@@ -10,12 +10,15 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "blimp/client/app/user_agent.h"
+#include "blimp/client/core/contents/tab_control_feature.h"
+#include "blimp/client/core/session/assignment_source.h"
 #include "blimp/client/feature/settings_feature.h"
-#include "blimp/client/feature/tab_control_feature.h"
-#include "blimp/client/session/assignment_source.h"
+#include "blimp/net/blimp_stats.h"
 #include "components/version_info/version_info.h"
 #include "jni/BlimpClientSession_jni.h"
 #include "net/base/net_errors.h"
+
+using base::android::JavaParamRef;
 
 namespace blimp {
 namespace client {
@@ -84,14 +87,14 @@ BlimpClientSessionAndroid::~BlimpClientSessionAndroid() {}
 
 void BlimpClientSessionAndroid::OnConnected() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_BlimpClientSession_onConnected(env, java_obj_.obj());
+  Java_BlimpClientSession_onConnected(env, java_obj_);
 }
 
 void BlimpClientSessionAndroid::OnDisconnected(int result) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_BlimpClientSession_onDisconnected(
-      env, java_obj_.obj(), base::android::ConvertUTF8ToJavaString(
-          env, net::ErrorToShortString(result)).obj());
+      env, java_obj_, base::android::ConvertUTF8ToJavaString(
+                          env, net::ErrorToShortString(result)));
 }
 
 void BlimpClientSessionAndroid::Destroy(JNIEnv* env,
@@ -100,18 +103,17 @@ void BlimpClientSessionAndroid::Destroy(JNIEnv* env,
 }
 
 void BlimpClientSessionAndroid::OnAssignmentConnectionAttempted(
-    AssignmentSource::Result result,
+    AssignmentRequestResult result,
     const Assignment& assignment) {
   // Notify the front end of the assignment result.
   std::string engine_ip = IPAddressToStringWithPort(
       assignment.engine_endpoint.address(), assignment.engine_endpoint.port());
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_BlimpClientSession_onAssignmentReceived(
-      env, java_obj_.obj(), static_cast<jint>(result),
-      base::android::ConvertUTF8ToJavaString(env, engine_ip).obj(),
+      env, java_obj_, static_cast<jint>(result),
+      base::android::ConvertUTF8ToJavaString(env, engine_ip),
       base::android::ConvertUTF8ToJavaString(env,
-                                             version_info::GetVersionNumber())
-          .obj());
+                                             version_info::GetVersionNumber()));
 
   BlimpClientSession::OnAssignmentConnectionAttempted(result, assignment);
 }
@@ -120,11 +122,10 @@ base::android::ScopedJavaLocalRef<jintArray>
 BlimpClientSessionAndroid::GetDebugInfo(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jobj) {
-  BlimpConnectionStatistics* stats =
-      BlimpClientSession::GetBlimpConnectionStatistics();
-  int metrics[] = {stats->Get(BlimpConnectionStatistics::BYTES_RECEIVED),
-                   stats->Get(BlimpConnectionStatistics::BYTES_SENT),
-                   stats->Get(BlimpConnectionStatistics::COMMIT)};
+  BlimpStats* stats = BlimpStats::GetInstance();
+  int metrics[] = {stats->Get(BlimpStats::BYTES_RECEIVED),
+                   stats->Get(BlimpStats::BYTES_SENT),
+                   stats->Get(BlimpStats::COMMIT)};
   return base::android::ToJavaIntArray(env, metrics, arraysize(metrics));
 }
 

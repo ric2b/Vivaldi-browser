@@ -81,13 +81,13 @@ WebInspector.HandlerRegistry.prototype = {
     registerHandler: function(name, handler)
     {
         this._handlers[name] = handler;
-        this.dispatchEventToListeners(WebInspector.HandlerRegistry.EventTypes.HandlersUpdated);
+        this.dispatchEventToListeners(WebInspector.HandlerRegistry.Events.HandlersUpdated);
     },
 
     unregisterHandler: function(name)
     {
         delete this._handlers[name];
-        this.dispatchEventToListeners(WebInspector.HandlerRegistry.EventTypes.HandlersUpdated);
+        this.dispatchEventToListeners(WebInspector.HandlerRegistry.Events.HandlersUpdated);
     },
 
     /**
@@ -117,10 +117,11 @@ WebInspector.HandlerRegistry.prototype = {
             contextMenu.appendItem(WebInspector.UIString.capitalize("Open ^using %s", handler),
                 this.dispatchToHandler.bind(this, handler, { url: contentProvider.contentURL() }));
         }
-        contextMenu.appendItem(WebInspector.copyLinkAddressLabel(), InspectorFrontendHost.copyText.bind(InspectorFrontendHost, contentProvider.contentURL()));
 
-        if (!contentProvider.contentURL())
+        if (!contentProvider.contentURL() || contentProvider instanceof WebInspector.NetworkRequest)
             return;
+
+        contextMenu.appendItem(WebInspector.copyLinkAddressLabel(), InspectorFrontendHost.copyText.bind(InspectorFrontendHost, contentProvider.contentURL()));
 
         if (!contentProvider.contentType().isDocumentOrScriptOrStyleSheet())
             return;
@@ -212,9 +213,9 @@ WebInspector.HandlerRegistry.prototype = {
     __proto__: WebInspector.Object.prototype
 }
 
-
-WebInspector.HandlerRegistry.EventTypes = {
-    HandlersUpdated: "HandlersUpdated"
+/** @enum {symbol} */
+WebInspector.HandlerRegistry.Events = {
+    HandlersUpdated: Symbol("HandlersUpdated")
 }
 
 /**
@@ -226,7 +227,7 @@ WebInspector.HandlerSelector = function(handlerRegistry)
     this.element = createElementWithClass("select", "chrome-select");
     this.element.addEventListener("change", this._onChange.bind(this), false);
     this._update();
-    this._handlerRegistry.addEventListener(WebInspector.HandlerRegistry.EventTypes.HandlersUpdated, this._update.bind(this));
+    this._handlerRegistry.addEventListener(WebInspector.HandlerRegistry.Events.HandlersUpdated, this._update.bind(this));
 }
 
 WebInspector.HandlerSelector.prototype =

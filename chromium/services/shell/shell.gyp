@@ -27,8 +27,8 @@
       'connect_util.h',
       'native_runner.h',
       'native_runner_delegate.h',
-      'shell.cc',
-      'shell.h',
+      'service_manager.cc',
+      'service_manager.h',
       'switches.cc',
       'switches.cc',
     ],
@@ -78,6 +78,7 @@
       'mojom_files': [
         'tests/test.mojom',
       ],
+      'use_new_wrapper_types': 'false',
     },
     'includes': [
       '../../mojo/mojom_bindings_generator_explicit.gypi',
@@ -160,12 +161,12 @@
     'target_name': 'catalog_manifest',
     'type': 'none',
     'variables': {
-      'application_type': 'mojo',
-      'application_name': 'catalog',
+      'type': 'mojo',
+      'name': 'catalog',
       'source_manifest': '<(DEPTH)/services/catalog/manifest.json',
     },
     'includes': [
-      '../../mojo/public/mojo_application_manifest.gypi',
+      '../shell/public/service_manifest.gypi',
     ],
     'hard_dependency': 1,
   }, {

@@ -83,7 +83,7 @@ void LayoutTextControl::adjustInnerEditorStyle(ComputedStyle& textBlockStyle) co
 
 int LayoutTextControl::textBlockLogicalHeight() const
 {
-    return logicalHeight() - borderAndPaddingLogicalHeight();
+    return (logicalHeight() - borderAndPaddingLogicalHeight()).toInt();
 }
 
 int LayoutTextControl::textBlockLogicalWidth() const
@@ -95,7 +95,7 @@ int LayoutTextControl::textBlockLogicalWidth() const
     if (innerEditor->layoutObject())
         unitWidth -= innerEditor->layoutBox()->paddingStart() + innerEditor->layoutBox()->paddingEnd();
 
-    return unitWidth;
+    return unitWidth.toInt();
 }
 
 void LayoutTextControl::updateFromElement()
@@ -120,8 +120,7 @@ void LayoutTextControl::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUni
         logicalHeight = computeControlLogicalHeight(innerEditorBox->lineHeight(true, HorizontalLine, PositionOfInteriorLineBoxes), nonContentHeight);
 
         // We are able to have a horizontal scrollbar if the overflow style is scroll, or if its auto and there's no word wrap.
-        if ((isHorizontalWritingMode() && (style()->overflowX() == OverflowScroll ||  (style()->overflowX() == OverflowAuto && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap)))
-            || (!isHorizontalWritingMode() && (style()->overflowY() == OverflowScroll ||  (style()->overflowY() == OverflowAuto && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap))))
+        if (style()->overflowInlineDirection() == OverflowScroll || (style()->overflowInlineDirection() == OverflowAuto && innerEditor->layoutObject()->style()->overflowWrap() == NormalOverflowWrap))
             logicalHeight += scrollbarThickness();
 
         // FIXME: The logical height of the inner text box should have been added before calling computeLogicalHeight to
@@ -189,8 +188,15 @@ static const char* const fontFamiliesWithInvalidCharWidth[] = {
 // from the width of a '0'. This only seems to apply to a fixed number of Mac fonts,
 // but, in order to get similar rendering across platforms, we do this check for
 // all platforms.
-bool LayoutTextControl::hasValidAvgCharWidth(const AtomicString& family)
+bool LayoutTextControl::hasValidAvgCharWidth(const SimpleFontData* font, const AtomicString& family)
 {
+    // Some fonts match avgCharWidth to CJK full-width characters.
+    // Heuristic check to avoid such fonts.
+    DCHECK(font);
+    const FontMetrics& metrics = font->getFontMetrics();
+    if (metrics.hasZeroWidth() && font->avgCharWidth() > metrics.zeroWidth() * 1.7)
+        return false;
+
     static HashSet<AtomicString>* fontFamiliesWithInvalidCharWidthMap = nullptr;
 
     if (family.isEmpty())
@@ -209,10 +215,10 @@ bool LayoutTextControl::hasValidAvgCharWidth(const AtomicString& family)
 float LayoutTextControl::getAvgCharWidth(const AtomicString& family) const
 {
     const Font& font = style()->font();
-    if (hasValidAvgCharWidth(family)) {
-        ASSERT(font.primaryFont());
-        return roundf(font.primaryFont()->avgCharWidth());
-    }
+
+    const SimpleFontData* primaryFont = font.primaryFont();
+    if (primaryFont && hasValidAvgCharWidth(primaryFont, family))
+        return roundf(primaryFont->avgCharWidth());
 
     const UChar ch = '0';
     const String str = String(&ch, 1);
@@ -232,8 +238,10 @@ void LayoutTextControl::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidt
     // Use average character width. Matches IE.
     AtomicString family = style()->font().getFontDescription().family().family();
     maxLogicalWidth = preferredContentLogicalWidth(const_cast<LayoutTextControl*>(this)->getAvgCharWidth(family));
-    if (LayoutBox* innerEditorLayoutBox = innerEditorElement()->layoutBox())
-        maxLogicalWidth += innerEditorLayoutBox->paddingStart() + innerEditorLayoutBox->paddingEnd();
+    if (innerEditorElement()) {
+        if (LayoutBox* innerEditorLayoutBox = innerEditorElement()->layoutBox())
+            maxLogicalWidth += innerEditorLayoutBox->paddingStart() + innerEditorLayoutBox->paddingEnd();
+    }
     if (!style()->logicalWidth().hasPercent())
         minLogicalWidth = maxLogicalWidth;
 }

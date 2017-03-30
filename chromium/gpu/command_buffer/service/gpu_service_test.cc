@@ -10,6 +10,7 @@
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_mock.h"
 #include "ui/gl/gl_surface_stub.h"
+#include "ui/gl/init/gl_factory.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
 namespace gpu {
@@ -36,7 +37,6 @@ void GpuServiceTest::SetUpWithGLVersion(const char* gl_version,
   context_->SetGLVersionString(gl_version);
   surface_ = new gl::GLSurfaceStub;
   context_->MakeCurrent(surface_.get());
-  gl::GLSurfaceTestSupport::InitializeDynamicMockBindings(context_.get());
   ran_setup_ = true;
 }
 
@@ -50,7 +50,7 @@ void GpuServiceTest::TearDown() {
   surface_ = nullptr;
   ::gl::MockGLInterface::SetGLInterface(NULL);
   gl_.reset();
-  gl::ClearGLBindings();
+  gl::init::ClearGLBindings();
   ran_teardown_ = true;
 
   testing::Test::TearDown();

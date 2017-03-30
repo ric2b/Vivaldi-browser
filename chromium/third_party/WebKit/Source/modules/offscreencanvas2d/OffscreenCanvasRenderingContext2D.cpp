@@ -6,8 +6,13 @@
 
 #include "bindings/modules/v8/OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContext.h"
 #include "core/frame/ImageBitmap.h"
+#include "core/frame/Settings.h"
+#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerSettings.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
+#include "platform/graphics/UnacceleratedImageBufferSurface.h"
+#include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 #include "wtf/Assertions.h"
 
 #define UNIMPLEMENTED ASSERT_NOT_REACHED
@@ -18,10 +23,19 @@ OffscreenCanvasRenderingContext2D::~OffscreenCanvasRenderingContext2D()
 {
 }
 
-OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(OffscreenCanvas* canvas, const CanvasContextCreationAttributes& attrs)
-    : CanvasRenderingContext(nullptr, canvas)
-    , m_hasAlpha(attrs.alpha())
+OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(ScriptState* scriptState, OffscreenCanvas* canvas, const CanvasContextCreationAttributes& attrs)
+    : CanvasRenderingContext(nullptr, canvas, attrs)
 {
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
+    if (executionContext->isDocument()) {
+        if (toDocument(executionContext)->settings()->disableReadingFromCanvas())
+            canvas->setDisableReadingFromCanvasTrue();
+        return;
+    }
+
+    WorkerSettings* workerSettings = toWorkerGlobalScope(executionContext)->workerSettings();
+    if (workerSettings && workerSettings->disableReadingFromCanvas())
+        canvas->setDisableReadingFromCanvasTrue();
 }
 
 DEFINE_TRACE(OffscreenCanvasRenderingContext2D)
@@ -67,12 +81,29 @@ bool OffscreenCanvasRenderingContext2D::hasImageBuffer() const
     return !!m_imageBuffer;
 }
 
+static bool shouldAccelerate(IntSize surfaceSize)
+{
+    if (!isMainThread())
+        return false; // Add support on Workers crbug.com/
+    return RuntimeEnabledFeatures::accelerated2dCanvasEnabled();
+}
+
 ImageBuffer* OffscreenCanvasRenderingContext2D::imageBuffer() const
 {
     if (!m_imageBuffer) {
-        // TODO: crbug.com/593514 Add support for GPU rendering
+        IntSize surfaceSize(width(), height());
+        OpacityMode opacityMode = hasAlpha() ? NonOpaque : Opaque;
+        std::unique_ptr<ImageBufferSurface> surface;
+        if (shouldAccelerate(surfaceSize)) {
+            surface.reset(new AcceleratedImageBufferSurface(surfaceSize, opacityMode));
+        }
+
+        if (!surface || !surface->isValid()) {
+            surface.reset(new UnacceleratedImageBufferSurface(surfaceSize, opacityMode, InitializeImagePixels));
+        }
+
         OffscreenCanvasRenderingContext2D* nonConstThis = const_cast<OffscreenCanvasRenderingContext2D*>(this);
-        nonConstThis->m_imageBuffer = ImageBuffer::create(IntSize(width(), height()), m_hasAlpha ? NonOpaque : Opaque, InitializeImagePixels);
+        nonConstThis->m_imageBuffer = ImageBuffer::create(std::move(surface));
 
         if (m_needsMatrixClipRestore) {
             restoreMatrixClipStack(m_imageBuffer->canvas());
@@ -87,8 +118,8 @@ ImageBitmap* OffscreenCanvasRenderingContext2D::transferToImageBitmap(ExceptionS
 {
     if (!imageBuffer())
         return nullptr;
-    // TODO: crbug.com/593514 Add support for GPU rendering
-    RefPtr<SkImage> skImage = m_imageBuffer->newSkImageSnapshot(PreferNoAcceleration, SnapshotReasonTransferToImageBitmap);
+    RefPtr<SkImage> skImage = m_imageBuffer->newSkImageSnapshot(PreferAcceleration, SnapshotReasonTransferToImageBitmap);
+    DCHECK(isMainThread() || !skImage->isTextureBacked()); // Acceleration not yet supported in Workers
     RefPtr<StaticBitmapImage> image = StaticBitmapImage::create(skImage.release());
     image->setOriginClean(this->originClean());
     m_imageBuffer.reset(); // "Transfer" means no retained buffer
@@ -163,4 +194,8 @@ bool OffscreenCanvasRenderingContext2D::isContextLost() const
     return false;
 }
 
+bool OffscreenCanvasRenderingContext2D::isPaintable() const
+{
+    return this->imageBuffer();
+}
 }

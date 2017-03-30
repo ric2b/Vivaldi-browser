@@ -706,7 +706,7 @@ class IDLParsingTest(unittest.TestCase):
 class TryServerMasterTest(unittest.TestCase):
   def testTryServerMasters(self):
     bots = {
-        'tryserver.chromium.android': [
+        'master.tryserver.chromium.android': [
             'android_archive_rel_ng',
             'android_arm64_dbg_recipe',
             'android_blink_rel',
@@ -730,7 +730,7 @@ class TryServerMasterTest(unittest.TestCase):
             'linux_android_dbg_ng',
             'linux_android_rel_ng',
         ],
-        'tryserver.chromium.mac': [
+        'master.tryserver.chromium.mac': [
             'ios_dbg_simulator',
             'ios_rel_device',
             'ios_rel_device_ninja',
@@ -746,7 +746,7 @@ class TryServerMasterTest(unittest.TestCase):
             'mac_x64_rel',
             'mac_xcodebuild',
         ],
-        'tryserver.chromium.linux': [
+        'master.tryserver.chromium.linux': [
             'chromium_presubmit',
             'linux_arm_cross_compile',
             'linux_arm_tester',
@@ -781,7 +781,7 @@ class TryServerMasterTest(unittest.TestCase):
             'linux_valgrind',
             'tools_build_presubmit',
         ],
-        'tryserver.chromium.win': [
+        'master.tryserver.chromium.win': [
             'win8_aura',
             'win8_chromium_dbg',
             'win8_chromium_rel',
@@ -866,6 +866,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
                                                checker_for_tests=self.checker)
 
   def testAddedPydep(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile('new.pydeps', [], action='A'),
     ]
@@ -875,6 +879,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertTrue('PYDEPS_FILES' in str(results[0]))
 
   def testRemovedPydep(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile(PRESUBMIT._ALL_PYDEPS_FILES[0], [], action='D'),
     ]
@@ -884,6 +892,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertTrue('PYDEPS_FILES' in str(results[0]))
 
   def testRandomPyIgnored(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile('random.py', []),
     ]
@@ -892,6 +904,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertEqual(0, len(results), 'Unexpected results: %r' % results)
 
   def testRelevantPyNoChange(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile('A.py', []),
     ]
@@ -906,6 +922,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertEqual(0, len(results), 'Unexpected results: %r' % results)
 
   def testRelevantPyOneChange(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile('A.py', []),
     ]
@@ -921,6 +941,10 @@ class PydepsNeedsUpdatingTest(unittest.TestCase):
     self.assertTrue('File is stale' in str(results[0]))
 
   def testRelevantPyTwoChanges(self):
+    # PRESUBMIT._CheckPydepsNeedsUpdating is only implemented for Android.
+    if self.mock_input_api.platform != 'linux2':
+      return []
+
     self.mock_input_api.files = [
       MockAffectedFile('C.py', []),
     ]

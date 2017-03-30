@@ -19,6 +19,8 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 
+#include "prefs/vivaldi_pref_names.h"
+
 // static
 history::HistoryService* HistoryServiceFactory::GetForProfile(
     Profile* profile,
@@ -77,14 +79,21 @@ HistoryServiceFactory::~HistoryServiceFactory() {
 
 KeyedService* HistoryServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  Profile* profile = Profile::FromBrowserContext(context);
   std::unique_ptr<history::HistoryService> history_service(
       new history::HistoryService(
           base::WrapUnique(new ChromeHistoryClient(
-              BookmarkModelFactory::GetForProfile(profile))),
-          base::WrapUnique(new history::ContentVisitDelegate(profile))));
-  if (!history_service->Init(
-          history::HistoryDatabaseParamsForPath(profile->GetPath()))) {
+              BookmarkModelFactory::GetForBrowserContext(context))),
+          base::WrapUnique(new history::ContentVisitDelegate(context))));
+
+  Profile *profile = Profile::FromBrowserContext(context);
+  int number_of_days_to_keep_visits = profile->GetPrefs()->GetInteger(
+      vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits);
+
+  history::HistoryDatabaseParams param =
+      history::HistoryDatabaseParamsForPath(profile->GetPath());
+  param.number_of_days_to_keep_visits = number_of_days_to_keep_visits;
+
+  if (!history_service->Init(param)) {
     return nullptr;
   }
   return history_service.release();

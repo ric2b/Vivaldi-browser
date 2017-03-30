@@ -18,11 +18,13 @@ cr.define('md_history.history_overflow_menu_test', function() {
 
   function registerTests() {
     suite('#overflow-menu', function() {
-      var element;
+      var app;
+      var listContainer;
+      var sharedMenu;
 
       suiteSetup(function() {
-        element = $('history-app').$['history-list'];
-
+        app = $('history-app');
+        listContainer = app.$['history'];
         var element1 = document.createElement('div');
         var element2 = document.createElement('div');
         document.body.appendChild(element1);
@@ -30,48 +32,55 @@ cr.define('md_history.history_overflow_menu_test', function() {
 
         MENU_EVENT.detail.target = element1;
         ADDITIONAL_MENU_EVENT.detail.target = element2;
+        return listContainer.$.sharedMenu.get().then(function(menu) {
+          sharedMenu = menu;
+        });
       });
 
       test('opening and closing menu', function() {
-        element.toggleMenu_(MENU_EVENT);
-        assertEquals(true, element.$.sharedMenu.menuOpen);
-        assertEquals(MENU_EVENT.detail.target,
-                     element.$.sharedMenu.lastAnchor_);
+        return listContainer.toggleMenu_(MENU_EVENT).then(function() {
+          assertTrue(sharedMenu.menuOpen);
+          assertEquals(MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
 
-        // Test having the same menu event (pressing the same button) closes the
-        // overflow menu.
-        element.toggleMenu_(MENU_EVENT);
-        assertEquals(false, element.$.sharedMenu.menuOpen);
+          // Test having the same menu event (pressing the same button) closes
+          // the overflow menu.
+          return listContainer.toggleMenu_(MENU_EVENT);
+        }).then(function() {
+          assertFalse(sharedMenu.menuOpen);
 
-        // Test having consecutive distinct menu events moves the menu to the
-        // new button.
-        element.toggleMenu_(MENU_EVENT);
-        element.toggleMenu_(ADDITIONAL_MENU_EVENT);
-        assertEquals(ADDITIONAL_MENU_EVENT.detail.target,
-                     element.$.sharedMenu.lastAnchor_);
-        assertEquals(true, element.$.sharedMenu.menuOpen);
-        element.toggleMenu_(MENU_EVENT);
-        assertEquals(true, element.$.sharedMenu.menuOpen);
-        assertEquals(MENU_EVENT.detail.target,
-                     element.$.sharedMenu.lastAnchor_);
+          // Test having consecutive distinct menu events moves the menu to the
+          // new button.
+          return listContainer.toggleMenu_(MENU_EVENT);
+        }).then(function() {
+          return listContainer.toggleMenu_(ADDITIONAL_MENU_EVENT);
+        }).then(function() {
+          assertEquals(
+              ADDITIONAL_MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
+          assertTrue(sharedMenu.menuOpen);
+          return listContainer.toggleMenu_(MENU_EVENT);
+        }).then(function() {
+          assertTrue(sharedMenu.menuOpen);
+          assertEquals(MENU_EVENT.detail.target, sharedMenu.lastAnchor_);
 
-        element.$.sharedMenu.closeMenu();
-        assertEquals(false, element.$.sharedMenu.menuOpen);
-        assertEquals(MENU_EVENT.detail.target,
-                     element.$.sharedMenu.lastAnchor_);
+          sharedMenu.closeMenu();
+          assertFalse(sharedMenu.menuOpen);
+        });
       });
 
-      test('keyboard input for closing menu', function() {
-        // Test that pressing escape on the document closes the menu. In the
-        // actual page, it will take two presses to close the menu due to focus.
-        // TODO(yingran): Fix this behavior to only require one key press.
-        element.toggleMenu_(MENU_EVENT);
-        MockInteractions.pressAndReleaseKeyOn(document, 27);
-        assertEquals(false, element.$.sharedMenu.menuOpen);
+      test('menu closes when search changes', function() {
+        var entry =
+            [createHistoryEntry('2016-07-19', 'https://www.nianticlabs.com')];
+
+        app.historyResult(createHistoryInfo(), entry);
+        return listContainer.toggleMenu_(MENU_EVENT).then(function() {
+          // Menu closes when search changes.
+          app.historyResult(createHistoryInfo('niantic'), entry);
+          assertFalse(sharedMenu.menuOpen);
+        });
       });
 
       teardown(function() {
-        element.$.sharedMenu.lastAnchor_ = null;
+        sharedMenu.lastAnchor_ = null;
       });
     });
   }

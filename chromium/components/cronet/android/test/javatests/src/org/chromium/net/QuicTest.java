@@ -37,10 +37,11 @@ public class QuicTest extends CronetTestBase {
         QuicTestServer.startQuicTestServer(getContext());
 
         mBuilder = new CronetEngine.Builder(getContext());
-        mBuilder.enableQUIC(true).enableNetworkQualityEstimator(true);
+        mBuilder.enableQuic(true).enableNetworkQualityEstimator(true);
         mBuilder.addQuicHint(QuicTestServer.getServerHost(), QuicTestServer.getServerPort(),
                 QuicTestServer.getServerPort());
 
+        // TODO(mgersh): Enable connection migration once it works, see http://crbug.com/634910
         JSONObject quicParams = new JSONObject()
                                         .put("connection_options", "PACE,IW10,FOO,DEADBEEF")
                                         .put("host_whitelist", "test.example.com")
@@ -50,11 +51,14 @@ public class QuicTest extends CronetTestBase {
                                         .put("packet_loss_threshold", 0.5)
                                         .put("idle_connection_timeout_seconds", 300)
                                         .put("close_sessions_on_ip_change", false)
-                                        .put("migrate_sessions_on_network_change", true)
-                                        .put("migrate_sessions_early", true);
-        JSONObject experimentalOptions = new JSONObject().put("QUIC", quicParams);
+                                        .put("migrate_sessions_on_network_change", false)
+                                        .put("migrate_sessions_early", false)
+                                        .put("race_cert_verification", true);
+        JSONObject hostResolverParams = CronetTestUtil.generateHostResolverRules();
+        JSONObject experimentalOptions = new JSONObject()
+                                                 .put("QUIC", quicParams)
+                                                 .put("HostResolverRules", hostResolverParams);
         mBuilder.setExperimentalOptions(experimentalOptions.toString());
-
         mBuilder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
         mBuilder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         mBuilder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK_NO_HTTP, 1000 * 1024);
@@ -74,7 +78,6 @@ public class QuicTest extends CronetTestBase {
         String[] commandLineArgs = {
                 CronetTestFramework.LIBRARY_INIT_KEY, CronetTestFramework.LibraryInitType.LEGACY};
         mTestFramework = new CronetTestFramework(null, commandLineArgs, getContext(), mBuilder);
-        registerHostResolver(mTestFramework, true);
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
 
         HashMap<String, String> headers = new HashMap<String, String>();
@@ -100,7 +103,6 @@ public class QuicTest extends CronetTestBase {
     @OnlyRunNativeCronet
     public void testQuicLoadUrl() throws Exception {
         mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
-        registerHostResolver(mTestFramework);
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
 
@@ -141,13 +143,15 @@ public class QuicTest extends CronetTestBase {
         CronetEngine.Builder builder = new CronetEngine.Builder(getContext());
         builder.setStoragePath(CronetTestFramework.getTestStorage(getContext()));
         builder.enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK, 1000 * 1024);
-        builder.enableQUIC(true);
+        builder.enableQuic(true);
         JSONObject quicParams = new JSONObject().put("host_whitelist", "test.example.com");
-        JSONObject experimentalOptions = new JSONObject().put("QUIC", quicParams);
+        JSONObject hostResolverParams = CronetTestUtil.generateHostResolverRules();
+        JSONObject experimentalOptions = new JSONObject()
+                                                 .put("QUIC", quicParams)
+                                                 .put("HostResolverRules", hostResolverParams);
         builder.setExperimentalOptions(experimentalOptions.toString());
         builder.setMockCertVerifierForTesting(QuicTestServer.createMockCertVerifier());
         mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, builder);
-        registerHostResolver(mTestFramework);
         TestUrlRequestCallback callback2 = new TestUrlRequestCallback();
         requestBuilder = new UrlRequest.Builder(
                 quicURL, callback2, callback2.getExecutor(), mTestFramework.mCronetEngine);
@@ -179,7 +183,6 @@ public class QuicTest extends CronetTestBase {
     @SuppressWarnings("deprecation")
     public void testRealTimeNetworkQualityObservationsWithQuic() throws Exception {
         mTestFramework = startCronetTestFrameworkWithUrlAndCronetEngineBuilder(null, mBuilder);
-        registerHostResolver(mTestFramework);
         String quicURL = QuicTestServer.getServerURL() + "/simple.txt";
         ConditionVariable waitForThroughput = new ConditionVariable();
 
@@ -222,6 +225,11 @@ public class QuicTest extends CronetTestBase {
 
         // NETWORK_QUALITY_OBSERVATION_SOURCE_QUIC
         assertTrue(rttListener.rttObservationCount(2) > 0);
+
+        // Verify that effective connection type callback is received and
+        // effective connection type is correctly set.
+        assertTrue(mTestFramework.mCronetEngine.getEffectiveConnectionType()
+                != EffectiveConnectionType.EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
 
         mTestFramework.mCronetEngine.shutdown();
     }

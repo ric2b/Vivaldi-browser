@@ -49,7 +49,7 @@ RequestManager::~RequestManager() {
   }
 
   DCHECK_EQ(0u, requests_.size());
-  STLDeleteValues(&requests_);
+  base::STLDeleteValues(&requests_);
 }
 
 int RequestManager::CreateRequest(RequestType type,
@@ -226,7 +226,7 @@ bool RequestManager::IsInteractingWithUser() const {
   // which is at most once every 10 seconds per request (except tests).
   const extensions::WindowControllerList::ControllerList& windows =
       extensions::WindowControllerList::GetInstance()->windows();
-  for (const auto& window : windows) {
+  for (auto* window : windows) {
     const Browser* const browser = window->GetBrowser();
     if (!browser)
       continue;

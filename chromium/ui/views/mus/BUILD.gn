@@ -4,8 +4,8 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//mojo/public/mojo_application.gni")
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 
@@ -28,11 +28,13 @@ component("mus") {
     "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
+    "os_exchange_data_provider_mus.cc",
+    "os_exchange_data_provider_mus.h",
+    "pointer_watcher_event_router.cc",
+    "pointer_watcher_event_router.h",
     "screen_mus.cc",
     "screen_mus.h",
     "screen_mus_delegate.h",
-    "surface_binding.cc",
-    "surface_binding.h",
     "surface_context_factory.cc",
     "surface_context_factory.h",
     "window_manager_connection.cc",
@@ -49,7 +51,7 @@ component("mus") {
 
   public_deps = [
     ":resources",
-    "//components/mus/public/cpp",
+    "//services/ui/public/cpp",
     "//ui/aura",
   ]
   deps = [
@@ -58,22 +60,19 @@ component("mus") {
     "//base/third_party/dynamic_annotations",
     "//cc",
     "//cc/surfaces",
-    "//components/bitmap_uploader",
-    "//components/mus/common:mus_common",
-    "//components/mus/gles2:lib",
-    "//components/mus/public/cpp",
-    "//components/mus/public/interfaces",
     "//mojo/common",
     "//mojo/public/cpp/bindings",
+    "//net",
     "//services/catalog/public/cpp",
     "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
     "//skia",
     "//third_party/icu",
     "//ui/aura",
     "//ui/compositor",
     "//ui/display",
-    "//ui/display/mojo",
     "//ui/events",
     "//ui/events:events_base",
     "//ui/gfx",
@@ -118,7 +117,7 @@ group("for_mojo_application") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [
@@ -131,10 +130,10 @@ source_set("test_support") {
     ":mus",
     "//base",
     "//base/test:test_support",
-    "//components/mus/common:mus_common",
     "//services/shell/background:lib",
     "//services/shell/background/tests:test_support",
     "//services/shell/public/cpp:sources",
+    "//services/ui/common:mus_common",
     "//testing/gtest",
     "//ui/aura",
     "//ui/gl:test_support",
@@ -157,9 +156,10 @@ test("views_mus_unittests") {
   sources = [
     "display_list_unittest.cc",
     "native_widget_mus_unittest.cc",
+    "os_exchange_data_provider_mus_unittest.cc",
+    "pointer_watcher_event_router_unittest.cc",
     "run_all_unittests_mus.cc",
     "screen_mus_unittest.cc",
-    "window_manager_connection_unittest.cc",
   ]
 
   sources += rebase_path(gypi.views_unittests_sources, ".", "//ui/views")
@@ -187,10 +187,11 @@ test("views_mus_unittests") {
     "//base:i18n",
     "//base/test:test_support",
     "//cc",
-    "//components/mus/public/cpp",
-    "//components/mus/public/cpp/tests:unittest_support",
-    "//components/mus/public/interfaces",
+    "//net",
     "//services/shell/background:main",  # Provides main().
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp/tests:unittest_support",
+    "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",
@@ -218,7 +219,7 @@ test("views_mus_unittests") {
 
   data_deps = [
     ":unittests_manifest",
-    "//components/mus/test_wm",
+    "//services/ui/test_wm",
   ]
 
   if (is_win) {
@@ -281,7 +282,7 @@ test("views_mus_interactive_ui_tests") {
 
   data_deps = [
     ":interactive_ui_tests_manifest",
-    "//components/mus/test_wm",
+    "//services/ui/test_wm",
   ]
 
   if (is_win) {
@@ -298,14 +299,14 @@ test("views_mus_interactive_ui_tests") {
   }
 }
 
-mojo_application_manifest("unittests_manifest") {
+service_manifest("unittests_manifest") {
   type = "exe"
-  application_name = "views_mus_unittests"
+  name = "views_mus_unittests"
   source = "unittests_manifest.json"
 }
 
-mojo_application_manifest("interactive_ui_tests_manifest") {
+service_manifest("interactive_ui_tests_manifest") {
   type = "exe"
-  application_name = "views_mus_interactive_ui_tests"
+  name = "views_mus_interactive_ui_tests"
   source = "interactive_ui_tests_manifest.json"
 }

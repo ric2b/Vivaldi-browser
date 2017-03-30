@@ -73,10 +73,16 @@ class FadeAnimationDelegate : public gfx::AnimationDelegate {
   [super removeFromSuperview];
 }
 
+- (void)viewDidMoveToWindow {
+  // In Material Design, the icon color depends on the theme. When the tab
+  // is moved into another window, make sure that it updates the theme.
+  [self updateIconForState:showingAlertState_];
+}
+
 - (void)updateIconForState:(TabAlertState)aState {
   if (aState != TabAlertState::NONE) {
     TabView* const tabView = base::mac::ObjCCast<TabView>([self superview]);
-    SkColor iconColor = [tabView closeButtonColor];
+    SkColor iconColor = [tabView iconColor];
     NSImage* tabIndicatorImage =
         chrome::GetTabAlertIndicatorImage(aState, iconColor).ToNSImage();
     [self setImage:tabIndicatorImage];

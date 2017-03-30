@@ -20,6 +20,11 @@
 
 namespace blink {
 
+bool ServiceWorkerRegistration::hasPendingActivity() const
+{
+    return !m_stopped;
+}
+
 const AtomicString& ServiceWorkerRegistration::interfaceName() const
 {
     return EventTargetNames::ServiceWorkerRegistration;
@@ -79,7 +84,7 @@ ScriptPromise ServiceWorkerRegistration::update(ScriptState* scriptState)
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
-    m_handle->registration()->update(client->provider(), new CallbackPromiseAdapter<void, ServiceWorkerError>(resolver));
+    m_handle->registration()->update(client->provider(), new CallbackPromiseAdapter<void, ServiceWorkerErrorForUpdate>(resolver));
     return promise;
 }
 
@@ -129,11 +134,6 @@ DEFINE_TRACE(ServiceWorkerRegistration)
     EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
     Supplementable<ServiceWorkerRegistration>::trace(visitor);
-}
-
-bool ServiceWorkerRegistration::hasPendingActivity() const
-{
-    return !m_stopped;
 }
 
 void ServiceWorkerRegistration::stop()

@@ -2,6 +2,7 @@
 
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "chrome/browser/importer/importer_list.h"
 
@@ -14,7 +15,7 @@
 #include "base/values.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_resources.h"
@@ -25,8 +26,8 @@
 
 class OperaNotesReader : public OperaAdrFileReader {
  public:
-  OperaNotesReader(){};
-  ~OperaNotesReader() override{};
+  OperaNotesReader() {}
+  ~OperaNotesReader() override {};
 
   void AddNote(std::vector<base::string16> &current_folder,
                const base::DictionaryValue &entries, bool is_folder,
@@ -69,7 +70,6 @@ void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
   base::string16 content;
 
   double created_time = 0;
-  double visited_time = 0;
 
   if (!is_folder && !entries.GetString("url", &url))
     url = base::string16();
@@ -113,17 +113,22 @@ void OperaNotesReader::AddNote(std::vector<base::string16> &current_folder,
   notes.push_back(entry);
 }
 
-void OperaImporter::ImportNotes() {
-  if (notesfilename_.empty()) return;
-
+bool OperaImporter::ImportNotes(std::string& error) {
+  if (notesfilename_.empty()) {
+    error = "No notes filename provided.";
+    return false;
+  }
   base::FilePath file(notesfilename_);
   OperaNotesReader reader;
 
-  reader.LoadFile(file);
-
+  if (!reader.LoadFile(file)) {
+    error = "Notes file does not exist.";
+    return false;
+  }
   if (!reader.Notes().empty() && !cancelled()) {
     const base::string16 &first_folder_name =
         bridge_->GetLocalizedString(IDS_NOTES_GROUP_FROM_OPERA);
     bridge_->AddNotes(reader.Notes(), first_folder_name);
   }
+  return true;
 }

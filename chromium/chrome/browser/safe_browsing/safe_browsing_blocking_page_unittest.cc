@@ -212,15 +212,15 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
     resource->callback =
         base::Bind(&SafeBrowsingBlockingPageTest::OnBlockingPageComplete,
                    base::Unretained(this));
-    resource->callback_thread =
-        content::BrowserThread::GetMessageLoopProxyForThread(
-            content::BrowserThread::IO);
+    resource->callback_thread = content::BrowserThread::GetTaskRunnerForThread(
+        content::BrowserThread::IO);
     resource->url = url;
     resource->is_subresource = is_subresource;
     resource->threat_type = SB_THREAT_TYPE_URL_MALWARE;
-    resource->render_process_host_id =
-        web_contents()->GetRenderProcessHost()->GetID();
-    resource->render_frame_id = web_contents()->GetMainFrame()->GetRoutingID();
+    resource->web_contents_getter =
+        SafeBrowsingUIManager::UnsafeResource::GetWebContentsGetter(
+            web_contents()->GetRenderProcessHost()->GetID(),
+            web_contents()->GetMainFrame()->GetRoutingID());
     resource->threat_source = safe_browsing::ThreatSource::LOCAL_PVER3;
   }
 

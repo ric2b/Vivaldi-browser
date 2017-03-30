@@ -50,13 +50,13 @@ class CredentialManagerImpl
   void BindRequest(mojom::CredentialManagerRequest request);
 
   // mojom::CredentialManager methods:
-  void Store(mojom::CredentialInfoPtr credential,
+  void Store(const CredentialInfo& credential,
              const StoreCallback& callback) override;
   void RequireUserMediation(
       const RequireUserMediationCallback& callback) override;
   void Get(bool zero_click_only,
            bool include_passwords,
-           mojo::Array<GURL> federations,
+           const std::vector<GURL>& federations,
            const GetCallback& callback) override;
 
   // CredentialManagerPendingRequestTaskDelegate:
@@ -67,7 +67,7 @@ class CredentialManagerImpl
   void SendPasswordForm(const SendCredentialCallback& send_callback,
                         const autofill::PasswordForm* form) override;
   PasswordManagerClient* client() const override;
-  autofill::PasswordForm GetSynthesizedFormForOrigin() const override;
+  PasswordStore::FormDigest GetSynthesizedFormForOrigin() const override;
 
   // CredentialManagerPendingSignedOutTaskDelegate:
   PasswordStore* GetPasswordStore() override;

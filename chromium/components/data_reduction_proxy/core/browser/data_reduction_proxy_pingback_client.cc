@@ -5,14 +5,16 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_pingback_client.h"
 
 #include "base/metrics/histogram.h"
+#include "base/optional.h"
 #include "base/rand_util.h"
+#include "base/time/time.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_page_load_timing.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/proto/client_config.pb.h"
-#include "components/data_reduction_proxy/proto/pageload_metrics.pb.h"
 #include "net/base/load_flags.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
@@ -27,12 +29,11 @@ static const char kHistogramSucceeded[] =
 static const char kHistogramAttempted[] =
     "DataReductionProxy.Pingback.Attempted";
 
-// Creates a PageloadMetrics protobuf for this page load and serializes to a
-// string.
-std::string SerializeData(const DataReductionProxyData& request_data,
-                          const DataReductionProxyPageLoadTiming& timing) {
-  RecordPageloadMetricsRequest batched_request;
-  PageloadMetrics* request = batched_request.add_pageloads();
+// Adds the relevant information to |request| for this page load based on page
+// timing and data reduction proxy state.
+void AddDataToPageloadMetrics(const DataReductionProxyData& request_data,
+                              const DataReductionProxyPageLoadTiming& timing,
+                              PageloadMetrics* request) {
   request->set_session_key(request_data.session_key());
   // For the timing events, any of them could be zero. Fill the message as a
   // best effort.
@@ -41,29 +42,45 @@ std::string SerializeData(const DataReductionProxyData& request_data,
           .release());
   if (request_data.original_request_url().is_valid())
     request->set_first_request_url(request_data.original_request_url().spec());
-  if (!timing.first_contentful_paint.is_zero()) {
+  if (timing.first_contentful_paint) {
     request->set_allocated_time_to_first_contentful_paint(
         protobuf_parser::CreateDurationFromTimeDelta(
-            timing.first_contentful_paint)
+            timing.first_contentful_paint.value())
             .release());
   }
-  if (!timing.first_image_paint.is_zero()) {
+  if (timing.first_image_paint) {
     request->set_allocated_time_to_first_image_paint(
-        protobuf_parser::CreateDurationFromTimeDelta(timing.first_image_paint)
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.first_image_paint.value())
             .release());
   }
-  if (!timing.response_start.is_zero()) {
+  if (timing.response_start) {
     request->set_allocated_time_to_first_byte(
-        protobuf_parser::CreateDurationFromTimeDelta(timing.response_start)
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.response_start.value())
             .release());
   }
-  if (!timing.load_event_start.is_zero()) {
+  if (timing.load_event_start) {
     request->set_allocated_page_load_time(
-        protobuf_parser::CreateDurationFromTimeDelta(timing.load_event_start)
+        protobuf_parser::CreateDurationFromTimeDelta(
+            timing.load_event_start.value())
             .release());
   }
+
+  request->set_effective_connection_type(
+      protobuf_parser::ProtoEffectiveConnectionTypeFromEffectiveConnectionType(
+          request_data.effective_connection_type()));
+}
+
+// Adds |current_time| as the metrics sent time to |request_data|, and returns
+// the serialized request.
+std::string AddTimeAndSerializeRequest(
+    RecordPageloadMetricsRequest* request_data,
+    base::Time current_time) {
+  request_data->set_allocated_metrics_sent_time(
+      protobuf_parser::CreateTimestampFromTime(current_time).release());
   std::string serialized_request;
-  batched_request.SerializeToString(&serialized_request);
+  request_data->SerializeToString(&serialized_request);
   return serialized_request;
 }
 
@@ -85,9 +102,8 @@ void DataReductionProxyPingbackClient::OnURLFetchComplete(
   DCHECK(source == current_fetcher_.get());
   UMA_HISTOGRAM_BOOLEAN(kHistogramSucceeded, source->GetStatus().is_success());
   current_fetcher_.reset();
-  while (!current_fetcher_ && !data_to_send_.empty()) {
-    current_fetcher_ = MaybeCreateFetcherForDataAndStart(data_to_send_.front());
-    data_to_send_.pop_front();
+  if (metrics_request_.pageloads_size() > 0) {
+    CreateFetcherForDataAndStart();
   }
 }
 
@@ -95,38 +111,43 @@ void DataReductionProxyPingbackClient::SendPingback(
     const DataReductionProxyData& request_data,
     const DataReductionProxyPageLoadTiming& timing) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  std::string serialized_request = SerializeData(request_data, timing);
-  if (current_fetcher_.get()) {
-    data_to_send_.push_back(serialized_request);
-  } else {
-    DCHECK(data_to_send_.empty());
-    current_fetcher_ = MaybeCreateFetcherForDataAndStart(serialized_request);
-  }
-}
-
-std::unique_ptr<net::URLFetcher>
-DataReductionProxyPingbackClient::MaybeCreateFetcherForDataAndStart(
-    const std::string& request_data) {
   bool send_pingback = ShouldSendPingback();
   UMA_HISTOGRAM_BOOLEAN(kHistogramAttempted, send_pingback);
   if (!send_pingback)
-    return nullptr;
-  std::unique_ptr<net::URLFetcher> fetcher(
-      net::URLFetcher::Create(pingback_url_, net::URLFetcher::POST, this));
-  fetcher->SetLoadFlags(net::LOAD_BYPASS_PROXY);
-  fetcher->SetUploadData("application/x-protobuf", request_data);
-  fetcher->SetRequestContext(url_request_context_);
+    return;
+  PageloadMetrics* pageload_metrics = metrics_request_.add_pageloads();
+  AddDataToPageloadMetrics(request_data, timing, pageload_metrics);
+  if (current_fetcher_.get())
+    return;
+  DCHECK_EQ(1, metrics_request_.pageloads_size());
+  CreateFetcherForDataAndStart();
+}
+
+void DataReductionProxyPingbackClient::CreateFetcherForDataAndStart() {
+  DCHECK(!current_fetcher_);
+  DCHECK_GE(metrics_request_.pageloads_size(), 1);
+  std::string serialized_request =
+      AddTimeAndSerializeRequest(&metrics_request_, CurrentTime());
+  metrics_request_.Clear();
+  current_fetcher_ =
+      net::URLFetcher::Create(pingback_url_, net::URLFetcher::POST, this);
+  current_fetcher_->SetLoadFlags(net::LOAD_BYPASS_PROXY);
+  current_fetcher_->SetUploadData("application/x-protobuf", serialized_request);
+  current_fetcher_->SetRequestContext(url_request_context_);
   // Configure max retries to be at most kMaxRetries times for 5xx errors.
   static const int kMaxRetries = 5;
-  fetcher->SetMaxRetriesOn5xx(kMaxRetries);
-  fetcher->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
-  fetcher->Start();
-  return fetcher;
+  current_fetcher_->SetMaxRetriesOn5xx(kMaxRetries);
+  current_fetcher_->SetAutomaticallyRetryOnNetworkChanges(kMaxRetries);
+  current_fetcher_->Start();
 }
 
 bool DataReductionProxyPingbackClient::ShouldSendPingback() const {
   return params::IsForcePingbackEnabledViaFlags() ||
          GenerateRandomFloat() < pingback_reporting_fraction_;
+}
+
+base::Time DataReductionProxyPingbackClient::CurrentTime() const {
+  return base::Time::Now();
 }
 
 float DataReductionProxyPingbackClient::GenerateRandomFloat() const {

@@ -74,8 +74,8 @@ public:
     void chromeDestroyed() override {}
 
     void* webView() const override { return nullptr; }
-    void setWindowRect(const IntRect&) override {}
-    IntRect windowRect() override { return IntRect(); }
+    void setWindowRect(const IntRect&, LocalFrame&) override {}
+    IntRect rootWindowRect() override { return IntRect(); }
 
     IntRect pageRect() override { return IntRect(); }
 
@@ -167,7 +167,7 @@ public:
 
     void setTouchAction(TouchAction) override {}
 
-    void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) override {}
+    void didAssociateFormControlsAfterLoad(LocalFrame*) override {}
 
     void annotatedRegionsChanged() override {}
     String acceptLanguages() override;
@@ -203,9 +203,8 @@ public:
     void detached(FrameDetachType) override {}
     void frameFocused() const override {}
 
-    void dispatchWillSendRequest(DocumentLoader*, unsigned long, ResourceRequest&, const ResourceResponse&) override {}
-    void dispatchDidReceiveResponse(DocumentLoader*, unsigned long, const ResourceResponse&) override {}
-    void dispatchDidFinishLoading(DocumentLoader*, unsigned long) override {}
+    void dispatchWillSendRequest(ResourceRequest&) override {}
+    void dispatchDidReceiveResponse(const ResourceResponse&) override {}
     void dispatchDidLoadResourceFromMemoryCache(const ResourceRequest&, const ResourceResponse&) override {}
 
     void dispatchDidHandleOnloadEvents() override {}
@@ -222,7 +221,6 @@ public:
     void dispatchDidChangeThemeColor() override {}
 
     NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool, bool) override;
-    bool hasPendingNavigation() override;
 
     void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
     void dispatchWillSubmitForm(HTMLFormElement*) override;
@@ -284,8 +282,8 @@ public:
     ~EmptyTextCheckerClient() { }
 
     void checkSpellingOfString(const String&, int*, int*) override {}
-    void checkGrammarOfString(const String&, Vector<GrammarDetail>&, int*, int*) override {}
     void requestCheckingOfString(TextCheckingRequest*) override;
+    void cancelAllPendingRequests() override;
 };
 
 class EmptySpellCheckerClient : public SpellCheckerClient {
@@ -294,8 +292,8 @@ public:
     EmptySpellCheckerClient() {}
     ~EmptySpellCheckerClient() override {}
 
-    bool isContinuousSpellCheckingEnabled() override { return false; }
-    void toggleContinuousSpellChecking() override {}
+    bool isSpellCheckingEnabled() override { return false; }
+    void toggleSpellCheckingEnabled() override {}
 
     TextCheckerClient& textChecker() override { return m_textCheckerClient; }
 
@@ -319,7 +317,7 @@ public:
     bool canCopyCut(LocalFrame*, bool defaultValue) const override { return defaultValue; }
     bool canPaste(LocalFrame*, bool defaultValue) const override { return defaultValue; }
 
-    bool handleKeyboardEvent() override { return false; }
+    bool handleKeyboardEvent(LocalFrame*) override { return false; }
 };
 
 class EmptyContextMenuClient final : public ContextMenuClient {

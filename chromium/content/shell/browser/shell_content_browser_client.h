@@ -34,7 +34,7 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   BrowserMainParts* CreateBrowserMainParts(
       const MainFunctionParams& parameters) override;
   bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
-                                       const GURL& effective_url) override;
+                                       const GURL& effective_site_url) override;
   bool IsHandledURL(const GURL& url) override;
   void RegisterInProcessMojoApplications(
       StaticMojoApplicationMap* apps) override;
@@ -43,7 +43,6 @@ class ShellContentBrowserClient : public ContentBrowserClient {
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
   void ResourceDispatcherHostCreated() override;
-  GeolocationDelegate* CreateGeolocationDelegate() override;
   std::string GetDefaultDownloadName() override;
   WebContentsViewDelegate* GetWebContentsViewDelegate(
       WebContents* web_contents) override;

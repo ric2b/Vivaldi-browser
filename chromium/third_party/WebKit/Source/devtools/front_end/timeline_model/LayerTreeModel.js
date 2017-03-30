@@ -66,9 +66,10 @@ WebInspector.LayerTreeModel = function(target)
     this._layerTree = null;
 }
 
+/** @enum {symbol} */
 WebInspector.LayerTreeModel.Events = {
-    LayerTreeChanged: "LayerTreeChanged",
-    LayerPainted: "LayerPainted",
+    LayerTreeChanged: Symbol("LayerTreeChanged"),
+    LayerPainted: Symbol("LayerPainted"),
 }
 
 WebInspector.LayerTreeModel.ScrollRectType = {
@@ -1299,7 +1300,7 @@ WebInspector.LayerTreeDispatcher.prototype = {
  */
 WebInspector.LayerTreeModel.fromTarget = function(target)
 {
-    if (!target.isPage())
+    if (!target.hasDOMCapability())
         return null;
 
     var model = /** @type {?WebInspector.LayerTreeModel} */ (target.model(WebInspector.LayerTreeModel));

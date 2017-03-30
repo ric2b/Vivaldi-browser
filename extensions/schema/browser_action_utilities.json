@@ -9,7 +9,13 @@
         "id": "ActionType",
         "type": "string",
         "enum": ["browser", "page"],
-          "description": "browser- or pageAction."
+        "description": "browser- or pageAction."
+      },
+      {
+        "id": "ExtensionType",
+        "type": "string",
+        "enum": ["extensionAction", "componentAction"],
+        "description": "Regular extension- or componentAction. Component actions will go through ToolbarActionViewController"
       },
       {
         "id": "ExtensionInfo",
@@ -69,6 +75,11 @@
             "type": "boolean",
             "optional": true,
             "description": "Whether the action is available in incognito windows or not."
+          },
+          "extensionType": {
+            "$ref": "ExtensionType",
+            "optional": true,
+            "description": "The type of the extensionAction, either pageaction or browseraction. Defaults to |extensionAction|."
           }
         }
       }

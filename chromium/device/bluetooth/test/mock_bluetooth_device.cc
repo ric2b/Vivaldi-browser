@@ -15,13 +15,13 @@ namespace device {
 
 MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
                                          uint32_t bluetooth_class,
-                                         const std::string& name,
+                                         const char* name,
                                          const std::string& address,
                                          bool paired,
                                          bool connected)
     : BluetoothDevice(adapter),
       bluetooth_class_(bluetooth_class),
-      name_(name),
+      name_(name ? base::Optional<std::string>(name) : base::nullopt),
       address_(address),
       connected_(connected) {
   ON_CALL(*this, GetBluetoothClass())
@@ -38,26 +38,29 @@ MockBluetoothDevice::MockBluetoothDevice(MockBluetoothAdapter* adapter,
       .WillByDefault(testing::Return(0));
   ON_CALL(*this, GetDeviceID())
       .WillByDefault(testing::Return(0));
+  ON_CALL(*this, GetName()).WillByDefault(testing::Return(name_));
   ON_CALL(*this, GetNameForDisplay())
-      .WillByDefault(testing::Return(base::UTF8ToUTF16(name_)));
+      .WillByDefault(testing::Return(
+          base::UTF8ToUTF16(name_ ? name_.value() : "Unnamed Device")));
   ON_CALL(*this, GetDeviceType())
       .WillByDefault(testing::Return(DEVICE_UNKNOWN));
   ON_CALL(*this, IsPaired())
       .WillByDefault(testing::Return(paired));
   ON_CALL(*this, IsConnected())
       .WillByDefault(testing::ReturnPointee(&connected_));
+  ON_CALL(*this, IsGattConnected())
+      .WillByDefault(testing::ReturnPointee(&connected_));
   ON_CALL(*this, IsConnectable())
       .WillByDefault(testing::Return(false));
   ON_CALL(*this, IsConnecting())
       .WillByDefault(testing::Return(false));
-  ON_CALL(*this, GetUUIDs()).WillByDefault(testing::Return(uuids_));
+  ON_CALL(*this, GetUUIDs()).WillByDefault(testing::ReturnPointee(&uuids_));
   ON_CALL(*this, ExpectingPinCode())
       .WillByDefault(testing::Return(false));
   ON_CALL(*this, ExpectingPasskey())
       .WillByDefault(testing::Return(false));
   ON_CALL(*this, ExpectingConfirmation())
       .WillByDefault(testing::Return(false));
-  ON_CALL(*this, GetDeviceName()).WillByDefault(testing::Return(name_));
 }
 
 MockBluetoothDevice::~MockBluetoothDevice() {}

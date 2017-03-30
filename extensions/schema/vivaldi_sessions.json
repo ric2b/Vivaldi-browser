@@ -16,13 +16,17 @@
           "name": {
             "type": "string",
             "description": "Session display name created from the filename"
+          },
+          "createDateJS": {
+            "type": "number",
+            "description": "Session save date in JS format."
           }
         }
       },
       {
         "id": "SessionOpenOptions",
         "type": "object",
-        "description": "Options for saving the session.",
+        "description": "Options for opening the session.",
         "properties": {
           "openInNewWindow": {
             "type": "boolean",

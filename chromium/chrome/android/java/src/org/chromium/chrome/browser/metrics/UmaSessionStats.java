@@ -155,15 +155,37 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
     }
 
     /**
-     * Updates the state of the MetricsService to account for the user's preferences.
+     * Updates the metrics services based on a change of consent. This can happen during first-run
+     * flow, and when the user changes their preferences.
      */
-    public void updateMetricsServiceState() {
-        boolean mayRecordStats = !PrivacyPreferencesManager.getInstance()
-                .isNeverUploadCrashDump();
-        boolean mayUploadStats = mReportingPermissionManager.isUmaUploadPermitted();
+    public static void changeMetricsReportingConsent(boolean consent) {
+        PrivacyPreferencesManager privacyManager = PrivacyPreferencesManager.getInstance();
+        // Update the new two-choice Android preference.
+        privacyManager.setUsageAndCrashReporting(consent);
+        // Update the old three-choice Android preference, and synchronize with Chrome local state
+        // preferences. Note, this forces the three-choice preferences to be either never upload,
+        // or only upload on WiFi.
+        privacyManager.initCrashUploadPreference(consent);
 
-        // Re-start the MetricsService with the given parameters.
-        nativeUpdateMetricsServiceState(mayRecordStats, mayUploadStats);
+        // Perform native changes needed to reflect the new consent value.
+        nativeChangeMetricsReportingConsent(consent);
+
+        updateMetricsServiceState();
+    }
+
+    /**
+     * Updates the state of MetricsService to account for the user's preferences.
+     */
+    public static void updateMetricsServiceState() {
+        PrivacyPreferencesManager privacyManager = PrivacyPreferencesManager.getInstance();
+
+        // Ensure Android and Chrome local state prefs are in sync.
+        privacyManager.syncUsageAndCrashReportingPrefs();
+
+        boolean mayUploadStats = privacyManager.isUmaUploadPermitted();
+
+        // Re-start the MetricsService with the given parameter, and current consent.
+        nativeUpdateMetricsServiceState(mayUploadStats);
     }
 
     /**
@@ -194,6 +216,10 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
             prefManager.setUsageAndCrashReporting(prefBridge.isMetricsReportingEnabled());
         }
 
+        // Update the metrics sampling state so it's available before the native feature list is
+        // available.
+        prefManager.setClientInMetricsSample(UmaUtils.isClientInMetricsReportingSample());
+
         // Make sure preferences are in sync.
         prefManager.syncUsageAndCrashReportingPrefs();
     }
@@ -203,8 +229,8 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
         updateMetricsServiceState();
     }
 
-    public static void registerExternalExperiment(int studyId, int experimentId) {
-        nativeRegisterExternalExperiment(studyId, experimentId);
+    public static void registerExternalExperiment(String studyName, int[] experimentIds) {
+        nativeRegisterExternalExperiment(studyName, experimentIds);
     }
 
     public static void registerSyntheticFieldTrial(String trialName, String groupName) {
@@ -212,12 +238,13 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
     }
 
     private static native long nativeInit();
-    private native void nativeUpdateMetricsServiceState(boolean mayRecord, boolean mayUpload);
+    private static native void nativeChangeMetricsReportingConsent(boolean consent);
+    private static native void nativeUpdateMetricsServiceState(boolean mayUpload);
     private native void nativeUmaResumeSession(long nativeUmaSessionStats);
     private native void nativeUmaEndSession(long nativeUmaSessionStats);
     private static native void nativeLogRendererCrash();
-    private static native void nativeRegisterExternalExperiment(int studyId,
-                                                                int experimentId);
+    private static native void nativeRegisterExternalExperiment(
+            String studyName, int[] experimentIds);
     private static native void nativeRegisterSyntheticFieldTrial(
             String trialName, String groupName);
     private static native void nativeRecordMultiWindowSession(int areaPercent, int instanceCount);

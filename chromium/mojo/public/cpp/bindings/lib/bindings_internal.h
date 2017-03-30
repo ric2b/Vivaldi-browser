@@ -7,6 +7,9 @@
 
 #include <stdint.h>
 
+#include <functional>
+
+#include "base/template_util.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/lib/template_util.h"
 #include "mojo/public/cpp/system/core.h"
@@ -14,30 +17,26 @@
 namespace mojo {
 
 template <typename T>
-class Array;
+class ArrayDataView;
 
 template <typename T>
-class AssociatedInterfacePtrInfo;
+class AssociatedInterfacePtrInfoDataView;
 
 template <typename T>
-class AssociatedInterfaceRequest;
+class AssociatedInterfaceRequestDataView;
 
 template <typename T>
-class InterfacePtr;
+class InterfacePtrDataView;
 
 template <typename T>
-class InterfaceRequest;
+class InterfaceRequestDataView;
 
 template <typename K, typename V>
-class Map;
+class MapDataView;
 
-class String;
+class NativeStructDataView;
 
-template <typename T>
-class StructPtr;
-
-template <typename T>
-class InlinedStructPtr;
+class StringDataView;
 
 namespace internal {
 
@@ -55,7 +54,45 @@ class Array_Data;
 template <typename K, typename V>
 class Map_Data;
 
+class NativeStruct_Data;
+
 using String_Data = Array_Data<char>;
+
+inline size_t Align(size_t size) {
+  return (size + 7) & ~0x7;
+}
+
+inline bool IsAligned(const void* ptr) {
+  return !(reinterpret_cast<uintptr_t>(ptr) & 0x7);
+}
+
+// Pointers are encoded as relative offsets. The offsets are relative to the
+// address of where the offset value is stored, such that the pointer may be
+// recovered with the expression:
+//
+//   ptr = reinterpret_cast<char*>(offset) + *offset
+//
+// A null pointer is encoded as an offset value of 0.
+//
+inline void EncodePointer(const void* ptr, uint64_t* offset) {
+  if (!ptr) {
+    *offset = 0;
+    return;
+  }
+
+  const char* p_obj = reinterpret_cast<const char*>(ptr);
+  const char* p_slot = reinterpret_cast<const char*>(offset);
+  DCHECK(p_obj > p_slot);
+
+  *offset = static_cast<uint64_t>(p_obj - p_slot);
+}
+
+// Note: This function doesn't validate the encoded pointer value.
+inline const void* DecodePointer(const uint64_t* offset) {
+  if (!*offset)
+    return nullptr;
+  return reinterpret_cast<const char*>(offset) + *offset;
+}
 
 #pragma pack(push, 1)
 
@@ -72,9 +109,18 @@ struct ArrayHeader {
 static_assert(sizeof(ArrayHeader) == 8, "Bad_sizeof(ArrayHeader)");
 
 template <typename T>
-union Pointer {
+struct Pointer {
+  using BaseType = T;
+
+  void Set(T* ptr) { EncodePointer(ptr, &offset); }
+  const T* Get() const { return static_cast<const T*>(DecodePointer(&offset)); }
+  T* Get() {
+    return static_cast<T*>(const_cast<void*>(DecodePointer(&offset)));
+  }
+
+  bool is_null() const { return offset == 0; }
+
   uint64_t offset;
-  T* ptr;
 };
 static_assert(sizeof(Pointer<char>) == 8, "Bad_sizeof(Pointer)");
 
@@ -170,15 +216,15 @@ struct MojomTypeTraits {
 };
 
 template <typename T>
-struct MojomTypeTraits<Array<T>, false> {
+struct MojomTypeTraits<ArrayDataView<T>, false> {
   using Data = Array_Data<typename MojomTypeTraits<T>::DataAsArrayElement>;
-  using DataAsArrayElement = Data*;
+  using DataAsArrayElement = Pointer<Data>;
 
   static const MojomTypeCategory category = MojomTypeCategory::ARRAY;
 };
 
 template <typename T>
-struct MojomTypeTraits<AssociatedInterfacePtrInfo<T>, false> {
+struct MojomTypeTraits<AssociatedInterfacePtrInfoDataView<T>, false> {
   using Data = AssociatedInterface_Data;
   using DataAsArrayElement = Data;
 
@@ -187,7 +233,7 @@ struct MojomTypeTraits<AssociatedInterfacePtrInfo<T>, false> {
 };
 
 template <typename T>
-struct MojomTypeTraits<AssociatedInterfaceRequest<T>, false> {
+struct MojomTypeTraits<AssociatedInterfaceRequestDataView<T>, false> {
   using Data = AssociatedInterfaceRequest_Data;
   using DataAsArrayElement = Data;
 
@@ -220,7 +266,7 @@ struct MojomTypeTraits<ScopedHandleBase<T>, false> {
 };
 
 template <typename T>
-struct MojomTypeTraits<InterfacePtr<T>, false> {
+struct MojomTypeTraits<InterfacePtrDataView<T>, false> {
   using Data = Interface_Data;
   using DataAsArrayElement = Data;
 
@@ -228,7 +274,7 @@ struct MojomTypeTraits<InterfacePtr<T>, false> {
 };
 
 template <typename T>
-struct MojomTypeTraits<InterfaceRequest<T>, false> {
+struct MojomTypeTraits<InterfaceRequestDataView<T>, false> {
   using Data = Handle_Data;
   using DataAsArrayElement = Data;
 
@@ -237,52 +283,44 @@ struct MojomTypeTraits<InterfaceRequest<T>, false> {
 };
 
 template <typename K, typename V>
-struct MojomTypeTraits<Map<K, V>, false> {
+struct MojomTypeTraits<MapDataView<K, V>, false> {
   using Data = Map_Data<typename MojomTypeTraits<K>::DataAsArrayElement,
                         typename MojomTypeTraits<V>::DataAsArrayElement>;
-  using DataAsArrayElement = Data*;
+  using DataAsArrayElement = Pointer<Data>;
 
   static const MojomTypeCategory category = MojomTypeCategory::MAP;
 };
 
 template <>
-struct MojomTypeTraits<String, false> {
+struct MojomTypeTraits<NativeStructDataView, false> {
+  using Data = internal::NativeStruct_Data;
+  using DataAsArrayElement = Pointer<Data>;
+
+  static const MojomTypeCategory category = MojomTypeCategory::STRUCT;
+};
+
+template <>
+struct MojomTypeTraits<StringDataView, false> {
   using Data = String_Data;
-  using DataAsArrayElement = Data*;
+  using DataAsArrayElement = Pointer<Data>;
 
   static const MojomTypeCategory category = MojomTypeCategory::STRING;
-};
-
-template <typename T>
-struct MojomTypeTraits<StructPtr<T>, false> {
-  using Data = typename T::Data_;
-  using DataAsArrayElement =
-      typename std::conditional<IsUnionDataType<Data>::value,
-                                Data,
-                                Data*>::type;
-
-  static const MojomTypeCategory category = IsUnionDataType<Data>::value
-                                                ? MojomTypeCategory::UNION
-                                                : MojomTypeCategory::STRUCT;
-};
-
-template <typename T>
-struct MojomTypeTraits<InlinedStructPtr<T>, false> {
-  using Data = typename T::Data_;
-  using DataAsArrayElement =
-      typename std::conditional<IsUnionDataType<Data>::value,
-                                Data,
-                                Data*>::type;
-
-  static const MojomTypeCategory category = IsUnionDataType<Data>::value
-                                                ? MojomTypeCategory::UNION
-                                                : MojomTypeCategory::STRUCT;
 };
 
 template <typename T, MojomTypeCategory categories>
 struct BelongsTo {
   static const bool value =
       static_cast<uint32_t>(MojomTypeTraits<T>::category & categories) != 0;
+};
+
+template <typename T>
+struct EnumHashImpl {
+  static_assert(std::is_enum<T>::value, "Incorrect hash function.");
+
+  size_t operator()(T input) const {
+    using UnderlyingType = typename base::underlying_type<T>::type;
+    return std::hash<UnderlyingType>()(static_cast<UnderlyingType>(input));
+  }
 };
 
 }  // namespace internal

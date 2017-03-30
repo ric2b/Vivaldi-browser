@@ -15,30 +15,18 @@ class TextureMailboxDeleter;
 
 class CC_EXPORT VulkanRenderer : public DirectRenderer {
  public:
-  static std::unique_ptr<VulkanRenderer> Create(
-      RendererClient* client,
-      const RendererSettings* settings,
-      OutputSurface* output_surface,
-      ResourceProvider* resource_provider,
-      TextureMailboxDeleter* texture_mailbox_deleter,
-      int highp_threshold_min);
-
-  ~VulkanRenderer() override;
-
-  // Implementation of public Renderer functions.
-  const RendererCapabilitiesImpl& Capabilities() const override;
-  void Finish() override;
-  void SwapBuffers(const CompositorFrameMetadata& metadata) override;
-  void ReceiveSwapBuffersAck(const CompositorFrameAck& ack) override;
-
- protected:
-  VulkanRenderer(RendererClient* client,
-                 const RendererSettings* settings,
+  VulkanRenderer(const RendererSettings* settings,
                  OutputSurface* output_surface,
                  ResourceProvider* resource_provider,
                  TextureMailboxDeleter* texture_mailbox_deleter,
                  int highp_threshold_min);
+  ~VulkanRenderer() override;
 
+  // Implementation of public DirectRenderer functions.
+  void SwapBuffers(const CompositorFrameMetadata& metadata) override;
+  void ReceiveSwapBuffersAck(const CompositorFrameAck& ack) override;
+
+ protected:
   // Implementations of protected Renderer functions.
   void DidChangeVisibility() override;
 
@@ -66,8 +54,6 @@ class CC_EXPORT VulkanRenderer : public DirectRenderer {
       std::unique_ptr<CopyOutputRequest> request) override;
 
  private:
-  RendererCapabilitiesImpl capabilities_;
-
   DISALLOW_COPY_AND_ASSIGN(VulkanRenderer);
 };
 

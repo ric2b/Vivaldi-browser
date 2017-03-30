@@ -29,8 +29,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/prefs/pref_service.h"
-#include "components/prefs/scoped_user_pref_update.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/user_prefs/tracked/tracked_preference_histogram_names.h"
 #include "extensions/browser/pref_names.h"
@@ -535,9 +533,9 @@ class PrefHashBrowserTestUntrustedInitialized : public PrefHashBrowserTestBase {
   void AttackPreferencesOnDisk(
       base::DictionaryValue* unprotected_preferences,
       base::DictionaryValue* protected_preferences) override {
-    EXPECT_TRUE(unprotected_preferences->Remove("protection.macs", NULL));
+    unprotected_preferences->Remove("protection.macs", NULL);
     if (protected_preferences)
-      EXPECT_TRUE(protected_preferences->Remove("protection.macs", NULL));
+      protected_preferences->Remove("protection.macs", NULL);
   }
 
   void VerifyReactionToPrefAttack() override {

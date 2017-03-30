@@ -5,7 +5,7 @@
 #include "core/inspector/InspectorAnimationAgent.h"
 
 #include "core/animation/Animation.h"
-#include "core/animation/AnimationEffect.h"
+#include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/AnimationEffectTiming.h"
 #include "core/animation/ComputedTimingProperties.h"
 #include "core/animation/EffectModel.h"
@@ -38,7 +38,7 @@ static const char animationAgentPlaybackRate[] = "animationAgentPlaybackRate";
 
 namespace blink {
 
-InspectorAnimationAgent::InspectorAnimationAgent(InspectedFrames* inspectedFrames, InspectorDOMAgent* domAgent, InspectorCSSAgent* cssAgent, V8InspectorSession* v8Session)
+InspectorAnimationAgent::InspectorAnimationAgent(InspectedFrames* inspectedFrames, InspectorDOMAgent* domAgent, InspectorCSSAgent* cssAgent, v8_inspector::V8InspectorSession* v8Session)
     : m_inspectedFrames(inspectedFrames)
     , m_domAgent(domAgent)
     , m_cssAgent(cssAgent)
@@ -53,7 +53,7 @@ void InspectorAnimationAgent::restore()
         ErrorString error;
         enable(&error);
         double playbackRate = 1;
-        m_state->getNumber(AnimationAgentState::animationAgentPlaybackRate, &playbackRate);
+        m_state->getDouble(AnimationAgentState::animationAgentPlaybackRate, &playbackRate);
         setPlaybackRate(nullptr, playbackRate);
     }
 }
@@ -86,7 +86,7 @@ void InspectorAnimationAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
         m_clearedAnimations.clear();
     }
     double playbackRate = 1;
-    m_state->getNumber(AnimationAgentState::animationAgentPlaybackRate, &playbackRate);
+    m_state->getDouble(AnimationAgentState::animationAgentPlaybackRate, &playbackRate);
     setPlaybackRate(nullptr, playbackRate);
 }
 
@@ -114,7 +114,6 @@ static std::unique_ptr<protocol::Animation::AnimationEffect> buildObjectForAnima
     std::unique_ptr<protocol::Animation::AnimationEffect> animationObject = protocol::Animation::AnimationEffect::create()
         .setDelay(delay)
         .setEndDelay(computedTiming.endDelay())
-        .setPlaybackRate(computedTiming.playbackRate())
         .setIterationStart(computedTiming.iterationStart())
         .setIterations(computedTiming.iterations())
         .setDuration(duration)
@@ -129,7 +128,7 @@ static std::unique_ptr<protocol::Animation::KeyframeStyle> buildObjectForStringK
 {
     Decimal decimal = Decimal::fromDouble(keyframe->offset() * 100);
     String offset = decimal.toString();
-    offset.append("%");
+    offset.append('%');
 
     std::unique_ptr<protocol::Animation::KeyframeStyle> keyframeObject = protocol::Animation::KeyframeStyle::create()
         .setOffset(offset)
@@ -202,7 +201,7 @@ void InspectorAnimationAgent::setPlaybackRate(ErrorString*, double playbackRate)
 {
     for (LocalFrame* frame : *m_inspectedFrames)
         frame->document()->timeline().setPlaybackRate(playbackRate);
-    m_state->setNumber(AnimationAgentState::animationAgentPlaybackRate, playbackRate);
+    m_state->setDouble(AnimationAgentState::animationAgentPlaybackRate, playbackRate);
 }
 
 void InspectorAnimationAgent::getCurrentTime(ErrorString* errorString, const String& id, double* currentTime)
@@ -260,13 +259,7 @@ blink::Animation* InspectorAnimationAgent::animationClone(blink::Animation* anim
             StringKeyframeVector newKeyframes;
             for (auto& oldKeyframe : oldKeyframes)
                 newKeyframes.append(toStringKeyframe(oldKeyframe.get()));
-            StringKeyframeEffectModel* newStringKeyframeModel = StringKeyframeEffectModel::create(newKeyframes);
-            // TODO(samli): This shouldn't be required.
-            Element* element = oldEffect->target();
-            if (!element)
-                return nullptr;
-            newStringKeyframeModel->forceConversionsToAnimatableValues(*element, element->computedStyle());
-            newModel = newStringKeyframeModel;
+            newModel = StringKeyframeEffectModel::create(newKeyframes);
         } else if (oldModel->isAnimatableValueKeyframeEffectModel()) {
             AnimatableValueKeyframeEffectModel* oldAnimatableValueKeyframeModel = toAnimatableValueKeyframeEffectModel(oldModel);
             KeyframeVector oldKeyframes = oldAnimatableValueKeyframeModel->getFrames();
@@ -363,7 +356,7 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
     }
 }
 
-void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const String& animationId, std::unique_ptr<protocol::Runtime::RemoteObject>* result)
+void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const String& animationId, std::unique_ptr<protocol::Runtime::API::RemoteObject>* result)
 {
     blink::Animation* animation = assertAnimation(errorString, animationId);
     if (!animation)
@@ -432,7 +425,7 @@ String InspectorAnimationAgent::createCSSId(blink::Animation& animation)
     for (CSSPropertyID property : cssProperties) {
         CSSStyleDeclaration* style = m_cssAgent->findEffectiveDeclaration(property, styles);
         // Ignore inline styles.
-        if (!style || !style->parentStyleSheet() || !style->parentRule() || style->parentRule()->type() != CSSRule::STYLE_RULE)
+        if (!style || !style->parentStyleSheet() || !style->parentRule() || style->parentRule()->type() != CSSRule::kStyleRule)
             continue;
         addStringToDigestor(digestor.get(), getPropertyNameString(property));
         addStringToDigestor(digestor.get(), m_cssAgent->styleSheetId(style->parentStyleSheet()));

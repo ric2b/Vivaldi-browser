@@ -71,6 +71,7 @@ WebInspector.SoftContextMenu.prototype = {
         if (!this._parentMenu) {
             this._glassPaneElement = createElementWithClass("div", "soft-context-menu-glass-pane fill");
             this._glassPaneElement.tabIndex = 0;
+            this._glassPaneElement.style.zIndex = "20000";
             this._glassPaneElement.addEventListener("mouseup", this._glassPaneMouseUp.bind(this), false);
             this._glassPaneElement.appendChild(this.element);
             document.body.appendChild(this._glassPaneElement);
@@ -391,7 +392,8 @@ WebInspector.SoftContextMenu.prototype = {
     {
         if (this._subMenu)
             this._subMenu._discardSubMenus();
-        this.element.remove();
+        if (this.element)
+            this.element.remove();
         if (this._parentMenu)
             delete this._parentMenu._subMenu;
     }

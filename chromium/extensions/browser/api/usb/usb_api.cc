@@ -503,7 +503,7 @@ ExtensionFunction::ResponseAction UsbFindDevicesFunction::Run() {
   vendor_id_ = parameters->options.vendor_id;
   product_id_ = parameters->options.product_id;
   int interface_id = parameters->options.interface_id.get()
-                         ? *parameters->options.interface_id.get()
+                         ? *parameters->options.interface_id
                          : UsbDevicePermissionData::ANY_INTERFACE;
   UsbDevicePermission::CheckParam param(vendor_id_, product_id_, interface_id);
   if (!extension()->permissions_data()->CheckAPIPermissionWithParam(
@@ -595,7 +595,7 @@ void UsbGetDevicesFunction::OnGetDevicesComplete(
   std::unique_ptr<base::ListValue> result(new base::ListValue());
   UsbGuidMap* guid_map = UsbGuidMap::Get(browser_context());
   for (const scoped_refptr<UsbDevice>& device : devices) {
-    if ((filters_.empty() || UsbDeviceFilter::MatchesAny(device, filters_)) &&
+    if (UsbDeviceFilter::MatchesAny(device, filters_) &&
         HasDevicePermission(device)) {
       Device api_device;
       guid_map->GetApiDevice(device, &api_device);

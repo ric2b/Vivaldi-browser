@@ -140,28 +140,28 @@ void ShadowRoot::recalcStyle(StyleRecalcChange change)
     // There's no style to update so just calling recalcStyle means we're updated.
     clearNeedsStyleRecalc();
 
-    recalcChildStyle(change);
+    recalcDescendantStyles(change);
     clearChildNeedsStyleRecalc();
 }
 
-void ShadowRoot::attach(const AttachContext& context)
+void ShadowRoot::attachLayoutTree(const AttachContext& context)
 {
     StyleSharingDepthScope sharingScope(*this);
-    DocumentFragment::attach(context);
+    DocumentFragment::attachLayoutTree(context);
 }
 
-void ShadowRoot::detach(const AttachContext& context)
+void ShadowRoot::detachLayoutTree(const AttachContext& context)
 {
     if (context.clearInvalidation)
         document().styleEngine().styleInvalidator().clearInvalidation(*this);
-    DocumentFragment::detach(context);
+    DocumentFragment::detachLayoutTree(context);
 }
 
 Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* insertionPoint)
 {
     DocumentFragment::insertedInto(insertionPoint);
 
-    if (!insertionPoint->inShadowIncludingDocument() || !isOldest())
+    if (!insertionPoint->isConnected() || !isOldest())
         return InsertionDone;
 
     // FIXME: When parsing <video controls>, insertedInto() is called many times without invoking removedFrom.
@@ -180,7 +180,7 @@ Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* inser
 
 void ShadowRoot::removedFrom(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inShadowIncludingDocument()) {
+    if (insertionPoint->isConnected()) {
         document().styleEngine().shadowRootRemovedFromDocument(this);
         if (m_registeredWithParentShadowRoot) {
             ShadowRoot* root = host().containingShadowRoot();
@@ -202,7 +202,7 @@ void ShadowRoot::childrenChanged(const ChildrenChange& change)
     ContainerNode::childrenChanged(change);
 
     if (change.isChildElementChange())
-        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingChanged, change.siblingBeforeChange, change.siblingAfterChange);
+        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, toElement(change.siblingChanged), change.siblingBeforeChange, change.siblingAfterChange);
 
     if (InsertionPoint* point = shadowInsertionPointOfYoungerShadowRoot()) {
         if (ShadowRoot* root = point->containingShadowRoot())

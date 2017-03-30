@@ -22,10 +22,12 @@
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
+#include "content/common/url_loader.mojom.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "net/base/request_priority.h"
+#include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -45,6 +47,10 @@ struct ResourceResponseHead;
 class SharedMemoryReceivedDataFactory;
 struct SiteIsolationResponseMetaData;
 struct SyncLoadResponse;
+
+namespace mojom {
+class URLLoaderFactory;
+}  // namespace mojom
 
 // This class serves as a communication interface to the ResourceDispatcherHost
 // in the browser process. It can be used from any child process.
@@ -66,16 +72,21 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
   // use this if you really need it!  There is also no way for the caller to
   // interrupt this method. Errors are reported via the status field of the
   // response parameter.
-  void StartSync(const RequestInfo& request_info,
-                 ResourceRequestBodyImpl* request_body,
-                 SyncLoadResponse* response);
+  virtual void StartSync(const RequestInfo& request_info,
+                         ResourceRequestBodyImpl* request_body,
+                         SyncLoadResponse* response,
+                         blink::WebURLRequest::LoadingIPCType ipc_type,
+                         mojom::URLLoaderFactory* url_loader_factory);
 
   // Call this method to initiate the request. If this method succeeds, then
   // the peer's methods will be called asynchronously to report various events.
-  // Returns the request id.
+  // Returns the request id. |url_loader_factory| must be non-null if and only
+  // if |ipc_type| is LoadingIPCType::Mojo.
   virtual int StartAsync(const RequestInfo& request_info,
                          ResourceRequestBodyImpl* request_body,
-                         std::unique_ptr<RequestPeer> peer);
+                         std::unique_ptr<RequestPeer> peer,
+                         blink::WebURLRequest::LoadingIPCType ipc_type,
+                         mojom::URLLoaderFactory* url_loader_factory);
 
   // Removes a request from the |pending_requests_| list, returning true if the
   // request was found and removed.
@@ -119,6 +130,7 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
       scoped_refptr<ResourceSchedulingFilter> resource_scheduling_filter);
 
  private:
+  friend class URLResponseBodyConsumer;
   friend class ResourceDispatcherTest;
 
   typedef std::deque<IPC::Message*> MessageQueue;
@@ -155,6 +167,10 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
     scoped_refptr<SharedMemoryReceivedDataFactory> received_data_factory;
     std::unique_ptr<SiteIsolationResponseMetaData> site_isolation_metadata;
     int buffer_size;
+
+    // For mojo loading.
+    mojom::URLLoaderPtr url_loader;
+    std::unique_ptr<mojom::URLLoaderClient> url_loader_client;
   };
   using PendingRequestMap = std::map<int, std::unique_ptr<PendingRequestInfo>>;
 
@@ -178,11 +194,13 @@ class CONTENT_EXPORT ResourceDispatcher : public IPC::Listener {
                        base::ProcessId renderer_pid);
   void OnReceivedInlinedDataChunk(int request_id,
                                   const std::vector<char>& data,
-                                  int encoded_data_length);
+                                  int encoded_data_length,
+                                  int encoded_body_length);
   void OnReceivedData(int request_id,
                       int data_offset,
                       int data_length,
-                      int encoded_data_length);
+                      int encoded_data_length,
+                      int encoded_body_length);
   void OnDownloadedData(int request_id, int data_len, int encoded_data_length);
   void OnRequestComplete(
       int request_id,

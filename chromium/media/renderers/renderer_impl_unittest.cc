@@ -51,6 +51,7 @@ class RendererImplTest : public ::testing::Test {
     MOCK_METHOD1(OnInitialize, void(PipelineStatus));
     MOCK_METHOD0(OnFlushed, void());
     MOCK_METHOD1(OnCdmAttached, void(bool));
+    MOCK_METHOD1(OnDurationChange, void(base::TimeDelta duration));
 
    private:
     DISALLOW_COPY_AND_ASSIGN(CallbackHelper);
@@ -87,6 +88,8 @@ class RendererImplTest : public ::testing::Test {
       DemuxerStream::Type type) {
     std::unique_ptr<StrictMock<MockDemuxerStream>> stream(
         new StrictMock<MockDemuxerStream>(type));
+    EXPECT_CALL(*stream, SetStreamStatusChangeCB(_))
+        .Times(testing::AnyNumber());
     return stream;
   }
 
@@ -468,6 +471,7 @@ TEST_F(RendererImplTest, FlushAfterUnderflow) {
 
   // Simulate underflow.
   EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   audio_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
 
   // Flush while underflowed. We shouldn't call StopTicking() again.
@@ -503,6 +507,7 @@ TEST_F(RendererImplTest, VideoStreamEnded) {
 
   EXPECT_CALL(time_source_, StopTicking());
   EXPECT_CALL(callbacks_, OnEnded());
+  EXPECT_CALL(*video_renderer_, OnTimeStateChanged(false));
 
   video_renderer_client_->OnEnded();
   base::RunLoop().RunUntilIdle();
@@ -518,6 +523,7 @@ TEST_F(RendererImplTest, AudioVideoStreamsEnded) {
 
   EXPECT_CALL(time_source_, StopTicking());
   EXPECT_CALL(callbacks_, OnEnded());
+  EXPECT_CALL(*video_renderer_, OnTimeStateChanged(false));
 
   video_renderer_client_->OnEnded();
   base::RunLoop().RunUntilIdle();
@@ -584,6 +590,7 @@ TEST_F(RendererImplTest, AudioUnderflow) {
 
   // Underflow should occur immediately with a single audio track.
   EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   audio_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
 }
 
@@ -594,6 +601,7 @@ TEST_F(RendererImplTest, AudioUnderflowWithVideo) {
   // Underflow should be immediate when both audio and video are present and
   // audio underflows.
   EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   audio_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
 }
 
@@ -603,6 +611,7 @@ TEST_F(RendererImplTest, VideoUnderflow) {
 
   // Underflow should occur immediately with a single video track.
   EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   video_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
 }
 
@@ -616,6 +625,7 @@ TEST_F(RendererImplTest, VideoUnderflowWithAudio) {
 
   // Underflow should be delayed when both audio and video are present and video
   // underflows.
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   video_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
   Mock::VerifyAndClearExpectations(&time_source_);
 
@@ -633,6 +643,8 @@ TEST_F(RendererImplTest, VideoUnderflowWithAudioVideoRecovers) {
 
   // Underflow should be delayed when both audio and video are present and video
   // underflows.
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
+      .Times(0);
   video_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
   Mock::VerifyAndClearExpectations(&time_source_);
 
@@ -651,9 +663,12 @@ TEST_F(RendererImplTest, VideoAndAudioUnderflow) {
 
   // Underflow should be delayed when both audio and video are present and video
   // underflows.
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING))
+      .Times(0);
   video_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
   Mock::VerifyAndClearExpectations(&time_source_);
 
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   EXPECT_CALL(time_source_, StopTicking());
   audio_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
 
@@ -671,6 +686,7 @@ TEST_F(RendererImplTest, VideoUnderflowWithAudioFlush) {
 
   // Simulate the cases where audio underflows and then video underflows.
   EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(callbacks_, OnBufferingStateChange(BUFFERING_HAVE_NOTHING));
   audio_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
   video_renderer_client_->OnBufferingStateChange(BUFFERING_HAVE_NOTHING);
   Mock::VerifyAndClearExpectations(&time_source_);
@@ -697,6 +713,33 @@ TEST_F(RendererImplTest, VideoUnderflowWithAudioFlush) {
 
   // Nothing else should primed on the message loop.
   base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(RendererImplTest, StreamStatusNotificationHandling) {
+  CreateAudioAndVideoStream();
+
+  DemuxerStream::StreamStatusChangeCB audio_stream_status_change_cb;
+  DemuxerStream::StreamStatusChangeCB video_stream_status_change_cb;
+  EXPECT_CALL(*audio_stream_, SetStreamStatusChangeCB(_))
+      .WillOnce(SaveArg<0>(&audio_stream_status_change_cb));
+  EXPECT_CALL(*video_stream_, SetStreamStatusChangeCB(_))
+      .WillOnce(SaveArg<0>(&video_stream_status_change_cb));
+  SetAudioRendererInitializeExpectations(PIPELINE_OK);
+  SetVideoRendererInitializeExpectations(PIPELINE_OK);
+  InitializeAndExpect(PIPELINE_OK);
+  Play();
+
+  // Verify that DemuxerStream status changes cause the corresponding
+  // audio/video renderer to be flushed and restarted.
+  base::TimeDelta time0;
+  EXPECT_CALL(time_source_, StopTicking());
+  EXPECT_CALL(*audio_renderer_, Flush(_)).WillOnce(RunClosure<0>());
+  EXPECT_CALL(*audio_renderer_, StartPlaying()).Times(1);
+  audio_stream_status_change_cb.Run(false, time0);
+
+  EXPECT_CALL(*video_renderer_, Flush(_)).WillOnce(RunClosure<0>());
+  EXPECT_CALL(*video_renderer_, StartPlayingFrom(_)).Times(1);
+  video_stream_status_change_cb.Run(false, time0);
 }
 
 }  // namespace media

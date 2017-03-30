@@ -40,6 +40,7 @@
 #include "public/web/WebFrameOwnerProperties.h"
 #include "public/web/WebHistoryItem.h"
 #include "public/web/WebRemoteFrameClient.h"
+#include "public/web/WebSettings.h"
 #include "public/web/WebViewClient.h"
 #include "web/WebViewImpl.h"
 #include <gmock/gmock.h>
@@ -51,15 +52,16 @@ namespace blink {
 
 class WebFrame;
 class WebFrameWidget;
-class WebLocalFrame;
-class WebRemoteFrame;
+class WebLocalFrameImpl;
 class WebRemoteFrameImpl;
+class WebSettings;
 enum class WebCachePolicy;
 
 namespace FrameTestHelpers {
 
 class TestWebFrameClient;
-using TestWebWidgetClient = WebWidgetClient;
+class TestWebWidgetClient;
+class TestWebViewClient;
 
 // Loads a url into the specified WebFrame for testing purposes. Pumps any
 // pending resource requests, as well as waiting for the threaded parser to
@@ -82,9 +84,13 @@ WebMouseEvent createMouseEvent(WebInputEvent::Type, WebMouseEvent::Button, const
 // Calls WebRemoteFrame::createLocalChild, but with some arguments prefilled
 // with default test values (i.e. with a default |client| or |properties| and/or
 // with a precalculated |uniqueName|).
-WebLocalFrame* createLocalChild(WebRemoteFrame* parent, const WebString& name = WebString(), WebFrameClient* = nullptr, WebFrame* previousSibling = nullptr, const WebFrameOwnerProperties& = WebFrameOwnerProperties());
-WebRemoteFrame* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient*, const WebString& name = WebString());
+WebLocalFrameImpl* createLocalChild(WebRemoteFrame* parent, const WebString& name = WebString(), WebFrameClient* = nullptr, WebWidgetClient* = nullptr, WebFrame* previousSibling = nullptr, const WebFrameOwnerProperties& = WebFrameOwnerProperties());
+WebRemoteFrameImpl* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient*, const WebString& name = WebString());
 
+// Helpers for unit tests with parameterized WebSettings overrides.
+typedef void (*SettingOverrideFunction)(WebSettings*);
+void DefaultSettingOverride(WebSettings*);
+void RootLayerScrollsSettingOverride(WebSettings*);
 class SettingOverrider {
 public:
     virtual void overrideSettings(WebSettings*) = 0;
@@ -117,9 +123,36 @@ private:
     bool m_originalOverlayScrollbarsEnabled;
 };
 
+class TestWebWidgetClient : public WebWidgetClient {
+public:
+    virtual ~TestWebWidgetClient() {}
+    bool allowsBrokenNullLayerTreeView() const override { return true; }
+};
+
+class TestWebViewWidgetClient : public TestWebWidgetClient {
+public:
+    explicit TestWebViewWidgetClient(TestWebViewClient* testWebViewClient)
+        : m_testWebViewClient(testWebViewClient)
+    {
+    }
+    virtual ~TestWebViewWidgetClient() {}
+
+    void initializeLayerTreeView() override;
+    WebLayerTreeView* layerTreeView() override;
+    void scheduleAnimation() override;
+    void didMeaningfulLayout(WebMeaningfulLayout) override;
+
+private:
+    TestWebViewClient* m_testWebViewClient;
+};
+
 class TestWebViewClient : public WebViewClient {
 public:
-    TestWebViewClient() : m_animationScheduled(false) { }
+    TestWebViewClient()
+        : m_testWebWidgetClient(this)
+        , m_animationScheduled(false)
+    {
+    }
     virtual ~TestWebViewClient() { }
     void initializeLayerTreeView() override;
     WebLayerTreeView* layerTreeView() override { return m_layerTreeView.get(); }
@@ -131,9 +164,12 @@ public:
     // TODO(lfg): This is a temporary method to retrieve the WebWidgetClient,
     // while we refactor WebView to not inherit from Webwidget.
     // Returns the WebWidgetClient.
-    WebWidgetClient* widgetClient() { return this; }
+    TestWebWidgetClient* widgetClient() { return &m_testWebWidgetClient; }
 
 private:
+    friend class TestWebViewWidgetClient;
+
+    TestWebViewWidgetClient m_testWebWidgetClient;
     std::unique_ptr<WebLayerTreeView> m_layerTreeView;
     bool m_animationScheduled;
 };
@@ -161,12 +197,10 @@ public:
 
     void reset();
 
-    WebView* webView() const { return m_webView; }
-    WebViewImpl* webViewImpl() const { return m_webView; }
+    WebViewImpl* webView() const { return m_webView; }
 
 private:
     WebViewImpl* m_webView;
-    WebFrameWidget* m_webViewWidget;
     SettingOverrider* m_settingOverrider;
     UseMockScrollbarSettings m_mockScrollbarSettings;
     TestWebViewClient* m_testWebViewClient;
@@ -179,7 +213,7 @@ public:
     TestWebFrameClient();
 
     WebFrame* createChildFrame(WebLocalFrame* parent, WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, const WebFrameOwnerProperties&) override;
-    void frameDetached(WebFrame*, DetachType) override;
+    void frameDetached(WebLocalFrame*, DetachType) override;
     void didStartLoading(bool) override;
     void didStopLoading() override;
 

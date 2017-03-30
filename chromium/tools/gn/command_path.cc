@@ -116,9 +116,15 @@ void PrintPath(const PathVector& path, DepType implicit_last_dep) {
   for (size_t i = 0; i < path.size(); i++) {
     OutputString(path[i].first->label().GetUserVisibleName(default_toolchain));
 
+    std::string disabled("");
+    if (path[i].first->is_disabled())
+      disabled = " disabled";
+
     // Output dependency type.
     if (i == path.size() - 1) {
       // Last one either gets the implicit last dep type or nothing.
+      if (!disabled.empty())
+        OutputString(" ["+disabled+"]");
       if (implicit_last_dep != DepType::NONE) {
         OutputString(std::string(" --> see ") +
                      StringForDepType(implicit_last_dep) +
@@ -127,7 +133,7 @@ void PrintPath(const PathVector& path, DepType implicit_last_dep) {
     } else {
       // Take type from the next entry.
       OutputString(std::string(" --[") + StringForDepType(path[i + 1].second) +
-                   "]-->", DECORATION_DIM);
+                   disabled + "]-->", DECORATION_DIM);
     }
     OutputString("\n");
   }

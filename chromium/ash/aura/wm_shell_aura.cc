@@ -4,32 +4,53 @@
 
 #include "ash/aura/wm_shell_aura.h"
 
+#include <utility>
+
+#include "ash/aura/key_event_watcher_aura.h"
+#include "ash/aura/pointer_watcher_adapter.h"
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_observer.h"
+#include "ash/common/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard.h"
 #include "ash/common/wm/mru_window_tracker.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_activation_observer.h"
 #include "ash/common/wm_display_observer.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
+#include "ash/laser/laser_pointer_controller.h"
+#include "ash/metrics/task_switch_metrics_recorder.h"
+#include "ash/shared/immersive_fullscreen_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
+#include "ash/touch/touch_uma.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/maximize_mode/maximize_mode_event_handler_aura.h"
 #include "ash/wm/screen_pinning_controller.h"
+#include "ash/wm/window_cycle_event_filter_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/ptr_util.h"
+#include "ui/aura/client/capture_client.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/aura/env.h"
 #include "ui/wm/public/activation_client.h"
 
 #if defined(OS_CHROMEOS)
 #include "ash/virtual_keyboard_controller.h"
 #endif
 
+#if defined(USE_X11)
+#include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_x11.h"
+#endif
+
+#if defined(USE_OZONE)
+#include "ash/wm/maximize_mode/scoped_disable_internal_mouse_and_keyboard_ozone.h"
+#endif
+
 namespace ash {
 
-WmShellAura::WmShellAura() {
+WmShellAura::WmShellAura(std::unique_ptr<ShellDelegate> shell_delegate)
+    : WmShell(std::move(shell_delegate)) {
   WmShell::Set(this);
 }
 
@@ -37,12 +58,22 @@ WmShellAura::~WmShellAura() {
   WmShell::Set(nullptr);
 }
 
-void WmShellAura::PrepareForShutdown() {
+void WmShellAura::CreatePointerWatcherAdapter() {
+  // Must occur after Shell has installed its early pre-target handlers (for
+  // example, WindowModalityController).
+  pointer_watcher_adapter_.reset(new PointerWatcherAdapter);
+}
+
+void WmShellAura::Shutdown() {
   if (added_activation_observer_)
     Shell::GetInstance()->activation_client()->RemoveObserver(this);
 
   if (added_display_observer_)
     Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
+
+  pointer_watcher_adapter_.reset();
+
+  WmShell::Shutdown();
 }
 
 WmWindow* WmShellAura::NewContainerWindow() {
@@ -61,6 +92,13 @@ WmWindow* WmShellAura::GetActiveWindow() {
   return WmWindowAura::Get(wm::GetActiveWindow());
 }
 
+WmWindow* WmShellAura::GetCaptureWindow() {
+  // Ash shares capture client among all RootWindowControllers, so we need only
+  // check the primary root.
+  return WmWindowAura::Get(
+      aura::client::GetCaptureWindow(Shell::GetPrimaryRootWindow()));
+}
+
 WmWindow* WmShellAura::GetPrimaryRootWindow() {
   return WmWindowAura::Get(Shell::GetPrimaryRootWindow());
 }
@@ -71,16 +109,32 @@ WmWindow* WmShellAura::GetRootWindowForDisplayId(int64_t display_id) {
                                ->GetRootWindowForDisplayId(display_id));
 }
 
-WmWindow* WmShellAura::GetRootWindowForNewWindows() {
-  return WmWindowAura::Get(Shell::GetTargetRootWindow());
-}
-
 const DisplayInfo& WmShellAura::GetDisplayInfo(int64_t display_id) const {
   return Shell::GetInstance()->display_manager()->GetDisplayInfo(display_id);
 }
 
+bool WmShellAura::IsActiveDisplayId(int64_t display_id) const {
+  return Shell::GetInstance()->display_manager()->IsActiveDisplayId(display_id);
+}
+
+display::Display WmShellAura::GetFirstDisplay() const {
+  return Shell::GetInstance()
+      ->display_manager()
+      ->software_mirroring_display_list()[0];
+}
+
+bool WmShellAura::IsInUnifiedMode() const {
+  return Shell::GetInstance()->display_manager()->IsInUnifiedMode();
+}
+
 bool WmShellAura::IsForceMaximizeOnFirstRun() {
-  return Shell::GetInstance()->delegate()->IsForceMaximizeOnFirstRun();
+  return delegate()->IsForceMaximizeOnFirstRun();
+}
+
+void WmShellAura::SetDisplayWorkAreaInsets(WmWindow* window,
+                                           const gfx::Insets& insets) {
+  aura::Window* aura_window = WmWindowAura::GetAuraWindow(window);
+  Shell::GetInstance()->SetDisplayWorkAreaInsets(aura_window, insets);
 }
 
 bool WmShellAura::IsPinned() {
@@ -93,7 +147,7 @@ void WmShellAura::SetPinnedWindow(WmWindow* window) {
 }
 
 bool WmShellAura::CanShowWindowForUser(WmWindow* window) {
-  return Shell::GetInstance()->delegate()->CanShowWindowForUser(window);
+  return delegate()->CanShowWindowForUser(window);
 }
 
 void WmShellAura::LockCursor() {
@@ -102,6 +156,10 @@ void WmShellAura::LockCursor() {
 
 void WmShellAura::UnlockCursor() {
   Shell::GetInstance()->cursor_manager()->UnlockCursor();
+}
+
+bool WmShellAura::IsMouseEventsEnabled() {
+  return Shell::GetInstance()->cursor_manager()->IsMouseEventsEnabled();
 }
 
 std::vector<WmWindow*> WmShellAura::GetAllRootWindows() {
@@ -113,7 +171,21 @@ std::vector<WmWindow*> WmShellAura::GetAllRootWindows() {
 }
 
 void WmShellAura::RecordUserMetricsAction(UserMetricsAction action) {
-  return Shell::GetInstance()->metrics()->RecordUserMetricsAction(action);
+  Shell::GetInstance()->metrics()->RecordUserMetricsAction(action);
+}
+
+void WmShellAura::RecordGestureAction(GestureActionType action) {
+  TouchUMA::GetInstance()->RecordGestureAction(action);
+}
+
+void WmShellAura::RecordTaskSwitchMetric(TaskSwitchSource source) {
+  Shell::GetInstance()->metrics()->task_switch_metrics_recorder().OnTaskSwitch(
+      source);
+}
+
+void WmShellAura::ShowContextMenu(const gfx::Point& location_in_screen,
+                                  ui::MenuSourceType source_type) {
+  Shell::GetInstance()->ShowContextMenu(location_in_screen, source_type);
 }
 
 std::unique_ptr<WindowResizer> WmShellAura::CreateDragWindowResizer(
@@ -123,9 +195,33 @@ std::unique_ptr<WindowResizer> WmShellAura::CreateDragWindowResizer(
       DragWindowResizer::Create(next_window_resizer.release(), window_state));
 }
 
+std::unique_ptr<WindowCycleEventFilter>
+WmShellAura::CreateWindowCycleEventFilter() {
+  return base::MakeUnique<WindowCycleEventFilterAura>();
+}
+
 std::unique_ptr<wm::MaximizeModeEventHandler>
 WmShellAura::CreateMaximizeModeEventHandler() {
   return base::WrapUnique(new wm::MaximizeModeEventHandlerAura);
+}
+
+std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
+WmShellAura::CreateScopedDisableInternalMouseAndKeyboard() {
+#if defined(USE_X11)
+  return base::WrapUnique(new ScopedDisableInternalMouseAndKeyboardX11);
+#elif defined(USE_OZONE)
+  return base::WrapUnique(new ScopedDisableInternalMouseAndKeyboardOzone);
+#endif
+  return nullptr;
+}
+
+std::unique_ptr<ImmersiveFullscreenController>
+WmShellAura::CreateImmersiveFullscreenController() {
+  return base::MakeUnique<ImmersiveFullscreenController>();
+}
+
+std::unique_ptr<KeyEventWatcher> WmShellAura::CreateKeyEventWatcher() {
+  return base::MakeUnique<KeyEventWatcherAura>();
 }
 
 void WmShellAura::OnOverviewModeStarting() {
@@ -135,10 +231,6 @@ void WmShellAura::OnOverviewModeStarting() {
 
 void WmShellAura::OnOverviewModeEnded() {
   FOR_EACH_OBSERVER(ShellObserver, *shell_observers(), OnOverviewModeEnded());
-}
-
-AccessibilityDelegate* WmShellAura::GetAccessibilityDelegate() {
-  return Shell::GetInstance()->accessibility_delegate();
 }
 
 SessionStateDelegate* WmShellAura::GetSessionStateDelegate() {
@@ -169,12 +261,17 @@ void WmShellAura::RemoveDisplayObserver(WmDisplayObserver* observer) {
   display_observers_.RemoveObserver(observer);
 }
 
-void WmShellAura::AddPointerWatcher(views::PointerWatcher* watcher) {
-  Shell::GetInstance()->AddPointerWatcher(watcher);
+void WmShellAura::AddPointerWatcher(views::PointerWatcher* watcher,
+                                    bool wants_moves) {
+  pointer_watcher_adapter_->AddPointerWatcher(watcher, wants_moves);
 }
 
 void WmShellAura::RemovePointerWatcher(views::PointerWatcher* watcher) {
-  Shell::GetInstance()->RemovePointerWatcher(watcher);
+  pointer_watcher_adapter_->RemovePointerWatcher(watcher);
+}
+
+bool WmShellAura::IsTouchDown() {
+  return aura::Env::GetInstance()->is_touch_down();
 }
 
 #if defined(OS_CHROMEOS)
@@ -183,15 +280,22 @@ void WmShellAura::ToggleIgnoreExternalKeyboard() {
       ->virtual_keyboard_controller()
       ->ToggleIgnoreExternalKeyboard();
 }
+
+void WmShellAura::SetLaserPointerEnabled(bool enabled) {
+  Shell::GetInstance()->laser_pointer_controller()->SetEnabled(enabled);
+}
 #endif
 
 void WmShellAura::OnWindowActivated(
     aura::client::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
     aura::Window* lost_active) {
+  WmWindow* gained_active_wm = WmWindowAura::Get(gained_active);
+  WmWindow* lost_active_wm = WmWindowAura::Get(lost_active);
+  if (gained_active_wm)
+    set_root_window_for_new_windows(gained_active_wm->GetRootWindow());
   FOR_EACH_OBSERVER(WmActivationObserver, activation_observers_,
-                    OnWindowActivated(WmWindowAura::Get(gained_active),
-                                      WmWindowAura::Get(lost_active)));
+                    OnWindowActivated(gained_active_wm, lost_active_wm));
 }
 
 void WmShellAura::OnAttemptToReactivateWindow(aura::Window* request_active,

@@ -161,8 +161,9 @@
 
     boolean hasSpellingMarker(Document document, long from, long length);
     boolean hasGrammarMarker(Document document, long from, long length);
-    void setContinuousSpellCheckingEnabled(boolean enabled);
+    void setSpellCheckingEnabled(boolean enabled);
 
+    bool canHyphenate(DOMString locale);
     void setMockHyphenation(DOMString locale);
 
     boolean isOverwriteModeEnabled(Document document);
@@ -198,8 +199,6 @@
     unsigned long numberOfLiveNodes();
     unsigned long numberOfLiveDocuments();
     DOMString dumpRefCountedInstanceCounts();
-    unsigned long numberOfConsoleMessages(Document document);
-    unsigned long numberOfConsoleMessagesWithArguments(Document document);
     unsigned long[] setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
 
     DOMString counterValue(Element element);
@@ -351,4 +350,6 @@
     DOMString getScrollAnimationState(Node node);
 
     DOMString getProgrammaticScrollAnimationState(Node node);
+
+    ClientRect visualRect(Node node);    
 };

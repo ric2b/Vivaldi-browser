@@ -18,10 +18,6 @@
 
 @implementation TestingCRWJSBaseManager
 
-- (NSString*)presenceBeacon {
-  return @"base";
-}
-
 - (NSString*)staticInjectionContent {
   return @"base = {};";
 }
@@ -33,10 +29,6 @@
 @end
 
 @implementation TestingAnotherCRWJSBaseManager
-
-- (NSString*)presenceBeacon {
-  return @"anotherbase";
-}
 
 - (NSString*)staticInjectionContent {
   return @"anotherbase = {};";
@@ -50,16 +42,8 @@
 
 @implementation TestingJsManager
 
-- (NSString*)presenceBeacon {
-  return @"base['testingjs']";
-}
-
 - (NSString*)staticInjectionContent {
   return @"base['testingjs'] = {};";
-}
-
-- (NSArray*)directDependencies {
-  return @[ [TestingCRWJSBaseManager class] ];
 }
 
 @end
@@ -69,10 +53,6 @@
 @end
 
 @implementation TestingDynamicJsManager
-
-- (NSString*)presenceBeacon {
-  return @"dynamic";
-}
 
 - (NSString*)injectionContent {
   static int i = 0;
@@ -94,16 +74,8 @@
 
 @implementation TestingAnotherJsManager
 
-- (NSString*)presenceBeacon {
-  return @"base['anothertestingjs']";
-}
-
 - (NSString*)staticInjectionContent {
   return @"base['anothertestingjs'] = {};";
-}
-
-- (NSArray*)directDependencies {
-  return @[ [TestingCRWJSBaseManager class] ];
 }
 
 @end
@@ -115,16 +87,8 @@
 
 @implementation TestingJsManagerWithNestedDependencies
 
-- (NSString*)presenceBeacon {
-  return @"base['testingjswithnesteddependencies']";
-}
-
 - (NSString*)staticInjectionContent {
   return @"base['testingjswithnesteddependencies'] = {};";
-}
-
-- (NSArray*)directDependencies {
-  return @[[TestingJsManager class]];
 }
 
 @end
@@ -135,20 +99,8 @@
 
 @implementation TestingJsManagerComplex
 
-- (NSString*)presenceBeacon {
-  return @"base['testingjswithnesteddependencies']['complex']";
-}
-
 - (NSString*)staticInjectionContent {
   return @"base['testingjswithnesteddependencies']['complex'] = {};";
-}
-
-- (NSArray*)directDependencies {
-  return @[
-    [TestingJsManagerWithNestedDependencies class],
-    [TestingAnotherJsManager class],
-    [TestingAnotherCRWJSBaseManager class],
-  ];
 }
 
 @end
@@ -170,9 +122,6 @@ class JsInjectionManagerTest : public web::WebTestWithWebState {
   CRWJSInjectionManager* GetInstanceOfClass(Class jsInjectionManagerClass);
   // Returns true if the receiver_ has all the managers in |managers|.
   bool HasReceiverManagers(NSArray* managers);
-  // EXPECTs that |actual| consists of the CRWJSInjectionManagers of the
-  // expected classes in a correct order.
-  void TestAllDependencies(NSArray* expected, NSArray* actual);
 };
 
 bool JsInjectionManagerTest::HasReceiverManagers(NSArray* manager_classes) {
@@ -183,25 +132,6 @@ bool JsInjectionManagerTest::HasReceiverManagers(NSArray* manager_classes) {
       return false;
   }
   return true;
-}
-
-void JsInjectionManagerTest::TestAllDependencies(NSArray* expected_classes,
-                                                 NSArray* actual) {
-  EXPECT_EQ([expected_classes count], [actual count]);
-
-  for (Class manager_class in expected_classes) {
-    CRWJSInjectionManager* expected_manager = GetInstanceOfClass(manager_class);
-    EXPECT_TRUE([actual containsObject:expected_manager]);
-  }
-
-  for (size_t index = 0; index < [actual count]; ++ index) {
-    CRWJSInjectionManager* manager = [actual objectAtIndex:index];
-    for (Class manager_class in [manager directDependencies]) {
-      CRWJSInjectionManager* dependency = GetInstanceOfClass(manager_class);
-      size_t dependency_index = [actual indexOfObject:dependency];
-      EXPECT_TRUE(index > dependency_index);
-    }
-  }
 }
 
 CRWJSInjectionManager* JsInjectionManagerTest::GetInstanceOfClass(
@@ -225,25 +155,6 @@ TEST_F(JsInjectionManagerTest, NoDependencies) {
   EXPECT_TRUE([manager hasBeenInjected]);
 }
 
-TEST_F(JsInjectionManagerTest, HasDependencies) {
-  NSUInteger originalCount =
-      [[web_state()->GetJSInjectionReceiver() managers] count];
-  CRWJSInjectionManager* manager = GetInstanceOfClass([TestingJsManager class]);
-  EXPECT_TRUE(manager);
-  EXPECT_EQ(originalCount + 2U,
-            [[web_state()->GetJSInjectionReceiver() managers] count])
-      << "Two more CRWJSInjectionManagers should be created.";
-  EXPECT_TRUE(HasReceiverManagers(
-      @[ [TestingCRWJSBaseManager class], [TestingCRWJSBaseManager class] ]));
-
-  EXPECT_FALSE([manager hasBeenInjected]);
-
-  [manager inject];
-  EXPECT_TRUE([manager hasBeenInjected]);
-  EXPECT_TRUE(
-      [GetInstanceOfClass([TestingCRWJSBaseManager class]) hasBeenInjected]);
-}
-
 TEST_F(JsInjectionManagerTest, Dynamic) {
   CRWJSInjectionManager* manager =
       GetInstanceOfClass([TestingDynamicJsManager class]);
@@ -256,56 +167,10 @@ TEST_F(JsInjectionManagerTest, Dynamic) {
   EXPECT_NSNE([manager injectionContent], [manager injectionContent]);
 }
 
-TEST_F(JsInjectionManagerTest, HasNestedDependencies) {
-  NSUInteger originalCount =
-      [[web_state()->GetJSInjectionReceiver() managers] count];
-  CRWJSInjectionManager* manager =
-      GetInstanceOfClass([TestingJsManagerWithNestedDependencies class]);
-  EXPECT_TRUE(manager);
-  EXPECT_EQ(originalCount + 3U,
-            [[web_state()->GetJSInjectionReceiver() managers] count])
-      << "Three more CRWJSInjectionManagers should be created.";
-  EXPECT_TRUE(HasReceiverManagers(@[
-    [TestingJsManagerWithNestedDependencies class],
-    [TestingCRWJSBaseManager class], [TestingCRWJSBaseManager class]
-  ]));
-
-  EXPECT_FALSE([manager hasBeenInjected]);
-
-  [manager inject];
-  EXPECT_TRUE([manager hasBeenInjected]);
-  EXPECT_TRUE([GetInstanceOfClass([TestingJsManager class]) hasBeenInjected]);
-  EXPECT_TRUE(
-      [GetInstanceOfClass([TestingCRWJSBaseManager class]) hasBeenInjected]);
-
-  NSArray* list = [manager allDependencies];
-  TestAllDependencies(
-      @[
-        [TestingCRWJSBaseManager class], [TestingJsManager class],
-        [TestingJsManagerWithNestedDependencies class]
-      ],
-      list);
-}
-
 // Tests that checking for an uninjected presence beacon returns false.
 TEST_F(JsInjectionManagerTest, WebControllerCheckForUninjectedScript) {
   EXPECT_FALSE([web_state()->GetJSInjectionReceiver()
-      scriptHasBeenInjectedForClass:Nil
-                     presenceBeacon:@"__gCrWeb.dummyBeacon"]);
-}
-
-TEST_F(JsInjectionManagerTest, AllDependencies) {
-  CRWJSInjectionManager* manager =
-      GetInstanceOfClass([TestingJsManagerComplex class]);
-  NSArray* list = [manager allDependencies];
-  TestAllDependencies(
-      @[
-        [TestingCRWJSBaseManager class], [TestingAnotherCRWJSBaseManager class],
-        [TestingJsManager class], [TestingAnotherJsManager class],
-        [TestingJsManagerWithNestedDependencies class],
-        [TestingJsManagerComplex class]
-      ],
-      list);
+      scriptHasBeenInjectedForClass:Nil]);
 }
 
 }  // namespace web

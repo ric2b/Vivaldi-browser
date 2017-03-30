@@ -159,11 +159,16 @@ WebInspector.DOMPresentationUtils.linkifyDeferredNodeReference = function(deferr
  */
 WebInspector.DOMPresentationUtils.buildImagePreviewContents = function(target, originalImageURL, showDimensions, userCallback, precomputedFeatures)
 {
-    var resource = target.resourceTreeModel.resourceForURL(originalImageURL);
+    var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(target);
+    if (!resourceTreeModel) {
+        userCallback();
+        return;
+    }
+    var resource = resourceTreeModel.resourceForURL(originalImageURL);
     var imageURL = originalImageURL;
     if (!isImageResource(resource) && precomputedFeatures && precomputedFeatures.currentSrc) {
         imageURL = precomputedFeatures.currentSrc;
-        resource = target.resourceTreeModel.resourceForURL(imageURL);
+        resource = resourceTreeModel.resourceForURL(imageURL);
     }
     if (!isImageResource(resource)) {
         userCallback();
@@ -236,8 +241,11 @@ WebInspector.DOMPresentationUtils.buildStackTracePreviewContents = function(targ
         for (var stackFrame of stackTrace.callFrames) {
             var row = createElement("tr");
             row.createChild("td", "function-name").textContent = WebInspector.beautifyFunctionName(stackFrame.functionName);
-            row.createChild("td").textContent = " @ ";
-            row.createChild("td").appendChild(linkifier.linkifyConsoleCallFrame(target, stackFrame));
+            var link = linkifier.maybeLinkifyConsoleCallFrame(target, stackFrame);
+            if (link) {
+                row.createChild("td").textContent = " @ ";
+                row.createChild("td").appendChild(link);
+            }
             contentElement.appendChild(row);
         }
     }
@@ -449,21 +457,18 @@ WebInspector.DOMPresentationUtils._cssPathStep = function(node, optimized, isTar
             continue;
 
         needsClassNames = true;
-        var ownClassNames = prefixedOwnClassNamesArray.keySet();
-        var ownClassNameCount = 0;
-        for (var name in ownClassNames)
-            ++ownClassNameCount;
-        if (ownClassNameCount === 0) {
+        var ownClassNames = new Set(prefixedOwnClassNamesArray);
+        if (!ownClassNames.size) {
             needsNthChild = true;
             continue;
         }
         var siblingClassNamesArray = prefixedElementClassNames(sibling);
         for (var j = 0; j < siblingClassNamesArray.length; ++j) {
             var siblingClass = siblingClassNamesArray[j];
-            if (!ownClassNames.hasOwnProperty(siblingClass))
+            if (!ownClassNames.has(siblingClass))
                 continue;
-            delete ownClassNames[siblingClass];
-            if (!--ownClassNameCount) {
+            ownClassNames.delete(siblingClass);
+            if (!ownClassNames.size) {
                 needsNthChild = true;
                 break;
             }
@@ -476,7 +481,7 @@ WebInspector.DOMPresentationUtils._cssPathStep = function(node, optimized, isTar
     if (needsNthChild) {
         result += ":nth-child(" + (ownIndex + 1) + ")";
     } else if (needsClassNames) {
-        for (var prefixedName in prefixedOwnClassNamesArray.keySet())
+        for (var prefixedName of prefixedOwnClassNamesArray)
             result += "." + escapeIdentifierIfNeeded(prefixedName.substr(1));
     }
 
@@ -645,7 +650,7 @@ WebInspector.DOMPresentationUtils.MarkerDecorator.prototype = {
  */
 WebInspector.DOMPresentationUtils.GenericDecorator = function(extension)
 {
-    this._title = WebInspector.UIString(extension.title(WebInspector.platform()));
+    this._title = WebInspector.UIString(extension.title());
     this._color = extension.descriptor()["color"];
 }
 

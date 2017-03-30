@@ -5,6 +5,7 @@
 /**
  * @typedef {{device: string,
  *           lastUpdateTime: string,
+ *           opened: boolean,
  *           separatorIndexes: !Array<number>,
  *           timestamp: number,
  *           tabs: !Array<!ForeignSessionTab>,
@@ -24,7 +25,7 @@ Polymer({
       observer: 'updateSyncedDevices'
     },
 
-    searchedTerm: {
+    searchTerm: {
       type: String,
       observer: 'searchTermChanged'
     },
@@ -39,17 +40,42 @@ Polymer({
     },
 
     /** @private */
-    signInState_: {
+    signInState: {
       type: Boolean,
-      value: loadTimeData.getBoolean('isUserSignedIn'),
+      observer: 'signInStateChanged_',
+    },
+
+    /** @private */
+    guestSession_: {
+      type: Boolean,
+      value: loadTimeData.getBoolean('isGuestSession'),
     },
 
     /** @private */
     fetchingSyncedTabs_: {
       type: Boolean,
       value: false,
-    }
+    },
+
+    hasSeenForeignData_: Boolean,
   },
+
+  listeners: {
+    'toggle-menu': 'onToggleMenu_',
+    'scroll': 'onListScroll_'
+  },
+
+  /** @override */
+  attached: function() {
+    // Update the sign in state.
+    chrome.send('otherDevicesInitialized');
+    md_history.BrowserService.getInstance().recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.INITIALIZED,
+        SyncedTabsHistogram.LIMIT);
+  },
+
+  /** @return {HTMLElement} */
+  getContentScrollTarget: function() { return this; },
 
   /**
    * @param {!ForeignSession} session
@@ -59,18 +85,22 @@ Polymer({
     var tabs = [];
     var separatorIndexes = [];
     for (var i = 0; i < session.windows.length; i++) {
+      var windowId = session.windows[i].sessionId;
       var newTabs = session.windows[i].tabs;
       if (newTabs.length == 0)
         continue;
 
+      newTabs.forEach(function(tab) {
+        tab.windowId = windowId;
+      });
 
-      if (!this.searchedTerm) {
+      var windowAdded = false;
+      if (!this.searchTerm) {
         // Add all the tabs if there is no search term.
         tabs = tabs.concat(newTabs);
-        separatorIndexes.push(tabs.length - 1);
+        windowAdded = true;
       } else {
-        var searchText = this.searchedTerm.toLowerCase();
-        var windowAdded = false;
+        var searchText = this.searchTerm.toLowerCase();
         for (var j = 0; j < newTabs.length; j++) {
           var tab = newTabs[j];
           if (tab.title.toLowerCase().indexOf(searchText) != -1) {
@@ -78,14 +108,14 @@ Polymer({
             windowAdded = true;
           }
         }
-        if (windowAdded)
-          separatorIndexes.push(tabs.length - 1);
       }
-
+      if (windowAdded && i != session.windows.length - 1)
+        separatorIndexes.push(tabs.length - 1);
     }
     return {
       device: session.name,
       lastUpdateTime: '– ' + session.modifiedTime,
+      opened: true,
       separatorIndexes: separatorIndexes,
       timestamp: session.timestamp,
       tabs: tabs,
@@ -93,10 +123,46 @@ Polymer({
     };
   },
 
-
   onSignInTap_: function() {
-    chrome.send('SyncSetupShowSetupUI');
-    chrome.send('SyncSetupStartSignIn', [false]);
+    chrome.send('startSignInFlow');
+  },
+
+  onListScroll_: function() {
+    var menu = this.$.menu.getIfExists();
+    if (menu)
+      menu.closeMenu();
+  },
+
+  onToggleMenu_: function(e) {
+    this.$.menu.get().then(function(menu) {
+      menu.toggleMenu(e.detail.target, e.detail.tag);
+      if (menu.menuOpen) {
+        md_history.BrowserService.getInstance().recordHistogram(
+            SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.SHOW_SESSION_MENU,
+            SyncedTabsHistogram.LIMIT);
+      }
+    });
+  },
+
+  onOpenAllTap_: function() {
+    var menu = assert(this.$.menu.getIfExists());
+    var browserService = md_history.BrowserService.getInstance();
+    browserService.recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.OPEN_ALL,
+        SyncedTabsHistogram.LIMIT);
+    browserService.openForeignSessionAllTabs(
+        menu.itemData);
+    menu.closeMenu();
+  },
+
+  onDeleteSessionTap_: function() {
+    var menu = assert(this.$.menu.getIfExists());
+    var browserService = md_history.BrowserService.getInstance();
+    browserService.recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.HIDE_FOR_NOW,
+        SyncedTabsHistogram.LIMIT);
+    browserService.deleteForeignSession(menu.itemData);
+    menu.closeMenu();
   },
 
   /** @private */
@@ -108,10 +174,32 @@ Polymer({
    * Decide whether or not should display no synced tabs message.
    * @param {boolean} signInState
    * @param {number} syncedDevicesLength
+   * @param {boolean} guestSession
    * @return {boolean}
    */
-  showNoSyncedMessage: function(signInState, syncedDevicesLength) {
+  showNoSyncedMessage: function(
+      signInState, syncedDevicesLength, guestSession) {
+    if (guestSession)
+      return true;
+
     return signInState && syncedDevicesLength == 0;
+  },
+
+  /**
+   * Shows the signin guide when the user is not signed in and not in a guest
+   * session.
+   * @param {boolean} signInState
+   * @param {boolean} guestSession
+   * @return {boolean}
+   */
+  showSignInGuide: function(signInState, guestSession) {
+    var show = !signInState && !guestSession;
+    if (show) {
+      md_history.BrowserService.getInstance().recordAction(
+          'Signin_Impression_FromRecentTabs');
+    }
+
+    return show;
   },
 
   /**
@@ -139,6 +227,13 @@ Polymer({
     if (!sessionList)
       return;
 
+    if (sessionList.length > 0 && !this.hasSeenForeignData_) {
+      this.hasSeenForeignData_ = true;
+      md_history.BrowserService.getInstance().recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.HAS_FOREIGN_DATA,
+        SyncedTabsHistogram.LIMIT);
+    }
+
     // First, update any existing devices that have changed.
     var updateCount = Math.min(sessionList.length, this.syncedDevices_.length);
     for (var i = 0; i < updateCount; i++) {
@@ -150,28 +245,37 @@ Polymer({
       }
     }
 
-    // Then, append any new devices.
-    for (var i = updateCount; i < sessionList.length; i++) {
-      this.push('syncedDevices_', this.createInternalDevice_(sessionList[i]));
+    if (sessionList.length >= this.syncedDevices_.length) {
+      // The list grew; append new items.
+      for (var i = updateCount; i < sessionList.length; i++) {
+        this.push('syncedDevices_', this.createInternalDevice_(sessionList[i]));
+      }
+    } else {
+      // The list shrank; remove deleted items.
+      this.splice(
+          'syncedDevices_', updateCount,
+          this.syncedDevices_.length - updateCount);
     }
+  },
+
+  /**
+   * End fetching synced tabs when sync is disabled.
+   */
+  tabSyncDisabled: function() {
+    this.fetchingSyncedTabs_ = false;
+    this.clearDisplayedSyncedDevices_();
   },
 
   /**
    * Get called when user's sign in state changes, this will affect UI of synced
    * tabs page. Sign in promo gets displayed when user is signed out, and
    * different messages are shown when there are no synced tabs.
-   * @param {boolean} isUserSignedIn
    */
-  updateSignInState: function(isUserSignedIn) {
-    // If user's sign in state didn't change, then don't change message or
-    // update UI.
-    if (this.signInState_ == isUserSignedIn)
-      return;
-
-    this.signInState_ = isUserSignedIn;
+  signInStateChanged_: function() {
+    this.fire('history-view-changed');
 
     // User signed out, clear synced device list and show the sign in promo.
-    if (!isUserSignedIn) {
+    if (!this.signInState) {
       this.clearDisplayedSyncedDevices_();
       return;
     }
@@ -180,7 +284,7 @@ Polymer({
     this.fetchingSyncedTabs_ = true;
   },
 
-  searchTermChanged: function(searchedTerm) {
+  searchTermChanged: function(searchTerm) {
     this.clearDisplayedSyncedDevices_();
     this.updateSyncedDevices(this.sessionList);
   }

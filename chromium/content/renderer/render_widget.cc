@@ -23,13 +23,11 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
+#include "cc/output/copy_output_request.h"
 #include "cc/output/output_surface.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "components/scheduler/renderer/render_widget_scheduling_state.h"
-#include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/input/synthetic_gesture_packet.h"
-#include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/text_input_state.h"
@@ -62,6 +60,8 @@
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/render_widget_scheduling_state.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -91,7 +91,7 @@
 #include "third_party/skia/include/core/SkPixelRef.h"
 #endif  // defined(OS_POSIX)
 
-#if defined(MOJO_SHELL_CLIENT)
+#if defined(USE_AURA)
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #endif
@@ -110,7 +110,6 @@ using blink::WebNode;
 using blink::WebPagePopup;
 using blink::WebPoint;
 using blink::WebPopupType;
-using blink::WebRange;
 using blink::WebRect;
 using blink::WebScreenInfo;
 using blink::WebSize;
@@ -198,7 +197,7 @@ bool IsDateTimeInput(ui::TextInputType type) {
 
 content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
     content::RenderWidget* widget) {
-#if defined(MOJO_SHELL_CLIENT)
+#if defined(USE_AURA)
   const base::CommandLine& cmdline = *base::CommandLine::ForCurrentProcess();
   if (content::MojoShellConnection::GetForProcess() &&
       cmdline.HasSwitch(switches::kUseMusInRenderer)) {
@@ -246,6 +245,7 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       text_input_mode_(ui::TEXT_INPUT_MODE_DEFAULT),
       text_input_flags_(0),
       can_compose_inline_(true),
+      composition_range_(gfx::Range::InvalidRange()),
       popup_type_(popup_type),
       pending_window_rect_count_(0),
       screen_info_(screen_info),
@@ -253,11 +253,13 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
 #if defined(OS_ANDROID)
       text_field_is_dirty_(false),
 #endif
+      monitor_composition_info_(false),
       popup_origin_scale_for_emulation_(0.f),
       frame_swap_message_queue_(new FrameSwapMessageQueue()),
       resizing_mode_selector_(new ResizingModeSelector()),
       has_host_context_menu_location_(false),
-      has_focus_(false) {
+      has_focus_(false),
+      focused_pepper_plugin_(nullptr) {
   if (!swapped_out)
     RenderProcess::current()->AddRefProcess();
   DCHECK(RenderThread::Get());
@@ -474,6 +476,8 @@ bool RenderWidget::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(InputMsg_ImeSetComposition, OnImeSetComposition)
     IPC_MESSAGE_HANDLER(InputMsg_ImeConfirmComposition, OnImeConfirmComposition)
     IPC_MESSAGE_HANDLER(InputMsg_MouseCaptureLost, OnMouseCaptureLost)
+    IPC_MESSAGE_HANDLER(InputMsg_SetEditCommandsForNextKeyEvent,
+                        OnSetEditCommandsForNextKeyEvent)
     IPC_MESSAGE_HANDLER(InputMsg_SetFocus, OnSetFocus)
     IPC_MESSAGE_HANDLER(InputMsg_SyntheticGestureCompleted,
                         OnSyntheticGestureCompleted)
@@ -490,9 +494,11 @@ bool RenderWidget::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewMsg_SetTextDirection, OnSetTextDirection)
     IPC_MESSAGE_HANDLER(ViewMsg_Move_ACK, OnRequestMoveAck)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateScreenRects, OnUpdateScreenRects)
-    IPC_MESSAGE_HANDLER(ViewMsg_SetSurfaceIdNamespace, OnSetSurfaceIdNamespace)
+    IPC_MESSAGE_HANDLER(ViewMsg_SetSurfaceClientId, OnSetSurfaceClientId)
     IPC_MESSAGE_HANDLER(ViewMsg_WaitForNextFrameForTests,
                         OnWaitNextFrameForTests)
+    IPC_MESSAGE_HANDLER(InputMsg_RequestCompositionUpdate,
+                        OnRequestCompositionUpdate)
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(InputMsg_ImeEventAck, OnImeEventAck)
     IPC_MESSAGE_HANDLER(InputMsg_RequestTextInputStateUpdate,
@@ -655,8 +661,6 @@ void RenderWidget::OnWasShown(bool needs_repainting,
 void RenderWidget::OnRequestMoveAck() {
   DCHECK(pending_window_rect_count_);
   pending_window_rect_count_--;
-  if (!pending_window_rect_count_)
-    view_screen_rect_ = pending_window_rect_;
 }
 
 GURL RenderWidget::GetURLForGraphicsContext3D() {
@@ -679,6 +683,11 @@ void RenderWidget::OnCursorVisibilityChange(bool is_visible) {
 void RenderWidget::OnMouseCaptureLost() {
   if (webwidget_)
     webwidget_->mouseCaptureLost();
+}
+
+void RenderWidget::OnSetEditCommandsForNextKeyEvent(
+    const EditCommands& edit_commands) {
+  edit_commands_ = edit_commands;
 }
 
 void RenderWidget::OnSetFocus(bool enable) {
@@ -816,6 +825,12 @@ void RenderWidget::WillBeginCompositorFrame() {
                     WillBeginCompositorFrame());
 }
 
+std::unique_ptr<cc::SwapPromise> RenderWidget::RequestCopyOfOutputForLayoutTest(
+    std::unique_ptr<cc::CopyOutputRequest> request) {
+  return RenderThreadImpl::current()->RequestCopyOfOutputForLayoutTest(
+      routing_id_, std::move(request));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetInputHandlerDelegate
 
@@ -853,11 +868,20 @@ void RenderWidget::ObserveGestureEventAndResult(
 }
 
 void RenderWidget::OnDidHandleKeyEvent() {
-  if (owner_delegate_)
-    owner_delegate_->RenderWidgetDidHandleKeyEvent();
+  ClearEditCommands();
 }
 
-void RenderWidget::OnDidOverscroll(const DidOverscrollParams& params) {
+void RenderWidget::SetEditCommandForNextKeyEvent(const std::string& name,
+                                                 const std::string& value) {
+  ClearEditCommands();
+  edit_commands_.emplace_back(name, value);
+}
+
+void RenderWidget::ClearEditCommands() {
+  edit_commands_.clear();
+}
+
+void RenderWidget::OnDidOverscroll(const ui::DidOverscrollParams& params) {
   Send(new InputHostMsg_DidOverscroll(routing_id_, params));
 }
 
@@ -993,7 +1017,12 @@ void RenderWidget::Resize(const ResizeParams& params) {
       screen_info_.orientationType != params.screen_info.orientationType;
 
   screen_info_ = params.screen_info;
-  SetDeviceScaleFactor(screen_info_.deviceScaleFactor);
+
+  if (device_scale_factor_ != screen_info_.deviceScaleFactor) {
+    device_scale_factor_ = screen_info_.deviceScaleFactor;
+    OnDeviceScaleFactorChanged();
+    ScheduleComposite();
+  }
 
   if (resizing_mode_selector_->NeverUsesSynchronousResize()) {
     // A resize ack shouldn't be requested if we have not ACK'd the previous
@@ -1005,8 +1034,10 @@ void RenderWidget::Resize(const ResizeParams& params) {
   if (!webwidget_)
     return;
 
-  if (compositor_)
+  if (compositor_) {
     compositor_->setViewportSize(params.physical_backing_size);
+    compositor_->setBottomControlsHeight(params.bottom_controls_height);
+  }
 
   visible_viewport_size_ = params.visible_viewport_size;
   resizer_rect_ = params.resizer_rect;
@@ -1074,29 +1105,6 @@ void RenderWidget::SetScreenRects(const gfx::Rect& view_screen_rect,
 
 ///////////////////////////////////////////////////////////////////////////////
 // WebWidgetClient
-
-void RenderWidget::didAutoResize(const WebSize& new_size) {
-  WebRect new_size_in_window(0, 0, new_size.width, new_size.height);
-  convertViewportToWindow(&new_size_in_window);
-  if (size_.width() != new_size_in_window.width ||
-      size_.height() != new_size_in_window.height) {
-    size_ = gfx::Size(new_size_in_window.width, new_size_in_window.height);
-
-    if (resizing_mode_selector_->is_synchronous_mode()) {
-      gfx::Rect new_pos(rootWindowRect().x,
-                        rootWindowRect().y,
-                        size_.width(),
-                        size_.height());
-      view_screen_rect_ = new_pos;
-      window_screen_rect_ = new_pos;
-    }
-
-    AutoResizeCompositor();
-
-    if (!resizing_mode_selector_->is_synchronous_mode())
-      need_update_rect_for_auto_resize_ = true;
-  }
-}
 
 void RenderWidget::AutoResizeCompositor()  {
   physical_backing_size_ = gfx::ScaleToCeiledSize(size_, device_scale_factor_);
@@ -1242,9 +1250,6 @@ void RenderWidget::show(WebNavigationPolicy) {
   SetPendingWindowRect(initial_rect_);
 }
 
-void RenderWidget::didFocus() {
-}
-
 void RenderWidget::DoDeferredClose() {
   WillCloseLayerTreeView();
   Send(new ViewHostMsg_Close(routing_id_));
@@ -1299,11 +1304,53 @@ void RenderWidget::Close() {
   }
 }
 
-WebRect RenderWidget::windowRect() {
-  if (pending_window_rect_count_)
-    return pending_window_rect_;
+void RenderWidget::ScreenRectToEmulatedIfNeeded(WebRect* window_rect) const {
+  DCHECK(window_rect);
+  float scale = popup_origin_scale_for_emulation_;
+  if (!scale)
+    return;
+  window_rect->x =
+      popup_view_origin_for_emulation_.x() +
+      (window_rect->x - popup_screen_origin_for_emulation_.x()) / scale;
+  window_rect->y =
+      popup_view_origin_for_emulation_.y() +
+      (window_rect->y - popup_screen_origin_for_emulation_.y()) / scale;
+}
 
-  return view_screen_rect_;
+void RenderWidget::EmulatedToScreenRectIfNeeded(WebRect* window_rect) const {
+  DCHECK(window_rect);
+  float scale = popup_origin_scale_for_emulation_;
+  if (!scale)
+    return;
+  window_rect->x =
+      popup_screen_origin_for_emulation_.x() +
+      (window_rect->x - popup_view_origin_for_emulation_.x()) * scale;
+  window_rect->y =
+      popup_screen_origin_for_emulation_.y() +
+      (window_rect->y - popup_view_origin_for_emulation_.y()) * scale;
+}
+
+WebRect RenderWidget::windowRect() {
+  WebRect rect;
+  if (pending_window_rect_count_) {
+    // NOTE(mbelshe): If there is a pending_window_rect_, then getting
+    // the RootWindowRect is probably going to return wrong results since the
+    // browser may not have processed the Move yet.  There isn't really anything
+    // good to do in this case, and it shouldn't happen - since this size is
+    // only really needed for windowToScreen, which is only used for Popups.
+    rect = pending_window_rect_;
+  } else {
+    rect = window_screen_rect_;
+  }
+
+  ScreenRectToEmulatedIfNeeded(&rect);
+  return rect;
+}
+
+WebRect RenderWidget::viewRect() {
+  WebRect rect = view_screen_rect_;
+  ScreenRectToEmulatedIfNeeded(&rect);
+  return rect;
 }
 
 void RenderWidget::setToolTipText(const blink::WebString& text,
@@ -1313,13 +1360,7 @@ void RenderWidget::setToolTipText(const blink::WebString& text,
 
 void RenderWidget::setWindowRect(const WebRect& rect_in_screen) {
   WebRect window_rect = rect_in_screen;
-  if (popup_origin_scale_for_emulation_) {
-    float scale = popup_origin_scale_for_emulation_;
-    window_rect.x = popup_screen_origin_for_emulation_.x() +
-        (window_rect.x - popup_view_origin_for_emulation_.x()) * scale;
-    window_rect.y = popup_screen_origin_for_emulation_.y() +
-        (window_rect.y - popup_view_origin_for_emulation_.y()) * scale;
-  }
+  EmulatedToScreenRectIfNeeded(&window_rect);
 
   if (!resizing_mode_selector_->is_synchronous_mode()) {
     if (did_show_) {
@@ -1336,19 +1377,13 @@ void RenderWidget::setWindowRect(const WebRect& rect_in_screen) {
 void RenderWidget::SetPendingWindowRect(const WebRect& rect) {
   pending_window_rect_ = rect;
   pending_window_rect_count_++;
-}
 
-WebRect RenderWidget::rootWindowRect() {
-  if (pending_window_rect_count_) {
-    // NOTE(mbelshe): If there is a pending_window_rect_, then getting
-    // the RootWindowRect is probably going to return wrong results since the
-    // browser may not have processed the Move yet.  There isn't really anything
-    // good to do in this case, and it shouldn't happen - since this size is
-    // only really needed for windowToScreen, which is only used for Popups.
-    return pending_window_rect_;
+  // Popups don't get size updates back from the browser so just store the set
+  // values.
+  if (popup_type_ != blink::WebPopupTypeNone) {
+      window_screen_rect_ = rect;
+      view_screen_rect_ = rect;
   }
-
-  return window_screen_rect_;
 }
 
 WebRect RenderWidget::windowResizerRect() {
@@ -1360,6 +1395,18 @@ void RenderWidget::OnImeSetComposition(
     const std::vector<WebCompositionUnderline>& underlines,
     const gfx::Range& replacement_range,
     int selection_start, int selection_end) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    focused_pepper_plugin_->render_frame()->OnImeSetComposition(
+        text, underlines, selection_start, selection_end);
+    return;
+  }
+#endif
+  if (replacement_range.IsValid()) {
+    webwidget_->applyReplacementRange(replacement_range.start(),
+                                      replacement_range.length());
+  }
+
   if (!ShouldHandleImeEvent())
     return;
   ImeEventGuard guard(this);
@@ -1371,12 +1418,24 @@ void RenderWidget::OnImeSetComposition(
     // sure we are in a consistent state.
     Send(new InputHostMsg_ImeCancelComposition(routing_id()));
   }
-  UpdateCompositionInfo(true);
+  UpdateCompositionInfo(false /* not an immediate request */);
 }
 
 void RenderWidget::OnImeConfirmComposition(const base::string16& text,
                                            const gfx::Range& replacement_range,
                                            bool keep_selection) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    focused_pepper_plugin_->render_frame()->OnImeConfirmComposition(
+        text, replacement_range, keep_selection);
+    return;
+  }
+#endif
+  if (replacement_range.IsValid()) {
+    webwidget_->applyReplacementRange(replacement_range.start(),
+                                      replacement_range.length());
+  }
+
   if (!ShouldHandleImeEvent())
     return;
   ImeEventGuard guard(this);
@@ -1388,7 +1447,7 @@ void RenderWidget::OnImeConfirmComposition(const base::string16& text,
   else
     webwidget_->confirmComposition(WebWidget::DoNotKeepSelection);
   input_handler_->set_handling_input_event(false);
-  UpdateCompositionInfo(true);
+  UpdateCompositionInfo(false /* not an immediate request */);
 }
 
 void RenderWidget::OnDeviceScaleFactorChanged() {
@@ -1442,16 +1501,15 @@ void RenderWidget::OnUpdateScreenRects(const gfx::Rect& view_screen_rect,
 
 void RenderWidget::OnUpdateWindowScreenRect(
     const gfx::Rect& window_screen_rect) {
-  if (screen_metrics_emulator_) {
+  if (screen_metrics_emulator_)
     screen_metrics_emulator_->OnUpdateWindowScreenRect(window_screen_rect);
-  } else {
+  else
     window_screen_rect_ = window_screen_rect;
-  }
 }
 
-void RenderWidget::OnSetSurfaceIdNamespace(uint32_t surface_id_namespace) {
+void RenderWidget::OnSetSurfaceClientId(uint32_t surface_id_namespace) {
   if (compositor_)
-    compositor_->SetSurfaceIdNamespace(surface_id_namespace);
+    compositor_->SetSurfaceClientId(surface_id_namespace);
 }
 
 void RenderWidget::OnHandleCompositorProto(const std::vector<uint8_t>& proto) {
@@ -1464,24 +1522,35 @@ void RenderWidget::showImeIfNeeded() {
 }
 
 ui::TextInputType RenderWidget::GetTextInputType() {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return focused_pepper_plugin_->text_input_type();
+#endif
   if (webwidget_)
     return WebKitToUiTextInputType(webwidget_->textInputType());
   return ui::TEXT_INPUT_TYPE_NONE;
 }
 
-void RenderWidget::UpdateCompositionInfo(bool should_update_range) {
-  TRACE_EVENT0("renderer", "RenderWidget::UpdateCompositionInfo");
-  gfx::Range range = gfx::Range();
-  if (should_update_range) {
-    GetCompositionRange(&range);
-  } else {
-    range = composition_range_;
-  }
-  std::vector<gfx::Rect> character_bounds;
-  GetCompositionCharacterBounds(&character_bounds);
+void RenderWidget::UpdateCompositionInfo(bool immediate_request) {
+  if (!monitor_composition_info_ && !immediate_request)
+    return;  // Do not calculate composition info if not requested.
 
-  if (!ShouldUpdateCompositionInfo(range, character_bounds))
+  TRACE_EVENT0("renderer", "RenderWidget::UpdateCompositionInfo");
+  gfx::Range range;
+  std::vector<gfx::Rect> character_bounds;
+
+  if (GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE) {
+    // Composition information is only available on editable node.
+    range = gfx::Range::InvalidRange();
+  } else {
+    GetCompositionRange(&range);
+    GetCompositionCharacterBounds(&character_bounds);
+  }
+
+  if (!immediate_request &&
+      !ShouldUpdateCompositionInfo(range, character_bounds)) {
     return;
+  }
   composition_character_bounds_ = character_bounds;
   composition_range_ = range;
   Send(new InputHostMsg_ImeCompositionRangeChanged(
@@ -1540,6 +1609,14 @@ void RenderWidget::OnRequestTextInputStateUpdate() {
 }
 #endif
 
+void RenderWidget::OnRequestCompositionUpdate(bool immediate_request,
+                                              bool monitor_request) {
+  monitor_composition_info_ = monitor_request;
+  if (!immediate_request)
+    return;
+  UpdateCompositionInfo(true /* immediate request */);
+}
+
 bool RenderWidget::ShouldHandleImeEvent() {
 #if defined(OS_ANDROID)
   if (!webwidget_)
@@ -1563,15 +1640,16 @@ bool RenderWidget::ShouldHandleImeEvent() {
 #endif
 }
 
-void RenderWidget::SetDeviceScaleFactor(float device_scale_factor) {
+void RenderWidget::OnSetDeviceScaleFactor(float device_scale_factor) {
   if (device_scale_factor_ == device_scale_factor)
     return;
 
   device_scale_factor_ = device_scale_factor;
 
   OnDeviceScaleFactorChanged();
-
   ScheduleComposite();
+
+  physical_backing_size_ = gfx::ScaleToCeiledSize(size_, device_scale_factor_);
 }
 
 bool RenderWidget::SetDeviceColorProfile(
@@ -1618,9 +1696,9 @@ void RenderWidget::DidToggleFullscreen() {
     return;
 
   if (is_fullscreen_granted_) {
-    webwidget_->didEnterFullScreen();
+    webwidget_->didEnterFullscreen();
   } else {
-    webwidget_->didExitFullScreen();
+    webwidget_->didExitFullscreen();
   }
 }
 
@@ -1676,6 +1754,19 @@ void RenderWidget::OnImeEventGuardFinish(ImeEventGuard* guard) {
 }
 
 void RenderWidget::GetSelectionBounds(gfx::Rect* focus, gfx::Rect* anchor) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_) {
+    // TODO(kinaba) http://crbug.com/101101
+    // Current Pepper IME API does not handle selection bounds. So we simply
+    // use the caret position as an empty range for now. It will be updated
+    // after Pepper API equips features related to surrounding text retrieval.
+    blink::WebRect caret(focused_pepper_plugin_->GetCaretBounds());
+    convertViewportToWindow(&caret);
+    *focus = caret;
+    *anchor = caret;
+    return;
+  }
+#endif
   WebRect focus_webrect;
   WebRect anchor_webrect;
   webwidget_->selectionBounds(focus_webrect, anchor_webrect);
@@ -1718,7 +1809,7 @@ void RenderWidget::UpdateSelectionBounds() {
     }
   }
 
-  UpdateCompositionInfo(false);
+  UpdateCompositionInfo(false /* not an immediate request */);
 }
 
 void RenderWidget::SetDeviceColorProfileForTesting(
@@ -1726,10 +1817,25 @@ void RenderWidget::SetDeviceColorProfileForTesting(
   SetDeviceColorProfile(color_profile);
 }
 
-void RenderWidget::ResetDeviceColorProfileForTesting() {
-  std::vector<char> color_profile;
-  color_profile.push_back('0');
-  SetDeviceColorProfile(color_profile);
+void RenderWidget::DidAutoResize(const gfx::Size& new_size) {
+  WebRect new_size_in_window(0, 0, new_size.width(), new_size.height());
+  convertViewportToWindow(&new_size_in_window);
+  if (size_.width() != new_size_in_window.width ||
+      size_.height() != new_size_in_window.height) {
+    size_ = gfx::Size(new_size_in_window.width, new_size_in_window.height);
+
+    if (resizing_mode_selector_->is_synchronous_mode()) {
+      gfx::Rect new_pos(windowRect().x, windowRect().y,
+                        size_.width(), size_.height());
+      view_screen_rect_ = new_pos;
+      window_screen_rect_ = new_pos;
+    }
+
+    AutoResizeCompositor();
+
+    if (!resizing_mode_selector_->is_synchronous_mode())
+      need_update_rect_for_auto_resize_ = true;
+  }
 }
 
 // Check blink::WebTextInputType and ui::TextInputType is kept in sync.
@@ -1770,9 +1876,29 @@ void RenderWidget::GetCompositionCharacterBounds(
     std::vector<gfx::Rect>* bounds) {
   DCHECK(bounds);
   bounds->clear();
+
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return;
+#endif
+
+  if (!webwidget_)
+    return;
+  blink::WebVector<blink::WebRect> bounds_from_blink;
+  if (!webwidget_->getCompositionCharacterBounds(bounds_from_blink))
+    return;
+
+  for (size_t i = 0; i < bounds_from_blink.size(); ++i) {
+    convertViewportToWindow(&bounds_from_blink[i]);
+    bounds->push_back(bounds_from_blink[i]);
+  }
 }
 
 void RenderWidget::GetCompositionRange(gfx::Range* range) {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return;
+#endif
   size_t location, length;
   if (webwidget_->compositionRange(&location, &length)) {
     range->set_start(location);
@@ -1800,6 +1926,10 @@ bool RenderWidget::ShouldUpdateCompositionInfo(
 }
 
 bool RenderWidget::CanComposeInline() {
+#if defined(ENABLE_PLUGINS)
+  if (focused_pepper_plugin_)
+    return focused_pepper_plugin_->IsPluginAcceptingCompositionEvents();
+#endif
   return true;
 }
 
@@ -1818,7 +1948,7 @@ void RenderWidget::resetInputMethod() {
       Send(new InputHostMsg_ImeCancelComposition(routing_id()));
   }
 
-  UpdateCompositionInfo(true);
+  UpdateCompositionInfo(false /* not an immediate request */);
 }
 
 #if defined(OS_ANDROID)

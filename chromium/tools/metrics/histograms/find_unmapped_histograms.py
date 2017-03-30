@@ -24,6 +24,31 @@ import path_util
 import extract_histograms
 
 
+C_FILENAME = re.compile(r"""
+    .*              # Anything
+    \.(cc|cpp|h|mm) # Ending in these extensions
+    $               # End of string
+    """, re.VERBOSE)
+TEST_FILENAME = re.compile(r"""
+    .*   # Anything
+    test # The word test
+    \.   # A literal '.'
+    """, re.VERBOSE)
+CPP_COMMENT = re.compile(r"""
+    \s*             # Optional whitespace
+    (?:             # Non-capturing group
+        //.*        # C++-style comment
+        \n          # Newline
+        |           # or
+        /\*         # Start C-style comment
+        (?:         # Non-capturing group
+            (?!\*/) # Negative lookahead for comment end
+            [\s\S]  # Any character including newline
+        )*          # Repeated zero or more times
+        \*/         # End C-style comment
+    )               # End group
+    \s*             # Optional whitespace
+    """, re.VERBOSE);
 ADJACENT_C_STRING_REGEX = re.compile(r"""
     ("      # Opening quotation mark
     [^"]*)  # Literal string contents
@@ -32,19 +57,55 @@ ADJACENT_C_STRING_REGEX = re.compile(r"""
     "       # Another opening quotation mark
     """, re.VERBOSE)
 CONSTANT_REGEX = re.compile(r"""
-    (\w*::)?  # Optional namespace
+    (\w*::)*  # Optional namespace(s)
     k[A-Z]    # Match a constant identifier: 'k' followed by an uppercase letter
     \w*       # Match the rest of the constant identifier
     $         # Make sure there's only the identifier, nothing else
     """, re.VERBOSE)
+MACRO_STRING_CONCATENATION_REGEX = re.compile(r"""
+    \s*                           # Optional whitespace
+    (                             # Group
+        (                         # Nested group
+            "[^"]*"               # Literal string
+            |                     # or
+            [a-zA-Z][a-zA-Z0-9_]+ # Macro constant name
+        )                         # End of alternation
+        \s*                       # Optional whitespace
+    ){2,}                         # Group repeated 2 or more times
+    $                             # End of string
+    """, re.VERBOSE)
 HISTOGRAM_REGEX = re.compile(r"""
-    UMA_HISTOGRAM  # Match the shared prefix for standard UMA histogram macros
-    \w*            # Match the rest of the macro name, e.g. '_ENUMERATION'
+    (\w*           # Capture the whole macro name
+    UMA_HISTOGRAM_ # Match the shared prefix for standard UMA histogram macros
+    (\w*))         # Match the rest of the macro name, e.g. '_ENUMERATION'
     \(             # Match the opening parenthesis for the macro
     \s*            # Match any whitespace -- especially, any newlines
     ([^,)]*)       # Capture the first parameter to the macro
     [,)]           # Match the comma/paren that delineates the first parameter
     """, re.VERBOSE)
+STANDARD_HISTOGRAM_SUFFIXES = frozenset(['TIMES', 'MEDIUM_TIMES', 'LONG_TIMES',
+                                         'LONG_TIMES_100', 'CUSTOM_TIMES',
+                                         'COUNTS', 'COUNTS_100', 'COUNTS_1000',
+                                         'COUNTS_10000', 'CUSTOM_COUNTS',
+                                         'MEMORY_KB', 'MEMORY_MB',
+                                         'MEMORY_LARGE_MB', 'PERCENTAGE',
+                                         'BOOLEAN', 'ENUMERATION',
+                                         'CUSTOM_ENUMERATION', 'SPARSE_SLOWLY'])
+OTHER_STANDARD_HISTOGRAMS = frozenset(['SCOPED_UMA_HISTOGRAM_TIMER',
+                                       'SCOPED_UMA_HISTOGRAM_LONG_TIMER'])
+# The following suffixes are not defined in //base/metrics but the first
+# argument to the macro is the full name of the histogram as a literal string.
+STANDARD_LIKE_SUFFIXES = frozenset(['SCROLL_LATENCY_SHORT',
+                                    'SCROLL_LATENCY_LONG',
+                                    'TOUCH_TO_SCROLL_LATENCY',
+                                    'LARGE_MEMORY_MB', 'MEGABYTES_LINEAR',
+                                    'LINEAR', 'ALLOCATED_MEGABYTES',
+                                    'CUSTOM_TIMES_MICROS',
+                                    'TIME_IN_MINUTES_MONTH_RANGE',
+                                    'TIMES_16H', 'MINUTES', 'MBYTES',
+                                    'ASPECT_RATIO', 'LOCATION_RESPONSE_TIMES',
+                                    'LOCK_TIMES', 'OOM_KILL_TIME_INTERVAL'])
+OTHER_STANDARD_LIKE_HISTOGRAMS = frozenset(['SCOPED_BLINK_UMA_HISTOGRAM_TIMER'])
 
 
 def RunGit(command):
@@ -65,6 +126,21 @@ class DirectoryNotFoundException(Exception):
 
   def __str__(self):
     return self.msg
+
+
+def removeComments(string):
+  """Remove any comments from an expression, including leading and trailing
+  whitespace. This does not correctly ignore comments embedded in strings,
+  but that shouldn't matter for this script.
+
+  Args:
+    string: The string to remove comments from, e.g.
+    '  // My histogram\n   "My.Important.Counts" '
+
+  Returns:
+    The string with comments removed, e.g. '"My.Important.Counts" '
+  """
+  return CPP_COMMENT.sub('', string)
 
 
 def collapseAdjacentCStrings(string):
@@ -111,6 +187,14 @@ def logNonLiteralHistogram(filename, histogram):
   if CONSTANT_REGEX.match(histogram):
     return
 
+  # A blank value wouldn't compile unless it was in a comment.
+  if histogram == '':
+    return
+
+  # String concatenations involving macros are always constant.
+  if MACRO_STRING_CONCATENATION_REGEX.match(histogram):
+    return
+
   # TODO(isherman): This is still a little noisy... needs further filtering to
   # reduce the noise.
   logging.warning('%s contains non-literal histogram name <%s>', filename,
@@ -124,7 +208,9 @@ def readChromiumHistograms():
   names that might vary during a single run of the app.
 
   Returns:
-    A set containing any found literal histogram names.
+    A tuple of
+      a set containing any found literal histogram names, and
+      a set mapping histogram name to first filename:line where it was found
   """
   logging.info('Scanning Chromium source for histograms...')
 
@@ -133,16 +219,33 @@ def readChromiumHistograms():
   #   'path/to/foo.cc:420:  UMA_HISTOGRAM_COUNTS_100("FooGroup.FooName",'
   #   'path/to/bar.cc:632:  UMA_HISTOGRAM_ENUMERATION('
   locations = RunGit(['gs', 'UMA_HISTOGRAM']).split('\n')
-  filenames = set([location.split(':')[0] for location in locations])
+  all_filenames = set(location.split(':')[0] for location in locations);
+  filenames = [f for f in all_filenames
+               if C_FILENAME.match(f) and not TEST_FILENAME.match(f)]
 
   histograms = set()
+  location_map = dict()
+  unknown_macros = set()
+  all_suffixes = STANDARD_HISTOGRAM_SUFFIXES | STANDARD_LIKE_SUFFIXES
+  all_others = OTHER_STANDARD_HISTOGRAMS | OTHER_STANDARD_LIKE_HISTOGRAMS
   for filename in filenames:
     contents = ''
     with open(filename, 'r') as f:
       contents = f.read()
 
-    matches = set(HISTOGRAM_REGEX.findall(contents))
-    for histogram in matches:
+    for match in HISTOGRAM_REGEX.finditer(contents):
+      line_number = contents[:match.start()].count('\n') + 1
+      if (match.group(2) not in all_suffixes and
+          match.group(1) not in all_others):
+        full_macro_name = match.group(1)
+        if (full_macro_name not in unknown_macros):
+          logging.warning('%s:%d: Unknown macro name: <%s>' %
+                          (filename, line_number, match.group(1)))
+          unknown_macros.add(full_macro_name)
+
+        continue
+
+      histogram = removeComments(match.group(3))
       histogram = collapseAdjacentCStrings(histogram)
 
       # Must begin and end with a quotation mark.
@@ -156,9 +259,11 @@ def readChromiumHistograms():
         logNonLiteralHistogram(filename, histogram)
         continue
 
-      histograms.add(histogram_stripped)
+      if histogram_stripped not in histograms:
+        histograms.add(histogram_stripped)
+        location_map[histogram_stripped] = '%s:%d' % (filename, line_number)
 
-  return histograms
+  return histograms, location_map
 
 
 def readXmlHistograms(histograms_file_location):
@@ -182,6 +287,31 @@ def hashHistogramName(name):
     Histogram hash as a string representing a hex number (with leading 0x).
   """
   return '0x' + hashlib.md5(name).hexdigest()[:16]
+
+
+def output_csv(unmapped_histograms, location_map):
+  for histogram in sorted(unmapped_histograms):
+    parts = location_map[histogram].split(':')
+    assert len(parts) == 2
+    (filename, line_number) = parts
+    print '%s,%s,%s,%s' % (filename, line_number, histogram,
+                           hashHistogramName(histogram))
+
+
+def output_log(unmapped_histograms, location_map, verbose):
+  if len(unmapped_histograms):
+    logging.info('')
+    logging.info('')
+    logging.info('Histograms in Chromium but not in XML files:')
+    logging.info('-------------------------------------------------')
+    for histogram in sorted(unmapped_histograms):
+      if verbose:
+        logging.info('%s: %s - %s', location_map[histogram], histogram,
+                     hashHistogramName(histogram))
+      else:
+        logging.info('  %s - %s', histogram, hashHistogramName(histogram))
+  else:
+    logging.info('Success!  No unmapped histograms found.')
 
 
 def main():
@@ -212,6 +342,16 @@ def main():
          '--root-directory) [optional, defaults to "%s"]' %
          default_extra_histograms_path,
     metavar='FILE')
+  parser.add_option(
+      '--csv', action='store_true', dest='output_as_csv', default=False,
+      help=(
+          'output as csv for ease of parsing ' +
+          '[optional, defaults to %default]'))
+  parser.add_option(
+      '--verbose', action='store_true', dest='verbose', default=False,
+      help=(
+          'print file position information with histograms ' +
+          '[optional, defaults to %default]'))
 
   (options, args) = parser.parse_args()
   if args:
@@ -225,7 +365,7 @@ def main():
   except EnvironmentError as e:
     logging.error("Could not change to root directory: %s", e)
     sys.exit(1)
-  chromium_histograms = readChromiumHistograms()
+  chromium_histograms, location_map = readChromiumHistograms()
   xml_histograms = readXmlHistograms(options.histograms_file_location)
   unmapped_histograms = chromium_histograms - xml_histograms
 
@@ -235,15 +375,10 @@ def main():
   else:
     logging.warning('No such file: %s', options.extra_histograms_file_location)
 
-  if len(unmapped_histograms):
-    logging.info('')
-    logging.info('')
-    logging.info('Histograms in Chromium but not in XML files:')
-    logging.info('-------------------------------------------------')
-    for histogram in sorted(unmapped_histograms):
-      logging.info('  %s - %s', histogram, hashHistogramName(histogram))
+  if options.output_as_csv:
+    output_csv(unmapped_histograms, location_map)
   else:
-    logging.info('Success!  No unmapped histograms found.')
+    output_log(unmapped_histograms, location_map, options.verbose)
 
 
 if __name__ == '__main__':

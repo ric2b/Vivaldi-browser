@@ -5,7 +5,6 @@
 #include "core/animation/StringKeyframe.h"
 
 #include "core/StylePropertyShorthand.h"
-#include "core/animation/DeferredLegacyStyleInterpolation.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/resolver/StyleResolver.h"
@@ -25,21 +24,21 @@ StringKeyframe::StringKeyframe(const StringKeyframe& copyFrom)
 
 void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, const String& value, Element* element, StyleSheetContents* styleSheetContents)
 {
-    ASSERT(property != CSSPropertyInvalid);
+    DCHECK_NE(property, CSSPropertyInvalid);
     if (CSSAnimations::isAnimatableProperty(property))
         m_cssPropertyMap->setProperty(property, value, false, styleSheetContents);
 }
 
-void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, CSSValue* value)
+void StringKeyframe::setCSSPropertyValue(CSSPropertyID property, const CSSValue& value)
 {
-    ASSERT(property != CSSPropertyInvalid);
-    ASSERT(CSSAnimations::isAnimatableProperty(property));
+    DCHECK_NE(property, CSSPropertyInvalid);
+    DCHECK(CSSAnimations::isAnimatableProperty(property));
     m_cssPropertyMap->setProperty(property, value, false);
 }
 
 void StringKeyframe::setPresentationAttributeValue(CSSPropertyID property, const String& value, Element* element, StyleSheetContents* styleSheetContents)
 {
-    ASSERT(property != CSSPropertyInvalid);
+    DCHECK_NE(property, CSSPropertyInvalid);
     if (CSSAnimations::isAnimatableProperty(property))
         m_presentationAttributeMap->setProperty(property, value, false, styleSheetContents);
 }
@@ -57,7 +56,7 @@ PropertyHandleSet StringKeyframe::properties() const
     for (unsigned i = 0; i < m_cssPropertyMap->propertyCount(); ++i) {
         StylePropertySet::PropertyReference propertyReference = m_cssPropertyMap->propertyAt(i);
         DCHECK(
-            !isShorthandProperty(propertyReference.id()) || propertyReference.value()->isVariableReferenceValue())
+            !isShorthandProperty(propertyReference.id()) || propertyReference.value().isVariableReferenceValue())
             << "Web Animations: Encountered unexpanded shorthand CSS property (" << propertyReference.id() << ").";
         properties.add(PropertyHandle(propertyReference.id(), false));
     }
@@ -79,24 +78,18 @@ PassRefPtr<Keyframe> StringKeyframe::clone() const
 PassRefPtr<Keyframe::PropertySpecificKeyframe> StringKeyframe::createPropertySpecificKeyframe(PropertyHandle property) const
 {
     if (property.isCSSProperty())
-        return CSSPropertySpecificKeyframe::create(offset(), &easing(), cssPropertyValue(property.cssProperty()), composite());
+        return CSSPropertySpecificKeyframe::create(offset(), &easing(), &cssPropertyValue(property.cssProperty()), composite());
 
     if (property.isPresentationAttribute())
-        return CSSPropertySpecificKeyframe::create(offset(), &easing(), presentationAttributeValue(property.presentationAttribute()), composite());
+        return CSSPropertySpecificKeyframe::create(offset(), &easing(), &presentationAttributeValue(property.presentationAttribute()), composite());
 
-    ASSERT(property.isSVGAttribute());
+    DCHECK(property.isSVGAttribute());
     return SVGPropertySpecificKeyframe::create(offset(), &easing(), svgPropertyValue(property.svgAttribute()), composite());
 }
 
-bool StringKeyframe::CSSPropertySpecificKeyframe::populateAnimatableValue(CSSPropertyID property, Element& element, const ComputedStyle* baseStyle, bool force) const
+bool StringKeyframe::CSSPropertySpecificKeyframe::populateAnimatableValue(CSSPropertyID property, Element& element, const ComputedStyle& baseStyle, const ComputedStyle* parentStyle) const
 {
-    if (m_animatableValueCache && !force)
-        return false;
-    if (!baseStyle && (!m_value || DeferredLegacyStyleInterpolation::interpolationRequiresStyleResolve(*m_value)))
-        return false;
-    if (!element.document().frame())
-        return false;
-    m_animatableValueCache = StyleResolver::createAnimatableValueSnapshot(element, baseStyle, property, m_value.get());
+    m_animatableValueCache = StyleResolver::createAnimatableValueSnapshot(element, baseStyle, parentStyle, property, m_value.get());
     return true;
 }
 

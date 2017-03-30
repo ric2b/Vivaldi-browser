@@ -45,7 +45,7 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost,
                                const std::string& message) override;
 
   bool IsAttached() override;
-  void InspectElement(int x, int y) override;
+  void InspectElement(DevToolsAgentHostClient* client, int x, int y) override;
   std::string GetId() override;
   BrowserContext* GetBrowserContext() override;
   WebContents* GetWebContents() override;
@@ -62,6 +62,7 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost,
   ~DevToolsAgentHostImpl() override;
 
   virtual bool DispatchProtocolMessage(const std::string& message) = 0;
+  virtual void InspectElement(int x, int y);
 
   void HostClosed();
   void SendMessageToClient(int session_id, const std::string& message);
@@ -91,7 +92,7 @@ class DevToolsMessageChunkProcessor {
   std::string state_cookie() const { return state_cookie_; }
   void set_state_cookie(const std::string& cookie) { state_cookie_ = cookie; }
   int last_call_id() const { return last_call_id_; }
-  void ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
+  bool ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
 
  private:
   SendMessageCallback callback_;

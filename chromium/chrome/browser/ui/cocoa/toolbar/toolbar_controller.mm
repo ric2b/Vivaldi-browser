@@ -161,6 +161,7 @@ CGFloat BrowserActionsContainerDelegate::GetMaxAllowedWidth() {
 - (void)browserActionsContainerWillAnimate:(NSNotification*)notification;
 - (void)adjustLocationSizeBy:(CGFloat)dX animate:(BOOL)animate;
 - (void)updateAppMenuButtonSeverity:(AppMenuIconPainter::Severity)severity
+                           iconType:(AppMenuIconController::IconType)iconType
                             animate:(BOOL)animate;
 @end
 
@@ -205,7 +206,9 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   void UpdateSeverity(AppMenuIconController::IconType type,
                       AppMenuIconPainter::Severity severity,
                       bool animate) override {
-    [controller_ updateAppMenuButtonSeverity:severity animate:animate];
+    [controller_ updateAppMenuButtonSeverity:severity
+                                    iconType:type
+                                     animate:animate];
   }
 
   void OnPreferenceChanged(const std::string& pref_name) {
@@ -365,6 +368,10 @@ class NotificationBridge : public AppMenuIconController::Delegate {
     NSRect locationBarFrame = [locationBar_ frame];
     locationBarFrame.origin.x = NSMaxX(homeButtonFrame) +
         kMaterialDesignButtonInset;
+    if (![homeButton_ isHidden]) {
+      // Ensure proper spacing between the home button and the location bar.
+      locationBarFrame.origin.x += kMaterialDesignElementPadding;
+    }
     locationBarFrame.origin.y = NSMaxY(toolbarBounds) -
         kMaterialDesignLocationBarPadding - kMaterialDesignLocationBarHeight;
     locationBarFrame.size.width =
@@ -795,6 +802,9 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   CGFloat moveX = [homeButton_ frame].size.width;
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     moveX -= 1.0;
+  } else {
+    // Ensure proper spacing between the home button and the location bar.
+    moveX += kMaterialDesignElementPadding;
   }
   if (hide)
     moveX *= -1;  // Reverse the direction of the move.
@@ -817,6 +827,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
 }
 
 - (void)updateAppMenuButtonSeverity:(AppMenuIconPainter::Severity)severity
+                           iconType:(AppMenuIconController::IconType)iconType
                             animate:(BOOL)animate {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     AppToolbarButtonCell* cell =
@@ -826,7 +837,7 @@ class NotificationBridge : public AppMenuIconController::Delegate {
   }
   AppToolbarButton* appMenuButton =
       base::mac::ObjCCastStrict<AppToolbarButton>(appMenuButton_);
-  [appMenuButton setSeverity:severity shouldAnimate:animate];
+  [appMenuButton setSeverity:severity iconType:iconType shouldAnimate:animate];
 }
 
 - (void)prefChanged:(const std::string&)prefName {

@@ -30,6 +30,7 @@
 #include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "cc/base/switches.h"
+#include "components/crash/content/app/breakpad_linux.h"
 #include "components/external_video_surface/browser/android/external_video_surface_container_impl.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
 #include "content/public/browser/browser_main_runner.h"
@@ -64,7 +65,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   content::SetContentClient(&content_client_);
 
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
-  cl->AppendSwitch(cc::switches::kEnableBeginFrameScheduling);
 
   // WebView uses the Android system's scrollbars and overscroll glow.
   cl->AppendSwitch(switches::kDisableOverscrollEdgeEffect);
@@ -107,6 +107,7 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   // https://crbug.com/521319
   cl->AppendSwitch(switches::kDisablePresentationAPI);
 
+#if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
     // Browser process (no type specified).
 
@@ -129,6 +130,7 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
         kV8SnapshotDataDescriptor64,
         gin::V8Initializer::GetSnapshotFilePath(false).AsUTF8Unsafe());
   }
+#endif  // V8_USE_EXTERNAL_STARTUP_DATA
 
   if (cl->HasSwitch(switches::kWebViewSandboxedRenderer)) {
     cl->AppendSwitch(switches::kInProcessGPU);
@@ -152,24 +154,33 @@ void AwMainDelegate::PreSandboxStartup() {
       command_line.GetSwitchValueASCII(switches::kProcessType);
   int crash_signal_fd = -1;
   if (process_type == switches::kRendererProcess) {
-    auto global_descriptors = base::GlobalDescriptors::GetInstance();
+    auto* global_descriptors = base::GlobalDescriptors::GetInstance();
     int pak_fd = global_descriptors->Get(kAndroidWebViewLocalePakDescriptor);
     base::MemoryMappedFile::Region pak_region =
         global_descriptors->GetRegion(kAndroidWebViewLocalePakDescriptor);
     ResourceBundle::InitSharedInstanceWithPakFileRegion(base::File(pak_fd),
                                                         pak_region);
-    pak_fd = global_descriptors->Get(kAndroidWebViewMainPakDescriptor);
-    pak_region =
-        global_descriptors->GetRegion(kAndroidWebViewMainPakDescriptor);
-    ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
-        base::File(pak_fd), pak_region, ui::SCALE_FACTOR_NONE);
+
+    std::pair<int, ui::ScaleFactor> extra_paks[] = {
+        {kAndroidWebViewMainPakDescriptor, ui::SCALE_FACTOR_NONE},
+        {kAndroidWebView100PercentPakDescriptor, ui::SCALE_FACTOR_100P}};
+
+    for (const auto& pak_info : extra_paks) {
+      pak_fd = global_descriptors->Get(pak_info.first);
+      pak_region = global_descriptors->GetRegion(pak_info.first);
+      ResourceBundle::GetSharedInstance().AddDataPackFromFileRegion(
+          base::File(pak_fd), pak_region, pak_info.second);
+    }
+
     crash_signal_fd =
         global_descriptors->Get(kAndroidWebViewCrashSignalDescriptor);
   }
-  if (process_type.empty() &&
-      command_line.HasSwitch(switches::kSingleProcess)) {
-    // "webview" has a special treatment in breakpad_linux.cc.
-    process_type = "webview";
+  if (process_type.empty()) {
+    if (command_line.HasSwitch(switches::kSingleProcess)) {
+      process_type = breakpad::kWebViewSingleProcessType;
+    } else {
+      process_type = breakpad::kBrowserProcessType;
+    }
   }
 
   crash_reporter::EnableMicrodumpCrashReporter(process_type, crash_signal_fd);

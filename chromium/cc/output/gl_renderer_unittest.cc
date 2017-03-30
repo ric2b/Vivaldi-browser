@@ -24,10 +24,10 @@
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
-#include "cc/test/fake_renderer_client.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/pixel_test.h"
 #include "cc/test/render_pass_test_utils.h"
+#include "cc/test/test_gles2_interface.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -64,15 +64,15 @@ class GLRendererTest : public testing::Test {
   RenderPass* root_render_pass() {
     return render_passes_in_draw_order_.back().get();
   }
-  void DrawFrame(Renderer* renderer, const gfx::Rect& viewport_rect) {
+  void DrawFrame(GLRenderer* renderer, const gfx::Rect& viewport_rect) {
     renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, gfx::ColorSpace(),
-                        viewport_rect, viewport_rect, false);
+                        viewport_rect, viewport_rect);
   }
-  void DrawFrame(Renderer* renderer,
+  void DrawFrame(GLRenderer* renderer,
                  const gfx::Rect& viewport_rect,
                  const gfx::Rect& clip_rect) {
     renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, gfx::ColorSpace(),
-                        viewport_rect, clip_rect, false);
+                        viewport_rect, clip_rect);
   }
 
   RenderPassList render_passes_in_draw_order_;
@@ -145,7 +145,7 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
   void TestShadersWithPrecision(TexCoordPrecision precision) {
     // This program uses external textures and sampler, so it won't compile
     // everywhere.
-    if (renderer()->Capabilities().using_egl_image)
+    if (context_provider()->ContextCapabilities().egl_image_external)
       EXPECT_PROGRAM_VALID(renderer()->GetVideoStreamTextureProgram(precision));
   }
 
@@ -159,7 +159,7 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
 
   void TestShadersWithPrecisionAndSampler(TexCoordPrecision precision,
                                           SamplerType sampler) {
-    if (!renderer()->Capabilities().using_egl_image &&
+    if (!context_provider()->ContextCapabilities().egl_image_external &&
         sampler == SAMPLER_TYPE_EXTERNAL_OES) {
       // This will likely be hit in tests due to usage of osmesa.
       return;
@@ -184,8 +184,10 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
         renderer()->GetTileProgramSwizzleAA(precision, sampler));
     for (int j = 0; j < 2; j++) {
       for (int k = 0; k < 2; k++) {
-        EXPECT_PROGRAM_VALID(
-            renderer()->GetVideoYUVProgram(precision, sampler, j, k));
+        for (int l = 0; l < 2; l++) {
+          EXPECT_PROGRAM_VALID(
+              renderer()->GetVideoYUVProgram(precision, sampler, j, k, l));
+        }
       }
     }
   }
@@ -194,7 +196,7 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
                             SamplerType sampler,
                             BlendMode blend_mode,
                             bool mask_for_background) {
-    if (!renderer()->Capabilities().using_egl_image &&
+    if (!context_provider()->ContextCapabilities().egl_image_external &&
         sampler == SAMPLER_TYPE_EXTERNAL_OES) {
       // This will likely be hit in tests due to usage of osmesa.
       return;
@@ -312,24 +314,16 @@ INSTANTIATE_TEST_CASE_P(MaskShadersCompile,
 
 class FakeRendererGL : public GLRenderer {
  public:
-  FakeRendererGL(RendererClient* client,
-                 const RendererSettings* settings,
+  FakeRendererGL(const RendererSettings* settings,
                  OutputSurface* output_surface,
                  ResourceProvider* resource_provider)
-      : GLRenderer(client,
-                   settings,
-                   output_surface,
-                   resource_provider,
-                   NULL,
-                   0) {}
+      : GLRenderer(settings, output_surface, resource_provider, nullptr, 0) {}
 
-  FakeRendererGL(RendererClient* client,
-                 const RendererSettings* settings,
+  FakeRendererGL(const RendererSettings* settings,
                  OutputSurface* output_surface,
                  ResourceProvider* resource_provider,
                  TextureMailboxDeleter* texture_mailbox_deleter)
-      : GLRenderer(client,
-                   settings,
+      : GLRenderer(settings,
                    output_surface,
                    resource_provider,
                    texture_mailbox_deleter,
@@ -342,7 +336,6 @@ class FakeRendererGL : public GLRenderer {
   // GLRenderer methods.
 
   // Changing visibility to public.
-  using GLRenderer::IsBackbufferDiscarded;
   using GLRenderer::DoDrawQuad;
   using GLRenderer::BeginDrawingFrame;
   using GLRenderer::FinishDrawingQuadList;
@@ -359,9 +352,10 @@ class GLRendererWithDefaultHarnessTest : public GLRendererTest {
     shared_bitmap_manager_.reset(new TestSharedBitmapManager());
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_.get(), shared_bitmap_manager_.get());
-    renderer_ = base::WrapUnique(
-        new FakeRendererGL(&renderer_client_, &settings_, output_surface_.get(),
-                           resource_provider_.get()));
+    renderer_ = base::MakeUnique<FakeRendererGL>(
+        &settings_, output_surface_.get(), resource_provider_.get());
+    renderer_->Initialize();
+    renderer_->SetVisible(true);
   }
 
   void SwapBuffers() { renderer_->SwapBuffers(CompositorFrameMetadata()); }
@@ -369,7 +363,6 @@ class GLRendererWithDefaultHarnessTest : public GLRendererTest {
   RendererSettings settings_;
   FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<FakeOutputSurface> output_surface_;
-  FakeRendererClient renderer_client_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<FakeRendererGL> renderer_;
@@ -389,10 +382,10 @@ class GLRendererShaderTest : public GLRendererTest {
     shared_bitmap_manager_.reset(new TestSharedBitmapManager());
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_.get(), shared_bitmap_manager_.get());
-    renderer_.reset(new FakeRendererGL(&renderer_client_,
-                                       &settings_,
-                                       output_surface_.get(),
+    renderer_.reset(new FakeRendererGL(&settings_, output_surface_.get(),
                                        resource_provider_.get()));
+    renderer_->Initialize();
+    renderer_->SetVisible(true);
   }
 
   void TestRenderPassProgram(TexCoordPrecision precision,
@@ -491,71 +484,12 @@ class GLRendererShaderTest : public GLRendererTest {
   RendererSettings settings_;
   FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<FakeOutputSurface> output_surface_;
-  FakeRendererClient renderer_client_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<FakeRendererGL> renderer_;
 };
 
 namespace {
-
-// Test GLRenderer DiscardBackbuffer functionality:
-// Suggest discarding framebuffer when one exists and the renderer is not
-// visible.
-// Expected: it is discarded and damage tracker is reset.
-TEST_F(
-    GLRendererWithDefaultHarnessTest,
-    SuggestBackbufferNoShouldDiscardBackbufferAndDamageRootLayerIfNotVisible) {
-  renderer_->SetVisible(false);
-  EXPECT_EQ(1, renderer_client_.set_full_root_layer_damage_count());
-  EXPECT_TRUE(renderer_->IsBackbufferDiscarded());
-}
-
-// Test GLRenderer DiscardBackbuffer functionality:
-// Suggest discarding framebuffer when one exists and the renderer is visible.
-// Expected: the allocation is ignored.
-TEST_F(GLRendererWithDefaultHarnessTest,
-       SuggestBackbufferNoDoNothingWhenVisible) {
-  renderer_->SetVisible(true);
-  EXPECT_EQ(0, renderer_client_.set_full_root_layer_damage_count());
-  EXPECT_FALSE(renderer_->IsBackbufferDiscarded());
-}
-
-// Test GLRenderer DiscardBackbuffer functionality:
-// Suggest discarding framebuffer when one does not exist.
-// Expected: it does nothing.
-TEST_F(GLRendererWithDefaultHarnessTest,
-       SuggestBackbufferNoWhenItDoesntExistShouldDoNothing) {
-  renderer_->SetVisible(false);
-  EXPECT_EQ(1, renderer_client_.set_full_root_layer_damage_count());
-  EXPECT_TRUE(renderer_->IsBackbufferDiscarded());
-
-  EXPECT_EQ(1, renderer_client_.set_full_root_layer_damage_count());
-  EXPECT_TRUE(renderer_->IsBackbufferDiscarded());
-}
-
-// Test GLRenderer DiscardBackbuffer functionality:
-// Begin drawing a frame while a framebuffer is discarded.
-// Expected: will recreate framebuffer.
-TEST_F(GLRendererWithDefaultHarnessTest,
-       DiscardedBackbufferIsRecreatedForScopeDuration) {
-  gfx::Rect viewport_rect(1, 1);
-  renderer_->SetVisible(false);
-  EXPECT_TRUE(renderer_->IsBackbufferDiscarded());
-  EXPECT_EQ(1, renderer_client_.set_full_root_layer_damage_count());
-
-  AddRenderPass(&render_passes_in_draw_order_,
-                RenderPassId(1, 0),
-                viewport_rect,
-                gfx::Transform());
-
-  renderer_->SetVisible(true);
-  DrawFrame(renderer_.get(), viewport_rect);
-  EXPECT_FALSE(renderer_->IsBackbufferDiscarded());
-
-  SwapBuffers();
-  EXPECT_EQ(1u, output_surface_->num_sent_frames());
-}
 
 TEST_F(GLRendererWithDefaultHarnessTest, ExternalStencil) {
   gfx::Rect viewport_rect(1, 1);
@@ -683,10 +617,7 @@ TEST_F(GLRendererTest, InitializationDoesNotMakeSynchronousCalls) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
 }
 
@@ -719,10 +650,7 @@ TEST_F(GLRendererTest, InitializationWithQuicklyLostContextDoesNotAssert) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
 }
 
@@ -753,11 +681,10 @@ TEST_F(GLRendererTest, OpaqueBackground) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(1, 1);
   RenderPass* root_pass =
@@ -795,11 +722,10 @@ TEST_F(GLRendererTest, TransparentBackground) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(1, 1);
   RenderPass* root_pass =
@@ -830,11 +756,10 @@ TEST_F(GLRendererTest, OffscreenOutputSurface) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(1, 1);
   AddRenderPass(&render_passes_in_draw_order_,
@@ -889,11 +814,10 @@ TEST_F(GLRendererTest, ActiveTextureState) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   // During initialization we are allowed to set any texture parameters.
   EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
@@ -973,11 +897,10 @@ TEST_F(GLRendererTest, ShouldClearRootRenderPass) {
   RendererSettings settings;
   settings.should_clear_root_render_pass = false;
 
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(10, 10);
 
@@ -1023,33 +946,32 @@ TEST_F(GLRendererTest, ShouldClearRootRenderPass) {
   Mock::VerifyAndClearExpectations(&mock_context);
 }
 
-class ScissorTestOnClearCheckingContext : public TestWebGraphicsContext3D {
+class ScissorTestOnClearCheckingGLES2Interface : public TestGLES2Interface {
  public:
-  ScissorTestOnClearCheckingContext() : scissor_enabled_(false) {}
+  ScissorTestOnClearCheckingGLES2Interface() = default;
 
-  void clear(GLbitfield) override { EXPECT_FALSE(scissor_enabled_); }
+  void Clear(GLbitfield) override { EXPECT_FALSE(scissor_enabled_); }
 
-  void enable(GLenum cap) override {
+  void Enable(GLenum cap) override {
     if (cap == GL_SCISSOR_TEST)
       scissor_enabled_ = true;
   }
 
-  void disable(GLenum cap) override {
+  void Disable(GLenum cap) override {
     if (cap == GL_SCISSOR_TEST)
       scissor_enabled_ = false;
   }
 
  private:
-  bool scissor_enabled_;
+  bool scissor_enabled_ = false;
 };
 
 TEST_F(GLRendererTest, ScissorTestWhenClearing) {
-  std::unique_ptr<ScissorTestOnClearCheckingContext> context_owned(
-      new ScissorTestOnClearCheckingContext);
+  auto gl_owned = base::MakeUnique<ScissorTestOnClearCheckingGLES2Interface>();
 
   FakeOutputSurfaceClient output_surface_client;
-  std::unique_ptr<OutputSurface> output_surface(
-      FakeOutputSurface::Create3d(std::move(context_owned)));
+  std::unique_ptr<OutputSurface> output_surface(FakeOutputSurface::Create3d(
+      TestContextProvider::Create(std::move(gl_owned))));
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -1059,12 +981,11 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
-  EXPECT_FALSE(renderer.Capabilities().using_partial_swap);
+  renderer.Initialize();
+  EXPECT_FALSE(renderer.use_partial_swap());
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(1, 1);
 
@@ -1095,31 +1016,32 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
   DrawFrame(&renderer, viewport_rect);
 }
 
-class DiscardCheckingContext : public TestWebGraphicsContext3D {
+class DiscardCheckingGLES2Interface : public TestGLES2Interface {
  public:
-  DiscardCheckingContext() : discarded_(0) {
-    set_have_post_sub_buffer(true);
-    set_have_discard_framebuffer(true);
+  DiscardCheckingGLES2Interface() = default;
+
+  void InitializeTestContext(TestWebGraphicsContext3D* context) override {
+    context->set_have_post_sub_buffer(true);
+    context->set_have_discard_framebuffer(true);
   }
 
-  void discardFramebufferEXT(GLenum target,
+  void DiscardFramebufferEXT(GLenum target,
                              GLsizei numAttachments,
                              const GLenum* attachments) override {
     ++discarded_;
   }
 
   int discarded() const { return discarded_; }
-  void reset() { discarded_ = 0; }
+  void reset_discarded() { discarded_ = 0; }
 
  private:
-  int discarded_;
+  int discarded_ = 0;
 };
 
 class NonReshapableOutputSurface : public FakeOutputSurface {
  public:
-  explicit NonReshapableOutputSurface(
-      std::unique_ptr<TestWebGraphicsContext3D> context3d)
-      : FakeOutputSurface(TestContextProvider::Create(std::move(context3d)),
+  explicit NonReshapableOutputSurface(std::unique_ptr<TestGLES2Interface> gl)
+      : FakeOutputSurface(TestContextProvider::Create(std::move(gl)),
                           nullptr,
                           false) {
     surface_size_ = gfx::Size(500, 500);
@@ -1132,13 +1054,12 @@ class NonReshapableOutputSurface : public FakeOutputSurface {
 };
 
 TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
-  std::unique_ptr<DiscardCheckingContext> context_owned(
-      new DiscardCheckingContext);
-  DiscardCheckingContext* context = context_owned.get();
+  auto gl_owned = base::MakeUnique<DiscardCheckingGLES2Interface>();
+  auto* gl = gl_owned.get();
 
   FakeOutputSurfaceClient output_surface_client;
   std::unique_ptr<NonReshapableOutputSurface> output_surface(
-      new NonReshapableOutputSurface(std::move(context_owned)));
+      new NonReshapableOutputSurface(std::move(gl_owned)));
   CHECK(output_surface->BindToClient(&output_surface_client));
   output_surface->set_fixed_size(gfx::Size(100, 100));
 
@@ -1150,12 +1071,11 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
   RendererSettings settings;
   settings.partial_swap_enabled = true;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
-  EXPECT_TRUE(renderer.Capabilities().using_partial_swap);
+  renderer.Initialize();
+  EXPECT_TRUE(renderer.use_partial_swap());
+  renderer.SetVisible(true);
 
   gfx::Rect viewport_rect(100, 100);
   gfx::Rect clip_rect(100, 100);
@@ -1171,8 +1091,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(0, context->discarded());
-    context->reset();
+    EXPECT_EQ(0, gl->discarded());
+    gl->reset_discarded();
   }
   {
     // Full frame, should discard.
@@ -1185,8 +1105,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(1, context->discarded());
-    context->reset();
+    EXPECT_EQ(1, gl->discarded());
+    gl->reset_discarded();
   }
   {
     // Full frame, external scissor is set, should not discard.
@@ -1201,8 +1121,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(0, context->discarded());
-    context->reset();
+    EXPECT_EQ(0, gl->discarded());
+    gl->reset_discarded();
     output_surface->set_has_external_stencil_test(false);
   }
   {
@@ -1217,8 +1137,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(0, context->discarded());
-    context->reset();
+    EXPECT_EQ(0, gl->discarded());
+    gl->reset_discarded();
   }
   {
     // Full frame, doesn't cover the surface, should not discard.
@@ -1232,8 +1152,8 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(0, context->discarded());
-    context->reset();
+    EXPECT_EQ(0, gl->discarded());
+    gl->reset_discarded();
   }
   {
     // Full frame, doesn't cover the surface (no offset), should not discard.
@@ -1248,15 +1168,15 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
     DrawFrame(&renderer, viewport_rect, clip_rect);
-    EXPECT_EQ(0, context->discarded());
-    context->reset();
+    EXPECT_EQ(0, gl->discarded());
+    gl->reset_discarded();
   }
 }
 
-class FlippedScissorAndViewportContext : public TestWebGraphicsContext3D {
+class FlippedScissorAndViewportGLES2Interface : public TestGLES2Interface {
  public:
-  MOCK_METHOD4(viewport, void(GLint x, GLint y, GLsizei width, GLsizei height));
-  MOCK_METHOD4(scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
+  MOCK_METHOD4(Viewport, void(GLint x, GLint y, GLsizei width, GLsizei height));
+  MOCK_METHOD4(Scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
 };
 
 TEST_F(GLRendererTest, ScissorAndViewportWithinNonreshapableSurface) {
@@ -1264,18 +1184,17 @@ TEST_F(GLRendererTest, ScissorAndViewportWithinNonreshapableSurface) {
   // and maintains a fixed size. This test verifies that glViewport and
   // glScissor's Y coordinate is flipped correctly in this environment, and that
   // the glViewport can be at a nonzero origin within the surface.
-  std::unique_ptr<FlippedScissorAndViewportContext> context_owned(
-      new FlippedScissorAndViewportContext);
+  auto gl_owned = base::MakeUnique<FlippedScissorAndViewportGLES2Interface>();
 
   // We expect exactly one call to viewport on this context and exactly two
   // to scissor (one to scissor the clear, one to scissor the quad draw).
-  EXPECT_CALL(*context_owned, viewport(10, 390, 100, 100));
-  EXPECT_CALL(*context_owned, scissor(10, 390, 100, 100));
-  EXPECT_CALL(*context_owned, scissor(30, 450, 20, 20));
+  EXPECT_CALL(*gl_owned, Viewport(10, 390, 100, 100));
+  EXPECT_CALL(*gl_owned, Scissor(10, 390, 100, 100));
+  EXPECT_CALL(*gl_owned, Scissor(30, 450, 20, 20));
 
   FakeOutputSurfaceClient output_surface_client;
   std::unique_ptr<OutputSurface> output_surface(
-      new NonReshapableOutputSurface(std::move(context_owned)));
+      new NonReshapableOutputSurface(std::move(gl_owned)));
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -1285,12 +1204,11 @@ TEST_F(GLRendererTest, ScissorAndViewportWithinNonreshapableSurface) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client,
-                          &settings,
-                          output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
-  EXPECT_FALSE(renderer.Capabilities().using_partial_swap);
+  renderer.Initialize();
+  EXPECT_FALSE(renderer.use_partial_swap());
+  renderer.SetVisible(true);
 
   gfx::Rect device_viewport_rect(10, 10, 100, 100);
   gfx::Rect viewport_rect(device_viewport_rect.size());
@@ -1324,10 +1242,11 @@ TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
                                    shared_bitmap_manager.get());
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client, &settings, output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get());
-  EXPECT_FALSE(renderer.Capabilities().using_partial_swap);
+  renderer.Initialize();
+  EXPECT_FALSE(renderer.use_partial_swap());
+  renderer.SetVisible(true);
 
   gfx::Rect device_viewport_rect(0, 0, 100, 100);
   gfx::Rect viewport_rect(device_viewport_rect.size());
@@ -1365,7 +1284,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
   ResourceId mask = resource_provider_->CreateResource(
       gfx::Size(20, 12), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider_->best_texture_format());
+      resource_provider_->best_texture_format(), gfx::ColorSpace());
   resource_provider_->AllocateForTesting(mask);
 
   SkScalar matrix[20];
@@ -1693,7 +1612,7 @@ class MockOutputSurface : public OutputSurface {
                     bool has_alpha));
   MOCK_METHOD0(BindFramebuffer, void());
   MOCK_METHOD0(GetFramebufferCopyTextureFormat, GLenum());
-  MOCK_METHOD1(SwapBuffers_, void(CompositorFrame& frame));
+  MOCK_METHOD1(SwapBuffers_, void(CompositorFrame& frame));  // NOLINT
   void SwapBuffers(CompositorFrame frame) override { SwapBuffers_(frame); }
 };
 
@@ -1707,10 +1626,12 @@ class MockOutputSurfaceTest : public GLRendererTest {
     resource_provider_ = FakeResourceProvider::Create(
         &output_surface_, shared_bitmap_manager_.get());
 
-    renderer_.reset(new FakeRendererGL(&renderer_client_,
-                                       &settings_,
-                                       &output_surface_,
+    renderer_.reset(new FakeRendererGL(&settings_, &output_surface_,
                                        resource_provider_.get()));
+    renderer_->Initialize();
+
+    EXPECT_CALL(output_surface_, EnsureBackbuffer()).Times(1);
+    renderer_->SetVisible(true);
   }
 
   void SwapBuffers() { renderer_->SwapBuffers(CompositorFrameMetadata()); }
@@ -1739,7 +1660,7 @@ class MockOutputSurfaceTest : public GLRendererTest {
         render_passes_in_draw_order_);
     renderer_->DrawFrame(&render_passes_in_draw_order_, device_scale_factor,
                          gfx::ColorSpace(), device_viewport_rect,
-                         device_viewport_rect, false);
+                         device_viewport_rect);
   }
 
   OutputSurfaceMockContext* Context() {
@@ -1753,9 +1674,17 @@ class MockOutputSurfaceTest : public GLRendererTest {
   StrictMock<MockOutputSurface> output_surface_;
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
-  FakeRendererClient renderer_client_;
   std::unique_ptr<FakeRendererGL> renderer_;
 };
+
+TEST_F(MockOutputSurfaceTest, BackbufferDiscard) {
+  // Drop backbuffer on hide.
+  EXPECT_CALL(output_surface_, DiscardBackbuffer()).Times(1);
+  renderer_->SetVisible(false);
+  // Restore backbuffer on show.
+  EXPECT_CALL(output_surface_, EnsureBackbuffer()).Times(1);
+  renderer_->SetVisible(true);
+}
 
 TEST_F(MockOutputSurfaceTest, DrawFrameAndSwap) {
   gfx::Rect device_viewport_rect(1, 1);
@@ -1843,11 +1772,9 @@ void MailboxReleased(const gpu::SyncToken& sync_token,
 void IgnoreCopyResult(std::unique_ptr<CopyOutputResult> result) {}
 
 TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
-  std::unique_ptr<DiscardCheckingContext> context_owned(
-      new DiscardCheckingContext);
   FakeOutputSurfaceClient output_surface_client;
   std::unique_ptr<FakeOutputSurface> output_surface(
-      FakeOutputSurface::Create3d(std::move(context_owned)));
+      FakeOutputSurface::Create3d());
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -1859,9 +1786,10 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client, &settings, output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get(), mailbox_deleter.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   TestOverlayProcessor* processor =
       new TestOverlayProcessor(output_surface.get());
@@ -1951,10 +1879,8 @@ class SingleOverlayOnTopProcessor : public OverlayProcessor {
   class SingleOverlayValidator : public OverlayCandidateValidator {
    public:
     void GetStrategies(OverlayProcessor::StrategyList* strategies) override {
-      strategies->push_back(
-          base::WrapUnique(new OverlayStrategySingleOnTop(this)));
-      strategies->push_back(
-          base::WrapUnique(new OverlayStrategyUnderlay(this)));
+      strategies->push_back(base::MakeUnique<OverlayStrategySingleOnTop>(this));
+      strategies->push_back(base::MakeUnique<OverlayStrategyUnderlay>(this));
     }
 
     bool AllowCALayerOverlays() override { return false; }
@@ -1971,7 +1897,7 @@ class SingleOverlayOnTopProcessor : public OverlayProcessor {
 
   void Initialize() override {
     strategies_.push_back(
-        base::WrapUnique(new OverlayStrategySingleOnTop(&validator_)));
+        base::MakeUnique<OverlayStrategySingleOnTop>(&validator_));
   }
 
   SingleOverlayValidator validator_;
@@ -2017,9 +1943,10 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
       new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
 
   RendererSettings settings;
-  FakeRendererClient renderer_client;
-  FakeRendererGL renderer(&renderer_client, &settings, output_surface.get(),
+  FakeRendererGL renderer(&settings, output_surface.get(),
                           resource_provider.get(), mailbox_deleter.get());
+  renderer.Initialize();
+  renderer.SetVisible(true);
 
   SingleOverlayOnTopProcessor* processor =
       new SingleOverlayOnTopProcessor(output_surface.get());
@@ -2066,6 +1993,133 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
                        BoundingRect(uv_top_left, uv_bottom_right))).Times(1);
 
   DrawFrame(&renderer, viewport_rect);
+}
+
+class PartialSwapMockGLES2Interface : public TestGLES2Interface {
+ public:
+  void InitializeTestContext(TestWebGraphicsContext3D* context) override {
+    context->set_have_post_sub_buffer(true);
+  }
+
+  MOCK_METHOD1(Enable, void(GLenum cap));
+  MOCK_METHOD1(Disable, void(GLenum cap));
+  MOCK_METHOD4(Scissor, void(GLint x, GLint y, GLsizei width, GLsizei height));
+};
+
+class GLRendererPartialSwapTest : public GLRendererTest {
+ protected:
+  void RunTest(bool partial_swap) {
+    auto gl_owned = base::MakeUnique<PartialSwapMockGLES2Interface>();
+    auto* gl = gl_owned.get();
+
+    FakeOutputSurfaceClient output_surface_client;
+    std::unique_ptr<FakeOutputSurface> output_surface(
+        FakeOutputSurface::Create3d(std::move(gl_owned)));
+    CHECK(output_surface->BindToClient(&output_surface_client));
+
+    std::unique_ptr<ResourceProvider> resource_provider =
+        FakeResourceProvider::Create(output_surface.get(), nullptr);
+
+    RendererSettings settings;
+    settings.partial_swap_enabled = partial_swap;
+    FakeRendererGL renderer(&settings, output_surface.get(),
+                            resource_provider.get());
+    renderer.Initialize();
+    EXPECT_EQ(partial_swap, renderer.use_partial_swap());
+    renderer.SetVisible(true);
+
+    gfx::Rect viewport_rect(100, 100);
+    gfx::Rect clip_rect(100, 100);
+
+    {
+      RenderPassId root_pass_id(1, 0);
+      RenderPass* root_pass =
+          AddRenderPass(&render_passes_in_draw_order_, root_pass_id,
+                        viewport_rect, gfx::Transform());
+      AddQuad(root_pass, viewport_rect, SK_ColorGREEN);
+
+      testing::Sequence seq;
+      // A bunch of initialization that happens.
+      EXPECT_CALL(*gl, Disable(GL_DEPTH_TEST)).InSequence(seq);
+      EXPECT_CALL(*gl, Disable(GL_CULL_FACE)).InSequence(seq);
+      EXPECT_CALL(*gl, Disable(GL_STENCIL_TEST)).InSequence(seq);
+      EXPECT_CALL(*gl, Enable(GL_BLEND)).InSequence(seq);
+      EXPECT_CALL(*gl, Disable(GL_SCISSOR_TEST)).InSequence(seq);
+
+      // Partial frame, we should use a scissor to swap only that part when
+      // partial swap is enabled.
+      root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
+
+      if (partial_swap) {
+        EXPECT_CALL(*gl, Enable(GL_SCISSOR_TEST)).InSequence(seq);
+        // The scissor is flipped, so subtract the y coord and height from the
+        // bottom of the GL viewport.
+        EXPECT_CALL(*gl, Scissor(2, viewport_rect.bottom() - 3 - 2, 3, 3))
+            .InSequence(seq);
+      }
+
+      // The quad doesn't need blending.
+      EXPECT_CALL(*gl, Disable(GL_BLEND)).InSequence(seq);
+
+      // Blending is disabled at the end of the frame.
+      EXPECT_CALL(*gl, Disable(GL_BLEND)).InSequence(seq);
+
+      renderer.DecideRenderPassAllocationsForFrame(
+          render_passes_in_draw_order_);
+      DrawFrame(&renderer, viewport_rect, clip_rect);
+    }
+  }
+};
+
+TEST_F(GLRendererPartialSwapTest, PartialSwap) {
+  RunTest(true);
+}
+
+TEST_F(GLRendererPartialSwapTest, NoPartialSwap) {
+  RunTest(false);
+}
+
+class GLRendererWithMockContextTest : public ::testing::Test {
+ protected:
+  class MockContextSupport : public TestContextSupport {
+   public:
+    MockContextSupport() {}
+    MOCK_METHOD1(SetAggressivelyFreeResources,
+                 void(bool aggressively_free_resources));
+  };
+
+  void SetUp() override {
+    auto context_support = base::MakeUnique<MockContextSupport>();
+    context_support_ptr_ = context_support.get();
+    auto context_provider = TestContextProvider::Create(
+        TestWebGraphicsContext3D::Create(), std::move(context_support));
+    output_surface_ = FakeOutputSurface::Create3d(std::move(context_provider));
+    output_surface_->BindToClient(&output_surface_client_);
+    resource_provider_ =
+        FakeResourceProvider::Create(output_surface_.get(), nullptr);
+    renderer_ =
+        base::MakeUnique<GLRenderer>(&settings_, output_surface_.get(),
+                                     resource_provider_.get(), nullptr, 0);
+    renderer_->Initialize();
+  }
+
+  RendererSettings settings_;
+  FakeOutputSurfaceClient output_surface_client_;
+  MockContextSupport* context_support_ptr_;
+  std::unique_ptr<OutputSurface> output_surface_;
+  std::unique_ptr<ResourceProvider> resource_provider_;
+  std::unique_ptr<GLRenderer> renderer_;
+};
+
+TEST_F(GLRendererWithMockContextTest,
+       ContextPurgedWhenRendererBecomesInvisible) {
+  EXPECT_CALL(*context_support_ptr_, SetAggressivelyFreeResources(false));
+  renderer_->SetVisible(true);
+  Mock::VerifyAndClearExpectations(context_support_ptr_);
+
+  EXPECT_CALL(*context_support_ptr_, SetAggressivelyFreeResources(true));
+  renderer_->SetVisible(false);
+  Mock::VerifyAndClearExpectations(context_support_ptr_);
 }
 
 }  // namespace

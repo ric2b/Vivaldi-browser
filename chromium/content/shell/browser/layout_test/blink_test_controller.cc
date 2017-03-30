@@ -278,8 +278,8 @@ bool BlinkTestController::PrepareForLayoutTest(
   accumulated_layout_test_runtime_flags_changes_.Clear();
   ShellBrowserContext* browser_context =
       ShellContentBrowserClient::Get()->browser_context();
-  if (test_url.spec().find("compositing/") != std::string::npos)
-    is_compositing_test_ = true;
+  is_compositing_test_ =
+      test_url.spec().find("compositing/") != std::string::npos;
   initial_size_ = Shell::GetShellDefaultSize();
   // The W3C SVG layout tests use a different size than the other layout tests.
   if (test_url.spec().find("W3C-SVG-1.1") != std::string::npos)
@@ -292,6 +292,8 @@ bool BlinkTestController::PrepareForLayoutTest(
         initial_size_);
     WebContentsObserver::Observe(main_window_->web_contents());
     current_pid_ = base::kNullProcessId;
+    default_prefs_ =
+      main_window_->web_contents()->GetRenderViewHost()->GetWebkitPreferences();
     main_window_->LoadURL(test_url);
   } else {
 #if defined(OS_MACOSX)
@@ -309,9 +311,13 @@ bool BlinkTestController::PrepareForLayoutTest(
         ->WasResized();
     RenderViewHost* render_view_host =
         main_window_->web_contents()->GetRenderViewHost();
-    WebPreferences prefs = render_view_host->GetWebkitPreferences();
-    OverrideWebkitPrefs(&prefs);
-    render_view_host->UpdateWebkitPreferences(prefs);
+
+    // Compositing tests override the default preferences (see
+    // BlinkTestController::OverrideWebkitPrefs) so we force them to be
+    // calculated again to ensure is_compositing_test_ changes are picked up.
+    OverrideWebkitPrefs(&default_prefs_);
+
+    render_view_host->UpdateWebkitPreferences(default_prefs_);
     HandleNewRenderFrameHost(render_view_host->GetMainFrame());
 
     NavigationController::LoadURLParams params(test_url);
@@ -590,7 +596,8 @@ void BlinkTestController::HandleNewRenderFrameHost(RenderFrameHost* frame) {
   }
 
   // Is this the 1st time this renderer contains parts of the main test window?
-  if (main_window && !ContainsKey(main_window_render_process_hosts_, process)) {
+  if (main_window &&
+      !base::ContainsKey(main_window_render_process_hosts_, process)) {
     main_window_render_process_hosts_.insert(process);
 
     // Make sure the new renderer process has a test configuration shared with
@@ -734,7 +741,7 @@ void BlinkTestController::OnLayoutDumpResponse(RenderFrameHost* sender,
 
   // Stitch the frame-specific results in the right order.
   std::string stitched_layout_dump;
-  for (const auto& render_frame_host : web_contents()->GetAllFrames()) {
+  for (auto* render_frame_host : web_contents()->GetAllFrames()) {
     auto it =
         frame_to_layout_dump_map_.find(render_frame_host->GetFrameTreeNodeId());
     if (it != frame_to_layout_dump_map_.end()) {
@@ -757,6 +764,15 @@ void BlinkTestController::OnPrintMessage(const std::string& message) {
 void BlinkTestController::OnOverridePreferences(const WebPreferences& prefs) {
   should_override_prefs_ = true;
   prefs_ = prefs;
+
+  // Notifies the main RenderViewHost that Blink preferences changed so
+  // immediately apply the new settings and to avoid re-usage of cached
+  // preferences that are now stale. RenderViewHost::UpdateWebkitPreferences is
+  // not used here because it would send an unneeded preferences update to the
+  // renderer.
+  RenderViewHost* main_render_view_host =
+      main_window_->web_contents()->GetRenderViewHost();
+  main_render_view_host->OnWebkitPreferencesChanged();
 }
 
 void BlinkTestController::OnClearDevToolsLocalStorage() {

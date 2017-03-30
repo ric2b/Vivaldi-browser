@@ -23,9 +23,9 @@
  */
 
 #include "modules/webaudio/AudioDestinationNode.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/audio/AudioUtilities.h"
 #include "platform/audio/DenormalDisabler.h"
 #include "wtf/Atomics.h"
@@ -41,7 +41,7 @@ AudioDestinationHandler::AudioDestinationHandler(AudioNode& node, float sampleRa
 
 AudioDestinationHandler::~AudioDestinationHandler()
 {
-    ASSERT(!isInitialized());
+    DCHECK(!isInitialized());
 }
 
 void AudioDestinationHandler::render(AudioBus* sourceBus, AudioBus* destinationBus, size_t numberOfFrames)
@@ -57,7 +57,7 @@ void AudioDestinationHandler::render(AudioBus* sourceBus, AudioBus* destinationB
     //
     // TODO(hongchan): because the context can go away while rendering, so this
     // check cannot guarantee the safe execution of the following steps.
-    ASSERT(context());
+    DCHECK(context());
     if (!context())
         return;
 
@@ -78,7 +78,7 @@ void AudioDestinationHandler::render(AudioBus* sourceBus, AudioBus* destinationB
     if (sourceBus)
         m_localAudioInputProvider.set(sourceBus);
 
-    ASSERT(numberOfInputs() >= 1);
+    DCHECK_GE(numberOfInputs(), 1u);
     if (numberOfInputs() < 1) {
         destinationBus->zero();
         return;
@@ -107,7 +107,7 @@ void AudioDestinationHandler::render(AudioBus* sourceBus, AudioBus* destinationB
 
 // ----------------------------------------------------------------
 
-AudioDestinationNode::AudioDestinationNode(AbstractAudioContext& context)
+AudioDestinationNode::AudioDestinationNode(BaseAudioContext& context)
     : AudioNode(context)
 {
 }

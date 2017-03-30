@@ -72,7 +72,6 @@
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
-#include "net/url_request/url_request_backoff_manager.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -205,12 +204,14 @@ class SystemURLRequestContextGetter : public net::URLRequestContextGetter {
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override;
 
+  // Tells the getter that the URLRequestContext is about to be shut down.
+  void Shutdown();
+
  protected:
   ~SystemURLRequestContextGetter() override;
 
  private:
-  IOSChromeIOThread* const
-      io_thread_;  // Weak pointer, owned by ApplicationContext.
+  IOSChromeIOThread* io_thread_;  // Weak pointer, owned by ApplicationContext.
   scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
 
   base::debug::LeakTracker<SystemURLRequestContextGetter> leak_tracker_;
@@ -226,6 +227,8 @@ SystemURLRequestContextGetter::~SystemURLRequestContextGetter() {}
 
 net::URLRequestContext* SystemURLRequestContextGetter::GetURLRequestContext() {
   DCHECK_CURRENTLY_ON(web::WebThread::IO);
+  if (!io_thread_)
+    return nullptr;
   DCHECK(io_thread_->globals()->system_request_context.get());
 
   return io_thread_->globals()->system_request_context.get();
@@ -234,6 +237,12 @@ net::URLRequestContext* SystemURLRequestContextGetter::GetURLRequestContext() {
 scoped_refptr<base::SingleThreadTaskRunner>
 SystemURLRequestContextGetter::GetNetworkTaskRunner() const {
   return network_task_runner_;
+}
+
+void SystemURLRequestContextGetter::Shutdown() {
+  DCHECK_CURRENTLY_ON(web::WebThread::IO);
+  io_thread_ = nullptr;
+  NotifyContextShuttingDown();
 }
 
 IOSChromeIOThread::Globals::SystemRequestContextLeakChecker::
@@ -396,15 +405,9 @@ void IOSChromeIOThread::Init() {
   quic_user_agent_id.push_back(' ');
   quic_user_agent_id.append(web::BuildOSCpuInfo());
 
-  network_session_configurator::ParseFieldTrials(true, true, quic_user_agent_id,
-                                                 &params_);
-  const version_info::Channel channel = ::GetChannel();
-  if (channel == version_info::Channel::UNKNOWN ||
-      channel == version_info::Channel::CANARY ||
-      channel == version_info::Channel::DEV) {
-    globals_->url_request_backoff_manager.reset(
-        new net::URLRequestBackoffManager());
-  }
+  network_session_configurator::ParseFieldTrials(
+      /*is_quic_force_disabled=*/false,
+      /*is_quic_force_enabled=*/false, quic_user_agent_id, &params_);
 
   // InitSystemRequestContext turns right around and posts a task back
   // to the IO thread, so we can't let it run until we know the IO
@@ -423,6 +426,7 @@ void IOSChromeIOThread::Init() {
 }
 
 void IOSChromeIOThread::CleanUp() {
+  system_url_request_context_getter_->Shutdown();
   system_url_request_context_getter_ = nullptr;
 
   // Release objects that the net::URLRequestContext could have been pointing
@@ -537,7 +541,7 @@ net::URLRequestContext* IOSChromeIOThread::ConstructSystemRequestContext(
   // Data URLs are always loaded through the system request context on iOS
   // (due to UIWebView limitations).
   bool set_protocol = system_job_factory->SetProtocolHandler(
-      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
+      url::kDataScheme, base::MakeUnique<net::DataProtocolHandler>());
   DCHECK(set_protocol);
   globals->system_url_request_job_factory.reset(system_job_factory);
   context->set_job_factory(globals->system_url_request_job_factory.get());
@@ -549,7 +553,6 @@ net::URLRequestContext* IOSChromeIOThread::ConstructSystemRequestContext(
       globals->http_user_agent_settings.get());
   context->set_network_quality_estimator(
       globals->network_quality_estimator.get());
-  context->set_backoff_manager(globals->url_request_backoff_manager.get());
 
   context->set_http_server_properties(globals->http_server_properties.get());
 

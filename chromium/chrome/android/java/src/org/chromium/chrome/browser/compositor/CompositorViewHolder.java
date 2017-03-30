@@ -19,6 +19,7 @@ import android.support.v4.view.accessibility.AccessibilityNodeInfoCompat;
 import android.support.v4.widget.ExploreByTouchHelper;
 import android.util.AttributeSet;
 import android.util.Pair;
+import android.view.DragEvent;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.View;
@@ -111,7 +112,7 @@ public class CompositorViewHolder extends CoordinatorLayout
     private Tab mTabVisible;
 
     /** The currently attached View. */
-    private View mView;
+    private TabContentViewParent mView;
 
     private TabObserver mTabObserver;
     private boolean mEnableCompositorTabStrip;
@@ -225,7 +226,8 @@ public class CompositorViewHolder extends CoordinatorLayout
         });
 
         mCompositorView = new CompositorView(getContext(), this);
-        addView(mCompositorView,
+        // mCompositorView should always be the first child.
+        addView(mCompositorView, 0,
                 new FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
     }
 
@@ -384,6 +386,23 @@ public class CompositorViewHolder extends CoordinatorLayout
         return super.dispatchHoverEvent(e);
     }
 
+    @Override
+    public boolean dispatchDragEvent(DragEvent e) {
+        ContentViewCore contentViewCore = mTabVisible.getContentViewCore();
+        if (contentViewCore == null) return false;
+
+        if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
+        contentViewCore.setCurrentTouchEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
+        boolean ret = super.dispatchDragEvent(e);
+
+        int action = e.getAction();
+        if (action == DragEvent.ACTION_DRAG_EXITED || action == DragEvent.ACTION_DRAG_ENDED
+                || action == DragEvent.ACTION_DROP) {
+            contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
+        }
+        return ret;
+    }
+
     /**
      * @return The {@link LayoutManager} associated with this view.
      */
@@ -483,11 +502,11 @@ public class CompositorViewHolder extends CoordinatorLayout
         if (actionMasked == MotionEvent.ACTION_DOWN
                 || actionMasked == MotionEvent.ACTION_HOVER_ENTER) {
             if (mLayoutManager != null) mLayoutManager.getViewportPixel(mCacheViewport);
-            contentViewCore.setCurrentMotionEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
+            contentViewCore.setCurrentTouchEventOffsets(-mCacheViewport.left, -mCacheViewport.top);
         } else if (canClear && (actionMasked == MotionEvent.ACTION_UP
                                        || actionMasked == MotionEvent.ACTION_CANCEL
                                        || actionMasked == MotionEvent.ACTION_HOVER_EXIT)) {
-            contentViewCore.setCurrentMotionEventOffsets(0.f, 0.f);
+            contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
         }
     }
 
@@ -771,10 +790,10 @@ public class CompositorViewHolder extends CoordinatorLayout
         }
         if (show) {
             if (mView.getParent() != this) {
-                // Make sure the view isn't a child of something else before we attempt to add it.
-                if (mView.getParent() instanceof ViewGroup) {
-                    ((ViewGroup) mView.getParent()).removeView(mView);
-                }
+                // During tab creation, we temporarily add the new tab's view to a FrameLayout to
+                // measure and lay it out. This way we could show the animation in the stack view.
+                // Therefore we should remove the view from that temporary FrameLayout here.
+                UiUtils.removeViewFromParent(mView);
 
                 for (int i = 0; i < sCachedCVCList.size(); i++) {
                     ContentViewCore content = sCachedCVCList.get(i);
@@ -785,22 +804,19 @@ public class CompositorViewHolder extends CoordinatorLayout
                     }
                 }
 
-                CoordinatorLayout.LayoutParams layoutParams = new CoordinatorLayout.LayoutParams(
-                        LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-                if (mView.getLayoutParams() instanceof MarginLayoutParams) {
-                    MarginLayoutParams existingLayoutParams =
-                            (MarginLayoutParams) mView.getLayoutParams();
-                    layoutParams.leftMargin = existingLayoutParams.leftMargin;
-                    layoutParams.rightMargin = existingLayoutParams.rightMargin;
-                    layoutParams.topMargin = existingLayoutParams.topMargin;
-                    layoutParams.bottomMargin = existingLayoutParams.bottomMargin;
+                CoordinatorLayout.LayoutParams layoutParams;
+                if (mView.getLayoutParams() instanceof CoordinatorLayout.LayoutParams) {
+                    layoutParams = (CoordinatorLayout.LayoutParams) mView.getLayoutParams();
+                } else {
+                    layoutParams = new CoordinatorLayout.LayoutParams(
+                            LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
                 }
-                if (mView instanceof TabContentViewParent) {
-                    layoutParams.setBehavior(((TabContentViewParent) mView).getBehavior());
-                }
-                // CompositorView has index of 0; TabContentViewParent has index of 1; Snackbar (if
-                // any) has index of 2. Setting index here explicitly to avoid TabContentViewParent
-                // hiding the snackbar.
+                layoutParams.setBehavior(mView.getBehavior());
+                // CompositorView has index of 0; TabContentViewParent has index of 1; omnibox
+                // result container (the scrim) has index of 2, Snackbar (if any) has index of 3.
+                // Setting index here explicitly to avoid TabContentViewParent hiding the scrim.
+                // TODO(ianwen): Use more advanced technologies to ensure z-order of the children of
+                // this class, instead of hard-coding.
                 addView(mView, 1, layoutParams);
 
                 setFocusable(false);
@@ -845,7 +861,7 @@ public class CompositorViewHolder extends CoordinatorLayout
     private void setTab(Tab tab) {
         if (tab != null) tab.loadIfNeeded();
 
-        View newView = tab != null ? tab.getView() : null;
+        TabContentViewParent newView = tab != null ? tab.getView() : null;
         if (mView == newView) return;
 
         // TODO(dtrainor): Look into changing this only if the views differ, but still parse the
@@ -902,7 +918,7 @@ public class CompositorViewHolder extends CoordinatorLayout
      * @param contentViewCore The {@link ContentViewCore} to initialize.
      */
     private void initializeContentViewCore(ContentViewCore contentViewCore) {
-        contentViewCore.setCurrentMotionEventOffsets(0.f, 0.f);
+        contentViewCore.setCurrentTouchEventOffsets(0.f, 0.f);
         contentViewCore.setTopControlsHeight(
                 getTopControlsHeightPixels(), contentViewCore.doTopControlsShrinkBlinkSize());
 

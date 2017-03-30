@@ -19,6 +19,8 @@
 
 namespace media {
 
+static const int kMpegAudioTrackId = 1;
+
 static const uint32_t kICYStartCode = 0x49435920;  // 'ICY '
 
 // Arbitrary upper bound on the size of an IceCast header before it
@@ -222,13 +224,13 @@ int MPEGAudioStreamParserBase::ParseFrame(const uint8_t* data,
 
     std::unique_ptr<MediaTracks> media_tracks(new MediaTracks());
     if (config_.IsValidConfig()) {
-      media_tracks->AddAudioTrack(config_, 1, "main", "", "");
+      media_tracks->AddAudioTrack(config_, kMpegAudioTrackId, "main", "", "");
     }
     if (!config_cb_.Run(std::move(media_tracks), TextTrackConfigMap()))
       return -1;
 
     if (!init_cb_.is_null()) {
-      InitParameters params(kInfiniteDuration());
+      InitParameters params(kInfiniteDuration);
       params.detected_audio_track_count = 1;
       params.auto_update_timestamp_offset = true;
       base::ResetAndReturn(&init_cb_).Run(params);
@@ -241,9 +243,8 @@ int MPEGAudioStreamParserBase::ParseFrame(const uint8_t* data,
   // TODO(wolenetz/acolwell): Validate and use a common cross-parser TrackId
   // type and allow multiple audio tracks, if applicable. See
   // https://crbug.com/341581.
-  scoped_refptr<StreamParserBuffer> buffer =
-      StreamParserBuffer::CopyFrom(data, frame_size, true,
-                                   DemuxerStream::AUDIO, 0);
+  scoped_refptr<StreamParserBuffer> buffer = StreamParserBuffer::CopyFrom(
+      data, frame_size, true, DemuxerStream::AUDIO, kMpegAudioTrackId);
   buffer->set_timestamp(timestamp_helper_->GetTimestamp());
   buffer->set_duration(timestamp_helper_->GetFrameDuration(sample_count));
   buffers->push_back(buffer);
@@ -407,9 +408,9 @@ bool MPEGAudioStreamParserBase::SendBuffers(BufferQueue* buffers,
     new_segment_cb_.Run();
   }
 
-  BufferQueue empty_video_buffers;
-  TextBufferQueueMap empty_text_map;
-  if (!new_buffers_cb_.Run(*buffers, empty_video_buffers, empty_text_map))
+  BufferQueueMap buffer_queue_map;
+  buffer_queue_map.insert(std::make_pair(kMpegAudioTrackId, *buffers));
+  if (!new_buffers_cb_.Run(buffer_queue_map))
     return false;
   buffers->clear();
 

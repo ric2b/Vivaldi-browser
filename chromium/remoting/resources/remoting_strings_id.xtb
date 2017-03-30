@@ -74,7 +74,6 @@ Untuk informasi tentang privasi, lihat Kebijakan Privasi Google (http://goo.gl/S
 <translation id="2676780859508944670">Sedang bekerja…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Pembaruan perangkat lunak biasanya otomatis terjadi, namun dalam kasus yang sangat jarang, pembaruan dapat gagal. Memperbarui perangkat lunak seharusnya tidak memakan waktu lebih dari beberapa menit dan dapat dilakukan saat tersambung ke komputer Anda dari jarak jauh.</translation>
-<translation id="2813770873348017932">Sambungan ke komputer jarak jauh diblokir untuk sementara karena seseorang mencoba untuk menyambungkannya dengan PIN yang tidak valid. Coba lagi nanti.</translation>
 <translation id="2841013758207633010">Waktu</translation>
 <translation id="2851674870054673688">Setelah mereka memasukkan kode, sesi berbagi Anda akan dimulai.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Host Chrome
 Desktop Jarak Jauh</translation>
 <translation id="4619978527973181021">Setuju dan Pasang</translation>
-<translation id="4647791084836149355">Tampilkan tampilan Cardboard</translation>
 <translation id="4703302905453407178">Komponen wajib berhenti bekerja. Laporkan masalah ini kepada pengembang.</translation>
 <translation id="4703799847237267011">Sesi Chromoting Anda berakhir.</translation>
 <translation id="4736223761657662401">Riwayat Sambungan</translation>
@@ -210,7 +208,6 @@ Desktop Jarak Jauh</translation>
 <translation id="6284412385303060032">Host yang berjalan di layar logika konsol telah dinonaktifkan untuk mendukung mode tirai dengan beralih ke host yang berjalan di sesi khusus pengguna.</translation>
 <translation id="629730747756840877">Akun</translation>
 <translation id="6304318647555713317">Klien</translation>
-<translation id="6324708100353784493">Anda telah mengaktifkan mode integrasi Google Cardboard. Untuk menggunakan mode ini, masukkan perangkat ke penampil yang kompatibel dengan Google Cradboard.</translation>
 <translation id="6381670701864002291">Lainnya.</translation>
 <translation id="6398765197997659313">Keluar dari tampilan layar penuh</translation>
 <translation id="6408143143164565232">• Mendengarkan audio dari komputer Windows atau Linux.
@@ -236,6 +233,7 @@ Desktop Jarak Jauh</translation>
 <translation id="6930242544192836755">Durasi</translation>
 <translation id="6939719207673461467">Tunjukkan/sembunyikan keyboard.</translation>
 <translation id="6944854424004126054">Pulihkan jendela</translation>
+<translation id="6963936880795878952">Sambungan ke komputer jarak jauh diblokir untuk sementara karena seseorang mencoba untuk menyambungkannya dengan PIN yang tidak valid. Coba lagi nanti.</translation>
 <translation id="6965382102122355670">Oke</translation>
 <translation id="6985691951107243942">Yakin ingin menonaktifkan sambungan jarak jauh dengan <ph name="HOSTNAME" />? Jika Anda berubah pikiran, Anda harus mengunjungi komputer tersebut untuk mengaktifkan kembali sambungan.</translation>
 <translation id="6998989275928107238">Kepada</translation>

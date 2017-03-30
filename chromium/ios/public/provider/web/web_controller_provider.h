@@ -51,7 +51,7 @@ class WebControllerProvider {
   // |completion| with the result.  Calls |completion| with nil parameters
   // when there is no previously loaded page.
   virtual void InjectScript(const std::string& script,
-                            web::JavaScriptCompletion completion);
+                            web::JavaScriptResultBlock completion);
 };
 
 class WebControllerProviderFactory {

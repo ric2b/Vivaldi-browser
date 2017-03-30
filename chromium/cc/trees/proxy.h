@@ -28,15 +28,12 @@ class BeginFrameSource;
 class LayerTreeDebugState;
 class LayerTreeMutator;
 class OutputSurface;
-struct RendererCapabilities;
 
 // Abstract interface responsible for proxying commands from the main-thread
 // side of the compositor over to the compositor implementation.
 class CC_EXPORT Proxy {
  public:
   virtual ~Proxy() {}
-
-  virtual void FinishAllRendering() = 0;
 
   virtual bool IsStarted() const = 0;
   virtual bool CommitToActiveTree() const = 0;
@@ -48,8 +45,6 @@ class CC_EXPORT Proxy {
   virtual void ReleaseOutputSurface() = 0;
 
   virtual void SetVisible(bool visible) = 0;
-
-  virtual const RendererCapabilities& GetRendererCapabilities() const = 0;
 
   virtual void SetNeedsAnimate() = 0;
   virtual void SetNeedsUpdateLayers() = 0;

@@ -58,14 +58,14 @@ String CSSFontFaceSrcValue::customCSSText() const
     if (isLocal()) {
         result.append("local(");
         result.append(serializeString(m_absoluteResource));
-        result.append(")");
+        result.append(')');
     } else {
         result.append(serializeURI(m_specifiedResource));
     }
     if (!m_format.isEmpty()) {
         result.append(" format(");
         result.append(serializeString(m_format));
-        result.append(")");
+        result.append(')');
     }
     return result.toString();
 }
@@ -116,6 +116,7 @@ void CSSFontFaceSrcValue::restoreCachedResourceIfNeeded(Document* document) cons
 
     FetchRequest request(ResourceRequest(resourceURL), FetchInitiatorTypeNames::css);
     request.setContentSecurityCheck(m_shouldCheckContentSecurityPolicy);
+    request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextFont);
     MixedContentChecker::shouldBlockFetch(document->frame(), m_fetched->resource()->lastResourceRequest(),
         m_fetched->resource()->lastResourceRequest().url(), MixedContentChecker::SendReport);
     document->fetcher()->requestLoadStarted(m_fetched->resource()->identifier(), m_fetched->resource(), request, ResourceFetcher::ResourceLoadingFromCache);

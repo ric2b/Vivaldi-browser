@@ -122,6 +122,13 @@ void TypingCommand::forwardDeleteKeyPressed(Document& document, EditingState* ed
     TypingCommand::create(document, ForwardDeleteKey, "", options, granularity)->apply();
 }
 
+String TypingCommand::textDataForInputEvent() const
+{
+    if (m_commands.isEmpty())
+        return m_textToInsert;
+    return m_commands.last()->textDataForInputEvent();
+}
+
 void TypingCommand::updateSelectionIfDifferentFromCurrentSelection(TypingCommand* typingCommand, LocalFrame* frame)
 {
     DCHECK(frame);
@@ -140,10 +147,10 @@ static String dispatchBeforeTextInsertedEvent(const String& text, const VisibleS
 
     String newText = text;
     if (Node* startNode = selectionForInsertion.start().computeContainerNode()) {
-        if (startNode->rootEditableElement()) {
+        if (rootEditableElement(*startNode)) {
             // Send BeforeTextInsertedEvent. The event handler will update text if necessary.
             BeforeTextInsertedEvent* evt = BeforeTextInsertedEvent::create(text);
-            startNode->rootEditableElement()->dispatchEvent(evt);
+            rootEditableElement(*startNode)->dispatchEvent(evt);
             newText = evt->text();
         }
     }
@@ -291,41 +298,31 @@ void TypingCommand::doApply(EditingState* editingState)
     NOTREACHED();
 }
 
-EditAction TypingCommand::editingAction() const
+InputEvent::InputType TypingCommand::inputType() const
 {
-    return EditActionTyping;
-}
+    using InputType = InputEvent::InputType;
 
-void TypingCommand::markMisspellingsAfterTyping(ETypingCommand commandType)
-{
-    LocalFrame* frame = document().frame();
-    if (!frame)
-        return;
-
-    if (!frame->spellChecker().isContinuousSpellCheckingEnabled())
-        return;
-    if (!SpellChecker::isSpellCheckingEnabledFor(endingSelection()))
-        return;
-
-    frame->spellChecker().cancelCheck();
-
-    // Take a look at the selection that results after typing and determine whether we need to spellcheck.
-    // Since the word containing the current selection is never marked, this does a check to
-    // see if typing made a new word that is not in the current selection. Basically, you
-    // get this by being at the end of a word and typing a space.
-    VisiblePosition start = createVisiblePosition(endingSelection().start(), endingSelection().affinity());
-    VisiblePosition previous = previousPositionOf(start);
-
-    VisiblePosition p1 = startOfWord(previous, LeftWordIfOnBoundary);
-
-    if (commandType == InsertParagraphSeparator) {
-        VisiblePosition p2 = nextWordPosition(start);
-        VisibleSelection words(p1, endOfWord(p2));
-        frame->spellChecker().markMisspellingsAfterLineBreak(words);
-    } else if (previous.isNotNull()) {
-        VisiblePosition p2 = startOfWord(start, LeftWordIfOnBoundary);
-        if (p1.deepEquivalent() != p2.deepEquivalent())
-            frame->spellChecker().markMisspellingsAfterTypingToWord(p1, endingSelection());
+    switch (m_commandType) {
+    // TODO(chongz): |DeleteSelection| is used by IME but we don't have direction info.
+    case DeleteSelection:
+        return InputType::DeleteContentBackward;
+    case DeleteKey:
+        if (m_compositionType != TextCompositionNone)
+            return InputType::DeleteComposedCharacterBackward;
+        return deletionInputTypeFromTextGranularity(DeleteDirection::Backward, m_granularity);
+    case ForwardDeleteKey:
+        if (m_compositionType != TextCompositionNone)
+            return InputType::DeleteComposedCharacterForward;
+        return deletionInputTypeFromTextGranularity(DeleteDirection::Forward, m_granularity);
+    case InsertText:
+        return InputType::InsertText;
+    case InsertLineBreak:
+        return InputType::InsertLineBreak;
+    case InsertParagraphSeparator:
+    case InsertParagraphSeparatorInQuotedContent:
+        return InputType::InsertParagraph;
+    default:
+        return InputType::None;
     }
 }
 
@@ -338,8 +335,6 @@ void TypingCommand::typingAddedToOpenCommand(ETypingCommand commandTypeForAddedT
     updatePreservesTypingStyle(commandTypeForAddedTyping);
     updateCommandTypeOfOpenCommand(commandTypeForAddedTyping);
 
-    // The old spellchecking code requires that checking be done first, to prevent issues like that in 6864072, where <doesn't> is marked as misspelled.
-    markMisspellingsAfterTyping(commandTypeForAddedTyping);
     frame->editor().appliedEditing(this);
 }
 

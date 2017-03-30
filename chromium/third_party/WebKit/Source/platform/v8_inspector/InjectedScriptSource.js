@@ -60,7 +60,7 @@ function push(array, var_args)
  */
 function toString(obj)
 {
-    // We don't use String(obj) because String16 could be overridden.
+    // We don't use String(obj) because String could be overridden.
     // Also the ("" + obj) expression may throw.
     try {
         return "" + obj;
@@ -115,7 +115,7 @@ function isArrayLike(obj)
         return false;
     try {
         if (typeof obj.splice === "function") {
-            if (!InjectedScriptHost.suppressWarningsAndCallFunction(Object.prototype.hasOwnProperty, obj, ["length"]))
+            if (!InjectedScriptHost.objectHasOwnProperty(/** @type {!Object} */ (obj), "length"))
                 return false;
             var len = obj.length;
             return typeof len === "number" && isUInt32(len);
@@ -170,12 +170,11 @@ domAttributesWithObservableSideEffectOnGet["Response"]["body"] = true;
 function doesAttributeHaveObservableSideEffectOnGet(object, attribute)
 {
     for (var interfaceName in domAttributesWithObservableSideEffectOnGet) {
-        var isInstance = InjectedScriptHost.suppressWarningsAndCallFunction(function(object, interfaceName) {
-            return /* suppressBlacklist */ typeof inspectedGlobalObject[interfaceName] === "function" && object instanceof inspectedGlobalObject[interfaceName];
-        }, null, [object, interfaceName]);
-        if (isInstance) {
+        var interfaceFunction = inspectedGlobalObject[interfaceName];
+        // Call to instanceOf looks safe after typeof check.
+        var isInstance = typeof interfaceFunction === "function" && /* suppressBlacklist */ object instanceof interfaceFunction;
+        if (isInstance)
             return attribute in domAttributesWithObservableSideEffectOnGet[interfaceName];
-        }
     }
     return false;
 }
@@ -199,6 +198,19 @@ InjectedScript.primitiveTypes = {
     __proto__: null
 }
 
+/**
+ * @type {!Object<string, string>}
+ * @const
+ */
+InjectedScript.closureTypes = { __proto__: null };
+InjectedScript.closureTypes["local"] = "Local";
+InjectedScript.closureTypes["closure"] = "Closure";
+InjectedScript.closureTypes["catch"] = "Catch";
+InjectedScript.closureTypes["block"] = "Block";
+InjectedScript.closureTypes["script"] = "Script";
+InjectedScript.closureTypes["with"] = "With Block";
+InjectedScript.closureTypes["global"] = "Global";
+
 InjectedScript.prototype = {
     /**
      * @param {*} object
@@ -212,73 +224,59 @@ InjectedScript.prototype = {
 
     /**
      * @param {*} object
+     * @return {boolean}
+     */
+    _shouldPassByValue: function(object)
+    {
+        return typeof object === "object" && InjectedScriptHost.subtype(object) === "internal#location";
+    },
+
+    /**
+     * @param {*} object
      * @param {string} groupName
-     * @param {boolean} canAccessInspectedGlobalObject
      * @param {boolean} forceValueType
      * @param {boolean} generatePreview
      * @return {!RuntimeAgent.RemoteObject}
      */
-    wrapObject: function(object, groupName, canAccessInspectedGlobalObject, forceValueType, generatePreview)
+    wrapObject: function(object, groupName, forceValueType, generatePreview)
     {
-        if (canAccessInspectedGlobalObject)
-            return this._wrapObject(object, groupName, forceValueType, generatePreview);
-        return this._fallbackWrapper(object);
+        return this._wrapObject(object, groupName, forceValueType, generatePreview);
     },
 
     /**
      * @param {!Array<!Object>} array
      * @param {string} property
      * @param {string} groupName
-     * @param {boolean} canAccessInspectedGlobalObject
      * @param {boolean} forceValueType
      * @param {boolean} generatePreview
      */
-    wrapPropertyInArray: function(array, property, groupName, canAccessInspectedGlobalObject, forceValueType, generatePreview)
+    wrapPropertyInArray: function(array, property, groupName, forceValueType, generatePreview)
     {
         for (var i = 0; i < array.length; ++i) {
             if (typeof array[i] === "object" && property in array[i])
-                array[i][property] = this.wrapObject(array[i][property], groupName, canAccessInspectedGlobalObject, forceValueType, generatePreview);
+                array[i][property] = this.wrapObject(array[i][property], groupName, forceValueType, generatePreview);
         }
     },
 
     /**
      * @param {!Array<*>} array
      * @param {string} groupName
-     * @param {boolean} canAccessInspectedGlobalObject
      * @param {boolean} forceValueType
      * @param {boolean} generatePreview
      */
-    wrapObjectsInArray: function(array, groupName, canAccessInspectedGlobalObject, forceValueType, generatePreview)
+    wrapObjectsInArray: function(array, groupName, forceValueType, generatePreview)
     {
         for (var i = 0; i < array.length; ++i)
-            array[i] = this.wrapObject(array[i], groupName, canAccessInspectedGlobalObject, forceValueType, generatePreview);
+            array[i] = this.wrapObject(array[i], groupName, forceValueType, generatePreview);
     },
 
     /**
-     * @param {*} object
-     * @return {!RuntimeAgent.RemoteObject}
-     */
-    _fallbackWrapper: function(object)
-    {
-        var result = { __proto__: null };
-        result.type = typeof object;
-        if (this.isPrimitiveValue(object))
-            result.value = object;
-        else
-            result.description = toString(object);
-        return /** @type {!RuntimeAgent.RemoteObject} */ (result);
-    },
-
-    /**
-     * @param {boolean} canAccessInspectedGlobalObject
      * @param {!Object} table
      * @param {!Array.<string>|string|boolean} columns
      * @return {!RuntimeAgent.RemoteObject}
      */
-    wrapTable: function(canAccessInspectedGlobalObject, table, columns)
+    wrapTable: function(table, columns)
     {
-        if (!canAccessInspectedGlobalObject)
-            return this._fallbackWrapper(table);
         var columnNames = null;
         if (typeof columns === "string")
             columns = [columns];
@@ -338,10 +336,20 @@ InjectedScript.prototype = {
      */
     getProperties: function(object, objectGroupName, ownProperties, accessorPropertiesOnly, generatePreview)
     {
+        var subtype = this._subtype(object);
+        if (subtype === "internal#scope") {
+            // Internally, scope contains object with scope variables and additional information like type,
+            // we use additional information for preview and would like to report variables as scope
+            // properties.
+            object = object.object;
+        }
+
         var descriptors = [];
         var iter = this._propertyDescriptors(object, ownProperties, accessorPropertiesOnly, undefined);
         // Go over properties, wrap object values.
         for (var descriptor of iter) {
+            if (subtype === "internal#scopeList" && descriptor.name === "length")
+                continue;
             if ("get" in descriptor)
                 descriptor.get = this._wrapObject(descriptor.get, objectGroupName);
             if ("set" in descriptor)
@@ -357,6 +365,21 @@ InjectedScript.prototype = {
             push(descriptors, descriptor);
         }
         return descriptors;
+    },
+
+    /**
+     * @param {!Object} object
+     * @return {?Object}
+     */
+    _objectPrototype: function(object)
+    {
+        if (InjectedScriptHost.subtype(object) === "proxy")
+            return null;
+        try {
+            return Object.getPrototypeOf(object);
+        } catch (e) {
+            return null;
+        }
     },
 
     /**
@@ -387,12 +410,12 @@ InjectedScript.prototype = {
 
                 try {
                     propertyProcessed[property] = true;
-                    var descriptor = nullifyObjectProto(InjectedScriptHost.suppressWarningsAndCallFunction(Object.getOwnPropertyDescriptor, Object, [o, property]));
+                    var descriptor = nullifyObjectProto(Object.getOwnPropertyDescriptor(o, property));
                     if (descriptor) {
                         if (accessorPropertiesOnly && !("get" in descriptor || "set" in descriptor))
                             continue;
                         if ("get" in descriptor && "set" in descriptor && name != "__proto__" && InjectedScriptHost.formatAccessorsAsProperties(object, descriptor.get) && !doesAttributeHaveObservableSideEffectOnGet(object, name)) {
-                            descriptor.value = InjectedScriptHost.suppressWarningsAndCallFunction(function(attribute) { return this[attribute]; }, object, [property]);
+                            descriptor.value = object[property];
                             descriptor.isOwn = true;
                             delete descriptor.get;
                             delete descriptor.set;
@@ -431,8 +454,8 @@ InjectedScript.prototype = {
         if (propertyNamesOnly) {
             for (var i = 0; i < propertyNamesOnly.length; ++i) {
                 var name = propertyNamesOnly[i];
-                for (var o = object; this._isDefined(o); o = InjectedScriptHost.prototype(o)) {
-                    if (InjectedScriptHost.suppressWarningsAndCallFunction(Object.prototype.hasOwnProperty, o, [name])) {
+                for (var o = object; this._isDefined(o); o = this._objectPrototype(o)) {
+                    if (InjectedScriptHost.objectHasOwnProperty(o, name)) {
                         for (var descriptor of process(o, [name]))
                             yield descriptor;
                         break;
@@ -455,11 +478,11 @@ InjectedScript.prototype = {
 
         var skipGetOwnPropertyNames;
         try {
-            skipGetOwnPropertyNames = InjectedScriptHost.isTypedArray(object) && object.length > 500000;
+            skipGetOwnPropertyNames = InjectedScriptHost.subtype(object) === "typedarray" && object.length > 500000;
         } catch (e) {
         }
 
-        for (var o = object; this._isDefined(o); o = InjectedScriptHost.prototype(o)) {
+        for (var o = object; this._isDefined(o); o = this._objectPrototype(o)) {
             if (InjectedScriptHost.subtype(o) === "proxy")
                 continue;
             if (skipGetOwnPropertyNames && o === object) {
@@ -478,7 +501,7 @@ InjectedScript.prototype = {
                     yield descriptor;
             }
             if (ownProperties) {
-                var proto = InjectedScriptHost.prototype(o);
+                var proto = this._objectPrototype(o);
                 if (proto && !accessorPropertiesOnly)
                     yield { name: "__proto__", value: proto, writable: true, configurable: true, enumerable: false, isOwn: true, __proto__: null };
                 break;
@@ -603,7 +626,7 @@ InjectedScript.prototype = {
             return "Proxy";
 
         var className = InjectedScriptHost.internalConstructorName(obj);
-        if (subtype === "array") {
+        if (subtype === "array" || subtype === "typedarray") {
             if (typeof obj.length === "number")
                 className += "[" + obj.length + "]";
             return className;
@@ -614,7 +637,8 @@ InjectedScript.prototype = {
 
         if (isSymbol(obj)) {
             try {
-                return /** @type {string} */ (InjectedScriptHost.suppressWarningsAndCallFunction(Symbol.prototype.toString, obj)) || "Symbol";
+                // It isn't safe, because Symbol.prototype.toString can be overriden.
+                return /* suppressBlacklist */ obj.toString() || "Symbol";
             } catch (e) {
                 return "Symbol";
             }
@@ -640,6 +664,12 @@ InjectedScript.prototype = {
                 return "{" + this._describeIncludingPrimitives(obj.key) + " => " + this._describeIncludingPrimitives(obj.value) + "}";
             return this._describeIncludingPrimitives(obj.value);
         }
+
+        if (subtype === "internal#scopeList")
+            return "Scopes[" + obj.length + "]";
+
+        if (subtype === "internal#scope")
+            return (InjectedScript.closureTypes[obj.type] || "Unknown") + (obj.name ? " (" + obj.name + ")" : "");
 
         return className;
     },
@@ -702,17 +732,24 @@ InjectedScript.RemoteObject = function(object, objectGroupName, doNotBind, force
         // Provide user-friendly number values.
         if (this.type === "number") {
             this.description = toStringDescription(object);
-            // Override "value" property for values that can not be JSON-stringified.
             switch (this.description) {
             case "NaN":
             case "Infinity":
             case "-Infinity":
             case "-0":
-                this.value = this.description;
+                delete this.value;
+                this.unserializableValue = this.description;
                 break;
             }
         }
 
+        return;
+    }
+
+    if (injectedScript._shouldPassByValue(object)) {
+        this.value = object;
+        this.subtype = injectedScript._subtype(object);
+        this.description = injectedScript._describeIncludingPrimitives(object);
         return;
     }
 
@@ -757,7 +794,8 @@ InjectedScript.RemoteObject.prototype = {
          */
         function logError(error)
         {
-            Promise.resolve().then(inspectedGlobalObject.console.error.bind(inspectedGlobalObject.console, "Custom Formatter Failed: " + error.message));
+            // We use user code to generate custom output for object, we can use user code for reporting error too.
+            Promise.resolve().then(/* suppressBlacklist */ inspectedGlobalObject.console.error.bind(inspectedGlobalObject.console, "Custom Formatter Failed: " + error.message));
         }
 
         /**
@@ -768,7 +806,7 @@ InjectedScript.RemoteObject.prototype = {
          */
         function wrap(object, customObjectConfig)
         {
-            return InjectedScriptHost.suppressWarningsAndCallFunction(injectedScript._wrapObject, injectedScript, [ object, objectGroupName, false, false, null, false, false, customObjectConfig ]);
+            return injectedScript._wrapObject(object, objectGroupName, false, false, null, false, false, customObjectConfig);
         }
 
         try {
@@ -892,7 +930,7 @@ InjectedScript.RemoteObject.prototype = {
                 continue;
 
             // Ignore length property of array.
-            if (this.subtype === "array" && name === "length")
+            if ((this.subtype === "array" || this.subtype === "typedarray") && name === "length")
                 continue;
 
             // Ignore size property of map, set.

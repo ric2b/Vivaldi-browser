@@ -110,7 +110,7 @@ enum IsolatedOriginStatus {
 
 }  // namespace
 
-class ObfuscatedFileEnumerator
+class ObfuscatedFileEnumerator final
     : public FileSystemFileUtil::AbstractFileEnumerator {
  public:
   ObfuscatedFileEnumerator(
@@ -138,21 +138,21 @@ class ObfuscatedFileEnumerator
   ~ObfuscatedFileEnumerator() override {}
 
   base::FilePath Next() override {
-    ProcessRecurseQueue();
-    if (display_stack_.empty())
-      return base::FilePath();
-
-    current_file_id_ = display_stack_.back();
-    display_stack_.pop_back();
-
     FileInfo file_info;
-    base::FilePath platform_file_path;
-    base::File::Error error =
-        obfuscated_file_util_->GetFileInfoInternal(
-            db_, context_, root_url_, current_file_id_,
-            &file_info, &current_platform_file_info_, &platform_file_path);
-    if (error != base::File::FILE_OK)
-      return Next();
+    base::File::Error error;
+    do {
+      ProcessRecurseQueue();
+      if (display_stack_.empty())
+        return base::FilePath();
+
+      current_file_id_ = display_stack_.back();
+      display_stack_.pop_back();
+
+      base::FilePath platform_file_path;
+      error = obfuscated_file_util_->GetFileInfoInternal(
+          db_, context_, root_url_, current_file_id_,
+          &file_info, &current_platform_file_info_, &platform_file_path);
+    } while (error != base::File::FILE_OK);
 
     base::FilePath virtual_path =
         current_parent_virtual_path_.Append(file_info.name);
@@ -962,7 +962,7 @@ void ObfuscatedFileUtil::MaybePrepopulateDatabase(
   for (size_t i = 0; i < type_strings_to_prepopulate.size(); ++i) {
     const std::string type_string = type_strings_to_prepopulate[i];
     // Only handles known types.
-    if (!ContainsKey(known_type_strings_, type_string))
+    if (!base::ContainsKey(known_type_strings_, type_string))
       continue;
     base::File::Error error = base::File::FILE_ERROR_FAILED;
     base::FilePath path = GetDirectoryForOriginAndType(
@@ -1264,8 +1264,8 @@ void ObfuscatedFileUtil::MarkUsed() {
 
 void ObfuscatedFileUtil::DropDatabases() {
   origin_database_.reset();
-  STLDeleteContainerPairSecondPointers(
-      directories_.begin(), directories_.end());
+  base::STLDeleteContainerPairSecondPointers(directories_.begin(),
+                                             directories_.end());
   directories_.clear();
   timer_.reset();
 }

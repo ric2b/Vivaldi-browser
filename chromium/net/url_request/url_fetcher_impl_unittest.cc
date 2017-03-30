@@ -39,10 +39,12 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_headers.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/gtest_util.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/url_request/url_request_throttler_manager.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(USE_NSS_CERTS)
@@ -53,6 +55,8 @@ namespace net {
 
 using base::Time;
 using base::TimeDelta;
+using net::test::IsError;
+using net::test::IsOk;
 
 // TODO(eroman): Add a regression test for http://crbug.com/40505.
 
@@ -123,7 +127,8 @@ class WaitingURLFetcherDelegate : public URLFetcherDelegate {
 
   void OnURLFetchDownloadProgress(const URLFetcher* source,
                                   int64_t current,
-                                  int64_t total) override {
+                                  int64_t total,
+                                  int64_t current_network_bytes) override {
     // Note that the current progress may be greater than the previous progress,
     // in the case of retrying the request.
     EXPECT_FALSE(did_complete_);
@@ -563,7 +568,8 @@ TEST_F(URLFetcherTest, DontRetryOnNetworkChangedByDefault) {
   // And the owner of the fetcher gets the ERR_NETWORK_CHANGED error.
   EXPECT_EQ(hanging_url(), delegate.fetcher()->GetOriginalURL());
   ASSERT_FALSE(delegate.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_NETWORK_CHANGED, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(),
+              IsError(ERR_NETWORK_CHANGED));
 }
 
 TEST_F(URLFetcherTest, RetryOnNetworkChangedAndFail) {
@@ -610,7 +616,8 @@ TEST_F(URLFetcherTest, RetryOnNetworkChangedAndFail) {
   // And the owner of the fetcher gets the ERR_NETWORK_CHANGED error.
   EXPECT_EQ(hanging_url(), delegate.fetcher()->GetOriginalURL());
   ASSERT_FALSE(delegate.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_NETWORK_CHANGED, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(),
+              IsError(ERR_NETWORK_CHANGED));
 }
 
 TEST_F(URLFetcherTest, RetryOnNetworkChangedAndSucceed) {
@@ -836,7 +843,8 @@ TEST_F(URLFetcherTest, PostAppendChunkAfterError) {
 
   // Make sure the request failed, as expected.
   EXPECT_FALSE(delegate.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_UNSAFE_PORT, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(),
+              IsError(ERR_UNSAFE_PORT));
 }
 
 // Checks that upload progress increases over time, never exceeds what's already
@@ -917,10 +925,11 @@ class CheckDownloadProgressDelegate : public WaitingURLFetcherDelegate {
 
   void OnURLFetchDownloadProgress(const URLFetcher* source,
                                   int64_t current,
-                                  int64_t total) override {
+                                  int64_t total,
+                                  int64_t current_network_bytes) override {
     // Run default checks.
-    WaitingURLFetcherDelegate::OnURLFetchDownloadProgress(source, current,
-                                                          total);
+    WaitingURLFetcherDelegate::OnURLFetchDownloadProgress(
+        source, current, total, current_network_bytes);
 
     EXPECT_LE(last_seen_progress_, current);
     EXPECT_EQ(file_size_, total);
@@ -1004,7 +1013,8 @@ class CancelOnDownloadProgressDelegate : public WaitingURLFetcherDelegate {
 
   void OnURLFetchDownloadProgress(const URLFetcher* source,
                                   int64_t current,
-                                  int64_t total) override {
+                                  int64_t total,
+                                  int64_t current_network_bytes) override {
     CancelFetch();
   }
 
@@ -1073,7 +1083,7 @@ TEST_F(URLFetcherTest, StopOnRedirect) {
   EXPECT_EQ(GURL(kRedirectTarget), delegate.fetcher()->GetURL());
   EXPECT_EQ(URLRequestStatus::CANCELED,
             delegate.fetcher()->GetStatus().status());
-  EXPECT_EQ(ERR_ABORTED, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(), IsError(ERR_ABORTED));
   EXPECT_EQ(301, delegate.fetcher()->GetResponseCode());
 }
 
@@ -1383,12 +1393,14 @@ TEST_F(URLFetcherTest, ShutdownSameThread) {
   // Wait for the first fetcher, make sure it failed.
   delegate1.WaitForComplete();
   EXPECT_FALSE(delegate1.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_CONTEXT_SHUT_DOWN, delegate1.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate1.fetcher()->GetStatus().error(),
+              IsError(ERR_CONTEXT_SHUT_DOWN));
 
   // Wait for the second fetcher, make sure it failed.
   delegate2.WaitForComplete();
   EXPECT_FALSE(delegate2.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_CONTEXT_SHUT_DOWN, delegate2.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate2.fetcher()->GetStatus().error(),
+              IsError(ERR_CONTEXT_SHUT_DOWN));
 
   // New fetchers should automatically fail without making new requests. This
   // should follow the same path as the second fetcher, but best to be safe.
@@ -1397,7 +1409,8 @@ TEST_F(URLFetcherTest, ShutdownSameThread) {
   delegate3.fetcher()->Start();
   delegate3.WaitForComplete();
   EXPECT_FALSE(delegate3.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_CONTEXT_SHUT_DOWN, delegate3.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate3.fetcher()->GetStatus().error(),
+              IsError(ERR_CONTEXT_SHUT_DOWN));
 }
 
 TEST_F(URLFetcherTest, ShutdownCrossThread) {
@@ -1412,14 +1425,16 @@ TEST_F(URLFetcherTest, ShutdownCrossThread) {
   context_getter->Shutdown();
   delegate1.WaitForComplete();
   EXPECT_FALSE(delegate1.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_CONTEXT_SHUT_DOWN, delegate1.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate1.fetcher()->GetStatus().error(),
+              IsError(ERR_CONTEXT_SHUT_DOWN));
 
   // New requests should automatically fail without making new requests.
   WaitingURLFetcherDelegate delegate2;
   delegate2.CreateFetcher(hanging_url(), URLFetcher::GET, context_getter);
   delegate2.StartFetcherAndWait();
   EXPECT_FALSE(delegate2.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_CONTEXT_SHUT_DOWN, delegate2.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate2.fetcher()->GetStatus().error(),
+              IsError(ERR_CONTEXT_SHUT_DOWN));
 }
 
 // Get a small file.
@@ -1491,7 +1506,8 @@ TEST_F(URLFetcherTest, FileTestTryToOverwriteDirectory) {
   delegate.StartFetcherAndWait();
 
   EXPECT_FALSE(delegate.fetcher()->GetStatus().is_success());
-  EXPECT_EQ(ERR_ACCESS_DENIED, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(),
+              IsError(ERR_ACCESS_DENIED));
 }
 
 // Get a small file and save it to a temp file.
@@ -1519,7 +1535,7 @@ TEST_F(URLFetcherBadHTTPSTest, BadHTTPS) {
 
   EXPECT_EQ(URLRequestStatus::CANCELED,
             delegate.fetcher()->GetStatus().status());
-  EXPECT_EQ(ERR_ABORTED, delegate.fetcher()->GetStatus().error());
+  EXPECT_THAT(delegate.fetcher()->GetStatus().error(), IsError(ERR_ABORTED));
   EXPECT_EQ(-1, delegate.fetcher()->GetResponseCode());
   EXPECT_FALSE(delegate.fetcher()->GetResponseHeaders());
   std::string data;

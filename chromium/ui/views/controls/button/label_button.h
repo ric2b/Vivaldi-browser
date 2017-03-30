@@ -46,7 +46,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the text shown on the button.
   const base::string16& GetText() const;
-  void SetText(const base::string16& text);
+  virtual void SetText(const base::string16& text);
 
   // Sets the text color shown for the specified button |for_state| to |color|.
   void SetTextColor(ButtonState for_state, SkColor color);
@@ -62,7 +62,11 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the font list used by this button.
   const gfx::FontList& GetFontList() const;
-  void SetFontList(const gfx::FontList& font_list);
+  // TODO(estade): make this function protected.
+  virtual void SetFontList(const gfx::FontList& font_list);
+
+  // Adjusts the font size up or down by the given amount.
+  virtual void AdjustFontSize(int font_size_delta);
 
   // Sets the elide behavior of this button.
   void SetElideBehavior(gfx::ElideBehavior elide_behavior);
@@ -154,6 +158,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, Image);
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, LabelAndImage);
   FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, FontList);
+  FRIEND_TEST_ALL_PREFIXES(LabelButtonTest, ResetColorsFromNativeTheme);
 
   void SetTextInternal(const base::string16& text);
 

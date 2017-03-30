@@ -73,7 +73,7 @@ private:
     void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) override;
     bool isPresentationAttributeWithSVGDOM(const QualifiedName&) const override;
 
-    bool isStructurallyExternal() const override { return !hrefString().isNull() && isExternalURIReference(hrefString(), document()); }
+    bool isStructurallyExternal() const override;
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
@@ -89,23 +89,23 @@ private:
     bool selfHasRelativeLengths() const override;
 
     // Instance tree handling
+    Element* resolveTargetElement();
     void buildShadowAndInstanceTree(SVGElement& target);
     void clearInstanceRoot();
     Element* createInstanceTree(SVGElement& targetRoot) const;
     void clearShadowTree();
     bool hasCycleUseReferencing(const SVGUseElement&, const ContainerNode& targetInstance, SVGElement*& newTarget) const;
     bool expandUseElementsInShadowTree();
-    void cloneNonMarkupEventListeners();
     void addReferencesToFirstDegreeNestedUseElements(SVGElement& target);
 
     void invalidateDependentShadowTrees();
 
     bool resourceIsStillLoading() const;
     bool resourceIsValid() const;
-    Document* externalDocument() const;
     bool instanceTreeIsLoading() const;
     void notifyFinished(Resource*) override;
     String debugName() const override { return "SVGUseElement"; }
+    void updateTargetReference();
     void setDocumentResource(DocumentResource*);
 
     Member<SVGAnimatedLength> m_x;
@@ -113,6 +113,8 @@ private:
     Member<SVGAnimatedLength> m_width;
     Member<SVGAnimatedLength> m_height;
 
+    AtomicString m_elementIdentifier;
+    bool m_elementIdentifierIsLocal;
     bool m_haveFiredLoadEvent;
     bool m_needsShadowTreeRecreation;
     Member<SVGElement> m_targetElementInstance;

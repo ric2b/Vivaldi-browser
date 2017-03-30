@@ -184,7 +184,7 @@
           'type': 'none',
           'dependencies': [
             '../base/base.gyp:base',
-            '../sync/sync.gyp:sync_java',
+            '../components/sync.gyp:sync_java',
           ],
           'variables': {
             'java_in_dir': 'signin/core/browser/android/java',
@@ -256,8 +256,6 @@
           ],
           'sources': [
             # Note: file list duplicated in GN build.
-            'signin/ios/browser/fake_profile_oauth2_token_service_ios_delegate.h',
-            'signin/ios/browser/fake_profile_oauth2_token_service_ios_delegate.mm',
             'signin/ios/browser/fake_profile_oauth2_token_service_ios_provider.h',
             'signin/ios/browser/fake_profile_oauth2_token_service_ios_provider.mm',
           ],

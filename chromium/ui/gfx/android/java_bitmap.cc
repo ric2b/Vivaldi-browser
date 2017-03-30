@@ -13,6 +13,7 @@
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::ScopedJavaLocalRef;
 
 namespace gfx {
 
@@ -35,11 +36,6 @@ JavaBitmap::JavaBitmap(jobject bitmap)
 JavaBitmap::~JavaBitmap() {
   int err = AndroidBitmap_unlockPixels(AttachCurrentThread(), bitmap_);
   DCHECK(!err);
-}
-
-// static
-bool JavaBitmap::RegisterJavaBitmap(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 static int SkColorTypeToBitmapFormat(SkColorType color_type) {

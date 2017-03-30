@@ -23,6 +23,7 @@
 
 #include "core/html/HTMLAnchorElement.h"
 
+#include "core/editing/EditingUtilities.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/FrameHost.h"
@@ -37,6 +38,7 @@
 #include "core/page/ChromeClient.h"
 #include "platform/network/NetworkHints.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "public/platform/WebNavigationHintType.h"
 
 namespace blink {
 
@@ -44,15 +46,6 @@ using namespace HTMLNames;
 
 class HTMLAnchorElement::NavigationHintSender : public GarbageCollected<HTMLAnchorElement::NavigationHintSender> {
 public:
-    // TODO(horo): Move WebNavigationHintType to public/ directory.
-    enum class WebNavigationHintType {
-        Unknown,
-        LinkMouseDown,
-        LinkTapUnconfirmed,
-        LinkTapDown,
-        Last = LinkTapDown
-    };
-
     static NavigationHintSender* create(HTMLAnchorElement* anchorElement)
     {
         return new NavigationHintSender(anchorElement);
@@ -71,7 +64,7 @@ private:
 
 void HTMLAnchorElement::NavigationHintSender::handleEvent(Event* event)
 {
-    if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton)
+    if (event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == static_cast<short>(WebPointerProperties::Button::Left))
         maybeSendNavigationHint(WebNavigationHintType::LinkMouseDown);
     else if (event->type() == EventTypeNames::gesturetapunconfirmed)
         maybeSendNavigationHint(WebNavigationHintType::LinkTapUnconfirmed);
@@ -116,7 +109,7 @@ void HTMLAnchorElement::NavigationHintSender::maybeSendNavigationHint(WebNavigat
     if (!shouldSendNavigationHint())
         return;
 
-    // TODO(horo): Send the navigation hint message to the browser process.
+    sendNavigationHint(m_anchorElement->href(), type);
 }
 
 HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tagName, Document& document)
@@ -144,7 +137,7 @@ DEFINE_TRACE(HTMLAnchorElement)
 
 bool HTMLAnchorElement::supportsFocus() const
 {
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return HTMLElement::supportsFocus();
     // If not a link we should still be able to focus the element if it has tabIndex.
     return isLink() || HTMLElement::supportsFocus();
@@ -184,7 +177,7 @@ bool HTMLAnchorElement::isMouseFocusable() const
 
 bool HTMLAnchorElement::isKeyboardFocusable() const
 {
-    ASSERT(document().isActive());
+    DCHECK(document().isActive());
 
     if (isFocusable() && Element::supportsFocus())
         return HTMLElement::isKeyboardFocusable();
@@ -199,9 +192,9 @@ static void appendServerMapMousePosition(StringBuilder& url, Event* event)
     if (!event->isMouseEvent())
         return;
 
-    ASSERT(event->target());
+    DCHECK(event->target());
     Node* target = event->target()->toNode();
-    ASSERT(target);
+    DCHECK(target);
     if (!isHTMLImageElement(*target))
         return;
 
@@ -245,9 +238,8 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
             return;
         }
 
-        // TODO(horo): Call NavigationHintSender::handleEvent() when
-        // SpeculativeLaunchServiceWorker feature is enabled.
-        // ensureNavigationHintSender()->handleEvent(event);
+        if (RuntimeEnabledFeatures::speculativeLaunchServiceWorkerEnabled())
+            ensureNavigationHintSender()->handleEvent(event);
 
         if (isLinkClick(event) && isLiveLink()) {
             handleClick(event);
@@ -260,7 +252,7 @@ void HTMLAnchorElement::defaultEventHandler(Event* event)
 
 void HTMLAnchorElement::setActive(bool down)
 {
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return;
 
     ContainerNode::setActive(down);
@@ -318,7 +310,7 @@ bool HTMLAnchorElement::canStartSelection() const
 {
     if (!isLink())
         return HTMLElement::canStartSelection();
-    return hasEditableStyle();
+    return hasEditableStyle(*this);
 }
 
 bool HTMLAnchorElement::draggable() const
@@ -391,7 +383,7 @@ short HTMLAnchorElement::tabIndex() const
 
 bool HTMLAnchorElement::isLiveLink() const
 {
-    return isLink() && !hasEditableStyle();
+    return isLink() && !hasEditableStyle(*this);
 }
 
 void HTMLAnchorElement::sendPings(const KURL& destinationURL) const
@@ -463,7 +455,7 @@ bool isEnterKeyKeydownEvent(Event* event)
 bool isLinkClick(Event* event)
 {
     // Allow detail <= 1 so that synthetic clicks work. They may have detail == 0.
-    return event->type() == EventTypeNames::click && (!event->isMouseEvent() || (toMouseEvent(event)->button() != RightButton && toMouseEvent(event)->detail() <= 1));
+    return (event->type() == EventTypeNames::click || event->type() == EventTypeNames::auxclick) && (!event->isMouseEvent() || (toMouseEvent(event)->button() != static_cast<short>(WebPointerProperties::Button::Right) && toMouseEvent(event)->detail() <= 1));
 }
 
 bool HTMLAnchorElement::willRespondToMouseClickEvents()

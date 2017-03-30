@@ -147,6 +147,11 @@ public class IntentHandler {
     public static final String EXTRA_EXTERNAL_NAV_PACKAGES = "org.chromium.chrome.browser.eenp";
 
     /**
+     * A hash code for the URL to verify intent data hasn't been modified.
+     */
+    public static final String EXTRA_DATA_HASH_CODE = "org.chromium.chrome.browser.data_hash";
+
+    /**
      * Fake ComponentName used in constructing TRUSTED_APPLICATION_CODE_EXTRA.
      */
     private static ComponentName sFakeComponentName = null;
@@ -155,6 +160,7 @@ public class IntentHandler {
 
     private static Pair<Integer, String> sPendingReferrer;
     private static int sReferrerId;
+    private static String sPendingIncognitoUrl;
 
     private static final String PACKAGE_GSA = "com.google.android.googlequicksearchbox";
     private static final String PACKAGE_GMAIL = "com.google.android.gm";
@@ -301,6 +307,12 @@ public class IntentHandler {
         ExternalAppId externalId = determineExternalIntentSource(mPackageName, intent);
         RecordHistogram.recordEnumeratedHistogram("MobileIntent.PageLoadDueToExternalApp",
                 externalId.ordinal(), ExternalAppId.INDEX_BOUNDARY.ordinal());
+        if (externalId == ExternalAppId.OTHER) {
+            String appId = IntentUtils.safeGetStringExtra(intent, Browser.EXTRA_APPLICATION_ID);
+            if (!TextUtils.isEmpty(appId)) {
+                RapporServiceBridge.sampleString("Android.PageLoadDueToExternalApp", appId);
+            }
+        }
     }
 
     /**
@@ -636,7 +648,9 @@ public class IntentHandler {
             // "Open new incognito tab" is currently limited to Chrome or first parties.
             if (!isInternal
                     && IntentUtils.safeGetBooleanExtra(
-                               intent, EXTRA_OPEN_NEW_INCOGNITO_TAB, false)) {
+                            intent, EXTRA_OPEN_NEW_INCOGNITO_TAB, false)
+                    && (getPendingIncognitoUrl() == null
+                            || !getPendingIncognitoUrl().equals(intent.getDataString()))) {
                 return true;
             }
 
@@ -741,7 +755,7 @@ public class IntentHandler {
             return true;
         }
         if (ExternalAuthUtils.getInstance().isGoogleSigned(
-                    context.getPackageManager(), ApiCompatibilityUtils.getCreatorPackage(token))) {
+                    context, ApiCompatibilityUtils.getCreatorPackage(token))) {
             return true;
         }
         return false;
@@ -889,6 +903,9 @@ public class IntentHandler {
         return urlScheme != null && urlScheme.equals(GOOGLECHROME_SCHEME);
     }
 
+    // TODO(mariakhomenko): pending referrer and pending incognito intent could potentially
+    // not work correctly in multi-window. Store per-window information instead.
+
     /**
      * Records a pending referrer URL that we may be sending to ourselves through an intent.
      * @param intent The intent to which we add a referrer.
@@ -917,6 +934,33 @@ public class IntentHandler {
             return sPendingReferrer.second;
         }
         return null;
+    }
+
+    /**
+     * Keeps track of pending incognito URL to be loaded and ensures we allow to load it if it
+     * comes back to us. This is a method for dispatching incognito URL intents from Chrome that
+     * may or may not end up in Chrome.
+     * @param intent The intent that will be sent.
+     */
+    public static void setPendingIncognitoUrl(Intent intent) {
+        if (intent.getData() != null) {
+            intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
+            sPendingIncognitoUrl = intent.getDataString();
+        }
+    }
+
+    /**
+     * Clears the pending incognito URL.
+     */
+    public static void clearPendingIncognitoUrl() {
+        sPendingIncognitoUrl = null;
+    }
+
+    /**
+     * @return Pending incognito URL that is allowed to be loaded without system token.
+     */
+    public static String getPendingIncognitoUrl() {
+        return sPendingIncognitoUrl;
     }
 
     /**

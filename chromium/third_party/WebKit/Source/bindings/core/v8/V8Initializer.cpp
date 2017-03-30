@@ -92,8 +92,15 @@ static Frame* findFrame(v8::Isolate* isolate, v8::Local<v8::Object> host, v8::Lo
 static void reportFatalErrorInMainThread(const char* location, const char* message)
 {
     int memoryUsageMB = Platform::current()->actualMemoryUsageMB();
-    printf("V8 error: %s (%s).  Current memory usage: %d MB\n", message, location, memoryUsageMB);
+    DVLOG(1) << "V8 error: " << message << " (" << location << ").  Current memory usage: " << memoryUsageMB << " MB";
     CRASH();
+}
+
+static void reportOOMErrorInMainThread(const char* location, bool isJsHeap)
+{
+    int memoryUsageMB = Platform::current()->actualMemoryUsageMB();
+    DVLOG(1) << "V8 " << (isJsHeap ? "javascript" : "process") << " OOM: (" << location << ").  Current memory usage: " << memoryUsageMB << " MB";
+    OOM_CRASH();
 }
 
 static String extractMessageForConsole(v8::Isolate* isolate, v8::Local<v8::Value> data)
@@ -156,9 +163,9 @@ static void messageHandlerInMainThread(v8::Local<v8::Message> message, v8::Local
         // other isolated worlds (which means that the error events won't fire any event listeners
         // in user's scripts).
         EventDispatchForbiddenScope::AllowUserAgentEvents allowUserAgentEvents;
-        context->reportException(event, accessControlStatus);
+        context->dispatchErrorEvent(event, accessControlStatus);
     } else {
-        context->reportException(event, accessControlStatus);
+        context->dispatchErrorEvent(event, accessControlStatus);
     }
 }
 
@@ -356,6 +363,7 @@ void V8Initializer::initializeMainThread()
 
     initializeV8Common(isolate);
 
+    isolate->SetOOMErrorHandler(reportOOMErrorInMainThread);
     isolate->SetFatalErrorHandler(reportFatalErrorInMainThread);
     isolate->AddMessageListener(messageHandlerInMainThread);
     isolate->SetFailedAccessCheckCallbackFunction(failedAccessCheckCallbackInMainThread);
@@ -411,7 +419,7 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message, v8::Local<v8:
         return;
 
     // Exceptions that occur in error handler should be ignored since in that case
-    // WorkerGlobalScope::reportException will send the exception to the worker object.
+    // WorkerGlobalScope::dispatchErrorEvent will send the exception to the worker object.
     if (perIsolateData->isReportingException())
         return;
 
@@ -427,7 +435,7 @@ static void messageHandlerInWorker(v8::Local<v8::Message> message, v8::Local<v8:
     // the error event from the v8::Message, quietly leave.
     if (!isolate->IsExecutionTerminating()) {
         V8ErrorHandler::storeExceptionOnErrorEventWrapper(scriptState, event, data, scriptState->context()->Global());
-        scriptState->getExecutionContext()->reportException(event, corsStatus);
+        scriptState->getExecutionContext()->dispatchErrorEvent(event, corsStatus);
     }
 
     perIsolateData->setReportingException(false);

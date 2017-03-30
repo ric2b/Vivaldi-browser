@@ -138,4 +138,65 @@ TEST_F(RangeTest, SplitTextNodeRangeOutsideText)
     EXPECT_EQ(4, rangeFromTextToMiddleOfElement->endOffset());
 }
 
+TEST_F(RangeTest, updateOwnerDocumentIfNeeded)
+{
+    Element* foo = document().createElement("foo", ASSERT_NO_EXCEPTION);
+    Element* bar = document().createElement("bar", ASSERT_NO_EXCEPTION);
+    foo->appendChild(bar);
+
+    Range* range = Range::create(document(), Position(bar, 0), Position(foo, 1));
+
+    Document* anotherDocument = Document::create();
+    anotherDocument->appendChild(foo);
+
+    EXPECT_EQ(bar, range->startContainer());
+    EXPECT_EQ(0, range->startOffset());
+    EXPECT_EQ(foo, range->endContainer());
+    EXPECT_EQ(1, range->endOffset());
+}
+
+// Regression test for crbug.com/639184
+TEST_F(RangeTest, NotMarkedValidByIrrelevantTextInsert)
+{
+    document().body()->setInnerHTML("<div><span id=span1>foo</span>bar<span id=span2>baz</span></div>", ASSERT_NO_EXCEPTION);
+
+    Element* div = document().querySelector("div");
+    Element* span1 = document().getElementById("span1");
+    Element* span2 = document().getElementById("span2");
+    Text* text = toText(div->childNodes()->item(1));
+
+    Range* range = Range::create(document(), span2, 0, div, 3);
+
+    div->removeChild(span1, ASSERT_NO_EXCEPTION);
+    text->insertData(0, "bar", ASSERT_NO_EXCEPTION);
+
+    EXPECT_TRUE(range->boundaryPointsValid());
+    EXPECT_EQ(span2, range->startContainer());
+    EXPECT_EQ(0, range->startOffset());
+    EXPECT_EQ(div, range->endContainer());
+    EXPECT_EQ(2, range->endOffset());
+}
+
+// Regression test for crbug.com/639184
+TEST_F(RangeTest, NotMarkedValidByIrrelevantTextRemove)
+{
+    document().body()->setInnerHTML("<div><span id=span1>foofoo</span>bar<span id=span2>baz</span></div>", ASSERT_NO_EXCEPTION);
+
+    Element* div = document().querySelector("div");
+    Element* span1 = document().getElementById("span1");
+    Element* span2 = document().getElementById("span2");
+    Text* text = toText(div->childNodes()->item(1));
+
+    Range* range = Range::create(document(), span2, 0, div, 3);
+
+    div->removeChild(span1, ASSERT_NO_EXCEPTION);
+    text->deleteData(0, 3, ASSERT_NO_EXCEPTION);
+
+    EXPECT_TRUE(range->boundaryPointsValid());
+    EXPECT_EQ(span2, range->startContainer());
+    EXPECT_EQ(0, range->startOffset());
+    EXPECT_EQ(div, range->endContainer());
+    EXPECT_EQ(2, range->endOffset());
+}
+
 } // namespace blink

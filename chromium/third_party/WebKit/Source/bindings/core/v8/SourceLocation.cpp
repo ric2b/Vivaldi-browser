@@ -10,11 +10,10 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/ThreadDebugger.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TracedValue.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
+#include "platform/v8_inspector/public/V8Inspector.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -22,14 +21,14 @@ namespace blink {
 
 namespace {
 
-std::unique_ptr<V8StackTrace> captureStackTrace(bool full)
+std::unique_ptr<v8_inspector::V8StackTrace> captureStackTrace(bool full)
 {
     v8::Isolate* isolate = v8::Isolate::GetCurrent();
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
     if (!data->threadDebugger() || !isolate->InContext())
         return nullptr;
     ScriptForbiddenScope::AllowUserAgentScript allowScripting;
-    return data->threadDebugger()->debugger()->captureStackTrace(full);
+    return data->threadDebugger()->v8Inspector()->captureStackTrace(full);
 }
 
 }
@@ -37,7 +36,7 @@ std::unique_ptr<V8StackTrace> captureStackTrace(bool full)
 // static
 std::unique_ptr<SourceLocation> SourceLocation::capture(const String& url, unsigned lineNumber, unsigned columnNumber)
 {
-    std::unique_ptr<V8StackTrace> stackTrace = captureStackTrace(false);
+    std::unique_ptr<v8_inspector::V8StackTrace> stackTrace = captureStackTrace(false);
     if (stackTrace && !stackTrace->isEmpty())
         return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
     return SourceLocation::create(url, lineNumber, columnNumber, std::move(stackTrace));
@@ -46,7 +45,7 @@ std::unique_ptr<SourceLocation> SourceLocation::capture(const String& url, unsig
 // static
 std::unique_ptr<SourceLocation> SourceLocation::capture(ExecutionContext* executionContext)
 {
-    std::unique_ptr<V8StackTrace> stackTrace = captureStackTrace(false);
+    std::unique_ptr<v8_inspector::V8StackTrace> stackTrace = captureStackTrace(false);
     if (stackTrace && !stackTrace->isEmpty())
         return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
 
@@ -67,10 +66,10 @@ std::unique_ptr<SourceLocation> SourceLocation::capture(ExecutionContext* execut
 std::unique_ptr<SourceLocation> SourceLocation::fromMessage(v8::Isolate* isolate, v8::Local<v8::Message> message, ExecutionContext* executionContext)
 {
     v8::Local<v8::StackTrace> stack = message->GetStackTrace();
-    std::unique_ptr<V8StackTrace> stackTrace = nullptr;
+    std::unique_ptr<v8_inspector::V8StackTrace> stackTrace = nullptr;
     V8PerIsolateData* data = V8PerIsolateData::from(isolate);
     if (data && data->threadDebugger())
-        stackTrace = data->threadDebugger()->debugger()->createStackTrace(stack);
+        stackTrace = data->threadDebugger()->v8Inspector()->createStackTrace(stack);
 
     int scriptId = message->GetScriptOrigin().ScriptID()->Value();
     if (!stack.IsEmpty() && stack->GetFrameCount() > 0) {
@@ -95,13 +94,13 @@ std::unique_ptr<SourceLocation> SourceLocation::fromMessage(v8::Isolate* isolate
 }
 
 // static
-std::unique_ptr<SourceLocation> SourceLocation::create(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
+std::unique_ptr<SourceLocation> SourceLocation::create(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<v8_inspector::V8StackTrace> stackTrace, int scriptId)
 {
     return wrapUnique(new SourceLocation(url, lineNumber, columnNumber, std::move(stackTrace), scriptId));
 }
 
 // static
-std::unique_ptr<SourceLocation> SourceLocation::createFromNonEmptyV8StackTrace(std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
+std::unique_ptr<SourceLocation> SourceLocation::createFromNonEmptyV8StackTrace(std::unique_ptr<v8_inspector::V8StackTrace> stackTrace, int scriptId)
 {
     // Retrieve the data before passing the ownership to SourceLocation.
     const String& url = stackTrace->topSourceURL();
@@ -121,13 +120,13 @@ std::unique_ptr<SourceLocation> SourceLocation::fromFunction(v8::Local<v8::Funct
 // static
 std::unique_ptr<SourceLocation> SourceLocation::captureWithFullStackTrace()
 {
-    std::unique_ptr<V8StackTrace> stackTrace = captureStackTrace(true);
+    std::unique_ptr<v8_inspector::V8StackTrace> stackTrace = captureStackTrace(true);
     if (stackTrace && !stackTrace->isEmpty())
         return SourceLocation::createFromNonEmptyV8StackTrace(std::move(stackTrace), 0);
     return SourceLocation::create(String(), 0, 0, nullptr, 0);
 }
 
-SourceLocation::SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace> stackTrace, int scriptId)
+SourceLocation::SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<v8_inspector::V8StackTrace> stackTrace, int scriptId)
     : m_url(url)
     , m_lineNumber(lineNumber)
     , m_columnNumber(columnNumber)
@@ -155,22 +154,12 @@ void SourceLocation::toTracedValue(TracedValue* value, const char* name) const
     value->endArray();
 }
 
-std::unique_ptr<V8StackTrace> SourceLocation::cloneStackTrace() const
-{
-    return m_stackTrace ? m_stackTrace->clone() : nullptr;
-}
-
 std::unique_ptr<SourceLocation> SourceLocation::clone() const
 {
-    return wrapUnique(new SourceLocation(m_url, m_lineNumber, m_columnNumber, m_stackTrace ? m_stackTrace->clone() : nullptr, m_scriptId));
+    return wrapUnique(new SourceLocation(m_url.isolatedCopy(), m_lineNumber, m_columnNumber, m_stackTrace ? m_stackTrace->clone() : nullptr, m_scriptId));
 }
 
-std::unique_ptr<SourceLocation> SourceLocation::isolatedCopy() const
-{
-    return wrapUnique(new SourceLocation(m_url.isolatedCopy(), m_lineNumber, m_columnNumber, m_stackTrace ? m_stackTrace->isolatedCopy() : nullptr, m_scriptId));
-}
-
-std::unique_ptr<protocol::Runtime::StackTrace> SourceLocation::buildInspectorObject() const
+std::unique_ptr<protocol::Runtime::API::StackTrace> SourceLocation::buildInspectorObject() const
 {
     return m_stackTrace ? m_stackTrace->buildInspectorObject() : nullptr;
 }

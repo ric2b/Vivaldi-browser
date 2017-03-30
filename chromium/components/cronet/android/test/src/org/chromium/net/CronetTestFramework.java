@@ -213,7 +213,7 @@ public class CronetTestFramework {
             Context context, CronetEngine.Builder cronetEngineBuilder) {
         if (cronetEngineBuilder == null) {
             cronetEngineBuilder = new CronetEngine.Builder(context);
-            cronetEngineBuilder.enableHTTP2(true).enableQUIC(true);
+            cronetEngineBuilder.enableHttp2(true).enableQuic(true);
         }
 
         String cacheString = getCommandLineArg(CACHE_KEY);
@@ -231,7 +231,7 @@ public class CronetTestFramework {
 
         String sdchString = getCommandLineArg(SDCH_KEY);
         if (SDCH_ENABLE.equals(sdchString)) {
-            cronetEngineBuilder.enableSDCH(true);
+            cronetEngineBuilder.enableSdch(true);
         }
 
         // Setting this here so it isn't overridden on the command line

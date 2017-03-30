@@ -38,7 +38,6 @@ bool ManifestManager::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
 
   IPC_BEGIN_MESSAGE_MAP(ManifestManager, message)
-    IPC_MESSAGE_HANDLER(ManifestManagerMsg_HasManifest, OnHasManifest)
     IPC_MESSAGE_HANDLER(ManifestManagerMsg_RequestManifest, OnRequestManifest)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
@@ -46,22 +45,15 @@ bool ManifestManager::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void ManifestManager::OnHasManifest(int request_id) {
-  GURL url(render_frame()->GetWebFrame()->document().manifestURL());
-
-  bool has_manifest = may_have_manifest_ && !url.is_empty();
-  Send(new ManifestManagerHostMsg_HasManifestResponse(
-      routing_id(), request_id, has_manifest));
-}
-
 void ManifestManager::OnRequestManifest(int request_id) {
   GetManifest(base::Bind(&ManifestManager::OnRequestManifestComplete,
                          base::Unretained(this), request_id));
 }
 
-void ManifestManager::OnRequestManifestComplete(
-    int request_id, const Manifest& manifest,
-    const ManifestDebugInfo&) {
+void ManifestManager::OnRequestManifestComplete(int request_id,
+                                                const GURL& manifest_url,
+                                                const Manifest& manifest,
+                                                const ManifestDebugInfo&) {
   // When sent via IPC, the Manifest must follow certain security rules.
   Manifest ipc_manifest = manifest;
   ipc_manifest.name = base::NullableString16(
@@ -88,17 +80,17 @@ void ManifestManager::OnRequestManifestComplete(
   }
 
   Send(new ManifestManagerHostMsg_RequestManifestResponse(
-      routing_id(), request_id, ipc_manifest));
+      routing_id(), request_id, manifest_url, ipc_manifest));
 }
 
 void ManifestManager::GetManifest(const GetManifestCallback& callback) {
   if (!may_have_manifest_) {
-    callback.Run(Manifest(), ManifestDebugInfo());
+    callback.Run(GURL(), Manifest(), ManifestDebugInfo());
     return;
   }
 
   if (!manifest_dirty_) {
-    callback.Run(manifest_, manifest_debug_info_);
+    callback.Run(manifest_url_, manifest_, manifest_debug_info_);
     return;
   }
 
@@ -114,6 +106,7 @@ void ManifestManager::GetManifest(const GetManifestCallback& callback) {
 void ManifestManager::DidChangeManifest() {
   may_have_manifest_ = true;
   manifest_dirty_ = true;
+  manifest_url_ = GURL();
 }
 
 void ManifestManager::DidCommitProvisionalLoad(
@@ -124,18 +117,19 @@ void ManifestManager::DidCommitProvisionalLoad(
 
   may_have_manifest_ = false;
   manifest_dirty_ = true;
+  manifest_url_ = GURL();
 }
 
 void ManifestManager::FetchManifest() {
-  GURL url(render_frame()->GetWebFrame()->document().manifestURL());
+  manifest_url_ = render_frame()->GetWebFrame()->document().manifestURL();
 
-  if (url.is_empty()) {
+  if (manifest_url_.is_empty()) {
     ManifestUmaUtil::FetchFailed(ManifestUmaUtil::FETCH_EMPTY_URL);
     ResolveCallbacks(ResolveStateFailure);
     return;
   }
 
-  fetcher_.reset(new ManifestFetcher(url));
+  fetcher_.reset(new ManifestFetcher(manifest_url_));
   fetcher_->Start(
       render_frame()->GetWebFrame(),
       render_frame()->GetWebFrame()->document().manifestUseCredentials(),
@@ -187,11 +181,18 @@ void ManifestManager::OnManifestFetchComplete(
     return;
   }
 
+  manifest_url_ = response.url();
   manifest_ = parser.manifest();
   ResolveCallbacks(ResolveStateSuccess);
 }
 
 void ManifestManager::ResolveCallbacks(ResolveState state) {
+  // Do not reset |manifest_url_| on failure here. If manifest_url_ is
+  // non-empty, that means the link 404s, we failed to fetch it, or it was
+  // unparseable. However, the site still tried to specify a manifest, so
+  // preserve that information in the URL for the callbacks.
+  // |manifest_url| will be reset on navigation or if we receive a didchange
+  // event.
   if (state == ResolveStateFailure)
     manifest_ = Manifest();
 
@@ -202,7 +203,7 @@ void ManifestManager::ResolveCallbacks(ResolveState state) {
 
   for (std::list<GetManifestCallback>::const_iterator it = callbacks.begin();
        it != callbacks.end(); ++it) {
-    it->Run(manifest_, manifest_debug_info_);
+    it->Run(manifest_url_, manifest_, manifest_debug_info_);
   }
 }
 

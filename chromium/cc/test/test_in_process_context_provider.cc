@@ -9,6 +9,8 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "cc/output/context_cache_controller.h"
 #include "cc/resources/platform_color.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
@@ -29,7 +31,8 @@ namespace cc {
 std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
     TestGpuMemoryBufferManager* gpu_memory_buffer_manager,
     TestImageFactory* image_factory,
-    gpu::GLInProcessContext* shared_context) {
+    gpu::GLInProcessContext* shared_context,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   const bool is_offscreen = true;
   gpu::gles2::ContextCreationAttribHelper attribs;
   attribs.alpha_size = -1;
@@ -44,22 +47,26 @@ std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
       base::WrapUnique(gpu::GLInProcessContext::Create(
           nullptr, nullptr, is_offscreen, gfx::kNullAcceleratedWidget,
           shared_context, attribs, gpu::SharedMemoryLimits(),
-          gpu_memory_buffer_manager, image_factory));
+          gpu_memory_buffer_manager, image_factory, std::move(task_runner)));
 
   DCHECK(context);
   return context;
 }
 
 std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext() {
-  return CreateTestInProcessContext(nullptr, nullptr, nullptr);
+  return CreateTestInProcessContext(nullptr, nullptr, nullptr,
+                                    base::ThreadTaskRunnerHandle::Get());
 }
 
 TestInProcessContextProvider::TestInProcessContextProvider(
-    TestInProcessContextProvider* shared_context)
-    : context_(CreateTestInProcessContext(
-          &gpu_memory_buffer_manager_,
-          &image_factory_,
-          (shared_context ? shared_context->context_.get() : nullptr))) {}
+    TestInProcessContextProvider* shared_context) {
+  context_ = CreateTestInProcessContext(
+      &gpu_memory_buffer_manager_, &image_factory_,
+      (shared_context ? shared_context->context_.get() : nullptr),
+      base::ThreadTaskRunnerHandle::Get());
+  cache_controller_.reset(new ContextCacheController(
+      context_->GetImplementation(), base::ThreadTaskRunnerHandle::Get()));
+}
 
 TestInProcessContextProvider::~TestInProcessContextProvider() {
 }
@@ -81,7 +88,12 @@ class GrContext* TestInProcessContextProvider::GrContext() {
     return gr_context_->get();
 
   gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(ContextGL()));
+  cache_controller_->SetGrContext(gr_context_->get());
   return gr_context_->get();
+}
+
+ContextCacheController* TestInProcessContextProvider::CacheController() {
+  return cache_controller_.get();
 }
 
 void TestInProcessContextProvider::InvalidateGrContext(uint32_t state) {
@@ -107,11 +119,6 @@ gpu::Capabilities TestInProcessContextProvider::ContextCapabilities() {
       break;
   }
   return capabilities;
-}
-
-void TestInProcessContextProvider::DeleteCachedResources() {
-  if (gr_context_)
-    gr_context_->FreeGpuResources();
 }
 
 void TestInProcessContextProvider::SetLostContextCallback(

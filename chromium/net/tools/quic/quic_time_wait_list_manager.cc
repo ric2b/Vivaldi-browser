@@ -12,15 +12,15 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "net/base/ip_endpoint.h"
-#include "net/quic/crypto/crypto_protocol.h"
-#include "net/quic/crypto/quic_decrypter.h"
-#include "net/quic/crypto/quic_encrypter.h"
-#include "net/quic/quic_clock.h"
-#include "net/quic/quic_flags.h"
-#include "net/quic/quic_framer.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_server_session_base.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/crypto_protocol.h"
+#include "net/quic/core/crypto/quic_decrypter.h"
+#include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/quic_clock.h"
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/core/quic_framer.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_server_session_base.h"
+#include "net/quic/core/quic_utils.h"
 
 using base::StringPiece;
 
@@ -91,7 +91,7 @@ QuicTimeWaitListManager::QuicTimeWaitListManager(
 
 QuicTimeWaitListManager::~QuicTimeWaitListManager() {
   connection_id_clean_up_alarm_->Cancel();
-  STLDeleteElements(&pending_packets_queue_);
+  base::STLDeleteElements(&pending_packets_queue_);
 }
 
 void QuicTimeWaitListManager::AddConnectionIdToTimeWait(
@@ -127,7 +127,7 @@ void QuicTimeWaitListManager::AddConnectionIdToTimeWait(
 
 bool QuicTimeWaitListManager::IsConnectionIdInTimeWait(
     QuicConnectionId connection_id) const {
-  return ContainsKey(connection_id_map_, connection_id);
+  return base::ContainsKey(connection_id_map_, connection_id);
 }
 
 QuicVersion QuicTimeWaitListManager::GetQuicVersionFromConnectionId(
@@ -261,15 +261,13 @@ bool QuicTimeWaitListManager::WriteToWire(QueuedPacket* queued_packet) {
 }
 
 void QuicTimeWaitListManager::SetConnectionIdCleanUpAlarm() {
-  connection_id_clean_up_alarm_->Cancel();
   QuicTime::Delta next_alarm_interval = QuicTime::Delta::Zero();
   if (!connection_id_map_.empty()) {
     QuicTime oldest_connection_id =
         connection_id_map_.begin()->second.time_added;
     QuicTime now = clock_->ApproximateNow();
-    if (now.Subtract(oldest_connection_id) < time_wait_period_) {
-      next_alarm_interval =
-          oldest_connection_id.Add(time_wait_period_).Subtract(now);
+    if (now - oldest_connection_id < time_wait_period_) {
+      next_alarm_interval = oldest_connection_id + time_wait_period_ - now;
     } else {
       LOG(ERROR) << "ConnectionId lingered for longer than time_wait_period_";
     }
@@ -278,8 +276,8 @@ void QuicTimeWaitListManager::SetConnectionIdCleanUpAlarm() {
     next_alarm_interval = time_wait_period_;
   }
 
-  connection_id_clean_up_alarm_->Set(
-      clock_->ApproximateNow().Add(next_alarm_interval));
+  connection_id_clean_up_alarm_->Update(
+      clock_->ApproximateNow() + next_alarm_interval, QuicTime::Delta::Zero());
 }
 
 bool QuicTimeWaitListManager::MaybeExpireOldestConnection(
@@ -300,7 +298,7 @@ bool QuicTimeWaitListManager::MaybeExpireOldestConnection(
 
 void QuicTimeWaitListManager::CleanUpOldConnectionIds() {
   QuicTime now = clock_->ApproximateNow();
-  QuicTime expiration = now.Subtract(time_wait_period_);
+  QuicTime expiration = now - time_wait_period_;
 
   while (MaybeExpireOldestConnection(expiration)) {
   }

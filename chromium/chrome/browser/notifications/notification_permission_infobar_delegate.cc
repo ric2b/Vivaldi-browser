@@ -10,37 +10,42 @@
 #include "components/infobars/core/infobar.h"
 
 // static
-infobars::InfoBar* NotificationPermissionInfobarDelegate::Create(
+infobars::InfoBar* NotificationPermissionInfoBarDelegate::Create(
     InfoBarService* infobar_service,
     const GURL& requesting_frame,
-    const base::Callback<void(bool, bool)>& callback) {
-  return infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
-      std::unique_ptr<ConfirmInfoBarDelegate>(
-          new NotificationPermissionInfobarDelegate(requesting_frame,
-                                                    callback))));
+    bool user_gesture,
+    Profile* profile,
+    const PermissionSetCallback& callback) {
+  return infobar_service->AddInfoBar(
+      CreatePermissionInfoBar(std::unique_ptr<PermissionInfoBarDelegate>(
+          new NotificationPermissionInfoBarDelegate(
+              requesting_frame, user_gesture, profile, callback))));
 }
 
-NotificationPermissionInfobarDelegate::NotificationPermissionInfobarDelegate(
+NotificationPermissionInfoBarDelegate::NotificationPermissionInfoBarDelegate(
     const GURL& requesting_frame,
-    const base::Callback<void(bool, bool)>& callback)
-    : PermissionInfobarDelegate(requesting_frame,
+    bool user_gesture,
+    Profile* profile,
+    const PermissionSetCallback& callback)
+    : PermissionInfoBarDelegate(requesting_frame,
                                 content::PermissionType::NOTIFICATIONS,
                                 CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-                                callback),
-      requesting_frame_(requesting_frame) {}
+                                user_gesture,
+                                profile,
+                                callback) {}
 
-NotificationPermissionInfobarDelegate::~NotificationPermissionInfobarDelegate()
+NotificationPermissionInfoBarDelegate::~NotificationPermissionInfoBarDelegate()
     {}
 
 infobars::InfoBarDelegate::InfoBarIdentifier
-NotificationPermissionInfobarDelegate::GetIdentifier() const {
+NotificationPermissionInfoBarDelegate::GetIdentifier() const {
   return NOTIFICATION_PERMISSION_INFOBAR_DELEGATE;
 }
 
-int NotificationPermissionInfobarDelegate::GetIconId() const {
+int NotificationPermissionInfoBarDelegate::GetIconId() const {
   return IDR_ANDROID_INFOBAR_NOTIFICATIONS;
 }
 
-int NotificationPermissionInfobarDelegate::GetMessageResourceId() const {
+int NotificationPermissionInfoBarDelegate::GetMessageResourceId() const {
   return IDS_NOTIFICATION_PERMISSIONS;
 }

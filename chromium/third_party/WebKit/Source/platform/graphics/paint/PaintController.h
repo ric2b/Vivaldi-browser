@@ -60,7 +60,7 @@ public:
 
     // Provide a new set of paint chunk properties to apply to recorded display
     // items, for Slimming Paint v2.
-    void updateCurrentPaintChunkProperties(const PaintChunkProperties&);
+    void updateCurrentPaintChunkProperties(const PaintChunk::Id*, const PaintChunkProperties&);
 
     // Retrieve the current paint properties.
     const PaintChunkProperties& currentPaintChunkProperties() const;
@@ -75,6 +75,8 @@ public:
 
         if (displayItemConstructionIsDisabled())
             return;
+
+        ensureNewDisplayItemListInitialCapacity();
         DisplayItemClass& displayItem = m_newDisplayItemList.allocateAndConstruct<DisplayItemClass>(std::forward<Args>(args)...);
         processNewItem(displayItem);
     }
@@ -95,13 +97,22 @@ public:
             createAndAppend<DisplayItemClass>(std::forward<Args>(args)...);
     }
 
+    // Tries to find the cached drawing display item corresponding to the given parameters. If found,
+    // appends the cached display item to the new display list and returns true. Otherwise returns false.
+    bool useCachedDrawingIfPossible(const DisplayItemClient&, DisplayItem::Type);
+
+    // Tries to find the cached subsequence corresponding to the given parameters. If found, copies the
+    // cache subsequence to the new display list and returns true. Otherwise returns false.
+    bool useCachedSubsequenceIfPossible(const DisplayItemClient&);
+
     // True if the last display item is a begin that doesn't draw content.
     bool lastDisplayItemIsNoopBegin() const;
     void removeLastDisplayItem();
+    const DisplayItem* lastDisplayItem(unsigned offset);
 
     void beginSkippingCache() { ++m_skippingCacheCount; }
     void endSkippingCache() { DCHECK(m_skippingCacheCount > 0); --m_skippingCacheCount; }
-    bool skippingCache() const { return m_skippingCacheCount; }
+    bool isSkippingCache() const { return m_skippingCacheCount; }
 
     // Must be called when a painting is finished.
     // offsetFromLayoutObject is the offset between the space of the GraphicsLayer which owns this
@@ -138,9 +149,7 @@ public:
 
     void appendDebugDrawingAfterCommit(const DisplayItemClient&, PassRefPtr<SkPicture>, const LayoutSize& offsetFromLayoutObject);
 
-#ifndef NDEBUG
     void showDebugData() const;
-#endif
 
 #if DCHECK_IS_ON()
     void assertDisplayItemClientsAreLive();
@@ -148,22 +157,38 @@ public:
 
 protected:
     PaintController()
-        : m_newDisplayItemList(kInitialDisplayItemListCapacityBytes)
+        : m_newDisplayItemList(0)
         , m_constructionDisabled(false)
         , m_subsequenceCachingDisabled(false)
         , m_textPainted(false)
         , m_imagePainted(false)
         , m_skippingCacheCount(0)
         , m_numCachedNewItems(0)
-    { }
+#if DCHECK_IS_ON()
+        , m_numSequentialMatches(0)
+        , m_numOutOfOrderMatches(0)
+        , m_numIndexedItems(0)
+#endif
+    {
+        resetCurrentListIndices();
+    }
 
 private:
+    friend class PaintControllerTestBase;
+    friend class PaintControllerPaintTestBase;
+
+    void ensureNewDisplayItemListInitialCapacity()
+    {
+        if (m_newDisplayItemList.isEmpty()) {
+            // TODO(wangxianzhu): Consider revisiting this heuristic.
+            m_newDisplayItemList = DisplayItemList(m_currentPaintArtifact.getDisplayItemList().isEmpty() ? kInitialDisplayItemListCapacityBytes : m_currentPaintArtifact.getDisplayItemList().usedCapacityInBytes());
+        }
+    }
+
     // Set new item state (cache skipping, etc) for a new item.
     void processNewItem(DisplayItem&);
 
-#ifndef NDEBUG
-    WTF::String displayItemListAsDebugString(const DisplayItemList&) const;
-#endif
+    String displayItemListAsDebugString(const DisplayItemList&) const;
 
     // Indices into PaintList of all DrawingDisplayItems and BeginSubsequenceDisplayItems of each client.
     // Temporarily used during merge to find out-of-order display items.
@@ -172,19 +197,22 @@ private:
     static size_t findMatchingItemFromIndex(const DisplayItem::Id&, const DisplayItemIndicesByClientMap&, const DisplayItemList&);
     static void addItemToIndexIfNeeded(const DisplayItem&, size_t index, DisplayItemIndicesByClientMap&);
 
-    struct OutOfOrderIndexContext;
-    DisplayItemList::iterator findOutOfOrderCachedItem(const DisplayItem::Id&, OutOfOrderIndexContext&);
-    DisplayItemList::iterator findOutOfOrderCachedItemForward(const DisplayItem::Id&, OutOfOrderIndexContext&);
-    void copyCachedSubsequence(const DisplayItemList& currentList, DisplayItemList::iterator& currentIt, DisplayItemList& updatedList, SkPictureGpuAnalyzer&);
+    size_t findCachedItem(const DisplayItem::Id&);
+    size_t findOutOfOrderCachedItemForward(const DisplayItem::Id&);
+    void copyCachedSubsequence(size_t&);
+
+    // Resets the indices (e.g. m_nextItemToMatch) of m_currentPaintArtifact.getDisplayItemList()
+    // to their initial values. This should be called when the DisplayItemList in m_currentPaintArtifact
+    // is newly created, or is changed causing the previous indices to be invalid.
+    void resetCurrentListIndices();
 
 #if DCHECK_IS_ON()
     // The following two methods are for checking under-invalidations
     // (when RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled).
-    void checkUnderInvalidation(DisplayItemList::iterator& newIt, DisplayItemList::iterator& currentIt);
-    void checkCachedDisplayItemIsUnchanged(const char* messagePrefix, const DisplayItem& newItem, const DisplayItem& oldItem);
+    void showUnderInvalidationError(const char* reason, const DisplayItem& newItem, const DisplayItem* oldItem) const;
+    void checkUnderInvalidation();
+    bool isCheckingUnderInvalidation() const { return m_underInvalidationCheckingEnd - m_underInvalidationCheckingBegin > 0; }
 #endif
-
-    void updateCacheGeneration();
 
     // The last complete paint artifact.
     // In SPv2, this includes paint chunks as well as display items.
@@ -209,14 +237,43 @@ private:
 
     int m_numCachedNewItems;
 
-#if DCHECK_IS_ON()
-    // This is used to check duplicated ids during add(). We could also check
-    // during commitNewDisplayItems(), but checking during add() helps developer
-    // easily find where the duplicated ids are from.
-    DisplayItemIndicesByClientMap m_newDisplayItemIndicesByClient;
-#endif
+    // Stores indices to valid DrawingDisplayItems in current display list that have not been
+    // matched by CachedDisplayItems during sequential matching. The indexed items will be
+    // matched by later out-of-order requests of cached display items. This ensures that when
+    // out-of-order cached display items are requested, we only traverse at most once over
+    // the current display list looking for potential matches. Thus we can ensure that the
+    // algorithm runs in linear time.
+    DisplayItemIndicesByClientMap m_outOfOrderItemIndices;
+
+    // The next item in the current list for sequential match.
+    size_t m_nextItemToMatch;
+
+    // The next item in the current list to be indexed for out-of-order cache requests.
+    size_t m_nextItemToIndex;
 
     DisplayItemClient::CacheGenerationOrInvalidationReason m_currentCacheGeneration;
+
+#if DCHECK_IS_ON()
+    int m_numSequentialMatches;
+    int m_numOutOfOrderMatches;
+    int m_numIndexedItems;
+
+    // This is used to check duplicated ids during createAndAppend().
+    DisplayItemIndicesByClientMap m_newDisplayItemIndicesByClient;
+
+    // These are set in useCachedDrawingIfPossible() and useCachedSubsequenceIfPossible()
+    // when we could use cached drawing or subsequence and under-invalidation checking is on,
+    // indicating the begin and end of the cached drawing or subsequence in the current list.
+    // The functions return false to let the client do actual painting, and PaintController
+    // will check if the actual painting results are the same as the cached.
+    size_t m_underInvalidationCheckingBegin;
+    size_t m_underInvalidationCheckingEnd;
+    // Number of probable under-invalidations that have been skipped temporarily because the
+    // mismatching display items may be removed in the future because of no-op pairs or
+    // compositing folding.
+    int m_skippedProbableUnderInvalidationCount;
+    String m_underInvalidationMessagePrefix;
+#endif
 
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
     // A stack recording subsequence clients that are currently painting.

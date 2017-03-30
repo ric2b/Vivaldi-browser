@@ -11,9 +11,9 @@
 #include "chrome/browser/extensions/external_policy_loader.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
 #include "grit/components_strings.h"
-#include "policy/policy_constants.h"
 
 namespace extensions {
 
@@ -69,10 +69,9 @@ bool NativeMessagingHostListPolicyHandler::CheckAndGetList(
        entry != list_value->end(); ++entry) {
     std::string name;
     if (!(*entry)->GetAsString(&name)) {
-      errors->AddError(policy_name(),
-                       entry - list_value->begin(),
+      errors->AddError(policy_name(), entry - list_value->begin(),
                        IDS_POLICY_TYPE_ERROR,
-                       ValueTypeToString(base::Value::TYPE_STRING));
+                       base::Value::GetTypeName(base::Value::TYPE_STRING));
       continue;
     }
     if (!(allow_wildcards_ && name == "*") &&

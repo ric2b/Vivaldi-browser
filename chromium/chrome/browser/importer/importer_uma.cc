@@ -72,6 +72,7 @@ void LogImporterUseToMetrics(const std::string& metric_postfix,
       metrics_type = IMPORTER_METRICS_OPERA_BOOKMARK_FILE;
       break;
     case TYPE_CHROME:
+    case TYPE_CHROMIUM:
       metrics_type = IMPORTER_METRICS_CHROME;
       break;
     case TYPE_VIVALDI:

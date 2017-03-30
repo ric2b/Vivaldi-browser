@@ -26,7 +26,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNode::domTemplate, V8TestInterfaceNode::trace, V8TestInterfaceNode::traceWrappers, 0, 0, V8TestInterfaceNode::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent };
+const WrapperTypeInfo V8TestInterfaceNode::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceNode::domTemplate, V8TestInterfaceNode::trace, V8TestInterfaceNode::traceWrappers, 0, V8TestInterfaceNode::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceNode", &V8Node::wrapperTypeInfo, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::NodeClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::InheritFromEventTarget, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -35,6 +35,19 @@ const WrapperTypeInfo V8TestInterfaceNode::wrapperTypeInfo = { gin::kEmbedderBli
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceNode::s_wrapperTypeInfo = V8TestInterfaceNode::wrapperTypeInfo;
+
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestInterfaceNode>::value,
+    "TestInterfaceNode inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestInterfaceNode::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestInterfaceNode is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 
 namespace TestInterfaceNodeV8Internal {
 
@@ -111,7 +124,7 @@ static void eventHandlerAttributeAttributeGetter(const v8::FunctionCallbackInfo<
     v8::Local<v8::Object> holder = info.Holder();
     TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(holder);
     EventListener* cppValue(WTF::getPtr(impl->eventHandlerAttribute()));
-    v8SetReturnValue(info, cppValue ? v8::Local<v8::Value>(V8AbstractEventListener::cast(cppValue)->getListenerObject(impl->getExecutionContext())) : v8::Local<v8::Value>(v8::Null(info.GetIsolate())));
+    v8SetReturnValue(info, cppValue ? V8AbstractEventListener::cast(cppValue)->getListenerOrNull(info.GetIsolate(), impl->getExecutionContext()) : v8::Null(info.GetIsolate()).As<v8::Value>());
 }
 
 static void eventHandlerAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -159,7 +172,7 @@ static void perWorldBindingsReadonlyTestInterfaceEmptyAttributeAttributeGetterCa
 static void reflectStringAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Object> holder = info.Holder();
-    Element* impl = V8Element::toImpl(holder);
+    TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(holder);
     v8SetReturnValueString(info, impl->fastGetAttribute(HTMLNames::reflectstringattributeAttr), info.GetIsolate());
 }
 
@@ -171,7 +184,7 @@ static void reflectStringAttributeAttributeGetterCallback(const v8::FunctionCall
 static void reflectStringAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Object> holder = info.Holder();
-    Element* impl = V8Element::toImpl(holder);
+    TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(holder);
     V8StringResource<> cppValue = v8Value;
     if (!cppValue.prepare())
         return;
@@ -200,7 +213,7 @@ static void reflectUrlStringAttributeAttributeGetterCallback(const v8::FunctionC
 static void reflectUrlStringAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::Object> holder = info.Holder();
-    Element* impl = V8Element::toImpl(holder);
+    TestInterfaceNode* impl = V8TestInterfaceNode::toImpl(holder);
     V8StringResource<> cppValue = v8Value;
     if (!cppValue.prepare())
         return;
@@ -340,7 +353,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceNode::domTemplate(v8::Isolate* is
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceNodeTemplate);
 }
-
 
 bool V8TestInterfaceNode::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

@@ -210,8 +210,9 @@ void VideoCaptureDeviceWin::ScopedMediaType::DeleteMediaType(
   }
 }
 
-VideoCaptureDeviceWin::VideoCaptureDeviceWin(const Name& device_name)
-    : device_name_(device_name), state_(kIdle) {
+VideoCaptureDeviceWin::VideoCaptureDeviceWin(
+    const VideoCaptureDeviceDescriptor& device_descriptor)
+    : device_descriptor_(device_descriptor), state_(kIdle) {
   // TODO(mcasas): Check that CoInitializeEx() has been called with the
   // appropriate Apartment model, i.e., Single Threaded.
 }
@@ -239,7 +240,7 @@ bool VideoCaptureDeviceWin::Init() {
   DCHECK(thread_checker_.CalledOnValidThread());
   HRESULT hr;
 
-  hr = GetDeviceFilter(device_name_.id(), capture_filter_.Receive());
+  hr = GetDeviceFilter(device_descriptor_.device_id, capture_filter_.Receive());
 
   if (!capture_filter_.get()) {
     DLOG(ERROR) << "Failed to create capture filter: "
@@ -458,7 +459,7 @@ void VideoCaptureDeviceWin::FrameReceived(const uint8_t* buffer,
 
   // There is a chance that the platform does not provide us with the timestamp,
   // in which case, we use reference time to calculate a timestamp.
-  if (timestamp == media::kNoTimestamp())
+  if (timestamp == media::kNoTimestamp)
     timestamp = base::TimeTicks::Now() - first_ref_time_;
 
   client_->OnIncomingCapturedData(buffer, length, capture_format_, 0,

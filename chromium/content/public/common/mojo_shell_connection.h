@@ -8,32 +8,36 @@
 #include <memory>
 
 #include "base/callback_forward.h"
+#include "base/sequenced_task_runner.h"
 #include "content/common/content_export.h"
 #include "content/public/common/mojo_application_info.h"
 #include "services/shell/public/cpp/identity.h"
-#include "services/shell/public/interfaces/shell_client.mojom.h"
+#include "services/shell/public/interfaces/service.mojom.h"
 
 namespace shell {
 class Connection;
 class Connector;
-class ShellConnection;
+class InterfaceProvider;
+class InterfaceRegistry;
 }
 
 namespace content {
 
+class ConnectionFilter;
+
 // Encapsulates a connection to a //services/shell.
-// Access a global instance on the thread the ShellConnection was bound by
+// Access a global instance on the thread the ServiceContext was bound by
 // calling Holder::Get().
-// Clients can add shell::ShellClient implementations whose exposed interfaces
-// will be exposed to inbound connections to this object's ShellClient.
+// Clients can add shell::Service implementations whose exposed interfaces
+// will be exposed to inbound connections to this object's Service.
 // Alternatively clients can define named services that will be constructed when
 // requests for those service names are received.
 // Clients must call any of the registration methods when receiving
 // ContentBrowserClient::RegisterInProcessMojoApplications().
 class CONTENT_EXPORT MojoShellConnection {
  public:
-  using ShellClientRequestHandler =
-      base::Callback<void(shell::mojom::ShellClientRequest)>;
+  using ServiceRequestHandler =
+      base::Callback<void(shell::mojom::ServiceRequest)>;
   using Factory = base::Callback<std::unique_ptr<MojoShellConnection>(void)>;
 
   // Stores an instance of |connection| in TLS for the current process. Must be
@@ -55,15 +59,23 @@ class CONTENT_EXPORT MojoShellConnection {
   // called before the MojoShellConnection has been created.
   static void SetFactoryForTest(Factory* factory);
 
-  // Creates a MojoShellConnection from |request|.
+  // Creates a MojoShellConnection from |request|. The connection binds
+  // its interfaces and accept new connections on |io_task_runner| only. Note
+  // that no incoming connections are accepted until Start() is called.
   static std::unique_ptr<MojoShellConnection> Create(
-      shell::mojom::ShellClientRequest request);
+      shell::mojom::ServiceRequest request,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner);
 
-  // Returns the bound shell::ShellConnection object.
-  // TODO(rockot): remove.
-  virtual shell::ShellConnection* GetShellConnection() = 0;
+  // Begins accepting incoming connections. Connection filters MUST be added
+  // before calling this in order to avoid races. See AddConnectionFilter()
+  // below.
+  virtual void Start() = 0;
 
-  // Returns the shell::Connector received via this connection's ShellClient
+  // Sets a closure to be invoked once the connection receives an Initialize()
+  // request from the shell.
+  virtual void SetInitializeHandler(const base::Closure& handler) = 0;
+
+  // Returns the shell::Connector received via this connection's Service
   // implementation. Use this to initiate connections as this object's Identity.
   virtual shell::Connector* GetConnector() = 0;
 
@@ -76,29 +88,56 @@ class CONTENT_EXPORT MojoShellConnection {
   // run immediately before returning from this function.
   virtual void SetConnectionLostClosure(const base::Closure& closure) = 0;
 
-  // Allows the caller to expose interfaces to the caller using the identity of
-  // this object's ShellClient. As distinct from AddEmbeddedService() and
-  // AddShellClientRequestHandler() which specify unique identities for the
-  // registered services.
-  virtual void AddEmbeddedShellClient(
-      std::unique_ptr<shell::ShellClient> shell_client) = 0;
-  virtual void AddEmbeddedShellClient(shell::ShellClient* shell_client) = 0;
+  // Provides an InterfaceRegistry to forward incoming interface requests to
+  // on the MojoShellConnection's own thread if they aren't bound by the
+  // connection's internal InterfaceRegistry on the IO thread.
+  //
+  // Also configures |interface_provider| to forward all of its outgoing
+  // interface requests to the connection's internal remote interface provider.
+  //
+  // Note that neither |interface_registry| or |interface_provider| is owned
+  // and both MUST outlive the MojoShellConnection.
+  //
+  // TODO(rockot): Remove this. It's a temporary solution to avoid porting all
+  // relevant code to ConnectionFilters at once.
+  virtual void SetupInterfaceRequestProxies(
+      shell::InterfaceRegistry* registry,
+      shell::InterfaceProvider* provider) = 0;
 
-  // Adds an embedded service to this connection's ShellClientFactory.
+  static const int kInvalidConnectionFilterId = 0;
+
+  // Allows the caller to filter inbound connections and/or expose interfaces
+  // on them. |filter| may be created on any thread, but will be used and
+  // destroyed exclusively on the IO thread (the thread corresponding to
+  // |io_task_runner| passed to Create() above.)
+  //
+  // Connection filters MUST be added before calling Start() in order to avoid
+  // races.
+  //
+  // Returns a unique identifier that can be passed to RemoveConnectionFilter()
+  // below.
+  virtual int AddConnectionFilter(
+      std::unique_ptr<ConnectionFilter> filter) = 0;
+
+  // Removes a filter using the id value returned by AddConnectionFilter().
+  // Removal (and destruction) happens asynchronously on the IO thread.
+  virtual void RemoveConnectionFilter(int filter_id) = 0;
+
+  // Adds an embedded service to this connection's ServiceFactory.
   // |info| provides details on how to construct new instances of the
   // service when an incoming connection is made to |name|.
   virtual void AddEmbeddedService(const std::string& name,
                                   const MojoApplicationInfo& info) = 0;
 
-  // Adds a generic ShellClientRequestHandler for a given service name. This
-  // will be used to satisfy any incoming calls to CreateShellClient() which
+  // Adds a generic ServiceRequestHandler for a given service name. This
+  // will be used to satisfy any incoming calls to CreateService() which
   // reference the given name.
   //
   // For in-process services, it is preferable to use |AddEmbeddedService()| as
   // defined above.
-  virtual void AddShellClientRequestHandler(
+  virtual void AddServiceRequestHandler(
       const std::string& name,
-      const ShellClientRequestHandler& handler) = 0;
+      const ServiceRequestHandler& handler) = 0;
 };
 
 }  // namespace content

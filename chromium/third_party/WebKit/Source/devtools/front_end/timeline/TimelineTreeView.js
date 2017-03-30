@@ -81,12 +81,18 @@ WebInspector.TimelineTreeView.prototype = {
     _onHover: function(node) { },
 
     /**
-     * @param {!RuntimeAgent.CallFrame} frame
-     * @return {!Element}
+     * @param {!WebInspector.TracingModel.Event} event
+     * @return {?Element}
      */
-    linkifyLocation: function(frame)
+    _linkifyLocation: function(event)
     {
-        return this._linkifier.linkifyConsoleCallFrame(this._model.target(), frame);
+        var target = this._model.targetByEvent(event);
+        if (!target)
+            return null;
+        var frame = WebInspector.TimelineProfileTree.eventStackFrame(event);
+        if (!frame)
+            return null;
+        return this._linkifier.maybeLinkifyConsoleCallFrame(target, frame);
     },
 
     /**
@@ -339,16 +345,14 @@ WebInspector.TimelineTreeView.GridNode.prototype = {
         } else if (event) {
             var data = event.args["data"];
             var deoptReason = data && data["deoptReason"];
-            if (deoptReason && deoptReason !== "no reason")
+            if (deoptReason)
                 container.createChild("div", "activity-warning").title = WebInspector.UIString("Not optimized: %s", deoptReason);
             name.textContent = event.name === WebInspector.TimelineModel.RecordType.JSFrame
                 ? WebInspector.beautifyFunctionName(event.args["data"]["functionName"])
                 : WebInspector.TimelineUIUtils.eventTitle(event);
-            var frame = WebInspector.TimelineProfileTree.eventStackFrame(event);
-            if (frame && frame["url"]) {
-                var callFrame = /** @type {!RuntimeAgent.CallFrame} */ (frame);
-                container.createChild("div", "activity-link").appendChild(this._treeView.linkifyLocation(callFrame));
-            }
+            var link = this._treeView._linkifyLocation(event);
+            if (link)
+                container.createChild("div", "activity-link").appendChild(link);
             icon.style.backgroundColor = WebInspector.TimelineUIUtils.eventColor(event);
         }
         return cell;
@@ -618,10 +622,10 @@ WebInspector.AggregatedTimelineTreeView.prototype = {
      */
     _createAggregator: function()
     {
-         return new WebInspector.TimelineAggregator(
-             event => WebInspector.TimelineUIUtils.eventStyle(event).title,
-             event => WebInspector.TimelineUIUtils.eventStyle(event).category.name
-         );
+        return new WebInspector.TimelineAggregator(
+            event => WebInspector.TimelineUIUtils.eventStyle(event).title,
+            event => WebInspector.TimelineUIUtils.eventStyle(event).category.name
+        );
     },
 
     __proto__: WebInspector.TimelineTreeView.prototype,
@@ -841,9 +845,7 @@ WebInspector.TimelineStackView = function(treeView)
     this._dataGrid.asWidget().show(this.element);
 }
 
-/**
- * @enum {symbol}
- */
+/** @enum {symbol} */
 WebInspector.TimelineStackView.Events = {
     SelectionChanged: Symbol("SelectionChanged")
 }

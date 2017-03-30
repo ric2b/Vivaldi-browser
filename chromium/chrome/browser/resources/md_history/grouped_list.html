@@ -3,6 +3,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://history/constants.html">
 <link rel="import" href="chrome://history/history_item.html">
+<link rel="import" href="chrome://history/history_list_behavior.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-grouped-list">
@@ -15,16 +16,17 @@
       }
 
       #main-container {
+        @apply(--card-sizing);
         align-items: center;
         display: flex;
         flex-direction: column;
-        padding: var(--first-card-padding-top) var(--card-padding-side);
+        padding-top: var(--first-card-padding-top);
       }
 
       .domain-heading {
         align-items: center;
         display: flex;
-        height: 40px;
+        height: var(--item-height);
         padding: 0 20px;
       }
 
@@ -38,9 +40,9 @@
       }
 
       .group-container {
+        @apply(--card-box-shadow);
         background: #fff;
-        border: 1px solid var(--card-border-color);
-        border-bottom-width: 2px;
+        border-radius: 2px;
         margin-bottom: var(--card-padding-between);
         max-width: var(--card-max-width);
         min-width: var(--card-min-width);
@@ -60,16 +62,15 @@
       }
 
       history-item {
-        --border-style: none;
         padding-left: 20px;
       }
     </style>
     <div id="no-results" class="centered-message"
-        hidden$="[[hasResults_(groupedHistoryData_.length)]]">
-      [[noResultsMessage_(searchedTerm, querying)]]
+        hidden$="[[hasResults(groupedHistoryData_.length)]]">
+      [[noResultsMessage(searchedTerm, querying)]]
     </div>
     <div id="main-container"
-        hidden$="[[!hasResults_(groupedHistoryData_.length)]]">
+        hidden$="[[!hasResults(groupedHistoryData_.length)]]">
       <template is="dom-repeat" items="[[groupedHistoryData_]]" as="group"
           initial-count="1" index-as="groupIndex">
         <div class="group-container">
@@ -95,12 +96,14 @@
                   <template is="dom-repeat" items="[[domain.visits]]"
                       as="item" initial-count="5" index-as="itemIndex">
                     <history-item item="[[item]]"
-                        starred="[[item.starred]]"
                         selected="{{item.selected}}"
                         has-time-gap="[[needsTimeGap_(
                             groupIndex, domainIndex, itemIndex)]]"
                         search-term="[[searchedTerm]]"
-                        number-of-items="[[historyData.length]]">
+                        number-of-items="[[historyData.length]]"
+                        path="[[pathForItem_(
+                            groupIndex, domainIndex, itemIndex)]]"
+                        embedded>
                     </history-item>
                   </template>
                 </template>

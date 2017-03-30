@@ -4,13 +4,20 @@
 
 _typemap_imports = [
   "//cc/ipc/typemaps.gni",
-  "//device/bluetooth/public/interfaces/typemaps.gni",
+  "//chrome/browser/media/router/mojo/typemaps.gni",
   "//components/arc/common/typemaps.gni",
+  "//components/metrics/public/cpp/typemaps.gni",
   "//components/typemaps.gni",
+  "//content/common/bluetooth/typemaps.gni",
+  "//content/common/typemaps.gni",
+  "//device/bluetooth/public/interfaces/typemaps.gni",
+  "//device/generic_sensor/public/interfaces/typemaps.gni",
   "//gpu/ipc/common/typemaps.gni",
   "//media/mojo/interfaces/typemaps.gni",
   "//mojo/common/typemaps.gni",
   "//mojo/public/cpp/bindings/tests/chromium_typemaps.gni",
+  "//services/shell/public/cpp/typemaps.gni",
+  "//services/ui/public/interfaces/display/typemaps.gni",
   "//skia/public/interfaces/typemaps.gni",
   "//ui/events/devices/mojo/typemaps.gni",
   "//ui/events/mojo/typemaps.gni",
@@ -20,6 +27,9 @@ _typemap_imports = [
 _typemaps = []
 
 foreach(typemap_import, _typemap_imports) {
+  # Avoid reassignment error by assigning to empty scope first.
+  _imported = {
+  }
   _imported = read_file(typemap_import, "scope")
   _typemaps += _imported.typemaps
 }

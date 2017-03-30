@@ -27,10 +27,7 @@ void TestSynchronousCompositor::SetClient(SynchronousCompositorClient* client) {
 }
 
 SynchronousCompositor::Frame TestSynchronousCompositor::DemandDrawHw(
-    const gfx::Size& surface_size,
-    const gfx::Transform& transform,
-    const gfx::Rect& viewport,
-    const gfx::Rect& clip,
+    const gfx::Size& viewport_size,
     const gfx::Rect& viewport_rect_for_tile_priority,
     const gfx::Transform& transform_for_tile_priority) {
   return std::move(hardware_frame_);
@@ -38,10 +35,10 @@ SynchronousCompositor::Frame TestSynchronousCompositor::DemandDrawHw(
 
 void TestSynchronousCompositor::ReturnResources(
     uint32_t output_surface_id,
-    const cc::CompositorFrameAck& frame_ack) {
+    const cc::ReturnedResourceArray& resources) {
   ReturnedResources returned_resources;
   returned_resources.output_surface_id = output_surface_id;
-  returned_resources.resources = frame_ack.resources;
+  returned_resources.resources = resources;
   frame_ack_array_.push_back(returned_resources);
 }
 

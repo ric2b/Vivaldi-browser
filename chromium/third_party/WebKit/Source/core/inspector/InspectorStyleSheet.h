@@ -29,7 +29,7 @@
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/inspector/protocol/CSS.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/Values.h"
+#include "platform/inspector_protocol/InspectorProtocol.h"
 #include "wtf/HashMap.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
@@ -61,7 +61,6 @@ public:
 
     CSSStyleDeclaration* cssStyle() { return m_style.get(); }
     std::unique_ptr<protocol::CSS::CSSStyle> buildObjectForStyle();
-    std::unique_ptr<protocol::Array<protocol::CSS::CSSComputedStyleProperty>> buildArrayForComputedStyle();
     bool styleText(String* result);
     bool textForRange(const SourceRange&, String* result);
 

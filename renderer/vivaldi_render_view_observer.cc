@@ -32,7 +32,7 @@ bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
 
 // Inserts text into input fields.
 void VivaldiRenderViewObserver::OnInsertText(const base::string16& text) {
-  blink::WebFrame* frame = render_view()->GetWebView()->focusedFrame();
+  blink::WebLocalFrame* frame = render_view()->GetWebView()->focusedFrame();
   frame->insertText(text);
 }
 

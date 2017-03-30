@@ -45,6 +45,9 @@
 #include "platform/text/Hyphenation.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextRunIterator.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebScheduler.h"
+#include "public/platform/WebThread.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -69,7 +72,8 @@ static SecureTextTimerMap* gSecureTextTimers = nullptr;
 class SecureTextTimer final : public TimerBase {
 public:
     SecureTextTimer(LayoutText* layoutText)
-        : m_layoutText(layoutText)
+        : TimerBase(Platform::current()->currentThread()->scheduler()->timerTaskRunner())
+        , m_layoutText(layoutText)
         , m_lastTypedCharacterOffset(-1)
     {
     }
@@ -402,7 +406,7 @@ static IntRect ellipsisRectForBox(InlineTextBox* box, unsigned startPos, unsigne
     return IntRect();
 }
 
-void LayoutText::absoluteQuads(Vector<FloatQuad>& quads, ClippingOption option) const
+void LayoutText::quads(Vector<FloatQuad>& quads, ClippingOption option, LocalOrAbsoluteOption localOrAbsolute) const
 {
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
         FloatRect boundaries(box->calculateBoundaries());
@@ -416,13 +420,16 @@ void LayoutText::absoluteQuads(Vector<FloatQuad>& quads, ClippingOption option) 
             else
                 boundaries.setHeight(ellipsisRect.maxY() - boundaries.y());
         }
-        quads.append(localToAbsoluteQuad(boundaries));
+        if (localOrAbsolute == AbsoluteQuads)
+            quads.append(localToAbsoluteQuad(boundaries));
+        else
+            quads.append(boundaries);
     }
 }
 
 void LayoutText::absoluteQuads(Vector<FloatQuad>& quads) const
 {
-    absoluteQuads(quads, NoClipping);
+    this->quads(quads, NoClipping, AbsoluteQuads);
 }
 
 void LayoutText::absoluteQuadsForRange(Vector<FloatQuad>& quads, unsigned start, unsigned end, bool useSelectionHeight)
@@ -619,7 +626,7 @@ PositionWithAffinity LayoutText::positionForPoint(const LayoutPoint& point)
 
             if (pointBlockDirection < bottom || (blocksAreFlipped && pointBlockDirection == bottom)) {
                 ShouldAffinityBeDownstream shouldAffinityBeDownstream;
-                if (lineDirectionPointFitsInBox(pointLineDirection, box, shouldAffinityBeDownstream))
+                if (lineDirectionPointFitsInBox(pointLineDirection.toInt(), box, shouldAffinityBeDownstream))
                     return createPositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(box, box->offsetForPosition(pointLineDirection), shouldAffinityBeDownstream);
             }
         }
@@ -628,7 +635,7 @@ PositionWithAffinity LayoutText::positionForPoint(const LayoutPoint& point)
 
     if (lastBox) {
         ShouldAffinityBeDownstream shouldAffinityBeDownstream;
-        lineDirectionPointFitsInBox(pointLineDirection, lastBox, shouldAffinityBeDownstream);
+        lineDirectionPointFitsInBox(pointLineDirection.toInt(), lastBox, shouldAffinityBeDownstream);
         return createPositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(lastBox, lastBox->offsetForPosition(pointLineDirection) + lastBox->start(), shouldAffinityBeDownstream);
     }
     return createPositionWithAffinity(0);
@@ -645,8 +652,8 @@ LayoutRect LayoutText::localCaretRect(InlineBox* inlineBox, int caretOffset, Lay
 
     InlineTextBox* box = toInlineTextBox(inlineBox);
 
-    int height = box->root().selectionHeight();
-    int top = box->root().selectionTop();
+    int height = box->root().selectionHeight().toInt();
+    int top = box->root().selectionTop().toInt();
 
     // Go ahead and round left to snap it to the nearest pixel.
     LayoutUnit left = box->positionForOffset(caretOffset);
@@ -708,7 +715,7 @@ LayoutRect LayoutText::localCaretRect(InlineBox* inlineBox, int caretOffset, Lay
         left = std::max(left, rootLeft);
     }
 
-    return LayoutRect(style()->isHorizontalWritingMode() ? IntRect(left, top, caretWidth(), height) : IntRect(top, left, height, caretWidth()));
+    return LayoutRect(style()->isHorizontalWritingMode() ? IntRect(left.toInt(), top, caretWidth().toInt(), height) : IntRect(top, left.toInt(), height, caretWidth().toInt()));
 }
 
 ALWAYS_INLINE float LayoutText::widthFromFont(const Font& f, int start, int len, float leadWidth, float textWidthSoFar, TextDirection textDirection, HashSet<const SimpleFontData*>* fallbackFonts, FloatRect* glyphBoundsAccumulation) const
@@ -927,8 +934,7 @@ void LayoutText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
     bool breakAll = (styleToUse.wordBreak() == BreakAllWordBreak || styleToUse.wordBreak() == BreakWordBreak) && styleToUse.autoWrap();
     bool keepAll = styleToUse.wordBreak() == KeepAllWordBreak && styleToUse.autoWrap();
 
-    Hyphenation* hyphenation = styleToUse.getHyphens() == HyphensAuto
-        ? Hyphenation::get(f.getFontDescription().locale()) : nullptr;
+    Hyphenation* hyphenation = styleToUse.getHyphenation();
     bool disableSoftHyphen = styleToUse.getHyphens() == HyphensNone;
     float maxWordWidth = 0;
     if (!hyphenation)
@@ -1626,7 +1632,7 @@ LayoutRect LayoutText::visualOverflowRect() const
 
 LayoutRect LayoutText::localOverflowRectForPaintInvalidation() const
 {
-    if (style()->visibility() != VISIBLE)
+    if (style()->visibility() != EVisibility::Visible)
         return LayoutRect();
 
     return unionRect(visualOverflowRect(), localSelectionRect());
@@ -1745,13 +1751,14 @@ PassRefPtr<AbstractInlineTextBox> LayoutText::firstAbstractInlineTextBox()
 
 void LayoutText::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    LayoutObject::invalidateDisplayItemClients(invalidationReason);
+    ObjectPaintInvalidator paintInvalidator(*this);
+    paintInvalidator.invalidateDisplayItemClient(*this, invalidationReason);
 
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
-        invalidateDisplayItemClient(*box, invalidationReason);
+        paintInvalidator.invalidateDisplayItemClient(*box, invalidationReason);
         if (box->truncation() != cNoTruncation) {
             if (EllipsisBox* ellipsisBox = box->root().ellipsisBox())
-                invalidateDisplayItemClient(*ellipsisBox, invalidationReason);
+                paintInvalidator.invalidateDisplayItemClient(*ellipsisBox, invalidationReason);
         }
     }
 }

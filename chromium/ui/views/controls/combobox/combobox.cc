@@ -110,13 +110,18 @@ class TransparentButton : public CustomButton {
       : CustomButton(listener) {
     SetAnimationDuration(LabelButton::kHoverAnimationDurationMs);
     SetFocusBehavior(FocusBehavior::NEVER);
+    set_notify_action(PlatformStyle::kMenuNotifyActivationAction);
   }
   ~TransparentButton() override {}
 
+#if !defined(OS_MACOSX)
+  // Override OnMousePressed() to transfer focus to the parent() on a click
+  // except on Mac, which doesn't transfer focus when buttons are clicked.
   bool OnMousePressed(const ui::MouseEvent& mouse_event) override {
     parent()->RequestFocus();
     return true;
   }
+#endif
 
   double GetAnimationValue() const {
     return hover_animation().GetCurrentValue();
@@ -764,7 +769,7 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
 void Combobox::PaintButtons(gfx::Canvas* canvas) {
   DCHECK(style_ == STYLE_ACTION);
 
-  gfx::ScopedRTLFlipCanvas scoped_canvas(canvas, bounds());
+  gfx::ScopedRTLFlipCanvas scoped_canvas(canvas, width());
 
   bool focused = HasFocus();
   const std::vector<const gfx::ImageSkia*>& arrow_button_images =

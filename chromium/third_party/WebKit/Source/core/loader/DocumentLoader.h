@@ -41,6 +41,7 @@
 #include "core/loader/DocumentLoadTiming.h"
 #include "core/loader/DocumentWriter.h"
 #include "core/loader/FrameLoaderTypes.h"
+#include "core/loader/LinkLoader.h"
 #include "core/loader/NavigationPolicy.h"
 #include "platform/SharedBuffer.h"
 #include "platform/network/ResourceError.h"
@@ -60,8 +61,10 @@ class LocalFrame;
 class FrameLoader;
 class ResourceLoader;
 class WebDocumentSubresourceFilter;
+struct ViewportDescriptionWrapper;
 
 class CORE_EXPORT DocumentLoader : public GarbageCollectedFinalized<DocumentLoader>, private RawResourceClient {
+    USING_GARBAGE_COLLECTED_MIXIN(DocumentLoader);
 public:
     static DocumentLoader* create(LocalFrame* frame, const ResourceRequest& request, const SubstituteData& data)
     {
@@ -105,13 +108,15 @@ public:
     bool replacesCurrentHistoryItem() const { return m_replacesCurrentHistoryItem; }
     void setReplacesCurrentHistoryItem(bool replacesCurrentHistoryItem) { m_replacesCurrentHistoryItem = replacesCurrentHistoryItem; }
 
-    bool isCommittedButEmpty() const { return m_state == Committed; }
+    bool isCommittedButEmpty() const { return m_state >= Committed && !m_dataReceived; }
 
     void setSentDidFinishLoad() { m_state = SentDidFinishLoad; }
     bool sentDidFinishLoad() const { return m_state == SentDidFinishLoad; }
 
     NavigationType getNavigationType() const { return m_navigationType; }
     void setNavigationType(NavigationType navigationType) { m_navigationType = navigationType; }
+
+    void upgradeInsecureRequest();
 
     void startLoadingMainResource();
 
@@ -144,12 +149,16 @@ public:
     void setWasBlockedAfterXFrameOptionsOrCSP() { m_wasBlockedAfterXFrameOptionsOrCSP = true; }
     bool wasBlockedAfterXFrameOptionsOrCSP() { return m_wasBlockedAfterXFrameOptionsOrCSP; }
 
+    void dispatchLinkHeaderPreloads(ViewportDescriptionWrapper*, LinkLoader::MediaPreloadPolicy);
+
     Resource* startPreload(Resource::Type, FetchRequest&);
 
     DECLARE_VIRTUAL_TRACE();
 
 protected:
     DocumentLoader(LocalFrame*, const ResourceRequest&, const SubstituteData&);
+
+    void didRedirect(const KURL& oldURL, const KURL& newURL);
 
     Vector<KURL> m_redirectChain;
 
@@ -207,6 +216,7 @@ private:
 
     bool m_isClientRedirect;
     bool m_replacesCurrentHistoryItem;
+    bool m_dataReceived;
 
     NavigationType m_navigationType;
 
@@ -226,7 +236,6 @@ private:
         NotStarted,
         Provisional,
         Committed,
-        DataReceived,
         MainResourceDone,
         SentDidFinishLoad
     };

@@ -10,6 +10,7 @@ import android.support.annotation.IntDef;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.UrlConstants;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.rappor.RapporServiceBridge;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -90,6 +91,25 @@ public class NewTabPageUma {
     /** The number of possible actions. */
     private static final int NUM_SNIPPETS_ACTIONS = 7;
 
+    /** Possible ways to follow the link provided by a snippet.
+     * Do not remove or change existing values other than NUM_OPEN_SNIPPET_METHODS. */
+    @IntDef({OPEN_SNIPPET_METHODS_PLAIN_CLICK, OPEN_SNIPPET_METHODS_NEW_WINDOW,
+            OPEN_SNIPPET_METHODS_NEW_TAB, OPEN_SNIPPET_METHODS_INCOGNITO,
+            OPEN_SNIPPET_METHODS_SAVE_FOR_OFFLINE, NUM_OPEN_SNIPPET_METHODS})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface OpenSnippetMethod {}
+    /** The article was opened taking over the tab. */
+    public static final int OPEN_SNIPPET_METHODS_PLAIN_CLICK = 0;
+    /** The article was opened in a new window. */
+    public static final int OPEN_SNIPPET_METHODS_NEW_WINDOW = 1;
+    /** The article was opened in a new tab, */
+    public static final int OPEN_SNIPPET_METHODS_NEW_TAB = 2;
+    /** The article was opened in an incognito tab. */
+    public static final int OPEN_SNIPPET_METHODS_INCOGNITO = 3;
+    /** The article was saved to be viewed offline. */
+    public static final int OPEN_SNIPPET_METHODS_SAVE_FOR_OFFLINE = 4;
+    /** The number of ways an article can be viewed. */
+    public static final int NUM_OPEN_SNIPPET_METHODS = 5;
     /**
      * Records an action taken by the user on the NTP.
      * @param action One of the ACTION_* values defined in this class.
@@ -163,6 +183,15 @@ public class NewTabPageUma {
     }
 
     /**
+     * Records how the article linked from a snippet was viewed.
+     * @param method method key, one of {@link OpenSnippetMethod}'s values.
+     */
+    public static void recordOpenSnippetMethod(@OpenSnippetMethod int method) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "NewTabPage.Snippets.OpenMethod", method, NUM_OPEN_SNIPPET_METHODS);
+    }
+
+    /**
      * Record a NTP impression (even potential ones to make informed product decisions).
      * @param impressionType Type of the impression from NewTabPageUma.java
      */
@@ -174,22 +203,27 @@ public class NewTabPageUma {
     }
 
     /**
-     * Records stats related to article visits, such as the time spent on the website, or if the
-     * user comes back to the NTP.
-     * @param tab Tab opened to load an article.
+     * Records stats related to content suggestion visits, such as the time spent on the website, or
+     * if the user comes back to the NTP.
+     * @param tab Tab opened to load a content suggestion.
+     * @param category The category of the content suggestion.
      */
-    public static void monitorVisit(Tab tab) {
-        tab.addObserver(new SnippetVisitRecorder());
+    public static void monitorContentSuggestionVisit(Tab tab, int category) {
+        tab.addObserver(new SnippetVisitRecorder(category));
     }
 
     /**
-     * Records stats related to article visits, such as the time spent on the website, or if the
-     * user comes back to the NTP. Use through {@link NewTabPageUma#monitorVisit(Tab)}.
+     * Records stats related to content suggestion visits, such as the time spent on the website, or
+     * if the user comes back to the NTP. Use through
+     * {@link NewTabPageUma#monitorContentSuggestionVisit(Tab, int)}.
      */
     private static class SnippetVisitRecorder extends EmptyTabObserver {
-        private final long mStartTimeNs = SystemClock.elapsedRealtime();
+        private final int mCategory;
+        private final long mStartTimeMs = SystemClock.elapsedRealtime();
 
-        private SnippetVisitRecorder() {}
+        private SnippetVisitRecorder(int category) {
+            mCategory = category;
+        }
 
         @Override
         public void onHidden(Tab tab) {
@@ -220,7 +254,7 @@ public class NewTabPageUma {
         @Override
         public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
             // End recording if a new URL gets loaded e.g. after entering a new query in
-            // the omnibox. This doesn't cover the nagivate-back case so we also need
+            // the omnibox. This doesn't cover the navigate-back case so we also need
             // onUpdateUrl.
             int transitionTypeMask = PageTransition.FROM_ADDRESS_BAR | PageTransition.HOME_PAGE
                     | PageTransition.CHAIN_START | PageTransition.CHAIN_END;
@@ -231,8 +265,10 @@ public class NewTabPageUma {
         private void endRecording(Tab removeObserverFromTab) {
             if (removeObserverFromTab != null) removeObserverFromTab.removeObserver(this);
             RecordUserAction.record("MobileNTP.Snippets.VisitEnd");
-            RecordHistogram.recordLongTimesHistogram("NewTabPage.Snippets.VisitDuration",
-                    SystemClock.elapsedRealtime() - mStartTimeNs, TimeUnit.MILLISECONDS);
+            long visitTimeMs = SystemClock.elapsedRealtime() - mStartTimeMs;
+            RecordHistogram.recordLongTimesHistogram(
+                    "NewTabPage.Snippets.VisitDuration", visitTimeMs, TimeUnit.MILLISECONDS);
+            SnippetsBridge.onSuggestionTargetVisited(mCategory, visitTimeMs);
         }
     }
 }

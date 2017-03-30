@@ -16,6 +16,7 @@ class Font;
 class GraphicsContext;
 struct PaintInfo;
 class LayoutPoint;
+class LayoutSVGInlineText;
 class ComputedStyle;
 class SVGInlineTextBox;
 struct SVGTextFragment;
@@ -45,6 +46,7 @@ public:
 
 private:
     bool shouldPaintSelection(const PaintInfo&) const;
+    FloatRect boundsForDrawingRecorder(const PaintInfo&, const ComputedStyle&, const LayoutPoint&, bool includeSelectionRect) const;
     void paintTextFragments(const PaintInfo&, LayoutObject&);
     void paintDecoration(const PaintInfo&, TextDecoration, const SVGTextFragment&);
     bool setupTextPaint(const PaintInfo&, const ComputedStyle&, LayoutSVGResourceMode, SkPaint&);
@@ -52,6 +54,9 @@ private:
     void paintText(const PaintInfo&, const ComputedStyle&, const ComputedStyle& selectionStyle, const SVGTextFragment&, LayoutSVGResourceMode, bool shouldPaintSelection);
     Vector<SVGTextFragmentWithRange> collectTextMatches(DocumentMarker*) const;
     Vector<SVGTextFragmentWithRange> collectFragmentsInRange(int startPosition, int endPosition) const;
+    LayoutObject& inlineLayoutObject() const;
+    LayoutObject& parentInlineLayoutObject() const;
+    LayoutSVGInlineText& inlineText() const;
 
     const SVGInlineTextBox& m_svgInlineTextBox;
 };

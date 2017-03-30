@@ -52,9 +52,9 @@
 
 #if defined(USE_AURA)
 #include "content/browser/compositor/image_transport_factory.h"
-#include "ui/aura/test/event_generator_delegate_aura.h"
+#include "ui/aura/test/event_generator_delegate_aura.h"  // nogncheck
 #if defined(USE_X11)
-#include "ui/aura/window_tree_host_x11.h"
+#include "ui/aura/window_tree_host_x11.h"  // nogncheck
 #endif
 #endif
 
@@ -65,18 +65,19 @@ namespace content {
 namespace {
 
 #if defined(OS_POSIX)
-// On SIGTERM (sent by the runner on timeouts), dump a stack trace (to make
-// debugging easier) and also exit with a known error code (so that the test
-// framework considers this a failure -- http://crbug.com/57578).
+// On SIGSEGV or SIGTERM (sent by the runner on timeouts), dump a stack trace
+// (to make debugging easier) and also exit with a known error code (so that
+// the test framework considers this a failure -- http://crbug.com/57578).
 // Note: We only want to do this in the browser process, and not forked
 // processes. That might lead to hangs because of locks inside tcmalloc or the
 // OS. See http://crbug.com/141302.
 static int g_browser_process_pid;
 static void DumpStackTraceSignalHandler(int signal) {
   if (g_browser_process_pid == base::GetCurrentProcId()) {
-    logging::RawLog(logging::LOG_ERROR,
-                    "BrowserTestBase signal handler received SIGTERM. "
-                    "Backtrace:\n");
+    std::string message("BrowserTestBase received signal: ");
+    message += strsignal(signal);
+    message += ". Backtrace:\n";
+    logging::RawLog(logging::LOG_ERROR, message.c_str());
     base::debug::StackTrace().Print();
   }
   _exit(128 + signal);
@@ -300,7 +301,8 @@ void BrowserTestBase::SetUp() {
 
   base::Closure* ui_task =
       new base::Closure(
-          base::Bind(&BrowserTestBase::ProxyRunTestOnMainThreadLoop, this));
+          base::Bind(&BrowserTestBase::ProxyRunTestOnMainThreadLoop,
+                     base::Unretained(this)));
 
 #if defined(OS_ANDROID)
   MainFunctionParams params(*command_line);
@@ -319,10 +321,11 @@ void BrowserTestBase::TearDown() {
 
 void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 #if defined(OS_POSIX)
-  if (handle_sigterm_) {
-    g_browser_process_pid = base::GetCurrentProcId();
+  g_browser_process_pid = base::GetCurrentProcId();
+  signal(SIGSEGV, DumpStackTraceSignalHandler);
+
+  if (handle_sigterm_)
     signal(SIGTERM, DumpStackTraceSignalHandler);
-  }
 #endif  // defined(OS_POSIX)
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

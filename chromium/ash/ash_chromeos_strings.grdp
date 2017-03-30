@@ -459,8 +459,8 @@ Press Shift + Alt to switch.
   <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TITLE_FAIL" desc="The title of the notification when taking a screenshot failed.">
     An error occurred
   </message>
-  <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TEXT_SUCCESS" desc="The text of the notification when a screenshot was taken.">
-    Click to view
+  <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TEXT_SUCCESS" desc="The text of the notification when a screenshot was taken. If clicked, the screenshot file is displayed in the Files app.">
+    Show in folder
   </message>
   <message name="IDS_ASH_SCREENSHOT_NOTIFICATION_TEXT_DISABLED" desc="The text of the notification when taking a screenshot failed because screenshots are disabled by administrator policy.">
     The ability to take screenshots has been disabled by your administrator.
@@ -492,11 +492,21 @@ Press Shift + Alt to switch.
     Help us improve Chromebooks
   </message>
   <message name="IDS_ASH_HATS_NOTIFICATION_BODY" desc="The body of the notification for Happiness Tracking Survey.">
-    <!-- TODO(malaykeshav): Implement the actual HaTS notification strings -->
-    Chrome OS HaTS survey text here. Chrome OS HaTS survey text here. Chrome OS HaTS survey text here. Chrome OS HaTS survey text here.
+    Let us know how we’re doing by answering a few questions.
   </message>
   <message name="IDS_ASH_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON" desc="The title of the button in the notification for Happiness Tracking Survey to take the said survey.">
-    Take our survey
+    SHOW QUESTIONS
+  </message>
+  <message name="IDS_ASH_IME_MENU_ACCESSIBLE_NAME" desc="The accessible text for opt-in IME menu icon in status tray.">
+    IME menu button
+  </message>
+
+  <!-- Quick Unlock Strings -->
+   <message name="IDS_ASH_QUICK_UNLOCK_NOTIFICATION_TITLE" desc="The title of the notification for Quick Unlock feature notification.">
+    QU Feature notification title here
+  </message>
+  <message name="IDS_ASH_QUICK_UNLOCK_NOTIFICATION_BODY" desc="The body of the notification for Quick Unlock feature notification.">
+    QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here. QU Feature notification body goes here.
   </message>
 
   <!-- Deprecated Accelerators Messages -->

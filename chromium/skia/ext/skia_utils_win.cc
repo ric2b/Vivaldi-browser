@@ -7,9 +7,12 @@
 #include <stddef.h>
 #include <windows.h>
 
+#include "base/debug/gdi_debug_util_win.h"
+#include "base/win/scoped_hdc.h"
+#include "base/win/win_util.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkTypes.h"
-#include "third_party/skia/include/effects/SkGradientShader.h"
 
 namespace {
 
@@ -22,6 +25,24 @@ static_assert(sizeof(RECT().top) == sizeof(SkIRect().fTop), "o6");
 static_assert(sizeof(RECT().right) == sizeof(SkIRect().fRight), "o7");
 static_assert(sizeof(RECT().bottom) == sizeof(SkIRect().fBottom), "o8");
 static_assert(sizeof(RECT) == sizeof(SkIRect), "o9");
+
+void CreateBitmapHeaderWithColorDepth(LONG width,
+                                      LONG height,
+                                      WORD color_depth,
+                                      BITMAPINFOHEADER* hdr) {
+  // These values are shared with gfx::PlatformDevice.
+  hdr->biSize = sizeof(BITMAPINFOHEADER);
+  hdr->biWidth = width;
+  hdr->biHeight = -height;  // Minus means top-down bitmap.
+  hdr->biPlanes = 1;
+  hdr->biBitCount = color_depth;
+  hdr->biCompression = BI_RGB;  // No compression.
+  hdr->biSizeImage = 0;
+  hdr->biXPelsPerMeter = 1;
+  hdr->biYPelsPerMeter = 1;
+  hdr->biClrUsed = 0;
+  hdr->biClrImportant = 0;
+}
 
 }  // namespace
 
@@ -95,6 +116,136 @@ void InitializeDC(HDC context) {
   SkASSERT(res != 0);
   res = SetROP2(context, R2_COPYPEN);
   SkASSERT(res != 0);
+}
+
+void LoadTransformToDC(HDC dc, const SkMatrix& matrix) {
+  XFORM xf;
+  xf.eM11 = matrix[SkMatrix::kMScaleX];
+  xf.eM21 = matrix[SkMatrix::kMSkewX];
+  xf.eDx = matrix[SkMatrix::kMTransX];
+  xf.eM12 = matrix[SkMatrix::kMSkewY];
+  xf.eM22 = matrix[SkMatrix::kMScaleY];
+  xf.eDy = matrix[SkMatrix::kMTransY];
+  SetWorldTransform(dc, &xf);
+}
+
+void CopyHDC(HDC source, HDC destination, int x, int y, bool is_opaque,
+             const RECT& src_rect, const SkMatrix& transform) {
+
+  int copy_width = src_rect.right - src_rect.left;
+  int copy_height = src_rect.bottom - src_rect.top;
+
+  // We need to reset the translation for our bitmap or (0,0) won't be in the
+  // upper left anymore
+  SkMatrix identity;
+  identity.reset();
+
+  LoadTransformToDC(source, identity);
+  if (is_opaque) {
+    BitBlt(destination,
+           x,
+           y,
+           copy_width,
+           copy_height,
+           source,
+           src_rect.left,
+           src_rect.top,
+           SRCCOPY);
+  } else {
+    SkASSERT(copy_width != 0 && copy_height != 0);
+    BLENDFUNCTION blend_function = {AC_SRC_OVER, 0, 255, AC_SRC_ALPHA};
+    GdiAlphaBlend(destination,
+                  x,
+                  y,
+                  copy_width,
+                  copy_height,
+                  source,
+                  src_rect.left,
+                  src_rect.top,
+                  copy_width,
+                  copy_height,
+                  blend_function);
+  }
+  LoadTransformToDC(source, transform);
+}
+
+SkImageInfo PrepareAllocation(HDC context, BITMAP* backing) {
+  HBITMAP backing_handle =
+      static_cast<HBITMAP>(GetCurrentObject(context, OBJ_BITMAP));
+  const size_t backing_size = sizeof *backing;
+  return (GetObject(backing_handle, backing_size, backing) == backing_size)
+            ? SkImageInfo::MakeN32Premul(backing->bmWidth, backing->bmHeight)
+            : SkImageInfo();
+}
+
+sk_sp<SkSurface> MapPlatformSurface(HDC context) {
+  BITMAP backing;
+  const SkImageInfo size(PrepareAllocation(context, &backing));
+  return size.isEmpty() ? nullptr
+                        : SkSurface::MakeRasterDirect(size, backing.bmBits,
+                                                      backing.bmWidthBytes);
+}
+
+SkBitmap MapPlatformBitmap(HDC context) {
+  BITMAP backing;
+  const SkImageInfo size(PrepareAllocation(context, &backing));
+  SkBitmap bitmap;
+  if (!size.isEmpty())
+    bitmap.installPixels(size, backing.bmBits, size.minRowBytes());
+  return bitmap;
+}
+
+HDC CreateOffscreenSurface(int width, int height) {
+  HBITMAP bitmap = nullptr;
+
+  // If this process doesn't have access to GDI, we'll have to use a shared
+  // memory segment instead.
+  if (!base::win::IsUser32AndGdi32Available())
+    return nullptr;
+
+  bitmap = CreateHBitmap(width, height, false, nullptr, nullptr);
+  if (!bitmap)
+    return nullptr;
+
+  base::win::ScopedCreateDC scoped_hdc(CreateCompatibleDC(nullptr));
+  if (!scoped_hdc.IsValid())
+    return nullptr;
+  InitializeDC(scoped_hdc.Get());
+  HRGN clip = CreateRectRgn(0, 0, width, height);
+  if ((SelectClipRgn(scoped_hdc.Get(), clip) == ERROR) ||
+      (!DeleteObject(clip)))
+    return nullptr;
+
+  SelectObject(scoped_hdc.Get(), bitmap);
+
+  // The caller must call DeleteDC(hdc) on this object once done with it.
+  return scoped_hdc.Take();
+}
+
+void CreateBitmapHeader(int width, int height, BITMAPINFOHEADER* hdr) {
+   CreateBitmapHeaderWithColorDepth(width, height, 32, hdr);
+}
+
+HBITMAP CreateHBitmap(int width, int height, bool is_opaque,
+                      HANDLE shared_section, void** data) {
+  // CreateDIBSection fails to allocate anything if we try to create an empty
+  // bitmap, so just create a minimal bitmap.
+  if ((width == 0) || (height == 0)) {
+    width = 1;
+    height = 1;
+  }
+
+  BITMAPINFOHEADER hdr = {0};
+  CreateBitmapHeader(width, height, &hdr);
+  HBITMAP hbitmap = CreateDIBSection(NULL, reinterpret_cast<BITMAPINFO*>(&hdr),
+                                     0, data, shared_section, 0);
+
+  // If CreateDIBSection() failed, try to get some useful information out
+  // before we crash for post-mortem analysis.
+  if (!hbitmap)
+    base::debug::GDIBitmapAllocFailure(&hdr, shared_section);
+
+  return hbitmap;
 }
 
 }  // namespace skia

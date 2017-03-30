@@ -74,6 +74,7 @@ TestWebGraphicsContext3D::TestWebGraphicsContext3D()
       weak_ptr_factory_(this) {
   CreateNamespace();
   set_support_image(true);
+  set_have_extension_egl_image(true);  // For stream textures.
 }
 
 TestWebGraphicsContext3D::~TestWebGraphicsContext3D() {
@@ -608,7 +609,7 @@ GLuint TestWebGraphicsContext3D::createImageCHROMIUM(ClientBuffer buffer,
                                                      GLsizei width,
                                                      GLsizei height,
                                                      GLenum internalformat) {
-  DCHECK_EQ(GL_RGBA, static_cast<int>(internalformat));
+  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA);
   GLuint image_id = NextImageId();
   base::AutoLock lock(namespace_->lock);
   std::unordered_set<unsigned>& images = namespace_->images;
@@ -631,21 +632,12 @@ GLuint TestWebGraphicsContext3D::createGpuMemoryBufferImageCHROMIUM(
     GLsizei height,
     GLenum internalformat,
     GLenum usage) {
-  DCHECK_EQ(GL_RGBA, static_cast<int>(internalformat));
+  DCHECK(internalformat == GL_RGB || internalformat == GL_RGBA);
   GLuint image_id = NextImageId();
   base::AutoLock lock(namespace_->lock);
   std::unordered_set<unsigned>& images = namespace_->images;
   images.insert(image_id);
   return image_id;
-}
-
-void TestWebGraphicsContext3D::getImageivCHROMIUM(GLuint image_id,
-                                                  GLenum param,
-                                                  GLint* data) {
-  DCHECK_EQ(GL_GPU_MEMORY_BUFFER_ID, static_cast<int>(param));
-  base::AutoLock lock(namespace_->lock);
-  std::unordered_set<unsigned>& images = namespace_->images;
-  *data = images.find(image_id) == images.end() ? -1 : 1;
 }
 
 GLuint64 TestWebGraphicsContext3D::insertFenceSync() {

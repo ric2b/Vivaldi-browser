@@ -10,13 +10,13 @@
 #include "base/command_line.h"
 #include "base/files/scoped_file.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_store.h"
-#include "components/net_log/net_log_temp_file.h"
-#include "components/net_log/net_log_temp_file.h"
+#include "components/net_log/net_log_file_writer.h"
 #include "components/version_info/version_info.h"
 #include "net/log/net_log_util.h"
 #include "net/log/trace_net_log_observer.h"
@@ -29,8 +29,8 @@ ChromeNetLog::ChromeNetLog(
     net::NetLogCaptureMode log_file_mode,
     const base::CommandLine::StringType& command_line_string,
     const std::string& channel_string)
-    : net_log_temp_file_(
-          new NetLogTempFile(this, command_line_string, channel_string)) {
+    : net_log_file_writer_(
+          new NetLogFileWriter(this, command_line_string, channel_string)) {
   if (!log_file.empty()) {
     // Much like logging.h, bypass threading restrictions by using fopen
     // directly.  Have to write on a thread that's shutdown to handle events on
@@ -65,7 +65,7 @@ ChromeNetLog::ChromeNetLog(
 }
 
 ChromeNetLog::~ChromeNetLog() {
-  net_log_temp_file_.reset();
+  net_log_file_writer_.reset();
   // Remove the observers we own before we're destroyed.
   if (write_to_file_observer_)
     write_to_file_observer_->StopObserving(nullptr);
@@ -74,7 +74,7 @@ ChromeNetLog::~ChromeNetLog() {
 }
 
 // static
-base::Value* ChromeNetLog::GetConstants(
+std::unique_ptr<base::Value> ChromeNetLog::GetConstants(
     const base::CommandLine::StringType& command_line_string,
     const std::string& channel_string) {
   std::unique_ptr<base::DictionaryValue> constants_dict =
@@ -83,30 +83,28 @@ base::Value* ChromeNetLog::GetConstants(
 
   // Add a dictionary with the version of the client and its command line
   // arguments.
-  {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+  auto dict = base::MakeUnique<base::DictionaryValue>();
 
-    // We have everything we need to send the right values.
-    dict->SetString("name", version_info::GetProductName());
-    dict->SetString("version", version_info::GetVersionNumber());
-    dict->SetString("cl", version_info::GetLastChange());
-    dict->SetString("version_mod", channel_string);
-    dict->SetString("official", version_info::IsOfficialBuild() ? "official"
-                                                                : "unofficial");
-    std::string os_type = base::StringPrintf(
-        "%s: %s (%s)", base::SysInfo::OperatingSystemName().c_str(),
-        base::SysInfo::OperatingSystemVersion().c_str(),
-        base::SysInfo::OperatingSystemArchitecture().c_str());
-    dict->SetString("os_type", os_type);
-    dict->SetString("command_line", command_line_string);
+  // We have everything we need to send the right values.
+  dict->SetString("name", version_info::GetProductName());
+  dict->SetString("version", version_info::GetVersionNumber());
+  dict->SetString("cl", version_info::GetLastChange());
+  dict->SetString("version_mod", channel_string);
+  dict->SetString("official",
+                  version_info::IsOfficialBuild() ? "official" : "unofficial");
+  std::string os_type = base::StringPrintf(
+      "%s: %s (%s)", base::SysInfo::OperatingSystemName().c_str(),
+      base::SysInfo::OperatingSystemVersion().c_str(),
+      base::SysInfo::OperatingSystemArchitecture().c_str());
+  dict->SetString("os_type", os_type);
+  dict->SetString("command_line", command_line_string);
 
-    constants_dict->Set("clientInfo", dict);
+  constants_dict->Set("clientInfo", std::move(dict));
 
-    data_reduction_proxy::DataReductionProxyEventStore::AddConstants(
-        constants_dict.get());
-  }
+  data_reduction_proxy::DataReductionProxyEventStore::AddConstants(
+      constants_dict.get());
 
-  return constants_dict.release();
+  return std::move(constants_dict);
 }
 
 }  // namespace net_log

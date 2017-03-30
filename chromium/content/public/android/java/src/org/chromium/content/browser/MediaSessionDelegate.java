@@ -8,6 +8,7 @@ import android.content.Context;
 import android.media.AudioManager;
 
 import org.chromium.base.Log;
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
@@ -51,12 +52,14 @@ public class MediaSessionDelegate implements AudioManager.OnAudioFocusChangeList
 
     @CalledByNative
     private void tearDown() {
+        assert ThreadUtils.runningOnUiThread();
         abandonAudioFocus();
         mNativeMediaSessionDelegateAndroid = 0;
     }
 
     @CalledByNative
     private boolean requestAudioFocus(boolean transientFocus) {
+        assert ThreadUtils.runningOnUiThread();
         mFocusType = transientFocus ? AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
                 : AudioManager.AUDIOFOCUS_GAIN;
         return requestAudioFocusInternal();
@@ -64,6 +67,7 @@ public class MediaSessionDelegate implements AudioManager.OnAudioFocusChangeList
 
     @CalledByNative
     private void abandonAudioFocus() {
+        assert ThreadUtils.runningOnUiThread();
         AudioManager am = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
         am.abandonAudioFocus(this);
     }
@@ -77,6 +81,7 @@ public class MediaSessionDelegate implements AudioManager.OnAudioFocusChangeList
 
     @Override
     public void onAudioFocusChange(int focusChange) {
+        assert ThreadUtils.runningOnUiThread();
         if (mNativeMediaSessionDelegateAndroid == 0) return;
 
         switch (focusChange) {

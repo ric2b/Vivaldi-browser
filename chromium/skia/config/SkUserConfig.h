@@ -17,8 +17,6 @@
 #ifndef SkUserConfig_DEFINED
 #define SkUserConfig_DEFINED
 
-#include "skia/ext/skia_histogram.h"
-
 /*  SkTypes.h, the root of the public header files, does the following trick:
 
     #include <SkPreConfig.h>
@@ -76,18 +74,10 @@
 //#define SK_CPU_BENDIAN
 //#define SK_CPU_LENDIAN
 
-/*  If zlib is available and you want to support the flate compression
-    algorithm (used in PDF generation), define SK_ZLIB_INCLUDE to be the
-    include path.
- */
-//#define SK_ZLIB_INCLUDE <zlib.h>
-#define SK_ZLIB_INCLUDE "third_party/zlib/zlib.h"
-
 /*  Define this to provide font subsetter for font subsetting when generating
     PDF documents.
  */
-#define SK_SFNTLY_SUBSETTER \
-    "third_party/sfntly/src/cpp/src/sample/chromium/font_subsetter.h"
+#define SK_SFNTLY_SUBSETTER "sample/chromium/font_subsetter.h"
 
 /*  To write debug messages to a console, skia will call SkDebugf(...) following
     printf conventions (e.g. const char* format, ...). If you want to redirect
@@ -211,6 +201,14 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #   define SK_SUPPORT_LEGACY_GETDEVICE
 #endif
 
+#ifndef    SK_SUPPORT_LEGACY_PICTUREINSTALLPIXELREF
+#   define SK_SUPPORT_LEGACY_PICTUREINSTALLPIXELREF
+#endif
+
+#ifndef    SK_SUPPORT_LEGACY_ACCESSBITMAP
+#   define SK_SUPPORT_LEGACY_ACCESSBITMAP
+#endif
+
 // Workaround for poor anisotropic mipmap quality,
 // pending Skia ripmap support.
 // (https://bugs.chromium.org/p/skia/issues/detail?id=4863)
@@ -228,10 +226,6 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 
 #ifndef    SK_SUPPORT_LEGACY_EVAL_CUBIC
 #   define SK_SUPPORT_LEGACY_EVAL_CUBIC
-#endif
-
-#ifndef    SK_SUPPORT_LEGACY_COMPUTESAVELAYER_FLAG
-#   define SK_SUPPORT_LEGACY_COMPUTESAVELAYER_FLAG
 #endif
 
 ///////////////////////// Imported from BUILD.gn and skia_common.gypi
@@ -257,6 +251,9 @@ SK_API void SkDebugf_FileLine(const char* file, int line, bool fatal,
 #define SK_SUPPORT_LEGACY_X86_BLITS
 
 #define SK_DISABLE_TILE_IMAGE_FILTER_OPTIMIZATION
+
+// Updating to a correct SkPMColor lerp will require layout test rebaselines.
+#define SK_SUPPORT_LEGACY_BROKEN_LERP
 
 // ===== End Chrome-specific definitions =====
 

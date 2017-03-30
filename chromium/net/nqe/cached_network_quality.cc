@@ -10,16 +10,24 @@ namespace nqe {
 
 namespace internal {
 
-CachedNetworkQuality::CachedNetworkQuality(
-    const NetworkQuality& network_quality)
-    : last_update_time_(base::TimeTicks::Now()),
-      network_quality_(network_quality) {}
+CachedNetworkQuality::CachedNetworkQuality()
+    : effective_connection_type_(EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
 
-CachedNetworkQuality::CachedNetworkQuality(const CachedNetworkQuality& other)
-    : last_update_time_(other.last_update_time_),
-      network_quality_(other.network_quality_) {}
+CachedNetworkQuality::CachedNetworkQuality(
+    base::TimeTicks last_update_time,
+    const NetworkQuality& network_quality,
+    EffectiveConnectionType effective_connection_type)
+    : last_update_time_(last_update_time),
+      network_quality_(network_quality),
+      effective_connection_type_(effective_connection_type) {}
+
+CachedNetworkQuality::CachedNetworkQuality(const CachedNetworkQuality& other) =
+    default;
 
 CachedNetworkQuality::~CachedNetworkQuality() {}
+
+CachedNetworkQuality& CachedNetworkQuality::operator=(
+    const CachedNetworkQuality& other) = default;
 
 bool CachedNetworkQuality::OlderThan(
     const CachedNetworkQuality& cached_network_quality) const {

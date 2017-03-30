@@ -11,12 +11,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/sync_driver/change_processor.h"
-#include "components/sync_driver/data_type_controller.h"
-#include "components/sync_driver/device_info.h"
+#include "components/sync/base/model_type.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/driver/change_processor.h"
+#include "components/sync/driver/data_type_controller.h"
+#include "components/sync/protocol/sync_protocol_error.h"
 #include "google_apis/gaia/google_service_auth_error.h"
-#include "sync/internal_api/public/base/model_type.h"
-#include "sync/protocol/sync_protocol_error.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 class ProfileSyncServiceMock : public ProfileSyncService {
@@ -62,8 +62,7 @@ class ProfileSyncServiceMock : public ProfileSyncService {
   MOCK_CONST_METHOD0(GetActiveDataTypes, syncer::ModelTypeSet());
   MOCK_CONST_METHOD0(GetPreferredDataTypes, syncer::ModelTypeSet());
   MOCK_CONST_METHOD0(GetRegisteredDataTypes, syncer::ModelTypeSet());
-  MOCK_CONST_METHOD0(GetLastSessionSnapshot,
-                     syncer::sessions::SyncSessionSnapshot());
+  MOCK_CONST_METHOD0(GetLastCycleSnapshot, syncer::SyncCycleSnapshot());
 
   MOCK_METHOD1(QueryDetailedSyncStatus,
                bool(browser_sync::SyncBackendHost::Status* result));

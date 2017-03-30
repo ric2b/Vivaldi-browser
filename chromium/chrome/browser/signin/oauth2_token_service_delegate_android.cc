@@ -25,6 +25,7 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 
@@ -94,8 +95,8 @@ void AndroidAccessTokenFetcher::Start(const std::string& client_id,
 
   // Call into Java to get a new token.
   Java_OAuth2TokenService_getOAuth2AuthToken(
-      env, base::android::GetApplicationContext(), j_username.obj(),
-      j_scope.obj(), reinterpret_cast<intptr_t>(heap_callback.release()));
+      env, base::android::GetApplicationContext(), j_username, j_scope,
+      reinterpret_cast<intptr_t>(heap_callback.release()));
 }
 
 void AndroidAccessTokenFetcher::CancelRequest() {
@@ -169,12 +170,12 @@ OAuth2TokenServiceDelegateAndroid::OAuth2TokenServiceDelegateAndroid(
     ScopedJavaLocalRef<jobjectArray> java_accounts(
         base::android::ToJavaArrayOfStrings(env, accounts_id));
     Java_OAuth2TokenService_saveStoredAccounts(
-        env, base::android::GetApplicationContext(), java_accounts.obj());
+        env, base::android::GetApplicationContext(), java_accounts);
   }
 
   if (!is_testing_profile_) {
     Java_OAuth2TokenService_validateAccounts(
-        AttachCurrentThread(), java_ref_.obj(),
+        AttachCurrentThread(), java_ref_,
         base::android::GetApplicationContext(), JNI_TRUE);
   }
 }
@@ -213,7 +214,7 @@ bool OAuth2TokenServiceDelegateAndroid::RefreshTokenIsAvailable(
       ConvertUTF8ToJavaString(env, account_name);
   jboolean refresh_token_is_available =
       Java_OAuth2TokenService_hasOAuth2RefreshToken(
-          env, base::android::GetApplicationContext(), j_account_id.obj());
+          env, base::android::GetApplicationContext(), j_account_id);
   return refresh_token_is_available == JNI_TRUE;
 }
 
@@ -284,7 +285,7 @@ void OAuth2TokenServiceDelegateAndroid::InvalidateAccessToken(
   ScopedJavaLocalRef<jstring> j_access_token =
       ConvertUTF8ToJavaString(env, access_token);
   Java_OAuth2TokenService_invalidateOAuth2AuthToken(
-      env, base::android::GetApplicationContext(), j_access_token.obj());
+      env, base::android::GetApplicationContext(), j_access_token);
 }
 
 void OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
@@ -346,7 +347,7 @@ void OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
   // Save the current accounts in the token service before calling
   // FireRefreshToken* methods.
   Java_OAuth2TokenService_saveStoredAccounts(
-      env, base::android::GetApplicationContext(), java_accounts.obj());
+      env, base::android::GetApplicationContext(), java_accounts);
 
   for (const std::string& refreshed_id : refreshed_ids)
     FireRefreshTokenAvailable(refreshed_id);
@@ -363,7 +364,7 @@ void OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
   std::vector<AccountInfo> accounts_info =
       account_tracker_service_->GetAccounts();
   for (const AccountInfo& info : accounts_info) {
-    if (!ContainsValue(curr_ids, info.account_id))
+    if (!base::ContainsValue(curr_ids, info.account_id))
       account_tracker_service_->RemoveAccount(info.account_id);
   }
 
@@ -382,13 +383,13 @@ bool OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
     std::vector<std::string>* refreshed_ids,
     std::vector<std::string>* revoked_ids,
     bool force_notifications) {
-  bool currently_signed_in = ContainsValue(curr_ids, signed_in_id);
+  bool currently_signed_in = base::ContainsValue(curr_ids, signed_in_id);
   if (currently_signed_in) {
     // Revoke token for ids that have been removed from the device.
     for (const std::string& prev_id : prev_ids) {
       if (prev_id == signed_in_id)
         continue;
-      if (!ContainsValue(curr_ids,  prev_id)) {
+      if (!base::ContainsValue(curr_ids, prev_id)) {
         DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::ValidateAccounts:"
                  << "revoked=" << prev_id;
         revoked_ids->push_back(prev_id);
@@ -396,8 +397,7 @@ bool OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
     }
 
     // Refresh token for new ids or all ids if |force_notifications|.
-    if (force_notifications ||
-        !ContainsValue(prev_ids, signed_in_id)) {
+    if (force_notifications || !base::ContainsValue(prev_ids, signed_in_id)) {
       // Always fire the primary signed in account first.
       DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::ValidateAccounts:"
                << "refreshed=" << signed_in_id;
@@ -406,15 +406,14 @@ bool OAuth2TokenServiceDelegateAndroid::ValidateAccounts(
     for (const std::string& curr_id : curr_ids) {
       if (curr_id == signed_in_id)
         continue;
-      if (force_notifications ||
-          !ContainsValue(prev_ids, curr_id)) {
+      if (force_notifications || !base::ContainsValue(prev_ids, curr_id)) {
         DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::ValidateAccounts:"
                  << "refreshed=" << curr_id;
         refreshed_ids->push_back(curr_id);
       }
     }
   } else {
-    if (ContainsValue(prev_ids, signed_in_id)) {
+    if (base::ContainsValue(prev_ids, signed_in_id)) {
       DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::ValidateAccounts:"
                << "revoked=" << signed_in_id;
       revoked_ids->push_back(signed_in_id);
@@ -442,18 +441,16 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenAvailableFromJava(
 
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenAvailable(
     const std::string& account_id) {
-  // TODO(knn): Convert to DCHECK after https://crbug.com/535211
-  CHECK(!account_id.empty());
+  DCHECK(!account_id.empty());
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::FireRefreshTokenAvailable id="
            << account_id;
   std::string account_name = MapAccountIdToAccountName(account_id);
-  // TODO(knn): Convert to DCHECK after https://crbug.com/535211
-  CHECK(!account_name.empty());
+  DCHECK(!account_name.empty());
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_account_name =
       ConvertUTF8ToJavaString(env, account_name);
-  Java_OAuth2TokenService_notifyRefreshTokenAvailable(env, java_ref_.obj(),
-                                                      j_account_name.obj());
+  Java_OAuth2TokenService_notifyRefreshTokenAvailable(env, java_ref_,
+                                                      j_account_name);
   OAuth2TokenServiceDelegate::FireRefreshTokenAvailable(account_id);
 }
 
@@ -469,8 +466,7 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevokedFromJava(
 
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevoked(
     const std::string& account_id) {
-  // TODO(knn): Convert to DCHECK after https://crbug.com/535211
-  CHECK(!account_id.empty());
+  DCHECK(!account_id.empty());
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevoked id="
            << account_id;
   std::string account_name = MapAccountIdToAccountName(account_id);
@@ -478,8 +474,8 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokenRevoked(
     JNIEnv* env = AttachCurrentThread();
     ScopedJavaLocalRef<jstring> j_account_name =
         ConvertUTF8ToJavaString(env, account_name);
-    Java_OAuth2TokenService_notifyRefreshTokenRevoked(env, java_ref_.obj(),
-                                                      j_account_name.obj());
+    Java_OAuth2TokenService_notifyRefreshTokenRevoked(env, java_ref_,
+                                                      j_account_name);
   } else {
     // Current prognosis is that we have an unmigrated account which is due for
     // deletion. Record a histogram to debug this.
@@ -502,7 +498,7 @@ void OAuth2TokenServiceDelegateAndroid::FireRefreshTokensLoadedFromJava(
 void OAuth2TokenServiceDelegateAndroid::FireRefreshTokensLoaded() {
   DVLOG(1) << "OAuth2TokenServiceDelegateAndroid::FireRefreshTokensLoaded";
   JNIEnv* env = AttachCurrentThread();
-  Java_OAuth2TokenService_notifyRefreshTokensLoaded(env, java_ref_.obj());
+  Java_OAuth2TokenService_notifyRefreshTokensLoaded(env, java_ref_);
   OAuth2TokenServiceDelegate::FireRefreshTokensLoaded();
 }
 
@@ -517,7 +513,7 @@ void OAuth2TokenServiceDelegateAndroid::RevokeAllCredentials() {
   ScopedJavaLocalRef<jobjectArray> java_accounts(
       base::android::ToJavaArrayOfStrings(env, std::vector<std::string>()));
   Java_OAuth2TokenService_saveStoredAccounts(
-      env, base::android::GetApplicationContext(), java_accounts.obj());
+      env, base::android::GetApplicationContext(), java_accounts);
 
   for (const std::string& account : accounts_to_revoke)
     FireRefreshTokenRevoked(account);

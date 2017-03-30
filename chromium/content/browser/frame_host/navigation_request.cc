@@ -24,6 +24,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_response.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
@@ -72,6 +73,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
     FrameMsg_Navigate_Type::Value navigation_type,
     LoFiState lofi_state,
     bool is_same_document_history_load,
+    bool is_history_navigation_in_new_child,
     const base::TimeTicks& navigation_start,
     NavigationControllerImpl* controller) {
   // Copy existing headers and add necessary headers that may not be present
@@ -97,6 +99,8 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
                             REQUEST_CONTEXT_TYPE_LOCATION),
       entry.ConstructRequestNavigationParams(
           frame_entry, is_same_document_history_load,
+          is_history_navigation_in_new_child,
+          entry.GetSubframeUniqueNames(frame_tree_node),
           frame_tree_node->has_committed_real_load(),
           controller->GetPendingEntryIndex() == -1,
           controller->GetIndexOfEntry(&entry),
@@ -128,6 +132,8 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
       -1,                      // page_id
       0,                       // nav_entry_id
       false,                   // is_same_document_history_load
+      false,                   // is_history_navigation_in_new_child
+      std::map<std::string, bool>(), // subframe_unique_names
       frame_tree_node->has_committed_real_load(),
       false,                   // intended_as_new_entry
       -1,                      // pending_history_list_offset
@@ -212,6 +218,7 @@ void NavigationRequest::BeginNavigation() {
         Referrer::SanitizeForRequest(common_params_.url,
                                      common_params_.referrer),
         begin_params_.has_user_gesture, common_params_.transition, false,
+        begin_params_.request_context_type,
         base::Bind(&NavigationRequest::OnStartChecksComplete,
                    base::Unretained(this)));
     return;
@@ -241,7 +248,8 @@ void NavigationRequest::CreateNavigationHandle(int pending_nav_entry_id) {
       !browser_initiated_,
       false,  // is_synchronous
       false,  // is_srcdoc
-      common_params_.navigation_start, pending_nav_entry_id);
+      common_params_.navigation_start, pending_nav_entry_id,
+      false);  // started_in_context_menu
 }
 
 void NavigationRequest::TransferNavigationHandleOwnership(
@@ -256,6 +264,15 @@ void NavigationRequest::OnRequestRedirected(
   if (redirect_info.new_method != "POST")
     common_params_.post_data = nullptr;
 
+  // Mark time for the Navigation Timing API.
+  if (request_params_.navigation_timing.redirect_start.is_null()) {
+    request_params_.navigation_timing.redirect_start =
+        request_params_.navigation_timing.fetch_start;
+  }
+  request_params_.navigation_timing.redirect_end = base::TimeTicks::Now();
+  request_params_.navigation_timing.fetch_start = base::TimeTicks::Now();
+
+  request_params_.redirects.push_back(common_params_.url);
   common_params_.url = redirect_info.new_url;
   common_params_.method = redirect_info.new_method;
   common_params_.referrer.url = GURL(redirect_info.new_referrer);
@@ -306,9 +323,8 @@ void NavigationRequest::OnResponseStarted(
   // renderer, allow the embedder to cancel the transfer.
   if (!browser_initiated_ &&
       render_frame_host != frame_tree_node_->current_frame_host() &&
-      !frame_tree_node_->navigator()
-           ->GetDelegate()
-           ->ShouldTransferNavigation()) {
+      !frame_tree_node_->navigator()->GetDelegate()->ShouldTransferNavigation(
+          frame_tree_node_->IsMainFrame())) {
     frame_tree_node_->ResetNavigationRequest(false);
     return;
   }
@@ -387,6 +403,9 @@ void NavigationRequest::OnStartChecksComplete(
       static_cast<ServiceWorkerContextWrapper*>(
           partition->GetServiceWorkerContext());
 
+  // Mark the fetch_start (Navigation Timing API).
+  request_params_.navigation_timing.fetch_start = base::TimeTicks::Now();
+
   loader_ = NavigationURLLoader::Create(
       frame_tree_node_->navigator()->GetController()->GetBrowserContext(),
       std::move(info_), service_worker_context, this);
@@ -430,6 +449,7 @@ void NavigationRequest::OnWillProcessResponseChecksComplete(
 
 void NavigationRequest::CommitNavigation() {
   DCHECK(response_ || !ShouldMakeNetworkRequestForURL(common_params_.url));
+  DCHECK(!common_params_.url.SchemeIs(url::kJavaScriptScheme));
 
   // Retrieve the RenderFrameHost that needs to commit the navigation.
   RenderFrameHostImpl* render_frame_host =
@@ -444,11 +464,7 @@ void NavigationRequest::CommitNavigation() {
                                       common_params_, request_params_,
                                       is_view_source_);
 
-  // When navigating to a Javascript url, the NavigationRequest is not stored
-  // in the FrameTreeNode. Therefore do not reset it, as this could cancel an
-  // existing pending navigation.
-  if (!common_params_.url.SchemeIs(url::kJavaScriptScheme))
-    frame_tree_node_->ResetNavigationRequest(true);
+  frame_tree_node_->ResetNavigationRequest(true);
 }
 
 }  // namespace content

@@ -13,6 +13,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -25,7 +26,6 @@
 #include "ui/events/event_switches.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/gfx/geometry/point3_f.h"
-#include "ui/gfx/x/x11_types.h"
 
 // XIScrollClass was introduced in XI 2.1 so we need to define it here
 // for backward-compatibility with older versions of XInput.
@@ -124,6 +124,15 @@ Iterator FindDeviceWithId(Iterator begin, Iterator end, int id) {
   return end;
 }
 
+// Disables high precision scrolling in X11
+const char kDisableHighPrecisionScrolling[] =
+    "disable-high-precision-scrolling";
+
+bool IsHighPrecisionScrollingDisabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kDisableHighPrecisionScrolling);
+}
+
 }  // namespace
 
 bool DeviceDataManagerX11::IsCMTDataType(const int type) {
@@ -155,6 +164,7 @@ DeviceDataManagerX11* DeviceDataManagerX11::GetInstance() {
 
 DeviceDataManagerX11::DeviceDataManagerX11()
     : xi_opcode_(-1),
+      high_precision_scrolling_disabled_(IsHighPrecisionScrollingDisabled()),
       atom_cache_(gfx::GetXDisplay(), kCachedAtoms),
       button_map_count_(0) {
   CHECK(gfx::GetXDisplay());
@@ -560,10 +570,16 @@ void DeviceDataManagerX11::GetScrollClassOffsets(const XEvent& xev,
   }
 }
 
-void DeviceDataManagerX11::InvalidateScrollClasses() {
-  for (int i = 0; i < kMaxDeviceNum; i++) {
-    scroll_data_[i].horizontal.seen = false;
-    scroll_data_[i].vertical.seen = false;
+void DeviceDataManagerX11::InvalidateScrollClasses(int device_id) {
+  if (device_id == kAllDevices) {
+    for (int i = 0; i < kMaxDeviceNum; i++) {
+      scroll_data_[i].horizontal.seen = false;
+      scroll_data_[i].vertical.seen = false;
+    }
+  } else {
+    CHECK(device_id >= 0 && device_id < kMaxDeviceNum);
+    scroll_data_[device_id].horizontal.seen = false;
+    scroll_data_[device_id].vertical.seen = false;
   }
 }
 
@@ -768,12 +784,11 @@ bool DeviceDataManagerX11::UpdateValuatorClassDevice(
 void DeviceDataManagerX11::UpdateScrollClassDevice(
     XIScrollClassInfo* scroll_class_info,
     int deviceid) {
+  if (high_precision_scrolling_disabled_)
+    return;
+
   DCHECK(deviceid >= 0 && deviceid < kMaxDeviceNum);
   ScrollInfo& info = scroll_data_[deviceid];
-
-  // TODO: xinput2 is disabled until edge cases are fixed.
-  // http://crbug.com/616308
-  return;
 
   bool legacy_scroll_available =
       (scroll_class_info->flags & XIScrollFlagNoEmulation) == 0;

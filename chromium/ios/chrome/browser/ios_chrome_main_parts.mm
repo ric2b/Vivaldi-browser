@@ -100,14 +100,14 @@ void IOSChromeMainParts::PreCreateThreads() {
   local_state_ = application_context_->GetLocalState();
   DCHECK(local_state_);
 
-  flags_ui::PrefServiceFlagsStorage flags_storage_(
+  flags_ui::PrefServiceFlagsStorage flags_storage(
       application_context_->GetLocalState());
-  ConvertFlagsToSwitches(&flags_storage_,
+  ConvertFlagsToSwitches(&flags_storage,
                          base::CommandLine::ForCurrentProcess());
 
   // Initialize tracking synchronizer system.
   tracking_synchronizer_ = new metrics::TrackingSynchronizer(
-      base::WrapUnique(new base::DefaultTickClock()),
+      base::MakeUnique<base::DefaultTickClock>(),
       base::Bind(&metrics::IOSTrackingSynchronizerDelegate::Create));
 
   // Now the command line has been mutated based on about:flags, we can setup
@@ -216,17 +216,26 @@ void IOSChromeMainParts::SetUpMetricsAndFieldTrials() {
     CHECK(result) << "Invalid --" << switches::kForceFieldTrials
                   << " list specified.";
   }
-  if (command_line->HasSwitch(switches::kIOSForceVariationIds)) {
-    // Create default variation ids which will always be included in the
-    // X-Client-Data request header.
-    variations::VariationsHttpHeaderProvider* provider =
-        variations::VariationsHttpHeaderProvider::GetInstance();
-    bool result = provider->SetDefaultVariationIds(
-        command_line->GetSwitchValueASCII(switches::kIOSForceVariationIds));
-    CHECK(result) << "Invalid --" << switches::kIOSForceVariationIds
-                  << " list specified.";
-  }
+
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+
+  // Associate parameters chosen in about:flags and create trial/group for them.
+  flags_ui::PrefServiceFlagsStorage flags_storage(
+      application_context_->GetLocalState());
+  std::vector<std::string> variation_ids =
+      RegisterAllFeatureVariationParameters(&flags_storage, feature_list.get());
+
+  variations::VariationsHttpHeaderProvider* http_header_provider =
+      variations::VariationsHttpHeaderProvider::GetInstance();
+  // Force the variation ids selected in chrome://flags and/or specified using
+  // the command-line flag.
+  bool result = http_header_provider->ForceVariationIds(
+      command_line->GetSwitchValueASCII(switches::kIOSForceVariationIds),
+      &variation_ids);
+  CHECK(result) << "Invalid list of variation ids specified (either in --"
+                << switches::kIOSForceVariationIds << " or in chrome://flags)";
+  metrics->AddSyntheticTrialObserver(http_header_provider);
+
   feature_list->InitializeFromCommandLine(
       command_line->GetSwitchValueASCII(switches::kEnableIOSFeatures),
       command_line->GetSwitchValueASCII(switches::kDisableIOSFeatures));

@@ -21,6 +21,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/variations/active_field_trials.h"
+#include "components/version_info/version_info.h"
 #include "content/public/browser/background_tracing_config.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -83,10 +84,17 @@ bool ProfileAllowsScenario(const content::BackgroundTracingConfig& config,
       return true;
   }
 
+#if !defined(OS_ANDROID)
   // Safeguard, in case background tracing is responsible for a crash on
   // startup.
   if (profile->GetLastSessionExitType() == Profile::EXIT_CRASHED)
     return false;
+#else
+  // In case of Android the exit state is always set as EXIT_CRASHED. So,
+  // preemptive mode cannot be used safely.
+  if (config.tracing_mode() == content::BackgroundTracingConfig::PREEMPTIVE)
+    return false;
+#endif
 
   PrefService* local_state = g_browser_process->local_state();
   DCHECK(local_state);
@@ -125,7 +133,7 @@ bool ChromeTracingDelegate::IsAllowedToBeginBackgroundScenario(
   if (!ProfileAllowsScenario(config, PROFILE_NOT_REQUIRED))
     return false;
 
-  if (requires_anonymized_data && chrome::IsOffTheRecordSessionActive())
+  if (requires_anonymized_data && chrome::IsIncognitoSessionActive())
     return false;
 
   return true;
@@ -135,7 +143,7 @@ bool ChromeTracingDelegate::IsAllowedToEndBackgroundScenario(
     const content::BackgroundTracingConfig& config,
     bool requires_anonymized_data) {
   if (requires_anonymized_data &&
-      (incognito_launched_ || chrome::IsOffTheRecordSessionActive())) {
+      (incognito_launched_ || chrome::IsIncognitoSessionActive())) {
     return false;
   }
 
@@ -167,6 +175,7 @@ void ChromeTracingDelegate::GenerateMetadataDict(
     variations_list->AppendString(it);
 
   metadata_dict->Set("field-trials", std::move(variations_list));
+  metadata_dict->SetString("revision", version_info::GetLastChange());
 }
 
 content::MetadataFilterPredicate

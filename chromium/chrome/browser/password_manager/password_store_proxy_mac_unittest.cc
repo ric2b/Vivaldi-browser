@@ -34,6 +34,7 @@ namespace {
 using autofill::PasswordForm;
 using content::BrowserThread;
 using password_manager::MigrationStatus;
+using password_manager::PasswordStore;
 using password_manager::PasswordStoreChange;
 using password_manager::PasswordStoreChangeList;
 using testing::_;
@@ -56,11 +57,12 @@ class MockPasswordStoreConsumer
     : public password_manager::PasswordStoreConsumer {
  public:
   MOCK_METHOD1(OnGetPasswordStoreResultsConstRef,
-               void(const std::vector<PasswordForm*>&));
+               void(const std::vector<std::unique_ptr<PasswordForm>>&));
 
   // GMock cannot mock methods with move-only args.
-  void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
-    OnGetPasswordStoreResultsConstRef(results.get());
+  void OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<PasswordForm>> results) override {
+    OnGetPasswordStoreResultsConstRef(results);
   }
 };
 
@@ -144,8 +146,7 @@ PasswordStoreProxyMacTest::PasswordStoreProxyMacTest() {
   OSCryptMocker::SetUpWithSingleton();
 }
 
-PasswordStoreProxyMacTest::~PasswordStoreProxyMacTest() {
-}
+PasswordStoreProxyMacTest::~PasswordStoreProxyMacTest() {}
 
 void PasswordStoreProxyMacTest::SetUp() {
   std::unique_ptr<password_manager::LoginDatabase> login_db(
@@ -161,7 +162,7 @@ void PasswordStoreProxyMacTest::TearDown() {
 void PasswordStoreProxyMacTest::CreateAndInitPasswordStore(
     std::unique_ptr<password_manager::LoginDatabase> login_db) {
   store_ = new PasswordStoreProxyMac(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
       base::WrapUnique(new crypto::MockAppleKeychain), std::move(login_db),
       &testing_prefs_);
   ASSERT_TRUE(store_->Init(syncer::SyncableService::StartSyncFlare()));
@@ -179,7 +180,8 @@ void PasswordStoreProxyMacTest::FinishAsyncProcessing() {
   // Do a store-level query to wait for all the previously enqueued operations
   // to finish.
   MockPasswordStoreConsumer consumer;
-  store_->GetLogins(PasswordForm(), &consumer);
+  store_->GetLogins({PasswordForm::SCHEME_HTML, std::string(), GURL()},
+                    &consumer);
   EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(_))
       .WillOnce(QuitUIMessageLoop());
   base::RunLoop().Run();
@@ -315,7 +317,7 @@ TEST_P(PasswordStoreProxyMacTest, FillLogins) {
   AddForm(blacklisted_form);
 
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(password_form, &mock_consumer);
+  store()->GetLogins(PasswordStore::FormDigest(password_form), &mock_consumer);
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(
                                  ElementsAre(Pointee(password_form))))
       .WillOnce(QuitUIMessageLoop());
@@ -350,9 +352,17 @@ TEST_P(PasswordStoreProxyMacTest, OperationsOnABadDatabaseSilentlyFail) {
 
   // Add a new autofillable login + a blacklisted login.
   password_manager::PasswordFormData www_form_data = {
-      PasswordForm::SCHEME_HTML, "http://www.facebook.com/",
-      "http://www.facebook.com/index.html", "login", L"username", L"password",
-      L"submit", L"not_joe_user", L"12345", true, false, 1};
+      PasswordForm::SCHEME_HTML,
+      "http://www.facebook.com/",
+      "http://www.facebook.com/index.html",
+      "login",
+      L"username",
+      L"password",
+      L"submit",
+      L"not_joe_user",
+      L"12345",
+      true,
+      1};
   std::unique_ptr<PasswordForm> form =
       CreatePasswordFormFromDataForTesting(www_form_data);
   std::unique_ptr<PasswordForm> blacklisted_form(new PasswordForm(*form));
@@ -366,7 +376,7 @@ TEST_P(PasswordStoreProxyMacTest, OperationsOnABadDatabaseSilentlyFail) {
 
   // Get all logins; autofillable logins; blacklisted logins.
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(*form, &mock_consumer);
+  store()->GetLogins(PasswordStore::FormDigest(*form), &mock_consumer);
   ON_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(_))
       .WillByDefault(QuitUIMessageLoop());
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));
@@ -448,7 +458,7 @@ void PasswordStoreProxyMacMigrationTest::TestMigration(bool lock_keychain) {
   if (lock_keychain)
     keychain_->set_locked(true);
   store_ = new PasswordStoreProxyMac(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
       std::move(keychain_), std::move(login_db_), &testing_prefs_);
   ASSERT_TRUE(store_->Init(syncer::SyncableService::StartSyncFlare()));
   FinishAsyncProcessing();
@@ -456,10 +466,11 @@ void PasswordStoreProxyMacMigrationTest::TestMigration(bool lock_keychain) {
   // Check the password is still there.
   if (lock_keychain && store_->password_store_mac()) {
     static_cast<crypto::MockAppleKeychain*>(
-        store_->password_store_mac()->keychain())->set_locked(false);
+        store_->password_store_mac()->keychain())
+        ->set_locked(false);
   }
   MockPasswordStoreConsumer mock_consumer;
-  store()->GetLogins(form, &mock_consumer);
+  store()->GetLogins(PasswordStore::FormDigest(form), &mock_consumer);
   EXPECT_CALL(mock_consumer,
               OnGetPasswordStoreResultsConstRef(ElementsAre(Pointee(form))))
       .WillOnce(QuitUIMessageLoop());
@@ -479,8 +490,7 @@ void PasswordStoreProxyMacMigrationTest::TestMigration(bool lock_keychain) {
     EXPECT_EQ(static_cast<int>(MigrationStatus::MIGRATED), status);
   }
   histogram_tester_.ExpectUniqueSample(
-      "PasswordManager.KeychainMigration.Status",
-      status, 1);
+      "PasswordManager.KeychainMigration.Status", status, 1);
 }
 
 TEST_P(PasswordStoreProxyMacMigrationTest, TestSuccessfullMigration) {

@@ -13,19 +13,17 @@
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "jni/UpdatePasswordInfoBar_jni.h"
 
+using base::android::JavaParamRef;
+
 UpdatePasswordInfoBar::UpdatePasswordInfoBar(
     std::unique_ptr<UpdatePasswordInfoBarDelegate> delegate)
     : ConfirmInfoBar(std::move(delegate)) {}
 
 UpdatePasswordInfoBar::~UpdatePasswordInfoBar() {}
 
-bool UpdatePasswordInfoBar::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 int UpdatePasswordInfoBar::GetIdOfSelectedUsername() const {
   return Java_UpdatePasswordInfoBar_getSelectedUsername(
-      base::android::AttachCurrentThread(), java_infobar_.obj());
+      base::android::AttachCurrentThread(), java_infobar_);
 }
 
 base::android::ScopedJavaLocalRef<jobject>
@@ -38,13 +36,13 @@ UpdatePasswordInfoBar::CreateRenderInfoBar(JNIEnv* env) {
       env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_OK));
   ScopedJavaLocalRef<jstring> cancel_button_text = ConvertUTF16ToJavaString(
       env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_CANCEL));
-  ScopedJavaLocalRef<jstring> branding_text =
-      ConvertUTF16ToJavaString(env, update_password_delegate->GetBranding());
+  ScopedJavaLocalRef<jstring> message_text =
+      ConvertUTF16ToJavaString(env, update_password_delegate->GetMessageText());
 
   std::vector<base::string16> usernames;
   if (update_password_delegate->ShowMultipleAccounts()) {
-    for (auto password_form : update_password_delegate->GetCurrentForms())
-      usernames.push_back(password_form->username_value);
+    for (const auto& form : update_password_delegate->GetCurrentForms())
+      usernames.push_back(form->username_value);
   } else {
     usernames.push_back(
         update_password_delegate->get_username_for_single_account());
@@ -52,11 +50,11 @@ UpdatePasswordInfoBar::CreateRenderInfoBar(JNIEnv* env) {
 
   base::android::ScopedJavaLocalRef<jobject> infobar;
   infobar.Reset(Java_UpdatePasswordInfoBar_show(
-      env, reinterpret_cast<intptr_t>(this), GetEnumeratedIconId(),
-      base::android::ToJavaArrayOfStrings(env, usernames).obj(),
-      ok_button_text.obj(), cancel_button_text.obj(), branding_text.obj(),
-      update_password_delegate->ShowMultipleAccounts(),
-      update_password_delegate->is_smartlock_branding_enabled()));
+      env, GetEnumeratedIconId(),
+      base::android::ToJavaArrayOfStrings(env, usernames), message_text,
+      update_password_delegate->message_link_range().start(),
+      update_password_delegate->message_link_range().end(), ok_button_text,
+      cancel_button_text));
 
   java_infobar_.Reset(env, infobar.obj());
   return infobar;

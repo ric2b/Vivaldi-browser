@@ -269,6 +269,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="3392045790598181549"><ph name="NAME" />, element din meniu</translation>
 <translation id="3406283310380167331">Afișați lista de formulare</translation>
 <translation id="3422338090358345848">Deschideți exploratorul comenzilor de la tastatură</translation>
+<translation id="3423495725743882470">rândul $1 coloana $2</translation>
 <translation id="3457000393508828486">Apăsat parțial</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, buton</translation>
 <translation id="3473644018603298796"><ph name="COUNT" /> selectate</translation>
@@ -297,6 +298,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}few{#}other{#}}</translation>
 <translation id="3801735343383419236">Completare automată listă</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">inserează $1.</translation>
 <translation id="3816633764618089385">Conținut media următor</translation>
 <translation id="3819376190738087562">Nu există puncte de accesare directă.</translation>
 <translation id="385383972552776628">Deschideți pagina de opțiuni</translation>
@@ -411,6 +413,7 @@ Dacă ai terminat tutorialul, folosește ChromeVox pentru a naviga la butonul Î
 <translation id="5000760171916499057">Nu există formulare.</translation>
 <translation id="5005670136041063723">Nu mai există elemente similare.</translation>
 <translation id="501473567976723023">Ianuarie</translation>
+<translation id="5040591161308540832">Tabelul $1, $2 pe $3</translation>
 <translation id="5041394372352067729">Deplasează afișajul Braille în partea de sus a paginii</translation>
 <translation id="5042770794184672516">Creșteți volumul vocii</translation>
 <translation id="5050015258024679800">Titlul de nivel 4 anterior</translation>
@@ -518,7 +521,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="5876817486144482042">Scădeți volumul vocii</translation>
 <translation id="5887397643266327462">Subtitrările Braille sunt activate.</translation>
 <translation id="5891934789323004067">Tabel</translation>
-<translation id="5919442531159595654">copiați.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{egal}few{# semne egal}other{# de semne egal}}</translation>
 <translation id="5939518447894949180">Resetează</translation>
 <translation id="5948123859135882163">Comutați interpretarea expresiilor matematice între structurală și semantică</translation>
@@ -554,6 +556,8 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="6355910664415701303">Nu există un element de listă anterior.</translation>
 <translation id="6364795331201459219">titlu 6</translation>
 <translation id="6368143427468974988">Titlul anterior</translation>
+<translation id="6378565991815958969">copiază $1.</translation>
+<translation id="6385591741672306837">coloană</translation>
 <translation id="6387719785439924554">separat</translation>
 <translation id="6411426777058107714">Nu există un buton radio anterior.</translation>
 <translation id="6414968628640960377">Elementul diferit anterior.</translation>
@@ -653,7 +657,6 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="7532613204005497612">Iunie</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, glisor</translation>
 <translation id="7552432549459840808">Comenzi rapide utile pentru Chrome</translation>
-<translation id="7586163296341959563">inserați.</translation>
 <translation id="7596919493010894443">secțiune eliminată</translation>
 <translation id="7604026522577407655">Accesați începutul coloanei curente</translation>
 <translation id="7604451927827590395">titlu</translation>
@@ -704,8 +707,8 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="8153880621934657047">Nu vă aflați în interiorul tabelului.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{caracter de subliniere}few{# caractere de subliniere}other{# de caractere de subliniere}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">rând</translation>
 <translation id="8186185314313222077">activează/dezactivează ecranul complet</translation>
-<translation id="81960742267269908">decupați.</translation>
 <translation id="8199231515320852133">Anunță anteturile celulei curente</translation>
 <translation id="820417203470636242">Celulă goală.</translation>
 <translation id="8215202828671303819">Selectare multiplă</translation>
@@ -782,6 +785,7 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="9077213568694924680">eliminate din selecție</translation>
 <translation id="9082874451376019682">Nu există un glisor anterior.</translation>
 <translation id="9089864840575085222">Repetă ecoul la tastare</translation>
+<translation id="9105227991373418255">decupează $1.</translation>
 <translation id="9107530006868467849">Niciun widget media anterior.</translation>
 <translation id="9108370397979208512">matematică</translation>
 <translation id="9108589040018540527">bară de derulare</translation>
@@ -789,6 +793,7 @@ Pentru a deschide meniul browserului Chrome, apasă pe Alt + F.</translation>
 <translation id="9115913704608474258">Noiembrie</translation>
 <translation id="9128414153595658330">casetă de dialog</translation>
 <translation id="9149560530563164529">secțiune</translation>
+<translation id="9150735707954472829">Filă</translation>
 <translation id="9151211641321628915">Anunță o scurtă descriere a poziției curente</translation>
 <translation id="9153606228985488238">Înălțime a sunetului de <ph name="PERCENT" /></translation>
 <translation id="9160096769946561184">Accesați finalul coloanei curente</translation>

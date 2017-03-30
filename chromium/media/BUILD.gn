@@ -11,6 +11,7 @@ import("//build/config/ui.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
+import("//third_party/ffmpeg/ffmpeg_options.gni")
 
 buildflag_header("media_features") {
   header = "media_features.h"
@@ -20,6 +21,12 @@ buildflag_header("media_features") {
     "ENABLE_HEVC_DEMUXING=$enable_hevc_demuxing",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
   ]
+}
+
+if (proprietary_codecs && media_use_ffmpeg) {
+  assert(
+      ffmpeg_branding != "Chromium" || is_vivaldi,
+      "proprietary codecs and ffmpeg_branding set to Chromium are incompatible")
 }
 
 # Common configuration for targets in the media directory.
@@ -113,6 +120,10 @@ component("media") {
     "cdm/player_tracker_impl.h",
     "cdm/supported_cdm_versions.cc",
     "cdm/supported_cdm_versions.h",
+    "device_monitors/device_monitor_mac.h",
+    "device_monitors/device_monitor_mac.mm",
+    "device_monitors/system_message_window_win.cc",
+    "device_monitors/system_message_window_win.h",
     "filters/audio_clock.cc",
     "filters/audio_clock.h",
     "filters/audio_renderer_algorithm.cc",
@@ -134,8 +145,6 @@ component("media") {
     "filters/decrypting_demuxer_stream.h",
     "filters/decrypting_video_decoder.cc",
     "filters/decrypting_video_decoder.h",
-    "filters/default_media_permission.cc",
-    "filters/default_media_permission.h",
     "filters/file_data_source.cc",
     "filters/frame_processor.cc",
     "filters/frame_processor.h",
@@ -173,10 +182,16 @@ component("media") {
     "filters/vp8_bool_decoder.h",
     "filters/vp8_parser.cc",
     "filters/vp8_parser.h",
+    "filters/vp9_bool_decoder.cc",
+    "filters/vp9_bool_decoder.h",
+    "filters/vp9_compressed_header_parser.cc",
+    "filters/vp9_compressed_header_parser.h",
     "filters/vp9_parser.cc",
     "filters/vp9_parser.h",
     "filters/vp9_raw_bits_reader.cc",
     "filters/vp9_raw_bits_reader.h",
+    "filters/vp9_uncompressed_header_parser.cc",
+    "filters/vp9_uncompressed_header_parser.h",
     "filters/webvtt_util.h",
     "filters/wsola_internals.cc",
     "filters/wsola_internals.h",
@@ -317,6 +332,71 @@ component("media") {
     deps += [ "//third_party/libvpx" ]
   }
 
+  if (system_proprietary_codecs) {
+    sources += [
+      "filters/ipc_audio_decoder.cc",
+      "filters/ipc_audio_decoder.h",
+      "filters/ipc_demuxer.cc",
+      "filters/ipc_demuxer.h",
+      "filters/ipc_demuxer_stream.cc",
+      "filters/ipc_demuxer_stream.h",
+      "filters/ipc_media_pipeline_host.h",
+      "filters/pass_through_audio_decoder.cc",
+      "filters/pass_through_audio_decoder.h",
+      "filters/pass_through_decoder_impl.cc",
+      "filters/pass_through_decoder_impl.h",
+      "filters/pass_through_decoder_texture.cc",
+      "filters/pass_through_decoder_texture.h",
+      "filters/pass_through_video_decoder.cc",
+      "filters/pass_through_video_decoder.h",
+      "filters/platform_media_pipeline_constants.cc",
+      "filters/platform_media_pipeline_constants.h",
+      "filters/platform_media_pipeline_types.cc",
+      "filters/platform_media_pipeline_types.h",
+      "filters/platform_media_pipeline_types_mac.h",
+      "filters/platform_media_pipeline_types_mac.mm",
+      "filters/protocol_sniffer.cc",
+      "filters/protocol_sniffer.h",
+    ]
+
+    deps += [ "//net" ]  # For GetMimeTypeFromFile
+
+    if (is_mac) {
+      sources += [
+        "filters/at_aac_helper.cc",
+        "filters/at_aac_helper.h",
+        "filters/at_audio_decoder.cc",
+        "filters/at_audio_decoder.h",
+        "filters/at_codec_helper.h",
+        "filters/at_mp3_helper.cc",
+        "filters/at_mp3_helper.h",
+        "filters/core_audio_demuxer.cc",
+        "filters/core_audio_demuxer.h",
+        "filters/core_audio_demuxer_stream.cc",
+        "filters/core_audio_demuxer_stream.h",
+      ]
+    }
+
+    if (is_win) {
+      sources += [
+        "filters/wmf_audio_decoder.cc",
+        "filters/wmf_audio_decoder.h",
+        "filters/wmf_decoder_impl.cc",
+        "filters/wmf_decoder_impl.h",
+        "filters/wmf_video_decoder.cc",
+        "filters/wmf_video_decoder.h",
+      ]
+
+      libs += [
+        "mfuuid.lib",
+        "mfplat.lib",
+      ]
+      deps += [ 
+        "//media/base/win:win",
+      ]
+    }
+  }
+
   if (is_android) {
     # On Android, FFmpeg is built without video decoders. We only
     # support hardware video decoding.
@@ -363,7 +443,6 @@ component("media") {
   if (is_mac) {
     public_deps += [ "//media/base/mac" ]
     libs += [
-      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "Foundation.framework",
@@ -457,6 +536,14 @@ component("media") {
     ]
   }
 
+  if (use_udev) {
+    deps += [ "//device/udev_linux" ]
+    sources += [
+      "device_monitors/device_monitor_udev.cc",
+      "device_monitors/device_monitor_udev.h",
+    ]
+  }
+
   public_deps += [
     ":media_features",
     ":shared_memory_support",
@@ -484,7 +571,7 @@ component("media") {
   ]
 }
 
-source_set("cdm_paths") {
+static_library("cdm_paths") {
   sources = [
     "cdm/cdm_paths.cc",
     "cdm/cdm_paths.h",
@@ -492,28 +579,6 @@ source_set("cdm_paths") {
   deps = [
     "//base",
   ]
-}
-
-# Minimal media component for media/cast on iOS.
-if (is_ios) {
-  component("media_for_cast_ios") {
-    configs += [
-      ":media_config",
-      ":media_implementation",
-    ]
-    all_dependent_configs = [ ":media_dependent_config" ]
-    include_dirs = [ "." ]
-    libs = [ "CoreVideo.framework" ]
-
-    deps = [
-      ":shared_memory_support",
-      "//base",
-      "//gpu/command_buffer/common",
-      "//media/base:base_for_cast_ios",
-      "//media/base/mac",
-      "//ui/gfx/geometry",
-    ]
-  }
 }
 
 test("media_unittests") {
@@ -527,6 +592,7 @@ test("media_unittests") {
     "cdm/simple_cdm_allocator_unittest.cc",
     "cdm/simple_cdm_buffer.cc",
     "cdm/simple_cdm_buffer.h",
+    "device_monitors/system_message_window_win_unittest.cc",
     "filters/audio_clock_unittest.cc",
     "filters/audio_decoder_selector_unittest.cc",
     "filters/audio_renderer_algorithm_unittest.cc",
@@ -756,7 +822,7 @@ test("audio_unittests") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "renderers/mock_gpu_memory_buffer_video_frame_pool.cc",
@@ -765,6 +831,8 @@ source_set("test_support") {
     "renderers/mock_gpu_video_accelerator_factories.h",
     "video/mock_video_decode_accelerator.cc",
     "video/mock_video_decode_accelerator.h",
+    "video/mock_video_encode_accelerator.cc",
+    "video/mock_video_encode_accelerator.h",
   ]
   public_deps = [
     ":media",
@@ -772,6 +840,7 @@ source_set("test_support") {
   ]
   deps = [
     "//base",
+    "//gpu/command_buffer/common",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

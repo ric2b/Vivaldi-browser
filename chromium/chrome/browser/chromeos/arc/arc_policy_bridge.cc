@@ -19,9 +19,9 @@
 #include "components/onc/onc_constants.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
+#include "components/policy/policy_constants.h"
 #include "components/user_manager/user.h"
 #include "mojo/public/cpp/bindings/string.h"
-#include "policy/policy_constants.h"
 
 namespace arc {
 
@@ -128,7 +128,7 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
   }
 
   std::unique_ptr<base::ListValue> ca_certs(
-      base::WrapUnique(new base::ListValue()));
+      base::MakeUnique<base::ListValue>());
   for (const auto& entry : certificates) {
     const base::DictionaryValue* certificate = nullptr;
     if (!entry->GetAsDictionary(&certificate)) {
@@ -143,22 +143,23 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
     if (cert_type != ::onc::certificate::kAuthority)
       continue;
 
-    const base::ListValue* trust_list = NULL;
-    bool web_trust_flag = false;
-    if (certificate->GetListWithoutPathExpansion(::onc::certificate::kTrustBits,
-                                                 &trust_list)) {
-      for (base::ListValue::const_iterator it = trust_list->begin();
-           it != trust_list->end(); ++it) {
-        std::string trust_type;
-        if (!(*it)->GetAsString(&trust_type))
-          NOTREACHED();
+    const base::ListValue* trust_list = nullptr;
+    if (!certificate->GetListWithoutPathExpansion(
+            ::onc::certificate::kTrustBits, &trust_list)) {
+      continue;
+    }
 
-        if (trust_type == ::onc::certificate::kWeb) {
-          // "Web" implies that the certificate is to be trusted for SSL
-          // identification.
-          web_trust_flag = true;
-          break;
-        }
+    bool web_trust_flag = false;
+    for (const auto& list_val : *trust_list) {
+      std::string trust_type;
+      if (!list_val->GetAsString(&trust_type))
+        NOTREACHED();
+
+      if (trust_type == ::onc::certificate::kWeb) {
+        // "Web" implies that the certificate is to be trusted for SSL
+        // identification.
+        web_trust_flag = true;
+        break;
       }
     }
     if (!web_trust_flag)
@@ -308,7 +309,7 @@ void ArcPolicyBridge::InitializePolicyService() {
       user_manager::UserManager::Get()->GetPrimaryUser();
   Profile* const profile =
       chromeos::ProfileHelper::Get()->GetProfileByUser(primary_user);
-  auto profile_policy_connector =
+  auto* profile_policy_connector =
       policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile);
   policy_service_ = profile_policy_connector->policy_service();
   is_managed_ = profile_policy_connector->IsManaged();

@@ -38,8 +38,6 @@
 #include "../platform/WebPageVisibilityState.h"
 #include "../platform/WebString.h"
 #include "../platform/WebVector.h"
-#include "WebHistoryCommitType.h"
-#include "WebHistoryItem.h"
 #include "WebWidget.h"
 
 namespace blink {
@@ -53,7 +51,6 @@ class WebFrame;
 class WebHitTestResult;
 class WebLocalFrame;
 class WebPageImportanceSignals;
-class WebPageOverlay;
 class WebPrerendererClient;
 class WebRemoteFrame;
 class WebSettings;
@@ -85,8 +82,8 @@ public:
     using WebWidget::size;
     using WebWidget::resize;
     using WebWidget::resizeVisualViewport;
-    using WebWidget::didEnterFullScreen;
-    using WebWidget::didExitFullScreen;
+    using WebWidget::didEnterFullscreen;
+    using WebWidget::didExitFullscreen;
     using WebWidget::beginFrame;
     using WebWidget::updateAllLifecyclePhases;
     using WebWidget::paint;
@@ -194,7 +191,7 @@ public:
 
     // Focus ---------------------------------------------------------------
 
-    virtual WebFrame* focusedFrame() = 0;
+    virtual WebLocalFrame* focusedFrame() = 0;
     virtual void setFocusedFrame(WebFrame*) = 0;
 
     // Sets the provided frame as focused and fires blur/focus events on any
@@ -202,6 +199,10 @@ public:
     // is different from setFocusedFrame, which does not fire events on focused
     // elements.
     virtual void focusDocumentView(WebFrame*) = 0;
+
+    // Sets no frame as focused and fires blur events on any currently focused
+    // element.
+    virtual void unfocusDocumentView() = 0;
 
     // Focus the first (last if reverse is true) focusable node.
     virtual void setInitialFocus(bool reverse) = 0;
@@ -337,7 +338,6 @@ public:
 
     // Set and reset the device color profile.
     virtual void setDeviceColorProfile(const WebVector<char>&) = 0;
-    virtual void resetDeviceColorProfileForTesting() = 0;
 
     // Resize the view at the same time as changing the state of the top
     // controls. If |topControlsShrinkLayout| is true, the embedder shrunk the
@@ -383,7 +383,7 @@ public:
 
     // Notifies the WebView that a drag has terminated.
     virtual void dragSourceEndedAt(
-        const WebPoint& clientPoint, const WebPoint& screenPoint,
+        const WebPoint& pointInViewport, const WebPoint& screenPoint,
         WebDragOperation operation) = 0;
 
     // Notfies the WebView that the system drag and drop operation has ended.
@@ -393,17 +393,17 @@ public:
     // something on the WebView.
     virtual WebDragOperation dragTargetDragEnter(
         const WebDragData&,
-        const WebPoint& clientPoint, const WebPoint& screenPoint,
+        const WebPoint& pointInViewport, const WebPoint& screenPoint,
         WebDragOperationsMask operationsAllowed,
         int modifiers) = 0;
     virtual WebDragOperation dragTargetDragOver(
-        const WebPoint& clientPoint, const WebPoint& screenPoint,
+        const WebPoint& pointInViewport, const WebPoint& screenPoint,
         WebDragOperationsMask operationsAllowed,
         int modifiers) = 0;
     virtual void dragTargetDragLeave() = 0;
     virtual void dragTargetDrop(
         const WebDragData&,
-        const WebPoint& clientPoint, const WebPoint& screenPoint,
+        const WebPoint& pointInViewport, const WebPoint& screenPoint,
         int modifiers) = 0;
 
     // Retrieves a list of spelling markers.

@@ -55,7 +55,9 @@ CrxUpdateItem::~CrxUpdateItem() {
 }
 
 CrxComponent::CrxComponent()
-    : allows_background_download(true), requires_network_encryption(true) {}
+    : allows_background_download(true),
+      requires_network_encryption(true),
+      supports_group_policy_enable_component_updates(false) {}
 
 CrxComponent::CrxComponent(const CrxComponent& other) = default;
 
@@ -196,7 +198,7 @@ bool UpdateClientImpl::GetCrxUpdateState(const std::string& id,
 bool UpdateClientImpl::IsUpdating(const std::string& id) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  for (const auto& task : tasks_) {
+  for (const auto* task : tasks_) {
     const auto ids(task->GetIds());
     if (std::find(ids.begin(), ids.end(), id) != ids.end()) {
       return true;
@@ -225,14 +227,14 @@ void UpdateClientImpl::Stop() {
   // they have not picked up by the update engine, and not shared with any
   // task runner yet.
   while (!task_queue_.empty()) {
-    const auto task(task_queue_.front());
+    auto* task(task_queue_.front());
     task_queue_.pop();
     task->Cancel();
   }
 }
 
 void UpdateClientImpl::SendUninstallPing(const std::string& id,
-                                         const Version& version,
+                                         const base::Version& version,
                                          int reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
 

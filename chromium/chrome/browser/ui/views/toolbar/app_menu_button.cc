@@ -44,7 +44,7 @@ AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
       margin_trailing_(0),
       weak_factory_(this) {
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    SetHasInkDrop(true);
+    SetInkDropMode(InkDropMode::ON);
     SetFocusPainter(nullptr);
   } else {
     icon_painter_.reset(new AppMenuIconPainter(this));
@@ -140,19 +140,23 @@ void AppMenuButton::ScheduleAppMenuIconPaint() {
 void AppMenuButton::UpdateIcon() {
   DCHECK(ui::MaterialDesignController::IsModeMaterial());
   SkColor color = gfx::kPlaceholderColor;
+  const ui::NativeTheme* native_theme = GetNativeTheme();
   switch (severity_) {
     case AppMenuIconPainter::SEVERITY_NONE:
       color = GetThemeProvider()->GetColor(
           ThemeProperties::COLOR_TOOLBAR_BUTTON_ICON);
       break;
     case AppMenuIconPainter::SEVERITY_LOW:
-      color = gfx::kGoogleGreen700;
+      color = native_theme->GetSystemColor(
+          ui::NativeTheme::kColorId_AlertSeverityLow);
       break;
     case AppMenuIconPainter::SEVERITY_MEDIUM:
-      color = gfx::kGoogleYellow700;
+      color = native_theme->GetSystemColor(
+          ui::NativeTheme::kColorId_AlertSeverityMedium);
       break;
     case AppMenuIconPainter::SEVERITY_HIGH:
-      color = gfx::kGoogleRed700;
+      color = native_theme->GetSystemColor(
+          ui::NativeTheme::kColorId_AlertSeverityHigh);
       break;
   }
 
@@ -166,10 +170,8 @@ void AppMenuButton::UpdateIcon() {
       icon_id = gfx::VectorIconId::BROWSER_TOOLS_UPDATE;
       break;
     case AppMenuIconController::IconType::GLOBAL_ERROR:
-      icon_id = gfx::VectorIconId::BROWSER_TOOLS_ERROR;
-      break;
     case AppMenuIconController::IconType::INCOMPATIBILITY_WARNING:
-      icon_id = gfx::VectorIconId::BROWSER_TOOLS_WARNING;
+      icon_id = gfx::VectorIconId::BROWSER_TOOLS_ERROR;
       break;
   }
 

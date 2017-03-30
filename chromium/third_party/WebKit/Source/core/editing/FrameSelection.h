@@ -108,7 +108,6 @@ public:
     bool isContentRichlyEditable() const { return selection().isContentRichlyEditable(); }
 
     void moveTo(const VisiblePosition&, EUserTriggered = NotUserTriggered, CursorAlignOnScroll = CursorAlignOnScroll::IfNeeded);
-    void moveTo(const VisiblePosition&, const VisiblePosition&, EUserTriggered = NotUserTriggered);
     void moveTo(const Position&, TextAffinity);
 
     template <typename Strategy>
@@ -174,6 +173,7 @@ public:
 
     void documentAttached(Document*);
     void documentDetached(const Document&);
+    void nodeChildrenWillBeRemoved(ContainerNode&);
     void nodeWillBeRemoved(Node&);
     void dataWillChange(const CharacterData& node);
     void didUpdateCharacterData(CharacterData*, unsigned offset, unsigned oldLength, unsigned newLength);
@@ -187,7 +187,7 @@ public:
     bool isCaretBoundsDirty() const;
     void setCaretRectNeedsUpdate();
     void scheduleVisualUpdate() const;
-    void invalidateCaretRect();
+    void invalidateCaretRect(bool forceInvalidation = false);
     void paintCaret(GraphicsContext&, const LayoutPoint&);
 
     // Used to suspend caret blinking while the mouse is down.
@@ -247,6 +247,8 @@ public:
 
 private:
     friend class FrameSelectionTest;
+    friend class PaintControllerPaintTestForSlimmingPaintV1AndV2;
+    FRIEND_TEST_ALL_PREFIXES(PaintControllerPaintTestForSlimmingPaintV1AndV2, FullDocumentPaintingWithCaret);
 
     explicit FrameSelection(LocalFrame*);
 
@@ -258,9 +260,6 @@ private:
     VisiblePositionTemplate<Strategy> originalBase() const;
     void setOriginalBase(const VisiblePosition&);
     void setOriginalBase(const VisiblePositionInFlatTree&);
-
-    template <typename Strategy>
-    void setNonDirectionalSelectionIfNeededAlgorithm(const VisibleSelectionTemplate<Strategy>&, TextGranularity, EndPointsAdjustmentMode);
 
     template <typename Strategy>
     void setSelectionAlgorithm(const VisibleSelectionTemplate<Strategy>&, SetSelectionOptions, CursorAlignOnScroll, TextGranularity);
@@ -292,7 +291,6 @@ private:
     const Member<SelectionEditor> m_selectionEditor;
 
     // Used to store base before the adjustment at bidi boundary
-    VisiblePosition m_originalBase;
     VisiblePositionInFlatTree m_originalBaseInFlatTree;
     TextGranularity m_granularity;
     LayoutUnit m_xPosForVerticalArrowNavigation;

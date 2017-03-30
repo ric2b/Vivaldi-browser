@@ -42,9 +42,46 @@ struct ArrayTraits<std::vector<T>> {
     return input[index];
   }
 
-  static bool Resize(std::vector<T>& input, size_t size) {
-    input.resize(size);
+  static inline bool Resize(std::vector<T>& input, size_t size) {
+    // Instead of calling std::vector<T>::resize() directly, this is a hack to
+    // make compilers happy. Some compilers (e.g., Mac, Android, Linux MSan)
+    // currently don't allow resizing types like
+    // std::vector<std::vector<MoveOnlyType>>.
+    // Because the deserialization code doesn't care about the original contents
+    // of |input|, we discard them directly.
+    //
+    // The "inline" keyword of this method matters. Without it, we have observed
+    // significant perf regression with some tests on Mac. crbug.com/631415
+    if (input.size() != size) {
+      std::vector<T> temp(size);
+      input.swap(temp);
+    }
+
     return true;
+  }
+};
+
+// This ArrayTraits specialization is used only for serialization.
+template <typename T>
+struct ArrayTraits<std::set<T>> {
+  using Element = T;
+  using ConstIterator = typename std::set<T>::const_iterator;
+
+  static bool IsNull(const std::set<T>& input) {
+    // std::set<> is always converted to non-null mojom array.
+    return false;
+  }
+
+  static size_t GetSize(const std::set<T>& input) { return input.size(); }
+
+  static ConstIterator GetBegin(const std::set<T>& input) {
+    return input.begin();
+  }
+  static void AdvanceIterator(ConstIterator& iterator) {
+    ++iterator;
+  }
+  static const T& GetValue(ConstIterator& iterator) {
+    return *iterator;
   }
 };
 

@@ -42,6 +42,7 @@
 #include "core/fetch/ResourceLoaderOptions.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/WorkerInspectorController.h"
+#include "core/inspector/WorkerThreadDebugger.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerClients.h"
@@ -149,15 +150,15 @@ void ServiceWorkerGlobalScope::setRegistration(std::unique_ptr<WebServiceWorkerR
     m_registration = ServiceWorkerRegistration::getOrCreate(getExecutionContext(), wrapUnique(handle.release()));
 }
 
-bool ServiceWorkerGlobalScope::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptions& options)
+bool ServiceWorkerGlobalScope::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptionsResolved& options)
 {
     if (m_didEvaluateScript) {
         if (eventType == EventTypeNames::install) {
             ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Event handler of 'install' event must be added on the initial evaluation of worker script.");
-            addMessageToWorkerConsole(consoleMessage);
+            addConsoleMessage(consoleMessage);
         } else if (eventType == EventTypeNames::activate) {
             ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "Event handler of 'activate' event must be added on the initial evaluation of worker script.");
-            addMessageToWorkerConsole(consoleMessage);
+            addConsoleMessage(consoleMessage);
         }
     }
     return WorkerGlobalScope::addEventListenerInternal(eventType, listener, options);
@@ -185,8 +186,12 @@ void ServiceWorkerGlobalScope::dispatchExtendableEvent(Event* event, WaitUntilOb
 
     observer->willDispatchEvent();
     dispatchEvent(event);
-    if (thread()->terminated())
+
+    // Check if the worker thread is forcibly terminated during the event
+    // because of timeout etc.
+    if (thread()->isForciblyTerminated())
         m_hadErrorInTopLevelEventHandler = true;
+
     observer->didDispatchEvent(m_hadErrorInTopLevelEventHandler);
 }
 
@@ -212,11 +217,11 @@ CachedMetadataHandler* ServiceWorkerGlobalScope::createWorkerScriptCachedMetadat
     return ServiceWorkerScriptCachedMetadataHandler::create(this, scriptURL, metaData);
 }
 
-void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void ServiceWorkerGlobalScope::exceptionThrown(ErrorEvent* event)
 {
-    WorkerGlobalScope::logExceptionToConsole(errorMessage, location->clone());
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
-    addMessageToWorkerConsole(consoleMessage);
+    WorkerGlobalScope::exceptionThrown(event);
+    if (WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(thread()->isolate()))
+        debugger->exceptionThrown(event);
 }
 
 void ServiceWorkerGlobalScope::scriptLoaded(size_t scriptSize, size_t cachedMetadataSize)

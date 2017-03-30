@@ -3,6 +3,7 @@
 
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "chrome/browser/importer/importer_list.h"
 
@@ -19,7 +20,7 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_resources.h"
@@ -29,8 +30,8 @@
 
 class OperaBookmarkReader : public OperaAdrFileReader {
  public:
-  OperaBookmarkReader(){};
-  ~OperaBookmarkReader() override{};
+  OperaBookmarkReader() {}
+  ~OperaBookmarkReader() override {};
 
   void AddBookmark(std::vector<base::string16> &current_folder,
                    const base::DictionaryValue &entries, bool is_folder,
@@ -69,81 +70,68 @@ void OperaBookmarkReader::AddBookmark(
     const base::DictionaryValue &entries, bool is_folder,
     base::string16 *item_name) {
   std::string temp;
-        base::string16 name;
-	base::string16 url;
-	base::string16 nickname;
-	base::string16 description;
-	base::string16 on_personal_bar_s;
-	base::string16 in_panel_s;
-	bool on_personal_bar = false;
-	bool in_panel = false;
-	int personal_bar_pos = 0;
-	int panel_pos = 0;
+  base::string16 name;
+  base::string16 url;
+  base::string16 nickname;
+  base::string16 description;
+  base::string16 in_panel_s;
 
-	double created_time=0;
-	double visited_time=0;
+  double created_time = 0;
+  double visited_time = 0;
 
-	if (!is_folder && !entries.GetString("url", &url))
-		url = base::string16();
+  if (!is_folder && !entries.GetString("url", &url))
+    url = base::string16();
 
-	if (!entries.GetString("name", &name))
-		name = url;
+  if (!entries.GetString("name", &name))
+    name = url;
 
-	if (item_name)
-		*item_name = name;
+  if (item_name)
+    *item_name = name;
 
-	if (!entries.GetString("short name", &nickname))
-		nickname.clear();
-	if (!entries.GetString("description", &description))
-		description.clear();
+  if (!entries.GetString("short name", &nickname)) {
+    nickname.clear();
+  }
+  if (!entries.GetString("description", &description)) {
+    description.clear();
+  }
+  if (!entries.GetString("created", &temp) ||
+      !base::StringToDouble(temp, &created_time))
+    created_time = 0;
 
-	if (!entries.GetString("on personalbar", &on_personal_bar_s))
-		on_personal_bar = (base::LowerCaseEqualsASCII(on_personal_bar_s, "yes"));
-	//entries.GetInteger("personalbar_pos",&personal_bar_pos);
+  if (!entries.GetString("visited", &temp) ||
+      !base::StringToDouble(temp, &visited_time))
+    visited_time = 0;
 
-	/*
-	if (!is_folder)
-	{
-		if (!entries.GetString("in panel", &in_panel_s))
-			in_panel = (LowerCaseEqualsASCII(in_panel_s, "yes"));
-		entries.GetInteger("panel_pos",&panel_pos);
-	}
-	*/
+  ImportedBookmarkEntry entry;
+  entry.in_toolbar = false;  // on_personal_bar;
+  entry.is_folder = is_folder;
+  entry.title = name;
+  entry.nickname = nickname;
+  entry.description = description;
+  entry.path = current_folder;
+  entry.url = GURL(url);
+  entry.creation_time = base::Time::FromTimeT(created_time);
+  entry.visited_time = base::Time::FromTimeT(visited_time);
 
-	if (!entries.GetString("created", &temp) || !base::StringToDouble(temp, &created_time))
-		created_time = 0;
-
-	if (!entries.GetString("visited", &temp) || !base::StringToDouble(temp, &visited_time))
-		visited_time = 0;
-
-	ImportedBookmarkEntry entry;
-	entry.in_toolbar = false; //on_personal_bar;
-	entry.is_folder = is_folder;
-	entry.title = name;
-	entry.nickname = nickname;
-	entry.description = description;
-	entry.path = current_folder;
-	entry.url = GURL(url);
-	entry.creation_time = base::Time::FromTimeT(created_time);
-	entry.visited_time = base::Time::FromTimeT(visited_time);
-
-	bookmarks.push_back(entry);
+  bookmarks.push_back(entry);
 }
 
-void OperaImporter::ImportBookMarks() {
+bool OperaImporter::ImportBookMarks(std::string& error) {
   if (bookmarkfilename_.empty()) {
-    bridge_->NotifyEnded();
-    return;
+    error = "No bookmark filename provided.";
+    return false;
   }
-
   base::FilePath file(bookmarkfilename_);
   OperaBookmarkReader reader;
 
-  reader.LoadFile(file);
-
+  if (!reader.LoadFile(file)) {
+    error = "Bookmark file does not exist.";
+    return false;
+  }
   if (!reader.Bookmarks().empty() && !cancelled()) {
     const base::string16 &first_folder_name =
         bridge_->GetLocalizedString(IDS_BOOKMARK_GROUP_FROM_OPERA);
     bridge_->AddBookmarks(reader.Bookmarks(), first_folder_name);
   }
+  return true;
 }

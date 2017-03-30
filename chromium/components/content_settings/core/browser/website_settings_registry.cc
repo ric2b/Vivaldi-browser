@@ -77,13 +77,16 @@ const WebsiteSettingsInfo* WebsiteSettingsRegistry::Register(
 #elif defined(OS_ANDROID)
   if (!(platform & PLATFORM_ANDROID))
     return nullptr;
+  // Don't sync settings to mobile platforms. The UI is different to desktop and
+  // doesn't allow the settings to be managed in the same way. See
+  // crbug.com/642184.
+  sync_status = WebsiteSettingsInfo::UNSYNCABLE;
 #elif defined(OS_IOS)
   if (!(platform & PLATFORM_IOS))
     return nullptr;
-  // Only default settings for Cookies and Popups are used in iOS. Exceptions
-  // and all the other content setting types are not used in iOS currently. So
-  // make content settings unsyncable on iOS for now.
-  // TODO(lshang): address this once we have proper content settings on iOS.
+  // Don't sync settings to mobile platforms. The UI is different to desktop and
+  // doesn't allow the settings to be managed in the same way. See
+  // crbug.com/642184.
   sync_status = WebsiteSettingsInfo::UNSYNCABLE;
 #else
 #error "Unsupported platform"
@@ -116,7 +119,7 @@ void WebsiteSettingsRegistry::Init() {
   Register(CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
            "auto-select-certificate", nullptr, WebsiteSettingsInfo::UNSYNCABLE,
            WebsiteSettingsInfo::NOT_LOSSY,
-           WebsiteSettingsInfo::REQUESTING_DOMAIN_ONLY_SCOPE, ALL_PLATFORMS,
+           WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE, ALL_PLATFORMS,
            WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
   Register(CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
            "ssl-cert-decisions", nullptr, WebsiteSettingsInfo::UNSYNCABLE,
@@ -126,7 +129,7 @@ void WebsiteSettingsRegistry::Init() {
            WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
   Register(CONTENT_SETTINGS_TYPE_APP_BANNER, "app-banner", nullptr,
            WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::LOSSY,
-           WebsiteSettingsInfo::REQUESTING_DOMAIN_ONLY_SCOPE,
+           WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
            DESKTOP | PLATFORM_ANDROID,
            WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
   Register(CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, "site-engagement", nullptr,
@@ -139,6 +142,12 @@ void WebsiteSettingsRegistry::Init() {
            WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE,
            DESKTOP | PLATFORM_ANDROID,
            WebsiteSettingsInfo::DONT_INHERIT_IN_INCOGNITO);
+  Register(CONTENT_SETTINGS_TYPE_PROMPT_NO_DECISION_COUNT,
+           "prompt-no-decision-count", nullptr, WebsiteSettingsInfo::UNSYNCABLE,
+           WebsiteSettingsInfo::NOT_LOSSY,
+           WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
+           DESKTOP | PLATFORM_ANDROID,
+           WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
 }
 
 }  // namespace content_settings

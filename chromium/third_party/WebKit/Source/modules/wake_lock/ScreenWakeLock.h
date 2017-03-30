@@ -5,8 +5,8 @@
 #ifndef ScreenWakeLock_h
 #define ScreenWakeLock_h
 
-#include "core/frame/LocalFrameLifecycleObserver.h"
-#include "core/page/PageLifecycleObserver.h"
+#include "core/dom/ContextLifecycleObserver.h"
+#include "core/page/PageVisibilityObserver.h"
 #include "modules/ModulesExport.h"
 #include "public/platform/modules/wake_lock/wake_lock_service.mojom-blink.h"
 #include "wtf/Noncopyable.h"
@@ -15,9 +15,8 @@ namespace blink {
 
 class LocalFrame;
 class Screen;
-class ServiceRegistry;
 
-class MODULES_EXPORT ScreenWakeLock final : public GarbageCollectedFinalized<ScreenWakeLock>, public Supplement<LocalFrame>, public PageLifecycleObserver, public LocalFrameLifecycleObserver {
+class MODULES_EXPORT ScreenWakeLock final : public GarbageCollectedFinalized<ScreenWakeLock>, public Supplement<LocalFrame>, public ContextLifecycleObserver, public PageVisibilityObserver {
     USING_GARBAGE_COLLECTED_MIXIN(ScreenWakeLock);
     WTF_MAKE_NONCOPYABLE(ScreenWakeLock);
 public:
@@ -26,21 +25,17 @@ public:
 
     static const char* supplementName();
     static ScreenWakeLock* from(LocalFrame*);
-    static void provideTo(LocalFrame&, ServiceRegistry*);
 
     ~ScreenWakeLock() = default;
 
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    ScreenWakeLock(LocalFrame&, ServiceRegistry*);
+    explicit ScreenWakeLock(LocalFrame&);
 
-    // Inherited from PageLifecycleObserver.
+    // Inherited from PageVisibilityObserver.
     void pageVisibilityChanged() override;
-    void didCommitLoad(LocalFrame*) override;
-
-    // Inherited from LocalFrameLifecycleObserver.
-    void willDetachFrameHost() override;
+    void contextDestroyed() override;
 
     bool keepAwake() const;
     void setKeepAwake(bool);

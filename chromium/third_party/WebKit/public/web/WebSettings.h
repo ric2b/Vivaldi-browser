@@ -107,7 +107,6 @@ public:
     enum class PassiveEventListenerDefault {
         False, // Default of false.
         True, // Default of true.
-        DocumentTrue, // Default of true for document level elements, false otherwise.
         ForceAllTrue // Force all values to be true even when specified.
     };
 
@@ -119,7 +118,6 @@ public:
     virtual bool mainFrameResizesAreOrientationChanges() const = 0;
     virtual bool shrinksViewportContentToFit() const = 0;
     virtual bool viewportEnabled() const = 0;
-    virtual void setAccelerated2dCanvasEnabled(bool) = 0;
     virtual void setAccelerated2dCanvasMSAASampleCount(int) = 0;
     virtual void setAcceleratedCompositingEnabled(bool) = 0;
     virtual void setPreferCompositingToLCDTextEnabled(bool) = 0;
@@ -147,6 +145,7 @@ public:
     virtual void setAntialiasedClips2dCanvasEnabled(bool) = 0;
     virtual void setAutoplayExperimentMode(const WebString&) = 0;
     virtual void setAutoZoomFocusedNodeToLegibleScale(bool) = 0;
+    virtual void setBrowserSideNavigationEnabled(bool) = 0;
     virtual void setCaretBrowsingEnabled(bool) = 0;
     virtual void setClobberUserAgentInitialScaleQuirk(bool) = 0;
     virtual void setCookieEnabled(bool) = 0;
@@ -261,7 +260,6 @@ public:
     virtual void setTextTrackTextSize(const WebString&) = 0;
     virtual void setThreadedScrollingEnabled(bool) = 0;
     virtual void setTouchDragDropEnabled(bool) = 0;
-    virtual void setUnifiedTextCheckerEnabled(bool) = 0;
     virtual void setUseLegacyBackgroundSizeShorthandBehavior(bool) = 0;
     virtual void setViewportStyle(WebViewportStyle) = 0;
     virtual void setUseSolidColorScrollbars(bool) = 0;

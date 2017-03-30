@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/display/display_manager.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -73,7 +74,7 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ssl/ssl_blocking_page.h"
-#include "chrome/browser/task_management/task_manager_interface.h"
+#include "chrome/browser/task_manager/task_manager_interface.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
@@ -87,7 +88,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
@@ -95,6 +95,7 @@
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/component_updater/component_updater_service.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -110,6 +111,7 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_service_impl.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
 #include "components/search_engines/template_url.h"
@@ -118,6 +120,8 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
+#include "components/update_client/url_request_post_interceptor.h"
+#include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_child_process_host_iterator.h"
@@ -166,6 +170,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
@@ -177,7 +182,6 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
-#include "policy/policy_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -188,9 +192,10 @@
 #include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
@@ -198,6 +203,8 @@
 #include "chrome/browser/chromeos/login/test/js_checker.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
+#include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chromeos/audio/cras_audio_handler.h"
@@ -276,6 +283,11 @@ const base::FilePath::CharType kAppUnpackedExt[] =
 const base::FilePath::CharType kUnpackedFullscreenAppName[] =
     FILE_PATH_LITERAL("fullscreen_app");
 #endif  // !defined(OS_MACOSX)
+
+#if defined(ENABLE_WEBRTC)
+// Arbitrary port range for testing the WebRTC UDP port policy.
+const char kTestWebRtcUdpPortRange[] = "10000-10100";
+#endif
 
 // Filters requests to the hosts in |urls| and redirects them to the test data
 // dir through URLRequestMockHTTPJobs.
@@ -369,10 +381,15 @@ void CheckCanOpenURL(Browser* browser, const char* spec) {
   content::WebContents* contents =
       browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(url, contents->GetURL());
-  base::string16 spec16 = base::UTF8ToUTF16(url.spec());
-  base::string16 title =
-      l10n_util::GetStringFUTF16(IDS_ERRORPAGES_TITLE_BLOCKED, spec16);
-  EXPECT_NE(title, contents->GetTitle());
+
+  base::string16 blocked_page_title;
+  if (url.has_host()) {
+    blocked_page_title = base::UTF8ToUTF16(url.host());
+  } else {
+    // Local file paths show the full URL.
+    blocked_page_title = base::UTF8ToUTF16(url.spec());
+  }
+  EXPECT_NE(blocked_page_title, contents->GetTitle());
 }
 
 // Verifies that access to the given url |spec| is blocked.
@@ -382,10 +399,15 @@ void CheckURLIsBlocked(Browser* browser, const char* spec) {
   content::WebContents* contents =
       browser->tab_strip_model()->GetActiveWebContents();
   EXPECT_EQ(url, contents->GetURL());
-  base::string16 spec16 = base::UTF8ToUTF16(url.spec());
-  base::string16 title =
-      l10n_util::GetStringFUTF16(IDS_ERRORPAGES_TITLE_BLOCKED, spec16);
-  EXPECT_EQ(title, contents->GetTitle());
+
+  base::string16 blocked_page_title;
+  if (url.has_host()) {
+    blocked_page_title = base::UTF8ToUTF16(url.host());
+  } else {
+    // Local file paths show the full URL.
+    blocked_page_title = base::UTF8ToUTF16(url.spec());
+  }
+  EXPECT_EQ(blocked_page_title, contents->GetTitle());
 
   // Verify that the expected error page is being displayed.
   bool result = false;
@@ -733,17 +755,19 @@ class PolicyTest : public InProcessBrowserTest {
     // ScreenshotGrabber doesn't own this observer, so the observer's lifetime
     // is tied to the test instead.
     chrome_screenshot_grabber->screenshot_grabber()->AddObserver(&observer_);
-    ash::Shell::GetInstance()->accelerator_controller()->SetScreenshotDelegate(
-        std::move(chrome_screenshot_grabber));
+    ash::Shell::GetInstance()
+        ->accelerator_controller_delegate()
+        ->SetScreenshotDelegate(std::move(chrome_screenshot_grabber));
 
     SetScreenshotPolicy(enabled);
-    ash::Shell::GetInstance()->accelerator_controller()->PerformActionIfEnabled(
+    ash::WmShell::Get()->accelerator_controller()->PerformActionIfEnabled(
         ash::TAKE_SCREENSHOT);
 
     content::RunMessageLoop();
-    static_cast<ChromeScreenshotGrabber*>(ash::Shell::GetInstance()
-                                              ->accelerator_controller()
-                                              ->screenshot_delegate())
+    static_cast<ChromeScreenshotGrabber*>(
+        ash::Shell::GetInstance()
+            ->accelerator_controller_delegate()
+            ->screenshot_delegate())
         ->screenshot_grabber()
         ->RemoveObserver(&observer_);
   }
@@ -839,7 +863,7 @@ class PolicyTest : public InProcessBrowserTest {
         browser()->tab_strip_model()->GetActiveWebContents();
     blink::WebMouseEvent click_event;
     click_event.type = blink::WebInputEvent::MouseDown;
-    click_event.button = blink::WebMouseEvent::ButtonLeft;
+    click_event.button = blink::WebMouseEvent::Button::Left;
     click_event.clickCount = 1;
     click_event.x = x;
     click_event.y = y;
@@ -1017,6 +1041,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   // policy. Also checks that default search can be completely disabled.
   const base::string16 kKeyword(base::ASCIIToUTF16("testsearch"));
   const std::string kSearchURL("http://search.example/search?q={searchTerms}");
+  const std::string kInstantURL("http://does/not/exist");
   const std::string kAlternateURL0(
       "http://search.example/search#q={searchTerms}");
   const std::string kAlternateURL1("http://search.example/#q={searchTerms}");
@@ -1033,6 +1058,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_NE(kKeyword, default_search->keyword());
   EXPECT_NE(kSearchURL, default_search->url());
+  EXPECT_NE(kInstantURL, default_search->instant_url());
   EXPECT_FALSE(
     default_search->alternate_urls().size() == 2 &&
     default_search->alternate_urls()[0] == kAlternateURL0 &&
@@ -1054,6 +1080,9 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   policies.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::WrapUnique(new base::StringValue(kSearchURL)), nullptr);
+  policies.Set(key::kDefaultSearchProviderInstantURL, POLICY_LEVEL_MANDATORY,
+               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+               base::WrapUnique(new base::StringValue(kInstantURL)), nullptr);
   std::unique_ptr<base::ListValue> alternate_urls(new base::ListValue);
   alternate_urls->AppendString(kAlternateURL0);
   alternate_urls->AppendString(kAlternateURL1);
@@ -1080,6 +1109,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ASSERT_TRUE(default_search);
   EXPECT_EQ(kKeyword, default_search->keyword());
   EXPECT_EQ(kSearchURL, default_search->url());
+  EXPECT_EQ(kInstantURL, default_search->instant_url());
   EXPECT_EQ(2U, default_search->alternate_urls().size());
   EXPECT_EQ(kAlternateURL0, default_search->alternate_urls()[0]);
   EXPECT_EQ(kAlternateURL1, default_search->alternate_urls()[1]);
@@ -1188,124 +1218,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ForceSafeSearch) {
   }
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, ReplaceSearchTerms) {
-  MakeRequestFail make_request_fail("search.example");
-
-  search::EnableQueryExtractionForTesting();
-
-  // Verifies that a default search is made using the provider configured via
-  // policy. Also checks that default search can be completely disabled.
-  const base::string16 kKeyword(base::ASCIIToUTF16("testsearch"));
-  const std::string kSearchURL("https://www.google.com/search?q={searchTerms}");
-  const std::string kInstantURL("http://does/not/exist");
-  const std::string kAlternateURL0(
-      "https://www.google.com/search#q={searchTerms}");
-  const std::string kAlternateURL1("https://www.google.com/#q={searchTerms}");
-  const std::string kSearchTermsReplacementKey(
-      "{google:instantExtendedEnabledKey}");
-
-  TemplateURLService* service = TemplateURLServiceFactory::GetForProfile(
-      browser()->profile());
-  search_test_utils::WaitForTemplateURLServiceToLoad(service);
-  TemplateURL* default_search = service->GetDefaultSearchProvider();
-  ASSERT_TRUE(default_search);
-  EXPECT_NE(kKeyword, default_search->keyword());
-  EXPECT_NE(kSearchURL, default_search->url());
-  EXPECT_NE(kInstantURL, default_search->instant_url());
-  EXPECT_FALSE(
-    default_search->alternate_urls().size() == 2 &&
-    default_search->alternate_urls()[0] == kAlternateURL0 &&
-    default_search->alternate_urls()[1] == kAlternateURL1);
-
-  // Override the default search provider using policies.
-  PolicyMap policies;
-  policies.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(true)), nullptr);
-  policies.Set(key::kDefaultSearchProviderKeyword, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::StringValue(kKeyword)), nullptr);
-  policies.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::StringValue(kSearchURL)), nullptr);
-  policies.Set(key::kDefaultSearchProviderInstantURL, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::StringValue(kInstantURL)), nullptr);
-  std::unique_ptr<base::ListValue> alternate_urls(new base::ListValue);
-  alternate_urls->AppendString(kAlternateURL0);
-  alternate_urls->AppendString(kAlternateURL1);
-  policies.Set(key::kDefaultSearchProviderAlternateURLs, POLICY_LEVEL_MANDATORY,
-               POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               std::move(alternate_urls), nullptr);
-  policies.Set(
-      key::kDefaultSearchProviderSearchTermsReplacementKey,
-      POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-      base::WrapUnique(new base::StringValue(kSearchTermsReplacementKey)),
-      nullptr);
-  UpdateProviderPolicy(policies);
-  default_search = service->GetDefaultSearchProvider();
-  ASSERT_TRUE(default_search);
-  EXPECT_EQ(kKeyword, default_search->keyword());
-  EXPECT_EQ(kSearchURL, default_search->url());
-  EXPECT_EQ(kInstantURL, default_search->instant_url());
-  EXPECT_EQ(2U, default_search->alternate_urls().size());
-  EXPECT_EQ(kAlternateURL0, default_search->alternate_urls()[0]);
-  EXPECT_EQ(kAlternateURL1, default_search->alternate_urls()[1]);
-
-  // Query terms replacement requires that the renderer process be a recognized
-  // Instant renderer. Fake it.
-  InstantService* instant_service =
-      InstantServiceFactory::GetForProfile(browser()->profile());
-  instant_service->AddInstantProcess(browser()->tab_strip_model()->
-      GetActiveWebContents()->GetRenderProcessHost()->GetID());
-
-  // Verify that searching from the omnibox does search term replacement with
-  // first URL pattern.
-  chrome::FocusLocationBar(browser());
-  LocationBar* location_bar = browser()->window()->GetLocationBar();
-  OmniboxView* omnibox_view = location_bar->GetOmniboxView();
-  ui_test_utils::SendToOmniboxAndSubmit(location_bar,
-      "https://www.google.com/?espv=1#q=foobar");
-  EXPECT_TRUE(
-      browser()->toolbar_model()->WouldPerformSearchTermReplacement(false));
-  EXPECT_EQ(base::ASCIIToUTF16("foobar"), omnibox_view->GetText());
-
-  // Verify that not using espv=1 does not do search term replacement.
-  chrome::FocusLocationBar(browser());
-  ui_test_utils::SendToOmniboxAndSubmit(location_bar,
-      "https://www.google.com/?q=foobar");
-  EXPECT_FALSE(
-      browser()->toolbar_model()->WouldPerformSearchTermReplacement(false));
-  EXPECT_EQ(base::ASCIIToUTF16("https://www.google.com/?q=foobar"),
-            omnibox_view->GetText());
-
-  // Verify that searching from the omnibox does search term replacement with
-  // second URL pattern.
-  chrome::FocusLocationBar(browser());
-  ui_test_utils::SendToOmniboxAndSubmit(location_bar,
-      "https://www.google.com/search?espv=1#q=banana");
-  EXPECT_TRUE(
-      browser()->toolbar_model()->WouldPerformSearchTermReplacement(false));
-  EXPECT_EQ(base::ASCIIToUTF16("banana"), omnibox_view->GetText());
-
-  // Verify that searching from the omnibox does search term replacement with
-  // standard search URL pattern.
-  chrome::FocusLocationBar(browser());
-  ui_test_utils::SendToOmniboxAndSubmit(location_bar,
-      "https://www.google.com/search?q=tractor+parts&espv=1");
-  EXPECT_TRUE(
-      browser()->toolbar_model()->WouldPerformSearchTermReplacement(false));
-  EXPECT_EQ(base::ASCIIToUTF16("tractor parts"), omnibox_view->GetText());
-
-  // Verify that searching from the omnibox prioritizes hash over query.
-  chrome::FocusLocationBar(browser());
-  ui_test_utils::SendToOmniboxAndSubmit(location_bar,
-      "https://www.google.com/search?q=tractor+parts&espv=1#q=foobar");
-  EXPECT_TRUE(
-      browser()->toolbar_model()->WouldPerformSearchTermReplacement(false));
-  EXPECT_EQ(base::ASCIIToUTF16("foobar"), omnibox_view->GetText());
-}
-
 IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
   // This test assumes Gpu access.
   if (!content::GpuDataManager::GetInstance()->GpuAccessAllowed(NULL))
@@ -1334,26 +1246,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
   content::CrashTab(contents);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_RELOAD));
   EXPECT_TRUE(IsWebGLEnabled(contents));
-}
-
-IN_PROC_BROWSER_TEST_F(PolicyTest, DisableSpdy) {
-  // Verifies that SPDY can be disable by policy.
-  EXPECT_TRUE(net::HttpStreamFactory::spdy_enabled());
-  PolicyMap policies;
-  policies.Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(true)), nullptr);
-  UpdateProviderPolicy(policies);
-  content::RunAllPendingInMessageLoop();
-  EXPECT_FALSE(net::HttpStreamFactory::spdy_enabled());
-  // Verify that it can be force-enabled too.
-  browser()->profile()->GetPrefs()->SetBoolean(prefs::kDisableSpdy, true);
-  policies.Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  UpdateProviderPolicy(policies);
-  content::RunAllPendingInMessageLoop();
-  EXPECT_TRUE(net::HttpStreamFactory::spdy_enabled());
 }
 
 namespace {
@@ -1853,7 +1745,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallForcelist) {
 
   TestRequestInterceptor interceptor(
       "update.extension",
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   interceptor.PushJobCallback(
       TestRequestInterceptor::FileJob(
           test_path.Append(kTestExtensionsDir).Append(kGood2CrxManifestName)));
@@ -2064,7 +1956,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequired) {
   ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
   TestRequestInterceptor interceptor(
       "update.extension",
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   interceptor.PushJobCallback(TestRequestInterceptor::BadRequestJob());
   interceptor.PushJobCallback(TestRequestInterceptor::FileJob(
       test_path.Append(kTestExtensionsDir).Append(kGood2CrxManifestName)));
@@ -2134,7 +2026,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
   ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &test_path));
   TestRequestInterceptor interceptor(
       "update.extension",
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   interceptor.PushJobCallback(TestRequestInterceptor::FileJob(
       test_path.Append(kTestExtensionsDir).Append(kGood2CrxManifestName)));
 
@@ -2273,7 +2165,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, IncognitoEnabled) {
   // Disable incognito via policy and verify that incognito windows can't be
   // opened.
   EXPECT_EQ(1u, active_browser_list->size());
-  EXPECT_FALSE(BrowserList::IsOffTheRecordSessionActive());
+  EXPECT_FALSE(BrowserList::IsIncognitoSessionActive());
   PolicyMap policies;
   policies.Set(key::kIncognitoEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
@@ -2281,7 +2173,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, IncognitoEnabled) {
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(chrome::ExecuteCommand(browser(), IDC_NEW_INCOGNITO_WINDOW));
   EXPECT_EQ(1u, active_browser_list->size());
-  EXPECT_FALSE(BrowserList::IsOffTheRecordSessionActive());
+  EXPECT_FALSE(BrowserList::IsIncognitoSessionActive());
 
   // Enable via policy and verify that incognito windows can be opened.
   policies.Set(key::kIncognitoEnabled, POLICY_LEVEL_MANDATORY,
@@ -2290,7 +2182,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, IncognitoEnabled) {
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_NEW_INCOGNITO_WINDOW));
   EXPECT_EQ(2u, active_browser_list->size());
-  EXPECT_TRUE(BrowserList::IsOffTheRecordSessionActive());
+  EXPECT_TRUE(BrowserList::IsIncognitoSessionActive());
 }
 
 IN_PROC_BROWSER_TEST_F(PolicyTest, Javascript) {
@@ -3307,7 +3199,8 @@ class MediaStreamDevicesControllerBrowserTest
     // and microphone permissions at the same time.
     MediaStreamDevicesController controller(
         browser()->tab_strip_model()->GetActiveWebContents(), request,
-        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept, this));
+        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
+                   base::Unretained(this)));
     if (controller.IsAskingForAudio())
       controller.PermissionGranted();
 
@@ -3326,7 +3219,8 @@ class MediaStreamDevicesControllerBrowserTest
     // and microphone permissions at the same time.
     MediaStreamDevicesController controller(
         browser()->tab_strip_model()->GetActiveWebContents(), request,
-        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept, this));
+        base::Bind(&MediaStreamDevicesControllerBrowserTest::Accept,
+                   base::Unretained(this)));
     if (controller.IsAskingForVideo())
       controller.PermissionGranted();
 
@@ -3360,7 +3254,7 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
                  base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
                  audio_devices),
       base::Bind(&MediaStreamDevicesControllerBrowserTest::FinishAudioTest,
-                 this));
+                 base::Unretained(this)));
 
   base::RunLoop().Run();
 }
@@ -3394,7 +3288,7 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
             audio_devices),
         base::Bind(
             &MediaStreamDevicesControllerBrowserTest::FinishAudioTest,
-            this));
+            base::Unretained(this)));
 
     base::RunLoop().Run();
   }
@@ -3417,7 +3311,7 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
                  base::Unretained(MediaCaptureDevicesDispatcher::GetInstance()),
                  video_devices),
       base::Bind(&MediaStreamDevicesControllerBrowserTest::FinishVideoTest,
-                 this));
+                 base::Unretained(this)));
 
   base::RunLoop().Run();
 }
@@ -3450,7 +3344,7 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerBrowserTest,
             video_devices),
         base::Bind(
             &MediaStreamDevicesControllerBrowserTest::FinishVideoTest,
-            this));
+            base::Unretained(this)));
 
     base::RunLoop().Run();
   }
@@ -3705,7 +3599,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SSLErrorOverridingDisallowed) {
 // TaskManagerEndProcessEnabled policy
 IN_PROC_BROWSER_TEST_F(PolicyTest, TaskManagerEndProcessEnabled) {
   // By default it's allowed to end tasks.
-  EXPECT_TRUE(task_management::TaskManagerInterface::IsEndProcessEnabled());
+  EXPECT_TRUE(task_manager::TaskManagerInterface::IsEndProcessEnabled());
 
   // Disabling ending tasks in task manager by policy
   PolicyMap policies1;
@@ -3715,7 +3609,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, TaskManagerEndProcessEnabled) {
   UpdateProviderPolicy(policies1);
 
   // Policy should not allow ending tasks anymore.
-  EXPECT_FALSE(task_management::TaskManagerInterface::IsEndProcessEnabled());
+  EXPECT_FALSE(task_manager::TaskManagerInterface::IsEndProcessEnabled());
 
   // Enabling ending tasks in task manager by policy
   PolicyMap policies2;
@@ -3725,7 +3619,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, TaskManagerEndProcessEnabled) {
   UpdateProviderPolicy(policies2);
 
   // Policy should allow ending tasks again.
-  EXPECT_TRUE(task_management::TaskManagerInterface::IsEndProcessEnabled());
+  EXPECT_TRUE(task_manager::TaskManagerInterface::IsEndProcessEnabled());
 }
 
 #if defined(ENABLE_MEDIA_ROUTER)
@@ -3755,6 +3649,324 @@ IN_PROC_BROWSER_TEST_F(MediaRouterDisabledPolicyTest, MediaRouterDisabled) {
   EXPECT_FALSE(media_router::MediaRouterEnabled(browser()->profile()));
 }
 #endif  // defined(ENABLE_MEDIA_ROUTER)
+
+#if defined(ENABLE_WEBRTC)
+// Sets the proper policy before the browser is started.
+template <bool enable>
+class WebRtcUdpPortRangePolicyTest : public PolicyTest {
+ public:
+  WebRtcUdpPortRangePolicyTest() = default;
+  void SetUpInProcessBrowserTestFixture() override {
+    PolicyTest::SetUpInProcessBrowserTestFixture();
+    PolicyMap policies;
+    if (enable) {
+      policies.Set(
+          key::kWebRtcUdpPortRange, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+          POLICY_SOURCE_CLOUD,
+          base::WrapUnique(new base::StringValue(kTestWebRtcUdpPortRange)),
+          nullptr);
+    }
+    provider_.UpdateChromePolicy(policies);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WebRtcUdpPortRangePolicyTest<enable>);
+};
+
+using WebRtcUdpPortRangeEnabledPolicyTest = WebRtcUdpPortRangePolicyTest<true>;
+using WebRtcUdpPortRangeDisabledPolicyTest =
+    WebRtcUdpPortRangePolicyTest<false>;
+
+IN_PROC_BROWSER_TEST_F(WebRtcUdpPortRangeEnabledPolicyTest,
+                       WebRtcUdpPortRangeEnabled) {
+  std::string port_range;
+  const PrefService::Preference* pref =
+      user_prefs::UserPrefs::Get(browser()->profile())
+          ->FindPreference(prefs::kWebRTCUDPPortRange);
+  pref->GetValue()->GetAsString(&port_range);
+  EXPECT_EQ(kTestWebRtcUdpPortRange, port_range);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcUdpPortRangeDisabledPolicyTest,
+                       WebRtcUdpPortRangeDisabled) {
+  std::string port_range;
+  const PrefService::Preference* pref =
+      user_prefs::UserPrefs::Get(browser()->profile())
+          ->FindPreference(prefs::kWebRTCUDPPortRange);
+  pref->GetValue()->GetAsString(&port_range);
+  EXPECT_TRUE(port_range.empty());
+}
+#endif  // defined(ENABLE_WEBRTC)
+
+// Tests the ComponentUpdater's EnabledComponentUpdates group policy by
+// calling the OnDemand interface. It uses the network interceptor to inspect
+// the presence of the updatedisabled="true" attribute in the update check
+// request. The update check request is expected to fail, since CUP fails.
+class ComponentUpdaterPolicyTest : public PolicyTest {
+ public:
+  ComponentUpdaterPolicyTest();
+  ~ComponentUpdaterPolicyTest() override;
+
+ protected:
+  using TestCaseAction = void (ComponentUpdaterPolicyTest::*)();
+  using TestCase = std::pair<TestCaseAction, TestCaseAction>;
+
+  // These test scenarios run as part of one test case by using the
+  // CallAsync helper, which calls OnDemand, then chains up to the next
+  // scenario when the OnDemandComplete callback fires.
+  void DefaultPolicy_GroupPolicySupported();
+  void FinishDefaultPolicy_GroupPolicySupported();
+
+  void DefaultPolicy_GroupPolicyNotSupported();
+  void FinishDefaultPolicy_GroupPolicyNotSupported();
+
+  void EnabledPolicy_GroupPolicySupported();
+  void FinishEnabledPolicy_GroupPolicySupported();
+
+  void EnabledPolicy_GroupPolicyNotSupported();
+  void FinishEnabledPolicy_GroupPolicyNotSupported();
+
+  void DisabledPolicy_GroupPolicySupported();
+  void FinishDisabled_PolicyGroupPolicySupported();
+
+  void DisabledPolicy_GroupPolicyNotSupported();
+  void FinishDisabledPolicy_GroupPolicyNotSupported();
+
+  void BeginTest();
+  void EndTest();
+
+  void UpdateComponent(const update_client::CrxComponent& crx_component);
+  void CallAsync(TestCaseAction action);
+  void VerifyExpectations(bool update_disabled);
+
+  void SetEnableComponentUpdates(bool enable_component_updates);
+
+  static update_client::CrxComponent MakeCrxComponent(
+      bool supports_group_policy_enable_component_updates);
+
+  TestCase cur_test_case_;
+
+  static const char component_id_[];
+
+  static const bool kUpdateDisabled = true;
+
+ private:
+  void OnDemandComplete(int error);
+
+  std::unique_ptr<update_client::URLRequestPostInterceptorFactory>
+      interceptor_factory_;
+
+  // This member is owned by the |interceptor_factory_|.
+  update_client::URLRequestPostInterceptor* post_interceptor_ = nullptr;
+
+  // This member is owned by g_browser_process;
+  component_updater::ComponentUpdateService* cus_;
+
+  DISALLOW_COPY_AND_ASSIGN(ComponentUpdaterPolicyTest);
+};
+
+const char ComponentUpdaterPolicyTest::component_id_[] =
+    "jebgalgnebhfojomionfpkfelancnnkf";
+
+ComponentUpdaterPolicyTest::ComponentUpdaterPolicyTest() {}
+
+ComponentUpdaterPolicyTest::~ComponentUpdaterPolicyTest() {}
+
+void ComponentUpdaterPolicyTest::SetEnableComponentUpdates(
+    bool enable_component_updates) {
+  PolicyMap policies;
+  policies.Set(
+      key::kComponentUpdatesEnabled, POLICY_LEVEL_MANDATORY,
+      POLICY_SCOPE_MACHINE, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+      base::WrapUnique(new base::FundamentalValue(enable_component_updates)),
+      nullptr);
+  UpdateProviderPolicy(policies);
+}
+
+update_client::CrxComponent ComponentUpdaterPolicyTest::MakeCrxComponent(
+    bool supports_group_policy_enable_component_updates) {
+  class MockInstaller : public update_client::CrxInstaller {
+   public:
+    MockInstaller() {}
+
+    MOCK_METHOD1(OnUpdateError, void(int error));
+    MOCK_METHOD2(Install,
+                 bool(const base::DictionaryValue& manifest,
+                      const base::FilePath& unpack_path));
+    MOCK_METHOD2(GetInstalledFile,
+                 bool(const std::string& file, base::FilePath* installed_file));
+    MOCK_METHOD0(Uninstall, bool());
+
+   private:
+    ~MockInstaller() override {}
+  };
+
+  // component id "jebgalgnebhfojomionfpkfelancnnkf".
+  static const uint8_t jebg_hash[] = {
+      0x94, 0x16, 0x0b, 0x6d, 0x41, 0x75, 0xe9, 0xec, 0x8e, 0xd5, 0xfa,
+      0x54, 0xb0, 0xd2, 0xdd, 0xa5, 0x6e, 0x05, 0x6b, 0xe8, 0x73, 0x47,
+      0xf6, 0xc4, 0x11, 0x9f, 0xbc, 0xb3, 0x09, 0xb3, 0x5b, 0x40};
+
+  // The component uses HTTPS only for network interception purposes.
+  update_client::CrxComponent crx_component;
+  crx_component.pk_hash.assign(std::begin(jebg_hash), std::end(jebg_hash));
+  crx_component.version = Version("0.9");
+  crx_component.installer = scoped_refptr<MockInstaller>(new MockInstaller());
+  crx_component.requires_network_encryption = true;
+  crx_component.supports_group_policy_enable_component_updates =
+      supports_group_policy_enable_component_updates;
+
+  return crx_component;
+}
+
+void ComponentUpdaterPolicyTest::UpdateComponent(
+    const update_client::CrxComponent& crx_component) {
+  post_interceptor_->Reset();
+  EXPECT_TRUE(post_interceptor_->ExpectRequest(
+      new update_client::PartialMatch("updatecheck"), 200));
+  EXPECT_TRUE(cus_->RegisterComponent(crx_component));
+  cus_->GetOnDemandUpdater().OnDemandUpdate(
+      component_id_, base::Bind(&ComponentUpdaterPolicyTest::OnDemandComplete,
+                                base::Unretained(this)));
+}
+
+void ComponentUpdaterPolicyTest::CallAsync(TestCaseAction action) {
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::Bind(action, base::Unretained(this)));
+}
+
+void ComponentUpdaterPolicyTest::OnDemandComplete(int error) {
+  CallAsync(cur_test_case_.second);
+}
+
+void ComponentUpdaterPolicyTest::BeginTest() {
+  cus_ = g_browser_process->component_updater();
+
+  interceptor_factory_ =
+      base::MakeUnique<update_client::URLRequestPostInterceptorFactory>(
+          "https", "clients2.google.com",
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+
+  post_interceptor_ = interceptor_factory_->CreateInterceptor(
+      base::FilePath(FILE_PATH_LITERAL("service/update2")));
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::DefaultPolicy_GroupPolicySupported,
+      &ComponentUpdaterPolicyTest::FinishDefaultPolicy_GroupPolicySupported);
+
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::EndTest() {
+  interceptor_factory_ = nullptr;
+  cus_ = nullptr;
+
+  base::MessageLoop::current()->QuitWhenIdle();
+}
+
+void ComponentUpdaterPolicyTest::VerifyExpectations(bool update_disabled) {
+  EXPECT_EQ(1, post_interceptor_->GetHitCount())
+      << post_interceptor_->GetRequestsAsString();
+  ASSERT_EQ(1, post_interceptor_->GetCount())
+      << post_interceptor_->GetRequestsAsString();
+  EXPECT_NE(std::string::npos,
+            post_interceptor_->GetRequests()[0].find(base::StringPrintf(
+                "<updatecheck%s/>",
+                update_disabled ? " updatedisabled=\"true\"" : "")));
+}
+
+void ComponentUpdaterPolicyTest::DefaultPolicy_GroupPolicySupported() {
+  UpdateComponent(MakeCrxComponent(true));
+}
+
+void ComponentUpdaterPolicyTest::FinishDefaultPolicy_GroupPolicySupported() {
+  // Default policy && policy support -> updates are enabled.
+  VerifyExpectations(!kUpdateDisabled);
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::DefaultPolicy_GroupPolicyNotSupported,
+      &ComponentUpdaterPolicyTest::FinishDefaultPolicy_GroupPolicyNotSupported);
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::DefaultPolicy_GroupPolicyNotSupported() {
+  UpdateComponent(MakeCrxComponent(false));
+}
+
+void ComponentUpdaterPolicyTest::FinishDefaultPolicy_GroupPolicyNotSupported() {
+  // Default policy && no policy support -> updates are enabled.
+  VerifyExpectations(!kUpdateDisabled);
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::EnabledPolicy_GroupPolicySupported,
+      &ComponentUpdaterPolicyTest::FinishEnabledPolicy_GroupPolicySupported);
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::EnabledPolicy_GroupPolicySupported() {
+  SetEnableComponentUpdates(true);
+  UpdateComponent(MakeCrxComponent(true));
+}
+
+void ComponentUpdaterPolicyTest::FinishEnabledPolicy_GroupPolicySupported() {
+  // Updates enabled policy && policy support -> updates are enabled.
+  VerifyExpectations(!kUpdateDisabled);
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::EnabledPolicy_GroupPolicyNotSupported,
+      &ComponentUpdaterPolicyTest::FinishEnabledPolicy_GroupPolicyNotSupported);
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::EnabledPolicy_GroupPolicyNotSupported() {
+  SetEnableComponentUpdates(true);
+  UpdateComponent(MakeCrxComponent(false));
+}
+
+void ComponentUpdaterPolicyTest::FinishEnabledPolicy_GroupPolicyNotSupported() {
+  // Updates enabled policy && no policy support -> updates are enabled.
+  VerifyExpectations(!kUpdateDisabled);
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::DisabledPolicy_GroupPolicySupported,
+      &ComponentUpdaterPolicyTest::FinishDisabled_PolicyGroupPolicySupported);
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::DisabledPolicy_GroupPolicySupported() {
+  SetEnableComponentUpdates(false);
+  UpdateComponent(MakeCrxComponent(true));
+}
+
+void ComponentUpdaterPolicyTest::FinishDisabled_PolicyGroupPolicySupported() {
+  // Updates enabled policy && policy support -> updates are disabled.
+  VerifyExpectations(kUpdateDisabled);
+
+  cur_test_case_ = std::make_pair(
+      &ComponentUpdaterPolicyTest::DisabledPolicy_GroupPolicyNotSupported,
+      &ComponentUpdaterPolicyTest::
+          FinishDisabledPolicy_GroupPolicyNotSupported);
+  CallAsync(cur_test_case_.first);
+}
+
+void ComponentUpdaterPolicyTest::DisabledPolicy_GroupPolicyNotSupported() {
+  SetEnableComponentUpdates(false);
+  UpdateComponent(MakeCrxComponent(false));
+}
+
+void ComponentUpdaterPolicyTest::
+    FinishDisabledPolicy_GroupPolicyNotSupported() {
+  // Updates enabled policy && no policy support -> updates are enabled.
+  VerifyExpectations(!kUpdateDisabled);
+
+  cur_test_case_ = TestCase();
+  CallAsync(&ComponentUpdaterPolicyTest::EndTest);
+}
+
+IN_PROC_BROWSER_TEST_F(ComponentUpdaterPolicyTest, EnabledComponentUpdates) {
+  BeginTest();
+  base::RunLoop().Run();
+}
 
 #if !defined(OS_CHROMEOS)
 // Similar to PolicyTest but sets the proper policy before the browser is
@@ -3935,6 +4147,19 @@ class ArcPolicyTest : public PolicyTest {
     command_line->AppendSwitch(chromeos::switches::kEnableArc);
   }
 
+  void SetArcEnabledByPolicy(bool enabled) {
+    PolicyMap policies;
+    policies.Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                 POLICY_SOURCE_CLOUD,
+                 base::WrapUnique(new base::FundamentalValue(enabled)),
+                 nullptr);
+    UpdateProviderPolicy(policies);
+    if (browser()) {
+      const PrefService* const prefs = browser()->profile()->GetPrefs();
+      EXPECT_EQ(prefs->GetBoolean(prefs::kArcEnabled), enabled);
+    }
+  }
+
  private:
   chromeos::FakeSessionManagerClient *fake_session_manager_client_;
   std::unique_ptr<arc::FakeArcBridgeInstance> fake_arc_bridge_instance_;
@@ -3942,34 +4167,67 @@ class ArcPolicyTest : public PolicyTest {
   DISALLOW_COPY_AND_ASSIGN(ArcPolicyTest);
 };
 
+class ArcPolicyDefaultAppTest : public ArcPolicyTest {
+ public:
+  ArcPolicyDefaultAppTest() {}
+  ~ArcPolicyDefaultAppTest() override {}
+
+ protected:
+  void SetUpInProcessBrowserTestFixture() override {
+    ArcDefaultAppList::UseTestAppsDirectory();
+    ArcPolicyTest::SetUpInProcessBrowserTestFixture();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ArcPolicyDefaultAppTest);
+};
+
 // Test ArcEnabled policy.
 IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcEnabled) {
   SetUpTest();
 
   const PrefService* const pref = browser()->profile()->GetPrefs();
-  const arc::ArcBridgeService* const arc_bridge_service
-      = arc::ArcBridgeService::Get();
+  const arc::ArcBridgeService* const arc_bridge_service =
+      arc::ArcBridgeService::Get();
 
   // ARC is switched off by default.
-  EXPECT_EQ(arc::ArcBridgeService::State::STOPPED, arc_bridge_service->state());
+  EXPECT_TRUE(arc_bridge_service->stopped());
   EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
 
   // Enable ARC.
-  PolicyMap policies;
-  policies.Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(true)), nullptr);
-  UpdateProviderPolicy(policies);
-  EXPECT_TRUE(pref->GetBoolean(prefs::kArcEnabled));
-  EXPECT_EQ(arc::ArcBridgeService::State::READY, arc_bridge_service->state());
+  SetArcEnabledByPolicy(true);
+  EXPECT_TRUE(arc_bridge_service->ready());
 
   // Disable ARC.
-  policies.Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD,
-               base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  UpdateProviderPolicy(policies);
-  EXPECT_FALSE(pref->GetBoolean(prefs::kArcEnabled));
-  EXPECT_EQ(arc::ArcBridgeService::State::STOPPED, arc_bridge_service->state());
+  SetArcEnabledByPolicy(false);
+  EXPECT_TRUE(arc_bridge_service->stopped());
+
+  TearDownTest();
+}
+
+// Test Arc default apps do not appear when Arc is disabled by policy.
+IN_PROC_BROWSER_TEST_F(ArcPolicyDefaultAppTest, DefaultApps) {
+  // Started disabled.
+  SetArcEnabledByPolicy(false);
+
+  SetUpTest();
+
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(browser()->profile());
+  ASSERT_NE(nullptr, prefs);
+
+  base::RunLoop run_loop;
+  prefs->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
+  run_loop.Run();
+
+  EXPECT_TRUE(prefs->GetAppIds().empty());
+
+  // Enable Arc
+  SetArcEnabledByPolicy(true);
+  EXPECT_FALSE(prefs->GetAppIds().empty());
+
+  // Disable Arc again.
+  SetArcEnabledByPolicy(false);
+  EXPECT_TRUE(prefs->GetAppIds().empty());
 
   TearDownTest();
 }

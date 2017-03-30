@@ -50,12 +50,9 @@ static void applyXSLRequestProperties(ResourceRequest& request)
 XSLStyleSheetResource* XSLStyleSheetResource::fetchSynchronously(FetchRequest& request, ResourceFetcher* fetcher)
 {
     applyXSLRequestProperties(request.mutableResourceRequest());
-    request.mutableResourceRequest().setTimeoutInterval(10);
-    ResourceLoaderOptions options(request.options());
-    options.synchronousPolicy = RequestSynchronously;
-    request.setOptions(options);
+    request.makeSynchronous();
     XSLStyleSheetResource* resource = toXSLStyleSheetResource(fetcher->requestResource(request, XSLStyleSheetResourceFactory()));
-    if (resource && resource->m_data)
+    if (resource && resource->data())
         resource->m_sheet = resource->decodedText();
     return resource;
 }
@@ -77,15 +74,15 @@ void XSLStyleSheetResource::didAddClient(ResourceClient* c)
     ASSERT(StyleSheetResourceClient::isExpectedType(c));
     Resource::didAddClient(c);
     if (!isLoading())
-        static_cast<StyleSheetResourceClient*>(c)->setXSLStyleSheet(m_resourceRequest.url(), m_response.url(), m_sheet);
+        static_cast<StyleSheetResourceClient*>(c)->setXSLStyleSheet(resourceRequest().url(), response().url(), m_sheet);
 }
 
 void XSLStyleSheetResource::checkNotify()
 {
-    if (m_data.get())
+    if (data())
         m_sheet = decodedText();
 
-    ResourceClientWalker<StyleSheetResourceClient> w(m_clients);
+    ResourceClientWalker<StyleSheetResourceClient> w(clients());
     while (StyleSheetResourceClient* c = w.next()) {
         markClientFinished(c);
         c->setXSLStyleSheet(resourceRequest().url(), response().url(), m_sheet);

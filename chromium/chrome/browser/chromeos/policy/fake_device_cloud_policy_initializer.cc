@@ -14,17 +14,17 @@ FakeDeviceCloudPolicyInitializer::FakeDeviceCloudPolicyInitializer()
     : DeviceCloudPolicyInitializer(
           NULL,  // local_state
           NULL,  // enterprise_service
-          NULL,  // consumer_service
           // background_task_runner
           scoped_refptr<base::SequencedTaskRunner>(NULL),
-          NULL,  // install_attributes
-          NULL,  // state_keys_broker
-          NULL,  // device_store
-          NULL),  // manager
+          NULL,   // install_attributes
+          NULL,   // state_keys_broker
+          NULL,   // device_store
+          NULL,   // manager
+          NULL,   // async_caller
+          NULL),  // cryptohome_client
       was_start_enrollment_called_(false),
-      enrollment_status_(EnrollmentStatus::ForStatus(
-          EnrollmentStatus::STATUS_SUCCESS)) {
-}
+      enrollment_status_(
+          EnrollmentStatus::ForStatus(EnrollmentStatus::STATUS_SUCCESS)) {}
 
 void FakeDeviceCloudPolicyInitializer::Init() {
 }
@@ -33,9 +33,7 @@ void FakeDeviceCloudPolicyInitializer::Shutdown() {
 }
 
 void FakeDeviceCloudPolicyInitializer::StartEnrollment(
-    ManagementMode management_mode,
     DeviceManagementService* device_management_service,
-    chromeos::OwnerSettingsServiceChromeOS* owner_settings_service,
     const EnrollmentConfig& enrollment_config,
     const std::string& auth_token,
     const AllowedDeviceModes& allowed_modes,

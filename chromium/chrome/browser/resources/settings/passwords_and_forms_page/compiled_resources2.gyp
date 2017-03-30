@@ -6,6 +6,7 @@
     {
       'target_name': 'passwords_and_forms_page',
       'dependencies': [
+        '../compiled_resources2.gyp:route',
         '../prefs/compiled_resources2.gyp:prefs_behavior',
         '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
@@ -22,7 +23,17 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_shared_menu/compiled_resources2.gyp:cr_shared_menu',
         '<(EXTERNS_GYP):autofill_private',
+        'address_edit_dialog',
         'credit_card_edit_dialog',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'address_edit_dialog',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
+        '<(EXTERNS_GYP):autofill_private',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
@@ -37,6 +48,7 @@
     {
       'target_name': 'passwords_section',
       'dependencies': [
+        '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_scrollable_behavior',
         '<(DEPTH)/ui/webui/resources/cr_elements/cr_shared_menu/compiled_resources2.gyp:cr_shared_menu',
         '<(EXTERNS_GYP):passwords_private',
         'password_edit_dialog',

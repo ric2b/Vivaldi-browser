@@ -26,11 +26,12 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "ui/gfx/skia_util.h"
 
 namespace cc {
 namespace {
 
-class SoftwareRendererTest : public testing::Test, public RendererClient {
+class SoftwareRendererTest : public testing::Test {
  public:
   void InitializeRenderer(
       std::unique_ptr<SoftwareOutputDevice> software_output_device) {
@@ -41,9 +42,10 @@ class SoftwareRendererTest : public testing::Test, public RendererClient {
     shared_bitmap_manager_.reset(new TestSharedBitmapManager());
     resource_provider_ = FakeResourceProvider::Create(
         output_surface_.get(), shared_bitmap_manager_.get());
-    renderer_ = SoftwareRenderer::Create(
-        this, &settings_, output_surface_.get(), resource_provider(),
-        true /* use_image_hijack_canvas */);
+    renderer_ = base::MakeUnique<SoftwareRenderer>(
+        &settings_, output_surface_.get(), resource_provider());
+    renderer_->Initialize();
+    renderer_->SetVisible(true);
   }
 
   ResourceProvider* resource_provider() const {
@@ -51,9 +53,6 @@ class SoftwareRendererTest : public testing::Test, public RendererClient {
   }
 
   SoftwareRenderer* renderer() const { return renderer_.get(); }
-
-  // RendererClient implementation.
-  void SetFullRootLayerDamage() override {}
 
   std::unique_ptr<SkBitmap> DrawAndCopyOutput(RenderPassList* list,
                                               float device_scale_factor,
@@ -68,7 +67,7 @@ class SoftwareRendererTest : public testing::Test, public RendererClient {
                        loop.QuitClosure())));
 
     renderer()->DrawFrame(list, device_scale_factor, gfx::ColorSpace(),
-                          device_viewport_rect, device_viewport_rect, false);
+                          device_viewport_rect, device_viewport_rect);
     loop.Run();
     return bitmap_result;
   }
@@ -150,9 +149,11 @@ TEST_F(SoftwareRendererTest, TileQuad) {
   InitializeRenderer(base::WrapUnique(new SoftwareOutputDevice));
 
   ResourceId resource_yellow = resource_provider()->CreateResource(
-      outer_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
+      outer_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      gfx::ColorSpace());
   ResourceId resource_cyan = resource_provider()->CreateResource(
-      inner_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
+      inner_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      gfx::ColorSpace());
 
   SkBitmap yellow_tile;
   yellow_tile.allocN32Pixels(outer_size.width(), outer_size.height());
@@ -221,7 +222,8 @@ TEST_F(SoftwareRendererTest, TileQuadVisibleRect) {
   InitializeRenderer(base::WrapUnique(new SoftwareOutputDevice));
 
   ResourceId resource_cyan = resource_provider()->CreateResource(
-      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
+      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      gfx::ColorSpace());
 
   SkBitmap cyan_tile;  // The lowest five rows are yellow.
   cyan_tile.allocN32Pixels(tile_size.width(), tile_size.height());
@@ -394,6 +396,64 @@ TEST_F(SoftwareRendererTest, RenderPassVisibleRect) {
   EXPECT_EQ(SK_ColorMAGENTA,
             output->getColor(interior_visible_rect.right() - 1,
                              interior_visible_rect.bottom() - 1));
+}
+
+class PartialSwapSoftwareOutputDevice : public SoftwareOutputDevice {
+ public:
+  // SoftwareOutputDevice overrides.
+  SkCanvas* BeginPaint(const gfx::Rect& damage_rect) override {
+    damage_rect_at_start_ = damage_rect;
+    canvas_ = SoftwareOutputDevice::BeginPaint(damage_rect);
+    return canvas_;
+  }
+  void EndPaint() override {
+    SkIRect clip_device_bounds;
+    canvas_->getClipDeviceBounds(&clip_device_bounds);
+    clip_rect_at_end_ = gfx::SkIRectToRect(clip_device_bounds);
+    SoftwareOutputDevice::EndPaint();
+  }
+
+  gfx::Rect damage_rect_at_start() const { return damage_rect_at_start_; }
+  gfx::Rect clip_rect_at_end() const { return clip_rect_at_end_; }
+
+ private:
+  SkCanvas* canvas_ = nullptr;
+  gfx::Rect damage_rect_at_start_;
+  gfx::Rect clip_rect_at_end_;
+};
+
+TEST_F(SoftwareRendererTest, PartialSwap) {
+  float device_scale_factor = 1.f;
+  gfx::Rect device_viewport_rect(0, 0, 100, 100);
+
+  settings_.partial_swap_enabled = true;
+
+  auto device_owned = base::MakeUnique<PartialSwapSoftwareOutputDevice>();
+  auto* device = device_owned.get();
+  InitializeRenderer(std::move(device_owned));
+
+  gfx::Rect viewport_rect(100, 100);
+  gfx::Rect clip_rect(100, 100);
+
+  RenderPassList list;
+
+  RenderPassId root_pass_id(1, 0);
+  RenderPass* root_pass =
+      AddRenderPass(&list, root_pass_id, viewport_rect, gfx::Transform());
+  AddQuad(root_pass, viewport_rect, SK_ColorGREEN);
+
+  // Partial frame, we should pass this rect to the SoftwareOutputDevice.
+  // partial swap is enabled.
+  root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
+
+  renderer()->DecideRenderPassAllocationsForFrame(list);
+  renderer()->DrawFrame(&list, device_scale_factor, gfx::ColorSpace(),
+                        viewport_rect, clip_rect);
+
+  // The damage rect should be reported to the SoftwareOutputDevice.
+  EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->damage_rect_at_start());
+  // The SkCanvas should be clipped to the damage rect.
+  EXPECT_EQ(gfx::Rect(2, 2, 3, 3), device->clip_rect_at_end());
 }
 
 }  // namespace

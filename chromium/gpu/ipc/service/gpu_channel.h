@@ -180,6 +180,9 @@ class GPU_EXPORT GpuChannel
   // Map of routing id to command buffer stub.
   base::ScopedPtrHashMap<int32_t, std::unique_ptr<GpuCommandBufferStub>> stubs_;
 
+ private:
+  friend class TestGpuChannel;
+
  protected:
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
 

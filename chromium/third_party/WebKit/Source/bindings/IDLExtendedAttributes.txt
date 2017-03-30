@@ -52,6 +52,7 @@ DoNotCheckSecurity=|Setter
 DoNotTestNewObject
 EnforceRange
 Exposed=*
+FeaturePolicy=*
 FlexibleArrayBufferView
 Global=|*
 ImplementedAs=*
@@ -90,6 +91,7 @@ Replaceable
 RuntimeEnabled=*
 SameObject
 SaveSameObject
+SecureContext
 SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|CurrentWindow|EnteredWindow

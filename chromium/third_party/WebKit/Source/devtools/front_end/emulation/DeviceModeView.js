@@ -420,6 +420,7 @@ WebInspector.DeviceModeView.prototype = {
             var ctx = canvas.getContext("2d");
             canvas.width = outlineRect.width;
             canvas.height = outlineRect.height;
+            ctx.imageSmoothingEnabled = false;
 
             var promise = Promise.resolve();
             if (this._model.outlineImage())
@@ -472,8 +473,8 @@ WebInspector.DeviceModeView.prototype = {
                               visiblePageRect.top,
                               Math.min(pageImage.naturalWidth, screenRect.width),
                               Math.min(pageImage.naturalHeight, screenRect.height));
-                var mainFrame = mainTarget.resourceTreeModel.mainFrame;
-                var fileName = mainFrame ? mainFrame.url.trimURL().removeURLFragment() : "";
+                var url = mainTarget && mainTarget.inspectedURL();
+                var fileName = url ? url.trimURL().removeURLFragment() : "";
                 if (this._model.type() === WebInspector.DeviceModeModel.Type.Device)
                     fileName += WebInspector.UIString("(%s)", this._model.device().title);
                 // Trigger download.

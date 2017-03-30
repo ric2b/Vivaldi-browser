@@ -8,8 +8,8 @@
 
 namespace chrome {
 
-bool IsOffTheRecordSessionActive() {
-  return BrowserList::IsOffTheRecordSessionActive();
+bool IsIncognitoSessionActive() {
+  return BrowserList::IsIncognitoSessionActive();
 }
 
 }  // namespace chrome

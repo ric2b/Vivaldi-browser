@@ -15,6 +15,7 @@ const char kEventPasteAndGo[] = "webViewPrivate.onPasteAndGo";
 const char kEventWebContentsDiscarded[] =
     "webViewPrivate.onWebcontentsDiscarded";
 const char kEventOnFullscreen[] = "webViewPrivate.onFullscreen";
+const char kEventContentBlocked[] = "webViewPrivate.onContentBlocked";
 
 const char kNewSearchName[] = "Name";
 const char kNewSearchUrl[] = "Url";

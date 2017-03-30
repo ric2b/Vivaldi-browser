@@ -5,7 +5,7 @@
 package org.chromium.chromoting;
 
 import android.graphics.Matrix;
-import android.graphics.Point;
+import android.graphics.PointF;
 import android.view.MotionEvent;
 
 import java.util.LinkedList;
@@ -56,9 +56,7 @@ public class TouchInputStrategy implements InputStrategyInterface {
         mInjector = injector;
         mQueuedEvents = new LinkedList<MotionEvent>();
 
-        synchronized (mRenderData) {
-            mRenderData.drawCursor = false;
-        }
+        mRenderData.drawCursor = false;
     }
 
     @Override
@@ -80,7 +78,7 @@ public class TouchInputStrategy implements InputStrategyInterface {
                 MotionEvent downEvent = mQueuedEvents.peek();
                 assert downEvent.getActionMasked() == MotionEvent.ACTION_DOWN;
 
-                mInjector.sendMouseClick(new Point((int) downEvent.getX(), (int) downEvent.getY()),
+                mInjector.sendMouseClick(new PointF(downEvent.getX(), downEvent.getY()),
                         InputStub.BUTTON_RIGHT);
                 clearQueuedEvents();
                 return true;
@@ -180,7 +178,7 @@ public class TouchInputStrategy implements InputStrategyInterface {
 
     @Override
     public DesktopView.InputFeedbackType getLongPressFeedbackType() {
-        return DesktopView.InputFeedbackType.LARGE_ANIMATION;
+        return DesktopView.InputFeedbackType.LONG_TOUCH_ANIMATION;
     }
 
     @Override
@@ -207,13 +205,12 @@ public class TouchInputStrategy implements InputStrategyInterface {
         // Use a copy of the original event so the original event can be passed to other
         // detectors/handlers in an unmodified state.
         event = MotionEvent.obtain(event);
-        synchronized (mRenderData) {
-            // Transform the event coordinates so they represent the remote screen coordinates
-            // instead of the local touch display.
-            Matrix inverted = new Matrix();
-            mRenderData.transform.invert(inverted);
-            event.transform(inverted);
-        }
+
+        // Transform the event coordinates so they represent the remote screen coordinates
+        // instead of the local touch display.
+        Matrix inverted = new Matrix();
+        mRenderData.transform.invert(inverted);
+        event.transform(inverted);
 
         return event;
     }

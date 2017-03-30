@@ -10,7 +10,7 @@ cr.define('md_history.history_item_test', function() {
       var SEARCH_HISTORY_RESULTS;
 
       suiteSetup(function() {
-        element = $('history-app').$['history-list'];
+        element = $('history-app').$['history'].$['infinite-list'];
         TEST_HISTORY_RESULTS = [
           createHistoryEntry('2016-03-16 10:00', 'http://www.google.com'),
           createHistoryEntry('2016-03-16 9:00', 'http://www.example.com'),
@@ -63,16 +63,37 @@ cr.define('md_history.history_item_test', function() {
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
 
-          element.removeDeletedHistory_([element.historyData_[3]]);
+          element.removeItemsByPath(['historyData_.3']);
           assertEquals(5, element.historyData_.length);
 
           // Checks that a new time gap separator has been inserted.
           assertTrue(items[2].hasTimeGap);
 
-          element.removeDeletedHistory_([element.historyData_[3]]);
+          element.removeItemsByPath(['historyData_.3']);
 
           // Checks time gap separator is removed.
           assertFalse(items[2].hasTimeGap);
+        });
+      });
+
+      test('remove bookmarks', function() {
+        element.addNewResults(TEST_HISTORY_RESULTS);
+        return flush().then(function() {
+          element.set('historyData_.1.starred', true);
+          element.set('historyData_.5.starred', true);
+          return flush();
+        }).then(function() {
+
+          items = Polymer.dom(element.root).querySelectorAll('history-item');
+
+          items[1].$$('#bookmark-star').focus();
+          MockInteractions.tap(items[1].$$('#bookmark-star'));
+
+          // Check that focus is shifted to overflow menu icon.
+          assertEquals(items[1].root.activeElement, items[1].$['menu-button']);
+          // Check that all items matching this url are unstarred.
+          assertEquals(element.historyData_[1].starred, false);
+          assertEquals(element.historyData_[5].starred, false);
         });
       });
 

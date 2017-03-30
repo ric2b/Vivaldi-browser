@@ -26,6 +26,8 @@
 #include "core/CoreExport.h"
 #include "core/fetch/CachedMetadataHandler.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "platform/MemoryCoordinator.h"
+#include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadPriority.h"
@@ -49,14 +51,17 @@ class ResourceClient;
 class ResourceTimingInfo;
 class ResourceLoader;
 class SecurityOrigin;
-class SharedBuffer;
 
 // A resource that is held in the cache. Classes who want to use this object should derive
 // from ResourceClient, to get the function calls in case the requested data has arrived.
 // This class also does the actual communication with the loader to obtain the resource from the network.
-class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource> {
+class CORE_EXPORT Resource : public GarbageCollectedFinalized<Resource>, public MemoryCoordinatorClient {
+    USING_GARBAGE_COLLECTED_MIXIN(Resource);
     WTF_MAKE_NONCOPYABLE(Resource);
 public:
+    // |Type| enum values are used in UMAs, so do not change the values of
+    // existing |Type|. When adding a new |Type|, append it at the end and
+    // update |kLastResourceType|.
     enum Type {
         MainResource,
         Image,
@@ -67,12 +72,12 @@ public:
         SVGDocument,
         XSLStyleSheet,
         LinkPrefetch,
-        LinkPreload,
         TextTrack,
         ImportResource,
         Media, // Audio or video file requested by a HTML5 media element
         Manifest
     };
+    static const int kLastResourceType = Manifest + 1;
 
     enum Status {
         NotStarted,
@@ -139,8 +144,6 @@ public:
     };
     PreloadResult getPreloadResult() const { return static_cast<PreloadResult>(m_preloadResult); }
 
-    unsigned count() const { return m_clients.size(); }
-
     Status getStatus() const { return static_cast<Status>(m_status); }
     void setStatus(Status status) { m_status = status; }
 
@@ -172,7 +175,7 @@ public:
 
     bool isEligibleForIntegrityCheck(SecurityOrigin*) const;
 
-    SharedBuffer* resourceBuffer() const { return m_data.get(); }
+    virtual PassRefPtr<SharedBuffer> resourceBuffer() const { return m_data; }
     void setResourceBuffer(PassRefPtr<SharedBuffer>);
 
     virtual void willFollowRedirect(ResourceRequest&, const ResourceResponse&);
@@ -192,8 +195,6 @@ public:
 
     // This may return nullptr when the resource isn't cacheable.
     CachedMetadataHandler* cacheHandler();
-
-    String reasonNotDeletable() const;
 
     AtomicString httpContentType() const;
 
@@ -221,9 +222,6 @@ public:
     double freshnessLifetime();
     double stalenessLifetime();
 
-    bool isPurgeable() const;
-    bool lock();
-
     void setCacheIdentifier(const String& cacheIdentifier) { m_cacheIdentifier = cacheIdentifier; }
     String cacheIdentifier() const { return m_cacheIdentifier; }
 
@@ -231,6 +229,9 @@ public:
     virtual void didDownloadData(int) { }
 
     double loadFinishTime() const { return m_loadFinishTime; }
+
+    void addToEncodedBodyLength(int value) { m_response.addToEncodedBodyLength(value); }
+    void addToDecodedBodyLength(int value) { m_response.addToDecodedBodyLength(value); }
 
     virtual bool canReuse(const ResourceRequest&) const { return true; }
 
@@ -240,7 +241,6 @@ public:
     virtual void onMemoryDump(WebMemoryDumpLevelOfDetail, WebProcessMemoryDump*) const;
 
     static const char* resourceTypeToString(Type, const FetchInitiatorInfo&);
-    static const char* resourceTypeName(Type);
 
 protected:
     Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
@@ -269,10 +269,6 @@ protected:
     void didRemoveClientOrObserver();
     virtual void allClientsAndObserversRemoved();
 
-    HashCountedSet<ResourceClient*> m_clients;
-    HashCountedSet<ResourceClient*> m_clientsAwaitingCallback;
-    HashCountedSet<ResourceClient*> m_finishedClients;
-
     bool hasClient(ResourceClient* client) { return m_clients.contains(client) || m_clientsAwaitingCallback.contains(client) || m_finishedClients.contains(client); }
 
     struct RedirectPair {
@@ -289,35 +285,36 @@ protected:
     };
     const Vector<RedirectPair>& redirectChain() const { return m_redirectChain; }
 
-    virtual bool isSafeToUnlock() const { return false; }
     virtual void destroyDecodedDataIfPossible() { }
 
     // Returns the memory dump name used for tracing. See Resource::onMemoryDump.
     String getMemoryDumpName() const;
 
-    ResourceRequest m_resourceRequest;
-    Member<ResourceLoader> m_loader;
-    ResourceLoaderOptions m_options;
+    const HashCountedSet<ResourceClient*>& clients() const { return m_clients; }
+    DataBufferingPolicy dataBufferingPolicy() const { return m_options.dataBufferingPolicy; }
 
-    ResourceResponse m_response;
-    double m_responseTimestamp;
+    void setCachePolicyBypassingCache();
+    void setLoFiStateOff();
 
-    RefPtr<SharedBuffer> m_data;
-    Timer<Resource> m_cancelTimer;
+    SharedBuffer* data() const { return m_data.get(); }
+    void clearData() { m_data.clear(); }
 
 private:
     class ResourceCallback;
     class CachedMetadataHandlerImpl;
     class ServiceWorkerResponseCachedMetadataHandler;
 
-    void cancelTimerFired(Timer<Resource>*);
+    void cancelTimerFired(TimerBase*);
 
     void revalidationSucceeded(const ResourceResponse&);
     void revalidationFailed();
 
     size_t calculateOverheadSize() const;
 
-    bool unlock();
+    String reasonNotDeletable() const;
+
+    // MemoryCoordinatorClient overrides:
+    void prepareToSuspend() override;
 
     Member<CachedMetadataHandlerImpl> m_cacheHandler;
     RefPtr<SecurityOrigin> m_fetcherSecurityOrigin;
@@ -353,6 +350,22 @@ private:
 
     // Ordered list of all redirects followed while fetching this resource.
     Vector<RedirectPair> m_redirectChain;
+
+    HashCountedSet<ResourceClient*> m_clients;
+    HashCountedSet<ResourceClient*> m_clientsAwaitingCallback;
+    HashCountedSet<ResourceClient*> m_finishedClients;
+
+    ResourceLoaderOptions m_options;
+
+    double m_responseTimestamp;
+
+    Timer<Resource> m_cancelTimer;
+
+    ResourceRequest m_resourceRequest;
+    Member<ResourceLoader> m_loader;
+    ResourceResponse m_response;
+
+    RefPtr<SharedBuffer> m_data;
 };
 
 class ResourceFactory {

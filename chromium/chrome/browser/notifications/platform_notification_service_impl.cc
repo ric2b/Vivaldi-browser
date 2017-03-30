@@ -82,38 +82,7 @@ void OnCloseNonPersistentNotificationProfileLoaded(
     const std::string& notification_id,
     Profile* profile) {
   NotificationDisplayServiceFactory::GetForProfile(profile)->Close(
-      notification_id);
-}
-
-// Callback to run once the profile has been loaded in order to perform a
-// given |operation| in a notification.
-void ProfileLoadedCallback(NotificationCommon::Operation operation,
-                           const GURL& origin,
-                           int64_t persistent_notification_id,
-                           int action_index,
-                           Profile* profile) {
-  if (!profile) {
-    // TODO(miguelg): Add UMA for this condition.
-    // Perhaps propagate this through PersistentNotificationStatus.
-    LOG(WARNING) << "Profile not loaded correctly";
-    return;
-  }
-
-  switch (operation) {
-    case NotificationCommon::CLICK:
-      PlatformNotificationServiceImpl::GetInstance()
-          ->OnPersistentNotificationClick(profile, persistent_notification_id,
-                                          origin, action_index);
-      break;
-    case NotificationCommon::CLOSE:
-      PlatformNotificationServiceImpl::GetInstance()
-          ->OnPersistentNotificationClose(profile, persistent_notification_id,
-                                          origin, true);
-      break;
-    case NotificationCommon::SETTINGS:
-      NotificationCommon::OpenNotificationSettings(profile);
-      break;
-  }
+      NotificationCommon::NON_PERSISTENT, notification_id);
 }
 
 // Callback used to close an non-persistent notification from blink.
@@ -144,22 +113,6 @@ PlatformNotificationServiceImpl::PlatformNotificationServiceImpl()
 }
 
 PlatformNotificationServiceImpl::~PlatformNotificationServiceImpl() {}
-
-void PlatformNotificationServiceImpl::ProcessPersistentNotificationOperation(
-    NotificationCommon::Operation operation,
-    const std::string& profile_id,
-    bool incognito,
-    const GURL& origin,
-    int64_t persistent_notification_id,
-    int action_index) {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  DCHECK(profile_manager);
-
-  profile_manager->LoadProfile(
-      profile_id, incognito,
-      base::Bind(&ProfileLoadedCallback, operation, origin,
-                 persistent_notification_id, action_index));
-}
 
 void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
     BrowserContext* browser_context,
@@ -329,6 +282,12 @@ void PlatformNotificationServiceImpl::DisplayNotification(
     base::Closure* cancel_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
+  // Posted tasks can request notifications to be added, which would cause a
+  // crash (see |ScopedKeepAlive|). We just do nothing here, the user would not
+  // see the notification anyway, since we are shutting down.
+  if (g_browser_process->IsShuttingDown())
+    return;
+
   Profile* profile = Profile::FromBrowserContext(browser_context);
   DCHECK(profile);
   DCHECK_EQ(0u, notification_data.actions.size());
@@ -337,9 +296,12 @@ void PlatformNotificationServiceImpl::DisplayNotification(
   NotificationObjectProxy* proxy =
       new NotificationObjectProxy(browser_context, std::move(delegate));
   Notification notification = CreateNotificationFromData(
-      profile, origin, notification_data, notification_resources, proxy);
-  GetNotificationDisplayService(profile)->Display(notification.delegate_id(),
-                                                  notification);
+      profile, GURL() /* service_worker_scope */, origin, notification_data,
+      notification_resources, proxy);
+
+  GetNotificationDisplayService(profile)->Display(
+      NotificationCommon::NON_PERSISTENT, notification.delegate_id(),
+      notification);
   if (cancel_callback) {
 #if defined(OS_WIN)
     std::string profile_id =
@@ -361,10 +323,17 @@ void PlatformNotificationServiceImpl::DisplayNotification(
 void PlatformNotificationServiceImpl::DisplayPersistentNotification(
     BrowserContext* browser_context,
     int64_t persistent_notification_id,
+    const GURL& service_worker_scope,
     const GURL& origin,
     const content::PlatformNotificationData& notification_data,
     const content::NotificationResources& notification_resources) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  // Posted tasks can request notifications to be added, which would cause a
+  // crash (see |ScopedKeepAlive|). We just do nothing here, the user would not
+  // see the notification anyway, since we are shutting down.
+  if (g_browser_process->IsShuttingDown())
+    return;
 
   Profile* profile = Profile::FromBrowserContext(browser_context);
   DCHECK(profile);
@@ -377,13 +346,15 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
       settings_button_index);
 
   Notification notification = CreateNotificationFromData(
-      profile, origin, notification_data, notification_resources, delegate);
+      profile, service_worker_scope, origin, notification_data,
+      notification_resources, delegate);
 
   // TODO(peter): Remove this mapping when we have reliable id generation for
   // the message_center::Notification objects.
   persistent_notifications_[persistent_notification_id] = notification.id();
 
   GetNotificationDisplayService(profile)->Display(
+      NotificationCommon::PERSISTENT,
       base::Int64ToString(delegate->persistent_notification_id()),
       notification);
   content::RecordAction(
@@ -417,12 +388,14 @@ void PlatformNotificationServiceImpl::ClosePersistentNotification(
     // TODO(peter): Remove this conversion when the notification ids are being
     // generated by the caller of this method.
     GetNotificationDisplayService(profile)->Close(
+        NotificationCommon::PERSISTENT,
         base::Int64ToString(persistent_notification_id));
   } else {
     auto iter = persistent_notifications_.find(persistent_notification_id);
     if (iter == persistent_notifications_.end())
       return;
-    GetNotificationDisplayService(profile)->Close(iter->second);
+    GetNotificationDisplayService(profile)->Close(
+        NotificationCommon::PERSISTENT, iter->second);
   }
 
   persistent_notifications_.erase(persistent_notification_id);
@@ -466,6 +439,7 @@ void PlatformNotificationServiceImpl::OnCloseEventDispatchComplete(
 
 Notification PlatformNotificationServiceImpl::CreateNotificationFromData(
     Profile* profile,
+    const GURL& service_worker_scope,
     const GURL& origin,
     const content::PlatformNotificationData& notification_data,
     const content::NotificationResources& notification_resources,
@@ -483,6 +457,7 @@ Notification PlatformNotificationServiceImpl::CreateNotificationFromData(
       origin, notification_data.tag, message_center::RichNotificationData(),
       delegate);
 
+  notification.set_service_worker_scope(service_worker_scope);
   notification.set_context_message(
       DisplayNameForContextMessage(profile, origin));
   notification.set_vibration_pattern(notification_data.vibration_pattern);
@@ -490,9 +465,14 @@ Notification PlatformNotificationServiceImpl::CreateNotificationFromData(
   notification.set_renotify(notification_data.renotify);
   notification.set_silent(notification_data.silent);
 
+  if (!notification_resources.image.drawsNothing()) {
+    notification.set_type(message_center::NOTIFICATION_TYPE_IMAGE);
+    notification.set_image(
+        gfx::Image::CreateFrom1xBitmap(notification_resources.image));
+  }
+
   // Badges are only supported on Android, primarily because it's the only
   // platform that makes good use of them in the status bar.
-  // TODO(mvanouwerkerk): ensure no badge is loaded when it will not be used.
 #if defined(OS_ANDROID)
   // TODO(peter): Handle different screen densities instead of always using the
   // 1x bitmap - crbug.com/585815.

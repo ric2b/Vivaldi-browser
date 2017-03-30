@@ -18,6 +18,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "gpu/config/gpu_switches.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
@@ -205,6 +206,20 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
   gpu_info->gl_extensions =
       reinterpret_cast<const char*>(glGetStringFn(GL_EXTENSIONS));
 
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(switches::kGpuTestingGLVendor)) {
+    gpu_info->gl_vendor =
+        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVendor);
+  }
+  if (command_line->HasSwitch(switches::kGpuTestingGLRenderer)) {
+    gpu_info->gl_renderer =
+        command_line->GetSwitchValueASCII(switches::kGpuTestingGLRenderer);
+  }
+  if (command_line->HasSwitch(switches::kGpuTestingGLVersion)) {
+    gpu_info->gl_version =
+        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVersion);
+  }
+
   GLint max_samples = 0;
   glGetIntegervFn(GL_MAX_SAMPLES, &max_samples);
   gpu_info->max_msaa_samples = base::IntToString(max_samples);
@@ -264,8 +279,6 @@ CollectInfoResult CollectGpuID(uint32_t* vendor_id, uint32_t* device_id) {
 }
 
 CollectInfoResult CollectBasicGraphicsInfo(GPUInfo* gpu_info) {
-  gpu_info->can_lose_context = false;
-
   // When command buffer is compiled as a standalone library, the process might
   // not have a Java environment.
   if (base::android::IsVMInitialized()) {

@@ -271,7 +271,6 @@ class TestFilterSpecifyingChild : public ResourceMessageFilter {
 
  private:
   void GetContexts(ResourceType resource_type,
-                   int origin_pid,
                    ResourceContext** resource_context,
                    net::URLRequestContext** request_context) {
     *resource_context = resource_context_;
@@ -320,31 +319,6 @@ class ForwardingFilter : public TestFilter {
   IPC::Sender* dest_;
 
   DISALLOW_COPY_AND_ASSIGN(ForwardingFilter);
-};
-
-// This class is a variation on URLRequestTestJob that will call
-// URLRequest::WillStartUsingNetwork before starting.
-class URLRequestTestDelayedNetworkJob : public net::URLRequestTestJob {
- public:
-  URLRequestTestDelayedNetworkJob(net::URLRequest* request,
-                                  net::NetworkDelegate* network_delegate)
-      : net::URLRequestTestJob(request, network_delegate) {}
-
-  // Only start if not deferred for network start.
-  void Start() override {
-    bool defer = false;
-    NotifyBeforeNetworkStart(&defer);
-    if (defer)
-      return;
-    net::URLRequestTestJob::Start();
-  }
-
-  void ResumeNetworkStart() override { net::URLRequestTestJob::StartAsync(); }
-
- private:
-  ~URLRequestTestDelayedNetworkJob() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(URLRequestTestDelayedNetworkJob);
 };
 
 // This class is a variation on URLRequestTestJob in that it does
@@ -549,7 +523,6 @@ class TestURLRequestJobFactory : public net::URLRequestJobFactory {
         hang_after_start_(false),
         delay_start_(false),
         delay_complete_(false),
-        network_start_notification_(false),
         url_request_jobs_created_count_(0) {
   }
 
@@ -572,10 +545,6 @@ class TestURLRequestJobFactory : public net::URLRequestJobFactory {
 
   void SetDelayedCompleteJobGeneration(bool delay_job_complete) {
     delay_complete_ = delay_job_complete;
-  }
-
-  void SetNetworkStartNotificationJobGeneration(bool notification) {
-    network_start_notification_ = notification;
   }
 
   net::URLRequestJob* MaybeCreateJobWithProtocolHandler(
@@ -609,7 +578,6 @@ class TestURLRequestJobFactory : public net::URLRequestJobFactory {
   bool hang_after_start_;
   bool delay_start_;
   bool delay_complete_;
-  bool network_start_notification_;
   mutable int url_request_jobs_created_count_;
   std::set<std::string> supported_schemes_;
 
@@ -643,8 +611,7 @@ enum GenericResourceThrottleFlags {
   NONE                      = 0,
   DEFER_STARTING_REQUEST    = 1 << 0,
   DEFER_PROCESSING_RESPONSE = 1 << 1,
-  CANCEL_BEFORE_START       = 1 << 2,
-  DEFER_NETWORK_START       = 1 << 3
+  CANCEL_BEFORE_START       = 1 << 2
 };
 
 // Throttle that tracks the current throttle blocking a request.  Only one
@@ -686,15 +653,6 @@ class GenericResourceThrottle : public ResourceThrottle {
   void WillProcessResponse(bool* defer) override {
     ASSERT_EQ(NULL, active_throttle_);
     if (flags_ & DEFER_PROCESSING_RESPONSE) {
-      active_throttle_ = this;
-      *defer = true;
-    }
-  }
-
-  void WillStartUsingNetwork(bool* defer) override {
-    ASSERT_EQ(NULL, active_throttle_);
-
-    if (flags_ & DEFER_NETWORK_START) {
       active_throttle_ = this;
       *defer = true;
     }
@@ -781,7 +739,7 @@ class TestResourceDispatcherHostDelegate
 // Waits for a ShareableFileReference to be released.
 class ShareableFileReleaseWaiter {
  public:
-  ShareableFileReleaseWaiter(const base::FilePath& path) {
+  explicit ShareableFileReleaseWaiter(const base::FilePath& path) {
     scoped_refptr<ShareableFileReference> file =
         ShareableFileReference::Get(path);
     file->AddFinalReleaseCallback(
@@ -807,7 +765,7 @@ class ShareableFileReleaseWaiter {
 // ResourceDispatcherHostImpl.
 class TestWebContentsObserver : public WebContentsObserver {
  public:
-  TestWebContentsObserver(WebContents* web_contents)
+  explicit TestWebContentsObserver(WebContents* web_contents)
       : WebContentsObserver(web_contents),
         resource_request_redirect_count_(0),
         resource_response_start_count_(0) {}
@@ -1568,7 +1526,7 @@ TEST_P(ResourceDispatcherHostTest, DetachedResourceTimesOut) {
   base::OneShotTimer timer;
   timer.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(210),
               base::MessageLoop::current(), &base::MessageLoop::QuitWhenIdle);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // The prefetch should be cancelled by now.
   EXPECT_EQ(0, host_.pending_requests());
@@ -1783,33 +1741,6 @@ TEST_P(ResourceDispatcherHostTest, PausedStartError) {
   EXPECT_EQ(0, host_.pending_requests());
 }
 
-// Test the WillStartUsingNetwork throttle.
-TEST_P(ResourceDispatcherHostTest, ThrottleNetworkStart) {
-  // Arrange to have requests deferred before processing response headers.
-  TestResourceDispatcherHostDelegate delegate;
-  delegate.set_flags(DEFER_NETWORK_START);
-  host_.SetDelegate(&delegate);
-
-  job_factory_->SetNetworkStartNotificationJobGeneration(true);
-  MakeTestRequest(0, 1, net::URLRequestTestJob::test_url_2());
-
-  // Should have deferred for network start.
-  GenericResourceThrottle* first_throttle =
-      GenericResourceThrottle::active_throttle();
-  ASSERT_TRUE(first_throttle);
-  EXPECT_EQ(0, network_delegate()->completed_requests());
-  EXPECT_EQ(1, host_.pending_requests());
-
-  first_throttle->Resume();
-
-  // Flush all the pending requests.
-  while (net::URLRequestTestJob::ProcessOnePendingMessage()) {}
-  base::RunLoop().RunUntilIdle();
-
-  EXPECT_EQ(1, network_delegate()->completed_requests());
-  EXPECT_EQ(0, host_.pending_requests());
-}
-
 TEST_P(ResourceDispatcherHostTest, ThrottleAndResumeTwice) {
   // Arrange to have requests deferred before starting.
   TestResourceDispatcherHostDelegate delegate;
@@ -1904,7 +1835,7 @@ TEST_P(ResourceDispatcherHostTest, TestProcessCancel) {
   // Now that the async IO path is in place, the IO always completes on the
   // initial call; so the requests have already completed.  This basically
   // breaks the whole test.
-  //EXPECT_EQ(3, host_.pending_requests());
+  // EXPECT_EQ(3, host_.pending_requests());
 
   // Process test_url_2 and test_url_3 for one level so one callback is called.
   // We'll cancel test_url_4 (detachable) before processing it to verify that it
@@ -2020,7 +1951,7 @@ TEST_P(ResourceDispatcherHostTest, TestProcessCancelDetachedTimesOut) {
   base::OneShotTimer timer;
   timer.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(210),
               base::MessageLoop::current(), &base::MessageLoop::QuitWhenIdle);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // The prefetch should be cancelled by now.
   EXPECT_EQ(0, host_.pending_requests());
@@ -2280,8 +2211,7 @@ TEST_P(ResourceDispatcherHostTest, TooMuchOutstandingRequestsMemory) {
   // ResourceDispatcherHost::CalculateApproximateMemoryCost().
   int kMemoryCostOfTest2Req =
       ResourceDispatcherHostImpl::kAvgBytesPerOutstandingRequest +
-      std::string("GET").size() +
-      net::URLRequestTestJob::test_url_2().spec().size();
+      net::URLRequestTestJob::test_url_2().spec().size() + sizeof("GET") - 1;
 
   // Tighten the bound on the ResourceDispatcherHost, to speed things up.
   int kMaxCostPerProcess = 440000;
@@ -3443,10 +3373,8 @@ TEST_P(ResourceDispatcherHostTest, RegisterDownloadedTempFile) {
   ASSERT_TRUE(base::CreateTemporaryFile(&file_path));
   scoped_refptr<ShareableFileReference> deletable_file =
       ShareableFileReference::GetOrCreate(
-          file_path,
-          ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetMessageLoopProxyForThread(
-              BrowserThread::FILE).get());
+          file_path, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
 
   // Not readable.
   EXPECT_FALSE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
@@ -3490,10 +3418,8 @@ TEST_P(ResourceDispatcherHostTest, ReleaseTemporiesOnProcessExit) {
   ASSERT_TRUE(base::CreateTemporaryFile(&file_path));
   scoped_refptr<ShareableFileReference> deletable_file =
       ShareableFileReference::GetOrCreate(
-          file_path,
-          ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetMessageLoopProxyForThread(
-              BrowserThread::FILE).get());
+          file_path, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
 
   // Register it for a resource request.
   host_.RegisterDownloadedTempFile(filter_->child_id(), kRequestID, file_path);
@@ -3855,8 +3781,6 @@ net::URLRequestJob* TestURLRequestJobFactory::MaybeCreateJobWithProtocolHandler(
     } else if (delay_complete_) {
       return new URLRequestTestDelayedCompletionJob(request,
                                                     network_delegate);
-    } else if (network_start_notification_) {
-      return new URLRequestTestDelayedNetworkJob(request, network_delegate);
     } else if (scheme == "big-job") {
       return new URLRequestBigJob(request, network_delegate);
     } else {

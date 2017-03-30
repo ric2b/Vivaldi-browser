@@ -29,7 +29,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/text_utils.h"
-#include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -48,6 +48,10 @@ namespace {
 // If we don't clamp the maximum width, then very long URLs and titles can make
 // the bubble arbitrarily wide.
 const int kMaxContentsWidth = 500;
+
+// The new default width for the content settings bubble. The review process to
+// the width on per-bubble basis is tracked with https://crbug.com/649650.
+const int kMaxDefaultContentsWidth = 320;
 
 // When we have multiline labels, we should set a minimum width lest we get very
 // narrow bubbles with lots of line-wrapping.
@@ -160,10 +164,10 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
     : content::WebContentsObserver(web_contents),
       BubbleDialogDelegateView(anchor_view, arrow),
       content_setting_bubble_model_(content_setting_bubble_model),
-      custom_link_(NULL),
-      manage_link_(NULL),
-      learn_more_link_(NULL),
-      close_button_(NULL) {
+      custom_link_(nullptr),
+      manage_link_(nullptr),
+      manage_button_(nullptr),
+      learn_more_link_(nullptr) {
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
@@ -182,7 +186,12 @@ gfx::Size ContentSettingBubbleContents::GetPreferredSize() const {
        (kMinMultiLineContentsWidth > preferred_size.width()))
           ? kMinMultiLineContentsWidth
           : preferred_size.width();
-  preferred_size.set_width(std::min(preferred_width, kMaxContentsWidth));
+  if (content_setting_bubble_model_->AsSubresourceFilterBubbleModel()) {
+    preferred_size.set_width(std::min(preferred_width,
+                                      kMaxDefaultContentsWidth));
+  } else {
+    preferred_size.set_width(std::min(preferred_width, kMaxContentsWidth));
+  }
   return preferred_size;
 }
 
@@ -205,12 +214,21 @@ void ContentSettingBubbleContents::Init() {
   bool bubble_content_empty = true;
 
   if (!bubble_content.title.empty()) {
-    views::Label* title_label = new views::Label(base::UTF8ToUTF16(
-        bubble_content.title));
+    views::Label* title_label = new views::Label(bubble_content.title);
     title_label->SetMultiLine(true);
     title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     layout->StartRow(0, kSingleColumnSetId);
     layout->AddView(title_label);
+    bubble_content_empty = false;
+  }
+
+  if (!bubble_content.message.empty()) {
+    views::Label* message_label = new views::Label(bubble_content.message);
+    layout->AddPaddingRow(0, views::kUnrelatedControlVerticalSpacing);
+    message_label->SetMultiLine(true);
+    message_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    layout->StartRow(0, kSingleColumnSetId);
+    layout->AddView(message_label);
     bubble_content_empty = false;
   }
 
@@ -324,7 +342,9 @@ void ContentSettingBubbleContents::Init() {
           !(i->second.disabled || model->GetDevices().empty()));
       combobox->set_listener(this);
       combobox->SetSelectedIndex(
-          model->GetDeviceIndex(i->second.selected_device));
+          model->GetDevices().empty()
+              ? 0
+              : model->GetDeviceIndex(i->second.selected_device));
       layout->AddView(combobox);
 
       bubble_content_empty = false;
@@ -372,10 +392,27 @@ void ContentSettingBubbleContents::Init() {
 }
 
 views::View* ContentSettingBubbleContents::CreateExtraView() {
-  manage_link_ = new views::Link(base::UTF8ToUTF16(
-      content_setting_bubble_model_->bubble_content().manage_link));
-  manage_link_->set_listener(this);
-  return manage_link_;
+  if (content_setting_bubble_model_->bubble_content()
+          .show_manage_text_as_button) {
+    manage_button_ = views::MdTextButton::CreateSecondaryUiButton(
+        this, base::UTF8ToUTF16(
+                  content_setting_bubble_model_->bubble_content().manage_text));
+    return manage_button_;
+  } else {
+    manage_link_ = new views::Link(base::UTF8ToUTF16(
+        content_setting_bubble_model_->bubble_content().manage_text));
+    manage_link_->set_listener(this);
+    return manage_link_;
+  }
+}
+
+bool ContentSettingBubbleContents::Accept() {
+  content_setting_bubble_model_->OnDoneClicked();
+  return true;
+}
+
+bool ContentSettingBubbleContents::Close() {
+  return true;
 }
 
 int ContentSettingBubbleContents::GetDialogButtons() const {
@@ -392,21 +429,20 @@ void ContentSettingBubbleContents::DidNavigateMainFrame(
     const content::FrameNavigateParams& params) {
   // Content settings are based on the main frame, so if it switches then
   // close up shop.
-  content_setting_bubble_model_->OnDoneClicked();
   GetWidget()->Close();
 }
 
 void ContentSettingBubbleContents::ButtonPressed(views::Button* sender,
                                                  const ui::Event& event) {
-  RadioGroup::const_iterator i(
-      std::find(radio_group_.begin(), radio_group_.end(), sender));
-  if (i != radio_group_.end()) {
+  if (manage_button_ == sender) {
+    GetWidget()->Close();
+    content_setting_bubble_model_->OnManageLinkClicked();
+  } else {
+    RadioGroup::const_iterator i(
+        std::find(radio_group_.begin(), radio_group_.end(), sender));
+    DCHECK(i != radio_group_.end());
     content_setting_bubble_model_->OnRadioClicked(i - radio_group_.begin());
-    return;
   }
-  DCHECK_EQ(sender, close_button_);
-  content_setting_bubble_model_->OnDoneClicked();
-  GetWidget()->Close();
 }
 
 void ContentSettingBubbleContents::LinkClicked(views::Link* source,

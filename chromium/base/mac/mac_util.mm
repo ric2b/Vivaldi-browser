@@ -441,7 +441,7 @@ int MacOSXMinorVersionInternal() {
   // immediate death.
   CHECK(darwin_major_version >= 6);
   int mac_os_x_minor_version = darwin_major_version - 4;
-  DLOG_IF(WARNING, darwin_major_version > 15) << "Assuming Darwin "
+  DLOG_IF(WARNING, darwin_major_version > 16) << "Assuming Darwin "
       << base::IntToString(darwin_major_version) << " is Mac OS X 10."
       << base::IntToString(mac_os_x_minor_version);
 
@@ -467,12 +467,6 @@ enum {
 #if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GT_10_9)
 bool IsOSMavericks() {
   return MacOSXMinorVersion() == MAVERICKS_MINOR_VERSION;
-}
-#endif
-
-#if !defined(BASE_MAC_MAC_UTIL_H_INLINED_GE_10_9)
-bool IsOSMavericksOrLater() {
-  return MacOSXMinorVersion() >= MAVERICKS_MINOR_VERSION;
 }
 #endif
 

@@ -16,8 +16,6 @@ class DownloadNotificationManagerForProfile;
 
 class DownloadNotificationManager : public DownloadUIController::Delegate {
  public:
-  static bool IsEnabled();
-
   explicit DownloadNotificationManager(Profile* profile);
   ~DownloadNotificationManager() override;
 
@@ -34,7 +32,8 @@ class DownloadNotificationManager : public DownloadUIController::Delegate {
   std::map<Profile*, DownloadNotificationManagerForProfile*>
       manager_for_profile_;
 
-  STLValueDeleter<std::map<Profile*, DownloadNotificationManagerForProfile*>>
+  base::STLValueDeleter<
+      std::map<Profile*, DownloadNotificationManagerForProfile*>>
       items_deleter_;
 };
 
@@ -71,7 +70,8 @@ class DownloadNotificationManagerForProfile
   // Pointer to the message center instance.
   message_center::MessageCenter* message_center_;
 
-  STLValueDeleter<std::map<content::DownloadItem*, DownloadItemNotification*>>
+  base::STLValueDeleter<
+      std::map<content::DownloadItem*, DownloadItemNotification*>>
       items_deleter_;
 };
 

@@ -63,15 +63,9 @@ class CONTENT_EXPORT BrowserPluginManager : public RenderThreadObserver {
   // RenderThreadObserver override.
   bool OnControlMessageReceived(const IPC::Message& message) override;
 
-  bool IsUpdatingFocusForGuests();
-
  private:
   // This map is keyed by guest instance IDs.
   IDMap<BrowserPlugin> instances_;
-
-  // Vivaldi addition; used to make sure the focus updating for the guests are
-  // not re-entrant. Introduced for VB-17416.
-  bool is_updating_focus_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserPluginManager);
 };

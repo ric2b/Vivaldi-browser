@@ -33,8 +33,8 @@
 #include "ui/accessibility/tree_generator.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_controller.h"
-#include "ash/shell.h"
+#include "ash/common/accelerators/accelerator_controller.h"
+#include "ash/common/wm_shell.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #endif
 
@@ -154,13 +154,15 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, TabsAutomationHostsPermissions) {
 }
 
 #if defined(USE_AURA)
-IN_PROC_BROWSER_TEST_F(AutomationApiTest, Desktop) {
+// Flaky, see http://crbug.com/637525
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, DISABLED_Desktop) {
   ASSERT_TRUE(RunExtensionSubtest("automation/tests/desktop", "desktop.html"))
       << message_;
 }
 
+// TODO(crbug.com/615908): Flaky on CrOS sanitizers.
 #if defined(OS_CHROMEOS)
-#if defined(MEMORY_SANITIZER)
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
 #define MAYBE_DesktopInitialFocus DISABLED_DesktopInitialFocus
 #else
 #define MAYBE_DesktopInitialFocus DesktopInitialFocus
@@ -187,7 +189,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, DesktopFocusIframe) {
 IN_PROC_BROWSER_TEST_F(AutomationApiTest, DesktopFocusViews) {
   AutomationManagerAura::GetInstance()->Enable(browser()->profile());
   // Trigger the shelf subtree to be computed.
-  ash::Shell::GetInstance()->accelerator_controller()->PerformActionIfEnabled(
+  ash::WmShell::Get()->accelerator_controller()->PerformActionIfEnabled(
       ash::FOCUS_SHELF);
 
   ASSERT_TRUE(
@@ -205,7 +207,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, DesktopNotRequested) {
 IN_PROC_BROWSER_TEST_F(AutomationApiTest, DesktopActions) {
   AutomationManagerAura::GetInstance()->Enable(browser()->profile());
   // Trigger the shelf subtree to be computed.
-  ash::Shell::GetInstance()->accelerator_controller()->PerformActionIfEnabled(
+  ash::WmShell::Get()->accelerator_controller()->PerformActionIfEnabled(
       ash::FOCUS_SHELF);
 
   ASSERT_TRUE(RunExtensionSubtest("automation/tests/desktop", "actions.html"))

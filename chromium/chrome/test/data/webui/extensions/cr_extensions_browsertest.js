@@ -30,7 +30,8 @@ CrExtensionsBrowserTest.prototype = {
 
   /** @override */
   commandLineSwitches: [{
-    switchName: 'enable-md-extensions',
+    switchName: 'enable-features',
+    switchValue: 'MaterialDesignExtensions',
   }],
 
   /** @override */
@@ -42,6 +43,7 @@ CrExtensionsBrowserTest.prototype = {
     'extension_keyboard_shortcuts_test.js',
     'extension_pack_dialog_test.js',
     'extension_service_test.js',
+    'extension_shortcut_input_test.js',
     'extension_sidebar_test.js',
     'extension_manager_test.js',
     '../mock_controller.js',
@@ -226,6 +228,12 @@ TEST_F('CrExtensionsBrowserTest', 'ExtensionShortcutUtilTest', function() {
   extension_keyboard_shortcut_tests.registerTests();
   mocha.grep(
       assert(extension_keyboard_shortcut_tests.TestNames.ShortcutUtil)).run();
+});
+
+TEST_F('CrExtensionsBrowserTest', 'ExtensionShortcutInputTest', function() {
+  extension_shortcut_input_tests.registerTests();
+  mocha.grep(
+      assert(extension_shortcut_input_tests.TestNames.Basic)).run();
 });
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,6 +26,7 @@ check_targets = [
 
   #"//chrome/*",  # Epic number of errors.
   "//chrome/app/*",
+  "//chrome/browser/extensions/*",
   "//chrome/common/*",
   "//chrome/installer/*",
   "//chrome/third_party/mozilla_security_manager/*",
@@ -36,25 +37,7 @@ check_targets = [
   "//chrome_elf/*",
   "//cloud_print/*",
   "//components/*",
-
-  #"//content/*",  # A whole lot of errors.
-  "//content/browser/*",
-  "//content/child/*",
-  "//content/common/*",
-  "//content/gpu/*",
-  "//content/ppapi_plugin/*",
-  "//content/public/*",
-  "//content/renderer/*",
-
-  #"//content/shell/*",  # Needs Android fix, bug 597020.
-
-  #"//content/test/*",  # A couple of errors left.
-  "//content/test:content_perftests",
-  "//content/test:content_site_isolation_browsertests",
-  "//content/test:content_test_mojo_bindings",
-  "//content/test:content_unittests",
-  "//content/test:test_support",
-  "//content/utility/*",
+  "//content/*",
   "//courgette/*",
   "//crypto/*",
   "//data/*",
@@ -111,7 +94,6 @@ check_targets = [
   "//skia/*",
   "//sql/*",
   "//storage/*",
-  "//sync/*",
   "//testing/*",
 
   #"//third_party/*",  # May not ever want this.
@@ -270,6 +252,7 @@ exec_script_whitelist = [
   "//clank/native/BUILD.gn",
 
   "//components/domain_reliability/BUILD.gn",
+  "//components/sync/protocol/protocol_sources.gni",
   "//content/browser/browser.gni",
   "//content/child/child.gni",
   "//content/common/common.gni",
@@ -292,7 +275,6 @@ exec_script_whitelist = [
   "//remoting/remoting_srcs.gni",
   "//remoting/remoting_version.gni",
   "//skia/BUILD.gn",
-  "//sync/protocol/protocol_sources.gni",
   "//third_party/android_platform/BUILD.gn",
   "//third_party/angle/BUILD.gn",
   "//third_party/angle/src/tests/BUILD.gn",
@@ -331,6 +313,7 @@ exec_script_whitelist = [
   "//tools/gn/misc/vim/syntax/gn.vim",
   "//tools/gn/setup.cc",
   "//ui/accessibility/BUILD.gn",
+  "//ui/gfx/BUILD.gn",
   "//ui/views/BUILD.gn",
   "//ui/views/mus/BUILD.gn",
   "//v8/test/cctest/BUILD.gn",

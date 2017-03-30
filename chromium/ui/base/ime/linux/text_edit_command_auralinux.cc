@@ -81,6 +81,10 @@ std::string TextEditCommandAuraLinux::GetCommandString() const {
       return "MoveToEndOfParagraph";
     case TextEditCommand::MOVE_TO_END_OF_PARAGRAPH_AND_MODIFY_SELECTION:
       return "MoveToEndOfParagraphAndModifySelection";
+    case TextEditCommand::MOVE_PARAGRAPH_BACKWARD_AND_MODIFY_SELECTION:
+      return "MoveParagraphBackwardAndModifySelection";
+    case TextEditCommand::MOVE_PARAGRAPH_FORWARD_AND_MODIFY_SELECTION:
+      return "MoveParagraphForwardAndModifySelection";
     case TextEditCommand::MOVE_UP:
       return "MoveUp";
     case TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION:
@@ -115,6 +119,8 @@ std::string TextEditCommandAuraLinux::GetCommandString() const {
       return "SelectAll";
     case TextEditCommand::TRANSPOSE:
       return "Transpose";
+    case TextEditCommand::YANK:
+      return "Yank";
     case TextEditCommand::INSERT_TEXT:
       return "InsertText";
     case TextEditCommand::SET_MARK:

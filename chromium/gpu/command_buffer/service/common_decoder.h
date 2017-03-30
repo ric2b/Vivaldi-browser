@@ -10,11 +10,9 @@
 
 #include <map>
 #include <memory>
-#include <stack>
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/linked_ptr.h"
 #include "gpu/command_buffer/common/buffer.h"
 #include "gpu/command_buffer/service/cmd_parser.h"
 #include "gpu/gpu_export.h"
@@ -120,6 +118,11 @@ class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
   }
   CommandBufferEngine* engine() const { return engine_; }
 
+  // Sets the maximum size for buckets.
+  void set_max_bucket_size(size_t max_bucket_size) {
+    max_bucket_size_ = max_bucket_size;
+  }
+
   // Creates a bucket. If the bucket already exists returns that bucket.
   Bucket* CreateBucket(uint32_t bucket_id);
 
@@ -191,8 +194,9 @@ class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
   #undef COMMON_COMMAND_BUFFER_CMD_OP
 
   CommandBufferEngine* engine_;
+  size_t max_bucket_size_;
 
-  typedef std::map<uint32_t, linked_ptr<Bucket>> BucketMap;
+  typedef std::map<uint32_t, std::unique_ptr<Bucket>> BucketMap;
   BucketMap buckets_;
 
   typedef Error (CommonDecoder::*CmdHandler)(uint32_t immediate_data_size,
@@ -209,6 +213,7 @@ class GPU_EXPORT CommonDecoder : NON_EXPORTED_BASE(public AsyncAPIInterface) {
   // A table of CommandInfo for all the commands.
   static const CommandInfo command_info[];
 
+  DISALLOW_COPY_AND_ASSIGN(CommonDecoder);
 };
 
 }  // namespace gpu

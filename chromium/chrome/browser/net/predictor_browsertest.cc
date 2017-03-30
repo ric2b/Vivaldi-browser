@@ -101,7 +101,6 @@ std::unique_ptr<net::test_server::HttpResponse> RedirectForPathHandler(
   return std::move(response);
 }
 
-const char kBlinkPreconnectFeature[] = "LinkPreconnect";
 const char kChromiumUrl[] = "http://chromium.org";
 const char kInvalidLongUrl[] =
     "http://"
@@ -403,8 +402,8 @@ class CrossSitePredictorObserver
 
   bool HasHostBeenLookedUpLocked(const GURL& url) {
     lock_.AssertAcquired();
-    return ContainsKey(successful_dns_lookups_, url) ||
-           ContainsKey(unsuccessful_dns_lookups_, url);
+    return base::ContainsKey(successful_dns_lookups_, url) ||
+           base::ContainsKey(unsuccessful_dns_lookups_, url);
   }
 
   bool HasHostBeenLookedUp(const GURL& url) {
@@ -435,7 +434,7 @@ class CrossSitePredictorObserver
     base::AutoLock lock(lock_);
     EXPECT_TRUE(HasHostBeenLookedUpLocked(url)) << "Expected to have looked up "
                                                 << url.spec();
-    return ContainsKey(successful_dns_lookups_, url);
+    return base::ContainsKey(successful_dns_lookups_, url);
   }
 
   void set_task_runner(
@@ -512,8 +511,6 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
-    command_line->AppendSwitchASCII(
-        switches::kEnableBlinkFeatures, kBlinkPreconnectFeature);
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     "PreconnectMore");
   }
@@ -535,7 +532,7 @@ class PredictorBrowserTest : public InProcessBrowserTest {
         base::Bind(&RedirectForPathHandler, "/",
                    cross_site_test_server()->GetURL("/title1.html")));
 
-    predictor()->SetPreconnectEnabledForTest(true);
+    predictor()->SetPredictorEnabledForTest(true);
     InstallPredictorObserver(embedded_test_server()->base_url(),
                              cross_site_test_server()->base_url());
     observer()->set_task_runner(task_runner_);
@@ -637,7 +634,8 @@ class PredictorBrowserTest : public InProcessBrowserTest {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&PredictorBrowserTest::FloodResolveRequests, this, names));
+        base::Bind(&PredictorBrowserTest::FloodResolveRequests,
+                   base::Unretained(this), names));
   }
 
   void FloodResolveRequests(const std::vector<GURL>& names) {
@@ -728,7 +726,7 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   }
 
   void ExpectUrlRequestedFromPredictor(const GURL& url) {
-    EXPECT_TRUE(ContainsKey(predictor()->results_, url));
+    EXPECT_TRUE(base::ContainsKey(predictor()->results_, url));
   }
 
   void DiscardAllResultsOnUIThread() {
@@ -1362,6 +1360,9 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest,
   PrepareFrameSubresources(referring_url_);
   PrepareFrameSubresources(referring_url_);
   PrepareFrameSubresources(referring_url_);
+
+  // The onload event is required to persist prefs.
+  ui_test_utils::NavigateToURL(browser(), referring_url_);
 }
 
 IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ShutdownStartupCyclePreresolve) {
@@ -1370,9 +1371,14 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, ShutdownStartupCyclePreresolve) {
   PrepareFrameSubresources(referring_url_);
   observer()->WaitUntilHostLookedUp(target_url_);
 
-  // Verify that both urls were requested by the predictor. Note that the
-  // startup URL may be requested before the observer attaches itself.
-  ExpectUrlRequestedFromPredictor(startup_url_);
+  // Since the predictor is only enabled after startup, just ensure that
+  // |startup_url_| is persisted in the prefs.
+  std::string startup_list;
+  GetListFromPrefsAsString(prefs::kDnsPrefetchingStartupList,
+                           &startup_list);
+  EXPECT_THAT(startup_list, HasSubstr(startup_url_.host()));
+
+  // Verify that the |target_url_| is requested by the predictor.
   EXPECT_FALSE(observer()->HostFound(target_url_));
 }
 
@@ -1380,6 +1386,9 @@ IN_PROC_BROWSER_TEST_F(PredictorBrowserTest, PRE_ClearData) {
   // The target url will have a expected connection count of 2 after this call.
   InstallPredictorObserver(referring_url_, target_url_);
   LearnFromNavigation(referring_url_, target_url_);
+
+  // The onload event is required to persist prefs.
+  ui_test_utils::NavigateToURL(browser(), referring_url_);
 }
 
 // Ensure predictive data is cleared when the history is cleared.

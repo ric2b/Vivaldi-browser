@@ -402,6 +402,7 @@ bool SecurityOrigin::isLocal() const
 
 bool SecurityOrigin::isLocalhost() const
 {
+    // TODO(mkwst): Update this to call into net::IsLocalhost.
     if (m_host == "localhost")
         return true;
 
@@ -505,7 +506,7 @@ void SecurityOrigin::buildRawString(StringBuilder& builder, bool includeSuborigi
     builder.append("://");
     if (includeSuborigin && hasSuborigin()) {
         builder.append(m_suborigin.name());
-        builder.append("_");
+        builder.append('_');
     }
     builder.append(m_host);
 

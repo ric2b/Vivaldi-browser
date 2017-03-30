@@ -67,7 +67,7 @@ Node* Text::mergeNextSiblingNodesIfPossible()
 
     // Merge text nodes.
     while (Node* nextSibling = this->nextSibling()) {
-        if (nextSibling->getNodeType() != TEXT_NODE)
+        if (nextSibling->getNodeType() != kTextNode)
             break;
 
         Text* nextText = toText(nextSibling);
@@ -141,7 +141,7 @@ static const Text* earliestLogicallyAdjacentTextNode(const Text* t)
 {
     for (const Node* n = t->previousSibling(); n; n = n->previousSibling()) {
         Node::NodeType type = n->getNodeType();
-        if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
+        if (type == Node::kTextNode || type == Node::kCdataSectionNode) {
             t = toText(n);
             continue;
         }
@@ -155,7 +155,7 @@ static const Text* latestLogicallyAdjacentTextNode(const Text* t)
 {
     for (const Node* n = t->nextSibling(); n; n = n->nextSibling()) {
         Node::NodeType type = n->getNodeType();
-        if (type == Node::TEXT_NODE || type == Node::CDATA_SECTION_NODE) {
+        if (type == Node::kTextNode || type == Node::kCdataSectionNode) {
             t = toText(n);
             continue;
         }
@@ -233,7 +233,7 @@ String Text::nodeName() const
 
 Node::NodeType Text::getNodeType() const
 {
-    return TEXT_NODE;
+    return kTextNode;
 }
 
 Node* Text::cloneNode(bool /*deep*/)
@@ -343,7 +343,7 @@ LayoutText* Text::createTextLayoutObject(const ComputedStyle& style)
     return new LayoutText(this, dataImpl());
 }
 
-void Text::attach(const AttachContext& context)
+void Text::attachLayoutTree(const AttachContext& context)
 {
     if (ContainerNode* layoutParent = LayoutTreeBuilderTraversal::parent(*this)) {
         if (LayoutObject* parentLayoutObject = layoutParent->layoutObject()) {
@@ -351,10 +351,10 @@ void Text::attach(const AttachContext& context)
                 LayoutTreeBuilderForText(*this, parentLayoutObject).createLayoutObject();
         }
     }
-    CharacterData::attach(context);
+    CharacterData::attachLayoutTree(context);
 }
 
-void Text::reattachIfNeeded(const AttachContext& context)
+void Text::reattachLayoutTreeIfNeeded(const AttachContext& context)
 {
     bool layoutObjectIsNeeded = false;
     ContainerNode* layoutParent = LayoutTreeBuilderTraversal::parent(*this);
@@ -368,16 +368,16 @@ void Text::reattachIfNeeded(const AttachContext& context)
     if (layoutObjectIsNeeded == !!layoutObject())
         return;
 
-    // The following is almost the same as Node::reattach() except that we create a layoutObject only if needed.
-    // Not calling reattach() to avoid repeated calls to Text::textLayoutObjectIsNeeded().
+    // The following is almost the same as Node::reattachLayoutTree() except that we create a layoutObject only if needed.
+    // Not calling reattachLayoutTree() to avoid repeated calls to Text::textLayoutObjectIsNeeded().
     AttachContext reattachContext(context);
     reattachContext.performingReattach = true;
 
     if (getStyleChangeType() < NeedsReattachStyleChange)
-        detach(reattachContext);
+        detachLayoutTree(reattachContext);
     if (layoutObjectIsNeeded)
         LayoutTreeBuilderForText(*this, layoutParent->layoutObject()).createLayoutObject();
-    CharacterData::attach(reattachContext);
+    CharacterData::attachLayoutTree(reattachContext);
 }
 
 void Text::recalcTextStyle(StyleRecalcChange change, Text* nextTextSibling)
@@ -389,7 +389,7 @@ void Text::recalcTextStyle(StyleRecalcChange change, Text* nextTextSibling)
             layoutItem.setText(dataImpl());
         clearNeedsStyleRecalc();
     } else if (needsStyleRecalc() || needsWhitespaceLayoutObject()) {
-        reattach();
+        reattachLayoutTree();
         if (this->layoutObject())
             reattachWhitespaceSiblingsIfNeeded(nextTextSibling);
     }

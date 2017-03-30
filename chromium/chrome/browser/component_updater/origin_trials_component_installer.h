@@ -29,7 +29,7 @@ class OriginTrialsComponentInstallerTraits : public ComponentInstallerTraits {
  private:
   bool VerifyInstallation(const base::DictionaryValue& manifest,
                           const base::FilePath& install_dir) const override;
-  bool CanAutoUpdate() const override;
+  bool SupportsGroupPolicyEnabledComponentUpdates() const override;
   bool RequiresNetworkEncryption() const override;
   bool OnCustomInstall(const base::DictionaryValue& manifest,
                        const base::FilePath& install_dir) override;
@@ -40,6 +40,7 @@ class OriginTrialsComponentInstallerTraits : public ComponentInstallerTraits {
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   update_client::InstallerAttributes GetInstallerAttributes() const override;
+  std::vector<std::string> GetMimeTypes() const override;
 
   DISALLOW_COPY_AND_ASSIGN(OriginTrialsComponentInstallerTraits);
 };

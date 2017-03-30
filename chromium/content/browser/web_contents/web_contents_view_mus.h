@@ -10,12 +10,12 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "components/mus/public/cpp/scoped_window_ptr.h"
-#include "components/mus/public/cpp/window.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/common/content_export.h"
 #include "content/common/drag_event_source_info.h"
+#include "services/ui/public/cpp/scoped_window_ptr.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/aura/window_delegate.h"
 
 namespace content {
@@ -31,7 +31,7 @@ class WebContentsViewMus : public WebContentsView,
   // The corresponding WebContentsImpl is passed in the constructor, and manages
   // our lifetime. This doesn't need to be the case, but is this way currently
   // because that's what was easiest when they were split.
-  WebContentsViewMus(mus::Window* parent_window,
+  WebContentsViewMus(ui::Window* parent_window,
                      WebContentsImpl* web_contents,
                      WebContentsViewDelegate* delegate,
                      RenderViewHostDelegateView** delegate_view);
@@ -46,6 +46,7 @@ class WebContentsViewMus : public WebContentsView,
   gfx::NativeView GetNativeView() const override;
   gfx::NativeView GetContentNativeView() const override;
   gfx::NativeWindow GetTopLevelNativeWindow() const override;
+  void GetScreenInfo(blink::WebScreenInfo* web_screen_info) const override;
   void GetContainerBounds(gfx::Rect* out) const override;
   void SizeContents(const gfx::Size& size) override;
   void Focus() override;
@@ -109,7 +110,7 @@ class WebContentsViewMus : public WebContentsView,
 
   std::unique_ptr<WebContentsViewDelegate> delegate_;
   std::unique_ptr<aura::Window> aura_window_;
-  std::unique_ptr<mus::ScopedWindowPtr> mus_window_;
+  std::unique_ptr<ui::ScopedWindowPtr> mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(WebContentsViewMus);
 };

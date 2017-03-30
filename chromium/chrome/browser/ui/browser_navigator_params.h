@@ -72,6 +72,9 @@ struct NavigateParams {
   GURL url;
   content::Referrer referrer;
 
+  // The frame name to be used for the main frame.
+  std::string frame_name;
+
   // The browser-global ID of the frame to navigate, or -1 for the main frame.
   int frame_tree_node_id;
 
@@ -211,7 +214,7 @@ struct NavigateParams {
   // [out] Specifies the Browser object where the navigation occurred or the
   //       tab was added. Guaranteed non-NULL unless the disposition did not
   //       require a navigation, in which case this is set to NULL
-  //       (SUPPRESS_OPEN, SAVE_TO_DISK, IGNORE_ACTION).
+  //       (SAVE_TO_DISK, IGNORE_ACTION).
   // Note: If |show_window| is set to false and a new Browser is created by
   //       Navigate(), the caller is responsible for showing it so that its
   //       window can assume responsibility for the Browser's lifetime (Browser
@@ -229,6 +232,9 @@ struct NavigateParams {
 
   // Indicates whether |target_contents| is being created with a window.opener.
   bool created_with_opener;
+
+  // Whether or not the related navigation was started in the context menu.
+  bool started_from_context_menu;
 
   // SiteInstance of the frame that initiated the navigation or null if we
   // don't know it. This should be assigned from the OpenURLParams of the

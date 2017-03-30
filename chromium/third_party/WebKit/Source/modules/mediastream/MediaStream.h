@@ -67,7 +67,6 @@ public:
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(active);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(inactive);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(ended);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(addtrack);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(removetrack);
 
@@ -88,7 +87,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptions&) override;
+    bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptionsResolved&) override;
 
 private:
     MediaStream(ExecutionContext*, MediaStreamDescriptor*);
@@ -104,7 +103,7 @@ private:
     bool emptyOrOnlyEndedTracks();
 
     void scheduleDispatchEvent(Event*);
-    void scheduledEventTimerFired(Timer<MediaStream>*);
+    void scheduledEventTimerFired(TimerBase*);
 
     bool m_stopped;
 

@@ -93,16 +93,6 @@ class TranslateUIDelegateTest : public ::testing::Test {
         new TranslateUIDelegate(manager_->GetWeakPtr(), "ar", "fr"));
 
     ASSERT_FALSE(client_->GetTranslatePrefs()->IsTooOftenDenied("ar"));
-    base::FeatureList::ClearInstanceForTesting();
-    base::FeatureList::SetInstance(base::WrapUnique(new base::FeatureList));
-  }
-
-  void TurnOnTranslate2016Q2UIFlag() {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(translate::kTranslateUI2016Q2.name,
-                                            std::string());
-    base::FeatureList::SetInstance(std::move(feature_list));
   }
 
   MockTranslateDriver driver_;

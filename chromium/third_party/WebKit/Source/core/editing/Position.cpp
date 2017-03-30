@@ -35,9 +35,19 @@
 namespace blink {
 
 #if DCHECK_IS_ON()
-static bool canBeAnchorNode(Node* node)
+template <typename Strategy>
+static bool canBeAnchorNode(Node*);
+
+template <>
+bool canBeAnchorNode<EditingStrategy>(Node* node)
 {
     return !node || !node->isPseudoElement();
+}
+
+template <>
+bool canBeAnchorNode<EditingInFlatTreeStrategy>(Node* node)
+{
+    return canBeAnchorNode<EditingStrategy>(node) && node->canParticipateInFlatTree();
 }
 #endif
 
@@ -89,7 +99,7 @@ PositionTemplate<Strategy>::PositionTemplate(Node* anchorNode, PositionAnchorTyp
         return;
     }
 #if DCHECK_IS_ON()
-    DCHECK(canBeAnchorNode(m_anchorNode.get()));
+    DCHECK(canBeAnchorNode<Strategy>(m_anchorNode.get())) << m_anchorNode;
 #endif
     DCHECK_NE(m_anchorType, PositionAnchorType::OffsetInAnchor);
 }
@@ -105,7 +115,7 @@ PositionTemplate<Strategy>::PositionTemplate(Node* anchorNode, int offset)
     else
         DCHECK_EQ(offset, 0);
 #if DCHECK_IS_ON()
-    DCHECK(canBeAnchorNode(m_anchorNode.get()));
+    DCHECK(canBeAnchorNode<Strategy>(m_anchorNode.get())) << m_anchorNode;
 #endif
 }
 
@@ -174,7 +184,7 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::parentAnchoredEquivalent(
             return inParentBeforeNode(*m_anchorNode);
         return PositionTemplate<Strategy>(m_anchorNode.get(), 0);
     }
-    if (!m_anchorNode->offsetInCharacters()
+    if (!m_anchorNode->isCharacterDataNode()
         && (isAfterAnchorOrAfterChildren() || static_cast<unsigned>(m_offset) == m_anchorNode->countChildren())
         && (Strategy::editingIgnoresContent(m_anchorNode.get()) || isDisplayInsideTable(m_anchorNode.get()))
         && computeContainerNode()) {
@@ -252,7 +262,7 @@ Node* PositionTemplate<Strategy>::nodeAsRangeFirstNode() const
         return nullptr;
     if (!isOffsetInAnchor())
         return toOffsetInAnchor().nodeAsRangeFirstNode();
-    if (m_anchorNode->offsetInCharacters())
+    if (m_anchorNode->isCharacterDataNode())
         return m_anchorNode.get();
     if (Node* child = Strategy::childAt(*m_anchorNode, m_offset))
         return child;
@@ -279,7 +289,7 @@ Node* PositionTemplate<Strategy>::nodeAsRangePastLastNode() const
         return nullptr;
     if (!isOffsetInAnchor())
         return toOffsetInAnchor().nodeAsRangePastLastNode();
-    if (m_anchorNode->offsetInCharacters())
+    if (m_anchorNode->isCharacterDataNode())
         return Strategy::nextSkippingChildren(*m_anchorNode);
     if (Node* child = Strategy::childAt(*m_anchorNode, m_offset))
         return child;
@@ -429,7 +439,7 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::afterNode(Node* anchorNod
 template <typename Strategy>
 int PositionTemplate<Strategy>::lastOffsetInNode(Node* node)
 {
-    return node->offsetInCharacters() ? node->maxCharacterOffset() : static_cast<int>(Strategy::countChildren(*node));
+    return node->isCharacterDataNode() ? node->maxCharacterOffset() : static_cast<int>(Strategy::countChildren(*node));
 }
 
 // static
@@ -454,7 +464,7 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::lastPositionInNode(Node* 
 template <typename Strategy>
 int PositionTemplate<Strategy>::minOffsetForNode(Node* anchorNode, int offset)
 {
-    if (anchorNode->offsetInCharacters())
+    if (anchorNode->isCharacterDataNode())
         return std::min(offset, anchorNode->maxCharacterOffset());
 
     int newOffset = 0;
@@ -513,9 +523,9 @@ PositionInFlatTree toPositionInFlatTree(const Position& pos)
     if (pos.isNull())
         return PositionInFlatTree();
 
+    Node* const anchor = pos.anchorNode();
     if (pos.isOffsetInAnchor()) {
-        Node* anchor = pos.anchorNode();
-        if (anchor->offsetInCharacters())
+        if (anchor->isCharacterDataNode())
             return PositionInFlatTree(anchor, pos.computeOffsetInContainerNode());
         DCHECK(!anchor->isSlotOrActiveInsertionPoint());
         int offset = pos.computeOffsetInContainerNode();
@@ -541,7 +551,11 @@ PositionInFlatTree toPositionInFlatTree(const Position& pos)
         return PositionInFlatTree(anchor, PositionAnchorType::AfterChildren);
     }
 
-    return PositionInFlatTree(pos.anchorNode(), pos.anchorType());
+    if (anchor->isShadowRoot())
+        return PositionInFlatTree(anchor->shadowHost(), pos.anchorType());
+    // TODO(yosin): Once we have a test case for SLOT or active insertion point,
+    // this function should handle it.
+    return PositionInFlatTree(anchor, pos.anchorType());
 }
 
 Position toPositionInDOMTree(const Position& position)
@@ -568,7 +582,7 @@ Position toPositionInDOMTree(const PositionInFlatTree& position)
         return Position::beforeNode(anchorNode);
     case PositionAnchorType::OffsetInAnchor: {
         int offset = position.offsetInContainerNode();
-        if (anchorNode->offsetInCharacters())
+        if (anchorNode->isCharacterDataNode())
             return Position(anchorNode, offset);
         Node* child = FlatTreeTraversal::childAt(*anchorNode, offset);
         if (child)

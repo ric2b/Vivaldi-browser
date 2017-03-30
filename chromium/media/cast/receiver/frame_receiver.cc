@@ -40,21 +40,24 @@ FrameReceiver::FrameReceiver(
     CastTransport* const transport)
     : cast_environment_(cast_environment),
       transport_(transport),
-      packet_parser_(config.sender_ssrc, config.rtp_payload_type),
+      packet_parser_(
+          config.sender_ssrc,
+          config.rtp_payload_type <= RtpPayloadType::AUDIO_LAST ? 127 : 96),
       stats_(cast_environment->Clock()),
       event_media_type_(event_media_type),
       event_subscriber_(kReceiverRtcpEventHistorySize, event_media_type),
       rtp_timebase_(config.rtp_timebase),
       target_playout_delay_(
           base::TimeDelta::FromMilliseconds(config.rtp_max_delay_ms)),
-      expected_frame_duration_(base::TimeDelta::FromSeconds(1) /
-                               config.target_frame_rate),
+      expected_frame_duration_(
+          base::TimeDelta::FromSecondsD(1.0 / config.target_frame_rate)),
       reports_are_scheduled_(false),
       framer_(cast_environment->Clock(),
               this,
               config.sender_ssrc,
               true,
-              config.rtp_max_delay_ms * config.target_frame_rate / 1000),
+              static_cast<int>(
+                  config.rtp_max_delay_ms * config.target_frame_rate / 1000)),
       rtcp_(cast_environment_->Clock(),
             config.receiver_ssrc,
             config.sender_ssrc),

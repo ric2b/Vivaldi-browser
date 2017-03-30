@@ -13,6 +13,7 @@
 
 #include "base/callback_forward.h"
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -54,7 +55,7 @@ class ComponentLoader {
   //
   //   ssh-keygen -t rsa -b 1024 -N '' -f /tmp/key.pem
   //   openssl rsa -pubout -outform DER < /tmp/key.pem 2>/dev/null | base64 -w 0
-  std::string Add(const std::string& manifest_contents,
+  std::string Add(const base::StringPiece& manifest_contents,
                   const base::FilePath& root_directory);
 
   // Convenience method for registering a component extension by resource id.
@@ -91,11 +92,6 @@ class ComponentLoader {
   // Similar to above but adds the default component extensions for kiosk mode.
   void AddDefaultComponentExtensionsForKioskMode(bool skip_session_components);
 
-  // Parse the given JSON manifest. Returns NULL if it cannot be parsed, or if
-  // if the result is not a DictionaryValue.
-  base::DictionaryValue* ParseManifest(
-      const std::string& manifest_contents) const;
-
   // Clear the list of registered extensions.
   void ClearAllRegistered();
 
@@ -115,6 +111,8 @@ class ComponentLoader {
   }
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ComponentLoaderTest, ParseManifest);
+
   // Information about a registered component extension.
   struct ComponentExtensionInfo {
     ComponentExtensionInfo(const base::DictionaryValue* manifest,
@@ -130,7 +128,12 @@ class ComponentLoader {
     std::string extension_id;
   };
 
-  std::string Add(const std::string& manifest_contents,
+  // Parses the given JSON manifest. Returns nullptr if it cannot be parsed or
+  // if the result is not a DictionaryValue.
+  base::DictionaryValue* ParseManifest(
+      base::StringPiece manifest_contents) const;
+
+  std::string Add(const base::StringPiece& manifest_contents,
                   const base::FilePath& root_directory,
                   bool skip_whitelist);
   std::string Add(const base::DictionaryValue* parsed_manifest,

@@ -8,7 +8,6 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.http.HttpResponseCache;
 import android.support.annotation.IntDef;
-import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 
@@ -61,14 +60,17 @@ public abstract class CronetEngine {
             public abstract void loadLibrary(String libName);
         }
 
-        // A hint that a host supports QUIC.
-        static class QuicHint {
+        /**
+         * A hint that a host supports QUIC.
+         * @hide only used by internal implementation.
+         */
+        public static class QuicHint {
             // The host.
-            final String mHost;
+            public final String mHost;
             // Port of the server that supports QUIC.
-            final int mPort;
+            public final int mPort;
             // Alternate protocol port.
-            final int mAlternatePort;
+            public final int mAlternatePort;
 
             QuicHint(String host, int port, int alternatePort) {
                 mHost = host;
@@ -77,16 +79,19 @@ public abstract class CronetEngine {
             }
         }
 
-        // A public key pin.
-        static class Pkp {
+        /**
+         * A public key pin.
+         * @hide only used by internal implementation.
+         */
+        public static class Pkp {
             // Host to pin for.
-            final String mHost;
+            public final String mHost;
             // Array of SHA-256 hashes of keys.
-            final byte[][] mHashes;
+            public final byte[][] mHashes;
             // Should pin apply to subdomains?
-            final boolean mIncludeSubdomains;
+            public final boolean mIncludeSubdomains;
             // When the pin expires.
-            final Date mExpirationDate;
+            public final Date mExpirationDate;
 
             Pkp(String host, byte[][] hashes, boolean includeSubdomains, Date expirationDate) {
                 mHost = host;
@@ -102,7 +107,8 @@ public abstract class CronetEngine {
         // See setters below for verbose descriptions.
         private final Context mContext;
         private final List<QuicHint> mQuicHints = new LinkedList<QuicHint>();
-        private final List<Pkp> mPkps = new LinkedList<Pkp>();
+        private final List<Pkp> mPkps = new LinkedList<>();
+        private boolean mPublicKeyPinningBypassForLocalTrustAnchorsEnabled;
         private String mUserAgent;
         private String mStoragePath;
         private boolean mLegacyModeEnabled;
@@ -121,6 +127,7 @@ public abstract class CronetEngine {
         private String mExperimentalOptions;
         private long mMockCertVerifier;
         private boolean mNetworkQualityEstimatorEnabled;
+        private String mCertVerifierData;
 
         /**
          * Default config enables SPDY, disables QUIC, SDCH and HTTP cache.
@@ -130,11 +137,12 @@ public abstract class CronetEngine {
             mContext = context;
             setLibraryName("cronet");
             enableLegacyMode(false);
-            enableQUIC(false);
-            enableHTTP2(true);
-            enableSDCH(false);
+            enableQuic(false);
+            enableHttp2(true);
+            enableSdch(false);
             enableHttpCache(HTTP_CACHE_DISABLED, 0);
             enableNetworkQualityEstimator(false);
+            enablePublicKeyPinningBypassForLocalTrustAnchors(true);
         }
 
         /**
@@ -161,7 +169,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        String getUserAgent() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String getUserAgent() {
             return mUserAgent;
         }
 
@@ -185,7 +196,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        String storagePath() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String storagePath() {
             return mStoragePath;
         }
 
@@ -213,7 +227,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        boolean legacyMode() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean legacyMode() {
             return mLegacyModeEnabled;
         }
 
@@ -221,10 +238,18 @@ public abstract class CronetEngine {
          * Overrides the name of the native library backing Cronet.
          * @param libName the name of the native library backing Cronet.
          * @return the builder to facilitate chaining.
+         * @hide only used by internal implementation.
          */
-        Builder setLibraryName(String libName) {
+        public Builder setLibraryName(String libName) {
             mLibraryName = libName;
             return this;
+        }
+
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String libraryName() {
+            return mLibraryName;
         }
 
         /**
@@ -238,12 +263,11 @@ public abstract class CronetEngine {
             return this;
         }
 
-        void loadLibrary() {
-            if (mLibraryLoader == null) {
-                System.loadLibrary(mLibraryName);
-            } else {
-                mLibraryLoader.loadLibrary(mLibraryName);
-            }
+        /**
+         * @hide only used by internal implementation.
+         */
+        public LibraryLoader libraryLoader() {
+            return mLibraryLoader;
         }
 
         /**
@@ -253,12 +277,15 @@ public abstract class CronetEngine {
          * @param value {@code true} to enable QUIC, {@code false} to disable.
          * @return the builder to facilitate chaining.
          */
-        public Builder enableQUIC(boolean value) {
+        public Builder enableQuic(boolean value) {
             mQuicEnabled = value;
             return this;
         }
 
-        boolean quicEnabled() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean quicEnabled() {
             return mQuicEnabled;
         }
 
@@ -268,9 +295,10 @@ public abstract class CronetEngine {
          *
          * @param context Android {@link Context} to get package name from.
          * @return QUIC User Agent ID string.
+         * @hide only used by internal implementation.
          */
         // TODO(mef): remove |context| parameter when legacy ChromiumUrlRequestContext is removed.
-        String getDefaultQuicUserAgentId(Context context) {
+        public String getDefaultQuicUserAgentId(Context context) {
             return mQuicEnabled ? UserAgent.getQuicUserAgentIdFrom(context) : "";
         }
 
@@ -280,12 +308,15 @@ public abstract class CronetEngine {
          * @param value {@code true} to enable HTTP/2, {@code false} to disable.
          * @return the builder to facilitate chaining.
          */
-        public Builder enableHTTP2(boolean value) {
+        public Builder enableHttp2(boolean value) {
             mHttp2Enabled = value;
             return this;
         }
 
-        boolean http2Enabled() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean http2Enabled() {
             return mHttp2Enabled;
         }
 
@@ -297,12 +328,15 @@ public abstract class CronetEngine {
          * @param value {@code true} to enable SDCH, {@code false} to disable.
          * @return the builder to facilitate chaining.
          */
-        public Builder enableSDCH(boolean value) {
+        public Builder enableSdch(boolean value) {
             mSdchEnabled = value;
             return this;
         }
 
-        boolean sdchEnabled() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean sdchEnabled() {
             return mSdchEnabled;
         }
 
@@ -318,7 +352,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        String dataReductionProxyKey() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String dataReductionProxyKey() {
             return mDataReductionProxyKey;
         }
 
@@ -348,15 +385,24 @@ public abstract class CronetEngine {
             return this;
         }
 
-        String dataReductionProxyPrimaryProxy() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String dataReductionProxyPrimaryProxy() {
             return mDataReductionProxyPrimaryProxy;
         }
 
-        String dataReductionProxyFallbackProxy() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String dataReductionProxyFallbackProxy() {
             return mDataReductionProxyFallbackProxy;
         }
 
-        String dataReductionProxySecureProxyCheckUrl() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String dataReductionProxySecureProxyCheckUrl() {
             return mDataReductionProxySecureProxyCheckUrl;
         }
 
@@ -433,15 +479,24 @@ public abstract class CronetEngine {
             return this;
         }
 
-        boolean cacheDisabled() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean cacheDisabled() {
             return mDisableCache;
         }
 
-        long httpCacheMaxSize() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public long httpCacheMaxSize() {
             return mHttpCacheMaxSize;
         }
 
-        int httpCacheMode() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public int httpCacheMode() {
             return mHttpCacheMode;
         }
 
@@ -464,7 +519,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        List<QuicHint> quicHints() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public List<QuicHint> quicHints() {
             return mQuicHints;
         }
 
@@ -538,9 +596,35 @@ public abstract class CronetEngine {
         /**
          * Returns list of public key pins.
          * @return list of public key pins.
+         * @hide only used by internal implementation.
          */
-        List<Pkp> publicKeyPins() {
+        public List<Pkp> publicKeyPins() {
             return mPkps;
+        }
+
+        /**
+         * Enables or disables public key pinning bypass for local trust anchors. Disabling the
+         * bypass for local trust anchors is highly discouraged since it may prohibit the app
+         * from communicating with the pinned hosts. E.g., a user may want to send all traffic
+         * through an SSL enabled proxy by changing the device proxy settings and adding the
+         * proxy certificate to the list of local trust anchor. Disabling the bypass will most
+         * likly prevent the app from sending any traffic to the pinned hosts. For more
+         * information see 'How does key pinning interact with local proxies and filters?' at
+         * https://www.chromium.org/Home/chromium-security/security-faq
+         *
+         * @param value {@code true} to enable the bypass, {@code false} to disable.
+         * @return the builder to facilitate chaining.
+         */
+        public Builder enablePublicKeyPinningBypassForLocalTrustAnchors(boolean value) {
+            mPublicKeyPinningBypassForLocalTrustAnchorsEnabled = value;
+            return this;
+        }
+
+        /**
+         * @hide only used by internal implementation.
+         */
+        public boolean publicKeyPinningBypassForLocalTrustAnchorsEnabled() {
+            return mPublicKeyPinningBypassForLocalTrustAnchorsEnabled;
         }
 
         /**
@@ -564,6 +648,11 @@ public abstract class CronetEngine {
                 throw new IllegalArgumentException("Hostname " + hostName + " is illegal."
                         + " A hostname should not consist of digits and/or dots only.");
             }
+            // Workaround for crash, see crbug.com/634914
+            if (hostName.length() > 255) {
+                throw new IllegalArgumentException("Hostname " + hostName + " is too long."
+                        + " The name of the host does not comply with RFC 1122 and RFC 1123.");
+            }
             try {
                 return IDN.toASCII(hostName, IDN.USE_STD3_ASCII_RULES);
             } catch (IllegalArgumentException ex) {
@@ -583,7 +672,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        String experimentalOptions() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String experimentalOptions() {
             return mExperimentalOptions;
         }
 
@@ -601,7 +693,10 @@ public abstract class CronetEngine {
             return this;
         }
 
-        long mockCertVerifier() {
+        /**
+         * @hide only used by internal implementation.
+         */
+        public long mockCertVerifier() {
             return mMockCertVerifier;
         }
 
@@ -627,18 +722,38 @@ public abstract class CronetEngine {
         /**
          * @return true if the network quality estimator has been enabled for
          * this builder.
-         * @hide as it's a prototype.
+         * @hide as it's a prototype and only used by internal implementation.
          */
-        boolean networkQualityEstimatorEnabled() {
+        public boolean networkQualityEstimatorEnabled() {
             return mNetworkQualityEstimatorEnabled;
+        }
+
+        /**
+         * Initializes CachingCertVerifier's cache with certVerifierData which has
+         * the results of certificate verification.
+         * @param certVerifierData a serialized representation of certificate
+         *        verification results.
+         * @return the builder to facilitate chaining.
+         */
+        public Builder setCertVerifierData(String certVerifierData) {
+            mCertVerifierData = certVerifierData;
+            return this;
+        }
+
+        /**
+         * @hide only used by internal implementation.
+         */
+        public String certVerifierData() {
+            return mCertVerifierData;
         }
 
         /**
          * Returns {@link Context} for builder.
          *
          * @return {@link Context} for builder.
+         * @hide only used by internal implementation.
          */
-        Context getContext() {
+        public Context getContext() {
             return mContext;
         }
 
@@ -667,7 +782,7 @@ public abstract class CronetEngine {
 
     private static final String TAG = "UrlRequestFactory";
     private static final String CRONET_URL_REQUEST_CONTEXT =
-            "org.chromium.net.CronetUrlRequestContext";
+            "org.chromium.net.impl.CronetUrlRequestContext";
 
     /**
      * Creates a {@link UrlRequest} object. All callbacks will
@@ -727,14 +842,14 @@ public abstract class CronetEngine {
      * @param priority priority of the request which should be one of the
      *         {@link UrlRequest.Builder#REQUEST_PRIORITY_IDLE REQUEST_PRIORITY_*}
      *         values.
-     * @param requestAnnotations Objects to pass on to {@link CronetEngine.RequestFinishedListener}.
+     * @param requestAnnotations Objects to pass on to {@link RequestFinishedInfo.Listener}.
      * @param disableCache disables cache for the request.
      *         If context is not set up to use cache this param has no effect.
      * @param disableConnectionMigration disables connection migration for this
      *         request if it is enabled for the session.
      * @return new request.
      * @deprecated Use {@link UrlRequest.Builder#build}.
-     * @hide as it references hidden CronetEngine.RequestFinishedListener
+     * @hide as it references hidden RequestFinishedInfo.Listener
      */
     @Deprecated
     protected abstract UrlRequest createRequest(String url, UrlRequest.Callback callback,
@@ -755,22 +870,23 @@ public abstract class CronetEngine {
      * @param priority priority of the stream which should be one of the
      *         {@link BidirectionalStream.Builder#STREAM_PRIORITY_IDLE STREAM_PRIORITY_*}
      *         values.
-     * @param disableAutoFlush whether auto flush should be disabled
      * @param delayRequestHeadersUntilFirstFlush whether to delay sending request
      *         headers until flush() is called, and try to combine them
      *         with the next data frame.
      * @return a new stream.
+     * @hide only used by internal implementation.
      */
-    abstract BidirectionalStream createBidirectionalStream(String url,
+    public abstract BidirectionalStream createBidirectionalStream(String url,
             BidirectionalStream.Callback callback, Executor executor, String httpMethod,
             List<Map.Entry<String, String>> requestHeaders,
-            @BidirectionalStream.Builder.StreamPriority int priority, boolean disableAutoFlush,
+            @BidirectionalStream.Builder.StreamPriority int priority,
             boolean delayRequestHeadersUntilFirstFlush);
 
     /**
      * @return {@code true} if the engine is enabled.
+     * @hide only used by internal implementation.
      */
-    abstract boolean isEnabled();
+    public abstract boolean isEnabled();
 
     /**
      * @return a human-readable version string of the engine.
@@ -797,16 +913,50 @@ public abstract class CronetEngine {
      *            exists, it is truncated before starting. If actively logging,
      *            this method is ignored.
      * @param logAll {@code true} to include basic events, user cookies,
-     *            credentials and all transferred bytes in the log.
+     *            credentials and all transferred bytes in the log. This option presents
+     *            a privacy risk, since it exposes the user's credentials, and should
+     *            only be used with the user's consent and in situations where the log
+     *            won't be public.
      *            {@code false} to just include basic events.
      */
     public abstract void startNetLogToFile(String fileName, boolean logAll);
+
+    /**
+     * Starts NetLog logging to a specified directory with a bounded size. The NetLog will contain
+     * events emitted by all live CronetEngines. The NetLog is useful for debugging.
+     * The log can be viewed by stitching the files using net/log/stitch_net_log_files.py and
+     * using a Chrome browser navigated to chrome://net-internals/#import
+     * @param dirPath the directory where the log files will be created. It must already exist.
+     *            NetLog files must not already exist in the directory. If actively logging,
+     *            this method is ignored.
+     * @param logAll {@code true} to include basic events, user cookies,
+     *            credentials and all transferred bytes in the log. This option presents a
+     *            privacy risk, since it exposes the user's credentials, and should only be
+     *            used with the user's consent and in situations where the log won't be public.
+     *            {@code false} to just include basic events.
+     * @param maxSize the maximum total disk space in bytes that should be used by NetLog. Actual
+     *            disk space usage may exceed this limit slightly.
+     */
+    public abstract void startNetLogToDisk(String dirPath, boolean logAll, int maxSize);
 
     /**
      * Stops NetLog logging and flushes file to disk. If a logging session is
      * not in progress, this call is ignored.
      */
     public abstract void stopNetLog();
+
+    /**
+     * Returns serialized representation of certificate verifier's cache
+     * which contains the list of hosts/certificates and the certificate
+     * verification results. May block until data is received from the network
+     * thread (will timeout after the specified timeout). In case of timeout, it
+     * returns the previous saved value.
+     *
+     * @param timeout in milliseconds. If timeout is 0, it will use default value.
+     * @return serialized representation of certificate verification results
+     *         data.
+     */
+    public abstract String getCertVerifierData(long timeout);
 
     /**
      * Returns differences in metrics collected by Cronet since the last call to
@@ -833,32 +983,11 @@ public abstract class CronetEngine {
     public abstract byte[] getGlobalMetricsDeltas();
 
     /**
-     * Sets the executor which will be used to notify RequestFinished
-     *             listeners, and to notify network quality RTT listeners
-     *             that do not provide an executor.
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API. In short term,
-     * once all Cronet embedders supply a valid executor with
-     * NetworkQualityRTTListener, update the above comment to reflect that
-     * {@link executor} is only used to notify RequestFinishedListeners.
+     * Returns the effective connection type computed by the network quality
+     * estimator.
      * @hide as it's a prototype.
      */
-    public abstract void setRequestFinishedListenerExecutor(Executor executor);
-
-    /**
-     * Enables the network quality estimator, which collects and reports
-     * measurements of round trip time (RTT) and downstream throughput at
-     * various layers of the network stack. After enabling the estimator,
-     * listeners of RTT and throughput can be added with
-     * {@link #addRttListener} and {@link #addThroughputListener} and
-     * removed with {@link #removeRttListener} and
-     * {@link #removeThroughputListener}. The estimator uses memory and CPU
-     * only when enabled.
-     * @param executor an executor that will be used to notified all
-     *            added RTT and throughput listeners.
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API.
-     * @hide as it's a prototype.
-     */
-    public abstract void enableNetworkQualityEstimator(Executor executor);
+    public abstract int getEffectiveConnectionType();
 
     /**
      * Configures the network quality estimator for testing. This must be called
@@ -869,7 +998,7 @@ public abstract class CronetEngine {
      * estimates.
      * @hide as it's a prototype.
      */
-    abstract void configureNetworkQualityEstimatorForTesting(
+    public abstract void configureNetworkQualityEstimatorForTesting(
             boolean useLocalHostRequests, boolean useSmallerResponses);
 
     /**
@@ -981,7 +1110,8 @@ public abstract class CronetEngine {
         CronetEngine cronetEngine = null;
         try {
             Class<? extends CronetEngine> engineClass =
-                    CronetEngine.class.getClassLoader()
+                    builder.getContext()
+                            .getClassLoader()
                             .loadClass(CRONET_URL_REQUEST_CONTEXT)
                             .asSubclass(CronetEngine.class);
             Constructor<? extends CronetEngine> constructor =
@@ -1009,148 +1139,16 @@ public abstract class CronetEngine {
      *
      * @param listener the listener for finished requests.
      *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
-     * using a request finished listener that provides its own executor.
      * @hide as it's a prototype.
      */
-    public abstract void addRequestFinishedListener(RequestFinishedListener listener);
+    public abstract void addRequestFinishedListener(RequestFinishedInfo.Listener listener);
 
     /**
      * Removes a finished request listener.
      *
      * @param listener the listener to remove.
      *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
-     * using a request finished listener that provides its own executor.
      * @hide it's a prototype.
      */
-    public abstract void removeRequestFinishedListener(RequestFinishedListener listener);
-
-    /**
-     * Information about a finished request. Passed to {@link RequestFinishedListener}.
-     *
-     * @hide as it's a prototype.
-     */
-    public static final class UrlRequestInfo {
-        private final String mUrl;
-        private final Collection<Object> mAnnotations;
-        private final UrlRequestMetrics mMetrics;
-        @Nullable private final UrlResponseInfo mResponseInfo;
-
-        UrlRequestInfo(String url, Collection<Object> annotations, UrlRequestMetrics metrics,
-                @Nullable UrlResponseInfo responseInfo) {
-            mUrl = url;
-            mAnnotations = annotations;
-            mMetrics = metrics;
-            mResponseInfo = responseInfo;
-        }
-
-        /** Returns the request's original URL. */
-        public String getUrl() {
-            return mUrl;
-        }
-
-        /** Returns the objects that the caller has supplied when initiating the request. */
-        public Collection<Object> getAnnotations() {
-            return mAnnotations;
-        }
-
-        // TODO(klm): Collect and return a chain of Metrics objects for redirect responses.
-        /**
-         * Returns metrics collected for this request.
-         *
-         * <p>The reported times and bytes account for all redirects, i.e.
-         * the TTFB is from the start of the original request to the ultimate response headers,
-         * the TTLB is from the start of the original request to the end of the ultimate response,
-         * the received byte count is for all redirects and the ultimate response combined.
-         * These cumulative metric definitions are debatable, but are chosen to make sense
-         * for user-facing latency analysis.
-         *
-         * <p>Must call {@link #enableNetworkQualityEstimator} to enable request metrics collection.
-         * @return metrics collected for this request.
-         */
-        public UrlRequestMetrics getMetrics() {
-            return mMetrics;
-        }
-
-        /**
-         * Returns a {@link UrlResponseInfo} for the request, if its response had started.
-         * @return {@link UrlResponseInfo} for the request, if its response had started.
-         */
-        @Nullable
-        public UrlResponseInfo getResponseInfo() {
-            return mResponseInfo;
-        }
-    }
-
-    /**
-     * Metrics collected for a single request.
-     *
-     * <p>Must call {@link #enableNetworkQualityEstimator} to enable request metrics collection.
-     *
-     * @hide as it's a prototype.
-     */
-    public static final class UrlRequestMetrics {
-        @Nullable private final Long mTtfbMs;
-        @Nullable private final Long mTotalTimeMs;
-        @Nullable private final Long mSentBytesCount;
-        @Nullable private final Long mReceivedBytesCount;
-
-        public UrlRequestMetrics(@Nullable Long ttfbMs, @Nullable Long totalTimeMs,
-                @Nullable Long sentBytesCount, @Nullable Long receivedBytesCount) {
-            mTtfbMs = ttfbMs;
-            mTotalTimeMs = totalTimeMs;
-            mSentBytesCount = sentBytesCount;
-            mReceivedBytesCount = receivedBytesCount;
-        }
-
-        /**
-         * Returns milliseconds between request initiation and first byte of response headers,
-         * or null if not collected.
-         */
-        @Nullable
-        public Long getTtfbMs() {
-            return mTtfbMs;
-        }
-
-        /**
-         * Returns milliseconds between request initiation and finish,
-         * including a failure or cancellation, or null if not collected.
-         */
-        @Nullable
-        public Long getTotalTimeMs() {
-            return mTotalTimeMs;
-        }
-
-        /**
-         * Returns total bytes sent over the network transport layer, or null if not collected.
-         */
-        @Nullable
-        public Long getSentBytesCount() {
-            return mSentBytesCount;
-        }
-
-        /**
-         * Returns total bytes received over the network transport layer, or null if not collected.
-         */
-        @Nullable
-        public Long getReceivedBytesCount() {
-            return mReceivedBytesCount;
-        }
-    }
-
-    /**
-     * Interface to listen for finished requests that were created via this CronetEngine instance.
-     *
-     * TODO(tbansal):  http://crbug.com/618034 Remove this API, and replace it with a listener
-     * whose executor is bound to the lifetime of the listener.
-     * @hide as it's a prototype.
-     */
-    public interface RequestFinishedListener {
-        /**
-         * Invoked with request info.
-         * @param requestInfo {@link UrlRequestInfo} for finished request.
-         */
-        void onRequestFinished(UrlRequestInfo requestInfo);
-    }
+    public abstract void removeRequestFinishedListener(RequestFinishedInfo.Listener listener);
 }

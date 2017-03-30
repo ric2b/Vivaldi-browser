@@ -9,14 +9,19 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/TopControls.h"
+#include "core/frame/VisualViewport.h"
 #include "core/layout/LayoutBox.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/OverscrollController.h"
 #include "core/page/scrolling/ViewportScrollCallback.h"
 #include "core/paint/PaintLayerScrollableArea.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 
 namespace blink {
+
+class RootFrameViewport;
 
 namespace {
 
@@ -27,8 +32,12 @@ ScrollableArea* scrollableAreaFor(const Element& element)
 
     LayoutBox* box = toLayoutBox(element.layoutObject());
 
+    // For a FrameView, we use the layoutViewport rather than the
+    // getScrollableArea() since that could be the RootFrameViewport. The
+    // rootScroller's ScrollableArea will be swapped in as the layout viewport
+    // in RootFrameViewport so we need to ensure we get the layout viewport.
     if (box->isDocumentElement())
-        return element.document().view()->getScrollableArea();
+        return element.document().view()->layoutViewportScrollableArea();
 
     return static_cast<PaintInvalidationCapableScrollableArea*>(
         box->getScrollableArea());
@@ -73,15 +82,8 @@ bool isValidRootScroller(const Element& element)
 
 } // namespace
 
-ViewportScrollCallback* RootScrollerController::createViewportApplyScroll(
-    TopControls* topControls, OverscrollController* overscrollController)
-{
-    return new ViewportScrollCallback(topControls, overscrollController);
-}
-
-RootScrollerController::RootScrollerController(Document& document, ViewportScrollCallback* applyScrollCallback)
+RootScrollerController::RootScrollerController(Document& document)
     : m_document(&document)
-    , m_viewportApplyScroll(applyScrollCallback)
 {
 }
 
@@ -91,6 +93,7 @@ DEFINE_TRACE(RootScrollerController)
     visitor->trace(m_viewportApplyScroll);
     visitor->trace(m_rootScroller);
     visitor->trace(m_effectiveRootScroller);
+    visitor->trace(m_currentViewportApplyScrollHost);
 }
 
 void RootScrollerController::set(Element* newRootScroller)
@@ -126,34 +129,101 @@ void RootScrollerController::updateEffectiveRootScroller()
     if (m_effectiveRootScroller == newEffectiveRootScroller)
         return;
 
-    moveViewportApplyScroll(newEffectiveRootScroller);
     m_effectiveRootScroller = newEffectiveRootScroller;
+
+    if (m_document->isInMainFrame())
+        setViewportApplyScrollOnRootScroller();
 }
 
-void RootScrollerController::moveViewportApplyScroll(Element* target)
+void RootScrollerController::setViewportApplyScrollOnRootScroller()
 {
-    if (!m_viewportApplyScroll)
+    DCHECK(m_document->isInMainFrame());
+
+    if (!m_viewportApplyScroll || !m_effectiveRootScroller)
         return;
 
-    if (m_effectiveRootScroller)
-        m_effectiveRootScroller->removeApplyScroll();
-
     ScrollableArea* targetScroller =
-        target ? scrollableAreaFor(*target) : nullptr;
+        scrollableAreaFor(*m_effectiveRootScroller);
 
-    if (targetScroller) {
-        // Use disable-native-scroll since the ViewportScrollCallback needs to
-        // apply scroll actions both before (TopControls) and after (overscroll)
-        // scrolling the element so it will apply scroll to the element itself.
-        target->setApplyScroll(
-            m_viewportApplyScroll,
-            "disable-native-scroll");
-    }
+    if (!targetScroller)
+        return;
+
+    if (m_currentViewportApplyScrollHost)
+        m_currentViewportApplyScrollHost->removeApplyScroll();
+
+    // Use disable-native-scroll since the ViewportScrollCallback needs to
+    // apply scroll actions both before (TopControls) and after (overscroll)
+    // scrolling the element so it will apply scroll to the element itself.
+    m_effectiveRootScroller->setApplyScroll(
+        m_viewportApplyScroll, "disable-native-scroll");
+
+    m_currentViewportApplyScrollHost = m_effectiveRootScroller;
 
     // Ideally, scroll customization would pass the current element to scroll to
     // the apply scroll callback but this doesn't happen today so we set it
-    // through a back door here.
+    // through a back door here. This is also needed by the
+    // ViewportScrollCallback to swap the target into the layout viewport
+    // in RootFrameViewport.
     m_viewportApplyScroll->setScroller(targetScroller);
+}
+
+void RootScrollerController::didUpdateCompositing()
+{
+    FrameHost* frameHost = m_document->frameHost();
+
+    // Let the compositor-side counterpart know about this change.
+    if (frameHost && m_document->isInMainFrame())
+        frameHost->chromeClient().registerViewportLayers();
+}
+
+void RootScrollerController::didAttachDocument()
+{
+    if (!m_document->isInMainFrame())
+        return;
+
+    FrameHost* frameHost = m_document->frameHost();
+    FrameView* frameView = m_document->view();
+
+    if (!frameHost || !frameView)
+        return;
+
+    RootFrameViewport* rootFrameViewport = frameView->getRootFrameViewport();
+    DCHECK(rootFrameViewport);
+
+    m_viewportApplyScroll = ViewportScrollCallback::create(
+        &frameHost->topControls(),
+        &frameHost->overscrollController(),
+        *rootFrameViewport);
+
+    updateEffectiveRootScroller();
+}
+
+GraphicsLayer* RootScrollerController::rootScrollerLayer()
+{
+    if (!m_effectiveRootScroller)
+        return nullptr;
+
+    ScrollableArea* area = scrollableAreaFor(*m_effectiveRootScroller);
+
+    if (!area)
+        return nullptr;
+
+    GraphicsLayer* graphicsLayer = area->layerForScrolling();
+
+    // TODO(bokan): We should assert graphicsLayer here and
+    // RootScrollerController should do whatever needs to happen to ensure
+    // the root scroller gets composited.
+
+    return graphicsLayer;
+}
+
+bool RootScrollerController::isViewportScrollCallback(
+    const ScrollStateCallback* callback) const
+{
+    if (!callback)
+        return false;
+
+    return callback == m_viewportApplyScroll.get();
 }
 
 Element* RootScrollerController::defaultEffectiveRootScroller()

@@ -1,0 +1,4 @@
+import("//vivaldi/gn/config/vivaldi_build_settings.gni")
+
+# Set up default extra compiler/link configs for Vivaldi
+import("//vivaldi/gn/config/product_configs.gni")

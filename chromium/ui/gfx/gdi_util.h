@@ -14,36 +14,17 @@
 
 namespace gfx {
 
-// Creates a BITMAPINFOHEADER structure given the bitmap's size.
-GFX_EXPORT void CreateBitmapHeader(int width, int height,
-                                   BITMAPINFOHEADER* hdr);
-
 // Creates a BITMAPV4HEADER structure given the bitmap's size.  You probably
 // only need to use BMP V4 if you need transparency (alpha channel). This
 // function sets the AlphaMask to 0xff000000.
 GFX_EXPORT void CreateBitmapV4Header(int width, int height,
                                      BITMAPV4HEADER* hdr);
 
-// Creates a monochrome bitmap header.
-void CreateMonochromeBitmapHeader(int width, int height, BITMAPINFOHEADER* hdr);
-
-// Modify the given hrgn by subtracting the given rectangles.
-GFX_EXPORT void SubtractRectanglesFromRegion(
-    HRGN hrgn,
-    const std::vector<gfx::Rect>& cutouts);
-
-GFX_EXPORT HRGN ConvertPathToHRGN(const gfx::Path& path);
-
 // Calculate scale to fit an entire page on DC.
 GFX_EXPORT float CalculatePageScale(HDC dc, int page_width, int page_height);
 
 // Apply scaling to the DC.
 GFX_EXPORT bool ScaleDC(HDC dc, float scale_factor);
-
-GFX_EXPORT void StretchDIBits(HDC hdc,
-                              int dest_x, int dest_y, int dest_w, int dest_h,
-                              int src_x, int src_y, int src_w, int src_h,
-                              void* pixels, const BITMAPINFO* bitmap_info);
 
 }  // namespace gfx
 

@@ -88,7 +88,7 @@
 //<include src="ui/commandbutton.js">
 //<include src="ui/file_manager_dialog_base.js">
 //<include src="metadata/metadata_cache_set.js">
-//<include src="metadata/new_metadata_provider.js">
+//<include src="metadata/metadata_provider.js">
 //
 //<include src="../../../../../components/chrome_apps/webstore_widget/cws_widget/app_installer.js">
 //<include src="../../../../../components/chrome_apps/webstore_widget/cws_widget/cws_webview_client.js">
@@ -132,6 +132,7 @@
 //<include src="progress_center_item_group.js">
 //<include src="quick_view_controller.js">
 //<include src="quick_view_model.js">
+//<include src="quick_view_uma.js">
 //<include src="scan_controller.js">
 //<include src="search_controller.js">
 //<include src="share_client.js">

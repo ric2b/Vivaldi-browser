@@ -106,13 +106,12 @@ static bool isAxisName(const String& name, Step::Axis& type)
 
 static bool isNodeTypeName(const String& name)
 {
-    DEFINE_STATIC_LOCAL(HashSet<String>, nodeTypeNames, ());
-    if (nodeTypeNames.isEmpty()) {
-        nodeTypeNames.add("comment");
-        nodeTypeNames.add("text");
-        nodeTypeNames.add("processing-instruction");
-        nodeTypeNames.add("node");
-    }
+    DEFINE_STATIC_LOCAL(HashSet<String>, nodeTypeNames, ({
+        "comment",
+        "text",
+        "processing-instruction",
+        "node",
+    }));
     return nodeTypeNames.contains(name);
 }
 
@@ -487,7 +486,7 @@ Expression* Parser::parseStatement(const String& statement, XPathNSResolver* res
             exceptionState.throwDOMException(SyntaxError, "The string '" + statement + "' is not a valid XPath expression.");
         return nullptr;
     }
-    ASSERT(m_strings.size() == 0);
+    DCHECK_EQ(m_strings.size(), 0u);
     Expression* result = m_topExpr;
     m_topExpr = nullptr;
 
@@ -496,20 +495,18 @@ Expression* Parser::parseStatement(const String& statement, XPathNSResolver* res
 
 void Parser::registerString(String* s)
 {
-    if (s == 0)
+    if (!s)
         return;
 
-    ASSERT(!m_strings.contains(s));
-
+    DCHECK(!m_strings.contains(s));
     m_strings.add(wrapUnique(s));
 }
 
 void Parser::deleteString(String* s)
 {
-    if (s == 0)
+    if (!s)
         return;
 
-    ASSERT(m_strings.contains(s));
-
+    DCHECK(m_strings.contains(s));
     m_strings.remove(s);
 }

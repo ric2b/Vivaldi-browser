@@ -14,11 +14,11 @@
 #include "components/policy/core/browser/configuration_policy_handler.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
 #include "components/proxy_config/proxy_config_dictionary.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "grit/components_strings.h"
-#include "policy/policy_constants.h"
 
 namespace {
 
@@ -255,10 +255,9 @@ bool ProxyPolicyHandler::CheckProxyModeAndServerMode(const PolicyMap& policies,
                        key::kProxyMode);
     }
     if (!mode->GetAsString(mode_value)) {
-      errors->AddError(key::kProxySettings,
-                       key::kProxyMode,
+      errors->AddError(key::kProxySettings, key::kProxyMode,
                        IDS_POLICY_TYPE_ERROR,
-                       ValueTypeToString(base::Value::TYPE_BOOLEAN));
+                       base::Value::GetTypeName(base::Value::TYPE_BOOLEAN));
       return false;
     }
 
@@ -275,7 +274,8 @@ bool ProxyPolicyHandler::CheckProxyModeAndServerMode(const PolicyMap& policies,
                        key::kProxyPacUrl,
                        IDS_POLICY_NOT_SPECIFIED_ERROR);
       return false;
-    } else if (mode == ProxyPrefs::MODE_FIXED_SERVERS && !server) {
+    }
+    if (mode == ProxyPrefs::MODE_FIXED_SERVERS && !server) {
       errors->AddError(key::kProxySettings,
                        key::kProxyServer,
                        IDS_POLICY_NOT_SPECIFIED_ERROR);
@@ -284,10 +284,9 @@ bool ProxyPolicyHandler::CheckProxyModeAndServerMode(const PolicyMap& policies,
   } else if (server_mode) {
     int server_mode_value;
     if (!server_mode->GetAsInteger(&server_mode_value)) {
-      errors->AddError(key::kProxySettings,
-                       key::kProxyServerMode,
+      errors->AddError(key::kProxySettings, key::kProxyServerMode,
                        IDS_POLICY_TYPE_ERROR,
-                       ValueTypeToString(base::Value::TYPE_INTEGER));
+                       base::Value::GetTypeName(base::Value::TYPE_INTEGER));
       return false;
     }
 
@@ -319,10 +318,8 @@ bool ProxyPolicyHandler::CheckProxyModeAndServerMode(const PolicyMap& policies,
                            message_id);
           return false;
         }
-        if (pac_url)
-          *mode_value = ProxyPrefs::kPacScriptProxyModeName;
-        else
-          *mode_value = ProxyPrefs::kFixedServersProxyModeName;
+        *mode_value = pac_url ? ProxyPrefs::kPacScriptProxyModeName
+                              : ProxyPrefs::kFixedServersProxyModeName;
         break;
       case PROXY_USE_SYSTEM_PROXY_SERVER_MODE:
         *mode_value = ProxyPrefs::kSystemProxyModeName;

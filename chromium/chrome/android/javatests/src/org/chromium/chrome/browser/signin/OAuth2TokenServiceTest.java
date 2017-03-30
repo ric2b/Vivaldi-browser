@@ -11,9 +11,9 @@ import android.test.suitebuilder.annotation.SmallTest;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.test.util.AccountHolder;
-import org.chromium.sync.test.util.MockAccountManager;
+import org.chromium.components.sync.signin.AccountManagerHelper;
+import org.chromium.components.sync.test.util.AccountHolder;
+import org.chromium.components.sync.test.util.MockAccountManager;
 
 import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
@@ -34,11 +34,11 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         AccountManagerHelper.overrideAccountManagerHelperForTests(mContext, mAccountManager);
     }
 
-    /*  http://crbug.com/533417
+    /*
      *  @SmallTest
      *  @Feature({"Sync"})
      */
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/533417")
     public void testGetAccountsNoAccountsRegistered() {
         String[] accounts = OAuth2TokenService.getAccounts(mContext);
         assertEquals("There should be no accounts registered", 0, accounts.length);
@@ -46,8 +46,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
 
     /*@SmallTest
     @Feature({"Sync"})*/
-    // http://crbug.com/527852
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/527852")
     public void testGetAccountsOneAccountRegistered() {
         Account account1 = AccountManagerHelper.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.create().account(account1).build();
@@ -63,8 +62,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
 
     /*@SmallTest
     @Feature({"Sync"})*/
-    // http://crbug.com/527852
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/527852")
     public void testGetAccountsTwoAccountsRegistered() {
         Account account1 = AccountManagerHelper.createAccountFromName("foo@gmail.com");
         AccountHolder accountHolder1 = AccountHolder.create().account(account1).build();
@@ -84,7 +82,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
         assertEquals("There should be zero registered account", 0, accounts.length);
     }
 
-    @DisabledTest // http://crbug.com/568620
+    @DisabledTest(message = "crbug.com/568620")
     @SmallTest
     @Feature({"Sync"})
     public void testGetOAuth2AccessTokenWithTimeoutOnSuccess() {
@@ -95,8 +93,7 @@ public class OAuth2TokenServiceTest extends InstrumentationTestCase {
 
     /*@SmallTest
     @Feature({"Sync"})*/
-    // http://crbug.com/527852
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/527852")
     public void testGetOAuth2AccessTokenWithTimeoutOnError() {
         String authToken = null;
         // Should not crash when auth token is null.

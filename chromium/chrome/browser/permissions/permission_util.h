@@ -10,13 +10,29 @@
 #include "base/macros.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "url/gurl.h"
 
-class GURL;
 class Profile;
 
 namespace content {
 enum class PermissionType;
 }  // namespace content
+
+enum class PermissionSourceUI;
+
+// This enum backs a UMA histogram, so it must be treated as append-only.
+enum PermissionAction {
+  GRANTED = 0,
+  DENIED = 1,
+  DISMISSED = 2,
+  IGNORED = 3,
+  REVOKED = 4,
+  REENABLED = 5,
+  REQUESTED = 6,
+
+  // Always keep this at the end.
+  PERMISSION_ACTION_NUM,
+};
 
 struct PermissionTypeHash {
   std::size_t operator()(const content::PermissionType& type) const;
@@ -37,22 +53,35 @@ class PermissionUtil {
   static bool GetPermissionType(ContentSettingsType type,
                                 content::PermissionType* out);
 
-  // Helper method which proxies
-  // HostContentSettingsMap::SetContentSettingDefaultScope(). Checks the content
-  // setting value before and after the change to determine whether it has gone
-  // from ALLOW to BLOCK or ASK, and records metrics accordingly. Should be
-  // called from UI code when a user changes permissions for a particular origin
-  // pair.
-  // TODO(tsergeant): This is a temporary solution to begin gathering metrics.
-  // We should integrate this better with the permissions layer. See
-  // crbug.com/469221.
-  static void SetContentSettingAndRecordRevocation(
-      Profile* profile,
-      const GURL& primary_url,
-      const GURL& secondary_url,
-      ContentSettingsType content_type,
-      std::string resource_identifier,
-      ContentSetting setting);
+  static bool ShouldShowPersistenceToggle();
+
+  // A scoped class that will check the current resolved content setting on
+  // construction and report a revocation metric accordingly if the revocation
+  // condition is met (from ALLOW to something else).
+  class ScopedRevocationReporter {
+   public:
+    ScopedRevocationReporter(Profile* profile,
+                             const GURL& primary_url,
+                             const GURL& secondary_url,
+                             ContentSettingsType content_type,
+                             PermissionSourceUI source_ui);
+
+    ScopedRevocationReporter(Profile* profile,
+                             const ContentSettingsPattern& primary_pattern,
+                             const ContentSettingsPattern& secondary_pattern,
+                             ContentSettingsType content_type,
+                             PermissionSourceUI source_ui);
+
+    ~ScopedRevocationReporter();
+
+   private:
+    Profile* profile_;
+    const GURL primary_url_;
+    const GURL secondary_url_;
+    ContentSettingsType content_type_;
+    PermissionSourceUI source_ui_;
+    bool is_initially_allowed_;
+  };
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PermissionUtil);

@@ -1,0 +1,47 @@
+import("features.gni")
+import("product.gni")
+import("//build/toolchain/cc_wrapper.gni")
+
+config("features") {
+  defines = [
+    "VIVALDI_BUILD",
+    "CHROMIUM_BUILD",
+    "VIVALDI_RELEASE=$release_kind",
+    "WIDEVINE_CDM_VERSION_STRING=\"1.0.123.456\"",
+    "OMIT_CHROME_FRAME",
+    "VIVALDI_RELEASE_KIND=$VIVALDI_RELEASE_KIND",
+  ]
+  if (system_proprietary_codecs) {
+    defines += [ "USE_SYSTEM_PROPRIETARY_CODECS" ]
+  }
+  include_dirs = [ "//vivaldi/" ]
+  if (is_official_build) {
+    defines += [ "VIVALDI_PRODUCT_VERSION=\"$official_product_kind_string\"" ]
+  }
+  if (use_cc_wrapper) {
+    defines += [ "VIVALDI_WIN_COMPILE_CACHE" ]
+  }
+  if (is_win) {
+    ldflags = [ "notelemetry.obj" ]
+  }
+}
+
+config("enable_disabled_tests") {
+  # Turns off the disabling of unittests performed by
+  # testing/disable_unittests.cpp
+  defines = [ "DONT_DISABLE_UNITTESTS" ]
+}
+
+config("enable_permanently_disabled_tests") {
+  # Turns off the permanent disabling of unittests performed by
+  # testing/disable_unittests.cpp
+  defines = [ "DONT_PERMANENTLY_DISABLE_UNITTESTS" ]
+}
+
+if (is_win) {
+  config("huge_link") {
+    #huge_link = true
+    #pool = "://build/toolchain/win:huge_pool($default_toolchain)"
+    #description = "HUGE_" + description
+  }
+}

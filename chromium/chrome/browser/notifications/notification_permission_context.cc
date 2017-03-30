@@ -23,6 +23,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "url/gurl.h"
+
 #include "content/public/browser/browser_thread.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "content/public/browser/web_contents.h"
@@ -162,14 +163,32 @@ void VisibilityTimerTabHelper::RunTask(const base::Closure& task) {
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(VisibilityTimerTabHelper);
 
-NotificationPermissionContext::NotificationPermissionContext(Profile* profile)
+NotificationPermissionContext::NotificationPermissionContext(
+    Profile* profile,
+    content::PermissionType permission_type)
     : PermissionContextBase(profile,
-                            content::PermissionType::NOTIFICATIONS,
+                            permission_type,
                             CONTENT_SETTINGS_TYPE_NOTIFICATIONS),
       extensions_context_(profile),
-      weak_factory_ui_thread_(this) {}
+      weak_factory_ui_thread_(this) {
+  DCHECK(permission_type == content::PermissionType::NOTIFICATIONS ||
+         permission_type == content::PermissionType::PUSH_MESSAGING);
+}
 
 NotificationPermissionContext::~NotificationPermissionContext() {}
+
+ContentSetting NotificationPermissionContext::GetPermissionStatus(
+    const GURL& requesting_origin,
+    const GURL& embedding_origin) const {
+  // Push messaging is only allowed to be granted on top-level origins.
+  if (permission_type() == content::PermissionType::PUSH_MESSAGING &&
+      requesting_origin != embedding_origin) {
+    return CONTENT_SETTING_BLOCK;
+  }
+
+  return PermissionContextBase::GetPermissionStatus(requesting_origin,
+                                                    embedding_origin);
+}
 
 void NotificationPermissionContext::ResetPermission(
     const GURL& requesting_origin,
@@ -192,6 +211,7 @@ void NotificationPermissionContext::DecidePermission(
     const PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
+    bool user_gesture,
     const BrowserPermissionCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -218,7 +238,8 @@ void NotificationPermissionContext::DecidePermission(
   }
 
   PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
-                                          embedding_origin, callback);
+                                          embedding_origin, user_gesture,
+                                          callback);
 }
 
 // Unlike other permission types, granting a notification for a given origin
@@ -243,5 +264,5 @@ void NotificationPermissionContext::UpdateContentSetting(
 }
 
 bool NotificationPermissionContext::IsRestrictedToSecureOrigins() const {
-  return false;
+  return permission_type() == content::PermissionType::PUSH_MESSAGING;
 }

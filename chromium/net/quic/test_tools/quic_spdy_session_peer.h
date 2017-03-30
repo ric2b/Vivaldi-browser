@@ -6,8 +6,8 @@
 #define NET_QUIC_TEST_TOOLS_QUIC_SPDY_SESSION_PEER_H_
 
 #include "base/macros.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_write_blocked_list.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_write_blocked_list.h"
 
 namespace net {
 
@@ -21,6 +21,7 @@ class QuicSpdySessionPeer {
   static QuicHeadersStream* GetHeadersStream(QuicSpdySession* session);
   static void SetHeadersStream(QuicSpdySession* session,
                                QuicHeadersStream* headers_stream);
+  static void SetForceHolBlocking(QuicSpdySession* session, bool value);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(QuicSpdySessionPeer);

@@ -11,7 +11,7 @@
 #include "ash/common/wm_window.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "components/mus/public/cpp/window_observer.h"
+#include "services/ui/public/cpp/window_observer.h"
 
 namespace views {
 class Widget;
@@ -27,12 +27,13 @@ namespace mus {
 
 class MusLayoutManagerAdapter;
 class WmRootWindowControllerMus;
+class WmWindowMusTestApi;
 
 // WmWindow implementation for mus.
 //
-// WmWindowMus is tied to the life of the underlying ::mus::Window (it is stored
+// WmWindowMus is tied to the life of the underlying ui::Window (it is stored
 // as an owned property).
-class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
+class WmWindowMus : public WmWindow, public ui::WindowObserver {
  public:
   // Indicates the source of the widget creation.
   enum class WidgetCreationType {
@@ -42,32 +43,32 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
     INTERNAL,
 
     // The widget was created for a client. In other words there is a client
-    // embedded in the mus::Window. For example, when Chrome creates a new
-    // browser window the window manager is asked to create the mus::Window.
-    // The window manager creates a mus::Window and a views::Widget to show the
+    // embedded in the ui::Window. For example, when Chrome creates a new
+    // browser window the window manager is asked to create the ui::Window.
+    // The window manager creates a ui::Window and a views::Widget to show the
     // non-client frame decorations. In this case the creation type is
     // FOR_CLIENT.
     FOR_CLIENT,
   };
 
-  explicit WmWindowMus(::mus::Window* window);
+  explicit WmWindowMus(ui::Window* window);
   // NOTE: this class is owned by the corresponding window. You shouldn't delete
   // TODO(sky): friend deleter and make private.
   ~WmWindowMus() override;
 
-  // Returns a WmWindow for an mus::Window, creating if necessary.
-  static WmWindowMus* Get(::mus::Window* window);
+  // Returns a WmWindow for an ui::Window, creating if necessary.
+  static WmWindowMus* Get(ui::Window* window);
 
   static WmWindowMus* Get(views::Widget* widget);
 
-  static ::mus::Window* GetMusWindow(WmWindow* wm_window) {
-    return const_cast<::mus::Window*>(
+  static ui::Window* GetMusWindow(WmWindow* wm_window) {
+    return const_cast<ui::Window*>(
         GetMusWindow(const_cast<const WmWindow*>(wm_window)));
   }
-  static const ::mus::Window* GetMusWindow(const WmWindow* wm_window);
+  static const ui::Window* GetMusWindow(const WmWindow* wm_window);
 
   static std::vector<WmWindow*> FromMusWindows(
-      const std::vector<::mus::Window*>& mus_windows);
+      const std::vector<ui::Window*>& mus_windows);
 
   // Sets the widget associated with the window. The widget is used to query
   // state, such as min/max size. The widget is not owned by the WmWindowMus.
@@ -76,8 +77,8 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
     widget_creation_type_ = type;
   }
 
-  ::mus::Window* mus_window() { return window_; }
-  const ::mus::Window* mus_window() const { return window_; }
+  ui::Window* mus_window() { return window_; }
+  const ui::Window* mus_window() const { return window_; }
 
   WmRootWindowControllerMus* GetRootWindowControllerMus() {
     return const_cast<WmRootWindowControllerMus*>(
@@ -105,11 +106,13 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   WmRootWindowController* GetRootWindowController() override;
   WmShell* GetShell() const override;
   void SetName(const char* name) override;
+  std::string GetName() const override;
   base::string16 GetTitle() const override;
   void SetShellWindowId(int id) override;
   int GetShellWindowId() const override;
   WmWindow* GetChildByShellWindowId(int id) override;
   ui::wm::WindowType GetType() const override;
+  bool IsBubble() override;
   ui::Layer* GetLayer() override;
   display::Display GetDisplayNearestWindow() override;
   bool HasNonClientArea() override;
@@ -131,8 +134,13 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   bool IsSystemModal() const override;
   bool GetBoolProperty(WmWindowProperty key) override;
   int GetIntProperty(WmWindowProperty key) override;
+  void SetIntProperty(WmWindowProperty key, int value) override;
+  ShelfItemDetails* GetShelfItemDetails() override;
+  void SetShelfItemDetails(const ShelfItemDetails& details) override;
+  void ClearShelfItemDetails() override;
   const wm::WindowState* GetWindowState() const override;
   WmWindow* GetToplevelWindow() override;
+  WmWindow* GetToplevelWindowForFocus() override;
   void SetParentUsingContext(WmWindow* context,
                              const gfx::Rect& screen_bounds) override;
   void AddChild(WmWindow* window) override;
@@ -202,35 +210,49 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   std::vector<WmWindow*> GetChildren() override;
   void ShowResizeShadow(int component) override;
   void HideResizeShadow() override;
+  void InstallResizeHandleWindowTargeter(
+      ImmersiveFullscreenController* immersive_fullscreen_controller) override;
   void SetBoundsInScreenBehaviorForChildren(
       BoundsInScreenBehavior behavior) override;
   void SetSnapsChildrenToPhysicalPixelBoundary() override;
   void SnapToPixelBoundaryIfNecessary() override;
   void SetChildrenUseExtendedHitRegion() override;
   void SetDescendantsStayInSameRootWindow(bool value) override;
+  std::unique_ptr<views::View> CreateViewWithRecreatedLayers() override;
   void AddObserver(WmWindowObserver* observer) override;
   void RemoveObserver(WmWindowObserver* observer) override;
   bool HasObserver(const WmWindowObserver* observer) const override;
+  void AddTransientWindowObserver(WmTransientWindowObserver* observer) override;
+  void RemoveTransientWindowObserver(
+      WmTransientWindowObserver* observer) override;
+  void AddLimitedPreTargetHandler(ui::EventHandler* handler) override;
+  void RemoveLimitedPreTargetHandler(ui::EventHandler* handler) override;
 
  private:
-  // mus::WindowObserver:
+  friend class WmWindowMusTestApi;
+
+  // ui::WindowObserver:
   void OnTreeChanging(const TreeChangeParams& params) override;
   void OnTreeChanged(const TreeChangeParams& params) override;
-  void OnWindowReordered(::mus::Window* window,
-                         ::mus::Window* relative_window,
-                         ::mus::mojom::OrderDirection direction) override;
+  void OnWindowReordered(ui::Window* window,
+                         ui::Window* relative_window,
+                         ui::mojom::OrderDirection direction) override;
   void OnWindowSharedPropertyChanged(
-      ::mus::Window* window,
+      ui::Window* window,
       const std::string& name,
       const std::vector<uint8_t>* old_data,
       const std::vector<uint8_t>* new_data) override;
-  void OnWindowBoundsChanged(::mus::Window* window,
+  void OnWindowBoundsChanged(ui::Window* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
-  void OnWindowDestroying(::mus::Window* window) override;
-  void OnWindowDestroyed(::mus::Window* window) override;
+  void OnWindowDestroying(ui::Window* window) override;
+  void OnWindowDestroyed(ui::Window* window) override;
+  void OnTransientChildAdded(ui::Window* window,
+                             ui::Window* transient) override;
+  void OnTransientChildRemoved(ui::Window* window,
+                               ui::Window* transient) override;
 
-  ::mus::Window* window_;
+  ui::Window* window_;
 
   // The shell window id of this window. Shell window ids are defined in
   // ash/common/shell_window_ids.h.
@@ -255,6 +277,11 @@ class WmWindowMus : public WmWindow, public ::mus::WindowObserver {
   // If true child windows should get a slightly larger hit region to make
   // resizing easier.
   bool children_use_extended_hit_region_ = false;
+
+  base::ObserverList<WmTransientWindowObserver, true> transient_observers_;
+
+  // If true the minimum size is 0x0, default is minimum size comes from widget.
+  bool use_empty_minimum_size_for_testing_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(WmWindowMus);
 };

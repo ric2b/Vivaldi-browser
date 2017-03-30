@@ -55,6 +55,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::GetClass;
+using base::android::JavaParamRef;
 using base::android::MethodID;
 using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
@@ -824,7 +825,7 @@ ChromeBrowserProvider::ChromeBrowserProvider(JNIEnv* env, jobject obj)
       handling_extensive_changes_(false) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   profile_ = g_browser_process->profile_manager()->GetLastUsedProfile();
-  bookmark_model_ = BookmarkModelFactory::GetForProfile(profile_);
+  bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(profile_);
   top_sites_ = TopSitesFactory::GetForProfile(profile_);
   favicon_service_ = FaviconServiceFactory::GetForProfile(
       profile_, ServiceAccessType::EXPLICIT_ACCESS),
@@ -1175,7 +1176,7 @@ void ChromeBrowserProvider::BookmarkModelChanged() {
   if (obj.is_null())
     return;
 
-  Java_ChromeBrowserProvider_onBookmarkChanged(env, obj.obj());
+  Java_ChromeBrowserProvider_onBookmarkChanged(env, obj);
 }
 
 void ChromeBrowserProvider::OnHistoryChanged() {
@@ -1183,7 +1184,7 @@ void ChromeBrowserProvider::OnHistoryChanged() {
   ScopedJavaLocalRef<jobject> obj = weak_java_provider_.get(env);
   if (obj.is_null())
     return;
-  Java_ChromeBrowserProvider_onHistoryChanged(env, obj.obj());
+  Java_ChromeBrowserProvider_onHistoryChanged(env, obj);
 }
 
 void ChromeBrowserProvider::OnURLVisited(
@@ -1213,7 +1214,7 @@ void ChromeBrowserProvider::OnKeywordSearchTermUpdated(
   ScopedJavaLocalRef<jobject> obj = weak_java_provider_.get(env);
   if (obj.is_null())
     return;
-  Java_ChromeBrowserProvider_onSearchTermChanged(env, obj.obj());
+  Java_ChromeBrowserProvider_onSearchTermChanged(env, obj);
 }
 
 void ChromeBrowserProvider::OnKeywordSearchTermDeleted(

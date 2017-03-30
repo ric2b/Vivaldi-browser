@@ -23,6 +23,7 @@
 #include "third_party/skia/include/core/SkFontStyle.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "third_party/skia/include/effects/SkMorphologyImageFilter.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
@@ -256,6 +257,10 @@ void SkiaTextRenderer::SetShader(sk_sp<SkShader> shader) {
   paint_.setShader(std::move(shader));
 }
 
+void SkiaTextRenderer::SetHaloEffect() {
+  paint_.setImageFilter(SkDilateImageFilter::Make(1, 1, nullptr));
+}
+
 void SkiaTextRenderer::SetUnderlineMetrics(SkScalar thickness,
                                            SkScalar position) {
   underline_thickness_ = thickness;
@@ -344,7 +349,6 @@ void SkiaTextRenderer::DiagonalStrike::Draw() {
   paint_.setStrokeWidth(SkIntToScalar(thickness));
 
   const bool clipped = pieces_.size() > 1;
-  SkCanvas* sk_canvas = canvas_->sk_canvas();
   int x = start_.x();
 
   for (size_t i = 0; i < pieces_.size(); ++i) {
@@ -352,8 +356,8 @@ void SkiaTextRenderer::DiagonalStrike::Draw() {
 
     if (clipped) {
       canvas_->Save();
-      sk_canvas->clipRect(RectToSkRect(
-          Rect(x, end.y() - thickness, pieces_[i].first, clip_height)));
+      canvas_->ClipRect(
+          Rect(x, end.y() - thickness, pieces_[i].first, clip_height));
     }
 
     canvas_->DrawLine(start_, end, paint_);
@@ -609,10 +613,11 @@ void RenderText::SetCursorPosition(size_t position) {
 
 void RenderText::MoveCursor(BreakType break_type,
                             VisualCursorDirection direction,
-                            bool select) {
+                            SelectionBehavior selection_behavior) {
   SelectionModel cursor(cursor_position(), selection_model_.caret_affinity());
   // Cancelling a selection moves to the edge of the selection.
-  if (break_type != LINE_BREAK && !selection().is_empty() && !select) {
+  if (break_type != LINE_BREAK && !selection().is_empty() &&
+      selection_behavior == SELECTION_NONE) {
     SelectionModel selection_start = GetSelectionModelForSelectionStart();
     int start_x = GetCursorBounds(selection_start, true).x();
     int cursor_x = GetCursorBounds(cursor, true).x();
@@ -629,8 +634,41 @@ void RenderText::MoveCursor(BreakType break_type,
   } else {
     cursor = GetAdjacentSelectionModel(cursor, break_type, direction);
   }
-  if (select)
-    cursor.set_selection_start(selection().start());
+
+  // |cursor| corresponds to the tentative end point of the new selection. The
+  // selection direction is reversed iff the current selection is non-empty and
+  // the old selection end point and |cursor| are at the opposite ends of the
+  // old selection start point.
+  uint32_t min_end = std::min(selection().end(), cursor.selection().end());
+  uint32_t max_end = std::max(selection().end(), cursor.selection().end());
+  uint32_t current_start = selection().start();
+
+  bool selection_reversed = !selection().is_empty() &&
+                            min_end <= current_start &&
+                            current_start <= max_end;
+
+  // Take |selection_behavior| into account.
+  switch (selection_behavior) {
+    case SELECTION_RETAIN:
+      cursor.set_selection_start(current_start);
+      break;
+    case SELECTION_EXTEND:
+      cursor.set_selection_start(selection_reversed ? selection().end()
+                                                    : current_start);
+      break;
+    case SELECTION_CARET:
+      if (selection_reversed) {
+        cursor =
+            SelectionModel(current_start, selection_model_.caret_affinity());
+      } else {
+        cursor.set_selection_start(current_start);
+      }
+      break;
+    case SELECTION_NONE:
+      // Do nothing.
+      break;
+  }
+
   MoveCursorTo(cursor);
 }
 
@@ -849,6 +887,8 @@ void RenderText::Draw(Canvas* canvas) {
 
   if (!text().empty()) {
     internal::SkiaTextRenderer renderer(canvas);
+    if (halo_effect())
+      renderer.SetHaloEffect();
     DrawVisualText(&renderer);
   }
 

@@ -199,6 +199,8 @@ def cpp_type(idl_type, extended_attributes=None, raw_type=False, used_as_rvalue_
             return implemented_as_class + '*'
         return cpp_template_type('Member', implemented_as_class)
     if idl_type.is_dictionary:
+        if used_as_rvalue_type:
+            return 'const %s&' % base_idl_type
         return base_idl_type
     if idl_type.is_union_type:
         # Avoid "AOrNullOrB" for cpp type of (A? or B) because we generate
@@ -470,7 +472,7 @@ def set_component_dirs(new_component_dirs):
 
 V8_VALUE_TO_CPP_VALUE = {
     # Basic
-    'Date': 'toCoreDate({isolate}, {v8_value})',
+    'Date': 'toCoreDate({isolate}, {v8_value}, exceptionState)',
     'DOMString': '{v8_value}',
     'ByteString': 'toByteString({isolate}, {arguments})',
     'USVString': 'toUSVString({isolate}, {arguments})',
@@ -504,7 +506,7 @@ def v8_conversion_needs_exception_state(idl_type):
     return (idl_type.is_numeric_type or
             idl_type.is_enum or
             idl_type.is_dictionary or
-            idl_type.name in ('Boolean', 'ByteString', 'Dictionary', 'USVString', 'SerializedScriptValue'))
+            idl_type.name in ('Boolean', 'ByteString', 'Date', 'Dictionary', 'USVString', 'SerializedScriptValue'))
 
 IdlType.v8_conversion_needs_exception_state = property(v8_conversion_needs_exception_state)
 IdlArrayOrSequenceType.v8_conversion_needs_exception_state = True
@@ -862,9 +864,13 @@ CPP_VALUE_TO_V8_VALUE = {
     'StringOrNull': '{cpp_value}.isNull() ? v8::Local<v8::Value>(v8::Null({isolate})) : v8String({isolate}, {cpp_value})',
     # Special cases
     'Dictionary': '{cpp_value}.v8Value()',
-    'EventHandler': '{cpp_value} ? v8::Local<v8::Value>(V8AbstractEventListener::cast({cpp_value})->getListenerObject(impl->getExecutionContext())) : v8::Local<v8::Value>(v8::Null({isolate}))',
+    'EventHandler': (
+        '{cpp_value} ? ' +
+        'V8AbstractEventListener::cast({cpp_value})->getListenerOrNull(' +
+        '{isolate}, impl->getExecutionContext()) : ' +
+        'v8::Null({isolate}).As<v8::Value>()'),
     'ScriptValue': '{cpp_value}.v8Value()',
-    'SerializedScriptValue': '{cpp_value} ? {cpp_value}->deserialize() : v8::Local<v8::Value>(v8::Null({isolate}))',
+    'SerializedScriptValue': 'v8Deserialize({isolate}, {cpp_value})',
     # General
     'array': 'toV8({cpp_value}, {creation_context}, {isolate})',
     'FrozenArray': 'freezeV8Object(toV8({cpp_value}, {creation_context}, {isolate}), {isolate})',

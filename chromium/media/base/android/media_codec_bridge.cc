@@ -7,19 +7,9 @@
 #include <algorithm>
 #include <limits>
 
-#include "base/android/build_info.h"
-#include "base/android/jni_android.h"
-#include "base/android/jni_array.h"
-#include "base/android/jni_string.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
-#include "media/base/decrypt_config.h"
-
-using base::android::AttachCurrentThread;
-using base::android::ConvertJavaStringToUTF8;
-using base::android::ConvertUTF8ToJavaString;
-using base::android::JavaIntArrayToIntVector;
-using base::android::ScopedJavaLocalRef;
+#include "media/base/subsample_entry.h"
 
 namespace media {
 
@@ -34,12 +24,12 @@ MediaCodecStatus MediaCodecBridge::QueueSecureInputBuffer(
     const std::string& key_id,
     const std::string& iv,
     const std::vector<SubsampleEntry>& subsamples,
-    const base::TimeDelta& presentation_time) {
+    base::TimeDelta presentation_time) {
   const std::vector<char> key_vec(key_id.begin(), key_id.end());
   const std::vector<char> iv_vec(iv.begin(), iv.end());
   return QueueSecureInputBuffer(index, data, data_size, key_vec, iv_vec,
                                 subsamples.empty() ? nullptr : &subsamples[0],
-                                subsamples.size(), presentation_time);
+                                (int)subsamples.size(), presentation_time);
 }
 
 MediaCodecStatus MediaCodecBridge::CopyFromOutputBuffer(int index,

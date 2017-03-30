@@ -100,7 +100,6 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
       embedder_visible_(true),
       is_full_page_plugin_(false),
       has_render_view_(has_render_view),
-      got_renderview_on_init_(has_render_view),
       is_in_destruction_(false),
       initialized_(false),
       guest_proxy_routing_id_(MSG_ROUTING_NONE),
@@ -196,6 +195,13 @@ base::WeakPtr<BrowserPluginGuest> BrowserPluginGuest::AsWeakPtr() {
 void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
                                   bool focused,
                                   blink::WebFocusType focus_type) {
+  // NOTE(andre@vivaldi.com) : The |report_focus_change| check was added
+  // because when showing an internal page, ie. the startpage, the
+  // InputMsg_SetFocus would be sent back to the RenderView causing a loop of
+  // setfoocus(false) calls.
+  bool report_focus_change =
+      (focus_state_.first != rwh) || (focus_state_.second != focused);
+  focus_state_ = std::make_pair(rwh, focused);
   focused_ = focused;
   if (!rwh)
     return;
@@ -205,6 +211,7 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
     static_cast<RenderViewHostImpl*>(RenderViewHost::From(rwh))->
         SetInitialFocus(focus_type == blink::WebFocusTypeBackward);
   }
+  if (report_focus_change)
   rwh->Send(new InputMsg_SetFocus(rwh->GetRoutingID(), focused));
   if (!focused && mouse_locked_)
     OnUnlockMouse();
@@ -338,7 +345,7 @@ void BrowserPluginGuest::InitInternal(
   DCHECK(GetWebContents()->GetRenderViewHost());
 
   // Initialize the device scale factor by calling |NotifyScreenInfoChanged|.
-  auto render_widget_host = RenderWidgetHostImpl::From(
+  auto* render_widget_host = RenderWidgetHostImpl::From(
       GetWebContents()->GetRenderViewHost()->GetWidget());
   render_widget_host->NotifyScreenInfoChanged();
 
@@ -415,7 +422,7 @@ void BrowserPluginGuest::OnSatisfySequence(
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.id_namespace, &sequences);
+  manager->DidSatisfySequences(sequence.client_id, &sequences);
 }
 
 void BrowserPluginGuest::OnRequireSequence(
@@ -743,13 +750,6 @@ void BrowserPluginGuest::Attach(
     const BrowserPluginHostMsg_Attach_Params& params) {
   browser_plugin_instance_id_ = browser_plugin_instance_id;
 
-  // Note(andre@vivaldi.com) : This will make sure a renderview is created. The
-  // reason for this is that we use the WebContents owned by the TabStripModel
-  // in our WebViewGuest widgets when running Vivaldi.
-  if (!got_renderview_on_init_) {
-    has_render_view_ = false;
-  }
-
   // The guest is owned by the embedder. Attach is queued up so we cannot
   // change embedders before attach completes. If the embedder goes away,
   // so does the guest and so we will never call WillAttachComplete because
@@ -821,7 +821,7 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
                                             blink::WebDragOperationsMask mask,
                                             const gfx::Point& location) {
   RenderViewHost* host = GetWebContents()->GetRenderViewHost();
-  auto embedder = owner_web_contents_->GetBrowserPluginEmbedder();
+  auto* embedder = owner_web_contents_->GetBrowserPluginEmbedder();
   DropData filtered_data(drop_data);
   host->FilterDropData(&filtered_data);
   switch (drag_status) {
@@ -949,13 +949,9 @@ void BrowserPluginGuest::OnSetVisibility(int browser_plugin_instance_id,
     return;
 
   guest_visible_ = visible;
-  // Note(gisli): Even thoug we call visibiltity methods on the WebContents this
-  // should work out for interstitial pages as inside the WebContents we call
-  // show/hide on RenderWidgetHostViewPort which we get from the RenderManager and it
-  // checks if it is an interstitial page and gives us the right one.
-  if (embedder_visible_ && guest_visible_) {
+  if (embedder_visible_ && guest_visible_)
     GetWebContents()->WasShown();
-  } else
+  else
     GetWebContents()->WasHidden();
 }
 

@@ -1,6 +1,5 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_events/cr_events.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_behavior.html">
 <link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="/controls/pref_control_behavior.html">
@@ -13,14 +12,13 @@
         display: inline-block;
       }
     </style>
-    <cr-events id="events"></cr-events>
-
     <div id="outerDiv" class="layout horizontal center">
       <paper-input id="input" auto-validate value="{{value}}"
           error-message="[[errorMessage]]" label="[[label]]"
           no-label-float="[[noLabelFloat]]" pattern="[[pattern]]"
           readonly$="[[readonly]]" required="[[required]]" type="[[type]]"
-          on-blur="onBlur_" disabled="[[isDisabled_(disabled, pref)]]">
+          on-blur="onBlur_" disabled="[[isDisabled_(disabled, pref)]]"
+          stop-keyboard-event-propagation$="[[stopKeyboardEventPropagation]]">
       </paper-input>
       <template is="dom-if" if="[[pref.policySource]]">
         <cr-policy-pref-indicator pref="[[pref]]"></cr-policy-pref-indicator>

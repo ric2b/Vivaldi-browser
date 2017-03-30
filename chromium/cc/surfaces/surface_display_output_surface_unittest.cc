@@ -25,16 +25,18 @@
 namespace cc {
 namespace {
 
+static constexpr int kArbitraryClientId = 0;
+
 class SurfaceDisplayOutputSurfaceTest : public testing::Test {
  public:
   SurfaceDisplayOutputSurfaceTest()
       : now_src_(new base::SimpleTestTickClock()),
         task_runner_(new OrderedSimpleTaskRunner(now_src_.get(), true)),
-        allocator_(0),
+        allocator_(kArbitraryClientId),
         display_size_(1920, 1080),
         display_rect_(display_size_),
         context_provider_(TestContextProvider::Create()) {
-    surface_manager_.RegisterSurfaceIdNamespace(allocator_.id_namespace());
+    surface_manager_.RegisterSurfaceClientId(allocator_.client_id());
 
     std::unique_ptr<FakeOutputSurface> display_output_surface =
         FakeOutputSurface::Create3d();
@@ -49,8 +51,7 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
         begin_frame_source.get(), task_runner_.get(), max_frames_pending));
 
     display_.reset(new Display(
-        &surface_manager_, &bitmap_manager_, &gpu_memory_buffer_manager_,
-        RendererSettings(), allocator_.id_namespace(),
+        &bitmap_manager_, &gpu_memory_buffer_manager_, RendererSettings(),
         std::move(begin_frame_source), std::move(display_output_surface),
         std::move(scheduler),
         base::MakeUnique<TextureMailboxDeleter>(task_runner_.get())));
@@ -60,6 +61,7 @@ class SurfaceDisplayOutputSurfaceTest : public testing::Test {
 
     delegated_output_surface_->BindToClient(&delegated_output_surface_client_);
     display_->Resize(display_size_);
+    display_->SetVisible(true);
 
     EXPECT_FALSE(
         delegated_output_surface_client_.did_lose_output_surface_called());

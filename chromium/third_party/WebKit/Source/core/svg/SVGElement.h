@@ -55,8 +55,8 @@ class CORE_EXPORT SVGElement : public Element {
     DEFINE_WRAPPERTYPEINFO();
 public:
     ~SVGElement() override;
-    void attach(const AttachContext&) override;
-    void detach(const AttachContext&) override;
+    void attachLayoutTree(const AttachContext&) override;
+    void detachLayoutTree(const AttachContext&) override;
 
     short tabIndex() const override;
     bool supportsFocus() const override { return false; }
@@ -88,6 +88,10 @@ public:
 
     void setWebAnimatedAttribute(const QualifiedName& attribute, SVGPropertyBase*);
     void clearWebAnimatedAttributes();
+
+    void setAnimatedAttribute(const QualifiedName&, SVGPropertyBase*);
+    void invalidateAnimatedAttribute(const QualifiedName&);
+    void clearAnimatedAttribute(const QualifiedName&);
 
     SVGSVGElement* ownerSVGElement() const;
     SVGElement* viewportElement() const;
@@ -180,6 +184,7 @@ public:
     };
 
     void invalidateInstances();
+    void setNeedsStyleRecalcForInstances(StyleChangeType, const StyleChangeReasonForTracing&);
 
     DECLARE_VIRTUAL_TRACE();
 

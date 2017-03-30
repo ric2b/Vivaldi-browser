@@ -14,7 +14,7 @@
 namespace ui {
 
 // Loads "resources.apk" from the .apk. Falls back to loading from disk, which
-// is necessary for tests.
+// is necessary for tests. Returns true if it succeeds, false otherwise.
 UI_BASE_EXPORT void LoadMainAndroidPackFile(
     const char* path_within_apk,
     const base::FilePath& disk_file_path);
@@ -40,8 +40,6 @@ UI_BASE_EXPORT void SetLocalePaksStoredInApk(bool value);
 // Only locale paks for the active Android language can be retrieved.
 UI_BASE_EXPORT std::string GetPathForAndroidLocalePakWithinApk(
     const std::string& locale);
-
-bool RegisterResourceBundleAndroid(JNIEnv* env);
 
 }  // namespace ui
 

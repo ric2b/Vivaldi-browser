@@ -15,17 +15,17 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sync/api/attachments/attachment_id.h"
+#include "components/sync/api/sync_change.h"
+#include "components/sync/api/sync_data.h"
+#include "components/sync/api/sync_error_factory_mock.h"
+#include "components/sync/api/syncable_service.h"
+#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/protocol/preference_specifics.pb.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/syncable_prefs/pref_model_associator.h"
 #include "components/syncable_prefs/pref_model_associator_client.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
-#include "sync/api/attachments/attachment_id.h"
-#include "sync/api/sync_change.h"
-#include "sync/api/sync_data.h"
-#include "sync/api/sync_error_factory_mock.h"
-#include "sync/api/syncable_service.h"
-#include "sync/internal_api/public/attachments/attachment_service_proxy_for_test.h"
-#include "sync/protocol/preference_specifics.pb.h"
-#include "sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using syncer::SyncChange;
@@ -45,6 +45,10 @@ const char kUnsyncedPreferenceDefaultValue[] = "default";
 const char kDefaultCharsetPrefName[] = "default_charset";
 const char kNonDefaultCharsetValue[] = "foo";
 const char kDefaultCharsetValue[] = "utf-8";
+
+void Increment(int* num) {
+  (*num)++;
+}
 
 class TestPrefModelAssociatorClient : public PrefModelAssociatorClient {
  public:
@@ -121,7 +125,6 @@ class PrefServiceSyncableTest : public testing::Test {
     pref_sync_service_ = reinterpret_cast<PrefModelAssociator*>(
         prefs_.GetSyncableService(syncer::PREFERENCES));
     ASSERT_TRUE(pref_sync_service_);
-    next_pref_remote_sync_node_id_ = 0;
   }
 
   syncer::SyncChange MakeRemoteChange(int64_t id,
@@ -553,6 +556,17 @@ TEST_F(PrefServiceSyncableTest, DeletePreference) {
       1, kStringPrefName, *null_value, SyncChange::ACTION_DELETE));
   pref_sync_service_->ProcessSyncChanges(FROM_HERE, list);
   EXPECT_TRUE(pref->IsDefaultValue());
+}
+
+TEST_F(PrefServiceSyncableTest, RegisterMergeDataFinishedCallback) {
+  int num_callbacks = 0;
+
+  prefs_.RegisterMergeDataFinishedCallback(
+      base::Bind(&Increment, &num_callbacks));
+  EXPECT_EQ(0, num_callbacks);
+
+  InitWithNoSyncData();
+  EXPECT_EQ(1, num_callbacks);
 }
 
 }  // namespace

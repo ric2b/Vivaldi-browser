@@ -74,7 +74,7 @@ public:
         return new PagePopupChromeClient(popup);
     }
 
-    void setWindowRect(const IntRect& rect) override
+    void setWindowRect(const IntRect& rect, LocalFrame&) override
     {
         m_popup->setWindowRect(rect);
     }
@@ -91,7 +91,7 @@ private:
         m_popup->closePopup();
     }
 
-    IntRect windowRect() override
+    IntRect rootWindowRect() override
     {
         return m_popup->windowRectInScreen();
     }
@@ -121,9 +121,9 @@ private:
 
     void scheduleAnimation(Widget*) override
     {
-        // Calling scheduleAnimation on m_webView so WebTestProxy will call beginFrame.
+        // Calling scheduleAnimation on m_webView so WebViewTestProxy will call beginFrame.
         if (LayoutTestSupport::isRunningLayoutTest())
-            m_popup->m_webView->scheduleAnimation();
+            m_popup->m_webView->mainFrameImpl()->frameWidget()->scheduleAnimation();
 
         if (m_popup->isAcceleratedCompositingActive()) {
             DCHECK(m_popup->m_layerTreeView);
@@ -160,10 +160,9 @@ private:
         return IntSize(0, 0);
     }
 
-    void setCursor(const Cursor& cursor, LocalFrame* localRoot) override
+    void setCursor(const Cursor& cursor, LocalFrame* localFrame) override
     {
-        if (m_popup->m_webView->client())
-            m_popup->m_webView->client()->didChangeCursor(WebCursorInfo(cursor));
+        m_popup->m_widgetClient->didChangeCursor(WebCursorInfo(cursor));
     }
 
     void setEventListenerProperties(WebEventListenerClass eventClass, WebEventListenerProperties properties) override

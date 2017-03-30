@@ -54,6 +54,7 @@
 #include "WebURLError.h"
 #include "WebVector.h"
 #include "base/metrics/user_metrics_action.h"
+#include "cc/resources/shared_bitmap.h"
 
 class GrContext;
 
@@ -64,7 +65,7 @@ template<class T> class Local;
 
 namespace blink {
 
-class ServiceRegistry;
+class InterfaceProvider;
 class WebAudioBus;
 class WebBlobRegistry;
 class WebCanvasCaptureHandler;
@@ -94,7 +95,6 @@ class WebMediaStreamTrack;
 class WebMessagePortChannel;
 class WebMimeRegistry;
 class WebNotificationManager;
-class WebPermissionClient;
 class WebPluginListBuilder;
 class WebPrescientNetworking;
 class WebProcessMemoryDump;
@@ -411,17 +411,6 @@ public:
     // recordAction(UserMetricsAction("MyAction"))
     virtual void recordAction(const UserMetricsAction&) { }
 
-    class TraceLogEnabledStateObserver {
-    public:
-        virtual ~TraceLogEnabledStateObserver() = default;
-        virtual void onTraceLogEnabled() = 0;
-        virtual void onTraceLogDisabled() = 0;
-    };
-
-    // Register or unregister a trace log state observer. Does not take ownership.
-    virtual void addTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
-    virtual void removeTraceLogEnabledStateObserver(TraceLogEnabledStateObserver*) {}
-
     typedef uint64_t WebMemoryAllocatorDumpGuid;
 
     // GPU ----------------------------------------------------------------
@@ -459,12 +448,7 @@ public:
     // the context cannot be created or initialized.
     virtual WebGraphicsContext3DProvider* createSharedOffscreenGraphicsContext3DProvider() { return nullptr; }
 
-    // Returns true if the platform is capable of producing an offscreen context suitable for accelerating 2d canvas.
-    // This will return false if the platform cannot promise that contexts will be preserved across operations like
-    // locking the screen or if the platform cannot provide a context with suitable performance characteristics.
-    //
-    // This value must be checked again after a context loss event as the platform's capabilities may have changed.
-    virtual bool canAccelerate2dCanvas() { return false; }
+    virtual std::unique_ptr<cc::SharedBitmap> allocateSharedBitmap(const WebSize& size) { return nullptr; }
 
     virtual bool isThreadedCompositingEnabled() { return false; }
     virtual bool isThreadedAnimationEnabled() { return true; }
@@ -518,7 +502,7 @@ public:
 
     // Mojo ---------------------------------------------------------------
 
-    virtual ServiceRegistry* serviceRegistry();
+    virtual InterfaceProvider* interfaceProvider();
 
     // Platform events -----------------------------------------------------
     // Device Orientation, Device Motion, Device Light, Battery, Gamepad.
@@ -581,11 +565,6 @@ public:
     // Push API------------------------------------------------------------
 
     virtual WebPushProvider* pushProvider() { return nullptr; }
-
-
-    // Permissions --------------------------------------------------------
-
-    virtual WebPermissionClient* permissionClient() { return nullptr; }
 
 
     // Background Sync API------------------------------------------------------------

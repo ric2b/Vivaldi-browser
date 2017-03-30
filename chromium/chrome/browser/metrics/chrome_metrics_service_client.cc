@@ -27,7 +27,9 @@
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/chrome_stability_metrics_provider.h"
+#include "chrome/browser/metrics/https_engagement_metrics_provider.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
+#include "chrome/browser/metrics/sampling_metrics_provider.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/metrics/time_ticks_experiment_win.h"
 #include "chrome/browser/sync/chrome_sync_client.h"
@@ -59,7 +61,7 @@
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/device_count_metrics_provider.h"
+#include "components/sync/device_info/device_count_metrics_provider.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/histogram_fetcher.h"
@@ -67,6 +69,7 @@
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/metrics/android_metrics_provider.h"
+#include "chrome/browser/metrics/page_load_metrics_provider.h"
 #endif
 
 #if defined(ENABLE_PRINT_PREVIEW)
@@ -88,6 +91,7 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
+
 #include "chrome/browser/metrics/antivirus_metrics_provider_win.h"
 #include "chrome/browser/metrics/google_update_metrics_provider_win.h"
 #include "chrome/common/metrics_constants_util_win.h"
@@ -200,7 +204,8 @@ void CleanUpGlobalPersistentHistogramStorage() {
 
   // Open (with delete) and then immediately close the file by going out of
   // scope. This is the only cross-platform safe way to delete a file that may
-  // be open elsewhere.
+  // be open elsewhere. Open handles will continue to operate normally but
+  // new opens will not be possible.
   base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
                         base::File::FLAG_DELETE_ON_CLOSE);
 }
@@ -241,8 +246,7 @@ ChromeMetricsServiceClient::~ChromeMetricsServiceClient() {
 
 // static
 std::unique_ptr<ChromeMetricsServiceClient> ChromeMetricsServiceClient::Create(
-    metrics::MetricsStateManager* state_manager,
-    PrefService* local_state) {
+    metrics::MetricsStateManager* state_manager) {
   // Perform two-phase initialization so that |client->metrics_service_| only
   // receives pointers to fully constructed objects.
   std::unique_ptr<ChromeMetricsServiceClient> client(
@@ -279,15 +283,8 @@ void ChromeMetricsServiceClient::SetMetricsClientId(
   crash_keys::SetMetricsClientIdFromGUID(client_id);
 }
 
-void ChromeMetricsServiceClient::OnRecordingDisabled() {
-  // If we're shutting down, don't drop the metrics_client_id, so that late
-  // crashes won't lose it.
-  if (!g_browser_process->IsShuttingDown())
-    crash_keys::ClearMetricsClientId();
-}
-
 bool ChromeMetricsServiceClient::IsOffTheRecordSessionActive() {
-  return chrome::IsOffTheRecordSessionActive();
+  return chrome::IsIncognitoSessionActive();
 }
 
 int32_t ChromeMetricsServiceClient::GetProduct() {
@@ -423,7 +420,7 @@ void ChromeMetricsServiceClient::Initialize() {
   // be worth revisiting this to still log events from non-incognito sessions.
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(new OmniboxMetricsProvider(
-          base::Bind(&chrome::IsOffTheRecordSessionActive))));
+          base::Bind(&chrome::IsIncognitoSessionActive))));
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new ChromeStabilityMetricsProvider(
@@ -435,12 +432,11 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::ScreenInfoMetricsProvider));
 
-  metrics_service_->RegisterMetricsProvider(
-      CreateInstallerFileMetricsProvider(
-          metrics_state_manager_->IsMetricsReportingEnabled()));
+  metrics_service_->RegisterMetricsProvider(CreateInstallerFileMetricsProvider(
+      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
 
   drive_metrics_provider_ = new metrics::DriveMetricsProvider(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::FILE),
       chrome::FILE_LOCAL_STATE);
   metrics_service_->RegisterMetricsProvider(
@@ -455,10 +451,16 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new metrics::CallStackProfileMetricsProvider));
 
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new metrics::SamplingMetricsProvider));
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<metrics::MetricsProvider>(
           new AndroidMetricsProvider(g_browser_process->local_state())));
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(new PageLoadMetricsProvider()));
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
 #if defined(OS_WIN)
@@ -522,6 +524,10 @@ void ChromeMetricsServiceClient::Initialize() {
       std::unique_ptr<metrics::MetricsProvider>(
           new sync_driver::DeviceCountMetricsProvider(base::Bind(
               &browser_sync::ChromeSyncClient::GetDeviceInfoTrackers))));
+
+  metrics_service_->RegisterMetricsProvider(
+      std::unique_ptr<metrics::MetricsProvider>(
+          new HttpsEngagementMetricsProvider()));
 
   // Clear stability metrics if it is the first time cellular upload logic
   // should apply to avoid sudden bulk uploads. It needs to be done after all
@@ -642,6 +648,11 @@ void ChromeMetricsServiceClient::CollectFinalHistograms() {
   details->StartFetch();
 }
 
+void ChromeMetricsServiceClient::MergeHistogramDeltas() {
+  DCHECK(GetMetricsService());
+  GetMetricsService()->MergeHistogramDeltas();
+}
+
 void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -660,19 +671,27 @@ void ChromeMetricsServiceClient::OnMemoryDetailCollectionDone() {
   DCHECK_EQ(num_async_histogram_fetches_in_progress_, 0);
 
 #if !defined(ENABLE_PRINT_PREVIEW)
-  num_async_histogram_fetches_in_progress_ = 1;
-#else   // !ENABLE_PRINT_PREVIEW
   num_async_histogram_fetches_in_progress_ = 2;
+#else   // !ENABLE_PRINT_PREVIEW
+  num_async_histogram_fetches_in_progress_ = 3;
   // Run requests to service and content in parallel.
   if (!ServiceProcessControl::GetInstance()->GetHistograms(callback, timeout)) {
     // Assume |num_async_histogram_fetches_in_progress_| is not changed by
     // |GetHistograms()|.
-    DCHECK_EQ(num_async_histogram_fetches_in_progress_, 2);
+    DCHECK_EQ(num_async_histogram_fetches_in_progress_, 3);
     // Assign |num_async_histogram_fetches_in_progress_| above and decrement it
     // here to make code work even if |GetHistograms()| fired |callback|.
     --num_async_histogram_fetches_in_progress_;
   }
 #endif  // !ENABLE_PRINT_PREVIEW
+
+  // Merge histograms from metrics providers into StatisticsRecorder.
+  content::BrowserThread::PostTaskAndReply(
+      content::BrowserThread::UI,
+      FROM_HERE,
+      base::Bind(&ChromeMetricsServiceClient::MergeHistogramDeltas,
+                 weak_ptr_factory_.GetWeakPtr()),
+      callback);
 
   // Set up the callback task to call after we receive histograms from all
   // child processes. |timeout| specifies how long to wait before absolutely

@@ -48,14 +48,15 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/prefs/pref_service.h"
 #include "components/query_parser/snippet.h"
-#include "components/sync_driver/device_info.h"
-#include "components/sync_driver/device_info_tracker.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/device_info/device_info_tracker.h"
+#include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/protocol/history_delete_directive_specifics.pb.h"
+#include "components/sync/protocol/sync_enums.pb.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
 #include "grit/components_strings.h"
-#include "sync/protocol/history_delete_directive_specifics.pb.h"
-#include "sync/protocol/sync_enums.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 
@@ -319,10 +320,11 @@ bool BrowsingHistoryHandler::HistoryEntry::SortByTimeDescending(
 BrowsingHistoryHandler::BrowsingHistoryHandler()
     : has_pending_delete_request_(false),
       history_service_observer_(this),
+      web_history_service_observer_(this),
+      sync_service_observer_(this),
       has_synced_results_(false),
       has_other_forms_of_browsing_history_(false),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 BrowsingHistoryHandler::~BrowsingHistoryHandler() {
   query_task_tracker_.TryCancelAll();
@@ -346,10 +348,25 @@ void BrowsingHistoryHandler::RegisterMessages() {
 #endif
 
   // Get notifications when history is cleared.
-  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
+  history::HistoryService* local_history = HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
-  if (hs)
-    history_service_observer_.Add(hs);
+  if (local_history)
+    history_service_observer_.Add(local_history);
+
+  // Get notifications when web history is deleted.
+  history::WebHistoryService* web_history =
+      WebHistoryServiceFactory::GetForProfile(profile);
+  if (web_history) {
+    web_history_service_observer_.Add(web_history);
+  } else {
+    // If |web_history| is not available, it means that the history sync is
+    // disabled. Observe |sync_service| so that we can attach the listener
+    // in case it gets enabled later.
+    ProfileSyncService* sync_service =
+        ProfileSyncServiceFactory::GetForProfile(profile);
+    if (sync_service)
+      sync_service_observer_.Add(sync_service);
+  }
 
   web_ui()->RegisterMessageCallback("queryHistory",
       base::Bind(&BrowsingHistoryHandler::HandleQueryHistory,
@@ -376,6 +393,18 @@ bool BrowsingHistoryHandler::ExtractIntegerValueAtIndex(
   }
   NOTREACHED();
   return false;
+}
+
+void BrowsingHistoryHandler::OnStateChanged() {
+  // If the history sync was enabled, start observing WebHistoryService.
+  // This method should not be called after we already added the observer.
+  history::WebHistoryService* web_history =
+      WebHistoryServiceFactory::GetForProfile(Profile::FromWebUI(web_ui()));
+  if (web_history) {
+    DCHECK(!web_history_service_observer_.IsObserving(web_history));
+    web_history_service_observer_.Add(web_history);
+    sync_service_observer_.RemoveAll();
+  }
 }
 
 void BrowsingHistoryHandler::WebHistoryTimeout() {
@@ -627,7 +656,7 @@ void BrowsingHistoryHandler::HandleClearBrowsingData(
 void BrowsingHistoryHandler::HandleRemoveBookmark(const base::ListValue* args) {
   base::string16 url = ExtractStringValue(args);
   Profile* profile = Profile::FromWebUI(web_ui());
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
   bookmarks::RemoveAllBookmarks(model, GURL(url));
 }
 
@@ -679,7 +708,8 @@ void BrowsingHistoryHandler::MergeDuplicateResults(
 
 void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
   Profile* profile = Profile::FromWebUI(web_ui());
-  BookmarkModel* bookmark_model = BookmarkModelFactory::GetForProfile(profile);
+  BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(profile);
   SupervisedUserService* supervised_user_service = NULL;
 #if defined(ENABLE_SUPERVISED_USERS)
   if (profile->IsSupervised())
@@ -913,7 +943,10 @@ void BrowsingHistoryHandler::SetQueryTimeInMonths(
   exploded.day_of_month = 1;
 
   if (offset == 0) {
-    options->begin_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
+      // TODO(maksims): implement errors handling here.
+      NOTIMPLEMENTED();
+    }
 
     // Set the end time of this first search to null (which will
     // show results from the future, should the user's clock have
@@ -927,12 +960,18 @@ void BrowsingHistoryHandler::SetQueryTimeInMonths(
     exploded.month -= offset - 1;
     // Set the correct year.
     NormalizeMonths(&exploded);
-    options->end_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
+      // TODO(maksims): implement errors handling here.
+      NOTIMPLEMENTED();
+    }
 
     exploded.month -= 1;
     // Set the correct year
     NormalizeMonths(&exploded);
-    options->begin_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
+      // TODO(maksims): implement errors handling here.
+      NOTIMPLEMENTED();
+    }
   }
 }
 
@@ -957,4 +996,8 @@ void BrowsingHistoryHandler::OnURLsDeleted(
     const std::set<GURL>& favicon_urls) {
   if (all_history || DeletionsDiffer(deleted_rows, urls_to_be_deleted_))
     web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
+}
+
+void BrowsingHistoryHandler::OnWebHistoryDeleted() {
+  web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
 }

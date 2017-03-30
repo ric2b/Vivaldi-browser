@@ -16,9 +16,6 @@ namespace blink {
 
 class ExecutionContext;
 class TracedValue;
-class V8StackTrace;
-
-namespace protocol { namespace Runtime { class StackTrace; }}
 
 class CORE_EXPORT SourceLocation {
 public:
@@ -35,7 +32,7 @@ public:
     // Forces full stack trace.
     static std::unique_ptr<SourceLocation> captureWithFullStackTrace();
 
-    static std::unique_ptr<SourceLocation> create(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId = 0);
+    static std::unique_ptr<SourceLocation> create(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<v8_inspector::V8StackTrace>, int scriptId = 0);
     ~SourceLocation();
 
     bool isUnknown() const { return m_url.isNull() && !m_scriptId && !m_lineNumber; }
@@ -43,10 +40,9 @@ public:
     unsigned lineNumber() const { return m_lineNumber; }
     unsigned columnNumber() const { return m_columnNumber; }
     int scriptId() const { return m_scriptId; }
+    std::unique_ptr<v8_inspector::V8StackTrace> takeStackTrace() { return std::move(m_stackTrace); }
 
-    std::unique_ptr<V8StackTrace> cloneStackTrace() const;
-    std::unique_ptr<SourceLocation> clone() const;
-    std::unique_ptr<SourceLocation> isolatedCopy() const; // Safe to pass between threads.
+    std::unique_ptr<SourceLocation> clone() const; // Safe to pass between threads.
 
     // No-op when stack trace is unknown.
     void toTracedValue(TracedValue*, const char* name) const;
@@ -55,26 +51,17 @@ public:
     String toString() const;
 
     // Could be null when stack trace is unknown.
-    std::unique_ptr<protocol::Runtime::StackTrace> buildInspectorObject() const;
+    std::unique_ptr<protocol::Runtime::API::StackTrace> buildInspectorObject() const;
 
 private:
-    SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTrace>, int scriptId);
-    static std::unique_ptr<SourceLocation> createFromNonEmptyV8StackTrace(std::unique_ptr<V8StackTrace>, int scriptId);
+    SourceLocation(const String& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<v8_inspector::V8StackTrace>, int scriptId);
+    static std::unique_ptr<SourceLocation> createFromNonEmptyV8StackTrace(std::unique_ptr<v8_inspector::V8StackTrace>, int scriptId);
 
     String m_url;
     unsigned m_lineNumber;
     unsigned m_columnNumber;
-    std::unique_ptr<V8StackTrace> m_stackTrace;
+    std::unique_ptr<v8_inspector::V8StackTrace> m_stackTrace;
     int m_scriptId;
-};
-
-template <>
-struct CrossThreadCopier<std::unique_ptr<SourceLocation>> {
-    using Type = std::unique_ptr<SourceLocation>;
-    static Type copy(std::unique_ptr<SourceLocation> location)
-    {
-        return location ? location->isolatedCopy() : nullptr;
-    }
 };
 
 } // namespace blink

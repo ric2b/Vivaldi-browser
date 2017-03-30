@@ -5,8 +5,11 @@
 #include "components/password_manager/core/browser/credential_manager_pending_request_task.h"
 
 #include <algorithm>
+#include <map>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
+#include "base/metrics/user_metrics.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/affiliated_match_helper.h"
 #include "components/password_manager/core/browser/password_bubble_experiment.h"
@@ -22,25 +25,43 @@ namespace {
 
 // Send a UMA histogram about if |local_results| has empty or duplicate
 // usernames.
-void ReportAccountChooserMetrics(
-    const ScopedVector<autofill::PasswordForm>& local_results,
-    bool had_empty_username) {
-  std::vector<base::string16> usernames;
-  for (const auto& form : local_results)
-    usernames.push_back(form->username_value);
-  std::sort(usernames.begin(), usernames.end());
-  bool has_duplicates =
-      std::adjacent_find(usernames.begin(), usernames.end()) != usernames.end();
+void ReportAccountChooserMetrics(bool had_duplicates, bool had_empty_username) {
   metrics_util::AccountChooserUsabilityMetric metric;
-  if (had_empty_username && has_duplicates)
+  if (had_empty_username && had_duplicates)
     metric = metrics_util::ACCOUNT_CHOOSER_EMPTY_USERNAME_AND_DUPLICATES;
   else if (had_empty_username)
     metric = metrics_util::ACCOUNT_CHOOSER_EMPTY_USERNAME;
-  else if (has_duplicates)
+  else if (had_duplicates)
     metric = metrics_util::ACCOUNT_CHOOSER_DUPLICATES;
   else
     metric = metrics_util::ACCOUNT_CHOOSER_LOOKS_OK;
   metrics_util::LogAccountChooserUsability(metric);
+}
+
+// Returns true iff |form1| is better suitable for showing in the account
+// chooser than |form2|. Inspired by PasswordFormManager::ScoreResult.
+bool IsBetterMatch(const autofill::PasswordForm& form1,
+                   const autofill::PasswordForm& form2) {
+  if (!form1.is_public_suffix_match && form2.is_public_suffix_match)
+    return true;
+  if (form1.preferred && !form2.preferred)
+    return true;
+  return form1.date_created > form2.date_created;
+}
+
+// Remove duplicates in |forms| before displaying them in the account chooser.
+void FilterDuplicates(ScopedVector<autofill::PasswordForm>* forms) {
+  std::map<base::string16, std::unique_ptr<autofill::PasswordForm>> credentials;
+  for (auto& form : *forms) {
+    auto it = credentials.find(form->username_value);
+    if (it == credentials.end() || IsBetterMatch(*form, *it->second)) {
+      credentials[form->username_value] = base::WrapUnique(form);
+      form = nullptr;
+    }
+  }
+  forms->clear();
+  for (auto& form_pair : credentials)
+    forms->push_back(std::move(form_pair.second));
 }
 
 }  // namespace
@@ -68,14 +89,14 @@ CredentialManagerPendingRequestTask::~CredentialManagerPendingRequestTask() =
     default;
 
 void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
-    ScopedVector<autofill::PasswordForm> results) {
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   if (delegate_->GetOrigin() != origin_) {
     delegate_->SendCredential(send_callback_, CredentialInfo());
     return;
   }
 
   ScopedVector<autofill::PasswordForm> local_results;
-  ScopedVector<autofill::PasswordForm> affiliated_results;
+  std::vector<std::unique_ptr<autofill::PasswordForm>> affiliated_results;
   ScopedVector<autofill::PasswordForm> federated_results;
   for (auto& form : results) {
     // Ensure that the form we're looking at matches the password and
@@ -91,13 +112,12 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
     // GURL definition: scheme, host, and port.
     // So we can't compare them directly.
     if (form->origin.GetOrigin() == origin_.GetOrigin()) {
-      local_results.push_back(form);
-      form = nullptr;
+      local_results.push_back(form.release());
     } else if (affiliated_realms_.count(form->signon_realm) &&
-               AffiliatedMatchHelper::IsValidAndroidCredential(*form)) {
+               AffiliatedMatchHelper::IsValidAndroidCredential(
+                   PasswordStore::FormDigest(*form))) {
       form->is_affiliation_based_match = true;
-      affiliated_results.push_back(form);
-      form = nullptr;
+      affiliated_results.push_back(std::move(form));
     }
 
     // TODO(mkwst): We're debating whether or not federations ought to be
@@ -110,9 +130,11 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
 
   if (!affiliated_results.empty()) {
     password_manager_util::TrimUsernameOnlyCredentials(&affiliated_results);
-    local_results.insert(local_results.end(), affiliated_results.begin(),
-                         affiliated_results.end());
-    affiliated_results.weak_clear();
+    size_t local_count = local_results.size();
+    local_results.resize(local_count + affiliated_results.size());
+    for (auto& affiliated : affiliated_results) {
+      local_results[local_count++] = affiliated.release();
+    }
   }
 
   // Remove empty usernames from the list.
@@ -122,6 +144,10 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
                                     });
   const bool has_empty_username = (begin_empty != local_results.end());
   local_results.erase(begin_empty, local_results.end());
+
+  const size_t local_results_size = local_results.size();
+  FilterDuplicates(&local_results);
+  const bool has_duplicates = (local_results_size != local_results.size());
 
   if ((local_results.empty() && federated_results.empty())) {
     delegate_->SendCredential(send_callback_, CredentialInfo());
@@ -145,6 +171,7 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
                             : CredentialType::CREDENTIAL_TYPE_FEDERATED);
     delegate_->client()->NotifyUserAutoSignin(std::move(local_results),
                                               origin_);
+    base::RecordAction(base::UserMetricsAction("CredentialManager_Autosignin"));
     delegate_->SendCredential(send_callback_, info);
     return;
   }
@@ -153,9 +180,10 @@ void CredentialManagerPendingRequestTask::OnGetPasswordStoreResults(
   // or if the user chooses not to return a credential, and the credential the
   // user chooses if they pick one.
   std::unique_ptr<autofill::PasswordForm> potential_autosignin_form(
-      new autofill::PasswordForm(*local_results[0]));
+      can_use_autosignin ? new autofill::PasswordForm(*local_results[0])
+                         : nullptr);
   if (!zero_click_only_)
-    ReportAccountChooserMetrics(local_results, has_empty_username);
+    ReportAccountChooserMetrics(has_duplicates, has_empty_username);
   if (zero_click_only_ ||
       !delegate_->client()->PromptUserToChooseCredentials(
           std::move(local_results), std::move(federated_results), origin_,

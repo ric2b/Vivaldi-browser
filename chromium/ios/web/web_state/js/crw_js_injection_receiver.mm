@@ -46,10 +46,8 @@
   [_evaluator executeJavaScript:script completionHandler:completionHandler];
 }
 
-- (BOOL)scriptHasBeenInjectedForClass:(Class)jsInjectionManagerClass
-                       presenceBeacon:(NSString*)beacon {
-  return [_evaluator scriptHasBeenInjectedForClass:jsInjectionManagerClass
-                                    presenceBeacon:beacon];
+- (BOOL)scriptHasBeenInjectedForClass:(Class)injectionManagerClass {
+  return [_evaluator scriptHasBeenInjectedForClass:injectionManagerClass];
 }
 
 - (void)injectScript:(NSString*)script forClass:(Class)jsInjectionManagerClass {
@@ -67,9 +65,6 @@
     manager = newManager;
   }
   DCHECK(manager);
-  for (Class depedencyClass in [manager directDependencies]) {
-    [self instanceOfClass:depedencyClass];
-  }
   return manager;
 }
 

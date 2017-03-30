@@ -15,6 +15,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/common/extension_id.h"
 
 namespace content {
 class BrowserContext;
@@ -76,7 +77,7 @@ class RendererStartupHelper : public KeyedService,
   // The set of ids for extensions that are active in a process that has not
   // been initialized. The activation message will be sent the process is
   // initialized.
-  std::map<content::RenderProcessHost*, std::set<std::string>>
+  std::map<content::RenderProcessHost*, std::set<ExtensionId>>
       pending_active_extensions_;
 
   content::NotificationRegistrar registrar_;

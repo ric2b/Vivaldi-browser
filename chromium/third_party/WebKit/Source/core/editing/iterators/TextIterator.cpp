@@ -82,18 +82,32 @@ TextIteratorBehaviorFlags adjustBehaviorFlags<EditingInFlatTreeStrategy>(TextIte
     return flags & ~(TextIteratorEntersOpenShadowRoots | TextIteratorEntersTextControls);
 }
 
+// Checks if |advance()| skips the descendants of |node|, which is the case if
+// |node| is neither a shadow root nor the owner of a layout object.
+static bool notSkipping(const Node& node)
+{
+    return node.layoutObject() || (node.isShadowRoot() && node.shadowHost()->layoutObject());
+}
+
 // This function is like Range::pastLastNode, except for the fact that it can
-// climb up out of shadow trees.
+// climb up out of shadow trees and ignores all nodes that will be skipped in
+// |advance()|.
 template <typename Strategy>
 Node* pastLastNode(const Node& rangeEndContainer, int rangeEndOffset)
 {
-    if (rangeEndOffset >= 0 && !rangeEndContainer.offsetInCharacters()) {
-        if (Node* next = Strategy::childAt(rangeEndContainer, rangeEndOffset))
-            return next;
+    if (rangeEndOffset >= 0 && !rangeEndContainer.isCharacterDataNode() && notSkipping(rangeEndContainer)) {
+        for (Node* next = Strategy::childAt(rangeEndContainer, rangeEndOffset); next; next = Strategy::nextSibling(*next)) {
+            if (notSkipping(*next))
+                return next;
+        }
     }
-    for (const Node* node = &rangeEndContainer; node; node = parentCrossingShadowBoundaries<Strategy>(*node)) {
-        if (Node* next = Strategy::nextSibling(*node))
-            return next;
+    for (const Node* node = &rangeEndContainer; node; ) {
+        const Node* parent = parentCrossingShadowBoundaries<Strategy>(*node);
+        if (parent && notSkipping(*parent)) {
+            if (Node* next = Strategy::nextSibling(*node))
+                return next;
+        }
+        node = parent;
     }
     return nullptr;
 }
@@ -170,11 +184,12 @@ void TextIteratorAlgorithm<Strategy>::initialize(Node* startContainer, int start
     m_startOffset = startOffset;
     m_endContainer = endContainer;
     m_endOffset = endOffset;
+    m_endNode = endContainer && !endContainer->isCharacterDataNode() && endOffset > 0 ? Strategy::childAt(*endContainer, endOffset - 1) : nullptr;
 
     m_shadowDepth = shadowDepthOf<Strategy>(*startContainer, *endContainer);
 
     // Set up the current node for processing.
-    if (startContainer->offsetInCharacters())
+    if (startContainer->isCharacterDataNode())
         m_node = startContainer;
     else if (Node* child = Strategy::childAt(*startContainer, startOffset))
         m_node = child;
@@ -318,7 +333,7 @@ void TextIteratorAlgorithm<Strategy>::advance()
             // Handle the current node according to its type.
             if (m_iterationProgress < HandledNode) {
                 bool handledNode = false;
-                if (layoutObject->isText() && m_node->getNodeType() == Node::TEXT_NODE) { // FIXME: What about CDATA_SECTION_NODE?
+                if (layoutObject->isText() && m_node->getNodeType() == Node::kTextNode) { // FIXME: What about kCdataSectionNode?
                     if (!m_fullyClippedStack.top() || ignoresStyleVisibility())
                         handledNode = handleTextNode();
                 } else if (layoutObject && (layoutObject->isImage() || layoutObject->isLayoutPart()
@@ -352,10 +367,9 @@ void TextIteratorAlgorithm<Strategy>::advance()
             next = Strategy::nextSibling(*m_node);
             if (!next) {
                 // 3. If we are at the last child, go up the node tree until we find a next sibling.
-                bool pastEnd = Strategy::next(*m_node) == m_pastEndNode;
                 ContainerNode* parentNode = Strategy::parent(*m_node);
                 while (!next && parentNode) {
-                    if ((pastEnd && parentNode == m_endContainer) || Strategy::isDescendantOf(*m_endContainer, *parentNode))
+                    if (m_node == m_endNode || Strategy::isDescendantOf(*m_endContainer, *parentNode))
                         return;
                     bool haveLayoutObject = m_node->layoutObject();
                     m_node = parentNode;
@@ -427,7 +441,7 @@ void TextIteratorAlgorithm<Strategy>::advance()
 
 static bool hasVisibleTextNode(LayoutText* layoutObject)
 {
-    if (layoutObject->style()->visibility() == VISIBLE)
+    if (layoutObject->style()->visibility() == EVisibility::Visible)
         return true;
 
     if (!layoutObject->isTextFragment())
@@ -439,7 +453,7 @@ static bool hasVisibleTextNode(LayoutText* layoutObject)
 
     DCHECK(fragment->firstLetterPseudoElement());
     LayoutObject* pseudoElementLayoutObject = fragment->firstLetterPseudoElement()->layoutObject();
-    return pseudoElementLayoutObject && pseudoElementLayoutObject->style()->visibility() == VISIBLE;
+    return pseudoElementLayoutObject && pseudoElementLayoutObject->style()->visibility() == EVisibility::Visible;
 }
 
 template<typename Strategy>
@@ -483,7 +497,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode()
                 return false;
             }
         }
-        if (layoutObject->style()->visibility() != VISIBLE && !ignoresStyleVisibility())
+        if (layoutObject->style()->visibility() != EVisibility::Visible && !ignoresStyleVisibility())
             return false;
         int strLength = str.length();
         int end = (textNode == m_endContainer) ? m_endOffset : INT_MAX;
@@ -504,7 +518,7 @@ bool TextIteratorAlgorithm<Strategy>::handleTextNode()
         handleTextNodeFirstLetter(toLayoutTextFragment(layoutObject));
 
     if (!layoutObject->firstTextBox() && str.length() > 0 && !shouldHandleFirstLetter) {
-        if (layoutObject->style()->visibility() != VISIBLE && !ignoresStyleVisibility())
+        if (layoutObject->style()->visibility() != EVisibility::Visible && !ignoresStyleVisibility())
             return false;
         m_lastTextNodeEndedWithCollapsedSpace = true; // entire block is collapsed space
         return true;
@@ -533,7 +547,7 @@ void TextIteratorAlgorithm<Strategy>::handleTextBox()
 {
     LayoutText* layoutObject = m_firstLetterText ? m_firstLetterText : toLayoutText(m_node->layoutObject());
 
-    if (layoutObject->style()->visibility() != VISIBLE && !ignoresStyleVisibility()) {
+    if (layoutObject->style()->visibility() != EVisibility::Visible && !ignoresStyleVisibility()) {
         m_textBox = nullptr;
     } else {
         String str = layoutObject->text();
@@ -586,12 +600,25 @@ void TextIteratorAlgorithm<Strategy>::handleTextBox()
                 // or a run of characters that does not include a newline.
                 // This effectively translates newlines to spaces without copying the text.
                 if (str[runStart] == '\n') {
-                    spliceBuffer(spaceCharacter, m_node, 0, runStart, runStart + 1);
+                    // We need to preserve new lines in case of PRE_LINE.
+                    // See bug crbug.com/317365.
+                    if (layoutObject->style()->whiteSpace() == PRE_LINE)
+                        spliceBuffer('\n', m_node, 0, runStart, runStart);
+                    else
+                        spliceBuffer(spaceCharacter, m_node, 0, runStart, runStart + 1);
                     m_offset = runStart + 1;
                 } else {
                     size_t subrunEnd = str.find('\n', runStart);
-                    if (subrunEnd == kNotFound || subrunEnd > runEnd)
+                    if (subrunEnd == kNotFound || subrunEnd > runEnd) {
                         subrunEnd = runEnd;
+                        // Restore the collapsed space at the end of text for copy & paste.
+                        // See http://crbug.com/318925
+                        if (str.endsWith(' ') && subrunEnd == str.length() - 1 && str[subrunEnd - 1] != ' ') {
+                            Node* nextNode = Strategy::nextSibling(*m_node);
+                            if (nextNode && isInline(nextNode))
+                                ++subrunEnd;
+                        }
+                    }
 
                     m_offset = subrunEnd;
                     emitText(m_node, layoutObject, runStart, subrunEnd);
@@ -641,7 +668,7 @@ void TextIteratorAlgorithm<Strategy>::handleTextNodeFirstLetter(LayoutTextFragme
         return;
 
     LayoutObject* pseudoLayoutObject = firstLetterElement->layoutObject();
-    if (pseudoLayoutObject->style()->visibility() != VISIBLE && !ignoresStyleVisibility())
+    if (pseudoLayoutObject->style()->visibility() != EVisibility::Visible && !ignoresStyleVisibility())
         return;
 
     LayoutObject* firstLetter = pseudoLayoutObject->slowFirstChild();
@@ -675,7 +702,7 @@ bool TextIteratorAlgorithm<Strategy>::handleReplacedElement()
         return false;
 
     LayoutObject* layoutObject = m_node->layoutObject();
-    if (layoutObject->style()->visibility() != VISIBLE && !ignoresStyleVisibility())
+    if (layoutObject->style()->visibility() != EVisibility::Visible && !ignoresStyleVisibility())
         return false;
 
     if (emitsObjectReplacementCharacter()) {
@@ -838,7 +865,7 @@ static bool shouldEmitExtraNewlineForNode(Node* node)
         || node->hasTagName(pTag)) {
         const ComputedStyle* style = r->style();
         if (style) {
-            int bottomMargin = toLayoutBox(r)->collapsedMarginAfter();
+            int bottomMargin = toLayoutBox(r)->collapsedMarginAfter().toInt();
             int fontSize = style->getFontDescription().computedPixelSize();
             if (bottomMargin * 2 >= fontSize)
                 return true;
@@ -893,7 +920,7 @@ bool TextIteratorAlgorithm<Strategy>::shouldRepresentNodeOffsetZero()
     // If this node is unrendered or invisible the VisiblePosition checks below won't have much meaning.
     // Additionally, if the range we are iterating over contains huge sections of unrendered content,
     // we would create VisiblePositions on every call to this function without this check.
-    if (!m_node->layoutObject() || m_node->layoutObject()->style()->visibility() != VISIBLE
+    if (!m_node->layoutObject() || m_node->layoutObject()->style()->visibility() != EVisibility::Visible
         || (m_node->layoutObject()->isLayoutBlockFlow() && !toLayoutBlock(m_node->layoutObject())->size().height() && !isHTMLBodyElement(*m_node)))
         return false;
 
@@ -1040,7 +1067,7 @@ Node* TextIteratorAlgorithm<Strategy>::node() const
 {
     if (m_textState.positionNode() || m_endContainer) {
         Node* node = currentContainer();
-        if (node->offsetInCharacters())
+        if (node->isCharacterDataNode())
             return node;
         return Strategy::childAt(*node, startOffsetInCurrentContainer());
     }

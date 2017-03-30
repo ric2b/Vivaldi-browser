@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/overview/overview_animation_type.h"
 #include "ash/common/wm/overview/scoped_overview_animation_settings.h"
@@ -18,6 +19,7 @@
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/common/wm_window_property.h"
 #include "base/auto_reset.h"
@@ -40,6 +42,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/window/non_client_view.h"
+#include "ui/wm/core/shadow.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -272,6 +275,7 @@ WindowSelectorItem::WindowSelectorItem(WmWindow* window,
     params.type = views::Widget::InitParams::TYPE_POPUP;
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+    params.name = "OverviewModeCloseButton";
     close_button_widget_.reset(new views::Widget);
     close_button_widget_->set_focus_on_creation(false);
     window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
@@ -354,6 +358,17 @@ void WindowSelectorItem::SetSelected(bool selected) {
   animation_settings.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
   window->SetOpacity(selected ? 0.0f : 1.0f);
+
+  ui::ScopedLayerAnimationSettings animation_settings_shadow(
+      shadow_->shadow_layer()->GetAnimator());
+  animation_settings_shadow.SetTransitionDuration(
+      base::TimeDelta::FromMilliseconds(kSelectorFadeInMilliseconds));
+  animation_settings_shadow.SetTweenType(selected
+                                             ? gfx::Tween::FAST_OUT_LINEAR_IN
+                                             : gfx::Tween::LINEAR_OUT_SLOW_IN);
+  animation_settings_shadow.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  shadow_->shadow_layer()->SetOpacity(selected ? 0.0f : 1.0f);
 }
 
 void WindowSelectorItem::RecomputeWindowTransforms() {
@@ -374,6 +389,26 @@ void WindowSelectorItem::SendAccessibleSelectionEvent() {
                                                       true);
 }
 
+void WindowSelectorItem::CloseWindow() {
+  if (ash::MaterialDesignController::IsOverviewMaterial()) {
+    gfx::Rect inset_bounds(target_bounds_);
+    inset_bounds.Inset(target_bounds_.width() * kPreCloseScale,
+                       target_bounds_.height() * kPreCloseScale);
+    OverviewAnimationType animation_type =
+        OverviewAnimationType::OVERVIEW_ANIMATION_CLOSING_SELECTOR_ITEM;
+    // Scale down both the window and label.
+    SetBounds(inset_bounds, animation_type);
+    // First animate opacity to an intermediate value concurrently with the
+    // scaling animation.
+    AnimateOpacity(kClosingItemOpacity, animation_type);
+
+    // Fade out the window and the label, effectively hiding them.
+    AnimateOpacity(
+        0.0, OverviewAnimationType::OVERVIEW_ANIMATION_CLOSE_SELECTOR_ITEM);
+  }
+  transform_window_.Close();
+}
+
 void WindowSelectorItem::SetDimmed(bool dimmed) {
   dimmed_ = dimmed;
   SetOpacity(dimmed ? kDimmedItemOpacity : 1.0f);
@@ -382,24 +417,8 @@ void WindowSelectorItem::SetDimmed(bool dimmed) {
 void WindowSelectorItem::ButtonPressed(views::Button* sender,
                                        const ui::Event& event) {
   if (sender == close_button_) {
-    if (ash::MaterialDesignController::IsOverviewMaterial()) {
-      gfx::Rect inset_bounds(target_bounds_);
-      inset_bounds.Inset(target_bounds_.width() * kPreCloseScale,
-                         target_bounds_.height() * kPreCloseScale);
-      OverviewAnimationType animation_type =
-          OverviewAnimationType::OVERVIEW_ANIMATION_CLOSING_SELECTOR_ITEM;
-      // Scale down both the window and label.
-      SetBounds(inset_bounds, animation_type);
-      // First animate opacity to an intermediate value concurrently with the
-      // scaling animation.
-      AnimateOpacity(kClosingItemOpacity, animation_type);
-
-      // Fade out the window and the label, effectively hiding them.
-      AnimateOpacity(
-          0.0, OverviewAnimationType::OVERVIEW_ANIMATION_CLOSE_SELECTOR_ITEM);
-    }
-    window_selector_->WindowClosing(this);
-    transform_window_.Close();
+    WmShell::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW_CLOSE_BUTTON);
+    CloseWindow();
     return;
   }
   CHECK(sender == window_label_button_view_);
@@ -501,6 +520,7 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.visible_on_all_workspaces = true;
+  params.name = "OverviewModeLabel";
   window_label_->set_focus_on_creation(false);
   root_window_->GetRootWindowController()
       ->ConfigureWidgetInitParamsForContainer(
@@ -531,11 +551,18 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
     window_label_button_view_->SetVisible(false);
     window_label_->Show();
 
+    shadow_.reset(new ::wm::Shadow());
+    shadow_->Init(::wm::Shadow::STYLE_INACTIVE);
+    shadow_->layer()->SetVisible(true);
+    window_label_->GetLayer()->Add(shadow_->layer());
+    window_label_->GetLayer()->SetMasksToBounds(false);
+
     views::View* background_view =
         new RoundedContainerView(kLabelBackgroundRadius, kLabelBackgroundColor);
     window_label_selector_.reset(new views::Widget);
     params.activatable = views::Widget::InitParams::Activatable::ACTIVATABLE_NO;
     params.accept_events = false;
+    params.name = "OverviewModeLabelSelector";
     window_label_selector_->Init(params);
     window_label_selector_->set_focus_on_creation(false);
     window_label_selector_->SetContentsView(background_view);
@@ -582,6 +609,7 @@ void WindowSelectorItem::UpdateHeaderLayout(
     // the window including its sizing borders.
     label_rect.set_height(label_rect.height() +
                           transformed_window_bounds.height());
+    gfx::Rect shadow_bounds(label_rect.size());
     label_rect.Inset(-kWindowSelectorMargin, -kWindowSelectorMargin);
     window_label_window->SetBounds(label_rect);
     gfx::Transform label_transform;
@@ -589,6 +617,9 @@ void WindowSelectorItem::UpdateHeaderLayout(
                               transformed_window_bounds.y());
     window_label_window->SetTransform(label_transform);
     window_label_selector_window->SetTransform(label_transform);
+
+    shadow_bounds.Offset(kWindowSelectorMargin, kWindowSelectorMargin);
+    shadow_->SetContentBounds(shadow_bounds);
   } else {
     if (!close_button_->visible()) {
       close_button_->SetVisible(true);

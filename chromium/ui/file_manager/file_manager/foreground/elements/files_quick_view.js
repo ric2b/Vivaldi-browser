@@ -9,6 +9,8 @@ var FilesQuickView = Polymer({
     // File media type, e.g. image, video.
     type: String,
     filePath: String,
+    // URLs should be accessible from webview since contets are rendered inside
+    // it. Hint: use URL.createObjectURL.
     contentUrl: String,
     videoPoster: String,
     audioArtwork: String,
@@ -19,11 +21,16 @@ var FilesQuickView = Polymer({
       value: true,
       type: Boolean,
       notify: true,
-    }
+    },
+    // Text shown when no playback is available.
+    noPlaybackText: String,
+    // Text shown when no preview is available.
+    noPreviewText: String,
   },
 
   listeners: {
     'iron-overlay-closed': 'clear',
+    'files-safe-media-tap-outside': 'close',
   },
 
   // Clears fields.
@@ -72,23 +79,32 @@ var FilesQuickView = Polymer({
   onOpenInNewButtonTap: function(event) {},
 
   /**
-   * @param {!Event} event
+   * @param {!Event} event tap event.
    *
    * @private
    */
-  onCloseButtonTap_: function(event) {
-    this.close();
+  onMetadataButtonTap_: function(event) {
+    // Set focus back to innerContent panel so that pressing space key next
+    // closes Quick View.
+    this.$.innerContentPanel.focus();
   },
 
   /**
+   * Close Quick View unless the clicked target or its ancestor contains
+   * 'no-close-on-click' class.
+   *
    * @param {!Event} event tap event.
    *
    * @private
    */
   onContentPanelTap_: function(event) {
     var target = event.detail.sourceEvent.target;
-    if (target.classList.contains('close-on-click'))
-      this.close();
+    while (target) {
+      if (target.classList.contains('no-close-on-click'))
+        return;
+      target = target.parentElement;
+    }
+    this.close();
   },
 
   /**
@@ -119,6 +135,17 @@ var FilesQuickView = Polymer({
    */
   isAudio_: function(type) {
     return type === 'audio';
+  },
+
+  /**
+   * @param {string} contentUrl
+   * @param {string} type
+   * @return {string}
+   *
+   * @private
+   */
+  audioUrl_: function(contentUrl, type) {
+    return this.isAudio_(type) ? contentUrl : "";
   },
 
   /**

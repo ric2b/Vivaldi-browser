@@ -43,6 +43,63 @@ cr.define('md_history', function() {
     },
 
     /**
+     * @param {!string} url
+     */
+    removeBookmark: function(url) {
+      chrome.send('removeBookmark', [url]);
+    },
+
+    /**
+     * @param {string} sessionTag
+     */
+    openForeignSessionAllTabs: function(sessionTag) {
+      chrome.send('openForeignSession', [sessionTag]);
+    },
+
+    /**
+     * @param {string} sessionTag
+     * @param {number} windowId
+     * @param {number} tabId
+     * @param {MouseEvent} e
+     */
+    openForeignSessionTab: function(sessionTag, windowId, tabId, e) {
+      chrome.send('openForeignSession', [
+        sessionTag, String(windowId), String(tabId), e.button || 0, e.altKey,
+        e.ctrlKey, e.metaKey, e.shiftKey
+      ]);
+    },
+
+    /**
+     * @param {string} sessionTag
+     */
+    deleteForeignSession: function(sessionTag) {
+      chrome.send('deleteForeignSession', [sessionTag]);
+    },
+
+    openClearBrowsingData: function() {
+      chrome.send('clearBrowsingData');
+    },
+
+    /**
+     * @param {string} histogram
+     * @param {number} value
+     * @param {number} max
+     */
+    recordHistogram: function(histogram, value, max) {
+      chrome.send('metricsHandler:recordInHistogram', [histogram, value, max]);
+    },
+
+    /**
+    * Record an action in UMA.
+    * @param {string} action The name of the action to be logged.
+    */
+    recordAction: function(action) {
+      if (action.indexOf('_') == -1)
+        action = 'HistoryPage_' + action;
+      chrome.send('metricsHandler:recordAction', [action]);
+    },
+
+    /**
      * @param {boolean} successful
      * @private
      */

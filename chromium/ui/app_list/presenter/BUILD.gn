@@ -42,11 +42,13 @@ mojom("mojom") {
     "app_list_presenter.mojom",
   ]
   deps = [
-    "//components/mus/public/interfaces",
+    "//services/ui/public/interfaces",
   ]
+
+  use_new_wrapper_types = false
 }
 
-source_set("test_support") {
+static_library("test_support") {
   sources = [
     "test/app_list_presenter_impl_test_api.cc",
     "test/app_list_presenter_impl_test_api.h",

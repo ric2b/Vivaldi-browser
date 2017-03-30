@@ -33,6 +33,7 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "core/InstrumentingAgents.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -45,6 +46,7 @@
 #include "core/inspector/InspectorInputAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorLayerTreeAgent.h"
+#include "core/inspector/InspectorLogAgent.h"
 #include "core/inspector/InspectorMemoryAgent.h"
 #include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
@@ -69,8 +71,8 @@
 #include "platform/TraceEvent.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
-#include "platform/inspector_protocol/Values.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
+#include "platform/inspector_protocol/InspectorProtocol.h"
+#include "platform/v8_inspector/public/V8Inspector.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebLayerTreeView.h"
@@ -266,6 +268,17 @@ private:
         return false;
     }
 
+    void runIfWaitingForDebugger(LocalFrame* frame) override
+    {
+        // If we've paused for createWindow, handle it ourselves.
+        if (quitForCreateWindow())
+            return;
+        // Otherwise, pass to the client (embedded workers do it differently).
+        WebDevToolsAgentImpl* agent = WebLocalFrameImpl::fromFrame(frame)->devToolsAgentImpl();
+        if (agent && agent->client())
+            agent->client()->resumeStartup();
+    }
+
     bool m_runningForDebugBreak;
     bool m_runningForCreateWindow;
     std::unique_ptr<WebDevToolsAgentClient::WebKitClientMessageLoop> m_messageLoop;
@@ -366,7 +379,7 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
     MainThreadDebugger* mainThreadDebugger = MainThreadDebugger::instance();
     v8::Isolate* isolate = V8PerIsolateData::mainThreadIsolate();
 
-    m_session = new InspectorSession(this, m_inspectedFrames.get(), m_instrumentingAgents.get(), sessionId, false /* autoFlush */, mainThreadDebugger->debugger(), mainThreadDebugger->contextGroupId(m_inspectedFrames->root()), state);
+    m_session = new InspectorSession(this, m_instrumentingAgents.get(), sessionId, mainThreadDebugger->v8Inspector(), mainThreadDebugger->contextGroupId(m_inspectedFrames->root()), state);
 
     InspectorDOMAgent* domAgent = new InspectorDOMAgent(isolate, m_inspectedFrames.get(), m_session->v8Session(), m_overlay.get());
     m_domAgent = domAgent;
@@ -389,7 +402,7 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
 
     m_session->append(InspectorApplicationCacheAgent::create(m_inspectedFrames.get()));
 
-    m_session->append(InspectorIndexedDBAgent::create(m_inspectedFrames.get()));
+    m_session->append(new InspectorIndexedDBAgent(m_inspectedFrames.get(), m_session->v8Session()));
 
     InspectorWorkerAgent* workerAgent = new InspectorWorkerAgent(m_inspectedFrames.get());
     m_session->append(workerAgent);
@@ -405,6 +418,8 @@ void WebDevToolsAgentImpl::initializeSession(int sessionId, const String& hostId
     InspectorPageAgent* pageAgent = InspectorPageAgent::create(m_inspectedFrames.get(), this, m_resourceContentLoader.get(), m_session->v8Session());
     m_pageAgent = pageAgent;
     m_session->append(pageAgent);
+
+    m_session->append(new InspectorLogAgent(&m_inspectedFrames->root()->host()->consoleMessageStorage()));
 
     m_tracingAgent->setLayerTreeId(m_layerTreeId);
     m_networkAgent->setHostId(hostId);
@@ -483,6 +498,12 @@ void WebDevToolsAgentImpl::didCommitLoadForLocalFrame(LocalFrame* frame)
         m_session->didCommitLoadForLocalFrame(frame);
 }
 
+void WebDevToolsAgentImpl::didStartProvisionalLoad(LocalFrame* frame)
+{
+    if (m_session && m_inspectedFrames->root() == frame)
+        m_session->v8Session()->resume();
+}
+
 bool WebDevToolsAgentImpl::screencastEnabled()
 {
     return m_pageAgent && m_pageAgent->screencastEnabled();
@@ -498,6 +519,12 @@ void WebDevToolsAgentImpl::didRemovePageOverlay(const GraphicsLayer* layer)
 {
     if (m_layerTreeAgent)
         m_layerTreeAgent->didRemovePageOverlay(layer);
+}
+
+void WebDevToolsAgentImpl::rootLayerCleared()
+{
+    if (m_tracingAgent)
+        m_tracingAgent->rootLayerCleared();
 }
 
 void WebDevToolsAgentImpl::layerTreeViewChanged(WebLayerTreeView* layerTreeView)
@@ -517,6 +544,18 @@ void WebDevToolsAgentImpl::disableTracing()
 {
     if (m_client)
         m_client->disableTracing();
+}
+
+void WebDevToolsAgentImpl::showReloadingBlanket()
+{
+    if (m_overlay)
+        m_overlay->showReloadingBlanket();
+}
+
+void WebDevToolsAgentImpl::hideReloadingBlanket()
+{
+    if (m_overlay)
+        m_overlay->hideReloadingBlanket();
 }
 
 void WebDevToolsAgentImpl::setCPUThrottlingRate(double rate)
@@ -543,9 +582,9 @@ void WebDevToolsAgentImpl::dispatchMessageFromFrontend(int sessionId, const Stri
     m_session->dispatchProtocolMessage(method, message);
 }
 
-void WebDevToolsAgentImpl::inspectElementAt(const WebPoint& pointInRootFrame)
+void WebDevToolsAgentImpl::inspectElementAt(int sessionId, const WebPoint& pointInRootFrame)
 {
-    if (!m_domAgent)
+    if (!m_domAgent || !m_session || m_session->sessionId() != sessionId)
         return;
     HitTestRequest::HitTestRequestType hitType = HitTestRequest::Move | HitTestRequest::ReadOnly | HitTestRequest::AllowChildFrameContent;
     HitTestRequest request(hitType);
@@ -574,44 +613,21 @@ void WebDevToolsAgentImpl::sendProtocolMessage(int sessionId, int callId, const 
         m_client->sendProtocolMessage(sessionId, callId, response, state);
 }
 
-void WebDevToolsAgentImpl::resumeStartup()
-{
-    // If we've paused for createWindow, handle it ourselves.
-    if (ClientMessageLoopAdapter::resumeForCreateWindow())
-        return;
-    // Otherwise, pass to the client (embedded workers do it differently).
-    if (m_client)
-        m_client->resumeStartup();
-}
-
-void WebDevToolsAgentImpl::profilingStarted()
-{
-    if (m_overlay)
-        m_overlay->suspend();
-}
-
-void WebDevToolsAgentImpl::profilingStopped()
-{
-    if (m_overlay)
-        m_overlay->resume();
-}
-
-void WebDevToolsAgentImpl::consoleCleared()
-{
-    if (m_domAgent)
-        m_domAgent->releaseDanglingNodes();
-}
-
 void WebDevToolsAgentImpl::pageLayoutInvalidated(bool resized)
 {
     if (m_overlay)
         m_overlay->pageLayoutInvalidated(resized);
 }
 
-void WebDevToolsAgentImpl::setPausedInDebuggerMessage(const String& message)
+void WebDevToolsAgentImpl::configureOverlay(bool suspended, const String& message)
 {
-    if (m_overlay)
-        m_overlay->setPausedInDebuggerMessage(message);
+    if (!m_overlay)
+        return;
+    m_overlay->setPausedInDebuggerMessage(message);
+    if (suspended)
+        m_overlay->suspend();
+    else
+        m_overlay->resume();
 }
 
 void WebDevToolsAgentImpl::waitForCreateWindow(LocalFrame* frame)

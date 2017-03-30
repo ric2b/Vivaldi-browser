@@ -12,6 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
 #include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service.h"
 #include "chrome/browser/chromeos/settings/device_oauth2_token_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chromeos/attestation/attestation_flow.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
 
@@ -55,6 +57,10 @@ em::DeviceRegisterRequest::Flavor EnrollmentModeToRegistrationFlavor(
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_SERVER_ADVERTISED;
     case policy::EnrollmentConfig::MODE_RECOVERY:
       return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_RECOVERY;
+    case policy::EnrollmentConfig::MODE_ATTESTATION:
+      return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION;
+    case policy::EnrollmentConfig::MODE_ATTESTATION_FORCED:
+      return em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION_FORCED;
   }
 
   NOTREACHED() << "Bad enrollment mode: " << mode;
@@ -67,7 +73,8 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     DeviceCloudPolicyStoreChromeOS* store,
     EnterpriseInstallAttributes* install_attributes,
     ServerBackedStateKeysBroker* state_keys_broker,
-    chromeos::OwnerSettingsServiceChromeOS* owner_settings_service,
+    cryptohome::AsyncMethodCaller* async_method_caller,
+    chromeos::CryptohomeClient* cryptohome_client,
     std::unique_ptr<CloudPolicyClient> client,
     scoped_refptr<base::SequencedTaskRunner> background_task_runner,
     const EnrollmentConfig& enrollment_config,
@@ -75,12 +82,12 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
     const std::string& client_id,
     const std::string& requisition,
     const AllowedDeviceModes& allowed_device_modes,
-    ManagementMode management_mode,
     const EnrollmentCallback& completion_callback)
     : store_(store),
       install_attributes_(install_attributes),
       state_keys_broker_(state_keys_broker),
-      owner_settings_service_(owner_settings_service),
+      async_method_caller_(async_method_caller),
+      cryptohome_client_(cryptohome_client),
       client_(std::move(client)),
       background_task_runner_(background_task_runner),
       enrollment_config_(enrollment_config),
@@ -88,7 +95,6 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
       client_id_(client_id),
       requisition_(requisition),
       allowed_device_modes_(allowed_device_modes),
-      management_mode_(management_mode),
       completion_callback_(completion_callback),
       device_mode_(DEVICE_MODE_NOT_SET),
       skip_robot_auth_(false),
@@ -97,8 +103,12 @@ EnrollmentHandlerChromeOS::EnrollmentHandlerChromeOS(
       weak_ptr_factory_(this) {
   CHECK(!client_->is_registered());
   CHECK_EQ(DM_STATUS_SUCCESS, client_->status());
-  CHECK(management_mode_ == MANAGEMENT_MODE_ENTERPRISE_MANAGED ||
-        management_mode_ == MANAGEMENT_MODE_CONSUMER_MANAGED);
+  CHECK((enrollment_config_.mode == EnrollmentConfig::MODE_ATTESTATION ||
+         enrollment_config_.mode ==
+             EnrollmentConfig::MODE_ATTESTATION_FORCED) == auth_token_.empty());
+  CHECK(enrollment_config_.auth_mechanism !=
+            EnrollmentConfig::AUTH_MECHANISM_ATTESTATION ||
+        (async_method_caller_ != nullptr && cryptohome_client_ != nullptr));
   store_->AddObserver(this);
   client_->AddObserver(this);
   client_->AddPolicyTypeToFetch(dm_protocol::kChromeDevicePolicyType,
@@ -144,8 +154,9 @@ void EnrollmentHandlerChromeOS::OnPolicyFetched(CloudPolicyClient* client) {
               new em::PolicyFetchResponse(*policy)),
           background_task_runner_));
 
-  validator->ValidateTimestamp(base::Time(), base::Time::NowFromSystemTime(),
-                               CloudPolicyValidatorBase::TIMESTAMP_REQUIRED);
+  validator->ValidateTimestamp(
+      base::Time(), base::Time::NowFromSystemTime(),
+      CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED);
 
   // If this is re-enrollment, make sure that the new policy matches the
   // previously-enrolled domain.
@@ -158,23 +169,12 @@ void EnrollmentHandlerChromeOS::OnPolicyFetched(CloudPolicyClient* client) {
                              CloudPolicyValidatorBase::DM_TOKEN_REQUIRED);
   validator->ValidatePolicyType(dm_protocol::kChromeDevicePolicyType);
   validator->ValidatePayload();
-  if (management_mode_ == MANAGEMENT_MODE_CONSUMER_MANAGED) {
-    // For consumer-managed devices, although we don't store the policy, we
-    // still need to verify its integrity since we use the request token in it.
-    // The consumer device management server does not have the verification
-    // key, and we need to skip checking on that by passing an empty key to
-    // ValidateInitialKey(). ValidateInitialKey() still checks that the policy
-    // data is correctly signed by the new public key when the verification key
-    // is empty.
-    validator->ValidateInitialKey(std::string(), std::string());
-  } else {
-    // If |domain| is empty here, the policy validation code will just use the
-    // domain from the username field in the policy itself to do key validation.
-    // TODO(mnissler): Plumb the enrolling user's username into this object so
-    // we can validate the username on the resulting policy, and use the domain
-    // from that username to validate the key below (http://crbug.com/343074).
-    validator->ValidateInitialKey(GetPolicyVerificationKey(), domain);
-  }
+  // If |domain| is empty here, the policy validation code will just use the
+  // domain from the username field in the policy itself to do key validation.
+  // TODO(mnissler): Plumb the enrolling user's username into this object so we
+  // can validate the username on the resulting policy, and use the domain from
+  // that username to validate the key below (http://crbug.com/343074).
+  validator->ValidateInitialKey(GetPolicyVerificationKey(), domain);
   validator.release()->StartValidation(
       base::Bind(&EnrollmentHandlerChromeOS::HandlePolicyValidationResult,
                  weak_ptr_factory_.GetWeakPtr()));
@@ -265,16 +265,51 @@ void EnrollmentHandlerChromeOS::HandleStateKeysResult(
 
 void EnrollmentHandlerChromeOS::StartRegistration() {
   CHECK_EQ(STEP_LOADING_STORE, enrollment_step_);
-  if (store_->is_initialized()) {
-    enrollment_step_ = STEP_REGISTRATION;
+  if (!store_->is_initialized()) {
+    // Do nothing. StartRegistration() will be called again from OnStoreLoaded()
+    // after the CloudPolicyStore has initialized.
+    return;
+  }
+  enrollment_step_ = STEP_REGISTRATION;
+  if (enrollment_config_.should_enroll_with_attestation()) {
+    StartAttestationBasedEnrollmentFlow();
+  } else {
     client_->Register(
         em::DeviceRegisterRequest::DEVICE,
         EnrollmentModeToRegistrationFlavor(enrollment_config_.mode),
         auth_token_, client_id_, requisition_, current_state_key_);
-  } else {
-    // Do nothing. StartRegistration() will be called again from OnStoreLoaded()
-    // after the CloudPolicyStore has initialized.
   }
+}
+
+void EnrollmentHandlerChromeOS::StartAttestationBasedEnrollmentFlow() {
+  if (!attestation_flow_) {
+    std::unique_ptr<chromeos::attestation::ServerProxy> attestation_ca_client(
+        new chromeos::attestation::AttestationCAClient());
+    attestation_flow_.reset(new chromeos::attestation::AttestationFlow(
+        async_method_caller_, cryptohome_client_,
+        std::move(attestation_ca_client)));
+  }
+  const chromeos::attestation::AttestationFlow::CertificateCallback callback =
+      base::Bind(
+          &EnrollmentHandlerChromeOS::HandleRegistrationCertificateResult,
+          weak_ptr_factory_.GetWeakPtr());
+  attestation_flow_->GetCertificate(
+      chromeos::attestation::PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
+      EmptyAccountId(), "" /* request_origin */, false /* force_new_key */,
+      callback);
+}
+
+void EnrollmentHandlerChromeOS::HandleRegistrationCertificateResult(
+    bool success,
+    const std::string& pem_certificate_chain) {
+  LOG(WARNING) << "Enrolling with a registration certificate"
+                  " is not supported yet.";
+  // TODO(drcrash): Invert success/fail tests, mocking as always failed now.
+  if (success) {
+    // TODO(drcrash): Implement new call in client_ to register with cert.
+  }
+  ReportResult(EnrollmentStatus::ForStatus(
+      EnrollmentStatus::STATUS_REGISTRATION_CERTIFICATE_FETCH_FAILED));
 }
 
 void EnrollmentHandlerChromeOS::HandlePolicyValidationResult(
@@ -369,26 +404,10 @@ void EnrollmentHandlerChromeOS::StartLockDevice() {
   // Since this method is also called directly.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
-  if (management_mode_ == MANAGEMENT_MODE_CONSUMER_MANAGED) {
-    CHECK(owner_settings_service_);
-
-    // Consumer device enrollment doesn't use install attributes. Instead,
-    // we put the information in the owners settings.
-    enrollment_step_ = STEP_STORE_TOKEN_AND_ID;
-    chromeos::OwnerSettingsServiceChromeOS::ManagementSettings settings;
-    settings.management_mode = management_mode_;
-    settings.request_token = request_token_;
-    settings.device_id = device_id_;
-    owner_settings_service_->SetManagementSettings(
-        settings,
-        base::Bind(&EnrollmentHandlerChromeOS::HandleSetManagementSettingsDone,
-                   weak_ptr_factory_.GetWeakPtr()));
-  } else {
-    install_attributes_->LockDevice(
-        username_, device_mode_, device_id_,
-        base::Bind(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
-                   weak_ptr_factory_.GetWeakPtr()));
-  }
+  install_attributes_->LockDevice(
+      username_, device_mode_, device_id_,
+      base::Bind(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void EnrollmentHandlerChromeOS::HandleSetManagementSettingsDone(bool success) {
@@ -460,12 +479,6 @@ void EnrollmentHandlerChromeOS::HandleStoreRobotAuthTokenResult(bool result) {
     LOG(ERROR) << "Failed to store API refresh token.";
     ReportResult(EnrollmentStatus::ForStatus(
         EnrollmentStatus::STATUS_ROBOT_REFRESH_STORE_FAILED));
-    return;
-  }
-
-  if (management_mode_ == MANAGEMENT_MODE_CONSUMER_MANAGED) {
-    // For consumer management enrollment, we don't store the policy.
-    ReportResult(EnrollmentStatus::ForStatus(EnrollmentStatus::STATUS_SUCCESS));
     return;
   }
 

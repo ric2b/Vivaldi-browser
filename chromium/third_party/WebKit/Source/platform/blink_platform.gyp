@@ -150,6 +150,7 @@
       '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings_wtf_support',
       '<(DEPTH)/net/net.gyp:net',
       '<(DEPTH)/skia/skia.gyp:skia',
+      '<(DEPTH)/third_party/ced/ced.gyp:ced',
       '<(DEPTH)/third_party/harfbuzz-ng/harfbuzz.gyp:harfbuzz-ng',
       '<(DEPTH)/third_party/iccjpeg/iccjpeg.gyp:iccjpeg',
       '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
@@ -161,7 +162,7 @@
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
       '<(DEPTH)/url/url.gyp:url_lib',
-      '<(DEPTH)/url/url.gyp:url_interfaces_mojom_for_blink',
+      '<(DEPTH)/url/url.gyp:url_mojom_for_blink',
       '<(DEPTH)/v8/src/v8.gyp:v8',
       '<(libjpeg_gyp_path):libjpeg',
     ],
@@ -206,11 +207,13 @@
       '<(blink_platform_output_dir)/RuntimeEnabledFeatures.h',
 
       # Additional .cpp files from the protocol_sources list.
+      '<(blink_platform_output_dir)/inspector_protocol/InspectorProtocol.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Console.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Debugger.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/HeapProfiler.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Profiler.cpp',
       '<(blink_platform_output_dir)/v8_inspector/protocol/Runtime.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Schema.cpp',
 
       # Additional .cpp files from the v8_inspector.
       #'<(blink_platform_output_dir)/v8_inspector/DebuggerScript.h',

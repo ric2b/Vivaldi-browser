@@ -540,8 +540,9 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
 
   appShimMenuController_.reset();
 
-  STLDeleteContainerPairSecondPointers(profileBookmarkMenuBridgeMap_.begin(),
-                                       profileBookmarkMenuBridgeMap_.end());
+  base::STLDeleteContainerPairSecondPointers(
+      profileBookmarkMenuBridgeMap_.begin(),
+      profileBookmarkMenuBridgeMap_.end());
 }
 
 - (void)didEndMainMessageLoop {
@@ -984,11 +985,6 @@ class AppControllerProfileObserver : public ProfileAttributesStorage::Observer {
                            currentProfile:lastProfile];
           break;
         }
-#if defined(GOOGLE_CHROME_BUILD)
-        case IDC_FEEDBACK:
-          enable = NO;
-          break;
-#endif
         default:
           enable = menuState_->IsCommandEnabled(tag) ?
                    ![self keyWindowIsModal] : NO;

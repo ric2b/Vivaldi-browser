@@ -34,17 +34,14 @@ const char kDisableIOSPasswordGeneration[] = "disable-ios-password-generation";
 const char kDisableIOSPasswordSuggestions[] =
     "disable-ios-password-suggestions";
 
-// Disables the use of WKWebView instead of UIWebView.
-const char kDisableIOSWKWebView[] = "disable-wkwebview";
-
 // Disable the snapshots lru cache.
 const char kDisableLRUSnapshotCache[] = "disable-lru-snapshot-cache";
 
 // Disable auto-reload of error pages if offline.
 const char kDisableOfflineAutoReload[] = "disable-offline-auto-reload";
 
-// Disables the tab eviction policy. (applicable iff WKWebView is enabled)
-const char kDisableTabEviction[] = "disable-tab-eviction";
+// Disable the Payment Request API.
+const char kDisablePaymentRequest[] = "disable-payment-request";
 
 // Disables the tab switcher.
 const char kDisableTabSwitcher[] = "disable-tab-switcher";
@@ -77,20 +74,20 @@ const char kEnableIOSHandoffToOtherDevices[] =
 // Enable password generation for iOS.
 const char kEnableIOSPasswordGeneration[] = "enable-ios-password-generation";
 
-// Enables the use of WKWebView instead of UIWebView.
-const char kEnableIOSWKWebView[] = "enable-wkwebview";
-
 // Enables the snapshot lru cache.
 const char kEnableLRUSnapshotCache[] = "enable-lru-snapshot-cache";
 
 // Enable auto-reload of error pages if offline.
 const char kEnableOfflineAutoReload[] = "enable-offline-auto-reload";
 
+// Enable the Payment Request API.
+const char kEnablePaymentRequest[] = "enable-payment-request";
+
+// Enables the QR Code scanner.
+const char kEnableQRScanner[] = "enable-qr-scanner";
+
 // Enables context-sensitive reader mode button in the toolbar.
 const char kEnableReaderModeToolbarIcon[] = "enable-reader-mode-toolbar-icon";
-
-// Enables the tab eviction policy. (applicable iff WKWebView is enabled)
-const char kEnableTabEviction[] = "enable-tab-eviction";
 
 // Enables the tab switcher.
 const char kEnableTabSwitcher[] = "enable-tab-switcher";

@@ -106,16 +106,15 @@ cr.define('settings_people_page_sync_page', function() {
 
         PolymerTest.clearBody();
         syncPage = document.createElement('settings-sync-page');
-        syncPage.currentRoute = {
-          section: 'people',
-          subpage: ['sync'],
-        };
+        settings.navigateTo(settings.Route.SYNC);
 
         document.body.appendChild(syncPage);
 
         cr.webUIListenerCallback('page-status-changed',
                                  settings.PageStatus.CONFIGURE);
-        assertEquals(settings.PageStatus.CONFIGURE, syncPage.$.pages.selected);
+        assertFalse(syncPage.$$('#' + settings.PageStatus.CONFIGURE).hidden);
+        assertTrue(syncPage.$$('#' + settings.PageStatus.TIMEOUT).hidden);
+        assertTrue(syncPage.$$('#' + settings.PageStatus.SPINNER).hidden);
 
         // Start with Sync All with no encryption selected.
         cr.webUIListenerCallback('sync-prefs-changed', getSyncAllPrefs());
@@ -133,19 +132,13 @@ cr.define('settings_people_page_sync_page', function() {
 
       test('NotifiesHandlerOfNavigation', function() {
         function testNavigateAway() {
-          syncPage.currentRoute = {
-            section: 'people',
-            subpage: [],
-          };
+          settings.navigateTo(settings.Route.PEOPLE);
           return browserProxy.whenCalled('didNavigateAwayFromSyncPage');
         }
 
         function testNavigateBack() {
           browserProxy.resetResolver('didNavigateToSyncPage');
-          syncPage.currentRoute = {
-            section: 'people',
-            subpage: ['sync'],
-          };
+          settings.navigateTo(settings.Route.SYNC);
           return browserProxy.whenCalled('didNavigateToSyncPage');
         }
 
@@ -158,10 +151,7 @@ cr.define('settings_people_page_sync_page', function() {
         function testRecreate() {
           browserProxy.resetResolver('didNavigateToSyncPage');
           syncPage = document.createElement('settings-sync-page');
-          syncPage.currentRoute = {
-            section: 'people',
-            subpage: ['sync'],
-          };
+          settings.navigateTo(settings.Route.SYNC);
 
           document.body.appendChild(syncPage);
           return browserProxy.whenCalled('didNavigateToSyncPage');
@@ -175,20 +165,34 @@ cr.define('settings_people_page_sync_page', function() {
       }),
 
       test('LoadingAndTimeout', function() {
+        var configurePage = syncPage.$$('#' + settings.PageStatus.CONFIGURE);
+        var spinnerPage = syncPage.$$('#' + settings.PageStatus.SPINNER);
+        var timeoutPage = syncPage.$$('#' + settings.PageStatus.TIMEOUT);
+
         cr.webUIListenerCallback('page-status-changed',
                                  settings.PageStatus.SPINNER);
-        assertEquals(settings.PageStatus.SPINNER, syncPage.$.pages.selected);
+        assertTrue(configurePage.hidden);
+        assertTrue(timeoutPage.hidden);
+        assertFalse(spinnerPage.hidden);
+
         cr.webUIListenerCallback('page-status-changed',
                                  settings.PageStatus.TIMEOUT);
-        assertEquals(settings.PageStatus.TIMEOUT, syncPage.$.pages.selected);
+        assertTrue(configurePage.hidden);
+        assertFalse(timeoutPage.hidden);
+        assertTrue(spinnerPage.hidden);
+
         cr.webUIListenerCallback('page-status-changed',
                                  settings.PageStatus.CONFIGURE);
-        assertEquals(settings.PageStatus.CONFIGURE, syncPage.$.pages.selected);
+        assertFalse(configurePage.hidden);
+        assertTrue(timeoutPage.hidden);
+        assertTrue(spinnerPage.hidden);
 
         // Should remain on the CONFIGURE page even if the passphrase failed.
         cr.webUIListenerCallback('page-status-changed',
                                  settings.PageStatus.PASSPHRASE_FAILED);
-        assertEquals(settings.PageStatus.CONFIGURE, syncPage.$.pages.selected);
+        assertFalse(configurePage.hidden);
+        assertTrue(timeoutPage.hidden);
+        assertTrue(spinnerPage.hidden);
       });
 
       test('SettingIndividualDatatypes', function() {

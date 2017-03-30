@@ -165,6 +165,8 @@ const struct QuicErrorMapping {
   // values.
   { net::QUIC_CRYPTO_MESSAGE_INDEX_NOT_FOUND,
    "quic_crypto_message_index_not_found" },
+  // A demand for an unsupport proof type was received.
+  { net::QUIC_UNSUPPORTED_PROOF_DEMAND, "quic.unsupported_proof_demand" },
   // An internal error occured in crypto processing.
   { net::QUIC_CRYPTO_INTERNAL_ERROR, "quic.crypto.internal_error" },
   // A crypto handshake message specified an unsupported version.
@@ -209,6 +211,12 @@ const struct QuicErrorMapping {
 
   // Multipath is not enabled, but a packet with multipath flag on is received.
   { net::QUIC_BAD_MULTIPATH_FLAG, "quic.bad_multipath_flag" },
+  // A path is supposed to exist but does not.
+  { net::QUIC_MULTIPATH_PATH_DOES_NOT_EXIST,
+    "quic.quic_multipath_path_does_not_exist" },
+  // A path is supposed to be active but is not.
+  { net::QUIC_MULTIPATH_PATH_NOT_ACTIVE,
+    "quic.quic_multipath_path_not_active" },
 
   // Network change and connection migration errors.
 
@@ -230,13 +238,17 @@ const struct QuicErrorMapping {
   // Stream frame overlaps with buffered data.
   { net::QUIC_OVERLAPPING_STREAM_DATA,
     "quic.overlapping_stream_data" },
+  // Stream frames arrived too discontiguously so that stream sequencer buffer
+  // has too many gaps.
+  { net::QUIC_TOO_MANY_FRAME_GAPS,
+    "quic.too_many_frame_gaps" },
 
   // No error. Used as bound while iterating.
   { net::QUIC_LAST_ERROR, "quic.last_error"}
 };
 
 // Must be updated any time a net::QuicErrorCode is deprecated in
-// net/quic/quic_protocol.h.
+// net/quic/core/quic_protocol.h.
 const int kDeprecatedQuicErrorCount = 4;
 const int kActiveQuicErrorCount =
     net::QUIC_LAST_ERROR - kDeprecatedQuicErrorCount;

@@ -105,9 +105,9 @@ void AddValidSCT(const net::SignedCertificateTimestampAndStatus& sct_and_status,
 }
 
 // Records an UMA histogram of the net errors when Expect CT reports
-// fails to send.
+// fail to send.
 void RecordUMAOnFailure(const GURL& report_uri, int net_error) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("SSL.ExpectCTReportFailure", net_error);
+  UMA_HISTOGRAM_SPARSE_SLOWLY("SSL.ExpectCTReportFailure2", -net_error);
 }
 
 }  // namespace
@@ -153,6 +153,8 @@ void ChromeExpectCTReporter::OnExpectCTFailed(
         AddUnknownSCT(sct_and_status, unknown_scts.get());
         break;
       case net::ct::SCT_STATUS_INVALID:
+      case net::ct::SCT_STATUS_INVALID_SIGNATURE:
+      case net::ct::SCT_STATUS_INVALID_TIMESTAMP:
         AddInvalidSCT(sct_and_status, invalid_scts.get());
         break;
       case net::ct::SCT_STATUS_OK:
@@ -175,5 +177,6 @@ void ChromeExpectCTReporter::OnExpectCTFailed(
 
   UMA_HISTOGRAM_BOOLEAN("SSL.ExpectCTReportSendingAttempt", true);
 
-  report_sender_->Send(report_uri, serialized_report);
+  report_sender_->Send(report_uri, "application/json; charset=utf-8",
+                       serialized_report);
 }

@@ -151,9 +151,6 @@ char kTSanDefaultSuppressions[] =
 // http://crbug.com/328868
 "race:PR_Lock\n"
 
-// http://crbug.com/329225
-"race:blink::currentTimeFunction\n"
-
 // http://crbug.com/333244
 "race:content::"
     "VideoCaptureImplTest::MockVideoCaptureImpl::~MockVideoCaptureImpl\n"
@@ -179,9 +176,6 @@ char kTSanDefaultSuppressions[] =
 "race:blink::s_platform\n"
 "race:content::"
     "RendererWebKitPlatformSupportImpl::~RendererWebKitPlatformSupportImpl\n"
-
-// http://crbug.com/345240
-"race:WTF::s_shutdown\n"
 
 // http://crbug.com/345618
 "race:WebCore::AudioDestinationNode::render\n"
@@ -269,6 +263,15 @@ char kTSanDefaultSuppressions[] =
 
 // http://crbug.com/582274
 "race:usrsctp_close\n"
+
+// http://crbug.com/633145
+"race:third_party/libjpeg_turbo/simd/jsimd_x86_64.c\n"
+
+// http://crbug.com/638378
+"race:~TaskSchedulerWorkerPoolCheckTlsReuse\n"
+
+// http://crbug.com/638583
+"race:webrtc/modules/audio_processing/aec/aec_rdft.cc\n"
 
 // End of suppressions.
 ;  // Please keep this semicolon.

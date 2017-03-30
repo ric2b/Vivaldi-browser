@@ -11,7 +11,7 @@
 namespace mojo {
 
 // static
-bool StructTraits<cc::mojom::CompositorFrameMetadata,
+bool StructTraits<cc::mojom::CompositorFrameMetadataDataView,
                   cc::CompositorFrameMetadata>::
     Read(cc::mojom::CompositorFrameMetadataDataView data,
          cc::CompositorFrameMetadata* out) {
@@ -29,11 +29,13 @@ bool StructTraits<cc::mojom::CompositorFrameMetadata,
   out->max_page_scale_factor = data.max_page_scale_factor();
   out->root_overflow_x_hidden = data.root_overflow_x_hidden();
   out->root_overflow_y_hidden = data.root_overflow_y_hidden();
-  if (!data.ReadLocationBarOffset(&out->location_bar_offset) ||
-      !data.ReadLocationBarContentTranslation(
-          &out->location_bar_content_translation)) {
-    return false;
-  }
+  out->may_contain_video = data.may_contain_video();
+  out->is_resourceless_software_draw_with_scroll_or_animation =
+      data.is_resourceless_software_draw_with_scroll_or_animation();
+  out->top_controls_height = data.top_controls_height();
+  out->top_controls_shown_ratio = data.top_controls_shown_ratio();
+  out->bottom_controls_height = data.bottom_controls_height();
+  out->bottom_controls_shown_ratio = data.bottom_controls_shown_ratio();
 
   out->root_background_color = data.root_background_color();
   return data.ReadSelection(&out->selection) &&

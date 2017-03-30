@@ -269,6 +269,7 @@
 <translation id="3392045790598181549"><ph name="NAME" />, మెను అంశం</translation>
 <translation id="3406283310380167331">ఫారమ్‌ల జాబితాను చూపండి</translation>
 <translation id="3422338090358345848">కీబోర్డ్ ఎక్స్‌ప్లోరర్‌ను తెరవండి</translation>
+<translation id="3423495725743882470">అడ్డువరుస $1 నిలువు వరుస $2</translation>
 <translation id="3457000393508828486">పాక్షికంగా నొక్కబడింది</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, బటన్</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">స్వీయపూర్తి జాబితా</translation>
 <translation id="3810838688059735925">వీడియో</translation>
+<translation id="3812237531158591503">$1ని అతికించండి.</translation>
 <translation id="3816633764618089385">తదుపరి మీడియా</translation>
 <translation id="3819376190738087562">జంప్‌లు లేవు.</translation>
 <translation id="385383972552776628">ఎంపికల పేజీని తెరవండి</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">ఫారమ్‌లు లేవు.</translation>
 <translation id="5005670136041063723">మరిన్ని సారూప్య మూలకాలు లేవు.</translation>
 <translation id="501473567976723023">జనవరి</translation>
+<translation id="5040591161308540832">పట్టిక $1, $2 X $3</translation>
 <translation id="5041394372352067729">బ్రెయిలీ డిస్‌ప్లేను పేజీ పైకి తరలించండి</translation>
 <translation id="5042770794184672516">ప్రసంగ వాల్యూమ్‌ను పెంచండి</translation>
 <translation id="5050015258024679800">మునుపటి స్థాయి 4 శీర్షిక</translation>
@@ -518,7 +521,6 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="5876817486144482042">ప్రసంగ వాల్యూమ్‌ను తగ్గించండి</translation>
 <translation id="5887397643266327462">బ్రెయిలీ శీర్షికలు ప్రారంభించబడ్డాయి.</translation>
 <translation id="5891934789323004067">పట్టిక</translation>
-<translation id="5919442531159595654">కాపీ చేయండి.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{సమాన గుర్తు}other{# సమాన గుర్తులు}}</translation>
 <translation id="5939518447894949180">రీసెట్ చేయి</translation>
 <translation id="5948123859135882163">గణిత వ్యక్తీకరణల వ్యాఖ్యానాన్ని వ్యవస్థీకృత వివరణ మరియు అర్థ వివరణ మధ్య టోగుల్ చేయండి</translation>
@@ -554,6 +556,8 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="6355910664415701303">మునుపటి జాబితా అంశం లేదు.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">మునుపటి శీర్షిక</translation>
+<translation id="6378565991815958969">$1ని కాపీ చేయండి.</translation>
+<translation id="6385591741672306837">నిలువు</translation>
 <translation id="6387719785439924554">ప్రక్కన</translation>
 <translation id="6411426777058107714">మునుపటి రేడియో బటన్ లేదు.</translation>
 <translation id="6414968628640960377">మునుపటి విభిన్న మూలకం.</translation>
@@ -653,7 +657,6 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="7532613204005497612">జూన్</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, స్లయిడర్</translation>
 <translation id="7552432549459840808">సహాయకరమైన Chrome సత్వరమార్గాలు</translation>
-<translation id="7586163296341959563">అతికించండి.</translation>
 <translation id="7596919493010894443">ఎంపిక క్లియర్ చేయబడింది</translation>
 <translation id="7604026522577407655">ప్రస్తుత నిలువు వరుస ప్రారంభానికి వెళ్లండి</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="8153880621934657047">లోపల పట్టిక కాదు.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{అండర్‌స్కోర్ గుర్తు}other{# అండర్‌స్కోర్ గుర్తులు}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">అడ్డు</translation>
 <translation id="8186185314313222077">పూర్తి స్క్రీన్‌ను టోగుల్ చేస్తుంది</translation>
-<translation id="81960742267269908">కత్తిరించండి.</translation>
 <translation id="8199231515320852133">ప్రస్తుత సెల్ యొక్క ముఖ్య శీర్షికలను తెలియజేయండి</translation>
 <translation id="820417203470636242">ఖాళీ సెల్.</translation>
 <translation id="8215202828671303819">బహుళ ఎంపిక</translation>
@@ -782,6 +785,7 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="9077213568694924680">ఎంపిక నుండి తీసివేయబడింది</translation>
 <translation id="9082874451376019682">మునుపటి స్లయిడర్ లేదు.</translation>
 <translation id="9089864840575085222">సైకిల్ టైపింగ్ అనుకరణ</translation>
+<translation id="9105227991373418255">$1ని కత్తిరించండి.</translation>
 <translation id="9107530006868467849">మునుపటి మీడియా విడ్జెట్ లేదు.</translation>
 <translation id="9108370397979208512">math</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Chrome బ్రౌజర్ మెనును తెరవడానికి, 
 <translation id="9115913704608474258">నవంబర్</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">ట్యాబ్</translation>
 <translation id="9151211641321628915">ప్రస్తుత స్థానం యొక్క సంక్షిప్త వివరణను తెలియజేస్తుంది</translation>
 <translation id="9153606228985488238">స్వర స్థాయి <ph name="PERCENT" /> శాతం</translation>
 <translation id="9160096769946561184">ప్రస్తుత నిలువు వరుస యొక్క చివరకు వెళ్లండి</translation>

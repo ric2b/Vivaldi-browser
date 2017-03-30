@@ -6,8 +6,10 @@
 
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/system/tray/hover_highlight_view.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -15,13 +17,14 @@
 #include "ash/common/system/tray/tray_item_more.h"
 #include "ash/common/system/tray/tray_popup_label_button.h"
 #include "ash/common/wm_shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/strings/utf_string_conversions.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -42,7 +45,7 @@ enum AccessibilityState {
 };
 
 uint32_t GetAccessibilityState() {
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
   uint32_t state = A11Y_NONE;
   if (delegate->IsSpokenFeedbackEnabled())
     state |= A11Y_SPOKEN_FEEDBACK;
@@ -74,8 +77,13 @@ class DefaultAccessibilityView : public TrayItemMore {
   explicit DefaultAccessibilityView(SystemTrayItem* owner)
       : TrayItemMore(owner, true) {
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    SetImage(bundle.GetImageNamed(IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK)
-                 .ToImageSkia());
+    if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
+      SetImage(gfx::CreateVectorIcon(
+          gfx::VectorIconId::SYSTEM_MENU_ACCESSIBILITY, kMenuIconColor));
+    } else {
+      SetImage(*bundle.GetImageNamed(IDR_AURA_UBER_TRAY_ACCESSIBILITY_DARK)
+                    .ToImageSkia());
+    }
     base::string16 label =
         bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_ACCESSIBILITY);
     SetLabel(label);
@@ -153,7 +161,7 @@ void AccessibilityDetailedView::AppendAccessibilityList() {
   CreateScrollableList();
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
 
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
   spoken_feedback_enabled_ = delegate->IsSpokenFeedbackEnabled();
   spoken_feedback_view_ =
       AddScrollListItem(bundle.GetLocalizedString(
@@ -237,7 +245,7 @@ HoverHighlightView* AccessibilityDetailedView::AddScrollListItem(
 }
 
 void AccessibilityDetailedView::OnViewClicked(views::View* sender) {
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
   if (sender == footer()->content()) {
     TransitionToDefaultView();
   } else if (sender == spoken_feedback_view_) {
@@ -285,6 +293,9 @@ void AccessibilityDetailedView::ButtonPressed(views::Button* sender,
     tray_delegate->ShowAccessibilityHelp();
   else if (sender == settings_view_)
     tray_delegate->ShowAccessibilitySettings();
+  else
+    return;
+  owner()->system_tray()->CloseSystemBubble();
 }
 
 }  // namespace tray
@@ -336,7 +347,7 @@ views::View* TrayAccessibility::CreateDefaultView(LoginStatus status) {
   // - "Enable accessibility menu" on chrome://settings is checked;
   // - or any of accessibility features is enabled
   // Otherwise, not shows it.
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
   if (login_ != LoginStatus::NOT_LOGGED_IN &&
       !delegate->ShouldShowAccessibilityMenu() &&
       // On login screen, keeps the initial visibility of the menu.

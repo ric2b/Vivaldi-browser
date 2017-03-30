@@ -458,11 +458,22 @@
             "type": "object",
             "name": "changeInfo",
             "properties": {
-              "title": { "type": "string" },
-              "content": { "type": "string" },
+              "title": {
+                "type": "string",
+                "optional": true
+              },
+              "content": {
+                "type": "string",
+                "optional": true
+              },
               "url": {
                 "type": "string",
                 "optional": true
+              },
+              "attachments": {
+                "type": "array",
+                "optional": true,
+                "items": { "$ref": "NoteAttachment" }
               }
             }
           }

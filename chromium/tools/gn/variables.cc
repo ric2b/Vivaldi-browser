@@ -44,6 +44,38 @@ const char kHostOs_Help[] =
     "  - \"mac\"\n"
     "  - \"win\"\n";
 
+const char kInvoker[] = "invoker";
+const char kInvoker_HelpShort[] =
+    "invoker: [string] The invoking scope inside a template.";
+const char kInvoker_Help[] =
+    "invoker: [string] The invoking scope inside a template.\n"
+    "\n"
+    "  Inside a template invocation, this variable refers to the scope of\n"
+    "  the invoker of the template. Outside of template invocations, this\n"
+    "  variable is undefined.\n"
+    "\n"
+    "  All of the variables defined inside the template invocation are\n"
+    "  accessible as members of the \"invoker\" scope. This is the way that\n"
+    "  templates read values set by the callers.\n"
+    "\n"
+    "  This is often used with \"defined\" to see if a value is set on the\n"
+    "  invoking scope.\n"
+    "\n"
+    "  See \"gn help template\" for more examples.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  template(\"my_template\") {\n"
+    "    print(invoker.sources)       # Prints [ \"a.cc\", \"b.cc\" ]\n"
+    "    print(defined(invoker.foo))  # Prints false.\n"
+    "    print(defined(invoker.bar))  # Prints true.\n"
+    "  }\n"
+    "\n"
+    "  my_template(\"doom_melon\") {\n"
+    "    sources = [ \"a.cc\", \"b.cc\" ]\n"
+    "    bar = 123\n"
+    "  }\n";
+
 const char kTargetCpu[] = "target_cpu";
 const char kTargetCpu_HelpShort[] =
     "target_cpu: [string] The desired cpu architecture for the build.";
@@ -75,6 +107,47 @@ const char kTargetCpu_Help[] =
     "  - \"arm\"\n"
     "  - \"arm64\"\n"
     "  - \"mipsel\"\n";
+
+const char kTargetName[] = "target_name";
+const char kTargetName_HelpShort[] =
+    "target_name: [string] The name of the current target.";
+const char kTargetName_Help[] =
+    "target_name: [string] The name of the current target.\n"
+    "\n"
+    "  Inside a target or template invocation, this variable refers to the\n"
+    "  name given to the target or template invocation. Outside of these,\n"
+    "  this variable is undefined.\n"
+    "\n"
+    "  This is most often used in template definitions to name targets\n"
+    "  defined in the template based on the name of the invocation. This\n"
+    "  is necessary both to ensure generated targets have unique names and\n"
+    "  to generate a target with the exact name of the invocation that\n"
+    "  other targets can depend on.\n"
+    "\n"
+    "  Be aware that this value will always reflect the innermost scope. So\n"
+    "  when defining a target inside a template, target_name will refer to\n"
+    "  the target rather than the template invocation. To get the name of the\n"
+    "  template invocation in this case, you should save target_name to a\n"
+    "  temporary variable outside of any target definitions.\n"
+    "\n"
+    "  See \"gn help template\" for more examples.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  executable(\"doom_melon\") {\n"
+    "    print(target_name)    # Prints \"doom_melon\".\n"
+    "  }\n"
+    "\n"
+    "  template(\"my_template\") {\n"
+    "    print(target_name)    # Prints \"space_ray\" when invoked below.\n"
+    "\n"
+    "    executable(target_name + \"_impl\") {\n"
+    "      print(target_name)  # Prints \"space_ray_impl\".\n"
+    "    }\n"
+    "  }\n"
+    "\n"
+    "  my_template(\"space_ray\") {\n"
+    "  }\n";
 
 const char kTargetOs[] = "target_os";
 const char kTargetOs_HelpShort[] =
@@ -534,6 +607,38 @@ const char kBundleResourcesDir_Help[] =
     "  This must correspond to a path under \"bundle_root_dir\".\n"
     "\n"
     "  See \"gn help bundle_root_dir\" for examples.\n";
+
+const char kBundleDepsFilter[] = "bundle_deps_filter";
+const char kBundleDepsFilter_HelpShort[] =
+    "bundle_deps_filter: [label list] A list of labels that are filtered out.";
+const char kBundleDepsFilter_Help[] =
+    "bundle_deps_filter: [label list] A list of labels that are filtered out.\n"
+    "\n"
+    "  A list of target labels.\n"
+    "\n"
+    "  This list contains target label patterns that should be filtered out\n"
+    "  when creating the bundle. Any target matching one of those label will\n"
+    "  be removed from the dependencies of the create_bundle target.\n"
+    "\n"
+    "  This is mostly useful when creating application extension bundle as\n"
+    "  the application extension has access to runtime resources from the\n"
+    "  application bundle and thus do not require a second copy.\n"
+    "\n"
+    "  See \"gn help create_bundle\" for more information.\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  create_bundle(\"today_extension\") {\n"
+    "    deps = [\n"
+    "      \"//base\"\n"
+    "    ]\n"
+    "    bundle_root_dir = \"$root_out_dir/today_extension.appex\"\n"
+    "    bundle_deps_filter = [\n"
+    "      # The extension uses //base but does not use any function calling\n"
+    "      # into third_party/icu and thus does not need the icudtl.dat file.\n"
+    "      \"//third_party/icu:icudata\",\n"
+    "    ]\n"
+    "  }\n";
 
 const char kBundleExecutableDir[] = "bundle_executable_dir";
 const char kBundleExecutableDir_HelpShort[] =
@@ -1689,6 +1794,20 @@ const char kWriteRuntimeDeps_Help[] =
     "  contents will be the same as requesting the runtime deps be written on\n"
     "  the command line (see \"gn help --runtime-deps-list-file\").\n";
 
+// <Vivaldi>
+const char kDisabled[] = "disabled";
+const char kDisabled_HelpShort[] =
+    "disabled: Disable the current target.";
+const char kDisabled_Help[] =
+    "disabled: Disable the current target.\n";
+
+const char kHugeLink[] = "huge_link";
+const char kHugeLink_HelpShort[] =
+    "huge_link: Linking the current target takes a lot of RAM (50GB+).";
+const char kHugeLink_Help[] =
+    "huge_link: Linking the current target takes a lot of RAM (50GB+).";
+// </Vivaldi>
+
 // -----------------------------------------------------------------------------
 
 VariableInfo::VariableInfo()
@@ -1713,6 +1832,7 @@ const VariableInfoMap& GetBuiltinVariables() {
     INSERT_VARIABLE(DefaultToolchain)
     INSERT_VARIABLE(HostCpu)
     INSERT_VARIABLE(HostOs)
+    INSERT_VARIABLE(Invoker)
     INSERT_VARIABLE(PythonPath)
     INSERT_VARIABLE(RootBuildDir)
     INSERT_VARIABLE(RootGenDir)
@@ -1720,6 +1840,7 @@ const VariableInfoMap& GetBuiltinVariables() {
     INSERT_VARIABLE(TargetCpu)
     INSERT_VARIABLE(TargetOs)
     INSERT_VARIABLE(TargetGenDir)
+    INSERT_VARIABLE(TargetName)
     INSERT_VARIABLE(TargetOutDir)
   }
   return info_map;
@@ -1736,6 +1857,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(AssertNoDeps)
     INSERT_VARIABLE(BundleRootDir)
     INSERT_VARIABLE(BundleResourcesDir)
+    INSERT_VARIABLE(BundleDepsFilter)
     INSERT_VARIABLE(BundleExecutableDir)
     INSERT_VARIABLE(BundlePlugInsDir)
     INSERT_VARIABLE(Cflags)
@@ -1778,6 +1900,10 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
     INSERT_VARIABLE(WriteRuntimeDeps)
+    // <Vivaldi>
+    INSERT_VARIABLE(Disabled)
+    INSERT_VARIABLE(HugeLink)
+    // </Vivaldi>
   }
   return info_map;
 }

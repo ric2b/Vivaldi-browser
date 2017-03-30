@@ -11,10 +11,8 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
-
-namespace base {
-class MessageLoop;
-}  // namespace base
+#include "base/single_thread_task_runner.h"
+#include "remoting/protocol/message_pipe.h"
 
 namespace net {
 class DrainableIOBuffer;
@@ -29,7 +27,6 @@ class VideoPacket;
 
 namespace protocol {
 
-class MessagePipe;
 class P2PDatagramSocket;
 class P2PStreamSocket;
 
@@ -59,7 +56,7 @@ class StreamConnectionTester {
   void HandleReadResult(int result);
 
  private:
-  base::MessageLoop* message_loop_;
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   P2PStreamSocket* host_socket_;
   P2PStreamSocket* client_socket_;
   int message_size_;
@@ -94,7 +91,7 @@ class DatagramConnectionTester {
   void OnRead(int result);
   void HandleReadResult(int result);
 
-  base::MessageLoop* message_loop_;
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   P2PDatagramSocket* host_socket_;
   P2PDatagramSocket* client_socket_;
   int message_size_;
@@ -112,18 +109,21 @@ class DatagramConnectionTester {
   int bad_packets_received_;
 };
 
-class MessagePipeConnectionTester {
+class MessagePipeConnectionTester : public MessagePipe::EventHandler {
  public:
   MessagePipeConnectionTester(MessagePipe* client_pipe,
                               MessagePipe* host_pipe,
                               int message_size,
                               int message_count);
-  ~MessagePipeConnectionTester();
+  ~MessagePipeConnectionTester() override;
 
   void RunAndCheckResults();
 
  protected:
-  void OnMessageReceived(std::unique_ptr<CompoundBuffer> message);
+  // MessagePipe::EventHandler interface.
+  void OnMessagePipeOpen() override;
+  void OnMessageReceived(std::unique_ptr<CompoundBuffer> message) override;
+  void OnMessagePipeClosed() override;
 
  private:
   base::RunLoop run_loop_;

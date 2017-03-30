@@ -88,18 +88,26 @@ public:
             void recordAttach(const String& handle)
             {
                 MutexLocker locker(m_loggingMutex);
-                m_result.append("A reader is attached to " + handle + " on " + currentThreadName() + ".\n");
+                m_result.append("A reader is attached to ");
+                m_result.append(handle);
+                m_result.append(" on ");
+                m_result.append(currentThreadName());
+                m_result.append(".\n");
             }
             void recordDetach(const String& handle)
             {
                 MutexLocker locker(m_loggingMutex);
-                m_result.append("A reader is detached from " + handle + " on " + currentThreadName() + ".\n");
+                m_result.append("A reader is detached from ");
+                m_result.append(handle);
+                m_result.append(" on ");
+                m_result.append(currentThreadName());
+                m_result.append(".\n");
             }
 
-            const String& result()
+            String result()
             {
                 MutexLocker locker(m_loggingMutex);
-                return m_result;
+                return m_result.toString();
             }
 
             void registerThreadHolder(ThreadHolder* holder)
@@ -144,7 +152,7 @@ public:
 
             // Protects |m_result|.
             Mutex m_loggingMutex;
-            String m_result;
+            StringBuilder m_result;
 
             // Protects |m_holder|.
             Mutex m_holderMutex;
@@ -207,7 +215,7 @@ public:
         private:
             DataConsumerHandle(const String& name, PassRefPtr<Context> context) : m_name(name.isolatedCopy()), m_context(context) { }
 
-            Reader* obtainReaderInternal(Client*) { return new ReaderImpl(m_name, m_context); }
+            std::unique_ptr<Reader> obtainReader(Client*) { return WTF::wrapUnique(new ReaderImpl(m_name, m_context)); }
             const char* debugName() const override { return "ThreadingTestBase::DataConsumerHandle"; }
 
             const String m_name;
@@ -216,7 +224,7 @@ public:
 
         void resetReader() { m_reader = nullptr; }
         void signalDone() { m_waitableEvent->signal(); }
-        const String& result() { return m_context->result(); }
+        String result() { return m_context->result(); }
         void postTaskToReadingThread(const WebTraceLocation& location, std::unique_ptr<CrossThreadClosure> task)
         {
             m_context->postTaskToReadingThread(location,  std::move(task));
@@ -307,7 +315,7 @@ public:
     class MockFetchDataConsumerHandle : public FetchDataConsumerHandle {
     public:
         static std::unique_ptr<::testing::StrictMock<MockFetchDataConsumerHandle>> create() { return wrapUnique(new ::testing::StrictMock<MockFetchDataConsumerHandle>); }
-        MOCK_METHOD1(obtainReaderInternal, Reader*(Client*));
+        MOCK_METHOD1(obtainFetchDataReader, std::unique_ptr<Reader>(Client*));
 
     private:
         const char* debugName() const override { return "MockFetchDataConsumerHandle"; }
@@ -428,12 +436,12 @@ public:
         };
 
         Context* getContext() { return m_context.get(); }
+        std::unique_ptr<Reader> obtainReader(Client*) override;
 
     private:
         class ReaderImpl;
 
         ReplayingHandle();
-        Reader* obtainReaderInternal(Client*) override;
         const char* debugName() const override { return "ReplayingHandle"; }
 
         RefPtr<Context> m_context;

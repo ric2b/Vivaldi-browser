@@ -17,16 +17,16 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaSink) {
   expected_media_sink.set_description("description");
   expected_media_sink.set_domain("domain");
 
-  interfaces::MediaSinkPtr mojo_sink(interfaces::MediaSink::New());
+  mojom::MediaSinkPtr mojo_sink(mojom::MediaSink::New());
   mojo_sink->sink_id = "sinkId1";
   mojo_sink->name = "Sink 1";
-  mojo_sink->description = "description";
-  mojo_sink->domain = "domain";
-  mojo_sink->icon_type = media_router::interfaces::MediaSink::IconType::CAST;
+  mojo_sink->description = std::string("description");
+  mojo_sink->domain = std::string("domain");
+  mojo_sink->icon_type = media_router::mojom::MediaSink::IconType::CAST;
 
   MediaSink media_sink = mojo::TypeConverter<
       media_router::MediaSink,
-      media_router::interfaces::MediaSinkPtr>::Convert(mojo_sink);
+      media_router::mojom::MediaSinkPtr>::Convert(mojo_sink);
 
   // Convert MediaSink and back should result in identical object.
   EXPECT_EQ(expected_media_sink.name(), media_sink.name());
@@ -43,32 +43,32 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaSinkIconType) {
   // Convert from Mojo to Media Router.
   EXPECT_EQ(media_router::MediaSink::CAST,
             mojo::SinkIconTypeFromMojo(
-                media_router::interfaces::MediaSink::IconType::CAST));
+                media_router::mojom::MediaSink::IconType::CAST));
   EXPECT_EQ(media_router::MediaSink::CAST_AUDIO,
             mojo::SinkIconTypeFromMojo(
-                media_router::interfaces::MediaSink::IconType::CAST_AUDIO));
+                media_router::mojom::MediaSink::IconType::CAST_AUDIO));
   EXPECT_EQ(
       media_router::MediaSink::CAST_AUDIO_GROUP,
       mojo::SinkIconTypeFromMojo(
-          media_router::interfaces::MediaSink::IconType::CAST_AUDIO_GROUP));
+          media_router::mojom::MediaSink::IconType::CAST_AUDIO_GROUP));
   EXPECT_EQ(media_router::MediaSink::GENERIC,
             mojo::SinkIconTypeFromMojo(
-                media_router::interfaces::MediaSink::IconType::GENERIC));
+                media_router::mojom::MediaSink::IconType::GENERIC));
   EXPECT_EQ(media_router::MediaSink::HANGOUT,
             mojo::SinkIconTypeFromMojo(
-                media_router::interfaces::MediaSink::IconType::HANGOUT));
+                media_router::mojom::MediaSink::IconType::HANGOUT));
 
   // Convert from Media Router to Mojo.
-  EXPECT_EQ(media_router::interfaces::MediaSink::IconType::CAST,
+  EXPECT_EQ(media_router::mojom::MediaSink::IconType::CAST,
             mojo::SinkIconTypeToMojo(media_router::MediaSink::CAST));
-  EXPECT_EQ(media_router::interfaces::MediaSink::IconType::CAST_AUDIO,
+  EXPECT_EQ(media_router::mojom::MediaSink::IconType::CAST_AUDIO,
             mojo::SinkIconTypeToMojo(media_router::MediaSink::CAST_AUDIO));
   EXPECT_EQ(
-      media_router::interfaces::MediaSink::IconType::CAST_AUDIO_GROUP,
+      media_router::mojom::MediaSink::IconType::CAST_AUDIO_GROUP,
       mojo::SinkIconTypeToMojo(media_router::MediaSink::CAST_AUDIO_GROUP));
-  EXPECT_EQ(media_router::interfaces::MediaSink::IconType::GENERIC,
+  EXPECT_EQ(media_router::mojom::MediaSink::IconType::GENERIC,
             mojo::SinkIconTypeToMojo(media_router::MediaSink::GENERIC));
-  EXPECT_EQ(media_router::interfaces::MediaSink::IconType::HANGOUT,
+  EXPECT_EQ(media_router::mojom::MediaSink::IconType::HANGOUT,
             mojo::SinkIconTypeToMojo(media_router::MediaSink::HANGOUT));
 }
 
@@ -76,16 +76,16 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRoute) {
   MediaSource expected_source(MediaSourceForTab(123));
   MediaRoute expected_media_route("routeId1", expected_source, "sinkId",
                                   "Description", false, "cast_view.html", true);
-  expected_media_route.set_off_the_record(true);
-  interfaces::MediaRoutePtr mojo_route(interfaces::MediaRoute::New());
+  expected_media_route.set_incognito(true);
+  mojom::MediaRoutePtr mojo_route(mojom::MediaRoute::New());
   mojo_route->media_route_id = "routeId1";
   mojo_route->media_source = expected_source.id();
   mojo_route->media_sink_id = "sinkId";
   mojo_route->description = "Description";
   mojo_route->is_local = false;
-  mojo_route->custom_controller_path = "cast_view.html";
+  mojo_route->custom_controller_path = std::string("cast_view.html");
   mojo_route->for_display = true;
-  mojo_route->off_the_record = true;
+  mojo_route->incognito = true;
 
   MediaRoute media_route = mojo_route.To<MediaRoute>();
   EXPECT_TRUE(expected_media_route.Equals(media_route));
@@ -99,37 +99,35 @@ TEST(MediaRouterTypeConvertersTest, ConvertMediaRoute) {
   EXPECT_EQ(expected_media_route.custom_controller_path(),
             media_route.custom_controller_path());
   EXPECT_EQ(expected_media_route.for_display(), media_route.for_display());
-  EXPECT_EQ(expected_media_route.off_the_record(),
-            media_route.off_the_record());
+  EXPECT_EQ(expected_media_route.incognito(), media_route.incognito());
 }
 
 TEST(MediaRouterTypeConvertersTest, ConvertMediaRouteWithoutOptionalFields) {
   MediaRoute expected_media_route("routeId1", MediaSource(), "sinkId",
                                   "Description", false, "", false);
-  interfaces::MediaRoutePtr mojo_route(interfaces::MediaRoute::New());
+  mojom::MediaRoutePtr mojo_route(mojom::MediaRoute::New());
   // MediaRoute::media_source is omitted.
   mojo_route->media_route_id = "routeId1";
   mojo_route->media_sink_id = "sinkId";
   mojo_route->description = "Description";
   mojo_route->is_local = false;
   mojo_route->for_display = false;
-  mojo_route->off_the_record = false;
+  mojo_route->incognito = false;
 
   MediaRoute media_route = mojo_route.To<MediaRoute>();
   EXPECT_TRUE(expected_media_route.Equals(media_route));
 }
 
 TEST(MediaRouterTypeConvertersTest, ConvertIssue) {
-  interfaces::IssuePtr mojoIssue;
-  mojoIssue = interfaces::Issue::New();
+  mojom::IssuePtr mojoIssue;
+  mojoIssue = mojom::Issue::New();
   mojoIssue->title = "title";
-  mojoIssue->message = "msg";
-  mojoIssue->route_id = "routeId";
-  mojoIssue->default_action = interfaces::Issue::ActionType::LEARN_MORE;
-  mojoIssue->secondary_actions =
-      mojo::Array<interfaces::Issue::ActionType>::New(1);
-  mojoIssue->secondary_actions[0] = interfaces::Issue::ActionType::DISMISS;
-  mojoIssue->severity = interfaces::Issue::Severity::WARNING;
+  mojoIssue->message = std::string("msg");
+  mojoIssue->route_id = std::string("routeId");
+  mojoIssue->default_action = mojom::Issue::ActionType::LEARN_MORE;
+  mojoIssue->secondary_actions = std::vector<mojom::Issue::ActionType>(
+      1, mojom::Issue::ActionType::DISMISS);
+  mojoIssue->severity = mojom::Issue::Severity::WARNING;
   mojoIssue->is_blocking = true;
   mojoIssue->help_page_id = 12345;
 
@@ -140,7 +138,7 @@ TEST(MediaRouterTypeConvertersTest, ConvertIssue) {
       secondary_actions, "routeId", Issue::WARNING, true, 12345);
   Issue converted_issue = mojo::TypeConverter<
       media_router::Issue,
-      media_router::interfaces::IssuePtr>::Convert(mojoIssue);
+      media_router::mojom::IssuePtr>::Convert(mojoIssue);
 
   EXPECT_EQ(expected_issue.title(), converted_issue.title());
   EXPECT_EQ(expected_issue.message(), converted_issue.message());
@@ -163,11 +161,11 @@ TEST(MediaRouterTypeConvertersTest, ConvertIssue) {
 }
 
 TEST(MediaRouterTypeConvertersTest, ConvertIssueWithoutOptionalFields) {
-  interfaces::IssuePtr mojoIssue;
-  mojoIssue = interfaces::Issue::New();
+  mojom::IssuePtr mojoIssue;
+  mojoIssue = mojom::Issue::New();
   mojoIssue->title = "title";
-  mojoIssue->default_action = interfaces::Issue::ActionType::DISMISS;
-  mojoIssue->severity = interfaces::Issue::Severity::WARNING;
+  mojoIssue->default_action = mojom::Issue::ActionType::DISMISS;
+  mojoIssue->severity = mojom::Issue::Severity::WARNING;
   mojoIssue->is_blocking = true;
 
   Issue expected_issue("title", "", IssueAction(IssueAction::TYPE_DISMISS),
@@ -176,7 +174,7 @@ TEST(MediaRouterTypeConvertersTest, ConvertIssueWithoutOptionalFields) {
 
   Issue converted_issue = mojo::TypeConverter<
       media_router::Issue,
-      media_router::interfaces::IssuePtr>::Convert(mojoIssue);
+      media_router::mojom::IssuePtr>::Convert(mojoIssue);
 
   EXPECT_EQ(expected_issue.title(), converted_issue.title());
   EXPECT_EQ(expected_issue.default_action().type(),

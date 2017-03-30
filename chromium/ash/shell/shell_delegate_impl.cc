@@ -7,21 +7,21 @@
 #include "ash/app_list/app_list_presenter_delegate_factory.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
+#include "ash/common/new_window_delegate.h"
+#include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/default_system_tray_delegate.h"
 #include "ash/common/wm/window_state.h"
-#include "ash/default_user_wallpaper_delegate.h"
-#include "ash/gpu_support_stub.h"
-#include "ash/new_window_delegate.h"
-#include "ash/pointer_watcher_delegate_aura.h"
+#include "ash/default_wallpaper_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
-#include "ash/shell/shelf_delegate_impl.h"
 #include "ash/shell/toplevel_window.h"
 #include "ash/test/test_keyboard_ui.h"
+#include "ash/test/test_shelf_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -45,10 +45,10 @@ class NewWindowDelegateImpl : public NewWindowDelegate {
   // NewWindowDelegate:
   void NewTab() override {}
   void NewWindow(bool incognito) override {
-    ash::shell::ToplevelWindow::CreateParams create_params;
+    ToplevelWindow::CreateParams create_params;
     create_params.can_resize = true;
     create_params.can_maximize = true;
-    ash::shell::ToplevelWindow::CreateToplevelWindow(create_params);
+    ToplevelWindow::CreateToplevelWindow(create_params);
   }
   void OpenFileManager() override {}
   void OpenCrosh() override {}
@@ -77,6 +77,35 @@ class MediaDelegateImpl : public MediaDelegate {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MediaDelegateImpl);
+};
+
+class PaletteDelegateImpl : public PaletteDelegate {
+ public:
+  PaletteDelegateImpl() {}
+  ~PaletteDelegateImpl() override {}
+
+  // PaletteDelegate:
+  std::unique_ptr<EnableListenerSubscription> AddPaletteEnableListener(
+      const EnableListener& on_state_changed) override {
+    on_state_changed.Run(false);
+    return nullptr;
+  }
+  void CreateNote() override {}
+  bool HasNoteApp() override { return false; }
+  void SetPartialMagnifierState(bool enabled) override {}
+  void SetStylusStateChangedCallback(
+      const OnStylusStateChangedCallback& on_stylus_state_changed) override {}
+  bool ShouldAutoOpenPalette() override { return false; }
+  bool ShouldShowPalette() override { return false; }
+  void TakeScreenshot() override {}
+  void TakePartialScreenshot(const base::Closure& done) override {
+    if (done)
+      done.Run();
+  }
+  void CancelPartialScreenshot() override {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PaletteDelegateImpl);
 };
 
 class SessionStateDelegateImpl : public SessionStateDelegate {
@@ -127,9 +156,8 @@ class SessionStateDelegateImpl : public SessionStateDelegate {
   bool IsMultiProfileAllowedByPrimaryUserPolicy() const override {
     return true;
   }
-  void AddSessionStateObserver(ash::SessionStateObserver* observer) override {}
-  void RemoveSessionStateObserver(
-      ash::SessionStateObserver* observer) override {}
+  void AddSessionStateObserver(SessionStateObserver* observer) override {}
+  void RemoveSessionStateObserver(SessionStateObserver* observer) override {}
 
  private:
   bool screen_locked_;
@@ -204,14 +232,6 @@ keyboard::KeyboardUI* ShellDelegateImpl::CreateKeyboardUI() {
   return new TestKeyboardUI;
 }
 
-void ShellDelegateImpl::VirtualKeyboardActivated(bool activated) {}
-
-void ShellDelegateImpl::AddVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {}
-
-void ShellDelegateImpl::RemoveVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {}
-
 void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
 
 app_list::AppListPresenter* ShellDelegateImpl::GetAppListPresenter() {
@@ -223,37 +243,37 @@ app_list::AppListPresenter* ShellDelegateImpl::GetAppListPresenter() {
 }
 
 ShelfDelegate* ShellDelegateImpl::CreateShelfDelegate(ShelfModel* model) {
-  shelf_delegate_ = new ShelfDelegateImpl();
+  shelf_delegate_ = new test::TestShelfDelegate(model);
   return shelf_delegate_;
 }
 
-ash::SystemTrayDelegate* ShellDelegateImpl::CreateSystemTrayDelegate() {
+SystemTrayDelegate* ShellDelegateImpl::CreateSystemTrayDelegate() {
   return new DefaultSystemTrayDelegate;
 }
 
-ash::UserWallpaperDelegate* ShellDelegateImpl::CreateUserWallpaperDelegate() {
-  return new DefaultUserWallpaperDelegate();
+std::unique_ptr<WallpaperDelegate>
+ShellDelegateImpl::CreateWallpaperDelegate() {
+  return base::MakeUnique<DefaultWallpaperDelegate>();
 }
 
-ash::SessionStateDelegate* ShellDelegateImpl::CreateSessionStateDelegate() {
+SessionStateDelegate* ShellDelegateImpl::CreateSessionStateDelegate() {
   return new SessionStateDelegateImpl;
 }
 
-ash::AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
+AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
 
-ash::NewWindowDelegate* ShellDelegateImpl::CreateNewWindowDelegate() {
+NewWindowDelegate* ShellDelegateImpl::CreateNewWindowDelegate() {
   return new NewWindowDelegateImpl;
 }
 
-ash::MediaDelegate* ShellDelegateImpl::CreateMediaDelegate() {
+MediaDelegate* ShellDelegateImpl::CreateMediaDelegate() {
   return new MediaDelegateImpl;
 }
 
-std::unique_ptr<ash::PointerWatcherDelegate>
-ShellDelegateImpl::CreatePointerWatcherDelegate() {
-  return base::WrapUnique(new PointerWatcherDelegateAura);
+std::unique_ptr<PaletteDelegate> ShellDelegateImpl::CreatePaletteDelegate() {
+  return base::MakeUnique<PaletteDelegateImpl>();
 }
 
 ui::MenuModel* ShellDelegateImpl::CreateContextMenu(WmShelf* wm_shelf,

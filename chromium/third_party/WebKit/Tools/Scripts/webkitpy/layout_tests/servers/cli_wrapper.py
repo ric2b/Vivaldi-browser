@@ -37,8 +37,6 @@ import argparse
 
 from webkitpy.common.host import Host
 
-_log = logging.getLogger(__name__)
-
 
 def main(server_constructor, input_fn=None, argv=None, **kwargs):
     input_fn = input_fn or raw_input
@@ -66,7 +64,7 @@ def main(server_constructor, input_fn=None, argv=None, **kwargs):
     server.start()
     try:
         _ = input_fn('Hit any key to stop the server and exit.')
-    except (KeyboardInterrupt, EOFError) as e:
+    except (KeyboardInterrupt, EOFError):
         pass
 
     server.stop()

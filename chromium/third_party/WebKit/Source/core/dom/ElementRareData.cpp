@@ -32,6 +32,8 @@
 
 #include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/dom/CompositorProxiedPropertySet.h"
+#include "core/observer/ResizeObservation.h"
+#include "core/observer/ResizeObserver.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
@@ -40,8 +42,8 @@ struct SameSizeAsElementRareData : NodeRareData {
     short indices[1];
     LayoutSize sizeForResizing;
     IntSize scrollOffset;
-    void* pointers[10];
-    Member<void*> persistentMember[3];
+    void* pointers[2];
+    Member<void*> members[13];
 };
 
 CSSStyleDeclaration& ElementRareData::ensureInlineCSSStyleDeclaration(Element* ownerElement)
@@ -66,6 +68,13 @@ AttrNodeList& ElementRareData::ensureAttrNodeList()
     return *m_attrNodeList;
 }
 
+ElementRareData::ResizeObserverDataMap& ElementRareData::ensureResizeObserverData()
+{
+    if (!m_resizeObserverData)
+        m_resizeObserverData = new HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>();
+    return *m_resizeObserverData;
+}
+
 DEFINE_TRACE_AFTER_DISPATCH(ElementRareData)
 {
     visitor->trace(m_dataset);
@@ -77,8 +86,10 @@ DEFINE_TRACE_AFTER_DISPATCH(ElementRareData)
     visitor->trace(m_cssomWrapper);
     visitor->trace(m_cssomMapWrapper);
     visitor->trace(m_pseudoElementData);
+    visitor->trace(m_v0CustomElementDefinition);
     visitor->trace(m_customElementDefinition);
     visitor->trace(m_intersectionObserverData);
+    visitor->trace(m_resizeObserverData);
     NodeRareData::traceAfterDispatch(visitor);
 }
 

@@ -7,6 +7,7 @@
 #include "base/sha1.h"
 #include "crypto/sha2.h"
 #include "net/cert/internal/parse_ocsp.h"
+#include "net/der/encode_values.h"
 
 namespace net {
 
@@ -127,13 +128,13 @@ bool ParseCertStatus(const der::Input& raw_tlv, OCSPCertStatus* out) {
 
   out->has_reason = false;
   if (status_tag == der::ContextSpecificPrimitive(0)) {
-    out->status = OCSPCertStatus::Status::GOOD;
+    out->status = OCSPRevocationStatus::GOOD;
   } else if (status_tag == der::ContextSpecificConstructed(1)) {
-    out->status = OCSPCertStatus::Status::REVOKED;
+    out->status = OCSPRevocationStatus::REVOKED;
     if (!ParseRevokedInfo(status, out))
       return false;
   } else if (status_tag == der::ContextSpecificPrimitive(2)) {
-    out->status = OCSPCertStatus::Status::UNKNOWN;
+    out->status = OCSPRevocationStatus::UNKNOWN;
   } else {
     return false;
   }
@@ -496,7 +497,7 @@ bool GetOCSPCertStatus(const OCSPResponseData& response_data,
                        const der::Input& issuer_tbs_certificate_tlv,
                        const der::Input& cert_tbs_certificate_tlv,
                        OCSPCertStatus* out) {
-  out->status = OCSPCertStatus::Status::GOOD;
+  out->status = OCSPRevocationStatus::GOOD;
 
   ParsedTbsCertificate tbs_cert;
   if (!ParseTbsCertificate(cert_tbs_certificate_tlv, {}, &tbs_cert))
@@ -516,17 +517,41 @@ bool GetOCSPCertStatus(const OCSPResponseData& response_data,
       found = true;
       // In the case that we receive multiple responses, we keep only the
       // strictest status (REVOKED > UNKNOWN > GOOD).
-      if (out->status == OCSPCertStatus::Status::GOOD ||
-          new_status.status == OCSPCertStatus::Status::REVOKED) {
+      if (out->status == OCSPRevocationStatus::GOOD ||
+          new_status.status == OCSPRevocationStatus::REVOKED) {
         *out = new_status;
       }
     }
   }
 
   if (!found)
-    out->status = OCSPCertStatus::Status::UNKNOWN;
+    out->status = OCSPRevocationStatus::UNKNOWN;
 
   return found;
+}
+
+bool CheckOCSPDateValid(const OCSPSingleResponse& response,
+                        const base::Time& verify_time,
+                        const base::TimeDelta& max_age) {
+  der::GeneralizedTime verify_time_der;
+  if (!der::EncodeTimeAsGeneralizedTime(verify_time, &verify_time_der))
+    return false;
+
+  if (response.this_update > verify_time_der)
+    return false;  // Response is not yet valid.
+
+  if (response.has_next_update && (response.next_update <= verify_time_der))
+    return false;  // Response is no longer valid.
+
+  der::GeneralizedTime earliest_this_update;
+  if (!der::EncodeTimeAsGeneralizedTime(verify_time - max_age,
+                                        &earliest_this_update)) {
+    return false;
+  }
+  if (response.this_update < earliest_this_update)
+    return false;  // Response is too old.
+
+  return true;
 }
 
 }  // namespace net

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/mac/mac_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/base/mac/coremedia_glue.h"
 #include "media/base/mac/corevideo_glue.h"
@@ -106,11 +105,6 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
     DLOG(ERROR) << "Failed creating VideoToolbox glue.";
     return profiles;
   }
-  if (!base::mac::IsOSMavericksOrLater()) {
-    DLOG(ERROR) << "VideoToolbox hardware encoder is supported on Mac OS 10.9 "
-                   "and later.";
-    return profiles;
-  }
   const bool rv = CreateCompressionSession(
       video_toolbox::DictionaryWithKeysAndValues(nullptr, nullptr, 0),
       gfx::Size(kDefaultResolutionWidth, kDefaultResolutionHeight), true);
@@ -156,11 +150,6 @@ bool VTVideoEncodeAccelerator::Initialize(VideoPixelFormat format,
   videotoolbox_glue_ = VideoToolboxGlue::Get();
   if (!videotoolbox_glue_) {
     DLOG(ERROR) << "Failed creating VideoToolbox glue.";
-    return false;
-  }
-  if (!base::mac::IsOSMavericksOrLater()) {
-    DLOG(ERROR) << "VideoToolbox hardware encoder is supported on Mac OS 10.9 "
-                   "and later.";
     return false;
   }
 
@@ -393,7 +382,7 @@ void VTVideoEncodeAccelerator::CompressionCallback(void* encoder_opaque,
   // one that calls VTCompressionSessionEncodeFrame.
   DVLOG(3) << __FUNCTION__;
 
-  auto encoder = reinterpret_cast<VTVideoEncodeAccelerator*>(encoder_opaque);
+  auto* encoder = reinterpret_cast<VTVideoEncodeAccelerator*>(encoder_opaque);
   DCHECK(encoder);
 
   // InProgressFrameEncode holds timestamp information of the encoded frame.
@@ -452,10 +441,11 @@ void VTVideoEncodeAccelerator::ReturnBitstreamBuffer(
     return;
   }
 
-  auto sample_attachments = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(
-      CoreMediaGlue::CMSampleBufferGetSampleAttachmentsArray(
-          encode_output->sample_buffer.get(), true),
-      0));
+  auto* sample_attachments =
+      static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(
+          CoreMediaGlue::CMSampleBufferGetSampleAttachmentsArray(
+              encode_output->sample_buffer.get(), true),
+          0));
   const bool keyframe = !CFDictionaryContainsKey(
       sample_attachments, CoreMediaGlue::kCMSampleAttachmentKey_NotSync());
 
@@ -492,7 +482,7 @@ bool VTVideoEncodeAccelerator::ResetCompressionSession() {
   const base::ScopedCFTypeRef<CFDictionaryRef> attributes =
       video_toolbox::DictionaryWithKeysAndValues(
           attributes_keys, attributes_values, arraysize(attributes_keys));
-  for (auto& v : attributes_values)
+  for (auto* v : attributes_values)
     CFRelease(v);
 
   bool session_rv =

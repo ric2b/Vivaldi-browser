@@ -13,6 +13,8 @@ config("mesa_headers_config") {
   }
 }
 
+assert(!is_ios, "mesa is not used on iOS, don't pull it in accidentally")
+
 # This directory contains checked-in files generated from the Mesa build.
 generated_src_dir = "src/chromium_gensrc"
 
@@ -773,7 +775,7 @@ if (is_linux) {
     include_dirs = [ "$generated_src_dir/egl/wayland/wayland-drm" ]
   }
 
-  source_set("wayland_drm_protocol") {
+  static_library("wayland_drm_protocol") {
     sources = [
       "$generated_src_dir/egl/wayland/wayland-drm/wayland-drm-client-protocol.h",
       "$generated_src_dir/egl/wayland/wayland-drm/wayland-drm-protocol.c",

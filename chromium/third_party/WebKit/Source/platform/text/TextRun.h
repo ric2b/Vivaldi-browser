@@ -35,6 +35,8 @@
 #include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 
+#include <unicode/utf16.h>
+
 class SkTextBlob;
 
 namespace blink {
@@ -150,6 +152,16 @@ public:
     const LChar* characters8() const { ASSERT(is8Bit()); return m_data.characters8; }
     const UChar* characters16() const { ASSERT(!is8Bit()); return m_data.characters16; }
 
+    UChar32 codepointAtAndNext(unsigned& i) const
+    {
+        if (is8Bit())
+            return (*this)[i++];
+        UChar32 codepoint;
+        SECURITY_DCHECK(i < m_len);
+        U16_NEXT(characters16(), i, m_len, codepoint);
+        return codepoint;
+    }
+
     bool is8Bit() const { return m_is8Bit; }
     unsigned length() const { return m_len; }
     unsigned charactersLength() const { return m_charactersLength; }
@@ -173,6 +185,7 @@ public:
     float xPos() const { return m_xpos; }
     void setXPos(float xPos) { m_xpos = xPos; }
     float expansion() const { return m_expansion; }
+    void setExpansion(float expansion) { m_expansion = expansion; }
     bool allowsLeadingExpansion() const { return m_expansionBehavior & AllowLeadingExpansion; }
     bool allowsTrailingExpansion() const { return m_expansionBehavior & AllowTrailingExpansion; }
     TextDirection direction() const { return static_cast<TextDirection>(m_direction); }

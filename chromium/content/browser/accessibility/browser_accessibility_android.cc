@@ -125,7 +125,7 @@ bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
       return true;
 
     // Nodes with only static text as children can drop their children.
-    if (HasOnlyStaticTextChildren())
+    if (HasOnlyTextChildren())
       return true;
   }
 
@@ -162,6 +162,10 @@ bool BrowserAccessibilityAndroid::IsClickable() const {
   return IsFocusable() || !GetText().empty();
 }
 
+bool BrowserAccessibilityAndroid::IsCollapsed() const {
+  return HasState(ui::AX_STATE_COLLAPSED);
+}
+
 bool BrowserAccessibilityAndroid::IsCollection() const {
   return (GetRole() == ui::AX_ROLE_GRID ||
           GetRole() == ui::AX_ROLE_LIST ||
@@ -195,7 +199,11 @@ bool BrowserAccessibilityAndroid::IsEditableText() const {
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
-  return HasState(ui::AX_STATE_ENABLED);
+  return !HasState(ui::AX_STATE_DISABLED);
+}
+
+bool BrowserAccessibilityAndroid::IsExpanded() const {
+  return HasState(ui::AX_STATE_EXPANDED);
 }
 
 bool BrowserAccessibilityAndroid::IsFocusable() const {
@@ -359,7 +367,7 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
       GetIntAttribute(ui::AX_ATTR_NAME_FROM) == ui::AX_NAME_FROM_CONTENTS) {
     // This is an approximation of "PlatformChildCount() > 0" because we can't
     // call PlatformChildCount from here.
-    if (InternalChildCount() > 0 && !HasOnlyStaticTextChildren())
+    if (InternalChildCount() > 0 && !HasOnlyTextChildren())
       return base::string16();
   }
 
@@ -406,9 +414,8 @@ base::string16 BrowserAccessibilityAndroid::GetText() const {
 
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
-  if (text.empty() &&
-      (HasOnlyStaticTextChildren() ||
-       (IsFocusable() && HasOnlyTextAndImageChildren()))) {
+  if (text.empty() && (HasOnlyTextChildren() ||
+                       (IsFocusable() && HasOnlyTextAndImageChildren()))) {
     for (uint32_t i = 0; i < InternalChildCount(); i++) {
       BrowserAccessibility* child = InternalGetChild(i);
       text += static_cast<BrowserAccessibilityAndroid*>(child)->GetText();
@@ -973,18 +980,18 @@ bool BrowserAccessibilityAndroid::Scroll(int direction) const {
     // If this is a web area inside of an iframe, try to use the bounds of
     // the containing element.
     BrowserAccessibility* parent = GetParent();
-    while (parent && (parent->GetLocation().width() == 0 ||
-                      parent->GetLocation().height() == 0)) {
+    while (parent && (parent->GetPageBoundsRect().width() == 0 ||
+                      parent->GetPageBoundsRect().height() == 0)) {
       parent = parent->GetParent();
     }
     if (parent)
-      bounds = parent->GetLocation();
+      bounds = parent->GetPageBoundsRect();
     else
-      bounds = GetLocation();
+      bounds = GetPageBoundsRect();
   } else {
     // Otherwise this is something like a scrollable div, just use the
     // bounds of this object itself.
-    bounds = GetLocation();
+    bounds = GetPageBoundsRect();
   }
 
   // Scroll by 80% of one page.
@@ -1250,7 +1257,7 @@ void BrowserAccessibilityAndroid::GetLineBoundaries(
       CHECK_EQ(ui::AX_ROLE_INLINE_TEXT_BOX, child->GetRole());
       // TODO(dmazzoni): replace this with a proper API to determine
       // if two inline text boxes are on the same line. http://crbug.com/421771
-      int y = child->GetLocation().y();
+      int y = child->GetPageBoundsRect().y();
       if (i == 0) {
         line_starts->push_back(offset);
       } else if (y != last_y) {
@@ -1336,12 +1343,12 @@ bool BrowserAccessibilityAndroid::HasFocusableChild() const {
   return false;
 }
 
-bool BrowserAccessibilityAndroid::HasOnlyStaticTextChildren() const {
+bool BrowserAccessibilityAndroid::HasOnlyTextChildren() const {
   // This is called from PlatformIsLeaf, so don't call PlatformChildCount
   // from within this!
   for (uint32_t i = 0; i < InternalChildCount(); i++) {
     BrowserAccessibility* child = InternalGetChild(i);
-    if (child->GetRole() != ui::AX_ROLE_STATIC_TEXT)
+    if (!child->IsTextOnlyObject())
       return false;
   }
   return true;

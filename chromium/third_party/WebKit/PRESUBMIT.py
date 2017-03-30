@@ -8,6 +8,7 @@ See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
 for more details about the presubmit API built into gcl.
 """
 
+import os
 import re
 import sys
 
@@ -136,11 +137,16 @@ def _CheckStyle(input_api, output_api):
     re_chromium_style_file = re.compile(r'\b[a-z_]+\.(cc|h)$')
     style_checker_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
         'Tools', 'Scripts', 'check-webkit-style')
-    args = ([input_api.python_executable, style_checker_path, '--diff-files']
-            + [input_api.os_path.join('..', '..', f.LocalPath())
-               for f in input_api.AffectedFiles()
-               # Filter out files that follow Chromium's coding style.
-               if not re_chromium_style_file.search(f.LocalPath())])
+    args = [input_api.python_executable, style_checker_path, '--diff-files']
+    files = [input_api.os_path.join('..', '..', f.LocalPath())
+             for f in input_api.AffectedFiles()
+             # Filter out files that follow Chromium's coding style.
+             if not re_chromium_style_file.search(f.LocalPath())]
+    # Do not call check-webkit-style with empty affected file list if all
+    # input_api.AffectedFiles got filtered.
+    if not files:
+        return []
+    args += files
     results = []
 
     try:
@@ -206,8 +212,8 @@ def _CheckForJSTest(input_api, output_api):
             'instead, as these can be more easily upstreamed to Web Platform '
             'Tests for cross-vendor compatibility testing. If you\'re not '
             'already familiar with this framework, a tutorial is available at '
-            'https://darobin.github.io/test-harness-tutorial/docs/using-testharness.html.'
-            'with the new framework.\n\n%s' % '\n'.join(errors))]
+            'https://darobin.github.io/test-harness-tutorial/docs/using-testharness.html'
+            '\n\n%s' % '\n'.join(errors))]
     return []
 
 def _CheckForFailInFile(input_api, f):
@@ -322,28 +328,53 @@ def CheckChangeOnCommit(input_api, output_api):
     return results
 
 
-def GetPreferredTryMasters(project, change):
-    import json
-    import os.path
-    import platform
-    import subprocess
+def _ArePaintOrCompositingDirectoriesModified(change):  # pylint: disable=C0103
+    """Checks whether CL has changes to paint or compositing directories."""
+    paint_or_compositing_paths = [
+        os.path.join('third_party', 'WebKit', 'Source', 'platform', 'graphics',
+                     'compositing'),
+        os.path.join('third_party', 'WebKit', 'Source', 'platform', 'graphics',
+                     'paint'),
+        os.path.join('third_party', 'WebKit', 'Source', 'core', 'layout',
+                     'compositing'),
+        os.path.join('third_party', 'WebKit', 'Source', 'core', 'paint'),
+    ]
+    for affected_file in change.AffectedFiles():
+        file_path = affected_file.LocalPath()
+        if any(x in file_path for x in paint_or_compositing_paths):
+            return True
+    return False
 
-    cq_config_path = os.path.join(
-        change.RepositoryRoot(), 'infra', 'config', 'cq.cfg')
-    # commit_queue.py below is a script in depot_tools directory, which has a
-    # 'builders' command to retrieve a list of CQ builders from the CQ config.
-    is_win = platform.system() == 'Windows'
-    masters = json.loads(subprocess.check_output(
-        ['commit_queue', 'builders', cq_config_path], shell=is_win))
 
-    try_config = {}
-    for master in masters:
-        try_config.setdefault(master, {})
-        for builder in masters[master]:
-            # Do not trigger presubmit builders, since they're likely to fail
-            # (e.g. OWNERS checks before finished code review), and we're
-            # running local presubmit anyway.
-            if 'presubmit' not in builder:
-                try_config[master][builder] = ['defaulttests']
+def PostUploadHook(cl, change, output_api):  # pylint: disable=C0103
+    """git cl upload will call this hook after the issue is created/modified.
 
-    return try_config
+    This hook adds extra try bots to the CL description in order to run slimming
+    paint v2 tests in addition to the CQ try bots if the change contains paint
+    or compositing changes (see: _ArePaintOrCompositingDirectoriesModified). For
+    more information about slimming-paint-v2 tests see https://crbug.com/601275.
+    """
+    if not _ArePaintOrCompositingDirectoriesModified(change):
+        return []
+
+    rietveld_obj = cl.RpcServer()
+    issue = cl.issue
+    description = rietveld_obj.get_description(issue)
+    if re.search(r'^CQ_INCLUDE_TRYBOTS=.*', description, re.M | re.I):
+        return []
+
+    bots = [
+        'master.tryserver.chromium.linux:linux_layout_tests_slimming_paint_v2',
+    ]
+
+    results = []
+    new_description = description
+    new_description += '\nCQ_INCLUDE_TRYBOTS=%s' % ';'.join(bots)
+    results.append(output_api.PresubmitNotifyResult(
+        'Automatically added slimming-paint-v2 tests to run on CQ due to '
+        'changes in paint or compositing directories.'))
+
+    if new_description != description:
+        rietveld_obj.update_description(issue, new_description)
+
+    return results

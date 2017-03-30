@@ -27,15 +27,12 @@ class MockScrollbar : public FakeScrollbar {
 };
 
 TEST(PaintedScrollbarLayerTest, NeedsPaint) {
-  FakeLayerTreeHostClient fake_client_(FakeLayerTreeHostClient::DIRECT_3D);
+  FakeLayerTreeHostClient fake_client_;
   TestTaskGraphRunner task_graph_runner_;
   std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
 
   layer_tree_host_ =
       FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_);
-  RendererCapabilities renderer_capabilities;
-  renderer_capabilities.max_texture_size = 2048;
-  layer_tree_host_->set_renderer_capabilities(renderer_capabilities);
 
   MockScrollbar* scrollbar = new MockScrollbar();
   scoped_refptr<PaintedScrollbarLayer> scrollbar_layer =

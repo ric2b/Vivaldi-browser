@@ -44,6 +44,8 @@ WebInspector.NetworkRequest = function(target, requestId, url, documentURL, fram
 {
     WebInspector.SDKObject.call(this, target);
 
+    this._networkLog = /** @type {!WebInspector.NetworkLog} */ (WebInspector.NetworkLog.fromTarget(target));
+    this._networkManager = /** @type {!WebInspector.NetworkManager} */ (WebInspector.NetworkManager.fromTarget(target));
     this._requestId = requestId;
     this.url = url;
     this._documentURL = documentURL;
@@ -92,14 +94,15 @@ WebInspector.NetworkRequest = function(target, requestId, url, documentURL, fram
     this.connectionId = "0";
 }
 
+/** @enum {symbol} */
 WebInspector.NetworkRequest.Events = {
-    FinishedLoading: "FinishedLoading",
-    TimingChanged: "TimingChanged",
-    RemoteAddressChanged: "RemoteAddressChanged",
-    RequestHeadersChanged: "RequestHeadersChanged",
-    ResponseHeadersChanged: "ResponseHeadersChanged",
-    WebsocketFrameAdded: "WebsocketFrameAdded",
-    EventSourceMessageAdded: "EventSourceMessageAdded",
+    FinishedLoading: Symbol("FinishedLoading"),
+    TimingChanged: Symbol("TimingChanged"),
+    RemoteAddressChanged: Symbol("RemoteAddressChanged"),
+    RequestHeadersChanged: Symbol("RequestHeadersChanged"),
+    ResponseHeadersChanged: Symbol("ResponseHeadersChanged"),
+    WebsocketFrameAdded: Symbol("WebsocketFrameAdded"),
+    EventSourceMessageAdded: Symbol("EventSourceMessageAdded")
 }
 
 /** @enum {string} */
@@ -461,6 +464,14 @@ WebInspector.NetworkRequest.prototype = {
         return (!!this._fromMemoryCache || !!this._fromDiskCache) && !this._transferSize;
     },
 
+    /**
+     * @return {boolean}
+     */
+    cachedInMemory: function()
+    {
+        return !!this._fromMemoryCache && !this._transferSize;
+    },
+
     setFromMemoryCache: function()
     {
         this._fromMemoryCache = true;
@@ -559,7 +570,9 @@ WebInspector.NetworkRequest.prototype = {
             this._path = "";
         } else {
             this._path = this._parsedURL.host + this._parsedURL.folderPathComponents;
-            this._path = this._path.trimURL(this.target().resourceTreeModel.inspectedPageDomain());
+
+            var inspectedURL = this.target().inspectedURL().asParsedURL();
+            this._path = this._path.trimURL(inspectedURL ? inspectedURL.host : "");
             if (this._parsedURL.lastPathComponent || this._parsedURL.queryParams)
                 this._name = this._parsedURL.lastPathComponent + (this._parsedURL.queryParams ? "?" + this._parsedURL.queryParams : "");
             else if (this._parsedURL.folderPathComponents) {
@@ -728,6 +741,7 @@ WebInspector.NetworkRequest.prototype = {
     {
         this._responseHeaders = x;
         delete this._sortedResponseHeaders;
+        delete this._serverTimings;
         delete this._responseCookies;
         this._responseHeaderValues = {};
 
@@ -784,6 +798,16 @@ WebInspector.NetworkRequest.prototype = {
         if (!this._responseCookies)
             this._responseCookies = WebInspector.CookieParser.parseSetCookie(this.target(), this.responseHeaderValue("Set-Cookie"));
         return this._responseCookies;
+    },
+
+    /**
+     * @return {?Array.<!WebInspector.ServerTiming>}
+     */
+    get serverTimings()
+    {
+        if (typeof this._serverTimings === "undefined")
+            this._serverTimings = WebInspector.ServerTiming.parseHeaders(this.responseHeaders);
+        return this._serverTimings;
     },
 
     /**
@@ -1124,7 +1148,7 @@ WebInspector.NetworkRequest.prototype = {
     initiatorRequest: function()
     {
         if (this._initiatorRequest === undefined)
-            this._initiatorRequest = this.target().networkLog.requestForURL(this.initiatorInfo().url);
+            this._initiatorRequest = this._networkLog.requestForURL(this.initiatorInfo().url);
         return this._initiatorRequest;
     },
 
@@ -1205,6 +1229,22 @@ WebInspector.NetworkRequest.prototype = {
     replayXHR: function()
     {
         this.target().networkAgent().replayXHR(this.requestId);
+    },
+
+    /**
+     * @return {!WebInspector.NetworkLog}
+     */
+    networkLog: function()
+    {
+        return this._networkLog;
+    },
+
+    /**
+     * @return {!WebInspector.NetworkManager}
+     */
+    networkManager: function()
+    {
+        return this._networkManager;
     },
 
     __proto__: WebInspector.SDKObject.prototype

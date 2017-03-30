@@ -25,6 +25,7 @@
 #include "chrome/browser/thumbnails/thumbnail_list_source.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/ntp_tiles/popular_sites.h"
+#include "components/safe_json/safe_json_parser.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/url_data_source.h"
 #include "jni/MostVisitedSites_jni.h"
@@ -33,6 +34,7 @@
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ToJavaArrayOfStrings;
@@ -64,7 +66,7 @@ void MostVisitedSitesBridge::SupervisorBridge::SetObserver(
 bool MostVisitedSitesBridge::SupervisorBridge::IsBlocked(const GURL& url) {
   SupervisedUserService* supervised_user_service =
       SupervisedUserServiceFactory::GetForProfile(profile_);
-  auto url_filter = supervised_user_service->GetURLFilterForUIThread();
+  auto* url_filter = supervised_user_service->GetURLFilterForUIThread();
   return url_filter->GetFilteringBehaviorForURL(url) ==
          SupervisedUserURLFilter::FilteringBehavior::BLOCK;
 }
@@ -96,8 +98,7 @@ class MostVisitedSitesBridge::JavaObserver : public MostVisitedSites::Observer {
  public:
   JavaObserver(JNIEnv* env, const JavaParamRef<jobject>& obj);
 
-  void OnMostVisitedURLsAvailable(
-      const MostVisitedSites::SuggestionsVector& suggestions) override;
+  void OnMostVisitedURLsAvailable(const NTPTilesVector& tiles) override;
 
   void OnPopularURLsAvailable(
       const MostVisitedSites::PopularSitesVector& sites) override;
@@ -114,32 +115,28 @@ MostVisitedSitesBridge::JavaObserver::JavaObserver(
     : observer_(env, obj) {}
 
 void MostVisitedSitesBridge::JavaObserver::OnMostVisitedURLsAvailable(
-    const MostVisitedSites::SuggestionsVector& suggestions) {
+    const NTPTilesVector& tiles) {
   JNIEnv* env = AttachCurrentThread();
   std::vector<base::string16> titles;
   std::vector<std::string> urls;
   std::vector<std::string> whitelist_icon_paths;
   std::vector<int> sources;
-  std::vector<int> provider_indexes;
 
-  titles.reserve(suggestions.size());
-  urls.reserve(suggestions.size());
-  whitelist_icon_paths.reserve(suggestions.size());
-  sources.reserve(suggestions.size());
-  provider_indexes.reserve(suggestions.size());
-  for (const auto& suggestion : suggestions) {
-    titles.emplace_back(suggestion.title);
-    urls.emplace_back(suggestion.url.spec());
-    whitelist_icon_paths.emplace_back(suggestion.whitelist_icon_path.value());
-    sources.emplace_back(suggestion.source);
-    provider_indexes.emplace_back(suggestion.provider_index);
+  titles.reserve(tiles.size());
+  urls.reserve(tiles.size());
+  whitelist_icon_paths.reserve(tiles.size());
+  sources.reserve(tiles.size());
+  for (const auto& tile : tiles) {
+    titles.emplace_back(tile.title);
+    urls.emplace_back(tile.url.spec());
+    whitelist_icon_paths.emplace_back(tile.whitelist_icon_path.value());
+    sources.emplace_back(static_cast<int>(tile.source));
   }
   Java_MostVisitedURLsObserver_onMostVisitedURLsAvailable(
-      env, observer_.obj(), ToJavaArrayOfStrings(env, titles).obj(),
-      ToJavaArrayOfStrings(env, urls).obj(),
-      ToJavaArrayOfStrings(env, whitelist_icon_paths).obj(),
-      ToJavaIntArray(env, sources).obj(),
-      ToJavaIntArray(env, provider_indexes).obj());
+      env, observer_, ToJavaArrayOfStrings(env, titles),
+      ToJavaArrayOfStrings(env, urls),
+      ToJavaArrayOfStrings(env, whitelist_icon_paths),
+      ToJavaIntArray(env, sources));
 }
 
 void MostVisitedSitesBridge::JavaObserver::OnPopularURLsAvailable(
@@ -154,21 +151,24 @@ void MostVisitedSitesBridge::JavaObserver::OnPopularURLsAvailable(
     large_icon_urls.emplace_back(site.large_icon_url.spec());
   }
   Java_MostVisitedURLsObserver_onPopularURLsAvailable(
-      env, observer_.obj(), ToJavaArrayOfStrings(env, urls).obj(),
-      ToJavaArrayOfStrings(env, favicon_urls).obj(),
-      ToJavaArrayOfStrings(env, large_icon_urls).obj());
+      env, observer_, ToJavaArrayOfStrings(env, urls),
+      ToJavaArrayOfStrings(env, favicon_urls),
+      ToJavaArrayOfStrings(env, large_icon_urls));
 }
 
 MostVisitedSitesBridge::MostVisitedSitesBridge(Profile* profile)
     : supervisor_(profile),
-      most_visited_(BrowserThread::GetBlockingPool(),
-                    profile->GetPrefs(),
-                    TemplateURLServiceFactory::GetForProfile(profile),
-                    g_browser_process->variations_service(),
-                    profile->GetRequestContext(),
-                    ChromePopularSites::GetDirectory(),
+      popular_sites_(BrowserThread::GetBlockingPool(),
+                     profile->GetPrefs(),
+                     TemplateURLServiceFactory::GetForProfile(profile),
+                     g_browser_process->variations_service(),
+                     profile->GetRequestContext(),
+                     ChromePopularSites::GetDirectory(),
+                     base::Bind(safe_json::SafeJsonParser::Parse)),
+      most_visited_(profile->GetPrefs(),
                     TopSitesFactory::GetForProfile(profile),
                     SuggestionsServiceFactory::GetForProfile(profile),
+                    &popular_sites_,
                     &supervisor_) {
   // Register the thumbnails debugging page.
   // TODO(sfiera): find thumbnails a home. They don't belong here.
@@ -204,26 +204,23 @@ void MostVisitedSitesBridge::RecordTileTypeMetrics(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jintArray>& jtile_types,
-    const JavaParamRef<jintArray>& jsources,
-    const JavaParamRef<jintArray>& jprovider_indices) {
+    const JavaParamRef<jintArray>& jsources) {
   std::vector<int> tile_types;
   std::vector<int> sources;
-  std::vector<int> provider_indices;
 
   base::android::JavaIntArrayToIntVector(env, jtile_types, &tile_types);
   base::android::JavaIntArrayToIntVector(env, jsources, &sources);
-  base::android::JavaIntArrayToIntVector(env, jprovider_indices,
-                                         &provider_indices);
 
-  most_visited_.RecordTileTypeMetrics(tile_types, sources, provider_indices);
+  most_visited_.RecordTileTypeMetrics(tile_types, sources);
 }
 
 void MostVisitedSitesBridge::RecordOpenedMostVisitedItem(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint index,
-    jint tile_type) {
-  most_visited_.RecordOpenedMostVisitedItem(index, tile_type);
+    jint tile_type,
+    jint source) {
+  most_visited_.RecordOpenedMostVisitedItem(index, tile_type, source);
 }
 
 // static

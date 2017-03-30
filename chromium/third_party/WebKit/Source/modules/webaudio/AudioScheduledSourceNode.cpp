@@ -24,10 +24,10 @@
 
 #include "modules/webaudio/AudioScheduledSourceNode.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/CrossThreadTask.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "modules/EventModules.h"
-#include "modules/webaudio/AbstractAudioContext.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/audio/AudioUtilities.h"
 #include "wtf/MathExtras.h"
 #include <algorithm>
@@ -47,11 +47,11 @@ AudioScheduledSourceHandler::AudioScheduledSourceHandler(NodeType nodeType, Audi
 void AudioScheduledSourceHandler::updateSchedulingInfo(
     size_t quantumFrameSize, AudioBus* outputBus, size_t& quantumFrameOffset, size_t& nonSilentFramesToProcess)
 {
-    ASSERT(outputBus);
+    DCHECK(outputBus);
     if (!outputBus)
         return;
 
-    ASSERT(quantumFrameSize == ProcessingSizeInFrames);
+    DCHECK_EQ(quantumFrameSize, static_cast<size_t>(ProcessingSizeInFrames));
     if (quantumFrameSize != ProcessingSizeInFrames)
         return;
 
@@ -110,7 +110,7 @@ void AudioScheduledSourceHandler::updateSchedulingInfo(
         size_t framesToZero = quantumFrameSize - zeroStartFrame;
 
         bool isSafe = zeroStartFrame < quantumFrameSize && framesToZero <= quantumFrameSize && zeroStartFrame + framesToZero <= quantumFrameSize;
-        ASSERT(isSafe);
+        DCHECK(isSafe);
 
         if (isSafe) {
             if (framesToZero > nonSilentFramesToProcess)
@@ -130,7 +130,7 @@ void AudioScheduledSourceHandler::updateSchedulingInfo(
 
 void AudioScheduledSourceHandler::start(double when, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     context()->recordUserGestureState();
 
@@ -169,7 +169,7 @@ void AudioScheduledSourceHandler::start(double when, ExceptionState& exceptionSt
 
 void AudioScheduledSourceHandler::stop(double when, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (playbackState() == UNSCHEDULED_STATE) {
         exceptionState.throwDOMException(
@@ -218,14 +218,14 @@ void AudioScheduledSourceHandler::finish()
 
 void AudioScheduledSourceHandler::notifyEnded()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (node())
         node()->dispatchEvent(Event::create(EventTypeNames::ended));
 }
 
 // ----------------------------------------------------------------
 
-AudioScheduledSourceNode::AudioScheduledSourceNode(AbstractAudioContext& context)
+AudioScheduledSourceNode::AudioScheduledSourceNode(BaseAudioContext& context)
     : AudioSourceNode(context)
     , ActiveScriptWrappable(this)
 {

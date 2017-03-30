@@ -331,6 +331,8 @@ DownloadPrefs* ChromeDownloadManagerDelegateTest::download_prefs() {
 
 }  // namespace
 
+// There is no "save as" context menu option on Android.
+#if !BUILDFLAG(ANDROID_JAVA_UI)
 TEST_F(ChromeDownloadManagerDelegateTest, StartDownload_LastSavePath) {
   GURL download_url("http://example.com/foo.txt");
 
@@ -403,6 +405,7 @@ TEST_F(ChromeDownloadManagerDelegateTest, StartDownload_LastSavePath) {
     VerifyAndClearExpectations();
   }
 }
+#endif  // !BUILDFLAG(ANDROID_JAVA_UI)
 
 TEST_F(ChromeDownloadManagerDelegateTest, MaybeDangerousContent) {
   GURL url("http://example.com/foo");

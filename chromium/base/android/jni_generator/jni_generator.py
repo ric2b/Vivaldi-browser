@@ -138,7 +138,7 @@ def JavaDataTypeToC(java_type):
 def WrapCTypeForDeclaration(c_type):
   """Wrap the C datatype in a JavaRef if required."""
   if re.match(RE_SCOPED_JNI_TYPES, c_type):
-    return 'const JavaParamRef<' + c_type + '>&'
+    return 'const base::android::JavaParamRef<' + c_type + '>&'
   else:
     return c_type
 
@@ -153,7 +153,11 @@ def JavaDataTypeToCForCalledByNativeParam(java_type):
   if java_type == 'int':
     return 'JniIntWrapper'
   else:
-    return JavaDataTypeToC(java_type)
+    c_type = JavaDataTypeToC(java_type)
+    if re.match(RE_SCOPED_JNI_TYPES, c_type):
+      return 'const base::android::JavaRefOrBare<' + c_type + '>&'
+    else:
+      return c_type
 
 
 def JavaReturnValueToC(java_type):
@@ -352,8 +356,14 @@ class JniParams(object):
     ret = []
     for p in [p.strip() for p in params.split(',')]:
       items = p.split(' ')
+
+      # Remove @Annotations from parameters.
+      while items[0].startswith('@'):
+        del items[0]
+
       if 'final' in items:
         items.remove('final')
+
       param = Param(
           datatype=items[0],
           name=(items[1] if len(items) > 1 else 'p%s' % len(ret)),
@@ -760,6 +770,8 @@ $CLOSE_NAMESPACE
         'HEADER_GUARD': self.header_guard,
         'INCLUDES': self.GetIncludesString(),
     }
+    assert ((values['JNI_NATIVE_METHODS'] == '') ==
+            (values['REGISTER_NATIVES'] == ''))
     return WrapOutput(template.substitute(values))
 
   def GetClassPathDefinitionsString(self):
@@ -818,7 +830,7 @@ $CLOSE_NAMESPACE
 
   def GetJNINativeMethodsString(self):
     """Returns the implementation of the array of native methods."""
-    if self.options.native_exports and not self.options.native_exports_optional:
+    if not self.options.native_exports_optional:
       return ''
     template = Template("""\
 static const JNINativeMethod kMethods${JAVA_CLASS}[] = {
@@ -829,10 +841,13 @@ ${KMETHODS}
 
   def GetRegisterNativesString(self):
     """Returns the code for RegisterNatives."""
+    natives = self.GetRegisterNativesImplString()
+    if not natives:
+      return ''
+
     template = Template("""\
 ${REGISTER_NATIVES_SIGNATURE} {
 ${EARLY_EXIT}
-${CLASSES}
 ${NATIVES}
   return true;
 }
@@ -844,17 +859,16 @@ ${NATIVES}
   if (base::android::IsManualJniRegistrationDisabled()) return true;
 """
 
-    natives = self.GetRegisterNativesImplString()
     values = {'REGISTER_NATIVES_SIGNATURE': signature,
               'EARLY_EXIT': early_exit,
-              'CLASSES': self.GetFindClasses(),
               'NATIVES': natives,
              }
+
     return template.substitute(values)
 
   def GetRegisterNativesImplString(self):
     """Returns the shared implementation for RegisterNatives."""
-    if self.options.native_exports and not self.options.native_exports_optional:
+    if not self.options.native_exports_optional:
       return ''
 
     template = Template("""\
@@ -954,7 +968,8 @@ ${NATIVES}
     return template.substitute(values)
 
   def GetJavaParamRefForCall(self, c_type, name):
-    return Template('JavaParamRef<${TYPE}>(env, ${NAME})').substitute({
+    return Template(
+        'base::android::JavaParamRef<${TYPE}>(env, ${NAME})').substitute({
         'TYPE': c_type,
         'NAME': name,
     })
@@ -979,15 +994,12 @@ ${NATIVES}
         params_in_call.append(p.name)
     params_in_call = ', '.join(params_in_call)
 
-    if self.options.native_exports:
-      stub_visibility = 'extern "C" __attribute__((visibility("default")))\n'
-    else:
-      stub_visibility = 'static '
     return_type = return_declaration = JavaDataTypeToC(native.return_type)
     post_call = ''
     if re.match(RE_SCOPED_JNI_TYPES, return_type):
       post_call = '.Release()'
-      return_declaration = 'ScopedJavaLocalRef<' + return_type + '>'
+      return_declaration = ('base::android::ScopedJavaLocalRef<' + return_type +
+                            '>')
     values = {
         'RETURN': return_type,
         'RETURN_DECLARATION': return_declaration,
@@ -997,7 +1009,6 @@ ${NATIVES}
         'PARAMS_IN_CALL': params_in_call,
         'POST_CALL': post_call,
         'STUB_NAME': self.GetStubName(native),
-        'STUB_VISIBILITY': stub_visibility,
     }
 
     if is_method:
@@ -1010,7 +1021,8 @@ ${NATIVES}
           'P0_TYPE': native.p0_type,
       })
       template = Template("""\
-${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env,
+extern "C" __attribute__((visibility("default")))
+${RETURN} ${STUB_NAME}(JNIEnv* env,
     ${PARAMS_IN_STUB}) {
   ${P0_TYPE}* native = reinterpret_cast<${P0_TYPE}*>(${PARAM0_NAME});
   CHECK_NATIVE_PTR(env, jcaller, native, "${NAME}"${OPTIONAL_ERROR_RETURN});
@@ -1021,7 +1033,8 @@ ${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env,
       template = Template("""
 static ${RETURN_DECLARATION} ${NAME}(JNIEnv* env, ${PARAMS});
 
-${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
+extern "C" __attribute__((visibility("default")))
+${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
   return ${NAME}(${PARAMS_IN_CALL})${POST_CALL};
 }
 """)
@@ -1029,8 +1042,12 @@ ${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
     return template.substitute(values)
 
   def GetArgument(self, param):
-    return ('as_jint(' + param.name + ')'
-            if param.datatype == 'int' else param.name)
+    if param.datatype == 'int':
+      return 'as_jint(' + param.name + ')'
+    elif re.match(RE_SCOPED_JNI_TYPES, JavaDataTypeToC(param.datatype)):
+      return param.name + '.obj()'
+    else:
+      return param.name
 
   def GetArgumentsInCall(self, params):
     """Return a string of arguments to call from native into Java"""
@@ -1043,8 +1060,9 @@ ${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
       first_param_in_declaration = ''
       first_param_in_call = ('%s_clazz(env)' % java_class)
     else:
-      first_param_in_declaration = ', jobject obj'
-      first_param_in_call = 'obj'
+      first_param_in_declaration = (
+          ', const base::android::JavaRefOrBare<jobject>& obj')
+      first_param_in_call = 'obj.obj()'
     params_in_declaration = self.GetCalledByNativeParamsInDeclaration(
         called_by_native)
     if params_in_declaration:
@@ -1070,7 +1088,7 @@ ${STUB_VISIBILITY}${RETURN} ${STUB_NAME}(JNIEnv* env, ${PARAMS_IN_STUB}) {
       pre_call = ' ' + pre_call
       return_declaration = return_type + ' ret ='
       if re.match(RE_SCOPED_JNI_TYPES, return_type):
-        return_type = 'ScopedJavaLocalRef<' + return_type + '>'
+        return_type = 'base::android::ScopedJavaLocalRef<' + return_type + '>'
         return_clause = 'return ' + return_type + '(env, ret);'
       else:
         return_clause = 'return ret;'
@@ -1106,7 +1124,6 @@ ${FUNCTION_SIGNATURE} {""")
     template = Template("""
 static base::subtle::AtomicWord g_${JAVA_CLASS}_${METHOD_ID_VAR_NAME} = 0;
 ${FUNCTION_HEADER}
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, ${FIRST_PARAM_IN_CALL},
       ${JAVA_CLASS}_clazz(env)${OPTIONAL_ERROR_RETURN});
   jmethodID method_id =
@@ -1153,13 +1170,9 @@ ${FUNCTION_HEADER}
     ret = []
     template = Template("""\
 const char k${JAVA_CLASS}ClassPath[] = "${JNI_CLASS_PATH}";""")
-    native_classes = self.GetUniqueClasses(self.natives)
-    called_by_native_classes = self.GetUniqueClasses(self.called_by_natives)
-    if self.options.native_exports:
-      all_classes = called_by_native_classes
-    else:
-      all_classes = native_classes
-      all_classes.update(called_by_native_classes)
+    all_classes = self.GetUniqueClasses(self.called_by_natives)
+    if self.options.native_exports_optional:
+      all_classes.update(self.GetUniqueClasses(self.natives))
 
     for clazz in all_classes:
       values = {
@@ -1169,39 +1182,19 @@ const char k${JAVA_CLASS}ClassPath[] = "${JNI_CLASS_PATH}";""")
       ret += [template.substitute(values)]
     ret += ''
 
-    class_getter_methods = []
-    if self.options.native_exports:
-      template = Template("""\
+    template = Template("""\
 // Leaking this jclass as we cannot use LazyInstance from some threads.
 base::subtle::AtomicWord g_${JAVA_CLASS}_clazz __attribute__((unused)) = 0;
 #define ${JAVA_CLASS}_clazz(env) \
 base::android::LazyGetClass(env, k${JAVA_CLASS}ClassPath, \
 &g_${JAVA_CLASS}_clazz)""")
-    else:
-      template = Template("""\
-// Leaking this jclass as we cannot use LazyInstance from some threads.
-jclass g_${JAVA_CLASS}_clazz = NULL;
-#define ${JAVA_CLASS}_clazz(env) g_${JAVA_CLASS}_clazz""")
 
-    for clazz in called_by_native_classes:
+    for clazz in all_classes:
       values = {
           'JAVA_CLASS': clazz,
       }
       ret += [template.substitute(values)]
 
-    return '\n'.join(ret)
-
-  def GetFindClasses(self):
-    """Returns the imlementation of FindClass for all known classes."""
-    if self.options.native_exports:
-      return '\n'
-    template = Template("""\
-  g_${JAVA_CLASS}_clazz = reinterpret_cast<jclass>(env->NewGlobalRef(
-      base::android::GetClass(env, k${JAVA_CLASS}ClassPath).obj()));""")
-    ret = []
-    for clazz in self.GetUniqueClasses(self.called_by_natives):
-      values = {'JAVA_CLASS': clazz}
-      ret += [template.substitute(values)]
     return '\n'.join(ret)
 
   def GetMethodIDImpl(self, called_by_native):
@@ -1366,15 +1359,10 @@ See SampleForTests.java for more details.
                            help='The path to cpp command.')
   option_parser.add_option('--javap', default='javap',
                            help='The path to javap command.')
-  option_parser.add_option('--native_exports', action='store_true',
-                           help='Native method registration through .so '
-                           'exports.')
   option_parser.add_option('--native_exports_optional', action='store_true',
                            help='Support both explicit and native method'
                            'registration.')
   options, args = option_parser.parse_args(argv)
-  if options.native_exports_optional:
-    options.native_exports = True
   if options.jar_file:
     input_file = ExtractJarInputFile(options.jar_file, options.input_file,
                                      options.output_dir)

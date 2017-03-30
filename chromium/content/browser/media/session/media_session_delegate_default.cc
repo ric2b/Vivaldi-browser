@@ -5,10 +5,12 @@
 #include "content/browser/media/session/media_session_delegate.h"
 
 #include "base/command_line.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/browser/media/session/audio_focus_manager.h"
 #include "media/base/media_switches.h"
 
 namespace content {
+
+using AudioFocusType = AudioFocusManager::AudioFocusType;
 
 namespace {
 
@@ -17,6 +19,7 @@ namespace {
 class MediaSessionDelegateDefault : public MediaSessionDelegate {
  public:
   explicit MediaSessionDelegateDefault(MediaSession* media_session);
+  ~MediaSessionDelegateDefault() override;
 
   // MediaSessionDelegate implementation.
   bool RequestAudioFocus(MediaSession::Type type) override;
@@ -34,22 +37,23 @@ MediaSessionDelegateDefault::MediaSessionDelegateDefault(
     : media_session_(media_session) {
 }
 
-bool MediaSessionDelegateDefault::RequestAudioFocus(MediaSession::Type) {
+MediaSessionDelegateDefault::~MediaSessionDelegateDefault() = default;
+
+bool MediaSessionDelegateDefault::RequestAudioFocus(MediaSession::Type type) {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableDefaultMediaSession)) {
     return true;
   }
 
-  for (WebContentsImpl* web_contents : WebContentsImpl::GetAllWebContents()) {
-    MediaSession* media_session = MediaSession::Get(web_contents);
-    if (media_session == media_session_ || !media_session->IsActive())
-      continue;
-    media_session->Suspend(MediaSession::SuspendType::SYSTEM);
-  }
+  AudioFocusManager::GetInstance()->RequestAudioFocus(
+      media_session_, type == MediaSession::Type::Content
+                          ? AudioFocusType::Gain
+                          : AudioFocusType::GainTransientMayDuck);
   return true;
 }
 
 void MediaSessionDelegateDefault::AbandonAudioFocus() {
+  AudioFocusManager::GetInstance()->AbandonAudioFocus(media_session_);
 }
 
 // static

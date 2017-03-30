@@ -14,7 +14,9 @@ PathOutput::PathOutput(const SourceDir& current_dir,
                        const base::StringPiece& source_root,
                        EscapingMode escaping)
     : current_dir_(current_dir) {
-  inverse_current_dir_ = RebasePath("//", current_dir, source_root);
+  inverse_current_dir_ = RebasePath(
+              BuildSettings::RemapActualToSourcePath("//"),
+              current_dir, source_root);
   if (!EndsWithSlash(inverse_current_dir_))
     inverse_current_dir_.push_back('/');
   options_.mode = escaping;
@@ -24,20 +26,20 @@ PathOutput::~PathOutput() {
 }
 
 void PathOutput::WriteFile(std::ostream& out, const SourceFile& file) const {
-  WritePathStr(out, file.value());
+  WritePathStr(out, file.actual_path());
 }
 
 void PathOutput::WriteDir(std::ostream& out,
                           const SourceDir& dir,
                           DirSlashEnding slash_ending) const {
-  if (dir.value() == "/") {
+  if (dir.actual_path() == "/") {
     // Writing system root is always a slash (this will normally only come up
     // on Posix systems).
     if (slash_ending == DIR_NO_LAST_SLASH)
       out << "/.";
     else
       out << "/";
-  } else if (dir.value() == "//") {
+  } else if (dir.actual_path() == "//") {
     // Writing out the source root.
     if (slash_ending == DIR_NO_LAST_SLASH) {
       // The inverse_current_dir_ will contain a [back]slash at the end, so we
@@ -62,11 +64,11 @@ void PathOutput::WriteDir(std::ostream& out,
     else
       out << ".";
   } else if (slash_ending == DIR_INCLUDE_LAST_SLASH) {
-    WritePathStr(out, dir.value());
+    WritePathStr(out, dir.actual_path());
   } else {
     // DIR_NO_LAST_SLASH mode, just trim the last char.
-    WritePathStr(out, base::StringPiece(dir.value().data(),
-                                        dir.value().size() - 1));
+    WritePathStr(out, base::StringPiece(dir.actual_path().data(),
+                                        dir.actual_path().size() - 1));
   }
 }
 
@@ -154,7 +156,7 @@ void PathOutput::WritePathStr(std::ostream& out,
       base::StringPiece(current_dir_.value())) {
     // The current dir is a prefix of the output file, so we can strip the
     // prefix and write out the result.
-    EscapeStringToStream(out, str.substr(current_dir_.value().size()),
+    EscapeStringToStream(out, str.substr(current_dir_.actual_path().size()),
                          options_);
   } else if (str.size() >= 2 && str[1] == '/') {
     WriteSourceRelativeString(out, str.substr(2));

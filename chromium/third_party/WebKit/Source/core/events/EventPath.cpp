@@ -35,13 +35,14 @@
 #include "core/events/TouchEvent.h"
 #include "core/events/TouchEventContext.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/svg/SVGUseElement.h"
 
 namespace blink {
 
 EventTarget* EventPath::eventTargetRespectingTargetRules(Node& referenceNode)
 {
     if (referenceNode.isPseudoElement()) {
-        ASSERT(referenceNode.parentNode());
+        DCHECK(referenceNode.parentNode());
         return referenceNode.parentNode();
     }
 
@@ -76,15 +77,25 @@ void EventPath::initializeWith(Node& node, Event* event)
     initialize();
 }
 
-static inline bool eventPathShouldBeEmptyFor(Node& node)
+static inline bool eventPathShouldBeEmptyFor(Node& node, Event* event)
 {
-    return node.isPseudoElement() && !node.parentElement();
+    if (node.isPseudoElement() && !node.parentElement())
+        return true;
+
+    // Do not dispatch non-composed events in SVG use trees.
+    if (node.isSVGElement()) {
+        if (toSVGElement(node).inUseShadowTree() && event && !event->composed())
+            return true;
+    }
+
+    return false;
 }
 
 void EventPath::initialize()
 {
-    if (eventPathShouldBeEmptyFor(*m_node))
+    if (eventPathShouldBeEmptyFor(*m_node, m_event))
         return;
+
     calculatePath();
     calculateAdjustedTargets();
     calculateTreeOrderAndSetNearestAncestorClosedTree();
@@ -92,8 +103,8 @@ void EventPath::initialize()
 
 void EventPath::calculatePath()
 {
-    ASSERT(m_node);
-    ASSERT(m_nodeEventContexts.isEmpty());
+    DCHECK(m_node);
+    DCHECK(m_nodeEventContexts.isEmpty());
     m_node->updateDistribution();
 
     // For performance and memory usage reasons we want to store the
@@ -102,6 +113,16 @@ void EventPath::calculatePath()
     // storing it in a perfectly sized m_nodeEventContexts Vector.
     HeapVector<Member<Node>, 64> nodesInPath;
     Node* current = m_node;
+
+    // Exclude nodes in SVG <use>'s shadow tree from event path.
+    // See crbug.com/630870
+    while (current->isSVGElement()) {
+        SVGUseElement* correspondingUseElement = toSVGElement(current)->correspondingUseElement();
+        if (!correspondingUseElement)
+            break;
+        current = correspondingUseElement;
+    }
+
     nodesInPath.append(current);
     while (current) {
         if (m_event && current->keepEventInNode(m_event))
@@ -112,7 +133,7 @@ void EventPath::calculatePath()
             for (const auto& insertionPoint : insertionPoints) {
                 if (insertionPoint->isShadowInsertionPoint()) {
                     ShadowRoot* containingShadowRoot = insertionPoint->containingShadowRoot();
-                    ASSERT(containingShadowRoot);
+                    DCHECK(containingShadowRoot);
                     if (!containingShadowRoot->isOldest())
                         nodesInPath.append(containingShadowRoot->olderShadowRoot());
                 }
@@ -161,14 +182,14 @@ void EventPath::calculateTreeOrderAndSetNearestAncestorClosedTree()
         // http://w3c.github.io/webcomponents/spec/shadow/
         TreeScope* parent = treeScopeEventContext.get()->treeScope().olderShadowRootOrParentTreeScope();
         if (!parent) {
-            ASSERT(!rootTree);
+            DCHECK(!rootTree);
             rootTree = treeScopeEventContext.get();
             continue;
         }
-        ASSERT(treeScopeEventContextMap.find(parent) != treeScopeEventContextMap.end());
+        DCHECK_NE(treeScopeEventContextMap.find(parent), treeScopeEventContextMap.end());
         treeScopeEventContextMap.find(parent)->value->addChild(*treeScopeEventContext.get());
     }
-    ASSERT(rootTree);
+    DCHECK(rootTree);
     rootTree->calculateTreeOrderAndSetNearestAncestorClosedTree(0, nullptr);
 }
 
@@ -211,7 +232,7 @@ void EventPath::calculateAdjustedTargets()
         if (lastTreeScope != &currentTreeScope) {
             lastTreeScopeEventContext = ensureTreeScopeEventContext(currentNode, &currentTreeScope, treeScopeEventContextMap);
         }
-        ASSERT(lastTreeScopeEventContext);
+        DCHECK(lastTreeScopeEventContext);
         at(i).setTreeScopeEventContext(lastTreeScopeEventContext);
         lastTreeScope = &currentTreeScope;
     }
@@ -242,7 +263,7 @@ EventTarget* EventPath::findRelatedNode(TreeScope& scope, RelatedTargetMap& rela
             break;
         }
     }
-    ASSERT(relatedNode);
+    DCHECK(relatedNode);
     for (const auto& entry : parentTreeScopes)
         relatedTargetMap.add(entry, relatedNode);
 
@@ -269,7 +290,7 @@ void EventPath::retargetRelatedTarget(const Node& relatedTargetNode)
 
     for (const auto& treeScopeEventContext : m_treeScopeEventContexts) {
         EventTarget* adjustedRelatedTarget = findRelatedNode(treeScopeEventContext->treeScope(), relatedNodeMap);
-        ASSERT(adjustedRelatedTarget);
+        DCHECK(adjustedRelatedTarget);
         treeScopeEventContext.get()->setRelatedTarget(adjustedRelatedTarget);
     }
 }
@@ -306,7 +327,7 @@ void EventPath::adjustForTouchEvent(TouchEvent& touchEvent)
     adjustTouchList(touchEvent.targetTouches(), adjustedTargetTouches, treeScopes);
     adjustTouchList(touchEvent.changedTouches(), adjustedChangedTouches, treeScopes);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     for (const auto& treeScopeEventContext : m_treeScopeEventContexts) {
         TreeScope& treeScope = treeScopeEventContext->treeScope();
         TouchEventContext* touchEventContext = treeScopeEventContext->touchEventContext();
@@ -340,22 +361,22 @@ void EventPath::adjustTouchList(const TouchList* touchList, HeapVector<Member<To
 
 const NodeEventContext& EventPath::topNodeEventContext()
 {
-    ASSERT(!isEmpty());
+    DCHECK(!isEmpty());
     return last();
 }
 
 void EventPath::ensureWindowEventContext()
 {
-    ASSERT(m_event);
+    DCHECK(m_event);
     if (!m_windowEventContext)
         m_windowEventContext = new WindowEventContext(*m_event, topNodeEventContext());
 }
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 void EventPath::checkReachability(TreeScope& treeScope, TouchList& touchList)
 {
     for (size_t i = 0; i < touchList.length(); ++i)
-        ASSERT(touchList.item(i)->target()->toNode()->treeScope().isInclusiveOlderSiblingShadowRootOrAncestorTreeScopeOf(treeScope));
+        DCHECK(touchList.item(i)->target()->toNode()->treeScope().isInclusiveOlderSiblingShadowRootOrAncestorTreeScopeOf(treeScope));
 }
 #endif
 

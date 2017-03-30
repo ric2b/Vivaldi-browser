@@ -12,7 +12,7 @@
         '../base/base.gyp:base',
         '../net/net.gyp:net',
         '../sql/sql.gyp:sql',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../third_party/protobuf/protobuf.gyp:protobuf_lite',
         '../url/url.gyp:url_lib',
         'autofill_core_common',
@@ -22,7 +22,6 @@
         '../third_party/re2/re2.gyp:re2',
         'password_manager_core_common',
         'password_manager_core_browser_proto',
-        'sync_driver',
         'url_formatter/url_formatter.gyp:url_formatter',
       ],
       'include_dirs': [
@@ -64,6 +63,9 @@
         'password_manager/core/browser/facet_manager.cc',
         'password_manager/core/browser/facet_manager.h',
         'password_manager/core/browser/facet_manager_host.h',
+        'password_manager/core/browser/form_fetcher.h',
+        'password_manager/core/browser/form_fetcher_impl.cc',
+        'password_manager/core/browser/form_fetcher_impl.h',
         'password_manager/core/browser/form_saver.h',
         'password_manager/core/browser/form_saver_impl.cc',
         'password_manager/core/browser/form_saver_impl.h',
@@ -128,6 +130,8 @@
         'password_manager/core/browser/password_ui_utils.h',
         'password_manager/core/browser/psl_matching_helper.cc',
         'password_manager/core/browser/psl_matching_helper.h',
+        'password_manager/core/browser/sql_table_builder.cc',
+        'password_manager/core/browser/sql_table_builder.h',
         'password_manager/core/browser/statistics_table.cc',
         'password_manager/core/browser/statistics_table.h',
         'password_manager/core/browser/test_affiliation_fetcher_factory.h',
@@ -195,6 +199,8 @@
         'password_manager/core/browser/password_manager_test_utils.cc',
         'password_manager/core/browser/password_manager_test_utils.h',
         # Note: sources list duplicated in GN build.
+        'password_manager/core/browser/stub_credentials_filter.cc',
+        'password_manager/core/browser/stub_credentials_filter.h',
         'password_manager/core/browser/stub_form_saver.h',
         'password_manager/core/browser/stub_log_manager.cc',
         'password_manager/core/browser/stub_log_manager.h',
@@ -237,7 +243,7 @@
         '../base/base.gyp:base',
         '../google_apis/google_apis.gyp:google_apis',
         '../net/net.gyp:net',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         'autofill_core_common',
         'password_manager_core_browser',
       ],
@@ -271,6 +277,7 @@
               'password_manager/content/public/interfaces/credential_manager.mojom',
             ],
             'mojom_typemaps': [
+              'password_manager/content/public/cpp/credential_manager.typemap',
               '<(DEPTH)/url/mojo/gurl.typemap',
               '<(DEPTH)/url/mojo/origin.typemap',
             ],
@@ -283,14 +290,12 @@
           ],
         },
         {
-          # GN version: //components/password_manager/content/public/cpp
+          # GN version: //components/password_manager/content/public/interfaces
           'target_name': 'password_manager_content_mojo_bindings',
           'type': 'static_library',
           'dependencies': [
             '../base/base.gyp:base',
-            '../mojo/mojo_base.gyp:mojo_common_lib',
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
-            '../third_party/WebKit/public/blink.gyp:blink',
             '../url/url.gyp:url_mojom',
             'password_manager_content_mojo_bindings_mojom',
             'password_manager_core_common',
@@ -298,12 +303,8 @@
           'export_dependent_settings': [
              '../url/url.gyp:url_mojom',
            ],
-          'include_dirs': [
-            '..',
-          ],
           'sources': [
-            'password_manager/content/public/cpp/type_converters.cc',
-            'password_manager/content/public/cpp/type_converters.h',
+            'password_manager/content/public/cpp/credential_manager_struct_traits.cc',
           ],
         },
         {
@@ -334,9 +335,11 @@
             '../content/content.gyp:content_browser',
             '../content/content.gyp:content_common',
             '../ipc/ipc.gyp:ipc',
+            '../mojo/mojo_base.gyp:mojo_common_lib',
             '../net/net.gyp:net',
             'autofill_content_browser',
             'autofill_content_common',
+            'autofill_content_mojo_bindings',
             'autofill_core_common',
             'keyed_service_content',
             'password_manager_content_mojo_bindings',

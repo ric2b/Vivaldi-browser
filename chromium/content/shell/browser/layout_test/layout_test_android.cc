@@ -18,6 +18,8 @@
 #include "jni/ShellLayoutTestUtils_jni.h"
 #include "url/gurl.h"
 
+using base::android::ScopedJavaLocalRef;
+
 namespace {
 
 base::FilePath GetTestFilesDirectory(JNIEnv* env) {
@@ -44,8 +46,6 @@ namespace content {
 
 void EnsureInitializeForAndroidLayoutTests() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  content::NestedMessagePumpAndroid::RegisterJni(env);
-  content::RegisterNativesImpl(env);
 
   bool success = base::MessageLoop::InitMessagePumpForUIFactory(
       &CreateMessagePumpForUI);

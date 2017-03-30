@@ -154,7 +154,7 @@ void ComponentLoader::LoadAll() {
 }
 
 base::DictionaryValue* ComponentLoader::ParseManifest(
-    const std::string& manifest_contents) const {
+    base::StringPiece manifest_contents) const {
   JSONStringValueDeserializer deserializer(manifest_contents);
   std::unique_ptr<base::Value> manifest = deserializer.Deserialize(NULL, NULL);
 
@@ -179,9 +179,9 @@ void ComponentLoader::ClearAllRegistered() {
 std::string ComponentLoader::GetExtensionID(
     int manifest_resource_id,
     const base::FilePath& root_directory) {
-  std::string manifest_contents = ResourceBundle::GetSharedInstance().
-      GetRawDataResource(manifest_resource_id).as_string();
-  base::DictionaryValue* manifest = ParseManifest(manifest_contents);
+  base::DictionaryValue* manifest =
+      ParseManifest(ResourceBundle::GetSharedInstance().GetRawDataResource(
+          manifest_resource_id));
   if (!manifest)
     return std::string();
 
@@ -195,18 +195,18 @@ std::string ComponentLoader::Add(int manifest_resource_id,
       !IsComponentExtensionWhitelisted(manifest_resource_id))
     return std::string();
 
-  std::string manifest_contents =
+  base::StringPiece manifest_contents =
       ResourceBundle::GetSharedInstance().GetRawDataResource(
-          manifest_resource_id).as_string();
+          manifest_resource_id);
   return Add(manifest_contents, root_directory, true);
 }
 
-std::string ComponentLoader::Add(const std::string& manifest_contents,
+std::string ComponentLoader::Add(const base::StringPiece& manifest_contents,
                                  const base::FilePath& root_directory) {
   return Add(manifest_contents, root_directory, false);
 }
 
-std::string ComponentLoader::Add(const std::string& manifest_contents,
+std::string ComponentLoader::Add(const base::StringPiece& manifest_contents,
                                  const base::FilePath& root_directory,
                                  bool skip_whitelist) {
   // The Value is kept for the lifetime of the ComponentLoader. This is
@@ -351,17 +351,21 @@ void ComponentLoader::AddHangoutServicesExtension() {
 }
 
 void ComponentLoader::AddHotwordAudioVerificationApp() {
+#if defined(ENABLE_HOTWORDING)
   if (HotwordServiceFactory::IsAlwaysOnAvailable()) {
     Add(IDR_HOTWORD_AUDIO_VERIFICATION_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("hotword_audio_verification")));
   }
+#endif
 }
 
 void ComponentLoader::AddHotwordHelperExtension() {
+#if defined(ENABLE_HOTWORDING)
   if (HotwordServiceFactory::IsHotwordAllowed(profile_)) {
     Add(IDR_HOTWORD_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("hotword")));
   }
+#endif
 }
 
 void ComponentLoader::AddImageLoaderExtension() {
@@ -423,9 +427,9 @@ void ComponentLoader::AddWithNameAndDescription(
       !IsComponentExtensionWhitelisted(manifest_resource_id))
     return;
 
-  std::string manifest_contents =
+  base::StringPiece manifest_contents =
       ResourceBundle::GetSharedInstance().GetRawDataResource(
-          manifest_resource_id).as_string();
+          manifest_resource_id);
 
   // The Value is kept for the lifetime of the ComponentLoader. This is
   // required in case LoadAll() is called again.
@@ -615,13 +619,6 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
 #endif  // defined(GOOGLE_CHROME_BUILD)
     if (install_feedback)
       Add(IDR_FEEDBACK_MANIFEST, base::FilePath(FILE_PATH_LITERAL("feedback")));
-
-#if defined(ENABLE_SETTINGS_APP)
-    if (!is_vivaldi) {
-    Add(IDR_SETTINGS_APP_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("settings_app")));
-    }
-#endif
   }
 
 #if defined(OS_CHROMEOS)

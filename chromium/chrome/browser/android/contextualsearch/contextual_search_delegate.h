@@ -19,6 +19,10 @@
 #include "content/public/browser/android/content_view_core.h"
 #include "net/url_request/url_fetcher_delegate.h"
 
+namespace content {
+class WebContents;
+}
+
 namespace net {
 class URLRequestContextGetter;
 }  // namespace net
@@ -68,13 +72,13 @@ class ContextualSearchDelegate
   void StartSearchTermResolutionRequest(
       const std::string& selection,
       bool use_resolved_search_term,
-      content::ContentViewCore* content_view_core,
+      content::WebContents* web_contents,
       bool may_send_base_page_url);
 
   // Gathers surrounding text and saves it locally for a future query.
   void GatherAndSaveSurroundingText(const std::string& selection,
                                     bool use_resolved_search_term,
-                                    content::ContentViewCore* content_view_core,
+                                    content::WebContents* web_contents,
                                     bool may_send_base_page_url);
 
   // Continues making a Search Term Resolution request, once the surrounding
@@ -118,7 +122,7 @@ class ContextualSearchDelegate
   // the given parameters.
   void BuildContext(const std::string& selection,
                     bool use_resolved_search_term,
-                    content::ContentViewCore* content_view_core,
+                    content::WebContents* web_contents,
                     bool may_send_base_page_url);
 
   // Builds and returns the search term resolution request URL.
@@ -137,7 +141,7 @@ class ContextualSearchDelegate
   void GatherSurroundingTextWithCallback(
       const std::string& selection,
       bool use_resolved_search_term,
-      content::ContentViewCore* content_view_core,
+      content::WebContents* web_contents,
       bool may_send_base_page_url,
       HandleSurroundingsCallback callback);
 
@@ -184,6 +188,7 @@ class ContextualSearchDelegate
                                         std::string* search_term,
                                         std::string* display_text,
                                         std::string* alternate_term,
+                                        std::string* mid,
                                         std::string* prevent_preload,
                                         int* mention_start,
                                         int* mention_end,

@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/arc/arc_wallpaper_handler.h"
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/logging.h"
@@ -14,7 +15,10 @@
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_files_id.h"
 #include "components/wallpaper/wallpaper_layout.h"
+#include "content/public/browser/browser_thread.h"
 #include "ui/gfx/image/image_skia.h"
+
+using user_manager::UserManager;
 
 namespace arc {
 
@@ -35,12 +39,11 @@ void SetBitmapAsWallpaper(const SkBitmap& bitmap) {
       chromeos::WallpaperManager::Get();
 
   const AccountId& account_id =
-      user_manager::UserManager::Get()->GetPrimaryUser()->GetAccountId();
+      UserManager::Get()->GetPrimaryUser()->GetAccountId();
   wallpaper::WallpaperFilesId wallpaper_files_id =
       wallpaper_manager->GetFilesId(account_id);
-  bool update_wallpaper =
-      account_id ==
-      user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
+  const bool update_wallpaper =
+      account_id == UserManager::Get()->GetActiveUser()->GetAccountId();
   // TODO(crbug.com/618922): Allow specifying layout.
   wallpaper_manager->SetCustomWallpaper(
       account_id, wallpaper_files_id, kAndroidWallpaperFilename,
@@ -55,62 +58,31 @@ void SetBitmapAsWallpaper(const SkBitmap& bitmap) {
 
 }  // namespace
 
-// An implementation of ImageDecoder::ImageRequest that just calls back
-// ArcWallpaperHandler.
-class ArcWallpaperHandler::ImageRequestImpl
-    : public ImageDecoder::ImageRequest {
- public:
-  // |handler| outlives this instance.
-  explicit ImageRequestImpl(ArcWallpaperHandler* handler) : handler_(handler) {}
-
-  // ImageDecoder::ImageRequest implementation.
-  void OnImageDecoded(const SkBitmap& bitmap) override {
-    handler_->OnImageDecoded(this, bitmap);
-  }
-  void OnDecodeImageFailed() override { handler_->OnDecodeImageFailed(this); }
-
- private:
-  ArcWallpaperHandler* handler_;
-
-  DISALLOW_COPY_AND_ASSIGN(ImageRequestImpl);
-};
-
 ArcWallpaperHandler::ArcWallpaperHandler() = default;
 
 ArcWallpaperHandler::~ArcWallpaperHandler() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  // Cancel in-flight requests.
-  for (ImageRequestImpl* request : inflight_requests_) {
-    ImageDecoder::Cancel(request);
-    delete request;
-  }
-  inflight_requests_.clear();
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // Make sure the callback is never called after destruction. It is safe to
+  // call Cancel() even when there is no in-flight request.
+  ImageDecoder::Cancel(this);
 }
 
-void ArcWallpaperHandler::SetWallpaper(const std::vector<uint8_t>& jpeg_data) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  std::unique_ptr<ImageRequestImpl> request =
-      base::MakeUnique<ImageRequestImpl>(this);
-  // TODO(nya): Improve ImageDecoder to minimize copy.
-  std::string jpeg_data_as_string(
-      reinterpret_cast<const char*>(jpeg_data.data()), jpeg_data.size());
-  ImageDecoder::StartWithOptions(request.get(), jpeg_data_as_string,
+void ArcWallpaperHandler::SetWallpaper(std::vector<uint8_t> jpeg_data) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // If there is an in-flight request, cancel it. It is safe to call Cancel()
+  // even when there is no in-flight request.
+  ImageDecoder::Cancel(this);
+  ImageDecoder::StartWithOptions(this, std::move(jpeg_data),
                                  ImageDecoder::ROBUST_JPEG_CODEC, true);
-  inflight_requests_.insert(request.release());
 }
 
-void ArcWallpaperHandler::OnImageDecoded(ImageRequestImpl* request,
-                                         const SkBitmap& bitmap) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  inflight_requests_.erase(request);
-  delete request;
+void ArcWallpaperHandler::OnImageDecoded(const SkBitmap& bitmap) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   SetBitmapAsWallpaper(bitmap);
 }
 
-void ArcWallpaperHandler::OnDecodeImageFailed(ImageRequestImpl* request) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  inflight_requests_.erase(request);
-  delete request;
+void ArcWallpaperHandler::OnDecodeImageFailed() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   LOG(ERROR) << "Failed to decode wallpaper image.";
 }
 

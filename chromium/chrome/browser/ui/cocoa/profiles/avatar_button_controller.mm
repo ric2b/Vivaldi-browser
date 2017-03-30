@@ -18,22 +18,21 @@
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/signin/core/browser/signin_error_controller.h"
+#include "components/signin/core/common/profile_management_switches.h"
 #include "grit/theme_resources.h"
+#include "skia/ext/skia_utils_mac.h"
 #import "ui/base/cocoa/appkit_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/nine_image_painter_factory.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 
 namespace {
-
-// NSButtons have a default padding of 5px. This button should have a padding
-// of 8px.
-const CGFloat kButtonExtraPadding = 8 - 5;
-const CGFloat kButtonHeight = 28;
 
 const ui::NinePartImageIds kNormalBorderImageIds =
     IMAGE_GRID(IDR_AVATAR_NATIVE_BUTTON_NORMAL);
@@ -48,6 +47,32 @@ NSImage* GetImageFromResourceID(int resourceId) {
   return ui::ResourceBundle::GetSharedInstance().GetNativeImageNamed(
       resourceId).ToNSImage();
 }
+
+const SkColor kMaterialButtonHoverColor = SkColorSetARGB(20, 0, 0, 0);
+const SkColor kMaterialButtonPressedColor = SkColorSetARGB(31, 0, 0, 0);
+const SkColor kMaterialAvatarIconColor = SkColorSetRGB(0x5a, 0x5a, 0x5a);
+
+CGFloat ButtonHeight() {
+  const CGFloat kButtonHeight = 28;
+  const CGFloat kMaterialButtonHeight = 24;
+  return ui::MaterialDesignController::IsModeMaterial() ? kMaterialButtonHeight
+                                                        : kButtonHeight;
+}
+
+// NSButtons have a default padding of 5px. Non-MD buttons should have a
+// padding of 8px. Meanwhile, MD buttons should have a padding of 6px.
+CGFloat ButtonExtraPadding() {
+  const CGFloat kDefaultPadding = 5;
+  const CGFloat kButtonExtraPadding = 8 - kDefaultPadding;
+  const CGFloat kMaterialButtonExtraPadding = 6 - kDefaultPadding;
+
+  return ui::MaterialDesignController::IsModeMaterial()
+             ? kMaterialButtonExtraPadding
+             : kButtonExtraPadding;
+}
+
+// Extra padding for the MD signed out avatar button.
+const CGFloat kMaterialSignedOutWidthPadding = 2;
 
 }  // namespace
 
@@ -78,26 +103,28 @@ NSImage* GetImageFromResourceID(int resourceId) {
   // is square. Otherwise, we are displaying the profile's name and an
   // optional authentication error icon.
   if ([self image] && !hasError_) {
-    buttonSize.width = kButtonHeight;
+    buttonSize.width = ButtonHeight();
+    if (ui::MaterialDesignController::IsModeMaterial())
+      buttonSize.width += kMaterialSignedOutWidthPadding;
   } else {
-    buttonSize.width += 2 * kButtonExtraPadding;
+    buttonSize.width += 2 * ButtonExtraPadding();
   }
-  buttonSize.height = kButtonHeight;
+  buttonSize.height = ButtonHeight();
   return buttonSize;
 }
 
 - (void)drawInteriorWithFrame:(NSRect)frame inView:(NSView*)controlView {
-  NSRect frameAfterPadding = NSInsetRect(frame, kButtonExtraPadding, 0);
+  NSRect frameAfterPadding = NSInsetRect(frame, ButtonExtraPadding(), 0);
   [super drawInteriorWithFrame:frameAfterPadding inView:controlView];
 }
 
 - (void)drawImage:(NSImage*)image
         withFrame:(NSRect)frame
            inView:(NSView*)controlView {
-  // The image used in the generic button case needs to be shifted down
-  // slightly to be centered correctly.
+  // The image used in the generic button case as well as the material-designed
+  // error icon both need to be shifted down slightly to be centered correctly.
   // TODO(noms): When the assets are fixed, remove this latter offset.
-  if (!hasError_)
+  if (!hasError_ || switches::IsMaterialDesignUserMenu())
     frame = NSOffsetRect(frame, 0, 1);
   [super drawImage:image withFrame:frame inView:controlView];
 }
@@ -106,15 +133,33 @@ NSImage* GetImageFromResourceID(int resourceId) {
                     inView:(NSView*)controlView {
   HoverState hoverState =
       [base::mac::ObjCCastStrict<AvatarButton>(controlView) hoverState];
-  ui::NinePartImageIds imageIds = kNormalBorderImageIds;
-  if (isThemedWindow_)
-    imageIds = kThemedBorderImageIds;
 
-  if (hoverState == kHoverStateMouseDown)
-    imageIds = kPressedBorderImageIds;
-  else if (hoverState == kHoverStateMouseOver)
-    imageIds = kHoverBorderImageIds;
-  ui::DrawNinePartImage(frame, imageIds, NSCompositeSourceOver, 1.0, true);
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    NSColor* backgroundColor = nil;
+    if (hoverState == kHoverStateMouseDown) {
+      backgroundColor = skia::SkColorToSRGBNSColor(kMaterialButtonPressedColor);
+    } else if (hoverState == kHoverStateMouseOver) {
+      backgroundColor = skia::SkColorToSRGBNSColor(kMaterialButtonHoverColor);
+    }
+
+    if (backgroundColor) {
+      [backgroundColor set];
+      NSBezierPath* path = [NSBezierPath bezierPathWithRoundedRect:frame
+                                                           xRadius:2.0f
+                                                           yRadius:2.0f];
+      [path fill];
+    }
+  } else {
+    ui::NinePartImageIds imageIds = kNormalBorderImageIds;
+    if (isThemedWindow_)
+      imageIds = kThemedBorderImageIds;
+
+    if (hoverState == kHoverStateMouseDown)
+      imageIds = kPressedBorderImageIds;
+    else if (hoverState == kHoverStateMouseOver)
+      imageIds = kHoverBorderImageIds;
+    ui::DrawNinePartImage(frame, imageIds, NSCompositeSourceOver, 1.0, true);
+  }
 }
 
 - (void)drawFocusRingMaskWithFrame:(NSRect)frame inView:(NSView*)view {
@@ -143,7 +188,7 @@ NSImage* GetImageFromResourceID(int resourceId) {
 
 @interface AvatarButtonController (Private)
 - (void)updateAvatarButtonAndLayoutParent:(BOOL)layoutParent;
-- (void)updateErrorStatus:(BOOL)hasError;
+- (void)setErrorStatus:(BOOL)hasError;
 - (void)dealloc;
 - (void)themeDidChangeNotification:(NSNotification*)aNotification;
 @end
@@ -159,20 +204,19 @@ NSImage* GetImageFromResourceID(int resourceId) {
     AvatarButton* avatarButton =
         [[AvatarButton alloc] initWithFrame:NSZeroRect];
     button_.reset(avatarButton);
-    base::scoped_nsobject<CustomThemeButtonCell> cell(
-        [[CustomThemeButtonCell alloc] initWithThemedWindow:isThemedWindow_]);
-    [avatarButton setCell:cell.get()];
 
-    // Check if the account already has an authentication error.
-    SigninErrorController* errorController =
-        profiles::GetSigninErrorController(browser->profile());
-    hasError_ = errorController && errorController->HasError();
+    base::scoped_nsobject<NSButtonCell> cell(
+        [[CustomThemeButtonCell alloc] initWithThemedWindow:isThemedWindow_]);
+
+    [avatarButton setCell:cell.get()];
 
     [avatarButton setWantsLayer:YES];
     [self setView:avatarButton];
 
     [avatarButton setBezelStyle:NSShadowlessSquareBezelStyle];
     [avatarButton setButtonType:NSMomentaryChangeButton];
+    if (switches::IsMaterialDesignUserMenu())
+      [[avatarButton cell] setHighlightsBy:NSNoCellMask];
     [avatarButton setBordered:YES];
 
     [avatarButton setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
@@ -180,6 +224,9 @@ NSImage* GetImageFromResourceID(int resourceId) {
     [avatarButton setAction:@selector(buttonClicked:)];
     [avatarButton setRightAction:@selector(buttonRightClicked:)];
 
+    // Check if the account already has an authentication or sync error and
+    // initialize the avatar button UI.
+    hasError_ = profileObserver_->HasAvatarError();
     [self updateAvatarButtonAndLayoutParent:NO];
 
     NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
@@ -247,26 +294,41 @@ NSImage* GetImageFromResourceID(int resourceId) {
 
   AvatarButton* button =
       base::mac::ObjCCastStrict<AvatarButton>(button_);
+
   if (useGenericButton) {
-    [button setDefaultImage:GetImageFromResourceID(
-        IDR_AVATAR_NATIVE_BUTTON_AVATAR)];
-    [button setHoverImage:GetImageFromResourceID(
-        IDR_AVATAR_NATIVE_BUTTON_AVATAR_HOVER)];
-    [button setPressedImage:GetImageFromResourceID(
-        IDR_AVATAR_NATIVE_BUTTON_AVATAR_PRESSED)];
-    // This is a workaround for an issue in the HoverImageButton where the
-    // button is initially sized incorrectly unless a default image is provided.
-    // See crbug.com/298501.
-    [button setImage:GetImageFromResourceID(IDR_AVATAR_NATIVE_BUTTON_AVATAR)];
+    if (ui::MaterialDesignController::IsModeMaterial()) {
+      NSImage* avatarIcon = NSImageFromImageSkia(
+          gfx::CreateVectorIcon(gfx::VectorIconId::USER_ACCOUNT_AVATAR, 18,
+                                kMaterialAvatarIconColor));
+      [button setDefaultImage:avatarIcon];
+      [button setHoverImage:nil];
+      [button setPressedImage:nil];
+    } else {
+      [button setDefaultImage:GetImageFromResourceID(
+                                  IDR_AVATAR_NATIVE_BUTTON_AVATAR)];
+      [button setHoverImage:GetImageFromResourceID(
+                                IDR_AVATAR_NATIVE_BUTTON_AVATAR_HOVER)];
+      [button setPressedImage:GetImageFromResourceID(
+                                  IDR_AVATAR_NATIVE_BUTTON_AVATAR_PRESSED)];
+      // This is a workaround for an issue in the HoverImageButton where the
+      // button is initially sized incorrectly unless a default image is
+      // provided.
+      // See crbug.com/298501.
+      [button setImage:GetImageFromResourceID(IDR_AVATAR_NATIVE_BUTTON_AVATAR)];
+    }
     [button setImagePosition:NSImageOnly];
   } else if (hasError_) {
-    [button setDefaultImage:GetImageFromResourceID(
-        IDR_ICON_PROFILES_AVATAR_BUTTON_ERROR)];
+    BOOL isMaterial = ui::MaterialDesignController::IsModeMaterial();
+    NSImage* errorIcon =
+        isMaterial
+            ? NSImageFromImageSkia(gfx::CreateVectorIcon(
+                  gfx::VectorIconId::SYNC_PROBLEM, 16, gfx::kGoogleRed700))
+            : GetImageFromResourceID(IDR_ICON_PROFILES_AVATAR_BUTTON_ERROR);
+    [button setDefaultImage:errorIcon];
     [button setHoverImage:nil];
     [button setPressedImage:nil];
-    [button setImage:GetImageFromResourceID(
-        IDR_ICON_PROFILES_AVATAR_BUTTON_ERROR)];
-    [button setImagePosition:NSImageRight];
+    [button setImage:errorIcon];
+    [button setImagePosition:isMaterial ? NSImageLeft : NSImageRight];
   } else {
     [button setDefaultImage:nil];
     [button setHoverImage:nil];
@@ -296,7 +358,7 @@ NSImage* GetImageFromResourceID(int resourceId) {
   }
 }
 
-- (void)updateErrorStatus:(BOOL)hasError {
+- (void)setErrorStatus:(BOOL)hasError {
   hasError_ = hasError;
   [self updateAvatarButtonAndLayoutParent:YES];
 }

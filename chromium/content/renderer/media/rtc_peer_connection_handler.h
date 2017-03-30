@@ -20,6 +20,7 @@
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/webrtc/media_stream_track_metrics.h"
+#include "ipc/ipc_platform_file.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
 #include "third_party/WebKit/public/platform/WebRTCStatsRequest.h"
@@ -31,6 +32,7 @@ class WebRTCAnswerOptions;
 class WebRTCDataChannelHandler;
 class WebRTCOfferOptions;
 class WebRTCPeerConnectionHandlerClient;
+class WebRTCStats;
 }
 
 namespace content {
@@ -50,10 +52,7 @@ class CONTENT_EXPORT LocalRTCStatsResponse
   }
 
   virtual blink::WebRTCStatsResponse webKitStatsResponse() const;
-  virtual size_t addReport(blink::WebString type, blink::WebString id,
-                           double timestamp);
-  virtual void addStatistic(size_t report,
-                            blink::WebString name, blink::WebString value);
+  virtual void addStats(const blink::WebRTCStats& stats);
 
  protected:
   ~LocalRTCStatsResponse() override {}
@@ -167,6 +166,12 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   // Tells the |client_| to close RTCPeerConnection.
   void CloseClientPeerConnection();
+
+  // Start recording an event log.
+  void StartEventLog(IPC::PlatformFileForTransit file,
+                     int64_t max_file_size_bytes);
+  // Stop recording an event log.
+  void StopEventLog();
 
  protected:
   webrtc::PeerConnectionInterface* native_peer_connection() {

@@ -9,6 +9,7 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/frame/UseCounter.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/webusb/USBConnectionEvent.h"
@@ -17,7 +18,8 @@
 #include "modules/webusb/USBDeviceRequestOptions.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 #include "wtf/Functional.h"
 
 namespace usb = device::usb::blink;
@@ -55,8 +57,8 @@ USB::USB(LocalFrame& frame)
     , m_clientBinding(this)
 {
     ThreadState::current()->registerPreFinalizer(this);
-    frame.serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_deviceManager));
-    m_deviceManager.set_connection_error_handler(createBaseCallback(WTF::bind(&USB::onDeviceManagerConnectionError, wrapWeakPersistent(this))));
+    frame.interfaceProvider()->getInterface(mojo::GetProxy(&m_deviceManager));
+    m_deviceManager.set_connection_error_handler(convertToBaseCallback(WTF::bind(&USB::onDeviceManagerConnectionError, wrapWeakPersistent(this))));
     m_deviceManager->SetClient(m_clientBinding.CreateInterfacePtrAndBind());
 }
 
@@ -78,17 +80,20 @@ void USB::dispose()
 
 ScriptPromise USB::getDevices(ScriptState* scriptState)
 {
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
+    UseCounter::count(executionContext, UseCounter::UsbGetDevices);
+
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
     if (!m_deviceManager) {
         resolver->reject(DOMException::create(NotSupportedError));
     } else {
         String errorMessage;
-        if (!scriptState->getExecutionContext()->isSecureContext(errorMessage)) {
+        if (!executionContext->isSecureContext(errorMessage)) {
             resolver->reject(DOMException::create(SecurityError, errorMessage));
         } else {
             m_deviceManagerRequests.add(resolver);
-            m_deviceManager->GetDevices(nullptr, createBaseCallback(WTF::bind(&USB::onGetDevices, wrapPersistent(this), wrapPersistent(resolver))));
+            m_deviceManager->GetDevices(nullptr, convertToBaseCallback(WTF::bind(&USB::onGetDevices, wrapPersistent(this), wrapPersistent(resolver))));
         }
     }
     return promise;
@@ -96,21 +101,24 @@ ScriptPromise USB::getDevices(ScriptState* scriptState)
 
 ScriptPromise USB::requestDevice(ScriptState* scriptState, const USBDeviceRequestOptions& options)
 {
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
+    UseCounter::count(executionContext, UseCounter::UsbRequestDevice);
+
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
 
     if (!m_chooserService) {
-        LocalFrame* frame = getExecutionContext() ? toDocument(getExecutionContext())->frame() : nullptr;
+        LocalFrame* frame = executionContext->isDocument() ? toDocument(executionContext)->frame() : nullptr;
         if (!frame) {
             resolver->reject(DOMException::create(NotSupportedError));
             return promise;
         }
-        frame->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_chooserService));
-        m_chooserService.set_connection_error_handler(createBaseCallback(WTF::bind(&USB::onChooserServiceConnectionError, wrapWeakPersistent(this))));
+        frame->interfaceProvider()->getInterface(mojo::GetProxy(&m_chooserService));
+        m_chooserService.set_connection_error_handler(convertToBaseCallback(WTF::bind(&USB::onChooserServiceConnectionError, wrapWeakPersistent(this))));
     }
 
     String errorMessage;
-    if (!scriptState->getExecutionContext()->isSecureContext(errorMessage)) {
+    if (!executionContext->isSecureContext(errorMessage)) {
         resolver->reject(DOMException::create(SecurityError, errorMessage));
     } else if (!UserGestureIndicator::consumeUserGesture()) {
         resolver->reject(DOMException::create(SecurityError, "Must be handling a user gesture to show a permission request."));
@@ -122,7 +130,7 @@ ScriptPromise USB::requestDevice(ScriptState* scriptState, const USBDeviceReques
                 filters.append(convertDeviceFilter(filter));
         }
         m_chooserServiceRequests.add(resolver);
-        m_chooserService->GetPermission(std::move(filters), createBaseCallback(WTF::bind(&USB::onGetPermission, wrapPersistent(this), wrapPersistent(resolver))));
+        m_chooserService->GetPermission(std::move(filters), convertToBaseCallback(WTF::bind(&USB::onGetPermission, wrapPersistent(this), wrapPersistent(resolver))));
     }
     return promise;
 }
@@ -158,7 +166,7 @@ USBDevice* USB::getOrCreateDevice(usb::DeviceInfoPtr deviceInfo)
     return device;
 }
 
-void USB::onGetDevices(ScriptPromiseResolver* resolver, mojo::WTFArray<usb::DeviceInfoPtr> deviceInfos)
+void USB::onGetDevices(ScriptPromiseResolver* resolver, Vector<usb::DeviceInfoPtr> deviceInfos)
 {
     auto requestEntry = m_deviceManagerRequests.find(resolver);
     if (requestEntry == m_deviceManagerRequests.end())
@@ -166,7 +174,7 @@ void USB::onGetDevices(ScriptPromiseResolver* resolver, mojo::WTFArray<usb::Devi
     m_deviceManagerRequests.remove(requestEntry);
 
     HeapVector<Member<USBDevice>> devices;
-    for (auto& deviceInfo : deviceInfos.PassStorage())
+    for (auto& deviceInfo : deviceInfos)
         devices.append(getOrCreateDevice(std::move(deviceInfo)));
     resolver->resolve(devices);
     m_deviceManagerRequests.remove(resolver);
@@ -210,6 +218,11 @@ void USB::OnDeviceRemoved(usb::DeviceInfoPtr deviceInfo)
 
 void USB::onDeviceManagerConnectionError()
 {
+    if (!Platform::current()) {
+        // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+        return;
+    }
+
     m_deviceManager.reset();
     for (ScriptPromiseResolver* resolver : m_deviceManagerRequests)
         resolver->reject(DOMException::create(NotFoundError, kNoServiceError));
@@ -218,6 +231,11 @@ void USB::onDeviceManagerConnectionError()
 
 void USB::onChooserServiceConnectionError()
 {
+    if (!Platform::current()) {
+        // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+        return;
+    }
+
     m_chooserService.reset();
     for (ScriptPromiseResolver* resolver : m_chooserServiceRequests)
         resolver->reject(DOMException::create(NotFoundError, kNoServiceError));

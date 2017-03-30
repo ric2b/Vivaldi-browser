@@ -7,19 +7,18 @@
 #include <utility>
 #include <vector>
 
+#include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/status_area_widget.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/web_notification/ash_popup_alignment_delegate.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_lookup.h"
-#include "ash/common/wm_root_window_controller.h"
-#include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
-#include "ash/system/status_area_widget.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_system_tray_delegate.h"
@@ -27,6 +26,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
@@ -143,19 +143,13 @@ class WebNotificationTrayTest : public test::AshTestBase {
 
   bool IsPopupVisible() { return GetTray()->IsPopupVisible(); }
 
-  std::unique_ptr<views::Widget> CreateTestWidget() {
-    std::unique_ptr<views::Widget> widget(new views::Widget);
-    views::Widget::InitParams params;
-    params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-    params.bounds = gfx::Rect(1, 2, 3, 4);
-    WmShell::Get()
-        ->GetPrimaryRootWindow()
-        ->GetRootWindowController()
-        ->ConfigureWidgetInitParamsForContainer(
-            widget.get(), kShellWindowId_DefaultContainer, &params);
-    widget->Init(params);
-    widget->Show();
-    return widget;
+  static std::unique_ptr<views::Widget> CreateTestWidget() {
+    return AshTestBase::CreateTestWidget(
+        nullptr, kShellWindowId_DefaultContainer, gfx::Rect(1, 2, 3, 4));
+  }
+
+  static void UpdateAutoHideStateNow() {
+    GetPrimaryShelf()->shelf_layout_manager()->UpdateAutoHideStateNow();
   }
 
  private:
@@ -381,6 +375,7 @@ TEST_F(WebNotificationTrayTest, MAYBE_PopupAndAutoHideShelf) {
   TestItem* test_item = new TestItem;
   GetSystemTray()->AddTrayItem(test_item);
   GetSystemTray()->ShowDefaultView(BUBBLE_CREATE_NEW);
+  UpdateAutoHideStateNow();
 
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
   EXPECT_TRUE(GetTray()->IsPopupVisible());
@@ -489,7 +484,7 @@ TEST_F(WebNotificationTrayTest, TouchFeedback) {
   gfx::Point center_point = tray->GetBoundsInScreen().CenterPoint();
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, center_point, touch_id,
-                       generator.Now());
+                       ui::EventTimeForNow());
   generator.Dispatch(&press);
   EXPECT_TRUE(tray->draw_background_as_active());
 
@@ -519,7 +514,7 @@ TEST_F(WebNotificationTrayTest, TouchFeedbackCancellation) {
   gfx::Point center_point = bounds.CenterPoint();
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, center_point, touch_id,
-                       generator.Now());
+                       ui::EventTimeForNow());
   generator.Dispatch(&press);
   EXPECT_TRUE(tray->draw_background_as_active());
 

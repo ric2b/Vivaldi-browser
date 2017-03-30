@@ -96,7 +96,7 @@ HTMLImageElement::HTMLImageElement(Document& document, HTMLFormElement* form, bo
     , m_referrerPolicy(ReferrerPolicyDefault)
 {
     setHasCustomStyleCallbacks();
-    if (form && form->inShadowIncludingDocument()) {
+    if (form && form->isConnected()) {
         m_form = form;
         m_formWasSetByParser = true;
         m_form->associate(*this);
@@ -201,7 +201,7 @@ HTMLFormElement* HTMLImageElement::formOwner() const
 
 void HTMLImageElement::formRemovedFromTree(const Node& formRoot)
 {
-    ASSERT(m_form);
+    DCHECK(m_form);
     if (NodeTraversal::highestAncestorOrSelf(*this) != formRoot)
         resetFormOwner();
 }
@@ -296,7 +296,7 @@ static bool supportedImageType(const String& type)
 // http://picture.responsiveimages.org/#update-source-set
 ImageCandidate HTMLImageElement::findBestFitImageFromPictureParent()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     Node* parent = parentNode();
     m_source = nullptr;
     if (!parent || !isHTMLPictureElement(*parent))
@@ -349,9 +349,9 @@ LayoutObject* HTMLImageElement::createLayoutObject(const ComputedStyle& style)
     return image;
 }
 
-void HTMLImageElement::attach(const AttachContext& context)
+void HTMLImageElement::attachLayoutTree(const AttachContext& context)
 {
-    HTMLElement::attach(context);
+    HTMLElement::attachLayoutTree(context);
 
     if (layoutObject() && layoutObject()->isImage()) {
         LayoutImage* layoutImage = toLayoutImage(layoutObject());
@@ -389,7 +389,7 @@ Node::InsertionNotificationRequest HTMLImageElement::insertedInto(ContainerNode*
 
     // If we have been inserted from a layoutObject-less document,
     // our loader may have not fetched the image, so do it now.
-    if ((insertionPoint->inShadowIncludingDocument() && !imageLoader().image()) || imageWasModified)
+    if ((insertionPoint->isConnected() && !imageLoader().image()) || imageWasModified)
         imageLoader().updateFromElement(ImageLoader::UpdateNormal, m_referrerPolicy);
 
     return HTMLElement::insertedInto(insertionPoint);
@@ -418,7 +418,7 @@ int HTMLImageElement::width()
 
         // if the image is available, use its width
         if (imageLoader().image())
-            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).width();
+            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).width().toInt();
     }
 
     LayoutBox* box = layoutBox();
@@ -439,7 +439,7 @@ int HTMLImageElement::height()
 
         // if the image is available, use its height
         if (imageLoader().image())
-            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).height();
+            return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1.0f).height().toInt();
     }
 
     LayoutBox* box = layoutBox();
@@ -451,7 +451,7 @@ int HTMLImageElement::naturalWidth() const
     if (!imageLoader().image())
         return 0;
 
-    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).width();
+    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).width().toInt();
 }
 
 int HTMLImageElement::naturalHeight() const
@@ -459,7 +459,7 @@ int HTMLImageElement::naturalHeight() const
     if (!imageLoader().image())
         return 0;
 
-    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).height();
+    return imageLoader().image()->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), m_imageDevicePixelRatio, ImageResource::IntrinsicCorrectedToDPR).height().toInt();
 }
 
 const String& HTMLImageElement::currentSrc() const
@@ -687,14 +687,15 @@ void HTMLImageElement::forceReload() const
     imageLoader().updateFromElement(ImageLoader::UpdateForcedReload, m_referrerPolicy);
 }
 
-ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
+ScriptPromise HTMLImageElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, Optional<IntRect> cropRect, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
-    ASSERT(eventTarget.toLocalDOMWindow());
-    if (!sw || !sh) {
-        exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
+    DCHECK(eventTarget.toLocalDOMWindow());
+    if ((cropRect && !ImageBitmap::isSourceSizeValid(cropRect->width(), cropRect->height(), exceptionState))
+        || !ImageBitmap::isSourceSizeValid(bitmapSourceSize().width(), bitmapSourceSize().height(), exceptionState))
         return ScriptPromise();
-    }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toLocalDOMWindow()->document(), options));
+    if (!ImageBitmap::isResizeOptionValid(options, exceptionState))
+        return ScriptPromise();
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, cropRect, eventTarget.toLocalDOMWindow()->document(), options));
 }
 
 void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior behavior)
@@ -719,6 +720,7 @@ void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior be
     bool imageHasLoaded = imageLoader().image() && !imageLoader().image()->isLoading() && !imageLoader().image()->errorOccurred();
     bool imageStillLoading = !imageHasLoaded && imageLoader().hasPendingActivity() && !imageLoader().hasPendingError() && !imageSourceURL().isEmpty();
     bool imageHasImage = imageLoader().image() && imageLoader().image()->hasImage();
+    bool imageIsDocument = imageLoader().isLoadingImageDocument() && imageLoader().image() && !imageLoader().image()->errorOccurred();
 
     // Icky special case for deferred images:
     // A deferred image is not loading, does have pending activity, does not
@@ -732,7 +734,7 @@ void HTMLImageElement::selectSourceURL(ImageLoader::UpdateFromElementBehavior be
     // Instead of dealing with that, there's a separate check that the
     // ImageResource has non-null image data associated with it, which isn't
     // folded into imageHasLoaded above.
-    if ((imageHasLoaded && imageHasImage) || imageStillLoading)
+    if ((imageHasLoaded && imageHasImage) || imageStillLoading || imageIsDocument)
         ensurePrimaryContent();
     else
         ensureFallbackContent();
@@ -772,10 +774,10 @@ void HTMLImageElement::ensurePrimaryContent()
 
 void HTMLImageElement::reattachFallbackContent()
 {
-    // This can happen inside of attach() in the middle of a recalcStyle so we need to
+    // This can happen inside of attachLayoutTree() in the middle of a recalcStyle so we need to
     // reattach synchronously here.
     if (document().inStyleRecalc())
-        reattach();
+        reattachLayoutTree();
     else
         lazyReattachIfAttached();
 }
@@ -828,8 +830,8 @@ IntSize HTMLImageElement::bitmapSourceSize() const
     if (!image)
         return IntSize();
     LayoutSize lSize = image->imageSize(LayoutObject::shouldRespectImageOrientation(layoutObject()), 1.0f);
-    ASSERT(lSize.fraction().isZero());
-    return IntSize(lSize.width(), lSize.height());
+    DCHECK(lSize.fraction().isZero());
+    return IntSize(lSize.width().toInt(), lSize.height().toInt());
 }
 
 } // namespace blink

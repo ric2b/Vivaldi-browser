@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Access gate to C++ side offline pages functionalities.
@@ -25,6 +26,7 @@ import java.util.Set;
 @JNINamespace("offline_pages::android")
 public class OfflinePageBridge {
     public static final String BOOKMARK_NAMESPACE = "bookmark";
+    public static final String SHARE_NAMESPACE = "share";
 
     /**
      * Retrieves the OfflinePageBridge for the given profile, creating it the first time
@@ -49,6 +51,7 @@ public class OfflinePageBridge {
     /** Whether an offline sub-feature is enabled or not. */
     private static Boolean sOfflineBookmarksEnabled;
     private static Boolean sBackgroundLoadingEnabled;
+    private static Boolean sPageSharingEnabled;
 
     /**
      * Callback used when saving an offline page.
@@ -142,6 +145,18 @@ public class OfflinePageBridge {
     }
 
     /**
+     * @return True if offline pages sharing is enabled.
+     */
+    @VisibleForTesting
+    public static boolean isPageSharingEnabled() {
+        ThreadUtils.assertOnUiThread();
+        if (sPageSharingEnabled == null) {
+            sPageSharingEnabled = nativeIsPageSharingEnabled();
+        }
+        return sPageSharingEnabled;
+    }
+
+    /**
      * @return True if an offline copy of the given URL can be saved.
      */
     public static boolean canSavePage(String url) {
@@ -198,21 +213,98 @@ public class OfflinePageBridge {
     }
 
     /**
-     * Gets the offline pages associated with a provided client ID.
+     * Gets the offline pages associated with the provided client IDs.
      *
-     * @param clientId Client's ID associated with an offline page.
-     * @return A {@link OfflinePageItem} matching the bookmark Id or <code>null</code> if none
+     * @param clientIds Client's IDs associated with offline pages.
+     * @return A list of {@link OfflinePageItem} matching the provided IDs, or an empty list if none
      * exist.
      */
     @VisibleForTesting
-    public void getPagesByClientId(
-            final ClientId clientId, final Callback<List<OfflinePageItem>> callback) {
+    public void getPagesByClientIds(
+            final List<ClientId> clientIds, final Callback<List<OfflinePageItem>> callback) {
         runWhenLoaded(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(getPagesByClientIdInternal(clientId));
+                List<OfflinePageItem> result = new ArrayList<>();
+                for (ClientId clientId : clientIds) {
+                    result.addAll(getPagesByClientIdInternal(clientId));
+                }
+                callback.onResult(result);
             }
         });
+    }
+
+    /**
+     * Gets all the URLs in the request queue.
+     *
+     * @return A list of {@link SavePageRequest} representing all the queued requests.
+     */
+    @VisibleForTesting
+    public void getRequestsInQueue(Callback<SavePageRequest[]> callback) {
+        nativeGetRequestsInQueue(mNativeOfflinePageBridge, callback);
+    }
+
+    private static class RequestsRemovedCallback {
+        private Callback<List<RequestRemovedResult>> mCallback;
+
+        public RequestsRemovedCallback(Callback<List<RequestRemovedResult>> callback) {
+            mCallback = callback;
+        }
+
+        @CalledByNative("RequestsRemovedCallback")
+        public void onResult(long[] resultIds, int[] resultCodes) {
+            assert resultIds.length == resultCodes.length;
+
+            List<RequestRemovedResult> results = new ArrayList<>();
+            for (int i = 0; i < resultIds.length; i++) {
+                results.add(new RequestRemovedResult(resultIds[i], resultCodes[i]));
+            }
+
+            mCallback.onResult(results);
+        }
+    }
+
+    /**
+     * Contains a result for a remove page request.
+     */
+    public static class RequestRemovedResult {
+        private long mRequestId;
+        private int mUpdateRequestResult;
+
+        public RequestRemovedResult(long requestId, int requestResult) {
+            mRequestId = requestId;
+            mUpdateRequestResult = requestResult;
+        }
+
+        /** Request ID as found in the SavePageRequest. */
+        public long getRequestId() {
+            return mRequestId;
+        }
+
+        /** {@see org.chromium.components.offlinepages.background.UpdateRequestResult} enum. */
+        public int getUpdateRequestResult() {
+            return mUpdateRequestResult;
+        }
+    }
+
+    /**
+     * Removes SavePageRequests from the request queue.
+     *
+     * The callback will be called with |null| in the case that the queue is unavailable.  This can
+     * happen in incognito, for example.
+     *
+     * @param requestIds The IDs of the requests to remove.
+     * @param callback Called when the removal is done, with the SavePageRequest objects that were
+     *     actually removed.
+     */
+    public void removeRequestsFromQueue(
+            List<Long> requestIdList, Callback<List<RequestRemovedResult>> callback) {
+        long[] requestIds = new long[requestIdList.size()];
+        for (int i = 0; i < requestIdList.size(); i++) {
+            requestIds[i] = requestIdList.get(i).longValue();
+        }
+        nativeRemoveRequestsFromQueue(
+                mNativeOfflinePageBridge, requestIds, new RequestsRemovedCallback(callback));
     }
 
     private List<OfflinePageItem> getPagesByClientIdInternal(ClientId clientId) {
@@ -228,32 +320,17 @@ public class OfflinePageBridge {
         return result;
     }
 
-    /**
-     * Gets the offline pages associated with a provided online URL.  The callback is called when
-     * the results are available.
+     /**
+     * Get the offline page associated with the provided offline URL.
      *
-     * @param onlineURL URL of the page.
-     * @param callback Called with the results.
+     * @param onlineUrl URL of the page.
+     * @param tabId Android tab ID.
+     * @param callback callback to pass back the
+     * matching {@link OfflinePageItem} if found. Will pass back null if not.
      */
-    @VisibleForTesting
-    public void getPagesByOnlineUrl(
-            final String onlineUrl, final Callback<List<OfflinePageItem>> callback) {
-        runWhenLoaded(new Runnable() {
-            @Override
-            public void run() {
-                List<OfflinePageItem> result = new ArrayList<>();
-
-                // TODO(http://crbug.com/589526) This native API returns only one item, but in the
-                // future will return a list.
-                OfflinePageItem item =
-                        nativeGetBestPageForOnlineURL(mNativeOfflinePageBridge, onlineUrl);
-                if (item != null) {
-                    result.add(item);
-                }
-
-                callback.onResult(result);
-            }
-        });
+    public void selectPageForOnlineUrl(String onlineUrl, int tabId,
+            Callback<OfflinePageItem> callback) {
+        nativeSelectPageForOnlineUrl(mNativeOfflinePageBridge, onlineUrl, tabId, callback);
     }
 
     /**
@@ -265,6 +342,24 @@ public class OfflinePageBridge {
      */
     public void getPageByOfflineUrl(String offlineUrl, Callback<OfflinePageItem> callback) {
         nativeGetPageByOfflineUrl(mNativeOfflinePageBridge, offlineUrl, callback);
+    }
+
+    /**
+     * Get the offline page associated with the provided offline ID.
+     *
+     * @param offlineId ID of the offline page.
+     * @param callback callback to pass back the
+     * matching {@link OfflinePageItem} if found. Will pass back <code>null</code> if not.
+     */
+    public void getPageByOfflineId(final long offlineId, final Callback<OfflinePageItem> callback) {
+        runWhenLoaded(new Runnable() {
+            @Override
+            public void run() {
+                OfflinePageItem item =
+                        nativeGetPageByOfflineId(mNativeOfflinePageBridge, offlineId);
+                callback.onResult(item);
+            }
+        });
     }
 
     /**
@@ -288,12 +383,42 @@ public class OfflinePageBridge {
     /**
      * Save the given URL as an offline page when the network becomes available.
      *
-     * @param url The given URL to save for later
+     * The page is marked as not having been saved by the user.  Use the 3-argument form to specify
+     * a user request.
+     *
+     * @param url The given URL to save for later.
      * @param clientId The client ID for the offline page to be saved later.
      */
-    public void savePageLater(final String url, final ClientId clientId) {
-        nativeSavePageLater(
-                mNativeOfflinePageBridge, url, clientId.getNamespace(), clientId.getId());
+    @VisibleForTesting
+    public void savePageLater(String url, ClientId clientId) {
+        savePageLater(url, clientId, true);
+    }
+
+    /**
+     * Save the given URL as an offline page when the network becomes available.
+     *
+     * @param url The given URL to save for later.
+     * @param clientId The client ID for the offline page to be saved later.
+     * @param userRequested Whether this request should be prioritized because the user explicitly
+     *     requested it.
+     */
+    public void savePageLater(final String url, final ClientId clientId, boolean userRequested) {
+        nativeSavePageLater(mNativeOfflinePageBridge, url, clientId.getNamespace(),
+                clientId.getId(), userRequested);
+    }
+
+    /**
+     * Save the given URL as an offline page when the network becomes available with a randomly
+     * generated clientId in the given namespace.
+     *
+     * @param url The given URL to save for later.
+     * @param namespace The namespace for the offline page to be saved later.
+     */
+    public void savePageLaterForDownload(final String url, final String namespace) {
+        // Download UI needs "async_loading" namespace and a random (type 4) GUID.
+        String uuid = UUID.randomUUID().toString();
+        ClientId clientId = new ClientId(namespace, uuid);
+        savePageLater(url, clientId, true /* userRequested */);
     }
 
     /**
@@ -348,6 +473,15 @@ public class OfflinePageBridge {
      */
     public void checkOfflinePageMetadata() {
         nativeCheckMetadataConsistency(mNativeOfflinePageBridge);
+    }
+
+    /**
+     * Retrieves the extra request header to reload the offline page.
+     * @param webContents Contents of the page to reload.
+     * @return The extra request header string.
+     */
+    public String getOfflinePageHeaderForReload(WebContents webContents) {
+        return nativeGetOfflinePageHeaderForReload(mNativeOfflinePageBridge, webContents);
     }
 
     private static class CheckPagesExistOfflineCallbackInternal {
@@ -447,17 +581,18 @@ public class OfflinePageBridge {
     @CalledByNative
     private static void createOfflinePageAndAddToList(List<OfflinePageItem> offlinePagesList,
             String url, long offlineId, String clientNamespace, String clientId, String offlineUrl,
-            long fileSize, long creationTime, int accessCount, long lastAccessTimeMs) {
+            String filePath, long fileSize, long creationTime, int accessCount,
+            long lastAccessTimeMs) {
         offlinePagesList.add(createOfflinePageItem(url, offlineId, clientNamespace, clientId,
-                offlineUrl, fileSize, creationTime, accessCount, lastAccessTimeMs));
+                offlineUrl, filePath, fileSize, creationTime, accessCount, lastAccessTimeMs));
     }
 
     @CalledByNative
     private static OfflinePageItem createOfflinePageItem(String url, long offlineId,
-            String clientNamespace, String clientId, String offlineUrl, long fileSize,
-            long creationTime, int accessCount, long lastAccessTimeMs) {
-        return new OfflinePageItem(url, offlineId, clientNamespace, clientId, offlineUrl, fileSize,
-                creationTime, accessCount, lastAccessTimeMs);
+            String clientNamespace, String clientId, String offlineUrl, String filePath,
+            long fileSize, long creationTime, int accessCount, long lastAccessTimeMs) {
+        return new OfflinePageItem(url, offlineId, clientNamespace, clientId, offlineUrl, filePath,
+                fileSize, creationTime, accessCount, lastAccessTimeMs);
     }
 
     @CalledByNative
@@ -468,6 +603,7 @@ public class OfflinePageBridge {
     private static native boolean nativeIsOfflinePagesEnabled();
     private static native boolean nativeIsOfflineBookmarksEnabled();
     private static native boolean nativeIsBackgroundLoadingEnabled();
+    private static native boolean nativeIsPageSharingEnabled();
     private static native boolean nativeCanSavePage(String url);
     private static native OfflinePageBridge nativeGetOfflinePageBridgeForProfile(Profile profile);
 
@@ -484,16 +620,27 @@ public class OfflinePageBridge {
             long nativeOfflinePageBridge, String clientNamespace, String clientId);
 
     @VisibleForTesting
+    native void nativeGetRequestsInQueue(
+            long nativeOfflinePageBridge, Callback<SavePageRequest[]> callback);
+
+    @VisibleForTesting
+    native void nativeRemoveRequestsFromQueue(
+            long nativeOfflinePageBridge, long[] requestIds, RequestsRemovedCallback callback);
+
+    @VisibleForTesting
     native OfflinePageItem nativeGetPageByOfflineId(long nativeOfflinePageBridge, long offlineId);
-    private native OfflinePageItem nativeGetBestPageForOnlineURL(
-            long nativeOfflinePageBridge, String onlineURL);
+    private native void nativeSelectPageForOnlineUrl(
+            long nativeOfflinePageBridge, String onlineUrl, int tabId,
+            Callback<OfflinePageItem> callback);
     private native void nativeGetPageByOfflineUrl(
             long nativeOfflinePageBridge, String offlineUrl, Callback<OfflinePageItem> callback);
     private native void nativeSavePage(long nativeOfflinePageBridge, SavePageCallback callback,
             WebContents webContents, String clientNamespace, String clientId);
-    private native void nativeSavePageLater(
-            long nativeOfflinePageBridge, String url, String clientNamespace, String clientId);
+    private native void nativeSavePageLater(long nativeOfflinePageBridge, String url,
+            String clientNamespace, String clientId, boolean userRequested);
     private native void nativeDeletePages(
             long nativeOfflinePageBridge, Callback<Integer> callback, long[] offlineIds);
     private native void nativeCheckMetadataConsistency(long nativeOfflinePageBridge);
+    private native String nativeGetOfflinePageHeaderForReload(
+            long nativeOfflinePageBridge, WebContents webContents);
 }

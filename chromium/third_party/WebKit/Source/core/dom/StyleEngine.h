@@ -39,8 +39,8 @@
 #include "core/dom/StyleEngineContext.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
+#include "wtf/AutoReset.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/TemporaryChange.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
@@ -60,13 +60,15 @@ class CORE_EXPORT StyleEngine final : public GarbageCollectedFinalized<StyleEngi
     USING_GARBAGE_COLLECTED_MIXIN(StyleEngine);
 public:
 
-    class IgnoringPendingStylesheet : public TemporaryChange<bool> {
+    class IgnoringPendingStylesheet {
         DISALLOW_NEW();
     public:
         IgnoringPendingStylesheet(StyleEngine& engine)
-            : TemporaryChange<bool>(engine.m_ignorePendingStylesheets, true)
+            : m_scope(&engine.m_ignorePendingStylesheets, true)
         {
         }
+    private:
+        AutoReset<bool> m_scope;
     };
 
     friend class IgnoringPendingStylesheet;
@@ -94,9 +96,10 @@ public:
     void updateStyleSheetsInImport(DocumentStyleSheetCollector& parentCollector);
     void updateActiveStyleSheets(StyleResolverUpdateMode);
 
+    enum ActiveSheetsUpdate { DontUpdateActiveSheets, UpdateActiveSheets };
     String preferredStylesheetSetName() const { return m_preferredStylesheetSetName; }
     String selectedStylesheetSetName() const { return m_selectedStylesheetSetName; }
-    void setPreferredStylesheetSetNameIfNotSet(const String&);
+    void setPreferredStylesheetSetNameIfNotSet(const String&, ActiveSheetsUpdate);
     void setSelectedStylesheetSetName(const String&);
     void setHttpDefaultStyle(const String&);
 
@@ -160,7 +163,6 @@ public:
     void resolverChanged(StyleResolverUpdateMode);
 
     CSSStyleSheet* createSheet(Element*, const String& text, TextPosition startPosition, StyleEngineContext&);
-    void removeSheet(StyleSheetContents*);
 
     void collectScopedStyleFeaturesTo(RuleFeatureSet&) const;
     void ensureFullscreenUAStyle();
@@ -172,9 +174,11 @@ public:
     void attributeChangedForElement(const QualifiedName& attributeName, Element&);
     void idChangedForElement(const AtomicString& oldId, const AtomicString& newId, Element&);
     void pseudoStateChangedForElement(CSSSelector::PseudoType, Element&);
-    void scheduleSiblingInvalidationsForElement(Element&, ContainerNode& schedulingParent);
+    void scheduleSiblingInvalidationsForElement(Element&, ContainerNode& schedulingParent, unsigned minDirectAdjacent);
     void scheduleInvalidationsForInsertedSibling(Element* beforeElement, Element& insertedElement);
     void scheduleInvalidationsForRemovedSibling(Element* beforeElement, Element& removedElement, Element& afterElement);
+    void scheduleNthPseudoInvalidations(ContainerNode&);
+
     unsigned styleForElementCount() const { return m_styleForElementCount; }
     void incStyleForElementCount() { m_styleForElementCount++; }
 
@@ -265,8 +269,8 @@ private:
 
     Member<CSSFontSelector> m_fontSelector;
 
-    HeapHashMap<AtomicString, Member<StyleSheetContents>> m_textToSheetCache;
-    HeapHashMap<Member<StyleSheetContents>, AtomicString> m_sheetToTextCache;
+    HeapHashMap<AtomicString, WeakMember<StyleSheetContents>> m_textToSheetCache;
+    HeapHashMap<WeakMember<StyleSheetContents>, AtomicString> m_sheetToTextCache;
 
     std::unique_ptr<StyleResolverStats> m_styleResolverStats;
     unsigned m_styleForElementCount = 0;

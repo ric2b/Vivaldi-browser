@@ -14,7 +14,7 @@
 namespace catalog {
 namespace {
 
-void AddEntry(const Entry& entry, mojo::Array<mojom::EntryPtr>* ary) {
+void AddEntry(const Entry& entry, std::vector<mojom::EntryPtr>* ary) {
   mojom::EntryPtr entry_ptr(mojom::Entry::New());
   entry_ptr->name = entry.name();
   entry_ptr->display_name = entry.display_name();
@@ -32,12 +32,11 @@ Instance::Instance(std::unique_ptr<Store> store, Reader* system_reader)
       weak_factory_(this) {}
 Instance::~Instance() {}
 
-void Instance::BindShellResolver(
-    shell::mojom::ShellResolverRequest request) {
+void Instance::BindResolver(shell::mojom::ResolverRequest request) {
   if (system_cache_)
-    shell_resolver_bindings_.AddBinding(this, std::move(request));
+    resolver_bindings_.AddBinding(this, std::move(request));
   else
-    pending_shell_resolver_requests_.push_back(std::move(request));
+    pending_resolver_requests_.push_back(std::move(request));
 }
 
 void Instance::BindCatalog(mojom::CatalogRequest request) {
@@ -50,23 +49,26 @@ void Instance::BindCatalog(mojom::CatalogRequest request) {
 void Instance::CacheReady(EntryCache* cache) {
   system_cache_ = cache;
   DeserializeCatalog();
-  for (auto& request : pending_shell_resolver_requests_)
-    BindShellResolver(std::move(request));
+  for (auto& request : pending_resolver_requests_)
+    BindResolver(std::move(request));
   for (auto& request : pending_catalog_requests_)
     BindCatalog(std::move(request));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Instance, shell::mojom::ShellResolver:
+// Instance, shell::mojom::Resolver:
 
-void Instance::ResolveMojoName(const mojo::String& mojo_name,
+void Instance::ResolveMojoName(const std::string& mojo_name,
                                const ResolveMojoNameCallback& callback) {
   DCHECK(system_cache_);
 
   std::string type = shell::GetNameType(mojo_name);
   if (type != shell::kNameType_Mojo && type != shell::kNameType_Exe) {
     std::unique_ptr<Entry> entry(new Entry(mojo_name));
-    callback.Run(shell::mojom::ResolveResult::From(*entry));
+    shell::mojom::ResolveResultPtr result =
+        shell::mojom::ResolveResult::From(*entry);
+    result->capabilities = base::nullopt;
+    callback.Run(std::move(result));
     return;
   }
 
@@ -88,18 +90,17 @@ void Instance::ResolveMojoName(const mojo::String& mojo_name,
 ////////////////////////////////////////////////////////////////////////////////
 // Instance, mojom::Catalog:
 
-void Instance::GetEntries(mojo::Array<mojo::String> names,
+void Instance::GetEntries(const base::Optional<std::vector<std::string>>& names,
                           const GetEntriesCallback& callback) {
   DCHECK(system_cache_);
 
-  mojo::Array<mojom::EntryPtr> entries;
-  if (names.is_null()) {
+  std::vector<mojom::EntryPtr> entries;
+  if (!names.has_value()) {
     // TODO(beng): user catalog.
     for (const auto& entry : *system_cache_)
       AddEntry(*entry.second, &entries);
   } else {
-    std::vector<mojo::String> names_vec = names.PassStorage();
-    for (const std::string& name : names_vec) {
+    for (const std::string& name : names.value()) {
       Entry* entry = nullptr;
       // TODO(beng): user catalog.
       if (system_cache_->find(name) != system_cache_->end())
@@ -113,9 +114,9 @@ void Instance::GetEntries(mojo::Array<mojo::String> names,
 }
 
 void Instance::GetEntriesProvidingClass(
-    const mojo::String& clazz,
+    const std::string& clazz,
     const GetEntriesProvidingClassCallback& callback) {
-  mojo::Array<mojom::EntryPtr> entries;
+  std::vector<mojom::EntryPtr> entries;
   for (const auto& entry : *system_cache_)
     if (entry.second->ProvidesClass(clazz))
       entries.push_back(mojom::Entry::From(*entry.second));
@@ -123,13 +124,13 @@ void Instance::GetEntriesProvidingClass(
 }
 
 void Instance::GetEntriesConsumingMIMEType(
-    const mojo::String& mime_type,
+    const std::string& mime_type,
     const GetEntriesConsumingMIMETypeCallback& callback) {
   // TODO(beng): implement.
 }
 
 void Instance::GetEntriesSupportingScheme(
-    const mojo::String& scheme,
+    const std::string& scheme,
     const GetEntriesSupportingSchemeCallback& callback) {
   // TODO(beng): implement.
 }

@@ -22,14 +22,16 @@ struct CONTENT_EXPORT SyntheticPointerActionParams
     : public SyntheticGestureParams {
  public:
   // Actions are queued up until we receive a PROCESS action, at which point
-  // we'll dispatch all queued events.
+  // we'll dispatch all queued events. A FINISH action will be received when
+  // we reach the end of the action sequence.
   enum class PointerActionType {
     NOT_INITIALIZED,
     PRESS,
     MOVE,
     RELEASE,
     PROCESS,
-    POINTER_ACTION_TYPE_MAX = PROCESS
+    FINISH,
+    POINTER_ACTION_TYPE_MAX = FINISH
   };
 
   SyntheticPointerActionParams();
@@ -47,7 +49,10 @@ struct CONTENT_EXPORT SyntheticPointerActionParams
   }
 
   void set_index(int index) {
-    DCHECK(pointer_action_type_ != PointerActionType::PROCESS);
+    DCHECK(pointer_action_type_ != PointerActionType::PROCESS &&
+           pointer_action_type_ != PointerActionType::FINISH);
+    // For all mouse pointer actions, the index should always be 0.
+    DCHECK(gesture_source_type != MOUSE_INPUT || index == 0);
     index_ = index;
   }
 
@@ -60,7 +65,9 @@ struct CONTENT_EXPORT SyntheticPointerActionParams
   PointerActionType pointer_action_type() const { return pointer_action_type_; }
 
   int index() const {
-    DCHECK(pointer_action_type_ != PointerActionType::PROCESS);
+    DCHECK(pointer_action_type_ != PointerActionType::PROCESS &&
+           pointer_action_type_ != PointerActionType::FINISH);
+    DCHECK(gesture_source_type != MOUSE_INPUT || index_ == 0);
     return index_;
   }
 

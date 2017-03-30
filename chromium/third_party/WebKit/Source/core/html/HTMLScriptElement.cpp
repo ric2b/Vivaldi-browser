@@ -90,7 +90,7 @@ void HTMLScriptElement::parseAttribute(const QualifiedName& name, const AtomicSt
 
 Node::InsertionNotificationRequest HTMLScriptElement::insertedInto(ContainerNode* insertionPoint)
 {
-    if (insertionPoint->inShadowIncludingDocument() && hasSourceAttribute() && !loader()->isScriptTypeSupported(ScriptLoader::DisallowLegacyTypeInTypeAttribute))
+    if (insertionPoint->isConnected() && hasSourceAttribute() && !loader()->isScriptTypeSupported(ScriptLoader::DisallowLegacyTypeInTypeAttribute))
         UseCounter::count(document(), UseCounter::ScriptElementWithInvalidTypeHasSrc);
     HTMLElement::insertedInto(insertionPoint);
     logAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
@@ -170,7 +170,7 @@ bool HTMLScriptElement::hasSourceAttribute() const
 
 void HTMLScriptElement::dispatchLoadEvent()
 {
-    ASSERT(!m_loader->haveFiredLoadEvent());
+    DCHECK(!m_loader->haveFiredLoadEvent());
     dispatchEvent(Event::create(EventTypeNames::load));
 }
 

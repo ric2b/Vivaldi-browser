@@ -8,7 +8,9 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 #include <set>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/location.h"
@@ -58,7 +60,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/url_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/crx_file/id_util.h"
@@ -83,6 +84,7 @@
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/feature_switch.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/background_info.h"
@@ -205,11 +207,14 @@ bool ExtensionService::OnExternalExtensionUpdateUrlFound(
 
   const Extension* extension = GetExtensionById(info.extension_id, true);
   if (extension) {
-    // Already installed. Skip this install if the current location has
-    // higher priority than |info.download_location|.
+    // Already installed. Skip this install if the current location has higher
+    // priority than |info.download_location|, and we aren't doing a
+    // reinstall of a corrupt policy force-installed extension.
     Manifest::Location current = extension->location();
-    if (current ==
-        Manifest::GetHigherPriorityLocation(current, info.download_location)) {
+    if (!pending_extension_manager_.IsPolicyReinstallForCorruptionExpected(
+            info.extension_id) &&
+        current == Manifest::GetHigherPriorityLocation(
+                       current, info.download_location)) {
       return false;
     }
     // Otherwise, overwrite the current installation.
@@ -237,16 +242,16 @@ void ExtensionService::OnExternalProviderUpdateComplete(
     const ScopedVector<ExternalInstallInfoFile>& file_extensions,
     const std::set<std::string>& removed_extensions) {
   // Update pending_extension_manager() with the new extensions first.
-  for (const auto& extension : update_url_extensions)
+  for (auto* extension : update_url_extensions)
     OnExternalExtensionUpdateUrlFound(*extension, false);
-  for (const auto& extension : file_extensions)
+  for (auto* extension : file_extensions)
     OnExternalExtensionFileFound(*extension);
 
 #if DCHECK_IS_ON()
   for (const std::string& id : removed_extensions) {
-    for (const auto& extension : update_url_extensions)
+    for (auto* extension : update_url_extensions)
       DCHECK_NE(id, extension->extension_id);
-    for (const auto& extension : file_extensions)
+    for (auto* extension : file_extensions)
       DCHECK_NE(id, extension->extension_id);
   }
 #endif
@@ -384,7 +389,7 @@ ExtensionService::ExtensionService(Profile* profile,
 
   // How long is the path to the Extensions directory?
   UMA_HISTOGRAM_CUSTOM_COUNTS("Extensions.ExtensionRootPathLength",
-                              install_directory_.value().length(), 0, 500, 100);
+                              install_directory_.value().length(), 1, 500, 100);
 }
 
 extensions::PendingExtensionManager*
@@ -888,6 +893,7 @@ void ExtensionService::DisableExtension(const std::string& extension_id,
   // can be uninstalled by the browser if the user sets extension-specific
   // preferences.
   if (extension && !(disable_reasons & Extension::DISABLE_RELOAD) &&
+      !(disable_reasons & Extension::DISABLE_CORRUPTED) &&
       !(disable_reasons & Extension::DISABLE_UPDATE_REQUIRED_BY_POLICY) &&
       !system_->management_policy()->UserMayModifySettings(extension,
                                                            nullptr) &&
@@ -1530,7 +1536,7 @@ void ExtensionService::AddExtension(const Extension* extension) {
 void ExtensionService::AddComponentExtension(const Extension* extension) {
   const std::string old_version_string(
       extension_prefs_->GetVersionString(extension->id()));
-  const Version old_version(old_version_string);
+  const base::Version old_version(old_version_string);
 
   VLOG(1) << "AddComponentExtension " << extension->name();
   if (!old_version.IsValid() || old_version != *extension->version()) {
@@ -1747,6 +1753,10 @@ void ExtensionService::OnExtensionInstalled(
       disable_reasons = Extension::DISABLE_NONE;
     }
   }
+
+  // If the old version of the extension was disabled due to corruption, this
+  // new install may correct the problem.
+  disable_reasons &= ~Extension::DISABLE_CORRUPTED;
 
   // Unsupported requirements overrides the management policy.
   if (install_flags & extensions::kInstallFlagHasRequirementErrors) {
@@ -2346,7 +2356,8 @@ void ExtensionService::UpdateBlacklistedExtensions(
       continue;
     }
     registry_->RemoveBlacklisted(*it);
-    extension_prefs_->SetExtensionBlacklisted(extension->id(), false);
+    extension_prefs_->SetExtensionBlacklistState(extension->id(),
+                                                 extensions::NOT_BLACKLISTED);
     AddExtension(extension.get());
     UMA_HISTOGRAM_ENUMERATION("ExtensionBlacklist.UnblacklistInstalled",
                               extension->location(),

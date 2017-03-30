@@ -28,7 +28,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/sync_service_utils.h"
+#include "components/sync/driver/sync_service_utils.h"
 #include "content/public/browser/notification_service.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -99,7 +99,7 @@ ChromeAutocompleteProviderClient::GetTopSites() {
 }
 
 bookmarks::BookmarkModel* ChromeAutocompleteProviderClient::GetBookmarkModel() {
-  return BookmarkModelFactory::GetForProfile(profile_);
+  return BookmarkModelFactory::GetForBrowserContext(profile_);
 }
 
 history::URLDatabase* ChromeAutocompleteProviderClient::GetInMemoryDatabase() {
@@ -147,6 +147,11 @@ ChromeAutocompleteProviderClient::GetKeywordExtensionsDelegate(
 #else
   return nullptr;
 #endif
+}
+
+PhysicalWebDataSource*
+ChromeAutocompleteProviderClient::GetPhysicalWebDataSource() {
+  return nullptr;
 }
 
 std::string ChromeAutocompleteProviderClient::GetAcceptLanguages() const {

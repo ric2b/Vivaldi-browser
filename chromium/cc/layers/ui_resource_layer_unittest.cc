@@ -12,6 +12,7 @@
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/geometry_test_utils.h"
+#include "cc/test/stub_layer_tree_host_single_thread_client.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/single_thread_proxy.h"
@@ -45,15 +46,12 @@ class TestUIResourceLayer : public UIResourceLayer {
 };
 
 class UIResourceLayerTest : public testing::Test {
- public:
-  UIResourceLayerTest() : fake_client_(FakeLayerTreeHostClient::DIRECT_3D) {}
-
  protected:
   void SetUp() override {
     layer_tree_host_ =
         FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_);
     layer_tree_host_->InitializeSingleThreaded(
-        &fake_client_, base::ThreadTaskRunnerHandle::Get(), nullptr);
+        &single_thread_client_, base::ThreadTaskRunnerHandle::Get(), nullptr);
   }
 
   void TearDown() override {
@@ -61,6 +59,7 @@ class UIResourceLayerTest : public testing::Test {
   }
 
   FakeLayerTreeHostClient fake_client_;
+  StubLayerTreeHostSingleThreadClient single_thread_client_;
   TestTaskGraphRunner task_graph_runner_;
   std::unique_ptr<FakeLayerTreeHost> layer_tree_host_;
 };

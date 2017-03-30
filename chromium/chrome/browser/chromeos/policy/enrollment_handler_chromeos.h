@@ -19,15 +19,23 @@
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "google_apis/gaia/gaia_oauth_client.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 namespace base {
 class SequencedTaskRunner;
 }
 
 namespace chromeos {
-class OwnerSettingsServiceChromeOS;
+class CryptohomeClient;
+
+namespace attestation {
+class AttestationFlow;
+}
+}
+
+namespace cryptohome {
+class AsyncMethodCaller;
 }
 
 namespace policy {
@@ -60,12 +68,12 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   // are acceptable. If the mode specified by the server is not acceptable,
   // enrollment will fail with an EnrollmentStatus indicating
   // STATUS_REGISTRATION_BAD_MODE.
-  // |management_mode| should be either ENTERPRISE_MANAGED or CONSUMER_MANAGED.
   EnrollmentHandlerChromeOS(
       DeviceCloudPolicyStoreChromeOS* store,
       EnterpriseInstallAttributes* install_attributes,
       ServerBackedStateKeysBroker* state_keys_broker,
-      chromeos::OwnerSettingsServiceChromeOS* owner_settings_service,
+      cryptohome::AsyncMethodCaller* async_method_caller,
+      chromeos::CryptohomeClient* cryptohome_client,
       std::unique_ptr<CloudPolicyClient> client,
       scoped_refptr<base::SequencedTaskRunner> background_task_runner,
       const EnrollmentConfig& enrollment_config,
@@ -73,7 +81,6 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
       const std::string& client_id,
       const std::string& requisition,
       const AllowedDeviceModes& allowed_device_modes,
-      ManagementMode management_mode,
       const EnrollmentCallback& completion_callback);
   ~EnrollmentHandlerChromeOS() override;
 
@@ -125,6 +132,14 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   // Handles the response to a request for server-backed state keys.
   void HandleStateKeysResult(const std::vector<std::string>& state_keys);
 
+  // Starts attestation based enrollment flow.
+  void StartAttestationBasedEnrollmentFlow();
+
+  // Handles the response to a request for a registration certificate.
+  void HandleRegistrationCertificateResult(
+      bool success,
+      const std::string& pem_certificate_chain);
+
   // Starts registration if the store is initialized.
   void StartRegistration();
 
@@ -160,17 +175,18 @@ class EnrollmentHandlerChromeOS : public CloudPolicyClient::Observer,
   DeviceCloudPolicyStoreChromeOS* store_;
   EnterpriseInstallAttributes* install_attributes_;
   ServerBackedStateKeysBroker* state_keys_broker_;
-  chromeos::OwnerSettingsServiceChromeOS* owner_settings_service_;
+  cryptohome::AsyncMethodCaller* async_method_caller_;
+  chromeos::CryptohomeClient* cryptohome_client_;
   std::unique_ptr<CloudPolicyClient> client_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
   std::unique_ptr<gaia::GaiaOAuthClient> gaia_oauth_client_;
+  std::unique_ptr<chromeos::attestation::AttestationFlow> attestation_flow_;
 
   EnrollmentConfig enrollment_config_;
   std::string auth_token_;
   std::string client_id_;
   std::string requisition_;
   AllowedDeviceModes allowed_device_modes_;
-  ManagementMode management_mode_;
   EnrollmentCallback completion_callback_;
 
   // The current state key provided by |state_keys_broker_|.

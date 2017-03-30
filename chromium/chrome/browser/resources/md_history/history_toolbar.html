@@ -1,6 +1,4 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/hardware-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tab.html">
@@ -24,8 +22,8 @@
       #overlay-buttons,
       #overlay-wrapper,
       #toolbar-container {
-        @apply(--layout-center);
-        @apply(--layout-horizontal);
+        align-items: center;
+        display: flex;
         width: 100%;
       }
 
@@ -37,14 +35,30 @@
         height: var(--toolbar-height);
       }
 
+      cr-toolbar {
+        --cr-toolbar-field-margin: var(--side-bar-width);
+      }
+
+      :host([has-drawer]) cr-toolbar {
+        --cr-toolbar-field-margin: 0;
+      }
+
+      :host(:not([has-drawer])) #overlay-wrapper {
+        -webkit-margin-start: var(--side-bar-width);
+      }
+
       #overlay-buttons {
         margin: 0 auto;
         max-width: var(--card-max-width);
         padding: 0 var(--card-padding-side);
       }
 
+      paper-button {
+        font-weight: 500;
+      }
+
       #number-selected {
-        @apply(--layout-flex);
+        flex: 1;
       }
 
       #cancel-icon-button {
@@ -74,8 +88,8 @@
       }
 
       #grouped-buttons-container {
-        @apply(--layout-center);
-        @apply(--layout-horizontal);
+        align-items: center;
+        display: flex;
       }
 
       #grouped-range-buttons {
@@ -83,11 +97,11 @@
       }
 
       #grouped-nav-container {
-        @apply(--layout-center);
-        @apply(--layout-end-justified);
-        @apply(--layout-flex);
-        @apply(--layout-horizontal);
         -webkit-margin-end: 24px;
+        align-items: center;
+        display: flex;
+        flex: 1;
+        justify-content: flex-end;
         overflow: hidden;
         transition: opacity 150ms;
       }
@@ -114,21 +128,24 @@
       <cr-toolbar id="main-toolbar" page-name="$i18n{title}"
           clear-label="$i18n{clearSearch}" search-prompt="$i18n{searchPrompt}"
           hidden$="[[itemsSelected_]]" spinner-active="[[spinnerActive]]"
+          show-menu="[[hasDrawer]]" menu-label="$i18n{historyMenuButton}"
           on-search-changed="onSearchChanged_">
       </cr-toolbar>
-      <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
-        <div id="overlay-buttons">
-          <paper-icon-button icon="cr:clear" id="cancel-icon-button"
-              on-tap="onClearSelectionTap_"></paper-icon-button>
-          <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
-          <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
-            $i18n{cancel}
-          </paper-button>
-          <paper-button id="delete-button" on-tap="onDeleteTap_">
-            $i18n{delete}
-          </paper-button>
+      <template is="dom-if" if="[[itemsSelected_]]">
+        <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
+          <div id="overlay-buttons">
+            <paper-icon-button icon="cr:clear" id="cancel-icon-button"
+                on-tap="onClearSelectionTap_"></paper-icon-button>
+            <div id="number-selected">[[numberOfItemsSelected_(count)]]</div>
+            <paper-button id="cancel-button" on-tap="onClearSelectionTap_">
+              $i18n{cancel}
+            </paper-button>
+            <paper-button id="delete-button" on-tap="onDeleteTap_">
+              $i18n{delete}
+            </paper-button>
+          </div>
         </div>
-      </div>
+      </template>
     </div>
     <template is="dom-if" if="[[isGroupedMode]]">
       <div id="grouped-buttons-container">

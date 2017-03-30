@@ -15,10 +15,8 @@
 #include "components/arc/instance_holder.h"
 
 namespace base {
-
 class FilePath;
-
-}  // namespace base
+}
 
 namespace arc {
 

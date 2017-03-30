@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_BROWSER_THREAD_IMPL_H_
 #define CONTENT_BROWSER_BROWSER_THREAD_IMPL_H_
 
+#include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,13 +26,15 @@ class CONTENT_EXPORT BrowserThreadImpl : public BrowserThread,
                     base::MessageLoop* message_loop);
   ~BrowserThreadImpl() override;
 
+  bool Start();
   bool StartWithOptions(const Options& options);
+  bool StartAndWaitForTesting();
 
   static void ShutdownThreadPool();
 
  protected:
   void Init() override;
-  void Run(base::MessageLoop* message_loop) override;
+  void Run(base::RunLoop* run_loop) override;
   void CleanUp() override;
 
  private:
@@ -42,13 +45,13 @@ class CONTENT_EXPORT BrowserThreadImpl : public BrowserThread,
 
   // The following are unique function names that makes it possible to tell
   // the thread id from the callstack alone in crash dumps.
-  void UIThreadRun(base::MessageLoop* message_loop);
-  void DBThreadRun(base::MessageLoop* message_loop);
-  void FileThreadRun(base::MessageLoop* message_loop);
-  void FileUserBlockingThreadRun(base::MessageLoop* message_loop);
-  void ProcessLauncherThreadRun(base::MessageLoop* message_loop);
-  void CacheThreadRun(base::MessageLoop* message_loop);
-  void IOThreadRun(base::MessageLoop* message_loop);
+  void UIThreadRun(base::RunLoop* run_loop);
+  void DBThreadRun(base::RunLoop* run_loop);
+  void FileThreadRun(base::RunLoop* run_loop);
+  void FileUserBlockingThreadRun(base::RunLoop* run_loop);
+  void ProcessLauncherThreadRun(base::RunLoop* run_loop);
+  void CacheThreadRun(base::RunLoop* run_loop);
+  void IOThreadRun(base::RunLoop* run_loop);
 
   static bool PostTaskHelper(
       BrowserThread::ID identifier,

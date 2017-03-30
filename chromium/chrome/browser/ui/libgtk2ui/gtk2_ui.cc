@@ -6,6 +6,7 @@
 
 #include <math.h>
 #include <pango/pango.h>
+#include <X11/Xcursor/Xcursor.h>
 #include <set>
 #include <utility>
 
@@ -49,6 +50,7 @@
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/skbitmap_operations.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/gfx/x/x11_types.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/button/blue_button.h"
@@ -437,6 +439,11 @@ double GetDPI() {
   if (dpi < 0) {
     const double kDefaultDPI = 96;
 
+    if (display::Display::HasForceDeviceScaleFactor()) {
+      dpi = display::Display::GetForcedDeviceScaleFactor() * kDefaultDPI;
+      return dpi;
+    }
+
     GtkSettings* gtk_settings = gtk_settings_get_default();
     CHECK(gtk_settings);
     gint gtk_dpi = -1;
@@ -508,8 +515,9 @@ void Gtk2UI::Initialize() {
                          G_CALLBACK(OnThemeChanged),
                          this);
 
-
   LoadGtkValues();
+
+  LoadCursorTheme();
 
 #if defined(ENABLE_BASIC_PRINTING)
   printing::PrintingContextLinux::SetCreatePrintDialogFunction(
@@ -994,6 +1002,24 @@ void Gtk2UI::LoadGtkValues() {
       theme->GetSystemColor(ui::NativeTheme::kColorId_ThrobberSpinningColor);
   colors_[ThemeProperties::COLOR_TAB_THROBBER_WAITING] =
       theme->GetSystemColor(ui::NativeTheme::kColorId_ThrobberWaitingColor);
+}
+
+void Gtk2UI::LoadCursorTheme() {
+  GtkSettings* settings = gtk_settings_get_default();
+
+  gchar* theme = nullptr;
+  gint size = 0;
+  g_object_get(settings,
+               "gtk-cursor-theme-name", &theme,
+               "gtk-cursor-theme-size", &size,
+               nullptr);
+
+  if (theme)
+    XcursorSetTheme(gfx::GetXDisplay(), theme);
+  if (size)
+    XcursorSetDefaultSize(gfx::GetXDisplay(), size);
+
+  g_free(theme);
 }
 
 void Gtk2UI::UpdateMaterialDesignColors() {

@@ -1,0 +1,98 @@
+import("//vivaldi/gn/config/version.gni")
+import("//chrome/version.gni")
+
+static_library("browser") {
+  public_deps = [
+    "//vivaldi/app",
+    "//vivaldi/app/resources",
+    "//vivaldi/app/resources",
+    "//vivaldi/clientparts",
+    "//vivaldi/extensions",
+    "//vivaldi/extensions/schema:api",
+    "//vivaldi/extraparts",
+    "//vivaldi/importer",
+    "//vivaldi/notes",
+    "//vivaldi/notifications",
+    "//vivaldi/prefs:browser_prefs",
+    "//vivaldi/ui",
+    "//vivaldi/vivapp:vivaldi_app",
+  ]
+  deps = [
+    ":vivaldi_version_info",
+
+    #"//vivaldi/base",
+    "//base:base",
+    "//chrome/app:chromium_strings",
+    "//chrome/app:generated_resources",
+    "//chrome/app:google_chrome_strings",
+    "//chrome/browser:resources",
+
+    #"//chrome/browser/extensions",
+    "//components/os_crypt:os_crypt",
+    "//components/search_engines",
+    "//components/strings:components_chromium_strings",
+    "//components/strings:components_google_chrome_strings",
+    "//components/strings:components_strings",
+    "//crypto:crypto",
+    "//skia:skia",
+    "//third_party/WebKit/public:blink_headers",
+  ]
+  if (is_win) {
+    deps += [ "//vivaldi/third_party:sparkle" ]
+  } else if (is_mac) {
+    deps += [
+      #"//vivaldi/third_party:copy_sparkle_framework",
+      "//vivaldi/app/nibs:vivaldi_xibs",
+    ]
+  }
+  sources = [
+    "../app/vivaldi_command_controller.cpp",
+    "../app/vivaldi_command_controller.h",
+    "../app/vivaldi_commands.h",
+    "vivaldi_browser_finder.cc",
+    "vivaldi_browser_finder.h",
+  ]
+  if (is_win) {
+    sources += [
+      "vivaldi_download_status.cpp",
+      "vivaldi_download_status.h",
+    ]
+  }
+  if (is_mac) {
+    sources += [
+      "vivaldi_app_observer.h",
+      "vivaldi_app_observer.mm",
+    ]
+  } else {
+    #deps += [ "//chrome/utility" ]
+  }
+}
+
+static_library("clipboard") {
+  sources = [
+    "vivaldi_clipboard_utils.cc",
+    "vivaldi_clipboard_utils.h",
+  ]
+}
+
+action("vivaldi_version_info") {
+  script = vivaldi_version_py_path
+  inputs = [
+    vivaldi_version_path,
+  ]
+  outputs = [
+    "$root_build_dir/vivaldi_version.txt",
+  ]
+  args = [
+           "-f",
+           rebase_path(vivaldi_version_path, root_build_dir),
+           "-f",
+           rebase_path(chrome_version_path, root_build_dir),
+           "-f",
+           rebase_path(lastchange_path, root_build_dir),
+           "-e",
+           "VIVALDI_BUILD=$GLOBAL_BUILDNUM",
+           "--vivaldi",
+           "-o",
+         ] + rebase_path(outputs, root_build_dir)
+}

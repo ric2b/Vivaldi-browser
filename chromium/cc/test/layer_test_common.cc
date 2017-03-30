@@ -75,14 +75,14 @@ void LayerTestCommon::VerifyQuadsAreOccluded(const QuadList& quads,
                                              const gfx::Rect& occluded,
                                              size_t* partially_occluded_count) {
   // No quad should exist if it's fully occluded.
-  for (const auto& quad : quads) {
+  for (auto* quad : quads) {
     gfx::Rect target_visible_rect = MathUtil::MapEnclosingClippedRect(
         quad->shared_quad_state->quad_to_target_transform, quad->visible_rect);
     EXPECT_FALSE(occluded.Contains(target_visible_rect));
   }
 
   // Quads that are fully occluded on one axis only should be shrunken.
-  for (const auto& quad : quads) {
+  for (auto* quad : quads) {
     gfx::Rect target_rect = MathUtil::MapEnclosingClippedRect(
         quad->shared_quad_state->quad_to_target_transform, quad->rect);
     if (!quad->shared_quad_state->quad_to_target_transform
@@ -119,8 +119,7 @@ LayerTestCommon::LayerImplTest::LayerImplTest()
     : LayerImplTest(LayerTreeSettingsForTesting()) {}
 
 LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
-    : client_(FakeLayerTreeHostClient::DIRECT_3D),
-      output_surface_(FakeOutputSurface::Create3d()),
+    : output_surface_(FakeOutputSurface::CreateDelegating3d()),
       host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_, settings)),
       render_pass_(RenderPass::Create()),
       layer_impl_id_(2) {
@@ -129,21 +128,22 @@ LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
   host_->host_impl()->active_tree()->SetRootLayerForTesting(std::move(root));
   root_layer_for_testing()->SetHasRenderSurface(true);
   host_->host_impl()->SetVisible(true);
-  host_->host_impl()->InitializeRenderer(output_surface_.get());
+  EXPECT_TRUE(host_->host_impl()->InitializeRenderer(output_surface_.get()));
 
   const int timeline_id = AnimationIdProvider::NextTimelineId();
   timeline_ = AnimationTimeline::Create(timeline_id);
-  host_->animation_host()->AddAnimationTimeline(timeline_);
+  host_->GetLayerTree()->animation_host()->AddAnimationTimeline(timeline_);
   // Create impl-side instance.
-  host_->animation_host()->PushPropertiesTo(
+  host_->GetLayerTree()->animation_host()->PushPropertiesTo(
       host_->host_impl()->animation_host());
   timeline_impl_ =
       host_->host_impl()->animation_host()->GetTimelineById(timeline_id);
 }
 
 LayerTestCommon::LayerImplTest::~LayerImplTest() {
-  host_->animation_host()->RemoveAnimationTimeline(timeline_);
+  host_->GetLayerTree()->animation_host()->RemoveAnimationTimeline(timeline_);
   timeline_ = nullptr;
+  host_->host_impl()->ReleaseOutputSurface();
 }
 
 void LayerTestCommon::LayerImplTest::CalcDrawProps(

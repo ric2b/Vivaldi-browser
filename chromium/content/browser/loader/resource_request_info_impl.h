@@ -197,6 +197,21 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     initiated_in_secure_context_ = secure;
   }
 
+  // Vivaldi specific
+  void set_ask_for_save_target(bool ask) {
+      ask_for_save_target_ = ask;
+  }
+  void set_open_when_downloaded(bool open) {
+      open_when_downloaded_ = open;
+  }
+  bool ask_for_save_target() {
+    return ask_for_save_target_;
+  }
+  bool open_when_downloaded() {
+      return open_when_downloaded_;
+  }
+  // Vivaldi specific ^^^
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest,
                            DeletedFilterDetached);
@@ -240,6 +255,10 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   const std::string original_headers_;
   scoped_refptr<ResourceRequestBodyImpl> body_;
   bool initiated_in_secure_context_;
+
+  // Vivaldi additions to pass save info to defered downloads. blobs etc.
+  bool ask_for_save_target_ = false;
+  bool open_when_downloaded_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceRequestInfoImpl);
 };

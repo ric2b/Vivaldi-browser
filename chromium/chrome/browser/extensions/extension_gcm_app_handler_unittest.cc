@@ -28,6 +28,7 @@
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/services/gcm/gcm_product_util.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -168,7 +169,7 @@ class FakeExtensionGCMAppHandler : public ExtensionGCMAppHandler {
 
   void RemoveAppHandler(const std::string& app_id) override {
     ExtensionGCMAppHandler::RemoveAppHandler(app_id);
-    if (!GetGCMDriver()->app_handlers().size())
+    if (GetGCMDriver()->app_handlers().empty())
       app_handler_count_drop_to_zero_ = true;
   }
 
@@ -197,10 +198,10 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
       content::BrowserContext* context) {
     Profile* profile = Profile::FromBrowserContext(context);
     scoped_refptr<base::SequencedTaskRunner> ui_thread =
-        content::BrowserThread::GetMessageLoopProxyForThread(
+        content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::UI);
     scoped_refptr<base::SequencedTaskRunner> io_thread =
-        content::BrowserThread::GetMessageLoopProxyForThread(
+        content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::IO);
     base::SequencedWorkerPool* worker_pool =
         content::BrowserThread::GetBlockingPool();
@@ -211,6 +212,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     return base::WrapUnique(new gcm::GCMProfileService(
         profile->GetPrefs(), profile->GetPath(), profile->GetRequestContext(),
         chrome::GetChannel(),
+        gcm::GetProductCategoryForSubtypes(profile->GetPrefs()),
         std::unique_ptr<ProfileIdentityProvider>(new ProfileIdentityProvider(
             SigninManagerFactory::GetForProfile(profile),
             ProfileOAuth2TokenServiceFactory::GetForProfile(profile),

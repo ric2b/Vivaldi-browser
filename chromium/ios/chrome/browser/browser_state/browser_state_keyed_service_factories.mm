@@ -21,7 +21,7 @@
 #include "ios/chrome/browser/history/top_sites_factory.h"
 #include "ios/chrome/browser/history/web_history_service_factory.h"
 #include "ios/chrome/browser/invalidation/ios_chrome_profile_invalidation_provider_factory.h"
-#include "ios/chrome/browser/ntp_snippets/ios_chrome_ntp_snippets_service_factory.h"
+#include "ios/chrome/browser/ntp_snippets/ios_chrome_content_suggestions_service_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -52,6 +52,7 @@
 // TODO(erg): This needs to be something else. I don't think putting every
 // FooServiceFactory here will scale or is desirable long term.
 void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
+  autofill::PersonalDataManagerFactory::GetInstance();
   dom_distiller::DomDistillerServiceFactory::GetInstance();
   ios::AboutSigninInternalsFactory::GetInstance();
   ios::AccountConsistencyServiceFactory::GetInstance();
@@ -79,12 +80,11 @@ void EnsureBrowserStateKeyedServiceFactoriesBuilt() {
   IOSChromeLargeIconCacheFactory::GetInstance();
   IOSChromeLargeIconServiceFactory::GetInstance();
   IOSChromeFaviconLoaderFactory::GetInstance();
-  IOSChromeNTPSnippetsServiceFactory::GetInstance();
+  IOSChromeContentSuggestionsServiceFactory::GetInstance();
   IOSChromePasswordManagerSettingMigratorServiceFactory::GetInstance();
   IOSChromePasswordStoreFactory::GetInstance();
   IOSChromeProfileInvalidationProviderFactory::GetInstance();
   OAuth2TokenServiceFactory::GetInstance();
-  PersonalDataManagerFactory::GetInstance();
   SigninClientFactory::GetInstance();
   suggestions::SuggestionsServiceFactory::GetInstance();
   SyncSetupServiceFactory::GetInstance();

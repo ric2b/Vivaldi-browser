@@ -13,13 +13,11 @@ namespace cc {
 class FakeLayerTreeHostImplClient : public LayerTreeHostImplClient {
  public:
   // LayerTreeHostImplClient implementation.
-  void UpdateRendererCapabilitiesOnImplThread() override {}
   void DidLoseOutputSurfaceOnImplThread() override {}
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override {}
   void SetBeginFrameSource(BeginFrameSource* source) override {}
   void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override {}
-  void DidSwapBuffersOnImplThread() override {}
   void DidSwapBuffersCompleteOnImplThread() override {}
   void OnCanDrawStateChanged(bool can_draw) override {}
   void NotifyReadyToActivate() override {}

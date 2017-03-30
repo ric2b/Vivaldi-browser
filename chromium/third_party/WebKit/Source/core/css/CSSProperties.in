@@ -45,6 +45,12 @@
 // The property will inherit by default if no value is specified, typically
 // mentioned in specifications as "Inherited: yes"
 
+// - independent
+// This property affects only one field on ComputedStyle, and can be set
+// directly during inheritance instead of forcing a recalc.
+// StyleResolver and StyleAdjuster are not invoked when these properties
+// are changed on a parent. Recalcs only happen if at least one
+// non-independent inherited property is changed in the parent.
 
 // The remaining arguments are used for the StyleBuilder and allow us to
 // succinctly describe how to apply properties. When default handlers are not
@@ -121,14 +127,14 @@ text-rendering inherited, font, type_name=TextRenderingMode
 zoom custom_all
 
 align-content initial=initialContentAlignment, converter=convertContentAlignmentData
-align-items initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
+align-items initial=initialDefaultAlignment, converter=convertSelfOrDefaultAlignmentData
 alignment-baseline svg
 align-self initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
 animation-delay custom_all
 animation-direction custom_all
 animation-duration custom_all
 animation-fill-mode custom_all
-animation-iteration-count custom_all
+animation-iteration-count keywords=[infinite], supports_multiple, custom_all
 animation-name custom_all
 animation-play-state custom_all
 animation-timing-function custom_all
@@ -138,7 +144,7 @@ background-attachment custom_all
 background-blend-mode custom_all
 background-clip custom_all
 background-color interpolable, custom_all
-background-image interpolable, custom_all
+background-image interpolable, custom_all, typedom_types=[Image], keywords=[auto]
 background-origin custom_all
 background-position-x interpolable, custom_all
 background-position-y interpolable, custom_all
@@ -155,7 +161,7 @@ border-collapse inherited
 border-image-outset interpolable, custom_all
 border-image-repeat custom_all
 border-image-slice interpolable, custom_all
-border-image-source interpolable, custom_value
+border-image-source interpolable, custom_value, typedom_types=[Image], keywords=[none]
 border-image-width interpolable, custom_all
 border-left-color interpolable, custom_all
 border-left-style type_name=EBorderStyle, initial=initialBorderStyle
@@ -185,7 +191,7 @@ color-interpolation-filters inherited, svg, type_name=EColorInterpolation
 color-rendering inherited, svg
 column-fill type_name=ColumnFill
 contain runtime_flag=CSSContainment, converter=convertFlags<Containment>
-content custom_all
+content custom_all, typedom_types=[Image], supports_multiple
 counter-increment custom_all
 counter-reset custom_all
 cursor inherited, custom_all
@@ -207,9 +213,9 @@ flex-wrap
 float type_name=EFloat, name_for_methods=Floating
 flood-color interpolable, svg, converter=convertColor
 flood-opacity interpolable, svg, converter=convertNumberOrPercentage
-grid-auto-columns runtime_flag=CSSGridLayout, converter=convertGridTrackSize
+grid-auto-columns runtime_flag=CSSGridLayout, converter=convertGridTrackSizeList
 grid-auto-flow runtime_flag=CSSGridLayout, converter=convertGridAutoFlow, type_name=GridAutoFlow
-grid-auto-rows runtime_flag=CSSGridLayout, converter=convertGridTrackSize
+grid-auto-rows runtime_flag=CSSGridLayout, converter=convertGridTrackSizeList
 grid-column-end runtime_flag=CSSGridLayout, converter=convertGridPosition
 grid-column-gap runtime_flag=CSSGridLayout, converter=convertLength
 grid-column-start runtime_flag=CSSGridLayout, converter=convertGridPosition
@@ -231,7 +237,7 @@ left typedom_types=[Length], keywords=[auto], supports_percentage, interpolable,
 letter-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing
 lighting-color interpolable, svg, converter=convertColor
 line-height interpolable, inherited, getter=specifiedLineHeight, converter=convertLineHeight
-list-style-image interpolable, inherited, custom_value
+list-style-image interpolable, inherited, custom_value, typedom_types=[Image]
 list-style-position inherited
 list-style-type inherited
 margin-bottom interpolable, initial=initialMargin, converter=convertQuirkyLength
@@ -261,6 +267,7 @@ outline-color interpolable, custom_all
 outline-offset interpolable, converter=convertComputedLength<int>
 outline-style custom_all
 outline-width interpolable, converter=convertLineWidth<unsigned short>
+overflow-anchor runtime_flag=ScrollAnchoring, type_name=EOverflowAnchor
 overflow-wrap inherited
 overflow-x type_name=EOverflow
 overflow-y type_name=EOverflow
@@ -271,7 +278,7 @@ padding-top interpolable, initial=initialPadding, converter=convertLength
 paint-order inherited, svg, converter=convertPaintOrder
 perspective interpolable, converter=convertPerspective
 perspective-origin interpolable, converter=convertPosition
-pointer-events inherited
+pointer-events inherited, independent
 position custom_inherit
 quotes inherited, converter=convertQuotes
 resize custom_value
@@ -287,7 +294,7 @@ scroll-snap-destination runtime_flag=CSSScrollSnapPoints, converter=convertPosit
 scroll-snap-coordinate runtime_flag=CSSScrollSnapPoints, converter=convertSnapCoordinates
 shape-image-threshold interpolable, type_name=float
 shape-margin interpolable, converter=convertLength
-shape-outside interpolable, converter=convertShapeValue
+shape-outside interpolable, converter=convertShapeValue, typedom_types=[Image]
 shape-rendering inherited, svg
 size custom_all
 snap-height runtime_flag=CSSSnapSize, inherited, custom_all
@@ -335,7 +342,7 @@ transition-timing-function custom_all
 unicode-bidi
 vector-effect svg
 vertical-align interpolable, custom_inherit, custom_value
-visibility interpolable, inherited
+visibility interpolable, inherited, independent
 x interpolable, svg, converter=convertLength
 y interpolable, svg, converter=convertLength
 -webkit-appearance type_name=ControlPart
@@ -404,7 +411,7 @@ column-width interpolable, converter=convertComputedLength<float>, custom_all
 -webkit-transform-origin-z interpolable, converter=convertComputedLength<float>
 -webkit-user-drag
 -webkit-user-modify inherited
--webkit-user-select inherited
+user-select inherited
 white-space inherited
 widows interpolable, inherited, type_name=short
 width interpolable, initial=initialSize, converter=convertLengthSizing, typedom_types=[Length], keywords=[auto], supports_percentage
@@ -586,3 +593,4 @@ columns longhands=column-width;column-count
 -webkit-transition-duration alias_for=transition-duration
 -webkit-transition-property alias_for=transition-property
 -webkit-transition-timing-function alias_for=transition-timing-function
+-webkit-user-select alias_for=user-select

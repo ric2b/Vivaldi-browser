@@ -61,6 +61,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/signin/core/browser/signin_client.h"
@@ -79,7 +80,6 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/policy_constants.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
@@ -230,7 +230,7 @@ void ExistingUserController::UpdateLoginDisplay(
 
   cros_settings_->GetBoolean(kAccountsPrefShowUserNamesOnSignIn,
                              &show_users_on_signin);
-  for (const auto& user : users) {
+  for (auto* user : users) {
     // Skip kiosk apps for login screen user list. Kiosk apps as pods (aka new
     // kiosk UI) is currently disabled and it gets the apps directly from
     // KioskAppManager.
@@ -262,10 +262,11 @@ void ExistingUserController::UpdateLoginDisplay(
   cros_settings_->GetBoolean(kAccountsPrefAllowGuest, &show_guest);
   show_users_on_signin |= !filtered_users.empty();
   show_guest &= !filtered_users.empty();
-  bool show_new_user = true;
+  bool allow_new_user = true;
+  cros_settings_->GetBoolean(kAccountsPrefAllowNewUser, &allow_new_user);
   login_display_->set_parent_window(GetNativeWindow());
-  login_display_->Init(
-      filtered_users, show_guest, show_users_on_signin, show_new_user);
+  login_display_->Init(filtered_users, show_guest, show_users_on_signin,
+                       allow_new_user);
   host_->OnPreferencesChanged();
 }
 

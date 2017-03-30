@@ -14,6 +14,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/media_metadata.h"
+#include "content/public/common/resource_type.h"
 #include "content/public/common/security_style.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
@@ -32,10 +33,10 @@ class RenderWidgetHost;
 class WebContents;
 class WebContentsImpl;
 struct AXEventNotificationDetails;
+struct AXLocationChangeNotificationDetails;
 struct FaviconURL;
 struct FrameNavigateParams;
 struct LoadCommittedDetails;
-struct LoadFromMemoryCacheDetails;
 struct Referrer;
 struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
@@ -300,7 +301,9 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
 
   // This method is invoked when content was loaded from an in-memory cache.
   virtual void DidLoadResourceFromMemoryCache(
-      const LoadFromMemoryCacheDetails& details) {}
+      const GURL& url,
+      const std::string& mime_type,
+      ResourceType resource_type) {}
 
   // This method is invoked when a response has been received for a resource
   // request.
@@ -450,6 +453,11 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // Invoked when an accessibility event is received from the renderer process.
   virtual void AccessibilityEventReceived(
       const std::vector<AXEventNotificationDetails>& details) {}
+
+  // Invoked when an accessibility location change is received from the
+  // renderer process.
+  virtual void AccessibilityLocationChangesReceived(
+      const std::vector<AXLocationChangeNotificationDetails>& details) {}
 
   // Invoked when theme color is changed to |theme_color|.
   virtual void DidChangeThemeColor(SkColor theme_color) {}

@@ -103,6 +103,20 @@ class MultiplexRouter::InterfaceEndpoint
     DCHECK_EQ(MOJO_RESULT_OK, result);
   }
 
+  void ResetSyncMessageSignal() {
+    router_->lock_.AssertAcquired();
+
+    if (!event_signalled_)
+      return;
+
+    DCHECK(sync_message_event_receiver_.is_valid());
+    MojoResult result =
+        ReadMessageRaw(sync_message_event_receiver_.get(), nullptr, nullptr,
+                       nullptr, nullptr, MOJO_READ_MESSAGE_FLAG_MAY_DISCARD);
+    DCHECK_EQ(MOJO_RESULT_OK, result);
+    event_signalled_ = false;
+  }
+
   // ---------------------------------------------------------------------------
   // The following public methods (i.e., InterfaceEndpointController
   // implementation) are called by the client on the same thread as the
@@ -199,20 +213,6 @@ class MultiplexRouter::InterfaceEndpoint
     DCHECK_EQ(MOJO_RESULT_OK, result);
   }
 
-  void ResetSyncMessageSignal() {
-    router_->lock_.AssertAcquired();
-
-    if (!event_signalled_)
-      return;
-
-    DCHECK(sync_message_event_receiver_.is_valid());
-    MojoResult result = ReadMessageRaw(sync_message_event_receiver_.get(),
-                                       nullptr, nullptr, nullptr, nullptr,
-                                       MOJO_READ_MESSAGE_FLAG_MAY_DISCARD);
-    DCHECK_EQ(MOJO_RESULT_OK, result);
-    event_signalled_ = false;
-  }
-
   // ---------------------------------------------------------------------------
   // The following members are safe to access from any threads.
 
@@ -255,8 +255,7 @@ struct MultiplexRouter::Task {
   // Doesn't take ownership of |message| but takes its contents.
   static std::unique_ptr<Task> CreateMessageTask(Message* message) {
     Task* task = new Task(MESSAGE);
-    task->message.reset(new Message);
-    message->MoveTo(task->message.get());
+    task->message = std::move(*message);
     return base::WrapUnique(task);
   }
   static std::unique_ptr<Task> CreateNotifyErrorTask(
@@ -271,7 +270,7 @@ struct MultiplexRouter::Task {
   bool IsMessageTask() const { return type == MESSAGE; }
   bool IsNotifyErrorTask() const { return type == NOTIFY_ERROR; }
 
-  std::unique_ptr<Message> message;
+  Message message;
   scoped_refptr<InterfaceEndpoint> endpoint_to_notify;
 
   enum Type { MESSAGE, NOTIFY_ERROR };
@@ -285,9 +284,10 @@ MultiplexRouter::MultiplexRouter(
     bool set_interface_id_namesapce_bit,
     ScopedMessagePipeHandle message_pipe,
     scoped_refptr<base::SingleThreadTaskRunner> runner)
-    : AssociatedGroupController(base::ThreadTaskRunnerHandle::Get()),
-      set_interface_id_namespace_bit_(set_interface_id_namesapce_bit),
-      header_validator_(this),
+    : set_interface_id_namespace_bit_(set_interface_id_namesapce_bit),
+      task_runner_(runner),
+      header_validator_(nullptr),
+      filters_(this),
       connector_(std::move(message_pipe),
                  Connector::MULTI_THREADED_SEND,
                  std::move(runner)),
@@ -296,15 +296,22 @@ MultiplexRouter::MultiplexRouter(
       next_interface_id_value_(1),
       posted_to_process_tasks_(false),
       encountered_error_(false),
+      paused_(false),
       testing_mode_(false) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
   // Always participate in sync handle watching, because even if it doesn't
   // expect sync requests during sync handle watching, it may still need to
   // dispatch messages to associated endpoints on a different thread.
   connector_.AllowWokenUpBySyncWatchOnSameThread();
-  connector_.set_incoming_receiver(&header_validator_);
+  connector_.set_incoming_receiver(&filters_);
   connector_.set_connection_error_handler(
       base::Bind(&MultiplexRouter::OnPipeConnectionError,
                  base::Unretained(this)));
+
+  std::unique_ptr<MessageHeaderValidator> header_validator =
+      base::MakeUnique<MessageHeaderValidator>();
+  header_validator_ = header_validator.get();
+  filters_.Append(std::move(header_validator));
 }
 
 MultiplexRouter::~MultiplexRouter() {
@@ -328,7 +335,7 @@ MultiplexRouter::~MultiplexRouter() {
 
 void MultiplexRouter::SetMasterInterfaceName(const std::string& name) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  header_validator_.SetDescription(name + " [master] MessageHeaderValidator");
+  header_validator_->SetDescription(name + " [master] MessageHeaderValidator");
   control_message_handler_.SetDescription(
       name + " [master] PipeControlMessageHandler");
 }
@@ -344,7 +351,7 @@ void MultiplexRouter::CreateEndpointHandlePair(
     id = next_interface_id_value_++;
     if (set_interface_id_namespace_bit_)
       id |= kInterfaceIdNamespaceMask;
-  } while (ContainsKey(endpoints_, id));
+  } while (base::ContainsKey(endpoints_, id));
 
   InterfaceEndpoint* endpoint = new InterfaceEndpoint(this, id);
   endpoints_[id] = endpoint;
@@ -382,7 +389,7 @@ void MultiplexRouter::CloseEndpointHandle(InterfaceId id, bool is_local) {
   base::AutoLock locker(lock_);
 
   if (!is_local) {
-    DCHECK(ContainsKey(endpoints_, id));
+    DCHECK(base::ContainsKey(endpoints_, id));
     DCHECK(!IsMasterInterfaceId(id));
 
     // We will receive a NotifyPeerEndpointClosed message from the other side.
@@ -391,7 +398,7 @@ void MultiplexRouter::CloseEndpointHandle(InterfaceId id, bool is_local) {
     return;
   }
 
-  DCHECK(ContainsKey(endpoints_, id));
+  DCHECK(base::ContainsKey(endpoints_, id));
   InterfaceEndpoint* endpoint = endpoints_[id].get();
   DCHECK(!endpoint->client());
   DCHECK(!endpoint->closed());
@@ -413,7 +420,7 @@ InterfaceEndpointController* MultiplexRouter::AttachEndpointClient(
   DCHECK(client);
 
   base::AutoLock locker(lock_);
-  DCHECK(ContainsKey(endpoints_, id));
+  DCHECK(base::ContainsKey(endpoints_, id));
 
   InterfaceEndpoint* endpoint = endpoints_[id].get();
   endpoint->AttachClient(client, std::move(runner));
@@ -432,7 +439,7 @@ void MultiplexRouter::DetachEndpointClient(
   DCHECK(IsValidInterfaceId(id));
 
   base::AutoLock locker(lock_);
-  DCHECK(ContainsKey(endpoints_, id));
+  DCHECK(base::ContainsKey(endpoints_, id));
 
   InterfaceEndpoint* endpoint = endpoints_[id].get();
   endpoint->DetachClient();
@@ -456,6 +463,33 @@ void MultiplexRouter::CloseMessagePipe() {
   OnPipeConnectionError();
 }
 
+void MultiplexRouter::PauseIncomingMethodCallProcessing() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  connector_.PauseIncomingMethodCallProcessing();
+
+  base::AutoLock locker(lock_);
+  paused_ = true;
+
+  for (auto iter = endpoints_.begin(); iter != endpoints_.end(); ++iter)
+    iter->second->ResetSyncMessageSignal();
+}
+
+void MultiplexRouter::ResumeIncomingMethodCallProcessing() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  connector_.ResumeIncomingMethodCallProcessing();
+
+  base::AutoLock locker(lock_);
+  paused_ = false;
+
+  for (auto iter = endpoints_.begin(); iter != endpoints_.end(); ++iter) {
+    auto sync_iter = sync_message_tasks_.find(iter->first);
+    if (sync_iter != sync_message_tasks_.end() && !sync_iter->second.empty())
+      iter->second->SignalSyncMessageEvent();
+  }
+
+  ProcessTasks(NO_DIRECT_CLIENT_CALLS, nullptr);
+}
+
 bool MultiplexRouter::HasAssociatedEndpoints() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock locker(lock_);
@@ -465,7 +499,7 @@ bool MultiplexRouter::HasAssociatedEndpoints() const {
   if (endpoints_.size() == 0)
     return false;
 
-  return !ContainsKey(endpoints_, kMasterInterfaceId);
+  return !base::ContainsKey(endpoints_, kMasterInterfaceId);
 }
 
 void MultiplexRouter::EnableTestingMode() {
@@ -482,6 +516,8 @@ bool MultiplexRouter::Accept(Message* message) {
   scoped_refptr<MultiplexRouter> protector(this);
   base::AutoLock locker(lock_);
 
+  DCHECK(!paused_);
+
   ClientCallBehavior client_call_behavior =
       connector_.during_sync_handle_watcher_callback()
           ? ALLOW_DIRECT_CLIENT_CALLS_FOR_SYNC_MESSAGES
@@ -497,8 +533,8 @@ bool MultiplexRouter::Accept(Message* message) {
     tasks_.push_back(Task::CreateMessageTask(message));
     Task* task = tasks_.back().get();
 
-    if (task->message->has_flag(Message::kFlagIsSync)) {
-      InterfaceId id = task->message->interface_id();
+    if (task->message.has_flag(Message::kFlagIsSync)) {
+      InterfaceId id = task->message.interface_id();
       sync_message_tasks_[id].push_back(task);
       auto iter = endpoints_.find(id);
       if (iter != endpoints_.end())
@@ -590,15 +626,15 @@ void MultiplexRouter::ProcessTasks(
   if (posted_to_process_tasks_)
     return;
 
-  while (!tasks_.empty()) {
+  while (!tasks_.empty() && !paused_) {
     std::unique_ptr<Task> task(std::move(tasks_.front()));
     tasks_.pop_front();
 
     InterfaceId id = kInvalidInterfaceId;
-    bool sync_message = task->IsMessageTask() && task->message &&
-                        task->message->has_flag(Message::kFlagIsSync);
+    bool sync_message = task->IsMessageTask() && !task->message.IsNull() &&
+                        task->message.has_flag(Message::kFlagIsSync);
     if (sync_message) {
-      id = task->message->interface_id();
+      id = task->message.interface_id();
       auto& sync_message_queue = sync_message_tasks_[id];
       DCHECK_EQ(task.get(), sync_message_queue.front());
       sync_message_queue.pop_front();
@@ -608,7 +644,7 @@ void MultiplexRouter::ProcessTasks(
         task->IsNotifyErrorTask()
             ? ProcessNotifyErrorTask(task.get(), client_call_behavior,
                                      current_task_runner)
-            : ProcessIncomingMessage(task->message.get(), client_call_behavior,
+            : ProcessIncomingMessage(&task->message, client_call_behavior,
                                      current_task_runner);
 
     if (!processed) {
@@ -635,15 +671,18 @@ bool MultiplexRouter::ProcessFirstSyncMessageForEndpoint(InterfaceId id) {
   if (iter == sync_message_tasks_.end())
     return false;
 
+  if (paused_)
+    return true;
+
   MultiplexRouter::Task* task = iter->second.front();
   iter->second.pop_front();
 
   DCHECK(task->IsMessageTask());
-  std::unique_ptr<Message> message(std::move(task->message));
+  Message message = std::move(task->message);
 
-  // Note: after this call, |task| and  |iter| may be invalidated.
+  // Note: after this call, |task| and |iter| may be invalidated.
   bool processed = ProcessIncomingMessage(
-      message.get(), ALLOW_DIRECT_CLIENT_CALLS_FOR_SYNC_MESSAGES, nullptr);
+      &message, ALLOW_DIRECT_CLIENT_CALLS_FOR_SYNC_MESSAGES, nullptr);
   DCHECK(processed);
 
   iter = sync_message_tasks_.find(id);
@@ -663,6 +702,8 @@ bool MultiplexRouter::ProcessNotifyErrorTask(
     ClientCallBehavior client_call_behavior,
     base::SingleThreadTaskRunner* current_task_runner) {
   DCHECK(!current_task_runner || current_task_runner->BelongsToCurrentThread());
+  DCHECK(!paused_);
+
   lock_.AssertAcquired();
   InterfaceEndpoint* endpoint = task->endpoint_to_notify.get();
   if (!endpoint->client())
@@ -694,9 +735,11 @@ bool MultiplexRouter::ProcessIncomingMessage(
     ClientCallBehavior client_call_behavior,
     base::SingleThreadTaskRunner* current_task_runner) {
   DCHECK(!current_task_runner || current_task_runner->BelongsToCurrentThread());
+  DCHECK(!paused_);
+  DCHECK(message);
   lock_.AssertAcquired();
 
-  if (!message) {
+  if (message->IsNull()) {
     // This is a sync message and has been processed during sync handle
     // watching.
     return true;

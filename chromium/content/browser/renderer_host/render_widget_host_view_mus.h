@@ -9,11 +9,11 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
-#include "components/mus/public/cpp/input_event_handler.h"
-#include "components/mus/public/cpp/scoped_window_ptr.h"
-#include "components/mus/public/cpp/window.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/browser/render_process_host_observer.h"
+#include "services/ui/public/cpp/input_event_handler.h"
+#include "services/ui/public/cpp/scoped_window_ptr.h"
+#include "services/ui/public/cpp/window.h"
 
 namespace content {
 
@@ -26,16 +26,16 @@ struct TextInputState;
 // This version of RenderWidgetHostView is for builds of Chrome that run through
 // the mojo shell and use the Mandoline UI Service (Mus). Mus is responsible for
 // windowing, compositing, and input event dispatch. The purpose of
-// RenderWidgetHostViewMus is to manage the mus::Window owned by the content
-// embedder. The browser is the owner of the mus::Window, controlling properties
+// RenderWidgetHostViewMus is to manage the ui::Window owned by the content
+// embedder. The browser is the owner of the ui::Window, controlling properties
 // such as visibility, and bounds. Some aspects such as input, focus, and cursor
 // are managed by Mus directly. Input event routing will be plumbed directly to
 // the renderer from Mus.
 class CONTENT_EXPORT RenderWidgetHostViewMus
     : public RenderWidgetHostViewBase,
-      NON_EXPORTED_BASE(public mus::InputEventHandler) {
+      NON_EXPORTED_BASE(public ui::InputEventHandler) {
  public:
-  RenderWidgetHostViewMus(mus::Window* parent_window,
+  RenderWidgetHostViewMus(ui::Window* parent_window,
                           RenderWidgetHostImpl* widget);
   ~RenderWidgetHostViewMus() override;
 
@@ -62,7 +62,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMus
   gfx::Vector2dF GetLastScrollOffset() const override;
   void SetBackgroundColor(SkColor color) override;
   gfx::Size GetPhysicalBackingSize() const override;
-  base::string16 GetSelectedText() const override;
+  base::string16 GetSelectedText() override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -100,8 +100,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMus
   void ClearCompositorFrame() override {}
   bool LockMouse() override;
   void UnlockMouse() override;
-  void GetScreenInfo(blink::WebScreenInfo* results) override;
   gfx::Rect GetBoundsInRootWindow() override;
+  void SetNeedsBeginFrames(bool needs_begin_frames) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
@@ -117,18 +117,18 @@ class CONTENT_EXPORT RenderWidgetHostViewMus
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
 
-  // mus::InputEventHandler:
+  // ui::InputEventHandler:
   void OnWindowInputEvent(
-      mus::Window* target,
+      ui::Window* target,
       const ui::Event& event,
-      std::unique_ptr<base::Callback<void(mus::mojom::EventResult)>>*
+      std::unique_ptr<base::Callback<void(ui::mojom::EventResult)>>*
           ack_callback) override;
 
   RenderWidgetHostImpl* host_;
 
   aura::Window* aura_window_;
 
-  std::unique_ptr<mus::ScopedWindowPtr> mus_window_;
+  std::unique_ptr<ui::ScopedWindowPtr> mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMus);
 };

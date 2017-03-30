@@ -29,7 +29,6 @@ import android.preference.Preference;
 import android.preference.Preference.OnPreferenceClickListener;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceScreen;
-import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -52,9 +51,8 @@ import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.ProfileSyncService.SyncStateChangedListener;
 import org.chromium.chrome.browser.sync.ui.SyncCustomizationFragment;
-import org.chromium.sync.AndroidSyncSettings;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.signin.ChromeSigninController;
+import org.chromium.components.sync.signin.AccountManagerHelper;
+import org.chromium.components.sync.signin.ChromeSigninController;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -72,6 +70,8 @@ public class AccountManagementFragment extends PreferenceFragment
         implements SignOutDialogListener, ProfileDownloader.Observer,
                 SyncStateChangedListener, SignInStateObserver,
                 ConfirmManagedSyncDataDialog.Listener {
+    private static final String TAG = "AcctManagementPref";
+
     public static final String SIGN_OUT_DIALOG_TAG = "sign_out_dialog_tag";
     private static final String CLEAR_DATA_PROGRESS_DIALOG_TAG = "clear_data_progress";
 
@@ -290,15 +290,9 @@ public class AccountManagementFragment extends PreferenceFragment
 
                         if (ProfileSyncService.get() == null) return true;
 
-                        if (AndroidSyncSettings.isMasterSyncEnabled(preferences)) {
-                            Bundle args = new Bundle();
-                            args.putString(
-                                    SyncCustomizationFragment.ARGUMENT_ACCOUNT, account.name);
-                            preferences.startFragment(
-                                    SyncCustomizationFragment.class.getName(), args);
-                        } else {
-                            openSyncSettingsPage(preferences);
-                        }
+                        Bundle args = new Bundle();
+                        args.putString(SyncCustomizationFragment.ARGUMENT_ACCOUNT, account.name);
+                        preferences.startFragment(SyncCustomizationFragment.class.getName(), args);
 
                         return true;
                     }
@@ -403,15 +397,6 @@ public class AccountManagementFragment extends PreferenceFragment
             prefScreen.removePreference(childContent);
             prefScreen.removePreference(childSafeSites);
         }
-    }
-
-    private void openSyncSettingsPage(Activity activity) {
-        // TODO(crbug/557784): This needs to actually take the user to a specific account settings
-        // page. There doesn't seem to be an obvious way to do that at the moment, but should update
-        // this when we figure that out.
-        Intent intent = new Intent(Settings.ACTION_SYNC_SETTINGS);
-        intent.putExtra(Settings.EXTRA_ACCOUNT_TYPES, new String[] {"com.google"});
-        activity.startActivity(intent);
     }
 
     private void updateAccountsList() {

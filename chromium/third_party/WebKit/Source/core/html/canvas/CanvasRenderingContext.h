@@ -28,14 +28,15 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLCanvasElement.h"
+#include "core/html/canvas/CanvasContextCreationAttributes.h"
+#include "core/layout/HitTestCanvasResult.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
+#include "third_party/skia/include/core/SkColorSpace.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/text/StringHash.h"
 
 class SkCanvas;
-
-namespace blink { class WebLayer; }
 
 namespace blink {
 
@@ -43,6 +44,13 @@ class CanvasImageSource;
 class HTMLCanvasElement;
 class ImageData;
 class ImageBitmap;
+class WebLayer;
+
+enum CanvasColorSpace {
+    kLegacyCanvasColorSpace,
+    kSRGBCanvasColorSpace,
+    kLinearRGBCanvasColorSpace,
+};
 
 class CORE_EXPORT CanvasRenderingContext : public GarbageCollectedFinalized<CanvasRenderingContext>, public ScriptWrappable {
     WTF_MAKE_NONCOPYABLE(CanvasRenderingContext);
@@ -69,10 +77,13 @@ public:
 
     HTMLCanvasElement* canvas() const { return m_canvas; }
 
+    CanvasColorSpace colorSpace() const { return m_colorSpace; };
+    WTF::String colorSpaceAsString() const;
+    sk_sp<SkColorSpace> skColorSpace() const;
+
     virtual ContextType getContextType() const = 0;
     virtual bool isAccelerated() const { return false; }
     virtual bool shouldAntialias() const { return false; }
-    virtual bool hasAlpha() const { return true; }
     virtual void setIsHidden(bool) = 0;
     virtual bool isContextLost() const { return true; }
     virtual void setCanvasGetContextResult(RenderingContext&) { NOTREACHED(); };
@@ -80,6 +91,9 @@ public:
 
     // Return true if the content is updated.
     virtual bool paintRenderingResultsToCanvas(SourceDrawingBuffer) { return false; }
+
+    // Note: this function is strictly for OffscreenCanvas only.
+    virtual bool isPaintable() const = 0;
 
     virtual WebLayer* platformLayer() const { return nullptr; }
 
@@ -107,8 +121,11 @@ public:
     virtual unsigned hitRegionsCount() const { return 0; }
     virtual void setFont(const String&) { }
     virtual void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) { }
-    virtual std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) { NOTREACHED(); return std::make_pair(nullptr, String()); }
+    virtual HitTestCanvasResult* getControlAndIdIfHitRegionExists(const LayoutPoint& location) { NOTREACHED(); return HitTestCanvasResult::create(String(), nullptr); }
     virtual String getIdFromControl(const Element* element) { return String(); }
+    virtual bool isAccelerationOptimalForCanvasContent() const { return true; }
+    virtual void resetUsageTracking() { };
+    virtual void incrementFrameCount() { };
 
     // WebGL-specific interface
     virtual bool is3d() const { return false; }
@@ -120,6 +137,7 @@ public:
 
     // ImageBitmap-specific interface
     virtual bool paint(GraphicsContext&, const IntRect&) { return false; }
+    virtual PassRefPtr<Image> getImage() const { return nullptr; }
 
     bool wouldTaintOrigin(CanvasImageSource*, SecurityOrigin* = nullptr);
     void didMoveToNewDocument(Document*);
@@ -130,8 +148,10 @@ public:
 
     void detachCanvas() { m_canvas = nullptr; }
 
+    const CanvasContextCreationAttributes& creationAttributes() const { return m_creationAttributes; }
+
 protected:
-    CanvasRenderingContext(HTMLCanvasElement* = nullptr, OffscreenCanvas* = nullptr);
+    CanvasRenderingContext(HTMLCanvasElement*, OffscreenCanvas*, const CanvasContextCreationAttributes&);
     DECLARE_VIRTUAL_TRACE();
     virtual void stop() = 0;
 
@@ -142,6 +162,8 @@ private:
     Member<OffscreenCanvas> m_offscreenCanvas;
     HashSet<String> m_cleanURLs;
     HashSet<String> m_dirtyURLs;
+    CanvasColorSpace m_colorSpace;
+    CanvasContextCreationAttributes m_creationAttributes;
 };
 
 } // namespace blink

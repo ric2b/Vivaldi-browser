@@ -17,6 +17,7 @@
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "platform/heap/HeapPage.h"
+#include "wtf/AutoReset.h"
 
 namespace blink {
 
@@ -57,7 +58,11 @@ void ScriptWrappableVisitor::AbortTracing()
 void ScriptWrappableVisitor::performCleanup()
 {
     for (auto header : m_headersToUnmark) {
-        header->unmarkWrapperHeader();
+        // Dead objects residing in the marking deque may become invalid due to
+        // minor garbage collections and are therefore set to nullptr. We have
+        // to skip over such objects.
+        if (header)
+            header->unmarkWrapperHeader();
     }
 
     m_headersToUnmark.clear();
@@ -96,7 +101,7 @@ void ScriptWrappableVisitor::RegisterV8References(const std::vector<std::pair<vo
 bool ScriptWrappableVisitor::AdvanceTracing(double deadlineInMs, v8::EmbedderHeapTracer::AdvanceTracingActions actions)
 {
     DCHECK(m_tracingInProgress);
-    WTF::TemporaryChange<bool>(m_advancingTracing, true);
+    WTF::AutoReset<bool>(&m_advancingTracing, true);
     while (actions.force_completion == v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION
         || WTF::monotonicallyIncreasingTimeMS() < deadlineInMs) {
         if (m_markingDeque.isEmpty()) {

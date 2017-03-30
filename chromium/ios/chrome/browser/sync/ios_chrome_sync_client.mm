@@ -27,12 +27,14 @@
 #include "components/password_manager/sync/browser/password_model_worker.h"
 #include "components/search_engines/search_engine_data_type_controller.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/sync_driver/glue/browser_thread_model_worker.h"
-#include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
-#include "components/sync_driver/glue/ui_model_worker.h"
-#include "components/sync_driver/sync_api_component_factory.h"
-#include "components/sync_driver/sync_util.h"
-#include "components/sync_driver/ui_data_type_controller.h"
+#include "components/sync/base/extensions_activity.h"
+#include "components/sync/driver/glue/browser_thread_model_worker.h"
+#include "components/sync/driver/glue/chrome_report_unrecoverable_error.h"
+#include "components/sync/driver/glue/ui_model_worker.h"
+#include "components/sync/driver/sync_api_component_factory.h"
+#include "components/sync/driver/sync_util.h"
+#include "components/sync/driver/ui_data_type_controller.h"
+#include "components/sync/engine/passive_model_worker.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
 #include "components/sync_sessions/sync_sessions_client.h"
@@ -59,8 +61,6 @@
 #include "ios/chrome/common/channel_info.h"
 #include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "ios/web/public/web_thread.h"
-#include "sync/internal_api/public/engine/passive_model_worker.h"
-#include "sync/util/extensions_activity.h"
 #include "ui/base/device_form_factor.h"
 
 namespace {
@@ -116,8 +116,8 @@ class SyncSessionsClientImpl : public sync_sessions::SyncSessionsClient {
     syncer::SyncableService::StartSyncFlare flare(
         ios::sync_start_util::GetFlareForSyncableService(
             browser_state_->GetStatePath()));
-    return base::WrapUnique(
-        new IOSChromeLocalSessionEventRouter(browser_state_, this, flare));
+    return base::MakeUnique<IOSChromeLocalSessionEventRouter>(browser_state_,
+                                                              this, flare);
   }
 
  private:
@@ -199,7 +199,8 @@ history::HistoryService* IOSChromeSyncClient::GetHistoryService() {
 
 autofill::PersonalDataManager* IOSChromeSyncClient::GetPersonalDataManager() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  return PersonalDataManagerFactory::GetForBrowserState(browser_state_);
+  return autofill::PersonalDataManagerFactory::GetForBrowserState(
+      browser_state_);
 }
 
 base::Closure IOSChromeSyncClient::GetPasswordStateChangedCallback() {
@@ -326,16 +327,17 @@ IOSChromeSyncClient::GetSyncableServiceForType(syncer::ModelType type) {
   }
 }
 
-syncer_v2::ModelTypeService* IOSChromeSyncClient::GetModelTypeServiceForType(
-    syncer::ModelType type) {
+base::WeakPtr<syncer_v2::ModelTypeService>
+IOSChromeSyncClient::GetModelTypeServiceForType(syncer::ModelType type) {
   switch (type) {
     case syncer::DEVICE_INFO:
       return IOSChromeProfileSyncServiceFactory::GetForBrowserState(
                  browser_state_)
-          ->GetDeviceInfoService();
+          ->GetDeviceInfoService()
+          ->AsWeakPtr();
     default:
       NOTREACHED();
-      return nullptr;
+      return base::WeakPtr<syncer_v2::ModelTypeService>();
   }
 }
 

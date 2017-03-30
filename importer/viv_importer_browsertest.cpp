@@ -4,6 +4,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -204,6 +205,9 @@ public:
     EXPECT_EQ(arraysize(OperaNotes), notes_count);
     EXPECT_EQ(arraysize(OperaPasswords), password_count);
   }
+  void ImportItemFailed(importer::ImportItem item,
+                        const std::string& error) override {}
+
   bool BookmarkModelIsLoaded() const override {return true;}
 
   bool TemplateURLServiceIsLoaded() const override {
@@ -303,7 +307,7 @@ protected:
           import_config,
           make_scoped_refptr(writer).get()
           );
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
   }
 

@@ -19,7 +19,7 @@ from telemetry.util import wpr_modes
 from page_sets.top_10_mobile import URL_LIST
 
 
-GOOGLE_SEARCH = 'https://www.google.com/search?'
+GOOGLE_SEARCH = 'https://www.google.co.uk/search?'
 
 SEARCH_QUERIES = [
   'science',
@@ -136,6 +136,10 @@ class MultiBrowserSharedState(story_module.SharedState):
 
     if self._platform is None:
       self._platform = possible_browser.platform
+      # TODO(nedn): Remove the if condition once
+      # https://codereview.chromium.org/2265593003/ is rolled to Chromium tree.
+      if hasattr(self._platform.network_controller, 'InitializeIfNeeded'):
+        self._platform.network_controller.InitializeIfNeeded()
     else:
       assert self._platform is possible_browser.platform
     self._possible_browsers[browser_type] = (possible_browser, options)
@@ -254,14 +258,14 @@ class DualBrowserStorySet(story_module.StorySet):
     for query, url in zip(SEARCH_QUERIES, URL_LIST):
       # Stories that run on the android-webview browser.
       self.AddStory(SinglePage(
-          name='google_%s' % re.sub('\W+', '_', query.lower()),
+          name='google_%s' % re.sub(r'\W+', '_', query.lower()),
           url=GOOGLE_SEARCH + urllib.urlencode({'q': query}),
           browser_type='android-webview',
           phase='on_webview'))
 
       # Stories that run on the browser selected by command line options.
       self.AddStory(SinglePage(
-          name=re.sub('\W+', '_', url),
+          name=re.sub(r'\W+', '_', url),
           url=url,
           browser_type='default',
           phase='on_chrome'))

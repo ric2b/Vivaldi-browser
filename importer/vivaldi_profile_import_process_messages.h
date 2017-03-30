@@ -27,3 +27,11 @@ IPC_MESSAGE_CONTROL1(ProfileImportProcessHostMsg_NotifySpeedDialImportStart,
 
 IPC_MESSAGE_CONTROL1(ProfileImportProcessHostMsg_NotifySpeedDialImportGroup,
                      std::vector<ImportedSpeedDialEntry>)
+
+IPC_MESSAGE_CONTROL2(ProfileImportProcessHostMsg_ImportItem_Failed,
+                     int  /* ImportItem */,
+                     std::string  /* error message */)
+
+IPC_MESSAGE_CONTROL2(ProfileImportProcessMsg_ReportImportItemFailed,
+                     int  /* ImportItem */,
+                     std::string  /* error message */)

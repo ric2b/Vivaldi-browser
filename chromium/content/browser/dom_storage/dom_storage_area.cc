@@ -357,7 +357,7 @@ void DOMStorageArea::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
       base::trace_event::MemoryDumpManager::GetInstance()
           ->system_allocator_pool_name();
   if (commit_batch_) {
-    auto commit_batch_mad = pmd->CreateAllocatorDump(name + "/commit_batch");
+    auto* commit_batch_mad = pmd->CreateAllocatorDump(name + "/commit_batch");
     commit_batch_mad->AddScalar(
         base::trace_event::MemoryAllocatorDump::kNameSize,
         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
@@ -370,7 +370,7 @@ void DOMStorageArea::OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd) {
   if (map_->bytes_used() < 1024)
     return;
 
-  auto map_mad = pmd->CreateAllocatorDump(name + "/storage_map");
+  auto* map_mad = pmd->CreateAllocatorDump(name + "/storage_map");
   map_mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                      base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                      map_->bytes_used());
@@ -400,7 +400,7 @@ void DOMStorageArea::InitialImportIfNeeded() {
   // above what we see in practice, since histograms can't change.
   UMA_HISTOGRAM_CUSTOM_COUNTS("LocalStorage.BrowserLocalStorageSizeInKB",
                               local_storage_size_kb,
-                              0, 6 * 1024, 50);
+                              1, 6 * 1024, 50);
   if (local_storage_size_kb < 100) {
     UMA_HISTOGRAM_TIMES(
         "LocalStorage.BrowserTimeToPrimeLocalStorageUnder100KB",

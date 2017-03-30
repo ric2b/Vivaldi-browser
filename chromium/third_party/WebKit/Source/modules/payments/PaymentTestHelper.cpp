@@ -13,6 +13,7 @@
 namespace blink {
 namespace {
 
+static int gUniqueId = 0;
 // PaymentItem and PaymentShippingOption have identical structure
 // except for the "id" field, which is present only in PaymentShippingOption.
 template <typename PaymentItemOrPaymentShippingOption>
@@ -60,7 +61,7 @@ PaymentShippingOption buildShippingOptionForTest(PaymentTestDataToChange data, P
         if (modificationType == PaymentTestOverwriteValue)
             shippingOption.setId(valueToUse);
     } else {
-        shippingOption.setId("id");
+        shippingOption.setId("id" + String::number(gUniqueId++));
     }
     setValues(shippingOption, data, modificationType, valueToUse);
     return shippingOption;
@@ -116,7 +117,7 @@ PaymentDetails buildPaymentDetailsForTest(PaymentTestDetailToChange detail, Paym
     PaymentDetails result;
     result.setTotal(total);
     result.setDisplayItems(HeapVector<PaymentItem>(1, item));
-    result.setShippingOptions(HeapVector<PaymentShippingOption>(2, shippingOption));
+    result.setShippingOptions(HeapVector<PaymentShippingOption>(1, shippingOption));
     result.setModifiers(HeapVector<PaymentDetailsModifier>(1, modifier));
 
     return result;
@@ -156,6 +157,7 @@ PaymentRequestMockFunctionScope::~PaymentRequestMockFunctionScope()
 v8::Local<v8::Function> PaymentRequestMockFunctionScope::expectCall(String* captor)
 {
     m_mockFunctions.append(new MockFunction(m_scriptState, captor));
+    EXPECT_CALL(*m_mockFunctions.last(), call(testing::_));
     return m_mockFunctions.last()->bind();
 }
 

@@ -14,11 +14,11 @@
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/schema.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
 #include "grit/components_strings.h"
-#include "policy/policy_constants.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -79,10 +79,9 @@ bool ExtensionListPolicyHandler::CheckAndGetList(
        entry != list_value->end(); ++entry) {
     std::string id;
     if (!(*entry)->GetAsString(&id)) {
-      errors->AddError(policy_name(),
-                       entry - list_value->begin(),
+      errors->AddError(policy_name(), entry - list_value->begin(),
                        IDS_POLICY_TYPE_ERROR,
-                       ValueTypeToString(base::Value::TYPE_STRING));
+                       base::Value::GetTypeName(base::Value::TYPE_STRING));
       continue;
     }
     if (!(allow_wildcards_ && id == "*") && !crx_file::id_util::IdIsValid(id)) {
@@ -148,10 +147,9 @@ bool ExtensionInstallForcelistPolicyHandler::ParseList(
     std::string entry_string;
     if (!(*entry)->GetAsString(&entry_string)) {
       if (errors) {
-        errors->AddError(policy_name(),
-                         entry - policy_list_value->begin(),
+        errors->AddError(policy_name(), entry - policy_list_value->begin(),
                          IDS_POLICY_TYPE_ERROR,
-                         ValueTypeToString(base::Value::TYPE_STRING));
+                         base::Value::GetTypeName(base::Value::TYPE_STRING));
       }
       continue;
     }
@@ -221,10 +219,9 @@ bool ExtensionURLPatternListPolicyHandler::CheckPolicySettings(
        entry != list_value->end(); ++entry) {
     std::string url_pattern_string;
     if (!(*entry)->GetAsString(&url_pattern_string)) {
-      errors->AddError(policy_name(),
-                       entry - list_value->begin(),
+      errors->AddError(policy_name(), entry - list_value->begin(),
                        IDS_POLICY_TYPE_ERROR,
-                       ValueTypeToString(base::Value::TYPE_STRING));
+                       base::Value::GetTypeName(base::Value::TYPE_STRING));
       return false;
     }
 

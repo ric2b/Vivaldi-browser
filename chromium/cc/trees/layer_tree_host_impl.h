@@ -27,9 +27,10 @@
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/render_pass_sink.h"
 #include "cc/output/begin_frame_args.h"
+#include "cc/output/context_cache_controller.h"
+#include "cc/output/delegating_renderer.h"
 #include "cc/output/managed_memory_policy.h"
 #include "cc/output/output_surface_client.h"
-#include "cc/output/renderer.h"
 #include "cc/quads/render_pass.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/ui_resource_client.h"
@@ -96,13 +97,11 @@ enum class GpuRasterizationStatus {
 // LayerTreeHost->Proxy callback interface.
 class LayerTreeHostImplClient {
  public:
-  virtual void UpdateRendererCapabilitiesOnImplThread() = 0;
   virtual void DidLoseOutputSurfaceOnImplThread() = 0;
   virtual void CommitVSyncParameters(base::TimeTicks timebase,
                                      base::TimeDelta interval) = 0;
   virtual void SetBeginFrameSource(BeginFrameSource* source) = 0;
   virtual void SetEstimatedParentDrawTime(base::TimeDelta draw_time) = 0;
-  virtual void DidSwapBuffersOnImplThread() = 0;
   virtual void DidSwapBuffersCompleteOnImplThread() = 0;
   virtual void OnCanDrawStateChanged(bool can_draw) = 0;
   virtual void NotifyReadyToActivate() = 0;
@@ -140,7 +139,6 @@ class LayerTreeHostImplClient {
 // state.
 class CC_EXPORT LayerTreeHostImpl
     : public InputHandler,
-      public RendererClient,
       public TileManagerClient,
       public OutputSurfaceClient,
       public TopControlsManagerClient,
@@ -203,9 +201,13 @@ class CC_EXPORT LayerTreeHostImpl
   std::unique_ptr<SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency) override;
   ScrollElasticityHelper* CreateScrollElasticityHelper() override;
+  bool GetScrollOffsetForLayer(int layer_id,
+                               gfx::ScrollOffset* offset) override;
+  bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) override;
 
   // TopControlsManagerClient implementation.
   float TopControlsHeight() const override;
+  float BottomControlsHeight() const override;
   void SetCurrentTopControlsShownRatio(float offset) override;
   float CurrentTopControlsShownRatio() const override;
   void DidChangeTopControlsPosition() override;
@@ -228,6 +230,7 @@ class CC_EXPORT LayerTreeHostImpl
     const LayerImplList* render_surface_layer_list;
     LayerImplList will_draw_layers;
     bool has_no_damage;
+    bool may_contain_video;
 
     // RenderPassSink implementation.
     void AppendRenderPass(std::unique_ptr<RenderPass> render_pass) override;
@@ -236,7 +239,10 @@ class CC_EXPORT LayerTreeHostImpl
     DISALLOW_COPY_AND_ASSIGN(FrameData);
   };
 
-  virtual void BeginMainFrameAborted(CommitEarlyOutReason reason);
+  virtual void BeginMainFrameAborted(
+      CommitEarlyOutReason reason,
+      std::vector<std::unique_ptr<SwapPromise>> swap_promises);
+  virtual void ReadyToCommit() {}  // For tests.
   virtual void BeginCommit();
   virtual void CommitComplete();
   virtual void UpdateAnimationState(bool start_ready_animations);
@@ -246,6 +252,7 @@ class CC_EXPORT LayerTreeHostImpl
   void AnimatePendingTreeAfterCommit();
   void MainThreadHasStoppedFlinging();
   void DidAnimateScrollOffset();
+  void SetFullViewportDamage();
   void SetViewportDamage(const gfx::Rect& damage_rect);
 
   void SetTreeLayerFilterMutated(ElementId element_id,
@@ -288,6 +295,10 @@ class CC_EXPORT LayerTreeHostImpl
                                         ElementListType list_type,
                                         AnimationChangeType change_type,
                                         bool is_animating) override;
+  void ElementFilterIsAnimatingChanged(ElementId element_id,
+                                       ElementListType list_type,
+                                       AnimationChangeType change_type,
+                                       bool is_animating) override;
   void ScrollOffsetAnimationFinished() override;
   gfx::ScrollOffset GetScrollOffsetForAnimation(
       ElementId element_id) const override;
@@ -332,9 +343,6 @@ class CC_EXPORT LayerTreeHostImpl
   // Viewport rect in view space used for tiling prioritization.
   const gfx::Rect ViewportRectForTilePriority() const;
 
-  // RendererClient implementation.
-  void SetFullRootLayerDamage() override;
-
   // TileManagerClient implementation.
   void NotifyReadyToActivate() override;
   void NotifyReadyToDraw() override;
@@ -367,16 +375,14 @@ class CC_EXPORT LayerTreeHostImpl
       const gfx::Rect& viewport_rect,
       const gfx::Transform& transform) override;
   void DidLoseOutputSurface() override;
-  void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
   void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) override;
-  void ReclaimResources(const CompositorFrameAck* ack) override;
+  void ReclaimResources(const ReturnedResourceArray& resources) override;
   void SetMemoryPolicy(const ManagedMemoryPolicy& policy) override;
   void SetTreeActivationCallback(const base::Closure& callback) override;
   void OnDraw(const gfx::Transform& transform,
               const gfx::Rect& viewport,
-              const gfx::Rect& clip,
               bool resourceless_software_draw) override;
 
   // LayerTreeMutatorClient.
@@ -393,22 +399,14 @@ class CC_EXPORT LayerTreeHostImpl
 
   std::string LayerTreeAsJson() const;
 
-  void FinishAllRendering();
   int RequestedMSAASampleCount() const;
 
   virtual bool InitializeRenderer(OutputSurface* output_surface);
   TileManager* tile_manager() { return &tile_manager_; }
 
-  void SetHasGpuRasterizationTrigger(bool flag) {
-    has_gpu_rasterization_trigger_ = flag;
-    UpdateGpuRasterizationStatus();
-  }
-  void SetContentIsSuitableForGpuRasterization(bool flag) {
-    content_is_suitable_for_gpu_rasterization_ = flag;
-    UpdateGpuRasterizationStatus();
-  }
+  void SetHasGpuRasterizationTrigger(bool flag);
+  void SetContentIsSuitableForGpuRasterization(bool flag);
   bool CanUseGpuRasterization();
-  void UpdateTreeResourcesForGpuRasterizationIfNeeded();
   bool use_gpu_rasterization() const { return use_gpu_rasterization_; }
   bool use_msaa() const { return use_msaa_; }
 
@@ -420,13 +418,12 @@ class CC_EXPORT LayerTreeHostImpl
     return settings_.create_low_res_tiling && !use_gpu_rasterization_;
   }
   ResourcePool* resource_pool() { return resource_pool_.get(); }
-  Renderer* renderer() { return renderer_.get(); }
+  DelegatingRenderer* renderer() { return renderer_.get(); }
   ImageDecodeController* image_decode_controller() {
     return image_decode_controller_.get();
   }
-  const RendererCapabilitiesImpl& GetRendererCapabilities() const;
 
-  virtual bool SwapBuffers(const FrameData& frame);
+  bool SwapBuffers(const FrameData& frame);
   virtual void WillBeginImplFrame(const BeginFrameArgs& args);
   virtual void DidFinishImplFrame();
   void DidModifyTilePriorities();
@@ -486,18 +483,10 @@ class CC_EXPORT LayerTreeHostImpl
     max_memory_needed_bytes_ = bytes;
   }
 
-  FrameRateCounter* fps_counter() {
-    return fps_counter_.get();
-  }
-  MemoryHistory* memory_history() {
-    return memory_history_.get();
-  }
-  DebugRectHistory* debug_rect_history() {
-    return debug_rect_history_.get();
-  }
-  ResourceProvider* resource_provider() {
-    return resource_provider_.get();
-  }
+  FrameRateCounter* fps_counter() { return fps_counter_.get(); }
+  MemoryHistory* memory_history() { return memory_history_.get(); }
+  DebugRectHistory* debug_rect_history() { return debug_rect_history_.get(); }
+  ResourceProvider* resource_provider() { return resource_provider_.get(); }
   TopControlsManager* top_controls_manager() {
     return top_controls_manager_.get();
   }
@@ -551,7 +540,6 @@ class CC_EXPORT LayerTreeHostImpl
 
   struct UIResourceData {
     ResourceId resource_id;
-    gfx::Size size;
     bool opaque;
   };
 
@@ -567,7 +555,6 @@ class CC_EXPORT LayerTreeHostImpl
   // should only be used by Renderer subclasses to populate glViewport/glClip
   // and their software-mode equivalents.
   gfx::Rect DeviceViewport() const;
-  gfx::Rect DeviceClip() const;
 
   // When a SwapPromiseMonitor is created on the impl thread, it calls
   // InsertSwapPromiseMonitor() to register itself with LayerTreeHostImpl.
@@ -662,7 +649,9 @@ class CC_EXPORT LayerTreeHostImpl
 
   void AnimateInternal(bool active_tree);
 
-  void UpdateGpuRasterizationStatus();
+  // Returns true if status changed.
+  bool UpdateGpuRasterizationStatus();
+  void UpdateTreeResourcesForGpuRasterizationIfNeeded();
 
   Viewport* viewport() { return viewport_.get(); }
 
@@ -721,6 +710,9 @@ class CC_EXPORT LayerTreeHostImpl
   bool ScrollAnimationUpdateTarget(ScrollNode* scroll_node,
                                    const gfx::Vector2dF& scroll_delta);
 
+  void SetCompositorContextVisibility(bool is_visible);
+  void SetWorkerContextVisibility(bool is_visible);
+
   using UIResourceMap = std::unordered_map<UIResourceId, UIResourceData>;
   UIResourceMap ui_resource_map_;
 
@@ -731,17 +723,25 @@ class CC_EXPORT LayerTreeHostImpl
 
   OutputSurface* output_surface_;
 
+  // The following scoped variables must not outlive the |output_surface_|.
+  // These should be transfered to ContextCacheController's
+  // ClientBecameNotVisible() before the output surface is destroyed.
+  std::unique_ptr<ContextCacheController::ScopedVisibility>
+      compositor_context_visibility_;
+  std::unique_ptr<ContextCacheController::ScopedVisibility>
+      worker_context_visibility_;
+
   std::unique_ptr<ResourceProvider> resource_provider_;
+  bool need_update_gpu_rasterization_status_;
   bool content_is_suitable_for_gpu_rasterization_;
   bool has_gpu_rasterization_trigger_;
   bool use_gpu_rasterization_;
   bool use_msaa_;
   GpuRasterizationStatus gpu_rasterization_status_;
-  bool tree_resources_for_gpu_rasterization_dirty_;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   std::unique_ptr<TileTaskManager> tile_task_manager_;
   std::unique_ptr<ResourcePool> resource_pool_;
-  std::unique_ptr<Renderer> renderer_;
+  std::unique_ptr<DelegatingRenderer> renderer_;
   std::unique_ptr<ImageDecodeController> image_decode_controller_;
 
   GlobalStateThatImpactsTilePriority global_tile_state_;
@@ -808,12 +808,10 @@ class CC_EXPORT LayerTreeHostImpl
   // - external_transform_ applies a transform above the root layer
   // - external_viewport_ is used DrawProperties, tile management and
   // glViewport/window projection matrix.
-  // - external_clip_ specifies a top-level clip rect
   // - viewport_rect_for_tile_priority_ is the rect in view space used for
   // tiling priority.
   gfx::Transform external_transform_;
   gfx::Rect external_viewport_;
-  gfx::Rect external_clip_;
   gfx::Rect viewport_rect_for_tile_priority_;
   bool resourceless_software_draw_;
 

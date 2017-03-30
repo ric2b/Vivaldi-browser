@@ -9,6 +9,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/PendingScript.h"
+#include "core/fetch/CachedMetadata.h"
 #include "core/fetch/ScriptResource.h"
 #include "core/frame/Settings.h"
 #include "core/html/parser/TextResourceDecoder.h"
@@ -181,7 +182,7 @@ public:
         , m_queueTailPosition(0)
         , m_bookmarkPosition(0)
         , m_lengthOfBOM(0)
-        , m_loadingTaskRunner(wrapUnique(loadingTaskRunner->clone()))
+        , m_loadingTaskRunner(loadingTaskRunner->clone())
     {
     }
 
@@ -288,7 +289,8 @@ private:
         }
 
         CachedMetadataHandler* cacheHandler = streamer->resource()->cacheHandler();
-        if (cacheHandler && cacheHandler->cachedMetadata(V8ScriptRunner::tagForCodeCache(cacheHandler))) {
+        RefPtr<CachedMetadata> codeCache(cacheHandler ? cacheHandler->cachedMetadata(V8ScriptRunner::tagForCodeCache(cacheHandler)) : nullptr);
+        if (codeCache.get())  {
             // The resource has a code cache, so it's unnecessary to stream and
             // parse the code. Cancel the streaming and resume the non-streaming
             // code path.
@@ -299,8 +301,7 @@ private:
 
         if (!m_resourceBuffer) {
             // We don't have a buffer yet. Try to get it from the resource.
-            SharedBuffer* buffer = streamer->resource()->resourceBuffer();
-            m_resourceBuffer = RefPtr<SharedBuffer>(buffer);
+            m_resourceBuffer = streamer->resource()->resourceBuffer();
         }
 
         fetchDataFromResourceBuffer(lengthOfBOM);
@@ -311,45 +312,54 @@ private:
         ASSERT(isMainThread());
         MutexLocker locker(m_mutex); // For m_cancelled + m_queueTailPosition.
 
-        // Get as much data from the ResourceBuffer as we can.
-        const char* data = 0;
-        Vector<const char*> chunks;
-        Vector<size_t> chunkLengths;
-        size_t dataLength = 0;
-
-        if (!m_cancelled) {
-            while (size_t length = m_resourceBuffer->getSomeData(data, m_queueTailPosition)) {
-                // FIXME: Here we can limit based on the total length, if it turns
-                // out that we don't want to give all the data we have (memory
-                // vs. speed).
-                chunks.append(data);
-                chunkLengths.append(length);
-                dataLength += length;
-                m_queueTailPosition += length;
-            }
-        }
-
         if (lengthOfBOM > 0) {
             ASSERT(!m_lengthOfBOM); // There should be only one BOM.
             m_lengthOfBOM = lengthOfBOM;
         }
 
-        // Copy the data chunks into a new buffer, since we're going to give the
-        // data to a background thread.
-        if (dataLength > lengthOfBOM) {
-            dataLength -= lengthOfBOM;
-            uint8_t* copiedData = new uint8_t[dataLength];
-            size_t offset = 0;
-            for (size_t i = 0; i < chunks.size(); ++i) {
-                memcpy(copiedData + offset, chunks[i] + lengthOfBOM, chunkLengths[i] - lengthOfBOM);
-                offset += chunkLengths[i] - lengthOfBOM;
-                // BOM is only in the first chunk
-                lengthOfBOM = 0;
-            }
-            m_dataQueue.produce(copiedData, dataLength);
+        if (m_cancelled) {
+            m_dataQueue.finish();
+            return;
         }
 
-        if (m_finished || m_cancelled)
+        // Get as much data from the ResourceBuffer as we can.
+        const char* data = nullptr;
+        Vector<const char*> chunks;
+        Vector<size_t> chunkLengths;
+        size_t bufferLength = 0;
+        while (size_t length = m_resourceBuffer->getSomeData(data, m_queueTailPosition)) {
+            // FIXME: Here we can limit based on the total length, if it turns
+            // out that we don't want to give all the data we have (memory
+            // vs. speed).
+            chunks.append(data);
+            chunkLengths.append(length);
+            bufferLength += length;
+            m_queueTailPosition += length;
+        }
+
+        // Copy the data chunks into a new buffer, since we're going to give the
+        // data to a background thread.
+        if (bufferLength > lengthOfBOM) {
+            size_t totalLength = bufferLength - lengthOfBOM;
+            uint8_t* copiedData = new uint8_t[totalLength];
+            size_t offset = 0;
+            size_t offsetInChunk = lengthOfBOM;
+            for (size_t i = 0; i < chunks.size(); ++i) {
+                if (offsetInChunk >= chunkLengths[i]) {
+                    offsetInChunk -= chunkLengths[i];
+                    continue;
+                }
+
+                size_t dataLength = chunkLengths[i] - offsetInChunk;
+                memcpy(copiedData + offset, chunks[i] + offsetInChunk, dataLength);
+                offset += dataLength;
+                // BOM is in the beginning of the buffer.
+                offsetInChunk = 0;
+            }
+            m_dataQueue.produce(copiedData, totalLength);
+        }
+
+        if (m_finished)
             m_dataQueue.finish();
     }
 
@@ -499,11 +509,15 @@ void ScriptStreamer::notifyAppendData(ScriptResource* resource)
         // here, because it might contain incomplete UTF-8 characters. Also note
         // that have at least s_smallScriptThreshold worth of data, which is more
         // than enough for detecting a BOM.
-        const char* data = 0;
-        size_t length = resource->resourceBuffer()->getSomeData(data, static_cast<size_t>(0));
+        constexpr size_t maximumLengthOfBOM = 4;
+        char maybeBOM[maximumLengthOfBOM] = {};
+        if (!resource->resourceBuffer()->getPartAsBytes(maybeBOM, static_cast<size_t>(0), maximumLengthOfBOM)) {
+            NOTREACHED();
+            return;
+        }
 
         std::unique_ptr<TextResourceDecoder> decoder(TextResourceDecoder::create("application/javascript", resource->encoding()));
-        lengthOfBOM = decoder->checkForBOM(data, length);
+        lengthOfBOM = decoder->checkForBOM(maybeBOM, maximumLengthOfBOM);
 
         // Maybe the encoding changed because we saw the BOM; get the encoding
         // from the decoder.
@@ -591,7 +605,7 @@ ScriptStreamer::ScriptStreamer(PendingScript* script, Type scriptType, ScriptSta
     , m_scriptURLString(m_resource->url().copy().getString())
     , m_scriptResourceIdentifier(m_resource->identifier())
     , m_encoding(v8::ScriptCompiler::StreamedSource::TWO_BYTE) // Unfortunately there's no dummy encoding value in the enum; let's use one we don't stream.
-    , m_loadingTaskRunner(wrapUnique(loadingTaskRunner->clone()))
+    , m_loadingTaskRunner(loadingTaskRunner->clone())
 {
 }
 

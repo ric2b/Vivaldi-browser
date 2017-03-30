@@ -26,9 +26,16 @@ class TimeTicks;
 }
 
 namespace ash {
+struct IMEInfo;
+struct IMEPropertyInfo;
 
 class CustodianInfoTrayObserver;
 class ShutdownPolicyObserver;
+class SystemTray;
+class SystemTrayItem;
+
+using IMEInfoList = std::vector<IMEInfo>;
+using IMEPropertyInfoList = std::vector<IMEPropertyInfo>;
 
 struct ASH_EXPORT NetworkIconInfo {
   NetworkIconInfo();
@@ -59,36 +66,14 @@ struct ASH_EXPORT BluetoothDeviceInfo {
 
 using BluetoothDeviceList = std::vector<BluetoothDeviceInfo>;
 
-struct ASH_EXPORT IMEPropertyInfo {
-  IMEPropertyInfo();
-  ~IMEPropertyInfo();
-
-  bool selected;
-  std::string key;
-  base::string16 name;
-};
-
-using IMEPropertyInfoList = std::vector<IMEPropertyInfo>;
-
-struct ASH_EXPORT IMEInfo {
-  IMEInfo();
-  IMEInfo(const IMEInfo& other);
-  ~IMEInfo();
-
-  bool selected;
-  bool third_party;
-  std::string id;
-  base::string16 name;
-  base::string16 medium_name;
-  base::string16 short_name;
-};
-
 struct ASH_EXPORT UpdateInfo {
   enum UpdateSeverity {
-    UPDATE_NORMAL,
-    UPDATE_LOW_GREEN,
-    UPDATE_HIGH_ORANGE,
-    UPDATE_SEVERE_RED,
+    UPDATE_NONE,
+    UPDATE_LOW,
+    UPDATE_ELEVATED,
+    UPDATE_HIGH,
+    UPDATE_SEVERE,
+    UPDATE_CRITICAL,
   };
 
   UpdateInfo();
@@ -98,8 +83,6 @@ struct ASH_EXPORT UpdateInfo {
   bool update_required;
   bool factory_reset_required;
 };
-
-using IMEInfoList = std::vector<IMEInfo>;
 
 class CastConfigDelegate;
 class NetworkingConfigDelegate;
@@ -208,6 +191,12 @@ class ASH_EXPORT SystemTrayDelegate {
   // Show the settings related to accessilibity.
   virtual void ShowAccessibilitySettings();
 
+  // Shows the help center article for palette.
+  virtual void ShowPaletteHelp();
+
+  // Shows the settings related to the palette.
+  virtual void ShowPaletteSettings();
+
   // Shows more information about public account mode.
   virtual void ShowPublicAccountInfo();
 
@@ -222,9 +211,6 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Attempts to sign out the user.
   virtual void SignOut();
-
-  // Attempts to lock the screen.
-  virtual void RequestLockScreen();
 
   // Attempts to restart the system for update.
   virtual void RequestRestartForUpdate();
@@ -335,6 +321,18 @@ class ASH_EXPORT SystemTrayDelegate {
 
   // Returns VPNDelegate. May return nullptr.
   virtual VPNDelegate* GetVPNDelegate() const;
+
+  // Creates a system tray item for display settings.
+  // TODO(jamescook): Remove this when mus has support for display management
+  // and we have a DisplayManager equivalent. See http://crbug.com/548429
+  virtual std::unique_ptr<SystemTrayItem> CreateDisplayTrayItem(
+      SystemTray* tray);
+
+  // Creates a system tray item for display rotation lock.
+  // TODO(jamescook): Remove this when mus has support for display management
+  // and we have a DisplayManager equivalent. See http://crbug.com/548429
+  virtual std::unique_ptr<SystemTrayItem> CreateRotationLockTrayItem(
+      SystemTray* tray);
 };
 
 }  // namespace ash

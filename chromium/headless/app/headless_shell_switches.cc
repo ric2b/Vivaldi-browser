@@ -27,5 +27,23 @@ const char kRepl[] = "repl";
 // Save a screenshot of the loaded page.
 const char kScreenshot[] = "screenshot";
 
+// Sets the GL implementation to use. Use a blank string to disable GL
+// rendering.
+const char kUseGL[] = "use-gl";
+
+// Directory where the browser stores the user profile.
+const char kUserDataDir[] = "user-data-dir";
+
+// If set the system waits the specified number of virtual milliseconds before
+// deeming the page to be ready.  For determinism virtual time does not advance
+// while there are pending network fetches (i.e no timers will fire). Once all
+// network fetches have completed, timers fire and if the system runs out of
+// virtual time is fastforwarded so the next timer fires immediatley, until the
+// specified virtual time budget is exhausted.
+const char kVirtualTimeBudget[] = "virtual-time-budget";
+
+// Sets the initial window size. Provided as string in the format "800x600".
+const char kWindowSize[] = "window-size";
+
 }  // namespace switches
 }  // namespace headless

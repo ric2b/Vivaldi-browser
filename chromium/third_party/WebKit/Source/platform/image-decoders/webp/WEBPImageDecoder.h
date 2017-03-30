@@ -65,10 +65,7 @@ private:
     int m_formatFlags;
     bool m_frameBackgroundHasAlpha;
 
-#if USE(QCMSLIB)
     void readColorProfile();
-#endif
-
     bool updateDemuxer();
     bool initFrameBuffer(size_t frameIndex);
     void applyPostProcessing(size_t frameIndex);
@@ -87,7 +84,7 @@ private:
     void clearDecoder();
 
     // FIXME: Update libwebp's API so it does not require copying the data on each update.
-    RefPtr<SkData> m_consolidatedData;
+    sk_sp<SkData> m_consolidatedData;
 };
 
 } // namespace blink

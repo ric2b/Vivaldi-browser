@@ -607,8 +607,14 @@ TEST_P(GLES2DecoderWithShaderTest, GetAttachedShadersBadSharedMemoryFails) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderWithShaderTest, GetShaderPrecisionFormatSucceeds) {
-  ScopedGLImplementationSetter gl_impl(::gl::kGLImplementationEGLGLES2);
+TEST_P(GLES2DecoderManualInitTest, GetShaderPrecisionFormatSucceeds) {
+  // Force ES underlying implementation to ensure we check the shader precision
+  // format.
+  InitState init;
+  init.gl_version = "opengl es 2.0";
+  init.bind_generates_resource = true;
+  InitDecoder(init);
+
   GetShaderPrecisionFormat cmd;
   typedef GetShaderPrecisionFormat::Result Result;
   Result* result = static_cast<Result*>(shared_memory_address_);
@@ -1782,7 +1788,7 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform1iValidArgs) {
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform1uiValidArgs) {
   EXPECT_CALL(*gl_, Uniform1uiv(kUniform4RealLocation, 1, _));
-  cmds::Uniform1ui cmd;
+  Uniform1ui cmd;
   cmd.Init(kUniform4FakeLocation, 2);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
@@ -1793,13 +1799,11 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform1uiValidArgs) {
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform1ivImmediateValidArgs) {
   Uniform1ivImmediate& cmd = *GetImmediateAs<Uniform1ivImmediate>();
-  EXPECT_CALL(*gl_,
-              Uniform1iv(kUniform1RealLocation,
-                         1,
-                         reinterpret_cast<GLint*>(ImmediateDataAddress(&cmd))));
-  GLint temp[1 * 2] = {
+  GLint temp[1] = {
       0,
   };
+  EXPECT_CALL(*gl_,
+              Uniform1iv(kUniform1RealLocation, 1, PointsToArray(temp, 1)));
   cmd.Init(kUniform1FakeLocation, 1, &temp[0]);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
 }
@@ -1841,16 +1845,33 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform1ivSamplerIsLimited) {
   EXPECT_EQ(GL_INVALID_VALUE, GetGLError());
 }
 
+TEST_P(GLES2DecoderWithShaderTest, Uniform1ivArray) {
+  Uniform1ivImmediate& cmd = *GetImmediateAs<Uniform1ivImmediate>();
+  GLint temp[3] = {
+      0, 1, 2,
+  };
+  EXPECT_CALL(*gl_,
+              Uniform1iv(kUniform8RealLocation, 2, PointsToArray(temp, 2)));
+  cmd.Init(kUniform8FakeLocation, 2, &temp[0]);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+
+  EXPECT_CALL(*gl_,
+              Uniform1iv(kUniform8RealLocation, 2, PointsToArray(temp, 2)));
+  cmd.Init(kUniform8FakeLocation, 3, &temp[0]);
+  EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+
 TEST_P(GLES2DecoderWithShaderTest, Uniform1uivImmediateValidArgs) {
-  cmds::Uniform1uivImmediate& cmd =
-      *GetImmediateAs<cmds::Uniform1uivImmediate>();
-  EXPECT_CALL(
-      *gl_,
-      Uniform1uiv(kUniform4RealLocation, 1,
-                  reinterpret_cast<GLuint*>(ImmediateDataAddress(&cmd))));
-  GLuint temp[1 * 2] = {
+  Uniform1uivImmediate& cmd =
+      *GetImmediateAs<Uniform1uivImmediate>();
+  GLuint temp[1] = {
       0,
   };
+  EXPECT_CALL(*gl_,
+              Uniform1uiv(kUniform4RealLocation, 1, PointsToArray(temp, 1)));
   cmd.Init(kUniform4FakeLocation, 1, &temp[0]);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
@@ -1884,7 +1905,7 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform1uivZeroCount) {
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform2uiValidArgs) {
   EXPECT_CALL(*gl_, Uniform2uiv(kUniform5RealLocation, 1, _));
-  cmds::Uniform2ui cmd;
+  Uniform2ui cmd;
   cmd.Init(kUniform5FakeLocation, 2, 3);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
@@ -1894,15 +1915,13 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform2uiValidArgs) {
 }
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform2uivImmediateValidArgs) {
-  cmds::Uniform2uivImmediate& cmd =
-      *GetImmediateAs<cmds::Uniform2uivImmediate>();
-  EXPECT_CALL(
-      *gl_,
-      Uniform2uiv(kUniform5RealLocation, 1,
-                  reinterpret_cast<GLuint*>(ImmediateDataAddress(&cmd))));
+  Uniform2uivImmediate& cmd =
+      *GetImmediateAs<Uniform2uivImmediate>();
   GLuint temp[2 * 1] = {
       0,
   };
+  EXPECT_CALL(*gl_,
+              Uniform2uiv(kUniform5RealLocation, 1, PointsToArray(temp, 2)));
   cmd.Init(kUniform5FakeLocation, 1, &temp[0]);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
@@ -1913,7 +1932,7 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform2uivImmediateValidArgs) {
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform3uiValidArgs) {
   EXPECT_CALL(*gl_, Uniform3uiv(kUniform6RealLocation, 1, _));
-  cmds::Uniform3ui cmd;
+  Uniform3ui cmd;
   cmd.Init(kUniform6FakeLocation, 2, 3, 4);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
@@ -1923,15 +1942,13 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform3uiValidArgs) {
 }
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform3uivImmediateValidArgs) {
-  cmds::Uniform3uivImmediate& cmd =
-      *GetImmediateAs<cmds::Uniform3uivImmediate>();
-  EXPECT_CALL(
-      *gl_,
-      Uniform3uiv(kUniform6RealLocation, 1,
-                  reinterpret_cast<GLuint*>(ImmediateDataAddress(&cmd))));
+  Uniform3uivImmediate& cmd =
+      *GetImmediateAs<Uniform3uivImmediate>();
   GLuint temp[3 * 1] = {
       0,
   };
+  EXPECT_CALL(*gl_,
+              Uniform3uiv(kUniform6RealLocation, 1, PointsToArray(temp, 3)));
   cmd.Init(kUniform6FakeLocation, 1, &temp[0]);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
@@ -1942,7 +1959,7 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform3uivImmediateValidArgs) {
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform4uiValidArgs) {
   EXPECT_CALL(*gl_, Uniform4uiv(kUniform7RealLocation, 1, _));
-  cmds::Uniform4ui cmd;
+  Uniform4ui cmd;
   cmd.Init(kUniform7FakeLocation, 2, 3, 4, 5);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
@@ -1952,15 +1969,13 @@ TEST_P(GLES2DecoderWithShaderTest, Uniform4uiValidArgs) {
 }
 
 TEST_P(GLES2DecoderWithShaderTest, Uniform4uivImmediateValidArgs) {
-  cmds::Uniform4uivImmediate& cmd =
-      *GetImmediateAs<cmds::Uniform4uivImmediate>();
-  EXPECT_CALL(
-      *gl_,
-      Uniform4uiv(kUniform7RealLocation, 1,
-                  reinterpret_cast<GLuint*>(ImmediateDataAddress(&cmd))));
+  Uniform4uivImmediate& cmd =
+      *GetImmediateAs<Uniform4uivImmediate>();
   GLuint temp[4 * 1] = {
       0,
   };
+  EXPECT_CALL(*gl_,
+              Uniform4uiv(kUniform7RealLocation, 1, PointsToArray(temp, 4)));
   cmd.Init(kUniform7FakeLocation, 1, &temp[0]);
   decoder_->set_unsafe_es3_apis_enabled(true);
   EXPECT_EQ(error::kNoError, ExecuteImmediateCmd(cmd, sizeof(temp)));
@@ -2197,16 +2212,20 @@ TEST_P(GLES2DecoderWithShaderTest, GetUniformLocationInvalidArgs) {
   EXPECT_NE(error::kNoError, ExecuteCmd(cmd));
 }
 
-TEST_P(GLES2DecoderWithShaderTest, UniformBlockBindingValidArgs) {
-  EXPECT_CALL(*gl_, UniformBlockBinding(kServiceProgramId, 2, 3));
-  SpecializedSetup<cmds::UniformBlockBinding, 0>(true);
-  cmds::UniformBlockBinding cmd;
-  cmd.Init(client_program_id_, 2, 3);
-  decoder_->set_unsafe_es3_apis_enabled(true);
+TEST_P(GLES3DecoderWithESSL3ShaderTest, Basic) {
+  // Make sure the setup is correct for ES3.
+  EXPECT_TRUE(decoder_->unsafe_es3_apis_enabled());
+  EXPECT_TRUE(feature_info()->validators()->texture_bind_target.IsValid(
+      GL_TEXTURE_3D));
+}
+
+TEST_P(GLES3DecoderWithESSL3ShaderTest, UniformBlockBindingValidArgs) {
+  EXPECT_CALL(*gl_, UniformBlockBinding(kServiceProgramId, 1, 3));
+  SpecializedSetup<UniformBlockBinding, 0>(true);
+  UniformBlockBinding cmd;
+  cmd.Init(client_program_id_, 1, 3);
   EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
-  decoder_->set_unsafe_es3_apis_enabled(false);
-  EXPECT_EQ(error::kUnknownCommand, ExecuteCmd(cmd));
 }
 
 TEST_P(GLES2DecoderWithShaderTest, BindUniformLocationCHROMIUMBucket) {
@@ -2308,7 +2327,7 @@ TEST_P(GLES2DecoderManualInitTest, ClearUniformsBeforeFirstProgramUse) {
     EXPECT_CALL(*gl_, UseProgram(kServiceProgramId))
         .Times(1)
         .RetiresOnSaturation();
-    cmds::UseProgram cmd;
+    UseProgram cmd;
     cmd.Init(client_program_id_);
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   }
@@ -2317,7 +2336,7 @@ TEST_P(GLES2DecoderManualInitTest, ClearUniformsBeforeFirstProgramUse) {
 TEST_P(GLES2DecoderWithShaderTest, UseDeletedProgram) {
   DoDeleteProgram(client_program_id_, kServiceProgramId);
   {
-    cmds::UseProgram cmd;
+    UseProgram cmd;
     cmd.Init(client_program_id_);
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   }
@@ -2330,7 +2349,7 @@ TEST_P(GLES2DecoderWithShaderTest, DetachDeletedShader) {
     EXPECT_CALL(*gl_, DetachShader(kServiceProgramId, kServiceFragmentShaderId))
         .Times(1)
         .RetiresOnSaturation();
-    cmds::DetachShader cmd;
+    DetachShader cmd;
     cmd.Init(client_program_id_, client_fragment_shader_id_);
     EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
   }

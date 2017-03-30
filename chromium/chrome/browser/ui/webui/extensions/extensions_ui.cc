@@ -12,7 +12,7 @@
 #include "chrome/browser/ui/webui/extensions/extension_settings_handler.h"
 #include "chrome/browser/ui/webui/extensions/install_extension_handler.h"
 #include "chrome/browser/ui/webui/metrics_handler.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -54,6 +54,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SIDEBAR_UPDATE_NOW);
   source->AddLocalizedString("developerMode",
                              IDS_MD_EXTENSIONS_SIDEBAR_DEVELOPER_MODE);
+  source->AddLocalizedString("dropToInstall",
+                             IDS_EXTENSIONS_INSTALL_DROP_TARGET);
   source->AddLocalizedString("getMoreExtensions",
                              IDS_MD_EXTENSIONS_SIDEBAR_GET_MORE_EXTENSIONS);
   source->AddLocalizedString("keyboardShortcuts",
@@ -122,6 +124,8 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
                              IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_LABEL);
   source->AddLocalizedString("shortcutScopeInChrome",
                              IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME);
+  source->AddLocalizedString("shortcutTypeAShortcut",
+                             IDS_MD_EXTENSIONS_TYPE_A_SHORTCUT);
   source->AddLocalizedString("viewBackgroundPage",
                              IDS_EXTENSIONS_BACKGROUND_PAGE);
   source->AddLocalizedString("viewIncognito",
@@ -142,9 +146,16 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("animation_helper.js",
                           IDR_MD_EXTENSIONS_ANIMATION_HELPER_JS);
   source->AddResourcePath("extensions.js", IDR_MD_EXTENSIONS_EXTENSIONS_JS);
+  source->AddResourcePath("drag_and_drop_handler.html",
+                          IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_HTML);
+  source->AddResourcePath("drag_and_drop_handler.js",
+                          IDR_EXTENSIONS_DRAG_AND_DROP_HANDLER_JS);
   source->AddResourcePath("detail_view.html",
                           IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML);
   source->AddResourcePath("detail_view.js", IDR_MD_EXTENSIONS_DETAIL_VIEW_JS);
+  source->AddResourcePath("drop_overlay.html",
+                          IDR_MD_EXTENSIONS_DROP_OVERLAY_HTML);
+  source->AddResourcePath("drop_overlay.js", IDR_MD_EXTENSIONS_DROP_OVERLAY_JS);
   source->AddResourcePath("keyboard_shortcuts.html",
                           IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML);
   source->AddResourcePath("keyboard_shortcuts.js",
@@ -164,6 +175,10 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("pack_dialog.js", IDR_MD_EXTENSIONS_PACK_DIALOG_JS);
   source->AddResourcePath("service.html", IDR_MD_EXTENSIONS_SERVICE_HTML);
   source->AddResourcePath("service.js", IDR_MD_EXTENSIONS_SERVICE_JS);
+  source->AddResourcePath("shortcut_input.html",
+                          IDR_MD_EXTENSIONS_SHORTCUT_INPUT_HTML);
+  source->AddResourcePath("shortcut_input.js",
+                          IDR_MD_EXTENSIONS_SHORTCUT_INPUT_JS);
   source->AddResourcePath("shortcut_util.html",
                           IDR_EXTENSIONS_SHORTCUT_UTIL_HTML);
   source->AddResourcePath("shortcut_util.js", IDR_EXTENSIONS_SHORTCUT_UTIL_JS);
@@ -196,8 +211,12 @@ ExtensionsUI::ExtensionsUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   Profile* profile = Profile::FromWebUI(web_ui);
   content::WebUIDataSource* source = nullptr;
 
-  if (::switches::MdExtensionsEnabled()) {
+  if (base::FeatureList::IsEnabled(features::kMaterialDesignExtensions)) {
     source = CreateMdExtensionsSource();
+    InstallExtensionHandler* install_extension_handler =
+        new InstallExtensionHandler();
+    install_extension_handler->GetLocalizedValues(source);
+    web_ui->AddMessageHandler(install_extension_handler);
   } else {
     source = CreateExtensionsHTMLSource();
 

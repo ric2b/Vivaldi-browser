@@ -84,7 +84,7 @@ class MockExecutive(object):
             if process_name_filter(process_name):
                 running_pids.append(process_pid)
 
-        _log.info("MOCK running_pids: %s" % running_pids)
+        _log.info("MOCK running_pids: %s", running_pids)
         return running_pids
 
     def command_for_printing(self, args):
@@ -112,7 +112,7 @@ class MockExecutive(object):
             input_string = ""
             if input:
                 input_string = ", input=%s" % input
-            _log.info("MOCK run_command: %s, cwd=%s%s%s" % (args, cwd, env_string, input_string))
+            _log.info("MOCK run_command: %s, cwd=%s%s%s", args, cwd, env_string, input_string)
         output = "MOCK output of child process"
 
         if self._should_throw_when_run.intersection(args):
@@ -136,6 +136,7 @@ class MockExecutive(object):
         pass
 
     def popen(self, args, cwd=None, env=None, **kwargs):
+        assert all(isinstance(arg, basestring) for arg in args)
         self.calls.append(args)
         if self._should_log:
             cwd_string = ""
@@ -144,14 +145,15 @@ class MockExecutive(object):
             env_string = ""
             if env:
                 env_string = ", env=%s" % env
-            _log.info("MOCK popen: %s%s%s" % (args, cwd_string, env_string))
+            _log.info("MOCK popen: %s%s%s", args, cwd_string, env_string)
         if not self._proc:
             self._proc = MockProcess()
         return self._proc
 
     def call(self, args, **kwargs):
+        assert all(isinstance(arg, basestring) for arg in args)
         self.calls.append(args)
-        _log.info('Mock call: %s' % args)
+        _log.info('Mock call: %s', args)
 
     def run_in_parallel(self, commands):
         assert len(commands)
@@ -159,6 +161,7 @@ class MockExecutive(object):
         num_previous_calls = len(self.calls)
         command_outputs = []
         for cmd_line, cwd in commands:
+            assert all(isinstance(arg, basestring) for arg in cmd_line)
             command_outputs.append([0, self.run_command(cmd_line, cwd=cwd), ''])
 
         new_calls = self.calls[num_previous_calls:]
@@ -196,6 +199,7 @@ class MockExecutive2(MockExecutive):
                     debug_logging=False):
         self.calls.append(args)
         assert isinstance(args, list) or isinstance(args, tuple)
+        assert all(isinstance(arg, basestring) for arg in args)
         if self._exception:
             raise self._exception  # pylint: disable=E0702
         if self._run_command_fn:

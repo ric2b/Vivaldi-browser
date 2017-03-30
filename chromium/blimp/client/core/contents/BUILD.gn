@@ -1,0 +1,139 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+if (is_android) {
+  import("//build/config/android/config.gni")
+  import("//build/config/android/rules.gni")
+}
+
+source_set("contents") {
+  visibility = [ "//blimp/client/*" ]
+
+  sources = [
+    "blimp_contents_impl.cc",
+    "blimp_contents_impl.h",
+    "blimp_contents_manager.cc",
+    "blimp_contents_manager.h",
+    "blimp_navigation_controller_delegate.h",
+    "blimp_navigation_controller_impl.cc",
+    "blimp_navigation_controller_impl.h",
+    "ime_feature.cc",
+    "ime_feature.h",
+    "navigation_feature.cc",
+    "navigation_feature.h",
+  ]
+
+  public_deps = [
+    "//base",
+    "//blimp/client:feature",
+    "//blimp/client/public:public_headers",
+    "//blimp/net",
+    "//net:net",
+    "//ui/base/ime:text_input_types",
+    "//ui/gfx/geometry:geometry",
+    "//url",
+  ]
+
+  deps = [
+    "//blimp/common",
+    "//components/url_formatter",
+  ]
+
+  if (is_android) {
+    sources += [
+      "android/blimp_contents_impl_android.cc",
+      "android/blimp_contents_impl_android.h",
+      "android/blimp_contents_jni_registrar.cc",
+      "android/blimp_contents_jni_registrar.h",
+      "android/blimp_contents_observer_proxy.cc",
+      "android/blimp_contents_observer_proxy.h",
+      "android/blimp_navigation_controller_impl_android.cc",
+      "android/blimp_navigation_controller_impl_android.h",
+    ]
+
+    deps += [ ":jni_headers" ]
+  }
+}
+
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "fake_navigation_feature.cc",
+    "fake_navigation_feature.h",
+    "mock_ime_feature_delegate.cc",
+    "mock_ime_feature_delegate.h",
+    "mock_navigation_feature_delegate.cc",
+    "mock_navigation_feature_delegate.h",
+  ]
+
+  deps = [
+    "//base",
+    "//skia",
+    "//url",
+  ]
+
+  public_deps = [
+    "//blimp/client/core/contents",
+    "//testing/gmock",
+  ]
+}
+
+source_set("unit_tests") {
+  visibility = [ "//blimp/client/core:unit_tests" ]
+
+  testonly = true
+
+  sources = [
+    "blimp_contents_impl_unittest.cc",
+    "blimp_contents_manager_unittest.cc",
+    "blimp_contents_observer_unittest.cc",
+    "blimp_navigation_controller_impl_unittest.cc",
+    "navigation_feature_unittest.cc",
+  ]
+
+  deps = [
+    ":contents",
+    ":test_support",
+    "//base",
+    "//blimp/client:feature",
+    "//blimp/client/public:public_headers",
+    "//blimp/common",
+    "//blimp/net:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
+    "//ui/gfx/geometry:geometry",
+    "//url",
+  ]
+}
+
+if (is_android) {
+  android_library("contents_java") {
+    visibility = [ "//blimp/client/*" ]
+
+    java_files = [
+      "android/java/src/org/chromium/blimp/core/contents/BlimpContentsImpl.java",
+      "android/java/src/org/chromium/blimp/core/contents/BlimpContentsObserverProxy.java",
+      "android/java/src/org/chromium/blimp/core/contents/BlimpNavigationControllerImpl.java",
+    ]
+
+    deps = [
+      "//base:base_java",
+      "//blimp/client/public:public_headers_java",
+    ]
+  }
+
+  generate_jni("jni_headers") {
+    visibility = [ ":*" ]
+
+    sources = [
+      "android/java/src/org/chromium/blimp/core/contents/BlimpContentsImpl.java",
+      "android/java/src/org/chromium/blimp/core/contents/BlimpContentsObserverProxy.java",
+      "android/java/src/org/chromium/blimp/core/contents/BlimpNavigationControllerImpl.java",
+    ]
+
+    jni_package = "blimp/client/core/contents"
+  }
+}

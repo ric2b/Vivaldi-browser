@@ -606,7 +606,7 @@ void MediaControls::defaultEventHandler(Event* event)
     }
 }
 
-void MediaControls::hideMediaControlsTimerFired(Timer<MediaControls>*)
+void MediaControls::hideMediaControlsTimerFired(TimerBase*)
 {
     unsigned behaviorFlags = m_hideTimerBehaviorFlags | IgnoreFocus | IgnoreVideoHover;
     m_hideTimerBehaviorFlags = IgnoreNone;
@@ -672,7 +672,7 @@ void MediaControls::notifyPanelWidthChanged(const LayoutUnit& newWidth)
     m_panelWidthChangedTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void MediaControls::panelWidthChangedTimerFired(Timer<MediaControls>*)
+void MediaControls::panelWidthChangedTimerFired(TimerBase*)
 {
     computeWhichControlsFit();
 }
@@ -689,8 +689,8 @@ void MediaControls::computeWhichControlsFit()
     // Controls that we'll hide / show, in order of decreasing priority.
     MediaControlElement* elements[] = {
         // Exclude m_playButton; we handle it specially.
-        m_toggleClosedCaptionsButton.get(),
         m_fullScreenButton.get(),
+        m_toggleClosedCaptionsButton.get(),
         m_timeline.get(),
         m_currentTimeDisplay.get(),
         m_volumeSlider.get(),

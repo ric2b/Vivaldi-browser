@@ -31,7 +31,6 @@ public:
 
     PointerEvent* create(
         const AtomicString& mouseEventName, const PlatformMouseEvent&,
-        EventTarget* relatedTarget,
         LocalDOMWindow*);
 
     PointerEvent* create(const AtomicString& type,
@@ -75,6 +74,8 @@ public:
     // properties if exists otherwise s_invalidId.
     int getPointerEventId(const WebPointerProperties&) const;
 
+    static const int s_mouseId;
+
 private:
     typedef WTF::UnsignedWithZeroKeyHashTraits<int> UnsignedHash;
     typedef struct IncomingId : public std::pair<int, int> {
@@ -100,8 +101,12 @@ private:
         unsigned buttons);
     void setBubblesAndCancelable(PointerEventInit&, const AtomicString& type);
 
+    // Creates pointerevents like boundary and capture events from another
+    // pointerevent (i.e. up/down/move events).
+    PointerEvent* createPointerEventFrom(
+        PointerEvent*, const AtomicString&, EventTarget*);
+
     static const int s_invalidId;
-    static const int s_mouseId;
 
     int m_currentId;
     HashMap<IncomingId, int, WTF::PairHash<int, int>, WTF::PairHashTraits<UnsignedHash, UnsignedHash>> m_pointerIncomingIdMapping;

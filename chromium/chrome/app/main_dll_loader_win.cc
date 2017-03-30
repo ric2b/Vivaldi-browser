@@ -31,7 +31,6 @@
 #include "chrome/app/chrome_watcher_client_win.h"
 #include "chrome/app/chrome_watcher_command_line_win.h"
 #include "chrome/app/file_pre_reader_win.h"
-#include "chrome/app/kasko_client.h"
 #include "chrome/chrome_watcher/chrome_watcher_main_api.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
@@ -43,8 +42,6 @@
 #include "chrome/installer/util/install_util.h"
 #include "chrome/installer/util/module_util_win.h"
 #include "chrome/installer/util/util_constants.h"
-#include "components/crash/content/app/crash_reporter_client.h"
-#include "components/crash/content/app/crashpad.h"
 #include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "content/public/app/sandbox_helper_win.h"
 #include "content/public/common/content_switches.h"
@@ -214,46 +211,12 @@ class ChromeDllLoader : public MainDllLoader {
 
  private:
   std::unique_ptr<ChromeWatcherClient> chrome_watcher_client_;
-#if BUILDFLAG(ENABLE_KASKO)
-  std::unique_ptr<KaskoClient> kasko_client_;
-#endif
 };
 
 void ChromeDllLoader::OnBeforeLaunch(const std::string& process_type,
                                      const base::FilePath& dll_path) {
   if (process_type.empty()) {
     RecordDidRun(dll_path);
-
-    // Launch the watcher process if stats collection consent has been granted.
-    if (crash_reporter::GetUploadsEnabled()) {
-      base::FilePath exe_path;
-      if (PathService::Get(base::FILE_EXE, &exe_path)) {
-        chrome_watcher_client_.reset(new ChromeWatcherClient(
-            base::Bind(&GenerateChromeWatcherCommandLine, exe_path)));
-        if (chrome_watcher_client_->LaunchWatcher()) {
-#if BUILDFLAG(ENABLE_KASKO)
-          kasko::api::MinidumpType minidump_type = kasko::api::SMALL_DUMP_TYPE;
-          if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-                  switches::kFullMemoryCrashReport)) {
-            minidump_type = kasko::api::FULL_DUMP_TYPE;
-          } else {
-            // TODO(scottmg): Point this at the common global one when it's
-            // moved back into the .exe. http://crbug.com/546288.
-            ChromeCrashReporterClient chrome_crash_client;
-            bool is_per_user_install = chrome_crash_client.GetIsPerUserInstall(
-                exe_path.value());
-            if (chrome_crash_client.GetShouldDumpLargerDumps(
-                    is_per_user_install)) {
-              minidump_type = kasko::api::LARGER_DUMP_TYPE;
-            }
-          }
-
-          kasko_client_.reset(
-              new KaskoClient(chrome_watcher_client_.get(), minidump_type));
-#endif  // BUILDFLAG(ENABLE_KASKO)
-        }
-      }
-    }
   } else {
     // Set non-browser processes up to be killed by the system after the browser
     // goes away. The browser uses the default shutdown order, which is 0x280.
@@ -273,9 +236,6 @@ int ChromeDllLoader::OnBeforeExit(int return_code,
     ClearDidRun(dll_path);
   }
 
-#if BUILDFLAG(ENABLE_KASKO)
-  kasko_client_.reset();
-#endif
   chrome_watcher_client_.reset();
 
   return return_code;

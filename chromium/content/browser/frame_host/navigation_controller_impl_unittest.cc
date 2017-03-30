@@ -30,6 +30,7 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
@@ -53,7 +54,6 @@
 #include "content/test/test_web_contents.h"
 #include "skia/ext/platform_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
 
 using base::Time;
@@ -2175,7 +2175,7 @@ TEST_F(NavigationControllerTest, NewSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -2196,7 +2196,13 @@ TEST_F(NavigationControllerTest, NewSubframe) {
     subframe->SendRendererInitiatedNavigationRequest(subframe_url, false);
     subframe->PrepareForCommit();
     subframe->SendNavigateWithParams(&params);
-    EXPECT_EQ(0U, notifications.size());
+
+    // In UseSubframeNavigationEntries mode, we notify of a PageState update to
+    // the entry here rather than during UpdateState.
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      EXPECT_TRUE(notifications.Check1AndReset(NOTIFICATION_NAV_ENTRY_CHANGED));
+    else
+      EXPECT_EQ(0U, notifications.size());
   }
 
   // Now do a new navigation in the frame.
@@ -2262,7 +2268,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name0, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url2("http://foo/2");
@@ -2283,7 +2289,13 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     subframe->SendRendererInitiatedNavigationRequest(url2, false);
     subframe->PrepareForCommit();
     subframe->SendNavigateWithParams(&params);
-    EXPECT_EQ(0U, notifications.size());
+
+    // In UseSubframeNavigationEntries mode, we notify of a PageState update to
+    // the entry here rather than during UpdateState.
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      EXPECT_TRUE(notifications.Check1AndReset(NOTIFICATION_NAV_ENTRY_CHANGED));
+    else
+      EXPECT_EQ(0U, notifications.size());
   }
 
   // There should still be only one entry.
@@ -2311,7 +2323,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name1, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe2 = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(1)->current_frame_host());
   const GURL url3("http://foo/3");
@@ -2332,7 +2344,13 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     subframe2->SendRendererInitiatedNavigationRequest(url3, false);
     subframe2->PrepareForCommit();
     subframe2->SendNavigateWithParams(&params);
-    EXPECT_EQ(0U, notifications.size());
+
+    // In UseSubframeNavigationEntries mode, we notify of a PageState update to
+    // the entry here rather than during UpdateState.
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      EXPECT_TRUE(notifications.Check1AndReset(NOTIFICATION_NAV_ENTRY_CHANGED));
+    else
+      EXPECT_EQ(0U, notifications.size());
   }
 
   // There should still be only one entry, mostly unchanged.
@@ -2360,7 +2378,7 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
   subframe->OnCreateChildFrame(process()->GetNextRoutingID(),
                                blink::WebTreeScopeType::Document, std::string(),
                                unique_name2, blink::WebSandboxFlags::None,
-                               blink::WebFrameOwnerProperties());
+                               FrameOwnerProperties());
   TestRenderFrameHost* subframe3 =
       static_cast<TestRenderFrameHost*>(contents()
                                             ->GetFrameTree()
@@ -2386,7 +2404,13 @@ TEST_F(NavigationControllerTest, AutoSubframe) {
     subframe3->SendRendererInitiatedNavigationRequest(url4, false);
     subframe3->PrepareForCommit();
     subframe3->SendNavigateWithParams(&params);
-    EXPECT_EQ(0U, notifications.size());
+
+    // In UseSubframeNavigationEntries mode, we notify of a PageState update to
+    // the entry here rather than during UpdateState.
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      EXPECT_TRUE(notifications.Check1AndReset(NOTIFICATION_NAV_ENTRY_CHANGED));
+    else
+      EXPECT_EQ(0U, notifications.size());
   }
 
   // There should still be only one entry, mostly unchanged.
@@ -2429,7 +2453,7 @@ TEST_F(NavigationControllerTest, BackSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://foo1/subframe");
@@ -2455,7 +2479,13 @@ TEST_F(NavigationControllerTest, BackSubframe) {
     subframe->SendRendererInitiatedNavigationRequest(subframe_url, false);
     subframe->PrepareForCommit();
     subframe->SendNavigateWithParams(&params);
-    EXPECT_EQ(0U, notifications.size());
+
+    // In UseSubframeNavigationEntries mode, we notify of a PageState update to
+    // the entry here rather than during UpdateState.
+    if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+      EXPECT_TRUE(notifications.Check1AndReset(NOTIFICATION_NAV_ENTRY_CHANGED));
+    else
+      EXPECT_EQ(0U, notifications.size());
   }
 
   // First manual subframe navigation.
@@ -3907,7 +3937,7 @@ TEST_F(NavigationControllerTest, SameSubframe) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL subframe_url("http://www.google.com/#");
@@ -4083,7 +4113,7 @@ TEST_F(NavigationControllerTest, SubframeWhilePending) {
   main_test_rfh()->OnCreateChildFrame(
       process()->GetNextRoutingID(), blink::WebTreeScopeType::Document,
       std::string(), unique_name, blink::WebSandboxFlags::None,
-      blink::WebFrameOwnerProperties());
+      FrameOwnerProperties());
   TestRenderFrameHost* subframe = static_cast<TestRenderFrameHost*>(
       contents()->GetFrameTree()->root()->child_at(0)->current_frame_host());
   const GURL url1_sub("http://foo/subframe");
@@ -5039,7 +5069,8 @@ TEST_F(NavigationControllerTest, PushStateUpdatesTitleAndFavicon) {
   FaviconStatus favicon;
   favicon.valid = true;
   favicon.url = GURL("http://foo/favicon.ico");
-  controller().GetLastCommittedEntry()->SetTitle(title);
+  contents()->UpdateTitleForEntry(
+      controller().GetLastCommittedEntry(), title);
   controller().GetLastCommittedEntry()->GetFavicon() = favicon;
 
   // history.pushState() is called.
@@ -5330,13 +5361,8 @@ TEST_F(NavigationControllerTest, RendererNavigateBogusSecurityInfo) {
             observer.details().ssl_status.connection_status);
   EXPECT_EQ(default_ssl_status.content_status,
             observer.details().ssl_status.content_status);
-  EXPECT_EQ(default_ssl_status.num_unknown_scts,
-            observer.details().ssl_status.num_unknown_scts);
-  EXPECT_EQ(default_ssl_status.num_invalid_scts,
-            observer.details().ssl_status.num_invalid_scts);
-  EXPECT_EQ(default_ssl_status.num_valid_scts,
-            observer.details().ssl_status.num_valid_scts);
-
+  EXPECT_EQ(default_ssl_status.sct_statuses,
+            observer.details().ssl_status.sct_statuses);
   EXPECT_EQ(1, main_test_rfh()->GetProcess()->bad_msg_count());
 }
 

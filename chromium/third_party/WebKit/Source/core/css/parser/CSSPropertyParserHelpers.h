@@ -15,6 +15,7 @@
 namespace blink {
 
 class CSSStringValue;
+class CSSURIValue;
 class CSSValuePair;
 
 // When these functions are successful, they will consume all the relevant
@@ -51,7 +52,8 @@ template<CSSValueID... allowedIdents> CSSPrimitiveValue* consumeIdent(CSSParserT
 
 CSSCustomIdentValue* consumeCustomIdent(CSSParserTokenRange&);
 CSSStringValue* consumeString(CSSParserTokenRange&);
-String consumeUrl(CSSParserTokenRange&);
+StringView consumeUrlAsStringView(CSSParserTokenRange&);
+CSSURIValue* consumeUrl(CSSParserTokenRange&);
 
 CSSValue* consumeColor(CSSParserTokenRange&, CSSParserMode, bool acceptQuirkyColors = false);
 
@@ -59,7 +61,13 @@ CSSValuePair* consumePosition(CSSParserTokenRange&, CSSParserMode, UnitlessQuirk
 bool consumePosition(CSSParserTokenRange&, CSSParserMode, UnitlessQuirk, CSSValue*& resultX, CSSValue*& resultY);
 bool consumeOneOrTwoValuedPosition(CSSParserTokenRange&, CSSParserMode, UnitlessQuirk, CSSValue*& resultX, CSSValue*& resultY);
 
-// TODO(timloh): Move across consumeImage
+enum class ConsumeGeneratedImage {
+    Allow,
+    Forbid
+};
+
+CSSValue* consumeImage(CSSParserTokenRange&, CSSParserContext, ConsumeGeneratedImage = ConsumeGeneratedImage::Allow);
+CSSValue* consumeImageOrNone(CSSParserTokenRange&, CSSParserContext);
 
 // Template implementations are at the bottom of the file for readability.
 

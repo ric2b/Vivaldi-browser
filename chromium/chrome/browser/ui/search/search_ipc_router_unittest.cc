@@ -22,9 +22,9 @@
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/instant_types.h"
-#include "chrome/common/ntp_logging_events.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/search/instant_types.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
@@ -56,9 +56,9 @@ class MockSearchIPCRouterDelegate : public SearchIPCRouter::Delegate {
   MOCK_METHOD2(OnLogEvent, void(NTPLoggingEventType event,
                                 base::TimeDelta time));
   MOCK_METHOD2(OnLogMostVisitedImpression,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD2(OnLogMostVisitedNavigation,
-               void(int position, const base::string16& provider));
+               void(int position, NTPLoggingTileSource tile_source));
   MOCK_METHOD1(PasteIntoOmnibox, void(const base::string16&));
   MOCK_METHOD1(OnChromeIdentityCheck, void(const base::string16& identity));
   MOCK_METHOD0(OnHistorySyncCheck, void());
@@ -76,8 +76,6 @@ class MockSearchIPCRouterPolicy : public SearchIPCRouter::Policy {
   MOCK_METHOD1(ShouldProcessPasteIntoOmnibox, bool(bool));
   MOCK_METHOD0(ShouldProcessChromeIdentityCheck, bool());
   MOCK_METHOD0(ShouldProcessHistorySyncCheck, bool());
-  MOCK_METHOD0(ShouldSendSetPromoInformation, bool());
-  MOCK_METHOD0(ShouldSendSetDisplayInstantResults, bool());
   MOCK_METHOD0(ShouldSendSetSuggestionToPrefetch, bool());
   MOCK_METHOD1(ShouldSendSetInputInProgress, bool(bool));
   MOCK_METHOD0(ShouldSendOmniboxFocusChanged, bool());
@@ -146,23 +144,6 @@ class SearchIPCRouterTest : public BrowserWithTestWindowTest {
 
   bool MessageWasSent(uint32_t id) {
     return process()->sink().GetFirstMessageMatching(id) != NULL;
-  }
-
-  void VerifyDisplayInstantResultsMsg(bool expected_param_value) {
-    SetupMockDelegateAndPolicy();
-    MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-    EXPECT_CALL(*policy, ShouldSendSetDisplayInstantResults()).Times(1)
-        .WillOnce(testing::Return(true));
-
-    GetSearchIPCRouter().SetDisplayInstantResults();
-    const IPC::Message* message = process()->sink().GetFirstMessageMatching(
-        ChromeViewMsg_SearchBoxSetDisplayInstantResults::ID);
-    EXPECT_NE(static_cast<const IPC::Message*>(NULL), message);
-    std::tuple<bool> display_instant_results_param;
-    ChromeViewMsg_SearchBoxSetDisplayInstantResults::Read(
-        message, &display_instant_results_param);
-    EXPECT_EQ(expected_param_value,
-              std::get<0>(display_instant_results_param));
   }
 
   MockSearchIPCRouterDelegate* mock_delegate() { return &delegate_; }
@@ -279,14 +260,14 @@ TEST_F(SearchIPCRouterTest, ProcessLogEventMsg) {
   NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_MOUSEOVER, delta)).Times(1);
+  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_TILE, delta)).Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(true));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogEvent(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(),
-      NTP_MOUSEOVER, delta));
+      NTP_TILE, delta));
 }
 
 TEST_F(SearchIPCRouterTest, IgnoreLogEventMsg) {
@@ -294,14 +275,14 @@ TEST_F(SearchIPCRouterTest, IgnoreLogEventMsg) {
   NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_MOUSEOVER, delta)).Times(0);
+  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_TILE, delta)).Times(0);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(false));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogEvent(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(),
-      NTP_MOUSEOVER, delta));
+      NTP_TILE, delta));
 }
 
 TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedImpressionMsg) {
@@ -309,14 +290,14 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedImpressionMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
   EXPECT_CALL(*mock_delegate(),
-      OnLogMostVisitedImpression(3, base::ASCIIToUTF16("Server"))).Times(1);
+      OnLogMostVisitedImpression(3, NTPLoggingTileSource::SERVER)).Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(true));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogMostVisitedImpression(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(), 3,
-      base::ASCIIToUTF16("Server")));
+      NTPLoggingTileSource::SERVER));
 }
 
 TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedNavigationMsg) {
@@ -324,14 +305,14 @@ TEST_F(SearchIPCRouterTest, ProcessLogMostVisitedNavigationMsg) {
   SetupMockDelegateAndPolicy();
   MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
   EXPECT_CALL(*mock_delegate(),
-      OnLogMostVisitedNavigation(3, base::ASCIIToUTF16("Server"))).Times(1);
+      OnLogMostVisitedNavigation(3, NTPLoggingTileSource::SERVER)).Times(1);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(1)
       .WillOnce(testing::Return(true));
 
   content::WebContents* contents = web_contents();
   OnMessageReceived(ChromeViewHostMsg_LogMostVisitedNavigation(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(), 3,
-      base::ASCIIToUTF16("Server")));
+      NTPLoggingTileSource::SERVER));
 }
 
 TEST_F(SearchIPCRouterTest, ProcessChromeIdentityCheckMsg) {
@@ -506,11 +487,11 @@ TEST_F(SearchIPCRouterTest, IgnoreMessageIfThePageIsNotActive) {
       contents->GetRoutingID(), page_seq_no, OMNIBOX_FOCUS_VISIBLE));
 
   base::TimeDelta delta = base::TimeDelta::FromMilliseconds(123);
-  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_MOUSEOVER, delta)).Times(0);
+  EXPECT_CALL(*mock_delegate(), OnLogEvent(NTP_TILE, delta)).Times(0);
   EXPECT_CALL(*policy, ShouldProcessLogEvent()).Times(0);
   OnMessageReceived(ChromeViewHostMsg_LogEvent(contents->GetRoutingID(),
                                                page_seq_no,
-                                               NTP_MOUSEOVER, delta));
+                                               NTP_TILE, delta));
 
   base::string16 text;
   EXPECT_CALL(*mock_delegate(), PasteIntoOmnibox(text)).Times(0);
@@ -552,75 +533,6 @@ TEST_F(SearchIPCRouterTest, IgnorePasteAndOpenDropdownMsg) {
 
   OnMessageReceived(ChromeViewHostMsg_PasteAndOpenDropdown(
       contents->GetRoutingID(), GetSearchIPCRouterSeqNo(), text));
-}
-
-TEST_F(SearchIPCRouterTest, SendSetPromoInformationMsg) {
-  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
-  SetupMockDelegateAndPolicy();
-  MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*policy, ShouldSendSetPromoInformation()).Times(1)
-      .WillOnce(testing::Return(true));
-
-  GetSearchIPCRouter().SetPromoInformation(true);
-  EXPECT_TRUE(MessageWasSent(ChromeViewMsg_SearchBoxPromoInformation::ID));
-}
-
-TEST_F(SearchIPCRouterTest, DoNotSendSetPromoInformationMsg) {
-  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
-  SetupMockDelegateAndPolicy();
-  MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*policy, ShouldSendSetPromoInformation()).Times(1)
-      .WillOnce(testing::Return(false));
-
-  GetSearchIPCRouter().SetPromoInformation(false);
-  EXPECT_FALSE(MessageWasSent(ChromeViewMsg_SearchBoxPromoInformation::ID));
-}
-
-TEST_F(SearchIPCRouterTest,
-       SendSetDisplayInstantResultsMsg_EnableInstantOnResultsPage) {
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "EmbeddedSearch",
-      "Group1 espv:42 query_extraction:1 prefetch_results_srp:1"));
-  NavigateAndCommitActiveTab(GURL("https://foo.com/url?espv&bar=abc"));
-
-  // Make sure ChromeViewMsg_SearchBoxSetDisplayInstantResults message param is
-  // set to true if the underlying page is a results page and
-  // "prefetch_results_srp" flag is enabled via field trials.
-  VerifyDisplayInstantResultsMsg(true);
-}
-
-TEST_F(SearchIPCRouterTest,
-       SendSetDisplayInstantResultsMsg_DisableInstantOnResultsPage) {
-  // |prefetch_results_srp" flag is disabled via field trials.
-  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-      "EmbeddedSearch",
-      "Group1 espv:42 query_extraction:1 prefetch_results_srp:0"));
-  NavigateAndCommitActiveTab(GURL("https://foo.com/url?espv&bar=abc"));
-
-  // Make sure ChromeViewMsg_SearchBoxSetDisplayInstantResults message param is
-  // set to false.
-  VerifyDisplayInstantResultsMsg(false);
-}
-
-TEST_F(SearchIPCRouterTest,
-       SendSetDisplayInstantResultsMsg_EnableInstantOutsideSearchResultsPage) {
-  NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
-  // Make sure ChromeViewMsg_SearchBoxSetDisplayInstantResults param is set to
-  // true if the underlying page is not a search results page.
-  VerifyDisplayInstantResultsMsg(true);
-}
-
-TEST_F(SearchIPCRouterTest, DoNotSendSetDisplayInstantResultsMsg) {
-  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
-  SetupMockDelegateAndPolicy();
-  MockSearchIPCRouterPolicy* policy = GetSearchIPCRouterPolicy();
-  EXPECT_CALL(*policy, ShouldSendSetDisplayInstantResults()).Times(1)
-      .WillOnce(testing::Return(false));
-
-  process()->sink().ClearMessages();
-  GetSearchIPCRouter().SetDisplayInstantResults();
-  EXPECT_FALSE(MessageWasSent(
-      ChromeViewMsg_SearchBoxSetDisplayInstantResults::ID));
 }
 
 TEST_F(SearchIPCRouterTest, SendSetSuggestionToPrefetch) {

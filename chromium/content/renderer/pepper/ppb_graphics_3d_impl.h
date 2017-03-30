@@ -20,6 +20,9 @@
 #include "ppapi/shared_impl/resource.h"
 
 namespace gpu {
+namespace gles2 {
+struct ContextCreationAttribHelper;
+}
 struct Capabilities;
 class CommandBufferProxyImpl;
 }
@@ -29,12 +32,13 @@ namespace content {
 class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared,
                             public gpu::GpuControlClient {
  public:
-  static PP_Resource CreateRaw(PP_Instance instance,
-                               PP_Resource share_context,
-                               const int32_t* attrib_list,
-                               gpu::Capabilities* capabilities,
-                               base::SharedMemoryHandle* shared_state_handle,
-                               gpu::CommandBufferId* command_buffer_id);
+  static PP_Resource CreateRaw(
+      PP_Instance instance,
+      PP_Resource share_context,
+      const gpu::gles2::ContextCreationAttribHelper& attrib_helper,
+      gpu::Capabilities* capabilities,
+      base::SharedMemoryHandle* shared_state_handle,
+      gpu::CommandBufferId* command_buffer_id);
 
   // PPB_Graphics3D_API trusted implementation.
   PP_Bool SetGetBuffer(int32_t transfer_buffer_id) override;
@@ -70,13 +74,14 @@ class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared,
   // ppapi::PPB_Graphics3D_Shared overrides.
   gpu::CommandBuffer* GetCommandBuffer() override;
   gpu::GpuControl* GetGpuControl() override;
-  int32_t DoSwapBuffers(const gpu::SyncToken& sync_token) override;
+  int32_t DoSwapBuffers(const gpu::SyncToken& sync_token,
+                        const gfx::Size& size) override;
 
  private:
   explicit PPB_Graphics3D_Impl(PP_Instance instance);
 
   bool InitRaw(PPB_Graphics3D_API* share_context,
-               const int32_t* attrib_list,
+               const gpu::gles2::ContextCreationAttribHelper& requested_attribs,
                gpu::Capabilities* capabilities,
                base::SharedMemoryHandle* shared_state_handle,
                gpu::CommandBufferId* command_buffer_id);
@@ -111,6 +116,7 @@ class PPB_Graphics3D_Impl : public ppapi::PPB_Graphics3D_Shared,
 #endif
 
   bool has_alpha_;
+  bool use_image_chromium_;
   std::unique_ptr<gpu::CommandBufferProxyImpl> command_buffer_;
 
   base::WeakPtrFactory<PPB_Graphics3D_Impl> weak_ptr_factory_;

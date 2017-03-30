@@ -43,7 +43,7 @@
 #include "modules/webdatabase/SQLTransactionCallback.h"
 #include "modules/webdatabase/SQLTransactionClient.h" // FIXME: Should be used in the backend only.
 #include "modules/webdatabase/SQLTransactionErrorCallback.h"
-#include "platform/Logging.h"
+#include "modules/webdatabase/StorageLog.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 
@@ -133,7 +133,9 @@ SQLTransaction::StateFunction SQLTransaction::stateFunctionFor(SQLTransactionSta
 // modify is m_requestedState which is meant for this purpose.
 void SQLTransaction::requestTransitToState(SQLTransactionState nextState)
 {
-    WTF_LOG(StorageAPI, "Scheduling %s for transaction %p\n", nameForSQLTransactionState(nextState), this);
+#if DCHECK_IS_ON()
+    STORAGE_DVLOG(1) << "Scheduling " << nameForSQLTransactionState(nextState) << " for transaction " << this;
+#endif
     m_requestedState = nextState;
     m_database->scheduleTransactionCallback(this);
 }
@@ -164,8 +166,8 @@ SQLTransactionState SQLTransaction::deliverTransactionCallback()
     // Spec 4.3.2 5: If the transaction callback was null or raised an exception, jump to the error callback
     SQLTransactionState nextState = SQLTransactionState::RunStatements;
     if (shouldDeliverErrorCallback) {
-        m_database->reportStartTransactionResult(5, SQLError::UNKNOWN_ERR, 0);
-        m_transactionError = SQLErrorData::create(SQLError::UNKNOWN_ERR, "the SQLTransactionCallback was null or threw an exception");
+        m_database->reportStartTransactionResult(5, SQLError::kUnknownErr, 0);
+        m_transactionError = SQLErrorData::create(SQLError::kUnknownErr, "the SQLTransactionCallback was null or threw an exception");
         nextState = SQLTransactionState::DeliverTransactionErrorCallback;
     }
     m_database->reportStartTransactionResult(0, -1, 0); // OK
@@ -215,8 +217,8 @@ SQLTransactionState SQLTransaction::deliverStatementCallback()
     m_executeSqlAllowed = false;
 
     if (result) {
-        m_database->reportCommitTransactionResult(2, SQLError::UNKNOWN_ERR, 0);
-        m_transactionError = SQLErrorData::create(SQLError::UNKNOWN_ERR, "the statement callback raised an exception or statement error callback did not return false");
+        m_database->reportCommitTransactionResult(2, SQLError::kUnknownErr, 0);
+        m_transactionError = SQLErrorData::create(SQLError::kUnknownErr, "the statement callback raised an exception or statement error callback did not return false");
         return nextStateForTransactionError();
     }
     return SQLTransactionState::RunStatements;
@@ -321,8 +323,9 @@ bool SQLTransaction::computeNextStateAndCleanupIfNeeded()
             || m_nextState == SQLTransactionState::DeliverStatementCallback
             || m_nextState == SQLTransactionState::DeliverQuotaIncreaseCallback
             || m_nextState == SQLTransactionState::DeliverSuccessCallback);
-
-        WTF_LOG(StorageAPI, "Callback %s\n", nameForSQLTransactionState(m_nextState));
+#if DCHECK_IS_ON()
+        STORAGE_DVLOG(1) << "Callback " << nameForSQLTransactionState(m_nextState);
+#endif
         return false;
     }
 

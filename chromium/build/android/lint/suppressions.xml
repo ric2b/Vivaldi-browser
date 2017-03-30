@@ -75,6 +75,17 @@ Still reading?
   <issue id="MissingApplicationIcon" severity="ignore"/>
   <issue id="MissingPermission" severity="ignore"/>
   <issue id="MissingRegistered" severity="ignore"/>
+  <issue id="MissingTranslation">
+    <!-- http://crbug.com/450548 -->
+    <ignore regexp=".*restriction_values.xml.*" />
+  </issue>
+  <!--
+    TODO(estevenson) remove this once translations are added for
+    IDS_ACCESSIBILITY_TOOLBAR_BTN_TABSWITCHER_TOGGLE (http://crbug.com/635677)
+  -->
+  <issue id="MissingQuantity">
+    <ignore regexp=".*android_chrome_strings.xml" />
+  </issue>
   <issue id="MissingVersion">
     <ignore path="AndroidManifest.xml"/>
   </issue>
@@ -102,16 +113,25 @@ Still reading?
   </issue>
   <issue id="SetJavaScriptEnabled" severity="ignore"/>
   <issue id="UnusedResources">
-    <!-- Used by chrome/android/java/AndroidManifest.xml -->
-    <ignore path="chrome/android/java/res/drawable/window_background.xml" />
-    <ignore path="chrome/android/java/res/xml/bookmark_widget_info.xml" />
-    <ignore path="chrome/android/java/res/xml/file_paths.xml" />
-
-    <ignore path="content/shell/android/shell_apk/res/layout/content_shell_activity.xml" />
-    <ignore path="content/shell/android/shell_apk/res/values/strings.xml" />
+    <!-- Used by Android's policies system -->
+    <ignore regexp="restriction_values.xml" />
+    <ignore path="android_webview/tools/automated_ui_tests/java/res/" />
+    <!--
+        This file isn't used if the target SDK version is less than 24.
+        TODO(estevenson) remove this and the conditional inclusion in
+        AndroidManifest.xml after rolling to SDK 24.
+    -->
+    <ignore path="chrome/android/java/res/xml/network_security_config.xml" />
   </issue>
   <issue id="SignatureOrSystemPermissions" severity="ignore"/>
   <issue id="UnusedAttribute" severity="ignore"/>
+  <!--
+    TODO(estevenson) remove this once translations are updated for
+    IDS_ACCESSIBILITY_TOOLBAR_BTN_TABSWITCHER_TOGGLE (http://crbug.com/635677)
+  -->
+  <issue id="UnusedQuantity">
+    <ignore regexp=".*android_chrome_strings.xml" />
+  </issue>
   <issue id="ViewConstructor" severity="ignore"/>
   <issue id="WrongCall" severity="ignore"/>
   <issue id="UselessParent">

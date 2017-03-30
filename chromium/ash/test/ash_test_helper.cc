@@ -4,17 +4,17 @@
 
 #include "ash/test/ash_test_helper.h"
 
-#include "ash/accelerators/accelerator_controller.h"
+#include "ash/accelerators/accelerator_controller_delegate_aura.h"
 #include "ash/common/ash_switches.h"
 #include "ash/common/display/display_info.h"
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/test/material_design_controller_test_api.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/shell_init_params.h"
 #include "ash/test/ash_test_views_delegate.h"
 #include "ash/test/content/test_shell_content_state.h"
 #include "ash/test/display_manager_test_api.h"
-#include "ash/test/material_design_controller_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_delegate.h"
@@ -71,7 +71,8 @@ AshTestHelper::AshTestHelper(base::MessageLoopForUI* message_loop)
 
 AshTestHelper::~AshTestHelper() {}
 
-void AshTestHelper::SetUp(bool start_session) {
+void AshTestHelper::SetUp(bool start_session,
+                          MaterialDesignController::Mode material_mode) {
   ResetDisplayIdForTest();
   views_delegate_.reset(new AshTestViewsDelegate);
 
@@ -127,6 +128,11 @@ void AshTestHelper::SetUp(bool start_session) {
   ui::test::MaterialDesignControllerTestAPI::Uninitialize();
   ui::MaterialDesignController::Initialize();
   ash::MaterialDesignController::Initialize();
+  if (material_mode == MaterialDesignController::Mode::UNINITIALIZED)
+    material_mode = MaterialDesignController::GetMode();
+  material_design_state_.reset(
+      new test::MaterialDesignControllerTestAPI(material_mode));
+
   ShellInitParams init_params;
   init_params.delegate = test_shell_delegate_;
   init_params.context_factory = context_factory;
@@ -145,13 +151,14 @@ void AshTestHelper::SetUp(bool start_session) {
   ShellTestApi(shell).DisableDisplayAnimator();
 
   test_screenshot_delegate_ = new TestScreenshotDelegate();
-  shell->accelerator_controller()->SetScreenshotDelegate(
+  shell->accelerator_controller_delegate()->SetScreenshotDelegate(
       std::unique_ptr<ScreenshotDelegate>(test_screenshot_delegate_));
 }
 
 void AshTestHelper::TearDown() {
   // Tear down the shell.
   Shell::DeleteInstance();
+  material_design_state_.reset();
   test::MaterialDesignControllerTestAPI::Uninitialize();
   ShellContentState::DestroyInstance();
 

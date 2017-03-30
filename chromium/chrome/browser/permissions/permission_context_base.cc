@@ -7,10 +7,13 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
@@ -24,18 +27,19 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
-#include "extensions/browser/guest_view/web_view/web_view_constants.h"
-#include "extensions/browser/guest_view/web_view/web_view_guest.h"
-#include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
+#include "url/gurl.h"
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/permissions/permission_queue_controller.h"
 #else
-#include "chrome/browser/permissions/permission_bubble_request_impl.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
+#include "chrome/browser/permissions/permission_request_impl.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_helper.h"
 
 using extensions::WebViewGuest;
 
@@ -51,6 +55,7 @@ PermissionContextBase::PermissionContextBase(
     const content::PermissionType permission_type,
     const ContentSettingsType content_settings_type)
     : profile_(profile),
+      decision_auto_blocker_(new PermissionDecisionAutoBlocker(profile)),
       permission_type_(permission_type),
       content_settings_type_(content_settings_type),
       weak_factory_(this) {
@@ -68,6 +73,7 @@ void PermissionContextBase::RequestPermission(
     content::WebContents* web_contents,
     const PermissionRequestID& id,
     const GURL& requesting_frame,
+    bool user_gesture,
     const BrowserPermissionCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -119,7 +125,7 @@ void PermissionContextBase::RequestPermission(
                                          embedding_origin, profile_);
 
   DecidePermission(web_contents, id, requesting_origin, embedding_origin,
-                   callback);
+                   user_gesture, callback);
 }
 
 ContentSetting PermissionContextBase::GetPermissionStatus(
@@ -159,10 +165,10 @@ void PermissionContextBase::CancelPermissionRequest(
 #if defined(OS_ANDROID)
   GetQueueController()->CancelInfoBarRequest(id);
 #else
-  PermissionBubbleRequest* cancelling = pending_bubbles_.get(id.ToString());
+  PermissionRequest* cancelling = pending_requests_.get(id.ToString());
   if (cancelling != NULL && web_contents != NULL &&
-      PermissionBubbleManager::FromWebContents(web_contents) != NULL) {
-    PermissionBubbleManager::FromWebContents(web_contents)
+      PermissionRequestManager::FromWebContents(web_contents) != NULL) {
+    PermissionRequestManager::FromWebContents(web_contents)
         ->CancelRequest(cancelling);
   }
 #endif
@@ -173,6 +179,7 @@ void PermissionContextBase::DecidePermission(
     const PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
+    bool user_gesture,
     const BrowserPermissionCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -204,7 +211,7 @@ void PermissionContextBase::DecidePermission(
           permission_callback =
             base::Bind(&PermissionContextBase::OnPermissionRequestResponse,
                      weak_factory_.GetWeakPtr(), id, requesting_origin,
-                     embedding_origin,
+                     embedding_origin, user_gesture,
                      callback);
       int request_id = web_view_permission_helper->RequestPermission(
           helper_permission_type,
@@ -224,32 +231,31 @@ void PermissionContextBase::DecidePermission(
     }
     return;
   }
-  PermissionBubbleManager* bubble_manager =
-      PermissionBubbleManager::FromWebContents(web_contents);
-  // TODO(felt): sometimes |bubble_manager| is null. This check is meant to
-  // prevent crashes. See crbug.com/457091.
-  if (!bubble_manager)
+  PermissionRequestManager* permission_request_manager =
+      PermissionRequestManager::FromWebContents(web_contents);
+  // TODO(felt): sometimes |permission_request_manager| is null. This check is
+  // meant to prevent crashes. See crbug.com/457091.
+  if (!permission_request_manager)
     return;
-  std::unique_ptr<PermissionBubbleRequest> request_ptr(
-      new PermissionBubbleRequestImpl(
-          requesting_origin, permission_type_,
-          base::Bind(&PermissionContextBase::PermissionDecided,
-                     weak_factory_.GetWeakPtr(), id, requesting_origin,
-                     embedding_origin, callback),
-          base::Bind(&PermissionContextBase::CleanUpBubble,
-                     weak_factory_.GetWeakPtr(), id)));
-  PermissionBubbleRequest* request = request_ptr.get();
-
-  bool inserted =
-      pending_bubbles_.add(id.ToString(), std::move(request_ptr)).second;
-  DCHECK(inserted) << "Duplicate id " << id.ToString();
-  bubble_manager->AddRequest(request);
-#else
-  GetQueueController()->CreateInfoBarRequest(
-      id, requesting_origin, embedding_origin,
+  std::unique_ptr<PermissionRequest> request_ptr(new PermissionRequestImpl(
+      requesting_origin, permission_type_, profile_, user_gesture,
       base::Bind(&PermissionContextBase::PermissionDecided,
                  weak_factory_.GetWeakPtr(), id, requesting_origin,
-                 embedding_origin, callback,
+                 embedding_origin, user_gesture, callback),
+      base::Bind(&PermissionContextBase::CleanUpRequest,
+                 weak_factory_.GetWeakPtr(), id)));
+  PermissionRequest* request = request_ptr.get();
+
+  bool inserted =
+      pending_requests_.add(id.ToString(), std::move(request_ptr)).second;
+  DCHECK(inserted) << "Duplicate id " << id.ToString();
+  permission_request_manager->AddRequest(request);
+#else
+  GetQueueController()->CreateInfoBarRequest(
+      id, requesting_origin, embedding_origin, user_gesture,
+      base::Bind(&PermissionContextBase::PermissionDecided,
+                 weak_factory_.GetWeakPtr(), id, requesting_origin,
+                 embedding_origin, user_gesture, callback,
                  // the queue controller takes care of persisting the
                  // permission
                  false));
@@ -271,6 +277,7 @@ void PermissionContextBase::OnPermissionRequestResponse(
         const PermissionRequestID& id,
         const GURL& requesting_origin,
         const GURL& embedding_origin,
+        bool user_gesture,
         const BrowserPermissionCallback& callback,
         bool allowed,
         const std::string &user_input
@@ -279,6 +286,7 @@ void PermissionContextBase::OnPermissionRequestResponse(
   PermissionDecided(id,
                     requesting_origin,
                     embedding_origin,
+                    user_gesture,
                     callback,
                     true,
                     allowed ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
@@ -288,24 +296,39 @@ void PermissionContextBase::PermissionDecided(
     const PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
+    bool user_gesture,
     const BrowserPermissionCallback& callback,
     bool persist,
     ContentSetting content_setting) {
 #if !defined(OS_ANDROID)
   // Infobar persistence and its related UMA is tracked on the infobar
   // controller directly.
-  if (persist) {
-    DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
-           content_setting == CONTENT_SETTING_BLOCK);
-    if (content_setting == CONTENT_SETTING_ALLOW)
-      PermissionUmaUtil::PermissionGranted(permission_type_, requesting_origin);
-    else
-      PermissionUmaUtil::PermissionDenied(permission_type_, requesting_origin);
+  PermissionRequestGestureType gesture_type =
+      user_gesture ? PermissionRequestGestureType::GESTURE
+                   : PermissionRequestGestureType::NO_GESTURE;
+  DCHECK(content_setting == CONTENT_SETTING_ALLOW ||
+         content_setting == CONTENT_SETTING_BLOCK ||
+         content_setting == CONTENT_SETTING_DEFAULT);
+  if (content_setting == CONTENT_SETTING_ALLOW) {
+    PermissionUmaUtil::PermissionGranted(permission_type_, gesture_type,
+                                         requesting_origin, profile_);
+  } else if (content_setting == CONTENT_SETTING_BLOCK) {
+    PermissionUmaUtil::PermissionDenied(permission_type_, gesture_type,
+                                        requesting_origin, profile_);
   } else {
-    DCHECK_EQ(content_setting, CONTENT_SETTING_DEFAULT);
-    PermissionUmaUtil::PermissionDismissed(permission_type_, requesting_origin);
+    PermissionUmaUtil::PermissionDismissed(permission_type_, gesture_type,
+                                           requesting_origin, profile_);
   }
 #endif
+
+  // Check if we should convert a dismiss decision into a block decision. This
+  // is gated on enabling the kBlockPromptsIfDismissedOften feature.
+  if (content_setting == CONTENT_SETTING_DEFAULT &&
+      decision_auto_blocker_->ShouldChangeDismissalToBlock(requesting_origin,
+                                                           permission_type_)) {
+    persist = true;
+    content_setting = CONTENT_SETTING_BLOCK;
+  }
 
   NotifyPermissionSet(id, requesting_origin, embedding_origin, callback,
                       persist, content_setting);
@@ -346,8 +369,8 @@ void PermissionContextBase::NotifyPermissionSet(
   callback.Run(content_setting);
 }
 
-void PermissionContextBase::CleanUpBubble(const PermissionRequestID& id) {
-  size_t success = pending_bubbles_.erase(id.ToString());
+void PermissionContextBase::CleanUpRequest(const PermissionRequestID& id) {
+  size_t success = pending_requests_.erase(id.ToString());
   DCHECK(success == 1) << "Missing request " << id.ToString();
 }
 

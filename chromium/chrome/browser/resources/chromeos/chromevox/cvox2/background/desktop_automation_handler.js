@@ -47,6 +47,7 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(e.alert, this.onAlert);
   this.addListener_(e.ariaAttributeChanged, this.onEventIfInRange);
   this.addListener_(e.checkedStateChanged, this.onCheckedStateChanged);
+  this.addListener_(e.childrenChanged, this.onActiveDescendantChanged);
   this.addListener_(e.focus, this.onFocus);
   this.addListener_(e.hover, this.onHover);
   this.addListener_(e.loadComplete, this.onLoadComplete);
@@ -129,11 +130,21 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onEventIfInRange: function(evt) {
-    // TODO(dtseng): Consider the end of the current range as well.
-    if (AutomationUtil.isDescendantOf(
-        ChromeVoxState.instance.currentRange.start.node, evt.target) ||
-            evt.target.state.focused)
-      this.onEventDefault(evt);
+    if (evt.target.root.role != RoleType.desktop &&
+        ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
+      return;
+
+    var prev = ChromeVoxState.instance.currentRange;
+    if (AutomationUtil.isDescendantOf(prev.start.node, evt.target) ||
+        AutomationUtil.isDescendantOf(evt.target, prev.start.node) ||
+        evt.target.state.focused) {
+      // Intentionally skip setting range.
+      new Output()
+          .withRichSpeechAndBraille(cursors.Range.fromNode(evt.target),
+                                    prev,
+                                    Output.EventType.NAVIGATE)
+          .go();
+    }
   },
 
   /**
@@ -168,7 +179,7 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onActiveDescendantChanged: function(evt) {
-    if (!evt.target.activeDescendant)
+    if (!evt.target.activeDescendant || !evt.target.state.focused)
       return;
     this.onEventDefault(new chrome.automation.AutomationEvent(
         EventType.focus, evt.target.activeDescendant));
@@ -247,6 +258,11 @@ DesktopAutomationHandler.prototype = {
       if (!focus || !AutomationUtil.isDescendantOf(focus, evt.target))
         return;
 
+      // Create text edit handler, if needed, now in order not to miss initial
+      // value change if text field has already been focused when initializing
+      // ChromeVox.
+      this.createTextEditHandlerIfNeeded_(focus);
+
       // If initial focus was already placed on this page (e.g. if a user starts
       // tabbing before load complete), then don't move ChromeVox's position on
       // the page.
@@ -311,6 +327,21 @@ DesktopAutomationHandler.prototype = {
     }
 
     this.createTextEditHandlerIfNeeded_(evt.target);
+
+    // Sync the ChromeVox range to the editable, if a selection exists.
+    var anchorObject = evt.target.root.anchorObject;
+    var anchorOffset = evt.target.root.anchorOffset;
+    var focusObject = evt.target.root.focusObject;
+    var focusOffset = evt.target.root.focusOffset;
+    if (anchorObject && focusObject) {
+      var selectedRange = new cursors.Range(
+          new cursors.WrappingCursor(anchorObject, anchorOffset),
+          new cursors.WrappingCursor(focusObject, focusOffset));
+
+      // Sync ChromeVox range with selection.
+      ChromeVoxState.instance.setCurrentRange(selectedRange);
+    }
+
     // TODO(plundblad): This can currently be null for contenteditables.
     // Clean up when it can't.
     if (this.textEditHandler_)
@@ -344,8 +375,12 @@ DesktopAutomationHandler.prototype = {
 
       this.lastValueChanged_ = new Date();
 
-      new Output().format('$value', evt.target)
-          .go();
+      var output = new Output();
+
+      if (t.root.role == RoleType.desktop)
+        output.withQueueMode(cvox.QueueMode.FLUSH);
+
+      output.format('$value', evt.target).go();
     }
   },
 

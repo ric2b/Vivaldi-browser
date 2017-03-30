@@ -24,9 +24,9 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/cloud_policy.pb.h"
+#include "components/policy/proto/device_management_local.pb.h"
 #include "google_apis/gaia/gaia_auth_util.h"
-#include "policy/proto/cloud_policy.pb.h"
-#include "policy/proto/device_management_local.pb.h"
 
 namespace em = enterprise_management;
 
@@ -272,7 +272,7 @@ void UserCloudPolicyStoreChromeOS::ValidatePolicyForStore(
     std::unique_ptr<em::PolicyFetchResponse> policy) {
   // Create and configure a validator.
   std::unique_ptr<UserCloudPolicyValidator> validator = CreateValidator(
-      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_REQUIRED);
+      std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED);
   validator->ValidateUsername(account_id_.GetUserEmail(), true);
   if (policy_key_.empty()) {
     validator->ValidateInitialKey(GetPolicyVerificationKey(),
@@ -421,7 +421,7 @@ void UserCloudPolicyStoreChromeOS::OnLegacyLoadFinished(
     // Create and configure a validator for the loaded legacy policy. Note that
     // the signature on this policy is not verified.
     std::unique_ptr<UserCloudPolicyValidator> validator = CreateValidator(
-        std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_REQUIRED);
+        std::move(policy), CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED);
     validator->ValidateUsername(account_id_.GetUserEmail(), true);
     validator.release()->StartValidation(
         base::Bind(&UserCloudPolicyStoreChromeOS::OnLegacyPolicyValidated,

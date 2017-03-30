@@ -59,6 +59,7 @@ class FrameSelection;
 class FrameView;
 class HTMLPlugInElement;
 class InputMethodController;
+class InterfaceProvider;
 class IntPoint;
 class IntSize;
 class InstrumentingAgents;
@@ -73,15 +74,16 @@ template <typename Strategy> class PositionWithAffinityTemplate;
 class PluginData;
 class Range;
 class ScriptController;
-class ServiceRegistry;
 class SpellChecker;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
 
-class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
+extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<LocalFrame>;
+
+class CORE_EXPORT LocalFrame final : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
 public:
-    static LocalFrame* create(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry* = nullptr);
+    static LocalFrame* create(FrameLoaderClient*, FrameHost*, FrameOwner*, InterfaceProvider* = nullptr);
 
     void init();
     void setView(FrameView*);
@@ -104,7 +106,7 @@ public:
     bool prepareForCommit() override;
     void didChangeVisibilityState() override;
 
-    void willDetachFrameHost();
+    void detachChildren();
 
     LocalDOMWindow* localDOMWindow() const;
     void setDOMWindow(LocalDOMWindow*);
@@ -131,6 +133,14 @@ public:
     // FIXME: This is a temporary hack to support RemoteFrames, and callers
     // should be updated to avoid storing things on the main frame.
     LocalFrame* localFrameRoot();
+
+    // Note that the result of this function should not be cached: a frame is
+    // not necessarily detached when it is navigated, so the return value can
+    // change.
+    // In addition, this function will always return true for a detached frame.
+    // TODO(dcheng): Move this to LocalDOMWindow and figure out the right
+    // behavior for detached windows.
+    bool isCrossOriginSubframe() const;
 
     InstrumentingAgents* instrumentingAgents() { return m_instrumentingAgents.get(); }
 
@@ -177,7 +187,7 @@ public:
 
     bool isNavigationAllowed() const { return m_navigationDisableCount == 0; }
 
-    ServiceRegistry* serviceRegistry() { return m_serviceRegistry; }
+    InterfaceProvider* interfaceProvider() { return m_interfaceProvider; }
 
     FrameLoaderClient* client() const;
 
@@ -186,7 +196,7 @@ public:
 private:
     friend class FrameNavigationDisabler;
 
-    LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*, ServiceRegistry*);
+    LocalFrame(FrameLoaderClient*, FrameHost*, FrameOwner*, InterfaceProvider*);
 
     // Internal Frame helper overrides:
     WindowProxyManager* getWindowProxyManager() const override;
@@ -197,6 +207,8 @@ private:
 
     void enableNavigation() { --m_navigationDisableCount; }
     void disableNavigation() { ++m_navigationDisableCount; }
+
+    std::unique_ptr<WebFrameScheduler> m_frameScheduler;
 
     mutable FrameLoader m_loader;
     Member<NavigationScheduler> m_navigationScheduler;
@@ -213,7 +225,6 @@ private:
     const Member<EventHandler> m_eventHandler;
     const Member<FrameConsole> m_console;
     const Member<InputMethodController> m_inputMethodController;
-    std::unique_ptr<WebFrameScheduler> m_frameScheduler;
 
     int m_navigationDisableCount;
 
@@ -224,7 +235,7 @@ private:
 
     Member<InstrumentingAgents> m_instrumentingAgents;
 
-    ServiceRegistry* const m_serviceRegistry;
+    InterfaceProvider* const m_interfaceProvider;
 };
 
 inline void LocalFrame::init()

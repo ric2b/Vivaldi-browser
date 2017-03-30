@@ -375,8 +375,8 @@ void LayoutFrameSet::layout()
     }
 
     LayoutUnit borderThickness(frameSet()->border());
-    layOutAxis(m_rows, frameSet()->rowLengths(), size().height() - (rows - 1) * borderThickness);
-    layOutAxis(m_cols, frameSet()->colLengths(), size().width() - (cols - 1) * borderThickness);
+    layOutAxis(m_rows, frameSet()->rowLengths(), (size().height() - (rows - 1) * borderThickness).toInt());
+    layOutAxis(m_cols, frameSet()->colLengths(), (size().width() - (cols - 1) * borderThickness).toInt());
 
     positionFrames();
 
@@ -472,7 +472,7 @@ bool LayoutFrameSet::userResize(MouseEvent* evt)
     if (!m_isResizing) {
         if (needsLayout())
             return false;
-        if (evt->type() == EventTypeNames::mousedown && evt->button() == LeftButton) {
+        if (evt->type() == EventTypeNames::mousedown && evt->button() == static_cast<short>(WebPointerProperties::Button::Left)) {
             FloatPoint localPos = absoluteToLocal(FloatPoint(evt->absoluteLocation()), UseTransforms);
             startResizing(m_cols, localPos.x());
             startResizing(m_rows, localPos.y());
@@ -482,11 +482,11 @@ bool LayoutFrameSet::userResize(MouseEvent* evt)
             }
         }
     } else {
-        if (evt->type() == EventTypeNames::mousemove || (evt->type() == EventTypeNames::mouseup && evt->button() == LeftButton)) {
+        if (evt->type() == EventTypeNames::mousemove || (evt->type() == EventTypeNames::mouseup && evt->button() == static_cast<short>(WebPointerProperties::Button::Left))) {
             FloatPoint localPos = absoluteToLocal(FloatPoint(evt->absoluteLocation()), UseTransforms);
             continueResizing(m_cols, localPos.x());
             continueResizing(m_rows, localPos.y());
-            if (evt->type() == EventTypeNames::mouseup && evt->button() == LeftButton) {
+            if (evt->type() == EventTypeNames::mouseup && evt->button() == static_cast<short>(WebPointerProperties::Button::Left)) {
                 setIsResizing(false);
                 return true;
             }

@@ -6,8 +6,11 @@
 #define CHROMEOS_DBUS_DEBUG_DAEMON_CLIENT_H_
 
 #include <stdint.h>
+#include <sys/types.h>
 
 #include <map>
+#include <string>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/files/file.h"
@@ -17,7 +20,6 @@
 #include "base/trace_event/tracing_agent.h"
 #include "chromeos/chromeos_export.h"
 #include "chromeos/dbus/dbus_client.h"
-#include "dbus/file_descriptor.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
@@ -33,12 +35,13 @@ class CHROMEOS_EXPORT DebugDaemonClient
   // - succeeded: was the logs stored successfully.
   typedef base::Callback<void(bool succeeded)> GetDebugLogsCallback;
 
-  // Requests to store debug logs into |file| and calls |callback|
+  // Requests to store debug logs into |file_descriptor| and calls |callback|
   // when completed. Debug logs will be stored in the .tgz if
   // |is_compressed| is true, otherwise in logs will be stored in .tar format.
+  // This method duplicates |file_descriptor| so it's OK to close the FD without
+  // waiting for the result.
   virtual void DumpDebugLogs(bool is_compressed,
-                             base::File file,
-                             scoped_refptr<base::TaskRunner> task_runner,
+                             int file_descriptor,
                              const GetDebugLogsCallback& callback) = 0;
 
   // Called once SetDebugMode() is complete. Takes one parameter:
@@ -98,11 +101,13 @@ class CHROMEOS_EXPORT DebugDaemonClient
   // seconds) and returns data collected over the passed |file_descriptor|.
   // |error_callback| is called if there is an error with the DBus call.
   // Note that quipper failures may occur after successfully running the DBus
-  // method. Such errors can be detected by |file_descriptor| being closed with
-  // no data written.
+  // method. Such errors can be detected by |file_descriptor| and all its
+  // duplicates being closed with no data written.
+  // This method duplicates |file_descriptor| so it's OK to close the FD without
+  // waiting for the result.
   virtual void GetPerfOutput(base::TimeDelta duration,
                              const std::vector<std::string>& perf_args,
-                             dbus::ScopedFileDescriptor file_descriptor,
+                             int file_descriptor,
                              const DBusMethodErrorCallback& error_callback) = 0;
 
   // Callback type for GetScrubbedLogs(), GetAllLogs() or GetUserLogFiles().
@@ -191,6 +196,18 @@ class CHROMEOS_EXPORT DebugDaemonClient
   // Runs the callback as soon as the service becomes available.
   virtual void WaitForServiceToBeAvailable(
       const WaitForServiceToBeAvailableCallback& callback) = 0;
+
+  // A callback for SetOomScoreAdj().
+  typedef base::Callback<void(bool success, const std::string& output)>
+      SetOomScoreAdjCallback;
+
+  // Set OOM score oom_score_adj for some process.
+  // Note that the corresponding DBus configuration of the debugd method
+  // "SetOomScoreAdj" only permits setting OOM score for processes running by
+  // user chronos or Android apps.
+  virtual void SetOomScoreAdj(
+      const std::map<pid_t, int32_t>& pid_to_oom_score_adj,
+      const SetOomScoreAdjCallback& callback) = 0;
 
   // Factory function, creates a new instance and returns ownership.
   // For normal usage, access the singleton via DBusThreadManager::Get().

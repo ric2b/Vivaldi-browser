@@ -28,6 +28,7 @@
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/resource_response.h"
+#include "content/public/common/resource_type.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -42,6 +43,7 @@
 #include "net/base/request_priority.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/cert/x509_certificate.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
@@ -284,7 +286,7 @@ class ResourceHandlerStub : public ResourceHandler {
         received_request_redirected_(false),
         total_bytes_downloaded_(0),
         observed_effective_connection_type_(
-            net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
+            net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
 
   // If true, defers the resource load in OnWillStart.
   void set_defer_request_on_will_start(bool defer_request_on_will_start) {
@@ -317,8 +319,7 @@ class ResourceHandlerStub : public ResourceHandler {
   const net::URLRequestStatus& status() const { return status_; }
   int total_bytes_downloaded() const { return total_bytes_downloaded_; }
 
-  net::NetworkQualityEstimator::EffectiveConnectionType
-  observed_effective_connection_type() const {
+  net::EffectiveConnectionType observed_effective_connection_type() const {
     return observed_effective_connection_type_;
   }
 
@@ -349,10 +350,6 @@ class ResourceHandlerStub : public ResourceHandler {
       *defer = true;
       deferred_run_loop_.Quit();
     }
-    return true;
-  }
-
-  bool OnBeforeNetworkStart(const GURL& url, bool* defer) override {
     return true;
   }
 
@@ -439,8 +436,7 @@ class ResourceHandlerStub : public ResourceHandler {
   base::RunLoop deferred_run_loop_;
   base::RunLoop response_completed_run_loop_;
   std::unique_ptr<base::RunLoop> wait_for_progress_run_loop_;
-  net::NetworkQualityEstimator::EffectiveConnectionType
-      observed_effective_connection_type_;
+  net::EffectiveConnectionType observed_effective_connection_type_;
 };
 
 // Test browser client that captures calls to SelectClientCertificates and
@@ -501,10 +497,11 @@ class NonChunkedUploadDataStream : public net::UploadDataStream {
   }
 
  private:
-  int InitInternal() override {
+  int InitInternal(const net::BoundNetLog& net_log) override {
     SetSize(size_);
     stream_.Init(base::Bind(&NonChunkedUploadDataStream::OnInitCompleted,
-                            base::Unretained(this)));
+                            base::Unretained(this)),
+                 net_log);
     return net::OK;
   }
 
@@ -539,22 +536,19 @@ class TestNetworkQualityEstimator : public net::NetworkQualityEstimator {
   TestNetworkQualityEstimator()
       : net::NetworkQualityEstimator(nullptr,
                                      std::map<std::string, std::string>()),
-        type_(net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {
-  }
+        type_(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {}
   ~TestNetworkQualityEstimator() override {}
 
-  net::NetworkQualityEstimator::EffectiveConnectionType
-  GetEffectiveConnectionType() const override {
+  net::EffectiveConnectionType GetEffectiveConnectionType() const override {
     return type_;
   }
 
-  void set_effective_connection_type(
-      net::NetworkQualityEstimator::EffectiveConnectionType type) {
+  void set_effective_connection_type(net::EffectiveConnectionType type) {
     type_ = type;
   }
 
  private:
-  net::NetworkQualityEstimator::EffectiveConnectionType type_;
+  net::EffectiveConnectionType type_;
 
   DISALLOW_COPY_AND_ASSIGN(TestNetworkQualityEstimator);
 };
@@ -597,19 +591,22 @@ class ResourceLoaderTest : public testing::Test,
 
   // Replaces loader_ with a new one for |request|.
   void SetUpResourceLoader(std::unique_ptr<net::URLRequest> request,
-                           bool is_main_frame) {
+                           ResourceType resource_type,
+                           bool belongs_to_main_frame) {
     raw_ptr_to_request_ = request.get();
 
-    ResourceType resource_type =
-        is_main_frame ? RESOURCE_TYPE_MAIN_FRAME : RESOURCE_TYPE_SUB_FRAME;
+    // A request marked as a main frame request must also belong to a main
+    // frame.
+    ASSERT_TRUE((resource_type != RESOURCE_TYPE_MAIN_FRAME) ||
+                belongs_to_main_frame);
 
     RenderFrameHost* rfh = web_contents_->GetMainFrame();
     ResourceRequestInfo::AllocateForTesting(
         request.get(), resource_type, &resource_context_,
         rfh->GetProcess()->GetID(), rfh->GetRenderViewHost()->GetRoutingID(),
-        rfh->GetRoutingID(), is_main_frame, false /* parent_is_main_frame */,
-        true /* allow_download */, false /* is_async */,
-        false /* is_using_lofi_ */);
+        rfh->GetRoutingID(), belongs_to_main_frame,
+        false /* parent_is_main_frame */, true /* allow_download */,
+        false /* is_async */, false /* is_using_lofi_ */);
     std::unique_ptr<ResourceHandlerStub> resource_handler(
         new ResourceHandlerStub(request.get()));
     raw_ptr_resource_handler_ = resource_handler.get();
@@ -631,7 +628,7 @@ class ResourceLoaderTest : public testing::Test,
     std::unique_ptr<net::URLRequest> request(
         resource_context_.GetRequestContext()->CreateRequest(
             test_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
-    SetUpResourceLoader(std::move(request), true);
+    SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
   }
 
   void TearDown() override {
@@ -658,7 +655,8 @@ class ResourceLoaderTest : public testing::Test,
   }
   void DidStartRequest(ResourceLoader* loader) override {}
   void DidReceiveRedirect(ResourceLoader* loader,
-                          const GURL& new_url) override {}
+                          const GURL& new_url,
+                          ResourceResponse* response) override {}
   void DidReceiveResponse(ResourceLoader* loader) override {}
   void DidFinishLoading(ResourceLoader* loader) override {}
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
@@ -938,10 +936,8 @@ class ResourceLoaderRedirectToFileTest : public ResourceLoaderTest {
                                          base::ThreadTaskRunnerHandle::Get()));
     file_stream_ = file_stream.get();
     deletable_file_ = ShareableFileReference::GetOrCreate(
-        temp_path_,
-        ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-        BrowserThread::GetMessageLoopProxyForThread(
-            BrowserThread::FILE).get());
+        temp_path_, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
 
     // Inject them into the handler.
     std::unique_ptr<RedirectToFileResourceHandler> handler(
@@ -1122,7 +1118,7 @@ TEST_F(HTTPSSecurityInfoResourceLoaderTest, SecurityInfoOnHTTPSResource) {
   std::unique_ptr<net::URLRequest> request(
       resource_context_.GetRequestContext()->CreateRequest(
           test_https_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
-  SetUpResourceLoader(std::move(request), true);
+  SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
 
   // Send the request and wait until it completes.
   loader_->StartRequest();
@@ -1161,7 +1157,7 @@ TEST_F(HTTPSSecurityInfoResourceLoaderTest,
       resource_context_.GetRequestContext()->CreateRequest(
           test_https_redirect_url(), net::DEFAULT_PRIORITY,
           nullptr /* delegate */));
-  SetUpResourceLoader(std::move(request), true);
+  SetUpResourceLoader(std::move(request), RESOURCE_TYPE_MAIN_FRAME, true);
 
   // Send the request and wait until it completes.
   loader_->StartRequest();
@@ -1196,16 +1192,18 @@ TEST_F(HTTPSSecurityInfoResourceLoaderTest,
 class EffectiveConnectionTypeResourceLoaderTest : public ResourceLoaderTest {
  public:
   void VerifyEffectiveConnectionType(
-      bool is_main_frame,
-      net::NetworkQualityEstimator::EffectiveConnectionType set_type,
-      net::NetworkQualityEstimator::EffectiveConnectionType expected_type) {
+      ResourceType resource_type,
+      bool belongs_to_main_frame,
+      net::EffectiveConnectionType set_type,
+      net::EffectiveConnectionType expected_type) {
     network_quality_estimator()->set_effective_connection_type(set_type);
 
     // Start the request and wait for it to finish.
     std::unique_ptr<net::URLRequest> request(
         resource_context_.GetRequestContext()->CreateRequest(
             test_url(), net::DEFAULT_PRIORITY, nullptr /* delegate */));
-    SetUpResourceLoader(std::move(request), is_main_frame);
+    SetUpResourceLoader(std::move(request), resource_type,
+                        belongs_to_main_frame);
 
     // Send the request and wait until it completes.
     loader_->StartRequest();
@@ -1220,24 +1218,32 @@ class EffectiveConnectionTypeResourceLoaderTest : public ResourceLoaderTest {
 
 // Tests that the effective connection type is set on main frame requests.
 TEST_F(EffectiveConnectionTypeResourceLoaderTest, Slow2G) {
-  VerifyEffectiveConnectionType(
-      true, net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
-      net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
+  VerifyEffectiveConnectionType(RESOURCE_TYPE_MAIN_FRAME, true,
+                                net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
+                                net::EFFECTIVE_CONNECTION_TYPE_SLOW_2G);
 }
 
 // Tests that the effective connection type is set on main frame requests.
 TEST_F(EffectiveConnectionTypeResourceLoaderTest, 3G) {
-  VerifyEffectiveConnectionType(
-      true, net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_3G,
-      net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_3G);
+  VerifyEffectiveConnectionType(RESOURCE_TYPE_MAIN_FRAME, true,
+                                net::EFFECTIVE_CONNECTION_TYPE_3G,
+                                net::EFFECTIVE_CONNECTION_TYPE_3G);
+}
+
+// Tests that the effective connection type is not set on requests that belong
+// to main frame.
+TEST_F(EffectiveConnectionTypeResourceLoaderTest, BelongsToMainFrame) {
+  VerifyEffectiveConnectionType(RESOURCE_TYPE_OBJECT, true,
+                                net::EFFECTIVE_CONNECTION_TYPE_3G,
+                                net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
 }
 
 // Tests that the effective connection type is not set on non-main frame
 // requests.
-TEST_F(EffectiveConnectionTypeResourceLoaderTest, NotAMainFrame) {
-  VerifyEffectiveConnectionType(
-      false, net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_3G,
-      net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
+TEST_F(EffectiveConnectionTypeResourceLoaderTest, DoesNotBelongToMainFrame) {
+  VerifyEffectiveConnectionType(RESOURCE_TYPE_OBJECT, false,
+                                net::EFFECTIVE_CONNECTION_TYPE_3G,
+                                net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN);
 }
 
 }  // namespace content

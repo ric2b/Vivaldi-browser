@@ -31,10 +31,10 @@
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/CSSShadowValue.h"
+#include "core/css/CSSURIValue.h"
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/svg/ReferenceFilterBuilder.h"
-#include "core/svg/SVGElement.h"
 #include "core/svg/SVGURIReference.h"
 
 namespace blink {
@@ -42,8 +42,6 @@ namespace blink {
 FilterOperation::OperationType FilterOperationResolver::filterOperationForType(CSSValueID type)
 {
     switch (type) {
-    case CSSValueUrl:
-        return FilterOperation::REFERENCE;
     case CSSValueGrayscale:
         return FilterOperation::GRAYSCALE;
     case CSSValueSepia:
@@ -129,25 +127,26 @@ FilterOperations FilterOperationResolver::createFilterOperations(StyleResolverSt
 
     const CSSToLengthConversionData& conversionData = state.cssToLengthConversionData();
     for (auto& currValue : toCSSValueList(inValue)) {
-        const CSSFunctionValue* filterValue = toCSSFunctionValue(currValue.get());
-        FilterOperation::OperationType operationType = filterOperationForType(filterValue->functionType());
-        countFilterUse(operationType, state.document());
-        ASSERT(filterValue->length() <= 1);
+        if (currValue->isURIValue()) {
+            countFilterUse(FilterOperation::REFERENCE, state.document());
 
-        if (operationType == FilterOperation::REFERENCE) {
-            const CSSSVGDocumentValue& svgDocumentValue = toCSSSVGDocumentValue(filterValue->item(0));
-            KURL url = state.document().completeURL(svgDocumentValue.url());
-
-            ReferenceFilterOperation* operation = ReferenceFilterOperation::create(svgDocumentValue.url(), AtomicString(url.fragmentIdentifier()));
-            if (SVGURIReference::isExternalURIReference(svgDocumentValue.url(), state.document())) {
-                if (!svgDocumentValue.loadRequested())
-                    state.elementStyleResources().addPendingSVGDocument(operation, &svgDocumentValue);
-                else if (svgDocumentValue.cachedSVGDocument())
-                    ReferenceFilterBuilder::setDocumentResourceReference(operation, new DocumentResourceReference(svgDocumentValue.cachedSVGDocument()));
+            const CSSURIValue& urlValue = toCSSURIValue(*currValue);
+            SVGURLReferenceResolver resolver(urlValue.value(), state.document());
+            ReferenceFilterOperation* operation = ReferenceFilterOperation::create(urlValue.value(), resolver.fragmentIdentifier());
+            if (!resolver.isLocal()) {
+                if (!urlValue.loadRequested())
+                    state.elementStyleResources().addPendingSVGDocument(operation, &urlValue);
+                else if (urlValue.cachedDocument())
+                    ReferenceFilterBuilder::setDocumentResourceReference(operation, new DocumentResourceReference(urlValue.cachedDocument()));
             }
             operations.operations().append(operation);
             continue;
         }
+
+        const CSSFunctionValue* filterValue = toCSSFunctionValue(currValue.get());
+        FilterOperation::OperationType operationType = filterOperationForType(filterValue->functionType());
+        countFilterUse(operationType, state.document());
+        DCHECK_LE(filterValue->length(), 1u);
 
         const CSSPrimitiveValue* firstValue = filterValue->length() && filterValue->item(0).isPrimitiveValue() ? &toCSSPrimitiveValue(filterValue->item(0)) : nullptr;
         switch (filterValue->functionType()) {

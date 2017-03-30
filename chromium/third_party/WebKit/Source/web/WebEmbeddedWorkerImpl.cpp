@@ -31,14 +31,15 @@
 #include "web/WebEmbeddedWorkerImpl.h"
 
 #include "bindings/core/v8/SourceLocation.h"
-#include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SecurityContext.h"
 #include "core/fetch/SubstituteData.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoadRequest.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerInspectorProxy.h"
@@ -253,18 +254,19 @@ void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message)
     m_workerInspectorProxy->dispatchMessageFromWorker(message);
 }
 
-void WebEmbeddedWorkerImpl::postTaskToLoader(std::unique_ptr<ExecutionContextTask> task)
+void WebEmbeddedWorkerImpl::postTaskToLoader(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
-    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, std::move(task));
+    // TODO(hiroshige,yuryu): Make this not use ExecutionContextTask and
+    // consider using m_mainThreadTaskRunners->get(TaskType::Networking)
+    // instead.
+    m_mainFrame->frame()->document()->postTask(location, std::move(task));
 }
 
-bool WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask> task)
+void WebEmbeddedWorkerImpl::postTaskToWorkerGlobalScope(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
     if (m_askedToTerminate || !m_workerThread)
-        return false;
-
-    m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
-    return !m_workerThread->terminated();
+        return;
+    m_workerThread->postTask(location, std::move(task));
 }
 
 void WebEmbeddedWorkerImpl::prepareShadowPageForLoader()
@@ -313,8 +315,7 @@ void WebEmbeddedWorkerImpl::loadShadowPage()
 }
 
 void WebEmbeddedWorkerImpl::willSendRequest(
-    WebLocalFrame* frame, unsigned, WebURLRequest& request,
-    const WebURLResponse& redirectResponse)
+    WebLocalFrame* frame, WebURLRequest& request)
 {
     if (m_networkProvider)
         m_networkProvider->willSendRequest(frame->dataSource(), request);
@@ -417,6 +418,7 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
 
     KURL scriptURL = m_mainScriptLoader->url();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
+    std::unique_ptr<WorkerSettings> workerSettings = wrapUnique(new WorkerSettings(document->settings()));
 
     std::unique_ptr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
         scriptURL,
@@ -430,9 +432,16 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),
         m_mainScriptLoader->originTrialTokens(),
+        std::move(workerSettings),
         static_cast<V8CacheOptions>(m_workerStartData.v8CacheOptions));
 
     m_mainScriptLoader.clear();
+
+    // We have a dummy document here for loading but it doesn't really represent
+    // the document/frame of associated document(s) for this worker. Here we
+    // populate the task runners with null document not to confuse the frame
+    // scheduler (which will end up using the thread's default task runner).
+    m_mainThreadTaskRunners = ParentFrameTaskRunners::create(nullptr);
 
     m_workerGlobalScopeProxy = ServiceWorkerGlobalScopeProxy::create(*this, *document, *m_workerContextClient);
     m_loaderProxy = WorkerLoaderProxy::create(this);

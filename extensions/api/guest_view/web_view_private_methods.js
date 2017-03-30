@@ -28,6 +28,7 @@ var WebViewImpl = require('webView').WebViewImpl;
 var WEB_VIEW_API_METHODS = [
   // Vivaldi methods
   'addToThumbnailService',
+  'allowBlockedInsecureContent',
   'discardPage',
   'getPageHistory',
   'getThumbnail',
@@ -109,6 +110,13 @@ WebViewImpl.prototype.isFocusedElementEditable = function (callback) {
     return;
   }
   WebViewPrivate.isFocusedElementEditable(this.guest.getId(), callback);
+};
+
+WebViewImpl.prototype.allowBlockedInsecureContent = function () {
+  if (!this.guest.getId()) {
+    return;
+  }
+  WebViewPrivate.allowBlockedInsecureContent(this.guest.getId());
 };
 
 // -----------------------------------------------------------------------------

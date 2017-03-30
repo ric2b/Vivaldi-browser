@@ -32,13 +32,13 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/typed_url_data_type_controller.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync_driver/data_type_manager_impl.h"
-#include "sync/internal_api/public/read_node.h"
-#include "sync/internal_api/public/read_transaction.h"
-#include "sync/internal_api/public/test/data_type_error_handler_mock.h"
-#include "sync/internal_api/public/write_node.h"
-#include "sync/internal_api/public/write_transaction.h"
-#include "sync/protocol/typed_url_specifics.pb.h"
+#include "components/sync/core/read_node.h"
+#include "components/sync/core/read_transaction.h"
+#include "components/sync/core/test/data_type_error_handler_mock.h"
+#include "components/sync/core/write_node.h"
+#include "components/sync/core/write_transaction.h"
+#include "components/sync/driver/data_type_manager_impl.h"
+#include "components/sync/protocol/typed_url_specifics.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -197,8 +197,8 @@ class ProfileSyncServiceTypedUrlTest : public AbstractProfileSyncServiceTest {
 
   void CreateHistoryService() {
     history_backend_ = new HistoryBackendMock();
-    syncable_service_ = base::WrapUnique(
-        new TestTypedUrlSyncableService(history_backend_.get()));
+    syncable_service_ =
+        base::MakeUnique<TestTypedUrlSyncableService>(history_backend_.get());
   }
 
   void DeleteSyncableService() {

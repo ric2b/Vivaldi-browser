@@ -53,7 +53,6 @@ public:
 
     CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextWebgl; }
     ImageBitmap* transferToImageBitmap(ExceptionState&) final;
-    unsigned version() const override { return 1; }
     String contextName() const override { return "WebGLRenderingContext"; }
     void registerContextExtensions() override;
     void setCanvasGetContextResult(RenderingContext&) final;
@@ -65,8 +64,8 @@ public:
     DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 private:
-    WebGLRenderingContext(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    WebGLRenderingContext(OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    WebGLRenderingContext(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes&);
+    WebGLRenderingContext(OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes&);
 
     // Enabled extension objects.
     Member<ANGLEInstancedArrays> m_angleInstancedArrays;

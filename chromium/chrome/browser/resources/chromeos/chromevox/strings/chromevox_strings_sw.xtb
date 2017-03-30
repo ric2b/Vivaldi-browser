@@ -268,6 +268,7 @@
 <translation id="3392045790598181549"><ph name="NAME" />, kipengee cha menyu</translation>
 <translation id="3406283310380167331">Onyesha orodha ya fomu</translation>
 <translation id="3422338090358345848">Fungua kigunduzi cha kibodi</translation>
+<translation id="3423495725743882470">safu mlalo $1 safu wima $2</translation>
 <translation id="3457000393508828486">Imebonyezwa kiasi</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, kitufe</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -296,6 +297,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Orodha inayojijaza kiotomatiki</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">bandika $1.</translation>
 <translation id="3816633764618089385">Maudhui yanayofuata</translation>
 <translation id="3819376190738087562">Hakuna kuruka.</translation>
 <translation id="385383972552776628">Fungua ukurasa wa chaguo</translation>
@@ -410,6 +412,7 @@
 <translation id="5000760171916499057">Hakuna fomu.</translation>
 <translation id="5005670136041063723">Hakuna vipengee vinavyofanana tena.</translation>
 <translation id="501473567976723023">Januari</translation>
+<translation id="5040591161308540832">Jedwali $1, $2 kwa $3</translation>
 <translation id="5041394372352067729">Sogeza onyesho la breli hadi mwanzo wa ukurasa</translation>
 <translation id="5042770794184672516">Ongeza sauti ya usemi</translation>
 <translation id="5050015258024679800">Kichwa cha ngazi ya 4 kilichotangulia</translation>
@@ -517,7 +520,6 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="5876817486144482042">Punguza sauti ya usemi</translation>
 <translation id="5887397643266327462">Manukuu ya breli yamewashwa.</translation>
 <translation id="5891934789323004067">Jedwali</translation>
-<translation id="5919442531159595654">nakili.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{sawa}other{alama # za sawa}}</translation>
 <translation id="5939518447894949180">Weka upya</translation>
 <translation id="5948123859135882163">Geuza fasiri ya ulinganisho wa hisabati kati ya ufafanuzi wa muundo na semantiki</translation>
@@ -553,6 +555,8 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="6355910664415701303">Hakuna kipengee cha orodha kilichotangulia.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Kichwa kilichotangulia</translation>
+<translation id="6378565991815958969">nakili $1.</translation>
+<translation id="6385591741672306837">safu wima</translation>
 <translation id="6387719785439924554">kando</translation>
 <translation id="6411426777058107714">Hakuna kitufe kilichotangulia.</translation>
 <translation id="6414968628640960377">Kipengee tofauti kilichotangulia.</translation>
@@ -652,7 +656,6 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="7532613204005497612">Juni</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, kitelezi</translation>
 <translation id="7552432549459840808">Njia Muhimu za Mikato kwenye Chrome</translation>
-<translation id="7586163296341959563">bandika.</translation>
 <translation id="7596919493010894443">uchaguzi umefutwa</translation>
 <translation id="7604026522577407655">Nenda hadi mwanzo wa safu wima ya sasa</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -703,8 +706,8 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="8153880621934657047">Haimo ndani ya jedwali.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{kistari cha chini}other{vistari # vya chini}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">safu mlalo</translation>
 <translation id="8186185314313222077">geuza skrini nzima</translation>
-<translation id="81960742267269908">kata.</translation>
 <translation id="8199231515320852133">Tangaza vichwa vya kisanduku cha sasa</translation>
 <translation id="820417203470636242">Kisanduku kitupu.</translation>
 <translation id="8215202828671303819">Chaguo nyingi</translation>
@@ -781,6 +784,7 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="9077213568694924680">imeondolewa kwenye uchaguzi</translation>
 <translation id="9082874451376019682">Hakuna kitelezi kilichotangulia.</translation>
 <translation id="9089864840575085222">Mwangwi wa mduara wa kuchapa</translation>
+<translation id="9105227991373418255">kata $1.</translation>
 <translation id="9107530006868467849">Hakuna wijeti ya maudhui.</translation>
 <translation id="9108370397979208512">hisabati</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -788,6 +792,7 @@ Ili kufungua menyu ya kivinjari cha Chrome, bonyeza Alt+F.</translation>
 <translation id="9115913704608474258">Novemba</translation>
 <translation id="9128414153595658330">mazungumzo</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Kichupo</translation>
 <translation id="9151211641321628915">Hutangaza maelezo mafupi ya nafasi ya sasa</translation>
 <translation id="9153606228985488238">Kiwango cha sauti asilimia <ph name="PERCENT" /></translation>
 <translation id="9160096769946561184">Nenda hadi mwisho wa safu wima ya sasa</translation>

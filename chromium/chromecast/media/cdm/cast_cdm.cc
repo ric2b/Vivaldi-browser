@@ -11,17 +11,57 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chromecast/media/base/decrypt_context_impl.h"
 #include "chromecast/media/base/media_resource_tracker.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/decryptor.h"
 #include "media/cdm/player_tracker_impl.h"
+#include "url/gurl.h"
 
 namespace chromecast {
 namespace media {
+namespace {
+
+class CastCdmContextImpl : public CastCdmContext {
+ public:
+  explicit CastCdmContextImpl(CastCdm* cast_cdm) : cast_cdm_(cast_cdm) {
+    DCHECK(cast_cdm_);
+  }
+  ~CastCdmContextImpl() override {}
+
+  // CastCdmContext implementation:
+  int RegisterPlayer(const base::Closure& new_key_cb,
+                     const base::Closure& cdm_unset_cb) override  {
+    return cast_cdm_->RegisterPlayer(new_key_cb, cdm_unset_cb);
+  }
+
+  void UnregisterPlayer(int registration_id) override {
+    cast_cdm_->UnregisterPlayer(registration_id);
+  }
+
+  std::unique_ptr<DecryptContextImpl> GetDecryptContext(
+      const std::string& key_id) override {
+    return cast_cdm_->GetDecryptContext(key_id);
+  }
+
+  void SetKeyStatus(const std::string& key_id,
+                    CastKeyStatus key_status,
+                    uint32_t system_code) override {
+    cast_cdm_->SetKeyStatus(key_id, key_status, system_code);
+  }
+
+ private:
+  // The CastCdm object which owns |this|.
+  CastCdm* const cast_cdm_;
+
+  DISALLOW_COPY_AND_ASSIGN(CastCdmContextImpl);
+};
+
+}  // namespace
 
 CastCdm::CastCdm(MediaResourceTracker* media_resource_tracker)
     : media_resource_tracker_(media_resource_tracker),
-      cast_cdm_context_(new CastCdmContext(this)) {
+      cast_cdm_context_(new CastCdmContextImpl(this)) {
   DCHECK(media_resource_tracker);
   thread_checker_.DetachFromThread();
 }
@@ -36,7 +76,6 @@ CastCdm::~CastCdm() {
 void CastCdm::Initialize(
     const ::media::SessionMessageCB& session_message_cb,
     const ::media::SessionClosedCB& session_closed_cb,
-    const ::media::LegacySessionErrorCB& legacy_session_error_cb,
     const ::media::SessionKeysChangeCB& session_keys_change_cb,
     const ::media::SessionExpirationUpdateCB& session_expiration_update_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -46,7 +85,6 @@ void CastCdm::Initialize(
 
   session_message_cb_ = session_message_cb;
   session_closed_cb_ = session_closed_cb;
-  legacy_session_error_cb_ = legacy_session_error_cb;
   session_keys_change_cb_ = session_keys_change_cb;
   session_expiration_update_cb_ = session_expiration_update_cb;
 
@@ -70,9 +108,8 @@ void CastCdm::UnregisterPlayer(int registration_id) {
 
 void CastCdm::OnSessionMessage(const std::string& session_id,
                                const std::vector<uint8_t>& message,
-                               const GURL& destination_url,
                                ::media::MediaKeys::MessageType message_type) {
-  session_message_cb_.Run(session_id, message_type, message, destination_url);
+  session_message_cb_.Run(session_id, message_type, message);
 }
 
 void CastCdm::OnSessionClosed(const std::string& session_id) {

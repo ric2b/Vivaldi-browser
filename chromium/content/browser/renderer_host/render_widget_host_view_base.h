@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
+#include "base/strings/string16.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/output/compositor_frame.h"
@@ -59,17 +60,18 @@ class SurfaceHittestDelegate;
 
 namespace ui {
 class LatencyInfo;
+struct DidOverscrollParams;
 }
 
 namespace content {
 class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
+class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
 class SyntheticGesture;
 class SyntheticGestureTarget;
 class TextInputManager;
 class WebCursor;
-struct DidOverscrollParams;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
 
@@ -83,9 +85,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
     return current_device_scale_factor_;
   }
 
+  // Returns the focused RenderWidgetHost inside this |view|'s RWH.
+  RenderWidgetHostImpl* GetFocusedWidget() const;
+
   // RenderWidgetHostView implementation.
   bool IsAura() const override;
 
+  RenderWidgetHost* GetRenderWidgetHost() const override;
   void SetBackgroundColor(SkColor color) override;
   void SetBackgroundColorToDefault() final;
   bool GetBackgroundOpaque() override;
@@ -94,7 +100,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void WasOccluded() override {}
   bool IsShowingContextMenu() const override;
   void SetShowingContextMenu(bool showing_menu) override;
-  base::string16 GetSelectedText() const override;
+  base::string16 GetSelectedText() override;
   bool IsMouseLocked() override;
   gfx::Size GetVisibleViewportSize() const override;
   void SetInsets(const gfx::Insets& insets) override;
@@ -162,6 +168,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // The height of the URL-bar top controls.
   virtual float GetTopControlsHeight() const;
 
+  // The height of the bottom bar.
+  virtual float GetBottomControlsHeight() const;
+
   // Called prior to forwarding input event messages to the renderer, giving
   // the view a chance to perform in-process event filtering or processing.
   // Return values of |NOT_CONSUMED| or |UNKNOWN| will result in |input_event|
@@ -215,23 +224,22 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                                       InputEventAckState ack_result) {}
 
-  virtual void DidOverscroll(const DidOverscrollParams& params) {}
+  virtual void DidOverscroll(const ui::DidOverscrollParams& params) {}
 
   virtual void DidStopFlinging() {}
 
   // Returns the compositing surface ID namespace, or 0 if Surfaces are not
   // enabled.
-  virtual uint32_t GetSurfaceIdNamespace();
+  virtual uint32_t GetSurfaceClientId();
 
   // When there are multiple RenderWidgetHostViews for a single page, input
   // events need to be targeted to the correct one for handling. The following
   // methods are invoked on the RenderWidgetHostView that should be able to
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
-  virtual uint32_t SurfaceIdNamespaceAtPoint(
-      cc::SurfaceHittestDelegate* delegate,
-      const gfx::Point& point,
-      gfx::Point* transformed_point);
+  virtual uint32_t SurfaceClientIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                          const gfx::Point& point,
+                                          gfx::Point* transformed_point);
   virtual void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) {}
   virtual void ProcessMouseEvent(const blink::WebMouseEvent& event,
                                  const ui::LatencyInfo& latency) {}
@@ -244,31 +252,49 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // Transform a point that is in the coordinate space of a Surface that is
   // embedded within the RenderWidgetHostViewBase's Surface to the
-  // coordinate space of the embedding Surface. Typically this means that a
-  // point was received from an out-of-process iframe's RenderWidget and needs
-  // to be translated to viewport coordinates for the root RWHV, in which case
-  // this method is called on the root RWHV with the out-of-process iframe's
-  // SurfaceId.
-  virtual void TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                               cc::SurfaceId original_surface,
-                                               gfx::Point* transformed_point);
+  // coordinate space of an embedding, or embedded, Surface. Typically this
+  // means that a point was received from an out-of-process iframe's
+  // RenderWidget and needs to be translated to viewport coordinates for the
+  // root RWHV, in which case this method is called on the root RWHV with the
+  // out-of-process iframe's SurfaceId.
+  // This does not transform points between surfaces where one does not
+  // contain the other. To transform between sibling surfaces, the point must
+  // be transformed to the root's coordinate space as an intermediate step.
+  virtual gfx::Point TransformPointToLocalCoordSpace(
+      const gfx::Point& point,
+      const cc::SurfaceId& original_surface);
+
+  // Transform a point that is in the coordinate space for the current
+  // RenderWidgetHostView to the coordinate space of the target_view.
+  virtual gfx::Point TransformPointToCoordSpaceForView(
+      const gfx::Point& point,
+      RenderWidgetHostViewBase* target_view);
+
+  //----------------------------------------------------------------------------
+  // The following methods are related to IME.
+  // TODO(ekaramad): Most of the IME methods should not stay virtual after IME
+  // is implemented for OOPIF. After fixing IME, mark the corresponding methods
+  // non-virtual (https://crbug.com/578168).
 
   // Updates the state of the input method attached to the view.
-  // TODO(ekaramad): This method will not stay virtual. It will be moved up top
-  // with the other non-virtual methods after TextInputState tracking is fixed
-  // on all platforms (https://crbug.com/578168).
   virtual void TextInputStateChanged(const TextInputState& text_input_state);
 
   // Cancel the ongoing composition of the input method attached to the view.
-  // TODO(ekaramad): This method will not stay virtual. It will be moved up top
-  // with the other non-virtual methods after IME is fixed on all platforms.
-  // (https://crbug.com/578168).
   virtual void ImeCancelComposition();
 
-  //----------------------------------------------------------------------------
-  // The following static methods are implemented by each platform.
+  // Notifies the view that the renderer selection bounds has changed.
+  // Selection bounds are described as a focus bound which is the current
+  // position of caret on the screen, as well as the anchor bound which is the
+  // starting position of the selection. The coordinates are with respect to
+  // RenderWidget's window's origin. Focus and anchor bound are represented as
+  // gfx::Rect.
+  virtual void SelectionBoundsChanged(
+      const ViewHostMsg_SelectionBounds_Params& params);
 
-  static void GetDefaultScreenInfo(blink::WebScreenInfo* results);
+  // Updates the range of the marked text in an IME composition.
+  virtual void ImeCompositionRangeChanged(
+      const gfx::Range& range,
+      const std::vector<gfx::Rect>& character_bounds);
 
   //----------------------------------------------------------------------------
   // The following pure virtual methods are implemented by derived classes.
@@ -300,13 +326,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Tells the View that the tooltip text for the current mouse position over
   // the page has changed.
   virtual void SetTooltipText(const base::string16& tooltip_text) = 0;
-
-  // Notifies the View that the renderer selection bounds has changed.
-  // |start_rect| and |end_rect| are the bounds end of the selection in the
-  // coordinate system of the render view. |start_direction| and |end_direction|
-  // indicates the direction at which the selection was made on touch devices.
-  virtual void SelectionBoundsChanged(
-      const ViewHostMsg_SelectionBounds_Params& params) = 0;
 
   // Copies the contents of the compositing surface, providing a new SkBitmap
   // result via an asynchronously-run |callback|. |src_subrect| is specified in
@@ -358,16 +377,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   static blink::WebScreenOrientationType GetOrientationTypeForDesktop(
       const display::Display& display);
 
-  virtual void GetScreenInfo(blink::WebScreenInfo* results) = 0;
-
   // Gets the bounds of the window, in screen coordinates.
   virtual gfx::Rect GetBoundsInRootWindow() = 0;
-
-  // Called by the RenderFrameHost when it receives an IPC response to a
-  // TextSurroundingSelectionRequest.
-  virtual void OnTextSurroundingSelectionResponse(const base::string16& content,
-                                                  size_t start_offset,
-                                                  size_t end_offset);
 
   // Called by the RenderWidgetHost when an ambiguous gesture is detected to
   // show the disambiguation popup bubble.
@@ -381,11 +392,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Instructs the view to not drop the surface even when the view is hidden.
   virtual void LockCompositingSurface() = 0;
   virtual void UnlockCompositingSurface() = 0;
-
-  // Updates the range of the marked text in an IME composition.
-  virtual void ImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) = 0;
 
   // Add and remove observers for lifetime event notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be
@@ -432,6 +438,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // Whether we are showing a context menu.
   bool showing_context_menu_;
 
+// TODO(ekaramad): In aura, text selection tracking for IME is done through the
+// TextInputManager. We still need the following variables for other platforms.
+// Remove them when tracking is done by TextInputManager on all platforms
+// (https://crbug.com/578168 and https://crbug.com/602427).
+#if !defined(USE_AURA)
   // A buffer containing the text inside and around the current selection range.
   base::string16 selection_text_;
 
@@ -441,6 +452,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
 
   // The current selection range relative to the start of the web page.
   gfx::Range selection_range_;
+#endif
 
   // The scale factor of the display the renderer is currently on.
   float current_device_scale_factor_;

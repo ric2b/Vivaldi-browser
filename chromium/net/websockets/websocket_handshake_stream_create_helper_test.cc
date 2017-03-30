@@ -17,12 +17,18 @@
 #include "net/http/http_response_info.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/socket_test_util.h"
+#include "net/test/gtest_util.h"
 #include "net/websockets/websocket_basic_handshake_stream.h"
 #include "net/websockets/websocket_stream.h"
 #include "net/websockets/websocket_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using net::test::IsOk;
+
+using ::testing::_;
 
 namespace net {
 namespace {
@@ -71,6 +77,13 @@ class TestConnectDelegate : public WebSocketStream::ConnectDelegate {
       bool fatal) override {}
 };
 
+class MockWebSocketStreamRequest : public WebSocketStreamRequest {
+ public:
+  MOCK_METHOD1(OnHandshakeStreamCreated,
+               void(WebSocketHandshakeStreamBase* handshake_stream));
+  MOCK_METHOD1(OnFailure, void(const std::string& message));
+};
+
 class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
  protected:
   std::unique_ptr<WebSocketStream> CreateAndInitializeStream(
@@ -80,7 +93,11 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
     static const char kOrigin[] = "http://localhost";
     WebSocketHandshakeStreamCreateHelper create_helper(&connect_delegate_,
                                                        sub_protocols);
-    create_helper.set_failure_message(&failure_message_);
+
+    EXPECT_CALL(stream_request, OnHandshakeStreamCreated(_)).Times(1);
+    EXPECT_CALL(stream_request, OnFailure(_)).Times(0);
+
+    create_helper.set_stream_request(&stream_request);
 
     std::unique_ptr<ClientSocketHandle> socket_handle =
         socket_handle_factory_.CreateClientSocketHandle(
@@ -104,7 +121,7 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
     request_info.load_flags = LOAD_DISABLE_CACHE;
     int rv = handshake->InitializeStream(
         &request_info, DEFAULT_PRIORITY, BoundNetLog(), CompletionCallback());
-    EXPECT_EQ(OK, rv);
+    EXPECT_THAT(rv, IsOk());
 
     HttpRequestHeaders headers;
     headers.SetHeader("Host", "localhost");
@@ -123,10 +140,10 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
 
     rv = handshake->SendRequest(headers, &response, dummy.callback());
 
-    EXPECT_EQ(OK, rv);
+    EXPECT_THAT(rv, IsOk());
 
     rv = handshake->ReadResponseHeaders(dummy.callback());
-    EXPECT_EQ(OK, rv);
+    EXPECT_THAT(rv, IsOk());
     EXPECT_EQ(101, response.headers->response_code());
     EXPECT_TRUE(response.headers->HasHeaderValue("Connection", "Upgrade"));
     EXPECT_TRUE(response.headers->HasHeaderValue("Upgrade", "websocket"));
@@ -135,7 +152,7 @@ class WebSocketHandshakeStreamCreateHelperTest : public ::testing::Test {
 
   MockClientSocketHandleFactory socket_handle_factory_;
   TestConnectDelegate connect_delegate_;
-  std::string failure_message_;
+  MockWebSocketStreamRequest stream_request;
 };
 
 // Confirm that the basic case works as expected.

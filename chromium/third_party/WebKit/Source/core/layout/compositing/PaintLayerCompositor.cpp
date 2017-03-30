@@ -25,8 +25,8 @@
 
 #include "core/layout/compositing/PaintLayerCompositor.h"
 
-#include "core/animation/AnimationTimeline.h"
 #include "core/animation/DocumentAnimations.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Fullscreen.h"
@@ -53,6 +53,7 @@
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/FramePainter.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/TransformRecorder.h"
 #include "platform/Histogram.h"
 #include "platform/JSONValues.h"
@@ -172,6 +173,8 @@ static LayoutVideo* findFullscreenVideoLayoutObject(Document& document)
         fullscreenElement = Fullscreen::fullscreenElementFrom(*contentDocument);
     }
     // Get the current fullscreen element from the document.
+    // TODO(foolip): When |currentFullScreenElementFrom| is removed, this will
+    // become a no-op and can be removed. https://crbug.com/402421
     fullscreenElement = Fullscreen::currentFullScreenElementFrom(*contentDocument);
     if (!isHTMLVideoElement(fullscreenElement))
         return nullptr;
@@ -348,7 +351,6 @@ static void forceRecomputePaintInvalidationRectsIncludingNonCompositingDescendan
     // changing the previous position from our paint invalidation container, which is fine as
     // we want a full paint invalidation anyway.
     layoutObject->clearPreviousPaintInvalidationRects();
-    layoutObject->setShouldDoFullPaintInvalidation();
 
     for (LayoutObject* child = layoutObject->slowFirstChild(); child; child = child->nextSibling()) {
         if (!child->isPaintInvalidationContainer())
@@ -405,11 +407,17 @@ void PaintLayerCompositor::updateIfNeeded()
 
     if (updateType != CompositingUpdateNone) {
         if (RuntimeEnabledFeatures::compositorWorkerEnabled() && m_scrollLayer) {
-            if (Element* scrollingElement = m_layoutView.document().scrollingElement()) {
-                uint32_t mutableProperties = CompositorMutableProperty::kNone;
-                if (scrollingElement->hasCompositorProxy())
-                    mutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & scrollingElement->compositorMutableProperties();
-                m_scrollLayer->setCompositorMutableProperties(mutableProperties);
+            LocalFrame* frame = m_layoutView.document().frame();
+            Settings* settings = frame ? frame->settings() : nullptr;
+            // If rootLayerScrolls is enabled, these properties are applied in
+            // CompositedLayerMapping::updateElementIdAndCompositorMutableProperties.
+            if (!settings || !settings->rootLayerScrolls()) {
+                if (Element* scrollingElement = m_layoutView.document().scrollingElement()) {
+                    uint32_t mutableProperties = CompositorMutableProperty::kNone;
+                    if (scrollingElement->hasCompositorProxy())
+                        mutableProperties = (CompositorMutableProperty::kScrollLeft | CompositorMutableProperty::kScrollTop) & scrollingElement->compositorMutableProperties();
+                    m_scrollLayer->setCompositorMutableProperties(mutableProperties);
+                }
             }
         }
 
@@ -555,7 +563,7 @@ void PaintLayerCompositor::paintInvalidationOnCompositingChange(PaintLayer* laye
     // FIXME: We should not allow paint invalidation out of paint invalidation state. crbug.com/457415
     DisablePaintInvalidationStateAsserts paintInvalidationAssertisabler;
 
-    layer->layoutObject()->invalidatePaintIncludingNonCompositingDescendants();
+    ObjectPaintInvalidator(*layer->layoutObject()).invalidatePaintIncludingNonCompositingDescendants();
 }
 
 void PaintLayerCompositor::frameViewDidChangeLocation(const IntPoint& contentsOffset)
@@ -643,7 +651,7 @@ bool PaintLayerCompositor::scrollingLayerDidChange(PaintLayer* layer)
     return false;
 }
 
-PassRefPtr<JSONObject> PaintLayerCompositor::layerTreeAsJSON(LayerTreeFlags flags) const
+std::unique_ptr<JSONObject> PaintLayerCompositor::layerTreeAsJSON(LayerTreeFlags flags) const
 {
     ASSERT(lifecycle().state() >= DocumentLifecycle::PaintInvalidationClean || m_layoutView.frameView()->shouldThrottleRendering());
 

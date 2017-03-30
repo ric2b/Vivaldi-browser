@@ -50,12 +50,12 @@ URLFetcherCore::Registry::Registry() {}
 URLFetcherCore::Registry::~Registry() {}
 
 void URLFetcherCore::Registry::AddURLFetcherCore(URLFetcherCore* core) {
-  DCHECK(!ContainsKey(fetchers_, core));
+  DCHECK(!base::ContainsKey(fetchers_, core));
   fetchers_.insert(core);
 }
 
 void URLFetcherCore::Registry::RemoveURLFetcherCore(URLFetcherCore* core) {
-  DCHECK(ContainsKey(fetchers_, core));
+  DCHECK(base::ContainsKey(fetchers_, core));
   fetchers_.erase(core);
 }
 
@@ -936,16 +936,19 @@ void URLFetcherCore::InformDelegateDownloadProgress() {
   delegate_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(
-          &URLFetcherCore::InformDelegateDownloadProgressInDelegateThread,
-          this, current_response_bytes_, total_response_bytes_));
+          &URLFetcherCore::InformDelegateDownloadProgressInDelegateThread, this,
+          current_response_bytes_, total_response_bytes_,
+          request_->GetTotalReceivedBytes()));
 }
 
 void URLFetcherCore::InformDelegateDownloadProgressInDelegateThread(
     int64_t current,
-    int64_t total) {
+    int64_t total,
+    int64_t current_network_bytes) {
   DCHECK(delegate_task_runner_->BelongsToCurrentThread());
   if (delegate_)
-    delegate_->OnURLFetchDownloadProgress(fetcher_, current, total);
+    delegate_->OnURLFetchDownloadProgress(fetcher_, current, total,
+                                          current_network_bytes);
 }
 
 void URLFetcherCore::AssertHasNoUploadData() const {

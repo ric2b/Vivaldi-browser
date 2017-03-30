@@ -5,8 +5,7 @@
 /**
  * @fileoverview
  * 'settings-subpage' shows a subpage beneath a subheader. The header contains
- * the subpage title and a back icon. The back icon fires an event which
- * is caught by settings-animated-pages, so it requires no separate handling.
+ * the subpage title, a search field and a back icon.
  */
 
 Polymer({
@@ -20,11 +19,35 @@ Polymer({
 
   properties: {
     pageTitle: String,
+
+    /** Setting a |searchLabel| will enable search. */
+    searchLabel: String,
+
+    searchTerm: {
+      type: String,
+      notify: true,
+      value: '',
+    },
+
+    /**
+     * Indicates which element triggers this subpage. Used by the searching
+     * algorithm to show search bubbles. It is |null| for subpages that are
+     * skipped during searching.
+     * @type {?HTMLElement}
+     */
+    associatedControl: {
+      type: Object,
+      value: null,
+    },
   },
 
   /** @private */
   onTapBack_: function() {
-    // Event is caught by settings-animated-pages.
-    this.fire('subpage-back');
+    settings.navigateToPreviousRoute();
+  },
+
+  /** @private */
+  onSearchChanged_: function(e) {
+    this.searchTerm = e.detail;
   },
 });

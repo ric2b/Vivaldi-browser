@@ -66,7 +66,7 @@
 namespace blink {
 
 enum class WebTreeScopeType;
-class ServiceRegistry;
+class InterfaceProvider;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebAppBannerClient;
@@ -89,9 +89,7 @@ class WebMediaPlayerEncryptedMediaClient;
 class WebMediaPlayerSource;
 class WebMediaSession;
 class WebMediaStream;
-class WebMIDIClient;
 class WebNotificationPermissionCallback;
-class WebPermissionClient;
 class WebServiceWorkerProvider;
 class WebSocketHandle;
 class WebPlugin;
@@ -176,7 +174,7 @@ public:
     enum class DetachType { Remove, Swap };
 
     // This frame has been detached from the view, but has not been closed yet.
-    virtual void frameDetached(WebFrame*, DetachType) { }
+    virtual void frameDetached(WebLocalFrame*, DetachType) {}
 
     // This frame has become focused..
     virtual void frameFocused() { }
@@ -271,9 +269,6 @@ public:
     // During a history navigation, we may choose to load new subframes from history as well.
     // This returns such a history item if appropriate.
     virtual WebHistoryItem historyItemForNewChildFrame() { return WebHistoryItem(); }
-
-    // Whether the client is handling a navigation request.
-    virtual bool hasPendingNavigation() { return false; }
 
     // Navigational notifications ------------------------------------------
 
@@ -407,6 +402,14 @@ public:
     // operations.
     virtual void didChangeSelection(bool isSelectionEmpty) { }
 
+    // This method is called in response to handleInputEvent() when the
+    // default action for the current keyboard event is not suppressed by the
+    // page, to give the embedder a chance to handle the keyboard event
+    // specially.
+    //
+    // Returns true if the keyboard event was handled by the embedder,
+    // indicating that the default action should be suppressed.
+    virtual bool handleCurrentKeyboardEvent() { return false; }
 
     // Dialogs -------------------------------------------------------------
 
@@ -466,22 +469,11 @@ public:
 
     // A request is about to be sent out, and the client may modify it.  Request
     // is writable, and changes to the URL, for example, will change the request
-    // made.  If this request is the result of a redirect, then redirectResponse
-    // will be non-null and contain the response that triggered the redirect.
-    virtual void willSendRequest(
-        WebLocalFrame*, unsigned identifier, WebURLRequest&,
-        const WebURLResponse& redirectResponse) { }
+    // made.
+    virtual void willSendRequest(WebLocalFrame*, WebURLRequest&) {}
 
-    // Response headers have been received for the resource request given
-    // by identifier.
-    virtual void didReceiveResponse(unsigned identifier, const WebURLResponse&) { }
-
-    virtual void didChangeResourcePriority(
-        unsigned identifier, const WebURLRequest::Priority& priority, int) { }
-
-    // The resource request given by identifier succeeded.
-    virtual void didFinishResourceLoad(
-        WebLocalFrame*, unsigned identifier) { }
+    // Response headers have been received.
+    virtual void didReceiveResponse(const WebURLResponse&) {}
 
     // The specified request was satified from WebCore's memory cache.
     virtual void didLoadResourceFromMemoryCache(
@@ -540,19 +532,11 @@ public:
 
     // Find-in-page notifications ------------------------------------------
 
-    // Notifies how many matches have been found so far, for a given
-    // identifier.  |finalUpdate| specifies whether this is the last update
-    // (all frames have completed scoping). This notification is only delivered
-    // to the main frame and aggregates all matches across all frames.
+    // Notifies how many matches have been found in this frame so far, for a
+    // given identifier.  |finalUpdate| specifies whether this is the last
+    // update for this frame.
     virtual void reportFindInPageMatchCount(
         int identifier, int count, bool finalUpdate) { }
-
-    // Notifies how many matches have been found in a specific frame so far,
-    // for a given identifier. Unlike reprotFindInPageMatchCount(), this
-    // notification is sent to the client of each frame, and only reports
-    // results per-frame.
-    virtual void reportFindInFrameMatchCount(
-        int identifier, int count, bool finalUpdate) {}
 
     // Notifies what tick-mark rect is currently selected.   The given
     // identifier lets the client know which request this message belongs
@@ -595,10 +579,6 @@ public:
 
     virtual WebEncryptedMediaClient* encryptedMediaClient() { return 0; }
 
-
-    // Web MIDI -------------------------------------------------------------
-
-    virtual WebMIDIClient* webMIDIClient() { return 0; }
 
     // User agent ------------------------------------------------------
 
@@ -657,14 +637,11 @@ public:
     // Fullscreen ----------------------------------------------------------
 
     // Called to enter/exit fullscreen mode.
-    // After calling enterFullscreen, WebWidget::{will,Did}EnterFullScreen
-    // should bound resizing the WebWidget into fullscreen mode.
-    // Similarly, when exitFullScreen is called,
-    // WebWidget::{will,Did}ExitFullScreen should bound resizing the WebWidget
-    // out of fullscreen mode.
-    // Note: the return value is ignored.
-    virtual bool enterFullscreen() { return false; }
-    virtual bool exitFullscreen() { return false; }
+    // After calling enterFullscreen or exitFullscreen,
+    // WebWidget::didEnterFullscreen or WebWidget::didExitFullscreen
+    // respectively will be called once the fullscreen mode has changed.
+    virtual void enterFullscreen() { }
+    virtual void exitFullscreen() { }
 
 
     // Sudden termination --------------------------------------------------
@@ -678,11 +655,6 @@ public:
     };
     virtual void suddenTerminationDisablerChanged(bool present, SuddenTerminationDisablerType) { }
 
-
-    // Permissions ---------------------------------------------------------
-
-    // Access the embedder API for permission client.
-    virtual WebPermissionClient* permissionClient() { return 0; }
 
     // App Banners ---------------------------------------------------------
     virtual WebAppBannerClient* appBannerClient() { return 0; }
@@ -720,7 +692,7 @@ public:
     }
 
     // Mojo ----------------------------------------------------------------
-    virtual ServiceRegistry* serviceRegistry() { return nullptr; }
+    virtual InterfaceProvider* interfaceProvider() { return nullptr; }
 
     // Visibility ----------------------------------------------------------
 
@@ -728,6 +700,13 @@ public:
     virtual WebPageVisibilityState visibilityState() const
     {
         return WebPageVisibilityStateVisible;
+    }
+
+    // Overwrites the given URL to use an HTML5 embed if possible.
+    // An empty URL is returned if the URL is not overriden.
+    virtual WebURL overrideFlashEmbedWithHTML(const WebURL& url)
+    {
+        return WebURL();
     }
 
 protected:

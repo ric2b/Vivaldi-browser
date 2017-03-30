@@ -23,6 +23,8 @@
         'precache/core/precache_database.h',
         'precache/core/precache_fetcher.cc',
         'precache/core/precache_fetcher.h',
+        'precache/core/precache_referrer_host_table.cc',
+        'precache/core/precache_referrer_host_table.h',
         'precache/core/precache_switches.cc',
         'precache/core/precache_switches.h',
         'precache/core/precache_session_table.cc',
@@ -43,6 +45,7 @@
       'type': 'static_library',
       'sources': [
         'precache/core/proto/precache.proto',
+        'precache/core/proto/timestamp.proto',
         'precache/core/proto/unfinished_work.proto',
       ],
       'variables': {
@@ -63,7 +66,7 @@
             'precache_core',
             'precache_core_proto',
             '../base/base.gyp:base',
-            '../components/components.gyp:sync_driver',
+            '../components/sync.gyp:sync',
             '../content/content.gyp:content_browser',
             '../url/url.gyp:url_lib',
           ],

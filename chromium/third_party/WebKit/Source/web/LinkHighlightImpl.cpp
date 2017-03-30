@@ -311,15 +311,15 @@ void LinkHighlightImpl::startHighlightAnimationIfNeeded()
 
     std::unique_ptr<CompositorFloatAnimationCurve> curve = CompositorFloatAnimationCurve::create();
 
-    const auto easeType = CubicBezierTimingFunction::EaseType::EASE;
+    const auto& timingFunction = *CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseType::EASE);
 
-    curve->addCubicBezierKeyframe(CompositorFloatKeyframe(0, startOpacity), easeType);
+    curve->addKeyframe(CompositorFloatKeyframe(0, startOpacity, timingFunction));
     // Make sure we have displayed for at least minPreFadeDuration before starting to fade out.
     float extraDurationRequired = std::max(0.f, minPreFadeDuration - static_cast<float>(monotonicallyIncreasingTime() - m_startTime));
     if (extraDurationRequired)
-        curve->addCubicBezierKeyframe(CompositorFloatKeyframe(extraDurationRequired, startOpacity), easeType);
+        curve->addKeyframe(CompositorFloatKeyframe(extraDurationRequired, startOpacity, timingFunction));
     // For layout tests we don't fade out.
-    curve->addCubicBezierKeyframe(CompositorFloatKeyframe(fadeDuration + extraDurationRequired, layoutTestMode() ? startOpacity : 0), easeType);
+    curve->addKeyframe(CompositorFloatKeyframe(fadeDuration + extraDurationRequired, layoutTestMode() ? startOpacity : 0, timingFunction));
 
     std::unique_ptr<CompositorAnimation> animation = CompositorAnimation::create(*curve, CompositorTargetProperty::OPACITY, 0, 0);
 
@@ -327,7 +327,7 @@ void LinkHighlightImpl::startHighlightAnimationIfNeeded()
     m_compositorPlayer->addAnimation(animation.release());
 
     invalidate();
-    m_owningWebViewImpl->scheduleAnimation();
+    m_owningWebViewImpl->mainFrameImpl()->frameWidget()->scheduleAnimation();
 }
 
 void LinkHighlightImpl::clearGraphicsLayerLinkHighlightPointer()

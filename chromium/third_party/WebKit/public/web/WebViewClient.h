@@ -35,7 +35,6 @@
 #include "../platform/WebPageVisibilityState.h"
 #include "../platform/WebString.h"
 #include "WebAXEnums.h"
-#include "WebContentDetectionResult.h"
 #include "WebFrame.h"
 #include "WebPopupType.h"
 #include "WebTextDirection.h"
@@ -110,21 +109,16 @@ public:
     // Called when PageImportanceSignals for the WebView is updated.
     virtual void pageImportanceSignalsChanged() { }
 
+    // Called to get the position of the root window containing the widget
+    // in screen coordinates.
+    virtual WebRect rootWindowRect() { return WebRect(); }
+
     // Editing -------------------------------------------------------------
 
     // These methods allow the client to intercept and overrule editing
     // operations.
     virtual void didCancelCompositionOnSelectionChange() { }
     virtual void didChangeContents() { }
-
-    // This method is called in response to WebView's handleInputEvent()
-    // when the default action for the current keyboard event is not
-    // suppressed by the page, to give the embedder a chance to handle
-    // the keyboard event specially.
-    //
-    // Returns true if the keyboard event was handled by the embedder,
-    // indicating that the default action should be suppressed.
-    virtual bool handleCurrentKeyboardEvent() { return false; }
 
     // Dialogs -------------------------------------------------------------
 
@@ -187,6 +181,11 @@ public:
     // Returns comma separated list of accept languages.
     virtual WebString acceptLanguages() { return WebString(); }
 
+    // Called when the View has changed size as a result of an auto-resize.
+    virtual void didAutoResize(const WebSize& newSize) {}
+
+    // Called when the View acquires focus.
+    virtual void didFocus() {}
 
     // Session history -----------------------------------------------------
 
@@ -228,10 +227,10 @@ public:
 
     // Content detection ----------------------------------------------------
 
-    // Retrieves detectable content (e.g., email addresses, phone numbers)
-    // around a hit test result. The embedder should use platform-specific
-    // content detectors to analyze the region around the hit test result.
-    virtual WebContentDetectionResult detectContentAround(const WebHitTestResult&) { return WebContentDetectionResult(); }
+    // Detects if the content at (or around) provided hit test result
+    // corresponds to an intent that could be handed by an embedder
+    // (e.g., email addresses, phone numbers).
+    virtual WebURL detectContentIntentAt(const WebHitTestResult&) { return WebURL(); }
 
     // Schedules a new content intent with the provided url.
     // The boolean flag is set to true when the user gesture has been applied
@@ -250,34 +249,24 @@ public:
     // TODO(lfg): These methods are only exposed through WebViewClient while we
     // refactor WebView to not inherit from WebWidget.
     // WebWidgetClient overrides.
-    bool allowsBrokenNullLayerTreeView() const override { return false; }
     void closeWidgetSoon() override {}
     void convertViewportToWindow(WebRect* rect) override {}
     void convertWindowToViewport(WebFloatRect* rect) override {}
-    void didAutoResize(const WebSize& newSize) override {}
-    void didChangeCursor(const WebCursorInfo&) override {}
-    void didFocus() override {}
     void didHandleGestureEvent(const WebGestureEvent& event, bool eventCancelled) override {}
-    void didInvalidateRect(const WebRect&) override {}
-    void didMeaningfulLayout(WebMeaningfulLayout) override {}
     void didOverscroll(const WebFloatSize& overscrollDelta, const WebFloatSize& accumulatedOverscroll, const WebFloatPoint& positionInViewport, const WebFloatSize& velocityInViewport) override {}
     void didUpdateTextOfFocusedElementByNonUserInput() override {}
     void hasTouchEventHandlers(bool) override {}
     void initializeLayerTreeView() override {}
-    WebLayerTreeView* layerTreeView() override { return 0; }
     void onMouseDown(const WebNode& mouseDownNode) override {}
     void resetInputMethod() override {}
-    WebRect rootWindowRect() override { return WebRect(); }
-    void scheduleAnimation() override {}
     WebScreenInfo screenInfo() override { return WebScreenInfo(); }
     void setToolTipText(const WebString&, WebTextDirection hint) override {}
     void setTouchAction(WebTouchAction touchAction) override {}
-    void setWindowRect(const WebRect&) override {}
     void showImeIfNeeded() override {}
     void showUnhandledTapUIIfNeeded(const WebPoint& tappedPosition, const WebNode& tappedNode, bool pageChanged) override {}
     void show(WebNavigationPolicy) override {}
-    WebRect windowRect() override { return WebRect(); }
     WebRect windowResizerRect() override { return WebRect(); }
+    virtual WebWidgetClient* widgetClient() { return this; }
 
 protected:
     ~WebViewClient() { }

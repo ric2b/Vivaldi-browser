@@ -21,6 +21,9 @@ class Domain;
 namespace application_cache {
 class Domain;
 }
+namespace browser {
+class Domain;
+}
 namespace cache_storage {
 class Domain;
 }
@@ -69,6 +72,9 @@ class Domain;
 namespace layer_tree {
 class Domain;
 }
+namespace log {
+class Domain;
+}
 namespace memory {
 class Domain;
 }
@@ -115,6 +121,7 @@ class HEADLESS_EXPORT HeadlessDevToolsClient {
   virtual accessibility::Domain* GetAccessibility() = 0;
   virtual animation::Domain* GetAnimation() = 0;
   virtual application_cache::Domain* GetApplicationCache() = 0;
+  virtual browser::Domain* GetBrowser() = 0;
   virtual cache_storage::Domain* GetCacheStorage() = 0;
   virtual console::Domain* GetConsole() = 0;
   virtual css::Domain* GetCSS() = 0;
@@ -131,6 +138,7 @@ class HEADLESS_EXPORT HeadlessDevToolsClient {
   virtual inspector::Domain* GetInspector() = 0;
   virtual io::Domain* GetIO() = 0;
   virtual layer_tree::Domain* GetLayerTree() = 0;
+  virtual log::Domain* GetLog() = 0;
   virtual memory::Domain* GetMemory() = 0;
   virtual network::Domain* GetNetwork() = 0;
   virtual page::Domain* GetPage() = 0;

@@ -28,6 +28,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/events/event_handler.h"
 #include "ui/gfx/font_list.h"
+#include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/native_widget.h"
 
@@ -41,7 +42,12 @@
 #include "chrome/browser/ui/views/frame/browser_command_handler_linux.h"
 #endif
 
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "ui/views/widget/desktop_aura/x11_desktop_handler.h"
+#endif
+
 #if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #include "ui/native_theme/native_theme_dark_win.h"
 #endif
 
@@ -141,6 +147,16 @@ bool BrowserFrame::UseCustomFrame() const {
   return native_browser_frame_->UseCustomFrame();
 }
 
+bool BrowserFrame::CustomDrawSystemTitlebar() const {
+#if defined(OS_WIN)
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kWindows10CustomTitlebar) &&
+         base::win::GetVersion() >= base::win::VERSION_WIN10;
+#else
+  return false;
+#endif
+}
+
 bool BrowserFrame::ShouldSaveWindowPlacement() const {
   return native_browser_frame_->ShouldSaveWindowPlacement();
 }
@@ -215,12 +231,18 @@ void BrowserFrame::OnNativeWidgetActivationChanged(bool active) {
     // ourselves as the last active browser window to ensure that we get treated
     // as such by the rest of Chrome.
     BrowserList::SetLastActive(browser_view_->browser());
+  } else {
+    BrowserList::NotifyBrowserNoLongerActive(browser_view_->browser());
   }
   Widget::OnNativeWidgetActivationChanged(active);
 }
 
 void BrowserFrame::OnNativeWidgetWorkspaceChanged() {
   chrome::SaveWindowWorkspace(browser_view_->browser(), GetWorkspace());
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  BrowserList::MoveBrowsersInWorkspaceToFront(
+      views::X11DesktopHandler::get()->GetWorkspace());
+#endif
   Widget::OnNativeWidgetWorkspaceChanged();
 }
 
@@ -238,17 +260,16 @@ void BrowserFrame::ShowContextMenuForView(views::View* source,
   views::View::ConvertPointFromScreen(non_client_view(), &point_in_view_coords);
   int hit_test = non_client_view()->NonClientHitTest(point_in_view_coords);
   if (hit_test == HTCAPTION || hit_test == HTNOWHERE) {
-    menu_runner_.reset(new views::MenuRunner(
+    menu_model_adapter_.reset(new views::MenuModelAdapter(
         GetSystemMenuModel(),
-        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
-    if (menu_runner_->RunMenuAt(source->GetWidget(),
-                                nullptr,
-                                gfx::Rect(p, gfx::Size(0, 0)),
-                                views::MENU_ANCHOR_TOPLEFT,
-                                source_type) ==
-        views::MenuRunner::MENU_DELETED) {
-      return;
-    }
+        base::Bind(&BrowserFrame::OnMenuClosed, base::Unretained(this))));
+    menu_runner_.reset(new views::MenuRunner(
+        menu_model_adapter_->CreateMenu(), views::MenuRunner::HAS_MNEMONICS |
+                                               views::MenuRunner::CONTEXT_MENU |
+                                               views::MenuRunner::ASYNC));
+    menu_runner_->RunMenuAt(source->GetWidget(), nullptr,
+                            gfx::Rect(p, gfx::Size(0, 0)),
+                            views::MENU_ANCHOR_TOPLEFT, source_type);
   }
 }
 
@@ -258,7 +279,7 @@ ui::MenuModel* BrowserFrame::GetSystemMenuModel() {
       ash::WmShell::Get()->GetSessionStateDelegate();
   if (delegate && delegate->NumberOfLoggedInUsers() > 1) {
     // In Multi user mode, the number of users as well as the order of users
-    // can change. Coming here we have more then one user and since the menu
+    // can change. Coming here we have more than one user and since the menu
     // model contains the user information, it must get updated to show any
     // changes happened since the last invocation.
     menu_model_builder_.reset();
@@ -274,4 +295,9 @@ ui::MenuModel* BrowserFrame::GetSystemMenuModel() {
 
 views::View* BrowserFrame::GetNewAvatarMenuButton() {
   return browser_frame_view_->GetProfileSwitcherView();
+}
+
+void BrowserFrame::OnMenuClosed() {
+  menu_model_adapter_.reset();
+  menu_runner_.reset();
 }

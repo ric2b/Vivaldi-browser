@@ -49,6 +49,7 @@ public:
     void unwrapLayoutObject();
 
     void updateStyle();
+    void updateStyle(LayoutObject* parent);
     bool anonymousHasStylePropagationOverride() override { return true; }
 
     // Must call setStyleWithWritingModeOfParent() instead.
@@ -60,6 +61,7 @@ private:
 
 protected:
     LayoutBlockFlow* m_placeholder;
+    ItemPosition selfAlignmentNormalBehavior() const override { return ItemPositionCenter; }
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutFullScreen, isLayoutFullScreen());

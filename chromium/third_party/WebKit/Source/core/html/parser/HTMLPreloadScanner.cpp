@@ -34,7 +34,6 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Document.h"
-#include "core/dom/ScriptLoader.h"
 #include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -222,6 +221,7 @@ public:
             }
         }
 
+
         TextPosition position = TextPosition(source.currentLine(), source.currentColumn());
         FetchRequest::ResourceWidth resourceWidth;
         float sourceSize = m_sourceSize;
@@ -275,10 +275,6 @@ private:
         // explanation.
         else if (match(attributeName, integrityAttr))
             SubresourceIntegrity::parseIntegrityAttribute(attributeValue, m_integrityMetadata);
-        else if (match(attributeName, typeAttr))
-            m_typeAttributeValue = attributeValue;
-        else if (match(attributeName, languageAttr))
-            m_languageAttributeValue = attributeValue;
     }
 
     template<typename NameType>
@@ -449,8 +445,6 @@ private:
             return false;
         if (match(m_tagImpl, inputTag) && !m_inputIsImage)
             return false;
-        if (match(m_tagImpl, scriptTag) && !ScriptLoader::isValidScriptTypeAndLanguage(m_typeAttributeValue, m_languageAttributeValue, ScriptLoader::AllowLegacyTypeInTypeAttribute))
-            return false;
         return true;
     }
 
@@ -487,8 +481,6 @@ private:
     String m_imgSrcUrl;
     String m_srcsetAttributeValue;
     String m_asAttributeValue;
-    String m_typeAttributeValue;
-    String m_languageAttributeValue;
     float m_sourceSize;
     bool m_sourceSizeSet;
     FetchRequest::DeferOption m_defer;
@@ -505,8 +497,6 @@ TokenPreloadScanner::TokenPreloadScanner(const KURL& documentURL, std::unique_pt
     , m_inStyle(false)
     , m_inPicture(false)
     , m_inScript(false)
-    , m_isAppCacheEnabled(false)
-    , m_isCSPEnabled(false)
     , m_templateCount(0)
     , m_documentParameters(std::move(documentParameters))
     , m_mediaValues(MediaValuesCached::create(mediaValuesCachedData))
@@ -524,7 +514,7 @@ TokenPreloadScanner::~TokenPreloadScanner()
 TokenPreloadScannerCheckpoint TokenPreloadScanner::createCheckpoint()
 {
     TokenPreloadScannerCheckpoint checkpoint = m_checkpoints.size();
-    m_checkpoints.append(Checkpoint(m_predictedBaseElementURL, m_inStyle, m_inScript, m_isAppCacheEnabled, m_isCSPEnabled, m_templateCount));
+    m_checkpoints.append(Checkpoint(m_predictedBaseElementURL, m_inStyle, m_inScript, m_templateCount));
     return checkpoint;
 }
 
@@ -534,8 +524,6 @@ void TokenPreloadScanner::rewindTo(TokenPreloadScannerCheckpoint checkpointIndex
     const Checkpoint& checkpoint = m_checkpoints[checkpointIndex];
     m_predictedBaseElementURL = checkpoint.predictedBaseElementURL;
     m_inStyle = checkpoint.inStyle;
-    m_isAppCacheEnabled = checkpoint.isAppCacheEnabled;
-    m_isCSPEnabled = checkpoint.isCSPEnabled;
     m_templateCount = checkpoint.templateCount;
 
     m_didRewind = true;
@@ -545,14 +533,14 @@ void TokenPreloadScanner::rewindTo(TokenPreloadScannerCheckpoint checkpointIndex
     m_checkpoints.clear();
 }
 
-void TokenPreloadScanner::scan(const HTMLToken& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport)
+void TokenPreloadScanner::scan(const HTMLToken& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport, bool* isCSPMetaTag)
 {
-    scanCommon(token, source, requests, viewport, nullptr);
+    scanCommon(token, source, requests, viewport, isCSPMetaTag, nullptr);
 }
 
-void TokenPreloadScanner::scan(const CompactHTMLToken& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport, bool* likelyDocumentWriteScript)
+void TokenPreloadScanner::scan(const CompactHTMLToken& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport, bool* isCSPMetaTag, bool* likelyDocumentWriteScript)
 {
-    scanCommon(token, source, requests, viewport, likelyDocumentWriteScript);
+    scanCommon(token, source, requests, viewport, isCSPMetaTag, likelyDocumentWriteScript);
 }
 
 static void handleMetaViewport(const String& attributeValue, const CachedDocumentParameters* documentParameters, MediaValuesCached* mediaValues, ViewportDescriptionWrapper* viewport)
@@ -661,17 +649,9 @@ bool TokenPreloadScanner::shouldEvaluateForDocumentWrite(const String& source)
 }
 
 template <typename Token>
-void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport, bool* likelyDocumentWriteScript)
+void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& source, PreloadRequestStream& requests, ViewportDescriptionWrapper* viewport, bool* isCSPMetaTag, bool* likelyDocumentWriteScript)
 {
     if (!m_documentParameters->doHtmlPreloadScanning)
-        return;
-
-    // Disable preload for documents with AppCache.
-    if (m_isAppCacheEnabled)
-        return;
-
-    // http://crbug.com/434230 Disable preload for documents with CSP <meta> tags
-    if (m_isCSPEnabled)
         return;
 
     switch (token.type()) {
@@ -733,16 +713,12 @@ void TokenPreloadScanner::scanCommon(const Token& token, const SegmentedString& 
             updatePredictedBaseURL(token);
             return;
         }
-        if (match(tagImpl, htmlTag) && token.getAttributeItem(manifestAttr)) {
-            m_isAppCacheEnabled = true;
-            return;
-        }
         if (match(tagImpl, metaTag)) {
             const typename Token::Attribute* equivAttribute = token.getAttributeItem(http_equivAttr);
             if (equivAttribute) {
                 String equivAttributeValue(equivAttribute->value());
                 if (equalIgnoringCase(equivAttributeValue, "content-security-policy")) {
-                    m_isCSPEnabled = true;
+                    *isCSPMetaTag = true;
                 } else if (equalIgnoringCase(equivAttributeValue, "accept-ch")) {
                     const typename Token::Attribute* contentAttribute = token.getAttributeItem(contentAttr);
                     if (contentAttribute)
@@ -815,8 +791,14 @@ void HTMLPreloadScanner::scanAndPreload(ResourcePreloader* preloader, const KURL
     while (m_tokenizer->nextToken(m_source, m_token)) {
         if (m_token.type() == HTMLToken::StartTag)
             m_tokenizer->updateStateFor(attemptStaticStringCreation(m_token.name(), Likely8Bit));
-        m_scanner.scan(m_token, m_source, requests, viewport);
+        bool isCSPMetaTag = false;
+        m_scanner.scan(m_token, m_source, requests, viewport, &isCSPMetaTag);
         m_token.clear();
+        // Don't preload anything if a CSP meta tag is found. We should never
+        // really find them here because the HTMLPreloadScanner is only used for
+        // dynamically added markup.
+        if (isCSPMetaTag)
+            return;
     }
 
     preloader->takeAndPreload(requests);

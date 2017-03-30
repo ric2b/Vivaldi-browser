@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_surface.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace chromecast {
@@ -29,19 +30,21 @@ class SurfaceFactoryCast : public SurfaceFactoryOzone {
   ~SurfaceFactoryCast() override;
 
   // SurfaceFactoryOzone implementation:
+  scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLImplementation implementation,
+      gfx::AcceleratedWidget widget) override;
+  scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLImplementation implementation,
+      const gfx::Size& size) override;
   std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
       gfx::AcceleratedWidget widget) override;
   intptr_t GetNativeDisplay() override;
-  std::unique_ptr<SurfaceOzoneEGL> CreateEGLSurfaceForWidget(
-      gfx::AcceleratedWidget widget) override;
   scoped_refptr<NativePixmap> CreateNativePixmap(
       gfx::AcceleratedWidget widget,
       gfx::Size size,
       gfx::BufferFormat format,
       gfx::BufferUsage usage) override;
-  bool LoadEGLGLES2Bindings(
-      AddGLLibraryCallback add_gl_library,
-      SetGLGetProcAddressProcCallback set_gl_get_proc_address) override;
+  bool LoadEGLGLES2Bindings() override;
 
   intptr_t GetNativeWindow();
   bool ResizeDisplay(gfx::Size viewport_size);
@@ -66,7 +69,6 @@ class SurfaceFactoryCast : public SurfaceFactoryOzone {
   bool have_display_type_;
   void* window_;
   gfx::Size display_size_;
-  gfx::Size new_display_size_;
   std::unique_ptr<chromecast::CastEglPlatform> egl_platform_;
 
   // Overlays scheduled in current and previous frames:

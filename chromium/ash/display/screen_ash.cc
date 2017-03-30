@@ -5,13 +5,12 @@
 #include "ash/display/screen_ash.h"
 
 #include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/wm/root_window_finder.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/root_window_settings.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "base/logging.h"
 #include "ui/aura/client/screen_position_client.h"
@@ -161,7 +160,7 @@ display::Display ScreenAsh::GetDisplayNearestPoint(
   // the |point|. This is correct in the only areas that matter, namely in the
   // corners between the physical screens.
   return *display::FindDisplayNearestPoint(
-      GetDisplayManager()->active_display_list(), point);
+      GetDisplayManager()->active_only_display_list(), point);
 }
 
 display::Display ScreenAsh::GetDisplayMatching(
@@ -170,7 +169,7 @@ display::Display ScreenAsh::GetDisplayMatching(
     return GetDisplayNearestPoint(match_rect.origin());
   const display::Display* matching =
       display::FindDisplayWithBiggestIntersection(
-          GetDisplayManager()->active_display_list(), match_rect);
+          GetDisplayManager()->active_only_display_list(), match_rect);
   // Fallback to the primary display if there is no matching display.
   return matching ? *matching : GetPrimaryDisplay();
 }

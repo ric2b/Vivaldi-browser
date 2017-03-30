@@ -26,11 +26,11 @@
 
 /**
  * @constructor
- * @extends {WebInspector.VBox}
+ * @extends {WebInspector.SimpleView}
  */
 WebInspector.DOMStorageItemsView = function(domStorage)
 {
-    WebInspector.VBox.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("DOM Storage"));
 
     this.domStorage = domStorage;
 
@@ -51,9 +51,10 @@ WebInspector.DOMStorageItemsView = function(domStorage)
 
 WebInspector.DOMStorageItemsView.prototype = {
     /**
+     * @override
      * @return {!Array.<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         return [this.refreshButton, this.deleteButton];
     },
@@ -258,5 +259,5 @@ WebInspector.DOMStorageItemsView.prototype = {
             this.domStorage.removeItem(node.data.key);
     },
 
-    __proto__: WebInspector.VBox.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }

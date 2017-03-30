@@ -86,7 +86,7 @@ bool LayoutSVGResourceClipper::calculateClipContentPathIfNeeded()
             continue;
 
         const ComputedStyle* style = childLayoutObject->style();
-        if (!style || style->display() == NONE || (style->visibility() != VISIBLE && !isSVGUseElement(*childElement)))
+        if (!style || style->display() == NONE || (style->visibility() != EVisibility::Visible && !isSVGUseElement(*childElement)))
             continue;
 
         // Current shape in clip-path gets clipped too. Fallback to masking.
@@ -146,7 +146,7 @@ bool LayoutSVGResourceClipper::asPath(const AffineTransform& animatedLocalTransf
 
     // We are able to represent the clip as a path. Continue with direct clipping,
     // and transform the content to userspace if necessary.
-    if (clipPathUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX) {
+    if (clipPathUnits() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
         AffineTransform transform;
         transform.translate(referenceBox.x(), referenceBox.y());
         transform.scaleNonUniform(referenceBox.width(), referenceBox.height());
@@ -177,7 +177,7 @@ PassRefPtr<const SkPicture> LayoutSVGResourceClipper::createContentPicture()
             continue;
 
         const ComputedStyle* style = layoutObject->style();
-        if (!style || style->display() == NONE || (style->visibility() != VISIBLE && !isSVGUseElement(*childElement)))
+        if (!style || style->display() == NONE || (style->visibility() != EVisibility::Visible && !isSVGUseElement(*childElement)))
             continue;
 
         bool isUseElement = isSVGUseElement(*childElement);
@@ -221,7 +221,7 @@ void LayoutSVGResourceClipper::calculateLocalClipBounds()
         if (!layoutObject->isSVGShape() && !layoutObject->isSVGText() && !isSVGUseElement(*childElement))
             continue;
         const ComputedStyle* style = layoutObject->style();
-        if (!style || style->display() == NONE || (style->visibility() != VISIBLE && !isSVGUseElement(*childElement)))
+        if (!style || style->display() == NONE || (style->visibility() != EVisibility::Visible && !isSVGUseElement(*childElement)))
             continue;
         if (isSVGUseElement(*childElement) && !toSVGUseElement(*childElement).visibleTargetGraphicsElementForClipping())
             continue;
@@ -233,10 +233,10 @@ void LayoutSVGResourceClipper::calculateLocalClipBounds()
 bool LayoutSVGResourceClipper::hitTestClipContent(const FloatRect& objectBoundingBox, const FloatPoint& nodeAtPoint)
 {
     FloatPoint point = nodeAtPoint;
-    if (!SVGLayoutSupport::pointInClippingArea(this, point))
+    if (!SVGLayoutSupport::pointInClippingArea(*this, point))
         return false;
 
-    if (clipPathUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX) {
+    if (clipPathUnits() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
         AffineTransform transform;
         transform.translate(objectBoundingBox.x(), objectBoundingBox.y());
         transform.scaleNonUniform(objectBoundingBox.width(), objectBoundingBox.height());
@@ -274,7 +274,7 @@ FloatRect LayoutSVGResourceClipper::resourceBoundingBox(const LayoutObject* obje
         calculateLocalClipBounds();
 
     AffineTransform transform = toSVGClipPathElement(element())->calculateAnimatedLocalTransform();
-    if (clipPathUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX) {
+    if (clipPathUnits() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
         FloatRect objectBoundingBox = object->objectBoundingBox();
         transform.translate(objectBoundingBox.x(), objectBoundingBox.y());
         transform.scaleNonUniform(objectBoundingBox.width(), objectBoundingBox.height());

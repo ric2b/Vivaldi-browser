@@ -48,7 +48,7 @@ update_client::InstallerAttributes SanitizeInstallerAttributes(
 
 // Returns true if at least one item requires network encryption.
 bool IsEncryptionRequired(const std::vector<CrxUpdateItem*>& items) {
-  for (const auto& item : items) {
+  for (const auto* item : items) {
     if (item->component.requires_network_encryption)
       return true;
   }
@@ -72,7 +72,8 @@ bool IsEncryptionRequired(const std::vector<CrxUpdateItem*>& items) {
 std::string BuildUpdateCheckRequest(const Configurator& config,
                                     const std::vector<CrxUpdateItem*>& items,
                                     PersistedData* metadata,
-                                    const std::string& additional_attributes) {
+                                    const std::string& additional_attributes,
+                                    bool enabled_component_updates) {
   const std::string brand(SanitizeBrand(config.GetBrand()));
   std::string app_elements;
   for (size_t i = 0; i != items.size(); ++i) {
@@ -86,13 +87,28 @@ std::string BuildUpdateCheckRequest(const Configurator& config,
       base::StringAppendF(&app, " brand=\"%s\"", brand.c_str());
     if (item->on_demand)
       base::StringAppendF(&app, " installsource=\"ondemand\"");
-
-    for (const auto& attr : installer_attributes)
+    for (const auto& attr : installer_attributes) {
       base::StringAppendF(&app, " %s=\"%s\"", attr.first.c_str(),
                           attr.second.c_str());
-
+    }
+    const std::string cohort = metadata->GetCohort(item->id);
+    const std::string cohort_name = metadata->GetCohortName(item->id);
+    const std::string cohort_hint = metadata->GetCohortHint(item->id);
+    if (!cohort.empty())
+      base::StringAppendF(&app, " cohort=\"%s\"", cohort.c_str());
+    if (!cohort_name.empty())
+      base::StringAppendF(&app, " cohortname=\"%s\"", cohort_name.c_str());
+    if (!cohort_hint.empty())
+      base::StringAppendF(&app, " cohorthint=\"%s\"", cohort_hint.c_str());
     base::StringAppendF(&app, ">");
-    base::StringAppendF(&app, "<updatecheck />");
+
+    base::StringAppendF(&app, "<updatecheck");
+    if (item->component.supports_group_policy_enable_component_updates &&
+        !enabled_component_updates) {
+      base::StringAppendF(&app, " updatedisabled=\"true\"");
+    }
+    base::StringAppendF(&app, "/>");
+
     base::StringAppendF(&app, "<ping rd=\"%d\" ping_freshness=\"%s\" />",
                         metadata->GetDateLastRollCall(item->id),
                         metadata->GetPingFreshness(item->id).c_str());
@@ -124,6 +140,7 @@ class UpdateCheckerImpl : public UpdateChecker {
   bool CheckForUpdates(
       const std::vector<CrxUpdateItem*>& items_to_check,
       const std::string& additional_attributes,
+      bool enabled_component_updates,
       const UpdateCheckCallback& update_check_callback) override;
 
  private:
@@ -153,6 +170,7 @@ UpdateCheckerImpl::~UpdateCheckerImpl() {
 bool UpdateCheckerImpl::CheckForUpdates(
     const std::vector<CrxUpdateItem*>& items_to_check,
     const std::string& additional_attributes,
+    bool enabled_component_updates,
     const UpdateCheckCallback& update_check_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -169,13 +187,13 @@ bool UpdateCheckerImpl::CheckForUpdates(
 
   std::unique_ptr<std::vector<std::string>> ids_checked(
       new std::vector<std::string>());
-  for (auto crx : items_to_check)
+  for (auto* crx : items_to_check)
     ids_checked->push_back(crx->id);
   request_sender_.reset(new RequestSender(config_));
   request_sender_->Send(
-      config_->UseCupSigning(),
+      config_->EnabledCupSigning(),
       BuildUpdateCheckRequest(*config_, items_to_check, metadata_,
-                              additional_attributes),
+                              additional_attributes, enabled_component_updates),
       urls, base::Bind(&UpdateCheckerImpl::OnRequestSenderComplete,
                        base::Unretained(this), base::Passed(&ids_checked)));
   return true;
@@ -194,6 +212,17 @@ void UpdateCheckerImpl::OnRequestSenderComplete(
       int daynum = update_response.results().daystart_elapsed_days;
       if (daynum != UpdateResponse::kNoDaystart)
         metadata_->SetDateLastRollCall(*ids_checked, daynum);
+      for (const auto& result : update_response.results().list) {
+        auto entry = result.cohort_attrs.find(UpdateResponse::Result::kCohort);
+        if (entry != result.cohort_attrs.end())
+          metadata_->SetCohort(result.extension_id, entry->second);
+        entry = result.cohort_attrs.find(UpdateResponse::Result::kCohortName);
+        if (entry != result.cohort_attrs.end())
+          metadata_->SetCohortName(result.extension_id, entry->second);
+        entry = result.cohort_attrs.find(UpdateResponse::Result::kCohortHint);
+        if (entry != result.cohort_attrs.end())
+          metadata_->SetCohortHint(result.extension_id, entry->second);
+      }
       base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::Bind(update_check_callback_, error,
                                 update_response.results(), retry_after_sec));

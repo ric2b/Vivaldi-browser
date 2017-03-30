@@ -46,9 +46,6 @@ class CreditCard : public AutofillDataModel {
   };
 
   CreditCard(const std::string& guid, const std::string& origin);
-  CreditCard(const base::string16& card_number,
-             int expiration_month,
-             int expiration_year);
 
   // Creates a server card.  The type must be MASKED_SERVER_CARD or
   // FULL_SERVER_CARD.
@@ -65,14 +62,8 @@ class CreditCard : public AutofillDataModel {
   // The user-visible type of the card, e.g. 'Mastercard'.
   static base::string16 TypeForDisplay(const std::string& type);
 
-// This method is not compiled on iOS because the resources are not used and
-// should not be shipped.
-// TODO(jdonnelly): Use credit card issuer images on iOS.
-// http://crbug.com/535784
-#if !defined(OS_IOS)
   // The ResourceBundle ID for the appropriate credit card image.
   static int IconResourceId(const std::string& type);
-#endif  // #if !defined(OS_IOS)
 
   // Returns the internal representation of credit card type corresponding to
   // the given |number|.  The credit card type is determined purely according to

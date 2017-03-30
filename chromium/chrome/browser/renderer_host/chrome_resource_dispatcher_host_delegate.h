@@ -84,8 +84,7 @@ class ChromeResourceDispatcherHostDelegate
                        std::unique_ptr<content::StreamInfo> stream) override;
   void OnResponseStarted(net::URLRequest* request,
                          content::ResourceContext* resource_context,
-                         content::ResourceResponse* response,
-                         IPC::Sender* sender) override;
+                         content::ResourceResponse* response) override;
   void OnRequestRedirected(const GURL& redirect_url,
                            net::URLRequest* request,
                            content::ResourceContext* resource_context,
@@ -98,6 +97,8 @@ class ChromeResourceDispatcherHostDelegate
       net::URLRequest* request) const override;
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
       content::ResourceContext* resource_context) override;
+  void OnAbortedFrameLoad(const GURL& url,
+                          base::TimeDelta request_loading_time) override;
 
   // Called on the UI thread. Allows switching out the
   // ExternalProtocolHandler::Delegate for testing code.

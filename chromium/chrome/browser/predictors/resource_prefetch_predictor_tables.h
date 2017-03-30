@@ -15,7 +15,9 @@
 #include "base/time/time.h"
 #include "chrome/browser/predictors/predictor_table_base.h"
 #include "chrome/browser/predictors/resource_prefetch_common.h"
+#include "chrome/browser/predictors/resource_prefetch_predictor.pb.h"
 #include "content/public/common/resource_type.h"
+#include "net/base/request_priority.h"
 #include "url/gurl.h"
 
 namespace sql {
@@ -23,6 +25,8 @@ class Statement;
 }
 
 namespace predictors {
+
+using chrome_browser_predictors::ResourceData;
 
 // Interface for database tables used by the ResourcePrefetchPredictor.
 // All methods except the constructor and destructor need to be called on the DB
@@ -46,9 +50,14 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
                 int number_of_hits,
                 int number_of_misses,
                 int consecutive_misses,
-                double average_position);
+                double average_position,
+                net::RequestPriority priority,
+                bool has_validators,
+                bool always_revalidate);
     void UpdateScore();
     bool operator==(const ResourceRow& rhs) const;
+    static void FromProto(const ResourceData& proto, ResourceRow* row);
+    void ToProto(ResourceData* resource_data) const;
 
     // Stores the host for host based data, main frame Url for the Url based
     // data. This field is cleared for efficiency reasons and the code outside
@@ -61,16 +70,17 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
     size_t number_of_misses;
     size_t consecutive_misses;
     double average_position;
+    net::RequestPriority priority;
+    bool has_validators;
+    bool always_revalidate;
 
     // Not stored.
     float score;
   };
   typedef std::vector<ResourceRow> ResourceRows;
 
-  // Sorts the ResourceRows by score, descending.
-  struct ResourceRowSorter {
-    bool operator()(const ResourceRow& x, const ResourceRow& y) const;
-  };
+  // Sorts the resource rows by score, decreasing.
+  static void SortResourceRows(ResourceRows* rows);
 
   // Aggregated data for a Url or Host. Although the data differs slightly, we
   // store them in the same structure, because most of the fields are common and
@@ -141,6 +151,8 @@ class ResourcePrefetchPredictorTables : public PredictorTableBase {
   // PredictorTableBase methods.
   void CreateTableIfNonExistent() override;
   void LogDatabaseStats() override;
+
+  bool DropTablesIfOutdated(sql::Connection* db);
 
   // Helpers to return Statements for cached Statements. The caller must take
   // ownership of the return Statements.

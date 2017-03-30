@@ -85,6 +85,7 @@ public:
     ImageResource* image() const { return m_image.get(); }
     void setImage(ImageResource*); // Cancels pending load events, and doesn't dispatch new ones.
 
+    bool isLoadingImageDocument() { return m_loadingImageDocument; }
     void setLoadingImageDocument() { m_loadingImageDocument = true; }
 
     bool hasPendingActivity() const
@@ -115,7 +116,7 @@ private:
     class Task;
 
     // Called from the task or from updateFromElement to initiate the load.
-    void doUpdateFromElement(BypassMainWorldBehavior, UpdateFromElementBehavior, ReferrerPolicy = ReferrerPolicyDefault);
+    void doUpdateFromElement(BypassMainWorldBehavior, UpdateFromElementBehavior, const KURL&, ReferrerPolicy = ReferrerPolicyDefault);
 
     virtual void dispatchLoadEvent() = 0;
     virtual void noImageResourceToLoad() { }
@@ -134,7 +135,7 @@ private:
     void crossSiteOrCSPViolationOccurred(AtomicString);
     void enqueueImageLoadingMicroTask(UpdateFromElementBehavior, ReferrerPolicy);
 
-    void timerFired(Timer<ImageLoader>*);
+    void timerFired(TimerBase*);
 
     KURL imageSourceToKURL(AtomicString) const;
 

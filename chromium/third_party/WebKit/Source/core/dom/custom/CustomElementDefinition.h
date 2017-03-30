@@ -48,6 +48,7 @@ public:
         return m_constructionStack;
     }
 
+    HTMLElement* createElementForConstructor(Document&);
     virtual HTMLElement* createElementSync(Document&, const QualifiedName&) = 0;
     virtual HTMLElement* createElementSync(Document&, const QualifiedName&, ExceptionState&) = 0;
     HTMLElement* createElementAsync(Document&, const QualifiedName&);
@@ -56,29 +57,45 @@ public:
 
     virtual bool hasConnectedCallback() const = 0;
     virtual bool hasDisconnectedCallback() const = 0;
-    bool hasAttributeChangedCallback(const QualifiedName&);
+    virtual bool hasAdoptedCallback() const = 0;
+    bool hasAttributeChangedCallback(const QualifiedName&) const;
+    bool hasStyleAttributeChangedCallback() const;
 
     virtual void runConnectedCallback(Element*) = 0;
     virtual void runDisconnectedCallback(Element*) = 0;
+    virtual void runAdoptedCallback(Element*) = 0;
     virtual void runAttributeChangedCallback(Element*, const QualifiedName&,
         const AtomicString& oldValue, const AtomicString& newValue) = 0;
 
     void enqueueUpgradeReaction(Element*);
     void enqueueConnectedCallback(Element*);
     void enqueueDisconnectedCallback(Element*);
+    void enqueueAdoptedCallback(Element*);
     void enqueueAttributeChangedCallback(Element*, const QualifiedName&,
         const AtomicString& oldValue, const AtomicString& newValue);
 
+    class CORE_EXPORT ConstructionStackScope final {
+        STACK_ALLOCATED();
+        DISALLOW_COPY_AND_ASSIGN(ConstructionStackScope);
+    public:
+        ConstructionStackScope(CustomElementDefinition*, Element*);
+        ~ConstructionStackScope();
+
+    private:
+        ConstructionStack& m_constructionStack;
+        Member<Element> m_element;
+        size_t m_depth;
+    };
 protected:
     virtual bool runConstructor(Element*) = 0;
 
     static void checkConstructorResult(Element*, Document&, const QualifiedName&, ExceptionState&);
 
-    HashSet<AtomicString> m_observedAttributes;
-
 private:
     const CustomElementDescriptor m_descriptor;
     ConstructionStack m_constructionStack;
+    HashSet<AtomicString> m_observedAttributes;
+    bool m_hasStyleAttributeChangedCallback;
 
     void enqueueAttributeChangedCallbackForAllAttributes(Element*);
 };

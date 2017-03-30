@@ -42,8 +42,15 @@
         'tracing/common/tracing_messages.h',
         'tracing/common/tracing_switches.cc',
         'tracing/common/tracing_switches.h',
+        'tracing/core/proto_utils.h',
+        'tracing/core/proto_zero_message.cc',
+        'tracing/core/proto_zero_message.h',
+        'tracing/core/proto_zero_message_handle.cc',
+        'tracing/core/proto_zero_message_handle.h',
         'tracing/core/scattered_stream_writer.cc',
         'tracing/core/scattered_stream_writer.h',
+        'tracing/core/trace_buffer_writer.cc',
+        'tracing/core/trace_buffer_writer.h',
         'tracing/core/trace_ring_buffer.cc',
         'tracing/core/trace_ring_buffer.h',
         'tracing/tracing_export.h',
@@ -55,6 +62,57 @@
           ],
         }],
       ]
+    },
+    {
+      'target_name': 'proto_zero_plugin',
+      'type': 'executable',
+      'toolsets': ['host'],
+      'sources': [
+        'tracing/tools/proto_zero_plugin/proto_zero_generator.cc',
+        'tracing/tools/proto_zero_plugin/proto_zero_generator.h',
+        'tracing/tools/proto_zero_plugin/proto_zero_plugin.cc',
+      ],
+      'include_dirs': [
+        '..',
+        '../third_party/protobuf/src',
+      ],
+      'dependencies': [
+        '../third_party/protobuf/protobuf.gyp:protoc_lib',
+      ],
+    },
+    {
+      'target_name': 'proto_zero_testing_messages',
+      'type': 'static_library',
+      'variables': {
+        'proto_in_dir': 'tracing/test',
+        'proto_out_dir': 'components/tracing/test',
+        'generator_plugin': 'proto_zero_plugin',
+        'generator_plugin_suffix': '.pbzero',
+        'generate_cc': 0,
+        'generate_python': 0,
+      },
+      'sources': [
+        'tracing/test/example_messages.proto',
+      ],
+      'dependencies': [
+        'proto_zero_plugin#host',
+      ],
+      'includes': ['../build/protoc.gypi'],
+    },
+    {
+      # Official protobuf used by tests to verify that the Tracing V2 output is
+      # effectively proto-compatible.
+      # GN version: //components/tracing:golden_protos_for_tests
+      'target_name': 'golden_protos_for_tests',
+      'type': 'static_library',
+      'variables': {
+        'proto_in_dir': 'tracing/proto',
+        'proto_out_dir': 'components/tracing/test/golden_protos',
+      },
+      'sources': [
+        'tracing/proto/events_chunk.proto',
+      ],
+      'includes': ['../build/protoc.gypi'],
     },
   ],
 }

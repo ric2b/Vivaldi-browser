@@ -28,7 +28,7 @@
 #include "core/css/CSSStyleSheet.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/IconURL.h"
-#include "core/dom/StyleEngineContext.h"
+#include "core/dom/StyleEngine.h"
 #include "core/fetch/ResourceOwner.h"
 #include "core/fetch/StyleSheetResource.h"
 #include "core/fetch/StyleSheetResourceClient.h"
@@ -76,7 +76,7 @@ public:
     bool sheetLoaded();
 
     void setDisabledState(bool);
-    void setSheetTitle(const String&);
+    void setSheetTitle(const String&, StyleEngine::ActiveSheetsUpdate = StyleEngine::DontUpdateActiveSheets);
 
     bool styleSheetIsLoading() const;
     bool hasSheet() const { return m_sheet; }
@@ -111,7 +111,7 @@ private:
     void setCrossOriginStylesheetStatus(CSSStyleSheet*);
     void setFetchFollowingCORS()
     {
-        ASSERT(!m_fetchFollowingCORS);
+        DCHECK(!m_fetchFollowingCORS);
         m_fetchFollowingCORS = true;
     }
     void clearFetchFollowingCORS()
@@ -230,7 +230,6 @@ private:
     String m_scope;
 
     bool m_createdByParser;
-    bool m_isInShadowTree;
 };
 
 } // namespace blink

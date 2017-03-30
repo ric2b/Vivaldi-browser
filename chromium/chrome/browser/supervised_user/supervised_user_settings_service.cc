@@ -18,11 +18,11 @@
 #include "chrome/common/chrome_constants.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
+#include "components/sync/api/sync_change.h"
+#include "components/sync/api/sync_error_factory.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/user_metrics.h"
-#include "sync/api/sync_change.h"
-#include "sync/api/sync_error_factory.h"
-#include "sync/protocol/sync.pb.h"
 
 using base::DictionaryValue;
 using base::JSONReader;
@@ -75,10 +75,7 @@ void SupervisedUserSettingsService::Init(
   Init(store);
   if (load_synchronously) {
     store_->ReadPrefs();
-    // TODO(bauerb): Temporary CHECK while investigating
-    // https://crbug.com/425785. Remove (or change to DCHECK) once the bug
-    // is fixed.
-    CHECK(store_->IsInitializationComplete());
+    DCHECK(IsReady());
   } else {
     store_->ReadPrefsAsync(nullptr);
   }
@@ -102,7 +99,7 @@ SupervisedUserSettingsService::Subscribe(const SettingsCallback& callback) {
   return callback_list_.Add(callback);
 }
 
-Profile* SupervisedUserSettingsService::GetProfile(){
+Profile* SupervisedUserSettingsService::GetProfile() {
   return profile_;
 }
 
@@ -111,7 +108,7 @@ void SupervisedUserSettingsService::SetActive(bool active) {
   InformSubscribers();
 }
 
-bool SupervisedUserSettingsService::IsReady() {
+bool SupervisedUserSettingsService::IsReady() const {
   // Initialization cannot be complete but have failed at the same time.
   DCHECK(!(store_->IsInitializationComplete() && initialization_failed_));
   return initialization_failed_ || store_->IsInitializationComplete();
@@ -244,6 +241,14 @@ SyncMergeResult SupervisedUserSettingsService::MergeDataAndStartSyncing(
         sync_data.GetSpecifics().managed_user_setting();
     std::unique_ptr<base::Value> value =
         JSONReader::Read(supervised_user_setting.value());
+    // Wrongly formatted input will cause null values.
+    // SetWithoutPathExpansion below requires non-null values.
+    if (!value) {
+      DLOG(ERROR) << "Invalid managed user setting value: "
+                  << supervised_user_setting.value()
+                  << ". Values must be JSON values.";
+      continue;
+    }
     std::string name_suffix = supervised_user_setting.name();
     std::string name_key = name_suffix;
     base::DictionaryValue* dict = GetDictionaryAndSplitKey(&name_suffix);
@@ -404,9 +409,7 @@ void SupervisedUserSettingsService::OnInitializationCompleted(bool success) {
     initialization_failed_ = true;
   }
 
-  // TODO(bauerb): Temporary CHECK while investigating https://crbug.com/425785.
-  // Remove (or change back to DCHECK) once the bug is fixed.
-  CHECK(IsReady());
+  DCHECK(IsReady());
   InformSubscribers();
 }
 

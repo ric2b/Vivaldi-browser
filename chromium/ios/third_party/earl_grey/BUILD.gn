@@ -7,17 +7,11 @@ import("//build/config/ios/rules.gni")
 
 config("config") {
   include_dirs = [ "src/EarlGrey" ]
-
-  # EarlGrey and its dependencies need to link to XCTest.framework
-  # that is not under $ios_sdk_path.
-  common_flags = [ "-F$ios_sdk_path/../../Library/Frameworks" ]
-  cflags_objc = common_flags
-  cflags_objcc = common_flags
-  ldflags = common_flags
 }
 
 ios_framework_bundle("earl_grey") {
   output_name = "EarlGrey"
+  info_plist = "Info.plist"
 
   testonly = true
   sources = [
@@ -72,6 +66,8 @@ ios_framework_bundle("earl_grey") {
     "src/EarlGrey/Additions/UIAnimation+GREYAdditions.m",
     "src/EarlGrey/Additions/UIApplication+GREYAdditions.h",
     "src/EarlGrey/Additions/UIApplication+GREYAdditions.m",
+    "src/EarlGrey/Additions/UIGestureRecognizer+GREYAdditions.h",
+    "src/EarlGrey/Additions/UIGestureRecognizer+GREYAdditions.m",
     "src/EarlGrey/Additions/UIScrollView+GREYAdditions.h",
     "src/EarlGrey/Additions/UIScrollView+GREYAdditions.m",
     "src/EarlGrey/Additions/UISwitch+GREYAdditions.h",
@@ -88,8 +84,6 @@ ios_framework_bundle("earl_grey") {
     "src/EarlGrey/Additions/UIWindow+GREYAdditions.m",
     "src/EarlGrey/Additions/XCTestCase+GREYAdditions.h",
     "src/EarlGrey/Additions/XCTestCase+GREYAdditions.m",
-    "src/EarlGrey/Additions/_UIGestureRecognizerFailureMap_GREYAdditions.h",
-    "src/EarlGrey/Additions/_UIGestureRecognizerFailureMap_GREYAdditions.m",
     "src/EarlGrey/Additions/_UIModalItemsPresentingViewController_GREYAdditions.h",
     "src/EarlGrey/Additions/_UIModalItemsPresentingViewController_GREYAdditions.m",
     "src/EarlGrey/Additions/__NSCFLocalDataTask_GREYAdditions.h",
@@ -186,6 +180,8 @@ ios_framework_bundle("earl_grey") {
     "src/EarlGrey/Synchronization/GREYNSTimerIdlingResource.m",
     "src/EarlGrey/Synchronization/GREYOperationQueueIdlingResource.h",
     "src/EarlGrey/Synchronization/GREYOperationQueueIdlingResource.m",
+    "src/EarlGrey/Synchronization/GREYRunLoopSpinner.h",
+    "src/EarlGrey/Synchronization/GREYRunLoopSpinner.m",
     "src/EarlGrey/Synchronization/GREYSyncAPI.h",
     "src/EarlGrey/Synchronization/GREYSyncAPI.m",
     "src/EarlGrey/Synchronization/GREYTimedIdlingResource.h",
@@ -237,6 +233,7 @@ ios_framework_bundle("earl_grey") {
     "src/EarlGrey/Synchronization/GREYUIThreadExecutor.h",
   ]
   deps = [
+    "//build/config/ios:xctest",
     "//ios/third_party/fishhook",
     "//third_party/google_toolbox_for_mac",
   ]
@@ -256,7 +253,10 @@ ios_framework_bundle("earl_grey") {
   ]
 
   public_configs = [ ":config" ]
-  configs += [ "//build/config/compiler:enable_arc" ]
+
   configs -= [ "//build/config/gcc:symbol_visibility_hidden" ]
-  configs += [ "//build/config/gcc:symbol_visibility_default" ]
+  configs += [
+    "//build/config/compiler:enable_arc",
+    "//build/config/gcc:symbol_visibility_default",
+  ]
 }

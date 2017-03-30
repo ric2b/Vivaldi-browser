@@ -49,7 +49,7 @@ class CSSStyleDeclaration;
 class ClientRect;
 class ClientRectList;
 class CompositorMutation;
-class V0CustomElementDefinition;
+class CustomElementDefinition;
 class DOMStringMap;
 class DOMTokenList;
 class Dictionary;
@@ -63,6 +63,8 @@ class MutableStylePropertySet;
 class NodeIntersectionObserverData;
 class PropertySetCSSStyleDeclaration;
 class PseudoElement;
+class ResizeObservation;
+class ResizeObserver;
 class ScrollState;
 class ScrollStateCallback;
 class ScrollToOptions;
@@ -70,6 +72,7 @@ class ShadowRoot;
 class ShadowRootInit;
 class StylePropertySet;
 class StylePropertyMap;
+class V0CustomElementDefinition;
 
 enum SpellcheckAttributeState {
     SpellcheckAttributeTrue,
@@ -217,6 +220,10 @@ public:
     virtual void scrollTo(const ScrollToOptions&);
 
     IntRect boundsInViewport() const;
+    // Returns an intersection rectangle of the bounds rectangle and the
+    // viewport rectangle, in the visual viewport coordinate. This function is
+    // used to show popups beside this element.
+    IntRect visibleBoundsInVisualViewport() const;
 
     ClientRectList* getClientRects();
     ClientRect* getBoundingClientRect();
@@ -283,7 +290,8 @@ public:
 
     void setInlineStyleProperty(CSSPropertyID, CSSValueID identifier, bool important = false);
     void setInlineStyleProperty(CSSPropertyID, double value, CSSPrimitiveValue::UnitType, bool important = false);
-    void setInlineStyleProperty(CSSPropertyID, CSSValue*, bool important = false);
+    // TODO(sashab): Make this take a const CSSValue&.
+    void setInlineStyleProperty(CSSPropertyID, const CSSValue*, bool important = false);
     bool setInlineStyleProperty(CSSPropertyID, const String& value, bool important = false);
 
     bool removeInlineStyleProperty(CSSPropertyID);
@@ -328,8 +336,8 @@ public:
 
     virtual void copyNonAttributePropertiesFromElement(const Element&) { }
 
-    void attach(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
 
     virtual LayoutObject* createLayoutObject(const ComputedStyle&);
     virtual bool layoutObjectIsNeeded(const ComputedStyle&);
@@ -374,7 +382,7 @@ public:
     void setIsInCanvasSubtree(bool value) { setElementFlag(IsInCanvasSubtree, value); }
     bool isInCanvasSubtree() const { return hasElementFlag(IsInCanvasSubtree); }
 
-    bool isDefined() const { return getCustomElementState() != CustomElementState::Undefined; }
+    bool isDefined() const { return !(static_cast<int>(getCustomElementState()) & static_cast<int>(CustomElementState::NotDefinedFlag)); }
     bool isUpgradedV0CustomElement() { return getV0CustomElementState() == V0Upgraded; }
     bool isUnresolvedV0CustomElement() { return getV0CustomElementState() == V0WaitingForUpgrade; }
 
@@ -445,6 +453,7 @@ public:
 
     void setPointerCapture(int pointerId, ExceptionState&);
     void releasePointerCapture(int pointerId, ExceptionState&);
+    bool hasPointerCapture(int pointerId);
 
     String textFromChildren();
 
@@ -515,8 +524,11 @@ public:
     void clearHasPendingResources() { clearElementFlag(HasPendingResources); }
     virtual void buildPendingResource() { }
 
-    void setCustomElementDefinition(V0CustomElementDefinition*);
-    V0CustomElementDefinition* customElementDefinition() const;
+    void v0SetCustomElementDefinition(V0CustomElementDefinition*);
+    V0CustomElementDefinition* v0CustomElementDefinition() const;
+
+    void setCustomElementDefinition(CustomElementDefinition*);
+    CustomElementDefinition* customElementDefinition() const;
 
     bool containsFullScreenElement() const { return hasElementFlag(ContainsFullScreenElement); }
     void setContainsFullScreenElement(bool);
@@ -563,7 +575,7 @@ public:
     void updateFromCompositorMutation(const CompositorMutation&);
 
     // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
-    // the element is inShadowIncludingDocument() and the context is an isolated world.
+    // the element is isConnected() and the context is an isolated world.
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1);
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2);
     void logAddElementIfIsolatedWorldAndInDocument(const char element[], const QualifiedName& attr1, const QualifiedName& attr2, const QualifiedName& attr3);
@@ -578,6 +590,10 @@ public:
     NodeIntersectionObserverData* intersectionObserverData() const;
     NodeIntersectionObserverData& ensureIntersectionObserverData();
 
+    HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>* resizeObserverData() const;
+    HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>& ensureResizeObserverData();
+    void setNeedsResizeObserverUpdate();
+
 protected:
     Element(const QualifiedName& tagName, Document*, ConstructionType);
 
@@ -587,7 +603,8 @@ protected:
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, CSSValueID identifier);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, double value, CSSPrimitiveValue::UnitType);
     void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, const String& value);
-    void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, CSSValue*);
+    // TODO(sashab): Make this take a const CSSValue&.
+    void addPropertyToPresentationAttributeStyle(MutableStylePropertySet*, CSSPropertyID, const CSSValue*);
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
@@ -649,7 +666,15 @@ private:
     PropertySetCSSStyleDeclaration* inlineStyleCSSOMWrapper();
     void setInlineStyleFromString(const AtomicString&);
 
+    // If the only inherited changes in the parent element are independent,
+    // these changes can be directly propagated to this element (the child).
+    // If these conditions are met, propagates the changes to the current style
+    // and returns the new style. Otherwise, returns null.
+    PassRefPtr<ComputedStyle> propagateInheritedProperties(StyleRecalcChange);
+
     StyleRecalcChange recalcOwnStyle(StyleRecalcChange);
+    // TODO(nainar): Make this const ComputedStyle&.
+    StyleRecalcChange buildLayoutTree(ComputedStyle&);
 
     inline void checkForEmptyStyleChange();
 
@@ -756,7 +781,6 @@ template<typename T> inline const T* toElement(const Node* node)
     ASSERT_WITH_SECURITY_IMPLICATION(!node || isElementOfType<const T>(*node));
     return static_cast<const T*>(node);
 }
-template<typename T, typename U> inline T* toElement(const RefPtr<U>& node) { return toElement<T>(node.get()); }
 
 inline bool isDisabledFormControl(const Node* node)
 {
@@ -867,9 +891,9 @@ inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* inse
 {
     DCHECK(!childNeedsStyleInvalidation());
     DCHECK(!needsStyleInvalidation());
-    DCHECK(insertionPoint->inShadowIncludingDocument() || insertionPoint->isInShadowTree() || isContainerNode());
-    if (insertionPoint->inShadowIncludingDocument()) {
-        setFlag(InDocumentFlag);
+    DCHECK(insertionPoint->isConnected() || insertionPoint->isInShadowTree() || isContainerNode());
+    if (insertionPoint->isConnected()) {
+        setFlag(IsConnectedFlag);
         insertionPoint->document().incrementNodeCount();
     }
     if (parentOrShadowHostNode()->isInShadowTree())
@@ -881,9 +905,9 @@ inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* inse
 
 inline void Node::removedFrom(ContainerNode* insertionPoint)
 {
-    DCHECK(insertionPoint->inShadowIncludingDocument() || isContainerNode() || isInShadowTree());
-    if (insertionPoint->inShadowIncludingDocument()) {
-        clearFlag(InDocumentFlag);
+    DCHECK(insertionPoint->isConnected() || isContainerNode() || isInShadowTree());
+    if (insertionPoint->isConnected()) {
+        clearFlag(IsConnectedFlag);
         insertionPoint->document().decrementNodeCount();
     }
     if (isInShadowTree() && !containingTreeScope().rootNode().isShadowRoot())

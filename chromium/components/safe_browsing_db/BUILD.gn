@@ -56,7 +56,7 @@ group("safe_browsing_db_mobile") {
   ]
 }
 
-source_set("database_manager") {
+static_library("database_manager") {
   sources = [
     "database_manager.cc",
     "database_manager.h",
@@ -65,27 +65,27 @@ source_set("database_manager") {
     ":hit_report",
     ":util",
     ":v4_get_hash_protocol_manager",
-    "//base:base",
+    "//base",
     "//content/public/browser",
     "//content/public/common",
     "//net",
-    "//url:url",
+    "//url",
   ]
 }
 
-source_set("hit_report") {
+static_library("hit_report") {
   sources = [
     "hit_report.cc",
     "hit_report.h",
   ]
   deps = [
     ":util",
-    "//components/metrics:metrics",
-    "//url:url",
+    "//components/metrics",
+    "//url",
   ]
 }
 
-source_set("prefix_set") {
+static_library("prefix_set") {
   sources = [
     "prefix_set.cc",
     "prefix_set.h",
@@ -96,7 +96,7 @@ source_set("prefix_set") {
   ]
 }
 
-source_set("remote_database_manager") {
+static_library("remote_database_manager") {
   sources = [
     "remote_database_manager.cc",
     "remote_database_manager.h",
@@ -109,7 +109,7 @@ source_set("remote_database_manager") {
     "//components/variations",
     "//content/public/browser",
     "//net",
-    "//url:url",
+    "//url",
   ]
 }
 
@@ -120,12 +120,12 @@ source_set("safe_browsing_api_handler") {
   ]
   deps = [
     ":util",
-    "//base:base",
-    "//url:url",
+    "//base",
+    "//url",
   ]
 }
 
-source_set("safe_browsing_api_handler_util") {
+static_library("safe_browsing_api_handler_util") {
   sources = [
     "safe_browsing_api_handler_util.cc",
     "safe_browsing_api_handler_util.h",
@@ -133,11 +133,11 @@ source_set("safe_browsing_api_handler_util") {
   deps = [
     ":metadata_proto",
     ":util",
-    "//base:base",
+    "//base",
   ]
 }
 
-source_set("test_database_manager") {
+static_library("test_database_manager") {
   sources = [
     "test_database_manager.cc",
     "test_database_manager.h",
@@ -149,17 +149,17 @@ source_set("test_database_manager") {
   ]
 }
 
-source_set("util") {
+static_library("util") {
   sources = [
     "util.cc",
     "util.h",
   ]
   deps = [
+    ":v4_protocol_manager_util",
     "//base",
-    "//base:base",
     "//crypto",
     "//net",
-    "//url:url",
+    "//url",
   ]
   if (is_win) {
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -167,7 +167,7 @@ source_set("util") {
   }
 }
 
-source_set("v4_database") {
+static_library("v4_database") {
   sources = [
     "v4_database.cc",
     "v4_database.h",
@@ -183,7 +183,7 @@ source_set("v4_database") {
   ]
 }
 
-source_set("v4_get_hash_protocol_manager") {
+static_library("v4_get_hash_protocol_manager") {
   sources = [
     "v4_get_hash_protocol_manager.cc",
     "v4_get_hash_protocol_manager.h",
@@ -196,11 +196,11 @@ source_set("v4_get_hash_protocol_manager") {
     ":v4_protocol_manager_util",
     "//base",
     "//net",
-    "//url:url",
+    "//url",
   ]
 }
 
-source_set("v4_local_database_manager") {
+static_library("v4_local_database_manager") {
   sources = [
     "v4_local_database_manager.cc",
     "v4_local_database_manager.h",
@@ -215,7 +215,7 @@ source_set("v4_local_database_manager") {
     "//base",
     "//content/public/browser",
     "//net",
-    "//url:url",
+    "//url",
   ]
 }
 
@@ -228,7 +228,18 @@ source_set("v4_protocol_manager_util") {
     ":safebrowsing_proto",
     "//base",
     "//net",
-    "//url:url",
+    "//url",
+  ]
+}
+
+source_set("v4_rice") {
+  sources = [
+    "v4_rice.cc",
+    "v4_rice.h",
+  ]
+  deps = [
+    "//base",
+    "//third_party/protobuf:protobuf_lite",
   ]
 }
 
@@ -243,11 +254,13 @@ source_set("v4_store") {
   ]
   deps = [
     ":v4_protocol_manager_util",
+    ":v4_rice",
     "//base",
+    "//crypto",
   ]
 }
 
-source_set("v4_update_protocol_manager") {
+static_library("v4_update_protocol_manager") {
   sources = [
     "v4_update_protocol_manager.cc",
     "v4_update_protocol_manager.h",
@@ -258,7 +271,7 @@ source_set("v4_update_protocol_manager") {
     ":v4_protocol_manager_util",
     "//base",
     "//net",
-    "//url:url",
+    "//url",
   ]
 }
 
@@ -270,7 +283,9 @@ source_set("unit_tests") {
     "util_unittest.cc",
     "v4_database_unittest.cc",
     "v4_get_hash_protocol_manager_unittest.cc",
+    "v4_local_database_manager_unittest.cc",
     "v4_protocol_manager_util_unittest.cc",
+    "v4_rice_unittest.cc",
     "v4_store_unittest.cc",
     "v4_update_protocol_manager_unittest.cc",
   ]
@@ -284,11 +299,13 @@ source_set("unit_tests") {
     ":v4_get_hash_protocol_manager",
     ":v4_local_database_manager",
     ":v4_protocol_manager_util",
+    ":v4_rice",
     ":v4_store",
     ":v4_store_proto",
     ":v4_update_protocol_manager",
     "//base",
     "//content/test:test_support",
+    "//crypto",
     "//net",
     "//net:test_support",
     "//testing/gtest",

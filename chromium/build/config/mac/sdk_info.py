@@ -6,6 +6,9 @@ import os
 import subprocess
 import sys
 
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import mac_toolchain
+
 # This script prints information about the build system, the operating
 # system and the iOS or Mac SDK (depending on the platform "iphonesimulator",
 # "iphoneos" or "macosx" generally).
@@ -39,6 +42,8 @@ def FillSDKPathAndVersion(settings, platform, xcode_version):
       'xcrun', '-sdk', platform, '--show-sdk-path']).strip()
   settings['sdk_version'] = subprocess.check_output([
       'xcrun', '-sdk', platform, '--show-sdk-version']).strip()
+  settings['sdk_platform_path'] = subprocess.check_output([
+      'xcrun', '-sdk', platform, '--show-sdk-platform-path']).strip()
   # TODO: unconditionally use --show-sdk-build-version once Xcode 7.2 or
   # higher is required to build Chrome for iOS or OS X.
   if xcode_version >= '0720':
@@ -54,6 +59,9 @@ if __name__ == '__main__':
         'usage: %s [iphoneos|iphonesimulator|macosx]\n' %
         os.path.basename(sys.argv[0]))
     sys.exit(1)
+
+  # Try using the toolchain in mac_files.
+  mac_toolchain.SetToolchainEnvironment()
 
   settings = {}
   FillMachineOSBuild(settings)

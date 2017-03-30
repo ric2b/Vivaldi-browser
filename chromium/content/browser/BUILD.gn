@@ -15,11 +15,14 @@ source_set("browser") {
     ":for_content_tests",  # See top of //content/BUILD.gn for why.
     "//content/public/browser:browser_sources",
   ]
+  if (is_android) {
+    # See comment in content/app/BUILD.gn above content_app_deps.
+    visibility += [ "//content/app:*" ]
+  }
 
   configs += [
     "//build/config:precompiled_headers",
     "//content:content_implementation",
-    "//content/public/common:mojo_shell_client",
     "//third_party/WebKit/public:debug_devtools",
     "//v8:external_startup_data",
   ]
@@ -37,12 +40,11 @@ source_set("browser") {
     "//components/filesystem:lib",
     "//components/leveldb:lib",
     "//components/link_header_util",
+    "//components/memory_coordinator/browser",
     "//components/mime_util",
-    "//components/scheduler:common",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/url_formatter",
-    "//components/webmessaging",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -59,6 +61,9 @@ source_set("browser") {
     "//device/battery",
     "//device/bluetooth",
     "//device/gamepad",
+    "//device/generic_sensor",
+    "//device/geolocation:device_geolocation",
+    "//device/geolocation/public/interfaces",
     "//device/power_save_blocker",
     "//device/vibration",
     "//gin",
@@ -66,10 +71,13 @@ source_set("browser") {
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
+    "//ipc",
+    "//ipc:mojom",
     "//media",
     "//media/capture",
     "//media/gpu/ipc/client",
     "//media/midi",
+    "//media/mojo/interfaces",
     "//media/mojo/interfaces:image_capture",
     "//mojo/common",
     "//mojo/edk/system",
@@ -77,14 +85,14 @@ source_set("browser") {
     "//mojo/public/js",
     "//net",
     "//net:extras",
+    "//services/file:lib",
+    "//services/file/public/cpp",
+    "//services/file/public/interfaces",
     "//services/shell",
     "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//services/shell/runner/common",
     "//services/shell/runner/host:lib",
-    "//services/user:lib",
-    "//services/user/public/cpp",
-    "//services/user/public/interfaces",
     "//skia",
     "//sql",
     "//storage/browser",
@@ -105,6 +113,7 @@ source_set("browser") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/display",
+    "//ui/display/types",
     "//ui/events",
     "//ui/events:gesture_detection",
     "//ui/events/blink",
@@ -155,7 +164,6 @@ source_set("browser") {
       "file_descriptor_info_impl.cc",
       "file_descriptor_info_impl.h",
     ]
-    sources -= [ "renderer_host/web_input_event_aurawin.cc" ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
@@ -185,6 +193,7 @@ source_set("browser") {
       "//third_party/libjingle:libjingle_webrtc",
       "//third_party/webrtc",
       "//third_party/webrtc/base:rtc_base",
+      "//third_party/webrtc/media:rtc_media",
       "//third_party/webrtc/modules/desktop_capture:primitives",
     ]
     if (is_linux || is_mac || is_win) {
@@ -206,10 +215,7 @@ source_set("browser") {
   }
 
   if (is_win) {
-    sources -= [
-      "device_sensors/data_fetcher_shared_memory_default.cc",
-      "geolocation/empty_wifi_data_provider.cc",
-    ]
+    sources -= [ "device_sensors/data_fetcher_shared_memory_default.cc" ]
     defines += [
       # This prevents the inclusion of atlhost.h which paired
       # with the windows 8 sdk it does the wrong thing.
@@ -271,12 +277,15 @@ source_set("browser") {
                     ".",
                     "//content")
 
-    configs += [
-      "//build/config/linux/atk",
-      "//build/config/linux/atk:warnings",
-      "//build/config/linux/gconf",
-      "//build/config/linux:glib",
-    ]
+    configs += [ "//build/config/linux/atk" ]
+
+    if (use_gconf) {
+      configs += [ "//build/config/linux/gconf" ]
+    }
+
+    if (use_glib) {
+      configs += [ "//build/config/linux:glib" ]
+    }
   }
 
   if (is_linux && use_aura) {
@@ -286,18 +295,6 @@ source_set("browser") {
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
-  }
-
-  # Dealing with *wifi_data_provider_*.cc is also a bit complicated given
-  # android, chromeos, linux and use_dbus.
-  if (is_android) {
-    sources -= [ "geolocation/wifi_data_provider_common.cc" ]
-  }
-  if (is_chromeos || (is_linux && !use_dbus)) {
-    sources -= [ "geolocation/wifi_data_provider_linux.cc" ]
-  }
-  if (is_linux && use_dbus) {
-    sources -= [ "geolocation/empty_wifi_data_provider.cc" ]
   }
 
   if (use_pango) {
@@ -311,10 +308,6 @@ source_set("browser") {
     sources -= [
       "browser_ipc_logging.cc",
       "device_sensors/data_fetcher_shared_memory_default.cc",
-      "geolocation/network_location_provider.cc",
-      "geolocation/network_location_provider.h",
-      "geolocation/network_location_request.cc",
-      "geolocation/network_location_request.h",
       "media/session/media_session_delegate_default.cc",
       "power_usage_monitor_impl.cc",
       "power_usage_monitor_impl.h",
@@ -343,6 +336,7 @@ source_set("browser") {
     deps += [
       "//content/public/android:jni",
       "//media",
+      "//media/capture/content/android",
       "//media/capture/video/android",
       "//media/mojo/interfaces",
       "//mojo/android:libsystem_java",
@@ -353,11 +347,7 @@ source_set("browser") {
   }
 
   if (is_mac) {
-    sources -= [
-      "device_sensors/data_fetcher_shared_memory_default.cc",
-      "geolocation/empty_wifi_data_provider.cc",
-      "geolocation/empty_wifi_data_provider.h",
-    ]
+    sources -= [ "device_sensors/data_fetcher_shared_memory_default.cc" ]
     deps += [
       "//media",
       "//sandbox/mac:sandbox",
@@ -382,26 +372,21 @@ source_set("browser") {
 
   if (use_aura) {
     deps += [
-      "//components/bitmap_uploader",
-      "//components/mus/common:mus_common",
-      "//components/mus/public/cpp",
-      "//components/mus/public/interfaces",
+      "//services/ui/public/cpp",
+      "//services/ui/public/interfaces",
       "//ui/aura",
       "//ui/aura_extra",
       "//ui/strings",
       "//ui/wm",
     ]
     sources += [
-      "compositor/software_output_device_mus.cc",
-      "compositor/software_output_device_mus.h",
+      "compositor/mus_browser_compositor_output_surface.cc",
+      "compositor/mus_browser_compositor_output_surface.h",
       "renderer_host/render_widget_host_view_mus.cc",
       "renderer_host/render_widget_host_view_mus.h",
       "web_contents/web_contents_view_mus.cc",
       "web_contents/web_contents_view_mus.h",
     ]
-    if (toolkit_views) {
-      defines += [ "MOJO_RUNNER_CLIENT" ]
-    }
   } else {  # Not aura.
     sources -= [
       "media/capture/cursor_renderer_aura.cc",
@@ -419,8 +404,6 @@ source_set("browser") {
       "renderer_host/render_widget_host_view_aura.h",
       "renderer_host/ui_events_helper.cc",
       "renderer_host/ui_events_helper.h",
-      "renderer_host/web_input_event_aura.cc",
-      "renderer_host/web_input_event_aura.h",
       "web_contents/aura/gesture_nav_simple.cc",
       "web_contents/aura/gesture_nav_simple.h",
       "web_contents/aura/overscroll_navigation_overlay.cc",
@@ -503,6 +486,14 @@ source_set("browser") {
 
   if (enable_ipc_fuzzer) {
     configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+  }
+
+  if (use_minikin_hyphenation) {
+    sources += [
+      "hyphenation/hyphenation_impl.cc",
+      "hyphenation/hyphenation_impl.h",
+    ]
+    defines += [ "USE_MINIKIN_HYPHENATION=1" ]
   }
 }
 

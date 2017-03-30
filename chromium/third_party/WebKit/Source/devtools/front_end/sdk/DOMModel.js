@@ -53,7 +53,7 @@ WebInspector.DOMNode = function(domModel, doc, isInShadowTree, payload)
     this._nodeValue = payload.nodeValue;
     this._pseudoType = payload.pseudoType;
     this._shadowRootType = payload.shadowRootType;
-    this._frameId = payload.frameId || null;
+    this._frameOwnerFrameId = payload.frameId || null;
     this._xmlVersion = payload.xmlVersion;
 
     this._shadowRoots = [];
@@ -141,6 +141,9 @@ WebInspector.DOMNode.ShadowRootTypes = {
     Open: "open",
     Closed: "closed"
 }
+
+/** @typedef {{name: string, value: string, _node: WebInspector.DOMNode}} */
+WebInspector.DOMNode.Attribute;
 
 WebInspector.DOMNode.prototype = {
     /**
@@ -427,7 +430,7 @@ WebInspector.DOMNode.prototype = {
     },
 
     /**
-     * @return {!Object}
+     * @return {!Array<!WebInspector.DOMNode.Attribute>}
      */
     attributes: function()
     {
@@ -600,10 +603,10 @@ WebInspector.DOMNode.prototype = {
      */
     frameId: function()
     {
-        var node = this;
-        while (!node._frameId && node.parentNode)
+        var node = this.parentNode || this;
+        while (!node._frameOwnerFrameId && node.parentNode)
             node = node.parentNode;
-        return node._frameId;
+        return node._frameOwnerFrameId;
     },
 
     /**
@@ -961,6 +964,20 @@ WebInspector.DOMNode.prototype = {
         this._agent.setInspectedNode(node.id);
     },
 
+    /**
+     *  @return {?WebInspector.DOMNode}
+     */
+    enclosingElementOrSelf: function()
+    {
+        var node = this;
+        if (node && node.nodeType() === Node.TEXT_NODE && node.parentNode)
+            node = node.parentNode;
+
+        if (node && node.nodeType() !== Node.ELEMENT_NODE)
+            node = null;
+        return node;
+    },
+
     __proto__: WebInspector.SDKObject.prototype
 }
 
@@ -1095,6 +1112,7 @@ WebInspector.DOMModel = function(target) {
     this._agent.enable();
 }
 
+/** @enum {string} */
 WebInspector.DOMModel.Events = {
     AttrModified: "AttrModified",
     AttrRemoved: "AttrRemoved",
@@ -1113,7 +1131,6 @@ WebInspector.DOMModel.Events = {
     InspectModeWillBeToggled: "InspectModeWillBeToggled",
     MarkersChanged: "MarkersChanged"
 }
-
 
 /**
  * @param {!WebInspector.RemoteObject} object
@@ -1267,7 +1284,7 @@ WebInspector.DOMModel.prototype = {
      */
     pushNodesByBackendIdsToFrontend: function(backendNodeIds, callback)
     {
-        var backendNodeIdsArray = Array.from(backendNodeIds.values());
+        var backendNodeIdsArray = backendNodeIds.valuesArray();
         /**
          * @param {?Array<!DOMAgent.NodeId>} nodeIds
          * @this {!WebInspector.DOMModel}

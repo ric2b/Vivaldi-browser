@@ -30,8 +30,6 @@ namespace mash {
 namespace catalog_viewer {
 namespace {
 
-using shell::mojom::InstanceInfoPtr;
-
 class CatalogViewerContents : public views::WidgetDelegateView,
                               public ui::TableModel {
  public:
@@ -41,8 +39,7 @@ class CatalogViewerContents : public views::WidgetDelegateView,
         catalog_(std::move(catalog)),
         table_view_(nullptr),
         table_view_parent_(nullptr),
-        observer_(nullptr),
-        weak_ptr_factory_(this) {
+        observer_(nullptr) {
     table_view_ = new views::TableView(this, GetColumns(), views::TEXT_ONLY,
                                        false);
     set_background(views::Background::CreateStandardPanelBackground());
@@ -50,12 +47,15 @@ class CatalogViewerContents : public views::WidgetDelegateView,
     table_view_parent_ = table_view_->CreateParentIfNecessary();
     AddChildView(table_view_parent_);
 
-    catalog_->GetEntries(nullptr,
-                         base::Bind(&CatalogViewerContents::OnGotCatalogEntries,
-                                    weak_ptr_factory_.GetWeakPtr()));
     // We don't want to show an empty UI so we just block until we have all the
-    // data.
-    catalog_.WaitForIncomingResponse();
+    // data. GetEntries is a sync call.
+    std::vector<catalog::mojom::EntryPtr> entries;
+    bool got = catalog_->GetEntries(base::nullopt, &entries);
+    if (got) {
+      for (auto& entry : entries)
+        entries_.push_back(Entry(entry->display_name, entry->name));
+      observer_->OnModelChanged();
+    }
   }
   ~CatalogViewerContents() override {
     table_view_->SetModel(nullptr);
@@ -117,13 +117,6 @@ class CatalogViewerContents : public views::WidgetDelegateView,
     observer_ = observer;
   }
 
-  void OnGotCatalogEntries(mojo::Array<catalog::mojom::EntryPtr> entries) {
-    entries_.clear();
-    for (auto& entry : entries)
-      entries_.push_back(Entry(entry->display_name, entry->name));
-    observer_->OnModelChanged();
-  }
-
   static std::vector<ui::TableColumn> GetColumns() {
     std::vector<ui::TableColumn> columns;
 
@@ -157,8 +150,6 @@ class CatalogViewerContents : public views::WidgetDelegateView,
 
   std::vector<Entry> entries_;
 
-  base::WeakPtrFactory<CatalogViewerContents> weak_ptr_factory_;
-
   DISALLOW_COPY_AND_ASSIGN(CatalogViewerContents);
 };
 
@@ -175,19 +166,18 @@ void CatalogViewer::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void CatalogViewer::Initialize(shell::Connector* connector,
-                               const shell::Identity& identity,
-                               uint32_t id) {
-  connector_ = connector;
-  tracing_.Initialize(connector, identity.name());
+void CatalogViewer::OnStart(const shell::Identity& identity) {
+  tracing_.Initialize(connector(), identity.name());
 
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
+  aura_init_.reset(
+      new views::AuraInit(connector(), "views_mus_resources.pak"));
   window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector, identity);
+      views::WindowManagerConnection::Create(connector(), identity);
 }
 
-bool CatalogViewer::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mojom::Launchable>(this);
+bool CatalogViewer::OnConnect(const shell::Identity& remote_identity,
+                              shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mojom::Launchable>(this);
   return true;
 }
 
@@ -199,7 +189,7 @@ void CatalogViewer::Launch(uint32_t what, mojom::LaunchMode how) {
     return;
   }
   catalog::mojom::CatalogPtr catalog;
-  connector_->ConnectToInterface("mojo:catalog", &catalog);
+  connector()->ConnectToInterface("mojo:catalog", &catalog);
 
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       new CatalogViewerContents(this, std::move(catalog)), nullptr,
@@ -208,7 +198,7 @@ void CatalogViewer::Launch(uint32_t what, mojom::LaunchMode how) {
   windows_.push_back(window);
 }
 
-void CatalogViewer::Create(shell::Connection* connection,
+void CatalogViewer::Create(const shell::Identity& remote_identity,
                            mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

@@ -14,14 +14,6 @@ Polymer({
 
   properties: {
     /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * Represents the state of the main toggle shown for the category. For
      * example, the Location category can be set to Block/Ask so false, in that
      * case, represents Block and true represents Ask.
@@ -77,6 +69,7 @@ Polymer({
       case settings.ContentSettingsTypes.JAVASCRIPT:
       case settings.ContentSettingsTypes.KEYGEN:
       case settings.ContentSettingsTypes.POPUPS:
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
         // "Allowed" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
             this.category,
@@ -85,8 +78,8 @@ Polymer({
                 settings.PermissionValues.BLOCK);
         break;
       case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
-      case settings.ContentSettingsTypes.GEOLOCATION:
       case settings.ContentSettingsTypes.CAMERA:
+      case settings.ContentSettingsTypes.GEOLOCATION:
       case settings.ContentSettingsTypes.MIC:
       case settings.ContentSettingsTypes.NOTIFICATIONS:
       case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:

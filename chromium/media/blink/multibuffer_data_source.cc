@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "media/base/media_log.h"
+#include "media/blink/buffered_data_source_host_impl.h"
 #include "media/blink/multibuffer_reader.h"
 #include "net/base/net_errors.h"
 
@@ -232,7 +233,7 @@ void MultibufferDataSource::OnRedirect(
 }
 
 void MultibufferDataSource::SetPreload(Preload preload) {
-  DVLOG(1) << __FUNCTION__ << "(" << preload << ")";
+  DVLOG(1) << __func__ << "(" << preload << ")";
   DCHECK(render_task_runner_->BelongsToCurrentThread());
   preload_ = preload;
   UpdateBufferSizes();
@@ -415,7 +416,7 @@ void MultibufferDataSource::ReadTask() {
   } else {
     reader_->Wait(1, base::Bind(&MultibufferDataSource::ReadTask,
                                 weak_factory_.GetWeakPtr()));
-    UpdateLoadingState(false);
+    UpdateLoadingState_Locked(false);
   }
 }
 
@@ -506,35 +507,39 @@ void MultibufferDataSource::StartCallback() {
 
   // Even if data is cached, say that we're loading at this point for
   // compatibility.
-  UpdateLoadingState(true);
+  UpdateLoadingState_Locked(true);
 }
 
 void MultibufferDataSource::ProgressCallback(int64_t begin, int64_t end) {
-  DVLOG(1) << __FUNCTION__ << "(" << begin << ", " << end << ")";
+  DVLOG(1) << __func__ << "(" << begin << ", " << end << ")";
   DCHECK(render_task_runner_->BelongsToCurrentThread());
 
   if (assume_fully_buffered())
     return;
 
+  base::AutoLock auto_lock(lock_);
+
   if (end > begin) {
     // TODO(scherkus): we shouldn't have to lock to signal host(), see
     // http://crbug.com/113712 for details.
-    base::AutoLock auto_lock(lock_);
     if (stop_signal_received_)
       return;
 
     host_->AddBufferedByteRange(begin, end);
   }
 
-  UpdateLoadingState(false);
+  UpdateLoadingState_Locked(false);
 }
 
-void MultibufferDataSource::UpdateLoadingState(bool force_loading) {
-  DVLOG(1) << __FUNCTION__;
+void MultibufferDataSource::UpdateLoadingState_Locked(bool force_loading) {
+  DVLOG(1) << __func__;
+  lock_.AssertAcquired();
   if (assume_fully_buffered())
     return;
   // Update loading state.
   bool is_loading = !!reader_ && reader_->IsLoading();
+  if (read_op_)
+    is_loading = true;
   if (force_loading || is_loading != loading_) {
     loading_ = is_loading || force_loading;
 
@@ -548,7 +553,7 @@ void MultibufferDataSource::UpdateLoadingState(bool force_loading) {
 }
 
 void MultibufferDataSource::UpdateBufferSizes() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   if (!reader_)
     return;
 

@@ -99,6 +99,7 @@ def parse_args(args):
                 "--adb-device",
                 action="append",
                 default=[],
+                dest='adb_devices',
                 help="Run Android layout tests on these devices."),
             # FIXME: Flip this to be off by default once we can log the
             # device setup more cleanly.
@@ -473,11 +474,11 @@ def _set_up_derived_options(port, options, args):
         options.batch_size = port.default_batch_size()
 
     if not options.child_processes:
-        options.child_processes = os.environ.get("WEBKIT_TEST_CHILD_PROCESSES",
-                                                 str(port.default_child_processes()))
+        options.child_processes = port.host.environ.get("WEBKIT_TEST_CHILD_PROCESSES",
+                                                        str(port.default_child_processes()))
     if not options.max_locked_shards:
-        options.max_locked_shards = int(os.environ.get("WEBKIT_TEST_MAX_LOCKED_SHARDS",
-                                                       str(port.default_max_locked_shards())))
+        options.max_locked_shards = int(port.host.environ.get("WEBKIT_TEST_MAX_LOCKED_SHARDS",
+                                                              str(port.default_max_locked_shards())))
 
     if not options.configuration:
         options.configuration = port.default_configuration()
@@ -510,7 +511,7 @@ def _set_up_derived_options(port, options, args):
             # to Port.
             filesystem = port.host.filesystem
             if not filesystem.isdir(filesystem.join(port.layout_tests_dir(), directory)):
-                _log.warning("'%s' was passed to --pixel-test-directories, which doesn't seem to be a directory" % str(directory))
+                _log.warning("'%s' was passed to --pixel-test-directories, which doesn't seem to be a directory", str(directory))
             else:
                 verified_dirs.add(directory)
 
@@ -567,13 +568,13 @@ def run(port, options, args, logging_stream, stdout):
             _log.debug("Dashboard generated.")
 
         _log.debug("")
-        _log.debug("Testing completed, Exit status: %d" % run_details.exit_code)
+        _log.debug("Testing completed, Exit status: %d", run_details.exit_code)
 
         # Temporary process dump for debugging windows timeout issues, see crbug.com/522396.
         _log.debug("")
         _log.debug("Process dump:")
         for process in port.host.executive.process_dump():
-            _log.debug("\t%s" % process)
+            _log.debug("\t%s", process)
 
         return run_details
 

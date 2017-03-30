@@ -146,7 +146,6 @@ component("base") {
     "default_theme_provider_mac.mm",
     "device_form_factor.h",
     "device_form_factor_android.cc",
-    "device_form_factor_android.h",
     "device_form_factor_desktop.cc",
     "device_form_factor_ios.mm",
     "dragdrop/drag_drop_types.h",
@@ -161,6 +160,10 @@ component("base") {
     "dragdrop/drop_target_win.h",
     "dragdrop/os_exchange_data.cc",
     "dragdrop/os_exchange_data.h",
+    "dragdrop/os_exchange_data_provider_builder_mac.h",
+    "dragdrop/os_exchange_data_provider_builder_mac.mm",
+    "dragdrop/os_exchange_data_provider_factory.cc",
+    "dragdrop/os_exchange_data_provider_factory.h",
     "dragdrop/os_exchange_data_provider_mac.h",
     "dragdrop/os_exchange_data_provider_mac.mm",
     "dragdrop/os_exchange_data_provider_win.cc",
@@ -299,6 +302,7 @@ component("base") {
       "accelerators/accelerator_history.h",
       "accelerators/accelerator_manager.cc",
       "accelerators/accelerator_manager.h",
+      "accelerators/accelerator_manager_delegate.h",
       "base_window.cc",
       "base_window.h",
       "clipboard/clipboard.cc",
@@ -556,16 +560,15 @@ component("base") {
       "dragdrop/drop_target_event.h",
       "dragdrop/os_exchange_data.cc",
       "dragdrop/os_exchange_data.h",
+      "dragdrop/os_exchange_data_provider_factory.cc",
+      "dragdrop/os_exchange_data_provider_factory.h",
       "nine_image_painter_factory.cc",
       "nine_image_painter_factory.h",
     ]
   }
 
   if (is_android) {
-    deps += [
-      ":ui_base_jni_headers",
-      "//ui/android:ui_java",
-    ]
+    deps += [ ":ui_base_jni_headers" ]
 
     libs += [ "jnigraphics" ]
   }
@@ -611,7 +614,7 @@ component("base") {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "test/material_design_controller_test_api.cc",
@@ -753,6 +756,7 @@ test("ui_base_unittests") {
   } else {  # !is_ios
     sources += [
       "accelerators/accelerator_manager_unittest.cc",
+      "accelerators/accelerator_unittest.cc",
       "accelerators/menu_label_accelerator_util_linux_unittest.cc",
       "clipboard/custom_data_helper_unittest.cc",
       "cocoa/base_view_unittest.mm",
@@ -792,9 +796,6 @@ test("ui_base_unittests") {
     ]
     if (is_linux && use_aura && !is_chromeos) {
       sources += [ "ime/input_method_auralinux_unittest.cc" ]
-    }
-    if (is_mac) {
-      sources += [ "resource/resource_bundle_mac_unittest.mm" ]
     }
     if (use_x11) {
       sources += [ "ime/composition_text_util_pango_unittest.cc" ]
@@ -946,7 +947,7 @@ test("ui_base_unittests") {
   }
 }
 
-if (is_mac) {
+if (is_mac && !is_vivaldi) {
   mac_framework_bundle("ui_unittests_framework") {
     testonly = true
     deps = [

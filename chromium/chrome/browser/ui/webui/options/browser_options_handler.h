@@ -25,7 +25,7 @@
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync_driver/sync_service_observer.h"
+#include "components/sync/driver/sync_service_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -33,7 +33,6 @@
 #include "ui/shell_dialogs/select_file_dialog.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/policy/consumer_management_service.h"
 #include "chrome/browser/chromeos/system/pointer_device_observer.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #else  // defined(OS_CHROMEOS)
@@ -64,7 +63,6 @@ class BrowserOptionsHandler
       public ui::SelectFileDialog::Listener,
 #if defined(OS_CHROMEOS)
       public chromeos::system::PointerDeviceObserver::Observer,
-      public policy::ConsumerManagementService::Observer,
       public ArcAppListPrefs::Observer,
 #endif
       public TemplateURLServiceObserver,
@@ -146,9 +144,6 @@ class BrowserOptionsHandler
 
   // Will be called when powerwash dialog is shown.
   void OnPowerwashDialogShow(const base::ListValue* args);
-
-  // ConsumerManagementService::Observer:
-  void OnConsumerManagementStatusChanged() override;
 
   // ArcAppListPrefs::Observer overrides.
   void OnAppReadyChanged(const std::string& app_id, bool ready) override;
@@ -337,6 +332,9 @@ class BrowserOptionsHandler
 
   // Called to show Android apps settings.
   void ShowAndroidAppsSettings(const base::ListValue* args);
+
+  // Called to show TalkBack settings.
+  void ShowAccessibilityTalkBackSettings(const base::ListValue *args);
 #endif
 
   // Setup the visibility for the metrics reporting setting.

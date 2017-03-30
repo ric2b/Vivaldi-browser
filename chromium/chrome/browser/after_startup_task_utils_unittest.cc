@@ -73,9 +73,9 @@ class AfterStartupTaskTest : public testing::Test {
   AfterStartupTaskTest()
       : browser_thread_bundle_(TestBrowserThreadBundle::REAL_DB_THREAD) {
     ui_thread_ = new WrappedTaskRunner(
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));
     db_thread_ = new WrappedTaskRunner(
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
     AfterStartupTaskUtils::UnsafeResetForTesting();
   }
 
@@ -197,4 +197,30 @@ TEST_F(AfterStartupTaskTest, PostTask) {
   RunLoop().RunUntilIdle();
   EXPECT_EQ(2, db_thread_->ran_task_count());
   EXPECT_EQ(2, ui_thread_->ran_task_count());
+}
+
+// Verify that posting to an AfterStartupTaskUtils::Runner bound to |db_thread_|
+// results in the same behavior as posting via
+// AfterStartupTaskUtils::PostTask(..., db_thread_, ...).
+TEST_F(AfterStartupTaskTest, AfterStartupTaskUtilsRunner) {
+  scoped_refptr<base::TaskRunner> after_startup_runner =
+      make_scoped_refptr(new AfterStartupTaskUtils::Runner(db_thread_));
+
+  EXPECT_FALSE(AfterStartupTaskUtils::IsBrowserStartupComplete());
+  after_startup_runner->PostTask(
+      FROM_HERE, base::Bind(&AfterStartupTaskTest::VerifyExpectedThread,
+                            BrowserThread::DB));
+
+  RunLoop().RunUntilIdle();
+  EXPECT_FALSE(AfterStartupTaskUtils::IsBrowserStartupComplete());
+  EXPECT_EQ(0, db_thread_->total_task_count());
+
+  AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
+  EXPECT_EQ(1, db_thread_->posted_task_count());
+
+  FlushDBThread();
+  RunLoop().RunUntilIdle();
+  EXPECT_EQ(1, db_thread_->ran_task_count());
+
+  EXPECT_EQ(0, ui_thread_->total_task_count());
 }

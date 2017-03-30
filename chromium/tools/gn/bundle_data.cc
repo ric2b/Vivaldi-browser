@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #include "tools/gn/filesystem_utils.h"
+#include "tools/gn/label_pattern.h"
 #include "tools/gn/output_file.h"
 #include "tools/gn/settings.h"
 #include "tools/gn/substitution_writer.h"
@@ -52,6 +53,10 @@ BundleData::~BundleData() {}
 
 void BundleData::AddBundleData(const Target* target) {
   DCHECK_EQ(target->output_type(), Target::BUNDLE_DATA);
+  for (const auto& pattern : bundle_deps_filter_) {
+    if (pattern.Matches(target->label()))
+      return;
+  }
   bundle_deps_.push_back(target);
 }
 
@@ -148,7 +153,7 @@ SourceFile BundleData::GetCompiledAssetCatalogPath() const {
 }
 
 SourceFile BundleData::GetBundleRootDirOutput(const Settings* settings) const {
-  const SourceDir& build_dir = settings->build_settings()->build_dir();
+  const SourceDir& build_dir = settings->toolchain_output_dir();
   std::string bundle_root_relative = RebasePath(root_dir().value(), build_dir);
 
   size_t first_component = bundle_root_relative.find('/');

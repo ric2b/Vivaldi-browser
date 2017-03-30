@@ -109,12 +109,6 @@ const int kMouseMoveCountBeforeConsiderReal = 3;
 // Amount of time we delay before resizing after a close from a touch.
 const int kTouchResizeLayoutTimeMS = 2000;
 
-// Amount to adjust the clip by when the tab is stacked before the active index.
-const int kStackedTabLeftClip = 20;
-
-// Amount to adjust the clip by when the tab is stacked after the active index.
-const int kStackedTabRightClip = 20;
-
 #if defined(OS_MACOSX)
 const int kPinnedToNonPinnedOffset = 2;
 #else
@@ -1165,6 +1159,11 @@ bool TabStrip::ShouldHideCloseButtonForInactiveTabs() {
       switches::kDisableHideInactiveStackedTabCloseButtons);
 }
 
+bool TabStrip::MaySetClip() {
+  // Only touch layout needs to restrict the clip.
+  return touch_layout_ || IsStackingDraggedTabs();
+}
+
 void TabStrip::SelectTab(Tab* tab) {
   int model_index = GetModelIndexOfTab(tab);
   if (IsValidModelIndex(model_index))
@@ -1286,7 +1285,7 @@ void TabStrip::MaybeStartDrag(
   drag_controller_.reset();
   TabDragController::MoveBehavior move_behavior =
       TabDragController::REORDER;
-  // Use MOVE_VISIBILE_TABS in the following conditions:
+  // Use MOVE_VISIBLE_TABS in the following conditions:
   // . Mouse event generated from touch and the left button is down (the right
   //   button corresponds to a long press, which we want to reorder).
   // . Gesture tap down and control key isn't down.
@@ -1300,7 +1299,7 @@ void TabStrip::MaybeStartDrag(
          (!(event.flags() & ui::EF_FROM_TOUCH) &&
           static_cast<const ui::MouseEvent&>(event).IsControlDown()))) ||
        (event.type() == ui::ET_GESTURE_TAP_DOWN && !event.IsControlDown()))) {
-    move_behavior = TabDragController::MOVE_VISIBILE_TABS;
+    move_behavior = TabDragController::MOVE_VISIBLE_TABS;
   }
 
   drag_controller_.reset(new TabDragController);
@@ -1346,9 +1345,11 @@ void TabStrip::OnMouseEventInTab(views::View* source,
   UpdateStackedLayoutFromMouseEvent(source, event);
 }
 
-bool TabStrip::ShouldPaintTab(const Tab* tab, gfx::Rect* clip) {
-  // Only touch layout needs to restrict the clip.
-  if (!touch_layout_ && !IsStackingDraggedTabs())
+bool TabStrip::ShouldPaintTab(
+    const Tab* tab,
+    const base::Callback<gfx::Path(const gfx::Size&)>& border_callback,
+    gfx::Path* clip) {
+  if (!MaySetClip())
     return true;
 
   int index = GetModelIndexOfTab(tab);
@@ -1360,30 +1361,30 @@ bool TabStrip::ShouldPaintTab(const Tab* tab, gfx::Rect* clip) {
   if (active_index == tab_count())
     active_index--;
 
+  const int current_x = tab_at(index)->x();
   if (index < active_index) {
-    if (tab_at(index)->x() == tab_at(index + 1)->x())
+    const int next_x = tab_at(index + 1)->x();
+    if (current_x == next_x)
       return false;
 
-    if (tab_at(index)->x() > tab_at(index + 1)->x())
+    if (current_x > next_x)
       return true;  // Can happen during dragging.
 
-    clip->SetRect(
-        0, 0, tab_at(index + 1)->x() - tab_at(index)->x() + kStackedTabLeftClip,
-        tab_at(index)->height());
+    *clip = border_callback.Run(tab_at(index + 1)->size());
+    clip->offset(SkIntToScalar(next_x - current_x), 0);
   } else if (index > active_index && index > 0) {
-    const gfx::Rect& tab_bounds(tab_at(index)->bounds());
-    const gfx::Rect& previous_tab_bounds(tab_at(index - 1)->bounds());
-    if (tab_bounds.x() == previous_tab_bounds.x())
+    const gfx::Rect& previous_bounds(tab_at(index - 1)->bounds());
+    const int previous_x = previous_bounds.x();
+    if (current_x == previous_x)
       return false;
 
-    if (tab_bounds.x() < previous_tab_bounds.x())
+    if (current_x < previous_x)
       return true;  // Can happen during dragging.
 
-    if (previous_tab_bounds.right() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP) !=
-        tab_bounds.x()) {
-      int x = previous_tab_bounds.right() - tab_bounds.x() -
-          kStackedTabRightClip;
-      clip->SetRect(x, 0, tab_bounds.width() - x, tab_bounds.height());
+    if (previous_bounds.right() - GetLayoutConstant(TABSTRIP_TAB_OVERLAP) !=
+        current_x) {
+      *clip = border_callback.Run(tab_at(index - 1)->size());
+      clip->offset(SkIntToScalar(previous_x - current_x), 0);
     }
   }
   return true;
@@ -1472,8 +1473,8 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     // We pass false for |lcd_text_requires_opaque_layer| so that background
     // tab titles will get LCD AA.  These are rendered opaquely on an opaque tab
     // background before the layer is composited, so this is safe.
-    ui::CompositingRecorder opacity_recorder(context, size(),
-                                             GetInactiveAlpha(false), false);
+    ui::CompositingRecorder opacity_recorder(context, GetInactiveAlpha(false),
+                                             false);
 
     PaintClosingTabs(tab_count(), context);
 
@@ -1532,8 +1533,8 @@ void TabStrip::PaintChildren(const ui::PaintContext& context) {
     // NewTabButton::PaintFill() for why we don't do this for the pressed state.
     // This call doesn't need to set |lcd_text_requires_opaque_layer| to false
     // because no text will be drawn.
-    ui::CompositingRecorder opacity_recorder(context, size(),
-                                             GetInactiveAlpha(true), true);
+    ui::CompositingRecorder opacity_recorder(context, GetInactiveAlpha(true),
+                                             true);
     newtab_button_->Paint(context);
   } else {
     newtab_button_->Paint(context);
@@ -1945,7 +1946,7 @@ void TabStrip::StackDraggedTabs(int delta) {
 bool TabStrip::IsStackingDraggedTabs() const {
   return drag_controller_.get() && drag_controller_->started_drag() &&
       (drag_controller_->move_behavior() ==
-       TabDragController::MOVE_VISIBILE_TABS);
+       TabDragController::MOVE_VISIBLE_TABS);
 }
 
 void TabStrip::LayoutDraggedTabsAt(const Tabs& tabs,
@@ -2618,23 +2619,10 @@ int TabStrip::GetStartXForNormalTabs() const {
 }
 
 Tab* TabStrip::FindTabForEvent(const gfx::Point& point) {
-  if (touch_layout_) {
-    int active_tab_index = touch_layout_->active_index();
-    if (active_tab_index != -1) {
-      Tab* tab = FindTabForEventFrom(point, active_tab_index, -1);
-      if (!tab)
-        tab = FindTabForEventFrom(point, active_tab_index + 1, 1);
-      return tab;
-    }
-    if (tab_count())
-      return FindTabForEventFrom(point, 0, 1);
-  } else {
-    for (int i = 0; i < tab_count(); ++i) {
-      if (IsPointInTab(tab_at(i), point))
-        return tab_at(i);
-    }
-  }
-  return NULL;
+  DCHECK(touch_layout_);
+  int active_tab_index = touch_layout_->active_index();
+  Tab* tab = FindTabForEventFrom(point, active_tab_index, -1);
+  return tab ? tab : FindTabForEventFrom(point, active_tab_index + 1, 1);
 }
 
 Tab* TabStrip::FindTabForEventFrom(const gfx::Point& point,
@@ -2650,20 +2638,32 @@ Tab* TabStrip::FindTabForEventFrom(const gfx::Point& point,
   return NULL;
 }
 
-views::View* TabStrip::FindTabHitByPoint(const gfx::Point& point) {
-  // The display order doesn't necessarily match the child list order, so we
-  // walk the display list hit-testing Tabs. Since the active tab always
-  // renders on top of adjacent tabs, it needs to be hit-tested before any
-  // left-adjacent Tab, so we look ahead for it as we walk.
+Tab* TabStrip::FindTabHitByPoint(const gfx::Point& point) {
+  // The display order doesn't necessarily match the child order, so we iterate
+  // in display order.
   for (int i = 0; i < tab_count(); ++i) {
-    Tab* next_tab = i < (tab_count() - 1) ? tab_at(i + 1) : NULL;
-    if (next_tab && next_tab->IsActive() && IsPointInTab(next_tab, point))
+    // If we don't first exclude points outside the current tab, the code below
+    // will return the wrong tab if the next tab is selected, the following tab
+    // is active, and |point| is in the overlap region between the two.
+    Tab* tab = tab_at(i);
+    if (!IsPointInTab(tab, point))
+      continue;
+
+    // Selected tabs render atop unselected ones, and active tabs render atop
+    // everything.  Check whether the next tab renders atop this one and |point|
+    // is in the overlap region.
+    Tab* next_tab = i < (tab_count() - 1) ? tab_at(i + 1) : nullptr;
+    if (next_tab &&
+        (next_tab->IsActive() ||
+         (next_tab->IsSelected() && !tab->IsSelected())) &&
+        IsPointInTab(next_tab, point))
       return next_tab;
-    if (IsPointInTab(tab_at(i), point))
-      return tab_at(i);
+
+    // This is the topmost tab for this point.
+    return tab;
   }
 
-  return NULL;
+  return nullptr;
 }
 
 std::vector<int> TabStrip::GetTabXCoordinates() {
@@ -2829,7 +2829,8 @@ void TabStrip::OnGestureEvent(ui::GestureEvent* event) {
     case ui::ET_GESTURE_LONG_TAP: {
       EndDrag(END_DRAG_CANCEL);
       gfx::Point local_point = event->location();
-      Tab* tab = FindTabForEvent(local_point);
+      Tab* tab = touch_layout_ ? FindTabForEvent(local_point)
+                               : FindTabHitByPoint(local_point);
       if (tab) {
         ConvertPointToScreen(this, &local_point);
         ShowContextMenuForTab(tab, local_point, ui::MENU_SOURCE_TOUCH);

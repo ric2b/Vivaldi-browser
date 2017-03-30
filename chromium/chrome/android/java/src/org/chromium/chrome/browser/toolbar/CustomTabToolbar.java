@@ -105,7 +105,6 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         }
     }
 
-    private static final int BRAND_COLOR_TRANSITION_DURATION_MS = 250;
     private static final int TITLE_ANIM_DELAY_MS = 800;
     private static final int STATE_DOMAIN_ONLY = 0;
     private static final int STATE_TITLE_ONLY = 1;
@@ -552,7 +551,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
         if (background.getColor() == finalColor) return;
 
         mBrandColorTransitionAnimation = ValueAnimator.ofFloat(0, 1)
-                .setDuration(BRAND_COLOR_TRANSITION_DURATION_MS);
+                .setDuration(ToolbarPhone.THEME_COLOR_TRANSITION_DURATION);
         mBrandColorTransitionAnimation.setInterpolator(BakedBezierInterpolator.TRANSFORM_CURVE);
         mBrandColorTransitionAnimation.addUpdateListener(new AnimatorUpdateListener() {
             @Override
@@ -685,7 +684,7 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
                     .getSystemService(Context.CLIPBOARD_SERVICE);
             Tab tab = getCurrentTab();
             if (tab == null) return false;
-            String url = tab.isOfflinePage() ? tab.getOfflinePageOriginalUrl() : tab.getUrl();
+            String url = tab.getOriginalUrl();
             ClipData clip = ClipData.newPlainText("url", url);
             clipboard.setPrimaryClip(clip);
             Toast.makeText(getContext(), R.string.url_copied, Toast.LENGTH_SHORT).show();
@@ -723,6 +722,14 @@ public class CustomTabToolbar extends ToolbarLayout implements LocationBar,
 
     @Override
     public void showUrlBarCursorWithoutFocusAnimations() {}
+
+    @Override
+    public boolean isUrlBarFocused() {
+        return false;
+    }
+
+    @Override
+    public void selectAll() {}
 
     @Override
     public void revertChanges() {}

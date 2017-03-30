@@ -23,9 +23,10 @@ SurfaceHittest::SurfaceHittest(SurfaceHittestDelegate* delegate,
 
 SurfaceHittest::~SurfaceHittest() {}
 
-SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(SurfaceId root_surface_id,
-                                                  const gfx::Point& point,
-                                                  gfx::Transform* transform) {
+SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(
+    const SurfaceId& root_surface_id,
+    const gfx::Point& point,
+    gfx::Transform* transform) {
   SurfaceId out_surface_id = root_surface_id;
 
   // Reset the output transform to identity.
@@ -40,9 +41,10 @@ SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(SurfaceId root_surface_id,
   return out_surface_id;
 }
 
-bool SurfaceHittest::GetTransformToTargetSurface(SurfaceId root_surface_id,
-                                                 SurfaceId target_surface_id,
-                                                 gfx::Transform* transform) {
+bool SurfaceHittest::GetTransformToTargetSurface(
+    const SurfaceId& root_surface_id,
+    const SurfaceId& target_surface_id,
+    gfx::Transform* transform) {
   // Reset the output transform to identity.
   if (transform)
     *transform = gfx::Transform();
@@ -53,8 +55,32 @@ bool SurfaceHittest::GetTransformToTargetSurface(SurfaceId root_surface_id,
                                              transform);
 }
 
+bool SurfaceHittest::TransformPointToTargetSurface(
+    const SurfaceId& original_surface_id,
+    const SurfaceId& target_surface_id,
+    gfx::Point* point) {
+  gfx::Transform transform;
+  // Two possibilities need to be considered: original_surface_id can be
+  // embedded in target_surface_id, or vice versa.
+  if (GetTransformToTargetSurface(target_surface_id, original_surface_id,
+                                  &transform)) {
+    if (transform.GetInverse(&transform))
+      transform.TransformPoint(point);
+    else
+      return false;
+  } else if (GetTransformToTargetSurface(original_surface_id, target_surface_id,
+                                         &transform)) {
+    // No need to invert the transform matrix in this case.
+    transform.TransformPoint(point);
+  } else {
+    return false;
+  }
+
+  return true;
+}
+
 bool SurfaceHittest::GetTargetSurfaceAtPointInternal(
-    SurfaceId surface_id,
+    const SurfaceId& surface_id,
     const RenderPassId& render_pass_id,
     const gfx::Point& point_in_root_target,
     std::set<const RenderPass*>* referenced_passes,
@@ -148,8 +174,8 @@ bool SurfaceHittest::GetTargetSurfaceAtPointInternal(
 }
 
 bool SurfaceHittest::GetTransformToTargetSurfaceInternal(
-    SurfaceId root_surface_id,
-    SurfaceId target_surface_id,
+    const SurfaceId& root_surface_id,
+    const SurfaceId& target_surface_id,
     const RenderPassId& render_pass_id,
     std::set<const RenderPass*>* referenced_passes,
     gfx::Transform* out_transform) {
@@ -228,7 +254,7 @@ bool SurfaceHittest::GetTransformToTargetSurfaceInternal(
 }
 
 const RenderPass* SurfaceHittest::GetRenderPassForSurfaceById(
-    SurfaceId surface_id,
+    const SurfaceId& surface_id,
     const RenderPassId& render_pass_id) {
   Surface* surface = manager_->GetSurfaceForId(surface_id);
   if (!surface)

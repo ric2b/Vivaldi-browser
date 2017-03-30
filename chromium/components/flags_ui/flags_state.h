@@ -10,12 +10,14 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 
 namespace base {
+class FeatureList;
 class ListValue;
 }
 
@@ -80,9 +82,15 @@ class FlagsState {
   void ResetAllFlags(FlagsStorage* flags_storage);
   void Reset();
 
-  // Registers variations parameter values stored in |flags_storage| (previously
-  // selected in about:flags).
-  void RegisterAllFeatureVariationParameters(FlagsStorage* flags_storage);
+  // Registers variations parameter values selected for features in about:flags.
+  // The selected flags are retrieved from |flags_storage|, the registered
+  // variation parameters are connected to their corresponding features in
+  // |feature_list|. Returns the (possibly empty) comma separated list of
+  // additional variation ids to register in the MetricsService that come from
+  // variations selected using chrome://flags.
+  std::vector<std::string> RegisterAllFeatureVariationParameters(
+      FlagsStorage* flags_storage,
+      base::FeatureList* feature_list);
 
   // Gets the list of feature entries. Entries that are available for the
   // current platform are appended to |supported_entries|; all other entries are

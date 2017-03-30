@@ -70,8 +70,12 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync_driver/invalidation_helper.h"
-#include "components/sync_driver/sync_driver_switches.h"
+#include "components/sync/driver/invalidation_helper.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/engine_impl/sync_scheduler_impl.h"
+#include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/fake_server/fake_server.h"
+#include "components/sync/test/fake_server/fake_server_network_resources.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
@@ -84,10 +88,6 @@
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
-#include "sync/engine/sync_scheduler_impl.h"
-#include "sync/protocol/sync.pb.h"
-#include "sync/test/fake_server/fake_server.h"
-#include "sync/test/fake_server/fake_server_network_resources.h"
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
@@ -145,7 +145,8 @@ class SyncServerStatusChecker : public net::URLFetcherDelegate {
     source->GetResponseAsString(&data);
     running_ =
         (source->GetStatus().status() == net::URLRequestStatus::SUCCESS &&
-        source->GetResponseCode() == 200 && data.find("ok") == 0);
+         source->GetResponseCode() == 200 &&
+         base::StartsWith(data, "ok", base::CompareCase::SENSITIVE));
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
@@ -712,7 +713,7 @@ void SyncTest::TearDownInProcessBrowserTestFixture() {
 
 void SyncTest::WaitForDataModels(Profile* profile) {
   bookmarks::test::WaitForBookmarkModelToLoad(
-      BookmarkModelFactory::GetForProfile(profile));
+      BookmarkModelFactory::GetForBrowserContext(profile));
   ui_test_utils::WaitForHistoryToLoad(HistoryServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS));
   search_test_utils::WaitForTemplateURLServiceToLoad(

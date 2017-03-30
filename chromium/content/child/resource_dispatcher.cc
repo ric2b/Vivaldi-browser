@@ -28,6 +28,7 @@
 #include "content/child/shared_memory_received_data_factory.h"
 #include "content/child/site_isolation_stats_gatherer.h"
 #include "content/child/sync_load_response.h"
+#include "content/child/url_response_body_consumer.h"
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_messages.h"
@@ -39,6 +40,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
@@ -72,6 +74,48 @@ int MakeRequestID() {
   static int next_request_id = 0;
   return next_request_id++;
 }
+
+class URLLoaderClientImpl final : public mojom::URLLoaderClient {
+ public:
+  URLLoaderClientImpl(int request_id,
+                      ResourceDispatcher* resource_dispatcher,
+                      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : binding_(this),
+        request_id_(request_id),
+        resource_dispatcher_(resource_dispatcher),
+        task_runner_(std::move(task_runner)) {}
+  ~URLLoaderClientImpl() override {
+    if (body_consumer_)
+      body_consumer_->Cancel();
+  }
+
+  void OnReceiveResponse(const ResourceResponseHead& response_head) override {
+    resource_dispatcher_->OnMessageReceived(
+        ResourceMsg_ReceivedResponse(request_id_, response_head));
+  }
+
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override {
+    DCHECK(!body_consumer_);
+    body_consumer_ = new URLResponseBodyConsumer(
+        request_id_, resource_dispatcher_, std::move(body), task_runner_.get());
+  }
+
+  void OnComplete(const ResourceRequestCompletionStatus& status) override {
+    body_consumer_->OnComplete(status);
+  }
+
+  mojom::URLLoaderClientPtr CreateInterfacePtrAndBind() {
+    return binding_.CreateInterfacePtrAndBind();
+  }
+
+ private:
+  mojo::Binding<mojom::URLLoaderClient> binding_;
+  scoped_refptr<URLResponseBodyConsumer> body_consumer_;
+  const int request_id_;
+  ResourceDispatcher* const resource_dispatcher_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+};
 
 }  // namespace
 
@@ -226,7 +270,8 @@ void ResourceDispatcher::OnSetDataBuffer(int request_id,
 void ResourceDispatcher::OnReceivedInlinedDataChunk(
     int request_id,
     const std::vector<char>& data,
-    int encoded_data_length) {
+    int encoded_data_length,
+    int encoded_body_length) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedInlinedDataChunk");
   DCHECK(!data.empty());
   DCHECK(base::FeatureList::IsEnabled(
@@ -247,14 +292,16 @@ void ResourceDispatcher::OnReceivedInlinedDataChunk(
   DCHECK(!request_info->buffer.get());
 
   std::unique_ptr<RequestPeer::ReceivedData> received_data(
-      new content::FixedReceivedData(data, encoded_data_length));
+      new content::FixedReceivedData(data, encoded_data_length,
+                                     encoded_body_length));
   request_info->peer->OnReceivedData(std::move(received_data));
 }
 
 void ResourceDispatcher::OnReceivedData(int request_id,
                                         int data_offset,
                                         int data_length,
-                                        int encoded_data_length) {
+                                        int encoded_data_length,
+                                        int encoded_body_length) {
   TRACE_EVENT0("loader", "ResourceDispatcher::OnReceivedData");
   DCHECK_GT(data_length, 0);
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
@@ -277,8 +324,8 @@ void ResourceDispatcher::OnReceivedData(int request_id,
     }
 
     std::unique_ptr<RequestPeer::ReceivedData> data =
-        request_info->received_data_factory->Create(data_offset, data_length,
-                                                    encoded_data_length);
+        request_info->received_data_factory->Create(
+            data_offset, data_length, encoded_data_length, encoded_body_length);
     // |data| takes care of ACKing.
     send_ack = false;
     request_info->peer->OnReceivedData(std::move(data));
@@ -471,7 +518,7 @@ void ResourceDispatcher::SetDefersLoading(int request_id, bool value) {
 void ResourceDispatcher::DidChangePriority(int request_id,
                                            net::RequestPriority new_priority,
                                            int intra_priority_value) {
-  DCHECK(ContainsKey(pending_requests_, request_id));
+  DCHECK(base::ContainsKey(pending_requests_, request_id));
   message_sender_->Send(new ResourceHostMsg_DidChangePriority(
       request_id, new_priority, intra_priority_value));
 }
@@ -542,11 +589,16 @@ void ResourceDispatcher::FlushDeferredMessages(int request_id) {
   }
 }
 
-void ResourceDispatcher::StartSync(const RequestInfo& request_info,
-                                   ResourceRequestBodyImpl* request_body,
-                                   SyncLoadResponse* response) {
+void ResourceDispatcher::StartSync(
+    const RequestInfo& request_info,
+    ResourceRequestBodyImpl* request_body,
+    SyncLoadResponse* response,
+    blink::WebURLRequest::LoadingIPCType ipc_type,
+    mojom::URLLoaderFactory* url_loader_factory) {
   std::unique_ptr<ResourceRequest> request =
       CreateRequest(request_info, request_body, NULL);
+  // TODO(yhirano): Use url_loader_factory otherwise.
+  DCHECK_EQ(blink::WebURLRequest::LoadingIPCType::ChromeIPC, ipc_type);
 
   SyncLoadResult result;
   IPC::SyncMessage* msg = new ResourceHostMsg_SyncLoad(
@@ -571,30 +623,44 @@ void ResourceDispatcher::StartSync(const RequestInfo& request_info,
   response->data.swap(result.data);
   response->download_file_path = result.download_file_path;
   response->socket_address = result.socket_address;
+  response->encoded_data_length = result.encoded_data_length;
+  response->encoded_body_length = result.encoded_body_length;
 }
 
-int ResourceDispatcher::StartAsync(const RequestInfo& request_info,
-                                   ResourceRequestBodyImpl* request_body,
-                                   std::unique_ptr<RequestPeer> peer) {
+int ResourceDispatcher::StartAsync(
+    const RequestInfo& request_info,
+    ResourceRequestBodyImpl* request_body,
+    std::unique_ptr<RequestPeer> peer,
+    blink::WebURLRequest::LoadingIPCType ipc_type,
+    mojom::URLLoaderFactory* url_loader_factory) {
   GURL frame_origin;
   std::unique_ptr<ResourceRequest> request =
       CreateRequest(request_info, request_body, &frame_origin);
 
   // Compute a unique request_id for this renderer process.
   int request_id = MakeRequestID();
-  pending_requests_[request_id] = base::WrapUnique(new PendingRequestInfo(
+  pending_requests_[request_id] = base::MakeUnique<PendingRequestInfo>(
       std::move(peer), request->resource_type, request->origin_pid,
-      frame_origin, request->url, request_info.download_to_file));
+      frame_origin, request->url, request_info.download_to_file);
 
-  if (resource_scheduling_filter_.get() &&
-      request_info.loading_web_task_runner) {
+  if (resource_scheduling_filter_.get() && request_info.loading_task_runner) {
     resource_scheduling_filter_->SetRequestIdTaskRunner(
-        request_id,
-        base::WrapUnique(request_info.loading_web_task_runner->clone()));
+        request_id, request_info.loading_task_runner);
   }
 
-  message_sender_->Send(new ResourceHostMsg_RequestResource(
-      request_info.routing_id, request_id, *request));
+  if (ipc_type == blink::WebURLRequest::LoadingIPCType::Mojo) {
+    std::unique_ptr<URLLoaderClientImpl> client(
+        new URLLoaderClientImpl(request_id, this, main_thread_task_runner_));
+    mojom::URLLoaderPtr url_loader;
+    url_loader_factory->CreateLoaderAndStart(
+        GetProxy(&url_loader), request_id, *request,
+        client->CreateInterfacePtrAndBind());
+    pending_requests_[request_id]->url_loader = std::move(url_loader);
+    pending_requests_[request_id]->url_loader_client = std::move(client);
+  } else {
+    message_sender_->Send(new ResourceHostMsg_RequestResource(
+        request_info.routing_id, request_id, *request));
+  }
 
   return request_id;
 }
@@ -604,7 +670,8 @@ void ResourceDispatcher::ToResourceResponseInfo(
     const ResourceResponseHead& browser_info,
     ResourceResponseInfo* renderer_info) const {
   *renderer_info = browser_info;
-  if (request_info.request_start.is_null() ||
+  if (base::TimeTicks::IsConsistentAcrossProcesses() ||
+      request_info.request_start.is_null() ||
       request_info.response_start.is_null() ||
       browser_info.request_start.is_null() ||
       browser_info.response_start.is_null() ||

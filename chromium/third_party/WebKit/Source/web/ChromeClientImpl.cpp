@@ -54,6 +54,16 @@
 #include "core/page/Page.h"
 #include "core/page/PopupOpeningObserver.h"
 #include "modules/accessibility/AXObject.h"
+#include "modules/audio_output_devices/AudioOutputDeviceClient.h"
+#include "modules/bluetooth/BluetoothSupplement.h"
+#include "modules/installedapp/InstalledAppController.h"
+#include "modules/mediastream/UserMediaController.h"
+#include "modules/notifications/NotificationPermissionClient.h"
+#include "modules/permissions/PermissionController.h"
+#include "modules/presentation/PresentationController.h"
+#include "modules/push_messaging/PushController.h"
+#include "modules/screen_orientation/ScreenOrientationController.h"
+#include "modules/vr/VRController.h"
 #include "platform/Cursor.h"
 #include "platform/FileChooser.h"
 #include "platform/Histogram.h"
@@ -90,11 +100,16 @@
 #include "public/web/WebUserGestureToken.h"
 #include "public/web/WebViewClient.h"
 #include "public/web/WebWindowFeatures.h"
+#include "web/AudioOutputDeviceClientImpl.h"
 #include "web/ColorChooserPopupUIController.h"
 #include "web/ColorChooserUIController.h"
 #include "web/DateTimeChooserImpl.h"
 #include "web/ExternalDateTimeChooser.h"
 #include "web/ExternalPopupMenu.h"
+#include "web/IndexedDBClientImpl.h"
+#include "web/LocalFileSystemClient.h"
+#include "web/NavigatorContentUtilsClientImpl.h"
+#include "web/NotificationPermissionClientImpl.h"
 #include "web/PopupMenuImpl.h"
 #include "web/WebFileChooserCompletionImpl.h"
 #include "web/WebFrameWidgetImpl.h"
@@ -185,13 +200,14 @@ void ChromeClientImpl::chromeDestroyed()
     // Our lifetime is bound to the WebViewImpl.
 }
 
-void ChromeClientImpl::setWindowRect(const IntRect& r)
+void ChromeClientImpl::setWindowRect(const IntRect& r, LocalFrame& frame)
 {
-    if (m_webView->client())
-        m_webView->client()->setWindowRect(r);
+    DCHECK_EQ(&frame, m_webView->mainFrameImpl()->frame());
+    WebWidgetClient* client = WebLocalFrameImpl::fromFrame(&frame)->frameWidget()->client();
+    client->setWindowRect(r);
 }
 
-IntRect ChromeClientImpl::windowRect()
+IntRect ChromeClientImpl::rootWindowRect()
 {
     WebRect rect;
     if (m_webView->client()) {
@@ -211,7 +227,7 @@ IntRect ChromeClientImpl::pageRect()
     // We hide the details of the window's border thickness from the web page by
     // simple re-using the window position here.  So, from the point-of-view of
     // the web page, the window has no border.
-    return windowRect();
+    return rootWindowRect();
 }
 
 void ChromeClientImpl::focus()
@@ -282,13 +298,13 @@ void updatePolicyForEvent(const WebInputEvent* inputEvent, NavigationPolicy* pol
         const WebMouseEvent* mouseEvent = static_cast<const WebMouseEvent*>(inputEvent);
 
         switch (mouseEvent->button) {
-        case WebMouseEvent::ButtonLeft:
+        case WebMouseEvent::Button::Left:
             buttonNumber = 0;
             break;
-        case WebMouseEvent::ButtonMiddle:
+        case WebMouseEvent::Button::Middle:
             buttonNumber = 1;
             break;
-        case WebMouseEvent::ButtonRight:
+        case WebMouseEvent::Button::Right:
             buttonNumber = 2;
             break;
         default:
@@ -570,9 +586,9 @@ IntRect ChromeClientImpl::viewportToScreen(const IntRect& rectInViewport, const 
 
     if (client) {
         client->convertViewportToWindow(&screenRect);
-        WebRect windowRect = client->windowRect();
-        screenRect.x += windowRect.x;
-        screenRect.y += windowRect.y;
+        WebRect viewRect = client->viewRect();
+        screenRect.x += viewRect.x;
+        screenRect.y += viewRect.y;
     }
 
     return screenRect;
@@ -732,13 +748,13 @@ Cursor ChromeClientImpl::lastSetCursorForTesting() const
     return m_lastSetMouseCursorForTesting;
 }
 
-void ChromeClientImpl::setCursor(const Cursor& cursor, LocalFrame* localRoot)
+void ChromeClientImpl::setCursor(const Cursor& cursor, LocalFrame* localFrame)
 {
     m_lastSetMouseCursorForTesting = cursor;
-    setCursor(WebCursorInfo(cursor), localRoot);
+    setCursor(WebCursorInfo(cursor), localFrame);
 }
 
-void ChromeClientImpl::setCursor(const WebCursorInfo& cursor, LocalFrame* localRoot)
+void ChromeClientImpl::setCursor(const WebCursorInfo& cursor, LocalFrame* localFrame)
 {
     if (m_cursorOverridden)
         return;
@@ -749,25 +765,15 @@ void ChromeClientImpl::setCursor(const WebCursorInfo& cursor, LocalFrame* localR
     if (m_webView->hasOpenedPopup())
         return;
 #endif
-    if (!m_webView->client())
-        return;
-    // TODO(kenrb, dcheng): For top-level frames we still use the WebView as
-    // a WebWidget. This special case will be removed when top-level frames
-    // get WebFrameWidgets.
-    if (localRoot->isMainFrame()) {
-        m_webView->client()->didChangeCursor(cursor);
-    } else {
-        WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localRoot);
-        DCHECK(webFrame);
-        DCHECK(webFrame->frameWidget());
-        if (toWebFrameWidgetImpl(webFrame->frameWidget())->client())
-            toWebFrameWidgetImpl(webFrame->frameWidget())->client()->didChangeCursor(cursor);
-    }
+
+    LocalFrame* localRoot = localFrame->localFrameRoot();
+    if (WebFrameWidgetBase* widget = WebLocalFrameImpl::fromFrame(localRoot)->frameWidget())
+        widget->client()->didChangeCursor(cursor);
 }
 
-void ChromeClientImpl::setCursorForPlugin(const WebCursorInfo& cursor, LocalFrame* localRoot)
+void ChromeClientImpl::setCursorForPlugin(const WebCursorInfo& cursor, LocalFrame* localFrame)
 {
-    setCursor(cursor, localRoot);
+    setCursor(cursor, localFrame);
 }
 
 void ChromeClientImpl::setCursorOverridden(bool overridden)
@@ -791,24 +797,15 @@ String ChromeClientImpl::acceptLanguages()
     return m_webView->client()->acceptLanguages();
 }
 
-void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer, LocalFrame* localRoot)
+void ChromeClientImpl::attachRootGraphicsLayer(GraphicsLayer* rootLayer, LocalFrame* localFrame)
 {
-    // FIXME: For top-level frames we still use the WebView as a WebWidget. This
-    // special case will be removed when top-level frames get WebFrameWidgets.
-    if (localRoot->isMainFrame()) {
-        m_webView->setRootGraphicsLayer(rootLayer);
-    } else {
-        WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localRoot);
-        // FIXME: The following conditional is only needed for staging until the
-        // Chromium patch lands that instantiates a WebFrameWidget.
-        if (!webFrame->frameWidget()) {
-            m_webView->setRootGraphicsLayer(rootLayer);
-            return;
-        }
-        DCHECK(webFrame);
-        DCHECK(webFrame->frameWidget());
-        toWebFrameWidgetImpl(webFrame->frameWidget())->setRootGraphicsLayer(rootLayer);
-    }
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localFrame)->localRoot();
+
+    // This method can be called while the frame is being detached. In that
+    // case, the rootLayer is null, and the widget is already destroyed.
+    DCHECK(webFrame->frameWidget() || !rootLayer);
+    if (webFrame->frameWidget())
+        webFrame->frameWidget()->setRootGraphicsLayer(rootLayer);
 }
 
 void ChromeClientImpl::didPaint(const PaintArtifact& paintArtifact)
@@ -818,44 +815,20 @@ void ChromeClientImpl::didPaint(const PaintArtifact& paintArtifact)
     m_webView->getPaintArtifactCompositor().update(paintArtifact);
 }
 
-void ChromeClientImpl::attachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
+void ChromeClientImpl::attachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localFrame)
 {
-    // FIXME: For top-level frames we still use the WebView as a WebWidget. This
-    // special case will be removed when top-level frames get WebFrameWidgets.
-    if (localRoot->isMainFrame()) {
-        m_webView->attachCompositorAnimationTimeline(compositorTimeline);
-    } else {
-        WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localRoot);
-        // FIXME: The following conditional is only needed for staging until the
-        // Chromium patch lands that instantiates a WebFrameWidget.
-        if (!webFrame->frameWidget()) {
-            m_webView->attachCompositorAnimationTimeline(compositorTimeline);
-            return;
-        }
-        DCHECK(webFrame);
-        DCHECK(webFrame->frameWidget());
-        toWebFrameWidgetImpl(webFrame->frameWidget())->attachCompositorAnimationTimeline(compositorTimeline);
-    }
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localFrame)->localRoot();
+    webFrame->frameWidget()->attachCompositorAnimationTimeline(compositorTimeline);
 }
 
-void ChromeClientImpl::detachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localRoot)
+void ChromeClientImpl::detachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline, LocalFrame* localFrame)
 {
-    // FIXME: For top-level frames we still use the WebView as a WebWidget. This
-    // special case will be removed when top-level frames get WebFrameWidgets.
-    if (localRoot->isMainFrame()) {
-        m_webView->detachCompositorAnimationTimeline(compositorTimeline);
-    } else {
-        WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localRoot);
-        // FIXME: The following conditional is only needed for staging until the
-        // Chromium patch lands that instantiates a WebFrameWidget.
-        if (!webFrame->frameWidget()) {
-            m_webView->detachCompositorAnimationTimeline(compositorTimeline);
-            return;
-        }
-        DCHECK(webFrame);
-        DCHECK(webFrame->frameWidget());
-        toWebFrameWidgetImpl(webFrame->frameWidget())->detachCompositorAnimationTimeline(compositorTimeline);
-    }
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(localFrame)->localRoot();
+
+    // This method can be called when the frame is being detached, after the
+    // widget is destroyed.
+    if (webFrame->frameWidget())
+        webFrame->frameWidget()->detachCompositorAnimationTimeline(compositorTimeline);
 }
 
 void ChromeClientImpl::enterFullScreenForElement(Element* element)
@@ -868,14 +841,28 @@ void ChromeClientImpl::exitFullScreenForElement(Element* element)
     m_webView->exitFullScreenForElement(element);
 }
 
-void ChromeClientImpl::clearCompositedSelection()
+void ChromeClientImpl::clearCompositedSelection(LocalFrame* frame)
 {
-    m_webView->clearCompositedSelection();
+    LocalFrame* localRoot = frame->localFrameRoot();
+    auto client = WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client();
+    if (!client)
+        return;
+
+    auto layerTreeView = client->layerTreeView();
+    if (layerTreeView)
+        layerTreeView->clearSelection();
 }
 
-void ChromeClientImpl::updateCompositedSelection(const CompositedSelection& selection)
+void ChromeClientImpl::updateCompositedSelection(LocalFrame* frame, const CompositedSelection& selection)
 {
-    m_webView->updateCompositedSelection(WebSelection(selection));
+    LocalFrame* localRoot = frame->localFrameRoot();
+    WebWidgetClient* client = WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client();
+    if (!client)
+        return;
+
+    WebLayerTreeView* layerTreeView = client->layerTreeView();
+    if (layerTreeView)
+        layerTreeView->registerSelection(WebSelection(selection));
 }
 
 bool ChromeClientImpl::hasOpenedPopup() const
@@ -982,11 +969,11 @@ void ChromeClientImpl::annotatedRegionsChanged()
         client->draggableRegionsChanged();
 }
 
-void ChromeClientImpl::didAssociateFormControls(const HeapVector<Member<Element>>& elements, LocalFrame* frame)
+void ChromeClientImpl::didAssociateFormControlsAfterLoad(LocalFrame* frame)
 {
     WebLocalFrameImpl* webframe = WebLocalFrameImpl::fromFrame(frame);
     if (webframe->autofillClient())
-        webframe->autofillClient()->didAssociateFormControls(elements);
+        webframe->autofillClient()->didAssociateFormControlsDynamically();
 }
 
 void ChromeClientImpl::didCancelCompositionOnSelectionChange()
@@ -1073,7 +1060,7 @@ void ChromeClientImpl::ajaxSucceeded(LocalFrame* frame)
 void ChromeClientImpl::registerViewportLayers() const
 {
     if (m_webView->rootGraphicsLayer() && m_webView->layerTreeView())
-        m_webView->page()->frameHost().visualViewport().registerLayersWithTreeView(m_webView->layerTreeView());
+        m_webView->registerViewportLayersWithCompositor();
 }
 
 void ChromeClientImpl::didUpdateTopControls() const
@@ -1126,6 +1113,36 @@ std::unique_ptr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler(BlameC
 double ChromeClientImpl::lastFrameTimeMonotonic() const
 {
     return m_webView->lastFrameTimeMonotonic();
+}
+
+void ChromeClientImpl::installSupplements(LocalFrame& frame)
+{
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(&frame);
+    WebFrameClient* client = webFrame->client();
+    if (client) {
+        providePushControllerTo(frame, client->pushClient());
+        provideUserMediaTo(frame, UserMediaClientImpl::create(client->userMediaClient()));
+    }
+
+    provideNotificationPermissionClientTo(frame, NotificationPermissionClientImpl::create());
+    provideIndexedDBClientTo(frame, IndexedDBClientImpl::create());
+    provideLocalFileSystemTo(frame, LocalFileSystemClient::create());
+    provideNavigatorContentUtilsTo(frame, NavigatorContentUtilsClientImpl::create(webFrame));
+
+    bool enableWebBluetooth = RuntimeEnabledFeatures::webBluetoothEnabled();
+#if OS(CHROMEOS) || OS(ANDROID) || OS(MACOSX)
+    enableWebBluetooth = true;
+#endif
+    if (enableWebBluetooth)
+        BluetoothSupplement::provideTo(frame, client ? client->bluetooth() : nullptr);
+
+    ScreenOrientationController::provideTo(frame, client ? client->webScreenOrientationClient() : nullptr);
+    if (RuntimeEnabledFeatures::presentationEnabled())
+        PresentationController::provideTo(frame, client ? client->presentationClient() : nullptr);
+    if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
+        provideAudioOutputDeviceClientTo(frame, AudioOutputDeviceClientImpl::create());
+    if (RuntimeEnabledFeatures::installedAppEnabled())
+        InstalledAppController::provideTo(frame, client ? client->installedAppClient() : nullptr);
 }
 
 } // namespace blink

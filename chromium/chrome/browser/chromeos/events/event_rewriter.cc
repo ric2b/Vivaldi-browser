@@ -10,7 +10,6 @@
 
 #include "ash/common/wm/window_state.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -58,7 +57,8 @@ const int kHotrodRemoteProductId = 0x21cc;
 const int kUnknownVendorId = -1;
 const int kUnknownProductId = -1;
 
-// Table of properties of remappable keys and/or remapping targets.
+// Table of properties of remappable keys and/or remapping targets (not
+// strictly limited to "modifiers").
 //
 // This is used in two distinct ways: for rewriting key up/down events,
 // and for rewriting modifier EventFlags on any kind of event.
@@ -112,11 +112,11 @@ const struct ModifierRemapping {
       ui::VKEY_CAPITAL}},
     {ui::EF_NONE,
      input_method::kEscapeKey,
-     nullptr,
+     prefs::kLanguageRemapEscapeKeyTo,
      {ui::EF_NONE, ui::DomCode::ESCAPE, ui::DomKey::ESCAPE, ui::VKEY_ESCAPE}},
     {ui::EF_NONE,
      input_method::kBackspaceKey,
-     nullptr,
+     prefs::kLanguageRemapBackspaceKeyTo,
      {ui::EF_NONE, ui::DomCode::BACKSPACE, ui::DomKey::BACKSPACE,
       ui::VKEY_BACK}},
     {ui::EF_NONE,
@@ -425,12 +425,8 @@ bool EventRewriter::IsLastKeyboardOfType(DeviceType device_type) const {
 
 bool EventRewriter::TopRowKeysAreFunctionKeys(const ui::KeyEvent& event) const {
   const PrefService* prefs = GetPrefService();
-  if (prefs && prefs->FindPreference(prefs::kLanguageSendFunctionKeys) &&
-      prefs->GetBoolean(prefs::kLanguageSendFunctionKeys))
-    return true;
-
-  ash::wm::WindowState* state = ash::wm::GetActiveWindowState();
-  return state ? state->top_row_keys_are_function_keys() : false;
+  return prefs && prefs->FindPreference(prefs::kLanguageSendFunctionKeys) &&
+         prefs->GetBoolean(prefs::kLanguageSendFunctionKeys);
 }
 
 int EventRewriter::GetRemappedModifierMasks(const PrefService& pref_service,
@@ -673,6 +669,8 @@ bool EventRewriter::RewriteModifierKeys(const ui::KeyEvent& key_event,
   if (!pref_service)
     return false;
 
+  // Preserve a copy of the original before rewriting |state| based on
+  // user preferences, device configuration, and certain IME properties.
   MutableKeyState incoming = *state;
   state->flags = ui::EF_NONE;
   int characteristic_flag = ui::EF_NONE;
@@ -782,6 +780,14 @@ bool EventRewriter::RewriteModifierKeys(const ui::KeyEvent& key_event,
       remapped_key =
           GetRemappedKey(prefs::kLanguageRemapAltKeyTo, *pref_service);
       break;
+    case ui::DomCode::ESCAPE:
+      remapped_key =
+          GetRemappedKey(prefs::kLanguageRemapEscapeKeyTo, *pref_service);
+      break;
+    case ui::DomCode::BACKSPACE:
+      remapped_key =
+          GetRemappedKey(prefs::kLanguageRemapBackspaceKeyTo, *pref_service);
+      break;
     default:
       break;
   }
@@ -824,6 +830,8 @@ bool EventRewriter::RewriteModifierKeys(const ui::KeyEvent& key_event,
     }
     // Toggle Caps Lock if the remapped key is ui::VKEY_CAPITAL.
     if (state->key_code == ui::VKEY_CAPITAL
+        // ... except on linux Chrome OS, where InputMethodChromeOS handles it.
+        && (base::SysInfo::IsRunningOnChromeOS() || ime_keyboard_for_testing_)
 #if defined(USE_X11)
         // ... but for X11, do nothing if the original key is ui::VKEY_CAPITAL
         // (i.e. a Caps Lock key on an external keyboard is pressed) since X

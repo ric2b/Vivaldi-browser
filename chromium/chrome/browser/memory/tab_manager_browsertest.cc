@@ -48,11 +48,11 @@ class TabManagerTest : public InProcessBrowserTest {
 IN_PROC_BROWSER_TEST_F(TabManagerTest, TabManagerBasics) {
   using content::WindowedNotificationObserver;
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
   EXPECT_FALSE(tab_manager->recent_tab_discard());
 
   // Disable the protection of recent tabs.
-  tab_manager->minimum_protection_time_ = base::TimeDelta::FromMinutes(0);
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(0));
 
   // Get three tabs open.
   WindowedNotificationObserver load1(
@@ -79,7 +79,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabManagerBasics) {
   browser()->OpenURL(open3);
   load3.Wait();
 
-  auto tsm = browser()->tab_strip_model();
+  auto* tsm = browser()->tab_strip_model();
   EXPECT_EQ(3, tsm->count());
 
   // Navigate the current (third) tab to a different URL, so we can test
@@ -188,10 +188,10 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, TabManagerBasics) {
 // discard upon |MEMORY_PRESSURE_LEVEL_CRITICAL| event.
 IN_PROC_BROWSER_TEST_F(TabManagerTest, OomPressureListener) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
 
   // Disable the protection of recent tabs.
-  tab_manager->minimum_protection_time_ = base::TimeDelta::FromMinutes(0);
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(0));
 
   // Get three tabs open.
   content::WindowedNotificationObserver load1(
@@ -238,10 +238,10 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, OomPressureListener) {
 
 IN_PROC_BROWSER_TEST_F(TabManagerTest, InvalidOrEmptyURL) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
 
   // Disable the protection of recent tabs.
-  tab_manager->minimum_protection_time_ = base::TimeDelta::FromMinutes(0);
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(0));
 
   // Open two tabs. Wait for the foreground one to load but do not wait for the
   // background one.
@@ -274,7 +274,6 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, InvalidOrEmptyURL) {
 // Makes sure that PDF pages are protected.
 IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectPDFPages) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
 
   // Start the embedded test server so we can get served the required PDF page.
   ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
@@ -303,16 +302,15 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectRecentlyUsedTabs) {
   // constant (as of now, it gets set through variations).
   const int kProtectionTime = 5;
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
 
   base::SimpleTestTickClock test_clock_;
   tab_manager->set_test_tick_clock(&test_clock_);
 
-  auto tsm = browser()->tab_strip_model();
+  auto* tsm = browser()->tab_strip_model();
 
   // Set the minimum time of protection.
-  tab_manager->minimum_protection_time_ =
-      base::TimeDelta::FromMinutes(kProtectionTime);
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(kProtectionTime));
 
   // Open 2 tabs, the second one being in the background.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIAboutURL));
@@ -357,10 +355,10 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectRecentlyUsedTabs) {
 // Makes sure that tabs using media devices are protected.
 IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
   TabManager* tab_manager = g_browser_process->GetTabManager();
-  ASSERT_TRUE(tab_manager);
 
   // Disable the protection of recent tabs.
-  tab_manager->minimum_protection_time_ = base::TimeDelta::FromMinutes(0);
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(0));
 
   // Open 2 tabs, the second one being in the background.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIAboutURL));
@@ -368,7 +366,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
       browser(), GURL(chrome::kChromeUIAboutURL), NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
-  auto tab = browser()->tab_strip_model()->GetWebContentsAt(1);
+  auto* tab = browser()->tab_strip_model()->GetWebContentsAt(1);
 
   // Simulate that a video stream is now being captured.
   content::MediaStreamDevice fake_media_device(
@@ -391,6 +389,47 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
 
   // Should be able to discard the background tab now.
   EXPECT_TRUE(tab_manager->DiscardTabImpl());
+}
+
+IN_PROC_BROWSER_TEST_F(TabManagerTest, AutoDiscardable) {
+  using content::WindowedNotificationObserver;
+  TabManager* tab_manager = g_browser_process->GetTabManager();
+
+  // Disable the protection of recent tabs.
+  tab_manager->set_minimum_protection_time_for_tests(
+      base::TimeDelta::FromMinutes(0));
+
+  // Get two tabs open.
+  WindowedNotificationObserver load1(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open1(GURL(chrome::kChromeUIAboutURL), content::Referrer(),
+                      CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open1);
+  load1.Wait();
+
+  WindowedNotificationObserver load2(
+      content::NOTIFICATION_NAV_ENTRY_COMMITTED,
+      content::NotificationService::AllSources());
+  OpenURLParams open2(GURL(chrome::kChromeUICreditsURL), content::Referrer(),
+                      NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_TYPED, false);
+  browser()->OpenURL(open2);
+  load2.Wait();
+
+  // Set the auto-discardable state of the first tab to false.
+  auto tsm = browser()->tab_strip_model();
+  ASSERT_EQ(2, tsm->count());
+  tab_manager->SetTabAutoDiscardableState(tsm->GetWebContentsAt(0), false);
+
+  // Shouldn't discard the tab, since auto-discardable is deactivated.
+  EXPECT_FALSE(tab_manager->DiscardTabImpl());
+
+  // Reset auto-discardable state to true.
+  tab_manager->SetTabAutoDiscardableState(tsm->GetWebContentsAt(0), true);
+
+  // Now it should be able to discard the tab.
+  EXPECT_TRUE(tab_manager->DiscardTabImpl());
+  EXPECT_TRUE(tab_manager->IsTabDiscarded(tsm->GetWebContentsAt(0)));
 }
 
 }  // namespace memory

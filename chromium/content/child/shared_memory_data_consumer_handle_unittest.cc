@@ -18,6 +18,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -81,7 +82,12 @@ class LoggingFixedReceivedData final : public RequestPeer::ReceivedData {
     return data_.empty() ? nullptr : &data_[0];
   }
   int length() const override { return static_cast<int>(data_.size()); }
-  int encoded_length() const override { return static_cast<int>(data_.size()); }
+  int encoded_data_length() const override {
+    return static_cast<int>(data_.size());
+  }
+  int encoded_body_length() const override {
+    return static_cast<int>(data_.size());
+  }
 
  private:
   const std::string name_;
@@ -140,7 +146,7 @@ class ThreadedSharedMemoryDataConsumerHandleTest : public ::testing::Test {
     void ReadData() {
       if (!client_) {
         client_.reset(new ClientImpl(this));
-        reader_ = handle_->ObtainReader(client_.get());
+        reader_ = handle_->obtainReader(client_.get());
       }
 
       Result rv = kOk;
@@ -166,7 +172,7 @@ class ThreadedSharedMemoryDataConsumerHandleTest : public ::testing::Test {
 
       // The operation is done.
       reader_.reset();
-      main_message_loop_->PostTask(FROM_HERE, on_done_);
+      main_message_loop_->task_runner()->PostTask(FROM_HERE, on_done_);
     }
 
    private:
@@ -196,7 +202,8 @@ class SharedMemoryDataConsumerHandleTest
     handle_.reset(new SharedMemoryDataConsumerHandle(GetParam(), &writer_));
   }
   std::unique_ptr<FixedReceivedData> NewFixedData(const char* s) {
-    return base::WrapUnique(new FixedReceivedData(s, strlen(s), strlen(s)));
+    auto size = strlen(s);
+    return base::MakeUnique<FixedReceivedData>(s, size, size, size);
   }
 
   StrictMock<MockClient> client_;
@@ -215,7 +222,7 @@ void RunPostedTasks() {
 TEST_P(SharedMemoryDataConsumerHandleTest, ReadFromEmpty) {
   char buffer[4];
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(buffer, 4, kNone, &read);
 
   EXPECT_EQ(kShouldWait, result);
@@ -227,7 +234,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AutoClose) {
   size_t read = 88;
 
   writer_.reset();
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(buffer, 4, kNone, &read);
 
   EXPECT_EQ(kDone, result);
@@ -239,7 +246,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReadSimple) {
 
   char buffer[4] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(buffer, 3, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -267,7 +274,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReadAfterHandleIsGone) {
 
   char buffer[8] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
 
   handle_.reset();
 
@@ -293,7 +300,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReObtainReader) {
 
   char buffer[4] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(buffer, 3, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -301,7 +308,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReObtainReader) {
   EXPECT_STREQ("hel", buffer);
 
   reader.reset();
-  reader = handle_->ObtainReader(nullptr);
+  reader = handle_->obtainReader(nullptr);
 
   result = reader->read(buffer, 3, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -325,7 +332,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseBeforeReading) {
 
   char buffer[20] = {};
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(buffer, sizeof(buffer), kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -342,7 +349,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithDataBeforeZeroRead) {
   writer_->Close();
 
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(nullptr, 0, kNone, &read);
 
   EXPECT_EQ(kOk, result);
@@ -353,7 +360,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithoutDataBeforeZeroRead) {
   writer_->Close();
 
   size_t read = 88;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   Result result = reader->read(nullptr, 0, kNone, &read);
 
   EXPECT_EQ(kDone, result);
@@ -373,7 +380,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddMultipleData) {
   size_t read;
   Result result;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   std::fill(&buffer[0], &buffer[arraysize(buffer)], 0);
   result = reader->read(buffer, 6, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -417,7 +424,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddMultipleDataInteractively) {
   size_t read;
   Result result;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   std::fill(&buffer[0], &buffer[arraysize(buffer)], 0);
   result = reader->read(buffer, 6, kNone, &read);
   EXPECT_EQ(kOk, result);
@@ -479,7 +486,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RegisterClient) {
   EXPECT_CALL(checkpoint, Call(4));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   RunPostedTasks();
   checkpoint.Call(2);
@@ -502,7 +509,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RegisterClientWhenDataExists) {
   checkpoint.Call(0);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(1);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(2);
   RunPostedTasks();
   checkpoint.Call(3);
@@ -525,7 +532,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, AddDataWhenClientIsRegistered) {
   EXPECT_CALL(checkpoint, Call(5));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -550,7 +557,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CloseWithClientAndData) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -567,7 +574,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ReleaseReader) {
   EXPECT_CALL(checkpoint, Call(2));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   reader.reset();
   writer_->AddData(NewFixedData("Once "));
@@ -579,7 +586,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadShouldWait) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   result = reader->beginRead(&buffer, kNone, &size);
   EXPECT_EQ(kShouldWait, result);
   EXPECT_EQ(nullptr, buffer);
@@ -593,7 +600,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadSimple) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   result = reader->beginRead(&buffer, kNone, &size);
   EXPECT_EQ(kOk, result);
   EXPECT_EQ(5u, size);
@@ -664,7 +671,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, CallOnClearWhenDestructed2) {
   handle_.reset(new SharedMemoryDataConsumerHandle(
       kApplyBackpressure,
       base::Bind(&DestructionTrackingFunction::Call, on_clear), &writer_));
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   handle_.reset();
   on_clear = nullptr;
   checkpoint.Call(1);
@@ -738,7 +745,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, TwoPhaseReadWithMultipleData) {
   const void* buffer = &result;
   size_t size = 99;
 
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
   result = reader->beginRead(&buffer, kNone, &size);
   EXPECT_EQ(kOk, result);
   EXPECT_EQ(5u, size);
@@ -778,7 +785,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ErrorRead) {
   Result result;
   char buffer[20] = {};
   size_t read = 99;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
 
   writer_->Fail();
   result = reader->read(buffer, sizeof(buffer), kNone, &read);
@@ -791,7 +798,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, ErrorTwoPhaseRead) {
   Result result;
   const void* pointer = &result;
   size_t size = 99;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
 
   writer_->Fail();
   result = reader->beginRead(&pointer, kNone, &size);
@@ -805,11 +812,11 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWhileTwoPhaseReadIsInProgress) {
   Result result;
   const void* pointer = nullptr;
   size_t size = 0;
-  auto reader = handle_->ObtainReader(nullptr);
+  auto reader = handle_->obtainReader(nullptr);
 
   writer_->AddData(NewFixedData("Once "));
   result = reader->beginRead(&pointer, kNone, &size);
-  auto buffer = static_cast<const char*>(pointer);
+  auto* buffer = static_cast<const char*>(pointer);
 
   ASSERT_EQ(kOk, result);
   ASSERT_NE(nullptr, pointer);
@@ -841,7 +848,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWithClient) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   writer_->Fail();
   checkpoint.Call(2);
@@ -862,7 +869,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, FailWithClientAndData) {
   EXPECT_CALL(checkpoint, Call(4));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -885,7 +892,7 @@ TEST_P(SharedMemoryDataConsumerHandleTest, RecursiveErrorNotification) {
   EXPECT_CALL(checkpoint, Call(3));
 
   checkpoint.Call(0);
-  auto reader = handle_->ObtainReader(&client_);
+  auto reader = handle_->obtainReader(&client_);
   checkpoint.Call(1);
   writer_->AddData(NewFixedData("Once "));
   checkpoint.Call(2);
@@ -900,19 +907,19 @@ TEST(SharedMemoryDataConsumerHandleBackpressureTest, Read) {
   size_t size;
 
   std::unique_ptr<Writer> writer;
-  auto handle = base::WrapUnique(
-      new SharedMemoryDataConsumerHandle(kApplyBackpressure, &writer));
+  auto handle = base::MakeUnique<SharedMemoryDataConsumerHandle>(
+      kApplyBackpressure, &writer);
   scoped_refptr<Logger> logger(new Logger);
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data1", "Once ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data1", "Once ", logger));
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data2", "upon ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data2", "upon ", logger));
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data3", "a ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data3", "a ", logger));
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data4", "time ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data4", "time ", logger));
 
-  auto reader = handle->ObtainReader(nullptr);
+  auto reader = handle->obtainReader(nullptr);
   logger->Add("1");
   result = reader->read(buffer, 2, kNone, &size);
   EXPECT_EQ(kOk, result);
@@ -945,17 +952,17 @@ TEST(SharedMemoryDataConsumerHandleBackpressureTest, CloseAndReset) {
   size_t size;
 
   std::unique_ptr<Writer> writer;
-  auto handle = base::WrapUnique(
-      new SharedMemoryDataConsumerHandle(kApplyBackpressure, &writer));
+  auto handle = base::MakeUnique<SharedMemoryDataConsumerHandle>(
+      kApplyBackpressure, &writer);
   scoped_refptr<Logger> logger(new Logger);
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data1", "Once ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data1", "Once ", logger));
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data2", "upon ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data2", "upon ", logger));
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data3", "a ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data3", "a ", logger));
 
-  auto reader = handle->ObtainReader(nullptr);
+  auto reader = handle->obtainReader(nullptr);
   logger->Add("1");
   result = reader->read(buffer, 2, kNone, &size);
   EXPECT_EQ(kOk, result);
@@ -981,16 +988,16 @@ TEST(SharedMemoryDataConsumerHandleBackpressureTest, CloseAndReset) {
 TEST(SharedMemoryDataConsumerHandleWithoutBackpressureTest, AddData) {
   base::MessageLoop loop;
   std::unique_ptr<Writer> writer;
-  auto handle = base::WrapUnique(
-      new SharedMemoryDataConsumerHandle(kDoNotApplyBackpressure, &writer));
+  auto handle = base::MakeUnique<SharedMemoryDataConsumerHandle>(
+      kDoNotApplyBackpressure, &writer);
   scoped_refptr<Logger> logger(new Logger);
 
   logger->Add("1");
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data1", "Once ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data1", "Once ", logger));
   logger->Add("2");
   writer->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data2", "upon ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data2", "upon ", logger));
   logger->Add("3");
 
   EXPECT_EQ(
@@ -1004,28 +1011,28 @@ TEST(SharedMemoryDataConsumerHandleWithoutBackpressureTest, AddData) {
 
 TEST_F(ThreadedSharedMemoryDataConsumerHandleTest, Read) {
   base::RunLoop run_loop;
-  auto operation = base::WrapUnique(new ReadDataOperation(
-      std::move(handle_), &loop_, run_loop.QuitClosure()));
+  auto operation = base::MakeUnique<ReadDataOperation>(
+      std::move(handle_), &loop_, run_loop.QuitClosure());
   scoped_refptr<Logger> logger(new Logger);
 
   base::Thread t("DataConsumerHandle test thread");
   ASSERT_TRUE(t.Start());
 
-  t.message_loop()->PostTask(FROM_HERE,
-                             base::Bind(&ReadDataOperation::ReadData,
-                                        base::Unretained(operation.get())));
+  t.task_runner()->PostTask(FROM_HERE,
+                            base::Bind(&ReadDataOperation::ReadData,
+                                       base::Unretained(operation.get())));
 
   logger->Add("1");
   writer_->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data1", "Once ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data1", "Once ", logger));
   writer_->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data2", "upon ", logger)));
-  writer_->AddData(base::WrapUnique(
-      new LoggingFixedReceivedData("data3", "a time ", logger)));
-  writer_->AddData(base::WrapUnique(
-      new LoggingFixedReceivedData("data4", "there ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data2", "upon ", logger));
   writer_->AddData(
-      base::WrapUnique(new LoggingFixedReceivedData("data5", "was ", logger)));
+      base::MakeUnique<LoggingFixedReceivedData>("data3", "a time ", logger));
+  writer_->AddData(
+      base::MakeUnique<LoggingFixedReceivedData>("data4", "there ", logger));
+  writer_->AddData(
+      base::MakeUnique<LoggingFixedReceivedData>("data5", "was ", logger));
   writer_->Close();
   logger->Add("2");
 

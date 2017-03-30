@@ -10,18 +10,14 @@ Polymer({
   is: 'settings-people-page',
 
   behaviors: [
+    I18nBehavior,
     WebUIListenerBehavior,
+<if expr="chromeos">
+    LockStateBehavior,
+</if>
   ],
 
   properties: {
-    /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
     /**
      * Preferences state.
      */
@@ -64,10 +60,11 @@ Polymer({
      * True if quick unlock settings should be displayed on this machine.
      * @private
      */
-    quickUnlockAllowed_: {
+    quickUnlockEnabled_: {
       type: Boolean,
-      // TODO(jdufault): Get a real value via quickUnlockPrivate API.
-      value: false,
+      value: function() {
+        return loadTimeData.getBoolean('quickUnlockEnabled');
+      },
       readOnly: true,
     },
 
@@ -142,6 +139,17 @@ Polymer({
 </if>
   },
 
+<if expr="chromeos">
+  /** @private */
+  getPasswordState_: function(hasPin, enableScreenLock) {
+    if (!enableScreenLock)
+      return this.i18n('lockScreenNone');
+    if (hasPin)
+      return this.i18n('lockScreenPinOrPassword');
+    return this.i18n('lockScreenPasswordOnly');
+  },
+</if>
+
   /**
    * Handler for when the profile's icon and name is updated.
    * @private
@@ -183,17 +191,17 @@ Polymer({
   /** @private */
   onPictureTap_: function() {
 <if expr="chromeos">
-    this.$.pages.setSubpageChain(['changePicture']);
+    settings.navigateTo(settings.Route.CHANGE_PICTURE);
 </if>
 <if expr="not chromeos">
-    this.$.pages.setSubpageChain(['manageProfile']);
+    settings.navigateTo(settings.Route.MANAGE_PROFILE);
 </if>
   },
 
 <if expr="not chromeos">
   /** @private */
   onProfileNameTap_: function() {
-    this.$.pages.setSubpageChain(['manageProfile']);
+    settings.navigateTo(settings.Route.MANAGE_PROFILE);
   },
 </if>
 
@@ -209,7 +217,7 @@ Polymer({
 
   /** @private */
   onDisconnectTap_: function() {
-    this.$.disconnectDialog.open();
+    this.$.disconnectDialog.showModal();
   },
 
   /** @private */
@@ -234,13 +242,13 @@ Polymer({
     if (this.syncStatus.managed)
       return;
 
-    this.$.pages.setSubpageChain(['sync']);
+    settings.navigateTo(settings.Route.SYNC);
   },
 
 <if expr="chromeos">
   /** @private */
-  onQuickUnlockTap_: function() {
-    this.$.pages.setSubpageChain(['quick-unlock-authenticate']);
+  onConfigureLockTap_: function() {
+    settings.navigateTo(settings.Route.LOCK_SCREEN);
   },
 
   /** @private */
@@ -260,7 +268,7 @@ Polymer({
     this.syncBrowserProxy_.manageOtherPeople();
 </if>
 <if expr="chromeos">
-    this.$.pages.setSubpageChain(['users']);
+    settings.navigateTo(settings.Route.ACCOUNTS);
 </if>
   },
 
@@ -322,5 +330,14 @@ Polymer({
       return 'settings:sync-disabled';
 
     return 'settings:done';
+  },
+
+  /**
+   * @param {string} iconUrl
+   * @return {string} A CSS imageset for multiple scale factors.
+   * @private
+   */
+  getIconImageset_: function(iconUrl) {
+    return cr.icon.getProfileAvatarIcon(iconUrl);
   },
 });

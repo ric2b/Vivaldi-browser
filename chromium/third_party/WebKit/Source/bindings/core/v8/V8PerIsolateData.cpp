@@ -39,6 +39,7 @@
 #include "wtf/LeakAnnotations.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
+#include <v8-debug.h>
 
 namespace blink {
 
@@ -46,7 +47,7 @@ static V8PerIsolateData* mainThreadPerIsolateData = 0;
 
 static void beforeCallEnteredCallback(v8::Isolate* isolate)
 {
-    RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden());
+    RELEASE_ASSERT(!ScriptForbiddenScope::isScriptForbidden() || isolate->GetCurrentContext() == v8::Debug::GetDebugContext(isolate));
 }
 
 static void microtasksCompletedCallback(v8::Isolate* isolate)
@@ -112,10 +113,6 @@ void V8PerIsolateData::useCounterCallback(v8::Isolate* isolate, v8::Isolate::Use
         break;
     case v8::Isolate::kLegacyConst:
         blinkFeature = UseCounter::LegacyConst;
-        break;
-    case v8::Isolate::kObjectObserve:
-        blinkFeature = UseCounter::ObjectObserve;
-        deprecated = true;
         break;
     case v8::Isolate::kSloppyMode:
         blinkFeature = UseCounter::V8SloppyMode;
@@ -194,6 +191,12 @@ void V8PerIsolateData::useCounterCallback(v8::Isolate* isolate, v8::Isolate::Use
         break;
     case v8::Isolate::kLegacyDateParser:
         blinkFeature = UseCounter::V8LegacyDateParser;
+        break;
+    case v8::Isolate::kDefineGetterOrSetterWouldThrow:
+        blinkFeature = UseCounter::V8DefineGetterOrSetterWouldThrow;
+        break;
+    case v8::Isolate::kFunctionConstructorReturnedUndefined:
+        blinkFeature = UseCounter::V8FunctionConstructorReturnedUndefined;
         break;
     default:
         // This can happen if V8 has added counters that this version of Blink

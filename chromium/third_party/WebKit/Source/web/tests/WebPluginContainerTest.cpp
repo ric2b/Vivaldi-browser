@@ -315,7 +315,7 @@ TEST_F(WebPluginContainerTest, Copy)
     runPendingTasks();
 
     webView->mainFrame()->document().unwrap<Document>()->body()->getElementById("translated-plugin")->focus();
-    EXPECT_TRUE(webView->mainFrame()->executeCommand("Copy"));
+    EXPECT_TRUE(webView->mainFrame()->toWebLocalFrame()->executeCommand("Copy"));
     EXPECT_EQ(WebString("x"), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
 }
 
@@ -331,12 +331,12 @@ TEST_F(WebPluginContainerTest, CopyFromContextMenu)
     webView->updateAllLifecyclePhases();
     runPendingTasks();
 
-    auto event = FrameTestHelpers::createMouseEvent(WebMouseEvent::MouseDown, WebMouseEvent::ButtonRight, WebPoint(30, 30), 0);
+    auto event = FrameTestHelpers::createMouseEvent(WebMouseEvent::MouseDown, WebMouseEvent::Button::Right, WebPoint(30, 30), 0);
     event.clickCount = 1;
 
     // Make sure the right-click + Copy works in common scenario.
     webView->handleInputEvent(event);
-    EXPECT_TRUE(webView->mainFrame()->executeCommand("Copy"));
+    EXPECT_TRUE(webView->mainFrame()->toWebLocalFrame()->executeCommand("Copy"));
     EXPECT_EQ(WebString("x"), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
 
     // Clear the clipboard buffer.
@@ -349,7 +349,7 @@ TEST_F(WebPluginContainerTest, CopyFromContextMenu)
     // 2) document blurs the plugin, because it can.
     webView->clearFocusedElement();
     // 3) Copy should still operate on the context node, even though the focus had shifted.
-    EXPECT_TRUE(webView->mainFrame()->executeCommand("Copy"));
+    EXPECT_TRUE(webView->mainFrame()->toWebLocalFrame()->executeCommand("Copy"));
     EXPECT_EQ(WebString("x"), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
 }
 
@@ -374,7 +374,7 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest)
 #if OS(MACOSX)
     modifierKey = static_cast<PlatformEvent::Modifiers>(PlatformEvent::MetaKey | PlatformEvent::NumLockOn | PlatformEvent::IsLeft);
 #endif
-    PlatformKeyboardEvent platformKeyboardEventC(PlatformEvent::RawKeyDown, "", "", "67", "", "", 67, 0, false, modifierKey, 0.0);
+    PlatformKeyboardEvent platformKeyboardEventC(PlatformEvent::RawKeyDown, "", "", "", "", 67, 0, false, modifierKey, 0.0);
     KeyboardEvent* keyEventC = KeyboardEvent::create(platformKeyboardEventC, 0);
     toWebPluginContainerImpl(pluginContainerOneElement.pluginContainer())->handleEvent(keyEventC);
     EXPECT_EQ(WebString("x"), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
@@ -383,7 +383,7 @@ TEST_F(WebPluginContainerTest, CopyInsertKeyboardEventsTest)
     Platform::current()->clipboard()->writePlainText(WebString(""));
     EXPECT_EQ(WebString(""), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
 
-    PlatformKeyboardEvent platformKeyboardEventInsert(PlatformEvent::RawKeyDown, "", "", "45", "", "", 45, 0, false, modifierKey, 0.0);
+    PlatformKeyboardEvent platformKeyboardEventInsert(PlatformEvent::RawKeyDown, "", "", "", "", 45, 0, false, modifierKey, 0.0);
     KeyboardEvent* keyEventInsert = KeyboardEvent::create(platformKeyboardEventInsert, 0);
     toWebPluginContainerImpl(pluginContainerOneElement.pluginContainer())->handleEvent(keyEventInsert);
     EXPECT_EQ(WebString("x"), Platform::current()->clipboard()->readPlainText(WebClipboard::Buffer()));
@@ -505,14 +505,13 @@ TEST_F(WebPluginContainerTest, ClippedRectsForIframedElement)
     WebPluginContainerImpl* pluginContainerImpl = toWebPluginContainerImpl(pluginElement.pluginContainer());
 
     DCHECK(pluginContainerImpl);
-    pluginContainerImpl->setFrameRect(IntRect(0, 0, 300, 300));
 
     IntRect windowRect, clipRect, unobscuredRect;
     Vector<IntRect> cutOutRects;
     calculateGeometry(pluginContainerImpl, windowRect, clipRect, unobscuredRect, cutOutRects);
-    EXPECT_RECT_EQ(IntRect(10, 210, 300, 300), windowRect);
-    EXPECT_RECT_EQ(IntRect(0, 0, 240, 90), clipRect);
-    EXPECT_RECT_EQ(IntRect(0, 0, 240, 160), unobscuredRect);
+    EXPECT_RECT_EQ(IntRect(20, 220, 40, 40), windowRect);
+    EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), clipRect);
+    EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), unobscuredRect);
 
     // Cause the plugin's frame to be detached.
     webViewHelper.reset();
@@ -540,11 +539,9 @@ TEST_F(WebPluginContainerTest, ClippedRectsForSubpixelPositionedPlugin)
     Vector<IntRect> cutOutRects;
 
     calculateGeometry(pluginContainerImpl, windowRect, clipRect, unobscuredRect, cutOutRects);
-    // TODO(chrishtr): these values should not be -1, they should be 0. They are -1 because WebPluginContainerImpl currently uses an IntRect for
-    // frameRect() to determine the position of the plugin, which results in a loss of precision if it is actually subpixel positioned.
     EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), windowRect);
-    EXPECT_RECT_EQ(IntRect(-1, -1, 41, 41), clipRect);
-    EXPECT_RECT_EQ(IntRect(-1, -1, 41, 41), unobscuredRect);
+    EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), clipRect);
+    EXPECT_RECT_EQ(IntRect(0, 0, 40, 40), unobscuredRect);
 
     // Cause the plugin's frame to be detached.
     webViewHelper.reset();

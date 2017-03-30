@@ -38,7 +38,7 @@ public:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
 
-    // ActiveScriptWrappable implementation.
+    // ScriptWrappable implementation.
     bool hasPendingActivity() const final;
 
     // ContextLifecycleObserver
@@ -61,7 +61,7 @@ private:
 
     void onCapabilities(ScriptPromiseResolver*, media::mojom::blink::PhotoCapabilitiesPtr);
     void onSetOptions(ScriptPromiseResolver*, bool);
-    void onTakePhoto(ScriptPromiseResolver*, const String& mimeType, mojo::WTFArray<uint8_t> data);
+    void onTakePhoto(ScriptPromiseResolver*, media::mojom::blink::BlobPtr);
     void onServiceConnectionError();
 
     Member<MediaStreamTrack> m_streamTrack;

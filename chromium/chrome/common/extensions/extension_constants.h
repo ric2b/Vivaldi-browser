@@ -94,9 +94,6 @@ extern const char kHotwordNewExtensionId[];
 // The extension id of the hotword shared module.
 extern const char kHotwordSharedModuleId[];
 
-// The extension id of the settings application.
-extern const char kSettingsAppId[];
-
 // The extension id of the Youtube application.
 extern const char kYoutubeAppId[];
 
@@ -248,10 +245,6 @@ extern const char kAppStateReadyToRun[];
 
 // The path part of the file system url used for media file systems.
 extern const char kMediaFileSystemPathPart[];
-
-// The key used for signing some pieces of data from the webstore.
-extern const uint8_t kWebstoreSignaturesPublicKey[];
-extern const int kWebstoreSignaturesPublicKeySize;
 
 #if defined(OS_CHROMEOS)
 // Returns true if |extension_id| is one of the IME extensions that will create

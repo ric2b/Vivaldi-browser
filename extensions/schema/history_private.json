@@ -18,7 +18,7 @@
         "description": "Handling of History search results. See: DuplicateHandling enum in history_types.h"
       },
       {
-        "id": "HistoryItem",
+        "id": "HistoryPrivateItem",
         "type": "object",
         "description": "An object encapsulating one result of a history query.",
         "properties": {
@@ -56,6 +56,30 @@
             "type": "integer",
             "optional": true,
             "description": "The number of times the user has navigated to this page by typing in the address."
+          },
+          "isBookmarked": {
+            "type": "boolean",
+            "description": "States if the URL is bookmarked."
+          }
+        }
+      },
+      {
+        "id": "TopUrlItem",
+        "type": "object",
+        "description": "An object encapsulating one result of a top url history query.",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The date of the visit for the top url"
+          },
+          "url": {
+            "type": "string",
+            "description": "The url visited"
+          },
+          "numberOfVisit": {
+            "type": "integer",
+            "optional": true,
+            "description": "The visit count of the url."
           }
         }
       }
@@ -99,7 +123,7 @@
               {
                 "name": "results",
                 "type": "array",
-                "items": { "$ref": "HistoryItem" }
+                "items": { "$ref": "HistoryPrivateItem" }
               }
             ]
           }
@@ -125,8 +149,73 @@
             "name": "callback",
             "type": "function",
             "parameters": [
-              { "name": "results", "type": "array", "items": { "$ref": "HistoryItem"} }
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "HistoryPrivateItem" }
+              }
             ]
+          }
+        ]
+      },
+      {
+        "name": "deleteVisits",
+        "type": "function",
+        "description": "Deletes all visits of the given URL for a certain period.",
+        "parameters": [
+          {
+            "name": "details",
+            "type": "object",
+            "properties": {
+              "url": {"type": "string", "description": "The URL to remove."},
+              "startTime": {"type": "number", "description": "Items added to history after this date, represented in milliseconds since the epoch."},
+              "endTime": {"type": "number", "description": "Items added to history before this date, represented in milliseconds since the epoch."}
+            }
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "optional": true,
+            "parameters": [ ]
+          }
+        ]
+      },
+      {
+        "name": "getTopUrlsPerDay",
+        "type": "function",
+        "description": "Retrives top url per day. Sorted by number of visits within the day ",
+        "parameters": [
+          {
+            "name": "maxTopUrlResults",
+            "type": "number",
+            "description": "The number of top urls to return per day."
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "TopUrlItem" }
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "events": [
+      {
+        "name": "onVisitModified",
+        "type": "function",
+        "description": "Fired when one or more URLs are removed from the history service.  When all visits have been removed the URL is purged from history.",
+        "parameters": [
+          {
+            "name": "modified",
+            "type": "object",
+            "properties": {
+              "urls": { "type": "array", "items": { "type": "string" }, "optional": true}
+            }
           }
         ]
       }

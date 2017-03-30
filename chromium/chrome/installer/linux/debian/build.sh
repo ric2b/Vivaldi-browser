@@ -250,7 +250,7 @@ VERSIONFULL="${VERSION}-${PACKAGE_RELEASE}"
 
 if [ "$BRANDING" = "vivaldi" ]; then
   source "${BUILDDIR}/installer/common/vivaldi.info"
-elif [ "$BRANDING_BUILD" = "_google_chrome" ]; then
+elif [ "$BRANDING" = "google_chrome" ]; then
   source "${BUILDDIR}/installer/common/google-chrome.info"
 else
   source "${BUILDDIR}/installer/common/chromium-browser.info"
@@ -317,14 +317,13 @@ rm -rf "$DUMMY_STAGING_DIR"
 # ca-certificates: Make sure users have SSL certificates.
 # fonts-liberation: Make sure users have compatible fonts for viewing PDFs.
 # libappindicator1: Make systray icons work in Unity.
-# libcurl3: Was for NPAPI Flash. TODO(thestig): Remove?
 # libnss3: Pull a more recent version of NSS than required by runtime linking,
 #          for security and stability updates in NSS.
 # libstdc++6: For C++11 support.
 # lsb-base: Implies many other dependencies.
 # xdg-utils: For OS integration.
 # wget: For uploading crash reports with Breakpad.
-ADDITION_DEPS="ca-certificates, fonts-liberation, libappindicator1, libcurl3, \
+ADDITION_DEPS="ca-certificates, fonts-liberation, libappindicator1, \
   libnss3 (>= 3.17.2), \
   xdg-utils (>= 1.0.2), wget"
 

@@ -13,15 +13,23 @@ typedef base::Callback<void(bool)> OnMetricsReportingCallbackType;
 class PrefService;
 class PrefRegistrySimple;
 
-// Initiates a change to metrics reporting state to the new value of |enabled|.
-// Starts or stops the metrics service based on the new state and then runs
-// |callback_fn| (which can be null) with the updated state (as the operation
-// may fail). On platforms other than CrOS and Android, also updates the
-// underlying pref.
+// Changes metrics reporting state without caring about the success of the
+// change.
+void ChangeMetricsReportingState(bool enabled);
+
+// Changes metrics reporting state to the new value of |enabled|. Starts or
+// stops the metrics service based on the new state and then runs |callback_fn|
+// (which can be null) with the updated state (as the operation may fail). On
+// platforms other than CrOS and Android, also updates the underlying pref.
 // TODO(gayane): Support setting the pref on all platforms.
-void InitiateMetricsReportingChange(
+void ChangeMetricsReportingStateWithReply(
     bool enabled,
     const OnMetricsReportingCallbackType& callback_fn);
+
+// Update metrics prefs on a permission (opt-in/out) change. When opting out,
+// this clears various client ids. When opting in, this resets saving crash
+// prefs, so as not to trigger upload of various stale data.
+void UpdateMetricsPrefsOnPermissionChange(bool metrics_enabled);
 
 // Returns whether MetricsReporting can be modified by the user (except
 // Android).

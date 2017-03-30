@@ -37,7 +37,7 @@
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/HTMLNames.h"
 #include "core/SVGNames.h"
-#include "core/animation/AnimationTimeline.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
@@ -129,6 +129,7 @@
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/Cursor.h"
 #include "platform/Language.h"
+#include "platform/LayoutLocale.h"
 #include "platform/PlatformKeyboardEvent.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
@@ -136,7 +137,6 @@
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/FrontendChannel.h"
 #include "platform/scroll/ProgrammaticScrollAnimator.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "public/platform/Platform.h"
@@ -233,8 +233,8 @@ void Internals::resetToConsistentState(Page* page)
     page->setPageScaleFactor(1);
     page->deprecatedLocalMainFrame()->view()->layoutViewportScrollableArea()->setScrollPosition(IntPoint(0, 0), ProgrammaticScroll);
     overrideUserPreferredLanguages(Vector<AtomicString>());
-    if (!page->deprecatedLocalMainFrame()->spellChecker().isContinuousSpellCheckingEnabled())
-        page->deprecatedLocalMainFrame()->spellChecker().toggleContinuousSpellChecking();
+    if (!page->deprecatedLocalMainFrame()->spellChecker().isSpellCheckingEnabled())
+        page->deprecatedLocalMainFrame()->spellChecker().toggleSpellCheckingEnabled();
     if (page->deprecatedLocalMainFrame()->editor().isOverwriteModeEnabled())
         page->deprecatedLocalMainFrame()->editor().toggleOverwriteModeEnabled();
 
@@ -490,6 +490,9 @@ void Internals::pauseAnimations(double pauseTime, ExceptionState& exceptionState
         exceptionState.throwDOMException(InvalidAccessError, ExceptionMessages::indexExceedsMinimumBound("pauseTime", pauseTime, 0.0));
         return;
     }
+
+    if (!frame())
+        return;
 
     frame()->view()->updateAllLifecyclePhases();
     frame()->document()->timeline().pauseAnimationsForTesting(pauseTime);
@@ -779,7 +782,9 @@ bool Internals::hasAutofocusRequest()
 
 Vector<String> Internals::formControlStateOfHistoryItem(ExceptionState& exceptionState)
 {
-    HistoryItem* mainItem = frame()->loader().currentItem();
+    HistoryItem* mainItem = nullptr;
+    if (frame())
+        mainItem = frame()->loader().currentItem();
     if (!mainItem) {
         exceptionState.throwDOMException(InvalidAccessError, "No history item is available.");
         return Vector<String>();
@@ -789,7 +794,9 @@ Vector<String> Internals::formControlStateOfHistoryItem(ExceptionState& exceptio
 
 void Internals::setFormControlStateOfHistoryItem(const Vector<String>& state, ExceptionState& exceptionState)
 {
-    HistoryItem* mainItem = frame()->loader().currentItem();
+    HistoryItem* mainItem = nullptr;
+    if (frame())
+        mainItem = frame()->loader().currentItem();
     if (!mainItem) {
         exceptionState.throwDOMException(InvalidAccessError, "No history item is available.");
         return;
@@ -895,7 +902,7 @@ void Internals::addTextMatchMarker(const Range* range, bool isActive)
 {
     ASSERT(range);
     range->ownerDocument().updateStyleAndLayoutIgnorePendingStylesheets();
-    range->ownerDocument().markers().addTextMatchMarker(range, isActive);
+    range->ownerDocument().markers().addTextMatchMarker(EphemeralRange(range), isActive);
 }
 
 void Internals::setMarkersActive(Node* node, unsigned startOffset, unsigned endOffset, bool active)
@@ -1310,7 +1317,7 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot, GraphicsLay
 
         LayoutRect rect;
         PaintLayer::mapRectInPaintInvalidationContainerToBacking(*searchRoot->layoutObject(), rect);
-        *layerOffset = IntSize(rect.x(), rect.y());
+        *layerOffset = IntSize(rect.x().toInt(), rect.y().toInt());
         return searchRoot;
     }
 
@@ -1328,7 +1335,7 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot, GraphicsLay
             *layerType ="squashing";
             LayoutRect rect;
             PaintLayer::mapRectInPaintInvalidationContainerToBacking(*searchRoot->layoutObject(), rect);
-            *layerOffset = IntSize(rect.x(), rect.y());
+            *layerOffset = IntSize(rect.x().toInt(), rect.y().toInt());
             return searchRoot;
         }
     }
@@ -1541,18 +1548,24 @@ bool Internals::hasSpellingMarker(Document* document, int from, int length)
     return document->frame()->spellChecker().selectionStartHasMarkerFor(DocumentMarker::Spelling, from, length);
 }
 
-void Internals::setContinuousSpellCheckingEnabled(bool enabled)
+void Internals::setSpellCheckingEnabled(bool enabled)
 {
     if (!contextDocument() || !contextDocument()->frame())
         return;
 
-    if (enabled != contextDocument()->frame()->spellChecker().isContinuousSpellCheckingEnabled())
-        contextDocument()->frame()->spellChecker().toggleContinuousSpellChecking();
+    if (enabled != contextDocument()->frame()->spellChecker().isSpellCheckingEnabled())
+        contextDocument()->frame()->spellChecker().toggleSpellCheckingEnabled();
+}
+
+bool Internals::canHyphenate(const AtomicString& locale)
+{
+    return LayoutLocale::valueOrDefault(LayoutLocale::get(locale))
+        .getHyphenation();
 }
 
 void Internals::setMockHyphenation(const AtomicString& locale)
 {
-    Hyphenation::setForTesting(locale, adoptRef(new MockHyphenation));
+    LayoutLocale::setHyphenationForTesting(locale, adoptRef(new MockHyphenation));
 }
 
 bool Internals::isOverwriteModeEnabled(Document* document)
@@ -1586,30 +1599,6 @@ unsigned Internals::numberOfLiveDocuments() const
 String Internals::dumpRefCountedInstanceCounts() const
 {
     return WTF::dumpRefCountedInstanceCounts();
-}
-
-unsigned Internals::numberOfConsoleMessages(Document* document) const
-{
-    if (!document->frame())
-        return 0;
-
-    MainThreadDebugger* debugger = MainThreadDebugger::instance();
-    unsigned total = 0;
-    unsigned withArguments = 0;
-    debugger->debugger()->consoleMessagesCount(debugger->contextGroupId(document->frame()), &total, &withArguments);
-    return total;
-}
-
-unsigned Internals::numberOfConsoleMessagesWithArguments(Document* document) const
-{
-    if (!document->frame())
-        return 0;
-
-    MainThreadDebugger* debugger = MainThreadDebugger::instance();
-    unsigned total = 0;
-    unsigned withArguments = 0;
-    debugger->debugger()->consoleMessagesCount(debugger->contextGroupId(document->frame()), &total, &withArguments);
-    return withArguments;
 }
 
 Vector<unsigned long> Internals::setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes)
@@ -1873,6 +1862,9 @@ void Internals::setPageScaleFactorLimits(float minScaleFactor, float maxScaleFac
 
 bool Internals::magnifyScaleAroundAnchor(float scaleFactor, float x, float y)
 {
+    if (!frame())
+        return false;
+
     return frame()->host()->visualViewport().magnifyScaleAroundAnchor(scaleFactor, FloatPoint(x, y));
 }
 
@@ -1949,6 +1941,9 @@ TypeConversions* Internals::typeConversions() const
 
 PrivateScriptTest* Internals::privateScriptTest() const
 {
+    if (!frame())
+        return nullptr;
+
     return PrivateScriptTest::create(frame()->document());
 }
 
@@ -1964,6 +1959,9 @@ UnionTypesTest* Internals::unionTypesTest() const
 
 Vector<String> Internals::getReferencedFilePaths() const
 {
+    if (!frame())
+        return Vector<String>();
+
     return frame()->loader().currentItem()->getReferencedFilePaths();
 }
 
@@ -2107,6 +2105,9 @@ static const char* cursorTypeToString(Cursor::Type cursorType)
 
 String Internals::getCurrentCursorInfo()
 {
+    if (!frame())
+        return String();
+
     Cursor cursor = frame()->page()->chromeClient().lastSetCursorForTesting();
 
     StringBuilder result;
@@ -2125,8 +2126,7 @@ String Internals::getCurrentCursorInfo()
     }
     if (cursor.imageScaleFactor() != 1) {
         result.append(" scale=");
-        NumberToStringBuffer buffer;
-        result.append(numberToFixedPrecisionString(cursor.imageScaleFactor(), 8, buffer, true));
+        result.appendNumber(cursor.imageScaleFactor(), 8);
     }
 
     return result.toString();
@@ -2134,6 +2134,9 @@ String Internals::getCurrentCursorInfo()
 
 bool Internals::cursorUpdatePending() const
 {
+    if (!frame())
+        return false;
+
     return frame()->eventHandler().cursorUpdatePending();
 }
 
@@ -2153,6 +2156,9 @@ PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(DOMArrayBuffer* b
 
 void Internals::forceReload(bool bypassCache)
 {
+    if (!frame())
+        return;
+
     frame()->reload(bypassCache ? FrameLoadTypeReloadBypassingCache : FrameLoadTypeReload, ClientRedirectPolicy::NotClientRedirect);
 }
 
@@ -2255,6 +2261,9 @@ void Internals::forceCompositingUpdate(Document* document, ExceptionState& excep
 
 void Internals::setZoomFactor(float factor)
 {
+    if (!frame())
+        return;
+
     frame()->setPageZoomFactor(factor);
 }
 
@@ -2372,11 +2381,17 @@ String Internals::textSurroundingNode(Node* node, int x, int y, unsigned long ma
 
 void Internals::setFocused(bool focused)
 {
+    if (!frame())
+        return;
+
     frame()->page()->focusController().setFocused(focused);
 }
 
 void Internals::setInitialFocus(bool reverse)
 {
+    if (!frame())
+        return;
+
     frame()->document()->clearFocusedElement();
     frame()->page()->focusController().setInitialFocus(reverse ? WebFocusTypeBackward : WebFocusTypeForward);
 }
@@ -2453,36 +2468,57 @@ void Internals::forceBlinkGCWithoutV8GC()
 
 String Internals::selectedHTMLForClipboard()
 {
+    if (!frame())
+        return String();
+
     return frame()->selection().selectedHTMLForClipboard();
 }
 
 String Internals::selectedTextForClipboard()
 {
+    if (!frame())
+        return String();
+
     return frame()->selection().selectedTextForClipboard();
 }
 
 void Internals::setVisualViewportOffset(int x, int y)
 {
+    if (!frame())
+        return;
+
     frame()->host()->visualViewport().setLocation(FloatPoint(x, y));
 }
 
 int Internals::visualViewportHeight()
 {
+    if (!frame())
+        return 0;
+
     return expandedIntSize(frame()->host()->visualViewport().visibleRect().size()).height();
 }
 
 int Internals::visualViewportWidth()
 {
+    if (!frame())
+        return 0;
+
     return expandedIntSize(frame()->host()->visualViewport().visibleRect().size()).width();
 }
 
 double Internals::visualViewportScrollX()
 {
+    if (!frame())
+        return 0;
+
     return frame()->view()->getScrollableArea()->scrollPositionDouble().x();
 }
 
 double Internals::visualViewportScrollY()
 {
+    if (!frame())
+        return 0;
+
     return frame()->view()->getScrollableArea()->scrollPositionDouble().y();
 }
 
@@ -2579,6 +2615,14 @@ String Internals::getProgrammaticScrollAnimationState(Node* node) const
     if (ScrollableArea* scrollableArea = scrollableAreaForNode(node))
         return scrollableArea->programmaticScrollAnimator().runStateAsText();
     return String();
+}
+
+ClientRect* Internals::visualRect(Node* node)
+{
+    if (!node || !node->layoutObject())
+        return ClientRect::create();
+
+    return ClientRect::create(FloatRect(node->layoutObject()->visualRect()));
 }
 
 } // namespace blink

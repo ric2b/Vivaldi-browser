@@ -12,7 +12,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/value_store/leveldb_value_store.h"
 #include "extensions/common/constants.h"
-#include "extensions/common/extension.h"
 
 using base::AutoLock;
 using content::BrowserThread;
@@ -169,13 +168,13 @@ bool LegacyValueStoreFactory::StateDBExists() const {
 }
 
 std::unique_ptr<ValueStore> LegacyValueStoreFactory::CreateRulesStore() {
-  return base::WrapUnique(
-      new LeveldbValueStore(kRulesDatabaseUMAClientName, GetRulesDBPath()));
+  return base::MakeUnique<LeveldbValueStore>(kRulesDatabaseUMAClientName,
+                                             GetRulesDBPath());
 }
 
 std::unique_ptr<ValueStore> LegacyValueStoreFactory::CreateStateStore() {
-  return base::WrapUnique(
-      new LeveldbValueStore(kStateDatabaseUMAClientName, GetStateDBPath()));
+  return base::MakeUnique<LeveldbValueStore>(kStateDatabaseUMAClientName,
+                                             GetStateDBPath());
 }
 
 std::unique_ptr<ValueStore> LegacyValueStoreFactory::CreateSettingsStore(
@@ -185,8 +184,8 @@ std::unique_ptr<ValueStore> LegacyValueStoreFactory::CreateSettingsStore(
   const ModelSettings* settings_root =
       GetSettingsRoot(settings_namespace).GetModel(model_type);
   DCHECK(settings_root != nullptr);
-  return base::WrapUnique(new LeveldbValueStore(
-      kSettingsDatabaseUMAClientName, settings_root->GetDBPath(extension_id)));
+  return base::MakeUnique<LeveldbValueStore>(
+      kSettingsDatabaseUMAClientName, settings_root->GetDBPath(extension_id));
 }
 
 void LegacyValueStoreFactory::DeleteSettings(

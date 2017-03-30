@@ -7,13 +7,12 @@
 
 #include <stddef.h>
 
-#include <string>
+#include <bitset>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "chrome/common/ntp_logging_events.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -28,38 +27,22 @@ class NTPUserDataLogger
  public:
   ~NTPUserDataLogger() override;
 
+  // Gets the associated NTPUserDataLogger, creating it if necessary.
+  //
+  // MUST be called only when the NTP is active.
   static NTPUserDataLogger* GetOrCreateFromWebContents(
       content::WebContents* content);
-
-  // Returns the name of the histogram that should be logged for an impression
-  // of a specified Most Visited |provider|.
-  static std::string GetMostVisitedImpressionHistogramNameForProvider(
-      const std::string& provider);
-
-  // Returns the name of the histogram that should be logged for a navigation
-  // to a specified Most Visited |provider|.
-  static std::string GetMostVisitedNavigationHistogramNameForProvider(
-      const std::string& provider);
-
-  // Logs a number of statistics regarding the NTP. Called when an NTP tab is
-  // about to be deactivated (be it by switching tabs, losing focus or closing
-  // the tab/shutting down Chrome), or when the user navigates to a URL.
-  void EmitNtpStatistics();
 
   // Called when an event occurs on the NTP that requires a counter to be
   // incremented. |time| is the delta time in ms from navigation start until
   // this event happened.
   void LogEvent(NTPLoggingEventType event, base::TimeDelta time);
 
-  // Logs an impression on one of the Most Visited tiles by a given provider.
-  void LogMostVisitedImpression(int position, const base::string16& provider);
+  // Logs an impression on one of the NTP tiles by a given source.
+  void LogMostVisitedImpression(int position, NTPLoggingTileSource tile_source);
 
-  // Logs a navigation on one of the Most Visited tiles by a given provider.
-  void LogMostVisitedNavigation(int position, const base::string16& provider);
-
-  // content::WebContentsObserver override
-  void NavigationEntryCommitted(
-      const content::LoadCommittedDetails& load_details) override;
+  // Logs a navigation on one of the NTP tiles by a given source.
+  void LogMostVisitedNavigation(int position, NTPLoggingTileSource tile_source);
 
  protected:
   explicit NTPUserDataLogger(content::WebContents* contents);
@@ -71,6 +54,35 @@ class NTPUserDataLogger
                            OnMostVisitedItemsChangedFromServer);
   FRIEND_TEST_ALL_PREFIXES(SearchTabHelperTest,
                            OnMostVisitedItemsChangedFromClient);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest,
+                           TestLogging);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestLogMostVisitedImpression);
+  FRIEND_TEST_ALL_PREFIXES(NTPUserDataLoggerTest, TestNumberOfTiles);
+
+  // Number of Most Visited elements on the NTP for logging purposes.
+  static const int kNumMostVisited = 8;
+
+  // content::WebContentsObserver override
+  void NavigationEntryCommitted(
+      const content::LoadCommittedDetails& load_details) override;
+
+  // Implementation of NavigationEntryCommitted; separate for test.
+  void NavigatedFromURLToURL(const GURL& from, const GURL& to);
+
+  // Logs a number of statistics regarding the NTP. Called when an NTP tab is
+  // about to be deactivated (be it by switching tabs, losing focus or closing
+  // the tab/shutting down Chrome), or when the user navigates to a URL.
+  void EmitNtpStatistics(base::TimeDelta load_time);
+
+  // Records whether we have yet logged an impression for the tile at a given
+  // index. A typical NTP will log 8 impressions, but could record fewer for new
+  // users that haven't built up a history yet.
+  //
+  // If something happens that causes the NTP to pull tiles from different
+  // sources, such as signing in (switching from client to server tiles), then
+  // only the impressions for the first source will be logged, leaving the
+  // number of impressions for a source slightly out-of-sync with navigations.
+  std::bitset<kNumMostVisited> impression_was_logged_;
 
   // True if at least one iframe came from a server-side suggestion.
   bool has_server_side_suggestions_;
@@ -81,36 +93,6 @@ class NTPUserDataLogger
   // Total number of tiles rendered, no matter if it's a thumbnail, a gray tile
   // or an external tile.
   size_t number_of_tiles_;
-
-  // Total number of tiles using a local thumbnail image for this NTP session.
-  size_t number_of_thumbnail_tiles_;
-
-  // Total number of tiles for which no thumbnail is specified and a gray tile
-  // with the domain is used as the main tile.
-  size_t number_of_gray_tiles_;
-
-  // Total number of tiles for which the visual appearance is handled externally
-  // by the page itself.
-  size_t number_of_external_tiles_;
-
-  // Total number of errors that occurred when trying to load thumbnail images
-  // for this NTP session. When these errors occur a grey tile is shown instead
-  // of a thumbnail image.
-  size_t number_of_thumbnail_errors_;
-
-  // The number of times a gray tile with the domain was used as the fallback
-  // for a failed thumbnail.
-  size_t number_of_gray_tile_fallbacks_;
-
-  // The number of times an external tile, for which the visual appearance is
-  // handled by the page itself, was the fallback for a failed thumbnail.
-  size_t number_of_external_tile_fallbacks_;
-
-  // Total number of mouseovers for this NTP session.
-  size_t number_of_mouseovers_;
-
-  // Time from navigation start it took to load the NTP in milliseconds.
-  base::TimeDelta load_time_;
 
   // Whether we have already emitted NTP stats for this web contents.
   bool has_emitted_;

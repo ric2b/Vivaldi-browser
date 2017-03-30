@@ -61,13 +61,17 @@ class GpuProcessTransportFactory
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() override;
+  uint32_t AllocateSurfaceClientId() override;
+  void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
   void SetDisplayColorSpace(ui::Compositor* compositor,
                             const gfx::ColorSpace& color_space) override;
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override;
+  void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                 base::TimeTicks timebase,
+                                 base::TimeDelta interval) override;
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override;
   void AddObserver(ui::ContextFactoryObserver* observer) override;
   void RemoveObserver(ui::ContextFactoryObserver* observer) override;
@@ -76,6 +80,8 @@ class GpuProcessTransportFactory
   ui::ContextFactory* GetContextFactory() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   display_compositor::GLHelper* GetGLHelper() override;
+  void SetGpuChannelEstablishFactory(
+      gpu::GpuChannelEstablishFactory* factory) override;
 #if defined(OS_MACOSX)
   void SetCompositorSuspendedForRecycle(ui::Compositor* compositor,
                                         bool suspended) override;
@@ -87,9 +93,11 @@ class GpuProcessTransportFactory
   PerCompositorData* CreatePerCompositorData(ui::Compositor* compositor);
   std::unique_ptr<cc::SoftwareOutputDevice> CreateSoftwareOutputDevice(
       ui::Compositor* compositor);
-  void EstablishedGpuChannel(base::WeakPtr<ui::Compositor> compositor,
-                             bool create_gpu_output_surface,
-                             int num_attempts);
+  void EstablishedGpuChannel(
+      base::WeakPtr<ui::Compositor> compositor,
+      bool create_gpu_output_surface,
+      int num_attempts,
+      scoped_refptr<gpu::GpuChannelHost> established_channel_host);
 
   void OnLostMainThreadSharedContextInsideCallback();
   void OnLostMainThreadSharedContext();
@@ -103,13 +111,15 @@ class GpuProcessTransportFactory
   std::unique_ptr<display_compositor::GLHelper> gl_helper_;
   base::ObserverList<ui::ContextFactoryObserver> observer_list_;
   std::unique_ptr<cc::SurfaceManager> surface_manager_;
-  uint32_t next_surface_id_namespace_;
+  uint32_t next_surface_client_id_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<ContextProviderCommandBuffer> shared_worker_context_provider_;
 
   bool shared_vulkan_context_provider_initialized_ = false;
   scoped_refptr<cc::VulkanInProcessContextProvider>
       shared_vulkan_context_provider_;
+
+  gpu::GpuChannelEstablishFactory* gpu_channel_factory_ = nullptr;
 
 #if defined(OS_WIN)
   std::unique_ptr<OutputDeviceBacking> software_backing_;

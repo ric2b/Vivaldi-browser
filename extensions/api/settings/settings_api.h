@@ -3,7 +3,7 @@
 #ifndef EXTENSIONS_API_SETTINGS_API_H_
 #define EXTENSIONS_API_SETTINGS_API_H_
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/singleton.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"

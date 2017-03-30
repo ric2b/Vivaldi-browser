@@ -89,8 +89,7 @@ public:
     PassRefPtr<ComputedStyle> styleForElement(Element*, const ComputedStyle* parentStyle = 0, StyleSharingBehavior = AllowStyleSharing,
         RuleMatchingBehavior = MatchAllRules);
 
-    static PassRefPtr<AnimatableValue> createAnimatableValueSnapshot(Element&, const ComputedStyle* baseStyle, CSSPropertyID, const CSSValue*);
-    static PassRefPtr<AnimatableValue> createAnimatableValueSnapshot(StyleResolverState&, CSSPropertyID, const CSSValue*);
+    static PassRefPtr<AnimatableValue> createAnimatableValueSnapshot(Element&, const ComputedStyle& baseStyle, const ComputedStyle* parentStyle, CSSPropertyID, const CSSValue*);
 
     PassRefPtr<ComputedStyle> pseudoStyleForElement(Element*, const PseudoStyleRequest&, const ComputedStyle* parentStyle);
 
@@ -152,11 +151,7 @@ public:
     {
         if (hasPendingAuthorStyleSheets())
             appendPendingAuthorStyleSheets();
-        return m_features;
-    }
-
-    RuleFeatureSet& ruleFeatureSet()
-    {
+        RELEASE_ASSERT(m_features.isAlive());
         return m_features;
     }
 
@@ -212,9 +207,9 @@ private:
     template <CSSPropertyPriority priority>
     void applyAnimatedProperties(StyleResolverState&, const ActiveInterpolationsMap&);
     template <CSSPropertyPriority priority>
-    void applyAllProperty(StyleResolverState&, CSSValue*, bool inheritedOnly, PropertyWhitelistType);
+    void applyAllProperty(StyleResolverState&, const CSSValue&, bool inheritedOnly, PropertyWhitelistType);
     template <CSSPropertyPriority priority>
-    void applyPropertiesForApplyAtRule(StyleResolverState&, const CSSValue*, bool isImportant, bool inheritedOnly, PropertyWhitelistType);
+    void applyPropertiesForApplyAtRule(StyleResolverState&, const CSSValue&, bool isImportant, PropertyWhitelistType);
 
     bool pseudoStyleForElementInternal(Element&, const PseudoStyleRequest&, const ComputedStyle* parentStyle, StyleResolverState&);
     bool hasAuthorBackground(const StyleResolverState&);

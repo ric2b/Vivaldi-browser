@@ -32,13 +32,14 @@ public abstract class ChromeFeatureList {
     /** Whether we show an important sites dialog in the "Clear Browsing Data" flow. */
     public static final String ANDROID_PAY_INTEGRATION_V1 = "AndroidPayIntegrationV1";
     public static final String IMPORTANT_SITES_IN_CBD = "ImportantSitesInCBD";
-    public static final String MEDIA_STYLE_NOTIFICATION = "MediaStyleNotification";
     public static final String NTP_FAKE_OMNIBOX_TEXT = "NTPFakeOmniboxText";
     public static final String NTP_MATERIAL_DESIGN = "NTPMaterialDesign";
     public static final String NTP_SNIPPETS = "NTPSnippets";
-    public static final String NTP_TOOLBAR = "NTPToolbar";
+    public static final String NTP_SNIPPETS_SAVE_TO_OFFLINE = "NTPSaveToOffline";
     public static final String WEB_PAYMENTS = "WebPayments";
     public static final String SYSTEM_DOWNLOAD_MANAGER = "SystemDownloadManager";
+    public static final String TAB_REPARENTING = "TabReparenting";
+    public static final String CCT_EXTERNAL_LINK_HANDLING = "CCTExternalLinkHandling";
 
     private static native boolean nativeIsEnabled(String featureName);
 }

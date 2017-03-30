@@ -17,6 +17,7 @@ scoped_refptr<VideoLayer> VideoLayer::Create(
 VideoLayer::VideoLayer(VideoFrameProvider* provider,
                        media::VideoRotation video_rotation)
     : provider_(provider), video_rotation_(video_rotation) {
+  SetMayContainVideo(true);
   DCHECK(provider_);
 }
 
@@ -35,7 +36,7 @@ bool VideoLayer::Update() {
   //
   // This is the inefficient legacy redraw path for videos.  It's better to
   // communicate this directly to the VideoLayerImpl.
-  updated |= !update_rect_.IsEmpty();
+  updated |= !update_rect().IsEmpty();
 
   return updated;
 }

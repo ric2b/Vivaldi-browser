@@ -10,13 +10,21 @@
 
 namespace blink {
 
+class DoublePoint;
+class DoubleRect;
+class DoubleSize;
 class FloatBox;
 class FloatPoint;
 class FloatPoint3D;
 class FloatQuad;
 class FloatRect;
 class FloatSize;
+class IntPoint;
+class IntRect;
+class IntSize;
+class LayoutPoint;
 class LayoutRect;
+class LayoutSize;
 
 // GTest print support for geometry classes.
 //
@@ -29,6 +37,9 @@ class LayoutRect;
 // use these printers. If, however, you get a link error about these symbols,
 // you need to make sure the blink_platform_test_support target is linked in
 // your unit test binary.
+void PrintTo(const DoublePoint&, std::ostream*);
+void PrintTo(const DoubleRect&, std::ostream*);
+void PrintTo(const DoubleSize&, std::ostream*);
 void PrintTo(const FloatBox&, std::ostream*);
 void PrintTo(const FloatPoint&, std::ostream*);
 void PrintTo(const FloatPoint3D&, std::ostream*);
@@ -37,8 +48,12 @@ void PrintTo(const FloatRect&, std::ostream*);
 void PrintTo(const FloatRoundedRect&, std::ostream*);
 void PrintTo(const FloatRoundedRect::Radii&, std::ostream*);
 void PrintTo(const FloatSize&, std::ostream*);
+void PrintTo(const IntPoint&, std::ostream*);
 void PrintTo(const IntRect&, std::ostream*);
+void PrintTo(const IntSize&, std::ostream*);
+void PrintTo(const LayoutPoint&, std::ostream*);
 void PrintTo(const LayoutRect&, std::ostream*);
+void PrintTo(const LayoutSize&, std::ostream*);
 
 } // namespace blink
 

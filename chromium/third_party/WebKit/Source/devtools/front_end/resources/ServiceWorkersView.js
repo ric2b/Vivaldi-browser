@@ -29,17 +29,21 @@ WebInspector.ServiceWorkersView.prototype = {
      */
     targetAdded: function(target)
     {
-        if (this._target || !target.serviceWorkerManager)
+        var securityOriginManager = WebInspector.SecurityOriginManager.fromTarget(target);
+        if (this._manager || !target.serviceWorkerManager || !securityOriginManager)
             return;
-        this._target = target;
-        this._manager = this._target.serviceWorkerManager;
+        this._manager = target.serviceWorkerManager;
+        this._securityOriginManager = securityOriginManager;
 
         this._toolbar.appendToolbarItem(WebInspector.NetworkConditionsSelector.createOfflineToolbarCheckbox());
         var forceUpdate = new WebInspector.ToolbarCheckbox(WebInspector.UIString("Update on reload"), WebInspector.UIString("Force update Service Worker on page reload"), this._manager.forceUpdateOnReloadSetting());
         this._toolbar.appendToolbarItem(forceUpdate);
-        var fallbackToNetwork = new WebInspector.ToolbarCheckbox(WebInspector.UIString("Bypass for network"), WebInspector.UIString("Bypass Service Worker and load resources from the network"), target.networkManager.bypassServiceWorkerSetting());
-        this._toolbar.appendToolbarItem(fallbackToNetwork);
-        this._toolbar.appendSpacer();
+        var networkManager = target && WebInspector.NetworkManager.fromTarget(target);
+        if (networkManager) {
+            var fallbackToNetwork = new WebInspector.ToolbarCheckbox(WebInspector.UIString("Bypass for network"), WebInspector.UIString("Bypass Service Worker and load resources from the network"), networkManager.bypassServiceWorkerSetting());
+            this._toolbar.appendToolbarItem(fallbackToNetwork);
+            this._toolbar.appendSpacer();
+        }
         this._showAllCheckbox = new WebInspector.ToolbarCheckbox(WebInspector.UIString("Show all"), WebInspector.UIString("Show all Service Workers regardless of the origin"));
         this._showAllCheckbox.inputElement.addEventListener("change", this._updateSectionVisibility.bind(this), false);
         this._toolbar.appendToolbarItem(this._showAllCheckbox);
@@ -50,8 +54,8 @@ WebInspector.ServiceWorkersView.prototype = {
         this._manager.addEventListener(WebInspector.ServiceWorkerManager.Events.RegistrationUpdated, this._registrationUpdated, this);
         this._manager.addEventListener(WebInspector.ServiceWorkerManager.Events.RegistrationDeleted, this._registrationDeleted, this);
         this._manager.addEventListener(WebInspector.ServiceWorkerManager.Events.RegistrationErrorAdded, this._registrationErrorAdded, this);
-        this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.SecurityOriginAdded, this._updateSectionVisibility, this);
-        this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.SecurityOriginRemoved, this._updateSectionVisibility, this);
+        securityOriginManager.addEventListener(WebInspector.SecurityOriginManager.Events.SecurityOriginAdded, this._updateSectionVisibility, this);
+        securityOriginManager.addEventListener(WebInspector.SecurityOriginManager.Events.SecurityOriginRemoved, this._updateSectionVisibility, this);
     },
 
     /**
@@ -60,14 +64,15 @@ WebInspector.ServiceWorkersView.prototype = {
      */
     targetRemoved: function(target)
     {
-        if (target !== this._target)
+        if (this._manager !== target.serviceWorkerManager)
             return;
-        delete this._target;
+        this._manager = null;
+        this._securityOriginManager = null;
     },
 
     _updateSectionVisibility: function()
     {
-        var securityOrigins = new Set(this._target.resourceTreeModel.securityOrigins());
+        var securityOrigins = new Set(this._securityOriginManager.securityOrigins());
         for (var section of this._sections.values()) {
             var visible = this._showAllCheckbox.checked() || securityOrigins.has(section._registration.securityOrigin);
             section._section.element.classList.toggle("hidden", !visible);

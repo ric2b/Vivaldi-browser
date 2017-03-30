@@ -24,21 +24,20 @@ void LogAndCallServiceRestartCallback(const std::string& url,
 namespace mash {
 namespace session {
 
-Session::Session() : connector_(nullptr), screen_locked_(false) {}
+Session::Session() : screen_locked_(false) {}
 Session::~Session() {}
 
-void Session::Initialize(shell::Connector* connector,
-                         const shell::Identity& identity,
-                         uint32_t id) {
-  connector_ = connector;
+void Session::OnStart(const shell::Identity& identity) {
   StartAppDriver();
   StartWindowManager();
-  StartSystemUI();
   StartQuickLaunch();
+  // Launch a chrome window for dev convience; don't do this in the long term.
+  connector()->Connect("exe:chrome");
 }
 
-bool Session::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mojom::Session>(this);
+bool Session::OnConnect(const shell::Identity& remote_identity,
+                        shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mojom::Session>(this);
   return true;
 }
 
@@ -46,7 +45,7 @@ void Session::Logout() {
   // TODO(beng): Notify connected listeners that login is happening, potentially
   // give them the option to stop it.
   mash::login::mojom::LoginPtr login;
-  connector_->ConnectToInterface("mojo:login", &login);
+  connector()->ConnectToInterface("mojo:login", &login);
   login->ShowLoginUI();
   // This kills the user environment.
   base::MessageLoop::current()->QuitWhenIdle();
@@ -54,7 +53,7 @@ void Session::Logout() {
 
 void Session::SwitchUser() {
   mash::login::mojom::LoginPtr login;
-  connector_->ConnectToInterface("mojo:login", &login);
+  connector()->ConnectToInterface("mojo:login", &login);
   login->SwitchUser();
 }
 
@@ -85,7 +84,7 @@ void Session::UnlockScreen() {
   StopScreenlock();
 }
 
-void Session::Create(shell::Connection* connection,
+void Session::Create(const shell::Identity& remote_identity,
                      mojom::SessionRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
@@ -95,12 +94,6 @@ void Session::StartWindowManager() {
       "mojo:ash",
       base::Bind(&Session::StartWindowManager,
                  base::Unretained(this)));
-}
-
-void Session::StartSystemUI() {
-  StartRestartableService("mojo:ash_sysui",
-                          base::Bind(&Session::StartSystemUI,
-                                     base::Unretained(this)));
 }
 
 void Session::StartAppDriver() {
@@ -134,12 +127,12 @@ void Session::StartRestartableService(
     const base::Closure& restart_callback) {
   // TODO(beng): This would be the place to insert logic that counted restarts
   //             to avoid infinite crash-restart loops.
-  std::unique_ptr<shell::Connection> connection = connector_->Connect(url);
+  std::unique_ptr<shell::Connection> connection =
+      connector()->Connect(url);
   // Note: |connection| may be null if we've lost our connection to the shell.
   if (connection) {
     connection->SetConnectionLostClosure(
         base::Bind(&LogAndCallServiceRestartCallback, url, restart_callback));
-    connection->AddInterface<mojom::Session>(this);
     connections_[url] = std::move(connection);
   }
 }

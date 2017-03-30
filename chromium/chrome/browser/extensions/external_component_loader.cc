@@ -25,9 +25,12 @@
 #include "chrome/browser/ui/app_list/google_now_extension.h"
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER) && defined(GOOGLE_CHROME_BUILD)
+#if defined(ENABLE_MEDIA_ROUTER) && \
+    (defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD))
 #include "chrome/browser/media/router/media_router_feature.h"
 #endif
+
+#include "app/vivaldi_apptools.h"
 
 namespace extensions {
 
@@ -39,10 +42,12 @@ ExternalComponentLoader::~ExternalComponentLoader() {}
 
 void ExternalComponentLoader::StartLoading() {
   prefs_.reset(new base::DictionaryValue());
+  if (!vivaldi::IsVivaldiRunning()) {
   AddExternalExtension(extension_misc::kInAppPaymentsSupportAppId);
 
   if (HotwordServiceFactory::IsHotwordAllowed(profile_))
     AddExternalExtension(extension_misc::kHotwordSharedModuleId);
+  }
 
 #if defined(OS_CHROMEOS)
   {
@@ -53,7 +58,8 @@ void ExternalComponentLoader::StartLoading() {
   }
 #endif
 
-#if defined(ENABLE_MEDIA_ROUTER) && defined(GOOGLE_CHROME_BUILD)
+#if defined(ENABLE_MEDIA_ROUTER) && \
+    (defined(GOOGLE_CHROME_BUILD) || defined(VIVALDI_BUILD))
   if (media_router::MediaRouterEnabled(profile_))
     AddExternalExtension(extension_misc::kMediaRouterStableExtensionId);
 #endif  // defined(ENABLE_MEDIA_ROUTER) && defined(GOOGLE_CHROME_BUILD)

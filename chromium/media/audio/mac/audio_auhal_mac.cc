@@ -211,7 +211,8 @@ OSStatus AUHALStream::Render(
     UInt32 bus_number,
     UInt32 number_of_frames,
     AudioBufferList* data) {
-  TRACE_EVENT0("audio", "AUHALStream::Render");
+  TRACE_EVENT2("audio", "AUHALStream::Render", "input buffer size",
+               number_of_frames_, "output buffer size", number_of_frames);
 
   UpdatePlayoutTimestamp(output_time_stamp);
 
@@ -392,7 +393,7 @@ void AUHALStream::ReportAndResetStats() {
   // Even if there aren't any glitches, we want to record it to get a feel for
   // how often we get no glitches vs the alternative.
   UMA_HISTOGRAM_CUSTOM_COUNTS("Media.Audio.Render.Glitches", glitches_detected_,
-                              0, 999999, 100);
+                              1, 999999, 100);
 
   auto lost_frames_ms = (total_lost_frames_ * 1000) / params_.sample_rate();
   std::string log_message = base::StringPrintf(

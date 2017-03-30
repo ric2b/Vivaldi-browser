@@ -37,11 +37,9 @@ bool RunResponseForwardToCallback::Accept(Message* message) {
   RunResponseMessageParams_Data* params =
       reinterpret_cast<RunResponseMessageParams_Data*>(
           message->mutable_payload());
-  params->DecodePointers();
-
   RunResponseMessageParamsPtr params_ptr;
   SerializationContext context;
-  Deserialize<RunResponseMessageParamsPtr>(params, &params_ptr, &context);
+  Deserialize<RunResponseMessageParamsDataView>(params, &params_ptr, &context);
 
   callback_.Run(std::move(params_ptr->query_version_result));
   return true;
@@ -56,13 +54,13 @@ void SendRunMessage(MessageReceiverWithResponder* receiver,
   params_ptr->reserved1 = 0u;
   params_ptr->query_version = std::move(query_version);
 
-  size_t size = PrepareToSerialize<RunMessageParamsPtr>(params_ptr, context);
+  size_t size =
+      PrepareToSerialize<RunMessageParamsDataView>(params_ptr, context);
   RequestMessageBuilder builder(kRunMessageId, size);
 
   RunMessageParams_Data* params = nullptr;
-  Serialize<RunMessageParamsPtr>(params_ptr, builder.buffer(), &params,
-                                 context);
-  params->EncodePointers();
+  Serialize<RunMessageParamsDataView>(params_ptr, builder.buffer(), &params,
+                                      context);
   MessageReceiver* responder = new RunResponseForwardToCallback(callback);
   if (!receiver->AcceptWithResponder(builder.message(), responder))
     delete responder;
@@ -76,14 +74,13 @@ void SendRunOrClosePipeMessage(MessageReceiverWithResponder* receiver,
   params_ptr->reserved1 = 0u;
   params_ptr->require_version = std::move(require_version);
 
-  size_t size =
-      PrepareToSerialize<RunOrClosePipeMessageParamsPtr>(params_ptr, context);
+  size_t size = PrepareToSerialize<RunOrClosePipeMessageParamsDataView>(
+      params_ptr, context);
   MessageBuilder builder(kRunOrClosePipeMessageId, size);
 
   RunOrClosePipeMessageParams_Data* params = nullptr;
-  Serialize<RunOrClosePipeMessageParamsPtr>(params_ptr, builder.buffer(),
-                                            &params, context);
-  params->EncodePointers();
+  Serialize<RunOrClosePipeMessageParamsDataView>(params_ptr, builder.buffer(),
+                                                 &params, context);
   bool ok = receiver->Accept(builder.message());
   ALLOW_UNUSED_LOCAL(ok);
 }

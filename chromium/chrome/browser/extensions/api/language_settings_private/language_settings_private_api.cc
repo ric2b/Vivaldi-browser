@@ -31,7 +31,7 @@
 #include "chrome/browser/translate/translate_service.h"
 #include "chrome/common/extensions/api/language_settings_private.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/spellcheck_common.h"
+#include "components/spellcheck/common/spellcheck_common.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "third_party/icu/source/i18n/unicode/coll.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -201,7 +201,7 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
 
   // Get the list of spell check languages and convert to a set.
   std::vector<std::string> spellcheck_languages;
-  chrome::spellcheck_common::SpellCheckLanguages(&spellcheck_languages);
+  spellcheck::SpellCheckLanguages(&spellcheck_languages);
   const std::unordered_set<std::string> spellcheck_language_set(
       spellcheck_languages.begin(), spellcheck_languages.end());
 
@@ -245,26 +245,70 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
   return RespondNow(OneArgument(std::move(language_list)));
 }
 
-LanguageSettingsPrivateSetLanguageListFunction::
-    LanguageSettingsPrivateSetLanguageListFunction()
-    : chrome_details_(this) {
-}
+LanguageSettingsPrivateEnableLanguageFunction::
+    LanguageSettingsPrivateEnableLanguageFunction()
+    : chrome_details_(this) {}
 
-LanguageSettingsPrivateSetLanguageListFunction::
-    ~LanguageSettingsPrivateSetLanguageListFunction() {
-}
+LanguageSettingsPrivateEnableLanguageFunction::
+    ~LanguageSettingsPrivateEnableLanguageFunction() {}
 
 ExtensionFunction::ResponseAction
-LanguageSettingsPrivateSetLanguageListFunction::Run() {
-  std::unique_ptr<language_settings_private::SetLanguageList::Params>
+LanguageSettingsPrivateEnableLanguageFunction::Run() {
+  std::unique_ptr<language_settings_private::EnableLanguage::Params>
       parameters =
-          language_settings_private::SetLanguageList::Params::Create(*args_);
+          language_settings_private::EnableLanguage::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
+  const std::string& language_code = parameters->language_code;
 
   std::unique_ptr<translate::TranslatePrefs> translate_prefs =
       ChromeTranslateClient::CreateTranslatePrefs(
           chrome_details_.GetProfile()->GetPrefs());
-  translate_prefs->UpdateLanguageList(parameters->language_codes);
+
+  std::vector<std::string> languages;
+  translate_prefs->GetLanguageList(&languages);
+
+  if (std::find(languages.begin(), languages.end(), language_code) !=
+      languages.end()) {
+    LOG(ERROR) << "Language " << language_code << " already enabled";
+    return RespondNow(NoArguments());
+  }
+
+  languages.push_back(parameters->language_code);
+  translate_prefs->UpdateLanguageList(languages);
+
+  return RespondNow(NoArguments());
+}
+
+LanguageSettingsPrivateDisableLanguageFunction::
+    LanguageSettingsPrivateDisableLanguageFunction()
+    : chrome_details_(this) {}
+
+LanguageSettingsPrivateDisableLanguageFunction::
+    ~LanguageSettingsPrivateDisableLanguageFunction() {}
+
+ExtensionFunction::ResponseAction
+LanguageSettingsPrivateDisableLanguageFunction::Run() {
+  std::unique_ptr<language_settings_private::DisableLanguage::Params>
+      parameters =
+          language_settings_private::DisableLanguage::Params::Create(*args_);
+  EXTENSION_FUNCTION_VALIDATE(parameters.get());
+  const std::string& language_code = parameters->language_code;
+
+  std::unique_ptr<translate::TranslatePrefs> translate_prefs =
+      ChromeTranslateClient::CreateTranslatePrefs(
+          chrome_details_.GetProfile()->GetPrefs());
+
+  std::vector<std::string> languages;
+  translate_prefs->GetLanguageList(&languages);
+
+  auto it = std::find(languages.begin(), languages.end(), language_code);
+  if (it == languages.end()) {
+    LOG(ERROR) << "Language " << language_code << " not enabled";
+    return RespondNow(NoArguments());
+  }
+
+  languages.erase(it);
+  translate_prefs->UpdateLanguageList(languages);
 
   return RespondNow(NoArguments());
 }

@@ -2,38 +2,35 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/accelerators/accelerator_controller.h"
+#include "ash/common/accelerators/accelerator_controller.h"
 
-#include "ash/accelerators/accelerator_table.h"
 #include "ash/aura/wm_window_aura.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #include "ash/common/accessibility_delegate.h"
 #include "ash/common/accessibility_types.h"
-#include "ash/common/ash_switches.h"
+#include "ash/common/ime_control_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/brightness_control_delegate.h"
+#include "ash/common/system/keyboard_brightness_control_delegate.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/volume_control_delegate.h"
+#include "ash/common/test/test_volume_control_delegate.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
-#include "ash/ime_control_delegate.h"
-#include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/system/brightness_control_delegate.h"
-#include "ash/system/keyboard_brightness/keyboard_brightness_control_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_animator.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/test/test_shell_delegate.h"
-#include "ash/test/test_volume_control_delegate.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
-#include "base/command_line.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/test/test_windows.h"
@@ -208,10 +205,6 @@ class AcceleratorControllerTest : public test::AshTestBase {
   ~AcceleratorControllerTest() override {}
 
  protected:
-  void EnableInternalDisplay() {
-    test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
-  }
-
   static AcceleratorController* GetController();
 
   static bool ProcessInController(const ui::Accelerator& accelerator) {
@@ -266,12 +259,22 @@ class AcceleratorControllerTest : public test::AshTestBase {
     return window;
   }
 
+  void SetBrightnessControlDelegate(
+      std::unique_ptr<BrightnessControlDelegate> delegate) {
+    WmShell::Get()->brightness_control_delegate_ = std::move(delegate);
+  }
+
+  void SetKeyboardBrightnessControlDelegate(
+      std::unique_ptr<KeyboardBrightnessControlDelegate> delegate) {
+    WmShell::Get()->keyboard_brightness_control_delegate_ = std::move(delegate);
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(AcceleratorControllerTest);
 };
 
 AcceleratorController* AcceleratorControllerTest::GetController() {
-  return Shell::GetInstance()->accelerator_controller();
+  return WmShell::Get()->accelerator_controller();
 }
 
 #if !defined(OS_WIN)
@@ -859,7 +862,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   {
     DummyBrightnessControlDelegate* delegate =
         new DummyBrightnessControlDelegate;
-    GetController()->SetBrightnessControlDelegate(
+    SetBrightnessControlDelegate(
         std::unique_ptr<BrightnessControlDelegate>(delegate));
     EXPECT_EQ(0, delegate->handle_brightness_down_count());
     EXPECT_TRUE(ProcessInController(brightness_down));
@@ -881,7 +884,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
     EXPECT_TRUE(ProcessInController(alt_brightness_up));
     DummyKeyboardBrightnessControlDelegate* delegate =
         new DummyKeyboardBrightnessControlDelegate;
-    GetController()->SetKeyboardBrightnessControlDelegate(
+    SetKeyboardBrightnessControlDelegate(
         std::unique_ptr<KeyboardBrightnessControlDelegate>(delegate));
     EXPECT_EQ(0, delegate->handle_keyboard_brightness_down_count());
     EXPECT_TRUE(ProcessInController(alt_brightness_down));
@@ -946,19 +949,19 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
 }
 
 TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
-  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
+  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
 
   // The press event should not open the AppList, the release should instead.
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_EQ(ui::VKEY_LWIN, GetCurrentAccelerator().key_code());
 
-  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
 
   EXPECT_TRUE(
       ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
-  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
 
   EXPECT_EQ(ui::VKEY_LWIN, GetPreviousAccelerator().key_code());
 
@@ -969,13 +972,13 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
   EXPECT_FALSE(
       ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
 
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_TRUE(
       ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
-  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
 
   // When spoken feedback is on, the AppList should not toggle.
   delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
@@ -984,16 +987,16 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
   EXPECT_FALSE(
       ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
-  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_FALSE(WmShell::Get()->GetAppListTargetVisibility());
 
 #if defined(OS_CHROMEOS)
   // The press of VKEY_BROWSER_SEARCH should toggle the AppList
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
-  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
   EXPECT_FALSE(ProcessInController(
       ReleaseAccelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
-  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(WmShell::Get()->GetAppListTargetVisibility());
 #endif
 }
 
@@ -1121,9 +1124,15 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
   EXPECT_TRUE(test_api.is_animating_lock());
 #endif
 
+  auto press_and_release_alt_tab = [&generator]() {
+    generator.PressKey(ui::VKEY_TAB, ui::EF_ALT_DOWN);
+    // Release the alt key to trigger the window activation.
+    generator.ReleaseKey(ui::VKEY_MENU, ui::EF_NONE);
+  };
+
   // A fullscreen window can consume ALT-TAB (preferred).
   ASSERT_EQ(w1, wm::GetActiveWindow());
-  generator.PressKey(ui::VKEY_TAB, ui::EF_ALT_DOWN);
+  press_and_release_alt_tab();
   ASSERT_EQ(w1, wm::GetActiveWindow());
   ASSERT_NE(w2, wm::GetActiveWindow());
 
@@ -1138,7 +1147,7 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
   ASSERT_FALSE(w1_state->IsFullscreen());
 
   EXPECT_EQ(w1, wm::GetActiveWindow());
-  generator.PressKey(ui::VKEY_TAB, ui::EF_ALT_DOWN);
+  press_and_release_alt_tab();
   ASSERT_NE(w1, wm::GetActiveWindow());
   ASSERT_EQ(w2, wm::GetActiveWindow());
 }
@@ -1237,7 +1246,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   {
     DummyBrightnessControlDelegate* delegate =
         new DummyBrightnessControlDelegate;
-    GetController()->SetBrightnessControlDelegate(
+    SetBrightnessControlDelegate(
         std::unique_ptr<BrightnessControlDelegate>(delegate));
     EXPECT_EQ(0, delegate->handle_brightness_down_count());
     EXPECT_TRUE(ProcessInController(brightness_down));
@@ -1276,7 +1285,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
 #endif
 
 TEST_F(AcceleratorControllerTest, DisallowedWithNoWindow) {
-  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->accessibility_delegate();
 
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i) {
     delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);

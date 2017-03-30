@@ -7,6 +7,7 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/stl_util.h"
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -28,6 +29,7 @@ using base::android::CheckException;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::GetClass;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using content::CertStore;
 using content::WebContents;
@@ -87,7 +89,7 @@ ConnectionInfoPopupAndroid::ConnectionInfoPopupAndroid(
   // Important to use GetVisibleEntry to match what's showing in the omnibox.
   content::NavigationEntry* nav_entry =
       web_contents->GetController().GetVisibleEntry();
-  if (nav_entry == NULL)
+  if (nav_entry == nullptr)
     return;
 
   popup_jobject_.Reset(env, java_website_settings_pop);
@@ -149,20 +151,15 @@ void ConnectionInfoPopupAndroid::SetIdentityInfo(
     }
 
     Java_ConnectionInfoPopup_addCertificateSection(
-        env,
-        popup_jobject_.obj(),
-        icon_id,
-        ConvertUTF8ToJavaString(env, headline).obj(),
-        description.obj(),
-        ConvertUTF16ToJavaString(env, certificate_label).obj());
+        env, popup_jobject_, icon_id, ConvertUTF8ToJavaString(env, headline),
+        description, ConvertUTF16ToJavaString(env, certificate_label));
 
     if (identity_info.show_ssl_decision_revoke_button) {
       base::string16 reset_button_label = l10n_util::GetStringUTF16(
           IDS_PAGEINFO_RESET_INVALID_CERTIFICATE_DECISIONS_BUTTON);
       Java_ConnectionInfoPopup_addResetCertDecisionsButton(
-          env,
-          popup_jobject_.obj(),
-          ConvertUTF16ToJavaString(env, reset_button_label).obj());
+          env, popup_jobject_,
+          ConvertUTF16ToJavaString(env, reset_button_label));
     }
   }
 
@@ -173,16 +170,15 @@ void ConnectionInfoPopupAndroid::SetIdentityInfo(
 
     ScopedJavaLocalRef<jstring> description = ConvertUTF8ToJavaString(
         env, identity_info.connection_status_description);
-    Java_ConnectionInfoPopup_addDescriptionSection(
-        env, popup_jobject_.obj(), icon_id, NULL, description.obj());
+    Java_ConnectionInfoPopup_addDescriptionSection(env, popup_jobject_, icon_id,
+                                                   nullptr, description);
   }
 
   Java_ConnectionInfoPopup_addMoreInfoLink(
-      env,
-      popup_jobject_.obj(),
+      env, popup_jobject_,
       ConvertUTF8ToJavaString(
-          env, l10n_util::GetStringUTF8(IDS_PAGE_INFO_HELP_CENTER_LINK)).obj());
-  Java_ConnectionInfoPopup_showDialog(env, popup_jobject_.obj());
+          env, l10n_util::GetStringUTF8(IDS_PAGE_INFO_HELP_CENTER_LINK)));
+  Java_ConnectionInfoPopup_showDialog(env, popup_jobject_);
 }
 
 void ConnectionInfoPopupAndroid::SetCookieInfo(
@@ -193,6 +189,9 @@ void ConnectionInfoPopupAndroid::SetCookieInfo(
 void ConnectionInfoPopupAndroid::SetPermissionInfo(
     const PermissionInfoList& permission_info_list,
     const ChosenObjectInfoList& chosen_object_info_list) {
+  base::STLDeleteContainerPointers(chosen_object_info_list.begin(),
+                                   chosen_object_info_list.end());
+
   NOTIMPLEMENTED();
 }
 

@@ -139,7 +139,7 @@ void CopyTexImageResourceManager::Destroy() {
   initialized_ = false;
 }
 
-void CopyTexImageResourceManager::DoCopyTexImage2DToLUMAComatabilityTexture(
+void CopyTexImageResourceManager::DoCopyTexImage2DToLUMACompatibilityTexture(
     const gles2::GLES2Decoder* decoder,
     GLuint dest_texture,
     GLenum dest_texture_target,
@@ -162,13 +162,13 @@ void CopyTexImageResourceManager::DoCopyTexImage2DToLUMAComatabilityTexture(
       feature_info_.get(), internal_format);
   glTexImage2D(dest_target, level, adjusted_internal_format, width, height, 0,
                adjusted_format, luma_type, nullptr);
-  DoCopyTexSubImage2DToLUMAComatabilityTexture(
+  DoCopyTexSubImageToLUMACompatibilityTexture(
       decoder, dest_texture, dest_texture_target, dest_target, luma_format,
-      luma_type, level, 0, 0, x, y, width, height, source_framebuffer,
+      luma_type, level, 0, 0, 0, x, y, width, height, source_framebuffer,
       source_framebuffer_internal_format);
 }
 
-void CopyTexImageResourceManager::DoCopyTexSubImage2DToLUMAComatabilityTexture(
+void CopyTexImageResourceManager::DoCopyTexSubImageToLUMACompatibilityTexture(
     const gles2::GLES2Decoder* decoder,
     GLuint dest_texture,
     GLenum dest_texture_target,
@@ -178,6 +178,7 @@ void CopyTexImageResourceManager::DoCopyTexSubImage2DToLUMAComatabilityTexture(
     GLint level,
     GLint xoffset,
     GLint yoffset,
+    GLint zoffset,
     GLint x,
     GLint y,
     GLsizei width,
@@ -241,8 +242,13 @@ void CopyTexImageResourceManager::DoCopyTexSubImage2DToLUMAComatabilityTexture(
 
   // Finally, copy the swizzled texture to the destination texture
   glBindTexture(dest_texture_target, dest_texture);
-  glCopyTexSubImage2D(dest_target, level, xoffset, yoffset, 0, 0, width,
-                      height);
+  if (dest_target == GL_TEXTURE_3D || dest_target == GL_TEXTURE_2D_ARRAY) {
+    glCopyTexSubImage3D(dest_target, level, xoffset, yoffset, zoffset,
+                        0, 0, width, height);
+  } else {
+    glCopyTexSubImage2D(dest_target, level, xoffset, yoffset,
+                        0, 0, width, height);
+  }
 
   // Restore state
   decoder->RestoreAllAttributes();

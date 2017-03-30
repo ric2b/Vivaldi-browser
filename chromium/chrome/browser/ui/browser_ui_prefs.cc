@@ -8,6 +8,7 @@
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -48,40 +49,31 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
                                 GetHomeButtonAndHomePageIsNewTabPageFlags());
   registry->RegisterBooleanPref(
-      prefs::kDeleteBrowsingHistory,
-      true,
+      browsing_data::prefs::kDeleteBrowsingHistory, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteDownloadHistory,
-      true,
+      browsing_data::prefs::kDeleteDownloadHistory, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteCache,
-      true,
+      browsing_data::prefs::kDeleteCache, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteCookies,
-      true,
+      browsing_data::prefs::kDeleteCookies, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeletePasswords,
-      false,
+      browsing_data::prefs::kDeletePasswords, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteFormData,
-      false,
+      browsing_data::prefs::kDeleteFormData, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteHostedAppsData,
-      false,
+      browsing_data::prefs::kDeleteHostedAppsData, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterBooleanPref(
-      prefs::kDeleteMediaLicenses,
-      false,
+      browsing_data::prefs::kDeleteMediaLicenses, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
-      prefs::kDeleteTimePeriod,
-      0,
+      browsing_data::prefs::kDeleteTimePeriod, 0,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterIntegerPref(
       prefs::kClearBrowsingDataHistoryNoticeShownTimes, 0);
@@ -124,6 +116,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(prefs::kWebRTCNonProxiedUdpEnabled, true);
   registry->RegisterStringPref(prefs::kWebRTCIPHandlingPolicy,
                                content::kWebRTCIPHandlingDefault);
+  registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
 #endif
 
   // Dictionaries to keep track of default tasks in the file browser.

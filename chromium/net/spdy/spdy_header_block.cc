@@ -4,10 +4,10 @@
 
 #include "net/spdy/spdy_header_block.h"
 
+#include <string.h>
+
 #include <algorithm>
-#include <ios>
 #include <utility>
-#include <vector>
 
 #include "base/logging.h"
 #include "base/macros.h"
@@ -28,6 +28,8 @@ namespace {
 // SpdyHeaderBlock::Storage allocates blocks of this size by default.
 const size_t kDefaultStorageBlockSize = 2048;
 
+const char kCookieKey[] = "cookie";
+
 }  // namespace
 
 // This class provides a backing store for StringPieces. It previously used
@@ -45,6 +47,24 @@ class SpdyHeaderBlock::Storage {
 
   StringPiece Write(const StringPiece s) {
     return StringPiece(arena_.Memdup(s.data(), s.size()), s.size());
+  }
+
+  // Given value, a string already in the arena, perform a realloc and append
+  // separator and more to the end of the value's new location. If value is the
+  // most recently added string (via Write), then UnsafeArena will not copy the
+  // existing value but instead will increase the space reserved for value.
+  StringPiece Realloc(StringPiece value,
+                      StringPiece separator,
+                      StringPiece more) {
+    size_t total_length = value.size() + separator.size() + more.size();
+    char* ptr = const_cast<char*>(value.data());
+    ptr = arena_.Realloc(ptr, value.size(), total_length);
+    StringPiece result(ptr, total_length);
+    ptr += value.size();
+    memcpy(ptr, separator.data(), separator.size());
+    ptr += separator.size();
+    memcpy(ptr, more.data(), more.size());
+    return result;
   }
 
   // If |s| points to the most recent allocation from arena_, the arena will
@@ -118,21 +138,18 @@ SpdyHeaderBlock::StringPieceProxy::operator StringPiece() const {
                                            : lookup_result_->second;
 }
 
-SpdyHeaderBlock::SpdyHeaderBlock() : storage_(new Storage) {}
+SpdyHeaderBlock::SpdyHeaderBlock() {}
 
-SpdyHeaderBlock::SpdyHeaderBlock(SpdyHeaderBlock&& other)
-    : storage_(std::move(other.storage_)) {
-  // |block_| is linked_hash_map, which does not have move constructor.
+SpdyHeaderBlock::SpdyHeaderBlock(SpdyHeaderBlock&& other) {
   block_.swap(other.block_);
+  storage_.swap(other.storage_);
 }
 
 SpdyHeaderBlock::~SpdyHeaderBlock() {}
 
 SpdyHeaderBlock& SpdyHeaderBlock::operator=(SpdyHeaderBlock&& other) {
-  storage_ = std::move(other.storage_);
-  // |block_| is linked_hash_map, which does not have move assignment
-  // operator.
   block_.swap(other.block_);
+  storage_.swap(other.storage_);
   return *this;
 }
 
@@ -167,7 +184,7 @@ string SpdyHeaderBlock::DebugString() const {
 
 void SpdyHeaderBlock::clear() {
   block_.clear();
-  storage_->Clear();
+  storage_.reset();
 }
 
 void SpdyHeaderBlock::insert(
@@ -183,14 +200,14 @@ SpdyHeaderBlock::StringPieceProxy SpdyHeaderBlock::operator[](
   if (iter == block_.end()) {
     // We write the key first, to assure that the StringPieceProxy has a
     // reference to a valid StringPiece in its operator=.
-    out_key = storage_->Write(key);
-    DVLOG(2) << "Key written as: " << hex
-             << static_cast<const void*>(key.data()) << ", " << dec
+    out_key = GetStorage()->Write(key);
+    DVLOG(2) << "Key written as: " << std::hex
+             << static_cast<const void*>(key.data()) << ", " << std::dec
              << key.size();
   } else {
     out_key = iter->first;
   }
-  return StringPieceProxy(&block_, storage_.get(), iter, out_key);
+  return StringPieceProxy(&block_, GetStorage(), iter, out_key);
 }
 
 StringPiece SpdyHeaderBlock::GetHeader(const StringPiece key) const {
@@ -207,13 +224,36 @@ void SpdyHeaderBlock::ReplaceOrAppendHeader(const StringPiece key,
     AppendHeader(key, value);
   } else {
     DVLOG(1) << "Updating key: " << iter->first << " with value: " << value;
-    iter->second = storage_->Write(value);
+    iter->second = GetStorage()->Write(value);
   }
+}
+
+void SpdyHeaderBlock::AppendValueOrAddHeader(const StringPiece key,
+                                             const StringPiece value) {
+  auto iter = block_.find(key);
+  if (iter == block_.end()) {
+    DVLOG(1) << "Inserting: (" << key << ", " << value << ")";
+    AppendHeader(key, value);
+    return;
+  }
+  DVLOG(1) << "Updating key: " << iter->first << "; appending value: " << value;
+  StringPiece separator("", 1);
+  if (key == kCookieKey) {
+    separator = "; ";
+  }
+  iter->second = GetStorage()->Realloc(iter->second, separator, value);
 }
 
 void SpdyHeaderBlock::AppendHeader(const StringPiece key,
                                    const StringPiece value) {
-  block_.insert(make_pair(storage_->Write(key), storage_->Write(value)));
+  block_.emplace(GetStorage()->Write(key), GetStorage()->Write(value));
+}
+
+SpdyHeaderBlock::Storage* SpdyHeaderBlock::GetStorage() {
+  if (!storage_) {
+    storage_.reset(new Storage);
+  }
+  return storage_.get();
 }
 
 std::unique_ptr<base::Value> SpdyHeaderBlockNetLogCallback(

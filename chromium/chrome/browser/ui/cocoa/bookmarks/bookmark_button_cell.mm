@@ -32,8 +32,8 @@ int HierarchyButtonLeftPadding() {
 }
 
 const int kIconTextSpacer = 4;
-const int kTextRightPadding = 1;
-const int kIconLeftPadding = 1;
+const int kTextRightPadding = 4;
+const int kIconLeftPadding = 4;
 
 const int kDefaultFontSize = 12;
 
@@ -45,6 +45,21 @@ const int kDefaultFontSize = 12;
 
 - (BOOL)isOffTheSideButtonCell {
   return YES;
+}
+
+- (NSString*)accessibilityTitle {
+  return l10n_util::GetNSString(IDS_ACCNAME_BOOKMARKS_CHEVRON);
+}
+
+- (NSRect)imageRectForBounds:(NSRect)theRect {
+  NSRect imageRect = [super imageRectForBounds:theRect];
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    // Make sure the chevron icon stays centered. Normally a bookmark bar item
+    // with no label has its icon placed at a fixed x-position.
+    CGFloat totalWidth = NSMaxX(theRect);
+    imageRect.origin.x = (totalWidth - [self image].size.width) / 2;
+  }
+  return imageRect;
 }
 
 @end
@@ -355,7 +370,7 @@ const int kDefaultFontSize = 12;
           kIconTextSpacer + std::ceil(textWidth) + kTextRightPadding;
     } else {
       // Make buttons without visible titles 20pts wide (18 plus padding).
-      cellSize.width = 18;
+      cellSize.width += kIconLeftPadding;
     }
   }
 
@@ -373,9 +388,7 @@ const int kDefaultFontSize = 12;
   // left edge, but only if there's a visible title.
   if (ui::MaterialDesignController::IsModeMaterial()) {
     imageRect.origin.y -= 1;
-    if ([[self visibleTitle] length] > 0) {
-      imageRect.origin.x += kIconLeftPadding;
-    }
+    imageRect.origin.x = kIconLeftPadding;
   }
   return imageRect;
 }
@@ -390,15 +403,15 @@ const int kDefaultFontSize = 12;
 - (void)drawFocusRingMaskWithFrame:(NSRect)cellFrame
                             inView:(NSView*)controlView {
   if (ui::MaterialDesignController::IsModeMaterial()) {
-    // In Material Design we have to move the focus ring over by 2 pts to get it
-    // to line up with the image.
-    if ([self visibleTitle].length > 0) {
-      cellFrame.origin.x += 2;
-    }
-
-    // We also have to nudge the chevron button's focus ring up 2pts.
+    // In Material Design we have to adjust the focus ring slightly for the
+    // chevron and regular bookmark icons.
     if ([self isOffTheSideButtonCell]) {
       cellFrame.origin.y -= 2;
+    } else if ([self visibleTitle].length > 0) {
+      cellFrame.origin.x += 4;
+    }
+    if ([controlView cr_lineWidth] < 1) {
+      cellFrame.origin.y -= 0.5;
     }
   }
   [super drawFocusRingMaskWithFrame:cellFrame inView:controlView];
@@ -443,8 +456,8 @@ const int kDefaultFontSize = 12;
   // In Material Design on Retina, and not in a folder menu, nudge the hover
   // background by 1px.
   const CGFloat kLineWidth = [controlView cr_lineWidth];
-  if ([self tag] == kMaterialStandardButtonTypeWithLimitedClickFeedback &&
-      ![self isFolderButtonCell] && kLineWidth < 1) {
+  if ([self isMaterialDesignButtonType] && ![self isFolderButtonCell] &&
+      kLineWidth < 1) {
     return -kLineWidth;
   }
   return 0.0;

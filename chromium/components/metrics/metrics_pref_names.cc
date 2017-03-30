@@ -55,8 +55,8 @@ const char kMetricsResetIds[] = "user_experience_metrics.reset_metrics_ids";
 const char kMetricsReportingEnabled[] =
     "user_experience_metrics.reporting_enabled";
 
-// Date/time when the user opted in to UMA and generated the client id for the
-// very first time (local machine time, stored as a 64-bit time_t value).
+// Date/time when the user opted in to UMA and generated the client id most
+// recently (local machine time, stored as a 64-bit time_t value).
 const char kMetricsReportingEnabledTimestamp[] =
     "user_experience_metrics.client_id_timestamp";
 
@@ -111,6 +111,11 @@ const char kStabilityExtensionRendererCrashCount[] =
 const char kStabilityExtensionRendererFailedLaunchCount[] =
     "user_experience_metrics.stability.extension_renderer_failed_launch_count";
 
+// Number of times an extension renderer process successfully launched since the
+// last report.
+const char kStabilityExtensionRendererLaunchCount[] =
+    "user_experience_metrics.stability.extension_renderer_launch_count";
+
 // Number of times the session end did not complete.
 const char kStabilityIncompleteSessionEndCount[] =
     "user_experience_metrics.stability.incomplete_session_end_count";
@@ -144,6 +149,11 @@ const char kStabilityRendererFailedLaunchCount[] =
 // report.
 const char kStabilityRendererHangCount[] =
     "user_experience_metrics.stability.renderer_hang_count";
+
+// Number of times a renderer process successfully launched since the last
+// report.
+const char kStabilityRendererLaunchCount[] =
+    "user_experience_metrics.stability.renderer_launch_count";
 
 // Base64 encoded serialized UMA system profile proto from the previous session.
 const char kStabilitySavedSystemProfile[] =

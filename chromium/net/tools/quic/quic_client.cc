@@ -14,13 +14,13 @@
 #include "base/logging.h"
 #include "base/run_loop.h"
 #include "net/base/sockaddr_storage.h"
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_bug_tracker.h"
-#include "net/quic/quic_connection.h"
-#include "net/quic/quic_data_reader.h"
-#include "net/quic/quic_flags.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_server_id.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_bug_tracker.h"
+#include "net/quic/core/quic_connection.h"
+#include "net/quic/core/quic_data_reader.h"
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_server_id.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_socket_utils.h"
@@ -51,27 +51,27 @@ QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicServerId& server_id,
                        const QuicVersionVector& supported_versions,
                        EpollServer* epoll_server,
-                       ProofVerifier* proof_verifier)
+                       std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClient(server_address,
                  server_id,
                  supported_versions,
                  QuicConfig(),
                  epoll_server,
-                 proof_verifier) {}
+                 std::move(proof_verifier)) {}
 
 QuicClient::QuicClient(IPEndPoint server_address,
                        const QuicServerId& server_id,
                        const QuicVersionVector& supported_versions,
                        const QuicConfig& config,
                        EpollServer* epoll_server,
-                       ProofVerifier* proof_verifier)
+                       std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClientBase(
           server_id,
           supported_versions,
           config,
           new QuicEpollConnectionHelper(epoll_server, QuicAllocator::SIMPLE),
           new QuicEpollAlarmFactory(epoll_server),
-          proof_verifier),
+          std::move(proof_verifier)),
       server_address_(server_address),
       local_port_(0),
       epoll_server_(epoll_server),
@@ -89,8 +89,8 @@ QuicClient::~QuicClient() {
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
 
-  STLDeleteElements(&data_to_resend_on_connect_);
-  STLDeleteElements(&data_sent_before_handshake_);
+  base::STLDeleteElements(&data_to_resend_on_connect_);
+  base::STLDeleteElements(&data_sent_before_handshake_);
 
   CleanUpAllUDPSockets();
 }
@@ -193,7 +193,7 @@ bool QuicClient::Connect() {
       for (QuicDataToResend* data : data_to_resend_on_connect_) {
         data->Resend();
       }
-      STLDeleteElements(&data_to_resend_on_connect_);
+      base::STLDeleteElements(&data_to_resend_on_connect_);
     }
     if (session() != nullptr &&
         session()->error() != QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
@@ -252,8 +252,8 @@ void QuicClient::Disconnect() {
         QUIC_PEER_GOING_AWAY, "Client disconnecting",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
-  STLDeleteElements(&data_to_resend_on_connect_);
-  STLDeleteElements(&data_sent_before_handshake_);
+  base::STLDeleteElements(&data_to_resend_on_connect_);
+  base::STLDeleteElements(&data_sent_before_handshake_);
 
   CleanUpAllUDPSockets();
 
@@ -320,7 +320,7 @@ void QuicClient::MaybeAddQuicDataToResend(QuicDataToResend* data_to_resend) {
   if (session()->IsCryptoHandshakeConfirmed()) {
     // The handshake is confirmed.  No need to continue saving requests to
     // resend.
-    STLDeleteElements(&data_sent_before_handshake_);
+    base::STLDeleteElements(&data_sent_before_handshake_);
     delete data_to_resend;
     return;
   }

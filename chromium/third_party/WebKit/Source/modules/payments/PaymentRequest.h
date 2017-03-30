@@ -17,6 +17,7 @@
 #include "modules/payments/PaymentOptions.h"
 #include "modules/payments/PaymentUpdater.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/payments/payment_request.mojom-blink.h"
 #include "wtf/Compiler.h"
@@ -59,6 +60,9 @@ public:
     DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingaddresschange);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingoptionchange);
 
+    // ScriptWrappable:
+    bool hasPendingActivity() const override;
+
     // EventTargetWithInlineData:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
@@ -68,18 +72,17 @@ public:
 
     // PaymentUpdater:
     void onUpdatePaymentDetails(const ScriptValue& detailsScriptValue) override;
-    void onUpdatePaymentDetailsFailure(const ScriptValue& error) override;
+    void onUpdatePaymentDetailsFailure(const String& error) override;
 
     DECLARE_TRACE();
+
+    void onCompleteTimeoutForTesting();
 
 private:
     PaymentRequest(ScriptState*, const HeapVector<PaymentMethodData>&, const PaymentDetails&, const PaymentOptions&, ExceptionState&);
 
     // LifecycleObserver:
     void contextDestroyed() override;
-
-    // ActiveScriptWrappable:
-    bool hasPendingActivity() const override;
 
     // mojom::blink::PaymentRequestClient:
     void OnShippingAddressChange(mojom::blink::PaymentAddressPtr) override;
@@ -89,11 +92,11 @@ private:
     void OnComplete() override;
     void OnAbort(bool abortedSuccessfully) override;
 
+    void onCompleteTimeout(TimerBase*);
+
     // Clears the promise resolvers and closes the Mojo connection.
     void clearResolversAndCloseMojoConnection();
 
-    Vector<MethodData> m_methodData;
-    PaymentDetails m_details;
     PaymentOptions m_options;
     Member<PaymentAddress> m_shippingAddress;
     String m_shippingOption;
@@ -102,6 +105,7 @@ private:
     Member<ScriptPromiseResolver> m_abortResolver;
     mojom::blink::PaymentRequestPtr m_paymentProvider;
     mojo::Binding<mojom::blink::PaymentRequestClient> m_clientBinding;
+    Timer<PaymentRequest> m_completeTimer;
 };
 
 } // namespace blink

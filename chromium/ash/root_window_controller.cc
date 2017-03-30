@@ -16,9 +16,17 @@
 #include "ash/common/login_status.h"
 #include "ash/common/root_window_controller_common.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf.h"
+#include "ash/common/shelf/shelf_delegate.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/status_area_layout_manager.h"
+#include "ash/common/system/status_area_widget.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm/always_on_top_controller.h"
 #include "ash/common/wm/container_finder.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
@@ -28,22 +36,15 @@
 #include "ash/common/wm/switchable_windows.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/workspace/workspace_layout_manager.h"
-#include "ash/common/wm/workspace/workspace_layout_manager_delegate.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
-#include "ash/desktop_background/user_wallpaper_delegate.h"
 #include "ash/display/display_manager.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/root_window_settings.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
+#include "ash/shelf/shelf_window_targeter.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
-#include "ash/shell_factory.h"
-#include "ash/system/status_area_widget.h"
 #include "ash/touch/touch_hud_debug.h"
 #include "ash/touch/touch_hud_projection.h"
 #include "ash/touch/touch_observer_hud.h"
@@ -51,7 +52,6 @@
 #include "ash/wm/panels/attached_panel_window_targeter.h"
 #include "ash/wm/panels/panel_window_event_handler.h"
 #include "ash/wm/stacking_controller.h"
-#include "ash/wm/status_area_layout_manager.h"
 #include "ash/wm/system_background_controller.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/window_properties.h"
@@ -281,40 +281,12 @@ class EmptyWindowDelegate : public aura::WindowDelegate {
   DISALLOW_COPY_AND_ASSIGN(EmptyWindowDelegate);
 };
 
-class WorkspaceLayoutManagerDelegateImpl
-    : public wm::WorkspaceLayoutManagerDelegate {
- public:
-  explicit WorkspaceLayoutManagerDelegateImpl(aura::Window* root_window)
-      : root_window_(root_window) {}
-  ~WorkspaceLayoutManagerDelegateImpl() override = default;
-
-  void set_shelf(ShelfLayoutManager* shelf) { shelf_ = shelf; }
-
-  // WorkspaceLayoutManagerDelegate:
-  void UpdateShelfVisibility() override {
-    if (shelf_)
-      shelf_->UpdateVisibilityState();
-  }
-  void OnFullscreenStateChanged(bool is_fullscreen) override {
-    if (shelf_) {
-      Shell::GetInstance()->NotifyFullscreenStateChange(
-          is_fullscreen, WmWindowAura::Get(root_window_));
-    }
-  }
-
- private:
-  aura::Window* root_window_;
-  ShelfLayoutManager* shelf_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(WorkspaceLayoutManagerDelegateImpl);
-};
-
 }  // namespace
 
 void RootWindowController::CreateForPrimaryDisplay(AshWindowTreeHost* host) {
   RootWindowController* controller = new RootWindowController(host);
   controller->Init(RootWindowController::PRIMARY,
-                   Shell::GetInstance()->delegate()->IsFirstRunAfterBoot());
+                   WmShell::Get()->delegate()->IsFirstRunAfterBoot());
 }
 
 void RootWindowController::CreateForSecondaryDisplay(AshWindowTreeHost* host) {
@@ -385,15 +357,18 @@ void RootWindowController::Shutdown() {
   wallpaper_controller_.reset();
   animating_wallpaper_controller_.reset();
   aura::Window* root_window = GetRootWindow();
-  Shell* shell = Shell::GetInstance();
+  WmWindow* root_shutting_down = WmWindowAura::Get(root_window);
+  WmShell* shell = WmShell::Get();
   // Change the target root window before closing child windows. If any child
   // being removed triggers a relayout of the shelf it will try to build a
   // window list adding windows from the target root window's containers which
   // may have already gone away.
-  if (Shell::GetTargetRootWindow() == root_window) {
-    shell->set_target_root_window(Shell::GetPrimaryRootWindow() == root_window
-                                      ? NULL
-                                      : Shell::GetPrimaryRootWindow());
+  if (shell->GetRootWindowForNewWindows() == root_shutting_down) {
+    // The root window for new windows is being destroyed. Switch to the primary
+    // root window if possible.
+    WmWindow* primary_root = shell->GetPrimaryRootWindow();
+    shell->set_root_window_for_new_windows(
+        primary_root == root_shutting_down ? nullptr : primary_root);
   }
 
   CloseChildWindows();
@@ -486,16 +461,24 @@ const aura::Window* RootWindowController::GetContainer(int container_id) const {
 }
 
 void RootWindowController::ShowShelf() {
-  if (!shelf_widget_->shelf())
+  if (!shelf_)
     return;
-  shelf_widget_->shelf()->SetVisible(true);
+  shelf_widget_->SetShelfVisibility(true);
   shelf_widget_->status_area_widget()->Show();
 }
 
 void RootWindowController::CreateShelf() {
-  if (shelf_widget_->shelf())
+  if (shelf_)
     return;
-  shelf_widget_->CreateShelf(wm_shelf_aura_.get());
+  ShelfView* shelf_view = shelf_widget_->CreateShelfView();
+
+  shelf_.reset(
+      new Shelf(wm_shelf_aura_.get(), shelf_view, shelf_widget_.get()));
+  shelf_widget_->set_shelf(shelf_.get());
+  // Must be initialized before the delegate is notified because the delegate
+  // may try to access the WmShelf.
+  wm_shelf_aura_->SetShelf(shelf_.get());
+  WmShell::Get()->shelf_delegate()->OnShelfCreated(wm_shelf_aura_.get());
 
   if (panel_layout_manager_)
     panel_layout_manager_->SetShelf(wm_shelf_aura_.get());
@@ -507,15 +490,14 @@ void RootWindowController::CreateShelf() {
   }
 
   // Notify shell observers that the shelf has been created.
-  Shell::GetInstance()->OnShelfCreatedForRootWindow(
+  WmShell::Get()->NotifyShelfCreatedForRootWindow(
       WmWindowAura::Get(GetRootWindow()));
 
   shelf_widget_->PostCreateShelf();
 }
 
 Shelf* RootWindowController::GetShelf() const {
-  // TODO(jamescook): Shelf should be owned by this class, not by ShelfWidget.
-  return shelf_widget_->shelf();
+  return shelf_.get();
 }
 
 void RootWindowController::UpdateAfterLoginStatusChange(LoginStatus status) {
@@ -545,9 +527,7 @@ void RootWindowController::OnWallpaperAnimationFinished(views::Widget* widget) {
   boot_splash_screen_.reset();
 #endif
 
-  Shell::GetInstance()
-      ->user_wallpaper_delegate()
-      ->OnWallpaperAnimationFinished();
+  WmShell::Get()->wallpaper_delegate()->OnWallpaperAnimationFinished();
   // Only removes old component when wallpaper animation finished. If we
   // remove the old one before the new wallpaper is done fading in there will
   // be a white flash during the animation.
@@ -593,8 +573,6 @@ void RootWindowController::CloseChildWindows() {
   if (shelf_widget_)
     shelf_widget_->Shutdown();
 
-  wm_shelf_aura_->Shutdown();
-
   // Close background widget first as it depends on tooltip.
   wallpaper_controller_.reset();
   animating_wallpaper_controller_.reset();
@@ -634,13 +612,16 @@ void RootWindowController::CloseChildWindows() {
   }
 
   shelf_widget_.reset();
+  // CloseChildWindows may be called twice during the shutdown of ash unittests.
+  // Avoid notifying WmShelf that the Shelf instance has been destroyed twice.
+  if (wm_shelf_aura_->shelf())
+    wm_shelf_aura_->ClearShelf();
+  shelf_.reset();
 }
 
 void RootWindowController::MoveWindowsTo(aura::Window* dst) {
-  // Forget the shelf early so that shelf don't update itself using wrong
-  // display info.
-  workspace_controller_->SetShelf(nullptr);
-  workspace_controller_->layout_manager()->DeleteDelegate();
+  // Clear the workspace controller, so it doesn't incorrectly update the shelf.
+  workspace_controller_.reset();
   ReparentAllWindows(GetRootWindow(), dst);
 }
 
@@ -657,7 +638,7 @@ SystemTray* RootWindowController::GetSystemTray() {
 
 void RootWindowController::ShowContextMenu(const gfx::Point& location_in_screen,
                                            ui::MenuSourceType source_type) {
-  ShellDelegate* delegate = Shell::GetInstance()->delegate();
+  ShellDelegate* delegate = WmShell::Get()->delegate();
   DCHECK(delegate);
   menu_model_.reset(delegate->CreateContextMenu(wm_shelf_aura_.get(), nullptr));
   if (!menu_model_)
@@ -703,7 +684,7 @@ void RootWindowController::ActivateKeyboard(
   keyboard_controller->AddObserver(workspace_controller_->layout_manager());
   keyboard_controller->AddObserver(
       always_on_top_controller_->GetLayoutManager());
-  Shell::GetInstance()->delegate()->VirtualKeyboardActivated(true);
+  WmShell::Get()->NotifyVirtualKeyboardActivated(true);
   aura::Window* parent = GetContainer(kShellWindowId_ImeWindowParentContainer);
   DCHECK(parent);
   aura::Window* keyboard_container = keyboard_controller->GetContainerWindow();
@@ -733,7 +714,7 @@ void RootWindowController::DeactivateKeyboard(
         workspace_controller_->layout_manager());
     keyboard_controller->RemoveObserver(
         always_on_top_controller_->GetLayoutManager());
-    Shell::GetInstance()->delegate()->VirtualKeyboardActivated(false);
+    WmShell::Get()->NotifyVirtualKeyboardActivated(false);
   }
 }
 
@@ -818,10 +799,6 @@ void RootWindowController::InitLayoutManagers() {
 
   aura::Window* root_window = GetRootWindow();
 
-  aura::Window* default_container =
-      GetContainer(kShellWindowId_DefaultContainer);
-  // Workspace manager has its own layout managers.
-
   aura::Window* modal_container =
       root_window->GetChildById(kShellWindowId_SystemModalContainer);
   DCHECK(modal_container);
@@ -839,26 +816,29 @@ void RootWindowController::InitLayoutManagers() {
   lock_modal_container->SetLayoutManager(
       new SystemModalContainerLayoutManager(lock_modal_container));
 
-  WorkspaceLayoutManagerDelegateImpl* workspace_layout_manager_delegate =
-      new WorkspaceLayoutManagerDelegateImpl(root_window);
-  workspace_controller_.reset(new WorkspaceController(
-      default_container, base::WrapUnique(workspace_layout_manager_delegate)));
+  WmWindow* default_container =
+      WmWindowAura::Get(GetContainer(kShellWindowId_DefaultContainer));
+  workspace_controller_.reset(new WorkspaceController(default_container));
 
   WmWindow* always_on_top_container =
       WmWindowAura::Get(GetContainer(kShellWindowId_AlwaysOnTopContainer));
   always_on_top_controller_.reset(
       new AlwaysOnTopController(always_on_top_container));
 
+  // Create the shelf and status area widgets.
   DCHECK(!shelf_widget_.get());
-  WmWindow* shelf_container =
-      WmWindowAura::Get(GetContainer(kShellWindowId_ShelfContainer));
-  WmWindow* status_container =
-      WmWindowAura::Get(GetContainer(kShellWindowId_StatusContainer));
-  shelf_widget_.reset(new ShelfWidget(shelf_container, status_container,
-                                      wm_shelf_aura_.get(),
-                                      workspace_controller()));
-  workspace_layout_manager_delegate->set_shelf(
-      shelf_widget_->shelf_layout_manager());
+  aura::Window* shelf_container = GetContainer(kShellWindowId_ShelfContainer);
+  aura::Window* status_container = GetContainer(kShellWindowId_StatusContainer);
+  WmWindow* wm_shelf_container = WmWindowAura::Get(shelf_container);
+  WmWindow* wm_status_container = WmWindowAura::Get(status_container);
+  shelf_widget_.reset(new ShelfWidget(wm_shelf_container, wm_status_container,
+                                      wm_shelf_aura_.get()));
+  // Make it easier to resize windows that partially overlap the shelf. Must
+  // occur after the ShelfLayoutManager is constructed by ShelfWidget.
+  shelf_container->SetEventTargeter(base::MakeUnique<ShelfWindowTargeter>(
+      wm_shelf_container, wm_shelf_aura_.get()));
+  status_container->SetEventTargeter(base::MakeUnique<ShelfWindowTargeter>(
+      wm_status_container, wm_shelf_aura_.get()));
 
   if (!WmShell::Get()
            ->GetSessionStateDelegate()

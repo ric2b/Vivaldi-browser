@@ -395,7 +395,7 @@ LayoutMultiColumnSet* LayoutMultiColumnFlowThread::columnSetAtBlockOffset(Layout
     ASSERT(!m_columnSetsInvalidated);
     if (m_multiColumnSetList.isEmpty())
         return nullptr;
-    if (offset <= 0)
+    if (offset < LayoutUnit())
         return m_multiColumnSetList.first();
 
     MultiColumnSetSearchAdapter adapter(offset);
@@ -585,10 +585,10 @@ void LayoutMultiColumnFlowThread::calculateColumnCountAndWidth(LayoutUnit& width
         count = computedColumnCount;
         width = ((availableWidth - ((count - 1) * columnGap)) / count).clampNegativeToZero();
     } else if (!columnStyle->hasAutoColumnWidth() && columnStyle->hasAutoColumnCount()) {
-        count = std::max(LayoutUnit(1), (availableWidth + columnGap) / (computedColumnWidth + columnGap));
+        count = std::max(LayoutUnit(1), (availableWidth + columnGap) / (computedColumnWidth + columnGap)).toUnsigned();
         width = ((availableWidth + columnGap) / count) - columnGap;
     } else {
-        count = std::max(std::min(LayoutUnit(computedColumnCount), (availableWidth + columnGap) / (computedColumnWidth + columnGap)), LayoutUnit(1));
+        count = std::max(std::min(LayoutUnit(computedColumnCount), (availableWidth + columnGap) / (computedColumnWidth + columnGap)), LayoutUnit(1)).toUnsigned();
         width = ((availableWidth + columnGap) / count) - columnGap;
     }
 }
@@ -1045,6 +1045,16 @@ bool LayoutMultiColumnFlowThread::canSkipLayout(const LayoutBox& root) const
             next = object->nextInPreOrderAfterChildren(&root);
     }
     return true;
+}
+
+MultiColumnLayoutState LayoutMultiColumnFlowThread::multiColumnLayoutState() const
+{
+    return MultiColumnLayoutState(m_lastSetWorkedOn);
+}
+
+void LayoutMultiColumnFlowThread::restoreMultiColumnLayoutState(const MultiColumnLayoutState& state)
+{
+    m_lastSetWorkedOn = state.columnSet();
 }
 
 } // namespace blink

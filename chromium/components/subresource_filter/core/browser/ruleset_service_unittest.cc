@@ -7,22 +7,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include <iterator>
 #include <memory>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
+#include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "build/build_config.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/subresource_filter/core/browser/ruleset_distributor.h"
+#include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -30,11 +35,51 @@ namespace subresource_filter {
 
 namespace {
 
+// Testing constants ----------------------------------------------------------
+
 const char kTestContentVersion1[] = "1.2.3.4";
 const char kTestContentVersion2[] = "1.2.3.5";
 
-const uint8_t kDummyRuleset1[] = {11, 0, 12, 13, 14};
-const uint8_t kDummyRuleset2[] = {21, 0, 22, 23};
+const char kTestDisallowedSuffix1[] = "foo";
+const char kTestDisallowedSuffix2[] = "bar";
+const char kTestLicenseContents[] = "Lorem ipsum";
+
+// Helpers --------------------------------------------------------------------
+
+template <typename Fun>
+class ScopedFunctionOverride {
+ public:
+  ScopedFunctionOverride(Fun* target, Fun replacement)
+      : target_(target), replacement_(replacement) {
+    std::swap(*target_, replacement_);
+  }
+
+  ~ScopedFunctionOverride() { std::swap(*target_, replacement_); }
+
+ private:
+  Fun* target_;
+  Fun replacement_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedFunctionOverride);
+};
+
+template <typename Fun>
+std::unique_ptr<ScopedFunctionOverride<Fun>> OverrideFunctionForScope(
+    Fun* target,
+    Fun replacement) {
+  return base::MakeUnique<ScopedFunctionOverride<Fun>>(target, replacement);
+}
+
+std::vector<uint8_t> ReadFileContents(base::File* file) {
+  size_t length = base::checked_cast<size_t>(file->GetLength());
+  std::vector<uint8_t> contents(length);
+  static_assert(sizeof(uint8_t) == sizeof(char), "Expected char = byte.");
+  file->Read(0, reinterpret_cast<char*>(contents.data()),
+             base::checked_cast<int>(length));
+  return contents;
+}
+
+// Mocks ----------------------------------------------------------------------
 
 class MockRulesetDistributor : public RulesetDistributor {
  public:
@@ -53,21 +98,30 @@ class MockRulesetDistributor : public RulesetDistributor {
   DISALLOW_COPY_AND_ASSIGN(MockRulesetDistributor);
 };
 
-std::vector<uint8_t> ReadFileContents(base::File* file) {
-  size_t length = base::checked_cast<size_t>(file->GetLength());
-  std::vector<uint8_t> contents(length);
-  static_assert(sizeof(uint8_t) == sizeof(char), "Expected char = byte.");
-  file->Read(0, reinterpret_cast<char*>(contents.data()),
-             base::checked_cast<int>(length));
-  return contents;
+bool MockFailingReplaceFile(const base::FilePath&,
+                            const base::FilePath&,
+                            base::File::Error* error) {
+  *error = base::File::FILE_ERROR_NOT_FOUND;
+  return false;
 }
 
-template <typename T, int N>
-std::vector<T> AsVector(const T (&array)[N]) {
-  return std::vector<T>(std::begin(array), std::end(array));
+#if GTEST_HAS_DEATH_TEST
+bool MockCrashingIndexRuleset(base::File, RulesetIndexer*) {
+  LOG(FATAL) << "Synthetic crash.";
+  return false;
 }
+#else
+bool MockFailingIndexRuleset(base::File, RulesetIndexer*) {
+  return false;
+}
+#endif
 
 }  // namespace
+
+// Test fixtures --------------------------------------------------------------
+
+using testing::TestRulesetPair;
+using testing::TestRulesetCreator;
 
 class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
  public:
@@ -78,11 +132,22 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
 
  protected:
   void SetUp() override {
-    RulesetVersion::RegisterPrefs(pref_service_.registry());
+    IndexedRulesetVersion::RegisterPrefs(pref_service_.registry());
 
-    ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
+    SetUpTempDir();
     ResetService(CreateRulesetService());
     RunUntilIdle();
+
+    ASSERT_NO_FATAL_FAILURE(
+        ruleset_creator_.CreateRulesetToDisallowURLsWithPathSuffix(
+            kTestDisallowedSuffix1, &test_ruleset_1_));
+    ASSERT_NO_FATAL_FAILURE(
+        ruleset_creator_.CreateRulesetToDisallowURLsWithPathSuffix(
+            kTestDisallowedSuffix2, &test_ruleset_2_));
+  }
+
+  virtual void SetUpTempDir() {
+    ASSERT_TRUE(scoped_temp_dir_.CreateUniqueTempDir());
   }
 
   std::unique_ptr<RulesetService> CreateRulesetService() {
@@ -100,14 +165,54 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
     }
   }
 
-  void StoreAndPublishUpdatedRuleset(const std::vector<uint8_t>& ruleset_data,
-                                     const std::string& new_content_version) {
-    service()->StoreAndPublishUpdatedRuleset(ruleset_data, new_content_version);
+  // Creates a new file with the given license |contents| at a unique temporary
+  // path, which is returned in |path|.
+  void CreateTestLicenseFile(const std::string& contents,
+                             base::FilePath* path) {
+    ASSERT_NO_FATAL_FAILURE(
+        test_ruleset_creator()->GetUniqueTemporaryPath(path));
+    ASSERT_EQ(static_cast<int>(contents.size()),
+              base::WriteFile(*path, contents.data(),
+                              static_cast<int>(contents.size())));
   }
 
-  void WritePreexistingRuleset(const RulesetVersion& version,
-                               const std::vector<uint8_t>& data) {
-    RulesetService::WriteRuleset(base_dir(), version, data);
+  void IndexAndStoreAndPublishUpdatedRuleset(
+      const TestRulesetPair& test_ruleset_pair,
+      const std::string& new_content_version,
+      const base::FilePath& license_path = base::FilePath()) {
+    UnindexedRulesetInfo ruleset_info;
+    ruleset_info.ruleset_path = test_ruleset_pair.unindexed.path;
+    ruleset_info.license_path = license_path;
+    ruleset_info.content_version = new_content_version;
+    service()->IndexAndStoreAndPublishRulesetIfNeeded(ruleset_info);
+  }
+
+  bool WriteRuleset(const TestRulesetPair& test_ruleset_pair,
+                    const IndexedRulesetVersion& indexed_version,
+                    const base::FilePath& license_path = base::FilePath()) {
+    return RulesetService::WriteRuleset(
+               indexed_version.GetSubdirectoryPathForVersion(base_dir()),
+               license_path, test_ruleset_pair.indexed.contents.data(),
+               test_ruleset_pair.indexed.contents.size()) ==
+           RulesetService::IndexAndWriteRulesetResult::SUCCESS;
+  }
+
+  base::FilePath GetExpectedRulesetDataFilePath(
+      const IndexedRulesetVersion& version) const {
+    return RulesetService::GetRulesetDataFilePath(
+        version.GetSubdirectoryPathForVersion(base_dir()));
+  }
+
+  base::FilePath GetExpectedLicenseFilePath(
+      const IndexedRulesetVersion& version) const {
+    return RulesetService::GetLicenseFilePath(
+        version.GetSubdirectoryPathForVersion(base_dir()));
+  }
+
+  base::FilePath GetExpectedSentinelFilePath(
+      const IndexedRulesetVersion& version) const {
+    return RulesetService::GetSentinelFilePath(
+        version.GetSubdirectoryPathForVersion(base_dir()));
   }
 
   void RunUntilIdle() { task_runner_->RunUntilIdle(); }
@@ -130,11 +235,21 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
     ASSERT_EQ(-1, file->Write(0, kTest, sizeof(kTest)));
   }
 
+  void AssertNoPendingTasks() { ASSERT_FALSE(task_runner_->HasPendingTask()); }
+
   PrefService* prefs() { return &pref_service_; }
   RulesetService* service() { return service_.get(); }
   MockRulesetDistributor* mock_distributor() { return mock_distributor_; }
+
+  virtual base::FilePath effective_temp_dir() const {
+    return scoped_temp_dir_.path();
+  }
+
+  TestRulesetCreator* test_ruleset_creator() { return &ruleset_creator_; }
+  const TestRulesetPair& test_ruleset_1() const { return test_ruleset_1_; }
+  const TestRulesetPair& test_ruleset_2() const { return test_ruleset_2_; }
   base::FilePath base_dir() const {
-    return scoped_temp_dir_.path().AppendASCII("Ruleset Base Dir");
+    return effective_temp_dir().AppendASCII("Rules").AppendASCII("Indexed");
   }
 
  private:
@@ -142,12 +257,139 @@ class SubresourceFilteringRulesetServiceTest : public ::testing::Test {
   base::ThreadTaskRunnerHandle task_runner_handle_;
   TestingPrefServiceSimple pref_service_;
 
+  TestRulesetCreator ruleset_creator_;
+  TestRulesetPair test_ruleset_1_;
+  TestRulesetPair test_ruleset_2_;
+
   base::ScopedTempDir scoped_temp_dir_;
   std::unique_ptr<RulesetService> service_;
   MockRulesetDistributor* mock_distributor_;  // Weak, owned by |service_|.
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilteringRulesetServiceTest);
 };
+
+// Specialized test fixture for death tests. It exposes the temporary directory
+// used by the parent process as an environment variable that is consumed by the
+// child process, so that both processes use the same temporary directory. This
+// would not otherwise be the case on Windows, where children are not `forked`
+// and therefore would create their own unique temp directory.
+class SubresourceFilteringRulesetServiceDeathTest
+    : public SubresourceFilteringRulesetServiceTest {
+ public:
+  SubresourceFilteringRulesetServiceDeathTest()
+      : environment_(base::Environment::Create()) {}
+
+ protected:
+  void SetUpTempDir() override {
+    if (environment_->HasVar(kInheritedTempDirKey)) {
+      std::string value;
+      ASSERT_TRUE(environment_->GetVar(kInheritedTempDirKey, &value));
+      inherited_temp_dir_ = base::FilePath::FromUTF8Unsafe(value);
+    } else {
+      SubresourceFilteringRulesetServiceTest::SetUpTempDir();
+      environment_->SetVar(kInheritedTempDirKey,
+                           effective_temp_dir().AsUTF8Unsafe());
+    }
+  }
+
+  void TearDown() override {
+    SubresourceFilteringRulesetServiceTest::TearDown();
+    if (inherited_temp_dir_.empty())
+      environment_->UnSetVar(kInheritedTempDirKey);
+  }
+
+  base::FilePath effective_temp_dir() const override {
+    if (!inherited_temp_dir_.empty())
+      return inherited_temp_dir_;
+    return SubresourceFilteringRulesetServiceTest::effective_temp_dir();
+  }
+
+ private:
+  static const char kInheritedTempDirKey[];
+
+  std::unique_ptr<base::Environment> environment_;
+  base::FilePath inherited_temp_dir_;
+
+  DISALLOW_COPY_AND_ASSIGN(SubresourceFilteringRulesetServiceDeathTest);
+};
+
+// static
+const char SubresourceFilteringRulesetServiceDeathTest::kInheritedTempDirKey[] =
+    "SUBRESOURCE_FILTERING_RULESET_SERVICE_DEATH_TEST_TEMP_DIR";
+
+// Tests ---------------------------------------------------------------------
+
+TEST_F(SubresourceFilteringRulesetServiceTest, PathsAreSane) {
+  IndexedRulesetVersion indexed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+
+  base::FilePath ruleset_data_path =
+      GetExpectedRulesetDataFilePath(indexed_version);
+  base::FilePath license_path = GetExpectedLicenseFilePath(indexed_version);
+  base::FilePath sentinel_path = GetExpectedSentinelFilePath(indexed_version);
+
+  base::FilePath version_dir = ruleset_data_path.DirName();
+  EXPECT_NE(ruleset_data_path, license_path);
+  EXPECT_NE(ruleset_data_path, sentinel_path);
+  EXPECT_EQ(version_dir, license_path.DirName());
+  EXPECT_EQ(version_dir, sentinel_path.DirName());
+
+  EXPECT_TRUE(base_dir().IsParent(version_dir));
+  EXPECT_PRED_FORMAT2(::testing::IsSubstring,
+                      base::IntToString(indexed_version.format_version),
+                      version_dir.MaybeAsASCII());
+  EXPECT_PRED_FORMAT2(::testing::IsSubstring, indexed_version.content_version,
+                      version_dir.MaybeAsASCII());
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest, WriteRuleset) {
+  base::FilePath original_license_path;
+  ASSERT_NO_FATAL_FAILURE(
+      CreateTestLicenseFile(kTestLicenseContents, &original_license_path));
+  IndexedRulesetVersion indexed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+
+  ASSERT_TRUE(
+      WriteRuleset(test_ruleset_1(), indexed_version, original_license_path));
+
+  base::File indexed_ruleset_data;
+  indexed_ruleset_data.Initialize(
+      GetExpectedRulesetDataFilePath(indexed_version),
+      base::File::FLAG_READ | base::File::FLAG_OPEN);
+  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
+      &indexed_ruleset_data, test_ruleset_1().indexed.contents));
+  std::string actual_license_contents;
+  ASSERT_TRUE(base::ReadFileToString(
+      GetExpectedLicenseFilePath(indexed_version), &actual_license_contents));
+  EXPECT_EQ(kTestLicenseContents, actual_license_contents);
+}
+
+// If the unindexed ruleset is not accompanied by a LICENSE file, there should
+// be no such file created next to the indexed ruleset. The lack of license can
+// be indicated by |license_path| being either an empty or non-existent path.
+TEST_F(SubresourceFilteringRulesetServiceTest,
+       WriteRuleset_NonExistentLicensePath) {
+  base::FilePath nonexistent_license_path;
+  ASSERT_NO_FATAL_FAILURE(test_ruleset_creator()->GetUniqueTemporaryPath(
+      &nonexistent_license_path));
+  IndexedRulesetVersion indexed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  ASSERT_TRUE(WriteRuleset(test_ruleset_1(), indexed_version,
+                           nonexistent_license_path));
+  EXPECT_TRUE(
+      base::PathExists(GetExpectedRulesetDataFilePath(indexed_version)));
+  EXPECT_FALSE(base::PathExists(GetExpectedLicenseFilePath(indexed_version)));
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest, WriteRuleset_EmptyLicensePath) {
+  IndexedRulesetVersion indexed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  ASSERT_TRUE(
+      WriteRuleset(test_ruleset_1(), indexed_version, base::FilePath()));
+  EXPECT_TRUE(
+      base::PathExists(GetExpectedRulesetDataFilePath(indexed_version)));
+  EXPECT_FALSE(base::PathExists(GetExpectedLicenseFilePath(indexed_version)));
+}
 
 TEST_F(SubresourceFilteringRulesetServiceTest, Startup_NoRulesetNotPublished) {
   EXPECT_EQ(0u, mock_distributor()->published_rulesets().size());
@@ -158,9 +400,9 @@ TEST_F(SubresourceFilteringRulesetServiceTest, Startup_NoRulesetNotPublished) {
 // but ensure some sane behavior just in case.
 TEST_F(SubresourceFilteringRulesetServiceTest,
        Startup_MissingRulesetNotPublished) {
-  RulesetVersion current_version(kTestContentVersion1,
-                                 RulesetVersion::CurrentFormatVersion());
-  // `Forget` to write ruleset data.
+  IndexedRulesetVersion current_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  // "Forget" to write ruleset data.
   current_version.SaveToPrefs(prefs());
 
   ResetService(CreateRulesetService());
@@ -170,11 +412,12 @@ TEST_F(SubresourceFilteringRulesetServiceTest,
 
 TEST_F(SubresourceFilteringRulesetServiceTest,
        Startup_LegacyFormatRulesetNotPublished) {
-  int legacy_format_version = RulesetVersion::CurrentFormatVersion() - 1;
-  RulesetVersion legacy_version(kTestContentVersion1, legacy_format_version);
+  int legacy_format_version = IndexedRulesetVersion::CurrentFormatVersion() - 1;
+  IndexedRulesetVersion legacy_version(kTestContentVersion1,
+                                       legacy_format_version);
   ASSERT_TRUE(legacy_version.IsValid());
   legacy_version.SaveToPrefs(prefs());
-  WritePreexistingRuleset(legacy_version, AsVector(kDummyRuleset1));
+  WriteRuleset(test_ruleset_1(), legacy_version);
 
   ResetService(CreateRulesetService());
   RunUntilIdle();
@@ -183,114 +426,378 @@ TEST_F(SubresourceFilteringRulesetServiceTest,
 
 TEST_F(SubresourceFilteringRulesetServiceTest,
        Startup_ExistingRulesetPublished) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
-  RulesetVersion current_version(kTestContentVersion1,
-                                 RulesetVersion::CurrentFormatVersion());
+  IndexedRulesetVersion current_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
   current_version.SaveToPrefs(prefs());
-  WritePreexistingRuleset(current_version, AsVector(kDummyRuleset1));
+  WriteRuleset(test_ruleset_1(), current_version);
 
   ResetService(CreateRulesetService());
   RunUntilIdle();
 
   ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets()[0], dummy_ruleset));
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
 }
 
 TEST_F(SubresourceFilteringRulesetServiceTest, NewRuleset_Published) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
-  service()->StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
   RunUntilIdle();
 
   ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets()[0], dummy_ruleset));
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
 
   MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
   service()->RegisterDistributor(base::WrapUnique(new_distributor));
   ASSERT_EQ(1u, new_distributor->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &new_distributor->published_rulesets()[0], dummy_ruleset));
+      &new_distributor->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest,
+       NewRulesetWithEmptyVersion_NotPublished) {
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), std::string());
+  RunUntilIdle();
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+  MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
+  service()->RegisterDistributor(base::WrapUnique(new_distributor));
+  ASSERT_EQ(0u, new_distributor->published_rulesets().size());
 }
 
 TEST_F(SubresourceFilteringRulesetServiceTest, NewRuleset_Persisted) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
-  service()->StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
+  base::HistogramTester histogram_tester;
+
+  base::FilePath original_license_path;
+  CreateTestLicenseFile(kTestLicenseContents, &original_license_path);
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1,
+                                        original_license_path);
   RunUntilIdle();
 
-  RulesetVersion stored_version;
+  IndexedRulesetVersion stored_version;
   stored_version.ReadFromPrefs(prefs());
   EXPECT_EQ(kTestContentVersion1, stored_version.content_version);
-  EXPECT_EQ(RulesetVersion::CurrentFormatVersion(),
+  EXPECT_EQ(IndexedRulesetVersion::CurrentFormatVersion(),
             stored_version.format_version);
+
+  EXPECT_FALSE(base::PathExists(GetExpectedSentinelFilePath(stored_version)));
+
+  // The unindexed ruleset was accompanied by a LICENSE file, ensure it is
+  // copied next to the indexed ruleset.
+  std::string actual_license_contents;
+  ASSERT_TRUE(base::ReadFileToString(GetExpectedLicenseFilePath(stored_version),
+                                     &actual_license_contents));
+  EXPECT_EQ(kTestLicenseContents, actual_license_contents);
 
   ResetService(CreateRulesetService());
   RunUntilIdle();
 
   ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets()[0], dummy_ruleset));
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
+
+  histogram_tester.ExpectTotalCount(
+      "SubresourceFilter.IndexRuleset.WallDuration", 1);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.IndexRuleset.NumUnsupportedRules", 0, 1);
+  histogram_tester.ExpectTotalCount(
+      "SubresourceFilter.WriteRuleset.ReplaceFileError", 0);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(RulesetService::IndexAndWriteRulesetResult::SUCCESS), 1);
+}
+
+// Test the scenario where a faulty copy of the ruleset resides on disk, that
+// is, when there is something in the directory corresponding to a ruleset
+// version, but preferences do not indicate that a valid copy of that version is
+// stored. The expectation is that the directory is overwritten with a correct
+// contents when the same version of the ruleset is fed to the service again.
+TEST_F(SubresourceFilteringRulesetServiceTest,
+       NewRuleset_OverwritesBadCopyOfSameVersionOnDisk) {
+  // Emulate a bad ruleset by writing |test_ruleset_2| into the directory
+  // corresponding to |test_ruleset_1| and not updating prefs.
+  IndexedRulesetVersion same_version_but_incomplete(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  WriteRuleset(test_ruleset_2(), same_version_but_incomplete);
+
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_EQ(kTestContentVersion1, stored_version.content_version);
+  EXPECT_EQ(IndexedRulesetVersion::CurrentFormatVersion(),
+            stored_version.format_version);
+  EXPECT_FALSE(base::PathExists(GetExpectedSentinelFilePath(stored_version)));
+
+  ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
+  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest,
+       NewRuleset_SuccessWithUnsupportedRules) {
+  base::HistogramTester histogram_tester;
+
+  // URL patterns longer than 255 characters are not supported.
+  const std::string kTooLongSuffix(1000, 'a');
+  TestRulesetPair ruleset_with_unsupported_rule;
+  ASSERT_NO_FATAL_FAILURE(
+      test_ruleset_creator()
+          ->CreateUnindexedRulesetToDisallowURLsWithPathSuffix(
+              kTooLongSuffix, &ruleset_with_unsupported_rule.unindexed));
+  IndexAndStoreAndPublishUpdatedRuleset(ruleset_with_unsupported_rule,
+                                        kTestContentVersion1);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_EQ(kTestContentVersion1, stored_version.content_version);
+  EXPECT_EQ(IndexedRulesetVersion::CurrentFormatVersion(),
+            stored_version.format_version);
+  EXPECT_FALSE(base::PathExists(GetExpectedSentinelFilePath(stored_version)));
+
+  ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
+
+  histogram_tester.ExpectTotalCount(
+      "SubresourceFilter.IndexRuleset.WallDuration", 1);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.IndexRuleset.NumUnsupportedRules", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(RulesetService::IndexAndWriteRulesetResult::SUCCESS), 1);
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest,
+       NewRuleset_CannotOpenUnindexedRulesetFile) {
+  base::HistogramTester histogram_tester;
+  UnindexedRulesetInfo ruleset_info;
+  ruleset_info.ruleset_path = base::FilePath();  // Non-existent.
+  ruleset_info.content_version = kTestContentVersion1;
+  service()->IndexAndStoreAndPublishRulesetIfNeeded(ruleset_info);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_FALSE(stored_version.IsValid());
+
+  // Expect no sentinel file. Although it is unlikely that we will magically
+  // find the file on a subsequent attempt, failing this early is cheap.
+  IndexedRulesetVersion failed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  EXPECT_FALSE(base::PathExists(GetExpectedSentinelFilePath(failed_version)));
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(RulesetService::IndexAndWriteRulesetResult::
+                           FAILED_OPENING_UNINDEXED_RULESET),
+      1);
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest, NewRuleset_ParseFailure) {
+  base::HistogramTester histogram_tester;
+  const std::string kGarbage(10000, '\xff');
+  ASSERT_TRUE(base::AppendToFile(test_ruleset_1().unindexed.path,
+                                 kGarbage.data(),
+                                 static_cast<int>(kGarbage.size())));
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_FALSE(stored_version.IsValid());
+
+  // Expect that a sentinel file is left behind. The parse failure is most
+  // likely permanent, there is no point to retrying indexing on next start-up.
+  IndexedRulesetVersion failed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  EXPECT_TRUE(base::PathExists(GetExpectedSentinelFilePath(failed_version)));
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(RulesetService::IndexAndWriteRulesetResult::
+                           FAILED_PARSING_UNINDEXED_RULESET),
+      1);
+}
+
+TEST_F(SubresourceFilteringRulesetServiceDeathTest, NewRuleset_IndexingCrash) {
+#if GTEST_HAS_DEATH_TEST
+  auto scoped_override(OverrideFunctionForScope(
+      &RulesetService::g_index_ruleset_func, &MockCrashingIndexRuleset));
+  EXPECT_DEATH(
+      {
+        IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(),
+                                              kTestContentVersion1);
+        RunUntilIdle();
+      },
+      "Synthetic crash");
+#else
+  auto scoped_override(OverrideFunctionForScope(
+      &RulesetService::g_index_ruleset_func, &MockFailingIndexRuleset));
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+#endif
+
+  // Expect that a sentinel file is left behind as a warning not to attempt
+  // indexing this version again, and thus to prevent crashing again.
+  IndexedRulesetVersion crashed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  EXPECT_TRUE(base::PathExists(GetExpectedSentinelFilePath(crashed_version)));
+
+  base::HistogramTester histogram_tester;
+  ResetService(CreateRulesetService());
+  RunUntilIdle();
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+
+  // The subsequent indexing attempt should be aborted.
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_FALSE(stored_version.IsValid());
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(RulesetService::IndexAndWriteRulesetResult::
+                           ABORTED_BECAUSE_SENTINEL_FILE_PRESENT),
+      1);
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest, NewRuleset_WriteFailure) {
+  base::HistogramTester histogram_tester;
+  auto scoped_override(OverrideFunctionForScope(
+      &RulesetService::g_replace_file_func, &MockFailingReplaceFile));
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_FALSE(stored_version.IsValid());
+
+  ASSERT_EQ(0u, mock_distributor()->published_rulesets().size());
+
+  // Expect that the sentinel file is already gone. Write failures are quite
+  // frequent and are often transient, so it is worth attempting indexing again.
+  IndexedRulesetVersion failed_version(
+      kTestContentVersion1, IndexedRulesetVersion::CurrentFormatVersion());
+  EXPECT_FALSE(base::PathExists(GetExpectedSentinelFilePath(failed_version)));
+
+  using IndexAndWriteRulesetResult = RulesetService::IndexAndWriteRulesetResult;
+  histogram_tester.ExpectTotalCount(
+      "SubresourceFilter.IndexRuleset.WallDuration", 1);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.IndexRuleset.NumUnsupportedRules", 0, 1);
+  base::File::Error expected_error = base::File::FILE_ERROR_NOT_FOUND;
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.ReplaceFileError", -expected_error, 1);
+  histogram_tester.ExpectUniqueSample(
+      "SubresourceFilter.WriteRuleset.Result",
+      static_cast<int>(IndexAndWriteRulesetResult::FAILED_REPLACE_FILE), 1);
 }
 
 TEST_F(SubresourceFilteringRulesetServiceTest,
        NewRulesetTwice_SecondRulesetPrevails) {
-  const std::vector<uint8_t> dummy_ruleset_1(AsVector(kDummyRuleset1));
-  const std::vector<uint8_t> dummy_ruleset_2(AsVector(kDummyRuleset2));
-
-  StoreAndPublishUpdatedRuleset(dummy_ruleset_1, kTestContentVersion1);
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
   RunUntilIdle();
 
-  StoreAndPublishUpdatedRuleset(dummy_ruleset_2, kTestContentVersion2);
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_2(), kTestContentVersion2);
   RunUntilIdle();
 
   // This verifies that the contents from the first version of the ruleset file
   // can still be read after it has been deprecated.
   ASSERT_EQ(2u, mock_distributor()->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets()[0], dummy_ruleset_1));
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets()[1], dummy_ruleset_2));
+      &mock_distributor()->published_rulesets()[1],
+      test_ruleset_2().indexed.contents));
 
   MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
   service()->RegisterDistributor(base::WrapUnique(new_distributor));
   ASSERT_EQ(1u, new_distributor->published_rulesets().size());
   ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &new_distributor->published_rulesets()[0], dummy_ruleset_2));
+      &new_distributor->published_rulesets()[0],
+      test_ruleset_2().indexed.contents));
 
-  RulesetVersion stored_version;
+  IndexedRulesetVersion stored_version;
   stored_version.ReadFromPrefs(prefs());
   EXPECT_EQ(kTestContentVersion2, stored_version.content_version);
 }
 
 TEST_F(SubresourceFilteringRulesetServiceTest,
+       NewRulesetTwiceWithTheSameVersion_SecondIsIgnored) {
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
+  RunUntilIdle();
+
+  // For good measure, also violate the requirement that versions should
+  // uniquely identify the contents.
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_2(), kTestContentVersion1);
+  ASSERT_NO_FATAL_FAILURE(AssertNoPendingTasks());
+
+  ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());
+  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
+      &mock_distributor()->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
+
+  MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
+  service()->RegisterDistributor(base::WrapUnique(new_distributor));
+  ASSERT_EQ(1u, new_distributor->published_rulesets().size());
+  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
+      &new_distributor->published_rulesets()[0],
+      test_ruleset_1().indexed.contents));
+
+  IndexedRulesetVersion stored_version;
+  stored_version.ReadFromPrefs(prefs());
+  EXPECT_EQ(kTestContentVersion1, stored_version.content_version);
+}
+
+TEST_F(SubresourceFilteringRulesetServiceTest,
        NewRulesetSetShortlyBeforeDestruction_NoCrashes) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
   for (size_t num_tasks_inbetween = 0; num_tasks_inbetween < 5u;
        ++num_tasks_inbetween) {
     SCOPED_TRACE(::testing::Message() << "#Tasks: " << num_tasks_inbetween);
 
-    StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
+    IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(),
+                                          kTestContentVersion1);
     RunPendingTasksNTimes(num_tasks_inbetween);
     ResetService();
     RunUntilIdle();
 
-    base::DeleteFile(base_dir(), false);
+    EXPECT_TRUE(base::DeleteFile(base_dir(), true));
     ResetService(CreateRulesetService());
   }
+
+  // Must pump out PostTaskWithReply tasks that are referencing the very same
+  // task runner to avoid circular dependencies and leaks on shutdown.
+  RunUntilIdle();
 }
 
 TEST_F(SubresourceFilteringRulesetServiceTest,
        NewRulesetTwiceInQuickSuccession_SecondRulesetPrevails) {
-  const std::vector<uint8_t> dummy_ruleset_1(AsVector(kDummyRuleset1));
-  const std::vector<uint8_t> dummy_ruleset_2(AsVector(kDummyRuleset2));
   for (size_t num_tasks_inbetween = 0; num_tasks_inbetween < 5u;
        ++num_tasks_inbetween) {
     SCOPED_TRACE(::testing::Message() << "#Tasks: " << num_tasks_inbetween);
 
-    StoreAndPublishUpdatedRuleset(dummy_ruleset_1, kTestContentVersion1);
+    IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(),
+                                          kTestContentVersion1);
     RunPendingTasksNTimes(num_tasks_inbetween);
 
-    StoreAndPublishUpdatedRuleset(dummy_ruleset_2, kTestContentVersion2);
+    IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_2(),
+                                          kTestContentVersion2);
     RunUntilIdle();
 
     // Optionally permit a "hazardous" publication of either the old or new
@@ -300,53 +807,37 @@ TEST_F(SubresourceFilteringRulesetServiceTest,
     if (mock_distributor()->published_rulesets().size() == 2) {
       base::File* file = &mock_distributor()->published_rulesets()[0];
       ASSERT_TRUE(file->IsValid());
-      EXPECT_THAT(ReadFileContents(file),
-                  testing::AnyOf(testing::Eq(dummy_ruleset_1),
-                                 testing::Eq(dummy_ruleset_2)));
+      EXPECT_THAT(
+          ReadFileContents(file),
+          ::testing::AnyOf(::testing::Eq(test_ruleset_1().indexed.contents),
+                           ::testing::Eq(test_ruleset_2().indexed.contents)));
     }
     ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-        &mock_distributor()->published_rulesets().back(), dummy_ruleset_2));
+        &mock_distributor()->published_rulesets().back(),
+        test_ruleset_2().indexed.contents));
 
     MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
     service()->RegisterDistributor(base::WrapUnique(new_distributor));
     ASSERT_EQ(1u, new_distributor->published_rulesets().size());
     ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-        &new_distributor->published_rulesets()[0], dummy_ruleset_2));
+        &new_distributor->published_rulesets()[0],
+        test_ruleset_2().indexed.contents));
 
-    RulesetVersion stored_version;
+    IndexedRulesetVersion stored_version;
     stored_version.ReadFromPrefs(prefs());
     EXPECT_EQ(kTestContentVersion2, stored_version.content_version);
+
+    ResetService();
+    RunUntilIdle();
+
+    EXPECT_TRUE(base::DeleteFile(base_dir(), true));
+    IndexedRulesetVersion().SaveToPrefs(prefs());
+    ResetService(CreateRulesetService());
   }
 }
 
-TEST_F(SubresourceFilteringRulesetServiceTest,
-       NewRulesetTwiceForTheSameVersion_SuccessAtLeastOnce) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
-
-  StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
-  RunUntilIdle();
-
-  StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
-  RunUntilIdle();
-
-  ASSERT_LE(1u, mock_distributor()->published_rulesets().size());
-  ASSERT_GE(2u, mock_distributor()->published_rulesets().size());
-  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets().front(), dummy_ruleset));
-  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &mock_distributor()->published_rulesets().back(), dummy_ruleset));
-
-  MockRulesetDistributor* new_distributor = new MockRulesetDistributor;
-  service()->RegisterDistributor(base::WrapUnique(new_distributor));
-  ASSERT_EQ(1u, new_distributor->published_rulesets().size());
-  ASSERT_NO_FATAL_FAILURE(AssertValidRulesetFileWithContents(
-      &new_distributor->published_rulesets()[0], dummy_ruleset));
-}
-
 TEST_F(SubresourceFilteringRulesetServiceTest, RulesetIsReadonly) {
-  const std::vector<uint8_t> dummy_ruleset(AsVector(kDummyRuleset1));
-
-  service()->StoreAndPublishUpdatedRuleset(dummy_ruleset, kTestContentVersion1);
+  IndexAndStoreAndPublishUpdatedRuleset(test_ruleset_1(), kTestContentVersion1);
   RunUntilIdle();
 
   ASSERT_EQ(1u, mock_distributor()->published_rulesets().size());

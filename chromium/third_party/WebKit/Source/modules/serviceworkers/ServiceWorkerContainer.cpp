@@ -78,10 +78,11 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
+        ScriptState::Scope scope(m_resolver->getScriptState());
         if (error.errorType == WebServiceWorkerError::ErrorTypeType) {
             m_resolver->reject(V8ThrowException::createTypeError(m_resolver->getScriptState()->isolate(), error.message));
         } else {
-            m_resolver->reject(ServiceWorkerError::take(m_resolver.get(), error));
+            m_resolver->reject(ServiceWorkerErrorForUpdate::take(m_resolver.get(), error));
         }
     }
 
@@ -181,7 +182,7 @@ ServiceWorkerContainer::~ServiceWorkerContainer()
     ASSERT(!m_provider);
 }
 
-void ServiceWorkerContainer::willBeDetachedFromFrame()
+void ServiceWorkerContainer::contextDestroyed()
 {
     if (m_provider) {
         m_provider->setClient(0);
@@ -251,7 +252,7 @@ void ServiceWorkerContainer::registerServiceWorkerImpl(ExecutionContext* executi
 
     ContentSecurityPolicy* csp = executionContext->contentSecurityPolicy();
     if (csp) {
-        if (!csp->allowWorkerContextFromSource(scriptURL, ResourceRequest::RedirectStatus::NoRedirect, ContentSecurityPolicy::SendReport)) {
+        if (!(csp->allowRequestWithoutIntegrity(WebURLRequest::RequestContextServiceWorker, scriptURL) && csp->allowWorkerContextFromSource(scriptURL, ResourceRequest::RedirectStatus::NoRedirect, ContentSecurityPolicy::SendReport))) {
             callbacks->onError(WebServiceWorkerError(WebServiceWorkerError::ErrorTypeSecurity, String("Failed to register a ServiceWorker: The provided scriptURL ('" + scriptURL.getString() + "') violates the Content Security Policy.")));
             return;
         }

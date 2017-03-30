@@ -24,10 +24,10 @@ Polymer({
     password: String,
   },
 
-  /** Opens the dialog. */
-  open: function() {
+  /** @override */
+  attached: function() {
     this.password = '';
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   },
 
   /** Closes the dialog. */

@@ -11,9 +11,13 @@
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/resources/scoped_ui_resource.h"
 #include "jni/ResourceManager_jni.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColorFilter.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -34,16 +38,15 @@ ResourceManagerImpl* ResourceManagerImpl::FromJavaObject(jobject jobj) {
 ResourceManagerImpl::ResourceManagerImpl(gfx::NativeWindow native_window)
     : host_(nullptr) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  java_obj_.Reset(env, Java_ResourceManager_create(
-                           env, native_window->GetJavaObject().obj(),
-                           reinterpret_cast<intptr_t>(this))
-                           .obj());
+  java_obj_.Reset(
+      env, Java_ResourceManager_create(env, native_window->GetJavaObject(),
+                                       reinterpret_cast<intptr_t>(this))
+               .obj());
   DCHECK(!java_obj_.is_null());
 }
 
 ResourceManagerImpl::~ResourceManagerImpl() {
-  Java_ResourceManager_destroy(base::android::AttachCurrentThread(),
-                               java_obj_.obj());
+  Java_ResourceManager_destroy(base::android::AttachCurrentThread(), java_obj_);
 }
 
 void ResourceManagerImpl::Init(cc::LayerTreeHost* host) {
@@ -72,6 +75,77 @@ ResourceManager::Resource* ResourceManagerImpl::GetResource(
   }
 
   return resource;
+}
+
+void ResourceManagerImpl::RemoveUnusedTints(
+    const std::unordered_set<int>& used_tints) {
+  // Iterate over the currently cached tints and remove ones that were not
+  // used as defined in |used_tints|.
+  for (auto it = tinted_resources_.cbegin(); it != tinted_resources_.cend();) {
+    if (used_tints.find(it->first) == used_tints.end()) {
+        it = tinted_resources_.erase(it);
+    } else {
+        ++it;
+    }
+  }
+}
+
+ResourceManager::Resource* ResourceManagerImpl::GetStaticResourceWithTint(
+    int res_id,
+    int tint_color) {
+  if (tinted_resources_.find(tint_color) == tinted_resources_.end()) {
+    tinted_resources_[tint_color] = base::MakeUnique<ResourceMap>();
+  }
+  ResourceMap* resource_map = tinted_resources_[tint_color].get();
+
+  Resource* tinted_resource = resource_map->Lookup(res_id);
+
+  // If the resource is already cached, use it.
+  if (tinted_resource)
+    return tinted_resource;
+
+  tinted_resource = new Resource();
+
+  ResourceManager::Resource* base_image =
+      GetResource(ANDROID_RESOURCE_TYPE_STATIC, res_id);
+  DCHECK(base_image);
+
+  TRACE_EVENT0("browser", "ResourceManagerImpl::GetStaticResourceWithTint");
+  SkBitmap tinted_bitmap;
+  tinted_bitmap.allocPixels(SkImageInfo::MakeN32Premul(base_image->size.width(),
+      base_image->size.height()));
+
+  SkCanvas canvas(tinted_bitmap);
+  canvas.clear(SK_ColorTRANSPARENT);
+
+  // Build a color filter to use on the base resource. This filter multiplies
+  // the RGB components by the components of the new color but retains the
+  // alpha of the original image.
+  SkPaint color_filter;
+  color_filter.setColorFilter(
+      SkColorFilter::MakeModeFilter(tint_color, SkXfermode::kModulate_Mode));
+
+  // Draw the resource and make it immutable.
+  base_image->ui_resource->GetBitmap(base_image->ui_resource->id(), false)
+      .DrawToCanvas(&canvas, &color_filter);
+  tinted_bitmap.setImmutable();
+
+  // Create a UI resource from the new bitmap.
+  tinted_resource = new Resource();
+  tinted_resource->size = gfx::Size(base_image->size);
+  tinted_resource->padding = gfx::Rect(base_image->padding);
+  tinted_resource->aperture = gfx::Rect(base_image->aperture);
+  tinted_resource->ui_resource = cc::ScopedUIResource::Create(host_,
+      cc::UIResourceBitmap(tinted_bitmap));
+
+  resource_map->AddWithID(tinted_resource, res_id);
+
+  return tinted_resource;
+}
+
+void ResourceManagerImpl::ClearTintedResourceCache(JNIEnv* env,
+    const JavaRef<jobject>& jobj) {
+  tinted_resources_.clear();
 }
 
 void ResourceManagerImpl::PreloadResource(AndroidResourceType res_type,
@@ -230,7 +304,7 @@ void ResourceManagerImpl::PreloadResourceFromJava(AndroidResourceType res_type,
                "resource_type", res_type,
                "resource_id", res_id);
   Java_ResourceManager_preloadResource(base::android::AttachCurrentThread(),
-                                       java_obj_.obj(), res_type, res_id);
+                                       java_obj_, res_type, res_id);
 }
 
 void ResourceManagerImpl::RequestResourceFromJava(AndroidResourceType res_type,
@@ -239,7 +313,7 @@ void ResourceManagerImpl::RequestResourceFromJava(AndroidResourceType res_type,
                "resource_type", res_type,
                "resource_id", res_id);
   Java_ResourceManager_resourceRequested(base::android::AttachCurrentThread(),
-                                         java_obj_.obj(), res_type, res_id);
+                                         java_obj_, res_type, res_id);
 }
 
 void ResourceManagerImpl::RequestCrushedSpriteResourceFromJava(
@@ -249,8 +323,8 @@ void ResourceManagerImpl::RequestCrushedSpriteResourceFromJava(
                "bitmap_res_id", bitmap_res_id,
                "metadata_res_id", metadata_res_id);
   Java_ResourceManager_crushedSpriteResourceRequested(
-      base::android::AttachCurrentThread(), java_obj_.obj(),
-      bitmap_res_id, metadata_res_id, reloading);
+      base::android::AttachCurrentThread(), java_obj_, bitmap_res_id,
+      metadata_res_id, reloading);
 }
 
 }  // namespace ui

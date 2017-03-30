@@ -18,6 +18,7 @@
 namespace blink {
 class WebMouseWheelEvent;
 class WebGestureEvent;
+struct WebScreenInfo;
 }
 
 namespace gfx {
@@ -60,6 +61,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // The screen info has changed.
   virtual void ScreenInfoChanged() {}
+
+  // Sets the device scale factor for frames associated with this WebContents.
+  virtual void UpdateDeviceScaleFactor(double device_scale_factor) {}
+
+  // Retrieve screen information.
+  virtual void GetScreenInfo(blink::WebScreenInfo* web_screen_info);
 
   // Callback to give the browser a chance to handle the specified keyboard
   // event before sending it to the renderer.
@@ -192,7 +199,7 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   virtual void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
                                       const std::vector<uint8_t>& proto) {}
 
-  // Called when the visibility of the RenderFrameProxyHost in outter
+  // Called when the visibility of the RenderFrameProxyHost in outer
   // WebContents changes. This method is only called on an inner WebContents and
   // will eventually notify all the RenderWidgetHostViews belonging to that
   // WebContents.
@@ -208,6 +215,12 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Returns the TextInputManager tracking text input state.
   virtual TextInputManager* GetTextInputManager();
+
+  // Returns true if this RenderWidgetHost should remain hidden. This is used by
+  // the RenderWidgetHost to ask the delegate if it can be shown in the event of
+  // something other than the WebContents attempting to enable visibility of
+  // this RenderWidgetHost.
+  virtual bool IsHidden();
 
  protected:
   virtual ~RenderWidgetHostDelegate() {}

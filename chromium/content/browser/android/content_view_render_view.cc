@@ -16,13 +16,15 @@
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
 #include "cc/layers/layer.h"
-#include "content/browser/android/content_view_core_impl.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/content_view_layer_renderer.h"
+#include "content/public/browser/web_contents.h"
 #include "jni/ContentViewRenderView_jni.h"
+#include "ui/android/view_android.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/size.h"
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace content {
@@ -58,15 +60,15 @@ void ContentViewRenderView::Destroy(JNIEnv* env,
   delete this;
 }
 
-void ContentViewRenderView::SetCurrentContentViewCore(
+void ContentViewRenderView::SetCurrentWebContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    jlong native_content_view_core) {
+    const JavaParamRef<jobject>& jweb_contents) {
   InitCompositor();
-  ContentViewCoreImpl* content_view_core =
-      reinterpret_cast<ContentViewCoreImpl*>(native_content_view_core);
-  compositor_->SetRootLayer(content_view_core ? content_view_core->GetLayer()
-                                              : scoped_refptr<cc::Layer>());
+  WebContents* web_contents = WebContents::FromJavaWebContents(jweb_contents);
+  compositor_->SetRootLayer(web_contents
+                                ? web_contents->GetNativeView()->GetLayer()
+                                : scoped_refptr<cc::Layer>());
 }
 
 void ContentViewRenderView::SurfaceCreated(JNIEnv* env,
@@ -110,7 +112,7 @@ void ContentViewRenderView::UpdateLayerTreeHost() {
 
 void ContentViewRenderView::OnSwapBuffersCompleted(int pending_swap_buffers) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_ContentViewRenderView_onSwapBuffersCompleted(env, java_obj_.obj());
+  Java_ContentViewRenderView_onSwapBuffersCompleted(env, java_obj_);
 }
 
 void ContentViewRenderView::InitCompositor() {

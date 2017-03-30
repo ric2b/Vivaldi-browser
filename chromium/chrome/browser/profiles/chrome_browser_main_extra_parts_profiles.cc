@@ -4,6 +4,7 @@
 
 #include "chrome/browser/profiles/chrome_browser_main_extra_parts_profiles.h"
 
+#include <memory>
 #include <utility>
 
 #include "build/build_config.h"
@@ -27,9 +28,10 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/media_galleries/media_galleries_preferences_factory.h"
+#include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/notifications/extension_welcome_notification_factory.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
-#include "chrome/browser/ntp_snippets/ntp_snippets_service_factory.h"
+#include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/password_manager/password_manager_setting_migrator_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/plugins/plugin_prefs_factory.h"
@@ -88,8 +90,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
-#include "chrome/browser/chromeos/policy/consumer_enrollment_handler_factory.h"
-#include "chrome/browser/chromeos/policy/consumer_management_notifier_factory.h"
 #include "chrome/browser/chromeos/policy/policy_cert_service_factory.h"
 #include "chrome/browser/chromeos/policy/recommendation_restorer_factory.h"
 #include "chrome/browser/chromeos/policy/user_cloud_policy_manager_factory_chromeos.h"
@@ -115,6 +115,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/printer_detector/printer_detector_factory.h"
+#include "chrome/browser/chromeos/printing/printer_pref_manager_factory.h"
 #include "chrome/browser/extensions/api/platform_keys/verify_trust_api.h"
 #endif
 
@@ -193,6 +194,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if defined(OS_ANDROID)
   chrome::android::DataUseUITabModelFactory::GetInstance();
 #endif
+  UINetworkQualityEstimatorServiceFactory::GetInstance();
 #if defined(ENABLE_PRINT_PREVIEW)
   CloudPrintProxyServiceFactory::GetInstance();
 #endif
@@ -215,6 +217,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #endif
 #if defined(OS_CHROMEOS)
   chromeos::PrinterDetectorFactory::GetInstance();
+  chromeos::PrinterPrefManagerFactory::GetInstance();
   extensions::VerifyTrustAPI::GetFactoryInstance();
 #endif
   FaviconServiceFactory::GetInstance();
@@ -264,7 +267,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   MediaGalleriesPreferencesFactory::GetInstance();
   NTPResourceCacheFactory::GetInstance();
 #endif
-  NTPSnippetsServiceFactory::GetInstance();
+  ContentSuggestionsServiceFactory::GetInstance();
   PasswordStoreFactory::GetInstance();
   PasswordManagerSettingMigratorServiceFactory::GetInstance();
 #if !defined(OS_ANDROID)
@@ -277,8 +280,6 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   policy::ProfilePolicyConnectorFactory::GetInstance();
 #if defined(OS_CHROMEOS)
   chromeos::OwnerSettingsServiceChromeOSFactory::GetInstance();
-  policy::ConsumerEnrollmentHandlerFactory::GetInstance();
-  policy::ConsumerManagementNotifierFactory::GetInstance();
   policy::PolicyCertServiceFactory::GetInstance();
   policy::RecommendationRestorerFactory::GetInstance();
   policy::UserCloudPolicyManagerFactoryChromeOS::GetInstance();

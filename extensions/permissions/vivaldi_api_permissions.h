@@ -13,7 +13,8 @@ namespace extensions {
 // Registers the permissions used in Vivaldi with the PermissionsInfo global.
 class VivaldiAPIPermissions : public PermissionsProvider {
  public:
-  std::vector<APIPermissionInfo*> GetAllPermissions() const override;
+  std::vector<std::unique_ptr<APIPermissionInfo>> GetAllPermissions()
+      const override;
   std::vector<PermissionsProvider::AliasInfo> GetAllAliases() const override;
 };
 

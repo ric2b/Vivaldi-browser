@@ -30,62 +30,51 @@
 
 /**
  * @constructor
- * @extends {WebInspector.SidebarPane}
+ * @extends {WebInspector.ThrottledWidget}
+ * @implements {WebInspector.ActionDelegate}
+ * @implements {WebInspector.ToolbarItem.ItemsProvider}
+ * @implements {WebInspector.ContextMenu.Provider}
  */
 WebInspector.WatchExpressionsSidebarPane = function()
 {
-    WebInspector.SidebarPane.call(this, WebInspector.UIString("Watch"));
+    WebInspector.ThrottledWidget.call(this);
     this.registerRequiredCSS("components/objectValue.css");
 
-    this._requiresUpdate = true;
     /** @type {!Array.<!WebInspector.WatchExpression>} */
     this._watchExpressions = [];
     this._watchExpressionsSetting = WebInspector.settings.createLocalSetting("watchExpressions", []);
 
-    var addButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add expression"), "add-toolbar-item");
-    addButton.addEventListener("click", this._addButtonClicked.bind(this));
-    this.toolbar().appendToolbarItem(addButton);
-    var refreshButton = new WebInspector.ToolbarButton(WebInspector.UIString("Refresh"), "refresh-toolbar-item");
-    refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this));
-    this.toolbar().appendToolbarItem(refreshButton);
+    this._addButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add expression"), "add-toolbar-item");
+    this._addButton.addEventListener("click", this._addButtonClicked.bind(this));
+    this._refreshButton = new WebInspector.ToolbarButton(WebInspector.UIString("Refresh"), "refresh-toolbar-item");
+    this._refreshButton.addEventListener("click", this._refreshButtonClicked.bind(this));
 
     this._bodyElement = this.element.createChild("div", "vbox watch-expressions");
     this._bodyElement.addEventListener("contextmenu", this._contextMenu.bind(this), false);
     this._expandController = new WebInspector.ObjectPropertiesSectionExpandController();
 
-    WebInspector.context.addFlavorChangeListener(WebInspector.ExecutionContext, this.refreshExpressions, this);
+    WebInspector.context.addFlavorChangeListener(WebInspector.ExecutionContext, this.update, this);
+    WebInspector.context.addFlavorChangeListener(WebInspector.DebuggerModel.CallFrame, this.update, this);
+    this._linkifier = new WebInspector.Linkifier();
+    this.update();
 }
 
 WebInspector.WatchExpressionsSidebarPane.prototype = {
-    wasShown: function()
+    /**
+     * @override
+     * @return {!Array<!WebInspector.ToolbarItem>}
+     */
+    toolbarItems: function()
     {
-        this._refreshExpressionsIfNeeded();
-    },
-
-    refreshExpressions: function()
-    {
-        this._requiresUpdate = true;
-        this._refreshExpressionsIfNeeded();
+        return [this._addButton, this._refreshButton];
     },
 
     /**
-     * @param {string} expressionString
+     * @return {boolean}
      */
-    addExpression: function(expressionString)
+    hasExpressions: function()
     {
-        this.expand();
-        if (this._requiresUpdate) {
-            this._rebuildWatchExpressions();
-            delete this._requiresUpdate;
-        }
-        this._createWatchExpression(expressionString);
-        this._saveExpressions();
-    },
-
-    expandIfNecessary: function()
-    {
-        if (this._watchExpressionsSetting.get().length)
-            this.expand();
+        return !!this._watchExpressionsSetting.get().length;
     },
 
     _saveExpressions: function()
@@ -98,15 +87,6 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
         this._watchExpressionsSetting.set(toSave);
     },
 
-    _refreshExpressionsIfNeeded: function()
-    {
-        if (this._requiresUpdate && this.isShowing()) {
-            this._rebuildWatchExpressions();
-            delete this._requiresUpdate;
-        } else
-            this._requiresUpdate = true;
-    },
-
     /**
      * @param {!WebInspector.Event=} event
      */
@@ -114,7 +94,7 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
     {
         if (event)
             event.consume(true);
-        this.expand();
+        WebInspector.viewManager.showView("sources.watch");
         this._createWatchExpression(null).startEditing();
     },
 
@@ -124,14 +104,19 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
     _refreshButtonClicked: function(event)
     {
         event.consume();
-        this.refreshExpressions();
+        this.update();
     },
 
-    _rebuildWatchExpressions: function()
+    /**
+     * @override
+     * @return {!Promise.<?>}
+     */
+    doUpdate: function()
     {
+        this._linkifier.reset();
         this._bodyElement.removeChildren();
         this._watchExpressions = [];
-        this._emptyElement = this._bodyElement.createChild("div", "info");
+        this._emptyElement = this._bodyElement.createChild("div", "gray-info-message");
         this._emptyElement.textContent = WebInspector.UIString("No Watch Expressions");
         var watchExpressionStrings = this._watchExpressionsSetting.get();
         for (var i = 0; i < watchExpressionStrings.length; ++i) {
@@ -141,6 +126,7 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
 
             this._createWatchExpression(expression);
         }
+        return Promise.resolve();
     },
 
     /**
@@ -150,7 +136,7 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
     _createWatchExpression: function(expression)
     {
         this._emptyElement.classList.add("hidden");
-        var watchExpression = new WebInspector.WatchExpression(expression, this._expandController);
+        var watchExpression = new WebInspector.WatchExpression(expression, this._expandController, this._linkifier);
         watchExpression.addEventListener(WebInspector.WatchExpression.Events.ExpressionUpdated, this._watchExpressionUpdated.bind(this));
         this._bodyElement.appendChild(watchExpression.element());
         this._watchExpressions.push(watchExpression);
@@ -207,10 +193,40 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
     {
         this._watchExpressions = [];
         this._saveExpressions();
-        this._rebuildWatchExpressions();
+        this.update();
     },
 
-    __proto__: WebInspector.SidebarPane.prototype
+    /**
+     * @override
+     * @param {!WebInspector.Context} context
+     * @param {string} actionId
+     * @return {boolean}
+     */
+    handleAction: function(context, actionId)
+    {
+        var frame = WebInspector.context.flavor(WebInspector.UISourceCodeFrame);
+        if (!frame)
+            return false;
+        var text = frame.textEditor.text(frame.textEditor.selection());
+        WebInspector.viewManager.showView("sources.watch");
+        this.doUpdate();
+        this._createWatchExpression(text);
+        this._saveExpressions();
+        return true;
+    },
+
+    /**
+     * @override
+     * @param {!Event} event
+     * @param {!WebInspector.ContextMenu} contextMenu
+     * @param {!Object} target
+     */
+    appendApplicableItems: function(event, contextMenu, target)
+    {
+        contextMenu.appendAction("sources.add-to-watch");
+    },
+
+    __proto__: WebInspector.ThrottledWidget.prototype
 }
 
 /**
@@ -218,22 +234,25 @@ WebInspector.WatchExpressionsSidebarPane.prototype = {
  * @extends {WebInspector.Object}
  * @param {?string} expression
  * @param {!WebInspector.ObjectPropertiesSectionExpandController} expandController
+ * @param {!WebInspector.Linkifier} linkifier
  */
-WebInspector.WatchExpression = function(expression, expandController)
+WebInspector.WatchExpression = function(expression, expandController, linkifier)
 {
     this._expression = expression;
     this._expandController = expandController;
     this._element = createElementWithClass("div", "watch-expression monospace");
     this._editing = false;
+    this._linkifier = linkifier;
 
-    this._createWatchExpression(null, false);
+    this._createWatchExpression(null);
     this.update();
 }
 
 WebInspector.WatchExpression._watchObjectGroupId = "watch-group";
 
+/** @enum {symbol} */
 WebInspector.WatchExpression.Events = {
-    ExpressionUpdated: "ExpressionUpdated"
+    ExpressionUpdated: Symbol("ExpressionUpdated")
 }
 
 WebInspector.WatchExpression.prototype = {
@@ -334,9 +353,9 @@ WebInspector.WatchExpression.prototype = {
 
     /**
      * @param {?WebInspector.RemoteObject} result
-     * @param {boolean} wasThrown
+     * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
      */
-    _createWatchExpression: function(result, wasThrown)
+    _createWatchExpression: function(result, exceptionDetails)
     {
         this._result = result;
 
@@ -347,12 +366,12 @@ WebInspector.WatchExpression.prototype = {
 
         var titleElement = headerElement.createChild("div", "watch-expression-title");
         this._nameElement = WebInspector.ObjectPropertiesSection.createNameElement(this._expression);
-        if (wasThrown || !result) {
+        if (!!exceptionDetails || !result) {
             this._valueElement = createElementWithClass("span", "error-message value");
             titleElement.classList.add("dimmed");
             this._valueElement.textContent = WebInspector.UIString("<not available>");
         } else {
-            this._valueElement = WebInspector.ObjectPropertiesSection.createValueElementWithCustomSupport(result, wasThrown, titleElement);
+            this._valueElement = WebInspector.ObjectPropertiesSection.createValueElementWithCustomSupport(result, !!exceptionDetails, titleElement, this._linkifier);
         }
         var separatorElement = createElementWithClass("span", "watch-expressions-separator");
         separatorElement.textContent = ": ";
@@ -360,9 +379,9 @@ WebInspector.WatchExpression.prototype = {
 
         this._element.removeChildren();
         this._objectPropertiesSection = null;
-        if (!wasThrown && result && result.hasChildren && !result.customPreview()) {
+        if (!exceptionDetails && result && result.hasChildren && !result.customPreview()) {
             headerElement.classList.add("watch-expression-object-header");
-            this._objectPropertiesSection = new WebInspector.ObjectPropertiesSection(result, headerElement);
+            this._objectPropertiesSection = new WebInspector.ObjectPropertiesSection(result, headerElement, this._linkifier);
             this._objectPresentationElement = this._objectPropertiesSection.element;
             this._expandController.watchSection(/** @type {string} */ (this._expression), this._objectPropertiesSection);
             var objectTreeElement = this._objectPropertiesSection.objectTreeElement();

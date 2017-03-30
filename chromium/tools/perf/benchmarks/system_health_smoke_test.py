@@ -23,13 +23,6 @@ from telemetry.testing import progress_reporter
 from benchmarks import system_health
 
 
-# We only cover memory system health
-_SH_BENCHMARKS_TO_SMOKE_TEST = [
-  system_health.DesktopMemorySystemHealth,
-  system_health.MobileMemorySystemHealth,
-]
-
-
 def GetSystemHealthBenchmarksToSmokeTest():
   sh_benchmark_classes = discover.DiscoverClassesInModule(
       system_health, perf_benchmark.PerfBenchmark,
@@ -38,24 +31,13 @@ def GetSystemHealthBenchmarksToSmokeTest():
               b.Name().startswith('system_health.memory'))
 
 
-_DISABLED_TESTS = [
-  # crbug.com/624474
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:dropbox',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:tools:docs',  # pylint: disable=line-too-long
-  # crbug.com/624587
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:search:ebay',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:news:cnn',  # pylint: disable=line-too-long
-  # crbug.com/624607
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.load:media:dailymotion',  # pylint: disable=line-too-long
-  # crbug.com/624701
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:games:bubbles',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:games:spychase',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:news:cnn',  # pylint: disable=line-too-long
-  # crbug.com/624840
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:drive',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:dropbox',  # pylint: disable=line-too-long
-  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.load:tools:gmail',  # pylint: disable=line-too-long
-]
+_DISABLED_TESTS = frozenset({
+  # crbug.com/629123
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:news:hackernews',  # pylint: disable=line-too-long
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_mobile.browse:news:nytimes',  # pylint: disable=line-too-long
+  # crbug.com/637230
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:news:cnn',  # pylint: disable=line-too-long
+})
 
 
 def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
@@ -124,6 +106,10 @@ def GenerateBenchmarkOptions(benchmark_class):
   # Only measure a single story so that this test cycles reasonably quickly.
   options.pageset_repeat = 1
   options.page_repeat = 1
+  # Enable browser logging in the smoke test only. Hopefully, this will detect
+  # all crashes and hence remove the need to enable logging in actual perf
+  # benchmarks.
+  options.browser_options.logging_verbosity = 'non-verbose'
   return options
 
 

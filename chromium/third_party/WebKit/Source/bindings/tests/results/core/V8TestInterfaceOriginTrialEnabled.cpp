@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceOriginTrialEnabled::domTemplate, V8TestInterfaceOriginTrialEnabled::trace, V8TestInterfaceOriginTrialEnabled::traceWrappers, 0, 0, V8TestInterfaceOriginTrialEnabled::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceOriginTrialEnabled", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceOriginTrialEnabled::domTemplate, V8TestInterfaceOriginTrialEnabled::trace, V8TestInterfaceOriginTrialEnabled::traceWrappers, 0, V8TestInterfaceOriginTrialEnabled::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceOriginTrialEnabled", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -31,6 +31,19 @@ const WrapperTypeInfo V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo = { gin
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceOriginTrialEnabled::s_wrapperTypeInfo = V8TestInterfaceOriginTrialEnabled::wrapperTypeInfo;
+
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestInterfaceOriginTrialEnabled>::value,
+    "TestInterfaceOriginTrialEnabled inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestInterfaceOriginTrialEnabled::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestInterfaceOriginTrialEnabled is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 
 namespace TestInterfaceOriginTrialEnabledV8Internal {
 
@@ -241,8 +254,8 @@ static void installV8TestInterfaceOriginTrialEnabledTemplate(v8::Isolate* isolat
         {"CONST_JAVASCRIPT", 1, 0, V8DOMConfiguration::ConstantTypeShort},
     };
     V8DOMConfiguration::installConstants(isolate, interfaceTemplate, prototypeTemplate, V8TestInterfaceOriginTrialEnabledConstants, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledConstants));
-    static_assert(0 == TestInterfaceOriginTrialEnabled::UNSIGNED_LONG, "the value of TestInterfaceOriginTrialEnabled_UNSIGNED_LONG does not match with implementation");
-    static_assert(1 == TestInterfaceOriginTrialEnabled::CONST_JAVASCRIPT, "the value of TestInterfaceOriginTrialEnabled_CONST_JAVASCRIPT does not match with implementation");
+    static_assert(0 == TestInterfaceOriginTrialEnabled::kUnsignedLong, "the value of TestInterfaceOriginTrialEnabled_kUnsignedLong does not match with implementation");
+    static_assert(1 == TestInterfaceOriginTrialEnabled::kConstJavascript, "the value of TestInterfaceOriginTrialEnabled_kConstJavascript does not match with implementation");
     V8DOMConfiguration::installAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledAccessors, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledAccessors));
     V8DOMConfiguration::installMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, V8TestInterfaceOriginTrialEnabledMethods, WTF_ARRAY_LENGTH(V8TestInterfaceOriginTrialEnabledMethods));
 
@@ -263,7 +276,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceOriginTrialEnabled::domTemplate(v
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceOriginTrialEnabledTemplate);
 }
-
 
 bool V8TestInterfaceOriginTrialEnabled::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

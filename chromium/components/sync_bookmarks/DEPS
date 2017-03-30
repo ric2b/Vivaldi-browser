@@ -4,8 +4,7 @@ include_rules = [
   "+components/favicon/core",
   "+components/history/core/browser",
   "+components/prefs",
-  "+components/sync_driver",
+  "+components/sync",
   "+components/undo",
-  "+sync",
   "+ui/gfx",
 ]

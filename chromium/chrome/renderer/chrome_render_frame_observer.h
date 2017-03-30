@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "base/timer/timer.h"
+#include "chrome/common/prerender_types.h"
 #include "content/public/renderer/render_frame_observer.h"
 
 class GURL;
@@ -35,7 +36,6 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver {
 
   // RenderFrameObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
-  void DidFinishDocumentLoad() override;
   void DidStartProvisionalLoad() override;
   void DidFinishLoad() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
@@ -44,7 +44,7 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver {
   void OnDestruct() override;
 
   // IPC handlers
-  void OnSetIsPrerendering(bool is_prerendering);
+  void OnSetIsPrerendering(prerender::PrerenderMode mode);
   void OnRequestReloadImageForContextNode();
   void OnRequestThumbnailForContextNode(
       int thumbnail_min_area_pixels,

@@ -456,7 +456,7 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
     {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     v8::String::Utf8Value attributeName(name);
     ExceptionState exceptionState(ExceptionState::SetterContext, *attributeName, "{{interface_name}}", info.Holder(), info.GetIsolate());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         exceptionState.throwIfNeeded();
         return;
     }
@@ -478,15 +478,17 @@ static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name
 {% block named_constructor %}
 {% from 'methods.cpp' import generate_constructor with context %}
 {% if named_constructor %}
-{% set to_active_scriptwrappable = '%s::toActiveScriptWrappable' % v8_class
-                                   if active_scriptwrappable else '0' %}
+{% set active_scriptwrappable_inheritance =
+    'InheritFromActiveScriptWrappable'
+    if active_scriptwrappable else
+    'NotInheritFromActiveScriptWrappable' %}
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{to_active_scriptwrappable}}, 0, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes_on_instance %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::trace, {{v8_class}}::traceWrappers, 0, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes_on_instance %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -911,25 +913,17 @@ prototypeObject->CreateDataProperty(context, unscopablesSymbol, unscopeables).Fr
 {% from 'attributes.cpp' import attribute_configuration with context %}
 ExecutionContext* executionContext = toExecutionContext(context);
 v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
-{% for attribute in attributes if attribute.exposed_test and attribute.on_prototype %}
+{% for attribute in attributes if (attribute.exposed_test or attribute.secure_context_test) and attribute.on_prototype %}
 {% filter exposed(attribute.exposed_test) %}
+{% filter secure_context(attribute.secure_context_test) %}
+{% filter runtime_enabled(attribute.runtime_enabled_function) %}
 const V8DOMConfiguration::AccessorConfiguration accessorConfiguration = {{attribute_configuration(attribute)}};
 V8DOMConfiguration::installAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfiguration);
-{% endfilter %}
+{% endfilter %}{# runtime_enabled #}
+{% endfilter %}{# secure_context #}
+{% endfilter %}{# exposed #}
 {% endfor %}
 {% endmacro %}
-
-
-{##############################################################################}
-{% block to_active_scriptwrappable %}
-{% if active_scriptwrappable %}
-ActiveScriptWrappable* {{v8_class}}::toActiveScriptWrappable(v8::Local<v8::Object> wrapper)
-{
-    return toImpl(wrapper);
-}
-
-{% endif %}
-{% endblock %}
 
 
 {##############################################################################}

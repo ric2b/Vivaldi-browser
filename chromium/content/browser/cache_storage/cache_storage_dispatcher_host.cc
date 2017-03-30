@@ -201,16 +201,17 @@ void CacheStorageDispatcherHost::OnCacheStorageMatch(
                                     request.headers, request.referrer,
                                     request.is_reload));
 
-  if (match_params.cache_name.empty()) {
+  if (match_params.cache_name.is_null()) {
     context_->cache_manager()->MatchAllCaches(
-        GURL(origin.Serialize()), std::move(scoped_request),
+        GURL(origin.Serialize()), std::move(scoped_request), match_params,
         base::Bind(&CacheStorageDispatcherHost::OnCacheStorageMatchCallback,
                    this, thread_id, request_id));
     return;
   }
   context_->cache_manager()->MatchCache(
-      GURL(origin.Serialize()), base::UTF16ToUTF8(match_params.cache_name),
-      std::move(scoped_request),
+      GURL(origin.Serialize()),
+      base::UTF16ToUTF8(match_params.cache_name.string()),
+      std::move(scoped_request), match_params,
       base::Bind(&CacheStorageDispatcherHost::OnCacheStorageMatchCallback, this,
                  thread_id, request_id));
 }
@@ -234,7 +235,7 @@ void CacheStorageDispatcherHost::OnCacheMatch(
                                     request.headers, request.referrer,
                                     request.is_reload));
   cache->Match(
-      std::move(scoped_request),
+      std::move(scoped_request), match_params,
       base::Bind(&CacheStorageDispatcherHost::OnCacheMatchCallback, this,
                  thread_id, request_id, base::Passed(it->second->Clone())));
 }
@@ -273,7 +274,7 @@ void CacheStorageDispatcherHost::OnCacheMatchAll(
     return;
   }
   cache->Match(
-      std::move(scoped_request),
+      std::move(scoped_request), match_params,
       base::Bind(&CacheStorageDispatcherHost::OnCacheMatchAllCallbackAdapter,
                  this, thread_id, request_id,
                  base::Passed(it->second->Clone())));
@@ -293,9 +294,14 @@ void CacheStorageDispatcherHost::OnCacheKeys(
   }
 
   CacheStorageCache* cache = it->second->value();
-  cache->Keys(base::Bind(&CacheStorageDispatcherHost::OnCacheKeysCallback, this,
-                         thread_id, request_id,
-                         base::Passed(it->second->Clone())));
+  std::unique_ptr<ServiceWorkerFetchRequest> request_ptr(
+      new ServiceWorkerFetchRequest(request.url, request.method,
+                                    request.headers, request.referrer,
+                                    request.is_reload));
+  cache->Keys(
+      std::move(request_ptr), match_params,
+      base::Bind(&CacheStorageDispatcherHost::OnCacheKeysCallback, this,
+                 thread_id, request_id, base::Passed(it->second->Clone())));
 }
 
 void CacheStorageDispatcherHost::OnCacheBatch(

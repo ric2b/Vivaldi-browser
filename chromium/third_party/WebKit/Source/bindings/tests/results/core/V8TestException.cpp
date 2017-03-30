@@ -22,7 +22,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestException::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestException::domTemplate, V8TestException::trace, V8TestException::traceWrappers, 0, 0, V8TestException::preparePrototypeAndInterfaceObject, nullptr, "TestException", 0, WrapperTypeInfo::WrapperTypeExceptionPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestException::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestException::domTemplate, V8TestException::trace, V8TestException::traceWrappers, 0, V8TestException::preparePrototypeAndInterfaceObject, nullptr, "TestException", 0, WrapperTypeInfo::WrapperTypeExceptionPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -31,6 +31,19 @@ const WrapperTypeInfo V8TestException::wrapperTypeInfo = { gin::kEmbedderBlink, 
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestException::s_wrapperTypeInfo = V8TestException::wrapperTypeInfo;
+
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestException>::value,
+    "TestException inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestException::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestException is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 
 namespace TestExceptionV8Internal {
 
@@ -140,7 +153,6 @@ v8::Local<v8::FunctionTemplate> V8TestException::domTemplate(v8::Isolate* isolat
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestExceptionTemplate);
 }
-
 
 bool V8TestException::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

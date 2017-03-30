@@ -192,10 +192,10 @@ SavePackage::~SavePackage() {
                                        completed_count() + in_process_count());
 
   // Free all SaveItems.
-  STLDeleteElements(&waiting_item_queue_);
-  STLDeleteValues(&in_progress_items_);
-  STLDeleteValues(&saved_success_items_);
-  STLDeleteValues(&saved_failed_items_);
+  base::STLDeleteElements(&waiting_item_queue_);
+  base::STLDeleteValues(&in_progress_items_);
+  base::STLDeleteValues(&saved_success_items_);
+  base::STLDeleteValues(&saved_failed_items_);
   // Clear containers that contain (now dangling/invalid) pointers to the
   // save items freed above.  This is not strictly required (as the containers
   // will be destructed soon by ~SavePackage), but seems like good code hygiene.
@@ -235,8 +235,7 @@ void SavePackage::Cancel(bool user_action) {
 void SavePackage::InternalInit() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
-  file_manager_ = rdh->save_file_manager();
+  file_manager_ = SaveFileManager::Get();
   DCHECK(file_manager_);
 
   download_manager_ = static_cast<DownloadManagerImpl*>(
@@ -573,7 +572,7 @@ void SavePackage::PutInProgressItemToSavedMap(SaveItem* save_item) {
 
   SaveItemIdMap& map = save_item->success() ?
       saved_success_items_ : saved_failed_items_;
-  DCHECK(!ContainsKey(map, save_item->id()));
+  DCHECK(!base::ContainsKey(map, save_item->id()));
   map[save_item->id()] = save_item;
 }
 
@@ -783,7 +782,7 @@ void SavePackage::SaveNextFile(bool process_all_remaining_items) {
     waiting_item_queue_.pop_front();
 
     // Add the item to |in_progress_items_|.
-    DCHECK(!ContainsKey(in_progress_items_, save_item->id()));
+    DCHECK(!base::ContainsKey(in_progress_items_, save_item->id()));
     in_progress_items_[save_item->id()] = save_item;
     save_item->Start();
 
@@ -1028,7 +1027,7 @@ void SavePackage::OnSerializedHtmlWithLocalLinksResponse(
       }
     }
 
-    if (ContainsKey(saved_failed_items_, save_item->id()))
+    if (base::ContainsKey(saved_failed_items_, save_item->id()))
       wrote_to_failed_file_ = true;
 
     return;
@@ -1049,9 +1048,8 @@ void SavePackage::OnSerializedHtmlWithLocalLinksResponse(
 
   // Current frame is completed saving, call finish in FILE thread.
   if (end_of_data) {
-    DVLOG(20) << " " << __FUNCTION__ << "()"
-              << " save_item_id = " << save_item->id() << " url = \""
-              << save_item->url().spec() << "\"";
+    DVLOG(20) << __func__ << "() save_item_id = " << save_item->id()
+              << " url = \"" << save_item->url().spec() << "\"";
     BrowserThread::PostTask(
         BrowserThread::FILE, FROM_HERE,
         base::Bind(&SaveFileManager::SaveFinished, file_manager_,
@@ -1239,11 +1237,13 @@ void SavePackage::CompleteSavableResourceLinksResponse() {
   }
 }
 
+// static
 base::FilePath SavePackage::GetSuggestedNameForSaveAs(
+    const base::string16& title,
+    const GURL& page_url,
     bool can_save_as_complete,
     const std::string& contents_mime_type) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::FilePath name_with_proper_ext = base::FilePath::FromUTF16Unsafe(title_);
+  base::FilePath name_with_proper_ext = base::FilePath::FromUTF16Unsafe(title);
 
   // If the page's title matches its URL, use the URL. Try to use the last path
   // component or if there is none, the domain as the file name.
@@ -1254,11 +1254,11 @@ base::FilePath SavePackage::GetSuggestedNameForSaveAs(
   // back to a URL, and if it matches the original page URL, we know the page
   // had no title (or had a title equal to its URL, which is fine to treat
   // similarly).
-  if (title_ == url_formatter::FormatUrl(page_url_)) {
+  if (title == url_formatter::FormatUrl(page_url)) {
     std::string url_path;
-    if (!page_url_.SchemeIs(url::kDataScheme)) {
+    if (!page_url.SchemeIs(url::kDataScheme)) {
       std::vector<std::string> url_parts = base::SplitString(
-          page_url_.path(), "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+          page_url.path(), "/", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
       if (!url_parts.empty()) {
         for (int i = static_cast<int>(url_parts.size()) - 1; i >= 0; --i) {
           url_path = url_parts[i];
@@ -1267,7 +1267,7 @@ base::FilePath SavePackage::GetSuggestedNameForSaveAs(
         }
       }
       if (url_path.empty())
-        url_path = page_url_.host();
+        url_path = page_url.host();
     } else {
       url_path = "dataurl";
     }
@@ -1288,6 +1288,8 @@ base::FilePath SavePackage::GetSuggestedNameForSaveAs(
 
 // static
 base::FilePath SavePackage::EnsureHtmlExtension(const base::FilePath& name) {
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
   base::FilePath::StringType ext = name.Extension();
   if (!ext.empty())
     ext.erase(ext.begin());  // Erase preceding '.'.
@@ -1303,6 +1305,8 @@ base::FilePath SavePackage::EnsureHtmlExtension(const base::FilePath& name) {
 // static
 base::FilePath SavePackage::EnsureMimeExtension(const base::FilePath& name,
     const std::string& contents_mime_type) {
+  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
   // Start extension at 1 to skip over period if non-empty.
   base::FilePath::StringType ext = name.Extension();
   if (!ext.empty())
@@ -1354,23 +1358,28 @@ void SavePackage::GetSaveInfo() {
   }
   std::string mime_type = web_contents()->GetContentsMimeType();
   bool can_save_as_complete = CanSaveAsComplete(mime_type);
-  base::FilePath suggested_filename =
-      GetSuggestedNameForSaveAs(can_save_as_complete, mime_type);
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::FILE, FROM_HERE,
-      base::Bind(&SavePackage::CreateDirectoryOnFileThread, website_save_dir,
-                 download_save_dir, suggested_filename, skip_dir_check),
+      base::Bind(&SavePackage::CreateDirectoryOnFileThread, title_, page_url_,
+                 can_save_as_complete, mime_type, website_save_dir,
+                 download_save_dir, skip_dir_check),
       base::Bind(&SavePackage::ContinueGetSaveInfo, this,
                  can_save_as_complete));
 }
 
 // static
 base::FilePath SavePackage::CreateDirectoryOnFileThread(
+    const base::string16& title,
+    const GURL& page_url,
+    bool can_save_as_complete,
+    const std::string& mime_type,
     const base::FilePath& website_save_dir,
     const base::FilePath& download_save_dir,
-    const base::FilePath& suggested_filename,
     bool skip_dir_check) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+
+  base::FilePath suggested_filename = GetSuggestedNameForSaveAs(
+      title, page_url, can_save_as_complete, mime_type);
 
   base::FilePath save_dir;
   // If the default html/websites save folder doesn't exist...

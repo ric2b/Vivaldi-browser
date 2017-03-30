@@ -36,6 +36,7 @@ class DevToolsFrameTraceRecorder;
 class DevToolsProtocolHandler;
 class FrameTreeNode;
 class NavigationHandle;
+class NavigationThrottle;
 class RenderFrameHostImpl;
 
 namespace devtools {
@@ -47,6 +48,7 @@ namespace inspector { class InspectorHandler; }
 namespace io { class IOHandler; }
 namespace network { class NetworkHandler; }
 namespace page { class PageHandler; }
+namespace schema { class SchemaHandler; }
 namespace security { class SecurityHandler; }
 namespace service_worker { class ServiceWorkerHandler; }
 namespace storage { class StorageHandler; }
@@ -64,6 +66,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   static void OnBeforeNavigation(RenderFrameHost* current,
                                  RenderFrameHost* pending);
   static void OnBeforeNavigation(NavigationHandle* navigation_handle);
+  static std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
+      NavigationHandle* navigation_handle);
 
   void SynchronousSwapCompositorFrame(
       cc::CompositorFrameMetadata frame_metadata);
@@ -151,6 +155,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void OnRequestNewWindow(RenderFrameHost* sender, int new_routing_id);
   void DestroyOnRenderFrameGone();
 
+  bool CheckConsistency();
+
   void CreatePowerSaveBlocker();
 
   class FrameHostHolder;
@@ -168,6 +174,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   std::unique_ptr<devtools::io::IOHandler> io_handler_;
   std::unique_ptr<devtools::network::NetworkHandler> network_handler_;
   std::unique_ptr<devtools::page::PageHandler> page_handler_;
+  std::unique_ptr<devtools::schema::SchemaHandler> schema_handler_;
   std::unique_ptr<devtools::security::SecurityHandler> security_handler_;
   std::unique_ptr<devtools::service_worker::ServiceWorkerHandler>
       service_worker_handler_;
@@ -181,6 +188,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   std::unique_ptr<base::WeakPtrFactory<ui::ViewAndroid>> view_weak_factory_;
 #endif
   std::unique_ptr<DevToolsProtocolHandler> protocol_handler_;
+  RenderFrameHostImpl* handlers_frame_host_;
   bool current_frame_crashed_;
 
   // PlzNavigate

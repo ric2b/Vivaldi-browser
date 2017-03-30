@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_UI_CONTROLLER_H_
 #define CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_UI_CONTROLLER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/macros.h"
@@ -51,21 +52,24 @@ class ManagePasswordsUIController
       std::unique_ptr<password_manager::PasswordFormManager> form_manager)
       override;
   bool OnChooseCredentials(
-      ScopedVector<autofill::PasswordForm> local_credentials,
-      ScopedVector<autofill::PasswordForm> federated_credentials,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+      std::vector<std::unique_ptr<autofill::PasswordForm>>
+          federated_credentials,
       const GURL& origin,
       const ManagePasswordsState::CredentialsCallback& callback) override;
-  void OnAutoSignin(ScopedVector<autofill::PasswordForm> local_forms,
-                    const GURL& origin) override;
+  void OnAutoSignin(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
+      const GURL& origin) override;
   void OnPromptEnableAutoSignin() override;
   void OnAutomaticPasswordSave(
       std::unique_ptr<password_manager::PasswordFormManager> form_manager)
       override;
   void OnPasswordAutofilled(
-      const autofill::PasswordFormMap& password_form_map,
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          password_form_map,
       const GURL& origin,
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>*
-          federated_matches) override;
+      const std::vector<const autofill::PasswordForm*>* federated_matches)
+      override;
 
   // PasswordStore::Observer:
   void OnLoginsChanged(
@@ -79,17 +83,20 @@ class ManagePasswordsUIController
     return bubble_status_ == SHOULD_POP_UP;
   }
 
+  base::WeakPtr<PasswordsModelDelegate> GetModelDelegateProxy();
+
   // PasswordsModelDelegate:
+  content::WebContents* GetWebContents() const override;
   const GURL& GetOrigin() const override;
   password_manager::ui::State GetState() const override;
   const autofill::PasswordForm& GetPendingPassword() const override;
   bool IsPasswordOverridden() const override;
-  const std::vector<const autofill::PasswordForm*>& GetCurrentForms()
+  const std::vector<std::unique_ptr<autofill::PasswordForm>>& GetCurrentForms()
       const override;
-  const std::vector<const autofill::PasswordForm*>& GetFederatedForms()
+  const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+  GetFederatedForms() const override;
+  const password_manager::InteractionsStats* GetCurrentInteractionStats()
       const override;
-  password_manager::InteractionsStats* GetCurrentInteractionStats() const
-      override;
   void OnBubbleShown() override;
   void OnBubbleHidden() override;
   void OnNoInteractionOnUpdate() override;
@@ -98,7 +105,7 @@ class ManagePasswordsUIController
   void SavePassword() override;
   void UpdatePassword(const autofill::PasswordForm& password_form) override;
   void ChooseCredential(
-      autofill::PasswordForm form,
+      const autofill::PasswordForm& form,
       password_manager::CredentialType credential_type) override;
   void NavigateToExternalPasswordManager() override;
   void NavigateToSmartLockHelpPage() override;
@@ -175,6 +182,17 @@ class ManagePasswordsUIController
   std::unique_ptr<PasswordDialogControllerImpl> dialog_controller_;
 
   BubbleStatus bubble_status_;
+
+  // The bubbles of different types can pop up unpredictably superseding each
+  // other. However, closing the bubble may affect the state of
+  // ManagePasswordsUIController internally. This is undesired if
+  // ManagePasswordsUIController is in the process of opening a new bubble. The
+  // situation is worse on Windows where the bubble is destroyed asynchronously.
+  // Thus, OnBubbleHidden() can be called after the new one is shown. By that
+  // time the internal state of ManagePasswordsUIController has nothing to do
+  // with the old bubble.
+  // Invalidating all the weak pointers will detach the current bubble.
+  base::WeakPtrFactory<ManagePasswordsUIController> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsUIController);
 };

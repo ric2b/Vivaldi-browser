@@ -20,6 +20,8 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
     // Handled by RenderWidgetHost.
     case InputHostMsg_HandleInputEvent_ACK::ID:
     case ViewHostMsg_UpdateRect::ID:
+    // Handled by RenderWidgetHostView.
+    case ViewHostMsg_SetNeedsBeginFrames::ID:
     // Allow targeted navigations while swapped out.
     case FrameHostMsg_OpenURL::ID:
     case ViewHostMsg_Focus::ID:
@@ -41,7 +43,6 @@ bool SwappedOutMessages::CanSendWhileSwappedOut(const IPC::Message* msg) {
     case FrameHostMsg_DomOperationResponse::ID:
     // Input events propagate from parent to child.
     case FrameHostMsg_ForwardInputEvent::ID:
-    case FrameHostMsg_InitializeChildFrame::ID:
     // The browser should always have an accurate mirror of the renderer's
     // notion of the current page id.
     case FrameHostMsg_DidAssignPageId::ID:

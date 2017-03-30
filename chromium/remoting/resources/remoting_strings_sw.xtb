@@ -74,7 +74,6 @@ Kwa maelezo kuhusu faragha, tafadhali angalia Sera ya Faragha ya Google (http://
 <translation id="2676780859508944670">Inafanya kazi…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Usasishaji wa programu kwa kawaida hufanyika kiotomatiki, lakini wakati mwingine unaweza kushindwa japo kwa nadra. Kusasisha programu kunapaswa kuchukua si zaidi ya dakika chache na kunaweza kufanyika wakati imeunganishwa kwa kompyuta yako kwa mbali.</translation>
-<translation id="2813770873348017932">Miunganisho ya kompyuta ya mbali imezuiwa kwa muda kwa sababu mtu alikuwa akijaribu kuunganisha kwayo kwa PIN batili. Tafadhali jaribu tena baadaye.</translation>
 <translation id="2841013758207633010">Muda</translation>
 <translation id="2851674870054673688">Mara tu anapoingiza msimbo kipindi chako cha kushiriki kitaanza.</translation>
 <translation id="2851754573186462851">Utiririshaji wa Programu ya Chromium</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Mpangishi wa Kompyuta
 ya Mbali ya Chrome</translation>
 <translation id="4619978527973181021">Kubali na Usakinishe</translation>
-<translation id="4647791084836149355">Onyesha mwonekano wa Cardboard</translation>
 <translation id="4703302905453407178">Kipengele kinachohitajika kimeacha kufanya kazi. Tafadhali ripoti tatizo hili kwa wasanidi programu.</translation>
 <translation id="4703799847237267011">Kipindi chako cha Chromoting kimekamilika.</translation>
 <translation id="4736223761657662401">Historia ya Muunganisho</translation>
@@ -210,7 +208,6 @@ ya Mbali ya Chrome</translation>
 <translation id="6284412385303060032">Seva pangishi inayotumika kwenye skrini ya dashibodi imezima ili kutumia hali ya pazia kwa kubadilisha hadi seva pangishi inayotumika katika kipindi mahususi cha mtumiaji.</translation>
 <translation id="629730747756840877">Akaunti</translation>
 <translation id="6304318647555713317">Kiteja</translation>
-<translation id="6324708100353784493">Umewasha kipengee cha hali ya kujumuisha Google Cardboard. Ili utumie hali hii, weka kifaa chako katika mwonekano unaotumika kwenye Google Cardboard.</translation>
 <translation id="6381670701864002291">Kitu kingine.</translation>
 <translation id="6398765197997659313">Ondoka kwenye Skrini nzima</translation>
 <translation id="6408143143164565232">• Sikiliza sauti kwenye kompyuta za Windows au Linux.
@@ -236,6 +233,7 @@ ya Mbali ya Chrome</translation>
 <translation id="6930242544192836755">Muda</translation>
 <translation id="6939719207673461467">Onyesha/ficha kibodi.</translation>
 <translation id="6944854424004126054">Rejesha dirisha</translation>
+<translation id="6963936880795878952">Miunganisho ya kompyuta ya mbali imezuiwa kwa muda kwa sababu mtu fulani alikuwa akijaribu kuifikia kwa kutumia PIN isiyo sahihi. Tafadhali jaribu tena baadaye.</translation>
 <translation id="6965382102122355670">Sawa</translation>
 <translation id="6985691951107243942">Una uhakika kuwa unataka kufunga miunganisho ya mbali kwa <ph name="HOSTNAME" />? Ukibadilisha nia, utahitajika kutembelea kompyuta hiyo ili uwashe miunganisho upya.</translation>
 <translation id="6998989275928107238">Hadi</translation>

@@ -1,0 +1,6 @@
+source_set("tools") {
+  sources = [
+    "../tools/vivaldi_tools.cpp",
+    "../tools/vivaldi_tools.h",
+  ]
+}

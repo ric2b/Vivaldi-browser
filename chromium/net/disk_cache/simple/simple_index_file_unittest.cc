@@ -28,7 +28,11 @@
 #include "net/disk_cache/simple/simple_index.h"
 #include "net/disk_cache/simple/simple_util.h"
 #include "net/disk_cache/simple/simple_version_upgrade.h"
+#include "net/test/gtest_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using net::test::IsOk;
 
 using base::Time;
 using disk_cache::SimpleIndexFile;
@@ -166,7 +170,9 @@ TEST_F(SimpleIndexFileTest, Serialize) {
       static_cast<uint64_t>(kNumHashes), 456);
   for (size_t i = 0; i < kNumHashes; ++i) {
     uint64_t hash = kHashes[i];
-    metadata_entries[i] = EntryMetadata(Time(), hash);
+    // TODO(eroman): Should restructure the test so no casting here (and same
+    //               elsewhere where a hash is cast to an entry size).
+    metadata_entries[i] = EntryMetadata(Time(), static_cast<uint32_t>(hash));
     SimpleIndex::InsertInEntrySet(hash, metadata_entries[i], &entries);
   }
 
@@ -236,7 +242,7 @@ TEST_F(SimpleIndexFileTest, WriteThenLoadIndex) {
   EntryMetadata metadata_entries[kNumHashes];
   for (size_t i = 0; i < kNumHashes; ++i) {
     uint64_t hash = kHashes[i];
-    metadata_entries[i] = EntryMetadata(Time(), hash);
+    metadata_entries[i] = EntryMetadata(Time(), static_cast<uint32_t>(hash));
     SimpleIndex::InsertInEntrySet(hash, metadata_entries[i], &entries);
   }
 
@@ -333,9 +339,9 @@ TEST_F(SimpleIndexFileTest, SimpleCacheUpgrade) {
                                         cache_thread.task_runner().get(), NULL);
   net::TestCompletionCallback cb;
   int rv = simple_cache->Init(cb.callback());
-  EXPECT_EQ(net::OK, cb.GetResult(rv));
+  EXPECT_THAT(cb.GetResult(rv), IsOk());
   rv = simple_cache->index()->ExecuteWhenReady(cb.callback());
-  EXPECT_EQ(net::OK, cb.GetResult(rv));
+  EXPECT_THAT(cb.GetResult(rv), IsOk());
   delete simple_cache;
 
   // The backend flushes the index on destruction and does so on the cache
@@ -383,7 +389,7 @@ TEST_F(SimpleIndexFileTest, OverwritesStaleTempFile) {
 
   // Write the index file.
   SimpleIndex::EntrySet entries;
-  SimpleIndex::InsertInEntrySet(11, EntryMetadata(Time(), 11), &entries);
+  SimpleIndex::InsertInEntrySet(11, EntryMetadata(Time(), 11u), &entries);
   net::TestClosure closure;
   simple_index_file.WriteToDisk(SimpleIndex::INDEX_WRITE_REASON_SHUTDOWN,
                                 entries, 120U, base::TimeTicks(), false,

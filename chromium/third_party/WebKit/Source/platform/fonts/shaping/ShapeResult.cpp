@@ -215,7 +215,8 @@ void ShapeResult::fallbackFonts(HashSet<const SimpleFontData*>* fallback) const
     ASSERT(fallback);
     ASSERT(m_primaryFont);
     for (unsigned i = 0; i < m_runs.size(); ++i) {
-        if (m_runs[i] && m_runs[i]->m_fontData != m_primaryFont
+        if (m_runs[i] && m_runs[i]->m_fontData
+            && m_runs[i]->m_fontData != m_primaryFont
             && !m_runs[i]->m_fontData->isTextOrientationFallbackOf(m_primaryFont.get())) {
             fallback->add(m_runs[i]->m_fontData.get());
         }
@@ -311,7 +312,12 @@ void ShapeResult::insertRun(std::unique_ptr<ShapeResult::RunInfo> runToInsert,
 
         // One out of x_advance and y_advance is zero, depending on
         // whether the buffer direction is horizontal or vertical.
-        float advance = harfBuzzPositionToFloat(pos.x_advance - pos.y_advance);
+        // Convert to float and negate to avoid integer-overflow for ULONG_MAX.
+        float advance;
+        if (LIKELY(pos.x_advance))
+            advance = harfBuzzPositionToFloat(pos.x_advance);
+        else
+            advance = -harfBuzzPositionToFloat(pos.y_advance);
 
         run->m_glyphData[i].characterIndex =
             glyphInfos[startGlyph + i].cluster - startCluster;

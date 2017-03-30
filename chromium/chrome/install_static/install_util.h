@@ -12,8 +12,6 @@
 #include <string>
 #include <vector>
 
-#include "base/strings/string16.h"
-
 namespace install_static {
 
 enum class ProcessType {
@@ -36,6 +34,7 @@ extern const wchar_t kRegPathClientState[];
 extern const wchar_t kRegPathClientStateMedium[];
 extern const wchar_t kRegPathChromePolicy[];
 extern const wchar_t kRegApField[];
+// Used to retrieve consent for uploading crashes and metrics.
 extern const wchar_t kRegValueUsageStats[];
 extern const wchar_t kUninstallArgumentsField[];
 extern const wchar_t kMetricsReportingEnabled[];
@@ -78,7 +77,15 @@ bool GetCollectStatsConsent();
 // Returns true if usage stats collecting is enabled for this user for the
 // executable passed in as |exe_path|.
 // Only used by tests.
-bool GetCollectStatsConsentForTesting(const base::string16& exe_path);
+bool GetCollectStatsConsentForTesting(const std::wstring& exe_path);
+
+// Returns true if the current executable is currently in the chosen sample that
+// will report stats and crashes.
+bool GetCollectStatsInSample();
+
+// Sets the registry value used for checking if Chrome is in the chosen sample
+// that will report stats and crashes. Returns true if writing was successful.
+bool SetCollectStatsInSample(bool in_sample);
 
 // Returns true if if usage stats reporting is controlled by a mandatory
 // policy. |metrics_is_enforced_by_policy| will be set to true accordingly.
@@ -100,32 +107,32 @@ bool IsNonBrowserProcess();
 // TODO(ananta)
 // http://crbug.com/604923
 // Unify this with the Browser Distribution code.
-bool GetDefaultUserDataDirectory(base::string16* result);
+bool GetDefaultUserDataDirectory(std::wstring* result);
 
 // Populates |crash_dir| with the default crash dump location regardless of
 // whether DIR_USER_DATA or DIR_CRASH_DUMPS has been overridden.
 // TODO(ananta)
 // http://crbug.com/604923
 // Unify this with the Browser Distribution code.
-bool GetDefaultCrashDumpLocation(base::string16* crash_dir);
+bool GetDefaultCrashDumpLocation(std::wstring* crash_dir);
 
 // Returns the contents of the specified |variable_name| from the environment
 // block of the calling process. Returns an empty string if the variable does
 // not exist.
 std::string GetEnvironmentString(const std::string& variable_name);
-base::string16 GetEnvironmentString16(const base::string16& variable_name);
+std::wstring GetEnvironmentString16(const std::wstring& variable_name);
 
 // Sets the environment variable identified by |variable_name| to the value
 // identified by |new_value|.
 bool SetEnvironmentString(const std::string& variable_name,
                           const std::string& new_value);
-bool SetEnvironmentString16(const base::string16& variable_name,
-                            const base::string16& new_value);
+bool SetEnvironmentString16(const std::wstring& variable_name,
+                            const std::wstring& new_value);
 
 // Returns true if the environment variable identified by |variable_name|
 // exists.
 bool HasEnvironmentVariable(const std::string& variable_name);
-bool HasEnvironmentVariable16(const base::string16& variable_name);
+bool HasEnvironmentVariable16(const std::wstring& variable_name);
 
 // Gets the exe version details like the |product_name|, |version|,
 // |special_build|, |channel_name|, etc. Most of this information is read
@@ -133,11 +140,11 @@ bool HasEnvironmentVariable16(const base::string16& variable_name);
 // TODO(ananta)
 // http://crbug.com/604923
 // Unify this with the Browser Distribution code.
-bool GetExecutableVersionDetails(const base::string16& exe_path,
-                                  base::string16* product_name,
-                                  base::string16* version,
-                                  base::string16* special_build,
-                                  base::string16* channel_name);
+bool GetExecutableVersionDetails(const std::wstring& exe_path,
+                                 std::wstring* product_name,
+                                 std::wstring* version,
+                                 std::wstring* special_build,
+                                 std::wstring* channel_name);
 
 // Gets the channel name for the current Chrome process.
 // If |add_modifier| is true the channel name is returned with the modifier
@@ -148,8 +155,7 @@ bool GetExecutableVersionDetails(const base::string16& exe_path,
 // Unify this with the Browser Distribution code.
 void GetChromeChannelName(bool is_per_user_install,
                           bool add_modifier,
-                          base::string16* channel_name);
-
+                          std::wstring* channel_name);
 
 // Returns the version of Google Update that is installed.
 // TODO(ananta)
@@ -162,7 +168,7 @@ std::string GetGoogleUpdateVersion();
 // TODO(ananta)
 // http://crbug.com/604923
 // Unify this with the Browser Distribution code.
-base::string16 GetChromeInstallSubDirectory();
+std::wstring GetChromeInstallSubDirectory();
 
 // Returns the registry path where the browser crash dumps metrics need to be
 // written to.
@@ -170,7 +176,7 @@ base::string16 GetChromeInstallSubDirectory();
 // http://crbug.com/604923
 // Unify this with the version in
 // chrome\common\metrics_constants_util_win.cc
-base::string16 GetBrowserCrashDumpAttemptsRegistryPath();
+std::wstring GetBrowserCrashDumpAttemptsRegistryPath();
 
 // Returns true if the |source| string matches the |pattern|. The pattern
 // may contain wildcards like '?', which matches one character or a '*'
@@ -178,12 +184,12 @@ base::string16 GetBrowserCrashDumpAttemptsRegistryPath();
 // Please note that pattern matches the whole string. If you want to find
 // something in the middle of the string then you need to specify the pattern
 // as '*xyz*'.
-bool MatchPattern(const base::string16& source, const base::string16& pattern);
+bool MatchPattern(const std::wstring& source, const std::wstring& pattern);
 
 // UTF8 to UTF16 and vice versa conversion helpers.
-base::string16 UTF8ToUTF16(const std::string& source);
+std::wstring UTF8ToUTF16(const std::string& source);
 
-std::string UTF16ToUTF8(const base::string16& source);
+std::string UTF16ToUTF8(const std::wstring& source);
 
 // Tokenizes a string |str| based on single character delimiter.
 // The tokens are returned in a vector. The |trim_spaces| parameter indicates
@@ -191,9 +197,9 @@ std::string UTF16ToUTF8(const base::string16& source);
 std::vector<std::string> TokenizeString(const std::string& str,
                                         char delimiter,
                                         bool trim_spaces);
-std::vector<base::string16> TokenizeString16(const base::string16& str,
-                                             base::char16 delimiter,
-                                             bool trim_spaces);
+std::vector<std::wstring> TokenizeString16(const std::wstring& str,
+                                           wchar_t delimiter,
+                                           bool trim_spaces);
 
 // Compares version strings of the form "X.X.X.X" and returns the result of the
 // comparison in the |result| parameter. The result is as below:

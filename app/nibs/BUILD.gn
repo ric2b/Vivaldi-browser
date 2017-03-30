@@ -1,0 +1,7 @@
+import("//build/config/mac/rules.gni")
+
+mac_xib_bundle_data("vivaldi_xibs") {
+  sources = [
+    "VivaldiMainMenu.xib",
+  ]
+}

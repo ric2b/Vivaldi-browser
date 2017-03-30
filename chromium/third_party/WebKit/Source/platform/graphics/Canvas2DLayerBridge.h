@@ -26,12 +26,12 @@
 #ifndef Canvas2DLayerBridge_h
 #define Canvas2DLayerBridge_h
 
+#include "cc/layers/texture_layer_client.h"
+#include "cc/resources/texture_mailbox.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/ImageBufferSurface.h"
 #include "public/platform/WebExternalTextureLayer.h"
-#include "public/platform/WebExternalTextureLayerClient.h"
-#include "public/platform/WebExternalTextureMailbox.h"
 #include "public/platform/WebThread.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -76,7 +76,7 @@ class SharedContextRateLimiter;
 // TODO: Fix background rendering and remove this workaround. crbug.com/600386
 #define CANVAS2D_BACKGROUND_RENDER_SWITCH_TO_CPU 0
 
-class PLATFORM_EXPORT Canvas2DLayerBridge : public WebExternalTextureLayerClient, public WebThread::TaskObserver, public RefCounted<Canvas2DLayerBridge> {
+class PLATFORM_EXPORT Canvas2DLayerBridge : public NON_EXPORTED_BASE(cc::TextureLayerClient), public WebThread::TaskObserver, public RefCounted<Canvas2DLayerBridge> {
     WTF_MAKE_NONCOPYABLE(Canvas2DLayerBridge);
 public:
     enum AccelerationMode {
@@ -85,13 +85,18 @@ public:
         ForceAccelerationForTesting,
     };
 
-    static PassRefPtr<Canvas2DLayerBridge> create(const IntSize&, int msaaSampleCount, OpacityMode, AccelerationMode);
+    Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DProvider>, const IntSize&, int msaaSampleCount, OpacityMode, AccelerationMode, sk_sp<SkColorSpace>);
 
     ~Canvas2DLayerBridge() override;
 
-    // WebExternalTextureLayerClient implementation.
-    bool prepareMailbox(WebExternalTextureMailbox*, WebExternalBitmap*) override;
-    void mailboxReleased(const WebExternalTextureMailbox&, bool lostResource) override;
+    // cc::TextureLayerClient implementation.
+    bool PrepareTextureMailbox(
+        cc::TextureMailbox* outMailbox,
+        std::unique_ptr<cc::SingleReleaseCallback>* outReleaseCallback) override;
+
+    // Callback for mailboxes given to the compositor from PrepareTextureMailbox.
+    void mailboxReleased(const gpu::Mailbox&, const gpu::SyncToken&,
+        bool lostResource);
 
     // ImageBufferSurface implementation
     void finalizeFrame(const FloatRect &dirtyRect);
@@ -113,10 +118,12 @@ public:
     void flushGpu();
     void prepareSurfaceForPaintingIfNeeded();
     bool isHidden() { return m_isHidden; }
+    OpacityMode opacityMode() { return m_opacityMode; }
 
     void beginDestruction();
     void hibernate();
     bool isHibernating() const { return m_hibernationImage.get(); }
+    sk_sp<SkColorSpace> colorSpace() const { return m_colorSpace; }
 
     PassRefPtr<SkImage> newImageSnapshot(AccelerationHint, SnapshotReason);
 
@@ -153,7 +160,7 @@ private:
     // All information associated with a CHROMIUM image.
     struct ImageInfo {
         ImageInfo() {}
-        ImageInfo(GLuint imageId, GLuint textureId, GLint gpuMemoryBufferId);
+        ImageInfo(GLuint imageId, GLuint textureId);
 
         // Whether this structure holds references to a CHROMIUM image.
         bool empty();
@@ -163,15 +170,12 @@ private:
 
         // The id of the texture bound to the CHROMIUM image.
         GLuint m_textureId = 0;
-
-        // The id of the GpuMemoryBuffer backing the texture and CHROMIUM image.
-        GLint m_gpuMemoryBufferId = -1;
     };
 #endif // USE_IOSURFACE_FOR_2D_CANVAS
 
     struct MailboxInfo {
         DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-        WebExternalTextureMailbox m_mailbox;
+        gpu::Mailbox m_mailbox;
         RefPtr<SkImage> m_image;
         RefPtr<Canvas2DLayerBridge> m_parentLayerBridge;
 
@@ -182,10 +186,9 @@ private:
 #endif // USE_IOSURFACE_FOR_2D_CANVAS
 
         MailboxInfo(const MailboxInfo&);
-        MailboxInfo() {}
+        MailboxInfo();
     };
 
-    Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DProvider>, const IntSize&, int msaaSampleCount, OpacityMode, AccelerationMode);
     gpu::gles2::GLES2Interface* contextGL();
     void startRecording();
     void skipQueuedDrawCommands();
@@ -209,7 +212,7 @@ private:
     // MailboxInfo, and prepended it to |m_mailboxs|. Returns whether the
     // mailbox was successfully prepared. |mailbox| is an out parameter only
     // populated on success.
-    bool prepareIOSurfaceMailboxFromImage(SkImage*, WebExternalTextureMailbox*);
+    bool prepareIOSurfaceMailboxFromImage(SkImage*, cc::TextureMailbox*);
 
     // Creates an IOSurface-backed texture. Returns an ImageInfo, which is empty
     // on failure. The caller takes ownership of both the texture and the image.
@@ -227,7 +230,7 @@ private:
 
     // Returns whether the mailbox was successfully prepared from the SkImage.
     // The mailbox is an out parameter only populated on success.
-    bool prepareMailboxFromImage(PassRefPtr<SkImage>, WebExternalTextureMailbox*);
+    bool prepareMailboxFromImage(PassRefPtr<SkImage>, cc::TextureMailbox*);
 
     // Resets Skia's texture bindings. This method should be called after
     // changing texture bindings.
@@ -257,6 +260,8 @@ private:
     bool m_hibernationScheduled = false;
 
     friend class Canvas2DLayerBridgeTest;
+    friend class CanvasRenderingContext2DTest;
+    friend class HTMLCanvasPainterTestForSPv2;
 
     uint32_t m_lastImageId;
 
@@ -271,6 +276,7 @@ private:
     AccelerationMode m_accelerationMode;
     OpacityMode m_opacityMode;
     const IntSize m_size;
+    sk_sp<SkColorSpace> m_colorSpace;
     int m_recordingPixelCount;
 
 #if USE_IOSURFACE_FOR_2D_CANVAS

@@ -7,25 +7,25 @@
 #include "ash/mus/property_util.h"
 #include "ash/mus/shelf_layout_manager_delegate.h"
 #include "ash/public/interfaces/ash_window_type.mojom.h"
-#include "components/mus/public/cpp/window.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace ash {
 namespace mus {
 
-ShelfLayoutManager::ShelfLayoutManager(::mus::Window* owner,
+ShelfLayoutManager::ShelfLayoutManager(ui::Window* owner,
                                        ShelfLayoutManagerDelegate* delegate)
     : LayoutManager(owner),
       delegate_(delegate),
       alignment_(mash::shelf::mojom::Alignment::BOTTOM),
       auto_hide_behavior_(mash::shelf::mojom::AutoHideBehavior::NEVER) {
-  AddLayoutProperty(::mus::mojom::WindowManager::kPreferredSize_Property);
+  AddLayoutProperty(ui::mojom::WindowManager::kPreferredSize_Property);
 }
 
 ShelfLayoutManager::~ShelfLayoutManager() {}
 
-::mus::Window* ShelfLayoutManager::GetShelfWindow() {
-  for (::mus::Window* child : owner()->children()) {
+ui::Window* ShelfLayoutManager::GetShelfWindow() {
+  for (ui::Window* child : owner()->children()) {
     if (GetAshWindowType(child) == mojom::AshWindowType::SHELF)
       return child;
   }
@@ -37,7 +37,7 @@ void ShelfLayoutManager::SetAlignment(mash::shelf::mojom::Alignment alignment) {
     return;
 
   alignment_ = alignment;
-  for (::mus::Window* window : owner()->children())
+  for (ui::Window* window : owner()->children())
     LayoutWindow(window);
 }
 
@@ -54,7 +54,7 @@ void ShelfLayoutManager::SetAutoHideBehavior(
 // layout as the number of children can vary when the application providing the
 // shelf restarts.
 
-void ShelfLayoutManager::LayoutWindow(::mus::Window* window) {
+void ShelfLayoutManager::LayoutWindow(ui::Window* window) {
   if (GetAshWindowType(window) != mojom::AshWindowType::SHELF) {
     // Phantom windows end up in this container, ignore them.
     return;
@@ -74,7 +74,7 @@ void ShelfLayoutManager::LayoutWindow(::mus::Window* window) {
   }
 }
 
-void ShelfLayoutManager::WindowAdded(::mus::Window* window) {
+void ShelfLayoutManager::WindowAdded(ui::Window* window) {
   if (GetAshWindowType(window) == mojom::AshWindowType::SHELF)
     delegate_->OnShelfWindowAvailable();
 }

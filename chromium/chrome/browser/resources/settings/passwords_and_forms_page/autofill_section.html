@@ -1,13 +1,14 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_shared_menu/cr_shared_menu.html">
 <link rel="import" href="chrome://resources/html/action_link.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="/passwords_and_forms_page/address_edit_dialog.html">
 <link rel="import" href="/passwords_and_forms_page/credit_card_edit_dialog.html">
 <link rel="import" href="/passwords_and_forms_page/passwords_shared_css.html">
 <link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-autofill-section">
+  <link rel="import" type="css" href="chrome://resources/css/action_link.css">
   <template>
     <style include="settings-shared passwords-shared">
       .link-item {
@@ -40,9 +41,8 @@
     </style>
     <div class="heading">$i18n{addresses}</div>
     <div class="item-list">
-      <iron-list id="addressList" items="[[addresses]]"
-          class="vertical-list list-section">
-        <template>
+      <div id="addressList" class="vertical-list list-section">
+        <template is="dom-repeat" items="[[addresses]]">
           <div class="list-item two-line">
             <div class="start">
               <span id="addressSummary">[[address_(item)]]</span>
@@ -56,26 +56,31 @@
             </paper-icon-button>
           </div>
         </template>
-      </iron-list>
+      </div>
       <div class="list-item link-item">
         <a is="action-link" on-tap="onAddAddressTap_">$i18n{addAddress}</a>
       </div>
     </div>
     <cr-shared-menu id="addressSharedMenu">
-      <div id="menuEditAddress" class="list-item menu-item"
-          on-tap="onMenuEditAddressTap_">$i18n{editAddress}</div>
-      <div id="menuRemoveAddress" class="list-item menu-item"
-          on-tap="onMenuRemoveAddressTap_">$i18n{removeAddress}</div>
+      <button id="menuEditAddress" class="list-item menu-item"
+          on-tap="onMenuEditAddressTap_">$i18n{editAddress}</button>
+      <button id="menuRemoveAddress" class="list-item menu-item"
+          on-tap="onMenuRemoveAddressTap_">$i18n{removeAddress}</button>
     </cr-shared-menu>
+    <template is="dom-if" if="[[activeAddress]]" restamp>
+      <settings-address-edit-dialog address="[[activeAddress]]"
+          on-close="unstampAddressEditDialog_">
+      </settings-address-edit-dialog>
+    </template>
     <div class="heading">$i18n{creditCards}</div>
     <div class="item-list">
       <div class="list-item column-header">
         <div class="type-column">$i18n{creditCardType}</div>
         <div class="expiration-column">$i18n{creditCardExpiration}</div>
       </div>
-      <iron-list id="creditCardList" items="[[creditCards]]"
+      <div id="creditCardList"
           class="vertical-list list-section list-with-header">
-        <template>
+        <template is="dom-repeat" items="[[creditCards]]">
           <div class="list-item two-line">
             <div class="type-column">
               <span id="creditCardLabel">[[item.metadata.summaryLabel]]</span>
@@ -98,7 +103,7 @@
             </div>
           </div>
         </template>
-      </iron-list>
+      </div>
       <div class="list-item link-item">
         <a is="action-link" on-tap="onAddCreditCardTap_">
           $i18n{addCreditCard}
@@ -106,16 +111,18 @@
       </div>
     </div>
     <cr-shared-menu id="creditCardSharedMenu">
-      <div id="menuEditCreditCard" class="list-item menu-item"
-          on-tap="onMenuEditCreditCardTap_">$i18n{editCreditCard}</div>
-      <div id="menuRemoveCreditCard" class="list-item menu-item"
-          on-tap="onMenuRemoveCreditCardTap_">$i18n{removeCreditCard}</div>
-      <div id="menuClearCreditCard" class="list-item menu-item"
-          on-tap="onMenuClearCreditCardTap_">$i18n{clearCreditCard}</div>
+      <button id="menuEditCreditCard" class="list-item menu-item"
+          on-tap="onMenuEditCreditCardTap_">$i18n{editCreditCard}</button>
+      <button id="menuRemoveCreditCard" class="list-item menu-item"
+          on-tap="onMenuRemoveCreditCardTap_">$i18n{removeCreditCard}</button>
+      <button id="menuClearCreditCard" class="list-item menu-item"
+          on-tap="onMenuClearCreditCardTap_">$i18n{clearCreditCard}</button>
     </cr-shared-menu>
-    <settings-credit-card-edit-dialog id="editCreditCardDialog">
-    </settings-credit-card-edit-dialog>
+    <template is="dom-if" if="[[activeCreditCard]]" restamp>
+      <settings-credit-card-edit-dialog credit-card="[[activeCreditCard]]"
+          on-close="unstampCreditCardEditDialog_">
+      </settings-credit-card-edit-dialog>
+    </template>
   </template>
-  <link rel="import" type="css" href="chrome://resources/css/action_link.css">
   <script src="/passwords_and_forms_page/autofill_section.js"></script>
 </dom-module>

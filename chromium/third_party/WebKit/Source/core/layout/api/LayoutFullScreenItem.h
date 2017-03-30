@@ -21,7 +21,7 @@ public:
     explicit LayoutFullScreenItem(const LayoutBlockItem& item)
         : LayoutBlockItem(item)
     {
-        ASSERT_WITH_SECURITY_IMPLICATION(!item || item.isLayoutFullScreen());
+        SECURITY_DCHECK(!item || item.isLayoutFullScreen());
     }
 
     explicit LayoutFullScreenItem(std::nullptr_t) : LayoutBlockItem(nullptr) { }

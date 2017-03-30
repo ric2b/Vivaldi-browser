@@ -8,6 +8,7 @@
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
+#include "platform/graphics/ImageBuffer.h"
 #include "wtf/MathExtras.h"
 #include <memory>
 
@@ -55,7 +56,7 @@ ImageBitmap* OffscreenCanvas::transferToImageBitmap(ExceptionState& exceptionSta
     ImageBitmap* image = m_context->transferToImageBitmap(exceptionState);
     if (!image) {
         // Undocumented exception (not in spec)
-        exceptionState.throwDOMException(V8GeneralError, "Out of memory");
+        exceptionState.throwDOMException(V8Error, "Out of memory");
     }
     return image;
 }
@@ -106,9 +107,14 @@ void OffscreenCanvas::registerRenderingContextFactory(std::unique_ptr<CanvasRend
 
 bool OffscreenCanvas::originClean() const
 {
-    // TODO(crbug.com/607575): Make Settings accessable in worker and use
-    // disableReadingFromCanvas to determine originClean value.
-    return m_originClean;
+    return m_originClean && !m_disableReadingFromCanvas;
+}
+
+bool OffscreenCanvas::isPaintable() const
+{
+    if (!m_context)
+        return ImageBuffer::canCreateImageBuffer(m_size);
+    return m_context->isPaintable();
 }
 
 DEFINE_TRACE(OffscreenCanvas)

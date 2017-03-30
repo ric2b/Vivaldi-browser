@@ -28,14 +28,15 @@ class OperaImporter : public Importer {
  private:
   ~OperaImporter() override;
 
-  void ImportBookMarks();
+  // Returns false on error in which case error is filled with an error message.
+  bool ImportBookMarks(std::string& error);
 
   //void ReadFaviconIndexFile(base::string16 domain, );
 
-  void ImportNotes();
-  void ImportSpeedDial();
+  bool ImportNotes(std::string& error);
+  bool ImportSpeedDial(std::string& error);
 
-  void ImportWand();
+  bool ImportWand(std::string& error);
   bool ImportWand_ReadEntryHTML(std::string::iterator &buffer,
                                 std::string::iterator &buffer_end,
                                 std::vector<autofill::PasswordForm> &passwords,

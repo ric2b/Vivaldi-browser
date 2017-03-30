@@ -110,10 +110,8 @@ void ImageInputType::handleDOMActivateEvent(Event* event)
 {
     if (element().isDisabledFormControl() || !element().form())
         return;
-    element().setActivatedSubmit(true);
     m_clickLocation = extractClickLocation(event);
-    element().form()->prepareForSubmission(event); // Event handlers can run.
-    element().setActivatedSubmit(false);
+    element().form()->prepareForSubmission(event, &element()); // Event handlers can run.
     event->setDefaultHandled();
 }
 
@@ -196,13 +194,13 @@ unsigned ImageInputType::height() const
         // If the image is available, use its height.
         HTMLImageLoader* imageLoader = element().imageLoader();
         if (imageLoader && imageLoader->image())
-            return imageLoader->image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1).height();
+            return imageLoader->image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1).height().toUnsigned();
     }
 
     element().document().updateStyleAndLayout();
 
     LayoutBox* box = element().layoutBox();
-    return box ? adjustForAbsoluteZoom(box->contentHeight(), box) : 0;
+    return box ? adjustForAbsoluteZoom(box->contentHeight().toInt(), box) : 0;
 }
 
 unsigned ImageInputType::width() const
@@ -216,13 +214,13 @@ unsigned ImageInputType::width() const
         // If the image is available, use its width.
         HTMLImageLoader* imageLoader = element().imageLoader();
         if (imageLoader && imageLoader->image())
-            return imageLoader->image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1).width();
+            return imageLoader->image()->imageSize(LayoutObject::shouldRespectImageOrientation(nullptr), 1).width().toUnsigned();
     }
 
     element().document().updateStyleAndLayout();
 
     LayoutBox* box = element().layoutBox();
-    return box ? adjustForAbsoluteZoom(box->contentWidth(), box) : 0;
+    return box ? adjustForAbsoluteZoom(box->contentWidth().toInt(), box) : 0;
 }
 
 bool ImageInputType::hasLegalLinkAttribute(const QualifiedName& name) const
@@ -268,10 +266,10 @@ void ImageInputType::ensurePrimaryContent()
 
 void ImageInputType::reattachFallbackContent()
 {
-    // This can happen inside of attach() in the middle of a recalcStyle so we need to
+    // This can happen inside of attachLayoutTree() in the middle of a recalcStyle so we need to
     // reattach synchronously here.
     if (element().document().inStyleRecalc())
-        element().reattach();
+        element().reattachLayoutTree();
     else
         element().lazyReattachIfAttached();
 }

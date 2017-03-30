@@ -547,17 +547,17 @@ TEST(AutofillProfileTest, CreateInferredLabelsI18n_JP_ja) {
   profiles.back()->set_language_code("ja_JP");
   static const char* kExpectedLabels[] = {
     "",
-    "ミク 初音",
-    "六本木ヒルズ森タワーミク 初音",
-    "六本木ヒルズ森タワー六本木 6-10-1ミク 初音",
-    "港区六本木ヒルズ森タワー六本木 6-10-1ミク 初音",
-    "東京都港区六本木ヒルズ森タワー六本木 6-10-1ミク 初音",
-    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1ミク 初音",
-    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音",
-    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音, Japan",
-    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音, Japan, "
+    "初音ミク",
+    "六本木ヒルズ森タワー初音ミク",
+    "六本木ヒルズ森タワー六本木 6-10-1初音ミク",
+    "港区六本木ヒルズ森タワー六本木 6-10-1初音ミク",
+    "東京都港区六本木ヒルズ森タワー六本木 6-10-1初音ミク",
+    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1初音ミク",
+    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例初音ミク",
+    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例初音ミク, Japan",
+    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例初音ミク, Japan, "
         "miku@rei.com",
-    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例ミク 初音, Japan, "
+    "〒106-6126東京都港区六本木ヒルズ森タワー六本木 6-10-1例初音ミク, Japan, "
         "miku@rei.com, 03-6384-9000",
   };
 
@@ -880,7 +880,7 @@ TEST(AutofillProfileTest, MergeDataFrom_SameProfile) {
   AutofillProfile b = a;
   b.set_guid(base::GenerateGUID());
   EXPECT_TRUE(a.MergeDataFrom(b, "en-US"));
-  EXPECT_EQ(2u, a.use_count());
+  EXPECT_EQ(1u, a.use_count());
 
   // Now the profile is fully populated. Merging it again has no effect (except
   // for usage statistics).
@@ -888,7 +888,7 @@ TEST(AutofillProfileTest, MergeDataFrom_SameProfile) {
   c.set_guid(base::GenerateGUID());
   c.set_use_count(3);
   EXPECT_FALSE(a.MergeDataFrom(c, "en-US"));
-  EXPECT_EQ(5u, a.use_count());
+  EXPECT_EQ(3u, a.use_count());
 }
 
 TEST(AutofillProfileTest, OverwriteName_AddNameFull) {

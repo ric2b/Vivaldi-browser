@@ -50,7 +50,7 @@ class NotesLoadDetails {
   }
   const std::string& stored_checksum() const { return stored_checksum_; }
 
-  const int64_t highest_id() { return highest_id_found_; }
+  int64_t highest_id() const { return highest_id_found_; }
   void update_highest_id(int64_t idx) {
     if (idx > highest_id_found_) {
       highest_id_found_ = idx;

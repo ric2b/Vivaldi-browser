@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "media/audio/audio_device_description.h"
 #include "media/audio/audio_manager.h"
@@ -27,10 +28,19 @@ CrasInputStream::CrasInputStream(const AudioParameters& params,
       stream_id_(0),
       stream_direction_(CRAS_STREAM_INPUT),
       pin_device_(NO_DEVICE),
-      is_loopback_(device_id ==
-                   AudioDeviceDescription::kLoopbackInputDeviceId) {
+      is_loopback_(
+          device_id == AudioDeviceDescription::kLoopbackInputDeviceId ||
+          device_id == AudioDeviceDescription::kLoopbackWithMuteDeviceId),
+      mute_system_audio_(device_id ==
+                         AudioDeviceDescription::kLoopbackWithMuteDeviceId),
+      mute_done_(false) {
   DCHECK(audio_manager_);
   audio_bus_ = AudioBus::Create(params_);
+  if (!IsDefault(device_id)) {
+    uint64_t cras_node_id;
+    base::StringToUint64(device_id, &cras_node_id);
+    pin_device_ = dev_index_of(cras_node_id);
+  }
 }
 
 CrasInputStream::~CrasInputStream() {
@@ -93,6 +103,7 @@ bool CrasInputStream::Open() {
       client_ = NULL;
       return false;
     }
+
     pin_device_ = cras_client_get_first_dev_type_idx(client_,
         CRAS_NODE_TYPE_POST_MIX_PRE_DSP, CRAS_STREAM_INPUT);
     if (pin_device_ < 0) {
@@ -217,6 +228,12 @@ void CrasInputStream::Start(AudioInputCallback* callback) {
     callback_ = NULL;
   }
 
+  // Mute system audio if requested.
+  if (mute_system_audio_ && !cras_client_get_system_muted(client_)) {
+    cras_client_set_system_mute(client_, 1);
+    mute_done_ = true;
+  }
+
   // Done with config params.
   cras_audio_format_destroy(audio_format);
   cras_client_stream_params_destroy(stream_params);
@@ -230,6 +247,11 @@ void CrasInputStream::Stop() {
 
   if (!callback_ || !started_)
     return;
+
+  if (mute_system_audio_ && mute_done_) {
+    cras_client_set_system_mute(client_, 0);
+    mute_done_ = false;
+  }
 
   StopAgc();
 
@@ -331,6 +353,14 @@ double CrasInputStream::GetVolume() {
 
 bool CrasInputStream::IsMuted() {
   return false;
+}
+
+bool CrasInputStream::IsDefault(const std::string& device_id) const {
+  AudioDeviceNames device_names;
+  audio_manager_->GetAudioInputDeviceNames(&device_names);
+  DCHECK(!device_names.empty());
+  AudioDeviceName device_name = device_names.front();
+  return device_name.unique_id == device_id;
 }
 
 double CrasInputStream::GetVolumeRatioFromDecibels(double dB) const {

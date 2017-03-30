@@ -60,7 +60,6 @@ void ExceptionState::throwDOMException(const ExceptionCode& ec, const String& me
 {
     ASSERT(ec);
     ASSERT(m_isolate);
-    ASSERT(!m_creationContext.IsEmpty());
 
     // SecurityError is thrown via ::throwSecurityError, and _careful_ consideration must be given to the data exposed to JavaScript via the 'sanitizedMessage'.
     ASSERT(ec != SecurityError);
@@ -68,19 +67,18 @@ void ExceptionState::throwDOMException(const ExceptionCode& ec, const String& me
     m_code = ec;
     String processedMessage = addExceptionContext(message);
     m_message = processedMessage;
-    setException(V8ThrowException::createDOMException(m_isolate, ec, processedMessage, m_creationContext));
+    setException(V8ThrowException::createDOMException(m_isolate, ec, processedMessage));
 }
 
 void ExceptionState::throwSecurityError(const String& sanitizedMessage, const String& unsanitizedMessage)
 {
     ASSERT(m_isolate);
-    ASSERT(!m_creationContext.IsEmpty());
     m_code = SecurityError;
     String finalSanitized = addExceptionContext(sanitizedMessage);
     m_message = finalSanitized;
     String finalUnsanitized = addExceptionContext(unsanitizedMessage);
 
-    setException(V8ThrowException::createDOMException(m_isolate, SecurityError, finalSanitized, finalUnsanitized, m_creationContext));
+    setException(V8ThrowException::createDOMException(m_isolate, SecurityError, finalSanitized, finalUnsanitized));
 }
 
 void ExceptionState::setException(v8::Local<v8::Value> exception)
@@ -97,7 +95,7 @@ void ExceptionState::setException(v8::Local<v8::Value> exception)
 void ExceptionState::throwException()
 {
     ASSERT(!m_exception.isEmpty());
-    V8ThrowException::throwException(m_exception.newLocal(m_isolate), m_isolate);
+    V8ThrowException::throwException(m_isolate, m_exception.newLocal(m_isolate));
 }
 
 void ExceptionState::throwTypeError(const String& message)

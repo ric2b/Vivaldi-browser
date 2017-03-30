@@ -29,6 +29,7 @@
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_id_allocator.h"
+#include "cc/surfaces/surface_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/compositor/compositor_observer.h"
@@ -37,18 +38,12 @@
 #include "ui/compositor/dip_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator_collection.h"
-#include "ui/gl/gl_context.h"
 #include "ui/gl/gl_switches.h"
 
 namespace {
 
 const double kDefaultRefreshRate = 60.0;
 const double kTestRefreshRate = 200.0;
-
-bool IsRunningInMojoShell(base::CommandLine* command_line) {
-  const char kMojoShellFlag[] = "mojo-platform-channel-handle";
-  return command_line->HasSwitch(kMojoShellFlag);
-}
 
 }  // namespace
 
@@ -80,9 +75,13 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
     : context_factory_(context_factory),
       root_layer_(NULL),
       widget_(gfx::kNullAcceleratedWidget),
+#if defined(USE_AURA)
+      window_(nullptr),
+#endif
       widget_valid_(false),
       output_surface_requested_(false),
-      surface_id_allocator_(context_factory->CreateSurfaceIdAllocator()),
+      surface_id_allocator_(new cc::SurfaceIdAllocator(
+          context_factory->AllocateSurfaceClientId())),
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
       device_scale_factor_(0.0f),
@@ -90,6 +89,10 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       compositor_lock_(NULL),
       layer_animator_collection_(this),
       weak_ptr_factory_(this) {
+  if (context_factory->GetSurfaceManager()) {
+    context_factory->GetSurfaceManager()->RegisterSurfaceClientId(
+        surface_id_allocator_->client_id());
+  }
   root_web_layer_ = cc::Layer::Create();
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -125,6 +128,8 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 #elif defined(OS_MACOSX)
   settings.renderer_settings.release_overlay_resources_after_gpu_query = true;
 #endif
+  settings.renderer_settings.gl_composited_texture_quad_border =
+      command_line->HasSwitch(cc::switches::kGlCompositedTextureQuadBorder);
 
   // These flags should be mirrored by renderer versions in content/renderer/.
   settings.initial_debug_state.show_debug_borders =
@@ -159,29 +164,26 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
 
-  // Use CPU_READ_WRITE_PERSISTENT memory buffers to support partial tile
-  // raster if needed.
-  gfx::BufferUsage usage =
-      settings.use_partial_raster
-          ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
-          : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
-
-  for (size_t format = 0;
-      format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
-    DCHECK_GT(settings.use_image_texture_targets.size(), format);
-    settings.use_image_texture_targets[format] =
-        context_factory_->GetImageTextureTarget(
-            static_cast<gfx::BufferFormat>(format), usage);
+  // Populate buffer_to_texture_target_map for all buffer usage/formats.
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      uint32_t target = context_factory_->GetImageTextureTarget(format, usage);
+      settings.renderer_settings.buffer_to_texture_target_map.insert(
+          cc::BufferToTextureTargetMap::value_type(
+              cc::BufferToTextureTargetKey(usage, format), target));
+    }
   }
 
   // Note: Only enable image decode tasks if we have more than one worker
   // thread.
   settings.image_decode_tasks_enabled = false;
 
-  // TODO(crbug.com/603600): This should always be turned on once mus tells its
-  // clients about BeginFrame.
-  settings.use_output_surface_begin_frame_source =
-      !IsRunningInMojoShell(command_line);
+  settings.use_output_surface_begin_frame_source = true;
 
 #if !defined(OS_ANDROID)
   // TODO(sohanjg): Revisit this memory usage in tile manager.
@@ -208,10 +210,11 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 
   animation_timeline_ =
       cc::AnimationTimeline::Create(cc::AnimationIdProvider::NextTimelineId());
-  host_->animation_host()->AddAnimationTimeline(animation_timeline_.get());
+  host_->GetLayerTree()->animation_host()->AddAnimationTimeline(
+      animation_timeline_.get());
 
-  host_->SetRootLayer(root_web_layer_);
-  host_->set_surface_id_namespace(surface_id_allocator_->id_namespace());
+  host_->GetLayerTree()->SetRootLayer(root_web_layer_);
+  host_->set_surface_client_id(surface_id_allocator_->client_id());
   host_->SetVisible(true);
 }
 
@@ -231,19 +234,70 @@ Compositor::~Compositor() {
     root_layer_->ResetCompositor();
 
   if (animation_timeline_)
-    host_->animation_host()->RemoveAnimationTimeline(animation_timeline_.get());
+    host_->GetLayerTree()->animation_host()->RemoveAnimationTimeline(
+        animation_timeline_.get());
 
   // Stop all outstanding draws before telling the ContextFactory to tear
   // down any contexts that the |host_| may rely upon.
   host_.reset();
 
   context_factory_->RemoveCompositor(this);
+  if (context_factory_->GetSurfaceManager()) {
+    for (auto& client : surface_clients_) {
+      if (client.second) {
+        context_factory_->GetSurfaceManager()
+            ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
+      }
+    }
+    context_factory_->GetSurfaceManager()->InvalidateSurfaceClientId(
+        surface_id_allocator_->client_id());
+  }
+}
+
+void Compositor::AddSurfaceClient(uint32_t client_id) {
+  // We don't give the client a parent until the ui::Compositor has an
+  // OutputSurface.
+  uint32_t parent_client_id = 0;
+  if (host_->has_output_surface()) {
+    parent_client_id = surface_id_allocator_->client_id();
+    context_factory_->GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
+        parent_client_id, client_id);
+  }
+  surface_clients_[client_id] = parent_client_id;
+}
+
+void Compositor::RemoveSurfaceClient(uint32_t client_id) {
+  auto it = surface_clients_.find(client_id);
+  DCHECK(it != surface_clients_.end());
+  if (host_->has_output_surface()) {
+    context_factory_->GetSurfaceManager()->UnregisterSurfaceNamespaceHierarchy(
+        it->second, client_id);
+  }
+  surface_clients_.erase(it);
 }
 
 void Compositor::SetOutputSurface(
     std::unique_ptr<cc::OutputSurface> output_surface) {
   output_surface_requested_ = false;
   host_->SetOutputSurface(std::move(output_surface));
+  // ui::Compositor uses a SingleThreadProxy and so BindToClient will be called
+  // above and SurfaceManager will be made aware of the OutputSurface's client
+  // ID.
+  for (auto& client : surface_clients_) {
+    if (client.second == surface_id_allocator_->client_id())
+      continue;
+    // If a client already has a parent, then we unregister the existing parent.
+    if (client.second) {
+      context_factory_->GetSurfaceManager()
+          ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
+    }
+    context_factory_->GetSurfaceManager()->RegisterSurfaceNamespaceHierarchy(
+        surface_id_allocator_->client_id(), client.first);
+    client.second = surface_id_allocator_->client_id();
+  }
+  // Visibility is reset when the output surface is lost, so update it to match
+  // the Compositor's.
+  context_factory_->SetDisplayVisible(this, host_->visible());
 }
 
 void Compositor::ScheduleDraw() {
@@ -267,7 +321,8 @@ cc::AnimationTimeline* Compositor::GetAnimationTimeline() const {
 
 void Compositor::SetHostHasTransparentBackground(
     bool host_has_transparent_background) {
-  host_->set_has_transparent_background(host_has_transparent_background);
+  host_->GetLayerTree()->set_has_transparent_background(
+      host_has_transparent_background);
 }
 
 void Compositor::ScheduleFullRedraw() {
@@ -285,12 +340,7 @@ void Compositor::ScheduleRedrawRect(const gfx::Rect& damage_rect) {
   host_->SetNeedsCommit();
 }
 
-void Compositor::FinishAllRendering() {
-  host_->FinishAllRendering();
-}
-
 void Compositor::DisableSwapUntilResize() {
-  host_->FinishAllRendering();
   context_factory_->ResizeDisplay(this, gfx::Size());
 }
 
@@ -304,13 +354,13 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
   DCHECK_GT(scale, 0);
   if (!size_in_pixel.IsEmpty()) {
     size_ = size_in_pixel;
-    host_->SetViewportSize(size_in_pixel);
+    host_->GetLayerTree()->SetViewportSize(size_in_pixel);
     root_web_layer_->SetBounds(size_in_pixel);
     context_factory_->ResizeDisplay(this, size_in_pixel);
   }
   if (device_scale_factor_ != scale) {
     device_scale_factor_ = scale;
-    host_->SetDeviceScaleFactor(scale);
+    host_->GetLayerTree()->SetDeviceScaleFactor(scale);
     if (root_layer_)
       root_layer_->OnDeviceScaleFactorChanged(scale);
   }
@@ -321,25 +371,40 @@ void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
 }
 
 void Compositor::SetBackgroundColor(SkColor color) {
-  host_->set_background_color(color);
+  host_->GetLayerTree()->set_background_color(color);
   ScheduleDraw();
 }
 
 void Compositor::SetVisible(bool visible) {
   host_->SetVisible(visible);
+  // Visibility is reset when the output surface is lost, so this must also be
+  // updated then.
+  context_factory_->SetDisplayVisible(this, visible);
 }
 
 bool Compositor::IsVisible() {
   return host_->visible();
 }
 
+bool Compositor::ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset) {
+  return host_->GetInputHandler()->ScrollLayerTo(layer_id, offset);
+}
+
+bool Compositor::GetScrollOffsetForLayer(int layer_id,
+                                         gfx::ScrollOffset* offset) const {
+  return host_->GetInputHandler()->GetScrollOffsetForLayer(layer_id, offset);
+}
+
 void Compositor::SetAuthoritativeVSyncInterval(
     const base::TimeDelta& interval) {
   context_factory_->SetAuthoritativeVSyncInterval(this, interval);
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-         cc::switches::kEnableBeginFrameScheduling)) {
-    vsync_manager_->SetAuthoritativeVSyncInterval(interval);
-  }
+  vsync_manager_->SetAuthoritativeVSyncInterval(interval);
+}
+
+void Compositor::SetDisplayVSyncParameters(base::TimeTicks timebase,
+                                           base::TimeDelta interval) {
+  context_factory_->SetDisplayVSyncParameters(this, timebase, interval);
+  vsync_manager_->UpdateVSyncParameters(timebase, interval);
 }
 
 void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
@@ -353,8 +418,14 @@ void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
 
 gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
   DCHECK(!IsVisible());
-  if (!host_->output_surface_lost())
+  if (!host_->output_surface_lost()) {
     host_->ReleaseOutputSurface();
+    for (auto& client : surface_clients_) {
+      context_factory_->GetSurfaceManager()
+          ->UnregisterSurfaceNamespaceHierarchy(client.second, client.first);
+      client.second = 0;
+    }
+  }
   context_factory_->RemoveCompositor(this);
   widget_valid_ = false;
   gfx::AcceleratedWidget widget = widget_;
@@ -366,6 +437,17 @@ gfx::AcceleratedWidget Compositor::widget() const {
   DCHECK(widget_valid_);
   return widget_;
 }
+
+#if defined(USE_AURA)
+void Compositor::SetWindow(ui::Window* window) {
+  window_ = window;
+}
+
+ui::Window* Compositor::window() const {
+  DCHECK(window_);
+  return window_;
+}
+#endif
 
 scoped_refptr<CompositorVSyncManager> Compositor::vsync_manager() const {
   return vsync_manager_;
@@ -424,8 +506,9 @@ void Compositor::UpdateLayerTreeHost() {
 void Compositor::RequestNewOutputSurface() {
   DCHECK(!output_surface_requested_);
   output_surface_requested_ = true;
-  if (widget_valid_)
+  if (widget_valid_) {
     context_factory_->CreateOutputSurface(weak_ptr_factory_.GetWeakPtr());
+  }
 }
 
 void Compositor::DidInitializeOutputSurface() {

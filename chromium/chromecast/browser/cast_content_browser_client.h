@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/content_browser_client.h"
 
 class PrefService;
@@ -28,10 +29,15 @@ namespace metrics {
 class MetricsService;
 }
 
+namespace shell {
+class InterfaceRegistry;
+}
+
 namespace chromecast {
 class CastService;
 
 namespace media {
+class MediaCapsImpl;
 class MediaPipelineBackend;
 class MediaPipelineBackendManager;
 struct MediaPipelineDeviceParams;
@@ -74,12 +80,14 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   // Creates a MediaPipelineDevice (CMA backend) for media playback, called
   // once per media player instance.
   virtual std::unique_ptr<media::MediaPipelineBackend>
-  CreateMediaPipelineBackend(const media::MediaPipelineDeviceParams& params);
+  CreateMediaPipelineBackend(const media::MediaPipelineDeviceParams& params,
+                             const std::string& audio_device_id);
 
   media::MediaResourceTracker* media_resource_tracker();
 
   media::MediaPipelineBackendManager* media_pipeline_backend_manager();
 #endif
+  media::MediaCapsImpl* media_caps();
 
   // Invoked when the metrics client ID changes.
   virtual void SetMetricsClientId(const std::string& client_id);
@@ -99,7 +107,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   bool IsHandledURL(const GURL& url) override;
   void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
                                       int child_process_id) override;
-  content::GeolocationDelegate* CreateGeolocationDelegate() override;
   void OverrideWebkitPrefs(content::RenderViewHost* render_view_host,
                            content::WebPreferences* prefs) override;
   void ResourceDispatcherHostCreated() override;
@@ -114,8 +121,8 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
-      const base::Callback<void(bool)>& callback,
-      content::CertificateRequestResultType* result) override;
+      const base::Callback<void(content::CertificateRequestResultType)>&
+          callback) override;
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
@@ -127,6 +134,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       WindowContainerType container_type,
       const GURL& target_url,
       const content::Referrer& referrer,
+      const std::string& frame_name,
       WindowOpenDisposition disposition,
       const blink::WebWindowFeatures& features,
       bool user_gesture,
@@ -136,6 +144,9 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       int opener_render_view_id,
       int opener_render_frame_id,
       bool* no_javascript_access) override;
+  void ExposeInterfacesToRenderer(
+      ::shell::InterfaceRegistry* registry,
+      content::RenderProcessHost* render_process_host) override;
   void RegisterInProcessMojoApplications(
       StaticMojoApplicationMap* apps) override;
 #if defined(OS_ANDROID)

@@ -263,6 +263,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Notifies the RenderWidgetHost that the View was destroyed.
   void ViewDestroyed();
 
+  // Signals if this host has forwarded a GestureScrollBegin without yet having
+  // forwarded a matching GestureScrollEnd/GestureFlingStart.
+  bool is_in_touchscreen_gesture_scroll() const {
+    return is_in_touchscreen_gesture_scroll_;
+  }
+
 #if defined(OS_MACOSX)
   // Pause for a moment to wait for pending repaint or resize messages sent to
   // the renderer to arrive. If pending resize messages are for an old window
@@ -414,17 +420,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
                              base::TimeDelta interval);
 
   // Called by the view in response to OnSwapCompositorFrame.
-  static void SendSwapCompositorFrameAck(
+  static void SendReclaimCompositorResources(
       int32_t route_id,
       uint32_t output_surface_id,
       int renderer_host_id,
-      const cc::CompositorFrameAck& ack);
-
-  // Called by the view to return resources to the compositor.
-  static void SendReclaimCompositorResources(int32_t route_id,
-                                             uint32_t output_surface_id,
-                                             int renderer_host_id,
-                                             const cc::CompositorFrameAck& ack);
+      bool is_swap_ack,
+      const cc::ReturnedResourceArray& resources);
 
   void set_allow_privileged_mouse_lock(bool allow) {
     allow_privileged_mouse_lock_ = allow;
@@ -523,6 +524,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   bool renderer_initialized() const { return renderer_initialized_; }
 
+  bool needs_begin_frames() const { return needs_begin_frames_; }
+
  protected:
   // ---------------------------------------------------------------------------
   // The following method is overridden by RenderViewHost to send upwards to
@@ -592,6 +595,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
   void OnForwardCompositorProto(const std::vector<uint8_t>& proto);
+  void OnSetNeedsBeginFrames(bool needs_begin_frames);
   void OnHittestData(const FrameHostMsg_HittestData_Params& params);
 
   // Called (either immediately or asynchronously) after we're done with our
@@ -612,7 +616,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void DecrementInFlightEventCount() override;
   void OnHasTouchEventHandlers(bool has_handlers) override;
   void DidFlush() override;
-  void DidOverscroll(const DidOverscrollParams& params) override;
+  void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
 
   // Dispatch input events with latency information
@@ -815,6 +819,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // RenderWidgetHostView::HasFocus in that in that the focus request may fail,
   // causing HasFocus to return false when is_focused_ is true.
   bool is_focused_;
+
+  // Whether the view should send begin frame messages to its render widget.
+  // This is state that may arrive before the view has been set and that must be
+  // consistent with the state in the renderer, so this host handles it.
+  bool needs_begin_frames_ = false;
 
   // This value indicates how long to wait before we consider a renderer hung.
   base::TimeDelta hung_renderer_delay_;

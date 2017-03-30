@@ -9,16 +9,16 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/status_area_widget.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_event_filter.h"
 #include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/system/tray/system_tray.h"
 #include "grit/ash_resources.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/nine_image_painter_factory.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_element.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -26,9 +26,11 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/nine_image_painter.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/transform.h"
 #include "ui/views/background.h"
@@ -46,6 +48,10 @@ const int kAnimationDurationForVisibilityMs = 250;
 // can animate sibling views out of the position to be occuped by the
 // TrayBackgroundView.
 const int kShowAnimationDelayMs = 100;
+
+// Additional padding used to adjust the user-visible size of status tray
+// and overview button dark background.
+const int kBackgroundAdjustPadding = 3;
 
 }  // namespace
 
@@ -89,35 +95,43 @@ class TrayBackground : public views::Background {
   const static int kNumOrientations = 2;
 
   explicit TrayBackground(TrayBackgroundView* tray_background_view)
-      : tray_background_view_(tray_background_view) {}
+      : tray_background_view_(tray_background_view), alpha_(0) {}
 
   ~TrayBackground() override {}
+
+  void set_alpha(int alpha) { alpha_ = alpha; }
 
  private:
   WmShelf* GetShelf() const { return tray_background_view_->shelf(); }
 
   void PaintMaterial(gfx::Canvas* canvas, views::View* view) const {
-    SkColor background_color = SK_ColorTRANSPARENT;
-    if (GetShelf()->GetBackgroundType() ==
-        ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT) {
-      background_color = SkColorSetA(kShelfBaseColor,
-                                     GetShelfConstant(SHELF_BACKGROUND_ALPHA));
-    }
-
-    // TODO(bruthig|tdanderson): The background should be changed using a
-    // fade in/out animation.
     SkPaint background_paint;
     background_paint.setFlags(SkPaint::kAntiAlias_Flag);
-    background_paint.setColor(background_color);
-    canvas->DrawRoundRect(view->GetLocalBounds(), kTrayRoundedBorderRadius,
-                          background_paint);
+    background_paint.setColor(SkColorSetA(kShelfBaseColor, alpha_));
+    gfx::Rect bounds;
+    gfx::Rect local_bounds = view->GetLocalBounds();
+
+    // The hit region are padded to the |view| as insets, so they are included
+    // in the local bounds. Remove these regions from view because hit region is
+    // invisible.
+    if (IsHorizontalAlignment(GetShelf()->GetAlignment())) {
+      bounds = gfx::Rect(local_bounds.x() + kHitRegionPadding, local_bounds.y(),
+                         local_bounds.width() - kHitRegionPadding -
+                             kHitRegionPadding - kSeparatorWidth,
+                         local_bounds.height());
+    } else {
+      bounds = gfx::Rect(local_bounds.x(), local_bounds.y() + kHitRegionPadding,
+                         local_bounds.width(),
+                         local_bounds.height() - kHitRegionPadding -
+                             kHitRegionPadding - kSeparatorWidth);
+    }
+    canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, background_paint);
 
     if (tray_background_view_->draw_background_as_active()) {
       SkPaint highlight_paint;
       highlight_paint.setFlags(SkPaint::kAntiAlias_Flag);
       highlight_paint.setColor(kShelfButtonActivatedHighlightColor);
-      canvas->DrawRoundRect(view->GetLocalBounds(), kTrayRoundedBorderRadius,
-                            highlight_paint);
+      canvas->DrawRoundRect(bounds, kTrayRoundedBorderRadius, highlight_paint);
     }
   }
 
@@ -164,6 +178,8 @@ class TrayBackground : public views::Background {
 
   // Reference to the TrayBackgroundView for which this is a background.
   TrayBackgroundView* tray_background_view_;
+
+  int alpha_;
 
   DISALLOW_COPY_AND_ASSIGN(TrayBackground);
 };
@@ -212,16 +228,16 @@ void TrayBackgroundView::TrayContainer::UpdateLayout() {
   views::BoxLayout::Orientation orientation =
       IsHorizontalAlignment(alignment_) ? views::BoxLayout::kHorizontal
                                         : views::BoxLayout::kVertical;
-
-  if (!ash::MaterialDesignController::IsShelfMaterial()) {
-    // Additional padding used to adjust the user-visible size of status tray
-    // dark background.
-    const int padding = 3;
-    SetBorder(views::Border::CreateEmptyBorder(gfx::Insets(padding) + margin_));
-  } else {
-    SetBorder(views::Border::CreateEmptyBorder(margin_));
-  }
-
+  const gfx::Insets insets(
+      ash::MaterialDesignController::IsShelfMaterial()
+          ? gfx::Insets(IsHorizontalAlignment(alignment_)
+                            ? gfx::Insets(0, kHitRegionPadding, 0,
+                                          kHitRegionPadding + kSeparatorWidth)
+                            : gfx::Insets(kHitRegionPadding, 0,
+                                          kHitRegionPadding + kSeparatorWidth,
+                                          0))
+          : gfx::Insets(kBackgroundAdjustPadding));
+  SetBorder(views::Border::CreateEmptyBorder(insets + margin_));
   views::BoxLayout* layout = new views::BoxLayout(orientation, 0, 0, 0);
   layout->SetDefaultFlex(1);
   views::View::SetLayoutManager(layout);
@@ -232,11 +248,13 @@ void TrayBackgroundView::TrayContainer::UpdateLayout() {
 // TrayBackgroundView
 
 TrayBackgroundView::TrayBackgroundView(WmShelf* wm_shelf)
-    : wm_shelf_(wm_shelf),
+    : ActionableView(nullptr),
+      wm_shelf_(wm_shelf),
       tray_container_(NULL),
       shelf_alignment_(SHELF_ALIGNMENT_BOTTOM),
       background_(NULL),
       draw_background_as_active_(false),
+      is_separator_visible_(false),
       widget_observer_(new TrayWidgetObserver(this)) {
   DCHECK(wm_shelf_);
   set_notify_enter_exit_on_child(true);
@@ -320,6 +338,7 @@ void TrayBackgroundView::SetVisible(bool visible) {
     layer()->SetVisible(false);
     HideTransformation();
   }
+  wm_shelf_->GetStatusAreaWidget()->OnTrayVisibilityChanged(this);
 }
 
 const char* TrayBackgroundView::GetClassName() const {
@@ -354,22 +373,13 @@ gfx::Rect TrayBackgroundView::GetFocusBounds() {
 }
 
 void TrayBackgroundView::OnGestureEvent(ui::GestureEvent* event) {
-  if (switches::IsTouchFeedbackEnabled()) {
-    if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
-      SetDrawBackgroundAsActive(true);
-    } else if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
-               event->type() == ui::ET_GESTURE_TAP_CANCEL) {
-      SetDrawBackgroundAsActive(false);
-    }
+  if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
+    SetDrawBackgroundAsActive(true);
+  } else if (event->type() == ui::ET_GESTURE_SCROLL_BEGIN ||
+             event->type() == ui::ET_GESTURE_TAP_CANCEL) {
+    SetDrawBackgroundAsActive(false);
   }
   ActionableView::OnGestureEvent(event);
-}
-
-void TrayBackgroundView::UpdateBackground(int alpha) {
-  // The animator should never fire when the alternate shelf layout is used.
-  if (!background_ || draw_background_as_active_)
-    return;
-  SchedulePaint();
 }
 
 void TrayBackgroundView::SetContents(views::View* contents) {
@@ -514,6 +524,49 @@ void TrayBackgroundView::SetDrawBackgroundAsActive(bool visible) {
 void TrayBackgroundView::UpdateBubbleViewArrow(
     views::TrayBubbleView* bubble_view) {
   // Nothing to do here.
+}
+
+void TrayBackgroundView::UpdateShelfItemBackground(int alpha) {
+  if (background_) {
+    background_->set_alpha(alpha);
+    SchedulePaint();
+  }
+}
+
+void TrayBackgroundView::SetSeparatorVisibility(bool is_shown) {
+  is_separator_visible_ = is_shown;
+  SchedulePaint();
+}
+
+void TrayBackgroundView::OnPaint(gfx::Canvas* canvas) {
+  ActionableView::OnPaint(canvas);
+  if (!MaterialDesignController::IsShelfMaterial() ||
+      shelf()->GetBackgroundType() ==
+          ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT ||
+      !is_separator_visible_) {
+    return;
+  }
+  // In the given |canvas|, draws a 1x32px separator line 4 pixel to the right
+  // of the TrayBackgroundView.
+  const bool horizontal_shelf = IsHorizontalAlignment(shelf_alignment_);
+  const gfx::Rect local_bounds = GetLocalBounds();
+  const int height = kTrayItemSize;
+  const int width = kSeparatorWidth;
+  const int x =
+      (horizontal_shelf ? local_bounds.width() : local_bounds.height()) -
+      kSeparatorWidth;
+  const int y = (GetShelfConstant(SHELF_SIZE) - kTrayItemSize) / 2;
+  gfx::ScopedCanvas scoped_canvas(canvas);
+  const float scale = canvas->UndoDeviceScaleFactor();
+  SkPaint paint;
+  paint.setColor(kSeparatorColor);
+  paint.setAntiAlias(true);
+
+  const gfx::Rect bounds = horizontal_shelf ? gfx::Rect(x, y, width, height)
+                                            : gfx::Rect(y, x, height, width);
+  gfx::RectF rect(gfx::ScaleRect(gfx::RectF(bounds), scale));
+  canvas->DrawLine(horizontal_shelf ? rect.top_right() : rect.bottom_left(),
+                   rect.bottom_right(), paint);
 }
 
 }  // namespace ash

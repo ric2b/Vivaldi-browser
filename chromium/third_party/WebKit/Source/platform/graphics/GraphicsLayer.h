@@ -42,7 +42,6 @@
 #include "platform/graphics/ImageOrientation.h"
 #include "platform/graphics/PaintInvalidationReason.h"
 #include "platform/graphics/filters/FilterOperations.h"
-#include "platform/graphics/paint/CachedDisplayItem.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "platform/heap/Handle.h"
@@ -203,7 +202,7 @@ public:
     // pointers for the layers and timing data will be included in the returned string.
     String layerTreeAsText(LayerTreeFlags = LayerTreeNormal) const;
 
-    PassRefPtr<JSONObject> layerTreeAsJSON(LayerTreeFlags) const;
+    std::unique_ptr<JSONObject> layerTreeAsJSON(LayerTreeFlags) const;
 
     void setTracksPaintInvalidations(bool);
     bool isTrackingOrCheckingPaintInvalidations() const
@@ -225,7 +224,7 @@ public:
     unsigned numLinkHighlights() { return m_linkHighlights.size(); }
     LinkHighlight* getLinkHighlight(int i) { return m_linkHighlights[i]; }
 
-    void setScrollableArea(ScrollableArea*, bool isViewport);
+    void setScrollableArea(ScrollableArea*, bool isVisualViewport);
     ScrollableArea* getScrollableArea() const { return m_scrollableArea; }
 
     WebContentLayer* contentLayer() const { return m_layer.get(); }
@@ -241,6 +240,7 @@ public:
 
     // cc::LayerClient implementation.
     std::unique_ptr<base::trace_event::ConvertableToTraceFormat> TakeDebugInfo(cc::Layer*) override;
+    void didUpdateMainThreadScrollingReasons() override;
 
     PaintController& getPaintController();
 
@@ -250,7 +250,6 @@ public:
     void setElementId(const CompositorElementId&);
     void setCompositorMutableProperties(uint32_t);
 
-    static void setDrawDebugRedFillForTesting(bool);
     ContentLayerDelegate* contentLayerDelegateForTesting() const { return m_contentLayerDelegate.get(); }
 
     // DisplayItemClient methods
@@ -297,7 +296,7 @@ private:
     WebLayer* contentsLayerIfRegistered();
 
     typedef HashMap<int, int> RenderingContextMap;
-    PassRefPtr<JSONObject> layerTreeAsJSONInternal(LayerTreeFlags, RenderingContextMap&) const;
+    std::unique_ptr<JSONObject> layerTreeAsJSONInternal(LayerTreeFlags, RenderingContextMap&) const;
 
 #if DCHECK_IS_ON()
     PassRefPtr<SkPicture> capturePicture();
@@ -334,8 +333,6 @@ private:
     bool m_hasClipParent : 1;
 
     bool m_painted : 1;
-    bool m_textPainted : 1;
-    bool m_imagePainted : 1;
 
     bool m_isTrackingPaintInvalidations : 1;
 

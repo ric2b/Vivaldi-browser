@@ -11,7 +11,6 @@
 
 #include "base/strings/stringprintf.h"
 #include "cc/output/output_surface.h"
-#include "cc/output/renderer.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/platform_color.h"
@@ -111,7 +110,8 @@ bool TextureLayerImpl::WillDraw(DrawMode draw_mode,
     if (!texture_copy_->id()) {
       texture_copy_->Allocate(texture_mailbox_.size_in_pixels(),
                               ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                              resource_provider->best_texture_format());
+                              resource_provider->best_texture_format(),
+                              gfx::ColorSpace());
     }
 
     if (texture_copy_->id()) {

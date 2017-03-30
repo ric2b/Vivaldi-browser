@@ -39,6 +39,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
@@ -663,16 +664,7 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
   // Checks based on params.load_type.
   switch (params.load_type) {
     case LOAD_TYPE_DEFAULT:
-      break;
     case LOAD_TYPE_HTTP_POST:
-      // TODO(lukasza): This assertion is false - it is also possible to POST to
-      // an chrome-extension://... URI.  This might be more common when
-      // allowing renderer-initiated POST after fixing https://crbug.com/344348.
-      if (!params.url.SchemeIs(url::kHttpScheme) &&
-          !params.url.SchemeIs(url::kHttpsScheme)) {
-        NOTREACHED() << "Http post load must use http(s) scheme.";
-        return;
-      }
       break;
     case LOAD_TYPE_DATA:
       if (!params.url.SchemeIs(url::kDataScheme)) {
@@ -783,6 +775,7 @@ void NavigationControllerImpl::LoadURLWithParams(const LoadURLParams& params) {
       break;
   };
 
+  entry->set_started_from_context_menu(params.started_from_context_menu);
   LoadEntry(std::move(entry));
 }
 
@@ -828,7 +821,8 @@ bool NavigationControllerImpl::RendererDidNavigate(
 
   switch (details->type) {
     case NAVIGATION_TYPE_NEW_PAGE:
-      RendererDidNavigateToNewPage(rfh, params, details->did_replace_entry);
+      RendererDidNavigateToNewPage(rfh, params, details->is_in_page,
+                                   details->did_replace_entry);
       break;
     case NAVIGATION_TYPE_EXISTING_PAGE:
       details->did_replace_entry = details->is_in_page;
@@ -838,11 +832,18 @@ bool NavigationControllerImpl::RendererDidNavigate(
       RendererDidNavigateToSamePage(rfh, params);
       break;
     case NAVIGATION_TYPE_NEW_SUBFRAME:
-      RendererDidNavigateNewSubframe(rfh, params, details->did_replace_entry);
+      RendererDidNavigateNewSubframe(rfh, params, details->is_in_page,
+                                     details->did_replace_entry);
       break;
     case NAVIGATION_TYPE_AUTO_SUBFRAME:
-      if (!RendererDidNavigateAutoSubframe(rfh, params))
+      if (!RendererDidNavigateAutoSubframe(rfh, params)) {
+        // In UseSubframeNavigationEntries mode, we won't send a notification
+        // about auto-subframe PageState during UpdateStateForFrame, since it
+        // looks like nothing has changed.  Send it here at commit time instead.
+        if (SiteIsolationPolicy::UseSubframeNavigationEntries())
+          NotifyEntryChanged(GetLastCommittedEntry());
         return false;
+      }
       break;
     case NAVIGATION_TYPE_NAV_IGNORE:
       // If a pending navigation was in progress, this canceled it.  We should
@@ -874,7 +875,11 @@ bool NavigationControllerImpl::RendererDidNavigate(
 
   // All committed entries should have nonempty content state so WebKit doesn't
   // get confused when we go back to them (see the function for details).
-  DCHECK(params.page_state.IsValid());
+  if (!params.page_state.IsValid()) {
+    // Temporarily generate a minidump to diagnose https://crbug.com/568703.
+    base::debug::DumpWithoutCrashing();
+    NOTREACHED() << "Shouldn't see an empty PageState at commit.";
+  }
   NavigationEntryImpl* active_entry = GetLastCommittedEntry();
   active_entry->SetTimestamp(timestamp);
   active_entry->SetHttpStatusCode(params.http_status_code);
@@ -1013,7 +1018,8 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
     // make sure Blink didn't treat a new cross-process navigation as inert, and
     // thus set params.did_create_new_entry to false. In that case, we must
     // treat it as NEW since the SiteInstance doesn't match the entry.
-    if (GetLastCommittedEntry()->site_instance() != rfh->GetSiteInstance())
+    if (!GetLastCommittedEntry() ||
+        GetLastCommittedEntry()->site_instance() != rfh->GetSiteInstance())
       return NAVIGATION_TYPE_NEW_PAGE;
 
     // Otherwise, this happens when you press enter in the URL bar to reload. We
@@ -1058,9 +1064,30 @@ NavigationType NavigationControllerImpl::ClassifyNavigation(
 void NavigationControllerImpl::RendererDidNavigateToNewPage(
     RenderFrameHostImpl* rfh,
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    bool is_in_page,
     bool replace_entry) {
   std::unique_ptr<NavigationEntryImpl> new_entry;
-  bool update_virtual_url;
+  bool update_virtual_url = false;
+
+  // First check if this is an in-page navigation.  If so, clone the current
+  // entry instead of looking at the pending entry, because the pending entry
+  // does not have any subframe history items.
+  if (is_in_page && GetLastCommittedEntry()) {
+    FrameNavigationEntry* frame_entry = new FrameNavigationEntry(
+        params.frame_unique_name, params.item_sequence_number,
+        params.document_sequence_number, rfh->GetSiteInstance(), nullptr,
+        params.url, params.referrer, params.method, params.post_id);
+    new_entry = GetLastCommittedEntry()->CloneAndReplace(
+        frame_entry, true, rfh->frame_tree_node(),
+        delegate_->GetFrameTree()->root());
+
+    // We expect |frame_entry| to be owned by |new_entry|.  This should never
+    // fail, because it's the main frame.
+    CHECK(frame_entry->HasOneRef());
+
+    update_virtual_url = new_entry->update_virtual_url_with_url();
+  }
+
   // Only make a copy of the pending entry if it is appropriate for the new page
   // that was just loaded. Verify this by checking if the entry corresponds
   // to the current navigation handle. Note that in some tests the render frame
@@ -1073,13 +1100,18 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
   // checks.
   NavigationHandleImpl* handle = rfh->navigation_handle();
   DCHECK(handle);
-  if (PendingEntryMatchesHandle(handle) && pending_entry_index_ == -1 &&
+
+  if (!new_entry &&
+      PendingEntryMatchesHandle(handle) && pending_entry_index_ == -1 &&
       (!pending_entry_->site_instance() ||
        pending_entry_->site_instance() == rfh->GetSiteInstance())) {
     new_entry = pending_entry_->Clone();
 
     update_virtual_url = new_entry->update_virtual_url_with_url();
-  } else {
+  }
+
+  // For non-in-page commits with no matching pending entry, create a new entry.
+  if (!new_entry) {
     new_entry = base::WrapUnique(new NavigationEntryImpl);
 
     // Find out whether the new entry needs to update its virtual URL on URL
@@ -1124,9 +1156,9 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
   frame_entry->set_post_id(params.post_id);
 
   // history.pushState() is classified as a navigation to a new page, but
-  // sets was_within_same_page to true. In this case, we already have the
-  // title and favicon available, so set them immediately.
-  if (params.was_within_same_page && GetLastCommittedEntry()) {
+  // sets is_in_page to true. In this case, we already have the title and
+  // favicon available, so set them immediately.
+  if (is_in_page && GetLastCommittedEntry()) {
     new_entry->SetTitle(GetLastCommittedEntry()->GetTitle());
     new_entry->GetFavicon() = GetLastCommittedEntry()->GetFavicon();
   }
@@ -1250,6 +1282,7 @@ void NavigationControllerImpl::RendererDidNavigateToSamePage(
 void NavigationControllerImpl::RendererDidNavigateNewSubframe(
     RenderFrameHostImpl* rfh,
     const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+    bool is_in_page,
     bool replace_entry) {
   DCHECK(ui::PageTransitionCoreTypeIs(params.transition,
                                       ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
@@ -1268,8 +1301,9 @@ void NavigationControllerImpl::RendererDidNavigateNewSubframe(
         params.frame_unique_name, params.item_sequence_number,
         params.document_sequence_number, rfh->GetSiteInstance(), nullptr,
         params.url, params.referrer, params.method, params.post_id));
-    new_entry = GetLastCommittedEntry()->CloneAndReplace(rfh->frame_tree_node(),
-                                                         frame_entry.get());
+    new_entry = GetLastCommittedEntry()->CloneAndReplace(
+        frame_entry.get(), is_in_page, rfh->frame_tree_node(),
+        delegate_->GetFrameTree()->root());
 
     // TODO(creis): Update this to add the frame_entry if we can't find the one
     // to replace, which can happen due to a unique name change.  See
@@ -1293,13 +1327,16 @@ bool NavigationControllerImpl::RendererDidNavigateAutoSubframe(
   // handle navigation inside of a subframe in it without creating a new entry.
   DCHECK(GetLastCommittedEntry());
 
+  // For newly created subframes, we don't need to send a commit notification.
+  // This is only necessary for history navigations in subframes.
+  bool send_commit_notification = false;
+
+  // If the |nav_entry_id| is non-zero and matches an existing entry, this is
+  // a history navigation.  Update the last committed index accordingly.
+  // If we don't recognize the |nav_entry_id|, it might be a recently pruned
+  // entry.  We'll handle it below.
   if (params.nav_entry_id) {
     int entry_index = GetEntryIndexWithUniqueID(params.nav_entry_id);
-
-    // If the |nav_entry_id| is non-zero and matches an existing entry, this is
-    // a history auto" navigation.  Update the last committed index accordingly.
-    // If we don't recognize the |nav_entry_id|, it might be either a pending
-    // entry for a transfer or a recently pruned entry.  We'll handle it below.
     if (entry_index != -1 && entry_index != last_committed_entry_index_) {
       // Make sure that a subframe commit isn't changing the main frame's
       // origin. Otherwise the renderer process may be confused, leading to a
@@ -1318,10 +1355,13 @@ bool NavigationControllerImpl::RendererDidNavigateAutoSubframe(
                                         bad_message::NC_AUTO_SUBFRAME);
       }
 
-      // TODO(creis): Update the FrameNavigationEntry in --site-per-process.
+      // We only need to discard the pending entry in this history navigation
+      // case.  For newly created subframes, there was no pending entry.
       last_committed_entry_index_ = entry_index;
       DiscardNonCommittedEntriesInternal();
-      return true;
+
+      // History navigations should send a commit notification.
+      send_commit_notification = true;
     }
   }
 
@@ -1334,21 +1374,9 @@ bool NavigationControllerImpl::RendererDidNavigateAutoSubframe(
         params.document_sequence_number, rfh->GetSiteInstance(), nullptr,
         params.url, params.referrer, params.page_state, params.method,
         params.post_id);
-
-    // Cross-process subframe navigations may leave a pending entry around.
-    // Clear it if it's actually for the subframe.
-    // TODO(creis): Don't use pending entries for subframe navigations.
-    // See https://crbug.com/495161.
-    if (pending_entry_ &&
-        pending_entry_->frame_tree_node_id() ==
-            rfh->frame_tree_node()->frame_tree_node_id()) {
-      DiscardPendingEntry(false);
-    }
   }
 
-  // We do not need to discard the pending entry in this case, since we will
-  // not generate commit notifications for this auto-subframe navigation.
-  return false;
+  return send_commit_notification;
 }
 
 int NavigationControllerImpl::GetIndexOfEntry(
@@ -1880,9 +1908,16 @@ void NavigationControllerImpl::FindFramesToNavigate(
       new_item->item_sequence_number() != old_item->item_sequence_number() ||
       (new_item->site_instance() != nullptr &&
        new_item->site_instance() != old_item->site_instance())) {
+    // Same document loads happen if the previous item has the same document
+    // sequence number.  Note that we should treat them as different document if
+    // the destination RenderFrameHost (which is necessarily the current
+    // RenderFrameHost for same document navigations) doesn't have a last
+    // committed page.  This case can happen for Ctrl+Back or after a renderer
+    // crash.
     if (old_item &&
         new_item->document_sequence_number() ==
-            old_item->document_sequence_number()) {
+            old_item->document_sequence_number() &&
+        !frame->current_frame_host()->last_committed_url().is_empty()) {
       same_document_loads->push_back(std::make_pair(frame, new_item));
 
       // TODO(avi, creis): This is a bug; we should not return here. Rather, we

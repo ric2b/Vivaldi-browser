@@ -39,6 +39,7 @@ IPCDemuxerStream::IPCDemuxerStream(
     IPCMediaPipelineHost* ipc_media_pipeline_host)
     : type_(type),
       ipc_media_pipeline_host_(ipc_media_pipeline_host),
+      is_enabled_(true),
       weak_ptr_factory_(this) {
   DCHECK(ipc_media_pipeline_host_);
 }
@@ -56,11 +57,41 @@ void IPCDemuxerStream::Read(const ReadCB& read_cb) {
     return;
   }
 
+  if (!is_enabled_) {
+    DVLOG(1) << "Read from disabled stream, returning EOS";
+    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    return;
+  }
+
   read_cb_ = read_cb;
 
   ipc_media_pipeline_host_->ReadDecodedData(
       DemuxerTypeToPlatformMediaDataType(type_),
       base::Bind(&IPCDemuxerStream::DataReady, weak_ptr_factory_.GetWeakPtr()));
+}
+
+bool IPCDemuxerStream::enabled() const {
+  return is_enabled_;
+}
+
+void IPCDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
+  if (enabled == is_enabled_)
+    return;
+
+  is_enabled_ = enabled;
+  if (!is_enabled_ && !read_cb_.is_null()) {
+    DVLOG(1) << "Read from disabled stream, returning EOS";
+    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    return;
+  }
+  if (!stream_status_change_cb_.is_null())
+    stream_status_change_cb_.Run(is_enabled_, timestamp);
+}
+
+void IPCDemuxerStream::SetStreamStatusChangeCB(
+    const StreamStatusChangeCB& cb) {
+  DCHECK(!cb.is_null());
+  stream_status_change_cb_ = cb;
 }
 
 AudioDecoderConfig IPCDemuxerStream::audio_decoder_config() {

@@ -341,7 +341,7 @@ bool ExtensionFunction::user_gesture() const {
 
 ExtensionFunction::ResponseValue ExtensionFunction::NoArguments() {
   return ResponseValue(new ArgumentListResponseValue(
-      name(), "NoArguments", this, base::WrapUnique(new base::ListValue())));
+      name(), "NoArguments", this, base::MakeUnique<base::ListValue>()));
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
@@ -485,8 +485,10 @@ UIThreadExtensionFunction::~UIThreadExtensionFunction() {
   // shutting down.
   // TODO(devlin): Duplicate this check in IOThreadExtensionFunction. It's
   // tricky because checking IsShuttingDown has to be called from the UI thread.
-  DCHECK(extensions::ExtensionsBrowserClient::Get()->IsShuttingDown() ||
-         did_respond_ || ignore_all_did_respond_for_testing_do_not_use)
+  extensions::ExtensionsBrowserClient* browser_client =
+      extensions::ExtensionsBrowserClient::Get();
+  DCHECK(!browser_client || browser_client->IsShuttingDown() || did_respond_ ||
+         ignore_all_did_respond_for_testing_do_not_use)
       << name_;
 }
 
@@ -521,11 +523,6 @@ bool UIThreadExtensionFunction::OnMessageReceived(const IPC::Message& message) {
 
 void UIThreadExtensionFunction::Destruct() const {
   BrowserThread::DeleteOnUIThread::Destruct(this);
-}
-
-content::RenderViewHost*
-UIThreadExtensionFunction::render_view_host_do_not_use() const {
-  return render_frame_host_ ? render_frame_host_->GetRenderViewHost() : nullptr;
 }
 
 void UIThreadExtensionFunction::SetRenderFrameHost(
@@ -644,22 +641,5 @@ ExtensionFunction::ResponseAction SyncExtensionFunction::Run() {
 
 // static
 bool SyncExtensionFunction::ValidationFailure(SyncExtensionFunction* function) {
-  return false;
-}
-
-SyncIOThreadExtensionFunction::SyncIOThreadExtensionFunction() {
-}
-
-SyncIOThreadExtensionFunction::~SyncIOThreadExtensionFunction() {
-}
-
-ExtensionFunction::ResponseAction SyncIOThreadExtensionFunction::Run() {
-  return RespondNow(RunSync() ? ArgumentList(std::move(results_))
-                              : Error(error_));
-}
-
-// static
-bool SyncIOThreadExtensionFunction::ValidationFailure(
-    SyncIOThreadExtensionFunction* function) {
   return false;
 }

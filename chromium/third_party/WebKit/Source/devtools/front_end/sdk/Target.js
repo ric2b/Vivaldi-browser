@@ -9,16 +9,17 @@
  * @extends {Protocol.Agents}
  * @param {!WebInspector.TargetManager} targetManager
  * @param {string} name
- * @param {number} type
+ * @param {number} capabilitiesMask
  * @param {!InspectorBackendClass.Connection} connection
  * @param {?WebInspector.Target} parentTarget
  */
-WebInspector.Target = function(targetManager, name, type, connection, parentTarget)
+WebInspector.Target = function(targetManager, name, capabilitiesMask, connection, parentTarget)
 {
     Protocol.Agents.call(this, connection.agentsMap());
     this._targetManager = targetManager;
     this._name = name;
-    this._type = type;
+    this._inspectedURL = "";
+    this._capabilitiesMask = capabilitiesMask;
     this._connection = connection;
     this._parentTarget = parentTarget;
     connection.addEventListener(InspectorBackendClass.Connection.Events.Disconnected, this._onDisconnect, this);
@@ -31,10 +32,12 @@ WebInspector.Target = function(targetManager, name, type, connection, parentTarg
 /**
  * @enum {number}
  */
-WebInspector.Target.Type = {
-    Page: 1,
-    DedicatedWorker: 2,
-    ServiceWorker: 4
+WebInspector.Target.Capability = {
+    Browser: 1,
+    JS: 2,
+    Network: 4,
+    Worker: 8,
+    DOM: 16
 }
 
 WebInspector.Target._nextId = 1;
@@ -57,16 +60,6 @@ WebInspector.Target.prototype = {
     },
 
     /**
-     *
-     * @return {number}
-     */
-    type: function()
-    {
-        return this._type;
-    },
-
-    /**
-     *
      * @return {!WebInspector.TargetManager}
      */
     targetManager: function()
@@ -75,12 +68,30 @@ WebInspector.Target.prototype = {
     },
 
     /**
+     * @param {number} capabilitiesMask
+     * @return {boolean}
+     */
+    hasAllCapabilities: function(capabilitiesMask)
+    {
+        return (this._capabilitiesMask & capabilitiesMask) === capabilitiesMask;
+    },
+
+    /**
+     *
+     * @return {!InspectorBackendClass.Connection}
+     */
+    connection: function()
+    {
+        return this._connection;
+    },
+
+    /**
      * @param {string} label
      * @return {string}
      */
     decorateLabel: function(label)
     {
-        return this.isWorker() ? "\u2699 " + label : label;
+        return !this.hasBrowserCapability() ? "\u2699 " + label : label;
     },
 
     /**
@@ -96,41 +107,41 @@ WebInspector.Target.prototype = {
     /**
      * @return {boolean}
      */
-    isPage: function()
+    hasBrowserCapability: function()
     {
-        return this._type === WebInspector.Target.Type.Page;
+        return this.hasAllCapabilities(WebInspector.Target.Capability.Browser);
     },
 
     /**
      * @return {boolean}
      */
-    isWorker: function()
+    hasJSCapability: function()
     {
-        return this.isDedicatedWorker() || this.isServiceWorker();
+        return this.hasAllCapabilities(WebInspector.Target.Capability.JS);
     },
 
     /**
      * @return {boolean}
      */
-    isDedicatedWorker: function()
+    hasNetworkCapability: function()
     {
-        return this._type === WebInspector.Target.Type.DedicatedWorker;
+        return this.hasAllCapabilities(WebInspector.Target.Capability.Network);
     },
 
     /**
      * @return {boolean}
      */
-    isServiceWorker: function()
+    hasWorkerCapability: function()
     {
-        return this._type === WebInspector.Target.Type.ServiceWorker;
+        return this.hasAllCapabilities(WebInspector.Target.Capability.Worker);
     },
 
     /**
      * @return {boolean}
      */
-    hasJSContext: function()
+    hasDOMCapability: function()
     {
-        return !this.isServiceWorker();
+        return this.hasAllCapabilities(WebInspector.Target.Capability.DOM);
     },
 
     /**
@@ -150,9 +161,6 @@ WebInspector.Target.prototype = {
     _dispose: function()
     {
         this._targetManager.dispatchEventToListeners(WebInspector.TargetManager.Events.TargetDisposed, this);
-        this.networkManager.dispose();
-        this.cpuProfilerModel.dispose();
-        WebInspector.ServiceWorkerCacheModel.fromTarget(this).dispose();
         if (this.workerManager)
             this.workerManager.dispose();
     },
@@ -180,6 +188,24 @@ WebInspector.Target.prototype = {
     models: function()
     {
         return this._modelByConstructor.valuesArray();
+    },
+
+    /**
+     * @return {string}
+     */
+    inspectedURL: function()
+    {
+        return this._inspectedURL;
+    },
+
+    /**
+     * @param {string} inspectedURL
+     */
+    setInspectedURL: function(inspectedURL)
+    {
+        this._inspectedURL = inspectedURL;
+        InspectorFrontendHost.inspectedURLChanged(inspectedURL || "");
+        this._targetManager.dispatchEventToListeners(WebInspector.TargetManager.Events.InspectedURLChanged, this);
     },
 
     __proto__: Protocol.Agents.prototype
@@ -218,6 +244,7 @@ WebInspector.SDKModel = function(modelClass, target)
 {
     WebInspector.SDKObject.call(this, target);
     target._modelByConstructor.set(modelClass, this);
+    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.TargetDisposed, this._targetDisposed, this);
 }
 
 WebInspector.SDKModel.prototype = {
@@ -235,6 +262,20 @@ WebInspector.SDKModel.prototype = {
     resumeModel: function()
     {
         return Promise.resolve();
+    },
+
+    dispose: function() { },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _targetDisposed: function(event)
+    {
+        var target = /** @type {!WebInspector.Target} */ (event.data);
+        if (target !== this._target)
+            return;
+        this.dispose();
+        WebInspector.targetManager.removeEventListener(WebInspector.TargetManager.Events.TargetDisposed, this._targetDisposed, this);
     },
 
     __proto__: WebInspector.SDKObject.prototype

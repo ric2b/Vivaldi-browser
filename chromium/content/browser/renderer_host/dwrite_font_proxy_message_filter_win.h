@@ -69,6 +69,8 @@ class CONTENT_EXPORT DWriteFontProxyMessageFilter
                     IDWriteLocalFontFileLoader* local_loader,
                     IDWriteFontFile* font_file);
 
+  bool IsLastResortFallbackFont(uint32_t font_index);
+
  private:
   enum CustomFontFileLoadingMode { ENABLE, DISABLE, FORCE };
 
@@ -78,6 +80,9 @@ class CONTENT_EXPORT DWriteFontProxyMessageFilter
   Microsoft::WRL::ComPtr<IDWriteFontFallback> font_fallback_;
   base::string16 windows_fonts_path_;
   CustomFontFileLoadingMode custom_font_file_loading_mode_;
+
+  // Temp code to help track down crbug.com/561873
+  std::vector<uint32_t> last_resort_fonts_;
 
   DISALLOW_COPY_AND_ASSIGN(DWriteFontProxyMessageFilter);
 };

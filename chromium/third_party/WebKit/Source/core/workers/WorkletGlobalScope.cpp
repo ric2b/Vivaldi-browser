@@ -53,6 +53,11 @@ void WorkletGlobalScope::disableEval(const String& errorMessage)
     m_scriptController->disableEval(errorMessage);
 }
 
+bool WorkletGlobalScope::isJSExecutionForbidden() const
+{
+    return m_scriptController->isExecutionForbidden();
+}
+
 bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
 {
     // Until there are APIs that are available in worklets and that
@@ -62,17 +67,6 @@ bool WorkletGlobalScope::isSecureContext(String& errorMessage, const SecureConte
         return true;
     errorMessage = getSecurityOrigin()->isPotentiallyTrustworthyErrorMessage();
     return false;
-}
-
-void WorkletGlobalScope::reportBlockedScriptExecutionToInspector(const String& directiveText)
-{
-    InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
-}
-
-void WorkletGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
-{
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
-    addConsoleMessage(consoleMessage);
 }
 
 KURL WorkletGlobalScope::virtualCompleteURL(const String& url) const

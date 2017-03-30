@@ -8,6 +8,8 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "build/build_config.h"
 #include "content/public/browser/resource_request_info.h"
@@ -62,9 +64,9 @@ class DataUseMeasurementTest : public testing::Test {
     }
 
     request->Start();
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
-    data_use_measurement_.ReportDataUseUMA(request.get());
+    data_use_measurement_.OnCompleted(*request, true);
   }
 
   // This function makes a user request and confirms that its effect is

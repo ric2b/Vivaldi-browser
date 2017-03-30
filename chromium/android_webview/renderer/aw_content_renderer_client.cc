@@ -27,7 +27,10 @@
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/printing/renderer/print_web_view_helper.h"
+#include "components/supervised_user_error_page/gin_wrapper.h"
+#include "components/supervised_user_error_page/supervised_user_error_page_android.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
+#include "components/web_restrictions/interfaces/web_restrictions.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/navigation_state.h"
@@ -36,6 +39,7 @@
 #include "content/public/renderer/render_view.h"
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
@@ -47,6 +51,11 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
+
+#if defined(ENABLE_SPELLCHECK)
+#include "components/spellcheck/renderer/spellcheck.h"
+#include "components/spellcheck/renderer/spellcheck_provider.h"
+#endif
 
 using content::RenderThread;
 
@@ -70,6 +79,13 @@ void AwContentRendererClient::RenderThreadStarted() {
   blink::WebString aw_scheme(
       base::ASCIIToUTF16(android_webview::kAndroidWebViewVideoPosterScheme));
   blink::WebSecurityPolicy::registerURLSchemeAsSecure(aw_scheme);
+
+#if defined(ENABLE_SPELLCHECK)
+  if (!spellcheck_) {
+    spellcheck_ = base::MakeUnique<SpellCheck>();
+    thread->AddObserver(spellcheck_.get());
+  }
+#endif
 }
 
 bool AwContentRendererClient::HandleNavigation(
@@ -159,6 +175,10 @@ void AwContentRendererClient::RenderViewCreated(
   new printing::PrintWebViewHelper(
       render_view, std::unique_ptr<printing::PrintWebViewHelper::Delegate>(
                        new AwPrintWebViewHelperDelegate()));
+
+#if defined(ENABLE_SPELLCHECK)
+  new SpellCheckProvider(render_view, spellcheck_.get());
+#endif
 }
 
 bool AwContentRendererClient::HasErrorPage(int http_status_code,
@@ -167,14 +187,14 @@ bool AwContentRendererClient::HasErrorPage(int http_status_code,
 }
 
 void AwContentRendererClient::GetNavigationErrorStrings(
-    content::RenderFrame* /* render_frame */,
+    content::RenderFrame* render_frame,
     const blink::WebURLRequest& failed_request,
     const blink::WebURLError& error,
     std::string* error_html,
     base::string16* error_description) {
   if (error_html) {
-    std::string url =
-        net::EscapeForHTML(GURL(failed_request.url()).possibly_invalid_spec());
+    GURL gurl(failed_request.url());
+    std::string url = net::EscapeForHTML(gurl.possibly_invalid_spec());
     std::string err =
         base::UTF16ToUTF8(base::StringPiece16(error.localizedDescription));
 
@@ -199,6 +219,22 @@ void AwContentRendererClient::GetNavigationErrorStrings(
         ResourceBundle::GetSharedInstance().GetRawDataResource(
             IDR_AW_LOAD_ERROR_HTML),
         replacements, nullptr);
+    if (error.reason == net::ERR_BLOCKED_BY_ADMINISTRATOR) {
+      // This needs more information
+      render_frame->GetRemoteInterfaces()->GetInterface(
+          &web_restrictions_service_);
+      web_restrictions::mojom::ClientResultPtr result;
+      if (web_restrictions_service_->GetResult(mojo::String(url), &result)) {
+        std::string detailed_error_html =
+            supervised_user_error_page::BuildHtmlFromWebRestrictionsResult(
+                result, RenderThread::Get()->GetLocale());
+        if (!detailed_error_html.empty()) {
+          *error_html = detailed_error_html;
+          supervised_user_error_page::GinWrapper::InstallWhenFrameReady(
+              render_frame, url, web_restrictions_service_);
+        }
+      }
+    }
   }
   if (error_description) {
     if (error.localizedDescription.isEmpty())
@@ -237,7 +273,7 @@ bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
   static const char* kMediaPlayerExtensions[] = {
       ".3gp",  ".ts",    ".flac", ".mid", ".xmf",
       ".mxmf", ".rtttl", ".rtx",  ".ota", ".imy"};
-  for (const auto& extension : kMediaPlayerExtensions) {
+  for (auto* extension : kMediaPlayerExtensions) {
     if (base::EndsWith(url.path(), extension,
                        base::CompareCase::INSENSITIVE_ASCII)) {
       return true;

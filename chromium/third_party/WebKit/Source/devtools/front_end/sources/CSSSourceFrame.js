@@ -36,9 +36,19 @@
 WebInspector.CSSSourceFrame = function(uiSourceCode)
 {
     WebInspector.UISourceCodeFrame.call(this, uiSourceCode);
-    this.textEditor.setAutocompleteDelegate(new WebInspector.CSSSourceFrame.AutocompleteDelegate());
     this._registerShortcuts();
+    this._swatchPopoverHelper = new WebInspector.SwatchPopoverHelper();
+    this._muteColorProcessing = false;
+    this.configureAutocomplete({
+        suggestionsCallback: this._cssSuggestions.bind(this),
+        isWordChar: this._isWordChar.bind(this)
+    });
 }
+
+/** @type {number} */
+WebInspector.CSSSourceFrame.maxSwatchProcessingLength = 300;
+
+WebInspector.CSSSourceFrame.SwatchBookmark = Symbol("swatch");
 
 WebInspector.CSSSourceFrame.prototype = {
     _registerShortcuts: function()
@@ -86,7 +96,7 @@ WebInspector.CSSSourceFrame.prototype = {
             return false;
 
         var cssUnitRange = new WebInspector.TextRange(selection.startLine, token.startColumn, selection.startLine, token.endColumn);
-        var cssUnitText = this.textEditor.copyRange(cssUnitRange);
+        var cssUnitText = this.textEditor.text(cssUnitRange);
         var newUnitText = this._modifyUnit(cssUnitText, change);
         if (!newUnitText)
             return false;
@@ -97,74 +107,209 @@ WebInspector.CSSSourceFrame.prototype = {
         return true;
     },
 
-    __proto__: WebInspector.UISourceCodeFrame.prototype
-}
-
-/**
- * @constructor
- * @implements {WebInspector.TextEditorAutocompleteDelegate}
- */
-WebInspector.CSSSourceFrame.AutocompleteDelegate = function()
-{
-    this._simpleDelegate = new WebInspector.SimpleAutocompleteDelegate(".-$");
-}
-
-WebInspector.CSSSourceFrame._backtrackDepth = 10;
-
-WebInspector.CSSSourceFrame.AutocompleteDelegate.prototype = {
     /**
-     * @override
-     * @param {!WebInspector.CodeMirrorTextEditor} editor
+     * @param {number} startLine
+     * @param {number} endLine
      */
-    initialize: function(editor)
+    _updateColorSwatches: function(startLine, endLine)
     {
-        this._simpleDelegate.initialize(editor);
+        var colorPositions = [];
+
+        var colorRegex = /[\s:;,(){}]((?:rgb|hsl)a?\([^)]+\)|#[0-9a-f]{8}|#[0-9a-f]{6}|#[0-9a-f]{3,4}|[a-z]+)(?=[\s;,(){}])/gi;
+        for (var lineNumber = startLine; lineNumber <= endLine; lineNumber++) {
+            var line = "\n" + this.textEditor.line(lineNumber).substring(0, WebInspector.CSSSourceFrame.maxSwatchProcessingLength) + "\n";
+            var match;
+            while ((match = colorRegex.exec(line)) !== null) {
+                if (match.length < 2)
+                    continue;
+                var colorText = match[1];
+                var color = WebInspector.Color.parse(colorText);
+                if (color)
+                    colorPositions.push(new WebInspector.CSSSourceFrame.ColorPosition(color, lineNumber, match.index, colorText.length));
+            }
+        }
+
+        this.textEditor.operation(putColorSwatchesInline.bind(this));
+
+        /**
+         * @this {WebInspector.CSSSourceFrame}
+         */
+        function putColorSwatchesInline()
+        {
+            this._clearBookmarks(startLine, endLine);
+
+            for (var i = 0; i < colorPositions.length; i++) {
+                var colorPosition = colorPositions[i];
+                var swatch = WebInspector.ColorSwatch.create();
+                swatch.setColorText(colorPosition.color.asString(WebInspector.Color.Format.Original));
+                swatch.iconElement().title = WebInspector.UIString("Open color picker.");
+                swatch.hideText(true);
+                var bookmark = this.textEditor.addBookmark(colorPosition.textRange.startLine, colorPosition.textRange.startColumn, swatch, WebInspector.CSSSourceFrame.SwatchBookmark);
+                swatch.iconElement().addEventListener("click", this._showSpectrum.bind(this, swatch, bookmark), true);
+            }
+        }
+    },
+
+    /**
+     * @param {number} startLine
+     * @param {number} endLine
+     */
+    _clearBookmarks: function(startLine, endLine)
+    {
+        var range = new WebInspector.TextRange(startLine, 0, endLine, this.textEditor.line(endLine).length);
+        this.textEditor.bookmarks(range, WebInspector.CSSSourceFrame.SwatchBookmark).forEach(marker => marker.clear());
+    },
+
+    /**
+     * @param {!WebInspector.ColorSwatch} swatch
+     * @param {!WebInspector.TextEditorBookMark} bookmark
+     * @param {!Event} event
+     */
+    _showSpectrum: function(swatch, bookmark, event)
+    {
+        event.consume(true);
+        if (this._swatchPopoverHelper.isShowing()) {
+            this._swatchPopoverHelper.hide(true);
+            return;
+        }
+        this._hadSpectrumChange = false;
+        var position = bookmark.position();
+        var colorText = swatch.color().asString(WebInspector.Color.Format.Original);
+        this.textEditor.setSelection(position);
+        this._currentColorTextRange = position.clone();
+        this._currentColorTextRange.endColumn += colorText.length;
+        this._currentSwatch = swatch;
+
+        this._spectrum = new WebInspector.Spectrum();
+        this._spectrum.setColor(swatch.color(), swatch.format());
+        this._spectrum.addEventListener(WebInspector.Spectrum.Events.SizeChanged, this._spectrumResized, this);
+        this._spectrum.addEventListener(WebInspector.Spectrum.Events.ColorChanged, this._spectrumChanged, this);
+        this._swatchPopoverHelper.show(this._spectrum, swatch.iconElement(), this._spectrumHidden.bind(this));
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _spectrumResized: function(event)
+    {
+        this._swatchPopoverHelper.reposition();
+    },
+
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _spectrumChanged: function(event)
+    {
+        this._muteColorProcessing = true;
+        this._hadSpectrumChange = true;
+        var colorString = /** @type {string} */ (event.data);
+        this._currentSwatch.setColorText(colorString);
+        this._textEditor.editRange(this._currentColorTextRange, colorString, "*color-text-changed");
+        this._currentColorTextRange.endColumn = this._currentColorTextRange.startColumn + colorString.length;
+    },
+
+    /**
+     * @param {boolean} commitEdit
+     */
+    _spectrumHidden: function(commitEdit)
+    {
+        this._muteColorProcessing = false;
+        this._spectrum.removeEventListener(WebInspector.Spectrum.Events.SizeChanged, this._spectrumResized, this);
+        this._spectrum.removeEventListener(WebInspector.Spectrum.Events.ColorChanged, this._spectrumChanged, this);
+        if (!commitEdit && this._hadSpectrumChange)
+            this.textEditor.undo();
+        delete this._spectrum;
+        delete this._currentSwatch;
+        delete this._currentColorTextRange;
     },
 
     /**
      * @override
      */
-    dispose: function()
+    onTextEditorContentSet: function()
     {
-        this._simpleDelegate.dispose();
+        WebInspector.UISourceCodeFrame.prototype.onTextEditorContentSet.call(this);
+        if (!this._muteColorProcessing)
+            this._updateColorSwatches(0, this.textEditor.linesCount - 1);
     },
 
     /**
      * @override
-     * @param {!WebInspector.CodeMirrorTextEditor} editor
+     * @param {!WebInspector.TextRange} oldRange
+     * @param {!WebInspector.TextRange} newRange
+     */
+    onTextChanged: function(oldRange, newRange)
+    {
+        WebInspector.UISourceCodeFrame.prototype.onTextChanged.call(this, oldRange, newRange);
+        if (!this._muteColorProcessing)
+            this._updateColorSwatches(newRange.startLine, newRange.endLine);
+    },
+
+    /**
+     * @override
      * @param {number} lineNumber
-     * @param {number} columnNumber
-     * @return {?WebInspector.TextRange}
      */
-    substituteRange: function(editor, lineNumber, columnNumber)
+    scrollChanged: function(lineNumber)
     {
-        return this._simpleDelegate.substituteRange(editor, lineNumber, columnNumber);
+        WebInspector.UISourceCodeFrame.prototype.scrollChanged.call(this, lineNumber);
+        if (this._swatchPopoverHelper.isShowing())
+            this._swatchPopoverHelper.hide(true);
     },
 
     /**
-     * @param {!WebInspector.CodeMirrorTextEditor} editor
+     * @param {string} char
+     * @return {boolean}
+     */
+    _isWordChar: function(char)
+    {
+        return WebInspector.TextUtils.isWordChar(char) || char === "." || char === "-" || char === "$";
+    },
+
+    /**
+     * @param {!WebInspector.TextRange} prefixRange
+     * @param {!WebInspector.TextRange} substituteRange
+     * @return {?Promise.<!WebInspector.SuggestBox.Suggestions>}
+     */
+    _cssSuggestions: function(prefixRange, substituteRange)
+    {
+        var prefix = this._textEditor.text(prefixRange);
+        if (prefix.startsWith("$"))
+            return null;
+
+        var propertyToken = this._backtrackPropertyToken(prefixRange.startLine, prefixRange.startColumn - 1);
+        if (!propertyToken)
+            return null;
+
+        var line = this._textEditor.line(prefixRange.startLine);
+        var tokenContent = line.substring(propertyToken.startColumn, propertyToken.endColumn);
+        var propertyValues = WebInspector.cssMetadata().propertyValues(tokenContent);
+        return Promise.resolve(propertyValues.filter(value => value.startsWith(prefix)).map(value => ({title: value})));
+    },
+
+    /**
      * @param {number} lineNumber
      * @param {number} columnNumber
      * @return {?{startColumn: number, endColumn: number, type: string}}
      */
-    _backtrackPropertyToken: function(editor, lineNumber, columnNumber)
+    _backtrackPropertyToken: function(lineNumber, columnNumber)
     {
+        var backtrackDepth = 10;
         var tokenPosition = columnNumber;
-        var line = editor.line(lineNumber);
-        var seenColumn = false;
+        var line = this._textEditor.line(lineNumber);
+        var seenColon = false;
 
-        for (var i = 0; i < WebInspector.CSSSourceFrame._backtrackDepth && tokenPosition >= 0; ++i) {
-            var token = editor.tokenAtTextPosition(lineNumber, tokenPosition);
+        for (var i = 0; i < backtrackDepth && tokenPosition >= 0; ++i) {
+            var token = this._textEditor.tokenAtTextPosition(lineNumber, tokenPosition);
             if (!token)
                 return null;
             if (token.type === "css-property")
-                return seenColumn ? token : null;
+                return seenColon ? token : null;
             if (token.type && !(token.type.indexOf("whitespace") !== -1 || token.type.startsWith("css-comment")))
                 return null;
 
             if (!token.type && line.substring(token.startColumn, token.endColumn) === ":") {
-                if (!seenColumn)
-                    seenColumn = true;
+                if (!seenColon)
+                    seenColon = true;
                 else
                     return null;
             }
@@ -173,25 +318,18 @@ WebInspector.CSSSourceFrame.AutocompleteDelegate.prototype = {
         return null;
     },
 
-    /**
-     * @override
-     * @param {!WebInspector.CodeMirrorTextEditor} editor
-     * @param {!WebInspector.TextRange} prefixRange
-     * @param {!WebInspector.TextRange} substituteRange
-     * @return {!Array.<string>}
-     */
-    wordsWithPrefix: function(editor, prefixRange, substituteRange)
-    {
-        var prefix = editor.copyRange(prefixRange);
-        if (prefix.startsWith("$"))
-            return this._simpleDelegate.wordsWithPrefix(editor, prefixRange, substituteRange);
-        var propertyToken = this._backtrackPropertyToken(editor, prefixRange.startLine, prefixRange.startColumn - 1);
-        if (!propertyToken)
-            return this._simpleDelegate.wordsWithPrefix(editor, prefixRange, substituteRange);
+    __proto__: WebInspector.UISourceCodeFrame.prototype
+}
 
-        var line = editor.line(prefixRange.startLine);
-        var tokenContent = line.substring(propertyToken.startColumn, propertyToken.endColumn);
-        var keywords = WebInspector.CSSMetadata.keywordsForProperty(tokenContent);
-        return keywords.startsWith(prefix);
-    },
+/**
+ * @constructor
+ * @param {!WebInspector.Color} color
+ * @param {number} lineNumber
+ * @param {number} startColumn
+ * @param {number} textLength
+ */
+WebInspector.CSSSourceFrame.ColorPosition = function(color, lineNumber, startColumn, textLength)
+{
+    this.color = color;
+    this.textRange = new WebInspector.TextRange(lineNumber, startColumn, lineNumber, startColumn + textLength);
 }

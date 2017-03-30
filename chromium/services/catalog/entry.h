@@ -6,12 +6,13 @@
 #define SERVICES_CATALOG_ENTRY_H_
 
 #include <memory>
-#include <set>
 #include <string>
+#include <vector>
 
 #include "base/files/file_path.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
 #include "services/shell/public/cpp/capabilities.h"
+#include "services/shell/public/interfaces/resolver.mojom.h"
 
 namespace base {
 class DictionaryValue;
@@ -19,19 +20,18 @@ class DictionaryValue;
 
 namespace catalog {
 
-// Static information about an application package known to the Catalog.
+// Static information about a service package known to the Catalog.
 class Entry {
  public:
   Entry();
   explicit Entry(const std::string& name);
-  explicit Entry(const Entry& other);
   ~Entry();
 
   std::unique_ptr<base::DictionaryValue> Serialize() const;
 
   // If the constructed Entry is a package that provides other Entrys, the
   // caller must assume ownership of the tree of Entrys by enumerating
-  // applications().
+  // services().
   static std::unique_ptr<Entry> Deserialize(const base::DictionaryValue& value);
 
   bool ProvidesClass(const std::string& clazz) const;
@@ -55,7 +55,10 @@ class Entry {
   }
   const Entry* package() const { return package_; }
   void set_package(Entry* package) { package_ = package; }
-  const std::set<Entry*>& applications() { return applications_; }
+
+  std::vector<std::unique_ptr<Entry>> TakeChildren() {
+    return std::move(children_);
+  }
 
  private:
   std::string name_;
@@ -64,7 +67,7 @@ class Entry {
   std::string display_name_;
   shell::CapabilitySpec capabilities_;
   Entry* package_ = nullptr;
-  std::set<Entry*> applications_;
+  std::vector<std::unique_ptr<Entry>> children_;
 };
 
 }  // namespace catalog

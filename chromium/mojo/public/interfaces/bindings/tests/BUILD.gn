@@ -17,7 +17,9 @@ mojom("test_interfaces") {
     "sample_service.mojom",
     "scoping.mojom",
     "serialization_test_structs.mojom",
+    "test_bad_messages.mojom",
     "test_constants.mojom",
+    "test_data_view.mojom",
     "test_native_types.mojom",
     "test_structs.mojom",
     "test_sync_methods.mojom",
@@ -27,6 +29,23 @@ mojom("test_interfaces") {
     ":test_mojom_import",
     ":test_mojom_import2",
   ]
+}
+
+component("test_export_component") {
+  testonly = true
+  deps = [
+    ":test_export",
+  ]
+}
+
+mojom("test_export") {
+  testonly = true
+  sources = [
+    "test_export.mojom",
+  ]
+  export_class_attribute = "MOJO_TEST_EXPORT"
+  export_define = "MOJO_TEST_IMPLEMENTATION=1"
+  export_header = "mojo/public/cpp/bindings/tests/mojo_test_export.h"
 }
 
 mojom("test_mojom_import") {
@@ -82,6 +101,10 @@ mojom("test_associated_interfaces") {
   sources = [
     "test_associated_interfaces.mojom",
     "validation_test_associated_interfaces.mojom",
+  ]
+
+  public_deps = [
+    ":test_interfaces",
   ]
 }
 

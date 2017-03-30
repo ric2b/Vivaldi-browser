@@ -186,8 +186,7 @@ input[type='range'] {
   visibility: hidden;
   -webkit-padding-start: 35px;
   background-repeat: no-repeat;
-  margin-bottom: 14px;
-  padding-bottom: 6px;
+  padding-bottom: 20px;
   padding-top: 3px;
 }
 
@@ -500,6 +499,7 @@ list:not([disabled]) > .network-group[selected] {
   -webkit-border-vertical-spacing: 0.65em;
 }
 
+#stylus-settings-link,
 #power-settings-link {
   /* Match the spacing of the touchpad/mouse slider. */
   line-height: 25px;

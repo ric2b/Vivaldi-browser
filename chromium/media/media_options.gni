@@ -39,7 +39,7 @@ declare_args() {
   enable_ac3_eac3_audio_demuxing = proprietary_codecs && is_chromecast
 
   enable_mse_mpeg2ts_stream_parser =
-      (proprietary_codecs && is_chromecast) || use_libfuzzer
+      (proprietary_codecs && is_chromecast) || use_libfuzzer || use_afl
 
   # Enable HEVC/H265 demuxing. Actual decoding must be provided by the
   # platform. Enable by default for Chromecast.
@@ -72,7 +72,7 @@ declare_args() {
   # |mojo_media_services|). When enabled, selected mojo paths will be enabled in
   # the media pipeline and corresponding services will hosted in the selected
   # remote process (e.g. "utility" process, see |mojo_media_host|).
-  enable_mojo_media = is_android
+  enable_mojo_media = is_android || (is_chromecast && !is_cast_desktop_build)
 
   # Enable the TestMojoMediaClient to be used in MojoMediaApplication. This is
   # for testing only and will override the default platform MojoMediaClient.

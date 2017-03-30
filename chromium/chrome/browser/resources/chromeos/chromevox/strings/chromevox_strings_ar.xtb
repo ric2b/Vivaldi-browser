@@ -269,6 +269,7 @@
 <translation id="3392045790598181549">عنصر القائمة <ph name="NAME" /></translation>
 <translation id="3406283310380167331">عرض قائمة النماذج</translation>
 <translation id="3422338090358345848">فتح مستكشف لوحة المفاتيح</translation>
+<translation id="3423495725743882470">صف $1 عمود $2</translation>
 <translation id="3457000393508828486">مضغوط جزئيًا</translation>
 <translation id="3462439746547587373">الزر <ph name="NAME" /></translation>
 <translation id="3473644018603298796">تم تحديد <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}zero{#}two{#}few{#}many{#}other{#}}</translation>
 <translation id="3801735343383419236">إكمال تلقائي على هيئة قائمة</translation>
 <translation id="3810838688059735925">فيديو</translation>
+<translation id="3812237531158591503">لصق $1.</translation>
 <translation id="3816633764618089385">الوسائط التالية</translation>
 <translation id="3819376190738087562">ليست هناك نقاط انتقال.</translation>
 <translation id="385383972552776628">فتح صفحة الخيارات</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">ليس هناك أي نماذج.</translation>
 <translation id="5005670136041063723">ليس هناك المزيد من العناصر المماثلة.</translation>
 <translation id="501473567976723023">كانون الثاني (يناير)</translation>
+<translation id="5040591161308540832">جدول $1، $2 في $3</translation>
 <translation id="5041394372352067729">نقل عرض برايل إلى أعلى الصفحة</translation>
 <translation id="5042770794184672516">زيادة مستوى صوت النطق</translation>
 <translation id="5050015258024679800">عنوان المستوى الرابع السابق</translation>
@@ -518,7 +521,6 @@
 <translation id="5876817486144482042">خفض مستوى صوت النطق</translation>
 <translation id="5887397643266327462">تم تمكين تسميات برايل التوضيحية.</translation>
 <translation id="5891934789323004067">جدول</translation>
-<translation id="5919442531159595654">نسخ.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{علامة تساوي واحدة}zero{# equal signs}two{علامتا تساوي (#)}few{# علامات تساوي}many{# علامة تساوي}other{# من علامات التساوي}}</translation>
 <translation id="5939518447894949180">إعادة</translation>
 <translation id="5948123859135882163">تبديل تفسير مصطلحات الرياضيات بين البنيوية والدلالية</translation>
@@ -554,6 +556,8 @@
 <translation id="6355910664415701303">ليس هناك عنصر قائمة سابق.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">العنوان السابق</translation>
+<translation id="6378565991815958969">نسخ $1.</translation>
+<translation id="6385591741672306837">العمود</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6411426777058107714">ليس هناك زر اختيار سابق.</translation>
 <translation id="6414968628640960377">العنصر المختلف السابق.</translation>
@@ -653,7 +657,6 @@
 <translation id="7532613204005497612">حزيران (يونيو)</translation>
 <translation id="7540083713905917247">شريط التمرير <ph name="NAME" />، بالقيمة <ph name="VALUE" /></translation>
 <translation id="7552432549459840808">‏اختصارات Chrome المفيدة</translation>
-<translation id="7586163296341959563">لصق.</translation>
 <translation id="7596919493010894443">تم مسح التحديد</translation>
 <translation id="7604026522577407655">الانتقال إلى بداية العمود الحالي</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@
 <translation id="8153880621934657047">ليس بداخل الجدول.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{شرطة سفلية واحدة}zero{# underscores}two{شرطتان سفليتان (#)}few{# شرطات سفلية}many{# شرطة سفلية}other{# من الشرطات السفلية}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">الصف</translation>
 <translation id="8186185314313222077">تبديل وضع ملء الشاشة</translation>
-<translation id="81960742267269908">قص.</translation>
 <translation id="8199231515320852133">الإعلان عن عناوين الخلية الحالية</translation>
 <translation id="820417203470636242">خلية فارغة.</translation>
 <translation id="8215202828671303819">تحديد متعدد</translation>
@@ -782,6 +785,7 @@
 <translation id="9077213568694924680">تمت الإزالة من التحديد</translation>
 <translation id="9082874451376019682">ليس هناك شريط تمرير سابق.</translation>
 <translation id="9089864840575085222">دورة صدى الكتابة</translation>
+<translation id="9105227991373418255">قص $1.</translation>
 <translation id="9107530006868467849">لا توجد أداة للوسائط السابقة.</translation>
 <translation id="9108370397979208512">math</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@
 <translation id="9115913704608474258">تشرين الثاني (نوفمبر)</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">علامة تبويب</translation>
 <translation id="9151211641321628915">الإعلان عن وصف موجز للموضع الحالي</translation>
 <translation id="9153606228985488238">درجة صوت بنسبة <ph name="PERCENT" /> في المائة</translation>
 <translation id="9160096769946561184">الانتقال إلى نهاية العمود الحالي</translation>

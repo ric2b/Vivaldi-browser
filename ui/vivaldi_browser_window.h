@@ -187,6 +187,7 @@ class VivaldiBrowserWindow : public BrowserWindow {
   std::string GetWorkspace() const override;
   void MaybeShowNewBackShortcutBubble(bool forward) override {}
   void HideNewBackShortcutBubble() override {}
+  bool IsVisibleOnAllWorkspaces() const override;
 
  protected:
   void DestroyBrowser() override;

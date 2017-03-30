@@ -5,16 +5,18 @@
 #include "ash/metrics/user_metrics_recorder.h"
 
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_item_types.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shelf/shelf_view.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/wm/window_state.h"
+#include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_delegate.h"
-#include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/metrics/histogram.h"
@@ -157,12 +159,13 @@ int GetNumVisibleWindowsInPrimaryDisplay() {
 
 // Records the number of items in the shelf as an UMA statistic.
 void RecordShelfItemCounts() {
-  ShelfDelegate* shelf_delegate = Shell::GetInstance()->GetShelfDelegate();
+  ShelfDelegate* shelf_delegate = WmShell::Get()->shelf_delegate();
+  DCHECK(shelf_delegate);
+
   int pinned_item_count = 0;
   int unpinned_item_count = 0;
 
-  for (const ShelfItem& shelf_item :
-       Shell::GetInstance()->shelf_model()->items()) {
+  for (const ShelfItem& shelf_item : WmShell::Get()->shelf_model()->items()) {
     if (shelf_item.type != TYPE_APP_LIST) {
       // Internal ash apps do not have an app id and thus will always be counted
       // as unpinned.
@@ -238,8 +241,7 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_DESKTOP_SWITCH_TASK:
       RecordAction(UserMetricsAction("Desktop_SwitchTask"));
-      task_switch_metrics_recorder_.OnTaskSwitch(
-          TaskSwitchMetricsRecorder::DESKTOP);
+      task_switch_metrics_recorder_.OnTaskSwitch(TaskSwitchSource::DESKTOP);
       break;
     case UMA_DRAG_MAXIMIZE_LEFT:
       RecordAction(UserMetricsAction("WindowDrag_MaximizeLeft"));
@@ -261,16 +263,14 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_LAUNCHER_LAUNCH_TASK:
       RecordAction(UserMetricsAction("Launcher_LaunchTask"));
-      task_switch_metrics_recorder_.OnTaskSwitch(
-          TaskSwitchMetricsRecorder::SHELF);
+      task_switch_metrics_recorder_.OnTaskSwitch(TaskSwitchSource::SHELF);
       break;
     case UMA_LAUNCHER_MINIMIZE_TASK:
       RecordAction(UserMetricsAction("Launcher_MinimizeTask"));
       break;
     case UMA_LAUNCHER_SWITCH_TASK:
       RecordAction(UserMetricsAction("Launcher_SwitchTask"));
-      task_switch_metrics_recorder_.OnTaskSwitch(
-          TaskSwitchMetricsRecorder::SHELF);
+      task_switch_metrics_recorder_.OnTaskSwitch(TaskSwitchSource::SHELF);
       break;
     case UMA_MAXIMIZE_MODE_DISABLED:
       RecordAction(UserMetricsAction("Touchview_Disabled"));
@@ -568,10 +568,16 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED:
       RecordAction(UserMetricsAction("WindowSelector_ActiveWindowChanged"));
       task_switch_metrics_recorder_.OnTaskSwitch(
-          TaskSwitchMetricsRecorder::OVERVIEW_MODE);
+          TaskSwitchSource::OVERVIEW_MODE);
       break;
     case UMA_WINDOW_OVERVIEW_ENTER_KEY:
       RecordAction(UserMetricsAction("WindowSelector_OverviewEnterKey"));
+      break;
+    case UMA_WINDOW_OVERVIEW_CLOSE_BUTTON:
+      RecordAction(UserMetricsAction("WindowSelector_OverviewCloseButton"));
+      break;
+    case UMA_WINDOW_OVERVIEW_CLOSE_KEY:
+      RecordAction(UserMetricsAction("WindowSelector_OverviewCloseKey"));
       break;
   }
 }
@@ -590,7 +596,10 @@ void UserMetricsRecorder::OnShellShuttingDown() {
 }
 
 void UserMetricsRecorder::RecordPeriodicMetrics() {
-  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  WmShelf* shelf = WmShell::Get()
+                       ->GetPrimaryRootWindow()
+                       ->GetRootWindowController()
+                       ->GetShelf();
   // TODO(bruthig): Investigating whether the check for |manager| is necessary
   // and add tests if it is.
   if (shelf) {

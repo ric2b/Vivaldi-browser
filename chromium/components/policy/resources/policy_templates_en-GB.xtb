@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
+<translation id="1007441141628883408">Enables component updates for all components in <ph name="PRODUCT_NAME" /> when unset or set to True.
+
+      If set to False, updates to components are disabled. However, some components are exempt from this policy: updates to any component that does not contain executable code, or does not significantly alter the behaviour of the browser, or is critical for its security will not be disabled.
+      Examples of such components include the certificate revocation lists and safe browsing data. </translation>
 <translation id="101438888985615157">Rotate screen by 180 degrees</translation>
 <translation id="1017967144265860778">Power management on the login screen</translation>
 <translation id="1019101089073227242">Set user data directory</translation>
@@ -22,13 +26,6 @@
       If set to true or left unset, statistics will be reported.</translation>
 <translation id="1046484220783400299">Enable deprecated web platform features for a limited time</translation>
 <translation id="1047128214168693844">Do not allow any site to track the users' physical location</translation>
-<translation id="1057535219415338480">Enables network prediction in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
-
-      This controls not only DNS prefetching but also TCP and SSL preconnection and prerendering of web pages. The policy name refers to DNS prefetching for historical reasons.
-
-      If you enable or disable this setting, users cannot change or override this setting in <ph name="PRODUCT_NAME" />.
-
-      If this policy is left not set, this will be enabled but the user will be able to change it.</translation>
 <translation id="1062011392452772310">Enable remote attestation for the device</translation>
 <translation id="1090892140761957285">URL for validating remote access client authentication token.
 
@@ -127,11 +124,6 @@
       disabled. In this case, the user cannot enable the feature.</translation>
 <translation id="1474273443907024088">Disable TLS False Start</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Specifies the period in milliseconds at which the device management service is queried for device policy information.
-
-      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1800000 (30 minutes) to 86400000 (1 day). Any values not in this range will be clamped to the respective boundary.
-
-      Leaving this policy not set will make <ph name="PRODUCT_OS_NAME" /> use the default value of 3 hours.</translation>
 <translation id="1504431521196476721">Remote Attestation</translation>
 <translation id="1509692106376861764">This policy has been retired as of <ph name="PRODUCT_NAME" /> version 29.</translation>
 <translation id="1522425503138261032">Allow sites to track the users' physical location</translation>
@@ -146,6 +138,7 @@
       unable to use ARC.</translation>
 <translation id="1561424797596341174">Policy overrides for Debug builds of the remote access host</translation>
 <translation id="1583248206450240930">Use <ph name="PRODUCT_FRAME_NAME" /> by default</translation>
+<translation id="1606958238518590302">When this policy is set to true, users cannot write anything to external storage devices.</translation>
 <translation id="1608755754295374538">URLs that will be granted access to audio capture devices without prompt</translation>
 <translation id="1617235075406854669">Enable deleting browser and download history</translation>
 <translation id="1617384279878333801">Enable add person in profile manager</translation>
@@ -253,6 +246,13 @@
       If this policy is set to true, <ph name="PRODUCT_OS_NAME" /> will attempt to download auto-update payloads via HTTP. If the policy is set to false or not set, HTTPS will be used for downloading auto-update payloads.</translation>
 <translation id="2006530844219044261">Power management</translation>
 <translation id="201557587962247231">Frequency of device status report uploads</translation>
+<translation id="2018836497795982119">Specifies the period in milliseconds at which the device management service is queried for user policy information.
+
+      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1,800,000 (30 minutes) to 86,400,000 (1 day). Any values not in this range will be clamped to the respective boundary. If the platform supports policy notifications, the refresh delay will be set to 24 hours because it is expected that policy notifications will force a refresh automatically whenever policy changes.
+
+      Leaving this policy not set will make <ph name="PRODUCT_NAME" /> use the default value of 3 hours.
+
+      Note that if the platform supports policy notifications, the refresh delay will be set to 24 hours (ignoring all defaults and the value of this policy) because it is expected that policy notifications will force a refresh automatically whenever policy changes, making more frequent refreshes unnecessary.</translation>
 <translation id="2024476116966025075">Configure the required domain name for remote access clients</translation>
 <translation id="2030905906517501646">Default search provider keyword</translation>
 <translation id="206623763829450685">Specifies which HTTP authentication schemes are supported by <ph name="PRODUCT_NAME" />.
@@ -344,11 +344,6 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 
       After enabling Bluetooth, the device must be rebooted for the changes to take effect (no need to reboot the device when disabling Bluetooth).</translation>
 <translation id="2366415278352956652">Enables cast</translation>
-<translation id="2371309782685318247">Specifies the period in milliseconds at which the device management service is queried for user policy information.
-
-      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1800000 (30 minutes) to 86400000 (1 day). Any values not in this range will be clamped to the respective boundary.
-
-      Leaving this policy not set will make <ph name="PRODUCT_NAME" /> use the default value of 3 hours.</translation>
 <translation id="2372547058085956601">The public session auto-login delay.
 
       If the |DeviceLocalAccountAutoLoginId| policy is unset, this policy has no effect. Otherwise:
@@ -549,6 +544,7 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
       If this setting is disabled, web pages cannot use JavaScript and the user cannot change that setting.
 
       If this setting is enabled or not set, web pages can use JavaScript but the user can change that setting.</translation>
+<translation id="2753637905605932878">Restrict the range of local UDP ports used by WebRTC</translation>
 <translation id="2757054304033424106">Types of extensions/apps that are allowed to be installed</translation>
 <translation id="2759224876420453487">Control the user behaviour in a multiprofile session</translation>
 <translation id="2761483219396643566">Idle warning delay when running on battery power</translation>
@@ -682,6 +678,7 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 
           If this policy is left unset, 'AllowJavaScript' will be used and the user will be able to change it.</translation>
 <translation id="3038323923255997294">Continue running background apps when <ph name="PRODUCT_NAME" /> is closed</translation>
+<translation id="3046192273793919231">Send network packets to the management server to monitor online status</translation>
 <translation id="3048744057455266684">If this policy is set and a search URL suggested from the omnibox contains this parameter in the query string or in the fragment identifier, then the suggestion will show the search terms and search provider instead of the raw search URL.
 
           This policy is optional. If not set, no search term replacement will be performed.
@@ -783,6 +780,15 @@ The contents of the list 'URLs to open at start-up' are ignored unless you selec
 <translation id="3264793472749429012">Default search provider encodings</translation>
 <translation id="3273221114520206906">Default JavaScript setting</translation>
 <translation id="3288595667065905535">Release channel</translation>
+<translation id="3291367259589875381">This policy is deprecated in M48 in favour of <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" />, and removed in M54.
+
+      Enables network prediction in <ph name="PRODUCT_NAME" /> and prevents users from changing this setting.
+
+      This controls not only DNS prefetching but also TCP and SSL preconnection and prerendering of web pages. The policy name refers to DNS prefetching for historical reasons.
+
+      If you enable or disable this setting, users cannot change or override this setting in <ph name="PRODUCT_NAME" />.
+
+      If this policy is left not set, this will be enabled but the user will be able to change it.</translation>
 <translation id="3292147213643666827">Enables <ph name="PRODUCT_NAME" /> to act as a proxy between <ph name="CLOUD_PRINT_NAME" /> and legacy printers connected to the machine.
 
       If this setting is enabled or not configured, users can enable the cloud print proxy by authentication with their Google account.
@@ -887,6 +893,7 @@ If you enable this setting, <ph name="PRODUCT_NAME" /> will always check on star
 If this setting is disabled, <ph name="PRODUCT_NAME" /> will never check if it is the default browser and will disable user controls for setting this option.
 
 If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to control whether it is the default browser and whether user notifications should be shown when it isn't.</translation>
+<translation id="379659290574555063">Treat external storage devices as read-only.</translation>
 <translation id="3800626789999016379">Configures the directory that <ph name="PRODUCT_NAME" /> will use for downloading files.
 
       If you set this policy, <ph name="PRODUCT_NAME" /> will use the provided directory regardless of whether the user has specified one or enabled the flag to be prompted for download location every time.
@@ -938,17 +945,20 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="3864818549971490907"> setting</translation>
 <translation id="3866249974567520381">Description</translation>
 <translation id="3866530186104388232">If this policy is set to true or not configured, <ph name="PRODUCT_OS_NAME" /> will show existing users on the login screen and allow the user to pick one. If this policy is set to false, <ph name="PRODUCT_OS_NAME" /> will use the username/password prompt for login.</translation>
-<translation id="3866824067696705379">How frequently monitoring heartbeats are sent, in milliseconds.
-
-      If this policy is unset, the default frequency is 3 minutes. The minimum
-      frequency is 30 seconds and the maximum frequency is 24 hours –
- values
-      outside of this range will be clamped to this range.</translation>
 <translation id="3868347814555911633">This policy is active in retail mode only.
 
       Lists extensions that are automatically installed for the Demo user, for devices in retail mode. These extensions are saved in the device and can be installed while offline, after the installation.
 
       Each list entry contains a dictionary that must include the extension ID in the 'extension-id' field, and its update URL in the 'update-url' field.</translation>
+<translation id="388237772682176890">This policy is deprecated in M53 and removed in M54, because SPDY/3.1 support is removed.
+
+      Disables use of the SPDY protocol in <ph name="PRODUCT_NAME" />.
+
+      If this policy is enabled the SPDY protocol will not be available in <ph name="PRODUCT_NAME" />.
+
+      Setting this policy to disabled will allow the usage of SPDY.
+
+      If this policy is left unset, SPDY will be available.</translation>
 <translation id="3891357445869647828">Enable JavaScript</translation>
 <translation id="3898060089412156345">Allow or deny audio capture.
 
@@ -966,6 +976,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           If not set or set to False, then users will be able to transfer files to Google Drive.</translation>
 <translation id="3915395663995367577">URL to a proxy .pac file</translation>
+<translation id="3939893074578116847">Send network packets to the management server to monitor online status, to allow
+      the server to detect if the device is offline.
+
+      If this policy is set to true, monitoring network packets (so-called <ph name="HEARTBEATS_TERM" />) will be sent.
+      If set to false or unset, no packets will be sent.</translation>
 <translation id="3964909636571393861">Allows access to a list of URLs</translation>
 <translation id="3965339130942650562">Timeout until idle user log-out is executed</translation>
 <translation id="3967075520570946456">Enable showing the welcome page on the first browser launch following OS upgrade.</translation>
@@ -1166,7 +1181,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           If you leave this policy unset <ph name="PRODUCT_NAME" /> will not delegate user credentials even if a server is detected as Intranet.</translation>
 <translation id="4752880493649142945">Client certificate for connecting to RemoteAccessHostTokenValidationUrl</translation>
-<translation id="4768493164188395498">Frequency of monitoring heartbeats</translation>
 <translation id="4791031774429044540">Enable the large cursor accessibility feature.
 
           If this policy is set to true, the large cursor will always be enabled.
@@ -1276,6 +1290,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           A blacklist value of '*' means that all native messaging hosts are blacklisted unless they are explicitly listed in the whitelist.
 
           If this policy is left not set <ph name="PRODUCT_NAME" /> will load all installed native messaging hosts.</translation>
+<translation id="5288772341821359899">If the policy is set, the UDP port range used by WebRTC is restricted to the specified port interval (endpoints included).
+
+      If the policy is not set, or if it is set to the empty string or an invalid port range, WebRTC is allowed to use any available local UDP port.</translation>
 <translation id="5290940294294002042">Specify a list of plug-ins that the user can enable or disable</translation>
 <translation id="5302612588919538756">This policy is deprecated, consider using SyncDisabled instead.
 
@@ -1347,6 +1364,18 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If this policy is set, the specified session will be automatically logged in after a period of time has elapsed at the login screen without user interaction. The public session must already be configured (see |DeviceLocalAccounts|).
 
       If this policy is unset, there will be no auto-login.</translation>
+<translation id="5529037166721644841">Specifies the period in milliseconds at which the device management service is queried for device policy information.
+
+      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1,800,000 (30 minutes) to 86,400,000 (1 day). Any values not in this range will be clamped to the respective boundary.
+
+      Leaving this policy not set will make <ph name="PRODUCT_OS_NAME" /> use the default value of 3 hours.
+
+      Note that if the platform supports policy notifications, the refresh delay will be set to 24 hours (ignoring all defaults and the value of this policy) because it is expected that policy notifications will force a refresh automatically whenever policy changes, making more frequent refreshes unnecessary.</translation>
+<translation id="5535957389335373033">How frequently monitoring network packets are sent, in milliseconds.
+
+      If this policy is unset, the default frequency is 3 minutes. The minimum
+      frequency is 30 seconds and the maximum frequency is 24 hours – values
+      outside of this range will be clamped to this range.</translation>
 <translation id="5535973522252703021">Kerberos delegation server whitelist</translation>
 <translation id="5560039246134246593">Add a parameter to the fetching of the Variations seed in <ph name="PRODUCT_NAME" />.
 
@@ -1386,6 +1415,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           If this setting is disabled or not set, then the remote access host can be associated with any local user.</translation>
 <translation id="5697306356229823047">Report device users</translation>
+<translation id="570062449808736508">When this policy is set to a non-empty string, the WebView will read URL restrictions from the content provider with the given authority name.</translation>
 <translation id="5703863730741917647">Specify the action to take when the idle delay is reached.
 
           Note that this policy is deprecated and will be removed in the future.
@@ -1649,6 +1679,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           If you set this policy, users can temporarily override it by enabling or disabling the on-screen keyboard. However, the user's choice is not persistent and the default is restored whenever the login screen is shown anew or the user remains idle on the login screen for a minute.
 
           If this policy is left unset, the on-screen keyboard is disabled when the login screen is first shown. Users can enable or disable the on-screen keyboard any time and its status on the login screen is persisted between users.</translation>
+<translation id="6573305661369899995">Set an external source of URL restrictions</translation>
 <translation id="6598235178374410284">User avatar image</translation>
 <translation id="6628646143828354685">Allows you to set whether websites are allowed to get access to nearby Bluetooth devices. Access can be completely blocked, or the user can be asked every time a website wants to get access to nearby Bluetooth devices.
 
@@ -1780,6 +1811,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
           If this setting is disabled or not set, then hosts can be shared using any account.
 
           See also RemoteAccessHostClientDomain.</translation>
+<translation id="6979510692034647325">Enables component updates in <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6997592395211691850">Whether online OCSP/CRL checks are required for local trust anchors</translation>
 <translation id="7003334574344702284">This policy forces the saved passwords to be imported from the previous default browser, if enabled. If enabled, this policy also affects the import dialogue.
 
@@ -1912,6 +1944,9 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           This policy is only respected if the 'DefaultSearchProviderEnabled' policy is enabled.</translation>
 <translation id="7302043767260300182">Screen lock delay when running on AC power</translation>
+<translation id="7311458740754205918">If this is set to true or not set, the New Tab page may show content suggestions based on the user's browsing history, interests or location.
+
+      If this is set to false, automatically-generated content suggestions are not shown on the New Tab page.</translation>
 <translation id="7323896582714668701">Additional command line parameters for <ph name="PRODUCT_NAME" /></translation>
 <translation id="7329842439428490522">Specifies the length of time without user input after which the screen is turned off when running on battery power.
 
@@ -1939,13 +1974,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
       If this policy is not set, automatic clean-up uses the default built-in strategy. Currently, it is the 'RemoveLRUIfDormant' strategy.</translation>
 <translation id="7336878834592315572">Keep cookies for the duration of the session.</translation>
 <translation id="7340034977315324840">Report device activity times</translation>
-<translation id="7381326101471547614">Disables use of the SPDY protocol in <ph name="PRODUCT_NAME" />.
-
-      If this policy is enabled the SPDY protocol will not be available in <ph name="PRODUCT_NAME" />.
-
-      Setting this policy to disabled will allow the usage of SPDY.
-
-      If this policy is left not set, SPDY will be available.</translation>
 <translation id="7384999953864505698">Allows QUIC protocol</translation>
 <translation id="7406651467768226499">Whether to allow the auto launched with zero delay kiosk app to control <ph name="PRODUCT_OS_NAME" /> version.
 
@@ -1964,6 +1992,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7443616896860707393">Cross-origin HTTP Basic Auth prompts</translation>
 <translation id="7468416082528382842">Windows registry location:</translation>
 <translation id="7469554574977894907">Enable search suggestions</translation>
+<translation id="7474249562477552702">Whether SHA-1 signed certificates issued by local trust anchors are allowed</translation>
 <translation id="7485481791539008776">Default printer selection rules</translation>
 <translation id="749556411189861380">Report OS and firmware version of enrolled devices.
 
@@ -1971,7 +2000,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7511361072385293666">If this policy is set to true or not set usage of QUIC protocol in <ph name="PRODUCT_NAME" /> is allowed.
       If this policy is set to false usage of QUIC protocol is disallowed.</translation>
 <translation id="7519251620064708155">Allow key generation on these sites</translation>
-<translation id="7523476810162382273">Send monitoring heartbeats to the management server</translation>
 <translation id="7529100000224450960">Allows you to set a list of url patterns that specify sites which are allowed to open pop-ups.
 
           If this policy is left unset the global default value will be used for all sites either from the 'DefaultPop-upsSetting' policy, if it is set, or the user's personal configuration otherwise.</translation>
@@ -1982,6 +2010,11 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
       If set to SAML_INTERSTITIAL, login will show an interstitial screen offering the user the option to go forward with authentication via the SAML IdP of the device's enrolment domain or go back to the normal GAIA login flow.</translation>
 <translation id="7567380065339179813">Allow plug-ins on these sites</translation>
+<translation id="757395965347379751">When this setting is enabled, <ph name="PRODUCT_NAME" /> allows SHA-1 signed certificates as long as they successfully validate and chain to a locally-installed CA certificates.
+
+      Note that this policy depends on the operating system certificate verification stack allowing SHA-1 signatures. If an OS update changes the OS handling of SHA-1 certificates, this policy may no longer have effect. Furthermore, this policy is intended as a temporary workaround to give enterprises more time to move away from SHA-1. This policy will be removed on or around 1 January 2019.
+
+      If this policy is not set, or it is set to false, then <ph name="PRODUCT_NAME" /> follows the publicly announced SHA-1 deprecation schedule.</translation>
 <translation id="7593523670408385997">Configures the cache size that <ph name="PRODUCT_NAME" /> will use for storing cached files on the disk.
 
       If you set this policy, <ph name="PRODUCT_NAME" /> will use the provided cache size regardless of whether the user has specified the '--disk-cache-size' flag or not. The value specified in this policy is not a hard boundary but rather a suggestion to the caching system, any value below a few megabytes is too small and will be rounded up to a sane minimum.
@@ -2039,6 +2072,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 
           If this setting is disabled or not set, then two-factor will not be enabled and the default behaviour of having a user-defined PIN will be used.</translation>
 <translation id="7750991880413385988">Open New Tab Page</translation>
+<translation id="7761446981238915769">Configure the list of installed apps on the login screen</translation>
 <translation id="7761526206824804472">Sets one or more recommended locales for a public session, allowing users to easily choose one of these locales.
 
       The user can choose a locale and a keyboard layout before starting a public session. By default, all locales supported by <ph name="PRODUCT_OS_NAME" /> are listed in alphabetic order. You can use this policy to move a set of recommended locales to the top of the list.
@@ -2061,6 +2095,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="7763479091692861127"> The types of connections that are allowed to use for OS updates. OS updates potentially put heavy strain on the connection due to their size and may incur additional cost. Therefore, they are by default not enabled for connection types that are considered expensive, which include WiMax, Bluetooth and Cellular at the moment.
 
       The recognised connection type identifiers are "ethernet", "wifi", "wimax", "bluetooth" and "cellular".</translation>
+<translation id="7763614521440615342">Show content suggestions on the New Tab page</translation>
 <translation id="7766336524667238790">Report information about the active kiosk session, such as
       application ID and version.
 
@@ -2462,6 +2497,28 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="8858642179038618439">Force YouTube Safety Mode</translation>
 <translation id="8864975621965365890">Suppresses the turn-down prompt that appears when a site is rendered by <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Homepage</translation>
+<translation id="88890388118515381">
+      Specifies a list of apps that are installed silently on the login screen,
+      without user interaction, and which cannot be uninstalled.
+      All permissions requested by the apps are granted
+      implicitly, without user interaction, including any additional
+      permissions requested by future versions of the app.
+
+      If an app, which previously had been force-installed, is removed from
+      this list, it is automatically uninstalled by <ph name="PRODUCT_NAME" />.
+
+      Each list item of the policy is a string that contains an extension ID
+      and an "update" URL separated by a semicolon (<ph name="SEMICOLON" />). The extension ID is the 32-letter string
+      found, e.g. on <ph name="CHROME_EXTENSIONS_LINK" /> when in
+      developer mode. The "update" URL should point to an Update Manifest
+      XML document as described at <ph name="LINK_TO_EXTENSION_DOC1" />. Note
+      that the "update" URL set in this policy is only used for the initial
+      installation; subsequent updates of the extension employ the update
+      URL indicated in the extension's manifest.
+
+      For example, <ph name="EXTENSION_POLICY_EXAMPLE" />
+      installs the <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> app from the standard Chrome Web Store "update"
+      URL. For more information about hosting extensions, see: <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">The Quirks Server provides hardware-specific configuration files, like ICC display profiles to adjust monitor calibration. When this policy is set to false, the device will not attempt to contact the Quirks Server to download configuration files. If this policy is true or not configured then <ph name="PRODUCT_OS_NAME" /> will automatically contact the Quirks Server and download configuration files, if available, and store them on the device. Such files might, for example, be used to improve display quality of attached monitors.</translation>
 <translation id="8905426178924715309">This policy is deprecated, please use ForceGoogleSafeSearch and ForceYouTubeSafetyMode instead. This policy will be ignored if either the ForceGoogleSafeSearch or ForceYouTubeSafetyMode policies are set.
 
@@ -2505,11 +2562,6 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="9088444059179765143">Configure the automatic timezone detection method</translation>
 <translation id="9096086085182305205">Authentication server whitelist</translation>
 <translation id="9098553063150791878">Policies for HTTP authentication</translation>
-<translation id="9104138886225968319">Send monitoring heartbeats to the management server, to allow
-      the server to detect if the device is offline.
-
-      If this policy is set to true, monitoring heartbeats will be sent. If set
-      to false or unset, then no heartbeats will be sent.</translation>
 <translation id="9112897538922695510">Allows you to register a list of protocol handlers. This can only be a recommended policy. The property |protocol| should be set to the scheme such as 'mailto' and the property |url| should be set to the URL pattern of the application that handles the scheme. The pattern can include a '%s', which if present will be replaced by the handled URL.
 
           The protocol handlers registered by policy are merged with the ones registered by the user and both are available for use. The user can override the protocol handlers installed by policy by installing a new default handler, but cannot remove a protocol handler registered by policy.</translation>
@@ -2551,6 +2603,7 @@ If this setting is not set, <ph name="PRODUCT_NAME" /> will allow the user to co
 <translation id="9187743794267626640">Disable mounting of external storage</translation>
 <translation id="9197740283131855199">Percentage by which to scale the screen dim delay if the user becomes active after dimming</translation>
 <translation id="9200828125069750521">Parameters for image URL which uses POST</translation>
+<translation id="9217154963008402249">Frequency of monitoring network packets</translation>
 <translation id="922540222991413931">Configure extension, app, and user script install sources</translation>
 <translation id="924557436754151212">Import saved passwords from default browser on first run</translation>
 <translation id="930930237275114205">Set <ph name="PRODUCT_FRAME_NAME" /> user data directory</translation>

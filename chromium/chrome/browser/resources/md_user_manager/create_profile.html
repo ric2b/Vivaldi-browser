@@ -31,6 +31,7 @@
                             visibility 0s linear 400ms;
         align-items: center;
         background-color: var(--paper-red-50);
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, .12);
         color: var(--google-red-700);
         display: flex;
         height: 40px;
@@ -114,14 +115,7 @@
           font-size: inherit;
           min-height: 40px;
         };
-        --paper-item-focused-before: {
-          background: none;
-        };
       }
-
-      #supervised-user-container paper-listbox paper-item:hover {
-        background: rgba(0, 0, 0, .12);
-      };
 
       #supervised-user-container #import-user {
         -webkit-margin-start: 16px;
@@ -184,6 +178,7 @@
             </paper-dropdown-menu>
             <a id="import-user" is="action-link" on-tap="onImportUserTap_"
                 hidden="[[isImportUserLinkHidden_(createInProgress_,
+                                                  loadingSupervisedUsers_,
                                                   signedInUserIndex_)]]">
               $i18n{importExistingSupervisedUserLink}
             </a>

@@ -175,7 +175,7 @@ void InsertListCommand::doApply(EditingState* editingState)
                 // infinite loop and because there is no more work to be done.
                 // FIXME(<rdar://problem/5983974>): The endingSelection() may be incorrect here.  Compute
                 // the new location of endOfSelection and use it as the end of the new selection.
-                if (!startOfLastParagraph.deepEquivalent().inShadowIncludingDocument())
+                if (!startOfLastParagraph.deepEquivalent().isConnected())
                     return;
                 setEndingSelection(startOfCurrentParagraph);
 
@@ -187,6 +187,11 @@ void InsertListCommand::doApply(EditingState* editingState)
                 if (!singleParagraphResult)
                     break;
                 if (endOfSelection.isNull() || endOfSelection.isOrphan() || startOfLastParagraph.isNull() || startOfLastParagraph.isOrphan()) {
+
+                    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+                    // see http://crbug.com/590369 for more details.
+                    document().updateStyleAndLayoutIgnorePendingStylesheets();
+
                     endOfSelection = visiblePositionForIndex(indexForEndOfSelection, scopeForEndOfSelection);
                     // If endOfSelection is null, then some contents have been deleted from the document.
                     // This should never happen and if it did, exit early immediately because we've lost the loop invariant.
@@ -222,6 +227,11 @@ void InsertListCommand::doApply(EditingState* editingState)
     doApplyForSingleParagraph(false, listTag, *firstRangeOf(endingSelection()), editingState);
 }
 
+InputEvent::InputType InsertListCommand::inputType() const
+{
+    return m_type == OrderedList ? InputEvent::InputType::InsertOrderedList : InputEvent::InputType::InsertUnorderedList;
+}
+
 bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HTMLQualifiedName& listTag, Range& currentSelection, EditingState* editingState)
 {
     // FIXME: This will produce unexpected results for a selection that starts just before a
@@ -231,17 +241,17 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
     Node* listChildNode = enclosingListChild(selectionNode);
     bool switchListType = false;
     if (listChildNode) {
-        if (!listChildNode->parentNode()->hasEditableStyle())
+        if (!hasEditableStyle(*listChildNode->parentNode()))
             return false;
         // Remove the list child.
         HTMLElement* listElement = enclosingList(listChildNode);
         if (listElement) {
-            if (!listElement->hasEditableStyle()) {
+            if (!hasEditableStyle(*listElement)) {
                 // Since, |listElement| is uneditable, we can't move |listChild|
                 // out from |listElement|.
                 return false;
             }
-            if (!listElement->parentNode()->hasEditableStyle()) {
+            if (!hasEditableStyle(*listElement->parentNode())) {
                 // Since parent of |listElement| is uneditable, we can not remove
                 // |listElement| for switching list type neither unlistify.
                 return false;
@@ -255,8 +265,8 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
             if (editingState->isAborted())
                 return false;
         }
-        DCHECK(listElement->hasEditableStyle());
-        DCHECK(listElement->parentNode()->hasEditableStyle());
+        DCHECK(hasEditableStyle(*listElement));
+        DCHECK(hasEditableStyle(*listElement->parentNode()));
         if (!listElement->hasTagName(listTag)) {
             // |listChildNode| will be removed from the list and a list of type
             // |m_type| will be created.
@@ -288,7 +298,7 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
             // Manually remove listNode because moveParagraphWithClones sometimes leaves it behind in the document.
             // See the bug 33668 and editing/execCommand/insert-list-orphaned-item-with-nested-lists.html.
             // FIXME: This might be a bug in moveParagraphWithClones or deleteSelection.
-            if (listElement && listElement->inShadowIncludingDocument()) {
+            if (listElement && listElement->isConnected()) {
                 removeNode(listElement, editingState);
                 if (editingState->isAborted())
                     return false;
@@ -325,7 +335,7 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
 {
     // Since, unlistify paragraph inserts nodes into parent and removes node
     // from parent, if parent of |listElement| should be editable.
-    DCHECK(listElement->parentNode()->hasEditableStyle());
+    DCHECK(hasEditableStyle(*listElement->parentNode()));
     Node* nextListChild;
     Node* previousListChild;
     VisiblePosition start;

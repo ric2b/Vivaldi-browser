@@ -28,15 +28,12 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import datetime
-import logging
 import re
 
 import webkitpy.common.config
 from webkitpy.common.checkout.scm.scm import SCM
 from webkitpy.common.memoized import memoized
 from webkitpy.common.system.executive import Executive, ScriptError
-
-_log = logging.getLogger(__name__)
 
 
 class AmbiguousCommitError(Exception):
@@ -72,7 +69,7 @@ class Git(SCM):
             executive = executive or Executive()
             return executive.run_command([cls.executable_name, 'rev-parse', '--is-inside-work-tree'],
                                          cwd=path, error_handler=Executive.ignore_error).rstrip() == "true"
-        except OSError as e:
+        except OSError:
             # The Windows bots seem to through a WindowsError when git isn't installed.
             return False
 

@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "ash/shell_delegate.h"
+#include "ash/common/shell_delegate.h"
 #include "base/macros.h"
 
 namespace keyboard {
@@ -20,7 +20,7 @@ class AppListPresenterMus;
 
 namespace sysui {
 
-class ShellDelegateMus : public ash::ShellDelegate {
+class ShellDelegateMus : public ShellDelegate {
  public:
   explicit ShellDelegateMus(std::unique_ptr<AppListPresenterMus>);
   ~ShellDelegateMus() override;
@@ -35,22 +35,16 @@ class ShellDelegateMus : public ash::ShellDelegate {
   void PreShutdown() override;
   void Exit() override;
   keyboard::KeyboardUI* CreateKeyboardUI() override;
-  void VirtualKeyboardActivated(bool activated) override;
-  void AddVirtualKeyboardStateObserver(
-      VirtualKeyboardStateObserver* observer) override;
-  void RemoveVirtualKeyboardStateObserver(
-      VirtualKeyboardStateObserver* observer) override;
   void OpenUrlFromArc(const GURL& url) override;
   app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
-  ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
-  ash::UserWallpaperDelegate* CreateUserWallpaperDelegate() override;
-  ash::SessionStateDelegate* CreateSessionStateDelegate() override;
-  ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  ash::NewWindowDelegate* CreateNewWindowDelegate() override;
-  ash::MediaDelegate* CreateMediaDelegate() override;
-  std::unique_ptr<PointerWatcherDelegate> CreatePointerWatcherDelegate()
-      override;
+  SystemTrayDelegate* CreateSystemTrayDelegate() override;
+  std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
+  SessionStateDelegate* CreateSessionStateDelegate() override;
+  AccessibilityDelegate* CreateAccessibilityDelegate() override;
+  NewWindowDelegate* CreateNewWindowDelegate() override;
+  MediaDelegate* CreateMediaDelegate() override;
+  std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
                                    const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;

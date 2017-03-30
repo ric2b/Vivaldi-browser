@@ -14,7 +14,6 @@
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_http_user_agent_settings.h"
 #include "chromecast/browser/cast_network_delegate.h"
-#include "components/network_session_configurator/switches.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
@@ -80,7 +79,7 @@ class URLRequestContextFactory::URLRequestContextGetter
 
   scoped_refptr<base::SingleThreadTaskRunner>
       GetNetworkTaskRunner() const override {
-    return content::BrowserThread::GetMessageLoopProxyForThread(
+    return content::BrowserThread::GetTaskRunnerForThread(
         content::BrowserThread::IO);
   }
 
@@ -122,7 +121,7 @@ class URLRequestContextFactory::MainURLRequestContextGetter
 
   scoped_refptr<base::SingleThreadTaskRunner>
       GetNetworkTaskRunner() const override {
-    return content::BrowserThread::GetMessageLoopProxyForThread(
+    return content::BrowserThread::GetTaskRunnerForThread(
         content::BrowserThread::IO);
   }
 
@@ -159,9 +158,9 @@ void URLRequestContextFactory::InitializeOnUIThread(net::NetLog* net_log) {
   // Proxy config service should be initialized in UI thread, since
   // ProxyConfigServiceDelegate on Android expects UI thread.
   proxy_config_service_ = net::ProxyService::CreateSystemProxyConfigService(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO),
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::FILE));
 
   net_log_ = net_log;
@@ -250,10 +249,10 @@ void URLRequestContextFactory::InitializeMainContextDependencies(
       switches::kEnableLocalFileAccesses)) {
     set_protocol = job_factory->SetProtocolHandler(
         url::kFileScheme,
-        base::WrapUnique(new net::FileProtocolHandler(
+        base::MakeUnique<net::FileProtocolHandler>(
             content::BrowserThread::GetBlockingPool()
                 ->GetTaskRunnerWithShutdownBehavior(
-                    base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
+                    base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
     DCHECK(set_protocol);
   }
 

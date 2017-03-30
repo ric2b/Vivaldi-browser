@@ -8,10 +8,12 @@
 #include "cc/output/output_surface.h"
 #include "cc/resources/shared_bitmap_manager.h"
 #include "cc/surfaces/surface_id_allocator.h"
-#include "components/mus/public/cpp/window.h"
-#include "services/shell/public/interfaces/connector.mojom.h"
+#include "services/ui/public/cpp/gpu_service.h"
+#include "services/ui/public/cpp/output_surface.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/compositor/reflector.h"
 #include "ui/gl/gl_bindings.h"
+#include "ui/views/mus/native_widget_mus.h"
 
 namespace views {
 namespace {
@@ -27,22 +29,20 @@ class FakeReflector : public ui::Reflector {
 
 }  // namespace
 
-SurfaceContextFactory::SurfaceContextFactory(
-    shell::Connector* connector,
-    mus::Window* window,
-    mus::mojom::SurfaceType surface_type)
-    : surface_binding_(connector, window, surface_type),
-      next_surface_id_namespace_(1u) {}
+SurfaceContextFactory::SurfaceContextFactory(ui::GpuService* gpu_service)
+    : next_surface_id_namespace_(1u), gpu_service_(gpu_service) {}
 
 SurfaceContextFactory::~SurfaceContextFactory() {}
 
 void SurfaceContextFactory::CreateOutputSurface(
     base::WeakPtr<ui::Compositor> compositor) {
-  // NOTIMPLEMENTED();
-  std::unique_ptr<cc::OutputSurface> surface =
-      surface_binding_.CreateOutputSurface();
-  if (surface)
-    compositor->SetOutputSurface(std::move(surface));
+  ui::Window* window = compositor->window();
+  NativeWidgetMus* native_widget = NativeWidgetMus::GetForWindow(window);
+  ui::mojom::SurfaceType surface_type = native_widget->surface_type();
+  std::unique_ptr<cc::OutputSurface> surface(
+      new ui::OutputSurface(gpu_service_->EstablishGpuChannelSync(),
+                            window->RequestSurface(surface_type)));
+  compositor->SetOutputSurface(std::move(surface));
 }
 
 std::unique_ptr<ui::Reflector> SurfaceContextFactory::CreateReflector(
@@ -83,17 +83,15 @@ cc::SharedBitmapManager* SurfaceContextFactory::GetSharedBitmapManager() {
 
 gpu::GpuMemoryBufferManager*
 SurfaceContextFactory::GetGpuMemoryBufferManager() {
-  return &gpu_memory_buffer_manager_;
+  return gpu_service_->gpu_memory_buffer_manager();
 }
 
 cc::TaskGraphRunner* SurfaceContextFactory::GetTaskGraphRunner() {
   return raster_thread_helper_.task_graph_runner();
 }
 
-std::unique_ptr<cc::SurfaceIdAllocator>
-SurfaceContextFactory::CreateSurfaceIdAllocator() {
-  return base::WrapUnique(
-      new cc::SurfaceIdAllocator(next_surface_id_namespace_++));
+uint32_t SurfaceContextFactory::AllocateSurfaceClientId() {
+  return next_surface_id_namespace_++;
 }
 
 cc::SurfaceManager* SurfaceContextFactory::GetSurfaceManager() {
@@ -101,9 +99,14 @@ cc::SurfaceManager* SurfaceContextFactory::GetSurfaceManager() {
   return nullptr;
 }
 
+void SurfaceContextFactory::SetDisplayVisible(ui::Compositor* compositor,
+                                              bool visible) {
+  // TODO(fsamuel): display[compositor]->SetVisible(visible);
+}
+
 void SurfaceContextFactory::ResizeDisplay(ui::Compositor* compositor,
                                           const gfx::Size& size) {
-  // NOTIMPLEMENTED();
+  // TODO(fsamuel): display[compositor]->Resize(size);
 }
 
 }  // namespace views

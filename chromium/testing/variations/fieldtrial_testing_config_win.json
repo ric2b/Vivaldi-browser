@@ -31,6 +31,11 @@
             }
         }
     ],
+    "BlockSmallPluginContent": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "BrowserBlacklist": [
         {
             "group_name": "Enabled"
@@ -95,6 +100,22 @@
             "group_name": "Enabled"
         }
     ],
+    "EnableWin32kLockDownMimeTypes": [
+        {
+            "group_name": "PPAPILockdown_Enabled",
+            "params": {
+                "*": "Enabled"
+            }
+        }
+    ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
+        }
+    ],
     "ExtensionActionRedesign": [
         {
             "group_name": "Disabled"
@@ -135,21 +156,16 @@
             "group_name": "Enabled"
         }
     ],
-    "LocalNTPSuggestionsService": [
-        {
-            "group_name": "Enabled"
-        }
-    ],
-    "MainFrameBeforeActivation": [
-        {
-            "enable_features": [
-                "MainFrameBeforeActivation"
-            ],
-            "group_name": "Enabled"
-        }
-    ],
     "MaterialDesignDownloads": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "MaterialDesignUserManager": [
+        {
+            "enable_features": [
+                "MaterialDesignUserManager"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -175,10 +191,12 @@
                 "HalfLifeSeconds": "60",
                 "None.DefaultMedianKbps": "567",
                 "None.DefaultMedianRTTMsec": "272",
+                "Slow2G.ThresholdMedianHttpRTTMsec": "2000",
                 "Unknown.DefaultMedianKbps": "1916",
                 "Unknown.DefaultMedianRTTMsec": "121",
                 "WiFi.DefaultMedianKbps": "2736",
-                "WiFi.DefaultMedianRTTMsec": "168"
+                "WiFi.DefaultMedianRTTMsec": "168",
+                "correlation_logging_probability": "0.001"
             }
         }
     ],
@@ -203,6 +221,14 @@
             "group_name": "Enabled"
         }
     ],
+    "NonValidatingReloadOnNormalReload": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnNormalReload"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -215,6 +241,26 @@
     ],
     "PageRevisitInstrumentation": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "ParseHTMLOnMainThread": [
+        {
+            "enable_features": [
+                "ParseHTMLOnMainThread"
+            ],
+            "group_name": "Enabled",
+            "params": {
+                "parseHTMLOnMainThreadCoalesceChunks": "false",
+                "parseHTMLOnMainThreadSyncTokenize": "false"
+            }
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -237,6 +283,22 @@
         {
             "enable_features": [
                 "UsePasswordSeparatedSigninFlow"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "PasswordSmartBubble": [
+        {
+            "group_name": "3-Times",
+            "params": {
+                "dismissal_count": "3"
+            }
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
             ],
             "group_name": "Enabled"
         }
@@ -281,24 +343,6 @@
             "group_name": "ShowAndPossiblySend",
             "params": {
                 "sendingThreshold": "1.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "-1.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "0.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "abcdef"
             }
         },
         {
@@ -386,6 +430,25 @@
             "group_name": "enforce_always_with_extensions_and_dse"
         }
     ],
+    "SignInPasswordPromo": [
+        {
+            "group_name": "Enable",
+            "params": {
+                "dismissal_threshold": "1"
+            }
+        }
+    ],
+    "SpeculativeLaunchServiceWorker": [
+        {
+            "enable_features": [
+                "SpeculativeLaunchServiceWorker"
+            ],
+            "group_name": "Enabled"
+        },
+        {
+            "group_name": "Disabled"
+        }
+    ],
     "StrictSecureCookies": [
         {
             "group_name": "Enabled"
@@ -437,6 +500,11 @@
             "params": {
                 "fetch_period_min": "30"
             }
+        }
+    ],
+    "WebFontsInterventionV2": [
+        {
+            "group_name": "Enabled-slow2g"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

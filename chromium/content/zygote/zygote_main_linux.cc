@@ -18,12 +18,14 @@
 #include <unistd.h>
 
 #include <memory>
+#include <set>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/lazy_instance.h"
 #include "base/memory/scoped_vector.h"
 #include "base/native_library.h"
 #include "base/pickle.h"
@@ -76,6 +78,11 @@ namespace content {
 
 namespace {
 
+base::LazyInstance<std::set<std::string>>::Leaky g_timezones =
+    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::Lock>::Leaky g_timezones_lock =
+    LAZY_INSTANCE_INITIALIZER;
+
 void CloseFds(const std::vector<int>& fds) {
   for (const auto& it : fds) {
     PCHECK(0 == IGNORE_EINTR(close(it)));
@@ -109,7 +116,8 @@ static void ProxyLocaltimeCallToBrowser(time_t input, struct tm* output,
 
   base::Pickle reply(reinterpret_cast<char*>(reply_buf), r);
   base::PickleIterator iter(reply);
-  std::string result, timezone;
+  std::string result;
+  std::string timezone;
   if (!iter.ReadString(&result) ||
       !iter.ReadString(&timezone) ||
       result.size() != sizeof(struct tm)) {
@@ -124,7 +132,9 @@ static void ProxyLocaltimeCallToBrowser(time_t input, struct tm* output,
     timezone_out[copy_len] = 0;
     output->tm_zone = timezone_out;
   } else {
-    output->tm_zone = NULL;
+    base::AutoLock lock(g_timezones_lock.Get());
+    auto ret_pair = g_timezones.Get().insert(timezone);
+    output->tm_zone = ret_pair.first->c_str();
   }
 }
 
@@ -223,16 +233,16 @@ struct tm* localtime_override(const time_t* timep) {
     ProxyLocaltimeCallToBrowser(*timep, &time_struct, timezone_string,
                                 sizeof(timezone_string));
     return &time_struct;
-  } else {
-    CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
-                             InitLibcLocaltimeFunctions));
-    struct tm* res = g_libc_localtime(timep);
-#if defined(MEMORY_SANITIZER)
-    if (res) __msan_unpoison(res, sizeof(*res));
-    if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
-#endif
-    return res;
   }
+
+  CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
+                           InitLibcLocaltimeFunctions));
+  struct tm* res = g_libc_localtime(timep);
+#if defined(MEMORY_SANITIZER)
+  if (res) __msan_unpoison(res, sizeof(*res));
+  if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
+#endif
+  return res;
 }
 
 // Use same trick to override localtime64(), localtime_r() and localtime64_r().
@@ -247,16 +257,16 @@ struct tm* localtime64_override(const time_t* timep) {
     ProxyLocaltimeCallToBrowser(*timep, &time_struct, timezone_string,
                                 sizeof(timezone_string));
     return &time_struct;
-  } else {
-    CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
-                             InitLibcLocaltimeFunctions));
-    struct tm* res = g_libc_localtime64(timep);
-#if defined(MEMORY_SANITIZER)
-    if (res) __msan_unpoison(res, sizeof(*res));
-    if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
-#endif
-    return res;
   }
+
+  CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
+                           InitLibcLocaltimeFunctions));
+  struct tm* res = g_libc_localtime64(timep);
+#if defined(MEMORY_SANITIZER)
+  if (res) __msan_unpoison(res, sizeof(*res));
+  if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
+#endif
+  return res;
 }
 
 __attribute__ ((__visibility__("default")))
@@ -268,16 +278,16 @@ struct tm* localtime_r_override(const time_t* timep, struct tm* result) {
   if (g_am_zygote_or_renderer) {
     ProxyLocaltimeCallToBrowser(*timep, result, NULL, 0);
     return result;
-  } else {
-    CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
-                             InitLibcLocaltimeFunctions));
-    struct tm* res = g_libc_localtime_r(timep, result);
-#if defined(MEMORY_SANITIZER)
-    if (res) __msan_unpoison(res, sizeof(*res));
-    if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
-#endif
-    return res;
   }
+
+  CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
+                           InitLibcLocaltimeFunctions));
+  struct tm* res = g_libc_localtime_r(timep, result);
+#if defined(MEMORY_SANITIZER)
+  if (res) __msan_unpoison(res, sizeof(*res));
+  if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
+#endif
+  return res;
 }
 
 __attribute__ ((__visibility__("default")))
@@ -289,16 +299,16 @@ struct tm* localtime64_r_override(const time_t* timep, struct tm* result) {
   if (g_am_zygote_or_renderer) {
     ProxyLocaltimeCallToBrowser(*timep, result, NULL, 0);
     return result;
-  } else {
-    CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
-                             InitLibcLocaltimeFunctions));
-    struct tm* res = g_libc_localtime64_r(timep, result);
-#if defined(MEMORY_SANITIZER)
-    if (res) __msan_unpoison(res, sizeof(*res));
-    if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
-#endif
-    return res;
   }
+
+  CHECK_EQ(0, pthread_once(&g_libc_localtime_funcs_guard,
+                           InitLibcLocaltimeFunctions));
+  struct tm* res = g_libc_localtime64_r(timep, result);
+#if defined(MEMORY_SANITIZER)
+  if (res) __msan_unpoison(res, sizeof(*res));
+  if (res->tm_zone) __msan_unpoison_string(res->tm_zone);
+#endif
+  return res;
 }
 
 #if defined(ENABLE_PLUGINS)
@@ -308,13 +318,13 @@ struct tm* localtime64_r_override(const time_t* timep, struct tm* result) {
 void PreloadPepperPlugins() {
   std::vector<PepperPluginInfo> plugins;
   ComputePepperPluginList(&plugins);
-  for (size_t i = 0; i < plugins.size(); ++i) {
-    if (!plugins[i].is_internal) {
+  for (const auto& plugin : plugins) {
+    if (!plugin.is_internal) {
       base::NativeLibraryLoadError error;
-      base::NativeLibrary library = base::LoadNativeLibrary(plugins[i].path,
+      base::NativeLibrary library = base::LoadNativeLibrary(plugin.path,
                                                             &error);
       VLOG_IF(1, !library) << "Unable to load plugin "
-                           << plugins[i].path.value() << " "
+                           << plugin.path.value() << " "
                            << error.ToString();
 
       (void)library;  // Prevent release-mode warning.
@@ -369,13 +379,23 @@ static void ZygotePreSandboxInit() {
 
     if (android_fonts_dir.size() > 0 && android_fonts_dir.back() != '/')
       android_fonts_dir += '/';
-    std::string font_config = android_fonts_dir + "fonts.xml";
+
     SkFontMgr_Android_CustomFonts custom;
     custom.fSystemFontUse =
         SkFontMgr_Android_CustomFonts::SystemFontUse::kOnlyCustom;
     custom.fBasePath = android_fonts_dir.c_str();
+
+    std::string font_config;
+    std::string fallback_font_config;
+    if (android_fonts_dir.find("kitkat") != std::string::npos) {
+      font_config = android_fonts_dir + "system_fonts.xml";
+      fallback_font_config = android_fonts_dir + "fallback_fonts.xml";
+      custom.fFallbackFontsXml = fallback_font_config.c_str();
+    } else {
+      font_config = android_fonts_dir + "fonts.xml";
+      custom.fFallbackFontsXml = nullptr;
+    }
     custom.fFontsXml = font_config.c_str();
-    custom.fFallbackFontsXml = nullptr;
     custom.fIsolated = true;
 
     blink::WebFontRendering::setSkiaFontManager(SkFontMgr_New_Android(&custom));

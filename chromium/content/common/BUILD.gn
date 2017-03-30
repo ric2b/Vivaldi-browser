@@ -27,6 +27,7 @@ source_set("common") {
     "//content:content_implementation",
     "//build/config:precompiled_headers",
     "//build/config/compiler:no_size_t_to_int_warning",
+    "//media/gpu:gpu_config",
   ]
 
   public_deps = [
@@ -36,13 +37,15 @@ source_set("common") {
     "//third_party/WebKit/public:blink_headers",
   ]
   deps = [
+    # This looks needless as we have :mojo_bindings in public_deps, but it's
+    # needed because of allow_circular_includes_from.
+    ":mojo_bindings_cpp_sources",
     "//base",
     "//base/third_party/dynamic_annotations",
     "//build/util:webkit_version",
     "//cc",
     "//cc/ipc",
     "//cc/surfaces",
-    "//components/mus/public/interfaces",
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//content:resources",
@@ -59,6 +62,7 @@ source_set("common") {
     "//gpu/ipc/common",
     "//gpu/skia_bindings",
     "//ipc",
+    "//ipc:mojom",
     "//media",
     "//media:shared_memory_support",
     "//media/base/ipc",
@@ -74,6 +78,7 @@ source_set("common") {
     "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//services/shell/runner/common",
+    "//services/ui/public/interfaces",
     "//skia",
     "//storage/common",
     "//third_party/WebKit/public:blink_minimal",
@@ -85,10 +90,12 @@ source_set("common") {
     "//ui/base",
     "//ui/base/ime",
     "//ui/display",
+    "//ui/events/blink",
     "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/color",
     "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
     "//ui/gl",
@@ -101,6 +108,8 @@ source_set("common") {
   include_dirs = []
   libs = []
   ldflags = []
+
+  allow_circular_includes_from = [ ":mojo_bindings_cpp_sources" ]
 
   if (is_android && use_seccomp_bpf) {
     set_sources_assignment_filter([])
@@ -134,10 +143,7 @@ source_set("common") {
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
   } else {
-    sources -= [
-      "cursors/webcursor_ozone.cc",
-      "font_list_ozone.cc",
-    ]
+    sources -= [ "cursors/webcursor_ozone.cc" ]
   }
 
   if (!use_aura || is_android) {
@@ -148,15 +154,12 @@ source_set("common") {
     sources -= [ "cursors/webcursor_aurax11.cc" ]
   }
 
-  if (use_pango) {
-    configs += [ "//build/config/linux/pangocairo" ]
-    if (use_ozone) {
-      # If we're using pango, never use this ozone file (it was removed in all
-      # non-ozone cases above).
-      sources -= [ "font_list_ozone.cc" ]
-    }
-  } else {
-    sources -= [ "font_list_pango.cc" ]
+  if (is_linux) {
+    deps += [ "//build/linux:fontconfig" ]
+  }
+
+  if (is_mac || is_win || is_android) {
+    sources -= [ "font_list_fontconfig.cc" ]
   }
 
   if (enable_plugins) {
@@ -179,6 +182,12 @@ source_set("common") {
 
   if (!is_win || !use_aura) {
     sources -= [ "cursors/webcursor_aurawin.cc" ]
+  }
+
+  if (system_proprietary_codecs) {
+    sources += [
+      "media/media_pipeline_messages.h",
+    ]
   }
 
   if (use_seccomp_bpf) {
@@ -219,6 +228,76 @@ source_set("common") {
       "external_ipc_dumper.h",
     ]
   }
+
+  if (system_proprietary_codecs) {
+    sources += [
+      "gpu/media/avf_data_buffer_queue.h",
+      "gpu/media/avf_data_buffer_queue.mm",
+      "gpu/media/avf_audio_tap.h",
+      "gpu/media/avf_audio_tap.mm",
+      "gpu/media/avf_media_decoder.h",
+      "gpu/media/avf_media_decoder.mm",
+      "gpu/media/avf_media_pipeline.h",
+      "gpu/media/avf_media_pipeline.mm",
+      "gpu/media/avf_media_reader.h",
+      "gpu/media/avf_media_reader.mm",
+      "gpu/media/avf_media_reader_runner.h",
+      "gpu/media/avf_media_reader_runner.mm",
+      "gpu/media/data_request_handler.h",
+      "gpu/media/data_request_handler.mm",
+      "gpu/media/data_source_loader.h",
+      "gpu/media/data_source_loader.mm",
+      "gpu/media/ipc_data_source.h",
+      "gpu/media/ipc_data_source_impl.cc",
+      "gpu/media/ipc_data_source_impl.h",
+      "gpu/media/ipc_media_pipeline.cc",
+      "gpu/media/ipc_media_pipeline.h",
+      "gpu/media/platform_media_pipeline.h",
+      "gpu/media/platform_media_pipeline_mac.cc",
+      "gpu/media/platform_media_pipeline_win.cc",
+      "gpu/media/propmedia_gpu_channel.cc",
+      "gpu/media/propmedia_gpu_channel.h",
+      "gpu/media/propmedia_gpu_channel_manager.cc",
+      "gpu/media/propmedia_gpu_channel_manager.h",
+      "media/media_pipeline_messages.h",
+    ]
+
+    deps += [ "//media" ]
+
+    if (is_mac) {
+      sources += [
+        "gpu/media/at_init.cc",
+        "gpu/media/at_init.h",
+      ]
+      libs += [
+        "AudioToolbox.framework",
+      ]
+
+      # VB-18038 audio doesn't work with -O2
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      configs += [ "//build/config/compiler:optimize_medium" ]
+    }
+
+    if (is_win) {
+      sources += [
+        "gpu/media/wmf_byte_stream.cc",
+        "gpu/media/wmf_byte_stream.h",
+        "gpu/media/wmf_media_pipeline.cc",
+        "gpu/media/wmf_media_pipeline.h",
+      ]
+
+      libs += [
+        "dxva2.lib",
+        "mf.lib",
+        "mfplat.lib",
+        "mfreadwrite.lib",
+        "mfuuid.lib",
+        "Propsys.lib",
+      ]
+
+      deps += [ "//net" ]  # For GetMimeTypeFromFile
+    }
+  }
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.
@@ -232,32 +311,37 @@ group("for_content_tests") {
 }
 
 mojom("mojo_bindings") {
-  # This interface is internal to content. However, this is not exported from
-  # the content component shared library. Code in content but outside of the
-  # content component (content/test or content/shell) should link to this
-  # directly.
+  # This interface is internal to content.
   visibility = [ "//content/*" ]
 
   sources = [
     "frame.mojom",
     "image_downloader/image_downloader.mojom",
     "leveldb_wrapper.mojom",
-    "process_control.mojom",
+    "render_frame_message_filter.mojom",
     "render_widget_window_tree_client_factory.mojom",
     "service_worker/embedded_worker_setup.mojom",
     "storage_partition_service.mojom",
+    "url_loader.mojom",
+    "url_loader_factory.mojom",
+    "websocket.mojom",
   ]
 
   import_dirs = [ "//mojo/services" ]
 
   public_deps = [
     "//components/leveldb/public/interfaces",
-    "//components/mus/public/interfaces",
+    "//device/sensors/public/interfaces",
     "//services/shell/public/interfaces",
+    "//services/ui/public/interfaces",
     "//skia/public/interfaces",
     "//third_party/WebKit/public:mojo_bindings",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
+
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
 }

@@ -29,7 +29,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import fnmatch
-import logging
 import re
 
 from optparse import make_option
@@ -38,8 +37,6 @@ from webkitpy.common.system.crashlogs import CrashLogs
 from webkitpy.tool.commands.command import Command
 from webkitpy.layout_tests.models.test_expectations import TestExpectations
 from webkitpy.layout_tests.port.factory import platform_options
-
-_log = logging.getLogger(__name__)
 
 
 class CrashLog(Command):
@@ -113,7 +110,8 @@ class PrintExpectations(Command):
 
         tests = set(default_port.tests(args))
         for port_name in port_names:
-            model = self._model(options, port_name, tests)
+            port = tool.port_factory.get(port_name, options)
+            model = TestExpectations(port, tests).model()
             tests_to_print = self._filter_tests(options, model, tests)
             lines = [model.get_expectation_line(test) for test in sorted(tests_to_print)]
             if port_name != port_names[0]:
@@ -144,10 +142,6 @@ class PrintExpectations(Command):
             for line in lines:
                 output.append("%s" % line.to_string(None, include_modifiers, include_expectations, include_comment=False))
         return output
-
-    def _model(self, options, port_name, tests):
-        port = self._tool.port_factory.get(port_name, options)
-        return TestExpectations(port, tests).model()
 
 
 class PrintBaselines(Command):

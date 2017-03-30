@@ -26,9 +26,9 @@
 #include "content/child/service_worker/service_worker_network_provider.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/site_isolation_policy.h"
-#include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -523,8 +523,11 @@ class RenderViewImplScaleFactorTest : public RenderViewImplBlinkSettingsTest {
     EXPECT_EQ(height, emulated_height);
     EXPECT_TRUE(ExecuteJavaScriptAndReturnIntValue(get_dpr, &emulated_dpr));
     EXPECT_EQ(static_cast<int>(dpr * 10), emulated_dpr);
-    EXPECT_EQ(compositor_dsf,
-              view()->compositor()->layer_tree_host()->device_scale_factor());
+    EXPECT_EQ(compositor_dsf, view()
+                                  ->compositor()
+                                  ->layer_tree_host()
+                                  ->GetLayerTree()
+                                  ->device_scale_factor());
   }
 };
 
@@ -897,7 +900,7 @@ TEST_F(RenderViewImplTest, NavigateProxyAndDetachBeforeOnNavigate) {
   RenderFrameImpl::CreateFrame(routing_id, kProxyRoutingId, MSG_ROUTING_NONE,
                                frame()->GetRoutingID(), MSG_ROUTING_NONE,
                                replication_state, nullptr, widget_params,
-                               blink::WebFrameOwnerProperties());
+                               FrameOwnerProperties());
   TestRenderFrame* provisional_frame =
       static_cast<TestRenderFrame*>(RenderFrameImpl::FromRoutingID(routing_id));
   EXPECT_TRUE(provisional_frame);
@@ -1466,7 +1469,7 @@ TEST_F(RenderViewImplTest, ContextMenu) {
   // make this a bit more robust in case of some other formatting or other bug.)
   WebMouseEvent mouse_event;
   mouse_event.type = WebInputEvent::MouseDown;
-  mouse_event.button = WebMouseEvent::ButtonRight;
+  mouse_event.button = WebMouseEvent::Button::Right;
   mouse_event.x = 250;
   mouse_event.y = 250;
   mouse_event.globalX = 250;
@@ -1732,28 +1735,13 @@ TEST_F(RenderViewImplTest, NavigateSubframe) {
   std::string output = base::UTF16ToUTF8(
       base::StringPiece16(WebFrameContentDumper::dumpWebViewAsText(
           view()->GetWebView(), kMaxOutputCharacters)));
-  EXPECT_EQ(output, "hello \n\nworld");
+  EXPECT_EQ(output, "hello  \n\nworld");
 }
 
 // This test ensures that a RenderFrame object is created for the top level
 // frame in the RenderView.
 TEST_F(RenderViewImplTest, BasicRenderFrame) {
   EXPECT_TRUE(view()->main_render_frame_);
-}
-
-TEST_F(RenderViewImplTest, GetSSLStatusOfFrame) {
-  LoadHTML("<!DOCTYPE html><html><body></body></html>");
-
-  WebLocalFrame* frame = GetMainFrame();
-  SSLStatus ssl_status = view()->GetSSLStatusOfFrame(frame);
-  EXPECT_FALSE(net::IsCertStatusError(ssl_status.cert_status));
-
-  SSLStatus status;
-  status.cert_status = net::CERT_STATUS_ALL_ERRORS;
-  const_cast<blink::WebURLResponse&>(frame->dataSource()->response())
-      .setSecurityInfo(SerializeSecurityInfo(status));
-  ssl_status = view()->GetSSLStatusOfFrame(frame);
-  EXPECT_TRUE(net::IsCertStatusError(ssl_status.cert_status));
 }
 
 TEST_F(RenderViewImplTest, MessageOrderInDidChangeSelection) {
@@ -1900,7 +1888,6 @@ TEST_F(RendererErrorPageTest, MAYBE_DoesNotSuppress) {
 #endif
 TEST_F(RendererErrorPageTest, MAYBE_HttpStatusCodeErrorWithEmptyBody) {
   blink::WebURLResponse response;
-  response.initialize();
   response.setHTTPStatusCode(503);
   WebLocalFrame* web_frame = GetMainFrame();
 
@@ -1914,7 +1901,7 @@ TEST_F(RendererErrorPageTest, MAYBE_HttpStatusCodeErrorWithEmptyBody) {
                        RequestNavigationParams());
 
   // Emulate a 4xx/5xx main resource response with an empty body.
-  main_frame->didReceiveResponse(1, response);
+  main_frame->didReceiveResponse(response);
   main_frame->didFinishDocumentLoad(web_frame);
   main_frame->runScriptsAtDocumentReady(web_frame, true);
 
@@ -2015,7 +2002,7 @@ TEST_F(RenderViewImplTest, ServiceWorkerNetworkProviderSetup) {
   blink::WebURLRequest request(GURL("http://foo.com"));
   request.setRequestContext(blink::WebURLRequest::RequestContextSubresource);
   blink::WebURLResponse redirect_response;
-  frame()->willSendRequest(GetMainFrame(), 0, request, redirect_response);
+  frame()->willSendRequest(GetMainFrame(), request);
   extra_data = static_cast<RequestExtraData*>(request.getExtraData());
   ASSERT_TRUE(extra_data);
   EXPECT_EQ(extra_data->service_worker_provider_id(),
@@ -2436,8 +2423,8 @@ TEST_F(DevToolsAgentTest, RuntimeEnableForcesContextsAfterNavigation) {
 TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("Console.enable",
-                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   DispatchDevToolsMessage("Runtime.evaluate",
                           "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
@@ -2446,14 +2433,14 @@ TEST_F(DevToolsAgentTest, RuntimeEvaluateRunMicrotasks) {
                           "() => console.log(42));\""
                           "}"
                           "}");
-  EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+  EXPECT_EQ(1, CountNotifications("Runtime.consoleAPICalled"));
 }
 
 TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
   LoadHTML("<body>page</body>");
   Attach();
-  DispatchDevToolsMessage("Console.enable",
-                          "{\"id\":1,\"method\":\"Console.enable\"}");
+  DispatchDevToolsMessage("Runtime.enable",
+                          "{\"id\":1,\"method\":\"Runtime.enable\"}");
   DispatchDevToolsMessage("Runtime.evaluate",
                           "{\"id\":2,"
                           "\"method\":\"Runtime.evaluate\","
@@ -2480,7 +2467,7 @@ TEST_F(DevToolsAgentTest, RuntimeCallFunctionOnRunMicrotasks) {
                               "console.log(239))}\""
                               "}"
                               "}");
-  EXPECT_EQ(1, CountNotifications("Console.messageAdded"));
+  EXPECT_EQ(1, CountNotifications("Runtime.consoleAPICalled"));
 }
 
 TEST_F(DevToolsAgentTest, CallFramesInIsolatedWorld) {

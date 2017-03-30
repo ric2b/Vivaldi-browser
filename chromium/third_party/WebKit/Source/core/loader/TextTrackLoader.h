@@ -69,6 +69,7 @@ public:
 
 private:
     // RawResourceClient
+    void redirectReceived(Resource*, ResourceRequest&, const ResourceResponse&) override;
     void dataReceived(Resource*, const char* data, size_t length) override;
     void notifyFinished(Resource*) override;
     String debugName() const override { return "TextTrackLoader"; }
@@ -80,7 +81,7 @@ private:
 
     TextTrackLoader(TextTrackLoaderClient&, Document&);
 
-    void cueLoadTimerFired(Timer<TextTrackLoader>*);
+    void cueLoadTimerFired(TimerBase*);
     void corsPolicyPreventedLoad(SecurityOrigin*, const KURL&);
 
     Document& document() const { return *m_document; }

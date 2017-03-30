@@ -37,7 +37,8 @@ WebContents* WebContentsDelegate::OpenURLFromTab(WebContents* source,
   return nullptr;
 }
 
-bool WebContentsDelegate::ShouldTransferNavigation() {
+bool WebContentsDelegate::ShouldTransferNavigation(
+    bool is_main_frame_navigation) {
   return true;
 }
 

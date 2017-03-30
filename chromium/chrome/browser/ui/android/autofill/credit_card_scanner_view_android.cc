@@ -9,13 +9,19 @@
 #include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/credit_card_scanner_view_delegate.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/field_types.h"
 #include "content/public/browser/android/content_view_core.h"
 #include "jni/CreditCardScanner_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
+
+using base::android::JavaParamRef;
 
 namespace autofill {
 
@@ -24,8 +30,8 @@ bool CreditCardScannerView::CanShow() {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaGlobalRef<jobject> java_object(
       Java_CreditCardScanner_create(
-          env, 0, base::android::GetApplicationContext(), 0));
-  return Java_CreditCardScanner_canScan(env, java_object.obj());
+          env, 0, base::android::GetApplicationContext(), nullptr));
+  return Java_CreditCardScanner_canScan(env, java_object);
 }
 
 // static
@@ -49,8 +55,10 @@ CreditCardScannerViewAndroid::CreditCardScannerViewAndroid(
           base::android::AttachCurrentThread(),
           reinterpret_cast<intptr_t>(this),
           base::android::GetApplicationContext(),
-          ViewAndroidHelper::FromWebContents(web_contents)->GetViewAndroid()
-              ->GetWindowAndroid()->GetJavaObject().obj())) {}
+          ViewAndroidHelper::FromWebContents(web_contents)
+              ->GetViewAndroid()
+              ->GetWindowAndroid()
+              ->GetJavaObject())) {}
 
 CreditCardScannerViewAndroid::~CreditCardScannerViewAndroid() {}
 
@@ -63,17 +71,27 @@ void CreditCardScannerViewAndroid::ScanCancelled(
 void CreditCardScannerViewAndroid::ScanCompleted(
     JNIEnv* env,
     const JavaParamRef<jobject>& object,
+    const JavaParamRef<jstring>& card_holder_name,
     const JavaParamRef<jstring>& card_number,
     jint expiration_month,
     jint expiration_year) {
-  delegate_->ScanCompleted(
-      base::android::ConvertJavaStringToUTF16(env, card_number),
-      static_cast<int>(expiration_month), static_cast<int>(expiration_year));
+  CreditCard card;
+  card.SetNumber(base::android::ConvertJavaStringToUTF16(env, card_number));
+  card.SetExpirationMonth(static_cast<int>(expiration_month));
+  card.SetExpirationYear(static_cast<int>(expiration_year));
+
+  if (base::FeatureList::IsEnabled(kAutofillScanCardholderName)) {
+    card.SetRawInfo(
+        CREDIT_CARD_NAME_FULL,
+        base::android::ConvertJavaStringToUTF16(env, card_holder_name));
+  }
+
+  delegate_->ScanCompleted(card);
 }
 
 void CreditCardScannerViewAndroid::Show() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_CreditCardScanner_scan(env, java_object_.obj());
+  Java_CreditCardScanner_scan(env, java_object_);
 }
 
 }  // namespace autofill

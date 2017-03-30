@@ -13,6 +13,20 @@ from metrics import loading
 from telemetry.core import exceptions, util
 from telemetry.page import page_test
 
+class ChromeProxyBypassOnTimeout(ChromeProxyValidation):
+  """Checks the client bypasses when endpoint site times out."""
+
+  def __init__(self):
+    super(ChromeProxyBypassOnTimeout, self).__init__(
+        restart_after_each_page=True,
+        metrics=metrics.ChromeProxyMetric())
+
+  def CustomizeBrowserOptions(self, options):
+    super(ChromeProxyBypassOnTimeout, self).CustomizeBrowserOptions(
+        options)
+
+  def AddResults(self, tab, results):
+    self._metrics.AddResultsForBypassOnTimeout(tab, results)
 
 class ChromeProxyDataSaving(page_test.PageTest):
   """Chrome proxy data saving measurement."""
@@ -181,6 +195,21 @@ def GetResponseOverrideURL(url=_TEST_SERVER_DEFAULT_URL, respStatus=0,
   else:
     return url + '?' + "&".join(queries)
 
+class ChromeProxyBadHTTPSFallback(ChromeProxyValidation):
+  """Checks the client falls back to HTTP proxy when HTTPS proxy errors."""
+
+  def __init__(self):
+    super(ChromeProxyBadHTTPSFallback, self).__init__(
+        restart_after_each_page=True,
+        metrics=metrics.ChromeProxyMetric())
+    self._is_chrome_proxy_enabled = True
+
+  def CustomizeBrowserOptions(self, options):
+    super(ChromeProxyBadHTTPSFallback, self).CustomizeBrowserOptions(
+        options)
+
+  def AddResults(self, tab, results):
+    self._metrics.AddResultsForBadHTTPSFallback(tab, results)
 
 class ChromeProxyHTTPFallbackProbeURL(ChromeProxyValidation):
   """Correctness measurement for proxy fallback.

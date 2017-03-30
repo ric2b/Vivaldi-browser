@@ -39,6 +39,7 @@ content::WebUIDataSource* CreatePasswordManagerInternalsHTMLSource() {
       IDR_PASSWORD_MANAGER_INTERNALS_PASSWORD_MANAGER_INTERNALS_CSS);
   source->SetDefaultResource(
       IDR_PASSWORD_MANAGER_INTERNALS_PASSWORD_MANAGER_INTERNALS_HTML);
+  source->DisableI18nAndUseGzipForAllPaths();
   return source;
 }
 
@@ -87,7 +88,7 @@ void PasswordManagerInternalsUI::DidStopLoading() {
   if (url.is_valid() && url.has_query()) {
     std::vector<std::string> query_parameters = base::SplitString(
         url.query(), "&", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
-    if (ContainsValue(query_parameters, "reset_fre"))
+    if (base::ContainsValue(query_parameters, "reset_fre"))
       ResetAutoSignInFirstRunExperience();
   }
 }

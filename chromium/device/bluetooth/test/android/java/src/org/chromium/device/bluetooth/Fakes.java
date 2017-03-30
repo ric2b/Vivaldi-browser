@@ -22,6 +22,8 @@ import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.components.location.LocationUtils;
+import org.chromium.device.bluetooth.test.TestRSSI;
+import org.chromium.device.bluetooth.test.TestTxPower;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,6 +43,11 @@ import java.util.UUID;
 class Fakes {
     private static final String TAG = "cr.Bluetooth";
 
+    // Android uses Integer.MIN_VALUE to signal no Tx Power in advertisement
+    // packet.
+    // https://developer.android.com/reference/android/bluetooth/le/ScanRecord.html#getTxPowerLevel()
+    private static final int NO_TX_POWER = Integer.MIN_VALUE;
+
     /**
      * Sets the factory for LocationUtils to return an instance whose
      * hasAndroidLocationPermission and isSystemLocationSettingEnabled return
@@ -54,12 +61,12 @@ class Fakes {
             public LocationUtils create() {
                 return new LocationUtils() {
                     @Override
-                    public boolean hasAndroidLocationPermission(Context context) {
+                    public boolean hasAndroidLocationPermission() {
                         return hasPermission;
                     }
 
                     @Override
-                    public boolean isSystemLocationSettingEnabled(Context context) {
+                    public boolean isSystemLocationSettingEnabled() {
                         return isEnabled;
                     }
                 };
@@ -107,10 +114,11 @@ class Fakes {
                     uuids.add(ParcelUuid.fromString("00001800-0000-1000-8000-00805f9b34fb"));
                     uuids.add(ParcelUuid.fromString("00001801-0000-1000-8000-00805f9b34fb"));
 
-                    mFakeScanner.mScanCallback.onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
+                    mFakeScanner.mScanCallback.onScanResult(
+                            ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
                             new FakeScanResult(new FakeBluetoothDevice(this, "01:00:00:90:1E:BE",
                                                        "FakeBluetoothDevice"),
-                                                                    uuids));
+                                    TestRSSI.LOWEST, uuids, TestTxPower.LOWEST));
                     break;
                 }
                 case 2: {
@@ -118,10 +126,11 @@ class Fakes {
                     uuids.add(ParcelUuid.fromString("00001802-0000-1000-8000-00805f9b34fb"));
                     uuids.add(ParcelUuid.fromString("00001803-0000-1000-8000-00805f9b34fb"));
 
-                    mFakeScanner.mScanCallback.onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
+                    mFakeScanner.mScanCallback.onScanResult(
+                            ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
                             new FakeScanResult(new FakeBluetoothDevice(this, "01:00:00:90:1E:BE",
                                                        "FakeBluetoothDevice"),
-                                                                    uuids));
+                                    TestRSSI.LOWER, uuids, TestTxPower.LOWER));
                     break;
                 }
                 case 3: {
@@ -129,7 +138,8 @@ class Fakes {
                     mFakeScanner.mScanCallback.onScanResult(
                             ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
                             new FakeScanResult(
-                                    new FakeBluetoothDevice(this, "01:00:00:90:1E:BE", ""), uuids));
+                                    new FakeBluetoothDevice(this, "01:00:00:90:1E:BE", ""),
+                                    TestRSSI.LOW, uuids, NO_TX_POWER));
 
                     break;
                 }
@@ -138,16 +148,18 @@ class Fakes {
                     mFakeScanner.mScanCallback.onScanResult(
                             ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
                             new FakeScanResult(
-                                    new FakeBluetoothDevice(this, "02:00:00:8B:74:63", ""), uuids));
+                                    new FakeBluetoothDevice(this, "02:00:00:8B:74:63", ""),
+                                    TestRSSI.MEDIUM, uuids, NO_TX_POWER));
 
                     break;
                 }
                 case 5: {
                     ArrayList<ParcelUuid> uuids = null;
-                    mFakeScanner.mScanCallback.onScanResult(ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
-                            new FakeScanResult(new FakeBluetoothDevice(
-                                                       this, "01:00:00:90:1E:BE", null),
-                                                                    uuids));
+                    mFakeScanner.mScanCallback.onScanResult(
+                            ScanSettings.CALLBACK_TYPE_ALL_MATCHES,
+                            new FakeScanResult(
+                                    new FakeBluetoothDevice(this, "01:00:00:90:1E:BE", null),
+                                    TestRSSI.HIGH, uuids, NO_TX_POWER));
                     break;
                 }
             }
@@ -273,12 +285,17 @@ class Fakes {
      */
     static class FakeScanResult extends Wrappers.ScanResultWrapper {
         private final FakeBluetoothDevice mDevice;
+        private final int mRssi;
+        private final int mTxPower;
         private final ArrayList<ParcelUuid> mUuids;
 
-        FakeScanResult(FakeBluetoothDevice device, ArrayList<ParcelUuid> uuids) {
+        FakeScanResult(
+                FakeBluetoothDevice device, int rssi, ArrayList<ParcelUuid> uuids, int txPower) {
             super(null);
             mDevice = device;
+            mRssi = rssi;
             mUuids = uuids;
+            mTxPower = txPower;
         }
 
         @Override
@@ -287,8 +304,18 @@ class Fakes {
         }
 
         @Override
+        public int getRssi() {
+            return mRssi;
+        }
+
+        @Override
         public List<ParcelUuid> getScanRecord_getServiceUuids() {
             return mUuids;
+        }
+
+        @Override
+        public int getScanRecord_getTxPowerLevel() {
+            return mTxPower;
         }
     }
 
@@ -302,12 +329,20 @@ class Fakes {
         final FakeBluetoothGatt mGatt;
         private Wrappers.BluetoothGattCallbackWrapper mGattCallback;
 
+        static FakeBluetoothDevice sRememberedDevice;
+
         public FakeBluetoothDevice(FakeBluetoothAdapter adapter, String address, String name) {
             super(null);
             mAdapter = adapter;
             mAddress = address;
             mName = name;
             mGatt = new FakeBluetoothGatt(this);
+        }
+
+        // Implements BluetoothTestAndroid::RememberDeviceForSubsequentAction.
+        @CalledByNative("FakeBluetoothDevice")
+        private static void rememberDeviceForSubsequentAction(ChromeBluetoothDevice chromeDevice) {
+            sRememberedDevice = (FakeBluetoothDevice) chromeDevice.mDevice;
         }
 
         // Create a call to onConnectionStateChange on the |chrome_device| using parameters
@@ -326,7 +361,13 @@ class Fakes {
         @CalledByNative("FakeBluetoothDevice")
         private static void servicesDiscovered(
                 ChromeBluetoothDevice chromeDevice, int status, String uuidsSpaceDelimited) {
-            FakeBluetoothDevice fakeDevice = (FakeBluetoothDevice) chromeDevice.mDevice;
+            if (chromeDevice == null && sRememberedDevice == null) {
+                throw new IllegalArgumentException("rememberDevice wasn't called previously.");
+            }
+
+            FakeBluetoothDevice fakeDevice = (chromeDevice == null)
+                    ? sRememberedDevice
+                    : (FakeBluetoothDevice) chromeDevice.mDevice;
 
             if (status == android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
                 fakeDevice.mGatt.mServices.clear();

@@ -101,8 +101,10 @@ def CheckChangeOnCommit(input_api, output_api):
 def _AreBenchmarksModified(change):
   """Checks whether CL contains any modification to Telemetry benchmarks."""
   for affected_file in change.AffectedFiles():
-    affected_file_path = affected_file.LocalPath()
-    file_path, _ = os.path.splitext(affected_file_path)
+    file_path = affected_file.LocalPath()
+    # Changes to unittest files should not count.
+    if file_path.endswith('test.py'):
+        continue
     if (os.path.join('tools', 'perf', 'benchmarks') in file_path or
         os.path.join('tools', 'perf', 'measurements') in file_path):
       return True
@@ -121,20 +123,20 @@ def PostUploadHook(cl, change, output_api):
   issue = cl.issue
   original_description = rietveld_obj.get_description(issue)
   if not benchmarks_modified or re.search(
-      r'^CQ_EXTRA_TRYBOTS=.*', original_description, re.M | re.I):
+      r'^CQ_INCLUDE_TRYBOTS=.*', original_description, re.M | re.I):
     return []
 
   results = []
   bots = [
     'android_s5_perf_cq',
+    'linux_perf_cq',
     'mac_retina_perf_cq',
-    # TODO(prasadv): Uncomment this once crbug.com/601699 is fixed.
-    # 'linux_perf_cq'
+    'winx64_10_perf_cq'
   ]
-  bots = ['tryserver.chromium.perf:%s' % s for s in bots]
+  bots = ['master.tryserver.chromium.perf:%s' % s for s in bots]
   bots_string = ';'.join(bots)
   description = original_description
-  description += '\nCQ_EXTRA_TRYBOTS=%s' % bots_string
+  description += '\nCQ_INCLUDE_TRYBOTS=%s' % bots_string
   results.append(output_api.PresubmitNotifyResult(
       'Automatically added Perf trybots to run Telemetry benchmarks on CQ.'))
 

@@ -94,8 +94,10 @@ public class UiUtils {
                 InputMethodManager imm =
                         (InputMethodManager) view.getContext().getSystemService(
                                 Context.INPUT_METHOD_SERVICE);
-                // Third-party touches disk on showSoftInput call. http://crbug.com/619824
+                // Third-party touches disk on showSoftInput call. http://crbug.com/619824,
+                // http://crbug.com/635118
                 StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+                StrictMode.allowThreadDiskWrites();
                 try {
                     imm.showSoftInput(view, 0);
                 } catch (IllegalArgumentException e) {
@@ -330,5 +332,17 @@ public class UiUtils {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR2
                 ? ContentUriUtils.getContentUriFromFile(context, file)
                 : Uri.fromFile(file);
+    }
+
+    /**
+     * Removes the view from its parent {@link ViewGroup}. No-op if the {@link View} is not yet
+     * attached to the view hierarchy.
+     *
+     * @param view The view to be removed from the parent.
+     */
+    public static void removeViewFromParent(View view) {
+        ViewGroup parent = (ViewGroup) view.getParent();
+        if (parent == null) return;
+        parent.removeView(view);
     }
 }

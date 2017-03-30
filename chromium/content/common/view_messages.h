@@ -15,7 +15,6 @@
 #include "cc/ipc/cc_param_traits.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/resources/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
@@ -61,6 +60,8 @@
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/icc_profile.h"
+#include "ui/gfx/ipc/color/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 #include "ui/gfx/range/range.h"
@@ -179,6 +180,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResizeParams)
   IPC_STRUCT_TRAITS_MEMBER(physical_backing_size)
   IPC_STRUCT_TRAITS_MEMBER(top_controls_shrink_blink_size)
   IPC_STRUCT_TRAITS_MEMBER(top_controls_height)
+  IPC_STRUCT_TRAITS_MEMBER(bottom_controls_height)
   IPC_STRUCT_TRAITS_MEMBER(visible_viewport_size)
   IPC_STRUCT_TRAITS_MEMBER(resizer_rect)
   IPC_STRUCT_TRAITS_MEMBER(is_fullscreen_granted)
@@ -234,6 +236,8 @@ IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
   IPC_STRUCT_TRAITS_MEMBER(enable_referrers)
   IPC_STRUCT_TRAITS_MEMBER(enable_do_not_track)
   IPC_STRUCT_TRAITS_MEMBER(webrtc_ip_handling_policy)
+  IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_min_port)
+  IPC_STRUCT_TRAITS_MEMBER(webrtc_udp_max_port)
   IPC_STRUCT_TRAITS_MEMBER(user_agent_override)
   IPC_STRUCT_TRAITS_MEMBER(accept_languages)
   IPC_STRUCT_TRAITS_MEMBER(report_frame_name_changes)
@@ -493,8 +497,8 @@ IPC_STRUCT_BEGIN(ViewMsg_New_Params)
   // The page zoom level.
   IPC_STRUCT_MEMBER(double, page_zoom_level)
 
-  // The color profile to use for image decode.
-  IPC_STRUCT_MEMBER(std::vector<char>, image_decode_color_profile)
+  // The ICC profile of the output color space to use for image decode.
+  IPC_STRUCT_MEMBER(gfx::ICCProfile, image_decode_color_space)
 IPC_STRUCT_END()
 
 #if defined(OS_MACOSX)
@@ -532,13 +536,6 @@ IPC_MESSAGE_ROUTED0(ViewMsg_MouseLockLost)
 IPC_MESSAGE_ROUTED2(ViewMsg_UpdateVSyncParameters,
                     base::TimeTicks /* timebase */,
                     base::TimeDelta /* interval */)
-
-// Sent when the history is altered outside of navigation. The history list was
-// reset to |history_length| length, and the offset was reset to be
-// |history_offset|.
-IPC_MESSAGE_ROUTED2(ViewMsg_SetHistoryOffsetAndLength,
-                    int /* history_offset */,
-                    int /* history_length */)
 
 // Tells the renderer to create a new view.
 // This message is slightly different, the view it takes (via
@@ -812,29 +809,26 @@ IPC_MESSAGE_ROUTED1(ViewMsg_ExtractSmartClipData,
                     gfx::Rect /* rect */)
 #endif
 
-// Sent by the browser as a reply to ViewHostMsg_SwapCompositorFrame.
-IPC_MESSAGE_ROUTED2(ViewMsg_SwapCompositorFrameAck,
-                    uint32_t /* output_surface_id */,
-                    cc::CompositorFrameAck /* ack */)
-
 // Sent by browser to tell renderer compositor that some resources that were
 // given to the browser in a swap are not being used anymore.
-IPC_MESSAGE_ROUTED2(ViewMsg_ReclaimCompositorResources,
+// If this message is in response to a swap then is_swap_ack is set.
+IPC_MESSAGE_ROUTED3(ViewMsg_ReclaimCompositorResources,
                     uint32_t /* output_surface_id */,
-                    cc::CompositorFrameAck /* ack */)
+                    bool /* is_swap_ack */,
+                    cc::ReturnedResourceArray /* resources */)
 
 // Sent by browser to give renderer compositor a new namespace ID for any
 // SurfaceSequences it has to create.
-IPC_MESSAGE_ROUTED1(ViewMsg_SetSurfaceIdNamespace,
+IPC_MESSAGE_ROUTED1(ViewMsg_SetSurfaceClientId,
                     uint32_t /* surface_id_namespace */)
 
 IPC_MESSAGE_ROUTED0(ViewMsg_SelectWordAroundCaret)
 
-// Sent by the browser to ask the renderer to redraw.
-// If |request_id| is not zero, it is added to the forced frame's latency info
-// as ui::WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT.
+// Sent by the browser to ask the renderer to redraw. Robust to events that can
+// happen in renderer (abortion of the commit or draw, loss of output surface
+// etc.).
 IPC_MESSAGE_ROUTED1(ViewMsg_ForceRedraw,
-                    int /* request_id */)
+                    ui::LatencyInfo /* latency_info */)
 
 // Let renderer know begin frame messages won't be sent even if requested.
 IPC_MESSAGE_ROUTED1(ViewMsg_SetBeginFramePaused, bool /* paused */)
@@ -880,11 +874,6 @@ IPC_SYNC_MESSAGE_CONTROL1_1(ViewHostMsg_CreateFullscreenWidget,
 // Asks the browser for a unique routing ID.
 IPC_SYNC_MESSAGE_CONTROL0_1(ViewHostMsg_GenerateRoutingID,
                             int /* routing_id */)
-
-// Asks the browser for the default audio hardware configuration.
-IPC_SYNC_MESSAGE_CONTROL0_2(ViewHostMsg_GetAudioHardwareConfig,
-                            media::AudioParameters /* input parameters */,
-                            media::AudioParameters /* output parameters */)
 
 // These three messages are sent to the parent RenderViewHost to display the
 // page/widget that was created by

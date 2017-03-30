@@ -8,9 +8,12 @@
 #include "headless/public/headless_browser.h"
 
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
+#include "headless/lib/browser/headless_devtools_manager_delegate.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 
 namespace aura {
@@ -23,7 +26,7 @@ class WindowTreeClient;
 
 namespace headless {
 
-class HeadlessBrowserContext;
+class HeadlessBrowserContextImpl;
 class HeadlessBrowserMainParts;
 
 class HeadlessBrowserImpl : public HeadlessBrowser {
@@ -34,18 +37,20 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
   ~HeadlessBrowserImpl() override;
 
   // HeadlessBrowser implementation:
-  HeadlessWebContents::Builder CreateWebContentsBuilder() override;
   HeadlessBrowserContext::Builder CreateBrowserContextBuilder() override;
-  HeadlessWebContents* CreateWebContents(const GURL& initial_url,
-                                         const gfx::Size& size) override;
-  scoped_refptr<base::SingleThreadTaskRunner> BrowserMainThread()
-      const override;
   scoped_refptr<base::SingleThreadTaskRunner> BrowserFileThread()
+      const override;
+  scoped_refptr<base::SingleThreadTaskRunner> BrowserIOThread() const override;
+  scoped_refptr<base::SingleThreadTaskRunner> BrowserMainThread()
       const override;
 
   void Shutdown() override;
 
-  std::vector<HeadlessWebContents*> GetAllWebContents() override;
+  std::vector<HeadlessBrowserContext*> GetAllBrowserContexts() override;
+  HeadlessWebContents* GetWebContentsForDevToolsAgentHostId(
+      const std::string& devtools_agent_host_id) override;
+  HeadlessBrowserContext* GetBrowserContextForId(
+      const std::string& id) override;
 
   void set_browser_main_parts(HeadlessBrowserMainParts* browser_main_parts);
   HeadlessBrowserMainParts* browser_main_parts() const;
@@ -54,27 +59,31 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
 
   HeadlessBrowser::Options* options() { return &options_; }
 
-  HeadlessWebContents* CreateWebContents(HeadlessWebContents::Builder* builder);
-  HeadlessWebContentsImpl* RegisterWebContents(
-      std::unique_ptr<HeadlessWebContentsImpl> web_contents);
+  HeadlessBrowserContext* CreateBrowserContext(
+      HeadlessBrowserContext::Builder* builder);
+  // Close given |browser_context| and delete it
+  // (all web contents associated with it go away too).
+  void DestroyBrowserContext(HeadlessBrowserContextImpl* browser_context);
 
-  // Close given |web_contents| and delete it.
-  void DestroyWebContents(HeadlessWebContentsImpl* web_contents);
+  base::WeakPtr<HeadlessBrowserImpl> GetWeakPtr();
 
-  // Customize the options used by this headless browser instance. Note that
-  // options which take effect before the message loop has been started (e.g.,
-  // custom message pumps) cannot be set via this method.
-  void SetOptionsForTesting(HeadlessBrowser::Options options);
+  aura::WindowTreeHost* window_tree_host() const;
 
  protected:
   base::Callback<void(HeadlessBrowser*)> on_start_callback_;
   HeadlessBrowser::Options options_;
   HeadlessBrowserMainParts* browser_main_parts_;  // Not owned.
+
+  // TODO(eseckler): Currently one window and one window_tree_host
+  // is used for all web contents. We should probably use one
+  // window per web contents, but additional investigation is needed.
   std::unique_ptr<aura::WindowTreeHost> window_tree_host_;
   std::unique_ptr<aura::client::WindowTreeClient> window_tree_client_;
 
-  std::unordered_map<HeadlessWebContents*, std::unique_ptr<HeadlessWebContents>>
-      web_contents_;
+  std::unordered_map<std::string, std::unique_ptr<HeadlessBrowserContextImpl>>
+      browser_contexts_;
+
+  base::WeakPtrFactory<HeadlessBrowserImpl> weak_ptr_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserImpl);

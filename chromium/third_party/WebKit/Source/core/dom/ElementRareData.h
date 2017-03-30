@@ -32,6 +32,7 @@
 #include "core/dom/NodeRareData.h"
 #include "core/dom/PseudoElement.h"
 #include "core/dom/PseudoElementData.h"
+#include "core/dom/custom/CustomElementDefinition.h"
 #include "core/dom/custom/V0CustomElementDefinition.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/html/ClassList.h"
@@ -44,6 +45,8 @@ namespace blink {
 
 class HTMLElement;
 class CompositorProxiedPropertySet;
+class ResizeObservation;
+class ResizeObserver;
 
 class ElementRareData : public NodeRareData {
 public:
@@ -88,7 +91,7 @@ public:
     NamedNodeMap* attributeMap() const { return m_attributeMap.get(); }
     void setAttributeMap(NamedNodeMap* attributeMap) { m_attributeMap = attributeMap; }
 
-    ComputedStyle* ensureComputedStyle() const { return m_computedStyle.get(); }
+    ComputedStyle* computedStyle() const { return m_computedStyle.get(); }
     void setComputedStyle(PassRefPtr<ComputedStyle> computedStyle) { m_computedStyle = computedStyle; }
     void clearComputedStyle() { m_computedStyle = nullptr; }
 
@@ -123,8 +126,12 @@ public:
     void decrementCompositorProxiedProperties(uint32_t properties);
     CompositorProxiedPropertySet* proxiedPropertyCounts() const { return m_proxiedProperties.get(); }
 
-    void setCustomElementDefinition(V0CustomElementDefinition* definition) { m_customElementDefinition = definition; }
-    V0CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
+    void v0SetCustomElementDefinition(V0CustomElementDefinition* definition) { m_v0CustomElementDefinition = definition; }
+    V0CustomElementDefinition* v0CustomElementDefinition() const { return m_v0CustomElementDefinition.get(); }
+
+    void setCustomElementDefinition(CustomElementDefinition* definition) { m_customElementDefinition = definition; }
+    CustomElementDefinition* customElementDefinition() const { return m_customElementDefinition.get(); }
+
 
     AttrNodeList& ensureAttrNodeList();
     AttrNodeList* attrNodeList() { return m_attrNodeList.get(); }
@@ -137,6 +144,11 @@ public:
             m_intersectionObserverData = new NodeIntersectionObserverData();
         return *m_intersectionObserverData;
     }
+
+    using ResizeObserverDataMap = HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>;
+
+    ResizeObserverDataMap* resizeObserverData() const { return m_resizeObserverData; }
+    ResizeObserverDataMap& ensureResizeObserverData();
 
     DECLARE_TRACE_AFTER_DISPATCH();
 
@@ -162,9 +174,12 @@ private:
 
     Member<ElementAnimations> m_elementAnimations;
     Member<NodeIntersectionObserverData> m_intersectionObserverData;
+    Member<ResizeObserverDataMap> m_resizeObserverData;
 
     RefPtr<ComputedStyle> m_computedStyle;
-    Member<V0CustomElementDefinition> m_customElementDefinition;
+    // TODO(davaajav):remove this field when v0 custom elements are deprecated
+    Member<V0CustomElementDefinition> m_v0CustomElementDefinition;
+    Member<CustomElementDefinition> m_customElementDefinition;
 
     Member<PseudoElementData> m_pseudoElementData;
 

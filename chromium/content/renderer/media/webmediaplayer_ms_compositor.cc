@@ -24,7 +24,9 @@
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/libyuv/include/libyuv/convert.h"
+#include "third_party/libyuv/include/libyuv/planar_functions.h"
 #include "third_party/libyuv/include/libyuv/video_common.h"
+#include "third_party/skia/include/core/SkSurface.h"
 
 namespace content {
 
@@ -44,31 +46,43 @@ scoped_refptr<media::VideoFrame> CopyFrame(
     new_frame = media::VideoFrame::CreateFrame(
         media::PIXEL_FORMAT_I420, frame->coded_size(), frame->visible_rect(),
         frame->natural_size(), frame->timestamp());
-    SkBitmap bitmap;
-    bitmap.allocN32Pixels(frame->visible_rect().width(),
-                          frame->visible_rect().height());
-    SkCanvas canvas(bitmap);
 
-    auto* provider =
+    sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
+        frame->visible_rect().width(), frame->visible_rect().height());
+
+    ContextProviderCommandBuffer* const provider =
         RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
-    if (provider) {
-      const media::Context3D context_3d =
-          media::Context3D(provider->ContextGL(), provider->GrContext());
-      DCHECK(context_3d.gl);
-      video_renderer->Copy(frame.get(), &canvas, context_3d);
+    if (surface && provider) {
+      DCHECK(provider->ContextGL());
+      video_renderer->Copy(
+          frame.get(), surface->getCanvas(),
+          media::Context3D(provider->ContextGL(), provider->GrContext()));
     } else {
-      // GPU Process crashed.
-      bitmap.eraseColor(SK_ColorTRANSPARENT);
+      // Return a black frame (yuv = {0, 0x80, 0x80}).
+      return media::VideoFrame::CreateColorFrame(
+          frame->visible_rect().size(), 0u, 0x80, 0x80, frame->timestamp());
     }
-    libyuv::ARGBToI420(reinterpret_cast<uint8_t*>(bitmap.getPixels()),
-                       bitmap.rowBytes(),
-                       new_frame->visible_data(media::VideoFrame::kYPlane),
-                       new_frame->stride(media::VideoFrame::kYPlane),
-                       new_frame->visible_data(media::VideoFrame::kUPlane),
-                       new_frame->stride(media::VideoFrame::kUPlane),
-                       new_frame->visible_data(media::VideoFrame::kVPlane),
-                       new_frame->stride(media::VideoFrame::kVPlane),
-                       bitmap.width(), bitmap.height());
+
+    SkPixmap pixmap;
+    const bool result = surface->getCanvas()->peekPixels(&pixmap);
+    DCHECK(result) << "Error trying to access SkSurface's pixels";
+
+    const uint32 source_pixel_format =
+        (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
+                                                     : libyuv::FOURCC_ARGB;
+    libyuv::ConvertToI420(
+        static_cast<const uint8*>(pixmap.addr(0, 0)),
+        pixmap.getSafeSize64(),
+        new_frame->visible_data(media::VideoFrame::kYPlane),
+        new_frame->stride(media::VideoFrame::kYPlane),
+        new_frame->visible_data(media::VideoFrame::kUPlane),
+        new_frame->stride(media::VideoFrame::kUPlane),
+        new_frame->visible_data(media::VideoFrame::kVPlane),
+        new_frame->stride(media::VideoFrame::kVPlane),
+        0 /* crop_x */, 0 /* crop_y */,
+        pixmap.width(), pixmap.height(),
+        new_frame->visible_rect().width(), new_frame->visible_rect().height(),
+        libyuv::kRotate0, source_pixel_format);
   } else {
     DCHECK(frame->IsMappable());
     DCHECK(frame->format() == media::PIXEL_FORMAT_YV12 ||
@@ -168,13 +182,13 @@ base::TimeDelta WebMediaPlayerMSCompositor::GetCurrentTime() {
 }
 
 size_t WebMediaPlayerMSCompositor::total_frame_count() const {
-  DVLOG(1) << __FUNCTION__ << ", " << total_frame_count_;
+  DVLOG(1) << __func__ << ", " << total_frame_count_;
   DCHECK(thread_checker_.CalledOnValidThread());
   return total_frame_count_;
 }
 
 size_t WebMediaPlayerMSCompositor::dropped_frame_count() const {
-  DVLOG(1) << __FUNCTION__ << ", " << dropped_frame_count_;
+  DVLOG(1) << __func__ << ", " << dropped_frame_count_;
   DCHECK(thread_checker_.CalledOnValidThread());
   return dropped_frame_count_;
 }
@@ -285,19 +299,19 @@ bool WebMediaPlayerMSCompositor::HasCurrentFrame() {
 }
 
 scoped_refptr<media::VideoFrame> WebMediaPlayerMSCompositor::GetCurrentFrame() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   base::AutoLock auto_lock(current_frame_lock_);
   current_frame_used_by_compositor_ = true;
   return current_frame_;
 }
 
 void WebMediaPlayerMSCompositor::PutCurrentFrame() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
 }
 
 scoped_refptr<media::VideoFrame>
 WebMediaPlayerMSCompositor::GetCurrentFrameWithoutUpdatingStatistics() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   base::AutoLock auto_lock(current_frame_lock_);
   return current_frame_;
 }
@@ -411,10 +425,10 @@ void WebMediaPlayerMSCompositor::SetCurrentFrame(
       current_frame_->natural_size() != frame->natural_size();
   current_frame_ = frame;
   if (size_changed) {
-    main_message_loop_->PostTask(
+    main_message_loop_->task_runner()->PostTask(
         FROM_HERE, base::Bind(&WebMediaPlayerMS::TriggerResize, player_));
   }
-  main_message_loop_->PostTask(
+  main_message_loop_->task_runner()->PostTask(
       FROM_HERE, base::Bind(&WebMediaPlayerMS::ResetCanvasCache, player_));
 }
 

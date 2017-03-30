@@ -22,11 +22,19 @@ std::function<R(Args...)> gles_bind(R (GLES2Interface::*func)(Args...),
 namespace skia_bindings {
 
 sk_sp<GrGLInterface> CreateGLES2InterfaceBindings(GLES2Interface* impl) {
+  // Until Chromium is passing the WebGL 2.0 conformance we're limiting Skia to
+  // a GLES 2.0 interface (plus extensions).
+  auto get_string_version_override = [impl](GLenum name) {
+    if (name == GL_VERSION)
+      return reinterpret_cast<const GLubyte*>("OpenGL ES 2.0 Chromium");
+    return impl->GetString(name);
+  };
+
   sk_sp<GrGLInterface> interface(new GrGLInterface);
   interface->fStandard = kGLES_GrGLStandard;
-  interface->fExtensions.init(
-      kGLES_GrGLStandard, gles_bind(&GLES2Interface::GetString, impl), nullptr,
-      gles_bind(&GLES2Interface::GetIntegerv, impl));
+  interface->fExtensions.init(kGLES_GrGLStandard, get_string_version_override,
+                              nullptr,
+                              gles_bind(&GLES2Interface::GetIntegerv, impl));
 
   GrGLInterface::Functions* functions = &interface->fFunctions;
   functions->fActiveTexture = gles_bind(&GLES2Interface::ActiveTexture, impl);
@@ -50,6 +58,8 @@ sk_sp<GrGLInterface> CreateGLES2InterfaceBindings(GLES2Interface* impl) {
   functions->fCompileShader = gles_bind(&GLES2Interface::CompileShader, impl);
   functions->fCompressedTexImage2D =
       gles_bind(&GLES2Interface::CompressedTexImage2D, impl);
+  functions->fCompressedTexSubImage2D =
+      gles_bind(&GLES2Interface::CompressedTexSubImage2D, impl);
   functions->fCopyTexSubImage2D =
       gles_bind(&GLES2Interface::CopyTexSubImage2D, impl);
   functions->fCreateProgram = gles_bind(&GLES2Interface::CreateProgram, impl);
@@ -91,11 +101,12 @@ sk_sp<GrGLInterface> CreateGLES2InterfaceBindings(GLES2Interface* impl) {
   functions->fGetShaderiv = gles_bind(&GLES2Interface::GetShaderiv, impl);
   functions->fGetShaderPrecisionFormat =
       gles_bind(&GLES2Interface::GetShaderPrecisionFormat, impl);
-  functions->fGetString = gles_bind(&GLES2Interface::GetString, impl);
+  functions->fGetString = get_string_version_override;
   functions->fGetUniformLocation =
       gles_bind(&GLES2Interface::GetUniformLocation, impl);
   functions->fInsertEventMarker =
       gles_bind(&GLES2Interface::InsertEventMarkerEXT, impl);
+  functions->fIsTexture = gles_bind(&GLES2Interface::IsTexture, impl);
   functions->fLineWidth = gles_bind(&GLES2Interface::LineWidth, impl);
   functions->fLinkProgram = gles_bind(&GLES2Interface::LinkProgram, impl);
   functions->fMapBufferSubData =

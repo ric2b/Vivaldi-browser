@@ -58,10 +58,16 @@ static bool g_ffmpeg_lib_initialized = InitializeFFmpegLibraries();
 
 const char kClearKeyCdmVersion[] = "0.1.0.1";
 const char kExternalClearKeyKeySystem[] = "org.chromium.externalclearkey";
+
+// Variants of External Clear Key key system to test different scenarios.
 const char kExternalClearKeyDecryptOnlyKeySystem[] =
     "org.chromium.externalclearkey.decryptonly";
+const char kExternalClearKeyRenewalKeySystem[] =
+    "org.chromium.externalclearkey.renewal";
 const char kExternalClearKeyFileIOTestKeySystem[] =
     "org.chromium.externalclearkey.fileiotest";
+const char kExternalClearKeyOutputProtectionTestKeySystem[] =
+    "org.chromium.externalclearkey.outputprotectiontest";
 const char kExternalClearKeyCrashKeySystem[] =
     "org.chromium.externalclearkey.crash";
 
@@ -78,12 +84,10 @@ const int64_t kSecondsPerMinute = 60;
 const int64_t kMsPerSecond = 1000;
 const int64_t kInitialTimerDelayMs = 200;
 const int64_t kMaxTimerDelayMs = 1 * kSecondsPerMinute * kMsPerSecond;
-// Renewal message header. For prefixed EME, if a key message starts with
-// |kRenewalHeader|, it's a renewal message. Otherwise, it's a key request.
-// FIXME(jrummell): Remove this once prefixed EME goes away.
-const char kRenewalHeader[] = "RENEWAL";
-// CDM file IO test result header.
-const char kFileIOTestResultHeader[] = "FILEIOTESTRESULT";
+
+// CDM unit test result header. Must be in sync with UNIT_TEST_RESULT_HEADER in
+// media/test/data/eme_player_js/globals.js.
+const char kUnitTestResultHeader[] = "UNIT_TEST_RESULT";
 
 // Copies |input_buffer| into a media::DecoderBuffer. If the |input_buffer| is
 // empty, an empty (end-of-stream) media::DecoderBuffer is returned.
@@ -119,8 +123,8 @@ static scoped_refptr<media::DecoderBuffer> CopyDecoderBufferFrom(
   return output_buffer;
 }
 
-static std::string GetFileIOTestResultMessage(bool success) {
-  std::string message(kFileIOTestResultHeader);
+static std::string GetUnitTestResultMessage(bool success) {
+  std::string message(kUnitTestResultHeader);
   message += success ? '1' : '0';
   return message;
 }
@@ -231,7 +235,9 @@ void* CreateCdmInstance(int cdm_interface_version,
   std::string key_system_string(key_system, key_system_size);
   if (key_system_string != kExternalClearKeyKeySystem &&
       key_system_string != kExternalClearKeyDecryptOnlyKeySystem &&
+      key_system_string != kExternalClearKeyRenewalKeySystem &&
       key_system_string != kExternalClearKeyFileIOTestKeySystem &&
+      key_system_string != kExternalClearKeyOutputProtectionTestKeySystem &&
       key_system_string != kExternalClearKeyCrashKeySystem) {
     DVLOG(1) << "Unsupported key system:" << key_system_string;
     return NULL;
@@ -246,8 +252,8 @@ void* CreateCdmInstance(int cdm_interface_version,
     return NULL;
 
   // TODO(jrummell): Obtain the proper origin for this instance.
-  GURL empty_gurl;
-  return new media::ClearKeyCdm(host, key_system_string, empty_gurl);
+  GURL empty_origin;
+  return new media::ClearKeyCdm(host, key_system_string, empty_origin);
 }
 
 const char* GetCdmVersion() {
@@ -269,7 +275,8 @@ ClearKeyCdm::ClearKeyCdm(ClearKeyCdmHost* host,
       key_system_(key_system),
       has_received_keys_change_event_for_emulated_loadsession_(false),
       timer_delay_ms_(kInitialTimerDelayMs),
-      renewal_timer_set_(false) {
+      renewal_timer_set_(false),
+      is_running_output_protection_test_(false) {
 #if defined(CLEAR_KEY_CDM_USE_FAKE_AUDIO_DECODER)
   channel_count_ = 0;
   bits_per_channel_ = 0;
@@ -306,8 +313,11 @@ void ClearKeyCdm::CreateSessionAndGenerateRequest(
       std::vector<uint8_t>(init_data, init_data + init_data_size),
       std::move(promise));
 
-  if (key_system_ == kExternalClearKeyFileIOTestKeySystem)
+  if (key_system_ == kExternalClearKeyFileIOTestKeySystem) {
     StartFileIOTest();
+  } else if (key_system_ == kExternalClearKeyOutputProtectionTestKeySystem) {
+    StartOutputProtectionTest();
+  }
 }
 
 // Loads a emulated stored session. Currently only |kLoadableSessionId|
@@ -335,9 +345,14 @@ void ClearKeyCdm::LoadSession(uint32_t promise_id,
                      promise_id),
           base::Bind(&ClearKeyCdm::OnPromiseFailed, base::Unretained(this),
                      promise_id)));
-  decryptor_->CreateSessionAndGenerateRequest(
-      MediaKeys::TEMPORARY_SESSION, EmeInitDataType::WEBM,
-      std::vector<uint8_t>(), std::move(promise));
+  // AesDecryptor does not support loading, so create a temporary session to
+  // represent it in other session-related methods.
+  std::vector<uint8_t> key_id(
+      kLoadableSessionKeyId,
+      kLoadableSessionKeyId + arraysize(kLoadableSessionKeyId) - 1);
+  decryptor_->CreateSessionAndGenerateRequest(MediaKeys::TEMPORARY_SESSION,
+                                              EmeInitDataType::WEBM, key_id,
+                                              std::move(promise));
 }
 
 void ClearKeyCdm::UpdateSession(uint32_t promise_id,
@@ -362,7 +377,7 @@ void ClearKeyCdm::UpdateSession(uint32_t promise_id,
       web_session_str, std::vector<uint8_t>(response, response + response_size),
       std::move(promise));
 
-  if (!renewal_timer_set_) {
+  if (key_system_ == kExternalClearKeyRenewalKeySystem && !renewal_timer_set_) {
     ScheduleNextRenewal();
     renewal_timer_set_ = true;
   }
@@ -448,13 +463,9 @@ void ClearKeyCdm::TimerExpired(void* context) {
     renewal_message = "ERROR: Invalid timer context found!";
   }
 
-  // This URL is only used for testing the code path for defaultURL.
-  // There is no service at this URL, so applications should ignore it.
-  const char url[] = "http://test.externalclearkey.chromium.org";
-
   host_->OnSessionMessage(last_session_id_.data(), last_session_id_.length(),
                           cdm::kLicenseRenewal, renewal_message.data(),
-                          renewal_message.length(), url, arraysize(url) - 1);
+                          renewal_message.length(), nullptr, 0);
 
   ScheduleNextRenewal();
 }
@@ -643,7 +654,7 @@ void ClearKeyCdm::Destroy() {
 void ClearKeyCdm::ScheduleNextRenewal() {
   // Prepare the next renewal message and set timer.
   std::ostringstream msg_stream;
-  msg_stream << kRenewalHeader << " from ClearKey CDM set at time "
+  msg_stream << "Renewal from ClearKey CDM set at time "
              << host_->GetCurrentWallTime() << ".";
   next_renewal_message_ = msg_stream.str();
 
@@ -694,7 +705,25 @@ void ClearKeyCdm::OnQueryOutputProtectionStatus(
     cdm::QueryResult result,
     uint32_t link_mask,
     uint32_t output_protection_mask) {
-  NOTIMPLEMENTED();
+  if (!is_running_output_protection_test_) {
+    NOTREACHED() << "OnQueryOutputProtectionStatus() called unexpectedly.";
+    return;
+  }
+
+  is_running_output_protection_test_ = false;
+
+// On Chrome OS, status query will fail on Linux Chrome OS build. So we ignore
+// the query result. On all other platforms, status query should succeed.
+// TODO(xhwang): Improve the check on Chrome OS builds. For example, use
+// base::SysInfo::IsRunningOnChromeOS() to differentiate between real Chrome OS
+// build and Linux Chrome OS build.
+#if !defined(OS_CHROMEOS)
+  if (result != cdm::kQuerySucceeded || link_mask != 0) {
+    OnUnitTestComplete(false);
+    return;
+  }
+#endif
+  OnUnitTestComplete(true);
 };
 
 void ClearKeyCdm::LoadLoadableSession() {
@@ -715,8 +744,7 @@ void ClearKeyCdm::LoadLoadableSession() {
 
 void ClearKeyCdm::OnSessionMessage(const std::string& session_id,
                                    MediaKeys::MessageType message_type,
-                                   const std::vector<uint8_t>& message,
-                                   const GURL& legacy_destination_url) {
+                                   const std::vector<uint8_t>& message) {
   DVLOG(1) << "OnSessionMessage: " << message.size();
 
   // Ignore the message when we are waiting to update the loadable session.
@@ -729,8 +757,7 @@ void ClearKeyCdm::OnSessionMessage(const std::string& session_id,
   host_->OnSessionMessage(session_id.data(), session_id.length(),
                           cdm::kLicenseRequest,
                           reinterpret_cast<const char*>(message.data()),
-                          message.size(), legacy_destination_url.spec().data(),
-                          legacy_destination_url.spec().size());
+                          message.size(), nullptr, 0);
 }
 
 void ClearKeyCdm::OnSessionKeysChange(const std::string& session_id,
@@ -903,6 +930,13 @@ cdm::Status ClearKeyCdm::GenerateFakeAudioFrames(
 }
 #endif  // CLEAR_KEY_CDM_USE_FAKE_AUDIO_DECODER
 
+void ClearKeyCdm::OnUnitTestComplete(bool success) {
+  std::string message = GetUnitTestResultMessage(success);
+  host_->OnSessionMessage(last_session_id_.data(), last_session_id_.length(),
+                          cdm::kLicenseRequest, message.data(),
+                          message.length(), nullptr, 0);
+}
+
 void ClearKeyCdm::StartFileIOTest() {
   file_io_test_runner_.reset(new FileIOTestRunner(
       base::Bind(&ClearKeyCdmHost::CreateFileIO, base::Unretained(host_))));
@@ -912,11 +946,13 @@ void ClearKeyCdm::StartFileIOTest() {
 
 void ClearKeyCdm::OnFileIOTestComplete(bool success) {
   DVLOG(1) << __FUNCTION__ << ": " << success;
-  std::string message = GetFileIOTestResultMessage(success);
-  host_->OnSessionMessage(last_session_id_.data(), last_session_id_.length(),
-                          cdm::kLicenseRequest, message.data(),
-                          message.length(), NULL, 0);
+  OnUnitTestComplete(success);
   file_io_test_runner_.reset();
+}
+
+void ClearKeyCdm::StartOutputProtectionTest() {
+  is_running_output_protection_test_ = true;
+  host_->QueryOutputProtectionStatus();
 }
 
 }  // namespace media

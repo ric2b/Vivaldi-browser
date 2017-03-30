@@ -181,6 +181,7 @@ void CloseAllBrowsers() {
 
 void AttemptUserExit() {
 #if defined(OS_CHROMEOS)
+  VLOG(1) << "AttemptUserExit";
   browser_shutdown::StartShutdownTracing();
   chromeos::BootTimesRecorder::Get()->AddLogoutTimeMarker("LogoutStarted",
                                                           false);
@@ -288,6 +289,7 @@ void AttemptExit() {
 #if defined(OS_CHROMEOS)
 // A function called when SIGTERM is received.
 void ExitCleanly() {
+  VLOG(1) << "ExitCleanly";
   // We always mark exit cleanly.
   MarkAsCleanShutdown();
 

@@ -292,32 +292,13 @@ static void SetAntiFlickerInUsbDevice(const int vendor_id,
   }
 }
 
-const std::string VideoCaptureDevice::Name::GetModel() const {
-  // Skip the AVFoundation's not USB nor built-in devices.
-  if (capture_api_type() == AVFOUNDATION && transport_type() != USB_OR_BUILT_IN)
-    return "";
-  if (capture_api_type() == DECKLINK)
-    return "";
-  // Both PID and VID are 4 characters.
-  if (unique_id_.size() < 2 * kVidPidSize)
-    return "";
-
-  // The last characters of device id is a concatenation of VID and then PID.
-  const size_t vid_location = unique_id_.size() - 2 * kVidPidSize;
-  std::string id_vendor = unique_id_.substr(vid_location, kVidPidSize);
-  const size_t pid_location = unique_id_.size() - kVidPidSize;
-  std::string id_product = unique_id_.substr(pid_location, kVidPidSize);
-
-  return id_vendor + ":" + id_product;
-}
-
-VideoCaptureDeviceMac::VideoCaptureDeviceMac(const Name& device_name)
-    : device_name_(device_name),
+VideoCaptureDeviceMac::VideoCaptureDeviceMac(
+    const VideoCaptureDeviceDescriptor& device_descriptor)
+    : device_descriptor_(device_descriptor),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       state_(kNotInitialized),
       capture_device_(nil),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 VideoCaptureDeviceMac::~VideoCaptureDeviceMac() {
   DCHECK(task_runner_->BelongsToCurrentThread());
@@ -332,11 +313,12 @@ void VideoCaptureDeviceMac::AllocateAndStart(
   }
 
   client_ = std::move(client);
-  if (device_name_.capture_api_type() == Name::AVFOUNDATION)
-    LogMessage("Using AVFoundation for device: " + device_name_.name());
+  if (device_descriptor_.capture_api == VideoCaptureApi::MACOSX_AVFOUNDATION)
+    LogMessage("Using AVFoundation for device: " +
+               device_descriptor_.display_name);
 
   NSString* deviceId =
-      [NSString stringWithUTF8String:device_name_.id().c_str()];
+      [NSString stringWithUTF8String:device_descriptor_.device_id.c_str()];
 
   [capture_device_ setFrameReceiver:this];
 
@@ -359,7 +341,9 @@ void VideoCaptureDeviceMac::AllocateAndStart(
   // Try setting the power line frequency removal (anti-flicker). The built-in
   // cameras are normally suspended so the configuration must happen right
   // before starting capture and during configuration.
-  const std::string& device_model = device_name_.GetModel();
+  const std::string device_model = GetDeviceModelId(
+      device_descriptor_.device_id, device_descriptor_.capture_api,
+      device_descriptor_.transport_type);
   if (device_model.length() > 2 * kVidPidSize) {
     std::string vendor_id = device_model.substr(0, kVidPidSize);
     std::string model_id = device_model.substr(kVidPidSize + 1);
@@ -389,12 +373,22 @@ void VideoCaptureDeviceMac::StopAndDeAllocate() {
   state_ = kIdle;
 }
 
-bool VideoCaptureDeviceMac::Init(
-    VideoCaptureDevice::Name::CaptureApiType capture_api_type) {
+void VideoCaptureDeviceMac::TakePhoto(TakePhotoCallback callback) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(state_ == kCapturing) << state_;
+
+  if (photo_callback_)  // Only one picture can be in flight at a time.
+    return;
+
+  photo_callback_.reset(new TakePhotoCallback(std::move(callback)));
+  [capture_device_ takePhoto];
+}
+
+bool VideoCaptureDeviceMac::Init(VideoCaptureApi capture_api_type) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kNotInitialized);
 
-  if (capture_api_type != Name::AVFOUNDATION)
+  if (capture_api_type != VideoCaptureApi::MACOSX_AVFOUNDATION)
     return false;
 
   capture_device_.reset(
@@ -413,8 +407,6 @@ void VideoCaptureDeviceMac::ReceiveFrame(const uint8_t* video_frame,
                                          int aspect_numerator,
                                          int aspect_denominator,
                                          base::TimeDelta timestamp) {
-  // This method is safe to call from a device capture thread, i.e. any thread
-  // controlled by AVFoundation.
   if (capture_format_.frame_size != frame_format.frame_size) {
     ReceiveError(FROM_HERE,
                  "Captured resolution " + frame_format.frame_size.ToString() +
@@ -426,6 +418,27 @@ void VideoCaptureDeviceMac::ReceiveFrame(const uint8_t* video_frame,
                                   0, base::TimeTicks::Now(), timestamp);
 }
 
+void VideoCaptureDeviceMac::OnPhotoTaken(const uint8_t* image_data,
+                                         size_t image_length,
+                                         const std::string& mime_type) {
+  DCHECK(photo_callback_);
+  if (!image_data || !image_length) {
+    OnPhotoError();
+    return;
+  }
+
+  mojom::BlobPtr blob = mojom::Blob::New();
+  blob->data.assign(image_data, image_data + image_length);
+  blob->mime_type = mime_type;
+  photo_callback_->Run(std::move(blob));
+  photo_callback_.reset();
+}
+
+void VideoCaptureDeviceMac::OnPhotoError() {
+  DLOG(ERROR) << __FUNCTION__ << " error taking picture";
+  photo_callback_.reset();
+}
+
 void VideoCaptureDeviceMac::ReceiveError(
     const tracked_objects::Location& from_here,
     const std::string& reason) {
@@ -434,18 +447,42 @@ void VideoCaptureDeviceMac::ReceiveError(
                             weak_factory_.GetWeakPtr(), from_here, reason));
 }
 
+void VideoCaptureDeviceMac::LogMessage(const std::string& message) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  if (client_)
+    client_->OnLog(message);
+}
+
+// static
+std::string VideoCaptureDeviceMac::GetDeviceModelId(
+    const std::string& device_id,
+    VideoCaptureApi capture_api,
+    VideoCaptureTransportType transport_type) {
+  // Skip the AVFoundation's not USB nor built-in devices.
+  if (capture_api == VideoCaptureApi::MACOSX_AVFOUNDATION &&
+      transport_type != VideoCaptureTransportType::MACOSX_USB_OR_BUILT_IN)
+    return "";
+  if (capture_api == VideoCaptureApi::MACOSX_DECKLINK)
+    return "";
+  // Both PID and VID are 4 characters.
+  if (device_id.size() < 2 * kVidPidSize)
+    return "";
+
+  // The last characters of device id is a concatenation of VID and then PID.
+  const size_t vid_location = device_id.size() - 2 * kVidPidSize;
+  std::string id_vendor = device_id.substr(vid_location, kVidPidSize);
+  const size_t pid_location = device_id.size() - kVidPidSize;
+  std::string id_product = device_id.substr(pid_location, kVidPidSize);
+
+  return id_vendor + ":" + id_product;
+}
+
 void VideoCaptureDeviceMac::SetErrorState(
     const tracked_objects::Location& from_here,
     const std::string& reason) {
   DCHECK(task_runner_->BelongsToCurrentThread());
   state_ = kError;
   client_->OnError(from_here, reason);
-}
-
-void VideoCaptureDeviceMac::LogMessage(const std::string& message) {
-  DCHECK(task_runner_->BelongsToCurrentThread());
-  if (client_)
-    client_->OnLog(message);
 }
 
 bool VideoCaptureDeviceMac::UpdateCaptureResolution() {

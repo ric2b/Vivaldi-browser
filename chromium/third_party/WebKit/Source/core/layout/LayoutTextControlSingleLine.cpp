@@ -231,15 +231,16 @@ LayoutUnit LayoutTextControlSingleLine::preferredContentLogicalWidth(float charW
     LayoutUnit result = LayoutUnit::fromFloatCeil(charWidth * factor);
 
     float maxCharWidth = 0.f;
-    AtomicString family = styleRef().font().getFontDescription().family().family();
+    const Font& font = style()->font();
+    AtomicString family = font.getFontDescription().family().family();
     // Match the default system font to the width of MS Shell Dlg, the default
     // font for textareas in Firefox, Safari Win and IE for some encodings (in
     // IE, the default font is encoding specific). 4027 is the (xMax - xMin)
     // value in the "head" font table for MS Shell Dlg.
     if (LayoutTheme::theme().needsHackForTextControlWithFontFamily(family))
         maxCharWidth = scaleEmToUnits(4027);
-    else if (hasValidAvgCharWidth(family))
-        maxCharWidth = roundf(styleRef().font().primaryFont()->maxCharWidth());
+    else if (hasValidAvgCharWidth(font.primaryFont(), family))
+        maxCharWidth = roundf(font.primaryFont()->maxCharWidth());
 
     // For text inputs, IE adds some extra width.
     if (maxCharWidth > 0.f)
@@ -273,7 +274,7 @@ PassRefPtr<ComputedStyle> LayoutTextControlSingleLine::createInnerEditorStyle(co
     textBlockStyle->setOverflowWrap(NormalOverflowWrap);
     textBlockStyle->setTextOverflow(textShouldBeTruncated() ? TextOverflowEllipsis : TextOverflowClip);
 
-    int computedLineHeight = lineHeight(true, HorizontalLine, PositionOfInteriorLineBoxes);
+    int computedLineHeight = lineHeight(true, HorizontalLine, PositionOfInteriorLineBoxes).toInt();
     // Do not allow line-height to be smaller than our default.
     if (textBlockStyle->fontSize() >= computedLineHeight)
         textBlockStyle->setLineHeight(ComputedStyle::initialLineHeight());

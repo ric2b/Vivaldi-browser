@@ -75,7 +75,7 @@
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync_driver/pref_names.h"
+#include "components/sync/driver/pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -482,7 +482,7 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
       pref_service);
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 
   chrome_http_user_agent_settings_.reset(
       new ChromeHttpUserAgentSettings(pref_service));
@@ -742,6 +742,9 @@ bool ProfileIOData::IsHandledProtocol(const std::string& scheme) {
 #if defined(OS_CHROMEOS)
     content::kExternalFileScheme,
 #endif  // defined(OS_CHROMEOS)
+#if defined(OS_ANDROID)
+    url::kContentScheme,
+#endif  // defined(OS_ANDROID)
     url::kAboutScheme,
 #if !defined(DISABLE_FTP_SUPPORT)
     url::kFtpScheme,
@@ -818,7 +821,7 @@ net::URLRequestContext* ProfileIOData::GetIsolatedAppRequestContext(
     content::URLRequestInterceptorScopedVector request_interceptors) const {
   DCHECK(initialized_);
   net::URLRequestContext* context = NULL;
-  if (ContainsKey(app_request_context_map_, partition_descriptor)) {
+  if (base::ContainsKey(app_request_context_map_, partition_descriptor)) {
     context = app_request_context_map_[partition_descriptor];
   } else {
     context = AcquireIsolatedAppRequestContext(
@@ -836,7 +839,8 @@ net::URLRequestContext* ProfileIOData::GetIsolatedMediaRequestContext(
     const StoragePartitionDescriptor& partition_descriptor) const {
   DCHECK(initialized_);
   net::URLRequestContext* context = NULL;
-  if (ContainsKey(isolated_media_request_context_map_, partition_descriptor)) {
+  if (base::ContainsKey(isolated_media_request_context_map_,
+                        partition_descriptor)) {
     context = isolated_media_request_context_map_[partition_descriptor];
   } else {
     context = AcquireIsolatedMediaRequestContext(app_context,
@@ -896,14 +900,14 @@ void ProfileIOData::InitializeMetricsEnabledStateOnUIThread() {
   enable_metrics_.Init(prefs::kCrashReportingEnabled,
                        g_browser_process->local_state());
   enable_metrics_.MoveToThread(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 #else
   // Prep the PrefMember and send it to the IO thread, since this value will be
   // read from there.
   enable_metrics_.Init(metrics::prefs::kMetricsReportingEnabled,
                        g_browser_process->local_state());
   enable_metrics_.MoveToThread(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 }
 
@@ -1329,8 +1333,12 @@ void ProfileIOData::DestroyResourceContext() {
   // notifications by severing the link between it and the
   // cert_transparency_verifier_ and unregistering it from new STH
   // notifications.
-  cert_transparency_verifier_->SetObserver(nullptr);
-  ct_tree_tracker_unregistration_.Run();
+  // Only do this if the profile was initalized and
+  // |cert_transparency_verifier_| is not null.
+  if (cert_transparency_verifier_) {
+    cert_transparency_verifier_->SetObserver(nullptr);
+    ct_tree_tracker_unregistration_.Run();
+  }
 }
 
 std::unique_ptr<net::HttpNetworkSession>

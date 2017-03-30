@@ -27,6 +27,8 @@ class SourceFile {
 
   // Takes a known absolute source file. Always begins in a slash.
   explicit SourceFile(const base::StringPiece& p);
+  explicit SourceFile(const base::StringPiece& p,
+                      const base::StringPiece& p_act);
 
   // Constructs from the given string by swapping in the contents of the given
   // value. The value will be the empty string after this call.
@@ -36,6 +38,7 @@ class SourceFile {
 
   bool is_null() const { return value_.empty(); }
   const std::string& value() const { return value_; }
+  const std::string& actual_path() const { return actual_path_; }
 
   // Returns everything after the last slash.
   std::string GetName() const;
@@ -43,7 +46,8 @@ class SourceFile {
 
   // Resolves this source file relative to some given source root. Returns
   // an empty file path on error.
-  base::FilePath Resolve(const base::FilePath& source_root) const;
+  base::FilePath Resolve(const base::FilePath& source_root,
+                         bool use_actual_path) const;
 
   // Returns true if this file starts with a "//" which indicates a path
   // from the source root.
@@ -86,6 +90,8 @@ class SourceFile {
   friend class SourceDir;
 
   std::string value_;
+
+  std::string actual_path_;
 
   // Copy & assign supported.
 };

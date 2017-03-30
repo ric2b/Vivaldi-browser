@@ -62,7 +62,11 @@ class WebRtcBrowserTest : public WebRtcTestBase {
     SetupPeerconnectionWithLocalStream(left_tab_, offer_cert_keygen_alg);
     SetupPeerconnectionWithLocalStream(right_tab_, answer_cert_keygen_alg);
 
-    NegotiateCall(left_tab_, right_tab_, video_codec);
+    if (!video_codec.empty()) {
+      SetDefaultVideoCodec(left_tab_, video_codec);
+      SetDefaultVideoCodec(right_tab_, video_codec);
+    }
+    NegotiateCall(left_tab_, right_tab_);
 
     DetectVideoAndHangUp();
   }
@@ -84,12 +88,12 @@ class WebRtcBrowserTest : public WebRtcTestBase {
         left_tab_, "gCertificateClone");
     SetupPeerconnectionWithLocalStream(right_tab_, cert_keygen_alg);
 
-    NegotiateCall(left_tab_, right_tab_, WebRtcTestBase::kUseDefaultVideoCodec);
+    NegotiateCall(left_tab_, right_tab_);
 
     DetectVideoAndHangUp();
   }
 
-private:
+protected:
   void StartServerAndOpenTabs() {
     ASSERT_TRUE(embedded_test_server()->Start());
     left_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
@@ -191,4 +195,16 @@ IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
   RunsAudioVideoWebRTCCallInTwoTabs(WebRtcTestBase::kUseDefaultVideoCodec,
                                     kKeygenAlgorithmEcdsa,
                                     kKeygenAlgorithmRsa);
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcBrowserTest,
+                       RunsAudioVideoWebRTCCallInTwoTabsGetStats) {
+  StartServerAndOpenTabs();
+  SetupPeerconnectionWithLocalStream(left_tab_);
+  SetupPeerconnectionWithLocalStream(right_tab_);
+  NegotiateCall(left_tab_, right_tab_);
+
+  VerifyStatsGenerated(left_tab_);
+
+  DetectVideoAndHangUp();
 }

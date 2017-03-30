@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -60,6 +61,8 @@ class TestObserver : public ProfileWriter,
     EXPECT_EQ(expected_bookmark_entries_.size(), bookmark_count_);
     EXPECT_EQ(expected_favicon_groups_.size(), favicon_count_);
   }
+  void ImportItemFailed(importer::ImportItem item,
+                        const std::string& error) override {}
 
   // ProfileWriter:
   bool BookmarkModelIsLoaded() const override {
@@ -225,7 +228,7 @@ IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporter) {
 
   host->StartImportSettings(source_profile, browser()->profile(),
                             importer::FAVORITES, observer.get());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterLegacyFallback) {
@@ -263,7 +266,7 @@ IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterLegacyFallback) {
 
   host->StartImportSettings(source_profile, browser()->profile(),
                             importer::FAVORITES, observer.get());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterNoDatabase) {
@@ -294,5 +297,5 @@ IN_PROC_BROWSER_TEST_F(EdgeImporterBrowserTest, EdgeImporterNoDatabase) {
 
   host->StartImportSettings(source_profile, browser()->profile(),
                             importer::FAVORITES, observer.get());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }

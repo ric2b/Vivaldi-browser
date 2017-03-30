@@ -6,37 +6,37 @@
 #define CHROME_BROWSER_UI_PASSWORDS_MANAGE_PASSWORDS_BUBBLE_MODEL_H_
 
 #include <utility>
+#include <vector>
 
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/clock.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/common/password_manager_ui.h"
-#include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/range/range.h"
-
-class Profile;
 
 namespace content {
 class WebContents;
 }
 
+class PasswordsModelDelegate;
+class Profile;
+
 // This model provides data for the ManagePasswordsBubble and controls the
 // password management actions.
-class ManagePasswordsBubbleModel : public content::WebContentsObserver {
+class ManagePasswordsBubbleModel {
  public:
   enum PasswordAction { REMOVE_PASSWORD, ADD_PASSWORD };
   enum DisplayReason { AUTOMATIC, USER_ACTION };
 
-  // Creates a ManagePasswordsBubbleModel, which holds a raw pointer to the
-  // WebContents in which it lives. Construction implies that the bubble
-  // is shown. The bubble's state is updated from the
-  // ManagePasswordsUIController associated with |web_contents|.
-  ManagePasswordsBubbleModel(content::WebContents* web_contents,
+  // Creates a ManagePasswordsBubbleModel, which holds a weak pointer to the
+  // delegate. Construction implies that the bubble is shown. The bubble's state
+  // is updated from the ManagePasswordsUIController associated with |delegate|.
+  ManagePasswordsBubbleModel(base::WeakPtr<PasswordsModelDelegate> delegate,
                              DisplayReason reason);
-  ~ManagePasswordsBubbleModel() override;
+  ~ManagePasswordsBubbleModel();
 
   // Called by the view code when the "Nope" button in clicked by the user in
   // update bubble.
@@ -88,7 +88,7 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
     return pending_password_;
   }
   // Returns the available credentials which match the current site.
-  const ScopedVector<const autofill::PasswordForm>& local_credentials() const {
+  const std::vector<autofill::PasswordForm>& local_credentials() const {
     return local_credentials_;
   }
   const base::string16& manage_link() const { return manage_link_; }
@@ -104,6 +104,7 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   }
 
   Profile* GetProfile() const;
+  content::WebContents* GetWebContents() const;
 
   // Returns true iff the multiple account selection prompt for account update
   // should be presented.
@@ -143,13 +144,16 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   gfx::Range title_brand_link_range_;
   autofill::PasswordForm pending_password_;
   bool password_overridden_;
-  ScopedVector<const autofill::PasswordForm> local_credentials_;
+  std::vector<autofill::PasswordForm> local_credentials_;
   base::string16 manage_link_;
   base::string16 save_confirmation_text_;
   gfx::Range save_confirmation_link_range_;
 
   // Responsible for recording all the interactions required.
   std::unique_ptr<InteractionKeeper> interaction_keeper_;
+
+  // A bridge to ManagePasswordsUIController instance.
+  base::WeakPtr<PasswordsModelDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsBubbleModel);
 };

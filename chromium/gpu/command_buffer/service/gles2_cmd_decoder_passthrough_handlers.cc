@@ -1511,44 +1511,6 @@ error::Error GLES2DecoderPassthroughImpl::HandleVertexAttribDivisorANGLE(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::HandleGenMailboxCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::GenMailboxCHROMIUM& c =
-      *static_cast<const gles2::cmds::GenMailboxCHROMIUM*>(cmd_data);
-  (void)c;
-  return error::kUnknownCommand;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::HandleCreateAndConsumeTextureCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::CreateAndConsumeTextureCHROMIUMImmediate& c = *static_cast<
-      const gles2::cmds::CreateAndConsumeTextureCHROMIUMImmediate*>(cmd_data);
-  GLenum target = static_cast<GLenum>(c.target);
-  uint32_t data_size;
-  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
-    return error::kOutOfBounds;
-  }
-  if (data_size > immediate_data_size) {
-    return error::kOutOfBounds;
-  }
-  const GLbyte* mailbox =
-      GetImmediateDataAs<const GLbyte*>(c, data_size, immediate_data_size);
-  if (mailbox == NULL) {
-    return error::kOutOfBounds;
-  }
-  uint32_t client_id = c.client_id;
-  error::Error error =
-      DoCreateAndConsumeTextureCHROMIUM(target, mailbox, client_id);
-  if (error != error::kNoError) {
-    return error;
-  }
-
-  return error::kNoError;
-}
-
 error::Error
 GLES2DecoderPassthroughImpl::HandleBindUniformLocationCHROMIUMBucket(
     uint32_t immediate_data_size,
@@ -1629,37 +1591,6 @@ error::Error GLES2DecoderPassthroughImpl::HandleInsertFenceSyncCHROMIUM(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::HandleGenSyncTokenCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::GenSyncTokenCHROMIUMImmediate& c =
-      *static_cast<const gles2::cmds::GenSyncTokenCHROMIUMImmediate*>(cmd_data);
-  (void)c;
-  return error::kUnknownCommand;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::HandleGenUnverifiedSyncTokenCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::GenUnverifiedSyncTokenCHROMIUMImmediate& c =
-      *static_cast<const gles2::cmds::GenUnverifiedSyncTokenCHROMIUMImmediate*>(
-          cmd_data);
-  (void)c;
-  return error::kUnknownCommand;
-}
-
-error::Error
-GLES2DecoderPassthroughImpl::HandleVerifySyncTokensCHROMIUMImmediate(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::VerifySyncTokensCHROMIUMImmediate& c =
-      *static_cast<const gles2::cmds::VerifySyncTokensCHROMIUMImmediate*>(
-          cmd_data);
-  (void)c;
-  return error::kUnknownCommand;
-}
-
 error::Error GLES2DecoderPassthroughImpl::HandleWaitSyncTokenCHROMIUM(
     uint32_t immediate_data_size,
     const void* cmd_data) {
@@ -1726,30 +1657,49 @@ error::Error GLES2DecoderPassthroughImpl::HandleScheduleOverlayPlaneCHROMIUM(
   return error::kNoError;
 }
 
+error::Error
+GLES2DecoderPassthroughImpl::HandleScheduleCALayerSharedStateCHROMIUM(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::ScheduleCALayerSharedStateCHROMIUM& c =
+      *static_cast<const gles2::cmds::ScheduleCALayerSharedStateCHROMIUM*>(
+          cmd_data);
+  const GLfloat* mem = GetSharedMemoryAs<const GLfloat*>(c.shm_id, c.shm_offset,
+                                                         20 * sizeof(GLfloat));
+  if (!mem) {
+    return error::kOutOfBounds;
+  }
+  GLfloat opacity = static_cast<GLfloat>(c.opacity);
+  GLboolean is_clipped = static_cast<GLboolean>(c.is_clipped);
+  const GLfloat* clip_rect = mem + 0;
+  GLint sorting_context_id = static_cast<GLint>(c.sorting_context_id);
+  const GLfloat* transform = mem + 4;
+  error::Error error = DoScheduleCALayerSharedStateCHROMIUM(
+      opacity, is_clipped, clip_rect, sorting_context_id, transform);
+  if (error != error::kNoError) {
+    return error;
+  }
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::HandleScheduleCALayerCHROMIUM(
     uint32_t immediate_data_size,
     const void* cmd_data) {
   const gles2::cmds::ScheduleCALayerCHROMIUM& c =
       *static_cast<const gles2::cmds::ScheduleCALayerCHROMIUM*>(cmd_data);
   const GLfloat* mem = GetSharedMemoryAs<const GLfloat*>(c.shm_id, c.shm_offset,
-                                                         28 * sizeof(GLfloat));
+                                                         8 * sizeof(GLfloat));
   if (!mem) {
     return error::kOutOfBounds;
   }
   GLuint contents_texture_id = static_cast<GLint>(c.contents_texture_id);
   const GLfloat* contents_rect = mem;
-  GLfloat opacity = static_cast<GLfloat>(c.opacity);
   GLuint background_color = static_cast<GLuint>(c.background_color);
   GLuint edge_aa_mask = static_cast<GLuint>(c.edge_aa_mask);
   const GLfloat* bounds_rect = mem + 4;
-  GLboolean is_clipped = static_cast<GLboolean>(c.is_clipped);
-  const GLfloat* clip_rect = mem + 8;
-  GLint sorting_context_id = static_cast<GLint>(c.sorting_context_id);
-  const GLfloat* transform = mem + 12;
-  error::Error error = DoScheduleCALayerCHROMIUM(
-      contents_texture_id, contents_rect, opacity, background_color,
-      edge_aa_mask, bounds_rect, is_clipped, clip_rect, sorting_context_id,
-      transform);
+  error::Error error =
+      DoScheduleCALayerCHROMIUM(contents_texture_id, contents_rect,
+                                background_color, edge_aa_mask, bounds_rect);
   if (error != error::kNoError) {
     return error;
   }

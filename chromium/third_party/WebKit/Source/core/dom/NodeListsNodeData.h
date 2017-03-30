@@ -179,12 +179,14 @@ private:
 template <typename Collection>
 inline Collection* ContainerNode::ensureCachedCollection(CollectionType type)
 {
+    ThreadState::GCForbiddenScope gcForbidden;
     return ensureNodeLists().addCache<Collection>(*this, type);
 }
 
 template <typename Collection>
 inline Collection* ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& name)
 {
+    ThreadState::GCForbiddenScope gcForbidden;
     return ensureNodeLists().addCache<Collection>(*this, type, name);
 }
 
@@ -192,6 +194,7 @@ template <typename Collection>
 inline Collection* ContainerNode::ensureCachedCollection(CollectionType type, const AtomicString& namespaceURI, const AtomicString& localName)
 {
     ASSERT_UNUSED(type, type == TagCollectionType);
+    ThreadState::GCForbiddenScope gcForbidden;
     return ensureNodeLists().addCache(*this, namespaceURI, localName);
 }
 

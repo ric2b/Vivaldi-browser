@@ -16,6 +16,7 @@
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/metrics/desktop_engagement/desktop_engagement_observer.h"
 #include "chrome/browser/net/net_error_tab_helper.h"
 #include "chrome/browser/net/predictor_tab_helper.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
+#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
 #include "chrome/browser/tab_contents/navigation_metrics_recorder.h"
 #include "chrome/browser/tracing/navigation_tracing.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
@@ -54,16 +56,19 @@
 #include "extensions/helper/vivaldi_init_helpers.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
+#include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/data_usage/data_use_tab_helper.h"
 #include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
 #include "chrome/browser/android/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/android/voice_search_tab_helper.h"
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/ntp_snippets/bookmark_last_visit_updater.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
-#include "components/offline_pages/offline_page_feature.h"
 #else
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/plugins/plugin_observer.h"
 #include "chrome/browser/safe_browsing/safe_browsing_tab_observer.h"
 #include "chrome/browser/thumbnails/thumbnail_tab_helper.h"
@@ -72,7 +77,6 @@
 #include "chrome/browser/ui/sad_tab_helper.h"
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 #include "chrome/browser/ui/sync/tab_contents_synced_tab_delegate.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "components/pdf/browser/pdf_web_contents_helper.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
@@ -187,8 +191,10 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   ChromeSecurityStateModelClient::CreateForWebContents(web_contents);
   if (SiteEngagementService::IsEnabled())
     SiteEngagementService::Helper::CreateForWebContents(web_contents);
+  std::unique_ptr<ChromeSubresourceFilterClient> subresource_filter_client(
+      new ChromeSubresourceFilterClient(web_contents));
   subresource_filter::ContentSubresourceFilterDriverFactory::
-      CreateForWebContents(web_contents);
+      CreateForWebContents(web_contents, std::move(subresource_filter_client));
   // TODO(vabr): Remove TabSpecificContentSettings from here once their function
   // is taken over by ChromeContentSettingsClient. http://crbug.com/387075
   TabSpecificContentSettings::CreateForWebContents(web_contents);
@@ -196,12 +202,15 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // --- Platform-specific tab helpers ---
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
+  banners::AppBannerManagerAndroid::CreateForWebContents(web_contents);
+  BookmarkLastVisitUpdater::CreateForWebContentsWithBookmarkModel(
+      web_contents, BookmarkModelFactory::GetForBrowserContext(
+                        web_contents->GetBrowserContext()));
   ContextMenuHelper::CreateForWebContents(web_contents);
   DataUseTabHelper::CreateForWebContents(web_contents);
 
   offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
-  if (offline_pages::IsOffliningRecentPagesEnabled())
-    offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
+  offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
 
   SingleTabModeTabHelper::CreateForWebContents(web_contents);
   ViewAndroidHelper::CreateForWebContents(web_contents);
@@ -217,7 +226,7 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   pdf::PDFWebContentsHelper::CreateForWebContentsWithClient(
       web_contents, std::unique_ptr<pdf::PDFWebContentsHelperClient>(
                         new ChromePDFWebContentsHelperClient()));
-  PermissionBubbleManager::CreateForWebContents(web_contents);
+  PermissionRequestManager::CreateForWebContents(web_contents);
   PluginObserver::CreateForWebContents(web_contents);
   SadTabHelper::CreateForWebContents(web_contents);
   safe_browsing::SafeBrowsingTabObserver::CreateForWebContents(web_contents);
@@ -231,12 +240,15 @@ void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   }
   web_modal::WebContentsModalDialogManager::CreateForWebContents(web_contents);
 
-  if (banners::AppBannerManagerDesktop::IsEnabled()) {
+  if (banners::AppBannerManagerDesktop::IsEnabled())
     banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
-  }
 #endif
 
-  // --- Feature tab helpers behind flags ---
+#if defined(OS_WIN) || defined(OS_MACOSX) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+  metrics::DesktopEngagementObserver::CreateForWebContents(web_contents);
+#endif
+// --- Feature tab helpers behind flags ---
 
 #if defined(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalTabHelper::CreateForWebContents(web_contents);

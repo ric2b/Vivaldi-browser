@@ -30,8 +30,8 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 using google::protobuf::RepeatedField;
 using google::protobuf::RepeatedPtrField;
@@ -70,6 +70,7 @@ const char* const kKnownSettings[] = {
     kExtensionCacheSize,
     kHeartbeatEnabled,
     kHeartbeatFrequency,
+    kLoginApps,
     kLoginAuthenticationBehavior,
     kLoginVideoCaptureAllowedUrls,
     kPolicyMissingMitigationMode,
@@ -84,6 +85,8 @@ const char* const kKnownSettings[] = {
     kReportDeviceSessionStatus,
     kReportDeviceUsers,
     kReportDeviceVersionInfo,
+    kReportOsUpdateStatus,
+    kReportRunningKioskApp,
     kReportUploadFrequency,
     kServiceAccountIdentity,
     kSignedDataRoamingEnabled,
@@ -283,6 +286,14 @@ void DecodeLoginPolicies(
     }
     new_values_cache->SetValue(kLoginVideoCaptureAllowedUrls, std::move(list));
   }
+
+  if (policy.has_login_apps()) {
+    std::unique_ptr<base::ListValue> login_apps(new base::ListValue);
+    const em::LoginAppsProto& login_apps_proto(policy.login_apps());
+    for (const auto& login_app : login_apps_proto.login_apps())
+      login_apps->Append(new base::StringValue(login_app));
+    new_values_cache->SetValue(kLoginApps, std::move(login_apps));
+  }
 }
 
 void DecodeNetworkPolicies(
@@ -358,6 +369,14 @@ void DecodeReportingPolicies(
       new_values_cache->SetBoolean(
           kReportDeviceSessionStatus,
           reporting_policy.report_session_status());
+    }
+    if (reporting_policy.has_report_os_update_status()) {
+      new_values_cache->SetBoolean(kReportOsUpdateStatus,
+                                   reporting_policy.report_os_update_status());
+    }
+    if (reporting_policy.has_report_running_kiosk_app()) {
+      new_values_cache->SetBoolean(kReportRunningKioskApp,
+                                   reporting_policy.report_running_kiosk_app());
     }
     if (reporting_policy.has_device_status_frequency()) {
       new_values_cache->SetInteger(
@@ -664,15 +683,9 @@ void DeviceSettingsProvider::UpdateValuesCache(
     TrustedStatus trusted_status) {
   PrefValueMap new_values_cache;
 
-  // If the device is not managed, or is consumer-managed, we set the device
-  // owner value.
-  if (policy_data.has_username() &&
-      (policy::GetManagementMode(policy_data) ==
-           policy::MANAGEMENT_MODE_LOCAL_OWNER ||
-       policy::GetManagementMode(policy_data) ==
-           policy::MANAGEMENT_MODE_CONSUMER_MANAGED)) {
+  // If the device is not managed, we set the device owner value.
+  if (policy_data.has_username() && !policy_data.has_request_token())
     new_values_cache.SetString(kDeviceOwner, policy_data.username());
-  }
 
   if (policy_data.has_service_account_identity()) {
     new_values_cache.SetString(kServiceAccountIdentity,

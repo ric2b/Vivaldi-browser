@@ -7,28 +7,27 @@
 #include "ash/common/wm/container_finder.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_layout_manager.h"
+#include "ash/common/wm_transient_window_observer.h"
 #include "ash/common/wm_window_observer.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/mus/bridge/mus_layout_manager_adapter.h"
 #include "ash/mus/bridge/wm_root_window_controller_mus.h"
 #include "ash/mus/bridge/wm_shell_mus.h"
 #include "ash/mus/property_util.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/mus/mus_util.h"
+#include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 #include "ui/display/display.h"
+#include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
 MUS_DECLARE_WINDOW_PROPERTY_TYPE(ash::mus::WmWindowMus*);
-
-// TODO(sky): fully implement this. Making DVLOG as too spammy to be useful.
-#undef NOTIMPLEMENTED
-#define NOTIMPLEMENTED() DVLOG(1) << "notimplemented"
 
 namespace {
 
@@ -55,21 +54,21 @@ class WindowStateMus : public wm::WindowState {
   DISALLOW_COPY_AND_ASSIGN(WindowStateMus);
 };
 
-ui::WindowShowState UIWindowShowStateFromMojom(::mus::mojom::ShowState state) {
+ui::WindowShowState UIWindowShowStateFromMojom(ui::mojom::ShowState state) {
   switch (state) {
-    case ::mus::mojom::ShowState::DEFAULT:
+    case ui::mojom::ShowState::DEFAULT:
       return ui::SHOW_STATE_DEFAULT;
-    case ::mus::mojom::ShowState::NORMAL:
+    case ui::mojom::ShowState::NORMAL:
       return ui::SHOW_STATE_NORMAL;
-    case ::mus::mojom::ShowState::MINIMIZED:
+    case ui::mojom::ShowState::MINIMIZED:
       return ui::SHOW_STATE_MINIMIZED;
-    case ::mus::mojom::ShowState::MAXIMIZED:
+    case ui::mojom::ShowState::MAXIMIZED:
       return ui::SHOW_STATE_MAXIMIZED;
-    case ::mus::mojom::ShowState::INACTIVE:
+    case ui::mojom::ShowState::INACTIVE:
       return ui::SHOW_STATE_INACTIVE;
-    case ::mus::mojom::ShowState::FULLSCREEN:
+    case ui::mojom::ShowState::FULLSCREEN:
       return ui::SHOW_STATE_FULLSCREEN;
-    case ::mus::mojom::ShowState::DOCKED:
+    case ui::mojom::ShowState::DOCKED:
       return ui::SHOW_STATE_DOCKED;
     default:
       break;
@@ -77,31 +76,31 @@ ui::WindowShowState UIWindowShowStateFromMojom(::mus::mojom::ShowState state) {
   return ui::SHOW_STATE_DEFAULT;
 }
 
-::mus::mojom::ShowState MojomWindowShowStateFromUI(ui::WindowShowState state) {
+ui::mojom::ShowState MojomWindowShowStateFromUI(ui::WindowShowState state) {
   switch (state) {
     case ui::SHOW_STATE_DEFAULT:
-      return ::mus::mojom::ShowState::DEFAULT;
+      return ui::mojom::ShowState::DEFAULT;
     case ui::SHOW_STATE_NORMAL:
-      return ::mus::mojom::ShowState::NORMAL;
+      return ui::mojom::ShowState::NORMAL;
     case ui::SHOW_STATE_MINIMIZED:
-      return ::mus::mojom::ShowState::MINIMIZED;
+      return ui::mojom::ShowState::MINIMIZED;
     case ui::SHOW_STATE_MAXIMIZED:
-      return ::mus::mojom::ShowState::MAXIMIZED;
+      return ui::mojom::ShowState::MAXIMIZED;
     case ui::SHOW_STATE_INACTIVE:
-      return ::mus::mojom::ShowState::INACTIVE;
+      return ui::mojom::ShowState::INACTIVE;
     case ui::SHOW_STATE_FULLSCREEN:
-      return ::mus::mojom::ShowState::FULLSCREEN;
+      return ui::mojom::ShowState::FULLSCREEN;
     case ui::SHOW_STATE_DOCKED:
-      return ::mus::mojom::ShowState::DOCKED;
+      return ui::mojom::ShowState::DOCKED;
     default:
       break;
   }
-  return ::mus::mojom::ShowState::DEFAULT;
+  return ui::mojom::ShowState::DEFAULT;
 }
 
 }  // namespace
 
-WmWindowMus::WmWindowMus(::mus::Window* window)
+WmWindowMus::WmWindowMus(ui::Window* window)
     : window_(window),
       // Matches aura, see aura::Window for details.
       observers_(base::ObserverList<WmWindowObserver>::NOTIFY_EXISTING_ONLY) {
@@ -115,14 +114,14 @@ WmWindowMus::~WmWindowMus() {
 }
 
 // static
-WmWindowMus* WmWindowMus::Get(::mus::Window* window) {
+WmWindowMus* WmWindowMus::Get(ui::Window* window) {
   if (!window)
     return nullptr;
 
   WmWindowMus* wm_window = window->GetLocalProperty(kWmWindowKey);
   if (wm_window)
     return wm_window;
-  // WmWindowMus is owned by the mus::Window.
+  // WmWindowMus is owned by the ui::Window.
   return new WmWindowMus(window);
 }
 
@@ -132,13 +131,13 @@ WmWindowMus* WmWindowMus::Get(views::Widget* widget) {
 }
 
 // static
-const ::mus::Window* WmWindowMus::GetMusWindow(const WmWindow* wm_window) {
+const ui::Window* WmWindowMus::GetMusWindow(const WmWindow* wm_window) {
   return static_cast<const WmWindowMus*>(wm_window)->mus_window();
 }
 
 // static
 std::vector<WmWindow*> WmWindowMus::FromMusWindows(
-    const std::vector<::mus::Window*>& mus_windows) {
+    const std::vector<ui::Window*>& mus_windows) {
   std::vector<WmWindow*> result(mus_windows.size());
   for (size_t i = 0; i < mus_windows.size(); ++i)
     result[i] = Get(mus_windows[i]);
@@ -174,10 +173,17 @@ WmShell* WmWindowMus::GetShell() const {
 void WmWindowMus::SetName(const char* name) {
   if (name) {
     window_->SetSharedProperty<std::string>(
-        ::mus::mojom::WindowManager::kName_Property, std::string(name));
+        ui::mojom::WindowManager::kName_Property, std::string(name));
   } else {
-    window_->ClearSharedProperty(::mus::mojom::WindowManager::kName_Property);
+    window_->ClearSharedProperty(ui::mojom::WindowManager::kName_Property);
   }
+}
+
+std::string WmWindowMus::GetName() const {
+  return window_->HasSharedProperty(ui::mojom::WindowManager::kName_Property)
+             ? window_->GetSharedProperty<std::string>(
+                   ui::mojom::WindowManager::kName_Property)
+             : std::string();
 }
 
 base::string16 WmWindowMus::GetTitle() const {
@@ -194,6 +200,10 @@ int WmWindowMus::GetShellWindowId() const {
 
 ui::wm::WindowType WmWindowMus::GetType() const {
   return GetWmWindowType(window_);
+}
+
+bool WmWindowMus::IsBubble() {
+  return GetWindowType(window_) == ui::mojom::WindowType::BUBBLE;
 }
 
 ui::Layer* WmWindowMus::GetLayer() {
@@ -217,10 +227,10 @@ int WmWindowMus::GetNonClientComponent(const gfx::Point& location) {
 
 gfx::Point WmWindowMus::ConvertPointToTarget(const WmWindow* target,
                                              const gfx::Point& point) const {
-  const ::mus::Window* target_window = GetMusWindow(target);
+  const ui::Window* target_window = GetMusWindow(target);
   if (target_window->Contains(window_)) {
     gfx::Point result(point);
-    const ::mus::Window* window = window_;
+    const ui::Window* window = window_;
     while (window != target_window) {
       result += window->bounds().origin().OffsetFromOrigin();
       window = window->parent();
@@ -258,7 +268,9 @@ gfx::Rect WmWindowMus::ConvertRectFromScreen(const gfx::Rect& rect) const {
 }
 
 gfx::Size WmWindowMus::GetMinimumSize() const {
-  return widget_ ? widget_->GetMinimumSize() : gfx::Size();
+  return widget_ && !use_empty_minimum_size_for_testing_
+             ? widget_->GetMinimumSize()
+             : gfx::Size();
 }
 
 gfx::Size WmWindowMus::GetMaximumSize() const {
@@ -336,11 +348,45 @@ int WmWindowMus::GetIntProperty(WmWindowProperty key) {
   return 0;
 }
 
+void WmWindowMus::SetIntProperty(WmWindowProperty key, int value) {
+  if (key == WmWindowProperty::SHELF_ID) {
+    NOTIMPLEMENTED();
+    return;
+  }
+
+  if (key == WmWindowProperty::TOP_VIEW_INSET) {
+    // TODO: need support for TOP_VIEW_INSET: http://crbug.com/615100.
+    NOTIMPLEMENTED();
+    return;
+  }
+
+  NOTREACHED();
+}
+
+ShelfItemDetails* WmWindowMus::GetShelfItemDetails() {
+  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
+  return nullptr;
+}
+
+void WmWindowMus::SetShelfItemDetails(const ShelfItemDetails& details) {
+  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
+}
+
+void WmWindowMus::ClearShelfItemDetails() {
+  NOTIMPLEMENTED();  // TODO: Add support; see crbug.com/634150
+}
+
 const wm::WindowState* WmWindowMus::GetWindowState() const {
   return window_state_.get();
 }
 
 WmWindow* WmWindowMus::GetToplevelWindow() {
+  return WmShellMus::GetToplevelAncestor(window_);
+}
+
+WmWindow* WmWindowMus::GetToplevelWindowForFocus() {
+  // TODO(sky): resolve if we really need two notions of top-level. In the mus
+  // world they are the same.
   return WmShellMus::GetToplevelAncestor(window_);
 }
 
@@ -535,15 +581,19 @@ bool WmWindowMus::HasRestoreBounds() const {
 }
 
 bool WmWindowMus::CanMaximize() const {
-  return widget_ ? widget_->widget_delegate()->CanMaximize() : false;
+  return (GetResizeBehavior(window_) &
+          ::ui::mojom::kResizeBehaviorCanMaximize) != 0;
 }
 
 bool WmWindowMus::CanMinimize() const {
-  return widget_ ? widget_->widget_delegate()->CanMinimize() : false;
+  return (GetResizeBehavior(window_) &
+          ::ui::mojom::kResizeBehaviorCanMinimize) != 0;
 }
 
 bool WmWindowMus::CanResize() const {
-  return widget_ ? widget_->widget_delegate()->CanResize() : false;
+  return window_ &&
+         (GetResizeBehavior(window_) & ::ui::mojom::kResizeBehaviorCanResize) !=
+             0;
 }
 
 bool WmWindowMus::CanActivate() const {
@@ -562,12 +612,12 @@ void WmWindowMus::StackChildAtBottom(WmWindow* child) {
 
 void WmWindowMus::StackChildAbove(WmWindow* child, WmWindow* target) {
   GetMusWindow(child)->Reorder(GetMusWindow(target),
-                               ::mus::mojom::OrderDirection::ABOVE);
+                               ui::mojom::OrderDirection::ABOVE);
 }
 
 void WmWindowMus::StackChildBelow(WmWindow* child, WmWindow* target) {
   GetMusWindow(child)->Reorder(GetMusWindow(target),
-                               ::mus::mojom::OrderDirection::BELOW);
+                               ui::mojom::OrderDirection::BELOW);
 }
 
 void WmWindowMus::SetAlwaysOnTop(bool value) {
@@ -608,7 +658,7 @@ bool WmWindowMus::IsFocused() const {
 }
 
 bool WmWindowMus::IsActive() const {
-  ::mus::Window* focused = window_->window_tree()->GetFocusedWindow();
+  ui::Window* focused = window_->window_tree()->GetFocusedWindow();
   return focused && window_->Contains(focused);
 }
 
@@ -628,15 +678,15 @@ void WmWindowMus::Deactivate() {
 }
 
 void WmWindowMus::SetFullscreen() {
-  SetWindowShowState(window_, ::mus::mojom::ShowState::FULLSCREEN);
+  SetWindowShowState(window_, ui::mojom::ShowState::FULLSCREEN);
 }
 
 void WmWindowMus::Maximize() {
-  SetWindowShowState(window_, ::mus::mojom::ShowState::MAXIMIZED);
+  SetWindowShowState(window_, ui::mojom::ShowState::MAXIMIZED);
 }
 
 void WmWindowMus::Minimize() {
-  SetWindowShowState(window_, ::mus::mojom::ShowState::MINIMIZED);
+  SetWindowShowState(window_, ui::mojom::ShowState::MINIMIZED);
 }
 
 void WmWindowMus::Unminimize() {
@@ -655,7 +705,7 @@ std::vector<WmWindow*> WmWindowMus::GetChildren() {
 WmWindow* WmWindowMus::GetChildByShellWindowId(int id) {
   if (id == shell_window_id_)
     return this;
-  for (::mus::Window* child : window_->children()) {
+  for (ui::Window* child : window_->children()) {
     WmWindow* result = Get(child)->GetChildByShellWindowId(id);
     if (result)
       return result;
@@ -664,11 +714,20 @@ WmWindow* WmWindowMus::GetChildByShellWindowId(int id) {
 }
 
 void WmWindowMus::ShowResizeShadow(int component) {
+  // TODO: http://crbug.com/640773.
   NOTIMPLEMENTED();
 }
 
 void WmWindowMus::HideResizeShadow() {
+  // TODO: http://crbug.com/640773.
   NOTIMPLEMENTED();
+}
+
+void WmWindowMus::InstallResizeHandleWindowTargeter(
+    ImmersiveFullscreenController* immersive_fullscreen_controller) {
+  // TODO(sky): I believe once ImmersiveFullscreenController is ported this
+  // won't be necessary in mash, but I need to verify that:
+  // http://crbug.com/548435.
 }
 
 void WmWindowMus::SetBoundsInScreenBehaviorForChildren(
@@ -707,6 +766,12 @@ void WmWindowMus::SetDescendantsStayInSameRootWindow(bool value) {
   NOTIMPLEMENTED();
 }
 
+std::unique_ptr<views::View> WmWindowMus::CreateViewWithRecreatedLayers() {
+  // TODO: need real implementation, http://crbug.com/629497.
+  std::unique_ptr<views::View> view(new views::View);
+  return view;
+}
+
 void WmWindowMus::AddObserver(WmWindowObserver* observer) {
   observers_.AddObserver(observer);
 }
@@ -717,6 +782,25 @@ void WmWindowMus::RemoveObserver(WmWindowObserver* observer) {
 
 bool WmWindowMus::HasObserver(const WmWindowObserver* observer) const {
   return observers_.HasObserver(observer);
+}
+
+void WmWindowMus::AddTransientWindowObserver(
+    WmTransientWindowObserver* observer) {
+  transient_observers_.AddObserver(observer);
+}
+
+void WmWindowMus::RemoveTransientWindowObserver(
+    WmTransientWindowObserver* observer) {
+  transient_observers_.RemoveObserver(observer);
+}
+
+void WmWindowMus::AddLimitedPreTargetHandler(ui::EventHandler* handler) {
+  DCHECK(GetInternalWidget());
+  widget_->GetNativeWindow()->AddPreTargetHandler(handler);
+}
+
+void WmWindowMus::RemoveLimitedPreTargetHandler(ui::EventHandler* handler) {
+  widget_->GetNativeWindow()->RemovePreTargetHandler(handler);
 }
 
 void WmWindowMus::OnTreeChanging(const TreeChangeParams& params) {
@@ -737,23 +821,23 @@ void WmWindowMus::OnTreeChanged(const TreeChangeParams& params) {
                     OnWindowTreeChanged(this, wm_params));
 }
 
-void WmWindowMus::OnWindowReordered(::mus::Window* window,
-                                    ::mus::Window* relative_window,
-                                    ::mus::mojom::OrderDirection direction) {
+void WmWindowMus::OnWindowReordered(ui::Window* window,
+                                    ui::Window* relative_window,
+                                    ui::mojom::OrderDirection direction) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_,
                     OnWindowStackingChanged(this));
 }
 
 void WmWindowMus::OnWindowSharedPropertyChanged(
-    ::mus::Window* window,
+    ui::Window* window,
     const std::string& name,
     const std::vector<uint8_t>* old_data,
     const std::vector<uint8_t>* new_data) {
-  if (name == ::mus::mojom::WindowManager::kShowState_Property) {
+  if (name == ui::mojom::WindowManager::kShowState_Property) {
     GetWindowState()->OnWindowShowStateChanged();
     return;
   }
-  if (name == ::mus::mojom::WindowManager::kAlwaysOnTop_Property) {
+  if (name == ui::mojom::WindowManager::kAlwaysOnTop_Property) {
     FOR_EACH_OBSERVER(
         WmWindowObserver, observers_,
         OnWindowPropertyChanged(this, WmWindowProperty::ALWAYS_ON_TOP));
@@ -764,19 +848,31 @@ void WmWindowMus::OnWindowSharedPropertyChanged(
   NOTIMPLEMENTED();
 }
 
-void WmWindowMus::OnWindowBoundsChanged(::mus::Window* window,
+void WmWindowMus::OnWindowBoundsChanged(ui::Window* window,
                                         const gfx::Rect& old_bounds,
                                         const gfx::Rect& new_bounds) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_,
                     OnWindowBoundsChanged(this, old_bounds, new_bounds));
 }
 
-void WmWindowMus::OnWindowDestroying(::mus::Window* window) {
+void WmWindowMus::OnWindowDestroying(ui::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroying(this));
 }
 
-void WmWindowMus::OnWindowDestroyed(::mus::Window* window) {
+void WmWindowMus::OnWindowDestroyed(ui::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowDestroyed(this));
+}
+
+void WmWindowMus::OnTransientChildAdded(ui::Window* window,
+                                        ui::Window* transient) {
+  FOR_EACH_OBSERVER(WmTransientWindowObserver, transient_observers_,
+                    OnTransientChildAdded(this, Get(transient)));
+}
+
+void WmWindowMus::OnTransientChildRemoved(ui::Window* window,
+                                          ui::Window* transient) {
+  FOR_EACH_OBSERVER(WmTransientWindowObserver, transient_observers_,
+                    OnTransientChildRemoved(this, Get(transient)));
 }
 
 }  // namespace mus

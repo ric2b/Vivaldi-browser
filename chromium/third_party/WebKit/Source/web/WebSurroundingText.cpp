@@ -28,13 +28,23 @@
 #include "core/dom/Node.h"
 #include "core/dom/Range.h"
 #include "core/dom/Text.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/SurroundingText.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/layout/LayoutObject.h"
 #include "public/platform/WebPoint.h"
 #include "public/web/WebHitTestResult.h"
+#include "web/WebLocalFrameImpl.h"
 
 namespace blink {
+
+WebSurroundingText::WebSurroundingText()
+{
+}
+
+WebSurroundingText::~WebSurroundingText()
+{
+}
 
 void WebSurroundingText::initialize(const WebNode& webNode, const WebPoint& nodePoint, size_t maxLength)
 {
@@ -45,9 +55,10 @@ void WebSurroundingText::initialize(const WebNode& webNode, const WebPoint& node
     m_private.reset(new SurroundingText(createVisiblePosition(node->layoutObject()->positionForPoint(static_cast<IntPoint>(nodePoint))).deepEquivalent().parentAnchoredEquivalent(), maxLength));
 }
 
-void WebSurroundingText::initialize(const WebRange& webRange, size_t maxLength)
+void WebSurroundingText::initializeFromCurrentSelection(WebLocalFrame* frame, size_t maxLength)
 {
-    if (Range* range = static_cast<Range*>(webRange))
+    LocalFrame* webFrame = toWebLocalFrameImpl(frame)->frame();
+    if (Range* range = createRange(webFrame->selection().selection().toNormalizedEphemeralRange()))
         m_private.reset(new SurroundingText(*range, maxLength));
 }
 
@@ -72,19 +83,9 @@ size_t WebSurroundingText::endOffsetInTextContent() const
     return m_private->endOffsetInContent();
 }
 
-WebRange WebSurroundingText::rangeFromContentOffsets(size_t startOffsetInContent, size_t endOffsetInContent)
-{
-    return m_private->rangeFromContentOffsets(startOffsetInContent, endOffsetInContent);
-}
-
 bool WebSurroundingText::isNull() const
 {
     return !m_private.get();
-}
-
-void WebSurroundingText::reset()
-{
-    m_private.reset(0);
 }
 
 } // namespace blink

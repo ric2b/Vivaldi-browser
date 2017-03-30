@@ -17,8 +17,8 @@
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
-#include "policy/proto/cloud_policy.pb.h"
-#include "policy/proto/device_management_backend.pb.h"
+#include "components/policy/proto/cloud_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 
 namespace em = enterprise_management;
 
@@ -49,7 +49,7 @@ void DeviceLocalAccountPolicyStore::Store(
     const em::PolicyFetchResponse& policy) {
   weak_factory_.InvalidateWeakPtrs();
   CheckKeyAndValidate(
-      true, base::WrapUnique(new em::PolicyFetchResponse(policy)),
+      true, base::MakeUnique<em::PolicyFetchResponse>(policy),
       base::Bind(&DeviceLocalAccountPolicyStore::StoreValidatedPolicy,
                  weak_factory_.GetWeakPtr()));
 }
@@ -161,8 +161,8 @@ void DeviceLocalAccountPolicyStore::Validate(
   validator->ValidateAgainstCurrentPolicy(
       policy(),
       valid_timestamp_required
-          ? CloudPolicyValidatorBase::TIMESTAMP_REQUIRED
-          : CloudPolicyValidatorBase::TIMESTAMP_NOT_REQUIRED,
+          ? CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED
+          : CloudPolicyValidatorBase::TIMESTAMP_NOT_VALIDATED,
       CloudPolicyValidatorBase::DM_TOKEN_NOT_REQUIRED);
 
   // Validate the DMToken to match what device policy has.

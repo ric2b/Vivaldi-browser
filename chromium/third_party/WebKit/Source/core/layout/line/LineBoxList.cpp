@@ -205,8 +205,8 @@ bool LineBoxList::hitTest(LineLayoutBoxModel layoutObject, HitTestResult& result
     IntRect hitSearchBoundingBox = locationInContainer.boundingBox();
 
     CullRect cullRect(firstLineBox()->isHorizontal() ?
-        IntRect(point.x(), hitSearchBoundingBox.y(), 1, hitSearchBoundingBox.height()) :
-        IntRect(hitSearchBoundingBox.x(), point.y(), hitSearchBoundingBox.width(), 1));
+        IntRect(point.x().toInt(), hitSearchBoundingBox.y(), 1, hitSearchBoundingBox.height()) :
+        IntRect(hitSearchBoundingBox.x(), point.y().toInt(), hitSearchBoundingBox.width(), 1));
 
     if (!anyLineIntersectsRect(layoutObject, cullRect, accumulatedOffset))
         return false;
@@ -234,6 +234,12 @@ void LineBoxList::dirtyLinesFromChangedChild(LineLayoutItem container, LineLayou
         return;
 
     LineLayoutInline inlineContainer = container.isLayoutInline() ? LineLayoutInline(container) : LineLayoutInline();
+
+    // If we are attaching children dirtying lines is unnecessary as we will do a full layout
+    // of the inline's contents anyway.
+    if (inlineContainer && inlineContainer.node() && inlineContainer.node()->needsAttach())
+        return;
+
     InlineBox* firstBox = inlineContainer ? inlineContainer.firstLineBoxIncludingCulling() : firstLineBox();
 
     // If we have no first line box, then just bail early.

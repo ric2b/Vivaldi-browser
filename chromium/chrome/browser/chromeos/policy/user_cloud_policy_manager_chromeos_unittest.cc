@@ -34,6 +34,8 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
+#include "components/policy/policy_constants.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
@@ -50,8 +52,6 @@
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_status.h"
-#include "policy/policy_constants.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -113,27 +113,24 @@ class UserCloudPolicyManagerChromeOSTest : public testing::Test {
     chrome::RegisterLocalState(prefs_.registry());
 
     // Set up a policy map for testing.
-    policy_map_.Set(
-        key::kHomepageLocation, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-        POLICY_SOURCE_CLOUD,
-        base::WrapUnique(new base::StringValue("http://chromium.org")),
-        nullptr);
+    policy_map_.Set(key::kHomepageLocation, POLICY_LEVEL_MANDATORY,
+                    POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+                    base::MakeUnique<base::StringValue>("http://chromium.org"),
+                    nullptr);
     policy_map_.Set(
         key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
         POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-        base::WrapUnique(new base::StringValue("primary-only")), nullptr);
+        base::MakeUnique<base::StringValue>("primary-only"), nullptr);
     policy_map_.Set(key::kEasyUnlockAllowed, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                    base::WrapUnique(new base::FundamentalValue(false)),
-                    nullptr);
-    policy_map_.Set(
-        key::kCaptivePortalAuthenticationIgnoresProxy, POLICY_LEVEL_MANDATORY,
-        POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-        base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+                    base::MakeUnique<base::FundamentalValue>(false), nullptr);
+    policy_map_.Set(key::kCaptivePortalAuthenticationIgnoresProxy,
+                    POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                    POLICY_SOURCE_CLOUD,
+                    base::MakeUnique<base::FundamentalValue>(false), nullptr);
     policy_map_.Set(key::kAllowDinosaurEasterEgg, POLICY_LEVEL_MANDATORY,
                     POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                    base::WrapUnique(new base::FundamentalValue(false)),
-                    nullptr);
+                    base::MakeUnique<base::FundamentalValue>(false), nullptr);
     expected_bundle_.Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
         .CopyFrom(policy_map_);
 

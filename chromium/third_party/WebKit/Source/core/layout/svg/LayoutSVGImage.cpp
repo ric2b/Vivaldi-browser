@@ -72,6 +72,8 @@ void LayoutSVGImage::updateBoundingBox()
         lengthContext.valueForLength(styleRef().width(), styleRef(), SVGLengthMode::Width),
         lengthContext.valueForLength(styleRef().height(), styleRef(), SVGLengthMode::Height));
     m_needsBoundariesUpdate |= oldBoundaries != m_objectBoundingBox;
+    if (element())
+        element()->setNeedsResizeObserverUpdate();
 }
 
 void LayoutSVGImage::layout()
@@ -120,10 +122,10 @@ bool LayoutSVGImage::nodeAtFloatPoint(HitTestResult& result, const FloatPoint& p
         return false;
 
     PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_IMAGE_HITTESTING, result.hitTestRequest(), style()->pointerEvents());
-    bool isVisible = (style()->visibility() == VISIBLE);
+    bool isVisible = (style()->visibility() == EVisibility::Visible);
     if (isVisible || !hitRules.requireVisible) {
         FloatPoint localPoint;
-        if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(this, localToSVGParentTransform(), pointInParent, localPoint))
+        if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(*this, localToSVGParentTransform(), pointInParent, localPoint))
             return false;
 
         if (hitRules.canHitFill || hitRules.canHitBoundingBox) {

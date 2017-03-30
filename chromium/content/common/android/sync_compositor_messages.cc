@@ -9,16 +9,10 @@ namespace content {
 SyncCompositorDemandDrawHwParams::SyncCompositorDemandDrawHwParams() {}
 
 SyncCompositorDemandDrawHwParams::SyncCompositorDemandDrawHwParams(
-    const gfx::Size& surface_size,
-    const gfx::Transform& transform,
-    const gfx::Rect& viewport,
-    const gfx::Rect& clip,
+    const gfx::Size& viewport_size,
     const gfx::Rect& viewport_rect_for_tile_priority,
     const gfx::Transform& transform_for_tile_priority)
-    : surface_size(surface_size),
-      transform(transform),
-      viewport(viewport),
-      clip(clip),
+    : viewport_size(viewport_size),
       viewport_rect_for_tile_priority(viewport_rect_for_tile_priority),
       transform_for_tile_priority(transform_for_tile_priority) {}
 
@@ -31,15 +25,15 @@ SyncCompositorDemandDrawSwParams::SyncCompositorDemandDrawSwParams() {}
 
 SyncCompositorDemandDrawSwParams::~SyncCompositorDemandDrawSwParams() {}
 
-SyncCompositorCommonRendererParams::SyncCompositorCommonRendererParams()
-    : version(0u),
-      page_scale_factor(0.f),
-      min_page_scale_factor(0.f),
-      max_page_scale_factor(0.f),
-      need_animate_scroll(false),
-      need_invalidate_count(0u),
-      did_activate_pending_tree_count(0u) {}
+SyncCompositorCommonRendererParams::SyncCompositorCommonRendererParams() =
+    default;
+
+SyncCompositorCommonRendererParams::SyncCompositorCommonRendererParams(
+    const SyncCompositorCommonRendererParams& other) = default;
 
 SyncCompositorCommonRendererParams::~SyncCompositorCommonRendererParams() {}
+
+SyncCompositorCommonRendererParams& SyncCompositorCommonRendererParams::
+operator=(const SyncCompositorCommonRendererParams& other) = default;
 
 }  // namespace content

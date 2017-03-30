@@ -13,6 +13,7 @@
 #include "modules/screen_orientation/ScreenOrientation.h"
 #include "modules/screen_orientation/ScreenOrientationDispatcher.h"
 #include "platform/LayoutTestSupport.h"
+#include "platform/ScopedOrientationChangeIndicator.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationClient.h"
 
@@ -24,8 +25,6 @@ ScreenOrientationController::~ScreenOrientationController()
 
 void ScreenOrientationController::provideTo(LocalFrame& frame, WebScreenOrientationClient* client)
 {
-    ASSERT(RuntimeEnabledFeatures::screenOrientationEnabled());
-
     ScreenOrientationController* controller = new ScreenOrientationController(frame, client);
     Supplement<LocalFrame>::provideTo(frame, supplementName(), controller);
 }
@@ -36,7 +35,7 @@ ScreenOrientationController* ScreenOrientationController::from(LocalFrame& frame
 }
 
 ScreenOrientationController::ScreenOrientationController(LocalFrame& frame, WebScreenOrientationClient* client)
-    : LocalFrameLifecycleObserver(&frame)
+    : DOMWindowProperty(&frame)
     , PlatformEventController(frame.page())
     , m_client(client)
     , m_dispatchEventTimer(this, &ScreenOrientationController::dispatchEventTimerFired)
@@ -94,7 +93,7 @@ void ScreenOrientationController::updateOrientation()
 
 bool ScreenOrientationController::isActiveAndVisible() const
 {
-    return m_orientation && frame() && page() && page()->isPageVisible();
+    return m_orientation && m_client && page() && page()->isPageVisible();
 }
 
 void ScreenOrientationController::pageVisibilityChanged()
@@ -103,6 +102,9 @@ void ScreenOrientationController::pageVisibilityChanged()
 
     if (!isActiveAndVisible())
         return;
+
+    DCHECK(frame());
+    DCHECK(frame()->host());
 
     // The orientation type and angle are tied in a way that if the angle has
     // changed, the type must have changed.
@@ -119,8 +121,6 @@ void ScreenOrientationController::pageVisibilityChanged()
 
 void ScreenOrientationController::notifyOrientationChanged()
 {
-    ASSERT(RuntimeEnabledFeatures::screenOrientationEnabled());
-
     if (!isActiveAndVisible())
         return;
 
@@ -170,10 +170,12 @@ void ScreenOrientationController::unlock()
     m_client->unlockOrientation();
 }
 
-void ScreenOrientationController::dispatchEventTimerFired(Timer<ScreenOrientationController>*)
+void ScreenOrientationController::dispatchEventTimerFired(TimerBase*)
 {
     if (!m_orientation)
         return;
+
+    ScopedOrientationChangeIndicator orientationChangeIndicator;
     m_orientation->dispatchEvent(Event::create(EventTypeNames::change));
 }
 
@@ -197,7 +199,7 @@ bool ScreenOrientationController::hasLastData()
     return true;
 }
 
-void ScreenOrientationController::willDetachFrameHost()
+void ScreenOrientationController::willDestroyGlobalObjectInFrame()
 {
     m_client = nullptr;
 }
@@ -213,7 +215,7 @@ void ScreenOrientationController::notifyDispatcher()
 DEFINE_TRACE(ScreenOrientationController)
 {
     visitor->trace(m_orientation);
-    LocalFrameLifecycleObserver::trace(visitor);
+    DOMWindowProperty::trace(visitor);
     Supplement<LocalFrame>::trace(visitor);
     PlatformEventController::trace(visitor);
 }

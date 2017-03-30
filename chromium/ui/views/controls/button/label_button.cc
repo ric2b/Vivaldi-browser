@@ -192,6 +192,10 @@ void LabelButton::SetFontList(const gfx::FontList& font_list) {
   label_->SetFontList(cached_normal_font_list_);
 }
 
+void LabelButton::AdjustFontSize(int font_size_delta) {
+  LabelButton::SetFontList(GetFontList().DeriveWithSizeDelta(font_size_delta));
+}
+
 void LabelButton::SetElideBehavior(gfx::ElideBehavior elide_behavior) {
   label_->SetElideBehavior(elide_behavior);
 }
@@ -422,6 +426,9 @@ void LabelButton::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   ResetLabelEnabledColor();
   // Invalidate the layout to pickup the new insets from the border.
   InvalidateLayout();
+  // The entire button has to be repainted here, since the native theme can
+  // define the tint for the entire background/border/focus ring.
+  SchedulePaint();
 }
 
 void LabelButton::AddInkDropLayer(ui::Layer* ink_drop_layer) {
@@ -454,10 +461,10 @@ std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
   return GetText().empty()
              ? CreateDefaultInkDropHighlight(
                    gfx::RectF(image()->GetMirroredBounds()).CenterPoint())
-             : base::WrapUnique(new views::InkDropHighlight(
+             : base::MakeUnique<views::InkDropHighlight>(
                    size(), kInkDropSmallCornerRadius,
                    gfx::RectF(GetLocalBounds()).CenterPoint(),
-                   GetInkDropBaseColor()));
+                   GetInkDropBaseColor());
 }
 
 void LabelButton::StateChanged() {
@@ -481,11 +488,24 @@ void LabelButton::GetExtraParams(ui::NativeTheme::ExtraParams* params) const {
 
 void LabelButton::ResetColorsFromNativeTheme() {
   const ui::NativeTheme* theme = GetNativeTheme();
+  bool button_style = style() == STYLE_BUTTON;
+  // Button colors are used only for STYLE_BUTTON, otherwise we use label
+  // colors. As it turns out, these are almost always the same color anyway in
+  // pre-MD, although in the MD world labels and buttons get different colors.
+  // TODO(estade): simplify this by removing STYLE_BUTTON.
   SkColor colors[STATE_COUNT] = {
-    theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonEnabledColor),
-    theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonHoverColor),
-    theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonHoverColor),
-    theme->GetSystemColor(ui::NativeTheme::kColorId_ButtonDisabledColor),
+      theme->GetSystemColor(button_style
+                                ? ui::NativeTheme::kColorId_ButtonEnabledColor
+                                : ui::NativeTheme::kColorId_LabelEnabledColor),
+      theme->GetSystemColor(button_style
+                                ? ui::NativeTheme::kColorId_ButtonHoverColor
+                                : ui::NativeTheme::kColorId_LabelEnabledColor),
+      theme->GetSystemColor(button_style
+                                ? ui::NativeTheme::kColorId_ButtonHoverColor
+                                : ui::NativeTheme::kColorId_LabelEnabledColor),
+      theme->GetSystemColor(button_style
+                                ? ui::NativeTheme::kColorId_ButtonDisabledColor
+                                : ui::NativeTheme::kColorId_LabelDisabledColor),
   };
 
   // Use hardcoded colors for inverted color scheme support and STYLE_BUTTON.
@@ -496,11 +516,11 @@ void LabelButton::ResetColorsFromNativeTheme() {
     label_->set_background(Background::CreateSolidBackground(SK_ColorBLACK));
     label_->SetAutoColorReadabilityEnabled(true);
     label_->SetShadows(gfx::ShadowValues());
-  } else if (style() == STYLE_BUTTON) {
-    PlatformStyle::ApplyLabelButtonTextStyle(label_, &colors);
-    label_->set_background(nullptr);
   } else {
+    if (style() == STYLE_BUTTON)
+      PlatformStyle::ApplyLabelButtonTextStyle(label_, &colors);
     label_->set_background(nullptr);
+    label_->SetAutoColorReadabilityEnabled(false);
   }
 
   for (size_t state = STATE_NORMAL; state < STATE_COUNT; ++state) {
@@ -541,6 +561,7 @@ void LabelButton::SetTextInternal(const base::string16& text) {
 void LabelButton::ChildPreferredSizeChanged(View* child) {
   ResetCachedPreferredSize();
   PreferredSizeChanged();
+  Layout();
 }
 
 ui::NativeTheme::Part LabelButton::GetThemePart() const {

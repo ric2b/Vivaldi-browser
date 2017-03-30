@@ -320,14 +320,14 @@ namespace media {
 PpapiCdmAdapter::PpapiCdmAdapter(PP_Instance instance, pp::Module* module)
     : pp::Instance(instance),
       pp::ContentDecryptor_Private(this),
-#if defined(OS_CHROMEOS)
       output_protection_(this),
-      platform_verification_(this),
       output_link_mask_(0),
       output_protection_mask_(0),
       query_output_protection_in_progress_(false),
       uma_for_output_protection_query_reported_(false),
       uma_for_output_protection_positive_result_reported_(false),
+#if defined(OS_CHROMEOS)
+      platform_verification_(this),
 #endif
       allocator_(this),
       cdm_(NULL),
@@ -354,6 +354,19 @@ CdmWrapper* PpapiCdmAdapter::CreateCdmInstance(const std::string& key_system) {
                               (cdm ? "" : " could not be") + " created.";
   DLOG_TO_CONSOLE(message);
   CDM_DLOG() << message;
+
+  if (cdm) {
+    pp::UMAPrivate uma_interface(this);
+
+    // The interface version is relatively small. So using normal histogram
+    // instead of a sparse histogram is okay. The following DCHECK asserts this.
+    PP_DCHECK(cdm->GetInterfaceVersion() <= 30);
+    uma_interface.HistogramEnumeration(
+        "Media.EME.CdmInterfaceVersion", cdm->GetInterfaceVersion(),
+        // Sample value should always be less than the boundary. Hence use "+1".
+        // See the comment on HistogramEnumeration in ppb_uma_private.idl.
+        cdm::ContentDecryptionModule::kVersion + 1);
+  }
 
   return cdm;
 }
@@ -694,18 +707,16 @@ void PpapiCdmAdapter::OnSessionMessage(const char* session_id,
                                        uint32_t message_size,
                                        const char* legacy_destination_url,
                                        uint32_t legacy_destination_url_size) {
+  // |legacy_destination_url| is obsolete and will be removed as part of
+  // https://crbug.com/570216.
   // License requests should not specify |legacy_destination_url|.
-  // |legacy_destination_url| is not passed to unprefixed EME applications,
-  // so it can be removed when the prefixed API is removed.
   PP_DCHECK(legacy_destination_url_size == 0 ||
             message_type != cdm::MessageType::kLicenseRequest);
 
   PostOnMain(callback_factory_.NewCallback(
       &PpapiCdmAdapter::SendSessionMessageInternal,
-      SessionMessage(
-          std::string(session_id, session_id_size), message_type, message,
-          message_size,
-          std::string(legacy_destination_url, legacy_destination_url_size))));
+      SessionMessage(std::string(session_id, session_id_size), message_type,
+                     message, message_size)));
 }
 
 void PpapiCdmAdapter::OnSessionKeysChange(const char* session_id,
@@ -760,11 +771,7 @@ void PpapiCdmAdapter::OnLegacySessionError(const char* session_id,
                                            uint32_t system_code,
                                            const char* error_message,
                                            uint32_t error_message_size) {
-  PostOnMain(callback_factory_.NewCallback(
-      &PpapiCdmAdapter::SendSessionErrorInternal,
-      std::string(session_id, session_id_size),
-      SessionError(error, system_code,
-                   std::string(error_message, error_message_size))));
+  // Obsolete and will be removed as part of https://crbug.com/570216.
 }
 
 // Helpers to pass the event to Pepper.
@@ -806,22 +813,13 @@ void PpapiCdmAdapter::SendSessionMessageInternal(
 
   pp::ContentDecryptor_Private::SessionMessage(
       message.session_id, CdmMessageTypeToPpMessageType(message.message_type),
-      message_array_buffer, message.legacy_destination_url);
+      message_array_buffer, std::string());
 }
 
 void PpapiCdmAdapter::SendSessionClosedInternal(int32_t result,
                                                 const std::string& session_id) {
   PP_DCHECK(result == PP_OK);
   pp::ContentDecryptor_Private::SessionClosed(session_id);
-}
-
-void PpapiCdmAdapter::SendSessionErrorInternal(int32_t result,
-                                               const std::string& session_id,
-                                               const SessionError& error) {
-  PP_DCHECK(result == PP_OK);
-  pp::ContentDecryptor_Private::LegacySessionError(
-      session_id, CdmExceptionTypeToPpCdmExceptionType(error.error),
-      error.system_code, error.error_description);
 }
 
 void PpapiCdmAdapter::SendSessionKeysChangeInternal(
@@ -1069,7 +1067,6 @@ void PpapiCdmAdapter::SendPlatformChallenge(const char* service_id,
 }
 
 void PpapiCdmAdapter::EnableOutputProtection(uint32_t desired_protection_mask) {
-#if defined(OS_CHROMEOS)
   int32_t result = output_protection_.EnableProtection(
       desired_protection_mask,
       callback_factory_.NewCallback(&PpapiCdmAdapter::EnableProtectionDone));
@@ -1079,11 +1076,9 @@ void PpapiCdmAdapter::EnableOutputProtection(uint32_t desired_protection_mask) {
 
   if (result != PP_OK && result != PP_OK_COMPLETIONPENDING)
     CDM_DLOG() << __FUNCTION__ << " failed!";
-#endif
 }
 
 void PpapiCdmAdapter::QueryOutputProtectionStatus() {
-#if defined(OS_CHROMEOS)
   PP_DCHECK(!query_output_protection_in_progress_);
 
   output_link_mask_ = output_protection_mask_ = 0;
@@ -1100,8 +1095,6 @@ void PpapiCdmAdapter::QueryOutputProtectionStatus() {
   // Fall through on error and issue an empty OnQueryOutputProtectionStatus().
   PP_DCHECK(result != PP_OK);
   CDM_DLOG() << __FUNCTION__ << " failed, result = " << result;
-#endif
-  cdm_->OnQueryOutputProtectionStatus(cdm::kQueryFailed, 0, 0);
 }
 
 void PpapiCdmAdapter::OnDeferredInitializationDone(cdm::StreamType stream_type,
@@ -1139,7 +1132,6 @@ cdm::FileIO* PpapiCdmAdapter::CreateFileIO(cdm::FileIOClient* client) {
       callback_factory_.NewCallback(&PpapiCdmAdapter::OnFirstFileRead));
 }
 
-#if defined(OS_CHROMEOS)
 void PpapiCdmAdapter::ReportOutputProtectionUMA(OutputProtectionStatus status) {
   pp::UMAPrivate uma_interface(this);
   uma_interface.HistogramEnumeration("Media.EME.OutputProtection", status,
@@ -1169,9 +1161,10 @@ void PpapiCdmAdapter::ReportOutputProtectionQueryResult() {
 
   const uint32_t kProtectableLinks =
       cdm::kLinkTypeHDMI | cdm::kLinkTypeDVI | cdm::kLinkTypeDisplayPort;
-  bool is_unprotectable_link_connected = external_links & ~kProtectableLinks;
+  bool is_unprotectable_link_connected =
+      (external_links & ~kProtectableLinks) != 0;
   bool is_hdcp_enabled_on_all_protectable_links =
-      output_protection_mask_ & cdm::kProtectionHDCP;
+      (output_protection_mask_ & cdm::kProtectionHDCP) != 0;
 
   if (!is_unprotectable_link_connected &&
       is_hdcp_enabled_on_all_protectable_links) {
@@ -1185,6 +1178,7 @@ void PpapiCdmAdapter::ReportOutputProtectionQueryResult() {
   // queries and success results.
 }
 
+#if defined(OS_CHROMEOS)
 void PpapiCdmAdapter::SendPlatformChallengeDone(
     int32_t result,
     const linked_ptr<PepperPlatformChallengeResponse>& response) {
@@ -1212,6 +1206,7 @@ void PpapiCdmAdapter::SendPlatformChallengeDone(
   signed_data_var.Unmap();
   signed_data_signature_var.Unmap();
 }
+#endif
 
 void PpapiCdmAdapter::EnableProtectionDone(int32_t result) {
   // Does nothing since clients must call QueryOutputProtectionStatus() to
@@ -1237,7 +1232,6 @@ void PpapiCdmAdapter::QueryOutputProtectionStatusDone(int32_t result) {
   cdm_->OnQueryOutputProtectionStatus(query_result, output_link_mask_,
                                       output_protection_mask_);
 }
-#endif
 
 PpapiCdmAdapter::SessionError::SessionError(
     cdm::Error error,
@@ -1247,16 +1241,13 @@ PpapiCdmAdapter::SessionError::SessionError(
       system_code(system_code),
       error_description(error_description) {}
 
-PpapiCdmAdapter::SessionMessage::SessionMessage(
-    const std::string& session_id,
-    cdm::MessageType message_type,
-    const char* message,
-    uint32_t message_size,
-    const std::string& legacy_destination_url)
+PpapiCdmAdapter::SessionMessage::SessionMessage(const std::string& session_id,
+                                                cdm::MessageType message_type,
+                                                const char* message,
+                                                uint32_t message_size)
     : session_id(session_id),
       message_type(message_type),
-      message(message, message + message_size),
-      legacy_destination_url(legacy_destination_url) {}
+      message(message, message + message_size) {}
 
 void* GetCdmHost(int host_interface_version, void* user_data) {
   if (!host_interface_version || !user_data)
@@ -1277,9 +1268,8 @@ void* GetCdmHost(int host_interface_version, void* user_data) {
       // Current version is supported.
       IsSupportedCdmHostVersion(cdm::Host_8::kVersion) &&
       // Include all previous supported versions (if any) here.
-      IsSupportedCdmHostVersion(cdm::Host_7::kVersion) &&
       // One older than the oldest supported version is not supported.
-      !IsSupportedCdmHostVersion(cdm::Host_7::kVersion - 1));
+      !IsSupportedCdmHostVersion(cdm::Host_8::kVersion - 1));
   PP_DCHECK(IsSupportedCdmHostVersion(host_interface_version));
 
   PpapiCdmAdapter* cdm_adapter = static_cast<PpapiCdmAdapter*>(user_data);
@@ -1287,8 +1277,6 @@ void* GetCdmHost(int host_interface_version, void* user_data) {
   switch (host_interface_version) {
     case cdm::Host_8::kVersion:
       return static_cast<cdm::Host_8*>(cdm_adapter);
-    case cdm::Host_7::kVersion:
-      return static_cast<cdm::Host_7*>(cdm_adapter);
     default:
       PP_NOTREACHED();
       return NULL;

@@ -12,6 +12,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "jni/ExternalEstimateProviderAndroid_jni.h"
 
+using base::android::JavaParamRef;
+
 namespace chrome {
 namespace android {
 
@@ -33,8 +35,7 @@ ExternalEstimateProviderAndroid::ExternalEstimateProviderAndroid()
 ExternalEstimateProviderAndroid::~ExternalEstimateProviderAndroid() {
   DCHECK(thread_checker_.CalledOnValidThread());
   Java_ExternalEstimateProviderAndroid_destroy(
-      base::android::AttachCurrentThread(),
-      j_external_estimate_provider_.obj());
+      base::android::AttachCurrentThread(), j_external_estimate_provider_);
 }
 
 bool ExternalEstimateProviderAndroid::GetRTT(base::TimeDelta* rtt) const {
@@ -42,7 +43,7 @@ bool ExternalEstimateProviderAndroid::GetRTT(base::TimeDelta* rtt) const {
   JNIEnv* env = base::android::AttachCurrentThread();
   int32_t milliseconds =
       Java_ExternalEstimateProviderAndroid_getRTTMilliseconds(
-          env, j_external_estimate_provider_.obj());
+          env, j_external_estimate_provider_);
   DCHECK_GE(milliseconds, no_value_);
   if (milliseconds == no_value_)
     return false;
@@ -56,7 +57,7 @@ bool ExternalEstimateProviderAndroid::GetDownstreamThroughputKbps(
   JNIEnv* env = base::android::AttachCurrentThread();
   int32_t kbps =
       Java_ExternalEstimateProviderAndroid_getDownstreamThroughputKbps(
-          env, j_external_estimate_provider_.obj());
+          env, j_external_estimate_provider_);
   DCHECK_GE(kbps, no_value_);
   if (kbps == no_value_)
     return false;
@@ -69,7 +70,7 @@ bool ExternalEstimateProviderAndroid::GetUpstreamThroughputKbps(
   DCHECK(thread_checker_.CalledOnValidThread());
   JNIEnv* env = base::android::AttachCurrentThread();
   int32_t kbps = Java_ExternalEstimateProviderAndroid_getUpstreamThroughputKbps(
-      env, j_external_estimate_provider_.obj());
+      env, j_external_estimate_provider_);
   DCHECK_GE(kbps, no_value_);
   if (kbps == no_value_)
     return false;
@@ -83,7 +84,7 @@ bool ExternalEstimateProviderAndroid::GetTimeSinceLastUpdate(
   JNIEnv* env = base::android::AttachCurrentThread();
   int32_t seconds =
       Java_ExternalEstimateProviderAndroid_getTimeSinceLastUpdateSeconds(
-          env, j_external_estimate_provider_.obj());
+          env, j_external_estimate_provider_);
   DCHECK_GE(seconds, no_value_);
   if (seconds == no_value_) {
     *time_since_last_update = base::TimeDelta::Max();
@@ -102,7 +103,7 @@ void ExternalEstimateProviderAndroid::Update() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ExternalEstimateProviderAndroid_requestUpdate(
-      env, j_external_estimate_provider_.obj());
+      env, j_external_estimate_provider_);
 }
 
 void ExternalEstimateProviderAndroid::

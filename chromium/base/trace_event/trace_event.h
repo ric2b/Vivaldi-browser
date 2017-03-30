@@ -76,7 +76,13 @@
   UNLIKELY(*INTERNAL_TRACE_EVENT_UID(category_group_enabled) &           \
            (base::trace_event::TraceLog::ENABLED_FOR_RECORDING |         \
             base::trace_event::TraceLog::ENABLED_FOR_EVENT_CALLBACK |    \
-            base::trace_event::TraceLog::ENABLED_FOR_ETW_EXPORT))
+            base::trace_event::TraceLog::ENABLED_FOR_ETW_EXPORT |        \
+            base::trace_event::TraceLog::ENABLED_FOR_FILTERING))
+
+#define INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_FILTERING_MODE( \
+    category_group_enabled)                                             \
+  UNLIKELY(category_group_enabled&                                      \
+               base::trace_event::TraceLog::ENABLED_FOR_FILTERING)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation specific tracing API definitions.
@@ -184,6 +190,14 @@
 //     base::trace_event::TraceEventHandle id)
 #define TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION \
     base::trace_event::TraceLog::GetInstance()->UpdateTraceEventDuration
+
+// Call EndEvent on the filter for a filtered event.
+// void TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION(
+//     const unsigned char* category_group_enabled,
+//     const char* name,
+//     base::trace_event::TraceEventHandle id)
+#define TRACE_EVENT_API_END_FILTERED_EVENT \
+  base::trace_event::TraceLog::GetInstance()->EndFilteredEvent
 
 // Adds a metadata event to the trace log. The |AppendValueAsTraceFormat| method
 // on the convertable value will be called at flush time.
@@ -348,6 +362,31 @@ TRACE_EVENT_API_CLASS_EXPORT extern \
           trace_event_internal::kNoId, ##__VA_ARGS__);                        \
     }                                                                         \
   } while (0)
+
+// The trace ID and bind ID will never be mangled by this macro.
+#define INTERNAL_TRACE_EVENT_ADD_BIND_IDS(category_group, name, id, bind_id,  \
+                                          ...)                                \
+    do {                                                                      \
+      INTERNAL_TRACE_EVENT_GET_CATEGORY_INFO(category_group);                 \
+      if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_RECORDING_MODE()) { \
+        trace_event_internal::TraceID::DontMangle source_id(id);              \
+        trace_event_internal::TraceID::DontMangle target_id(bind_id);         \
+        if (target_id.scope() == trace_event_internal::kGlobalScope) {        \
+          trace_event_internal::AddTraceEvent(                                \
+              TRACE_EVENT_PHASE_BIND_IDS,                                     \
+              INTERNAL_TRACE_EVENT_UID(category_group_enabled),               \
+              name, source_id.scope(), source_id.raw_id(),                    \
+              TRACE_EVENT_FLAG_HAS_ID, target_id.raw_id(), ##__VA_ARGS__);    \
+        } else {                                                              \
+          trace_event_internal::AddTraceEvent(                                \
+              TRACE_EVENT_PHASE_BIND_IDS,                                     \
+              INTERNAL_TRACE_EVENT_UID(category_group_enabled),               \
+              name, source_id.scope(), source_id.raw_id(),                    \
+              TRACE_EVENT_FLAG_HAS_ID, target_id.raw_id(),                    \
+              "bind_scope", target_id.scope(), ##__VA_ARGS__);                \
+        }                                                                     \
+      }                                                                       \
+    } while (0)
 
 // Implementation detail: internal macro to create static category and add
 // metadata event if the category is enabled.
@@ -974,9 +1013,15 @@ class TRACE_EVENT_API_CLASS_EXPORT ScopedTracer {
   ScopedTracer() : p_data_(NULL) {}
 
   ~ScopedTracer() {
-    if (p_data_ && *data_.category_group_enabled)
+    if (p_data_ && *data_.category_group_enabled) {
       TRACE_EVENT_API_UPDATE_TRACE_EVENT_DURATION(
           data_.category_group_enabled, data_.name, data_.event_handle);
+      if (INTERNAL_TRACE_EVENT_CATEGORY_GROUP_ENABLED_FOR_FILTERING_MODE(
+              *data_.category_group_enabled)) {
+        TRACE_EVENT_API_END_FILTERED_EVENT(data_.category_group_enabled,
+                                           data_.name, data_.event_handle);
+      }
+    }
   }
 
   void Initialize(const unsigned char* category_group_enabled,

@@ -87,9 +87,10 @@ WebInspector.Action = function(extension)
     this._toggled = false;
 }
 
+/** @enum {symbol} */
 WebInspector.Action.Events = {
-    Enabled: "Enabled",
-    Toggled: "Toggled"
+    Enabled: Symbol("Enabled"),
+    Toggled: Symbol("Toggled")
 }
 
 WebInspector.Action.prototype = {
@@ -106,7 +107,7 @@ WebInspector.Action.prototype = {
      */
     execute: function()
     {
-        return this._extension.instancePromise().then(handleAction.bind(this));
+        return this._extension.instance().then(handleAction.bind(this));
 
         /**
          * @param {!Object} actionDelegate
@@ -170,7 +171,7 @@ WebInspector.Action.prototype = {
      */
     title: function()
     {
-        var title = this._extension.title(WebInspector.platform());
+        var title = this._extension.title();
         var options = this._extension.descriptor()["options"];
         if (options) {
             for (var pair of options) {

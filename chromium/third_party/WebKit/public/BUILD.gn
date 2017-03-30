@@ -20,6 +20,8 @@ group("blink") {
   public_deps = [
     ":blink_headers",
     ":blink_minimal",
+  ]
+  deps = [
     "//third_party/WebKit/Source/platform",
     "//third_party/WebKit/Source/web",
   ]
@@ -85,13 +87,16 @@ if (is_android) {
   java_cpp_enum("blink_headers_java_enums_srcjar") {
     sources = [
       "./platform/WebDisplayMode.h",
-      "./web/WebInputEvent.h",
+      "./platform/WebInputEvent.h",
       "./web/WebTextInputType.h",
     ]
   }
 
   # GYP version: WebKit/public/blink_headers.gyp:blink_headers_java
   android_library("blink_headers_java") {
+    deps = [
+      "//third_party/android_tools:android_support_annotations_java",
+    ]
     srcjar_deps = [ ":blink_headers_java_enums_srcjar" ]
   }
 }
@@ -161,33 +166,80 @@ mojom("mojo_bindings") {
     "platform/mime_registry.mojom",
     "platform/modules/background_sync/background_sync.mojom",
     "platform/modules/bluetooth/web_bluetooth.mojom",
-    "platform/modules/geolocation/geolocation.mojom",
+    "platform/modules/broadcastchannel/broadcast_channel.mojom",
+    "platform/modules/budget_service/budget_service.mojom",
+    "platform/modules/hyphenation/hyphenation.mojom",
     "platform/modules/notifications/notification.mojom",
     "platform/modules/notifications/notification_service.mojom",
     "platform/modules/offscreencanvas/offscreen_canvas_surface.mojom",
-    "platform/modules/permissions/permission.mojom",
-    "platform/modules/permissions/permission_status.mojom",
-    "platform/modules/presentation/presentation.mojom",
     "platform/modules/serviceworker/service_worker_event_status.mojom",
     "platform/modules/wake_lock/wake_lock_service.mojom",
   ]
   public_deps = [
     ":android_mojo_bindings",
+    ":new_wrapper_types_mojo_bindings",
     "//cc/ipc:interfaces_surfaceid_only",
     "//device/bluetooth/public/interfaces:bluetooth_mojom_bluetooth_uuid",
+    "//url/mojo:url_mojom_origin",
   ]
+
+  use_new_wrapper_types = false
+
+  # The chromium variant must be linked with content and use the same export
+  # settings in component build because of the WebBluetoothDeviceId typemap
+  # inside content.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+
+  # Similarly, the blink variant must be linked with the platform component
+  # since it uses types from it in its typemaps.
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
+}
+
+# GYP version: WebKit/public/blink.gyp:new_wrapper_types_mojo_bindings
+mojom("new_wrapper_types_mojo_bindings") {
+  sources = [
+    "platform/modules/permissions/permission.mojom",
+    "platform/modules/permissions/permission_status.mojom",
+    "platform/modules/presentation/presentation.mojom",
+  ]
+
+  public_deps = [
+    "//url/mojo:url_mojom_origin",
+  ]
+
+  # See comment above.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 }
 
 # GYP version: WebKit/public/blink.gyp:android_mojo_bindings_java
 mojom("android_mojo_bindings") {
   sources = [
     "platform/modules/payments/payment_request.mojom",
+    "platform/modules/webshare/webshare.mojom",
   ]
+
+  use_new_wrapper_types = false
+
+  # See comment above.
+  export_class_attribute = "CONTENT_EXPORT"
+  export_define = "CONTENT_IMPLEMENTATION=1"
+  export_header = "content/common/content_export.h"
+  export_class_attribute_blink = "BLINK_PLATFORM_EXPORT"
+  export_define_blink = "BLINK_PLATFORM_IMPLEMENTATION=1"
+  export_header_blink = "third_party/WebKit/public/platform/WebCommon.h"
 }
 
 group("generate_mojo_bindings") {
   deps = [
-    ":mojo_bindings__generator",
     ":mojo_bindings_blink__generator",
   ]
 }

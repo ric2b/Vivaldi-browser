@@ -28,7 +28,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperations::domTemplate, V8TestSpecialOperations::trace, V8TestSpecialOperations::traceWrappers, 0, 0, V8TestSpecialOperations::preparePrototypeAndInterfaceObject, nullptr, "TestSpecialOperations", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestSpecialOperations::domTemplate, V8TestSpecialOperations::trace, V8TestSpecialOperations::traceWrappers, 0, V8TestSpecialOperations::preparePrototypeAndInterfaceObject, nullptr, "TestSpecialOperations", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -38,12 +38,25 @@ const WrapperTypeInfo V8TestSpecialOperations::wrapperTypeInfo = { gin::kEmbedde
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestSpecialOperations::s_wrapperTypeInfo = V8TestSpecialOperations::wrapperTypeInfo;
 
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestSpecialOperations>::value,
+    "TestSpecialOperations inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestSpecialOperations::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestSpecialOperations is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+
 namespace TestSpecialOperationsV8Internal {
 
 static void namedItemMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod(info.GetIsolate(), "namedItem", "TestSpecialOperations", 1, info.Length()), info.GetIsolate());
+        V8ThrowException::throwException(info.GetIsolate(), createMinimumArityTypeErrorForMethod(info.GetIsolate(), "namedItem", "TestSpecialOperations", 1, info.Length()));
         return;
     }
     TestSpecialOperations* impl = V8TestSpecialOperations::toImpl(info.Holder());
@@ -177,7 +190,6 @@ v8::Local<v8::FunctionTemplate> V8TestSpecialOperations::domTemplate(v8::Isolate
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestSpecialOperationsTemplate);
 }
-
 
 bool V8TestSpecialOperations::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

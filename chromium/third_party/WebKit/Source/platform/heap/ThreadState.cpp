@@ -76,6 +76,8 @@ uintptr_t ThreadState::s_mainThreadStackStart = 0;
 uintptr_t ThreadState::s_mainThreadUnderestimatedStackSize = 0;
 uint8_t ThreadState::s_mainThreadStateStorage[sizeof(ThreadState)];
 
+const size_t defaultAllocatedObjectSizeThreshold = 100 * 1024;
+
 ThreadState::ThreadState(bool perThreadHeapEnabled)
     : m_thread(currentThread())
     , m_persistentRegion(wrapUnique(new PersistentRegion()))
@@ -98,6 +100,7 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
     , m_gcMixinMarker(nullptr)
     , m_shouldFlushHeapDoesNotContainCache(false)
     , m_gcState(NoGCScheduled)
+    , m_threadLocalWeakCallbackStack(CallbackStack::create())
     , m_isolate(nullptr)
     , m_traceDOMWrappers(nullptr)
     , m_invalidateDeadObjectsInWrappersMarkingDeque(nullptr)
@@ -135,18 +138,11 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
 
     m_likelyToBePromptlyFreed = wrapArrayUnique(new int[likelyToBePromptlyFreedArraySize]);
     clearArenaAges();
-
-    // There is little use of weak references and collections off the main thread;
-    // use a much lower initial block reservation.
-    size_t initialBlockSize = isMainThread() ? CallbackStack::kDefaultBlockSize : CallbackStack::kMinimalBlockSize;
-    m_threadLocalWeakCallbackStack = new CallbackStack(initialBlockSize);
 }
 
 ThreadState::~ThreadState()
 {
     ASSERT(checkThread());
-    delete m_threadLocalWeakCallbackStack;
-    m_threadLocalWeakCallbackStack = nullptr;
     for (int i = 0; i < BlinkGC::NumberOfArenas; ++i)
         delete m_arenas[i];
 
@@ -507,10 +503,10 @@ double ThreadState::partitionAllocGrowingRate()
 
 // TODO(haraken): We should improve the GC heuristics. The heuristics affect
 // performance significantly.
-bool ThreadState::judgeGCThreshold(size_t totalMemorySizeThreshold, double heapGrowingRateThreshold)
+bool ThreadState::judgeGCThreshold(size_t allocatedObjectSizeThreshold, size_t totalMemorySizeThreshold, double heapGrowingRateThreshold)
 {
     // If the allocated object size or the total memory size is small, don't trigger a GC.
-    if (m_heap->heapStats().allocatedObjectSize() < 100 * 1024 || totalMemorySize() < totalMemorySizeThreshold)
+    if (m_heap->heapStats().allocatedObjectSize() < allocatedObjectSizeThreshold || totalMemorySize() < totalMemorySizeThreshold)
         return false;
     // If the growing rate of Oilpan's heap or PartitionAlloc is high enough,
     // trigger a GC.
@@ -524,12 +520,12 @@ bool ThreadState::shouldScheduleIdleGC()
 {
     if (gcState() != NoGCScheduled)
         return false;
-    return judgeGCThreshold(1024 * 1024, 1.5);
+    return judgeGCThreshold(defaultAllocatedObjectSizeThreshold, 1024 * 1024, 1.5);
 }
 
 bool ThreadState::shouldScheduleV8FollowupGC()
 {
-    return judgeGCThreshold(32 * 1024 * 1024, 1.5);
+    return judgeGCThreshold(defaultAllocatedObjectSizeThreshold, 32 * 1024 * 1024, 1.5);
 }
 
 bool ThreadState::shouldSchedulePageNavigationGC(float estimatedRemovalRatio)
@@ -537,13 +533,13 @@ bool ThreadState::shouldSchedulePageNavigationGC(float estimatedRemovalRatio)
     // If estimatedRemovalRatio is low we should let IdleGC handle this.
     if (estimatedRemovalRatio < 0.01)
         return false;
-    return judgeGCThreshold(32 * 1024 * 1024, 1.5 * (1 - estimatedRemovalRatio));
+    return judgeGCThreshold(defaultAllocatedObjectSizeThreshold, 32 * 1024 * 1024, 1.5 * (1 - estimatedRemovalRatio));
 }
 
 bool ThreadState::shouldForceConservativeGC()
 {
     // TODO(haraken): 400% is too large. Lower the heap growing factor.
-    return judgeGCThreshold(32 * 1024 * 1024, 5.0);
+    return judgeGCThreshold(defaultAllocatedObjectSizeThreshold, 32 * 1024 * 1024, 5.0);
 }
 
 // If we're consuming too much memory, trigger a conservative GC
@@ -552,7 +548,7 @@ bool ThreadState::shouldForceMemoryPressureGC()
 {
     if (totalMemorySize() < 300 * 1024 * 1024)
         return false;
-    return judgeGCThreshold(0, 1.5);
+    return judgeGCThreshold(0, 0, 1.5);
 }
 
 void ThreadState::scheduleV8FollowupGCIfNeeded(BlinkGC::V8GCType gcType)
@@ -963,7 +959,8 @@ void ThreadState::preGC()
     // should only process callbacks that's found to be reachable by
     // the latest GC, when it eventually gets to next perform
     // thread-local weak processing.
-    m_threadLocalWeakCallbackStack->clear();
+    m_threadLocalWeakCallbackStack->decommit();
+    m_threadLocalWeakCallbackStack->commit();
 }
 
 void ThreadState::postGC(BlinkGC::GCType gcType)

@@ -346,27 +346,55 @@ int UDPSocketPosix::BindToNetwork(
       base::android::SDK_VERSION_LOLLIPOP) {
     return ERR_NOT_IMPLEMENTED;
   }
-  // NOTE(pauljensen): This does rely on Android implementation details, but
-  // these details are unlikely to change.
-  typedef int (*SetNetworkForSocket)(unsigned netId, int socketFd);
-  static SetNetworkForSocket setNetworkForSocket;
-  // This is racy, but all racers should come out with the same answer so it
-  // shouldn't matter.
-  if (!setNetworkForSocket) {
-    // Android's netd client library should always be loaded in our address
-    // space as it shims socket() which was used to create |socket_|.
-    base::FilePath file(base::GetNativeLibraryName("netd_client"));
-    // Use RTLD_NOW to match Android's prior loading of the library:
-    // http://androidxref.com/6.0.0_r5/xref/bionic/libc/bionic/NetdClient.cpp#37
-    // Use RTLD_NOLOAD to assert that the library is already loaded and
-    // avoid doing any disk IO.
-    void* dl = dlopen(file.value().c_str(), RTLD_NOW | RTLD_NOLOAD);
-    setNetworkForSocket =
-        reinterpret_cast<SetNetworkForSocket>(dlsym(dl, "setNetworkForSocket"));
+  int rv;
+  // On Android M and newer releases use supported NDK API. On Android L use
+  // setNetworkForSocket from libnetd_client.so.
+  if (base::android::BuildInfo::GetInstance()->sdk_int() >=
+      base::android::SDK_VERSION_MARSHMALLOW) {
+    // See declaration of android_setsocknetwork() here:
+    // http://androidxref.com/6.0.0_r1/xref/development/ndk/platforms/android-M/include/android/multinetwork.h#65
+    // Function cannot be called directly as it will cause app to fail to load
+    // on pre-marshmallow devices.
+    typedef int (*MarshmallowSetNetworkForSocket)(int64_t netId, int socketFd);
+    static MarshmallowSetNetworkForSocket marshmallowSetNetworkForSocket;
+    // This is racy, but all racers should come out with the same answer so it
+    // shouldn't matter.
+    if (!marshmallowSetNetworkForSocket) {
+      base::FilePath file(base::GetNativeLibraryName("android"));
+      void* dl = dlopen(file.value().c_str(), RTLD_NOW);
+      marshmallowSetNetworkForSocket =
+          reinterpret_cast<MarshmallowSetNetworkForSocket>(
+              dlsym(dl, "android_setsocknetwork"));
+    }
+    if (!marshmallowSetNetworkForSocket)
+      return ERR_NOT_IMPLEMENTED;
+    rv = marshmallowSetNetworkForSocket(network, socket_);
+    if (rv)
+      rv = errno;
+  } else {
+    // NOTE(pauljensen): This does rely on Android implementation details, but
+    // they won't change because Lollipop is already released.
+    typedef int (*LollipopSetNetworkForSocket)(unsigned netId, int socketFd);
+    static LollipopSetNetworkForSocket lollipopSetNetworkForSocket;
+    // This is racy, but all racers should come out with the same answer so it
+    // shouldn't matter.
+    if (!lollipopSetNetworkForSocket) {
+      // Android's netd client library should always be loaded in our address
+      // space as it shims socket() which was used to create |socket_|.
+      base::FilePath file(base::GetNativeLibraryName("netd_client"));
+      // Use RTLD_NOW to match Android's prior loading of the library:
+      // http://androidxref.com/6.0.0_r5/xref/bionic/libc/bionic/NetdClient.cpp#37
+      // Use RTLD_NOLOAD to assert that the library is already loaded and
+      // avoid doing any disk IO.
+      void* dl = dlopen(file.value().c_str(), RTLD_NOW | RTLD_NOLOAD);
+      lollipopSetNetworkForSocket =
+          reinterpret_cast<LollipopSetNetworkForSocket>(
+              dlsym(dl, "setNetworkForSocket"));
+    }
+    if (!lollipopSetNetworkForSocket)
+      return ERR_NOT_IMPLEMENTED;
+    rv = -lollipopSetNetworkForSocket(network, socket_);
   }
-  if (!setNetworkForSocket)
-    return ERR_NOT_IMPLEMENTED;
-  int rv = setNetworkForSocket(network, socket_);
   // If |network| has since disconnected, |rv| will be ENONET.  Surface this as
   // ERR_NETWORK_CHANGED, rather than MapSystemError(ENONET) which gives back
   // the less descriptive ERR_FAILED.
@@ -395,6 +423,37 @@ int UDPSocketPosix::SetSendBufferSize(int32_t size) {
   int rv = setsockopt(socket_, SOL_SOCKET, SO_SNDBUF,
                       reinterpret_cast<const char*>(&size), sizeof(size));
   return rv == 0 ? OK : MapSystemError(errno);
+}
+
+int UDPSocketPosix::SetDoNotFragment() {
+  DCHECK_NE(socket_, kInvalidSocket);
+  DCHECK(CalledOnValidThread());
+
+#if !defined(IP_PMTUDISC_DO)
+  return ERR_NOT_IMPLEMENTED;
+#else
+  if (addr_family_ == AF_INET6) {
+    int val = IPV6_PMTUDISC_DO;
+    if (setsockopt(socket_, IPPROTO_IPV6, IPV6_MTU_DISCOVER, &val,
+                   sizeof(val)) != 0) {
+      return MapSystemError(errno);
+    }
+
+    int v6_only = false;
+    socklen_t v6_only_len = sizeof(v6_only);
+    if (getsockopt(socket_, IPPROTO_IPV6, IPV6_V6ONLY, &v6_only,
+                   &v6_only_len) != 0) {
+      return MapSystemError(errno);
+    }
+
+    if (v6_only)
+      return OK;
+  }
+
+  int val = IP_PMTUDISC_DO;
+  int rv = setsockopt(socket_, IPPROTO_IP, IP_MTU_DISCOVER, &val, sizeof(val));
+  return rv == 0 ? OK : MapSystemError(errno);
+#endif
 }
 
 int UDPSocketPosix::AllowAddressReuse() {

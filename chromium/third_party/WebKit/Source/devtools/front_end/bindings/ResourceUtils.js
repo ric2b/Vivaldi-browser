@@ -34,9 +34,9 @@
  */
 WebInspector.resourceForURL = function(url)
 {
-    var targets = WebInspector.targetManager.targets();
+    var targets = WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM);
     for (var i = 0; i < targets.length; ++i) {
-        var resource = targets[i].resourceTreeModel.resourceForURL(url);
+        var resource = WebInspector.ResourceTreeModel.fromTarget(targets[i]).resourceForURL(url);
         if (resource)
             return resource;
     }
@@ -48,9 +48,9 @@ WebInspector.resourceForURL = function(url)
  */
 WebInspector.forAllResources = function(callback)
 {
-    var targets = WebInspector.targetManager.targets();
+    var targets = WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM);
     for (var i = 0; i < targets.length; ++i)
-        targets[i].resourceTreeModel.forAllResources(callback);
+        WebInspector.ResourceTreeModel.fromTarget(targets[i]).forAllResources(callback);
 }
 
 /**
@@ -70,14 +70,16 @@ WebInspector.displayNameForURL = function(url)
     if (uiSourceCode)
         return uiSourceCode.displayName();
 
-    if (!WebInspector.targetManager.inspectedPageURL())
+    var mainTarget = WebInspector.targetManager.mainTarget();
+    var inspectedURL = mainTarget && mainTarget.inspectedURL();
+    if (!inspectedURL)
         return url.trimURL("");
 
-    var parsedURL = WebInspector.targetManager.inspectedPageURL().asParsedURL();
+    var parsedURL = inspectedURL.asParsedURL();
     var lastPathComponent = parsedURL ? parsedURL.lastPathComponent : parsedURL;
-    var index = WebInspector.targetManager.inspectedPageURL().indexOf(lastPathComponent);
-    if (index !== -1 && index + lastPathComponent.length === WebInspector.targetManager.inspectedPageURL().length) {
-        var baseURL = WebInspector.targetManager.inspectedPageURL().substring(0, index);
+    var index = inspectedURL.indexOf(lastPathComponent);
+    if (index !== -1 && index + lastPathComponent.length === inspectedURL.length) {
+        var baseURL = inspectedURL.substring(0, index);
         if (url.startsWith(baseURL))
             return url.substring(index);
     }

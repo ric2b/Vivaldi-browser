@@ -16,7 +16,7 @@
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/ownership/mock_owner_key_util.h"
-#include "policy/proto/device_management_backend.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -36,8 +36,8 @@ ScopedCrosSettingsTestHelper::~ScopedCrosSettingsTestHelper() {
 
 std::unique_ptr<FakeOwnerSettingsService>
 ScopedCrosSettingsTestHelper::CreateOwnerSettingsService(Profile* profile) {
-  return base::WrapUnique(new FakeOwnerSettingsService(
-      profile, new ownership::MockOwnerKeyUtil(), &stub_settings_provider_));
+  return base::MakeUnique<FakeOwnerSettingsService>(
+      profile, new ownership::MockOwnerKeyUtil(), &stub_settings_provider_);
 }
 
 void ScopedCrosSettingsTestHelper::ReplaceProvider(const std::string& path) {

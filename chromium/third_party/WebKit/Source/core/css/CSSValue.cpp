@@ -53,7 +53,6 @@
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSQuadValue.h"
 #include "core/css/CSSReflectValue.h"
-#include "core/css/CSSSVGDocumentValue.h"
 #include "core/css/CSSShadowValue.h"
 #include "core/css/CSSStringValue.h"
 #include "core/css/CSSTimingFunctionValue.h"
@@ -177,8 +176,6 @@ bool CSSValue::equals(const CSSValue& other) const
             return compareCSSValues<CSSValuePair>(*this, other);
         case ImageSetClass:
             return compareCSSValues<CSSImageSetValue>(*this, other);
-        case CSSSVGDocumentClass:
-            return compareCSSValues<CSSSVGDocumentValue>(*this, other);
         case CSSContentDistributionClass:
             return compareCSSValues<CSSContentDistributionValue>(*this, other);
         case CustomPropertyDeclarationClass:
@@ -271,8 +268,6 @@ String CSSValue::cssText() const
         return toCSSValueList(this)->customCSSText();
     case ImageSetClass:
         return toCSSImageSetValue(this)->customCSSText();
-    case CSSSVGDocumentClass:
-        return toCSSSVGDocumentValue(this)->customCSSText();
     case CSSContentDistributionClass:
         return toCSSContentDistributionValue(this)->customCSSText();
     case VariableReferenceClass:
@@ -284,139 +279,6 @@ String CSSValue::cssText() const
     }
     ASSERT_NOT_REACHED();
     return String();
-}
-
-void CSSValue::destroy()
-{
-    switch (getClassType()) {
-    case BasicShapeCircleClass:
-        delete toCSSBasicShapeCircleValue(this);
-        return;
-    case BasicShapeEllipseClass:
-        delete toCSSBasicShapeEllipseValue(this);
-        return;
-    case BasicShapePolygonClass:
-        delete toCSSBasicShapePolygonValue(this);
-        return;
-    case BasicShapeInsetClass:
-        delete toCSSBasicShapeInsetValue(this);
-        return;
-    case BorderImageSliceClass:
-        delete toCSSBorderImageSliceValue(this);
-        return;
-    case ColorClass:
-        delete toCSSColorValue(this);
-        return;
-    case CounterClass:
-        delete toCSSCounterValue(this);
-        return;
-    case CursorImageClass:
-        delete toCSSCursorImageValue(this);
-        return;
-    case FontFaceSrcClass:
-        delete toCSSFontFaceSrcValue(this);
-        return;
-    case FontFamilyClass:
-        delete toCSSFontFamilyValue(this);
-        return;
-    case FontFeatureClass:
-        delete toCSSFontFeatureValue(this);
-        return;
-    case FunctionClass:
-        delete toCSSFunctionValue(this);
-        return;
-    case LinearGradientClass:
-        delete toCSSLinearGradientValue(this);
-        return;
-    case RadialGradientClass:
-        delete toCSSRadialGradientValue(this);
-        return;
-    case CrossfadeClass:
-        delete toCSSCrossfadeValue(this);
-        return;
-    case PaintClass:
-        delete toCSSPaintValue(this);
-        return;
-    case CustomIdentClass:
-        delete toCSSCustomIdentValue(this);
-        return;
-    case ImageClass:
-        delete toCSSImageValue(this);
-        return;
-    case InheritedClass:
-        delete toCSSInheritedValue(this);
-        return;
-    case InitialClass:
-        delete toCSSInitialValue(this);
-        return;
-    case UnsetClass:
-        delete toCSSUnsetValue(this);
-        return;
-    case GridAutoRepeatClass:
-        delete toCSSGridAutoRepeatValue(this);
-        return;
-    case GridLineNamesClass:
-        delete toCSSGridLineNamesValue(this);
-        return;
-    case GridTemplateAreasClass:
-        delete toCSSGridTemplateAreasValue(this);
-        return;
-    case PathClass:
-        delete toCSSPathValue(this);
-        return;
-    case PrimitiveClass:
-        delete toCSSPrimitiveValue(this);
-        return;
-    case QuadClass:
-        delete toCSSQuadValue(this);
-        return;
-    case ReflectClass:
-        delete toCSSReflectValue(this);
-        return;
-    case ShadowClass:
-        delete toCSSShadowValue(this);
-        return;
-    case StringClass:
-        delete toCSSStringValue(this);
-        return;
-    case CubicBezierTimingFunctionClass:
-        delete toCSSCubicBezierTimingFunctionValue(this);
-        return;
-    case StepsTimingFunctionClass:
-        delete toCSSStepsTimingFunctionValue(this);
-        return;
-    case UnicodeRangeClass:
-        delete toCSSUnicodeRangeValue(this);
-        return;
-    case URIClass:
-        delete toCSSURIValue(this);
-        return;
-    case ValuePairClass:
-        delete toCSSValuePair(this);
-        return;
-    case ValueListClass:
-        delete toCSSValueList(this);
-        return;
-    case ImageSetClass:
-        delete toCSSImageSetValue(this);
-        return;
-    case CSSSVGDocumentClass:
-        delete toCSSSVGDocumentValue(this);
-        return;
-    case CSSContentDistributionClass:
-        delete toCSSContentDistributionValue(this);
-        return;
-    case VariableReferenceClass:
-        delete toCSSVariableReferenceValue(this);
-        return;
-    case CustomPropertyDeclarationClass:
-        delete toCSSCustomPropertyDeclaration(this);
-        return;
-    case PendingSubstitutionValueClass:
-        delete toCSSPendingSubstitutionValue(this);
-        return;
-    }
-    ASSERT_NOT_REACHED();
 }
 
 void CSSValue::finalizeGarbageCollectedObject()
@@ -532,9 +394,6 @@ void CSSValue::finalizeGarbageCollectedObject()
         return;
     case ImageSetClass:
         toCSSImageSetValue(this)->~CSSImageSetValue();
-        return;
-    case CSSSVGDocumentClass:
-        toCSSSVGDocumentValue(this)->~CSSSVGDocumentValue();
         return;
     case CSSContentDistributionClass:
         toCSSContentDistributionValue(this)->~CSSContentDistributionValue();
@@ -665,9 +524,6 @@ DEFINE_TRACE(CSSValue)
         return;
     case ImageSetClass:
         toCSSImageSetValue(this)->traceAfterDispatch(visitor);
-        return;
-    case CSSSVGDocumentClass:
-        toCSSSVGDocumentValue(this)->traceAfterDispatch(visitor);
         return;
     case CSSContentDistributionClass:
         toCSSContentDistributionValue(this)->traceAfterDispatch(visitor);

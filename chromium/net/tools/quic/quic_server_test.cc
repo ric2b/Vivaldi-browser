@@ -4,8 +4,8 @@
 
 #include "net/tools/quic/quic_server.h"
 
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_dispatcher.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
@@ -28,9 +28,11 @@ class QuicServerDispatchPacketTest : public ::testing::Test {
       : crypto_config_("blah",
                        QuicRandom::GetInstance(),
                        CryptoTestUtils::ProofSourceForTesting()),
+        version_manager_(AllSupportedVersions()),
         dispatcher_(
             config_,
             &crypto_config_,
+            &version_manager_,
             std::unique_ptr<QuicEpollConnectionHelper>(
                 new QuicEpollConnectionHelper(&eps_,
                                               QuicAllocator::BUFFER_POOL)),
@@ -49,6 +51,7 @@ class QuicServerDispatchPacketTest : public ::testing::Test {
  protected:
   QuicConfig config_;
   QuicCryptoServerConfig crypto_config_;
+  QuicVersionManager version_manager_;
   EpollServer eps_;
   MockQuicDispatcher dispatcher_;
 };

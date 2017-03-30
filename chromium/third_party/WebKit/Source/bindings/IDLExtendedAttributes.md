@@ -426,6 +426,12 @@ Summary: Signals that a `readonly` attribute that returns an object type always 
 
 This attribute has no effect on code generation and should simply be used in Blink IDL files if the specification uses it. If you want the binding layer to cache the resulting object, use `[SaveSameObject]`.
 
+### [SecureContext] _(a, i, m)_
+
+Standard: [SecureContext](https://heycam.github.io/webidl/#SecureContext)
+
+Summary: Interfaces and interface members with a `SecureContext` attribute are exposed only inside ["Secure Contexts"](https://w3c.github.io/webappsec-secure-contexts/).
+
 ### [TreatNullAs] _(a,p)_, [TreatUndefinedAs] _(a,p)_
 
 Standard: [TreatNullAs](http://heycam.github.io/webidl/#TreatNullAs)
@@ -503,18 +509,21 @@ If an interface X has `[ActiveScriptWrappable]` and an interface Y inherits the 
 ```webidl
 [
     ActiveScriptWrappable,
+    DependentLifetime,
 ] interface Foo {};
-```
 
 interface Bar : Foo {};  // inherits [ActiveScriptWrappable] from Foo
+```
+
 If a given DOM object needs to be kept alive as long as the DOM object has pending activities, you need to specify `[ActiveScriptWrappable]` and `[DependentLifetime]`. For example, `[ActiveScriptWrappable]` can be used when the DOM object is expecting events to be raised in the future.
 
-If you use `[ActiveScriptWrappable]`, the corresponding Blink class needs to inherit ActiveScriptWrappable. For example, in case of XMLHttpRequest, core/xml/XMLHttpRequest.h would look like this:
+If you use `[ActiveScriptWrappable]`, the corresponding Blink class needs to inherit ActiveScriptWrappable and override hasPendingActivity(). For example, in case of XMLHttpRequest, core/xml/XMLHttpRequest.h would look like this:
 
 ```c++
 class XMLHttpRequest : public ActiveScriptWrappable
 {
-    ...;
+    // Returns true if the object needs to be kept alive.
+    bool hasPendingActivity() const override { return ...; }
 }
 ```
 
@@ -983,13 +992,13 @@ for (var value of iter) {
 Currently the code generator doesn't take care of the name conflict. Namely, it is not allowed to have "iterator" method in an iterable interface.
 ***
 
-### [Measure] _(m, a, c)_
+### [Measure] _(i, m, a, c)_
 
 Summary: Measures usage of a specific feature via UseCounter.
 
 In order to measure usage of specific features, Chrome submits anonymous statistics through the Histogram recording system for users who opt-in to sharing usage statistics. This extended attribute hooks up a specific feature to this measurement system.
 
-Usage: `[Measure]` can be specified on methods, attributes, and constants. The generated feature name must be added to [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [core/frame/UseCounter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h)).
+Usage: `[Measure]` can be specified on interfaces, methods, attributes, and constants. When specified on an interface usage of the constructor will be measured. The generated feature name must be added to [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [core/frame/UseCounter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h)).
 
 ```webidl
 [Measure] attribute Node interestingAttribute;
@@ -997,12 +1006,12 @@ Usage: `[Measure]` can be specified on methods, attributes, and constants. The g
 [Measure] const INTERESTING_CONSTANT = 1;
 ```
 
-### [MeasureAs] _(m, a, c)_
+### [MeasureAs] _(i, m, a, c)_
 
 Summary: Like `[Measure]`, but the feature name is provided as the extended attribute value.
 This is similar to the standard `[DeprecateAs]` extended attribute, but does not display a deprecation warning.
 
-Usage: `[MeasureAs]` can be specified on methods, attributes, and constants. The value must match one of the enumeration values in [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [core/frame/UseCounter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h)).
+Usage: `[MeasureAs]` can be specified on interfaces, methods, attributes, and constants. The value must match one of the enumeration values in [UseCounter::Feature](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h&q=%22enum%20Feature%22&sq=package:chromium&type=cs&l=61) (in [core/frame/UseCounter.h](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.h)).
 
 ```webidl
 [MeasureAs=AttributeWeAreInterestedIn] attribute Node interestingAttribute;

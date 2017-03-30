@@ -15,6 +15,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "jni/MediaCodecUtil_jni.h"
+#include "media/base/android/media_codec_bridge.h"
 #include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
@@ -72,7 +73,7 @@ static std::string GetDefaultCodecName(const std::string& mime_type,
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
   ScopedJavaLocalRef<jstring> j_codec_name =
-      Java_MediaCodecUtil_getDefaultCodecName(env, j_mime.obj(), direction,
+      Java_MediaCodecUtil_getDefaultCodecName(env, j_mime, direction,
                                               require_software_codec);
   return ConvertJavaStringToUTF8(env, j_codec_name.obj());
 }
@@ -83,7 +84,7 @@ static bool IsDecoderSupportedByDevice(const std::string& android_mime_type) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime =
       ConvertUTF8ToJavaString(env, android_mime_type);
-  return Java_MediaCodecUtil_isDecoderSupportedForDevice(env, j_mime.obj());
+  return Java_MediaCodecUtil_isDecoderSupportedForDevice(env, j_mime);
 }
 
 // static
@@ -94,11 +95,14 @@ bool MediaCodecUtil::IsMediaCodecAvailable() {
 
   // Blacklist some devices on Jellybean as for MediaCodec support is buggy.
   // http://crbug.com/365494, http://crbug.com/615872
+  // Blacklist Lenovo A6600 / A6800 on KitKat, which tends to crash a lot.
+  // See crbug.com/628059 .  We include < K since they don't exist.
   if (base::android::BuildInfo::GetInstance()->sdk_int() <= 19) {
     std::string model(base::android::BuildInfo::GetInstance()->model());
     return model != "GT-I9100" && model != "GT-I9300" && model != "GT-N7000" &&
-           model != "GT-N7100";
+           model != "GT-N7100" && model != "A6600" && model != "A6800";
   }
+
   return true;
 }
 
@@ -118,7 +122,7 @@ std::set<int> MediaCodecUtil::GetEncoderColorFormats(
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
   ScopedJavaLocalRef<jintArray> j_color_format_array =
-      Java_MediaCodecUtil_getEncoderColorFormatsForMime(env, j_mime.obj());
+      Java_MediaCodecUtil_getEncoderColorFormatsForMime(env, j_mime);
 
   if (j_color_format_array.obj()) {
     std::vector<int> formats;
@@ -139,7 +143,7 @@ bool MediaCodecUtil::CanDecode(const std::string& codec, bool is_secure) {
   if (mime.empty())
     return false;
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime);
-  return Java_MediaCodecUtil_canDecode(env, j_mime.obj(), is_secure);
+  return Java_MediaCodecUtil_canDecode(env, j_mime, is_secure);
 }
 
 // static
@@ -153,7 +157,7 @@ bool MediaCodecUtil::IsKnownUnaccelerated(const std::string& android_mime_type,
       GetDefaultCodecName(android_mime_type, direction, false);
   DVLOG(1) << __FUNCTION__ << "Default codec for " << android_mime_type << " : "
            << codec_name << ", direction: " << direction;
-  if (!codec_name.size())
+  if (codec_name.empty())
     return true;
 
   // MediaTek hardware vp8 is known slower than the software implementation.
@@ -190,11 +194,6 @@ bool MediaCodecUtil::IsHLSPath(const GURL& url) {
 bool MediaCodecUtil::IsHLSURL(const GURL& url) {
   return (url.SchemeIsHTTPOrHTTPS() || url.SchemeIsFile()) &&
          url.spec().find("m3u8") != std::string::npos;
-}
-
-// static
-bool MediaCodecUtil::RegisterMediaCodecUtil(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 // static
@@ -238,6 +237,20 @@ bool MediaCodecUtil::IsSurfaceViewOutputSupported() {
   }
 
   return true;
+}
+
+// static
+bool MediaCodecUtil::CodecNeedsFlushWorkaround(MediaCodecBridge* codec) {
+  int sdk_int = base::android::BuildInfo::GetInstance()->sdk_int();
+  std::string codec_name = codec->GetName();
+  return sdk_int < 18 ||
+         (sdk_int == 18 && ("OMX.SEC.avc.dec" == codec_name ||
+                            "OMX.SEC.avc.dec.secure" == codec_name)) ||
+         (sdk_int == 19 &&
+          base::StartsWith(base::android::BuildInfo::GetInstance()->model(),
+                           "SM-G800", base::CompareCase::INSENSITIVE_ASCII) &&
+          ("OMX.Exynos.avc.dec" == codec_name ||
+           "OMX.Exynos.avc.dec.secure" == codec_name));
 }
 
 }  // namespace media

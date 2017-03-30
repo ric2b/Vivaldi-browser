@@ -11,9 +11,9 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "components/sync/protocol/history_status.pb.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "sync/protocol/history_status.pb.h"
 
 namespace history {
 
@@ -24,8 +24,9 @@ namespace {
 // TODO(msramek): Find a way to keep these URLs in sync with what is used
 // in WebHistoryService.
 
-const char kLookupUrl[] =
-    "https://history.google.com/history/api/lookup";
+const char kLookupUrl[] = "https://history.google.com/history/api/lookup";
+
+const char kDeleteUrl[] = "https://history.google.com/history/api/delete";
 
 const char kChromeClient[] = "chrome";
 
@@ -105,8 +106,8 @@ const std::string& FakeRequest::GetResponseBody() {
   remove_query.ClearQuery();
   GURL base_url = url_.ReplaceComponents(remove_query);
 
-  // History query.
   if (base_url == GURL(kLookupUrl) && client == kChromeClient) {
+    // History query.
     int count = service_->GetNumberOfVisitsBetween(begin_, end_);
     if (max_count_ && max_count_ < count)
       count = max_count_;
@@ -115,17 +116,19 @@ const std::string& FakeRequest::GetResponseBody() {
     for (int i = 0; i < count; ++i)
       response_body_ += i ? ", {}" : "{}";
     response_body_ += "] }";
-  }
 
-  // Web and app activity query.
-  if (base_url == GURL(kLookupUrl) && client == kWebAndAppClient) {
+  } else if (base_url == GURL(kDeleteUrl) && client == kChromeClient) {
+    // Deletion query.
+    response_body_ = "{ \"just needs to be\" : \"a valid JSON.\" }";
+
+  } else if (base_url == GURL(kLookupUrl) && client == kWebAndAppClient) {
+    // Web and app activity query.
     response_body_ = base::StringPrintf(
         "{ \"history_recording_enabled\": %s }",
         service_->IsWebAndAppActivityEnabled() ? "true" : "false");
-  }
 
-  // Other forms of browsing history query.
-  if (url_.host() == kSyncServerHost) {
+  } else if (url_.host() == kSyncServerHost) {
+    // Other forms of browsing history query.
     std::unique_ptr<sync_pb::HistoryStatusResponse> history_status(
         new sync_pb::HistoryStatusResponse());
     history_status->set_has_derived_data(

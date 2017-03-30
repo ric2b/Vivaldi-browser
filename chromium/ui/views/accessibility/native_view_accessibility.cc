@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/events/event_utils.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -56,7 +57,7 @@ const ui::AXNodeData& NativeViewAccessibility::GetData() {
   data_ = ui::AXNodeData();
   data_.role = state.role;
   data_.state = state.state();
-  data_.location = view_->GetBoundsInScreen();
+  data_.location = gfx::RectF(view_->GetBoundsInScreen());
   data_.AddStringAttribute(ui::AX_ATTR_NAME, base::UTF16ToUTF8(state.name));
   data_.AddStringAttribute(ui::AX_ATTR_VALUE, base::UTF16ToUTF8(state.value));
   data_.AddStringAttribute(ui::AX_ATTR_ACTION,
@@ -65,6 +66,14 @@ const ui::AXNodeData& NativeViewAccessibility::GetData() {
                            base::UTF16ToUTF8(state.keyboard_shortcut));
   data_.AddStringAttribute(ui::AX_ATTR_PLACEHOLDER,
                            base::UTF16ToUTF8(state.placeholder));
+
+  // General expectation is that GetTooltipText() is only asked for
+  // while on screen and in a widget.
+  if (view_->GetWidget() && state.description.empty() &&
+      view_->GetTooltipText(gfx::Point(), &state.description))
+    data_.AddStringAttribute(ui::AX_ATTR_DESCRIPTION,
+                             base::UTF16ToUTF8(state.description));
+
   data_.AddIntAttribute(ui::AX_ATTR_TEXT_SEL_START, state.selection_start);
   data_.AddIntAttribute(ui::AX_ATTR_TEXT_SEL_END, state.selection_end);
 
@@ -102,6 +111,12 @@ gfx::NativeViewAccessible NativeViewAccessibility::ChildAtIndex(int index) {
     return child_widget->GetRootView()->GetNativeViewAccessible();
   }
 
+  return nullptr;
+}
+
+gfx::NativeWindow NativeViewAccessibility::GetTopLevelWidget() {
+  if (view_->GetWidget())
+    return view_->GetWidget()->GetTopLevelWidget()->GetNativeWindow();
   return nullptr;
 }
 
@@ -193,13 +208,20 @@ void NativeViewAccessibility::DoDefaultAction() {
 
 bool NativeViewAccessibility::SetStringValue(const base::string16& new_value) {
   // Return an error if the view can't set the value.
-  ui::AXViewState state;
-  view_->GetAccessibleState(&state);
-  if (state.set_value_callback.is_null())
+  if (!CanSetStringValue())
     return false;
 
+  ui::AXViewState state;
+  view_->GetAccessibleState(&state);
   state.set_value_callback.Run(new_value);
   return true;
+}
+
+bool NativeViewAccessibility::CanSetStringValue() {
+  ui::AXViewState state;
+  view_->GetAccessibleState(&state);
+  return !ui::AXViewState::IsFlagSet(GetData().state, ui::AX_STATE_READ_ONLY) &&
+         !state.set_value_callback.is_null();
 }
 
 void NativeViewAccessibility::OnWidgetDestroying(Widget* widget) {

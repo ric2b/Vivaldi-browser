@@ -6,7 +6,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "blimp/net/blimp_connection.h"
-#include "blimp/net/blimp_connection_statistics.h"
+#include "blimp/net/message_port.h"
 #include "blimp/net/ssl_client_transport.h"
 #include "net/base/address_list.h"
 #include "net/base/ip_address.h"
@@ -61,13 +61,11 @@ class SSLClientTransportTest : public testing::Test {
   void ConfigureTransport(const net::IPEndPoint& ip_endpoint) {
     // The mock does not interact with the cert directly, so just leave it null.
     scoped_refptr<net::X509Certificate> cert;
-    transport_.reset(
-        new SSLClientTransport(ip_endpoint, cert, &statistics_, &net_log_));
+    transport_.reset(new SSLClientTransport(ip_endpoint, cert, &net_log_));
     transport_->SetClientSocketFactoryForTest(&socket_factory_);
   }
 
   base::MessageLoop message_loop;
-  BlimpConnectionStatistics statistics_;
   net::NetLog net_log_;
   net::StaticSocketDataProvider tcp_connect_;
   std::unique_ptr<net::SSLSocketDataProvider> ssl_connect_;
@@ -84,7 +82,7 @@ TEST_F(SSLClientTransportTest, ConnectSyncOK) {
     SetupSSLSyncSocketConnect(net::OK);
     transport_->Connect(base::Bind(&SSLClientTransportTest::ConnectComplete,
                                    base::Unretained(this)));
-    EXPECT_NE(nullptr, transport_->TakeConnection().get());
+    EXPECT_NE(nullptr, transport_->TakeMessagePort().get());
     base::RunLoop().RunUntilIdle();
   }
 }
@@ -99,7 +97,7 @@ TEST_F(SSLClientTransportTest, ConnectAsyncOK) {
     transport_->Connect(base::Bind(&SSLClientTransportTest::ConnectComplete,
                                    base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
-    EXPECT_NE(nullptr, transport_->TakeConnection().get());
+    EXPECT_NE(nullptr, transport_->TakeMessagePort().get());
   }
 }
 
@@ -158,7 +156,7 @@ TEST_F(SSLClientTransportTest, ConnectAfterError) {
   SetupSSLSyncSocketConnect(net::OK);
   transport_->Connect(base::Bind(&SSLClientTransportTest::ConnectComplete,
                                  base::Unretained(this)));
-  EXPECT_NE(nullptr, transport_->TakeConnection().get());
+  EXPECT_NE(nullptr, transport_->TakeMessagePort().get());
   base::RunLoop().RunUntilIdle();
 }
 

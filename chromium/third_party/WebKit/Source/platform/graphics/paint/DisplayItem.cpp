@@ -71,10 +71,8 @@ static WTF::String specialDrawingTypeAsDebugString(DisplayItem::Type type)
     switch (type) {
         DEBUG_STRING_CASE(BoxDecorationBackground);
         DEBUG_STRING_CASE(Caret);
-        DEBUG_STRING_CASE(DragCaret);
         DEBUG_STRING_CASE(ColumnRules);
         DEBUG_STRING_CASE(DebugDrawing);
-        DEBUG_STRING_CASE(DebugRedFill);
         DEBUG_STRING_CASE(DocumentBackground);
         DEBUG_STRING_CASE(DragImage);
         DEBUG_STRING_CASE(SVGImage);
@@ -132,7 +130,9 @@ static WTF::String drawingTypeAsDebugString(DisplayItem::Type type)
 static String foreignLayerTypeAsDebugString(DisplayItem::Type type)
 {
     switch (type) {
+        DEBUG_STRING_CASE(ForeignLayerCanvas);
         DEBUG_STRING_CASE(ForeignLayerPlugin);
+        DEBUG_STRING_CASE(ForeignLayerVideo);
         DEFAULT_CASE;
     }
 }
@@ -184,8 +184,6 @@ WTF::String DisplayItem::typeAsDebugString(Type type)
 {
     if (isDrawingType(type))
         return drawingTypeAsDebugString(type);
-    if (isCachedDrawingType(type))
-        return "Cached" + drawingTypeAsDebugString(cachedDrawingTypeToDrawingType(type));
 
     if (isForeignLayerType(type))
         return foreignLayerTypeAsDebugString(type);
@@ -223,7 +221,6 @@ WTF::String DisplayItem::typeAsDebugString(Type type)
         DEBUG_STRING_CASE(EndClipPath);
         DEBUG_STRING_CASE(Subsequence);
         DEBUG_STRING_CASE(EndSubsequence);
-        DEBUG_STRING_CASE(CachedSubsequence);
         DEBUG_STRING_CASE(UninitializedType);
         DEFAULT_CASE;
     }

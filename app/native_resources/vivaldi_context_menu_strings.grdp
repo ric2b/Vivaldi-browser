@@ -2,6 +2,30 @@
 <!-- Vivaldi context menu specific strings (included from vivaldi_native_strings.grd). -->
 <grit-part>
     <message name="IDS_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE" desc="The name of the Add as Search Engine command in the content area context menu">
-        Add as search en&amp;gine...
+        Add as Search En&amp;gine...
+    </message>
+    <message name="IDS_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB" desc="Where to open an image">
+        Open Image in New Tab
+    </message>
+    <message name="IDS_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB" desc="Where to open an image">
+        Open Image in New Background Tab
+    </message>
+    <message name="IDS_VIV_OPEN_IMAGE_NEW_WINDOW" desc="Where to open an image">
+        Open Image in New Window
+    </message>
+    <message name="IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW" desc="Where to open an image">
+        Open Image in Private Window
+    </message>
+    <message name="IDS_VIV_OPEN_LINK_NEW_FOREGROUND_TAB" desc="Where to open a link">
+        Open Link in New Tab
+    </message>
+    <message name="IDS_VIV_OPEN_LINK_NEW_BACKGROUND_TAB" desc="Where to open a link">
+        Open Link in New Background Tab
+    </message>
+    <message name="IDS_VIV_OPEN_LINK_NEW_WINDOW" desc="Where to open a link">
+        Open Link in New Window
+    </message>
+    <message name="IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW" desc="Where to open a link">
+        Open Link in Private Window
     </message>
 </grit-part>

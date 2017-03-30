@@ -4,9 +4,8 @@
 
 #include "content/browser/indexed_db/indexed_db_fake_backing_store.h"
 
-#include <memory>
-
 #include "base/files/file_path.h"
+#include "net/url_request/url_request_context_getter.h"
 
 namespace content {
 
@@ -14,7 +13,7 @@ IndexedDBFakeBackingStore::IndexedDBFakeBackingStore()
     : IndexedDBBackingStore(NULL /* indexed_db_factory */,
                             url::Origin(GURL("http://localhost:81")),
                             base::FilePath(),
-                            NULL /* request_context */,
+                            scoped_refptr<net::URLRequestContextGetter>(),
                             std::unique_ptr<LevelDBDatabase>(),
                             std::unique_ptr<LevelDBComparator>(),
                             NULL /* task_runner */) {}
@@ -81,7 +80,7 @@ leveldb::Status IndexedDBFakeBackingStore::PutRecord(
     int64_t object_store_id,
     const IndexedDBKey& key,
     IndexedDBValue* value,
-    ScopedVector<storage::BlobDataHandle>* handles,
+    std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles,
     RecordIdentifier* record) {
   return leveldb::Status::OK();
 }

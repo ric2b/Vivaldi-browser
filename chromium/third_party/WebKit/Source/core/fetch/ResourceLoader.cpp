@@ -32,7 +32,6 @@
 #include "core/fetch/CSSStyleSheetResource.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceFetcher.h"
-#include "platform/Logging.h"
 #include "platform/SharedBuffer.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
@@ -93,6 +92,14 @@ void ResourceLoader::start(const ResourceRequest& request, WebTaskRunner* loadin
         m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
 }
 
+void ResourceLoader::restartForServiceWorkerFallback(const ResourceRequest& request)
+{
+    m_loader.reset();
+    m_loader = wrapUnique(Platform::current()->createURLLoader());
+    DCHECK(m_loader);
+    m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
+}
+
 void ResourceLoader::setDefersLoading(bool defers)
 {
     ASSERT(m_loader);
@@ -116,7 +123,7 @@ void ResourceLoader::cancel()
     didFail(nullptr, ResourceError::cancelledError(m_resource->lastResourceRequest().url()));
 }
 
-void ResourceLoader::willFollowRedirect(WebURLLoader*, WebURLRequest& passedNewRequest, const WebURLResponse& passedRedirectResponse)
+void ResourceLoader::willFollowRedirect(WebURLLoader*, WebURLRequest& passedNewRequest, const WebURLResponse& passedRedirectResponse, int64_t encodedDataLength)
 {
     ASSERT(!passedNewRequest.isNull());
     ASSERT(!passedRedirectResponse.isNull());
@@ -125,7 +132,7 @@ void ResourceLoader::willFollowRedirect(WebURLLoader*, WebURLRequest& passedNewR
     const ResourceResponse& redirectResponse(passedRedirectResponse.toResourceResponse());
     newRequest.setRedirectStatus(ResourceRequest::RedirectStatus::FollowedRedirect);
 
-    if (m_fetcher->willFollowRedirect(m_resource.get(), newRequest, redirectResponse)) {
+    if (m_fetcher->willFollowRedirect(m_resource.get(), newRequest, redirectResponse, encodedDataLength)) {
         m_resource->willFollowRedirect(newRequest, redirectResponse);
     } else {
         m_resource->willNotFollowRedirect();
@@ -144,60 +151,10 @@ void ResourceLoader::didSendData(WebURLLoader*, unsigned long long bytesSent, un
     m_resource->didSendData(bytesSent, totalBytesToBeSent);
 }
 
-bool ResourceLoader::responseNeedsAccessControlCheck() const
-{
-    // If the fetch was (potentially) CORS enabled, an access control check of the response is required.
-    return m_resource->options().corsEnabled == IsCORSEnabled;
-}
-
-void ResourceLoader::didReceiveResponse(WebURLLoader*, const WebURLResponse& response, WebDataConsumerHandle* rawHandle)
+void ResourceLoader::didReceiveResponse(WebURLLoader*, const WebURLResponse& response, WebDataConsumerHandle* handle)
 {
     DCHECK(!response.isNull());
-    // |rawHandle|'s ownership is transferred to the callee.
-    std::unique_ptr<WebDataConsumerHandle> handle = wrapUnique(rawHandle);
-    const ResourceResponse& resourceResponse = response.toResourceResponse();
-
-    if (responseNeedsAccessControlCheck()) {
-        if (response.wasFetchedViaServiceWorker()) {
-            if (response.wasFallbackRequiredByServiceWorker()) {
-                m_loader.reset();
-                m_loader = wrapUnique(Platform::current()->createURLLoader());
-                DCHECK(m_loader);
-                ResourceRequest request = m_resource->lastResourceRequest();
-                DCHECK_EQ(request.skipServiceWorker(), WebURLRequest::SkipServiceWorker::None);
-                // This code handles the case when a regular controlling service worker
-                // doesn't handle a cross origin request. When this happens we still
-                // want to give foreign fetch a chance to handle the request, so
-                // only skip the controlling service worker for the fallback request.
-                // This is currently safe because of http://crbug.com/604084 the
-                // wasFallbackRequiredByServiceWorker flag is never set when foreign fetch
-                // handled a request.
-                request.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::Controlling);
-                m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
-                return;
-            }
-        } else {
-            if (!m_resource->isCacheValidator() || resourceResponse.httpStatusCode() != 304)
-                m_resource->setResponse(resourceResponse);
-            if (!m_fetcher->canAccessResource(m_resource.get(), m_resource->options().securityOrigin.get(), response.url(), ResourceFetcher::ShouldLogAccessControlErrors)) {
-                m_fetcher->didReceiveResponse(m_resource.get(), resourceResponse);
-                didFail(nullptr, ResourceError::cancelledDueToAccessCheckError(KURL(response.url())));
-                return;
-            }
-        }
-    }
-
-    m_resource->responseReceived(resourceResponse, std::move(handle));
-    if (!m_loader)
-        return;
-
-    m_fetcher->didReceiveResponse(m_resource.get(), resourceResponse);
-    if (!m_loader)
-        return;
-
-    if (m_resource->response().httpStatusCode() < 400 || m_resource->shouldIgnoreHTTPStatusCodeErrors())
-        return;
-    didFail(nullptr, ResourceError::cancelledError(resourceResponse.url()));
+    m_fetcher->didReceiveResponse(m_resource.get(), response.toResourceResponse(), handle);
 }
 
 void ResourceLoader::didReceiveResponse(WebURLLoader* loader, const WebURLResponse& response)
@@ -205,10 +162,12 @@ void ResourceLoader::didReceiveResponse(WebURLLoader* loader, const WebURLRespon
     didReceiveResponse(loader, response, nullptr);
 }
 
-void ResourceLoader::didReceiveData(WebURLLoader*, const char* data, int length, int encodedDataLength)
+void ResourceLoader::didReceiveData(WebURLLoader*, const char* data, int length, int encodedDataLength, int encodedBodyLength)
 {
     RELEASE_ASSERT(length >= 0);
     m_fetcher->didReceiveData(m_resource.get(), data, length, encodedDataLength);
+    m_resource->addToEncodedBodyLength(encodedBodyLength);
+    m_resource->addToDecodedBodyLength(length);
     m_resource->appendData(data, length);
 }
 
@@ -238,10 +197,10 @@ void ResourceLoader::requestSynchronously(const ResourceRequest& request)
 
     WrappedResourceRequest requestIn(request);
     WebURLResponse responseOut;
-    responseOut.initialize();
     WebURLError errorOut;
     WebData dataOut;
-    m_loader->loadSynchronously(requestIn, responseOut, errorOut, dataOut);
+    int64_t encodedDataLength = WebURLLoaderClient::kUnknownEncodedDataLength;
+    m_loader->loadSynchronously(requestIn, responseOut, errorOut, dataOut, encodedDataLength);
 
     // A message dispatched while synchronously fetching the resource
     // can bring about the cancellation of this load.
@@ -254,8 +213,7 @@ void ResourceLoader::requestSynchronously(const ResourceRequest& request)
     didReceiveResponse(0, responseOut);
     if (!m_loader)
         return;
-    RefPtr<ResourceLoadInfo> resourceLoadInfo = responseOut.toResourceResponse().resourceLoadInfo();
-    int64_t encodedDataLength = resourceLoadInfo ? resourceLoadInfo->encodedDataLength : WebURLLoaderClient::kUnknownEncodedDataLength;
+    DCHECK_GE(responseOut.toResourceResponse().encodedBodyLength(), 0);
 
     // Follow the async case convention of not calling didReceiveData or
     // appending data to m_resource if the response body is empty. Copying the

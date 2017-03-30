@@ -11,6 +11,7 @@ import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.os.StrictMode;
 import android.os.SystemClock;
 import android.text.Editable;
 import android.text.Layout;
@@ -366,8 +367,20 @@ public class UrlBar extends VerticallyFixedEditText {
             mSelectionChangedInBatchMode = false;
         }
 
-        if (!TextUtils.equals(mBeforeBatchEditFullText, getText().toString())
+        String newText = getText().toString();
+        if (!TextUtils.equals(mBeforeBatchEditFullText, newText)
                 || getText().getSpanStart(mAutocompleteSpan) != mBeforeBatchEditAutocompleteIndex) {
+            // If the text being typed is a single character that matches the next character in the
+            // previously visible autocomplete text, we reapply the autocomplete text to prevent
+            // a visual flickering when the autocomplete text is cleared and then quickly reapplied
+            // when the next round of suggestions is received.
+            if (shouldAutocomplete() && mBeforeBatchEditAutocompleteIndex != -1
+                    && mBeforeBatchEditFullText != null
+                    && mBeforeBatchEditFullText.startsWith(newText)
+                    && !mTextDeletedInBatchMode
+                    && newText.length() - mBeforeBatchEditAutocompleteIndex == 1) {
+                setAutocompleteText(newText, mBeforeBatchEditFullText.substring(newText.length()));
+            }
             notifyAutocompleteTextStateChanged(mTextDeletedInBatchMode);
         }
 
@@ -949,7 +962,14 @@ public class UrlBar extends VerticallyFixedEditText {
 
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
-        super.onInitializeAccessibilityNodeInfo(info);
+        // Certain OEM implementations of onInitializeAccessibilityNodeInfo trigger disk reads
+        // to access the clipboard.  crbug.com/640993
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+        try {
+            super.onInitializeAccessibilityNodeInfo(info);
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
+        }
 
         if (mAccessibilityTextOverride != null) {
             info.setText(mAccessibilityTextOverride);

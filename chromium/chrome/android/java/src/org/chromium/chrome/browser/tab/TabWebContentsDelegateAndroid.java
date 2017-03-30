@@ -36,7 +36,6 @@ import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.web_contents_delegate_android.WebContentsDelegateAndroid;
 import org.chromium.content_public.browser.InvalidateTypes;
 import org.chromium.content_public.browser.WebContents;
@@ -83,11 +82,7 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
             // If the parent Tab belongs to another Activity, fire the Intent to bring it back.
             if (isSelected && mTab.getParentIntent() != null
                     && mTab.getActivity().getIntent() != mTab.getParentIntent()) {
-                boolean mayLaunch = FeatureUtilities.isDocumentMode(mTab.getApplicationContext())
-                        ? isParentInAndroidOverview() : true;
-                if (mayLaunch) {
-                    mTab.getActivity().startActivity(mTab.getParentIntent());
-                }
+                mTab.getActivity().startActivity(mTab.getParentIntent());
             }
         }
 
@@ -186,13 +181,13 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
     }
 
     @Override
-    public void onLoadStarted(boolean toDifferentDocument) {
-        mTab.onLoadStarted(toDifferentDocument);
-    }
-
-    @Override
-    public void onLoadStopped() {
-        mTab.onLoadStopped();
+    public void loadingStateChanged(boolean toDifferentDocument) {
+        boolean isLoading = mTab.getWebContents() != null && mTab.getWebContents().isLoading();
+        if (isLoading) {
+            mTab.onLoadStarted(toDifferentDocument);
+        } else {
+            mTab.onLoadStopped();
+        }
     }
 
     @Override
@@ -341,11 +336,6 @@ public class TabWebContentsDelegateAndroid extends WebContentsDelegateAndroid {
         }
 
         return success;
-    }
-
-    @CalledByNative
-    private boolean requestAppBanner() {
-        return mTab.requestAppBanner();
     }
 
     @Override

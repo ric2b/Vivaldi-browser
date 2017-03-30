@@ -68,7 +68,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
-  void SetShape(SkRegion* native_region) override;
+  void SetShape(std::unique_ptr<SkRegion> native_region) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -81,6 +81,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void SetAlwaysOnTop(bool always_on_top) override;
   bool IsAlwaysOnTop() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
+  bool IsVisibleOnAllWorkspaces() const override;
   bool SetWindowTitle(const base::string16& title) override;
   void ClearNativeFocus() override;
   Widget::MoveLoopResult RunMoveLoop(
@@ -195,7 +196,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void PostHandleMSG(UINT message, WPARAM w_param, LPARAM l_param) override;
   bool HandleScrollEvent(const ui::ScrollEvent& event) override;
   void HandleWindowSizeChanging() override;
-  void HandleWindowSizeChanged() override;
+  void HandleWindowSizeUnchanged() override;
   void HandleWindowScaleFactorChanged(float window_scale_factor) override;
 
   Widget* GetWidget();

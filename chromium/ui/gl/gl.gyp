@@ -18,7 +18,6 @@
         '<(DEPTH)/gpu/command_buffer/command_buffer.gyp:gles2_utils',
         '<(DEPTH)/skia/skia.gyp:skia',
         '<(DEPTH)/third_party/mesa/mesa.gyp:mesa_headers',
-        '<(DEPTH)/ui/base/ui_base.gyp:ui_base',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
         '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
       ],
@@ -40,6 +39,8 @@
         'android/surface_texture.h',
         'android/surface_texture_listener.cc',
         'android/surface_texture_listener.h',
+        'ca_renderer_layer_params.cc',
+        'ca_renderer_layer_params.h',
         'gl_bindings.cc',
         'gl_bindings.h',
         'gl_bindings_autogen_gl.cc',
@@ -80,11 +81,6 @@
         'gl_image_stub.h',
         'gl_implementation.cc',
         'gl_implementation.h',
-        'gl_implementation_android.cc',
-        'gl_implementation_mac.cc',
-        'gl_implementation_ozone.cc',
-        'gl_implementation_win.cc',
-        'gl_implementation_x11.cc',
         'gl_osmesa_api_implementation.cc',
         'gl_osmesa_api_implementation.h',
         'gl_share_group.cc',
@@ -99,6 +95,11 @@
         'gl_surface_overlay.h',
         'gl_surface_stub.cc',
         'gl_surface_stub.h',
+        "gl_stub_api.cc",
+        "gl_stub_api.h",
+        "gl_stub_api_base.h",
+        "gl_stub_autogen_gl.cc",
+        "gl_stub_autogen_gl.h",
         'gl_switches.cc',
         'gl_switches.h',
         'gl_version_info.cc',
@@ -136,9 +137,6 @@
             'gl_image_egl.h',
             'gl_surface_egl.cc',
             'gl_surface_egl.h',
-            'gl_surface_egl_android.cc',
-            'gl_surface_egl_ozone.cc',
-            'gl_surface_egl_win.cc',
           ],
           'direct_dependent_settings': {
             'defines': [
@@ -190,7 +188,6 @@
             '<(DEPTH)/build/linux/system.gyp:x11',
             '<(DEPTH)/build/linux/system.gyp:xcomposite',
             '<(DEPTH)/build/linux/system.gyp:xext',
-            '<(DEPTH)/ui/base/x/ui_base_x.gyp:ui_base_x',
             '<(DEPTH)/ui/events/platform/events_platform.gyp:events_platform',
             '<(DEPTH)/ui/gfx/x/gfx_x11.gyp:gfx_x11',
           ],
@@ -241,9 +238,6 @@
             '<(DEPTH)/third_party/angle/src/angle.gyp:libEGL',
             '<(DEPTH)/third_party/angle/src/angle.gyp:libGLESv2',
           ],
-          'include_dirs': [
-            '<(DEPTH)/third_party/swiftshader/include',
-          ],
         }],
         ['OS=="mac"', {
           'sources': [
@@ -290,16 +284,6 @@
         }],
         ['OS!="android"', {
           'sources/': [ ['exclude', '^android/'] ],
-        }],
-        ['use_ozone==1', {
-          'sources': [
-            'gl_image_ozone_native_pixmap.cc',
-            'gl_image_ozone_native_pixmap.h',
-          ],
-          'dependencies': [
-            '../ozone/ozone.gyp:ozone',
-            '../ozone/ozone.gyp:ozone_base',
-          ],
         }],
       ],
     },

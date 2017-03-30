@@ -35,8 +35,6 @@
 #include "blink/public/resources/grit/blink_resources.h"
 #include "build/build_config.h"
 #include "components/mime_util/mime_util.h"
-#include "components/scheduler/child/web_task_runner_impl.h"
-#include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "content/app/resources/grit/content_resources.h"
 #include "content/app/strings/grit/content_strings.h"
 #include "content/child/background_sync/background_sync_provider.h"
@@ -44,14 +42,11 @@
 #include "content/child/content_child_helpers.h"
 #include "content/child/notifications/notification_dispatcher.h"
 #include "content/child/notifications/notification_manager.h"
-#include "content/child/permissions/permission_dispatcher.h"
-#include "content/child/permissions/permission_dispatcher_thread_proxy.h"
 #include "content/child/push_messaging/push_dispatcher.h"
 #include "content/child/push_messaging/push_provider.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_url_loader_impl.h"
 #include "content/child/web_url_request_util.h"
-#include "content/child/websocket_bridge.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/public/common/content_client.h"
 #include "net/base/data_url.h"
@@ -61,6 +56,7 @@
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/WebKit/public/platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "ui/base/layout.h"
 #include "ui/events/gestures/blink/web_gesture_curve_impl.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -73,7 +69,7 @@ using blink::WebThemeEngine;
 using blink::WebURL;
 using blink::WebURLError;
 using blink::WebURLLoader;
-using scheduler::WebThreadImplForWorkerScheduler;
+using blink::scheduler::WebThreadImplForWorkerScheduler;
 
 namespace content {
 
@@ -348,22 +344,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
   return -1;
 }
 
-class TraceLogObserverAdapter
-    : public base::trace_event::TraceLog::EnabledStateObserver {
- public:
-  TraceLogObserverAdapter(
-      blink::Platform::TraceLogEnabledStateObserver* observer)
-      : observer_(observer) {}
-
-  void OnTraceLogEnabled() override { observer_->onTraceLogEnabled(); }
-
-  void OnTraceLogDisabled() override { observer_->onTraceLogDisabled(); }
-
- private:
-  blink::Platform::TraceLogEnabledStateObserver* observer_;
-  DISALLOW_COPY_AND_ASSIGN(TraceLogObserverAdapter);
-};
-
 // TODO(skyostil): Ensure that we always have an active task runner when
 // constructing the platform.
 BlinkPlatformImpl::BlinkPlatformImpl()
@@ -386,15 +366,13 @@ void BlinkPlatformImpl::InternalInit() {
     notification_dispatcher_ =
         ChildThreadImpl::current()->notification_dispatcher();
     push_dispatcher_ = ChildThreadImpl::current()->push_dispatcher();
-    permission_client_.reset(new PermissionDispatcher(
-        ChildThreadImpl::current()->GetRemoteInterfaces()));
     main_thread_sync_provider_.reset(
         new BackgroundSyncProvider(main_thread_task_runner_.get()));
   }
 }
 
 void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
-    scheduler::WebThreadBase* thread) {
+    blink::scheduler::WebThreadBase* thread) {
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
   thread->GetTaskRunner()->PostTask(
@@ -412,10 +390,6 @@ void BlinkPlatformImpl::UpdateWebThreadTLS(blink::WebThread* thread,
 }
 
 BlinkPlatformImpl::~BlinkPlatformImpl() {
-}
-
-blink::WebSocketHandle* BlinkPlatformImpl::createWebSocketHandle() {
-  return new WebSocketBridge;
 }
 
 WebString BlinkPlatformImpl::userAgent() {
@@ -458,7 +432,7 @@ blink::WebThread* BlinkPlatformImpl::createThread(const char* name) {
 }
 
 void BlinkPlatformImpl::SetCompositorThread(
-    scheduler::WebThreadBase* compositor_thread) {
+    blink::scheduler::WebThreadBase* compositor_thread) {
   compositor_thread_ = compositor_thread;
   if (compositor_thread_)
     WaitUntilWebThreadTLSUpdate(compositor_thread_);
@@ -471,26 +445,6 @@ blink::WebThread* BlinkPlatformImpl::currentThread() {
 void BlinkPlatformImpl::recordAction(const blink::UserMetricsAction& name) {
     if (ChildThread* child_thread = ChildThread::Get())
         child_thread->RecordComputedAction(name.action());
-}
-
-void BlinkPlatformImpl::addTraceLogEnabledStateObserver(
-    TraceLogEnabledStateObserver* observer) {
-  TraceLogObserverAdapter* adapter = new TraceLogObserverAdapter(observer);
-  bool did_insert =
-      trace_log_observers_.add(observer, base::WrapUnique(adapter)).second;
-  DCHECK(did_insert);
-  base::trace_event::TraceLog::GetInstance()->AddEnabledStateObserver(adapter);
-}
-
-void BlinkPlatformImpl::removeTraceLogEnabledStateObserver(
-    TraceLogEnabledStateObserver* observer) {
-  std::unique_ptr<TraceLogObserverAdapter> adapter =
-      trace_log_observers_.take_and_erase(observer);
-  DCHECK(adapter);
-  DCHECK(base::trace_event::TraceLog::GetInstance()->HasEnabledStateObserver(
-      adapter.get()));
-  base::trace_event::TraceLog::GetInstance()->RemoveEnabledStateObserver(
-      adapter.get());
 }
 
 namespace {
@@ -879,17 +833,6 @@ blink::WebPushProvider* BlinkPlatformImpl::pushProvider() {
 
   return PushProvider::ThreadSpecificInstance(thread_safe_sender_.get(),
                                               push_dispatcher_.get());
-}
-
-blink::WebPermissionClient* BlinkPlatformImpl::permissionClient() {
-  if (!permission_client_.get())
-    return nullptr;
-
-  if (IsMainThread())
-    return permission_client_.get();
-
-  return PermissionDispatcherThreadProxy::GetThreadInstance(
-      main_thread_task_runner_.get(), permission_client_.get());
 }
 
 blink::WebSyncProvider* BlinkPlatformImpl::backgroundSyncProvider() {

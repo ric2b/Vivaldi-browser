@@ -97,7 +97,7 @@ class SendResponseDelegate
 
   bool GetResponse() {
     EXPECT_TRUE(HasResponse());
-    return *response_.get();
+    return *response_;
   }
 
   void OnSendResponse(UIThreadExtensionFunction* function,
@@ -626,7 +626,7 @@ class IdentityGetProfileUserInfoFunctionTest : public IdentityTestWithSignin {
     func->set_extension(test_util::CreateEmptyExtension(kExtensionId).get());
     std::unique_ptr<base::Value> value(
         utils::RunFunctionAndReturnSingleResult(func.get(), "[]", browser()));
-    return api::identity::ProfileUserInfo::FromValue(*value.get());
+    return api::identity::ProfileUserInfo::FromValue(*value);
   }
 
   std::unique_ptr<api::identity::ProfileUserInfo>
@@ -636,7 +636,7 @@ class IdentityGetProfileUserInfoFunctionTest : public IdentityTestWithSignin {
     func->set_extension(CreateExtensionWithEmailPermission());
     std::unique_ptr<base::Value> value(
         utils::RunFunctionAndReturnSingleResult(func.get(), "[]", browser()));
-    return api::identity::ProfileUserInfo::FromValue(*value.get());
+    return api::identity::ProfileUserInfo::FromValue(*value);
   }
 
  private:
@@ -1570,8 +1570,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesDefault) {
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
   EXPECT_EQ(2ul, token_key->scopes.size());
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "scope1"));
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "scope2"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "scope1"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "scope2"));
 }
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmpty) {
@@ -1599,7 +1599,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmail) {
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
   EXPECT_EQ(1ul, token_key->scopes.size());
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "email"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "email"));
 }
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmailFooBar) {
@@ -1616,9 +1616,9 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesEmailFooBar) {
 
   const ExtensionTokenKey* token_key = func->GetExtensionTokenKeyForTest();
   EXPECT_EQ(3ul, token_key->scopes.size());
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "email"));
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "foo"));
-  EXPECT_TRUE(ContainsKey(token_key->scopes, "bar"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "email"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "foo"));
+  EXPECT_TRUE(base::ContainsKey(token_key->scopes, "bar"));
 }
 
 

@@ -10,8 +10,8 @@
 #import "base/ios/weak_nsobject.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/memory/scoped_vector.h"
-#include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -125,7 +125,7 @@ void CredentialManager::CredentialsRequested(
   // the request should fail outright and the JS Promise should be rejected
   // with an appropriate error.
   if (pending_request_ || !store) {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&CredentialManager::RejectPromise,
                    weak_factory_.GetWeakPtr(), request_id,
@@ -138,7 +138,7 @@ void CredentialManager::CredentialsRequested(
   // without first asking the user -- and if zero-click isn't currently
   // available, send back an empty credential.
   if (zero_click_only && !IsZeroClickAllowed()) {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&CredentialManager::SendCredentialByID,
                               weak_factory_.GetWeakPtr(), request_id,
                               password_manager::CredentialInfo()));
@@ -312,14 +312,13 @@ password_manager::PasswordManagerClient* CredentialManager::client() const {
   return client_;
 }
 
-autofill::PasswordForm CredentialManager::GetSynthesizedFormForOrigin() const {
-  autofill::PasswordForm synthetic_form;
-  synthetic_form.origin = web_state()->GetLastCommittedURL().GetOrigin();
-  synthetic_form.signon_realm = synthetic_form.origin.spec();
-  synthetic_form.scheme = autofill::PasswordForm::SCHEME_HTML;
-  synthetic_form.ssl_valid = synthetic_form.origin.SchemeIsCryptographic() &&
-                             !client_->DidLastPageLoadEncounterSSLErrors();
-  return synthetic_form;
+password_manager::PasswordStore::FormDigest
+CredentialManager::GetSynthesizedFormForOrigin() const {
+  password_manager::PasswordStore::FormDigest form = {
+      autofill::PasswordForm::SCHEME_HTML, std::string(),
+      web_state()->GetLastCommittedURL().GetOrigin()};
+  form.signon_realm = form.origin.spec();
+  return form;
 }
 
 void CredentialManager::OnProvisionalSaveComplete() {

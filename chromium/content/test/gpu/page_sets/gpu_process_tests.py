@@ -120,6 +120,48 @@ class DriverBugWorkaroundsTestsPage(gpu_test_base.PageBase):
       self._Validate(tab, "browser_process", False, self.unexpected_workaround)
       self._Validate(tab, "gpu_process", False, self.unexpected_workaround)
 
+
+class EqualBugWorkaroundsBasePage(gpu_test_base.PageBase):
+  def __init__(self, name=None, page_set=None, shared_page_state_class=None,
+               expectations=None):
+    super(EqualBugWorkaroundsBasePage, self).__init__(
+      url='chrome:gpu',
+      name=name,
+      page_set=page_set,
+      shared_page_state_class=shared_page_state_class,
+      expectations=expectations)
+
+  def Validate(self, tab, results):
+    has_gpu_process_js = 'chrome.gpuBenchmarking.hasGpuProcess()'
+    if not tab.EvaluateJavaScript(has_gpu_process_js):
+      raise page_test.Failure('No GPU process detected')
+
+    has_gpu_channel_js = 'chrome.gpuBenchmarking.hasGpuChannel()'
+    if not tab.EvaluateJavaScript(has_gpu_channel_js):
+      raise page_test.Failure('No GPU channel detected')
+
+    browser_list = tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
+    gpu_list = tab.EvaluateJavaScript( \
+      'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+
+    diff = set(browser_list).symmetric_difference(set(gpu_list))
+    if len(diff) > 0:
+      print 'Test failed. Printing page contents:'
+      print tab.EvaluateJavaScript('document.body.innerHTML')
+      raise page_test.Failure('Browser and GPU process list of driver bug' \
+        'workarounds are not equal: %s != %s, diff: %s' % \
+        (browser_list, gpu_list, list(diff)))
+
+    basic_infos = tab.EvaluateJavaScript('browserBridge.gpuInfo.basic_info')
+    disabled_gl_extensions = None
+    for info in basic_infos:
+      if info['description'].startswith('Disabled Extensions'):
+        disabled_gl_extensions = info['value']
+        break
+
+    return gpu_list, disabled_gl_extensions
+
+
 class GpuProcessTestsPage(gpu_test_base.PageBase):
   def __init__(self, url, name, story_set, expectations):
     super(GpuProcessTestsPage, self).__init__(url=url,
@@ -174,7 +216,11 @@ class NoGpuProcessSharedPageState(GpuProcessSharedPageState):
       test, finder_options, story_set)
     options = finder_options.browser_options
 
-    if sys.platform in ('cygwin', 'win32'):
+    if options.browser_type.startswith('android'):
+      # Hit id 8 from kSoftwareRenderingListJson, which applies to any platform.
+      options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
+      options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0324')
+    elif sys.platform in ('cygwin', 'win32'):
       # Hit id 34 from kSoftwareRenderingListJson.
       options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x5333')
       options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x8811')
@@ -215,11 +261,13 @@ class SoftwareGpuProcessSharedPageState(GpuProcessSharedPageState):
     super(SoftwareGpuProcessSharedPageState, self).__init__(
       test, finder_options, story_set)
     options = finder_options.browser_options
+
+    # Hit exception from id 50 from kSoftwareRenderingListJson.
     options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
     options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0de1')
     options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=VMware')
     options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=SVGA3D')
-    options.AppendExtraBrowserArgs('--gpu-testing-gl-version="2.1 Mesa 10.1"')
+    options.AppendExtraBrowserArgs('--gpu-testing-gl-version=2.1 Mesa 10.1')
 
 
 class SoftwareGpuProcessPage(gpu_test_base.PageBase):
@@ -286,7 +334,14 @@ class DriverBugWorkaroundsUponGLRendererShared(GpuProcessSharedPageState):
     super(DriverBugWorkaroundsUponGLRendererShared, self).__init__(
       test, finder_options, story_set)
     options = finder_options.browser_options
-    if sys.platform in ('cygwin', 'win32'):
+    if options.browser_type.startswith('android'):
+      # Hit id 108 from kGpuDriverBugListJson.
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=' \
+                                     'NVIDIA Corporation')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=NVIDIA Tegra')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-version=' \
+                                     'OpenGL ES 3.1 NVIDIA 343.00')
+    elif sys.platform in ('cygwin', 'win32'):
       # Hit id 51 and 87 from kGpuDriverBugListJson.
       options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x1002')
       options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x6779')
@@ -297,27 +352,29 @@ class DriverBugWorkaroundsUponGLRendererShared(GpuProcessSharedPageState):
       options.AppendExtraBrowserArgs('--gpu-testing-gl-version=OpenGL ES 2.0 ' \
         '(ANGLE 2.1.0.0c0d8006a9dd)')
     elif sys.platform.startswith('linux'):
-      # Hit id 153 from kGpuDriverBugListJson.
+      # Hit id 40 from kGpuDriverBugListJson.
       options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x0101')
       options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0102')
-      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=Vivante ' \
-        'Corporation')
-      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=Vivante GC1000')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=ARM')
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-renderer=Mali-400 MP')
     elif sys.platform == 'darwin':
       # Currently on osx no workaround relies on gl-renderer.
       pass
 
 
 class DriverBugWorkaroundsUponGLRendererPage(DriverBugWorkaroundsTestsPage):
-  def __init__(self, story_set, expectations):
+  def __init__(self, story_set, expectations, is_platform_android):
     self.expected_workaround = None
     self.unexpected_workaround = None
 
-    if sys.platform in ('cygwin', 'win32'):
+    if is_platform_android:
+      self.expected_workaround = \
+          "unpack_overlapping_rows_separately_unpack_buffer"
+    elif sys.platform in ('cygwin', 'win32'):
       self.expected_workaround = "texsubimage_faster_than_teximage"
       self.unexpected_workaround = "disable_d3d11"
     elif sys.platform.startswith('linux'):
-      self.expected_workaround = "disable_multisampled_render_to_texture"
+      self.expected_workaround = "disable_discard_framebuffer"
     elif sys.platform == 'darwin':
       pass
     super(DriverBugWorkaroundsUponGLRendererPage, self).__init__(
@@ -461,8 +518,9 @@ class ReadbackWebGLGpuProcessSharedPageState(GpuProcessSharedPageState):
     super(ReadbackWebGLGpuProcessSharedPageState, self).__init__(
       test, finder_options, story_set)
     options = finder_options.browser_options
+    is_platform_android = options.browser_type.startswith('android')
 
-    if sys.platform.startswith('linux'):
+    if sys.platform.startswith('linux') and not is_platform_android:
       # Hit id 110 from kSoftwareRenderingListJson.
       options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
       options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0de1')
@@ -472,16 +530,17 @@ class ReadbackWebGLGpuProcessSharedPageState(GpuProcessSharedPageState):
       options.AppendExtraBrowserArgs('--gpu-testing-gl-version="3.0 Mesa 11.2"')
 
 class ReadbackWebGLGpuProcessPage(gpu_test_base.PageBase):
-  def __init__(self, story_set, expectations):
+  def __init__(self, story_set, expectations, is_platform_android):
     super(ReadbackWebGLGpuProcessPage, self).__init__(
       url='chrome:gpu',
       name='GpuProcess.readback_webgl_gpu_process',
       page_set=story_set,
       shared_page_state_class=ReadbackWebGLGpuProcessSharedPageState,
       expectations=expectations)
+    self.is_platform_android = is_platform_android
 
   def Validate(self, tab, results):
-    if sys.platform.startswith('linux'):
+    if sys.platform.startswith('linux') and not self.is_platform_android:
       feature_status_js = 'browserBridge.gpuInfo.featureStatus.featureStatus'
       feature_status_list = tab.EvaluateJavaScript(feature_status_js)
       result = True
@@ -499,27 +558,160 @@ class ReadbackWebGLGpuProcessPage(gpu_test_base.PageBase):
           % feature_status_list)
 
 
-class EqualBugWorkaroundsInBrowserAndGpuProcessPage(gpu_test_base.PageBase):
+class HasTransparentVisualsShared(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(HasTransparentVisualsShared, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+    if sys.platform.startswith('linux'):
+      # Hit id 173 from kGpuDriverBugListJson.
+      options.AppendExtraBrowserArgs('--gpu-testing-gl-version=3.0 Mesa ' \
+                                     '12.1')
+
+class HasTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
   def __init__(self, story_set, expectations):
-    super(EqualBugWorkaroundsInBrowserAndGpuProcessPage, self).__init__(
-      url='chrome:gpu',
-      name='GpuProcess.equal_bug_workarounds_in_browser_and_gpu_process',
+    super(HasTransparentVisualsGpuProcessPage, self).__init__(
+      name='GpuProcess.has_transparent_visuals_gpu_process',
       page_set=story_set,
-      shared_page_state_class=GpuProcessSharedPageState,
-      expectations=expectations)
+      shared_page_state_class=HasTransparentVisualsShared,
+      expectations=expectations,
+      expected_workaround=None,
+      unexpected_workaround='disable_transparent_visuals')
 
   def Validate(self, tab, results):
-    browser_list = tab.EvaluateJavaScript('GetDriverBugWorkarounds()')
-    gpu_list = tab.EvaluateJavaScript( \
-      'chrome.gpuBenchmarking.getGpuDriverBugWorkarounds()')
+    if sys.platform.startswith('linux'):
+      super(HasTransparentVisualsGpuProcessPage, self).Validate(tab, results)
 
-    diff = set(browser_list).symmetric_difference(set(gpu_list))
+
+class NoTransparentVisualsShared(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(NoTransparentVisualsShared, self).__init__(
+      test, finder_options, story_set)
+    options = finder_options.browser_options
+    if sys.platform.startswith('linux'):
+      options.AppendExtraBrowserArgs('--disable_transparent_visuals=1')
+
+class NoTransparentVisualsGpuProcessPage(DriverBugWorkaroundsTestsPage):
+  def __init__(self, story_set, expectations):
+    super(NoTransparentVisualsGpuProcessPage, self).__init__(
+      name='GpuProcess.no_transparent_visuals_gpu_process',
+      page_set=story_set,
+      shared_page_state_class=NoTransparentVisualsShared,
+      expectations=expectations,
+      expected_workaround='disable_transparent_visuals',
+      unexpected_workaround=None)
+
+  def Validate(self, tab, results):
+    if sys.platform.startswith('linux'):
+      super(NoTransparentVisualsGpuProcessPage, self).Validate(tab, results)
+
+
+class TransferWorkaroundSharedPageState(GpuProcessSharedPageState):
+  def __init__(self, test, finder_options, story_set):
+    super(TransferWorkaroundSharedPageState, self).__init__(
+      test, finder_options, story_set)
+
+  # Extra browser args need to be added here. Adding them in RunStory would be
+  # too late.
+  def WillRunStory(self, results):
+    if self.WarmUpDone():
+      options = self._finder_options.browser_options
+      options.AppendExtraBrowserArgs('--use_gpu_driver_workaround_for_testing')
+      options.AppendExtraBrowserArgs('--disable-gpu-driver-bug-workarounds')
+
+      # Inject some info to make sure the flag above is effective.
+      if sys.platform == 'darwin':
+        # Hit id 33 from kGpuDriverBugListJson.
+        options.AppendExtraBrowserArgs('--gpu-testing-gl-vendor=Imagination')
+      else:
+        # Hit id 5 from kGpuDriverBugListJson.
+        options.AppendExtraBrowserArgs('--gpu-testing-vendor-id=0x10de')
+        options.AppendExtraBrowserArgs('--gpu-testing-device-id=0x0001')
+        # no multi gpu on Android.
+        if not options.browser_type.startswith('android'):
+          options.AppendExtraBrowserArgs('--gpu-testing-secondary-vendor-ids=')
+          options.AppendExtraBrowserArgs('--gpu-testing-secondary-device-ids=')
+
+      for workaround in self.RecordedWorkarounds():
+        options.AppendExtraBrowserArgs('--' + workaround)
+      options.AppendExtraBrowserArgs('--disable-gl-extensions=' + \
+                                     self.DisabledGLExts())
+    super(TransferWorkaroundSharedPageState, self).WillRunStory(results)
+
+  # self._current_page is None in WillRunStory so do the transfer here.
+  def RunStory(self, results):
+    if self.WarmUpDone():
+      self._current_page.expected_workarounds = self.RecordedWorkarounds()
+      self._current_page.expected_disabled_exts = self.DisabledGLExts()
+      self.AddTestingWorkaround(self._current_page.expected_workarounds)
+    super(TransferWorkaroundSharedPageState, self).RunStory(results)
+
+  def WarmUpDone(self):
+    return self._previous_page is not None and \
+           self.RecordedWorkarounds() is not None
+
+  def RecordedWorkarounds(self):
+    return self._previous_page.recorded_workarounds
+
+  def DisabledGLExts(self):
+    return self._previous_page.recorded_disabled_exts
+
+  def AddTestingWorkaround(self, workarounds):
+    if workarounds is not None:
+      workarounds.append('use_gpu_driver_workaround_for_testing')
+
+
+class EqualBugWorkaroundsPage(EqualBugWorkaroundsBasePage):
+  def __init__(self, story_set, expectations):
+    super(EqualBugWorkaroundsPage, self).__init__(
+      name='GpuProcess.equal_bug_workarounds_in_browser_and_gpu_process',
+      page_set=story_set,
+      shared_page_state_class=TransferWorkaroundSharedPageState,
+      expectations=expectations)
+    self.recorded_workarounds = None
+    self.recorded_disabled_exts = None
+
+  def Validate(self, tab, results):
+    recorded_info = super(EqualBugWorkaroundsPage, self).Validate(tab, results)
+    gpu_list, disabled_gl_extensions = recorded_info
+
+    self.recorded_workarounds = gpu_list
+    self.recorded_disabled_exts = disabled_gl_extensions
+
+
+class OnlyOneWorkaroundPage(EqualBugWorkaroundsBasePage):
+  def __init__(self, story_set, expectations):
+    super(OnlyOneWorkaroundPage, self).__init__(
+      name='GpuProcess.only_one_workaround',
+      page_set=story_set,
+      shared_page_state_class=TransferWorkaroundSharedPageState,
+      expectations=expectations)
+    self.expected_workarounds = None
+    self.expected_disabled_exts = None
+
+  def Validate(self, tab, results):
+    # Requires EqualBugWorkaroundsPage to succeed. If it has failed then just
+    # pass to not overload the logs.
+    if self.expected_workarounds is None:
+      return
+
+    recorded_info = super(OnlyOneWorkaroundPage, self).Validate(tab, results)
+    gpu_list, disabled_gl_extensions = recorded_info
+
+    diff = set(self.expected_workarounds).symmetric_difference(set(gpu_list))
     if len(diff) > 0:
       print 'Test failed. Printing page contents:'
       print tab.EvaluateJavaScript('document.body.innerHTML')
-      raise page_test.Failure('Browser and GPU process list of driver bug' \
+      raise page_test.Failure('GPU process and expected list of driver bug' \
         'workarounds are not equal: %s != %s, diff: %s' % \
-        (browser_list, gpu_list, list(diff)))
+        (self.expected_workarounds, gpu_list, list(diff)))
+
+    if self.expected_disabled_exts != disabled_gl_extensions:
+      print 'Test failed. Printing page contents:'
+      print tab.EvaluateJavaScript('document.body.innerHTML')
+      raise page_test.Failure('The expected disabled gl extensions are ' \
+        'incorrect: %s != %s:' % \
+        (self.expected_disabled_exts, disabled_gl_extensions))
 
 
 class GpuProcessTestsStorySet(story_set_module.StorySet):
@@ -545,18 +737,29 @@ class GpuProcessTestsStorySet(story_set_module.StorySet):
     self.AddStory(FunctionalVideoPage(self, expectations))
     self.AddStory(GpuInfoCompletePage(self, expectations))
     self.AddStory(NoGpuProcessPage(self, expectations))
-    self.AddStory(SoftwareGpuProcessPage(self, expectations))
+    self.AddStory(DriverBugWorkaroundsInGpuProcessPage(self, expectations))
+    self.AddStory(ReadbackWebGLGpuProcessPage(self, expectations,
+                                              is_platform_android))
+    self.AddStory(DriverBugWorkaroundsUponGLRendererPage(self, expectations,
+                                                         is_platform_android))
+    self.AddStory(EqualBugWorkaroundsPage(self, expectations))
+    self.AddStory(OnlyOneWorkaroundPage(self, expectations))
+
     if not is_platform_android:
       self.AddStory(SkipGpuProcessPage(self, expectations))
-    self.AddStory(DriverBugWorkaroundsInGpuProcessPage(self, expectations))
-    self.AddStory(IdentifyActiveGpuPage1(self, expectations))
-    self.AddStory(IdentifyActiveGpuPage2(self, expectations))
-    self.AddStory(IdentifyActiveGpuPage3(self, expectations))
-    self.AddStory(IdentifyActiveGpuPage4(self, expectations))
-    self.AddStory(ReadbackWebGLGpuProcessPage(self, expectations))
-    self.AddStory(DriverBugWorkaroundsUponGLRendererPage(self, expectations))
-    self.AddStory(EqualBugWorkaroundsInBrowserAndGpuProcessPage(self,
-                                                                expectations))
+      self.AddStory(HasTransparentVisualsGpuProcessPage(self, expectations))
+      self.AddStory(NoTransparentVisualsGpuProcessPage(self, expectations))
+
+      # There is no Android multi-gpu configuration and the helper
+      # gpu_info_collector.cc::IdentifyActiveGPU is not even called.
+      self.AddStory(IdentifyActiveGpuPage1(self, expectations))
+      self.AddStory(IdentifyActiveGpuPage2(self, expectations))
+      self.AddStory(IdentifyActiveGpuPage3(self, expectations))
+      self.AddStory(IdentifyActiveGpuPage4(self, expectations))
+
+      # There is currently no entry in kSoftwareRenderingListJson that enables
+      # a software GL driver on Android.
+      self.AddStory(SoftwareGpuProcessPage(self, expectations))
 
   @property
   def allow_mixed_story_states(self):

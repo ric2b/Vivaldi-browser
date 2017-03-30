@@ -24,6 +24,7 @@ class SingleThreadTaskRunner;
 
 namespace ui {
 class SynchronousInputHandlerProxy;
+struct DidOverscrollParams;
 }
 
 namespace IPC {
@@ -64,9 +65,14 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
   void RegisterRoutingID(int routing_id) override;
   void UnregisterRoutingID(int routing_id) override;
   void DidOverscroll(int routing_id,
-                     const DidOverscrollParams& params) override;
+                     const ui::DidOverscrollParams& params) override;
   void DidStartFlinging(int routing_id) override;
   void DidStopFlinging(int routing_id) override;
+  void DispatchNonBlockingEventToMainThread(
+      int routing_id,
+      ui::ScopedWebInputEvent event,
+      const ui::LatencyInfo& latency_info) override;
+
   void NotifyInputEventHandled(int routing_id,
                                blink::WebInputEvent::Type type,
                                InputEventAckState ack_result) override;
@@ -78,10 +84,10 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
   bool OnMessageReceived(const IPC::Message& message) override;
 
   // MainThreadEventQueueClient methods:
-  void SendEventToMainThread(int routing_id,
-                             const blink::WebInputEvent* event,
-                             const ui::LatencyInfo& latency,
-                             InputEventDispatchType dispatch_type) override;
+  void HandleEventOnMainThread(int routing_id,
+                               const blink::WebInputEvent* event,
+                               const ui::LatencyInfo& latency,
+                               InputEventDispatchType dispatch_type) override;
   // Send an InputEventAck IPC message. |touch_event_id| represents
   // the unique event id for the original WebTouchEvent and should
   // be 0 if otherwise. See WebInputEventTraits::GetUniqueTouchEventId.
@@ -116,14 +122,15 @@ class CONTENT_EXPORT InputEventFilter : public InputHandlerManagerClient,
   std::set<int> routes_;
 
   using RouteQueueMap =
-      std::unordered_map<int, std::unique_ptr<MainThreadEventQueue>>;
+      std::unordered_map<int, scoped_refptr<MainThreadEventQueue>>;
   RouteQueueMap route_queues_;
 
   // Used to intercept overscroll notifications while an event is being
   // dispatched.  If the event causes overscroll, the overscroll metadata can be
   // bundled in the event ack, saving an IPC.  Note that we must continue
   // supporting overscroll IPC notifications due to fling animation updates.
-  std::unique_ptr<DidOverscrollParams>* current_overscroll_params_;
+  std::unique_ptr<ui::DidOverscrollParams>* current_overscroll_params_;
+  blink::scheduler::RendererScheduler* renderer_scheduler_;
 };
 
 }  // namespace content

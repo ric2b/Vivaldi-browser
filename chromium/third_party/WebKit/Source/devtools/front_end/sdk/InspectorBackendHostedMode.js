@@ -6,21 +6,18 @@
 
 WebInspector.InspectorBackendHostedMode = {};
 
-/**
- * @param {string} jsonUrl
- */
-WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded = function(jsonUrl)
+WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded = function()
 {
     if (InspectorBackend.isInitialized())
         return;
 
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", jsonUrl, false);
-    xhr.send(null);
-
-    var schema = JSON.parse(xhr.responseText);
-    var code = WebInspector.InspectorBackendHostedMode.generateCommands(schema);
-    eval(code);
+    for (var url of Object.keys(Runtime.cachedResources)) {
+        if (url.indexOf("protocol.json") !== -1) {
+            var protocol = Runtime.cachedResources[url];
+            var code = WebInspector.InspectorBackendHostedMode.generateCommands(JSON.parse(protocol));
+            eval(code);
+        }
+    }
 }
 
 /**
@@ -51,9 +48,15 @@ WebInspector.InspectorBackendHostedMode.generateCommands = function(schema)
         var members = [];
         for (var m = 0; m < items.length; ++m) {
             var value = items[m];
-            var name = value.replace(/-(\w)/g, toUpperCase.bind(null, 1)).toTitleCase();
+            var name = value;
+            var prefix = "";
+            if (name[0] === "-") {
+                prefix = "Negative";
+                name = name.substring(1);
+            }
+            name = name.replace(/-(\w)/g, toUpperCase.bind(null, 1)).toTitleCase();
             name = name.replace(/HTML|XML|WML|API/ig, toUpperCase.bind(null, 0));
-            members.push(name + ": \"" + value + "\"");
+            members.push(prefix + name + ": \"" + value + "\"");
         }
         return "InspectorBackend.registerEnum(\"" + enumName + "\", {" + members.join(", ") + "});";
     }
@@ -122,4 +125,4 @@ WebInspector.InspectorBackendHostedMode.generateCommands = function(schema)
     return result.join("\n");
 }
 
-WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded("../inspector.json");
+WebInspector.InspectorBackendHostedMode.loadFromJSONIfNeeded();

@@ -27,15 +27,15 @@
 #include "content/public/common/result_codes.h"
 #include "device/bluetooth/android/bluetooth_jni_registrar.h"
 #include "device/gamepad/android/gamepad_jni_registrar.h"
-#include "device/power_save_blocker/power_save_blocker_jni_registrar.h"
+#include "device/geolocation/android/geolocation_jni_registrar.h"
 #include "device/usb/android/usb_jni_registrar.h"
 #include "media/base/android/media_jni_registrar.h"
+#include "media/capture/content/android/screen_capture_jni_registrar.h"
 #include "media/capture/video/android/capture_jni_registrar.h"
 #include "media/midi/midi_jni_registrar.h"
 #include "net/android/net_jni_registrar.h"
 #include "ui/android/ui_android_jni_registrar.h"
 #include "ui/base/android/ui_base_jni_registrar.h"
-#include "ui/events/android/events_jni_registrar.h"
 #include "ui/gfx/android/gfx_jni_registrar.h"
 #include "ui/gl/android/gl_jni_registrar.h"
 #include "ui/shell_dialogs/android/shell_dialogs_jni_registrar.h"
@@ -61,9 +61,6 @@ bool EnsureJniRegistered(JNIEnv* env) {
     if (!ui::gl::android::RegisterJni(env))
       return false;
 
-    if (!ui::events::android::RegisterJni(env))
-      return false;
-
     if (!ui::shell_dialogs::RegisterJni(env))
       return false;
 
@@ -82,7 +79,7 @@ bool EnsureJniRegistered(JNIEnv* env) {
     if (!device::android::RegisterGamepadJni(env))
       return false;
 
-    if (!device::android::RegisterPowerSaveBlockerJni(env))
+    if (!device::android::RegisterGeolocationJni(env))
       return false;
 
     if (!device::android::RegisterUsbJni(env))
@@ -95,6 +92,9 @@ bool EnsureJniRegistered(JNIEnv* env) {
       return false;
 
     if (!media::midi::RegisterJni(env))
+      return false;
+
+    if (!media::RegisterScreenCaptureJni(env))
       return false;
 
     if (!ui::RegisterUIAndroidJni(env))

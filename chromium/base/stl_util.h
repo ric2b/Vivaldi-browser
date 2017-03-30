@@ -15,6 +15,8 @@
 
 #include "base/logging.h"
 
+namespace base {
+
 // Clears internal memory of an STL object.
 // STL clear()/reserve(0) does not always free internal memory allocated
 // This function uses swap/destructor to ensure the internal memory is freed.
@@ -42,24 +44,6 @@ void STLDeleteContainerPointers(ForwardIterator begin, ForwardIterator end) {
     ForwardIterator temp = begin;
     ++begin;
     delete *temp;
-  }
-}
-
-// For a range within a container of pairs, calls delete (non-array version) on
-// BOTH items in the pairs.
-// NOTE: Like STLDeleteContainerPointers, it is important that this deletes
-// behind the iterator because if both the key and value are deleted, the
-// container may call the hash function on the iterator when it is advanced,
-// which could result in the hash function trying to dereference a stale
-// pointer.
-template <class ForwardIterator>
-void STLDeleteContainerPairPointers(ForwardIterator begin,
-                                    ForwardIterator end) {
-  while (begin != end) {
-    ForwardIterator temp = begin;
-    ++begin;
-    delete temp->first;
-    delete temp->second;
   }
 }
 
@@ -197,8 +181,6 @@ bool ContainsValue(const Collection& collection, const Value& value) {
   return std::find(collection.begin(), collection.end(), value) !=
       collection.end();
 }
-
-namespace base {
 
 // Returns true if the container is sorted.
 template <typename Container>

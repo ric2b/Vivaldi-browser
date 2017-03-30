@@ -210,8 +210,9 @@ public:
 
     bool hasSpellingMarker(Document*, int from, int length);
     bool hasGrammarMarker(Document*, int from, int length);
-    void setContinuousSpellCheckingEnabled(bool);
+    void setSpellCheckingEnabled(bool);
 
+    bool canHyphenate(const AtomicString& locale);
     void setMockHyphenation(const AtomicString& locale);
 
     bool isOverwriteModeEnabled(Document*);
@@ -245,8 +246,6 @@ public:
     unsigned numberOfLiveNodes() const;
     unsigned numberOfLiveDocuments() const;
     String dumpRefCountedInstanceCounts() const;
-    unsigned numberOfConsoleMessages(Document*) const;
-    unsigned numberOfConsoleMessagesWithArguments(Document*) const;
     LocalDOMWindow* openDummyInspectorFrontend(const String& url);
     void closeDummyInspectorFrontend();
     Vector<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
@@ -400,6 +399,9 @@ public:
     // Returns the run state of the node's programmatic scroll animator (see ScrollAnimatorCompositorCoordinater::RunState),
     // or -1 if the node does not have a scrollable area.
     String getProgrammaticScrollAnimationState(Node*) const;
+
+    // Returns the visual rect of a node's LayoutObject.
+    ClientRect* visualRect(Node*);
 
 private:
     explicit Internals(ScriptState*);

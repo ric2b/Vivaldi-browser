@@ -21,11 +21,13 @@ const char* pointerTypeNameForWebPointPointerType(WebPointerProperties::PointerT
     case WebPointerProperties::PointerType::Touch:
         return "touch";
     case WebPointerProperties::PointerType::Pen:
+    case WebPointerProperties::PointerType::Eraser:
+        // TODO(mustaq): Fix when the spec starts supporting hovering erasers.
         return "pen";
     case WebPointerProperties::PointerType::Mouse:
         return "mouse";
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return "";
 }
 
@@ -47,8 +49,31 @@ const AtomicString& pointerEventNameForMouseEventName(
 
 #undef RETURN_CORRESPONDING_PE_NAME
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return emptyAtom;
+}
+
+
+unsigned short buttonToButtonsBitfield(WebPointerProperties::Button button)
+{
+#define CASE_BUTTON_TO_BUTTONS(enumLabel) \
+    case WebPointerProperties::Button::enumLabel:\
+        return static_cast<unsigned short>(WebPointerProperties::Buttons::enumLabel)
+
+    switch (button) {
+        CASE_BUTTON_TO_BUTTONS(NoButton);
+        CASE_BUTTON_TO_BUTTONS(Left);
+        CASE_BUTTON_TO_BUTTONS(Right);
+        CASE_BUTTON_TO_BUTTONS(Middle);
+        CASE_BUTTON_TO_BUTTONS(X1);
+        CASE_BUTTON_TO_BUTTONS(X2);
+        CASE_BUTTON_TO_BUTTONS(Eraser);
+    }
+
+#undef CASE_BUTTON_TO_BUTTONS
+
+    NOTREACHED();
+    return 0;
 }
 
 } // namespace
@@ -72,24 +97,35 @@ void PointerEventFactory::setIdTypeButtons(PointerEventInit& pointerEventInit,
     const IncomingId incomingId(pointerType, pointerProperties.id);
     int pointerId = addIdAndActiveButtons(incomingId, buttons != 0);
 
+    // Tweak the |buttons| to reflect pen eraser mode only if the pen is in
+    // active buttons state w/o even considering the eraser button.
+    // TODO(mustaq): Fix when the spec starts supporting hovering erasers.
+    if (pointerType == WebPointerProperties::PointerType::Eraser && buttons != 0) {
+        buttons |= static_cast<unsigned>(WebPointerProperties::Buttons::Eraser);
+        buttons &= ~static_cast<unsigned>(WebPointerProperties::Buttons::Left);
+    }
     pointerEventInit.setButtons(buttons);
+
     pointerEventInit.setPointerId(pointerId);
     pointerEventInit.setPointerType(pointerTypeNameForWebPointPointerType(pointerType));
     pointerEventInit.setIsPrimary(isPrimary(pointerId));
 }
 
-void PointerEventFactory::setBubblesAndCancelable(PointerEventInit& pointerEventInit,
-    const AtomicString& type)
+void PointerEventFactory::setBubblesAndCancelable(
+    PointerEventInit& pointerEventInit, const AtomicString& type)
 {
     pointerEventInit.setBubbles(type != EventTypeNames::pointerenter
         && type != EventTypeNames::pointerleave);
     pointerEventInit.setCancelable(type != EventTypeNames::pointerenter
-        && type != EventTypeNames::pointerleave && type != EventTypeNames::pointercancel);
+        && type != EventTypeNames::pointerleave
+        && type != EventTypeNames::pointercancel
+        && type != EventTypeNames::gotpointercapture
+        && type != EventTypeNames::lostpointercapture);
 }
 
 PointerEvent* PointerEventFactory::create(
-    const AtomicString& mouseEventName, const PlatformMouseEvent& mouseEvent,
-    EventTarget* relatedTarget,
+    const AtomicString& mouseEventName,
+    const PlatformMouseEvent& mouseEvent,
     LocalDOMWindow* view)
 {
     DCHECK(mouseEventName == EventTypeNames::mousemove
@@ -122,9 +158,15 @@ PointerEvent* PointerEventFactory::create(
 
     if (pointerEventName == EventTypeNames::pointerdown
         || pointerEventName == EventTypeNames::pointerup) {
-        pointerEventInit.setButton(mouseEvent.button());
-    } else { // Only when pointerEventName == EventTypeNames::pointermove
-        pointerEventInit.setButton(NoButton);
+        WebPointerProperties::Button button = mouseEvent.pointerProperties().button;
+        // TODO(mustaq): Fix when the spec starts supporting hovering erasers.
+        if (mouseEvent.pointerProperties().pointerType == WebPointerProperties::PointerType::Eraser
+            && button == WebPointerProperties::Button::Left)
+            button =  WebPointerProperties::Button::Eraser;
+        pointerEventInit.setButton(static_cast<int>(button));
+    } else {
+        DCHECK(pointerEventName == EventTypeNames::pointermove);
+        pointerEventInit.setButton(static_cast<int>(WebPointerProperties::Button::NoButton));
     }
     pointerEventInit.setPressure(getPointerEventPressure(
         mouseEvent.pointerProperties().force, pointerEventInit.buttons()));
@@ -135,14 +177,12 @@ PointerEvent* PointerEventFactory::create(
 
     // Make sure chorded buttons fire pointermove instead of pointerup/down.
     if ((pointerEventName == EventTypeNames::pointerdown
-        && (buttons & ~MouseEvent::buttonToButtons(mouseEvent.button())) != 0)
+        && (buttons & ~buttonToButtonsBitfield(mouseEvent.pointerProperties().button)) != 0)
         || (pointerEventName == EventTypeNames::pointerup && buttons != 0))
         pointerEventName = EventTypeNames::pointermove;
 
 
     pointerEventInit.setView(view);
-    if (relatedTarget)
-        pointerEventInit.setRelatedTarget(relatedTarget);
 
     return PointerEvent::create(pointerEventName, pointerEventInit);
 }
@@ -175,7 +215,7 @@ PointerEvent* PointerEventFactory::create(const AtomicString& type,
     pointerEventInit.setScreenY(touchPoint.screenPos().y());
     pointerEventInit.setClientX(clientPoint.x());
     pointerEventInit.setClientY(clientPoint.y());
-    pointerEventInit.setButton(pointerPressedOrReleased ? LeftButton: NoButton);
+    pointerEventInit.setButton(static_cast<int>(pointerPressedOrReleased ? WebPointerProperties::Button::Left : WebPointerProperties::Button::NoButton));
     pointerEventInit.setPressure(getPointerEventPressure(
         touchPoint.force(), pointerEventInit.buttons()));
     pointerEventInit.setTiltX(touchPoint.pointerProperties().tiltX);
@@ -193,7 +233,7 @@ PointerEvent* PointerEventFactory::create(const AtomicString& type,
 PointerEvent* PointerEventFactory::createPointerCancelEvent(
     const int pointerId, const WebPointerProperties::PointerType pointerType)
 {
-    ASSERT(m_pointerIdMapping.contains(pointerId));
+    DCHECK(m_pointerIdMapping.contains(pointerId));
     m_pointerIdMapping.set(pointerId, PointerAttributes(m_pointerIdMapping.get(pointerId).incomingId, false));
 
     PointerEventInit pointerEventInit;
@@ -207,33 +247,11 @@ PointerEvent* PointerEventFactory::createPointerCancelEvent(
     return PointerEvent::create(EventTypeNames::pointercancel, pointerEventInit);
 }
 
-PointerEvent* PointerEventFactory::createPointerCaptureEvent(
-    PointerEvent* pointerEvent,
-    const AtomicString& type)
-{
-    ASSERT(type == EventTypeNames::gotpointercapture
-        || type == EventTypeNames::lostpointercapture);
-
-    PointerEventInit pointerEventInit;
-    pointerEventInit.setPointerId(pointerEvent->pointerId());
-    pointerEventInit.setPointerType(pointerEvent->pointerType());
-    pointerEventInit.setIsPrimary(pointerEvent->isPrimary());
-    pointerEventInit.setBubbles(true);
-    pointerEventInit.setCancelable(false);
-
-    return PointerEvent::create(type, pointerEventInit);
-}
-
-PointerEvent* PointerEventFactory::createPointerBoundaryEvent(
+PointerEvent* PointerEventFactory::createPointerEventFrom(
     PointerEvent* pointerEvent,
     const AtomicString& type,
     EventTarget* relatedTarget)
 {
-    ASSERT(type == EventTypeNames::pointerout
-        || type == EventTypeNames::pointerleave
-        || type == EventTypeNames::pointerover
-        || type == EventTypeNames::pointerenter);
-
     PointerEventInit pointerEventInit;
 
     pointerEventInit.setPointerId(pointerEvent->pointerId());
@@ -258,6 +276,30 @@ PointerEvent* PointerEventFactory::createPointerBoundaryEvent(
         pointerEventInit.setRelatedTarget(relatedTarget);
 
     return PointerEvent::create(type, pointerEventInit);
+}
+
+PointerEvent* PointerEventFactory::createPointerCaptureEvent(
+    PointerEvent* pointerEvent,
+    const AtomicString& type)
+{
+    DCHECK(type == EventTypeNames::gotpointercapture
+        || type == EventTypeNames::lostpointercapture);
+
+    return createPointerEventFrom(
+        pointerEvent, type, pointerEvent->relatedTarget());
+}
+
+PointerEvent* PointerEventFactory::createPointerBoundaryEvent(
+    PointerEvent* pointerEvent,
+    const AtomicString& type,
+    EventTarget* relatedTarget)
+{
+    DCHECK(type == EventTypeNames::pointerout
+        || type == EventTypeNames::pointerleave
+        || type == EventTypeNames::pointerover
+        || type == EventTypeNames::pointerenter);
+
+    return createPointerEventFrom(pointerEvent, type, relatedTarget);
 }
 
 PointerEventFactory::PointerEventFactory()

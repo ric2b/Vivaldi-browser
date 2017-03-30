@@ -11,10 +11,12 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
+#include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -22,11 +24,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/browser/autofill_download_manager.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/credit_card.h"
@@ -44,6 +48,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/test_rappor_service.h"
+#include "components/variations/variations_associated_data.h"
 #include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -73,6 +78,8 @@ class MockAutofillClient : public TestAutofillClient {
   MOCK_METHOD2(ConfirmSaveCreditCardLocally,
                void(const CreditCard& card, const base::Closure& callback));
 
+  MOCK_METHOD0(ShouldShowSigninPromo, bool());
+
  private:
   DISALLOW_COPY_AND_ASSIGN(MockAutofillClient);
 };
@@ -85,7 +92,8 @@ class TestPaymentsClient : public payments::PaymentsClient {
 
   ~TestPaymentsClient() override {}
 
-  void GetUploadDetails(const std::string& app_locale) override {
+  void GetUploadDetails(const std::vector<AutofillProfile>& addresses,
+                        const std::string& app_locale) override {
     delegate_->OnDidGetUploadDetails(
         app_locale == "en-US" ? AutofillClient::SUCCESS
                               : AutofillClient::PERMANENT_FAILURE,
@@ -695,9 +703,20 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
     suggestion_vector.push_back(suggestion2);
     CheckSuggestions(expected_page_id, 3, &suggestion_vector[0]);
   }
+  // Check that the autofill suggestions were sent, and that they match a page
+  // but contain no results.
   void CheckNoSuggestions(int expected_page_id) {
-    EXPECT_TRUE(on_suggestions_returned_seen());
     CheckSuggestions(expected_page_id, 0, nullptr);
+  }
+  // Check that the autofill suggestions were sent, and that they match a page
+  // and contain a specific number of suggestions.
+  void CheckSuggestionCount(int expected_page_id,
+                            size_t expected_num_suggestions) {
+    // Ensure that these results are from the most recent query.
+    EXPECT_TRUE(on_suggestions_returned_seen_);
+
+    EXPECT_EQ(expected_page_id, query_id_);
+    ASSERT_EQ(expected_num_suggestions, suggestions_.size());
   }
 
   bool on_query_seen() const {
@@ -729,6 +748,8 @@ class TestAutofillExternalDelegate : public AutofillExternalDelegate {
 
 class AutofillManagerTest : public testing::Test {
  public:
+  AutofillManagerTest() : field_trial_list_(nullptr) {}
+
   void SetUp() override {
     autofill_client_.SetPrefs(test::PrefServiceForTesting());
     personal_data_.set_database(autofill_client_.GetDatabase());
@@ -747,6 +768,9 @@ class AutofillManagerTest : public testing::Test {
         autofill_manager_.get(),
         autofill_driver_.get()));
     autofill_manager_->SetExternalDelegate(external_delegate_.get());
+
+    // Clear all the things.
+    variations::testing::ClearAllVariationParams();
   }
 
   void TearDown() override {
@@ -761,6 +785,32 @@ class AutofillManagerTest : public testing::Test {
     personal_data_.SetPrefService(NULL);
 
     request_context_ = nullptr;
+  }
+
+  void EnableCreditCardSigninPromoFeatureWithLimit(int impression_limit) {
+    const std::string kTrialName = "MyTrial";
+    const std::string kGroupName = "Group1";
+
+    scoped_refptr<base::FieldTrial> trial(
+        base::FieldTrialList::CreateFieldTrial(kTrialName, kGroupName));
+    std::map<std::string, std::string> params;
+    params[kCreditCardSigninPromoImpressionLimitParamKey] =
+        base::IntToString(impression_limit);
+    ASSERT_TRUE(
+        variations::AssociateVariationParams(kTrialName, kGroupName, params));
+
+    // Enable the feature.
+    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    feature_list->RegisterFieldTrialOverride(
+        kAutofillCreditCardSigninPromo.name,
+        base::FeatureList::OVERRIDE_ENABLE_FEATURE, trial.get());
+    scoped_feature_list_.InitWithFeatureList(std::move(feature_list));
+
+    // Double-checking our params made it.
+    std::map<std::string, std::string> actualParams;
+    EXPECT_TRUE(variations::GetVariationParamsByFeature(
+        kAutofillCreditCardSigninPromo, &actualParams));
+    EXPECT_EQ(params, actualParams);
   }
 
   void GetAutofillSuggestions(int query_id,
@@ -921,20 +971,16 @@ class AutofillManagerTest : public testing::Test {
     autofill_manager_->FillOrPreviewCreditCardForm(
         AutofillDriver::FORM_DATA_ACTION_FILL, kDefaultPageID, *form,
         form->fields[0], *card);
+  }
 
-#if defined(OS_IOS)
-    // Filling out the entire form on iOS requires requesting autofill on each
-    // of the form fields.
-    autofill_manager_->FillOrPreviewCreditCardForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, kDefaultPageID, *form,
-        form->fields[1], *card);
-    autofill_manager_->FillOrPreviewCreditCardForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, kDefaultPageID, *form,
-        form->fields[2], *card);
-    autofill_manager_->FillOrPreviewCreditCardForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, kDefaultPageID, *form,
-        form->fields[3], *card);
-#endif  // defined(OS_IOS)
+  // Convenience method for using and retrieving a mock autocomplete history
+  // manager.
+  MockAutocompleteHistoryManager* RecreateMockAutocompleteHistoryManager() {
+    MockAutocompleteHistoryManager* manager = new
+        MockAutocompleteHistoryManager(autofill_driver_.get(),
+                                       autofill_manager_->client());
+    autofill_manager_->autocomplete_history_manager_.reset(manager);
+    return manager;
   }
 
   // Convenience method to cast the FullCardRequest into a CardUnmaskDelegate.
@@ -954,6 +1000,8 @@ class AutofillManagerTest : public testing::Test {
   TestPaymentsClient* payments_client_;
   TestAutofillDownloadManager* download_manager_;
   TestPersonalDataManager personal_data_;
+  base::FieldTrialList field_trial_list_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 class TestFormStructure : public FormStructure {
@@ -1037,9 +1085,10 @@ TEST_F(AutofillManagerTest, OnFormsSeen_DifferentFormStructures) {
   download_manager_->VerifyLastQueriedForms(forms);
 }
 
-// Test that no suggestions are returned for a field with an unrecognized
-// autocomplete attribute.
+// Test that no autofill suggestions are returned for a field with an
+// unrecognized autocomplete attribute.
 TEST_F(AutofillManagerTest, GetProfileSuggestions_UnrecognizedAttribute) {
+  // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
   form.origin = GURL("https://myform.com/form.html");
@@ -1060,21 +1109,26 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_UnrecognizedAttribute) {
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
-  // Suggestions should be returned for the first two fields
-  GetAutofillSuggestions(form, form.fields[0]);
-  EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
-  GetAutofillSuggestions(form, form.fields[1]);
-  EXPECT_TRUE(external_delegate_->on_suggestions_returned_seen());
+  // Ensure that autocomplete manager is not called for suggestions either.
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
-  // Suggestions should not be returned for the third field because of its
+  // Suggestions should be returned for the first two fields.
+  GetAutofillSuggestions(form, form.fields[0]);
+  external_delegate_->CheckSuggestionCount(kDefaultPageID, 2);
+  GetAutofillSuggestions(form, form.fields[1]);
+  external_delegate_->CheckSuggestionCount(kDefaultPageID, 2);
+
+  // No suggestions should not be provided for the third field because of its
   // unrecognized autocomplete attribute.
   GetAutofillSuggestions(form, form.fields[2]);
-  EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+  external_delegate_->CheckNoSuggestions(kDefaultPageID);
 }
 
 // Test that no suggestions are returned when there are less than three fields
 // and none of them have an autocomplete attribute.
 TEST_F(AutofillManagerTest, GetProfileSuggestions_SmallFormNoAutocomplete) {
+  // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
   form.origin = GURL("https://myform.com/form.html");
@@ -1088,6 +1142,10 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_SmallFormNoAutocomplete) {
   std::vector<FormData> forms(1, form);
   FormsSeen(forms);
 
+  // Ensure that autocomplete manager is called for both fields.
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(2);
+
   GetAutofillSuggestions(form, form.fields[0]);
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
 
@@ -1099,6 +1157,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_SmallFormNoAutocomplete) {
 // attribute, suggestions are only made for the one that has the attribute.
 TEST_F(AutofillManagerTest,
        GetProfileSuggestions_SmallFormWithOneAutocomplete) {
+  // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
   form.origin = GURL("https://myform.com/form.html");
@@ -1131,6 +1190,7 @@ TEST_F(AutofillManagerTest,
 // suggestions are made for both fields.
 TEST_F(AutofillManagerTest,
        GetProfileSuggestions_SmallFormWithTwoAutocomplete) {
+  // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
   form.origin = GURL("https://myform.com/form.html");
@@ -1159,7 +1219,7 @@ TEST_F(AutofillManagerTest,
 
 // Test that we return all address profile suggestions when all form fields are
 // empty.
-TEST_F(AutofillManagerTest, GetProfileSuggestionsEmptyValue) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_EmptyValue) {
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
@@ -1179,7 +1239,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestionsEmptyValue) {
 
 // Test that we return only matching address profile suggestions when the
 // selected form field has been partially filled out.
-TEST_F(AutofillManagerTest, GetProfileSuggestionsMatchCharacter) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_MatchCharacter) {
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
@@ -1271,7 +1331,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestions_AlreadyAutofilledNoLabels) {
 }
 
 // Test that we return no suggestions when the form has no relevant fields.
-TEST_F(AutofillManagerTest, GetProfileSuggestionsUnknownFields) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_UnknownFields) {
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -1296,7 +1356,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestionsUnknownFields) {
 }
 
 // Test that we cull duplicate profile suggestions.
-TEST_F(AutofillManagerTest, GetProfileSuggestionsWithDuplicates) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_WithDuplicates) {
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
@@ -1320,7 +1380,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestionsWithDuplicates) {
 }
 
 // Test that we return no suggestions when autofill is disabled.
-TEST_F(AutofillManagerTest, GetProfileSuggestionsAutofillDisabledByUser) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_AutofillDisabledByUser) {
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
@@ -1441,7 +1501,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_StopCharsWithInput) {
 
 // Test that we return only matching credit card profile suggestions when the
 // selected form field has been partially filled out.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestionsMatchCharacter) {
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_MatchCharacter) {
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, true, false);
@@ -1462,7 +1522,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestionsMatchCharacter) {
 
 // Test that we return credit card profile suggestions when the selected form
 // field is not the credit card number field.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestionsNonCCNumber) {
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonCCNumber) {
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, true, false);
@@ -1495,7 +1555,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestionsNonCCNumber) {
 
 // Test that we return a warning explaining that credit card profile suggestions
 // are unavailable when the form is not secure.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestionsNonHTTPS) {
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_NonHTTPS) {
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, false, false);
@@ -1521,7 +1581,7 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestionsNonHTTPS) {
 
 // Test that we return all credit card suggestions in the case that two cards
 // have the same obfuscated number.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestionsRepeatedObfuscatedNumber) {
+TEST_F(AutofillManagerTest, GetCreditCardSuggestions_RepeatedObfuscatedNumber) {
   // Add a credit card with the same obfuscated number as Elvis's.
   // |credit_card| will be owned by the mock PersonalDataManager.
   CreditCard* credit_card = new CreditCard;
@@ -1702,7 +1762,7 @@ TEST_F(AutofillManagerTest, GetFieldSuggestionsWithDuplicateValues) {
       Suggestion("Elvis", "", "", 1));
 }
 
-TEST_F(AutofillManagerTest, GetProfileSuggestionsFancyPhone) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_FancyPhone) {
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
@@ -1729,7 +1789,7 @@ TEST_F(AutofillManagerTest, GetProfileSuggestionsFancyPhone) {
       Suggestion("12345678901", "3734 Elvis Presley Blvd.", "", 3));
 }
 
-TEST_F(AutofillManagerTest, GetProfileSuggestionsForPhonePrefixOrSuffix) {
+TEST_F(AutofillManagerTest, GetProfileSuggestions_ForPhonePrefixOrSuffix) {
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -1825,26 +1885,18 @@ TEST_F(AutofillManagerTest, WillFillCreditCardNumber) {
       month_field = &form.fields[i];
   }
 
-  // Empty form - whole form is Autofilled (except on iOS).
+  // Empty form - whole form is Autofilled.
   EXPECT_TRUE(WillFillCreditCardNumber(form, *number_field));
-#if defined(OS_IOS)
-  EXPECT_FALSE(WillFillCreditCardNumber(form, *name_field));
-#else
   EXPECT_TRUE(WillFillCreditCardNumber(form, *name_field));
-#endif  // defined(OS_IOS)
 
   // If the user has entered a value, it won't be overridden.
   number_field->value = ASCIIToUTF16("gibberish");
   EXPECT_TRUE(WillFillCreditCardNumber(form, *number_field));
   EXPECT_FALSE(WillFillCreditCardNumber(form, *name_field));
 
-  // But if that value is removed, it will be Autofilled (except on iOS).
+  // But if that value is removed, it will be Autofilled.
   number_field->value.clear();
-#if defined(OS_IOS)
-  EXPECT_FALSE(WillFillCreditCardNumber(form, *name_field));
-#else
   EXPECT_TRUE(WillFillCreditCardNumber(form, *name_field));
-#endif  // defined(OS_IOS)
 
   // When part of the section is Autofilled, only fill the initiating field.
   month_field->is_autofilled = true;
@@ -1853,7 +1905,7 @@ TEST_F(AutofillManagerTest, WillFillCreditCardNumber) {
 }
 
 // Test that we correctly fill a credit card form.
-TEST_F(AutofillManagerTest, FillCreditCardForm) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_Simple) {
   // Set up our form data.
   FormData form;
   CreateTestCreditCardFormData(&form, true, false);
@@ -1871,7 +1923,7 @@ TEST_F(AutofillManagerTest, FillCreditCardForm) {
 }
 
 // Test that whitespace is stripped from the credit card number.
-TEST_F(AutofillManagerTest, FillCreditCardFormStripCardNumberWhitespace) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_StripCardNumberWhitespace) {
   // Same as the SetUp(), but generate Elvis card with whitespace in credit
   // card number.
   personal_data_.CreateTestCreditCardWithWhitespace();
@@ -1892,7 +1944,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormStripCardNumberWhitespace) {
 }
 
 // Test that separator characters are stripped from the credit card number.
-TEST_F(AutofillManagerTest, FillCreditCardFormStripCardNumberSeparators) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_StripCardNumberSeparators) {
   // Same as the SetUp(), but generate Elvis card with separator characters in
   // credit card number.
   personal_data_.CreateTestCreditCardWithSeparators();
@@ -1914,7 +1966,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormStripCardNumberSeparators) {
 
 // Test that we correctly fill a credit card form with month input type.
 // 1. year empty, month empty
-TEST_F(AutofillManagerTest, FillCreditCardFormNoYearNoMonth) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_NoYearNoMonth) {
   // Same as the SetUp(), but generate 4 credit cards with year month
   // combination.
   personal_data_.CreateTestCreditCardsYearAndMonth("", "");
@@ -1937,7 +1989,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormNoYearNoMonth) {
 
 // Test that we correctly fill a credit card form with month input type.
 // 2. year empty, month non-empty
-TEST_F(AutofillManagerTest, FillCreditCardFormNoYearMonth) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_NoYearMonth) {
   // Same as the SetUp(), but generate 4 credit cards with year month
   // combination.
   personal_data_.CreateTestCreditCardsYearAndMonth("", "04");
@@ -1959,7 +2011,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormNoYearMonth) {
 
 // Test that we correctly fill a credit card form with month input type.
 // 3. year non-empty, month empty
-TEST_F(AutofillManagerTest, FillCreditCardFormYearNoMonth) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_YearNoMonth) {
   // Same as the SetUp(), but generate 4 credit cards with year month
   // combination.
   personal_data_.CreateTestCreditCardsYearAndMonth("2999", "");
@@ -1981,7 +2033,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormYearNoMonth) {
 
 // Test that we correctly fill a credit card form with month input type.
 // 4. year non-empty, month empty
-TEST_F(AutofillManagerTest, FillCreditCardFormYearMonth) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_YearMonth) {
   // Same as the SetUp(), but generate 4 credit cards with year month
   // combination.
   personal_data_.ClearCreditCards();
@@ -2004,7 +2056,7 @@ TEST_F(AutofillManagerTest, FillCreditCardFormYearMonth) {
 
 // Test that we correctly fill a credit card form with first and last cardholder
 // name.
-TEST_F(AutofillManagerTest, FillCreditCardFormSplitName) {
+TEST_F(AutofillManagerTest, FillCreditCardForm_SplitName) {
   // Set up our form data.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -2949,15 +3001,12 @@ TEST_F(AutofillManagerTest, FormSubmittedAutocompleteEnabled) {
   autofill_manager_.reset(
       new TestAutofillManager(autofill_driver_.get(), &client, NULL));
   autofill_manager_->set_autofill_enabled(false);
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(), &client));
 
   // Set up our form data.
   FormData form;
   test::CreateTestAddressFormData(&form);
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
+
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
   EXPECT_CALL(*m, OnWillSubmitForm(_));
   FormSubmitted(form);
 }
@@ -2979,13 +3028,8 @@ TEST_F(AutofillManagerTest, AutocompleteSuggestions_SomeWhenAutofillDisabled) {
   const FormFieldData& field = form.fields[0];
 
   // Expect Autocomplete manager to be called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(), &client));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _));
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _));
 
   GetAutofillSuggestions(form, field);
 }
@@ -3009,13 +3053,9 @@ TEST_F(AutofillManagerTest,
   field.should_autocomplete = false;
 
   // Autocomplete manager is not called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(), &client));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
   GetAutofillSuggestions(form, field);
 }
@@ -3032,14 +3072,8 @@ TEST_F(AutofillManagerTest, AutocompleteSuggestions_NoneWhenAutofillPresent) {
   const FormFieldData& field = form.fields[0];
 
   // Autocomplete manager is not called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(),
-          autofill_manager_->client()));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
   GetAutofillSuggestions(form, field);
 
@@ -3065,14 +3099,8 @@ TEST_F(AutofillManagerTest, AutocompleteSuggestions_SomeWhenAutofillEmpty) {
   test::CreateTestFormField("Email", "email", "donkey", "email", &field);
 
   // Autocomplete manager is called for suggestions because Autofill is empty.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(),
-          autofill_manager_->client()));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _));
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _));
 
   GetAutofillSuggestions(form, field);
 }
@@ -3098,12 +3126,7 @@ TEST_F(AutofillManagerTest,
   field.should_autocomplete = true;
 
   // Autocomplete manager is not called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(),
-                                         autofill_manager_->client()));
-  MockAutocompleteHistoryManager* m =
-      static_cast<MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
   EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _));
 
   GetAutofillSuggestions(form, field);
@@ -3129,11 +3152,7 @@ TEST_F(AutofillManagerTest,
   field.should_autocomplete = true;
 
   // Autocomplete manager is not called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(), &client));
-  MockAutocompleteHistoryManager* m =
-      static_cast<MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
   EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
   GetAutofillSuggestions(form, field);
@@ -3156,14 +3175,8 @@ TEST_F(
   test::CreateTestFormField("Email", "email", "donkey", "email", &field);
 
   // Autocomplete manager is not called for suggestions.
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(),
-          autofill_manager_->client()));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
   GetAutofillSuggestions(form, field);
 }
@@ -3175,13 +3188,8 @@ TEST_F(AutofillManagerTest, AutocompleteOffRespectedForAutocomplete) {
   autofill_manager_->set_autofill_enabled(false);
   autofill_manager_->SetExternalDelegate(external_delegate_.get());
 
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(), &client));
-  MockAutocompleteHistoryManager* m = static_cast<
-      MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*m,
-      OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnGetAutocompleteSuggestions(_, _, _, _)).Times(0);
 
   // Set up our form data.
   FormData form;
@@ -4108,7 +4116,8 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestions_UnrecognizedAttribute) {
 
 // Test to verify suggestions appears for forms having credit card number split
 // across fields.
-TEST_F(AutofillManagerTest, GetCreditCardSuggestionsForNumberSpitAcrossFields) {
+TEST_F(AutofillManagerTest,
+       GetCreditCardSuggestions_ForNumberSpitAcrossFields) {
   // Set up our form data with credit card number split across fields.
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -4165,15 +4174,9 @@ TEST_F(AutofillManagerTest, GetCreditCardSuggestionsForNumberSpitAcrossFields) {
 // Test that inputs detected to be CVC inputs are forced to
 // !should_autocomplete for AutocompleteHistoryManager::OnWillSubmitForm.
 TEST_F(AutofillManagerTest, DontSaveCvcInAutocompleteHistory) {
-  autofill_manager_->autocomplete_history_manager_.reset(
-      new MockAutocompleteHistoryManager(autofill_driver_.get(),
-                                         &autofill_client_));
   FormData form_seen_by_ahm;
-  MockAutocompleteHistoryManager* mock_ahm =
-      static_cast<MockAutocompleteHistoryManager*>(
-          autofill_manager_->autocomplete_history_manager_.get());
-  EXPECT_CALL(*mock_ahm, OnWillSubmitForm(_))
-      .WillOnce(SaveArg<0>(&form_seen_by_ahm));
+  MockAutocompleteHistoryManager* m = RecreateMockAutocompleteHistoryManager();
+  EXPECT_CALL(*m, OnWillSubmitForm(_)).WillOnce(SaveArg<0>(&form_seen_by_ahm));
 
   FormData form;
   form.name = ASCIIToUTF16("MyForm");
@@ -4905,6 +4908,141 @@ TEST_F(AutofillManagerTest, NoCreditCardSuggestionsForNonPrefixTokenMatch) {
   GetAutofillSuggestions(form, field);
   // Autocomplete suggestions are queried, but not Autofill.
   EXPECT_FALSE(external_delegate_->on_suggestions_returned_seen());
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
+// card form, with no impression limit and the feature enabled.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_NoLimit) {
+  // Enable the feature with no impression limit.
+  EnableCreditCardSigninPromoFeatureWithLimit(0);
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // The result will depend on what ShouldShowSigninPromo(). We control its
+  // output and verify that both cases behave as expected.
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(true));
+  EXPECT_TRUE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(false));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+}
+
+// Test that ShouldShowCreditCardSigninPromo doesn't show for a credit card form
+// when the feature is off.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_FeatureOff) {
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // Returns false without calling ShouldShowSigninPromo().
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo()).Times(0);
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
+// card form with an impression limit and no impressions yet.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_UnmetLimit) {
+  // Enable the feature with an impression limit.
+  EnableCreditCardSigninPromoFeatureWithLimit(10);
+  // No impressions yet.
+  ASSERT_EQ(0, autofill_client_.GetPrefs()->GetInteger(
+                   prefs::kAutofillCreditCardSigninPromoImpressionCount));
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // The mock implementation of ShouldShowSigninPromo() will return true here,
+  // creating an impression, and false below, preventing an impression.
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(true));
+  EXPECT_TRUE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Expect to now have an impression.
+  EXPECT_EQ(1, autofill_client_.GetPrefs()->GetInteger(
+                   prefs::kAutofillCreditCardSigninPromoImpressionCount));
+
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(false));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // No additional impression.
+  EXPECT_EQ(1, autofill_client_.GetPrefs()->GetInteger(
+                   prefs::kAutofillCreditCardSigninPromoImpressionCount));
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for a credit
+// card form with an impression limit that has been attained already.
+TEST_F(AutofillManagerTest,
+       ShouldShowCreditCardSigninPromo_CreditCardField_WithAttainedLimit) {
+  // Enable the feature with an impression limit.
+  EnableCreditCardSigninPromoFeatureWithLimit(10);
+
+  // Set up our form data.
+  FormData form;
+  CreateTestCreditCardFormData(&form, true, false);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("Name on Card", "nameoncard", "", "text", &field);
+
+  // Set the impression count to the same value as the limit.
+  autofill_client_.GetPrefs()->SetInteger(
+      prefs::kAutofillCreditCardSigninPromoImpressionCount, 10);
+
+  // Both calls will now return false, regardless of the mock implementation of
+  // ShouldShowSigninPromo().
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(true));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo())
+      .WillOnce(testing::Return(false));
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
+
+  // Number of impressions stay the same.
+  EXPECT_EQ(10, autofill_client_.GetPrefs()->GetInteger(
+                    prefs::kAutofillCreditCardSigninPromoImpressionCount));
+}
+
+// Test that ShouldShowCreditCardSigninPromo behaves as expected for an address
+// form.
+TEST_F(AutofillManagerTest, ShouldShowCreditCardSigninPromo_AddressField) {
+  // Set up our form data.
+  FormData form;
+  test::CreateTestAddressFormData(&form);
+  std::vector<FormData> forms(1, form);
+  FormsSeen(forms);
+
+  FormFieldData field;
+  test::CreateTestFormField("First Name", "firstname", "", "text", &field);
+
+  // Call will now return false, because it is initiated from an address field.
+  EXPECT_CALL(autofill_client_, ShouldShowSigninPromo()).Times(0);
+  EXPECT_FALSE(autofill_manager_->ShouldShowCreditCardSigninPromo(form, field));
 }
 
 // Verify that typing "S" into the middle name field will match and order middle

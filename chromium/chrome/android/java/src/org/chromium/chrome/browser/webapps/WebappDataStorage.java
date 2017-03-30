@@ -44,6 +44,20 @@ public class WebappDataStorage {
     static final String KEY_ACTION = "action";
     static final String KEY_IS_ICON_GENERATED = "is_icon_generated";
     static final String KEY_VERSION = "version";
+    static final String KEY_WEBAPK_PACKAGE_NAME = "webapk_package_name";
+
+    // The last time that Chrome checked for Web Manifest updates for a WebAPK.
+    static final String KEY_LAST_CHECK_WEB_MANIFEST_UPDATE_TIME =
+            "last_check_web_manifest_update_time";
+
+    // The last time that the WebAPK update request completed (successfully or
+    // unsuccessfully).
+    static final String KEY_LAST_WEBAPK_UPDATE_REQUEST_COMPLETE_TIME =
+            "last_webapk_update_request_complete_time";
+
+    // Whether the last WebAPK update request succeeded.
+    static final String KEY_DID_LAST_WEBAPK_UPDATE_REQUEST_SUCCEED =
+            "did_last_webapk_update_request_succeed";
 
     // Unset/invalid constants for last used times and URLs. 0 is used as the null last
     // used time as WebappRegistry assumes that this is always a valid timestamp.
@@ -165,7 +179,7 @@ public class WebappDataStorage {
     }
 
     /**
-     * Deletes the URL and scope, and sets last used time to 0 in SharedPreferences.
+     * Deletes the URL and scope, and sets all timestamps to 0 in SharedPreferences.
      * This does not remove the stored splash screen image (if any) for the app.
      * @param context  The context to read the SharedPreferences file.
      * @param webappId The ID of the web app for which history is being cleared.
@@ -180,6 +194,9 @@ public class WebappDataStorage {
         editor.putLong(KEY_LAST_USED, LAST_USED_UNSET);
         editor.remove(KEY_URL);
         editor.remove(KEY_SCOPE);
+        editor.remove(KEY_LAST_CHECK_WEB_MANIFEST_UPDATE_TIME);
+        editor.remove(KEY_LAST_WEBAPK_UPDATE_REQUEST_COMPLETE_TIME);
+        editor.remove(KEY_DID_LAST_WEBAPK_UPDATE_REQUEST_SUCCEED);
         editor.apply();
     }
 
@@ -340,6 +357,8 @@ public class WebappDataStorage {
             editor.putInt(KEY_SOURCE, IntentUtils.safeGetIntExtra(
                         shortcutIntent, ShortcutHelper.EXTRA_SOURCE,
                         ShortcutSource.UNKNOWN));
+            editor.putString(KEY_WEBAPK_PACKAGE_NAME, IntentUtils.safeGetStringExtra(
+                    shortcutIntent, ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME));
             updated = true;
         }
         if (updated) editor.apply();
@@ -360,6 +379,23 @@ public class WebappDataStorage {
     }
 
     /**
+     * Returns the theme color stored in this object, or
+     * ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING if it is not stored.
+     */
+    long getThemeColor() {
+        return mPreferences.getLong(KEY_THEME_COLOR,
+                ShortcutHelper.MANIFEST_COLOR_INVALID_OR_MISSING);
+    }
+
+    /**
+     * Returns the orientation stored in this object, or ScreenOrientationValues.DEFAULT if it is
+     * not stored.
+     */
+    int getOrientation() {
+        return mPreferences.getInt(KEY_ORIENTATION, ScreenOrientationValues.DEFAULT);
+    }
+
+    /**
      * Updates the last used time of this object.
      */
     void updateLastUsedTime() {
@@ -373,6 +409,63 @@ public class WebappDataStorage {
         return mPreferences.getLong(KEY_LAST_USED, LAST_USED_INVALID);
     }
 
+    /**
+     * Returns the package name if the data is for a WebAPK, null otherwise.
+     */
+    String getWebApkPackageName() {
+        return mPreferences.getString(KEY_WEBAPK_PACKAGE_NAME, null);
+    }
+
+    /**
+     *  Updates the time of the last check for whether the WebAPK's Web Manifest was updated.
+     */
+    void updateTimeOfLastCheckForUpdatedWebManifest() {
+        mPreferences.edit()
+                .putLong(KEY_LAST_CHECK_WEB_MANIFEST_UPDATE_TIME, sClock.currentTimeMillis())
+                .apply();
+    }
+
+    /**
+     * Returns the time of the last check for whether the WebAPK's Web Manifest was updated.
+     */
+    long getLastCheckForWebManifestUpdateTime() {
+        return mPreferences.getLong(KEY_LAST_CHECK_WEB_MANIFEST_UPDATE_TIME, LAST_USED_INVALID);
+    }
+
+    /**
+     * Updates the time that the last WebAPK update request completed (successfully or
+     * unsuccessfully).
+     */
+    void updateTimeOfLastWebApkUpdateRequestCompletion() {
+        mPreferences.edit()
+                .putLong(KEY_LAST_WEBAPK_UPDATE_REQUEST_COMPLETE_TIME, sClock.currentTimeMillis())
+                .apply();
+    }
+
+    /**
+     * Returns the time that the last WebAPK update request completed (successfully or
+     * unsuccessfully).
+     */
+    long getLastWebApkUpdateRequestCompletionTime() {
+        return mPreferences.getLong(
+                KEY_LAST_WEBAPK_UPDATE_REQUEST_COMPLETE_TIME, LAST_USED_INVALID);
+    }
+
+    /**
+     * Updates the result of whether the last update request to WebAPK Server succeeded.
+     */
+    void updateDidLastWebApkUpdateRequestSucceed(boolean sucess) {
+        mPreferences.edit()
+                .putBoolean(KEY_DID_LAST_WEBAPK_UPDATE_REQUEST_SUCCEED, sucess)
+                .apply();
+    }
+
+    /**
+     * Returns whether the last update request to WebAPK Server succeeded.
+     */
+    boolean getDidLastWebApkUpdateRequestSucceed() {
+        return mPreferences.getBoolean(KEY_DID_LAST_WEBAPK_UPDATE_REQUEST_SUCCEED, false);
+    }
     /**
      * Returns true if this web app has been launched from home screen recently (within
      * WEBAPP_LAST_OPEN_MAX_TIME milliseconds).

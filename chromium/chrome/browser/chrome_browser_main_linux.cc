@@ -58,9 +58,15 @@ void ChromeBrowserMainPartsLinux::PreProfileInit() {
 
 #if !defined(OS_CHROMEOS)
   // Forward to os_crypt the flag to use a specific password store.
-  std::string password_store =
-      parsed_command_line().GetSwitchValueASCII(switches::kPasswordStore);
-  OSCrypt::SetStore(password_store);
+  OSCrypt::SetStore(
+      parsed_command_line().GetSwitchValueASCII(switches::kPasswordStore));
+  // Forward the product name
+  OSCrypt::SetProductName(l10n_util::GetStringUTF8(IDS_PRODUCT_NAME));
+  // OSCrypt may target keyring, which requires calls from the main thread.
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner(
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI));
+  OSCrypt::SetMainThreadRunner(main_thread_runner);
 #endif
 
   ChromeBrowserMainPartsPosix::PreProfileInit();

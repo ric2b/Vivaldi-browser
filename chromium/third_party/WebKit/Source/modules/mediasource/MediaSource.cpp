@@ -39,9 +39,11 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/html/track/AudioTrackList.h"
+#include "core/html/track/VideoTrackList.h"
 #include "modules/mediasource/MediaSourceRegistry.h"
+#include "modules/mediasource/SourceBufferTrackBaseSupplement.h"
 #include "platform/ContentType.h"
-#include "platform/Logging.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
@@ -51,10 +53,12 @@
 #include "wtf/text/CString.h"
 #include <memory>
 
+#ifndef BLINK_MSLOG
+#define BLINK_MSLOG DVLOG(3)
+#endif
+
 using blink::WebMediaSource;
 using blink::WebSourceBuffer;
-
-#define MSLOG DVLOG(3)
 
 namespace blink {
 
@@ -115,26 +119,26 @@ MediaSource::MediaSource(ExecutionContext* context)
     , m_sourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
     , m_activeSourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
     , m_liveSeekableRange(TimeRanges::create())
-    , m_isAddedToRegistry(false)
+    , m_addedToRegistryCounter(0)
 {
-    MSLOG << __FUNCTION__ << " this=" << this;
+    BLINK_MSLOG << __func__ << " this=" << this;
 }
 
 MediaSource::~MediaSource()
 {
-    MSLOG << __FUNCTION__ << " this=" << this;
+    BLINK_MSLOG << __func__ << " this=" << this;
     DCHECK(isClosed());
 }
 
 void MediaSource::logAndThrowDOMException(ExceptionState& exceptionState, const ExceptionCode& error, const String& message)
 {
-    MSLOG << __FUNCTION__ << " (error=" << error << ", message=" << message << ")";
+    BLINK_MSLOG << __func__ << " (error=" << error << ", message=" << message << ")";
     exceptionState.throwDOMException(error, message);
 }
 
 SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& exceptionState)
 {
-    MSLOG << __FUNCTION__ << " this=" << this << " type=" << type;
+    BLINK_MSLOG << __func__ << " this=" << this << " type=" << type;
 
     // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-addSourceBuffer-SourceBuffer-DOMString-type
     // 1. If type is an empty string then throw an InvalidAccessError exception
@@ -175,13 +179,13 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& e
     m_sourceBuffers->add(buffer);
 
     // 7. Return the new object to the caller.
-    MSLOG << __FUNCTION__ << " this=" << this << " type=" << type << " -> " << buffer;
+    BLINK_MSLOG << __func__ << " this=" << this << " type=" << type << " -> " << buffer;
     return buffer;
 }
 
 void MediaSource::removeSourceBuffer(SourceBuffer* buffer, ExceptionState& exceptionState)
 {
-    MSLOG << __FUNCTION__ << " this=" << this << " buffer=" << buffer;
+    BLINK_MSLOG << __func__ << " this=" << this << " buffer=" << buffer;
 
     // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-removeSourceBuffer-void-SourceBuffer-sourceBuffer
 
@@ -249,7 +253,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-isTypeSupported-boolean-DOMString-type
     // 1. If type is an empty string, then return false.
     if (type.isEmpty()) {
-        MSLOG << __FUNCTION__ << "(" << type << ") -> false (empty input)";
+        BLINK_MSLOG << __func__ << "(" << type << ") -> false (empty input)";
         return false;
     }
 
@@ -258,7 +262,7 @@ bool MediaSource::isTypeSupported(const String& type)
 
     // 2. If type does not contain a valid MIME type string, then return false.
     if (contentType.type().isEmpty()) {
-        MSLOG << __FUNCTION__ << "(" << type << ") -> false (invalid mime type)";
+        BLINK_MSLOG << __func__ << "(" << type << ") -> false (invalid mime type)";
         return false;
     }
 
@@ -268,7 +272,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // Note: MediaSource.isTypeSupported() returning true implies that HTMLMediaElement.canPlayType() will return "maybe" or "probably"
     // since it does not make sense for a MediaSource to support a type the HTMLMediaElement knows it cannot play.
     if (HTMLMediaElement::supportsType(contentType) == WebMimeRegistry::IsNotSupported) {
-        MSLOG << __FUNCTION__ << "(" << type << ") -> false (not supported by HTMLMediaElement)";
+        BLINK_MSLOG << __func__ << "(" << type << ") -> false (not supported by HTMLMediaElement)";
         return false;
     }
 #endif
@@ -278,7 +282,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // 5. If the MediaSource does not support the specified combination of media type, media subtype, and codecs then return false.
     // 6. Return true.
     bool result = MIMETypeRegistry::isSupportedMediaSourceMIMEType(contentType.type(), codecs);
-    MSLOG << __FUNCTION__ << "(" << type << ") -> " << (result ? "true" : "false");
+    BLINK_MSLOG << __func__ << "(" << type << ") -> " << (result ? "true" : "false");
     return result;
 }
 
@@ -315,14 +319,15 @@ void MediaSource::setWebMediaSourceAndOpen(std::unique_ptr<WebMediaSource> webMe
 
 void MediaSource::addedToRegistry()
 {
-    DCHECK(!m_isAddedToRegistry);
-    m_isAddedToRegistry = true;
+    ++m_addedToRegistryCounter;
+    // Ensure there's no counter overflow.
+    CHECK_GT(m_addedToRegistryCounter, 0);
 }
 
 void MediaSource::removedFromRegistry()
 {
-    DCHECK(m_isAddedToRegistry);
-    m_isAddedToRegistry = false;
+    DCHECK_GT(m_addedToRegistryCounter, 0);
+    --m_addedToRegistryCounter;
 }
 
 double MediaSource::duration() const
@@ -418,6 +423,26 @@ TimeRanges* MediaSource::seekable() const
     return TimeRanges::create(0, sourceDuration);
 }
 
+void MediaSource::onTrackChanged(TrackBase* track)
+{
+    DCHECK(RuntimeEnabledFeatures::audioVideoTracksEnabled());
+    SourceBuffer* sourceBuffer = SourceBufferTrackBaseSupplement::sourceBuffer(*track);
+    if (!sourceBuffer)
+        return;
+
+    DCHECK(m_sourceBuffers->contains(sourceBuffer));
+    if (track->type() == WebMediaPlayer::AudioTrack) {
+        sourceBuffer->audioTracks().scheduleChangeEvent();
+    } else if (track->type() == WebMediaPlayer::VideoTrack) {
+        if (static_cast<VideoTrack*>(track)->selected())
+            sourceBuffer->videoTracks().trackSelected(track->id());
+        sourceBuffer->videoTracks().scheduleChangeEvent();
+    }
+
+    bool isActive = (sourceBuffer->videoTracks().selectedIndex() != -1) || sourceBuffer->audioTracks().hasEnabledTrack();
+    setSourceBufferActive(sourceBuffer, isActive);
+}
+
 void MediaSource::setDuration(double duration, ExceptionState& exceptionState)
 {
     // 2.1 http://www.w3.org/TR/media-source/#widl-MediaSource-duration
@@ -501,7 +526,7 @@ void MediaSource::setReadyState(const AtomicString& state)
     DCHECK(state == openKeyword() || state == closedKeyword() || state == endedKeyword());
 
     AtomicString oldState = readyState();
-    MSLOG << __FUNCTION__ << " this=" << this << " : " << oldState << " -> " << state;
+    BLINK_MSLOG << __func__ << " this=" << this << " : " << oldState << " -> " << state;
 
     if (state == closedKeyword()) {
         m_webMediaSource.reset();
@@ -603,9 +628,16 @@ bool MediaSource::isOpen() const
     return readyState() == openKeyword();
 }
 
-void MediaSource::setSourceBufferActive(SourceBuffer* sourceBuffer)
+void MediaSource::setSourceBufferActive(SourceBuffer* sourceBuffer, bool isActive)
 {
-    DCHECK(!m_activeSourceBuffers->contains(sourceBuffer));
+    if (!isActive) {
+        DCHECK(m_activeSourceBuffers->contains(sourceBuffer));
+        m_activeSourceBuffers->remove(sourceBuffer);
+        return;
+    }
+
+    if (m_activeSourceBuffers->contains(sourceBuffer))
+        return;
 
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-activeSourceBuffers
     // SourceBuffer objects in SourceBuffer.activeSourceBuffers must appear in
@@ -665,7 +697,7 @@ bool MediaSource::hasPendingActivity() const
 {
     return m_attachedElement || m_webMediaSource
         || m_asyncEventQueue->hasPendingEvents()
-        || m_isAddedToRegistry;
+        || m_addedToRegistryCounter > 0;
 }
 
 void MediaSource::stop()

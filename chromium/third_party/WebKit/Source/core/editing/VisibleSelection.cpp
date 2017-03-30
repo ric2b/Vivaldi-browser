@@ -587,8 +587,8 @@ void VisibleSelectionTemplate<Strategy>::adjustSelectionToAvoidCrossingShadowBou
 static Element* lowestEditableAncestor(Node* node)
 {
     while (node) {
-        if (node->hasEditableStyle())
-            return node->rootEditableElement();
+        if (hasEditableStyle(*node))
+            return rootEditableElement(*node);
         if (isHTMLBodyElement(*node))
             break;
         node = node->parentNode();
@@ -714,7 +714,7 @@ bool VisibleSelectionTemplate<Strategy>::isContentEditable() const
 template <typename Strategy>
 bool VisibleSelectionTemplate<Strategy>::hasEditableStyle() const
 {
-    return isEditablePosition(start(), ContentIsEditable);
+    return isEditablePosition(start());
 }
 
 template <typename Strategy>
@@ -727,23 +727,6 @@ template <typename Strategy>
 Element* VisibleSelectionTemplate<Strategy>::rootEditableElement() const
 {
     return rootEditableElementOf(start());
-}
-
-template <typename Strategy>
-static bool isValidPosition(const PositionTemplate<Strategy>& position)
-{
-    if (!position.inShadowIncludingDocument())
-        return false;
-
-    if (!position.isOffsetInAnchor())
-        return true;
-
-    if (position.offsetInContainerNode() < 0)
-        return false;
-
-    const unsigned offset = static_cast<unsigned>(position.offsetInContainerNode());
-    const unsigned nodeLength = position.anchorNode()->lengthOfContents();
-    return offset <= nodeLength;
 }
 
 template <typename Strategy>
@@ -760,16 +743,16 @@ void VisibleSelectionTemplate<Strategy>::updateIfNeeded()
     appendTrailingWhitespace();
 }
 
+// TODO(yosin): Since |validatePositionsIfNeeded()| is called just one place,
+// we should move it to the call site.
 template <typename Strategy>
 void VisibleSelectionTemplate<Strategy>::validatePositionsIfNeeded()
 {
-    if (!m_base.inShadowIncludingDocument() || !m_extent.inShadowIncludingDocument()) {
+    if (!m_base.isConnected() || !m_extent.isConnected()) {
         *this = VisibleSelectionTemplate();
         return;
     }
-    if (isValidPosition(m_base) && isValidPosition(m_extent) && isValidPosition(m_start) && isValidPosition(m_end))
-        return;
-    validate();
+    updateIfNeeded();
 }
 
 template <typename Strategy>

@@ -14,10 +14,8 @@
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
 #include "cc/trees/swap_promise_monitor.h"
-#include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_ack_state.h"
-#include "content/common/input/web_input_event_traits.h"
 #include "content/public/common/content_switches.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
@@ -26,6 +24,8 @@
 #include "content/renderer/render_widget.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
 #include "third_party/WebKit/public/platform/WebFloatSize.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/point_conversions.h"
 
@@ -43,6 +43,7 @@ using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
+using ui::DidOverscrollParams;
 
 namespace content {
 
@@ -127,14 +128,14 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
     PASSIVE_LISTENER_UMA_ENUM_SUPPRESSED,
     PASSIVE_LISTENER_UMA_ENUM_CANCELABLE,
     PASSIVE_LISTENER_UMA_ENUM_CANCELABLE_AND_CANCELED,
-    PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING,
+    PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING,
     PASSIVE_LISTENER_UMA_ENUM_COUNT
   };
 
   int enum_value;
   switch (dispatch_type) {
-    case WebInputEvent::ListenersForcedNonBlockingPassive:
-      enum_value = PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING;
+    case WebInputEvent::ListenersForcedNonBlockingDueToFling:
+      enum_value = PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING;
       break;
     case WebInputEvent::ListenersNonBlockingPassive:
       enum_value = PASSIVE_LISTENER_UMA_ENUM_PASSIVE;
@@ -164,10 +165,11 @@ void LogPassiveEventListenersUma(WebInputEventResult result,
       UMA_HISTOGRAM_CUSTOM_COUNTS("Event.PassiveListeners.Latency",
                                   GetEventLatencyMicros(event_timestamp, now),
                                   1, 10000000, 100);
-    } else if (enum_value == PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING) {
+    } else if (enum_value ==
+               PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING) {
       base::TimeTicks now = base::TimeTicks::Now();
       UMA_HISTOGRAM_CUSTOM_COUNTS(
-          "Event.PassiveListeners.ForcedNonBlockingLatency",
+          "Event.PassiveListeners.ForcedNonBlockingLatencyDueToFling",
           GetEventLatencyMicros(event_timestamp, now), 1, 10000000, 100);
     }
   }
@@ -243,9 +245,9 @@ void RenderWidgetInputHandler::HandleInputEvent(
   if (base::TimeTicks::IsHighResolution())
     start_time = base::TimeTicks::Now();
 
-  TRACE_EVENT1("renderer,benchmark",
+  TRACE_EVENT1("renderer,benchmark,rail",
                "RenderWidgetInputHandler::OnHandleInputEvent", "event",
-               WebInputEventTraits::GetName(input_event.type));
+               WebInputEvent::GetName(input_event.type));
   TRACE_EVENT_SYNTHETIC_DELAY_BEGIN("blink.HandleInputEvent");
   TRACE_EVENT_WITH_FLOW1("input,benchmark", "LatencyInfo.Flow",
                          TRACE_ID_DONT_MANGLE(latency_info.trace_id()),
@@ -334,21 +336,17 @@ void RenderWidgetInputHandler::HandleInputEvent(
     LogPassiveEventListenersUma(processed, touch.dispatchType,
                                 input_event.timeStampSeconds, latency_info);
 
-    if (input_event.type == WebInputEvent::TouchStart &&
-        touch.dispatchType == WebInputEvent::Blocking &&
+    // TODO(lanwei): Remove this metric for event latency outside fling in M56,
+    // once we've gathered enough data to decide if we want to ship the passive
+    // event listener for fling, see https://crbug.com/638661.
+    if (touch.dispatchType == WebInputEvent::Blocking &&
+        touch.touchStartOrFirstTouchMove &&
         base::TimeTicks::IsHighResolution()) {
       base::TimeTicks now = base::TimeTicks::Now();
-      if (touch.dispatchedDuringFling) {
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Touch.TouchStartLatencyDuringFling",
-            GetEventLatencyMicros(input_event.timeStampSeconds, now), 1,
-            100000000, 50);
-      } else {
-        UMA_HISTOGRAM_CUSTOM_COUNTS(
-            "Event.Touch.TouchStartLatencyOutsideFling",
-            GetEventLatencyMicros(input_event.timeStampSeconds, now), 1,
-            100000000, 50);
-      }
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Event.Touch.TouchLatencyOutsideFling",
+          GetEventLatencyMicros(input_event.timeStampSeconds, now), 1,
+          100000000, 50);
     }
   } else if (input_event.type == WebInputEvent::MouseWheel) {
     LogPassiveEventListenersUma(
@@ -420,12 +418,11 @@ void RenderWidgetInputHandler::HandleInputEvent(
 
   TRACE_EVENT_SYNTHETIC_DELAY_END("blink.HandleInputEvent");
 
-  // Note that we can't use handling_event_type_ here since it will be overriden
-  // by reentrant calls for events after the paused one.
+  // Note that we can't use handling_event_type_ here since it will be
+  // overridden by reentrant calls for events after the paused one.
   bool can_send_ack = !(ignore_ack_for_mouse_move_from_debugger_ &&
                         input_event.type == WebInputEvent::MouseMove);
-  if (dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN ||
-      dispatch_type == DISPATCH_TYPE_NON_BLOCKING_NOTIFY_MAIN) {
+  if (dispatch_type == DISPATCH_TYPE_BLOCKING_NOTIFY_MAIN) {
     // |non_blocking| means it was ack'd already by the InputHandlerProxy
     // so let the delegate know the event has been handled.
     delegate_->NotifyInputEventHandled(input_event.type, ack_result);
@@ -437,7 +434,7 @@ void RenderWidgetInputHandler::HandleInputEvent(
     std::unique_ptr<InputEventAck> response(new InputEventAck(
         input_event.type, ack_result, swap_latency_info,
         std::move(event_overscroll),
-        WebInputEventTraits::GetUniqueTouchEventId(input_event)));
+        ui::WebInputEventTraits::GetUniqueTouchEventId(input_event)));
     if (rate_limiting_wanted && frame_pending && !widget_->is_hidden()) {
       // We want to rate limit the input events in this case, so we'll wait for
       // painting to finish before ACKing this message.

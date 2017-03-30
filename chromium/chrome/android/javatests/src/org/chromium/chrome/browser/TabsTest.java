@@ -19,8 +19,6 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
 
-import junit.framework.Assert;
-
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -51,8 +49,10 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
+import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.chrome.browser.toolbar.ToolbarPhone;
 import org.chromium.chrome.test.ChromeTabbedActivityTestBase;
+import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
@@ -69,6 +69,7 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.io.File;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
@@ -575,9 +576,8 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     /*
        @LargeTest
        @Feature({"Android-TabSwitcher"})
-       Bug http://crbug.com/156746
     */
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/156746")
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     public void testTabsCulling() throws InterruptedException {
         // Open one more tabs than maxTabsDrawn.
@@ -1082,10 +1082,9 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
     /*
         @MediumTest
         @Feature({"Android-TabSwitcher"})
-        Bug http://crbug.com/157259
      */
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-    @DisabledTest
+    @DisabledTest(message = "crbug.com/157259")
     public void testSwitchTabStackWithoutClosingTabsInLandscape() throws InterruptedException {
         getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         newIncognitoTabFromMenu();
@@ -1379,7 +1378,7 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
             try {
                 selectCallback.waitForCallback(0);
             } catch (TimeoutException e) {
-                Assert.fail("Tab selected event was never received");
+                fail("Tab selected event was never received");
             }
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
@@ -1650,6 +1649,33 @@ public class TabsTest extends ChromeTabbedActivityTestBase {
         });
 
         assertTrue("WebContentsObserver was never destroyed", webContentsDestroyCalled.get());
+    }
+
+    @MediumTest
+    @Feature({"Android-TabSwitcher"})
+    public void testIncognitoTabsNotRestoredAfterSwipe() throws Exception {
+        newIncognitoTabFromMenu();
+
+        File tabStateDir = TabbedModeTabPersistencePolicy.getOrCreateTabbedModeStateDirectory();
+        TabModel normalModel = getActivity().getTabModelSelector().getModel(false);
+        TabModel incognitoModel = getActivity().getTabModelSelector().getModel(true);
+        File normalTabFile = new File(tabStateDir,
+                TabState.getTabStateFilename(
+                        normalModel.getTabAt(normalModel.getCount() - 1).getId(), false));
+        File incognitoTabFile = new File(tabStateDir,
+                TabState.getTabStateFilename(incognitoModel.getTabAt(0).getId(), true));
+
+        assertTrue(normalTabFile.getAbsolutePath(), normalTabFile.exists());
+        assertTrue(incognitoTabFile.getAbsolutePath(), incognitoTabFile.exists());
+
+        // Although we're destroying the activity, the Application will still live on since its in
+        // the same process as this test.
+        ApplicationTestUtils.finishActivity(getActivity());
+
+        // Activity will be started without a savedInstanceState.
+        startMainActivityOnBlankPage();
+        assertTrue(normalTabFile.exists());
+        assertFalse(incognitoTabFile.exists());
     }
 
     @Override

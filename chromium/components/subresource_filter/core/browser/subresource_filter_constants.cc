@@ -6,10 +6,22 @@
 
 namespace subresource_filter {
 
-const base::FilePath::CharType kRulesetBaseDirectoryName[] =
-    FILE_PATH_LITERAL("Subresource Filtering Rules");
+const base::FilePath::CharType kTopLevelDirectoryName[] =
+    FILE_PATH_LITERAL("Subresource Filter");
+
+const base::FilePath::CharType kIndexedRulesetBaseDirectoryName[] =
+    FILE_PATH_LITERAL("Indexed Rules");
+
+const base::FilePath::CharType kUnindexedRulesetBaseDirectoryName[] =
+    FILE_PATH_LITERAL("Unindexed Rules");
 
 const base::FilePath::CharType kRulesetDataFileName[] =
     FILE_PATH_LITERAL("Ruleset Data");
+
+const base::FilePath::CharType kLicenseFileName[] =
+    FILE_PATH_LITERAL("LICENSE");
+
+const base::FilePath::CharType kSentinelFileName[] =
+    FILE_PATH_LITERAL("Indexing in Progress");
 
 }  // namespace subresource_filter

@@ -11,14 +11,18 @@
 #include "cc/playback/display_item_list_settings.h"
 #include "cc/playback/drawing_display_item.h"
 #include "cc/playback/transform_display_item.h"
+#include "cc/trees/clip_node.h"
+#include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/property_tree.h"
+#include "cc/trees/transform_node.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
 #include "platform/graphics/paint/ForeignLayerDisplayItem.h"
 #include "platform/graphics/paint/PaintArtifact.h"
+#include "platform/graphics/paint/PropertyTreeState.h"
 #include "platform/graphics/paint/TransformPaintPropertyNode.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
@@ -79,33 +83,41 @@ PaintArtifactCompositor::~PaintArtifactCompositor()
 
 namespace {
 
+static gfx::Rect largeRect(-200000, -200000, 400000, 400000);
+
 static void appendDisplayItemToCcDisplayItemList(const DisplayItem& displayItem, cc::DisplayItemList* list)
 {
     if (DisplayItem::isDrawingType(displayItem.getType())) {
         const SkPicture* picture = static_cast<const DrawingDisplayItem&>(displayItem).picture();
         if (!picture)
             return;
-        gfx::Rect bounds = gfx::SkIRectToRect(picture->cullRect().roundOut());
-        list->CreateAndAppendItem<cc::DrawingDisplayItem>(bounds, sk_ref_sp(picture));
+        // In theory we would pass the bounds of the picture, previously done as:
+        // gfx::Rect bounds = gfx::SkIRectToRect(picture->cullRect().roundOut());
+        // or use the visual rect directly. However, clip content layers attempt
+        // to raster in a different space than that of the visual rects. We'll be
+        // reworking visual rects further for SPv2, so for now we just pass a
+        // visual rect large enough to make sure items raster.
+        list->CreateAndAppendDrawingItem<cc::DrawingDisplayItem>(largeRect, sk_ref_sp(picture));
     }
 }
 
 static scoped_refptr<cc::DisplayItemList> recordPaintChunk(const PaintArtifact& artifact, const PaintChunk& chunk, const gfx::Rect& combinedBounds)
 {
     cc::DisplayItemListSettings settings;
-    scoped_refptr<cc::DisplayItemList> list = cc::DisplayItemList::Create(
-        gfx::Rect(combinedBounds.size()), settings);
+    scoped_refptr<cc::DisplayItemList> list = cc::DisplayItemList::Create(settings);
 
     gfx::Transform translation;
     translation.Translate(-combinedBounds.x(), -combinedBounds.y());
-    // TODO(jbroman, wkorman): What visual rectangle is wanted here?
-    list->CreateAndAppendItem<cc::TransformDisplayItem>(gfx::Rect(), translation);
+    // Passing combinedBounds as the visual rect for the begin/end transform item
+    // would normally be the sensible thing to do, but see comment above re:
+    // visual rects for drawing items and further rework in flight.
+    list->CreateAndAppendPairedBeginItem<cc::TransformDisplayItem>(translation);
 
     const DisplayItemList& displayItems = artifact.getDisplayItemList();
     for (const auto& displayItem : displayItems.itemsInPaintChunk(chunk))
         appendDisplayItemToCcDisplayItemList(displayItem, list.get());
 
-    list->CreateAndAppendItem<cc::EndTransformDisplayItem>(gfx::Rect());
+    list->CreateAndAppendPairedEndItem<cc::EndTransformDisplayItem>();
 
     list->Finalize();
     return list;
@@ -121,42 +133,6 @@ static gfx::Transform transformToTransformSpace(const TransformPaintPropertyNode
         currentSpace = currentSpace->parent();
     }
     return gfx::Transform(TransformationMatrix::toSkMatrix44(matrix));
-}
-
-unsigned clipNodeDepth(const ClipPaintPropertyNode* node)
-{
-    unsigned depth = 0;
-    while (node) {
-        depth++;
-        node = node->parent();
-    }
-    return depth;
-}
-
-const ClipPaintPropertyNode* nearestCommonAncestor(const ClipPaintPropertyNode* a, const ClipPaintPropertyNode* b)
-{
-    // Measure both depths.
-    unsigned depthA = clipNodeDepth(a);
-    unsigned depthB = clipNodeDepth(b);
-
-    // Make it so depthA >= depthB.
-    if (depthA < depthB) {
-        std::swap(a, b);
-        std::swap(depthA, depthB);
-    }
-
-    // Make it so depthA == depthB.
-    while (depthA > depthB) {
-        a = a->parent();
-        depthA--;
-    }
-
-    // Walk up until we find the ancestor.
-    while (a != b) {
-        a = a->parent();
-        b = b->parent();
-    }
-    return a;
 }
 
 const TransformPaintPropertyNode* localTransformSpace(const ClipPaintPropertyNode* clip)
@@ -205,7 +181,7 @@ public:
     cc::Layer* switchToNewClipLayer(const ClipPaintPropertyNode* clip)
     {
         // Walk up to the nearest common ancestor.
-        const auto* ancestor = nearestCommonAncestor(clip, m_clipLayers.last().first);
+        const auto* ancestor = propertyTreeNearestCommonAncestor<ClipPaintPropertyNode>(clip, m_clipLayers.last().first);
         while (m_clipLayers.last().first != ancestor)
             m_clipLayers.removeLast();
 
@@ -271,7 +247,7 @@ void setMinimalPropertyTrees(cc::PropertyTrees* propertyTrees, int ownerId)
     transformTree.clear();
     cc::TransformNode& transformNode = *transformTree.Node(transformTree.Insert(cc::TransformNode(), kRealRootNodeId));
     DCHECK_EQ(transformNode.id, kSecondaryRootNodeId);
-    transformNode.data.source_node_id = transformNode.parent_id;
+    transformNode.source_node_id = transformNode.parent_id;
     transformTree.SetTargetId(transformNode.id, kRealRootNodeId);
     transformTree.SetContentTargetId(transformNode.id, kRealRootNodeId);
 
@@ -288,8 +264,8 @@ void setMinimalPropertyTrees(cc::PropertyTrees* propertyTrees, int ownerId)
     cc::EffectNode& effectNode = *effectTree.Node(effectTree.Insert(cc::EffectNode(), kRealRootNodeId));
     DCHECK_EQ(effectNode.id, kSecondaryRootNodeId);
     effectNode.owner_id = ownerId;
-    effectNode.data.clip_id = clipNode.id;
-    effectNode.data.has_render_surface = true;
+    effectNode.clip_id = clipNode.id;
+    effectNode.has_render_surface = true;
 
     cc::ScrollTree& scrollTree = propertyTrees->scroll_tree;
     scrollTree.clear();
@@ -372,52 +348,83 @@ scoped_refptr<cc::Layer> PaintArtifactCompositor::layerForPaintChunk(const Paint
 
 namespace {
 
-class TransformTreeManager {
-    WTF_MAKE_NONCOPYABLE(TransformTreeManager);
+class PropertyTreeManager {
+    WTF_MAKE_NONCOPYABLE(PropertyTreeManager);
 public:
-    TransformTreeManager(cc::TransformTree& transformTree, cc::Layer* rootLayer)
-        : m_transformTree(transformTree)
-        , m_rootLayer(rootLayer) {}
+    PropertyTreeManager(cc::PropertyTrees& propertyTrees, cc::Layer* rootLayer)
+        : m_propertyTrees(propertyTrees)
+        , m_rootLayer(rootLayer)
+#if DCHECK_IS_ON()
+        , m_isFirstEffectEver(true)
+#endif
+    {
+        m_effectStack.append(BlinkEffectAndCcIdPair{nullptr, kSecondaryRootNodeId});
+    }
 
-    int compositorIdForNode(const TransformPaintPropertyNode*);
+    int compositorIdForTransformNode(const TransformPaintPropertyNode*);
+    int compositorIdForClipNode(const ClipPaintPropertyNode*);
+    int switchToEffectNode(const EffectPaintPropertyNode& nextEffect);
+    int compositorIdForCurrentEffectNode() const { return m_effectStack.last().id; }
 
 private:
-    // Transform tree which should be updated by the manager.
-    cc::TransformTree& m_transformTree;
+    void buildEffectNodesRecursively(const EffectPaintPropertyNode* nextEffect);
+
+    cc::TransformTree& transformTree() { return m_propertyTrees.transform_tree; }
+    cc::ClipTree& clipTree() { return m_propertyTrees.clip_tree; }
+    cc::EffectTree& effectTree() { return m_propertyTrees.effect_tree; }
+
+    const EffectPaintPropertyNode* currentEffectNode() const { return m_effectStack.last().effect; }
+
+    // Property trees which should be updated by the manager.
+    cc::PropertyTrees& m_propertyTrees;
 
     // Layer to which transform "owner" layers should be added. These will not
     // have any actual children, but at present must exist in the tree.
     cc::Layer* m_rootLayer;
 
-    // Map from Blink-side transform nodes to cc transform node indices.
-    HashMap<const TransformPaintPropertyNode*, int> m_nodeMap;
+    // Maps from Blink-side property tree nodes to cc property node indices.
+    HashMap<const TransformPaintPropertyNode*, int> m_transformNodeMap;
+    HashMap<const ClipPaintPropertyNode*, int> m_clipNodeMap;
+
+    struct BlinkEffectAndCcIdPair {
+        const EffectPaintPropertyNode* effect;
+        int id;
+    };
+    Vector<BlinkEffectAndCcIdPair> m_effectStack;
+
+#if DCHECK_IS_ON()
+    HashSet<const EffectPaintPropertyNode*> m_effectNodesConverted;
+    bool m_isFirstEffectEver;
+#endif
 };
 
-int TransformTreeManager::compositorIdForNode(const TransformPaintPropertyNode* transformNode)
+int PropertyTreeManager::compositorIdForTransformNode(const TransformPaintPropertyNode* transformNode)
 {
     if (!transformNode)
         return kSecondaryRootNodeId;
 
-    auto it = m_nodeMap.find(transformNode);
-    if (it != m_nodeMap.end())
+    auto it = m_transformNodeMap.find(transformNode);
+    if (it != m_transformNodeMap.end())
         return it->value;
 
     scoped_refptr<cc::Layer> dummyLayer = cc::Layer::Create();
-    int parentId = compositorIdForNode(transformNode->parent());
-    int id = m_transformTree.Insert(cc::TransformNode(), parentId);
+    int parentId = compositorIdForTransformNode(transformNode->parent());
+    int id = transformTree().Insert(cc::TransformNode(), parentId);
 
-    cc::TransformNode& compositorNode = *m_transformTree.Node(id);
-    m_transformTree.SetTargetId(id, kRealRootNodeId);
-    m_transformTree.SetContentTargetId(id, kRealRootNodeId);
-    compositorNode.data.source_node_id = parentId;
+    cc::TransformNode& compositorNode = *transformTree().Node(id);
+    transformTree().SetTargetId(id, kRealRootNodeId);
+    transformTree().SetContentTargetId(id, kRealRootNodeId);
+    compositorNode.source_node_id = parentId;
 
     FloatPoint3D origin = transformNode->origin();
-    compositorNode.data.pre_local.matrix().setTranslate(
+    compositorNode.pre_local.matrix().setTranslate(
         -origin.x(), -origin.y(), -origin.z());
-    compositorNode.data.local.matrix() = TransformationMatrix::toSkMatrix44(transformNode->matrix());
-    compositorNode.data.post_local.matrix().setTranslate(
+    compositorNode.local.matrix() = TransformationMatrix::toSkMatrix44(transformNode->matrix());
+    compositorNode.post_local.matrix().setTranslate(
         origin.x(), origin.y(), origin.z());
-    compositorNode.data.needs_local_transform_update = true;
+    compositorNode.needs_local_transform_update = true;
+    compositorNode.flattens_inherited_transform = transformNode->flattensInheritedTransform();
+    compositorNode.sorting_context_id = transformNode->renderingContextID();
 
     m_rootLayer->AddChild(dummyLayer);
     dummyLayer->SetTransformTreeIndex(id);
@@ -426,10 +433,131 @@ int TransformTreeManager::compositorIdForNode(const TransformPaintPropertyNode* 
     dummyLayer->SetScrollTreeIndex(kRealRootNodeId);
     dummyLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
 
-    auto result = m_nodeMap.set(transformNode, id);
+    auto result = m_transformNodeMap.set(transformNode, id);
     DCHECK(result.isNewEntry);
-    m_transformTree.set_needs_update(true);
+    transformTree().set_needs_update(true);
     return id;
+}
+
+int PropertyTreeManager::compositorIdForClipNode(const ClipPaintPropertyNode* clipNode)
+{
+    if (!clipNode)
+        return kSecondaryRootNodeId;
+
+    auto it = m_clipNodeMap.find(clipNode);
+    if (it != m_clipNodeMap.end())
+        return it->value;
+
+    scoped_refptr<cc::Layer> dummyLayer = cc::Layer::Create();
+    int parentId = compositorIdForClipNode(clipNode->parent());
+    int id = clipTree().Insert(cc::ClipNode(), parentId);
+
+    cc::ClipNode& compositorNode = *clipTree().Node(id);
+    compositorNode.owner_id = dummyLayer->id();
+
+    // TODO(jbroman): Don't discard rounded corners.
+    compositorNode.clip = clipNode->clipRect().rect();
+    compositorNode.transform_id = compositorIdForTransformNode(clipNode->localTransformSpace());
+    compositorNode.target_transform_id = kRealRootNodeId;
+    compositorNode.applies_local_clip = true;
+    compositorNode.layers_are_clipped = true;
+    compositorNode.layers_are_clipped_when_surfaces_disabled = true;
+
+    m_rootLayer->AddChild(dummyLayer);
+    dummyLayer->SetTransformTreeIndex(compositorNode.transform_id);
+    dummyLayer->SetClipTreeIndex(id);
+    dummyLayer->SetEffectTreeIndex(kSecondaryRootNodeId);
+    dummyLayer->SetScrollTreeIndex(kRealRootNodeId);
+    dummyLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
+
+    auto result = m_clipNodeMap.set(clipNode, id);
+    DCHECK(result.isNewEntry);
+    clipTree().set_needs_update(true);
+    return id;
+}
+
+unsigned depth(const EffectPaintPropertyNode* node)
+{
+    unsigned result = 0;
+    for (; node; node = node->parent())
+        result++;
+    return result;
+}
+
+const EffectPaintPropertyNode* lowestCommonAncestor(const EffectPaintPropertyNode* nodeA, const EffectPaintPropertyNode* nodeB)
+{
+    // Optimized common case.
+    if (nodeA == nodeB)
+        return nodeA;
+
+    unsigned depthA = depth(nodeA), depthB = depth(nodeB);
+    while (depthA > depthB) {
+        nodeA = nodeA->parent();
+        depthA--;
+    }
+    while (depthB > depthA) {
+        nodeB = nodeB->parent();
+        depthB--;
+    }
+    DCHECK_EQ(depthA, depthB);
+    while (nodeA != nodeB) {
+        nodeA = nodeA->parent();
+        nodeB = nodeB->parent();
+    }
+    return nodeA;
+}
+
+int PropertyTreeManager::switchToEffectNode(const EffectPaintPropertyNode& nextEffect)
+{
+    const EffectPaintPropertyNode* ancestor = lowestCommonAncestor(currentEffectNode(), &nextEffect);
+    while (currentEffectNode() != ancestor)
+        m_effectStack.removeLast();
+
+#if DCHECK_IS_ON()
+    DCHECK(m_isFirstEffectEver || currentEffectNode()) << "Malformed effect tree. Nodes in the same property tree should have common root.";
+    m_isFirstEffectEver = false;
+#endif
+    buildEffectNodesRecursively(&nextEffect);
+
+    return compositorIdForCurrentEffectNode();
+}
+
+void PropertyTreeManager::buildEffectNodesRecursively(const EffectPaintPropertyNode* nextEffect)
+{
+    if (nextEffect == currentEffectNode())
+        return;
+    DCHECK(nextEffect);
+
+    buildEffectNodesRecursively(nextEffect->parent());
+    DCHECK_EQ(nextEffect->parent(), currentEffectNode());
+
+#if DCHECK_IS_ON()
+    DCHECK(!m_effectNodesConverted.contains(nextEffect)) << "Malformed paint artifact. Paint chunks under the same effect should be contiguous.";
+    m_effectNodesConverted.add(nextEffect);
+#endif
+
+    // We currently create dummy layers to host effect nodes and corresponding render surface.
+    // This should be removed once cc implements better support for freestanding property trees.
+    scoped_refptr<cc::Layer> dummyLayer = cc::Layer::Create();
+    m_rootLayer->AddChild(dummyLayer);
+
+    // Also cc assumes a clip node is always created by a layer that creates render surface.
+    cc::ClipNode& dummyClip = *clipTree().Node(clipTree().Insert(cc::ClipNode(), kSecondaryRootNodeId));
+    dummyClip.owner_id = dummyLayer->id();
+    dummyClip.transform_id = kRealRootNodeId;
+    dummyClip.target_transform_id = kRealRootNodeId;
+
+    cc::EffectNode& effectNode = *effectTree().Node(effectTree().Insert(cc::EffectNode(), compositorIdForCurrentEffectNode()));
+    effectNode.owner_id = dummyLayer->id();
+    effectNode.clip_id = dummyClip.id;
+    effectNode.opacity = nextEffect->opacity();
+    m_effectStack.append(BlinkEffectAndCcIdPair{nextEffect, effectNode.id});
+
+    dummyLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
+    dummyLayer->SetTransformTreeIndex(kSecondaryRootNodeId);
+    dummyLayer->SetClipTreeIndex(dummyClip.id);
+    dummyLayer->SetEffectTreeIndex(effectNode.id);
+    dummyLayer->SetScrollTreeIndex(kRealRootNodeId);
 }
 
 } // namespace
@@ -438,7 +566,7 @@ void PaintArtifactCompositor::updateInLayerListMode(const PaintArtifact& paintAr
 {
     cc::LayerTreeHost* host = m_rootLayer->layer_tree_host();
 
-    setMinimalPropertyTrees(host->property_trees(), m_rootLayer->id());
+    setMinimalPropertyTrees(host->GetLayerTree()->property_trees(), m_rootLayer->id());
     m_rootLayer->RemoveAllChildren();
     m_rootLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
     m_rootLayer->SetTransformTreeIndex(kSecondaryRootNodeId);
@@ -446,30 +574,39 @@ void PaintArtifactCompositor::updateInLayerListMode(const PaintArtifact& paintAr
     m_rootLayer->SetEffectTreeIndex(kSecondaryRootNodeId);
     m_rootLayer->SetScrollTreeIndex(kRealRootNodeId);
 
-    TransformTreeManager transformTreeManager(host->property_trees()->transform_tree, m_rootLayer.get());
+    PropertyTreeManager propertyTreeManager(*host->GetLayerTree()->property_trees(), m_rootLayer.get());
     m_contentLayerClients.clear();
     m_contentLayerClients.reserveCapacity(paintArtifact.paintChunks().size());
     for (const PaintChunk& paintChunk : paintArtifact.paintChunks()) {
         gfx::Vector2dF layerOffset;
         scoped_refptr<cc::Layer> layer = layerForPaintChunk(paintArtifact, paintChunk, layerOffset);
 
-        int transformId = transformTreeManager.compositorIdForNode(paintChunk.properties.transform.get());
+        int transformId = propertyTreeManager.compositorIdForTransformNode(paintChunk.properties.transform.get());
+        int clipId = propertyTreeManager.compositorIdForClipNode(paintChunk.properties.clip.get());
+        int effectId = propertyTreeManager.switchToEffectNode(*paintChunk.properties.effect.get());
+
         layer->set_offset_to_transform_parent(layerOffset);
 
         m_rootLayer->AddChild(layer);
         layer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
         layer->SetTransformTreeIndex(transformId);
-        layer->SetClipTreeIndex(kSecondaryRootNodeId);
-        layer->SetEffectTreeIndex(kSecondaryRootNodeId);
+        layer->SetClipTreeIndex(clipId);
+        layer->SetEffectTreeIndex(effectId);
         layer->SetScrollTreeIndex(kRealRootNodeId);
+
+        // TODO(jbroman): This probably shouldn't be necessary, but it is still
+        // queried by RenderSurfaceImpl.
+        layer->Set3dSortingContextId(host->GetLayerTree()->property_trees()->transform_tree.Node(transformId)->sorting_context_id);
+
+        layer->SetShouldCheckBackfaceVisibility(paintChunk.properties.backfaceHidden);
 
         if (m_extraDataForTestingEnabled)
             m_extraDataForTesting->contentLayers.append(layer);
     }
 
     // Mark the property trees as having been rebuilt.
-    host->property_trees()->sequence_number = kPropertyTreeSequenceNumber;
-    host->property_trees()->needs_rebuild = false;
+    host->GetLayerTree()->property_trees()->sequence_number = kPropertyTreeSequenceNumber;
+    host->GetLayerTree()->property_trees()->needs_rebuild = false;
 }
 
 } // namespace blink

@@ -37,7 +37,6 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_chromium_strings.h"
-#include "components/strings/grit/components_google_chrome_strings.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -92,9 +91,9 @@ void RecordBubbleHistogramValue(SessionCrashedBubbleHistogramValue value) {
 
 // Whether or not the bubble UI should be used.
 bool IsBubbleUIEnabled() {
-  // Function InitiateMetricsReportingChange (called when the user chooses to
-  // opt-in to UMA) does not support Chrome OS yet, so don't show the bubble on
-  // Chrome OS.
+// Function ChangeMetricsReportingState (called when the user chooses to
+// opt-in to UMA) does not support Chrome OS yet, so don't show the bubble on
+// Chrome OS.
 #if defined(OS_CHROMEOS)
   return false;
 #else
@@ -411,7 +410,7 @@ void SessionCrashedBubbleView::RestorePreviousSession() {
   // Record user's choice for opt-in in to UMA.
   // There's no opt-out choice in the crash restore bubble.
   if (uma_option_ && uma_option_->checked()) {
-    InitiateMetricsReportingChange(true, OnMetricsReportingCallbackType());
+    ChangeMetricsReportingState(true);
     RecordBubbleHistogramValue(SESSION_CRASHED_BUBBLE_UMA_OPTIN);
   }
   CloseBubble();

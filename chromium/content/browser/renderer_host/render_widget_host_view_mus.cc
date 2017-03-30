@@ -7,49 +7,45 @@
 #include <utility>
 
 #include "build/build_config.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/interfaces/window_manager_constants.mojom.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/render_widget_window_tree_client_factory.mojom.h"
 #include "content/common/text_input_state.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
 
-namespace blink {
-struct WebScreenInfo;
-}
-
 namespace content {
 
-RenderWidgetHostViewMus::RenderWidgetHostViewMus(mus::Window* parent_window,
+RenderWidgetHostViewMus::RenderWidgetHostViewMus(ui::Window* parent_window,
                                                  RenderWidgetHostImpl* host)
     : host_(host), aura_window_(nullptr) {
   DCHECK(parent_window);
-  mus::Window* window = parent_window->window_tree()->NewWindow();
+  ui::Window* window = parent_window->window_tree()->NewWindow();
   window->SetVisible(true);
   window->SetBounds(gfx::Rect(300, 300));
   window->set_input_event_handler(this);
   parent_window->AddChild(window);
-  mus_window_.reset(new mus::ScopedWindowPtr(window));
+  mus_window_.reset(new ui::ScopedWindowPtr(window));
   host_->SetView(this);
 
   // Connect to the renderer, pass it a WindowTreeClient interface request
   // and embed that client inside our mus window.
   mojom::RenderWidgetWindowTreeClientFactoryPtr factory;
-  host_->GetProcess()->GetChildConnection()->GetInterface(&factory);
+  host_->GetProcess()->GetRemoteInterfaces()->GetInterface(&factory);
 
-  mus::mojom::WindowTreeClientPtr window_tree_client;
+  ui::mojom::WindowTreeClientPtr window_tree_client;
   factory->CreateWindowTreeClientForRenderWidget(
       host_->GetRoutingID(), mojo::GetProxy(&window_tree_client));
   mus_window_->window()->Embed(std::move(window_tree_client),
-                               mus::mojom::kEmbedFlagEmbedderInterceptsEvents);
+                               ui::mojom::kEmbedFlagEmbedderInterceptsEvents);
 }
 
 RenderWidgetHostViewMus::~RenderWidgetHostViewMus() {}
@@ -136,7 +132,7 @@ gfx::Size RenderWidgetHostViewMus::GetPhysicalBackingSize() const {
   return RenderWidgetHostViewBase::GetPhysicalBackingSize();
 }
 
-base::string16 RenderWidgetHostViewMus::GetSelectedText() const {
+base::string16 RenderWidgetHostViewMus::GetSelectedText() {
   NOTIMPLEMENTED();
   return base::string16();
 }
@@ -253,14 +249,14 @@ void RenderWidgetHostViewMus::UnlockMouse() {
   // TODO(fsamuel): Implement mouse lock in Mus.
 }
 
-void RenderWidgetHostViewMus::GetScreenInfo(blink::WebScreenInfo* results) {
-  // TODO(fsamuel): Populate screen info from Mus.
-}
-
 gfx::Rect RenderWidgetHostViewMus::GetBoundsInRootWindow() {
   aura::Window* top_level = aura_window_->GetToplevelWindow();
   gfx::Rect bounds(top_level->GetBoundsInScreen());
   return bounds;
+}
+
+void RenderWidgetHostViewMus::SetNeedsBeginFrames(bool needs_begin_frames) {
+  // TODO(enne): Implement this.
 }
 
 #if defined(OS_MACOSX)
@@ -304,9 +300,9 @@ void RenderWidgetHostViewMus::UnlockCompositingSurface() {
 }
 
 void RenderWidgetHostViewMus::OnWindowInputEvent(
-    mus::Window* window,
+    ui::Window* window,
     const ui::Event& event,
-    std::unique_ptr<base::Callback<void(mus::mojom::EventResult)>>*
+    std::unique_ptr<base::Callback<void(ui::mojom::EventResult)>>*
         ack_callback) {
   // TODO(sad): Dispatch |event| to the RenderWidgetHost.
 }

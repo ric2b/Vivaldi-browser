@@ -19,7 +19,6 @@ class SequencedTaskRunner;
 
 namespace shell {
 class InterfaceProvider;
-class InterfaceRegistry;
 }
 
 namespace content {
@@ -82,10 +81,6 @@ class UtilityProcessHost : public IPC::Sender {
 
   // Starts the utility process.
   virtual bool Start() = 0;
-
-  // Returns the shell::InterfaceRegistry the browser process uses to expose
-  // interfaces to the utility process.
-  virtual shell::InterfaceRegistry* GetInterfaceRegistry() = 0;
 
   // Returns the shell::InterfaceProvider the browser process can use to bind
   // interfaces exposed to it from the utility process.

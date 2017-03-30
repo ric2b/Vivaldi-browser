@@ -1,0 +1,6 @@
+include_rules = [
+  "+chromeos",
+  "+components/sync/protocol",
+  "+crypto",
+  "+third_party/zlib",  # For UniquePosition compression
+]

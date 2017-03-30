@@ -61,6 +61,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::cast::CastLoggingEvent,
                           media::cast::kNumOfLoggingEvents)
 IPC_ENUM_TRAITS_MAX_VALUE(media::cast::EventMediaType,
                           media::cast::EVENT_MEDIA_TYPE_LAST)
+IPC_ENUM_TRAITS_MIN_MAX_VALUE(media::cast::RtpPayloadType,
+                              media::cast::RtpPayloadType::FIRST,
+                              media::cast::RtpPayloadType::LAST)
 
 IPC_STRUCT_TRAITS_BEGIN(media::cast::EncodedFrame)
   IPC_STRUCT_TRAITS_MEMBER(dependency)
@@ -175,11 +178,7 @@ IPC_MESSAGE_CONTROL3(CastMsg_RawEvents,
 
 // Cast messages sent from the renderer to the browser.
 
-IPC_MESSAGE_CONTROL2(CastHostMsg_InitializeAudio,
-                     int32_t /*channel_id*/,
-                     media::cast::CastTransportRtpConfig /*config*/)
-
-IPC_MESSAGE_CONTROL2(CastHostMsg_InitializeVideo,
+IPC_MESSAGE_CONTROL2(CastHostMsg_InitializeStream,
                      int32_t /*channel_id*/,
                      media::cast::CastTransportRtpConfig /*config*/)
 

@@ -28,7 +28,7 @@ AudioTimestampValidator::AudioTimestampValidator(
     const scoped_refptr<MediaLog>& media_log)
     : has_codec_delay_(decoder_config.codec_delay() > 0),
       media_log_(media_log),
-      audio_base_ts_(kNoTimestamp()),
+      audio_base_ts_(kNoTimestamp),
       reached_stable_state_(false),
       num_unstable_audio_tries_(0),
       limit_unstable_audio_tries_(kLimitTriesForStableTiming),
@@ -42,17 +42,16 @@ void AudioTimestampValidator::CheckForTimestampGap(
     const scoped_refptr<DecoderBuffer>& buffer) {
   if (buffer->end_of_stream())
     return;
-  DCHECK_NE(kNoTimestamp(), buffer->timestamp());
+  DCHECK_NE(kNoTimestamp, buffer->timestamp());
 
-  // If audio_base_ts_ == kNoTimestamp(), we are processing our first buffer.
+  // If audio_base_ts_ == kNoTimestamp, we are processing our first buffer.
   // If stream has neither codec delay nor discard padding, we should expect
   // timestamps and output durations to line up from the start (i.e. be stable).
-  if (audio_base_ts_ == kNoTimestamp() && !has_codec_delay_ &&
+  if (audio_base_ts_ == kNoTimestamp && !has_codec_delay_ &&
       buffer->discard_padding().first == base::TimeDelta() &&
       buffer->discard_padding().second == base::TimeDelta()) {
-    DVLOG(3) << __FUNCTION__
-             << " Expecting stable timestamps - stream has neither codec delay"
-             << " nor discard padding.";
+    DVLOG(3) << __func__ << " Expecting stable timestamps - stream has neither "
+             << "codec delay nor discard padding.";
     limit_unstable_audio_tries_ = 0;
   }
 
@@ -66,7 +65,7 @@ void AudioTimestampValidator::CheckForTimestampGap(
   // before producing the first decoded output.
   if (!audio_output_ts_helper_) {
     audio_base_ts_ = buffer->timestamp();
-    DVLOG(3) << __FUNCTION__
+    DVLOG(3) << __func__
              << " setting audio_base:" << audio_base_ts_.InMicroseconds();
     return;
   }
@@ -83,8 +82,7 @@ void AudioTimestampValidator::CheckForTimestampGap(
   if (!reached_stable_state_) {
     if (std::abs(ts_delta.InMilliseconds()) < kStableTimeGapThrsholdMsec) {
       reached_stable_state_ = true;
-      DVLOG(3) << __FUNCTION__
-               << " stabilized! tries:" << num_unstable_audio_tries_
+      DVLOG(3) << __func__ << " stabilized! tries:" << num_unstable_audio_tries_
                << " offset:"
                << audio_output_ts_helper_->base_timestamp().InMicroseconds();
     } else {
@@ -95,7 +93,7 @@ void AudioTimestampValidator::CheckForTimestampGap(
       audio_output_ts_helper_->SetBaseTimestamp(orig_offset + ts_delta);
       audio_output_ts_helper_->AddFrames(decoded_frame_count);
 
-      DVLOG(3) << __FUNCTION__
+      DVLOG(3) << __func__
                << " NOT stabilized. tries:" << num_unstable_audio_tries_
                << " offset was:" << orig_offset.InMicroseconds() << " now:"
                << audio_output_ts_helper_->base_timestamp().InMicroseconds();
@@ -121,7 +119,7 @@ void AudioTimestampValidator::CheckForTimestampGap(
     // Increase threshold to avoid log spam but, let us know if gap widens.
     drift_warning_threshold_msec_ = std::abs(ts_delta.InMilliseconds());
   }
-  DVLOG(3) << __FUNCTION__ << " delta:" << ts_delta.InMicroseconds()
+  DVLOG(3) << __func__ << " delta:" << ts_delta.InMicroseconds()
            << " expected_ts:" << expected_ts.InMicroseconds()
            << " actual_ts:" << buffer->timestamp().InMicroseconds()
            << " audio_ts_offset:"
@@ -131,7 +129,7 @@ void AudioTimestampValidator::CheckForTimestampGap(
 void AudioTimestampValidator::RecordOutputDuration(
     const scoped_refptr<AudioBuffer>& audio_buffer) {
   if (!audio_output_ts_helper_) {
-    DCHECK_NE(audio_base_ts_, kNoTimestamp());
+    DCHECK_NE(audio_base_ts_, kNoTimestamp);
     // SUBTLE: deliberately creating this with output buffer sample rate because
     // demuxer stream config is potentially stale for implicit AAC.
     audio_output_ts_helper_.reset(
@@ -139,7 +137,7 @@ void AudioTimestampValidator::RecordOutputDuration(
     audio_output_ts_helper_->SetBaseTimestamp(audio_base_ts_);
   }
 
-  DVLOG(3) << __FUNCTION__ << " " << audio_buffer->frame_count() << " frames";
+  DVLOG(3) << __func__ << " " << audio_buffer->frame_count() << " frames";
   audio_output_ts_helper_->AddFrames(audio_buffer->frame_count());
 }
 

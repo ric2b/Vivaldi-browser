@@ -113,7 +113,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
     virtual ~Delegate() {}
 
     // Called when the database cannot be read correctly for some reason.
-    virtual void NotifyProfileError(sql::InitStatus init_status) = 0;
+    // |diagnostics| contains information about the underlying database
+    // which can help in identifying the cause of the profile error.
+    virtual void NotifyProfileError(sql::InitStatus init_status,
+                                    const std::string& diagnostics) = 0;
 
     // Sets the in-memory history backend. The in-memory backend is created by
     // the main backend. For non-unit tests, this happens on the background
@@ -212,6 +215,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
   // As a side effect, caches the list of top hosts for the purposes of
   // generating internal metrics.
   TopHostsList TopHosts(size_t num_hosts) const;
+
+  // Computes the |num_hosts| most-visited hostnames per day. For all history
+  // available. Returns an empty list if db_ is not initialized.
+  TopUrlsPerDayList TopUrlsPerDay(size_t num_hosts) const;
 
   // Gets the counts and last last time of URLs that belong to |origins| in the
   // history database. Origins that are not in the history database will be in
@@ -882,6 +889,10 @@ class HistoryBackend : public base::RefCountedThreadSafe<HistoryBackend>,
 
   // Listens for the system being under memory pressure.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
+
+  // Contains diagnostic information about the sql database that is non-empty
+  // when a catastrophic error occurs.
+  std::string db_diagnostics_;
 
   // Map from host to index in the TopHosts list. It is updated only by
   // TopHosts(), so it's usually stale.

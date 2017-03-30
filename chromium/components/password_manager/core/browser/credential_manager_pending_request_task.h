@@ -12,6 +12,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "url/gurl.h"
 
@@ -38,7 +39,7 @@ class CredentialManagerPendingRequestTaskDelegate {
   virtual GURL GetOrigin() const = 0;
 
   // Retrieves a synthetic PasswordForm for the current page origin.
-  virtual autofill::PasswordForm GetSynthesizedFormForOrigin() const = 0;
+  virtual PasswordStore::FormDigest GetSynthesizedFormForOrigin() const = 0;
 
   // Returns the PasswordManagerClient.
   virtual PasswordManagerClient* client() const = 0;
@@ -71,7 +72,7 @@ class CredentialManagerPendingRequestTask : public PasswordStoreConsumer {
 
   // PasswordStoreConsumer implementation.
   void OnGetPasswordStoreResults(
-      ScopedVector<autofill::PasswordForm> results) override;
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
 
  private:
   CredentialManagerPendingRequestTaskDelegate* delegate_;  // Weak;

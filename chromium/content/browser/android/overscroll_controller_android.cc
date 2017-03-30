@@ -10,7 +10,6 @@
 #include "cc/layers/layer.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "content/browser/android/content_view_core_impl.h"
-#include "content/common/input/did_overscroll_params.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/content_switches.h"
@@ -21,7 +20,9 @@
 #include "ui/android/window_android.h"
 #include "ui/android/window_android_compositor.h"
 #include "ui/base/l10n/l10n_util_android.h"
+#include "ui/events/blink/did_overscroll_params.h"
 
+using ui::DidOverscrollParams;
 using ui::EdgeEffect;
 using ui::EdgeEffectBase;
 using ui::EdgeEffectL;
@@ -97,9 +98,10 @@ std::unique_ptr<OverscrollRefresh> CreateRefreshEffect(
 }  // namespace
 
 OverscrollControllerAndroid::OverscrollControllerAndroid(
-    ContentViewCoreImpl* content_view_core)
+    ContentViewCoreImpl* content_view_core,
+    float dpi_scale)
     : compositor_(content_view_core->GetWindowAndroid()->GetCompositor()),
-      dpi_scale_(content_view_core->GetDpiScale()),
+      dpi_scale_(dpi_scale),
       enabled_(true),
       glow_effect_(CreateGlowEffect(this, dpi_scale_)),
       refresh_effect_(CreateRefreshEffect(content_view_core)) {

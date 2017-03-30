@@ -65,11 +65,11 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.toolbar.ActionModeController.ActionBarDelegate;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarManager;
 import org.chromium.chrome.browser.widget.findinpage.FindToolbarObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
+import org.chromium.content_public.browser.NavigationEntry;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
@@ -415,14 +415,31 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
                 }
             }
 
+            private boolean hasPendingNonNtpNavigation(Tab tab) {
+                WebContents webContents = tab.getWebContents();
+                if (webContents == null) return false;
+
+                NavigationController navigationController = webContents.getNavigationController();
+                if (navigationController == null) return false;
+
+                NavigationEntry pendingEntry = navigationController.getPendingEntry();
+                if (pendingEntry == null) return false;
+
+                return !NewTabPage.isNTPUrl(pendingEntry.getUrl());
+            }
+
             @Override
             public void onDidFailLoad(Tab tab, boolean isProvisionalLoad, boolean isMainFrame,
                     int errorCode, String description, String failingUrl) {
                 NewTabPage ntp = mToolbarModel.getNewTabPageForCurrentTab();
                 if (ntp == null) return;
-                if (isProvisionalLoad && isMainFrame) {
+
+                // If the load failed due to a different navigation, there is no need to reset the
+                // location bar animations.
+                if (isProvisionalLoad && isMainFrame && !hasPendingNonNtpNavigation(tab)) {
                     ntp.setUrlFocusAnimationsDisabled(false);
                     mToolbar.onTabOrModelChanged();
+                    if (mToolbar.getProgressBar() != null) mToolbar.getProgressBar().finish(false);
                 }
             }
 
@@ -685,8 +702,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
      * @return The view that the pop up menu should be anchored to on the UI.
      */
     public View getMenuAnchor() {
-        return mToolbar.shouldShowMenuButton() ? mToolbar.getMenuButtonWrapper()
-                : mToolbar.getLocationBar().getMenuAnchor();
+        return mToolbar.getMenuButtonWrapper();
     }
 
     /**
@@ -751,12 +767,6 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
     private void onNativeLibraryReady() {
         mNativeLibraryReady = true;
         mToolbar.onNativeLibraryReady();
-
-        if (FeatureUtilities.isTabSwitchingEnabledInDocumentMode(mToolbar.getContext())) {
-            // We want to give a similar look and feel as Android's overview mode button
-            // by not updating tab count and keep the button as a rounded square.
-            mShouldUpdateTabCount = false;
-        }
 
         final TemplateUrlService templateUrlService = TemplateUrlService.getInstance();
         TemplateUrlService.LoadListener mTemplateServiceLoadListener =
@@ -949,11 +959,18 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
 
     /**
      * Focuses or unfocuses the URL bar.
+     *
+     * If you request focus and the UrlBar was already focused, this will select all of the text.
+     *
      * @param focused Whether URL bar should be focused.
      */
     public void setUrlBarFocus(boolean focused) {
         if (!isInitialized()) return;
+        boolean wasFocused = mToolbar.getLocationBar().isUrlBarFocused();
         mToolbar.getLocationBar().setUrlBarFocus(focused);
+        if (wasFocused && focused) {
+            mToolbar.getLocationBar().selectAll();
+        }
     }
 
     /**
@@ -1022,8 +1039,7 @@ public class ToolbarManager implements ToolbarTabController, UrlFocusChangeListe
         updateReloadState(tabCrashed);
         updateBookmarkButtonStatus();
 
-        mToolbar.getMenuButtonWrapper().setVisibility(
-                mToolbar.shouldShowMenuButton() ? View.VISIBLE : View.GONE);
+        mToolbar.getMenuButtonWrapper().setVisibility(View.VISIBLE);
     }
 
     private void updateBookmarkButtonStatus() {

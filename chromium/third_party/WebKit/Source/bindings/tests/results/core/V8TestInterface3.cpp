@@ -27,7 +27,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterface3::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface3::domTemplate, V8TestInterface3::trace, V8TestInterface3::traceWrappers, 0, V8TestInterface3::visitDOMWrapper, V8TestInterface3::preparePrototypeAndInterfaceObject, nullptr, "TestInterface3", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent };
+const WrapperTypeInfo V8TestInterface3::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterface3::domTemplate, V8TestInterface3::trace, V8TestInterface3::traceWrappers, V8TestInterface3::visitDOMWrapper, V8TestInterface3::preparePrototypeAndInterfaceObject, nullptr, "TestInterface3", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Dependent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -36,6 +36,19 @@ const WrapperTypeInfo V8TestInterface3::wrapperTypeInfo = { gin::kEmbedderBlink,
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterface3::s_wrapperTypeInfo = V8TestInterface3::wrapperTypeInfo;
+
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestInterface3>::value,
+    "TestInterface3 inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestInterface3::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestInterface3 is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 
 namespace TestInterface3V8Internal {
 
@@ -54,7 +67,7 @@ static void readonlyStringifierAttributeAttributeGetterCallback(const v8::Functi
 static void voidMethodDocumentMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod(info.GetIsolate(), "voidMethodDocument", "TestInterface3", 1, info.Length()), info.GetIsolate());
+        V8ThrowException::throwException(info.GetIsolate(), createMinimumArityTypeErrorForMethod(info.GetIsolate(), "voidMethodDocument", "TestInterface3", 1, info.Length()));
         return;
     }
     TestInterface3* impl = V8TestInterface3::toImpl(info.Holder());
@@ -78,7 +91,7 @@ static void keysMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "keys", "TestInterface3", info.Holder(), info.GetIsolate());
     TestInterface3* impl = V8TestInterface3::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     Iterator* result = impl->iterableKeys(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -96,7 +109,7 @@ static void valuesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "values", "TestInterface3", info.Holder(), info.GetIsolate());
     TestInterface3* impl = V8TestInterface3::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     Iterator* result = impl->valuesForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -114,7 +127,7 @@ static void entriesMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "entries", "TestInterface3", info.Holder(), info.GetIsolate());
     TestInterface3* impl = V8TestInterface3::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     Iterator* result = impl->entriesForBinding(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -148,7 +161,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
         callback = ScriptValue(ScriptState::current(info.GetIsolate()), info[0]);
         thisArg = ScriptValue(ScriptState::current(info.GetIsolate()), info[1]);
     }
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     impl->forEachForBinding(scriptState, ScriptValue(scriptState, info.Holder()), callback, thisArg, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -176,7 +189,7 @@ static void iteratorMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "iterator", "TestInterface3", info.Holder(), info.GetIsolate());
     TestInterface3* impl = V8TestInterface3::toImpl(info.Holder());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     Iterator* result = impl->iterator(scriptState, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
@@ -298,7 +311,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterface3::domTemplate(v8::Isolate* isola
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterface3Template);
 }
-
 
 bool V8TestInterface3::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

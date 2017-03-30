@@ -68,6 +68,14 @@ gfx::NativeWindow WebContentsViewGuest::GetTopLevelNativeWindow() const {
   return guest_->embedder_web_contents()->GetTopLevelNativeWindow();
 }
 
+void WebContentsViewGuest::GetScreenInfo(
+    blink::WebScreenInfo* web_screen_info) const {
+  if (guest_->embedder_web_contents())
+    guest_->embedder_web_contents()->GetView()->GetScreenInfo(web_screen_info);
+  else
+    WebContentsView::GetDefaultScreenInfo(web_screen_info);
+}
+
 void WebContentsViewGuest::OnGuestAttached(WebContentsView* parent_view) {
 #if defined(USE_AURA)
   // In aura, ScreenPositionClient doesn't work properly if we do
@@ -132,6 +140,10 @@ void WebContentsViewGuest::CreateView(const gfx::Size& initial_size,
 
 RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForWidget(
     RenderWidgetHost* render_widget_host, bool is_guest_view_hack) {
+  if (vivaldi::IsVivaldiRunning() && render_widget_host->GetView()) {
+    static_cast<RenderWidgetHostViewBase*>(render_widget_host->GetView())
+        ->Destroy();
+  } else {
   if (render_widget_host->GetView()) {
     // During testing, the view will already be set up in most cases to the
     // test view, so we don't want to clobber it with a real one. To verify that
@@ -142,6 +154,7 @@ RenderWidgetHostViewBase* WebContentsViewGuest::CreateViewForWidget(
     return static_cast<RenderWidgetHostViewBase*>(
         render_widget_host->GetView());
   }
+  } // If Vivaldi is running and view exists.
 
   RenderWidgetHostViewBase* platform_widget =
       platform_view_->CreateViewForWidget(render_widget_host, true);

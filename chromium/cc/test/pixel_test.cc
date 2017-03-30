@@ -80,10 +80,15 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   gfx::Rect device_clip_rect = external_device_clip_rect_.IsEmpty()
                                    ? device_viewport_rect
                                    : external_device_clip_rect_;
+
+  if (software_renderer_) {
+    software_renderer_->SetDisablePictureQuadImageFiltering(
+        disable_picture_quad_image_filtering_);
+  }
+
   renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
   renderer_->DrawFrame(pass_list, device_scale_factor, gfx::ColorSpace(),
-                       device_viewport_rect, device_clip_rect,
-                       disable_picture_quad_image_filtering_);
+                       device_viewport_rect, device_clip_rect);
 
   // Wait for the readback to complete.
   if (output_surface_->context_provider())
@@ -137,14 +142,16 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
       gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
       output_surface_->capabilities().delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
-      settings_.use_image_texture_targets);
+      settings_.renderer_settings.buffer_to_texture_target_map);
 
-  texture_mailbox_deleter_ = base::WrapUnique(
-      new TextureMailboxDeleter(base::ThreadTaskRunnerHandle::Get()));
+  texture_mailbox_deleter_ = base::MakeUnique<TextureMailboxDeleter>(
+      base::ThreadTaskRunnerHandle::Get());
 
-  renderer_ = GLRenderer::Create(
-      this, &settings_.renderer_settings, output_surface_.get(),
+  renderer_ = base::MakeUnique<GLRenderer>(
+      &settings_.renderer_settings, output_surface_.get(),
       resource_provider_.get(), texture_mailbox_deleter_.get(), 0);
+  renderer_->Initialize();
+  renderer_->SetVisible(true);
 }
 
 void PixelTest::ForceExpandedViewport(const gfx::Size& surface_expansion) {
@@ -181,10 +188,14 @@ void PixelTest::SetUpSoftwareRenderer() {
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
       main_thread_task_runner_.get(), 0, 1, delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
-      settings_.use_image_texture_targets);
-  renderer_ = SoftwareRenderer::Create(
-      this, &settings_.renderer_settings, output_surface_.get(),
-      resource_provider_.get(), true /* use_image_hijack_canvas */);
+      settings_.renderer_settings.buffer_to_texture_target_map);
+  auto renderer = base::MakeUnique<SoftwareRenderer>(
+      &settings_.renderer_settings, output_surface_.get(),
+      resource_provider_.get());
+  software_renderer_ = renderer.get();
+  renderer_ = std::move(renderer);
+  renderer_->Initialize();
+  renderer_->SetVisible(true);
 }
 
 }  // namespace cc

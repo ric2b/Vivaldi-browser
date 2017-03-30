@@ -39,7 +39,7 @@ class HandleResources {
     TRACE_EVENT0("browser", "HandleResources::Create");
     JNIEnv* env = base::android::AttachCurrentThread();
     if (!context)
-      context = base::android::GetApplicationContext();
+      context = base::android::GetApplicationContext().obj();
 
     left_bitmap_ = CreateSkBitmapFromJavaBitmap(
         Java_HandleViewResources_getLeftHandleBitmap(env, context));
@@ -177,11 +177,6 @@ void CompositedTouchHandleDrawable::DetachLayer() {
 
 void CompositedTouchHandleDrawable::UpdateLayerPosition() {
   layer_->SetPosition(origin_position_);
-}
-
-// static
-bool CompositedTouchHandleDrawable::RegisterHandleViewResources(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace content

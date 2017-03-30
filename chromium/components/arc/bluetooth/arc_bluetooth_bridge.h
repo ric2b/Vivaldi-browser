@@ -47,6 +47,7 @@ class ArcBluetoothBridge
 
   // Overridden from InstanceHolder<mojom::BluetoothInstance>::Observer:
   void OnInstanceReady() override;
+  void OnInstanceClosed() override;
 
   void OnAdapterInitialized(scoped_refptr<device::BluetoothAdapter> adapter);
 
@@ -226,6 +227,9 @@ class ArcBluetoothBridge
   void ReadRemoteRssi(mojom::BluetoothAddressPtr remote_addr,
                       const ReadRemoteRssiCallback& callback) override;
 
+  void OpenBluetoothSocket(
+      const OpenBluetoothSocketCallback& callback) override;
+
   // Bluetooth Mojo host interface - Bluetooth Gatt Server functions
   // Android counterpart link:
   // https://source.android.com/devices/halref/bt__gatt__server_8h.html
@@ -263,9 +267,6 @@ class ArcBluetoothBridge
                       bool confirm,
                       mojo::Array<uint8_t> value,
                       const SendIndicationCallback& callback) override;
-
-  void OpenBluetoothSocket(
-      const OpenBluetoothSocketCallback& callback) override;
 
   // Bluetooth Mojo host interface - Bluetooth SDP functions
   void GetSdpRecords(mojom::BluetoothAddressPtr remote_addr,

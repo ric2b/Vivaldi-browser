@@ -27,7 +27,7 @@ const char* const kTestSystemLogFileNames[] = {"name1.txt", "name32.txt"};
 // Generate the fake system log files.
 SystemLogUploader::SystemLogs GenerateTestSystemLogFiles() {
   SystemLogUploader::SystemLogs system_logs;
-  for (auto const file_path : kTestSystemLogFileNames) {
+  for (auto* file_path : kTestSystemLogFileNames) {
     system_logs.push_back(std::make_pair(file_path, file_path));
   }
   return system_logs;
@@ -120,14 +120,14 @@ class MockSystemLogDelegate : public SystemLogUploader::Delegate {
   void LoadSystemLogs(const LogUploadCallback& upload_callback) override {
     EXPECT_TRUE(is_upload_allowed_);
     upload_callback.Run(
-        base::WrapUnique(new SystemLogUploader::SystemLogs(system_logs_)));
+        base::MakeUnique<SystemLogUploader::SystemLogs>(system_logs_));
   }
 
   std::unique_ptr<UploadJob> CreateUploadJob(
       const GURL& url,
       UploadJob::Delegate* delegate) override {
-    return base::WrapUnique(new MockUploadJob(url, delegate, is_upload_error_,
-                                              system_logs_.size()));
+    return base::MakeUnique<MockUploadJob>(url, delegate, is_upload_error_,
+                                           system_logs_.size());
   }
 
   void set_upload_allowed(bool is_upload_allowed) {

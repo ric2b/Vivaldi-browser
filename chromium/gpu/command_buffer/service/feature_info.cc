@@ -137,7 +137,8 @@ FeatureInfo::FeatureFlags::FeatureFlags()
       ext_multisample_compatibility(false),
       ext_blend_func_extended(false),
       ext_read_format_bgra(false),
-      desktop_srgb_support(false) {}
+      desktop_srgb_support(false),
+      arb_es3_compatibility(false) {}
 
 FeatureInfo::FeatureInfo() {
   InitializeBasicState(base::CommandLine::InitializedForCurrentProcess()
@@ -208,6 +209,10 @@ bool FeatureInfo::InitializeForTesting(
 
 bool FeatureInfo::InitializeForTesting() {
   return Initialize(CONTEXT_TYPE_OPENGLES2, DisallowedFeatures());
+}
+
+bool FeatureInfo::InitializeForTesting(ContextType context_type) {
+  return Initialize(context_type, DisallowedFeatures());
 }
 
 bool IsGL_REDSupportedOnFBOs() {
@@ -515,6 +520,7 @@ void FeatureInfo::InitializeFeatures() {
       // is ES2 where GL_DEPTH_STENCIL_ATTACHMENT isn't accepted, it is still
       // OK.
       validators_.attachment.AddValue(GL_DEPTH_STENCIL_ATTACHMENT);
+      validators_.attachment_query.AddValue(GL_DEPTH_STENCIL_ATTACHMENT);
     }
   }
 
@@ -556,15 +562,14 @@ void FeatureInfo::InitializeFeatures() {
          extensions.Contains("GL_OES_rgb8_rgba8")) &&
         extensions.Contains("GL_EXT_sRGB")) ||
        feature_flags_.desktop_srgb_support) &&
-      (context_type_ == CONTEXT_TYPE_WEBGL1 ||
-       context_type_ == CONTEXT_TYPE_OPENGLES2)) {
+       IsWebGL1OrES2Context()) {
     AddExtensionString("GL_EXT_sRGB");
     validators_.texture_internal_format.AddValue(GL_SRGB_EXT);
     validators_.texture_internal_format.AddValue(GL_SRGB_ALPHA_EXT);
     validators_.texture_format.AddValue(GL_SRGB_EXT);
     validators_.texture_format.AddValue(GL_SRGB_ALPHA_EXT);
     validators_.render_buffer_format.AddValue(GL_SRGB8_ALPHA8_EXT);
-    validators_.frame_buffer_parameter.AddValue(
+    validators_.framebuffer_parameter.AddValue(
         GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_SRGB_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_SRGB_ALPHA_EXT);
@@ -643,6 +648,12 @@ void FeatureInfo::InitializeFeatures() {
     AddExtensionString("GL_EXT_read_format_bgra");
     validators_.read_pixel_format.AddValue(GL_BGRA_EXT);
   }
+
+  // GL_ARB_ES3_compatibility adds support for some ES3 texture formats that are
+  // not supported in desktop GL
+  feature_flags_.arb_es3_compatibility =
+      extensions.Contains("GL_ARB_ES3_compatibility") &&
+      !gl_version_info_->is_es;
 
   // glGetInteger64v for timestamps is implemented on the client side in a way
   // that it does not depend on a driver-level implementation of
@@ -852,8 +863,8 @@ void FeatureInfo::InitializeFeatures() {
         gl_version_info_->is_es3 || gl_version_info_->is_desktop_core_profile;
     if (ext_has_multisample) {
       feature_flags_.chromium_framebuffer_multisample = true;
-      validators_.frame_buffer_target.AddValue(GL_READ_FRAMEBUFFER_EXT);
-      validators_.frame_buffer_target.AddValue(GL_DRAW_FRAMEBUFFER_EXT);
+      validators_.framebuffer_target.AddValue(GL_READ_FRAMEBUFFER_EXT);
+      validators_.framebuffer_target.AddValue(GL_DRAW_FRAMEBUFFER_EXT);
       validators_.g_l_state.AddValue(GL_READ_FRAMEBUFFER_BINDING_EXT);
       validators_.g_l_state.AddValue(GL_MAX_SAMPLES_EXT);
       validators_.render_buffer_parameter.AddValue(GL_RENDERBUFFER_SAMPLES_EXT);
@@ -861,21 +872,19 @@ void FeatureInfo::InitializeFeatures() {
     }
   }
 
-  if (!workarounds_.disable_multisampled_render_to_texture) {
-    if (extensions.Contains("GL_EXT_multisampled_render_to_texture")) {
-      feature_flags_.multisampled_render_to_texture = true;
-    } else if (extensions.Contains("GL_IMG_multisampled_render_to_texture")) {
-      feature_flags_.multisampled_render_to_texture = true;
-      feature_flags_.use_img_for_multisampled_render_to_texture = true;
-    }
-    if (feature_flags_.multisampled_render_to_texture) {
-      validators_.render_buffer_parameter.AddValue(
-          GL_RENDERBUFFER_SAMPLES_EXT);
-      validators_.g_l_state.AddValue(GL_MAX_SAMPLES_EXT);
-      validators_.frame_buffer_parameter.AddValue(
-          GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT);
-      AddExtensionString("GL_EXT_multisampled_render_to_texture");
-    }
+  if (extensions.Contains("GL_EXT_multisampled_render_to_texture")) {
+    feature_flags_.multisampled_render_to_texture = true;
+  } else if (extensions.Contains("GL_IMG_multisampled_render_to_texture")) {
+    feature_flags_.multisampled_render_to_texture = true;
+    feature_flags_.use_img_for_multisampled_render_to_texture = true;
+  }
+  if (feature_flags_.multisampled_render_to_texture) {
+    validators_.render_buffer_parameter.AddValue(
+        GL_RENDERBUFFER_SAMPLES_EXT);
+    validators_.g_l_state.AddValue(GL_MAX_SAMPLES_EXT);
+    validators_.framebuffer_parameter.AddValue(
+        GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_SAMPLES_EXT);
+    AddExtensionString("GL_EXT_multisampled_render_to_texture");
   }
 
   if (!gl_version_info_->is_es ||
@@ -1044,6 +1053,9 @@ void FeatureInfo::InitializeFeatures() {
     }
   }
 
+  bool have_occlusion_query =
+      gl_version_info_->IsAtLeastGLES(3, 0) ||
+      gl_version_info_->IsAtLeastGL(3, 3);
   bool have_ext_occlusion_query_boolean =
       extensions.Contains("GL_EXT_occlusion_query_boolean");
   bool have_arb_occlusion_query2 =
@@ -1051,13 +1063,18 @@ void FeatureInfo::InitializeFeatures() {
   bool have_arb_occlusion_query =
       extensions.Contains("GL_ARB_occlusion_query");
 
-  if (have_ext_occlusion_query_boolean ||
+  if (have_occlusion_query ||
+      have_ext_occlusion_query_boolean ||
       have_arb_occlusion_query2 ||
       have_arb_occlusion_query) {
-    AddExtensionString("GL_EXT_occlusion_query_boolean");
+    if (context_type_ == CONTEXT_TYPE_OPENGLES2) {
+      AddExtensionString("GL_EXT_occlusion_query_boolean");
+    }
     feature_flags_.occlusion_query_boolean = true;
     feature_flags_.use_arb_occlusion_query2_for_occlusion_query_boolean =
-        !have_ext_occlusion_query_boolean && have_arb_occlusion_query2;
+        !have_ext_occlusion_query_boolean && (have_arb_occlusion_query2 ||
+        (gl_version_info_->IsAtLeastGL(3, 3) &&
+         gl_version_info_->IsLowerThanGL(4, 3)));
     feature_flags_.use_arb_occlusion_query_for_occlusion_query_boolean =
         !have_ext_occlusion_query_boolean && have_arb_occlusion_query &&
         !have_arb_occlusion_query2;
@@ -1101,6 +1118,7 @@ void FeatureInfo::InitializeFeatures() {
          i < static_cast<GLenum>(GL_COLOR_ATTACHMENT0 + max_color_attachments);
          ++i) {
       validators_.attachment.AddValue(i);
+      validators_.attachment_query.AddValue(i);
     }
     static_assert(GL_COLOR_ATTACHMENT0_EXT == GL_COLOR_ATTACHMENT0,
                   "GL_COLOR_ATTACHMENT0_EXT should equal GL_COLOR_ATTACHMENT0");
@@ -1268,6 +1286,7 @@ void FeatureInfo::InitializeFeatures() {
       (gl_version_info_->IsAtLeastGL(3, 2) &&
        extensions.Contains("GL_ARB_blend_func_extended"));
   if (!disable_shader_translator_ &&
+      !workarounds_.get_frag_data_info_bug &&
       ((gl_version_info_->IsAtLeastGL(3, 2) &&
         has_opengl_dual_source_blending) ||
        (gl_version_info_->IsAtLeastGLES(3, 0) &&
@@ -1350,6 +1369,9 @@ void FeatureInfo::EnableES3Validators() {
     validators_.attachment.RemoveValues(
         kColorAttachments + max_color_attachments,
         kTotalColorAttachmentEnums - max_color_attachments);
+    validators_.attachment_query.RemoveValues(
+        kColorAttachments + max_color_attachments,
+        kTotalColorAttachmentEnums - max_color_attachments);
     validators_.read_buffer.RemoveValues(
         kColorAttachments + max_color_attachments,
         kTotalColorAttachmentEnums - max_color_attachments);
@@ -1393,6 +1415,36 @@ bool FeatureInfo::IsWebGLContext() const {
       return true;
     case CONTEXT_TYPE_OPENGLES2:
     case CONTEXT_TYPE_OPENGLES3:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+bool FeatureInfo::IsWebGL1OrES2Context() const {
+  // Switch statement to cause a compile-time error if we miss a case.
+  switch (context_type_) {
+    case CONTEXT_TYPE_WEBGL1:
+    case CONTEXT_TYPE_OPENGLES2:
+      return true;
+    case CONTEXT_TYPE_WEBGL2:
+    case CONTEXT_TYPE_OPENGLES3:
+      return false;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+bool FeatureInfo::IsWebGL2OrES3Context() const {
+  // Switch statement to cause a compile-time error if we miss a case.
+  switch (context_type_) {
+    case CONTEXT_TYPE_WEBGL2:
+    case CONTEXT_TYPE_OPENGLES3:
+      return true;
+    case CONTEXT_TYPE_WEBGL1:
+    case CONTEXT_TYPE_OPENGLES2:
       return false;
   }
 

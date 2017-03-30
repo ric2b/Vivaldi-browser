@@ -2,7 +2,9 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/WebKit/Source/build/scripts/scripts.gni")
 import("//third_party/WebKit/Source/config.gni")
@@ -194,14 +196,40 @@ action("inspector_protocol_sources") {
     ":inspector_protocol_version",
   ]
   sources = [
+    "inspector_protocol/Allocator_h.template",
+    "inspector_protocol/Array_h.template",
+    "inspector_protocol/BackendCallback_h.template",
     "inspector_protocol/CodeGenerator.py",
+    "inspector_protocol/Collections_h.template",
+    "inspector_protocol/DispatcherBase_cpp.template",
+    "inspector_protocol/DispatcherBase_h.template",
+    "inspector_protocol/ErrorSupport_cpp.template",
+    "inspector_protocol/ErrorSupport_h.template",
+    "inspector_protocol/Exported_h.template",
+    "inspector_protocol/FrontendChannel_h.template",
+    "inspector_protocol/Imported_h.template",
+    "inspector_protocol/InspectorProtocol_cpp.template",
+    "inspector_protocol/Maybe_h.template",
+    "inspector_protocol/Object_cpp.template",
+    "inspector_protocol/Object_h.template",
+    "inspector_protocol/Parser_cpp.template",
+    "inspector_protocol/Parser_h.template",
+    "inspector_protocol/Platform_h.template",
+    "inspector_protocol/String16_cpp.template",
+    "inspector_protocol/String16_h.template",
     "inspector_protocol/TypeBuilder_cpp.template",
     "inspector_protocol/TypeBuilder_h.template",
+    "inspector_protocol/ValueConversions_h.template",
+    "inspector_protocol/Values_cpp.template",
+    "inspector_protocol/Values_h.template",
   ]
   inputs = [
     "v8_inspector/js_protocol.json",
+    "v8_inspector/inspector_protocol_config.json",
   ]
   outputs = [
+    "$blink_platform_output_dir/inspector_protocol/InspectorProtocol.cpp",
+    "$blink_platform_output_dir/inspector_protocol/InspectorProtocol.h",
     "$blink_platform_output_dir/v8_inspector/protocol/Console.cpp",
     "$blink_platform_output_dir/v8_inspector/protocol/Console.h",
     "$blink_platform_output_dir/v8_inspector/protocol/Debugger.cpp",
@@ -212,20 +240,18 @@ action("inspector_protocol_sources") {
     "$blink_platform_output_dir/v8_inspector/protocol/Profiler.h",
     "$blink_platform_output_dir/v8_inspector/protocol/Runtime.cpp",
     "$blink_platform_output_dir/v8_inspector/protocol/Runtime.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Schema.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Schema.h",
+    "$blink_platform_output_dir/v8_inspector/public/protocol/Debugger.h",
+    "$blink_platform_output_dir/v8_inspector/public/protocol/Runtime.h",
+    "$blink_platform_output_dir/v8_inspector/public/protocol/Schema.h",
   ]
 
   args = [
-    "--protocol",
-    rebase_path("v8_inspector/js_protocol.json", root_build_dir),
-    "--string_type",
-    "String16",
-    "--export_macro",
-    "PLATFORM_EXPORT",
-    "--output_dir",
-    rebase_path(blink_platform_output_dir + "/v8_inspector/protocol",
-                root_build_dir),
-    "--output_package",
-    "platform/v8_inspector/protocol",
+    "--output_base",
+    rebase_path(blink_platform_output_dir, root_build_dir),
+    "--config",
+    rebase_path("v8_inspector/inspector_protocol_config.json", root_build_dir),
   ]
 }
 
@@ -352,6 +378,7 @@ component("platform") {
     "//skia",
     "//third_party:jpeg",
     "//third_party/WebKit/Source/wtf",
+    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/iccjpeg",
     "//third_party/libpng",
     "//third_party/libwebp",
@@ -366,7 +393,7 @@ component("platform") {
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:wtf_support",
     "//third_party/WebKit/Source/platform/heap",
-    "//third_party/WebKit/public:mojo_bindings_blink",
+    "//third_party/ced",
     "//third_party/harfbuzz-ng",
     "//third_party/icu",
     "//ui/gfx",
@@ -436,6 +463,14 @@ component("platform") {
     sources -= [ "scroll/ScrollbarThemeAndroid.cpp" ]
   }
 
+  if (use_minikin_hyphenation) {
+    sources += [
+      "text/hyphenation/HyphenationMinikin.cpp",
+      "text/hyphenation/HyphenatorAOSP.cpp",
+      "text/hyphenation/HyphenatorAOSP.h",
+    ]
+  }
+
   if (!use_default_render_theme) {
     sources -= [
       "scroll/ScrollbarThemeAura.cpp",
@@ -466,7 +501,7 @@ component("platform") {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   sources = platform_test_support_files
   visibility += [ "//third_party/WebKit/*" ]
   testonly = true
@@ -592,6 +627,31 @@ test("blink_platform_unittests") {
   include_dirs = [ "$root_gen_dir/blink" ]
 }
 
+test("blink_platform_perftests") {
+  sources = [
+    "scheduler/base/task_queue_manager_delegate_for_test.cc",
+    "scheduler/base/task_queue_manager_delegate_for_test.h",
+    "scheduler/base/task_queue_manager_perftest.cc",
+  ]
+
+  configs += [
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/WebKit/Source/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
+
+  deps = [
+    ":blink_common",
+    ":platform",
+    "//base",
+    "//base/test:test_support",
+    "//base/test:test_support_perf",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+}
+
 group("blink_platform_unittests_data") {
   data = [
     "testing/data/",
@@ -630,4 +690,22 @@ if (current_cpu == "x86" || current_cpu == "x64") {
       ":blink_common",
     ]
   }
+}
+
+# Fuzzer for blink::MHTMLParser.
+fuzzer_test("mhtml_parser_fuzzer") {
+  sources = [
+    "mhtml/MHTMLFuzzer.cpp",
+  ]
+  deps = [
+    ":blink_common",
+    ":platform",
+    ":test_support",
+  ]
+  dict = "//testing/libfuzzer/fuzzers/dicts/mhtml.dict"
+  seed_corpus = "//third_party/WebKit/LayoutTests/mhtml"
+  additional_configs = [
+    "//third_party/WebKit/Source/wtf:wtf_config",
+    "//third_party/WebKit/Source:config",
+  ]
 }

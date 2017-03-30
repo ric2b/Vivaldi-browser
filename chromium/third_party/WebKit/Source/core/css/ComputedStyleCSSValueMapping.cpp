@@ -441,25 +441,15 @@ static CSSValue* valueForReflection(const StyleReflection* reflection, const Com
     return CSSReflectValue::create(direction, offset, valueForNinePieceImage(reflection->mask(), style));
 }
 
-static ItemPosition resolveAlignmentAuto(ItemPosition position, const ComputedStyle* style)
-{
-    if (position != ItemPositionAuto)
-        return position;
-
-    if (!RuntimeEnabledFeatures::cssGridLayoutEnabled())
-        return ItemPositionStretch;
-
-    return isFlexOrGrid(style) ? ItemPositionStretch : ItemPositionStart;
-}
-
-static CSSValueList* valueForItemPositionWithOverflowAlignment(ItemPosition itemPosition, OverflowAlignment overflowAlignment, ItemPositionType positionType)
+static CSSValueList* valueForItemPositionWithOverflowAlignment(const StyleSelfAlignmentData& data)
 {
     CSSValueList* result = CSSValueList::createSpaceSeparated();
-    if (positionType == LegacyPosition)
+    if (data.positionType() == LegacyPosition)
         result->append(*CSSPrimitiveValue::createIdentifier(CSSValueLegacy));
-    result->append(*CSSPrimitiveValue::create(itemPosition));
-    if (itemPosition >= ItemPositionCenter && overflowAlignment != OverflowAlignmentDefault)
-        result->append(*CSSPrimitiveValue::create(overflowAlignment));
+    // To avoid needing to copy the RareNonInheritedData, we repurpose the 'auto' flag to not just mean 'auto' prior to running the StyleAdjuster but also mean 'normal' after running it.
+    result->append(*CSSPrimitiveValue::create(data.position() == ItemPositionAuto ? ComputedStyle::initialDefaultAlignment().position() : data.position()));
+    if (data.position() >= ItemPositionCenter && data.overflow() != OverflowAlignmentDefault)
+        result->append(*CSSPrimitiveValue::create(data.overflow()));
     ASSERT(result->length() <= 2);
     return result;
 }
@@ -566,13 +556,17 @@ static CSSValueList* valuesForBackgroundShorthand(const ComputedStyle& style, co
     return ret;
 }
 
-static CSSValueList* valueForContentPositionAndDistributionWithOverflowAlignment(const StyleContentAlignmentData& data)
+static CSSValueList* valueForContentPositionAndDistributionWithOverflowAlignment(const StyleContentAlignmentData& data, CSSValueID normalBehaviorValueID)
 {
     CSSValueList* result = CSSValueList::createSpaceSeparated();
     if (data.distribution() != ContentDistributionDefault)
         result->append(*CSSPrimitiveValue::create(data.distribution()));
-    if (data.distribution() == ContentDistributionDefault || data.position() != ContentPositionNormal)
-        result->append(*CSSPrimitiveValue::create(data.position()));
+    if (data.distribution() == ContentDistributionDefault || data.position() != ContentPositionNormal) {
+        if (!RuntimeEnabledFeatures::cssGridLayoutEnabled() && data.position() == ContentPositionNormal)
+            result->append(*CSSPrimitiveValue::createIdentifier(normalBehaviorValueID));
+        else
+            result->append(*CSSPrimitiveValue::create(data.position()));
+    }
     if ((data.position() >= ContentPositionCenter || data.distribution() != ContentDistributionDefault) && data.overflow() != OverflowAlignmentDefault)
         result->append(*CSSPrimitiveValue::create(data.overflow()));
     ASSERT(result->length() > 0);
@@ -744,11 +738,12 @@ class OrderedNamedLinesCollector {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(OrderedNamedLinesCollector);
 public:
-    OrderedNamedLinesCollector(const ComputedStyle& style, bool isRowAxis, size_t repetitions)
+    OrderedNamedLinesCollector(const ComputedStyle& style, bool isRowAxis, size_t autoRepeatTracksCount)
         : m_orderedNamedGridLines(isRowAxis ? style.orderedNamedGridColumnLines() : style.orderedNamedGridRowLines())
         , m_orderedNamedAutoRepeatGridLines(isRowAxis ? style.autoRepeatOrderedNamedGridColumnLines() : style.autoRepeatOrderedNamedGridRowLines())
         , m_insertionPoint(isRowAxis ? style.gridAutoRepeatColumnsInsertionPoint() : style.gridAutoRepeatRowsInsertionPoint())
-        , m_repetitions(repetitions)
+        , m_autoRepeatTotalTracks(autoRepeatTracksCount)
+        , m_autoRepeatTrackListLength(isRowAxis ? style.gridAutoRepeatColumns().size() : style.gridAutoRepeatRows().size())
     {
     }
 
@@ -763,7 +758,8 @@ private:
     const OrderedNamedGridLines& m_orderedNamedGridLines;
     const OrderedNamedGridLines& m_orderedNamedAutoRepeatGridLines;
     size_t m_insertionPoint;
-    size_t m_repetitions;
+    size_t m_autoRepeatTotalTracks;
+    size_t m_autoRepeatTrackListLength;
 };
 
 void OrderedNamedLinesCollector::appendLines(CSSGridLineNamesValue& lineNamesValue, size_t index, NamedLinesType type) const
@@ -785,9 +781,10 @@ void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue&
         return;
     }
 
-    DCHECK(m_repetitions);
-    if (i > m_insertionPoint + m_repetitions) {
-        appendLines(lineNamesValue, i - (m_repetitions - 1), NamedLines);
+    DCHECK(m_autoRepeatTotalTracks);
+
+    if (i > m_insertionPoint + m_autoRepeatTotalTracks) {
+        appendLines(lineNamesValue, i - (m_autoRepeatTotalTracks - 1), NamedLines);
         return;
     }
 
@@ -797,14 +794,16 @@ void OrderedNamedLinesCollector::collectLineNamesForIndex(CSSGridLineNamesValue&
         return;
     }
 
-    if (i == m_insertionPoint + m_repetitions) {
-        appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
+    if (i == m_insertionPoint + m_autoRepeatTotalTracks) {
+        appendLines(lineNamesValue, m_autoRepeatTrackListLength, AutoRepeatNamedLines);
         appendLines(lineNamesValue, m_insertionPoint + 1, NamedLines);
         return;
     }
 
-    appendLines(lineNamesValue, 1, AutoRepeatNamedLines);
-    appendLines(lineNamesValue, 0, AutoRepeatNamedLines);
+    size_t autoRepeatIndexInFirstRepetition = (i - m_insertionPoint) % m_autoRepeatTrackListLength;
+    if (!autoRepeatIndexInFirstRepetition && i > m_insertionPoint)
+        appendLines(lineNamesValue, m_autoRepeatTrackListLength, AutoRepeatNamedLines);
+    appendLines(lineNamesValue, autoRepeatIndexInFirstRepetition, AutoRepeatNamedLines);
 }
 
 static void addValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collector, size_t i, CSSValueList& list)
@@ -816,6 +815,16 @@ static void addValuesForNamedGridLinesAtIndex(OrderedNamedLinesCollector& collec
     collector.collectLineNamesForIndex(*lineNames, i);
     if (lineNames->length())
         list.append(*lineNames);
+}
+
+static CSSValue* valueForGridTrackSizeList(GridTrackSizingDirection direction, const ComputedStyle& style)
+{
+    const Vector<GridTrackSize>& autoTrackSizes = direction == ForColumns ? style.gridAutoColumns() : style.gridAutoRows();
+
+    CSSValueList* list = CSSValueList::createSpaceSeparated();
+    for (auto& trackSize : autoTrackSizes)
+        list->append(*specifiedValueForGridTrackSize(trackSize, style));
+    return list;
 }
 
 static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const LayoutObject* layoutObject, const ComputedStyle& style)
@@ -837,28 +846,22 @@ static CSSValue* valueForGridTrackList(GridTrackSizingDirection direction, const
     if (trackListIsEmpty)
         return CSSPrimitiveValue::createIdentifier(CSSValueNone);
 
-    size_t repetitions = isLayoutGrid ? toLayoutGrid(layoutObject)->autoRepeatCountForDirection(direction) : 0;
-    OrderedNamedLinesCollector collector(style, isRowAxis, repetitions);
+    size_t autoRepeatTotalTracks = isLayoutGrid ? toLayoutGrid(layoutObject)->autoRepeatCountForDirection(direction) : 0;
+    OrderedNamedLinesCollector collector(style, isRowAxis, autoRepeatTotalTracks);
     CSSValueList* list = CSSValueList::createSpaceSeparated();
     size_t insertionIndex;
     if (isLayoutGrid) {
         const auto* grid = toLayoutGrid(layoutObject);
-        const Vector<LayoutUnit>& trackPositions = direction == ForColumns ? grid->columnPositions() : grid->rowPositions();
-        // There are at least #tracks + 1 grid lines (trackPositions). Apart from that, the grid container can generate implicit grid tracks,
-        // so we'll have more trackPositions than trackSizes as the latter only contain the explicit grid.
-        ASSERT(trackPositions.size() - 1 >= trackSizes.size());
+        Vector<LayoutUnit> computedTrackSizes = grid->trackSizesForComputedStyle(direction);
+        size_t numTracks = computedTrackSizes.size();
 
-        size_t i;
-        LayoutUnit gutterSize = grid->guttersSize(direction, 2);
-        LayoutUnit offsetBetweenTracks = grid->offsetBetweenTracks(direction);
-        for (i = 0; i < trackPositions.size() - 2; ++i) {
+        for (size_t i = 0; i < numTracks; ++i) {
             addValuesForNamedGridLinesAtIndex(collector, i, *list);
-            list->append(*zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i] - gutterSize - offsetBetweenTracks, style));
+            list->append(*zoomAdjustedPixelValue(computedTrackSizes[i], style));
         }
-        // Last track line does not have any gutter or distribution offset.
-        addValuesForNamedGridLinesAtIndex(collector, i, *list);
-        list->append(*zoomAdjustedPixelValue(trackPositions[i + 1] - trackPositions[i], style));
-        insertionIndex = trackPositions.size() - 1;
+        addValuesForNamedGridLinesAtIndex(collector, numTracks + 1, *list);
+
+        insertionIndex = numTracks;
     } else {
         for (size_t i = 0; i < trackSizes.size(); ++i) {
             addValuesForNamedGridLinesAtIndex(collector, i, *list);
@@ -993,13 +996,13 @@ static CSSValue* valueForAnimationDelay(const CSSTimingData* timingData)
 static CSSValue* valueForAnimationDirection(Timing::PlaybackDirection direction)
 {
     switch (direction) {
-    case Timing::PlaybackDirectionNormal:
+    case Timing::PlaybackDirection::NORMAL:
         return CSSPrimitiveValue::createIdentifier(CSSValueNormal);
-    case Timing::PlaybackDirectionAlternate:
+    case Timing::PlaybackDirection::ALTERNATE_NORMAL:
         return CSSPrimitiveValue::createIdentifier(CSSValueAlternate);
-    case Timing::PlaybackDirectionReverse:
+    case Timing::PlaybackDirection::REVERSE:
         return CSSPrimitiveValue::createIdentifier(CSSValueReverse);
-    case Timing::PlaybackDirectionAlternateReverse:
+    case Timing::PlaybackDirection::ALTERNATE_REVERSE:
         return CSSPrimitiveValue::createIdentifier(CSSValueAlternateReverse);
     default:
         ASSERT_NOT_REACHED();
@@ -1022,13 +1025,13 @@ static CSSValue* valueForAnimationDuration(const CSSTimingData* timingData)
 static CSSValue* valueForAnimationFillMode(Timing::FillMode fillMode)
 {
     switch (fillMode) {
-    case Timing::FillModeNone:
+    case Timing::FillMode::NONE:
         return CSSPrimitiveValue::createIdentifier(CSSValueNone);
-    case Timing::FillModeForwards:
+    case Timing::FillMode::FORWARDS:
         return CSSPrimitiveValue::createIdentifier(CSSValueForwards);
-    case Timing::FillModeBackwards:
+    case Timing::FillMode::BACKWARDS:
         return CSSPrimitiveValue::createIdentifier(CSSValueBackwards);
-    case Timing::FillModeBoth:
+    case Timing::FillMode::BOTH:
         return CSSPrimitiveValue::createIdentifier(CSSValueBoth);
     default:
         ASSERT_NOT_REACHED();
@@ -1053,8 +1056,8 @@ static CSSValue* valueForAnimationPlayState(EAnimPlayState playState)
 
 static CSSValue* createTimingFunctionValue(const TimingFunction* timingFunction)
 {
-    switch (timingFunction->type()) {
-    case TimingFunction::kCubicBezierFunction:
+    switch (timingFunction->getType()) {
+    case TimingFunction::Type::CUBIC_BEZIER:
         {
             const CubicBezierTimingFunction* bezierTimingFunction = toCubicBezierTimingFunction(timingFunction);
             if (bezierTimingFunction->getEaseType() != CubicBezierTimingFunction::EaseType::CUSTOM) {
@@ -1081,7 +1084,7 @@ static CSSValue* createTimingFunctionValue(const TimingFunction* timingFunction)
             return CSSCubicBezierTimingFunctionValue::create(bezierTimingFunction->x1(), bezierTimingFunction->y1(), bezierTimingFunction->x2(), bezierTimingFunction->y2());
         }
 
-    case TimingFunction::kStepsFunction:
+    case TimingFunction::Type::STEPS:
         {
             const StepsTimingFunction* stepsTimingFunction = toStepsTimingFunction(timingFunction);
             StepsTimingFunction::StepPosition position = stepsTimingFunction->getStepPosition();
@@ -1881,18 +1884,11 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
     case CSSPropertyEmptyCells:
         return CSSPrimitiveValue::create(style.emptyCells());
     case CSSPropertyAlignContent:
-        return valueForContentPositionAndDistributionWithOverflowAlignment(style.alignContent());
+        return valueForContentPositionAndDistributionWithOverflowAlignment(style.alignContent(), CSSValueStretch);
     case CSSPropertyAlignItems:
-        return valueForItemPositionWithOverflowAlignment(resolveAlignmentAuto(style.alignItemsPosition(), &style), style.alignItemsOverflowAlignment(), NonLegacyPosition);
-    case CSSPropertyAlignSelf: {
-        ItemPosition position = style.alignSelfPosition();
-        if (position == ItemPositionAuto) {
-            // TODO(lajava): This code doesn't work for ShadowDOM (see Node::parentComputedStyle)
-            const ComputedStyle* parentStyle = styledNode->parentNode() ? styledNode->parentNode()->ensureComputedStyle() : nullptr;
-            position = parentStyle ? ComputedStyle::resolveAlignment(*parentStyle, style, resolveAlignmentAuto(parentStyle->alignItemsPosition(), parentStyle)) : ItemPositionStart;
-        }
-        return valueForItemPositionWithOverflowAlignment(position, style.alignSelfOverflowAlignment(), NonLegacyPosition);
-    }
+        return valueForItemPositionWithOverflowAlignment(style.alignItems());
+    case CSSPropertyAlignSelf:
+        return valueForItemPositionWithOverflowAlignment(style.alignSelf());
     case CSSPropertyFlex:
         return valuesForShorthandProperty(flexShorthand(), style, layoutObject, styledNode, allowVisitedStyle);
     case CSSPropertyFlexBasis:
@@ -1908,7 +1904,7 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
     case CSSPropertyFlexWrap:
         return CSSPrimitiveValue::create(style.flexWrap());
     case CSSPropertyJustifyContent:
-        return valueForContentPositionAndDistributionWithOverflowAlignment(style.justifyContent());
+        return valueForContentPositionAndDistributionWithOverflowAlignment(style.justifyContent(), CSSValueFlexStart);
     case CSSPropertyOrder:
         return CSSPrimitiveValue::create(style.order(), CSSPrimitiveValue::UnitType::Number);
     case CSSPropertyFloat:
@@ -1973,14 +1969,14 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
         return list;
     }
     // Specs mention that getComputedStyle() should return the used value of the property instead of the computed
-    // one for grid-definition-{rows|columns} but not for the grid-auto-{rows|columns} as things like
+    // one for grid-template-{rows|columns} but not for the grid-auto-{rows|columns} as things like
     // grid-auto-columns: 2fr; cannot be resolved to a value in pixels as the '2fr' means very different things
     // depending on the size of the explicit grid or the number of implicit tracks added to the grid. See
     // http://lists.w3.org/Archives/Public/www-style/2013Nov/0014.html
     case CSSPropertyGridAutoColumns:
-        return specifiedValueForGridTrackSize(style.gridAutoColumns(), style);
+        return valueForGridTrackSizeList(ForColumns, style);
     case CSSPropertyGridAutoRows:
-        return specifiedValueForGridTrackSize(style.gridAutoRows(), style);
+        return valueForGridTrackSizeList(ForRows, style);
 
     case CSSPropertyGridTemplateColumns:
         return valueForGridTrackList(ForColumns, layoutObject, style);
@@ -2047,11 +2043,9 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
     case CSSPropertyIsolation:
         return CSSPrimitiveValue::create(style.isolation());
     case CSSPropertyJustifyItems:
-        return valueForItemPositionWithOverflowAlignment(resolveAlignmentAuto(style.justifyItemsPosition(), &style), style.justifyItemsOverflowAlignment(), style.justifyItemsPositionType());
-    case CSSPropertyJustifySelf: {
-        Node* parent = styledNode->parentNode();
-        return valueForItemPositionWithOverflowAlignment(resolveAlignmentAuto(style.justifySelfPosition(), parent ? parent->ensureComputedStyle() : nullptr), style.justifySelfOverflowAlignment(), NonLegacyPosition);
-    }
+        return valueForItemPositionWithOverflowAlignment(style.justifyItems());
+    case CSSPropertyJustifySelf:
+        return valueForItemPositionWithOverflowAlignment(style.justifySelf());
     case CSSPropertyLeft:
         return valueForPositionOffset(style, CSSPropertyLeft, layoutObject);
     case CSSPropertyLetterSpacing:
@@ -2162,6 +2156,8 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
         return zoomAdjustedPixelValue(style.outlineWidth(), style);
     case CSSPropertyOverflow:
         return CSSPrimitiveValue::create(max(style.overflowX(), style.overflowY()));
+    case CSSPropertyOverflowAnchor:
+        return CSSPrimitiveValue::create(style.overflowAnchor());
     case CSSPropertyOverflowWrap:
         return CSSPrimitiveValue::create(style.overflowWrap());
     case CSSPropertyOverflowX:
@@ -2536,7 +2532,7 @@ const CSSValue* ComputedStyleCSSValueMapping::get(CSSPropertyID propertyID, cons
         return currentColorOrValidColor(style, style.tapHighlightColor());
     case CSSPropertyWebkitUserDrag:
         return CSSPrimitiveValue::create(style.userDrag());
-    case CSSPropertyWebkitUserSelect:
+    case CSSPropertyUserSelect:
         return CSSPrimitiveValue::create(style.userSelect());
     case CSSPropertyBorderBottomLeftRadius:
         return &valueForBorderRadiusCorner(style.borderBottomLeftRadius(), style);

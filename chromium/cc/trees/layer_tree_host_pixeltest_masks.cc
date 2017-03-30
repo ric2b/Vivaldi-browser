@@ -60,8 +60,8 @@ class MaskContentLayerClient : public ContentLayerClient {
     }
 
     scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        DisplayItemList::Create(DisplayItemListSettings());
+    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();
@@ -360,8 +360,8 @@ class CheckerContentLayerClient : public ContentLayerClient {
     }
 
     scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        DisplayItemList::Create(DisplayItemListSettings());
+    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();
@@ -398,8 +398,8 @@ class CircleContentLayerClient : public ContentLayerClient {
                        paint);
 
     scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(PaintableRegion(), DisplayItemListSettings());
-    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+        DisplayItemList::Create(DisplayItemListSettings());
+    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
 
     display_list->Finalize();

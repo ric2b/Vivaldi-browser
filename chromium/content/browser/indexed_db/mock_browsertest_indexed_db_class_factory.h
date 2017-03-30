@@ -18,6 +18,7 @@
 
 namespace content {
 
+class IndexedDBConnection;
 class LevelDBTransaction;
 class LevelDBDatabase;
 
@@ -40,20 +41,20 @@ class MockBrowserTestIndexedDBClassFactory : public IndexedDBClassFactory {
   MockBrowserTestIndexedDBClassFactory();
   ~MockBrowserTestIndexedDBClassFactory() override;
 
-  IndexedDBDatabase* CreateIndexedDBDatabase(
+  scoped_refptr<IndexedDBDatabase> CreateIndexedDBDatabase(
       const base::string16& name,
       IndexedDBBackingStore* backing_store,
       IndexedDBFactory* factory,
       const IndexedDBDatabase::Identifier& unique_identifier) override;
   IndexedDBTransaction* CreateIndexedDBTransaction(
       int64_t id,
-      scoped_refptr<IndexedDBDatabaseCallbacks> callbacks,
+      base::WeakPtr<IndexedDBConnection> connection,
       const std::set<int64_t>& scope,
       blink::WebIDBTransactionMode mode,
-      IndexedDBDatabase* db,
       IndexedDBBackingStore::Transaction* backing_store_transaction) override;
-  LevelDBTransaction* CreateLevelDBTransaction(LevelDBDatabase* db) override;
-  LevelDBIteratorImpl* CreateIteratorImpl(
+  scoped_refptr<LevelDBTransaction> CreateLevelDBTransaction(
+      LevelDBDatabase* db) override;
+  std::unique_ptr<LevelDBIteratorImpl> CreateIteratorImpl(
       std::unique_ptr<leveldb::Iterator> iterator) override;
 
   void FailOperation(FailClass failure_class,

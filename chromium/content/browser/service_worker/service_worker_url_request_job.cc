@@ -250,7 +250,19 @@ ServiceWorkerURLRequestJob::~ServiceWorkerURLRequestJob() {
 
 void ServiceWorkerURLRequestJob::FallbackToNetwork() {
   DCHECK_EQ(NOT_DETERMINED, response_type_);
+  DCHECK(!IsFallbackToRendererNeeded());
   response_type_ = FALLBACK_TO_NETWORK;
+  MaybeStartRequest();
+}
+
+void ServiceWorkerURLRequestJob::FallbackToNetworkOrRenderer() {
+  DCHECK_EQ(NOT_DETERMINED, response_type_);
+  DCHECK_NE(ServiceWorkerFetchType::FOREIGN_FETCH, fetch_type_);
+  if (IsFallbackToRendererNeeded()) {
+    response_type_ = FALLBACK_TO_RENDERER;
+  } else {
+    response_type_ = FALLBACK_TO_NETWORK;
+  }
   MaybeStartRequest();
 }
 
@@ -393,11 +405,6 @@ void ServiceWorkerURLRequestJob::OnSSLCertificateError(
   NOTREACHED();
 }
 
-void ServiceWorkerURLRequestJob::OnBeforeNetworkStart(net::URLRequest* request,
-                                                      bool* defer) {
-  NOTREACHED();
-}
-
 void ServiceWorkerURLRequestJob::OnResponseStarted(net::URLRequest* request) {
   // TODO(falken): Add Content-Length, Content-Type if they were not provided in
   // the ServiceWorkerResponse.
@@ -499,10 +506,11 @@ void ServiceWorkerURLRequestJob::StartRequest() {
       return;
 
     case FALLBACK_TO_NETWORK:
-      // Restart the request to create a new job. Our request handler will
-      // return nullptr, and the default job (which will hit network) should be
-      // created.
-      NotifyRestartRequired();
+      FinalizeFallbackToNetwork();
+      return;
+
+    case FALLBACK_TO_RENDERER:
+      FinalizeFallbackToRenderer();
       return;
 
     case FORWARD_TO_SERVICE_WORKER:
@@ -664,7 +672,7 @@ void ServiceWorkerURLRequestJob::DidPrepareFetchEvent(
       initial_worker_status_ != EmbeddedWorkerStatus::RUNNING) {
     return;
   }
-  if (ServiceWorkerMetrics::ShouldExcludeURLFromHistogram(request()->url()))
+  if (version->should_exclude_from_uma())
     return;
   ServiceWorkerMetrics::RecordActivatedWorkerPreparationTimeForMainFrame(
       worker_ready_time_ - request()->creation_time(), initial_worker_status_,
@@ -698,8 +706,7 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     if (IsMainResourceLoad()) {
       // Using the service worker failed, so fallback to network.
       delegate_->MainResourceLoadFailed();
-      response_type_ = FALLBACK_TO_NETWORK;
-      NotifyRestartRequired();
+      FinalizeFallbackToNetwork();
     } else {
       DeliverErrorResponse();
     }
@@ -708,30 +715,11 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
 
   if (fetch_result == SERVICE_WORKER_FETCH_EVENT_RESULT_FALLBACK) {
     ServiceWorkerMetrics::RecordFallbackedRequestMode(request_mode_);
-    // When the request_mode is |CORS| or |CORS-with-forced-preflight| and the
-    // origin of the request URL is different from the security origin of the
-    // document, we can't simply fallback to the network in the browser process.
-    // It is because the CORS preflight logic is implemented in the renderer. So
-    // we returns a fall_back_required response to the renderer.
-    if ((request_mode_ == FETCH_REQUEST_MODE_CORS ||
-         request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
-        !request()->initiator().IsSameOriginWith(
-            url::Origin(request()->url()))) {
-      // TODO(mek): http://crbug.com/604084 Figure out what to do about CORS
-      // preflight and fallbacks for foreign fetch events.
-      fall_back_required_ =
-          fetch_type_ != ServiceWorkerFetchType::FOREIGN_FETCH;
-      RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_FOR_CORS);
-      CreateResponseHeader(
-          400, "Service Worker Fallback Required", ServiceWorkerHeaderMap());
-      CommitResponseHeader();
-      return;
+    if (IsFallbackToRendererNeeded()) {
+      FinalizeFallbackToRenderer();
+    } else {
+      FinalizeFallbackToNetwork();
     }
-    // Change the response type and restart the request to fallback to
-    // the network.
-    RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_RESPONSE);
-    response_type_ = FALLBACK_TO_NETWORK;
-    NotifyRestartRequired();
     return;
   }
 
@@ -866,6 +854,49 @@ void ServiceWorkerURLRequestJob::DeliverErrorResponse() {
   CommitResponseHeader();
 }
 
+void ServiceWorkerURLRequestJob::FinalizeFallbackToNetwork() {
+  // Restart this request to create a new job. The default job (which will hit
+  // network) will be created in the next time because our request handler will
+  // return nullptr after restarting and this means our interceptor does not
+  // intercept.
+  if (ShouldRecordResult())
+    RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_RESPONSE);
+  response_type_ = FALLBACK_TO_NETWORK;
+  NotifyRestartRequired();
+  return;
+}
+
+void ServiceWorkerURLRequestJob::FinalizeFallbackToRenderer() {
+  // TODO(mek): http://crbug.com/604084 Figure out what to do about CORS
+  // preflight and fallbacks for foreign fetch events.
+  DCHECK_NE(fetch_type_, ServiceWorkerFetchType::FOREIGN_FETCH);
+  fall_back_required_ = true;
+  if (ShouldRecordResult())
+    RecordResult(ServiceWorkerMetrics::REQUEST_JOB_FALLBACK_FOR_CORS);
+  CreateResponseHeader(400, "Service Worker Fallback Required",
+                       ServiceWorkerHeaderMap());
+  response_type_ = FALLBACK_TO_RENDERER;
+  CommitResponseHeader();
+}
+
+bool ServiceWorkerURLRequestJob::IsFallbackToRendererNeeded() const {
+  // When the request_mode is |CORS| or |CORS-with-forced-preflight| and the
+  // origin of the request URL is different from the security origin of the
+  // document, we can't simply fallback to the network in the browser process.
+  // It is because the CORS preflight logic is implemented in the renderer. So
+  // we return a fall_back_required response to the renderer.
+  // If fetch_type is |FOREIGN_FETCH| any required CORS checks will have already
+  // been done in the renderer (and if a preflight was necesary the request
+  // would never have reached foreign fetch), so such requests can always
+  // fallback to the network directly.
+  return !IsMainResourceLoad() &&
+         fetch_type_ != ServiceWorkerFetchType::FOREIGN_FETCH &&
+         (request_mode_ == FETCH_REQUEST_MODE_CORS ||
+          request_mode_ == FETCH_REQUEST_MODE_CORS_WITH_FORCED_PREFLIGHT) &&
+         !request()->initiator().IsSameOriginWith(
+             url::Origin(request()->url()));
+}
+
 void ServiceWorkerURLRequestJob::SetResponseBodyType(ResponseBodyType type) {
   DCHECK_EQ(response_body_type_, UNKNOWN);
   DCHECK_NE(type, UNKNOWN);
@@ -941,10 +972,12 @@ void ServiceWorkerURLRequestJob::NotifyRestartRequired() {
 }
 
 void ServiceWorkerURLRequestJob::OnStartCompleted() const {
-  if (response_type_ != FORWARD_TO_SERVICE_WORKER) {
+  if (response_type_ != FORWARD_TO_SERVICE_WORKER &&
+      response_type_ != FALLBACK_TO_RENDERER) {
     ServiceWorkerResponseInfo::ForRequest(request_, true)
         ->OnStartCompleted(
             false /* was_fetched_via_service_worker */,
+            false /* was_fetched_via_foreign_fetch */,
             false /* was_fallback_required */,
             GURL() /* original_url_via_service_worker */,
             blink::WebServiceWorkerResponseTypeDefault,
@@ -957,9 +990,10 @@ void ServiceWorkerURLRequestJob::OnStartCompleted() const {
   }
   ServiceWorkerResponseInfo::ForRequest(request_, true)
       ->OnStartCompleted(
-          true /* was_fetched_via_service_worker */, fall_back_required_,
-          response_url_, service_worker_response_type_, worker_start_time_,
-          worker_ready_time_, response_is_in_cache_storage_,
+          true /* was_fetched_via_service_worker */,
+          fetch_type_ == ServiceWorkerFetchType::FOREIGN_FETCH,
+          fall_back_required_, response_url_, service_worker_response_type_,
+          worker_start_time_, worker_ready_time_, response_is_in_cache_storage_,
           response_cache_storage_cache_name_, cors_exposed_header_names_);
 }
 

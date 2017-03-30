@@ -7,11 +7,11 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #import "base/mac/mac_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/app/chrome_command_ids.h"
 #import "chrome/browser/app_controller_mac.h"
 #include "chrome/browser/command_updater.h"
@@ -93,178 +93,6 @@ const SkColor kMaterialDarkVectorIconColor = SK_ColorWHITE;
 
 }  // namespace
 
-// A temporary class that draws hardcoded HTTP graphic icons for Material
-// design. This class will be removed once the Material icons are available
-// in M53.
-@interface LocationBarImageRep : NSCustomImageRep
-@property(assign, nonatomic) gfx::VectorIconId iconId;
-@property(retain, nonatomic) NSColor* fillColor;
-
-+ (NSImage*)imageForId:(gfx::VectorIconId)vectorIconId
-                 color:(SkColor)vectorIconColor;
-
-// NSCustomImageRep delegate method that performs the drawing.
-+ (void)drawLocationBarIcon:(LocationBarImageRep*)imageRep;
-
-@end
-
-@implementation LocationBarImageRep
-
-@synthesize iconId = iconId_;
-@synthesize fillColor = fillColor_;
-
-- (void)dealloc {
-  [fillColor_ release];
-  [super dealloc];
-}
-
-+ (NSImage*)imageForId:(gfx::VectorIconId)vectorIconId
-                 color:(SkColor)vectorIconColor {
-  if (vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTP &&
-      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID &&
-      vectorIconId != gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID) {
-    return NSImageFromImageSkiaWithColorSpace(
-        gfx::CreateVectorIcon(vectorIconId, kDefaultIconSize, vectorIconColor),
-        base::mac::GetSRGBColorSpace());
-  }
-
-  base::scoped_nsobject<LocationBarImageRep> imageRep(
-      [[LocationBarImageRep alloc]
-          initWithDrawSelector:@selector(drawLocationBarIcon:)
-                      delegate:[LocationBarImageRep class]]);
-  [imageRep setIconId:vectorIconId];
-  [imageRep setFillColor:skia::SkColorToSRGBNSColor(vectorIconColor)];
-
-  // Create the image from the image rep.
-  const NSSize kImageSize = NSMakeSize(kDefaultIconSize, kDefaultIconSize);
-  NSImage* locationBarImage =
-      [[[NSImage alloc] initWithSize:kImageSize] autorelease];
-  [locationBarImage setCacheMode:NSImageCacheAlways];
-  [locationBarImage addRepresentation:imageRep];
-
-  return locationBarImage;
-}
-
-+ (void)drawLocationBarIcon:(LocationBarImageRep*)imageRep {
-  [[imageRep fillColor] set];
-
-  // Determine the scale factor.
-  CGContextRef context = static_cast<CGContextRef>(
-      [[NSGraphicsContext currentContext] graphicsPort]);
-  CGRect unitRect = CGRectMake(0.0, 0.0, 1.0, 1.0);
-  CGRect deviceRect = CGContextConvertRectToDeviceSpace(context, unitRect);
-  int scaleFactor = deviceRect.size.height;
-
-  switch ([imageRep iconId]) {
-    case gfx::VectorIconId::LOCATION_BAR_HTTP:
-      [self drawLocationBarIconHTTPForScale:scaleFactor];
-      break;
-    case gfx::VectorIconId::LOCATION_BAR_HTTPS_INVALID:
-      [self drawLocationBarIconHTTPSInvalidForScale:scaleFactor];
-      break;
-    case gfx::VectorIconId::LOCATION_BAR_HTTPS_VALID:
-      [self drawLocationBarIconHTTPSValidForScale:scaleFactor];
-      break;
-    default:
-      // Make it obvious that there's a problem.
-      [[NSColor redColor] set];
-      NSRectFill(NSMakeRect(0, 0, kDefaultIconSize, kDefaultIconSize));
-      break;
-  }
-}
-
-+ (void)drawLocationBarIconHTTPForScale:(int)scaleFactor {
-  if (scaleFactor > 1) {
-    NSRect ovalRect = NSMakeRect(2.25, 1.75, 12, 12);
-    NSBezierPath* circlePath =
-        [NSBezierPath bezierPathWithOvalInRect:ovalRect];
-    [circlePath setLineWidth:1.5];
-    [circlePath stroke];
-
-    NSRectFill(NSMakeRect(7.5, 4.5, 1.5, 4));
-    NSRectFill(NSMakeRect(7.5, 9.5, 1.5, 1.5));
-  } else {
-    NSRect ovalRect = NSMakeRect(2, 2, 12, 12);
-    NSBezierPath* circlePath =
-        [NSBezierPath bezierPathWithOvalInRect:ovalRect];
-    [circlePath setLineWidth:1.5];
-    [circlePath stroke];
-
-    NSRectFill(NSMakeRect(7, 4, 2, 5));
-    NSRectFill(NSMakeRect(7, 10, 2, 2));
-  }
-}
-
-+ (void)drawLocationBarIconHTTPSInvalidForScale:(int)scaleFactor {
-  // The vector icon is upside down relative to the default OS X coordinate
-  // system so rotate by 180 degrees.
-  CGContextRef context = static_cast<CGContextRef>(
-      [[NSGraphicsContext currentContext] graphicsPort]);
-  const int kHalfDefaultIconSize = kDefaultIconSize / 2;
-  CGContextTranslateCTM(context, kHalfDefaultIconSize, kHalfDefaultIconSize);
-  CGContextRotateCTM(context, M_PI);
-  CGContextTranslateCTM(context, -kHalfDefaultIconSize, -kHalfDefaultIconSize);
-
-  // If Retina, nudge the icon up 1/2pt.
-  if (scaleFactor == 2) {
-    CGContextTranslateCTM(context, 0, -0.5);
-  }
-
-  NSBezierPath* trianglePath = [NSBezierPath bezierPath];
-  [trianglePath moveToPoint:NSMakePoint(0.5f, 14)];
-  [trianglePath relativeLineToPoint:NSMakePoint(15, 0)];
-  [trianglePath lineToPoint:NSMakePoint(8, 1)];
-  [trianglePath closePath];
-
-  NSBezierPath* cutOutPath = [NSBezierPath bezierPath];
-  [cutOutPath moveToPoint:NSMakePoint(9, 12)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(-2, 0)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(0, -2)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(2, 0)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(0, 2)];
-  [cutOutPath closePath];
-  [cutOutPath relativeMoveToPoint:NSMakePoint(0, -3)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(-2, 0)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(0, -3)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(2, 0)];
-  [cutOutPath relativeLineToPoint:NSMakePoint(0, 3)];
-  [cutOutPath closePath];
-
-  [trianglePath appendBezierPath:cutOutPath];
-  [trianglePath fill];
-}
-
-+ (void)drawLocationBarIconHTTPSValidForScale:(int)scaleFactor {
-  NSAffineTransform* transform = [NSAffineTransform transform];
-  // Adjust down 1px in Retina, so that the lock sits on the text baseline.
-  if (scaleFactor > 1) {
-    [transform translateXBy:0 yBy:-0.5];
-  }
-
-  NSBezierPath* rectPath =
-      [NSBezierPath bezierPathWithRoundedRect:NSMakeRect(4, 3, 8, 7)
-                                      xRadius:1
-                                      yRadius:1];
-  [rectPath transformUsingAffineTransform:transform];
-  [rectPath fill];
-
-  NSBezierPath* curvePath = [NSBezierPath bezierPath];
-  [curvePath moveToPoint:NSMakePoint(5.5, 9.75)];
-  [curvePath lineToPoint:NSMakePoint(5.5, 10)];
-  [curvePath curveToPoint:NSMakePoint(8, 13)
-            controlPoint1:NSMakePoint(5.5, 13)
-            controlPoint2:NSMakePoint(7.5, 13)];
-  [curvePath curveToPoint:NSMakePoint(10.5, 10)
-            controlPoint1:NSMakePoint(8.5, 13)
-            controlPoint2:NSMakePoint(10.5, 13)];
-  [curvePath lineToPoint:NSMakePoint(10.5, 9.75)];
-  [curvePath setLineWidth:1.25];
-  [curvePath transformUsingAffineTransform:transform];
-  [curvePath stroke];
-}
-
-@end
-
 // TODO(shess): This code is mostly copied from the gtk
 // implementation.  Make sure it's all appropriate and flesh it out.
 
@@ -327,7 +155,7 @@ LocationBarViewMac::~LocationBarViewMac() {
 void LocationBarViewMac::ShowFirstRunBubble() {
   // We need the browser window to be shown before we can show the bubble, but
   // we get called before that's happened.
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&LocationBarViewMac::ShowFirstRunBubbleInternal,
                             weak_ptr_factory_.GetWeakPtr()));
 }
@@ -575,7 +403,7 @@ void LocationBarViewMac::OnDecorationsChanged() {
   // TODO(shess): The field-editor frame and cursor rects should not
   // change, here.
   std::vector<LocationBarDecoration*> decorations = GetDecorations();
-  for (const auto& decoration : decorations)
+  for (auto* decoration : decorations)
     UpdateAccessibilityViewPosition(decoration);
   [field_ updateMouseTracking];
   [field_ resetFieldEditorFrameIfNeeded];
@@ -767,9 +595,10 @@ void LocationBarViewMac::UpdateLocationIcon() {
     vector_icon_color = kMaterialDarkVectorIconColor;
 
   DCHECK(vector_icon_id != gfx::VectorIconId::VECTOR_ICON_NONE);
-  NSImage* image =
-      [LocationBarImageRep imageForId:vector_icon_id color:vector_icon_color];
-
+  NSImage* image = NSImageFromImageSkiaWithColorSpace(
+      gfx::CreateVectorIcon(vector_icon_id, kDefaultIconSize,
+                            vector_icon_color),
+      base::mac::GetSRGBColorSpace());
   location_icon_decoration_->SetImage(image);
   ev_bubble_decoration_->SetImage(image);
   Layout();
@@ -1027,7 +856,7 @@ void LocationBarViewMac::OnDefaultZoomLevelChanged() {
 std::vector<NSView*> LocationBarViewMac::GetDecorationAccessibilityViews() {
   std::vector<LocationBarDecoration*> decorations = GetDecorations();
   std::vector<NSView*> views;
-  for (const auto& decoration : decorations)
+  for (auto* decoration : decorations)
     views.push_back(decoration->GetAccessibilityView());
   return views;
 }

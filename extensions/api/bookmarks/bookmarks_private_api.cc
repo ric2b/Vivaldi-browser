@@ -35,7 +35,7 @@ namespace bookmarks_private = vivaldi::bookmarks_private;
 VivaldiBookmarksAPI::VivaldiBookmarksAPI(content::BrowserContext *context)
     : browser_context_(context), bookmark_model_(nullptr) {
   bookmark_model_ =
-      BookmarkModelFactory::GetForProfile(Profile::FromBrowserContext(context));
+      BookmarkModelFactory::GetForBrowserContext(context);
   DCHECK(bookmark_model_);
   bookmark_model_->AddObserver(this);
 }

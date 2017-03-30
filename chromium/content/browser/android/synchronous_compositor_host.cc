@@ -11,7 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/output/compositor_frame_ack.h"
+#include "content/browser/android/synchronous_compositor_observer.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -26,6 +26,7 @@
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkRect.h"
+#include "ui/events/blink/did_overscroll_params.h"
 #include "ui/gfx/skia_util.h"
 
 namespace content {
@@ -66,10 +67,10 @@ SynchronousCompositorHost::SynchronousCompositorHost(
     bool use_in_proc_software_draw)
     : rwhva_(rwhva),
       client_(client),
-      ui_task_runner_(
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)),
+      ui_task_runner_(BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
       process_id_(rwhva_->GetRenderWidgetHost()->GetProcess()->GetID()),
       routing_id_(rwhva_->GetRenderWidgetHost()->GetRoutingID()),
+      rph_observer_(SynchronousCompositorObserver::GetOrCreateFor(process_id_)),
       sender_(rwhva_->GetRenderWidgetHost()),
       use_in_process_zero_copy_software_draw_(use_in_proc_software_draw),
       bytes_limit_(0u),
@@ -96,14 +97,11 @@ bool SynchronousCompositorHost::OnMessageReceived(const IPC::Message& message) {
 }
 
 SynchronousCompositor::Frame SynchronousCompositorHost::DemandDrawHw(
-    const gfx::Size& surface_size,
-    const gfx::Transform& transform,
-    const gfx::Rect& viewport,
-    const gfx::Rect& clip,
+    const gfx::Size& viewport_size,
     const gfx::Rect& viewport_rect_for_tile_priority,
     const gfx::Transform& transform_for_tile_priority) {
-  SyncCompositorDemandDrawHwParams params(surface_size, transform, viewport,
-                                          clip, viewport_rect_for_tile_priority,
+  SyncCompositorDemandDrawHwParams params(viewport_size,
+                                          viewport_rect_for_tile_priority,
                                           transform_for_tile_priority);
   SynchronousCompositor::Frame frame;
   frame.frame.reset(new cc::CompositorFrame);
@@ -286,10 +284,10 @@ void SynchronousCompositorHost::SendZeroMemory() {
 
 void SynchronousCompositorHost::ReturnResources(
     uint32_t output_surface_id,
-    const cc::CompositorFrameAck& frame_ack) {
-  DCHECK(!frame_ack.resources.empty());
+    const cc::ReturnedResourceArray& resources) {
+  DCHECK(!resources.empty());
   sender_->Send(new SyncCompositorMsg_ReclaimResources(
-      routing_id_, output_surface_id, frame_ack));
+      routing_id_, output_surface_id, resources));
 }
 
 void SynchronousCompositorHost::SetMemoryPolicy(size_t bytes_limit) {
@@ -333,19 +331,15 @@ void SynchronousCompositorHost::OnComputeScroll(
 }
 
 void SynchronousCompositorHost::DidOverscroll(
-    const DidOverscrollParams& over_scroll_params) {
+    const ui::DidOverscrollParams& over_scroll_params) {
   client_->DidOverscroll(this, over_scroll_params.accumulated_overscroll,
                          over_scroll_params.latest_overscroll_delta,
                          over_scroll_params.current_fling_velocity);
 }
 
-void SynchronousCompositorHost::DidSendBeginFrame() {
-  SyncCompositorCommonRendererParams common_renderer_params;
-  if (!sender_->Send(new SyncCompositorMsg_SynchronizeRendererState(
-          routing_id_, &common_renderer_params))) {
-    return;
-  }
-  ProcessCommonParams(common_renderer_params);
+void SynchronousCompositorHost::DidSendBeginFrame(
+    ui::WindowAndroid* window_android) {
+  rph_observer_->SyncStateAfterVSync(window_android, this);
 }
 
 void SynchronousCompositorHost::OutputSurfaceCreated() {

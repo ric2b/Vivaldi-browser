@@ -74,6 +74,7 @@ vs-chromium-project.txt
 /build/x64/
 /build/linux/bin/eu-strip
 /build/linux/debian_*-sysroot/
+/build/linux/ubuntu_*-sysroot/
 /build/mac_files
 /buildtools
 # The Chrome OS build creates a /c symlink due to http://crbug.com/54866.
@@ -125,6 +126,7 @@ vs-chromium-project.txt
 /chrome/setup_unittests.xml
 /chrome/supplement.gypi
 /chrome/sync_integration_tests_run.xml
+/chrome/test/android/telemetry_tests/browser_tests/*.wpr
 /chrome/test/chromeos/autotest/files/client/deps/chrome_test/test_src/
 /chrome/test/chromeos/autotest/files/client/deps/page_cycler_dep/test_src/
 /chrome/test/chromeos/autotest/files/client/deps/perf_data_dep/test_src/
@@ -188,6 +190,7 @@ vs-chromium-project.txt
 /ios/third_party/earl_grey/src
 /ios/third_party/fishhook/src
 /ios/third_party/gcdwebserver/src
+/ios/third_party/material_text_accessibility_ios/src
 /ios/third_party/ochamcrest/src
 /ios_internal
 /llvm
@@ -309,6 +312,7 @@ vs-chromium-project.txt
 /third_party/bison
 /third_party/boringssl/src
 /third_party/bouncycastle/lib/*.jar
+/third_party/byte_buddy/lib/*.jar
 /third_party/cacheinvalidation/cacheinvalidation_unittests_run.xml
 /third_party/cardboard-java/src
 /third_party/catapult
@@ -318,6 +322,7 @@ vs-chromium-project.txt
 /third_party/chromite
 /third_party/class-dump/src
 /third_party/cld_2/src
+/third_party/cld_3/src
 /third_party/colorama/src
 /third_party/cros
 /third_party/cros_system_api
@@ -345,6 +350,7 @@ vs-chromium-project.txt
 /third_party/google_appengine_cloudstorage
 /third_party/google_toolbox_for_mac/src
 /third_party/googlemac
+/third_party/gvr-android-sdk/src
 /third_party/gperf
 /third_party/grpc
 /third_party/guava/lib/*.jar
@@ -354,6 +360,7 @@ vs-chromium-project.txt
 /third_party/hunspell_dictionaries
 /third_party/icu
 /third_party/icu4j/lib/*.jar
+/third_party/intellij/lib/*.jar
 /third_party/jarjar
 /third_party/javax_inject/lib/*.jar
 /third_party/jsoncpp/source
@@ -393,10 +400,10 @@ vs-chromium-project.txt
 /third_party/netty-tcnative/src
 /third_party/netty4/src
 /third_party/nss
+/third_party/objenesis/lib/*.jar
 /third_party/omaha/src/omaha
 /third_party/openmax_dl/
 /third_party/openh264/src
-/third_party/opus/src
 /third_party/ow2_asm/lib/*.jar
 /third_party/pdfsqueeze
 /third_party/pdfium
@@ -418,7 +425,8 @@ vs-chromium-project.txt
 /third_party/pywebsocket/src
 /third_party/re2/src
 /third_party/requests/src
-/third_party/robolectric/lib
+/third_party/robolectric/lib/*.jar
+/third_party/robolectric/robolectric
 /third_party/scons-2.0.1
 /third_party/sfntly/src
 /third_party/shaderc/src
@@ -430,7 +438,7 @@ vs-chromium-project.txt
 /third_party/sqlite4java/lib/**/*.jar
 /third_party/sqlite4java/lib/**/*.jnilib
 /third_party/sqlite4java/lib/**/*.so
-/third_party/swiftshader/include/
+/third_party/swiftshader/
 /third_party/syzygy
 /third_party/syzygy/binaries
 /third_party/tsan/
@@ -440,6 +448,7 @@ vs-chromium-project.txt
 /third_party/v8-i18n
 /third_party/valgrind
 /third_party/v4l2capture
+/third_party/visualmetrics
 /third_party/wayland/src
 /third_party/wayland-protocols/src
 /third_party/wds/src

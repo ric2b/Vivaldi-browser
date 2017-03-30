@@ -250,7 +250,7 @@ TabStripModel::TabStripModel(TabStripModelDelegate* delegate, Profile* profile)
 }
 
 TabStripModel::~TabStripModel() {
-  STLDeleteElements(&contents_data_);
+  base::STLDeleteElements(&contents_data_);
   order_controller_.reset();
 }
 
@@ -812,7 +812,8 @@ void TabStripModel::AddWebContents(WebContents* contents,
   // new background tab.
   if (WebContents* old_contents = GetActiveWebContents()) {
     if ((add_types & ADD_ACTIVE) == 0) {
-      ResizeWebContents(contents, old_contents->GetContainerBounds().size());
+      ResizeWebContents(
+          contents, gfx::Rect(old_contents->GetContainerBounds().size()));
     }
   }
 }
@@ -1048,20 +1049,15 @@ std::vector<int> TabStripModel::GetIndicesClosedByCommand(
   DCHECK(ContainsIndex(index));
   DCHECK(id == CommandCloseTabsToRight || id == CommandCloseOtherTabs);
   bool is_selected = IsTabSelected(index);
-  int start;
+  int last_unclosed_tab = -1;
   if (id == CommandCloseTabsToRight) {
-    if (is_selected) {
-      start = selection_model_.selected_indices()[
-          selection_model_.selected_indices().size() - 1] + 1;
-    } else {
-      start = index + 1;
-    }
-  } else {
-    start = 0;
+    last_unclosed_tab =
+        is_selected ? selection_model_.selected_indices().back() : index;
   }
+
   // NOTE: callers expect the vector to be sorted in descending order.
   std::vector<int> indices;
-  for (int i = count() - 1; i >= start; --i) {
+  for (int i = count() - 1; i > last_unclosed_tab; --i) {
     if (i != index && !IsTabPinned(i) && (!is_selected || !IsTabSelected(i)))
       indices.push_back(i);
   }

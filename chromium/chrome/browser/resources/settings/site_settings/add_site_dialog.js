@@ -32,7 +32,7 @@ Polymer({
    */
   open: function(type) {
     this.allowException = type == settings.PermissionValues.ALLOW;
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   },
 
   /**
@@ -46,6 +46,11 @@ Polymer({
     }.bind(this));
   },
 
+  /** @private */
+  onCancelTap_: function() {
+    this.$.dialog.cancel();
+  },
+
   /**
    * The tap handler for the Add [Site] button (adds the pattern and closes
    * the dialog).
@@ -56,7 +61,7 @@ Polymer({
       return;  // Can happen when Enter is pressed.
     var pattern = this.addPatternWildcard_(this.site_);
     this.setCategoryPermissionForOrigin(
-        pattern, '', this.category, this.allowException ?
+        pattern, pattern, this.category, this.allowException ?
             settings.PermissionValues.ALLOW : settings.PermissionValues.BLOCK);
     this.$.dialog.close();
   },

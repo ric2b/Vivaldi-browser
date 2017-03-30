@@ -75,6 +75,9 @@ enum PageSizeType {
 // This struct is for rarely used non-inherited CSS3, CSS2, and WebKit-specific properties.
 // By grouping them together, we save space, and only allocate this object when someone
 // actually uses one of these properties.
+// TODO(sashab): Move this into a private class on ComputedStyle, and remove
+// all methods on it, merging them into copy/creation methods on ComputedStyle
+// instead. Keep the allocation logic, only allocating a new object if needed.
 class CORE_EXPORT StyleRareNonInheritedData : public RefCounted<StyleRareNonInheritedData> {
 public:
     static PassRefPtr<StyleRareNonInheritedData> create() { return adoptRef(new StyleRareNonInheritedData); }
@@ -171,8 +174,6 @@ public:
     unsigned m_appearance : 6; // EAppearance
 
     unsigned m_textDecorationStyle : 3; // TextDecorationStyle
-    unsigned m_wrapFlow: 3; // WrapFlow
-    unsigned m_wrapThrough: 1; // WrapThrough
 
     unsigned m_hasCurrentOpacityAnimation : 1;
     unsigned m_hasCurrentTransformAnimation : 1;
@@ -182,6 +183,8 @@ public:
     unsigned m_runningTransformAnimationOnCompositor : 1;
     unsigned m_runningFilterAnimationOnCompositor : 1;
     unsigned m_runningBackdropFilterAnimationOnCompositor : 1;
+
+    unsigned m_isStackingContext : 1;
 
     unsigned m_effectiveBlendMode: 5; // EBlendMode
 

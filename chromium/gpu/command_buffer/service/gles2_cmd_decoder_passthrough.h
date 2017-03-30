@@ -59,7 +59,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   void ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) override;
 
   // Resize an offscreen frame buffer.
-  bool ResizeOffscreenFrameBuffer(const gfx::Size& size) override;
+  bool ResizeOffscreenFramebuffer(const gfx::Size& size) override;
 
   // Make this decoder's GL context current.
   bool MakeCurrent() override;
@@ -72,6 +72,8 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Gets the associated ContextGroup
   ContextGroup* GetContextGroup() override;
+
+  const FeatureInfo* GetFeatureInfo() const override;
 
   Capabilities GetCapabilities() override;
 
@@ -206,6 +208,7 @@ class GLES2DecoderPassthroughImpl : public GLES2Decoder {
   Logger* GetLogger() override;
 
   const ContextState* GetContextState() override;
+  scoped_refptr<ShaderTranslatorInterface> GetTranslator(GLenum type) override;
 
  private:
   int commands_to_process_;

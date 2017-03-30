@@ -6,6 +6,7 @@
 
 #include "base/logging.h"
 #import "base/mac/scoped_nsobject.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/xcallback_parameters.h"
 #include "url/gurl.h"
 
@@ -14,6 +15,7 @@
   base::scoped_nsobject<XCallbackParameters> _xCallbackParameters;
   BOOL _launchVoiceSearch;
   BOOL _launchInIncognito;
+  BOOL _launchQRScanner;
 }
 
 @synthesize launchVoiceSearch = _launchVoiceSearch;
@@ -50,6 +52,16 @@
   return [NSString stringWithFormat:@"ExternalURL: %s \nXCallbackParams: %@",
                                     _externalURL.spec().c_str(),
                                     _xCallbackParameters.get()];
+}
+
+#pragma mark Property implementation.
+
+- (BOOL)launchQRScanner {
+  return _launchQRScanner && experimental_flags::IsQRCodeReaderEnabled();
+}
+
+- (void)setLaunchQRScanner:(BOOL)launch {
+  _launchQRScanner = launch;
 }
 
 @end

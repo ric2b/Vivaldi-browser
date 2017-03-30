@@ -30,6 +30,7 @@
 
 #include "core/CoreExport.h"
 #include "core/frame/FrameTypes.h"
+#include "core/layout/api/LayoutPartItem.h"
 #include "core/loader/FrameLoaderTypes.h"
 #include "core/page/FrameTree.h"
 #include "platform/heap/Handle.h"
@@ -81,7 +82,6 @@ public:
     virtual void reload(FrameLoadType, ClientRedirectPolicy) = 0;
 
     virtual void detach(FrameDetachType);
-    void detachChildren();
     void disconnectOwnerElement();
     virtual bool shouldClose() = 0;
 
@@ -117,13 +117,15 @@ public:
     bool canNavigate(const Frame&);
     virtual void printNavigationErrorMessage(const Frame&, const char* reason) = 0;
 
+    // TODO(pilgrim) replace all instances of ownerLayoutObject() with ownerLayoutItem()
+    // https://crbug.com/499321
     LayoutPart* ownerLayoutObject() const; // LayoutObject for the element that contains this frame.
+    LayoutPartItem ownerLayoutItem() const
+    {
+        return LayoutPartItem(this->ownerLayoutObject());
+    }
 
     Settings* settings() const; // can be null
-
-    // Return true if and only if this frame is a cross-origin frame with
-    // respect to the top-level frame.
-    bool isCrossOrigin() const;
 
     // isLoading() is true when the embedder should think a load is in progress.
     // In the case of LocalFrames, it means that the frame has sent a didStartLoading()
@@ -167,7 +169,7 @@ inline FrameTree& Frame::tree() const
 }
 
 // Allow equality comparisons of Frames by reference or pointer, interchangeably.
-DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES_REFCOUNTED(Frame)
+DEFINE_COMPARISON_OPERATORS_WITH_REFERENCES(Frame)
 
 } // namespace blink
 

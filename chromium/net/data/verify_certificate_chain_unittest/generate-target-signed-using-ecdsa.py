@@ -3,23 +3,23 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Certificate chain with a trusted root using RSA, and intermediary using EC,
+"""Certificate chain with a trusted root using RSA, and intermediate using EC,
 and a target certificate using RSA. Verification is expected to succeed."""
 
 import common
 
-# Self-signed root certificate (part of trust store), using RSA.
+# Self-signed root certificate (used as trust anchor). using RSA.
 root = common.create_self_signed_root_certificate('Root')
 
-# Intermediary using an EC key for the P-384 curve.
-intermediary = common.create_intermediary_certificate('Intermediary', root)
-intermediary.generate_ec_key('secp384r1')
+# Intermediate using an EC key for the P-384 curve.
+intermediate = common.create_intermediate_certificate('Intermediate', root)
+intermediate.set_key(common.generate_ec_key('secp384r1'))
 
 # Target certificate contains an RSA key (but is signed using ECDSA).
-target = common.create_end_entity_certificate('Target', intermediary)
+target = common.create_end_entity_certificate('Target', intermediate)
 
-chain = [target, intermediary]
-trusted = [root]
+chain = [target, intermediate]
+trusted = common.TrustAnchor(root, constrained=False)
 time = common.DEFAULT_TIME
 verify_result = True
 

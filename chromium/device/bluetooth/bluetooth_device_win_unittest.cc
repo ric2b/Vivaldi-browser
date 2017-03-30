@@ -49,7 +49,7 @@ class BluetoothDeviceWinTest : public testing::Test {
 
     // Add device with audio/video services.
     device_state_.reset(new BluetoothTaskManagerWin::DeviceState());
-    device_state_->name = kDeviceName;
+    device_state_->name = std::string(kDeviceName);
     device_state_->address = kDeviceAddress;
 
     BluetoothTaskManagerWin::ServiceRecordState* audio_state =
@@ -70,7 +70,7 @@ class BluetoothDeviceWinTest : public testing::Test {
 
     // Add empty device.
     empty_device_state_.reset(new BluetoothTaskManagerWin::DeviceState());
-    empty_device_state_->name = kDeviceName;
+    empty_device_state_->name = std::string(kDeviceName);
     empty_device_state_->address = kDeviceAddress;
     empty_device_.reset(new BluetoothDeviceWin(NULL, *empty_device_state_,
                                                ui_task_runner, socket_thread,
@@ -85,11 +85,11 @@ class BluetoothDeviceWinTest : public testing::Test {
 };
 
 TEST_F(BluetoothDeviceWinTest, GetUUIDs) {
-  BluetoothDevice::UUIDList uuids = device_->GetUUIDs();
+  BluetoothDevice::UUIDSet uuids = device_->GetUUIDs();
 
   EXPECT_EQ(2u, uuids.size());
-  EXPECT_EQ(kTestAudioSdpUuid, uuids[0]);
-  EXPECT_EQ(kTestVideoSdpUuid, uuids[1]);
+  EXPECT_TRUE(base::ContainsKey(uuids, kTestAudioSdpUuid));
+  EXPECT_TRUE(base::ContainsKey(uuids, kTestVideoSdpUuid));
 
   uuids = empty_device_->GetUUIDs();
   EXPECT_EQ(0u, uuids.size());

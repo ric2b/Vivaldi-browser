@@ -59,7 +59,7 @@ gfx::Image UpgradeDetector::GetIcon() {
   DCHECK_NE(gfx::kPlaceholderColor, color);
 
   return gfx::Image(
-      gfx::CreateVectorIcon(gfx::VectorIconId::UPGRADE_MENU_ITEM, 16, color));
+      gfx::CreateVectorIcon(gfx::VectorIconId::BROWSER_TOOLS_UPDATE, color));
 }
 
 UpgradeDetector::UpgradeDetector()
@@ -117,7 +117,7 @@ void UpgradeDetector::TriggerNotification(chrome::NotificationType type) {
 void UpgradeDetector::IdleCallback(ui::IdleState state) {
   // Don't proceed while an incognito window is open. The timer will still
   // keep firing, so this function will get a chance to re-evaluate this.
-  if (chrome::IsOffTheRecordSessionActive())
+  if (chrome::IsIncognitoSessionActive())
     return;
 
   switch (state) {

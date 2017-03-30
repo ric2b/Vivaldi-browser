@@ -188,6 +188,10 @@ Class AVFoundationGlue::AVCaptureVideoDataOutputClass() {
   return [AVFoundationBundle() classNamed:@"AVCaptureVideoDataOutput"];
 }
 
+Class AVFoundationGlue::AVCaptureStillImageOutputClass() {
+  return [AVFoundationBundle() classNamed:@"AVCaptureStillImageOutput"];
+}
+
 Class AVFoundationGlue::AVAssetClass() {
   return [AVFoundationBundle() classNamed:@"AVAsset"];
 }

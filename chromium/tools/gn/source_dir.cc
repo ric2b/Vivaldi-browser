@@ -33,6 +33,18 @@ SourceDir::SourceDir(const base::StringPiece& p)
   if (!EndsWithSlash(value_))
     value_.push_back('/');
   AssertValueSourceDirString(value_);
+  actual_path_ = BuildSettings::RemapSourcePathToActual(value_);
+}
+
+SourceDir::SourceDir(const base::StringPiece& p, const base::StringPiece& p_act)
+    : value_(p.data(), p.size()),
+      actual_path_(p_act.data(), p_act.size()) {
+  if (!EndsWithSlash(value_))
+    value_.push_back('/');
+  if (!EndsWithSlash(actual_path_))
+    actual_path_.push_back('/');
+  AssertValueSourceDirString(value_);
+  AssertValueSourceDirString(actual_path_);
 }
 
 SourceDir::SourceDir(SwapIn, std::string* s) {
@@ -40,6 +52,7 @@ SourceDir::SourceDir(SwapIn, std::string* s) {
   if (!EndsWithSlash(value_))
     value_.push_back('/');
   AssertValueSourceDirString(value_);
+  actual_path_ = BuildSettings::RemapSourcePathToActual(value_);
 }
 
 SourceDir::~SourceDir() {
@@ -73,6 +86,9 @@ SourceFile SourceDir::ResolveRelativeFile(
     // Source-relative.
     ret.value_.assign(str.data(), str.size());
     NormalizePath(&ret.value_, source_root);
+    ret.actual_path_ = BuildSettings::RemapSourcePathToActual(ret.value_);
+    if (ret.value_.compare(ret.actual_path_) == 0)
+      ret.value_= BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     return ret;
   } else if (IsPathAbsolute(str)) {
     if (source_root.empty() ||
@@ -86,12 +102,15 @@ SourceFile SourceDir::ResolveRelativeFile(
       ret.value_.append(str.data(), str.size());
     }
     NormalizePath(&ret.value_);
+    // Vivaldi update
+    ret.actual_path_ = ret.value_;
+    ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     return ret;
   }
 
   if (!source_root.empty()) {
     std::string absolute =
-        FilePathToUTF8(Resolve(UTF8ToFilePath(source_root)).AppendASCII(
+        FilePathToUTF8(Resolve(UTF8ToFilePath(source_root), true).AppendASCII(
             str).value());
     NormalizePath(&absolute);
     if (!MakeAbsolutePathRelativeIfPossible(source_root, absolute,
@@ -103,6 +122,11 @@ SourceFile SourceDir::ResolveRelativeFile(
         ret.value_ = "/";
 #endif
       ret.value_.append(absolute.data(), absolute.size());
+      ret.actual_path_ = ret.value_;
+    } else {
+      // Vivaldi update
+      ret.actual_path_ = ret.value_;
+      ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     }
     return ret;
   }
@@ -110,11 +134,12 @@ SourceFile SourceDir::ResolveRelativeFile(
   // With no source_root_, there's nothing we can do about
   // e.g. p=../../../path/to/file and value_=//source and we'll
   // errornously return //file.
-  ret.value_.reserve(value_.size() + str.size());
-  ret.value_.assign(value_);
-  ret.value_.append(str.data(), str.size());
+  ret.actual_path_.reserve(actual_path_.size() + str.size());
+  ret.actual_path_.assign(actual_path_);
+  ret.actual_path_.append(str.data(), str.size());
 
-  NormalizePath(&ret.value_);
+  NormalizePath(&ret.actual_path_);
+  ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
   return ret;
 }
 
@@ -147,6 +172,9 @@ SourceDir SourceDir::ResolveRelativeDir(
     if (!EndsWithSlash(ret.value_))
       ret.value_.push_back('/');
     NormalizePath(&ret.value_, source_root);
+    ret.actual_path_ = BuildSettings::RemapSourcePathToActual(ret.value_);
+    if (ret.value_.compare(ret.actual_path_) == 0)
+      ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     return ret;
   } else if (IsPathAbsolute(str)) {
     if (source_root.empty() ||
@@ -160,12 +188,15 @@ SourceDir SourceDir::ResolveRelativeDir(
     NormalizePath(&ret.value_);
     if (!EndsWithSlash(ret.value_))
       ret.value_.push_back('/');
+    // Vivaldi update
+    ret.actual_path_ = ret.value_;
+    ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     return ret;
   }
 
   if (!source_root.empty()) {
     std::string absolute =
-        FilePathToUTF8(Resolve(UTF8ToFilePath(source_root)).AppendASCII(
+        FilePathToUTF8(Resolve(UTF8ToFilePath(source_root), true).AppendASCII(
             str.as_string()).value());
     NormalizePath(&absolute);
     if (!MakeAbsolutePathRelativeIfPossible(source_root, absolute,
@@ -178,22 +209,26 @@ SourceDir SourceDir::ResolveRelativeDir(
     }
     if (!EndsWithSlash(ret.value_))
       ret.value_.push_back('/');
+    // Vivaldi update
+    ret.actual_path_ = ret.value_;
+    ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
     return ret;
   }
 
-  ret.value_.reserve(value_.size() + str.size());
-  ret.value_.assign(value_);
-  ret.value_.append(str.data(), str.size());
+  ret.actual_path_.reserve(actual_path_.size() + str.size());
+  ret.actual_path_.assign(actual_path_);
+  ret.actual_path_.append(str.data(), str.size());
 
-  NormalizePath(&ret.value_);
-  if (!EndsWithSlash(ret.value_))
-    ret.value_.push_back('/');
-  AssertValueSourceDirString(ret.value_);
-
+  NormalizePath(&ret.actual_path_);
+  if (!EndsWithSlash(ret.actual_path_))
+    ret.actual_path_.push_back('/');
+  AssertValueSourceDirString(ret.actual_path_);
+  ret.value_ = BuildSettings::RemapActualToSourcePath(ret.actual_path_);
   return ret;
 }
 
-base::FilePath SourceDir::Resolve(const base::FilePath& source_root) const {
+base::FilePath SourceDir::Resolve(const base::FilePath& source_root,
+                                  bool use_actual_path) const {
   if (is_null())
     return base::FilePath();
 
@@ -209,6 +244,9 @@ base::FilePath SourceDir::Resolve(const base::FilePath& source_root) const {
   }
 
   // String the double-leading slash for source-relative paths.
+  if (use_actual_path)
+    converted.assign(&actual_path_[2], actual_path_.size() - 2);
+  else
   converted.assign(&value_[2], value_.size() - 2);
   return source_root.Append(UTF8ToFilePath(converted))
       .NormalizePathSeparatorsTo('/');

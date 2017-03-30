@@ -26,8 +26,9 @@
 #ifndef EditCommand_h
 #define EditCommand_h
 
+#include "core/CoreExport.h"
 #include "core/editing/VisibleSelection.h"
-#include "core/editing/commands/EditAction.h"
+#include "core/events/InputEvent.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -36,13 +37,13 @@ class CompositeEditCommand;
 class Document;
 class EditingState;
 
-class EditCommand : public GarbageCollectedFinalized<EditCommand> {
+class CORE_EXPORT EditCommand : public GarbageCollectedFinalized<EditCommand> {
 public:
     virtual ~EditCommand();
 
     void setParent(CompositeEditCommand*);
 
-    virtual EditAction editingAction() const;
+    virtual InputEvent::InputType inputType() const;
 
     const VisibleSelection& startingSelection() const { return m_startingSelection; }
     const VisibleSelection& endingSelection() const { return m_endingSelection; }
@@ -53,6 +54,9 @@ public:
 
     // The |EditingState*| argument must not be nullptr.
     virtual void doApply(EditingState*) = 0;
+
+    // |TypingCommand| will return the text of the last |m_commands|.
+    virtual String textDataForInputEvent() const;
 
     DECLARE_VIRTUAL_TRACE();
 

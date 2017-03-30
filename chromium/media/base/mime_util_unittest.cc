@@ -195,7 +195,7 @@ TEST(MimeUtilTest, CommonMediaMimeTypeSystemCodecs) {
   bool proprietary_video_supported = false;
 #if defined(OS_MACOSX)
   proprietary_audio_supported = true;
-  proprietary_video_supported = base::mac::IsOSMavericksOrLater();
+  proprietary_video_supported = true;
 #elif defined(OS_WIN)
   proprietary_audio_supported =
       base::win::GetVersion() >= base::win::VERSION_WIN7;

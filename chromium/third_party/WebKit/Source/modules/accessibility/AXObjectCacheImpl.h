@@ -91,7 +91,7 @@ public:
     void handleLayoutComplete(Document*) override;
     void handleClicked(Node*) override;
 
-    void setCanvasObjectBounds(Element*, const LayoutRect&) override;
+    void setCanvasObjectBounds(HTMLCanvasElement*, Element*, const LayoutRect&) override;
 
     void inlineTextBoxesUpdated(LineLayoutItem) override;
 
@@ -232,7 +232,7 @@ private:
 
     Timer<AXObjectCacheImpl> m_notificationPostTimer;
     HeapVector<std::pair<Member<AXObject>, AXNotification>> m_notificationsToPost;
-    void notificationPostTimerFired(Timer<AXObjectCacheImpl>*);
+    void notificationPostTimerFired(TimerBase*);
 
     AXObject* focusedImageMapUIElement(HTMLAreaElement*);
 

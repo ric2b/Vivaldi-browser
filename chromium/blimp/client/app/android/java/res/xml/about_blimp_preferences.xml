@@ -20,6 +20,6 @@
     <ListPreference
         android:key="blimp_assigner_url"
         android:title="@string/blimp_assigner_url"
-        android:entries="@array/assigner_envs"
-        android:entryValues="@array/assigner_urls" />
+        android:entries="@array/blimp_assigner_envs"
+        android:entryValues="@array/blimp_assigner_urls" />
 </PreferenceScreen>

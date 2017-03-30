@@ -94,7 +94,7 @@
 #include "url/url_constants.h"
 
 #if defined(OS_WIN)
-#include "ui/display/win/dpi.h"
+#include "ui/display/win/screen_win.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/platform_font_win.h"
 #endif
@@ -139,13 +139,13 @@ void GetWindowsSpecificPrefs(RendererPreferences* prefs) {
       metrics.lfMessageFont);
 
   prefs->vertical_scroll_bar_width_in_dips =
-      display::win::GetSystemMetricsInDIP(SM_CXVSCROLL);
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXVSCROLL);
   prefs->horizontal_scroll_bar_height_in_dips =
-      display::win::GetSystemMetricsInDIP(SM_CYHSCROLL);
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYHSCROLL);
   prefs->arrow_bitmap_height_vertical_scroll_bar_in_dips =
-      display::win::GetSystemMetricsInDIP(SM_CYVSCROLL);
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYVSCROLL);
   prefs->arrow_bitmap_width_horizontal_scroll_bar_in_dips =
-      display::win::GetSystemMetricsInDIP(SM_CXHSCROLL);
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXHSCROLL);
 }
 #endif
 
@@ -327,7 +327,7 @@ bool RenderViewHostImpl::CreateRenderView(
 
   // We should not set both main_frame_routing_id_ and proxy_route_id.  Log
   // cases that this happens (without crashing) to track down
-  // https://crbug.com/574245.
+  // https://crbug.com/575245.
   // TODO(creis): Remove this once we've found the cause.
   if (main_frame_routing_id_ != MSG_ROUTING_NONE &&
       proxy_route_id != MSG_ROUTING_NONE)
@@ -372,8 +372,7 @@ bool RenderViewHostImpl::CreateRenderView(
   params.min_size = GetWidget()->min_size_for_auto_resize();
   params.max_size = GetWidget()->max_size_for_auto_resize();
   params.page_zoom_level = delegate_->GetPendingPageZoomLevel();
-  params.image_decode_color_profile =
-      gfx::ColorSpace::FromBestMonitor().GetICCProfile();
+  params.image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
   GetWidget()->GetResizeParams(&params.initial_size);
 
   if (!Send(new ViewMsg_New(params)))
@@ -383,8 +382,8 @@ bool RenderViewHostImpl::CreateRenderView(
   // If the RWHV has not yet been set, the surface ID namespace will get
   // passed down by the call to SetView().
   if (GetWidget()->GetView()) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(
-        GetRoutingID(), GetWidget()->GetView()->GetSurfaceIdNamespace()));
+    Send(new ViewMsg_SetSurfaceClientId(
+        GetRoutingID(), GetWidget()->GetView()->GetSurfaceClientId()));
   }
 
   // If it's enabled, tell the renderer to set up the Javascript bindings for
@@ -540,8 +539,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.main_frame_resizes_are_orientation_changes =
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
-  prefs.image_color_profiles_enabled =
-      command_line.HasSwitch(switches::kEnableImageColorProfiles);
+  prefs.color_correct_rendering_enabled =
+      command_line.HasSwitch(switches::kEnableColorCorrectRendering);
 
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
@@ -1015,8 +1014,11 @@ void RenderViewHostImpl::OnStartDragging(
     const gfx::Vector2d& bitmap_offset_in_dip,
     const DragEventSourceInfo& event_info) {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
-  if (!view)
+  if (!view) {
+    // Need to clear drag and drop state in blink.
+    DragSourceSystemDragEnded();
     return;
+  }
 
   DropData filtered_data(drop_data);
   RenderProcessHost* process = GetProcess();
@@ -1125,16 +1127,6 @@ bool RenderViewHostImpl::MayRenderWidgetForwardKeyboardEvent(
     return false;
   }
   return true;
-}
-
-void RenderViewHostImpl::OnTextSurroundingSelectionResponse(
-    const base::string16& content,
-    size_t start_offset,
-    size_t end_offset) {
-  if (!GetWidget()->GetView())
-    return;
-  GetWidget()->GetView()->OnTextSurroundingSelectionResponse(
-      content, start_offset, end_offset);
 }
 
 WebPreferences RenderViewHostImpl::GetWebkitPreferences() {

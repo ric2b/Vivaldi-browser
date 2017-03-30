@@ -116,6 +116,12 @@ AutofillManager.prototype = {
    */
   getAddressList: assertNotReached,
 
+  /**
+   * Saves the given address.
+   * @param {!AutofillManager.AddressEntry} address
+   */
+  saveAddress: assertNotReached,
+
   /** @param {string} guid The guid of the address to remove.  */
   removeAddress: assertNotReached,
 
@@ -247,6 +253,11 @@ AutofillManagerImpl.prototype = {
   },
 
   /** @override */
+  saveAddress: function(address) {
+    chrome.autofillPrivate.saveAddress(address);
+  },
+
+  /** @override */
   removeAddress: function(guid) {
     assert(guid);
     chrome.autofillPrivate.removeEntry(guid);
@@ -302,12 +313,6 @@ Polymer({
       notify: true,
     },
 
-    /** The current active route. */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
     /**
      * An array of passwords to display.
      * @type {!Array<!PasswordManager.PasswordUiEntry>}
@@ -319,6 +324,9 @@ Polymer({
      * @type {!Array<!PasswordManager.ExceptionPair>}
      */
     passwordExceptions: Array,
+
+    /** @private Filter applied to passwords and password exceptions. */
+    passwordFilter_: String,
 
      /**
      * An array of saved addresses.
@@ -339,6 +347,7 @@ Polymer({
     'remove-credit-card': 'removeCreditCard_',
     'remove-password-exception': 'removePasswordException_',
     'remove-saved-password': 'removeSavedPassword_',
+    'save-address': 'saveAddress_',
     'save-credit-card': 'saveCreditCard_',
     'show-password': 'showPassword_',
   },
@@ -461,7 +470,7 @@ Polymer({
     // Ignore clicking on the toggle button and verify autofill is enabled.
     if (Polymer.dom(event).localTarget != this.$.autofillToggle &&
         this.getPref('autofill.enabled').value) {
-      this.$.pages.setSubpageChain(['manage-autofill']);
+      settings.navigateTo(settings.Route.AUTOFILL);
     }
   },
 
@@ -475,8 +484,17 @@ Polymer({
     // enabled.
     if (Polymer.dom(event).localTarget != this.$.passwordToggle &&
         this.getPref('profile.password_manager_enabled').value) {
-      this.$.pages.setSubpageChain(['manage-passwords']);
+      settings.navigateTo(settings.Route.MANAGE_PASSWORDS);
     }
+  },
+
+  /**
+   * Listens for the save-address event, and calls the private API.
+   * @param {!Event} event
+   * @private
+   */
+  saveAddress_: function(event) {
+    this.autofillManager_.saveAddress(event.detail);
   },
 
   /**

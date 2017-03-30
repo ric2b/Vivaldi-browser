@@ -92,17 +92,10 @@ bool GetFirstLDBFile(const base::FilePath& dir, base::FilePath* ldb_file) {
   return false;
 }
 
-class BackupEnv : public ChromiumEnv {
- public:
-  BackupEnv() : ChromiumEnv("BackupEnv", true /* backup tables */) {}
-};
-
-base::LazyInstance<BackupEnv>::Leaky backup_env = LAZY_INSTANCE_INITIALIZER;
-
-TEST(ChromiumEnv, BackupTables) {
+TEST(ChromiumEnv, DeleteBackupTables) {
   Options options;
   options.create_if_missing = true;
-  options.env = backup_env.Pointer();
+  options.env = Env::Default();
 
   base::ScopedTempDir scoped_temp_dir;
   ASSERT_TRUE(scoped_temp_dir.CreateUniqueTempDir());
@@ -115,36 +108,29 @@ TEST(ChromiumEnv, BackupTables) {
   EXPECT_TRUE(status.ok()) << status.ToString();
   Slice a = "a";
   Slice z = "z";
-  db->CompactRange(&a, &z);
-  int ldb_files = CountFilesWithExtension(dir, FPL(".ldb"));
-  int bak_files = CountFilesWithExtension(dir, FPL(".bak"));
-  EXPECT_GT(ldb_files, 0);
-  EXPECT_EQ(ldb_files, bak_files);
-  base::FilePath ldb_file;
-  EXPECT_TRUE(GetFirstLDBFile(dir, &ldb_file));
+  db->CompactRange(&a, &z);  // Ensure manifest written out to table.
   delete db;
-  EXPECT_TRUE(base::DeleteFile(ldb_file, false));
-  EXPECT_EQ(ldb_files - 1, CountFilesWithExtension(dir, FPL(".ldb")));
+  db = nullptr;
 
-  // The ldb file deleted above should be restored in Open.
-  status = leveldb::DB::Open(options, dir.AsUTF8Unsafe(), &db);
+  // Current ChromiumEnv no longer makes backup tables - verify for sanity.
+  EXPECT_EQ(1, CountFilesWithExtension(dir, FPL(".ldb")));
+  EXPECT_EQ(0, CountFilesWithExtension(dir, FPL(".bak")));
+
+  // Manually create our own backup table to simulate opening db created by
+  // prior release.
+  base::FilePath ldb_path;
+  ASSERT_TRUE(GetFirstLDBFile(dir, &ldb_path));
+  base::FilePath bak_path = ldb_path.ReplaceExtension(FPL(".bak"));
+  ASSERT_TRUE(base::CopyFile(ldb_path, bak_path));
+  EXPECT_EQ(1, CountFilesWithExtension(dir, FPL(".bak")));
+
+  // Now reopen and close then verify the backup file was deleted.
+  status = DB::Open(options, dir.AsUTF8Unsafe(), &db);
   EXPECT_TRUE(status.ok()) << status.ToString();
-  std::string value;
-  status = db->Get(ReadOptions(), "key", &value);
-  EXPECT_TRUE(status.ok()) << status.ToString();
-  EXPECT_EQ("value", value);
+  EXPECT_EQ(0, CountFilesWithExtension(dir, FPL(".bak")));
   delete db;
-
-  // Ensure that deleting an ldb file also deletes its backup.
-  int orig_ldb_files = CountFilesWithExtension(dir, FPL(".ldb"));
-  EXPECT_GT(ldb_files, 0);
-  EXPECT_EQ(ldb_files, bak_files);
-  EXPECT_TRUE(GetFirstLDBFile(dir, &ldb_file));
-  options.env->DeleteFile(ldb_file.AsUTF8Unsafe());
-  ldb_files = CountFilesWithExtension(dir, FPL(".ldb"));
-  bak_files = CountFilesWithExtension(dir, FPL(".bak"));
-  EXPECT_EQ(orig_ldb_files - 1, ldb_files);
-  EXPECT_EQ(bak_files, ldb_files);
+  EXPECT_EQ(1, CountFilesWithExtension(dir, FPL(".ldb")));
+  EXPECT_EQ(0, CountFilesWithExtension(dir, FPL(".bak")));
 }
 
 TEST(ChromiumEnv, GetChildrenEmptyDir) {
@@ -181,6 +167,27 @@ TEST(ChromiumEnv, GetChildrenPriorResults) {
   status = env->GetChildren(dir.AsUTF8Unsafe(), &result);
   EXPECT_TRUE(status.ok());
   EXPECT_EQ(1U, result.size());
+}
+
+TEST(ChromiumEnv, TestWriteBufferSize) {
+  // If can't get disk size, use leveldb defaults.
+  const int64_t MB = 1024 * 1024;
+  EXPECT_EQ(size_t(4 * MB), leveldb_env::WriteBufferSize(-1));
+
+  // A very small disk (check lower clamp value).
+  EXPECT_EQ(size_t(1 * MB), leveldb_env::WriteBufferSize(1 * MB));
+
+  // Some value on the linear equation between min and max.
+  EXPECT_EQ(size_t(2.5 * MB), leveldb_env::WriteBufferSize(25 * MB));
+
+  // The disk size equating to the max buffer size
+  EXPECT_EQ(size_t(4 * MB), leveldb_env::WriteBufferSize(40 * MB));
+
+  // Make sure sizes larger than 40MB are clamped to max buffer size.
+  EXPECT_EQ(size_t(4 * MB), leveldb_env::WriteBufferSize(80 * MB));
+
+  // Check for very large disk size (catch overflow).
+  EXPECT_EQ(size_t(4 * MB), leveldb_env::WriteBufferSize(100 * MB * MB));
 }
 
 int main(int argc, char** argv) { return base::TestSuite(argc, argv).Run(); }

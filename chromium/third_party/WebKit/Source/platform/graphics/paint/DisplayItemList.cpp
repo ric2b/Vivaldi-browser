@@ -14,12 +14,8 @@
 
 namespace blink {
 
-DisplayItem& DisplayItemList::appendByMoving(DisplayItem& item, const IntRect& visualRect, SkPictureGpuAnalyzer& gpuAnalyzer)
+DisplayItem& DisplayItemList::appendByMoving(DisplayItem& item)
 {
-    // No reason to continue the analysis once we have a veto.
-    if (gpuAnalyzer.suitableForGpuRasterization())
-        item.analyzeForGpuRasterization(gpuAnalyzer);
-
 #ifndef NDEBUG
     String originalDebugString = item.asDebugString();
 #endif
@@ -33,42 +29,12 @@ DisplayItem& DisplayItemList::appendByMoving(DisplayItem& item, const IntRect& v
     // Save original debug string in the old item to help debugging.
     item.setClientDebugString(originalDebugString);
 #endif
-    appendVisualRect(visualRect);
     return result;
 }
 
 void DisplayItemList::appendVisualRect(const IntRect& visualRect)
 {
-    size_t itemIndex = m_visualRects.size();
-    const DisplayItem& item = (*this)[itemIndex];
-
-    // For paired display items such as transforms, since we are not guaranteed containment, the
-    // visual rect must comprise the union of the visual rects for all items within its block.
-
-    if (item.isBegin()) {
-        m_visualRects.append(visualRect);
-        m_beginItemIndices.append(itemIndex);
-
-    } else if (item.isEnd()) {
-        size_t lastBeginIndex = m_beginItemIndices.last();
-        m_beginItemIndices.removeLast();
-
-        // Ending bounds match the starting bounds.
-        m_visualRects.append(m_visualRects[lastBeginIndex]);
-
-        // The block that ended needs to be included in the bounds of the enclosing block.
-        growCurrentBeginItemVisualRect(m_visualRects[lastBeginIndex]);
-
-    } else {
-        m_visualRects.append(visualRect);
-        growCurrentBeginItemVisualRect(visualRect);
-    }
-}
-
-void DisplayItemList::growCurrentBeginItemVisualRect(const IntRect& visualRect)
-{
-    if (!m_beginItemIndices.isEmpty())
-        m_visualRects[m_beginItemIndices.last()].unite(visualRect);
+    m_visualRects.append(visualRect);
 }
 
 DisplayItemList::Range<DisplayItemList::iterator>

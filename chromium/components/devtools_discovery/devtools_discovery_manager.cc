@@ -21,7 +21,7 @@ DevToolsDiscoveryManager::DevToolsDiscoveryManager() {
 }
 
 DevToolsDiscoveryManager::~DevToolsDiscoveryManager() {
-  STLDeleteElements(&providers_);
+  base::STLDeleteElements(&providers_);
 }
 
 void DevToolsDiscoveryManager::AddProvider(std::unique_ptr<Provider> provider) {
@@ -55,11 +55,38 @@ std::unique_ptr<DevToolsTargetDescriptor> DevToolsDiscoveryManager::CreateNew(
 DevToolsTargetDescriptor::List
 DevToolsDiscoveryManager::GetDescriptorsFromProviders() {
   DevToolsTargetDescriptor::List result;
-  for (const auto& provider : providers_) {
+  for (auto* provider : providers_) {
     DevToolsTargetDescriptor::List partial = provider->GetDescriptors();
     result.insert(result.begin(), partial.begin(), partial.end());
   }
   return result;
+}
+
+std::unique_ptr<base::DictionaryValue>
+DevToolsDiscoveryManager::HandleCreateTargetCommand(
+    base::DictionaryValue* command_dict) {
+  int id;
+  std::string method;
+  std::string url;
+  const base::DictionaryValue* params_dict = nullptr;
+  if (command_dict->GetInteger("id", &id) &&
+      command_dict->GetString("method", &method) &&
+      method == "Browser.createTarget" &&
+      command_dict->GetDictionary("params", &params_dict) &&
+      params_dict->GetString("url", &url)) {
+    std::unique_ptr<devtools_discovery::DevToolsTargetDescriptor> descriptor =
+        CreateNew(GURL(url));
+    if (!descriptor)
+      return nullptr;
+    std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
+    result->SetInteger("id", id);
+    std::unique_ptr<base::DictionaryValue> cmd_result(
+        new base::DictionaryValue());
+    cmd_result->SetString("targetId", descriptor->GetId());
+    result->Set("result", std::move(cmd_result));
+    return result;
+  }
+  return nullptr;
 }
 
 }  // namespace devtools_discovery

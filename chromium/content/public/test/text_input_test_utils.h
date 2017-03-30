@@ -6,13 +6,24 @@
 #define CONTENT_PUBLIC_TEST_TEXT_INPUT_TEST_UTILS_H_
 
 #include <string>
+#include <vector>
 
 #include "base/callback.h"
+#include "base/strings/string16.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 
+namespace gfx {
+class Range;
+}
+
+namespace ui {
+struct CompositionUnderline;
+}
+
 namespace content {
 
+class RenderWidgetHost;
 class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
 class WebContents;
@@ -38,18 +49,34 @@ size_t GetRegisteredViewsCountFromTextInputManager(WebContents* web_contents);
 // given WebContents.
 RenderWidgetHostView* GetActiveViewFromWebContents(WebContents* web_contents);
 
+// This method will send a request for an immediate update on composition range
+// from TextInputManager's active widget corresponding to the |web_contents|.
+// This function will return false if the request is not successfully sent;
+// either due to missing TextInputManager or lack of an active widget.
+bool RequestCompositionInfoFromActiveWidget(WebContents* web_contents);
+
 // This class provides the necessary API for accessing the state of and also
 // observing the TextInputManager for WebContents.
 class TextInputManagerTester {
  public:
-  using Callback = base::Callback<void(TextInputManagerTester*)>;
-
   TextInputManagerTester(WebContents* web_contents);
   virtual ~TextInputManagerTester();
 
   // Sets a callback which is invoked when a RWHV calls UpdateTextInputState
   // on the TextInputManager which is being observed.
-  void SetUpdateTextInputStateCalledCallback(const Callback& callback);
+  void SetUpdateTextInputStateCalledCallback(const base::Closure& callback);
+
+  // Sets a callback which is invoked when a RWHV calls SelectionBoundsChanged
+  // on the TextInputManager which is being observed.
+  void SetOnSelectionBoundsChangedCallback(const base::Closure& callback);
+
+  // Sets a callback which is invoked when a RWHV calls
+  // ImeCompositionRangeChanged on the TextInputManager that is being observed.
+  void SetOnImeCompositionRangeChangedCallback(const base::Closure& callback);
+
+  // Sets a callback which is invoked when a RWHV calls SelectionChanged on the
+  // TextInputManager which is being observed.
+  void SetOnTextSelectionChangedCallback(const base::Closure& callback);
 
   // Returns true if there is a focused <input> and populates |type| with
   // |TextInputState.type| of the TextInputManager.
@@ -59,13 +86,16 @@ class TextInputManagerTester {
   // |TextInputState.value| of the TextInputManager.
   bool GetTextInputValue(std::string* value);
 
+  // Returns true if there is a focused <input> and populates |length| with the
+  // length of the selected text range in the focused view.
+  bool GetCurrentTextSelectionLength(size_t* length);
+
   // Returns the RenderWidgetHostView with a focused <input> element or nullptr
   // if none exists.
   const RenderWidgetHostView* GetActiveView();
 
-  // Returns the RenderWidgetHostView which has most recently called
-  // TextInputManager::UpdateTextInputState on the TextInputManager which is
-  // being observed.
+  // Returns the RenderWidgetHostView which has most recently updated any of its
+  // state (e.g., TextInputState or otherwise).
   const RenderWidgetHostView* GetUpdatedView();
 
   // Returns true if a call to TextInputManager::UpdateTextInputState has led

@@ -26,18 +26,15 @@ namespace android_webview {
 
 class ChildFrame;
 class RenderThreadManager;
-class ScopedAppGLStateRestore;
 class SurfacesInstance;
 
 class HardwareRenderer : public cc::SurfaceFactoryClient {
  public:
-  HardwareRenderer(RenderThreadManager* state, int framebuffer_binding_ext);
+  explicit HardwareRenderer(RenderThreadManager* state);
   ~HardwareRenderer() override;
 
-  void DrawGL(AwDrawGLInfo* draw_info, const ScopedAppGLStateRestore& gl_state);
+  void DrawGL(AwDrawGLInfo* draw_info);
   void CommitFrame();
-
-  void SetBackingFrameBufferObject(int framebuffer_binding_ext);
 
  private:
   // cc::SurfaceFactoryClient implementation.

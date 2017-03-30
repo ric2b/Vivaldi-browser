@@ -89,6 +89,16 @@ blink::WebGestureCurve* BlimpInputHandlerWrapper::CreateFlingAnimationCurve(
                false /* on_main_thread */).release();
 }
 
+void BlimpInputHandlerWrapper::DispatchNonBlockingEventToMainThread(
+    ui::ScopedWebInputEvent event,
+    const ui::LatencyInfo& latency_info) {
+  DCHECK(compositor_thread_checker_.CalledOnValidThread());
+  DCHECK_EQ(event->type, blink::WebInputEvent::MouseWheel);
+ 
+  NOTIMPLEMENTED()
+      << "Dispatching Non Blocking Events to the engine is not supported";
+}
+
 void BlimpInputHandlerWrapper::DidOverscroll(
     const gfx::Vector2dF& accumulated_overscroll,
     const gfx::Vector2dF& latest_overscroll_delta,

@@ -262,10 +262,11 @@ public class LayoutManagerDocument extends LayoutManager
         int themeColor = tab.getThemeColor();
         boolean canUseLiveTexture =
                 tab.getContentViewCore() != null && !tab.isShowingSadTab() && !isNativePage;
-        layoutTab.initFromHost(tab.getBackgroundColor(), tab.shouldStall(), canUseLiveTexture,
-                themeColor, ColorUtils.getTextBoxColorForToolbarBackground(
+        boolean needsUpdate = layoutTab.initFromHost(tab.getBackgroundColor(), tab.shouldStall(),
+                canUseLiveTexture, themeColor, ColorUtils.getTextBoxColorForToolbarBackground(
                                     mContext.getResources(), tab, themeColor),
                 ColorUtils.getTextBoxAlphaForToolbarBackground(tab));
+        if (needsUpdate) requestUpdate();
 
         mHost.requestRender();
     }
@@ -395,8 +396,7 @@ public class LayoutManagerDocument extends LayoutManager
             FullscreenManager manager = mHost.getFullscreenManager();
             if (getActiveLayout() != mStaticLayout
                     || !FeatureUtilities.isDocumentModeEligible(mHost.getContext())
-                    || !DeviceClassManager.enableToolbarSwipe(
-                               FeatureUtilities.isDocumentMode(mHost.getContext()))
+                    || !DeviceClassManager.enableToolbarSwipe()
                     || (manager != null && manager.getPersistentFullscreenMode())) {
                 return false;
             }

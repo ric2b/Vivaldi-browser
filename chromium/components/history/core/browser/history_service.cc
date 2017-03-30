@@ -48,7 +48,7 @@
 #include "components/history/core/browser/visit_delegate.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/history/core/common/thumbnail_score.h"
-#include "sync/api/sync_error_factory.h"
+#include "components/sync/api/sync_error_factory.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 #if defined(OS_IOS)
@@ -65,6 +65,7 @@ static const char* kHistoryThreadName = "Chrome_HistoryThread";
 void RunWithFaviconResults(
     const favicon_base::FaviconResultsCallback& callback,
     std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results) {
+  TRACE_EVENT0("browser", "RunWithFaviconResults");
   callback.Run(*bitmap_results);
 }
 
@@ -107,11 +108,12 @@ class HistoryService::BackendDelegate : public HistoryBackend::Delegate {
       : history_service_(history_service),
         service_task_runner_(service_task_runner) {}
 
-  void NotifyProfileError(sql::InitStatus init_status) override {
+  void NotifyProfileError(sql::InitStatus init_status,
+                          const std::string& diagnostics) override {
     // Send to the history service on the main thread.
     service_task_runner_->PostTask(
         FROM_HERE, base::Bind(&HistoryService::NotifyProfileError,
-                              history_service_, init_status));
+                              history_service_, init_status, diagnostics));
   }
 
   void SetInMemoryBackend(
@@ -307,7 +309,7 @@ base::CancelableTaskTracker::TaskId HistoryService::ScheduleDBTask(
   base::CancelableTaskTracker::IsCanceledCallback is_canceled;
   base::CancelableTaskTracker::TaskId task_id =
       tracker->NewTrackedTaskId(&is_canceled);
-  // Use base::ThreadTaskRunnerHandler::Get() to get a message loop proxy to
+  // Use base::ThreadTaskRunnerHandler::Get() to get a task runner for
   // the current message loop so that we can forward the call to the method
   // HistoryDBTask::DoneRunOnMainThread() in the correct thread.
   thread_->task_runner()->PostTask(
@@ -339,6 +341,17 @@ void HistoryService::TopHosts(size_t num_hosts,
       thread_->task_runner().get(), FROM_HERE,
       base::Bind(&HistoryBackend::TopHosts, history_backend_.get(), num_hosts),
       callback);
+}
+
+void HistoryService::TopUrlsPerDay(
+    size_t num_hosts,
+    const TopUrlsPerDayCallback& callback) const {
+  DCHECK(thread_) << "History service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+  PostTaskAndReplyWithResult(thread_->task_runner().get(), FROM_HERE,
+                             base::Bind(&HistoryBackend::TopUrlsPerDay,
+                                        history_backend_.get(), num_hosts),
+                             callback);
 }
 
 void HistoryService::GetCountsAndLastVisitForOrigins(
@@ -376,7 +389,7 @@ void HistoryService::AddPage(const GURL& url,
   DCHECK(thread_checker_.CalledOnValidThread());
   AddPage(HistoryAddPageArgs(url, time, context_id, nav_entry_id, referrer,
                              redirects, transition, visit_source,
-                             did_replace_entry));
+                             did_replace_entry, true));
 }
 
 void HistoryService::AddPage(const GURL& url,
@@ -384,7 +397,8 @@ void HistoryService::AddPage(const GURL& url,
                              VisitSource visit_source) {
   DCHECK(thread_checker_.CalledOnValidThread());
   AddPage(HistoryAddPageArgs(url, time, nullptr, 0, GURL(), RedirectList(),
-                             ui::PAGE_TRANSITION_LINK, visit_source, false));
+                             ui::PAGE_TRANSITION_LINK, visit_source, false,
+                             true));
 }
 
 void HistoryService::AddPage(const HistoryAddPageArgs& add_page_args) {
@@ -506,6 +520,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFavicons(
     const std::vector<int>& desired_sizes,
     const favicon_base::FaviconResultsCallback& callback,
     base::CancelableTaskTracker* tracker) {
+  TRACE_EVENT0("browser", "HistoryService::GetFavicons");
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   std::vector<favicon_base::FaviconRawBitmapResult>* results =
@@ -523,6 +538,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFaviconsForURL(
     const std::vector<int>& desired_sizes,
     const favicon_base::FaviconResultsCallback& callback,
     base::CancelableTaskTracker* tracker) {
+  TRACE_EVENT0("browser", "HistoryService::GetFaviconsForURL");
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   std::vector<favicon_base::FaviconRawBitmapResult>* results =
@@ -557,6 +573,7 @@ base::CancelableTaskTracker::TaskId HistoryService::GetFaviconForID(
     int desired_size,
     const favicon_base::FaviconResultsCallback& callback,
     base::CancelableTaskTracker* tracker) {
+  TRACE_EVENT0("browser", "HistoryService::GetFaviconForID");
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   std::vector<favicon_base::FaviconRawBitmapResult>* results =
@@ -576,6 +593,7 @@ HistoryService::UpdateFaviconMappingsAndFetch(
     const std::vector<int>& desired_sizes,
     const favicon_base::FaviconResultsCallback& callback,
     base::CancelableTaskTracker* tracker) {
+  TRACE_EVENT0("browser", "HistoryService::UpdateFaviconMappingsAndFetch");
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   std::vector<favicon_base::FaviconRawBitmapResult>* results =
@@ -594,6 +612,7 @@ void HistoryService::MergeFavicon(
     favicon_base::IconType icon_type,
     scoped_refptr<base::RefCountedMemory> bitmap_data,
     const gfx::Size& pixel_size) {
+  TRACE_EVENT0("browser", "HistoryService::MergeFavicon");
   DCHECK(thread_) << "History service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
   if (history_client_ && !history_client_->CanAddURL(page_url))
@@ -983,10 +1002,11 @@ void HistoryService::SetInMemoryBackend(
   in_memory_backend_->AttachToHistoryService(this);
 }
 
-void HistoryService::NotifyProfileError(sql::InitStatus init_status) {
+void HistoryService::NotifyProfileError(sql::InitStatus init_status,
+                                        const std::string& diagnostics) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (history_client_)
-    history_client_->NotifyProfileError(init_status);
+    history_client_->NotifyProfileError(init_status, diagnostics);
 }
 
 void HistoryService::DeleteURL(const GURL& url) {

@@ -66,8 +66,12 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                        blink::WebTouchEvent *event,
                        const ui::LatencyInfo& latency);
 
-  void AddSurfaceIdNamespaceOwner(uint32_t id, RenderWidgetHostViewBase* owner);
-  void RemoveSurfaceIdNamespaceOwner(uint32_t id);
+  void BubbleScrollEvent(RenderWidgetHostViewBase* target_view,
+                         const blink::WebGestureEvent& event);
+  void CancelScrollBubbling(RenderWidgetHostViewBase* target_view);
+
+  void AddSurfaceClientIdOwner(uint32_t id, RenderWidgetHostViewBase* owner);
+  void RemoveSurfaceClientIdOwner(uint32_t id);
 
   bool is_registered(uint32_t id) {
     return owner_map_.find(id) != owner_map_.end();
@@ -94,7 +98,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
         hittest_data_;
   };
 
-  using SurfaceIdNamespaceOwnerMap =
+  using SurfaceClientIdOwnerMap =
       base::hash_map<uint32_t, RenderWidgetHostViewBase*>;
   struct TargetData {
     RenderWidgetHostViewBase* target;
@@ -117,12 +121,27 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                                  blink::WebGestureEvent* event,
                                  const ui::LatencyInfo& latency);
 
-  SurfaceIdNamespaceOwnerMap owner_map_;
+  // The following methods take a GestureScrollUpdate event and send a
+  // GestureScrollBegin or GestureScrollEnd for wrapping it. This is needed
+  // when GestureScrollUpdates are being forwarded for scroll bubbling.
+  void SendGestureScrollBegin(RenderWidgetHostViewBase* view,
+                              const blink::WebGestureEvent& event);
+  void SendGestureScrollEnd(RenderWidgetHostViewBase* view,
+                            const blink::WebGestureEvent& event);
+
+  SurfaceClientIdOwnerMap owner_map_;
   TargetQueue touchscreen_gesture_target_queue_;
   TargetData touch_target_;
   TargetData touchscreen_gesture_target_;
   TargetData touchpad_gesture_target_;
+  TargetData bubbling_gesture_scroll_target_;
+  TargetData first_bubbling_scroll_target_;
   int active_touches_;
+  // Keep track of when we are between GesturePinchBegin and GesturePinchEnd
+  // inclusive, as we need to route these events (and anything in between) to
+  // the main frame.
+  bool in_touchscreen_gesture_pinch_;
+  bool gesture_pinch_did_send_scroll_begin_;
   std::unordered_map<cc::SurfaceId, HittestData, cc::SurfaceIdHash>
       hittest_data_;
 

@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
+#include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/vertex_array_manager.h"
 #include "gpu/command_buffer/service/vertex_attrib_manager.h"
@@ -107,18 +108,12 @@ struct GPU_EXPORT TextureUnit {
 
 class GPU_EXPORT Vec4 {
  public:
-  enum DataType {
-    kFloat,
-    kInt,
-    kUInt,
-  };
-
   Vec4() {
     v_[0].float_value = 0.0f;
     v_[1].float_value = 0.0f;
     v_[2].float_value = 0.0f;
     v_[3].float_value = 1.0f;
-    type_ = kFloat;
+    type_ = SHADER_VARIABLE_FLOAT;
   }
 
   template <typename T>
@@ -127,7 +122,7 @@ class GPU_EXPORT Vec4 {
   template <typename T>
   void SetValues(const T* values);
 
-  DataType type() const {
+  ShaderVariableBaseType type() const {
     return type_;
   }
 
@@ -141,7 +136,7 @@ class GPU_EXPORT Vec4 {
   };
 
   ValueUnion v_[4];
-  DataType type_;
+  ShaderVariableBaseType type_;
 };
 
 template <>
@@ -195,6 +190,9 @@ struct GPU_EXPORT ContextState {
   void RestoreTextureUnitBindings(
       GLuint unit, const ContextState* prev_state) const;
 
+  void PushTextureDecompressionUnpackState() const;
+  void RestoreUnpackState() const;
+
   // Helper for getting cached state.
   bool GetStateAsGLint(
       GLenum pname, GLint* params, GLsizei* num_written) const;
@@ -244,6 +242,29 @@ struct GPU_EXPORT ContextState {
 
   void SetBoundBuffer(GLenum target, Buffer* buffer);
   void RemoveBoundBuffer(Buffer* buffer);
+
+  void InitGenericAttribs(GLuint max_vertex_attribs) {
+    attrib_values.resize(max_vertex_attribs);
+
+    uint32_t packed_size = max_vertex_attribs / 16;
+    packed_size += (max_vertex_attribs % 16 == 0) ? 0 : 1;
+    generic_attrib_base_type_mask_.resize(packed_size);
+    for (uint32_t i = 0; i < packed_size; ++i) {
+      // All generic attribs are float type by default.
+      generic_attrib_base_type_mask_[i] = 0x55555555u * SHADER_VARIABLE_FLOAT;
+    }
+  }
+
+  void SetGenericVertexAttribBaseType(GLuint index, GLenum base_type) {
+    DCHECK_LT(index, attrib_values.size());
+    int shift_bits = (index % 16) * 2;
+    generic_attrib_base_type_mask_[index / 16] &= ~(0x3 << shift_bits);
+    generic_attrib_base_type_mask_[index / 16] |= (base_type << shift_bits);
+  }
+
+  const std::vector<uint32_t>& generic_attrib_base_type_mask() const {
+    return generic_attrib_base_type_mask_;
+  }
 
   void UnbindTexture(TextureRef* texture);
   void UnbindSampler(Sampler* sampler);
@@ -321,6 +342,11 @@ struct GPU_EXPORT ContextState {
   void InitStateManual(const ContextState* prev_state) const;
 
   bool framebuffer_srgb_;
+
+  // Generic vertex attrib base types: FLOAT, INT, or UINT.
+  // Each base type is encoded into 2 bits, the lowest 2 bits for location 0,
+  // the highest 2 bits for location (max_vertex_attribs - 1).
+  std::vector<uint32_t> generic_attrib_base_type_mask_;
 
   FeatureInfo* feature_info_;
   std::unique_ptr<ErrorState> error_state_;

@@ -53,6 +53,7 @@ scoped_refptr<Importer> CreateImporterByType(ImporterType type,
     case TYPE_OPERA_BOOKMARK_FILE:
       return new OperaImporter(import_config);
     case TYPE_CHROME:
+    case TYPE_CHROMIUM:
     case TYPE_YANDEX:
     case TYPE_OPERA_OPIUM:
     case TYPE_OPERA_OPIUM_BETA:

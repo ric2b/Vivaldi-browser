@@ -16,7 +16,7 @@ namespace security_interstitials {
 namespace {
 
 // URL for help page.
-const char kHelpURL[] = "https://support.google.com/chrome/answer/4454607";
+const char kHelpURL[] = "https://support.google.com/chrome/answer/6098869";
 
 bool IsMasked(int options, SSLErrorUI::SSLErrorOptionsMask mask) {
   return ((options & mask) != 0);
@@ -66,6 +66,7 @@ void SSLErrorUI::PopulateStringsForHTML(base::DictionaryValue* load_time_data) {
   common_string_util::PopulateSSLLayoutStrings(cert_error_, load_time_data);
   common_string_util::PopulateSSLDebuggingStrings(ssl_info_, time_triggered_,
                                                   load_time_data);
+  common_string_util::PopulateNewIconStrings(load_time_data);
 
   // Shared values for both the overridable and non-overridable versions.
   load_time_data->SetBoolean("bad_clock", false);

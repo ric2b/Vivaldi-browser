@@ -28,28 +28,32 @@ class Transform;
 }
 
 namespace ui {
+class EventHandler;
 class Layer;
 }
 
 namespace views {
+class View;
 class Widget;
 }
 
 namespace ash {
 
+class ImmersiveFullscreenController;
+struct ShelfItemDetails;
 class WmLayoutManager;
 class WmRootWindowController;
 class WmShell;
+class WmTransientWindowObserver;
 class WmWindowObserver;
 enum class WmWindowProperty;
 
 namespace wm {
-class WMEvent;
 class WindowState;
 }
 
 // This class exists as a porting layer to allow ash/wm to work with
-// aura::Window or mus::Window. See aura::Window for details on the functions.
+// aura::Window or ui::Window. See aura::Window for details on the functions.
 class ASH_EXPORT WmWindow {
  public:
   // See comments in SetBoundsInScreen().
@@ -72,6 +76,7 @@ class ASH_EXPORT WmWindow {
 
   // Used for debugging.
   virtual void SetName(const char* name) = 0;
+  virtual std::string GetName() const = 0;
 
   virtual base::string16 GetTitle() const = 0;
 
@@ -81,6 +86,8 @@ class ASH_EXPORT WmWindow {
   virtual WmWindow* GetChildByShellWindowId(int id) = 0;
 
   virtual ui::wm::WindowType GetType() const = 0;
+
+  virtual bool IsBubble() = 0;
 
   // TODO(sky): seems like this shouldn't be exposed.
   virtual ui::Layer* GetLayer() = 0;
@@ -117,6 +124,12 @@ class ASH_EXPORT WmWindow {
 
   virtual bool GetBoolProperty(WmWindowProperty key) = 0;
   virtual int GetIntProperty(WmWindowProperty key) = 0;
+  virtual void SetIntProperty(WmWindowProperty key, int value) = 0;
+
+  // Returns null if there are no details.
+  virtual ShelfItemDetails* GetShelfItemDetails() = 0;
+  virtual void SetShelfItemDetails(const ShelfItemDetails& details) = 0;
+  virtual void ClearShelfItemDetails() = 0;
 
   wm::WindowState* GetWindowState() {
     return const_cast<wm::WindowState*>(
@@ -124,7 +137,11 @@ class ASH_EXPORT WmWindow {
   }
   virtual const wm::WindowState* GetWindowState() const = 0;
 
+  // The implementation of this matches aura::Window::GetToplevelWindow().
   virtual WmWindow* GetToplevelWindow() = 0;
+  // The implementation of this matches
+  // aura::client::ActivationClient::GetToplevelWindow().
+  virtual WmWindow* GetToplevelWindowForFocus() = 0;
 
   // See aura::client::ParentWindowWithContext() for details of what this does.
   virtual void SetParentUsingContext(WmWindow* context,
@@ -253,6 +270,11 @@ class ASH_EXPORT WmWindow {
   virtual void ShowResizeShadow(int component) = 0;
   virtual void HideResizeShadow() = 0;
 
+  // Installs a resize handler on the window that makes it easier to resize
+  // the window. See ResizeHandleWindowTargeter for the specifics.
+  virtual void InstallResizeHandleWindowTargeter(
+      ImmersiveFullscreenController* immersive_fullscreen_controller) = 0;
+
   // See description in SetBoundsInScreen().
   virtual void SetBoundsInScreenBehaviorForChildren(BoundsInScreenBehavior) = 0;
 
@@ -271,9 +293,24 @@ class ASH_EXPORT WmWindow {
   // container. This is used by SetBoundsInScreen().
   virtual void SetDescendantsStayInSameRootWindow(bool value) = 0;
 
+  // Returns a View that renders the contents of this window's layers.
+  virtual std::unique_ptr<views::View> CreateViewWithRecreatedLayers() = 0;
+
   virtual void AddObserver(WmWindowObserver* observer) = 0;
   virtual void RemoveObserver(WmWindowObserver* observer) = 0;
   virtual bool HasObserver(const WmWindowObserver* observer) const = 0;
+
+  virtual void AddTransientWindowObserver(
+      WmTransientWindowObserver* observer) = 0;
+  virtual void RemoveTransientWindowObserver(
+      WmTransientWindowObserver* observer) = 0;
+
+  // Adds or removes a handler to receive events targeted at this window, before
+  // this window handles the events itself; the handler does not recieve events
+  // from embedded windows. This only supports windows with internal widgets;
+  // see GetInternalWidget(). Ownership of the handler is not transferred.
+  virtual void AddLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
+  virtual void RemoveLimitedPreTargetHandler(ui::EventHandler* handler) = 0;
 
  protected:
   virtual ~WmWindow() {}

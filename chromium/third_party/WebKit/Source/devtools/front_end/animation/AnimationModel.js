@@ -20,13 +20,15 @@ WebInspector.AnimationModel = function(target)
     /** @type {!Array.<string>} */
     this._pendingAnimations = [];
     this._playbackRate = 1;
-    target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._reset, this);
-    this._screenshotCapture = new WebInspector.AnimationModel.ScreenshotCapture(target, this);
+    var resourceTreeModel = /** @type {!WebInspector.ResourceTreeModel} */ (WebInspector.ResourceTreeModel.fromTarget(target));
+    resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.Events.MainFrameNavigated, this._reset, this);
+    this._screenshotCapture = new WebInspector.AnimationModel.ScreenshotCapture(target, this, resourceTreeModel);
 }
 
+/** @enum {symbol} */
 WebInspector.AnimationModel.Events = {
-    AnimationGroupStarted: "AnimationGroupStarted",
-    ModelReset: "ModelReset"
+    AnimationGroupStarted: Symbol("AnimationGroupStarted"),
+    ModelReset: Symbol("ModelReset")
 }
 
 WebInspector.AnimationModel.prototype = {
@@ -202,10 +204,12 @@ WebInspector.AnimationModel._symbol = Symbol("AnimationModel");
 
 /**
  * @param {!WebInspector.Target} target
- * @return {!WebInspector.AnimationModel}
+ * @return {?WebInspector.AnimationModel}
  */
 WebInspector.AnimationModel.fromTarget = function(target)
 {
+    if (!target.hasDOMCapability())
+        return null;
     if (!target[WebInspector.AnimationModel._symbol])
         target[WebInspector.AnimationModel._symbol] = new WebInspector.AnimationModel(target);
 
@@ -460,14 +464,6 @@ WebInspector.AnimationModel.AnimationEffect.prototype = {
     endDelay: function()
     {
         return this._payload.endDelay;
-    },
-
-    /**
-     * @return {number}
-     */
-    playbackRate: function()
-    {
-        return this._payload.playbackRate;
     },
 
     /**
@@ -877,13 +873,14 @@ WebInspector.AnimationDispatcher.prototype = {
  * @constructor
  * @param {!WebInspector.Target} target
  * @param {!WebInspector.AnimationModel} model
+ * @param {!WebInspector.ResourceTreeModel} resourceTreeModel
  */
-WebInspector.AnimationModel.ScreenshotCapture = function(target, model)
+WebInspector.AnimationModel.ScreenshotCapture = function(target, model, resourceTreeModel)
 {
     this._target = target;
     /** @type {!Array<!WebInspector.AnimationModel.ScreenshotCapture.Request>} */
     this._requests = [];
-    this._target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.ScreencastFrame, this._screencastFrame, this);
+    resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.Events.ScreencastFrame, this._screencastFrame, this);
     this._model = model;
     this._model.addEventListener(WebInspector.AnimationModel.Events.ModelReset, this._stopScreencast, this);
 }

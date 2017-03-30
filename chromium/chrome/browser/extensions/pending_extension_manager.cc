@@ -7,6 +7,8 @@
 #include <algorithm>
 
 #include "base/logging.h"
+#include "base/metrics/histogram.h"
+#include "base/stl_util.h"
 #include "base/version.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/browser/browser_thread.h"
@@ -25,7 +27,7 @@ bool AlwaysInstall(const extensions::Extension* extension) {
   return true;
 }
 
-std::string GetVersionString(const Version& version) {
+std::string GetVersionString(const base::Version& version) {
   return version.IsValid() ? version.GetString() : "invalid";
 }
 
@@ -53,6 +55,13 @@ const PendingExtensionInfo* PendingExtensionManager::GetById(
 }
 
 bool PendingExtensionManager::Remove(const std::string& id) {
+  if (base::ContainsKey(expected_policy_reinstalls_, id)) {
+    base::TimeDelta latency =
+        base::TimeTicks::Now() - expected_policy_reinstalls_[id];
+    UMA_HISTOGRAM_LONG_TIMES("Extensions.CorruptPolicyExtensionResolved",
+                             latency);
+    expected_policy_reinstalls_.erase(id);
+  }
   PendingExtensionList::iterator iter;
   for (iter = pending_extension_list_.begin();
        iter != pending_extension_list_.end();
@@ -84,6 +93,17 @@ bool PendingExtensionManager::HasPendingExtensionFromSync() const {
   }
 
   return false;
+}
+
+void PendingExtensionManager::ExpectPolicyReinstallForCorruption(
+    const ExtensionId& id) {
+  expected_policy_reinstalls_[id] = base::TimeTicks::Now();
+  UMA_HISTOGRAM_BOOLEAN("Extensions.CorruptPolicyExtensionDetected", true);
+}
+
+bool PendingExtensionManager::IsPolicyReinstallForCorruptionExpected(
+    const ExtensionId& id) const {
+  return base::ContainsKey(expected_policy_reinstalls_, id);
 }
 
 bool PendingExtensionManager::AddFromSync(
@@ -146,7 +166,7 @@ bool PendingExtensionManager::AddFromExtensionImport(
   return AddExtensionImpl(id,
                           std::string(),
                           update_url,
-                          Version(),
+                          base::Version(),
                           should_allow_install,
                           kIsFromSync,
                           kManifestLocation,
@@ -187,7 +207,7 @@ bool PendingExtensionManager::AddFromExternalUpdateUrl(
   return AddExtensionImpl(id,
                           install_parameter,
                           update_url,
-                          Version(),
+                          base::Version(),
                           &AlwaysInstall,
                           kIsFromSync,
                           location,
@@ -200,7 +220,7 @@ bool PendingExtensionManager::AddFromExternalUpdateUrl(
 bool PendingExtensionManager::AddFromExternalFile(
     const std::string& id,
     Manifest::Location install_source,
-    const Version& version,
+    const base::Version& version,
     int creation_flags,
     bool mark_acknowledged) {
   // TODO(skerner): AddFromSync() checks to see if the extension is
@@ -248,7 +268,7 @@ bool PendingExtensionManager::AddExtensionImpl(
     const std::string& id,
     const std::string& install_parameter,
     const GURL& update_url,
-    const Version& version,
+    const base::Version& version,
     PendingExtensionInfo::ShouldAllowInstallPredicate should_allow_install,
     bool is_from_sync,
     Manifest::Location install_source,

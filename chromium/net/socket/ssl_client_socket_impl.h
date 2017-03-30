@@ -28,6 +28,7 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/openssl_ssl_util.h"
+#include "net/ssl/scoped_openssl_types.h"
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/ssl/ssl_config_service.h"
 
@@ -72,7 +73,6 @@ class SSLClientSocketImpl : public SSLClientSocket {
 
   // SSLClientSocket implementation.
   void GetSSLCertRequestInfo(SSLCertRequestInfo* cert_request_info) override;
-  NextProtoStatus GetNextProto(std::string* proto) const override;
   ChannelIDService* GetChannelIDService() const override;
   Error GetSignedEKMForTokenBinding(crypto::ECPrivateKey* key,
                                     std::vector<uint8_t>* out) override;
@@ -96,6 +96,8 @@ class SSLClientSocketImpl : public SSLClientSocket {
   void SetSubresourceSpeculation() override;
   void SetOmniboxSpeculation() override;
   bool WasEverUsed() const override;
+  bool WasNpnNegotiated() const override;
+  NextProto GetNegotiatedProtocol() const override;
   bool GetSSLInfo(SSLInfo* ssl_info) override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
   void ClearConnectionAttempts() override {}
@@ -217,18 +219,17 @@ class SSLClientSocketImpl : public SSLClientSocket {
   // Callbacks for operations with the private key.
   int PrivateKeyTypeCallback();
   size_t PrivateKeyMaxSignatureLenCallback();
-  ssl_private_key_result_t PrivateKeySignCallback(uint8_t* out,
-                                                  size_t* out_len,
-                                                  size_t max_out,
-                                                  const EVP_MD* md,
-                                                  const uint8_t* in,
-                                                  size_t in_len);
-  ssl_private_key_result_t PrivateKeySignCompleteCallback(uint8_t* out,
-                                                          size_t* out_len,
-                                                          size_t max_out);
+  ssl_private_key_result_t PrivateKeySignDigestCallback(uint8_t* out,
+                                                        size_t* out_len,
+                                                        size_t max_out,
+                                                        const EVP_MD* md,
+                                                        const uint8_t* in,
+                                                        size_t in_len);
+  ssl_private_key_result_t PrivateKeyCompleteCallback(uint8_t* out,
+                                                      size_t* out_len,
+                                                      size_t max_out);
 
-  void OnPrivateKeySignComplete(Error error,
-                                const std::vector<uint8_t>& signature);
+  void OnPrivateKeyComplete(Error error, const std::vector<uint8_t>& signature);
 
   int TokenBindingAdd(const uint8_t** out,
                       size_t* out_len,
@@ -238,6 +239,17 @@ class SSLClientSocketImpl : public SSLClientSocket {
                         int* out_alert_value);
 
   void LogConnectEndEvent(int rv);
+
+  // Record which TLS extension was used to negotiate protocol and protocol
+  // chosen in a UMA histogram.
+  void RecordNegotiationExtension() const;
+
+  // Records histograms for channel id support during full handshakes - resumed
+  // handshakes are ignored.
+  void RecordChannelIDSupport() const;
+
+  // Returns whether TLS channel ID is enabled.
+  bool IsChannelIDEnabled() const;
 
   bool transport_send_busy_;
   bool transport_recv_busy_;
@@ -287,6 +299,7 @@ class SSLClientSocketImpl : public SSLClientSocket {
   std::unique_ptr<PeerCertificateChain> server_cert_chain_;
   scoped_refptr<X509Certificate> server_cert_;
   CertVerifyResult server_cert_verify_result_;
+  std::string ocsp_response_;
   bool completed_connect_;
 
   // Set when Read() or Write() successfully reads or writes data to or from the
@@ -341,15 +354,16 @@ class SSLClientSocketImpl : public SSLClientSocket {
   bool disconnected_;
 
   NextProtoStatus npn_status_;
-  std::string npn_proto_;
+  NextProto negotiated_protocol_;
+  // Protocol negotiation extension used.
+  SSLNegotiationExtension negotiation_extension_;
   // Written by the |channel_id_service_|.
   std::unique_ptr<crypto::ECPrivateKey> channel_id_key_;
   // True if a channel ID was sent.
   bool channel_id_sent_;
-  // True if the current session was newly-established, but the certificate had
-  // not yet been verified externally, so it cannot be inserted into the cache
-  // until later.
-  bool session_pending_;
+  // If non-null, the newly-established to be inserted into the session cache
+  // once certificate verification is done.
+  ScopedSSL_SESSION pending_session_;
   // True if the initial handshake's certificate has been verified.
   bool certificate_verified_;
   // The request handle for |channel_id_service_|.

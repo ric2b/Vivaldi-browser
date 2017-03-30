@@ -32,8 +32,8 @@
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_retry_info.h"
 #include "net/proxy/proxy_service.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -431,12 +431,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
   if (info_sources & NET_INFO_SPDY_STATUS) {
     base::DictionaryValue* status_dict = new base::DictionaryValue();
 
-    status_dict->SetBoolean("enable_spdy31",
-                            http_network_session->params().enable_spdy31 &&
-                                HttpStreamFactory::spdy_enabled());
     status_dict->SetBoolean("enable_http2",
-                            http_network_session->params().enable_http2 &&
-                                HttpStreamFactory::spdy_enabled());
+                            http_network_session->params().enable_http2);
 
     NextProtoVector alpn_protos;
     http_network_session->GetAlpnProtos(&alpn_protos);

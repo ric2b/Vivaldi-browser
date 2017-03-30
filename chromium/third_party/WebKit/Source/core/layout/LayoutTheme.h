@@ -130,7 +130,8 @@ public:
     virtual Color platformDefaultCompositionBackgroundColor() const { return defaultCompositionBackgroundColor; }
     virtual void platformColorsDidChange();
 
-    virtual double caretBlinkInterval() const { return 0.5; }
+    void setCaretBlinkInterval(double);
+    virtual double caretBlinkInterval() const;
 
     // System fonts and colors for CSS.
     virtual void systemFont(CSSValueID systemFontID, FontStyle&, FontWeight&, float& fontSize, AtomicString& fontFamily) const = 0;
@@ -145,12 +146,14 @@ public:
 
     virtual void adjustSliderThumbSize(ComputedStyle&) const;
 
-    virtual int popupInternalPaddingLeft(const ComputedStyle&) const { return 0; }
-    virtual int popupInternalPaddingRight(const ComputedStyle&) const { return 0; }
+    virtual int popupInternalPaddingStart(const ComputedStyle&) const { return 0; }
+    virtual int popupInternalPaddingEnd(const ComputedStyle&) const { return 0; }
     virtual int popupInternalPaddingTop(const ComputedStyle&) const { return 0; }
     virtual int popupInternalPaddingBottom(const ComputedStyle&) const { return 0; }
 
     virtual ScrollbarControlSize scrollbarControlSizeForPart(ControlPart) { return RegularScrollbar; }
+
+    virtual void adjustProgressBarBounds(ComputedStyle& style) const { }
 
     // Returns the repeat interval of the animation for the progress bar.
     virtual double animationRepeatIntervalForProgressBar() const;
@@ -212,6 +215,7 @@ protected:
 
     virtual void adjustMenuListStyle(ComputedStyle&, Element*) const;
     virtual void adjustMenuListButtonStyle(ComputedStyle&, Element*) const;
+    virtual void adjustSliderContainerStyle(ComputedStyle&, Element*) const;
     virtual void adjustSliderThumbStyle(ComputedStyle&) const;
     virtual void adjustSearchFieldStyle(ComputedStyle&) const;
     virtual void adjustSearchFieldCancelButtonStyle(ComputedStyle&) const;
@@ -242,6 +246,7 @@ private:
 
     Color m_customFocusRingColor;
     bool m_hasCustomFocusRingColor;
+    double m_caretBlinkInterval = 0.5;
 
     // This color is expected to be drawn on a semi-transparent overlay,
     // making it more transparent than its alpha value indicates.

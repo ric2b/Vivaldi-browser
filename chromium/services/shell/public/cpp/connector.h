@@ -10,8 +10,8 @@
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/identity.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
-#include "services/shell/public/interfaces/shell.mojom.h"
-#include "services/shell/public/interfaces/shell_client.mojom.h"
+#include "services/shell/public/interfaces/service.mojom.h"
+#include "services/shell/public/interfaces/service_manager.mojom.h"
 
 namespace shell {
 
@@ -19,8 +19,8 @@ namespace shell {
 // connections between applications are established. Once Connect() is called,
 // this class is bound to the thread the call was made on and it cannot be
 // passed to another thread without calling Clone().
-// An instance of this class is created internally by ShellConnection for use
-// on the thread ShellConnection is instantiated on, and this interface is
+// An instance of this class is created internally by ServiceContext for use
+// on the thread ServiceContext is instantiated on, and this interface is
 // wrapped by the Shell interface.
 // To use this interface on other threads, call Shell::CloneConnector() and
 // pass the result to another thread. To pass to subsequent threads, call
@@ -42,20 +42,16 @@ class Connector {
     const Identity& target() { return target_; }
     void set_target(const Identity& target) { target_ = target; }
     void set_client_process_connection(
-        mojom::ShellClientPtr shell_client,
+        mojom::ServicePtr service,
         mojom::PIDReceiverRequest pid_receiver_request) {
-      shell_client_ = std::move(shell_client);
+      service_ = std::move(service);
       pid_receiver_request_ = std::move(pid_receiver_request);
     }
     void TakeClientProcessConnection(
-        mojom::ShellClientPtr* shell_client,
+        mojom::ServicePtr* service,
         mojom::PIDReceiverRequest* pid_receiver_request) {
-      *shell_client = std::move(shell_client_);
+      *service = std::move(service_);
       *pid_receiver_request = std::move(pid_receiver_request_);
-    }
-    InterfaceRegistry* exposed_interfaces() { return exposed_interfaces_; }
-    void set_exposed_interfaces(InterfaceRegistry* exposed_interfaces) {
-      exposed_interfaces_ = exposed_interfaces;
     }
     InterfaceProvider* remote_interfaces() { return remote_interfaces_; }
     void set_remote_interfaces(InterfaceProvider* remote_interfaces) {
@@ -64,13 +60,16 @@ class Connector {
 
    private:
     Identity target_;
-    mojom::ShellClientPtr shell_client_;
+    mojom::ServicePtr service_;
     mojom::PIDReceiverRequest pid_receiver_request_;
-    InterfaceRegistry* exposed_interfaces_ = nullptr;
     InterfaceProvider* remote_interfaces_ = nullptr;
 
     DISALLOW_COPY_AND_ASSIGN(ConnectParams);
   };
+
+  // Creates a new Connector instance and fills in |*request| with a request
+  // for the other end the Connector's interface.
+  static std::unique_ptr<Connector> Create(mojom::ConnectorRequest* request);
 
   // Requests a new connection to an application. Returns a pointer to the
   // connection if the connection is permitted by this application's delegate,

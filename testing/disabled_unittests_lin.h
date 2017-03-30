@@ -51,3 +51,11 @@
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_MP4)
   DISABLE_ALL(MediaCanPlayTypeTest)
+
+  // Assume these fails due to switches::kExtensionActionRedesign being disabled
+  DISABLE(ToolbarActionViewInteractiveUITest, TestClickingOnOverflowedAction)
+
+  // VB-22258
+  DISABLE(ComponentFlashHintFileTest, CorruptionTest)
+  DISABLE(ComponentFlashHintFileTest, ExistsTest)
+  DISABLE(ComponentFlashHintFileTest, InstallTest)

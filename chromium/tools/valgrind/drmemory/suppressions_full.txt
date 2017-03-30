@@ -1218,8 +1218,8 @@ name=bug_162825
 
 UNINITIALIZED READ
 name=bug_176616_a
-*!WebTestRunner::WebTestProxyBase::didCreateDataSource
-*!WebTestRunner::WebTestProxy<>::didCreateDataSource
+*!WebTestRunner::WebViewTestProxyBase::didCreateDataSource
+*!WebTestRunner::WebViewTestProxy<>::didCreateDataSource
 *!blink::FrameLoaderClientImpl::createDocumentLoader
 *!blink::FrameLoader::init
 *!blink::Frame::init
@@ -1603,8 +1603,8 @@ gl_in_process_context.dll!gpu::GLInProcessContext::CreateContext
 
 UNINITIALIZED READ
 name=bug_371844
-*!content::GamepadProvider::PadState::Match
-*!content::GamepadProvider::DoPoll
+*!device::GamepadProvider::PadState::Match
+*!device::GamepadProvider::DoPoll
 
 UNINITIALIZED READ
 name=bug_371950
@@ -1660,12 +1660,6 @@ name=bug_377728
 *!SpellcheckLanguage::SpellCheckWord
 *!SpellCheck::SpellCheckWord
 
-UNINITIALIZED READ
-name=bug_387373
-*!blink::WebEmbeddedWorkerImpl::startWorkerContext
-*!content::EmbeddedWorkerDispatcher::OnStartWorker
-*!EmbeddedWorkerMsg_StartWorker::Dispatch<>
-
 UNADDRESSABLE ACCESS
 name=bug_389132
 content.dll!crypto_kernel_do_load_cipher_type
@@ -1699,17 +1693,6 @@ content.dll!content::RenderFrameImpl::OnExtendSelectionAndDelete
 UNINITIALIZED READ
 name=bug_399842
 skia.dll!S32A_Opaque_BlitRow32_SSE4
-
-HANDLE LEAK
-name=bug_403544
-system call NtCreateSemaphore
-KERNELBASE.dll!CreateSemaphoreExW
-...
-v8.dll!v8::internal::SweeperThread::SweeperThread
-...
-blink_web.dll!blink::WorkerScriptController::WorkerScriptController
-blink_web.dll!blink::WorkerGlobalScope::WorkerGlobalScope
-blink_web.dll!blink::ServiceWorkerGlobalScope::ServiceWorkerGlobalScope
 
 UNINITIALIZED READ
 name=bug_414268
@@ -2162,3 +2145,12 @@ name=bug_617740
 media.dll!mkvmuxer::Segment::WriteFramesAll
 media.dll!mkvmuxer::Segment::Finalize
 media.dll!media::WebmMuxer::~WebmMuxer
+
+HANDLE LEAK
+name=bug_628485
+system call NtCreateSemaphore
+KERNELBASE.dll!CreateSemaphoreExW
+KERNEL32.dll!CreateSemaphoreW
+content.dll!vp8cx_create_encoder_threads
+content.dll!vp8_create_compressor
+content.dll!vp8e_init

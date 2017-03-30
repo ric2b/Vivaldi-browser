@@ -23,6 +23,9 @@ class ImporterProgressObserver {
   // source profile and is now ready for further processing.
   virtual void ImportItemEnded(ImportItem item) = 0;
 
+  // Invoked when an item fails to import.
+  virtual void ImportItemFailed(ImportItem item, const std::string& error) = 0;
+
   // Invoked when the source profile has been imported.
   virtual void ImportEnded() = 0;
 

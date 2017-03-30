@@ -12,6 +12,7 @@
 #define GPU_COMMAND_BUFFER_SERVICE_GLES2_CMD_VALIDATION_AUTOGEN_H_
 
 ValueValidator<GLenum> attachment;
+ValueValidator<GLenum> attachment_query;
 class BackbufferAttachmentValidator {
  public:
   bool IsValid(const GLenum value) const;
@@ -112,8 +113,8 @@ class FaceTypeValidator {
 };
 FaceTypeValidator face_type;
 
-ValueValidator<GLenum> frame_buffer_parameter;
-ValueValidator<GLenum> frame_buffer_target;
+ValueValidator<GLenum> framebuffer_parameter;
+ValueValidator<GLenum> framebuffer_target;
 ValueValidator<GLenum> g_l_state;
 class GetMaxIndexTypeValidator {
  public:

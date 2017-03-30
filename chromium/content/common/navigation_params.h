@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <string>
 
 #include "base/memory/ref_counted.h"
@@ -203,6 +204,16 @@ struct CONTENT_EXPORT StartNavigationParams {
   int transferred_request_request_id;
 };
 
+// PlzNavigate
+// Timings collected in the browser during navigation for the
+// Navigation Timing API. Sent to Blink in RequestNavigationParams when
+// the navigation is ready to be committed.
+struct CONTENT_EXPORT NavigationTiming {
+  base::TimeTicks redirect_start;
+  base::TimeTicks redirect_end;
+  base::TimeTicks fetch_start;
+};
+
 // Used by FrameMsg_Navigate. Holds the parameters needed by the renderer to
 // start a browser-initiated navigation besides those in CommonNavigationParams.
 // PlzNavigate: sent to the renderer to make it issue a stream request for a
@@ -217,6 +228,8 @@ struct CONTENT_EXPORT RequestNavigationParams {
                           int32_t page_id,
                           int nav_entry_id,
                           bool is_same_document_history_load,
+                          bool is_history_navigation_in_new_child,
+                          std::map<std::string, bool> subframe_unique_names,
                           bool has_committed_real_load,
                           bool intended_as_new_entry,
                           int pending_history_list_offset,
@@ -262,6 +275,20 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // the same document.  Defaults to false.
   bool is_same_document_history_load;
 
+  // Whether this is a history navigation in a newly created child frame, in
+  // which case the browser process is instructing the renderer process to load
+  // a URL from a session history item.  Defaults to false.
+  bool is_history_navigation_in_new_child;
+
+  // If this is a history navigation, this contains a map of frame unique names
+  // to |is_about_blank| for immediate children of the frame being navigated for
+  // which there are history items.  The renderer process only needs to check
+  // with the browser process for newly created subframes that have these unique
+  // names (and only when not staying on about:blank).
+  // TODO(creis): Expand this to a data structure including corresponding
+  // same-process PageStates for the whole subtree in https://crbug.com/639842.
+  std::map<std::string, bool> subframe_unique_names;
+
   // Whether the frame being navigated has already committed a real page, which
   // affects how new navigations are classified in the renderer process.
   // This currently is only ever set to true in --site-per-process mode.
@@ -297,6 +324,10 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // PlzNavigate
   // Whether a ServiceWorkerProviderHost should be created for the window.
   bool should_create_service_worker;
+
+  // PlzNavigate
+  // Timing of navigation events.
+  NavigationTiming navigation_timing;
 
 #if defined(OS_ANDROID)
   // The real content of the data: URL. Only used in Android WebView for

@@ -23,6 +23,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/background/background_application_list_model.h"
+#include "chrome/browser/background/background_mode_optimizer.h"
 #include "chrome/browser/background/background_trigger.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_shutdown.h"
@@ -91,6 +92,9 @@ void RecordMenuItemClick(MenuItem item) {
                             MENU_ITEM_NUM_STATES);
 }
 }  // namespace
+
+// static
+bool BackgroundModeManager::should_restart_in_background_ = false;
 
 BackgroundModeManager::BackgroundModeData::BackgroundModeData(
     Profile* profile,
@@ -171,7 +175,7 @@ void BackgroundModeManager::BackgroundModeData::BuildProfileMenu(
     }
 
     // Add a menu item for each trigger.
-    for (const auto& trigger : registered_triggers_) {
+    for (auto* trigger : registered_triggers_) {
       const gfx::ImageSkia* icon = trigger->GetIcon();
       const base::string16& name = trigger->GetName();
       int command_id = command_id_handler_vector_->size();
@@ -318,6 +322,7 @@ BackgroundModeManager::BackgroundModeManager(
     // in a mode that doesn't open a browser window. It will be resumed when the
     // first browser window is opened.
     SuspendBackgroundMode();
+    optimizer_ = BackgroundModeOptimizer::Create();
   }
 
   // If the -keep-alive-for-test flag is passed, then always keep chrome running
@@ -406,6 +411,22 @@ Browser* BackgroundModeManager::GetBrowserWindowForProfile(Profile* profile) {
 
 bool BackgroundModeManager::IsBackgroundModeActive() {
   return in_background_mode_;
+}
+
+bool BackgroundModeManager::IsBackgroundWithoutWindows() const {
+  return KeepAliveRegistry::GetInstance()->WouldRestartWithout({
+      // Transient startup related KeepAlives, not related to any UI.
+      KeepAliveOrigin::SESSION_RESTORE,
+      KeepAliveOrigin::BACKGROUND_MODE_MANAGER_STARTUP,
+
+      // Notification KeepAlives are not dependent on the Chrome UI being
+      // loaded, and can be registered when we were in pure background mode.
+      // They just block it to avoid issues. Ignore them when determining if we
+      // are in that mode.
+      KeepAliveOrigin::NOTIFICATION,
+      KeepAliveOrigin::PENDING_NOTIFICATION_CLICK_EVENT,
+      KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
+  });
 }
 
 int BackgroundModeManager::NumberOfBackgroundModeData() {
@@ -519,7 +540,7 @@ void BackgroundModeManager::OnApplicationListChanged(Profile* profile) {
   // Get the new apps (if any) and process them.
   std::set<const extensions::Extension*> new_apps = bmd->GetNewBackgroundApps();
   std::vector<base::string16> new_names;
-  for (const auto& app : new_apps)
+  for (auto* app : new_apps)
     new_names.push_back(base::UTF8ToUTF16(app->name()));
   OnClientsChanged(profile, new_names);
 }
@@ -671,6 +692,7 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
 //  BackgroundModeManager, private
 void BackgroundModeManager::ReleaseStartupKeepAliveCallback() {
   keep_alive_for_startup_.reset();
+  optimizer_ = BackgroundModeOptimizer::Create();
 }
 
 void BackgroundModeManager::ReleaseStartupKeepAlive() {
@@ -948,7 +970,7 @@ void BackgroundModeManager::UpdateStatusTrayIconContextMenu() {
     std::sort(bmd_vector.begin(), bmd_vector.end(),
               &BackgroundModeData::BackgroundModeDataCompare);
     int profiles_using_background_mode = 0;
-    for (const auto& bmd : bmd_vector) {
+    for (auto* bmd : bmd_vector) {
       // We should only display the profile in the status icon if it has at
       // least one background app.
       if (bmd->GetBackgroundClientCount() > 0) {

@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
-<translation id="1008557486741366299">ఇప్పుడు కాదు</translation>
 <translation id="1047726139967079566">ఈ పేజీని బుక్‌మార్క్ చెయ్యి...</translation>
 <translation id="1172898394251786223">తదుపరి ఫీల్డ్</translation>
 <translation id="2320166752086256636">కీబోర్డ్‌ను దాచు</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">నవీకరణ</translation>
 <translation id="4875622588773761625">మీరు ఈ సైట్ కోసం <ph name="PASSWORD_MANAGER_BRAND" /> మీ పాస్‌వర్డ్‌ను నవీకరించాలని కోరుకుంటున్నారా?</translation>
 <translation id="5317780077021120954">సేవ్ చేయి</translation>
+<translation id="6039694632319341016">ఈ సైట్‌కు <ph name="PASSWORD_MANAGER_BRAND" /> మీ <ph name="USERNAME" /> పాస్‌వర్డ్‌ని నవీకరించాలని మీరు కోరుకుంటున్నారా?</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6149061208933997199">పాస్‌వర్డ్‌ను ఉపయోగించు</translation>
 <translation id="6196207969502475924">వాయిస్ శోధన</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">వచనాన్ని క్లియర్ చేయి</translation>
 <translation id="6456425917241817154">Chrome రూపొందించిన పాస్‌వర్డ్</translation>
 <translation id="6535543971741225613">మీరు ప్రాప్యత చేయడానికి ప్రయత్నిస్తున్న సైట్ వింతగా ప్రవర్తిస్తోంది మరియు దాని URL సరిగ్గా ఉందని Chrome ధృవీకరించలేకపోయింది. భద్రతా కారణాల దృష్ట్యా, మీరు కొనసాగకూడదు మరియు వీలైతే రేపు మళ్లీ ప్రయత్నించండి లేదా మరో విధంగా ప్రయత్నించండి.</translation>
-<translation id="6647073004883890710">ఈ సైట్ కోసం <ph name="USERNAME" /> పాస్‌వర్డ్‌ను <ph name="PASSWORD_MANAGER_BRAND" /> నవీకరించాలని మీరు కోరుకుంటున్నారా?</translation>
 <translation id="7222245588540287464">సందర్భానుసార శోధన ప్రారంభించబడాలో లేదో తెలపండి.</translation>
-<translation id="7378627244592794276">వద్దు</translation>
 <translation id="7456847797759667638">స్థానాన్ని తెరువు...</translation>
 <translation id="7481312909269577407">ఫార్వార్డ్</translation>
 <translation id="7484580869648358686">హెచ్చరిక: ఇక్కడ కొంత సరిగ్గా లేదు!</translation>

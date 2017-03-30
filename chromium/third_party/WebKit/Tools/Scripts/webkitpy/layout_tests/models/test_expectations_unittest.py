@@ -26,19 +26,17 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+from collections import OrderedDict
 import unittest
 
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.system.outputcapture import OutputCapture
-
-from webkitpy.layout_tests.models.test_configuration import *
-from webkitpy.layout_tests.models.test_expectations import *
-
-try:
-    from collections import OrderedDict
-except ImportError:
-    # Needed for Python < 2.7
-    from webkitpy.thirdparty.ordered_dict import OrderedDict
+from webkitpy.layout_tests.models.test_configuration import TestConfiguration, TestConfigurationConverter
+from webkitpy.layout_tests.models.test_expectations import (
+    TestExpectationLine, TestExpectations, ParseError, TestExpectationParser,
+    PASS, FAIL, TEXT, IMAGE, IMAGE_PLUS_TEXT, AUDIO,
+    TIMEOUT, CRASH, LEAK, SKIP, WONTFIX, NEEDS_REBASELINE, MISSING
+)
 
 
 class Base(unittest.TestCase):
@@ -275,7 +273,7 @@ expectations:3 A reftest without text expectation cannot be marked as NeedsRebas
                            "Bug(user) [ Release ] test-to-rebaseline.html [ NeedsRebaseline ]", is_lint_mode=True)
             self.assertFalse(True, "ParseError wasn't raised")
         except ParseError as e:
-            warnings = ("expectations:1 Unrecognized specifier 'foo' failures/expected/text.html\n"
+            warnings = ("expectations:1 Unrecognized specifier \"FOO\" failures/expected/text.html\n"
                         "expectations:2 Path does not exist. non-existent-test.html\n"
                         "expectations:4 A test cannot be rebaselined for Debug/Release. test-to-rebaseline.html")
             self.assertEqual(str(e), warnings)
@@ -429,7 +427,7 @@ class SkippedTests(Base):
         port.skipped_layout_tests = lambda tests: set(['foo/bar/baz.html'])
         capture = OutputCapture()
         capture.capture_output()
-        exp = TestExpectations(port)
+        TestExpectations(port)
         _, _, logs = capture.restore_output()
         self.assertEqual('The following test foo/bar/baz.html from the Skipped list doesn\'t exist\n', logs)
 
@@ -474,7 +472,8 @@ class ExpectationSyntaxTests(Base):
         self.assert_tokenize_exp('[ Mac ] foo.html [ Failure ] ', specifiers=['MAC'], expectations=['FAIL'])
 
     def test_unknown_config(self):
-        self.assert_tokenize_exp('[ Foo ] foo.html [ Pass ]', specifiers=['Foo'], expectations=['PASS'])
+        self.assert_tokenize_exp('[ Foo ] foo.html [ Pass ]', specifiers=['Foo'], expectations=['PASS'],
+                                 warnings=['Unrecognized specifier "Foo"'])
 
     def test_unknown_expectation(self):
         self.assert_tokenize_exp('foo.html [ Audio ]', warnings=['Unrecognized expectation "Audio"'])

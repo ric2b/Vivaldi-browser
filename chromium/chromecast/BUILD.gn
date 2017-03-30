@@ -6,12 +6,12 @@ import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/locales.gni")
 import("//build/config/ui.gni")
-import("//build_overrides/v8.gni")
 import("//chromecast/build/tests/cast_test.gni")
 import("//chromecast/chromecast.gni")
 import("//media/media_options.gni")
 import("//tools/grit/repack.gni")
 import("//ui/ozone/ozone.gni")
+import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -31,6 +31,7 @@ cast_test_group("cast_tests") {
     "//chromecast/base:cast_base_unittests",
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
+    "//chromecast/system/reboot:cast_reboot_unittests",
     "//content/test:content_unittests",
     "//crypto:crypto_unittests",
     "//media:media_unittests",
@@ -39,7 +40,6 @@ cast_test_group("cast_tests") {
     "//ppapi:ppapi_unittests",
     "//sandbox/linux:sandbox_linux_unittests",
     "//sql:sql_unittests",
-    "//sync:sync_unit_tests",
     "//third_party/cacheinvalidation:cacheinvalidation_unittests",
     "//ui/base:ui_base_unittests",
   ]
@@ -61,12 +61,6 @@ cast_test_group("cast_tests") {
       # ProxyScriptFetcherImplTest.HttpMimeType is flaking (b/19848784)
       # Running a batch of net_unittests has high overhead. Run tests in batches of 25 to reduce number of batches (b/23156294).
       "net_unittests --gtest_filter=-KeygenHandlerTest.SmokeTest:KeygenHandlerTest.ConcurrencyTest:ProxyScriptFetcherImplTest.HttpMimeType --test-launcher-timeout=90000 --test-launcher-batch-limit=25",
-
-      # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
-      # Disable ProcessUtilTest.* (need to define OS_ANDROID)
-      # Disable StackContainer.BufferAlignment (don't support 16-byte alignment)
-      # Disable SystemMetrics2Test.GetSystemMemoryInfo (buffers>0 can't be guaranteed)
-      "base_unittests --gtest_filter=-ProcessMetricsTest.GetNumberOfThreads:ProcessUtilTest.*:StackContainer.BufferAlignment:SystemMetrics2Test.GetSystemMemoryInfo",
 
       # DesktopCaptureDeviceTest.*: No capture device on Eureka
       # Disable PepperGamepadHostTest.WaitForReply (pepper not supported on Eureka)
@@ -90,14 +84,21 @@ cast_test_group("cast_tests") {
       #   SoundsManagerTest.Play
       # Disable AudioStreamHandlerTest.ConsecutivePlayRequests (b/16539293)
       "media_unittests --gtest_filter=-AudioOutputControllerTest.PlayDivertSwitchDeviceRevertClose:AudioOutputControllerTest.PlaySwitchDeviceClose:AudioStreamHandlerTest.Play:AudioStreamHandlerTest.ConsecutivePlayRequests:PipelineIntegrationTest.BasicPlayback_MediaSource_VP9_WebM:PipelineIntegrationTest.BasicPlayback_VideoOnly_VP9_WebM:PipelineIntegrationTest.BasicPlayback_VP9*:PipelineIntegrationTest.P444_VP9_WebM:PipelineIntegrationTest.BasicPlayback_VP8A*:OpusAudioDecoderTest/AudioDecoderTest.ProduceAudioSamples/0:SoundsManagerTest.Play",
-      "sync_unit_tests --gtest_filter=-SyncHttpBridgeTest.*",
 
       # DoAppendUTF8Invalid fails because of dcheck_always_on flag in Eng builds
       "url_unittests --gtest_filter=-URLCanonTest.DoAppendUTF8Invalid",
     ]
 
+    # Disable ProcessMetricsTest.GetNumberOfThreads (b/15610509)
+    # Disable ProcessUtilTest.* (need to define OS_ANDROID)
+    # Disable StackContainer.BufferAlignment (don't support 16-byte alignment)
+    # Disable SystemMetrics2Test.GetSystemMemoryInfo (buffers>0 can't be guaranteed)
     if (disable_display) {
-      filters += [ "base_unittests --gtest_filter=-TimeFormattingTest.*" ]
+      # Also disable TimeFormattingTest on audio-only builds, since we don't
+      # include the necessary info in icudtl.dat.
+      filters += [ "base_unittests --gtest_filter=-ProcessMetricsTest.GetNumberOfThreads:ProcessUtilTest.*:StackContainer.BufferAlignment:SystemMetrics2Test.GetSystemMemoryInfo:TimeFormattingTest.*" ]
+    } else {
+      filters += [ "base_unittests --gtest_filter=-ProcessMetricsTest.GetNumberOfThreads:ProcessUtilTest.*:StackContainer.BufferAlignment:SystemMetrics2Test.GetSystemMemoryInfo" ]
     }
   } else if (is_cast_desktop_build || target_os == "android") {
     filters += [
@@ -125,10 +126,15 @@ cast_test_group("cast_tests") {
       "//url:url_unittests",
     ]
 
+    use_gpu_switch = ""
+    if (!is_cast_desktop_build) {
+      use_gpu_switch = " --use-gpu-in-tests"
+    }
+
     # --enable-local-file-accesses => to load sample media files
     # --test-launcher-jobs=1 => so internal code can bind to port
     filters += [
-      "cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1",
+      "cast_shell_browser_test --no-sandbox --enable-local-file-accesses --enable-cma-media-pipeline --ozone-platform=cast --test-launcher-jobs=1" + use_gpu_switch,
       "cast_media_unittests --test-launcher-jobs=1",
       "ipc_tests --test-launcher-jobs=1",
     ]

@@ -22,6 +22,12 @@ float ScaleTilt(int value, int min_value, int num_values) {
   return 180.f * (value - min_value) / num_values - 90.f;
 }
 
+EventPointerType GetToolType(int button_tool) {
+  if (button_tool == BTN_TOOL_RUBBER)
+    return EventPointerType::POINTER_TYPE_ERASER;
+  return EventPointerType::POINTER_TYPE_PEN;
+}
+
 }  // namespace
 
 TabletEventConverterEvdev::TabletEventConverterEvdev(
@@ -178,9 +184,9 @@ void TabletEventConverterEvdev::DispatchMouseButton(const input_event& input) {
   bool down = input.value;
 
   dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
-      input_device_.id, cursor_->GetLocation(), button, down,
+      input_device_.id, EF_NONE, cursor_->GetLocation(), button, down,
       false /* allow_remap */,
-      PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+      PointerDetails(GetToolType(stylus_),
                      /* radius_x */ 0.0f, /* radius_y */ 0.0f, pressure_,
                      tilt_x_, tilt_y_),
       TimeTicksFromInputEvent(input)));
@@ -202,8 +208,8 @@ void TabletEventConverterEvdev::FlushEvents(const input_event& input) {
   UpdateCursor();
 
   dispatcher_->DispatchMouseMoveEvent(MouseMoveEventParams(
-      input_device_.id, cursor_->GetLocation(),
-      PointerDetails(EventPointerType::POINTER_TYPE_PEN,
+      input_device_.id, EF_NONE, cursor_->GetLocation(),
+      PointerDetails(GetToolType(stylus_),
                      /* radius_x */ 0.0f, /* radius_y */ 0.0f, pressure_,
                      tilt_x_, tilt_y_),
       TimeTicksFromInputEvent(input)));

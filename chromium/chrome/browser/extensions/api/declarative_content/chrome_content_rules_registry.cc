@@ -20,6 +20,7 @@
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/common/extension_id.h"
 
 namespace extensions {
 
@@ -135,7 +136,7 @@ void ChromeContentRulesRegistry::DidNavigateMainFrame(
     content::WebContents* contents,
     const content::LoadCommittedDetails& details,
     const content::FrameNavigateParams& params) {
-  if (ContainsKey(active_rules_, contents)) {
+  if (base::ContainsKey(active_rules_, contents)) {
     EvaluationScope evaluation_scope(this);
     for (const std::unique_ptr<ContentPredicateEvaluator>& evaluator :
          evaluators_)
@@ -320,7 +321,7 @@ std::string ChromeContentRulesRegistry::RemoveRulesImpl(
 
     // Remove the ContentRule from active_rules_.
     for (auto& tab_rules_pair : active_rules_) {
-      if (ContainsKey(tab_rules_pair.second, rule)) {
+      if (base::ContainsKey(tab_rules_pair.second, rule)) {
         ContentAction::ApplyInfo apply_info =
             {rule->extension, browser_context(), tab_rules_pair.first,
              rule->priority};
@@ -362,14 +363,14 @@ std::string ChromeContentRulesRegistry::RemoveAllRulesImpl(
 void ChromeContentRulesRegistry::EvaluateConditionsForTab(
     content::WebContents* tab) {
   std::set<const ContentRule*> matching_rules = GetMatchingRules(tab);
-  if (matching_rules.empty() && !ContainsKey(active_rules_, tab))
+  if (matching_rules.empty() && !base::ContainsKey(active_rules_, tab))
     return;
 
   std::set<const ContentRule*>& prev_matching_rules = active_rules_[tab];
   for (const ContentRule* rule : matching_rules) {
     ContentAction::ApplyInfo apply_info =
         {rule->extension, browser_context(), tab, rule->priority};
-    if (!ContainsKey(prev_matching_rules, rule)) {
+    if (!base::ContainsKey(prev_matching_rules, rule)) {
       for (const std::unique_ptr<const ContentAction>& action : rule->actions)
         action->Apply(apply_info);
     } else {
@@ -378,7 +379,7 @@ void ChromeContentRulesRegistry::EvaluateConditionsForTab(
     }
   }
   for (const ContentRule* rule : prev_matching_rules) {
-    if (!ContainsKey(matching_rules, rule)) {
+    if (!base::ContainsKey(matching_rules, rule)) {
       ContentAction::ApplyInfo apply_info =
           {rule->extension, browser_context(), tab, rule->priority};
       for (const std::unique_ptr<const ContentAction>& action : rule->actions)

@@ -11,10 +11,12 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/api/tabs/tabs_windows_api.h"
 #include "chrome/browser/extensions/api/tabs/windows_event_router.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -155,11 +157,14 @@ void TabsEventRouter::TabEntry::WebContentsDestroyed() {
 TabsEventRouter::TabsEventRouter(Profile* profile)
     : profile_(profile),
       favicon_scoped_observer_(this),
-      browser_tab_strip_tracker_(this, this, this) {
+      browser_tab_strip_tracker_(this, this, this),
+      tab_manager_scoped_observer_(this) {
   DCHECK(!profile->IsOffTheRecord());
 
   browser_tab_strip_tracker_.Init(
       BrowserTabStripTracker::InitWith::ALL_BROWERS);
+
+  tab_manager_scoped_observer_.Add(g_browser_process->GetTabManager());
 }
 
 TabsEventRouter::~TabsEventRouter() {
@@ -420,11 +425,6 @@ void TabsEventRouter::TabUpdated(TabEntry* entry,
     changed_property_names.insert(tabs_constants::kMutedInfoKey);
   }
 
-  bool discarded = ExtensionTabUtil::IsDiscarded(entry->web_contents());
-  if (entry->SetDiscarded(discarded)) {
-    changed_property_names.insert(tabs_constants::kDiscardedKey);
-  }
-
   if (!changed_property_names.empty()) {
     DispatchTabUpdatedEvent(entry->web_contents(),
                             std::move(changed_property_names));
@@ -581,6 +581,20 @@ void TabsEventRouter::OnFaviconUpdated(
         static_cast<favicon::ContentFaviconDriver*>(favicon_driver);
     FaviconUrlUpdated(content_favicon_driver->web_contents());
   }
+}
+
+void TabsEventRouter::OnDiscardedStateChange(WebContents* contents,
+                                             bool is_discarded) {
+  std::set<std::string> changed_property_names;
+  changed_property_names.insert(tabs_constants::kDiscardedKey);
+  DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
+}
+
+void TabsEventRouter::OnAutoDiscardableStateChange(WebContents* contents,
+                                                   bool is_auto_discardable) {
+  std::set<std::string> changed_property_names;
+  changed_property_names.insert(tabs_constants::kAutoDiscardableKey);
+  DispatchTabUpdatedEvent(contents, std::move(changed_property_names));
 }
 
 }  // namespace extensions

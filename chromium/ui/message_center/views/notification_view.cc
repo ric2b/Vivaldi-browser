@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/url_formatter/elide_url.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -95,7 +94,7 @@ std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
 // message next to each other within a single column.
 class ItemView : public views::View {
  public:
-  ItemView(const message_center::NotificationItem& item);
+  explicit ItemView(const message_center::NotificationItem& item);
   ~ItemView() override;
 
   // Overridden from views::View:
@@ -182,20 +181,6 @@ void NotificationView::CreateOrUpdateViews(const Notification& notification) {
   CreateOrUpdateActionButtonViews(notification);
 }
 
-void NotificationView::SetAccessibleName(const Notification& notification) {
-  std::vector<base::string16> accessible_lines;
-  accessible_lines.push_back(notification.title());
-  accessible_lines.push_back(notification.message());
-  accessible_lines.push_back(notification.context_message());
-  std::vector<NotificationItem> items = notification.items();
-  for (size_t i = 0; i < items.size() && i < kNotificationMaximumItems; ++i) {
-    accessible_lines.push_back(items[i].title + base::ASCIIToUTF16(" ") +
-                               items[i].message);
-  }
-  set_accessible_name(
-      base::JoinString(accessible_lines, base::ASCIIToUTF16("\n")));
-}
-
 NotificationView::NotificationView(MessageCenterController* controller,
                                    const Notification& notification)
     : MessageView(controller, notification),
@@ -224,7 +209,6 @@ NotificationView::NotificationView(MessageCenterController* controller,
   // touch areas (<http://crbug.com/168822> and <http://crbug.com/168856>).
   AddChildView(small_image());
   CreateOrUpdateCloseButtonView(notification);
-  SetAccessibleName(notification);
 
   SetEventTargeter(
       std::unique_ptr<views::ViewTargeter>(new views::ViewTargeter(this)));
@@ -339,7 +323,6 @@ void NotificationView::UpdateWithNotification(
   MessageView::UpdateWithNotification(notification);
 
   CreateOrUpdateViews(notification);
-  SetAccessibleName(notification);
   Layout();
   SchedulePaint();
 }
@@ -435,7 +418,7 @@ void NotificationView::CreateOrUpdateMessageView(
     message_view_->SetText(text);
   }
 
-  message_view_->SetVisible(!notification.items().size());
+  message_view_->SetVisible(notification.items().empty());
 }
 
 base::string16 NotificationView::FormatContextMessage(
@@ -545,7 +528,7 @@ void NotificationView::CreateOrUpdateProgressBarView(
   if (!is_indeterminate)
     progress_bar_view_->SetValue(notification.progress() / 100.0);
 
-  progress_bar_view_->SetVisible(!notification.items().size());
+  progress_bar_view_->SetVisible(notification.items().empty());
 }
 
 void NotificationView::CreateOrUpdateListItemViews(
@@ -580,13 +563,6 @@ void NotificationView::CreateOrUpdateIconView(
 
   gfx::ImageSkia icon = notification.icon().AsImageSkia();
   icon_view_->SetImage(icon, icon.size());
-
-  if (notification.draw_icon_background()) {
-    icon_view_->set_background(
-        views::Background::CreateSolidBackground(kIconBackgroundColor));
-  } else {
-    icon_view_->set_background(nullptr);
-  }
 }
 
 void NotificationView::CreateOrUpdateImageView(
@@ -639,8 +615,8 @@ void NotificationView::CreateOrUpdateActionButtonViews(
 
   if (new_buttons || buttons.size() == 0) {
     // STLDeleteElements also clears the container.
-    STLDeleteElements(&separators_);
-    STLDeleteElements(&action_buttons_);
+    base::STLDeleteElements(&separators_);
+    base::STLDeleteElements(&action_buttons_);
   }
 
   DCHECK(bottom_view_);

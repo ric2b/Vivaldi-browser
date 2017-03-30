@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/history/core/browser/history_service.h"
@@ -224,7 +225,8 @@ void IOSChromeBrowsingDataRemover::RemoveImpl(int remove_mask) {
                      base::Unretained(this)));
 
       autofill::PersonalDataManager* data_manager =
-          PersonalDataManagerFactory::GetForBrowserState(browser_state_);
+          autofill::PersonalDataManagerFactory::GetForBrowserState(
+              browser_state_);
       if (data_manager)
         data_manager->Refresh();
     }
@@ -291,7 +293,8 @@ void IOSChromeBrowsingDataRemover::RemoveImpl(int remove_mask) {
                      base::Unretained(this)));
 
       autofill::PersonalDataManager* data_manager =
-          PersonalDataManagerFactory::GetForBrowserState(browser_state_);
+          autofill::PersonalDataManagerFactory::GetForBrowserState(
+              browser_state_);
       if (data_manager)
         data_manager->Refresh();
     }
@@ -399,7 +402,7 @@ void IOSChromeBrowsingDataRemover::NotifyAndDelete() {
 
   // History requests aren't happy if you delete yourself from the callback.
   // As such, we do a delete later.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 void IOSChromeBrowsingDataRemover::NotifyAndDeleteIfDone() {

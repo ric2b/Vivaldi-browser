@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//testing/test.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 defines = [ "GN_BUILD" ]
 
@@ -58,6 +59,8 @@ static_library("gn_lib") {
     "create_bundle_target_generator.h",
     "deps_iterator.cc",
     "deps_iterator.h",
+    "desc_builder.cc",
+    "desc_builder.h",
     "eclipse_writer.cc",
     "eclipse_writer.h",
     "err.cc",
@@ -101,6 +104,8 @@ static_library("gn_lib") {
     "input_file_manager.h",
     "item.cc",
     "item.h",
+    "json_project_writer.cc",
+    "json_project_writer.h",
     "label.cc",
     "label.h",
     "label_pattern.cc",
@@ -285,6 +290,8 @@ test("gn_unittests") {
     "function_get_target_outputs_unittest.cc",
     "function_process_file_template_unittest.cc",
     "function_rebase_path_unittest.cc",
+    "function_template_unittest.cc",
+    "function_toolchain_unittest.cc",
     "function_write_file_unittest.cc",
     "functions_target_unittest.cc",
     "functions_unittest.cc",
@@ -338,5 +345,14 @@ test("gn_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//testing/gtest",
+  ]
+}
+
+fuzzer_test("gn_parser_fuzzer") {
+  sources = [
+    "parser_fuzzer.cc",
+  ]
+  deps = [
+    ":gn_lib",
   ]
 }

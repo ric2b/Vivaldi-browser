@@ -151,43 +151,37 @@ cr.define('settings_reset_page', function() {
         MockInteractions.tap(resetPage.$.resetProfile);
         var dialog = resetPage.$$('settings-reset-profile-dialog');
         assertTrue(!!dialog);
+        assertTrue(dialog.$.dialog.open);
         var onDialogClosed = new Promise(
             function(resolve, reject) {
-              dialog.addEventListener('iron-overlay-closed', resolve);
+              dialog.addEventListener('close', function() {
+                assertFalse(dialog.$.dialog.open);
+                resolve();
+              });
             });
 
         return resetPageBrowserProxy.whenCalled(
-            'onShowResetProfileDialog').then(
-            function() {
-              closeDialogFn(dialog);
-              return Promise.all([
-                onDialogClosed,
-                resetPageBrowserProxy.whenCalled('onHideResetProfileDialog'),
-              ]);
-            });
+              'onShowResetProfileDialog').then(function() {
+          closeDialogFn(dialog);
+          return Promise.all([
+            onDialogClosed,
+            resetPageBrowserProxy.whenCalled('onHideResetProfileDialog'),
+          ]);
+        });
       }
 
       // Tests that the reset profile dialog opens and closes correctly and that
       // resetPageBrowserProxy calls are occurring as expected.
       test(TestNames.ResetProfileDialogOpenClose, function() {
-        return Promise.all([
+        return testOpenCloseResetProfileDialog(function(dialog) {
           // Test case where the 'cancel' button is clicked.
-          testOpenCloseResetProfileDialog(
-              function(dialog) {
-                MockInteractions.tap(dialog.$.cancel);
-              }),
-          // Test case where the 'close' button is clicked.
-          testOpenCloseResetProfileDialog(
-              function(dialog) {
-                MockInteractions.tap(dialog.$.dialog.getCloseButton());
-              }),
-          // Test case where the 'Esc' key is pressed.
-          testOpenCloseResetProfileDialog(
-              function(dialog) {
-                MockInteractions.pressAndReleaseKeyOn(
-                    dialog, 27 /* 'Esc' key code */);
-              }),
-        ]);
+          MockInteractions.tap(dialog.$.cancel);
+        }).then(function() {
+          return testOpenCloseResetProfileDialog(function(dialog) {
+            // Test case where the 'close' button is clicked.
+            MockInteractions.tap(dialog.$.dialog.getCloseButton());
+          });
+        });
       });
 
       // Tests that when user request to reset the profile the appropriate
@@ -204,7 +198,11 @@ cr.define('settings_reset_page', function() {
 
         return resetPageBrowserProxy.whenCalled('showReportedSettings').then(
             function() {
+              assertFalse(dialog.$.reset.disabled);
+              assertFalse(dialog.$.resetSpinner.active);
               MockInteractions.tap(dialog.$.reset);
+              assertTrue(dialog.$.reset.disabled);
+              assertTrue(dialog.$.resetSpinner.active);
               return resetPageBrowserProxy.whenCalled(
                   'performResetProfileSettings');
             });
@@ -222,10 +220,14 @@ cr.define('settings_reset_page', function() {
           MockInteractions.tap(resetPage.$.powerwash);
           var dialog = resetPage.$$('settings-powerwash-dialog');
           assertTrue(!!dialog);
+          assertTrue(dialog.$.dialog.open);
           var onDialogClosed = new Promise(
-              function(resolve, reject) {
-                dialog.addEventListener('iron-overlay-closed', resolve);
+            function(resolve, reject) {
+              dialog.addEventListener('close', function() {
+                assertFalse(dialog.$.dialog.open);
+                resolve();
               });
+            });
 
           MockInteractions.tap(closeButtonFn(dialog));
           return Promise.all([

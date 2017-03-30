@@ -20,7 +20,12 @@ group("service") {
   }
 }
 
-source_set("ipc_service_sources") {
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "ipc_service_sources") {
   visibility = [ "//gpu/*" ]
   sources = [
     "gpu_channel.cc",
@@ -46,6 +51,7 @@ source_set("ipc_service_sources") {
   public_deps = [
     "//base",
     "//ipc",
+    "//ui/base",
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -78,9 +84,8 @@ source_set("ipc_service_sources") {
     deps += [ "//ui/accelerated_widget_mac" ]
     lib_dirs = [ "$mac_sdk_path/usr/lib" ]
     libs += [
-      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
-      "CoreGraphics.framework",
       "QuartzCore.framework",
+      "CoreGraphics.framework",
     ]
   }
   if (is_android) {

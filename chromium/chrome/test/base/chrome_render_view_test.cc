@@ -11,12 +11,12 @@
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chrome/renderer/chrome_content_renderer_client.h"
-#include "chrome/renderer/spellchecker/spellcheck.h"
 #include "chrome/test/base/chrome_unit_test_suite.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
+#include "components/spellcheck/renderer/spellcheck.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/renderer/render_view.h"
@@ -79,9 +79,8 @@ class MockAutofillAgent : public AutofillAgent {
   MOCK_CONST_METHOD0(IsUserGesture, bool());
 
  private:
-  void didAssociateFormControls(
-      const blink::WebVector<blink::WebNode>& nodes) override {
-    AutofillAgent::didAssociateFormControls(nodes);
+  void didAssociateFormControlsDynamically() override {
+    AutofillAgent::didAssociateFormControlsDynamically();
     if (run_loop_)
       run_loop_->Quit();
   }

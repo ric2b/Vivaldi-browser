@@ -28,6 +28,7 @@
 #include "gpu/ipc/common/gpu_messages.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/message_filter.h"
+#include "services/shell/runner/common/client_util.h"
 
 namespace content {
 
@@ -36,8 +37,7 @@ BrowserGpuChannelHostFactory* BrowserGpuChannelHostFactory::instance_ = NULL;
 class BrowserGpuChannelHostFactory::EstablishRequest
     : public base::RefCountedThreadSafe<EstablishRequest> {
  public:
-  static scoped_refptr<EstablishRequest> Create(CauseForGpuLaunch cause,
-                                                int gpu_client_id,
+  static scoped_refptr<EstablishRequest> Create(int gpu_client_id,
                                                 uint64_t gpu_client_tracing_id,
                                                 int gpu_host_id);
   void Wait();
@@ -49,8 +49,7 @@ class BrowserGpuChannelHostFactory::EstablishRequest
 
  private:
   friend class base::RefCountedThreadSafe<EstablishRequest>;
-  explicit EstablishRequest(CauseForGpuLaunch cause,
-                            int gpu_client_id,
+  explicit EstablishRequest(int gpu_client_id,
                             uint64_t gpu_client_tracing_id,
                             int gpu_host_id);
   ~EstablishRequest() {}
@@ -61,7 +60,6 @@ class BrowserGpuChannelHostFactory::EstablishRequest
   void FinishOnMain();
 
   base::WaitableEvent event_;
-  CauseForGpuLaunch cause_for_gpu_launch_;
   const int gpu_client_id_;
   const uint64_t gpu_client_tracing_id_;
   int gpu_host_id_;
@@ -74,14 +72,13 @@ class BrowserGpuChannelHostFactory::EstablishRequest
 
 scoped_refptr<BrowserGpuChannelHostFactory::EstablishRequest>
 BrowserGpuChannelHostFactory::EstablishRequest::Create(
-    CauseForGpuLaunch cause,
     int gpu_client_id,
     uint64_t gpu_client_tracing_id,
     int gpu_host_id) {
-  scoped_refptr<EstablishRequest> establish_request = new EstablishRequest(
-      cause, gpu_client_id, gpu_client_tracing_id, gpu_host_id);
+  scoped_refptr<EstablishRequest> establish_request =
+      new EstablishRequest(gpu_client_id, gpu_client_tracing_id, gpu_host_id);
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   // PostTask outside the constructor to ensure at least one reference exists.
   task_runner->PostTask(
       FROM_HERE,
@@ -91,13 +88,11 @@ BrowserGpuChannelHostFactory::EstablishRequest::Create(
 }
 
 BrowserGpuChannelHostFactory::EstablishRequest::EstablishRequest(
-    CauseForGpuLaunch cause,
     int gpu_client_id,
     uint64_t gpu_client_tracing_id,
     int gpu_host_id)
     : event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
              base::WaitableEvent::InitialState::NOT_SIGNALED),
-      cause_for_gpu_launch_(cause),
       gpu_client_id_(gpu_client_id),
       gpu_client_tracing_id_(gpu_client_tracing_id),
       gpu_host_id_(gpu_host_id),
@@ -113,8 +108,7 @@ void BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO() {
           "BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO"));
   GpuProcessHost* host = GpuProcessHost::FromID(gpu_host_id_);
   if (!host) {
-    host = GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                               cause_for_gpu_launch_);
+    host = GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED);
     if (!host) {
       LOG(ERROR) << "Failed to launch GPU process.";
       FinishOnIO();
@@ -149,7 +143,7 @@ void BrowserGpuChannelHostFactory::EstablishRequest::EstablishOnIO() {
 void BrowserGpuChannelHostFactory::EstablishRequest::OnEstablishedOnIO(
     const IPC::ChannelHandle& channel_handle,
     const gpu::GPUInfo& gpu_info) {
-  if (channel_handle.name.empty() && reused_gpu_process_) {
+  if (!channel_handle.mojo_handle.is_valid() && reused_gpu_process_) {
     // We failed after re-using the GPU process, but it may have died in the
     // mean time. Retry to have a chance to create a fresh GPU process.
     DVLOG(1) << "Failed to create channel on existing GPU process. Trying to "
@@ -212,8 +206,7 @@ void BrowserGpuChannelHostFactory::Initialize(bool establish_gpu_channel) {
   DCHECK(!instance_);
   instance_ = new BrowserGpuChannelHostFactory();
   if (establish_gpu_channel) {
-    instance_->EstablishGpuChannel(CAUSE_FOR_GPU_LAUNCH_BROWSER_STARTUP,
-                                   base::Closure());
+    instance_->EstablishGpuChannel(gpu::GpuChannelEstablishedCallback());
   }
 }
 
@@ -253,7 +246,7 @@ BrowserGpuChannelHostFactory::~BrowserGpuChannelHostFactory() {
   if (pending_request_.get())
     pending_request_->Cancel();
   for (size_t n = 0; n < established_callbacks_.size(); n++)
-    established_callbacks_[n].Run();
+    established_callbacks_[n].Run(nullptr);
   shutdown_event_->Signal();
   if (gpu_channel_) {
     gpu_channel_->DestroyChannel();
@@ -267,7 +260,7 @@ bool BrowserGpuChannelHostFactory::IsMainThread() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 BrowserGpuChannelHostFactory::GetIOThreadTaskRunner() {
-  return BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+  return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
 }
 
 std::unique_ptr<base::SharedMemory>
@@ -278,25 +271,9 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
   return shm;
 }
 
-// Blocking the UI thread to open a GPU channel is not supported on Android.
-// (Opening the initial channel to a child process involves handling a reply
-// task on the UI thread first, so we cannot block here.)
-#if !defined(OS_ANDROID)
-scoped_refptr<gpu::GpuChannelHost>
-BrowserGpuChannelHostFactory::EstablishGpuChannelSync(
-    CauseForGpuLaunch cause_for_gpu_launch) {
-  EstablishGpuChannel(cause_for_gpu_launch, base::Closure());
-
-  if (pending_request_.get())
-    pending_request_->Wait();
-
-  return gpu_channel_;
-}
-#endif
-
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
-    CauseForGpuLaunch cause_for_gpu_launch,
-    const base::Closure& callback) {
+    const gpu::GpuChannelEstablishedCallback& callback) {
+  DCHECK(!shell::ShellIsRemote());
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());
     // Recreate the channel if it has been lost.
@@ -307,17 +284,37 @@ void BrowserGpuChannelHostFactory::EstablishGpuChannel(
   if (!gpu_channel_.get() && !pending_request_.get()) {
     // We should only get here if the context was lost.
     pending_request_ = EstablishRequest::Create(
-        cause_for_gpu_launch, gpu_client_id_,
-        gpu_client_tracing_id_,
-        gpu_host_id_);
+        gpu_client_id_, gpu_client_tracing_id_, gpu_host_id_);
   }
 
   if (!callback.is_null()) {
     if (gpu_channel_.get())
-      callback.Run();
+      callback.Run(gpu_channel_);
     else
       established_callbacks_.push_back(callback);
   }
+}
+
+// Blocking the UI thread to open a GPU channel is not supported on Android.
+// (Opening the initial channel to a child process involves handling a reply
+// task on the UI thread first, so we cannot block here.)
+scoped_refptr<gpu::GpuChannelHost>
+BrowserGpuChannelHostFactory::EstablishGpuChannelSync() {
+#if defined(OS_ANDROID)
+  NOTREACHED();
+  return nullptr;
+#endif
+  EstablishGpuChannel(gpu::GpuChannelEstablishedCallback());
+
+  if (pending_request_.get())
+    pending_request_->Wait();
+
+  return gpu_channel_;
+}
+
+gpu::GpuMemoryBufferManager*
+BrowserGpuChannelHostFactory::GetGpuMemoryBufferManager() {
+  return gpu_memory_buffer_manager_.get();
 }
 
 gpu::GpuChannelHost* BrowserGpuChannelHostFactory::GetGpuChannel() {
@@ -330,7 +327,7 @@ gpu::GpuChannelHost* BrowserGpuChannelHostFactory::GetGpuChannel() {
 void BrowserGpuChannelHostFactory::GpuChannelEstablished() {
   DCHECK(IsMainThread());
   DCHECK(pending_request_.get());
-  if (pending_request_->channel_handle().name.empty()) {
+  if (!pending_request_->channel_handle().mojo_handle.is_valid()) {
     DCHECK(!gpu_channel_.get());
   } else {
     // TODO(robliao): Remove ScopedTracker below once https://crbug.com/466866
@@ -354,7 +351,7 @@ void BrowserGpuChannelHostFactory::GpuChannelEstablished() {
           "466866 BrowserGpuChannelHostFactory::GpuChannelEstablished2"));
 
   for (size_t n = 0; n < established_callbacks_.size(); n++)
-    established_callbacks_[n].Run();
+    established_callbacks_[n].Run(gpu_channel_);
 
   established_callbacks_.clear();
 }

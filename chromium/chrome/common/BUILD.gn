@@ -25,28 +25,17 @@ grit("resources") {
   ]
 }
 
-# GYP version: chrome/chrome_resources.gyp:chrome_resources
-#              (generate_extensions_api_resources action)
-if (enable_extensions) {
-  grit("extensions_api_resources") {
-    source = "extensions_api_resources.grd"
-    output_dir = "$root_gen_dir/chrome"
-    outputs = [
-      "grit/extensions_api_resources.h",
-      "extensions_api_resources.pak",
-    ]
-  }
-}
-
 buildflag_header("features") {
   header = "features.h"
   flags = [
     "ANDROID_JAVA_UI=$android_java_ui",
     "ENABLE_BACKGROUND=$enable_background",
+    "ENABLE_BASIC_PRINT_DIALOG=$enable_basic_print_dialog",
     "ENABLE_GOOGLE_NOW=$enable_google_now",
     "ENABLE_ONE_CLICK_SIGNIN=$enable_one_click_signin",
     "ENABLE_PACKAGE_MASH_SERVICES=$enable_package_mash_services",
     "USE_VULCANIZE=$use_vulcanize",
+    "PGO_BUILD=$pgo_build",
   ]
 }
 
@@ -92,11 +81,10 @@ static_library("common") {
     "//components/metrics:net",
     "//components/nacl/common:process_type",
     "//components/nacl/common:switches",
-    "//components/network_session_configurator:switches",
     "//components/offline_pages:switches",
     "//components/omnibox/common",
-    "//components/policy",
-    "//components/policy:policy_component_common",
+    "//components/policy:generated",
+    "//components/policy/core/common",
     "//components/prefs",
     "//components/strings",
     "//components/translate/core/common",
@@ -165,6 +153,7 @@ static_library("common") {
                            "//chrome")
     public_deps += [
       "//chrome/common/extensions/api",
+      "//chrome/common/extensions/api:extensions_features",
       "//device/usb",
       "//extensions:extensions_resources",
       "//extensions/common",
@@ -404,6 +393,7 @@ static_library("test_support") {
       "extensions/extension_test_util.cc",
       "extensions/extension_test_util.h",
     ]
+    deps += [ "//chrome/common/extensions:test_features" ]
   }
 }
 
@@ -428,9 +418,12 @@ mojom("mojo_bindings") {
   sources = [
     "image_decoder.mojom",
     "resource_usage_reporter.mojom",
+    "shell_handler_win.mojom",
   ]
 
   public_deps = [
     "//skia/public/interfaces",
   ]
+
+  use_new_wrapper_types = false
 }

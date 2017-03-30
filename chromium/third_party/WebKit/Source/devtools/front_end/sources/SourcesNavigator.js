@@ -28,115 +28,6 @@
 
 /**
  * @constructor
- * @extends {WebInspector.Object}
- * @param {!WebInspector.Workspace} workspace
- */
-WebInspector.SourcesNavigator = function(workspace)
-{
-    WebInspector.Object.call(this);
-    this._workspace = workspace;
-
-    this._tabbedPane = new WebInspector.TabbedPane();
-    this._tabbedPane.setShrinkableTabs(true);
-    this._tabbedPane.element.classList.add("navigator-tabbed-pane");
-    this._tabbedPaneController = new WebInspector.ExtensibleTabbedPaneController(this._tabbedPane, "navigator-view", this._navigatorViewCreated.bind(this));
-    /** @type {!Map.<string, ?WebInspector.NavigatorView>} */
-    this._navigatorViews = new Map();
-
-    var toolbar = new WebInspector.Toolbar("");
-    var menuButton = new WebInspector.ToolbarMenuButton(this._populateMenu.bind(this), true);
-    menuButton.setTitle(WebInspector.UIString("More options"));
-    toolbar.appendToolbarItem(menuButton);
-
-    this._tabbedPane.appendAfterTabStrip(toolbar.element);
-}
-
-WebInspector.SourcesNavigator.Events = {
-    SourceSelected: "SourceSelected",
-    SourceRenamed: "SourceRenamed"
-}
-
-WebInspector.SourcesNavigator.prototype = {
-    /**
-     * @param {string} id
-     * @param {!WebInspector.Widget} view
-     */
-    _navigatorViewCreated: function(id, view)
-    {
-        var navigatorView = /** @type {!WebInspector.NavigatorView} */ (view);
-        navigatorView.addEventListener(WebInspector.NavigatorView.Events.ItemSelected, this._sourceSelected, this);
-        navigatorView.addEventListener(WebInspector.NavigatorView.Events.ItemRenamed, this._sourceRenamed, this);
-        this._navigatorViews.set(id, navigatorView);
-        navigatorView.setWorkspace(this._workspace);
-    },
-
-    /**
-     * @return {!WebInspector.Widget}
-     */
-    get view()
-    {
-        return this._tabbedPane;
-    },
-
-    /**
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     */
-    revealUISourceCode: function(uiSourceCode)
-    {
-        var ids = this._tabbedPaneController.viewIds();
-        var promises = [];
-        for (var i = 0; i < ids.length; ++i)
-            promises.push(this._tabbedPaneController.viewForId(ids[i]));
-        Promise.all(promises).then(filterNavigators.bind(this));
-
-        /**
-         * @param {!Array.<!Object>} objects
-         * @this {WebInspector.SourcesNavigator}
-         */
-        function filterNavigators(objects)
-        {
-            for (var i = 0; i < objects.length; ++i) {
-                var navigatorView = /** @type {!WebInspector.NavigatorView} */ (objects[i]);
-                if (navigatorView.accept(uiSourceCode)) {
-                    this._tabbedPane.selectTab(ids[i]);
-                    navigatorView.revealUISourceCode(uiSourceCode, true);
-                }
-            }
-        }
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _sourceSelected: function(event)
-    {
-        this.dispatchEventToListeners(WebInspector.SourcesNavigator.Events.SourceSelected, event.data);
-    },
-
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _sourceRenamed: function(event)
-    {
-        this.dispatchEventToListeners(WebInspector.SourcesNavigator.Events.SourceRenamed, event.data);
-    },
-
-    /**
-     * @param {!WebInspector.ContextMenu} contextMenu
-     */
-    _populateMenu: function(contextMenu)
-    {
-        var groupByFolderSetting = WebInspector.moduleSetting("navigatorGroupByFolder");
-        contextMenu.appendItemsAtLocation("navigatorMenu");
-        contextMenu.appendSeparator();
-        contextMenu.appendCheckboxItem(WebInspector.UIString("Group by folder"), () => groupByFolderSetting.set(!groupByFolderSetting.get()), groupByFolderSetting.get());
-    },
-
-    __proto__: WebInspector.Object.prototype
-}
-
-/**
- * @constructor
  * @extends {WebInspector.NavigatorView}
  */
 WebInspector.SourcesNavigatorView = function()
@@ -163,11 +54,15 @@ WebInspector.SourcesNavigatorView.prototype = {
      */
     _inspectedURLChanged: function(event)
     {
-        var nodes = this._uiSourceCodeNodes.valuesArray();
-        for (var i = 0; i < nodes.length; ++i) {
-            var uiSourceCode = nodes[i].uiSourceCode();
-            var inspectedPageURL = WebInspector.targetManager.inspectedPageURL();
-            if (inspectedPageURL && WebInspector.networkMapping.networkURL(uiSourceCode) === inspectedPageURL)
+        var mainTarget = WebInspector.targetManager.mainTarget();
+        if (event.data !== mainTarget)
+            return;
+        var inspectedURL = mainTarget && mainTarget.inspectedURL();
+        if (!inspectedURL)
+            return
+        for (var node of this._uiSourceCodeNodes.valuesArray()) {
+            var uiSourceCode = node.uiSourceCode();
+            if (WebInspector.networkMapping.networkURL(uiSourceCode) === inspectedURL)
                 this.revealUISourceCode(uiSourceCode, true);
         }
     },
@@ -178,7 +73,7 @@ WebInspector.SourcesNavigatorView.prototype = {
      */
     uiSourceCodeAdded: function(uiSourceCode)
     {
-        var inspectedPageURL = WebInspector.targetManager.inspectedPageURL();
+        var inspectedPageURL = WebInspector.targetManager.mainTarget().inspectedURL();
         if (inspectedPageURL && WebInspector.networkMapping.networkURL(uiSourceCode) === inspectedPageURL)
             this.revealUISourceCode(uiSourceCode, true);
     },

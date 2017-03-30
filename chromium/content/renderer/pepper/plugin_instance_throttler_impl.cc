@@ -41,8 +41,9 @@ const int kAudioThrottledFrameTimeoutMilliseconds = 500;
 const int PluginInstanceThrottlerImpl::kMaximumFramesToExamine = 150;
 
 // static
-std::unique_ptr<PluginInstanceThrottler> PluginInstanceThrottler::Create() {
-  return base::WrapUnique(new PluginInstanceThrottlerImpl);
+std::unique_ptr<PluginInstanceThrottler> PluginInstanceThrottler::Create(
+    RenderFrame::RecordPeripheralDecision record_decision) {
+  return base::WrapUnique(new PluginInstanceThrottlerImpl(record_decision));
 }
 
 // static
@@ -53,8 +54,10 @@ void PluginInstanceThrottler::RecordUnthrottleMethodMetric(
       PluginInstanceThrottler::UNTHROTTLE_METHOD_NUM_ITEMS);
 }
 
-PluginInstanceThrottlerImpl::PluginInstanceThrottlerImpl()
-    : state_(THROTTLER_STATE_AWAITING_KEYFRAME),
+PluginInstanceThrottlerImpl::PluginInstanceThrottlerImpl(
+    content::RenderFrame::RecordPeripheralDecision record_decision)
+    : record_decision_(record_decision),
+      state_(THROTTLER_STATE_AWAITING_KEYFRAME),
       is_hidden_for_placeholder_(false),
       web_plugin_(nullptr),
       frames_examined_(0),
@@ -65,8 +68,7 @@ PluginInstanceThrottlerImpl::PluginInstanceThrottlerImpl()
               kAudioThrottledFrameTimeoutMilliseconds),
           this,
           &PluginInstanceThrottlerImpl::EngageThrottle),
-      weak_factory_(this) {
-}
+      weak_factory_(this) {}
 
 PluginInstanceThrottlerImpl::~PluginInstanceThrottlerImpl() {
   FOR_EACH_OBSERVER(Observer, observer_list_, OnThrottlerDestroyed());
@@ -144,7 +146,8 @@ void PluginInstanceThrottlerImpl::Initialize(
     auto status = frame->GetPeripheralContentStatus(
         frame->GetWebFrame()->top()->getSecurityOrigin(), content_origin,
         gfx::Size(roundf(unobscured_size.width() / zoom_factor),
-                  roundf(unobscured_size.height() / zoom_factor)));
+                  roundf(unobscured_size.height() / zoom_factor)),
+        record_decision_);
     if (status != RenderFrame::CONTENT_STATUS_PERIPHERAL) {
       DCHECK_NE(THROTTLER_STATE_MARKED_ESSENTIAL, state_);
       state_ = THROTTLER_STATE_MARKED_ESSENTIAL;
@@ -165,20 +168,20 @@ void PluginInstanceThrottlerImpl::Initialize(
   }
 }
 
-void PluginInstanceThrottlerImpl::OnImageFlush(const SkBitmap* bitmap) {
+void PluginInstanceThrottlerImpl::OnImageFlush(const SkBitmap& bitmap) {
   DCHECK(needs_representative_keyframe());
-  if (!bitmap)
-    return;
+  // Even if the bitmap is empty, count that as a boring but valid bitmap.
 
   ++frames_examined_;
 
-  // Does not make a copy, just takes a reference to the underlying pixel data.
-  last_received_frame_ = *bitmap;
+  // Does not make a deep copy, just takes a reference to the underlying pixel
+  // data. This may have lifetime issues!
+  last_received_frame_ = bitmap;
 
   if (audio_throttled_)
     audio_throttled_frame_timeout_.Reset();
 
-  double boring_score = color_utils::CalculateBoringScore(*bitmap);
+  double boring_score = color_utils::CalculateBoringScore(bitmap);
   if (boring_score <= kAcceptableFrameMaximumBoringness ||
       frames_examined_ >= kMaximumFramesToExamine) {
     EngageThrottle();

@@ -96,6 +96,10 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
   void OnClose(int status) override;
 
  private:
+  // Helper function used to initialize private members and to set delegate on
+  // stream when stream is created.
+  void InitializeStreamHelper();
+
   // Helper function used for resetting stream from inside the stream.
   void ResetStreamInternal();
 
@@ -155,7 +159,7 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
   const HttpRequestInfo* request_info_;
 
   // |response_info_| is the HTTP response data object which is filled in
-  // when a SYN_REPLY comes in for the stream.
+  // when a response HEADERS comes in for the stream.
   // It is not owned by this stream object, or point to |push_response_info_|.
   HttpResponseInfo* response_info_;
 
@@ -190,7 +194,7 @@ class NET_EXPORT_PRIVATE SpdyHttpStream : public SpdyStream::Delegate,
 
   SSLInfo ssl_info_;
   bool was_npn_negotiated_;
-  NextProto protocol_negotiated_;
+  NextProto negotiated_protocol_;
 
   base::WeakPtrFactory<SpdyHttpStream> weak_factory_;
 

@@ -51,12 +51,6 @@ bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction, SQLEr
 
     v8::Local<v8::Value> transactionHandle = toV8(transaction, m_scriptState->context()->Global(), isolate);
     v8::Local<v8::Value> errorHandle = toV8(error, m_scriptState->context()->Global(), isolate);
-    if (transactionHandle.IsEmpty() || errorHandle.IsEmpty()) {
-        if (!isScriptControllerTerminating())
-            CRASH();
-        return true;
-    }
-
     ASSERT(transactionHandle->IsObject());
 
     v8::Local<v8::Value> argv[] = {
@@ -74,7 +68,7 @@ bool V8SQLStatementErrorCallback::handleEvent(SQLTransaction* transaction, SQLEr
     // statement, if any, or onto the next overall step otherwise. Otherwise,
     // the error callback did not return false, or there was no error callback.
     // Jump to the last step in the overall steps.
-    if (!ScriptController::callFunction(getExecutionContext(), m_callback.newLocal(isolate), m_scriptState->context()->Global(), WTF_ARRAY_LENGTH(argv), argv, isolate).ToLocal(&result))
+    if (!V8ScriptRunner::callFunction(m_callback.newLocal(isolate), getExecutionContext(), m_scriptState->context()->Global(), WTF_ARRAY_LENGTH(argv), argv, isolate).ToLocal(&result))
         return true;
 
     bool value;

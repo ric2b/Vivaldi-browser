@@ -5,10 +5,13 @@
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/shelf/shelf_background_animator.h"
+#include "ash/common/shelf/shelf_background_animator_observer.h"
 #include "ash/common/shelf/shelf_constants.h"
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_observer.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm/window_animation_types.h"
 #include "ash/common/wm/window_parenting_utils.h"
 #include "ash/common/wm/window_resizer.h"
@@ -47,22 +50,25 @@ const int kFadeDurationMs = 60;
 const int kMinimizeDurationMs = 720;
 
 class DockedBackgroundWidget : public views::Widget,
-                               public BackgroundAnimatorDelegate,
-                               public WmShelfObserver {
+                               public WmShelfObserver,
+                               public ShelfBackgroundAnimatorObserver {
  public:
   explicit DockedBackgroundWidget(DockedWindowLayoutManager* manager)
       : manager_(manager),
         alignment_(DOCKED_ALIGNMENT_NONE),
-        background_animator_(this, 0, GetShelfConstant(SHELF_BACKGROUND_ALPHA)),
-        alpha_(0),
+        background_animator_(SHELF_BACKGROUND_DEFAULT, nullptr),
+        asset_background_alpha_(0),
         opaque_background_(ui::LAYER_SOLID_COLOR),
         visible_background_type_(manager_->shelf()->GetBackgroundType()),
         visible_background_change_type_(BACKGROUND_CHANGE_IMMEDIATE) {
     manager_->shelf()->AddObserver(this);
     InitWidget(manager_->dock_container());
+
+    background_animator_.AddObserver(this);
   }
 
   ~DockedBackgroundWidget() override {
+    background_animator_.RemoveObserver(this);
     manager_->shelf()->RemoveObserver(this);
   }
 
@@ -84,15 +90,12 @@ class DockedBackgroundWidget : public views::Widget,
     gfx::Rect local_window_bounds(GetWindowBoundsInScreen().size());
     ui::PaintRecorder recorder(context, local_window_bounds.size());
 
-    if (MaterialDesignController::IsShelfMaterial()) {
-      recorder.canvas()->FillRect(local_window_bounds,
-                                  SkColorSetA(kShelfBaseColor, alpha_));
-    } else {
+    if (!MaterialDesignController::IsShelfMaterial()) {
       const gfx::ImageSkia& shelf_background(alignment_ == DOCKED_ALIGNMENT_LEFT
                                                  ? shelf_background_left_
                                                  : shelf_background_right_);
       SkPaint paint;
-      paint.setAlpha(alpha_);
+      paint.setAlpha(asset_background_alpha_);
       recorder.canvas()->DrawImageInt(
           shelf_background, 0, 0, shelf_background.width(),
           shelf_background.height(),
@@ -112,15 +115,21 @@ class DockedBackgroundWidget : public views::Widget,
     }
   }
 
-  // BackgroundAnimatorDelegate:
-  void UpdateBackground(int alpha) override {
-    alpha_ = alpha;
+  // ShelfBackgroundAnimatorObserver:
+  void UpdateShelfOpaqueBackground(int alpha) override {
+    const float kMaxAlpha = 255.0f;
+    opaque_background_.SetOpacity(alpha / kMaxAlpha);
+  }
+
+  void UpdateShelfAssetBackground(int alpha) override {
+    asset_background_alpha_ = alpha;
     SchedulePaintInRect(gfx::Rect(GetWindowBoundsInScreen().size()));
   }
 
-  // ShelfLayoutManagerObserver:
-  void OnBackgroundUpdated(ShelfBackgroundType background_type,
-                           BackgroundAnimatorChangeType change_type) override {
+  // WmShelfObserver:
+  void OnBackgroundTypeChanged(
+      ShelfBackgroundType background_type,
+      BackgroundAnimatorChangeType change_type) override {
     // Sets the background type. Starts an animation to transition to
     // |background_type| if the widget is visible. If the widget is not visible,
     // the animation is postponed till the widget becomes visible.
@@ -174,24 +183,7 @@ class DockedBackgroundWidget : public views::Widget,
     BackgroundAnimatorChangeType change_type =
         IsVisible() ? visible_background_change_type_
                     : BACKGROUND_CHANGE_IMMEDIATE;
-
-    float target_opacity =
-        (background_type == SHELF_BACKGROUND_MAXIMIZED) ? 1.0f : 0.0f;
-    std::unique_ptr<ui::ScopedLayerAnimationSettings>
-        opaque_background_animation;
-    if (change_type != BACKGROUND_CHANGE_IMMEDIATE) {
-      opaque_background_animation.reset(new ui::ScopedLayerAnimationSettings(
-          opaque_background_.GetAnimator()));
-      opaque_background_animation->SetTransitionDuration(
-          base::TimeDelta::FromMilliseconds(kTimeToSwitchBackgroundMs));
-    }
-    opaque_background_.SetOpacity(target_opacity);
-
-    // TODO(varkha): use ui::Layer on both opaque_background and normal
-    // background retire background_animator_ at all. It would be simpler.
-    // See also ShelfWidget::SetPaintsBackground.
-    background_animator_.SetPaintsBackground(
-        background_type != SHELF_BACKGROUND_DEFAULT, change_type);
+    background_animator_.PaintBackground(background_type, change_type);
     SchedulePaintInRect(gfx::Rect(GetWindowBoundsInScreen().size()));
   }
 
@@ -200,11 +192,12 @@ class DockedBackgroundWidget : public views::Widget,
   DockedAlignment alignment_;
 
   // The animator for the background transitions.
-  BackgroundAnimator background_animator_;
+  ShelfBackgroundAnimator background_animator_;
 
   // The alpha to use for drawing image assets covering the docked background.
-  int alpha_;
+  int asset_background_alpha_;
 
+  // TODO(bruthig): Remove opaque_background_ (see https://crbug.com/621551).
   // Solid black background that can be made fully opaque.
   ui::Layer opaque_background_;
 
@@ -392,6 +385,16 @@ class DockedWindowLayoutManager::ShelfWindowObserver : public WmWindowObserver {
                              const gfx::Rect& new_bounds) override {
     shelf_bounds_in_screen_ =
         window->GetParent()->ConvertRectToScreen(new_bounds);
+
+    // When the shelf is auto-hidden, it has an invisible height of 3px used
+    // as a hit region which is specific to Chrome OS MD (for non-MD, the 3
+    // pixels are visible). In computing the work area we should consider a
+    // hidden shelf as having a height of 0 (for non-MD, shelf height is 3).
+    if (docked_layout_manager_->shelf()->GetAutoHideState() ==
+        ShelfAutoHideState::SHELF_AUTO_HIDE_HIDDEN) {
+      shelf_bounds_in_screen_.set_height(
+          GetShelfConstant(SHELF_INSETS_FOR_AUTO_HIDE));
+    }
     docked_layout_manager_->OnShelfBoundsChanged();
   }
 
@@ -419,6 +422,7 @@ DockedWindowLayoutManager::DockedWindowLayoutManager(WmWindow* dock_container)
       in_fullscreen_(root_window_controller_->GetWorkspaceWindowState() ==
                      wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN),
       docked_width_(0),
+      in_overview_(false),
       alignment_(DOCKED_ALIGNMENT_NONE),
       preferred_alignment_(DOCKED_ALIGNMENT_NONE),
       event_source_(DOCKED_ACTION_SOURCE_UNKNOWN),
@@ -426,6 +430,7 @@ DockedWindowLayoutManager::DockedWindowLayoutManager(WmWindow* dock_container)
       last_action_time_(base::Time::Now()),
       background_widget_(nullptr) {
   DCHECK(dock_container);
+  dock_container_->GetShell()->AddShellObserver(this);
   dock_container->GetShell()->AddActivationObserver(this);
   root_window_controller_->AddObserver(this);
 }
@@ -454,6 +459,7 @@ void DockedWindowLayoutManager::Shutdown() {
     child->GetWindowState()->RemoveObserver(this);
   }
   dock_container_->GetShell()->RemoveActivationObserver(this);
+  dock_container_->GetShell()->RemoveShellObserver(this);
   root_window_controller_->RemoveObserver(this);
 }
 
@@ -764,38 +770,12 @@ void DockedWindowLayoutManager::SetChildBounds(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// DockedWindowLayoutManager, ash::ShellObserver implementation:
+// DockedWindowLayoutManager, WmRootWindowControllerObserver implementation:
 
 void DockedWindowLayoutManager::OnWorkAreaChanged() {
   Relayout();
   UpdateDockBounds(DockedWindowLayoutManagerObserver::DISPLAY_INSETS_CHANGED);
   MaybeMinimizeChildrenExcept(dragged_window_);
-}
-
-void DockedWindowLayoutManager::OnFullscreenStateChanged(bool is_fullscreen) {
-  // Entering fullscreen mode (including immersive) hides docked windows.
-  in_fullscreen_ = root_window_controller_->GetWorkspaceWindowState() ==
-                   wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN;
-  {
-    // prevent Relayout from getting called multiple times during this
-    base::AutoReset<bool> auto_reset_in_layout(&in_layout_, true);
-    // Use a copy of children array because a call to MinimizeDockedWindow or
-    // RestoreDockedWindow can change order.
-    for (WmWindow* window : dock_container_->GetChildren()) {
-      if (IsPopupOrTransient(window))
-        continue;
-      wm::WindowState* window_state = window->GetWindowState();
-      if (in_fullscreen_) {
-        if (window->IsVisible())
-          MinimizeDockedWindow(window_state);
-      } else {
-        if (!window_state->IsMinimized())
-          RestoreDockedWindow(window_state);
-      }
-    }
-  }
-  Relayout();
-  UpdateDockBounds(DockedWindowLayoutManagerObserver::CHILD_CHANGED);
 }
 
 void DockedWindowLayoutManager::OnShelfAlignmentChanged() {
@@ -899,14 +879,74 @@ void DockedWindowLayoutManager::OnWindowActivated(WmWindow* gained_active,
       break;
     }
   }
-  if (ancestor)
+  if (ancestor) {
+    // Window activation from overview mode may unminimize a window and require
+    // layout update.
+    MaybeMinimizeChildrenExcept(gained_active);
+    Relayout();
     UpdateStacking(ancestor);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// DockedWindowLayoutManager, ShellObserver implementation:
+
+void DockedWindowLayoutManager::OnShelfAlignmentChanged(WmWindow* root_window) {
+}
+
+void DockedWindowLayoutManager::OnFullscreenStateChanged(
+    bool is_fullscreen,
+    WmWindow* root_window) {
+  if (root_window != dock_container_->GetRootWindow())
+    return;
+
+  // Entering fullscreen mode (including immersive) hides docked windows.
+  in_fullscreen_ = root_window_controller_->GetWorkspaceWindowState() ==
+                   wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN;
+  {
+    // prevent Relayout from getting called multiple times during this
+    base::AutoReset<bool> auto_reset_in_layout(&in_layout_, true);
+    // Use a copy of children array because a call to MinimizeDockedWindow or
+    // RestoreDockedWindow can change order.
+    for (WmWindow* window : dock_container_->GetChildren()) {
+      if (IsPopupOrTransient(window))
+        continue;
+      wm::WindowState* window_state = window->GetWindowState();
+      if (in_fullscreen_) {
+        if (window->IsVisible())
+          MinimizeDockedWindow(window_state);
+      } else {
+        if (!window_state->IsMinimized())
+          RestoreDockedWindow(window_state);
+      }
+    }
+  }
+  Relayout();
+  UpdateDockBounds(DockedWindowLayoutManagerObserver::CHILD_CHANGED);
+}
+
+void DockedWindowLayoutManager::OnOverviewModeStarting() {
+  in_overview_ = true;
+  if (!ash::MaterialDesignController::IsOverviewMaterial())
+    return;
+  UpdateDockBounds(DockedWindowLayoutManagerObserver::CHILD_CHANGED);
+}
+
+void DockedWindowLayoutManager::OnOverviewModeEnded() {
+  in_overview_ = false;
+  if (!ash::MaterialDesignController::IsOverviewMaterial())
+    return;
+  UpdateDockBounds(DockedWindowLayoutManagerObserver::CHILD_CHANGED);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // DockedWindowLayoutManager private implementation:
 
 void DockedWindowLayoutManager::MaybeMinimizeChildrenExcept(WmWindow* child) {
+  WindowSelectorController* window_selector_controller =
+      WmShell::Get()->window_selector_controller();
+  if (window_selector_controller->IsRestoringMinimizedWindows())
+    return;
   // Minimize any windows that don't fit without overlap.
   const gfx::Rect work_area =
       dock_container_->GetDisplayNearestWindow().work_area();
@@ -1046,7 +1086,11 @@ DockedAlignment DockedWindowLayoutManager::GetEdgeNearestWindow(
 }
 
 void DockedWindowLayoutManager::Relayout() {
-  if (in_layout_)
+  // Suppress layouts during overview mode while restoring minimized windows so
+  // that docked animations are not interfering with the overview mode.
+  WindowSelectorController* window_selector_controller =
+      WmShell::Get()->window_selector_controller();
+  if (in_layout_ || (window_selector_controller->IsRestoringMinimizedWindows()))
     return;
   if (alignment_ == DOCKED_ALIGNMENT_NONE && !is_dragged_window_docked_)
     return;
@@ -1241,7 +1285,8 @@ void DockedWindowLayoutManager::FanOutChildren(
 
 void DockedWindowLayoutManager::UpdateDockBounds(
     DockedWindowLayoutManagerObserver::Reason reason) {
-  int dock_inset = docked_width_ + (docked_width_ > 0 ? kMinDockGap : 0);
+  int docked_width = in_overview_ ? 0 : docked_width_;
+  int dock_inset = docked_width + (docked_width > 0 ? kMinDockGap : 0);
   const gfx::Rect work_area =
       dock_container_->GetDisplayNearestWindow().work_area();
   gfx::Rect bounds = gfx::Rect(
@@ -1257,11 +1302,17 @@ void DockedWindowLayoutManager::UpdateDockBounds(
   gfx::Rect background_bounds(docked_bounds_);
   if (shelf_observer_)
     background_bounds.Subtract(shelf_observer_->shelf_bounds_in_screen());
-  if (docked_width_ > 0) {
-    if (!background_widget_)
-      background_widget_.reset(new DockedBackgroundWidget(this));
-    background_widget_->SetBackgroundBounds(background_bounds, alignment_);
-    background_widget_->Show();
+  if (docked_width > 0) {
+    // TODO: |shelf_| should not be null by the time we get here, but it may
+    // be in mash as startup sequence doesn't yet match that of ash. Once
+    // |shelf_| is created at same time as ash we can remove conditional.
+    // http://crbug.com/632099
+    if (shelf_) {
+      if (!background_widget_)
+        background_widget_.reset(new DockedBackgroundWidget(this));
+      background_widget_->SetBackgroundBounds(background_bounds, alignment_);
+      background_widget_->Show();
+    }
   } else if (background_widget_) {
     background_widget_->Hide();
   }

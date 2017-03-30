@@ -218,7 +218,7 @@ void DataTransfer::setDragImage(Element* image, int x, int y)
         return;
 
     IntPoint location(x, y);
-    if (isHTMLImageElement(*image) && !image->inShadowIncludingDocument())
+    if (isHTMLImageElement(*image) && !image->isConnected())
         setDragImageResource(toHTMLImageElement(*image).cachedImage(), location);
     else
         setDragImageElement(image, location);
@@ -280,7 +280,7 @@ static void writeImageToDataObject(DataObject* dataObject, Element* element, con
     if (!cachedImage || !cachedImage->getImage() || !cachedImage->isLoaded())
         return;
 
-    SharedBuffer* imageBuffer = cachedImage->getImage()->data();
+    RefPtr<SharedBuffer> imageBuffer = cachedImage->getImage()->data();
     if (!imageBuffer || !imageBuffer->size())
         return;
 

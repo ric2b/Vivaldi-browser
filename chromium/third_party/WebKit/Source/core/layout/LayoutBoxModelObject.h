@@ -289,11 +289,6 @@ public:
 
     void invalidateTreeIfNeeded(const PaintInvalidationState&) override;
 
-    // Indicate that the contents of this layoutObject need to be repainted.
-    // This only has an effect if compositing is being used.
-    // The rect is in the physical coordinate space of this layout object.
-    void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason, const LayoutObject&) const;
-
     // http://www.w3.org/TR/css3-background/#body-background
     // <html> root element with no background steals background from its first <body> child.
     // The used background for such body element should be the initial value. (i.e. transparent)
@@ -303,8 +298,6 @@ protected:
     void willBeDestroyed() override;
 
     LayoutPoint adjustedPositionRelativeTo(const LayoutPoint&, const Element*) const;
-
-    bool calculateHasBoxDecorations() const;
 
     // Returns the continuation associated with |this|.
     // Returns nullptr if no continuation is associated with |this|.
@@ -375,6 +368,8 @@ private:
             m_rareData = wrapUnique(new LayoutBoxModelObjectRareData());
         return *m_rareData.get();
     }
+
+    bool hasAutoHeightOrContainingBlockWithAutoHeight(bool checkingContainingBlock) const;
 
     // The PaintLayer associated with this object.
     // |m_layer| can be nullptr depending on the return value of layerTypeRequired().

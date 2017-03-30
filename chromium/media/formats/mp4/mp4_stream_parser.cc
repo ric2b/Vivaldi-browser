@@ -101,8 +101,7 @@ bool MP4StreamParser::Parse(const uint8_t* buf, int size) {
 
   queue_.Push(buf, size);
 
-  BufferQueue audio_buffers;
-  BufferQueue video_buffers;
+  BufferQueueMap buffers;
 
   bool result = false;
   bool err = false;
@@ -125,7 +124,7 @@ bool MP4StreamParser::Parse(const uint8_t* buf, int size) {
         break;
 
       case kEmittingSamples:
-        result = EnqueueSample(&audio_buffers, &video_buffers, &err);
+        result = EnqueueSample(&buffers, &err);
         if (result) {
           int64_t max_clear = runs_->GetMaxClearOffset() + moof_head_;
           err = !ReadAndDiscardMDATsUntil(max_clear);
@@ -135,7 +134,7 @@ bool MP4StreamParser::Parse(const uint8_t* buf, int size) {
   } while (result && !err);
 
   if (!err)
-    err = !SendAndFlushSamples(&audio_buffers, &video_buffers);
+    err = !SendAndFlushSamples(&buffers);
 
   if (err) {
     DLOG(ERROR) << "Error while parsing MP4";
@@ -200,9 +199,6 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
   for (std::vector<Track>::const_iterator track = moov_->tracks.begin();
        track != moov_->tracks.end(); ++track) {
-    // TODO(strobe): Only the first audio and video track present in a file are
-    // used. (Track selection is better accomplished via Source IDs, though, so
-    // adding support for track selection within a stream is low-priority.)
     const SampleDescription& samp_descr =
         track->media.information.sample_table.description;
 
@@ -405,7 +401,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
 
   RCHECK(config_cb_.Run(std::move(media_tracks), TextTrackConfigMap()));
 
-  StreamParser::InitParameters params(kInfiniteDuration());
+  StreamParser::InitParameters params(kInfiniteDuration);
   if (moov_->extends.header.fragment_duration > 0) {
     params.duration = TimeDeltaFromRational(
         moov_->extends.header.fragment_duration, moov_->header.timescale);
@@ -491,15 +487,13 @@ bool MP4StreamParser::PrepareAACBuffer(
   return true;
 }
 
-bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
-                                    BufferQueue* video_buffers,
-                                    bool* err) {
+bool MP4StreamParser::EnqueueSample(BufferQueueMap* buffers, bool* err) {
   DCHECK_EQ(state_, kEmittingSamples);
 
   if (!runs_->IsRunValid()) {
     // Flush any buffers we've gotten in this chunk so that buffers don't
     // cross |new_segment_cb_| calls
-    *err = !SendAndFlushSamples(audio_buffers, video_buffers);
+    *err = !SendAndFlushSamples(buffers);
     if (*err)
       return false;
 
@@ -610,10 +604,9 @@ bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
   // TODO(wolenetz/acolwell): Validate and use a common cross-parser TrackId
   // type and allow multiple tracks for same media type, if applicable. See
   // https://crbug.com/341581.
-  scoped_refptr<StreamParserBuffer> stream_buf =
-      StreamParserBuffer::CopyFrom(&frame_buf[0], frame_buf.size(),
-                                   runs_->is_keyframe(),
-                                   buffer_type, 0);
+  scoped_refptr<StreamParserBuffer> stream_buf = StreamParserBuffer::CopyFrom(
+      &frame_buf[0], frame_buf.size(), runs_->is_keyframe(), buffer_type,
+      runs_->track_id());
 
   if (decrypt_config)
     stream_buf->set_decrypt_config(std::move(decrypt_config));
@@ -629,27 +622,16 @@ bool MP4StreamParser::EnqueueSample(BufferQueue* audio_buffers,
            << ", cts=" << runs_->cts().InMilliseconds()
            << ", size=" << runs_->sample_size();
 
-  if (audio) {
-    audio_buffers->push_back(stream_buf);
-  } else {
-    video_buffers->push_back(stream_buf);
-  }
-
+  (*buffers)[runs_->track_id()].push_back(stream_buf);
   runs_->AdvanceSample();
   return true;
 }
 
-bool MP4StreamParser::SendAndFlushSamples(BufferQueue* audio_buffers,
-                                          BufferQueue* video_buffers) {
-  if (audio_buffers->empty() && video_buffers->empty())
+bool MP4StreamParser::SendAndFlushSamples(BufferQueueMap* buffers) {
+  if (buffers->empty())
     return true;
-
-  TextBufferQueueMap empty_text_map;
-  bool success = new_buffers_cb_.Run(*audio_buffers,
-                                     *video_buffers,
-                                     empty_text_map);
-  audio_buffers->clear();
-  video_buffers->clear();
+  bool success = new_buffers_cb_.Run(*buffers);
+  buffers->clear();
   return success;
 }
 

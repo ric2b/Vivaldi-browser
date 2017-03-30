@@ -5,9 +5,9 @@
 #ifndef IOS_CHROME_BROWSER_UI_WEBUI_MOJO_WEB_UI_IOS_CONTROLLER_H_
 #define IOS_CHROME_BROWSER_UI_WEBUI_MOJO_WEB_UI_IOS_CONTROLLER_H_
 
-#include "ios/public/provider/web/web_ui_ios.h"
-#include "ios/public/provider/web/web_ui_ios_controller.h"
 #import "ios/web/public/web_state/web_state.h"
+#include "ios/web/public/webui/web_ui_ios.h"
+#include "ios/web/public/webui/web_ui_ios_controller.h"
 #include "services/shell/public/cpp/interface_factory.h"
 #include "services/shell/public/cpp/interface_registry.h"
 
@@ -34,7 +34,7 @@ class MojoWebUIIOSController : public web::WebUIIOSController,
 
  private:
   // shell::InterfaceFactory overrides:
-  void Create(shell::Connection*,
+  void Create(const shell::Identity& remote_identity,
               mojo::InterfaceRequest<Interface> request) override {
     BindUIHandler(std::move(request));
   }

@@ -163,7 +163,7 @@ void LayoutListMarker::layout()
 void LayoutListMarker::imageChanged(WrappedImagePtr o, const IntRect*)
 {
     // A list marker can't have a background or border image, so no need to call the base class method.
-    if (o != m_image->data())
+    if (!m_image || o != m_image->data())
         return;
 
     LayoutSize imageSize = isImage() ? imageBulletSize() : LayoutSize();
@@ -422,13 +422,13 @@ IntRect LayoutListMarker::getRelativeMarkerRect() const
         }
         break;
     case ListStyleCategory::Language:
-        relativeRect = IntRect(0, 0, getWidthOfTextWithSuffix(), style()->font().getFontMetrics().height());
+        relativeRect = IntRect(0, 0, getWidthOfTextWithSuffix().toInt(), style()->font().getFontMetrics().height());
         break;
     }
 
     if (!style()->isHorizontalWritingMode()) {
         relativeRect = relativeRect.transposedRect();
-        relativeRect.setX(size().width() - relativeRect.x() - relativeRect.width());
+        relativeRect.setX((size().width() - relativeRect.x() - relativeRect.width()).toInt());
     }
 
     return relativeRect;

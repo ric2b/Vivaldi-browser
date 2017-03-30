@@ -9,18 +9,18 @@
 Polymer({
   is: 'settings-menu',
 
+  behaviors: [settings.RouteObserverBehavior],
+
   properties: {
     /** @private */
-    advancedOpened_: Boolean,
+    aboutSelected_: Boolean,
 
     /**
-     * The current active route.
-     * @type {!SettingsRoute}
+     * Dictionary defining page visibility.
+     * @type {!GuestModePageVisibility}
      */
-    currentRoute: {
+    pageVisibility: {
       type: Object,
-      notify: true,
-      observer: 'currentRouteChanged_',
     },
   },
 
@@ -40,25 +40,29 @@ Polymer({
       this.fire('toggle-advanced-page', false);
     }.bind(this));
 
-    this.fire('toggle-advanced-page', this.currentRoute.page == 'advanced');
+    this.fire('toggle-advanced-page',
+              settings.Route.ADVANCED.contains(settings.getCurrentRoute()));
   },
 
   /**
-   * @param {!SettingsRoute} newRoute
-   * @private
+   * @param {!settings.Route} newRoute
    */
-  currentRouteChanged_: function(newRoute) {
-    // Sync URL changes to the side nav menu.
-
-    if (newRoute.page == 'advanced') {
-      this.$.advancedMenu.selected = this.currentRoute.section;
-      this.$.basicMenu.selected = null;
-    } else if (newRoute.page == 'basic') {
-      this.$.advancedMenu.selected = null;
-      this.$.basicMenu.selected = this.currentRoute.section;
-    } else {
+  currentRouteChanged: function(newRoute) {
+    // Make the three menus mutually exclusive.
+    if (settings.Route.ABOUT.contains(newRoute)) {
+      this.aboutSelected_ = true;
       this.$.advancedMenu.selected = null;
       this.$.basicMenu.selected = null;
+    } else if (settings.Route.ADVANCED.contains(newRoute)) {
+      this.aboutSelected_ = false;
+      // For routes from URL entry, we need to set selected.
+      this.$.advancedMenu.selected = newRoute.path;
+      this.$.basicMenu.selected = null;
+    } else if (settings.Route.BASIC.contains(newRoute)) {
+      this.aboutSelected_ = false;
+      this.$.advancedMenu.selected = null;
+      // For routes from URL entry, we need to set selected.
+      this.$.basicMenu.selected = newRoute.path;
     }
   },
 
@@ -66,16 +70,24 @@ Polymer({
    * @param {!Event} event
    * @private
    */
+  ripple_: function(event) {
+    var ripple = document.createElement('paper-ripple');
+    ripple.addEventListener('transitionend', function() {
+      ripple.remove();
+    });
+    event.currentTarget.appendChild(ripple);
+    ripple.downAction();
+    ripple.upAction();
+  },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
   openPage_: function(event) {
-    var submenuRoute = event.currentTarget.parentNode.dataset.page;
-    if (submenuRoute) {
-      this.currentRoute = {
-        page: submenuRoute,
-        section: event.currentTarget.dataset.section,
-        subpage: [],
-        url: '',
-      };
-    }
+    var route = settings.getRouteForPath(event.currentTarget.dataset.path);
+    assert(route, 'settings-menu has an an entry with an invalid path');
+    settings.navigateTo(route);
   },
 
   /**

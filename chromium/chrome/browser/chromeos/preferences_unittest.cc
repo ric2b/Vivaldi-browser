@@ -15,26 +15,25 @@
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
-#include "chrome/browser/chromeos/system/fake_input_device_settings.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/prefs/pref_member.h"
+#include "components/sync/api/attachments/attachment_id.h"
+#include "components/sync/api/fake_sync_change_processor.h"
+#include "components/sync/api/sync_change.h"
+#include "components/sync/api/sync_data.h"
+#include "components/sync/api/sync_error_factory.h"
+#include "components/sync/api/sync_error_factory_mock.h"
+#include "components/sync/api/syncable_service.h"
+#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/protocol/preference_specifics.pb.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
-#include "sync/api/attachments/attachment_id.h"
-#include "sync/api/fake_sync_change_processor.h"
-#include "sync/api/sync_change.h"
-#include "sync/api/sync_data.h"
-#include "sync/api/sync_error_factory.h"
-#include "sync/api/sync_error_factory_mock.h"
-#include "sync/api/syncable_service.h"
-#include "sync/internal_api/public/attachments/attachment_service_proxy_for_test.h"
-#include "sync/protocol/preference_specifics.pb.h"
-#include "sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
@@ -178,8 +177,6 @@ class PreferencesTest : public testing::Test {
     mock_manager_ = new input_method::MyMockInputMethodManager(
         &previous_input_method_, &current_input_method_);
     input_method::InitializeForTesting(mock_manager_);
-    system::InputDeviceSettings::SetSettingsForTesting(
-        new system::FakeInputDeviceSettings());
 
     prefs_.reset(new Preferences(mock_manager_));
   }
@@ -250,17 +247,11 @@ class InputMethodPreferencesTest : public PreferencesTest {
     InitComponentExtensionIMEManager();
     input_method::InputMethodDescriptors descriptors;
     mock_manager_->GetActiveIMEState()->AddInputMethodExtension(
-        kIdentityIMEID,
-        descriptors,
-        NULL);
+        kIdentityIMEID, descriptors, nullptr);
     mock_manager_->GetActiveIMEState()->AddInputMethodExtension(
-        kToUpperIMEID,
-        descriptors,
-        NULL);
+        kToUpperIMEID, descriptors, nullptr);
     mock_manager_->GetActiveIMEState()->AddInputMethodExtension(
-        kAPIArgumentIMEID,
-        descriptors,
-        NULL);
+        kAPIArgumentIMEID, descriptors, nullptr);
   }
 
   void InitComponentExtensionIMEManager() {

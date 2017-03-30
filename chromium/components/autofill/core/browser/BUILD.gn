@@ -5,7 +5,7 @@
 import("//build/config/chrome_build.gni")
 
 # GYP version: components/autofill.gyp:autofill_core_browser
-source_set("browser") {
+static_library("browser") {
   sources = [
     "address.cc",
     "address.h",
@@ -147,8 +147,6 @@ source_set("browser") {
 
   if (is_ios) {
     sources += [
-      "autofill_field_trial_ios.cc",
-      "autofill_field_trial_ios.h",
       "keyboard_accessory_metrics_logger.h",
       "keyboard_accessory_metrics_logger.mm",
     ]
@@ -156,6 +154,10 @@ source_set("browser") {
 
   if (is_ios || is_android) {
     sources += [
+      "autofill_assistant.cc",
+      "autofill_assistant.h",
+      "autofill_credit_card_filling_infobar_delegate_mobile.cc",
+      "autofill_credit_card_filling_infobar_delegate_mobile.h",
       "autofill_save_card_infobar_delegate_mobile.cc",
       "autofill_save_card_infobar_delegate_mobile.h",
       "autofill_save_card_infobar_mobile.h",
@@ -179,7 +181,7 @@ source_set("browser") {
     "//components/signin/core/browser",
     "//components/signin/core/common",
     "//components/strings",
-    "//components/sync_driver",
+    "//components/sync",
     "//components/variations/net",
     "//components/version_info",
     "//components/webdata/common",
@@ -187,7 +189,6 @@ source_set("browser") {
     "//net",
     "//skia",
     "//sql",
-    "//sync",
     "//third_party/fips181",
     "//third_party/icu",
     "//third_party/libaddressinput:util",
@@ -211,7 +212,7 @@ source_set("browser") {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "autofill_test_utils.cc",
@@ -323,6 +324,10 @@ source_set("unit_tests") {
     "webdata/web_data_service_unittest.cc",
   ]
 
+  if (is_ios || is_android) {
+    sources += [ "autofill_assistant_unittest.cc" ]
+  }
+
   deps = [
     ":browser",
     ":test_support",
@@ -339,8 +344,9 @@ source_set("unit_tests") {
     "//components/signin/core/browser:test_support",
     "//components/signin/core/common",
     "//components/strings",
-    "//components/sync_driver",
-    "//components/sync_driver:test_support",
+    "//components/sync",
+    "//components/sync:test_support_sync_api",
+    "//components/sync:test_support_sync_driver",
     "//components/variations",
     "//components/webdata/common",
     "//components/webdata_services:test_support",
@@ -348,8 +354,6 @@ source_set("unit_tests") {
     "//google_apis:test_support",
     "//net:test_support",
     "//sql",
-    "//sync",
-    "//sync:test_support_sync_api",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/libaddressinput:util",

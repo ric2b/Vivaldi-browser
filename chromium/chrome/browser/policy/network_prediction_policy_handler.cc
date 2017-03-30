@@ -9,9 +9,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
 #include "grit/components_strings.h"
-#include "policy/policy_constants.h"
 
 namespace policy {
 
@@ -33,16 +33,14 @@ bool NetworkPredictionPolicyHandler::CheckPolicySettings(
 
   if (network_prediction_enabled &&
       !network_prediction_enabled->IsType(base::Value::TYPE_BOOLEAN)) {
-    errors->AddError(key::kDnsPrefetchingEnabled,
-                     IDS_POLICY_TYPE_ERROR,
-                     ValueTypeToString(base::Value::TYPE_BOOLEAN));
+    errors->AddError(key::kDnsPrefetchingEnabled, IDS_POLICY_TYPE_ERROR,
+                     base::Value::GetTypeName(base::Value::TYPE_BOOLEAN));
   }
 
   if (network_prediction_options &&
       !network_prediction_options->IsType(base::Value::TYPE_INTEGER)) {
-    errors->AddError(key::kNetworkPredictionOptions,
-                     IDS_POLICY_TYPE_ERROR,
-                     ValueTypeToString(base::Value::TYPE_INTEGER));
+    errors->AddError(key::kNetworkPredictionOptions, IDS_POLICY_TYPE_ERROR,
+                     base::Value::GetTypeName(base::Value::TYPE_INTEGER));
   }
 
   if (network_prediction_enabled && network_prediction_options) {

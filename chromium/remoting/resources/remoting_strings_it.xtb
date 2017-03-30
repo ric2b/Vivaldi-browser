@@ -74,7 +74,6 @@ Per informazioni sulla privacy, leggi le Norme sulla privacy di Google (http://g
 <translation id="2676780859508944670">Operazione in corso...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">In genere gli aggiornamenti software vengono eseguiti automaticamente, ma in rari casi potrebbero non riuscire. L'aggiornamento del software non dovrebbe richiedere più di alcuni minuti e può essere eseguito collegandosi al computer da remoto.</translation>
-<translation id="2813770873348017932">Le connessioni al computer remoto sono temporaneamente bloccate perché qualcuno stava cercando di collegarsi al computer con un PIN non valido. Riprova più tardi.</translation>
 <translation id="2841013758207633010">Ora</translation>
 <translation id="2851674870054673688">Una volta inserito il codice, la sessione di condivisione avrà inizio.</translation>
 <translation id="2851754573186462851">Chromium App Stream</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Host Chrome
 Remote Desktop</translation>
 <translation id="4619978527973181021">Accetta e installa</translation>
-<translation id="4647791084836149355">Mostra visualizzazione Cardboard</translation>
 <translation id="4703302905453407178">Un componente obbligatorio ha smesso di funzionare. Segnala il problema agli sviluppatori.</translation>
 <translation id="4703799847237267011">La sessione Chromoting è terminata.</translation>
 <translation id="4736223761657662401">Cronologia connessioni</translation>
@@ -210,7 +208,6 @@ Remote Desktop</translation>
 <translation id="6284412385303060032">L'esecuzione dell'host nella schermata di accesso alla console si è interrotta per supportare la modalità Curtain, pertanto l'host viene ora eseguito in una sessione specifica dell'utente.</translation>
 <translation id="629730747756840877">Account</translation>
 <translation id="6304318647555713317">Client</translation>
-<translation id="6324708100353784493">Hai attivato la modalità di integrazione Google Cardboard. Per utilizzare questa modalità, inserisci il dispositivo in un visore compatibile con Google Cardboard.</translation>
 <translation id="6381670701864002291">Qualcos'altro.</translation>
 <translation id="6398765197997659313">Esci da schermo intero</translation>
 <translation id="6408143143164565232">• Ascolta contenuti audio da computer Windows o Linux.
@@ -236,6 +233,7 @@ Remote Desktop</translation>
 <translation id="6930242544192836755">Durata</translation>
 <translation id="6939719207673461467">Mostra/nascondi tastiera.</translation>
 <translation id="6944854424004126054">Ripristina finestra</translation>
+<translation id="6963936880795878952">Le connessioni al computer remoto sono temporaneamente bloccate perché qualcuno stava cercando di collegarsi al computer con un PIN non valido. Riprova più tardi.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Vuoi disattivare le connessioni remote a <ph name="HOSTNAME" />? Se cambi idea, dovrai utilizzare il computer in questione per riattivare le connessioni.</translation>
 <translation id="6998989275928107238">A</translation>

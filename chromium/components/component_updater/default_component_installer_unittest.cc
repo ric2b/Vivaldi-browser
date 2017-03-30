@@ -4,6 +4,7 @@
 
 #include <iterator>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -57,8 +58,9 @@ class MockUpdateClient : public UpdateClient {
                      bool(const std::string& id, CrxUpdateItem* update_item));
   MOCK_CONST_METHOD1(IsUpdating, bool(const std::string& id));
   MOCK_METHOD0(Stop, void());
-  MOCK_METHOD3(SendUninstallPing,
-               void(const std::string& id, const Version& version, int reason));
+  MOCK_METHOD3(
+      SendUninstallPing,
+      void(const std::string& id, const base::Version& version, int reason));
 
  private:
   ~MockUpdateClient() override {}
@@ -73,7 +75,9 @@ class FakeInstallerTraits : public ComponentInstallerTraits {
     return true;
   }
 
-  bool CanAutoUpdate() const override { return true; }
+  bool SupportsGroupPolicyEnabledComponentUpdates() const override {
+    return true;
+  }
 
   bool RequiresNetworkEncryption() const override { return true; }
 
@@ -100,6 +104,10 @@ class FakeInstallerTraits : public ComponentInstallerTraits {
     installer_attributes["ap"] = "fake-ap";
     installer_attributes["is-enterprise"] = "1";
     return installer_attributes;
+  }
+
+  std::vector<std::string> GetMimeTypes() const override {
+    return std::vector<std::string>();
   }
 
  private:
@@ -221,6 +229,7 @@ TEST_F(DefaultComponentInstallerTest, RegisterComponent) {
   EXPECT_STREQ("fake name", component.name.c_str());
   EXPECT_EQ(expected_attrs, component.installer_attributes);
   EXPECT_TRUE(component.requires_network_encryption);
+  EXPECT_TRUE(component.supports_group_policy_enable_component_updates);
 }
 
 }  // namespace component_updater

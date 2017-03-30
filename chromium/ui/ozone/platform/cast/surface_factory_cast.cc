@@ -10,14 +10,17 @@
 #include <utility>
 
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "chromecast/base/chromecast_switches.h"
 #include "chromecast/public/cast_egl_platform.h"
 #include "chromecast/public/graphics_types.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/vsync_provider.h"
-#include "ui/ozone/platform/cast/surface_ozone_egl_cast.h"
+#include "ui/ozone/platform/cast/gl_surface_cast.h"
 #include "ui/ozone/public/native_pixmap.h"
 #include "ui/ozone/public/surface_ozone_canvas.h"
 
@@ -34,13 +37,20 @@ chromecast::Size FromGfxSize(const gfx::Size& size) {
   return chromecast::Size(size.width(), size.height());
 }
 
-// Initial display size to create, needed before first window is created.
-gfx::Size GetInitialDisplaySize() {
-  return gfx::Size(1280, 720);
-}
-
-// Hard lower bound on display resolution
-gfx::Size GetMinDisplaySize() {
+// Display resolution, set in browser process and passed by switches.
+gfx::Size GetDisplaySize() {
+  base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+  int width, height;
+  if (base::StringToInt(
+          cmd_line->GetSwitchValueASCII(switches::kCastInitialScreenWidth),
+          &width) &&
+      base::StringToInt(
+          cmd_line->GetSwitchValueASCII(switches::kCastInitialScreenHeight),
+          &height)) {
+    return gfx::Size(width, height);
+  }
+  LOG(WARNING) << "Unable to get initial screen resolution from command line,"
+               << "using default 720p";
   return gfx::Size(1280, 720);
 }
 
@@ -79,8 +89,7 @@ SurfaceFactoryCast::SurfaceFactoryCast(
       display_type_(0),
       have_display_type_(false),
       window_(0),
-      display_size_(GetInitialDisplaySize()),
-      new_display_size_(GetInitialDisplaySize()),
+      display_size_(GetDisplaySize()),
       egl_platform_(std::move(egl_platform)),
       overlay_count_(0),
       previous_frame_overlay_count_(0) {}
@@ -158,6 +167,32 @@ void SurfaceFactoryCast::OnOverlayScheduled(const gfx::Rect& display_bounds) {
   overlay_bounds_ = display_bounds;
 }
 
+scoped_refptr<gl::GLSurface> SurfaceFactoryCast::CreateViewGLSurface(
+    gl::GLImplementation implementation,
+    gfx::AcceleratedWidget widget) {
+  if (implementation != gl::kGLImplementationEGLGLES2) {
+    NOTREACHED();
+    return nullptr;
+  }
+
+  // Verify requested widget dimensions match our current display size.
+  DCHECK_EQ(widget >> 16, display_size_.width());
+  DCHECK_EQ(widget & 0xffff, display_size_.height());
+
+  return gl::InitializeGLSurface(new GLSurfaceCast(widget, this));
+}
+
+scoped_refptr<gl::GLSurface> SurfaceFactoryCast::CreateOffscreenGLSurface(
+    gl::GLImplementation implementation,
+    const gfx::Size& size) {
+  if (implementation != gl::kGLImplementationEGLGLES2) {
+    NOTREACHED();
+    return nullptr;
+  }
+
+  return gl::InitializeGLSurface(new gl::PbufferGLSurfaceEGL(size));
+}
+
 std::unique_ptr<SurfaceOzoneCanvas> SurfaceFactoryCast::CreateCanvasForWidget(
     gfx::AcceleratedWidget widget) {
   // Software canvas support only in headless mode
@@ -174,10 +209,6 @@ intptr_t SurfaceFactoryCast::GetNativeDisplay() {
 void SurfaceFactoryCast::CreateDisplayTypeAndWindowIfNeeded() {
   if (state_ == kUninitialized) {
     InitializeHardware();
-  }
-  if (new_display_size_ != display_size_) {
-    DestroyDisplayTypeAndWindow();
-    display_size_ = new_display_size_;
   }
   DCHECK_EQ(state_, kInitialized);
   if (!have_display_type_) {
@@ -203,12 +234,8 @@ intptr_t SurfaceFactoryCast::GetNativeWindow() {
 }
 
 bool SurfaceFactoryCast::ResizeDisplay(gfx::Size size) {
-  // set size to at least 1280x720 even if passed 1x1
-  size.SetToMax(GetMinDisplaySize());
-  if (have_display_type_ && size != display_size_) {
-    DestroyDisplayTypeAndWindow();
-  }
-  display_size_ = size;
+  DCHECK_EQ(size.width(), display_size_.width());
+  DCHECK_EQ(size.height(), display_size_.height());
   return true;
 }
 
@@ -228,13 +255,6 @@ void SurfaceFactoryCast::DestroyDisplayTypeAndWindow() {
   }
 }
 
-std::unique_ptr<SurfaceOzoneEGL> SurfaceFactoryCast::CreateEGLSurfaceForWidget(
-    gfx::AcceleratedWidget widget) {
-  new_display_size_ = gfx::Size(widget >> 16, widget & 0xFFFF);
-  new_display_size_.SetToMax(GetMinDisplaySize());
-  return base::WrapUnique<SurfaceOzoneEGL>(new SurfaceOzoneEglCast(this));
-}
-
 void SurfaceFactoryCast::ChildDestroyed() {
   if (egl_platform_->MultipleSurfaceUnsupported())
     DestroyWindow();
@@ -247,7 +267,7 @@ scoped_refptr<NativePixmap> SurfaceFactoryCast::CreateNativePixmap(
     gfx::BufferUsage usage) {
   class CastPixmap : public NativePixmap {
    public:
-    CastPixmap(SurfaceFactoryCast* parent) : parent_(parent) {}
+    explicit CastPixmap(SurfaceFactoryCast* parent) : parent_(parent) {}
 
     void* GetEGLClientBuffer() const override {
       // TODO(halliwell): try to implement this through CastEglPlatform.
@@ -258,6 +278,7 @@ scoped_refptr<NativePixmap> SurfaceFactoryCast::CreateNativePixmap(
     int GetDmaBufFd(size_t plane) const override { return -1; }
     int GetDmaBufPitch(size_t plane) const override { return 0; }
     int GetDmaBufOffset(size_t plane) const override { return 0; }
+    uint64_t GetDmaBufModifier(size_t plane) const override { return 0; }
     gfx::BufferFormat GetBufferFormat() const override {
       return gfx::BufferFormat::BGRA_8888;
     }
@@ -287,9 +308,7 @@ scoped_refptr<NativePixmap> SurfaceFactoryCast::CreateNativePixmap(
   return make_scoped_refptr(new CastPixmap(this));
 }
 
-bool SurfaceFactoryCast::LoadEGLGLES2Bindings(
-    AddGLLibraryCallback add_gl_library,
-    SetGLGetProcAddressProcCallback set_gl_get_proc_address) {
+bool SurfaceFactoryCast::LoadEGLGLES2Bindings() {
   if (state_ != kInitialized) {
     InitializeHardware();
     if (state_ != kInitialized) {
@@ -299,14 +318,14 @@ bool SurfaceFactoryCast::LoadEGLGLES2Bindings(
 
   void* lib_egl = egl_platform_->GetEglLibrary();
   void* lib_gles2 = egl_platform_->GetGles2Library();
-  GLGetProcAddressProc gl_proc = egl_platform_->GetGLProcAddressProc();
+  gl::GLGetProcAddressProc gl_proc = egl_platform_->GetGLProcAddressProc();
   if (!lib_egl || !lib_gles2 || !gl_proc) {
     return false;
   }
 
-  set_gl_get_proc_address.Run(gl_proc);
-  add_gl_library.Run(lib_egl);
-  add_gl_library.Run(lib_gles2);
+  gl::SetGLGetProcAddressProc(gl_proc);
+  gl::AddGLNativeLibrary(lib_egl);
+  gl::AddGLNativeLibrary(lib_gles2);
   return true;
 }
 

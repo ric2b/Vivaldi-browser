@@ -25,6 +25,7 @@ public class WebappInfo {
     private String mEncodedIcon;
     private Bitmap mDecodedIcon;
     private Uri mUri;
+    private Uri mScopeUri;
     private String mName;
     private String mShortName;
     private int mDisplayMode;
@@ -117,6 +118,7 @@ public class WebappInfo {
         String id = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_ID);
         String icon = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_ICON);
         String url = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_URL);
+        String scope = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_SCOPE);
         int displayMode = displayModeFromIntent(intent);
         int orientation = orientationFromIntent(intent);
         int source = IntentUtils.safeGetIntExtra(intent,
@@ -135,7 +137,7 @@ public class WebappInfo {
         String webApkPackageName = IntentUtils.safeGetStringExtra(intent,
                 ShortcutHelper.EXTRA_WEBAPK_PACKAGE_NAME);
 
-        return create(id, url, icon, name, shortName, displayMode, orientation, source,
+        return create(id, url, scope, icon, name, shortName, displayMode, orientation, source,
                 themeColor, backgroundColor, isIconGenerated, webApkPackageName);
     }
 
@@ -143,6 +145,7 @@ public class WebappInfo {
      * Construct a WebappInfo.
      * @param id              ID for the webapp.
      * @param url             URL for the webapp.
+     * @param scope           Scope for the webapp.
      * @param icon            Icon to show for the webapp.
      * @param name            Name of the webapp.
      * @param shortName       The short name of the webapp.
@@ -154,7 +157,7 @@ public class WebappInfo {
      * @param webApkPackageName The package of the WebAPK associated with the webapp. Null if
      *                          no WebAPK is associated with the webapp.
      */
-    public static WebappInfo create(String id, String url, String icon, String name,
+    public static WebappInfo create(String id, String url, String scope, String icon, String name,
             String shortName, int displayMode, int orientation, int source, long themeColor,
             long backgroundColor, boolean isIconGenerated, String webApkPackageName) {
         if (id == null || url == null) {
@@ -163,18 +166,24 @@ public class WebappInfo {
         }
 
         Uri uri = Uri.parse(url);
-        return new WebappInfo(id, uri, icon, name, shortName, displayMode, orientation, source,
-                themeColor, backgroundColor, isIconGenerated, webApkPackageName);
+        if (scope == null || scope.isEmpty()) {
+            scope = ShortcutHelper.getScopeFromUrl(url);
+        }
+        Uri scopeUri = Uri.parse(scope);
+        Uri webManifestUri = null;
+        return new WebappInfo(id, uri, scopeUri, icon, name, shortName, displayMode, orientation,
+                source, themeColor, backgroundColor, isIconGenerated, webApkPackageName);
     }
 
-    private WebappInfo(String id, Uri uri, String encodedIcon, String name, String shortName,
-            int displayMode, int orientation, int source, long themeColor,
+    private WebappInfo(String id, Uri uri, Uri scopeUri, String encodedIcon, String name,
+            String shortName, int displayMode, int orientation, int source, long themeColor,
             long backgroundColor, boolean isIconGenerated, String webApkPackageName) {
         mEncodedIcon = encodedIcon;
         mId = id;
         mName = name;
         mShortName = shortName;
         mUri = uri;
+        mScopeUri = scopeUri;
         mDisplayMode = displayMode;
         mOrientation = orientation;
         mSource = source;
@@ -200,6 +209,10 @@ public class WebappInfo {
         return mUri;
     }
 
+    public Uri scopeUri() {
+        return mScopeUri;
+    }
+
     public String name() {
         return mName;
     }
@@ -220,6 +233,10 @@ public class WebappInfo {
         return mOrientation;
     }
 
+    public void updateOrientation(int orientation) {
+        mOrientation = orientation;
+    }
+
     public int source() {
         return mSource;
     }
@@ -231,6 +248,10 @@ public class WebappInfo {
      */
     public long themeColor() {
         return mThemeColor;
+    }
+
+    public void updateThemeColor(long themeColor) {
+        mThemeColor = themeColor;
     }
 
     /**
@@ -295,8 +316,7 @@ public class WebappInfo {
     public void setWebappIntentExtras(Intent intent) {
         intent.putExtra(ShortcutHelper.EXTRA_ID, id());
         intent.putExtra(ShortcutHelper.EXTRA_URL, uri().toString());
-        intent.putExtra(ShortcutHelper.EXTRA_SCOPE,
-                ShortcutHelper.getScopeFromUrl(uri().toString()));
+        intent.putExtra(ShortcutHelper.EXTRA_SCOPE, scopeUri().toString());
         intent.putExtra(ShortcutHelper.EXTRA_ICON, encodedIcon());
         intent.putExtra(ShortcutHelper.EXTRA_VERSION, ShortcutHelper.WEBAPP_SHORTCUT_VERSION);
         intent.putExtra(ShortcutHelper.EXTRA_NAME, name());

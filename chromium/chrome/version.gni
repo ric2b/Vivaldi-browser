@@ -3,6 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/chrome_build.gni")
+if (is_vivaldi) {
+  import("//vivaldi/gn/config/version.gni")
+}
 
 # Runs the version processing script over the given template file to produce
 # an output file. This is used for generating various forms of files that
@@ -73,6 +76,8 @@ template("process_version") {
     version_path = "//chrome/VERSION"
     if (is_chrome_branded) {
       branding_path = "//chrome/app/theme/google_chrome/BRANDING"
+    } else if (is_vivaldi) {
+      branding_path = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
     } else {
       branding_path = "//chrome/app/theme/chromium/BRANDING"
     }
@@ -82,6 +87,13 @@ template("process_version") {
       lastchange_path,
       branding_path,
     ]
+    if (is_vivaldi) {
+      lastchange_vivaldi_path = "//build/util/LASTCHANGE.vivaldi"
+      inputs += [
+        vivaldi_version_path,
+        lastchange_vivaldi_path,
+      ]
+    }
     if (defined(invoker.inputs)) {
       inputs += invoker.inputs
     }
@@ -117,6 +129,17 @@ template("process_version") {
       "-f",
       rebase_path(lastchange_path, root_build_dir),
     ]
+    if (is_vivaldi) {
+      args += [
+        "-f",
+        rebase_path(vivaldi_version_path, root_build_dir),
+        "-f",
+        rebase_path(lastchange_vivaldi_path, root_build_dir),
+        "-e",
+        "VIVALDI_BUILD=$vivaldi_global_build_number",
+        "--vivaldi",
+      ]
+    }
     if (defined(invoker.extra_args)) {
       args += invoker.extra_args
     }

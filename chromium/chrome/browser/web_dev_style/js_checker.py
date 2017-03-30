@@ -55,6 +55,11 @@ class JSChecker(object):
     return self.RegexCheck(i, line, r"\* (@inheritDoc)",
         "@inheritDoc is deprecated, use @override instead")
 
+  def PolymerLocalIdCheck(self, i, line):
+    """Checks for use of element.$.localId."""
+    return self.RegexCheck(i, line, r"(?<!this)(\.\$)[\[\.]",
+        "Please only use this.$.localId, not element.$.localId")
+
   def WrapperTypeCheck(self, i, line):
     """Check for wrappers (new String()) instead of builtins (string)."""
     return self.RegexCheck(i, line,
@@ -185,9 +190,19 @@ class JSChecker(object):
             errors.MISSING_JSDOC_TAG_THIS,
         ]
 
-    # Whitelist Polymer-specific JsDoc tags.
-    gflags.FLAGS.custom_jsdoc_tags = ('group', 'element', 'attribute',
-                                      'default', 'polymerBehavior')
+    # Keep this in sync with third_party/closure_compiler/closure_args.gypi
+    gflags.FLAGS.custom_jsdoc_tags = (
+        'abstract',
+        'attribute',
+        'default',
+        'demo',
+        'element',
+        'group',
+        'hero',
+        'polymerBehavior',
+        'status',
+        'submodule',
+    )
     error_handler = ErrorHandlerImpl(self.input_api.re)
     runner.Run(file_to_lint, error_handler, source=source)
     return error_handler.GetErrors()
@@ -218,6 +233,7 @@ class JSChecker(object):
             self.EndJsDocCommentCheck(i, line),
             self.ExtraDotInGenericCheck(i, line),
             self.InheritDocCheck(i, line),
+            self.PolymerLocalIdCheck(i, line),
             self.WrapperTypeCheck(i, line),
             self.VarNameCheck(i, line),
         ])

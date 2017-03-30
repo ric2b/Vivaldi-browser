@@ -60,7 +60,6 @@
 #include "core/page/Page.h"
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 #include "platform/blob/BlobData.h"
-#include "platform/inspector_protocol/Values.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
 #include "platform/network/ResourceLoadTiming.h"
@@ -274,8 +273,8 @@ void InspectorNetworkAgent::restore()
 {
     if (m_state->booleanProperty(NetworkAgentState::networkAgentEnabled, false)) {
         enable(
-            m_state->numberProperty(NetworkAgentState::totalBufferSize, maximumTotalBufferSize),
-            m_state->numberProperty(NetworkAgentState::resourceBufferSize, maximumResourceBufferSize));
+            m_state->integerProperty(NetworkAgentState::totalBufferSize, maximumTotalBufferSize),
+            m_state->integerProperty(NetworkAgentState::resourceBufferSize, maximumResourceBufferSize));
     }
 }
 
@@ -421,15 +420,6 @@ static std::unique_ptr<protocol::Network::Response> buildObjectForResourceRespon
 
         const ResourceResponse::SecurityDetails* responseSecurityDetails = response.getSecurityDetails();
 
-        int numUnknownSCTs = safeCast<int>(responseSecurityDetails->numUnknownSCTs);
-        int numInvalidSCTs = safeCast<int>(responseSecurityDetails->numInvalidSCTs);
-        int numValidSCTs = safeCast<int>(responseSecurityDetails->numValidSCTs);
-
-        std::unique_ptr<protocol::Network::CertificateValidationDetails> certificateValidationDetails = protocol::Network::CertificateValidationDetails::create()
-            .setNumUnknownScts(numUnknownSCTs)
-            .setNumInvalidScts(numInvalidSCTs)
-            .setNumValidScts(numValidSCTs).build();
-
         std::unique_ptr<protocol::Array<protocol::Network::SignedCertificateTimestamp>> signedCertificateTimestampList = protocol::Array<protocol::Network::SignedCertificateTimestamp>::create();
         for (auto const& sct : responseSecurityDetails->sctList) {
             std::unique_ptr<protocol::Network::SignedCertificateTimestamp> signedCertificateTimestamp = protocol::Network::SignedCertificateTimestamp::create()
@@ -452,7 +442,6 @@ static std::unique_ptr<protocol::Network::Response> buildObjectForResourceRespon
             .setCertificateId(responseSecurityDetails->certID)
             .setSignedCertificateTimestampList(std::move(signedCertificateTimestampList))
             .build();
-        securityDetails->setCertificateValidationDetails(std::move(certificateValidationDetails));
         if (responseSecurityDetails->mac.length() > 0)
             securityDetails->setMac(responseSecurityDetails->mac);
 
@@ -813,6 +802,7 @@ void InspectorNetworkAgent::applyUserAgentOverride(String* userAgent)
 
 void InspectorNetworkAgent::willRecalculateStyle(Document*)
 {
+    DCHECK(!m_isRecalculatingStyle);
     m_isRecalculatingStyle = true;
 }
 
@@ -830,7 +820,7 @@ void InspectorNetworkAgent::didScheduleStyleRecalculation(Document* document)
 
 std::unique_ptr<protocol::Network::Initiator> InspectorNetworkAgent::buildInitiatorObject(Document* document, const FetchInitiatorInfo& initiatorInfo)
 {
-    std::unique_ptr<protocol::Runtime::StackTrace> currentStackTrace = SourceLocation::capture(document)->buildInspectorObject();
+    std::unique_ptr<protocol::Runtime::API::StackTrace> currentStackTrace = SourceLocation::capture(document)->buildInspectorObject();
     if (currentStackTrace) {
         std::unique_ptr<protocol::Network::Initiator> initiatorObject = protocol::Network::Initiator::create()
             .setType(protocol::Network::Initiator::TypeEnum::Script).build();
@@ -845,9 +835,9 @@ std::unique_ptr<protocol::Network::Initiator> InspectorNetworkAgent::buildInitia
             .setType(protocol::Network::Initiator::TypeEnum::Parser).build();
         initiatorObject->setUrl(urlWithoutFragment(document->url()).getString());
         if (TextPosition::belowRangePosition() != initiatorInfo.position)
-            initiatorObject->setLineNumber(initiatorInfo.position.m_line.oneBasedInt());
+            initiatorObject->setLineNumber(initiatorInfo.position.m_line.zeroBasedInt());
         else
-            initiatorObject->setLineNumber(document->scriptableDocumentParser()->lineNumber().oneBasedInt());
+            initiatorObject->setLineNumber(document->scriptableDocumentParser()->lineNumber().zeroBasedInt());
         return initiatorObject;
     }
 
@@ -858,9 +848,18 @@ std::unique_ptr<protocol::Network::Initiator> InspectorNetworkAgent::buildInitia
         .setType(protocol::Network::Initiator::TypeEnum::Other).build();
 }
 
-void InspectorNetworkAgent::didCreateWebSocket(Document*, unsigned long identifier, const KURL& requestURL, const String&)
+void InspectorNetworkAgent::didCreateWebSocket(Document* document, unsigned long identifier, const KURL& requestURL, const String&)
 {
-    frontend()->webSocketCreated(IdentifiersFactory::requestId(identifier), urlWithoutFragment(requestURL).getString());
+    std::unique_ptr<protocol::Runtime::API::StackTrace> currentStackTrace = SourceLocation::capture(document)->buildInspectorObject();
+    if (!currentStackTrace) {
+        frontend()->webSocketCreated(IdentifiersFactory::requestId(identifier), urlWithoutFragment(requestURL).getString());
+        return;
+    }
+
+    std::unique_ptr<protocol::Network::Initiator> initiatorObject = protocol::Network::Initiator::create()
+        .setType(protocol::Network::Initiator::TypeEnum::Script).build();
+    initiatorObject->setStack(std::move(currentStackTrace));
+    frontend()->webSocketCreated(IdentifiersFactory::requestId(identifier), urlWithoutFragment(requestURL).getString(), std::move(initiatorObject));
 }
 
 void InspectorNetworkAgent::willSendWebSocketHandshakeRequest(Document*, unsigned long identifier, const WebSocketHandshakeRequest* request)
@@ -928,8 +927,8 @@ void InspectorNetworkAgent::enable(int totalBufferSize, int resourceBufferSize)
         return;
     m_resourcesData->setResourcesDataSizeLimits(totalBufferSize, resourceBufferSize);
     m_state->setBoolean(NetworkAgentState::networkAgentEnabled, true);
-    m_state->setNumber(NetworkAgentState::totalBufferSize, totalBufferSize);
-    m_state->setNumber(NetworkAgentState::resourceBufferSize, resourceBufferSize);
+    m_state->setInteger(NetworkAgentState::totalBufferSize, totalBufferSize);
+    m_state->setInteger(NetworkAgentState::resourceBufferSize, resourceBufferSize);
     m_instrumentingAgents->addInspectorNetworkAgent(this);
 }
 
@@ -977,7 +976,7 @@ void InspectorNetworkAgent::getResponseBodyBlob(const String& requestId, std::un
     client->start(document);
 }
 
-void InspectorNetworkAgent::getResponseBody(ErrorString* errorString, const String& requestId, std::unique_ptr<GetResponseBodyCallback> passCallback)
+void InspectorNetworkAgent::getResponseBody(const String& requestId, std::unique_ptr<GetResponseBodyCallback> passCallback)
 {
     std::unique_ptr<GetResponseBodyCallback> callback = std::move(passCallback);
     NetworkResourcesData::ResourceData const* resourceData = m_resourcesData->data(requestId);
@@ -1168,7 +1167,7 @@ bool InspectorNetworkAgent::fetchResourceContent(Document* document, const KURL&
     return false;
 }
 
-void InspectorNetworkAgent::removeFinishedReplayXHRFired(Timer<InspectorNetworkAgent>*)
+void InspectorNetworkAgent::removeFinishedReplayXHRFired(TimerBase*)
 {
     m_replayXHRsToBeDeleted.clear();
 }

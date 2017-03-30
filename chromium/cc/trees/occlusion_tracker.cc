@@ -48,6 +48,14 @@ Occlusion OcclusionTracker::GetCurrentOcclusionForContributingSurface(
                    second_last.occlusion_from_inside_target);
 }
 
+const RenderSurfaceImpl*
+OcclusionTracker::OcclusionSurfaceForContributingSurface() const {
+  // A contributing surface doesn't get occluded by things inside its own
+  // surface, so only things outside the surface can occlude it. That occlusion
+  // is found just below the top of the stack (if it exists).
+  return (stack_.size() < 2) ? nullptr : stack_[stack_.size() - 2].target;
+}
+
 void OcclusionTracker::EnterLayer(const LayerIteratorPosition& layer_iterator) {
   LayerImpl* render_target = layer_iterator.target_render_surface_layer;
 
@@ -182,9 +190,8 @@ void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // If the occlusion within the surface can not be applied to things outside of
   // the surface's subtree, then clear the occlusion here so it won't be used.
   if (surface->MaskLayer() || surface->draw_opacity() < 1 ||
-      !finished_target->uses_default_blend_mode() ||
-      target_is_only_for_copy_request ||
-      finished_target->filters().HasFilterThatAffectsOpacity()) {
+      !surface->UsesDefaultBlendMode() || target_is_only_for_copy_request ||
+      surface->Filters().HasFilterThatAffectsOpacity()) {
     stack_.back().occlusion_from_outside_target.Clear();
     stack_.back().occlusion_from_inside_target.Clear();
   }
@@ -211,9 +218,11 @@ static void ReduceOcclusionBelowSurface(
       &outset_top, &outset_right, &outset_bottom, &outset_left);
 
   // The filter can move pixels from outside of the clip, so allow affected_area
-  // to expand outside the clip.
-  affected_area_in_target.Inset(
-      -outset_left, -outset_top, -outset_right, -outset_bottom);
+  // to expand outside the clip. Notably the content we're concerned with here
+  // is not the affected area, but rather stuff slightly outside it. Thus the
+  // directions of the outsets are reversed from normal.
+  affected_area_in_target.Inset(-outset_right, -outset_bottom, -outset_left,
+                                -outset_top);
   SimpleEnclosedRegion affected_occlusion = *occlusion_from_inside_target;
   affected_occlusion.Intersect(affected_area_in_target);
 
@@ -340,8 +349,9 @@ void OcclusionTracker::MarkOccludedBehindLayer(const LayerImpl* layer) {
   if (layer->draw_opacity() < 1)
     return;
 
-  if (!layer->uses_default_blend_mode())
-    return;
+  // The only currently supported draw_blend_mode is SrcOver mode, so
+  // draw_blend_mode does not affect occlusion.
+  DCHECK_EQ(layer->draw_blend_mode(), SkXfermode::kSrcOver_Mode);
 
   if (layer->Is3dSorted())
     return;

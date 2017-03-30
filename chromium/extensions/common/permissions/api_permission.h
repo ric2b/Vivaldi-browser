@@ -58,7 +58,7 @@ class APIPermission {
     kAppView,
     kAudio,
     kAudioCapture,
-    kAudioModem,
+    kDeleted_AudioModem,
     kAutofillPrivate,
     kAutomation,
     kAutoTestPrivate,
@@ -80,8 +80,8 @@ class APIPermission {
     kContentSettings,
     kContextMenus,
     kCookie,
-    kCopresence,
-    kCopresencePrivate,
+    kDeleted_Copresence,
+    kDeleted_CopresencePrivate,
     kCryptotokenPrivate,
     kDataReductionProxy,
     kDiagnostics,
@@ -245,6 +245,7 @@ class APIPermission {
     kCertificateProvider,
     kResourcesPrivate,
     kDisplaySource,
+    kClipboard,
 
     // vivaldi permissions
 

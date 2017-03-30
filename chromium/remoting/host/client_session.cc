@@ -48,9 +48,9 @@ std::unique_ptr<AudioEncoder> CreateAudioEncoder(
   const protocol::ChannelConfig& audio_config = config.audio_config();
 
   if (audio_config.codec == protocol::ChannelConfig::CODEC_VERBATIM) {
-    return base::WrapUnique(new AudioEncoderVerbatim());
+    return base::MakeUnique<AudioEncoderVerbatim>();
   } else if (audio_config.codec == protocol::ChannelConfig::CODEC_OPUS) {
-    return base::WrapUnique(new AudioEncoderOpus());
+    return base::MakeUnique<AudioEncoderOpus>();
   }
 
   NOTREACHED();
@@ -120,12 +120,23 @@ void ClientSession::NotifyClientResolution(
   if (!screen_controls_)
     return;
 
-  ScreenResolution client_resolution(
-      webrtc::DesktopSize(resolution.dips_width(), resolution.dips_height()),
-      webrtc::DesktopVector(kDefaultDpi, kDefaultDpi));
+  webrtc::DesktopSize client_size(resolution.dips_width(),
+                                  resolution.dips_height());
+  if (connection_->session()->config().protocol() ==
+      protocol::SessionConfig::Protocol::WEBRTC) {
+    // When using WebRTC round down the dimensions to multiple of 2. Otherwise
+    // the dimensions will be rounded on the receiver, which will cause blurring
+    // due to scaling. The resulting size is still close to the client size and
+    // will fit on the client's screen without scaling.
+    // TODO(sergeyu): Make WebRTC handle odd dimensions properly.
+    // crbug.com/636071
+    client_size.set(client_size.width() & (~1), client_size.height() & (~1));
+  }
 
   // Try to match the client's resolution.
-  screen_controls_->SetScreenResolution(client_resolution);
+  // TODO(sergeyu): Pass clients DPI to the resizer.
+  screen_controls_->SetScreenResolution(ScreenResolution(
+      client_size, webrtc::DesktopVector(kDefaultDpi, kDefaultDpi)));
 }
 
 void ClientSession::ControlVideo(const protocol::VideoControl& video_control) {
@@ -178,7 +189,7 @@ void ClientSession::SetCapabilities(
   }
 
   // Compute the set of capabilities supported by both client and host.
-  client_capabilities_ = base::WrapUnique(new std::string());
+  client_capabilities_ = base::MakeUnique<std::string>();
   if (capabilities.has_capabilities())
     *client_capabilities_ = capabilities.capabilities();
   capabilities_ = IntersectCapabilities(*client_capabilities_,
@@ -439,9 +450,9 @@ ClientSessionControl* ClientSession::session_control() {
 std::unique_ptr<protocol::ClipboardStub> ClientSession::CreateClipboardProxy() {
   DCHECK(CalledOnValidThread());
 
-  return base::WrapUnique(
-      new protocol::ClipboardThreadProxy(client_clipboard_factory_.GetWeakPtr(),
-                                         base::ThreadTaskRunnerHandle::Get()));
+  return base::MakeUnique<protocol::ClipboardThreadProxy>(
+      client_clipboard_factory_.GetWeakPtr(),
+      base::ThreadTaskRunnerHandle::Get());
 }
 
 void ClientSession::OnVideoSizeChanged(protocol::VideoStream* video_stream,

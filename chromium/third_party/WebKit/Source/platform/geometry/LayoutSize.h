@@ -46,7 +46,7 @@ enum AspectRatioFit {
     AspectRatioFitGrow
 };
 
-class LayoutSize {
+class PLATFORM_EXPORT LayoutSize {
     DISALLOW_NEW();
 public:
     LayoutSize() { }
@@ -148,9 +148,7 @@ public:
         return LayoutSize(m_width.fraction(), m_height.fraction());
     }
 
-#ifndef NDEBUG
     String toString() const;
-#endif
 
 private:
     LayoutUnit m_width, m_height;
@@ -231,6 +229,10 @@ inline LayoutSize roundedLayoutSize(const FloatSize& s)
 {
     return LayoutSize(s);
 }
+
+// Redeclared here to avoid ODR issues.
+// See platform/testing/GeometryPrinters.h.
+void PrintTo(const LayoutSize&, std::ostream*);
 
 } // namespace blink
 

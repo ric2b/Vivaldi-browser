@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
@@ -17,7 +18,6 @@
 #include "content/public/browser/render_process_host_factory.h"
 #include "ipc/ipc_test_sink.h"
 #include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/public/cpp/interface_registry.h"
 
 class StoragePartition;
 
@@ -82,8 +82,8 @@ class MockRenderProcessHost : public RenderProcessHost {
 #if defined(ENABLE_WEBRTC)
   void EnableAudioDebugRecordings(const base::FilePath& file) override;
   void DisableAudioDebugRecordings() override;
-  void EnableEventLogRecordings(const base::FilePath& file) override;
-  void DisableEventLogRecordings() override;
+  bool StartWebRTCEventLog(const base::FilePath& file_path) override;
+  bool StopWebRTCEventLog() override;
   void SetWebRtcLogMessageCallback(
       base::Callback<void(const std::string&)> callback) override;
   void ClearWebRtcLogMessageCallback() override;
@@ -94,9 +94,7 @@ class MockRenderProcessHost : public RenderProcessHost {
 #endif
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
   void NotifyTimezoneChange(const std::string& zone_id) override;
-  shell::InterfaceRegistry* GetInterfaceRegistry() override;
   shell::InterfaceProvider* GetRemoteInterfaces() override;
-  shell::Connection* GetChildConnection() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
   const base::TimeTicks& GetInitTimeForNavigationMetrics() const override;
@@ -139,10 +137,6 @@ class MockRenderProcessHost : public RenderProcessHost {
 
   int worker_ref_count() const { return worker_ref_count_; }
 
-  void SetInterfaceRegistry(
-      std::unique_ptr<shell::InterfaceRegistry> interface_registry) {
-    interface_registry_ = std::move(interface_registry);
-  }
   void SetRemoteInterfaces(
       std::unique_ptr<shell::InterfaceProvider> remote_interfaces) {
     remote_interfaces_ = std::move(remote_interfaces);
@@ -167,7 +161,6 @@ class MockRenderProcessHost : public RenderProcessHost {
   bool is_process_backgrounded_;
   std::unique_ptr<base::ProcessHandle> process_handle;
   int worker_ref_count_;
-  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
   std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderProcessHost);

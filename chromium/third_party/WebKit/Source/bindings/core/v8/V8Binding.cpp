@@ -36,6 +36,7 @@
 #include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8Element.h"
 #include "bindings/core/v8/V8EventTarget.h"
+#include "bindings/core/v8/V8HTMLLinkElement.h"
 #include "bindings/core/v8/V8NodeFilter.h"
 #include "bindings/core/v8/V8NodeFilterCondition.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
@@ -809,8 +810,16 @@ void installOriginTrialsCore(ScriptState* scriptState)
     // configuration of origin trial enabled attibutes and interfaces in IDL
     // files. (crbug.com/615060)
 
-    // Initialization code for origin trials for core bindings, if necessary,
-    // should go here.
+    ExecutionContext* executionContext = scriptState->getExecutionContext();
+    OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext, OriginTrialContext::DontCreateIfNotExists);
+    if (!originTrialContext)
+        return;
+
+    if (!originTrialContext->featureBindingsInstalled("LinkServiceWorker") && (RuntimeEnabledFeatures::linkServiceWorkerEnabled() || originTrialContext->isFeatureEnabled("ForeignFetch"))) {
+        if (executionContext->isDocument()) {
+            V8HTMLLinkElement::installLinkServiceWorker(scriptState);
+        }
+    }
 }
 
 namespace {
@@ -830,12 +839,24 @@ void installOriginTrials(ScriptState* scriptState)
     (*s_installOriginTrialsFunction)(scriptState);
 
     // Mark each enabled feature as having been installed.
-    if (!originTrialContext->featureBindingsInstalled("DurableStorage") && (RuntimeEnabledFeatures::durableStorageEnabled() || originTrialContext->isFeatureEnabled("DurableStorage", nullptr))) {
+    if (!originTrialContext->featureBindingsInstalled("DurableStorage") && (RuntimeEnabledFeatures::durableStorageEnabled() || originTrialContext->isFeatureEnabled("DurableStorage"))) {
         originTrialContext->setFeatureBindingsInstalled("DurableStorage");
     }
 
-    if (!originTrialContext->featureBindingsInstalled("WebBluetooth") && (RuntimeEnabledFeatures::webBluetoothEnabled() || originTrialContext->isFeatureEnabled("WebBluetooth", nullptr))) {
+    if (!originTrialContext->featureBindingsInstalled("WebBluetooth") && (RuntimeEnabledFeatures::webBluetoothEnabled() || originTrialContext->isFeatureEnabled("WebBluetooth"))) {
         originTrialContext->setFeatureBindingsInstalled("WebBluetooth");
+    }
+
+    if (!originTrialContext->featureBindingsInstalled("WebUSB") && (RuntimeEnabledFeatures::webUSBEnabled() || originTrialContext->isFeatureEnabled("WebUSB"))) {
+        originTrialContext->setFeatureBindingsInstalled("WebUSB");
+    }
+
+    if (!originTrialContext->featureBindingsInstalled("LinkServiceWorker") && (RuntimeEnabledFeatures::linkServiceWorkerEnabled() || originTrialContext->isFeatureEnabled("ForeignFetch"))) {
+        originTrialContext->setFeatureBindingsInstalled("LinkServiceWorker");
+    }
+
+    if (!originTrialContext->featureBindingsInstalled("ForeignFetch") && (RuntimeEnabledFeatures::foreignFetchEnabled() || originTrialContext->isFeatureEnabled("ForeignFetch"))) {
+        originTrialContext->setFeatureBindingsInstalled("ForeignFetch");
     }
 }
 
@@ -938,19 +959,9 @@ v8::Isolate* toIsolate(LocalFrame* frame)
     return frame->script().isolate();
 }
 
-void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>& info)
-{
-    v8::Local<v8::Value> data = info.Data();
-    ASSERT(data->IsExternal());
-    V8PerContextData* perContextData = V8PerContextData::from(info.Holder()->CreationContext());
-    if (!perContextData)
-        return;
-    v8SetReturnValue(info, perContextData->constructorForType(WrapperTypeInfo::unwrap(data)));
-}
-
 v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value> value, v8::Isolate* isolate)
 {
-    v8CallOrCrash(value.As<v8::Object>()->SetIntegrityLevel(isolate->GetCurrentContext(), v8::IntegrityLevel::kFrozen));
+    value.As<v8::Object>()->SetIntegrityLevel(isolate->GetCurrentContext(), v8::IntegrityLevel::kFrozen).ToChecked();
     return value;
 }
 

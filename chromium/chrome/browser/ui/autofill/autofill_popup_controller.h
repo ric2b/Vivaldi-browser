@@ -13,9 +13,9 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/autofill/autofill_popup_view_delegate.h"
+#include "third_party/skia/include/core/SkColor.h"
 
 namespace gfx {
-class FontList;
 class Point;
 class Rect;
 }
@@ -55,12 +55,9 @@ class AutofillPopupController : public AutofillPopupViewDelegate {
   // Removes the suggestion at the given index.
   virtual bool RemoveSuggestion(int index) = 0;
 
-#if !defined(OS_ANDROID)
-  // The same font can vary based on the type of data it is showing,
-  // so we need to know the row.
-  virtual const gfx::FontList& GetValueFontListForRow(size_t index) const = 0;
-  virtual const gfx::FontList& GetLabelFontList() const = 0;
-#endif
+  // Returns the background color of the row item according to its |index|, or
+  // transparent if the default popup background should be used.
+  virtual SkColor GetBackgroundColorForRow(int index) const = 0;
 
   // Returns the index of the selected line. A line is "selected" when it is
   // hovered or has keyboard focus.

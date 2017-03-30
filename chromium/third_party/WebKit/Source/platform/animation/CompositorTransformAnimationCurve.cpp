@@ -9,8 +9,6 @@
 #include "cc/animation/transform_operations.h"
 #include "platform/animation/CompositorTransformOperations.h"
 
-using blink::CompositorTransformKeyframe;
-
 namespace blink {
 
 CompositorTransformAnimationCurve::CompositorTransformAnimationCurve()
@@ -22,56 +20,19 @@ CompositorTransformAnimationCurve::~CompositorTransformAnimationCurve()
 {
 }
 
-void CompositorTransformAnimationCurve::addLinearKeyframe(const CompositorTransformKeyframe& keyframe)
+void CompositorTransformAnimationCurve::addKeyframe(const CompositorTransformKeyframe& keyframe)
 {
-    const cc::TransformOperations& transformOperations = keyframe.value().asTransformOperations();
-    m_curve->AddKeyframe(cc::TransformKeyframe::Create(
-        base::TimeDelta::FromSecondsD(keyframe.time()), transformOperations, nullptr));
+    m_curve->AddKeyframe(keyframe.cloneToCC());
 }
 
-void CompositorTransformAnimationCurve::addCubicBezierKeyframe(const CompositorTransformKeyframe& keyframe, CubicBezierTimingFunction::EaseType easeType)
+void CompositorTransformAnimationCurve::setTimingFunction(const TimingFunction& timingFunction)
 {
-    const cc::TransformOperations& transformOperations = keyframe.value().asTransformOperations();
-    m_curve->AddKeyframe(cc::TransformKeyframe::Create(
-        base::TimeDelta::FromSecondsD(keyframe.time()), transformOperations,
-        cc::CubicBezierTimingFunction::CreatePreset(easeType)));
+    m_curve->SetTimingFunction(timingFunction.cloneToCC());
 }
 
-void CompositorTransformAnimationCurve::addCubicBezierKeyframe(const CompositorTransformKeyframe& keyframe,  double x1, double y1, double x2, double y2)
+void CompositorTransformAnimationCurve::setScaledDuration(double scaledDuration)
 {
-    const cc::TransformOperations& transformOperations = keyframe.value().asTransformOperations();
-    m_curve->AddKeyframe(cc::TransformKeyframe::Create(
-        base::TimeDelta::FromSecondsD(keyframe.time()), transformOperations,
-        cc::CubicBezierTimingFunction::Create(x1, y1, x2, y2)));
-}
-
-void CompositorTransformAnimationCurve::addStepsKeyframe(const CompositorTransformKeyframe& keyframe, int steps, StepsTimingFunction::StepPosition stepPosition)
-{
-    const cc::TransformOperations& transformOperations = keyframe.value().asTransformOperations();
-    m_curve->AddKeyframe(cc::TransformKeyframe::Create(
-        base::TimeDelta::FromSecondsD(keyframe.time()), transformOperations,
-        cc::StepsTimingFunction::Create(steps, stepPosition)));
-}
-
-void CompositorTransformAnimationCurve::setLinearTimingFunction()
-{
-    m_curve->SetTimingFunction(nullptr);
-}
-
-void CompositorTransformAnimationCurve::setCubicBezierTimingFunction(CubicBezierTimingFunction::EaseType easeType)
-{
-    m_curve->SetTimingFunction(cc::CubicBezierTimingFunction::CreatePreset(easeType));
-}
-
-void CompositorTransformAnimationCurve::setCubicBezierTimingFunction(double x1, double y1, double x2, double y2)
-{
-    m_curve->SetTimingFunction(
-        cc::CubicBezierTimingFunction::Create(x1, y1, x2, y2));
-}
-
-void CompositorTransformAnimationCurve::setStepsTimingFunction(int numberOfSteps, StepsTimingFunction::StepPosition stepPosition)
-{
-    m_curve->SetTimingFunction(cc::StepsTimingFunction::Create(numberOfSteps, stepPosition));
+    m_curve->set_scaled_duration(scaledDuration);
 }
 
 std::unique_ptr<cc::AnimationCurve> CompositorTransformAnimationCurve::cloneToAnimationCurve() const

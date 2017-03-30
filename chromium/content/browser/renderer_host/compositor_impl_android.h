@@ -23,6 +23,7 @@
 #include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "ui/android/context_provider_factory.h"
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/android/resources/ui_resource_provider.h"
 #include "ui/android/window_android_compositor.h"
@@ -36,6 +37,7 @@ class Layer;
 class LayerTreeHost;
 class SurfaceIdAllocator;
 class SurfaceManager;
+class VulkanContextProvider;
 class VulkanInProcessContextProvider;
 }
 
@@ -62,12 +64,6 @@ class CONTENT_EXPORT CompositorImpl
   ~CompositorImpl() override;
 
   static bool IsInitialized();
-
-  static cc::SurfaceManager* GetSurfaceManager();
-  static std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator();
-
-  static scoped_refptr<cc::VulkanInProcessContextProvider>
-  SharedVulkanContextProviderAndroid();
 
   void PopulateGpuCapabilities(gpu::Capabilities gpu_capabilities);
 
@@ -123,16 +119,29 @@ class CONTENT_EXPORT CompositorImpl
                base::TimeDelta vsync_period) override;
   void SetNeedsAnimate() override;
   void SetVisible(bool visible);
-  void CreateOutputSurface();
   void CreateLayerTreeHost();
 
-  void OnGpuChannelEstablished();
-  void OnGpuChannelTimeout();
+  void HandlePendingOutputSurfaceRequest();
+
+#if defined(ENABLE_VULKAN)
+  void CreateVulkanOutputSurface();
+#endif
+  void OnGpuChannelEstablished(
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+      ui::ContextProviderFactory::GpuChannelHostResult result);
+  void InitializeDisplay(
+      std::unique_ptr<cc::OutputSurface> display_output_surface,
+      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+      scoped_refptr<cc::ContextProvider> context_provider);
+
+  bool HavePendingReadbacks();
 
   // root_layer_ is the persistent internal root layer, while subroot_layer_
   // is the one attached by the compositor client.
-  scoped_refptr<cc::Layer> root_layer_;
   scoped_refptr<cc::Layer> subroot_layer_;
+
+  // Subtree for hidden layers with CopyOutputRequests on them.
+  scoped_refptr<cc::Layer> readback_layer_tree_;
 
   // Destruction order matters here:
   std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
@@ -161,8 +170,6 @@ class CONTENT_EXPORT CompositorImpl
   unsigned int pending_swapbuffers_;
 
   size_t num_successive_context_creation_failures_;
-
-  base::OneShotTimer establish_gpu_channel_timeout_;
 
   // Whether there is an OutputSurface request pending from the current
   // |host_|. Becomes |true| if RequestNewOutputSurface is called, and |false|

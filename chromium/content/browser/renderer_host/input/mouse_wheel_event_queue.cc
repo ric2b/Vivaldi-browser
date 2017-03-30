@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
+#include "ui/events/blink/web_input_event_traits.h"
 
 using blink::WebGestureEvent;
 using blink::WebInputEvent;
@@ -33,18 +34,20 @@ class QueuedWebMouseWheelEvent : public MouseWheelEventWithLatencyInfo {
 };
 
 MouseWheelEventQueue::MouseWheelEventQueue(MouseWheelEventQueueClient* client,
-                                           int64_t scroll_transaction_ms)
+                                           bool enable_scroll_latching)
     : client_(client),
       needs_scroll_begin_(true),
       needs_scroll_end_(false),
-      scroll_transaction_ms_(scroll_transaction_ms),
+      enable_scroll_latching_(enable_scroll_latching),
       scrolling_device_(blink::WebGestureDeviceUninitialized) {
   DCHECK(client);
+  scroll_transaction_ms_ =
+      enable_scroll_latching_ ? kDefaultWheelScrollLatchingTransactionMs : 0;
 }
 
 MouseWheelEventQueue::~MouseWheelEventQueue() {
   if (!wheel_queue_.empty())
-    STLDeleteElements(&wheel_queue_);
+    base::STLDeleteElements(&wheel_queue_);
 }
 
 void MouseWheelEventQueue::QueueEvent(
@@ -80,7 +83,8 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
 
   // If event wasn't consumed then generate a gesture scroll for it.
   if (ack_result != INPUT_EVENT_ACK_STATE_CONSUMED &&
-      WebInputEventTraits::CanCauseScroll(event_sent_for_gesture_ack_->event) &&
+      ui::WebInputEventTraits::CanCauseScroll(
+          event_sent_for_gesture_ack_->event) &&
       event_sent_for_gesture_ack_->event.resendingPluginId == -1 &&
       (scrolling_device_ == blink::WebGestureDeviceUninitialized ||
        scrolling_device_ == blink::WebGestureDeviceTouchpad)) {

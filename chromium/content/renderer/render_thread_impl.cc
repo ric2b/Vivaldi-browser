@@ -14,7 +14,6 @@
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/lazy_instance.h"
-#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
@@ -23,11 +22,10 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/path_service.h"
-#include "base/single_thread_task_runner.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/strings/string_tokenizer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/simple_thread.h"
@@ -39,17 +37,15 @@
 #include "build/build_config.h"
 #include "cc/base/histograms.h"
 #include "cc/base/switches.h"
-#include "cc/blink/web_external_bitmap_impl.h"
 #include "cc/blink/web_layer_impl.h"
+#include "cc/output/buffer_to_texture_target_map.h"
+#include "cc/output/copy_output_request.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_settings.h"
-#include "components/scheduler/child/compositor_worker_scheduler.h"
-#include "components/scheduler/child/webthread_base.h"
-#include "components/scheduler/child/webthread_impl_for_worker_scheduler.h"
-#include "components/scheduler/renderer/renderer_scheduler.h"
+#include "components/memory_coordinator/child/child_memory_coordinator_impl.h"
 #include "content/child/appcache/appcache_dispatcher.h"
 #include "content/child/appcache/appcache_frontend_impl.h"
 #include "content/child/blob_storage/blob_message_filter.h"
@@ -67,12 +63,12 @@
 #include "content/child/runtime_features.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/child/web_database_observer_impl.h"
-#include "content/child/websocket_message_filter.h"
 #include "content/child/worker_thread_registry.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/dom_storage/dom_storage_messages.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu_process_launch_causes.h"
 #include "content/common/render_process_messages.h"
@@ -133,7 +129,6 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_platform_file.h"
-#include "media/base/audio_hardware_config.h"
 #include "media/base/media.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
 #include "mojo/common/common_type_converters.h"
@@ -142,17 +137,22 @@
 #include "net/base/port_util.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "third_party/WebKit/public/platform/WebImageGenerator.h"
+#include "third_party/WebKit/public/platform/WebMemoryCoordinator.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
+#include "third_party/WebKit/public/platform/scheduler/child/compositor_worker_scheduler.h"
+#include "third_party/WebKit/public/platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebCache.h"
 #include "third_party/WebKit/public/web/WebDatabase.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebKit.h"
-#include "third_party/WebKit/public/web/WebMemoryCoordinator.h"
 #include "third_party/WebKit/public/web/WebNetworkStateNotifier.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebScriptController.h"
@@ -191,7 +191,6 @@
 #include "content/renderer/media/peer_connection_tracker.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
-#include "content/renderer/media/webrtc_identity_service.h"
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -203,11 +202,11 @@
 #include "v8/src/third_party/vtune/v8-vtune.h"
 #endif
 
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "components/mus/common/gpu_service.h"
+#if defined(USE_AURA)
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #include "content/renderer/mus/render_widget_window_tree_client_factory.h"
+#include "services/ui/public/cpp/gpu_service.h"
 #endif
 
 #if defined(ENABLE_IPC_FUZZER)
@@ -223,7 +222,7 @@ using blink::WebScriptController;
 using blink::WebSecurityPolicy;
 using blink::WebString;
 using blink::WebView;
-using scheduler::WebThreadImplForWorkerScheduler;
+using blink::scheduler::WebThreadImplForWorkerScheduler;
 
 namespace content {
 
@@ -291,8 +290,10 @@ class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
 
  private:
   // WebThreadImplForWorkerScheduler:
-  std::unique_ptr<scheduler::WorkerScheduler> CreateWorkerScheduler() override {
-    return base::WrapUnique(new scheduler::CompositorWorkerScheduler(thread()));
+  std::unique_ptr<blink::scheduler::WorkerScheduler> CreateWorkerScheduler()
+      override {
+    return base::WrapUnique(
+        new blink::scheduler::CompositorWorkerScheduler(thread()));
   }
 
   DISALLOW_COPY_AND_ASSIGN(WebThreadForCompositor);
@@ -319,20 +320,6 @@ void* CreateHistogram(
 void AddHistogramSample(void* hist, int sample) {
   base::Histogram* histogram = static_cast<base::Histogram*>(hist);
   histogram->Add(sample);
-}
-
-std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmapFunction(
-    const gfx::Size& size) {
-  return ChildThreadImpl::current()->shared_bitmap_manager()->
-      AllocateSharedBitmap(size);
-}
-
-void EnableBlinkPlatformLogChannels(const std::string& channels) {
-  if (channels.empty())
-    return;
-  base::StringTokenizer t(channels, ", ");
-  while (t.GetNext())
-    blink::enableLogChannel(t.token().c_str());
 }
 
 void NotifyTimezoneChangeOnThisThread() {
@@ -418,19 +405,6 @@ void CreateEmbeddedWorkerSetup(
   new EmbeddedWorkerSetupImpl(std::move(request));
 }
 
-void StringToUintVector(const std::string& str, std::vector<unsigned>* vector) {
-  DCHECK(vector->empty());
-  std::vector<std::string> pieces = base::SplitString(
-      str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-  DCHECK_EQ(pieces.size(), static_cast<size_t>(gfx::BufferFormat::LAST) + 1);
-  for (size_t i = 0; i < pieces.size(); ++i) {
-    unsigned number = 0;
-    bool succeed = base::StringToUint(pieces[i], &number);
-    DCHECK(succeed);
-    vector->push_back(number);
-  }
-}
-
 scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
     const gpu::SharedMemoryLimits& limits,
@@ -458,6 +432,11 @@ scoped_refptr<ContextProviderCommandBuffer> CreateOffscreenContext(
       gpu::kNullSurfaceHandle,
       GURL("chrome://gpu/RenderThreadImpl::CreateOffscreenContext"),
       automatic_flushes, support_locking, limits, attributes, nullptr, type));
+}
+
+bool IsRunningInMash() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(switches::kIsRunningInMash);
 }
 
 }  // namespace
@@ -584,8 +563,8 @@ bool RenderThreadImpl::HistogramCustomizer::IsAlexaTop10NonGoogleSite(
 // static
 RenderThreadImpl* RenderThreadImpl::Create(
     const InProcessChildThreadParams& params) {
-  std::unique_ptr<scheduler::RendererScheduler> renderer_scheduler =
-      scheduler::RendererScheduler::Create();
+  std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler =
+      blink::scheduler::RendererScheduler::Create();
   scoped_refptr<base::SingleThreadTaskRunner> test_task_counter;
   return new RenderThreadImpl(
       params, std::move(renderer_scheduler), test_task_counter);
@@ -594,7 +573,7 @@ RenderThreadImpl* RenderThreadImpl::Create(
 // static
 RenderThreadImpl* RenderThreadImpl::Create(
     std::unique_ptr<base::MessageLoop> main_message_loop,
-    std::unique_ptr<scheduler::RendererScheduler> renderer_scheduler) {
+    std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler) {
   return new RenderThreadImpl(std::move(main_message_loop),
                               std::move(renderer_scheduler));
 }
@@ -605,11 +584,13 @@ RenderThreadImpl* RenderThreadImpl::current() {
 
 RenderThreadImpl::RenderThreadImpl(
     const InProcessChildThreadParams& params,
-    std::unique_ptr<scheduler::RendererScheduler> scheduler,
+    std::unique_ptr<blink::scheduler::RendererScheduler> scheduler,
     scoped_refptr<base::SingleThreadTaskRunner>& resource_task_queue)
     : ChildThreadImpl(Options::Builder()
                           .InBrowserProcess(params)
                           .UseMojoChannel(true)
+                          .AutoStartMojoShellConnection(false)
+                          .ConnectToBrowser(true)
                           .Build()),
       renderer_scheduler_(std::move(scheduler)),
       categorized_worker_pool_(new CategorizedWorkerPool()) {
@@ -620,8 +601,12 @@ RenderThreadImpl::RenderThreadImpl(
 // which means that we need to make the render thread pump UI events.
 RenderThreadImpl::RenderThreadImpl(
     std::unique_ptr<base::MessageLoop> main_message_loop,
-    std::unique_ptr<scheduler::RendererScheduler> scheduler)
-    : ChildThreadImpl(Options::Builder().UseMojoChannel(true).Build()),
+    std::unique_ptr<blink::scheduler::RendererScheduler> scheduler)
+    : ChildThreadImpl(Options::Builder()
+                          .UseMojoChannel(true)
+                          .AutoStartMojoShellConnection(false)
+                          .ConnectToBrowser(true)
+                          .Build()),
       renderer_scheduler_(std::move(scheduler)),
       main_message_loop_(std::move(main_message_loop)),
       categorized_worker_pool_(new CategorizedWorkerPool()) {
@@ -646,6 +631,14 @@ void RenderThreadImpl::Init(
 
   // Register this object as the main thread.
   ChildProcess::current()->set_main_thread(this);
+
+#if defined(USE_AURA)
+  if (IsRunningInMash()) {
+    gpu_service_ =
+        ui::GpuService::Create(GetMojoShellConnection()->GetConnector(),
+                               ChildProcess::current()->io_task_runner());
+  }
+#endif
 
   InitializeWebKit(resource_task_queue);
 
@@ -673,9 +666,9 @@ void RenderThreadImpl::Init(
       kMaxResourceRequestsPerFlushWhenThrottled));
   resource_dispatcher()->set_message_sender(resource_dispatch_throttler_.get());
 
-  media_stream_center_ = NULL;
+  media_stream_center_ = nullptr;
 
-  blob_message_filter_ = new BlobMessageFilter(GetFileThreadMessageLoopProxy());
+  blob_message_filter_ = new BlobMessageFilter(GetFileThreadTaskRunner());
   AddFilter(blob_message_filter_.get());
   db_message_filter_ = new DBMessageFilter();
   AddFilter(db_message_filter_.get());
@@ -690,31 +683,26 @@ void RenderThreadImpl::Init(
   peer_connection_tracker_.reset(new PeerConnectionTracker());
   AddObserver(peer_connection_tracker_.get());
 
-  p2p_socket_dispatcher_ =
-      new P2PSocketDispatcher(GetIOMessageLoopProxy().get());
+  p2p_socket_dispatcher_ = new P2PSocketDispatcher(GetIOTaskRunner().get());
   AddFilter(p2p_socket_dispatcher_.get());
-
-  webrtc_identity_service_.reset(new WebRTCIdentityService());
 
   peer_connection_factory_.reset(
       new PeerConnectionDependencyFactory(p2p_socket_dispatcher_.get()));
 
   aec_dump_message_filter_ = new AecDumpMessageFilter(
-      GetIOMessageLoopProxy(), message_loop()->task_runner(),
-      peer_connection_factory_.get());
+      GetIOTaskRunner(), message_loop()->task_runner());
 
   AddFilter(aec_dump_message_filter_.get());
 
 #endif  // defined(ENABLE_WEBRTC)
 
-  audio_input_message_filter_ =
-      new AudioInputMessageFilter(GetIOMessageLoopProxy());
+  audio_input_message_filter_ = new AudioInputMessageFilter(GetIOTaskRunner());
   AddFilter(audio_input_message_filter_.get());
 
-  audio_message_filter_ = new AudioMessageFilter(GetIOMessageLoopProxy());
+  audio_message_filter_ = new AudioMessageFilter(GetIOTaskRunner());
   AddFilter(audio_message_filter_.get());
 
-  midi_message_filter_ = new MidiMessageFilter(GetIOMessageLoopProxy());
+  midi_message_filter_ = new MidiMessageFilter(GetIOTaskRunner());
   AddFilter(midi_message_filter_.get());
 
   AddFilter((new IndexedDBMessageFilter(thread_safe_sender()))->GetFilter());
@@ -722,6 +710,16 @@ void RenderThreadImpl::Init(
   AddFilter((new CacheStorageMessageFilter(thread_safe_sender()))->GetFilter());
 
   AddFilter((new ServiceWorkerContextMessageFilter())->GetFilter());
+
+#if defined(USE_AURA)
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMusInRenderer)) {
+    CreateRenderWidgetWindowTreeClientFactory(GetMojoShellConnection());
+  }
+#endif
+
+  // Must be called before RenderThreadStarted() below.
+  StartMojoShellConnection();
 
   GetContentClient()->renderer()->RenderThreadStarted();
 
@@ -766,7 +764,8 @@ void RenderThreadImpl::Init(
 
   std::string image_texture_target_string =
       command_line.GetSwitchValueASCII(switches::kContentImageTextureTarget);
-  StringToUintVector(image_texture_target_string, &use_image_texture_targets_);
+  buffer_to_texture_target_map_ =
+      cc::StringToBufferToTextureTargetMap(image_texture_target_string);
 
   if (command_line.HasSwitch(switches::kDisableLCDText)) {
     is_lcd_text_enabled_ = false;
@@ -830,6 +829,16 @@ void RenderThreadImpl::Init(
       base::Bind(&RenderThreadImpl::OnSyncMemoryPressure,
                  base::Unretained(this))));
 
+  if (memory_coordinator::IsEnabled()) {
+    // TODO(bashi): Revisit how to manage the lifetime of
+    // ChildMemoryCoordinatorImpl.
+    // https://codereview.chromium.org/2094583002/#msg52
+    memory_coordinator::mojom::MemoryCoordinatorHandlePtr parent_coordinator;
+    GetRemoteInterfaces()->GetInterface(mojo::GetProxy(&parent_coordinator));
+    memory_coordinator_ = memory_coordinator::CreateChildMemoryCoordinator(
+        std::move(parent_coordinator), this);
+  }
+
   int num_raster_threads = 0;
   std::string string_value =
       command_line.GetSwitchValueASCII(switches::kNumRasterThreads);
@@ -856,17 +865,15 @@ void RenderThreadImpl::Init(
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateFrameFactory));
   GetInterfaceRegistry()->AddInterface(base::Bind(CreateEmbeddedWorkerSetup));
 
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  // We may not have a MojoShellConnection object in tests that directly
-  // instantiate a RenderThreadImpl.
-  if (MojoShellConnection::GetForProcess() &&
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseMusInRenderer))
-    CreateRenderWidgetWindowTreeClientFactory();
-#endif
-
   GetRemoteInterfaces()->GetInterface(
       mojo::GetProxy(&storage_partition_service_));
+
+#if defined(OS_LINUX)
+  ChildProcess::current()->SetIOThreadPriority(base::ThreadPriority::DISPLAY);
+  ChildThreadImpl::current()->SetThreadPriority(
+      categorized_worker_pool_->background_worker_thread_id(),
+      base::ThreadPriority::BACKGROUND);
+#endif
 
   is_renderer_suspended_ = false;
 }
@@ -894,11 +901,11 @@ void RenderThreadImpl::Shutdown() {
   // Shutdown in reverse of the initialization order.
   if (devtools_agent_message_filter_.get()) {
     RemoveFilter(devtools_agent_message_filter_.get());
-    devtools_agent_message_filter_ = NULL;
+    devtools_agent_message_filter_ = nullptr;
   }
 
   RemoveFilter(audio_input_message_filter_.get());
-  audio_input_message_filter_ = NULL;
+  audio_input_message_filter_ = nullptr;
 
 #if defined(ENABLE_WEBRTC)
   RTCPeerConnectionHandler::DestructAllHandlers();
@@ -912,7 +919,7 @@ void RenderThreadImpl::Shutdown() {
   vc_manager_.reset();
 
   RemoveFilter(db_message_filter_.get());
-  db_message_filter_ = NULL;
+  db_message_filter_ = nullptr;
 
   // Shutdown the file thread if it's running.
   if (file_thread_)
@@ -920,7 +927,7 @@ void RenderThreadImpl::Shutdown() {
 
   if (compositor_message_filter_.get()) {
     RemoveFilter(compositor_message_filter_.get());
-    compositor_message_filter_ = NULL;
+    compositor_message_filter_ = nullptr;
   }
 
 #if defined(OS_ANDROID)
@@ -939,7 +946,7 @@ void RenderThreadImpl::Shutdown() {
 
   // AudioMessageFilter may be accessed on |media_thread_|, so shutdown after.
   RemoveFilter(audio_message_filter_.get());
-  audio_message_filter_ = NULL;
+  audio_message_filter_ = nullptr;
 
   categorized_worker_pool_->Shutdown();
 
@@ -947,7 +954,7 @@ void RenderThreadImpl::Shutdown() {
   input_handler_manager_.reset();
   if (input_event_filter_.get()) {
     RemoveFilter(input_event_filter_.get());
-    input_event_filter_ = NULL;
+    input_event_filter_ = nullptr;
   }
 
   // RemoveEmbeddedWorkerRoute may be called while deleting
@@ -959,7 +966,7 @@ void RenderThreadImpl::Shutdown() {
   // hold pointers to V8 objects (e.g., via pending requests).
   main_thread_indexed_db_dispatcher_.reset();
 
-  main_thread_compositor_task_runner_ = NULL;
+  main_thread_compositor_task_runner_ = nullptr;
 
   gpu_factories_.clear();
 
@@ -972,13 +979,14 @@ void RenderThreadImpl::Shutdown() {
 
   ChildThreadImpl::Shutdown();
 
-  // Shut down the message loop and the renderer scheduler before shutting down
-  // Blink. This prevents a scenario where a pending task in the message loop
-  // accesses Blink objects after Blink shuts down.
+  // Shut down the message loop (if provided when the RenderThreadImpl was
+  // constructed) and the renderer scheduler before shutting down Blink. This
+  // prevents a scenario where a pending task in the message loop accesses Blink
+  // objects after Blink shuts down.
   renderer_scheduler_->SetRAILModeObserver(nullptr);
   renderer_scheduler_->Shutdown();
   if (main_message_loop_)
-    main_message_loop_->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
   if (blink_platform_impl_) {
     blink_platform_impl_->Shutdown();
@@ -998,7 +1006,7 @@ void RenderThreadImpl::Shutdown() {
   // to the browser process.
   main_message_loop_.reset();
 
-  lazy_tls.Pointer()->Set(NULL);
+  lazy_tls.Pointer()->Set(nullptr);
 }
 
 bool RenderThreadImpl::Send(IPC::Message* msg) {
@@ -1049,7 +1057,7 @@ IPC::SyncMessageFilter* RenderThreadImpl::GetSyncMessageFilter() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetIOMessageLoopProxy() {
+RenderThreadImpl::GetIOTaskRunner() {
   return ChildProcess::current()->io_task_runner();
 }
 
@@ -1143,6 +1151,10 @@ void RenderThreadImpl::InitializeCompositorThread() {
   compositor_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(base::IgnoreResult(&ThreadRestrictions::SetIOAllowed), false));
+#if defined(OS_LINUX)
+  ChildThreadImpl::current()->SetThreadPriority(compositor_thread_->threadId(),
+                                                base::ThreadPriority::DISPLAY);
+#endif
 
   SynchronousInputHandlerProxyClient* synchronous_input_handler_proxy_client =
       nullptr;
@@ -1218,9 +1230,6 @@ void RenderThreadImpl::InitializeWebKit(
       resource_task_queue2);
   resource_dispatcher()->SetMainThreadTaskRunner(resource_task_queue2);
 
-  websocket_message_filter()->SetLoadingTaskRunner(
-      renderer_scheduler_->LoadingTaskRunner());
-
   if (!command_line.HasSwitch(switches::kDisableThreadedCompositing) &&
       !command_line.HasSwitch(switches::kUseRemoteCompositing))
     InitializeCompositorThread();
@@ -1247,9 +1256,6 @@ void RenderThreadImpl::InitializeWebKit(
 
   RenderThreadImpl::RegisterSchemes();
 
-  EnableBlinkPlatformLogChannels(
-      command_line.GetSwitchValueASCII(switches::kBlinkPlatformLogChannels));
-
   RenderMediaClient::Initialize();
 
   devtools_agent_message_filter_ = new DevToolsAgentFilter();
@@ -1269,8 +1275,6 @@ void RenderThreadImpl::InitializeWebKit(
       GetContentClient()
           ->renderer()
           ->AllowTimerSuspensionWhenProcessBackgrounded());
-
-  cc_blink::SetSharedBitmapAllocationFunction(AllocateSharedBitmapFunction);
 
   SkGraphics::SetResourceCacheSingleAllocationByteLimit(
       kImageCacheSingleAllocationByteLimit);
@@ -1445,7 +1449,7 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
   const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
 
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
-      EstablishGpuChannelSync(CAUSE_FOR_GPU_LAUNCH_MEDIA_CONTEXT);
+      EstablishGpuChannelSync();
   if (!gpu_channel_host)
     return nullptr;
   // This context is only used to create textures and mailbox them, so
@@ -1472,16 +1476,11 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
 #else
       cmd_line->HasSwitch(switches::kEnableGpuMemoryBufferVideoFrames);
 #endif
-  std::vector<unsigned> image_texture_targets;
-  std::string video_frame_image_texture_target_string =
-      cmd_line->GetSwitchValueASCII(switches::kVideoImageTextureTarget);
-  StringToUintVector(video_frame_image_texture_target_string,
-                     &image_texture_targets);
 
   gpu_factories_.push_back(RendererGpuVideoAcceleratorFactories::Create(
       std::move(gpu_channel_host), base::ThreadTaskRunnerHandle::Get(),
       media_task_runner, std::move(media_context_provider),
-      enable_gpu_memory_buffer_video_frames, image_texture_targets,
+      enable_gpu_memory_buffer_video_frames, buffer_to_texture_target_map_,
       enable_video_accelerator));
   return gpu_factories_.back();
 }
@@ -1519,8 +1518,8 @@ RenderThreadImpl::SharedMainThreadContextProvider() {
           GL_NO_ERROR)
     return shared_main_thread_contexts_;
 
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(EstablishGpuChannelSync(
-      CAUSE_FOR_GPU_LAUNCH_RENDERER_SHARED_MAIN_THREAD_CONTEXT));
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
+      EstablishGpuChannelSync());
   if (!gpu_channel_host) {
     shared_main_thread_contexts_ = nullptr;
     return nullptr;
@@ -1546,8 +1545,8 @@ scoped_refptr<StreamTextureFactory> RenderThreadImpl::GetStreamTexureFactory() {
     scoped_refptr<ContextProviderCommandBuffer> shared_context_provider =
         SharedMainThreadContextProvider();
     if (!shared_context_provider) {
-      stream_texture_factory_ = NULL;
-      return NULL;
+      stream_texture_factory_ = nullptr;
+      return nullptr;
     }
     DCHECK(shared_context_provider->GetCommandBufferProxy());
     DCHECK(shared_context_provider->GetCommandBufferProxy()->channel());
@@ -1571,31 +1570,9 @@ AudioRendererMixerManager* RenderThreadImpl::GetAudioRendererMixerManager() {
   return audio_renderer_mixer_manager_.get();
 }
 
-media::AudioHardwareConfig* RenderThreadImpl::GetAudioHardwareConfig() {
-  if (!audio_hardware_config_) {
-    media::AudioParameters input_params;
-    media::AudioParameters output_params;
-    Send(new ViewHostMsg_GetAudioHardwareConfig(
-        &input_params, &output_params));
-
-    audio_hardware_config_.reset(new media::AudioHardwareConfig(
-        input_params, output_params));
-  }
-
-  return audio_hardware_config_.get();
-}
-
 base::WaitableEvent* RenderThreadImpl::GetShutdownEvent() {
   return ChildProcess::current()->GetShutDownEvent();
 }
-
-#if defined(OS_WIN)
-void RenderThreadImpl::PreCacheFontCharacters(const LOGFONT& log_font,
-                                              const base::string16& str) {
-  Send(new RenderProcessHostMsg_PreCacheFontCharacters(log_font, str));
-}
-
-#endif  // OS_WIN
 
 bool RenderThreadImpl::IsGpuRasterizationForced() {
   return is_gpu_rasterization_forced_;
@@ -1637,8 +1614,9 @@ bool RenderThreadImpl::IsElasticOverscrollEnabled() {
   return is_elastic_overscroll_enabled_;
 }
 
-std::vector<unsigned> RenderThreadImpl::GetImageTextureTargets() {
-  return use_image_texture_targets_;
+const cc::BufferToTextureTargetMap&
+RenderThreadImpl::GetBufferToTextureTargetMap() {
+  return buffer_to_texture_target_map_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -1652,10 +1630,14 @@ RenderThreadImpl::GetCompositorImplThreadTaskRunner() {
 }
 
 gpu::GpuMemoryBufferManager* RenderThreadImpl::GetGpuMemoryBufferManager() {
-  return gpu_memory_buffer_manager();
+#if defined(USE_AURA)
+  if (gpu_service_)
+    return gpu_service_->gpu_memory_buffer_manager();
+#endif
+  return  gpu_memory_buffer_manager();
 }
 
-scheduler::RendererScheduler* RenderThreadImpl::GetRendererScheduler() {
+blink::scheduler::RendererScheduler* RenderThreadImpl::GetRendererScheduler() {
   return renderer_scheduler_.get();
 }
 
@@ -1714,7 +1696,7 @@ void RenderThreadImpl::OnChannelError() {
 bool RenderThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {
   base::ObserverListBase<RenderThreadObserver>::Iterator it(&observers_);
   RenderThreadObserver* observer;
-  while ((observer = it.GetNext()) != NULL) {
+  while ((observer = it.GetNext()) != nullptr) {
     if (observer->OnControlMessageReceived(msg))
       return true;
   }
@@ -1820,32 +1802,38 @@ scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishGpuChannelSync(
 
     // Recreate the channel if it has been lost.
     gpu_channel_->DestroyChannel();
-    gpu_channel_ = NULL;
+    gpu_channel_ = nullptr;
   }
 
-  // Ask the browser for the channel name.
-  int client_id = 0;
-  IPC::ChannelHandle channel_handle;
-  gpu::GPUInfo gpu_info;
-  if (!Send(new ChildProcessHostMsg_EstablishGpuChannel(
-          cause_for_gpu_launch, &client_id, &channel_handle, &gpu_info)) ||
-#if defined(OS_POSIX)
-      channel_handle.socket.fd == -1 ||
+  if (!IsRunningInMash()) {
+    int client_id = 0;
+    IPC::ChannelHandle channel_handle;
+    gpu::GPUInfo gpu_info;
+    // Ask the browser for the channel name.
+    if (!Send(new ChildProcessHostMsg_EstablishGpuChannel(
+            cause_for_gpu_launch,
+            &client_id, &channel_handle, &gpu_info)) ||
+        !channel_handle.mojo_handle.is_valid()) {
+      // Otherwise cancel the connection.
+      return nullptr;
+    }
+    GetContentClient()->SetGpuInfo(gpu_info);
+
+    // Cache some variables that are needed on the compositor thread for our
+    // implementation of GpuChannelHostFactory.
+    io_thread_task_runner_ = ChildProcess::current()->io_task_runner();
+
+    gpu_channel_ =
+        gpu::GpuChannelHost::Create(this, client_id, gpu_info, channel_handle,
+                                    ChildProcess::current()->GetShutDownEvent(),
+                                    gpu_memory_buffer_manager());
+  } else {
+#if defined(USE_AURA)
+    gpu_channel_ = gpu_service_->EstablishGpuChannelSync();
+#else
+    NOTREACHED();
 #endif
-      channel_handle.name.empty()) {
-    // Otherwise cancel the connection.
-    return NULL;
   }
-
-  GetContentClient()->SetGpuInfo(gpu_info);
-
-  // Cache some variables that are needed on the compositor thread for our
-  // implementation of GpuChannelHostFactory.
-  io_thread_task_runner_ = ChildProcess::current()->io_task_runner();
-
-  gpu_channel_ = gpu::GpuChannelHost::Create(
-      this, client_id, gpu_info, channel_handle,
-      ChildProcess::current()->GetShutDownEvent(), gpu_memory_buffer_manager());
   return gpu_channel_;
 }
 
@@ -1860,14 +1848,14 @@ RenderThreadImpl::CreateCompositorOutputSurface(
   if (command_line.HasSwitch(switches::kDisableGpuCompositing))
     use_software = true;
 
-#if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-  auto shell_connection = MojoShellConnection::GetForProcess();
-  if (shell_connection && !use_software &&
+#if defined(USE_AURA)
+  if (GetMojoShellConnection() && !use_software &&
       command_line.HasSwitch(switches::kUseMusInRenderer)) {
-    mus::GpuService::Initialize(shell_connection->GetConnector());
     RenderWidgetMusConnection* connection =
         RenderWidgetMusConnection::GetOrCreate(routing_id);
-    return connection->CreateOutputSurface();
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
+        EstablishGpuChannelSync();
+    return connection->CreateOutputSurface(std::move(gpu_channel_host));
   }
 #endif
 
@@ -1888,8 +1876,7 @@ RenderThreadImpl::CreateCompositorOutputSurface(
   // before creating any context providers.
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host;
   if (!use_software) {
-    gpu_channel_host = EstablishGpuChannelSync(
-        CAUSE_FOR_GPU_LAUNCH_RENDERER_VERIFY_GPU_COMPOSITING);
+    gpu_channel_host = EstablishGpuChannelSync();
     if (!gpu_channel_host) {
       // Cause the compositor to wait and try again.
       return nullptr;
@@ -1948,7 +1935,7 @@ RenderThreadImpl::CreateCompositorOutputSurface(
 
   if (layout_test_deps_) {
     return layout_test_deps_->CreateOutputSurface(
-        std::move(gpu_channel_host), std::move(context_provider),
+        routing_id, std::move(gpu_channel_host), std::move(context_provider),
         std::move(worker_context_provider), this);
   }
 
@@ -1964,6 +1951,14 @@ RenderThreadImpl::CreateCompositorOutputSurface(
   return base::WrapUnique(new CompositorOutputSurface(
       routing_id, output_surface_id, std::move(context_provider),
       std::move(worker_context_provider), std::move(frame_swap_message_queue)));
+}
+
+std::unique_ptr<cc::SwapPromise>
+RenderThreadImpl::RequestCopyOfOutputForLayoutTest(
+    int32_t routing_id,
+    std::unique_ptr<cc::CopyOutputRequest> request) {
+  DCHECK(layout_test_deps_);
+  return layout_test_deps_->RequestCopyOfOutput(routing_id, std::move(request));
 }
 
 blink::WebMediaStreamCenter* RenderThreadImpl::CreateMediaStreamCenter(
@@ -1988,6 +1983,13 @@ RenderThreadImpl::GetPeerConnectionDependencyFactory() {
   return peer_connection_factory_.get();
 }
 #endif
+
+mojom::RenderFrameMessageFilter*
+RenderThreadImpl::render_frame_message_filter() {
+  if (!render_frame_message_filter_)
+    GetChannel()->GetRemoteAssociatedInterface(&render_frame_message_filter_);
+  return render_frame_message_filter_.get();
+}
 
 gpu::GpuChannelHost* RenderThreadImpl::GetGpuChannel() {
   if (!gpu_channel_)
@@ -2097,8 +2099,8 @@ void RenderThreadImpl::OnMemoryPressure(
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetFileThreadMessageLoopProxy() {
-  DCHECK(message_loop() == base::MessageLoop::current());
+RenderThreadImpl::GetFileThreadTaskRunner() {
+  DCHECK(message_loop()->task_runner()->BelongsToCurrentThread());
   if (!file_thread_) {
     file_thread_.reset(new base::Thread("Renderer::FILE"));
     file_thread_->Start();
@@ -2108,7 +2110,7 @@ RenderThreadImpl::GetFileThreadMessageLoopProxy() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 RenderThreadImpl::GetMediaThreadTaskRunner() {
-  DCHECK(message_loop() == base::MessageLoop::current());
+  DCHECK(message_loop()->task_runner()->BelongsToCurrentThread());
   if (!media_thread_) {
     media_thread_.reset(new base::Thread("Media"));
     media_thread_->Start();
@@ -2138,8 +2140,8 @@ RenderThreadImpl::SharedCompositorWorkerContextProvider() {
       return shared_worker_context_provider_;
   }
 
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(EstablishGpuChannelSync(
-      CAUSE_FOR_GPU_LAUNCH_SHARED_WORKER_THREAD_CONTEXT));
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
+      EstablishGpuChannelSync());
   if (!gpu_channel_host) {
     shared_worker_context_provider_ = nullptr;
     return shared_worker_context_provider_;
@@ -2269,5 +2271,17 @@ void RenderThreadImpl::OnSyncMemoryPressure(
   blink::MemoryPressureNotificationToWorkerThreadIsolates(
       v8_memory_pressure_level);
 }
+
+// Note that this would be called only when memory_coordinator is enabled.
+// OnSyncMemoryPressure() is never called in that case.
+void RenderThreadImpl::OnTrimMemoryImmediately() {
+  if (blink::mainThreadIsolate()) {
+    blink::mainThreadIsolate()->MemoryPressureNotification(
+        v8::MemoryPressureLevel::kCritical);
+    blink::MemoryPressureNotificationToWorkerThreadIsolates(
+        v8::MemoryPressureLevel::kCritical);
+  }
+}
+
 
 }  // namespace content

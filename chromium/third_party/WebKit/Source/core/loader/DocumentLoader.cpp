@@ -61,7 +61,6 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "platform/HTTPNames.h"
-#include "platform/Logging.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mhtml/ArchiveResource.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -73,7 +72,7 @@
 #include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebMimeRegistry.h"
 #include "wtf/Assertions.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
 
@@ -105,6 +104,7 @@ DocumentLoader::DocumentLoader(LocalFrame* frame, const ResourceRequest& req, co
     , m_request(req)
     , m_isClientRedirect(false)
     , m_replacesCurrentHistoryItem(false)
+    , m_dataReceived(false)
     , m_navigationType(NavigationTypeOther)
     , m_documentLoadTiming(*this)
     , m_timeOfLastDataReceived(0.0)
@@ -144,6 +144,7 @@ DEFINE_TRACE(DocumentLoader)
     visitor->trace(m_documentLoadTiming);
     visitor->trace(m_applicationCacheHost);
     visitor->trace(m_contentSecurityPolicy);
+    RawResourceClient::trace(visitor);
 }
 
 unsigned long DocumentLoader::mainResourceIdentifier() const
@@ -196,7 +197,7 @@ Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& reques
     case Resource::ImportResource:
         resource = RawResource::fetchImport(request, fetcher());
         break;
-    case Resource::LinkPreload:
+    case Resource::Raw:
         resource = RawResource::fetch(request, fetcher());
         break;
     default:
@@ -206,6 +207,23 @@ Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& reques
     if (resource)
         fetcher()->preloadStarted(resource);
     return resource;
+}
+
+void DocumentLoader::didRedirect(const KURL& oldURL, const KURL& newURL)
+{
+    timing().addRedirect(oldURL, newURL);
+
+    // If a redirection happens during a back/forward navigation, don't restore
+    // any state from the old HistoryItem.
+    // There is a provisional history item for back/forward navigation only.
+    // In the other case, clearing it is a no-op.
+    DCHECK(frameLoader());
+    frameLoader()->clearProvisionalHistoryItem();
+}
+
+void DocumentLoader::dispatchLinkHeaderPreloads(ViewportDescriptionWrapper* viewport, LinkLoader::MediaPreloadPolicy mediaPolicy)
+{
+    LinkLoader::loadLinksFromHeader(response().httpHeaderField(HTTPNames::Link), response().url(), m_frame->document(), NetworkHintsInterfaceImpl(), LinkLoader::OnlyLoadResources, mediaPolicy, viewport);
 }
 
 void DocumentLoader::didChangePerformanceTiming()
@@ -323,9 +341,9 @@ void DocumentLoader::redirectReceived(Resource* resource, ResourceRequest& reque
     }
 
     ASSERT(timing().fetchStart());
-    timing().addRedirect(redirectResponse.url(), requestURL);
     appendRedirect(requestURL);
-    frameLoader()->receivedMainResourceRedirect(requestURL);
+    didRedirect(redirectResponse.url(), requestURL);
+    frameLoader()->client()->dispatchDidReceiveServerRedirectForProvisionalLoad();
 }
 
 static bool canShowMIMEType(const String& mimeType, LocalFrame* frame)
@@ -484,7 +502,7 @@ void DocumentLoader::commitData(const char* bytes, size_t length)
         return;
 
     if (length)
-        m_state = DataReceived;
+        m_dataReceived = true;
 
     m_writer->addData(bytes, length);
 }
@@ -509,7 +527,7 @@ void DocumentLoader::dataReceived(Resource* resource, const char* data, size_t l
         return;
     }
 
-    TemporaryChange<bool> reentrancyProtector(m_inDataReceived, true);
+    AutoReset<bool> reentrancyProtector(&m_inDataReceived, true);
     processData(data, length);
 
     // Process data received in reentrant invocations. Note that the
@@ -626,6 +644,11 @@ bool DocumentLoader::maybeLoadEmpty()
     return true;
 }
 
+void DocumentLoader::upgradeInsecureRequest()
+{
+    fetcher()->context().upgradeInsecureRequest(m_request);
+}
+
 void DocumentLoader::startLoadingMainResource()
 {
     timing().markNavigationStart();
@@ -637,8 +660,13 @@ void DocumentLoader::startLoadingMainResource()
         return;
 
     ASSERT(timing().navigationStart());
-    ASSERT(!timing().fetchStart());
-    timing().markFetchStart();
+
+    // PlzNavigate:
+    // The fetch has already started in the browser. Don't mark it again.
+    if (!m_frame->settings()->browserSideNavigationEnabled()) {
+        DCHECK(!timing().fetchStart());
+        timing().markFetchStart();
+    }
 
     DEFINE_STATIC_LOCAL(ResourceLoaderOptions, mainResourceLoadOptions,
         (DoNotBufferData, AllowStoredCredentials, ClientRequestedCredentials, CheckContentSecurityPolicy, DocumentContext));

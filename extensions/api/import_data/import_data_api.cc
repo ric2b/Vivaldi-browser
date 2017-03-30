@@ -128,7 +128,7 @@ const size_t kImportItemToStringMappingLength =
     arraysize(import_item_string_mapping);
 
 const std::string ImportItemToString(importer::ImportItem item) {
-  for (int i = 0; i < kImportItemToStringMappingLength; i++) {
+  for (size_t i = 0; i < kImportItemToStringMappingLength; i++) {
     if (item == import_item_string_mapping[i].item) {
       return import_item_string_mapping[i].name;
     }
@@ -170,6 +170,8 @@ ImportDataAPI::ImportDataAPI(content::BrowserContext *context)
       this, vivaldi::import_data::OnImportItemStarted::kEventName);
   event_router->RegisterObserver(
       this, vivaldi::import_data::OnImportItemEnded::kEventName);
+  event_router->RegisterObserver(
+      this, vivaldi::import_data::OnImportItemFailed::kEventName);
 }
 
 ImportDataAPI::~ImportDataAPI() {
@@ -222,6 +224,16 @@ void ImportDataAPI::ImportItemEnded(importer::ImportItem item) {
       vivaldi::import_data::OnImportItemEnded::kEventName,
       vivaldi::import_data::OnImportItemEnded::Create(item_name));
 }
+void ImportDataAPI::ImportItemFailed(importer::ImportItem item,
+                                     const std::string& error) {
+  // Ensure we get an error at the end.
+  import_succeeded_count_++;
+  const std::string item_name = ImportItemToString(item);
+
+  event_router_->DispatchEvent(
+      vivaldi::import_data::OnImportItemFailed::kEventName,
+      vivaldi::import_data::OnImportItemFailed::Create(item_name, error));
+}
 
 void ImportDataAPI::ImportEnded() {
   importer_host_->set_observer(NULL);
@@ -271,7 +283,7 @@ bool ImporterApiFunction::RunAsync() {
 }
 
 void ImporterApiFunction::SendAsyncResponse() {
-  base::MessageLoop::current()->PostTask(
+  base::MessageLoop::current()->task_runner()->PostTask(
       FROM_HERE, base::Bind(&ImporterApiFunction::SendResponseToCallback,
                             base::Unretained(this)));
 }

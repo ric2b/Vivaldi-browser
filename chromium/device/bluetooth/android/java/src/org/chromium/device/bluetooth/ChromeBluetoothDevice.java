@@ -8,16 +8,14 @@ import android.annotation.TargetApi;
 import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.os.Build;
-import android.os.ParcelUuid;
 
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.base.metrics.RecordHistogram;
 
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
 
 /**
  * Exposes android.bluetooth.BluetoothDevice as necessary for C++
@@ -32,7 +30,6 @@ final class ChromeBluetoothDevice {
 
     private long mNativeBluetoothDeviceAndroid;
     final Wrappers.BluetoothDeviceWrapper mDevice;
-    private HashSet<String> mUuidsFromScan;
     Wrappers.BluetoothGattWrapper mBluetoothGatt;
     private final BluetoothGattCallbackImpl mBluetoothGattCallbackImpl;
     final HashMap<Wrappers.BluetoothGattCharacteristicWrapper,
@@ -44,7 +41,6 @@ final class ChromeBluetoothDevice {
             long nativeBluetoothDeviceAndroid, Wrappers.BluetoothDeviceWrapper deviceWrapper) {
         mNativeBluetoothDeviceAndroid = nativeBluetoothDeviceAndroid;
         mDevice = deviceWrapper;
-        mUuidsFromScan = new HashSet<String>();
         mBluetoothGattCallbackImpl = new BluetoothGattCallbackImpl();
         mWrapperToChromeCharacteristicsMap =
                 new HashMap<Wrappers.BluetoothGattCharacteristicWrapper,
@@ -79,19 +75,6 @@ final class ChromeBluetoothDevice {
                 nativeBluetoothDeviceAndroid, (Wrappers.BluetoothDeviceWrapper) deviceWrapper);
     }
 
-    // Implements BluetoothDeviceAndroid::UpdateAdvertisedUUIDs.
-    @CalledByNative
-    private boolean updateAdvertisedUUIDs(List<ParcelUuid> uuidsFromScan) {
-        if (uuidsFromScan == null) {
-            return false;
-        }
-        boolean uuidsUpdated = false;
-        for (ParcelUuid uuid : uuidsFromScan) {
-            uuidsUpdated |= mUuidsFromScan.add(uuid.toString());
-        }
-        return uuidsUpdated;
-    }
-
     // Implements BluetoothDeviceAndroid::GetBluetoothClass.
     @CalledByNative
     private int getBluetoothClass() {
@@ -104,18 +87,16 @@ final class ChromeBluetoothDevice {
         return mDevice.getAddress();
     }
 
+    // Implements BluetoothDeviceAndroid::GetName.
+    @CalledByNative
+    private String getName() {
+        return mDevice.getName();
+    }
+
     // Implements BluetoothDeviceAndroid::IsPaired.
     @CalledByNative
     private boolean isPaired() {
         return mDevice.getBondState() == BluetoothDevice.BOND_BONDED;
-    }
-
-    // Implements BluetoothDeviceAndroid::GetUUIDs.
-    @CalledByNative
-    private String[] getUuids() {
-        // TODO(scheib): return merged list of UUIDs from scan results and,
-        // after a device is connected, discoverServices. crbug.com/508648
-        return mUuidsFromScan.toArray(new String[mUuidsFromScan.size()]);
     }
 
     // Implements BluetoothDeviceAndroid::CreateGattConnectionImpl.
@@ -138,12 +119,6 @@ final class ChromeBluetoothDevice {
         if (mBluetoothGatt != null) mBluetoothGatt.disconnect();
     }
 
-    // Implements BluetoothDeviceAndroid::GetDeviceName.
-    @CalledByNative
-    private String getDeviceName() {
-        return mDevice.getName();
-    }
-
     // Implements callbacks related to a GATT connection.
     private class BluetoothGattCallbackImpl extends Wrappers.BluetoothGattCallbackWrapper {
         @Override
@@ -153,12 +128,21 @@ final class ChromeBluetoothDevice {
                             ? "Connected"
                             : "Disconnected");
             if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "Bluetooth.Web.Android.onConnectionStateChange.Status.Connected", status);
                 mBluetoothGatt.discoverServices();
             } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) {
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "Bluetooth.Web.Android.onConnectionStateChange.Status.Disconnected",
+                        status);
                 if (mBluetoothGatt != null) {
                     mBluetoothGatt.close();
                     mBluetoothGatt = null;
                 }
+            } else {
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "Bluetooth.Web.Android.onConnectionStateChange.Status.InvalidState",
+                        status);
             }
             ThreadUtils.runOnUiThread(new Runnable() {
                 @Override
@@ -179,6 +163,19 @@ final class ChromeBluetoothDevice {
                 @Override
                 public void run() {
                     if (mNativeBluetoothDeviceAndroid != 0) {
+                        // When the device disconnects it deletes
+                        // mBluetoothGatt, so we need to check it's not null.
+                        if (mBluetoothGatt == null) {
+                            RecordHistogram.recordSparseSlowlyHistogram(
+                                    "Bluetooth.Web.Android.onServicesDiscovered.Status."
+                                            + "Disconnected",
+                                    status);
+                            return;
+                        }
+                        RecordHistogram.recordSparseSlowlyHistogram(
+                                "Bluetooth.Web.Android.onServicesDiscovered.Status.Connected",
+                                status);
+
                         // TODO(crbug.com/576906): Update or replace existing GATT objects if they
                         //                         change after initial discovery.
                         for (Wrappers.BluetoothGattServiceWrapper service :
@@ -230,6 +227,8 @@ final class ChromeBluetoothDevice {
                         // when the event races object destruction.
                         Log.v(TAG, "onCharacteristicRead when chromeCharacteristic == null.");
                     } else {
+                        RecordHistogram.recordSparseSlowlyHistogram(
+                                "Bluetooth.Web.Android.onCharacteristicRead.Status", status);
                         chromeCharacteristic.onCharacteristicRead(status);
                     }
                 }
@@ -250,6 +249,8 @@ final class ChromeBluetoothDevice {
                         // when the event races object destruction.
                         Log.v(TAG, "onCharacteristicWrite when chromeCharacteristic == null.");
                     } else {
+                        RecordHistogram.recordSparseSlowlyHistogram(
+                                "Bluetooth.Web.Android.onCharacteristicWrite.Status", status);
                         chromeCharacteristic.onCharacteristicWrite(status);
                     }
                 }
@@ -269,6 +270,8 @@ final class ChromeBluetoothDevice {
                         // when the event races object destruction.
                         Log.v(TAG, "onDescriptorRead when chromeDescriptor == null.");
                     } else {
+                        RecordHistogram.recordSparseSlowlyHistogram(
+                                "Bluetooth.Web.Android.onDescriptorRead.Status", status);
                         chromeDescriptor.onDescriptorRead(status);
                     }
                 }
@@ -288,6 +291,8 @@ final class ChromeBluetoothDevice {
                         // when the event races object destruction.
                         Log.v(TAG, "onDescriptorWrite when chromeDescriptor == null.");
                     } else {
+                        RecordHistogram.recordSparseSlowlyHistogram(
+                                "Bluetooth.Web.Android.onDescriptorWrite.Status", status);
                         chromeDescriptor.onDescriptorWrite(status);
                     }
                 }

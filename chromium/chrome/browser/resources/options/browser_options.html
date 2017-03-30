@@ -92,7 +92,7 @@
         </span>
       </label>
     </div>
-<if expr="is_posix and not chromeos and not is_macosx">
+<if expr="is_linux and not chromeos">
     <div class="checkbox"><label>
         <input id="show-window-decorations" type="checkbox"
             pref="browser.custom_chrome_frame" metric="Options_CustomFrame"
@@ -107,14 +107,18 @@
     <div>
       <span i18n-content="deviceGroupDescription"></span>
       <div id="touchpad-settings" class="settings-row" hidden>
-        <span class="option-name" i18n-content="touchpadSpeed"></span>
+        <span id="touchpad-speed-label" class="option-name"
+            i18n-content="touchpadSpeed"></span>
         <input id="touchpad-sensitivity-range" type="range" min="1" max="5"
-            pref="settings.touchpad.sensitivity2" class="touch-slider">
+            pref="settings.touchpad.sensitivity2" class="touch-slider"
+            aria-labelledby="touchpad-speed-label">
       </div>
       <div id="mouse-settings" class="settings-row" hidden>
-        <span class="option-name" i18n-content="mouseSpeed"></span>
+        <span id="mouse-speed-label" class="option-name"
+            i18n-content="mouseSpeed"></span>
         <input id="mouse-sensitivity-range" type="range" min="1" max="5"
-            pref="settings.mouse.sensitivity2" class="touch-slider">
+            pref="settings.mouse.sensitivity2" class="touch-slider"
+            aria-labelledby="mouse-speed-label">
       </div>
       <div id="no-pointing-devices" i18n-content="noPointingDevices"
           class="settings-row" hidden>
@@ -132,6 +136,10 @@
         <button id="storage-manager-button"
             i18n-content="storageManagerButtonTitle" hidden>
         </button>
+      </div>
+      <div id="stylus-row" hidden>
+        <a is="action-link" id="stylus-settings-link"
+            i18n-content="stylusSettingsButtonTitle"></a>
       </div>
       <div id="power-row" hidden>
         <a is="action-link" id="power-settings-link"
@@ -277,11 +285,6 @@
 </if>
       <div id="profiles-buttons">
         <button id="profiles-create" i18n-content="profilesCreate"></button>
-<if expr="enable_settings_app">
-        <button id="profiles-app-list-switch"
-            i18n-content="profilesAppListSwitch" hidden>
-        </button>
-</if>
         <button id="profiles-manage" i18n-content="profilesManage" disabled>
         </button>
         <button id="profiles-delete" i18n-content="profilesDelete"></button>
@@ -342,18 +345,6 @@
       <div id="set-time" class="settings-row" hidden>
         <button id="set-time-button"
             i18n-content="setTimeButton"></button>
-      </div>
-    </div>
-  </section>
-
-  <section id="device-control-section" hidden>
-    <h3 i18n-content="deviceControlTitle"></h3>
-    <div id="consumer-management-section">
-      <div class="settings-row">
-        <span i18n-content="consumerManagementDescription"></span>
-      </div>
-      <div class="settings-row">
-        <button id="consumer-management-button"></button>
       </div>
     </div>
   </section>
@@ -893,6 +884,8 @@
         <div id="accessibility-settings" hidden>
           <button id="accessibility-settings-button"
             i18n-content="accessibilitySettings"></button>
+          <button id="talkback-settings-button"
+            i18n-content="accessibilityTalkBackSettings"></button>
         </div>
       </div>
     </div>

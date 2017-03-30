@@ -51,12 +51,10 @@
 #include "chrome/browser/renderer_context_menu/spelling_menu_observer.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/spellchecker/spellcheck_host_metrics.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/browser/tab_contents/retargeting_details.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -68,7 +66,6 @@
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/common/spellcheck_common.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/password_generation_util.h"
@@ -82,6 +79,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/spellcheck/browser/pref_names.h"
+#include "components/spellcheck/browser/spellcheck_host_metrics.h"
+#include "components/spellcheck/common/spellcheck_common.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
@@ -155,6 +155,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "browser/menus/vivaldi_menu_enums.h"
+#include "browser/vivaldi_browser_finder.h"
 
 using base::UserMetricsAction;
 using blink::WebContextMenuData;
@@ -312,9 +313,10 @@ const struct UmaEnumCommandIdPair {
     {85, -1, IDC_CONTENT_CONTEXT_OPEN_WITH12},
     {86, -1, IDC_CONTENT_CONTEXT_OPEN_WITH13},
     {87, -1, IDC_CONTENT_CONTEXT_OPEN_WITH14},
+    {88, -1, IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN},
     // Add new items here and use |enum_id| from the next line.
     // Also, add new items to RenderViewContextMenuItem enum in histograms.xml.
-    {88, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
+    {89, -1, 0},  // Must be the last. Increment |enum_id| when new IDC
                   // was added.
 };
 
@@ -707,7 +709,7 @@ void RenderViewContextMenu::AppendAllExtensionItems() {
     DCHECK(iter != ids.end());
     std::vector<const Extension*>& extensions =
         title_to_extensions_map[sorted_menu_titles[i]];
-    for (const auto& extension : extensions) {
+    for (auto* extension : extensions) {
       MenuItem::ExtensionKey extension_key(extension->id());
       const MenuItem::ExtensionKey extension_key_w_webviewid = *iter++;
       bool has_webview = (extension_key_w_webviewid.webview_instance_id != guest_view::kInstanceIDNone);
@@ -901,6 +903,16 @@ void RenderViewContextMenu::RecordShownItem(int id) {
     // visible items than executable items.
     DLOG(ERROR) << "Update kUmaEnumToControlId. Unhanded IDC: " << id;
   }
+}
+
+bool RenderViewContextMenu::IsHTML5Fullscreen() const {
+  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  if (!browser)
+    return false;
+
+  FullscreenController* controller =
+      browser->exclusive_access_manager()->fullscreen_controller();
+  return controller->IsTabFullscreen();
 }
 
 #if defined(ENABLE_PLUGINS)
@@ -1195,6 +1207,8 @@ void RenderViewContextMenu::AppendPluginItems() {
 }
 
 void RenderViewContextMenu::AppendPageItems() {
+  AppendExitFullscreenItem();
+
   menu_model_.AddItemWithStringId(IDC_BACK, IDS_CONTENT_CONTEXT_BACK);
   menu_model_.AddItemWithStringId(IDC_FORWARD, IDS_CONTENT_CONTEXT_FORWARD);
   menu_model_.AddItemWithStringId(IDC_RELOAD, IDS_CONTENT_CONTEXT_RELOAD);
@@ -1208,8 +1222,11 @@ void RenderViewContextMenu::AppendPageItems() {
       ChromeTranslateClient::FromWebContents(source_web_contents_);
   if (chrome_translate_client &&
       TranslateService::IsTranslatableURL(params_.page_url)) {
-    std::string locale = g_browser_process->GetApplicationLocale();
-    locale = translate::TranslateDownloadManager::GetLanguageCode(locale);
+    std::unique_ptr<translate::TranslatePrefs> prefs(
+        ChromeTranslateClient::CreateTranslatePrefs(
+            GetPrefs(browser_context_)));
+    std::string locale =
+        translate::TranslateManager::GetTargetLanguage(prefs.get());
     base::string16 language =
         l10n_util::GetDisplayNameForLocale(locale, locale, true);
     menu_model_.AddItem(
@@ -1217,6 +1234,23 @@ void RenderViewContextMenu::AppendPageItems() {
         l10n_util::GetStringFUTF16(IDS_CONTENT_CONTEXT_TRANSLATE, language));
     AddGoogleIconToLastMenuItem(&menu_model_);
   }
+}
+
+void RenderViewContextMenu::AppendExitFullscreenItem() {
+  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  if (!browser)
+    return;
+
+  // Only show item if in fullscreen mode.
+  if (!browser->exclusive_access_manager()
+           ->fullscreen_controller()
+           ->IsControllerInitiatedFullscreen()) {
+    return;
+  }
+
+  menu_model_.AddItemWithStringId(IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN,
+                                  IDS_CONTENT_CONTEXT_EXIT_FULLSCREEN);
+  menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 }
 
 void RenderViewContextMenu::AppendCopyItem() {
@@ -1458,7 +1492,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
   // Allow Spell Check language items on sub menu for text area context menu.
   if ((id >= IDC_SPELLCHECK_LANGUAGES_FIRST) &&
       (id < IDC_SPELLCHECK_LANGUAGES_LAST)) {
-    return prefs->GetBoolean(prefs::kEnableContinuousSpellcheck);
+    return prefs->GetBoolean(spellcheck::prefs::kEnableSpellcheck);
   }
 
   // Extension items.
@@ -1602,9 +1636,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
              incognito_avail != IncognitoModePrefs::DISABLED;
 
     case IDC_PRINT:
-      return prefs->GetBoolean(prefs::kPrintingEnabled) &&
-             (params_.media_type == WebContextMenuData::MediaTypeNone ||
-              params_.media_flags & WebContextMenuData::MediaCanPrint);
+      return IsPrintPreviewEnabled();
 
     case IDC_CONTENT_CONTEXT_SEARCHWEBFOR:
     case IDC_CONTENT_CONTEXT_GOTOURL:
@@ -1612,7 +1644,7 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
     case IDC_CONTENT_CONTEXT_LANGUAGE_SETTINGS:
       return true;
     case IDC_CHECK_SPELLING_WHILE_TYPING:
-      return prefs->GetBoolean(prefs::kEnableContinuousSpellcheck);
+      return prefs->GetBoolean(spellcheck::prefs::kEnableSpellcheck);
 
 #if !defined(OS_MACOSX) && defined(OS_POSIX)
     // TODO(suzhe): this should not be enabled for password fields.
@@ -1629,6 +1661,9 @@ bool RenderViewContextMenu::IsCommandIdEnabled(int id) const {
 
     case IDC_ROUTE_MEDIA:
       return IsRouteMediaEnabled();
+
+    case IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN:
+      return true;
 
     default:
       {
@@ -1696,13 +1731,13 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       break;
 
     case IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW:
-      OpenURL(params_.link_url, GetDocumentURL(params_), NEW_WINDOW,
-              ui::PAGE_TRANSITION_LINK);
+      OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
+              NEW_WINDOW, ui::PAGE_TRANSITION_LINK, "", true);
       break;
 
     case IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD:
-      OpenURL(params_.link_url, GURL(), OFF_THE_RECORD,
-              ui::PAGE_TRANSITION_LINK);
+      OpenURLWithExtraHeaders(params_.link_url, GURL(),
+              OFF_THE_RECORD, ui::PAGE_TRANSITION_LINK, "", true);
       break;
 
     case IDC_CONTENT_CONTEXT_SAVELINKAS:
@@ -1739,7 +1774,7 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
       OpenURLWithExtraHeaders(
           params_.src_url, GetDocumentURL(params_), NEW_BACKGROUND_TAB,
           ui::PAGE_TRANSITION_LINK,
-          data_reduction_proxy::kDataReductionPassThroughHeader);
+          data_reduction_proxy::kDataReductionPassThroughHeader, false);
       break;
 
     case IDC_CONTENT_CONTEXT_LOAD_ORIGINAL_IMAGE:
@@ -1808,6 +1843,10 @@ void RenderViewContextMenu::ExecuteCommand(int id, int event_flags) {
 
     case IDC_ROUTE_MEDIA:
       ExecRouteMedia();
+      break;
+
+    case IDC_CONTENT_CONTEXT_EXIT_FULLSCREEN:
+      ExecExitFullscreen();
       break;
 
     case IDC_VIEW_SOURCE:
@@ -2001,9 +2040,11 @@ bool RenderViewContextMenu::IsTranslateEnabled() const {
   }
   std::string original_lang =
       chrome_translate_client->GetLanguageState().original_language();
-  std::string target_lang = g_browser_process->GetApplicationLocale();
-  target_lang =
-      translate::TranslateDownloadManager::GetLanguageCode(target_lang);
+  std::unique_ptr<translate::TranslatePrefs> prefs(
+      ChromeTranslateClient::CreateTranslatePrefs(
+          GetPrefs(browser_context_)));
+  std::string target_lang =
+      translate::TranslateManager::GetTargetLanguage(prefs.get());
   // Note that we intentionally enable the menu even if the original and
   // target languages are identical.  This is to give a way to user to
   // translate a page that might contains text fragments in a different
@@ -2013,9 +2054,9 @@ bool RenderViewContextMenu::IsTranslateEnabled() const {
          !chrome_translate_client->GetLanguageState().IsPageTranslated() &&
          !embedder_web_contents_->GetInterstitialPage() &&
          // There are some application locales which can't be used as a
-         // target language for translation.
-         translate::TranslateDownloadManager::IsSupportedLanguage(
-             target_lang) &&
+         // target language for translation. In that case GetTargetLanguage()
+         // may return empty.
+         !target_lang.empty() &&
          // Disable on the Instant Extended NTP.
          !search::IsInstantNTP(embedder_web_contents_);
 }
@@ -2104,11 +2145,21 @@ bool RenderViewContextMenu::IsPasteAndMatchStyleEnabled() const {
       ui::CLIPBOARD_TYPE_COPY_PASTE);
 }
 
+bool RenderViewContextMenu::IsPrintPreviewEnabled() const {
+  if (params_.media_type != WebContextMenuData::MediaTypeNone &&
+      !(params_.media_flags & WebContextMenuData::MediaCanPrint)) {
+    return false;
+  }
+
+  Browser* browser = GetBrowser();
+  return browser && chrome::CanPrint(browser);
+}
+
 bool RenderViewContextMenu::IsRouteMediaEnabled() const {
   if (!media_router::MediaRouterEnabled(browser_context_))
     return false;
 
-  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  Browser* browser = GetBrowser();
   if (!browser)
     return false;
 
@@ -2128,12 +2179,11 @@ bool RenderViewContextMenu::IsRouteMediaEnabled() const {
 
 void RenderViewContextMenu::ExecOpenLinkNewTab() {
   Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
-  OpenURL(params_.link_url,
-          GetDocumentURL(params_),
+  OpenURLWithExtraHeaders(params_.link_url, GetDocumentURL(params_),
           (!browser || browser->is_app() || vivaldi::IsVivaldiRunning())
                                           ? NEW_FOREGROUND_TAB
                                           : NEW_BACKGROUND_TAB,
-          ui::PAGE_TRANSITION_LINK);
+          ui::PAGE_TRANSITION_LINK, "", true);
 }
 
 void RenderViewContextMenu::ExecProtocolHandler(int event_flags,
@@ -2252,6 +2302,15 @@ void RenderViewContextMenu::ExecSaveAs() {
   }
 }
 
+void RenderViewContextMenu::ExecExitFullscreen() {
+  Browser* browser = chrome::FindBrowserWithWebContents(source_web_contents_);
+  if (!browser) {
+    NOTREACHED();
+    return;
+  }
+
+  browser->exclusive_access_manager()->ExitExclusiveAccess();
+}
 
 void RenderViewContextMenu::ExecCopyLinkText() {
   ui::ScopedClipboardWriter scw(ui::CLIPBOARD_TYPE_COPY_PASTE);
@@ -2379,13 +2438,9 @@ void RenderViewContextMenu::ExecRouteMedia() {
   if (!media_router::MediaRouterEnabled(browser_context_))
     return;
 
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(source_web_contents_);
-  DCHECK(browser);
-
   media_router::MediaRouterDialogController* dialog_controller =
       media_router::MediaRouterDialogController::GetOrCreateForWebContents(
-          source_web_contents_);
+          embedder_web_contents_);
   if (!dialog_controller)
     return;
 
@@ -2408,15 +2463,14 @@ void RenderViewContextMenu::ExecTranslate() {
 
   std::string original_lang =
       chrome_translate_client->GetLanguageState().original_language();
-  std::string target_lang =
-      translate::TranslateDownloadManager::GetLanguageCode(
-          g_browser_process->GetApplicationLocale());
 
   // Since the user decided to translate for that language and site, clears
   // any preferences for not translating them.
   std::unique_ptr<translate::TranslatePrefs> prefs(
       ChromeTranslateClient::CreateTranslatePrefs(
           GetPrefs(browser_context_)));
+  std::string target_lang =
+      translate::TranslateManager::GetTargetLanguage(prefs.get());
   prefs->UnblockLanguage(original_lang);
   prefs->RemoveSiteFromBlacklist(params_.page_url.HostNoBrackets());
 
@@ -2458,4 +2512,11 @@ void RenderViewContextMenu::PluginActionAt(
     const WebPluginAction& action) {
   source_web_contents_->GetRenderViewHost()->
       ExecutePluginActionAtLocation(location, action);
+}
+
+Browser* RenderViewContextMenu::GetBrowser() const {
+  if (vivaldi::IsVivaldiRunning()) {
+    return vivaldi::FindBrowserWithWebContents(embedder_web_contents_);
+  }
+  return chrome::FindBrowserWithWebContents(embedder_web_contents_);
 }

@@ -62,15 +62,15 @@
       'target_name': 'content_app_browser_manifest',
       'type': 'none',
       'variables': {
-        'application_type': 'exe',
-        'application_name': 'content_browser',
+        'type': 'exe',
+        'name': 'content_browser',
         'packaged_manifests': [
-          '<(PRODUCT_DIR)/Mojo Applications/user/manifest.json',
+          '<(PRODUCT_DIR)/Packages/user/manifest.json',
         ],
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_browser_manifest.json',
       },
       'includes': [
-        '../mojo/public/mojo_application_manifest.gypi',
+        '../services/shell/public/service_manifest.gypi',
       ],
       'dependencies': [
         '../services/user/user.gyp:user_app_manifest',
@@ -82,12 +82,12 @@
       'target_name': 'content_app_gpu_manifest',
       'type': 'none',
       'variables': {
-        'application_type': 'exe',
-        'application_name': 'content_gpu',
+        'type': 'exe',
+        'name': 'content_gpu',
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_gpu_manifest.json',
       },
       'includes': [
-        '../mojo/public/mojo_application_manifest.gypi',
+        '../services/shell/public/service_manifest.gypi',
       ],
       'hard_dependency': 1,
     },
@@ -96,12 +96,12 @@
       'target_name': 'content_app_renderer_manifest',
       'type': 'none',
       'variables': {
-        'application_type': 'exe',
-        'application_name': 'content_renderer',
+        'type': 'exe',
+        'name': 'content_renderer',
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_renderer_manifest.json',
       },
       'includes': [
-        '../mojo/public/mojo_application_manifest.gypi',
+        '../services/shell/public/service_manifest.gypi',
       ],
       'hard_dependency': 1,
     },
@@ -110,12 +110,12 @@
       'target_name': 'content_app_utility_manifest',
       'type': 'none',
       'variables': {
-        'application_type': 'exe',
-        'application_name': 'content_utility',
+        'type': 'exe',
+        'name': 'content_utility',
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_utility_manifest.json',
       },
       'includes': [
-        '../mojo/public/mojo_application_manifest.gypi',
+        '../services/shell/public/service_manifest.gypi',
       ],
       'hard_dependency': 1,
     },
@@ -510,6 +510,7 @@
             '../base/base.gyp:base',
             '../device/battery/battery.gyp:device_battery_java',
             '../device/bluetooth/bluetooth.gyp:device_bluetooth_java',
+            '../device/nfc/nfc.gyp:device_nfc_java',
             '../device/usb/usb.gyp:device_usb_java',
             '../device/vibration/vibration.gyp:device_vibration_java',
             '../media/media.gyp:media_java',
@@ -689,16 +690,6 @@
             'java_set_jni_headers',
           ],
           'includes': [ 'content_jni.gypi' ],
-          'conditions': [
-            ['enable_webvr==1', {
-              'sources': [
-                'public/android/java/src/org/chromium/content/browser/input/CardboardVRDevice.java',
-              ],
-              'dependencies': [
-                '../third_party/cardboard-java/cardboard.gyp:cardboard_jar',
-              ],
-            }],
-          ],
         },
         {
           'target_name': 'content_shell_assets_copy',

@@ -38,7 +38,7 @@ bool ProcessVersionString(const std::string& version_string,
   // If the splitter is '-', we assume it's a date with format "mm-dd-yyyy";
   // we split it into the order of "yyyy", "mm", "dd".
   if (splitter == '-') {
-    std::string year = (*version)[version->size() - 1];
+    std::string year = version->back();
     for (int i = version->size() - 1; i > 0; --i) {
       (*version)[i] = (*version)[i - 1];
     }
@@ -125,7 +125,7 @@ const char kVersionStyleStringLexical[] = "lexical";
 
 const char kOp[] = "op";
 
-}  // namespace anonymous
+}  // namespace
 
 GpuControlList::VersionInfo::VersionInfo(
     const std::string& version_op,
@@ -580,6 +580,15 @@ GpuControlList::GpuControlListEntry::GetEntryFromValue(
     dictionary_entry_count++;
   }
 
+  std::string gl_version_string_value;
+  if (value->GetString("gl_version_string", &gl_version_string_value)) {
+    if (!entry->SetGLVersionStringInfo(gl_version_string_value)) {
+      LOG(WARNING) << "Malformed gl_version_string entry " << entry->id();
+      return NULL;
+    }
+    dictionary_entry_count++;
+  }
+
   std::string gl_vendor_value;
   if (value->GetString("gl_vendor", &gl_vendor_value)) {
     if (!entry->SetGLVendorInfo(gl_vendor_value)) {
@@ -930,6 +939,12 @@ bool GpuControlList::GpuControlListEntry::SetGLVersionInfo(
   return gl_version_info_->IsValid();
 }
 
+bool GpuControlList::GpuControlListEntry::SetGLVersionStringInfo(
+    const std::string& version_string_value) {
+  gl_version_string_info_ = version_string_value;
+  return !gl_version_string_info_.empty();
+}
+
 bool GpuControlList::GpuControlListEntry::SetGLVendorInfo(
     const std::string& vendor_value) {
   gl_vendor_info_ = vendor_value;
@@ -1257,6 +1272,8 @@ bool GpuControlList::GpuControlListEntry::Contains(
   }
   if (GLVersionInfoMismatch(gpu_info.gl_version))
     return false;
+  if (StringMismatch(gpu_info.gl_version, gl_version_string_info_))
+    return false;
   if (StringMismatch(gpu_info.gl_vendor, gl_vendor_info_))
     return false;
   if (StringMismatch(gpu_info.gl_renderer, gl_renderer_info_))
@@ -1318,6 +1335,8 @@ bool GpuControlList::GpuControlListEntry::NeedsMoreInfo(
   if (!driver_vendor_info_.empty() && gpu_info.driver_vendor.empty())
     return true;
   if (driver_version_info_.get() && gpu_info.driver_version.empty())
+    return true;
+  if (!gl_version_string_info_.empty() && gpu_info.gl_version.empty())
     return true;
   if (!gl_vendor_info_.empty() && gpu_info.gl_vendor.empty())
     return true;
@@ -1394,14 +1413,11 @@ GpuControlList::~GpuControlList() {
 bool GpuControlList::LoadList(
     const std::string& json_context,
     GpuControlList::OsFilter os_filter) {
-  std::unique_ptr<base::Value> root = base::JSONReader::Read(json_context);
-  if (root.get() == NULL || !root->IsType(base::Value::TYPE_DICTIONARY))
+  std::unique_ptr<base::DictionaryValue> root =
+      base::DictionaryValue::From(base::JSONReader::Read(json_context));
+  if (!root)
     return false;
-
-  base::DictionaryValue* root_dictionary =
-      static_cast<base::DictionaryValue*>(root.get());
-  DCHECK(root_dictionary);
-  return LoadList(*root_dictionary, os_filter);
+  return LoadList(*root, os_filter);
 }
 
 bool GpuControlList::LoadList(const base::DictionaryValue& parsed_json,

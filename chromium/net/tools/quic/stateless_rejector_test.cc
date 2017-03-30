@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "net/quic/crypto/crypto_handshake_message.h"
-#include "net/quic/crypto/proof_source.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/crypto_handshake_message.h"
+#include "net/quic/core/crypto/proof_source.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_crypto_server_config_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -42,7 +42,7 @@ vector<TestParams> GetTestParams() {
   vector<TestParams> params;
   for (FlagsMode flags :
        {ENABLED, STATELESS_DISABLED, CHEAP_DISABLED, BOTH_DISABLED}) {
-    for (QuicVersion version : QuicSupportedVersions()) {
+    for (QuicVersion version : AllSupportedVersions()) {
       TestParams param;
       param.version = version;
       param.flags = flags;
@@ -63,11 +63,12 @@ class StatelessRejectorTest : public ::testing::TestWithParam<TestParams> {
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         rejector_(GetParam().version,
-                  QuicSupportedVersions(),
+                  AllSupportedVersions(),
                   &config_,
                   &compressed_certs_cache_,
                   &clock_,
                   QuicRandom::GetInstance(),
+                  kDefaultMaxPacketSize,
                   IPEndPoint(net::test::Loopback4(), 12345),
                   IPEndPoint(net::test::Loopback4(), 443)) {
     FLAGS_enable_quic_stateless_reject_support =
@@ -135,6 +136,7 @@ TEST_P(StatelessRejectorTest, InvalidChlo) {
   // clang-format off
   const CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
       "CHLO",
+      "PDMD", "X509",
       "COPT", "SREJ",
       nullptr);
   // clang-format on
@@ -154,6 +156,7 @@ TEST_P(StatelessRejectorTest, ValidChloWithoutSrejSupport) {
   // clang-format off
   const CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
       "CHLO",
+      "PDMD", "X509",
       "AEAD", "AESG",
       "KEXS", "C255",
       "PUBS", pubs_hex_.c_str(),
@@ -172,6 +175,7 @@ TEST_P(StatelessRejectorTest, RejectChlo) {
   // clang-format off
   const CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
       "CHLO",
+      "PDMD", "X509",
       "AEAD", "AESG",
       "KEXS", "C255",
       "COPT", "SREJ",
@@ -210,6 +214,7 @@ TEST_P(StatelessRejectorTest, AcceptChlo) {
   // clang-format off
   const CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
       "CHLO",
+      "PDMD", "X509",
       "AEAD", "AESG",
       "KEXS", "C255",
       "COPT", "SREJ",

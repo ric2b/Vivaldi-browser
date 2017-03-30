@@ -8,7 +8,6 @@
 #include "ash/common/login_status.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/content/shell_content_state.h"
-#include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
 #include "ash/shell/content/shell_content_state_impl.h"
 #include "ash/shell/shell_delegate_impl.h"
@@ -18,6 +17,7 @@
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
@@ -172,7 +172,7 @@ void ShellBrowserMainParts::PostMainMessageLoopRun() {
 }
 
 bool ShellBrowserMainParts::MainMessageLoopRun(int* result_code) {
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   return true;
 }
 

@@ -43,7 +43,6 @@
 using namespace clang::ast_matchers;
 using clang::tooling::CommonOptionsParser;
 using clang::tooling::Replacement;
-using clang::tooling::Replacements;
 using llvm::StringRef;
 
 namespace {
@@ -92,17 +91,6 @@ AST_MATCHER_P(clang::OverloadExpr,
       return false;
   }
   return true;
-}
-
-bool IsDeclContextInWTF(const clang::DeclContext* decl_context) {
-  auto* namespace_decl = clang::dyn_cast_or_null<clang::NamespaceDecl>(
-      decl_context->getEnclosingNamespaceContext());
-  if (!namespace_decl)
-    return false;
-  if (namespace_decl->getParent()->isTranslationUnit() &&
-      namespace_decl->getName() == "WTF")
-    return true;
-  return IsDeclContextInWTF(namespace_decl->getParent());
 }
 
 template <typename T>
@@ -288,6 +276,13 @@ bool GetNameForDecl(const clang::FunctionDecl& decl,
                     std::string& name) {
   name = decl.getName().str();
   name[0] = clang::toUppercase(name[0]);
+
+  // https://crbug.com/582312: Prepend "Get" if method name conflicts with type.
+  const clang::IdentifierInfo* return_type =
+      decl.getReturnType().getBaseTypeIdentifier();
+  if (return_type && return_type->getName() == name)
+    name = "Get" + name;
+
   return true;
 }
 
@@ -359,15 +354,6 @@ bool GetNameForDecl(const clang::VarDecl& decl,
     // Don't try to rename constants that already conform to Chrome style.
     if (original_name.size() >= 2 && original_name[0] == 'k' &&
         clang::isUppercase(original_name[1]))
-      return false;
-
-    // Struct consts in WTF do not become kFoo cuz stuff like type traits
-    // should stay as lowercase.
-    const clang::DeclContext* decl_context = decl.getDeclContext();
-    bool is_in_wtf = IsDeclContextInWTF(decl_context);
-    const clang::CXXRecordDecl* parent =
-        clang::dyn_cast_or_null<clang::CXXRecordDecl>(decl_context);
-    if (is_in_wtf && parent && parent->isStruct())
       return false;
 
     name = 'k';
@@ -491,7 +477,7 @@ struct TargetNodeTraits<clang::UnresolvedMemberExpr> {
 template <typename DeclNode, typename TargetNode>
 class RewriterBase : public MatchFinder::MatchCallback {
  public:
-  explicit RewriterBase(Replacements* replacements)
+  explicit RewriterBase(std::set<Replacement>* replacements)
       : replacements_(replacements) {}
 
   void run(const MatchFinder::MatchResult& result) override {
@@ -533,7 +519,7 @@ class RewriterBase : public MatchFinder::MatchCallback {
   }
 
  private:
-  Replacements* const replacements_;
+  std::set<Replacement>* const replacements_;
   std::unordered_map<std::string, std::string> replacement_names_;
 };
 
@@ -583,7 +569,7 @@ int main(int argc, const char* argv[]) {
                                  options.getSourcePathList());
 
   MatchFinder match_finder;
-  Replacements replacements;
+  std::set<Replacement> replacements;
 
   auto in_blink_namespace =
       decl(hasAncestor(namespaceDecl(anyOf(hasName("blink"), hasName("WTF")),
@@ -599,7 +585,13 @@ int main(int argc, const char* argv[]) {
   //   };
   // matches |x|, |y|, and |VALUE|.
   auto field_decl_matcher = id("decl", fieldDecl(in_blink_namespace));
-  auto var_decl_matcher = id("decl", varDecl(in_blink_namespace));
+  auto is_wtf_type_trait_value =
+      varDecl(hasName("value"), hasStaticStorageDuration(),
+              hasType(isConstQualified()), hasType(booleanType()),
+              hasAncestor(recordDecl(hasAncestor(namespaceDecl(
+                  hasName("WTF"), hasParent(translationUnitDecl()))))));
+  auto var_decl_matcher =
+      id("decl", varDecl(in_blink_namespace, unless(is_wtf_type_trait_value)));
   auto enum_member_decl_matcher =
       id("decl", enumConstantDecl(in_blink_namespace));
 

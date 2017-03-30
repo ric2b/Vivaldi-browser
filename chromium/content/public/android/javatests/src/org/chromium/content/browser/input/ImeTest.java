@@ -13,6 +13,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.test.suitebuilder.annotation.MediumTest;
 import android.test.suitebuilder.annotation.SmallTest;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.KeyEvent;
@@ -24,7 +25,6 @@ import android.view.inputmethod.InputConnection;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.FlakyTest;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -187,6 +187,26 @@ public class ImeTest extends ContentShellTestBase {
         // Cursor exceeds the right boundary.
         setComposingText("efgh", 100);
         waitAndVerifyUpdateSelection(10, 8, 8, 2, 6);
+    }
+
+    @SmallTest
+    @Feature({"TextInput", "Main"})
+    public void testSetComposingTextWithEmptyText() throws Throwable {
+        commitText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, -1, -1);
+
+        setComposingText("AB", 1);
+        waitAndVerifyUpdateSelection(1, 7, 7, 5, 7);
+
+        // With previous composition.
+        setComposingText("", -3);
+        waitAndVerifyUpdateSelection(2, 2, 2, -1, -1);
+        assertTextsAroundCursor("he", null, "llo");
+
+        // Without previous composition.
+        setComposingText("", 3);
+        waitAndVerifyUpdateSelection(3, 4, 4, -1, -1);
+        assertTextsAroundCursor("hell", null, "o");
     }
 
     @SmallTest
@@ -623,7 +643,6 @@ public class ImeTest extends ContentShellTestBase {
     @CommandLineFlags.Add("enable-features=ImeThread")
     @MediumTest
     @Feature({"TextInput"})
-    @FlakyTest
     public void testPasteLongText() throws Exception {
         int textLength = 25000;
         String text = new String(new char[textLength]).replace("\0", "a");
@@ -633,6 +652,7 @@ public class ImeTest extends ContentShellTestBase {
         selectAll();
         waitAndVerifyUpdateSelection(1, 0, textLength, -1, -1);
         copy();
+        assertClipboardContents(getActivity(), text);
 
         focusElement("textarea");
         waitAndVerifyUpdateSelection(2, 0, 0, -1, -1);
@@ -943,12 +963,16 @@ public class ImeTest extends ContentShellTestBase {
     @SmallTest
     @Feature({"TextInput", "Main"})
     public void testSetComposingRegionOutOfBounds() throws Throwable {
-        focusElement("textarea");
+        focusElementAndWaitForStateUpdate("textarea");
         setComposingText("hello", 1);
+        waitAndVerifyUpdateSelection(0, 5, 5, 0, 5);
 
         setComposingRegion(0, 0);
+        waitAndVerifyUpdateSelection(1, 5, 5, -1, -1);
         setComposingRegion(0, 9);
-        setComposingRegion(9, 0);
+        waitAndVerifyUpdateSelection(2, 5, 5, 0, 5);
+        setComposingRegion(9, 1);
+        waitAndVerifyUpdateSelection(3, 5, 5, 1, 5);
     }
 
     @SmallTest
@@ -1228,6 +1252,22 @@ public class ImeTest extends ContentShellTestBase {
         waitForEventLogs("keydown(229),input,keyup(229),selectionchange,selectionchange");
     }
 
+    @MediumTest
+    @Feature({"TextInput"})
+    public void testGetCursorCapsMode() throws Throwable {
+        commitText("Hello World", 1);
+        waitAndVerifyUpdateSelection(0, 11, 11, -1, -1);
+        assertEquals(0,
+                getCursorCapsMode(InputType.TYPE_TEXT_FLAG_CAP_WORDS));
+        setSelection(6, 6);
+        waitAndVerifyUpdateSelection(1, 6, 6, -1, -1);
+        assertEquals(InputType.TYPE_TEXT_FLAG_CAP_WORDS,
+                getCursorCapsMode(InputType.TYPE_TEXT_FLAG_CAP_WORDS));
+        commitText("\n", 1);
+        assertEquals(InputType.TYPE_TEXT_FLAG_CAP_WORDS,
+                getCursorCapsMode(InputType.TYPE_TEXT_FLAG_CAP_WORDS));
+    }
+
     private void clearEventLogs() throws Exception {
         final String code = "clearEventLogs()";
         JavaScriptUtils.executeJavaScriptAndWaitForResult(
@@ -1314,6 +1354,30 @@ public class ImeTest extends ContentShellTestBase {
             }
         });
         waitAndVerifyUpdateSelection(0, 7, 7, -1, -1);
+    }
+
+    // crbug.com/643477
+    @MediumTest
+    @Feature({"TextInput"})
+    public void testUiThreadAccess() throws Exception {
+        final ChromiumBaseInputConnection connection = mConnection;
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                // We allow UI thread access for most functions, except for
+                // beginBatchEdit(), endBatchEdit(), and get* methods().
+                assertTrue(connection.commitText("a", 1));
+                assertTrue(connection.setComposingText("b", 1));
+                assertTrue(connection.setComposingText("bc", 1));
+                assertTrue(connection.finishComposingText());
+            }
+        });
+        assertEquals("abc", runBlockingOnImeThread(new Callable<CharSequence>() {
+            @Override
+            public CharSequence call() throws Exception {
+                return connection.getTextBeforeCursor(5, 0);
+            }
+        }));
     }
 
     private void performGo(TestCallbackHelperContainer testCallbackHelperContainer)
@@ -1431,6 +1495,8 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
+    // After calling this method, we should call assertClipboardContents() to wait for the clipboard
+    // to get updated. See cubug.com/621046
     private void copy() {
         final WebContents webContents = mWebContents;
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -1481,7 +1547,12 @@ public class ImeTest extends ContentShellTestBase {
         });
     }
 
-    private <T> T runBlockingOnImeThread(Callable<T> c) throws Exception {
+    /**
+     * Run the {@Callable} on IME thread (or UI thread if not applicable).
+     * @param c The callable
+     * @return The result from running the callable.
+     */
+    protected <T> T runBlockingOnImeThread(Callable<T> c) throws Exception {
         return ImeTestUtils.runBlockingOnHandler(mConnectionFactory.getHandler(), c);
     }
 
@@ -1593,6 +1664,16 @@ public class ImeTest extends ContentShellTestBase {
             @Override
             public CharSequence call() {
                 return connection.getTextAfterCursor(length, flags);
+            }
+        });
+    }
+
+    private int getCursorCapsMode(final int reqModes) throws Throwable {
+        final ChromiumBaseInputConnection connection = mConnection;
+        return runBlockingOnImeThread(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return connection.getCursorCapsMode(reqModes);
             }
         });
     }

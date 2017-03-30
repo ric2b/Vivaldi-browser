@@ -285,7 +285,7 @@ ChannelIDService::ChannelIDService(
       weak_ptr_factory_(this) {}
 
 ChannelIDService::~ChannelIDService() {
-  STLDeleteValues(&inflight_);
+  base::STLDeleteValues(&inflight_);
 }
 
 // static
@@ -303,7 +303,7 @@ int ChannelIDService::GetOrCreateChannelID(
     std::unique_ptr<crypto::ECPrivateKey>* key,
     const CompletionCallback& callback,
     Request* out_req) {
-  DVLOG(1) << __FUNCTION__ << " " << host;
+  DVLOG(1) << __func__ << " " << host;
   DCHECK(CalledOnValidThread());
   base::TimeTicks request_start = base::TimeTicks::Now();
 
@@ -358,7 +358,7 @@ int ChannelIDService::GetChannelID(const std::string& host,
                                    std::unique_ptr<crypto::ECPrivateKey>* key,
                                    const CompletionCallback& callback,
                                    Request* out_req) {
-  DVLOG(1) << __FUNCTION__ << " " << host;
+  DVLOG(1) << __func__ << " " << host;
   DCHECK(CalledOnValidThread());
   base::TimeTicks request_start = base::TimeTicks::Now();
 

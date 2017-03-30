@@ -20,9 +20,8 @@ namespace content {
 namespace {
 void SendDestroyingVideoSurfaceOnIO(int surface_id,
                                     const base::Closure& done_cb) {
-  GpuProcessHost* host =
-      GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                          CAUSE_FOR_GPU_LAUNCH_NO_LAUNCH);
+  GpuProcessHost* host = GpuProcessHost::Get(
+      GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */);
   if (host)
     host->SendDestroyingVideoSurface(surface_id, done_cb);
   else
@@ -84,8 +83,8 @@ void BrowserSurfaceViewManager::OnCreateFullscreenSurface(
 
   ContentViewCore* cvc = ContentViewCore::FromWebContents(
       WebContents::FromRenderFrameHost(render_frame_host_));
-  content_video_view_.reset(new ContentVideoView(this, cvc));
-  OnNaturalSizeChanged(video_natural_size);
+  content_video_view_.reset(
+      new ContentVideoView(this, cvc, video_natural_size));
 }
 
 void BrowserSurfaceViewManager::OnNaturalSizeChanged(const gfx::Size& size) {

@@ -35,18 +35,12 @@ class ReflectorImpl;
 class WebGraphicsContext3DCommandBufferImpl;
 
 class CONTENT_EXPORT BrowserCompositorOutputSurface
-    : public cc::OutputSurface,
-      public ui::CompositorVSyncManager::Observer {
+    : public cc::OutputSurface {
  public:
   ~BrowserCompositorOutputSurface() override;
 
   // cc::OutputSurface implementation.
-  bool BindToClient(cc::OutputSurfaceClient* client) override;
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
-
-  // ui::CompositorVSyncManager::Observer implementation.
-  void OnUpdateVSyncParameters(base::TimeTicks timebase,
-                               base::TimeDelta interval) override;
 
   void OnUpdateVSyncParametersFromGpu(base::TimeTicks timebase,
                                       base::TimeDelta interval);
@@ -55,10 +49,6 @@ class CONTENT_EXPORT BrowserCompositorOutputSurface
 
   // Called when |reflector_| was updated.
   virtual void OnReflectorChanged();
-
-  // Returns a callback that will be called when all mirroring
-  // compositors have started composition.
-  virtual base::Closure CreateCompositionStartedCallback();
 
   // Called when a swap completion is sent from the GPU process.
   // The argument |params_mac| is used to communicate parameters needed on Mac
@@ -99,14 +89,8 @@ class CONTENT_EXPORT BrowserCompositorOutputSurface
   cc::SyntheticBeginFrameSource* synthetic_begin_frame_source_;
   ReflectorImpl* reflector_;
 
-  // True when BeginFrame scheduling is enabled.
-  bool use_begin_frame_scheduling_;
-
  private:
   void Initialize();
-
-  void UpdateVSyncParametersInternal(base::TimeTicks timebase,
-                                     base::TimeDelta interval);
 
   std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
       overlay_candidate_validator_;

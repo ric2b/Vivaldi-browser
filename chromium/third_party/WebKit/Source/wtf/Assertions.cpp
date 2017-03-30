@@ -69,6 +69,10 @@
 #include <android/log.h>
 #endif
 
+// TODO(tkent): These function should be in anonymous namespace.
+void WTFGetBacktrace(void** stack, int* size);
+void WTFPrintBacktrace(void** stack, int size);
+
 WTF_ATTRIBUTE_PRINTF(1, 0)
 static void vprintf_stderr_common(const char* format, va_list args)
 {
@@ -336,17 +340,6 @@ void WTFPrintBacktrace(void** stack, int size)
         else
             printf_stderr_common("%-3d %p\n", frameNumber, stack[i]);
     }
-}
-
-void WTFLog(WTFLogChannel* channel, const char* format, ...)
-{
-    if (channel->state != WTFLogChannelOn)
-        return;
-
-    va_list args;
-    va_start(args, format);
-    vprintf_stderr_with_trailing_newline(format, args);
-    va_end(args);
 }
 
 void WTFLogAlways(const char* format, ...)

@@ -1351,6 +1351,285 @@ TEST_F(HostContentSettingsMapTest, MigrateKeygenSettings) {
                 host, host, CONTENT_SETTINGS_TYPE_KEYGEN, std::string()));
 }
 
+TEST_F(HostContentSettingsMapTest, MigrateDomainScopedSettings) {
+  TestingProfile profile;
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+  PrefService* prefs = profile.GetPrefs();
+  // Set the pref to its initial state so that migration can be done later in
+  // the test (normally it is done on construction of HostContentSettingsMap).
+  int default_value;
+  prefs->GetDefaultPrefValue(prefs::kDomainToOriginMigrationStatus)
+      ->GetAsInteger(&default_value);
+  prefs->SetInteger(prefs::kDomainToOriginMigrationStatus, default_value);
+
+  // Set old formatted http settings.
+  GURL http_host("http://example.com/");
+  GURL http_host_narrower("http://a.example.com/");
+
+  // Change default setting to BLOCK.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_POPUPS, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  // Patterns generated for cookies used to be domain scoped.
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(http_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_POPUPS,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  // Settings also apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  ContentSettingsForOneType settings;
+  host_content_settings_map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS,
+                                                   std::string(), &settings);
+  // |host_content_settings_map| contains default setting and a domain scoped
+  // setting.
+  EXPECT_EQ(2U, settings.size());
+  EXPECT_TRUE(settings[0].primary_pattern.ToString() == "[*.]example.com");
+  EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
+
+  // Set old formatted https settings.
+  GURL https_host("https://example.com/");
+  GURL https_host_narrower("https://a.example.com/");
+
+  // Change default setting to BLOCK.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_JAVASCRIPT, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+                std::string()));
+  // Patterns generated for popups used to be domain scoped.
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(https_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+                std::string()));
+  // Settings also apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
+
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string(), &settings);
+  // |host_content_settings_map| contains default setting and a domain scoped
+  // setting.
+  EXPECT_EQ(2U, settings.size());
+  EXPECT_TRUE(settings[0].primary_pattern.ToString() ==
+              "https://[*.]example.com:443");
+  EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
+
+  // Set domain scoped settings for cookies.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_COOKIES, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(http_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_COOKIES,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(https_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_COOKIES,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_COOKIES,
+                std::string()));
+  // Settings also apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+
+  host_content_settings_map->MigrateDomainScopedSettings(false);
+
+  // After migration, settings only affect origins.
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  host_content_settings_map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_POPUPS,
+                                                   std::string(), &settings);
+  // |host_content_settings_map| contains default setting and a origin scoped
+  // setting.
+  EXPECT_EQ(2U, settings.size());
+  EXPECT_TRUE(settings[0].primary_pattern.ToString() ==
+              "http://example.com:80");
+  EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
+
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+                std::string()));
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string()));
+  host_content_settings_map->GetSettingsForOneType(
+      CONTENT_SETTINGS_TYPE_JAVASCRIPT, std::string(), &settings);
+  // |host_content_settings_map| contains default setting and a origin scoped
+  // setting.
+  EXPECT_EQ(2U, settings.size());
+  EXPECT_TRUE(settings[0].primary_pattern.ToString() ==
+              "https://example.com:443");
+  EXPECT_TRUE(settings[1].primary_pattern.ToString() == "*");
+
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host, https_host, CONTENT_SETTINGS_TYPE_COOKIES,
+                std::string()));
+  // Settings still apply to subdomains. Cookie settings didn't get migrated.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_COOKIES, std::string()));
+}
+
+// Ensure that migration only happens once upon construction of the HCSM and
+// once after syncing (even when these events occur multiple times).
+TEST_F(HostContentSettingsMapTest, DomainToOriginMigrationStatus) {
+  TestingProfile profile;
+  PrefService* prefs = profile.GetPrefs();
+
+  GURL http_host("http://example.com/");
+  GURL http_host_narrower("http://a.example.com/");
+  std::string host_pattern_string =
+      ContentSettingsPattern::FromURL(http_host).ToString();
+
+  {
+    DictionaryPrefUpdate update(prefs,
+                                GetPrefName(CONTENT_SETTINGS_TYPE_POPUPS));
+    base::DictionaryValue* all_settings_dictionary = update.Get();
+    ASSERT_TRUE(NULL != all_settings_dictionary);
+
+    base::DictionaryValue* domain_setting = new base::DictionaryValue;
+    domain_setting->SetInteger("setting", CONTENT_SETTING_ALLOW);
+    all_settings_dictionary->SetWithoutPathExpansion(host_pattern_string + ",*",
+                                                     domain_setting);
+  }
+
+  const base::DictionaryValue* all_settings_dictionary =
+      prefs->GetDictionary(GetPrefName(CONTENT_SETTINGS_TYPE_POPUPS));
+  const base::DictionaryValue* result = NULL;
+  EXPECT_TRUE(all_settings_dictionary->GetDictionaryWithoutPathExpansion(
+      "[*.]example.com,*", &result));
+
+  // Migration is done on construction of HostContentSettingsMap.
+  HostContentSettingsMap* host_content_settings_map =
+      HostContentSettingsMapFactory::GetForProfile(&profile);
+
+  // Change default setting to BLOCK.
+  host_content_settings_map->SetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_POPUPS, CONTENT_SETTING_BLOCK);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http_host, http_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  // Settings only apply to origins. Migration got executed.
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                http_host_narrower, http_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  GURL https_host("https://example.com/");
+  GURL https_host_narrower("https://a.example.com/");
+
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(https_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_POPUPS,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          https_host, https_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  // Settings apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Try to do migration again before sync.
+  host_content_settings_map->MigrateDomainScopedSettings(false);
+
+  // Settings still apply to subdomains. Migration didn't get executed.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Do migration after sync.
+  host_content_settings_map->MigrateDomainScopedSettings(true);
+
+  // Settings only apply to origins. Migration got executed.
+  EXPECT_EQ(CONTENT_SETTING_BLOCK,
+            host_content_settings_map->GetContentSetting(
+                https_host_narrower, https_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  GURL http1_host("http://google.com/");
+  GURL http1_host_narrower("http://a.google.com/");
+
+  host_content_settings_map->SetContentSettingCustomScope(
+      ContentSettingsPattern::FromURL(http1_host),
+      ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_POPUPS,
+      std::string(), CONTENT_SETTING_ALLOW);
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      host_content_settings_map->GetContentSetting(
+          http1_host, http1_host, CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+  // Settings apply to subdomains.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http1_host_narrower, http1_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+
+  // Try to do migration again after sync.
+  host_content_settings_map->MigrateDomainScopedSettings(true);
+
+  // Settings still apply to subdomains. Migration didn't get executed.
+  EXPECT_EQ(CONTENT_SETTING_ALLOW,
+            host_content_settings_map->GetContentSetting(
+                http1_host_narrower, http1_host_narrower,
+                CONTENT_SETTINGS_TYPE_POPUPS, std::string()));
+}
+
 TEST_F(HostContentSettingsMapTest, InvalidPattern) {
   // This is a regression test for crbug.com/618529, which fixed a memory leak
   // when a website setting was set under a URL that mapped to an invalid

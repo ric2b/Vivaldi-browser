@@ -11,6 +11,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/utils/SkNullCanvas.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 namespace {
@@ -38,25 +39,28 @@ private:
         m_currentTask = task;
 
     }
-    WebTaskRunner* clone() override { return nullptr; }
+    bool runsTasksOnCurrentThread() override { return true; }
+    std::unique_ptr<WebTaskRunner> clone() override { return nullptr; }
     double virtualTimeSeconds() const override { return 0.0; }
     double monotonicallyIncreasingVirtualTimeSeconds() const override { return m_time; }
+    SingleThreadTaskRunner* taskRunner() override { return nullptr; }
 
     double m_time;
     Task* m_currentTask;
 };
 
-class MockTimer : public Timer<SVGImageChromeClient> {
-    typedef void (SVGImageChromeClient::*TimerFiredFunction)(Timer*);
+class MockTimer : public TaskRunnerTimer<SVGImageChromeClient> {
 public:
+    using TimerFiredFunction = typename TaskRunnerTimer<SVGImageChromeClient>::TimerFiredFunction;
+
     MockTimer(SVGImageChromeClient* o, TimerFiredFunction f)
-    : Timer<SVGImageChromeClient>(o, f, &m_taskRunner)
+        : TaskRunnerTimer(&m_taskRunner, o, f)
     {
     }
 
     void fire()
     {
-        this->Timer<SVGImageChromeClient>::fired();
+        fired();
         stop();
     }
 
@@ -140,7 +144,7 @@ TEST_F(SVGImageTest, TimelineSuspendAndResume)
     load(kAnimatedDocument, shouldPause);
     SVGImageChromeClient& chromeClient = image().chromeClientForTesting();
     MockTimer* timer = new MockTimer(&chromeClient, &SVGImageChromeClient::animationTimerFired);
-    chromeClient.setTimer(timer);
+    chromeClient.setTimer(wrapUnique(timer));
 
     // Simulate a draw. Cause a frame (timer) to be scheduled.
     pumpFrame();
@@ -166,7 +170,7 @@ TEST_F(SVGImageTest, ResetAnimation)
     load(kAnimatedDocument, shouldPause);
     SVGImageChromeClient& chromeClient = image().chromeClientForTesting();
     MockTimer* timer = new MockTimer(&chromeClient, &SVGImageChromeClient::animationTimerFired);
-    chromeClient.setTimer(timer);
+    chromeClient.setTimer(wrapUnique(timer));
 
     // Simulate a draw. Cause a frame (timer) to be scheduled.
     pumpFrame();

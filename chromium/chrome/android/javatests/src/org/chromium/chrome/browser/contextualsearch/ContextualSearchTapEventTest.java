@@ -22,6 +22,7 @@ import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilterHos
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.ContextualSearchClient;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 import org.chromium.ui.touch_selection.SelectionEventType;
@@ -43,12 +44,12 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
      */
     private static class MockContextualSearchRequest extends ContextualSearchRequest {
         public MockContextualSearchRequest(String term, String altTerm, boolean prefetch) {
-            super(term, altTerm, prefetch);
+            super(term, altTerm, "", prefetch);
         }
 
         @Override
-        protected Uri getUriTemplate(String query, @Nullable String alternateTerm,
-                boolean shouldPrefetch) {
+        protected Uri getUriTemplate(
+                String query, @Nullable String alternateTerm, String mid, boolean shouldPrefetch) {
             return Uri.parse("");
         }
     }
@@ -85,25 +86,28 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
             super(activity, windowAndroid, null);
             setSelectionController(new MockCSSelectionController(activity, this));
             getSelectionController().getBaseContentView().setContextualSearchClient(this);
-            setContextualSearchPolicy(new MockContextualSearchPolicy(activity));
+            MockContextualSearchPolicy policy = new MockContextualSearchPolicy(activity);
+            setContextualSearchPolicy(policy);
+            mTranslateController = new MockedCSTranslateController(activity, policy, null);
         }
 
         @Override
         public void startSearchTermResolutionRequest(String selection) {
             // Skip native calls and immediately "resolve" the search term.
-            onSearchTermResolutionResponse(true, 200, selection, selection, "", false, 0, 10, "");
+            onSearchTermResolutionResponse(
+                    true, 200, selection, selection, "", "", false, 0, 10, "");
         }
 
         @Override
-        protected ContextualSearchRequest createContextualSearchRequest(String query,
-                String altTerm, boolean shouldPrefetch) {
+        protected ContextualSearchRequest createContextualSearchRequest(
+                String query, String altTerm, String mid, boolean shouldPrefetch) {
             return new MockContextualSearchRequest(query, altTerm, shouldPrefetch);
         }
 
         @Override
         protected void nativeGatherSurroundingText(long nativeContextualSearchManager,
                 String selection, boolean useResolvedSearchTerm,
-                ContentViewCore baseContentViewCore, boolean maySendBasePageUrl) {}
+                WebContents webContents, boolean maySendBasePageUrl) {}
 
         /**
          * @return A stubbed ContentViewCore for mocking text selection.
@@ -130,6 +134,31 @@ public class ContextualSearchTapEventTest extends ChromeActivityTestCaseBase<Chr
         @Override
         public StubbedContentViewCore getBaseContentView() {
             return mContentViewCore;
+        }
+    }
+
+    // --------------------------------------------------------------------------------------------
+
+    /**
+     * Translate controller that mocks out native calls.
+     */
+    private static class MockedCSTranslateController extends ContextualSearchTranslateController {
+        private static final String ENGLISH_TARGET_LANGUAGE = "en";
+        private static final String ENGLISH_ACCEPT_LANGUAGES = "en-US,en";
+
+        MockedCSTranslateController(ChromeActivity activity, ContextualSearchPolicy policy,
+                ContextualSearchTranslateInterface hostInterface) {
+            super(activity, policy, hostInterface);
+        }
+
+        @Override
+        protected String getNativeAcceptLanguages() {
+            return ENGLISH_ACCEPT_LANGUAGES;
+        }
+
+        @Override
+        protected String getNativeTranslateServiceTargetLanguage() {
+            return ENGLISH_TARGET_LANGUAGE;
         }
     }
 

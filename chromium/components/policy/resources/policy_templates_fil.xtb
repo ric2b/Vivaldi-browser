@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
+<translation id="1007441141628883408">Ine-enable ang mga pag-update ng bahagi para sa lahat ng bahagi sa <ph name="PRODUCT_NAME" /> kapag hindi nakatakda o nakatakda sa True.
+
+      Kung nakatakda sa False, idi-disable ang mga pag-update sa mga bahagi. Gayunpaman, nakabukod mula sa patakarang ito ang ilang bahagi: ang mga pag-update sa anumang bahagi na hindi naglalaman ng executable code, o hindi binabago ang pagkilos ng browser, o mahalaga para sa seguridad nito ay hindi idi-disable.
+      Kabilang sa mga halimbawa ng naturang mga bahagi ang mga listahan ng pagpapawalang-bisa ng certification at data ng ligtas na pagba-browse. </translation>
 <translation id="101438888985615157">I-rotate ang screen nang 180 degrees</translation>
 <translation id="1017967144265860778">Pamamahala ng power sa screen sa pag-log in</translation>
 <translation id="1019101089073227242">Itakda ang direktoryo ng data ng user</translation>
@@ -22,13 +26,6 @@
       Kung itatakda sa true o hindi naitakda, iuulat ang mga istatistika.</translation>
 <translation id="1046484220783400299">I-enable ang mga hindi na ginagamit na feature ng web platform sa loob ng limitadong panahon</translation>
 <translation id="1047128214168693844">Huwag payagan ang anumang site na subaybayan ang aktwal na lokasyon ng mga user</translation>
-<translation id="1057535219415338480">Binibigyang-daan ang paghuhula ng network sa <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user na baguhin ang setting na ito.
-
-      Kinokontrol nito hindi lang ang paunang pag-fetch ng DNS ngunit pati rin ang paunang pagkonekta at pag-render na TCP at SSL ng mga web page. Ang pangalan ng patakaran ay tumutukoy sa paunang pag-fetch ng DNS para sa mga makasaysayang dahilan.
-
-      Kung papaganahin mo o hindi mo papaganahin ang setting na ito, hindi mababago o ma-o-override ng mga user ang setting na ito sa <ph name="PRODUCT_NAME" />.
-
-      Kung hahayaang hindi nakatakda ang patakarang ito, papaganahin ito ngunit mababago ito ng user.</translation>
 <translation id="1062011392452772310">I-enable ang malayuang pagpapatotoo para sa device</translation>
 <translation id="1090892140761957285">URL para sa pagpapatunay ng token ng pagpapatotoo ng client ng malayuang access.
 
@@ -127,11 +124,6 @@
       Unified Desktop. Sa sitwasyong ito, hindi mae-enable ng user ang feature.</translation>
 <translation id="1474273443907024088">I-disable ang TLS False Start</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Tinutukoy ang tagal sa milliseconds kung kailan na-query sa serbisyo ng pamamahala sa device ang impormasyon ng patakaran ng device.
-
-      Ino-override ng pagtatakda ng patakarang ito ang default na halaga na 3 oras. Ang mga wastong halaga para sa patakarang ito ay mula 1800000 (30 minuto) hanggang 86400000 (1 araw). Ididikit sa mga naaayong limitasyon ang anumang mga halagang wala sa sakop na ito.
-
-      Kapag hindi nakatakda ang patakarang ito, gagamitin ng <ph name="PRODUCT_OS_NAME" /> ang default na halaga na 3 oras.</translation>
 <translation id="1504431521196476721">Malayuang Pagpapatunay</translation>
 <translation id="1509692106376861764">Hindi na ginagamit ang patakarang ito simula sa <ph name="PRODUCT_NAME" /> bersyon 29.</translation>
 <translation id="1522425503138261032">Payagan ang mga site na subaybayan ang aktwal na lokasyon ng mga user</translation>
@@ -146,6 +138,7 @@
       mga user ng enterprise ang ARC.</translation>
 <translation id="1561424797596341174">Mga pag-override ng patakaran para sa Mga build sa pag-debug ng host ng malayuang access</translation>
 <translation id="1583248206450240930">Gamitin ang <ph name="PRODUCT_FRAME_NAME" /> bilang default</translation>
+<translation id="1606958238518590302">Kapag nakatakda sa true ang patakarang ito, hindi makakapag-write ang mga user ng kahit ano sa external na storage ng mga device.</translation>
 <translation id="1608755754295374538">Mga URL na mabibigyan ng access sa mga device na nakakakuha ng audio nang walang prompt</translation>
 <translation id="1617235075406854669">Paganahin ang pagtatanggal ng browser at kasaysayan ng pag-download</translation>
 <translation id="1617384279878333801">I-enable ang magdagdag ng tao sa profile manager</translation>
@@ -251,6 +244,13 @@
       Kung itinakda sa true ang patakarang ito, susubukang i-download ng <ph name="PRODUCT_OS_NAME" /> ang mga auto-update payload sa pamamagitan ng HTTP. Kung itinakda sa false ang patakarang ito o hindi nakatakda, gagamitin ang HTTPS sa pagda-download ng mga auto-update payload.</translation>
 <translation id="2006530844219044261">Pamamahala ng power</translation>
 <translation id="201557587962247231">Dalas ng pag-upload ng mga ulat ng status ng device</translation>
+<translation id="2018836497795982119">Tinutukoy ang tagal sa mga millisecond kung gaano katagal na-query ang serbisyo ng pamamahala sa device para sa impormasyon ng patakaran ng user.
+
+      Kapag itinakda ang patakarang ito, mao-override ang default na value na 3 oras. Ang mga wastong value para sa patakarang ito ay nasa saklaw mula 1800000 (30 minuto) hanggang 86400000 (1 araw). Maka-clamp sa kaukulang hangganan ang anumang mga value na wala sa saklaw na ito. Kung sinusuportahan ng platform ang mga notification ng patakaran, itatakda ang pagkaantala ng pag-refresh sa 24 na oras dahil inaasahan na ang mga notification ng patakaran ay magpipilit ng awtomatikong pag-refresh sa tuwing magbabago ang patakaran.
+
+      Kapag hindi itinakda ang patakarang ito, gagamitin ng <ph name="PRODUCT_NAME" /> ang default na value na 3 oras.
+
+      Tandaan na kung sinusuportahan ng platform ang mga notification ng patakaran, itatakda ang pagkaantala ng pag-refresh sa 24 na oras (nang hindi pinapansin ang lahat ng default at ang value ng patakarang ito) dahil inaasahan na ang mga notification ng patakaran ay magpipilit ng awtomatikong pag-refresh sa tuwing magbabago ang patakaran, kaya hindi na kailangang madalas na mag-refresh.</translation>
 <translation id="2024476116966025075">I-configure ang kinakailangang domain name para sa mga client ng malayuang pag-access</translation>
 <translation id="2030905906517501646">Default na keyword ng provider ng paghahanap</translation>
 <translation id="206623763829450685">Tinutukoy kung aling mga scheme ng pagpapatotoo ng HTTP ang sinusuportahan ng <ph name="PRODUCT_NAME" />.
@@ -340,12 +340,6 @@
 
       Pagkatapos i-enable ang Bluetooth, dapat i-reboot ang device upang malapat ang mga pagbabago (hindi na kailangang i-reboot ang device kapag idi-disable ang Bluetooth).</translation>
 <translation id="2366415278352956652">Ine-enable ang pag-cast</translation>
-<translation id="2371309782685318247">Tinutukoy ang tagal sa milliseconds kung kailan na-query sa serbisyo ng pamamahala sa device ang impormasyon ng patakaran ng user.
-
-      Ino-override ng pagtatakda ng patakarang ito ang default na halaga na 3 oras. Ang mga wastong halaga para sa patakarang ito ay mula 1800000 (30 minuto) hanggang 86400000 (1 araw). Ididikit sa mga naaayong limitasyon ang anumang mga halagang wala sa sakop na ito.
-
-      Kapag hindi nakatakda ang patakarang ito, gagamitin ng <ph name="PRODUCT_NAME" /> ang default na halaga na 3 oras.
-</translation>
 <translation id="2372547058085956601">Delay ng awtomatikong pag-log in sa pampublikong session.
 
       Kung hindi nakatakda ang patakaran ng |DeviceLocalAccountAutoLoginId|, walang bisa ang patakarang ito. Kung hindi:
@@ -546,6 +540,7 @@
       Kung hindi pinagana ang setting na ito, hindi makakagamit ng JavaScript ang mga web page at hindi mababago ng user ang setting na iyon.
 
       Kung pinagana o hindi nakatakda ang setting na ito, makakagamit ng JavaScript ang mga web page ngunit mababago ng user ang setting na iyon.</translation>
+<translation id="2753637905605932878">Paghigpitan ang hanay ng mga lokal na UDP port na ginagamit ng WebRTC</translation>
 <translation id="2757054304033424106">Mga uri ng mga extension/apps na pinapayagang ma-install</translation>
 <translation id="2759224876420453487">Kokontrolin ang pag-uugali ng user sa isang session na multiprofile</translation>
 <translation id="2761483219396643566">Delay ng babala bago mag-idle kapag gumagamit ng baterya</translation>
@@ -679,6 +674,7 @@
 
           Kung hinayaang hindi nakatakda ang patakarang ito, gagamitin ang 'AllowJavaScript' at magagawa ng user na baguhin ito.</translation>
 <translation id="3038323923255997294">Magpatuloy sa pagpapatakbo ng apps sa background kapag nakasara ang <ph name="PRODUCT_NAME" /></translation>
+<translation id="3046192273793919231">Magpadala ng mga network packet sa server sa pamamahala upang masubaybayan ang online status</translation>
 <translation id="3048744057455266684">Kung nakatakda ang patakarang ito at may URL sa paghahanap na iminungkahi mula sa omnibox na naglalaman ng parameter na ito sa string ng query o sa tagatukoy ng fragment, ipapakita ng suhestiyon ang mga termino para sa paghahanap at search provider sa halip na ang mismong URL sa paghahanap.
 
           Opsyonal ang patakarang ito. Kung hindi nakatakda, hindi magpapalit ng termino para sa paghahanap.
@@ -780,6 +776,15 @@
 <translation id="3264793472749429012">Mga pag-encode ng default na provider ng paghahanap</translation>
 <translation id="3273221114520206906">Default na setting ng JavaScript</translation>
 <translation id="3288595667065905535">I-release ang channel</translation>
+<translation id="3291367259589875381">Hindi na ginagamit ang patakarang ito sa M48 at pinalitan na ng <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" />, at inalis sa M54.
+
+      Ine-enable ang paghula ng network sa <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user na palitan ang setting na ito.
+
+      Hindi lang pag-prefetch ng DNS ang kinokontrol nito ngunit pati rin paunang pagkonekta at pag-render ng TCP at SSL ng mga web page. Tinutukoy ng pangalan ng patakaran ang pag-prefetch ng DNS para sa mga dati nang dahilan.
+
+      Kung ie-enable o idi-disable mo ang setting na ito, hindi mababago o mao-override ng mga user ang setting na ito sa <ph name="PRODUCT_NAME" />.
+
+      Kung iiwan na hindi nakatakda ang patakarang ito, mae-enable ito ngunit magagawa ng user na baguhin ito.</translation>
 <translation id="3292147213643666827">Pinapagana ang <ph name="PRODUCT_NAME" /> na magsilbi bilang proxy sa pagitan ng <ph name="CLOUD_PRINT_NAME" /> at mga legacy printer na nakakonekta sa machine.
 
       Kung pinagana o hindi naka-configure ang setting na ito, mapapagana ng mga user ang proxy ng cloud print proxy sa pamamagitan ng pagpapatotoo sa kanilang Google Account.
@@ -878,6 +883,7 @@
 <translation id="3780152581321609624">Isama sa Kerberos SPN ang port na hindi karaniwan</translation>
 <translation id="3788662722837364290">Mga setting ng pamamahala ng power kapag naging idle ang user</translation>
 <translation id="3793095274466276777">Kino-configure ang default na mga pagsusuri ng browser sa <ph name="PRODUCT_NAME" /> at pinipigilan ang mga user sa pagbabago ng mga ito. Kung pinagana mo ang setting na ito, palaging titingnan ng <ph name="PRODUCT_NAME" /> ang startup kahit na default na browser ito at awtomatikong irerehistro ang sarili nito kung posible. Kung hindi pinagana ang setting na ito, hindi kailanmang titingnan ng <ph name="PRODUCT_NAME" /> kung ito ang default na browser at hindi papaganahin ang mga kontrol ng user para sa pagtatakda ng pagpipiliang ito. Kung hindi nakatakda ang setting na ito, papayagan ng <ph name="PRODUCT_NAME" /> ang user na kontrolin kahit na ito ay default na browser at kahit na dapat maipakita ang mga notification ng user kapag hindi ito ipinapakita.</translation>
+<translation id="379659290574555063">Itinuturing ang mga external na storage ng device bilang read-only.</translation>
 <translation id="3800626789999016379">Kino-configure ang direktoryong gagamitin ng <ph name="PRODUCT_NAME" /> para sa pagda-download ng mga file.
 
       Kung itatakda mo ang patakarang ito, gagamitin ng <ph name="PRODUCT_NAME" /> ang ibinigay na direktoryo, tumukoy man ang user ng isa o na-enable niya ang flag upang ma-prompt para sa lokasyon ng download sa bawat pagkakataon.
@@ -929,16 +935,20 @@
 <translation id="3864818549971490907">Default na setting ng mga plugin</translation>
 <translation id="3866249974567520381">Paglalarawan</translation>
 <translation id="3866530186104388232">Kung nakatakda sa true o hindi naka-configure ang patakarang ito, ipapakita ng <ph name="PRODUCT_OS_NAME" /> ang mga umiiral nang user sa screen ng pag-login at papayag na pumili ng isa. Kung nakatakda sa false ang patakarang ito, gagamitin ng <ph name="PRODUCT_OS_NAME" /> ang prompt ng username/password para sa pag-login.</translation>
-<translation id="3866824067696705379">Gaano kadalas ipinapadala ang pagsubaybay ng tibok ng puso, ayon sa mga millisecond.
-
-      Kung hindi itatakda ang patakaran na ito, ang default na dalas ay 3 minuto. Ang
-      minimum na dalas ay 30 segundo at ang maximum na dalas ay 24 na oras -
-      ang mga value na nasa labas ng saklaw na ito ay maka-clamp sa saklaw na ito.</translation>
 <translation id="3868347814555911633">Sa retail mode lang aktibo ang patakarang ito.
 
       Nililista ang mga extension na awtomatikong naka-install para sa user ng Demo, para sa mga device na nasa retail mode. Naka-save ang mga extension na ito sa device at maaaring i-install habang naka-offline, pagkatapos ng pag-install.
 
       Ang bawat entry sa listahan ay naglalaman ng diksyunaryong dapat kabilangan ng ID ng extension sa field na 'extension-id,' at ng URL ng update nito sa field na 'update-url.'</translation>
+<translation id="388237772682176890">Ang patakarang ito ay hindi na ginagamit sa M53 at inalis na sa M54, dahil inalis na ang suporta sa SPDY/3.1.
+
+      Dini-disable ang paggamit ng SPDY protocol sa <ph name="PRODUCT_NAME" />.
+
+      Kung na-enable ang patakarang ito, hindi magiging available ang SPDY protocol sa <ph name="PRODUCT_NAME" />.
+
+      Kapag itinakda sa naka-disable ang patakarang ito, papayagan ang paggamit ng SPDY.
+
+      Kung hindi itinakda ang patakarang ito, magiging available ang SPDY.</translation>
 <translation id="3891357445869647828">Paganahin ang JavaScript</translation>
 <translation id="3898060089412156345">Pahintulutan o tanggihan ang pagkuha ng audio.
 
@@ -956,6 +966,11 @@
 
           Kung hindi nakatakda o nakatakda sa False, makakapaglipat ang mga user ng mga file sa Google Drive.</translation>
 <translation id="3915395663995367577">URL sa proxy na .pac file</translation>
+<translation id="3939893074578116847">Magpadala ng mga network packet sa server sa pamamahala upang masubaybayan ang online status, upang mabigyang-daan ang
+      server na tukuyin kung offline ang device.
+
+      Kung nakatakda ang patakarang ito sa true, ipapadala ang mga sinusubaybayang network packet (na tinatawag na <ph name="HEARTBEATS_TERM" />).
+      Kung nakatakda sa false o hindi nakatakda, walang ipapadalang mga packet.</translation>
 <translation id="3964909636571393861">Nagbibigay-daan sa pag-access sa isang listahan ng mga URL</translation>
 <translation id="3965339130942650562">Mag-timeout hanggang maisagawa ang pag-log-out ng idle na user</translation>
 <translation id="3967075520570946456">I-enable ang pagpapakita ng welcome page sa unang paglulunsad ng browser kasunod ng pag-upgrade ng OS.</translation>
@@ -1156,7 +1171,6 @@
 
           Kung iiwanan mong hindi nakatakda ang patakarang ito, hindi maglalaan ang <ph name="PRODUCT_NAME" /> ng mga kredensyal ng user kahit na na-detect ang isang server bilang Intranet.</translation>
 <translation id="4752880493649142945">Certificate ng client para sa pagkonekta sa RemoteAccessHostTokenValidationUrl</translation>
-<translation id="4768493164188395498">Dalas ng pagsubaybay sa mga tibok ng puso</translation>
 <translation id="4791031774429044540">I-enable ang tampok sa pagiging naa-access ng malaking cursor.
 
           Kung nakatakda sa true ang patakarang ito, palaging naka-enable ang malaking cursor.
@@ -1262,6 +1276,9 @@
           Ang value ng blacklist na '*' ay nangangahulugang naka-blacklist ang lahat ng host ng native na pagmemensahe maliban kung tahasang nakalista ang mga ito sa whitelist.
 
           Kung ang patakarang ito ay naiwang hindi nakatakda, ilo-load ng <ph name="PRODUCT_NAME" /> ang lahat ng naka-install na host ng native na pagmemensahe.</translation>
+<translation id="5288772341821359899">Kung nakatakda ang patakaran, paghihigpitan ang hanay ng UDP port na ginagamit ng WebRTC sa tinukoy na interval ng port (kasama ang mga endpoint).
+
+      Kung hindi nakatakda ang patakaran, o kung nakatakda ito sa walang lamang string o di-wastong hanay ng port, pinapayagan ang WebRTC na gamitin ang anumang available na lokal na UDP port.</translation>
 <translation id="5290940294294002042">Tumukoy ng listahan ng mga plugin na maaaring paganahin o hindi paganahin ng user</translation>
 <translation id="5302612588919538756">Hindi na ginagamit ang patakarang ito, pag-isipang gamitin na lang ang SyncDisabled.
 
@@ -1333,6 +1350,18 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Kung nakatakda ang patakarang ito, ang tinukoy na session ay awtomatikong mala-log in kapag lumipas na ang isang takdang panahon sa screen sa pag-log in nang walang pakikipag-ugnayan ng user. Dapat ay naka-configure na ang pampublikong session (tingnan ang |DeviceLocalAccounts|).
 
       Kung hindi nakatakda ang patakarang ito, walang magaganap na awtomatikong pag-log in.</translation>
+<translation id="5529037166721644841">Tinutukoy ang tagal sa mga millisecond kung gaano katagal na-query ang serbisyo ng pamamahala sa device para sa impormasyon ng patakaran ng device.
+
+      Kapag itinakda ang patakarang ito, mao-override ang default na value na 3 oras. Ang mga wastong value para sa patakarang ito ay nasa saklaw mula 1800000 (30 minuto) hanggang 86400000 (1 araw).  Maka-clamp sa kaukulang hangganan ang anumang mga value na wala sa saklaw na ito.
+
+      Kapag hindi itinakda ang patakarang ito, gagamitin ng <ph name="PRODUCT_OS_NAME" /> ang default na value na 3 oras.
+
+      Tandaan na kung sinusuportahan ng platform ang mga notification ng patakaran, itatakda ang pagkaantala ng pag-refresh sa 24 na oras (nang hindi pinapansin ang lahat ng default at value ng patakarang ito) dahil inaasahan na ang mga notification ng patakaran ay magpipilit ng awtomatikong pag-refresh sa tuwing magbabago ang patakaran, kaya hindi na kailangang madalas na mag-refresh.</translation>
+<translation id="5535957389335373033">Gaano kadalas ipinapadala ang mga sinusubaybayang network packet, sa mga millisecond.
+
+      Kung hindi nakatakda ang patakarang ito, ang default na dalas ay 3 minuto. Ang minimum
+      na dalas ay 30 segundo at 24 na oras ang maximum na dalas - ang mga value
+      sa labas ng saklaw na ito ay maka-clamp sa saklaw na ito.</translation>
 <translation id="5535973522252703021">Whitelist ng server ng paglalaan ng Kerberos</translation>
 <translation id="5560039246134246593">Magdagdag ng parameter sa pagkuha ng seed ng Mga Variation sa <ph name="PRODUCT_NAME" />.
 
@@ -1372,6 +1401,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Kung naka-disable o hindi nakatakda ang setting na ito, maaaring maugnay sa sinumang lokal na user ang host ng malayuang access.</translation>
 <translation id="5697306356229823047">I-ulat ang mga user ng device</translation>
+<translation id="570062449808736508">Kapag nakatakda ang patakarang ito sa isang string na may laman, babasahin ng WebView ang mga paghihigpit sa URL mula sa provider ng content gamit ang ibinigay na pangalan ng kinauukulan.</translation>
 <translation id="5703863730741917647">Tukuyin ang pagkilos na gagawin kapag naabot na ang pagkaantala ng idle.
 
           Tandaan na hindi ginagamit ang patakarang ito at aalisin sa hinaharap.
@@ -1639,6 +1669,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
           Kung itinakda mo ang patakarang ito, maaari itong pansamantalang i-override ng mga user sa pamamagitan ng pag-enable o pag-disable ng on-screen na keyboard. Gayunpaman, hindi permanente ang pipiliin ng user at ipinapanumbalik ang default sa tuwing ipinapakita ang screen sa pag-log in o nananatiling idle ang user sa screen sa pag-log in sa loob ng isang minuto.
 
           Kung iniwang hindi nakatakda ang patakarang ito, naka-disable ang on-screen na keyboard kapag unang ipinakita ang screen sa pag-log in. Maaaring i-enable o i-disable ng mga user ang on-screen na keyboard anumang oras at magpapatuloy ang status nito sa screen sa pag-log in sa pagitan ng mga user.</translation>
+<translation id="6573305661369899995">Magtakda ng external na pagmumulan ng mga paghihigpit sa URL</translation>
 <translation id="6598235178374410284">Larawan ng avatar ng user</translation>
 <translation id="6628646143828354685">Binibigyang-daan kang magtakda kung pinapayagan ang mga website na kumuha ng access sa malalapit na Bluetooth device. Maaaring ganap na i-block ang access, o maaaring tanungin ang user sa tuwing gusto ng website na kumuha ng access sa malalapit na Bluetooth device.
 
@@ -1770,6 +1801,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
           Kung idi-disable o hindi itatakda ang setting na ito, maibabahagi ang mga host gamit ang anumang account.
 
           Tingnan din ang RemoteAccessHostClientDomain.</translation>
+<translation id="6979510692034647325">Ine-enable ang mga pag-update ng bahagi sa <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6997592395211691850">Kung kinakailangan ang mga online na pagsusuri sa OCSP/CRL para sa mga lokal na pinagkakatiwalaang anchor</translation>
 <translation id="7003334574344702284">Pinupwersa ng patakarang ito na ma-import mula sa nakaraang default na browser ang mga naka-save na password kung pinagana. Kung pinagana, naaapektuhan rin ng patakarang ito ang dialog ng import.
 
@@ -1902,6 +1934,9 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Sinusunod lang ang patakarang ito kung pinagana ang patakarang 'DefaultSearchProviderEnabled'.</translation>
 <translation id="7302043767260300182">Delay ng screen lock kapag tumatakbo habang nakasaksak sa kuryente</translation>
+<translation id="7311458740754205918">Kung itinakda ito sa true o hindi ito itinakda, ang page ng Bagong Tab ay maaaring magpakita ng mga suhestyon sa content batay sa history ng pagba-browse, mga interes o lokasyon ng user.
+
+      Kung itinakda ito sa false, hindi makikita ang awtomatikong ginawang suhestyon sa content sa page ng Bagong Tab.</translation>
 <translation id="7323896582714668701">Mga karagdagang command line na parameter para sa <ph name="PRODUCT_NAME" /></translation>
 <translation id="7329842439428490522">Tinutukoy ang tagal ng oras na walang input ng user na kapag lumipas ay i-o-off ang screen kapag tumatakbo gamit ang power ng baterya.
 
@@ -1929,7 +1964,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
       Kung hindi itinakda ang patakarang ito, gagamiting ng awtomatikong pag-clean-up ang default na built-in na diskarte. Sa kasalukuyan, ito ay ang 'RemoveLRUIfDormant' na diskarte.</translation>
 <translation id="7336878834592315572">Panatilihin ang cookies para sa kabuuan ng session</translation>
 <translation id="7340034977315324840">Iulat ang mga panahon ng aktibidad ng device</translation>
-<translation id="7381326101471547614">Hindi pinapagana ang paggamit ng SPDY protocol sa <ph name="PRODUCT_NAME" />. Kung pinagana ang patakarang ito, ang SPDY protocol ay hindi magiging available sa <ph name="PRODUCT_NAME" />. Ang pagtatakda ng patakarang ito sa hindi pinagana ay papayagan ang paggamit ng SPDY. Kung iwanang hindi nakatakda ang SPDY na ito, magiging available ang Spf.</translation>
 <translation id="7384999953864505698">Pinapayagan ang QUIC protocol</translation>
 <translation id="7406651467768226499">Kung papayagan ba ang awtomatikong inilunsad na walang pagkaantalang kiosk app na kontrolin ang bersyon ng <ph name="PRODUCT_OS_NAME" />.
 
@@ -1948,6 +1982,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="7443616896860707393">Mga prompt ng Cross-origin HTTP Basic Auth</translation>
 <translation id="7468416082528382842">Lokasyon ng registry ng window:</translation>
 <translation id="7469554574977894907">Paganahin ang mga suhestiyon sa paghahanap</translation>
+<translation id="7474249562477552702">Kung pinapayagan ang mga SHA-1 signed certificate na ibinigay ng mga lokal na trust anchor</translation>
 <translation id="7485481791539008776">Mga panuntunan sa pagpili ng default na printer</translation>
 <translation id="749556411189861380">Iulat ang bersyon ng OS at firmware ng mga naka-enroll na device.
 
@@ -1955,7 +1990,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="7511361072385293666">Kung nakatakda ang patakaran na ito sa true o hindi ito nakatakda, ang paggamit ng QUIC protocol sa <ph name="PRODUCT_NAME" /> ay pinapayagan.
       Kung ang patakaran na ito ay nakatakda sa false, ang paggamit ng QUIC protocol ay hindi pinapayagan.</translation>
 <translation id="7519251620064708155">Payagan ang pagbuo ng key sa mga site na ito</translation>
-<translation id="7523476810162382273">Magpadala ng mga pangsubaybay ng heartbeat sa server sa pamamahala</translation>
 <translation id="7529100000224450960">Binibigyang-daan kang magtakda ng isang listahan ng mga pattern ng url na tumutukoy ng mga site na pinapayagang magbukas ng mga popup.
 
           Kung hinayaang hindi nakatakda ang patakarang ito gagamitin ang global na default na halaga para sa lahat ng site mula sa patakaran ng 'DefaultPopupsSetting' kung nakatakda ito, o kung hindi man ay sa personal na configuration ng user.</translation>
@@ -1966,6 +2000,11 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
       Kung itatakda sa SAML_INTERSTITIAL, makikita sa log in ang isang interstitial na screen na nag-aalok sa user na magpatuloy sa pagpapatotoo sa pamamagitan ng SAML IdP ng domain ng pag-enroll ng device, o bumalik sa normal na daloy ng pag-log in sa GAIA.</translation>
 <translation id="7567380065339179813">Pinapayagan ang mga plugin sa mga site na ito</translation>
+<translation id="757395965347379751">Kapag naka-enable ang setting na ito, pinapayagan ng <ph name="PRODUCT_NAME" /> ang mga SHA-1 signed certificate hanggang matagumpay silang nakakapagpatotoo at nakakabit sa isang lokal na naka-install na mga CA certificate.
+
+      Tandaan na nakadepende ang patakarang ito sa operating system certificate verification stack na pumapayag sa mga SHA-1 signature. Kung mabago ng isang update sa OS ang pangangasiwa ng OS sa mga SHA-1 certificate, maaaring mawalan na nang bisa ang patakarang ito.  Bukod pa rito, maaaring nilayon ang patakarang ito na maging isang pansamantalang remedyo upang mabigyan ang mga kumpanya ng higit pang oras upang makalipat mula sa SHA-1.  Aalisin ang patakarang ito sa petsa o malapit sa petsang ika-1 ng Enero, 2019.
+
+      Kung hindi nakatakda ang patakarang ito o nakatakda sa false, susundin ng <ph name="PRODUCT_NAME" /> ang inanunsyo sa publiko na iskedyul ng paghinto sa paggamit ng SHA-1.</translation>
 <translation id="7593523670408385997">Kino-configure ang laki ng cache na gagamitin ng <ph name="PRODUCT_NAME" /> sa pag-iimbak ng mga na-cache na file sa disk.
 
       Kung itinakda mo ang patakarang ito, gagamitin ng <ph name="PRODUCT_NAME" /> ang ibinigay na laki ng cache tinukoy man ng user ang '--disk-cache-size' flag o hindi. Ang value na tinutukoy sa patakarang ito ay hindi isang ganap na hangganan ngunit sa halip ay isang suhestiyon sa sistema sa pagka-cache, masyadong maliit ang anumang value na mas mababa sa ilang megabyte at ira-round up sa isang maayos na minimum.
@@ -2024,6 +2063,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 
           Kung hindi pinapagana o hindi nakatakda ang setting na ito, hindi papaganahin ang dalawang salik at gagamitin ang default na paggana ng pagkakaroon ng PIN na tinukoy ng user.</translation>
 <translation id="7750991880413385988">Buksan ang Pahina ng Bagong Tab</translation>
+<translation id="7761446981238915769">I-configure ang listahan ng mga naka-install na app sa screen ng pag-login</translation>
 <translation id="7761526206824804472">Nagtatakda ng isa o higit pang mga inirerekomendang lokal para sa isang pampublikong session, na nagbibigay-daan sa mga user na madaling pumili ng isa sa mga lokal na ito.
 
       Makakapili ang user ng lokal at layout ng keyboard bago magsimula ng pampublikong session. Bilang default, nakalista ang lahat ng lokal na sinusuportahan ng <ph name="PRODUCT_OS_NAME" /> ayon sa pagkakasunud-sunod ng alpabeto. Magagamit mo ang patakarang ito upang maglipat ng hanay ng mga inirerekomendang lokal sa itaas ng listahan.
@@ -2046,6 +2086,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="7763479091692861127"> Ang mga uri ng koneksyon na pinapayagang gamitin para sa mga pag-update sa OS. Potensyal na nakakapagpabagal ng koneksyon ang mga pag-update sa OS dahil sa laki ng mga ito at maaari itong makaipon ng karagdagang gastusin. Samakatuwid, hindi naka-enable ang mga ito bilang default para sa mga uri ng koneksyon na itinuturing na mahal, na kinabibilangan ng WiMax, Bluetooth at Cellular sa ngayon.
 
       Ang mga kilalang identifier ng uri ng koneksyon ay "ethernet," "wifi," "wimax," "bluetooth" at "cellular."</translation>
+<translation id="7763614521440615342">Ipakita ang mga suhestyon sa content sa page ng Bagong Tab</translation>
 <translation id="7766336524667238790">Nag-uulat ng impormasyon tungkol sa aktibong session sa kiosk, gaya ng
       application ID at bersyon.
 
@@ -2448,6 +2489,28 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="8858642179038618439">Puwersahin ang YouTube Safety Mode</translation>
 <translation id="8864975621965365890">Pinipigilan ang turndown na prompt na lumilitaw kapag na-render ang isang site ng <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Home page</translation>
+<translation id="88890388118515381">
+      Tumutukoy ng isang listahan ng mga app na palihim na ini-install sa screen ng pag-login,
+      nang walang pakikipag-ugnayan ng user, at hindi maaaring i-uninstall.
+      Ang lahat ng pahintulot na hiniling ng mga app ay ibinibigay
+      nang walang pagpapahayag, nang walang pakikipag-ugnayan ng user, na kinabibilangan ng anumang mga karagdagang
+      pahintulot na hiniling ng mga bersyon ng app sa hinaharap.
+
+      Kung inalis sa listahang ito ang isang app na dati nang pilit na na-install,
+      awtomatiko itong ina-uninstall ng <ph name="PRODUCT_NAME" />.
+
+      Ang bawat item ng listahan ng patakaran ay isang string na naglalaman ng extension ID
+      at isang URL ng "update" na pinaghihiwalay ng semicolon (<ph name="SEMICOLON" />). Ang extension ID ay ang string na may 32 titik
+      na makikita halimbawa sa <ph name="CHROME_EXTENSIONS_LINK" /> kapag nasa
+      developer mode. Ang URL ng "update" ay dapat mapunta sa Manifest ng Update
+      na dokumentong XML gaya ng inilarawan sa <ph name="LINK_TO_EXTENSION_DOC1" />. Tandaan
+      na ang URL ng "update" na itinakda sa patakarang ito ay ginagamit lang sa paunang
+      pag-install; gagamitin ng mga kasunod na update ng extension ang URL ng
+      update na nakasaad sa manifest ng extension.
+
+      Halimbawa, <ph name="EXTENSION_POLICY_EXAMPLE" />
+      ini-install ang <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> app mula sa karaniwang URL ng "update" ng Chrome Web Store.
+      Para sa higit pang impormasyon tungkol sa pagho-host ng mga extension, tingnan ang: <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">Nagbibigay ang Quirks Server ng mga configuration file na partikular sa hardware, tulad ng
       mga ICC display profile upang isaayos ang calibration ng monitor.
 
@@ -2500,11 +2563,6 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="9088444059179765143">I-configure ang awtomatikong paraan ng pag-detect ng timezone</translation>
 <translation id="9096086085182305205">Whitelist ng server sa pagpapatotoo</translation>
 <translation id="9098553063150791878">Mga patakaran para sa pagpapatotoo ng HTTP</translation>
-<translation id="9104138886225968319">Nagpapadala ng mga heartbeat sa pagsubaybay sa server sa pamamahala upang magbigay-daan
-      sa server na matukoy kung offline ang device.
-
-      Kung itatakda ang patakarang ito sa true, magpapadala ng mga heartbeat sa pagsubaybay. Kung itatakda ito
-      sa false o kung hindi ito itatakda, hindi magpapadala ng mga heartbeat.</translation>
 <translation id="9112897538922695510">Nagbibigay-daan sa iyong magrehistro ng isang listahan ng mga tagapangasiwa ng protocol. Dapat ay isa itong inirerekomendang patakaran. Dapat itakda ang property na |protocol| sa scheme gaya ng 'mailto' at dapat itakda ang property na |url| sa pattern ng URL ng application na nangangasiwa sa scheme. Maaaring maglaman ng '%s' ang pattern, at kung mayroon nito, papalitan ito ng pinapangasiwaang URL.
 
           Ang mga tagapangasiwa ng protocol na irerehistro ng patakaran ay isasama sa mga inirehistro ng user, at available gamitin ang dalawang ito. Maaaring i-override ng user ang mga tagapangasiwa ng protocol na na-install ng patakaran sa pamamagitan ng pag-i-install ng bagong default na tagapangasiwa, ngunit hindi nila maaalis ang isang tagapangasiwa ng protocol na inirehistro ng patakaran.</translation>
@@ -2546,6 +2604,7 @@ lumagpas na sa partikular na haba ng panahon ang oras na hindi ito nagamit.
 <translation id="9187743794267626640">Huwag paganahin ang pag-mount ng panlabas na storage</translation>
 <translation id="9197740283131855199">Porsyento na nase-scale ang pagkaantala ng pagdilim ng screen kapag naging aktibo ang user pagkatapos ng pagdilim</translation>
 <translation id="9200828125069750521">Mga parameter para sa URL ng larawan na gumagamit ng POST</translation>
+<translation id="9217154963008402249">Dalas ng mga sinusubaybayang network packet</translation>
 <translation id="922540222991413931">Mag-configure ng mga pinagmulan ng pag-install ng extension, app, at script ng user</translation>
 <translation id="924557436754151212">Mag-import ng mga naka-save na password mula sa default na browser sa unang pagtakbo</translation>
 <translation id="930930237275114205">Itakda ang direktoryo ng data ng user ng <ph name="PRODUCT_FRAME_NAME" /></translation>

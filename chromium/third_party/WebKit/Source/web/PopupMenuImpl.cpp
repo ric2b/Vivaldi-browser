@@ -12,6 +12,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLHRElement.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
@@ -246,14 +247,14 @@ DEFINE_TRACE(PopupMenuImpl)
 void PopupMenuImpl::writeDocument(SharedBuffer* data)
 {
     HTMLSelectElement& ownerElement = *m_ownerElement;
-    IntRect anchorRectInScreen = m_chromeClient->viewportToScreen(ownerElement.elementRectRelativeToViewport(), ownerElement.document().view());
+    IntRect anchorRectInScreen = m_chromeClient->viewportToScreen(ownerElement.visibleBoundsInVisualViewport(), ownerElement.document().view());
 
     PagePopupClient::addString("<!DOCTYPE html><head><meta charset='UTF-8'><style>\n", data);
     data->append(Platform::current()->loadResource("pickerCommon.css"));
     data->append(Platform::current()->loadResource("listPicker.css"));
     PagePopupClient::addString("</style></head><body><div id=main>Loading...</div><script>\n"
         "window.dialogArguments = {\n", data);
-    addProperty("selectedIndex", ownerElement.optionToListIndex(ownerElement.selectedIndex()), data);
+    addProperty("selectedIndex", ownerElement.selectedListIndex(), data);
     const ComputedStyle* ownerStyle = ownerElement.computedStyle();
     ItemIterationContext context(*ownerStyle, data);
     context.serializeBaseStyle();
@@ -294,7 +295,7 @@ void PopupMenuImpl::addElementStyle(ItemIterationContext& context, HTMLElement& 
     // TODO(tkent): We generate unnecessary "style: {\n},\n" even if no
     // additional style.
     PagePopupClient::addString("style: {\n", data);
-    if (style->visibility() == HIDDEN)
+    if (style->visibility() == EVisibility::Hidden)
         addProperty("visibility", String("hidden"), data);
     if (style->display() == NONE)
         addProperty("display", String("none"), data);
@@ -398,7 +399,7 @@ void PopupMenuImpl::setValueAndClosePopup(int numValue, const String& stringValu
     DCHECK(success);
     {
         EventQueueScope scope;
-        m_ownerElement->valueChanged(listIndex);
+        m_ownerElement->selectOptionByPopup(listIndex);
         if (m_popup)
             m_chromeClient->closePagePopup(m_popup);
         // 'change' event is dispatched here.  For compatbility with
@@ -511,7 +512,7 @@ void PopupMenuImpl::update()
     }
     context.finishGroupIfNecessary();
     PagePopupClient::addString("],\n", data.get());
-    IntRect anchorRectInScreen = m_chromeClient->viewportToScreen(m_ownerElement->elementRectRelativeToViewport(), ownerElement().document().view());
+    IntRect anchorRectInScreen = m_chromeClient->viewportToScreen(m_ownerElement->visibleBoundsInVisualViewport(), ownerElement().document().view());
     addProperty("anchorRectInScreen", anchorRectInScreen, data.get());
     PagePopupClient::addString("}\n", data.get());
     m_popup->postMessage(String::fromUTF8(data->data(), data->size()));

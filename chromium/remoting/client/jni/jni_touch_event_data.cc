@@ -14,35 +14,30 @@ JniTouchEventData::JniTouchEventData() {}
 JniTouchEventData::~JniTouchEventData() {}
 
 // static
-bool JniTouchEventData::RegisterJni(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
-// static
 void JniTouchEventData::CopyTouchPointData(
     JNIEnv* env,
     const base::android::ScopedJavaLocalRef<jobject>& java_object,
     protocol::TouchEventPoint* touch_event_point) {
   touch_event_point->set_id(
-      Java_TouchEventData_getTouchPointId(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointId(env, java_object));
 
   touch_event_point->set_x(
-      Java_TouchEventData_getTouchPointX(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointX(env, java_object));
 
   touch_event_point->set_y(
-      Java_TouchEventData_getTouchPointY(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointY(env, java_object));
 
   touch_event_point->set_radius_x(
-      Java_TouchEventData_getTouchPointRadiusX(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointRadiusX(env, java_object));
 
   touch_event_point->set_radius_y(
-      Java_TouchEventData_getTouchPointRadiusY(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointRadiusY(env, java_object));
 
   touch_event_point->set_angle(
-      Java_TouchEventData_getTouchPointAngle(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointAngle(env, java_object));
 
   touch_event_point->set_pressure(
-      Java_TouchEventData_getTouchPointPressure(env, java_object.obj()));
+      Java_TouchEventData_getTouchPointPressure(env, java_object));
 }
 
 }  // namespace remoting

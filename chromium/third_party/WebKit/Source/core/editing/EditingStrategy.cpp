@@ -33,7 +33,7 @@ bool EditingAlgorithm<Traversal>::isEmptyNonEditableNodeInEditable(const Node* n
     // Flat Tree:
     //   <host><div ce><span1>unedittable</span></div></host>
     // e.g. editing/shadow/breaking-editing-boundaries.html
-    return !Traversal::hasChildren(*node) && !node->hasEditableStyle() && node->parentNode() && node->parentNode()->hasEditableStyle();
+    return !Traversal::hasChildren(*node) && !hasEditableStyle(*node) && node->parentNode() && hasEditableStyle(*node->parentNode());
 }
 
 template <typename Traversal>
@@ -48,7 +48,7 @@ int EditingAlgorithm<Traversal>::lastOffsetForEditing(const Node* node)
     DCHECK(node);
     if (!node)
         return 0;
-    if (node->offsetInCharacters())
+    if (node->isCharacterDataNode())
         return node->maxCharacterOffset();
 
     if (Traversal::hasChildren(*node))
@@ -69,7 +69,7 @@ int EditingAlgorithm<Traversal>::lastOffsetForEditing(const Node* node)
 template <typename Strategy>
 Node* EditingAlgorithm<Strategy>::rootUserSelectAllForNode(Node* node)
 {
-    if (!node || !nodeIsUserSelectAll(node))
+    if (!node || usedValueOfUserSelect(*node) != SELECT_ALL)
         return nullptr;
     Node* parent = Strategy::parent(*node);
     if (!parent)
@@ -81,7 +81,7 @@ Node* EditingAlgorithm<Strategy>::rootUserSelectAllForNode(Node* node)
             parent = Strategy::parent(*parent);
             continue;
         }
-        if (!nodeIsUserSelectAll(parent))
+        if (usedValueOfUserSelect(*parent) != SELECT_ALL)
             break;
         candidateRoot = parent;
         parent = Strategy::parent(*candidateRoot);

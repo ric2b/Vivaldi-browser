@@ -23,6 +23,7 @@ const char* const kMemoryDumpAllowedArgs[] = {"dumps", nullptr};
 
 const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "thread_name", nullptr},
+    {"__metadata", "process_name", nullptr},
     {"ipc", "SyncChannel::Send", nullptr},
     {"toplevel", "*", nullptr},
     {"latencyInfo", "*", kInputLatencyAllowedArgs},
@@ -89,7 +90,7 @@ bool IsTraceEventArgsWhitelisted(
 }
 
 bool IsMetadataWhitelisted(const std::string& metadata_name) {
-  for (auto key : kMetadataWhitelist) {
+  for (auto* key : kMetadataWhitelist) {
     if (base::MatchPattern(metadata_name, key)) {
       return true;
     }

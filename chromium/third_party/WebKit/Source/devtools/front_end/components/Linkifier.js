@@ -160,19 +160,20 @@ WebInspector.Linkifier.prototype = {
      * @param {number} lineNumber
      * @param {number=} columnNumber
      * @param {string=} classes
-     * @return {!Element}
+     * @return {?Element}
      */
-    linkifyScriptLocation: function(target, scriptId, sourceURL, lineNumber, columnNumber, classes)
+    maybeLinkifyScriptLocation: function(target, scriptId, sourceURL, lineNumber, columnNumber, classes)
     {
-        var fallbackAnchor = WebInspector.linkifyResourceAsNode(sourceURL, lineNumber, columnNumber, classes);
+        var fallbackAnchor = sourceURL ? WebInspector.linkifyResourceAsNode(sourceURL, lineNumber, columnNumber, classes) : null;
         if (!target || target.isDetached())
             return fallbackAnchor;
         var debuggerModel = WebInspector.DebuggerModel.fromTarget(target);
         if (!debuggerModel)
             return fallbackAnchor;
 
-        var rawLocation = scriptId ? debuggerModel.createRawLocationByScriptId(scriptId, lineNumber, columnNumber || 0) :
-                                     debuggerModel.createRawLocationByURL(sourceURL, lineNumber, columnNumber || 0);
+        var rawLocation =
+            (scriptId ? debuggerModel.createRawLocationByScriptId(scriptId, lineNumber, columnNumber || 0) : null) ||
+            debuggerModel.createRawLocationByURL(sourceURL, lineNumber, columnNumber || 0);
         if (!rawLocation)
             return fallbackAnchor;
 
@@ -183,6 +184,21 @@ WebInspector.Linkifier.prototype = {
         anchor[WebInspector.Linkifier._liveLocationSymbol] = liveLocation;
         anchor[WebInspector.Linkifier._fallbackAnchorSymbol] = fallbackAnchor;
         return anchor;
+    },
+
+    /**
+     * @param {?WebInspector.Target} target
+     * @param {?string} scriptId
+     * @param {string} sourceURL
+     * @param {number} lineNumber
+     * @param {number=} columnNumber
+     * @param {string=} classes
+     * @return {!Element}
+     */
+    linkifyScriptLocation: function(target, scriptId, sourceURL, lineNumber, columnNumber, classes)
+    {
+        return this.maybeLinkifyScriptLocation(target, scriptId, sourceURL, lineNumber, columnNumber, classes)
+            || WebInspector.linkifyResourceAsNode(sourceURL, lineNumber, columnNumber, classes);
     },
 
     /**
@@ -200,11 +216,11 @@ WebInspector.Linkifier.prototype = {
      * @param {?WebInspector.Target} target
      * @param {!RuntimeAgent.CallFrame} callFrame
      * @param {string=} classes
-     * @return {!Element}
+     * @return {?Element}
      */
-    linkifyConsoleCallFrame: function(target, callFrame, classes)
+    maybeLinkifyConsoleCallFrame: function(target, callFrame, classes)
     {
-        return this.linkifyScriptLocation(target, callFrame.scriptId, callFrame.url, WebInspector.DebuggerModel.fromOneBased(callFrame.lineNumber), WebInspector.DebuggerModel.fromOneBased(callFrame.columnNumber), classes);
+        return this.maybeLinkifyScriptLocation(target, callFrame.scriptId, callFrame.url, callFrame.lineNumber, callFrame.columnNumber, classes);
     },
 
     /**
@@ -218,7 +234,7 @@ WebInspector.Linkifier.prototype = {
         console.assert(stackTrace.callFrames && stackTrace.callFrames.length);
 
         var topFrame = stackTrace.callFrames[0];
-        var fallbackAnchor = WebInspector.linkifyResourceAsNode(topFrame.url, WebInspector.DebuggerModel.fromOneBased(topFrame.lineNumber), WebInspector.DebuggerModel.fromOneBased(topFrame.columnNumber), classes);
+        var fallbackAnchor = WebInspector.linkifyResourceAsNode(topFrame.url, topFrame.lineNumber, topFrame.columnNumber, classes);
         if (target.isDetached())
             return fallbackAnchor;
 
@@ -522,7 +538,12 @@ WebInspector.linkifyStringAsFragment = function(string)
  */
 WebInspector.linkifyResourceAsNode = function(url, lineNumber, columnNumber, classes, tooltipText, urlDisplayName)
 {
-    var linkText = urlDisplayName ? urlDisplayName : url ? WebInspector.displayNameForURL(url) : WebInspector.UIString("(program)");
+    if (!url) {
+        var element = createElementWithClass("span", classes);
+        element.textContent = urlDisplayName || WebInspector.UIString("(unknown)");
+        return element;
+    }
+    var linkText = urlDisplayName || WebInspector.displayNameForURL(url);
     if (typeof lineNumber === "number")
         linkText += ":" + (lineNumber + 1);
     var anchor = WebInspector.linkifyURLAsNode(url, linkText, classes, false, tooltipText);

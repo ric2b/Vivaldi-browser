@@ -9,12 +9,12 @@
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/AudioParam.h"
 #include "platform/audio/AudioBus.h"
-#include "platform/audio/Spatializer.h"
+#include "platform/audio/StereoPanner.h"
 #include <memory>
 
 namespace blink {
 
-class AbstractAudioContext;
+class BaseAudioContext;
 
 // StereoPannerNode is an AudioNode with one input and one output. It is
 // specifically designed for equal-power stereo panning.
@@ -32,7 +32,7 @@ public:
 private:
     StereoPannerHandler(AudioNode&, float sampleRate, AudioParamHandler& pan);
 
-    std::unique_ptr<Spatializer> m_stereoPanner;
+    std::unique_ptr<StereoPanner> m_stereoPanner;
     RefPtr<AudioParamHandler> m_pan;
 
     AudioFloatArray m_sampleAccuratePanValues;
@@ -43,13 +43,13 @@ private:
 class StereoPannerNode final : public AudioNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static StereoPannerNode* create(AbstractAudioContext&, ExceptionState&);
+    static StereoPannerNode* create(BaseAudioContext&, ExceptionState&);
     DECLARE_VIRTUAL_TRACE();
 
     AudioParam* pan() const;
 
 private:
-    StereoPannerNode(AbstractAudioContext&);
+    StereoPannerNode(BaseAudioContext&);
 
     Member<AudioParam> m_pan;
 };

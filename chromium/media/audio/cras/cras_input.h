@@ -49,6 +49,9 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
   bool IsMuted() override;
 
  private:
+  // Checks if |device_id| corresponds to 'Default' choice.
+  bool IsDefault(const std::string& device_id) const;
+
   // Handles requests to get samples from the provided buffer.  This will be
   // called by the audio server when it has samples ready.
   static int SamplesReady(cras_client* client,
@@ -110,6 +113,10 @@ class MEDIA_EXPORT CrasInputStream : public AgcAudioStream<AudioInputStream> {
 
   // True if the stream is a system-wide loopback stream.
   bool is_loopback_;
+
+  // True if we want to mute system audio during capturing.
+  bool mute_system_audio_;
+  bool mute_done_;
 
   std::unique_ptr<AudioBus> audio_bus_;
 

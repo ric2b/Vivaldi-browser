@@ -75,6 +75,8 @@
 #include "components/policy/core/common/schema.h"
 #include "components/prefs/testing_pref_store.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
+#include "components/sync/api/fake_sync_change_processor.h"
+#include "components/sync/api/sync_error_factory_mock.h"
 #include "components/syncable_prefs/pref_service_mock_factory.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
@@ -94,8 +96,6 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
-#include "sync/api/fake_sync_change_processor.h"
-#include "sync/api/sync_error_factory_mock.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -182,7 +182,7 @@ class TestExtensionURLRequestContextGetter
   }
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override {
-    return BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+    return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   }
 
  protected:
@@ -194,18 +194,17 @@ class TestExtensionURLRequestContextGetter
 
 std::unique_ptr<KeyedService> BuildHistoryService(
     content::BrowserContext* context) {
-  Profile* profile = Profile::FromBrowserContext(context);
   return base::WrapUnique(new history::HistoryService(
       base::WrapUnique(new ChromeHistoryClient(
-          BookmarkModelFactory::GetForProfile(profile))),
-      base::WrapUnique(new history::ContentVisitDelegate(profile))));
+          BookmarkModelFactory::GetForBrowserContext(context))),
+      base::WrapUnique(new history::ContentVisitDelegate(context))));
 }
 
 std::unique_ptr<KeyedService> BuildInMemoryURLIndex(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
   std::unique_ptr<InMemoryURLIndex> in_memory_url_index(
-      new InMemoryURLIndex(BookmarkModelFactory::GetForProfile(profile),
+      new InMemoryURLIndex(BookmarkModelFactory::GetForBrowserContext(profile),
                            HistoryServiceFactory::GetForProfile(
                                profile, ServiceAccessType::IMPLICIT_ACCESS),
                            TemplateURLServiceFactory::GetForProfile(profile),
@@ -221,16 +220,16 @@ std::unique_ptr<KeyedService> BuildBookmarkModel(
   std::unique_ptr<BookmarkModel> bookmark_model(
       new BookmarkModel(base::WrapUnique(new ChromeBookmarkClient(
           profile, ManagedBookmarkServiceFactory::GetForProfile(profile)))));
-  bookmark_model->Load(profile->GetPrefs(),
-                       profile->GetPath(),
+  bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
                        profile->GetIOTaskRunner(),
-                       content::BrowserThread::GetMessageLoopProxyForThread(
+                       content::BrowserThread::GetTaskRunnerForThread(
                            content::BrowserThread::UI));
   return std::move(bookmark_model);
 }
 
 void TestProfileErrorCallback(WebDataServiceWrapper::ErrorType error_type,
-                              sql::InitStatus status) {
+                              sql::InitStatus status,
+                              const std::string& diagnostics) {
   NOTREACHED();
 }
 
@@ -239,8 +238,8 @@ std::unique_ptr<KeyedService> BuildWebDataService(
   const base::FilePath& context_path = context->GetPath();
   return base::WrapUnique(new WebDataServiceWrapper(
       context_path, g_browser_process->GetApplicationLocale(),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::DB),
       sync_start_util::GetFlareForSyncableService(context_path),
       &TestProfileErrorCallback));
 }
@@ -533,6 +532,11 @@ TestingProfile::~TestingProfile() {
 
   if (pref_proxy_config_tracker_.get())
     pref_proxy_config_tracker_->DetachFromPrefService();
+
+  // Shutdown storage partitions before we post a task to delete
+  // the resource context.
+  ShutdownStoragePartitions();
+
   // Failing a post == leaks == heapcheck failure. Make that an immediate test
   // failure.
   if (resource_context_) {
@@ -953,7 +957,7 @@ net::URLRequestContextGetter* TestingProfile::CreateRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
   return new net::TestURLRequestContextGetter(
-            BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 }
 
 net::URLRequestContextGetter*

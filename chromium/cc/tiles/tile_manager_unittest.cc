@@ -24,6 +24,7 @@
 #include "cc/test/fake_recording_source.h"
 #include "cc/test/fake_tile_manager.h"
 #include "cc/test/fake_tile_task_manager.h"
+#include "cc/test/layer_tree_settings_for_testing.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_layer_tree_host_base.h"
 #include "cc/test/test_shared_bitmap_manager.h"
@@ -46,9 +47,10 @@ namespace {
 class TileManagerTilePriorityQueueTest : public TestLayerTreeHostBase {
  public:
   LayerTreeSettings CreateSettings() override {
-    LayerTreeSettings settings;
+    LayerTreeSettingsForTesting settings;
     settings.create_low_res_tiling = true;
-    settings.verify_clip_tree_calculations = true;
+    settings.renderer_settings.buffer_to_texture_target_map =
+        DefaultBufferToTextureTargetMapForTesting();
     return settings;
   }
 
@@ -550,7 +552,7 @@ TEST_F(TileManagerTilePriorityQueueTest, RasterTilePriorityQueueInvalidation) {
             actual_required_for_activation_tiles);
 }
 
-TEST_F(TileManagerTilePriorityQueueTest, ActivationComesBeforeEventually) {
+TEST_F(TileManagerTilePriorityQueueTest, ActivationComesBeforeSoon) {
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
   gfx::Size layer_bounds(1000, 1000);
@@ -579,12 +581,11 @@ TEST_F(TileManagerTilePriorityQueueTest, ActivationComesBeforeEventually) {
       SMOOTHNESS_TAKES_PRIORITY, RasterTilePriorityQueue::Type::ALL));
   EXPECT_FALSE(queue->IsEmpty());
 
-  // Get all the tiles that are NOW or SOON and make sure they are ready to
-  // draw.
+  // Get all the tiles that are NOW and make sure they are ready to draw.
   std::vector<Tile*> all_tiles;
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
-    if (prioritized_tile.priority().priority_bin >= TilePriority::EVENTUALLY)
+    if (prioritized_tile.priority().priority_bin >= TilePriority::SOON)
       break;
 
     all_tiles.push_back(prioritized_tile.tile());
@@ -913,7 +914,9 @@ TEST_F(TileManagerTilePriorityQueueTest,
   host_impl()->pending_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
 
-  pending_child_layer->OnOpacityAnimated(0.0);
+  host_impl()->pending_tree()->property_trees()->effect_tree.OnOpacityAnimated(
+      0.0f, pending_child_layer->effect_tree_index(),
+      host_impl()->pending_tree());
 
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
@@ -1087,6 +1090,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
   settings.verify_clip_tree_calculations = true;
+  settings.verify_transform_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1198,6 +1202,7 @@ TEST_F(TileManagerTilePriorityQueueTest,
   client.SetTileSize(gfx::Size(30, 30));
   LayerTreeSettings settings;
   settings.verify_clip_tree_calculations = true;
+  settings.verify_transform_tree_calculations = true;
 
   std::unique_ptr<PictureLayerTilingSet> tiling_set =
       PictureLayerTilingSet::Create(
@@ -1323,12 +1328,12 @@ TEST_F(TileManagerTilePriorityQueueTest,
   EXPECT_TRUE(host_impl()->is_likely_to_require_a_draw());
 
   Resource* resource = host_impl()->resource_pool()->AcquireResource(
-      gfx::Size(256, 256), RGBA_8888);
+      gfx::Size(256, 256), RGBA_8888, gfx::ColorSpace());
 
   host_impl()->tile_manager()->CheckIfMoreTilesNeedToBePreparedForTesting();
   EXPECT_FALSE(host_impl()->is_likely_to_require_a_draw());
 
-  host_impl()->resource_pool()->ReleaseResource(resource, 0);
+  host_impl()->resource_pool()->ReleaseResource(resource);
 }
 
 TEST_F(TileManagerTilePriorityQueueTest, DefaultMemoryPolicy) {
@@ -1492,15 +1497,14 @@ class TileManagerTest : public TestLayerTreeHostBase {
       SharedBitmapManager* shared_bitmap_manager,
       TaskGraphRunner* task_graph_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager) override {
-    return base::WrapUnique(new MockLayerTreeHostImpl(
+    return base::MakeUnique<MockLayerTreeHostImpl>(
         settings, task_runner_provider, shared_bitmap_manager,
-        task_graph_runner, gpu_memory_buffer_manager));
+        task_graph_runner, gpu_memory_buffer_manager);
   }
 
-  // By default use SoftwareOutputSurface.
+  // By default use software compositing (no context provider).
   std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    return FakeOutputSurface::CreateSoftware(
-        base::WrapUnique(new SoftwareOutputDevice));
+    return FakeOutputSurface::CreateDelegatingSoftware();
   }
 
   MockLayerTreeHostImpl& MockHostImpl() {
@@ -1660,11 +1664,11 @@ TEST_F(TileManagerTest, LowResHasNoImage) {
 class ActivationTasksDoNotBlockReadyToDrawTest : public TileManagerTest {
  protected:
   std::unique_ptr<TaskGraphRunner> CreateTaskGraphRunner() override {
-    return base::WrapUnique(new SynchronousTaskGraphRunner());
+    return base::MakeUnique<SynchronousTaskGraphRunner>();
   }
 
   std::unique_ptr<OutputSurface> CreateOutputSurface() override {
-    return FakeOutputSurface::Create3d();
+    return FakeOutputSurface::CreateDelegating3d();
   }
 
   LayerTreeSettings CreateSettings() override {
@@ -1780,8 +1784,11 @@ TEST_F(PartialRasterTileManagerTest, CancelledTasksHaveNoContentId) {
   // Make sure that the tile we invalidated above was not returned to the pool
   // with its invalidated resource ID.
   host_impl()->resource_pool()->CheckBusyResources();
-  EXPECT_FALSE(host_impl()->resource_pool()->TryAcquireResourceWithContentId(
-      kInvalidatedId));
+  gfx::Rect total_invalidated_rect;
+  EXPECT_FALSE(host_impl()->resource_pool()->TryAcquireResourceForPartialRaster(
+      kInvalidatedId + 1, gfx::Rect(), kInvalidatedId,
+      &total_invalidated_rect));
+  EXPECT_EQ(gfx::Rect(), total_invalidated_rect);
 
   // Free our host_impl_ before the tile_task_manager we passed it, as it
   // will use that class in clean up.
@@ -1833,9 +1840,10 @@ void RunPartialRasterCheck(std::unique_ptr<LayerTreeHostImpl> host_impl,
       &raster_buffer_provider);
 
   // Ensure there's a resource with our |kInvalidatedId| in the resource pool.
-  host_impl->resource_pool()->ReleaseResource(
-      host_impl->resource_pool()->AcquireResource(kTileSize, RGBA_8888),
-      kInvalidatedId);
+  auto* resource = host_impl->resource_pool()->AcquireResource(
+      kTileSize, RGBA_8888, gfx::ColorSpace());
+  host_impl->resource_pool()->OnContentReplaced(resource->id(), kInvalidatedId);
+  host_impl->resource_pool()->ReleaseResource(resource);
   host_impl->resource_pool()->CheckBusyResources();
 
   scoped_refptr<FakeRasterSource> pending_raster_source =

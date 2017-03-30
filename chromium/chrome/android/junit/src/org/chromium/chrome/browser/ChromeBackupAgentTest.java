@@ -4,11 +4,12 @@
 
 package org.chromium.chrome.browser;
 
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.CoreMatchers.nullValue;
+
 import static org.junit.Assert.assertThat;
-import static org.junit.matchers.JUnitMatchers.containsString;
 
 import android.accounts.Account;
 import android.accounts.AccountManager;
@@ -20,7 +21,7 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.io.ByteArrayInputStream;
@@ -46,7 +47,7 @@ public class ChromeBackupAgentTest {
         ChromeTestBackupAgent(byte[] mChromeInputPrefs) {
             // This is protected in ContextWrapper, so can only be called within a derived
             // class.
-            attachBaseContext(Robolectric.application);
+            attachBaseContext(RuntimeEnvironment.application);
             mInputStream = new ByteArrayInputStream(mChromeInputPrefs);
             mOutputStream = new ByteArrayOutputStream();
         }
@@ -79,9 +80,9 @@ public class ChromeBackupAgentTest {
 
     @Before
     public void setUp() throws Exception {
-        ContextUtils.initApplicationContextForTests(Robolectric.application);
-        AccountManager manager =
-                (AccountManager) Robolectric.application.getSystemService(Context.ACCOUNT_SERVICE);
+        ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
+        AccountManager manager = (AccountManager) RuntimeEnvironment.application.getSystemService(
+                Context.ACCOUNT_SERVICE);
         manager.addAccountExplicitly(new Account("user1", "dummy"), null, null);
         manager.addAccountExplicitly(new Account("user2", "dummy"), null, null);
     }
@@ -93,7 +94,7 @@ public class ChromeBackupAgentTest {
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("google.services.username", "user1");
         editor.putString("junk", "junk");
-        editor.commit();
+        editor.apply();
 
         String chromeInputPrefs =
                 "{\"junk1\":\"abc\", "
@@ -128,7 +129,7 @@ public class ChromeBackupAgentTest {
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("junk", "junk");
-        editor.commit();
+        editor.apply();
 
         String chromeInputPrefs =
                 "{\"junk1\":\"abc\", "
@@ -158,7 +159,7 @@ public class ChromeBackupAgentTest {
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("google.services.username", "wrong_user");
         editor.putString("junk", "junk");
-        editor.commit();
+        editor.apply();
 
         String chromeInputPrefs =
                 "{\"junk1\":\"abc\", "

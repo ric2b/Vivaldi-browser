@@ -32,7 +32,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     // of speed performance on Android Nexus 7 as of Dec 2015.  ALWAYS_INLINE
     // didn't work in this case.
     if (const DOMWindow* window = impl->toDOMWindow()) {
-        if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), window, exceptionState)) {
+        if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), window, exceptionState)) {
             {% if not method.returns_promise %}
             exceptionState.throwIfNeeded();
             {% endif %}
@@ -40,7 +40,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
         }
     }
     {% else %}{# interface_name == 'EventTarget' #}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         {% if not method.returns_promise %}
         exceptionState.throwIfNeeded();
         {% endif %}
@@ -49,7 +49,7 @@ static void {{method.name}}{{method.overload_index}}Method{{world_suffix}}(const
     {% endif %}{# interface_name == 'EventTarget' #}
     {% endif %}
     {% if method.is_check_security_for_return_value %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), {{method.cpp_value}}, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), {{method.cpp_value}}, exceptionState)) {
         v8SetReturnValueNull(info);
         {% if not method.returns_promise %}
         exceptionState.throwIfNeeded();
@@ -208,7 +208,9 @@ if (!{{argument.name}}{% if argument.is_nullable %} && !isUndefinedOrNull(info[{
 {# Invalid enum values: http://www.w3.org/TR/WebIDL/#idl-enums #}
 {{declare_enum_validation_variable(argument.enum_values)}}
 if (!isValidEnum({{argument.name}}, validValues, WTF_ARRAY_LENGTH(validValues), "{{argument.enum_type}}", exceptionState)) {
+    {% if not method.returns_promise %}
     exceptionState.throwIfNeeded();
+    {% endif %}
     return;
 }
 {% elif argument.idl_type == 'Promise' %}
@@ -231,7 +233,11 @@ if (!{{argument.name}}.isUndefinedOrNull() && !{{argument.name}}.isObject()) {
 {% if method.is_call_with_script_state or method.is_call_with_this_value %}
 {# [ConstructorCallWith=ScriptState] #}
 {# [CallWith=ScriptState] #}
-ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+{% if method.is_static %}
+ScriptState* scriptState = ScriptState::forFunctionObject(info);
+{% else %}
+ScriptState* scriptState = ScriptState::forReceiverObject(info);
+{% endif %}
 {% endif %}
 {% if method.is_call_with_execution_context %}
 {# [ConstructorCallWith=ExecutionContext] #}
@@ -336,7 +342,7 @@ setMinimumArityTypeError(exceptionState, {{number_of_required_arguments}}, info.
 v8SetReturnValue(info, ScriptPromise::rejectRaw(ScriptState::current(info.GetIsolate()), {{create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments)}}));
 return;
 {%- else %}
-V8ThrowException::throwException({{create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments)}}, info.GetIsolate());
+V8ThrowException::throwException(info.GetIsolate(), {{create_minimum_arity_type_error_without_exception_state(method, number_of_required_arguments)}});
 return;
 {%- endif %}
 {%- endmacro %}
@@ -500,7 +506,11 @@ static void {{method.name}}MethodCallback{{world_suffix}}(const v8::FunctionCall
     {% endif %}
     {% endif %}{# not method.overloads #}
     {% if world_suffix in method.activity_logging_world_list %}
-    ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
+    {% if method.is_static %}
+    ScriptState* scriptState = ScriptState::forFunctionObject(info);
+    {% else %}
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
+    {% endif %}
     V8PerContextData* contextData = scriptState->perContextData();
     {% if method.activity_logging_world_check %}
     if (scriptState->world().isIsolatedWorld() && contextData && contextData->activityLogger())
@@ -541,7 +551,7 @@ static void {{method.name}}OriginSafeMethodGetter{{world_suffix}}(const v8::Prop
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
     {{cpp_class}}* impl = {{v8_class}}::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), impl, BindingSecurity::ErrorReportOption::DoNotReport)) {
         return;
     }
 
@@ -575,9 +585,6 @@ bool {{v8_class}}::PrivateScript::{{method.name}}Method({{method.argument_declar
 
     ScriptState::Scope scope(scriptState);
     v8::Local<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
-    if (holder.IsEmpty())
-        return false;
-
     {% for argument in method.arguments %}
     v8::Local<v8::Value> {{argument.handle}} = {{argument.private_script_cpp_value_to_v8_value}};
     {% endfor %}
@@ -677,6 +684,9 @@ v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTempla
 ExecutionContext* executionContext = toExecutionContext(prototypeObject->CreationContext());
 ASSERT(executionContext);
 {% for method in methods | conditionally_exposed(is_partial) %}
+{% filter secure_context(method.overloads.secure_context_test_all
+                         if method.overloads else
+                         method.secure_context_test) %}
 {% filter exposed(method.overloads.exposed_test_all
                   if method.overloads else
                   method.exposed_test) %}
@@ -687,6 +697,7 @@ const V8DOMConfiguration::MethodConfiguration {{method.name}}MethodConfiguration
 V8DOMConfiguration::installMethod(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, {{method.name}}MethodConfiguration);
 {% endfilter %}{# runtime_enabled() #}
 {% endfilter %}{# exposed() #}
+{% endfilter %}{# secure_context() #}
 {% endfor %}
 {% endif %}
 {%- endmacro %}

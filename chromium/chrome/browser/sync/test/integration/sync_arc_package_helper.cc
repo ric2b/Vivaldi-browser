@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "base/command_line.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -145,6 +146,8 @@ bool SyncArcPackageHelper::AllProfilesHaveSamePackageDetails() {
 
 void SyncArcPackageHelper::SetupArcService(Profile* profile, size_t id) {
   DCHECK(profile);
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      chromeos::switches::kEnableArc);
   const user_manager::User* user = CreateUserAndLogin(profile, id);
   // Have the user-to-profile mapping ready to avoid using the real profile
   // manager (which is null).
@@ -159,10 +162,20 @@ void SyncArcPackageHelper::SetupArcService(Profile* profile, size_t id) {
 
   ArcAppListPrefs* arc_app_list_prefs = ArcAppListPrefs::Get(profile);
   DCHECK(arc_app_list_prefs);
+
+  base::RunLoop run_loop;
+  arc_app_list_prefs->SetDefaltAppsReadyCallback(run_loop.QuitClosure());
+  run_loop.Run();
+
   instance_map_[profile].reset(new FakeAppInstance(arc_app_list_prefs));
   DCHECK(instance_map_[profile].get());
   arc_app_list_prefs->app_instance_holder()->SetInstance(
       instance_map_[profile].get());
+  // OnPackageListRefreshed will be called when AppInstance is ready.
+  // For fakeAppInstance we use SendRefreshPackageList to make sure that
+  // OnPackageListRefreshed will be called.
+  instance_map_[profile]->SendRefreshPackageList(
+      std::vector<arc::mojom::ArcPackageInfo>());
 }
 
 void SyncArcPackageHelper::InstallPackage(

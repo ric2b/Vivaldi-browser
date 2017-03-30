@@ -651,6 +651,9 @@ void DesktopNativeWidgetAura::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                              const gfx::ImageSkia& app_icon) {
   if (content_window_)
     desktop_window_tree_host_->SetWindowIcons(window_icon, app_icon);
+
+  NativeWidgetAura::AssignIconToAuraWindow(content_window_, window_icon,
+                                           app_icon);
 }
 
 void DesktopNativeWidgetAura::InitModalType(ui::ModalType modal_type) {
@@ -707,9 +710,9 @@ void DesktopNativeWidgetAura::StackAtTop() {
 void DesktopNativeWidgetAura::StackBelow(gfx::NativeView native_view) {
 }
 
-void DesktopNativeWidgetAura::SetShape(SkRegion* shape) {
+void DesktopNativeWidgetAura::SetShape(std::unique_ptr<SkRegion> shape) {
   if (content_window_)
-    desktop_window_tree_host_->SetShape(shape);
+    desktop_window_tree_host_->SetShape(std::move(shape));
 }
 
 void DesktopNativeWidgetAura::Close() {
@@ -743,6 +746,7 @@ void DesktopNativeWidgetAura::Hide() {
 
 void DesktopNativeWidgetAura::ShowMaximizedWithBounds(
       const gfx::Rect& restored_bounds) {
+  // IsVisible() should check the same objects here for visibility.
   if (!content_window_)
     return;
   desktop_window_tree_host_->ShowMaximizedWithBounds(restored_bounds);
@@ -750,6 +754,7 @@ void DesktopNativeWidgetAura::ShowMaximizedWithBounds(
 }
 
 void DesktopNativeWidgetAura::ShowWithWindowState(ui::WindowShowState state) {
+  // IsVisible() should check the same objects here for visibility.
   if (!content_window_)
     return;
   desktop_window_tree_host_->ShowWindowWithState(state);
@@ -757,7 +762,13 @@ void DesktopNativeWidgetAura::ShowWithWindowState(ui::WindowShowState state) {
 }
 
 bool DesktopNativeWidgetAura::IsVisible() const {
-  return content_window_ && desktop_window_tree_host_->IsVisible();
+  // The objects checked here should be the same objects changed in
+  // ShowWithWindowState and ShowMaximizedWithBounds. For example, MS Windows
+  // platform code might show the desktop window tree host early, meaning we
+  // aren't fully visible as we haven't shown the content window. Callers may
+  // short-circuit a call to show this widget if they think its already visible.
+  return content_window_ && content_window_->IsVisible() &&
+      desktop_window_tree_host_->IsVisible();
 }
 
 void DesktopNativeWidgetAura::Activate() {
@@ -786,6 +797,11 @@ bool DesktopNativeWidgetAura::IsAlwaysOnTop() const {
 void DesktopNativeWidgetAura::SetVisibleOnAllWorkspaces(bool always_visible) {
   if (content_window_)
     desktop_window_tree_host_->SetVisibleOnAllWorkspaces(always_visible);
+}
+
+bool DesktopNativeWidgetAura::IsVisibleOnAllWorkspaces() const {
+  return content_window_ &&
+         desktop_window_tree_host_->IsVisibleOnAllWorkspaces();
 }
 
 void DesktopNativeWidgetAura::Maximize() {

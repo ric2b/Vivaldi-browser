@@ -3,8 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//mojo/public/mojo_application.gni")
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/repack.gni")
 
@@ -15,23 +15,23 @@ source_set("lib") {
   ]
 
   deps = [
-    "//components/mus/common:mus_common",
     "//mash/public/interfaces",
+    "//services/ui/common:mus_common",
   ]
 
   public_deps = [
     "//base",
-    "//components/mus/public/interfaces",
     "//services/catalog/public/interfaces",
     "//services/shell/public/cpp:sources",
+    "//services/ui/public/interfaces",
   ]
 
   data_deps = [
-    "//components/mus",
+    "//services/ui",
   ]
 }
 
-mojo_native_application("app_driver") {
+service("app_driver") {
   sources = [
     "main.cc",
   ]
@@ -46,11 +46,12 @@ mojo_native_application("app_driver") {
 
   data_deps = [
     ":manifest",
+    "//ash/touch_hud/mus:touch_hud",
     "//mash/task_viewer",
   ]
 }
 
-mojo_application_manifest("manifest") {
-  application_name = "app_driver"
+service_manifest("manifest") {
+  name = "app_driver"
   source = "manifest.json"
 }

@@ -135,18 +135,32 @@ PasswordStoreChangeList PasswordStoreDefault::RemoveLoginsSyncedBetweenImpl(
   return changes;
 }
 
-PasswordStoreChangeList
-PasswordStoreDefault::DisableAutoSignInForAllLoginsImpl() {
+PasswordStoreChangeList PasswordStoreDefault::DisableAutoSignInForOriginsImpl(
+    const base::Callback<bool(const GURL&)>& origin_filter) {
   ScopedVector<autofill::PasswordForm> forms;
   PasswordStoreChangeList changes;
-  if (login_db_ && login_db_->GetAutoSignInLogins(&forms)) {
-    if (login_db_->DisableAutoSignInForAllLogins()) {
-      for (const auto* form : forms) {
-        changes.push_back(
-            PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
-      }
+  if (!login_db_ || !login_db_->GetAutoSignInLogins(&forms))
+    return changes;
+
+  std::set<GURL> origins_to_update;
+  for (const auto* form : forms) {
+    if (origin_filter.Run(form->origin))
+      origins_to_update.insert(form->origin);
+  }
+
+  std::set<GURL> origins_updated;
+  for (const GURL& origin : origins_to_update) {
+    if (login_db_->DisableAutoSignInForOrigin(origin))
+      origins_updated.insert(origin);
+  }
+
+  for (const auto* form : forms) {
+    if (origins_updated.count(form->origin)) {
+      changes.push_back(
+          PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
     }
   }
+
   return changes;
 }
 
@@ -157,22 +171,22 @@ bool PasswordStoreDefault::RemoveStatisticsCreatedBetweenImpl(
          login_db_->stats_table().RemoveStatsBetween(delete_begin, delete_end);
 }
 
-ScopedVector<autofill::PasswordForm> PasswordStoreDefault::FillMatchingLogins(
-    const autofill::PasswordForm& form) {
-  ScopedVector<autofill::PasswordForm> matched_forms;
+std::vector<std::unique_ptr<PasswordForm>>
+PasswordStoreDefault::FillMatchingLogins(const FormDigest& form) {
+  std::vector<std::unique_ptr<PasswordForm>> matched_forms;
   if (login_db_ && !login_db_->GetLogins(form, &matched_forms))
-    return ScopedVector<autofill::PasswordForm>();
+    return std::vector<std::unique_ptr<PasswordForm>>();
   return matched_forms;
 }
 
 bool PasswordStoreDefault::FillAutofillableLogins(
-    ScopedVector<PasswordForm>* forms) {
+    std::vector<std::unique_ptr<PasswordForm>>* forms) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   return login_db_ && login_db_->GetAutofillableLogins(forms);
 }
 
 bool PasswordStoreDefault::FillBlacklistLogins(
-    ScopedVector<PasswordForm>* forms) {
+    std::vector<std::unique_ptr<PasswordForm>>* forms) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   return login_db_ && login_db_->GetBlacklistLogins(forms);
 }

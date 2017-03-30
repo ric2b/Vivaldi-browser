@@ -38,9 +38,14 @@ class TemplateURLService;
 
 namespace ntp_tiles {
 
+using ParseJSONCallback = base::Callback<void(
+    const std::string& unsafe_json,
+    const base::Callback<void(std::unique_ptr<base::Value>)>& success_callback,
+    const base::Callback<void(const std::string&)>& error_callback)>;
+
 // Downloads and provides a list of suggested popular sites, for display on
-// the NTP when there are not enough personalized suggestions. Caches the
-// downloaded file on disk to avoid re-downloading on every startup.
+// the NTP when there are not enough personalized tiles. Caches the downloaded
+// file on disk to avoid re-downloading on every startup.
 class PopularSites : public net::URLFetcherDelegate {
  public:
   struct Site {
@@ -61,19 +66,24 @@ class PopularSites : public net::URLFetcherDelegate {
 
   using FinishedCallback = base::Callback<void(bool /* success */)>;
 
-  // When the suggestions have been fetched (from cache or URL) and parsed,
-  // invokes |callback|, on the same thread as the caller.
-  //
-  // Set |force_download| to enforce re-downloading the suggestions file, even
-  // if it already exists on disk.
   PopularSites(const scoped_refptr<base::SequencedWorkerPool>& blocking_pool,
                PrefService* prefs,
                const TemplateURLService* template_url_service,
                variations::VariationsService* variations_service,
                net::URLRequestContextGetter* download_context,
                const base::FilePath& directory,
-               bool force_download,
-               const FinishedCallback& callback);
+               ParseJSONCallback parse_json);
+
+  // Starts the process of retrieving popular sites. When they are available,
+  // invokes |callback| with the result, on the same thread as the caller. Never
+  // invokes |callback| before returning control to the caller, even if the
+  // result is immediately known.
+  //
+  // Set |force_download| to enforce re-downloading the popular sites file, even
+  // if it already exists on disk.
+  //
+  // Must be called at most once on a given PopularSites object.
+  void StartFetch(bool force_download, const FinishedCallback& callback);
 
   ~PopularSites() override;
 
@@ -104,18 +114,22 @@ class PopularSites : public net::URLFetcherDelegate {
   void ParseSiteList(std::unique_ptr<base::Value> json);
   void OnDownloadFailed();
 
+  // Parameters set from constructor.
+  scoped_refptr<base::TaskRunner> const blocking_runner_;
+  PrefService* const prefs_;
+  const TemplateURLService* const template_url_service_;
+  variations::VariationsService* const variations_;
+  net::URLRequestContextGetter* const download_context_;
+  base::FilePath const local_path_;
+  ParseJSONCallback parse_json_;
+
+  // Set by StartFetch() and called after fetch completes.
   FinishedCallback callback_;
+
   std::unique_ptr<net::URLFetcher> fetcher_;
   bool is_fallback_;
   std::vector<Site> sites_;
   GURL pending_url_;
-
-  base::FilePath local_path_;
-
-  PrefService* prefs_;
-  net::URLRequestContextGetter* download_context_;
-
-  scoped_refptr<base::TaskRunner> blocking_runner_;
 
   base::WeakPtrFactory<PopularSites> weak_ptr_factory_;
 

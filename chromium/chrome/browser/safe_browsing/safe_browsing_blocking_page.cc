@@ -27,7 +27,6 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/safe_browsing/threat_details.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
-#include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -35,6 +34,7 @@
 #include "chrome/grit/locale_settings.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
@@ -68,15 +68,8 @@ const char kSbDiagnosticUrl[] =
     "https://www.google.com/safebrowsing/diagnostic?site=%s&client=chromium";
 #endif
 
-// URL for malware and phishing, V2.
-const char kLearnMoreMalwareUrlV2[] =
-    "https://www.google.com/transparencyreport/safebrowsing/";
-const char kLearnMorePhishingUrlV2[] =
-    "https://www.google.com/transparencyreport/safebrowsing/";
-
-// Constants for the V4 phishing string upgrades.
-const char kSocialEngineeringTrial[] = "SafeBrowsingSocialEngineeringStrings";
-const char kSocialEngineeringEnabled[] = "Enabled";
+// URL for the Help Center article on Safe Browsing warnings.
+const char kLearnMore[] = "https://support.google.com/chrome/answer/99020";
 
 // After a safe browsing interstitial where the user opted-in to the report
 // but clicked "proceed anyway", we delay the call to
@@ -93,8 +86,6 @@ const char kEventNameOther[] = "safebrowsing_other_interstitial_";
 // Constants for the V4 phishing string upgrades.
 const char kReportPhishingErrorUrl[] =
     "https://www.google.com/safebrowsing/report_error/";
-const char kReportPhishingErrorTrial[] = "SafeBrowsingReportPhishingErrorLink";
-const char kReportPhishingErrorEnabled[] = "Enabled";
 
 base::LazyInstance<SafeBrowsingBlockingPage::UnsafeResourceMap>
     g_unsafe_resource_map = LAZY_INSTANCE_INITIALIZER;
@@ -184,8 +175,8 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
       rappor::LOW_FREQUENCY_SAFEBROWSING_RAPPOR_TYPE;
   reporting_info.deprecated_rappor_report_type =
       rappor::SAFEBROWSING_RAPPOR_TYPE;
-  set_metrics_helper(base::WrapUnique(new ChromeMetricsHelper(
-      web_contents, request_url(), reporting_info, GetSamplingEventName())));
+  set_metrics_helper(base::MakeUnique<ChromeMetricsHelper>(
+      web_contents, request_url(), reporting_info, GetSamplingEventName()));
   metrics_helper()->RecordUserDecision(
       security_interstitials::MetricsHelper::SHOW);
   metrics_helper()->RecordUserInteraction(
@@ -259,9 +250,7 @@ void SafeBrowsingBlockingPage::CommandReceived(const std::string& page_cmd) {
       // User pressed "Learn more".
       metrics_helper()->RecordUserInteraction(
           security_interstitials::MetricsHelper::SHOW_LEARN_MORE);
-      GURL learn_more_url(
-          interstitial_reason_ == SB_REASON_PHISHING ?
-          kLearnMorePhishingUrlV2 : kLearnMoreMalwareUrlV2);
+      GURL learn_more_url(kLearnMore);
       learn_more_url = google_util::AppendGoogleLocaleParam(
           learn_more_url, g_browser_process->GetApplicationLocale());
       OpenURLParams params(learn_more_url,
@@ -494,9 +483,8 @@ SafeBrowsingBlockingPage* SafeBrowsingBlockingPage::CreateBlockingPage(
 void SafeBrowsingBlockingPage::ShowBlockingPage(
     SafeBrowsingUIManager* ui_manager,
     const UnsafeResource& unsafe_resource) {
-  DVLOG(1) << __FUNCTION__ << " " << unsafe_resource.url.spec();
-  WebContents* web_contents = tab_util::GetWebContentsByFrameID(
-      unsafe_resource.render_process_host_id, unsafe_resource.render_frame_id);
+  DVLOG(1) << __func__ << " " << unsafe_resource.url.spec();
+  WebContents* web_contents = unsafe_resource.web_contents_getter.Run();
 
   InterstitialPage* interstitial =
       InterstitialPage::GetInterstitialPage(web_contents);
@@ -639,6 +627,8 @@ void SafeBrowsingBlockingPage::PopulateInterstitialStrings(
   load_time_data->SetBoolean(
       "overridable",
       !IsPrefEnabled(prefs::kSafeBrowsingProceedAnywayDisabled));
+  security_interstitials::common_string_util::PopulateNewIconStrings(
+      load_time_data);
 
   switch (interstitial_reason_) {
     case SB_REASON_MALWARE:
@@ -725,35 +715,20 @@ void SafeBrowsingBlockingPage::PopulateHarmfulLoadTimeData(
 
 void SafeBrowsingBlockingPage::PopulatePhishingLoadTimeData(
     base::DictionaryValue* load_time_data) {
-  bool use_social_engineering_strings =
-      base::FieldTrialList::FindFullName(kSocialEngineeringTrial) ==
-      kSocialEngineeringEnabled;
   load_time_data->SetBoolean("phishing", true);
-  load_time_data->SetString(
-      "heading", l10n_util::GetStringUTF16(use_social_engineering_strings
-                                               ? IDS_PHISHING_V4_HEADING
-                                               : IDS_PHISHING_V3_HEADING));
+  load_time_data->SetString("heading",
+                            l10n_util::GetStringUTF16(IDS_PHISHING_V4_HEADING));
   load_time_data->SetString(
       "primaryParagraph",
-      l10n_util::GetStringFUTF16(use_social_engineering_strings
-                                     ? IDS_PHISHING_V4_PRIMARY_PARAGRAPH
-                                     : IDS_PHISHING_V3_PRIMARY_PARAGRAPH,
+      l10n_util::GetStringFUTF16(IDS_PHISHING_V4_PRIMARY_PARAGRAPH,
                                  GetFormattedHostName()));
   load_time_data->SetString(
       "explanationParagraph",
-      l10n_util::GetStringFUTF16(IDS_PHISHING_V3_EXPLANATION_PARAGRAPH,
+      l10n_util::GetStringFUTF16(IDS_PHISHING_V4_EXPLANATION_PARAGRAPH,
                                  GetFormattedHostName()));
-
-  if (base::FieldTrialList::FindFullName(kReportPhishingErrorTrial) ==
-      kReportPhishingErrorEnabled) {
-    load_time_data->SetString(
-        "finalParagraph", l10n_util::GetStringUTF16(
-                              IDS_PHISHING_V4_PROCEED_AND_REPORT_PARAGRAPH));
-  } else {
-    load_time_data->SetString(
-        "finalParagraph",
-        l10n_util::GetStringUTF16(IDS_PHISHING_V3_PROCEED_PARAGRAPH));
-  }
+  load_time_data->SetString(
+      "finalParagraph",
+      l10n_util::GetStringUTF16(IDS_PHISHING_V4_PROCEED_AND_REPORT_PARAGRAPH));
 
   PopulateExtendedReportingOption(load_time_data);
 }

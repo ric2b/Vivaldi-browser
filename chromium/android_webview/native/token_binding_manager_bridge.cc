@@ -15,7 +15,9 @@
 #include "net/base/net_errors.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
+using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 
 namespace android_webview {
@@ -31,8 +33,7 @@ void OnKeyReady(const ScopedJavaGlobalRef<jobject>& callback,
   JNIEnv* env = base::android::AttachCurrentThread();
 
   if (status != net::OK || !key) {
-    Java_AwTokenBindingManager_onKeyReady(env, callback.obj(), nullptr,
-                                          nullptr);
+    Java_AwTokenBindingManager_onKeyReady(env, callback, nullptr, nullptr);
     return;
   }
 
@@ -46,8 +47,8 @@ void OnKeyReady(const ScopedJavaGlobalRef<jobject>& callback,
   ScopedJavaLocalRef<jbyteArray> jpublic_key = base::android::ToJavaByteArray(
       env, public_key.data(), public_key.size());
 
-  Java_AwTokenBindingManager_onKeyReady(env, callback.obj(), jprivate_key.obj(),
-                                        jpublic_key.obj());
+  Java_AwTokenBindingManager_onKeyReady(env, callback, jprivate_key,
+                                        jpublic_key);
 }
 
 // Indicates webview client that key deletion is complete.
@@ -56,7 +57,7 @@ void OnDeletionComplete(const ScopedJavaGlobalRef<jobject>& callback) {
   if (callback.is_null())
     return;
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AwTokenBindingManager_onDeletionComplete(env, callback.obj());
+  Java_AwTokenBindingManager_onDeletionComplete(env, callback);
 }
 
 }  // namespace

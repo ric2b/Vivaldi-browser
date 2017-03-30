@@ -118,30 +118,6 @@ void dispatchInputEventEditableContentChanged(Element* startRoot, Element* endRo
         dispatchInputEvent(endRoot, inputType, data, isComposing);
 }
 
-InputEvent::InputType inputTypeFromCommand(const CompositeEditCommand* command)
-{
-    if (command->isTypingCommand()) {
-        const TypingCommand* typingCommand = toTypingCommand(command);
-        // TODO(chongz): Separate command types into more detailed InputType.
-        switch (typingCommand->commandTypeOfOpenCommand()) {
-        case TypingCommand::DeleteSelection:
-        case TypingCommand::DeleteKey:
-        case TypingCommand::ForwardDeleteKey:
-            return InputEvent::InputType::DeleteContent;
-        case TypingCommand::InsertText:
-        case TypingCommand::InsertLineBreak:
-        case TypingCommand::InsertParagraphSeparator:
-        case TypingCommand::InsertParagraphSeparatorInQuotedContent:
-            return InputEvent::InputType::InsertText;
-        default:
-            return InputEvent::InputType::None;
-        }
-    }
-
-    // TODO(chongz): Handle other edit actions.
-    return InputEvent::InputType::None;
-}
-
 InputEvent::EventIsComposing isComposingFromCommand(const CompositeEditCommand* command)
 {
     if (command->isTypingCommand() && toTypingCommand(command)->compositionType() != TypingCommand::TextCompositionNone)
@@ -204,13 +180,6 @@ EditorClient& Editor::client() const
     if (Page* page = frame().page())
         return page->editorClient();
     return emptyEditorClient();
-}
-
-UndoStack* Editor::undoStack() const
-{
-    if (Page* page = frame().page())
-        return &page->undoStack();
-    return 0;
 }
 
 bool Editor::handleTextEvent(TextEvent* event)
@@ -311,14 +280,14 @@ bool Editor::canDeleteRange(const EphemeralRange& range) const
     if (!startContainer || !endContainer)
         return false;
 
-    if (!startContainer->hasEditableStyle() || !endContainer->hasEditableStyle())
+    if (!hasEditableStyle(*startContainer) || !hasEditableStyle(*endContainer))
         return false;
 
     if (range.isCollapsed()) {
         VisiblePosition start = createVisiblePosition(range.startPosition());
         VisiblePosition previous = previousPositionOf(start);
         // FIXME: We sometimes allow deletions at the start of editable roots, like when the caret is in an empty list item.
-        if (previous.isNull() || previous.deepEquivalent().anchorNode()->rootEditableElement() != startContainer->rootEditableElement())
+        if (previous.isNull() || rootEditableElement(*previous.deepEquivalent().anchorNode()) != rootEditableElement(*startContainer))
             return false;
     }
     return true;
@@ -343,7 +312,7 @@ bool Editor::isSelectTrailingWhitespaceEnabled() const
     return false;
 }
 
-bool Editor::deleteWithDirection(SelectionDirection direction, TextGranularity granularity, bool killRing, bool isTypingAction)
+bool Editor::deleteWithDirection(DeleteDirection direction, TextGranularity granularity, bool killRing, bool isTypingAction)
 {
     if (!canEdit())
         return false;
@@ -357,7 +326,7 @@ bool Editor::deleteWithDirection(SelectionDirection direction, TextGranularity g
         } else {
             if (killRing)
                 addToKillRing(selectedRange());
-            deleteSelectionWithSmartDelete(canSmartCopyOrDelete());
+            deleteSelectionWithSmartDelete(canSmartCopyOrDelete(), deletionInputTypeFromTextGranularity(direction, granularity));
             // Implicitly calls revealSelectionAfterEditingOperation().
         }
     } else {
@@ -367,15 +336,13 @@ bool Editor::deleteWithDirection(SelectionDirection direction, TextGranularity g
         if (killRing)
             options |= TypingCommand::KillRing;
         switch (direction) {
-        case DirectionForward:
-        case DirectionRight:
+        case DeleteDirection::Forward:
             DCHECK(frame().document());
             TypingCommand::forwardDeleteKeyPressed(*frame().document(), &editingState, options, granularity);
             if (editingState.isAborted())
                 return false;
             break;
-        case DirectionBackward:
-        case DirectionLeft:
+        case DeleteDirection::Backward:
             DCHECK(frame().document());
             TypingCommand::deleteKeyPressed(*frame().document(), options, granularity);
             break;
@@ -392,13 +359,16 @@ bool Editor::deleteWithDirection(SelectionDirection direction, TextGranularity g
     return true;
 }
 
-void Editor::deleteSelectionWithSmartDelete(bool smartDelete)
+void Editor::deleteSelectionWithSmartDelete(bool smartDelete, InputEvent::InputType inputType)
 {
     if (frame().selection().isNone())
         return;
 
+    const bool kMergeBlocksAfterDelete = true;
+    const bool kExpandForSpecialElements = false;
+    const bool kSanitizeMarkup = true;
     DCHECK(frame().document());
-    DeleteSelectionCommand::create(*frame().document(), smartDelete)->apply();
+    DeleteSelectionCommand::create(*frame().document(), smartDelete, kMergeBlocksAfterDelete, kExpandForSpecialElements, kSanitizeMarkup, inputType)->apply();
 }
 
 void Editor::pasteAsPlainText(const String& pastingText, bool smartReplace)
@@ -572,7 +542,7 @@ void Editor::replaceSelectionWithFragment(DocumentFragment* fragment, bool selec
     if (matchStyle)
         options |= ReplaceSelectionCommand::MatchStyle;
     DCHECK(frame().document());
-    ReplaceSelectionCommand::create(*frame().document(), fragment, options, EditActionPaste)->apply();
+    ReplaceSelectionCommand::create(*frame().document(), fragment, options, InputEvent::InputType::Paste)->apply();
     revealSelectionAfterEditingOperation();
 }
 
@@ -590,7 +560,7 @@ void Editor::replaceSelectionAfterDragging(DocumentFragment* fragment, bool smar
     if (plainText)
         options |= ReplaceSelectionCommand::MatchStyle;
     DCHECK(frame().document());
-    ReplaceSelectionCommand::create(*frame().document(), fragment, options, EditActionDrag)->apply();
+    ReplaceSelectionCommand::create(*frame().document(), fragment, options, InputEvent::InputType::Drag)->apply();
 }
 
 void Editor::moveSelectionAfterDragging(DocumentFragment* fragment, const Position& pos, bool smartInsert, bool smartDelete)
@@ -654,46 +624,46 @@ Element* Editor::findEventTargetFromSelection() const
     return findEventTargetFrom(frame().selection().selection());
 }
 
-void Editor::applyStyle(StylePropertySet* style, EditAction editingAction)
+void Editor::applyStyle(StylePropertySet* style, InputEvent::InputType inputType)
 {
     switch (frame().selection().getSelectionType()) {
     case NoSelection:
         // do nothing
         break;
     case CaretSelection:
-        computeAndSetTypingStyle(style, editingAction);
+        computeAndSetTypingStyle(style, inputType);
         break;
     case RangeSelection:
         if (style) {
             DCHECK(frame().document());
-            ApplyStyleCommand::create(*frame().document(), EditingStyle::create(style), editingAction)->apply();
+            ApplyStyleCommand::create(*frame().document(), EditingStyle::create(style), inputType)->apply();
         }
         break;
     }
 }
 
-void Editor::applyParagraphStyle(StylePropertySet* style, EditAction editingAction)
+void Editor::applyParagraphStyle(StylePropertySet* style, InputEvent::InputType inputType)
 {
     if (frame().selection().isNone() || !style)
         return;
     DCHECK(frame().document());
-    ApplyStyleCommand::create(*frame().document(), EditingStyle::create(style), editingAction, ApplyStyleCommand::ForceBlockProperties)->apply();
+    ApplyStyleCommand::create(*frame().document(), EditingStyle::create(style), inputType, ApplyStyleCommand::ForceBlockProperties)->apply();
 }
 
-void Editor::applyStyleToSelection(StylePropertySet* style, EditAction editingAction)
+void Editor::applyStyleToSelection(StylePropertySet* style, InputEvent::InputType inputType)
 {
     if (!style || style->isEmpty() || !canEditRichly())
         return;
 
-    applyStyle(style, editingAction);
+    applyStyle(style, inputType);
 }
 
-void Editor::applyParagraphStyleToSelection(StylePropertySet* style, EditAction editingAction)
+void Editor::applyParagraphStyleToSelection(StylePropertySet* style, InputEvent::InputType inputType)
 {
     if (!style || style->isEmpty() || !canEditRichly())
         return;
 
-    applyParagraphStyle(style, editingAction);
+    applyParagraphStyle(style, inputType);
 }
 
 bool Editor::selectionStartHasStyle(CSSPropertyID propertyID, const String& value) const
@@ -729,38 +699,19 @@ static void dispatchEditableContentChangedEvents(Element* startRoot, Element* en
         endRoot->dispatchEvent(Event::create(EventTypeNames::webkitEditableContentChanged));
 }
 
-void Editor::requestSpellcheckingAfterApplyingCommand(CompositeEditCommand* cmd)
-{
-    // Note: Request spell checking for and only for |ReplaceSelectionCommand|s
-    // created in |Editor::replaceSelectionWithFragment()|.
-    // TODO(xiaochengh): May also need to do this after dragging crbug.com/298046.
-    if (cmd->editingAction() != EditActionPaste)
-        return;
-    if (!spellChecker().isContinuousSpellCheckingEnabled())
-        return;
-    if (!SpellChecker::isSpellCheckingEnabledFor(cmd->endingSelection()))
-        return;
-    DCHECK(cmd->isReplaceSelectionCommand());
-    const EphemeralRange& insertedRange = toReplaceSelectionCommand(cmd)->insertedRange();
-    if (insertedRange.isNull())
-        return;
-    spellChecker().chunkAndMarkAllMisspellingsAndBadGrammar(cmd->endingSelection().rootEditableElement(), insertedRange);
-}
-
 void Editor::appliedEditing(CompositeEditCommand* cmd)
 {
     EventQueueScope scope;
     frame().document()->updateStyleAndLayout();
 
-    // Request spell checking after pasting before any further DOM change.
-    requestSpellcheckingAfterApplyingCommand(cmd);
+    // Request spell checking before any further DOM change.
+    spellChecker().markMisspellingsAfterApplyingCommand(*cmd);
 
     EditCommandComposition* composition = cmd->composition();
     DCHECK(composition);
     dispatchEditableContentChangedEvents(composition->startingRootEditableElement(), composition->endingRootEditableElement());
     // TODO(chongz): Filter empty InputType after spec is finalized.
-    // TODO(chongz): Fill in |data| field.
-    dispatchInputEventEditableContentChanged(composition->startingRootEditableElement(), composition->endingRootEditableElement(), inputTypeFromCommand(cmd), emptyString(), isComposingFromCommand(cmd));
+    dispatchInputEventEditableContentChanged(composition->startingRootEditableElement(), composition->endingRootEditableElement(), cmd->inputType(), cmd->textDataForInputEvent(), isComposingFromCommand(cmd));
     VisibleSelection newSelection(cmd->endingSelection());
 
     // Don't clear the typing style with this selection change. We do those things elsewhere if necessary.
@@ -776,8 +727,7 @@ void Editor::appliedEditing(CompositeEditCommand* cmd)
         // Only register a new undo command if the command passed in is
         // different from the last command
         m_lastEditCommand = cmd;
-        if (UndoStack* undoStack = this->undoStack())
-            undoStack->registerUndoStep(m_lastEditCommand->ensureComposition());
+        m_undoStack->registerUndoStep(m_lastEditCommand->ensureComposition());
     }
 
     respondToChangedContents(newSelection);
@@ -797,8 +747,7 @@ void Editor::unappliedEditing(EditCommandComposition* cmd)
         changeSelectionAfterCommand(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
 
     m_lastEditCommand = nullptr;
-    if (UndoStack* undoStack = this->undoStack())
-        undoStack->registerRedoStep(cmd);
+    m_undoStack->registerRedoStep(cmd);
     respondToChangedContents(newSelection);
 }
 
@@ -810,12 +759,17 @@ void Editor::reappliedEditing(EditCommandComposition* cmd)
     dispatchEditableContentChangedEvents(cmd->startingRootEditableElement(), cmd->endingRootEditableElement());
     dispatchInputEventEditableContentChanged(cmd->startingRootEditableElement(), cmd->endingRootEditableElement(), InputEvent::InputType::Redo, emptyString(), InputEvent::EventIsComposing::NotComposing);
 
+    // TODO(yosin): Since |dispatchEditableContentChangedEvents()| and
+    // |dispatchInputEventEditableContentChanged()|, we would like to know
+    // such case. Once we have a case, this |DCHECK()| should be replaced
+    // with if-statement.
+    DCHECK(frame().document());
     VisibleSelection newSelection(cmd->endingSelection());
-    changeSelectionAfterCommand(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
+    if (newSelection.isValidFor(*frame().document()))
+        changeSelectionAfterCommand(newSelection, FrameSelection::CloseTyping | FrameSelection::ClearTypingStyle);
 
     m_lastEditCommand = nullptr;
-    if (UndoStack* undoStack = this->undoStack())
-        undoStack->registerUndoStep(cmd);
+    m_undoStack->registerUndoStep(cmd);
     respondToChangedContents(newSelection);
 }
 
@@ -826,6 +780,7 @@ Editor* Editor::create(LocalFrame& frame)
 
 Editor::Editor(LocalFrame& frame)
     : m_frame(&frame)
+    , m_undoStack(UndoStack::create())
     , m_preventRevealSelection(0)
     , m_shouldStartNewKillRingSequence(false)
     // This is off by default, since most editors want this behavior (this matches IE but not FF).
@@ -846,6 +801,7 @@ void Editor::clear()
     frame().inputMethodController().clear();
     m_shouldStyleWithCSS = false;
     m_defaultParagraphSeparator = EditorParagraphSeparatorIsDiv;
+    m_undoStack->clear();
 }
 
 bool Editor::insertText(const String& text, KeyboardEvent* triggeringEvent)
@@ -928,7 +884,7 @@ void Editor::cut()
         } else {
             writeSelectionToPasteboard();
         }
-        deleteSelectionWithSmartDelete(canSmartCopyOrDelete());
+        deleteSelectionWithSmartDelete(canSmartCopyOrDelete(), InputEvent::InputType::Cut);
     }
 }
 
@@ -981,7 +937,9 @@ void Editor::performDelete()
     if (!canDelete())
         return;
     addToKillRing(selectedRange());
-    deleteSelectionWithSmartDelete(canSmartCopyOrDelete());
+    // TODO(chongz): |Editor::performDelete()| has no direction.
+    // https://github.com/w3c/editing/issues/130
+    deleteSelectionWithSmartDelete(canSmartCopyOrDelete(), InputEvent::InputType::DeleteContentBackward);
 
     // clear the "start new kill ring sequence" setting, because it was set to true
     // when the selection was updated by deleting the range
@@ -1060,28 +1018,22 @@ void Editor::copyImage(const HitTestResult& result)
 
 bool Editor::canUndo()
 {
-    if (UndoStack* undoStack = this->undoStack())
-        return undoStack->canUndo();
-    return false;
+    return m_undoStack->canUndo();
 }
 
 void Editor::undo()
 {
-    if (UndoStack* undoStack = this->undoStack())
-        undoStack->undo();
+    m_undoStack->undo();
 }
 
 bool Editor::canRedo()
 {
-    if (UndoStack* undoStack = this->undoStack())
-        return undoStack->canRedo();
-    return false;
+    return m_undoStack->canRedo();
 }
 
 void Editor::redo()
 {
-    if (UndoStack* undoStack = this->undoStack())
-        undoStack->redo();
+    m_undoStack->redo();
 }
 
 void Editor::setBaseWritingDirection(WritingDirection direction)
@@ -1098,7 +1050,7 @@ void Editor::setBaseWritingDirection(WritingDirection direction)
 
     MutableStylePropertySet* style = MutableStylePropertySet::create(HTMLQuirksMode);
     style->setProperty(CSSPropertyDirection, direction == LeftToRightWritingDirection ? "ltr" : direction == RightToLeftWritingDirection ? "rtl" : "inherit", false);
-    applyParagraphStyleToSelection(style, EditActionSetWritingDirection);
+    applyParagraphStyleToSelection(style, InputEvent::InputType::SetWritingDirection);
 }
 
 void Editor::revealSelectionAfterEditingOperation(const ScrollAlignment& alignment, RevealExtentOption revealExtentOption)
@@ -1201,7 +1153,7 @@ IntRect Editor::firstRectForRange(const EphemeralRange& range) const
     // start and end aren't on the same line, so go from start to the end of its line
     return IntRect(startCaretRect.x(),
         startCaretRect.y(),
-        startCaretRect.width() + extraWidthToEndOfLine,
+        (startCaretRect.width() + extraWidthToEndOfLine).toInt(),
         startCaretRect.height());
 }
 
@@ -1211,7 +1163,7 @@ IntRect Editor::firstRectForRange(const Range* range) const
     return firstRectForRange(EphemeralRange(range));
 }
 
-void Editor::computeAndSetTypingStyle(StylePropertySet* style, EditAction editingAction)
+void Editor::computeAndSetTypingStyle(StylePropertySet* style, InputEvent::InputType inputType)
 {
     if (!style || style->isEmpty()) {
         frame().selection().clearTypingStyle();
@@ -1233,7 +1185,7 @@ void Editor::computeAndSetTypingStyle(StylePropertySet* style, EditAction editin
     EditingStyle* blockStyle = typingStyle->extractAndRemoveBlockProperties();
     if (!blockStyle->isEmpty()) {
         DCHECK(frame().document());
-        ApplyStyleCommand::create(*frame().document(), blockStyle, editingAction)->apply();
+        ApplyStyleCommand::create(*frame().document(), blockStyle, inputType)->apply();
     }
 
     // Set the remaining style as the typing style.
@@ -1387,11 +1339,14 @@ void Editor::toggleOverwriteModeEnabled()
     frame().selection().setShouldShowBlockCursor(m_overwriteModeEnabled);
 }
 
+// TODO(tkent): This is a workaround of some crash bugs in the editing code,
+// which assumes a document has a valid HTML structure. We should make the
+// editing code more robust, and should remove this hack. crbug.com/580941.
 void Editor::tidyUpHTMLStructure(Document& document)
 {
     // hasEditableStyle() needs up-to-date ComputedStyle.
     document.updateStyleAndLayoutTree();
-    bool needsValidStructure = document.hasEditableStyle() || (document.documentElement() && document.documentElement()->hasEditableStyle());
+    bool needsValidStructure = hasEditableStyle(document) || (document.documentElement() && hasEditableStyle(*document.documentElement()));
     if (!needsValidStructure)
         return;
     Element* existingHead = nullptr;
@@ -1412,6 +1367,7 @@ void Editor::tidyUpHTMLStructure(Document& document)
     // non-<html> root elements under <body>, and the <body> works as
     // rootEditableElement.
     document.addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, "document.execCommand() doesn't work with an invalid HTML structure. It is corrected automatically."));
+    UseCounter::count(document, UseCounter::ExecCommandAltersHTMLStructure);
 
     Element* root = HTMLHtmlElement::create(document);
     if (existingHead)
@@ -1434,6 +1390,7 @@ DEFINE_TRACE(Editor)
 {
     visitor->trace(m_frame);
     visitor->trace(m_lastEditCommand);
+    visitor->trace(m_undoStack);
     visitor->trace(m_mark);
 }
 

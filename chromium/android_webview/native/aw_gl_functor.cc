@@ -9,6 +9,8 @@
 #include "jni/AwGLFunctor_jni.h"
 
 using base::android::AttachCurrentThread;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 
 extern "C" {
@@ -33,7 +35,7 @@ AwGLFunctor::AwGLFunctor(const JavaObjectWeakGlobalRef& java_ref)
     : java_ref_(java_ref),
       render_thread_manager_(
           this,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)) {
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   ++g_instance_count;
 }
@@ -49,7 +51,7 @@ bool AwGLFunctor::RequestInvokeGL(bool wait_for_completion) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return false;
-  return Java_AwGLFunctor_requestInvokeGL(env, obj.obj(), wait_for_completion);
+  return Java_AwGLFunctor_requestInvokeGL(env, obj, wait_for_completion);
 }
 
 void AwGLFunctor::DetachFunctorFromView() {
@@ -57,7 +59,7 @@ void AwGLFunctor::DetachFunctorFromView() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null())
-    Java_AwGLFunctor_detachFunctorFromView(env, obj.obj());
+    Java_AwGLFunctor_detachFunctorFromView(env, obj);
 }
 
 void AwGLFunctor::Destroy(JNIEnv* env,

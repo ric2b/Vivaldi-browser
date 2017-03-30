@@ -67,13 +67,6 @@ ChildFrameCompositingHelper::ChildFrameCompositingHelper(
 ChildFrameCompositingHelper::~ChildFrameCompositingHelper() {
 }
 
-BrowserPluginManager* ChildFrameCompositingHelper::GetBrowserPluginManager() {
-  if (!browser_plugin_)
-    return nullptr;
-
-  return BrowserPluginManager::Get();
-}
-
 blink::WebPluginContainer* ChildFrameCompositingHelper::GetContainer() {
   if (!browser_plugin_)
     return nullptr;
@@ -81,20 +74,14 @@ blink::WebPluginContainer* ChildFrameCompositingHelper::GetContainer() {
   return browser_plugin_->container();
 }
 
-int ChildFrameCompositingHelper::GetInstanceID() {
-  if (!browser_plugin_)
-    return 0;
-
-  return browser_plugin_->browser_plugin_instance_id();
-}
-
-void ChildFrameCompositingHelper::UpdateWebLayer(blink::WebLayer* layer) {
+void ChildFrameCompositingHelper::UpdateWebLayer(
+    std::unique_ptr<blink::WebLayer> layer) {
   if (GetContainer()) {
-    GetContainer()->setWebLayer(layer);
+    GetContainer()->setWebLayer(layer.get());
   } else if (frame_) {
-    frame_->setRemoteWebLayer(layer);
+    frame_->setRemoteWebLayer(layer.get());
   }
-  web_layer_.reset(layer);
+  web_layer_ = std::move(layer);
 }
 
 void ChildFrameCompositingHelper::CheckSizeAndAdjustLayerProperties(
@@ -141,8 +128,9 @@ void ChildFrameCompositingHelper::ChildFrameGone() {
     }
   }
 
-  blink::WebLayer* layer = new cc_blink::WebLayerImpl(crashed_layer);
-  UpdateWebLayer(layer);
+  std::unique_ptr<blink::WebLayer> layer(
+      new cc_blink::WebLayerImpl(crashed_layer));
+  UpdateWebLayer(std::move(layer));
 }
 
 // static
@@ -219,8 +207,13 @@ void ChildFrameCompositingHelper::OnSetSurface(
 
   surface_layer->SetSurfaceId(surface_id, scale_factor, frame_size);
   surface_layer->SetMasksToBounds(true);
-  blink::WebLayer* layer = new cc_blink::WebLayerImpl(surface_layer);
-  UpdateWebLayer(layer);
+  std::unique_ptr<cc_blink::WebLayerImpl> layer(
+      new cc_blink::WebLayerImpl(surface_layer));
+  // TODO(lfg): Investigate if it's possible to propagate the information about
+  // the child surface's opacity. https://crbug.com/629851.
+  layer->setOpaque(false);
+  layer->SetContentsOpaqueIsFixed(true);
+  UpdateWebLayer(std::move(layer));
 
   UpdateVisibility(true);
 

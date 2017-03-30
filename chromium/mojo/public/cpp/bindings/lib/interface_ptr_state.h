@@ -19,11 +19,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
-#include "mojo/public/cpp/bindings/lib/filter_chain.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
 #include "mojo/public/cpp/bindings/lib/router.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
@@ -107,13 +107,6 @@ class InterfacePtrState<Interface, false> {
   }
 
   bool HasAssociatedInterfaces() const { return false; }
-
-  bool WaitForIncomingResponse() {
-    ConfigureProxyIfNecessary();
-
-    DCHECK(router_);
-    return router_->WaitForIncomingMessage(MOJO_DEADLINE_INDEFINITE);
-  }
 
   // After this method is called, the object is in an invalid state and
   // shouldn't be reused.
@@ -263,13 +256,6 @@ class InterfacePtrState<Interface, true> {
 
   bool HasAssociatedInterfaces() const {
     return router_ ? router_->HasAssociatedEndpoints() : false;
-  }
-
-  bool WaitForIncomingResponse() {
-    ConfigureProxyIfNecessary();
-
-    DCHECK(router_);
-    return router_->WaitForIncomingMessage(MOJO_DEADLINE_INDEFINITE);
   }
 
   // After this method is called, the object is in an invalid state and

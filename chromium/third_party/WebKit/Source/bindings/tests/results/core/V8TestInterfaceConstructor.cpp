@@ -27,7 +27,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor::domTemplate, V8TestInterfaceConstructor::trace, V8TestInterfaceConstructor::traceWrappers, 0, 0, V8TestInterfaceConstructor::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceConstructor", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestInterfaceConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructor::domTemplate, V8TestInterfaceConstructor::trace, V8TestInterfaceConstructor::traceWrappers, 0, V8TestInterfaceConstructor::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceConstructor", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -37,12 +37,25 @@ const WrapperTypeInfo V8TestInterfaceConstructor::wrapperTypeInfo = { gin::kEmbe
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestInterfaceConstructor::s_wrapperTypeInfo = V8TestInterfaceConstructor::wrapperTypeInfo;
 
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestInterfaceConstructor>::value,
+    "TestInterfaceConstructor inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestInterfaceConstructor::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestInterfaceConstructor is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+
 namespace TestInterfaceConstructorV8Internal {
 
 static void constructor1(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ConstructionContext, "TestInterfaceConstructor", info.Holder(), info.GetIsolate());
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::create(scriptState, executionContext, document, exceptionState);
@@ -112,7 +125,7 @@ static void constructor2(const v8::FunctionCallbackInfo<v8::Value>& info)
             return;
         }
     }
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::create(scriptState, executionContext, document, doubleArg, stringArg, testInterfaceEmptyArg, dictionaryArg, sequenceStringArg, sequenceDictionaryArg, sequenceLongOrTestDictionaryArg, optionalDictionaryArg, optionalTestInterfaceEmptyArg, exceptionState);
@@ -141,7 +154,7 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info)
         if (!arg.prepare())
             return;
         if (UNLIKELY(numArgsPassed <= 1)) {
-            ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+            ScriptState* scriptState = ScriptState::forReceiverObject(info);
             ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
             Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
             TestInterfaceConstructor* impl = TestInterfaceConstructor::create(scriptState, executionContext, document, arg, exceptionState);
@@ -158,7 +171,7 @@ static void constructor3(const v8::FunctionCallbackInfo<v8::Value>& info)
         if (!optArg.prepare())
             return;
     }
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::create(scriptState, executionContext, document, arg, optArg, exceptionState);
@@ -188,7 +201,7 @@ static void constructor4(const v8::FunctionCallbackInfo<v8::Value>& info)
         if (!arg3.prepare())
             return;
     }
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::create(scriptState, executionContext, document, arg, arg2, arg3, exceptionState);
@@ -269,7 +282,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestInterfaceConstructorConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructorConstructor::domTemplate, V8TestInterfaceConstructor::trace, V8TestInterfaceConstructor::traceWrappers, 0, 0, V8TestInterfaceConstructor::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceConstructor", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestInterfaceConstructorConstructor::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestInterfaceConstructorConstructor::domTemplate, V8TestInterfaceConstructor::trace, V8TestInterfaceConstructor::traceWrappers, 0, V8TestInterfaceConstructor::preparePrototypeAndInterfaceObject, nullptr, "TestInterfaceConstructor", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -304,7 +317,7 @@ static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCall
         if (!arg.prepare())
             return;
         if (UNLIKELY(numArgsPassed <= 1)) {
-            ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+            ScriptState* scriptState = ScriptState::forReceiverObject(info);
             ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
             Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
             TestInterfaceConstructor* impl = TestInterfaceConstructor::createForJSConstructor(scriptState, executionContext, document, arg, exceptionState);
@@ -321,7 +334,7 @@ static void V8TestInterfaceConstructorConstructorCallback(const v8::FunctionCall
         if (!optArg.prepare())
             return;
     }
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     Document& document = *toDocument(currentExecutionContext(info.GetIsolate()));
     TestInterfaceConstructor* impl = TestInterfaceConstructor::createForJSConstructor(scriptState, executionContext, document, arg, optArg, exceptionState);
@@ -386,7 +399,6 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceConstructor::domTemplate(v8::Isol
 {
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceConstructorTemplate);
 }
-
 
 bool V8TestInterfaceConstructor::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

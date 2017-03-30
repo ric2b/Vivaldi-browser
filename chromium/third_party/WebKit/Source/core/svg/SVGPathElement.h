@@ -37,6 +37,7 @@ public:
     DECLARE_NODE_FACTORY(SVGPathElement);
 
     Path asPath() const override;
+    Path attributePath() const;
 
     float getTotalLength();
     SVGPointTearOff* getPointAtLength(float distance);
@@ -49,6 +50,8 @@ public:
 
     bool isPresentationAttribute(const QualifiedName&) const override;
     bool isPresentationAttributeWithSVGDOM(const QualifiedName&) const override;
+
+    FloatRect getBBox() override;
 
     DECLARE_VIRTUAL_TRACE();
 

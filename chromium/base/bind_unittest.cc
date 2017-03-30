@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -340,52 +341,18 @@ class BindTest : public ::testing::Test {
 
 StrictMock<NoRef>* BindTest::static_func_mock_ptr;
 
-// Sanity check that we can instantiate a callback for each arity.
-TEST_F(BindTest, ArityTest) {
-  Callback<int()> c0 = Bind(&Sum, 32, 16, 8, 4, 2, 1);
-  EXPECT_EQ(63, c0.Run());
+TEST_F(BindTest, BasicTest) {
+  Callback<int(int, int, int)> cb = Bind(&Sum, 32, 16, 8);
+  EXPECT_EQ(92, cb.Run(13, 12, 11));
 
-  Callback<int(int)> c1 = Bind(&Sum, 32, 16, 8, 4, 2);
-  EXPECT_EQ(75, c1.Run(13));
+  Callback<int(int, int, int, int, int, int)> c1 = Bind(&Sum);
+  EXPECT_EQ(69, c1.Run(14, 13, 12, 11, 10, 9));
 
-  Callback<int(int,int)> c2 = Bind(&Sum, 32, 16, 8, 4);
-  EXPECT_EQ(85, c2.Run(13, 12));
+  Callback<int(int, int, int)> c2 = Bind(c1, 32, 16, 8);
+  EXPECT_EQ(86, c2.Run(11, 10, 9));
 
-  Callback<int(int,int,int)> c3 = Bind(&Sum, 32, 16, 8);
-  EXPECT_EQ(92, c3.Run(13, 12, 11));
-
-  Callback<int(int,int,int,int)> c4 = Bind(&Sum, 32, 16);
-  EXPECT_EQ(94, c4.Run(13, 12, 11, 10));
-
-  Callback<int(int,int,int,int,int)> c5 = Bind(&Sum, 32);
-  EXPECT_EQ(87, c5.Run(13, 12, 11, 10, 9));
-
-  Callback<int(int,int,int,int,int,int)> c6 = Bind(&Sum);
-  EXPECT_EQ(69, c6.Run(13, 12, 11, 10, 9, 14));
-}
-
-// Test the Currying ability of the Callback system.
-TEST_F(BindTest, CurryingTest) {
-  Callback<int(int,int,int,int,int,int)> c6 = Bind(&Sum);
-  EXPECT_EQ(69, c6.Run(13, 12, 11, 10, 9, 14));
-
-  Callback<int(int,int,int,int,int)> c5 = Bind(c6, 32);
-  EXPECT_EQ(87, c5.Run(13, 12, 11, 10, 9));
-
-  Callback<int(int,int,int,int)> c4 = Bind(c5, 16);
-  EXPECT_EQ(94, c4.Run(13, 12, 11, 10));
-
-  Callback<int(int,int,int)> c3 = Bind(c4, 8);
-  EXPECT_EQ(92, c3.Run(13, 12, 11));
-
-  Callback<int(int,int)> c2 = Bind(c3, 4);
-  EXPECT_EQ(85, c2.Run(13, 12));
-
-  Callback<int(int)> c1 = Bind(c2, 2);
-  EXPECT_EQ(75, c1.Run(13));
-
-  Callback<int()> c0 = Bind(c1, 1);
-  EXPECT_EQ(63, c0.Run());
+  Callback<int()> c3 = Bind(c2, 4, 2, 1);
+  EXPECT_EQ(63, c3.Run());
 }
 
 // Test that currying the rvalue result of another Bind() works correctly.
@@ -797,7 +764,6 @@ struct CustomDeleter {
 
 using MoveOnlyTypesToTest =
     ::testing::Types<std::unique_ptr<DeleteCounter>,
-                     std::unique_ptr<DeleteCounter>,
                      std::unique_ptr<DeleteCounter, CustomDeleter>>;
 TYPED_TEST_CASE(BindMoveOnlyTypeTest, MoveOnlyTypesToTest);
 
@@ -1038,6 +1004,36 @@ TEST_F(BindTest, ArgumentCopiesAndMoves) {
   EXPECT_EQ(0, move_assigns);
 }
 
+TEST_F(BindTest, CapturelessLambda) {
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<int>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void(*)()>::value);
+  EXPECT_FALSE(internal::IsConvertibleToRunType<void(NoRef::*)()>::value);
+
+  auto f = []() {};
+  EXPECT_TRUE(internal::IsConvertibleToRunType<decltype(f)>::value);
+
+  int i = 0;
+  auto g = [i]() {};
+  EXPECT_FALSE(internal::IsConvertibleToRunType<decltype(g)>::value);
+
+  auto h = [](int, double) { return 'k'; };
+  EXPECT_TRUE((std::is_same<
+      char(int, double),
+      internal::ExtractCallableRunType<decltype(h)>>::value));
+
+  EXPECT_EQ(42, Bind([] { return 42; }).Run());
+  EXPECT_EQ(42, Bind([](int i) { return i * 7; }, 6).Run());
+
+  int x = 1;
+  base::Callback<void(int)> cb =
+      Bind([](int* x, int i) { *x *= i; }, Unretained(&x));
+  cb.Run(6);
+  EXPECT_EQ(6, x);
+  cb.Run(7);
+  EXPECT_EQ(42, x);
+}
+
 // Callback construction and assignment tests.
 //   - Construction from an InvokerStorageHolder should not cause ref/deref.
 //   - Assignment from other callback should only cause one ref
@@ -1065,17 +1061,12 @@ TEST_F(BindTest, WindowsCallingConventions) {
 }
 #endif
 
-#if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) && GTEST_HAS_DEATH_TEST
-
 // Test null callbacks cause a DCHECK.
 TEST(BindDeathTest, NullCallback) {
   base::Callback<void(int)> null_cb;
   ASSERT_TRUE(null_cb.is_null());
-  EXPECT_DEATH(base::Bind(null_cb, 42), "");
+  EXPECT_DCHECK_DEATH(base::Bind(null_cb, 42));
 }
-
-#endif  // (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)) &&
-        //     GTEST_HAS_DEATH_TEST
 
 }  // namespace
 }  // namespace base

@@ -27,12 +27,11 @@ class WebDatabaseService::BackendDelegate
       : web_database_service_(web_database_service),
         callback_thread_(base::ThreadTaskRunnerHandle::Get()) {}
 
-  void DBLoaded(sql::InitStatus status) override {
+  void DBLoaded(sql::InitStatus status,
+                const std::string& diagnostics) override {
     callback_thread_->PostTask(
-        FROM_HERE,
-        base::Bind(&WebDatabaseService::OnDatabaseLoadDone,
-                   web_database_service_,
-                   status));
+        FROM_HERE, base::Bind(&WebDatabaseService::OnDatabaseLoadDone,
+                              web_database_service_, status, diagnostics));
   }
  private:
   const base::WeakPtr<WebDatabaseService> web_database_service_;
@@ -133,23 +132,33 @@ void WebDatabaseService::RegisterDBErrorCallback(
   error_callbacks_.push_back(callback);
 }
 
-void WebDatabaseService::OnDatabaseLoadDone(sql::InitStatus status) {
-  if (status == sql::INIT_OK) {
+void WebDatabaseService::OnDatabaseLoadDone(sql::InitStatus status,
+                                            const std::string& diagnostics) {
+  // The INIT_OK_WITH_DATA_LOSS status is an initialization success but with
+  // suspected data loss, so we also run the error callbacks.
+  if (status != sql::INIT_OK) {
+    // Notify that the database load failed.
+    while (!error_callbacks_.empty()) {
+      // The profile error callback is a message box that runs in a nested run
+      // loop. While it's being displayed, other OnDatabaseLoadDone() will run
+      // (posted from WebDatabaseBackend::Delegate::DBLoaded()). We need to make
+      // sure that after the callback running the message box returns, it checks
+      // |error_callbacks_| before it accesses it.
+      DBLoadErrorCallback error_callback = error_callbacks_.back();
+      error_callbacks_.pop_back();
+      if (!error_callback.is_null())
+        error_callback.Run(status, diagnostics);
+    }
+  }
+
+  if (status == sql::INIT_OK || status == sql::INIT_OK_WITH_DATA_LOSS) {
     db_loaded_ = true;
 
-    for (size_t i = 0; i < loaded_callbacks_.size(); i++) {
-      if (!loaded_callbacks_[i].is_null())
-        loaded_callbacks_[i].Run();
+    while (!loaded_callbacks_.empty()) {
+      DBLoadedCallback loaded_callback = loaded_callbacks_.back();
+      loaded_callbacks_.pop_back();
+      if (!loaded_callback.is_null())
+        loaded_callback.Run();
     }
-
-    loaded_callbacks_.clear();
-  } else {
-    // Notify that the database load failed.
-    for (size_t i = 0; i < error_callbacks_.size(); i++) {
-      if (!error_callbacks_[i].is_null())
-        error_callbacks_[i].Run(status);
-    }
-
-    error_callbacks_.clear();
   }
 }

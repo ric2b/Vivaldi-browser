@@ -13,9 +13,8 @@
 
 namespace blink {
 
-ImageBitmapRenderingContext::ImageBitmapRenderingContext(HTMLCanvasElement* canvas, CanvasContextCreationAttributes attrs, Document& document)
-    : CanvasRenderingContext(canvas)
-    , m_hasAlpha(attrs.alpha())
+ImageBitmapRenderingContext::ImageBitmapRenderingContext(HTMLCanvasElement* canvas, const CanvasContextCreationAttributes& attrs, Document& document)
+    : CanvasRenderingContext(canvas, nullptr, attrs)
 { }
 
 ImageBitmapRenderingContext::~ImageBitmapRenderingContext() { }
@@ -27,6 +26,11 @@ void ImageBitmapRenderingContext::setCanvasGetContextResult(RenderingContext& re
 
 void ImageBitmapRenderingContext::transferFromImageBitmap(ImageBitmap* imageBitmap)
 {
+    if (!imageBitmap) {
+        m_image.release();
+        return;
+    }
+
     m_image = imageBitmap->bitmapImage();
     if (!m_image)
         return;
@@ -53,7 +57,7 @@ bool ImageBitmapRenderingContext::paint(GraphicsContext& gc, const IntRect& r)
 
     // With impl-side painting, it is unsafe to use a gpu-backed SkImage
     ASSERT(!m_image->imageForCurrentFrame()->isTextureBacked());
-    gc.drawImage(m_image.get(), r, nullptr, m_hasAlpha ? SkXfermode::kSrcOver_Mode : SkXfermode::kSrc_Mode);
+    gc.drawImage(m_image.get(), r, nullptr, creationAttributes().alpha() ? SkXfermode::kSrcOver_Mode : SkXfermode::kSrc_Mode);
 
     return true;
 }

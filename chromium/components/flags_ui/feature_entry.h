@@ -50,10 +50,12 @@ struct FeatureEntry {
 
     // Corresponds to a base::Feature and additional options [O_1, ..., O_n]
     // that specify variation parameters. Each of the options can specify a set
-    // of variation parameters. The entry will have n+2 states: Default,
-    // Enabled: V_1, ..., Enabled: V_n, Disabled. When not specified or set to
-    // Default, the normal default values of the feature and of the parameters
-    // are used.
+    // of variation parameters. The entry will have n+3 states: Default,
+    // Enabled, Enabled V_1, ..., Enabled: V_n, Disabled. When set to Default,
+    // the normal default values of the feature and of the parameters are used
+    // (possibly passed from the server in a trial config). When set to Enabled,
+    // the feature is overriden to be enabled and empty set of parameters is
+    // used boiling down to the default behavior in the code.
     FEATURE_WITH_VARIATIONS_VALUE,
   };
 
@@ -97,6 +99,10 @@ struct FeatureEntry {
     const char* description_text;
     const FeatureParam* params;
     int num_params;
+    // A variation id number in the format of
+    // VariationsHttpHeaderProvider::SetDefaultVariationIds or nullptr
+    // if you do not need to set any variation_id for this feature variation.
+    const char* variation_id;
   };
 
   // The internal name of the feature entry. This is never shown to the user.

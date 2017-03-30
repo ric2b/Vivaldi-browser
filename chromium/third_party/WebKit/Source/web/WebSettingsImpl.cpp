@@ -153,6 +153,11 @@ void WebSettingsImpl::setAutoZoomFocusedNodeToLegibleScale(bool autoZoomFocusedN
     m_autoZoomFocusedNodeToLegibleScale = autoZoomFocusedNodeToLegibleScale;
 }
 
+void WebSettingsImpl::setBrowserSideNavigationEnabled(bool enabled)
+{
+    m_settings->setBrowserSideNavigationEnabled(enabled);
+}
+
 void WebSettingsImpl::setTextAutosizingEnabled(bool enabled)
 {
     m_devToolsEmulator->setTextAutosizingEnabled(enabled);
@@ -542,11 +547,6 @@ void WebSettingsImpl::setMockGestureTapHighlightsEnabled(bool enabled)
     m_settings->setMockGestureTapHighlightsEnabled(enabled);
 }
 
-void WebSettingsImpl::setAccelerated2dCanvasEnabled(bool enabled)
-{
-    m_settings->setAccelerated2dCanvasEnabled(enabled);
-}
-
 void WebSettingsImpl::setAccelerated2dCanvasMSAASampleCount(int count)
 {
     m_settings->setAccelerated2dCanvasMSAASampleCount(count);
@@ -580,11 +580,6 @@ void WebSettingsImpl::setHyperlinkAuditingEnabled(bool enabled)
 void WebSettingsImpl::setAutoplayExperimentMode(const WebString& mode)
 {
     m_settings->setAutoplayExperimentMode(mode);
-}
-
-void WebSettingsImpl::setUnifiedTextCheckerEnabled(bool enabled)
-{
-    m_settings->setUnifiedTextCheckerEnabled(enabled);
 }
 
 void WebSettingsImpl::setCaretBrowsingEnabled(bool enabled)

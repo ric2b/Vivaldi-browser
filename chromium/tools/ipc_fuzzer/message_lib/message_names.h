@@ -7,8 +7,8 @@
 
 #include <stdint.h>
 
-#include <map>
 #include <string>
+#include <unordered_map>
 #include "base/logging.h"
 #include "base/macros.h"
 
@@ -20,7 +20,7 @@ class MessageNames {
   ~MessageNames();
   static MessageNames* GetInstance();
 
-  void Add(uint32_t type, const std::string& name) {
+  void Add(uint32_t type, const char* name) {
     name_map_[type] = name;
     type_map_[name] = type;
   }
@@ -46,8 +46,8 @@ class MessageNames {
   }
 
  private:
-  typedef std::map<uint32_t, std::string> TypeToNameMap;
-  typedef std::map<std::string, uint32_t> NameToTypeMap;
+  typedef std::unordered_map<uint32_t, std::string> TypeToNameMap;
+  typedef std::unordered_map<std::string, uint32_t> NameToTypeMap;
   TypeToNameMap name_map_;
   NameToTypeMap type_map_;
 

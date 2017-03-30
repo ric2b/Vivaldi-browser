@@ -44,8 +44,8 @@ void GLSurfaceTestSupport::InitializeOneOff() {
   use_osmesa = false;
 #endif
 
-  std::vector<GLImplementation> allowed_impls;
-  GetAllowedGLImplementations(&allowed_impls);
+  std::vector<GLImplementation> allowed_impls =
+      init::GetAllowedGLImplementations();
   DCHECK(!allowed_impls.empty());
 
   GLImplementation impl = allowed_impls[0];
@@ -72,7 +72,7 @@ void GLSurfaceTestSupport::InitializeOneOffImplementation(
 
   // This method may be called multiple times in the same process to set up
   // bindings in different ways.
-  ClearGLBindings();
+  init::ClearGLBindings();
 
   bool gpu_service_logging = false;
   bool disable_gl_drawing = false;
@@ -84,11 +84,6 @@ void GLSurfaceTestSupport::InitializeOneOffImplementation(
 // static
 void GLSurfaceTestSupport::InitializeOneOffWithMockBindings() {
   InitializeOneOffImplementation(kGLImplementationMockGL, false);
-}
-
-// static
-void GLSurfaceTestSupport::InitializeDynamicMockBindings(GLContext* context) {
-  CHECK(InitializeDynamicGLBindings(kGLImplementationMockGL, context));
 }
 
 }  // namespace gl

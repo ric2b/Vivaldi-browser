@@ -32,7 +32,6 @@
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventSender.h"
-#include "core/frame/Deprecation.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/SVGURIReference.h"
@@ -222,7 +221,7 @@ void SVGSMILElement::buildPendingResource()
 {
     clearResourceAndEventBaseReferences();
 
-    if (!inShadowIncludingDocument()) {
+    if (!isConnected()) {
         // Reset the target element if we are no longer in the document.
         setTargetElement(nullptr);
         return;
@@ -237,7 +236,7 @@ void SVGSMILElement::buildPendingResource()
         target = SVGURIReference::targetElementFromIRIString(href, treeScope(), &id);
     SVGElement* svgTarget = target && target->isSVGElement() ? toSVGElement(target) : nullptr;
 
-    if (svgTarget && !svgTarget->inShadowIncludingDocument())
+    if (svgTarget && !svgTarget->isConnected())
         svgTarget = nullptr;
 
     if (svgTarget != targetElement())
@@ -313,10 +312,12 @@ Node::InsertionNotificationRequest SVGSMILElement::insertedInto(ContainerNode* r
 {
     SVGElement::insertedInto(rootParent);
 
-    if (!rootParent->inShadowIncludingDocument())
+    if (!rootParent->isConnected())
         return InsertionDone;
 
-    Deprecation::countDeprecation(document(), UseCounter::SVGSMILElementInDocument);
+    UseCounter::count(document(), UseCounter::SVGSMILElementInDocument);
+    if (document().isLoadCompleted())
+        UseCounter::count(&document(), UseCounter::SVGSMILElementInsertedAfterLoad);
 
     setAttributeName(constructQualifiedName(this, fastGetAttribute(SVGNames::attributeNameAttr)));
     SVGSVGElement* owner = ownerSVGElement();
@@ -344,7 +345,7 @@ Node::InsertionNotificationRequest SVGSMILElement::insertedInto(ContainerNode* r
 
 void SVGSMILElement::removedFrom(ContainerNode* rootParent)
 {
-    if (rootParent->inShadowIncludingDocument()) {
+    if (rootParent->isConnected()) {
         clearResourceAndEventBaseReferences();
         clearConditions();
         setTargetElement(nullptr);
@@ -472,12 +473,15 @@ bool SVGSMILElement::parseCondition(const String& value, BeginOrEnd beginOrEnd)
     } else if (nameString == "begin" || nameString == "end") {
         if (baseID.isEmpty())
             return false;
+        UseCounter::count(&document(), UseCounter::SVGSMILBeginOrEndSyncbaseValue);
         type = Condition::Syncbase;
     } else if (nameString.startsWith("accesskey(")) {
         // FIXME: accesskey() support.
         type = Condition::AccessKey;
-    } else
+    } else {
+        UseCounter::count(&document(), UseCounter::SVGSMILBeginOrEndEventValue);
         type = Condition::EventBase;
+    }
 
     m_conditions.append(Condition::create(type, beginOrEnd, baseID, nameString, offset, repeat));
 
@@ -517,7 +521,7 @@ void SVGSMILElement::parseAttribute(const QualifiedName& name, const AtomicStrin
             parseBeginOrEnd(fastGetAttribute(SVGNames::endAttr), End);
         }
         parseBeginOrEnd(value.getString(), Begin);
-        if (inShadowIncludingDocument())
+        if (isConnected())
             connectSyncBaseConditions();
     } else if (name == SVGNames::endAttr) {
         if (!m_conditions.isEmpty()) {
@@ -525,7 +529,7 @@ void SVGSMILElement::parseAttribute(const QualifiedName& name, const AtomicStrin
             parseBeginOrEnd(fastGetAttribute(SVGNames::beginAttr), Begin);
         }
         parseBeginOrEnd(value.getString(), End);
-        if (inShadowIncludingDocument())
+        if (isConnected())
             connectSyncBaseConditions();
     } else if (name == SVGNames::onbeginAttr) {
         setAttributeEventListener(EventTypeNames::beginEvent, createAttributeEventListener(this, name, value, eventParameterName()));
@@ -559,7 +563,7 @@ void SVGSMILElement::svgAttributeChanged(const QualifiedName& attrName)
         if (m_targetElement)
             clearAnimatedType();
     } else if (attrName == SVGNames::beginAttr || attrName == SVGNames::endAttr) {
-        if (inShadowIncludingDocument()) {
+        if (isConnected()) {
             connectEventBaseConditions();
             if (attrName == SVGNames::beginAttr)
                 beginListChanged(elapsed());

@@ -9,12 +9,9 @@
 #include "device/usb/usb_device.h"
 #include "jni/ChromeUsbConnection_jni.h"
 
-namespace device {
+using base::android::ScopedJavaLocalRef;
 
-// static
-bool UsbDeviceHandleAndroid::RegisterJNI(JNIEnv* env) {
-  return RegisterNativesImpl(env);  // Generated in ChromeUsbConnection_jni.h
-}
+namespace device {
 
 // static
 scoped_refptr<UsbDeviceHandleAndroid> UsbDeviceHandleAndroid::Create(
@@ -23,9 +20,8 @@ scoped_refptr<UsbDeviceHandleAndroid> UsbDeviceHandleAndroid::Create(
     scoped_refptr<base::SequencedTaskRunner> blocking_task_runner,
     const base::android::JavaRef<jobject>& usb_connection) {
   ScopedJavaLocalRef<jobject> wrapper =
-      Java_ChromeUsbConnection_create(env, usb_connection.obj());
-  base::ScopedFD fd(
-      Java_ChromeUsbConnection_getFileDescriptor(env, wrapper.obj()));
+      Java_ChromeUsbConnection_create(env, usb_connection);
+  base::ScopedFD fd(Java_ChromeUsbConnection_getFileDescriptor(env, wrapper));
   return make_scoped_refptr(new UsbDeviceHandleAndroid(
       device, std::move(fd), blocking_task_runner, wrapper));
 }
@@ -48,7 +44,7 @@ void UsbDeviceHandleAndroid::CloseBlocking() {
 
 void UsbDeviceHandleAndroid::CloseConnection() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_ChromeUsbConnection_close(env, j_object_.obj());
+  Java_ChromeUsbConnection_close(env, j_object_);
   j_object_.Reset();
 }
 

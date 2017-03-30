@@ -7,6 +7,8 @@
 
 #include <memory>
 
+#include "base/macros.h"
+#include "ui/gl/gl_surface.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 
 namespace ui {
@@ -18,12 +20,13 @@ class X11SurfaceFactory : public SurfaceFactoryOzone {
   ~X11SurfaceFactory() override;
 
   // SurfaceFactoryOzone:
-
-  std::unique_ptr<SurfaceOzoneEGL> CreateEGLSurfaceForWidget(
+  scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLImplementation implementation,
       gfx::AcceleratedWidget widget) override;
-  bool LoadEGLGLES2Bindings(
-      AddGLLibraryCallback add_gl_library,
-      SetGLGetProcAddressProcCallback set_gl_get_proc_address) override;
+  scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLImplementation implementation,
+      const gfx::Size& size) override;
+  bool LoadEGLGLES2Bindings() override;
   intptr_t GetNativeDisplay() override;
 
  private:

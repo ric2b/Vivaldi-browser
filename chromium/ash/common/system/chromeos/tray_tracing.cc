@@ -4,18 +4,21 @@
 
 #include "ash/common/system/chromeos/tray_tracing.h"
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/system/tray/actionable_view.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm_shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -25,15 +28,23 @@ namespace tray {
 
 class DefaultTracingView : public ActionableView {
  public:
-  DefaultTracingView() {
+  explicit DefaultTracingView(SystemTrayItem* owner) : ActionableView(owner) {
     SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
                                           kTrayPopupPaddingHorizontal, 0,
                                           kTrayPopupPaddingBetweenItems));
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    image_ = new FixedSizedImageView(0, kTrayPopupItemHeight);
-    image_->SetImage(
-        bundle.GetImageNamed(IDR_AURA_UBER_TRAY_TRACING).ToImageSkia());
+    image_ =
+        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+    if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
+      // TODO(tdanderson): Update the icon used for tracing or remove it from
+      // the system menu. See crbug.com/625691.
+      image_->SetImage(CreateVectorIcon(gfx::VectorIconId::CODE, kMenuIconSize,
+                                        kMenuIconColor));
+    } else {
+      image_->SetImage(
+          bundle.GetImageNamed(IDR_AURA_UBER_TRAY_TRACING).ToImageSkia());
+    }
     AddChildView(image_);
 
     label_ = new views::Label();
@@ -51,6 +62,7 @@ class DefaultTracingView : public ActionableView {
     WmShell::Get()->RecordUserMetricsAction(
         UMA_STATUS_AREA_TRACING_DEFAULT_SELECTED);
     WmShell::Get()->system_tray_delegate()->ShowChromeSlow();
+    CloseSystemBubble();
     return true;
   }
 
@@ -88,7 +100,7 @@ bool TrayTracing::GetInitialVisibility() {
 views::View* TrayTracing::CreateDefaultView(LoginStatus status) {
   CHECK(default_ == NULL);
   if (tray_view() && tray_view()->visible())
-    default_ = new tray::DefaultTracingView();
+    default_ = new tray::DefaultTracingView(this);
   return default_;
 }
 

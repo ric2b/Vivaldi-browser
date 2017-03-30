@@ -73,8 +73,9 @@ class MockUpdateClient : public UpdateClient {
                      bool(const std::string& id, CrxUpdateItem* update_item));
   MOCK_CONST_METHOD1(IsUpdating, bool(const std::string& id));
   MOCK_METHOD0(Stop, void());
-  MOCK_METHOD3(SendUninstallPing,
-               void(const std::string& id, const Version& version, int reason));
+  MOCK_METHOD3(
+      SendUninstallPing,
+      void(const std::string& id, const base::Version& version, int reason));
 
  private:
   ~MockUpdateClient() override;
@@ -127,7 +128,13 @@ class ComponentUpdaterTest : public testing::Test {
 
 class OnDemandTester {
  public:
-  static bool OnDemand(ComponentUpdateService* cus, const std::string& id);
+  void OnDemand(ComponentUpdateService* cus, const std::string& id);
+  int error() const { return error_; }
+
+ private:
+  void OnDemandComplete(int error);
+
+  int error_ = 0;
 };
 
 MockInstaller::MockInstaller() {
@@ -148,9 +155,15 @@ MockServiceObserver::MockServiceObserver() {
 MockServiceObserver::~MockServiceObserver() {
 }
 
-bool OnDemandTester::OnDemand(ComponentUpdateService* cus,
+void OnDemandTester::OnDemand(ComponentUpdateService* cus,
                               const std::string& id) {
-  return cus->GetOnDemandUpdater().OnDemandUpdate(id);
+  cus->GetOnDemandUpdater().OnDemandUpdate(
+      id,
+      base::Bind(&OnDemandTester::OnDemandComplete, base::Unretained(this)));
+}
+
+void OnDemandTester::OnDemandComplete(int error) {
+  error_ = error;
 }
 
 std::unique_ptr<ComponentUpdateService> TestComponentUpdateServiceFactory(
@@ -243,12 +256,12 @@ TEST_F(ComponentUpdaterTest, RegisterComponent) {
 
   CrxComponent crx_component1;
   crx_component1.pk_hash.assign(abag_hash, abag_hash + arraysize(abag_hash));
-  crx_component1.version = Version("1.0");
+  crx_component1.version = base::Version("1.0");
   crx_component1.installer = installer;
 
   CrxComponent crx_component2;
   crx_component2.pk_hash.assign(jebg_hash, jebg_hash + arraysize(jebg_hash));
-  crx_component2.version = Version("0.9");
+  crx_component2.version = base::Version("0.9");
   crx_component2.installer = installer;
 
   // Quit after two update checks have fired.
@@ -274,8 +287,7 @@ TEST_F(ComponentUpdaterTest, RegisterComponent) {
 TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
   class LoopHandler {
    public:
-    LoopHandler(int max_cnt, const base::Closure& quit_closure)
-        : max_cnt_(max_cnt), quit_closure_(quit_closure) {}
+    LoopHandler(int max_cnt) : max_cnt_(max_cnt) {}
 
     void OnInstall(
         const std::string& ids,
@@ -284,13 +296,16 @@ TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
       completion_callback.Run(0);
       static int cnt = 0;
       ++cnt;
-      if (cnt >= max_cnt_)
-        quit_closure_.Run();
+      if (cnt >= max_cnt_) {
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::Bind(&LoopHandler::Quit, base::Unretained(this)));
+      }
     }
 
    private:
+    void Quit() { base::MessageLoop::current()->QuitWhenIdle(); }
+
     const int max_cnt_;
-    base::Closure quit_closure_;
   };
 
   base::HistogramTester ht;
@@ -300,27 +315,37 @@ TEST_F(ComponentUpdaterTest, OnDemandUpdate) {
 
   auto& cus = component_updater();
 
-  const std::string id = "jebgalgnebhfojomionfpkfelancnnkf";
-  EXPECT_FALSE(OnDemandTester::OnDemand(&cus, id));
+  // Tests calling OnDemand for an unregistered component. This call results in
+  // an error, which is recorded by the OnDemandTester instance. Since the
+  // component was not registered, the call is ignored for UMA metrics.
+  OnDemandTester ondemand_tester_component_not_registered;
+  ondemand_tester_component_not_registered.OnDemand(
+      &cus, "ihfokbkgjpifnbbojhneepfflplebdkc");
 
-  scoped_refptr<MockInstaller> installer(new MockInstaller());
+  const std::string id = "jebgalgnebhfojomionfpkfelancnnkf";
 
   using update_client::jebg_hash;
   CrxComponent crx_component;
   crx_component.pk_hash.assign(jebg_hash, jebg_hash + arraysize(jebg_hash));
-  crx_component.version = Version("0.9");
-  crx_component.installer = installer;
+  crx_component.version = base::Version("0.9");
+  crx_component.installer = new MockInstaller();
 
-  LoopHandler loop_handler(1, quit_closure());
+  LoopHandler loop_handler(1);
   EXPECT_CALL(update_client(),
               Install("jebgalgnebhfojomionfpkfelancnnkf", _, _))
       .WillOnce(Invoke(&loop_handler, &LoopHandler::OnInstall));
   EXPECT_CALL(update_client(), Stop()).Times(1);
 
   EXPECT_TRUE(cus.RegisterComponent(crx_component));
-  EXPECT_TRUE(OnDemandTester::OnDemand(&cus, id));
+  OnDemandTester ondemand_tester;
+  ondemand_tester.OnDemand(&cus, id);
 
-  RunThreads();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(
+      static_cast<int>(update_client::Error::ERROR_UPDATE_INVALID_ARGUMENT),
+      ondemand_tester_component_not_registered.error());
+  EXPECT_EQ(0, ondemand_tester.error());
 
   ht.ExpectUniqueSample("ComponentUpdater.Calls", 0, 1);
   ht.ExpectUniqueSample("ComponentUpdater.UpdateCompleteResult", 0, 1);
@@ -360,7 +385,7 @@ TEST_F(ComponentUpdaterTest, MaybeThrottle) {
   using update_client::jebg_hash;
   CrxComponent crx_component;
   crx_component.pk_hash.assign(jebg_hash, jebg_hash + arraysize(jebg_hash));
-  crx_component.version = Version("0.9");
+  crx_component.version = base::Version("0.9");
   crx_component.installer = installer;
 
   LoopHandler loop_handler(1, quit_closure());

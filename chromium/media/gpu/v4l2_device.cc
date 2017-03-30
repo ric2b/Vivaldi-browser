@@ -51,6 +51,9 @@ VideoPixelFormat V4L2Device::V4L2PixFmtToVideoPixelFormat(uint32_t pix_fmt) {
     case V4L2_PIX_FMT_YUV420M:
       return PIXEL_FORMAT_I420;
 
+    case V4L2_PIX_FMT_YVU420:
+      return PIXEL_FORMAT_YV12;
+
     case V4L2_PIX_FMT_RGB32:
       return PIXEL_FORMAT_ARGB;
 
@@ -72,6 +75,9 @@ uint32_t V4L2Device::VideoPixelFormatToV4L2PixFmt(VideoPixelFormat format) {
     case PIXEL_FORMAT_I420:
       return V4L2_PIX_FMT_YUV420M;
 
+    case PIXEL_FORMAT_YV12:
+      return V4L2_PIX_FMT_YVU420;
+
     default:
       LOG(FATAL) << "Add more cases as needed";
       return 0;
@@ -92,7 +98,10 @@ uint32_t V4L2Device::VideoCodecProfileToV4L2PixFmt(VideoCodecProfile profile,
     else
       return V4L2_PIX_FMT_VP8;
   } else if (profile >= VP9PROFILE_MIN && profile <= VP9PROFILE_MAX) {
-    return V4L2_PIX_FMT_VP9;
+    if (slice_based)
+      return V4L2_PIX_FMT_VP9_FRAME;
+    else
+      return V4L2_PIX_FMT_VP9;
   } else {
     LOG(FATAL) << "Add more cases as needed";
     return 0;
@@ -109,6 +118,9 @@ uint32_t V4L2Device::V4L2PixFmtToDrmFormat(uint32_t format) {
     case V4L2_PIX_FMT_YUV420:
     case V4L2_PIX_FMT_YUV420M:
       return DRM_FORMAT_YUV420;
+
+    case V4L2_PIX_FMT_YVU420:
+      return DRM_FORMAT_YVU420;
 
     case V4L2_PIX_FMT_RGB32:
       return DRM_FORMAT_ARGB8888;
@@ -274,6 +286,7 @@ V4L2Device::GetSupportedDecodeProfiles(const size_t num_formats,
         max_profile = VP8PROFILE_MAX;
         break;
       case V4L2_PIX_FMT_VP9:
+      case V4L2_PIX_FMT_VP9_FRAME:
         min_profile = VP9PROFILE_MIN;
         max_profile = VP9PROFILE_MAX;
         break;

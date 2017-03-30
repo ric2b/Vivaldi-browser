@@ -22,13 +22,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "core/dom/CrossThreadTask.h"
+#include "modules/webaudio/MediaElementAudioSourceNode.h"
+
+#include "core/dom/ExecutionContextTask.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeOutput.h"
-#include "modules/webaudio/MediaElementAudioSourceNode.h"
-#include "platform/Logging.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/audio/AudioUtilities.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Locker.h"
@@ -45,7 +45,7 @@ MediaElementAudioSourceHandler::MediaElementAudioSourceHandler(AudioNode& node, 
     , m_maybePrintCORSMessage(!m_passesCurrentSrcCORSAccessCheck)
     , m_currentSrcString(mediaElement.currentSrc().getString())
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     // Default to stereo. This could change depending on what the media element
     // .src is set to.
     addOutput(2);
@@ -72,7 +72,7 @@ void MediaElementAudioSourceHandler::dispose()
 void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels, float sourceSampleRate)
 {
     if (numberOfChannels != m_sourceNumberOfChannels || sourceSampleRate != m_sourceSampleRate) {
-        if (!numberOfChannels || numberOfChannels > AbstractAudioContext::maxNumberOfChannels() || !AudioUtilities::isValidAudioBufferSampleRate(sourceSampleRate)) {
+        if (!numberOfChannels || numberOfChannels > BaseAudioContext::maxNumberOfChannels() || !AudioUtilities::isValidAudioBufferSampleRate(sourceSampleRate)) {
             // process() will generate silence for these uninitialized values.
             DLOG(ERROR) << "setFormat(" << numberOfChannels << ", " << sourceSampleRate << ") - unhandled format change";
             // Synchronize with process().
@@ -99,7 +99,7 @@ void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels, float so
 
         {
             // The context must be locked when changing the number of output channels.
-            AbstractAudioContext::AutoLocker contextLocker(context());
+            BaseAudioContext::AutoLocker contextLocker(context());
 
             // Do any necesssary re-configuration to the output's number of channels.
             output(0).setNumberOfChannels(numberOfChannels);
@@ -109,7 +109,7 @@ void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels, float so
 
 bool MediaElementAudioSourceHandler::passesCORSAccessCheck()
 {
-    ASSERT(mediaElement());
+    DCHECK(mediaElement());
 
     return (mediaElement()->webMediaPlayer() && mediaElement()->webMediaPlayer()->didPassCORSAccessCheck())
         || m_passesCurrentSrcCORSAccessCheck;
@@ -117,7 +117,7 @@ bool MediaElementAudioSourceHandler::passesCORSAccessCheck()
 
 void MediaElementAudioSourceHandler::onCurrentSrcChanged(const KURL& currentSrc)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     // Synchronize with process().
     Locker<MediaElementAudioSourceHandler> locker(*this);
@@ -133,7 +133,7 @@ void MediaElementAudioSourceHandler::onCurrentSrcChanged(const KURL& currentSrc)
 
 bool MediaElementAudioSourceHandler::passesCurrentSrcCORSAccessCheck(const KURL& currentSrc)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     return context()->getSecurityOrigin() && context()->getSecurityOrigin()->canRequest(currentSrc);
 }
 
@@ -163,11 +163,11 @@ void MediaElementAudioSourceHandler::process(size_t numberOfFrames)
         // Grab data from the provider so that the element continues to make progress, even if
         // we're going to output silence anyway.
         if (m_multiChannelResampler.get()) {
-            ASSERT(m_sourceSampleRate != sampleRate());
+            DCHECK_NE(m_sourceSampleRate, sampleRate());
             m_multiChannelResampler->process(&provider, outputBus, numberOfFrames);
         } else {
             // Bypass the resampler completely if the source is at the context's sample-rate.
-            ASSERT(m_sourceSampleRate == sampleRate());
+            DCHECK_EQ(m_sourceSampleRate, sampleRate());
             provider.provideInput(outputBus, numberOfFrames);
         }
         // Output silence if we don't have access to the element.
@@ -201,13 +201,13 @@ void MediaElementAudioSourceHandler::unlock()
 
 // ----------------------------------------------------------------
 
-MediaElementAudioSourceNode::MediaElementAudioSourceNode(AbstractAudioContext& context, HTMLMediaElement& mediaElement)
+MediaElementAudioSourceNode::MediaElementAudioSourceNode(BaseAudioContext& context, HTMLMediaElement& mediaElement)
     : AudioSourceNode(context)
 {
     setHandler(MediaElementAudioSourceHandler::create(*this, mediaElement));
 }
 
-MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(AbstractAudioContext& context, HTMLMediaElement& mediaElement, ExceptionState& exceptionState)
+MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(BaseAudioContext& context, HTMLMediaElement& mediaElement, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 

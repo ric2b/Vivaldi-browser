@@ -16,7 +16,6 @@
 
 namespace blink {
 
-
 class CORE_EXPORT LongOrTestDictionary final {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
@@ -29,9 +28,9 @@ public:
     static LongOrTestDictionary fromLong(int);
 
     bool isTestDictionary() const { return m_type == SpecificTypeTestDictionary; }
-    TestDictionary getAsTestDictionary() const;
-    void setTestDictionary(TestDictionary);
-    static LongOrTestDictionary fromTestDictionary(TestDictionary);
+    const TestDictionary& getAsTestDictionary() const;
+    void setTestDictionary(const TestDictionary&);
+    static LongOrTestDictionary fromTestDictionary(const TestDictionary&);
 
     LongOrTestDictionary(const LongOrTestDictionary&);
     ~LongOrTestDictionary();

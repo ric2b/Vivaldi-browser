@@ -124,7 +124,8 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
 
   // Create resource pool.
-  *resource_pool = ResourcePool::Create(resource_provider, task_runner);
+  *resource_pool = ResourcePool::Create(resource_provider, task_runner,
+                                        ResourcePool::kDefaultExpirationDelay);
 
   switch (raster_buffer_provider_type_) {
     case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
@@ -146,7 +147,6 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
     case RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY:
       EXPECT_TRUE(compositor_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
-      EXPECT_TRUE(host_impl->GetRendererCapabilities().using_image);
 
       *raster_buffer_provider = ZeroCopyRasterBufferProvider::Create(
           resource_provider, PlatformColor::BestTextureFormat());
@@ -155,7 +155,6 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       EXPECT_TRUE(compositor_context_provider);
       EXPECT_TRUE(worker_context_provider);
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
-      EXPECT_TRUE(host_impl->GetRendererCapabilities().using_image);
 
       *raster_buffer_provider = base::MakeUnique<OneCopyRasterBufferProvider>(
           task_runner, compositor_context_provider, worker_context_provider,

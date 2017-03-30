@@ -10,14 +10,14 @@
 #include <memory>
 #include <utility>
 
-#include "ash/audio/sounds.h"
+#include "ash/aura/wm_window_aura.h"
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/wm_shell.h"
 #include "ash/high_contrast/high_contrast_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "base/callback.h"
@@ -96,6 +96,13 @@ using extensions::api::braille_display_private::StubBrailleController;
 namespace chromeos {
 
 namespace {
+
+// When this flag is set, system sounds will not be played.
+const char kAshDisableSystemSounds[] = "ash-disable-system-sounds";
+
+// When this flag is set, system sounds will be played whether the
+// ChromeVox is enabled or not.
+const char kAshEnableSystemSounds[] = "ash-enable-system-sounds";
 
 static chromeos::AccessibilityManager* g_accessibility_manager = NULL;
 
@@ -184,12 +191,12 @@ class ContentScriptLoader {
   }
 
  private:
-  void OnFileLoaded(bool success, const std::string& data) {
+  void OnFileLoaded(bool success, std::unique_ptr<std::string> data) {
     if (success) {
       RenderViewHost* render_view_host =
           RenderViewHost::FromID(render_process_id_, render_view_id_);
       if (render_view_host)
-        ExecuteScriptHelper(render_view_host, data, extension_id_);
+        ExecuteScriptHelper(render_view_host, *data, extension_id_);
     }
     Run();
   }
@@ -258,14 +265,14 @@ void InjectChromeVoxContentScript(
 
   const extensions::UserScriptList& content_scripts =
       extensions::ContentScriptsInfo::GetContentScripts(extension);
-  for (size_t i = 0; i < content_scripts.size(); i++) {
-    const extensions::UserScript& script = content_scripts[i];
-    if (web_contents && !script.MatchesURL(content_url))
+  for (const std::unique_ptr<extensions::UserScript>& script :
+       content_scripts) {
+    if (web_contents && !script->MatchesURL(content_url))
       continue;
-    for (size_t j = 0; j < script.js_scripts().size(); ++j) {
-      const extensions::UserScript::File& file = script.js_scripts()[j];
-      extensions::ExtensionResource resource = extension->GetResource(
-          file.relative_path());
+    for (const std::unique_ptr<extensions::UserScript::File>& file :
+         script->js_scripts()) {
+      extensions::ExtensionResource resource =
+          extension->GetResource(file->relative_path());
       loader->AppendScript(resource);
     }
   }
@@ -772,9 +779,16 @@ void AccessibilityManager::OnLocaleChanged() {
   EnableSpokenFeedback(true, ash::A11Y_NOTIFICATION_NONE);
 }
 
-void AccessibilityManager::PlayEarcon(int sound_key) {
+bool AccessibilityManager::PlayEarcon(int sound_key, PlaySoundOption option) {
   DCHECK(sound_key < chromeos::SOUND_COUNT);
-  ash::PlaySystemSoundIfSpokenFeedback(sound_key);
+  base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+  if (cl->HasSwitch(kAshDisableSystemSounds))
+    return false;
+  if (option == PlaySoundOption::SPOKEN_FEEDBACK_ENABLED &&
+      !IsSpokenFeedbackEnabled() && !cl->HasSwitch(kAshEnableSystemSounds)) {
+    return false;
+  }
+  return media::SoundsManager::Get()->Play(sound_key);
 }
 
 void AccessibilityManager::HandleAccessibilityGesture(ui::AXGesture gesture) {
@@ -1305,7 +1319,7 @@ base::TimeDelta AccessibilityManager::PlayShutdownSound() {
   if (!system_sounds_enabled_)
     return base::TimeDelta();
   system_sounds_enabled_ = false;
-  if (!ash::PlaySystemSoundIfSpokenFeedback(SOUND_SHUTDOWN))
+  if (!PlayEarcon(SOUND_SHUTDOWN, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED))
     return base::TimeDelta();
   return media::SoundsManager::Get()->GetDuration(SOUND_SHUTDOWN);
 }
@@ -1467,7 +1481,7 @@ void AccessibilityManager::OnShutdown(extensions::ExtensionRegistry* registry) {
 
 void AccessibilityManager::PostLoadChromeVox(Profile* profile) {
   // Do any setup work needed immediately after ChromeVox actually loads.
-  ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_ENABLED);
+  PlayEarcon(SOUND_SPOKEN_FEEDBACK_ENABLED, PlaySoundOption::ALWAYS);
 
   if (chrome_vox_loaded_on_lock_screen_ ||
       should_speak_chrome_vox_announcements_on_user_screen_) {
@@ -1497,7 +1511,7 @@ void AccessibilityManager::PostLoadChromeVox(Profile* profile) {
 
 void AccessibilityManager::PostUnloadChromeVox(Profile* profile) {
   // Do any teardown work needed immediately after ChromeVox actually unloads.
-  ash::PlaySystemSoundAlways(SOUND_SPOKEN_FEEDBACK_DISABLED);
+  PlayEarcon(SOUND_SPOKEN_FEEDBACK_DISABLED, PlaySoundOption::ALWAYS);
   // Clear the accessibility focus ring.
   AccessibilityFocusRingController::GetInstance()->SetFocusRing(
       std::vector<gfx::Rect>(),
@@ -1509,7 +1523,8 @@ void AccessibilityManager::OnChromeVoxPanelClosing() {
   chromevox_panel_widget_observer_.reset(nullptr);
   chromevox_panel_ = nullptr;
 
-  ash::Shelf* shelf = ash::Shelf::ForWindow(root_window);
+  ash::Shelf* shelf =
+      ash::Shelf::ForWindow(ash::WmWindowAura::Get(root_window));
   if (!shelf)
     return;
 

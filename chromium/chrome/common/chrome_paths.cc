@@ -25,6 +25,11 @@
 #include "ui/base/ui_base_paths.h"  // nogncheck
 #endif
 
+#if defined(OS_LINUX)
+#include "base/environment.h"
+#include "base/nix/xdg_util.h"
+#endif
+
 #if defined(OS_MACOSX)
 #include "base/mac/foundation_util.h"
 #endif
@@ -299,6 +304,9 @@ bool PathProvider(int key, base::FilePath* result) {
         return false;
       cur = cur.Append(kPepperFlashSystemBaseDirectory);
       cur = cur.Append(chrome::kPepperFlashPluginFilename);
+#elif defined(OS_LINUX)
+      cur = cur.Append(
+        FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
 #else
       // Chrome on iOS does not supports PPAPI binaries, return false.
       // TODO(wfh): If Adobe release PPAPI binaries for Linux, add support here.
@@ -571,12 +579,16 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif  // !defined(OS_ANDROID)
 #if defined(OS_LINUX)
     case chrome::FILE_COMPONENT_FLASH_HINT:
-      if (!PathService::Get(chrome::DIR_COMPONENT_UPDATED_PEPPER_FLASH_PLUGIN,
-                            &cur)) {
-        return false;
-      }
+    {
+      std::unique_ptr<base::Environment> env(base::Environment::Create());
+      cur = cur.Append(base::nix::GetXDGDirectory(env.get(),
+                                              base::nix::kXdgConfigHomeEnvVar,
+                                              base::nix::kDotConfigDir));
+      cur = cur.Append("google-chrome");
+      cur = cur.Append(kPepperFlashBaseDirectory);
       cur = cur.Append(kComponentUpdatedFlashHint);
       break;
+    }
 #endif  // defined(OS_LINUX)
 
     default:

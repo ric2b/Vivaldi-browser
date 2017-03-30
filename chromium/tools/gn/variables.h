@@ -37,6 +37,10 @@ extern const char kDefaultToolchain[];
 extern const char kDefaultToolchain_HelpShort[];
 extern const char kDefaultToolchain_Help[];
 
+extern const char kInvoker[];
+extern const char kInvoker_HelpShort[];
+extern const char kInvoker_Help[];
+
 extern const char kPythonPath[];
 extern const char kPythonPath_HelpShort[];
 extern const char kPythonPath_Help[];
@@ -56,6 +60,10 @@ extern const char kRootOutDir_Help[];
 extern const char kTargetCpu[];
 extern const char kTargetCpu_HelpShort[];
 extern const char kTargetCpu_Help[];
+
+extern const char kTargetName[];
+extern const char kTargetName_HelpShort[];
+extern const char kTargetName_Help[];
 
 extern const char kTargetOs[];
 extern const char kTargetOs_HelpShort[];
@@ -102,6 +110,10 @@ extern const char kBundleRootDir_Help[];
 extern const char kBundleResourcesDir[];
 extern const char kBundleResourcesDir_HelpShort[];
 extern const char kBundleResourcesDir_Help[];
+
+extern const char kBundleDepsFilter[];
+extern const char kBundleDepsFilter_HelpShort[];
+extern const char kBundleDepsFilter_Help[];
 
 extern const char kBundleExecutableDir[];
 extern const char kBundleExecutableDir_HelpShort[];
@@ -270,6 +282,16 @@ extern const char kVisibility_Help[];
 extern const char kWriteRuntimeDeps[];
 extern const char kWriteRuntimeDeps_HelpShort[];
 extern const char kWriteRuntimeDeps_Help[];
+
+// <Vivaldi>
+extern const char kDisabled[];
+extern const char kDisabled_HelpShort[];
+extern const char kDisabled_Help[];
+
+extern const char kHugeLink[];
+extern const char kHugeLink_HelpShort[];
+extern const char kHugeLink_Help[];
+// </Vivaldi>
 
 // -----------------------------------------------------------------------------
 

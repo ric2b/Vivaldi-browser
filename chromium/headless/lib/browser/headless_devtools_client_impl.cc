@@ -6,10 +6,12 @@
 
 #include <memory>
 
+#include "base/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/values.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 
 namespace headless {
@@ -33,6 +35,7 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       accessibility_domain_(this),
       animation_domain_(this),
       application_cache_domain_(this),
+      browser_domain_(this),
       cache_storage_domain_(this),
       console_domain_(this),
       css_domain_(this),
@@ -49,6 +52,7 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       inspector_domain_(this),
       io_domain_(this),
       layer_tree_domain_(this),
+      log_domain_(this),
       memory_domain_(this),
       network_domain_(this),
       page_domain_(this),
@@ -58,7 +62,10 @@ HeadlessDevToolsClientImpl::HeadlessDevToolsClientImpl()
       security_domain_(this),
       service_worker_domain_(this),
       tracing_domain_(this),
-      worker_domain_(this) {}
+      worker_domain_(this),
+      browser_main_thread_(content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::UI)),
+      weak_ptr_factory_(this) {}
 
 HeadlessDevToolsClientImpl::~HeadlessDevToolsClientImpl() {}
 
@@ -88,8 +95,10 @@ void HeadlessDevToolsClientImpl::DispatchProtocolMessage(
     NOTREACHED() << "Badly formed reply";
     return;
   }
-  if (!DispatchMessageReply(*message_dict) && !DispatchEvent(*message_dict))
+  if (!DispatchMessageReply(*message_dict) &&
+      !DispatchEvent(std::move(message), *message_dict)) {
     DLOG(ERROR) << "Unhandled protocol message: " << json_message;
+  }
 }
 
 bool HeadlessDevToolsClientImpl::DispatchMessageReply(
@@ -118,11 +127,12 @@ bool HeadlessDevToolsClientImpl::DispatchMessageReply(
 }
 
 bool HeadlessDevToolsClientImpl::DispatchEvent(
+    std::unique_ptr<base::Value> owning_message,
     const base::DictionaryValue& message_dict) {
   std::string method;
   if (!message_dict.GetString("method", &method))
     return false;
-  auto it = event_handlers_.find(method);
+  EventHandlerMap::const_iterator it = event_handlers_.find(method);
   if (it == event_handlers_.end()) {
     NOTREACHED() << "Unknown event: " << method;
     return false;
@@ -133,9 +143,22 @@ bool HeadlessDevToolsClientImpl::DispatchEvent(
       NOTREACHED() << "Badly formed event parameters";
       return false;
     }
-    it->second.Run(*result_dict);
+    // DevTools assumes event handling is async so we must post a task here or
+    // we risk breaking things.
+    browser_main_thread_->PostTask(
+        FROM_HERE, base::Bind(&HeadlessDevToolsClientImpl::DispatchEventTask,
+                              weak_ptr_factory_.GetWeakPtr(),
+                              base::Passed(std::move(owning_message)),
+                              &it->second, result_dict));
   }
   return true;
+}
+
+void HeadlessDevToolsClientImpl::DispatchEventTask(
+    std::unique_ptr<base::Value> owning_message,
+    const EventHandler* event_handler,
+    const base::DictionaryValue* result_dict) {
+  event_handler->Run(*result_dict);
 }
 
 void HeadlessDevToolsClientImpl::AgentHostClosed(
@@ -156,6 +179,10 @@ animation::Domain* HeadlessDevToolsClientImpl::GetAnimation() {
 
 application_cache::Domain* HeadlessDevToolsClientImpl::GetApplicationCache() {
   return &application_cache_domain_;
+}
+
+browser::Domain* HeadlessDevToolsClientImpl::GetBrowser() {
+  return &browser_domain_;
 }
 
 cache_storage::Domain* HeadlessDevToolsClientImpl::GetCacheStorage() {
@@ -220,6 +247,10 @@ io::Domain* HeadlessDevToolsClientImpl::GetIO() {
 
 layer_tree::Domain* HeadlessDevToolsClientImpl::GetLayerTree() {
   return &layer_tree_domain_;
+}
+
+log::Domain* HeadlessDevToolsClientImpl::GetLog() {
+  return &log_domain_;
 }
 
 memory::Domain* HeadlessDevToolsClientImpl::GetMemory() {

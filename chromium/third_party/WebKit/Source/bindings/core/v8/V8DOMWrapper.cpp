@@ -62,11 +62,8 @@ v8::Local<v8::Object> V8DOMWrapper::createWrapper(v8::Isolate* isolate, v8::Loca
         // V8PerContextData::createWrapperFromCache, though there is no need to
         // cache resulting objects or their constructors.
         const DOMWrapperWorld& world = DOMWrapperWorld::world(scope.context());
-        if (!type->domTemplate(isolate, world)->InstanceTemplate()->NewInstance(scope.context()).ToLocal(&wrapper)) {
-            // Nothing to do.
-        }
+        wrapper = type->domTemplate(isolate, world)->InstanceTemplate()->NewInstance(scope.context()).ToLocalChecked();
     }
-
     return wrapper;
 }
 
@@ -113,20 +110,23 @@ void V8WrapperInstantiationScope::securityCheck(v8::Isolate* isolate, v8::Local<
         // Sandbox detached frames - they can't create cross origin objects.
         LocalDOMWindow* callingWindow = currentDOMWindow(isolate);
         DOMWindow* targetWindow = toDOMWindow(contextForWrapper);
-        if (callingWindow->document()->getSecurityOrigin()->canAccessCheckSuborigins(targetWindow->document()->getSecurityOrigin()))
-            return;
-
         // TODO(jochen): Currently, Location is the only object for which we can reach this code path. Should be generalized.
         ExceptionState exceptionState(ExceptionState::ConstructionContext, "Location", contextForWrapper->Global(), isolate);
-        // We can't create a better message for a detached frame.
-        exceptionState.throwSecurityError(String(), String());
+        if (BindingSecurity::shouldAllowAccessToDetachedWindow(callingWindow, targetWindow, exceptionState))
+            return;
+
+        CHECK_EQ(SecurityError, exceptionState.code());
         exceptionState.throwIfNeeded();
         return;
     }
     const DOMWrapperWorld& currentWorld = DOMWrapperWorld::world(m_context);
     RELEASE_ASSERT(currentWorld.worldId() == DOMWrapperWorld::world(contextForWrapper).worldId());
-    if (currentWorld.isMainWorld()) {
-        RELEASE_ASSERT(BindingSecurity::shouldAllowAccessToFrame(isolate, currentDOMWindow(isolate), frame, DoNotReportSecurityError));
+    // TODO(jochen): Add the interface name here once this is generalized.
+    ExceptionState exceptionState(ExceptionState::ConstructionContext, nullptr, contextForWrapper->Global(), isolate);
+    if (currentWorld.isMainWorld() && !BindingSecurity::shouldAllowAccessToFrame(currentDOMWindow(isolate), frame, exceptionState)) {
+        CHECK_EQ(SecurityError, exceptionState.code());
+        exceptionState.throwIfNeeded();
+        return;
     }
 }
 

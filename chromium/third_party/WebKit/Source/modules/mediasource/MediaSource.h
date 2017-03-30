@@ -93,12 +93,13 @@ public:
     double duration() const override;
     TimeRanges* buffered() const override;
     TimeRanges* seekable() const override;
+    void onTrackChanged(TrackBase*) override;
 
     // EventTarget interface
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // ActiveDOMObject interface
@@ -110,7 +111,7 @@ public:
     // Used by SourceBuffer.
     void openIfInEndedState();
     bool isOpen() const;
-    void setSourceBufferActive(SourceBuffer*);
+    void setSourceBufferActive(SourceBuffer*, bool);
     HTMLMediaElement* mediaElement() const;
 
     // Used by MediaSourceRegistry.
@@ -145,7 +146,7 @@ private:
 
     Member<TimeRanges> m_liveSeekableRange;
 
-    bool m_isAddedToRegistry;
+    int m_addedToRegistryCounter;
 };
 
 } // namespace blink

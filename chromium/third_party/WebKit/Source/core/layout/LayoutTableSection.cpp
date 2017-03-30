@@ -119,13 +119,23 @@ LayoutTableSection::~LayoutTableSection()
 
 void LayoutTableSection::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)
 {
+    DCHECK(style()->display() == TABLE_FOOTER_GROUP || style()->display() == TABLE_ROW_GROUP || style()->display() == TABLE_HEADER_GROUP);
+
     LayoutTableBoxComponent::styleDidChange(diff, oldStyle);
     propagateStyleToAnonymousChildren();
 
-    // If border was changed, notify table.
+    if (!oldStyle)
+        return;
+
     LayoutTable* table = this->table();
-    if (table && !table->selfNeedsLayout() && !table->normalChildNeedsLayout() && oldStyle && oldStyle->border() != style()->border())
+    if (!table)
+        return;
+
+    if (!table->selfNeedsLayout() && !table->normalChildNeedsLayout() && oldStyle->border() != style()->border())
         table->invalidateCollapsedBorders();
+
+    if (LayoutTableBoxComponent::doCellsHaveDirtyWidth(*this, *table, diff, *oldStyle))
+        markAllCellsWidthsDirtyAndOrNeedsLayout(MarkDirtyAndNeedsLayout);
 }
 
 void LayoutTableSection::willBeRemovedFromTree()
@@ -558,7 +568,7 @@ void LayoutTableSection::updateRowsHeightHavingOnlySpanningCells(LayoutTableCell
 }
 
 // Distribute rowSpan cell height in rows those comes in rowSpan cell based on the ratio of row's height if
-// 1. RowSpan cell height is greater then the total height of rows in rowSpan cell
+// 1. RowSpan cell height is greater than the total height of rows in rowSpan cell
 void LayoutTableSection::distributeRowSpanHeightToRows(SpanningLayoutTableCells& rowSpanCells)
 {
     ASSERT(rowSpanCells.size());
@@ -591,8 +601,8 @@ void LayoutTableSection::distributeRowSpanHeightToRows(SpanningLayoutTableCells&
         unsigned spanningCellEndIndex = rowIndex + rowSpan;
         unsigned lastSpanningCellEndIndex = lastRowIndex + lastRowSpan;
 
-        // Only heightest spanning cell will distribute it's extra height in row if more then one spanning cells
-        // present at same level.
+        // Only the highest spanning cell will distribute its extra height in a row if more than one spanning cell
+        // is present at the same level.
         if (rowIndex == lastRowIndex && rowSpan == lastRowSpan)
             continue;
 
@@ -684,8 +694,8 @@ void LayoutTableSection::distributeRowSpanHeightToRows(SpanningLayoutTableCells&
 }
 
 // Find out the baseline of the cell
-// If the cell's baseline is more then the row's baseline then the cell's baseline become the row's baseline
-// and if the row's baseline goes out of the row's boundries then adjust row height accordingly.
+// If the cell's baseline is more than the row's baseline then the cell's baseline become the row's baseline
+// and if the row's baseline goes out of the row's boundaries then adjust row height accordingly.
 void LayoutTableSection::updateBaselineForCell(LayoutTableCell* cell, unsigned row, int& baselineDescent)
 {
     if (!cell->isBaselineAligned())
@@ -990,10 +1000,11 @@ void LayoutTableSection::layoutRows()
             rowLayoutObject->updateLayerTransformAfterLayout();
             if (isPaginated) {
                 paginationStrutOnRow = paginationStrutForRow(rowLayoutObject, LayoutUnit(m_rowPos[r]));
+                rowLayoutObject->setPaginationStrut(LayoutUnit(paginationStrutOnRow));
                 if (paginationStrutOnRow) {
                     // If there isn't room for at least one content row on a page with a header group, then
                     // we won't repeat the header on each page.
-                    if (!r && table()->header() && table()->sectionAbove(this) == table()->header())
+                    if (!r && table()->header() && table()->sectionAbove(this) == table()->header() && table()->header()->getPaginationBreakability() != AllowAnyBreaks)
                         state.setHeightOffsetForTableHeaders(state.heightOffsetForTableHeaders() - table()->header()->logicalHeight());
                     // If we have a header group we will paint it at the top of each page, move the rows
                     // down to accomodate it.
@@ -1086,7 +1097,7 @@ void LayoutTableSection::layoutRows()
                 // We'll also do a basic increase of the row height to accommodate the cell if it's bigger, but this isn't quite right
                 // either. It's at least stable though and won't result in an infinite # of relayouts that may never stabilize.
                 LayoutUnit oldLogicalHeight = cell->logicalHeight();
-                rowHeightIncreaseForPagination = std::max<int>(rowHeightIncreaseForPagination, oldLogicalHeight - rHeight);
+                rowHeightIncreaseForPagination = std::max<int>(rowHeightIncreaseForPagination, (oldLogicalHeight - rHeight).toInt());
                 cell->setLogicalHeight(LayoutUnit(rHeight));
                 cell->computeOverflow(oldLogicalHeight, false);
             }
@@ -1147,7 +1158,7 @@ int LayoutTableSection::paginationStrutForRow(LayoutTableRow* row, LayoutUnit lo
         // completely. No point in leaving a page completely blank.
         return 0;
     }
-    return paginationStrut;
+    return paginationStrut.toInt();
 }
 
 void LayoutTableSection::computeOverflowFromCells()
@@ -1224,6 +1235,17 @@ bool LayoutTableSection::recalcChildOverflowAfterStyleChange()
     if (childrenOverflowChanged)
         computeOverflowFromCells(totalRows, numEffCols);
     return childrenOverflowChanged;
+}
+
+void LayoutTableSection::markAllCellsWidthsDirtyAndOrNeedsLayout(WhatToMarkAllCells whatToMark)
+{
+    for (LayoutTableRow* row = firstRow(); row; row = row->nextRow()) {
+        for (LayoutTableCell* cell = row->firstCell(); cell; cell = cell->nextCell()) {
+            cell->setPreferredLogicalWidthsDirty();
+            if (whatToMark == MarkDirtyAndNeedsLayout)
+                cell->setChildNeedsLayout();
+        }
+    }
 }
 
 int LayoutTableSection::calcBlockDirectionOuterBorder(BlockBorderSide side) const
@@ -1351,7 +1373,7 @@ int LayoutTableSection::firstLineBoxBaseline() const
         const CellStruct& cs = firstRow.at(i);
         const LayoutTableCell* cell = cs.primaryCell();
         if (cell)
-            firstLineBaseline = std::max<int>(firstLineBaseline, cell->logicalTop() + cell->borderBefore() + cell->paddingBefore() + cell->contentLogicalHeight());
+            firstLineBaseline = std::max<int>(firstLineBaseline, (cell->logicalTop() + cell->borderBefore() + cell->paddingBefore() + cell->contentLogicalHeight()).toInt());
     }
 
     return firstLineBaseline;
@@ -1695,7 +1717,7 @@ void LayoutTableSection::setLogicalPositionForCell(LayoutTableCell* cell, unsign
     cell->setLogicalLocation(cellLocation);
 }
 
-bool LayoutTableSection::hasRepeatingHeaderGroup() const
+bool LayoutTableSection::isRepeatingHeaderGroup() const
 {
     if (getPaginationBreakability() == LayoutBox::AllowAnyBreaks)
         return false;
@@ -1712,7 +1734,7 @@ bool LayoutTableSection::hasRepeatingHeaderGroup() const
     // If the first row of the section after the header group doesn't fit on the page, then
     // don't repeat the header on each page. See https://drafts.csswg.org/css-tables-3/#repeated-headers
     LayoutTableSection* sectionBelow = table()->sectionBelow(this);
-    if (sectionBelow && sectionBelow->paginationStrutForRow(sectionBelow->firstRow(), sectionBelow->logicalTop()))
+    if (sectionBelow && sectionBelow->firstRow() && sectionBelow->firstRow()->paginationStrut())
         return false;
 
     return true;
@@ -1725,7 +1747,7 @@ bool LayoutTableSection::mapToVisualRectInAncestorSpace(const LayoutBoxModelObje
     // Repeating table headers are painted once per fragmentation page/column. This does not go through the regular fragmentation machinery,
     // so we need special code to expand the invalidation rect to contain all positions of the header in all columns.
     // Note that this is in flow thread coordinates, not visual coordinates. The enclosing LayoutFlowThread will convert to visual coordinates.
-    if (table()->header() == this && hasRepeatingHeaderGroup())
+    if (table()->header() == this && isRepeatingHeaderGroup())
         rect.setHeight(table()->logicalHeight());
     return LayoutTableBoxComponent::mapToVisualRectInAncestorSpace(ancestor, rect, flags);
 }

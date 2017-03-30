@@ -5,25 +5,15 @@
 #ifndef EXTENSIONS_COMMON_FEATURES_API_FEATURE_H_
 #define EXTENSIONS_COMMON_FEATURES_API_FEATURE_H_
 
-#include <string>
-
 #include "extensions/common/features/simple_feature.h"
 
 namespace extensions {
 
-class APIFeature : public SimpleFeature {
- public:
-  APIFeature();
-  ~APIFeature() override;
-
-  // extensions::Feature:
-  bool IsInternal() const override;
-
-  std::string Parse(const base::DictionaryValue* value) override;
-
- private:
-  bool internal_;
-};
+// TODO(devlin): APIFeatures are just SimpleFeatures now. However, there's a
+// bunch of stuff (including the feature compiler) that relies on the presence
+// of an APIFeature class. For now, just typedef this, but eventually we should
+// remove it.
+using APIFeature = SimpleFeature;
 
 }  // namespace extensions
 

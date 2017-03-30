@@ -20,26 +20,27 @@
 namespace {
 const char kFooClassPath[] = "org/chromium/foo/Foo";
 // Leaking this jclass as we cannot use LazyInstance from some threads.
-jclass g_Foo_clazz = NULL;
-#define Foo_clazz(env) g_Foo_clazz
+base::subtle::AtomicWord g_Foo_clazz __attribute__((unused)) = 0;
+#define Foo_clazz(env) base::android::LazyGetClass(env, kFooClassPath, &g_Foo_clazz)
 
 }  // namespace
 
 // Step 2: method stubs.
 
-static void DoSomething(JNIEnv* env, const JavaParamRef<jclass>& jcaller,
-    const JavaParamRef<jobject>& callback);
-
-static void Java_org_chromium_foo_Foo_nativeDoSomething(JNIEnv* env, jclass
+static void DoSomething(JNIEnv* env, const base::android::JavaParamRef<jclass>&
     jcaller,
+    const base::android::JavaParamRef<jobject>& callback);
+
+extern "C" __attribute__((visibility("default")))
+void Java_org_chromium_foo_Foo_nativeDoSomething(JNIEnv* env, jclass jcaller,
     jobject callback) {
-  return DoSomething(env, JavaParamRef<jclass>(env, jcaller),
-      JavaParamRef<jobject>(env, callback));
+  return DoSomething(env, base::android::JavaParamRef<jclass>(env, jcaller),
+      base::android::JavaParamRef<jobject>(env, callback));
 }
 
 static base::subtle::AtomicWord g_Foo_calledByNative = 0;
-static void Java_Foo_calledByNative(JNIEnv* env, jobject callback) {
-  /* Must call RegisterNativesImpl()  */
+static void Java_Foo_calledByNative(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& callback) {
   CHECK_CLAZZ(env, Foo_clazz(env),
       Foo_clazz(env));
   jmethodID method_id =
@@ -55,7 +56,7 @@ static void Java_Foo_calledByNative(JNIEnv* env, jobject callback) {
       &g_Foo_calledByNative);
 
      env->CallStaticVoidMethod(Foo_clazz(env),
-          method_id, callback);
+          method_id, callback.obj());
   jni_generator::CheckException(env);
 
 }
@@ -71,9 +72,7 @@ static const JNINativeMethod kMethodsFoo[] = {
 };
 
 static bool RegisterNativesImpl(JNIEnv* env) {
-
-  g_Foo_clazz = reinterpret_cast<jclass>(env->NewGlobalRef(
-      base::android::GetClass(env, kFooClassPath).obj()));
+  if (base::android::IsManualJniRegistrationDisabled()) return true;
 
   const int kMethodsFooSize = arraysize(kMethodsFoo);
 

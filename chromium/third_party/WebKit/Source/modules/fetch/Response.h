@@ -59,7 +59,7 @@ public:
     // This function must be called with entering an appropriate V8 context.
     Response* clone(ScriptState*, ExceptionState&);
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // Does not call response.setBlobDataHandle().
@@ -67,7 +67,11 @@ public:
 
     bool hasBody() const;
     BodyStreamBuffer* bodyBuffer() override { return m_response->buffer(); }
+    // Returns the BodyStreamBuffer of |m_response|. This method doesn't check
+    // the internal response of |m_response| even if |m_response| has it.
     const BodyStreamBuffer* bodyBuffer() const override { return m_response->buffer(); }
+    // Returns the BodyStreamBuffer of the internal response of |m_response| if
+    // any. Otherwise, returns one of |m_response|.
     BodyStreamBuffer* internalBodyBuffer() { return m_response->internalBuffer(); }
     const BodyStreamBuffer* internalBodyBuffer() const { return m_response->internalBuffer(); }
     bool bodyUsed() override;

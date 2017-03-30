@@ -8,6 +8,8 @@
 #include <stdint.h>
 #include <sys/socket.h>
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
@@ -23,12 +25,12 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/blocking_method_caller.h"
 #include "chromeos/dbus/cryptohome_client.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/sha2.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
@@ -367,6 +369,18 @@ class SessionManagerClientImpl : public SessionManagerClient {
         base::Bind(&SessionManagerClientImpl::OnArcMethod,
                    weak_ptr_factory_.GetWeakPtr(),
                    login_manager::kSessionManagerStopArcInstance, callback));
+  }
+
+  void PrioritizeArcInstance(const ArcCallback& callback) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerPrioritizeArcInstance);
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerPrioritizeArcInstance,
+                   callback));
   }
 
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override {
@@ -937,6 +951,10 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
   void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         const ArcCallback& callback) override {
+    callback.Run(false);
+  }
+
+  void PrioritizeArcInstance(const ArcCallback& callback) override {
     callback.Run(false);
   }
 

@@ -39,7 +39,11 @@ class WEBDATA_EXPORT WebDatabaseBackend
     virtual ~Delegate() {}
 
     // Invoked when the backend has finished loading the db.
-    virtual void DBLoaded(sql::InitStatus status) = 0;
+    // |status| is the result of initializing the db.
+    // |diagnostics| contains diagnostic information about the db, and it will
+    // only be populated when an error occurs.
+    virtual void DBLoaded(sql::InitStatus status,
+                          const std::string& diagnostics) = 0;
   };
 
   WebDatabaseBackend(
@@ -53,12 +57,6 @@ class WEBDATA_EXPORT WebDatabaseBackend
   // Initializes the database and notifies caller via callback when complete.
   // Callback is called synchronously.
   void InitDatabase();
-
-  // Opens the database file from the profile path if an init has not yet been
-  // attempted. Separated from the constructor to ease construction/destruction
-  // of this object on one thread but database access on the DB thread. Returns
-  // the status of the database.
-  sql::InitStatus LoadDatabaseIfNecessary();
 
   // Shuts down the database.
   void ShutdownDatabase();
@@ -90,6 +88,14 @@ class WEBDATA_EXPORT WebDatabaseBackend
   virtual ~WebDatabaseBackend();
 
  private:
+  // Opens the database file from the profile path if an init has not yet been
+  // attempted. Separated from the constructor to ease construction/destruction
+  // of this object on one thread but database access on the DB thread.
+  void LoadDatabaseIfNecessary();
+
+  // Invoked on a db error.
+  void DatabaseErrorCallback(int error, sql::Statement* statement);
+
   // Commit the current transaction.
   void Commit();
 
@@ -118,6 +124,14 @@ class WEBDATA_EXPORT WebDatabaseBackend
   // True if an attempt has been made to load the database (even if the attempt
   // fails), used to avoid continually trying to reinit if the db init fails.
   bool init_complete_;
+
+  // True if a catastrophic database error occurs and further error callbacks
+  // from the database should be ignored.
+  bool catastrophic_error_occurred_;
+
+  // If a catastrophic database error has occurred, this contains any available
+  // diagnostic information.
+  std::string diagnostics_;
 
   // Delegate. See the class definition above for more information.
   std::unique_ptr<Delegate> delegate_;

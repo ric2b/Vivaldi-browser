@@ -39,14 +39,14 @@ class MediaRouterAndroid : public MediaRouterBase {
                    content::WebContents* web_contents,
                    const std::vector<MediaRouteResponseCallback>& callbacks,
                    base::TimeDelta timeout,
-                   bool off_the_record) override;
+                   bool incognito) override;
   void JoinRoute(const MediaSource::Id& source,
                  const std::string& presentation_id,
                  const GURL& origin,
                  content::WebContents* web_contents,
                  const std::vector<MediaRouteResponseCallback>& callbacks,
                  base::TimeDelta timeout,
-                 bool off_the_record) override;
+                 bool incognito) override;
   void ConnectRouteByRouteId(
       const MediaSource::Id& source,
       const MediaRoute::Id& route_id,
@@ -54,7 +54,7 @@ class MediaRouterAndroid : public MediaRouterBase {
       content::WebContents* web_contents,
       const std::vector<MediaRouteResponseCallback>& callbacks,
       base::TimeDelta timeout,
-      bool off_the_record) override;
+      bool incognito) override;
   void DetachRoute(const MediaRoute::Id& route_id) override;
   void TerminateRoute(const MediaRoute::Id& route_id) override;
   void SendRouteMessage(const MediaRoute::Id& route_id,
@@ -136,10 +136,8 @@ class MediaRouterAndroid : public MediaRouterBase {
   void UnregisterMediaRoutesObserver(MediaRoutesObserver* observer) override;
   void RegisterIssuesObserver(IssuesObserver* observer) override;
   void UnregisterIssuesObserver(IssuesObserver* observer) override;
-  void RegisterPresentationSessionMessagesObserver(
-      PresentationSessionMessagesObserver* observer) override;
-  void UnregisterPresentationSessionMessagesObserver(
-      PresentationSessionMessagesObserver* observer) override;
+  void RegisterRouteMessageObserver(RouteMessageObserver* observer) override;
+  void UnregisterRouteMessageObserver(RouteMessageObserver* observer) override;
 
   base::android::ScopedJavaGlobalRef<jobject> java_media_router_;
 
@@ -172,10 +170,9 @@ class MediaRouterAndroid : public MediaRouterBase {
   using SendMessageCallbacks = IDMap<SendRouteMessageCallback, IDMapOwnPointer>;
   SendMessageCallbacks message_callbacks_;
 
-  using MessagesObservers = base::ScopedPtrHashMap<
-      MediaRoute::Id,
-      std::unique_ptr<base::ObserverList<PresentationSessionMessagesObserver>>>;
-  MessagesObservers messages_observers_;
+  using MessageObservers = base::ScopedPtrHashMap<
+    MediaRoute::Id, std::unique_ptr<base::ObserverList<RouteMessageObserver>>>;
+  MessageObservers message_observers_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouterAndroid);
 };

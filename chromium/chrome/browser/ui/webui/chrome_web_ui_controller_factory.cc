@@ -37,6 +37,7 @@
 #include "chrome/browser/ui/webui/invalidations_ui.h"
 #include "chrome/browser/ui/webui/local_state/local_state_ui.h"
 #include "chrome/browser/ui/webui/log_web_ui_url.h"
+#include "chrome/browser/ui/webui/net_export_ui.h"
 #include "chrome/browser/ui/webui/net_internals/net_internals_ui.h"
 #include "chrome/browser/ui/webui/omnibox/omnibox_ui.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
@@ -54,6 +55,7 @@
 #include "chrome/browser/ui/webui/supervised_user_internals_ui.h"
 #include "chrome/browser/ui/webui/sync_internals_ui.h"
 #include "chrome/browser/ui/webui/translate_internals/translate_internals_ui.h"
+#include "chrome/browser/ui/webui/usb_internals/usb_internals_ui.h"
 #include "chrome/browser/ui/webui/user_actions/user_actions_ui.h"
 #include "chrome/browser/ui/webui/version_ui.h"
 #include "chrome/common/chrome_features.h"
@@ -102,14 +104,12 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/ui/webui/net_export_ui.h"
-#include "chrome/browser/ui/webui/offline_internals_ui.h"
+#include "chrome/browser/ui/webui/offline/offline_internals_ui.h"
 #include "chrome/browser/ui/webui/popular_sites_internals_ui.h"
 #include "chrome/browser/ui/webui/snippets_internals_ui.h"
 #else
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/easy_unlock_service_factory.h"
-#include "chrome/browser/ui/webui/copresence_ui.h"
 #include "chrome/browser/ui/webui/devtools_ui.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
 #include "chrome/browser/ui/webui/md_downloads/md_downloads_ui.h"
@@ -146,7 +146,7 @@
 #include "components/proximity_auth/webui/url_constants.h"
 #endif
 
-#if !defined(OFFICIAL_BUILD) && defined(OS_CHROMEOS) && !defined(NDEBUG)
+#if defined(OS_CHROMEOS) && !defined(NDEBUG)
 #include "chrome/browser/ui/webui/chromeos/emulator/device_emulator_ui.h"
 #endif
 
@@ -351,6 +351,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<InvalidationsUI>;
   if (url.host() == chrome::kChromeUILocalStateHost)
     return &NewWebUI<LocalStateUI>;
+  if (url.host() == chrome::kChromeUINetExportHost)
+    return &NewWebUI<NetExportUI>;
   if (url.host() == chrome::kChromeUINetInternalsHost)
     return &NewWebUI<NetInternalsUI>;
   if (url.host() == chrome::kChromeUIOmniboxHost)
@@ -375,6 +377,8 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<WebDialogUI>;
   if (url.host() == chrome::kChromeUITranslateInternalsHost)
     return &NewWebUI<TranslateInternalsUI>;
+  if (url.host() == chrome::kChromeUIUsbInternalsHost)
+    return &NewWebUI<UsbInternalsUI>;
   if (url.host() == chrome::kChromeUIUserActionsHost)
     return &NewWebUI<UserActionsUI>;
   if (url.host() == chrome::kChromeUIVersionHost)
@@ -418,7 +422,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
   // If the material design extensions page is enabled, it gets its own host.
   // Otherwise, it's handled by the uber settings page.
   if (url.host() == chrome::kChromeUIExtensionsHost &&
-      ::switches::MdExtensionsEnabled()) {
+      base::FeatureList::IsEnabled(features::kMaterialDesignExtensions)) {
     return &NewWebUI<extensions::ExtensionsUI>;
   }
   // Material Design history is on its own host, rather than on an Uber page.
@@ -427,7 +431,7 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<MdHistoryUI>;
   }
   // Material Design Settings gets its own host, if enabled.
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettingsFeature) &&
+  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings) &&
       url.host() == chrome::kChromeUISettingsHost) {
     return &NewWebUI<settings::MdSettingsUI>;
   }
@@ -497,16 +501,14 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
     return &NewWebUI<chromeos::SlowTraceController>;
   if (url.host() == chrome::kChromeUIVoiceSearchHost)
     return &NewWebUI<VoiceSearchUI>;
-#if !defined(GOOGLE_CHROME_BUILD) && !defined(NDEBUG)
+#if !defined(NDEBUG)
   if (!base::SysInfo::IsRunningOnChromeOS()) {
     if (url.host() == chrome::kChromeUIDeviceEmulatorHost)
       return &NewWebUI<DeviceEmulatorUI>;
   }
-#endif  // !defined(GOOGLE_CHROME_BUILD) && !defined(NDEBUG)
+#endif  // !defined(NDEBUG)
 #endif  // defined(OS_CHROMEOS)
 #if defined(OS_ANDROID)
-  if (url.host() == chrome::kChromeUINetExportHost)
-    return &NewWebUI<NetExportUI>;
   if (url.host() == chrome::kChromeUIOfflineInternalsHost)
     return &NewWebUI<OfflineInternalsUI>;
   if (url.host() == chrome::kChromeUIPopularSitesInternalsHost)
@@ -515,8 +517,6 @@ WebUIFactoryFunction GetWebUIFactoryFunction(WebUI* web_ui,
       !profile->IsOffTheRecord())
     return &NewWebUI<SnippetsInternalsUI>;
 #else
-  if (url.host() == chrome::kChromeUICopresenceHost)
-    return &NewWebUI<CopresenceUI>;
   if (url.SchemeIs(content::kChromeDevToolsScheme))
     return &NewWebUI<DevToolsUI>;
 

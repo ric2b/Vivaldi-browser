@@ -13,11 +13,18 @@
 
 #include "base/compiler_specific.h"
 #include "base/files/scoped_file.h"
+#include "base/memory/ref_counted.h"
 #include "base/process/process.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_endpoint.h"
 #include "ipc/ipc_message.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 #if defined(OS_POSIX)
 #include <sys/types.h>
@@ -55,9 +62,6 @@ class IPC_EXPORT Channel : public Endpoint {
     MODE_SERVER_FLAG = 0x1,
     MODE_CLIENT_FLAG = 0x2,
     MODE_NAMED_FLAG = 0x4,
-#if defined(OS_POSIX)
-    MODE_OPEN_ACCESS_FLAG = 0x8, // Don't restrict access based on client UID.
-#endif
   };
 
   // Some Standard Modes
@@ -69,10 +73,6 @@ class IPC_EXPORT Channel : public Endpoint {
     MODE_CLIENT = MODE_CLIENT_FLAG,
     MODE_NAMED_SERVER = MODE_SERVER_FLAG | MODE_NAMED_FLAG,
     MODE_NAMED_CLIENT = MODE_CLIENT_FLAG | MODE_NAMED_FLAG,
-#if defined(OS_POSIX)
-    MODE_OPEN_NAMED_SERVER = MODE_OPEN_ACCESS_FLAG | MODE_SERVER_FLAG |
-                             MODE_NAMED_FLAG
-#endif
   };
 
   // Messages internal to the IPC implementation are defined here.
@@ -91,6 +91,63 @@ class IPC_EXPORT Channel : public Endpoint {
     // has received the message that contains the FD. When we
     // receive it again on the sender side, we close the FD.
     CLOSE_FD_MESSAGE_TYPE = HELLO_MESSAGE_TYPE - 1
+  };
+
+  // Helper interface a Channel may implement to expose support for associated
+  // Mojo interfaces.
+  class IPC_EXPORT AssociatedInterfaceSupport {
+   public:
+    using GenericAssociatedInterfaceFactory =
+        base::Callback<void(mojo::ScopedInterfaceEndpointHandle)>;
+
+    virtual ~AssociatedInterfaceSupport() {}
+
+    // Accesses the AssociatedGroup used to associate new interface endpoints
+    // with this Channel. Must be safe to call from any thread.
+    virtual mojo::AssociatedGroup* GetAssociatedGroup() = 0;
+
+    // Adds an interface factory to this channel for interface |name|. Must be
+    // safe to call from any thread.
+    virtual void AddGenericAssociatedInterface(
+        const std::string& name,
+        const GenericAssociatedInterfaceFactory& factory) = 0;
+
+    // Requests an associated interface from the remote endpoint.
+    virtual void GetGenericRemoteAssociatedInterface(
+        const std::string& name,
+        mojo::ScopedInterfaceEndpointHandle handle) = 0;
+
+    // Template helper to add an interface factory to this channel.
+    template <typename Interface>
+    using AssociatedInterfaceFactory =
+        base::Callback<void(mojo::AssociatedInterfaceRequest<Interface>)>;
+    template <typename Interface>
+    void AddAssociatedInterface(
+        const AssociatedInterfaceFactory<Interface>& factory) {
+      AddGenericAssociatedInterface(
+          Interface::Name_,
+          base::Bind(&BindAssociatedInterfaceRequest<Interface>, factory));
+    }
+
+    // Template helper to request a remote associated interface.
+    template <typename Interface>
+    void GetRemoteAssociatedInterface(
+        mojo::AssociatedInterfacePtr<Interface>* proxy) {
+      mojo::AssociatedInterfaceRequest<Interface> request =
+          mojo::GetProxy(proxy, GetAssociatedGroup());
+      GetGenericRemoteAssociatedInterface(
+          Interface::Name_, request.PassHandle());
+    }
+
+   private:
+    template <typename Interface>
+    static void BindAssociatedInterfaceRequest(
+        const AssociatedInterfaceFactory<Interface>& factory,
+        mojo::ScopedInterfaceEndpointHandle handle) {
+      mojo::AssociatedInterfaceRequest<Interface> request;
+      request.Bind(std::move(handle));
+      factory.Run(std::move(request));
+    }
   };
 
   // The maximum message size in bytes. Attempting to receive a message of this
@@ -125,8 +182,6 @@ class IPC_EXPORT Channel : public Endpoint {
   //   connects to the already established IPC object.
   //
   // Each mode has its own Create*() API to create the Channel object.
-  //
-  // TODO(morrita): Replace CreateByModeForProxy() with one of above Create*().
   static std::unique_ptr<Channel> Create(
       const IPC::ChannelHandle& channel_handle,
       Mode mode,
@@ -134,7 +189,9 @@ class IPC_EXPORT Channel : public Endpoint {
 
   static std::unique_ptr<Channel> CreateClient(
       const IPC::ChannelHandle& channel_handle,
-      Listener* listener);
+      Listener* listener,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner =
+          base::ThreadTaskRunnerHandle::Get());
 
   // Channels on Windows are named by default and accessible from other
   // processes. On POSIX channels are anonymous by default and not accessible
@@ -147,17 +204,11 @@ class IPC_EXPORT Channel : public Endpoint {
   static std::unique_ptr<Channel> CreateNamedClient(
       const IPC::ChannelHandle& channel_handle,
       Listener* listener);
-#if defined(OS_POSIX)
-  // An "open" named server accepts connections from ANY client.
-  // The caller must then implement their own access-control based on the
-  // client process' user Id.
-  static std::unique_ptr<Channel> CreateOpenNamedServer(
-      const IPC::ChannelHandle& channel_handle,
-      Listener* listener);
-#endif
   static std::unique_ptr<Channel> CreateServer(
       const IPC::ChannelHandle& channel_handle,
-      Listener* listener);
+      Listener* listener,
+      const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner =
+          base::ThreadTaskRunnerHandle::Get());
 
   ~Channel() override;
 
@@ -180,6 +231,11 @@ class IPC_EXPORT Channel : public Endpoint {
 
   // Get its own process id. This value is told to the peer.
   virtual base::ProcessId GetSelfPID() const = 0;
+
+  // Gets a helper for associating Mojo interfaces with this Channel.
+  //
+  // NOTE: Not all implementations support this.
+  virtual AssociatedInterfaceSupport* GetAssociatedInterfaceSupport();
 
   // Overridden from ipc::Sender.
   // Send a message over the Channel to the listener on the other end.

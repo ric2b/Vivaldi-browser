@@ -14,6 +14,7 @@
 #include "ipc/param_traits_macros.h"
 #include "third_party/WebKit/public/web/WebAXEnums.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_relative_bounds.h"
 #include "ui/accessibility/ax_tree_update.h"
 #include "ui/gfx/transform.h"
 
@@ -39,6 +40,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentNodeData)
   IPC_STRUCT_TRAITS_MEMBER(html_attributes)
   IPC_STRUCT_TRAITS_MEMBER(child_ids)
   IPC_STRUCT_TRAITS_MEMBER(content_int_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(offset_container_id)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::AXContentTreeData)
@@ -54,8 +56,10 @@ IPC_STRUCT_TRAITS_BEGIN(content::AXContentTreeData)
   IPC_STRUCT_TRAITS_MEMBER(focus_id)
   IPC_STRUCT_TRAITS_MEMBER(sel_anchor_object_id)
   IPC_STRUCT_TRAITS_MEMBER(sel_anchor_offset)
+  IPC_STRUCT_TRAITS_MEMBER(sel_anchor_affinity)
   IPC_STRUCT_TRAITS_MEMBER(sel_focus_object_id)
   IPC_STRUCT_TRAITS_MEMBER(sel_focus_offset)
+  IPC_STRUCT_TRAITS_MEMBER(sel_focus_affinity)
   IPC_STRUCT_TRAITS_MEMBER(routing_id)
   IPC_STRUCT_TRAITS_MEMBER(parent_routing_id)
 IPC_STRUCT_TRAITS_END()
@@ -83,9 +87,8 @@ IPC_STRUCT_BEGIN(AccessibilityHostMsg_LocationChangeParams)
   // ID of the object whose location is changing.
   IPC_STRUCT_MEMBER(int, id)
 
-  // The object's new location, in frame-relative coordinates (same
-  // as the coordinates in AccessibilityNodeData).
-  IPC_STRUCT_MEMBER(gfx::Rect, new_location)
+  // The object's new location info.
+  IPC_STRUCT_MEMBER(ui::AXRelativeBounds, new_location)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(AccessibilityHostMsg_FindInPageResultParams)

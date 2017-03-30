@@ -129,7 +129,7 @@ void AutocompleteActionPredictor::RegisterTransitionalMatches(
   }
 
   for (const auto& i : result) {
-    if (!ContainsValue(match_it->urls, i.destination_url))
+    if (!base::ContainsValue(match_it->urls, i.destination_url))
       match_it->urls.push_back(i.destination_url);
   }
 }
@@ -153,18 +153,18 @@ void AutocompleteActionPredictor::StartPrerendering(
     const gfx::Size& size) {
   // Only cancel the old prerender after starting the new one, so if the URLs
   // are the same, the underlying prerender will be reused.
-  std::unique_ptr<prerender::PrerenderHandle> old_prerender_handle(
-      prerender_handle_.release());
-  if (prerender::PrerenderManager* prerender_manager =
-          prerender::PrerenderManagerFactory::GetForProfile(profile_)) {
-    prerender_handle_.reset(prerender_manager->AddPrerenderFromOmnibox(
-        url, session_storage_namespace, size));
+  std::unique_ptr<prerender::PrerenderHandle> old_prerender_handle =
+      std::move(prerender_handle_);
+  prerender::PrerenderManager* prerender_manager =
+      prerender::PrerenderManagerFactory::GetForProfile(profile_);
+  if (prerender_manager) {
+    prerender_handle_ = prerender_manager->AddPrerenderFromOmnibox(
+        url, session_storage_namespace, size);
   }
   if (old_prerender_handle)
     old_prerender_handle->OnCancel();
 }
 
-// Given a match, return a recommended action.
 AutocompleteActionPredictor::Action
     AutocompleteActionPredictor::RecommendAction(
         const base::string16& user_text,
@@ -207,8 +207,6 @@ AutocompleteActionPredictor::Action
   return action;
 }
 
-// Return true if the suggestion type warrants a TCP/IP preconnection.
-// i.e., it is now quite likely that the user will select the related domain.
 // static
 bool AutocompleteActionPredictor::IsPreconnectable(
     const AutocompleteMatch& match) {

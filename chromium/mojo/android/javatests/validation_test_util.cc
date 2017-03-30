@@ -14,6 +14,9 @@
 #include "jni/ValidationTestUtil_jni.h"
 #include "mojo/public/cpp/bindings/tests/validation_test_input_parser.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace mojo {
 namespace android {
 
@@ -34,8 +37,7 @@ ScopedJavaLocalRef<jobject> ParseData(
           input, &data, &num_handles, &error_message)) {
     ScopedJavaLocalRef<jstring> j_error_message =
         base::android::ConvertUTF8ToJavaString(env, error_message);
-    return Java_ValidationTestUtil_buildData(env, NULL, 0,
-                                             j_error_message.obj());
+    return Java_ValidationTestUtil_buildData(env, nullptr, 0, j_error_message);
   }
   void* data_ptr = &data[0];
   if (!data_ptr) {
@@ -44,7 +46,8 @@ ScopedJavaLocalRef<jobject> ParseData(
   }
   jobject byte_buffer =
       env->NewDirectByteBuffer(data_ptr, data.size());
-  return Java_ValidationTestUtil_buildData(env, byte_buffer, num_handles, NULL);
+  return Java_ValidationTestUtil_buildData(env, byte_buffer, num_handles,
+                                           nullptr);
 }
 
 }  // namespace android

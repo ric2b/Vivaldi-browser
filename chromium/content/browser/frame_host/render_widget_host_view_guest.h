@@ -71,7 +71,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   gfx::Rect GetViewBounds() const override;
   gfx::Rect GetBoundsInRootWindow() override;
   gfx::Size GetPhysicalBackingSize() const override;
-  base::string16 GetSelectedText() const override;
+  base::string16 GetSelectedText() override;
+  void SetNeedsBeginFrames(bool needs_begin_frames) override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -101,12 +102,13 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
 #endif
+  void ProcessMouseEvent(const blink::WebMouseEvent& event,
+                         const ui::LatencyInfo& latency) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
 
   bool LockMouse() override;
   void UnlockMouse() override;
-  void GetScreenInfo(blink::WebScreenInfo* results) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
@@ -132,6 +134,16 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
 
  private:
   RenderWidgetHostViewBase* GetOwnerRenderWidgetHostView() const;
+
+  // Since we now route GestureEvents directly to the guest renderer, we need
+  // a way to make sure that the BrowserPlugin in the embedder gets focused so
+  // that keyboard input (which still travels via BrowserPlugin) is routed to
+  // the plugin and thus onwards to the guest.
+  // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
+  // http://crbug.com/533069
+  void MaybeSendSyntheticTapGesture(
+      const blink::WebFloatPoint& position,
+      const blink::WebFloatPoint& screenPosition) const;
 
   void OnHandleInputEvent(RenderWidgetHostImpl* embedder,
                           int browser_plugin_instance_id,

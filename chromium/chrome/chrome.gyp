@@ -15,12 +15,12 @@
     'chromium_browser_dependencies': [
       'common',
       'browser',
-      '../sync/sync.gyp:sync',
+      '../components/sync.gyp:sync',
     ],
     # GN version is the group //chrome:child_dependencies
     'chromium_child_dependencies': [
       'common',
-      '../sync/sync.gyp:sync',
+      '../components/sync.gyp:sync',
     ],
     'grit_out_dir': '<(SHARED_INTERMEDIATE_DIR)/chrome',
     'protoc_out_dir': '<(SHARED_INTERMEDIATE_DIR)/protoc_out',
@@ -430,8 +430,6 @@
           'type': 'none',
           'dependencies': [
             'activity_type_ids_java',
-            'browsing_data_time_period_java',
-            'browsing_data_type_java',
             'chrome_locale_paks',
             'chrome_resources.gyp:chrome_strings',
             'chrome_strings_grd',
@@ -459,6 +457,7 @@
             '../components/components.gyp:autocomplete_match_java',
             '../components/components.gyp:autocomplete_match_type_java',
             '../components/components.gyp:bookmarks_java',
+            '../components/components.gyp:browsing_data_utils_java',
             '../components/components.gyp:dom_distiller_core_java',
             '../components/components.gyp:gcm_driver_java',
             '../components/components.gyp:infobar_delegate_java',
@@ -473,18 +472,18 @@
             '../components/components.gyp:precache_java',
             '../components/components.gyp:safe_json_java',
             '../components/components.gyp:security_state_enums_java',
-            '../components/components.gyp:service_tab_launcher_java',
             '../components/components.gyp:signin_core_browser_java',
             '../components/components.gyp:variations_java',
             '../components/components.gyp:web_contents_delegate_android_java',
-            '../components/components.gyp:web_restrictions_java',
+            '../components/components.gyp:web_restrictions_java_browser',
             '../components/components_strings.gyp:components_strings',
+            '../components/url_formatter/url_formatter.gyp:url_formatter_java',
             '../content/content.gyp:content_java',
             '../media/media.gyp:media_java',
             '../mojo/mojo_public.gyp:mojo_bindings_java',
             '../mojo/mojo_public.gyp:mojo_public_java',
             '../printing/printing.gyp:printing_java',
-            '../sync/sync.gyp:sync_java',
+            '../components/sync.gyp:sync_java',
             '../third_party/WebKit/public/blink.gyp:android_mojo_bindings_java',
             '../third_party/android_data_chart/android_data_chart.gyp:android_data_chart_java',
             '../third_party/android_media/android_media.gyp:android_media_java',
@@ -686,7 +685,7 @@
            # '<(grit_out_dir)',
           ],
           'conditions': [
-            ['use_cups==1 and OS!="chromeos"', {
+            ['use_cups==1 and chromeos==0', {
               'dependencies': [
                 '../printing/printing.gyp:cups',
               ],
@@ -694,15 +693,15 @@
                 'service/cloud_print/print_system_cups.cc',
               ],
             }],
-            ['OS!="win" and use_cups!=1', {
-              'sources': [
-                'service/cloud_print/print_system_dummy.cc',
-              ],
-            }],
             ['OS=="win"', {
               'sources': [
                 'service/service_utility_process_host.cc',
                 'service/service_utility_process_host.h',
+              ],
+            }],
+            ['chromeos==1 or (OS!="win" and use_cups!=1)', {
+              'sources': [
+                'service/cloud_print/print_system_dummy.cc',
               ],
             }],
           ],

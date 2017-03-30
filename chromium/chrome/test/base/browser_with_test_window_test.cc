@@ -4,6 +4,7 @@
 
 #include "chrome/test/base/browser_with_test_window_test.h"
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -55,7 +56,8 @@ void BrowserWithTestWindowTest::SetUp() {
   // perhaps by AshTestHelper owning an AuraTestHelper.
   ash_test_helper_.reset(new ash::test::AshTestHelper(
       base::MessageLoopForUI::current()));
-  ash_test_helper_->SetUp(true);
+  ash_test_helper_->SetUp(true,
+                          ash::MaterialDesignController::Mode::UNINITIALIZED);
 #elif defined(TOOLKIT_VIEWS)
   views_test_helper_.reset(new views::ScopedViewsTestHelper());
 #endif
@@ -183,10 +185,11 @@ void BrowserWithTestWindowTest::NavigateAndCommitActiveTabWithTitle(
     Browser* navigating_browser,
     const GURL& url,
     const base::string16& title) {
-  NavigationController* controller = &navigating_browser->tab_strip_model()->
-      GetActiveWebContents()->GetController();
+  WebContents* contents =
+      navigating_browser->tab_strip_model()->GetActiveWebContents();
+  NavigationController* controller = &contents->GetController();
   NavigateAndCommit(controller, url);
-  controller->GetActiveEntry()->SetTitle(title);
+  contents->UpdateTitleForEntry(controller->GetActiveEntry(), title);
 }
 
 void BrowserWithTestWindowTest::DestroyBrowserAndProfile() {

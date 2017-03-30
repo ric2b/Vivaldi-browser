@@ -43,11 +43,13 @@ class MockMDnsDatagramServerSocket : public DatagramServerSocket {
 
   MOCK_METHOD1(SetReceiveBufferSize, int(int32_t size));
   MOCK_METHOD1(SetSendBufferSize, int(int32_t size));
+  MOCK_METHOD0(SetDoNotFragment, int());
 
   MOCK_METHOD0(Close, void());
 
   MOCK_CONST_METHOD1(GetPeerAddress, int(IPEndPoint* address));
   int GetLocalAddress(IPEndPoint* address) const override;
+  MOCK_METHOD0(UseNonBlockingIO, void());
   MOCK_CONST_METHOD0(NetLog, const BoundNetLog&());
 
   MOCK_METHOD0(AllowAddressReuse, void());

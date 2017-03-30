@@ -6,6 +6,8 @@
 
 #include "jni/AutofillLogger_jni.h"
 
+using base::android::ScopedJavaLocalRef;
+
 namespace autofill {
 
 void AutofillLoggerAndroid::DidFillOrPreviewField(
@@ -18,12 +20,8 @@ void AutofillLoggerAndroid::DidFillOrPreviewField(
       base::android::ConvertUTF16ToJavaString(env, profile_full_name);
   // On android, the fields are never previwed: it's safe to assume here that
   // the field has been filled.
-  Java_AutofillLogger_didFillField(
-      env, j_autofilled_value.obj(), j_profile_full_name.obj());
-}
-
-bool AutofillLoggerAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
+  Java_AutofillLogger_didFillField(env, j_autofilled_value,
+                                   j_profile_full_name);
 }
 
 }  // namespace autofill

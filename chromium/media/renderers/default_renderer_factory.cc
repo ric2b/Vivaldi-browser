@@ -174,8 +174,8 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
                           use_platform_media_pipeline),
       true, gpu_factories, media_log_));
 
-  return base::WrapUnique(new RendererImpl(
-      media_task_runner, std::move(audio_renderer), std::move(video_renderer)));
+  return base::MakeUnique<RendererImpl>(
+      media_task_runner, std::move(audio_renderer), std::move(video_renderer));
 }
 
 }  // namespace media

@@ -15,7 +15,7 @@
 #include "base/values.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "net/ssl/signed_certificate_timestamp_and_status.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
@@ -28,7 +28,7 @@
 namespace {
 
 const char kSendHistogramName[] = "SSL.ExpectCTReportSendingAttempt";
-const char kFailureHistogramName[] = "SSL.ExpectCTReportFailure";
+const char kFailureHistogramName[] = "SSL.ExpectCTReportFailure2";
 
 // A test ReportSender that exposes the latest report URI and
 // serialized report to be sent.
@@ -39,12 +39,16 @@ class TestCertificateReportSender : public net::ReportSender {
   ~TestCertificateReportSender() override {}
 
   void Send(const GURL& report_uri,
-            const std::string& serialized_report) override {
+            base::StringPiece content_type,
+            base::StringPiece serialized_report) override {
     latest_report_uri_ = report_uri;
-    latest_serialized_report_ = serialized_report;
+    serialized_report.CopyToString(&latest_serialized_report_);
+    content_type.CopyToString(&latest_content_type_);
   }
 
   const GURL& latest_report_uri() { return latest_report_uri_; }
+
+  const std::string& latest_content_type() { return latest_content_type_; }
 
   const std::string& latest_serialized_report() {
     return latest_serialized_report_;
@@ -52,6 +56,7 @@ class TestCertificateReportSender : public net::ReportSender {
 
  private:
   GURL latest_report_uri_;
+  std::string latest_content_type_;
   std::string latest_serialized_report_;
 };
 
@@ -133,7 +138,8 @@ void FindSCTInReportList(
           found = true;
         break;
 
-      case net::ct::SCT_STATUS_INVALID: {
+      case net::ct::SCT_STATUS_INVALID_SIGNATURE:
+      case net::ct::SCT_STATUS_INVALID_TIMESTAMP: {
         // Invalid SCTs have a log id and an origin and nothing else.
         EXPECT_FALSE(report_sct->HasKey("sct"));
         std::string id_base64;
@@ -197,9 +203,15 @@ void CheckReportSCTs(
         ASSERT_NO_FATAL_FAILURE(FindSCTInReportList(
             expected_sct.sct, net::ct::SCT_STATUS_LOG_UNKNOWN, unknown_scts));
         break;
-      case net::ct::SCT_STATUS_INVALID:
+      case net::ct::SCT_STATUS_INVALID_SIGNATURE:
         ASSERT_NO_FATAL_FAILURE(FindSCTInReportList(
-            expected_sct.sct, net::ct::SCT_STATUS_INVALID, invalid_scts));
+            expected_sct.sct, net::ct::SCT_STATUS_INVALID_SIGNATURE,
+            invalid_scts));
+        break;
+      case net::ct::SCT_STATUS_INVALID_TIMESTAMP:
+        ASSERT_NO_FATAL_FAILURE(FindSCTInReportList(
+            expected_sct.sct, net::ct::SCT_STATUS_INVALID_TIMESTAMP,
+            invalid_scts));
         break;
       case net::ct::SCT_STATUS_OK:
         ASSERT_NO_FATAL_FAILURE(FindSCTInReportList(
@@ -399,7 +411,7 @@ TEST_F(ChromeExpectCTReporterWaitTest, SendReportFailure) {
 
   histograms.ExpectTotalCount(kFailureHistogramName, 1);
   histograms.ExpectBucketCount(kFailureHistogramName,
-                               net::ERR_CONNECTION_FAILED, 1);
+                               -net::ERR_CONNECTION_FAILED, 1);
   histograms.ExpectTotalCount(kSendHistogramName, 1);
   histograms.ExpectBucketCount(kSendHistogramName, true, 1);
 }
@@ -441,10 +453,18 @@ TEST(ChromeExpectCTReporterTest, SendReport) {
   MakeTestSCTAndStatus(
       net::ct::SignedCertificateTimestamp::SCT_FROM_TLS_EXTENSION,
       "invalid_log_id1", "extensions1", "signature1", now,
-      net::ct::SCT_STATUS_INVALID, &ssl_info.signed_certificate_timestamps);
+      net::ct::SCT_STATUS_INVALID_TIMESTAMP,
+      &ssl_info.signed_certificate_timestamps);
+
+  MakeTestSCTAndStatus(
+      net::ct::SignedCertificateTimestamp::SCT_FROM_TLS_EXTENSION,
+      "invalid_log_id1", "extensions1", "signature1", now,
+      net::ct::SCT_STATUS_INVALID_SIGNATURE,
+      &ssl_info.signed_certificate_timestamps);
+
   MakeTestSCTAndStatus(net::ct::SignedCertificateTimestamp::SCT_EMBEDDED,
                        "invalid_log_id2", "extensions2", "signature2", now,
-                       net::ct::SCT_STATUS_INVALID,
+                       net::ct::SCT_STATUS_INVALID_SIGNATURE,
                        &ssl_info.signed_certificate_timestamps);
 
   MakeTestSCTAndStatus(
@@ -463,6 +483,7 @@ TEST(ChromeExpectCTReporterTest, SendReport) {
   reporter.OnExpectCTFailed(host_port, report_uri, ssl_info);
   EXPECT_EQ(report_uri, sender->latest_report_uri());
   EXPECT_FALSE(sender->latest_serialized_report().empty());
+  EXPECT_EQ("application/json; charset=utf-8", sender->latest_content_type());
   ASSERT_NO_FATAL_FAILURE(CheckExpectCTReport(
       sender->latest_serialized_report(), host_port, ssl_info));
 

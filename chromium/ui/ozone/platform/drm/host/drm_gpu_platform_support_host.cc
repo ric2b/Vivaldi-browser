@@ -254,8 +254,7 @@ bool DrmGpuPlatformSupportHost::OnMessageReceivedForDrmOverlayManager(
   IPC_BEGIN_MESSAGE_MAP(DrmGpuPlatformSupportHost, message)
     IPC_MESSAGE_HANDLER(OzoneHostMsg_OverlayCapabilitiesReceived,
                         OnOverlayResult)
-    // TODO(rjk): insert the extra
-    IPC_MESSAGE_UNHANDLED(handled = false)
+  // TODO(rjk): insert the extra
   IPC_END_MESSAGE_MAP()
   return handled;
 }

@@ -138,6 +138,11 @@ class CrashReporterClient {
   // Returns true if the user has given consent to collect stats.
   virtual bool GetCollectStatsConsent();
 
+  // Returns true if the client is currently in the chosen sample that will
+  // report stats and crashes. Crashes should only be reported if this function
+  // returns true and GetCollectStatsConsent returns true.
+  virtual bool GetCollectStatsInSample();
+
 #if defined(OS_WIN) || defined(OS_MACOSX)
   // Returns true if crash reporting is enforced via management policies. In
   // that case, |breakpad_enabled| is set to the value enforced by policies.
@@ -147,6 +152,10 @@ class CrashReporterClient {
 #if defined(OS_ANDROID)
   // Returns the descriptor key of the android minidump global descriptor.
   virtual int GetAndroidMinidumpDescriptor();
+
+  // Returns the file descriptor of the pipe used to inform apps of
+  // webview renderer crashes.
+  virtual int GetAndroidCrashSignalFD();
 
   // Returns true if breakpad microdumps should be enabled. This orthogonal to
   // the standard minidump uploader (which depends on the user consent).

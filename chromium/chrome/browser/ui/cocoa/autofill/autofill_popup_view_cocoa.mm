@@ -12,6 +12,8 @@
 #include "chrome/browser/ui/cocoa/autofill/autofill_popup_view_bridge.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
+#include "skia/ext/skia_utils_mac.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/font_list.h"
@@ -150,9 +152,15 @@ using autofill::AutofillPopupLayoutModel;
                         bounds:(NSRect)bounds
                       selected:(BOOL)isSelected
                    textYOffset:(CGFloat)textYOffset {
-  // If this row is selected, highlight it.
+  // If this row is selected, highlight it with this mac system color.
+  // Otherwise the controller may have a specific background color for this
+  // entry.
   if (isSelected) {
     [[self highlightColor] set];
+    [NSBezierPath fillRect:bounds];
+  } else {
+    SkColor backgroundColor = controller_->GetBackgroundColorForRow(index);
+    [skia::SkColorToSRGBNSColor(backgroundColor) set];
     [NSBezierPath fillRect:bounds];
   }
 
@@ -189,12 +197,13 @@ using autofill::AutofillPopupLayoutModel;
         textYOffset:(CGFloat)textYOffset {
   NSColor* nameColor =
       controller_->IsWarning(index) ? [self warningColor] : [self nameColor];
-  NSDictionary* nameAttributes =
-      [NSDictionary dictionaryWithObjectsAndKeys:
-           controller_->GetValueFontListForRow(index).GetPrimaryFont().
-               GetNativeFont(),
-           NSFontAttributeName, nameColor, NSForegroundColorAttributeName,
-           nil];
+  NSDictionary* nameAttributes = [NSDictionary
+      dictionaryWithObjectsAndKeys:controller_->layout_model()
+                                       .GetValueFontListForRow(index)
+                                       .GetPrimaryFont()
+                                       .GetNativeFont(),
+                                   NSFontAttributeName, nameColor,
+                                   NSForegroundColorAttributeName, nil];
   NSSize nameSize = [name sizeWithAttributes:nameAttributes];
   x -= rightAlign ? nameSize.width : 0;
   CGFloat y = bounds.origin.y + (bounds.size.height - nameSize.height) / 2;
@@ -233,13 +242,13 @@ using autofill::AutofillPopupLayoutModel;
             rightAlign:(BOOL)rightAlign
                 bounds:(NSRect)bounds
            textYOffset:(CGFloat)textYOffset {
-  NSDictionary* subtextAttributes =
-      [NSDictionary dictionaryWithObjectsAndKeys:
-           controller_->GetLabelFontList().GetPrimaryFont().GetNativeFont(),
-           NSFontAttributeName,
-           [self subtextColor],
-           NSForegroundColorAttributeName,
-           nil];
+  NSDictionary* subtextAttributes = [NSDictionary
+      dictionaryWithObjectsAndKeys:controller_->layout_model()
+                                       .GetLabelFontList()
+                                       .GetPrimaryFont()
+                                       .GetNativeFont(),
+                                   NSFontAttributeName, [self subtextColor],
+                                   NSForegroundColorAttributeName, nil];
   NSSize subtextSize = [subtext sizeWithAttributes:subtextAttributes];
   x -= rightAlign ? subtextSize.width : 0;
   CGFloat y = bounds.origin.y + (bounds.size.height - subtextSize.height) / 2;

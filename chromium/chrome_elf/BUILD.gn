@@ -2,9 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+# Chrome elf targets (excepting tests) should only link in kernel32.
+# Please don't add dependencies on any other system libraries.
+
+import("//build/config/compiler/compiler.gni")
 import("//build/config/win/manifest.gni")
 import("//chrome/version.gni")
 import("//testing/test.gni")
+
+##------------------------------------------------------------------------------
+## chrome_elf
+##------------------------------------------------------------------------------
 
 process_version("chrome_elf_resources") {
   template_file = chrome_version_rc_template
@@ -35,16 +43,19 @@ shared_library("chrome_elf") {
   ]
   deps = [
     ":blacklist",
-    ":breakpad",
     ":chrome_elf_manifest",
     ":chrome_elf_resources",
-    ":common",
+    ":chrome_elf_security",
+    ":constants",
+    ":hook_util",
+    ":nt_registry",
     "//base",
     "//build/config/sanitizers:deps",
     "//chrome/install_static:install_static_util",
     "//components/crash/content/app",
     "//components/crash/core/common",
     "//content/public/common:result_codes",
+    "//third_party/crashpad/crashpad/client:client",
   ]
   configs += [ "//build/config/win:windowed" ]
   configs -= [ "//build/config/win:console" ]
@@ -66,39 +77,25 @@ shared_library("chrome_elf") {
   }
 }
 
+##------------------------------------------------------------------------------
+## source sets
+##------------------------------------------------------------------------------
+
+source_set("chrome_elf_security") {
+  sources = [
+    "chrome_elf_security.cc",
+    "chrome_elf_security.h",
+  ]
+  deps = [
+    ":constants",
+    ":nt_registry",
+  ]
+}
+
 source_set("constants") {
   sources = [
     "chrome_elf_constants.cc",
     "chrome_elf_constants.h",
-  ]
-}
-
-source_set("common") {
-  public_deps = [
-    ":constants",
-  ]
-  deps = [
-    "//base",
-    "//sandbox",
-  ]
-  sources = [
-    "thunk_getter.cc",
-    "thunk_getter.h",
-  ]
-}
-
-source_set("breakpad") {
-  include_dirs = [ "$target_gen_dir" ]
-  sources = [
-    "breakpad.cc",
-    "breakpad.h",
-  ]
-  deps = [
-    ":common",
-    "//base",
-    "//breakpad:breakpad_handler",
-    "//chrome/common:version_header",
-    "//chrome/install_static:install_static_util",
   ]
 }
 
@@ -111,6 +108,10 @@ source_set("dll_hash") {
     "dll_hash/dll_hash.h",
   ]
 }
+
+##------------------------------------------------------------------------------
+## chrome_elf sub targets
+##------------------------------------------------------------------------------
 
 executable("dll_hash_main") {
   sources = [
@@ -129,18 +130,56 @@ static_library("blacklist") {
     "blacklist/blacklist.h",
     "blacklist/blacklist_interceptions.cc",
     "blacklist/blacklist_interceptions.h",
+    "blacklist/crashpad_helper.cc",
+    "blacklist/crashpad_helper.h",
   ]
   public_deps = [
     "//sandbox",
   ]
   deps = [
-    ":breakpad",
-    ":common",
     ":constants",
-    "//base",
+    ":hook_util",
+    ":nt_registry",
     "//chrome/install_static:install_static_util",
+
+    # Still uses base/win/pe_image.h
+    "//base",
+    "//third_party/crashpad/crashpad/client:client",
   ]
 }
+
+static_library("hook_util") {
+  sources = [
+    "hook_util/thunk_getter.cc",
+    "hook_util/thunk_getter.h",
+  ]
+  deps = [
+    "//sandbox",
+  ]
+}
+
+# This target contains utility functions which must only depend on
+# kernel32. Please don't add dependencies on other system libraries.
+static_library("nt_registry") {
+  sources = [
+    "../sandbox/win/src/nt_internals.h",
+    "nt_registry/nt_registry.cc",
+    "nt_registry/nt_registry.h",
+  ]
+  if (is_official_build && full_wpo_on_official == true) {
+    # This library doen't build with WPO enabled due to a MSVC compiler bug.
+    # TODO(pennymac|sebmarchand): Remove this once MS has fixed this compiler
+    # bug: https://connect.microsoft.com/VisualStudio/feedback/details/3104499
+    configs -= [ "//build/config/compiler:default_optimization" ]
+    configs += [ "//build/config/compiler:optimize_no_wpo" ]
+  }
+
+  libs = [ "kernel32.lib" ]
+}
+
+##------------------------------------------------------------------------------
+## tests
+##------------------------------------------------------------------------------
 
 test("chrome_elf_unittests") {
   output_name = "chrome_elf_unittests"
@@ -148,13 +187,17 @@ test("chrome_elf_unittests") {
     "blacklist/test/blacklist_test.cc",
     "chrome_elf_util_unittest.cc",
     "elf_imports_unittest.cc",
+    "nt_registry/nt_registry_unittest.cc",
     "run_all_unittests.cc",
   ]
   include_dirs = [ "$target_gen_dir" ]
   deps = [
     ":blacklist",
     ":blacklist_test_main_dll",
-    ":common",
+    ":chrome_elf_security",
+    ":constants",
+    ":hook_util",
+    ":nt_registry",
     "//base",
     "//base/test:test_support",
     "//chrome",
@@ -198,10 +241,22 @@ shared_library("blacklist_test_main_dll") {
   ]
   deps = [
     ":blacklist",
-    ":common",
+    ":nt_registry",
     "//base",
     "//build/config/sanitizers:deps",
     "//chrome/install_static:install_static_util",
+  ]
+  ldflags = [
+    "/NODEFAULTLIB:user32.lib",
+    "/DELAYLOAD:dbghelp.dll",
+    "/DELAYLOAD:ole32.dll",
+    "/DELAYLOAD:psapi.dll",
+    "/DELAYLOAD:rpcrt4.dll",
+    "/DELAYLOAD:shell32.dll",
+    "/DELAYLOAD:user32.dll",
+    "/DELAYLOAD:winhttp.dll",
+    "/DELAYLOAD:winmm.dll",
+    "/DELAYLOAD:ws2_32.dll",
   ]
 }
 

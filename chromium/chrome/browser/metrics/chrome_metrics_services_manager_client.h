@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -26,6 +27,25 @@ class ChromeMetricsServicesManagerClient
   explicit ChromeMetricsServicesManagerClient(PrefService* local_state);
   ~ChromeMetricsServicesManagerClient() override;
 
+  // Unconditionally attempts to create a field trial to control client side
+  // metrics/crash sampling to use as a fallback when one hasn't been
+  // provided. This is expected to occur on first-run on platforms that don't
+  // have first-run variations support. This should only be called when there is
+  // no existing field trial controlling the sampling feature, and on the
+  // correct platform and channel.
+  static void CreateFallbackSamplingTrial(base::FeatureList* feature_list);
+
+  // Determines if this client is eligible to send metrics. If they are, and
+  // there was user consent, then metrics and crashes would be reported.
+  static bool IsClientInSample();
+
+  // Gets the sample rate for in-sample clients. If the sample rate is not
+  // defined, returns false, and |rate| is unchanged, otherwise returns true,
+  // and |rate| contains the sample rate. If the client isn't in-sample, the
+  // sample rate is undefined. It is also undefined for clients that are not
+  // eligible for sampling.
+  static bool GetSamplingRatePerMille(int* rate);
+
  private:
   // This is defined as a member class to get access to
   // ChromeMetricsServiceAccessor through ChromeMetricsServicesManagerClient's
@@ -42,6 +62,11 @@ class ChromeMetricsServicesManagerClient
   bool IsSafeBrowsingEnabled(const base::Closure& on_update_callback) override;
   bool IsMetricsReportingEnabled() override;
   bool OnlyDoMetricsRecording() override;
+
+#if defined(OS_WIN)
+  // On Windows, the client controls whether Crashpad can upload crash reports.
+  void UpdateRunningServices(bool may_record, bool may_upload) override;
+#endif  // defined(OS_WIN)
 
   // Gets the MetricsStateManager, creating it if it has not already been
   // created.

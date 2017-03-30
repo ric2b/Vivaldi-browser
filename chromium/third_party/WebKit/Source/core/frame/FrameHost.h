@@ -41,7 +41,7 @@
 namespace blink {
 
 class ChromeClient;
-class CustomElementReactionStack;
+class ConsoleMessageStorage;
 class Deprecation;
 class EventHandlerRegistry;
 class OverscrollController;
@@ -113,8 +113,8 @@ public:
     const AtomicString& overrideEncoding() const { return m_overrideEncoding; }
     void setOverrideEncoding(const AtomicString& encoding) { m_overrideEncoding = encoding; }
 
-    CustomElementReactionStack& customElementReactionStack();
-    const CustomElementReactionStack& customElementReactionStack() const;
+    ConsoleMessageStorage& consoleMessageStorage();
+    const ConsoleMessageStorage& consoleMessageStorage() const;
 
     DECLARE_TRACE();
 
@@ -139,7 +139,7 @@ private:
     const Member<VisualViewport> m_visualViewport;
     const Member<OverscrollController> m_overscrollController;
     const Member<EventHandlerRegistry> m_eventHandlerRegistry;
-    const Member<CustomElementReactionStack> m_customElementReactionStack;
+    const Member<ConsoleMessageStorage> m_consoleMessageStorage;
 
     AtomicString m_overrideEncoding;
     int m_subframeCount;

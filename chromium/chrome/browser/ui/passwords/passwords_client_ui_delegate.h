@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_CLIENT_UI_DELEGATE_H_
 #define CHROME_BROWSER_UI_PASSWORDS_PASSWORDS_CLIENT_UI_DELEGATE_H_
 
+#include <map>
 #include <memory>
 #include <vector>
 
 #include "base/callback.h"
-#include "base/memory/scoped_vector.h"
+#include "base/strings/string16.h"
 #include "components/autofill/core/common/password_form.h"
 
 namespace content {
@@ -45,15 +46,16 @@ class PasswordsClientUIDelegate {
   // a decision. If the UI isn't shown the method returns false and doesn't call
   // |callback|.
   virtual bool OnChooseCredentials(
-      ScopedVector<autofill::PasswordForm> local_credentials,
-      ScopedVector<autofill::PasswordForm> federated_credentials,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+      std::vector<std::unique_ptr<autofill::PasswordForm>>
+          federated_credentials,
       const GURL& origin,
       const base::Callback<void(const autofill::PasswordForm*)>& callback) = 0;
 
   // Called when user is auto signed in to the site. |local_forms[0]| contains
   // the credential returned to the site. |origin| is a URL of the site.
   virtual void OnAutoSignin(
-      ScopedVector<autofill::PasswordForm> local_forms,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
       const GURL& origin) = 0;
 
   // Called when it's the right time to enable autosign-in explicitly.
@@ -70,10 +72,10 @@ class PasswordsClientUIDelegate {
   // the manage password icon. |federated_matches| contain the matching stored
   // federated credentials to display in the UI.
   virtual void OnPasswordAutofilled(
-      const autofill::PasswordFormMap& password_form_map,
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          password_form_map,
       const GURL& origin,
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>*
-          federated_matches) = 0;
+      const std::vector<const autofill::PasswordForm*>* federated_matches) = 0;
 
  protected:
   virtual ~PasswordsClientUIDelegate() = default;

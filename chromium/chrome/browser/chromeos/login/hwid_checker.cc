@@ -118,8 +118,11 @@ bool IsMachineHWIDCorrect() {
     return true;
   if (!base::SysInfo::IsRunningOnChromeOS())
     return true;
+
   chromeos::system::StatisticsProvider* stats =
       chromeos::system::StatisticsProvider::GetInstance();
+  if (stats->IsRunningOnVm())
+    return true;
 
   std::string hwid;
   if (!stats->GetMachineStatistic(chromeos::system::kHardwareClassKey, &hwid)) {
@@ -127,14 +130,7 @@ bool IsMachineHWIDCorrect() {
     return false;
   }
   if (!chromeos::IsHWIDCorrect(hwid)) {
-    // Log the system vendor info to see what the system vendor is on the GCE
-    // VMs. This info will be used to filter out error messages on VMs. See
-    // http://crbug.com/585514 and http://crbug.com/585515 for more info.
-    std::string system_vendor;
-    stats->GetMachineStatistic(chromeos::system::kSystemVendorKey,
-                               &system_vendor);
-    LOG(ERROR) << "Machine has malformed HWID '" << hwid << "'. "
-               << "The system vendor is '" << system_vendor << "'.";
+    LOG(ERROR) << "Machine has malformed HWID '" << hwid << "'. ";
     return false;
   }
   return true;

@@ -93,15 +93,6 @@ CreditCard::CreditCard(const std::string& guid, const std::string& origin)
       expiration_year_(0),
       server_status_(OK) {}
 
-CreditCard::CreditCard(const base::string16& card_number,
-                       int expiration_month,
-                       int expiration_year)
-    : CreditCard() {
-  SetNumber(card_number);
-  SetExpirationMonth(expiration_month);
-  SetExpirationYear(expiration_year);
-}
-
 CreditCard::CreditCard(RecordType type, const std::string& server_id)
     : CreditCard() {
   DCHECK(type == MASKED_SERVER_CARD || type == FULL_SERVER_CARD);
@@ -134,9 +125,6 @@ base::string16 CreditCard::TypeForDisplay(const std::string& type) {
   return ::autofill::TypeForFill(type);
 }
 
-// This method is not compiled on iOS because the resources are not used and
-// should not be shipped.
-#if !defined(OS_IOS)
 // static
 int CreditCard::IconResourceId(const std::string& type) {
   if (type == kAmericanExpressCard)
@@ -159,7 +147,6 @@ int CreditCard::IconResourceId(const std::string& type) {
   DCHECK_EQ(kGenericCard, type);
   return IDR_AUTOFILL_CC_GENERIC;
 }
-#endif  // #if !defined(OS_IOS)
 
 // static
 const char* CreditCard::GetCreditCardType(const base::string16& number) {

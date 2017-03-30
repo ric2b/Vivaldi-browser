@@ -15,6 +15,17 @@ import zipfile
 from util import build_utils
 
 
+def _CheckFilePathEndsWithJar(parser, file_path):
+  if not file_path.endswith(".jar"):
+    # dx ignores non .jar files.
+    parser.error("%s does not end in .jar" % file_path)
+
+
+def _CheckFilePathsEndWithJar(parser, file_paths):
+  for file_path in file_paths:
+    _CheckFilePathEndsWithJar(parser, file_path)
+
+
 def _RemoveUnwantedFilesFromZip(dex_path):
   iz = zipfile.ZipFile(dex_path, 'r')
   tmp_dex_path = '%s.tmp.zip' % dex_path
@@ -80,9 +91,14 @@ def _ParseArgs(args):
     logging.warning('--main-dex-list-path is unused if multidex is not enabled')
 
   if options.inputs:
-    options.inputs = build_utils.ParseGypList(options.inputs)
+    options.inputs = build_utils.ParseGnList(options.inputs)
+    _CheckFilePathsEndWithJar(parser, options.inputs)
   if options.excluded_paths:
-    options.excluded_paths = build_utils.ParseGypList(options.excluded_paths)
+    options.excluded_paths = build_utils.ParseGnList(options.excluded_paths)
+
+  if options.proguard_enabled_input_path:
+    _CheckFilePathEndsWithJar(parser, options.proguard_enabled_input_path)
+  _CheckFilePathsEndWithJar(parser, paths)
 
   return options, paths
 
@@ -152,11 +168,10 @@ def _RunDx(changes, options, dex_cmd, paths):
           dex_cmd.append('--incremental')
           for path in changed_paths:
             changed_subpaths = set(changes.IterChangedSubpaths(path))
-            # Not a fundamental restriction, but it's the case right now and it
-            # simplifies the logic to assume so.
-            assert changed_subpaths, 'All inputs should be zip files.'
-            build_utils.ExtractAll(path, path=classes_temp_dir,
-                                   predicate=lambda p: p in changed_subpaths)
+            # Note: |changed_subpaths| may be empty if nothing changed.
+            if changed_subpaths:
+              build_utils.ExtractAll(path, path=classes_temp_dir,
+                                     predicate=lambda p: p in changed_subpaths)
           paths = [classes_temp_dir]
 
     dex_cmd += paths

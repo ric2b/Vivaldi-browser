@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/common/shelf/shelf_background_animator_observer.h"
 #include "ash/common/shelf/shelf_types.h"
 #include "ash/common/system/tray/actionable_view.h"
-#include "ash/common/wm/background_animator.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/views/bubble/tray_bubble_view.h"
@@ -24,11 +24,11 @@ class WmShelf;
 // Base class for children of StatusAreaWidget: SystemTray, WebNotificationTray,
 // LogoutButtonTray, OverviewButtonTray.
 // This class handles setting and animating the background when the Launcher
-// his shown/hidden. It also inherits from ActionableView so that the tray
+// is shown/hidden. It also inherits from ActionableView so that the tray
 // items can override PerformAction when clicked on.
 class ASH_EXPORT TrayBackgroundView : public ActionableView,
-                                      public BackgroundAnimatorDelegate,
-                                      public ui::ImplicitAnimationObserver {
+                                      public ui::ImplicitAnimationObserver,
+                                      public ShelfBackgroundAnimatorObserver {
  public:
   static const char kViewClassName[];
 
@@ -80,14 +80,12 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   void ChildPreferredSizeChanged(views::View* child) override;
   void GetAccessibleState(ui::AXViewState* state) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
+  void OnPaint(gfx::Canvas* canvas) override;
 
   // ActionableView:
   bool PerformAction(const ui::Event& event) override;
   gfx::Rect GetFocusBounds() override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-
-  // BackgroundAnimatorDelegate:
-  void UpdateBackground(int alpha) override;
 
   // Called whenever the shelf alignment changes.
   virtual void SetShelfAlignment(ShelfAlignment alignment);
@@ -138,12 +136,14 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // Updates the arrow visibility based on the launcher visibility.
   void UpdateBubbleViewArrow(views::TrayBubbleView* bubble_view);
 
+  // ShelfBackgroundAnimatorObserver:
+  void UpdateShelfItemBackground(int alpha) override;
+
+  // Updates the visibility of this tray's separator.
+  void SetSeparatorVisibility(bool is_show);
+
  private:
   class TrayWidgetObserver;
-
-  // Called from Initialize after all status area trays have been created.
-  // Sets the border based on the position of the view.
-  void SetTrayBorder();
 
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
@@ -169,6 +169,10 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // This variable stores the activation override which will tint the background
   // differently if set to true.
   bool draw_background_as_active_;
+
+  // Visibility of this tray's separator which is a line of 1x32px and 4px to
+  // right of tray.
+  bool is_separator_visible_;
 
   std::unique_ptr<TrayWidgetObserver> widget_observer_;
   std::unique_ptr<TrayEventFilter> tray_event_filter_;

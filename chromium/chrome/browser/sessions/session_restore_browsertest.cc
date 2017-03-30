@@ -43,6 +43,7 @@
 #include "components/sessions/core/serialized_navigation_entry_test_helper.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
+#include "components/sync/protocol/session_specifics.pb.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -54,7 +55,6 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "sync/protocol/session_specifics.pb.h"
 #include "ui/base/page_transition_types.h"
 
 #if defined(OS_MACOSX)
@@ -543,16 +543,16 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreIndividualTabFromWindow) {
   ASSERT_EQ(1U, service->entries().size());
   ASSERT_EQ(sessions::TabRestoreService::WINDOW,
             service->entries().front()->type);
-  const sessions::TabRestoreService::Window* window =
-      static_cast<sessions::TabRestoreService::Window*>(
-          service->entries().front());
+  auto* window = static_cast<sessions::TabRestoreService::Window*>(
+      service->entries().front().get());
   EXPECT_EQ(3U, window->tabs.size());
 
   // Find the SessionID for entry2. Since the session service was destroyed,
   // there is no guarantee that the SessionID for the tab has remained the same.
   base::Time timestamp;
   int http_status_code = 0;
-  for (const sessions::TabRestoreService::Tab& tab : window->tabs) {
+  for (const auto& tab_ptr : window->tabs) {
+    const sessions::TabRestoreService::Tab& tab = *tab_ptr;
     // If this tab held url2, then restore this single tab.
     if (tab.navigations[0].virtual_url() == url2) {
       timestamp = tab.navigations[0].timestamp();
@@ -575,7 +575,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreIndividualTabFromWindow) {
   ASSERT_EQ(sessions::TabRestoreService::WINDOW,
             service->entries().front()->type);
   window = static_cast<sessions::TabRestoreService::Window*>(
-      service->entries().front());
+      service->entries().front().get());
   EXPECT_EQ(2U, window->tabs.size());
 
   // Make sure that the restored tab was restored with the correct
@@ -615,9 +615,8 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_WindowWithOneTab) {
   // Expect the window to be converted to a tab by the TRS.
   EXPECT_EQ(1U, service->entries().size());
   ASSERT_EQ(sessions::TabRestoreService::TAB, service->entries().front()->type);
-  const sessions::TabRestoreService::Tab* tab =
-      static_cast<sessions::TabRestoreService::Tab*>(
-          service->entries().front());
+  auto* tab = static_cast<const sessions::TabRestoreService::Tab*>(
+      service->entries().front().get());
 
   // Restore the tab.
   std::vector<sessions::LiveTab*> content =
@@ -1280,6 +1279,44 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWithNavigateSelectedTab) {
   // Navigated url should be the active tab.
   ASSERT_EQ(url3_,
             new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+}
+
+// Ensure that AUTO_SUBFRAME navigations in subframes are restored.
+// See https://crbug.com/638088.
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreAfterAutoSubframe) {
+  // Load a page with a blank iframe, then navigate the iframe.  This will be an
+  // auto-subframe commit, and we expect it to be restored.
+  GURL main_url(ui_test_utils::GetTestUrl(
+      base::FilePath(base::FilePath::kCurrentDirectory),
+      base::FilePath(FILE_PATH_LITERAL("iframe_blank.html"))));
+  GURL subframe_url(ui_test_utils::GetTestUrl(
+      base::FilePath(base::FilePath::kCurrentDirectory),
+      base::FilePath(FILE_PATH_LITERAL("title1.html"))));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  content::TestNavigationObserver observer(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  std::string nav_frame_script =
+      "frames[0].location.href = '" + subframe_url.spec() + "';";
+  ASSERT_TRUE(content::ExecuteScript(
+      browser()->tab_strip_model()->GetActiveWebContents(), nav_frame_script));
+  observer.Wait();
+
+  // Restore the session.
+  Browser* new_browser = QuitBrowserAndRestore(browser(), 1);
+  ASSERT_EQ(1u, active_browser_list_->size());
+  ASSERT_EQ(1, new_browser->tab_strip_model()->count());
+
+  // The restored page should have the right iframe.
+  ASSERT_EQ(main_url,
+            new_browser->tab_strip_model()->GetActiveWebContents()->GetURL());
+  std::string actual_frame_url;
+  std::string frame_url_script =
+      "window.domAutomationController.send("
+      "frames[0].location.href);";
+  EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+      new_browser->tab_strip_model()->GetActiveWebContents(), frame_url_script,
+      &actual_frame_url));
+  EXPECT_EQ(subframe_url.possibly_invalid_spec(), actual_frame_url);
 }
 
 // Do a clobber restore from the new tab page. This test follows the code path

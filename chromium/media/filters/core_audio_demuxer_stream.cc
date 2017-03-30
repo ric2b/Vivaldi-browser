@@ -103,6 +103,7 @@ CoreAudioDemuxerStream::CoreAudioDemuxerStream(
     UInt32 bit_rate,
     Type type)
     : demuxer_(demuxer),
+      is_enabled_(true),
       reading_audio_data_(false),
       is_enqueue_running_(false),
       output_buffer_(NULL),
@@ -186,6 +187,12 @@ void CoreAudioDemuxerStream::Read(const ReadCB& read_cb) {
 
   if (!audio_queue_) {
     base::ResetAndReturn(&read_cb_).Run(kAborted, NULL);
+    return;
+  }
+
+  if (!is_enabled_) {
+    DVLOG(1) << "Read from disabled stream, returning EOS";
+    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
     return;
   }
 

@@ -49,12 +49,11 @@ class ASH_EXPORT WmRootWindowControllerAura : public WmRootWindowController,
       int shell_container_id,
       views::Widget::InitParams* init_params) override;
   WmWindow* FindEventTarget(const gfx::Point& location_in_screen) override;
+  gfx::Point GetLastMouseLocationInRoot() override;
   void AddObserver(WmRootWindowControllerObserver* observer) override;
   void RemoveObserver(WmRootWindowControllerObserver* observer) override;
 
   // ShellObserver:
-  void OnFullscreenStateChanged(bool is_fullscreen,
-                                WmWindow* root_window) override;
   void OnShelfAlignmentChanged(WmWindow* root_window) override;
 
   // DisplayObserver:

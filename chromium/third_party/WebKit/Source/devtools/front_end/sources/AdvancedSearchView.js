@@ -75,9 +75,21 @@ WebInspector.AdvancedSearchView.prototype = {
     {
         if (queryCandidate)
             this._search.value = queryCandidate;
-        this.focus();
+
+        if (this.isShowing())
+            this.focus();
+        else
+            this._focusOnShow = true;
 
         this._startIndexing();
+    },
+
+    wasShown: function()
+    {
+        if (this._focusOnShow) {
+            this.focus();
+            delete this._focusOnShow;
+        }
     },
 
     _onIndexingFinished: function()
@@ -273,15 +285,6 @@ WebInspector.AdvancedSearchView.prototype = {
         this._searchMessageElement.textContent = finished ? WebInspector.UIString("Search finished.") : WebInspector.UIString("Search interrupted.");
     },
 
-    /**
-     * @override
-     * @return {!Element}
-     */
-    defaultFocusedElement: function()
-    {
-        return this._search;
-    },
-
     focus: function()
     {
         WebInspector.setCurrentFocusElement(this._search);
@@ -344,28 +347,13 @@ WebInspector.AdvancedSearchView.prototype = {
 /**
  * @param {string} query
  * @param {string=} filePath
- * @return {!Promise.<!WebInspector.AdvancedSearchView>}
  */
 WebInspector.AdvancedSearchView.openSearch = function(query, filePath)
 {
-    /**
-     * @param {?WebInspector.Widget} view
-     * @return {!WebInspector.AdvancedSearchView}
-     */
-    function updateSearchBox(view)
-    {
-        console.assert(view && view instanceof WebInspector.AdvancedSearchView);
-        var searchView = /** @type {!WebInspector.AdvancedSearchView} */(view);
-        if (searchView._search !== searchView.element.window().document.activeElement) {
-            WebInspector.inspectorView.setCurrentPanel(WebInspector.SourcesPanel.instance());
-            var fileMask = filePath ? " file:" + filePath : "";
-            searchView._toggle(query + fileMask);
-            searchView.focus();
-        }
-        return searchView;
-    }
-
-    return WebInspector.inspectorView.showViewInDrawer("sources.search").then(updateSearchBox);
+    WebInspector.viewManager.showView("sources.search");
+    var searchView = /** @type {!WebInspector.AdvancedSearchView} */ (self.runtime.sharedInstance(WebInspector.AdvancedSearchView));
+    var fileMask = filePath ? " file:" + filePath : "";
+    searchView._toggle(query + fileMask);
 }
 
 /**
@@ -414,16 +402,13 @@ WebInspector.AdvancedSearchView.ActionDelegate.prototype = {
         return true;
     },
 
-    /**
-     * @return {!Promise.<!WebInspector.AdvancedSearchView>}
-     */
     _showSearch: function()
     {
         var selection = WebInspector.inspectorView.element.getDeepSelection();
         var queryCandidate = "";
         if (selection.rangeCount)
             queryCandidate = selection.toString().replace(/\r?\n.*/, "");
-        return WebInspector.AdvancedSearchView.openSearch(queryCandidate);
+        WebInspector.AdvancedSearchView.openSearch(queryCandidate);
     },
 }
 

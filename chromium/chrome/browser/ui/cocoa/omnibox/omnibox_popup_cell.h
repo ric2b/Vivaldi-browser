@@ -40,7 +40,7 @@ class OmniboxPopupViewMac;
 // Is this suggestion an answer or calculator result.
 @property(readonly, nonatomic) bool isAnswer;
 @property(readonly, nonatomic) AutocompleteMatch::Type matchType;
-@property(readonly, nonatomic) int max_lines;
+@property(readonly, nonatomic) int maxLines;
 
 - (instancetype)initWithMatch:(const AutocompleteMatch&)match
                contentsOffset:(CGFloat)contentsOffset

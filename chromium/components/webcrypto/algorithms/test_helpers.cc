@@ -18,7 +18,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
-#include "components/test_runner/test_common.h"
 #include "components/webcrypto/algorithm_dispatch.h"
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/generate_key_result.h"
@@ -42,9 +41,7 @@ bool Base64DecodeUrlSafe(const std::string& input, std::string* output) {
 }  // namespace
 
 // static
-void WebCryptoTestBase::SetUpTestCase() {
-  test_runner::EnsureBlinkInitialized();
-}
+void WebCryptoTestBase::SetUpTestCase() {}
 
 void PrintTo(const Status& status, ::std::ostream* os) {
   *os << StatusToString(status);
@@ -114,8 +111,7 @@ blink::WebCryptoAlgorithm CreateRsaHashedKeyGenAlgorithm(
   return blink::WebCryptoAlgorithm::adoptParamsAndCreate(
       algorithm_id,
       new blink::WebCryptoRsaHashedKeyGenParams(
-          CreateAlgorithm(hash_id), modulus_length, public_exponent.data(),
-          static_cast<unsigned int>(public_exponent.size())));
+          CreateAlgorithm(hash_id), modulus_length, public_exponent));
 }
 
 std::vector<uint8_t> Corrupted(const std::vector<uint8_t>& input) {

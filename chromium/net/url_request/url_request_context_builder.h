@@ -34,7 +34,7 @@
 #include "net/http/http_network_session.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_service.h"
-#include "net/quic/quic_protocol.h"
+#include "net/quic/core/quic_protocol.h"
 #include "net/socket/next_proto.h"
 #include "net/url_request/url_request_job_factory.h"
 
@@ -92,7 +92,6 @@ class NET_EXPORT URLRequestContextBuilder {
     HostMappingRules* host_mapping_rules;
     uint16_t testing_fixed_http_port;
     uint16_t testing_fixed_https_port;
-    bool enable_spdy31;
     bool enable_http2;
     bool enable_quic;
     std::string quic_user_agent_id;
@@ -108,6 +107,7 @@ class NET_EXPORT URLRequestContextBuilder {
     bool quic_migrate_sessions_on_network_change;
     bool quic_migrate_sessions_early;
     bool quic_disable_bidirectional_streams;
+    bool quic_race_cert_verification;
   };
 
   URLRequestContextBuilder();
@@ -286,12 +286,13 @@ class NET_EXPORT URLRequestContextBuilder {
         quic_disable_bidirectional_streams;
   }
 
-  void set_throttling_enabled(bool throttling_enabled) {
-    throttling_enabled_ = throttling_enabled;
+  void set_quic_race_cert_verification(bool quic_race_cert_verification) {
+    http_network_session_params_.quic_race_cert_verification =
+        quic_race_cert_verification;
   }
 
-  void set_backoff_enabled(bool backoff_enabled) {
-    backoff_enabled_ = backoff_enabled;
+  void set_throttling_enabled(bool throttling_enabled) {
+    throttling_enabled_ = throttling_enabled;
   }
 
   void set_socket_performance_watcher_factory(
@@ -353,7 +354,6 @@ class NET_EXPORT URLRequestContextBuilder {
 #endif
   bool http_cache_enabled_;
   bool throttling_enabled_;
-  bool backoff_enabled_;
   bool sdch_enabled_;
   bool cookie_store_set_by_client_;
 

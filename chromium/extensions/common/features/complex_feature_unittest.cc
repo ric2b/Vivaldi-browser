@@ -17,31 +17,25 @@ namespace extensions {
 TEST(ComplexFeatureTest, MultipleRulesWhitelist) {
   const std::string kIdFoo("fooabbbbccccddddeeeeffffgggghhhh");
   const std::string kIdBar("barabbbbccccddddeeeeffffgggghhhh");
-  std::unique_ptr<ComplexFeature::FeatureList> features(
-      new ComplexFeature::FeatureList());
+  std::vector<Feature*> features;
 
-  // Rule: "extension", whitelist "foo".
-  std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature);
-  std::unique_ptr<base::DictionaryValue> rule(
-      DictionaryBuilder()
-          .Set("whitelist", ListBuilder().Append(kIdFoo).Build())
-          .Set("extension_types", ListBuilder().Append("extension").Build())
-          .Build());
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
+  {
+    // Rule: "extension", whitelist "foo".
+    std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature());
+    simple_feature->set_whitelist({kIdFoo.c_str()});
+    simple_feature->set_extension_types({Manifest::TYPE_EXTENSION});
+    features.push_back(simple_feature.release());
+  }
 
-  // Rule: "legacy_packaged_app", whitelist "bar".
-  simple_feature.reset(new SimpleFeature);
-  rule = DictionaryBuilder()
-             .Set("whitelist", ListBuilder().Append(kIdBar).Build())
-             .Set("extension_types",
-                  ListBuilder().Append("legacy_packaged_app").Build())
-             .Build();
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
+  {
+    // Rule: "legacy_packaged_app", whitelist "bar".
+    std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature());
+    simple_feature->set_whitelist({kIdBar.c_str()});
+    simple_feature->set_extension_types({Manifest::TYPE_LEGACY_PACKAGED_APP});
+    features.push_back(simple_feature.release());
+  }
 
-  std::unique_ptr<ComplexFeature> feature(
-      new ComplexFeature(std::move(features)));
+  std::unique_ptr<ComplexFeature> feature(new ComplexFeature(&features));
 
   // Test match 1st rule.
   EXPECT_EQ(
@@ -80,30 +74,24 @@ TEST(ComplexFeatureTest, MultipleRulesWhitelist) {
 
 // Tests that dependencies are correctly checked.
 TEST(ComplexFeatureTest, Dependencies) {
-  std::unique_ptr<ComplexFeature::FeatureList> features(
-      new ComplexFeature::FeatureList());
+  std::vector<Feature*> features;
 
-  // Rule which depends on an extension-only feature (content_security_policy).
-  std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature);
-  std::unique_ptr<base::DictionaryValue> rule =
-      DictionaryBuilder()
-          .Set("dependencies",
-               ListBuilder().Append("manifest:content_security_policy").Build())
-          .Build();
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
+  {
+    // Rule which depends on an extension-only feature
+    // (content_security_policy).
+    std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature());
+    simple_feature->set_dependencies({"manifest:content_security_policy"});
+    features.push_back(simple_feature.release());
+  }
 
-  // Rule which depends on an platform-app-only feature (serial).
-  simple_feature.reset(new SimpleFeature);
-  rule = DictionaryBuilder()
-             .Set("dependencies",
-                  ListBuilder().Append("permission:serial").Build())
-             .Build();
-  simple_feature->Parse(rule.get());
-  features->push_back(std::move(simple_feature));
+  {
+    // Rule which depends on an platform-app-only feature (serial).
+    std::unique_ptr<SimpleFeature> simple_feature(new SimpleFeature());
+    simple_feature->set_dependencies({"permission:serial"});
+    features.push_back(simple_feature.release());
+  }
 
-  std::unique_ptr<ComplexFeature> feature(
-      new ComplexFeature(std::move(features)));
+  std::unique_ptr<ComplexFeature> feature(new ComplexFeature(&features));
 
   // Available to extensions because of the content_security_policy rule.
   EXPECT_EQ(

@@ -84,9 +84,7 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
 
   virtual ~ChildFrameCompositingHelper();
 
-  BrowserPluginManager* GetBrowserPluginManager();
   blink::WebPluginContainer* GetContainer();
-  int GetInstanceID();
 
   void CheckSizeAndAdjustLayerProperties(const gfx::Size& new_size,
                                          float device_scale_factor,
@@ -109,7 +107,7 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
       int browser_plugin_instance_id,
       const cc::SurfaceId& id,
       const cc::SurfaceSequence& sequence);
-  void UpdateWebLayer(blink::WebLayer* layer);
+  void UpdateWebLayer(std::unique_ptr<blink::WebLayer> layer);
 
   int host_routing_id_;
 

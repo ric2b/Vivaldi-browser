@@ -9,6 +9,7 @@ import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
@@ -45,7 +46,7 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
     @MediumTest
     public void testCloseDialog() throws InterruptedException, ExecutionException,
             TimeoutException {
-        triggerUIAndWait(mReadyToClose);
+        triggerUIAndWait(mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -55,7 +56,7 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
     public void testEditAndCloseDialog() throws InterruptedException, ExecutionException,
             TimeoutException {
         triggerUIAndWait(mReadyForInput);
-        clickAndWait(R.id.button_secondary, mReadyToClose);
+        clickAndWait(R.id.button_secondary, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -95,13 +96,16 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
                 "123"});
     }
 
-    /** Attempt to add an invalid credit card number and cancel payment. */
-    @MediumTest
+    /**
+     * Attempt to add an invalid credit card number and cancel payment.
+     * @MediumTest
+     */
+    @FlakyTest(message = "crbug.com/626289")
     public void testAddInvalidCardNumberAndCancel()
             throws InterruptedException, ExecutionException, TimeoutException {
         fillNewCardForm("123", "Bob", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
         clickInCardEditorAndWait(R.id.payments_edit_done_button, mEditorValidationError);
-        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -116,13 +120,16 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
                 new int[] {month, year, billingAddress}, mBillingAddressChangeProcessed);
     }
 
-    /** Attempt to add a credit card with an empty name on card and cancel payment. */
-    @MediumTest
+    /**
+     * Attempt to add a credit card with an empty name on card and cancel payment.
+     * @MediumTest
+     */
+    @FlakyTest(message = "crbug.com/626289")
     public void testAddEmptyNameOnCardAndCancel()
             throws InterruptedException, ExecutionException, TimeoutException {
         fillNewCardForm("5454-5454-5454-5454", "", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
         clickInCardEditorAndWait(R.id.payments_edit_done_button, mEditorValidationError);
-        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -203,7 +210,7 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -249,7 +256,7 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInCardEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -362,5 +369,14 @@ public class PaymentRequestNoShippingTest extends PaymentRequestTestBase {
                     RecordHistogram.getHistogramValueCountForTesting(
                             "PaymentRequest.RequestedInformation", i));
         }
+    }
+
+    /** Verifies the format of the billing address suggestions when adding a new credit card. */
+    @MediumTest
+    public void testNewCardBillingAddressFormat()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        fillNewCardForm("5454-5454-5454-5454", "Bob", DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS);
+        assertTrue(getSpinnerSelectionTextInCardEditor(2).equals(
+                "Jon Doe, Google, 340 Main St, Los Angeles, CA 90291, United States"));
     }
 }

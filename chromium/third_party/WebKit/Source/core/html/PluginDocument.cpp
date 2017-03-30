@@ -79,7 +79,7 @@ void PluginDocumentParser::createDocumentStructure()
 {
     // FIXME: Assert we have a loader to figure out why the original null checks
     // and assert were added for the security bug in http://trac.webkit.org/changeset/87566
-    ASSERT(document());
+    DCHECK(document());
     RELEASE_ASSERT(document()->loader());
 
     LocalFrame* frame = document()->frame();
@@ -154,7 +154,7 @@ void PluginDocumentParser::finish()
 PluginView* PluginDocumentParser::pluginView() const
 {
     if (Widget* widget = toPluginDocument(document())->pluginWidget()) {
-        ASSERT_WITH_SECURITY_IMPLICATION(widget->isPluginContainer());
+        SECURITY_DCHECK(widget->isPluginContainer());
         return toPluginView(widget);
     }
     return 0;
@@ -178,8 +178,11 @@ DocumentParser* PluginDocument::createParser()
 Widget* PluginDocument::pluginWidget()
 {
     if (m_pluginNode && m_pluginNode->layoutObject()) {
-        ASSERT(m_pluginNode->layoutObject()->isEmbeddedObject());
-        return toLayoutEmbeddedObject(m_pluginNode->layoutObject())->widget();
+        CHECK(m_pluginNode->layoutObject()->isEmbeddedObject());
+        Widget* widget = toLayoutEmbeddedObject(m_pluginNode->layoutObject())->widget();
+        if (!widget || !widget->isPluginContainer())
+            return nullptr;
+        return widget;
     }
     return 0;
 }
@@ -189,11 +192,11 @@ Node* PluginDocument::pluginNode()
     return m_pluginNode.get();
 }
 
-void PluginDocument::detach(const AttachContext& context)
+void PluginDocument::detachLayoutTree(const AttachContext& context)
 {
     // Release the plugin node so that we don't have a circular reference.
     m_pluginNode = nullptr;
-    HTMLDocument::detach(context);
+    HTMLDocument::detachLayoutTree(context);
 }
 
 DEFINE_TRACE(PluginDocument)

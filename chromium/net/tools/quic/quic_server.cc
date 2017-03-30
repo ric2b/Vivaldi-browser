@@ -15,18 +15,19 @@
 
 #include "net/base/ip_endpoint.h"
 #include "net/base/sockaddr_storage.h"
-#include "net/quic/crypto/crypto_handshake.h"
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_clock.h"
-#include "net/quic/quic_crypto_stream.h"
-#include "net/quic/quic_data_reader.h"
-#include "net/quic/quic_protocol.h"
+#include "net/quic/core/crypto/crypto_handshake.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_clock.h"
+#include "net/quic/core/quic_crypto_stream.h"
+#include "net/quic/core/quic_data_reader.h"
+#include "net/quic/core/quic_protocol.h"
 #include "net/tools/quic/quic_dispatcher.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_clock.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
 #include "net/tools/quic/quic_packet_reader.h"
+#include "net/tools/quic/quic_simple_dispatcher.h"
 #include "net/tools/quic/quic_simple_server_session_helper.h"
 #include "net/tools/quic/quic_socket_utils.h"
 
@@ -47,14 +48,14 @@ const char kSourceAddressTokenSecret[] = "secret";
 
 }  // namespace
 
-QuicServer::QuicServer(ProofSource* proof_source)
-    : QuicServer(proof_source,
+QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source)
+    : QuicServer(std::move(proof_source),
                  QuicConfig(),
                  QuicCryptoServerConfig::ConfigOptions(),
-                 QuicSupportedVersions()) {}
+                 AllSupportedVersions()) {}
 
 QuicServer::QuicServer(
-    ProofSource* proof_source,
+    std::unique_ptr<ProofSource> proof_source,
     const QuicConfig& config,
     const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
     const QuicVersionVector& supported_versions)
@@ -65,9 +66,9 @@ QuicServer::QuicServer(
       config_(config),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
-                     proof_source),
+                     std::move(proof_source)),
       crypto_config_options_(crypto_config_options),
-      supported_versions_(supported_versions),
+      version_manager_(supported_versions),
       packet_reader_(new QuicPacketReader()) {
   Initialize();
 }
@@ -147,8 +148,8 @@ QuicDefaultPacketWriter* QuicServer::CreateWriter(int fd) {
 
 QuicDispatcher* QuicServer::CreateQuicDispatcher() {
   QuicEpollAlarmFactory alarm_factory(&epoll_server_);
-  return new QuicDispatcher(
-      config_, &crypto_config_, supported_versions_,
+  return new QuicSimpleDispatcher(
+      config_, &crypto_config_, &version_manager_,
       std::unique_ptr<QuicEpollConnectionHelper>(new QuicEpollConnectionHelper(
           &epoll_server_, QuicAllocator::BUFFER_POOL)),
       std::unique_ptr<QuicServerSessionBase::Helper>(

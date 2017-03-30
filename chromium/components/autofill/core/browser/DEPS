@@ -4,7 +4,7 @@ include_rules = [
   "+components/keyed_service/core",
   "+components/signin/core/browser",
   "+components/signin/core/common",
-  "+components/sync_driver",
+  "+components/sync",
   "+components/variations",
   "+components/version_info",
   "+components/webdata/common",
@@ -14,7 +14,6 @@ include_rules = [
   "+google_apis/google_api_keys.h",
   "+net",
   "+sql",
-  "+sync",
   "+third_party/fips181",
   "+third_party/libaddressinput", # For address i18n.
   "+third_party/libphonenumber",  # For phone number i18n.

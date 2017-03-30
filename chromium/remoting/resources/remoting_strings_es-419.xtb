@@ -74,7 +74,6 @@ Para obtener más información sobre la privacidad, consulta la política de pri
 <translation id="2676780859508944670">Operación en curso…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Las actualizaciones de software, por lo general, se realizan de forma automática, pero puede haber errores en casos excepcionales. La actualización del software no debe tardar más de unos minutos y se puede hacer mientras estás conectado a tu computadora de forma remota.</translation>
-<translation id="2813770873348017932">Las conexiones con la computadora remota se bloquearon temporalmente porque alguien intentó conectarse con ella a través de un PIN no válido. Vuelve a intentarlo más tarde.</translation>
 <translation id="2841013758207633010">Hora</translation>
 <translation id="2851674870054673688">Una vez que se haya ingresado el código, se iniciará la sesión compartida.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Host del Escritorio
 remoto de Chrome</translation>
 <translation id="4619978527973181021">Aceptar e instalar</translation>
-<translation id="4647791084836149355">Mostrar vista de Cardboard</translation>
 <translation id="4703302905453407178">Un componente requerido dejó de funcionar. Informa este problema ante los programadores.</translation>
 <translation id="4703799847237267011">Se cerró tu sesión en Chromoting.</translation>
 <translation id="4736223761657662401">Historial de conexiones</translation>
@@ -210,7 +208,6 @@ remoto de Chrome</translation>
 <translation id="6284412385303060032">Se cerró el host que se ejecuta en la pantalla de acceso de la consola para poder admitir el modo de cortina. Por lo tanto, se cambió a un host que se ejecuta en una sesión específica de usuario.</translation>
 <translation id="629730747756840877">Cuenta</translation>
 <translation id="6304318647555713317">Cliente</translation>
-<translation id="6324708100353784493">Habilitaste el modo de integración de Google Cardboard. Para utilizar este modo, coloca tu dispositivo en un visor compatible con Google Cardboard.</translation>
 <translation id="6381670701864002291">Tengo otro problema.</translation>
 <translation id="6398765197997659313">Salir de pantalla completa</translation>
 <translation id="6408143143164565232">• Escucha audio de computadoras Windows o Linux.
@@ -236,6 +233,7 @@ remoto de Chrome</translation>
 <translation id="6930242544192836755">Duración</translation>
 <translation id="6939719207673461467">Mostrar u ocultar teclado</translation>
 <translation id="6944854424004126054">Restaurar ventana</translation>
+<translation id="6963936880795878952">Las conexiones con la computadora remota se bloquearon temporalmente porque alguien intentó conectarse a ella con un PIN no válido. Vuelve a intentarlo más tarde.</translation>
 <translation id="6965382102122355670">Aceptar</translation>
 <translation id="6985691951107243942">¿Realmente deseas inhabilitar las conexiones remotas con <ph name="HOSTNAME" />? Si te arrepientes, tendrás que ir a esa computadora para volver a habilitar las conexiones.</translation>
 <translation id="6998989275928107238">A</translation>

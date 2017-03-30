@@ -269,6 +269,7 @@ Ha végzett az útmutatóval, a ChromeVox segítségével navigáljon a Bezárá
 <translation id="3392045790598181549"><ph name="NAME" />, menüelem</translation>
 <translation id="3406283310380167331">Űrlaplista megjelenítése</translation>
 <translation id="3422338090358345848">Keyboard Explorer megnyitása</translation>
+<translation id="3423495725743882470">$1. sor $2. oszlop</translation>
 <translation id="3457000393508828486">Részben megnyomva</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, gomb</translation>
 <translation id="3473644018603298796"><ph name="COUNT" />. dia</translation>
@@ -297,6 +298,7 @@ Ha végzett az útmutatóval, a ChromeVox segítségével navigáljon a Bezárá
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Automatikus kiegészítés listaként</translation>
 <translation id="3810838688059735925">Videó</translation>
+<translation id="3812237531158591503">$1 beillesztése.</translation>
 <translation id="3816633764618089385">Következő médiaelem</translation>
 <translation id="3819376190738087562">Nincs ugrás.</translation>
 <translation id="385383972552776628">A beállítások oldalának megnyitása</translation>
@@ -411,6 +413,7 @@ Ha végzett az útmutatóval, a ChromeVox segítségével navigáljon a Bezárá
 <translation id="5000760171916499057">Nincsenek űrlapok.</translation>
 <translation id="5005670136041063723">Nincs több hasonló elem.</translation>
 <translation id="501473567976723023">január</translation>
+<translation id="5040591161308540832">$1 táblázat, $2 × $3</translation>
 <translation id="5041394372352067729">A Braille-kijelző áthelyezése az oldal tetejére</translation>
 <translation id="5042770794184672516">Beszéd hangerejének növelése</translation>
 <translation id="5050015258024679800">Előző 4. szintű fejléc</translation>
@@ -518,7 +521,6 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="5876817486144482042">Beszéd hangerejének csökkentése</translation>
 <translation id="5887397643266327462">Braille-feliratok engedélyezve.</translation>
 <translation id="5891934789323004067">Táblázat</translation>
-<translation id="5919442531159595654">másolás.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{egyenlőségjel}other{# egyenlőségjel}}</translation>
 <translation id="5939518447894949180">Visszaállítás</translation>
 <translation id="5948123859135882163">Váltás a matematikai kifejezések strukturális és szemantikai értelmezése között</translation>
@@ -554,6 +556,8 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="6355910664415701303">Nincs előző listaelem.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Előző fejléc</translation>
+<translation id="6378565991815958969">$1 másolása.</translation>
+<translation id="6385591741672306837">oszlop</translation>
 <translation id="6387719785439924554">oldaltartalom</translation>
 <translation id="6411426777058107714">Nincs előző választógomb.</translation>
 <translation id="6414968628640960377">Előző eltérő elem.</translation>
@@ -653,7 +657,6 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="7532613204005497612">június</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, csúszka</translation>
 <translation id="7552432549459840808">Hasznos Chrome-billentyűparancsok</translation>
-<translation id="7586163296341959563">beillesztés.</translation>
 <translation id="7596919493010894443">kijelölés törölve</translation>
 <translation id="7604026522577407655">Ugrás az aktuális oszlop elejére</translation>
 <translation id="7604451927827590395">címsor</translation>
@@ -704,8 +707,8 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="8153880621934657047">Nem táblázatban van.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{alulvonás}other{# alulvonás}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">sor</translation>
 <translation id="8186185314313222077">váltás teljes képernyős módra</translation>
-<translation id="81960742267269908">kivágás.</translation>
 <translation id="8199231515320852133">Aktuális cella fejléceinek felolvasása</translation>
 <translation id="820417203470636242">Üres cella.</translation>
 <translation id="8215202828671303819">Többszörös kiválasztás</translation>
@@ -782,6 +785,7 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="9077213568694924680">eltávolítva a kiválasztottak közül</translation>
 <translation id="9082874451376019682">Nincs előző dia.</translation>
 <translation id="9089864840575085222">Ciklikus gépelési visszaolvasás</translation>
+<translation id="9105227991373418255">$1 kivágása.</translation>
 <translation id="9107530006868467849">Nincs előző médiamodul.</translation>
 <translation id="9108370397979208512">matematika</translation>
 <translation id="9108589040018540527">görgetősáv</translation>
@@ -789,6 +793,7 @@ A Chrome böngésző menüjének megnyitásához nyomja le az Alt + F billentyű
 <translation id="9115913704608474258">november</translation>
 <translation id="9128414153595658330">pnl</translation>
 <translation id="9149560530563164529">szakasz</translation>
+<translation id="9150735707954472829">Lap</translation>
 <translation id="9151211641321628915">Röviden elmondja, hogy mi az aktuális pozíció</translation>
 <translation id="9153606228985488238">Hangmagasság: <ph name="PERCENT" /> százalék</translation>
 <translation id="9160096769946561184">Ugrás az aktuális oszlop végére</translation>

@@ -107,6 +107,8 @@ public:
     {
         return host ? host->requireSupplement(key) : 0;
     }
+
+    DEFINE_INLINE_VIRTUAL_TRACE() { }
 };
 
 // Supplementable<T> inherits from GarbageCollectedMixin virtually
@@ -118,7 +120,6 @@ public:
     void provideSupplement(const char* key, Supplement<T>* supplement)
     {
         ASSERT(m_threadId == currentThread());
-        ASSERT(!this->m_supplements.get(key));
         this->m_supplements.set(key, supplement);
     }
 

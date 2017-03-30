@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
+<translation id="1007441141628883408">Aktiverar komponentuppdateringar för alla komponenter i <ph name="PRODUCT_NAME" /> när principen inte är angiven eller när den är inställd på Sant.
+
+      Om den är inställd på Falskt är komponentuppdateringar inaktiverade. Vissa komponenter undantas dock från principen: uppdateringar för komponenter som inte innehåller körbar kod eller inte märkbart förändrar webbläsarens funktion eller är viktiga för dess säkerhet inaktiveras inte.
+      Exempel på sådana komponenter är uppgifter om listor över återkallade certifikat och uppgifter i säker webbsökning. </translation>
 <translation id="101438888985615157">Rotera skärmen 180 grader</translation>
 <translation id="1017967144265860778">Energibesparing på inloggningssidan</translation>
 <translation id="1019101089073227242">Ange katalog för användardata</translation>
@@ -22,13 +26,6 @@
       Om den är inställd på sant eller inte har angetts rapporteras statistik.</translation>
 <translation id="1046484220783400299">Aktivera föråldrade webbplattformsfunktioner under en begränsad tid</translation>
 <translation id="1047128214168693844">Tillåt inte att någon webbplats spårar användarnas fysiska plats</translation>
-<translation id="1057535219415338480">Aktiverar nätverksförutsägelse i <ph name="PRODUCT_NAME" /> och förhindrar att användarna ändrar inställningen.
-
-      Detta styr inte bara DNS-förhämtning utan också TCP- och SSL-föranslutning och förrendering av webbsidor. Policyns namn refererar till DNS-förhämtning av historiska skäl.
-
-      Om du aktiverar eller inaktiverar den här inställningen kan användarna inte ändra eller åsidosätta den i <ph name="PRODUCT_NAME" />.
-
-      Om policyn inte ställs in är funktionen aktiverad, men den kan ändras av användarna.</translation>
 <translation id="1062011392452772310">Aktivera fjärrattestering för enheten</translation>
 <translation id="1090892140761957285">Webbadress för att validera autentiseringstoken för fjärråtkomstklient.
 
@@ -127,11 +124,6 @@
       enhetligt skrivbord. I så fall kan användaren inte aktivera funktionen.</translation>
 <translation id="1474273443907024088">Inaktivera falsk start i TLS</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Policyn anger hur lång tid i millisekunder som enhetshanteringstjänsten tillfrågas efter information om enhetspolicy.
-
-      Om du ställer in policyn ersätts standardvärdet 3 timmar. Giltiga värden för policyn är mellan 1800000 (30 minuter) och 86400000 (1 dag). Om ett värde utanför intervallet anges ändras det till närmaste gräns.
-
-      Om du inte anger policyn används standardvärdet 3 timmar i <ph name="PRODUCT_OS_NAME" />.</translation>
 <translation id="1504431521196476721">Fjärrattestering</translation>
 <translation id="1509692106376861764">Den här principen gäller inte från version 29 av <ph name="PRODUCT_NAME" /> och senare.</translation>
 <translation id="1522425503138261032">Tillåt alla webbplatser att spåra användarnas fysiska plats</translation>
@@ -146,6 +138,7 @@
       inte använda ARC.</translation>
 <translation id="1561424797596341174">Åsidosättningar av policyn för felsökningsversioner av fjärråtkomstvärden</translation>
 <translation id="1583248206450240930">Använd <ph name="PRODUCT_FRAME_NAME" /> som standard</translation>
+<translation id="1606958238518590302">När principen är inställd på sant kan inte användare spara något på externa lagringsenheter.</translation>
 <translation id="1608755754295374538">Webbadresser som ska ges tillgång till ljudinspelningsenheter utan meddelande</translation>
 <translation id="1617235075406854669">Aktivera borttagning av webb- och nedladdningshistorik</translation>
 <translation id="1617384279878333801">Gör att en person kan läggas till i profilhanteraren</translation>
@@ -257,6 +250,13 @@
       Om policyn är inställd på sant kommer <ph name="PRODUCT_OS_NAME" /> att försöka ladda ned betalningar med automatisk uppdatering via HTTP. Om policyn är inställd på falskt eller inte har angetts kommer HTTPS att användas för att ladda ned betalningar med automatisk uppdatering.</translation>
 <translation id="2006530844219044261">Energibesparing (DPMS)</translation>
 <translation id="201557587962247231">Frekvens för antal uppladdningar av statusrapport för enhet</translation>
+<translation id="2018836497795982119">Anger en tid i millisekunder för hur ofta enhetshanteringstjänsten tillfrågas om användarpolicyinformation.
+
+      När denna policy har ställts in åsidosätts standardvärdet tre timmar. Giltiga värden är från 1800000 (30 minuter) till 86400000 (en dag). Värden utanför intervallet ändras till närmaste gräns. Om plattformen stöder policymeddelanden används 24 timmar som uppdateringsfördröjning, eftersom uppdateringar då sker automatiskt så fort policyn förändras.
+
+      Om denna policy inte har ställts in används standardvärdet 3 timmar i <ph name="PRODUCT_NAME" />.
+
+      Observera att om plattformen stöder policymeddelanden används 24 timmar som uppdateringsfördröjning (och alla standardvärden och detta policyvärde ignoreras), eftersom uppdateringar då sker automatiskt så fort policyn förändras. Det gör tätare uppdateringar överflödiga.</translation>
 <translation id="2024476116966025075">Konfigurera domännamnet som krävs för fjärråtkomstklienter</translation>
 <translation id="2030905906517501646">Sökord för standardsökleverantör</translation>
 <translation id="206623763829450685">Anger vilka scheman för HTTP-autentisering som stöds av <ph name="PRODUCT_NAME" />.
@@ -348,11 +348,6 @@
 
       När Bluetooth har aktiverats måste enheten startas om innan ändringarna tillämpas (du behöver inte starta om enheten när du inaktiverar Bluetooth).</translation>
 <translation id="2366415278352956652">Aktiverar cast</translation>
-<translation id="2371309782685318247">Policyn anger hur ofta i millisekunder som enhetshanteringstjänsten avfrågas efter användarpolicyinformation.
-
-      Om policyn anges ersätter den standardinställningen 3 timmar. Giltiga värden för policyn är från 1800000 (30 minuter) till 86400000 (1 dag). Värden utanför detta intervall ändras till närmaste gräns.
-
-      Om policyn inte anges används standardvärdet 3 timmar i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2372547058085956601">Fördröjningen av den automatiska inloggningen till en offentlig session.
 
       Om policyn |DeviceLocalAccountAutoLoginId| inte har angetts har inte policyn någon effekt. I annat fall:
@@ -553,6 +548,7 @@
       Om den här inställningen är inaktiverad kan inte JavaScript användas på webbsidor och inställningen kan inte ändras av användaren.
 
       Om inställningen är aktiverad eller inte inställd kan JavaScript användas på webbsidor, men inställningen kan inte ändras av användaren.</translation>
+<translation id="2753637905605932878">Låt WebRTC endast använda UDP-portar inom ett begränsat intervall</translation>
 <translation id="2757054304033424106">Typer av tillägg/appar som får installeras</translation>
 <translation id="2759224876420453487">Styr användarens beteende i en multiprofilsession</translation>
 <translation id="2761483219396643566">Inaktivitetstid när enheten drivs av batteriet</translation>
@@ -686,6 +682,7 @@
 
           Om policyn inte anges används AllowJavaScript och användaren kan ändra inställningen.</translation>
 <translation id="3038323923255997294">Fortsätt köra bakgrundsappar när <ph name="PRODUCT_NAME" /> avslutas</translation>
+<translation id="3046192273793919231">Skicka nätverkspaket för övervakning av onlinestatusen till hanteringsservern</translation>
 <translation id="3048744057455266684">Om den här policyn ställs in och en sökadress som har föreslagits från adressfältet innehåller den här parametern i sökfrågan eller i fragmentidentifieraren kommer förslaget att visa sökorden och sökleverantören istället för själva sökadressen.
 
           Policyn är valfri. Om den inte ställs in byts inga sökord ut.
@@ -787,6 +784,15 @@
 <translation id="3264793472749429012">Kodningar för standardsökleverantör</translation>
 <translation id="3273221114520206906">Standardinställning för JavaScript</translation>
 <translation id="3288595667065905535">Lanseringskanal</translation>
+<translation id="3291367259589875381">Den här principen har fasats ut till förmån för <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" /> i M48 och tagits bort i M54.
+
+      Aktiverar nätverksförutsägelse i <ph name="PRODUCT_NAME" /> och förhindrar att användarna ändrar inställningen.
+
+      Detta styr inte bara DNS-förhämtning utan också TCP- och SSL-föranslutning och förrendering av webbsidor. Principens namn refererar till DNS-förhämtning av historiska skäl.
+
+      Om du aktiverar eller inaktiverar den här inställningen kan användarna inte ändra eller åsidosätta den i <ph name="PRODUCT_NAME" />.
+
+      Om principen inte anges är funktionen aktiverad, men den kan ändras av användarna.</translation>
 <translation id="3292147213643666827">Gör att <ph name="PRODUCT_NAME" /> kan fungera som proxy mellan <ph name="CLOUD_PRINT_NAME" /> och gamla skrivare som är anslutna till datorn.
 
       Om inställningen är aktiverad eller inte har konfigurerats kan användarna aktivera molnutskriftsproxyn genom autentisering med deras Google-konton.
@@ -891,6 +897,7 @@
       Om inställningen är inaktiverad kontrollerar <ph name="PRODUCT_NAME" /> aldrig om den är standardwebbläsare och användarkontrollerna för inställningen inaktiveras.
 
       Om inställningen inte anges kan användaren avgöra om <ph name="PRODUCT_NAME" /> ska vara standardwebbläsare och om ett meddelande ska visas för användaren när den inte är det.</translation>
+<translation id="379659290574555063">Behandla externa lagringsenheter som skrivskyddade.</translation>
 <translation id="3800626789999016379">Konfigurerar vilken katalog som ska användas för nedladdade filer i <ph name="PRODUCT_NAME" />.
 
       Om principen har ställts in används den angivna katalogen i <ph name="PRODUCT_NAME" /> oavsett om användaren har angett en katalog eller aktiverat flaggan för att bli tillfrågad om nedladdningsplats varje gång.
@@ -942,16 +949,20 @@
 <translation id="3864818549971490907">Standardinställning för plugin-program</translation>
 <translation id="3866249974567520381">Beskrivning</translation>
 <translation id="3866530186104388232">Om den här policyn är inställd på sant eller inte är konfigurerad visas befintliga användare på inloggningsskärmen i <ph name="PRODUCT_OS_NAME" /> och det går att välja en. Om policyn är inställd på falskt används inloggningsfönstret för användarnamn och lösenord i <ph name="PRODUCT_OS_NAME" />.</translation>
-<translation id="3866824067696705379">Hur ofta övervakningspulser skickas, i millisekunder.
-
-      Om policyn inte har angetts är standardfrekvensen 3 minuter. Den lägsta
-      frekvensen är 30 sekunder och den högsta 24 timmar. Värden
-      utanför detta intervall ändras till närmaste värde inom intervallet.</translation>
 <translation id="3868347814555911633">Den här policyn är bara aktiv i återförsäljarläge.
 
       Anger tillägg som installeras automatiskt för demoanvändaren för enheter i återförsäljarläge. Dessa tillägg sparas i enheten och kan installeras offline efter installationen.
 
       Varje post i listan innehåller en ordbok som måste innehålla tilläggets ID i fältet extension-id och dess uppdateringsadress i fältet update-url.</translation>
+<translation id="388237772682176890">Den här principen har fasats ut i M53 och tagits bort från M54, eftersom stödet för SPDY/3.1 har tagits bort.
+
+      Inaktiverar användning av SPDY-protokollet i <ph name="PRODUCT_NAME" />.
+
+      Om den här principen är aktiverad är SPDY-protokollet inte tillgängligt i <ph name="PRODUCT_NAME" />.
+
+      Om den här principen inaktiveras kan SPDY användas.
+
+      Om den här principen inte anges kommer SPDY att bli tillgängligt.</translation>
 <translation id="3891357445869647828">Aktivera JavaScript</translation>
 <translation id="3898060089412156345">Tillåt eller neka ljudinspelning.
 
@@ -969,6 +980,11 @@
 
           Om ingen inställning görs eller om Falskt anges kan användaren föra över filer till Google Drive.</translation>
 <translation id="3915395663995367577">Webbadress till en PAC-proxyfil</translation>
+<translation id="3939893074578116847">Skicka nätverkspaket för övervakning av onlinestatusen till hanteringsservern, så att
+      den kan identifiera om enheten är offline.
+
+      Om principen är inställd på sant kommer nätverkspaket för övervakning (så kallade <ph name="HEARTBEATS_TERM" />) att skickas.
+      Om principen är inställd på falskt eller inte har angetts skickas inga paket.</translation>
 <translation id="3964909636571393861">Ger åtkomst till en lista med webbadresser</translation>
 <translation id="3965339130942650562">Tidsgräns för utloggning av inaktiv användare</translation>
 <translation id="3967075520570946456">Gör att välkomstsidan visas när webbläsaren startas för första gången efter en uppgradering av operativsystemet.</translation>
@@ -1169,7 +1185,6 @@
 
           Om du inte anger principen kommer <ph name="PRODUCT_NAME" /> inte att delegera användaruppgifter även om en server identifieras som ett intranät.</translation>
 <translation id="4752880493649142945">Klientcertifikat för att ansluta till RemoteAccessHostTokenValidationUrl</translation>
-<translation id="4768493164188395498">Frekvens för övervakningspulser</translation>
 <translation id="4791031774429044540">Aktivera hjälpmedelsfunktionen stor markör.
 
           Om den här principen är sann är den stora markören alltid aktiverad.
@@ -1279,6 +1294,9 @@
            Om svarta listan har värdet * betyder det att alla värdar för Native Messaging är otillåtna, såvida de inte har angetts explicit i vitlistan.
 
           Om principen inte har getts något värde läser <ph name="PRODUCT_NAME" /> in alla installerade värdar för Native Messaging.</translation>
+<translation id="5288772341821359899">Om den här principen har angetts används bara UDP-portarna inom det angivna intervallet (ändvärdena inräknade) för WebRTC.
+
+      Om principen inte anges eller om den har ställts in på den tomma strängen eller ett ogiltigt portintervall får vilken tillgänglig lokal UDP-port som helst användas för WebRTC.</translation>
 <translation id="5290940294294002042">Ange en lista med plugin-program som användaren kan aktivera och inaktivera</translation>
 <translation id="5302612588919538756">Den här principen har fasats ut. Använd SyncDisabled i stället.
 
@@ -1349,6 +1367,18 @@
       Om policyn har angetts kommer den angivna sessionen automatiskt att loggas in efter att en viss tid har förflutit på inloggningsskärmen utan åtgärder från användaren. Den offentliga sessionen måste redan vara konfigurerad (se |DeviceLocalAccounts|).
 
       Om policyn inte har angetts sker ingen automatisk inloggning.</translation>
+<translation id="5529037166721644841">Anger en tid i millisekunder för hur ofta enhetshanteringstjänsten tillfrågas om användarpolicyinformation.
+
+       När denna policy principen har ställts in åsidosätts standardvärdet tre timmar. Giltiga värden är från 1800000 (30 minuter) till 86400000 (en dag). Värden utanför intervallet ändras till närmaste gräns.
+
+      Om denna policy inte har ställts in används standardvärdet 3 timmar i <ph name="PRODUCT_OS_NAME" />.
+
+      Observera att om plattformen stöder policymeddelanden används 24 timmar som uppdateringsfördröjning (och alla standardvärden och detta principvärde ignoreras), eftersom uppdateringar då sker automatiskt så fort policyn förändras. Det gör tätare uppdateringar överflödiga.</translation>
+<translation id="5535957389335373033">Hur ofta nätverkspaket för övervakning skickas, i millisekunder.
+
+      Om policyn inte har angetts är standardfrekvensen 3 minuter. Den lägsta
+      frekvensen är 30 sekunder och den högsta 24 timmar. Värden
+      utanför detta intervall ändras till närmaste värde inom intervallet.</translation>
 <translation id="5535973522252703021">Vitlista  för Kerberos-delegeringsserver</translation>
 <translation id="5560039246134246593">Lägg till en parameter vid hämtningen av startvärdet för Variations i <ph name="PRODUCT_NAME" />.
 
@@ -1388,6 +1418,7 @@
 
           Om den här inställningen är inaktiverad eller inte har angetts kan fjärråtkomstvärden kopplas till vilken lokal användare som helst.</translation>
 <translation id="5697306356229823047">Rapportera enhetsanvändare</translation>
+<translation id="570062449808736508">När man ställt in ett annat värde för principen än en tom sträng läser WebView webbadressbegränsningar från innehållsutgivaren med utfärdarnamnet.</translation>
 <translation id="5703863730741917647">Ange vilken åtgärd som ska vidtas när fördröjningen på grund av inaktivitet har uppnåtts.
 
           Tänk på att den här policyn är på väg att fasas ut och kommer att tas bort i framtiden.
@@ -1655,6 +1686,7 @@
           Om du ställer in den här policyn kan användarna åsidosätta den tillfälligt genom att aktivera eller inaktivera skärmtangentbordet. Användarens val sparas däremot inte och standardinställningen återställs varje gång inloggningsskärmen öppnas igen eller användaren är inaktiv på inloggningsskärmen i en minut.
 
           Om policyn inte ställs in är skärmtangentbordet inaktiverat när inloggningsskärmen visas första gången. Användaren kan aktivera eller inaktivera skärmtangentbordet när som helst och dess status på inloggningsskärmen sparas för användaren.</translation>
+<translation id="6573305661369899995">Ange en extern källa för webbadressbegränsningar</translation>
 <translation id="6598235178374410284">Användarens avatarbild</translation>
 <translation id="6628646143828354685">Principen innebär att du kan ange om webbplatser får tillgång till Bluetooth-enheter i närheten. Åtkomsten kan blockeras helt eller så kan användaren bli tillfrågad varje gång en webbplats begär att få tillgång till Bluetooth-enheter i närheten.
 
@@ -1786,6 +1818,7 @@
           Om inställningen är inaktiverad eller inte angiven kan värdar delas med hjälp av vilka konton som helst.
 
           Se även RemoteAccessHostClientDomain.</translation>
+<translation id="6979510692034647325">Aktiverar komponentuppdateringar i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6997592395211691850">Om OCSP/CRL-kontroller online krävs för lokala tillitsankare</translation>
 <translation id="7003334574344702284">När den här policyn är aktiverad tvingas import av sparade lösenord från standardwebbläsaren. Policyn påverkar också dialogrutan för import.
 
@@ -1917,6 +1950,9 @@
 
           Den här policyn gäller bara om policyn DefaultSearchProviderEnabled är aktiverad.</translation>
 <translation id="7302043767260300182">Skärmlåsningstid när enheten är ansluten till elnätet</translation>
+<translation id="7311458740754205918">Om policyn är inställd på sant eller inte inställd alls kan förslag på innehåll utifrån användarens webbhistorik, intressen eller plats visas på sidan Ny flik.
+
+      Om policyn är inställd på falskt visas inte förslag på innehåll som genererats automatiskt på sidan Ny flik.</translation>
 <translation id="7323896582714668701">Ytterligare kommandoradsparametrar för <ph name="PRODUCT_NAME" /></translation>
 <translation id="7329842439428490522">Anger efter hur lång tid utan åtgärd från användaren som skärmen ska stängas av när enheten drivs av batteriet.
 
@@ -1944,13 +1980,6 @@
       Om policyn inte har angetts används den inbyggda strategin av den automatiska rensningen. För närvarande är det strategin RemoveLRUIfDormant.</translation>
 <translation id="7336878834592315572">Behåll cookies under hela sessionen</translation>
 <translation id="7340034977315324840">Rapportera aktivitetstider för enhet</translation>
-<translation id="7381326101471547614">Inaktiverar användning av SPDY-protokollet i <ph name="PRODUCT_NAME" />.
-
-      Om den här policyn är aktiverad är SPDY-protokollet inte tillgängligt i <ph name="PRODUCT_NAME" />.
-
-      Om den här policyn inaktiveras kan SPDY användas.
-
-      Om den här policyn inte anges kommer SPDY att bli tillgängligt.</translation>
 <translation id="7384999953864505698">Tillåter QUIC-protokoll</translation>
 <translation id="7406651467768226499">Tillåta eller inte tillåta att kioskappen som startas automatiskt utan fördröjning styr <ph name="PRODUCT_OS_NAME" />-versionen.
 
@@ -1969,6 +1998,7 @@
 <translation id="7443616896860707393">Frågor vid korsursprungs-HTTP med basauktorisering</translation>
 <translation id="7468416082528382842">Windows-registerplats:</translation>
 <translation id="7469554574977894907">Aktivera sökförslag</translation>
+<translation id="7474249562477552702">Om SHA-1-signerade certifikat som utfärdats av lokala tillitsankare tillåts eller inte</translation>
 <translation id="7485481791539008776">Skrivarens standardurvalsregler</translation>
 <translation id="749556411189861380">Rapportera versionsinformation om operativsystem och fast programvara på registrerade enheter.
 
@@ -1976,7 +2006,6 @@
 <translation id="7511361072385293666">Om den här policyn är inställd på sant eller inte har angetts är användning av QUIC-protokoll i <ph name="PRODUCT_NAME" /> tillåten.
       Om policyn är inställd på falskt är inte användning av QUIC-protokoll tillåten.</translation>
 <translation id="7519251620064708155">Tillåt nyckelgenerering på dessa webbplatser</translation>
-<translation id="7523476810162382273">Skicka övervakningspulser till hanteringsservern</translation>
 <translation id="7529100000224450960">Policyn gör att du kan ange en lista med webbadressmönster som anger webbplatser som får öppna popupfönster.
 
           Om den här policyn inte anges används det globala standardvärdet för alla webbplatser. Standardvärdet hämtas från policyn DefaultPopupsSetting om den har angetts och från användarens personliga konfiguration om den inte har det.</translation>
@@ -1987,6 +2016,11 @@
 
       Om principen är inställd på SAML_INTERSTITIAL visas en mellansidesskärm när användaren loggar in som frågar om han eller hon vill fortsätta autentiseringen via SAML IdP på enhetens registreringsdomän eller gå tillbaka till det vanliga inloggningsflödet för GAIA.</translation>
 <translation id="7567380065339179813">Tillåt plugin-program på dessa webbplatser</translation>
+<translation id="757395965347379751">När den här inställningen har aktiverats är certifikat som signerats med SHA-1 tillåtna i <ph name="PRODUCT_NAME" /> så länge det går att validera dem i en obruten kedja till ett lokalt installerat CA-certifikat.
+
+      Observera att principen är beroende av att stacken för certifikatverifiering i operativsystemet tillåter SHA-1-signaturer. Om en uppdatering av operativsystemet leder till en ändring av hur SHA-1-certifikat hanteras där kanske den här principen inte längre har någon funktion. Vidare är principen bara en tillfällig lösning som ska ge företag längre tid på sig att avveckla SHA-1. Principen kommer att tas bort den 1 januari 2019 eller däromkring.
+
+      Om principen inte anges eller om den har ställts in på falskt kommer den utlysta tidsplanen för utfasning av SHA-1 att följas i <ph name="PRODUCT_NAME" />.</translation>
 <translation id="7593523670408385997">Konfigurerar storleken på cacheminnet där <ph name="PRODUCT_NAME" /> sparar cachade filer på skivan.
 
       När den här principen har getts ett värde använder <ph name="PRODUCT_NAME" /> ett cacheminne med den angivna storleken oavsett om användaren har angett en storlek med flaggan --disk-cache-size eller inte. Det värde som anges i principen är inte en fast gräns utan snarare ett förslag till cachesystemet. Om värdet är mindre än några MB är det för litet och avrundas uppåt till en vettig minimigräns.
@@ -2044,6 +2078,7 @@
 
           Om inställningen inaktiveras eller inte anges så kommer tvåstegsverifiering inte att aktiveras och standardfunktionen med en användardefinierad PIN-kod kommer att användas.</translation>
 <translation id="7750991880413385988">Öppna sidan Ny flik</translation>
+<translation id="7761446981238915769">Konfigurera listan över installerade appar på inloggningsskärmen</translation>
 <translation id="7761526206824804472">Anger en eller flera rekommenderade språkkoder för en offentlig session så att användare enkelt kan använda någon av dessa språkkoder.
 
       Användaren kan välja en språkkod och en tangentbordslayout innan en offentlig session startas. Som standard anges alla språkkoder som stöds av <ph name="PRODUCT_OS_NAME" /> i alfabetisk ordning. Du kan använda den här principen för att flytta flera rekommenderade språkkoder högst upp i listan.
@@ -2066,6 +2101,7 @@
 <translation id="7763479091692861127"> De typer av anslutningar som är tillåtna att använda uppdateringar av operativsystem. Uppdateringar av operativsystem belastar anslutningen hårt på grund av dess storlek och kan medföra extra kostnader. Därför är de inte aktiverade som standard för anslutningstyper som anses vara dyra. Det gäller bland annat WiMax, Bluetooth och Cellular.
 
       Identifierarna för giltiga anslutningstyper är ”ethernet”, ”wifi”, ”wimax”, ”bluetooth” och ”cellular”.</translation>
+<translation id="7763614521440615342">Visa förslag på innehåll på sidan Ny flik</translation>
 <translation id="7766336524667238790">Rapporterar information om den aktiva kiosksessionen, bland annat
       app-id och appversion.
 
@@ -2474,6 +2510,28 @@
 <translation id="8858642179038618439">Tvinga fram Säkert läge på YouTube</translation>
 <translation id="8864975621965365890">Ser till att avvisningsmeddelandet som visas när en webbplats renderas av <ph name="PRODUCT_FRAME_NAME" /> inte visas.</translation>
 <translation id="8870318296973696995">Startsida</translation>
+<translation id="88890388118515381">
+      Anger en lista med appar som installeras obemärkt på inloggningsskärmen,
+      utan att användaren gör något, och som inte kan avinstalleras.
+      Alla behörigheter som begärs beviljas automatiskt, utan att användaren
+      behöver göra något. Det gäller även ytterligare behörigheter som begärs i
+      framtida versioner av appen.
+
+      Om en app som tidigare har tvångsinstallerats tas bort från listan
+      avinstalleras den automatiskt av <ph name="PRODUCT_NAME" />.
+
+      Varje post i policyn är en sträng som innehåller ett tilläggs-id
+      och en uppdateringsadress avgränsade med semikolon (<ph name="SEMICOLON" />). 
+      Ett tilläggs-id är sträng med 32 bokstäver, till exempel den som
+      finns på <ph name="CHROME_EXTENSIONS_LINK" /> i utvecklarläge. Uppdateringsadressen ska peka på ett
+      XML-manifestdokument för uppdatering enligt beskrivningen på <ph name="LINK_TO_EXTENSION_DOC1" />.
+      Observera att uppdateringsadressen som anges i den här policyn bara
+      används för den ursprungliga installationen. För senare uppdateringar av
+      tillägget används den uppdateringsadress som anges i tilläggets manifest.
+
+      Exempel: <ph name="EXTENSION_POLICY_EXAMPLE" /> installerar appen <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> från standarduppdateringsadressen
+      för Chrome Web Store. Mer information om värdservrar för tillägg finns
+      på: <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">Quirks-servern tillhandahåller maskinvaruspecifika konfigurationsfiler, t.ex.
       ICC-bildskärmsprofiler som används för färgkalibrering av skärmen.
 
@@ -2527,10 +2585,6 @@
 <translation id="9088444059179765143">Konfigurera metod för automatisk tidszonsangivelse</translation>
 <translation id="9096086085182305205">Vitlista för autentiseringsserver</translation>
 <translation id="9098553063150791878">Princip för HTTP-autentisering</translation>
-<translation id="9104138886225968319">Skicka övervakningspulser till hanteringsservern så att denna kan identifiera om enheten är offline.
-
-      Om principen är inställd på sant kommer övervakningspulser att skickas. Om
-      principen är inställd på falskt eller inte har angetts kommer inga pulser att skickas.</translation>
 <translation id="9112897538922695510">Gör att du kan registrera en lista över protokollhanterare. Detta kan bara vara en rekommenderad policy. Egendomen |protokoll| ska anges till systemet som "mailto" och egendomen |webbadress| ska anges till webbadressmönstret i appen som hanterar systemet. Mönstret kan innehålla "%s", som ersätts av den hanterade webbadressen vid förekomst.
 
           Protokollhanterare som registreras av policyn slås ihop med de som registreras av användaren och båda går att använda. Användare kan åsidosätta protokollhanterarna som har installerats av policyn genom att installera en ny standardhanterare, men användare kan inte ta bort en protokollhanterare som har registrerats av policyn.</translation>
@@ -2572,6 +2626,7 @@
 <translation id="9187743794267626640">Inaktivera montering av extern lagring</translation>
 <translation id="9197740283131855199">Procentsats med vilken fördröjningen av dämpningen av skärmen ska skalanpassas om användaren gör något efter dämpningen</translation>
 <translation id="9200828125069750521">Parametrar för bildwebbadresser som använder POST</translation>
+<translation id="9217154963008402249">Frekvens för nätverkspaket för övervakning</translation>
 <translation id="922540222991413931">Konfigurera installationskällor för tillägg, appar och användarskript</translation>
 <translation id="924557436754151212">Importera sparade lösenord från standardwebbläsaren första gången den körs</translation>
 <translation id="930930237275114205">Ange katalog för användardata i <ph name="PRODUCT_FRAME_NAME" /></translation>

@@ -14,11 +14,11 @@
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "device/bluetooth/bluetooth_gatt_notify_session_android.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service_android.h"
 #include "jni/ChromeBluetoothRemoteGattDescriptor_jni.h"
 
 using base::android::AttachCurrentThread;
+using base::android::JavaParamRef;
 
 namespace device {
 
@@ -43,7 +43,7 @@ BluetoothRemoteGattDescriptorAndroid::Create(
 
 BluetoothRemoteGattDescriptorAndroid::~BluetoothRemoteGattDescriptorAndroid() {
   Java_ChromeBluetoothRemoteGattDescriptor_onBluetoothRemoteGattDescriptorAndroidDestruction(
-      AttachCurrentThread(), j_descriptor_.obj());
+      AttachCurrentThread(), j_descriptor_);
 }
 
 // static
@@ -64,7 +64,7 @@ std::string BluetoothRemoteGattDescriptorAndroid::GetIdentifier() const {
 BluetoothUUID BluetoothRemoteGattDescriptorAndroid::GetUUID() const {
   return device::BluetoothUUID(
       ConvertJavaStringToUTF8(Java_ChromeBluetoothRemoteGattDescriptor_getUUID(
-          AttachCurrentThread(), j_descriptor_.obj())));
+          AttachCurrentThread(), j_descriptor_)));
 }
 
 const std::vector<uint8_t>& BluetoothRemoteGattDescriptorAndroid::GetValue()
@@ -96,7 +96,7 @@ void BluetoothRemoteGattDescriptorAndroid::ReadRemoteDescriptor(
   }
 
   if (!Java_ChromeBluetoothRemoteGattDescriptor_readRemoteDescriptor(
-          AttachCurrentThread(), j_descriptor_.obj())) {
+          AttachCurrentThread(), j_descriptor_)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(error_callback,
@@ -123,8 +123,7 @@ void BluetoothRemoteGattDescriptorAndroid::WriteRemoteDescriptor(
 
   JNIEnv* env = AttachCurrentThread();
   if (!Java_ChromeBluetoothRemoteGattDescriptor_writeRemoteDescriptor(
-          env, j_descriptor_.obj(),
-          base::android::ToJavaByteArray(env, new_value).obj())) {
+          env, j_descriptor_, base::android::ToJavaByteArray(env, new_value))) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(error_callback,

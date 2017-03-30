@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/macros.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_request.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "content/public/browser/web_contents_delegate.h"
 
@@ -24,7 +24,7 @@ namespace user_prefs {
 class PrefRegistrySyncable;
 }
 
-class MediaStreamDevicesController : public PermissionBubbleRequest {
+class MediaStreamDevicesController : public PermissionRequest {
  public:
   MediaStreamDevicesController(content::WebContents* web_contents,
                                const content::MediaStreamRequest& request,
@@ -41,6 +41,11 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   bool IsAskingForVideo() const;
   base::string16 GetMessageText() const;
 
+  // Returns the PermissionsType associated with the provided
+  // ContentSettingsType. |content_type| must be a media stream type.
+  content::PermissionType GetPermissionTypeForContentSettingsType(
+      ContentSettingsType content_type) const;
+
   // Forces the permissions to be denied (without being persisted) regardless
   // of what the previous state was.  If the user had previously allowed the
   // site video or audio access, this ignores that and informs the site it was
@@ -54,10 +59,12 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   // |audio_accepted| and |video_accepted|. Intended for use from
   // MediaStreamInfobarDelegateAndroid.
   // TODO(tsergeant): Remove this by refactoring Android to use
-  // PermissionBubbleRequest instead of a custom infobar delegate.
+  // PermissionRequest instead of a custom infobar delegate.
   void GroupedRequestFinished(bool audio_accepted, bool video_accepted);
 
-  // PermissionBubbleRequest:
+  bool ShouldShowPersistenceToggle() const override;
+
+  // PermissionRequest:
   int GetIconId() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
@@ -65,7 +72,7 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
-  PermissionBubbleType GetPermissionBubbleType() const override;
+  PermissionRequestType GetPermissionRequestType() const override;
 
  private:
   // Returns a list of devices available for the request for the given
@@ -130,9 +137,6 @@ class MediaStreamDevicesController : public PermissionBubbleRequest {
   // The callback that needs to be Run to notify WebRTC of whether access to
   // audio/video devices was granted or not.
   content::MediaResponseCallback callback_;
-
-  // Whether the permissions granted or denied by the user should be persisted.
-  bool persist_permission_changes_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaStreamDevicesController);
 };

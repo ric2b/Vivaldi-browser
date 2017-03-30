@@ -20,8 +20,8 @@
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/ownership/owner_settings_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_validator.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/scoped_nss_types.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 namespace crypto {
 class RSAPrivateKey;
@@ -105,15 +105,12 @@ class DeviceSettingsService : public SessionManagerClient::Observer {
   // and stops any pending operations.
   void UnsetSessionManager();
 
-  SessionManagerClient* session_manager_client() const {
-    return session_manager_client_;
-  }
-
-  // Returns the currently active device settings. Returns NULL if the device
-  // settings have not been retrieved from session_manager yet.
   const enterprise_management::PolicyData* policy_data() {
     return policy_data_.get();
   }
+
+  // Returns the currently active device settings. Returns nullptr if the device
+  // settings have not been retrieved from session_manager yet.
   const enterprise_management::ChromeDeviceSettingsProto*
       device_settings() const {
     return device_settings_.get();

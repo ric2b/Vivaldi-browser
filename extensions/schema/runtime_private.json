@@ -3,16 +3,95 @@
 [
   {
     "namespace": "runtimePrivate",
-    "description": "Use the <code>vivaldi.runtimePrivate</code> API to exit the browser.",
+    "description": "Use the <code>vivaldi.runtimePrivate</code> API to access.",
     "compiler_options": {
       "implemented_in": "extensions/api/runtime/runtime_api.h"
     },
+    "types": [
+      {
+        "id": "FeatureFlagInfo",
+        "type": "object",
+        "description": "Object returned from the getAllFeatureFlags function.",
+        "properties": {
+          "name": {
+            "description": "Name of this feature flag. This is the key used to look up the name.",
+            "type": "string"
+          },
+          "friendlyName": {
+            "description": "This is the normalized name of this feature flag suitable to be showed to the user.",
+            "type": "string"
+          },
+          "description": {
+            "description": "Description of this feature flag.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The current value for this flag (true or false) in official builds.",
+            "type": "string"
+          },
+          "internalValue": {
+            "description": "The current value for this flag (true or false) in internal builds.",
+            "type": "string"
+          },
+          "locked": {
+            "description": "Locked from being changed. If true, it cannot be changed as it's locked from command line.",
+            "type": "boolean"
+          }
+        }
+      }
+    ],
     "functions": [
       {
         "name": "exit",
         "description": "Close all browsers and exit the application.",
         "type": "function",
         "parameters": []
+      },
+      {
+        "name": "getAllFeatureFlags",
+        "type": "function",
+        "description": "Gets all the registered Vivaldi feature flags.",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "FeatureFlagInfo" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "setFeatureEnabled",
+        "type": "function",
+        "description": "Enables or disables a feature.",
+        "parameters": [
+            {
+              "type": "string",
+              "name": "featureName",
+              "description": "Name of the feature to enable or disable."
+            },
+            {
+              "type": "boolean",
+              "name": "enable",
+              "description": "true to enable feature."
+            },
+            {
+              "type": "function",
+              "name": "callback",
+              "parameters": [
+                {
+                  "type": "boolean",
+                  "name": "success",
+                  "description": "true if feature name was valid, false on any error."
+                }
+              ]
+            }
+        ]
       }
     ]
   }

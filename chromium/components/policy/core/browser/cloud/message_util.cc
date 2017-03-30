@@ -46,6 +46,8 @@ int GetIDSForDMStatus(DeviceManagementStatus status) {
       return IDS_POLICY_DM_STATUS_SERVICE_DOMAIN_MISMATCH;
     case DM_STATUS_SERVICE_POLICY_NOT_FOUND:
       return IDS_POLICY_DM_STATUS_SERVICE_POLICY_NOT_FOUND;
+    case DM_STATUS_CANNOT_SIGN_REQUEST:
+      return IDS_POLICY_DM_STATUS_CANNOT_SIGN_REQUEST;
   }
   NOTREACHED() << "Unhandled DM status " << status;
   return IDS_POLICY_DM_STATUS_UNKNOWN_ERROR;
@@ -69,8 +71,8 @@ int GetIDSForValidationStatus(CloudPolicyValidatorBase::Status status) {
       return IDS_POLICY_VALIDATION_WRONG_SETTINGS_ENTITY_ID;
     case CloudPolicyValidatorBase::VALIDATION_BAD_TIMESTAMP:
       return IDS_POLICY_VALIDATION_BAD_TIMESTAMP;
-    case CloudPolicyValidatorBase::VALIDATION_WRONG_TOKEN:
-      return IDS_POLICY_VALIDATION_WRONG_TOKEN;
+    case CloudPolicyValidatorBase::VALIDATION_BAD_DM_TOKEN:
+      return IDS_POLICY_VALIDATION_BAD_DM_TOKEN;
     case CloudPolicyValidatorBase::VALIDATION_BAD_USERNAME:
       return IDS_POLICY_VALIDATION_BAD_USERNAME;
     case CloudPolicyValidatorBase::VALIDATION_POLICY_PARSE_ERROR:

@@ -27,23 +27,30 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import optparse
 import unittest
 
 from webkitpy.common.system.outputcapture import OutputCapture
-from webkitpy.layout_tests.port.test import TestPort
-from webkitpy.tool.commands.queries import *
-from webkitpy.tool.mock_tool import MockTool, MockOptions
+from webkitpy.tool.commands.queries import PrintBaselines, PrintExpectations
+from webkitpy.tool.mock_tool import MockWebKitPatch
 
 
 class PrintExpectationsTest(unittest.TestCase):
 
-    def run_test(self, tests, expected_stdout, platform='test-win-win7', **args):
-        options = MockOptions(all=False, csv=False, full=False, platform=platform,
-                              include_keyword=[], exclude_keyword=[], paths=False).update(**args)
-        tool = MockTool()
-        tool.port_factory.all_port_names = lambda: TestPort.ALL_BASELINE_VARIANTS
+    def run_test(self, tests, expected_stdout, platform='test-win-win7', **kwargs):
+        options_defaults = {
+            'all': False, 'csv': False, 'full': False, 'platform': platform,
+            'include_keyword': [], 'exclude_keyword': [], 'paths': False,
+        }
+        options_defaults.update(kwargs)
+        options = optparse.Values(dict(**options_defaults))
+        tool = MockWebKitPatch()
+        tool.port_factory.all_port_names = lambda: [
+            'test-linux-trusty', 'test-linux-precise',
+            'test-mac-mac10.11', 'test-mac-mac10.10',
+            'test-win-win10', 'test-win-win7'
+        ]
         command = PrintExpectations()
-        command.bind_to_tool(tool)
 
         oc = OutputCapture()
         try:
@@ -108,10 +115,14 @@ class PrintBaselinesTest(unittest.TestCase):
 
     def setUp(self):
         self.oc = None
-        self.tool = MockTool()
+        self.tool = MockWebKitPatch()
         self.test_port = self.tool.port_factory.get('test-win-win7')
         self.tool.port_factory.get = lambda port_name=None: self.test_port
-        self.tool.port_factory.all_port_names = lambda: TestPort.ALL_BASELINE_VARIANTS
+        self.tool.port_factory.all_port_names = lambda: [
+            'test-linux-trusty', 'test-linux-precise',
+            'test-mac-mac10.11', 'test-mac-mac10.10',
+            'test-win-win10', 'test-win-win7'
+        ]
 
     def tearDown(self):
         if self.oc:
@@ -128,10 +139,9 @@ class PrintBaselinesTest(unittest.TestCase):
 
     def test_basic(self):
         command = PrintBaselines()
-        command.bind_to_tool(self.tool)
         self.capture_output()
-        command.execute(MockOptions(all=False, include_virtual_tests=False,
-                                    csv=False, platform=None), ['passes/text.html'], self.tool)
+        options = optparse.Values({'all': False, 'include_virtual_tests': False, 'csv': False, 'platform': None})
+        command.execute(options, ['passes/text.html'], self.tool)
         stdout, _, _ = self.restore_output()
         self.assertMultiLineEqual(stdout,
                                   ('// For test-win-win7\n'
@@ -140,10 +150,9 @@ class PrintBaselinesTest(unittest.TestCase):
 
     def test_multiple(self):
         command = PrintBaselines()
-        command.bind_to_tool(self.tool)
         self.capture_output()
-        command.execute(MockOptions(all=False, include_virtual_tests=False, csv=False,
-                                    platform='test-win-*'), ['passes/text.html'], self.tool)
+        options = optparse.Values({'all': False, 'include_virtual_tests': False, 'csv': False, 'platform': 'test-win-*'})
+        command.execute(options, ['passes/text.html'], self.tool)
         stdout, _, _ = self.restore_output()
         self.assertMultiLineEqual(stdout,
                                   ('// For test-win-win10\n'
@@ -156,10 +165,9 @@ class PrintBaselinesTest(unittest.TestCase):
 
     def test_csv(self):
         command = PrintBaselines()
-        command.bind_to_tool(self.tool)
         self.capture_output()
-        command.execute(MockOptions(all=False, platform='*win7', csv=True,
-                                    include_virtual_tests=False), ['passes/text.html'], self.tool)
+        options = optparse.Values({'all': False, 'platform': '*win7', 'csv': True, 'include_virtual_tests': False})
+        command.execute(options, ['passes/text.html'], self.tool)
         stdout, _, _ = self.restore_output()
         self.assertMultiLineEqual(stdout,
                                   ('test-win-win7,passes/text.html,None,png,passes/text-expected.png,None\n'

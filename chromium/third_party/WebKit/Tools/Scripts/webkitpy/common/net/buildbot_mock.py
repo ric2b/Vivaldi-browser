@@ -26,76 +26,28 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import logging
-
+from webkitpy.common.net.buildbot import BuildBot
 from webkitpy.common.net.layouttestresults import LayoutTestResults
-from webkitpy.common.net import layouttestresults_unittest
-
-_log = logging.getLogger(__name__)
+from webkitpy.common.net.layouttestresults_unittest import LayoutTestResultsTest
 
 
-class MockBuild(object):
-
-    def __init__(self, builder, build_number, revision, is_green):
-        self._builder = builder
-        self._number = build_number
-        self._revision = revision
-        self._is_green = is_green
-
-    def results_url(self):
-        return "%s/%s" % (self._builder.results_url(), self._number)
-
-
-class MockBuilder(object):
-
-    def __init__(self, builder_name, master_name='chromium.mock'):
-        self._name = builder_name
-        self._master_name = master_name
-
-    def name(self):
-        return self._name
-
-    def build(self, build_number):
-        return MockBuild(self, build_number=build_number, revision=1234, is_green=False)
-
-    def results_url(self):
-        return "http://example.com/builders/%s/results" % self.name()
-
-    def accumulated_results_url(self):
-        return "http://example.com/f/builders/%s/results/layout-test-results" % self.name()
-
-    def latest_layout_test_results_url(self):
-        return self.accumulated_results_url()
-
-    def latest_layout_test_results(self):
-        return self.fetch_layout_test_results(self.latest_layout_test_results_url())
-
-    def fetch_layout_test_results(self, _):
-        return LayoutTestResults.results_from_string(layouttestresults_unittest.LayoutTestResultsTest.example_full_results_json)
-
-
-class MockBuildBot(object):
+# TODO(qyearsley): Instead of canned results from another module, other unit
+# tests may be a little easier to understand if this returned None by default
+# when there are no canned results to return.
+class MockBuildBot(BuildBot):
 
     def __init__(self):
-        self._mock_builder1_status = {
-            "name": "Builder1",
-            "is_green": True,
-            "activity": "building",
-        }
-        self._mock_builder2_status = {
-            "name": "Builder2",
-            "is_green": True,
-            "activity": "idle",
-        }
+        super(MockBuildBot, self).__init__()
+        # Dict of Build to canned LayoutTestResults.
+        self._canned_results = {}
 
-    def builder_with_name(self, builder_name, master_name='chromium.mock'):
-        return MockBuilder(builder_name, master_name)
+    def fetch_layout_test_results(self, _):
+        return LayoutTestResults.results_from_string(LayoutTestResultsTest.example_full_results_json)
 
-    def builder_statuses(self):
-        return [
-            self._mock_builder1_status,
-            self._mock_builder2_status,
-        ]
+    def set_results(self, build, results):
+        self._canned_results[build] = results
 
-    def light_tree_on_fire(self):
-        self._mock_builder2_status["is_green"] = False
+    def fetch_results(self, build):
+        return self._canned_results.get(
+            build,
+            LayoutTestResults.results_from_string(LayoutTestResultsTest.example_full_results_json))

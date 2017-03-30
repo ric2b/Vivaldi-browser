@@ -48,7 +48,8 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
                format == gfx::BufferFormat::BGRX_8888 ||
                format == gfx::BufferFormat::YVU_420;
       case gfx::BufferUsage::SCANOUT:
-        return format == gfx::BufferFormat::BGRX_8888;
+        return format == gfx::BufferFormat::BGRX_8888 ||
+               format == gfx::BufferFormat::RGBX_8888;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT: {
 #if defined(OS_CHROMEOS)
@@ -80,7 +81,7 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
         // TODO(dcastagna): Add support for pixmaps with multiple FDs for non
         // scanout buffers.
         return ClientNativePixmapDmaBuf::ImportFromDmabuf(
-            scoped_fd.release(), size, handle.strides_and_offsets[0].first);
+            scoped_fd.release(), size, handle.planes[0].stride);
 #else
         NOTREACHED();
         return nullptr;

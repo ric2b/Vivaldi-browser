@@ -35,8 +35,8 @@ TEST_F(ContextMenuCoordinatorTest, ValidateIsVisible) {
   params.location = CGPointZero;
   params.view.reset([[view_controller_ view] retain]);
   menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
+      initWithBaseViewController:view_controller_
+                          params:params]);
   [menu_coordinator_ start];
 
   EXPECT_TRUE([menu_coordinator_ isVisible]);
@@ -48,26 +48,11 @@ TEST_F(ContextMenuCoordinatorTest, ValidateDismissalOnStop) {
   params.location = CGPointZero;
   params.view.reset([[view_controller_ view] retain]);
   menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
+      initWithBaseViewController:view_controller_
+                          params:params]);
   [menu_coordinator_ start];
 
   [menu_coordinator_ stop];
-
-  EXPECT_FALSE([menu_coordinator_ isVisible]);
-}
-
-// Tests the context menu dismissal.
-TEST_F(ContextMenuCoordinatorTest, ValidateDismissalOnDestroy) {
-  web::ContextMenuParams params;
-  params.location = CGPointZero;
-  params.view.reset([[view_controller_ view] retain]);
-  menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
-  [menu_coordinator_ start];
-
-  menu_coordinator_.reset();
 
   EXPECT_FALSE([menu_coordinator_ isVisible]);
 }
@@ -78,8 +63,8 @@ TEST_F(ContextMenuCoordinatorTest, ValidateActions) {
   params.location = CGPointZero;
   params.view.reset([[view_controller_ view] retain]);
   menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
+      initWithBaseViewController:view_controller_
+                          params:params]);
 
   NSArray* menu_titles = @[ @"foo", @"bar" ];
   for (NSString* title in menu_titles) {
@@ -114,8 +99,8 @@ TEST_F(ContextMenuCoordinatorTest, CancelButtonExists) {
   params.location = CGPointZero;
   params.view.reset([[view_controller_ view] retain]);
   menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
+      initWithBaseViewController:view_controller_
+                          params:params]);
 
   [menu_coordinator_ start];
 
@@ -140,8 +125,8 @@ TEST_F(ContextMenuCoordinatorTest, ValidateContextMenuParams) {
   params.menu_title.reset(title);
   params.view.reset([[view_controller_ view] retain]);
   menu_coordinator_.reset([[ContextMenuCoordinator alloc]
-      initWithViewController:view_controller_
-                      params:params]);
+      initWithBaseViewController:view_controller_
+                          params:params]);
   [menu_coordinator_ start];
 
   EXPECT_TRUE([[view_controller_ presentedViewController]

@@ -25,8 +25,7 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
-"""
-This script imports a directory of W3C tests into Blink.
+"""This script imports a directory of W3C tests into Blink.
 
 This script takes a source repository directory, which it searches for files,
 then converts and copies files over to a destination directory.
@@ -119,11 +118,14 @@ def configure_logging():
 def parse_args():
     parser = optparse.OptionParser(usage='usage: %prog [options] source_repo_path')
     parser.add_option('-n', '--no-overwrite', dest='overwrite', action='store_false', default=True,
-                      help='Flag to prevent duplicate test files from overwriting existing tests. By default, they will be overwritten.')
+                      help=('Flag to prevent duplicate test files from overwriting existing tests. '
+                            'By default, they will be overwritten.'))
     parser.add_option('-a', '--all', action='store_true', default=False,
-                      help='Import all tests including reftests, JS tests, and manual/pixel tests. By default, only reftests and JS tests are imported.')
+                      help=('Import all tests including reftests, JS tests, and manual/pixel tests. '
+                            'By default, only reftests and JS tests are imported.'))
     parser.add_option('-d', '--dest-dir', dest='destination', default='w3c',
-                      help='Import into a specified directory relative to the LayoutTests root. By default, files are imported under LayoutTests/w3c.')
+                      help=('Import into a specified directory relative to the LayoutTests root. '
+                            'By default, files are imported under LayoutTests/w3c.'))
     parser.add_option('--ignore-expectations', action='store_true', default=False,
                       help='Ignore the W3CImportExpectations file and import everything.')
     parser.add_option('--dry-run', action='store_true', default=False,
@@ -146,8 +148,11 @@ class TestImporter(object):
         self.webkit_finder = WebKitFinder(self.filesystem)
         self._webkit_root = self.webkit_finder.webkit_base()
         self.layout_tests_dir = self.webkit_finder.path_from_webkit_base('LayoutTests')
-        self.destination_directory = self.filesystem.normpath(self.filesystem.join(self.layout_tests_dir, options.destination,
-                                                                                   self.filesystem.basename(self.source_repo_path)))
+        self.destination_directory = self.filesystem.normpath(
+            self.filesystem.join(
+                self.layout_tests_dir,
+                options.destination,
+                self.filesystem.basename(self.source_repo_path)))
         self.import_in_place = (self.source_repo_path == self.destination_directory)
         self.dir_above_repo = self.filesystem.dirname(self.source_repo_path)
 
@@ -173,12 +178,12 @@ class TestImporter(object):
             reftests = 0
             jstests = 0
 
-            # Files in 'tools' are not for browser testing (e.g., a script for generating test files).
-            # http://testthewebforward.org/docs/test-format-guidelines.html#tools
+            # Files in 'tools' are not for browser testing, so we skip them.
+            # See: http://testthewebforward.org/docs/test-format-guidelines.html#tools
             DIRS_TO_SKIP = ('.git', 'test-plan', 'tools')
 
-            # Need to copy all files in 'support', including HTML without meta data.
-            # http://testthewebforward.org/docs/test-format-guidelines.html#support-files
+            # We copy all files in 'support', including HTML without metadata.
+            # See: http://testthewebforward.org/docs/test-format-guidelines.html#support-files
             DIRS_TO_INCLUDE = ('resources', 'support')
 
             if dirs:
@@ -193,10 +198,10 @@ class TestImporter(object):
                     if path_base in dirs:
                         dirs.remove(path_base)
                         if not self.options.dry_run and self.import_in_place:
-                            _log.info("  pruning %s" % path_base)
+                            _log.info("  pruning %s", path_base)
                             self.filesystem.rmtree(path_full)
                         else:
-                            _log.info("  skipping %s" % path_base)
+                            _log.info("  skipping %s", path_base)
 
             copy_list = []
 
@@ -206,7 +211,7 @@ class TestImporter(object):
                 path_base = self.destination_directory.replace(self.layout_tests_dir + '/', '') + '/' + path_base
                 if path_base in paths_to_skip:
                     if not self.options.dry_run and self.import_in_place:
-                        _log.info("  pruning %s" % path_base)
+                        _log.info("  pruning %s", path_base)
                         self.filesystem.remove(path_full)
                         continue
                     else:
@@ -214,12 +219,12 @@ class TestImporter(object):
                 # FIXME: This block should really be a separate function, but the early-continues make that difficult.
 
                 if filename.startswith('.') or filename.endswith('.pl'):
-                    continue  # For some reason the w3c repo contains random perl scripts we don't care about.
+                    # The w3cs repos may contain perl scripts, which we don't care about.
+                    continue
                 if filename == 'OWNERS' or filename == 'reftest.list':
-                    continue  # These files fail our presubmits.
-                # see  http://crbug.com/584660 and
-                # http://crbug.com/582838.
-
+                    # These files fail our presubmits.
+                    # See http://crbug.com/584660 and http://crbug.com/582838.
+                    continue
 
                 fullpath = self.filesystem.join(root, filename)
 
@@ -234,7 +239,7 @@ class TestImporter(object):
                     copy_list.append({'src': fullpath, 'dest': filename})
                     continue
 
-                test_parser = TestParser(vars(self.options), filename=fullpath)
+                test_parser = TestParser(fullpath, self.host, vars(self.options))
                 test_info = test_parser.analyze_test()
                 if test_info is None:
                     continue
@@ -296,7 +301,7 @@ class TestImporter(object):
         for line in expectation_lines:
             if 'SKIP' in line.expectations:
                 if line.specifiers:
-                    _log.warning("W3CImportExpectations:%s should not have any specifiers" % line.line_numbers)
+                    _log.warning("W3CImportExpectations:%s should not have any specifiers", line.line_numbers)
                     continue
                 paths_to_skip.add(line.name)
         return paths_to_skip
@@ -334,7 +339,7 @@ class TestImporter(object):
 
                 if self.filesystem.isdir(orig_filepath):
                     # FIXME: Figure out what is triggering this and what to do about it.
-                    _log.error('%s refers to a directory' % orig_filepath)
+                    _log.error('%s refers to a directory', orig_filepath)
                     continue
 
                 if not self.filesystem.exists(orig_filepath):
@@ -353,12 +358,12 @@ class TestImporter(object):
 
                 relpath = self.filesystem.relpath(new_filepath, self.layout_tests_dir)
                 if not self.options.overwrite and self.filesystem.exists(new_filepath):
-                    _log.info('  skipping %s' % relpath)
+                    _log.info('  skipping %s', relpath)
                 else:
                     # FIXME: Maybe doing a file diff is in order here for existing files?
                     # In other words, there's no sense in overwriting identical files, but
                     # there's no harm in copying the identical thing.
-                    _log.info('  %s' % relpath)
+                    _log.info('  %s', relpath)
 
                 # Only HTML, XML, or CSS should be converted.
                 # FIXME: Eventually, so should JS when support is added for this type of conversion.
@@ -407,7 +412,10 @@ class TestImporter(object):
         """Checks whether a source path is too long to import.
 
         Args:
-          Absolute path of file to be imported.
+            Absolute path of file to be imported.
+
+        Returns:
+            True if the path is too long to import, False if it's OK.
         """
         path_from_repo_base = os.path.relpath(source_path, self.source_repo_path)
         return len(path_from_repo_base) > MAX_PATH_LENGTH

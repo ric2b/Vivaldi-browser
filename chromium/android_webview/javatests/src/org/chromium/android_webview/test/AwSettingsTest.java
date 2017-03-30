@@ -1350,15 +1350,20 @@ public class AwSettingsTest extends AwTestBase {
         }
 
         private String getData() {
+            // Add a sequence number as a comment to ensure WebView does not do
+            // something special for the same page load, for instance, restoring
+            // user state like a scroll position.
             return "<html><head>"
                     + (mWithViewPortTag ? "<meta name='viewport' content='width=3000' />" : "")
-                    + "</head>"
-                    + "<body></body></html>";
+                    + "</head><body><!-- "
+                    + mDataSequence++
+                    + " --></body></html>";
         }
 
         private final boolean mWithViewPortTag;
         private boolean mExpectScaleChange;
         private int mOnScaleChangedCallCount;
+        private int mDataSequence;
     }
 
     class AwSettingsForceZeroLayoutHeightTestHelper extends AwSettingsTestHelper<Boolean> {
@@ -1606,11 +1611,10 @@ public class AwSettingsTest extends AwTestBase {
     }
 
     /*
-     * Disabled due to document.defaultCharset removal. crbug.com/587484
      * @SmallTest
      * @Feature({"AndroidWebView", "Preferences"})
      */
-    @DisabledTest
+    @DisabledTest(message = "Disabled due to document.defaultCharset removal. crbug.com/587484")
     public void testDefaultTextEncodingWithTwoViews() throws Throwable {
         ViewPair views = createViews();
         runPerViewSettingsTest(

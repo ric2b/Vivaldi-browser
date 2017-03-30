@@ -3,10 +3,23 @@
 // found in the LICENSE file.
 
 // https://w3c.github.io/mediacapture-image/index.html#idl-def-PhotoCapabilities
+
+enum MeteringMode {
+    "unavailable",
+    "manual",
+    "single-shot",
+    "continuous",
+};
+
 [
     RuntimeEnabled=ImageCapture,
 ] interface PhotoCapabilities {
-    attribute MediaSettingsRange zoom;
+    readonly attribute MediaSettingsRange iso;
+    readonly attribute MediaSettingsRange imageHeight;
+    readonly attribute MediaSettingsRange imageWidth;
+    readonly attribute MediaSettingsRange zoom;
+    readonly attribute MeteringMode focusMode;
+    readonly attribute MeteringMode exposureMode;
     // TODO(mcasas): Implement all other PhotoCapabilities fields
     // https://crbug.com/518807
 };

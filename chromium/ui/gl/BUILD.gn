@@ -2,9 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//build/config/chrome_build.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+
+declare_args() {
+  enable_swiftshader = is_chrome_branded && is_win
+}
 
 use_egl = is_win || is_android || is_linux
 use_glx = use_x11
@@ -14,10 +20,9 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-if (target_os == "chromeos") {
-  pkg_config("libdrm") {
-    packages = [ "libdrm" ]
-  }
+buildflag_header("gl_features") {
+  header = "gl_features.h"
+  flags = [ "ENABLE_SWIFTSHADER=$enable_swiftshader" ]
 }
 
 config("gl_config") {
@@ -45,6 +50,8 @@ component("gl") {
     "android/surface_texture.h",
     "android/surface_texture_listener.cc",
     "android/surface_texture_listener.h",
+    "ca_renderer_layer_params.cc",
+    "ca_renderer_layer_params.h",
     "gl_bindings.cc",
     "gl_bindings.h",
     "gl_bindings_autogen_gl.cc",
@@ -85,15 +92,17 @@ component("gl") {
     "gl_image_stub.h",
     "gl_implementation.cc",
     "gl_implementation.h",
-    "gl_implementation_android.cc",
-    "gl_implementation_mac.cc",
-    "gl_implementation_win.cc",
     "gl_osmesa_api_implementation.cc",
     "gl_osmesa_api_implementation.h",
     "gl_share_group.cc",
     "gl_share_group.h",
     "gl_state_restorer.cc",
     "gl_state_restorer.h",
+    "gl_stub_api.cc",
+    "gl_stub_api.h",
+    "gl_stub_api_base.h",
+    "gl_stub_autogen_gl.cc",
+    "gl_stub_autogen_gl.h",
     "gl_surface.cc",
     "gl_surface.h",
     "gl_surface_osmesa.cc",
@@ -137,7 +146,6 @@ component("gl") {
   public_deps = [
     "//base",
     "//third_party/mesa:mesa_headers",
-    "//ui/base/",
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -159,8 +167,6 @@ component("gl") {
       "gl_image_egl.h",
       "gl_surface_egl.cc",
       "gl_surface_egl.h",
-      "gl_surface_egl_android.cc",
-      "gl_surface_egl_win.cc",
     ]
   }
   if (is_android || is_linux) {
@@ -171,7 +177,6 @@ component("gl") {
   }
   if (use_x11) {
     sources += [
-      "gl_implementation_x11.cc",
       "gl_surface_egl_x11.cc",
       "gl_surface_egl_x11.h",
       "gl_surface_osmesa_x11.cc",
@@ -182,16 +187,6 @@ component("gl") {
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
     ]
-  }
-  if (use_ozone) {
-    sources += [
-      "gl_image_ozone_native_pixmap.cc",
-      "gl_image_ozone_native_pixmap.h",
-      "gl_implementation_ozone.cc",
-      "gl_surface_egl_ozone.cc",
-    ]
-
-    deps += [ "//ui/ozone" ]
   }
   if (use_glx) {
     sources += [
@@ -236,10 +231,6 @@ component("gl") {
     libs = [ "dwmapi.lib" ]
     ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
 
-    if (is_official_build) {
-      include_dirs += [ "//third_party/swiftshader/include" ]
-    }
-
     data_deps = [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
@@ -280,14 +271,11 @@ component("gl") {
 
     libs = [ "android" ]
 
-    deps += [
-      ":gl_jni_headers",
-      "//ui/android:ui_java",
-    ]
+    deps += [ ":gl_jni_headers" ]
   }
 }
 
-source_set("gl_unittest_utils") {
+static_library("gl_unittest_utils") {
   testonly = true
   sources = [
     "gl_bindings_autogen_mock.cc",
@@ -308,7 +296,7 @@ source_set("gl_unittest_utils") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "test/gl_image_test_support.cc",
@@ -336,6 +324,26 @@ source_set("test_support") {
   }
 }
 
+source_set("run_all_unittests") {
+  testonly = true
+
+  sources = [
+    "test/run_all_unittests.cc",
+  ]
+
+  deps = [
+    "//base",
+  ]
+
+  public_deps = [
+    "//base/test:test_support",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
 test("gl_unittests") {
   sources = [
     "gl_api_unittest.cc",
@@ -343,7 +351,6 @@ test("gl_unittests") {
     "gl_image_shared_memory_unittest.cc",
     "gl_version_info_unittest.cc",
     "gpu_timing_unittest.cc",
-    "test/run_all_unittests.cc",
   ]
 
   if (use_egl) {
@@ -355,13 +362,6 @@ test("gl_unittests") {
 
   if (use_glx) {
     sources += [ "glx_api_unittest.cc" ]
-  }
-
-  if (use_ozone) {
-    sources += [ "gl_image_ozone_native_pixmap_unittest.cc" ]
-    if (target_os == "chromeos" && target_cpu != "arm") {
-      sources += [ "gl_image_ozone_native_pixmap_drm_unittest.cc" ]
-    }
   }
 
   if (is_mac) {
@@ -378,9 +378,9 @@ test("gl_unittests") {
   deps = [
     ":gl",
     ":gl_unittest_utils",
+    ":run_all_unittests",
     ":test_support",
     "//base",
-    "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx",
@@ -388,17 +388,9 @@ test("gl_unittests") {
     "//ui/gl/init",
   ]
 
-  if (target_os == "chromeos") {
-    configs += [ ":libdrm" ]
-  }
-
   data_deps = [
     "//third_party/mesa:osmesa",
   ]
-
-  if (use_ozone) {
-    deps += [ "//ui/ozone" ]
-  }
 }
 
 if (is_android) {

@@ -76,12 +76,6 @@ void ProxyMain::DidCompleteSwapBuffers() {
   layer_tree_host_->DidCompleteSwapBuffers();
 }
 
-void ProxyMain::SetRendererCapabilities(
-    const RendererCapabilities& capabilities) {
-  DCHECK(IsMainThread());
-  renderer_capabilities_ = capabilities;
-}
-
 void ProxyMain::BeginMainFrameNotExpectedSoon() {
   TRACE_EVENT0("cc", "ProxyMain::BeginMainFrameNotExpectedSoon");
   DCHECK(IsMainThread());
@@ -111,18 +105,14 @@ void ProxyMain::RequestNewOutputSurface() {
   layer_tree_host_->RequestNewOutputSurface();
 }
 
-void ProxyMain::DidInitializeOutputSurface(
-    bool success,
-    const RendererCapabilities& capabilities) {
+void ProxyMain::DidInitializeOutputSurface(bool success) {
   TRACE_EVENT0("cc", "ProxyMain::DidInitializeOutputSurface");
   DCHECK(IsMainThread());
 
-  if (!success) {
+  if (!success)
     layer_tree_host_->DidFailToInitializeOutputSurface();
-    return;
-  }
-  renderer_capabilities_ = capabilities;
-  layer_tree_host_->DidInitializeOutputSurface();
+  else
+    layer_tree_host_->DidInitializeOutputSurface();
 }
 
 void ProxyMain::DidCompletePageScaleAnimation() {
@@ -145,9 +135,10 @@ void ProxyMain::BeginMainFrame(
   if (defer_commits_) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_DeferCommit",
                          TRACE_EVENT_SCOPE_THREAD);
+    std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     channel_main_->BeginMainFrameAbortedOnImpl(
         CommitEarlyOutReason::ABORTED_DEFERRED_COMMIT,
-        begin_main_frame_start_time);
+        begin_main_frame_start_time, std::move(empty_swap_promises));
     return;
   }
 
@@ -161,17 +152,20 @@ void ProxyMain::BeginMainFrame(
 
   if (!layer_tree_host_->visible()) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_NotVisible", TRACE_EVENT_SCOPE_THREAD);
+    std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     channel_main_->BeginMainFrameAbortedOnImpl(
-        CommitEarlyOutReason::ABORTED_NOT_VISIBLE, begin_main_frame_start_time);
+        CommitEarlyOutReason::ABORTED_NOT_VISIBLE, begin_main_frame_start_time,
+        std::move(empty_swap_promises));
     return;
   }
 
   if (layer_tree_host_->output_surface_lost()) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_OutputSurfaceLost",
                          TRACE_EVENT_SCOPE_THREAD);
+    std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
     channel_main_->BeginMainFrameAbortedOnImpl(
         CommitEarlyOutReason::ABORTED_OUTPUT_SURFACE_LOST,
-        begin_main_frame_start_time);
+        begin_main_frame_start_time, std::move(empty_swap_promises));
     return;
   }
 
@@ -215,7 +209,8 @@ void ProxyMain::BeginMainFrame(
   if (!updated && can_cancel_this_commit) {
     TRACE_EVENT_INSTANT0("cc", "EarlyOut_NoUpdates", TRACE_EVENT_SCOPE_THREAD);
     channel_main_->BeginMainFrameAbortedOnImpl(
-        CommitEarlyOutReason::FINISHED_NO_UPDATES, begin_main_frame_start_time);
+        CommitEarlyOutReason::FINISHED_NO_UPDATES, begin_main_frame_start_time,
+        layer_tree_host_->TakeSwapPromises());
 
     // Although the commit is internally aborted, this is because it has been
     // detected to be a no-op.  From the perspective of an embedder, this commit
@@ -223,7 +218,6 @@ void ProxyMain::BeginMainFrame(
     current_pipeline_stage_ = NO_PIPELINE_STAGE;
     layer_tree_host_->CommitComplete();
     layer_tree_host_->DidBeginMainFrame();
-    layer_tree_host_->BreakSwapPromises(SwapPromise::COMMIT_NO_UPDATE);
     return;
   }
 
@@ -245,26 +239,15 @@ void ProxyMain::BeginMainFrame(
     bool hold_commit_for_activation = commit_waits_for_activation_;
     commit_waits_for_activation_ = false;
     CompletionEvent completion;
-    channel_main_->StartCommitOnImpl(&completion, layer_tree_host_,
-                                     begin_main_frame_start_time,
-                                     hold_commit_for_activation);
+    channel_main_->NotifyReadyToCommitOnImpl(&completion, layer_tree_host_,
+                                             begin_main_frame_start_time,
+                                             hold_commit_for_activation);
     completion.Wait();
   }
 
   current_pipeline_stage_ = NO_PIPELINE_STAGE;
   layer_tree_host_->CommitComplete();
   layer_tree_host_->DidBeginMainFrame();
-}
-
-void ProxyMain::FinishAllRendering() {
-  DCHECK(IsMainThread());
-  DCHECK(!defer_commits_);
-
-  // Make sure all GL drawing is finished on the impl thread.
-  DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
-  CompletionEvent completion;
-  channel_main_->FinishAllRenderingOnImpl(&completion);
-  completion.Wait();
 }
 
 bool ProxyMain::IsStarted() const {
@@ -285,12 +268,6 @@ void ProxyMain::SetOutputSurface(OutputSurface* output_surface) {
 void ProxyMain::SetVisible(bool visible) {
   TRACE_EVENT1("cc", "ProxyMain::SetVisible", "visible", visible);
   channel_main_->SetVisibleOnImpl(visible);
-}
-
-const RendererCapabilities& ProxyMain::GetRendererCapabilities() const {
-  DCHECK(IsMainThread());
-  DCHECK(!layer_tree_host_->output_surface_lost());
-  return renderer_capabilities_;
 }
 
 void ProxyMain::SetNeedsAnimate() {

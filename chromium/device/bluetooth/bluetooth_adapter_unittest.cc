@@ -430,8 +430,16 @@ TEST_F(BluetoothTest, ConstructDefaultAdapter) {
     LOG(WARNING) << "Bluetooth adapter not present; skipping unit test.";
     return;
   }
-  EXPECT_GT(adapter_->GetAddress().length(), 0u);
-  EXPECT_GT(adapter_->GetName().length(), 0u);
+
+  bool expected = false;
+// MacOS returns empty for name and address if the adapter is off.
+#if defined(OS_MACOSX)
+  expected = !adapter_->IsPowered();
+#endif  // defined(OS_MACOSX)
+
+  EXPECT_EQ(expected, adapter_->GetAddress().empty());
+  EXPECT_EQ(expected, adapter_->GetName().empty());
+
   EXPECT_TRUE(adapter_->IsPresent());
   // Don't know on test machines if adapter will be powered or not, but
   // the call should be safe to make and consistent.
@@ -621,6 +629,8 @@ TEST_F(BluetoothTest, DiscoverLowEnergyDeviceTwice) {
 
 #if defined(OS_ANDROID) || defined(OS_MACOSX)
 // Discovers a device, and then again with new Service UUIDs.
+// Makes sure we don't create another device when we've found the
+// device in the past.
 TEST_F(BluetoothTest, DiscoverLowEnergyDeviceWithUpdatedUUIDs) {
   if (!PlatformSupportsLowEnergy()) {
     LOG(WARNING) << "Low Energy Bluetooth unavailable, skipping unit test.";
@@ -633,12 +643,6 @@ TEST_F(BluetoothTest, DiscoverLowEnergyDeviceWithUpdatedUUIDs) {
   StartLowEnergyDiscoverySession();
   BluetoothDevice* device = SimulateLowEnergyDevice(1);
 
-  // Check the initial UUIDs:
-  EXPECT_TRUE(
-      ContainsValue(device->GetUUIDs(), BluetoothUUID(kTestUUIDGenericAccess)));
-  EXPECT_FALSE(ContainsValue(device->GetUUIDs(),
-                             BluetoothUUID(kTestUUIDImmediateAlert)));
-
   // Discover same device again with updated UUIDs:
   observer.Reset();
   SimulateLowEnergyDevice(2);
@@ -647,26 +651,12 @@ TEST_F(BluetoothTest, DiscoverLowEnergyDeviceWithUpdatedUUIDs) {
   EXPECT_EQ(1u, adapter_->GetDevices().size());
   EXPECT_EQ(device, observer.last_device());
 
-  // Expect new AND old UUIDs:
-  EXPECT_TRUE(
-      ContainsValue(device->GetUUIDs(), BluetoothUUID(kTestUUIDGenericAccess)));
-  EXPECT_TRUE(ContainsValue(device->GetUUIDs(),
-                            BluetoothUUID(kTestUUIDImmediateAlert)));
-
   // Discover same device again with empty UUIDs:
   observer.Reset();
   SimulateLowEnergyDevice(3);
   EXPECT_EQ(0, observer.device_added_count());
-#if defined(OS_MACOSX)
-  // TODO(scheib): Call DeviceChanged only if UUIDs change. crbug.com/547106
   EXPECT_EQ(1, observer.device_changed_count());
-#else
-  EXPECT_EQ(0, observer.device_changed_count());
-#endif
   EXPECT_EQ(1u, adapter_->GetDevices().size());
-
-  // Expect all UUIDs:
-  EXPECT_EQ(4u, device->GetUUIDs().size());
 }
 #endif  // defined(OS_ANDROID) || defined(OS_MACOSX)
 

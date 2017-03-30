@@ -99,7 +99,7 @@ VivaldiInstallDialog::VivaldiInstallDialog(
     HINSTANCE instance,
     const bool set_as_default_browser,
     const InstallType default_install_type,
-    const std::wstring& destination_folder)
+    const base::FilePath& destination_folder)
   : install_type_(default_install_type)
   , set_as_default_browser_(set_as_default_browser)
   , register_browser_(false)
@@ -124,8 +124,10 @@ VivaldiInstallDialog::VivaldiInstallDialog(
   if (destination_folder.empty()) {
     SetDefaultDestinationFolder();
   } else {
-    destination_folder_.assign(destination_folder);
+    destination_folder_ = destination_folder;
   }
+  if (default_install_type == INSTALL_STANDALONE)
+    last_standalone_folder_ = destination_folder_;
 
   language_code_ = GetCurrentTranslation();
 
@@ -146,7 +148,7 @@ VivaldiInstallDialog::VivaldiInstallDialog(
   enable_set_as_default_checkbox_ =
       (base::win::GetVersion() < base::win::VERSION_WIN10);
 
-  enable_register_browser_checkbox_ = (install_type_ == INSTALL_STANDALONE);
+  enable_register_browser_checkbox_ = IsRegisterBrowserValid();
 }
 
 VivaldiInstallDialog::~VivaldiInstallDialog() {
@@ -181,7 +183,7 @@ VivaldiInstallDialog::~VivaldiInstallDialog() {
 VivaldiInstallDialog::DlgResult VivaldiInstallDialog::ShowModal() {
   GetLastInstallValues();
 
-  enable_register_browser_checkbox_ = (install_type_ == INSTALL_STANDALONE);
+  enable_register_browser_checkbox_ = IsRegisterBrowserValid();
 
   hdlg_ = CreateDialogParam(instance_,
                             MAKEINTRESOURCE(IDD_DIALOG1),
@@ -214,31 +216,31 @@ void VivaldiInstallDialog::SetDefaultDestinationFolder() {
     csidl = CSIDL_LOCAL_APPDATA;
     break;
   case INSTALL_STANDALONE:
-    csidl = CSIDL_LOCAL_APPDATA;
-    break;
-  default:
-    csidl = CSIDL_LOCAL_APPDATA;  // TODO (jarle) ok for now
+    destination_folder_ = last_standalone_folder_;
     break;
   }
-  if (SUCCEEDED(SHGetFolderPath(NULL, csidl, NULL, 0, szPath))) {
-    destination_folder_.assign(szPath);
-    destination_folder_.append(L"\\Vivaldi");
-    if (hdlg_)
-      SetDlgItemText(hdlg_, IDC_EDIT_DEST_FOLDER, destination_folder_.c_str());
+
+  if (csidl && (SUCCEEDED(SHGetFolderPath(NULL, csidl, NULL, 0, szPath)))) {
+    destination_folder_ = base::FilePath(szPath);
+    destination_folder_ = destination_folder_.Append(L"Vivaldi");
+  }
+  if (hdlg_) {
+    SetDlgItemText(hdlg_, IDC_EDIT_DEST_FOLDER,
+        destination_folder_.value().c_str());
   }
 }
 
 bool VivaldiInstallDialog::GetLastInstallValues() {
   base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_QUERY_VALUE);
   if (key.Valid()) {
-    key.ReadValue(kVivaldiInstallerDestinationFolder, &destination_folder_);
+    std::wstring str_dest_folder;
+    key.ReadValue(kVivaldiInstallerDestinationFolder, &str_dest_folder);
+    destination_folder_ = base::FilePath(str_dest_folder);
     key.ReadValueDW(kVivaldiInstallerInstallType, (DWORD*)&install_type_);
     key.ReadValueDW(kVivaldiInstallerDefaultBrowser,
         (DWORD*)&set_as_default_browser_);
-#if 0
-      key.ReadValueDW(kVivaldiInstallerRegisterBrowser,
-          (DWORD*)&register_browser_);
-#endif
+    if (install_type_ == INSTALL_STANDALONE)
+      last_standalone_folder_ = destination_folder_;
     return true;
   }
   return false;
@@ -248,14 +250,10 @@ void VivaldiInstallDialog::SaveInstallValues() {
   base::win::RegKey key(HKEY_CURRENT_USER, kVivaldiKey, KEY_ALL_ACCESS);
   if (key.Valid()) {
     key.WriteValue(kVivaldiInstallerDestinationFolder,
-        destination_folder_.c_str());
+        destination_folder_.value().c_str());
     key.WriteValue(kVivaldiInstallerInstallType, (DWORD)install_type_);
     key.WriteValue(kVivaldiInstallerDefaultBrowser,
         set_as_default_browser_ ? 1 : 0);
-#if 0
-    key.WriteValue(kVivaldiInstallerRegisterBrowser,
-        register_browser_ ? 1 : 0);
-#endif
     key.WriteValue(google_update::kRegLangField, language_code_.c_str());
   }
 }
@@ -294,7 +292,8 @@ void VivaldiInstallDialog::InitDialog() {
 
   ComboBox_SetCurSel(GetDlgItem(hdlg_, IDC_COMBO_INSTALLTYPES), install_type_);
 
-  SetDlgItemText(hdlg_, IDC_EDIT_DEST_FOLDER, destination_folder_.c_str());
+  SetDlgItemText(hdlg_, IDC_EDIT_DEST_FOLDER,
+      destination_folder_.value().c_str());
 
   SendMessage(GetDlgItem(hdlg_, IDC_CHECK_DEFAULT), BM_SETCHECK,
       set_as_default_browser_ ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -351,7 +350,7 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
   bi.lpszTitle = L"Select a folder"; // TODO (jarle) localize
   bi.ulFlags = BIF_USENEWUI | BIF_RETURNONLYFSDIRS;
   bi.lpfn = BrowseCallbackProc;
-  bi.lParam = (LPARAM)destination_folder_.c_str();
+  bi.lParam = (LPARAM)destination_folder_.value().c_str();
 
   OleInitialize(NULL);
 
@@ -365,7 +364,7 @@ void VivaldiInstallDialog::ShowBrowseFolderDialog() {
     CoTaskMemFree(pIDL);
     return;
   }
-  destination_folder_.assign(buffer.get());
+  destination_folder_ = base::FilePath(buffer.get());
 
   CoTaskMemFree(pIDL);
   OleUninitialize();
@@ -390,16 +389,9 @@ void VivaldiInstallDialog::DoDialog() {
 }
 
 void VivaldiInstallDialog::OnInstallTypeSelection() {
-  InstallType old_install_type = install_type_;
   install_type_ = (InstallType)ComboBox_GetCurSel(GetDlgItem(hdlg_,
       IDC_COMBO_INSTALLTYPES));
-
-  if (install_type_ == INSTALL_FOR_ALL_USERS ||
-      (install_type_ == INSTALL_FOR_CURRENT_USER &&
-      old_install_type == INSTALL_FOR_ALL_USERS)) {
-    SetDefaultDestinationFolder(); // fixed folder (for now at least)
-  }
-
+  SetDefaultDestinationFolder();
   UpdateRegisterCheckboxVisibility();
 }
 
@@ -421,6 +413,12 @@ void VivaldiInstallDialog::OnLanguageSelection() {
       }
     }
   }
+}
+
+const bool VivaldiInstallDialog::GetRegisterBrowser() const {
+  return register_browser_ ||
+      (set_as_default_browser_ &&
+          base::win::GetVersion() < base::win::VERSION_WIN10);
 }
 
 /* static */
@@ -571,11 +569,16 @@ void VivaldiInstallDialog::ShowOptions(HWND hdlg, bool show) {
 }
 
 void VivaldiInstallDialog::UpdateRegisterCheckboxVisibility() {
-  enable_register_browser_checkbox_ = (install_type_ == INSTALL_STANDALONE);
+  enable_register_browser_checkbox_ = IsRegisterBrowserValid();
   EnableWindow(GetDlgItem(hdlg_, IDC_CHECK_REGISTER),
       (enable_register_browser_checkbox_) ? TRUE : FALSE);
   ShowWindow(GetDlgItem(hdlg_, IDC_CHECK_REGISTER),
       (enable_register_browser_checkbox_) ? SW_SHOW : SW_HIDE);
+}
+
+const bool VivaldiInstallDialog::IsRegisterBrowserValid() const {
+  return (install_type_ == INSTALL_STANDALONE &&
+      base::win::GetVersion() >= base::win::VERSION_WIN10);
 }
 
 void VivaldiInstallDialog::InitBkgnd(HWND hdlg, int cx, int cy) {
@@ -837,7 +840,7 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
         if (buffer.get()) {
           GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER, buffer.get(),
               MAX_PATH - 1);
-          this_->destination_folder_.assign(buffer.get());
+          this_->destination_folder_ = base::FilePath(buffer.get());
         }
 
         this_->set_as_default_browser_ = SendMessage(GetDlgItem(hdlg,
@@ -867,11 +870,11 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
         if (buffer.get()) {
           GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER, buffer.get(),
               MAX_PATH - 1);
-          this_->destination_folder_.assign(buffer.get());
+          this_->destination_folder_ = base::FilePath(buffer.get());
         }
         this_->ShowBrowseFolderDialog();
         SetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER,
-            this_->destination_folder_.c_str());
+            this_->destination_folder_.value().c_str());
       }
       break;
     case IDC_BTN_MODE:
@@ -891,18 +894,23 @@ INT_PTR CALLBACK VivaldiInstallDialog::DlgProc(HWND hdlg,
         if (HIWORD(wparam) == EN_CHANGE) {
           std::unique_ptr<wchar_t[]> buffer(new wchar_t[MAX_PATH]);
           if (buffer.get()) {
-            GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER,
+            UINT chars_count = GetDlgItemText(hdlg, IDC_EDIT_DEST_FOLDER,
                 buffer.get(), MAX_PATH - 1);
+
             base::FilePath new_path(buffer.get());
+
+            if (chars_count == 0 && IsWindowEnabled(GetDlgItem(hdlg, IDOK)))
+              EnableWindow(GetDlgItem(hdlg, IDOK), FALSE);
+            else if (chars_count > 0 &&
+                !IsWindowEnabled(GetDlgItem(hdlg, IDOK)))
+              EnableWindow(GetDlgItem(hdlg, IDOK), TRUE);
+
             InstallType installed_type;
             if (IsVivaldiInstalled(new_path, installed_type)) {
-              this_->is_upgrade_ = true;
               SetDlgItemText(hdlg, IDC_SYSLINK_TOS,
                   TXT_TOS_ACCEPT_AND_UPDATE);// TODO (jarle) localize
               SetDlgItemText(hdlg, IDOK,
                   TXT_BTN_ACCEPT_AND_UPDATE);// TODO (jarle) localize
-              // TODO (jarle) VB-1612
-              EnableWindow(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES), FALSE);
               ShowWindow(GetDlgItem(hdlg, IDC_STATIC_WARN), SW_SHOW);
               this_->install_type_ = installed_type;
               ComboBox_SetCurSel(GetDlgItem(hdlg, IDC_COMBO_INSTALLTYPES),

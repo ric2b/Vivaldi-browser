@@ -4,13 +4,18 @@
   "process-group": "browser",
   "display_name": "Content Browser",
   "capabilities": {
+    // Remove this once http://crbug.com/632818 is fixed.
+    "provided": {
+      "all_interfaces": [ "*" ]
+    },
     "required": {
       "*": { "classes": [ "app" ] },
 
       // We allow the browser to connect to any interfaces exposed by its child
       // processes.
-      "exe:content_renderer": { "classes": [ "all_interfaces" ] },
       "exe:content_gpu": { "classes": [ "all_interfaces" ] },
+      "exe:content_plugin": { "classes": [ "all_interfaces" ] },
+      "exe:content_renderer": { "classes": [ "all_interfaces" ] },
       "exe:content_utility": { "classes": [ "all_interfaces" ] },
 
       "mojo:shell": {
@@ -20,12 +25,13 @@
           "shell:user_id"
         ]
       },
-      "mojo:user": {
+      "mojo:file": {
         "interfaces": [
           "leveldb::mojom::LevelDBService",
           "user_service::UserService"
-         ]
-      }
+        ]
+      },
+      "mojo:media": { "classes": [ "all_interfaces" ] }
     }
   }
 }

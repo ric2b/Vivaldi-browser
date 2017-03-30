@@ -37,14 +37,15 @@ WebInspector.ProfileDataGridNode = function(profileNode, owningTree, hasChildren
     WebInspector.DataGridNode.call(this, null, hasChildren);
 
     this.tree = owningTree;
-    this.childrenByCallUID = {};
+    /** @type {!Map<string, !WebInspector.ProfileDataGridNode>} */
+    this.childrenByCallUID = new Map();
     this.lastComparator = null;
 
     this.callUID = profileNode.callUID;
     this.self = profileNode.self;
     this.total = profileNode.total;
     this.functionName = WebInspector.beautifyFunctionName(profileNode.functionName);
-    this._deoptReason = profileNode.deoptReason && profileNode.deoptReason !== "no reason" ? profileNode.deoptReason : "";
+    this._deoptReason = profileNode.deoptReason || "";
     this.url = profileNode.url;
 }
 
@@ -79,6 +80,8 @@ WebInspector.ProfileDataGridNode.prototype = {
             if (this.profileNode.scriptId === "0")
                 break;
             var urlElement = this.tree._formatter.linkifyNode(this);
+            if (!urlElement)
+                break;
             urlElement.style.maxWidth = "75%";
             cell.appendChild(urlElement);
             break;
@@ -154,7 +157,7 @@ WebInspector.ProfileDataGridNode.prototype = {
     {
         WebInspector.DataGridNode.prototype.insertChild.call(this, profileDataGridNode, index);
 
-        this.childrenByCallUID[profileDataGridNode.callUID] = /** @type {!WebInspector.ProfileDataGridNode} */ (profileDataGridNode);
+        this.childrenByCallUID.set(profileDataGridNode.callUID, /** @type {!WebInspector.ProfileDataGridNode} */ (profileDataGridNode));
     },
 
     /**
@@ -165,14 +168,14 @@ WebInspector.ProfileDataGridNode.prototype = {
     {
         WebInspector.DataGridNode.prototype.removeChild.call(this, profileDataGridNode);
 
-        delete this.childrenByCallUID[/** @type {!WebInspector.ProfileDataGridNode} */ (profileDataGridNode).callUID];
+        this.childrenByCallUID.delete((/** @type {!WebInspector.ProfileDataGridNode} */ (profileDataGridNode)).callUID);
     },
 
     removeChildren: function()
     {
         WebInspector.DataGridNode.prototype.removeChildren.call(this);
 
-        this.childrenByCallUID = {};
+        this.childrenByCallUID.clear();
     },
 
     /**
@@ -183,7 +186,7 @@ WebInspector.ProfileDataGridNode.prototype = {
     {
         if (!node)
             return null;
-        return this.childrenByCallUID[node.callUID];
+        return this.childrenByCallUID.get(node.callUID);
     },
 
     get selfPercent()
@@ -286,10 +289,10 @@ WebInspector.ProfileDataGridNode.merge = function(container, child, shouldAbsorb
 
     for (var index = 0; index < count; ++index) {
         var orphanedChild = children[index];
-        var existingChild = container.childrenByCallUID[orphanedChild.callUID];
+        var existingChild = container.childrenByCallUID.get(orphanedChild.callUID);
 
         if (existingChild)
-            existingChild.merge(orphanedChild, false);
+            existingChild.merge(/** @type{!WebInspector.ProfileDataGridNode} */(orphanedChild), false);
         else
             container.appendChild(orphanedChild);
     }
@@ -327,7 +330,7 @@ WebInspector.ProfileDataGridTree = function(formatter, searchableView, total)
     this._searchableView = searchableView;
     this.total = total;
     this.lastComparator = null;
-    this.childrenByCallUID = {};
+    this.childrenByCallUID = new Map();
 }
 
 WebInspector.ProfileDataGridTree.prototype = {
@@ -344,13 +347,13 @@ WebInspector.ProfileDataGridTree.prototype = {
     insertChild: function(child, index)
     {
         this.children.splice(index, 0, child);
-        this.childrenByCallUID[child.callUID] = child;
+        this.childrenByCallUID.set(child.callUID, child);
     },
 
     removeChildren: function()
     {
         this.children = [];
-        this.childrenByCallUID = {};
+        this.childrenByCallUID.clear();
     },
 
     populateChildren: function()
@@ -647,7 +650,7 @@ WebInspector.ProfileDataGridNode.Formatter.prototype = {
 
     /**
      * @param  {!WebInspector.ProfileDataGridNode} node
-     * @return {!Element}
+     * @return {?Element}
      */
     linkifyNode: function(node) { }
 }

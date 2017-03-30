@@ -5,6 +5,7 @@
 #include "media/base/android/media_player_listener.h"
 
 #include "base/android/jni_android.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -14,6 +15,8 @@
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
+using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace media {
@@ -30,9 +33,9 @@ MediaPlayerListener::MediaPlayerListener(
 MediaPlayerListener::~MediaPlayerListener() {}
 
 void MediaPlayerListener::CreateMediaPlayerListener(
-    jobject context, jobject media_player) {
+    const JavaRef<jobject>& context,
+    const JavaRef<jobject>& media_player) {
   JNIEnv* env = AttachCurrentThread();
-  CHECK(env);
   if (j_media_player_listener_.is_null()) {
     j_media_player_listener_.Reset(Java_MediaPlayerListener_create(
         env, reinterpret_cast<intptr_t>(this), context, media_player));

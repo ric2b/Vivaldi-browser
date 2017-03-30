@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="@dimen/snippets_padding_and_peeking_card_height"
-    android:background="@drawable/ntp_card">
+    android:background="@drawable/ntp_card_single">
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/article_headline"
@@ -18,7 +18,6 @@
         android:layout_height="wrap_content"
         android:layout_alignParentStart="true"
         android:layout_toStartOf="@+id/article_thumbnail"
-        android:lines="2"
         android:ellipsize="end"
         android:textSize="16sp"
         android:textColor="@color/snippets_headline_text_color"
@@ -32,7 +31,7 @@
         android:layout_below="@+id/article_headline"
         android:layout_toStartOf="@+id/article_thumbnail"
         android:layout_marginTop="8dp"
-        android:lines="2"
+        android:maxLines="2"
         android:ellipsize="end"
         android:textSize="14sp"
         android:textColor="@color/snippets_text_color"
@@ -42,7 +41,7 @@
         android:id="@+id/article_publisher"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="@dimen/snippets_publisher_margin_top_with_article_snippet"
         android:layout_alignParentStart="true"
         android:layout_below="@+id/article_snippet"
         android:drawablePadding="8dp"

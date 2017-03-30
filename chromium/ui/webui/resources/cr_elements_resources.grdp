@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <grit-part>
   <!-- Polymer 1.0 Elements -->
+  <structure name="IDR_CR_ELEMENTS_CR_SCROLLABLE_BEHAVIOR_HTML"
+             file="../../webui/resources/cr_elements/cr_scrollable_behavior.html"
+             type="chrome_html" />
+  <structure name="IDR_CR_ELEMENTS_CR_SCROLLABLE_BEHAVIOR_JS"
+             file="../../webui/resources/cr_elements/cr_scrollable_behavior.js"
+             type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_DIALOG_HTML"
              file="../../webui/resources/cr_elements/cr_dialog/cr_dialog.html"
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_DIALOG_JS"
              file="../../webui/resources/cr_elements/cr_dialog/cr_dialog.js"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_EVENTS_HTML"
-             file="../../webui/resources/cr_elements/cr_events/cr_events.html"
-             type="chrome_html" />
-  <structure name="IDR_CR_ELEMENTS_CR_EVENTS_JS"
-             file="../../webui/resources/cr_elements/cr_events/cr_events.js"
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_EXPAND_BUTTON_CSS"
              file="../../webui/resources/cr_elements/cr_expand_button/cr_expand_button.css"
@@ -24,7 +24,8 @@
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_ICONS_HTML"
              file="../../webui/resources/cr_elements/icons.html"
-             type="chrome_html" />
+             type="chrome_html"
+             preprocess="true" />
   <if expr="chromeos">
     <structure name="IDR_CR_ELEMENTS_CR_NETWORK_ICON_HTML"
                file="../../webui/resources/cr_elements/network/cr_network_icon.html"
@@ -38,20 +39,11 @@
     <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_JS"
                file="../../webui/resources/cr_elements/network/cr_network_list.js"
                type="chrome_html" />
-    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_CUSTOM_ITEM_HTML"
-               file="../../webui/resources/cr_elements/network/cr_network_list_custom_item.html"
+    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_ITEM_HTML"
+               file="../../webui/resources/cr_elements/network/cr_network_list_item.html"
                type="chrome_html" />
-    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_CUSTOM_ITEM_JS"
-               file="../../webui/resources/cr_elements/network/cr_network_list_custom_item.js"
-               type="chrome_html" />
-    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_ITEM_CSS_HTML"
-               file="../../webui/resources/cr_elements/network/cr_network_list_item_css.html"
-               type="chrome_html" />
-    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_NETWORK_ITEM_HTML"
-               file="../../webui/resources/cr_elements/network/cr_network_list_network_item.html"
-               type="chrome_html" />
-    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_NETWORK_ITEM_JS"
-               file="../../webui/resources/cr_elements/network/cr_network_list_network_item.js"
+    <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_ITEM_JS"
+               file="../../webui/resources/cr_elements/network/cr_network_list_item.js"
                type="chrome_html" />
     <structure name="IDR_CR_ELEMENTS_CR_NETWORK_LIST_TYPES_HTML"
                file="../../webui/resources/cr_elements/network/cr_network_list_types.html"
@@ -107,6 +99,9 @@
   <structure name="IDR_CR_ELEMENTS_CR_POLICY_PREF_INDICATOR_HTML"
              file="../../webui/resources/cr_elements/policy/cr_policy_pref_indicator.html"
              type="chrome_html" />
+  <structure name="IDR_CR_ELEMENTS_CR_POLICY_VARS_CSS_HTML"
+             file="../../webui/resources/cr_elements/policy/cr_policy_vars_css.html"
+             type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_PROFILE_AVATAR_SELECTOR_HTML"
              file="../../webui/resources/cr_elements/cr_profile_avatar_selector/cr_profile_avatar_selector.html"
              type="chrome_html" />
@@ -136,6 +131,9 @@
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_SHARED_STYLE_CSS_HTML"
              file="../../webui/resources/cr_elements/shared_style_css.html"
+             type="chrome_html" />
+  <structure name="IDR_CR_ELEMENTS_CR_SHARED_VARS_CSS_HTML"
+             file="../../webui/resources/cr_elements/shared_vars_css.html"
              type="chrome_html" />
   <structure name="IDR_CR_ELEMENTS_CR_SLIDER_HTML"
              file="../../webui/resources/cr_elements/cr_slider/cr_slider.html"

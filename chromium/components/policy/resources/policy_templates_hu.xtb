@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
+<translation id="1007441141628883408">Engedélyezi a komponensek frissítését minden komponens esetén a(z) <ph name="PRODUCT_NAME" /> termékben, ha a beállítás nincs megadva, vagy ha a beállítás Igaz.
+
+      Ha a beállítás Hamis, a komponensek frissítése ki van kapcsolva. Egyes komponensek azonban mentesülnek a házirend alól: az olyan komponensek frissítései, amelyek nem tartalmaznak végrehajtható kódot, nem változtatják meg jelentősen a böngésző viselkedését, vagy kiemelkedően fontosak a komponens biztonsága érdekében, nem lesznek kikapcsolva.
+      Ilyen komponensek például a tanúsítványok visszavonási listái és a biztonságos böngészési adatok. </translation>
 <translation id="101438888985615157">Képernyő elforgatása 180 fokkal</translation>
 <translation id="1017967144265860778">Energiagazdálkodás a bejelentkezési képernyőn</translation>
 <translation id="1019101089073227242">Felhasználói adatok könyvtárának beállítása</translation>
@@ -22,13 +26,6 @@
       Ha a házirend értéke igaz, vagy ha nincs beállítva, a böngésző jelenti a statisztikákat.</translation>
 <translation id="1046484220783400299">Elavult Web Platform-funkciók engedélyezése korlátozott ideig</translation>
 <translation id="1047128214168693844">Minden oldal számára tiltja a felhasználók fizikai helyének követését</translation>
-<translation id="1057535219415338480">Engedélyezi a hálózati várható kifejezést a(z) <ph name="PRODUCT_NAME" /> termékben, és megakadályozza, hogy a felhasználók módosítsák ezt a beállítást.
-
-      Ez nem csak a DNS-előtöltést vezérli, hanem az előzetes TCP- és SSL-kapcsolatokat, valamint a weboldalak előzetes megjelenítését is. A házirend neve történeti okok miatt a DNS-előtöltésre utal.
-
-      Ha be- vagy kikapcsolja ezt a beállítást a(z) <ph name="PRODUCT_NAME" /> termékben, a felhasználók nem módosíthatják vagy írhatják felül.
-
-      Ha nem állítja be, akkor be lesz kapcsolva, ám a felhasználók módosíthatják.</translation>
 <translation id="1062011392452772310">Az eszköz távoli tanúsításának engedélyezése</translation>
 <translation id="1090892140761957285">A távoli elérésű ügyfél hitelesítőtokenjének ellenőrzésére szolgáló URL.
 
@@ -125,11 +122,6 @@
       ki van kapcsolva. Ekkor a felhasználó nem tudja bekapcsolni a funkciót.</translation>
 <translation id="1474273443907024088">A TLS False Start letiltása</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Megadja, hogy az eszközre vonatkozó házirendadatok lekérdezése az eszközkezelési szolgáltatástól hány ezredmásodpercenként történjen. 
-
-Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órás értéket. Ennél a házirendnél az érvényes érték 1 800 000 (30 perc) és 86 400 000 (1 nap) közötti. 
-
-Bármely érték, amely nem ebben a tartományban van, a közelebbi határhoz lesz igazítva. Ha a házirend konfigurálatlanul marad, akkor a(z) <ph name="PRODUCT_OS_NAME" /> az alapértelmezés szerinti 3 órás értéket használja.</translation>
 <translation id="1504431521196476721">Távoli tanúsítás</translation>
 <translation id="1509692106376861764">Ez a házirend többé nincs jelen a <ph name="PRODUCT_NAME" /> 29-es verziójától kezdve.</translation>
 <translation id="1522425503138261032">Engedélyezi a webhelyek számára a felhasználók fizikai helyének követését</translation>
@@ -144,6 +136,7 @@ Bármely érték, amely nem ebben a tartományban van, a közelebbi határhoz le
       felhasználók nem használhatják az ARC szolgáltatást.</translation>
 <translation id="1561424797596341174">A házirend felülírja a távoli elérésű gazdagép hibakeresés végzésére szolgáló buildjeit</translation>
 <translation id="1583248206450240930">A <ph name="PRODUCT_FRAME_NAME" /> használata alapértelmezés szerint</translation>
+<translation id="1606958238518590302">Ha a házirend beállítása igaz, akkor a felhasználók nem írhatnak semmit a külső tárolóeszközökre.</translation>
 <translation id="1608755754295374538">Azon URL-ek, amelyek rákérdezés nélkül hozzáférést kapnak a hangrögzítő eszközökhöz</translation>
 <translation id="1617235075406854669">Böngészési és letöltési előzmények törlésének engedélyezése</translation>
 <translation id="1617384279878333801">Engedélyezi a személyek hozzáadását a profilkezelőben</translation>
@@ -246,6 +239,13 @@ Bármely érték, amely nem ebben a tartományban van, a közelebbi határhoz le
       Ha a házirend értéke igaz, akkor a <ph name="PRODUCT_OS_NAME" /> az automatikusan frissülő hasznos tartalmakat HTTP-kapcsolaton keresztül kísérli meg letölteni. Ha a házirend értéke hamis, vagy ha nincs beállítva, akkor a rendszer mindig HTTPS-kapcsolatot használ az automatikusan frissülő hasznos tartalmak letöltésére.</translation>
 <translation id="2006530844219044261">Energiagazdálkodás</translation>
 <translation id="201557587962247231">Az eszköz állapotával kapcsolatos jelentések feltöltési gyakorisága</translation>
+<translation id="2018836497795982119">Azt az időtartamot adja meg ezredmásodpercben, amilyen rendszerességgel az eszközkezelő szolgáltatás lekérdezi a felhasználói szabályzattal kapcsolatos információkat.
+
+      A házirend beállításával felülírja a 3 órás alapértelmezett értéket. Az érték 1800000 (30 perc) és 86400000 (1 nap) között lehet. A tartományon kívül eső értékeket a rendszer a közelebbi tartományhatárra állítja. Ha az operációs rendszer támogatja a házirendekkel kapcsolatos értesítéseket, akkor a frissítési időszak 24 órás lesz, ugyanis a házirenddel kapcsolatos értesítéseknek automatikusan ki kell kényszeríteniük a frissítést, amikor egy házirend megváltozik.
+
+      Ha nem állítja be a házirendet, akkor a <ph name="PRODUCT_NAME" /> az alapértelmezett 3 órás értéket fogja használni.
+
+      Felhívjuk figyelmét, hogy ha az operációs rendszer támogatja a házirendekkel kapcsolatos értesítéseket, akkor a frissítési időszak 24 órás lesz (azaz a böngésző nem veszi figyelembe sem az alapértelmezett, sem a beállított értékeket), ugyanis a házirenddel kapcsolatos értesítéseknek automatikusan ki kell kényszeríteniük a frissítést, amikor egy házirend megváltozik, így szükségtelen gyakrabban frissíteni.</translation>
 <translation id="2024476116966025075">A kötelező domainnév konfigurálása a távoli hozzáférésű ügyfeleknél</translation>
 <translation id="2030905906517501646">Alapértelmezett keresési szolgáltató kulcsszava</translation>
 <translation id="206623763829450685">Meghatározza, hogy a <ph name="PRODUCT_NAME" /> milyen HTTP-hitelesítési sémákat támogat.
@@ -323,9 +323,6 @@ Bármely érték, amely nem ebben a tartományban van, a közelebbi határhoz le
 
       A Bluetooth engedélyezését követően újra kell indítani az eszközt ahhoz, hogy a változtatások életbe lépjenek (a Bluetooth letiltása után nem szükséges újraindítani az eszközt).</translation>
 <translation id="2366415278352956652">Lehetővé teszi az átküldést</translation>
-<translation id="2371309782685318247">Megadja, hogy a rendszer hány ezredmásodpercenként kérdezze le a felhasználói házirendek adatait az eszközkezelési szolgáltatástól.
-
-Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órás értéket. Ennél a házirendnél az érvényes értékek 1 800 000 (30 perc) és 86 400 000 (1 nap) közöttiek. A rendszer minden olyan értéket, amely nem ebben a tartományban van, hozzáigazít a közelebbi határhoz. Ha a házirend beállítatlanul marad, akkor a(z) <ph name="PRODUCT_NAME" /> az alapértelmezés szerinti 3 órás értéket használja.</translation>
 <translation id="2372547058085956601">A nyilvános munkamenet automatikus bejelentkezési késleltetése.
 
       Ha a |DeviceLocalAccountAutoLoginId| házirend nincs beállítva, akkor nincs semmilyen hatása. Máskülönben:
@@ -516,6 +513,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha ez a beállítás ki van kapcsolva, akkor a weboldalak nem használhatnak JavaScriptet, és a felhasználó nem módosíthatja a beállítást.
 
       Ha be van kapcsolva vagy nincs beállítva, akkor a weboldalak használhatnak JavaScriptet, ám a felhasználó módosíthatja a beállítást.</translation>
+<translation id="2753637905605932878">A WebRTC által használt helyi UDP-porttartományok korlátozása</translation>
 <translation id="2757054304033424106">Telepíthető bővítmény-/alkalmazástípusok</translation>
 <translation id="2759224876420453487">A felhasználói viselkedés szabályozása többprofilos munkamenetben</translation>
 <translation id="2761483219396643566">Tétlenségi figyelmeztetés késleltetése akkumulátorról való működés során</translation>
@@ -647,6 +645,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="3030000825273123558">Mutatók jelentéseinek engedélyezése</translation>
 <translation id="3034580675120919256">Meghatározhatja, hogy a webhelyek futtathatnak-e JavaScriptet. A JavaScript futtatását engedélyezheti vagy letilthatja minden webhely számára. Ha a házirend beállítatlanul marad, a rendszer az "AllowJavaScript" értéket használja, amelyet a felhasználó módosíthat.</translation>
 <translation id="3038323923255997294">A háttéralkalmazások továbbfuttatása a(z) <ph name="PRODUCT_NAME" /> alkalmazás bezárása esetén</translation>
+<translation id="3046192273793919231">Hálózati csomagok küldése a kezelőszerverre az online állapot ellenőrzésének céljából</translation>
 <translation id="3048744057455266684">Ha ez a házirend be van állítva, és egy, a cím- és keresősávban javasolt keresési URL tartalmazza ezt a paramétert a lekérdezési karakterláncban vagy a töredékazonosítóban, akkor a javaslat a keresési kifejezéseket és a keresőszolgáltatót fogja mutatni a nyers keresési URL helyett.
 
           Ez a házirend opcionális. Ha nincs beállítva, a keresési kifejezéseket a rendszer nem cseréli le.
@@ -740,6 +739,15 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="3264793472749429012">Alapértelmezett keresési szolgáltató kódolásai</translation>
 <translation id="3273221114520206906">Alapértelmezett  JavaScript-beállítás</translation>
 <translation id="3288595667065905535">Kiadási csatorna</translation>
+<translation id="3291367259589875381">Ez az irányelv – a <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" /> miatt – megszűnt az M48-ban, majd eltávolításra került az M54-ben.
+
+      Engedélyezi a hálózati előrejelzést a(z) <ph name="PRODUCT_NAME" /> termékben, valamint megakadályozza a felhasználókat a beállítás módosításában.
+
+      Nemcsak a DNS-előtöltést, hanem az előzetes TCP- és SSL-kapcsolatokat és a weboldalak előzetes megjelenítését is vezérli. Az irányelv neve történeti okok miatt a DNS-előtöltésre utal.
+
+      A beállítás engedélyezése vagy letiltása esetén a felhasználók nem módosíthatják, és nem bírálhatják felül ezt a beállítást a(z) <ph name="PRODUCT_NAME" /> termékben.
+
+      Ha nem állítja be az irányelvet, akkor aktiválódik, de a felhasználók képesek lesznek módosítani.</translation>
 <translation id="3292147213643666827">Lehetővé teszi, hogy a(z) <ph name="PRODUCT_NAME" /> proxyként működjön a(z) <ph name="CLOUD_PRINT_NAME" /> és a számítógéphez csatlakoztatott régebbi nyomtatók között.
 
       Ha ez a beállítás be van kapcsolva vagy nincs megadva, a felhasználók Google Fiókjuk érvényesítésével bekapcsolhatják a cloud print proxyt.
@@ -838,6 +846,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="3780152581321609624">A Kerberos SPN tartalmazza a nem szabványos portot</translation>
 <translation id="3788662722837364290">Energiagazdálkodási beállítások olyankor, amikor a felhasználó tétlen</translation>
 <translation id="3793095274466276777">Beállítja a <ph name="PRODUCT_NAME" /> alapértelmezett böngésző-ellenőrzéseit, és megakadályozza, hogy a felhasználók megváltoztassák ezeket. Ha engedélyezi ezt a beállítást, a <ph name="PRODUCT_NAME" /> mindig ellenőrzi induláskor, hogy alapértelmezett böngésző-e, és automatikusan regisztrálja magát, ha lehetséges. Ha ez a beállítás le van tiltva, a <ph name="PRODUCT_NAME" /> soha nem fogja ellenőrizni, hogy alapértelmezett böngésző-e, és letiltja a felhasználók számára a beállítás lehetőségét. Ha ez a beállítás nincs megadva, a <ph name="PRODUCT_NAME" /> elérhetővé teszi a választást a felhasználó számára, hogy ez legyen-e az alapértelmezett böngésző, és hogy mutasson-e felhasználói értesítéseket, ha nem az.</translation>
+<translation id="379659290574555063">Külső tárolóeszközök kezelése csak olvashatóként.</translation>
 <translation id="3800626789999016379">Beállítja a(z) <ph name="PRODUCT_NAME" /> által a fájlok letöltéséhez használt mappát.
 
       Ha beállítja ezt a házirendet, a(z) <ph name="PRODUCT_NAME" /> a megadott mappát fogja használni attól függetlenül, hogy a felhasználó kiválasztott-e egyet, vagy engedélyezte-e azt a jelölőt, amely alapján a rendszer minden alkalommal megkérdezi a letöltés helyét.
@@ -887,16 +896,20 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="3864818549971490907">Alapértelmezett bővítménybeállítások</translation>
 <translation id="3866249974567520381">Leírás</translation>
 <translation id="3866530186104388232">Ha ez igazra van állítva vagy nincs beállítva, akkor a(z) <ph name="PRODUCT_OS_NAME" /> megjeleníti a meglévő felhasználókat a bejelentkezési képernyőn, és lehetővé teszi, hogy a felhasználó kiválassza a saját nevét. Ha beállítása hamis, akkor a(z) <ph name="PRODUCT_OS_NAME" /> felhasználónevet/jelszót kérő ablakot jelenít meg a bejelentkezésnél.</translation>
-<translation id="3866824067696705379">Milyen gyakran küld ellenőrző szívveréseket a böngésző (ezredmásodpercben).
-
-      Ha nem állítja be a házirendet, az alapértelmezett gyakoriság három perc.
-      A legkisebb gyakoriság harminc másodperc, a legnagyobb 24 óra. Az e
-      tartományon kívüli értékek ebbe a tartományba lesznek beszorítva.</translation>
 <translation id="3868347814555911633">Ez a házirend csak kiállító módban aktív.
 
       Felsorolja azokat a bővítményeket, amelyeket a kiállító módban lévő eszközök esetében automatikusan telepít a rendszer a bemutatófelhasználó részére. A bővítményeket a rendszer az eszközre menti, így azok offline módban, a telepítés után is telepíthetők.
 
       A listabejegyzések szótárának tartalmaznia kell a bővítményazonosítót az „extension-id” mezőben, valamint annak frissített URL-jét az „update-url” mezőben.</translation>
+<translation id="388237772682176890">Ez az irányelv megszűnt az M53-ban, valamint eltávolításra került az M54-ben, mivel a SPDY/3.1  támogatását megszüntettük.
+
+      Letiltja a SPDY protokoll használatát a(z) <ph name="PRODUCT_NAME" /> termékben.
+
+      Ha engedélyezi ezt az irányelvet, akkor a SPDY protokoll nem fog rendelkezésre állni a következőben: <ph name="PRODUCT_NAME" />.
+
+      Az irányelv letiltásával a SPDY használhatóvá válik.
+
+      Ha nem állítja be ezt az irányelvet, akkor a SPDY rendelkezésre áll.</translation>
 <translation id="3891357445869647828">JavaScript engedélyezése</translation>
 <translation id="3898060089412156345">Hangrögzítés engedélyezése vagy tiltása.
 
@@ -913,6 +926,11 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ha nincs beállítva, vagy ha az értéke hamis, akkor a felhasználók átvihetnek fájlokat a Google Drive-ra.</translation>
 <translation id="3915395663995367577">URL egy proxy .pac fájlhoz</translation>
+<translation id="3939893074578116847">Hálózati csomagok küldése a kezelőszervernek az online állapot ellenőrzése céljából;
+      ezáltal a szerver észleli, ha az eszköz offline állapotban van.
+
+      Ha az irányelvet igaz értékre állítja, a rendszer ellenőrző hálózati csomagokat (úgynevezett <ph name="HEARTBEATS_TERM" />) fog küldeni.
+      Ha hamis értékre állítja vagy nem állít be értéket, akkor a rendszer nem küld csomagokat.</translation>
 <translation id="3964909636571393861">Engedélyezi a hozzáférést az URL-ek egy listájához</translation>
 <translation id="3965339130942650562">Időtúllépés, amely után a felhasználót a rendszer tétlenség esetén kijelentkezteti.</translation>
 <translation id="3967075520570946456">Az üdvözlőoldal megjelenítésének engedélyezése az operációs rendszer frissítését követő első böngészőindításkor.</translation>
@@ -1091,7 +1109,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ha nem állítja be ezt a házirendet, a <ph name="PRODUCT_NAME" /> még akkor sem delegál felhasználói hitelesítési adatokat, ha a szervert az intraneten lévőnek érzékeli.</translation>
 <translation id="4752880493649142945">Klienstanúsítvány a RemoteAccessHostTokenValidationUrl címhez történő csatlakozáshoz</translation>
-<translation id="4768493164188395498">Az ellenőrző szívverések gyakorisága</translation>
 <translation id="4791031774429044540">A nagy egérmutató kisegítő lehetőség engedélyezése.
 
           Ha a házirend értéke igaz, a nagy egérmutató mindig engedélyezve lesz.
@@ -1179,6 +1196,9 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           A tiltólista „*” értéke azt jelenti, hogy minden üzenetkezelő gazdagép felkerül rá, hacsak nem szerepelnek kifejezetten az engedélyezőlistán.
 
           Ha a házirend nincs beállítva, a(z) <ph name="PRODUCT_NAME" /> minden telepített natív üzenetkezelő gazdagépet betölt.</translation>
+<translation id="5288772341821359899">Az irányelvet beállítva a WebRTC által használt UDP-porttartomány a megadott portintervallumra korlátozódik (a végpontokkal együtt).
+
+      Ha az irányelvet nem állítja be, vagy üres karakterláncot, illetve érvénytelen porttartományt ad meg, akkor a WebRTC bármelyik rendelkezésre álló helyi UDP-portot használhatja.</translation>
 <translation id="5290940294294002042">Adja meg a felhasználó által be- vagy kikapcsolható bővítmények listáját</translation>
 <translation id="5302612588919538756">Ez a házirend elavult, használja helyette a SyncDisabled házirendet.
 
@@ -1240,6 +1260,18 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha a házirend be van állítva, a meghatározott munkamenetet a rendszer automatikusan bejelentkezteti, ha felhasználói interakció nélkül telik el a megadott időtartam a bejelentkezési képernyőn. A nyilvános munkamenetet előre be kell állítani (tekintse meg a következőt: |DeviceLocalAccounts|).
 
       Ha nincs beállítva a házirend, nem lesz automatikus bejelentkezés.</translation>
+<translation id="5529037166721644841">Azt az időtartamot adja meg ezredmásodpercben, amilyen rendszerességgel az eszközkezelő szolgáltatás lekérdezi az eszközszabályzattal kapcsolatos információkat.
+
+      A házirend beállításával felülírja a 3 órás alapértelmezett értéket. Az érték 1800000 (30 perc) és 86400000 (1 nap) között lehet. A tartományon kívül eső értékeket a rendszer a közelebbi tartományhatárra állítja.
+
+      Ha nem állítja be a házirendet, akkor a <ph name="PRODUCT_OS_NAME" /> az alapértelmezett 3 órás értéket fogja használni.
+
+      Felhívjuk figyelmét, hogy ha az operációs rendszer támogatja a házirendekkel kapcsolatos értesítéseket, akkor a frissítési időszak 24 órás lesz (azaz a böngésző nem veszi figyelembe sem az alapértelmezett, sem a beállított értékeket), ugyanis a házirenddel kapcsolatos értesítéseknek automatikusan ki kell kényszeríteniük a frissítést, amikor egy házirend megváltozik, így szükségtelen gyakrabban frissíteni.</translation>
+<translation id="5535957389335373033">A böngésző által küldött ellenőrző hálózati csomagok gyakorisága (ezredmásodpercben).
+
+      Ha nem állítja be az irányelvet, az alapértelmezett gyakoriság három perc.
+      A minimális érték 30 másodperc, a maximális 24 óra. A
+      tartományon kívüli értékek ebbe a tartományba lesznek beszorítva.</translation>
 <translation id="5535973522252703021">Kerberos felhatalmazási szerver kivétellistája</translation>
 <translation id="5560039246134246593">Paraméter hozzáadása a Variations seed lekéréséhez a(z) <ph name="PRODUCT_NAME" /> termékben.
 
@@ -1279,6 +1311,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ha ez a beállítás le van tiltva, illetve nincs megadva, akkor a távoli elérésű gazdagép bármely helyi felhasználóhoz társítható.</translation>
 <translation id="5697306356229823047">Eszközfelhasználók jelentése</translation>
+<translation id="570062449808736508">Ha a házirend értéke nem üres karakterlánc, akkor a WebView beolvassa a tartalomszolgáltatótól kapott URL-korlátozásokat és az adott hatóság nevét.</translation>
 <translation id="5703863730741917647">A tétlenségi késleltetés elérésekor végrehajtandó művelet megadása.
 
           Vegye figyelembe, hogy ez a házirend elavult, ezért a jövőben törlésre kerül.
@@ -1524,6 +1557,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           Ha beállítja ezt a házirendet, a felhasználók ideiglenesen felülbírálhatják a képernyő-billentyűzet engedélyezésével vagy letiltásával. A felhasználó választása azonban nem tartós, és ha újra megjelenik a bejelentkezési képernyő, vagy ha a felhasználó egy percig tétlen marad azon, akkor a rendszer visszaállítja az alapértelmezett beállítást.
 
           Ha nem állítja be ezt a házirendet, akkor a képernyő-billentyűzet le lesz tiltva a bejelentkezési képernyő első megjelenítésekor. A felhasználók bármikor engedélyezhetik vagy letilthatják a képernyő-billentyűzetet, és annak állapota a bejelentkezési képernyőn megmarad a felhasználók között.</translation>
+<translation id="6573305661369899995">Külső URL-korlátozási forrás beállítása</translation>
 <translation id="6598235178374410284">Felhasználó avatarképe</translation>
 <translation id="6628646143828354685">Lehetővé teszi annak beállítását, hogy a webhelyek hozzáférhetnek-e a közeli Bluetooth-eszközökhöz. A hozzáférés teljes mértékben letiltható, vagy a rendszer minden olyan alkalommal rákérdezhet a felhasználónál az engedélyezésre, amikor egy webhely közeli Bluetooth-eszközökhöz szeretne hozzáférni.
 
@@ -1651,6 +1685,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
           Ha a beállítás le van tiltva vagy nincs megadva, a gazdagépeket bármely fiókkal meg lehet osztani.
 
           Lásd még a RemoteAccessHostClientDomain házirendet.</translation>
+<translation id="6979510692034647325">Engedélyezi a komponensek frissítéseit a(z) <ph name="PRODUCT_NAME" /> termékben.</translation>
 <translation id="6997592395211691850">Szükség van-e online OCSP- vagy CRL-ellenőrzésekre a helyi megbízhatósági kapcsolatok alapjainál</translation>
 <translation id="7003334574344702284">Ez a házirend engedélyezése esetén kikényszeríti a mentett jelszavak importálását a jelenlegi alapértelmezett böngészőből. Bekapcsolása esetén a házirend az importálás párbeszédpanelére is hatással van. Letiltása esetén a mentett jelszavak importálása nem történik meg. Ha nincs beállítva, akkor előfordulhat, hogy a rendszer a felhasználótól kérdezi meg, hogy megtörténjen-e az importálás, vagy hogy lehet-e automatikus az importálás.</translation>
 <translation id="7003746348783715221">A <ph name="PRODUCT_NAME" /> beállításai</translation>
@@ -1771,6 +1806,9 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Az alkalmazás csak akkor veszi figyelembe ezt a házirendet, ha a „DefaultSearchProviderEnabled” házirend is engedélyezve van.</translation>
 <translation id="7302043767260300182">Képernyőzár késleltetése hálózati áramról való működés során</translation>
+<translation id="7311458740754205918">Ha igazra van állítva, vagy ha nincs beállítva, az Új lap oldalon megjelenhetnek javaslatok a felhasználó böngészési előzményei, érdeklődési körei vagy tartózkodási helye alapján.
+
+      Ha a beállítás hamis, akkor nem jelennek meg automatikusan generált tartalomjavaslatok az Új lap oldalon.</translation>
 <translation id="7323896582714668701">A(z) <ph name="PRODUCT_NAME" /> további parancssori paraméterei</translation>
 <translation id="7329842439428490522">Megadja azt a felhasználói bevitel nélküli időtartamot, amely után a rendszer kikapcsolja a képernyőt, ha akkumulátorról működik.
 
@@ -1796,7 +1834,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
       Ha a házirend nincs beállítva, akkor az automatikus tisztítás az alapértelmezett stratégiát használja. Ez jelenleg a „RemoveLRUIfDormant” stratégia.</translation>
 <translation id="7336878834592315572">Cookie-k megtartása a munkamenet idejére</translation>
 <translation id="7340034977315324840">Az eszköz aktív idejének jelentése</translation>
-<translation id="7381326101471547614">Letiltja az SPDY protokoll használatát a(z) <ph name="PRODUCT_NAME" /> termékben. Ha ez a házirend engedélyezve van, akkor az SPDY protokoll nem lesz elérhető a(z) <ph name="PRODUCT_NAME" /> termékben. E házirend kikapcsolása lehetővé teszi az SPDY használatát. Ha ez a házirend beállítatlanul marad, az SPDY elérhető lesz.</translation>
 <translation id="7384999953864505698">Engedélyezi a QUIC-protokollt</translation>
 <translation id="7406651467768226499">Annak meghatározása, hogy a késés nélkül, automatikusan elindított kioszkalkalmazás irányítsa-e a <ph name="PRODUCT_OS_NAME" /> verzióját.
 
@@ -1815,6 +1852,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="7443616896860707393">Cross-origin HTTP Basic Auth-kérdés</translation>
 <translation id="7468416082528382842">Windows beállításjegyzékének helye:</translation>
 <translation id="7469554574977894907">Keresési javaslatok engedélyezése</translation>
+<translation id="7474249562477552702">A helyi bizalmi horgonyok által nyújtott SHA-1-aláírással rendelkező tanúsítványok engedélyezése</translation>
 <translation id="7485481791539008776">Alapértelmezett nyomtató kiválasztására vonatkozó szabályok</translation>
 <translation id="749556411189861380">A regisztrált eszközökben lévő operációs rendszer és firmware verziójának jelentése.
 
@@ -1822,7 +1860,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="7511361072385293666">Ha a házirend értéke igaz, vagy ha nincs beállítva, akkor a <ph name="PRODUCT_NAME" /> termékben használható a QUIC protokoll.
       Ha a házirend értéke hamis, akkor a QUIC protokoll nem használható.</translation>
 <translation id="7519251620064708155">Kulcslétrehozás engedélyezése ezeken a webhelyeken</translation>
-<translation id="7523476810162382273">Ellenőrző szívverések küldése a kezelőszervernek</translation>
 <translation id="7529100000224450960">Lehetővé teszi, hogy megadja az URL-minták egy olyan listáját, amely meghatározza, mely webhelyek nyithatnak meg felugró ablakokat. Ha a házirend beállítatlanul marad, akkor a rendszer a globális alapértelmezett értéket használja valamennyi webhelyre vonatkozóan; vagy -- ha be van állítva -- a "DefaultPopupsSetting" házirendből, vagy pedig a felhasználó személyes konfigurációjából.</translation>
 <translation id="7529144158022474049">Szórási tényező automatikus frissítése</translation>
 <translation id="7553535237300701827">Amikor az irányelv be van állítva, a bejelentkezési hitelesítés folyamata a beállítás értékétől függően a következők egyike szerint alakul:
@@ -1831,6 +1868,11 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
       Ha SAML_INTERSTITIAL értékre van beállítva, a bejelentkezés során egy közbeiktatott képernyő jelenik meg, amelyen a felhasználó választhat, hogy az eszköz regisztrációs domainjén érvényes SAML IdP hitelesítés használatával folytatja, vagy visszatér a normál GAIA-bejelentkezési folyamathoz.</translation>
 <translation id="7567380065339179813">Bővítmények engedélyezése ezeken a webhelyeken</translation>
+<translation id="757395965347379751">A beállítás aktiválása esetén a(z) <ph name="PRODUCT_NAME" /> engedélyezi az SHA-1-aláírással rendelkező tanúsítványokat, amennyiben sikeres a hitelesítésük, és helyileg telepített CA-tanúsítványokhoz tartoznak.
+
+      Felhívjuk figyelmét arra, hogy ez az irányelv az SHA-1-aláírásokat engedélyező operációs rendszer tanúsítványhitelesítési készletétől függ. Ha az operációs rendszer valamelyik frissítése módosítja az SHA-1-tanúsítványok kezelésének módját, akkor előfordulhat, hogy ez az irányelv a továbbiakban nem fog működni.  Továbbá ez az irányelv csak ideiglenes megoldásként szolgál, hogy a vállalatoknak több idejük legyen áttérni az SHA-1-ről.  Ez az irányelv 2019. január 1-jén eltávolításra kerül.
+
+      Ha az irányelv nincs beállítva, vagy „hamis” értékre van állítva, akkor a(z) <ph name="PRODUCT_NAME" /> követi az SHA-1 nyilvánosan közzétett megszüntetési időpontját.</translation>
 <translation id="7593523670408385997">Konfigurálja a gyorsítótár méretét, amelyet a(z) <ph name="PRODUCT_NAME" /> arra használ, hogy a gyorsítótárazott fájlokat a merevlemezen tárolja.
 
       Ha beállítja ezt a házirendet, a(z) <ph name="PRODUCT_NAME" /> attól függetlenül használni fogja a megadott méretű gyorsítótárat, hogy a felhasználó megadta-e a „--disk-cache-size” jelölőt. A házirendben meghatározott érték nem abszolút határ, inkább egy javaslat a gyorsítótárazó rendszer számára. A néhány megabájt alatti, túl kicsi értékeket a rendszer automatikusan felkerekíti egy használható minimumra.
@@ -1884,6 +1926,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 
           Ha a beállítás le van tiltva vagy nincs megadva, akkor a kétlépcsős azonosítás nincs engedélyezve, és alapértelmezés szerint a felhasználó által megadott PIN-kód szükséges.</translation>
 <translation id="7750991880413385988">Új lap oldal megnyitása</translation>
+<translation id="7761446981238915769">A telepített alkalmazások listájának konfigurálása a bejelentkezési képernyőn</translation>
 <translation id="7761526206824804472">Beállít egy vagy több javasolt nyelv- és országkódot egy nyilvános munkamenet számára, ami lehetővé teszi, hogy a felhasználók egyszerűen válasszanak közülük.
 
       A felhasználó a nyilvános munkamenet megkezdése előtt kiválaszthat egy nyelv- és országkódot, valamint egy billentyűzetkiosztást. Alapértelmezés szerint a <ph name="PRODUCT_OS_NAME" /> által támogatott összes nyelv- és országkód megjelenik ábécésorrendben. A házirend beállításával a javasolt nyelv- és országkódok egy készletét a lista tetejére helyezheti.
@@ -1904,6 +1947,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="7763479091692861127"> Az operációs rendszer frissítéseihez használható kapcsolattípusok. Előfordulhat, hogy az operációs rendszer frissítései a méretük miatt nagyon megterhelik a kapcsolatot, és esetlegesen további költségeket eredményezhetnek. Ezért alapértelmezés szerint nincsenek engedélyezve a drágának tartott kapcsolattípusok, amelyek jelenleg a WiMax-, Bluetooth- és mobilkapcsolatokat jelentik.
 
       A felismert kapcsolattípus-azonosítók a következők: Ethernet, Wi-Fi, WiMax, Bluetooth és mobil.</translation>
+<translation id="7763614521440615342">Tartalomjavaslatok az Új lap oldalon</translation>
 <translation id="7766336524667238790">Információk (például alkalmazásazonosító és -verzió) jelentése
       az aktív kioszkmunkamenetről.
 
@@ -2272,6 +2316,29 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="8858642179038618439">A YouTube Biztonságos módjának kényszerítése</translation>
 <translation id="8864975621965365890">Elrejti a kikapcsolási figyelmeztetést, amely akkor jelenik meg, ha egy webhelyet a(z) <ph name="PRODUCT_FRAME_NAME" /> jeleníti meg.</translation>
 <translation id="8870318296973696995">Kezdőoldal</translation>
+<translation id="88890388118515381">
+      Meghatározza azoknak az alkalmazásoknak a listáját, amelyeket a rendszer
+      a háttérben, felhasználói beavatkozás nélkül telepít a bejelentkezési
+      képernyőre, és amelyeket nem lehet eltávolítani.
+      A rendszer az alkalmazások által kért valamennyi engedélyt
+      implicit módon, felhasználói beavatkozás nélkül adja meg, ideértve
+      az alkalmazás jövőbeni verziói által kért engedélyeket is.
+
+      Ha egy korábban kényszerítetten telepített alkalmazás lekerül a listáról,
+      akkor azt a <ph name="PRODUCT_NAME" /> automatikusan eltávolítja.
+
+      A házirend mindegyik listaeleme egy karakterlánc, amely pontosvesszővel
+      (<ph name="SEMICOLON" />) elválasztva tartalmazza a bővítményazonosítót és a frissítési URL-t.
+      A bővítményazonosító az a 32 betűs karakterlánc, amely pl. a <ph name="CHROME_EXTENSIONS_LINK" /> linken
+      található fejlesztői módban. A frissítési URL-nek az itt ismertetett
+      frissítési jegyzék XML-dokumentumra kell mutatnia: <ph name="LINK_TO_EXTENSION_DOC1" />. Fontos: Az ebben
+      a házirendben megadott frissítési URL csak a kezdeti telepítés céljára szolgál;
+      a bővítmény azt követő frissítései a bővítmény jegyzékfájljában megadott
+      frissítési URL-t használják.
+
+      Például a(z) <ph name="EXTENSION_POLICY_EXAMPLE" />
+      a Chrome Internetes áruház normál frissítési URL-jéről telepíti a(z) <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> 
+      bővítményt. A bővítmények tárolásával kapcsolatos további információkért lásd a következőt: <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">A Quirks Server hardverspecifikus konfigurációs fájlokat, például
       ICC megjelenítési profilokat biztosít a monitor kalibrálásához.
 
@@ -2325,11 +2392,6 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="9088444059179765143">Az automatikus időzóna-érzékelés módszerének konfigurálása</translation>
 <translation id="9096086085182305205">Azonosítási szerverek engedélyezési listája</translation>
 <translation id="9098553063150791878">HTTP-hitelesítési szabályok</translation>
-<translation id="9104138886225968319">Ellenőrző szívverések küldése a kezelőszervernek,
-      hogy az észlelhesse, ha az eszköz offline van.
-
-      Ha a házirend beállítása igaz, a rendszer küld ellenőrző szívveréseket.
-      Ha hamis, vagy ha nincs beállítva, akkor nem küld.</translation>
 <translation id="9112897538922695510">Lehetővé teszi a protokollkezelők listájának regisztrálását. Csak ajánlott házirend lehet. A |protocol| tulajdonságot a sémához – például „mailto” – kell beállítani, az |url| tulajdonságot pedig a sémát kezelő alkalmazás URL-mintájához. A minta tartalmazhat „%s” karakterláncot, amelynek – ha van – helyére majd a kezelt URL kerül.
 
           A rendszer egyesíti a házirend által regisztrált protokollkezelőket a felhasználó által regisztráltakkal, és mindkétféle protokollkezelő használatra készen rendelkezésre áll. A felhasználó új alapértelmezett kezelő telepítésével felülírhatja a házirend által telepített protokollkezelőket, a házirend által regisztrált protokollkezelőt azonban nem tudja eltávolítani.</translation>
@@ -2364,6 +2426,7 @@ Ennek a házirendnek a beállítása felülbírálja az alapértelmezett 3 órá
 <translation id="9187743794267626640">Külső tárhely csatlakoztatásának letiltása</translation>
 <translation id="9197740283131855199">Az a százalék, amelynek alapján a képernyő-elsötétítési késleltetés skálázódik, ha az elsötétedés után a felhasználó aktív lesz</translation>
 <translation id="9200828125069750521">Paraméterek POST metódust használó kép-URL-hez</translation>
+<translation id="9217154963008402249">Az ellenőrző hálózati csomagok gyakorisága</translation>
 <translation id="922540222991413931">Bővítmény-, alkalmazás- és felhasználói szkripttelepítési források konfigurálása</translation>
 <translation id="924557436754151212">Mentett jelszavak importálása az alapértelmezett böngészőből az első indításkor</translation>
 <translation id="930930237275114205">A(z) <ph name="PRODUCT_FRAME_NAME" /> felhasználói adatokat tartalmazó könyvtárának beállítása</translation>

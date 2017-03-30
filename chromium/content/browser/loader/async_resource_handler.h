@@ -14,6 +14,7 @@
 #include "base/timer/timer.h"
 #include "content/browser/loader/resource_handler.h"
 #include "content/browser/loader/resource_message_delegate.h"
+#include "content/common/content_export.h"
 #include "net/base/io_buffer.h"
 #include "url/gurl.h"
 
@@ -30,8 +31,8 @@ class SharedIOBuffer;
 
 // Used to complete an asynchronous resource request in response to resource
 // load events from the resource dispatcher host.
-class AsyncResourceHandler : public ResourceHandler,
-                             public ResourceMessageDelegate {
+class CONTENT_EXPORT AsyncResourceHandler : public ResourceHandler,
+                                            public ResourceMessageDelegate {
  public:
   AsyncResourceHandler(net::URLRequest* request,
                        ResourceDispatcherHostImpl* rdh);
@@ -45,7 +46,6 @@ class AsyncResourceHandler : public ResourceHandler,
                            bool* defer) override;
   bool OnResponseStarted(ResourceResponse* response, bool* defer) override;
   bool OnWillStart(const GURL& url, bool* defer) override;
-  bool OnBeforeNetworkStart(const GURL& url, bool* defer) override;
   bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                   int* buf_size,
                   int min_size) override;
@@ -70,6 +70,7 @@ class AsyncResourceHandler : public ResourceHandler,
   void OnDefer();
   bool CheckForSufficientResource();
   int CalculateEncodedDataLengthToReport();
+  int CalculateEncodedBodyLengthToReport();
   void RecordHistogram();
 
   scoped_refptr<ResourceBuffer> buffer_;
@@ -96,6 +97,7 @@ class AsyncResourceHandler : public ResourceHandler,
   base::RepeatingTimer progress_timer_;
 
   int64_t reported_transfer_size_;
+  int64_t reported_encoded_body_length_;
 
   DISALLOW_COPY_AND_ASSIGN(AsyncResourceHandler);
 };

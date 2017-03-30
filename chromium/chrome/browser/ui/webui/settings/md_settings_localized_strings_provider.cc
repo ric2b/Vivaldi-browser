@@ -7,6 +7,8 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/i18n/number_formatting.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -15,11 +17,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/google_chrome_strings.h"
 #include "chrome/grit/locale_settings.h"
-#include "chrome/grit/settings_chromium_strings.h"
-#include "chrome/grit/settings_google_chrome_strings.h"
-#include "chrome/grit/settings_strings.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/google/core/browser/google_util.h"
@@ -61,25 +59,31 @@ void AddLocalizedStringsBulk(content::WebUIDataSource* html_source,
   }
 }
 
-void AddCommonStrings(content::WebUIDataSource* html_source) {
+void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
   LocalizedString localized_strings[] = {
       {"add", IDS_ADD},
       {"cancel", IDS_CANCEL},
+      {"confirm", IDS_CONFIRM},
       {"disable", IDS_DISABLE},
       {"learnMore", IDS_LEARN_MORE},
       {"ok", IDS_OK},
       {"save", IDS_SAVE},
       {"advancedPageTitle", IDS_SETTINGS_ADVANCED},
       {"basicPageTitle", IDS_SETTINGS_BASIC},
-      {"searchPrompt", IDS_SETTINGS_SEARCH_PROMPT},
-      // TODO(dpapad); IDS_DOWNLOAD_CLEAR_SEARCH and IDS_MD_HISTORY_CLEAR_SEARCH
-      // are identical, merge them to one and re-use here.
-      {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
       {"settings", IDS_SETTINGS_SETTINGS},
       {"restart", IDS_SETTINGS_RESTART},
+      {"menuButtonLabel", IDS_SETTINGS_MENU_BUTTON_LABEL},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
+
+  html_source->AddBoolean(
+      "isGuest",
+#if defined(OS_CHROMEOS)
+      user_manager::UserManager::Get()->IsLoggedInAsGuest());
+#else
+      profile->IsOffTheRecord());
+#endif
 }
 
 void AddA11yStrings(content::WebUIDataSource* html_source) {
@@ -111,10 +115,44 @@ void AddA11yStrings(content::WebUIDataSource* html_source) {
      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_CURSOR_HIGHLIGHT_DESCRIPTION},
     {"focusHighlightLabel",
      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION},
-    {"selectToSpeakLabel",
+    {"selectToSpeakTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE},
+    {"selectToSpeakDescription",
      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION},
     {"switchAccessLabel",
      IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION},
+    {"manageAccessibilityFeatures",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES},
+    {"textToSpeechHeading",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_HEADING},
+    {"displayHeading",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_HEADING},
+    {"displaySettingsTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_TITLE},
+    {"displaySettingsDescription",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_DESCRIPTION},
+    {"appearanceSettingsTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_TITLE},
+    {"appearanceSettingsDescription",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_DESCRIPTION},
+    {"keyboardHeading",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_HEADING},
+    {"keyboardSettingsTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_TITLE},
+    {"keyboardSettingsDescription",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_DESCRIPTION},
+    {"mouseAndTouchpadHeading",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_AND_TOUCHPAD_HEADING},
+    {"mouseSettingsTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_TITLE},
+    {"mouseSettingsDescription",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_DESCRIPTION},
+    {"audioHeading",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_AUDIO_HEADING},
+    {"additionalFeaturesTitle",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE},
+    {"additionalFeaturesDescription",
+     IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_DESCRIPTION},
 #endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
@@ -151,17 +189,25 @@ void AddAboutStrings(content::WebUIDataSource* html_source) {
     {"aboutUpgradeUpdating", IDS_SETTINGS_UPGRADE_UPDATING},
 
 #if defined(OS_CHROMEOS)
-    {"aboutChannelStable", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE},
+    {"aboutArcVersionLabel", IDS_SETTINGS_ABOUT_PAGE_ARC_VERSION},
+    {"aboutBuildDateLabel", IDS_VERSION_UI_BUILD_DATE},
     {"aboutChannelBeta", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_BETA},
     {"aboutChannelDev", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_DEV},
+    {"aboutChannelLabel", IDS_SETTINGS_ABOUT_PAGE_CHANNEL},
+    {"aboutChannelStable", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL_STABLE},
     {"aboutCheckForUpdates", IDS_SETTINGS_ABOUT_PAGE_CHECK_FOR_UPDATES},
+    {"aboutCommandLineLabel", IDS_VERSION_UI_COMMAND_LINE},
     {"aboutCurrentlyOnChannel", IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL},
+    {"aboutDetailedBuildInfo", IDS_SETTINGS_ABOUT_PAGE_DETAILED_BUILD_INFO},
+    {"aboutFirmwareLabel", IDS_SETTINGS_ABOUT_PAGE_FIRMWARE},
+    {"aboutPlatformLabel", IDS_SETTINGS_ABOUT_PAGE_PLATFORM},
     {"aboutRelaunchAndPowerwash",
      IDS_SETTINGS_ABOUT_PAGE_RELAUNCH_AND_POWERWASH},
     {"aboutUpgradeUpdatingChannelSwitch",
      IDS_SETTINGS_UPGRADE_UPDATING_CHANNEL_SWITCH},
     {"aboutUpgradeSuccessChannelSwitch",
      IDS_SETTINGS_UPGRADE_SUCCESSFUL_CHANNEL_SWITCH},
+    {"aboutUserAgentLabel", IDS_VERSION_UI_USER_AGENT},
 
     // About page, channel switcher dialog.
     {"aboutChangeChannel", IDS_SETTINGS_ABOUT_PAGE_CHANGE_CHANNEL},
@@ -219,6 +265,9 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
     {"openWallpaperApp", IDS_SETTINGS_OPEN_WALLPAPER_APP},
     {"setWallpaper", IDS_SETTINGS_SET_WALLPAPER},
 #endif
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    {"showWindowDecorations", IDS_SHOW_WINDOW_DECORATIONS},
+#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -227,22 +276,20 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source) {
 #if defined(OS_CHROMEOS)
 void AddBluetoothStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
-      {"bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH},
-      {"bluetoothAddDevicePageTitle", IDS_SETTINGS_BLUETOOTH_ADD_DEVICE},
-      {"bluetoothPairDevicePageTitle", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE},
-      {"bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE},
-      {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
+      {"bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY},
       {"bluetoothAddDevice", IDS_OPTIONS_SETTINGS_ADD_BLUETOOTH_DEVICE},
-      {"bluetoothNoDevices", IDS_OPTIONS_SETTINGS_BLUETOOTH_NO_DEVICES},
+      {"bluetoothAddDevicePageTitle", IDS_SETTINGS_BLUETOOTH_ADD_DEVICE},
       {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
+      {"bluetoothConnecting", IDS_SETTINGS_BLUETOOTH_CONNECTING},
       {"bluetoothDisconnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISCONNECT},
-      {"bluetoothConnecting", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECTING},
+      {"bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR},
+      {"bluetoothEnable", IDS_SETTINGS_BLUETOOTH_ENABLE},
+      {"bluetoothNoDevices", IDS_OPTIONS_SETTINGS_BLUETOOTH_NO_DEVICES},
+      {"bluetoothPageTitle", IDS_SETTINGS_BLUETOOTH},
+      {"bluetoothPairDevicePageTitle", IDS_SETTINGS_BLUETOOTH_PAIR_DEVICE},
+      {"bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY},
       {"bluetoothRemove", IDS_SETTINGS_BLUETOOTH_REMOVE},
       {"bluetoothScanning", IDS_OPTIONS_SETTINGS_BLUETOOTH_SCANNING},
-      {"bluetoothAccept", IDS_OPTIONS_SETTINGS_BLUETOOTH_ACCEPT_PASSKEY},
-      {"bluetoothReject", IDS_OPTIONS_SETTINGS_BLUETOOTH_REJECT_PASSKEY},
-      {"bluetoothConnect", IDS_OPTIONS_SETTINGS_BLUETOOTH_CONNECT},
-      {"bluetoothDismiss", IDS_OPTIONS_SETTINGS_BLUETOOTH_DISMISS_ERROR},
       // Device connecting and pairing.
       {"bluetoothStartConnecting", IDS_SETTINGS_BLUETOOTH_START_CONNECTING},
       {"bluetoothEnterKey", IDS_OPTIONS_SETTINGS_BLUETOOTH_ENTER_KEY},
@@ -254,6 +301,35 @@ void AddBluetoothStrings(content::WebUIDataSource* html_source) {
       {"bluetooth_requestPasskey", IDS_SETTINGS_BLUETOOTH_REQUEST_PASSKEY},
       {"bluetooth_displayPasskey", IDS_SETTINGS_BLUETOOTH_DISPLAY_PASSKEY},
       {"bluetooth_confirmPasskey", IDS_SETTINGS_BLUETOOTH_CONFIRM_PASSKEY},
+      // These ids are generated in JS using 'bluetooth_result_' + a value from
+      // bluetoothPrivate.ConnectResultType (see bluetooth_private.idl).
+      {"bluetooth_connect_attributeLengthInvalid",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_ATTRIBUTE_LENGTH_INVALID},
+      {"bluetooth_connect_authCanceled",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_CANCELED},
+      {"bluetooth_connect_authFailed",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_FAILED},
+      {"bluetooth_connect_authRejected",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_REJECTED},
+      {"bluetooth_connect_authTimeout",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_TIMEOUT},
+      {"bluetooth_connect_connectionCongested",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_CONNECTION_CONGESTED},
+      {"bluetooth_connect_failed", IDS_SETTINGS_BLUETOOTH_CONNECT_FAILED},
+      {"bluetooth_connect_inProgress",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_IN_PROGRESS},
+      {"bluetooth_connect_insufficientEncryption",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_INSUFFICIENT_ENCRYPTION},
+      {"bluetooth_connect_offsetInvalid",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_OFFSET_INVALID},
+      {"bluetooth_connect_readNotPermitted",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_READ_NOT_PERMITTED},
+      {"bluetooth_connect_requestNotSupported",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_REQUEST_NOT_SUPPORTED},
+      {"bluetooth_connect_unsupportedDevice",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_UNSUPPORTED_DEVICE},
+      {"bluetooth_connect_writeNotPermitted",
+       IDS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -407,13 +483,20 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
   AddLocalizedStringsBulk(html_source, device_strings,
                           arraysize(device_strings));
 
-  LocalizedString touchpad_strings[] = {
+  LocalizedString pointers_strings[] = {
+      {"mouseTitle", IDS_SETTINGS_MOUSE_TITLE},
       {"touchpadTitle", IDS_SETTINGS_TOUCHPAD_TITLE},
+      {"mouseAndTouchpadTitle", IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE},
       {"touchpadTapToClickEnabledLabel",
        IDS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_ENABLED_LABEL},
+      {"touchpadSpeed", IDS_SETTINGS_TOUCHPAD_SPEED_LABEL},
+      {"pointerSlow", IDS_SETTINGS_POINTER_SPEED_SLOW_LABEL},
+      {"pointerFast", IDS_SETTINGS_POINTER_SPEED_FAST_LABEL},
+      {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
+      {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
   };
-  AddLocalizedStringsBulk(html_source, touchpad_strings,
-                          arraysize(touchpad_strings));
+  AddLocalizedStringsBulk(html_source, pointers_strings,
+                          arraysize(pointers_strings));
 
   LocalizedString keyboard_strings[] = {
       {"keyboardTitle", IDS_SETTINGS_KEYBOARD_TITLE},
@@ -442,8 +525,15 @@ void AddDeviceStrings(content::WebUIDataSource* html_source) {
   AddLocalizedStringsBulk(html_source, keyboard_strings,
                           arraysize(keyboard_strings));
 
+  LocalizedString stylus_strings[] = {
+      {"stylusTitle", IDS_SETTINGS_STYLUS_TITLE},
+      {"stylusEnableStylusTools", IDS_SETTINGS_STYLUS_ENABLE_STYLUS_TOOLS},
+      {"stylusAutoOpenStylusTools", IDS_SETTINGS_STYLUS_AUTO_OPEN_STYLUS_TOOLS},
+      {"stylusFindMoreApps", IDS_SETTINGS_STYLUS_FIND_MORE_APPS}};
+  AddLocalizedStringsBulk(html_source, stylus_strings,
+                          arraysize(stylus_strings));
+
   LocalizedString display_strings[] = {
-      {"devicePageTitle", IDS_SETTINGS_DEVICE_TITLE},
       {"displayTitle", IDS_SETTINGS_DISPLAY_TITLE},
       {"displayArrangement", IDS_SETTINGS_DISPLAY_ARRANGEMENT},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
@@ -581,20 +671,13 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"internetPageTitle", IDS_SETTINGS_INTERNET},
       {"internetDetailPageTitle", IDS_SETTINGS_INTERNET_DETAIL},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
-      // Required by cr_network_list_network_item.js. TODO(stevenjb): Add to
-      // settings_strings.grdp or provide an alternative translation method.
-      // crbug.com/512214.
-      {"networkConnected", IDS_ASH_STATUS_TRAY_NETWORK_CONNECTED},
-      {"networkConnecting", IDS_ASH_STATUS_TRAY_NETWORK_CONNECTING},
-      {"networkDisabled", IDS_OPTIONS_SETTINGS_NETWORK_DISABLED},
-      {"networkNotConnected", IDS_ASH_STATUS_TRAY_NETWORK_NOT_CONNECTED},
-      {"OncTypeCellular", IDS_NETWORK_TYPE_CELLULAR},
-      {"OncTypeEthernet", IDS_NETWORK_TYPE_ETHERNET},
-      {"OncTypeVPN", IDS_NETWORK_TYPE_VPN},
-      {"OncTypeWiFi", IDS_NETWORK_TYPE_WIFI},
-      {"OncTypeWimax", IDS_NETWORK_TYPE_WIMAX},
-      {"vpnNameTemplate",
-       IDS_OPTIONS_SETTINGS_SECTION_THIRD_PARTY_VPN_NAME_TEMPLATE},
+      {"knownNetworksButton", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_BUTTON},
+      {"knownNetworksMessage", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_MESSAGE},
+      {"knownNetworksPreferred",
+       IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_PREFFERED},
+      {"knownNetworksNoPreferred",
+       IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_NO_PREFERRED},
+      {"knownNetworksAll", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_ALL},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -609,9 +692,10 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_ORDERING_INSTRUCTIONS},
       {"moveUp", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_UP},
       {"moveDown", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_DOWN},
+      {"removeLanguage", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_REMOVE},
       {"languageDetail",
        IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_LANGUAGE_DETAIL},
-      {"manageLanguages", IDS_SETTINGS_LANGUAGES_LANGUAGES_MANAGE},
+      {"addLanguages", IDS_SETTINGS_LANGUAGES_LANGUAGES_ADD},
 #if defined(OS_CHROMEOS)
       {"inputMethodsListTitle",
        IDS_SETTINGS_LANGUAGES_INPUT_METHODS_LIST_TITLE},
@@ -619,7 +703,7 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source) {
       {"manageInputMethodsPageTitle",
        IDS_SETTINGS_LANGUAGES_MANAGE_INPUT_METHODS_TITLE},
 #endif
-      {"manageLanguagesPageTitle",
+      {"addLanguagesDialogTitle",
        IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE},
       {"allLanguages", IDS_SETTINGS_LANGUAGES_ALL_LANGUAGES},
       {"enabledLanguages", IDS_SETTINGS_LANGUAGES_ENABLED_LANGUAGES},
@@ -699,6 +783,11 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"googlePayments", IDS_SETTINGS_GOOGLE_PAYMENTS},
       {"googlePaymentsCached", IDS_SETTINGS_GOOGLE_PAYMENTS_CACHED},
       {"addresses", IDS_SETTINGS_AUTOFILL_ADDRESSES_HEADING},
+      {"addAddressTitle", IDS_SETTINGS_AUTOFILL_ADDRESSES_ADD_TITLE},
+      {"editAddressTitle", IDS_SETTINGS_AUTOFILL_ADDRESSES_EDIT_TITLE},
+      {"addressCountry", IDS_SETTINGS_AUTOFILL_ADDRESSES_COUNTRY},
+      {"addressPhone", IDS_SETTINGS_AUTOFILL_ADDRESSES_PHONE},
+      {"addressEmail", IDS_SETTINGS_AUTOFILL_ADDRESSES_EMAIL},
       {"addAddress", IDS_SETTINGS_AUTOFILL_ADD_ADDRESS_BUTTON},
       {"editAddress", IDS_SETTINGS_ADDRESS_EDIT},
       {"removeAddress", IDS_SETTINGS_ADDRESS_REMOVE},
@@ -717,13 +806,19 @@ void AddPasswordsAndFormsStrings(content::WebUIDataSource* html_source) {
       {"addCreditCardTitle", IDS_SETTINGS_ADD_CREDIT_CARD_TITLE},
       {"autofillDetail", IDS_SETTINGS_AUTOFILL_DETAIL},
       {"passwords", IDS_SETTINGS_PASSWORDS},
+      {"passwordsAutosigninLabel",
+       IDS_SETTINGS_PASSWORDS_AUTOSIGNIN_CHECKBOX_LABEL},
+      {"passwordsAutosigninDescription",
+       IDS_SETTINGS_PASSWORDS_AUTOSIGNIN_CHECKBOX_DESC},
       {"passwordsDetail", IDS_SETTINGS_PASSWORDS_DETAIL},
       {"savedPasswordsHeading", IDS_SETTINGS_PASSWORDS_SAVED_HEADING},
       {"passwordExceptionsHeading", IDS_SETTINGS_PASSWORDS_EXCEPTIONS_HEADING},
       {"deletePasswordException", IDS_SETTINGS_PASSWORDS_DELETE_EXCEPTION},
-      {"editPassword", IDS_SETTINGS_PASSWORD_EDIT},
+      {"passwordsDone", IDS_SETTINGS_PASSWORD_DONE},
       {"removePassword", IDS_SETTINGS_PASSWORD_REMOVE},
-      {"editPasswordTitle", IDS_SETTINGS_PASSWORDS_EDIT_TITLE},
+      {"searchPasswords", IDS_SETTINGS_PASSWORD_SEARCH},
+      {"passwordDetailsTitle", IDS_SETTINGS_PASSWORDS_VIEW_DETAILS_TITLE},
+      {"passwordViewDetails", IDS_SETTINGS_PASSWORD_VIEW_DETAILS},
       {"editPasswordWebsiteLabel", IDS_SETTINGS_PASSWORDS_WEBSITE},
       {"editPasswordUsernameLabel", IDS_SETTINGS_PASSWORDS_USERNAME},
       {"editPasswordPasswordLabel", IDS_SETTINGS_PASSWORDS_PASSWORD},
@@ -752,35 +847,35 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
     {"manageOtherPeople", IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE},
     {"manageSupervisedUsers", IDS_SETTINGS_PEOPLE_MANAGE_SUPERVISED_USERS},
 #if defined(OS_CHROMEOS)
+    {"configurePinChoosePinTitle",
+     IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CHOOSE_PIN_TITLE},
+    {"configurePinConfirmPinTitle",
+     IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONFIRM_PIN_TITLE},
+    {"configurePinContinueButton",
+     IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONTINUE_BUTTON},
+    {"configurePinMismatched", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED},
+    {"configurePinTooShort", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT},
+    {"configurePinWeakPin", IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_WEAK_PIN},
     {"enableScreenlock", IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK},
-    {"quickUnlockTitle", IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_TITLE},
-    {"quickUnlockConfirmLogin", IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIRM_LOGIN},
-    {"quickUnlockPasswordLabel",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_PASSWORD_LABEL},
-    {"quickUnlockInvalidPassword",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_INVALID_PASSWORD},
-    {"quickUnlockChooseUnlockMethod",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CHOOSE_UNLOCK_METHOD},
-    {"quickUnlockUnlockMethodPassword",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PASSWORD},
-    {"quickUnlockUnlockMethodPinAndPassword",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PIN_AND_PASSWORD},
-    {"quickUnlockUnlockMethodNone",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_NONE},
-    {"quickUnlockConfigurePinButton",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BUTTON},
-    {"quickUnlockConfigurePinChoosePinTitle",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_TITLE},
-    {"quickUnlockConfigurePinChoosePinWeakPinWarning",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_WEAK_PIN_WARNING},
-    {"quickUnlockConfigurePinContinueButton",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONTINUE_BUTTON},
-    {"quickUnlockConfigurePinConfirmPinTitle",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONFIRM_PIN_TITLE},
-    {"quickUnlockConfigurePinMismatchedPins",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_MISMATCHED_PINS},
-    {"quickUnlockConfigurePinBackButton",
-     IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BACK_BUTTON},
+    {"lockScreenChangePinButton",
+     IDS_SETTINGS_PEOPLE_LOCK_SCREEN_CHANGE_PIN_BUTTON},
+    {"lockScreenNone", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE},
+    {"lockScreenPasswordOnly", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY},
+    {"lockScreenPinOrPassword",
+     IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD},
+    {"lockScreenSetupPinButton",
+     IDS_SETTINGS_PEOPLE_LOCK_SCREEN_SETUP_PIN_BUTTON},
+    {"lockScreenTitle", IDS_SETTINGS_PEOPLE_LOCK_SCREEN_TITLE},
+    {"passwordPromptEnterPassword",
+     IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD},
+    {"passwordPromptInvalidPassword",
+     IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_INVALID_PASSWORD},
+    {"passwordPromptPasswordLabel",
+     IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_PASSWORD_LABEL},
+    {"passwordPromptTitle", IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_TITLE},
+    {"pinKeyboardPlaceholderPin", IDS_PIN_KEYBOARD_HINT_TEXT_PIN},
+    {"pinKeyboardPlaceholderPinPassword",
+     IDS_PIN_KEYBOARD_HINT_TEXT_PIN_PASSWORD},
     {"changePictureTitle", IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE},
     {"changePicturePageDescription", IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TEXT},
     {"takePhoto", IDS_SETTINGS_CHANGE_PICTURE_TAKE_PHOTO},
@@ -858,9 +953,16 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
 
+  // Format numbers to be used on the pin keyboard.
+  for (int j = 0; j <= 9; j++) {
+    html_source->AddString("pinKeyboard" + base::IntToString(j),
+                           base::FormatNumber(int64_t{j}));
+  }
+
   html_source->AddString("autofillHelpURL", autofill::kHelpURL);
   html_source->AddString("supervisedUsersUrl",
                          chrome::kLegacySupervisedUserManagementURL);
+
   std::string sync_dashboard_url =
       google_util::AppendGoogleLocaleParam(
           GURL(chrome::kSyncGoogleDashboardURL),
@@ -868,18 +970,39 @@ void AddPeopleStrings(content::WebUIDataSource* html_source) {
           .spec();
   html_source->AddString("syncDashboardUrl", sync_dashboard_url);
   html_source->AddString(
-      "activityControlsUrl",
-      base::ASCIIToUTF16(chrome::kGoogleAccountActivityControlsURL));
+      "passphraseRecover",
+      l10n_util::GetStringFUTF8(IDS_SETTINGS_PASSPHRASE_RECOVER,
+                                base::ASCIIToUTF16(sync_dashboard_url)));
+
+  html_source->AddString("activityControlsUrl",
+                         chrome::kGoogleAccountActivityControlsURL);
 }
 
 void AddPrintingStrings(content::WebUIDataSource* html_source) {
   LocalizedString localized_strings[] = {
-      {"printingPageTitle", IDS_SETTINGS_PRINTING},
-      {"printingCloudPrintLearnMoreLabel",
-       IDS_SETTINGS_PRINTING_CLOUD_PRINT_LEARN_MORE_LABEL},
-      {"printingNotificationsLabel", IDS_SETTINGS_PRINTING_NOTIFICATIONS_LABEL},
-      {"printingManageCloudPrintDevices",
-       IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES},
+    {"printingPageTitle", IDS_SETTINGS_PRINTING},
+    {"printingCloudPrintLearnMoreLabel",
+     IDS_SETTINGS_PRINTING_CLOUD_PRINT_LEARN_MORE_LABEL},
+    {"printingNotificationsLabel", IDS_SETTINGS_PRINTING_NOTIFICATIONS_LABEL},
+    {"printingManageCloudPrintDevices",
+     IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES},
+    {"cloudPrintersTitle", IDS_SETTINGS_PRINTING_CLOUD_PRINTERS},
+#if defined(OS_CHROMEOS)
+    {"cupsPrintersTitle", IDS_SETTINGS_PRINTING_CUPS_PRINTERS},
+    {"addCupsPrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER},
+    {"cupsPrinterDetails", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_DETAILS},
+    {"removePrinter", IDS_SETTINGS_PRINTING_CUPS_PRINTERS_REMOVE},
+    {"searchLabel", IDS_SETTINGS_PRINTING_CUPS_SEARCH_LABEL},
+    {"printerDetailsTitle", IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_TITLE},
+    {"printerName", IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_NAME},
+    {"printerModel", IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_MODEL},
+    {"addPrinterTitle", IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_TITLE},
+    {"cancelButtonText", IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_CANCEL},
+    {"addPrinterButtonText", IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_ADD},
+    {"printerDetailsAdvanced", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED},
+    {"printerAddress", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ADDRESS},
+    {"printerProtocol", IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_PROTOCOL},
+#endif
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -901,7 +1024,11 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source) {
       {"safeBrowsingEnableExtendedReporting",
        IDS_SETTINGS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING},
       {"spellingPref", IDS_SETTINGS_SPELLING_PREF},
+#if defined(OS_CHROMEOS)
+      {"enableLogging", IDS_SETTINGS_ENABLE_LOGGING_DIAGNOSTIC_AND_USAGE_DATA},
+#else
       {"enableLogging", IDS_SETTINGS_ENABLE_LOGGING},
+#endif
       {"doNotTrack", IDS_SETTINGS_ENABLE_DO_NOT_TRACK},
       {"enableContentProtectionAttestation",
        IDS_SETTINGS_ENABLE_CONTENT_PROTECTION_ATTESTATION},
@@ -921,6 +1048,23 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source) {
                          l10n_util::GetStringFUTF16(
                              IDS_SETTINGS_IMPROVE_BROWSING_EXPERIENCE,
                              base::ASCIIToUTF16(chrome::kPrivacyLearnMoreURL)));
+}
+
+void AddSearchInSettingsStrings(content::WebUIDataSource* html_source) {
+  LocalizedString localized_strings[] = {
+    {"searchPrompt", IDS_SETTINGS_SEARCH_PROMPT},
+    {"searchNoResults", IDS_SETTINGS_SEARCH_NO_RESULTS},
+    // TODO(dpapad); IDS_DOWNLOAD_CLEAR_SEARCH and IDS_MD_HISTORY_CLEAR_SEARCH
+    // are identical, merge them to one and re-use here.
+    {"clearSearch", IDS_DOWNLOAD_CLEAR_SEARCH},
+  };
+  AddLocalizedStringsBulk(html_source, localized_strings,
+                          arraysize(localized_strings));
+
+  base::string16 help_text = l10n_util::GetStringFUTF16(
+      IDS_SETTINGS_SEARCH_NO_RESULTS_HELP,
+      base::ASCIIToUTF16(chrome::kSettingsSearchHelpURL));
+  html_source->AddString("searchNoResultsHelp", help_text);
 }
 
 void AddSearchStrings(content::WebUIDataSource* html_source) {
@@ -971,12 +1115,62 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"addSiteHeader", IDS_SETTINGS_ADD_SITE_HEADER},
       {"addSiteLink", IDS_SETTINGS_ADD_SITE_LINK},
       {"addSite", IDS_SETTINGS_ADD_SITE},
+      {"cookieAppCache", IDS_COOKIES_APPLICATION_CACHE},
+      {"cookieCacheStorage", IDS_COOKIES_CACHE_STORAGE},
+      {"cookieChannelId", IDS_COOKIES_CHANNEL_ID},
+      {"cookieDatabaseStorage", IDS_COOKIES_DATABASE_STORAGE},
+      {"cookieFileSystem", IDS_COOKIES_FILE_SYSTEM},
+      {"cookieFlashLso", IDS_COOKIES_FLASH_LSO},
+      {"cookieLocalStorage", IDS_COOKIES_LOCAL_STORAGE},
+      {"cookiePlural", IDS_COOKIES_PLURAL_COOKIES},
+      {"cookieServiceWorker", IDS_COOKIES_SERVICE_WORKER},
+      {"cookieSingular", IDS_COOKIES_SINGLE_COOKIE},
       {"embeddedOnHost", IDS_EXCEPTIONS_GEOLOCATION_EMBEDDED_ON_HOST},
+      {"appCacheManifest",
+       IDS_COOKIES_APPLICATION_CACHE_MANIFEST_LABEL},
+      {"cacheStorageLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"cacheStorageOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"cacheStorageSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"channelIdServerId", IDS_COOKIES_CHANNEL_ID_ORIGIN_LABEL},
+      {"channelIdType", IDS_COOKIES_CHANNEL_ID_TYPE_LABEL},
+      {"channelIdCreated", IDS_COOKIES_CHANNEL_ID_CREATED_LABEL},
+      {"channelIdExpires", IDS_COOKIES_CHANNEL_ID_EXPIRES_LABEL},
+      {"cookieAccessibleToScript",
+       IDS_COOKIES_COOKIE_ACCESSIBLE_TO_SCRIPT_LABEL},
+      {"cookieLastAccessed", IDS_COOKIES_LAST_ACCESSED_LABEL},
+      {"cookieContent", IDS_COOKIES_COOKIE_CONTENT_LABEL},
+      {"cookieCreated", IDS_COOKIES_COOKIE_CREATED_LABEL},
+      {"cookieDomain", IDS_COOKIES_COOKIE_DOMAIN_LABEL},
+      {"cookieExpires", IDS_COOKIES_COOKIE_EXPIRES_LABEL},
+      {"cookieName", IDS_COOKIES_COOKIE_NAME_LABEL},
+      {"cookiePath", IDS_COOKIES_COOKIE_PATH_LABEL},
+      {"cookieSendFor", IDS_COOKIES_COOKIE_SENDFOR_LABEL},
+      {"fileSystemOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"fileSystemPersistentUsage",
+       IDS_COOKIES_FILE_SYSTEM_PERSISTENT_USAGE_LABEL},
+      {"fileSystemTemporaryUsage",
+       IDS_COOKIES_FILE_SYSTEM_TEMPORARY_USAGE_LABEL},
+      {"indexedDbSize", IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"indexedDbLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"indexedDbOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"localStorageLastModified",
+       IDS_COOKIES_LOCAL_STORAGE_LAST_MODIFIED_LABEL},
+      {"localStorageOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"localStorageSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"serviceWorkerOrigin", IDS_COOKIES_LOCAL_STORAGE_ORIGIN_LABEL},
+      {"serviceWorkerScopes", IDS_COOKIES_SERVICE_WORKER_SCOPES_LABEL},
+      {"serviceWorkerSize",
+       IDS_COOKIES_LOCAL_STORAGE_SIZE_ON_DISK_LABEL},
+      {"webdbDesc", IDS_COOKIES_WEB_DATABASE_DESCRIPTION_LABEL},
       {"siteSettingsCategoryPageTitle", IDS_SETTINGS_SITE_SETTINGS_CATEGORY},
       {"siteSettingsCategoryAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
       {"siteSettingsCategoryCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
       {"siteSettingsCategoryCookies", IDS_SETTINGS_SITE_SETTINGS_COOKIES},
-      {"siteSettingsCategoryFullscreen", IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN},
+      {"siteSettingsCategoryHandlers", IDS_SETTINGS_SITE_SETTINGS_HANDLERS},
       {"siteSettingsCategoryImages", IDS_SETTINGS_SITE_SETTINGS_IMAGES},
       {"siteSettingsCategoryLocation", IDS_SETTINGS_SITE_SETTINGS_LOCATION},
       {"siteSettingsCategoryJavascript", IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT},
@@ -984,8 +1178,6 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsCategoryNotifications",
        IDS_SETTINGS_SITE_SETTINGS_NOTIFICATIONS},
       {"siteSettingsCategoryPopups", IDS_SETTINGS_SITE_SETTINGS_POPUPS},
-      {"siteSettingsSiteDetailsPageTitle",
-       IDS_SETTINGS_SITE_SETTINGS_SITE_DETAILS},
       {"siteSettingsAllSites", IDS_SETTINGS_SITE_SETTINGS_ALL_SITES},
       {"siteSettingsAutomaticDownloads",
        IDS_SETTINGS_SITE_SETTINGS_AUTOMATIC_DOWNLOADS},
@@ -993,6 +1185,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC},
       {"siteSettingsCamera", IDS_SETTINGS_SITE_SETTINGS_CAMERA},
       {"siteSettingsCookies", IDS_SETTINGS_SITE_SETTINGS_COOKIES},
+      {"siteSettingsHandlers", IDS_SETTINGS_SITE_SETTINGS_HANDLERS},
       {"siteSettingsKeygen", IDS_SETTINGS_SITE_SETTINGS_KEYGEN},
       {"siteSettingsLocation", IDS_SETTINGS_SITE_SETTINGS_LOCATION},
       {"siteSettingsMic", IDS_SETTINGS_SITE_SETTINGS_MIC},
@@ -1003,10 +1196,11 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsPopups", IDS_SETTINGS_SITE_SETTINGS_POPUPS},
       {"siteSettingsUnsandboxedPlugins",
        IDS_SETTINGS_SITE_SETTINGS_UNSANDBOXED_PLUGINS},
+      {"siteSettingsUsbDevices",
+       IDS_SETTINGS_SITE_SETTINGS_USB_DEVICES},
       {"siteSettingsFullscreen", IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN},
       {"siteSettingsMaySaveCookies",
        IDS_SETTINGS_SITE_SETTINGS_MAY_SAVE_COOKIES},
-      {"siteSettingsAskFirst", IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST},
       {"siteSettingsAskFirst", IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST},
       {"siteSettingsAskFirstRecommended",
        IDS_SETTINGS_SITE_SETTINGS_ASK_FIRST_RECOMMENDED},
@@ -1030,6 +1224,12 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_ALLOW_RECENTLY_CLOSED_SITES_RECOMMENDED},
       {"siteSettingsBackgroundSyncBlocked",
        IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCKED},
+      {"siteSettingsHandlersAsk",
+       IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK},
+      {"siteSettingsHandlersAskRecommended",
+       IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK_RECOMMENDED},
+      {"siteSettingsHandlersBlocked",
+       IDS_SETTINGS_SITE_SETTINGS_HANDLERS_BLOCKED},
       {"siteSettingsKeygenAllow",
        IDS_SETTINGS_SITE_SETTINGS_KEYGEN_ALLOW},
       {"siteSettingsKeygenBlock",
@@ -1061,10 +1261,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsBlock", IDS_SETTINGS_SITE_SETTINGS_BLOCK},
       {"siteSettingsSessionOnly", IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY},
       {"siteSettingsAllowed", IDS_SETTINGS_SITE_SETTINGS_ALLOWED},
-      {"siteSettingsAllowed", IDS_SETTINGS_SITE_SETTINGS_ALLOWED},
       {"siteSettingsAllowedRecommended",
        IDS_SETTINGS_SITE_SETTINGS_ALLOWED_RECOMMENDED},
-      {"siteSettingsBlocked", IDS_SETTINGS_SITE_SETTINGS_BLOCKED},
       {"siteSettingsBlocked", IDS_SETTINGS_SITE_SETTINGS_BLOCKED},
       {"siteSettingsBlockedRecommended",
        IDS_SETTINGS_SITE_SETTINGS_BLOCKED_RECOMMENDED},
@@ -1080,9 +1278,17 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source) {
       {"siteSettingsPermissions", IDS_SETTINGS_SITE_SETTINGS_PERMISSIONS},
       {"siteSettingsClearAndReset", IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON},
       {"siteSettingsDelete", IDS_SETTINGS_SITE_SETTINGS_DELETE},
+      {"siteSettingsCookieHeader", IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER},
+      {"siteSettingsCookieDialog", IDS_SETTINGS_SITE_SETTINGS_COOKIE_DIALOG},
+      {"siteSettingsCookieRemove", IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE},
+      {"siteSettingsCookieRemoveAll",
+       IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL},
       {"thirdPartyCookie", IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE},
       {"thirdPartyCookieSublabel",
        IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL},
+      {"handlerIsDefault", IDS_SETTINGS_SITE_SETTINGS_HANDLER_IS_DEFAULT},
+      {"handlerSetDefault", IDS_SETTINGS_SITE_SETTINGS_HANDLER_SET_DEFAULT},
+      {"handlerRemove", IDS_SETTINGS_SITE_SETTINGS_REMOVE},
   };
   AddLocalizedStringsBulk(html_source, localized_strings,
                           arraysize(localized_strings));
@@ -1160,9 +1366,29 @@ void AddWebContentStrings(content::WebUIDataSource* html_source) {
 
 }  // namespace
 
+#if defined(OS_CHROMEOS)
+void AddCrNetworkStrings(content::WebUIDataSource* html_source) {
+  LocalizedString localized_strings[] = {
+      {"networkConnecting", IDS_SETTINGS_INTERNET_NETWORK_CONNECTING},
+      {"networkDisabled", IDS_SETTINGS_INTERNET_NETWORK_DISABLED},
+      {"networkNotConnected", IDS_SETTINGS_INTERNET_NETWORK_NOT_CONNECTED},
+      {"networkListItemConnected",
+       IDS_SETTINGS_INTERNET_NETWORK_LIST_ITEM_CONNECTED},
+      {"OncTypeCellular", IDS_SETTINGS_NETWORK_TYPE_CELLULAR},
+      {"OncTypeEthernet", IDS_SETTINGS_NETWORK_TYPE_ETHERNET},
+      {"OncTypeVPN", IDS_SETTINGS_NETWORK_TYPE_VPN},
+      {"OncTypeWiFi", IDS_SETTINGS_NETWORK_TYPE_WIFI},
+      {"OncTypeWiMAX", IDS_SETTINGS_NETWORK_TYPE_WIMAX},
+      {"vpnNameTemplate", IDS_SETTINGS_THIRD_PARTY_VPN_NAME_TEMPLATE},
+  };
+  AddLocalizedStringsBulk(html_source, localized_strings,
+                          arraysize(localized_strings));
+}
+#endif  // OS_CHROMEOS
+
 void AddLocalizedStrings(content::WebUIDataSource* html_source,
                          Profile* profile) {
-  AddCommonStrings(html_source);
+  AddCommonStrings(html_source, profile);
 
   AddA11yStrings(html_source);
   AddAboutStrings(html_source);
@@ -1189,6 +1415,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
 #if defined(OS_CHROMEOS)
   AddEasyUnlockStrings(html_source);
   AddInternetStrings(html_source);
+  AddCrNetworkStrings(html_source);
 #endif
   AddLanguagesStrings(html_source);
 #if defined(OS_CHROMEOS)
@@ -1201,6 +1428,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddPrivacyStrings(html_source);
   AddResetStrings(html_source);
   AddSearchEnginesStrings(html_source);
+  AddSearchInSettingsStrings(html_source);
   AddSearchStrings(html_source);
   AddSiteSettingsStrings(html_source);
 #if !defined(OS_CHROMEOS)

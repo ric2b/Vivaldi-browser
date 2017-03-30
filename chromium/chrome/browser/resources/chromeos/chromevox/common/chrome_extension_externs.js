@@ -205,7 +205,6 @@ chrome.automation.StateType = {
   default: '',
   disabled: '',
   editable: '',
-  enabled: '',
   expanded: '',
   focusable: '',
   focused: '',
@@ -430,7 +429,7 @@ chrome.automation.AutomationNode.prototype.wordEnds;
 
 
 /**
- * @type {chrome.automation.AutomationNode}
+ * @type {chrome.automation.AutomationRootNode}
  */
 chrome.automation.AutomationNode.prototype.root;
 
@@ -617,6 +616,57 @@ chrome.automation.focusOffset;
  * @type {(chrome.automation.AutomationNode|undefined)}
  */
 chrome.automation.AutomationNode.prototype.activeDescendant;
+
+/** @type {number} */
+chrome.automation.AutomationNode.prototype.tableCellColumnIndex;
+
+/** @type {number} */
+chrome.automation.AutomationNode.prototype.tableCellRowIndex;
+
+/** @type {number} */
+chrome.automation.AutomationNode.prototype.tableColumnCount;
+
+/** @type {number} */
+chrome.automation.AutomationNode.prototype.tableRowCount;
+
+/** @type {number} */
+chrome.automation.AutomationNode.prototype.hierarchicalLevel;
+
+/** @type {Array<number>} */
+chrome.automation.AutomationNode.prototype.markerTypes;
+/** @type {Array<number>} */
+chrome.automation.AutomationNode.prototype.markerStarts;
+/** @type {Array<number>} */
+chrome.automation.AutomationNode.prototype.markerEnds;
+
+/** @type {boolean} */
+chrome.automation.AutomationNode.prototype.ariaReadonly;
+
+/**
+ * @extends {chrome.automation.AutomationNode}
+ * @constructor
+ */
+chrome.automation.AutomationRootNode = function() {};
+
+/**
+ * @type {chrome.automation.AutomationNode}
+ */
+chrome.automation.AutomationRootNode.prototype.anchorObject;
+
+/**
+ * @type {number}
+ */
+chrome.automation.AutomationRootNode.prototype.anchorOffset;
+
+/**
+ * @type {chrome.automation.AutomationNode}
+ */
+chrome.automation.AutomationRootNode.prototype.focusObject;
+
+/**
+ * @type {number}
+ */
+chrome.automation.AutomationRootNode.prototype.focusOffset;
 
 /** @type {function() : !Object} */
 chrome.app.getDetails;

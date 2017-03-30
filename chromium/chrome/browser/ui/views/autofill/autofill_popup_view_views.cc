@@ -6,6 +6,7 @@
 
 #include "chrome/browser/ui/autofill/autofill_popup_controller.h"
 #include "chrome/browser/ui/autofill/autofill_popup_layout_model.h"
+#include "chrome/browser/ui/autofill/popup_constants.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #include "components/autofill/core/browser/suggestion.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -56,7 +57,7 @@ void AutofillPopupViewViews::OnPaint(gfx::Canvas* canvas) {
 
     if (controller_->GetSuggestionAt(i).frontend_id ==
         POPUP_ITEM_ID_SEPARATOR) {
-      canvas->FillRect(line_rect, kItemTextColor);
+      canvas->FillRect(line_rect, kLabelTextColor);
     } else {
       DrawAutofillEntry(canvas, i, line_rect);
     }
@@ -70,8 +71,7 @@ void AutofillPopupViewViews::InvalidateRow(size_t row) {
 void AutofillPopupViewViews::DrawAutofillEntry(gfx::Canvas* canvas,
                                                int index,
                                                const gfx::Rect& entry_rect) {
-  if (controller_->selected_line() == index)
-    canvas->FillRect(entry_rect, kHoveredBackgroundColor);
+  canvas->FillRect(entry_rect, controller_->GetBackgroundColorForRow(index));
 
   const bool is_rtl = controller_->IsRTL();
   const int text_align =
@@ -80,8 +80,8 @@ void AutofillPopupViewViews::DrawAutofillEntry(gfx::Canvas* canvas,
   value_rect.Inset(AutofillPopupLayoutModel::kEndPadding, 0);
   canvas->DrawStringRectWithFlags(
       controller_->GetElidedValueAt(index),
-      controller_->GetValueFontListForRow(index),
-      controller_->IsWarning(index) ? kWarningTextColor : kValueTextColor,
+      controller_->layout_model().GetValueFontListForRow(index),
+      controller_->IsWarning(index) ? kLabelTextColor : kValueTextColor,
       value_rect, text_align);
 
   // Use this to figure out where all the other Autofill items should be placed.
@@ -111,13 +111,13 @@ void AutofillPopupViewViews::DrawAutofillEntry(gfx::Canvas* canvas,
   // Draw the label text.
   const int label_width =
       gfx::GetStringWidth(controller_->GetElidedLabelAt(index),
-                          controller_->GetLabelFontList());
+                          controller_->layout_model().GetLabelFontList());
   if (!is_rtl)
     x_align_left -= label_width;
 
   canvas->DrawStringRectWithFlags(
-      controller_->GetElidedLabelAt(index), controller_->GetLabelFontList(),
-      kItemTextColor,
+      controller_->GetElidedLabelAt(index),
+      controller_->layout_model().GetLabelFontList(), kLabelTextColor,
       gfx::Rect(x_align_left, entry_rect.y(), label_width, entry_rect.height()),
       text_align);
 }

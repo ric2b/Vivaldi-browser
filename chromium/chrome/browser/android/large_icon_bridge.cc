@@ -22,6 +22,7 @@
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/codec/png_codec.h"
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::AttachCurrentThread;
@@ -51,9 +52,7 @@ void OnLargeIconAvailable(
   if (result.fallback_icon_style)
     background_color = result.fallback_icon_style->background_color;
 
-  Java_LargeIconCallback_onLargeIconAvailable(env,
-                                              j_callback->obj(),
-                                              j_bitmap.obj(),
+  Java_LargeIconCallback_onLargeIconAvailable(env, j_callback->obj(), j_bitmap,
                                               background_color);
 }
 

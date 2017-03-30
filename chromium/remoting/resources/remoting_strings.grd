@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<grit base_dir="." current_release="1" enc_check="möl" latest_public_release="0" source_lang_id="en">
+<grit base_dir="." latest_public_release="0" current_release="1"
+      output_all_resource_defines="false" enc_check="möl" source_lang_id="en">
   <outputs>
     <output filename="remoting/base/string_resources.h" type="rc_header">
       <emit emit_type="prepend"/>
@@ -564,12 +565,6 @@
       </message>
 
       <if expr="is_android or is_ios">
-        <message desc="Pressing this button switches the view of the remote desktop to a Virtual Reality representation which is compatible with Google Cardboard." name="IDS_SHOW_CARDBOARD" formatter_data="android_java">
-          Show Cardboard view
-        </message>
-        <message desc="This message is shown in a dialog to warn the user they are about to switch to a Virtual Reality view which will not function properly unless the user has a Google Cardboard compatible device." name="IDS_CARDBOARD_WARNING_MESSAGE" formatter_data="android_java">
-          You have enabled Google Cardboard integration mode. To use this mode, insert your device into a Google Cardboard-compatible viewer.
-        </message>
         <message desc="Button to show or hide the on-screen keyboard." name="IDS_SHOW_HIDE_KEYBOARD" formatter_data="android_java">
           Show/hide keyboard.
         </message>
@@ -740,7 +735,7 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
         Duration
       </message>
       <message desc="Error that is shown on the client side when the host is blocking all connections due to failed authentication attempts." name="IDS_ERROR_HOST_OVERLOAD" formatter_data="android_java">
-        Connections to the remote computer are temporarily blocked because somebody was trying to connect to it with invalid PIN. Please try again later.
+        Connections to the remote computer are temporarily blocked because somebody was trying to connect to it with an invalid PIN. Please try again later.
       </message>
       <message desc="Error that is shown on the client side after the host has terminated connection that lasted more than maximum allowed duration." name="IDS_ERROR_MAX_SESSION_LENGTH" formatter_data="android_java">
         The remote session has expired.

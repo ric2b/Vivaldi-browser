@@ -27,6 +27,7 @@
 #define ImageSource_h
 
 #include "platform/PlatformExport.h"
+#include "platform/graphics/DeferredImageDecoder.h"
 #include "platform/graphics/ImageOrientation.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
@@ -36,7 +37,6 @@ class SkImage;
 
 namespace blink {
 
-class DeferredImageDecoder;
 class ImageOrientation;
 class IntPoint;
 class IntSize;
@@ -69,7 +69,9 @@ public:
     // Returns the number of bytes of frame data actually cleared.
     size_t clearCacheExceptFrame(size_t);
 
-    void setData(SharedBuffer& data, bool allDataReceived);
+    PassRefPtr<SharedBuffer> data();
+    // Returns false when the decoder layer rejects the data.
+    bool setData(PassRefPtr<SharedBuffer> data, bool allDataReceived);
     String filenameExtension() const;
 
     bool isSizeAvailable();

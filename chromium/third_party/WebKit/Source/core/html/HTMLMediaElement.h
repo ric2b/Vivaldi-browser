@@ -45,7 +45,9 @@
 namespace blink {
 
 class AudioSourceProviderClient;
+class AudioTrack;
 class AudioTrackList;
+class AutoplayUmaHelper;
 class ContentType;
 class CueTimeline;
 class ElementVisibilityObserver;
@@ -64,6 +66,7 @@ class TextTrackContainer;
 class TextTrackList;
 class TimeRanges;
 class URLRegistry;
+class VideoTrack;
 class VideoTrackList;
 class WebAudioSourceProvider;
 class WebInbandTextTrack;
@@ -124,7 +127,7 @@ public:
     void setSrcObject(MediaStreamDescriptor*);
     MediaStreamDescriptor* getSrcObject() const { return m_srcObject.get(); }
 
-    enum NetworkState { NETWORK_EMPTY, NETWORK_IDLE, NETWORK_LOADING, NETWORK_NO_SOURCE };
+    enum NetworkState { kNetworkEmpty, kNetworkIdle, kNetworkLoading, kNetworkNoSource };
     NetworkState getNetworkState() const;
 
     String preload() const;
@@ -138,7 +141,7 @@ public:
     String canPlayType(const String& mimeType) const;
 
     // ready state
-    enum ReadyState { HAVE_NOTHING, HAVE_METADATA, HAVE_CURRENT_DATA, HAVE_FUTURE_DATA, HAVE_ENOUGH_DATA };
+    enum ReadyState { kHaveNothing, kHaveMetadata, kHaveCurrentData, kHaveFutureData, kHaveEnoughData };
     ReadyState getReadyState() const;
     bool seeking() const;
 
@@ -183,10 +186,10 @@ public:
     void togglePlayState();
 
     AudioTrackList& audioTracks();
-    void audioTrackChanged(WebMediaPlayer::TrackId, bool enabled);
+    void audioTrackChanged(AudioTrack*);
 
     VideoTrackList& videoTracks();
-    void selectedVideoTrackChanged(WebMediaPlayer::TrackId*);
+    void selectedVideoTrackChanged(VideoTrack*);
 
     TextTrack* addTextTrack(const AtomicString& kind, const AtomicString& label, const AtomicString& language, ExceptionState&);
 
@@ -246,7 +249,7 @@ public:
     void sourceWasRemoved(HTMLSourceElement*);
     void sourceWasAdded(HTMLSourceElement*);
 
-    // ActiveScriptWrappable functions.
+    // ScriptWrappable functions.
     bool hasPendingActivity() const final;
 
     AudioSourceProviderClient* audioSourceNode() { return m_audioSourceNode; }
@@ -286,7 +289,7 @@ protected:
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
     void finishParsingChildren() final;
     bool isURLAttribute(const Attribute&) const override;
-    void attach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
 
     void didMoveToNewDocument(Document& oldDocument) override;
     virtual KURL posterImageURL() const { return KURL(); }
@@ -298,13 +301,6 @@ protected:
     void recordAutoplayMetric(AutoplayMetrics);
 
 private:
-    // These values are used for histograms. Do not reorder.
-    enum AutoplayUnmuteActionStatus {
-        AutoplayUnmuteActionFailure = 0,
-        AutoplayUnmuteActionSuccess = 1,
-        AutoplayUnmuteActionMax
-    };
-
     void resetMediaPlayerAndMediaSource();
 
     bool alwaysCreateUserAgentShadowRoot() const final { return true; }
@@ -358,9 +354,9 @@ private:
     void cancelledRemotePlaybackRequest() final;
     void requestReload(const WebURL&) final;
 
-    void loadTimerFired(Timer<HTMLMediaElement>*);
-    void progressEventTimerFired(Timer<HTMLMediaElement>*);
-    void playbackProgressTimerFired(Timer<HTMLMediaElement>*);
+    void loadTimerFired(TimerBase*);
+    void progressEventTimerFired(TimerBase*);
+    void playbackProgressTimerFired(TimerBase*);
     void startPlaybackProgressTimer();
     void startProgressEventTimer();
     void stopPeriodicTimers();
@@ -404,7 +400,7 @@ private:
     void cancelDeferredLoad();
     void startDeferredLoad();
     void executeDeferredLoad();
-    void deferredLoadTimerFired(Timer<HTMLMediaElement>*);
+    void deferredLoadTimerFired(TimerBase*);
 
     void markCaptionAndSubtitleTracksAsUnconfigured();
 
@@ -458,7 +454,7 @@ private:
     void createPlaceholderTracksIfNecessary();
 
     // Sets the selected/enabled tracks if they aren't set before we initially
-    // transition to HAVE_METADATA.
+    // transition to kHaveMetadata.
     void selectInitialTracksIfNecessary();
 
     // Return true if and only if a user gesture is required to unlock this
@@ -484,7 +480,7 @@ private:
 
     void setNetworkState(NetworkState);
 
-    void audioTracksTimerFired(Timer<HTMLMediaElement>*);
+    void audioTracksTimerFired(TimerBase*);
 
     // TODO(liberato): remove once autoplay gesture override experiment concludes.
     void triggerAutoplayViewportCheckForTesting();
@@ -499,15 +495,12 @@ private:
 
     EnumerationHistogram& showControlsHistogram() const;
 
-    void recordAutoplaySourceMetric(int source);
-    void recordAutoplayUnmuteStatus(AutoplayUnmuteActionStatus);
-
     void onVisibilityChangedForAutoplay(bool isVisible);
 
-    UnthrottledTimer<HTMLMediaElement> m_loadTimer;
-    UnthrottledTimer<HTMLMediaElement> m_progressEventTimer;
-    UnthrottledTimer<HTMLMediaElement> m_playbackProgressTimer;
-    UnthrottledTimer<HTMLMediaElement> m_audioTracksTimer;
+    UnthrottledThreadTimer<HTMLMediaElement> m_loadTimer;
+    UnthrottledThreadTimer<HTMLMediaElement> m_progressEventTimer;
+    UnthrottledThreadTimer<HTMLMediaElement> m_playbackProgressTimer;
+    UnthrottledThreadTimer<HTMLMediaElement> m_audioTracksTimer;
     Member<TimeRanges> m_playedTimeRanges;
     Member<GenericEventQueue> m_asyncEventQueue;
 
@@ -567,7 +560,7 @@ private:
 
     Member<HTMLMediaSource> m_mediaSource;
 
-    // Cached time value. Only valid when ready state is HAVE_METADATA or
+    // Cached time value. Only valid when ready state is kHaveMetadata or
     // higher, otherwise the current time is assumed to be zero.
     mutable double m_cachedTime;
 
@@ -671,6 +664,7 @@ private:
 
     class AutoplayHelperClientImpl;
 
+    friend class AutoplayUmaHelper; // for isAutoplayAllowedPerSettings
     friend class Internals;
     friend class TrackDisplayUpdateScope;
     friend class AutoplayExperimentHelper;
@@ -678,6 +672,7 @@ private:
 
     Member<AutoplayExperimentHelper::Client> m_autoplayHelperClient;
     Member<AutoplayExperimentHelper> m_autoplayHelper;
+    Member<AutoplayUmaHelper> m_autoplayUmaHelper;
 
     WebRemotePlaybackClient* m_remotePlaybackClient;
 

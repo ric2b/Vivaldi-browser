@@ -13,7 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/process/process_info.h"
 #include "base/rand_util.h"
-#include "base/synchronization/cancellation_flag.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/task_runner.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
@@ -28,7 +28,6 @@
 using content::BrowserThread;
 using content::WebContents;
 using content::WebContentsObserver;
-using StartupCompleteFlag = base::CancellationFlag;
 
 namespace {
 
@@ -45,7 +44,7 @@ struct AfterStartupTask {
 };
 
 // The flag may be read on any thread, but must only be set on the UI thread.
-base::LazyInstance<StartupCompleteFlag>::Leaky g_startup_complete_flag;
+base::LazyInstance<base::AtomicFlag>::Leaky g_startup_complete_flag;
 
 // The queue may only be accessed on the UI thread.
 base::LazyInstance<std::deque<AfterStartupTask*>>::Leaky g_after_startup_tasks;
@@ -193,6 +192,27 @@ void StartupObserver::Start() {
 
 }  // namespace
 
+AfterStartupTaskUtils::Runner::Runner(
+    scoped_refptr<base::TaskRunner> destination_runner)
+    : destination_runner_(std::move(destination_runner)) {
+  DCHECK(destination_runner_);
+}
+
+AfterStartupTaskUtils::Runner::~Runner() = default;
+
+bool AfterStartupTaskUtils::Runner::PostDelayedTask(
+    const tracked_objects::Location& from_here,
+    const base::Closure& task,
+    base::TimeDelta delay) {
+  DCHECK(delay.is_zero());
+  AfterStartupTaskUtils::PostTask(from_here, destination_runner_, task);
+  return true;
+}
+
+bool AfterStartupTaskUtils::Runner::RunsTasksOnCurrentThread() const {
+  return destination_runner_->RunsTasksOnCurrentThread();
+}
+
 void AfterStartupTaskUtils::StartMonitoringStartup() {
   // The observer is self-deleting.
   (new StartupObserver)->Start();
@@ -200,15 +220,15 @@ void AfterStartupTaskUtils::StartMonitoringStartup() {
 
 void AfterStartupTaskUtils::PostTask(
     const tracked_objects::Location& from_here,
-    const scoped_refptr<base::TaskRunner>& task_runner,
+    const scoped_refptr<base::TaskRunner>& destination_runner,
     const base::Closure& task) {
   if (IsBrowserStartupComplete()) {
-    task_runner->PostTask(from_here, task);
+    destination_runner->PostTask(from_here, task);
     return;
   }
 
   std::unique_ptr<AfterStartupTask> queued_task(
-      new AfterStartupTask(from_here, task_runner, task));
+      new AfterStartupTask(from_here, destination_runner, task));
   QueueTask(std::move(queued_task));
 }
 

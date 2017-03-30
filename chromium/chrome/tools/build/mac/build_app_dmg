@@ -18,8 +18,9 @@ fi
 # fail on anything from here out
 set -e
 
-TOP="${SRCROOT}/.."
-PKG_DMG="${SRCROOT}/installer/mac/pkg-dmg"
+MYDIR="$(dirname $0)/../../.."
+TOP="${SRCROOT:-${MYDIR}}/.."
+PKG_DMG="${SRCROOT:-${MYDIR}}/installer/mac/pkg-dmg"
 BRAND_SCRIPT="${TOP}/build/branding_value.sh"
 
 BUILD_BRANDING=$1
@@ -28,9 +29,9 @@ VERSION=$2
 APP_NAME=$("${BRAND_SCRIPT}" "${BUILD_BRANDING}" PRODUCT_FULLNAME)
 DMG_NAME=$(echo "${APP_NAME}" | sed "s/ //g")
 
-SRC_APP_PATH="${BUILT_PRODUCTS_DIR}/${APP_NAME}.app"
+SRC_APP_PATH="${BUILT_PRODUCTS_DIR:-.}/${APP_NAME}.app"
 VOL_NAME="${APP_NAME}"
-DST_DMG_PATH="${BUILT_PRODUCTS_DIR}/${DMG_NAME}.${VERSION}.dmg"
+DST_DMG_PATH="${BUILT_PRODUCTS_DIR:-.}/${DMG_NAME}.${VERSION}.dmg"
 
 # Call the real working
 "${PKG_DMG}" --source /var/empty \

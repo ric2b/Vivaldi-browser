@@ -10,8 +10,6 @@ per-file app_modal_strings.grdp=file://components/app_modal/OWNERS
 
 per-file arc.gypi=file://components/arc/OWNERS
 
-per-file audio_modem.gypi=file://components/audio_modem/OWNERS
-
 per-file autofill.gypi=file://components/autofill/OWNERS
 per-file autofill_strings.grdp=file://components/autofill/OWNERS
 
@@ -20,6 +18,7 @@ per-file bookmarks.gypi=file://components/bookmarks/OWNERS
 
 per-file browser_sync.gypi=file://components/browser_sync/OWNERS
 
+per-file browsing_data_strings.grdp=file://components/browsing_data/OWNERS
 per-file browsing_data.gypi=file://components/browsing_data/OWNERS
 
 per-file bubble.gypi=file://components/bubble/OWNERS
@@ -30,8 +29,6 @@ per-file cdm.gypi=file://components/cdm/OWNERS
 
 per-file certificate_transparency.gypi=file://components/certificate_transparency/OWNERS
 
-per-file chooser_controller.gypi=file://components/chooser_controller/OWNERS
-
 per-file chrome_apps.gypi=file://components/chrome_apps/OWNERS
 
 per-file cloud_devices.gypi=file://components/cloud_devices/OWNERS
@@ -41,8 +38,6 @@ per-file component_updater.gypi=file://components/component_updater/OWNERS
 per-file constrained_window.gypi=file://components/constrained_window/OWNERS
 
 per-file content_settings.gypi=file://components/content_settings/OWNERS
-
-per-file copresence.gypi=file://components/copresence/OWNERS
 
 per-file crash.gypi=file://components/crash/OWNERS
 per-file crash_strings.grdp=file://components/crash/OWNERS
@@ -133,6 +128,7 @@ per-file ntp_tiles.gypi=file://components/ntp_tiles/OWNERS
 per-file offline_pages.gypi=file://components/offline_pages/OWNERS
 
 per-file omnibox.gypi=file://components/omnibox/OWNERS
+per-file omnibox_strings.grdp=file://components/omnibox/OWNERS
 
 per-file onc.gypi=file://components/onc/OWNERS
 
@@ -143,8 +139,6 @@ per-file os_crypt.gypi=file://components/os_crypt/OWNERS
 per-file ownership.gypi=file://components/ownership/OWNERS
 
 per-file packed_ct_ev_whitelist.gypi=file://components/packed_ct_ev_whitelist/OWNERS
-
-per-file page_load_metrics.gypi=file://components/page_load_metrics/OWNERS
 
 per-file pairing.gypi=file://components/pairing/OWNERS
 
@@ -161,6 +155,8 @@ per-file policy.gypi=file://components/policy/OWNERS
 per-file policy_strings.grdp=file://components/policy/OWNERS
 
 per-file precache.gypi=file://components/precache/OWNERS
+
+per-file previews.gypi=file://components/previews/OWNERS
 
 per-file printing.gypi=file://components/printing/OWNERS
 
@@ -197,6 +193,8 @@ per-file sessions.gypi=file://components/sessions/OWNERS
 
 per-file signin.gypi=file://components/signin/OWNERS
 
+per-file spellcheck.gypi=file://components/spellcheck/OWNERS
+
 per-file ssl_errors.gypi=file://components/ssl_errors/OWNERS
 per-file ssl_errors_strings.grdp=file://components/ssl_errors/OWNERS
 
@@ -211,9 +209,11 @@ per-file suggestions.gypi=file://components/suggestions/OWNERS
 per-file supervised_user_error_page.gypi=file://components/supervised_user_error_page/OWNERS
 per-file supervised_user_error_page_strings.grdp=file://components/supervised_user_error_page/OWNERS
 
-per-file sync_driver.gypi=file://components/sync_driver/OWNERS
+per-file sync.gyp=file://components/sync/OWNERS
 
 per-file sync_sessions.gypi=file://components/sync_sessions/OWNERS
+
+per-file sync_ui_strings.grdp=file://components/sync/OWNERS
 
 per-file timers.gypi=file://components/timers/OWNERS
 
@@ -248,12 +248,6 @@ per-file web_restrictions.gypi=file://components/web_restrictions/OWNERS
 
 per-file webdata.gypi=file://components/webdata/OWNERS
 per-file webdata_services.gypi=file://components/webdata_services/OWNERS
-
-per-file webmessaging.gypi=file://components/webmessaging/OWNERS
-
-per-file webp_transcode.gypi=file://components/webp_transcode/OWNERS
-
-per-file webusb.gypi=file://components/webusb/OWNERS
 
 per-file wifi.gypi=file://components/wifi/OWNERS
 

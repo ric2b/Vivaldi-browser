@@ -46,8 +46,8 @@ class FullscreenController final : public GarbageCollected<FullscreenController>
 public:
     static FullscreenController* create(WebViewImpl*);
 
-    void didEnterFullScreen();
-    void didExitFullScreen();
+    void didEnterFullscreen();
+    void didExitFullscreen();
 
     void enterFullScreenForElement(Element*);
     void exitFullScreenForElement(Element*);
@@ -55,6 +55,8 @@ public:
     bool isFullscreen() { return m_fullScreenFrame; }
 
     void updateSize();
+
+    void didUpdateLayout();
 
     DECLARE_TRACE();
 
@@ -70,6 +72,7 @@ private:
     float m_exitFullscreenPageScaleFactor;
     IntSize m_exitFullscreenScrollOffset;
     FloatPoint m_exitFullscreenVisualViewportOffset;
+    bool m_needsScrollAndScaleRestore;
 
     // If set, the WebView is transitioning to fullscreen for this element.
     Member<Element> m_provisionalFullScreenElement;

@@ -16,8 +16,6 @@ WebInspector.TimelineController = function(target, delegate, tracingModel)
     this._target = target;
     this._tracingModel = tracingModel;
     this._targets = [];
-    this._allProfilesStoppedPromise = Promise.resolve();
-    this._targetsResumedPromise = Promise.resolve();
     WebInspector.targetManager.observeTargets(this);
 }
 
@@ -73,9 +71,13 @@ WebInspector.TimelineController.prototype = {
 
     stopRecording: function()
     {
-        this._allProfilesStoppedPromise = this._stopProfilingOnAllTargets();
+        var tracingStoppedPromises = [];
+        tracingStoppedPromises.push(new Promise(resolve => this._tracingCompleteCallback = resolve));
+        tracingStoppedPromises.push(this._stopProfilingOnAllTargets());
         this._target.tracingManager.stop();
-        this._targetsResumedPromise = WebInspector.targetManager.resumeAllTargets();
+        tracingStoppedPromises.push(WebInspector.targetManager.resumeAllTargets());
+        Promise.all(tracingStoppedPromises).then(() => this._allSourcesFinished());
+
         this._delegate.loadingStarted();
     },
 
@@ -107,7 +109,7 @@ WebInspector.TimelineController.prototype = {
      */
     _startProfilingOnTarget: function(target)
     {
-        return target.profilerAgent().start();
+        return target.hasJSCapability() ? target.profilerAgent().start() : Promise.resolve();
     },
 
     /**
@@ -127,13 +129,13 @@ WebInspector.TimelineController.prototype = {
      */
     _stopProfilingOnTarget: function(target)
     {
-        return target.profilerAgent().stop(this._addCpuProfile.bind(this, target.id()));
+        return target.hasJSCapability() ? target.profilerAgent().stop(this._addCpuProfile.bind(this, target.id())) : Promise.resolve();
     },
 
     /**
      * @param {number} targetId
      * @param {?Protocol.Error} error
-     * @param {?ProfilerAgent.CPUProfile} cpuProfile
+     * @param {?ProfilerAgent.Profile} cpuProfile
      */
     _addCpuProfile: function(targetId, error, cpuProfile)
     {
@@ -170,14 +172,14 @@ WebInspector.TimelineController.prototype = {
         var options = "sampling-frequency=" + samplingFrequencyHz;
         var target = this._target;
         var tracingManager = target.tracingManager;
-        target.resourceTreeModel.suspendReload();
+        WebInspector.targetManager.suspendReload(target);
         profilingStartedPromise.then(tracingManager.start.bind(tracingManager, this, categories, options, onTraceStarted));
         /**
          * @param {?string} error
          */
         function onTraceStarted(error)
         {
-            target.resourceTreeModel.resumeReload();
+            WebInspector.targetManager.resumeReload(target);
             if (callback)
                 callback(error);
         }
@@ -206,11 +208,11 @@ WebInspector.TimelineController.prototype = {
      */
     tracingComplete: function()
     {
-        Promise.all([this._allProfilesStoppedPromise, this._targetsResumedPromise])
-            .then(this._didStopRecordingTraceEvents.bind(this));
+        this._tracingCompleteCallback();
+        this._tracingCompleteCallback = null;
     },
 
-    _didStopRecordingTraceEvents: function()
+    _allSourcesFinished: function()
     {
         this._injectCpuProfileEvents();
         this._tracingModel.tracingComplete();
@@ -220,7 +222,7 @@ WebInspector.TimelineController.prototype = {
     /**
      * @param {number} pid
      * @param {number} tid
-     * @param {?ProfilerAgent.CPUProfile} cpuProfile
+     * @param {?ProfilerAgent.Profile} cpuProfile
      */
     _injectCpuProfileEvent: function(pid, tid, cpuProfile)
     {

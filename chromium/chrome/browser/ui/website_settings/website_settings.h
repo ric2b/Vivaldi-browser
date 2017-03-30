@@ -36,10 +36,12 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver {
   //
   // Status of a connection to a website.
   enum SiteConnectionStatus {
-    SITE_CONNECTION_STATUS_UNKNOWN = 0,      // No status available.
-    SITE_CONNECTION_STATUS_ENCRYPTED,        // Connection is encrypted.
-    SITE_CONNECTION_STATUS_MIXED_CONTENT,    // Non-secure passive content.
-    SITE_CONNECTION_STATUS_MIXED_SCRIPT,     // Non-secure active content.
+    SITE_CONNECTION_STATUS_UNKNOWN = 0,  // No status available.
+    SITE_CONNECTION_STATUS_ENCRYPTED,    // Connection is encrypted.
+    SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE,  // Non-secure passive
+                                                          // content.
+    SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE,   // Non-secure active
+                                                          // content.
     SITE_CONNECTION_STATUS_UNENCRYPTED,      // Connection is not encrypted.
     SITE_CONNECTION_STATUS_ENCRYPTED_ERROR,  // Connection error occurred.
     SITE_CONNECTION_STATUS_INTERNAL_PAGE,    // Internal site.
@@ -95,6 +97,7 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver {
   };
 
   struct ChooserUIInfo {
+    ContentSettingsType content_settings_type;
     ChooserContextBase* (*get_context)(Profile*);
     int blocked_icon_id;
     int allowed_icon_id;
@@ -141,14 +144,6 @@ class WebsiteSettings : public TabSpecificContentSettings::SiteDataObserver {
 
   SiteIdentityStatus site_identity_status() const {
     return site_identity_status_;
-  }
-
-  base::string16 site_connection_details() const {
-    return site_connection_details_;
-  }
-
-  base::string16 site_identity_details() const {
-    return site_identity_details_;
   }
 
   base::string16 organization_name() const {

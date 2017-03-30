@@ -11,7 +11,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/search_urls.h"
+#include "chrome/common/search/search_urls.h"
 #include "extensions/helper/vivaldi_app_helper.h"
 #include "grit/platform_locale_settings.h"
 #include "prefs/vivaldi_pref_names.h"

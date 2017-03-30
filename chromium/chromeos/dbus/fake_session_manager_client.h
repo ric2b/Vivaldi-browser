@@ -67,6 +67,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         const ArcCallback& callback) override;
   void StopArcInstance(const ArcCallback& callback) override;
+  void PrioritizeArcInstance(const ArcCallback& callback) override;
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
   void RemoveArcData(const cryptohome::Identification& cryptohome_id,
                      const ArcCallback& callback) override;
@@ -97,6 +98,9 @@ class FakeSessionManagerClient : public SessionManagerClient {
   int start_device_wipe_call_count() const {
     return start_device_wipe_call_count_;
   }
+  int request_lock_screen_call_count() const {
+    return request_lock_screen_call_count_;
+  }
 
   // Returns how many times LockScreenShown() was called.
   int notify_lock_screen_shown_call_count() const {
@@ -119,6 +123,7 @@ class FakeSessionManagerClient : public SessionManagerClient {
   std::vector<std::string> server_backed_state_keys_;
 
   int start_device_wipe_call_count_;
+  int request_lock_screen_call_count_;
   int notify_lock_screen_shown_call_count_;
   int notify_lock_screen_dismissed_call_count_;
 

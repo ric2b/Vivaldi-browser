@@ -45,19 +45,19 @@ static inline const AtomicString& eventTypeForKeyboardEventType(PlatformEvent::E
         default:
             break;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return EventTypeNames::keydown;
 }
 
 static inline KeyboardEvent::KeyLocationCode keyLocationCode(const PlatformKeyboardEvent& key)
 {
     if (key.isKeypad())
-        return KeyboardEvent::DOM_KEY_LOCATION_NUMPAD;
+        return KeyboardEvent::kDomKeyLocationNumpad;
     if (key.getModifiers() & PlatformEvent::IsLeft)
-        return KeyboardEvent::DOM_KEY_LOCATION_LEFT;
+        return KeyboardEvent::kDomKeyLocationLeft;
     if (key.getModifiers() & PlatformEvent::IsRight)
-        return KeyboardEvent::DOM_KEY_LOCATION_RIGHT;
-    return KeyboardEvent::DOM_KEY_LOCATION_STANDARD;
+        return KeyboardEvent::kDomKeyLocationRight;
+    return KeyboardEvent::kDomKeyLocationStandard;
 }
 
 KeyboardEvent* KeyboardEvent::create(ScriptState* scriptState, const AtomicString& type, const KeyboardEventInit& initializer)
@@ -68,14 +68,13 @@ KeyboardEvent* KeyboardEvent::create(ScriptState* scriptState, const AtomicStrin
 }
 
 KeyboardEvent::KeyboardEvent()
-    : m_location(DOM_KEY_LOCATION_STANDARD)
+    : m_location(kDomKeyLocationStandard)
 {
 }
 
 KeyboardEvent::KeyboardEvent(const PlatformKeyboardEvent& key, AbstractView* view)
     : UIEventWithKeyState(eventTypeForKeyboardEventType(key.type()), true, true, view, 0, key.getModifiers(), key.timestamp(), InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
     , m_keyEvent(wrapUnique(new PlatformKeyboardEvent(key)))
-    , m_keyIdentifier(key.keyIdentifier())
     , m_code(key.code())
     , m_key(key.key())
     , m_location(keyLocationCode(key))
@@ -85,7 +84,6 @@ KeyboardEvent::KeyboardEvent(const PlatformKeyboardEvent& key, AbstractView* vie
 
 KeyboardEvent::KeyboardEvent(const AtomicString& eventType, const KeyboardEventInit& initializer)
     : UIEventWithKeyState(eventType, initializer)
-    , m_keyIdentifier(initializer.keyIdentifier())
     , m_code(initializer.code())
     , m_key(initializer.key())
     , m_location(initializer.location())
@@ -96,10 +94,9 @@ KeyboardEvent::KeyboardEvent(const AtomicString& eventType, const KeyboardEventI
 }
 
 KeyboardEvent::KeyboardEvent(const AtomicString& eventType, bool canBubble, bool cancelable, AbstractView* view,
-    const String& keyIdentifier, const String& code, const String& key, unsigned location, PlatformEvent::Modifiers modifiers,
+    const String& code, const String& key, unsigned location, PlatformEvent::Modifiers modifiers,
     double plaformTimeStamp)
     : UIEventWithKeyState(eventType, canBubble, cancelable, view, 0, modifiers, plaformTimeStamp, InputDeviceCapabilities::doesntFireTouchEventsSourceCapabilities())
-    , m_keyIdentifier(keyIdentifier)
     , m_code(code)
     , m_key(key)
     , m_location(location)
@@ -122,7 +119,6 @@ void KeyboardEvent::initKeyboardEvent(ScriptState* scriptState, const AtomicStri
 
     initUIEvent(type, canBubble, cancelable, view, 0);
 
-    m_keyIdentifier = keyIdentifier;
     m_location = location;
     initModifiers(ctrlKey, altKey, shiftKey, metaKey);
     initLocationModifiers(location);
@@ -181,13 +177,13 @@ int KeyboardEvent::which() const
 void KeyboardEvent::initLocationModifiers(unsigned location)
 {
     switch (location) {
-    case KeyboardEvent::DOM_KEY_LOCATION_NUMPAD:
+    case KeyboardEvent::kDomKeyLocationNumpad:
         m_modifiers |= PlatformEvent::IsKeyPad;
         break;
-    case KeyboardEvent::DOM_KEY_LOCATION_LEFT:
+    case KeyboardEvent::kDomKeyLocationLeft:
         m_modifiers |= PlatformEvent::IsLeft;
         break;
-    case KeyboardEvent::DOM_KEY_LOCATION_RIGHT:
+    case KeyboardEvent::kDomKeyLocationRight:
         m_modifiers |= PlatformEvent::IsRight;
         break;
     }

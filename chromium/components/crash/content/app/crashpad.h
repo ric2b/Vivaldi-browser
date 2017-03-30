@@ -12,12 +12,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "third_party/kasko/kasko_features.h"
-
-#if BUILDFLAG(ENABLE_KASKO)
-#include "base/process/process.h"
-#include "syzygy/kasko/api/crash_key.h"
-#endif  // BUILDFLAG(ENABLE_KASKO)
 
 namespace crash_reporter {
 
@@ -61,12 +55,15 @@ void InitializeCrashpadWithEmbeddedHandler(bool initial_client,
                                            const std::string& process_type);
 #endif  // OS_WIN
 
-// Enables or disables crash report upload. This is a property of the Crashpad
-// database. In a newly-created database, uploads will be disabled. This
-// function only has an effect when called in the browser process. Its effect is
-// immediate and applies to all other process types, including processes that
-// are already running.
-void SetUploadsEnabled(bool enabled);
+// Enables or disables crash report upload, taking the given consent to upload
+// into account. Consent may be ignored, uploads may not be enabled even with
+// consent, but will only be enabled without consent when policy enforces crash
+// reporting. Whether reports upload is a property of the Crashpad database. In
+// a newly-created database, uploads will be disabled. This function only has an
+// effect when called in the browser process. Its effect is immediate and
+// applies to all other process types, including processes that are already
+// running.
+void SetUploadConsent(bool consent);
 
 // Determines whether uploads are enabled or disabled. This information is only
 // available in the browser process.
@@ -75,7 +72,8 @@ bool GetUploadsEnabled();
 enum class ReportUploadState {
   NotUploaded,
   Pending,
-  Uploaded,
+  Pending_UserRequested,
+  Uploaded
 };
 
 struct Report {
@@ -93,16 +91,8 @@ struct Report {
 // reports first).
 void GetReports(std::vector<Report>* reports);
 
-#if BUILDFLAG(ENABLE_KASKO)
-// Returns a copy of the current crash keys for Kasko.
-void GetCrashKeysForKasko(std::vector<kasko::api::CrashKey>* crash_keys);
-
-// Reads the annotations for the executable module for |process| and puts them
-// into |crash_keys|.
-void ReadMainModuleAnnotationsForKasko(
-    const base::Process& process,
-    std::vector<kasko::api::CrashKey>* crash_keys);
-#endif  // BUILDFLAG(ENABLE_KASKO)
+// Requests a user triggered upload for a crash report with a given id.
+void RequestSingleCrashUpload(const std::string& local_id);
 
 namespace internal {
 

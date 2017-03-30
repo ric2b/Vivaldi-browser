@@ -10,6 +10,11 @@
 
 #include "base/logging.h"
 #include "base/task_scheduler/task_tracker.h"
+#include "build/build_config.h"
+
+#if defined(OS_MACOSX)
+#include "base/mac/scoped_nsautorelease_pool.h"
+#endif
 
 namespace base {
 namespace internal {
@@ -31,14 +36,24 @@ class SchedulerWorker::Thread : public PlatformThread::Delegate {
     // Set if this thread was detached.
     std::unique_ptr<Thread> detached_thread;
 
-    outer_->delegate_->OnMainEntry(outer_);
+    outer_->delegate_->OnMainEntry(
+        outer_, outer_->last_detach_time_.is_null()
+                    ? TimeDelta::Max()
+                    : TimeTicks::Now() - outer_->last_detach_time_);
 
     // A SchedulerWorker starts out waiting for work.
     WaitForWork();
 
-    while (!outer_->task_tracker_->shutdown_completed() &&
+    while (!outer_->task_tracker_->IsShutdownComplete() &&
            !outer_->ShouldExitForTesting()) {
       DCHECK(outer_);
+
+#if defined(OS_MACOSX)
+      mac::ScopedNSAutoreleasePool autorelease_pool;
+#endif
+
+      UpdateThreadPriority(GetDesiredThreadPriority());
+
       // Get the sequence containing the next task to execute.
       scoped_refptr<Sequence> sequence = outer_->delegate_->GetWork(outer_);
       if (!sequence) {
@@ -55,7 +70,7 @@ class SchedulerWorker::Thread : public PlatformThread::Delegate {
         continue;
       }
 
-      outer_->task_tracker_->RunTask(sequence->PeekTask());
+      outer_->task_tracker_->RunNextTaskInSequence(sequence.get());
 
       const bool sequence_became_empty = sequence->PopTask();
 
@@ -91,17 +106,17 @@ class SchedulerWorker::Thread : public PlatformThread::Delegate {
 
  private:
   Thread(SchedulerWorker* outer)
-    : outer_(outer),
-      wake_up_event_(WaitableEvent::ResetPolicy::MANUAL,
-                     WaitableEvent::InitialState::NOT_SIGNALED) {
+      : outer_(outer),
+        wake_up_event_(WaitableEvent::ResetPolicy::MANUAL,
+                       WaitableEvent::InitialState::NOT_SIGNALED),
+        current_thread_priority_(GetDesiredThreadPriority()) {
     DCHECK(outer_);
   }
 
   void Initialize() {
     constexpr size_t kDefaultStackSize = 0;
-    PlatformThread::CreateWithPriority(kDefaultStackSize, this,
-                                       &thread_handle_,
-                                       outer_->thread_priority_);
+    PlatformThread::CreateWithPriority(kDefaultStackSize, this, &thread_handle_,
+                                       current_thread_priority_);
   }
 
   void WaitForWork() {
@@ -117,6 +132,37 @@ class SchedulerWorker::Thread : public PlatformThread::Delegate {
     wake_up_event_.Reset();
   }
 
+  // Returns the priority for which the thread should be set based on the
+  // priority hint, current shutdown state, and platform capabilities.
+  ThreadPriority GetDesiredThreadPriority() {
+    DCHECK(outer_);
+
+    // All threads have a NORMAL priority when Lock doesn't handle multiple
+    // thread priorities.
+    if (!Lock::HandlesMultipleThreadPriorities())
+      return ThreadPriority::NORMAL;
+
+    // To avoid shutdown hangs, disallow a priority below NORMAL during
+    // shutdown. If thread priority cannot be increased, never allow a priority
+    // below NORMAL.
+    if (static_cast<int>(outer_->priority_hint_) <
+            static_cast<int>(ThreadPriority::NORMAL) &&
+        (outer_->task_tracker_->HasShutdownStarted() ||
+         !PlatformThread::CanIncreaseCurrentThreadPriority())) {
+      return ThreadPriority::NORMAL;
+    }
+
+    return outer_->priority_hint_;
+  }
+
+  void UpdateThreadPriority(ThreadPriority desired_thread_priority) {
+    if (desired_thread_priority == current_thread_priority_)
+      return;
+
+    PlatformThread::SetCurrentThreadPriority(desired_thread_priority);
+    current_thread_priority_ = desired_thread_priority;
+  }
+
   PlatformThreadHandle thread_handle_;
 
   SchedulerWorker* outer_;
@@ -124,16 +170,20 @@ class SchedulerWorker::Thread : public PlatformThread::Delegate {
   // Event signaled to wake up this thread.
   WaitableEvent wake_up_event_;
 
+  // Current priority of this thread. May be different from
+  // |outer_->priority_hint_|.
+  ThreadPriority current_thread_priority_;
+
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
 
 std::unique_ptr<SchedulerWorker> SchedulerWorker::Create(
-    ThreadPriority thread_priority,
+    ThreadPriority priority_hint,
     std::unique_ptr<Delegate> delegate,
     TaskTracker* task_tracker,
     InitialState initial_state) {
   std::unique_ptr<SchedulerWorker> worker(
-      new SchedulerWorker(thread_priority, std::move(delegate), task_tracker));
+      new SchedulerWorker(priority_hint, std::move(delegate), task_tracker));
   // Creation happens before any other thread can reference this one, so no
   // synchronization is necessary.
   if (initial_state == SchedulerWorker::InitialState::ALIVE) {
@@ -185,10 +235,10 @@ bool SchedulerWorker::ThreadAliveForTesting() const {
   return !!thread_;
 }
 
-SchedulerWorker::SchedulerWorker(ThreadPriority thread_priority,
+SchedulerWorker::SchedulerWorker(ThreadPriority priority_hint,
                                  std::unique_ptr<Delegate> delegate,
                                  TaskTracker* task_tracker)
-    : thread_priority_(thread_priority),
+    : priority_hint_(priority_hint),
       delegate_(std::move(delegate)),
       task_tracker_(task_tracker) {
   DCHECK(delegate_);
@@ -201,7 +251,10 @@ std::unique_ptr<SchedulerWorker::Thread> SchedulerWorker::Detach() {
   // If a wakeup is pending, then a WakeUp() came in while we were deciding to
   // detach. This means we can't go away anymore since we would break the
   // guarantee that we call GetWork() after a successful wakeup.
-  return thread_->IsWakeUpPending() ? nullptr : std::move(thread_);
+  if (thread_->IsWakeUpPending())
+    return nullptr;
+  last_detach_time_ = TimeTicks::Now();
+  return std::move(thread_);
 }
 
 void SchedulerWorker::CreateThread() {

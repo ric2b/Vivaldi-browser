@@ -20,6 +20,7 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 BluetoothChooserAndroid::BluetoothChooserAndroid(
@@ -46,7 +47,7 @@ BluetoothChooserAndroid::BluetoothChooserAndroid(
           env,
           url_formatter::FormatUrlForSecurityDisplay(GURL(origin.Serialize())));
   java_dialog_.Reset(Java_BluetoothChooserDialog_create(
-      env, window_android.obj(), origin_string.obj(),
+      env, window_android, origin_string,
       security_model_client->GetSecurityInfo().security_level,
       reinterpret_cast<intptr_t>(this)));
 }
@@ -54,7 +55,7 @@ BluetoothChooserAndroid::BluetoothChooserAndroid(
 BluetoothChooserAndroid::~BluetoothChooserAndroid() {
   if (!java_dialog_.is_null()) {
     Java_BluetoothChooserDialog_closeDialog(AttachCurrentThread(),
-                                            java_dialog_.obj());
+                                            java_dialog_);
   }
 }
 
@@ -67,9 +68,9 @@ bool BluetoothChooserAndroid::CanAskForScanningPermission() {
 void BluetoothChooserAndroid::SetAdapterPresence(AdapterPresence presence) {
   JNIEnv* env = AttachCurrentThread();
   if (presence != AdapterPresence::POWERED_ON) {
-    Java_BluetoothChooserDialog_notifyAdapterTurnedOff(env, java_dialog_.obj());
+    Java_BluetoothChooserDialog_notifyAdapterTurnedOff(env, java_dialog_);
   } else {
-    Java_BluetoothChooserDialog_notifyAdapterTurnedOn(env, java_dialog_.obj());
+    Java_BluetoothChooserDialog_notifyAdapterTurnedOn(env, java_dialog_);
   }
 }
 
@@ -87,27 +88,31 @@ void BluetoothChooserAndroid::ShowDiscoveryState(DiscoveryState state) {
       java_state = 2;
       break;
   }
-  Java_BluetoothChooserDialog_notifyDiscoveryState(
-      AttachCurrentThread(), java_dialog_.obj(), java_state);
+  Java_BluetoothChooserDialog_notifyDiscoveryState(AttachCurrentThread(),
+                                                   java_dialog_, java_state);
 }
 
-void BluetoothChooserAndroid::AddDevice(const std::string& device_id,
-                                        const base::string16& device_name) {
+void BluetoothChooserAndroid::AddOrUpdateDevice(
+    const std::string& device_id,
+    bool should_update_name,
+    const base::string16& device_name,
+    bool is_gatt_connected,
+    bool is_paired,
+    int signal_strength_level) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_device_id =
       ConvertUTF8ToJavaString(env, device_id);
   ScopedJavaLocalRef<jstring> java_device_name =
       ConvertUTF16ToJavaString(env, device_name);
-  Java_BluetoothChooserDialog_addDevice(
-      env, java_dialog_.obj(), java_device_id.obj(), java_device_name.obj());
+  Java_BluetoothChooserDialog_addOrUpdateDevice(
+      env, java_dialog_, java_device_id, java_device_name);
 }
 
 void BluetoothChooserAndroid::RemoveDevice(const std::string& device_id) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> java_device_id =
       ConvertUTF16ToJavaString(env, base::UTF8ToUTF16(device_id));
-  Java_BluetoothChooserDialog_removeDevice(env, java_dialog_.obj(),
-                                           java_device_id.obj());
+  Java_BluetoothChooserDialog_removeDevice(env, java_dialog_, java_device_id);
 }
 
 void BluetoothChooserAndroid::OnDialogFinished(

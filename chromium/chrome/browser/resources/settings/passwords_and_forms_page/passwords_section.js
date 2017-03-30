@@ -20,7 +20,15 @@ var ExceptionPairEntryEvent;
 Polymer({
   is: 'passwords-section',
 
+  behaviors: [CrScrollableBehavior],
+
   properties: {
+    /** Preferences state. */
+    prefs: {
+      type: Object,
+      notify: true,
+    },
+
     /**
      * An array of passwords to display.
      * @type {!Array<!chrome.passwordsPrivate.PasswordUiEntry>}
@@ -46,24 +54,45 @@ Polymer({
       type: Array,
       value: function() { return []; },
     },
+
+
+    /**
+     * Assigning a non-null value triggers the add/edit dialog.
+     * @private {?chrome.passwordsPrivate.PasswordUiEntry}
+     */
+    activePassword: Object,
+
+    /** Filter on the saved passwords and exceptions. */
+    filter: {
+      type: String,
+      value: '',
+    },
   },
 
   listeners: {
     'passwordList.scroll': 'closeMenu_',
-    'tap': 'closeMenu_',
+  },
+
+  observers: ['passwordListChanged_(savedPasswords, filter)'],
+
+  /**
+   * Updates the scrollable contents when the list of passwords has changed.
+   * @private
+   */
+  passwordListChanged_: function() {
+    this.updateScrollableContents();
   },
 
   /**
    * Sets the password in the current password dialog if the loginPair matches.
    * @param {!chrome.passwordsPrivate.LoginPair} loginPair
-   * @param {!string} password
+   * @param {string} password
    */
   setPassword: function(loginPair, password) {
-    var passwordDialog = this.$.passwordEditDialog;
-    if (passwordDialog.item && passwordDialog.item.loginPair &&
-        passwordDialog.item.loginPair.originUrl == loginPair.originUrl &&
-        passwordDialog.item.loginPair.username == loginPair.username) {
-      passwordDialog.password = password;
+    if (this.activePassword &&
+        this.activePassword.loginPair.originUrl == loginPair.originUrl &&
+        this.activePassword.loginPair.username == loginPair.username) {
+      this.$$('password-edit-dialog').password = password;
     }
   },
 
@@ -73,11 +102,41 @@ Polymer({
    */
   onMenuEditPasswordTap_: function() {
     var menu = /** @type {CrSharedMenuElement} */(this.$.menu);
-    var data =
+    this.activePassword =
         /** @type {chrome.passwordsPrivate.PasswordUiEntry} */(menu.itemData);
-    this.$.passwordEditDialog.item = data;
-    this.$.passwordEditDialog.open();
     menu.closeMenu();
+  },
+
+  /** @private */
+  unstampPasswordEditDialog_: function(e) {
+    this.activePassword = null;
+  },
+
+  /**
+   * @param {!Array<!chrome.passwordsPrivate.PasswordUiEntry>} savedPasswords
+   * @param {string} filter
+   * @return {!Array<!chrome.passwordsPrivate.PasswordUiEntry>}
+   * @private
+   */
+  getFilteredPasswords_: function(savedPasswords, filter) {
+    if (!filter)
+      return savedPasswords;
+
+    return savedPasswords.filter(function(password) {
+      return password.loginPair.originUrl.includes(filter) ||
+             password.loginPair.username.includes(filter);
+    });
+  },
+
+  /**
+   * @param {string} filter
+   * @return {function(!chrome.passwordsPrivate.ExceptionPair): boolean}
+   * @private
+   */
+  passwordExceptionFilter_: function(filter) {
+    return function(exception) {
+      return exception.exceptionUrl.includes(filter);
+    };
   },
 
   /**

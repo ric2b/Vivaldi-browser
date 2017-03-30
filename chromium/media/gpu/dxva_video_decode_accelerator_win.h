@@ -31,6 +31,7 @@
 #include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
 #include "base/win/scoped_comptr.h"
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "media/filters/h264_parser.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/media_gpu_export.h"
@@ -130,7 +131,8 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
       override;
   GLenum GetSurfaceInternalFormat() const override;
 
-  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles();
+  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles(
+      const gpu::GpuPreferences& gpu_preferences);
 
   // Preload dlls required for decoding.
   static void PreSandboxInitialization();
@@ -476,6 +478,9 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // H/W decoding.
   bool use_dx11_;
 
+  // True when using Microsoft's VP9 HMFT for decoding.
+  bool using_ms_vp9_mft_ = false;
+
   // True if we should use DXGI keyed mutexes to synchronize between the two
   // contexts.
   bool use_keyed_mutex_;
@@ -488,7 +493,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   bool using_angle_device_;
 
   // Enables experimental hardware acceleration for VP8/VP9 video decoding.
-  const bool enable_accelerated_vpx_decode_;
+  const gpu::GpuPreferences::VpxDecodeVendors enable_accelerated_vpx_decode_;
 
   // The media foundation H.264 decoder has problems handling changes like
   // resolution change, bitrate change etc. If we reinitialize the decoder

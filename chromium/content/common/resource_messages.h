@@ -23,9 +23,9 @@
 #include "ipc/ipc_message_macros.h"
 #include "net/base/request_priority.h"
 #include "net/cert/signed_certificate_timestamp.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_response_info.h"
-#include "net/nqe/network_quality_estimator.h"
-#include "net/ssl/signed_certificate_timestamp_and_status.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/url_request/redirect_info.h"
 
 #ifndef CONTENT_COMMON_RESOURCE_MESSAGES_H_
@@ -132,9 +132,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::FetchRedirectMode,
 IPC_ENUM_TRAITS_MAX_VALUE(content::SkipServiceWorker,
                           content::SkipServiceWorker::LAST)
 
-IPC_ENUM_TRAITS_MAX_VALUE(
-    net::NetworkQualityEstimator::EffectiveConnectionType,
-    net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_LAST - 1)
+IPC_ENUM_TRAITS_MAX_VALUE(net::EffectiveConnectionType,
+                          net::EFFECTIVE_CONNECTION_TYPE_LAST - 1)
 
 IPC_STRUCT_TRAITS_BEGIN(content::ResourceResponseHead)
 IPC_STRUCT_TRAITS_PARENT(content::ResourceResponseInfo)
@@ -159,6 +158,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResourceResponseInfo)
   IPC_STRUCT_TRAITS_MEMBER(has_major_certificate_errors)
   IPC_STRUCT_TRAITS_MEMBER(content_length)
   IPC_STRUCT_TRAITS_MEMBER(encoded_data_length)
+  IPC_STRUCT_TRAITS_MEMBER(encoded_body_length)
   IPC_STRUCT_TRAITS_MEMBER(appcache_id)
   IPC_STRUCT_TRAITS_MEMBER(appcache_manifest_url)
   IPC_STRUCT_TRAITS_MEMBER(load_timing)
@@ -307,19 +307,21 @@ IPC_MESSAGE_CONTROL4(ResourceMsg_SetDataBuffer,
 // Sent when a chunk of data from a resource request is ready, and the resource
 // is expected to be small enough to fit in the inlined buffer.
 // The data is sent as a part of IPC message.
-IPC_MESSAGE_CONTROL3(ResourceMsg_InlinedDataChunkReceived,
+IPC_MESSAGE_CONTROL4(ResourceMsg_InlinedDataChunkReceived,
                      int /* request_id */,
                      std::vector<char> /* data */,
-                     int /* encoded_data_length */)
+                     int /* encoded_data_length */,
+                     int /* encoded_body_length */)
 
 // Sent when some data from a resource request is ready.  The data offset and
 // length specify a byte range into the shared memory buffer provided by the
 // SetDataBuffer message.
-IPC_MESSAGE_CONTROL4(ResourceMsg_DataReceived,
+IPC_MESSAGE_CONTROL5(ResourceMsg_DataReceived,
                      int /* request_id */,
                      int /* data_offset */,
                      int /* data_length */,
-                     int /* encoded_data_length */)
+                     int /* encoded_data_length */,
+                     int /* encoded_body_length */)
 
 // Sent when some data from a resource request has been downloaded to
 // file. This is only called in the 'download_to_file' case and replaces

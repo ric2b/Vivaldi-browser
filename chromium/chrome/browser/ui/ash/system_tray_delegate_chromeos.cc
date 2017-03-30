@@ -16,6 +16,7 @@
 #include "ash/common/login_status.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/session/session_state_observer.h"
+#include "ash/common/shell_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/system/chromeos/bluetooth/bluetooth_observer.h"
 #include "ash/common/system/chromeos/power/power_status.h"
@@ -23,6 +24,7 @@
 #include "ash/common/system/chromeos/shutdown_policy_observer.h"
 #include "ash/common/system/date/clock_observer.h"
 #include "ash/common/system/ime/ime_observer.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray_accessibility.h"
@@ -30,10 +32,9 @@
 #include "ash/common/system/user/user_observer.h"
 #include "ash/common/system/volume_control_delegate.h"
 #include "ash/common/wm_shell.h"
-#include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
-#include "ash/system/tray/system_tray.h"
+#include "ash/system/chromeos/rotation/tray_rotation_lock.h"
+#include "ash/system/chromeos/tray_display.h"
 #include "ash/wm/lock_state_controller.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -135,6 +136,7 @@ const int kSessionLengthLimitMaxMs = 24 * 60 * 60 * 1000;  // 24 hours.
 
 const char kDisplaySettingsSubPageName[] = "display";
 const char kDisplayOverscanSettingsSubPageName[] = "displayOverscan";
+const char kPaletteSettingsSubPageName[] = "stylus-overlay";
 
 void ExtractIMEInfo(const input_method::InputMethodDescriptor& ime,
                     const input_method::InputMethodUtil& util,
@@ -260,7 +262,7 @@ void SystemTrayDelegateChromeOS::Initialize() {
 void SystemTrayDelegateChromeOS::InitializeOnAdapterReady(
     scoped_refptr<device::BluetoothAdapter> adapter) {
   bluetooth_adapter_ = adapter;
-  CHECK(bluetooth_adapter_.get());
+  CHECK(bluetooth_adapter_);
   bluetooth_adapter_->AddObserver(this);
 
   local_state_registrar_.reset(new PrefChangeRegistrar);
@@ -302,7 +304,8 @@ SystemTrayDelegateChromeOS::~SystemTrayDelegateChromeOS() {
   DBusThreadManager::Get()->GetSessionManagerClient()->RemoveObserver(this);
   input_method::InputMethodManager::Get()->RemoveObserver(this);
   ui::ime::InputMethodMenuManager::GetInstance()->RemoveObserver(this);
-  bluetooth_adapter_->RemoveObserver(this);
+  if (bluetooth_adapter_)
+    bluetooth_adapter_->RemoveObserver(this);
   ash::WmShell::Get()->GetSessionStateDelegate()->RemoveSessionStateObserver(
       this);
 
@@ -518,6 +521,18 @@ void SystemTrayDelegateChromeOS::ShowAccessibilitySettings() {
   ShowSettingsSubPageForActiveUser(sub_page);
 }
 
+void SystemTrayDelegateChromeOS::ShowPaletteHelp() {
+  chrome::ScopedTabbedBrowserDisplayer displayer(
+      ProfileManager::GetActiveUserProfile());
+  chrome::ShowSingletonTab(displayer.browser(),
+                           GURL(chrome::kChromePaletteHelpURL));
+}
+
+void SystemTrayDelegateChromeOS::ShowPaletteSettings() {
+  content::RecordAction(base::UserMetricsAction("ShowPaletteOptions"));
+  ShowSettingsSubPageForActiveUser(kPaletteSettingsSubPageName);
+}
+
 void SystemTrayDelegateChromeOS::ShowPublicAccountInfo() {
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
@@ -547,9 +562,8 @@ void SystemTrayDelegateChromeOS::ShowEnterpriseInfo() {
 }
 
 void SystemTrayDelegateChromeOS::ShowUserLogin() {
-  ash::Shell* shell = ash::Shell::GetInstance();
   ash::WmShell* wm_shell = ash::WmShell::Get();
-  if (!shell->delegate()->IsMultiProfilesEnabled())
+  if (!wm_shell->delegate()->IsMultiProfilesEnabled())
     return;
 
   // Only regular non-supervised users could add other users to current session.
@@ -595,12 +609,6 @@ void SystemTrayDelegateChromeOS::ShowUserLogin() {
 
 void SystemTrayDelegateChromeOS::SignOut() {
   chrome::AttemptUserExit();
-}
-
-void SystemTrayDelegateChromeOS::RequestLockScreen() {
-  // TODO(antrim) : additional logging for crbug/173178
-  LOG(WARNING) << "Requesting screen lock from AshSystemTrayDelegate";
-  DBusThreadManager::Get()->GetSessionManagerClient()->RequestLockScreen();
 }
 
 void SystemTrayDelegateChromeOS::RequestRestartForUpdate() {
@@ -678,7 +686,7 @@ void SystemTrayDelegateChromeOS::ConnectToBluetoothDevice(
 }
 
 bool SystemTrayDelegateChromeOS::IsBluetoothDiscovering() {
-  return bluetooth_adapter_->IsDiscovering();
+  return bluetooth_adapter_ && bluetooth_adapter_->IsDiscovering();
 }
 
 void SystemTrayDelegateChromeOS::GetCurrentIME(ash::IMEInfo* info) {
@@ -758,16 +766,16 @@ void SystemTrayDelegateChromeOS::ShowOtherNetworkDialog(
 }
 
 bool SystemTrayDelegateChromeOS::GetBluetoothAvailable() {
-  return bluetooth_adapter_->IsPresent();
+  return bluetooth_adapter_ && bluetooth_adapter_->IsPresent();
 }
 
 bool SystemTrayDelegateChromeOS::GetBluetoothEnabled() {
-  return bluetooth_adapter_->IsPowered();
+  return bluetooth_adapter_ && bluetooth_adapter_->IsPowered();
 }
 
 bool SystemTrayDelegateChromeOS::GetBluetoothDiscovering() {
-  return (bluetooth_discovery_session_.get() &&
-      bluetooth_discovery_session_->IsActive());
+  return bluetooth_discovery_session_ &&
+         bluetooth_discovery_session_->IsActive();
 }
 
 void SystemTrayDelegateChromeOS::ChangeProxySettings() {
@@ -849,6 +857,16 @@ void SystemTrayDelegateChromeOS::ShouldRebootOnShutdown(
 
 ash::VPNDelegate* SystemTrayDelegateChromeOS::GetVPNDelegate() const {
   return vpn_delegate_.get();
+}
+
+std::unique_ptr<ash::SystemTrayItem>
+SystemTrayDelegateChromeOS::CreateDisplayTrayItem(ash::SystemTray* tray) {
+  return base::MakeUnique<ash::TrayDisplay>(tray);
+}
+
+std::unique_ptr<ash::SystemTrayItem>
+SystemTrayDelegateChromeOS::CreateRotationLockTrayItem(ash::SystemTray* tray) {
+  return base::MakeUnique<ash::TrayRotationLock>(tray);
 }
 
 void SystemTrayDelegateChromeOS::UserAddedToSession(

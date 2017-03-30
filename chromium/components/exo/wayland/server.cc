@@ -30,10 +30,7 @@
 #include "ash/common/display/display_info.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/common/wm_shell.h"
-#include "ash/display/display_manager.h"
 #include "ash/shell.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
@@ -63,6 +60,7 @@
 #include "components/exo/surface_property.h"
 #include "components/exo/touch.h"
 #include "components/exo/touch_delegate.h"
+#include "components/exo/wm_helper.h"
 #include "ipc/unix_domain_socket_util.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window_property.h"
@@ -75,8 +73,6 @@
 #include "ui/gfx/buffer_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
-#include "ui/wm/public/activation_change_observer.h"
-#include "ui/wm/public/activation_client.h"
 
 #if defined(USE_OZONE)
 #include <drm_fourcc.h>
@@ -538,20 +534,21 @@ void drm_create_prime_buffer(wl_client* client,
     return;
   }
 
-  std::vector<int> strides{stride0, stride1, stride2};
-  std::vector<int> offsets{offset0, offset1, offset2};
+  std::vector<gfx::NativePixmapPlane> planes;
+  planes.emplace_back(stride0, offset0, 0);
+  planes.emplace_back(stride1, offset1, 0);
+  planes.emplace_back(stride2, offset2, 0);
   std::vector<base::ScopedFD> fds;
 
-  int planes =
+  size_t num_planes =
       gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
-  strides.resize(planes);
-  offsets.resize(planes);
+  planes.resize(num_planes);
   fds.push_back(base::ScopedFD(name));
 
   std::unique_ptr<Buffer> buffer =
       GetUserDataAs<Display>(resource)->CreateLinuxDMABufBuffer(
-          gfx::Size(width, height), supported_format->buffer_format, strides,
-          offsets, std::move(fds));
+          gfx::Size(width, height), supported_format->buffer_format, planes,
+          std::move(fds));
   if (!buffer) {
     wl_resource_post_no_memory(resource);
     return;
@@ -684,8 +681,7 @@ void linux_buffer_params_create(wl_client* client,
     return;
   }
 
-  std::vector<int> strides;
-  std::vector<int> offsets;
+  std::vector<gfx::NativePixmapPlane> planes;
   std::vector<base::ScopedFD> fds;
 
   for (uint32_t i = 0; i < num_planes; ++i) {
@@ -697,16 +693,15 @@ void linux_buffer_params_create(wl_client* client,
       return;
     }
     LinuxBufferParams::Plane& plane = plane_it->second;
-    strides.push_back(plane.stride);
-    offsets.push_back(plane.offset);
+    planes.emplace_back(plane.stride, plane.offset, 0);
     if (plane.fd.is_valid())
       fds.push_back(std::move(plane.fd));
   }
 
   std::unique_ptr<Buffer> buffer =
       linux_buffer_params->display->CreateLinuxDMABufBuffer(
-          gfx::Size(width, height), supported_format->buffer_format, strides,
-          offsets, std::move(fds));
+          gfx::Size(width, height), supported_format->buffer_format, planes,
+          std::move(fds));
   if (!buffer) {
     zwp_linux_buffer_params_v1_send_failed(resource);
     return;
@@ -1080,8 +1075,7 @@ class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
         display::Screen::GetScreen()->GetPrimaryDisplay();
 
     const ash::DisplayInfo& info =
-        ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
-            display.id());
+        WMHelper::GetInstance()->GetDisplayInfo(display.id());
 
     const float kInchInMm = 25.4f;
     const char* kUnknownMake = "unknown";
@@ -1574,8 +1568,8 @@ const struct zwp_notification_surface_v1_interface
 
 // Implements remote shell interface and monitors workspace state needed
 // for the remote shell interface.
-class WaylandRemoteShell : public ash::ShellObserver,
-                           public aura::client::ActivationChangeObserver,
+class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
+                           public WMHelper::ActivationObserver,
                            public display::DisplayObserver {
  public:
   WaylandRemoteShell(Display* display,
@@ -1583,23 +1577,22 @@ class WaylandRemoteShell : public ash::ShellObserver,
       : display_(display),
         remote_shell_resource_(remote_shell_resource),
         weak_ptr_factory_(this) {
-    ash::WmShell::Get()->AddShellObserver(this);
-    ash::Shell* shell = ash::Shell::GetInstance();
-    shell->activation_client()->AddObserver(this);
+    auto* helper = WMHelper::GetInstance();
+    helper->AddMaximizeModeObserver(this);
+    helper->AddActivationObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
 
-    layout_mode_ = ash::Shell::GetInstance()
-                           ->maximize_mode_controller()
-                           ->IsMaximizeModeWindowManagerEnabled()
+    layout_mode_ = helper->IsMaximizeModeWindowManagerEnabled()
                        ? ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
                        : ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
     SendPrimaryDisplayMetrics();
-    SendActivated(shell->activation_client()->GetActiveWindow(), nullptr);
+    SendActivated(helper->GetActiveWindow(), nullptr);
   }
   ~WaylandRemoteShell() override {
-    ash::WmShell::Get()->RemoveShellObserver(this);
-    ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
+    auto* helper = WMHelper::GetInstance();
+    helper->RemoveMaximizeModeObserver(this);
+    helper->RemoveActivationObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
   }
 
@@ -1633,7 +1626,7 @@ class WaylandRemoteShell : public ash::ShellObserver,
     SendConfigure_DEPRECATED(display);
   }
 
-  // Overridden from ash::ShellObserver:
+  // Overridden from WMHelper::MaximizeModeObserver:
   void OnMaximizeModeStarted() override {
     layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET;
     SendLayoutModeChange_DEPRECATED();
@@ -1654,9 +1647,8 @@ class WaylandRemoteShell : public ash::ShellObserver,
         base::TimeDelta::FromMilliseconds(kConfigureDelayAfterLayoutSwitchMs));
   }
 
-  // Overridden from aura::client::ActivationChangeObserver:
+  // Overridden from WMHelper::ActivationObserver:
   void OnWindowActivated(
-      aura::client::ActivationChangeObserver::ActivationReason reason,
       aura::Window* gained_active,
       aura::Window* lost_active) override {
     SendActivated(gained_active, lost_active);
@@ -2971,6 +2963,8 @@ class WaylandPointerStylusDelegate : public PointerStylusDelegate {
     uint wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_MOUSE;
     if (type == ui::EventPointerType::POINTER_TYPE_PEN)
       wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_PEN;
+    else if (type == ui::EventPointerType::POINTER_TYPE_ERASER)
+      wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_ERASER;
     zwp_pointer_stylus_v1_send_tool_change(resource_, wayland_type);
   }
   void OnPointerForce(base::TimeTicks time_stamp, float force) override {

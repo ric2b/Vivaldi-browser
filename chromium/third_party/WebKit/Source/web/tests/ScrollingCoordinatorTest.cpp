@@ -26,7 +26,9 @@
 
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/StyleSheetList.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/VisualViewport.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -60,7 +62,8 @@ public:
         // OSX attaches main frame scrollbars to the VisualViewport so the VisualViewport layers need
         // to be initialized.
         webViewImpl()->updateAllLifecyclePhases();
-        webViewImpl()->setRootGraphicsLayer(
+        WebFrameWidgetBase* mainFrameWidget = webViewImpl()->mainFrameImpl()->frameWidget();
+        mainFrameWidget->setRootGraphicsLayer(
             webViewImpl()->mainFrameImpl()->frame()->view()->layoutViewItem().compositor()->rootGraphicsLayer());
     }
 
@@ -95,8 +98,8 @@ public:
         return webScrollLayer;
     }
 
-    WebViewImpl* webViewImpl() const { return m_helper.webViewImpl(); }
-    LocalFrame* frame() const { return m_helper.webViewImpl()->mainFrameImpl()->frame(); }
+    WebViewImpl* webViewImpl() const { return m_helper.webView(); }
+    LocalFrame* frame() const { return m_helper.webView()->mainFrameImpl()->frame(); }
 
     WebLayerTreeView* webLayerTreeView() const { return webViewImpl()->layerTreeView(); }
 
@@ -132,6 +135,10 @@ TEST_F(ScrollingCoordinatorTest, fastScrollingByDefault)
     ASSERT_FALSE(rootScrollLayer->shouldScrollOnMainThread());
     ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::TouchStartOrMove));
     ASSERT_EQ(WebEventListenerProperties::Nothing, webLayerTreeView()->eventListenerProperties(WebEventListenerClass::MouseWheel));
+
+    WebLayer* innerViewportScrollLayer = page->frameHost().visualViewport().scrollLayer()->platformLayer();
+    ASSERT_TRUE(innerViewportScrollLayer->scrollable());
+    ASSERT_FALSE(innerViewportScrollLayer->shouldScrollOnMainThread());
 }
 
 TEST_F(ScrollingCoordinatorTest, fastScrollingCanBeDisabledWithSetting)
@@ -150,6 +157,11 @@ TEST_F(ScrollingCoordinatorTest, fastScrollingCanBeDisabledWithSetting)
     WebLayer* rootScrollLayer = getRootScrollLayer();
     ASSERT_TRUE(rootScrollLayer->scrollable());
     ASSERT_TRUE(rootScrollLayer->shouldScrollOnMainThread());
+
+    // Main scrolling should also propagate to inner viewport layer.
+    WebLayer* innerViewportScrollLayer = page->frameHost().visualViewport().scrollLayer()->platformLayer();
+    ASSERT_TRUE(innerViewportScrollLayer->scrollable());
+    ASSERT_TRUE(innerViewportScrollLayer->shouldScrollOnMainThread());
 }
 
 
@@ -366,7 +378,7 @@ TEST_F(ScrollingCoordinatorTest, updateEventHandlersDuringTeardown)
 
     // Simulate detaching the document from its DOM window. This should not
     // cause a crash when the WebViewImpl is closed by the test runner.
-    frame()->document()->detach();
+    frame()->document()->detachLayoutTree();
 }
 
 TEST_F(ScrollingCoordinatorTest, clippedBodyTest)

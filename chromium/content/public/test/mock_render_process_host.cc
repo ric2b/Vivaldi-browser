@@ -104,6 +104,7 @@ void MockRenderProcessHost::EnableSendQueue() {
 
 bool MockRenderProcessHost::Init() {
   has_connection_ = true;
+  remote_interfaces_.reset(new shell::InterfaceProvider);
   return true;
 }
 
@@ -261,16 +262,8 @@ base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() const {
 void MockRenderProcessHost::NotifyTimezoneChange(const std::string& zone_id) {
 }
 
-shell::InterfaceRegistry* MockRenderProcessHost::GetInterfaceRegistry() {
-  return interface_registry_.get();
-}
-
 shell::InterfaceProvider* MockRenderProcessHost::GetRemoteInterfaces() {
   return remote_interfaces_.get();
-}
-
-shell::Connection* MockRenderProcessHost::GetChildConnection() {
-  return nullptr;
 }
 
 std::unique_ptr<base::SharedPersistentMemoryAllocator>
@@ -317,10 +310,14 @@ void MockRenderProcessHost::EnableAudioDebugRecordings(
 
 void MockRenderProcessHost::DisableAudioDebugRecordings() {}
 
-void MockRenderProcessHost::EnableEventLogRecordings(
-    const base::FilePath& file) {}
+bool MockRenderProcessHost::StartWebRTCEventLog(
+    const base::FilePath& file_path) {
+  return false;
+}
 
-void MockRenderProcessHost::DisableEventLogRecordings() {}
+bool MockRenderProcessHost::StopWebRTCEventLog() {
+  return false;
+}
 
 void MockRenderProcessHost::SetWebRtcLogMessageCallback(
     base::Callback<void(const std::string&)> callback) {

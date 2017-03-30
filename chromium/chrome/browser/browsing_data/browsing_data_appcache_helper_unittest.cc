@@ -12,6 +12,7 @@
 #include "base/stl_util.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -43,18 +44,24 @@ class CannedBrowsingDataAppCacheHelperTest : public testing::Test {
   CannedBrowsingDataAppCacheHelperTest()
       : thread_bundle_(content::TestBrowserThreadBundle::REAL_IO_THREAD) {}
 
+  void TearDown() override {
+    // Make sure we run all pending tasks on IO thread before testing
+    // profile is destructed.
+    content::RunAllPendingInMessageLoop(content::BrowserThread::IO);
+  }
+
+ protected:
   content::TestBrowserThreadBundle thread_bundle_;
+  TestingProfile profile_;
 };
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, SetInfo) {
-  TestingProfile profile;
-
   GURL manifest1("http://example1.com/manifest.xml");
   GURL manifest2("http://example2.com/path1/manifest.xml");
   GURL manifest3("http://example2.com/path2/manifest.xml");
 
   scoped_refptr<CannedBrowsingDataAppCacheHelper> helper(
-      new CannedBrowsingDataAppCacheHelper(&profile));
+      new CannedBrowsingDataAppCacheHelper(&profile_));
   helper->AddAppCache(manifest1);
   helper->AddAppCache(manifest2);
   helper->AddAppCache(manifest3);
@@ -68,26 +75,24 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, SetInfo) {
       callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(2u, collection.size());
-  EXPECT_TRUE(ContainsKey(collection, manifest1.GetOrigin()));
+  EXPECT_TRUE(base::ContainsKey(collection, manifest1.GetOrigin()));
   ASSERT_EQ(1u, collection[manifest1.GetOrigin()].size());
   EXPECT_EQ(manifest1, collection[manifest1.GetOrigin()].at(0).manifest_url);
 
-  EXPECT_TRUE(ContainsKey(collection, manifest2.GetOrigin()));
+  EXPECT_TRUE(base::ContainsKey(collection, manifest2.GetOrigin()));
   EXPECT_EQ(2u, collection[manifest2.GetOrigin()].size());
   std::set<GURL> manifest_results;
   manifest_results.insert(collection[manifest2.GetOrigin()].at(0).manifest_url);
   manifest_results.insert(collection[manifest2.GetOrigin()].at(1).manifest_url);
-  EXPECT_TRUE(ContainsKey(manifest_results, manifest2));
-  EXPECT_TRUE(ContainsKey(manifest_results, manifest3));
+  EXPECT_TRUE(base::ContainsKey(manifest_results, manifest2));
+  EXPECT_TRUE(base::ContainsKey(manifest_results, manifest3));
 }
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, Unique) {
-  TestingProfile profile;
-
   GURL manifest("http://example.com/manifest.xml");
 
   scoped_refptr<CannedBrowsingDataAppCacheHelper> helper(
-      new CannedBrowsingDataAppCacheHelper(&profile));
+      new CannedBrowsingDataAppCacheHelper(&profile_));
   helper->AddAppCache(manifest);
   helper->AddAppCache(manifest);
 
@@ -100,18 +105,16 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Unique) {
       callback.info_collection()->infos_by_origin;
 
   ASSERT_EQ(1u, collection.size());
-  EXPECT_TRUE(ContainsKey(collection, manifest.GetOrigin()));
+  EXPECT_TRUE(base::ContainsKey(collection, manifest.GetOrigin()));
   ASSERT_EQ(1u, collection[manifest.GetOrigin()].size());
   EXPECT_EQ(manifest, collection[manifest.GetOrigin()].at(0).manifest_url);
 }
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, Empty) {
-  TestingProfile profile;
-
   GURL manifest("http://example.com/manifest.xml");
 
   scoped_refptr<CannedBrowsingDataAppCacheHelper> helper(
-      new CannedBrowsingDataAppCacheHelper(&profile));
+      new CannedBrowsingDataAppCacheHelper(&profile_));
 
   ASSERT_TRUE(helper->empty());
   helper->AddAppCache(manifest);
@@ -121,14 +124,12 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Empty) {
 }
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, Delete) {
-  TestingProfile profile;
-
   GURL manifest1("http://example.com/manifest1.xml");
   GURL manifest2("http://foo.example.com/manifest2.xml");
   GURL manifest3("http://bar.example.com/manifest3.xml");
 
   scoped_refptr<CannedBrowsingDataAppCacheHelper> helper(
-      new CannedBrowsingDataAppCacheHelper(&profile));
+      new CannedBrowsingDataAppCacheHelper(&profile_));
 
   EXPECT_TRUE(helper->empty());
   helper->AddAppCache(manifest1);
@@ -138,17 +139,16 @@ TEST_F(CannedBrowsingDataAppCacheHelperTest, Delete) {
   EXPECT_EQ(3u, helper->GetAppCacheCount());
   helper->DeleteAppCacheGroup(manifest2);
   EXPECT_EQ(2u, helper->GetAppCacheCount());
-  EXPECT_FALSE(ContainsKey(helper->GetOriginAppCacheInfoMap(), manifest2));
+  EXPECT_FALSE(
+      base::ContainsKey(helper->GetOriginAppCacheInfoMap(), manifest2));
 }
 
 TEST_F(CannedBrowsingDataAppCacheHelperTest, IgnoreExtensionsAndDevTools) {
-  TestingProfile profile;
-
   GURL manifest1("chrome-extension://abcdefghijklmnopqrstuvwxyz/manifest.xml");
   GURL manifest2("chrome-devtools://abcdefghijklmnopqrstuvwxyz/manifest.xml");
 
   scoped_refptr<CannedBrowsingDataAppCacheHelper> helper(
-      new CannedBrowsingDataAppCacheHelper(&profile));
+      new CannedBrowsingDataAppCacheHelper(&profile_));
 
   ASSERT_TRUE(helper->empty());
   helper->AddAppCache(manifest1);

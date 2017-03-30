@@ -6,9 +6,9 @@
 
 #include "base/auto_reset.h"
 #include "base/trace_event/trace_event.h"
-#include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/resource_messages.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 
 namespace content {
 namespace {
@@ -21,7 +21,7 @@ bool IsResourceRequest(const IPC::Message& msg) {
 
 ResourceDispatchThrottler::ResourceDispatchThrottler(
     IPC::Sender* proxied_sender,
-    scheduler::RendererScheduler* scheduler,
+    blink::scheduler::RendererScheduler* scheduler,
     base::TimeDelta flush_period,
     uint32_t max_requests_per_flush)
     : proxied_sender_(proxied_sender),
@@ -132,7 +132,7 @@ void ResourceDispatchThrottler::FlushAll() {
                "total_throttled_messages", throttled_messages_.size());
   std::deque<IPC::Message*> throttled_messages;
   throttled_messages.swap(throttled_messages_);
-  for (auto& message : throttled_messages)
+  for (auto* message : throttled_messages)
     ForwardMessage(message);
   // There shouldn't be re-entrancy issues when forwarding an IPC, but validate
   // as a safeguard.

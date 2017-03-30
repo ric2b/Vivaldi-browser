@@ -12,6 +12,8 @@
 #include "ui/android/window_android.h"
 #include "url/gurl.h"
 
+using base::android::ScopedJavaLocalRef;
+
 void ReportChildAccountFeedback(content::WebContents* web_contents,
                                 const std::string& description,
                                 const GURL& url) {
@@ -27,9 +29,5 @@ void ReportChildAccountFeedback(content::WebContents* web_contents,
   ScopedJavaLocalRef<jstring> jurl =
       base::android::ConvertUTF8ToJavaString(env, url.spec());
   Java_ChildAccountFeedbackReporter_reportFeedbackWithWindow(
-      env, window->GetJavaObject().obj(), jdesc.obj(), jurl.obj());
-}
-
-bool RegisterChildAccountFeedbackReporter(JNIEnv* env) {
-  return RegisterNativesImpl(env);
+      env, window->GetJavaObject(), jdesc, jurl);
 }

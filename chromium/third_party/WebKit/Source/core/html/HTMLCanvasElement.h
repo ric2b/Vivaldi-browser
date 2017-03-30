@@ -38,7 +38,7 @@
 #include "core/html/canvas/CanvasDrawListener.h"
 #include "core/html/canvas/CanvasImageSource.h"
 #include "core/imagebitmap/ImageBitmapSource.h"
-#include "core/page/PageLifecycleObserver.h"
+#include "core/page/PageVisibilityObserver.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/CanvasSurfaceLayerBridge.h"
@@ -50,6 +50,8 @@
 
 #define CanvasDefaultInterpolationQuality InterpolationLow
 
+class SkColorSpace;
+
 namespace blink {
 
 class AffineTransform;
@@ -57,6 +59,7 @@ class CanvasContextCreationAttributes;
 class CanvasRenderingContext;
 class CanvasRenderingContextFactory;
 class GraphicsContext;
+class HitTestCanvasResult;
 class HTMLCanvasElement;
 class Image;
 class ImageBitmapOptions;
@@ -64,11 +67,12 @@ class ImageBuffer;
 class ImageBufferSurface;
 class ImageData;
 class IntSize;
+class WebGraphicsContext3DProvider;
 
 class CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext;
 typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext RenderingContext;
 
-class CORE_EXPORT HTMLCanvasElement final : public HTMLElement, public ContextLifecycleObserver, public PageLifecycleObserver, public CanvasImageSource, public ImageBufferClient, public ImageBitmapSource {
+class CORE_EXPORT HTMLCanvasElement final : public HTMLElement, public ContextLifecycleObserver, public PageVisibilityObserver, public CanvasImageSource, public ImageBufferClient, public ImageBitmapSource {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
     USING_PRE_FINALIZER(HTMLCanvasElement, dispose);
@@ -147,8 +151,6 @@ public:
     bool hasImageBuffer() const { return m_imageBuffer.get(); }
     void discardImageBuffer();
 
-    bool shouldAccelerate(const IntSize&) const;
-
     bool shouldBeDirectComposited() const;
 
     void prepareSurfaceForPaintingIfNeeded() const;
@@ -157,10 +159,10 @@ public:
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
 
-    // ContextLifecycleObserver (and PageLifecycleObserver!!!) implementation
+    // ContextLifecycleObserver (and PageVisibilityObserver!!!) implementation
     void contextDestroyed() override;
 
-    // PageLifecycleObserver implementation
+    // PageVisibilityObserver implementation
     void pageVisibilityChanged() override;
 
     // CanvasImageSource implementation
@@ -175,6 +177,7 @@ public:
     // ImageBufferClient implementation
     void notifySurfaceInvalid() override;
     bool isDirty() override { return !m_dirtyRect.isEmpty(); }
+    void didDisableAcceleration() override;
     void didFinalizeFrame() override;
     void restoreCanvasMatrixClipStack(SkCanvas*) const override;
 
@@ -182,7 +185,7 @@ public:
 
     // ImageBitmapSource implementation
     IntSize bitmapSourceSize() const override;
-    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, int sx, int sy, int sw, int sh, const ImageBitmapOptions&, ExceptionState&) override;
+    ScriptPromise createImageBitmap(ScriptState*, EventTarget&, Optional<IntRect> cropRect, const ImageBitmapOptions&, ExceptionState&) override;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -199,7 +202,7 @@ public:
 
     // For Canvas HitRegions
     bool isSupportedInteractiveCanvasFallback(const Element&);
-    std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint&);
+    HitTestCanvasResult* getControlAndIdIfHitRegionExists(const LayoutPoint&);
     String getIdFromControl(const Element*);
 
     // For OffscreenCanvas that controls this html canvas element
@@ -219,13 +222,17 @@ private:
     static ContextFactoryVector& renderingContextFactories();
     static CanvasRenderingContextFactory* getRenderingContextFactory(int);
 
+    bool shouldAccelerate(const IntSize&) const;
+
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
     LayoutObject* createLayoutObject(const ComputedStyle&) override;
     bool areAuthorShadowsAllowed() const override { return false; }
 
     void reset();
 
-    std::unique_ptr<ImageBufferSurface> createImageBufferSurface(const IntSize& deviceSize, int* msaaSampleCount);
+    std::unique_ptr<ImageBufferSurface> createWebGLImageBufferSurface(const IntSize& deviceSize, OpacityMode, sk_sp<SkColorSpace>);
+    std::unique_ptr<ImageBufferSurface> createAcceleratedImageBufferSurface(const IntSize& deviceSize, OpacityMode, sk_sp<SkColorSpace>, int* msaaSampleCount);
+    std::unique_ptr<ImageBufferSurface> createUnacceleratedImageBufferSurface(const IntSize& deviceSize, OpacityMode, sk_sp<SkColorSpace>);
     void createImageBuffer();
     void createImageBufferInternal(std::unique_ptr<ImageBufferSurface> externalSurface);
     bool shouldUseDisplayList(const IntSize& deviceSize);
@@ -261,6 +268,9 @@ private:
 
     // Used for OffscreenCanvas that controls this HTML canvas element
     std::unique_ptr<CanvasSurfaceLayerBridge> m_surfaceLayerBridge;
+
+    int m_numFramesSinceLastRenderingModeSwitch;
+    bool m_pendingRenderingModeSwitch;
 };
 
 } // namespace blink

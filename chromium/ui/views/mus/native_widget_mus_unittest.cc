@@ -6,13 +6,14 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/tests/window_tree_client_private.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
-#include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/tests/window_tree_client_private.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_observer.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -24,6 +25,7 @@
 #include "ui/gfx/path.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/controls/native/native_view_host.h"
+#include "ui/views/mus/window_manager_connection.h"
 #include "ui/views/test/focus_manager_test.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
@@ -31,7 +33,7 @@
 #include "ui/views/widget/widget_observer.h"
 #include "ui/wm/public/activation_client.h"
 
-using mus::mojom::EventResult;
+using ui::mojom::EventResult;
 
 namespace views {
 namespace {
@@ -161,26 +163,26 @@ class NativeWidgetMusTest : public ViewsTestBase {
 
   int ack_callback_count() { return ack_callback_count_; }
 
-  void AckCallback(mus::mojom::EventResult result) {
+  void AckCallback(ui::mojom::EventResult result) {
     ack_callback_count_++;
-    EXPECT_EQ(mus::mojom::EventResult::HANDLED, result);
+    EXPECT_EQ(ui::mojom::EventResult::HANDLED, result);
   }
 
   // Returns a mouse pressed event inside the widget. Tests that place views
   // within the widget that respond to the event must be constructed within the
   // widget coordinate space such that they respond correctly.
   std::unique_ptr<ui::MouseEvent> CreateMouseEvent() {
-    return base::WrapUnique(new ui::MouseEvent(
+    return base::MakeUnique<ui::MouseEvent>(
         ui::ET_MOUSE_PRESSED, gfx::Point(50, 50), gfx::Point(50, 50),
-        base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON));
+        base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
   }
 
   // Simulates an input event to the NativeWidget.
   void OnWindowInputEvent(
       NativeWidgetMus* native_widget,
       const ui::Event& event,
-      std::unique_ptr<base::Callback<void(mus::mojom::EventResult)>>*
-      ack_callback) {
+      std::unique_ptr<base::Callback<void(ui::mojom::EventResult)>>*
+          ack_callback) {
     native_widget->OnWindowInputEvent(native_widget->window(), event,
                                       ack_callback);
   }
@@ -246,39 +248,39 @@ TEST_F(NativeWidgetMusTest, ShowNonActivatableWidget) {
   EXPECT_EQ(0u, activation_observer.changes().size());
 }
 
-// Tests that a window with an icon sets the mus::Window icon property.
+// Tests that a window with an icon sets the ui::Window icon property.
 TEST_F(NativeWidgetMusTest, AppIcon) {
   // Create a Widget with a bitmap as the icon.
   SkBitmap source_bitmap = MakeBitmap(SK_ColorRED);
   std::unique_ptr<Widget> widget(
       CreateWidget(new TestWidgetDelegate(source_bitmap)));
 
-  // The mus::Window has the icon property.
-  mus::Window* window =
+  // The ui::Window has the icon property.
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget->native_widget_private())->window();
   EXPECT_TRUE(window->HasSharedProperty(
-      mus::mojom::WindowManager::kWindowAppIcon_Property));
+      ui::mojom::WindowManager::kWindowAppIcon_Property));
 
   // The icon is the expected icon.
   SkBitmap icon = window->GetSharedProperty<SkBitmap>(
-      mus::mojom::WindowManager::kWindowAppIcon_Property);
+      ui::mojom::WindowManager::kWindowAppIcon_Property);
   EXPECT_TRUE(gfx::BitmapsAreEqual(source_bitmap, icon));
 }
 
-// Tests that a window without an icon does not set the mus::Window icon
+// Tests that a window without an icon does not set the ui::Window icon
 // property.
 TEST_F(NativeWidgetMusTest, NoAppIcon) {
   // Create a Widget without a special icon.
   std::unique_ptr<Widget> widget(CreateWidget(nullptr));
 
-  // The mus::Window does not have an icon property.
-  mus::Window* window =
+  // The ui::Window does not have an icon property.
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget->native_widget_private())->window();
   EXPECT_FALSE(window->HasSharedProperty(
-      mus::mojom::WindowManager::kWindowAppIcon_Property));
+      ui::mojom::WindowManager::kWindowAppIcon_Property));
 }
 
-// Tests that changing the icon on a Widget updates the mus::Window icon
+// Tests that changing the icon on a Widget updates the ui::Window icon
 // property.
 TEST_F(NativeWidgetMusTest, ChangeAppIcon) {
   // Create a Widget with an icon.
@@ -292,10 +294,10 @@ TEST_F(NativeWidgetMusTest, ChangeAppIcon) {
   widget->UpdateWindowIcon();
 
   // The window has the updated icon.
-  mus::Window* window =
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget->native_widget_private())->window();
   SkBitmap icon = window->GetSharedProperty<SkBitmap>(
-      mus::mojom::WindowManager::kWindowAppIcon_Property);
+      ui::mojom::WindowManager::kWindowAppIcon_Property);
   EXPECT_TRUE(gfx::BitmapsAreEqual(bitmap2, icon));
 }
 
@@ -308,33 +310,33 @@ TEST_F(NativeWidgetMusTest, ValidLayerTree) {
 }
 
 // Tests that the internal name is propagated from the Widget to the
-// mus::Window.
+// ui::Window.
 TEST_F(NativeWidgetMusTest, GetName) {
   Widget widget;
   Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.name = "MyWidget";
   widget.Init(params);
-  mus::Window* window =
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget.native_widget_private())->window();
   EXPECT_EQ("MyWidget", window->GetName());
 }
 
 // Tests that a Widget with a hit test mask propagates the mask to the
-// mus::Window.
+// ui::Window.
 TEST_F(NativeWidgetMusTest, HitTestMask) {
   gfx::Rect mask(5, 5, 10, 10);
   std::unique_ptr<Widget> widget(
       CreateWidget(new WidgetDelegateWithHitTestMask(mask)));
 
   // The window has the mask.
-  mus::Window* window =
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget->native_widget_private())->window();
   ASSERT_TRUE(window->hit_test_mask());
   EXPECT_EQ(mask.ToString(), window->hit_test_mask()->ToString());
 }
 
-// Verifies changing the visibility of a child mus::Window doesn't change the
+// Verifies changing the visibility of a child ui::Window doesn't change the
 // visibility of the parent.
 TEST_F(NativeWidgetMusTest, ChildVisibilityDoesntEffectParent) {
   Widget widget;
@@ -342,13 +344,13 @@ TEST_F(NativeWidgetMusTest, ChildVisibilityDoesntEffectParent) {
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   widget.Init(params);
   widget.Show();
-  mus::Window* window =
+  ui::Window* window =
       static_cast<NativeWidgetMus*>(widget.native_widget_private())->window();
   ASSERT_TRUE(window->visible());
 
   // Create a child window, make it visible and parent it to the Widget's
   // window.
-  mus::Window* child_window = window->window_tree()->NewWindow();
+  ui::Window* child_window = window->window_tree()->NewWindow();
   child_window->SetVisible(true);
   window->AddChild(child_window);
 
@@ -416,7 +418,7 @@ TEST_F(NativeWidgetMusTest, WidgetReceivesEvent) {
   std::unique_ptr<ui::MouseEvent> mouse = CreateMouseEvent();
   NativeWidgetMus* native_widget =
       static_cast<NativeWidgetMus*>(widget->native_widget_private());
-  mus::WindowTreeClientPrivate test_api(native_widget->window());
+  ui::WindowTreeClientPrivate test_api(native_widget->window());
   test_api.CallOnWindowInputEvent(native_widget->window(), std::move(mouse));
   EXPECT_EQ(1, handler.num_mouse_events());
 }
@@ -480,7 +482,7 @@ TEST_F(NativeWidgetMusTest, SetAndReleaseCapture) {
   widget->GetContentsView()->AddChildView(content);
   internal::NativeWidgetPrivate* widget_private =
       widget->native_widget_private();
-  mus::Window* mus_window =
+  ui::Window* mus_window =
       static_cast<NativeWidgetMus*>(widget_private)->window();
   EXPECT_FALSE(widget_private->HasCapture());
   EXPECT_FALSE(mus_window->HasCapture());
@@ -494,7 +496,7 @@ TEST_F(NativeWidgetMusTest, SetAndReleaseCapture) {
   EXPECT_FALSE(mus_window->HasCapture());
 }
 
-// Ensure that manually setting NativeWidgetMus's mus::Window bounds also
+// Ensure that manually setting NativeWidgetMus's ui::Window bounds also
 // updates its WindowTreeHost bounds.
 TEST_F(NativeWidgetMusTest, SetMusWindowBounds) {
   std::unique_ptr<Widget> widget(CreateWidget(nullptr));
@@ -503,7 +505,7 @@ TEST_F(NativeWidgetMusTest, SetMusWindowBounds) {
   widget->GetContentsView()->AddChildView(content);
   NativeWidgetMus* native_widget =
       static_cast<NativeWidgetMus*>(widget->native_widget_private());
-  mus::Window* mus_window = native_widget->window();
+  ui::Window* mus_window = native_widget->window();
 
   gfx::Rect start_bounds = initial_bounds();
   gfx::Rect end_bounds = gfx::Rect(40, 50, 60, 70);
@@ -519,6 +521,92 @@ TEST_F(NativeWidgetMusTest, SetMusWindowBounds) {
   // Main check for this test: Setting |mus_window| bounds while bypassing
   // |native_widget| must update window_tree_host bounds.
   EXPECT_EQ(end_bounds, native_widget->window_tree_host()->GetBounds());
+}
+
+// Verifies visibility of the aura::Window and ui::Window are updated when the
+// Widget is shown/hidden.
+TEST_F(NativeWidgetMusTest, TargetVisibility) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  NativeWidgetMus* native_widget =
+      static_cast<NativeWidgetMus*>(widget->native_widget_private());
+  ui::Window* mus_window = native_widget->window();
+  EXPECT_FALSE(mus_window->visible());
+  EXPECT_FALSE(widget->GetNativeView()->TargetVisibility());
+
+  widget->Show();
+  EXPECT_TRUE(mus_window->visible());
+  EXPECT_TRUE(widget->GetNativeView()->TargetVisibility());
+}
+
+// Indirectly verifies Show() isn't invoked twice on the underlying
+// aura::Window.
+TEST_F(NativeWidgetMusTest, DontShowTwice) {
+  std::unique_ptr<Widget> widget(CreateWidget(nullptr));
+  widget->GetNativeView()->layer()->SetOpacity(0.0f);
+  // aura::Window::Show() allows the opacity to be 0 as long as the window is
+  // hidden. So, as long as this only invokes aura::Window::Show() once the
+  // DCHECK in aura::Window::Show() won't fire.
+  widget->Show();
+}
+
+namespace {
+
+// See description of test for details.
+class IsMaximizedObserver : public ui::WindowObserver {
+ public:
+  IsMaximizedObserver() {}
+  ~IsMaximizedObserver() override {}
+
+  void set_widget(Widget* widget) { widget_ = widget; }
+
+  bool got_change() const { return got_change_; }
+
+  // ui::WindowObserver:
+  void OnWindowSharedPropertyChanged(
+      ui::Window* window,
+      const std::string& name,
+      const std::vector<uint8_t>* old_data,
+      const std::vector<uint8_t>* new_data) override {
+    // Expect only one change for the show state.
+    ASSERT_FALSE(got_change_);
+    got_change_ = true;
+    EXPECT_EQ(ui::mojom::WindowManager::kShowState_Property, name);
+    EXPECT_TRUE(widget_->IsMaximized());
+  }
+
+ private:
+  bool got_change_ = false;
+  Widget* widget_ =  nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(IsMaximizedObserver);
+};
+
+}  // namespace
+
+// Verifies that asking for Widget::IsMaximized() from within
+// OnWindowSharedPropertyChanged() returns the right thing.
+TEST_F(NativeWidgetMusTest, IsMaximized) {
+  ASSERT_TRUE(WindowManagerConnection::Exists());
+  ui::Window* window = WindowManagerConnection::Get()->NewWindow(
+      std::map<std::string, std::vector<uint8_t>>());
+  IsMaximizedObserver observer;
+  // NOTE: the order here is important, we purposefully add the
+  // ui::WindowObserver before creating NativeWidgetMus, which also adds its
+  // own observer.
+  window->AddObserver(&observer);
+
+  std::unique_ptr<Widget> widget(new Widget());
+  observer.set_widget(widget.get());
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+  params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = initial_bounds();
+  params.native_widget = new NativeWidgetMus(widget.get(), window,
+                                             ui::mojom::SurfaceType::DEFAULT);
+  widget->Init(params);
+  window->SetSharedProperty<int32_t>(
+      ui::mojom::WindowManager::kShowState_Property,
+      static_cast<uint32_t>(ui::mojom::ShowState::MAXIMIZED));
+  EXPECT_TRUE(widget->IsMaximized());
 }
 
 }  // namespace views

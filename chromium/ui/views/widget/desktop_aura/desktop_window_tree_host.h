@@ -19,7 +19,7 @@ class Window;
 namespace client {
 class DragDropClient;
 }
-}
+}  // namespace aura
 
 namespace gfx {
 class ImageSkia;
@@ -95,8 +95,8 @@ class VIEWS_EXPORT DesktopWindowTreeHost {
   virtual gfx::Rect GetWorkAreaBoundsInScreen() const = 0;
 
   // Sets the shape of the root window. If |native_region| is NULL then the
-  // window reverts to rectangular. Takes ownership of |native_region|.
-  virtual void SetShape(SkRegion* native_region) = 0;
+  // window reverts to rectangular.
+  virtual void SetShape(std::unique_ptr<SkRegion> native_region) = 0;
 
   virtual void Activate() = 0;
   virtual void Deactivate() = 0;
@@ -113,6 +113,7 @@ class VIEWS_EXPORT DesktopWindowTreeHost {
   virtual bool IsAlwaysOnTop() const = 0;
 
   virtual void SetVisibleOnAllWorkspaces(bool always_visible) = 0;
+  virtual bool IsVisibleOnAllWorkspaces() const = 0;
 
   // Returns true if the title changed.
   virtual bool SetWindowTitle(const base::string16& title) = 0;

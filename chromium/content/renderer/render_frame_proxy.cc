@@ -13,7 +13,9 @@
 #include "content/child/web_url_request_util.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/content_security_policy_header.h"
+#include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
@@ -357,8 +359,8 @@ void RenderFrameProxy::OnEnforceInsecureRequestPolicy(
 }
 
 void RenderFrameProxy::OnSetFrameOwnerProperties(
-    const blink::WebFrameOwnerProperties& properties) {
-  web_frame_->setFrameOwnerProperties(properties);
+    const FrameOwnerProperties& properties) {
+  web_frame_->setFrameOwnerProperties(properties.ToWebFrameOwnerProperties());
 }
 
 void RenderFrameProxy::OnDidUpdateOrigin(
@@ -380,7 +382,7 @@ void RenderFrameProxy::OnSetFocusedFrame() {
 }
 
 void RenderFrameProxy::OnWillEnterFullscreen() {
-  web_frame_->willEnterFullScreen();
+  web_frame_->willEnterFullscreen();
 }
 
 void RenderFrameProxy::frameDetached(DetachType type) {
@@ -437,12 +439,6 @@ void RenderFrameProxy::forwardPostMessage(
   Send(new FrameHostMsg_RouteMessageEvent(routing_id_, params));
 }
 
-void RenderFrameProxy::initializeChildFrame(
-    float scale_factor) {
-  Send(new FrameHostMsg_InitializeChildFrame(
-      routing_id_, scale_factor));
-}
-
 void RenderFrameProxy::navigate(const blink::WebURLRequest& request,
                                 bool should_replace_current_entry) {
   FrameHostMsg_OpenURL_Params params;
@@ -466,7 +462,12 @@ void RenderFrameProxy::forwardInputEvent(const blink::WebInputEvent* event) {
 }
 
 void RenderFrameProxy::frameRectsChanged(const blink::WebRect& frame_rect) {
-  Send(new FrameHostMsg_FrameRectChanged(routing_id_, frame_rect));
+  gfx::Rect rect = frame_rect;
+  if (IsUseZoomForDSFEnabled()) {
+    rect = gfx::ScaleToEnclosingRect(
+        rect, 1.f / render_widget_->GetOriginalDeviceScaleFactor());
+  }
+  Send(new FrameHostMsg_FrameRectChanged(routing_id_, rect));
 }
 
 void RenderFrameProxy::visibilityChanged(bool visible) {

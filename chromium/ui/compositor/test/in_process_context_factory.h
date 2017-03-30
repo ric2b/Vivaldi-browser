@@ -60,14 +60,18 @@ class InProcessContextFactory : public ContextFactory {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() override;
+  uint32_t AllocateSurfaceClientId() override;
   cc::SurfaceManager* GetSurfaceManager() override;
+  void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
   void SetDisplayColorSpace(ui::Compositor* compositor,
                             const gfx::ColorSpace& color_space) override {}
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override {}
+  void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                 base::TimeTicks timebase,
+                                 base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
   void AddObserver(ContextFactoryObserver* observer) override;
   void RemoveObserver(ContextFactoryObserver* observer) override;
@@ -79,7 +83,7 @@ class InProcessContextFactory : public ContextFactory {
   cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   cc::TestImageFactory image_factory_;
   cc::TestTaskGraphRunner task_graph_runner_;
-  uint32_t next_surface_id_namespace_;
+  uint32_t next_surface_client_id_;
   bool use_test_surface_;
   bool context_factory_for_test_;
   cc::SurfaceManager* surface_manager_;

@@ -31,9 +31,8 @@
 #include "core/dom/ParserContentPolicy.h"
 #include "core/html/parser/HTMLElementStack.h"
 #include "core/html/parser/HTMLFormattingElementList.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -101,18 +100,21 @@ enum FlushMode {
 };
 
 class AtomicHTMLToken;
+class CustomElementDefinition;
 class Document;
 class Element;
 class HTMLFormElement;
+class HTMLParserReentryPermit;
 
 class HTMLConstructionSite final {
     WTF_MAKE_NONCOPYABLE(HTMLConstructionSite);
     DISALLOW_NEW();
 public:
-    HTMLConstructionSite(Document*, ParserContentPolicy);
-    HTMLConstructionSite(DocumentFragment*, ParserContentPolicy);
+    HTMLConstructionSite(HTMLParserReentryPermit*, Document&, ParserContentPolicy);
     ~HTMLConstructionSite();
     DECLARE_TRACE();
+
+    void initFragmentParsing(DocumentFragment*, Element* contextElement);
 
     void detach();
 
@@ -195,8 +197,7 @@ public:
     Element* head() const { return m_head->element(); }
     HTMLStackItem* headStackItem() const { return m_head.get(); }
 
-    void setForm(HTMLFormElement*);
-    HTMLFormElement* form() const { return m_form.get(); }
+    bool isFormElementPointerNonNull() const { return m_form; }
     HTMLFormElement* takeForm();
 
     ParserContentPolicy getParserContentPolicy() { return m_parserContentPolicy; }
@@ -243,6 +244,9 @@ private:
     void executeTask(HTMLConstructionSiteTask&);
     void queueTask(const HTMLConstructionSiteTask&);
 
+    CustomElementDefinition* lookUpCustomElementDefinition(Document&, AtomicHTMLToken*);
+
+    HTMLParserReentryPermit* m_reentryPermit;
     Member<Document> m_document;
 
     // This is the root ContainerNode to which the parser attaches all newly
@@ -250,7 +254,9 @@ private:
     // and a Document in all other cases.
     Member<ContainerNode> m_attachmentRoot;
 
+    // https://html.spec.whatwg.org/multipage/syntax.html#head-element-pointer
     Member<HTMLStackItem> m_head;
+    // https://html.spec.whatwg.org/multipage/syntax.html#form-element-pointer
     Member<HTMLFormElement> m_form;
     mutable HTMLElementStack m_openElements;
     mutable HTMLFormattingElementList m_activeFormattingElements;

@@ -9,18 +9,19 @@
 #include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/FetchUtils.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/FormData.h"
-#include "core/loader/BeaconLoader.h"
+#include "core/loader/PingLoader.h"
 
 namespace blink {
 
 NavigatorBeacon::NavigatorBeacon(Navigator& navigator)
-    : LocalFrameLifecycleObserver(navigator.frame())
+    : DOMWindowProperty(navigator.frame())
     , m_transmittedBytes(0)
 {
 }
@@ -31,7 +32,7 @@ NavigatorBeacon::~NavigatorBeacon()
 
 DEFINE_TRACE(NavigatorBeacon)
 {
-    LocalFrameLifecycleObserver::trace(visitor);
+    DOMWindowProperty::trace(visitor);
     Supplement<Navigator>::trace(visitor);
 }
 
@@ -77,7 +78,7 @@ bool NavigatorBeacon::canSendBeacon(ExecutionContext* context, const KURL& url, 
 
 int NavigatorBeacon::maxAllowance() const
 {
-    ASSERT(frame());
+    DCHECK(frame());
     const Settings* settings = frame()->settings();
     if (settings) {
         int maxAllowed = settings->maxBeaconTransmission();
@@ -88,15 +89,10 @@ int NavigatorBeacon::maxAllowance() const
     return m_transmittedBytes;
 }
 
-bool NavigatorBeacon::beaconResult(ExecutionContext* context, bool allowed, int sentBytes)
+void NavigatorBeacon::addTransmittedBytes(int sentBytes)
 {
-    if (allowed) {
-        ASSERT(sentBytes >= 0);
-        m_transmittedBytes += sentBytes;
-    } else {
-        UseCounter::count(context, UseCounter::SendBeaconQuotaExceeded);
-    }
-    return allowed;
+    DCHECK_GE(sentBytes, 0);
+    m_transmittedBytes += sentBytes;
 }
 
 bool NavigatorBeacon::sendBeacon(ExecutionContext* context, Navigator& navigator, const String& urlstring, const ArrayBufferViewOrBlobOrStringOrFormData& data, ExceptionState& exceptionState)
@@ -111,18 +107,33 @@ bool NavigatorBeacon::sendBeacon(ExecutionContext* context, Navigator& navigator
     int bytes = 0;
     bool allowed;
 
-    if (data.isArrayBufferView())
-        allowed = BeaconLoader::sendBeacon(impl.frame(), allowance, url, data.getAsArrayBufferView(), bytes);
-    else if (data.isBlob())
-        allowed = BeaconLoader::sendBeacon(impl.frame(), allowance, url, data.getAsBlob(), bytes);
-    else if (data.isString())
-        allowed = BeaconLoader::sendBeacon(impl.frame(), allowance, url, data.getAsString(), bytes);
-    else if (data.isFormData())
-        allowed = BeaconLoader::sendBeacon(impl.frame(), allowance, url, data.getAsFormData(), bytes);
-    else
-        allowed = BeaconLoader::sendBeacon(impl.frame(), allowance, url, String(), bytes);
+    if (data.isArrayBufferView()) {
+        allowed = PingLoader::sendBeacon(impl.frame(), allowance, url, data.getAsArrayBufferView(), bytes);
+    } else if (data.isBlob()) {
+        Blob* blob = data.getAsBlob();
+        if (!FetchUtils::isSimpleContentType(AtomicString(blob->type()))) {
+            UseCounter::count(context, UseCounter::SendBeaconWithNonSimpleContentType);
+            if (RuntimeEnabledFeatures::sendBeaconThrowForBlobWithNonSimpleTypeEnabled()) {
+                exceptionState.throwSecurityError("sendBeacon() with a Blob whose type is not CORS-safelisted MIME type is disallowed experimentally. See http://crbug.com/490015 for details.");
+                return false;
+            }
+        }
+        allowed = PingLoader::sendBeacon(impl.frame(), allowance, url, blob, bytes);
+    } else if (data.isString()) {
+        allowed = PingLoader::sendBeacon(impl.frame(), allowance, url, data.getAsString(), bytes);
+    } else if (data.isFormData()) {
+        allowed = PingLoader::sendBeacon(impl.frame(), allowance, url, data.getAsFormData(), bytes);
+    } else {
+        allowed = PingLoader::sendBeacon(impl.frame(), allowance, url, String(), bytes);
+    }
 
-    return impl.beaconResult(context, allowed, bytes);
+    if (allowed) {
+        impl.addTransmittedBytes(bytes);
+        return true;
+    }
+
+    UseCounter::count(context, UseCounter::SendBeaconQuotaExceeded);
+    return false;
 }
 
 } // namespace blink

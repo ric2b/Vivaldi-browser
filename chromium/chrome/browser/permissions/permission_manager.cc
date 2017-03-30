@@ -19,7 +19,6 @@
 #include "chrome/browser/permissions/permission_request_id.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/push_messaging/push_messaging_permission_context.h"
 #include "chrome/browser/storage/durable_storage_permission_context.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/common/features.h"
@@ -78,7 +77,6 @@ ContentSettingsType PermissionTypeToContentSetting(PermissionType permission) {
     case PermissionType::MIDI_SYSEX:
       return CONTENT_SETTINGS_TYPE_MIDI_SYSEX;
     case PermissionType::PUSH_MESSAGING:
-      return CONTENT_SETTINGS_TYPE_PUSH_MESSAGING;
     case PermissionType::NOTIFICATIONS:
       return CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
     case PermissionType::GEOLOCATION:
@@ -222,9 +220,11 @@ PermissionManager::PermissionManager(Profile* profile)
   permission_contexts_[PermissionType::MIDI_SYSEX] =
       base::WrapUnique(new MidiPermissionContext(profile));
   permission_contexts_[PermissionType::PUSH_MESSAGING] =
-      base::WrapUnique(new PushMessagingPermissionContext(profile));
+      base::WrapUnique(new NotificationPermissionContext(
+          profile, PermissionType::PUSH_MESSAGING));
   permission_contexts_[PermissionType::NOTIFICATIONS] =
-      base::WrapUnique(new NotificationPermissionContext(profile));
+      base::WrapUnique(new NotificationPermissionContext(
+          profile, PermissionType::NOTIFICATIONS));
 #if !BUILDFLAG(ANDROID_JAVA_UI)
   permission_contexts_[PermissionType::GEOLOCATION] =
       base::WrapUnique(new GeolocationPermissionContext(profile));
@@ -260,11 +260,13 @@ int PermissionManager::RequestPermission(
     PermissionType permission,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
+    bool user_gesture,
     const base::Callback<void(PermissionStatus)>& callback) {
   return RequestPermissions(
       std::vector<PermissionType>(1, permission),
       render_frame_host,
       requesting_origin,
+      user_gesture,
       base::Bind(&PermissionRequestResponseCallbackWrapper, callback));
 }
 
@@ -272,6 +274,7 @@ int PermissionManager::RequestPermissions(
     const std::vector<PermissionType>& permissions,
     content::RenderFrameHost* render_frame_host,
     const GURL& requesting_origin,
+    bool user_gesture,
     const base::Callback<void(
         const std::vector<PermissionStatus>&)>& callback) {
   if (permissions.empty()) {
@@ -304,7 +307,7 @@ int PermissionManager::RequestPermissions(
 
     PermissionContextBase* context = GetPermissionContext(permission);
     context->RequestPermission(
-        web_contents, request, requesting_origin,
+        web_contents, request, requesting_origin, user_gesture,
         base::Bind(&ContentSettingToPermissionStatusCallbackWrapper,
             base::Bind(&PermissionManager::OnPermissionsRequestResponseStatus,
                 weak_ptr_factory_.GetWeakPtr(), request_id, i)));

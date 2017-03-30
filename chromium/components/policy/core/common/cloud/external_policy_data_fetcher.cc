@@ -160,7 +160,7 @@ ExternalPolicyDataFetcherBackend::ExternalPolicyDataFetcherBackend(
 
 ExternalPolicyDataFetcherBackend::~ExternalPolicyDataFetcherBackend() {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
-  STLDeleteContainerPairFirstPointers(job_map_.begin(), job_map_.end());
+  base::STLDeleteContainerPairFirstPointers(job_map_.begin(), job_map_.end());
 }
 
 std::unique_ptr<ExternalPolicyDataFetcher>
@@ -251,7 +251,8 @@ void ExternalPolicyDataFetcherBackend::OnURLFetchComplete(
 void ExternalPolicyDataFetcherBackend::OnURLFetchDownloadProgress(
     const net::URLFetcher* source,
     int64_t current,
-    int64_t total) {
+    int64_t total,
+    int64_t current_network_bytes) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
   JobMap::iterator it = job_map_.find(const_cast<net::URLFetcher*>(source));
   DCHECK(it != job_map_.end());

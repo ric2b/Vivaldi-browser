@@ -88,7 +88,7 @@ public:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // ActiveDOMObject
@@ -104,7 +104,7 @@ private:
     MediaKeySession(ScriptState*, MediaKeys*, WebEncryptedMediaSessionType);
     void dispose();
 
-    void actionTimerFired(Timer<MediaKeySession>*);
+    void actionTimerFired(TimerBase*);
 
     // WebContentDecryptionModuleSession::Client
     void message(MessageType, const unsigned char* message, size_t messageLength) override;

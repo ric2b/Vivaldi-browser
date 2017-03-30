@@ -25,14 +25,14 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioBasicProcessorHandler.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "modules/webaudio/WaveShaperNode.h"
 #include "wtf/PtrUtil.h"
 
 namespace blink {
 
-WaveShaperNode::WaveShaperNode(AbstractAudioContext& context)
+WaveShaperNode::WaveShaperNode(BaseAudioContext& context)
     : AudioNode(context)
 {
     setHandler(AudioBasicProcessorHandler::create(AudioHandler::NodeTypeWaveShaper, *this, context.sampleRate(), wrapUnique(new WaveShaperProcessor(context.sampleRate(), 1))));
@@ -40,7 +40,7 @@ WaveShaperNode::WaveShaperNode(AbstractAudioContext& context)
     handler().initialize();
 }
 
-WaveShaperNode* WaveShaperNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+WaveShaperNode* WaveShaperNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 
@@ -59,7 +59,7 @@ WaveShaperProcessor* WaveShaperNode::getWaveShaperProcessor() const
 
 void WaveShaperNode::setCurve(DOMFloat32Array* curve, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (curve && curve->length() < 2) {
         exceptionState.throwDOMException(
@@ -76,17 +76,26 @@ void WaveShaperNode::setCurve(DOMFloat32Array* curve, ExceptionState& exceptionS
 
 DOMFloat32Array* WaveShaperNode::curve()
 {
-    return getWaveShaperProcessor()->curve();
+    Vector<float>* curve = getWaveShaperProcessor()->curve();
+    if (!curve)
+        return nullptr;
+
+    unsigned size = curve->size();
+    RefPtr<WTF::Float32Array> newCurve = WTF::Float32Array::create(size);
+
+    memcpy(newCurve->data(), curve->data(), sizeof(float) * size);
+
+    return DOMFloat32Array::create(newCurve.release());
 }
 
 void WaveShaperNode::setOversample(const String& type)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     // This is to synchronize with the changes made in
     // AudioBasicProcessorNode::checkNumberOfChannelsForInput() where we can
     // initialize() and uninitialize().
-    AbstractAudioContext::AutoLocker contextLocker(context());
+    BaseAudioContext::AutoLocker contextLocker(context());
 
     if (type == "none") {
         getWaveShaperProcessor()->setOversample(WaveShaperProcessor::OverSampleNone);

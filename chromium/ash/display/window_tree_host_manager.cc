@@ -11,8 +11,8 @@
 #include <utility>
 
 #include "ash/common/ash_switches.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/display/cursor_window_controller.h"
-#include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/root_window_transformers.h"
@@ -26,8 +26,6 @@
 #include "ash/root_window_settings.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/stl_util.h"
@@ -46,6 +44,7 @@
 #include "ui/compositor/compositor.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
+#include "ui/display/manager/display_layout_store.h"
 #include "ui/display/screen.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/public/activation_client.h"
@@ -137,12 +136,12 @@ void SetDisplayPropertiesOnHost(AshWindowTreeHost* ash_host,
       CreateRootWindowTransformerForDisplay(host->window(), display));
   ash_host->SetRootWindowTransformer(std::move(transformer));
 
-  DisplayMode mode =
+  scoped_refptr<ManagedDisplayMode> mode =
       GetDisplayManager()->GetActiveModeForDisplayId(display.id());
-  if (mode.refresh_rate > 0.0f) {
+  if (mode && mode->refresh_rate() > 0.0f) {
     host->compositor()->SetAuthoritativeVSyncInterval(
         base::TimeDelta::FromMicroseconds(base::Time::kMicrosecondsPerSecond /
-                                          mode.refresh_rate));
+                                          mode->refresh_rate()));
   }
 
   // Just movnig the display requires the full redraw.
@@ -282,7 +281,7 @@ void WindowTreeHostManager::Shutdown() {
   }
   CHECK(primary_rwc);
 
-  STLDeleteElements(&to_delete);
+  base::STLDeleteElements(&to_delete);
   delete primary_rwc;
 }
 
@@ -585,7 +584,8 @@ void WindowTreeHostManager::OnDisplayAdded(const display::Display& display) {
         ash_host->AsWindowTreeHost()->window(), false);
     Shell::GetInstance()
         ->partial_magnification_controller()
-        ->SwitchTargetRootWindow(ash_host->AsWindowTreeHost()->window());
+        ->SwitchTargetRootWindowIfNeeded(
+            ash_host->AsWindowTreeHost()->window());
 
     AshWindowTreeHost* to_delete = primary_tree_host_for_replace_;
     primary_tree_host_for_replace_ = nullptr;
@@ -767,7 +767,7 @@ void WindowTreeHostManager::PostDisplayConfigurationChange() {
   focus_activation_store_->Restore();
 
   DisplayManager* display_manager = GetDisplayManager();
-  DisplayLayoutStore* layout_store = display_manager->layout_store();
+  display::DisplayLayoutStore* layout_store = display_manager->layout_store();
   if (display_manager->num_connected_displays() > 1) {
     display::DisplayIdList list = display_manager->GetCurrentDisplayIdList();
     const display::DisplayLayout& layout =

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/signin_internals_ui.h"
 
+#include <string>
+#include <vector>
+
 #include "base/hash.h"
 #include "base/profiler/scoped_tracker.h"
 #include "chrome/browser/profiles/profile.h"
@@ -25,10 +28,11 @@ content::WebUIDataSource* CreateSignInInternalsHTMLSource() {
   source->SetJsonPath("strings.js");
   source->AddResourcePath("signin_internals.js", IDR_SIGNIN_INTERNALS_INDEX_JS);
   source->SetDefaultResource(IDR_SIGNIN_INTERNALS_INDEX_HTML);
+  source->DisableI18nAndUseGzipForAllPaths();
   return source;
 }
 
-} //  namespace
+}  //  namespace
 
 SignInInternalsUI::SignInInternalsUI(content::WebUI* web_ui)
     : WebUIController(web_ui) {
@@ -78,7 +82,8 @@ bool SignInInternalsUI::OverrideHandleWebUIMessage(
       GaiaCookieManagerService* cookie_manager_service =
           GaiaCookieManagerServiceFactory::GetForProfile(profile);
       if (cookie_manager_service->ListAccounts(
-              &cookie_accounts, &signed_out_accounts)) {
+              &cookie_accounts, &signed_out_accounts,
+              "ChromiumSignInInternalsUI")) {
         about_signin_internals->OnGaiaAccountsInCookieUpdated(
             cookie_accounts,
             signed_out_accounts,

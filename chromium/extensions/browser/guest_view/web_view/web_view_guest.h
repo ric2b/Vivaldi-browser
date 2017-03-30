@@ -91,7 +91,10 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   // Request navigating the guest to the provided |src| URL.
   // |wasTyped| will set transition to PAGE_TRANSITION_TYPED so it is remembered
   // in typed history.
-  void NavigateGuest(const std::string& src, bool force_navigation, bool wasTyped = false);
+  void NavigateGuest(const std::string& src,
+                     bool force_navigation,
+                     bool wasTyped = false,
+                     content::Referrer* referrer = nullptr);
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
@@ -188,6 +191,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
                  const gfx::Rect& selection_rect,
                  int active_match_ordinal,
                  bool final_update) final;
+  bool ZoomPropagatesFromEmbedderToGuest() const final;
   const char* GetAPINamespace() const final;
   int GetTaskPrefix() const final;
   void GuestDestroyed() final;
@@ -373,10 +377,18 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
     GURL url;
     std::string name;
     bool changed;
+    content::Referrer *referrer;
     NewWindowInfo(const GURL& url, const std::string& name) :
         url(url),
         name(name),
-        changed(false) {}
+        changed(false),
+        referrer(nullptr) {}
+    // NOTE(espen@vivaldi.com): We have to let the referrer member be a pointer
+    // (and thus have a destructor) to avoid breaking chromium style:
+    // "Complex constructor has an inlined body"
+    ~NewWindowInfo() {
+      delete referrer;
+    };
   };
 
   using PendingWindowMap = std::map<WebViewGuest*, NewWindowInfo>;
@@ -391,6 +403,9 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   // Tracks whether the webview has a pending zoom from before the first
   // navigation. This will be equal to 0 when there is no pending zoom.
   double pending_zoom_factor_;
+
+  // Whether the GuestView set an explicit zoom level.
+  bool did_set_explicit_zoom_;
 
 #ifdef VIVALDI_BUILD
 #include "extensions/api/guest_view/vivaldi_web_view_guest_class.inc"

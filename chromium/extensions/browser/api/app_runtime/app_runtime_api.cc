@@ -8,6 +8,7 @@
 
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -75,9 +76,11 @@ void DispatchOnLaunchedEventImpl(
       ->SetLastLaunchTime(extension_id, base::Time::Now());
 }
 
-app_runtime::LaunchSource getLaunchSourceEnum(
+app_runtime::LaunchSource GetLaunchSourceEnum(
     extensions::AppLaunchSource source) {
   switch (source) {
+    case extensions::SOURCE_UNTRACKED:
+      return app_runtime::LAUNCH_SOURCE_UNTRACKED;
     case extensions::SOURCE_APP_LAUNCHER:
       return app_runtime::LAUNCH_SOURCE_APP_LAUNCHER;
     case extensions::SOURCE_NEW_TAB_PAGE:
@@ -137,15 +140,17 @@ void AppRuntimeEventRouter::DispatchOnEmbedRequestedEvent(
 void AppRuntimeEventRouter::DispatchOnLaunchedEvent(
     BrowserContext* context,
     const Extension* extension,
-    extensions::AppLaunchSource source) {
-  app_runtime::LaunchData launch_data;
-
-  app_runtime::LaunchSource source_enum = getLaunchSourceEnum(source);
+    extensions::AppLaunchSource source,
+    std::unique_ptr<app_runtime::LaunchData> launch_data) {
+  if (!launch_data)
+    launch_data = base::MakeUnique<app_runtime::LaunchData>();
+  app_runtime::LaunchSource source_enum = GetLaunchSourceEnum(source);
   if (extensions::FeatureSwitch::trace_app_source()->IsEnabled()) {
-    launch_data.source = source_enum;
+    launch_data->source = source_enum;
   }
+
   DispatchOnLaunchedEventImpl(extension->id(), source_enum,
-                              launch_data.ToValue(), context);
+                              launch_data->ToValue(), context);
 }
 
 // static
@@ -165,19 +170,24 @@ void AppRuntimeEventRouter::DispatchOnRestartedEvent(
 void AppRuntimeEventRouter::DispatchOnLaunchedEventWithFileEntries(
     BrowserContext* context,
     const Extension* extension,
+    extensions::AppLaunchSource source,
     const std::string& handler_id,
     const std::vector<EntryInfo>& entries,
-    const std::vector<GrantedFileEntry>& file_entries) {
+    const std::vector<GrantedFileEntry>& file_entries,
+    std::unique_ptr<app_runtime::ActionData> action_data) {
+  app_runtime::LaunchSource source_enum = GetLaunchSourceEnum(source);
+
   // TODO(sergeygs): Use the same way of creating an event (using the generated
   // boilerplate) as below in DispatchOnLaunchedEventWithUrl.
   std::unique_ptr<base::DictionaryValue> launch_data(new base::DictionaryValue);
   launch_data->SetString("id", handler_id);
 
-  app_runtime::LaunchSource source_enum =
-      app_runtime::LAUNCH_SOURCE_FILE_HANDLER;
   if (extensions::FeatureSwitch::trace_app_source()->IsEnabled()) {
     launch_data->SetString("source", app_runtime::ToString(source_enum));
   }
+
+  if (action_data)
+    launch_data->Set("actionData", action_data->ToValue());
 
   std::unique_ptr<base::ListValue> items(new base::ListValue);
   DCHECK(file_entries.size() == entries.size());
@@ -185,6 +195,9 @@ void AppRuntimeEventRouter::DispatchOnLaunchedEventWithFileEntries(
     std::unique_ptr<base::DictionaryValue> launch_item(
         new base::DictionaryValue);
 
+    // TODO: The launch item type should be documented in the idl so that this
+    // entire function can be strongly typed and built using an
+    // app_runtime::LaunchData instance.
     launch_item->SetString("fileSystemId", file_entries[i].filesystem_id);
     launch_item->SetString("baseName", file_entries[i].registered_name);
     launch_item->SetString("mimeType", entries[i].mime_type);

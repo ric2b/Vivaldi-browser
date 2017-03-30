@@ -17,10 +17,10 @@
 
 #include "base/macros.h"
 #include "net/base/ip_endpoint.h"
-#include "net/quic/crypto/quic_crypto_server_config.h"
-#include "net/quic/quic_chromium_connection_helper.h"
-#include "net/quic/quic_config.h"
-#include "net/quic/quic_framer.h"
+#include "net/quic/chromium/quic_chromium_connection_helper.h"
+#include "net/quic/core/crypto/quic_crypto_server_config.h"
+#include "net/quic/core/quic_config.h"
+#include "net/quic/core/quic_framer.h"
 #include "net/tools/epoll_server/epoll_server.h"
 #include "net/tools/quic/quic_default_packet_writer.h"
 
@@ -35,8 +35,8 @@ class QuicPacketReader;
 
 class QuicServer : public EpollCallbackInterface {
  public:
-  explicit QuicServer(ProofSource* proof_source);
-  QuicServer(ProofSource* proof_source,
+  explicit QuicServer(std::unique_ptr<ProofSource> proof_source);
+  QuicServer(std::unique_ptr<ProofSource> proof_source,
              const QuicConfig& config,
              const QuicCryptoServerConfig::ConfigOptions& server_config_options,
              const QuicVersionVector& supported_versions);
@@ -81,12 +81,11 @@ class QuicServer : public EpollCallbackInterface {
 
   const QuicConfig& config() const { return config_; }
   const QuicCryptoServerConfig& crypto_config() const { return crypto_config_; }
-  const QuicVersionVector& supported_versions() const {
-    return supported_versions_;
-  }
   EpollServer* epoll_server() { return &epoll_server_; }
 
   QuicDispatcher* dispatcher() { return dispatcher_.get(); }
+
+  QuicVersionManager* version_manager() { return &version_manager_; }
 
  private:
   friend class net::test::QuicServerPeer;
@@ -122,11 +121,8 @@ class QuicServer : public EpollCallbackInterface {
   // crypto_config_options_ contains crypto parameters for the handshake.
   QuicCryptoServerConfig::ConfigOptions crypto_config_options_;
 
-  // This vector contains QUIC versions which we currently support.
-  // This should be ordered such that the highest supported version is the first
-  // element, with subsequent elements in descending order (versions can be
-  // skipped as necessary).
-  QuicVersionVector supported_versions_;
+  // Used to generate current supported versions.
+  QuicVersionManager version_manager_;
 
   // Point to a QuicPacketReader object on the heap. The reader allocates more
   // space than allowed on the stack.

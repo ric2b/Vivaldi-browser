@@ -142,12 +142,12 @@ protected:
     void writeArrayBufferView(const DOMArrayBufferView&);
     void doWriteImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeImageData(uint32_t width, uint32_t height, const uint8_t* pixelData, uint32_t pixelDataLength);
-    void writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, const uint8_t* pixelData, uint32_t pixelDataLength);
+    void writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, uint32_t isPremultiplied, const uint8_t* pixelData, uint32_t pixelDataLength);
     void writeRegExp(v8::Local<v8::String> pattern, v8::RegExp::Flags);
     void writeTransferredMessagePort(uint32_t index);
     void writeTransferredArrayBuffer(uint32_t index);
     void writeTransferredImageBitmap(uint32_t index);
-    void writeTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id);
+    void writeTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t canvasId, uint32_t clientId, uint32_t localId, uint64_t nonce);
     void writeTransferredSharedArrayBuffer(uint32_t index);
     void writeObjectReference(uint32_t reference);
     void writeObject(uint32_t numProperties);
@@ -447,6 +447,11 @@ private:
     uint32_t m_nextObjectReference;
     WebBlobInfoArray* m_blobInfo;
     BlobDataHandleMap* m_blobDataHandles;
+
+    // Counts of object types encountered while serializing the object graph.
+    int m_primitiveCount = 0;
+    int m_jsObjectCount = 0;
+    int m_domWrapperCount = 0;
 };
 
 class ScriptValueDeserializer;
@@ -509,7 +514,7 @@ private:
     bool readDate(v8::Local<v8::Value>*);
     bool readNumber(v8::Local<v8::Value>*);
     bool readNumberObject(v8::Local<v8::Value>*);
-    ImageData* doReadImageData();
+    bool doReadImageDataProperties(uint32_t* width, uint32_t* height, uint32_t* pixelDataLength);
     bool readImageData(v8::Local<v8::Value>*);
     bool readImageBitmap(v8::Local<v8::Value>*);
     bool readCompositorProxy(v8::Local<v8::Value>*);
@@ -583,7 +588,7 @@ public:
     bool tryGetTransferredMessagePort(uint32_t index, v8::Local<v8::Value>*);
     bool tryGetTransferredArrayBuffer(uint32_t index, v8::Local<v8::Value>*);
     bool tryGetTransferredImageBitmap(uint32_t index, v8::Local<v8::Value>*);
-    bool tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id, v8::Local<v8::Value>*);
+    bool tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t canvasId, uint32_t clientId, uint32_t localId, uint64_t nonce, v8::Local<v8::Value>*);
     bool tryGetTransferredSharedArrayBuffer(uint32_t index, v8::Local<v8::Value>*);
     bool tryGetObjectFromObjectReference(uint32_t reference, v8::Local<v8::Value>*);
     uint32_t objectReferenceCount();

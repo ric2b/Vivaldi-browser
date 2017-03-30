@@ -256,7 +256,7 @@ void GuestViewBase::InitWithWebContents(
     SetUpSizing(create_params);
 
   // Observe guest zoom changes.
-  auto zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
+  auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
   zoom_controller->AddObserver(this);
 
   // Give the derived class an opportunity to perform additional initialization.
@@ -373,7 +373,7 @@ GuestViewBase* GuestViewBase::FromWebContents(const WebContents* web_contents) {
 // static
 GuestViewBase* GuestViewBase::From(int owner_process_id,
                                    int guest_instance_id) {
-  auto host = content::RenderProcessHost::FromID(owner_process_id);
+  auto* host = content::RenderProcessHost::FromID(owner_process_id);
   if (!host)
     return nullptr;
 
@@ -414,7 +414,7 @@ void GuestViewBase::SetContextMenuPosition(const gfx::Point& position) {}
 
 WebContents* GuestViewBase::CreateNewGuestWindow(
     const WebContents::CreateParams& create_params) {
-  auto guest_manager = GuestViewManager::FromBrowserContext(browser_context());
+  auto* guest_manager = GuestViewManager::FromBrowserContext(browser_context());
 
   if( !owner_web_contents())
     return nullptr;
@@ -496,12 +496,6 @@ void GuestViewBase::Destroy() {
 
   is_being_destroyed_ = true;
 
-  // For Vivaldi make sure we mark the guest view as detached.
-  // TODO:  Should we call DidDetach().  Note, it also calls
-  //        StopTrackingEmbedderZoomLevel.
-  if (vivaldi::IsVivaldiRunning())
-    element_instance_id_ = guest_view::kInstanceIDNone;
-
   // It is important to clear owner_web_contents_ after the call to
   // StopTrackingEmbedderZoomLevel(), but before the rest of
   // the statements in this function.
@@ -518,8 +512,10 @@ void GuestViewBase::Destroy() {
   // may wish to access their openers.
   weak_ptr_factory_.InvalidateWeakPtrs();
 
-  // Give the content module an opportunity to perform some cleanup.
+  // Vivaldi; we might end up here after the webcontents and guest_host_ has
+  // been destroyed.
   if (guest_host_) {
+  // Give the content module an opportunity to perform some cleanup.
   guest_host_->WillDestroy();
   guest_host_ = nullptr;
 
@@ -528,6 +524,7 @@ void GuestViewBase::Destroy() {
       RemoveGuest(guest_instance_id_);
   pending_events_.clear();
   }
+
   if (web_contents()) {
     if (HandOverToBrowser(web_contents())) {
       content::WebContentsObserver::Observe(NULL);
@@ -782,7 +779,7 @@ void GuestViewBase::OnZoomChanged(
 
   if (data.web_contents == embedder_web_contents()) {
     // The embedder's zoom level has changed.
-    auto guest_zoom_controller =
+    auto* guest_zoom_controller =
         zoom::ZoomController::FromWebContents(web_contents());
     if (content::ZoomValuesEqual(data.new_zoom_level,
                                  guest_zoom_controller->GetZoomLevel())) {
@@ -899,7 +896,7 @@ void GuestViewBase::SetUpSizing(const base::DictionaryValue& params) {
 }
 
 void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
-  auto embedder_zoom_controller =
+  auto* embedder_zoom_controller =
       zoom::ZoomController::FromWebContents(owner_web_contents());
   if (!embedder_zoom_controller)
     return;
@@ -922,7 +919,7 @@ void GuestViewBase::StartTrackingEmbedderZoomLevel() {
   if (!ZoomPropagatesFromEmbedderToGuest())
     return;
 
-  auto embedder_zoom_controller =
+  auto* embedder_zoom_controller =
       zoom::ZoomController::FromWebContents(owner_web_contents());
   // Chrome Apps do not have a ZoomController.
   if (!embedder_zoom_controller)
@@ -940,7 +937,7 @@ void GuestViewBase::StopTrackingEmbedderZoomLevel() {
   if (/*!attached() ||*/ !ZoomPropagatesFromEmbedderToGuest())
     return;
 
-  auto embedder_zoom_controller =
+  auto* embedder_zoom_controller =
       zoom::ZoomController::FromWebContents(owner_web_contents());
   // Chrome Apps do not have a ZoomController.
   if (!embedder_zoom_controller)

@@ -6,20 +6,20 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_H_
 
 #include <memory>
+#include <ostream>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list_threadsafe.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
-#include "sync/api/syncable_service.h"
+#include "components/sync/api/syncable_service.h"
 
 namespace autofill {
 struct PasswordForm;
@@ -62,6 +62,20 @@ class PasswordStore : protected PasswordStoreSync,
 
    protected:
     virtual ~Observer() {}
+  };
+
+  // Represents a subset of autofill::PasswordForm needed for credential
+  // retrievals.
+  struct FormDigest {
+    FormDigest(autofill::PasswordForm::Scheme scheme,
+               const std::string& signon_realm,
+               const GURL& origin);
+    explicit FormDigest(const autofill::PasswordForm& form);
+    bool operator==(const FormDigest& other) const;
+
+    autofill::PasswordForm::Scheme scheme;
+    std::string signon_realm;
+    GURL origin;
   };
 
   PasswordStore(scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner,
@@ -136,10 +150,13 @@ class PasswordStore : protected PasswordStoreSync,
                                       base::Time delete_end,
                                       const base::Closure& completion);
 
-  // Sets the 'skip_zero_click' flag for all logins in the database to 'true'.
-  // |completion| will be posted to the |main_thread_runner_| after these
-  // modifications are completed and notifications are sent out.
-  void DisableAutoSignInForAllLogins(const base::Closure& completion);
+  // Sets the 'skip_zero_click' flag for all logins in the database that match
+  // |origin_filter| to 'true'. |completion| will be posted to
+  // the |main_thread_runner_| after these modifications are completed
+  // and notifications are sent out.
+  void DisableAutoSignInForOrigins(
+      const base::Callback<bool(const GURL&)>& origin_filter,
+      const base::Closure& completion);
 
   // Removes cached affiliation data that is no longer needed; provided that
   // affiliation-based matching is enabled.
@@ -150,7 +167,7 @@ class PasswordStore : protected PasswordStoreSync,
   // TODO(engedy): Currently, this will not return federated logins saved from
   // Android applications that are affiliated with the realm of |form|. Need to
   // decide if this is the desired behavior. See: https://crbug.com/539844.
-  virtual void GetLogins(const autofill::PasswordForm& form,
+  virtual void GetLogins(const FormDigest& form,
                          PasswordStoreConsumer* consumer);
 
   // Gets the complete list of PasswordForms that are not blacklist entries--and
@@ -217,7 +234,7 @@ class PasswordStore : protected PasswordStoreSync,
     // Note that if this method is not called before destruction, the consumer
     // will not be notified.
     void NotifyConsumerWithResults(
-        ScopedVector<autofill::PasswordForm> results);
+        std::vector<std::unique_ptr<autofill::PasswordForm>> results);
 
     void NotifyWithSiteStatistics(
         std::vector<std::unique_ptr<InteractionsStats>> stats);
@@ -269,7 +286,8 @@ class PasswordStore : protected PasswordStoreSync,
                                                   base::Time delete_end) = 0;
 
   // Synchronous implementation to disable auto sign-in.
-  virtual PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl() = 0;
+  virtual PasswordStoreChangeList DisableAutoSignInForOriginsImpl(
+      const base::Callback<bool(const GURL&)>& origin_filter) = 0;
 
   // Finds all PasswordForms with a signon_realm that is equal to, or is a
   // PSL-match to that of |form|, and takes care of notifying the consumer with
@@ -277,7 +295,7 @@ class PasswordStore : protected PasswordStoreSync,
   // Note: subclasses should implement FillMatchingLogins() instead. This needs
   // to be virtual only because asynchronous behavior in PasswordStoreWin.
   // TODO(engedy): Make this non-virtual once https://crbug.com/78830 is fixed.
-  virtual void GetLoginsImpl(const autofill::PasswordForm& form,
+  virtual void GetLoginsImpl(const FormDigest& form,
                              std::unique_ptr<GetLoginsRequest> request);
 
   // Synchronous implementation provided by subclasses to add the given login.
@@ -296,8 +314,8 @@ class PasswordStore : protected PasswordStoreSync,
 
   // Finds and returns all PasswordForms with the same signon_realm as |form|,
   // or with a signon_realm that is a PSL-match to that of |form|.
-  virtual ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form) = 0;
+  virtual std::vector<std::unique_ptr<autofill::PasswordForm>>
+  FillMatchingLogins(const FormDigest& form) = 0;
 
   // Synchronous implementation for manipulating with statistics.
   virtual void AddSiteStatsImpl(const InteractionsStats& stats) = 0;
@@ -371,7 +389,9 @@ class PasswordStore : protected PasswordStoreSync,
   void RemoveStatisticsCreatedBetweenInternal(base::Time delete_begin,
                                               base::Time delete_end,
                                               const base::Closure& completion);
-  void DisableAutoSignInForAllLoginsInternal(const base::Closure& completion);
+  void DisableAutoSignInForOriginsInternal(
+      const base::Callback<bool(const GURL&)>& origin_filter,
+      const base::Closure& completion);
 
   // Finds all non-blacklist PasswordForms, and notifies the consumer.
   void GetAutofillableLoginsImpl(std::unique_ptr<GetLoginsRequest> request);
@@ -397,7 +417,7 @@ class PasswordStore : protected PasswordStoreSync,
   // realms for Android credentials.
   void NotifyLoginsWithAffiliatedRealms(
       std::unique_ptr<GetLoginsRequest> request,
-      ScopedVector<autofill::PasswordForm> obtained_forms);
+      std::vector<std::unique_ptr<autofill::PasswordForm>> obtained_forms);
 
   // Extended version of GetLoginsImpl that also returns credentials stored for
   // the specified affiliated Android applications. That is, it finds all
@@ -407,18 +427,19 @@ class PasswordStore : protected PasswordStoreSync,
   //  * is one of those in |additional_android_realms|,
   // and takes care of notifying the consumer with the results when done.
   void GetLoginsWithAffiliationsImpl(
-      const autofill::PasswordForm& form,
+      const FormDigest& form,
       std::unique_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
 
   // Retrieves and fills in |affiliated_web_realm| values for Android
   // credentials in |forms|. Called on the main thread.
-  void InjectAffiliatedWebRealms(ScopedVector<autofill::PasswordForm> forms,
-                                 std::unique_ptr<GetLoginsRequest> request);
+  void InjectAffiliatedWebRealms(
+      std::vector<std::unique_ptr<autofill::PasswordForm>> forms,
+      std::unique_ptr<GetLoginsRequest> request);
 
   // Schedules GetLoginsWithAffiliationsImpl() to be run on the DB thread.
   void ScheduleGetLoginsWithAffiliations(
-      const autofill::PasswordForm& form,
+      const FormDigest& form,
       std::unique_ptr<GetLoginsRequest> request,
       const std::vector<std::string>& additional_android_realms);
 
@@ -472,6 +493,10 @@ class PasswordStore : protected PasswordStoreSync,
 
   DISALLOW_COPY_AND_ASSIGN(PasswordStore);
 };
+
+// For logging only.
+std::ostream& operator<<(std::ostream& os,
+                         const PasswordStore::FormDigest& digest);
 
 }  // namespace password_manager
 

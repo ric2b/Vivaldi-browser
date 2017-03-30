@@ -41,7 +41,8 @@ class CSSChecker(object):
 
     def _remove_ats(s):
       at_reg = re.compile(r"""
-          @(?!\d+x\b)\w+[^'"]*?{  # @at-keyword selector junk {, not @2x
+          @(?!apply)(?!\d+x\b)    # @at-keyword, not (apply|2x)
+          \w+[^'"]*?{             # selector junk {
           (.*{.*?})+              # inner { curly } blocks, rules, and selector
           .*?}                    # stuff up to the first end curly }
           """,
@@ -167,6 +168,9 @@ class CSSChecker(object):
 
     def no_data_uris_in_source_files(line):
       return re.search(r'\(\s*\s*data:', line)
+
+    def no_mixin_shims(line):
+      return re.search('\-\-[\w\-]+_\-_[\w\-]+\s*:', line)
 
     def no_quotes_in_url(line):
       return re.search('url\s*\(\s*["\']', line, re.IGNORECASE)
@@ -344,6 +348,10 @@ class CSSChecker(object):
         },
         { 'desc': "Don't use data URIs in source files. Use grit instead.",
           'test': no_data_uris_in_source_files,
+        },
+        { 'desc': "Don't override custom properties created by Polymer's mixin "
+                  "shim. Set mixins or documented custom properties directly.",
+          'test': no_mixin_shims,
         },
         { 'desc': "Don't use quotes in url().",
           'test': no_quotes_in_url,

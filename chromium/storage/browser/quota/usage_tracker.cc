@@ -32,7 +32,7 @@ UsageTracker::UsageTracker(const QuotaClientList& clients,
     : type_(type),
       storage_monitor_(storage_monitor),
       weak_factory_(this) {
-  for (const auto& client : clients) {
+  for (auto* client : clients) {
     if (client->DoesSupport(type)) {
       client_tracker_map_[client->id()] =
           new ClientUsageTracker(this, client, type, special_storage_policy,
@@ -42,7 +42,7 @@ UsageTracker::UsageTracker(const QuotaClientList& clients,
 }
 
 UsageTracker::~UsageTracker() {
-  STLDeleteValues(&client_tracker_map_);
+  base::STLDeleteValues(&client_tracker_map_);
 }
 
 ClientUsageTracker* UsageTracker::GetClientTracker(QuotaClient::ID client_id) {

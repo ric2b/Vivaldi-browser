@@ -25,77 +25,77 @@ namespace media_router {
 
 class MediaRouterMojoImpl;
 
-class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
+class MockMediaRouteProvider : public mojom::MediaRouteProvider {
  public:
   MockMediaRouteProvider();
   ~MockMediaRouteProvider() override;
 
   MOCK_METHOD8(CreateRoute,
-               void(const mojo::String& source_urn,
-                    const mojo::String& sink_id,
-                    const mojo::String& presentation_id,
-                    const mojo::String& origin,
+               void(const std::string& source_urn,
+                    const std::string& sink_id,
+                    const std::string& presentation_id,
+                    const std::string& origin,
                     int tab_id,
                     int64_t timeout_secs,
-                    bool off_the_record,
+                    bool incognito,
                     const CreateRouteCallback& callback));
   MOCK_METHOD7(JoinRoute,
-               void(const mojo::String& source_urn,
-                    const mojo::String& presentation_id,
-                    const mojo::String& origin,
+               void(const std::string& source_urn,
+                    const std::string& presentation_id,
+                    const std::string& origin,
                     int tab_id,
                     int64_t timeout_secs,
-                    bool off_the_record,
+                    bool incognito,
                     const JoinRouteCallback& callback));
   MOCK_METHOD8(ConnectRouteByRouteId,
-               void(const mojo::String& source_urn,
-                    const mojo::String& route_id,
-                    const mojo::String& presentation_id,
-                    const mojo::String& origin,
+               void(const std::string& source_urn,
+                    const std::string& route_id,
+                    const std::string& presentation_id,
+                    const std::string& origin,
                     int tab_id,
                     int64_t timeout_secs,
-                    bool off_the_record,
+                    bool incognito,
                     const JoinRouteCallback& callback));
-  MOCK_METHOD1(DetachRoute, void(const mojo::String& route_id));
-  MOCK_METHOD2(TerminateRoute, void(const mojo::String& route_id,
+  MOCK_METHOD1(DetachRoute, void(const std::string& route_id));
+  MOCK_METHOD2(TerminateRoute, void(const std::string& route_id,
                                     const TerminateRouteCallback& callback));
-  MOCK_METHOD1(StartObservingMediaSinks, void(const mojo::String& source));
-  MOCK_METHOD1(StopObservingMediaSinks, void(const mojo::String& source));
+  MOCK_METHOD1(StartObservingMediaSinks, void(const std::string& source));
+  MOCK_METHOD1(StopObservingMediaSinks, void(const std::string& source));
   MOCK_METHOD3(SendRouteMessage,
-               void(const mojo::String& media_route_id,
-                    const mojo::String& message,
+               void(const std::string& media_route_id,
+                    const std::string& message,
                     const SendRouteMessageCallback& callback));
   void SendRouteBinaryMessage(
-      const mojo::String& media_route_id,
-      mojo::Array<uint8_t> data,
+      const std::string& media_route_id,
+      const std::vector<uint8_t>& data,
       const SendRouteMessageCallback& callback) override {
-    SendRouteBinaryMessageInternal(media_route_id, data.storage(), callback);
+    SendRouteBinaryMessageInternal(media_route_id, data, callback);
   }
   MOCK_METHOD3(SendRouteBinaryMessageInternal,
-               void(const mojo::String& media_route_id,
+               void(const std::string& media_route_id,
                     const std::vector<uint8_t>& data,
                     const SendRouteMessageCallback& callback));
   MOCK_METHOD1(StartListeningForRouteMessages,
-               void(const mojo::String& route_id));
+               void(const std::string& route_id));
   MOCK_METHOD1(StopListeningForRouteMessages,
-               void(const mojo::String& route_id));
+               void(const std::string& route_id));
   MOCK_METHOD1(OnPresentationSessionDetached,
-               void(const mojo::String& route_id));
-  MOCK_METHOD1(StartObservingMediaRoutes, void(const mojo::String& source));
-  MOCK_METHOD1(StopObservingMediaRoutes, void(const mojo::String& source));
+               void(const std::string& route_id));
+  MOCK_METHOD1(StartObservingMediaRoutes, void(const std::string& source));
+  MOCK_METHOD1(StopObservingMediaRoutes, void(const std::string& source));
   MOCK_METHOD0(EnableMdnsDiscovery, void());
-  MOCK_METHOD1(UpdateMediaSinks, void(const mojo::String& source));
+  MOCK_METHOD1(UpdateMediaSinks, void(const std::string& source));
   void SearchSinks(
-      const mojo::String& sink_id,
-      const mojo::String& media_source,
-      interfaces::SinkSearchCriteriaPtr search_criteria,
+      const std::string& sink_id,
+      const std::string& media_source,
+      mojom::SinkSearchCriteriaPtr search_criteria,
       const SearchSinksCallback& callback) override {
     SearchSinks_(sink_id, media_source, search_criteria, callback);
   }
   MOCK_METHOD4(SearchSinks_,
-               void(const mojo::String& sink_id,
-                    const mojo::String& media_source,
-                    interfaces::SinkSearchCriteriaPtr& search_criteria,
+               void(const std::string& sink_id,
+                    const std::string& media_source,
+                    mojom::SinkSearchCriteriaPtr& search_criteria,
                     const SearchSinksCallback& callback));
 
  private:
@@ -137,13 +137,13 @@ class MediaRouterMojoTest : public ::testing::Test {
   testing::NiceMock<MockEventPageTracker> mock_event_page_tracker_;
 
   // Mojo proxy object for |mock_media_router_|
-  media_router::interfaces::MediaRouterPtr media_router_proxy_;
+  media_router::mojom::MediaRouterPtr media_router_proxy_;
 
  private:
   content::TestBrowserThreadBundle test_thread_bundle_;
   scoped_refptr<extensions::Extension> extension_;
   std::unique_ptr<MediaRouterMojoImpl> mock_media_router_;
-  std::unique_ptr<mojo::Binding<interfaces::MediaRouteProvider>> binding_;
+  std::unique_ptr<mojo::Binding<mojom::MediaRouteProvider>> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaRouterMojoTest);
 };

@@ -50,6 +50,7 @@ enum ShouldComputePreferred { ComputeActual, ComputePreferred };
 
 enum ApplyOverflowClipFlag {
     ApplyOverflowClip,
+    // Don't apply overflow clipping or scrolling.
     ApplyNonScrollOverflowClip
 };
 
@@ -60,9 +61,10 @@ struct LayoutBoxRareData {
 public:
     LayoutBoxRareData()
         : m_spannerPlaceholder(nullptr)
-        , m_overrideLogicalContentHeight(-1)
         , m_overrideLogicalContentWidth(-1)
-        , m_previousBorderBoxSize(LayoutUnit(-1), LayoutUnit(-1))
+        , m_overrideLogicalContentHeight(-1)
+        , m_hasOverrideContainingBlockContentLogicalWidth(false)
+        , m_hasOverrideContainingBlockContentLogicalHeight(false)
         , m_percentHeightContainer(nullptr)
         , m_snapContainer(nullptr)
         , m_snapAreas(nullptr)
@@ -72,16 +74,15 @@ public:
     // For spanners, the spanner placeholder that lays us out within the multicol container.
     LayoutMultiColumnSpannerPlaceholder* m_spannerPlaceholder;
 
-    LayoutUnit m_overrideLogicalContentHeight;
     LayoutUnit m_overrideLogicalContentWidth;
+    LayoutUnit m_overrideLogicalContentHeight;
 
-    // Set by LayoutBox::savePreviousBoxSizesIfNeeded().
-    LayoutSize m_previousBorderBoxSize;
-    LayoutRect m_previousContentBoxRect;
-    LayoutRect m_previousLayoutOverflowRect;
+    bool m_hasOverrideContainingBlockContentLogicalWidth;
+    bool m_hasOverrideContainingBlockContentLogicalHeight;
+    LayoutUnit m_overrideContainingBlockContentLogicalWidth;
+    LayoutUnit m_overrideContainingBlockContentLogicalHeight;
 
     LayoutUnit m_pageLogicalOffset;
-
     LayoutUnit m_paginationStrut;
 
     LayoutBlock* m_percentHeightContainer;
@@ -354,6 +355,8 @@ public:
     IntSize absoluteContentBoxOffset() const;
     // The content box converted to absolute coords (taking transforms into account).
     FloatQuad absoluteContentQuad() const;
+    // The clip rect of the background.
+    LayoutRect backgroundClipRect() const;
 
     // This returns the content area of the box (excluding padding and border). The only difference with contentBoxRect is that computedCSSContentBoxRect
     // does include the intrinsic padding in the content box as this is what some callers expect (like getComputedStyle).
@@ -693,9 +696,9 @@ public:
     // break, we also need to know the break-after value of the previous in-flow sibling.
     bool needsForcedBreakBefore(EBreak previousBreakAfterValue) const;
 
+    bool paintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
     LayoutRect localOverflowRectForPaintInvalidation() const override;
     bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const override;
-    virtual void invalidatePaintForOverhangingFloats(bool paintAllDescendants);
 
     LayoutUnit containingBlockLogicalHeightForGetComputedStyle() const;
 
@@ -799,6 +802,9 @@ public:
     virtual bool hasControlClip() const { return false; }
     virtual LayoutRect controlClipRect(const LayoutPoint&) const { return LayoutRect(); }
 
+    // Returns the combination of overflow clip, contain: paint clip and CSS clip for this object, in local space.
+    LayoutRect clippingRect() const;
+
     virtual void paintBoxDecorationBackground(const PaintInfo&, const LayoutPoint&) const;
     virtual void paintMask(const PaintInfo&, const LayoutPoint&) const;
     void imageChanged(WrappedImagePtr, const IntRect* = nullptr) override;
@@ -873,9 +879,11 @@ public:
             return;
         rect.setX(m_frameRect.width() - rect.maxX());
     }
-    // These represent your location relative to your container as a physical offset.
-    // In layout related methods you almost always want the logical location (e.g. x() and y()).
-    LayoutPoint topLeftLocation() const;
+    // These represent your location relative to your container as a physical
+    // offset. In layout related methods you almost always want the logical
+    // location (e.g. x() and y()). Passing |container| causes flipped-block
+    // flipping w.r.t. that container, or containingBlock() otherwise.
+    LayoutPoint topLeftLocation(const LayoutBox* flippedBlocksContainer = nullptr) const;
     LayoutSize topLeftLocationOffset() const { return toLayoutSize(topLeftLocation()); }
 
     LayoutRect logicalVisualOverflowRectForPropagation(const ComputedStyle&) const;
@@ -960,8 +968,16 @@ public:
 
     bool hitTestClippedOutByRoundedBorder(const HitTestLocation& locationInContainer, const LayoutPoint& borderBoxLocation) const;
 
-    bool mustInvalidateFillLayersPaintOnWidthChange(const FillLayer&) const;
-    bool mustInvalidateFillLayersPaintOnHeightChange(const FillLayer&) const;
+    static bool mustInvalidateFillLayersPaintOnWidthChange(const FillLayer&);
+    static bool mustInvalidateFillLayersPaintOnHeightChange(const FillLayer&);
+
+    bool mustInvalidateBackgroundOrBorderPaintOnHeightChange() const;
+    bool mustInvalidateBackgroundOrBorderPaintOnWidthChange() const;
+
+    // Returns true if the box intersects the viewport visible to the user.
+    bool intersectsVisibleViewport() const;
+
+    bool hasNonCompositedScrollbars() const final;
 
 protected:
     void willBeDestroyed() override;
@@ -972,6 +988,8 @@ protected:
     void styleWillChange(StyleDifference, const ComputedStyle& newStyle) override;
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
     void updateFromStyle() override;
+
+    virtual ItemPosition selfAlignmentNormalBehavior() const { return ItemPositionStretch; }
 
     // Returns false if it could not cheaply compute the extent (e.g. fixed background), in which case the returned rect may be incorrect.
     // FIXME: make this a const method once the LayoutBox reference in BoxPainter is const.
@@ -993,17 +1011,14 @@ protected:
     void addLayerHitTestRects(LayerHitTestRects&, const PaintLayer* currentCompositedLayer, const LayoutPoint& layerOffset, const LayoutRect& containerRect) const override;
     void computeSelfHitTestRects(Vector<LayoutRect>&, const LayoutPoint& layerOffset) const override;
 
-    PaintInvalidationReason getPaintInvalidationReason(const PaintInvalidationState&,
-        const LayoutRect& oldBounds, const LayoutPoint& oldPositionFromPaintInvalidationContainer,
-        const LayoutRect& newBounds, const LayoutPoint& newPositionFromPaintInvalidationContainer) const override;
-    void incrementallyInvalidatePaint(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect& oldBounds, const LayoutRect& newBounds, const LayoutPoint& positionFromPaintInvalidationContainer) override;
-
     PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
+    PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidatorContext&) const override;
     void invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState& childPaintInvalidationState) override;
 
+    bool columnFlexItemHasStretchAlignment() const;
+    bool isStretchingColumnFlexItem() const;
     bool hasStretchedLogicalWidth() const;
 
-    bool hasNonCompositedScrollbars() const final;
     void excludeScrollbars(LayoutRect&, OverlayScrollbarClipBehavior = IgnoreOverlayScrollbarSize) const;
 
     LayoutUnit containingBlockLogicalWidthForPositioned(const LayoutBoxModelObject* containingBlock, bool checkForPerpendicularWritingMode = true) const;
@@ -1015,11 +1030,6 @@ protected:
     static void computeLogicalTopPositionedOffset(LayoutUnit& logicalTopPos, const LayoutBox* child, LayoutUnit logicalHeightValue, const LayoutBoxModelObject* containerBlock, LayoutUnit containerLogicalHeight);
 
 private:
-    bool mustInvalidateBackgroundOrBorderPaintOnHeightChange() const;
-    bool mustInvalidateBackgroundOrBorderPaintOnWidthChange() const;
-
-    void invalidatePaintRectClippedByOldAndNewBounds(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect&, const LayoutRect& oldBounds, const LayoutRect& newBounds);
-
     void updateShapeOutsideInfoAfterStyleChange(const ComputedStyle&, const ComputedStyle* oldStyle);
     void updateGridPositionAfterStyleChange(const ComputedStyle*);
     void updateScrollSnapMappingAfterStyleChange(const ComputedStyle*, const ComputedStyle* oldStyle);
@@ -1028,9 +1038,6 @@ private:
 
     bool autoWidthShouldFitContent() const;
     LayoutUnit shrinkToFitLogicalWidth(LayoutUnit availableLogicalWidth, LayoutUnit bordersPlusPadding) const;
-
-    // Returns true if we queued up a paint invalidation.
-    bool invalidatePaintOfLayerRectsForImage(WrappedImagePtr, const FillLayer&, bool drawingBackground);
 
     bool stretchesToViewportInQuirksMode() const;
     bool skipContainingBlockForPercentHeightCalculation(const LayoutBox* containingBlock) const;
@@ -1075,24 +1082,11 @@ private:
         return *m_rareData.get();
     }
 
-    bool needToSavePreviousBoxSizes();
-    void savePreviousBoxSizesIfNeeded();
-    LayoutSize computePreviousBorderBoxSize(const LayoutSize& previousBoundsSize) const;
-
     bool logicalHeightComputesAsNone(SizeType) const;
 
     bool isBox() const = delete; // This will catch anyone doing an unnecessary check.
 
-    void frameRectChanged()
-    {
-        // The frame rect may change because of layout of other objects.
-        // Should check this object for paint invalidation.
-        if (!needsLayout())
-            setMayNeedPaintInvalidation();
-    }
-
-    // Returns true if the box intersects the viewport visible to the user.
-    bool intersectsVisibleViewport();
+    void frameRectChanged();
 
     virtual bool isInSelfHitTestingPhase(HitTestAction hitTestAction) const { return hitTestAction == HitTestForeground; }
 

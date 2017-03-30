@@ -34,6 +34,7 @@
 #include "core/CoreExport.h"
 #include "core/fileapi/FileError.h"
 #include "core/loader/ThreadableLoaderClient.h"
+#include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Forward.h"
 #include "wtf/PtrUtil.h"
@@ -69,7 +70,6 @@ public:
         return wrapUnique(new FileReaderLoader(readType, client));
     }
 
-    FileReaderLoader(ReadType, FileReaderLoaderClient*);
     ~FileReaderLoader() override;
 
     void start(ExecutionContext*, PassRefPtr<BlobDataHandle>);
@@ -82,8 +82,8 @@ public:
     void didFinishLoading(unsigned long, double) override;
     void didFail(const ResourceError&) override;
 
+    DOMArrayBuffer* arrayBufferResult();
     String stringResult();
-    DOMArrayBuffer* arrayBufferResult() const;
 
     // Returns the total bytes received. Bytes ignored by m_rawData won't be
     // counted.
@@ -106,8 +106,9 @@ public:
     void setDataType(const String& dataType) { m_dataType = dataType; }
 
 private:
+    FileReaderLoader(ReadType, FileReaderLoaderClient*);
+
     void startInternal(ExecutionContext&, const Stream*, PassRefPtr<BlobDataHandle>);
-    void terminate();
     void cleanup();
 
     void failed(FileError::ErrorCode);
@@ -123,11 +124,12 @@ private:
 
     KURL m_urlForReading;
     bool m_urlForReadingIsStream;
-    std::unique_ptr<ThreadableLoader> m_loader;
+    Persistent<ThreadableLoader> m_loader;
 
     std::unique_ptr<ArrayBufferBuilder> m_rawData;
     bool m_isRawDataConverted;
 
+    Persistent<DOMArrayBuffer> m_arrayBufferResult;
     String m_stringResult;
 
     // The decoder used to decode the text data.

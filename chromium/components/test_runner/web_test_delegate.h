@@ -53,7 +53,7 @@ namespace test_runner {
 class DeviceLightData;
 class GamepadController;
 class WebTask;
-class WebTestProxyBase;
+class WebViewTestProxyBase;
 struct TestPreferences;
 
 class WebTestDelegate {
@@ -200,7 +200,7 @@ class WebTestDelegate {
 
   // Controls whether all cookies should be accepted or writing cookies in a
   // third-party context is blocked.
-  virtual void SetAcceptAllCookies(bool accept) = 0;
+  virtual void SetBlockThirdPartyCookies(bool block) = 0;
 
   // The same as RewriteLayoutTestsURL unless the resource is a path starting
   // with /tmp/, then return a file URL to a temporary file.
@@ -272,7 +272,7 @@ class WebTestDelegate {
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) = 0;
 
-  virtual float GetDeviceScaleFactorForTest() const = 0;
+  virtual float GetDeviceScaleFactor() const = 0;
 
   // Run all pending idle tasks, and then run callback.
   virtual void RunIdleTasks(const base::Closure& callback) = 0;

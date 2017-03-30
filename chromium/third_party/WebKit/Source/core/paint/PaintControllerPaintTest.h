@@ -31,14 +31,12 @@ protected:
     {
         RenderingTest::SetUp();
         enableCompositing();
-        GraphicsLayer::setDrawDebugRedFillForTesting(false);
         RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(m_enableSlimmingPaintV2);
     }
     void TearDown() override
     {
         RuntimeEnabledFeatures::setSlimmingPaintInvalidationEnabled(m_originalSlimmingPaintInvalidationEnabled);
         RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(m_originalSlimmingPaintV2Enabled);
-        GraphicsLayer::setDrawDebugRedFillForTesting(true);
     }
 
     bool paintWithoutCommit(const IntRect* interestRect = nullptr)
@@ -74,6 +72,8 @@ protected:
         }
         return false;
     }
+
+    int numCachedNewItems() { return rootPaintController().m_numCachedNewItems; }
 
 private:
     bool m_originalSlimmingPaintInvalidationEnabled;
@@ -129,11 +129,8 @@ public:
 
 // Shorter names for frequently used display item types in tests.
 const DisplayItem::Type backgroundType = DisplayItem::BoxDecorationBackground;
-const DisplayItem::Type cachedBackgroundType = DisplayItem::drawingTypeToCachedDrawingType(backgroundType);
 const DisplayItem::Type foregroundType = DisplayItem::paintPhaseToDrawingType(PaintPhaseForeground);
-const DisplayItem::Type cachedForegroundType = DisplayItem::drawingTypeToCachedDrawingType(foregroundType);
 const DisplayItem::Type documentBackgroundType = DisplayItem::DocumentBackground;
-const DisplayItem::Type cachedDocumentBackgroundType = DisplayItem::drawingTypeToCachedDrawingType(DisplayItem::DocumentBackground);
 
 } // namespace blink
 

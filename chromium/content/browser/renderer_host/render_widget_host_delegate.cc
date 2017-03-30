@@ -8,6 +8,8 @@
 
 namespace content {
 
+void RenderWidgetHostDelegate::GetScreenInfo(blink::WebScreenInfo*) {}
+
 bool RenderWidgetHostDelegate::PreHandleKeyboardEvent(
     const NativeWebKeyboardEvent& event,
     bool* is_keyboard_shortcut) {
@@ -69,6 +71,10 @@ bool RenderWidgetHostDelegate::HasMouseLock(
 
 TextInputManager* RenderWidgetHostDelegate::GetTextInputManager() {
   return nullptr;
+}
+
+bool RenderWidgetHostDelegate::IsHidden() {
+  return false;
 }
 
 }  // namespace content

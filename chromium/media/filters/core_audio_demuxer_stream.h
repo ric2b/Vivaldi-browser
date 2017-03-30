@@ -35,6 +35,9 @@ class CoreAudioDemuxerStream : public DemuxerStream {
   Type type() const override;
   void EnableBitstreamConverter() override;
   bool SupportsConfigChanges() override;
+  bool enabled() const override;
+  void set_enabled(bool enabled, base::TimeDelta timestamp) override;
+  void SetStreamStatusChangeCB(const StreamStatusChangeCB& cb) override;
 
   void Stop();
   void Abort();
@@ -67,6 +70,8 @@ class CoreAudioDemuxerStream : public DemuxerStream {
   AudioTimeStamp time_stamp_;
 
   ReadCB read_cb_;
+  bool is_enabled_;
+  StreamStatusChangeCB stream_status_change_cb_;
 
   bool reading_audio_data_;
   bool is_enqueue_running_;

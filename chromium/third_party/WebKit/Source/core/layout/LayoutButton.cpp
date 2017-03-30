@@ -76,6 +76,7 @@ void LayoutButton::updateAnonymousChildStyle(const LayoutObject& child, Computed
     childStyle.setFlexDirection(style()->flexDirection());
     childStyle.setJustifyContent(style()->justifyContent());
     childStyle.setFlexWrap(style()->flexWrap());
+    // TODO (lajava): An anonymous box must not be used to resolve children's auto values.
     childStyle.setAlignItems(style()->alignItems());
     childStyle.setAlignContent(style()->alignContent());
 }
@@ -99,9 +100,9 @@ int LayoutButton::baselinePosition(FontBaseline baseline, bool firstLine, LineDi
         // even when we have the anonymous LayoutBlock child, we calculate the
         // baseline for the empty case manually here.
         if (direction == HorizontalLine) {
-            return marginTop() + size().height() - borderBottom() - paddingBottom() - horizontalScrollbarHeight();
+            return (marginTop() + size().height() - borderBottom() - paddingBottom() - horizontalScrollbarHeight()).toInt();
         }
-        return marginRight() + size().width() - borderLeft() - paddingLeft() - verticalScrollbarWidth();
+        return (marginRight() + size().width() - borderLeft() - paddingLeft() - verticalScrollbarWidth()).toInt();
     }
     return LayoutFlexibleBox::baselinePosition(baseline, firstLine, direction, linePositionMode);
 }

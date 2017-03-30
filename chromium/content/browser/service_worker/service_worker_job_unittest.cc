@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/time/time.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -58,10 +59,10 @@ void SaveFoundRegistrationCallback(
     bool* called,
     scoped_refptr<ServiceWorkerRegistration>* registration,
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& result) {
+    scoped_refptr<ServiceWorkerRegistration> result) {
   EXPECT_EQ(expected_status, status);
   *called = true;
-  *registration = result;
+  *registration = std::move(result);
 }
 
 // Creates a callback which both keeps track of if it's been called,
@@ -657,6 +658,8 @@ TEST_F(ServiceWorkerJobTest, UnregisterWaitingSetsRedundant) {
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(SERVICE_WORKER_OK, status);
 
+  version->set_fetch_handler_existence(
+      ServiceWorkerVersion::FetchHandlerExistence::EXISTS);
   version->SetStatus(ServiceWorkerVersion::INSTALLED);
   registration->SetWaitingVersion(version);
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
@@ -1442,12 +1445,12 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
       install_callback_.Run();
     SimulateSend(new ServiceWorkerHostMsg_InstallEventFinished(
         embedded_worker_id, request_id, install_event_result_,
-        has_fetch_handler_));
+        has_fetch_handler_, base::Time::Now()));
   }
   void OnActivateEvent(int embedded_worker_id, int request_id) override {
-    SimulateSend(
-        new ServiceWorkerHostMsg_ActivateEventFinished(
-            embedded_worker_id, request_id, activate_event_result_));
+    SimulateSend(new ServiceWorkerHostMsg_ActivateEventFinished(
+        embedded_worker_id, request_id, activate_event_result_,
+        base::Time::Now()));
   }
 
   void set_install_callback(const base::Closure& callback) {
@@ -1593,13 +1596,15 @@ TEST_F(ServiceWorkerJobTest, HasFetchHandler) {
   helper->set_has_fetch_handler(true);
   RunRegisterJob(pattern, script);
   registration = FindRegistrationForPattern(pattern);
-  EXPECT_TRUE(registration->active_version()->has_fetch_handler());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::EXISTS,
+            registration->active_version()->fetch_handler_existence());
   RunUnregisterJob(pattern);
 
   helper->set_has_fetch_handler(false);
   RunRegisterJob(pattern, script);
   registration = FindRegistrationForPattern(pattern);
-  EXPECT_FALSE(registration->active_version()->has_fetch_handler());
+  EXPECT_EQ(ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST,
+            registration->active_version()->fetch_handler_existence());
   RunUnregisterJob(pattern);
 }
 

@@ -83,9 +83,8 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
       DataReductionProxyIOData* io_data,
       DataReductionProxyBypassStats* bypass_stats);
 
-  // Creates a |Value| summary of the state of the network session. The caller
-  // is responsible for deleting the returned value.
-  base::Value* SessionNetworkStatsInfoToValue() const;
+  // Creates a base::Value summary of the state of the network session.
+  std::unique_ptr<base::Value> SessionNetworkStatsInfoToValue() const;
 
   void SetDataUseGroupProvider(
       std::unique_ptr<DataUseGroupProvider> data_use_group_provider);

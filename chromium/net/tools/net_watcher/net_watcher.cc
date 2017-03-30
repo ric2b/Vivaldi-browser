@@ -3,6 +3,12 @@
 // found in the LICENSE file.
 
 // This is a small utility that watches for and logs network changes.
+// It prints out the current network connection type and proxy configuration
+// upon startup and then prints out changes as they happen.
+// It's useful for testing NetworkChangeNotifier and ProxyConfigService.
+// The only command line option supported is --ignore-netif which is followed
+// by a comma seperated list of network interfaces to ignore when computing
+// connection type; this option is only supported on linux.
 
 #include <memory>
 #include <string>
@@ -15,6 +21,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -22,10 +29,6 @@
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/proxy/proxy_service.h"
-
-#if defined(USE_GLIB) && !defined(OS_CHROMEOS)
-#include <glib-object.h>
-#endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "net/base/network_change_notifier_linux.h"
@@ -144,16 +147,6 @@ int main(int argc, char* argv[]) {
 #if defined(OS_MACOSX)
   base::mac::ScopedNSAutoreleasePool pool;
 #endif
-#if defined(USE_GLIB) && !defined(OS_CHROMEOS)
-  // g_type_init will be deprecated in 2.36. 2.35 is the development
-  // version for 2.36, hence do not call g_type_init starting 2.35.
-  // http://developer.gnome.org/gobject/unstable/gobject-Type-Information.html#g-type-init
-#if !GLIB_CHECK_VERSION(2, 35, 0)
-  // Needed so ProxyConfigServiceLinux can use gconf.
-  // Normally handled by BrowserMainLoop::InitializeToolkit().
-  g_type_init();
-#endif
-#endif  // defined(USE_GLIB) && !defined(OS_CHROMEOS)
   base::AtExitManager exit_manager;
   base::CommandLine::Init(argc, argv);
   logging::LoggingSettings settings;
@@ -214,7 +207,7 @@ int main(int argc, char* argv[]) {
   LOG(INFO) << "Watching for network events...";
 
   // Start watching for events.
-  network_loop.Run();
+  base::RunLoop().Run();
 
   proxy_config_service->RemoveObserver(&net_watcher);
 

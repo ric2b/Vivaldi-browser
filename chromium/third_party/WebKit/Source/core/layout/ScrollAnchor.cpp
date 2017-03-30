@@ -14,36 +14,43 @@ namespace blink {
 
 using Corner = ScrollAnchor::Corner;
 
-ScrollAnchor::ScrollAnchor(ScrollableArea* scroller)
-    : m_scroller(scroller)
-    , m_hasBounced(false)
+ScrollAnchor::ScrollAnchor()
+    : m_anchorObject(nullptr)
+    , m_corner(Corner::TopLeft)
+    , m_scrollAnchorDisablingStyleChanged(false)
 {
-    ASSERT(m_scroller);
-    ASSERT(m_scroller->isFrameView() || m_scroller->isPaintLayerScrollableArea());
+}
+
+ScrollAnchor::ScrollAnchor(ScrollableArea* scroller)
+    : ScrollAnchor()
+{
+    setScroller(scroller);
 }
 
 ScrollAnchor::~ScrollAnchor()
 {
 }
 
+void ScrollAnchor::setScroller(ScrollableArea* scroller)
+{
+    DCHECK(!m_scroller);
+    DCHECK(scroller);
+    DCHECK(scroller->isRootFrameViewport() || scroller->isFrameView() || scroller->isPaintLayerScrollableArea());
+    m_scroller = scroller;
+}
+
 // TODO(pilgrim) replace all instances of scrollerLayoutBox with scrollerLayoutBoxItem
 // https://crbug.com/499321
 static LayoutBox* scrollerLayoutBox(const ScrollableArea* scroller)
 {
-    LayoutBox* box = scroller->isFrameView()
-        ? toFrameView(scroller)->layoutView()
-        : &toPaintLayerScrollableArea(scroller)->box();
-    ASSERT(box);
+    LayoutBox* box = scroller->layoutBox();
+    DCHECK(box);
     return box;
 }
 
 static LayoutBoxItem scrollerLayoutBoxItem(const ScrollableArea* scroller)
 {
-    LayoutBoxItem box = scroller->isFrameView()
-        ? toFrameView(scroller)->layoutViewItem()
-        : LayoutBoxItem(&toPaintLayerScrollableArea(scroller)->box());
-    ASSERT(!box.isNull());
-    return box;
+    return LayoutBoxItem(scrollerLayoutBox(scroller));
 }
 
 static Corner cornerFromCandidateRect(const LayoutObject* layoutObject)
@@ -71,14 +78,16 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject, const Scrolla
     LayoutRect localBounds;
     if (layoutObject->isBox()) {
         localBounds = toLayoutBox(layoutObject)->borderBoxRect();
-        // borderBoxRect doesn't include overflow content and floats.
-        LayoutUnit maxHeight = std::max(localBounds.height(), toLayoutBox(layoutObject)->layoutOverflowRect().height());
-        if (layoutObject->isLayoutBlockFlow() && toLayoutBlockFlow(layoutObject)->containsFloats()) {
-            // Note that lowestFloatLogicalBottom doesn't include floating
-            // grandchildren.
-            maxHeight = std::max(maxHeight, toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
+        if (!layoutObject->hasOverflowClip()) {
+            // borderBoxRect doesn't include overflow content and floats.
+            LayoutUnit maxHeight = std::max(localBounds.height(), toLayoutBox(layoutObject)->layoutOverflowRect().height());
+            if (layoutObject->isLayoutBlockFlow() && toLayoutBlockFlow(layoutObject)->containsFloats()) {
+                // Note that lowestFloatLogicalBottom doesn't include floating
+                // grandchildren.
+                maxHeight = std::max(maxHeight, toLayoutBlockFlow(layoutObject)->lowestFloatLogicalBottom());
+            }
+            localBounds.setHeight(maxHeight);
         }
-        localBounds.setHeight(maxHeight);
     } else if (layoutObject->isText()) {
         // TODO(skobes): Use first and last InlineTextBox only?
         for (InlineTextBox* box = toLayoutText(layoutObject)->firstTextBox(); box; box = box->nextTextBox())
@@ -94,7 +103,7 @@ static LayoutRect relativeBounds(const LayoutObject* layoutObject, const Scrolla
     // part of the scroll offset so that the rounding in restore() matches the snapping of
     // the anchor node to the pixel grid of the layer it paints into. For non-FrameView
     // scrollers, we rely on the flooring behavior of LayoutBox::scrolledContentOffset.
-    if (scroller->isFrameView())
+    if (scroller->isFrameView() || scroller->isRootFrameViewport())
         relativeBounds.moveBy(-flooredIntPoint(scroller->scrollPositionDouble()));
     return relativeBounds;
 }
@@ -109,14 +118,6 @@ static bool candidateMayMoveWithScroller(const LayoutObject* candidate, const Sc
     if (const ComputedStyle* style = candidate->style()) {
         if (style->hasViewportConstrainedPosition())
             return false;
-
-        if (style->hasOutOfFlowPosition()) {
-            // Absolute positioned elements with non-zero scrollTop/Left/Bottom/
-            // Right can stick to the viewport.
-            if (!style->top().isZero() || !style->left().isZero()
-                || !style->bottom().isZero() || !style->right().isZero())
-                return false;
-        }
     }
 
     bool skippedByContainerLookup = false;
@@ -138,6 +139,9 @@ ScrollAnchor::ExamineResult ScrollAnchor::examine(const LayoutObject* candidate)
         return ExamineResult(Skip);
 
     if (!candidateMayMoveWithScroller(candidate, m_scroller))
+        return ExamineResult(Skip);
+
+    if (candidate->style()->overflowAnchor() == AnchorNone)
         return ExamineResult(Skip);
 
     LayoutRect candidateRect = relativeBounds(candidate, m_scroller);
@@ -163,8 +167,8 @@ void ScrollAnchor::findAnchor()
     while (candidate) {
         ExamineResult result = examine(candidate);
         if (result.viable) {
-            m_current.m_anchorObject = candidate;
-            m_current.m_corner = result.corner;
+            m_anchorObject = candidate;
+            m_corner = result.corner;
         }
         switch (result.status) {
         case Skip:
@@ -182,40 +186,48 @@ void ScrollAnchor::findAnchor()
     }
 }
 
+bool ScrollAnchor::computeScrollAnchorDisablingStyleChanged()
+{
+    LayoutObject* current = anchorObject();
+    if (!current)
+        return false;
+
+    LayoutObject* scrollerBox = scrollerLayoutBox(m_scroller);
+    while (true) {
+        DCHECK(current);
+        if (current->scrollAnchorDisablingStyleChanged())
+            return true;
+        if (current == scrollerBox)
+            return false;
+        current = current->parent();
+    }
+}
+
 void ScrollAnchor::save()
 {
+    DCHECK(m_scroller);
     if (m_scroller->scrollPosition() == IntPoint::zero()) {
         clear();
         return;
     }
-    if (m_current)
-        return;
 
-    findAnchor();
-    if (!m_current)
-        return;
+    if (!m_anchorObject) {
+        findAnchor();
+        if (!m_anchorObject)
+            return;
 
-    m_current.m_anchorObject->setIsScrollAnchorObject();
-    m_current.m_savedRelativeOffset = computeRelativeOffset(
-        m_current.m_anchorObject, m_scroller, m_current.m_corner);
-
-    if (m_lastAdjusted) {
-        // We need to update m_lastAdjusted.m_savedRelativeOffset, since it is
-        // relative to the visible rect and the user may have scrolled since the
-        // last adjustment.
-        if (!candidateMayMoveWithScroller(m_lastAdjusted.m_anchorObject, m_scroller)) {
-            m_lastAdjusted.clear();
-        } else if (m_lastAdjusted.m_anchorObject == m_current.m_anchorObject
-            && m_lastAdjusted.m_corner == m_current.m_corner) {
-            m_lastAdjusted.m_savedRelativeOffset = m_current.m_savedRelativeOffset;
-        } else {
-            m_lastAdjusted.m_savedRelativeOffset = computeRelativeOffset(
-                m_lastAdjusted.m_anchorObject, m_scroller, m_lastAdjusted.m_corner);
-        }
+        m_anchorObject->setIsScrollAnchorObject();
+        m_savedRelativeOffset = computeRelativeOffset(
+            m_anchorObject, m_scroller, m_corner);
     }
+
+    // Note that we must compute this during save() since the scroller's
+    // descendants have finished layout (and had the bit cleared) by the
+    // time restore() is called.
+    m_scrollAnchorDisablingStyleChanged = computeScrollAnchorDisablingStyleChanged();
 }
 
-IntSize ScrollAnchor::computeAdjustment(const AnchorPoint& anchorPoint) const
+IntSize ScrollAnchor::computeAdjustment() const
 {
     // The anchor node can report fractional positions, but it is DIP-snapped when
     // painting (crbug.com/610805), so we must round the offsets to determine the
@@ -224,46 +236,28 @@ IntSize ScrollAnchor::computeAdjustment(const AnchorPoint& anchorPoint) const
     // (For example, anchor moving from 2.4px -> 2.6px is really 2px -> 3px, so we
     // should scroll by 1px instead of 0.2px.) This is true regardless of whether
     // the ScrollableArea actually uses fractional scroll positions.
-    return roundedIntSize(computeRelativeOffset(
-        anchorPoint.m_anchorObject, m_scroller, anchorPoint.m_corner)) -
-        roundedIntSize(anchorPoint.m_savedRelativeOffset);
+    return roundedIntSize(computeRelativeOffset(m_anchorObject, m_scroller, m_corner)) -
+        roundedIntSize(m_savedRelativeOffset);
 }
 
 void ScrollAnchor::restore()
 {
-    if (m_lastAdjusted && m_lastAdjusted.m_anchorObject != m_current.m_anchorObject
-        && !m_hasBounced && computeAdjustment(m_lastAdjusted) == -m_lastAdjustment) {
-        // If previous anchor point has bounced, follow the bounce.
-        clear();
-        adjust(-m_lastAdjustment);
+    DCHECK(m_scroller);
+    if (!m_anchorObject)
         return;
-    }
-    if (!m_current)
-        return;
-    IntSize adjustment = computeAdjustment(m_current);
+    IntSize adjustment = computeAdjustment();
     if (adjustment.isZero())
         return;
-    if (adjustment == -m_lastAdjustment && m_hasBounced) {
-        // Don't bounce more than once.
+
+    if (m_scrollAnchorDisablingStyleChanged) {
+        // Note that we only clear if the adjustment would have been non-zero.
+        // This minimizes redundant calls to findAnchor.
+        // TODO(skobes): add UMA metric for this.
         clear();
-        m_hasBounced = false;
-        m_lastAdjustment = IntSize();
-        m_lastAdjusted.clear();
         return;
     }
-    adjust(adjustment);
-}
 
-void ScrollAnchor::adjust(IntSize adjustment)
-{
-    m_scroller->scrollAnimator().adjustAnimationAndSetScrollPosition(adjustment, AnchoringScroll);
-
-    if (m_current && m_lastAdjusted.m_anchorObject != m_current.m_anchorObject) {
-        m_lastAdjusted.clear();
-        m_lastAdjusted = m_current;
-    }
-    m_hasBounced = (m_lastAdjustment == -adjustment);
-    m_lastAdjustment = adjustment;
+    m_scroller->setScrollPosition(m_scroller->scrollPositionDouble() + adjustment, AnchoringScroll);
 
     // Update UMA metric.
     DEFINE_STATIC_LOCAL(EnumerationHistogram, adjustedOffsetHistogram,
@@ -274,11 +268,6 @@ void ScrollAnchor::adjust(IntSize adjustment)
 
 void ScrollAnchor::clear()
 {
-    m_current.clear();
-}
-
-void ScrollAnchor::AnchorPoint::clear()
-{
     LayoutObject* anchorObject = m_anchorObject;
     m_anchorObject = nullptr;
 
@@ -288,16 +277,13 @@ void ScrollAnchor::AnchorPoint::clear()
 
 bool ScrollAnchor::refersTo(const LayoutObject* layoutObject) const
 {
-    return m_current.m_anchorObject == layoutObject
-        || m_lastAdjusted.m_anchorObject == layoutObject;
+    return m_anchorObject == layoutObject;
 }
 
 void ScrollAnchor::notifyRemoved(LayoutObject* layoutObject)
 {
-    if (m_current.m_anchorObject == layoutObject)
-        m_current.clear();
-    if (m_lastAdjusted.m_anchorObject == layoutObject)
-        m_lastAdjusted.clear();
+    if (m_anchorObject == layoutObject)
+        clear();
 }
 
 } // namespace blink

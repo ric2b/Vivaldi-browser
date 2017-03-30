@@ -22,4 +22,17 @@ void GroupTargetGenerator::DoRun() {
   target_->set_output_type(Target::GROUP);
   // Groups only have the default types filled in by the target generator
   // base class.
+  // However, groups can be used to create aliases for executable targets
+  // so retrieve output_name, if it is present
+  FillOutputName();
+}
+
+bool GroupTargetGenerator::FillOutputName() {
+  const Value* value = scope_->GetValue(variables::kOutputName, true);
+  if (!value)
+    return true;
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+  target_->set_output_name(value->string_value());
+  return true;
 }

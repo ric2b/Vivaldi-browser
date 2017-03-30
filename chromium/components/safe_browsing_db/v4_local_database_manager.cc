@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "components/safe_browsing_db/safebrowsing.pb.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -18,29 +17,12 @@ using content::BrowserThread;
 namespace safe_browsing {
 
 namespace {
-#if defined(OS_WIN)
-#define PLATFORM_TYPE WINDOWS_PLATFORM
-#elif defined(OS_LINUX)
-#define PLATFORM_TYPE LINUX_PLATFORM
-#elif defined(OS_MACOSX)
-#define PLATFORM_TYPE OSX_PLATFORM
-#else
-// This should ideally never compile but it is getting compiled on Android.
-// See: https://bugs.chromium.org/p/chromium/issues/detail?id=621647
-// TODO(vakh): Once that bug is fixed, this should be removed. If we leave
-// the platform_type empty, the server won't recognize the request and
-// return an error response which will pollute our UMA metrics.
-#define PLATFORM_TYPE LINUX_PLATFORM
-#endif
 
 // TODO(vakh): Implement this to populate the map appopriately.
 // Filed as http://crbug.com/608075
 StoreFileNameMap GetStoreFileNameMap() {
-  return StoreFileNameMap(
-      {{UpdateListIdentifier(PLATFORM_TYPE, URL, MALWARE_THREAT),
-        "UrlMalware.store"},
-       {UpdateListIdentifier(PLATFORM_TYPE, URL, SOCIAL_ENGINEERING_PUBLIC),
-        "UrlSoceng.store"}});
+  return StoreFileNameMap({{GetUrlMalwareId(), "UrlMalware.store"},
+                           {GetUrlSocEngId(), "UrlSoceng.store"}});
 }
 
 }  // namespace
@@ -60,8 +42,8 @@ bool V4LocalDatabaseManager::IsSupported() const {
   return true;
 }
 
-safe_browsing::ThreatSource V4LocalDatabaseManager::GetThreatSource() const {
-  return safe_browsing::ThreatSource::LOCAL_PVER4;
+ThreatSource V4LocalDatabaseManager::GetThreatSource() const {
+  return ThreatSource::LOCAL_PVER4;
 }
 
 bool V4LocalDatabaseManager::ChecksAreAlwaysAsync() const {
@@ -154,12 +136,38 @@ bool V4LocalDatabaseManager::IsCsdWhitelistKillSwitchOn() {
 bool V4LocalDatabaseManager::CheckBrowseUrl(const GURL& url, Client* client) {
   // TODO(vakh): Implement this skeleton.
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!enabled_) {
+  if (!enabled_ || !CanCheckUrl(url)) {
     return true;
   }
 
-  // Don't defer the resource load.
-  return true;
+  if (v4_database_) {
+    base::hash_set<FullHash> full_hashes;
+    V4ProtocolManagerUtil::UrlToFullHashes(url, &full_hashes);
+
+    base::hash_set<UpdateListIdentifier> stores_to_look(
+        {GetUrlMalwareId(), GetUrlSocEngId()});
+    base::hash_set<HashPrefix> matched_hash_prefixes;
+    base::hash_set<UpdateListIdentifier> matched_stores;
+    MatchedHashPrefixMap matched_hash_prefix_map;
+    for (const auto& full_hash : full_hashes) {
+      v4_database_->GetStoresMatchingFullHash(full_hash, stores_to_look,
+                                              &matched_hash_prefix_map);
+      for (const auto& matched_pair : matched_hash_prefix_map) {
+        matched_stores.insert(matched_pair.first);
+        matched_hash_prefixes.insert(matched_pair.second);
+      }
+    }
+
+    DCHECK_EQ(matched_stores.empty(), matched_hash_prefixes.empty());
+
+    // TODO(vakh): Return false and fetch full hashes for the matching hash
+    // prefixes.
+    return matched_hash_prefixes.empty();
+  } else {
+    // TODO(vakh): Queue the check and process it when the database becomes
+    // ready.
+    return false;
+  }
 }
 
 void V4LocalDatabaseManager::CancelCheck(Client* client) {
@@ -261,8 +269,10 @@ void V4LocalDatabaseManager::UpdateRequestCompleted(
 }
 
 void V4LocalDatabaseManager::DatabaseUpdated() {
-  v4_update_protocol_manager_->ScheduleNextUpdate(
-      v4_database_->GetStoreStateMap());
+  if (enabled_) {
+    v4_update_protocol_manager_->ScheduleNextUpdate(
+        v4_database_->GetStoreStateMap());
+  }
 }
 
 }  // namespace safe_browsing

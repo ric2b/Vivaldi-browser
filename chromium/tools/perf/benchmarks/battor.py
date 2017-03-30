@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 from core import perf_benchmark
+from telemetry.timeline import chrome_trace_category_filter
 from telemetry.web_perf import timeline_based_measurement
 import page_sets
 from telemetry import benchmark
@@ -13,11 +14,15 @@ from telemetry import benchmark
 class _BattOrBenchmark(perf_benchmark.PerfBenchmark):
 
   def CreateTimelineBasedMeasurementOptions(self):
-    options = timeline_based_measurement.Options()
+    options = timeline_based_measurement.Options(
+        chrome_trace_category_filter.ChromeTraceCategoryFilter())
+    options.config.chrome_trace_config.category_filter.AddFilterString('rail')
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = True
-    options.config.chrome_trace_config.SetDefaultOverheadFilter()
-    options.SetTimelineBasedMetric('powerMetric')
+    options.config.enable_atrace_trace = True
+    options.config.atrace_config.categories = ['sched']
+    options.config.enable_cpu_trace = True
+    options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
     return options
 
   @classmethod
@@ -55,12 +60,14 @@ class BattOrSystemHealthLoadingDesktop(_BattOrBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
 
   def CreateStorySet(self, options):
-    return page_sets.DesktopSystemHealthStorySet(take_memory_measurement=False)
+    return page_sets.SystemHealthStorySet(platform='desktop', case='load')
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
-    return (possible_browser.platform.GetDeviceTypeName() != 'Desktop' or
-            not possible_browser.platform.HasBattOrConnected())
+    return (
+        super(BattOrSystemHealthLoadingDesktop, cls).ShouldDisable(
+            possible_browser) or
+        possible_browser.platform.GetDeviceTypeName() != 'Desktop')
 
   @classmethod
   def Name(cls):
@@ -71,7 +78,7 @@ class BattOrSystemHealthLoadingMobile(_BattOrBenchmark):
   """Mobile Chrome Memory System Health Benchmark."""
 
   def CreateStorySet(self, options):
-    return page_sets.MobileSystemHealthStorySet(take_memory_measurement=False)
+    return page_sets.SystemHealthStorySet(platform='mobile', case='load')
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
@@ -80,14 +87,15 @@ class BattOrSystemHealthLoadingMobile(_BattOrBenchmark):
     if (possible_browser.browser_type == 'reference' and
         possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
       return True
-    return not possible_browser.platform.HasBattOrConnected()
+
+    return super(BattOrSystemHealthLoadingMobile, cls).ShouldDisable(
+        possible_browser)
 
   @classmethod
   def Name(cls):
     return 'battor.system_health_loading_mobile'
 
 
-@benchmark.Disabled('android')  # crbug.com/618330
 class BattOrPowerCases(_BattOrBenchmark):
   page_set = page_sets.power_cases.PowerCasesPageSet
 
@@ -96,7 +104,6 @@ class BattOrPowerCases(_BattOrBenchmark):
     return 'battor.power_cases'
 
 
-@benchmark.Disabled('android') # crbug.com/618330
 class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
   page_set = page_sets.power_cases.PowerCasesPageSet
 
@@ -105,9 +112,21 @@ class BattOrPowerCasesNoChromeTrace(_BattOrBenchmark):
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = False
     options.config.chrome_trace_config.SetDefaultOverheadFilter()
-    options.SetTimelineBasedMetric('powerMetric')
+    options.SetTimelineBasedMetrics(['powerMetric', 'clockSyncLatencyMetric'])
     return options
 
   @classmethod
   def Name(cls):
     return 'battor.power_cases_no_chrome_trace'
+
+
+@benchmark.Enabled('mac')
+class BattOrTrivialPages(_BattOrBenchmark):
+
+  def CreateStorySet(self, options):
+    # We want it to wait for 30 seconds to be comparable to legacy power tests.
+    return page_sets.MacGpuTrivialPagesStorySet(wait_in_seconds=30)
+
+  @classmethod
+  def Name(cls):
+    return 'battor.trivial_pages'

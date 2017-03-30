@@ -13,6 +13,8 @@
 #include "content/public/browser/web_contents.h"
 #include "jni/GeneratedPasswordSavedInfoBarDelegate_jni.h"
 
+using base::android::JavaParamRef;
+
 // static
 void GeneratedPasswordSavedInfoBarDelegateAndroid::Create(
     content::WebContents* web_contents) {
@@ -35,13 +37,12 @@ GeneratedPasswordSavedInfoBar::CreateRenderInfoBar(JNIEnv* env) {
       static_cast<GeneratedPasswordSavedInfoBarDelegateAndroid*>(delegate());
 
   return Java_GeneratedPasswordSavedInfoBarDelegate_show(
-      env, GetEnumeratedIconId(),
-      base::android::ConvertUTF16ToJavaString(
-          env, infobar_delegate->message_text()).obj(),
+      env, GetEnumeratedIconId(), base::android::ConvertUTF16ToJavaString(
+                                      env, infobar_delegate->message_text()),
       infobar_delegate->inline_link_range().start(),
       infobar_delegate->inline_link_range().end(),
       base::android::ConvertUTF16ToJavaString(
-          env, infobar_delegate->button_label()).obj());
+          env, infobar_delegate->button_label()));
 }
 
 void GeneratedPasswordSavedInfoBar::OnLinkClicked(
@@ -60,8 +61,4 @@ void GeneratedPasswordSavedInfoBar::ProcessButton(int action) {
     return;
 
   RemoveSelf();
-}
-
-bool RegisterGeneratedPasswordSavedInfoBarDelegate(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

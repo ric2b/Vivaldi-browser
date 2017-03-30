@@ -5,7 +5,7 @@
 #include "CustomCompositorAnimations.h"
 
 #include "core/animation/Animation.h"
-#include "core/animation/AnimationTimeline.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/animatable/AnimatableDouble.h"
@@ -37,7 +37,7 @@ static KeyframeEffect* createInfiniteKeyFrameEffect(Element& element, CSSPropert
 
     Timing timing;
     timing.iterationDuration = 0;
-    timing.fillMode = Timing::FillModeForwards;
+    timing.fillMode = Timing::FillMode::FORWARDS;
 
     AnimatableValueKeyframeEffectModel* effectModel = AnimatableValueKeyframeEffectModel::create(keyframes);
     return KeyframeEffect::create(&element, effectModel, timing);

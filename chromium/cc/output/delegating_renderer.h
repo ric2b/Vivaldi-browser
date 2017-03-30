@@ -10,47 +10,24 @@
 #include "base/macros.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/renderer.h"
 
 namespace cc {
-
 class OutputSurface;
 class ResourceProvider;
 
-class CC_EXPORT DelegatingRenderer : public Renderer {
+class CC_EXPORT DelegatingRenderer {
  public:
-  static std::unique_ptr<DelegatingRenderer> Create(
-      RendererClient* client,
-      const RendererSettings* settings,
-      OutputSurface* output_surface,
-      ResourceProvider* resource_provider);
-  ~DelegatingRenderer() override;
+  DelegatingRenderer(OutputSurface* output_surface,
+                     ResourceProvider* resource_provider);
+  ~DelegatingRenderer();
 
-  const RendererCapabilitiesImpl& Capabilities() const override;
+  void DrawFrame(RenderPassList* render_passes_in_draw_order);
 
-  void DrawFrame(RenderPassList* render_passes_in_draw_order,
-                 float device_scale_factor,
-                 const gfx::ColorSpace& device_color_space,
-                 const gfx::Rect& device_viewport_rect,
-                 const gfx::Rect& device_clip_rect,
-                 bool disable_picture_quad_image_filtering) override;
-
-  void Finish() override {}
-
-  void SwapBuffers(CompositorFrameMetadata metadata) override;
-  void ReceiveSwapBuffersAck(const CompositorFrameAck&) override;
+  void SwapBuffers(CompositorFrameMetadata metadata);
 
  private:
-  DelegatingRenderer(RendererClient* client,
-                     const RendererSettings* settings,
-                     OutputSurface* output_surface,
-                     ResourceProvider* resource_provider);
-
-  void DidChangeVisibility() override;
-
-  OutputSurface* output_surface_;
-  ResourceProvider* resource_provider_;
-  RendererCapabilitiesImpl capabilities_;
+  OutputSurface* const output_surface_;
+  ResourceProvider* const resource_provider_;
   std::unique_ptr<DelegatedFrameData> delegated_frame_data_;
 
   DISALLOW_COPY_AND_ASSIGN(DelegatingRenderer);

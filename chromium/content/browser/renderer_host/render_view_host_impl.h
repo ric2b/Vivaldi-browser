@@ -244,6 +244,10 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   // Creates a full screen RenderWidget.
   void CreateNewFullscreenWidget(int32_t route_id);
 
+  // Send RenderViewReady to observers once the process is launched, but not
+  // re-entrantly.
+  void PostRenderViewReady();
+
   // TODO(creis): Remove after debugging https:/crbug.com/575245.
   int main_frame_routing_id() const {
     return main_frame_routing_id_;
@@ -252,10 +256,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   void set_main_frame_routing_id(int routing_id) {
     main_frame_routing_id_ = routing_id;
   }
-
-  void OnTextSurroundingSelectionResponse(const base::string16& content,
-                                          size_t start_offset,
-                                          size_t end_offset);
 
   // Increases the refcounting on this RVH. This is done by the FrameTree on
   // creation of a RenderFrameHost or RenderFrameProxyHost.
@@ -328,9 +328,6 @@ class CONTENT_EXPORT RenderViewHostImpl : public RenderViewHost,
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            NavigateMainFrameToChildSite);
 
-  // Send RenderViewReady to observers once the process is launched, but not
-  // re-entrantly.
-  void PostRenderViewReady();
   void RenderViewReady();
 
   // TODO(creis): Move to a private namespace on RenderFrameHostImpl.

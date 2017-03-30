@@ -13,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
-#include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/common/dom_storage/dom_storage_types.h"
 #include "content/common/frame_messages.h"
@@ -38,7 +37,9 @@
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
 #include "third_party/WebKit/public/platform/WebScreenInfo.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
+#include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
@@ -114,9 +115,8 @@ class RendererBlinkPlatformImplTestOverrideImpl
     : public RendererBlinkPlatformImpl {
  public:
   RendererBlinkPlatformImplTestOverrideImpl(
-      scheduler::RendererScheduler* scheduler)
-      : RendererBlinkPlatformImpl(scheduler, nullptr) {
-  }
+      blink::scheduler::RendererScheduler* scheduler)
+      : RendererBlinkPlatformImpl(scheduler, nullptr) {}
 
   // Get rid of the dependency to the sandbox, which is not available in
   // RenderViewTest.
@@ -125,7 +125,7 @@ class RendererBlinkPlatformImplTestOverrideImpl
 
 RenderViewTest::RendererBlinkPlatformImplTestOverride::
     RendererBlinkPlatformImplTestOverride() {
-  renderer_scheduler_ = scheduler::RendererScheduler::Create();
+  renderer_scheduler_ = blink::scheduler::RendererScheduler::Create();
   blink_platform_impl_.reset(
       new RendererBlinkPlatformImplTestOverrideImpl(renderer_scheduler_.get()));
 }
@@ -155,7 +155,7 @@ RenderViewTest::~RenderViewTest() {
 void RenderViewTest::ProcessPendingMessages() {
   msg_loop_.task_runner()->PostTask(FROM_HERE,
                                     base::MessageLoop::QuitWhenIdleClosure());
-  msg_loop_.Run();
+  base::RunLoop().Run();
 }
 
 WebLocalFrame* RenderViewTest::GetMainFrame() {
@@ -186,6 +186,7 @@ void RenderViewTest::LoadHTML(const char* html) {
   url_string.append(html);
   GURL url(url_string);
   WebURLRequest request(url);
+  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
   request.setCheckForBrowserSideNavigation(false);
   GetMainFrame()->loadRequest(request);
   // The load actually happens asynchronously, so we pump messages to process
@@ -338,17 +339,12 @@ void RenderViewTest::TearDown() {
   base::RunLoop().RunUntilIdle();
 
 #if defined(OS_MACOSX)
-  // Needs to run before blink::shutdown().
   autorelease_pool_.reset(NULL);
 #endif
 
   leak_detector->collectGarbageAndReport();
 
-  base::RunLoop().RunUntilIdle();
-
   blink_platform_impl_.Shutdown();
-  blink::shutdown();
-
   platform_->PlatformUninitialize();
   platform_.reset();
   params_.reset();
@@ -449,7 +445,7 @@ bool RenderViewTest::SimulateElementClick(const std::string& element_id) {
 void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
   WebMouseEvent mouse_event;
   mouse_event.type = WebInputEvent::MouseDown;
-  mouse_event.button = WebMouseEvent::ButtonLeft;
+  mouse_event.button = WebMouseEvent::Button::Left;
   mouse_event.x = point.x();
   mouse_event.y = point.y();
   mouse_event.clickCount = 1;
@@ -475,7 +471,7 @@ bool RenderViewTest::SimulateElementRightClick(const std::string& element_id) {
 void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
   WebMouseEvent mouse_event;
   mouse_event.type = WebInputEvent::MouseDown;
-  mouse_event.button = WebMouseEvent::ButtonRight;
+  mouse_event.button = WebMouseEvent::Button::Right;
   mouse_event.x = point.x();
   mouse_event.y = point.y();
   mouse_event.clickCount = 1;

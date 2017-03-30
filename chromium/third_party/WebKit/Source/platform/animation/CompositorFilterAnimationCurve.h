@@ -33,17 +33,9 @@ public:
     }
     ~CompositorFilterAnimationCurve() override;
 
-    void addLinearKeyframe(const CompositorFilterKeyframe&);
-    void addCubicBezierKeyframe(const CompositorFilterKeyframe&, CubicBezierTimingFunction::EaseType);
-    // Adds the keyframe with a custom, bezier timing function. Note, it is
-    // assumed that x0 = y0, and x3 = y3 = 1.
-    void addCubicBezierKeyframe(const CompositorFilterKeyframe&, double x1, double y1, double x2, double y2);
-    void addStepsKeyframe(const CompositorFilterKeyframe&, int steps, StepsTimingFunction::StepPosition);
-
-    void setLinearTimingFunction();
-    void setCubicBezierTimingFunction(CubicBezierTimingFunction::EaseType);
-    void setCubicBezierTimingFunction(double x1, double y1, double x2, double y2);
-    void setStepsTimingFunction(int numberOfSteps, StepsTimingFunction::StepPosition);
+    void addKeyframe(const CompositorFilterKeyframe&);
+    void setTimingFunction(const TimingFunction&);
+    void setScaledDuration(double);
 
     // blink::CompositorAnimationCurve implementation.
     std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;

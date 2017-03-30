@@ -10,17 +10,17 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
-#include "components/sync_driver/local_device_info_provider.h"
+#include "components/sync/api/sync_error.h"
+#include "components/sync/api/sync_error_factory.h"
+#include "components/sync/api/sync_merge_result.h"
+#include "components/sync/api/time.h"
+#include "components/sync/device_info/local_device_info_provider.h"
+#include "components/sync/syncable/syncable_util.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "components/sync_sessions/synced_tab_delegate.h"
 #include "components/sync_sessions/synced_window_delegate.h"
 #include "components/sync_sessions/synced_window_delegates_getter.h"
 #include "components/variations/variations_associated_data.h"
-#include "sync/api/sync_error.h"
-#include "sync/api/sync_error_factory.h"
-#include "sync/api/sync_merge_result.h"
-#include "sync/api/time.h"
-#include "sync/syncable/syncable_util.h"
 
 using sessions::SerializedNavigationEntry;
 using sync_driver::DeviceInfo;
@@ -238,15 +238,15 @@ void SessionsSyncManager::AssociateWindows(
           continue;
 
         if (synced_tab->IsPlaceholderTab()) {
-          // For tabs without WebContents update the |tab_id|, as it could have
-          // changed after a session restore.
+          // For tabs without WebContents update the |tab_id| and |window_id|,
+          // as it could have changed after a session restore.
           // Note: We cannot check if a tab is valid if it has no WebContents.
           // We assume any such tab is valid and leave the contents of
           // corresponding sync node unchanged.
           if (synced_tab->GetSyncId() > TabNodePool::kInvalidTabNodeID &&
               tab_id > TabNodePool::kInvalidTabID) {
-            AssociateRestoredPlaceholderTab(*synced_tab, tab_id, restored_tabs,
-                                            change_output);
+            AssociateRestoredPlaceholderTab(*synced_tab, tab_id, window_id,
+                                            restored_tabs, change_output);
             found_tabs = true;
             window_s.add_tab(tab_id);
           }
@@ -948,6 +948,7 @@ void SessionsSyncManager::LocalTabDelegateToSpecifics(
 void SessionsSyncManager::AssociateRestoredPlaceholderTab(
     const SyncedTabDelegate& tab_delegate,
     SessionID::id_type new_tab_id,
+    SessionID::id_type new_window_id,
     const syncer::SyncDataList& restored_tabs,
     syncer::SyncChangeList* change_output) {
   DCHECK_NE(tab_delegate.GetSyncId(), TabNodePool::kInvalidTabNodeID);
@@ -974,11 +975,14 @@ void SessionsSyncManager::AssociateRestoredPlaceholderTab(
     TabLink* tab_link = new TabLink(tab_delegate.GetSyncId(), &tab_delegate);
     local_tab_map_[new_tab_id] = make_linked_ptr<TabLink>(tab_link);
 
-    if (specifics->tab().tab_id() == new_tab_id)
+    if (specifics->tab().tab_id() == new_tab_id &&
+        specifics->tab().window_id() == new_window_id)
       return;
 
-    // The tab_id changed (e.g due to session restore), so update sync.
+    // Either the tab_id or window_id changed (e.g due to session restore), so
+    // update the sync node.
     specifics->mutable_tab()->set_tab_id(new_tab_id);
+    specifics->mutable_tab()->set_window_id(new_window_id);
     syncer::SyncData data = syncer::SyncData::CreateLocalData(
         TabNodePool::TabIdToTag(current_machine_tag_, specifics->tab_node_id()),
         current_session_name_, entity);

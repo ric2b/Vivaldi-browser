@@ -86,12 +86,6 @@ void DownloadShelfContextMenu::ExecuteCommand(int command_id, int event_flags) {
       static_cast<DownloadCommands::Command>(command_id));
 }
 
-bool DownloadShelfContextMenu::GetAcceleratorForCommandId(
-    int command_id,
-    ui::Accelerator* accelerator) {
-  return false;
-}
-
 bool DownloadShelfContextMenu::IsItemForCommandIdDynamic(int command_id) const {
   return false;
 }
@@ -156,7 +150,8 @@ base::string16 DownloadShelfContextMenu::GetLabelForCommandId(
       id = IDS_DOWNLOAD_MENU_LEARN_MORE_INTERRUPTED;
       break;
     case DownloadCommands::COPY_TO_CLIPBOARD:
-      // This command is implemented only for Donwload Notification.
+    case DownloadCommands::ANNOTATE:
+      // These commands are implemented only for the Download notification.
       NOTREACHED();
       break;
   }

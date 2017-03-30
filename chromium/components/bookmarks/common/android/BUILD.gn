@@ -10,8 +10,6 @@ source_set("android") {
     "bookmark_id.cc",
     "bookmark_id.h",
     "bookmark_type.h",
-    "component_jni_registrar.cc",
-    "component_jni_registrar.h",
   ]
   deps = [
     ":bookmarks_jni_headers",
@@ -23,6 +21,7 @@ source_set("android") {
 android_library("bookmarks_java") {
   deps = [
     "//base:base_java",
+    "//third_party/android_tools:android_support_annotations_java",
   ]
   srcjar_deps = [ ":bookmark_type_javagen" ]
   java_files = [ "java/src/org/chromium/components/bookmarks/BookmarkId.java" ]

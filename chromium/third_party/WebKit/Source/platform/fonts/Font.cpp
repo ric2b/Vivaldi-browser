@@ -414,14 +414,10 @@ int Font::offsetForPosition(const TextRun& run, float x, bool includePartialGlyp
 
 CodePath Font::codePath(const TextRunPaintInfo& runInfo) const
 {
-// TODO(eae): Disable the always use complex text feature on Android for now as
-// it caused a memory regression for webview. crbug.com/577306
-#if !OS(ANDROID)
     if (RuntimeEnabledFeatures::alwaysUseComplexTextEnabled()
         || LayoutTestSupport::alwaysUseComplexTextForTest()) {
         return ComplexPath;
     }
-#endif
 
     const TextRun& run = runInfo.run;
 
@@ -527,8 +523,7 @@ GlyphData Font::glyphDataForCharacter(UChar32& c, bool mirror, bool normalizeSpa
 
     if (variant == AutoVariant) {
         if (m_fontDescription.variantCaps() == FontDescription::SmallCaps) {
-            bool includeDefault = false;
-            UChar32 upperC = toUpper(c, m_fontDescription.locale(includeDefault));
+            UChar32 upperC = toUpper(c, LayoutLocale::localeString(m_fontDescription.locale()));
             if (upperC != c) {
                 c = upperC;
                 variant = SmallCapsVariant;

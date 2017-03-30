@@ -4,7 +4,7 @@
 
 import("//remoting/remoting_enable.gni")
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [
@@ -40,6 +40,8 @@ source_set("test_support") {
     "fake_remote_host_info_fetcher.h",
     "fake_socket_factory.cc",
     "fake_socket_factory.h",
+    "frame_generator_util.cc",
+    "frame_generator_util.h",
     "host_info.cc",
     "host_info.h",
     "host_list_fetcher.cc",
@@ -58,6 +60,8 @@ source_set("test_support") {
     "remote_host_info_fetcher.h",
     "rgb_value.cc",
     "rgb_value.h",
+    "scroll_frame_generator.cc",
+    "scroll_frame_generator.h",
     "test_chromoting_client.cc",
     "test_chromoting_client.h",
     "test_video_renderer.cc",
@@ -106,7 +110,7 @@ executable("chromoting_test_driver") {
   ]
 }
 
-source_set("ar_test_driver_common") {
+static_library("ar_test_driver_common") {
   testonly = true
 
   sources = [

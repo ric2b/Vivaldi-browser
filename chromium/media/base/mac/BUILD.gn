@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
+
 assert(is_mac || is_ios)
 
 source_set("mac") {
@@ -31,6 +33,15 @@ source_set("mac") {
     libs = [
       "AVFoundation.framework",
       "CoreVideo.framework",  # Required by video_frame_mac.cc.
+    ]
+  }
+  if (system_proprietary_codecs) {
+    sources += [
+      "framework_type_conversions.h",
+      "framework_type_conversions.mm",
+      "mediatoolbox_glue.h",
+      "mediatoolbox_glue.mm",
+      "scoped_audio_queue_ref.h",
     ]
   }
   set_sources_assignment_filter(sources_assignment_filter)

@@ -17,8 +17,11 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "ui/gfx/image/image.h"
 
+class GURL;
+
 namespace content {
 class NavigationHandle;
+class WebContents;
 }  // namespace content
 
 namespace arc {
@@ -37,6 +40,7 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
     JUST_ONCE_PRESSED = 3,
     PREFERRED_ACTIVITY_FOUND = 4,
     SIZE,
+    INVALID = SIZE,
   };
 
   // Restricts the amount of apps displayed to the user without the need of a
@@ -44,33 +48,42 @@ class ArcNavigationThrottle : public content::NavigationThrottle {
   enum { kMaxAppResults = 3 };
 
   using NameAndIcon = std::pair<std::string, gfx::Image>;
-  using ShowDisambigDialogCallback =
-      base::Callback<void(content::NavigationHandle* handle,
+  using ShowIntentPickerCallback =
+      base::Callback<void(content::WebContents* web_contents,
                           const std::vector<NameAndIcon>& app_info,
                           const base::Callback<void(size_t, CloseReason)>& cb)>;
-  ArcNavigationThrottle(
-      content::NavigationHandle* navigation_handle,
-      const ShowDisambigDialogCallback& show_disambig_dialog_cb);
+  ArcNavigationThrottle(content::NavigationHandle* navigation_handle,
+                        const ShowIntentPickerCallback& show_intent_picker_cb);
   ~ArcNavigationThrottle() override;
+
+  static bool ShouldOverrideUrlLoadingForTesting(const GURL& previous_url,
+                                                 const GURL& current_url);
 
  private:
   // content::Navigation implementation:
   NavigationThrottle::ThrottleCheckResult WillStartRequest() override;
   NavigationThrottle::ThrottleCheckResult WillRedirectRequest() override;
 
+  NavigationThrottle::ThrottleCheckResult HandleRequest();
   void OnAppCandidatesReceived(mojo::Array<mojom::UrlHandlerInfoPtr> handlers);
   void OnAppIconsReceived(
       mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
       std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> icons);
-  void OnDisambigDialogClosed(mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
-                              size_t selected_app_index,
-                              CloseReason close_reason);
-
+  void OnIntentPickerClosed(mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
+                            size_t selected_app_index,
+                            CloseReason close_reason);
   // A callback object that allow us to display an IntentPicker when Run() is
   // executed, it also allow us to report the user's selection back to
-  // OnDisambigDialogClosed().
-  ShowDisambigDialogCallback show_disambig_dialog_callback_;
+  // OnIntentPickerClosed().
+  ShowIntentPickerCallback show_intent_picker_callback_;
 
+  // A cache of the action the user took the last time this navigation throttle
+  // popped up the intent picker dialog.  If the dialog has never been popped up
+  // before, this will have a value of CloseReason::INVALID.  Used to avoid
+  // popping up the dialog multiple times on chains of multiple redirects.
+  CloseReason previous_user_action_;
+
+  // This has to be the last member of the class.
   base::WeakPtrFactory<ArcNavigationThrottle> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcNavigationThrottle);

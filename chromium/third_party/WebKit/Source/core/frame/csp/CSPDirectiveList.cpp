@@ -12,11 +12,11 @@
 #include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Crypto.h"
-#include "platform/ParsingUtilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/text/Base64.h"
+#include "wtf/text/ParsingUtilities.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 #include "wtf/text/WTFString.h"
 
@@ -55,6 +55,7 @@ CSPDirectiveList::CSPDirectiveList(ContentSecurityPolicy* policy, ContentSecurit
     , m_strictMixedContentCheckingEnforced(false)
     , m_upgradeInsecureRequests(false)
     , m_treatAsPublicAddress(false)
+    , m_requireSRIFor(RequireSRIForToken::None)
 {
     m_reportOnly = type == ContentSecurityPolicyHeaderTypeReport;
 }
@@ -171,6 +172,63 @@ bool CSPDirectiveList::checkAncestors(SourceListDirective* directive, LocalFrame
             return false;
     }
     return true;
+}
+
+bool CSPDirectiveList::checkRequestWithoutIntegrity(WebURLRequest::RequestContext context) const
+{
+    if (m_requireSRIFor == RequireSRIForToken::None)
+        return true;
+    // SRI specification (https://w3c.github.io/webappsec-subresource-integrity/#apply-algorithm-to-request)
+    // says to match token with request's destination with the token.
+    // Keep this logic aligned with ContentSecurityPolicy::allowRequest
+    if ((m_requireSRIFor & RequireSRIForToken::Script)
+        && (context == WebURLRequest::RequestContextScript
+            || context == WebURLRequest::RequestContextImport
+            || context == WebURLRequest::RequestContextServiceWorker
+            || context == WebURLRequest::RequestContextSharedWorker
+            || context == WebURLRequest::RequestContextWorker)) {
+        return false;
+    }
+    if ((m_requireSRIFor & RequireSRIForToken::Style) && context == WebURLRequest::RequestContextStyle)
+        return false;
+    return true;
+}
+
+bool CSPDirectiveList::checkRequestWithoutIntegrityAndReportViolation(WebURLRequest::RequestContext context, const KURL& url, ResourceRequest::RedirectStatus redirectStatus) const
+{
+    if (checkRequestWithoutIntegrity(context))
+        return true;
+    String resourceType;
+    switch (context) {
+    case WebURLRequest::RequestContextScript:
+    case WebURLRequest::RequestContextImport:
+        resourceType = "script";
+        break;
+    case WebURLRequest::RequestContextStyle:
+        resourceType = "stylesheet";
+        break;
+    case WebURLRequest::RequestContextServiceWorker:
+        resourceType = "service worker";
+        break;
+    case WebURLRequest::RequestContextSharedWorker:
+        resourceType = "shared worker";
+        break;
+    case WebURLRequest::RequestContextWorker:
+        resourceType = "worker";
+        break;
+    default:
+        break;
+    }
+
+    reportViolation(ContentSecurityPolicy::RequireSRIFor, ContentSecurityPolicy::RequireSRIFor, "Refused to load the " + resourceType + " '" + url.elidedString() + "' because 'require-sri-for' directive requires integrity attribute be present for all " + resourceType + "s.", url, redirectStatus);
+    return denyIfEnforcingPolicy();
+}
+
+bool CSPDirectiveList::allowRequestWithoutIntegrity(WebURLRequest::RequestContext context, const KURL& url, ResourceRequest::RedirectStatus redirectStatus, ContentSecurityPolicy::ReportingStatus reportingStatus) const
+{
+    if (reportingStatus == ContentSecurityPolicy::SendReport)
+        return checkRequestWithoutIntegrityAndReportViolation(context, url, redirectStatus);
+    return denyIfEnforcingPolicy() || checkRequestWithoutIntegrity(context);
 }
 
 bool CSPDirectiveList::checkMediaType(MediaListDirective* directive, const String& type, const String& typeAttribute) const
@@ -551,6 +609,60 @@ bool CSPDirectiveList::parseDirective(const UChar* begin, const UChar* end, Stri
     return true;
 }
 
+void CSPDirectiveList::parseRequireSRIFor(const String& name, const String& value)
+{
+    if (m_requireSRIFor != 0) {
+        m_policy->reportDuplicateDirective(name);
+        return;
+    }
+    StringBuilder tokenErrors;
+    unsigned numberOfTokenErrors = 0;
+    Vector<UChar> characters;
+    value.appendTo(characters);
+
+    const UChar* position = characters.data();
+    const UChar* end = position + characters.size();
+
+    while (position < end) {
+        skipWhile<UChar, isASCIISpace>(position, end);
+
+        const UChar* tokenBegin = position;
+        skipWhile<UChar, isNotASCIISpace>(position, end);
+
+        if (tokenBegin < position) {
+            String token = String(tokenBegin, position - tokenBegin);
+            if (equalIgnoringCase(token, "script")) {
+                m_requireSRIFor |= RequireSRIForToken::Script;
+            } else if (equalIgnoringCase(token, "style")) {
+                m_requireSRIFor |= RequireSRIForToken::Style;
+            } else {
+                if (numberOfTokenErrors)
+                    tokenErrors.append(", \'");
+                else
+                    tokenErrors.append('\'');
+                tokenErrors.append(token);
+                tokenErrors.append('\'');
+                numberOfTokenErrors++;
+            }
+        }
+    }
+
+    if (numberOfTokenErrors == 0)
+        return;
+
+    String invalidTokensErrorMessage;
+    if (numberOfTokenErrors > 1)
+        tokenErrors.append(" are invalid 'require-sri-for' tokens.");
+    else
+        tokenErrors.append(" is an invalid 'require-sri-for' token.");
+
+    invalidTokensErrorMessage = tokenErrors.toString();
+
+    DCHECK(!invalidTokensErrorMessage.isEmpty());
+
+    m_policy->reportInvalidRequireSRIForTokens(invalidTokensErrorMessage);
+}
+
 void CSPDirectiveList::parseReportURI(const String& name, const String& value)
 {
     if (!m_reportEndpoints.isEmpty()) {
@@ -699,13 +811,15 @@ void CSPDirectiveList::parseReflectedXSS(const String& name, const String& value
     const UChar* begin = position;
     skipWhile<UChar, isNotASCIISpace>(position, end);
 
+    StringView token(begin, position - begin);
+
     // value1
     //       ^
-    if (equalIgnoringCase("allow", begin, position - begin)) {
+    if (equalIgnoringCase("allow", token)) {
         m_reflectedXSSDisposition = AllowReflectedXSS;
-    } else if (equalIgnoringCase("filter", begin, position - begin)) {
+    } else if (equalIgnoringCase("filter", token)) {
         m_reflectedXSSDisposition = FilterReflectedXSS;
-    } else if (equalIgnoringCase("block", begin, position - begin)) {
+    } else if (equalIgnoringCase("block", token)) {
         m_reflectedXSSDisposition = BlockReflectedXSS;
     } else {
         m_reflectedXSSDisposition = ReflectedXSSInvalid;
@@ -745,17 +859,19 @@ void CSPDirectiveList::parseReferrer(const String& name, const String& value)
     const UChar* begin = position;
     skipWhile<UChar, isNotASCIISpace>(position, end);
 
+    StringView token(begin, position - begin);
+
     // value1
     //       ^
-    if (equalIgnoringCase("unsafe-url", begin, position - begin)) {
+    if (equalIgnoringCase("unsafe-url", token)) {
         m_referrerPolicy = ReferrerPolicyAlways;
-    } else if (equalIgnoringCase("no-referrer", begin, position - begin)) {
+    } else if (equalIgnoringCase("no-referrer", token)) {
         m_referrerPolicy = ReferrerPolicyNever;
-    } else if (equalIgnoringCase("no-referrer-when-downgrade", begin, position - begin)) {
+    } else if (equalIgnoringCase("no-referrer-when-downgrade", token)) {
         m_referrerPolicy = ReferrerPolicyDefault;
-    } else if (equalIgnoringCase("origin", begin, position - begin)) {
+    } else if (equalIgnoringCase("origin", token)) {
         m_referrerPolicy = ReferrerPolicyOrigin;
-    } else if (equalIgnoringCase("origin-when-cross-origin", begin, position - begin) || equalIgnoringCase("origin-when-crossorigin", begin, position - begin)) {
+    } else if (equalIgnoringCase("origin-when-cross-origin", token) || equalIgnoringCase("origin-when-crossorigin", token)) {
         m_referrerPolicy = ReferrerPolicyOriginWhenCrossOrigin;
     } else {
         m_policy->reportInvalidReferrer(value);
@@ -826,6 +942,8 @@ void CSPDirectiveList::addDirective(const String& name, const String& value)
         setCSPDirective<SourceListDirective>(name, value, m_manifestSrc);
     } else if (equalIgnoringCase(name, ContentSecurityPolicy::TreatAsPublicAddress)) {
         treatAsPublicAddress(name, value);
+    } else if (equalIgnoringCase(name, ContentSecurityPolicy::RequireSRIFor) && m_policy->experimentalFeaturesEnabled()) {
+        parseRequireSRIFor(name, value);
     } else {
         m_policy->reportUnsupportedDirective(name);
     }

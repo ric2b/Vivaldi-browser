@@ -26,12 +26,10 @@ class BrowserCompositorMacClient {
  public:
   virtual NSView* BrowserCompositorMacGetNSView() const = 0;
   virtual SkColor BrowserCompositorMacGetGutterColor(SkColor color) const = 0;
-  virtual void BrowserCompositorMacSendCompositorSwapAck(
-      int output_surface_id,
-      const cc::CompositorFrameAck& ack) = 0;
   virtual void BrowserCompositorMacSendReclaimCompositorResources(
       int output_surface_id,
-      const cc::CompositorFrameAck& ack) = 0;
+      bool is_swap_ack,
+      const cc::ReturnedResourceArray& resources) = 0;
   virtual void BrowserCompositorMacOnLostCompositorResources() = 0;
   virtual void BrowserCompositorMacUpdateVSyncParameters(
       const base::TimeTicks& timebase,
@@ -69,6 +67,7 @@ class BrowserCompositorMac : public cc::BeginFrameObserver,
   void SwapCompositorFrame(uint32_t output_surface_id,
                            cc::CompositorFrame frame);
   void SetHasTransparentBackground(bool transparent);
+  void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
   void UpdateVSyncParameters(const base::TimeTicks& timebase,
                              const base::TimeDelta& interval);
   void SetNeedsBeginFrames(bool needs_begin_frames);
@@ -110,12 +109,10 @@ class BrowserCompositorMac : public cc::BeginFrameObserver,
   std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
       bool defer_compositor_lock) override;
   void DelegatedFrameHostResizeLockWasReleased() override;
-  void DelegatedFrameHostSendCompositorSwapAck(
-      int output_surface_id,
-      const cc::CompositorFrameAck& ack) override;
   void DelegatedFrameHostSendReclaimCompositorResources(
       int output_surface_id,
-      const cc::CompositorFrameAck& ack) override;
+      bool is_swap_ack,
+      const cc::ReturnedResourceArray& resources) override;
   void DelegatedFrameHostOnLostCompositorResources() override;
   void DelegatedFrameHostUpdateVSyncParameters(
       const base::TimeTicks& timebase,

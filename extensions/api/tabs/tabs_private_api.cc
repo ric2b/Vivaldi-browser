@@ -30,6 +30,7 @@
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
+#include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/tabs_private.h"
@@ -69,26 +70,17 @@ content::WebContents* GetWebContentsFromTabStrip(int tab_id, Profile *profile) {
 }
 
 bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
-  display::Screen* screen = display::Screen::GetScreen();
-  DCHECK(screen);
-
   gfx::Point screen_point(screen_x, screen_y);
 
-#if defined(OS_WIN)
-  gfx::Point point_in_pixels =
-    display::win::ScreenWin::DIPToScreenPoint(screen_point);
-#else
-  gfx::Point point_in_pixels = screen_point;
-#endif
   AppWindowRegistry* app_window_registry =
     AppWindowRegistry::Factory::GetForBrowserContext(profile, false);
   AppWindowRegistry::AppWindowList list =
     app_window_registry->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
 
   bool outside = true;
-  for (auto win : list) {
-    gfx::Rect rect = win->GetClientBounds();
-    if (rect.Contains(point_in_pixels)) {
+  for (auto& win : list) {
+    gfx::Rect rect = win->GetBaseWindow()->GetBounds();
+    if (rect.Contains(screen_point)) {
       outside = false;
       break;
     }
@@ -139,16 +131,10 @@ void TabsPrivateEventRouter::OnDragLeave(const TabDragDataCollection& data) {
 void TabsPrivateEventRouter::OnDrop(const TabDragDataCollection& data) {
 }
 
-blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
-    int screen_x, int screen_y, blink::WebDragOperationsMask ops,
-    const TabDragDataCollection& data, bool cancelled) {
-  if (data.empty())
-    return ops;
+namespace {
 
-  bool outside = IsOutsideAppWindow(screen_x, screen_y, profile_);
-
-  vivaldi::tabs_private::DragData drag_data;
-
+void PopulateDragData(const TabDragDataCollection& data,
+                      vivaldi::tabs_private::DragData& drag_data) {
   for (TabDragDataCollection::const_iterator it = data.begin();
        it != data.end(); ++it) {
     drag_data.mime_type.append(base::UTF16ToUTF8(it->first));
@@ -156,6 +142,27 @@ blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
 
     // Should be only a single element
     break;
+  }
+}
+
+}  // namespace
+
+blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
+    int screen_x, int screen_y, blink::WebDragOperationsMask ops,
+    const TabDragDataCollection& data, bool cancelled) {
+  vivaldi::tabs_private::DragData drag_data;
+  bool outside = IsOutsideAppWindow(screen_x, screen_y, profile_);
+  if (data.empty()) {
+    // Drop happened before drop data was filled out in dragenter, get
+    // the backup data as js has not been able to add to it.
+    TabsPrivateAPI* api =
+        TabsPrivateAPI::GetFactoryInstance()->Get(profile_);
+
+    TabDragDataCollection& drop_data = api->GetDropDataBackup();
+
+    PopulateDragData(drop_data, drag_data);
+  } else {
+    PopulateDragData(data, drag_data);
   }
   ::vivaldi::SetTabDragInProgress(false);
 
@@ -172,13 +179,7 @@ blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragEnd(
 
 blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragCursorUpdating(
     int screen_x, int screen_y, blink::WebDragOperationsMask ops) {
-//  bool outside = IsOutsideAppWindow(screen_x, screen_y, profile_);
-//  if (outside) {
-    // If we're outside our own window, we always allow a drop as we'll handle
-    // it ourselves.
-    return blink::WebDragOperationsMask::WebDragOperationMove;
-//  }
-//  return ops;
+  return blink::WebDragOperationsMask::WebDragOperationMove;
 }
 
 TabsPrivateEventRouter::TabsPrivateEventRouter(Profile* profile)
@@ -258,29 +259,30 @@ base::StringValue DictionaryToJSONString(
   return base::StringValue(json_string);
 }
 
-
 void VivaldiPrivateTabObserver::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
   if (::vivaldi::isTabZoomEnabled(web_contents())) {
     std::string ext = web_contents()->GetExtData();
 
     base::JSONParserOptions options = base::JSON_PARSE_RFC;
-    std::unique_ptr<base::Value> json =
-      base::JSONReader::Read(ext, options);
+    std::unique_ptr<base::Value> json = base::JSONReader::Read(ext, options);
     base::DictionaryValue* dict = NULL;
+    Profile* profile =
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+    content::HostZoomMap* host_zoom_map =
+        content::HostZoomMap::GetDefaultForBrowserContext(profile);
+    double default_zoom_level = host_zoom_map->GetDefaultZoomLevel();
+
     if (json && json->GetAsDictionary(&dict)) {
       if (dict) {
         if (dict->HasKey("vivaldi_tab_zoom")) {
           dict->GetDouble("vivaldi_tab_zoom", &tab_zoom_level_);
         } else {
-          Profile *profile =
-            Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-          content::HostZoomMap* host_zoom_map =
-            content::HostZoomMap::GetDefaultForBrowserContext(profile);
-          tab_zoom_level_ = host_zoom_map->GetDefaultZoomLevel();
-          dict->SetDouble("vivaldi_tab_zoom", tab_zoom_level_);
+          tab_zoom_level_ = default_zoom_level;
         }
       }
+    } else {
+      tab_zoom_level_ = default_zoom_level;
     }
   }
 
@@ -385,37 +387,6 @@ void VivaldiPrivateTabObserver::SetZoomLevelForTab(double level) {
   }
 }
 
-TabsPrivateDiscardFunction::TabsPrivateDiscardFunction() {}
-
-TabsPrivateDiscardFunction::~TabsPrivateDiscardFunction() {}
-
-bool TabsPrivateDiscardFunction::RunAsync() {
-  std::unique_ptr<tabs_private::Discard::Params> params(
-      tabs_private::Discard::Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  int tab_id = params->tab_id;
-
-  bool success = true;
-
-  content::WebContents *tabstrip_contents =
-      GetWebContentsFromTabStrip(tab_id, GetProfile());
-  if (tabstrip_contents) {
-    VivaldiPrivateTabObserver::FromWebContents(tabstrip_contents)
-        ->OnTabDiscarded(tabstrip_contents, true);
-
-    memory::TabManager* tab_manager = g_browser_process->GetTabManager();
-    int64_t web_content_id = reinterpret_cast<int64_t>(tabstrip_contents);
-    if (!tab_manager->DiscardTabById(web_content_id)) {
-      success = false;
-      error_ = "Error: WebContents not freed. Was active, played media or "
-               "already discarded.";
-    }
-  }
-  SendResponse(success);
-  return success;
-}
-
 TabsPrivateUpdateFunction::TabsPrivateUpdateFunction() {
 }
 
@@ -513,20 +484,6 @@ void VivaldiPrivateTabObserver::OnFaviconUpdated(
   BroadcastEvent(tabs_private::OnFaviconUpdated::kEventName, args, profile);
 }
 
-void VivaldiPrivateTabObserver::OnTabDiscarded(content::WebContents *contents,
-                                               bool discarded) {
-  vivaldi::tabs_private::UpdateTabInfo info;
-  info.discarded.reset(new bool(discarded));
-  std::unique_ptr<base::ListValue> args =
-      vivaldi::tabs_private::OnTabUpdated::Create(
-          extensions::ExtensionTabUtil::GetTabId(contents), info);
-  Profile *profile = Profile::FromBrowserContext(contents->GetBrowserContext());
-
-  BroadcastEvent(vivaldi::tabs_private::OnTabUpdated::kEventName, args,
-                 profile);
-}
-
-
 TabsPrivateInsertTextFunction::TabsPrivateInsertTextFunction() {
 }
 
@@ -604,9 +561,11 @@ bool TabsPrivateStartDragFunction::RunAsync() {
   content::DropData drop_data;
   const base::string16 identifier(
       base::UTF8ToUTF16(params->drag_data.mime_type));
+  const base::string16 custom_data(
+      base::UTF8ToUTF16(params->drag_data.custom_data));
 
   drop_data.custom_data.insert(std::make_pair(
-      identifier, base::UTF8ToUTF16(params->drag_data.custom_data)));
+      identifier, custom_data));
 
   drop_data.url = GURL(params->drag_data.url);
   drop_data.url_title = base::UTF8ToUTF16(params->drag_data.title);
@@ -618,9 +577,19 @@ bool TabsPrivateStartDragFunction::RunAsync() {
   gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, 1));
   content::DragEventSourceInfo event_info;
 
-  event_info.event_source = params->is_from_touch
-    ? ui::DragDropTypes::DRAG_EVENT_SOURCE_TOUCH
-    : ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE;
+  event_info.event_source =
+      params->is_from_touch.get() && *params->is_from_touch.get()
+          ? ui::DragDropTypes::DRAG_EVENT_SOURCE_TOUCH
+          : ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE;
+  event_info.event_location =
+      display::Screen::GetScreen()->GetCursorScreenPoint();
+
+  TabsPrivateAPI* api = TabsPrivateAPI::GetFactoryInstance()->Get(GetProfile());
+
+  TabDragDataCollection backup_drop_data;
+  backup_drop_data.insert(std::make_pair(identifier, custom_data));
+
+  api->SetDropDataBackup(backup_drop_data);
 
   ::vivaldi::SetTabDragInProgress(true);
   view->StartDragging(drop_data, allowed_ops, image, image_offset, event_info);

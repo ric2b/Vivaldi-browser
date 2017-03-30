@@ -321,6 +321,12 @@ class WebContents : public PageNavigator,
   // download, in which case the URL would revert to what it was previously).
   virtual const base::string16& GetTitle() const = 0;
 
+  // Saves the given title to the navigation entry and does associated work. It
+  // will update history and the view with the new title, and also synthesize
+  // titles for file URLs that have none. Thus |entry| must have a URL set.
+  virtual void UpdateTitleForEntry(NavigationEntry* entry,
+                                   const base::string16& title) = 0;
+
   // The max page ID for any page that the current SiteInstance has loaded in
   // this WebContents.  Page IDs are specific to a given SiteInstance and
   // WebContents, corresponding to a specific RenderView in the renderer.
@@ -361,9 +367,6 @@ class WebContents : public PageNavigator,
 
   // Returns the character encoding of the page.
   virtual const std::string& GetEncoding() const = 0;
-
-  // True if this is a secure page which displayed insecure content.
-  virtual bool DisplayedInsecureContent() const = 0;
 
   // Internal state ------------------------------------------------------------
 
@@ -689,23 +692,17 @@ class WebContents : public PageNavigator,
   // (and what action to take regarding the selection).
   virtual void StopFinding(StopFindAction action) = 0;
 
-  // Requests the renderer to insert CSS into the main frame's document.
-  virtual void InsertCSS(const std::string& css) = 0;
-
   // Returns true if audio has recently been audible from the WebContents.
   virtual bool WasRecentlyAudible() = 0;
 
-  typedef base::Callback<void(const Manifest&)> GetManifestCallback;
+  // The callback invoked when the renderer responds to a request for the main
+  // frame document's manifest. The url will be empty if the document specifies
+  // no manifest, and the manifest will be empty if any other failures occurred.
+  typedef base::Callback<void(const GURL&, const Manifest&)>
+      GetManifestCallback;
 
-  // Requests the Manifest of the main frame's document.
+  // Requests the manifest URL and the Manifest of the main frame's document.
   virtual void GetManifest(const GetManifestCallback& callback) = 0;
-
-  typedef base::Callback<void(bool)> HasManifestCallback;
-
-  // Returns true if the main frame has a <link> to a web manifest, otherwise
-  // false. This method does not guarantee that the manifest exists at the
-  // specified location or is valid.
-  virtual void HasManifest(const HasManifestCallback& callback) = 0;
 
   // Requests the renderer to exit fullscreen.
   // |will_cause_resize| indicates whether the fullscreen change causes a
@@ -753,11 +750,6 @@ class WebContents : public PageNavigator,
   // Returns true if other views are allowed, false otherwise.
   virtual bool GetAllowOtherViews() = 0;
 #endif  // OS_ANDROID
-
-  // NOTE(andre@vivaldi.com) : These are used to navigate pages that is
-  //                         normally navigated in chrome::LoadURLInContents().
-  virtual std::unique_ptr<std::string> delayed_open_url() = 0;
-  virtual void set_delayed_open_url(std::string* url) = 0;
 
  private:
   // This interface should only be implemented inside content.

@@ -1,25 +1,12 @@
 {
-  "Android Galaxy S5 Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
-      }
-    ]
-  },
-  "Android Galaxy S5 Perf (2)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
-      }
-    ]
-  },
   "Android Galaxy S5 Perf (3)": {
     "scripts": [
       {
-        "name": "host_info",
-        "script": "host_info.py"
+        "args": [
+          "cc_perftests"
+        ],
+        "name": "cc_perftests",
+        "script": "gtest_perf_test.py"
       },
       {
         "args": [
@@ -27,29 +14,17 @@
         ],
         "name": "gpu_perftests",
         "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android Nexus5 Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
       }
     ]
   },
   "Android Nexus5 Perf (2)": {
     "scripts": [
       {
-        "name": "host_info",
-        "script": "host_info.py"
+        "args": [
+          "cc_perftests"
+        ],
+        "name": "cc_perftests",
+        "script": "gtest_perf_test.py"
       },
       {
         "args": [
@@ -57,52 +32,28 @@
         ],
         "name": "gpu_perftests",
         "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android Nexus6 Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
       }
     ]
   },
   "Android Nexus6 Perf (2)": {
     "scripts": [
       {
-        "name": "host_info",
-        "script": "host_info.py"
-      },
-      {
         "args": [
           "cc_perftests"
         ],
         "name": "cc_perftests",
         "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android Nexus7v2 Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
       }
     ]
   },
   "Android Nexus7v2 Perf (2)": {
     "scripts": [
       {
-        "name": "host_info",
-        "script": "host_info.py"
+        "args": [
+          "cc_perftests"
+        ],
+        "name": "cc_perftests",
+        "script": "gtest_perf_test.py"
       },
       {
         "args": [
@@ -110,29 +61,17 @@
         ],
         "name": "gpu_perftests",
         "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android Nexus9 Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
       }
     ]
   },
   "Android Nexus9 Perf (2)": {
     "scripts": [
       {
-        "name": "host_info",
-        "script": "host_info.py"
+        "args": [
+          "cc_perftests"
+        ],
+        "name": "cc_perftests",
+        "script": "gtest_perf_test.py"
       },
       {
         "args": [
@@ -140,29 +79,6 @@
         ],
         "name": "gpu_perftests",
         "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "cc_perftests"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Android One Perf (1)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
-      }
-    ]
-  },
-  "Android One Perf (2)": {
-    "scripts": [
-      {
-        "name": "host_info",
-        "script": "host_info.py"
       }
     ]
   },
@@ -174,92 +90,6 @@
           "--test-launcher-print-test-stdio=always"
         ],
         "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Mac 10.8 Perf (1)": {
-    "scripts": [
-      {
-        "args": [
-          "gpu_perftests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "gpu_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Mac 10.8 Perf (3)": {
-    "scripts": [
-      {
-        "args": [
-          "cc_perftests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "performance_browser_tests",
-          "--test-launcher-print-test-stdio=always",
-          "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
-          "--test-launcher-jobs=1",
-          "--enable-gpu"
-        ],
-        "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Mac 10.9 Perf (1)": {
-    "scripts": [
-      {
-        "args": [
-          "gpu_perftests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "gpu_perftests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Mac 10.9 Perf (3)": {
-    "scripts": [
-      {
-        "args": [
-          "cc_perftests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "cc_perftests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "performance_browser_tests",
-          "--test-launcher-print-test-stdio=always",
-          "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
-          "--test-launcher-jobs=1",
-          "--enable-gpu"
-        ],
-        "name": "performance_browser_tests",
         "script": "gtest_perf_test.py"
       },
       {
@@ -285,34 +115,10 @@
       },
       {
         "args": [
-          "performance_browser_tests",
-          "--test-launcher-print-test-stdio=always",
-          "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
-          "--test-launcher-jobs=1",
-          "--enable-gpu"
-        ],
-        "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
           "load_library_perf_tests",
           "--test-launcher-print-test-stdio=always"
         ],
         "name": "load_library_perf_tests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Win 7 Intel GPU Perf": {
-    "scripts": [
-      {
-        "args": [
-          "angle_perftests",
-          "--test-launcher-print-test-stdio=always",
-          "--test-launcher-jobs=1"
-        ],
-        "name": "angle_perftests",
         "script": "gtest_perf_test.py"
       },
       {
@@ -324,37 +130,6 @@
           "--enable-gpu"
         ],
         "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
-        "script": "gtest_perf_test.py"
-      }
-    ]
-  },
-  "Win 7 Low-End Perf (2)": {
-    "scripts": [
-      {
-        "args": [
-          "performance_browser_tests",
-          "--test-launcher-print-test-stdio=always",
-          "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
-          "--test-launcher-jobs=1",
-          "--enable-gpu"
-        ],
-        "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
         "script": "gtest_perf_test.py"
       }
     ]
@@ -372,6 +147,14 @@
       },
       {
         "args": [
+          "load_library_perf_tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "load_library_perf_tests",
+        "script": "gtest_perf_test.py"
+      },
+      {
+        "args": [
           "performance_browser_tests",
           "--test-launcher-print-test-stdio=always",
           "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
@@ -379,14 +162,6 @@
           "--enable-gpu"
         ],
         "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
         "script": "gtest_perf_test.py"
       }
     ]
@@ -395,6 +170,14 @@
     "scripts": [
       {
         "args": [
+          "load_library_perf_tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "load_library_perf_tests",
+        "script": "gtest_perf_test.py"
+      },
+      {
+        "args": [
           "performance_browser_tests",
           "--test-launcher-print-test-stdio=always",
           "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
@@ -402,14 +185,6 @@
           "--enable-gpu"
         ],
         "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
         "script": "gtest_perf_test.py"
       }
     ]
@@ -418,6 +193,14 @@
     "scripts": [
       {
         "args": [
+          "load_library_perf_tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "load_library_perf_tests",
+        "script": "gtest_perf_test.py"
+      },
+      {
+        "args": [
           "performance_browser_tests",
           "--test-launcher-print-test-stdio=always",
           "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
@@ -425,14 +208,6 @@
           "--enable-gpu"
         ],
         "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
         "script": "gtest_perf_test.py"
       }
     ]
@@ -441,6 +216,14 @@
     "scripts": [
       {
         "args": [
+          "load_library_perf_tests",
+          "--test-launcher-print-test-stdio=always"
+        ],
+        "name": "load_library_perf_tests",
+        "script": "gtest_perf_test.py"
+      },
+      {
+        "args": [
           "performance_browser_tests",
           "--test-launcher-print-test-stdio=always",
           "--gtest_filter=TabCapturePerformanceTest.*:CastV2PerformanceTest.*",
@@ -448,14 +231,6 @@
           "--enable-gpu"
         ],
         "name": "performance_browser_tests",
-        "script": "gtest_perf_test.py"
-      },
-      {
-        "args": [
-          "load_library_perf_tests",
-          "--test-launcher-print-test-stdio=always"
-        ],
-        "name": "load_library_perf_tests",
         "script": "gtest_perf_test.py"
       }
     ]

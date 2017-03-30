@@ -18,7 +18,7 @@
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_instant_controller.h"
@@ -67,7 +67,7 @@ class BrowserNavigatorWebContentsAdoption {
     TabHelpers::AttachTabHelpers(contents);
 
     // Make the tab show up in the task manager.
-    task_management::WebContentsTags::CreateForTabContents(contents);
+    task_manager::WebContentsTags::CreateForTabContents(contents);
   }
 };
 
@@ -189,8 +189,7 @@ Browser* GetBrowserForDisposition(chrome::NavigateParams* params) {
     case OFF_THE_RECORD:
       // Make or find an incognito window.
       return GetOrCreateBrowser(profile->GetOffTheRecordProfile());
-    // The following types all result in no navigation.
-    case SUPPRESS_OPEN:
+    // The following types result in no navigation.
     case SAVE_TO_DISK:
     case IGNORE_ACTION:
       return NULL;
@@ -244,6 +243,11 @@ void NormalizeDisposition(chrome::NavigateParams* params) {
 
 // Obtain the profile used by the code that originated the Navigate() request.
 Profile* GetSourceProfile(chrome::NavigateParams* params) {
+  if (params->source_site_instance) {
+    return Profile::FromBrowserContext(
+        params->source_site_instance->GetBrowserContext());
+  }
+
   if (params->source_contents) {
     return Profile::FromBrowserContext(
         params->source_contents->GetBrowserContext());
@@ -258,6 +262,7 @@ void LoadURLInContents(WebContents* target_contents,
   NavigationController::LoadURLParams load_url_params(url);
   load_url_params.source_site_instance = params->source_site_instance;
   load_url_params.referrer = params->referrer;
+  load_url_params.frame_name = params->frame_name;
   load_url_params.frame_tree_node_id = params->frame_tree_node_id;
   load_url_params.redirect_chain = params->redirect_chain;
   load_url_params.transition_type = params->transition;
@@ -265,6 +270,7 @@ void LoadURLInContents(WebContents* target_contents,
   load_url_params.should_replace_current_entry =
       params->should_replace_current_entry;
   load_url_params.is_renderer_initiated = params->is_renderer_initiated;
+  load_url_params.started_from_context_menu = params->started_from_context_menu;
 
   if (params->uses_post) {
     load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
@@ -341,6 +347,7 @@ content::WebContents* CreateTargetContents(const chrome::NavigateParams& params,
       params.source_site_instance
           ? params.source_site_instance
           : tab_util::GetSiteInstanceForNewTab(params.browser->profile(), url));
+  create_params.main_frame_name = params.frame_name;
   if (params.source_contents) {
     create_params.initial_size =
         params.source_contents->GetContainerBounds().size();
@@ -452,7 +459,8 @@ void Navigate(NavigateParams* params) {
   if (GetSourceProfile(params) != params->browser->profile()) {
     // A tab is being opened from a link from a different profile, we must reset
     // source information that may cause state to be shared.
-    params->source_contents = NULL;
+    params->source_contents = nullptr;
+    params->source_site_instance = nullptr;
     params->referrer = content::Referrer();
   }
 
@@ -532,13 +540,9 @@ void Navigate(NavigateParams* params) {
       // Try to handle non-navigational URLs that popup dialogs and such, these
       // should not actually navigate.
       if (!HandleNonNavigationAboutURL(params->url)) {
-        // NOTE(andre@vivaldi.com) : We need to store the url to navigate after
-        //                          the correct WebContents has been created in
-        //                          our WebViewGuest.
-        params->target_contents->set_delayed_open_url(
-          new std::string(params->url.spec()));
         // Perform the actual navigation, tracking whether it came from the
         // renderer.
+
         LoadURLInContents(params->target_contents, params->url, params);
       }
     }
@@ -560,9 +564,9 @@ void Navigate(NavigateParams* params) {
   if (params->source_contents == params->target_contents ||
       (swapped_in_prerender && params->disposition == CURRENT_TAB)) {
     // The navigation occurred in the source tab.
-    params->browser->UpdateUIForNavigationInTab(params->target_contents,
-                                                params->transition,
-                                                user_initiated);
+    params->browser->UpdateUIForNavigationInTab(
+        params->target_contents, params->transition, params->window_action,
+        user_initiated);
   } else if (singleton_index == -1) {
     // If some non-default value is set for the index, we should tell the
     // TabStripModel to respect it.
@@ -624,8 +628,10 @@ bool IsURLAllowedInIncognito(const GURL& url,
   // chrome://settings.
   if (url.scheme() == content::kChromeUIScheme &&
       (url.host() == chrome::kChromeUISettingsHost ||
+       url.host() == chrome::kChromeUIMdSettingsHost ||
        url.host() == chrome::kChromeUISettingsFrameHost ||
        url.host() == chrome::kChromeUIHelpHost ||
+       url.host() == chrome::kChromeUIHistoryHost ||
        url.host() == chrome::kChromeUIExtensionsHost ||
        url.host() == chrome::kChromeUIBookmarksHost ||
 #if !defined(OS_CHROMEOS)

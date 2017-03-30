@@ -27,7 +27,6 @@
     // FIXME: Attr should not inherit from Node. crbug.com/305105
     const unsigned short ATTRIBUTE_NODE = 2;
     const unsigned short TEXT_NODE = 3;
-    // FIXME: CDATASection has been removed from the spec. crbug.com/437205
     const unsigned short CDATA_SECTION_NODE = 4;
     const unsigned short ENTITY_REFERENCE_NODE = 5; // historical
     const unsigned short ENTITY_NODE = 6; // historical
@@ -42,7 +41,7 @@
 
     readonly attribute DOMString? baseURI;
 
-    [ImplementedAs=inShadowIncludingDocument, Measure] readonly attribute boolean isConnected;
+    [Measure] readonly attribute boolean isConnected;
     [PerWorldBindings] readonly attribute Document? ownerDocument;
     [PerWorldBindings] readonly attribute Node? parentNode;
     [PerWorldBindings] readonly attribute Element? parentElement;
@@ -52,6 +51,7 @@
     [PerWorldBindings] readonly attribute Node? lastChild;
     [PerWorldBindings] readonly attribute Node? previousSibling;
     [PerWorldBindings] readonly attribute Node? nextSibling;
+    [MeasureAs=NodeGetRootNode] Node getRootNode(optional GetRootNodeOptions options);
 
     [CEReactions, CustomElementCallbacks] attribute DOMString? nodeValue;
 

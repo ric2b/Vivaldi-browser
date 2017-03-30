@@ -16,23 +16,28 @@
 infobars::InfoBar* ProtectedMediaIdentifierInfoBarDelegateAndroid::Create(
     InfoBarService* infobar_service,
     const GURL& requesting_frame,
+    bool user_gesture,
+    Profile* profile,
     const PermissionSetCallback& callback) {
-  return infobar_service->AddInfoBar(infobar_service->CreateConfirmInfoBar(
-      std::unique_ptr<ConfirmInfoBarDelegate>(
-          new ProtectedMediaIdentifierInfoBarDelegateAndroid(requesting_frame,
-                                                             callback))));
+  return infobar_service->AddInfoBar(
+      CreatePermissionInfoBar(std::unique_ptr<PermissionInfoBarDelegate>(
+          new ProtectedMediaIdentifierInfoBarDelegateAndroid(
+              requesting_frame, user_gesture, profile, callback))));
 }
 
 ProtectedMediaIdentifierInfoBarDelegateAndroid::
     ProtectedMediaIdentifierInfoBarDelegateAndroid(
         const GURL& requesting_frame,
+        bool user_gesture,
+        Profile* profile,
         const PermissionSetCallback& callback)
-    : PermissionInfobarDelegate(
+    : PermissionInfoBarDelegate(
           requesting_frame,
           content::PermissionType::PROTECTED_MEDIA_IDENTIFIER,
           CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER,
-          callback),
-      requesting_frame_(requesting_frame) {}
+          user_gesture,
+          profile,
+          callback) {}
 
 ProtectedMediaIdentifierInfoBarDelegateAndroid::
     ~ProtectedMediaIdentifierInfoBarDelegateAndroid() {}
@@ -46,11 +51,6 @@ int ProtectedMediaIdentifierInfoBarDelegateAndroid::GetIconId() const {
   return IDR_ANDROID_INFOBAR_PROTECTED_MEDIA_IDENTIFIER;
 }
 
-int ProtectedMediaIdentifierInfoBarDelegateAndroid::GetMessageResourceId()
-    const {
-  return IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_QUESTION;
-}
-
 base::string16 ProtectedMediaIdentifierInfoBarDelegateAndroid::GetLinkText()
     const {
   return l10n_util::GetStringUTF16(IDS_LEARN_MORE);
@@ -58,4 +58,9 @@ base::string16 ProtectedMediaIdentifierInfoBarDelegateAndroid::GetLinkText()
 
 GURL ProtectedMediaIdentifierInfoBarDelegateAndroid::GetLinkURL() const {
   return GURL(chrome::kEnhancedPlaybackNotificationLearnMoreURL);
+}
+
+int ProtectedMediaIdentifierInfoBarDelegateAndroid::GetMessageResourceId()
+    const {
+  return IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_QUESTION;
 }

@@ -42,31 +42,6 @@ console.assert = function(value, message)
 var ArrayLike;
 
 /**
- * @param {!Object} obj
- * @return {boolean}
- */
-Object.isEmpty = function(obj)
-{
-    for (var i in obj)
-        return false;
-    return true;
-}
-
-/**
- * @param {!Object.<string,!T>} obj
- * @return {!Array.<!T>}
- * @template T
- */
-Object.values = function(obj)
-{
-    var result = Object.keys(obj);
-    var length = result.length;
-    for (var i = 0; i < length; ++i)
-        result[i] = obj[result[i]];
-    return result;
-}
-
-/**
  * @param {number} m
  * @param {number} n
  * @return {number}
@@ -508,20 +483,6 @@ Object.defineProperty(Array.prototype, "remove", {
         }
         this.length = index;
         return true;
-    }
-});
-
-Object.defineProperty(Array.prototype, "keySet", {
-    /**
-     * @return {!Object.<string, boolean>}
-     * @this {Array.<*>}
-     */
-    value: function()
-    {
-        var keys = {};
-        for (var i = 0; i < this.length; ++i)
-            keys[this[i]] = true;
-        return keys;
     }
 });
 

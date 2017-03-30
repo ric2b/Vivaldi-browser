@@ -15,6 +15,7 @@
 #include "cc/base/math_util.h"
 #include "cc/output/gl_renderer.h"
 #include "cc/resources/resource_provider.h"
+#include "cc/resources/resource_util.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "media/base/video_frame.h"
@@ -152,7 +153,8 @@ VideoFrameExternalResources::VideoFrameExternalResources()
     : type(NONE),
       read_lock_fences_enabled(false),
       offset(0.0f),
-      multiplier(1.0f) {}
+      multiplier(1.0f),
+      bits_per_channel(8) {}
 
 VideoFrameExternalResources::VideoFrameExternalResources(
     const VideoFrameExternalResources& other) = default;
@@ -173,6 +175,7 @@ VideoResourceUpdater::~VideoResourceUpdater() {
 VideoResourceUpdater::ResourceList::iterator
 VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
                                        ResourceFormat format,
+                                       const gfx::ColorSpace& color_space,
                                        bool has_mailbox,
                                        bool immutable_hint) {
   // TODO(danakj): Abstract out hw/sw resource create/delete from
@@ -180,7 +183,7 @@ VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
   const ResourceId resource_id = resource_provider_->CreateResource(
       plane_size, immutable_hint ? ResourceProvider::TEXTURE_HINT_IMMUTABLE
                                  : ResourceProvider::TEXTURE_HINT_DEFAULT,
-      format);
+      format, color_space);
   if (resource_id == 0)
     return all_resources_.end();
 
@@ -355,9 +358,9 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
     // Check if we need to allocate a new resource.
     if (resource_it == all_resources_.end()) {
       const bool is_immutable = true;
-      resource_it =
-          AllocateResource(output_plane_resource_size, output_resource_format,
-                           !software_compositor, is_immutable);
+      resource_it = AllocateResource(
+          output_plane_resource_size, output_resource_format,
+          video_frame->ColorSpace(), !software_compositor, is_immutable);
     }
     if (resource_it == all_resources_.end())
       break;
@@ -374,6 +377,8 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
   }
 
   VideoFrameExternalResources external_resources;
+
+  external_resources.bits_per_channel = bits_per_channel;
 
   if (software_compositor) {
     DCHECK_EQ(plane_resources.size(), 1u);
@@ -514,10 +519,11 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForSoftwarePlanes(
       external_resources.multiplier = 2048.0 / max_input_value;
     }
 
-    external_resources.mailboxes.push_back(
-        TextureMailbox(plane_resource.mailbox(), gpu::SyncToken(),
-                       resource_provider_->GetResourceTextureTarget(
-                           plane_resource.resource_id())));
+    TextureMailbox mailbox(plane_resource.mailbox(), gpu::SyncToken(),
+                           resource_provider_->GetResourceTextureTarget(
+                               plane_resource.resource_id()));
+    mailbox.set_color_space(video_frame->ColorSpace());
+    external_resources.mailboxes.push_back(mailbox);
     external_resources.release_callbacks.push_back(base::Bind(
         &RecycleResource, AsWeakPtr(), plane_resource.resource_id()));
   }
@@ -579,7 +585,7 @@ void VideoResourceUpdater::CopyPlaneTexture(
   if (resource == all_resources_.end()) {
     const bool is_immutable = false;
     resource = AllocateResource(output_plane_resource_size, copy_target_format,
-                                true, is_immutable);
+                                video_frame->ColorSpace(), true, is_immutable);
   }
 
   resource->add_ref();
@@ -608,9 +614,10 @@ void VideoResourceUpdater::CopyPlaneTexture(
   // Done with the source video frame texture at this point.
   video_frame->UpdateReleaseSyncToken(&client);
 
-  external_resources->mailboxes.push_back(
-      TextureMailbox(resource->mailbox(), sync_token, GL_TEXTURE_2D,
-                     video_frame->coded_size(), false, false));
+  TextureMailbox mailbox(resource->mailbox(), sync_token, GL_TEXTURE_2D,
+                         video_frame->coded_size(), false, false);
+  mailbox.set_color_space(video_frame->ColorSpace());
+  external_resources->mailboxes.push_back(mailbox);
 
   external_resources->release_callbacks.push_back(
       base::Bind(&RecycleResource, AsWeakPtr(), resource->resource_id()));
@@ -646,13 +653,14 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
             media::VideoFrameMetadata::COPY_REQUIRED)) {
       CopyPlaneTexture(video_frame.get(), mailbox_holder, &external_resources);
     } else {
-      external_resources.mailboxes.push_back(TextureMailbox(
-          mailbox_holder.mailbox, mailbox_holder.sync_token,
-          mailbox_holder.texture_target, video_frame->coded_size(),
-          video_frame->metadata()->IsTrue(
-              media::VideoFrameMetadata::ALLOW_OVERLAY),
-          false));
-
+      TextureMailbox mailbox(mailbox_holder.mailbox, mailbox_holder.sync_token,
+                             mailbox_holder.texture_target,
+                             video_frame->coded_size(),
+                             video_frame->metadata()->IsTrue(
+                                 media::VideoFrameMetadata::ALLOW_OVERLAY),
+                             false);
+      mailbox.set_color_space(video_frame->ColorSpace());
+      external_resources.mailboxes.push_back(mailbox);
       external_resources.release_callbacks.push_back(
           base::Bind(&ReturnTexture, AsWeakPtr(), video_frame));
     }

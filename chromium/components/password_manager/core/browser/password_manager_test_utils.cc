@@ -16,18 +16,6 @@ using autofill::PasswordForm;
 
 namespace password_manager {
 
-namespace {
-
-void GetFeatureOverridesAsCSV(const std::vector<const base::Feature*>& features,
-                              std::string* overrides) {
-  for (const base::Feature* feature : features) {
-    overrides->append(feature->name);
-    overrides->push_back(',');
-  }
-}
-
-}  // namespace
-
 const char kTestingIconUrlSpec[] = "https://accounts.google.com/Icon";
 const char kTestingFederationUrlSpec[] = "https://accounts.google.com/login";
 const int kTestingDaysAfterPasswordsAreSynced = 1;
@@ -38,7 +26,6 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
   std::unique_ptr<PasswordForm> form(new PasswordForm());
   form->scheme = form_data.scheme;
   form->preferred = form_data.preferred;
-  form->ssl_valid = form_data.ssl_valid;
   form->date_created = base::Time::FromDoubleT(form_data.creation_time);
   form->date_synced =
       form->date_created +
@@ -73,16 +60,21 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromDataForTesting(
 }
 
 bool ContainsEqualPasswordFormsUnordered(
-    const std::vector<PasswordForm*>& expectations,
-    const std::vector<PasswordForm*>& actual_values,
+    const std::vector<std::unique_ptr<PasswordForm>>& expectations,
+    const std::vector<std::unique_ptr<PasswordForm>>& actual_values,
     std::ostream* mismatch_output) {
-  std::vector<PasswordForm*> remaining_expectations(expectations.begin(),
-                                                    expectations.end());
+  std::vector<PasswordForm*> remaining_expectations(expectations.size());
+  std::transform(
+      expectations.begin(), expectations.end(), remaining_expectations.begin(),
+      [](const std::unique_ptr<PasswordForm>& form) { return form.get(); });
+
   bool had_mismatched_actual_form = false;
-  for (const PasswordForm* actual : actual_values) {
+  for (const auto& actual : actual_values) {
     auto it_matching_expectation = std::find_if(
         remaining_expectations.begin(), remaining_expectations.end(),
-        [actual](PasswordForm* expected) { return *expected == *actual; });
+        [&actual](const PasswordForm* expected) {
+          return *expected == *actual;
+        });
     if (it_matching_expectation != remaining_expectations.end()) {
       // Erase the matched expectation by moving the last element to its place.
       *it_matching_expectation = remaining_expectations.back();
@@ -106,20 +98,6 @@ bool ContainsEqualPasswordFormsUnordered(
   }
 
   return !had_mismatched_actual_form && remaining_expectations.empty();
-}
-
-void SetFeatures(const std::vector<const base::Feature*>& enable_features,
-                 const std::vector<const base::Feature*>& disable_features,
-                 std::unique_ptr<base::FeatureList> feature_list) {
-  std::string enable_overrides;
-  std::string disable_overrides;
-
-  GetFeatureOverridesAsCSV(enable_features, &enable_overrides);
-  GetFeatureOverridesAsCSV(disable_features, &disable_overrides);
-
-  base::FeatureList::ClearInstanceForTesting();
-  feature_list->InitializeFromCommandLine(enable_overrides, disable_overrides);
-  base::FeatureList::SetInstance(std::move(feature_list));
 }
 
 MockPasswordStoreObserver::MockPasswordStoreObserver() {}

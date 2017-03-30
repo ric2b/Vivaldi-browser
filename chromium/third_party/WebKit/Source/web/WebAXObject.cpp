@@ -238,7 +238,7 @@ bool WebAXObject::isAriaReadOnly() const
     if (isDetached())
         return false;
 
-    return equalIgnoringCase(m_private->getAttribute(HTMLNames::aria_readonlyAttr), "true");
+    return equalIgnoringASCIICase(m_private->getAttribute(HTMLNames::aria_readonlyAttr), "true");
 }
 
 WebString WebAXObject::ariaAutoComplete() const
@@ -853,22 +853,26 @@ WebAXRole WebAXObject::role() const
     return static_cast<WebAXRole>(m_private->roleValue());
 }
 
-void WebAXObject::selection(WebAXObject& anchorObject, int& anchorOffset,
-    WebAXObject& focusObject, int& focusOffset) const
+void WebAXObject::selection(WebAXObject& anchorObject, int& anchorOffset, WebAXTextAffinity& anchorAffinity,
+    WebAXObject& focusObject, int& focusOffset, WebAXTextAffinity& focusAffinity) const
 {
     if (isDetached()) {
         anchorObject = WebAXObject();
         anchorOffset = -1;
+        anchorAffinity = WebAXTextAffinityDownstream;
         focusObject = WebAXObject();
         focusOffset = -1;
+        focusAffinity = WebAXTextAffinityDownstream;
         return;
     }
 
     AXObject::AXRange axSelection = m_private->selection();
     anchorObject = WebAXObject(axSelection.anchorObject);
     anchorOffset = axSelection.anchorOffset;
+    anchorAffinity = static_cast<WebAXTextAffinity>(axSelection.anchorAffinity);
     focusObject = WebAXObject(axSelection.focusObject);
     focusOffset = axSelection.focusOffset;
+    focusAffinity = static_cast<WebAXTextAffinity>(axSelection.focusAffinity);
     return;
 }
 
@@ -878,8 +882,8 @@ void WebAXObject::setSelection(const WebAXObject& anchorObject, int anchorOffset
     if (isDetached())
         return;
 
-    AXObject::AXRange axSelection(anchorObject, anchorOffset,
-        focusObject, focusOffset);
+    AXObject::AXRange axSelection(anchorObject, anchorOffset, TextAffinity::Upstream,
+        focusObject, focusOffset, TextAffinity::Downstream);
     m_private->setSelection(axSelection);
     return;
 }
@@ -968,9 +972,13 @@ void WebAXObject::showContextMenu() const
     Element* element = nullptr;
     if (node->isElementNode()) {
         element = toElement(node);
+    } else if (node->isDocumentNode()) {
+        element = node->document().documentElement();
     } else {
         node->updateDistribution();
         ContainerNode* parent = FlatTreeTraversal::parent(*node);
+        if (!parent)
+            return;
         ASSERT_WITH_SECURITY_IMPLICATION(parent->isElementNode());
         element = toElement(parent);
     }

@@ -71,6 +71,10 @@ const AXNodeData& TestAXNodeWrapper::GetData() {
   return node_->data();
 }
 
+gfx::NativeWindow TestAXNodeWrapper::GetTopLevelWidget() {
+  return nullptr;
+}
+
 gfx::NativeViewAccessible TestAXNodeWrapper::GetParent() {
   TestAXNodeWrapper* parent_wrapper = GetOrCreate(tree_, node_->parent());
   return parent_wrapper ?
@@ -113,6 +117,10 @@ void TestAXNodeWrapper::DoDefaultAction() {
 }
 
 bool TestAXNodeWrapper::SetStringValue(const base::string16& new_value) {
+  return false;
+}
+
+bool TestAXNodeWrapper::CanSetStringValue() {
   return false;
 }
 

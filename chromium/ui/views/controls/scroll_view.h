@@ -12,7 +12,14 @@
 #include "base/macros.h"
 #include "ui/views/controls/scrollbar/scroll_bar.h"
 
+namespace gfx {
+class ScrollOffset;
+}
+
 namespace views {
+namespace test {
+class ScrollViewTestApi;
+}
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -47,6 +54,11 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
 
   // Sets the header, deleting the previous header.
   void SetHeader(View* header);
+
+  // Sets the background color. The default is white when scrolling with layers,
+  // otherwise transparent. An opaque color when scrolling with layers ensures
+  // fonts can be drawn with subpixel antialiasing.
+  void SetBackgroundColor(SkColor color);
 
   // Returns the visible region of the content View.
   gfx::Rect GetVisibleRect() const;
@@ -94,7 +106,8 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
                          bool is_positive) override;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(ScrollViewTest, CornerViewVisibility);
+  friend class test::ScrollViewTestApi;
+
   class Viewport;
 
   // Used internally by SetHeader() and SetContents() to reset the view.  Sets
@@ -121,6 +134,20 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   // Update the scrollbars positions given viewport and content sizes.
   void UpdateScrollBarPositions();
 
+  // Helpers to get and set the current scroll offset (either from the ui::Layer
+  // or from the |contents_| origin offset).
+  gfx::ScrollOffset CurrentOffset() const;
+  void ScrollToOffset(const gfx::ScrollOffset& offset);
+
+  // Whether the ScrollView scrolls using ui::Layer APIs.
+  bool ScrollsWithLayers() const;
+
+  // Callback entrypoint when hosted Layers are scrolled by the Compositor.
+  void OnLayerScrolled();
+
+  // Horizontally scrolls the header (if any) to match the contents.
+  void ScrollHeader();
+
   // The current contents and its viewport. |contents_| is contained in
   // |contents_viewport_|.
   View* contents_;
@@ -144,6 +171,10 @@ class VIEWS_EXPORT ScrollView : public View, public ScrollBarController {
   // values if the view is not bounded.
   int min_height_;
   int max_height_;
+
+  // The background color given to the viewport (for overscroll), and to the
+  // contents when scrolling with layers.
+  SkColor background_color_;
 
   // If true, never show the horizontal scrollbar (even if the contents is wider
   // than the viewport).

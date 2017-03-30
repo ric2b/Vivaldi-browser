@@ -34,6 +34,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -136,7 +137,7 @@ ListType GetUrlSeverestThreatListType(
     return INVALID;
 
   std::vector<std::string> patterns;
-  GeneratePatternsToCheck(url, &patterns);
+  V4ProtocolManagerUtil::GeneratePatternsToCheck(url, &patterns);
 
   ListType pending_threat = INVALID;
   int pending_threat_severity = GetThreatSeverity(INVALID);
@@ -772,7 +773,7 @@ void LocalSafeBrowsingDatabaseManager::DoStopOnIOThread() {
     if (check->client)
       check->OnSafeBrowsingResult();
   }
-  STLDeleteElements(&checks_);
+  base::STLDeleteElements(&checks_);
 
   gethash_requests_.clear();
 }
@@ -801,7 +802,7 @@ SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase() {
     return database_;
 
   const base::TimeTicks before = base::TimeTicks::Now();
-  SafeBrowsingDatabase* database = SafeBrowsingDatabase::Create(
+  std::unique_ptr<SafeBrowsingDatabase> database = SafeBrowsingDatabase::Create(
       safe_browsing_task_runner_, enable_download_protection_,
       enable_csd_whitelist_, enable_download_whitelist_,
       enable_extension_blacklist_, enable_ip_blacklist_,
@@ -812,7 +813,7 @@ SafeBrowsingDatabase* LocalSafeBrowsingDatabaseManager::GetDatabase() {
     // Acquiring the lock here guarantees correct ordering between the writes to
     // the new database object above, and the setting of |database_| below.
     base::AutoLock lock(database_lock_);
-    database_ = database;
+    database_ = database.release();
   }
 
   BrowserThread::PostTask(

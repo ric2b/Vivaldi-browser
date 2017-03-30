@@ -73,22 +73,12 @@ public:
         virtual ~ExtraData() { }
     };
 
-    ResourceRequest()
-    {
-        initialize(KURL());
-    }
-
-    ResourceRequest(const String& urlString)
-    {
-        initialize(KURL(ParsedURLString, urlString));
-    }
-
-    ResourceRequest(const KURL& url)
-    {
-        initialize(url);
-    }
-
+    ResourceRequest();
+    ResourceRequest(const String& urlString);
+    ResourceRequest(const KURL&);
     explicit ResourceRequest(CrossThreadResourceRequestData*);
+    ResourceRequest(const ResourceRequest&);
+    ResourceRequest& operator=(const ResourceRequest&);
 
     // Gets a copy of the data suitable for passing to another thread.
     std::unique_ptr<CrossThreadResourceRequestData> copyData() const;
@@ -136,9 +126,9 @@ public:
     const AtomicString& httpSuborigin() const { return httpHeaderField(HTTPNames::Suborigin); }
     // Note that these will also set and clear, respectively, the
     // Suborigin header, if appropriate.
-    void setHTTPOrigin(PassRefPtr<SecurityOrigin>);
+    void setHTTPOrigin(const SecurityOrigin*);
     void clearHTTPOrigin();
-    void addHTTPOriginIfNeeded(PassRefPtr<SecurityOrigin>);
+    void addHTTPOriginIfNeeded(const SecurityOrigin*);
 
     const AtomicString& httpUserAgent() const { return httpHeaderField(HTTPNames::User_Agent); }
     void setHTTPUserAgent(const AtomicString& httpUserAgent) { setHTTPHeaderField(HTTPNames::User_Agent, httpUserAgent); }

@@ -7,6 +7,7 @@ package org.chromium.media;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.graphics.ImageFormat;
+import android.graphics.Rect;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -14,12 +15,14 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.util.Range;
 import android.util.Size;
 import android.view.Surface;
 
@@ -86,7 +89,8 @@ public class VideoCaptureCamera2 extends VideoCapture {
                 // time a downloaded image is ready. Since |handler| is null, we'll work on the
                 // current Thread Looper.
                 mPreviewSession.setRepeatingRequest(mPreviewRequest, null, null);
-            } catch (CameraAccessException | IllegalArgumentException | SecurityException ex) {
+            } catch (CameraAccessException | SecurityException | IllegalStateException
+                    | IllegalArgumentException ex) {
                 Log.e(TAG, "setRepeatingRequest: ", ex);
                 return;
             }
@@ -126,9 +130,11 @@ public class VideoCaptureCamera2 extends VideoCapture {
                     throw new IllegalStateException();
                 }
 
-                readImageIntoBuffer(image, mCapturedData);
-                nativeOnFrameAvailable(mNativeVideoCaptureDeviceAndroid, mCapturedData,
-                        mCapturedData.length, getCameraRotation());
+                nativeOnI420FrameAvailable(mNativeVideoCaptureDeviceAndroid,
+                        image.getPlanes()[0].getBuffer(), image.getPlanes()[0].getRowStride(),
+                        image.getPlanes()[1].getBuffer(), image.getPlanes()[2].getBuffer(),
+                        image.getPlanes()[1].getRowStride(), image.getPlanes()[1].getPixelStride(),
+                        image.getWidth(), image.getHeight(), getCameraRotation());
             } catch (IllegalStateException ex) {
                 Log.e(TAG, "acquireLatestImage():", ex);
             }
@@ -217,6 +223,15 @@ public class VideoCaptureCamera2 extends VideoCapture {
         }
     };
 
+    // Inner Runnable to restart capture, must be run on |mContext| looper.
+    private final Runnable mRestartCapture = new Runnable() {
+        @Override
+        public void run() {
+            mPreviewSession.close(); // Asynchronously kill the CaptureSession.
+            createPreviewObjects();
+        }
+    };
+
     private static final double kNanoSecondsToFps = 1.0E-9;
     private static final String TAG = "VideoCapture";
 
@@ -224,13 +239,18 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
     private final Object mCameraStateLock = new Object();
 
-    private byte[] mCapturedData;
-
     private CameraDevice mCameraDevice;
     private CameraCaptureSession mPreviewSession;
     private CaptureRequest mPreviewRequest;
 
     private CameraState mCameraState = CameraState.STOPPED;
+    private final float mMaxZoom;
+    private Rect mCropRect = new Rect();
+    private int mFocusMode = AndroidMeteringMode.CONTINUOUS;
+    private int mExposureMode = AndroidMeteringMode.CONTINUOUS;
+    private int mPhotoWidth = 0;
+    private int mPhotoHeight = 0;
+    private MeteringRectangle mAreaOfInterest;
 
     // Service function to grab CameraCharacteristics and handle exceptions.
     private static CameraCharacteristics getCameraCharacteristics(Context appContext, int id) {
@@ -288,9 +308,39 @@ public class VideoCaptureCamera2 extends VideoCapture {
         previewRequestBuilder.set(CaptureRequest.EDGE_MODE, CameraMetadata.EDGE_MODE_FAST);
         previewRequestBuilder.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE,
                 CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON);
-        // SENSOR_EXPOSURE_TIME ?
+        if (mFocusMode == AndroidMeteringMode.CONTINUOUS) {
+            Log.d(TAG, "Focus: CONTROL_AF_MODE_CONTINUOUS_PICTURE");
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+        } else if (mFocusMode == AndroidMeteringMode.SINGLE_SHOT) {
+            Log.d(TAG, "Focus: triggering a single shot");
+            previewRequestBuilder.set(
+                    CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO);
+            previewRequestBuilder.set(
+                    CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+        }
+
+        if (mExposureMode == AndroidMeteringMode.FIXED) {
+            previewRequestBuilder.set(
+                    CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
+        } else {
+            previewRequestBuilder.set(
+                    CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
+        }
+
+        if (mAreaOfInterest != null) {
+            MeteringRectangle[] array = {mAreaOfInterest};
+            Log.d(TAG, "Area of interest %s", mAreaOfInterest.toString());
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, array);
+            previewRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, array);
+        }
+
+        if (!mCropRect.isEmpty()) {
+            previewRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, mCropRect);
+        }
 
         List<Surface> surfaceList = new ArrayList<Surface>(1);
+        // TODO(mcasas): Hold on to this Surface and release() it when not needed.
         surfaceList.add(imageReader.getSurface());
 
         mPreviewRequest = previewRequestBuilder.build();
@@ -306,52 +356,32 @@ public class VideoCaptureCamera2 extends VideoCapture {
         return true;
     }
 
-    private static void readImageIntoBuffer(Image image, byte[] data) {
-        final int imageWidth = image.getWidth();
-        final int imageHeight = image.getHeight();
-        final Image.Plane[] planes = image.getPlanes();
-
-        int offset = 0;
-        for (int plane = 0; plane < planes.length; ++plane) {
-            final ByteBuffer buffer = planes[plane].getBuffer();
-            final int rowStride = planes[plane].getRowStride();
-            // Experimentally, U and V planes have |pixelStride| = 2, which
-            // essentially means they are packed. That's silly, because we are
-            // forced to unpack here.
-            final int pixelStride = planes[plane].getPixelStride();
-            final int planeWidth = (plane == 0) ? imageWidth : imageWidth / 2;
-            final int planeHeight = (plane == 0) ? imageHeight : imageHeight / 2;
-
-            if (pixelStride == 1 && rowStride == planeWidth) {
-                // Copy whole plane from buffer into |data| at once.
-                buffer.get(data, offset, planeWidth * planeHeight);
-                offset += planeWidth * planeHeight;
-            } else {
-                // Copy pixels one by one respecting pixelStride and rowStride.
-                byte[] rowData = new byte[rowStride];
-                for (int row = 0; row < planeHeight - 1; ++row) {
-                    buffer.get(rowData, 0, rowStride);
-                    for (int col = 0; col < planeWidth; ++col) {
-                        data[offset++] = rowData[col * pixelStride];
-                    }
-                }
-
-                // Last row is special in some devices and may not contain the full
-                // |rowStride| bytes of data. See http://crbug.com/458701 and
-                // http://developer.android.com/reference/android/media/Image.Plane.html#getBuffer()
-                buffer.get(rowData, 0, Math.min(rowStride, buffer.remaining()));
-                for (int col = 0; col < planeWidth; ++col) {
-                    data[offset++] = rowData[col * pixelStride];
-                }
-            }
-        }
-    }
-
     private void changeCameraStateAndNotify(CameraState state) {
         synchronized (mCameraStateLock) {
             mCameraState = state;
             mCameraStateLock.notifyAll();
         }
+    }
+
+    // Finds the closest Size to (|width|x|height|) in |sizes|, and returns it or null.
+    // Ignores |width| or |height| if either is zero (== don't care).
+    private static Size findClosestSizeInArray(Size[] sizes, int width, int height) {
+        if (sizes == null) return null;
+        Size closestSize = null;
+        int minDiff = Integer.MAX_VALUE;
+        for (Size size : sizes) {
+            final int diff = ((width > 0) ? Math.abs(size.getWidth() - width) : 0)
+                    + ((height > 0) ? Math.abs(size.getHeight() - height) : 0);
+            if (diff < minDiff) {
+                minDiff = diff;
+                closestSize = size;
+            }
+        }
+        if (minDiff == Integer.MAX_VALUE) {
+            Log.e(TAG, "Couldn't find resolution close to (%dx%d)", width, height);
+            return null;
+        }
+        return closestSize;
     }
 
     static boolean isLegacyDevice(Context appContext, int id) {
@@ -379,20 +409,20 @@ public class VideoCaptureCamera2 extends VideoCapture {
         final CameraCharacteristics cameraCharacteristics =
                 getCameraCharacteristics(appContext, id);
         if (cameraCharacteristics == null) {
-            return CaptureApiType.API_TYPE_UNKNOWN;
+            return VideoCaptureApi.UNKNOWN;
         }
 
         final int supportedHWLevel =
                 cameraCharacteristics.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL);
         switch (supportedHWLevel) {
             case CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY:
-                return CaptureApiType.API2_LEGACY;
+                return VideoCaptureApi.ANDROID_API2_LEGACY;
             case CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_FULL:
-                return CaptureApiType.API2_FULL;
+                return VideoCaptureApi.ANDROID_API2_FULL;
             case CameraMetadata.INFO_SUPPORTED_HARDWARE_LEVEL_LIMITED:
-                return CaptureApiType.API2_LIMITED;
+                return VideoCaptureApi.ANDROID_API2_LIMITED;
             default:
-                return CaptureApiType.API2_LEGACY;
+                return VideoCaptureApi.ANDROID_API2_LEGACY;
         }
     }
 
@@ -450,6 +480,9 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
     VideoCaptureCamera2(Context context, int id, long nativeVideoCaptureDeviceAndroid) {
         super(context, id, nativeVideoCaptureDeviceAndroid);
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(context, id);
+        mMaxZoom =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
     }
 
     @Override
@@ -467,18 +500,8 @@ public class VideoCaptureCamera2 extends VideoCapture {
 
         // Find closest supported size.
         final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.YUV_420_888);
-        if (supportedSizes == null) return false;
-        Size closestSupportedSize = null;
-        int minDiff = Integer.MAX_VALUE;
-        for (Size size : supportedSizes) {
-            final int diff =
-                    Math.abs(size.getWidth() - width) + Math.abs(size.getHeight() - height);
-            if (diff < minDiff) {
-                minDiff = diff;
-                closestSupportedSize = size;
-            }
-        }
-        if (minDiff == Integer.MAX_VALUE) {
+        final Size closestSupportedSize = findClosestSizeInArray(supportedSizes, width, height);
+        if (closestSupportedSize == null) {
             Log.e(TAG, "No supported resolutions.");
             return false;
         }
@@ -488,9 +511,6 @@ public class VideoCaptureCamera2 extends VideoCapture {
         // |mCaptureFormat| is also used to configure the ImageReader.
         mCaptureFormat = new VideoCaptureFormat(closestSupportedSize.getWidth(),
                 closestSupportedSize.getHeight(), frameRate, ImageFormat.YUV_420_888);
-        int expectedFrameSize = mCaptureFormat.mWidth * mCaptureFormat.mHeight
-                * ImageFormat.getBitsPerPixel(mCaptureFormat.mPixelFormat) / 8;
-        mCapturedData = new byte[expectedFrameSize];
         mCameraNativeOrientation =
                 cameraCharacteristics.get(CameraCharacteristics.SENSOR_ORIENTATION);
         // TODO(mcasas): The following line is correct for N5 with prerelease Build,
@@ -546,24 +566,151 @@ public class VideoCaptureCamera2 extends VideoCapture {
         if (mCameraDevice == null) return false;
         mCameraDevice.close();
         changeCameraStateAndNotify(CameraState.STOPPED);
+        mCropRect = new Rect();
         return true;
     }
 
     public PhotoCapabilities getPhotoCapabilities() {
         final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
+        PhotoCapabilities.Builder builder = new PhotoCapabilities.Builder();
 
-        // The Max zoom is returned as x100 by the API to avoid using floating point.
-        final int maxZoom = Math.round(
-                cameraCharacteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM)
-                * 100);
+        int minIso = 0;
+        int maxIso = 0;
+        final Range<Integer> iso_range =
+                cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+        if (iso_range != null) {
+            minIso = iso_range.getLower();
+            maxIso = iso_range.getUpper();
+        }
+        builder.setMinIso(minIso).setMaxIso(maxIso);
+        builder.setCurrentIso(mPreviewRequest.get(CaptureRequest.SENSOR_SENSITIVITY));
 
+        final StreamConfigurationMap streamMap =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.JPEG);
+        int minWidth = Integer.MAX_VALUE;
+        int minHeight = Integer.MAX_VALUE;
+        int maxWidth = 0;
+        int maxHeight = 0;
+        for (Size size : supportedSizes) {
+            if (size.getWidth() < minWidth) minWidth = size.getWidth();
+            if (size.getHeight() < minHeight) minHeight = size.getHeight();
+            if (size.getWidth() > maxWidth) maxWidth = size.getWidth();
+            if (size.getHeight() > maxHeight) maxHeight = size.getHeight();
+        }
+        builder.setMinHeight(minHeight).setMaxHeight(maxHeight);
+        builder.setMinWidth(minWidth).setMaxWidth(maxWidth);
+        builder.setCurrentHeight((mPhotoHeight > 0) ? mPhotoHeight : mCaptureFormat.getHeight());
+        builder.setCurrentWidth((mPhotoWidth > 0) ? mPhotoWidth : mCaptureFormat.getWidth());
+
+        // The Min and Max zoom are returned as x100 by the API to avoid using floating point. There
+        // is no min-zoom per se, so clamp it to always 100 (TODO(mcasas): make const member).
+        final int minZoom = 100;
+        final int maxZoom = Math.round(mMaxZoom * 100);
         // Width Ratio x100 is used as measure of current zoom.
-        final int currentZoom = 100 * mPreviewRequest.get(CaptureRequest.SCALER_CROP_REGION).width()
-                / cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
-                          .width();
+        final int currentZoom = 100
+                * cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
+                          .width()
+                / mPreviewRequest.get(CaptureRequest.SCALER_CROP_REGION).width();
+        builder.setMinZoom(minZoom).setMaxZoom(maxZoom).setCurrentZoom(currentZoom);
 
-        // There is no min-zoom per se, so clamp it to always 100.
-        return new PhotoCapabilities(maxZoom, 100, currentZoom);
+        final int focusMode = mPreviewRequest.get(CaptureRequest.CONTROL_AF_MODE);
+        // Classify the Focus capabilities. In CONTINUOUS and SINGLE_SHOT, we can call
+        // autoFocus(AutoFocusCallback) to configure region(s) to focus onto.
+        int jniFocusMode = AndroidMeteringMode.UNAVAILABLE;
+        if (focusMode == CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                || focusMode == CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE) {
+            jniFocusMode = AndroidMeteringMode.CONTINUOUS;
+        } else if (focusMode == CameraMetadata.CONTROL_AF_MODE_AUTO
+                || focusMode == CameraMetadata.CONTROL_AF_MODE_MACRO) {
+            jniFocusMode = AndroidMeteringMode.SINGLE_SHOT;
+        } else if (focusMode == CameraMetadata.CONTROL_AF_MODE_OFF) {
+            jniFocusMode = AndroidMeteringMode.FIXED;
+        } else {
+            assert jniFocusMode == CameraMetadata.CONTROL_AF_MODE_EDOF;
+        }
+        builder.setFocusMode(jniFocusMode);
+
+        int jniExposureMode = AndroidMeteringMode.CONTINUOUS;
+        if (mPreviewRequest.get(CaptureRequest.CONTROL_AE_MODE)
+                == CameraMetadata.CONTROL_AE_MODE_OFF) {
+            jniExposureMode = AndroidMeteringMode.UNAVAILABLE;
+        }
+        if (mPreviewRequest.get(CaptureRequest.CONTROL_AE_LOCK)) {
+            jniExposureMode = AndroidMeteringMode.FIXED;
+        }
+        builder.setFocusMode(jniExposureMode);
+
+        // TODO(mcasas): https://crbug.com/518807 read the exposure compensation min and max
+        // values using CONTROL_AE_COMPENSATION_RANGE.
+
+        return builder.build();
+    }
+
+    @Override
+    public void setPhotoOptions(int zoom, int focusMode, int exposureMode, int width, int height,
+            float[] pointsOfInterest2D) {
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
+        final Rect canvas =
+                cameraCharacteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+
+        if (zoom != 0) {
+            final float normalizedZoom = Math.max(100, Math.min(zoom, mMaxZoom * 100)) / 100;
+            final float cropFactor = (normalizedZoom - 1) / (2 * normalizedZoom);
+
+            mCropRect = new Rect(Math.round(canvas.width() * cropFactor),
+                    Math.round(canvas.height() * cropFactor),
+                    Math.round(canvas.width() * (1 - cropFactor)),
+                    Math.round(canvas.height() * (1 - cropFactor)));
+            Log.d(TAG, "zoom level %f, rectangle: %s", normalizedZoom, mCropRect.toString());
+        }
+
+        if (focusMode != AndroidMeteringMode.NOT_SET) mFocusMode = focusMode;
+        if (exposureMode != AndroidMeteringMode.NOT_SET) mExposureMode = exposureMode;
+
+        // TODO(mcasas): https://crbug.com/518807 support exposure compensation.
+
+        if (width > 0) mPhotoWidth = width;
+        if (height > 0) mPhotoHeight = height;
+
+        // Upon new |zoom| configuration, clear up the previous |mAreaOfInterest| if any.
+        if (mAreaOfInterest != null && !mAreaOfInterest.getRect().isEmpty() && zoom > 0) {
+            mAreaOfInterest = null;
+        }
+        // Also clear |mAreaOfInterest| if the user sets it as UNAVAILABLE.
+        if (mFocusMode == AndroidMeteringMode.UNAVAILABLE
+                || mExposureMode == AndroidMeteringMode.UNAVAILABLE) {
+            mAreaOfInterest = null;
+        }
+        // Update |mAreaOfInterest| if the camera supports and there are |pointsOfInterest2D|.
+        if (cameraCharacteristics.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) > 0
+                && pointsOfInterest2D.length > 0) {
+            assert pointsOfInterest2D.length == 1 : "Only 1 point of interest supported";
+            assert pointsOfInterest2D[0] <= 1.0 && pointsOfInterest2D[0] >= 0.0;
+            assert pointsOfInterest2D[1] <= 1.0 && pointsOfInterest2D[1] >= 0.0;
+            // Calculate a Rect of 1/8 the |visibleRect| dimensions, and center it w.r.t. |canvas|.
+            final Rect visibleRect = (mCropRect.isEmpty()) ? canvas : mCropRect;
+            int centerX = Math.round(pointsOfInterest2D[0] * visibleRect.width());
+            int centerY = Math.round(pointsOfInterest2D[1] * visibleRect.height());
+            if (visibleRect.equals(mCropRect)) {
+                centerX += (canvas.width() - visibleRect.width()) / 2;
+                centerY += (canvas.height() - visibleRect.height()) / 2;
+            }
+            final int regionWidth = visibleRect.width() / 8;
+            final int regionHeight = visibleRect.height() / 8;
+
+            mAreaOfInterest = new MeteringRectangle(Math.max(0, centerX - regionWidth / 2),
+                    Math.max(0, centerY - regionHeight / 2), regionWidth, regionHeight,
+                    MeteringRectangle.METERING_WEIGHT_MAX);
+
+            Log.d(TAG, "Calculating (%.2fx%.2f) wrt to %s (canvas being %s)", pointsOfInterest2D[0],
+                    pointsOfInterest2D[1], visibleRect.toString(), canvas.toString());
+            Log.d(TAG, "Area of interest %s", mAreaOfInterest.toString());
+        }
+
+        final Handler mainHandler = new Handler(mContext.getMainLooper());
+        mainHandler.removeCallbacks(mRestartCapture);
+        mainHandler.post(mRestartCapture);
     }
 
     @Override
@@ -571,8 +718,20 @@ public class VideoCaptureCamera2 extends VideoCapture {
         Log.d(TAG, "takePhoto " + callbackId);
         if (mCameraDevice == null || mCameraState != CameraState.STARTED) return false;
 
-        final ImageReader imageReader = ImageReader.newInstance(mCaptureFormat.getWidth(),
-                mCaptureFormat.getHeight(), ImageFormat.JPEG, 1 /* maxImages */);
+        final CameraCharacteristics cameraCharacteristics = getCameraCharacteristics(mContext, mId);
+        final StreamConfigurationMap streamMap =
+                cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+        final Size[] supportedSizes = streamMap.getOutputSizes(ImageFormat.JPEG);
+        final Size closestSize = findClosestSizeInArray(supportedSizes, mPhotoWidth, mPhotoHeight);
+
+        Log.d(TAG, "requested resolution: (%dx%d)", mPhotoWidth, mPhotoHeight);
+        if (closestSize != null) {
+            Log.d(TAG, " matched (%dx%d)", closestSize.getWidth(), closestSize.getHeight());
+        }
+        final ImageReader imageReader = ImageReader.newInstance(
+                (closestSize != null) ? closestSize.getWidth() : mCaptureFormat.getWidth(),
+                (closestSize != null) ? closestSize.getHeight() : mCaptureFormat.getHeight(),
+                ImageFormat.JPEG, 1 /* maxImages */);
 
         HandlerThread thread = new HandlerThread("CameraPicture");
         thread.start();
@@ -582,6 +741,7 @@ public class VideoCaptureCamera2 extends VideoCapture {
         imageReader.setOnImageAvailableListener(photoReaderListener, backgroundHandler);
 
         final List<Surface> surfaceList = new ArrayList<Surface>(1);
+        // TODO(mcasas): Hold on to this Surface and release() it when not needed.
         surfaceList.add(imageReader.getSurface());
 
         CaptureRequest.Builder photoRequestBuilder = null;
@@ -598,6 +758,34 @@ public class VideoCaptureCamera2 extends VideoCapture {
         }
         photoRequestBuilder.addTarget(imageReader.getSurface());
         photoRequestBuilder.set(CaptureRequest.JPEG_ORIENTATION, getCameraRotation());
+        if (!mCropRect.isEmpty()) {
+            photoRequestBuilder.set(CaptureRequest.SCALER_CROP_REGION, mCropRect);
+        }
+
+        if (mFocusMode == AndroidMeteringMode.CONTINUOUS) {
+            photoRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+        } else if (mFocusMode == AndroidMeteringMode.SINGLE_SHOT) {
+            photoRequestBuilder.set(
+                    CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START);
+        }
+
+        if (mExposureMode == AndroidMeteringMode.FIXED) {
+            photoRequestBuilder.set(
+                    CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
+        } else {
+            photoRequestBuilder.set(
+                    CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_ON);
+            // TODO(mcasas): set to CONTROL_AE_MODE_ON_{AUTO,ALWAYS}_FLASH{,_REDEYE} depending on
+            // other options that need to be wired and passed to setPhotoOptions().
+        }
+
+        if (mAreaOfInterest != null) {
+            MeteringRectangle[] array = {mAreaOfInterest};
+            Log.d(TAG, "Area of interest %s", mAreaOfInterest.toString());
+            photoRequestBuilder.set(CaptureRequest.CONTROL_AF_REGIONS, array);
+            photoRequestBuilder.set(CaptureRequest.CONTROL_AE_REGIONS, array);
+        }
 
         final CaptureRequest photoRequest = photoRequestBuilder.build();
         final CrPhotoSessionListener sessionListener =

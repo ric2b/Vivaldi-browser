@@ -92,6 +92,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void OnSwapCompositorFrame(uint32_t output_surface_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override {}
+  void SetNeedsBeginFrames(bool needs_begin_frames) override {}
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -100,16 +101,10 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override {}
-  void ImeCancelComposition() override {}
-  void ImeCompositionRangeChanged(
-      const gfx::Range& range,
-      const std::vector<gfx::Rect>& character_bounds) override {}
   void RenderProcessGone(base::TerminationStatus status,
                          int error_code) override;
   void Destroy() override;
   void SetTooltipText(const base::string16& tooltip_text) override {}
-  void SelectionBoundsChanged(
-      const ViewHostMsg_SelectionBounds_Params& params) override {}
   void CopyFromCompositingSurface(
       const gfx::Rect& src_subrect,
       const gfx::Size& dst_size,
@@ -123,11 +118,10 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void LockCompositingSurface() override {}
   void UnlockCompositingSurface() override {}
-  void GetScreenInfo(blink::WebScreenInfo* results) override {}
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  uint32_t GetSurfaceIdNamespace() override;
+  uint32_t GetSurfaceClientId() override;
 
   bool is_showing() const { return is_showing_; }
   bool is_occluded() const { return is_occluded_; }

@@ -14,7 +14,6 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -54,7 +53,8 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   typedef base::Callback<void(const std::vector<std::string>&)>
       AffiliatedRealmsCallback;
 
-  typedef base::Callback<void(ScopedVector<autofill::PasswordForm>)>
+  typedef base::Callback<void(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>)>
       PasswordFormsCallback;
 
   // The |password_store| must outlive |this|. Both arguments must be non-NULL,
@@ -71,7 +71,7 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   // |observed_form| if it is web-based. Otherwise, yields the empty list. The
   // |result_callback| will be invoked in both cases, on the same thread.
   virtual void GetAffiliatedAndroidRealms(
-      const autofill::PasswordForm& observed_form,
+      const PasswordStore::FormDigest& observed_form,
       const AffiliatedRealmsCallback& result_callback);
 
   // Retrieves realms of web sites affiliated with the Android application that
@@ -82,7 +82,7 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   // long as the |android_form| is from the PasswordStore, this should rarely
   // happen as affiliation information for those applications are prefetched.
   virtual void GetAffiliatedWebRealms(
-      const autofill::PasswordForm& android_form,
+      const PasswordStore::FormDigest& android_form,
       const AffiliatedRealmsCallback& result_callback);
 
   // Retrieves realms of web sites affiliated with the Android credentials in
@@ -91,18 +91,18 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
   // NOTE: This will not issue an on-demand network request. If a request to
   // cache fails, no web realm will be injected into corresponding form.
   virtual void InjectAffiliatedWebRealms(
-      ScopedVector<autofill::PasswordForm> forms,
+      std::vector<std::unique_ptr<autofill::PasswordForm>> forms,
       const PasswordFormsCallback& result_callback);
 
   // Removes cached affiliation data that is no longer needed.
   void TrimAffiliationCache();
 
   // Returns whether or not |form| represents an Android credential.
-  static bool IsValidAndroidCredential(const autofill::PasswordForm& form);
+  static bool IsValidAndroidCredential(const PasswordStore::FormDigest& form);
 
   // Returns whether or not |form| represents a valid Web credential for the
   // purposes of affiliation-based matching.
-  static bool IsValidWebCredential(const autofill::PasswordForm& form);
+  static bool IsValidWebCredential(const PasswordStore::FormDigest& form);
 
   // Sets the task runner to be used to delay I/O heavy initialization. Should
   // be called before Initialize(). Used only for testing.
@@ -151,7 +151,7 @@ class AffiliatedMatchHelper : public PasswordStore::Observer,
 
   // PasswordStoreConsumer:
   void OnGetPasswordStoreResults(
-      ScopedVector<autofill::PasswordForm> results) override;
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override;
 
   PasswordStore* const password_store_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_for_waiting_;

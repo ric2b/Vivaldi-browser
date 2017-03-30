@@ -4,37 +4,48 @@
 
 #include "ash/common/system/update/tray_update.h"
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_notifier.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/wm_shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
 
+namespace ash {
 namespace {
 
-int DecideResource(ash::UpdateInfo::UpdateSeverity severity, bool dark) {
+// Decides the non-material design image resource to use for a given update
+// severity.
+// TODO(tdanderson): This is only used for non-material design, so remove it
+// when material design is the default. See crbug.com/625692.
+int DecideResource(UpdateInfo::UpdateSeverity severity, bool dark) {
   switch (severity) {
-    case ash::UpdateInfo::UPDATE_NORMAL:
+    case UpdateInfo::UPDATE_NONE:
+    case UpdateInfo::UPDATE_LOW:
       return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK : IDR_AURA_UBER_TRAY_UPDATE;
 
-    case ash::UpdateInfo::UPDATE_LOW_GREEN:
+    case UpdateInfo::UPDATE_ELEVATED:
       return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_GREEN
                   : IDR_AURA_UBER_TRAY_UPDATE_GREEN;
 
-    case ash::UpdateInfo::UPDATE_HIGH_ORANGE:
+    case UpdateInfo::UPDATE_HIGH:
       return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_ORANGE
                   : IDR_AURA_UBER_TRAY_UPDATE_ORANGE;
 
-    case ash::UpdateInfo::UPDATE_SEVERE_RED:
+    case UpdateInfo::UPDATE_SEVERE:
+    case UpdateInfo::UPDATE_CRITICAL:
       return dark ? IDR_AURA_UBER_TRAY_UPDATE_DARK_RED
                   : IDR_AURA_UBER_TRAY_UPDATE_RED;
   }
@@ -43,19 +54,49 @@ int DecideResource(ash::UpdateInfo::UpdateSeverity severity, bool dark) {
   return 0;
 }
 
-class UpdateView : public ash::ActionableView {
+// Returns the color to use for the material design update icon when the update
+// severity is |severity|. If |for_menu| is true, the icon color for the system
+// menu is given, otherwise the icon color for the system tray is given.
+SkColor IconColorForUpdateSeverity(UpdateInfo::UpdateSeverity severity,
+                                   bool for_menu) {
+  const SkColor default_color = for_menu ? kMenuIconColor : kTrayIconColor;
+  switch (severity) {
+    case UpdateInfo::UPDATE_NONE:
+      return default_color;
+    case UpdateInfo::UPDATE_LOW:
+      return for_menu ? gfx::kGoogleGreen700 : gfx::kGoogleGreen300;
+    case UpdateInfo::UPDATE_ELEVATED:
+      return for_menu ? gfx::kGoogleYellow700 : gfx::kGoogleYellow300;
+    case UpdateInfo::UPDATE_HIGH:
+    case UpdateInfo::UPDATE_SEVERE:
+    case UpdateInfo::UPDATE_CRITICAL:
+      return for_menu ? gfx::kGoogleRed700 : gfx::kGoogleRed300;
+    default:
+      NOTREACHED();
+      break;
+  }
+  return default_color;
+}
+
+class UpdateView : public ActionableView {
  public:
-  explicit UpdateView(const ash::UpdateInfo& info) {
+  UpdateView(SystemTrayItem* owner, const UpdateInfo& info)
+      : ActionableView(owner) {
     SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                          ash::kTrayPopupPaddingHorizontal, 0,
-                                          ash::kTrayPopupPaddingBetweenItems));
+                                          kTrayPopupPaddingHorizontal, 0,
+                                          kTrayPopupPaddingBetweenItems));
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
     views::ImageView* image =
-        new ash::FixedSizedImageView(0, ash::kTrayPopupItemHeight);
-    image->SetImage(bundle.GetImageNamed(DecideResource(info.severity, true))
-                        .ToImageSkia());
-
+        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
+    if (MaterialDesignController::IsSystemTrayMenuMaterial()) {
+      image->SetImage(gfx::CreateVectorIcon(
+          gfx::VectorIconId::SYSTEM_MENU_UPDATE,
+          IconColorForUpdateSeverity(info.severity, true)));
+    } else {
+      image->SetImage(bundle.GetImageNamed(DecideResource(info.severity, true))
+                          .ToImageSkia());
+    }
     AddChildView(image);
 
     base::string16 label =
@@ -72,17 +113,17 @@ class UpdateView : public ash::ActionableView {
  private:
   // Overridden from ActionableView.
   bool PerformAction(const ui::Event& event) override {
-    ash::WmShell::Get()->system_tray_delegate()->RequestRestartForUpdate();
-    ash::WmShell::Get()->RecordUserMetricsAction(
-        ash::UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED);
+    WmShell::Get()->system_tray_delegate()->RequestRestartForUpdate();
+    WmShell::Get()->RecordUserMetricsAction(
+        UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED);
+    CloseSystemBubble();
     return true;
   }
 
   DISALLOW_COPY_AND_ASSIGN(UpdateView);
 };
-}
 
-namespace ash {
+}  // namespace
 
 TrayUpdate::TrayUpdate(SystemTray* system_tray)
     : TrayImageItem(system_tray, IDR_AURA_UBER_TRAY_UPDATE, UMA_UPDATE) {
@@ -102,11 +143,14 @@ bool TrayUpdate::GetInitialVisibility() {
 views::View* TrayUpdate::CreateDefaultView(LoginStatus status) {
   UpdateInfo info;
   WmShell::Get()->system_tray_delegate()->GetSystemUpdateInfo(&info);
-  return info.update_required ? new UpdateView(info) : nullptr;
+  return info.update_required ? new UpdateView(this, info) : nullptr;
 }
 
 void TrayUpdate::OnUpdateRecommended(const UpdateInfo& info) {
-  SetImageFromResourceId(DecideResource(info.severity, false));
+  if (MaterialDesignController::UseMaterialDesignSystemIcons())
+    SetIconColor(IconColorForUpdateSeverity(info.severity, false));
+  else
+    SetImageFromResourceId(DecideResource(info.severity, false));
   tray_view()->SetVisible(true);
 }
 

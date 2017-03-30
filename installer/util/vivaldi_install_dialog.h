@@ -37,23 +37,24 @@ public:
   };
 
   VivaldiInstallDialog(HINSTANCE instance,
-    const bool set_as_default_browser = false,
-    const InstallType default_install_type = INSTALL_FOR_CURRENT_USER,
-    const std::wstring& destination_folder = L"");
+                       const bool set_as_default_browser,
+                       const InstallType default_install_type,
+                       const base::FilePath& destination_folder);
 
   virtual ~VivaldiInstallDialog();
 
   DlgResult ShowModal();
 
-  std::wstring GetDestinationFolder() const { return destination_folder_; }
+  const base::FilePath& GetDestinationFolder() const {
+    return destination_folder_;
+  }
   InstallType GetInstallType() const { return install_type_; }
   bool GetSetAsDefaultBrowser() const { return set_as_default_browser_; }
   std::wstring GetLanguageCode() const { return language_code_; }
-  bool GetRegisterBrowser() const { return register_browser_; }
+  const bool GetRegisterBrowser() const;
 
-  static bool IsVivaldiInstalled(
-      const base::FilePath& path,
-      InstallType& installed_type);
+  static bool IsVivaldiInstalled(const base::FilePath& path,
+                                 InstallType& installed_type);
 
 private:
   void InitDialog();
@@ -73,6 +74,7 @@ private:
   void ShowDlgControls(HWND hwnd_dlg, bool show = true);
   void ShowOptions(HWND hwnd_dlg, bool show = true);
   void UpdateRegisterCheckboxVisibility();
+  const bool IsRegisterBrowserValid() const;
 
   void InitBkgnd(HWND hdlg, int cx, int cy);
 
@@ -91,7 +93,8 @@ private:
 
 private:
   std::wstring language_code_;
-  std::wstring destination_folder_;
+  base::FilePath destination_folder_;
+  base::FilePath last_standalone_folder_;
   InstallType install_type_;
   bool set_as_default_browser_;
   bool register_browser_;

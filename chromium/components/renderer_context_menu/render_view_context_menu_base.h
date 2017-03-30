@@ -148,10 +148,6 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
   virtual void HandleAuthorizeAllPlugins() = 0;
 #endif
 
-  // Returns the accelerator for given |command_id|.
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override = 0;
-
   // Subclasses should send notification.
   virtual void NotifyMenuShown() = 0;
   virtual void NotifyURLOpened(const GURL& url,
@@ -176,7 +172,8 @@ class RenderViewContextMenuBase : public ui::SimpleMenuModel::Delegate,
                                const GURL& referrer,
                                WindowOpenDisposition disposition,
                                ui::PageTransition transition,
-                               const std::string& extra_headers);
+                               const std::string& extra_headers,
+                               bool started_from_context_menu);
 
   content::ContextMenuParams params_;
   content::WebContents* const source_web_contents_;

@@ -4,6 +4,8 @@
 
 #include "content/browser/web_contents/web_contents_view_android.h"
 
+#include "base/android/jni_android.h"
+#include "base/android/jni_string.h"
 #include "base/logging.h"
 #include "content/browser/android/content_view_core_impl.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
@@ -13,8 +15,38 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents_delegate.h"
+#include "content/public/common/drop_data.h"
+#include "third_party/WebKit/public/platform/WebScreenInfo.h"
+#include "ui/display/screen.h"
+#include "ui/gfx/android/device_display_info.h"
+#include "ui/gfx/android/java_bitmap.h"
+#include "ui/gfx/image/image_skia.h"
+
+using base::android::AttachCurrentThread;
+using base::android::ConvertUTF16ToJavaString;
+using base::android::JavaRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace content {
+
+// static
+void WebContentsView::GetDefaultScreenInfo(
+    blink::WebScreenInfo* results) {
+  const display::Display& display =
+      display::Screen::GetScreen()->GetPrimaryDisplay();
+  results->rect = display.bounds();
+  // TODO(husky): Remove any system controls from availableRect.
+  results->availableRect = display.work_area();
+  results->deviceScaleFactor = display.device_scale_factor();
+  results->orientationAngle = display.RotationAsDegree();
+  results->orientationType =
+      RenderWidgetHostViewBase::GetOrientationTypeForMobile(display);
+  gfx::DeviceDisplayInfo info;
+  results->depth = display.color_depth();
+  results->depthPerComponent = display.depth_per_component();
+  results->isMonochrome = (results->depthPerComponent == 0);
+}
+
 WebContentsView* CreateWebContentsView(
     WebContentsImpl* web_contents,
     WebContentsViewDelegate* delegate,
@@ -57,15 +89,25 @@ void WebContentsViewAndroid::SetContentViewCore(
 }
 
 gfx::NativeView WebContentsViewAndroid::GetNativeView() const {
-  return content_view_core_ ? content_view_core_ : NULL;
+  return content_view_core_ ? content_view_core_->GetViewAndroid() : nullptr;
 }
 
 gfx::NativeView WebContentsViewAndroid::GetContentNativeView() const {
-  return content_view_core_ ? content_view_core_ : NULL;
+  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
+  if (rwhv)
+    return rwhv->GetNativeView();
+
+  // TODO(sievers): This should return null.
+  return GetNativeView();
 }
 
 gfx::NativeWindow WebContentsViewAndroid::GetTopLevelNativeWindow() const {
-  return content_view_core_ ? content_view_core_->GetWindowAndroid() : NULL;
+  return content_view_core_ ? content_view_core_->GetWindowAndroid() : nullptr;
+}
+
+void WebContentsViewAndroid::GetScreenInfo(blink::WebScreenInfo* result) const {
+  // ScreenInfo isn't tied to the widget on Android. Always return the default.
+  WebContentsView::GetDefaultScreenInfo(result);
 }
 
 void WebContentsViewAndroid::GetContainerBounds(gfx::Rect* out) const {
@@ -192,11 +234,84 @@ void WebContentsViewAndroid::StartDragging(
     const gfx::ImageSkia& image,
     const gfx::Vector2d& image_offset,
     const DragEventSourceInfo& event_info) {
-  NOTIMPLEMENTED();
+  if (drop_data.text.is_null()) {
+    // Need to clear drag and drop state in blink.
+    OnDragEnded();
+    return;
+  }
+
+  gfx::NativeView native_view = GetNativeView();
+  if (!native_view) {
+    // Need to clear drag and drop state in blink.
+    OnDragEnded();
+    return;
+  }
+
+  const SkBitmap* bitmap = image.bitmap();
+  SkBitmap dummy_bitmap;
+
+  if (image.size().IsEmpty()) {
+    // An empty drag image is possible if the Javascript sets an empty drag
+    // image on purpose.
+    // Create a dummy 1x1 pixel image to avoid crashes when converting to java
+    // bitmap.
+    dummy_bitmap.allocN32Pixels(1, 1);
+    dummy_bitmap.eraseColor(0);
+    bitmap = &dummy_bitmap;
+  }
+
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> jtext =
+      ConvertUTF16ToJavaString(env, drop_data.text.string());
+
+  if (!native_view->StartDragAndDrop(jtext, gfx::ConvertToJavaBitmap(bitmap))) {
+    // Need to clear drag and drop state in blink.
+    OnDragEnded();
+    return;
+  }
+
+  if (content_view_core_)
+    content_view_core_->HidePopupsAndPreserveSelection();
 }
 
 void WebContentsViewAndroid::UpdateDragCursor(blink::WebDragOperation op) {
-  NOTIMPLEMENTED();
+  // Intentional no-op because Android does not have cursor.
+}
+
+void WebContentsViewAndroid::OnDragEntered(
+    const std::vector<DropData::Metadata>& metadata,
+    const gfx::Point& location,
+    const gfx::Point& screen_location) {
+  blink::WebDragOperationsMask allowed_ops =
+      static_cast<blink::WebDragOperationsMask>(blink::WebDragOperationCopy |
+                                                blink::WebDragOperationMove);
+  web_contents_->GetRenderViewHost()->DragTargetDragEnterWithMetaData(
+      metadata, location, screen_location, allowed_ops, 0);
+}
+
+void WebContentsViewAndroid::OnDragUpdated(const gfx::Point& location,
+                                           const gfx::Point& screen_location) {
+  blink::WebDragOperationsMask allowed_ops =
+      static_cast<blink::WebDragOperationsMask>(blink::WebDragOperationCopy |
+                                                blink::WebDragOperationMove);
+  web_contents_->GetRenderViewHost()->DragTargetDragOver(
+      location, screen_location, allowed_ops, 0);
+}
+
+void WebContentsViewAndroid::OnDragExited() {
+  web_contents_->GetRenderViewHost()->DragTargetDragLeave();
+}
+
+void WebContentsViewAndroid::OnPerformDrop(DropData* drop_data,
+                                           const gfx::Point& location,
+                                           const gfx::Point& screen_location) {
+  web_contents_->GetRenderViewHost()->FilterDropData(drop_data);
+  web_contents_->GetRenderViewHost()->DragTargetDrop(*drop_data, location,
+                                                     screen_location, 0);
+}
+
+void WebContentsViewAndroid::OnDragEnded() {
+  web_contents_->GetRenderViewHost()->DragSourceSystemDragEnded();
 }
 
 void WebContentsViewAndroid::GotFocus() {

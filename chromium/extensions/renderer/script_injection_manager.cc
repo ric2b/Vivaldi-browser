@@ -271,7 +271,7 @@ ScriptInjectionManager::~ScriptInjectionManager() {
 
 void ScriptInjectionManager::OnRenderFrameCreated(
     content::RenderFrame* render_frame) {
-  rfo_helpers_.push_back(base::WrapUnique(new RFOHelper(render_frame, this)));
+  rfo_helpers_.push_back(base::MakeUnique<RFOHelper>(render_frame, this));
 }
 
 void ScriptInjectionManager::OnExtensionUnloaded(
@@ -299,8 +299,7 @@ void ScriptInjectionManager::OnInjectionFinished(
 }
 
 void ScriptInjectionManager::OnUserScriptsUpdated(
-    const std::set<HostID>& changed_hosts,
-    const std::vector<UserScript*>& scripts) {
+    const std::set<HostID>& changed_hosts) {
   for (auto iter = pending_injections_.begin();
        iter != pending_injections_.end();) {
     if (changed_hosts.count((*iter)->host_id()) > 0)

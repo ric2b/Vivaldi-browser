@@ -16,7 +16,7 @@ namespace blink {
 CSSPaintImageGenerator* CSSPaintImageGeneratorImpl::create(const String& name, Document& document, Observer* observer)
 {
     LocalDOMWindow* domWindow = document.domWindow();
-    PaintWorklet* paintWorklet = WindowPaintWorklet::from(*domWindow).paintWorklet(&document);
+    PaintWorklet* paintWorklet = WindowPaintWorklet::from(*domWindow).paintWorklet();
 
     CSSPaintDefinition* paintDefinition = paintWorklet->findDefinition(name);
     CSSPaintImageGeneratorImpl* generator;
@@ -53,9 +53,9 @@ void CSSPaintImageGeneratorImpl::setDefinition(CSSPaintDefinition* definition)
     m_observer->paintImageGeneratorReady();
 }
 
-PassRefPtr<Image> CSSPaintImageGeneratorImpl::paint(const LayoutObject& layoutObject, const IntSize& size)
+PassRefPtr<Image> CSSPaintImageGeneratorImpl::paint(const LayoutObject& layoutObject, const IntSize& size, float zoom)
 {
-    return m_definition ? m_definition->paint(layoutObject, size) : nullptr;
+    return m_definition ? m_definition->paint(layoutObject, size, zoom) : nullptr;
 }
 
 const Vector<CSSPropertyID>& CSSPaintImageGeneratorImpl::nativeInvalidationProperties() const
@@ -68,6 +68,11 @@ const Vector<AtomicString>& CSSPaintImageGeneratorImpl::customInvalidationProper
 {
     DEFINE_STATIC_LOCAL(Vector<AtomicString>, emptyVector, ());
     return m_definition ? m_definition->customInvalidationProperties() : emptyVector;
+}
+
+bool CSSPaintImageGeneratorImpl::hasAlpha() const
+{
+    return m_definition && m_definition->hasAlpha();
 }
 
 DEFINE_TRACE(CSSPaintImageGeneratorImpl)

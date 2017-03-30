@@ -6,10 +6,12 @@
 
 #include "ash/common/ash_constants.h"
 #include "ash/common/ash_switches.h"
-#include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/header_painter.h"
+#include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "ash/common/frame/header_painter.h"
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
@@ -25,9 +27,11 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/test/immersive_fullscreen_controller_test_api.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_test.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "components/signin/core/account_id/account_id.h"
 #endif  // defined(OS_CHROMEOS)
@@ -106,7 +110,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
   EXPECT_TRUE(frame_view->caption_button_container_->visible());
 }
 
-// TODO(zturner): Change this to USE_ASH after fixing the test on Windows.
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
@@ -119,7 +122,13 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
 
   ImmersiveModeController* immersive_mode_controller =
       browser_view->immersive_mode_controller();
-  immersive_mode_controller->SetupForTest();
+  ASSERT_EQ(ImmersiveModeController::Type::ASH,
+            immersive_mode_controller->type());
+
+  ash::ImmersiveFullscreenControllerTestApi(
+      static_cast<ImmersiveModeControllerAsh*>(immersive_mode_controller)
+          ->controller())
+      .SetupForTest();
 
   // Immersive fullscreen starts disabled.
   ASSERT_FALSE(widget->IsFullscreen());
@@ -188,14 +197,21 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest, ImmersiveFullscreen) {
   EXPECT_LT(Tab::GetImmersiveHeight(),
             frame_view->header_painter_->GetHeaderHeightForPainting());
 
-  // Ending the reveal should hide the caption buttons and the header should
-  // be in the lightbar style.
+  // Ending the reveal. In MD, immersive browser should have the same behavior
+  // as full screen, i.e., no light bar and having an origin of (0,0). In
+  // non-MD, immersive browser will show a 3 dp light bar on the top.
   revealed_lock.reset();
-  EXPECT_TRUE(frame_view->ShouldPaint());
-  EXPECT_FALSE(frame_view->caption_button_container_->visible());
-  EXPECT_TRUE(frame_view->UseImmersiveLightbarHeaderStyle());
-  EXPECT_EQ(Tab::GetImmersiveHeight(),
-            frame_view->header_painter_->GetHeaderHeightForPainting());
+  if (ash::MaterialDesignController::IsShelfMaterial()) {
+    EXPECT_FALSE(frame_view->ShouldPaint());
+    EXPECT_FALSE(frame_view->UseImmersiveLightbarHeaderStyle());
+    EXPECT_EQ(0, frame_view->header_painter_->GetHeaderHeightForPainting());
+  } else {
+    EXPECT_TRUE(frame_view->ShouldPaint());
+    EXPECT_FALSE(frame_view->caption_button_container_->visible());
+    EXPECT_TRUE(frame_view->UseImmersiveLightbarHeaderStyle());
+    EXPECT_EQ(Tab::GetImmersiveHeight(),
+              frame_view->header_painter_->GetHeaderHeightForPainting());
+  }
 
   // Exiting immersive fullscreen should make the caption buttons and the frame
   // visible again.
@@ -284,16 +300,18 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
           widget->non_client_view()->frame_view());
 
   const gfx::Rect initial = frame_view->caption_button_container_->bounds();
-  ash::Shell::GetInstance()->maximize_mode_controller()->
-      EnableMaximizeModeWindowManager(true);
+  ash::WmShell::Get()
+      ->maximize_mode_controller()
+      ->EnableMaximizeModeWindowManager(true);
   ash::FrameCaptionButtonContainerView::TestApi test(frame_view->
                                                      caption_button_container_);
   test.EndAnimations();
   const gfx::Rect during_maximize = frame_view->caption_button_container_->
       bounds();
   EXPECT_GT(initial.width(), during_maximize.width());
-  ash::Shell::GetInstance()->maximize_mode_controller()->
-      EnableMaximizeModeWindowManager(false);
+  ash::WmShell::Get()
+      ->maximize_mode_controller()
+      ->EnableMaximizeModeWindowManager(false);
   test.EndAnimations();
   const gfx::Rect after_restore = frame_view->caption_button_container_->
       bounds();

@@ -119,7 +119,7 @@ LatencyInfoTracedValue::LatencyInfoTracedValue(base::Value* value)
     : value_(value) {
 }
 
-const char kTraceCategoriesForAsyncEvents[] = "benchmark,latencyInfo";
+const char kTraceCategoriesForAsyncEvents[] = "benchmark,latencyInfo,rail";
 
 struct LatencyInfoEnabledInitializer {
   LatencyInfoEnabledInitializer() :
@@ -359,13 +359,10 @@ bool LatencyInfo::FindLatency(LatencyComponentType type,
 void LatencyInfo::RemoveLatency(LatencyComponentType type) {
   LatencyMap::iterator it = latency_components_.begin();
   while (it != latency_components_.end()) {
-    if (it->first.first == type) {
-      LatencyMap::iterator tmp = it;
-      ++it;
-      latency_components_.erase(tmp);
-    } else {
+    if (it->first.first == type)
+      it = latency_components_.erase(it);
+    else
       it++;
-    }
   }
 }
 

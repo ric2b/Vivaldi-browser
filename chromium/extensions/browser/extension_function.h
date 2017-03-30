@@ -39,7 +39,6 @@ class Value;
 namespace content {
 class BrowserContext;
 class RenderFrameHost;
-class RenderViewHost;
 class WebContents;
 }
 
@@ -510,11 +509,6 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   }
   content::BrowserContext* browser_context() const { return context_; }
 
-  // DEPRECATED: Please use render_frame_host().
-  // TODO(devlin): Remove this once all callers are updated to use
-  // render_frame_host().
-  content::RenderViewHost* render_view_host_do_not_use() const;
-
   void SetRenderFrameHost(content::RenderFrameHost* render_frame_host);
   content::RenderFrameHost* render_frame_host() const {
     return render_frame_host_;
@@ -698,32 +692,6 @@ class SyncExtensionFunction : public UIThreadExtensionFunction {
   ResponseAction Run() final;
 
   DISALLOW_COPY_AND_ASSIGN(SyncExtensionFunction);
-};
-
-class SyncIOThreadExtensionFunction : public IOThreadExtensionFunction {
- public:
-  SyncIOThreadExtensionFunction();
-
- protected:
-  ~SyncIOThreadExtensionFunction() override;
-
-  // Deprecated: Override IOThreadExtensionFunction and implement Run() instead.
-  //
-  // SyncIOThreadExtensionFunctions implement this method. Return true to
-  // respond immediately with success, false to respond immediately with an
-  // error.
-  virtual bool RunSync() = 0;
-
-  // ValidationFailure override to match RunSync().
-  static bool ValidationFailure(SyncIOThreadExtensionFunction* function);
-
- private:
-  // If you're hitting a compile error here due to "final" - great! You're
-  // doing the right thing, you just need to extend IOThreadExtensionFunction
-  // instead of SyncIOExtensionFunction.
-  ResponseAction Run() final;
-
-  DISALLOW_COPY_AND_ASSIGN(SyncIOThreadExtensionFunction);
 };
 
 #endif  // EXTENSIONS_BROWSER_EXTENSION_FUNCTION_H_

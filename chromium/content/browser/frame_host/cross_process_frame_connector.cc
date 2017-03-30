@@ -5,6 +5,7 @@
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 
 #include "cc/surfaces/surface.h"
+#include "cc/surfaces/surface_hittest.h"
 #include "cc/surfaces/surface_manager.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -15,10 +16,12 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/frame_messages.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/gfx/geometry/dip_util.h"
 
 namespace content {
 
@@ -26,12 +29,11 @@ CrossProcessFrameConnector::CrossProcessFrameConnector(
     RenderFrameProxyHost* frame_proxy_in_parent_renderer)
     : frame_proxy_in_parent_renderer_(frame_proxy_in_parent_renderer),
       view_(nullptr),
-      device_scale_factor_(1) {
-}
+      is_scroll_bubbling_(false) {}
 
 CrossProcessFrameConnector::~CrossProcessFrameConnector() {
-  if (view_)
-    view_->SetCrossProcessFrameConnector(nullptr);
+  // Notify the view of this object being destroyed, if the view still exists.
+  set_view(nullptr);
 }
 
 bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
@@ -41,8 +43,6 @@ bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_ForwardInputEvent, OnForwardInputEvent)
     IPC_MESSAGE_HANDLER(FrameHostMsg_FrameRectChanged, OnFrameRectChanged)
     IPC_MESSAGE_HANDLER(FrameHostMsg_VisibilityChanged, OnVisibilityChanged)
-    IPC_MESSAGE_HANDLER(FrameHostMsg_InitializeChildFrame,
-                        OnInitializeChildFrame)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SatisfySequence, OnSatisfySequence)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RequireSequence, OnRequireSequence)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -54,15 +54,29 @@ bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
 void CrossProcessFrameConnector::set_view(
     RenderWidgetHostViewChildFrame* view) {
   // Detach ourselves from the previous |view_|.
-  if (view_)
+  if (view_) {
+    // The RenderWidgetHostDelegate needs to be checked because set_view() can
+    // be called during nested WebContents destruction. See
+    // https://crbug.com/644306.
+    if (is_scroll_bubbling_ && GetParentRenderWidgetHostView() &&
+        RenderWidgetHostImpl::From(
+            GetParentRenderWidgetHostView()->GetRenderWidgetHost())
+            ->delegate()) {
+      RenderWidgetHostImpl::From(
+          GetParentRenderWidgetHostView()->GetRenderWidgetHost())
+          ->delegate()
+          ->GetInputEventRouter()
+          ->CancelScrollBubbling(view_);
+      is_scroll_bubbling_ = false;
+    }
     view_->SetCrossProcessFrameConnector(nullptr);
+  }
 
   view_ = view;
 
   // Attach ourselves to the new view and size it appropriately.
   if (view_) {
     view_->SetCrossProcessFrameConnector(this);
-    SetDeviceScaleFactor(device_scale_factor_);
     SetRect(child_frame_rect_);
   }
 }
@@ -87,7 +101,7 @@ void CrossProcessFrameConnector::OnSatisfySequence(
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   cc::SurfaceManager* manager = GetSurfaceManager();
-  manager->DidSatisfySequences(sequence.id_namespace, &sequences);
+  manager->DidSatisfySequences(sequence.client_id, &sequences);
 }
 
 void CrossProcessFrameConnector::OnRequireSequence(
@@ -102,20 +116,8 @@ void CrossProcessFrameConnector::OnRequireSequence(
   surface->AddDestructionDependency(sequence);
 }
 
-void CrossProcessFrameConnector::OnInitializeChildFrame(float scale_factor) {
-  if (scale_factor != device_scale_factor_)
-    SetDeviceScaleFactor(scale_factor);
-}
-
 gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
   return child_frame_rect_;
-}
-
-void CrossProcessFrameConnector::GetScreenInfo(blink::WebScreenInfo* results) {
-  auto parent_view = GetParentRenderWidgetHostView();
-  if (parent_view) {
-    parent_view->GetScreenInfo(results);
-  }
 }
 
 void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
@@ -126,58 +128,87 @@ void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
 
 gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
     const gfx::Point& point,
-    cc::SurfaceId surface_id) {
-  gfx::Point transformed_point = point;
+    const cc::SurfaceId& surface_id) {
+  return TransformPointToCoordSpaceForView(point, GetRootRenderWidgetHostView(),
+                                           surface_id);
+}
+
+gfx::Point CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
+    const gfx::Point& point,
+    const cc::SurfaceId& original_surface,
+    const cc::SurfaceId& local_surface_id) {
+  if (original_surface == local_surface_id)
+    return point;
+
+  // Transformations use physical pixels rather than DIP, so conversion
+  // is necessary.
+  gfx::Point transformed_point =
+      gfx::ConvertPointToPixel(view_->current_surface_scale_factor(), point);
+  cc::SurfaceHittest hittest(nullptr, GetSurfaceManager());
+  if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
+                                             &transformed_point))
+    DCHECK(false);
+
+  return gfx::ConvertPointToDIP(view_->current_surface_scale_factor(),
+                                transformed_point);
+}
+
+gfx::Point CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
+    const gfx::Point& point,
+    RenderWidgetHostViewBase* target_view,
+    const cc::SurfaceId& local_surface_id) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
-  if (root_view)
-    root_view->TransformPointToLocalCoordSpace(point, surface_id,
-                                               &transformed_point);
-  return transformed_point;
+  if (!root_view)
+    return point;
+
+  // It is possible that neither the original surface or target surface is an
+  // ancestor of the other in the RenderWidgetHostView tree (e.g. they could
+  // be siblings). To account for this, the point is first tranformed into the
+  // root coordinate space and then the root is asked to perform the conversion.
+  gfx::Point root_point =
+      root_view->TransformPointToLocalCoordSpace(point, local_surface_id);
+
+  if (target_view == root_view)
+    return root_point;
+
+  return root_view->TransformPointToCoordSpaceForView(point, target_view);
 }
 
 void CrossProcessFrameConnector::ForwardProcessAckedTouchEvent(
     const TouchEventWithLatencyInfo& touch,
     InputEventAckState ack_result) {
-  auto main_view = GetRootRenderWidgetHostView();
+  auto* main_view = GetRootRenderWidgetHostView();
   if (main_view)
     main_view->ProcessAckedTouchEvent(touch, ack_result);
 }
 
 void CrossProcessFrameConnector::BubbleScrollEvent(
-    const blink::WebInputEvent& event) {
-  auto parent_view = GetParentRenderWidgetHostView();
+    const blink::WebGestureEvent& event) {
+  DCHECK(event.type == blink::WebInputEvent::GestureScrollUpdate ||
+         event.type == blink::WebInputEvent::GestureScrollEnd);
+  auto* parent_view = GetParentRenderWidgetHostView();
 
   if (!parent_view)
     return;
 
+  auto* event_router =
+      RenderWidgetHostImpl::From(parent_view->GetRenderWidgetHost())
+          ->delegate()
+          ->GetInputEventRouter();
+
   gfx::Vector2d offset_from_parent = child_frame_rect_.OffsetFromOrigin();
+  blink::WebGestureEvent resent_gesture_event(event);
+  // TODO(kenrb, wjmaclean): Do we need to account for transforms here?
+  // See https://crbug.com/626020.
+  resent_gesture_event.x += offset_from_parent.x();
+  resent_gesture_event.y += offset_from_parent.y();
   if (event.type == blink::WebInputEvent::GestureScrollUpdate) {
-    blink::WebGestureEvent resent_gesture_event;
-    memcpy(&resent_gesture_event, &event, sizeof(resent_gesture_event));
-    resent_gesture_event.x += offset_from_parent.x();
-    resent_gesture_event.y += offset_from_parent.y();
-    // TODO(wjmaclean, kenrb): The resendingPluginId field is used by
-    // BrowserPlugin to associate bubbled events with each plugin, which is
-    // not needed for OOPIFs. However the field needs to be set in order
-    // to prompt the parent frame's RenderWidgetHostImpl to
-    // manage the gesture scroll event lifetime (in particular creating the
-    // GestureScrollBegin and GestureScrollEnd events). This can be converted
-    // to a flag or otherwise refactored out when BrowserPlugin supporting
-    // code is eventually removed (https://crbug.com/533069).
-    resent_gesture_event.resendingPluginId = 1;
-    ui::LatencyInfo latency_info;
-    parent_view->ProcessGestureEvent(resent_gesture_event, latency_info);
-  } else if (event.type == blink::WebInputEvent::MouseWheel) {
-    blink::WebMouseWheelEvent resent_wheel_event;
-    memcpy(&resent_wheel_event, &event, sizeof(resent_wheel_event));
-    resent_wheel_event.x += offset_from_parent.x();
-    resent_wheel_event.y += offset_from_parent.y();
-    // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
-    // https://crbug.com/613628
-    ui::LatencyInfo latency_info;
-    parent_view->ProcessMouseWheelEvent(resent_wheel_event, latency_info);
-  } else {
-    NOTIMPLEMENTED();
+    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+    is_scroll_bubbling_ = true;
+  } else if (event.type == blink::WebInputEvent::GestureScrollEnd &&
+             is_scroll_bubbling_) {
+    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+    is_scroll_bubbling_ = false;
   }
 }
 
@@ -274,19 +305,13 @@ void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
     return;
   }
 
-  if (visible)
+  if (visible &&
+      !RenderWidgetHostImpl::From(view_->GetRenderWidgetHost())
+           ->delegate()
+           ->IsHidden()) {
     view_->Show();
-  else
+  } else if (!visible) {
     view_->Hide();
-}
-
-void CrossProcessFrameConnector::SetDeviceScaleFactor(float scale_factor) {
-  device_scale_factor_ = scale_factor;
-  // The RenderWidgetHost is null in unit tests.
-  if (view_ && view_->GetRenderWidgetHost()) {
-    RenderWidgetHostImpl* child_widget =
-        RenderWidgetHostImpl::From(view_->GetRenderWidgetHost());
-    child_widget->NotifyScreenInfoChanged();
   }
 }
 

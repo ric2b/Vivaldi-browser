@@ -117,7 +117,7 @@ static xmlDocPtr docLoaderFunc(
 
         // We don't specify an encoding here. Neither Gecko nor WinIE respects
         // the encoding specified in the HTTP headers.
-        SharedBuffer* data = resource->resourceBuffer();
+        RefPtr<SharedBuffer> data = resource->resourceBuffer();
         xmlDocPtr doc = data ? xmlReadMemory(data->data(), data->size(), (const char*)uri, 0, options) : nullptr;
 
         xmlSetStructuredErrorFunc(0, 0);
@@ -155,7 +155,7 @@ static int writeToStringBuilder(void* context, const char* buffer, int len)
     const char* stringCurrent = buffer;
     WTF::Unicode::ConversionResult result = WTF::Unicode::convertUTF8ToUTF16(&stringCurrent, buffer + len, &bufferUChar, bufferUCharEnd);
     if (result != WTF::Unicode::conversionOK && result != WTF::Unicode::sourceExhausted) {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return -1;
     }
 

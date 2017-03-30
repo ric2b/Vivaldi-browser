@@ -8,10 +8,12 @@ import android.content.DialogInterface;
 import android.test.suitebuilder.annotation.MediumTest;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.FlakyTest;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
+import org.chromium.chrome.browser.payments.ui.PaymentRequestSection;
 
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
@@ -44,7 +46,7 @@ public class PaymentRequestDynamicShippingSingleAddressTest extends PaymentReque
     public void testAddressNotSelected()
             throws InterruptedException, ExecutionException, TimeoutException {
         triggerUIAndWait(mReadyForInput);
-        assertEquals("Select shipping", getAddressSectionLabel());
+        assertEquals(PaymentRequestSection.EDIT_BUTTON_SELECT, getSummarySectionButtonState());
     }
 
     /** Expand the shipping address section, select an address, and click "Pay." */
@@ -70,13 +72,17 @@ public class PaymentRequestDynamicShippingSingleAddressTest extends PaymentReque
         clickInShippingSummaryAndWait(R.id.payments_section, mReadyForInput);
         clickInShippingAddressAndWait(R.id.payments_add_option_button, mReadyToEdit);
         clickInEditorAndWait(R.id.payments_edit_done_button, mEditorValidationError);
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
 
-    /** Add a valid address and complete the transaction. */
-    @MediumTest
+    /**
+     * Add a valid address and complete the transaction.
+     * @MediumTest
+     * @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE) // crbug.com/626289
+     */
+    @FlakyTest(message = "crbug.com/626289")
     public void testAddAddressAndPay()
             throws InterruptedException, ExecutionException, TimeoutException {
         triggerUIAndWait(mReadyForInput);
@@ -111,7 +117,7 @@ public class PaymentRequestDynamicShippingSingleAddressTest extends PaymentReque
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -157,7 +163,7 @@ public class PaymentRequestDynamicShippingSingleAddressTest extends PaymentReque
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }

@@ -59,6 +59,7 @@ inline SVGUseElement::SVGUseElement(Document& document)
     , m_y(SVGAnimatedLength::create(this, SVGNames::yAttr, SVGLength::create(SVGLengthMode::Height)))
     , m_width(SVGAnimatedLength::create(this, SVGNames::widthAttr, SVGLength::create(SVGLengthMode::Width)))
     , m_height(SVGAnimatedLength::create(this, SVGNames::heightAttr, SVGLength::create(SVGLengthMode::Height)))
+    , m_elementIdentifierIsLocal(true)
     , m_haveFiredLoadEvent(false)
     , m_needsShadowTreeRecreation(false)
 {
@@ -114,7 +115,7 @@ Node::InsertionNotificationRequest SVGUseElement::insertedInto(ContainerNode* ro
 {
     // This functions exists to assure assumptions made in the code regarding SVGElementInstance creation/destruction are satisfied.
     SVGGraphicsElement::insertedInto(rootParent);
-    if (!rootParent->inShadowIncludingDocument())
+    if (!rootParent->isConnected())
         return InsertionDone;
     ASSERT(!m_targetElementInstance || !isWellFormedDocument(&document()));
     ASSERT(!hasPendingResources() || !isWellFormedDocument(&document()));
@@ -125,19 +126,10 @@ Node::InsertionNotificationRequest SVGUseElement::insertedInto(ContainerNode* ro
 void SVGUseElement::removedFrom(ContainerNode* rootParent)
 {
     SVGGraphicsElement::removedFrom(rootParent);
-    if (rootParent->inShadowIncludingDocument()) {
+    if (rootParent->isConnected()) {
         clearShadowTree();
         cancelShadowTreeRecreation();
     }
-}
-
-Document* SVGUseElement::externalDocument() const
-{
-    // Gracefully handle error condition.
-    if (!resourceIsValid())
-        return nullptr;
-    ASSERT(m_resource->document());
-    return m_resource->document();
 }
 
 static void transferUseWidthAndHeightIfNeeded(const SVGUseElement& use, SVGElement& shadowElement, const SVGElement& originalElement)
@@ -192,6 +184,28 @@ void SVGUseElement::collectStyleForPresentationAttribute(const QualifiedName& na
         SVGGraphicsElement::collectStyleForPresentationAttribute(name, value, style);
 }
 
+bool SVGUseElement::isStructurallyExternal() const
+{
+    return !m_elementIdentifierIsLocal;
+}
+
+void SVGUseElement::updateTargetReference()
+{
+    SVGURLReferenceResolver resolver(hrefString(), document());
+    m_elementIdentifier = resolver.fragmentIdentifier();
+    m_elementIdentifierIsLocal = resolver.isLocal();
+    if (m_elementIdentifierIsLocal) {
+        setDocumentResource(nullptr);
+        return;
+    }
+    KURL resolvedUrl = resolver.absoluteUrl();
+    if (m_elementIdentifier.isEmpty()
+        || (m_resource && equalIgnoringFragmentIdentifier(resolvedUrl, m_resource->url())))
+        return;
+    FetchRequest request(ResourceRequest(resolvedUrl), localName());
+    setDocumentResource(DocumentResource::fetchSVGDocument(request, document().fetcher()));
+}
+
 void SVGUseElement::svgAttributeChanged(const QualifiedName& attrName)
 {
     if (attrName == SVGNames::xAttr
@@ -221,19 +235,8 @@ void SVGUseElement::svgAttributeChanged(const QualifiedName& attrName)
 
     if (SVGURIReference::isKnownAttribute(attrName)) {
         SVGElement::InvalidationGuard invalidationGuard(this);
-        if (isStructurallyExternal()) {
-            KURL url = document().completeURL(hrefString());
-            const KURL& existingURL = m_resource ? m_resource->url() : KURL();
-            if (url.hasFragmentIdentifier() && !equalIgnoringFragmentIdentifier(url, existingURL)) {
-                FetchRequest request(ResourceRequest(url), localName());
-                setDocumentResource(DocumentResource::fetchSVGDocument(request, document().fetcher()));
-            }
-        } else {
-            setDocumentResource(nullptr);
-        }
-
+        updateTargetReference();
         invalidateShadowTree();
-
         return;
     }
 
@@ -249,29 +252,28 @@ static bool isDisallowedElement(const Element& element)
     if (!element.isSVGElement())
         return true;
 
-    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, allowedElementTags, ());
-    if (allowedElementTags.isEmpty()) {
-        allowedElementTags.add(SVGNames::aTag);
-        allowedElementTags.add(SVGNames::circleTag);
-        allowedElementTags.add(SVGNames::descTag);
-        allowedElementTags.add(SVGNames::ellipseTag);
-        allowedElementTags.add(SVGNames::gTag);
-        allowedElementTags.add(SVGNames::imageTag);
-        allowedElementTags.add(SVGNames::lineTag);
-        allowedElementTags.add(SVGNames::metadataTag);
-        allowedElementTags.add(SVGNames::pathTag);
-        allowedElementTags.add(SVGNames::polygonTag);
-        allowedElementTags.add(SVGNames::polylineTag);
-        allowedElementTags.add(SVGNames::rectTag);
-        allowedElementTags.add(SVGNames::svgTag);
-        allowedElementTags.add(SVGNames::switchTag);
-        allowedElementTags.add(SVGNames::symbolTag);
-        allowedElementTags.add(SVGNames::textTag);
-        allowedElementTags.add(SVGNames::textPathTag);
-        allowedElementTags.add(SVGNames::titleTag);
-        allowedElementTags.add(SVGNames::tspanTag);
-        allowedElementTags.add(SVGNames::useTag);
-    }
+    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, allowedElementTags, ({
+        SVGNames::aTag,
+        SVGNames::circleTag,
+        SVGNames::descTag,
+        SVGNames::ellipseTag,
+        SVGNames::gTag,
+        SVGNames::imageTag,
+        SVGNames::lineTag,
+        SVGNames::metadataTag,
+        SVGNames::pathTag,
+        SVGNames::polygonTag,
+        SVGNames::polylineTag,
+        SVGNames::rectTag,
+        SVGNames::svgTag,
+        SVGNames::switchTag,
+        SVGNames::symbolTag,
+        SVGNames::textTag,
+        SVGNames::textPathTag,
+        SVGNames::titleTag,
+        SVGNames::tspanTag,
+        SVGNames::useTag,
+    }));
     return !allowedElementTags.contains<SVGAttributeHashTranslator>(element.tagQName());
 }
 
@@ -306,34 +308,39 @@ void SVGUseElement::clearShadowTree()
     removeAllOutgoingReferences();
 }
 
+Element* SVGUseElement::resolveTargetElement()
+{
+    if (m_elementIdentifier.isEmpty())
+        return nullptr;
+    const TreeScope* lookupScope = nullptr;
+    if (m_elementIdentifierIsLocal)
+        lookupScope = &treeScope();
+    else if (resourceIsValid())
+        lookupScope = m_resource->document();
+    else
+        return nullptr;
+    Element* target = lookupScope->getElementById(m_elementIdentifier);
+    // TODO(fs): Why would the Element not be "connected" at this point?
+    if (target && target->isConnected())
+        return target;
+    // Don't record any pending references for external resources.
+    if (!m_resource) {
+        document().accessSVGExtensions().addPendingResource(m_elementIdentifier, this);
+        DCHECK(hasPendingResources());
+    }
+    return nullptr;
+}
+
 void SVGUseElement::buildPendingResource()
 {
     if (inUseShadowTree())
         return;
     clearShadowTree();
     cancelShadowTreeRecreation();
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
-    Document* externalDocument = this->externalDocument();
-    if (isStructurallyExternal() && !externalDocument)
-        return;
-
-    AtomicString id;
-    Element* target = targetElementFromIRIString(hrefString(), treeScope(), &id, externalDocument);
-    if (!target || !target->inShadowIncludingDocument()) {
-        // If we can't find the target of an external element, just give up.
-        // We can't observe if the target somewhen enters the external document, nor should we do it.
-        if (externalDocument)
-            return;
-        if (id.isEmpty())
-            return;
-
-        document().accessSVGExtensions().addPendingResource(id, this);
-        ASSERT(hasPendingResources());
-        return;
-    }
-
-    if (target->isSVGElement()) {
+    Element* target = resolveTargetElement();
+    if (target && target->isSVGElement()) {
         buildShadowAndInstanceTree(toSVGElement(*target));
         invalidateDependentShadowTrees();
     }
@@ -361,7 +368,7 @@ static void associateCorrespondingElements(SVGElement& targetRoot, SVGElement& i
 // case).
 static inline void removeDisallowedElementsFromSubtree(SVGElement& subtree)
 {
-    ASSERT(!subtree.inShadowIncludingDocument());
+    ASSERT(!subtree.isConnected());
     Element* element = ElementTraversal::firstWithin(subtree);
     while (element) {
         if (isDisallowedElement(*element)) {
@@ -435,10 +442,8 @@ void SVGUseElement::buildShadowAndInstanceTree(SVGElement& target)
 
     addReferencesToFirstDegreeNestedUseElements(target);
 
-    if (instanceTreeIsLoading()) {
-        cloneNonMarkupEventListeners();
+    if (instanceTreeIsLoading())
         return;
-    }
 
     // Assure shadow tree building was successful.
     ASSERT(m_targetElementInstance);
@@ -456,8 +461,6 @@ void SVGUseElement::buildShadowAndInstanceTree(SVGElement& target)
     // reset |m_targetElementInstance|.
     m_targetElementInstance = toSVGElement(shadowTreeRootElement->firstChild());
     ASSERT(m_targetElementInstance->parentNode() == shadowTreeRootElement);
-
-    cloneNonMarkupEventListeners();
 
     // Update relative length information.
     updateRelativeLengthsInformation();
@@ -512,7 +515,7 @@ SVGGraphicsElement* SVGUseElement::visibleTargetGraphicsElementForClipping() con
         return nullptr;
 
     const ComputedStyle* style = element.layoutObject()->style();
-    if (!style || style->visibility() != VISIBLE)
+    if (!style || style->visibility() != EVisibility::Visible)
         return nullptr;
 
     // Spec: "If a <use> element is a child of a clipPath element, it must directly
@@ -539,14 +542,6 @@ void SVGUseElement::addReferencesToFirstDegreeNestedUseElements(SVGElement& targ
         isSVGUseElement(target) ? toSVGUseElement(&target) : Traversal<SVGUseElement>::firstWithin(target);
     for (; useElement; useElement = Traversal<SVGUseElement>::nextSkippingChildren(*useElement, &target))
         addReferenceTo(useElement);
-}
-
-void SVGUseElement::cloneNonMarkupEventListeners()
-{
-    for (SVGElement& element : Traversal<SVGElement>::descendantsOf(*userAgentShadowRoot())) {
-        if (EventTargetData* data = element.correspondingElement()->eventTargetData())
-            data->eventListenerMap.copyEventListenersNotCreatedFromMarkupToTarget(&element);
-    }
 }
 
 bool SVGUseElement::hasCycleUseReferencing(const SVGUseElement& use, const ContainerNode& targetInstance, SVGElement*& newTarget) const
@@ -650,7 +645,7 @@ void SVGUseElement::invalidateDependentShadowTrees()
     instances.appendRange(rawInstances.begin(), rawInstances.end());
     for (auto& instance : instances) {
         if (SVGUseElement* element = instance->correspondingUseElement()) {
-            ASSERT(element->inShadowIncludingDocument());
+            ASSERT(element->isConnected());
             element->invalidateShadowTree();
         }
     }
@@ -703,7 +698,7 @@ void SVGUseElement::dispatchPendingEvent(SVGUseEventSender* eventSender)
 void SVGUseElement::notifyFinished(Resource* resource)
 {
     ASSERT(m_resource == resource);
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
 
     invalidateShadowTree();

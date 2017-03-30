@@ -25,15 +25,24 @@ if (is_android) {
   }
 
   if (!defined(default_android_ndk_root)) {
+    default_android_ndk_major_version = "10"
     default_android_ndk_root = "//third_party/android_tools/ndk"
     default_android_ndk_version = "r10e"
   } else {
     assert(defined(default_android_ndk_version))
   }
 
+  # The same version of lint should be used for building all targets,
+  # and these args ensure that the upstream version of lint is used for
+  # both upstream and downstream targets.
+  lint_android_sdk_root = "//third_party/android_tools/sdk"
+  lint_android_sdk_version = "23"
+
   if (!defined(default_android_sdk_root)) {
-    default_android_sdk_root = "//third_party/android_tools/sdk"
-    default_android_sdk_version = "23"
+    # Reuse the lint variables to ensure that the lint version gets updated
+    # when the upstream SDK version is updated.
+    default_android_sdk_root = lint_android_sdk_root
+    default_android_sdk_version = lint_android_sdk_version
     default_android_sdk_build_tools_version = "23.0.1"
   }
 
@@ -61,6 +70,7 @@ if (is_android) {
   }
 
   declare_args() {
+    android_ndk_major_version = default_android_ndk_major_version
     android_ndk_root = default_android_ndk_root
     android_ndk_version = default_android_ndk_version
 
@@ -97,8 +107,7 @@ if (is_android) {
     proguard_verbose = false
 
     # Java debug on Android. Having this on enables multidexing, and turning it
-    # off will enable proguard. To access this flag from within Java code, look
-    # at BuildConfig.IS_DEBUG, which is wired to this arg.
+    # off will enable proguard.
     is_java_debug = is_debug
 
     # Set to true to enable the Errorprone compiler
@@ -120,19 +129,23 @@ if (is_android) {
     # Speed up incremental compiles by compiling only changed files.
     enable_incremental_javac = false
 
-    # Speed up dexing using dx --incremental.
-    enable_incremental_dx = is_java_debug
-
-    # Neither of these should ever be used for release builds since they are
-    # somewhat experimental and dx --incremental is known to not produce
-    # byte-for-byte identical output.
-    assert(!(enable_incremental_dx && !is_java_debug))
-    assert(!(enable_incremental_javac && !is_java_debug))
-
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.
     use_order_profiling = false
   }
+
+  # We need a second declare_args block to make sure we are using the overridden
+  # value of the arguments set above.
+  declare_args() {
+    # Speed up dexing using dx --incremental.
+    enable_incremental_dx = is_java_debug
+  }
+
+  # Neither of these should ever be used for release builds since they are
+  # somewhat experimental and dx --incremental is known to not produce
+  # byte-for-byte identical output.
+  assert(!(enable_incremental_dx && !is_java_debug))
+  assert(!(enable_incremental_javac && !is_java_debug))
 
   # Host stuff -----------------------------------------------------------------
 
@@ -252,11 +265,8 @@ if (is_android) {
 
   # ABI ------------------------------------------------------------------------
 
-  # Intentionally do not define android_app_secondary_abi for 64-bit
-  # android_app_abi, since they are not used.
   if (current_cpu == "x86") {
     android_app_abi = "x86"
-    android_app_secondary_abi = "x86_64"
   } else if (current_cpu == "arm") {
     import("//build/config/arm.gni")
     if (arm_version < 7) {
@@ -264,10 +274,8 @@ if (is_android) {
     } else {
       android_app_abi = "armeabi-v7a"
     }
-    android_app_secondary_abi = "arm64-v8a"
   } else if (current_cpu == "mipsel") {
     android_app_abi = "mips"
-    android_app_secondary_abi = "mips64"
   } else if (current_cpu == "x64") {
     android_app_abi = "x86_64"
   } else if (current_cpu == "arm64") {
@@ -280,5 +288,38 @@ if (is_android) {
 
   if (android_libcpp_lib_dir == "") {
     android_libcpp_lib_dir = "${android_libcpp_root}/libs/${android_app_abi}"
+  }
+
+  # Secondary ABI -------------------------------------------------------------
+  if (target_cpu == "arm64" || target_cpu == "x64" || target_cpu == "mips64el") {
+    android_64bit_target_cpu = true
+  } else if (target_cpu == "arm" || target_cpu == "x86" ||
+             target_cpu == "mipsel") {
+    android_64bit_target_cpu = false
+  } else {
+    assert(false, "Unknown target CPU: $target_cpu")
+  }
+
+  # Intentionally do not define android_app_secondary_abi_cpu and
+  # android_app_secondary_abi for 32-bit target_cpu, since they are not used.
+  if (target_cpu == "arm64") {
+    android_secondary_abi_cpu = "arm"
+    android_app_secondary_abi = "armeabi-v7a"
+  } else if (target_cpu == "x64") {
+    android_secondary_abi_cpu = "x86"
+    android_app_secondary_abi = "x86"
+  } else if (target_cpu == "mips64el") {
+    android_secondary_abi_cpu = "mipsel"
+    android_app_secondary_abi = "mips"
+  }
+
+  if (defined(android_secondary_abi_cpu)) {
+    if (is_clang) {
+      android_secondary_abi_toolchain =
+          "//build/toolchain/android:clang_${android_secondary_abi_cpu}"
+    } else {
+      android_secondary_abi_toolchain =
+          "//build/toolchain/android:${android_secondary_abi_cpu}"
+    }
   }
 }

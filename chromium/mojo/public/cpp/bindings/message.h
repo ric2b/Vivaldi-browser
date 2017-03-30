@@ -13,12 +13,15 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/logging.h"
 #include "mojo/public/cpp/bindings/lib/message_buffer.h"
 #include "mojo/public/cpp/bindings/lib/message_internal.h"
 #include "mojo/public/cpp/system/message.h"
 
 namespace mojo {
+
+using ReportBadMessageCallback = base::Callback<void(const std::string& error)>;
 
 // Message is a holder for the data and handles to be sent over a MessagePipe.
 // Message owns its data and handles, but a consumer of Message is free to
@@ -31,7 +34,19 @@ class Message {
   static const uint32_t kFlagIsSync = 1 << 2;
 
   Message();
+  Message(Message&& other);
+
   ~Message();
+
+  Message& operator=(Message&& other);
+
+  // Resets the Message to an uninitialized state. Upon reset, the Message
+  // exists as if it were default-constructed: it has no data buffer and owns no
+  // handles.
+  void Reset();
+
+  // Indicates whether this Message is uninitialized.
+  bool IsNull() const { return !buffer_; }
 
   // Initializes a Message with enough space for |capacity| bytes.
   void Initialize(size_t capacity, bool zero_initialized);
@@ -41,10 +56,9 @@ class Message {
                                  uint32_t num_bytes,
                                  std::vector<Handle>* handles);
 
-  // Transfers data and handles to |destination|.
-  void MoveTo(Message* destination);
-
-  uint32_t data_num_bytes() const { return buffer_->data_num_bytes(); }
+  uint32_t data_num_bytes() const {
+    return static_cast<uint32_t>(buffer_->size());
+  }
 
   // Access the raw bytes of the message.
   const uint8_t* data() const {
@@ -86,8 +100,8 @@ class Message {
   const uint8_t* payload() const { return data() + header()->num_bytes; }
   uint8_t* mutable_payload() { return const_cast<uint8_t*>(payload()); }
   uint32_t payload_num_bytes() const {
-    DCHECK(buffer_->data_num_bytes() >= header()->num_bytes);
-    size_t num_bytes = buffer_->data_num_bytes() - header()->num_bytes;
+    DCHECK(data_num_bytes() >= header()->num_bytes);
+    size_t num_bytes = data_num_bytes() - header()->num_bytes;
     DCHECK(num_bytes <= std::numeric_limits<uint32_t>::max());
     return static_cast<uint32_t>(num_bytes);
   }
@@ -186,6 +200,56 @@ class MessageReceiverWithResponderStatus : public MessageReceiver {
       WARN_UNUSED_RESULT = 0;
 };
 
+class PassThroughFilter : public MessageReceiver {
+ public:
+  PassThroughFilter();
+  ~PassThroughFilter() override;
+
+  // MessageReceiver:
+  bool Accept(Message* message) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PassThroughFilter);
+};
+
+namespace internal {
+class SyncMessageResponseSetup;
+}
+
+// An object which should be constructed on the stack immediately before making
+// a sync request for which the caller wishes to perform custom validation of
+// the response value(s). It is illegal to make more than one sync call during
+// the lifetime of the topmost SyncMessageResponseContext, but it is legal to
+// nest contexts to support reentrancy.
+//
+// Usage should look something like:
+//
+//     SyncMessageResponseContext response_context;
+//     foo_interface->SomeSyncCall(&response_value);
+//     if (response_value.IsBad())
+//       response_context.ReportBadMessage("Bad response_value!");
+//
+class SyncMessageResponseContext {
+ public:
+  SyncMessageResponseContext();
+  ~SyncMessageResponseContext();
+
+  static SyncMessageResponseContext* current();
+
+  void ReportBadMessage(const std::string& error);
+
+  const ReportBadMessageCallback& GetBadMessageCallback();
+
+ private:
+  friend class internal::SyncMessageResponseSetup;
+
+  SyncMessageResponseContext* outer_context_;
+  Message response_;
+  ReportBadMessageCallback bad_message_callback_;
+
+  DISALLOW_COPY_AND_ASSIGN(SyncMessageResponseContext);
+};
+
 // Read a single message from the pipe. The caller should have created the
 // Message, but not called Initialize(). Returns MOJO_RESULT_SHOULD_WAIT if
 // the caller should wait on the handle to become readable. Returns
@@ -194,6 +258,20 @@ class MessageReceiverWithResponderStatus : public MessageReceiver {
 //
 // NOTE: The message hasn't been validated and may be malformed!
 MojoResult ReadMessage(MessagePipeHandle handle, Message* message);
+
+// Reports the currently dispatching Message as bad. Note that this is only
+// legal to call from directly within the stack frame of a message dispatch. If
+// you need to do asynchronous work before you can determine the legitimacy of
+// a message, use TakeBadMessageCallback() and retain its result until you're
+// ready to invoke or discard it.
+void ReportBadMessage(const std::string& error);
+
+// Acquires a callback which may be run to report the currently dispatching
+// Message as bad. Note that this is only legal to call from directly within the
+// stack frame of a message dispatch, but the returned callback may be called
+// exactly once any time thereafter to report the message as bad. This may only
+// be called once per message.
+ReportBadMessageCallback GetBadMessageCallback();
 
 }  // namespace mojo
 

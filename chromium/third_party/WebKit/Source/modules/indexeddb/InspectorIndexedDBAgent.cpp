@@ -55,8 +55,7 @@
 #include "modules/indexeddb/IDBOpenDBRequest.h"
 #include "modules/indexeddb/IDBRequest.h"
 #include "modules/indexeddb/IDBTransaction.h"
-#include "platform/inspector_protocol/Values.h"
-#include "platform/v8_inspector/public/V8ToProtocolValue.h"
+#include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
@@ -84,6 +83,8 @@ static const char indexedDBAgentEnabled[] = "indexedDBAgentEnabled";
 };
 
 namespace {
+
+static const char indexedDBObjectGroup[] = "indexeddb";
 
 class GetDatabaseNamesCallback final : public EventListener {
     WTF_MAKE_NONCOPYABLE(GetDatabaseNamesCallback);
@@ -407,9 +408,9 @@ class DataLoader;
 
 class OpenCursorCallback final : public EventListener {
 public:
-    static OpenCursorCallback* create(ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, int skipCount, unsigned pageSize)
+    static OpenCursorCallback* create(v8_inspector::V8InspectorSession* v8Session, ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, int skipCount, unsigned pageSize)
     {
-        return new OpenCursorCallback(scriptState, std::move(requestCallback), skipCount, pageSize);
+        return new OpenCursorCallback(v8Session, scriptState, std::move(requestCallback), skipCount, pageSize);
     }
 
     ~OpenCursorCallback() override { }
@@ -464,21 +465,14 @@ public:
         Document* document = toDocument(m_scriptState->getExecutionContext());
         if (!document)
             return;
-        // FIXME: There are no tests for this error showing when a recursive
-        // object is inspected.
-        const String16 errorMessage("\"Inspection error. Maximum depth reached?\"");
         ScriptState* scriptState = m_scriptState.get();
         ScriptState::Scope scope(scriptState);
-        std::unique_ptr<protocol::Value> keyJsonValue = toProtocolValue(scriptState->context(), idbCursor->key(scriptState).v8Value());
-        std::unique_ptr<protocol::Value> primaryKeyJsonValue = toProtocolValue(scriptState->context(), idbCursor->primaryKey(scriptState).v8Value());
-        std::unique_ptr<protocol::Value> valueJsonValue = toProtocolValue(scriptState->context(), idbCursor->value(scriptState).v8Value());
-        String16 key = keyJsonValue ? keyJsonValue->toJSONString() : errorMessage;
-        String16 value = valueJsonValue ? valueJsonValue->toJSONString() : errorMessage;
-        String primaryKey = primaryKeyJsonValue ? primaryKeyJsonValue->toJSONString() : errorMessage;
+        v8::Local<v8::Context> context = scriptState->context();
         std::unique_ptr<DataEntry> dataEntry = DataEntry::create()
-            .setKey(key)
-            .setPrimaryKey(primaryKey)
-            .setValue(value).build();
+            .setKey(m_v8Session->wrapObject(context, idbCursor->key(scriptState).v8Value(), indexedDBObjectGroup))
+            .setPrimaryKey(m_v8Session->wrapObject(context, idbCursor->primaryKey(scriptState).v8Value(), indexedDBObjectGroup))
+            .setValue(m_v8Session->wrapObject(context, idbCursor->value(scriptState).v8Value(), indexedDBObjectGroup))
+            .build();
         m_result->addItem(std::move(dataEntry));
     }
 
@@ -493,8 +487,9 @@ public:
     }
 
 private:
-    OpenCursorCallback(ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, int skipCount, unsigned pageSize)
+    OpenCursorCallback(v8_inspector::V8InspectorSession* v8Session, ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, int skipCount, unsigned pageSize)
         : EventListener(EventListener::CPPEventListenerType)
+        , m_v8Session(v8Session)
         , m_scriptState(scriptState)
         , m_requestCallback(std::move(requestCallback))
         , m_skipCount(skipCount)
@@ -503,6 +498,7 @@ private:
         m_result = Array<DataEntry>::create();
     }
 
+    v8_inspector::V8InspectorSession* m_v8Session;
     RefPtr<ScriptState> m_scriptState;
     std::unique_ptr<RequestDataCallback> m_requestCallback;
     int m_skipCount;
@@ -512,9 +508,9 @@ private:
 
 class DataLoader final : public ExecutableWithDatabase {
 public:
-    static PassRefPtr<DataLoader> create(ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, const String& objectStoreName, const String& indexName, IDBKeyRange* idbKeyRange, int skipCount, unsigned pageSize)
+    static PassRefPtr<DataLoader> create(v8_inspector::V8InspectorSession* v8Session, ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, const String& objectStoreName, const String& indexName, IDBKeyRange* idbKeyRange, int skipCount, unsigned pageSize)
     {
-        return adoptRef(new DataLoader(scriptState, std::move(requestCallback), objectStoreName, indexName, idbKeyRange, skipCount, pageSize));
+        return adoptRef(new DataLoader(v8Session, scriptState, std::move(requestCallback), objectStoreName, indexName, idbKeyRange, skipCount, pageSize));
     }
 
     ~DataLoader() override { }
@@ -544,13 +540,14 @@ public:
         } else {
             idbRequest = idbObjectStore->openCursor(getScriptState(), m_idbKeyRange.get(), WebIDBCursorDirectionNext);
         }
-        OpenCursorCallback* openCursorCallback = OpenCursorCallback::create(getScriptState(), std::move(m_requestCallback), m_skipCount, m_pageSize);
+        OpenCursorCallback* openCursorCallback = OpenCursorCallback::create(m_v8Session, getScriptState(), std::move(m_requestCallback), m_skipCount, m_pageSize);
         idbRequest->addEventListener(EventTypeNames::success, openCursorCallback, false);
     }
 
     RequestCallback* getRequestCallback() override { return m_requestCallback.get(); }
-    DataLoader(ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, const String& objectStoreName, const String& indexName, IDBKeyRange* idbKeyRange, int skipCount, unsigned pageSize)
+    DataLoader(v8_inspector::V8InspectorSession* v8Session, ScriptState* scriptState, std::unique_ptr<RequestDataCallback> requestCallback, const String& objectStoreName, const String& indexName, IDBKeyRange* idbKeyRange, int skipCount, unsigned pageSize)
         : ExecutableWithDatabase(scriptState)
+        , m_v8Session(v8Session)
         , m_requestCallback(std::move(requestCallback))
         , m_objectStoreName(objectStoreName)
         , m_indexName(indexName)
@@ -560,6 +557,7 @@ public:
     {
     }
 
+    v8_inspector::V8InspectorSession* m_v8Session;
     std::unique_ptr<RequestDataCallback> m_requestCallback;
     String m_objectStoreName;
     String m_indexName;
@@ -571,13 +569,9 @@ public:
 } // namespace
 
 // static
-InspectorIndexedDBAgent* InspectorIndexedDBAgent::create(InspectedFrames* inspectedFrames)
-{
-    return new InspectorIndexedDBAgent(inspectedFrames);
-}
-
-InspectorIndexedDBAgent::InspectorIndexedDBAgent(InspectedFrames* inspectedFrames)
+InspectorIndexedDBAgent::InspectorIndexedDBAgent(InspectedFrames* inspectedFrames, v8_inspector::V8InspectorSession* v8Session)
     : m_inspectedFrames(inspectedFrames)
+    , m_v8Session(v8Session)
 {
 }
 
@@ -593,6 +587,12 @@ void InspectorIndexedDBAgent::restore()
     }
 }
 
+void InspectorIndexedDBAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
+{
+    if (frame == m_inspectedFrames->root())
+        m_v8Session->releaseObjectGroup(indexedDBObjectGroup);
+}
+
 void InspectorIndexedDBAgent::enable(ErrorString*)
 {
     m_state->setBoolean(IndexedDBAgentState::indexedDBAgentEnabled, true);
@@ -601,6 +601,7 @@ void InspectorIndexedDBAgent::enable(ErrorString*)
 void InspectorIndexedDBAgent::disable(ErrorString*)
 {
     m_state->setBoolean(IndexedDBAgentState::indexedDBAgentEnabled, false);
+    m_v8Session->releaseObjectGroup(indexedDBObjectGroup);
 }
 
 static Document* assertDocument(ErrorString* errorString, LocalFrame* frame)
@@ -628,15 +629,20 @@ static IDBFactory* assertIDBFactory(ErrorString* errorString, Document* document
     return idbFactory;
 }
 
-void InspectorIndexedDBAgent::requestDatabaseNames(ErrorString* errorString, const String& securityOrigin, std::unique_ptr<RequestDatabaseNamesCallback> requestCallback)
+void InspectorIndexedDBAgent::requestDatabaseNames(const String& securityOrigin, std::unique_ptr<RequestDatabaseNamesCallback> requestCallback)
 {
     LocalFrame* frame = m_inspectedFrames->frameWithSecurityOrigin(securityOrigin);
-    Document* document = assertDocument(errorString, frame);
-    if (!document)
+    ErrorString errorString;
+    Document* document = assertDocument(&errorString, frame);
+    if (!document) {
+        requestCallback->sendFailure(errorString);
         return;
-    IDBFactory* idbFactory = assertIDBFactory(errorString, document);
-    if (!idbFactory)
+    }
+    IDBFactory* idbFactory = assertIDBFactory(&errorString, document);
+    if (!idbFactory) {
+        requestCallback->sendFailure(errorString);
         return;
+    }
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
     if (!scriptState)
@@ -651,15 +657,20 @@ void InspectorIndexedDBAgent::requestDatabaseNames(ErrorString* errorString, con
     idbRequest->addEventListener(EventTypeNames::success, GetDatabaseNamesCallback::create(std::move(requestCallback), document->getSecurityOrigin()->toRawString()), false);
 }
 
-void InspectorIndexedDBAgent::requestDatabase(ErrorString* errorString, const String& securityOrigin, const String& databaseName, std::unique_ptr<RequestDatabaseCallback> requestCallback)
+void InspectorIndexedDBAgent::requestDatabase(const String& securityOrigin, const String& databaseName, std::unique_ptr<RequestDatabaseCallback> requestCallback)
 {
     LocalFrame* frame = m_inspectedFrames->frameWithSecurityOrigin(securityOrigin);
-    Document* document = assertDocument(errorString, frame);
-    if (!document)
+    ErrorString errorString;
+    Document* document = assertDocument(&errorString, frame);
+    if (!document) {
+        requestCallback->sendFailure(errorString);
         return;
-    IDBFactory* idbFactory = assertIDBFactory(errorString, document);
-    if (!idbFactory)
+    }
+    IDBFactory* idbFactory = assertIDBFactory(&errorString, document);
+    if (!idbFactory) {
+        requestCallback->sendFailure(errorString);
         return;
+    }
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
     if (!scriptState)
@@ -669,7 +680,7 @@ void InspectorIndexedDBAgent::requestDatabase(ErrorString* errorString, const St
     databaseLoader->start(idbFactory, document->getSecurityOrigin(), databaseName);
 }
 
-void InspectorIndexedDBAgent::requestData(ErrorString* errorString,
+void InspectorIndexedDBAgent::requestData(
     const String& securityOrigin,
     const String& databaseName,
     const String& objectStoreName,
@@ -680,16 +691,21 @@ void InspectorIndexedDBAgent::requestData(ErrorString* errorString,
     std::unique_ptr<RequestDataCallback> requestCallback)
 {
     LocalFrame* frame = m_inspectedFrames->frameWithSecurityOrigin(securityOrigin);
-    Document* document = assertDocument(errorString, frame);
-    if (!document)
+    ErrorString errorString;
+    Document* document = assertDocument(&errorString, frame);
+    if (!document) {
+        requestCallback->sendFailure(errorString);
         return;
-    IDBFactory* idbFactory = assertIDBFactory(errorString, document);
-    if (!idbFactory)
+    }
+    IDBFactory* idbFactory = assertIDBFactory(&errorString, document);
+    if (!idbFactory) {
+        requestCallback->sendFailure(errorString);
         return;
+    }
 
     IDBKeyRange* idbKeyRange = keyRange.isJust() ? idbKeyRangeFromKeyRange(keyRange.fromJust()) : nullptr;
     if (keyRange.isJust() && !idbKeyRange) {
-        *errorString = "Can not parse key range.";
+        requestCallback->sendFailure("Can not parse key range.");
         return;
     }
 
@@ -697,7 +713,7 @@ void InspectorIndexedDBAgent::requestData(ErrorString* errorString,
     if (!scriptState)
         return;
     ScriptState::Scope scope(scriptState);
-    RefPtr<DataLoader> dataLoader = DataLoader::create(scriptState, std::move(requestCallback), objectStoreName, indexName, idbKeyRange, skipCount, pageSize);
+    RefPtr<DataLoader> dataLoader = DataLoader::create(m_v8Session, scriptState, std::move(requestCallback), objectStoreName, indexName, idbKeyRange, skipCount, pageSize);
     dataLoader->start(idbFactory, document->getSecurityOrigin(), databaseName);
 }
 
@@ -786,15 +802,20 @@ private:
     std::unique_ptr<ClearObjectStoreCallback> m_requestCallback;
 };
 
-void InspectorIndexedDBAgent::clearObjectStore(ErrorString* errorString, const String& securityOrigin, const String& databaseName, const String& objectStoreName, std::unique_ptr<ClearObjectStoreCallback> requestCallback)
+void InspectorIndexedDBAgent::clearObjectStore(const String& securityOrigin, const String& databaseName, const String& objectStoreName, std::unique_ptr<ClearObjectStoreCallback> requestCallback)
 {
     LocalFrame* frame = m_inspectedFrames->frameWithSecurityOrigin(securityOrigin);
-    Document* document = assertDocument(errorString, frame);
-    if (!document)
+    ErrorString errorString;
+    Document* document = assertDocument(&errorString, frame);
+    if (!document) {
+        requestCallback->sendFailure(errorString);
         return;
-    IDBFactory* idbFactory = assertIDBFactory(errorString, document);
-    if (!idbFactory)
+    }
+    IDBFactory* idbFactory = assertIDBFactory(&errorString, document);
+    if (!idbFactory) {
+        requestCallback->sendFailure(errorString);
         return;
+    }
 
     ScriptState* scriptState = ScriptState::forMainWorld(frame);
     if (!scriptState)

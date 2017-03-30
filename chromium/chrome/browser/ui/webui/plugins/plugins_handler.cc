@@ -171,7 +171,7 @@ void PluginsPageHandler::SetPluginAlwaysAllowed(const mojo::String& plugin,
   // whitelisted by the user from automatically whitelisted ones.
   DictionaryPrefUpdate update(profile->GetPrefs(),
                               prefs::kContentSettingsPluginWhitelist);
-  update->SetBoolean(plugin, allowed);
+  update->SetBoolean(plugin.get(), allowed);
 }
 
 void PluginsPageHandler::GetPluginsData(
@@ -244,7 +244,7 @@ mojo::Array<mojom::PluginDataPtr> PluginsPageHandler::GeneratePluginsData(
     bool group_enabled = false;
 
     mojo::Array<mojom::PluginFilePtr> plugin_files;
-    for (const auto& group_plugin : group_plugins) {
+    for (const auto* group_plugin : group_plugins) {
       bool plugin_enabled = plugin_prefs->IsPluginEnabled(*group_plugin);
 
       plugin_files.push_back(GeneratePluginFile(
@@ -261,13 +261,14 @@ mojo::Array<mojom::PluginDataPtr> PluginsPageHandler::GeneratePluginsData(
 
     plugin_data->always_allowed = false;
     plugin_data->trusted = false;
+    plugin_data->policy_click_to_play = GetClickToPlayPolicyEnabled();
 
     if (group_enabled) {
       if (plugin_metadata->GetSecurityStatus(*active_plugin) ==
           PluginMetadata::SECURITY_STATUS_FULLY_TRUSTED) {
         plugin_data->trusted = true;
         plugin_data->always_allowed = true;
-      } else {
+      } else if (!GetClickToPlayPolicyEnabled()) {
         const base::DictionaryValue* whitelist =
             profile->GetPrefs()->GetDictionary(
                 prefs::kContentSettingsPluginWhitelist);
@@ -292,6 +293,16 @@ mojo::Array<mojom::PluginDataPtr> PluginsPageHandler::GeneratePluginsData(
   }
 
   return plugins_data;
+}
+
+bool PluginsPageHandler::GetClickToPlayPolicyEnabled() const {
+  Profile* profile = Profile::FromWebUI(web_ui_);
+  HostContentSettingsMap* map =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  std::string provider_id;
+  ContentSetting setting = map->GetDefaultContentSetting(
+      CONTENT_SETTINGS_TYPE_PLUGINS, &provider_id);
+  return (setting == CONTENT_SETTING_ASK && provider_id == "policy");
 }
 
 mojom::PluginFilePtr PluginsPageHandler::GeneratePluginFile(

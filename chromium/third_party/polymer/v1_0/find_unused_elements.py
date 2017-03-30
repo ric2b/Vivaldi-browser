@@ -20,8 +20,6 @@ class UnusedElementsDetector(object):
 
   # Unused elements to ignore because we plan to use them soon.
   __WHITELIST = (
-    # TODO(dschuyler): Use element or remove from whitelist.
-    'app-route',
     # Necessary for closure.
     'polymer-externs',
   )
@@ -138,7 +136,8 @@ class UnusedElementsDetector(object):
             continue
 
           # Skip generated files that may include the element source.
-          if filename in ('crisper.js', 'vulcanized.html'):
+          if filename in ('crisper.js', 'vulcanized.html',
+                          'app.crisper.js', 'app.vulcanized.html'):
             continue
 
           with open(os.path.join(dirpath, filename)) as f:

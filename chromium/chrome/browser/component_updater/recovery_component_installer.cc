@@ -25,6 +25,9 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
+#if defined(OS_WIN)
+#include "chrome/installer/util/install_util.h"
+#endif  // OS_WIN
 #include "components/component_updater/component_updater_paths.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/component_updater/pref_names.h"
@@ -93,7 +96,7 @@ base::CommandLine GetRecoveryInstallCommandLine(
     const base::FilePath& command,
     const base::DictionaryValue& manifest,
     bool is_deferred_run,
-    const Version& version) {
+    const base::Version& version) {
   base::CommandLine command_line(command);
 
   // Add a flag to for re-attempted install with elevated privilege so that the
@@ -151,7 +154,7 @@ void DoElevatedInstallRecoveryComponent(const base::FilePath& path) {
     return;
   std::string proposed_version;
   manifest->GetStringASCII("version", &proposed_version);
-  const Version version(proposed_version.c_str());
+  const base::Version version(proposed_version.c_str());
   if (!version.IsValid())
     return;
 
@@ -192,7 +195,7 @@ void ElevatedInstallRecoveryComponent(const base::FilePath& installer_path) {
 // See chrome/browser/recovery/recovery_install_global_error.cc for details.
 class RecoveryComponentInstaller : public update_client::CrxInstaller {
  public:
-  RecoveryComponentInstaller(const Version& version, PrefService* prefs);
+  RecoveryComponentInstaller(const base::Version& version, PrefService* prefs);
 
   // ComponentInstaller implementation:
   void OnUpdateError(int error) override;
@@ -211,7 +214,7 @@ class RecoveryComponentInstaller : public update_client::CrxInstaller {
   bool RunInstallCommand(const base::CommandLine& cmdline,
                          const base::FilePath& installer_folder) const;
 
-  Version current_version_;
+  base::Version current_version_;
   PrefService* prefs_;
 };
 
@@ -221,23 +224,35 @@ void SimulateElevatedRecoveryHelper(PrefService* prefs) {
 
 void RecoveryRegisterHelper(ComponentUpdateService* cus, PrefService* prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  Version version(prefs->GetString(prefs::kRecoveryComponentVersion));
+  base::Version version(prefs->GetString(prefs::kRecoveryComponentVersion));
   if (!version.IsValid()) {
     NOTREACHED();
     return;
   }
+
+  update_client::InstallerAttributes installer_attributes;
+#if defined(OS_WIN)
+  base::FilePath exe_path;
+  PathService::Get(base::FILE_EXE, &exe_path);
+  installer_attributes["ismachine"] =
+      InstallUtil::IsPerUserInstall(exe_path) ? "0" : "1";
+#endif  // OS_WIN
 
   update_client::CrxComponent recovery;
   recovery.name = "recovery";
   recovery.installer = new RecoveryComponentInstaller(version, prefs);
   recovery.version = version;
   recovery.pk_hash.assign(kSha2Hash, &kSha2Hash[sizeof(kSha2Hash)]);
+  recovery.supports_group_policy_enable_component_updates = true;
+  recovery.requires_network_encryption = false;
+  recovery.installer_attributes = installer_attributes;
   if (!cus->RegisterComponent(recovery)) {
     NOTREACHED() << "Recovery component registration failed.";
   }
 }
 
-void RecoveryUpdateVersionHelper(const Version& version, PrefService* prefs) {
+void RecoveryUpdateVersionHelper(
+    const base::Version& version, PrefService* prefs) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   prefs->SetString(prefs::kRecoveryComponentVersion, version.GetString());
 }
@@ -249,8 +264,8 @@ void SetPrefsForElevatedRecoveryInstall(const base::FilePath& unpack_path,
   prefs->SetBoolean(prefs::kRecoveryComponentNeedsElevation, true);
 }
 
-RecoveryComponentInstaller::RecoveryComponentInstaller(const Version& version,
-                                                       PrefService* prefs)
+RecoveryComponentInstaller::RecoveryComponentInstaller(
+    const base::Version& version, PrefService* prefs)
     : current_version_(version), prefs_(prefs) {
   DCHECK(version.IsValid());
 }
@@ -340,7 +355,7 @@ bool RecoveryComponentInstaller::Install(const base::DictionaryValue& manifest,
     return false;
   std::string proposed_version;
   manifest.GetStringASCII("version", &proposed_version);
-  Version version(proposed_version.c_str());
+  base::Version version(proposed_version.c_str());
   if (!version.IsValid())
     return false;
   if (current_version_.CompareTo(version) >= 0)

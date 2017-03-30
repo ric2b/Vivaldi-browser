@@ -154,7 +154,7 @@ public:
 
     bool layoutObjectIsNeeded(const ComputedStyle&) final;
     LayoutObject* createLayoutObject(const ComputedStyle&) override;
-    void detach(const AttachContext& = AttachContext()) final;
+    void detachLayoutTree(const AttachContext& = AttachContext()) final;
     void updateFocusAppearance(SelectionBehaviorOnFocus) final;
 
     // FIXME: For isActivatedSubmit and setActivatedSubmit, we should use the NVI-idiom here by making
@@ -186,6 +186,8 @@ public:
     FileList* files();
     void setFiles(FileList*);
 
+    void setFilesFromPaths(const Vector<String>&);
+
     // Returns true if the given DragData has more than one dropped files.
     bool receiveDroppedFiles(const DragData*);
 
@@ -206,6 +208,8 @@ public:
     HTMLDataListElement* dataList() const;
     bool hasValidDataListOptions() const;
     void listAttributeTargetChanged();
+    // Associated <datalist> options which match to the current INPUT value.
+    HeapVector<Member<HTMLOptionElement>> filteredDataListOptions() const;
 
     HTMLInputElement* checkedRadioButtonForGroup();
     bool isInRequiredRadioButtonGroup();
@@ -216,8 +220,6 @@ public:
     void updateView();
     bool needsToUpdateViewValue() const { return m_needsToUpdateViewValue; }
     void setInnerEditorValue(const String&) override;
-
-    void cacheSelectionInResponseToSetValue(int caretOffset) { cacheSelection(caretOffset, caretOffset, SelectionHasNoDirection); }
 
     // For test purposes.
     void selectColorInColorChooser(const Color&);
@@ -283,7 +285,6 @@ private:
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) final;
     void didMoveToNewDocument(Document& oldDocument) final;
-    void removeAllEventListeners() final;
 
     bool hasCustomFocusLogic() const final;
     bool isKeyboardFocusable() const final;
@@ -315,7 +316,7 @@ private:
 
     void copyNonAttributePropertiesFromElement(const Element&) final;
 
-    void attach(const AttachContext& = AttachContext()) final;
+    void attachLayoutTree(const AttachContext& = AttachContext()) final;
 
     void appendToFormData(FormData&) final;
     String resultForDialogSubmit() final;
@@ -353,7 +354,6 @@ private:
     void requiredAttributeChanged() final;
     void disabledAttributeChanged() final;
 
-    void updateTouchEventHandlerRegistry();
     void initializeTypeInParsing();
     void updateType();
 
@@ -391,7 +391,6 @@ private:
     unsigned m_parsingInProgress : 1;
     unsigned m_valueAttributeWasUpdatedAfterParsing : 1;
     unsigned m_canReceiveDroppedFiles : 1;
-    unsigned m_hasTouchEventHandler : 1;
     unsigned m_shouldRevealPassword : 1;
     unsigned m_needsToUpdateViewValue : 1;
     unsigned m_isPlaceholderVisible : 1;

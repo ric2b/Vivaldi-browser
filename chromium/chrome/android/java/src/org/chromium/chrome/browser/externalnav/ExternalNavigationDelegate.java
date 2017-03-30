@@ -45,7 +45,7 @@ interface ExternalNavigationDelegate {
      * @param infos ResolveInfos to search.
      * @return The package name of the first valid WebAPK. Null if no valid WebAPK was found.
      */
-    String findValidWebApkPackageName(List<ResolveInfo> infos);
+    String findWebApkPackageName(List<ResolveInfo> infos);
 
     /**
      * Get the name of the package of the currently running activity so that incoming intents
@@ -113,11 +113,6 @@ interface ExternalNavigationDelegate {
      * Determine if the Chrome app is in the foreground.
      */
     boolean isChromeAppInForeground();
-
-    /**
-     * Check if Chrome is running in document mode.
-     */
-    boolean isDocumentMode();
 
     /**
      * @return Default SMS application's package name. Null if there isn't any.

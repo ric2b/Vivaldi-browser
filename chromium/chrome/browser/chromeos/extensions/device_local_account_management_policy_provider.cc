@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/logging.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/grit/generated_resources.h"
@@ -36,9 +37,11 @@ const char* const kPublicSessionWhitelist[] = {
     "ngjnkanfphagcaokhjecbgkboelgfcnf",  // Print button
     "gbchcmhmhahfdphkhkmpfmihenigjmpp",  // Chrome Remote Desktop
     "cjanmonomjogheabiocdamfpknlpdehm",  // HP printer driver
+    "ioofdkhojeeimmagbjbknkejkgbphdfl",  // RICOH Print for Chrome
     "pmnllmkmjilbojkpgplbdmckghmaocjh",  // Scan app by François Beaufort
     "khpfeaanjngmcnplbdlpegiifgpfgdco",  // Smart Card Connector App
     "haeblkpifdemlfnkogkipmghfcbonief",  // Charismathics Smart Card Middleware
+    "mpnkhdpphjiihmlmkcamhpogecnnfffa",  // Service NSW Kiosk Utility
 
     // Libraries:
     "aclofikceldphonlfmghmimkodjdmhck",  // Ancoris login component
@@ -159,9 +162,6 @@ const char* const kSafeManifestEntries[] = {
 
     // TBD
     // emk::kCommands,
-
-    // TBD, doc missing
-    // emk::kCopresence,
 
     // TBD, looks unsafe
     // emk::kEventRules,
@@ -294,9 +294,6 @@ const char* const kSafePermissionStrings[] = {
 
     // Potentially risky: Could be used to spoof system UI.
     // "contextMenus",
-
-    // Dev channel only.  Not evaluated.
-    // "copresence",
 
     // Placing a document on the scanner implies user consent.
     "documentScan",
@@ -494,9 +491,12 @@ bool IsPlatformAppSafeForPublicSession(const extensions::Extension* extension) {
         }
         // Allow arbitrary web requests.  Don't include <all_urls> because that
         // also matches file:// schemes.
-        if (permission_string.find("https://") == 0 ||
-            permission_string.find("http://") == 0 ||
-            permission_string.find("ftp://") == 0) {
+        if (base::StartsWith(permission_string, "https://",
+                             base::CompareCase::SENSITIVE) ||
+            base::StartsWith(permission_string, "http://",
+                             base::CompareCase::SENSITIVE) ||
+            base::StartsWith(permission_string, "ftp://",
+                             base::CompareCase::SENSITIVE)) {
           continue;
         }
         LOG(ERROR) << extension->id()

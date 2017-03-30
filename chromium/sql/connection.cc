@@ -243,22 +243,7 @@ bool Connection::IsExpectedSqliteError(int error) {
 void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
   AssertIOAllowed();
 
-  std::string debug_info;
-  const int error = (extended_error & 0xFF);
-  if (error == SQLITE_CORRUPT) {
-    // CollectCorruptionInfo() is implemented in terms of sql::Connection,
-    // prevent reentrant calls to the error callback.
-    // TODO(shess): Rewrite IntegrityCheckHelper() in terms of raw SQLite.
-    ErrorCallback original_callback = std::move(error_callback_);
-    reset_error_callback();
-
-    debug_info = CollectCorruptionInfo();
-
-    error_callback_ = std::move(original_callback);
-  } else {
-    debug_info = CollectErrorInfo(extended_error, stmt);
-  }
-
+  std::string debug_info = GetDiagnosticInfo(extended_error, stmt);
   if (!debug_info.empty() && RegisterIntentToUpload()) {
     char debug_buf[2000];
     base::strlcpy(debug_buf, debug_info.c_str(), arraysize(debug_buf));
@@ -1708,15 +1693,28 @@ bool Connection::OpenInternal(const std::string& file_name,
   err = sqlite3_extended_result_codes(db_, 1);
   DCHECK_EQ(err, SQLITE_OK) << "Could not enable extended result codes";
 
-  // sqlite3_open() does not actually read the database file (unless a
-  // hot journal is found).  Successfully executing this pragma on an
-  // existing database requires a valid header on page 1.
+  // sqlite3_open() does not actually read the database file (unless a hot
+  // journal is found).  Successfully executing this pragma on an existing
+  // database requires a valid header on page 1.  ExecuteAndReturnErrorCode() to
+  // get the error code before error callback (potentially) overwrites.
   // TODO(shess): For now, just probing to see what the lay of the
   // land is.  If it's mostly SQLITE_NOTADB, then the database should
   // be razed.
   err = ExecuteAndReturnErrorCode("PRAGMA auto_vacuum");
-  if (err != SQLITE_OK)
+  if (err != SQLITE_OK) {
     UMA_HISTOGRAM_SPARSE_SLOWLY("Sqlite.OpenProbeFailure", err);
+    OnSqliteError(err, nullptr, "PRAGMA auto_vacuum");
+
+    // Retry or bail out if the error handler poisoned the handle.
+    // TODO(shess): Move this handling to one place (see also sqlite3_open and
+    // secure_delete).  Possibly a wrapper function?
+    if (poisoned_) {
+      Close();
+      if (retry_flag == RETRY_ON_POISON)
+        return OpenInternal(file_name, NO_RETRY);
+      return false;
+    }
+  }
 
 #if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
   // The version of SQLite shipped with iOS doesn't enable ICU, which includes
@@ -1919,6 +1917,40 @@ bool Connection::QuickIntegrityCheck() {
   if (!IntegrityCheckHelper("PRAGMA quick_check", &messages))
     return false;
   return messages.size() == 1 && messages[0] == "ok";
+}
+
+std::string Connection::GetDiagnosticInfo(int extended_error,
+                                          Statement* statement) {
+  // Prevent reentrant calls to the error callback.
+  ErrorCallback original_callback = std::move(error_callback_);
+  reset_error_callback();
+
+  // Trim extended error codes.
+  const int error = (extended_error & 0xFF);
+  // CollectCorruptionInfo() is implemented in terms of sql::Connection,
+  // TODO(shess): Rewrite IntegrityCheckHelper() in terms of raw SQLite.
+  std::string result = (error == SQLITE_CORRUPT)
+                           ? CollectCorruptionInfo()
+                           : CollectErrorInfo(extended_error, statement);
+
+  // The following queries must be executed after CollectErrorInfo() above, so
+  // if they result in their own errors, they don't interfere with
+  // CollectErrorInfo().
+  const bool has_valid_header =
+      (ExecuteAndReturnErrorCode("PRAGMA auto_vacuum") == SQLITE_OK);
+  const bool select_sqlite_master_result =
+      (ExecuteAndReturnErrorCode("SELECT COUNT(*) FROM sqlite_master") ==
+       SQLITE_OK);
+
+  // Restore the original error callback.
+  error_callback_ = std::move(original_callback);
+
+  base::StringAppendF(&result, "Has valid header: %s\n",
+                      (has_valid_header ? "Yes" : "No"));
+  base::StringAppendF(&result, "Has valid schema: %s\n",
+                      (select_sqlite_master_result ? "Yes" : "No"));
+
+  return result;
 }
 
 // TODO(shess): Allow specifying maximum results (default 100 lines).

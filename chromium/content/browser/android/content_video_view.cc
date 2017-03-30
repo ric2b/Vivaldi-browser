@@ -15,7 +15,9 @@
 
 using base::android::AttachCurrentThread;
 using base::android::CheckException;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
+using base::android::ScopedJavaLocalRef;
 using base::UserMetricsAction;
 using content::RecordAction;
 
@@ -46,10 +48,12 @@ ContentVideoView* ContentVideoView::GetInstance() {
 }
 
 ContentVideoView::ContentVideoView(Client* client,
-                                   ContentViewCore* content_view_core)
+                                   ContentViewCore* content_view_core,
+                                   const gfx::Size& video_natural_size)
     : client_(client), weak_factory_(this) {
   DCHECK(!g_content_video_view);
-  j_content_video_view_ = CreateJavaObject(content_view_core);
+  j_content_video_view_ =
+      CreateJavaObject(content_view_core, video_natural_size);
   g_content_video_view = this;
 }
 
@@ -58,8 +62,8 @@ ContentVideoView::~ContentVideoView() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
   if (!content_video_view.is_null()) {
-    Java_ContentVideoView_destroyContentVideoView(env,
-        content_video_view.obj(), true);
+    Java_ContentVideoView_destroyContentVideoView(env, content_video_view,
+                                                  true);
     j_content_video_view_.reset();
   }
   g_content_video_view = NULL;
@@ -69,7 +73,7 @@ void ContentVideoView::OpenVideo() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
   if (!content_video_view.is_null()) {
-    Java_ContentVideoView_openVideo(env, content_video_view.obj());
+    Java_ContentVideoView_openVideo(env, content_video_view);
   }
 }
 
@@ -77,7 +81,7 @@ void ContentVideoView::OnMediaPlayerError(int error_type) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
   if (!content_video_view.is_null()) {
-    Java_ContentVideoView_onMediaPlayerError(env, content_video_view.obj(),
+    Java_ContentVideoView_onMediaPlayerError(env, content_video_view,
                                              error_type);
   }
 }
@@ -86,8 +90,8 @@ void ContentVideoView::OnVideoSizeChanged(int width, int height) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
   if (!content_video_view.is_null()) {
-    Java_ContentVideoView_onVideoSizeChanged(env, content_video_view.obj(),
-                                             width, height);
+    Java_ContentVideoView_onVideoSizeChanged(env, content_video_view, width,
+                                             height);
   }
 }
 
@@ -96,7 +100,7 @@ void ContentVideoView::ExitFullscreen() {
   ScopedJavaLocalRef<jobject> content_video_view = GetJavaObject(env);
   bool release_media_player = false;
   if (!content_video_view.is_null())
-    Java_ContentVideoView_exitFullscreen(env, content_video_view.obj(),
+    Java_ContentVideoView_exitFullscreen(env, content_video_view,
                                          release_media_player);
 }
 
@@ -157,7 +161,8 @@ void ContentVideoView::RecordExitFullscreenPlayback(
 }
 
 JavaObjectWeakGlobalRef ContentVideoView::CreateJavaObject(
-    ContentViewCore* content_view_core) {
+    ContentViewCore* content_view_core,
+    const gfx::Size& video_natural_size) {
   JNIEnv* env = AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> j_content_view_core =
       content_view_core->GetJavaObject();
@@ -165,10 +170,9 @@ JavaObjectWeakGlobalRef ContentVideoView::CreateJavaObject(
     return JavaObjectWeakGlobalRef(env, nullptr);
 
   return JavaObjectWeakGlobalRef(
-      env,
-      Java_ContentVideoView_createContentVideoView(
-          env,
-          j_content_view_core.obj(),
-          reinterpret_cast<intptr_t>(this)).obj());
+      env, Java_ContentVideoView_createContentVideoView(
+               env, j_content_view_core, reinterpret_cast<intptr_t>(this),
+               video_natural_size.width(), video_natural_size.height())
+               .obj());
 }
 }  // namespace content

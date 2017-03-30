@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/search/instant_search_prerenderer.h"
 
+#include <utility>
+
 #include "chrome/browser/prerender/prerender_handle.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -19,12 +21,6 @@
 #include "components/search_engines/template_url_service.h"
 
 namespace {
-
-// Returns true if the underlying page supports Instant search.
-bool PageSupportsInstantSearch(content::WebContents* contents) {
-  // Search results page supports Instant search.
-  return SearchTabHelper::FromWebContents(contents)->IsSearchResultsPage();
-}
 
 // Returns true if |match| is associated with the default search provider.
 bool MatchIsFromDefaultSearchProvider(const AutocompleteMatch& match,
@@ -67,13 +63,13 @@ void InstantSearchPrerenderer::Init(
 
   // Only cancel the old prerender after starting the new one, so if the URLs
   // are the same, the underlying prerender will be reused.
-  std::unique_ptr<prerender::PrerenderHandle> old_prerender_handle(
-      prerender_handle_.release());
+  std::unique_ptr<prerender::PrerenderHandle> old_prerender_handle =
+      std::move(prerender_handle_);
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForProfile(profile_);
   if (prerender_manager) {
-    prerender_handle_.reset(prerender_manager->AddPrerenderForInstant(
-        prerender_url_, session_storage_namespace, size));
+    prerender_handle_ = prerender_manager->AddPrerenderForInstant(
+        prerender_url_, session_storage_namespace, size);
   }
   if (old_prerender_handle)
     old_prerender_handle->OnCancel();
@@ -124,9 +120,7 @@ bool InstantSearchPrerenderer::CanCommitQuery(
     return false;
   }
 
-  // InstantSearchPrerenderer can commit query to the prerendered page only if
-  // the underlying |source| page doesn't support Instant search.
-  return !PageSupportsInstantSearch(source);
+  return true;
 }
 
 bool InstantSearchPrerenderer::UsePrerenderedPage(
@@ -182,8 +176,7 @@ bool InstantSearchPrerenderer::IsAllowed(const AutocompleteMatch& match,
   // This handles the by-far-the-most-common cases while still being simple and
   // maintainable.
   return source && AutocompleteMatch::IsSearchType(match.type) &&
-      MatchIsFromDefaultSearchProvider(match, profile_) &&
-      !PageSupportsInstantSearch(source);
+      MatchIsFromDefaultSearchProvider(match, profile_);
 }
 
 content::WebContents* InstantSearchPrerenderer::prerender_contents() const {
@@ -193,7 +186,6 @@ content::WebContents* InstantSearchPrerenderer::prerender_contents() const {
 
 bool InstantSearchPrerenderer::QueryMatchesPrefetch(
     const base::string16& query) const {
-  if (search::ShouldReuseInstantSearchBasePage())
-    return true;
-  return last_instant_suggestion_.text == query;
+  return search::ShouldReuseInstantSearchBasePage() ||
+         last_instant_suggestion_.text == query;
 }

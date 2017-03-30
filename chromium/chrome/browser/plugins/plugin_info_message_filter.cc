@@ -6,24 +6,29 @@
 
 #include <stddef.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
+#include "chrome/browser/plugins/plugin_filter_utils.h"
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_otr_state.h"
+#include "chrome/common/chrome_content_client.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/render_messages.h"
+#include "components/component_updater/component_updater_service.h"
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/browser/plugins_field_trial.h"
@@ -56,30 +61,6 @@ using content::WebPluginInfo;
 
 namespace {
 
-// For certain sandboxed Pepper plugins, use the JavaScript Content Settings.
-bool ShouldUseJavaScriptSettingForPlugin(const WebPluginInfo& plugin) {
-  if (plugin.type != WebPluginInfo::PLUGIN_TYPE_PEPPER_IN_PROCESS &&
-      plugin.type != WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS) {
-    return false;
-  }
-
-#if !defined(DISABLE_NACL)
-  // Treat Native Client invocations like JavaScript.
-  if (plugin.name == base::ASCIIToUTF16(nacl::kNaClPluginName))
-    return true;
-#endif
-
-#if defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
-  // Treat CDM invocations like JavaScript.
-  if (plugin.name == base::ASCIIToUTF16(kWidevineCdmDisplayName)) {
-    DCHECK(plugin.type == WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS);
-    return true;
-  }
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
-
-  return false;
-}
-
 #if defined(ENABLE_PEPPER_CDMS)
 
 enum PluginAvailabilityStatusForUMA {
@@ -110,7 +91,7 @@ void ReportMetrics(const std::string& mime_type,
                    const GURL& origin_url) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (chrome::IsOffTheRecordSessionActive())
+  if (chrome::IsIncognitoSessionActive())
     return;
   rappor::RapporService* rappor_service = g_browser_process->rappor_service();
   if (!rappor_service)
@@ -178,12 +159,12 @@ PluginInfoMessageFilter::Context::Context(int render_process_id,
   allow_outdated_plugins_.Init(prefs::kPluginsAllowOutdated,
                                profile->GetPrefs());
   allow_outdated_plugins_.MoveToThread(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO));
   always_authorize_plugins_.Init(prefs::kPluginsAlwaysAuthorize,
                                  profile->GetPrefs());
   always_authorize_plugins_.MoveToThread(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO));
 }
 
@@ -251,32 +232,32 @@ void PluginInfoMessageFilter::PluginsLoaded(
     const GetPluginInfo_Params& params,
     IPC::Message* reply_msg,
     const std::vector<WebPluginInfo>& plugins) {
-  ChromeViewHostMsg_GetPluginInfo_Output output;
+  std::unique_ptr<ChromeViewHostMsg_GetPluginInfo_Output> output(
+      new ChromeViewHostMsg_GetPluginInfo_Output());
   // This also fills in |actual_mime_type|.
   std::unique_ptr<PluginMetadata> plugin_metadata;
   if (context_.FindEnabledPlugin(params.render_frame_id, params.url,
                                  params.top_origin_url, params.mime_type,
-                                 &output.status, &output.plugin,
-                                 &output.actual_mime_type,
-                                 &plugin_metadata)) {
-    context_.DecidePluginStatus(params, output.plugin, plugin_metadata.get(),
-                                &output.status);
+                                 &output->status, &output->plugin,
+                                 &output->actual_mime_type, &plugin_metadata)) {
+    context_.DecidePluginStatus(params, output->plugin, plugin_metadata.get(),
+                                &output->status);
   }
 
-  if (plugin_metadata) {
-    output.group_identifier = plugin_metadata->identifier();
-    output.group_name = plugin_metadata->name();
-  }
-
-  context_.MaybeGrantAccess(output.status, output.plugin.path);
-
-  ChromeViewHostMsg_GetPluginInfo::WriteReplyParams(reply_msg, output);
-  Send(reply_msg);
-  if (output.status !=
-      ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
-    main_thread_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&ReportMetrics, output.actual_mime_type,
-                              params.url, params.top_origin_url));
+  if (output->status == ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
+    // Check to see if the component updater can fetch an implementation.
+    base::PostTaskAndReplyWithResult(
+        main_thread_task_runner_.get(), FROM_HERE,
+        base::Bind(
+            &component_updater::ComponentUpdateService::GetComponentForMimeType,
+            base::Unretained(g_browser_process->component_updater()),
+            params.mime_type),
+        base::Bind(&PluginInfoMessageFilter::ComponentPluginLookupDone, this,
+                   params, base::Passed(&output),
+                   base::Passed(&plugin_metadata), reply_msg));
+  } else {
+    GetPluginInfoReply(params, std::move(output), std::move(plugin_metadata),
+                       reply_msg);
   }
 }
 
@@ -316,7 +297,7 @@ void PluginInfoMessageFilter::OnIsInternalPluginAvailableForMimeType(
       mime_type, is_plugin_disabled ? PLUGIN_DISABLED : PLUGIN_NOT_REGISTERED);
 }
 
-#endif // defined(ENABLE_PEPPER_CDMS)
+#endif  // defined(ENABLE_PEPPER_CDMS)
 
 void PluginInfoMessageFilter::Context::DecidePluginStatus(
     const GetPluginInfo_Params& params,
@@ -336,7 +317,8 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
   bool is_managed = false;
   // Check plugin content settings. The primary URL is the top origin URL and
   // the secondary URL is the plugin URL.
-  GetPluginContentSetting(plugin, params.top_origin_url, params.url,
+  GetPluginContentSetting(host_content_settings_map_, plugin,
+                          params.top_origin_url, params.url,
                           plugin_metadata->identifier(), &plugin_setting,
                           &uses_default_content_setting, &is_managed);
 
@@ -406,7 +388,6 @@ void PluginInfoMessageFilter::Context::DecidePluginStatus(
     if (extensions::WebViewRendererState::GetInstance()->IsGuest(
             render_process_id_))
       *status = ChromeViewHostMsg_GetPluginInfo_Status::kUnauthorized;
-
   }
 #endif
 }
@@ -427,6 +408,15 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
   std::vector<std::string> mime_types;
   PluginService::GetInstance()->GetPluginInfoArray(
       url, mime_type, allow_wildcard, &matching_plugins, &mime_types);
+#if defined(GOOGLE_CHROME_BUILD)
+  base::FilePath not_present =
+      base::FilePath::FromUTF8Unsafe(ChromeContentClient::kNotPresent);
+  matching_plugins.erase(
+      std::remove_if(
+          matching_plugins.begin(), matching_plugins.end(),
+          [&](const WebPluginInfo& info) { return info.path == not_present; }),
+      matching_plugins.end());
+#endif  // defined(GOOGLE_CHROME_BUILD)
   if (matching_plugins.empty()) {
     *status = ChromeViewHostMsg_GetPluginInfo_Status::kNotFound;
     return false;
@@ -462,59 +452,42 @@ bool PluginInfoMessageFilter::Context::FindEnabledPlugin(
   return enabled;
 }
 
-void PluginInfoMessageFilter::Context::GetPluginContentSetting(
-    const WebPluginInfo& plugin,
-    const GURL& policy_url,
-    const GURL& plugin_url,
-    const std::string& resource,
-    ContentSetting* setting,
-    bool* uses_default_content_setting,
-    bool* is_managed) const {
-  std::unique_ptr<base::Value> value;
-  content_settings::SettingInfo info;
-  bool uses_plugin_specific_setting = false;
-  if (ShouldUseJavaScriptSettingForPlugin(plugin)) {
-    value = host_content_settings_map_->GetWebsiteSetting(
-        policy_url,
-        policy_url,
-        CONTENT_SETTINGS_TYPE_JAVASCRIPT,
-        std::string(),
-        &info);
-  } else {
-    content_settings::SettingInfo specific_info;
-    std::unique_ptr<base::Value> specific_setting =
-        host_content_settings_map_->GetWebsiteSetting(
-            policy_url, plugin_url, CONTENT_SETTINGS_TYPE_PLUGINS, resource,
-            &specific_info);
-    content_settings::SettingInfo general_info;
-    std::unique_ptr<base::Value> general_setting =
-        host_content_settings_map_->GetWebsiteSetting(
-            policy_url, plugin_url, CONTENT_SETTINGS_TYPE_PLUGINS,
-            std::string(), &general_info);
-
-    // If there is a plugin-specific setting, we use it, unless the general
-    // setting was set by policy, in which case it takes precedence.
-    // TODO(tommycli): Remove once we deprecate the plugin ASK policy.
-    bool legacy_ask_user = content_settings::ValueToContentSetting(
-                               general_setting.get()) == CONTENT_SETTING_ASK;
-    bool use_policy =
-        general_info.source == content_settings::SETTING_SOURCE_POLICY &&
-        !legacy_ask_user;
-    uses_plugin_specific_setting = specific_setting && !use_policy;
-    if (uses_plugin_specific_setting) {
-      value = std::move(specific_setting);
-      info = specific_info;
-    } else {
-      value = std::move(general_setting);
-      info = general_info;
-    }
+void PluginInfoMessageFilter::ComponentPluginLookupDone(
+    const GetPluginInfo_Params& params,
+    std::unique_ptr<ChromeViewHostMsg_GetPluginInfo_Output> output,
+    std::unique_ptr<PluginMetadata> plugin_metadata,
+    IPC::Message* reply_msg,
+    std::unique_ptr<component_updater::ComponentInfo> cus_plugin_info) {
+  if (cus_plugin_info) {
+    output->status =
+        ChromeViewHostMsg_GetPluginInfo_Status::kComponentUpdateRequired;
+    plugin_metadata.reset(new PluginMetadata(
+        cus_plugin_info->id, cus_plugin_info->name, false, GURL(), GURL(),
+        base::ASCIIToUTF16(cus_plugin_info->id), std::string()));
   }
-  *setting = content_settings::ValueToContentSetting(value.get());
-  *uses_default_content_setting =
-      !uses_plugin_specific_setting &&
-      info.primary_pattern == ContentSettingsPattern::Wildcard() &&
-      info.secondary_pattern == ContentSettingsPattern::Wildcard();
-  *is_managed = info.source == content_settings::SETTING_SOURCE_POLICY;
+  GetPluginInfoReply(params, std::move(output), std::move(plugin_metadata),
+                     reply_msg);
+}
+
+void PluginInfoMessageFilter::GetPluginInfoReply(
+    const GetPluginInfo_Params& params,
+    std::unique_ptr<ChromeViewHostMsg_GetPluginInfo_Output> output,
+    std::unique_ptr<PluginMetadata> plugin_metadata,
+    IPC::Message* reply_msg) {
+  if (plugin_metadata) {
+    output->group_identifier = plugin_metadata->identifier();
+    output->group_name = plugin_metadata->name();
+  }
+
+  context_.MaybeGrantAccess(output->status, output->plugin.path);
+
+  ChromeViewHostMsg_GetPluginInfo::WriteReplyParams(reply_msg, *output);
+  Send(reply_msg);
+  if (output->status != ChromeViewHostMsg_GetPluginInfo_Status::kNotFound) {
+    main_thread_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&ReportMetrics, output->actual_mime_type,
+                              params.url, params.top_origin_url));
+  }
 }
 
 void PluginInfoMessageFilter::Context::MaybeGrantAccess(

@@ -136,17 +136,23 @@ class MockComponentUpdateService : public ComponentUpdateService,
     return false;
   }
 
+  std::unique_ptr<ComponentInfo> GetComponentForMimeType(
+      const std::string& mime_type) const override {
+    return nullptr;
+  }
+
   // OnDemandUpdater implementation:
-  bool OnDemandUpdate(const std::string& crx_id) override {
+  void OnDemandUpdate(
+      const std::string& crx_id,
+      ComponentUpdateService::CompletionCallback callback) override {
     on_demand_update_called_ = true;
 
     if (!component_) {
       ADD_FAILURE() << "Trying to update unregistered component " << crx_id;
-      return false;
+      return;
     }
 
     EXPECT_EQ(GetCrxComponentID(*component_), crx_id);
-    return true;
   }
 
  private:

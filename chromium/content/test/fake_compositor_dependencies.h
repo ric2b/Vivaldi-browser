@@ -6,11 +6,12 @@
 #define CONTENT_TEST_FAKE_COMPOSITOR_DEPENDENCIES_H_
 
 #include "base/macros.h"
+#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
-#include "content/test/fake_renderer_scheduler.h"
+#include "third_party/WebKit/public/platform/scheduler/test/fake_renderer_scheduler.h"
 
 namespace content {
 
@@ -30,14 +31,14 @@ class FakeCompositorDependencies : public CompositorDependencies {
   bool IsPartialRasterEnabled() override;
   bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
-  std::vector<unsigned> GetImageTextureTargets() override;
+  const cc::BufferToTextureTargetMap& GetBufferToTextureTargetMap() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorImplThreadTaskRunner() override;
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
-  scheduler::RendererScheduler* GetRendererScheduler() override;
+  blink::scheduler::RendererScheduler* GetRendererScheduler() override;
   std::unique_ptr<cc::BeginFrameSource> CreateExternalBeginFrameSource(
       int routing_id) override;
   cc::ImageSerializationProcessor* GetImageSerializationProcessor() override;
@@ -49,7 +50,8 @@ class FakeCompositorDependencies : public CompositorDependencies {
   cc::TestSharedBitmapManager shared_bitmap_manager_;
   cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   cc::TestTaskGraphRunner task_graph_runner_;
-  FakeRendererScheduler renderer_scheduler_;
+  blink::scheduler::FakeRendererScheduler renderer_scheduler_;
+  cc::BufferToTextureTargetMap buffer_to_texture_target_map_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeCompositorDependencies);
 };

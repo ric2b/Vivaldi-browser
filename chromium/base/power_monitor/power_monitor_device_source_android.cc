@@ -18,18 +18,16 @@ void ProcessPowerEventHelper(PowerMonitorSource::PowerEvent event) {
 
 namespace android {
 
-// Native implementation of PowerMonitor.java.
+// Native implementation of PowerMonitor.java. Note: This will be invoked by
+// PowerMonitor.java shortly after startup to set the correct initial value for
+// "is on battery power."
 void OnBatteryChargingChanged(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
   ProcessPowerEventHelper(PowerMonitorSource::POWER_STATE_EVENT);
 }
 
-void OnMainActivityResumed(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
-  ProcessPowerEventHelper(PowerMonitorSource::RESUME_EVENT);
-}
-
-void OnMainActivitySuspended(JNIEnv* env, const JavaParamRef<jclass>& clazz) {
-  ProcessPowerEventHelper(PowerMonitorSource::SUSPEND_EVENT);
-}
+// Note: Android does not have the concept of suspend / resume as it's known by
+// other platforms. Thus we do not send Suspend/Resume notifications. See
+// http://crbug.com/644515
 
 }  // namespace android
 

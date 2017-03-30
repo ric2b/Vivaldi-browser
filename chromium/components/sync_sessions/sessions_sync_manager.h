@@ -20,8 +20,9 @@
 #include "base/time/time.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
-#include "components/sync_driver/device_info.h"
-#include "components/sync_driver/sync_prefs.h"
+#include "components/sync/api/syncable_service.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/driver/sync_prefs.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
@@ -29,7 +30,6 @@
 #include "components/sync_sessions/synced_session.h"
 #include "components/sync_sessions/synced_session_tracker.h"
 #include "components/sync_sessions/tab_node_pool.h"
-#include "sync/api/syncable_service.h"
 
 namespace syncer {
 class SyncErrorFactory;
@@ -289,8 +289,8 @@ class SessionsSyncManager : public syncer::SyncableService,
   // into memory yet (e.g on android) and we don't have a WebContents. In this
   // case we can't do a full association, but we still want to update tab IDs
   // as they may have changed after a session was restored.  This method
-  // compares new_tab_id against the previously persisted tab ID (from
-  // our TabNodePool) and updates it if it differs.
+  // compares new_tab_id and new_window_id against the previously persisted tab
+  // ID and window ID (from our TabNodePool) and updates them if either differs.
   // |restored_tabs| is a filtered tab-only subset of initial sync data, if
   // available (during MergeDataAndStartSyncing). It can be used to obtain
   // baseline SessionSpecifics for tabs we can't fully associate any other
@@ -300,6 +300,7 @@ class SessionsSyncManager : public syncer::SyncableService,
   void AssociateRestoredPlaceholderTab(
       const SyncedTabDelegate& tab_delegate,
       SessionID::id_type new_tab_id,
+      SessionID::id_type new_window_id,
       const syncer::SyncDataList& restored_tabs,
       syncer::SyncChangeList* change_output);
 

@@ -32,6 +32,15 @@ IOSChromeGCMProfileServiceFactory::GetInstance() {
   return base::Singleton<IOSChromeGCMProfileServiceFactory>::get();
 }
 
+// static
+std::string IOSChromeGCMProfileServiceFactory::GetProductCategoryForSubtypes() {
+#if defined(GOOGLE_CHROME_BUILD)
+  return "com.chrome.ios";
+#else
+  return "org.chromium.ios";
+#endif
+}
+
 IOSChromeGCMProfileServiceFactory::IOSChromeGCMProfileServiceFactory()
     : BrowserStateKeyedServiceFactory(
           "GCMProfileService",
@@ -54,9 +63,10 @@ IOSChromeGCMProfileServiceFactory::BuildServiceInstanceFor(
           base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  return base::WrapUnique(new gcm::GCMProfileService(
+  return base::MakeUnique<gcm::GCMProfileService>(
       browser_state->GetPrefs(), browser_state->GetStatePath(),
       browser_state->GetRequestContext(), ::GetChannel(),
+      GetProductCategoryForSubtypes(),
       base::WrapUnique(new ProfileIdentityProvider(
           ios::SigninManagerFactory::GetForBrowserState(browser_state),
           OAuth2TokenServiceFactory::GetForBrowserState(browser_state),
@@ -64,5 +74,5 @@ IOSChromeGCMProfileServiceFactory::BuildServiceInstanceFor(
       base::WrapUnique(new gcm::GCMClientFactory),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::UI),
       web::WebThread::GetTaskRunnerForThread(web::WebThread::IO),
-      blocking_task_runner));
+      blocking_task_runner);
 }

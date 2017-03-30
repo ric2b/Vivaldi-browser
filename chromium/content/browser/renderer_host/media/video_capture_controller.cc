@@ -179,7 +179,7 @@ void VideoCaptureController::AddClient(
   }
 
   // If this is the first client added to the controller, cache the parameters.
-  if (!controller_clients_.size())
+  if (controller_clients_.empty())
     video_capture_format_ = params.requested_format;
 
   // Signal error in case device is already in error state.
@@ -350,8 +350,8 @@ VideoCaptureController::GetVideoCaptureFormat() const {
 }
 
 VideoCaptureController::~VideoCaptureController() {
-  STLDeleteContainerPointers(controller_clients_.begin(),
-                             controller_clients_.end());
+  base::STLDeleteContainerPointers(controller_clients_.begin(),
+                                   controller_clients_.end());
 }
 
 void VideoCaptureController::DoIncomingCapturedVideoFrameOnIOThread(
@@ -386,7 +386,7 @@ void VideoCaptureController::DoIncomingCapturedVideoFrameOnIOThread(
              buffer->mapped_size())))
         << "VideoFrame does not appear to be backed by Buffer";
 
-    for (const auto& client : controller_clients_) {
+    for (auto* client : controller_clients_) {
       if (client->session_closed || client->paused)
         continue;
 
@@ -506,7 +506,7 @@ VideoCaptureController::ControllerClient* VideoCaptureController::FindClient(
 VideoCaptureController::ControllerClient* VideoCaptureController::FindClient(
     int session_id,
     const ControllerClients& clients) {
-  for (auto client : clients) {
+  for (auto* client : clients) {
     if (client->session_id == session_id)
       return client;
   }

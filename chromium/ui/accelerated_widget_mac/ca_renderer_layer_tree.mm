@@ -10,13 +10,15 @@
 #include <GLES2/gl2extchromium.h>
 
 #include "base/command_line.h"
-#include "base/mac/mac_util.h"
+#include "base/lazy_instance.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cocoa/animation_utils.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/geometry/dip_util.h"
+#include "ui/gl/ca_renderer_layer_params.h"
+#include "ui/gl/gl_image_io_surface.h"
 
 #if !defined(MAC_OS_X_VERSION_10_8) || \
     MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_8
@@ -128,32 +130,91 @@ bool AVSampleBufferDisplayLayerEnqueueIOSurface(
 
 }  // namespace
 
-CARendererLayerTree::CARendererLayerTree() {}
+class CARendererLayerTree::SolidColorContents
+    : public base::RefCounted<CARendererLayerTree::SolidColorContents> {
+ public:
+  static scoped_refptr<SolidColorContents> Get(SkColor color);
+  id GetContents() const;
+
+ private:
+  friend class base::RefCounted<SolidColorContents>;
+
+  SolidColorContents(SkColor color, IOSurfaceRef io_surface);
+  ~SolidColorContents();
+
+  SkColor color_ = 0;
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface_;
+  static base::LazyInstance<std::map<SkColor, SolidColorContents*>> map_;
+};
+
+base::LazyInstance<std::map<SkColor, CARendererLayerTree::SolidColorContents*>>
+    CARendererLayerTree::SolidColorContents::map_;
+
+// static
+scoped_refptr<CARendererLayerTree::SolidColorContents>
+CARendererLayerTree::SolidColorContents::Get(SkColor color) {
+  const int kSolidColorContentsSize = 16;
+
+  auto found = map_.Get().find(color);
+  if (found != map_.Get().end())
+    return found->second;
+
+  IOSurfaceRef io_surface = CreateIOSurface(
+      gfx::Size(kSolidColorContentsSize, kSolidColorContentsSize),
+      gfx::BufferFormat::BGRA_8888);
+  if (!io_surface)
+    return nullptr;
+
+  size_t bytes_per_row = IOSurfaceGetBytesPerRowOfPlane(io_surface, 0);
+  IOSurfaceLock(io_surface, 0, NULL);
+  char* row_base_address =
+      reinterpret_cast<char*>(IOSurfaceGetBaseAddress(io_surface));
+  for (int i = 0; i < kSolidColorContentsSize; ++i) {
+    unsigned int* pixel = reinterpret_cast<unsigned int*>(row_base_address);
+    for (int j = 0; j < kSolidColorContentsSize; ++j)
+      *(pixel++) = color;
+    row_base_address += bytes_per_row;
+  }
+  IOSurfaceUnlock(io_surface, 0, NULL);
+
+  return new SolidColorContents(color, io_surface);
+}
+
+id CARendererLayerTree::SolidColorContents::GetContents() const {
+  return static_cast<id>(io_surface_.get());
+}
+
+CARendererLayerTree::SolidColorContents::SolidColorContents(
+    SkColor color,
+    IOSurfaceRef io_surface)
+    : color_(color), io_surface_(io_surface) {
+  DCHECK(map_.Get().find(color_) == map_.Get().end());
+  map_.Get()[color_] = this;
+}
+
+CARendererLayerTree::SolidColorContents::~SolidColorContents() {
+  auto found = map_.Get().find(color_);
+  DCHECK(found != map_.Get().end());
+  DCHECK(found->second == this);
+  map_.Get().erase(color_);
+}
+
+CARendererLayerTree::CARendererLayerTree(
+    bool allow_av_sample_buffer_display_layer,
+    bool allow_solid_color_layers)
+    : allow_av_sample_buffer_display_layer_(
+          allow_av_sample_buffer_display_layer),
+      allow_solid_color_layers_(allow_solid_color_layers) {}
 CARendererLayerTree::~CARendererLayerTree() {}
 
-bool CARendererLayerTree::ScheduleCALayer(
-    bool is_clipped,
-    const gfx::Rect& clip_rect,
-    unsigned sorting_context_id,
-    const gfx::Transform& transform,
-    base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
-    base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer,
-    const gfx::RectF& contents_rect,
-    const gfx::Rect& rect,
-    unsigned background_color,
-    unsigned edge_aa_mask,
-    float opacity,
-    unsigned filter) {
+bool CARendererLayerTree::ScheduleCALayer(const CARendererLayerParams& params) {
   // Excessive logging to debug white screens (crbug.com/583805).
   // TODO(ccameron): change this back to a DLOG.
   if (has_committed_) {
     LOG(ERROR) << "ScheduleCALayer called after CommitScheduledCALayers.";
     return false;
   }
-  return root_layer_.AddContentLayer(is_clipped, clip_rect, sorting_context_id,
-                                     transform, io_surface, cv_pixel_buffer,
-                                     contents_rect, rect, background_color,
-                                     edge_aa_mask, opacity, filter);
+  return root_layer_.AddContentLayer(this, params);
 }
 
 void CARendererLayerTree::CommitScheduledCALayers(
@@ -227,6 +288,9 @@ bool CARendererLayerTree::CommitFullscreenLowPowerLayer(
   return true;
 }
 
+id CARendererLayerTree::ContentsForSolidColorForTesting(SkColor color) {
+  return SolidColorContents::Get(color)->GetContents();
+}
 
 CARendererLayerTree::RootLayer::RootLayer() {}
 
@@ -281,6 +345,7 @@ CARendererLayerTree::TransformLayer::~TransformLayer() {
 }
 
 CARendererLayerTree::ContentLayer::ContentLayer(
+    CARendererLayerTree* tree,
     base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
     base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer,
     const gfx::RectF& contents_rect,
@@ -299,6 +364,17 @@ CARendererLayerTree::ContentLayer::ContentLayer(
       ca_filter(filter == GL_LINEAR ? kCAFilterLinear : kCAFilterNearest) {
   DCHECK(filter == GL_LINEAR || filter == GL_NEAREST);
 
+  // On Mac OS Sierra, solid color layers are not color color corrected to the
+  // output monitor color space, but IOSurface-backed layers are color
+  // corrected. Note that this is only the case when the CALayers are shared
+  // across processes. To make colors consistent across both solid color and
+  // IOSurface-backed layers, use a cache of solid-color IOSurfaces as contents.
+  // https://crbug.com/633805
+  if (!io_surface && !tree->allow_solid_color_layers_) {
+    solid_color_contents = SolidColorContents::Get(background_color);
+    ContentLayer::contents_rect = gfx::RectF(0, 0, 1, 1);
+  }
+
   // Because the root layer has setGeometryFlipped:YES, there is some ambiguity
   // about what exactly top and bottom mean. This ambiguity is resolved in
   // different ways for solid color CALayers and for CALayers that have content
@@ -311,7 +387,7 @@ CARendererLayerTree::ContentLayer::ContentLayer(
     ca_edge_aa_mask |= kCALayerLeftEdge;
   if (edge_aa_mask & GL_CA_LAYER_EDGE_RIGHT_CHROMIUM)
     ca_edge_aa_mask |= kCALayerRightEdge;
-  if (io_surface) {
+  if (io_surface || solid_color_contents) {
     if (edge_aa_mask & GL_CA_LAYER_EDGE_TOP_CHROMIUM)
       ca_edge_aa_mask |= kCALayerBottomEdge;
     if (edge_aa_mask & GL_CA_LAYER_EDGE_BOTTOM_CHROMIUM)
@@ -325,20 +401,18 @@ CARendererLayerTree::ContentLayer::ContentLayer(
 
   // Only allow 4:2:0 frames which fill the layer's contents to be promoted to
   // AV layers.
-  if (IOSurfaceGetPixelFormat(io_surface) ==
+  if (tree->allow_av_sample_buffer_display_layer_ &&
+      IOSurfaceGetPixelFormat(io_surface) ==
           kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange &&
       contents_rect == gfx::RectF(0, 0, 1, 1)) {
-    // Disable AVSampleBufferDisplayLayer on <10.11 due to reports of memory
-    // leaks on 10.9.
-    // https://crbug.com/631485
-    if (base::mac::IsOSElCapitanOrLater())
-      use_av_layer = true;
+    use_av_layer = true;
   }
 }
 
 CARendererLayerTree::ContentLayer::ContentLayer(ContentLayer&& layer)
     : io_surface(layer.io_surface),
       cv_pixel_buffer(layer.cv_pixel_buffer),
+      solid_color_contents(layer.solid_color_contents),
       contents_rect(layer.contents_rect),
       rect(layer.rect),
       background_color(layer.background_color),
@@ -357,18 +431,8 @@ CARendererLayerTree::ContentLayer::~ContentLayer() {
 }
 
 bool CARendererLayerTree::RootLayer::AddContentLayer(
-    bool is_clipped,
-    const gfx::Rect& clip_rect,
-    unsigned sorting_context_id,
-    const gfx::Transform& transform,
-    base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
-    base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer,
-    const gfx::RectF& contents_rect,
-    const gfx::Rect& rect,
-    unsigned background_color,
-    unsigned edge_aa_mask,
-    float opacity,
-    unsigned filter) {
+    CARendererLayerTree* tree,
+    const CARendererLayerParams& params) {
   bool needs_new_clip_and_sorting_layer = true;
 
   // In sorting_context_id 0, all quads are listed in back-to-front order.
@@ -376,16 +440,16 @@ bool CARendererLayerTree::RootLayer::AddContentLayer(
   // If a quad has a 3D transform, it is necessary to put it in its own sorting
   // context, so that it will not intersect with quads before and after it.
   bool is_singleton_sorting_context =
-      !sorting_context_id && !transform.IsFlat();
+      !params.sorting_context_id && !params.transform.IsFlat();
 
   if (!clip_and_sorting_layers.empty()) {
     ClipAndSortingLayer& current_layer = clip_and_sorting_layers.back();
     // It is in error to change the clipping settings within a non-zero sorting
     // context. The result will be incorrect layering and intersection.
-    if (sorting_context_id &&
-        current_layer.sorting_context_id == sorting_context_id &&
-        (current_layer.is_clipped != is_clipped ||
-         current_layer.clip_rect != clip_rect)) {
+    if (params.sorting_context_id &&
+        current_layer.sorting_context_id == params.sorting_context_id &&
+        (current_layer.is_clipped != params.is_clipped ||
+         current_layer.clip_rect != params.clip_rect)) {
       // Excessive logging to debug white screens (crbug.com/583805).
       // TODO(ccameron): change this back to a DLOG.
       LOG(ERROR) << "CALayer changed clip inside non-zero sorting context.";
@@ -393,58 +457,52 @@ bool CARendererLayerTree::RootLayer::AddContentLayer(
     }
     if (!is_singleton_sorting_context &&
         !current_layer.is_singleton_sorting_context &&
-        current_layer.is_clipped == is_clipped &&
-        current_layer.clip_rect == clip_rect &&
-        current_layer.sorting_context_id == sorting_context_id) {
+        current_layer.is_clipped == params.is_clipped &&
+        current_layer.clip_rect == params.clip_rect &&
+        current_layer.sorting_context_id == params.sorting_context_id) {
       needs_new_clip_and_sorting_layer = false;
     }
   }
   if (needs_new_clip_and_sorting_layer) {
-    clip_and_sorting_layers.push_back(
-        ClipAndSortingLayer(is_clipped, clip_rect, sorting_context_id,
-                            is_singleton_sorting_context));
+    clip_and_sorting_layers.push_back(ClipAndSortingLayer(
+        params.is_clipped, params.clip_rect, params.sorting_context_id,
+        is_singleton_sorting_context));
   }
-  clip_and_sorting_layers.back().AddContentLayer(
-      transform, io_surface, cv_pixel_buffer, contents_rect, rect,
-      background_color, edge_aa_mask, opacity, filter);
+  clip_and_sorting_layers.back().AddContentLayer(tree, params);
   return true;
 }
 
 void CARendererLayerTree::ClipAndSortingLayer::AddContentLayer(
-    const gfx::Transform& transform,
-    base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
-    base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer,
-    const gfx::RectF& contents_rect,
-    const gfx::Rect& rect,
-    unsigned background_color,
-    unsigned edge_aa_mask,
-    float opacity,
-    unsigned filter) {
+    CARendererLayerTree* tree,
+    const CARendererLayerParams& params) {
   bool needs_new_transform_layer = true;
   if (!transform_layers.empty()) {
     const TransformLayer& current_layer = transform_layers.back();
-    if (current_layer.transform == transform)
+    if (current_layer.transform == params.transform)
       needs_new_transform_layer = false;
   }
   if (needs_new_transform_layer)
-    transform_layers.push_back(TransformLayer(transform));
-  transform_layers.back().AddContentLayer(io_surface, cv_pixel_buffer,
-                                          contents_rect, rect, background_color,
-                                          edge_aa_mask, opacity, filter);
+    transform_layers.push_back(TransformLayer(params.transform));
+  transform_layers.back().AddContentLayer(tree, params);
 }
 
 void CARendererLayerTree::TransformLayer::AddContentLayer(
-    base::ScopedCFTypeRef<IOSurfaceRef> io_surface,
-    base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer,
-    const gfx::RectF& contents_rect,
-    const gfx::Rect& rect,
-    unsigned background_color,
-    unsigned edge_aa_mask,
-    float opacity,
-    unsigned filter) {
-  content_layers.push_back(ContentLayer(io_surface, cv_pixel_buffer,
-                                        contents_rect, rect, background_color,
-                                        edge_aa_mask, opacity, filter));
+    CARendererLayerTree* tree,
+    const CARendererLayerParams& params) {
+  base::ScopedCFTypeRef<IOSurfaceRef> io_surface;
+  base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
+  if (params.image) {
+    gl::GLImageIOSurface* io_surface_image =
+        gl::GLImageIOSurface::FromGLImage(params.image);
+    DCHECK(io_surface_image);
+    io_surface = io_surface_image->io_surface();
+    cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
+  }
+
+  content_layers.push_back(
+      ContentLayer(tree, io_surface, cv_pixel_buffer, params.contents_rect,
+                   params.rect, params.background_color, params.edge_aa_mask,
+                   params.opacity, params.filter));
 }
 
 void CARendererLayerTree::RootLayer::CommitToCA(CALayer* superlayer,
@@ -577,7 +635,8 @@ void CARendererLayerTree::ContentLayer::CommitToCA(CALayer* superlayer,
     std::swap(ca_layer, old_layer->ca_layer);
     std::swap(av_layer, old_layer->av_layer);
     update_contents = old_layer->io_surface != io_surface ||
-                      old_layer->cv_pixel_buffer != cv_pixel_buffer;
+                      old_layer->cv_pixel_buffer != cv_pixel_buffer ||
+                      old_layer->solid_color_contents != solid_color_contents;
     update_contents_rect = old_layer->contents_rect != contents_rect;
     update_rect = old_layer->rect != rect;
     update_background_color = old_layer->background_color != background_color;
@@ -614,7 +673,13 @@ void CARendererLayerTree::ContentLayer::CommitToCA(CALayer* superlayer,
     }
   } else {
     if (update_contents) {
-      [ca_layer setContents:static_cast<id>(io_surface.get())];
+      if (io_surface) {
+        [ca_layer setContents:static_cast<id>(io_surface.get())];
+      } else if (solid_color_contents) {
+        [ca_layer setContents:solid_color_contents->GetContents()];
+      } else {
+        [ca_layer setContents:nil];
+      }
       if ([ca_layer respondsToSelector:(@selector(setContentsScale:))])
         [ca_layer setContentsScale:scale_factor];
     }
@@ -655,9 +720,15 @@ void CARendererLayerTree::ContentLayer::CommitToCA(CALayer* superlayer,
       if (use_av_layer) {
         // Yellow represents an AV layer that changed this frame.
         color.reset(CGColorCreateGenericRGB(1, 1, 0, 1));
-      } else {
-        // Pink represents a CALayer that changed this frame.
+      } else if (io_surface) {
+        // Magenta represents a CALayer that changed this frame.
         color.reset(CGColorCreateGenericRGB(1, 0, 1, 1));
+      } else if (solid_color_contents) {
+        // Cyan represents a solid color IOSurface-backed layer.
+        color.reset(CGColorCreateGenericRGB(0, 1, 1, 1));
+      } else {
+        // Red represents a solid color layer.
+        color.reset(CGColorCreateGenericRGB(1, 0, 0, 1));
       }
     } else {
       // Grey represents a CALayer that has not changed.

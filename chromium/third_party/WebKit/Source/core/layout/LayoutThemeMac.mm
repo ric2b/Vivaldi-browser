@@ -111,6 +111,22 @@
 
 namespace blink {
 
+namespace {
+
+bool fontSizeMatchesToControlSize(const ComputedStyle& style)
+{
+    int fontSize = style.fontSize();
+    if (fontSize == [NSFont systemFontSizeForControlSize:NSRegularControlSize])
+        return true;
+    if (fontSize == [NSFont systemFontSizeForControlSize:NSSmallControlSize])
+        return true;
+    if (fontSize == [NSFont systemFontSizeForControlSize:NSMiniControlSize])
+        return true;
+    return false;
+}
+
+} // namespace
+
 using namespace HTMLNames;
 
 LayoutThemeMac::LayoutThemeMac()
@@ -445,14 +461,26 @@ bool LayoutThemeMac::isControlStyled(const ComputedStyle& style) const
     if (style.appearance() == TextFieldPart || style.appearance() == TextAreaPart)
         return style.hasAuthorBorder() || style.boxShadow();
 
-    // FIXME: This is horrible, but there is not much else that can be done.
-    // Menu lists cannot draw properly when scaled. They can't really draw
-    // properly when transformed either. We can't detect the transform case at
-    // style adjustment time so that will just have to stay broken.  We can
-    // however detect that we're zooming. If zooming is in effect we treat it
-    // like the control is styled.
-    if (style.appearance() == MenulistPart && style.effectiveZoom() != 1.0f)
-        return true;
+    if (style.appearance() == MenulistPart) {
+        // FIXME: This is horrible, but there is not much else that can be done.
+        // Menu lists cannot draw properly when scaled. They can't really draw
+        // properly when transformed either. We can't detect the transform case
+        // at style adjustment time so that will just have to stay broken.  We
+        // can however detect that we're zooming. If zooming is in effect we
+        // treat it like the control is styled.
+        if (style.effectiveZoom() != 1.0f)
+            return true;
+        if (!fontSizeMatchesToControlSize(style))
+            return true;
+        if (style.getFontDescription().family().family() != "BlinkMacSystemFont")
+            return true;
+        if (!style.height().isIntrinsicOrAuto())
+            return true;
+        // NSPopUpButtonCell on macOS 10.9 doesn't support
+        // NSUserInterfaceLayoutDirectionRightToLeft.
+        if (IsOSMavericks() && style.direction() == RTL)
+            return true;
+    }
     // Some other cells don't work well when scaled.
     if (style.effectiveZoom() != 1) {
         switch (style.appearance()) {
@@ -656,26 +684,10 @@ const int* LayoutThemeMac::popupButtonPadding(NSControlSize size) const
     return padding[size];
 }
 
-const IntSize* LayoutThemeMac::progressBarSizes() const
+const int* LayoutThemeMac::progressBarHeights() const
 {
-    static const IntSize sizes[3] = { IntSize(0, 20), IntSize(0, 12), IntSize(0, 12) };
+    static const int sizes[3] = { 20, 12, 12 };
     return sizes;
-}
-
-const int* LayoutThemeMac::progressBarMargins(NSControlSize controlSize) const
-{
-    static const int margins[3][4] =
-    {
-        { 0, 0, 1, 0 },
-        { 0, 0, 1, 0 },
-        { 0, 0, 1, 0 },
-    };
-    return margins[controlSize];
-}
-
-int LayoutThemeMac::minimumProgressBarHeight(const ComputedStyle& style) const
-{
-    return sizeForSystemFont(style, progressBarSizes()).height();
 }
 
 double LayoutThemeMac::animationRepeatIntervalForProgressBar() const
@@ -723,31 +735,30 @@ void LayoutThemeMac::adjustMenuListStyle(ComputedStyle& style, Element* e) const
 }
 
 static const int baseBorderRadius = 5;
-static const int styledPopupPaddingLeft = 8;
+static const int styledPopupPaddingStart = 8;
 static const int styledPopupPaddingTop = 1;
 static const int styledPopupPaddingBottom = 2;
 
 // These functions are called with MenuListPart or MenulistButtonPart appearance
 // by LayoutMenuList.
-int LayoutThemeMac::popupInternalPaddingLeft(const ComputedStyle& style) const
+int LayoutThemeMac::popupInternalPaddingStart(const ComputedStyle& style) const
 {
     if (style.appearance() == MenulistPart)
         return popupButtonPadding(controlSizeForFont(style))[ThemeMac::LeftMargin] * style.effectiveZoom();
     if (style.appearance() == MenulistButtonPart)
-        return styledPopupPaddingLeft * style.effectiveZoom();
+        return styledPopupPaddingStart * style.effectiveZoom();
     return 0;
 }
 
-int LayoutThemeMac::popupInternalPaddingRight(const ComputedStyle& style) const
+int LayoutThemeMac::popupInternalPaddingEnd(const ComputedStyle& style) const
 {
     if (style.appearance() == MenulistPart)
         return popupButtonPadding(controlSizeForFont(style))[ThemeMac::RightMargin] * style.effectiveZoom();
-    if (style.appearance() == MenulistButtonPart) {
-        float fontScale = style.fontSize() / baseFontSize;
-        float arrowWidth = menuListBaseArrowWidth * fontScale;
-        return static_cast<int>(ceilf(arrowWidth + (menuListArrowPaddingLeft + menuListArrowPaddingRight) * style.effectiveZoom()));
-    }
-    return 0;
+    if (style.appearance() != MenulistButtonPart)
+        return 0;
+    float fontScale = style.fontSize() / baseFontSize;
+    float arrowWidth = menuListBaseArrowWidth * fontScale;
+    return static_cast<int>(ceilf(arrowWidth + (menuListArrowPaddingStart + menuListArrowPaddingEnd) * style.effectiveZoom()));
 }
 
 int LayoutThemeMac::popupInternalPaddingTop(const ComputedStyle& style) const
@@ -793,6 +804,8 @@ void LayoutThemeMac::setPopupButtonCellState(const LayoutObject& object, const I
     updateCheckedState(popupButton, object);
     updateEnabledState(popupButton, object);
     updatePressedState(popupButton, object);
+
+    popupButton.userInterfaceLayoutDirection = object.styleRef().direction() == LTR ? NSUserInterfaceLayoutDirectionLeftToRight : NSUserInterfaceLayoutDirectionRightToLeft;
 }
 
 const IntSize* LayoutThemeMac::menuListSizes() const
@@ -894,6 +907,16 @@ IntSize LayoutThemeMac::sliderTickSize() const
 int LayoutThemeMac::sliderTickOffsetFromTrackCenter() const
 {
     return -9;
+}
+
+void LayoutThemeMac::adjustProgressBarBounds(ComputedStyle& style) const
+{
+    float zoomLevel = style.effectiveZoom();
+    NSControlSize controlSize = controlSizeForFont(style);
+    int height = progressBarHeights()[controlSize] * zoomLevel;
+
+    // Now inflate it to account for the shadow.
+    style.setMinHeight(Length(height + zoomLevel, Fixed));
 }
 
 void LayoutThemeMac::adjustSliderThumbSize(ComputedStyle& style) const

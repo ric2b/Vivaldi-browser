@@ -12,6 +12,8 @@
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_view.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 using GuestViewContainerMap = std::map<int, guest_view::GuestViewContainer*>;
@@ -147,6 +149,12 @@ void GuestViewContainer::PerformPendingRequest() {
 
 void GuestViewContainer::HandlePendingResponseCallback(
     const IPC::Message& message) {
+  // NOTE(andre@vivaldi.com) : This was added to prevent a callback call without
+  // pending_response_ being set.
+  if (vivaldi::IsVivaldiRunning() && !pending_response_.get()) {
+    return;
+  }
+
   CHECK(pending_response_.get());
   linked_ptr<GuestViewRequest> pending_response(pending_response_.release());
   pending_response->HandleResponse(message);

@@ -27,6 +27,7 @@
 #include "ui/base/l10n/l10n_util.h"
 
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using content::WebContents;
 
@@ -170,10 +171,9 @@ void ChromeDownloadDelegate::RequestHTTPGetDownload(
   ScopedJavaLocalRef<jstring> jfilename =
       base::android::ConvertUTF16ToJavaString(env, file_name);
   Java_ChromeDownloadDelegate_requestHttpGetDownload(
-      env, java_ref_,
-      jurl.obj(), juser_agent.obj(), jcontent_disposition.obj(),
-      jmime_type.obj(), jcookie.obj(), jreferer.obj(), has_user_gesture,
-      jfilename.obj(), content_length, must_download);
+      env, java_ref_, jurl, juser_agent, jcontent_disposition, jmime_type,
+      jcookie, jreferer, has_user_gesture, jfilename, content_length,
+      must_download);
 }
 
 void ChromeDownloadDelegate::OnDownloadStarted(const std::string& filename,
@@ -183,8 +183,8 @@ void ChromeDownloadDelegate::OnDownloadStarted(const std::string& filename,
       env, filename);
   ScopedJavaLocalRef<jstring> jmime_type =
       ConvertUTF8ToJavaString(env, mime_type);
-  Java_ChromeDownloadDelegate_onDownloadStarted(
-      env, java_ref_, jfilename.obj(), jmime_type.obj());
+  Java_ChromeDownloadDelegate_onDownloadStarted(env, java_ref_, jfilename,
+                                                jmime_type);
 }
 
 void ChromeDownloadDelegate::OnDangerousDownload(const std::string& filename,
@@ -193,8 +193,8 @@ void ChromeDownloadDelegate::OnDangerousDownload(const std::string& filename,
   ScopedJavaLocalRef<jstring> jfilename = ConvertUTF8ToJavaString(
       env, filename);
   ScopedJavaLocalRef<jstring> jguid = ConvertUTF8ToJavaString(env, guid);
-  Java_ChromeDownloadDelegate_onDangerousDownload(
-      env, java_ref_, jfilename.obj(), jguid.obj());
+  Java_ChromeDownloadDelegate_onDangerousDownload(env, java_ref_, jfilename,
+                                                  jguid);
 }
 
 void ChromeDownloadDelegate::RequestFileAccess(intptr_t callback_id) {
@@ -206,7 +206,7 @@ void ChromeDownloadDelegate::RequestFileAccess(intptr_t callback_id) {
 void Init(JNIEnv* env,
           const JavaParamRef<jobject>& obj,
           const JavaParamRef<jobject>& jweb_contents) {
-  auto web_contents = WebContents::FromJavaWebContents(jweb_contents);
+  auto* web_contents = WebContents::FromJavaWebContents(jweb_contents);
   ChromeDownloadDelegate::CreateForWebContents(web_contents);
   ChromeDownloadDelegate::FromWebContents(web_contents)->SetJavaRef(env, obj);
 }

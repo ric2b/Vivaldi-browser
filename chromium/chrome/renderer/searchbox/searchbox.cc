@@ -235,11 +235,9 @@ SearchBox::SearchBox(content::RenderView* render_view)
     : content::RenderViewObserver(render_view),
       content::RenderViewObserverTracker<SearchBox>(render_view),
     page_seq_no_(0),
-    app_launcher_enabled_(false),
     is_focused_(false),
     is_input_in_progress_(false),
     is_key_capture_enabled_(false),
-    display_instant_results_(false),
     most_visited_items_cache_(kMaxInstantMostVisitedItemCacheSize),
     query_() {
 }
@@ -269,15 +267,15 @@ void SearchBox::LogEvent(NTPLoggingEventType event) {
 }
 
 void SearchBox::LogMostVisitedImpression(int position,
-                                         const base::string16& provider) {
+                                         NTPLoggingTileSource tile_source) {
   render_view()->Send(new ChromeViewHostMsg_LogMostVisitedImpression(
-      render_view()->GetRoutingID(), page_seq_no_, position, provider));
+      render_view()->GetRoutingID(), page_seq_no_, position, tile_source));
 }
 
 void SearchBox::LogMostVisitedNavigation(int position,
-                                         const base::string16& provider) {
+                                         NTPLoggingTileSource tile_source) {
   render_view()->Send(new ChromeViewHostMsg_LogMostVisitedNavigation(
-      render_view()->GetRoutingID(), page_seq_no_, position, provider));
+      render_view()->GetRoutingID(), page_seq_no_, position, tile_source));
 }
 
 void SearchBox::CheckIsUserSignedInToChromeAs(const base::string16& identity) {
@@ -372,10 +370,6 @@ bool SearchBox::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxFocusChanged, OnFocusChanged)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxMostVisitedItemsChanged,
                         OnMostVisitedChanged)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxPromoInformation,
-                        OnPromoInformationReceived)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxSetDisplayInstantResults,
-                        OnSetDisplayInstantResults)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxSetInputInProgress,
                         OnSetInputInProgress)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SearchBoxSetSuggestionToPrefetch,
@@ -463,14 +457,6 @@ void SearchBox::OnMostVisitedChanged(
     extensions_v8::SearchBoxExtension::DispatchMostVisitedChanged(
         render_view()->GetWebView()->mainFrame());
   }
-}
-
-void SearchBox::OnPromoInformationReceived(bool is_app_launcher_enabled) {
-  app_launcher_enabled_ = is_app_launcher_enabled;
-}
-
-void SearchBox::OnSetDisplayInstantResults(bool display_instant_results) {
-  display_instant_results_ = display_instant_results;
 }
 
 void SearchBox::OnSetInputInProgress(bool is_input_in_progress) {

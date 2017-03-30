@@ -12,9 +12,10 @@
 
 #include "ash/common/accessibility_types.h"
 #include "ash/common/session/session_state_observer.h"
+#include "ash/common/system/chromeos/supervised/custodian_info_tray_observer.h"
+#include "ash/common/system/tray/ime_info.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/system/chromeos/supervised/custodian_info_tray_observer.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
@@ -106,12 +107,13 @@ class SystemTrayDelegateChromeOS
   void ShowHelp() override;
   void ShowAccessibilityHelp() override;
   void ShowAccessibilitySettings() override;
+  void ShowPaletteHelp() override;
+  void ShowPaletteSettings() override;
   void ShowPublicAccountInfo() override;
   void ShowSupervisedUserInfo() override;
   void ShowEnterpriseInfo() override;
   void ShowUserLogin() override;
   void SignOut() override;
-  void RequestLockScreen() override;
   void RequestRestartForUpdate() override;
   void RequestShutdown() override;
   void GetAvailableBluetoothDevices(ash::BluetoothDeviceList* list) override;
@@ -152,6 +154,10 @@ class SystemTrayDelegateChromeOS
   void ShouldRebootOnShutdown(
       const ash::RebootOnShutdownCallback& callback) override;
   ash::VPNDelegate* GetVPNDelegate() const override;
+  std::unique_ptr<ash::SystemTrayItem> CreateDisplayTrayItem(
+      ash::SystemTray* tray) override;
+  std::unique_ptr<ash::SystemTrayItem> CreateRotationLockTrayItem(
+      ash::SystemTray* tray) override;
 
   // Overridden from user_manager::UserManager::UserSessionStateObserver:
   void UserAddedToSession(const user_manager::User* active_user) override;

@@ -370,7 +370,7 @@ bool AVCodecContextToAudioDecoderConfig(
   // AVStream occasionally has invalid extra data. See http://crbug.com/517163
   if ((codec_context->extradata_size == 0) !=
       (codec_context->extradata == nullptr)) {
-    LOG(ERROR) << __FUNCTION__
+    LOG(ERROR) << __func__
                << (codec_context->extradata == nullptr ? " NULL" : " Non-NULL")
                << " extra data cannot have size of "
                << codec_context->extradata_size << ".";
@@ -520,7 +520,7 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   // AVStream occasionally has invalid extra data. See http://crbug.com/517163
   if ((stream->codec->extradata_size == 0) !=
       (stream->codec->extradata == nullptr)) {
-    LOG(ERROR) << __FUNCTION__
+    LOG(ERROR) << __func__
                << (stream->codec->extradata == nullptr ? " NULL" : " Non-Null")
                << " extra data cannot have size of "
                << stream->codec->extradata_size << ".";
@@ -760,5 +760,63 @@ int32_t HashCodecName(const char* codec_name) {
   memcpy(&hash, base::SHA1HashString(codec_name).substr(0, 4).c_str(), 4);
   return hash;
 }
+
+#define TEST_PRIMARY(P)                                                 \
+  static_assert(                                                        \
+      static_cast<int>(gfx::ColorSpace::PrimaryID::P) == AVCOL_PRI_##P, \
+      "gfx::ColorSpace::PrimaryID::" #P " does not match AVCOL_PRI_" #P);
+
+#define TEST_TRANSFER(T)                                                 \
+  static_assert(                                                         \
+      static_cast<int>(gfx::ColorSpace::TransferID::T) == AVCOL_TRC_##T, \
+      "gfx::ColorSpace::TransferID::" #T " does not match AVCOL_TRC_" #T);
+
+#define TEST_COLORSPACE(C)                                             \
+  static_assert(                                                       \
+      static_cast<int>(gfx::ColorSpace::MatrixID::C) == AVCOL_SPC_##C, \
+      "gfx::ColorSpace::MatrixID::" #C " does not match AVCOL_SPC_" #C);
+
+TEST_PRIMARY(RESERVED0);
+TEST_PRIMARY(BT709);
+TEST_PRIMARY(UNSPECIFIED);
+TEST_PRIMARY(RESERVED);
+TEST_PRIMARY(BT470M);
+TEST_PRIMARY(BT470BG);
+TEST_PRIMARY(SMPTE170M);
+TEST_PRIMARY(SMPTE240M);
+TEST_PRIMARY(FILM);
+TEST_PRIMARY(BT2020);
+TEST_PRIMARY(SMPTEST428_1);
+
+TEST_TRANSFER(RESERVED0);
+TEST_TRANSFER(BT709);
+TEST_TRANSFER(UNSPECIFIED);
+TEST_TRANSFER(RESERVED);
+TEST_TRANSFER(GAMMA22);
+TEST_TRANSFER(GAMMA28);
+TEST_TRANSFER(SMPTE170M);
+TEST_TRANSFER(SMPTE240M);
+TEST_TRANSFER(LINEAR);
+TEST_TRANSFER(LOG);
+TEST_TRANSFER(LOG_SQRT);
+TEST_TRANSFER(IEC61966_2_4);
+TEST_TRANSFER(BT1361_ECG);
+TEST_TRANSFER(IEC61966_2_1);
+TEST_TRANSFER(BT2020_10);
+TEST_TRANSFER(BT2020_12);
+TEST_TRANSFER(SMPTEST2084);
+TEST_TRANSFER(SMPTEST428_1);
+
+TEST_COLORSPACE(RGB);
+TEST_COLORSPACE(BT709);
+TEST_COLORSPACE(UNSPECIFIED);
+TEST_COLORSPACE(RESERVED);
+TEST_COLORSPACE(FCC);
+TEST_COLORSPACE(BT470BG);
+TEST_COLORSPACE(SMPTE170M);
+TEST_COLORSPACE(SMPTE240M);
+TEST_COLORSPACE(YCOCG);
+TEST_COLORSPACE(BT2020_NCL);
+TEST_COLORSPACE(BT2020_CL);
 
 }  // namespace media

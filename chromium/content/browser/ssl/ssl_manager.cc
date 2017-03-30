@@ -13,14 +13,12 @@
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
-#include "content/browser/ssl/ssl_cert_error_handler.h"
+#include "content/browser/ssl/ssl_error_handler.h"
 #include "content/browser/ssl/ssl_policy.h"
-#include "content/browser/ssl/ssl_request_info.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/load_from_memory_cache_details.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/resource_request_details.h"
 #include "content/public/common/ssl_status.h"
@@ -45,6 +43,35 @@ class SSLManagerSet : public base::SupportsUserData::Data {
   DISALLOW_COPY_AND_ASSIGN(SSLManagerSet);
 };
 
+void HandleSSLErrorOnUI(
+    const base::Callback<WebContents*(void)>& web_contents_getter,
+    const base::WeakPtr<SSLErrorHandler::Delegate>& delegate,
+    const ResourceType resource_type,
+    const GURL& url,
+    const net::SSLInfo& ssl_info,
+    bool fatal) {
+  content::WebContents* web_contents = web_contents_getter.Run();
+  std::unique_ptr<SSLErrorHandler> handler(new SSLErrorHandler(
+      web_contents, delegate, resource_type, url, ssl_info, fatal));
+
+  if (!web_contents) {
+    // Requests can fail to dispatch because they don't have a WebContents. See
+    // https://crbug.com/86537. In this case we have to make a decision in this
+    // function, so we ignore revocation check failures.
+    if (net::IsCertStatusMinorError(ssl_info.cert_status)) {
+      handler->ContinueRequest();
+    } else {
+      handler->CancelRequest();
+    }
+    return;
+  }
+
+  SSLManager* manager =
+      static_cast<NavigationControllerImpl*>(&web_contents->GetController())
+          ->ssl_manager();
+  manager->policy()->OnCertError(std::move(handler));
+}
+
 }  // namespace
 
 // static
@@ -62,14 +89,12 @@ void SSLManager::OnSSLCertificateError(
            << " url: " << url.spec()
            << " cert_status: " << std::hex << ssl_info.cert_status;
 
-  // A certificate error occurred.  Construct a SSLCertErrorHandler object and
-  // hand it over to the UI thread for processing.
+  // A certificate error occurred. Construct a SSLErrorHandler object
+  // on the UI thread for processing.
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&SSLCertErrorHandler::Dispatch,
-                 new SSLCertErrorHandler(delegate, resource_type, url, ssl_info,
-                                         fatal),
-                 web_contents_getter));
+      base::Bind(&HandleSSLErrorOnUI, web_contents_getter, delegate,
+                 resource_type, url, ssl_info, fatal));
 }
 
 // static
@@ -141,35 +166,19 @@ void SSLManager::DidRunInsecureContent(const GURL& security_origin) {
   UpdateEntry(navigation_entry);
 }
 
-void SSLManager::DidLoadFromMemoryCache(
-    const LoadFromMemoryCacheDetails& details) {
-  // Simulate loading this resource through the usual path.
-  // Note that we specify SUB_RESOURCE as the resource type as WebCore only
-  // caches sub-resources.
-  // This resource must have been loaded with no filtering because filtered
-  // resouces aren't cachable.
-  scoped_refptr<SSLRequestInfo> info(new SSLRequestInfo(
-      details.url,
-      RESOURCE_TYPE_SUB_RESOURCE,
-      details.cert_id,
-      details.cert_status));
-
-  // Simulate loading this resource through the usual path.
-  policy()->OnRequestStarted(info.get());
+void SSLManager::DidRunContentWithCertErrors(const GURL& security_origin) {
+  NavigationEntryImpl* navigation_entry = controller_->GetLastCommittedEntry();
+  policy()->DidRunContentWithCertErrors(navigation_entry, security_origin);
+  UpdateEntry(navigation_entry);
 }
 
 void SSLManager::DidStartResourceResponse(
     const ResourceRequestDetails& details) {
-  scoped_refptr<SSLRequestInfo> info(new SSLRequestInfo(
-      details.url,
-      details.resource_type,
-      details.ssl_cert_id,
-      details.ssl_cert_status));
-
   // Notify our policy that we started a resource request.  Ideally, the
   // policy should have the ability to cancel the request, but we can't do
   // that yet.
-  policy()->OnRequestStarted(info.get());
+  policy()->OnRequestStarted(details.url, details.ssl_cert_id,
+                             details.ssl_cert_status);
 }
 
 void SSLManager::DidReceiveResourceRedirect(

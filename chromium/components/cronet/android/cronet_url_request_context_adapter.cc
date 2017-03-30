@@ -14,7 +14,9 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/base64.h"
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -24,10 +26,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/cronet/android/cert/cert_verifier_cache_serializer.h"
+#include "components/cronet/android/cert/proto/cert_verification.pb.h"
 #include "components/cronet/histogram_manager.h"
 #include "components/cronet/url_request_context_config.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -41,13 +46,14 @@
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/base/url_util.h"
+#include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_server_properties_manager.h"
+#include "net/log/bounded_file_net_log_observer.h"
 #include "net/log/write_to_file_net_log_observer.h"
 #include "net/nqe/external_estimate_provider.h"
-#include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config_service_android.h"
 #include "net/proxy/proxy_service.h"
 #include "net/sdch/sdch_owner.h"
@@ -60,7 +66,13 @@
 #include "components/cronet/android/cronet_data_reduction_proxy.h"
 #endif
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace {
+
+// Always split NetLog events into 10 files.
+const int kNumNetLogEventFiles = 10;
 
 // This class wraps a NetLog that also contains network change events.
 class NetLogWithNetworkChangeEvents {
@@ -412,8 +424,10 @@ CronetURLRequestContextAdapter::~CronetURLRequestContextAdapter() {
   if (network_quality_estimator_) {
     network_quality_estimator_->RemoveRTTObserver(this);
     network_quality_estimator_->RemoveThroughputObserver(this);
+    network_quality_estimator_->RemoveEffectiveConnectionTypeObserver(this);
   }
-  // Stop |write_to_file_observer_| if there is one.
+
+  // Stop NetLog observer if there is one.
   StopNetLogHelper();
 }
 
@@ -461,25 +475,6 @@ void CronetURLRequestContextAdapter::ConfigureNetworkQualityEstimatorForTesting(
                      ConfigureNetworkQualityEstimatorOnNetworkThreadForTesting,
                  base::Unretained(this), use_local_host_requests,
                  use_smaller_responses));
-}
-
-void CronetURLRequestContextAdapter::
-    EnableNetworkQualityEstimatorOnNetworkThread() {
-  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
-  DCHECK(!network_quality_estimator_);
-  network_quality_estimator_.reset(new net::NetworkQualityEstimator(
-      std::unique_ptr<net::ExternalEstimateProvider>(),
-      std::map<std::string, std::string>()));
-  context_->set_network_quality_estimator(network_quality_estimator_.get());
-}
-
-void CronetURLRequestContextAdapter::EnableNetworkQualityEstimator(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jcaller) {
-  PostTaskToNetworkThread(
-      FROM_HERE, base::Bind(&CronetURLRequestContextAdapter::
-                                EnableNetworkQualityEstimatorOnNetworkThread,
-                            base::Unretained(this)));
 }
 
 void CronetURLRequestContextAdapter::ProvideRTTObservationsOnNetworkThread(
@@ -612,13 +607,23 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
 
   if (config->enable_network_quality_estimator) {
     DCHECK(!network_quality_estimator_);
+    std::map<std::string, std::string> variation_params;
+    // Configure network quality estimator: Specify the algorithm that should
+    // be used for computing the effective connection type. The algorithm
+    // is specified using the key-value pairs defined in
+    // //net/nqe/network_quality_estimator.cc.
+    // TODO(tbansal): Investigate a more robust way of configuring the network
+    // quality estimator.
+    variation_params["effective_connection_type_algorithm"] =
+        "TransportRTTOrDownstreamThroughput";
     network_quality_estimator_.reset(new net::NetworkQualityEstimator(
-        std::unique_ptr<net::ExternalEstimateProvider>(),
-        std::map<std::string, std::string>(), false, false));
+        std::unique_ptr<net::ExternalEstimateProvider>(), variation_params,
+        false, false));
     // Set the socket performance watcher factory so that network quality
     // estimator is notified of socket performance metrics from TCP and QUIC.
     context_builder.set_socket_performance_watcher_factory(
         network_quality_estimator_->GetSocketPerformanceWatcherFactory());
+    network_quality_estimator_->AddEffectiveConnectionTypeObserver(this);
   }
 
   context_ = context_builder.Build();
@@ -678,6 +683,20 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
     }
   }
 
+  // If there is a cert_verifier, then populate its cache with
+  // |cert_verifier_data|.
+  if (!config->cert_verifier_data.empty() && context_->cert_verifier()) {
+    SCOPED_UMA_HISTOGRAM_TIMER("Net.Cronet.CertVerifierCache.DeserializeTime");
+    std::string data;
+    cronet_pb::CertVerificationCache cert_verification_cache;
+    if (base::Base64Decode(config->cert_verifier_data, &data) &&
+        cert_verification_cache.ParseFromString(data)) {
+      DeserializeCertVerifierCache(cert_verification_cache,
+                                   reinterpret_cast<net::CachingCertVerifier*>(
+                                       context_->cert_verifier()));
+    }
+  }
+
   // Iterate through PKP configuration for every host.
   for (const auto& pkp : config->pkp_list) {
     // Add the host pinning.
@@ -686,10 +705,14 @@ void CronetURLRequestContextAdapter::InitializeOnNetworkThread(
         pkp->pin_hashes, GURL::EmptyGURL());
   }
 
+  context_->transport_security_state()
+      ->SetEnablePublicKeyPinningBypassForLocalTrustAnchors(
+          config->bypass_public_key_pinning_for_local_trust_anchors);
+
   JNIEnv* env = base::android::AttachCurrentThread();
   jcronet_url_request_context_.Reset(env, jcronet_url_request_context.obj());
-  Java_CronetUrlRequestContext_initNetworkThread(
-      env, jcronet_url_request_context.obj());
+  Java_CronetUrlRequestContext_initNetworkThread(env,
+                                                 jcronet_url_request_context);
 
 #if defined(DATA_REDUCTION_PROXY_SUPPORT)
   if (data_reduction_proxy_)
@@ -778,10 +801,53 @@ void CronetURLRequestContextAdapter::StartNetLogToFile(
       /*constants=*/nullptr, /*url_request_context=*/nullptr);
 }
 
+void CronetURLRequestContextAdapter::StartNetLogToDisk(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller,
+    const JavaParamRef<jstring>& jdir_name,
+    jboolean jlog_all,
+    jint jmax_size) {
+  PostTaskToNetworkThread(
+      FROM_HERE,
+      base::Bind(&CronetURLRequestContextAdapter::
+                     StartNetLogToBoundedFileOnNetworkThread,
+                 base::Unretained(this),
+                 base::android::ConvertJavaStringToUTF8(env, jdir_name),
+                 jlog_all, jmax_size));
+}
+
 void CronetURLRequestContextAdapter::StopNetLog(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
   StopNetLogHelper();
+}
+
+void CronetURLRequestContextAdapter::GetCertVerifierData(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& jcaller) {
+  PostTaskToNetworkThread(
+      FROM_HERE,
+      base::Bind(
+          &CronetURLRequestContextAdapter::GetCertVerifierDataOnNetworkThread,
+          base::Unretained(this)));
+}
+
+void CronetURLRequestContextAdapter::GetCertVerifierDataOnNetworkThread() {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+  std::string encoded_data;
+  if (is_context_initialized_ && context_->cert_verifier()) {
+    SCOPED_UMA_HISTOGRAM_TIMER("Net.Cronet.CertVerifierCache.SerializeTime");
+    std::string data;
+    cronet_pb::CertVerificationCache cert_cache =
+        SerializeCertVerifierCache(*reinterpret_cast<net::CachingCertVerifier*>(
+            context_->cert_verifier()));
+    cert_cache.SerializeToString(&data);
+    base::Base64Encode(data, &encoded_data);
+  }
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_CronetUrlRequestContext_onGetCertVerifierData(
+      env, jcronet_url_request_context_.obj(),
+      base::android::ConvertUTF8ToJavaString(env, encoded_data).obj());
 }
 
 base::Thread* CronetURLRequestContextAdapter::GetFileThread() {
@@ -793,12 +859,20 @@ base::Thread* CronetURLRequestContextAdapter::GetFileThread() {
   return file_thread_.get();
 }
 
+void CronetURLRequestContextAdapter::OnEffectiveConnectionTypeChanged(
+    net::EffectiveConnectionType effective_connection_type) {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+  Java_CronetUrlRequestContext_onEffectiveConnectionTypeChanged(
+      base::android::AttachCurrentThread(), jcronet_url_request_context_.obj(),
+      effective_connection_type);
+}
+
 void CronetURLRequestContextAdapter::OnRTTObservation(
     int32_t rtt_ms,
     const base::TimeTicks& timestamp,
     net::NetworkQualityObservationSource source) {
   Java_CronetUrlRequestContext_onRttObservation(
-      base::android::AttachCurrentThread(), jcronet_url_request_context_.obj(),
+      base::android::AttachCurrentThread(), jcronet_url_request_context_,
       rtt_ms, (timestamp - base::TimeTicks::UnixEpoch()).InMilliseconds(),
       source);
 }
@@ -808,16 +882,62 @@ void CronetURLRequestContextAdapter::OnThroughputObservation(
     const base::TimeTicks& timestamp,
     net::NetworkQualityObservationSource source) {
   Java_CronetUrlRequestContext_onThroughputObservation(
-      base::android::AttachCurrentThread(), jcronet_url_request_context_.obj(),
+      base::android::AttachCurrentThread(), jcronet_url_request_context_,
       throughput_kbps,
       (timestamp - base::TimeTicks::UnixEpoch()).InMilliseconds(), source);
 }
 
+void CronetURLRequestContextAdapter::StartNetLogToBoundedFileOnNetworkThread(
+    const std::string& dir_path,
+    bool include_socket_bytes,
+    int size) {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+
+  // Do nothing if already logging to a directory.
+  if (bounded_file_observer_)
+    return;
+
+  // Filepath for NetLog files must exist and be writable.
+  base::FilePath file_path(dir_path);
+  DCHECK(base::PathIsWritable(file_path));
+
+  bounded_file_observer_.reset(
+      new net::BoundedFileNetLogObserver(GetFileThread()->task_runner()));
+  if (include_socket_bytes) {
+    bounded_file_observer_->set_capture_mode(
+        net::NetLogCaptureMode::IncludeSocketBytes());
+  }
+
+  bounded_file_observer_->StartObserving(g_net_log.Get().net_log(), file_path,
+                                         /*constants=*/nullptr, context_.get(),
+                                         size, kNumNetLogEventFiles);
+}
+
+void CronetURLRequestContextAdapter::StopBoundedFileNetLogOnNetworkThread() {
+  DCHECK(GetNetworkTaskRunner()->BelongsToCurrentThread());
+  bounded_file_observer_->StopObserving(
+      context_.get(),
+      base::Bind(&CronetURLRequestContextAdapter::StopNetLogCompleted,
+                 base::Unretained(this)));
+  bounded_file_observer_.reset();
+}
+
+void CronetURLRequestContextAdapter::StopNetLogCompleted() {
+  Java_CronetUrlRequestContext_stopNetLogCompleted(
+      base::android::AttachCurrentThread(), jcronet_url_request_context_.obj());
+}
+
 void CronetURLRequestContextAdapter::StopNetLogHelper() {
   base::AutoLock lock(write_to_file_observer_lock_);
+  DCHECK(!(write_to_file_observer_ && bounded_file_observer_));
   if (write_to_file_observer_) {
     write_to_file_observer_->StopObserving(/*url_request_context=*/nullptr);
     write_to_file_observer_.reset();
+  } else if (bounded_file_observer_) {
+    PostTaskToNetworkThread(FROM_HERE,
+                            base::Bind(&CronetURLRequestContextAdapter::
+                                           StopBoundedFileNetLogOnNetworkThread,
+                                       base::Unretained(this)));
   }
 }
 
@@ -840,7 +960,9 @@ static jlong CreateRequestContextConfig(
     jlong jhttp_cache_max_size,
     const JavaParamRef<jstring>& jexperimental_quic_connection_options,
     jlong jmock_cert_verifier,
-    jboolean jenable_network_quality_estimator) {
+    jboolean jenable_network_quality_estimator,
+    jboolean jbypass_public_key_pinning_for_local_trust_anchors,
+    const JavaParamRef<jstring>& jcert_verifier_data) {
   return reinterpret_cast<jlong>(new URLRequestContextConfig(
       jquic_enabled,
       ConvertNullableJavaStringToUTF8(env, jquic_default_user_agent_id),
@@ -859,7 +981,9 @@ static jlong CreateRequestContextConfig(
           env, jdata_reduction_proxy_secure_proxy_check_url),
       base::WrapUnique(
           reinterpret_cast<net::CertVerifier*>(jmock_cert_verifier)),
-      jenable_network_quality_estimator));
+      jenable_network_quality_estimator,
+      jbypass_public_key_pinning_for_local_trust_anchors,
+      ConvertNullableJavaStringToUTF8(env, jcert_verifier_data)));
 }
 
 // Add a QUIC hint to a URLRequestContextConfig.

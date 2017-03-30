@@ -9,6 +9,7 @@
 #include "public/web/WebScriptExecutionCallback.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebView.h"
+#include "web/tests/sim/SimRequest.h"
 #include "web/tests/sim/SimTest.h"
 
 namespace blink {
@@ -37,12 +38,31 @@ protected:
         ScriptExecutionCallbackHelper callbackHelper;
         webView().mainFrame()->toWebLocalFrame()->requestExecuteScriptAndReturnValue(
             WebScriptSource(WebString(scriptSource)), false, &callbackHelper);
-        testing::runPendingTasks();
         return callbackHelper.result();
     }
 };
 
-TEST_F(VirtualTimeTest, DOMTimersFireInExpectedOrder)
+namespace {
+    void quitRunLoop()
+    {
+        base::MessageLoop::current()->QuitNow();
+    }
+
+    // Some task queues may have repeating v8 tasks that run forever so we impose a hard time limit.
+    void runTasksForPeriod(double delayMs)
+    {
+        Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(BLINK_FROM_HERE, WTF::bind(&quitRunLoop), delayMs);
+        testing::enterRunLoop();
+    }
+}
+
+// http://crbug.com/633321
+#if OS(ANDROID)
+#define MAYBE_DOMTimersFireInExpectedOrder DISABLED_DOMTimersFireInExpectedOrder
+#else
+#define MAYBE_DOMTimersFireInExpectedOrder DOMTimersFireInExpectedOrder
+#endif
+TEST_F(VirtualTimeTest, MAYBE_DOMTimersFireInExpectedOrder)
 {
     webView().scheduler()->enableVirtualTime();
 
@@ -60,10 +80,17 @@ TEST_F(VirtualTimeTest, DOMTimersFireInExpectedOrder)
     // take 100h to fire, but thanks to timer fast forwarding we can make them
     // fire immediatly.
 
+    testing::runPendingTasks();
     EXPECT_EQ("c, b, a", ExecuteJavaScript("run_order.join(', ')"));
 }
 
-TEST_F(VirtualTimeTest, SetInterval)
+// http://crbug.com/633321
+#if OS(ANDROID)
+#define MAYBE_SetInterval DISABLED_SetInterval
+#else
+#define MAYBE_SetInterval SetInterval
+#endif
+TEST_F(VirtualTimeTest, MAYBE_SetInterval)
 {
     webView().scheduler()->enableVirtualTime();
 
@@ -78,15 +105,21 @@ TEST_F(VirtualTimeTest, SetInterval)
         "}, 1000);"
         "setTimeout(function() { run_order.push('timer'); }, 1500);");
 
-    // If virtual time is not supplied to TimerBase then the setInterval
-    // won't fire 10x.
+    runTasksForPeriod(12000);
+
     EXPECT_EQ("9, timer, 8, 7, 6, 5, 4, 3, 2, 1, 0", ExecuteJavaScript("run_order.join(', ')"));
 }
 
-TEST_F(VirtualTimeTest, AllowVirtualTimeToAdvance)
+// http://crbug.com/633321
+#if OS(ANDROID)
+#define MAYBE_AllowVirtualTimeToAdvance DISABLED_AllowVirtualTimeToAdvance
+#else
+#define MAYBE_AllowVirtualTimeToAdvance AllowVirtualTimeToAdvance
+#endif
+TEST_F(VirtualTimeTest, MAYBE_AllowVirtualTimeToAdvance)
 {
     webView().scheduler()->enableVirtualTime();
-    webView().scheduler()->setAllowVirtualTimeToAdvance(false);
+    webView().scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::PAUSE);
 
     ExecuteJavaScript(
         "var run_order = [];"
@@ -97,12 +130,58 @@ TEST_F(VirtualTimeTest, AllowVirtualTimeToAdvance)
         "timerFn(10, 'b');"
         "timerFn(1, 'c');");
 
+    testing::runPendingTasks();
     EXPECT_EQ("", ExecuteJavaScript("run_order.join(', ')"));
 
-    webView().scheduler()->setAllowVirtualTimeToAdvance(true);
-    testing::runPendingTasks();
+    webView().scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::ADVANCE);
+    runTasksForPeriod(1000);
 
     EXPECT_EQ("c, b, a", ExecuteJavaScript("run_order.join(', ')"));
+}
+
+// http://crbug.com/633321
+#if OS(ANDROID)
+#define MAYBE_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading DISABLED_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading
+#else
+#define MAYBE_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading VirtualTimeNotAllowedToAdvanceWhileResourcesLoading
+#endif
+TEST_F(VirtualTimeTest, MAYBE_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading)
+{
+    webView().scheduler()->enableVirtualTime();
+    webView().scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::DETERMINISTIC_LOADING);
+
+    // To ensure determinism virtual time is not allowed to advance until we have seen at least one load.
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    SimRequest mainResource("https://example.com/test.html", "text/html");
+    SimRequest cssResource("https://example.com/test.css", "text/css");
+
+    // Loading, virtual time should not advance.
+    loadURL("https://example.com/test.html");
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    mainResource.start();
+
+    // Still Loading, virtual time should not advance.
+    mainResource.write("<!DOCTYPE html><link rel=stylesheet href=test.css>");
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    // Still Loading, virtual time should not advance.
+    cssResource.start();
+    cssResource.write("a { color: red; }");
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    // Still Loading, virtual time should not advance.
+    cssResource.finish();
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    // Still Loading, virtual time should not advance.
+    mainResource.write("<body>");
+    EXPECT_FALSE(webView().scheduler()->virtualTimeAllowedToAdvance());
+
+    // Finished loading, virtual time should be able to advance.
+    mainResource.finish();
+    EXPECT_TRUE(webView().scheduler()->virtualTimeAllowedToAdvance());
 }
 
 } // namespace blink

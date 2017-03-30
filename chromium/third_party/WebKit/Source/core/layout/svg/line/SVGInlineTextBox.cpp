@@ -239,14 +239,13 @@ bool SVGInlineTextBox::nodeAtPoint(HitTestResult& result, const HitTestLocation&
     ASSERT(!isLineBreak());
 
     PointerEventsHitRules hitRules(PointerEventsHitRules::SVG_TEXT_HITTESTING, result.hitTestRequest(), getLineLayoutItem().style()->pointerEvents());
-    bool isVisible = getLineLayoutItem().style()->visibility() == VISIBLE;
+    bool isVisible = getLineLayoutItem().style()->visibility() == EVisibility::Visible;
     if (isVisible || !hitRules.requireVisible) {
         if (hitRules.canHitBoundingBox
             || (hitRules.canHitStroke && (getLineLayoutItem().style()->svgStyle().hasStroke() || !hitRules.requireStroke))
             || (hitRules.canHitFill && (getLineLayoutItem().style()->svgStyle().hasFill() || !hitRules.requireFill))) {
-            LayoutPoint boxOrigin(x(), y());
-            boxOrigin.moveBy(accumulatedOffset);
-            LayoutRect rect(boxOrigin, size());
+            LayoutRect rect(topLeft(), LayoutSize(logicalWidth(), logicalHeight()));
+            rect.moveBy(accumulatedOffset);
             if (locationInContainer.intersects(rect)) {
                 LineLayoutSVGInlineText lineLayoutItem = LineLayoutSVGInlineText(this->getLineLayoutItem());
                 ASSERT(lineLayoutItem.scalingFactor());

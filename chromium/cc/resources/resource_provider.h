@@ -27,6 +27,7 @@
 #include "cc/base/resource_id.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
+#include "cc/output/renderer_settings.h"
 #include "cc/resources/release_callback_impl.h"
 #include "cc/resources/resource_format.h"
 #include "cc/resources/return_callback.h"
@@ -37,6 +38,7 @@
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
@@ -85,15 +87,16 @@ class CC_EXPORT ResourceProvider
     RESOURCE_TYPE_BITMAP,
   };
 
-  ResourceProvider(ContextProvider* compositor_context_provider,
-                   SharedBitmapManager* shared_bitmap_manager,
-                   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-                   BlockingTaskRunner* blocking_main_thread_task_runner,
-                   int highp_threshold_min,
-                   size_t id_allocation_chunk_size,
-                   bool delegated_sync_points_required,
-                   bool use_gpu_memory_buffer_resources,
-                   const std::vector<unsigned>& use_image_texture_targets);
+  ResourceProvider(
+      ContextProvider* compositor_context_provider,
+      SharedBitmapManager* shared_bitmap_manager,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+      BlockingTaskRunner* blocking_main_thread_task_runner,
+      int highp_threshold_min,
+      size_t id_allocation_chunk_size,
+      bool delegated_sync_points_required,
+      bool use_gpu_memory_buffer_resources,
+      const BufferToTextureTargetMap& buffer_to_texture_target_map);
   ~ResourceProvider() override;
 
   void Initialize();
@@ -132,13 +135,16 @@ class CC_EXPORT ResourceProvider
   // Creates a resource of the default resource type.
   ResourceId CreateResource(const gfx::Size& size,
                             TextureHint hint,
-                            ResourceFormat format);
+                            ResourceFormat format,
+                            const gfx::ColorSpace& color_space);
 
   // Creates a resource for a particular texture target (the distinction between
   // texture targets has no effect in software mode).
   ResourceId CreateGpuMemoryBufferResource(const gfx::Size& size,
                                            TextureHint hint,
-                                           ResourceFormat format);
+                                           ResourceFormat format,
+                                           gfx::BufferUsage usage,
+                                           const gfx::ColorSpace& color_space);
 
   // Wraps an external texture mailbox into a GL resource.
   ResourceId CreateResourceFromTextureMailbox(
@@ -220,6 +226,7 @@ class CC_EXPORT ResourceProvider
     unsigned texture_id() const { return texture_id_; }
     GLenum target() const { return target_; }
     const gfx::Size& size() const { return size_; }
+    const gfx::ColorSpace& color_space() const { return color_space_; }
 
    private:
     ResourceProvider* resource_provider_;
@@ -227,6 +234,7 @@ class CC_EXPORT ResourceProvider
     unsigned texture_id_;
     GLenum target_;
     gfx::Size size_;
+    gfx::ColorSpace color_space_;
 
     DISALLOW_COPY_AND_ASSIGN(ScopedReadLockGL);
   };
@@ -244,6 +252,9 @@ class CC_EXPORT ResourceProvider
 
     unsigned texture_id() const { return resource_lock_.texture_id(); }
     GLenum target() const { return target_; }
+    const gfx::ColorSpace& color_space() const {
+      return resource_lock_.color_space();
+    }
 
    private:
     ScopedReadLockGL resource_lock_;
@@ -393,6 +404,7 @@ class CC_EXPORT ResourceProvider
     ResourceProvider* resource_provider_;
     ResourceId resource_id_;
     ResourceFormat format_;
+    gfx::BufferUsage usage_;
     gfx::Size size_;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
     base::ThreadChecker thread_checker_;
@@ -475,7 +487,7 @@ class CC_EXPORT ResourceProvider
 
   void ValidateResource(ResourceId id) const;
 
-  GLenum GetImageTextureTarget(ResourceFormat format);
+  GLenum GetImageTextureTarget(gfx::BufferUsage usage, ResourceFormat format);
 
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -583,10 +595,15 @@ class CC_EXPORT ResourceProvider
     unsigned bound_image_id;
     TextureHint hint;
     ResourceType type;
+
+    // GpuMemoryBuffer resource allocation needs to know how the resource will
+    // be used.
+    gfx::BufferUsage usage;
     ResourceFormat format;
     SharedBitmapId shared_bitmap_id;
     SharedBitmap* shared_bitmap;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
+    gfx::ColorSpace color_space;
 
    private:
     SynchronizationState synchronization_state_ = SYNCHRONIZED;
@@ -618,8 +635,11 @@ class CC_EXPORT ResourceProvider
   ResourceId CreateGLTexture(const gfx::Size& size,
                              TextureHint hint,
                              ResourceType type,
-                             ResourceFormat format);
-  ResourceId CreateBitmap(const gfx::Size& size);
+                             ResourceFormat format,
+                             gfx::BufferUsage usage,
+                             const gfx::ColorSpace& color_space);
+  ResourceId CreateBitmap(const gfx::Size& size,
+                          const gfx::ColorSpace& color_space);
   Resource* InsertResource(ResourceId id, Resource resource);
   Resource* GetResource(ResourceId id);
   const Resource* LockForRead(ResourceId id);
@@ -692,7 +712,7 @@ class CC_EXPORT ResourceProvider
   std::unique_ptr<IdAllocator> buffer_id_allocator_;
 
   bool use_sync_query_;
-  std::vector<unsigned> use_image_texture_targets_;
+  BufferToTextureTargetMap buffer_to_texture_target_map_;
 
   // A process-unique ID used for disambiguating memory dumps from different
   // resource providers.

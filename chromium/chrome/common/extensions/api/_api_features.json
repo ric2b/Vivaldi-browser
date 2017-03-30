@@ -3,20 +3,11 @@
 // found in the LICENSE file.
 
 // This features file defines extension APIs implemented under src/chrome.
-// See extensions/common/features/* to understand this file, in particular
-// feature.h, simple_feature.h, and base_feature_provider.h.
+// See chrome/common/extensions/api/_features.md to understand this file, as
+// well as feature.h, simple_feature.h, and base_feature_provider.h.
 //
 // Note that specifying "web_page", "blessed_web_page", or "all" as a context
 // type will require manually updating chrome/renderer/resources/dispatcher.cc.
-
-// To add a new whitelisted ID, SHA-1 it and force it to uppercase. In Bash:
-//
-// $ echo -n "aaaabbbbccccddddeeeeffffgggghhhh" | \
-// sha1sum | tr '[:lower:]' '[:upper:]'
-// 9A0417016F345C934A1A88F55CA17C05014EEEBA  -
-//
-// Google employees: please update http://go/chrome-api-whitelist to map
-// hashes back to ids.
 
 {
   "accessibilityFeatures": [{
@@ -94,10 +85,6 @@
   "appviewTag": {
     "internal": true,
     "dependencies": ["permission:appview"],
-    "contexts": ["blessed_extension"]
-  },
-  "audioModem": {
-    "dependencies": ["permission:audioModem"],
     "contexts": ["blessed_extension"]
   },
   "autofillPrivate": [{
@@ -268,14 +255,6 @@
   },
   "cookies": {
     "dependencies": ["permission:cookies"],
-    "contexts": ["blessed_extension"]
-  },
-  "copresence": {
-    "dependencies": ["permission:copresence"],
-    "contexts": ["blessed_extension"]
-  },
-  "copresencePrivate": {
-    "dependencies": ["permission:copresencePrivate"],
     "contexts": ["blessed_extension"]
   },
   "cryptotokenPrivate": {
@@ -563,7 +542,8 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*"
+      "chrome://md-settings/*",
+      "chrome://settings/*"
     ]
   }],
   "instanceID": {
@@ -714,7 +694,9 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://md-settings/*"
+      "chrome://md-settings/*",
+      "chrome://settings/*",
+      "chrome://settings-frame/*"
     ],
     "platforms": ["chromeos"]
   },

@@ -26,7 +26,7 @@ static bool isSVGPrefixed(const String& property)
 
 static String removeSVGPrefix(const String& property)
 {
-    ASSERT(isSVGPrefixed(property));
+    DCHECK(isSVGPrefixed(property));
     return property.substring(kSVGPrefixLength);
 }
 
@@ -171,7 +171,7 @@ const AttributeNameMap& getSupportedAttributes()
             &SVGNames::zAttr,
         };
         for (size_t i = 0; i < WTF_ARRAY_LENGTH(attributes); i++) {
-            ASSERT(!SVGElement::isAnimatableCSSProperty(*attributes[i]));
+            DCHECK(!SVGElement::isAnimatableCSSProperty(*attributes[i]));
             supportedAttributes.set(*attributes[i], attributes[i]);
         }
     }
@@ -180,7 +180,7 @@ const AttributeNameMap& getSupportedAttributes()
 
 QualifiedName svgAttributeName(const String& property)
 {
-    ASSERT(!isSVGPrefixed(property));
+    DCHECK(!isSVGPrefixed(property));
     return QualifiedName(nullAtom, AtomicString(property), nullAtom);
 }
 
@@ -210,10 +210,9 @@ PassRefPtr<TimingFunction> AnimationInputHelpers::parseTimingFunction(const Stri
         return nullptr;
     }
 
-    CSSValue* value = CSSParser::parseSingleValue(CSSPropertyTransitionTimingFunction, string);
+    const CSSValue* value = CSSParser::parseSingleValue(CSSPropertyTransitionTimingFunction, string);
     if (!value || !value->isValueList()) {
-        ASSERT(!value || value->isCSSWideKeyword());
-        bool throwTypeError = true;
+        DCHECK(!value || value->isCSSWideKeyword());
         if (document) {
             if (string.startsWith("function")) {
                 // Due to a bug in old versions of the web-animations-next
@@ -227,27 +226,16 @@ PassRefPtr<TimingFunction> AnimationInputHelpers::parseTimingFunction(const Stri
                 // linear case is special because 'linear' is the default value
                 // for easing. See http://crbug.com/601672
                 if (string == "function (a){return a}") {
-                    Deprecation::countDeprecation(*document, UseCounter::WebAnimationsEasingAsFunctionLinear);
-                    throwTypeError = false;
+                    UseCounter::count(*document, UseCounter::WebAnimationsEasingAsFunctionLinear);
                 } else {
                     UseCounter::count(*document, UseCounter::WebAnimationsEasingAsFunctionOther);
                 }
             }
         }
-
-        // TODO(suzyh): This return clause exists so that the special linear
-        // function case above is exempted from causing TypeErrors. The
-        // throwTypeError bool and this if-statement should be removed after the
-        // M53 branch point in July 2016, so that this case will also throw
-        // TypeErrors from M54 onward.
-        if (!throwTypeError) {
-            return Timing::defaults().timingFunction;
-        }
-
         exceptionState.throwTypeError("'" + string + "' is not a valid value for easing");
         return nullptr;
     }
-    CSSValueList* valueList = toCSSValueList(value);
+    const CSSValueList* valueList = toCSSValueList(value);
     if (valueList->length() > 1) {
         exceptionState.throwTypeError("Easing may not be set to a list of values");
         return nullptr;

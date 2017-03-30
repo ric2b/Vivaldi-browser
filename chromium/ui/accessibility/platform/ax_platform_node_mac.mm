@@ -305,6 +305,9 @@ void NotifyMacEvent(NSView* target, ui::AXEvent event_type) {
     NSAccessibilityRoleDescriptionAttribute,
     NSAccessibilityEnabledAttribute,
     NSAccessibilityFocusedAttribute,
+    NSAccessibilityHelpAttribute,
+    NSAccessibilityTopLevelUIElementAttribute,
+    NSAccessibilityWindowAttribute,
   ];
 
   // Attributes required for user-editable controls.
@@ -346,8 +349,44 @@ void NotifyMacEvent(NSView* target, ui::AXEvent event_type) {
   return axAttributes.autorelease();
 }
 
-- (BOOL)accessibilityIsAttributeSettable:(NSString*)attribute {
+- (BOOL)accessibilityIsAttributeSettable:(NSString*)attributeName {
+  // Allow certain attributes to be written via an accessibility client. A
+  // writable attribute will only appear as such if the accessibility element
+  // has a value set for that attribute.
+  if ([attributeName isEqualToString:NSAccessibilitySelectedAttribute] ||
+      [attributeName
+          isEqualToString:NSAccessibilitySelectedChildrenAttribute] ||
+      [attributeName
+          isEqualToString:NSAccessibilitySelectedTextRangeAttribute] ||
+      [attributeName
+          isEqualToString:NSAccessibilityVisibleCharacterRangeAttribute]) {
+    return NO;
+  }
+
+  if ([attributeName isEqualToString:NSAccessibilityValueAttribute])
+    return node_->GetDelegate()->CanSetStringValue();
+  // TODO(patricialor): Implement and merge with conditional for value above.
+  if ([attributeName isEqualToString:NSAccessibilitySelectedTextAttribute])
+    return NO;
+
+  if ([attributeName isEqualToString:NSAccessibilityFocusedAttribute]) {
+    if (ui::AXViewState::IsFlagSet(node_->GetData().state,
+                                   ui::AX_STATE_FOCUSABLE))
+      return NO;
+  }
+
+  // TODO(patricialor): Add callbacks for updating the above attributes except
+  // NSAccessibilityValueAttribute and return YES.
   return NO;
+}
+
+- (void)accessibilitySetValue:(id)value forAttribute:(NSString*)attribute {
+  if ([attribute isEqualToString:NSAccessibilityValueAttribute] &&
+      [value isKindOfClass:[NSString class]])
+    node_->GetDelegate()->SetStringValue(base::SysNSStringToUTF16(value));
+
+  // TODO(patricialor): Plumb through all the other writable attributes as
+  // specified in accessibilityIsAttributeSettable.
 }
 
 - (id)accessibilityAttributeValue:(NSString*)attribute {
@@ -400,10 +439,7 @@ void NotifyMacEvent(NSView* target, ui::AXEvent event_type) {
 }
 
 - (NSString*)AXRoleDescription {
-  NSString* description = [self getStringAttribute:ui::AX_ATTR_DESCRIPTION];
-  if (!description)
-    return NSAccessibilityRoleDescription([self AXRole], [self AXSubrole]);
-  return description;
+  return NSAccessibilityRoleDescription([self AXRole], [self AXSubrole]);
 }
 
 - (NSValue*)AXSize {
@@ -430,6 +466,18 @@ void NotifyMacEvent(NSView* target, ui::AXEvent event_type) {
     return [NSNumber numberWithBool:(node_->GetDelegate()->GetFocus() ==
                                      node_->GetNativeViewAccessible())];
   return [NSNumber numberWithBool:NO];
+}
+
+- (NSString*)AXHelp {
+  return [self getStringAttribute:ui::AX_ATTR_DESCRIPTION];
+}
+
+- (NSWindow*)AXTopLevelUIElement {
+  return [self AXWindow];
+}
+
+- (NSWindow*)AXWindow {
+  return node_->GetDelegate()->GetTopLevelWidget();
 }
 
 // Textfield-specific NSAccessibility attributes.

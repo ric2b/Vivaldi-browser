@@ -50,6 +50,13 @@
   DISABLE_ALL(DocumentWritePageLoadMetricsObserverTest)
   DISABLE_ALL(FromGWSPageLoadMetricsObserverTest)
   DISABLE(RenderWidgetUnittest, TouchStartDuringOrOutsideFlingUmaMetrics)
+  DISABLE(OfflinePageModelImplTest, DownloadMetrics)
+  DISABLE(ActivityAnalyzerTest, GlobalAnalyzerConstruction)
+  DISABLE(ActivityTrackerTest, ScopedTaskTest)
+  DISABLE(ActivityTrackerTest, ThreadDeathTest)
+  DISABLE(RenderWidgetUnittest, TouchDuringOrOutsideFlingUmaMetrics)
+  DISABLE(HttpStreamFactoryImplJobControllerTest, DelayedTCP)
+  DISABLE(DevToolsSanityTest, TestNetworkPushTime)
 
   // Fails on tester, works on dev PC; assume it is the timing issue
   DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)

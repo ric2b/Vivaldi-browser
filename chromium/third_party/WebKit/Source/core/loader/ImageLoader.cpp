@@ -34,6 +34,7 @@
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
+#include "core/fetch/ResourceLoadingLog.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -45,7 +46,6 @@
 #include "core/layout/LayoutVideo.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/svg/graphics/SVGImage.h"
-#include "platform/Logging.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/WebCachePolicy.h"
@@ -107,6 +107,7 @@ public:
             m_scriptState = ScriptState::forMainWorld(loader->element()->document().frame());
             ASSERT(m_scriptState);
         }
+        m_requestURL = loader->imageSourceToKURL(loader->element()->imageSourceURL());
     }
 
     void run()
@@ -117,9 +118,9 @@ public:
         InspectorInstrumentation::AsyncTask asyncTask(&context, this);
         if (m_scriptState->contextIsValid()) {
             ScriptState::Scope scope(m_scriptState.get());
-            m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
+            m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_requestURL, m_referrerPolicy);
         } else {
-            m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_referrerPolicy);
+            m_loader->doUpdateFromElement(m_shouldBypassMainWorldCSP, m_updateBehavior, m_requestURL, m_referrerPolicy);
         }
     }
 
@@ -141,6 +142,7 @@ private:
     RefPtr<ScriptState> m_scriptState;
     WeakPtrFactory<Task> m_weakFactory;
     ReferrerPolicy m_referrerPolicy;
+    KURL m_requestURL;
 };
 
 ImageLoader::ImageLoader(Element* element)
@@ -153,7 +155,7 @@ ImageLoader::ImageLoader(Element* element)
     , m_elementIsProtected(false)
     , m_suppressErrorEvents(false)
 {
-    WTF_LOG(ResourceLoading, "new ImageLoader %p", this);
+    RESOURCE_LOADING_DVLOG(1) << "new ImageLoader " << this;
     ThreadState::current()->registerPreFinalizer(this);
 }
 
@@ -163,8 +165,9 @@ ImageLoader::~ImageLoader()
 
 void ImageLoader::dispose()
 {
-    WTF_LOG(ResourceLoading, "~ImageLoader %p; m_hasPendingLoadEvent=%d, m_hasPendingErrorEvent=%d",
-        this, m_hasPendingLoadEvent, m_hasPendingErrorEvent);
+    RESOURCE_LOADING_DVLOG(1) << "~ImageLoader " << this
+        << "; m_hasPendingLoadEvent=" << m_hasPendingLoadEvent
+        << ", m_hasPendingErrorEvent=" << m_hasPendingErrorEvent;
 
     if (m_image) {
         m_image->removeObserver(this);
@@ -251,7 +254,7 @@ inline void ImageLoader::enqueueImageLoadingMicroTask(UpdateFromElementBehavior 
     m_loadDelayCounter = IncrementLoadEventDelayCount::create(m_element->document());
 }
 
-void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, UpdateFromElementBehavior updateBehavior, ReferrerPolicy referrerPolicy)
+void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, UpdateFromElementBehavior updateBehavior, const KURL& url, ReferrerPolicy referrerPolicy)
 {
     // FIXME: According to
     // http://www.whatwg.org/specs/web-apps/current-work/multipage/embedded-content.html#the-img-element:the-img-element-55
@@ -271,7 +274,6 @@ void ImageLoader::doUpdateFromElement(BypassMainWorldBehavior bypassBehavior, Up
         return;
 
     AtomicString imageSourceURL = m_element->imageSourceURL();
-    KURL url = imageSourceToKURL(imageSourceURL);
     ImageResource* newImage = nullptr;
     if (!url.isNull()) {
         // Unlike raw <img>, we block mixed content inside of <picture> or <img srcset>.
@@ -378,7 +380,7 @@ void ImageLoader::updateFromElement(UpdateFromElementBehavior updateBehavior, Re
 
     KURL url = imageSourceToKURL(imageSourceURL);
     if (shouldLoadImmediately(url)) {
-        doUpdateFromElement(DoNotBypassMainWorldCSP, updateBehavior, referrerPolicy);
+        doUpdateFromElement(DoNotBypassMainWorldCSP, updateBehavior, url, referrerPolicy);
         return;
     }
     // Allow the idiom "img.src=''; img.src='.." to clear down the image before
@@ -432,8 +434,8 @@ bool ImageLoader::shouldLoadImmediately(const KURL& url) const
 
 void ImageLoader::imageNotifyFinished(ImageResource* resource)
 {
-    WTF_LOG(ResourceLoading, "ImageLoader::imageNotifyFinished %p; m_hasPendingLoadEvent=%d",
-        this, m_hasPendingLoadEvent);
+    RESOURCE_LOADING_DVLOG(1) << "ImageLoader::imageNotifyFinished " << this
+        << "; m_hasPendingLoadEvent=" << m_hasPendingLoadEvent;
 
     ASSERT(m_failedLoadURL.isEmpty());
     ASSERT(resource == m_image.get());
@@ -537,14 +539,14 @@ void ImageLoader::updatedHasPendingEvent()
     }
 }
 
-void ImageLoader::timerFired(Timer<ImageLoader>*)
+void ImageLoader::timerFired(TimerBase*)
 {
     m_keepAlive.clear();
 }
 
 void ImageLoader::dispatchPendingEvent(ImageEventSender* eventSender)
 {
-    WTF_LOG(ResourceLoading, "ImageLoader::dispatchPendingEvent %p", this);
+    RESOURCE_LOADING_DVLOG(1) << "ImageLoader::dispatchPendingEvent " << this;
     ASSERT(eventSender == &loadEventSender() || eventSender == &errorEventSender());
     const AtomicString& eventType = eventSender->eventType();
     if (eventType == EventTypeNames::load)

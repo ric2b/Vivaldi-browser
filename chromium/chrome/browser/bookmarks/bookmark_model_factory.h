@@ -12,18 +12,19 @@ namespace base {
 template <typename T> struct DefaultSingletonTraits;
 }
 
-class Profile;
-
 namespace bookmarks {
 class BookmarkModel;
 }
 
-// Singleton that owns all BookmarkModels and associates them with Profiles.
+// Singleton that owns all BookmarkModels and associates them with
+// BrowserContexts.
 class BookmarkModelFactory : public BrowserContextKeyedServiceFactory {
  public:
-  static bookmarks::BookmarkModel* GetForProfile(Profile* profile);
+  static bookmarks::BookmarkModel* GetForBrowserContext(
+      content::BrowserContext* browser_context);
 
-  static bookmarks::BookmarkModel* GetForProfileIfExists(Profile* profile);
+  static bookmarks::BookmarkModel* GetForBrowserContextIfExists(
+      content::BrowserContext* browser_context);
 
   static BookmarkModelFactory* GetInstance();
 

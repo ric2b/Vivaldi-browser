@@ -28,6 +28,7 @@
 #include "content/common/frame_messages.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/media/audio_device_factory.h"
 #include "content/renderer/pepper/content_decryptor_delegate.h"
 #include "content/renderer/pepper/event_conversion.h"
 #include "content/renderer/pepper/fullscreen_container.h"
@@ -60,7 +61,6 @@
 #include "content/renderer/render_widget.h"
 #include "content/renderer/render_widget_fullscreen_pepper.h"
 #include "content/renderer/sad_plugin.h"
-#include "media/base/audio_hardware_config.h"
 #include "ppapi/c/dev/ppp_text_input_dev.h"
 #include "ppapi/c/pp_rect.h"
 #include "ppapi/c/ppb_audio_config.h"
@@ -179,6 +179,7 @@ using blink::WebURLResponse;
 using blink::WebUserGestureIndicator;
 using blink::WebUserGestureToken;
 using blink::WebView;
+using blink::WebWidget;
 
 namespace content {
 
@@ -407,8 +408,8 @@ void PepperPluginInstanceImpl::ExternalDocumentLoader::ReplayReceivedData(
     WebURLLoaderClient* document_loader) {
   for (std::list<std::string>::iterator it = data_.begin(); it != data_.end();
        ++it) {
-    document_loader->didReceiveData(
-        NULL, it->c_str(), it->length(), 0 /* encoded_data_length */);
+    document_loader->didReceiveData(NULL, it->c_str(), it->length(),
+                                    0 /* encoded_data_length */, it->length());
   }
   if (finished_loading_) {
     document_loader->didFinishLoading(
@@ -425,7 +426,8 @@ void PepperPluginInstanceImpl::ExternalDocumentLoader::didReceiveData(
     WebURLLoader* loader,
     const char* data,
     int data_length,
-    int encoded_data_length) {
+    int encoded_data_length,
+    int encoded_body_length) {
   data_.push_back(std::string(data, data_length));
 }
 
@@ -2118,6 +2120,9 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
     } else {
       container_->setWebLayer(web_layer_.get());
     }
+    if (is_flash_plugin_) {
+      web_layer_->ccLayer()->SetMayContainVideo(true);
+    }
   }
 
   layer_bound_to_fullscreen_ = !!fullscreen_container_;
@@ -2127,15 +2132,21 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
 
 bool PepperPluginInstanceImpl::PrepareTextureMailbox(
     cc::TextureMailbox* mailbox,
-    std::unique_ptr<cc::SingleReleaseCallback>* release_callback,
-    bool use_shared_memory) {
+    std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
   if (!bound_graphics_2d_platform_)
     return false;
   return bound_graphics_2d_platform_->PrepareTextureMailbox(mailbox,
                                                             release_callback);
 }
 
-void PepperPluginInstanceImpl::OnDestruct() { render_frame_ = NULL; }
+void PepperPluginInstanceImpl::AccessibilityModeChanged() {
+  if (render_frame_->render_accessibility() && LoadPdfInterface())
+    plugin_pdf_interface_->EnableAccessibility(pp_instance());
+}
+
+void PepperPluginInstanceImpl::OnDestruct() {
+  render_frame_ = nullptr;
+}
 
 void PepperPluginInstanceImpl::OnThrottleStateChange() {
   SendDidChangeView();
@@ -2194,8 +2205,9 @@ void PepperPluginInstanceImpl::HandleMouseLockedInputEvent(
 
 void PepperPluginInstanceImpl::SimulateInputEvent(
     const InputEventData& input_event) {
-  WebView* web_view = container()->document().frame()->view();
-  if (!web_view) {
+  WebWidget* widget =
+      container()->document().frame()->localRoot()->frameWidget();
+  if (!widget) {
     NOTREACHED();
     return;
   }
@@ -2211,7 +2223,7 @@ void PepperPluginInstanceImpl::SimulateInputEvent(
   for (std::vector<std::unique_ptr<WebInputEvent>>::iterator it =
            events.begin();
        it != events.end(); ++it) {
-    web_view->handleInputEvent(*it->get());
+    widget->handleInputEvent(*it->get());
   }
 }
 
@@ -2460,14 +2472,24 @@ PP_Var PepperPluginInstanceImpl::ExecuteScript(PP_Instance instance,
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputSampleRate(
     PP_Instance instance) {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread->GetAudioHardwareConfig()->GetOutputSampleRate();
+  return render_frame()
+             ? AudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetRoutingID(), 0 /* session_id */,
+                   std::string() /* device_id */, url::Origin(document_url()))
+                   .output_params()
+                   .sample_rate()
+             : 0;
 }
 
 uint32_t PepperPluginInstanceImpl::GetAudioHardwareOutputBufferSize(
     PP_Instance instance) {
-  RenderThreadImpl* thread = RenderThreadImpl::current();
-  return thread->GetAudioHardwareConfig()->GetOutputBufferSize();
+  return render_frame()
+             ? AudioDeviceFactory::GetOutputDeviceInfo(
+                   render_frame()->GetRoutingID(), 0 /* session_id */,
+                   std::string() /* device_id */, url::Origin(document_url()))
+                   .output_params()
+                   .frames_per_buffer()
+             : 0;
 }
 
 PP_Var PepperPluginInstanceImpl::GetDefaultCharSet(PP_Instance instance) {
@@ -2509,8 +2531,9 @@ void PepperPluginInstanceImpl::SessionMessage(PP_Instance instance,
                                               PP_CdmMessageType message_type,
                                               PP_Var message_var,
                                               PP_Var legacy_destination_url) {
-  content_decryptor_delegate_->OnSessionMessage(
-      session_id_var, message_type, message_var, legacy_destination_url);
+  // |legacy_destination_url| is obsolete.
+  content_decryptor_delegate_->OnSessionMessage(session_id_var, message_type,
+                                                message_var);
 }
 
 void PepperPluginInstanceImpl::SessionKeysChange(
@@ -2542,8 +2565,7 @@ void PepperPluginInstanceImpl::LegacySessionError(
     PP_CdmExceptionCode exception_code,
     uint32_t system_code,
     PP_Var error_description_var) {
-  content_decryptor_delegate_->OnLegacySessionError(
-      session_id_var, exception_code, system_code, error_description_var);
+  // Obsolete.
 }
 
 void PepperPluginInstanceImpl::DeliverBlock(
@@ -2769,10 +2791,10 @@ PP_Bool PepperPluginInstanceImpl::SetCursor(PP_Instance instance,
   custom_cursor->hotSpot.x = hot_spot->x;
   custom_cursor->hotSpot.y = hot_spot->y;
 
-  const SkBitmap* bitmap = image_data->GetMappedBitmap();
+  SkBitmap bitmap(image_data->GetMappedBitmap());
   // Make a deep copy, so that the cursor remains valid even after the original
   // image data gets freed.
-  if (!bitmap->copyTo(&custom_cursor->customImage.getSkBitmap())) {
+  if (!bitmap.copyTo(&custom_cursor->customImage.getSkBitmap())) {
     return PP_FALSE;
   }
 
@@ -3014,8 +3036,8 @@ bool PepperPluginInstanceImpl::IsValidInstanceOf(PluginModule* module) {
   return module == module_.get() || module == original_module_.get();
 }
 
-RenderView* PepperPluginInstanceImpl::GetRenderView() {
-  return render_frame_ ? render_frame_->render_view() : NULL;
+RenderFrame* PepperPluginInstanceImpl::GetRenderFrame() {
+  return render_frame_;
 }
 
 blink::WebPluginContainer* PepperPluginInstanceImpl::GetContainer() {

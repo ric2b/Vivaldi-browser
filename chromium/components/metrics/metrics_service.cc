@@ -396,8 +396,6 @@ void MetricsService::DisableRecording() {
     return;
   recording_state_ = INACTIVE;
 
-  client_->OnRecordingDisabled();
-
   base::RemoveActionCallback(action_callback_);
 
   for (MetricsProvider* provider : metrics_providers_)
@@ -468,6 +466,11 @@ void MetricsService::OnAppEnterBackground() {
   scheduler_->Stop();
 
   MarkAppCleanShutdownAndCommit(&clean_exit_beacon_, local_state_);
+
+  // Give providers a chance to persist histograms as part of being
+  // backgrounded.
+  for (MetricsProvider* provider : metrics_providers_)
+    provider->OnAppEnterBackground();
 
   // At this point, there's no way of knowing when the process will be
   // killed, so this has to be treated similar to a shutdown, closing and
@@ -540,6 +543,11 @@ UpdateUsagePrefCallbackType MetricsService::GetDataUseForwardingCallback() {
         base::ThreadTaskRunnerHandle::Get());
   }
   return UpdateUsagePrefCallbackType();
+}
+
+void MetricsService::MergeHistogramDeltas() {
+  for (MetricsProvider* provider : metrics_providers_)
+    provider->MergeHistogramDeltas();
 }
 
 //------------------------------------------------------------------------------
@@ -1070,6 +1078,33 @@ void MetricsService::RegisterSyntheticFieldTrial(
   NotifySyntheticTrialObservers();
 }
 
+void MetricsService::RegisterSyntheticMultiGroupFieldTrial(
+    uint32_t trial_name_hash,
+    const std::vector<uint32_t>& group_name_hashes) {
+  auto has_same_trial_name =
+      [trial_name_hash](const variations::SyntheticTrialGroup& x) {
+        return x.id.name == trial_name_hash;
+      };
+  synthetic_trial_groups_.erase(
+      std::remove_if(synthetic_trial_groups_.begin(),
+                     synthetic_trial_groups_.end(), has_same_trial_name),
+      synthetic_trial_groups_.end());
+
+  if (group_name_hashes.empty())
+    return;
+
+  variations::SyntheticTrialGroup trial_group(trial_name_hash,
+                                              group_name_hashes[0]);
+  trial_group.start_time = base::TimeTicks::Now();
+  for (uint32_t group_name_hash : group_name_hashes) {
+    // Note: Adding the trial group will copy it, so this re-uses the same
+    // |trial_group| struct for convenience (e.g. so start_time's all match).
+    trial_group.id.group = group_name_hash;
+    synthetic_trial_groups_.push_back(trial_group);
+  }
+  NotifySyntheticTrialObservers();
+}
+
 void MetricsService::GetCurrentSyntheticFieldTrialsForTesting(
     std::vector<variations::ActiveGroupId>* synthetic_trials) {
   GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(), synthetic_trials);
@@ -1121,32 +1156,24 @@ void MetricsService::RecordCurrentHistograms() {
   DCHECK(log_manager_.current_log());
   SCOPED_UMA_HISTOGRAM_TIMER("UMA.MetricsService.RecordCurrentHistograms.Time");
 
-  // Merge any data from metrics providers into the global StatisticsRecorder.
-  for (MetricsProvider* provider : metrics_providers_)
-    provider->MergeHistogramDeltas();
-
-  histogram_snapshot_manager_.StartDeltas();
   // "true" to the begin() call indicates that StatisticsRecorder should include
   // histograms held in persistent storage.
-  histogram_snapshot_manager_.PrepareDeltasWithoutStartFinish(
+  histogram_snapshot_manager_.PrepareDeltas(
       base::StatisticsRecorder::begin(true), base::StatisticsRecorder::end(),
       base::Histogram::kNoFlags, base::Histogram::kUmaTargetedHistogramFlag);
   for (MetricsProvider* provider : metrics_providers_)
     provider->RecordHistogramSnapshots(&histogram_snapshot_manager_);
-  histogram_snapshot_manager_.FinishDeltas();
 }
 
 void MetricsService::RecordCurrentStabilityHistograms() {
   DCHECK(log_manager_.current_log());
-  histogram_snapshot_manager_.StartDeltas();
   // "true" indicates that StatisticsRecorder should include histograms in
   // persistent storage.
-  histogram_snapshot_manager_.PrepareDeltasWithoutStartFinish(
+  histogram_snapshot_manager_.PrepareDeltas(
       base::StatisticsRecorder::begin(true), base::StatisticsRecorder::end(),
       base::Histogram::kNoFlags, base::Histogram::kUmaStabilityHistogramFlag);
   for (MetricsProvider* provider : metrics_providers_)
     provider->RecordInitialHistogramSnapshots(&histogram_snapshot_manager_);
-  histogram_snapshot_manager_.FinishDeltas();
 }
 
 void MetricsService::LogCleanShutdown() {

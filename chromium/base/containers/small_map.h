@@ -32,7 +32,7 @@ namespace base {
 //
 //  - If you only ever keep a couple of items and have very simple usage,
 //    consider whether a using a vector and brute-force searching it will be
-//    the most efficient. It's not a lot of generated code (less then a
+//    the most efficient. It's not a lot of generated code (less than a
 //    red-black tree if your key is "weird" and not eliminated as duplicate of
 //    something else) and will probably be faster and do fewer heap allocations
 //    than std::map if you have just a couple of items.
@@ -510,8 +510,8 @@ class SmallMap {
     size_ = 0;
   }
 
-  // Invalidates iterators.
-  void erase(const iterator& position) {
+  // Invalidates iterators. Returns iterator following the last removed element.
+  iterator erase(const iterator& position) {
     if (size_ >= 0) {
       int i = position.array_iter_ - array_;
       array_[i].Destroy();
@@ -519,10 +519,11 @@ class SmallMap {
       if (i != size_) {
         array_[i].InitFromMove(std::move(array_[size_]));
         array_[size_].Destroy();
+        return iterator(array_ + i);
       }
-    } else {
-      map_->erase(position.hash_iter_);
+      return end();
     }
+    return iterator(map_->erase(position.hash_iter_));
   }
 
   size_t erase(const key_type& key) {

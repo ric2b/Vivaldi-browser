@@ -14,7 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
-#include "net/quic/quic_bug_tracker.h"
+#include "net/quic/core/quic_bug_tracker.h"
 #include "net/spdy/spdy_http_utils.h"
 
 using base::FilePath;
@@ -69,7 +69,7 @@ class ResourceFileImpl : public net::QuicInMemoryCache::ResourceFile {
     body_ = StringPiece(file_contents_.data() + headers_end,
                         file_contents_.size() - headers_end);
 
-    CreateSpdyHeadersFromHttpResponse(*http_headers_, HTTP2, &spdy_headers_);
+    CreateSpdyHeadersFromHttpResponse(*http_headers_, &spdy_headers_);
   }
 
  private:
@@ -208,7 +208,7 @@ void QuicInMemoryCache::AddSpecialResponse(StringPiece host,
 QuicInMemoryCache::QuicInMemoryCache() {}
 
 void QuicInMemoryCache::ResetForTests() {
-  STLDeleteValues(&responses_);
+  base::STLDeleteValues(&responses_);
   server_push_resources_.clear();
 }
 
@@ -279,7 +279,7 @@ list<ServerPushInfo> QuicInMemoryCache::GetServerPushResources(
 }
 
 QuicInMemoryCache::~QuicInMemoryCache() {
-  STLDeleteValues(&responses_);
+  base::STLDeleteValues(&responses_);
 }
 
 void QuicInMemoryCache::AddResponseImpl(StringPiece host,
@@ -290,7 +290,7 @@ void QuicInMemoryCache::AddResponseImpl(StringPiece host,
                                         SpdyHeaderBlock response_trailers) {
   DCHECK(!host.empty()) << "Host must be populated, e.g. \"www.google.com\"";
   string key = GetKey(host, path);
-  if (ContainsKey(responses_, key)) {
+  if (base::ContainsKey(responses_, key)) {
     QUIC_BUG << "Response for '" << key << "' already exists!";
     return;
   }

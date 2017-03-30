@@ -18,12 +18,16 @@
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_stream_test_util.h"
 #include "net/spdy/spdy_test_util_common.h"
+#include "net/test/gtest_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using net::test::IsError;
+using net::test::IsOk;
 
 namespace net {
 
-class SpdySessionPoolTest : public ::testing::Test,
-                            public ::testing::WithParamInterface<NextProto> {
+class SpdySessionPoolTest : public ::testing::Test {
  protected:
   // Used by RunIPPoolingTest().
   enum SpdyPoolCloseSessionsType {
@@ -32,9 +36,7 @@ class SpdySessionPoolTest : public ::testing::Test,
     SPDY_POOL_CLOSE_IDLE_SESSIONS,
   };
 
-  SpdySessionPoolTest()
-      : session_deps_(GetParam()),
-        spdy_session_pool_(NULL) {}
+  SpdySessionPoolTest() : spdy_session_pool_(NULL) {}
 
   void CreateNetworkSession() {
     http_session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
@@ -47,11 +49,6 @@ class SpdySessionPoolTest : public ::testing::Test,
   std::unique_ptr<HttpNetworkSession> http_session_;
   SpdySessionPool* spdy_session_pool_;
 };
-
-INSTANTIATE_TEST_CASE_P(NextProto,
-                        SpdySessionPoolTest,
-                        testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2));
 
 // A delegate that opens a new session when it is closed.
 class SessionOpeningDelegate : public SpdyStream::Delegate {
@@ -87,7 +84,7 @@ class SessionOpeningDelegate : public SpdyStream::Delegate {
 
 // Set up a SpdyStream to create a new session when it is closed.
 // CloseCurrentSessions should not close the newly-created session.
-TEST_P(SpdySessionPoolTest, CloseCurrentSessions) {
+TEST_F(SpdySessionPoolTest, CloseCurrentSessions) {
   const char kTestHost[] = "www.foo.com";
   const int kTestPort = 80;
 
@@ -137,7 +134,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentSessions) {
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, test_key));
 }
 
-TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
+TEST_F(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   MockConnect connect_data(SYNCHRONOUS, OK);
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
@@ -262,7 +259,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
 
 // Set up a SpdyStream to create a new session when it is closed.
 // CloseAllSessions should close the newly-created session.
-TEST_P(SpdySessionPoolTest, CloseAllSessions) {
+TEST_F(SpdySessionPoolTest, CloseAllSessions) {
   const char kTestHost[] = "www.foo.com";
   const int kTestPort = 80;
 
@@ -344,6 +341,7 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   };
 
   session_deps_.host_resolver->set_synchronous_mode(true);
+  std::unique_ptr<HostResolver::Request> request[arraysize(test_hosts)];
   for (size_t i = 0; i < arraysize(test_hosts); i++) {
     session_deps_.host_resolver->rules()->AddIPLiteralRule(
         test_hosts[i].name, test_hosts[i].iplist, std::string());
@@ -351,12 +349,9 @@ void SpdySessionPoolTest::RunIPPoolingTest(
     // This test requires that the HostResolver cache be populated.  Normal
     // code would have done this already, but we do it manually.
     HostResolver::RequestInfo info(HostPortPair(test_hosts[i].name, kTestPort));
-    session_deps_.host_resolver->Resolve(info,
-                                         DEFAULT_PRIORITY,
-                                         &test_hosts[i].addresses,
-                                         CompletionCallback(),
-                                         NULL,
-                                         BoundNetLog());
+    session_deps_.host_resolver->Resolve(
+        info, DEFAULT_PRIORITY, &test_hosts[i].addresses, CompletionCallback(),
+        &request[i], BoundNetLog());
 
     // Setup a SpdySessionKey
     test_hosts[i].key = SpdySessionKey(
@@ -498,22 +493,22 @@ void SpdySessionPoolTest::RunIPPoolingTest(
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, test_hosts[2].key));
 }
 
-TEST_P(SpdySessionPoolTest, IPPooling) {
+TEST_F(SpdySessionPoolTest, IPPooling) {
   RunIPPoolingTest(SPDY_POOL_CLOSE_SESSIONS_MANUALLY);
 }
 
-TEST_P(SpdySessionPoolTest, IPPoolingCloseCurrentSessions) {
+TEST_F(SpdySessionPoolTest, IPPoolingCloseCurrentSessions) {
   RunIPPoolingTest(SPDY_POOL_CLOSE_CURRENT_SESSIONS);
 }
 
-TEST_P(SpdySessionPoolTest, IPPoolingCloseIdleSessions) {
+TEST_F(SpdySessionPoolTest, IPPoolingCloseIdleSessions) {
   RunIPPoolingTest(SPDY_POOL_CLOSE_IDLE_SESSIONS);
 }
 
 // Construct a Pool with SpdySessions in various availability states. Simulate
 // an IP address change. Ensure sessions gracefully shut down. Regression test
 // for crbug.com/379469.
-TEST_P(SpdySessionPoolTest, IPAddressChanged) {
+TEST_F(SpdySessionPoolTest, IPAddressChanged) {
   MockConnect connect_data(SYNCHRONOUS, OK);
   session_deps_.host_resolver->set_synchronous_mode(true);
 
@@ -521,15 +516,14 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   // can ignore issues of how dependencies are set.  We default to
   // setting them (when doing the appropriate protocol) since that's
   // where we're eventually headed for all HTTP/2 connections.
-  session_deps_.enable_priority_dependencies = true;
-  SpdyTestUtil spdy_util(GetParam(), /*enable_priority_dependencies*/ true);
+  SpdyTestUtil spdy_util;
 
   MockRead reads[] = {
       MockRead(SYNCHRONOUS, ERR_IO_PENDING)  // Stall forever.
   };
-  std::unique_ptr<SpdySerializedFrame> req(
+  SpdySerializedFrame req(
       spdy_util.ConstructSpdyGet("http://www.a.com", 1, MEDIUM));
-  MockWrite writes[] = {CreateMockWrite(*req, 1)};
+  MockWrite writes[] = {CreateMockWrite(req, 1)};
 
   StaticSocketDataProvider dataA(reads, arraysize(reads), writes,
                                  arraysize(writes));
@@ -555,10 +549,8 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   test::StreamDelegateDoNothing delegateA(spdy_streamA);
   spdy_streamA->SetDelegate(&delegateA);
 
-  std::unique_ptr<SpdyHeaderBlock> headers(
-      new SpdyHeaderBlock(spdy_util.ConstructGetHeaderBlock(urlA.spec())));
+  SpdyHeaderBlock headers(spdy_util.ConstructGetHeaderBlock(urlA.spec()));
   spdy_streamA->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
-  EXPECT_TRUE(spdy_streamA->HasUrlFromHeaders());
 
   base::RunLoop().RunUntilIdle();  // Allow headers to write.
   EXPECT_TRUE(delegateA.send_headers_completed());
@@ -613,13 +605,13 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   EXPECT_FALSE(delegateA.StreamIsClosed());
 
   EXPECT_TRUE(delegateB.StreamIsClosed());  // Created stream was closed.
-  EXPECT_EQ(ERR_NETWORK_CHANGED, delegateB.WaitForClose());
+  EXPECT_THAT(delegateB.WaitForClose(), IsError(ERR_NETWORK_CHANGED));
 
   sessionA->CloseSessionOnError(ERR_ABORTED, "Closing");
   sessionB->CloseSessionOnError(ERR_ABORTED, "Closing");
 
   EXPECT_TRUE(delegateA.StreamIsClosed());
-  EXPECT_EQ(ERR_ABORTED, delegateA.WaitForClose());
+  EXPECT_THAT(delegateA.WaitForClose(), IsError(ERR_ABORTED));
 #else
   EXPECT_TRUE(sessionA->IsDraining());
   EXPECT_TRUE(sessionB->IsDraining());
@@ -627,13 +619,13 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
 
   // Both streams were closed with an error.
   EXPECT_TRUE(delegateA.StreamIsClosed());
-  EXPECT_EQ(ERR_NETWORK_CHANGED, delegateA.WaitForClose());
+  EXPECT_THAT(delegateA.WaitForClose(), IsError(ERR_NETWORK_CHANGED));
   EXPECT_TRUE(delegateB.StreamIsClosed());
-  EXPECT_EQ(ERR_NETWORK_CHANGED, delegateB.WaitForClose());
+  EXPECT_THAT(delegateB.WaitForClose(), IsError(ERR_NETWORK_CHANGED));
 #endif  // defined(OS_ANDROID) || defined(OS_WIN) || defined(OS_IOS)
 }
 
-TEST_P(SpdySessionPoolTest, FindAvailableSession) {
+TEST_F(SpdySessionPoolTest, FindAvailableSession) {
   SpdySessionKey key(HostPortPair("https://www.example.org", 443),
                      ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
 

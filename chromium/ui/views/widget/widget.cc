@@ -558,8 +558,8 @@ void Widget::StackBelow(gfx::NativeView native_view) {
   native_widget_->StackBelow(native_view);
 }
 
-void Widget::SetShape(SkRegion* shape) {
-  native_widget_->SetShape(shape);
+void Widget::SetShape(std::unique_ptr<SkRegion> shape) {
+  native_widget_->SetShape(std::move(shape));
 }
 
 void Widget::Close() {
@@ -665,6 +665,10 @@ bool Widget::IsAlwaysOnTop() const {
 
 void Widget::SetVisibleOnAllWorkspaces(bool always_visible) {
   native_widget_->SetVisibleOnAllWorkspaces(always_visible);
+}
+
+bool Widget::IsVisibleOnAllWorkspaces() const {
+  return native_widget_->IsVisibleOnAllWorkspaces();
 }
 
 void Widget::Maximize() {
@@ -1453,7 +1457,7 @@ void Widget::SetInitialBoundsForFramelessWindow(const gfx::Rect& bounds) {
       native_widget_->CenterWindow(size);
   } else {
     // Use the supplied initial bounds.
-    SetBoundsConstrained(bounds);
+    SetBounds(bounds);
   }
 }
 

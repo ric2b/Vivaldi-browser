@@ -413,7 +413,9 @@ void BrowserAccessibilityManager::OnLocationChanges(
     if (!obj)
       continue;
     ui::AXNode* node = obj->node();
-    node->SetLocation(params[i].new_location);
+    node->SetLocation(params[i].new_location.offset_container_id,
+                      params[i].new_location.bounds,
+                      params[i].new_location.transform.get());
   }
   SendLocationChangeEvents(params);
 }
@@ -517,9 +519,7 @@ BrowserAccessibility* BrowserAccessibilityManager::GetActiveDescendant(
 
 bool BrowserAccessibilityManager::NativeViewHasFocus() {
   BrowserAccessibilityDelegate* delegate = GetDelegateFromRootManager();
-  if (delegate)
-    return delegate->AccessibilityViewHasFocus();
-  return false;
+  return delegate && delegate->AccessibilityViewHasFocus();
 }
 
 BrowserAccessibility* BrowserAccessibilityManager::GetFocus() {
@@ -530,7 +530,7 @@ BrowserAccessibility* BrowserAccessibilityManager::GetFocus() {
 
   BrowserAccessibilityManager* focused_manager = nullptr;
   if (focused_tree_id)
-    focused_manager =BrowserAccessibilityManager::FromID(focused_tree_id);
+    focused_manager = BrowserAccessibilityManager::FromID(focused_tree_id);
 
   // BrowserAccessibilityManager::FromID(focused_tree_id) may return nullptr
   // if the tree is not created or has been destroyed.
@@ -693,8 +693,8 @@ bool BrowserAccessibilityManager::FindIndicesInCommonParent(
     int* child_index1,
     int* child_index2) {
   DCHECK(common_parent && child_index1 && child_index2);
-  auto ancestor1 = const_cast<BrowserAccessibility*>(&object1);
-  auto ancestor2 = const_cast<BrowserAccessibility*>(&object2);
+  auto* ancestor1 = const_cast<BrowserAccessibility*>(&object1);
+  auto* ancestor2 = const_cast<BrowserAccessibility*>(&object2);
   do {
     *child_index1 = ancestor1->GetIndexInParent();
     ancestor1 = ancestor1->GetParent();
@@ -720,6 +720,31 @@ bool BrowserAccessibilityManager::FindIndicesInCommonParent(
 }
 
 // static
+ui::AXTreeOrder BrowserAccessibilityManager::CompareNodes(
+    const BrowserAccessibility& object1,
+    const BrowserAccessibility& object2) {
+  if (&object1 == &object2)
+    return ui::AX_TREE_ORDER_EQUAL;
+
+  BrowserAccessibility* common_parent;
+  int child_index1;
+  int child_index2;
+  if (FindIndicesInCommonParent(
+          object1, object2, &common_parent, &child_index1, &child_index2)) {
+    if (child_index1 < child_index2)
+      return ui::AX_TREE_ORDER_BEFORE;
+    if (child_index1 > child_index2)
+      return ui::AX_TREE_ORDER_AFTER;
+  }
+
+  if (object2.IsDescendantOf(&object1))
+    return ui::AX_TREE_ORDER_BEFORE;
+  if (object1.IsDescendantOf(&object2))
+    return ui::AX_TREE_ORDER_AFTER;
+
+  return ui::AX_TREE_ORDER_UNDEFINED;
+}
+
 std::vector<const BrowserAccessibility*>
 BrowserAccessibilityManager::FindTextOnlyObjectsInRange(
     const BrowserAccessibility& start_object,
@@ -853,8 +878,7 @@ base::string16 BrowserAccessibilityManager::GetTextForRange(
     text += text_only_objects[i]->GetText();
   }
 
-  const BrowserAccessibility* end_text_object =
-      text_only_objects[text_only_objects.size() - 1];
+  const BrowserAccessibility* end_text_object = text_only_objects.back();
   if (end_offset <= static_cast<int>(end_text_object->GetText().length())) {
     text += end_text_object->GetText().substr(0, end_offset);
   } else {
@@ -862,6 +886,69 @@ base::string16 BrowserAccessibilityManager::GetTextForRange(
   }
 
   return text;
+}
+
+// static
+gfx::Rect BrowserAccessibilityManager::GetPageBoundsForRange(
+    const BrowserAccessibility& start_object,
+    int start_offset,
+    const BrowserAccessibility& end_object,
+    int end_offset) {
+  DCHECK_GE(start_offset, 0);
+  DCHECK_GE(end_offset, 0);
+
+  if (&start_object == &end_object && start_object.IsSimpleTextControl()) {
+    if (start_offset > end_offset)
+      std::swap(start_offset, end_offset);
+
+    if (start_offset >= static_cast<int>(start_object.GetText().length()) ||
+        end_offset > static_cast<int>(start_object.GetText().length())) {
+      return gfx::Rect();
+    }
+
+    return start_object.GetPageBoundsForRange(
+        start_offset, end_offset - start_offset);
+  }
+
+  gfx::Rect result;
+  const BrowserAccessibility* first = &start_object;
+  const BrowserAccessibility* last = &end_object;
+
+  switch (CompareNodes(*first, *last)) {
+    case ui::AX_TREE_ORDER_BEFORE:
+    case ui::AX_TREE_ORDER_EQUAL:
+      break;
+    case ui::AX_TREE_ORDER_AFTER:
+      std::swap(first, last);
+      std::swap(start_offset, end_offset);
+      break;
+    default:
+      return gfx::Rect();
+  }
+
+  const BrowserAccessibility* current = first;
+  do {
+    if (current->IsTextOnlyObject()) {
+      int len = static_cast<int>(current->GetText().size());
+      int start_char_index = 0;
+      int end_char_index = len;
+      if (current == first)
+        start_char_index = start_offset;
+      if (current == last)
+        end_char_index = end_offset;
+      result.Union(current->GetPageBoundsForRange(
+          start_char_index, end_char_index - start_char_index));
+    } else {
+      result.Union(current->GetPageBoundsRect());
+    }
+
+    if (current == last)
+      break;
+
+    current = NextInTreeOrder(current);
+  } while (current);
+
+  return result;
 }
 
 void BrowserAccessibilityManager::OnNodeDataWillChange(

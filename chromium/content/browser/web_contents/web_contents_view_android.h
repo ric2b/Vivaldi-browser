@@ -12,6 +12,7 @@
 #include "content/browser/web_contents/web_contents_view.h"
 #include "content/public/browser/web_contents_view_delegate.h"
 #include "content/public/common/context_menu_params.h"
+#include "content/public/common/drop_data.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
@@ -35,6 +36,7 @@ class WebContentsViewAndroid : public WebContentsView,
   gfx::NativeView GetNativeView() const override;
   gfx::NativeView GetContentNativeView() const override;
   gfx::NativeWindow GetTopLevelNativeWindow() const override;
+  void GetScreenInfo(blink::WebScreenInfo* web_screen_info) const override;
   void GetContainerBounds(gfx::Rect* out) const override;
   void SizeContents(const gfx::Size& size) override;
   void Focus() override;
@@ -75,6 +77,17 @@ class WebContentsViewAndroid : public WebContentsView,
   void UpdateDragCursor(blink::WebDragOperation operation) override;
   void GotFocus() override;
   void TakeFocus(bool reverse) override;
+
+  void OnDragEntered(const std::vector<DropData::Metadata>& metadata,
+                     const gfx::Point& location,
+                     const gfx::Point& screen_location);
+  void OnDragUpdated(const gfx::Point& location,
+                     const gfx::Point& screen_location);
+  void OnDragExited();
+  void OnPerformDrop(DropData* drop_data,
+                     const gfx::Point& location,
+                     const gfx::Point& screen_location);
+  void OnDragEnded();
 
  private:
   // The WebContents whose contents we display.

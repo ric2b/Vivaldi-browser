@@ -605,6 +605,13 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemapMultipleKeys) {
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT,
         ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, ui::DomKey::ALT}},
 
+      // Press Escape with Alt and Shift. Confirm the event is not rewritten.
+      {ui::ET_KEY_PRESSED,
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, ui::DomKey::ESCAPE},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, ui::DomKey::ESCAPE}},
+
       // Press Search with Caps Lock mask. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
@@ -619,7 +626,18 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemapMultipleKeys) {
        {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_CAPS_LOCK_ON,
         ui::DomKey::META}},
 
-      // Press Shift+Ctrl+Alt+Search+A. Confirm the event is not rewritten.
+      // Press Shift+Ctrl+Alt+Search+Escape. Confirm the event is not rewritten.
+      {ui::ET_KEY_PRESSED,
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+            ui::EF_COMMAND_DOWN,
+        ui::DomKey::ESCAPE},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+            ui::EF_COMMAND_DOWN,
+        ui::DomKey::ESCAPE}},
+
+      // Press Shift+Ctrl+Alt+Search+B. Confirm the event is not rewritten.
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
@@ -637,7 +655,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersNoRemapMultipleKeys) {
 }
 
 TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
-  // Disable Search and Control keys.
+  // Disable Search, Control and Escape keys.
   syncable_prefs::TestingPrefServiceSyncable prefs;
   chromeos::Preferences::RegisterProfilePrefs(prefs.registry());
   IntegerPrefMember search;
@@ -646,6 +664,9 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
   IntegerPrefMember control;
   control.Init(prefs::kLanguageRemapControlKeyTo, &prefs);
   control.SetValue(chromeos::input_method::kVoidKey);
+  IntegerPrefMember escape;
+  escape.Init(prefs::kLanguageRemapEscapeKeyTo, &prefs);
+  escape.SetValue(chromeos::input_method::kVoidKey);
 
   EventRewriter rewriter(NULL);
   rewriter.KeyboardDeviceAddedForTesting(kKeyboardDeviceId, "PC Keyboard");
@@ -670,6 +691,12 @@ TEST_F(EventRewriterTest, TestRewriteModifiersDisableSome) {
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_CONTROL_DOWN,
         ui::DomKey::CONTROL},
+       {ui::VKEY_UNKNOWN, ui::DomCode::NONE, ui::EF_NONE,
+        ui::DomKey::UNIDENTIFIED}},
+
+      // Press Escape. Confirm the event is now VKEY_UNKNOWN.
+      {ui::ET_KEY_PRESSED,
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE},
        {ui::VKEY_UNKNOWN, ui::DomCode::NONE, ui::EF_NONE,
         ui::DomKey::UNIDENTIFIED}},
 
@@ -808,7 +835,7 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToControl) {
 }
 
 TEST_F(EventRewriterTest, TestRewriteModifiersRemapToEscape) {
-  // Remap Search to ESC.
+  // Remap Search to Escape.
   syncable_prefs::TestingPrefServiceSyncable prefs;
   chromeos::Preferences::RegisterProfilePrefs(prefs.registry());
   IntegerPrefMember search;
@@ -833,27 +860,30 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapToEscape) {
 }
 
 TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
-  // Remap Search to Alt.
+  // Remap Escape to Alt.
   syncable_prefs::TestingPrefServiceSyncable prefs;
   chromeos::Preferences::RegisterProfilePrefs(prefs.registry());
-  IntegerPrefMember search;
-  search.Init(prefs::kLanguageRemapSearchKeyTo, &prefs);
-  search.SetValue(chromeos::input_method::kAltKey);
+  IntegerPrefMember escape;
+  escape.Init(prefs::kLanguageRemapEscapeKeyTo, &prefs);
+  escape.SetValue(chromeos::input_method::kAltKey);
 
   EventRewriter rewriter(NULL);
   rewriter.KeyboardDeviceAddedForTesting(kKeyboardDeviceId, "PC Keyboard");
   rewriter.set_pref_service_for_testing(&prefs);
 
-  KeyTestCase s2a_tests[] = {
-      // Press Search. Confirm the event is now VKEY_MENU.
+  KeyTestCase e2a_tests[] = {
+      // Press Escape. Confirm the event is now VKEY_MENU.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
-        ui::DomKey::META},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE},
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT, ui::EF_ALT_DOWN,
         ui::DomKey::ALT}},
+      // Release Escape to clear flags.
+      {ui::ET_KEY_RELEASED,
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE},
+       {ui::VKEY_MENU, ui::DomCode::ALT_LEFT, ui::EF_NONE, ui::DomKey::ALT}},
   };
 
-  for (const auto& test : s2a_tests) {
+  for (const auto& test : e2a_tests) {
     CheckKeyTestCase(&rewriter, test);
   }
 
@@ -901,31 +931,28 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
        {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
         ui::DomKey::META}},
 
-      // Then, press all of the three, Control+Alt+Search.
+      // Then, press all of the three, Control+Alt+Escape.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
-        ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
-        ui::DomKey::META},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN, ui::DomKey::CONTROL},
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT,
         ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN,
         ui::DomKey::ALT}},
 
-      // Press Shift+Control+Alt+Search.
+      // Press Shift+Control+Alt+Escape.
       {ui::ET_KEY_PRESSED,
-       {ui::VKEY_LWIN, ui::DomCode::META_LEFT,
-        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-            ui::EF_COMMAND_DOWN,
-        ui::DomKey::META},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE,
+        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
+        ui::DomKey::ESCAPE},
        {ui::VKEY_MENU, ui::DomCode::ALT_LEFT,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
             ui::EF_COMMAND_DOWN,
         ui::DomKey::ALT}},
 
-      // Press Shift+Control+Alt+Search+B
+      // Press Shift+Control+Alt+B
       {ui::ET_KEY_PRESSED,
        {ui::VKEY_B, ui::DomCode::US_B,
-        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
-            ui::EF_COMMAND_DOWN,
+        ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
         ui::DomKey::Constant<'B'>::Character},
        {ui::VKEY_B, ui::DomCode::US_B,
         ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
@@ -934,6 +961,51 @@ TEST_F(EventRewriterTest, TestRewriteModifiersRemapMany) {
   };
 
   for (const auto& test : c2s_tests) {
+    CheckKeyTestCase(&rewriter, test);
+  }
+
+  // Remap Search to Backspace.
+  IntegerPrefMember search;
+  search.Init(prefs::kLanguageRemapSearchKeyTo, &prefs);
+  search.SetValue(chromeos::input_method::kBackspaceKey);
+
+  KeyTestCase s2b_tests[] = {
+      // Release Control and Escape, as Search and Alt would transform Backspace
+      // to Delete.
+      {ui::ET_KEY_RELEASED,
+       {ui::VKEY_CONTROL, ui::DomCode::CONTROL_LEFT, ui::EF_NONE,
+        ui::DomKey::CONTROL},
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_ALT_DOWN,
+        ui::DomKey::META}},
+      {ui::ET_KEY_RELEASED,
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE},
+       {ui::VKEY_MENU, ui::DomCode::ALT_LEFT, ui::EF_NONE, ui::DomKey::ALT}},
+      // Press Search. Confirm the event is now VKEY_BACK.
+      {ui::ET_KEY_PRESSED,
+       {ui::VKEY_LWIN, ui::DomCode::META_LEFT, ui::EF_COMMAND_DOWN,
+        ui::DomKey::META},
+       {ui::VKEY_BACK, ui::DomCode::BACKSPACE, ui::EF_NONE,
+        ui::DomKey::BACKSPACE}},
+  };
+
+  for (const auto& test : s2b_tests) {
+    CheckKeyTestCase(&rewriter, test);
+  }
+
+  // Remap Backspace to Escape.
+  IntegerPrefMember backspace;
+  backspace.Init(prefs::kLanguageRemapBackspaceKeyTo, &prefs);
+  backspace.SetValue(chromeos::input_method::kEscapeKey);
+
+  KeyTestCase b2e_tests[] = {
+      // Press Backspace. Confirm the event is now VKEY_ESCAPE.
+      {ui::ET_KEY_PRESSED,
+       {ui::VKEY_BACK, ui::DomCode::BACKSPACE, ui::EF_NONE,
+        ui::DomKey::BACKSPACE},
+       {ui::VKEY_ESCAPE, ui::DomCode::ESCAPE, ui::EF_NONE, ui::DomKey::ESCAPE}},
+  };
+
+  for (const auto& test : b2e_tests) {
     CheckKeyTestCase(&rewriter, test);
   }
 }
@@ -1996,25 +2068,12 @@ TEST_F(EventRewriterAshTest, TopRowKeysAreFunctionKeys) {
   ui::KeyEvent press_f1(ui::ET_KEY_PRESSED, ui::VKEY_F1, ui::DomCode::F1,
                         ui::EF_NONE, ui::DomKey::F1, ui::EventTimeForNow());
 
-  // Simulate an apps v2 window that has requested top row keys as function
-  // keys. The event should not be rewritten.
-  window_state->set_top_row_keys_are_function_keys(true);
-  ui::EventDispatchDetails details = Send(&press_f1);
-  ASSERT_FALSE(details.dispatcher_destroyed);
-  PopEvents(&events);
-  EXPECT_EQ(1u, events.size());
-  EXPECT_EQ(
-      GetExpectedResultAsString(ui::ET_KEY_PRESSED, ui::VKEY_F1,
-                                ui::DomCode::F1, ui::EF_NONE, ui::DomKey::F1),
-      GetKeyEventAsString(*static_cast<ui::KeyEvent*>(events[0])));
-
   // The event should also not be rewritten if the send-function-keys pref is
   // additionally set, for both apps v2 and regular windows.
   BooleanPrefMember send_function_keys_pref;
   send_function_keys_pref.Init(prefs::kLanguageSendFunctionKeys, prefs());
   send_function_keys_pref.SetValue(true);
-  window_state->set_top_row_keys_are_function_keys(false);
-  details = Send(&press_f1);
+  ui::EventDispatchDetails details = Send(&press_f1);
   ASSERT_FALSE(details.dispatcher_destroyed);
   PopEvents(&events);
   EXPECT_EQ(1u, events.size());

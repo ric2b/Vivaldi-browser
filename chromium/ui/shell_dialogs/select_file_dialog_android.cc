@@ -17,6 +17,8 @@
 #include "ui/shell_dialogs/selected_file_info.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace ui {
 
@@ -118,11 +120,9 @@ void SelectFileDialogImpl::SelectFileImpl(
 
   bool accept_multiple_files = SelectFileDialog::SELECT_OPEN_MULTI_FILE == type;
 
-  Java_SelectFileDialog_selectFile(env, java_object_.obj(),
-                                   accept_types_java.obj(),
-                                   accept_types.second,
-                                   accept_multiple_files,
-                                   owning_window->GetJavaObject().obj());
+  Java_SelectFileDialog_selectFile(env, java_object_, accept_types_java,
+                                   accept_types.second, accept_multiple_files,
+                                   owning_window->GetJavaObject());
 }
 
 bool SelectFileDialogImpl::RegisterSelectFileDialog(JNIEnv* env) {

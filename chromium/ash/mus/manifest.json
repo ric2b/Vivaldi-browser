@@ -4,11 +4,19 @@
   "display_name": "Ash Window Manager and Shell",
   "capabilities": {
     "provided": {
-      "mus:window_manager" : [ "mus::mojom::AcceleratorRegistrar" ]
+      "mus:window_manager" : [ "ui::mojom::AcceleratorRegistrar" ]
     },
     "required": {
-      "*": { "classes": [ "app" ] },
-      "mojo:mus": { "interfaces": [ "mus::mojom::WindowManagerWindowTreeFactory" ] }
+      "*": { "classes": [ "accessibility", "app" ] },
+      "mojo:mash_session": {
+        "interfaces": [ "mash::session::mojom::Session" ]
+      },
+      "mojo:ui": {
+        "interfaces": [
+          "ui::mojom::AccessibilityManager",
+          "ui::mojom::WindowManagerWindowTreeFactory"
+        ]
+      }
     }
   }
 }

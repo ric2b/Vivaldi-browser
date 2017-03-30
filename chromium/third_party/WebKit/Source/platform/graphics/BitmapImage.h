@@ -28,6 +28,7 @@
 #ifndef BitmapImage_h
 #define BitmapImage_h
 
+#include "platform/Timer.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/FrameData.h"
@@ -40,8 +41,6 @@
 #include <memory>
 
 namespace blink {
-
-template <typename T> class Timer;
 
 class PLATFORM_EXPORT BitmapImage final : public Image {
     friend class BitmapImageTest;
@@ -65,7 +64,9 @@ public:
     IntSize sizeRespectingOrientation() const;
     bool getHotSpot(IntPoint&) const override;
     String filenameExtension() const override;
-    bool dataChanged(bool allDataReceived) override;
+
+    SizeAvailability setData(PassRefPtr<SharedBuffer> data, bool allDataReceived) override;
+    SizeAvailability dataChanged(bool allDataReceived) override;
 
     bool isAllDataReceived() const { return m_allDataReceived; }
     bool hasColorProfile() const;
@@ -89,7 +90,7 @@ public:
     // Construct a BitmapImage with the given orientation.
     static PassRefPtr<BitmapImage> createWithOrientationForTesting(const SkBitmap&, ImageOrientation);
     // Advance the image animation by one frame.
-    void advanceAnimationForTesting() override { internalAdvanceAnimation(false); }
+    void advanceAnimationForTesting() override { internalAdvanceAnimation(); }
 
 private:
     enum RepetitionCountStatus {
@@ -125,6 +126,8 @@ private:
     // some room in the image cache.
     void destroyDecodedData() override;
 
+    PassRefPtr<SharedBuffer> data() override;
+
     // Notifies observers that the memory footprint has changed.
     void notifyMemoryChanged();
 
@@ -139,20 +142,26 @@ private:
     bool shouldAnimate();
     void startAnimation(CatchUpAnimation = CatchUp) override;
     void stopAnimation();
-    void advanceAnimation(Timer<BitmapImage>*);
+    void advanceAnimation(TimerBase*);
     // Advance the animation and let the next frame get scheduled without
     // catch-up logic. For large images with slow or heavily-loaded systems,
     // throwing away data as we go (see destroyDecodedData()) means we can spend
     // so much time re-decoding data that we are always behind. To prevent this,
     // we force the next animation to skip the catch up logic.
-    void advanceAnimationWithoutCatchUp(Timer<BitmapImage>*);
+    void advanceAnimationWithoutCatchUp(TimerBase*);
 
-    // Function that does the real work of advancing the animation.  When
-    // skippingFrames is true, we're in the middle of a loop trying to skip over
-    // a bunch of animation frames, so we should not do things like decode each
-    // one or notify our observers.
+    // This function does the real work of advancing the animation. When
+    // skipping frames to catch up, we're in the middle of a loop trying to skip
+    // over a bunch of animation frames, so we should not do things like decode
+    // each one or notify our observers.
     // Returns whether the animation was advanced.
-    bool internalAdvanceAnimation(bool skippingFrames);
+    enum AnimationAdvancement {
+        Normal,
+        SkipFramesToCatchUp
+    };
+    bool internalAdvanceAnimation(AnimationAdvancement = Normal);
+
+    void notifyObserversOfAnimationAdvance(TimerBase*);
 
     ImageSource m_source;
     mutable IntSize m_size; // The size to use for the overall image (will just be the size of the first image).

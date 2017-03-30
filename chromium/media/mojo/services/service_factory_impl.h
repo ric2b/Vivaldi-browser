@@ -12,7 +12,7 @@
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_connection_ref.h"
+#include "services/shell/public/cpp/service_context_ref.h"
 
 namespace shell {
 namespace mojom {
@@ -30,25 +30,20 @@ class RendererFactory;
 class ServiceFactoryImpl : public mojom::ServiceFactory {
  public:
   ServiceFactoryImpl(mojo::InterfaceRequest<mojom::ServiceFactory> request,
-                     shell::mojom::InterfaceProvider* interfaces,
+                     shell::mojom::InterfaceProviderPtr interfaces,
                      scoped_refptr<MediaLog> media_log,
-                     std::unique_ptr<shell::ShellConnectionRef> connection_ref,
+                     std::unique_ptr<shell::ServiceContextRef> connection_ref,
                      MojoMediaClient* mojo_media_client);
   ~ServiceFactoryImpl() final;
 
   // mojom::ServiceFactory implementation.
   void CreateAudioDecoder(mojom::AudioDecoderRequest request) final;
   void CreateVideoDecoder(mojom::VideoDecoderRequest request) final;
-  void CreateRenderer(mojom::RendererRequest request) final;
+  void CreateRenderer(const mojo::String& audio_device_id,
+                      mojom::RendererRequest request) final;
   void CreateCdm(mojom::ContentDecryptionModuleRequest request) final;
 
  private:
-#if defined(ENABLE_MOJO_RENDERER)
-  RendererFactory* GetRendererFactory();
-
-  std::unique_ptr<RendererFactory> renderer_factory_;
-#endif  // defined(ENABLE_MOJO_RENDERER)
-
 #if defined(ENABLE_MOJO_CDM)
   CdmFactory* GetCdmFactory();
 
@@ -58,11 +53,11 @@ class ServiceFactoryImpl : public mojom::ServiceFactory {
   MojoCdmServiceContext cdm_service_context_;
   mojo::StrongBinding<mojom::ServiceFactory> binding_;
 #if defined(ENABLE_MOJO_CDM)
-  shell::mojom::InterfaceProvider* interfaces_;
+  shell::mojom::InterfaceProviderPtr interfaces_;
 #endif
 
   scoped_refptr<MediaLog> media_log_;
-  std::unique_ptr<shell::ShellConnectionRef> connection_ref_;
+  std::unique_ptr<shell::ServiceContextRef> connection_ref_;
   MojoMediaClient* mojo_media_client_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceFactoryImpl);

@@ -4,15 +4,66 @@
 
 package org.chromium.chrome.browser.payments;
 
-import org.chromium.content.browser.ServiceRegistry.ImplementationFactory;
+import android.app.Activity;
+
+import org.chromium.chrome.browser.ChromeFeatureList;
+import org.chromium.chrome.browser.payments.PaymentRequestImpl.PaymentRequestDismissObserver;
+import org.chromium.content.browser.ContentViewCore;
+import org.chromium.content.browser.InterfaceRegistry.ImplementationFactory;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.mojo.system.MojoException;
+import org.chromium.mojom.payments.PaymentDetails;
+import org.chromium.mojom.payments.PaymentErrorReason;
+import org.chromium.mojom.payments.PaymentMethodData;
+import org.chromium.mojom.payments.PaymentOptions;
 import org.chromium.mojom.payments.PaymentRequest;
+import org.chromium.mojom.payments.PaymentRequestClient;
+import org.chromium.ui.base.WindowAndroid;
 
 /**
  * Creates instances of PaymentRequest.
  */
-public class PaymentRequestFactory implements ImplementationFactory<PaymentRequest> {
+public class PaymentRequestFactory implements ImplementationFactory<PaymentRequest>,
+        PaymentRequestDismissObserver {
     private final WebContents mWebContents;
+    private boolean mIsPaymentRequestRunning;
+
+    /**
+     * An implementation of PaymentRequest that immediately rejects all connections.
+     * Necessary because Mojo does not handle null returned from createImpl().
+     */
+    private static final class InvalidPaymentRequest implements PaymentRequest {
+        private PaymentRequestClient mClient;
+
+        @Override
+        public void init(PaymentRequestClient client, PaymentMethodData[] methodData,
+                PaymentDetails details, PaymentOptions options) {
+            mClient = client;
+        }
+
+        @Override
+        public void show() {
+            if (mClient != null) {
+                mClient.onError(PaymentErrorReason.USER_CANCEL);
+                mClient.close();
+            }
+        }
+
+        @Override
+        public void updateWith(PaymentDetails details) {}
+
+        @Override
+        public void abort() {}
+
+        @Override
+        public void complete(int result) {}
+
+        @Override
+        public void close() {}
+
+        @Override
+        public void onConnectionError(MojoException e) {}
+    }
 
     /**
      * Builds a factory for PaymentRequest.
@@ -25,6 +76,29 @@ public class PaymentRequestFactory implements ImplementationFactory<PaymentReque
 
     @Override
     public PaymentRequest createImpl() {
-        return new PaymentRequestImpl(mWebContents);
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_PAYMENTS)) {
+            return new InvalidPaymentRequest();
+        }
+
+        if (mWebContents == null) return new InvalidPaymentRequest();
+
+        ContentViewCore contentViewCore = ContentViewCore.fromWebContents(mWebContents);
+        if (contentViewCore == null) return new InvalidPaymentRequest();
+
+        WindowAndroid window = contentViewCore.getWindowAndroid();
+        if (window == null) return new InvalidPaymentRequest();
+
+        Activity context = window.getActivity().get();
+        if (context == null) return new InvalidPaymentRequest();
+
+        if (mIsPaymentRequestRunning) return new InvalidPaymentRequest();
+        mIsPaymentRequestRunning = true;
+
+        return new PaymentRequestImpl(context, mWebContents, this);
+    }
+
+    @Override
+    public void onPaymentRequestDismissed() {
+        mIsPaymentRequestRunning = false;
     }
 }

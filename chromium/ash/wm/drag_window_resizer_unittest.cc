@@ -6,12 +6,12 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_positioning_utils.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_md_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
@@ -78,7 +78,6 @@ class DragWindowResizerTest : public test::AshMDTestBase {
     gfx::Rect root_bounds(root->bounds());
     EXPECT_EQ(kRootHeight, root_bounds.height());
     EXPECT_EQ(800, root_bounds.width());
-    Shell::GetInstance()->SetDisplayWorkAreaInsets(root, gfx::Insets());
     window_.reset(new aura::Window(&delegate_));
     window_->SetType(ui::wm::WINDOW_TYPE_NORMAL);
     window_->Init(ui::LAYER_NOT_DRAWN);

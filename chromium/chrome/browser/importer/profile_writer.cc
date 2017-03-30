@@ -95,7 +95,7 @@ void ShowBookmarkBar(Profile* profile) {
 ProfileWriter::ProfileWriter(Profile* profile) : profile_(profile) {}
 
 bool ProfileWriter::BookmarkModelIsLoaded() const {
-  return BookmarkModelFactory::GetForProfile(profile_)->loaded();
+  return BookmarkModelFactory::GetForBrowserContext(profile_)->loaded();
 }
 
 bool ProfileWriter::TemplateURLServiceIsLoaded() const {
@@ -138,7 +138,7 @@ void ProfileWriter::AddBookmarks(
   if (bookmarks.empty())
     return;
 
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile_);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
   DCHECK(model->loaded());
 
   // If the bookmark bar is currently empty, we should import directly to it.
@@ -264,7 +264,7 @@ void ProfileWriter::AddSpeedDial(
   if (speeddial.empty())
     return;
 
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile_);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
   DCHECK(model->loaded());
   const BookmarkNode* bookmark_bar = model->bookmark_bar_node();
   const base::string16& first_folder_name =

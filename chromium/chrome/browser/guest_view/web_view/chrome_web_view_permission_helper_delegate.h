@@ -32,6 +32,7 @@ class ChromeWebViewPermissionHelperDelegate :
   void RequestGeolocationPermission(
       int bridge_id,
       const GURL& requesting_frame,
+      bool user_gesture,
       const base::Callback<void(bool)>& callback) override;
   void CancelGeolocationPermissionRequest(int bridge_id) override;
   void RequestNotificationPermission(
@@ -83,6 +84,7 @@ class ChromeWebViewPermissionHelperDelegate :
 
   void OnGeolocationPermissionResponse(
       int bridge_id,
+      bool user_gesture,
       const base::Callback<void(blink::mojom::PermissionStatus)>& callback,
       bool allow,
       const std::string& user_input);

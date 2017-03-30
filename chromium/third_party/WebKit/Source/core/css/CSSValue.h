@@ -91,7 +91,6 @@ public:
     bool isCubicBezierTimingFunctionValue() const { return m_classType == CubicBezierTimingFunctionClass; }
     bool isStepsTimingFunctionValue() const { return m_classType == StepsTimingFunctionClass; }
     bool isGridTemplateAreasValue() const { return m_classType == GridTemplateAreasClass; }
-    bool isSVGDocumentValue() const { return m_classType == CSSSVGDocumentClass; }
     bool isContentDistributionValue() const { return m_classType == CSSContentDistributionClass; }
     bool isUnicodeRangeValue() const { return m_classType == UnicodeRangeClass; }
     bool isGridLineNamesValue() const { return m_classType == GridLineNamesClass; }
@@ -166,9 +165,6 @@ protected:
         CustomPropertyDeclarationClass,
         PendingSubstitutionValueClass,
 
-        // SVG classes.
-        CSSSVGDocumentClass,
-
         CSSContentDistributionClass,
 
         // List class types must appear after ValueListClass.
@@ -199,9 +195,6 @@ protected:
 
     // NOTE: This class is non-virtual for memory and performance reasons.
     // Don't go making it virtual again unless you know exactly what you're doing!
-
-private:
-    void destroy();
 
 protected:
     // The bits in this section are only used by specific subclasses but kept here

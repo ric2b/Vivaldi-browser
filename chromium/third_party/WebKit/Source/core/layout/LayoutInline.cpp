@@ -191,6 +191,17 @@ void LayoutInline::styleDidChange(StyleDifference diff, const ComputedStyle* old
     propagateStyleToAnonymousChildren();
 }
 
+static inline bool fontDifferenceRequiresLineBox(const ComputedStyle& style,
+    const ComputedStyle& parentStyle)
+{
+    const SimpleFontData* font = style.font().primaryFont();
+    const SimpleFontData* parentFont = parentStyle.font().primaryFont();
+
+    return (font && parentFont && !font->getFontMetrics()
+        .hasIdenticalAscentDescentAndLineGap(parentFont->getFontMetrics()))
+        || parentStyle.lineHeight() != style.lineHeight();
+}
+
 void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout)
 {
     // Once we have been tainted once, just assume it will happen again. This way effects like hover highlighting that change the
@@ -205,8 +216,7 @@ void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout)
         || (parentLayoutInline && parentStyle.verticalAlign() != VerticalAlignBaseline)
         || style()->verticalAlign() != VerticalAlignBaseline
         || style()->getTextEmphasisMark() != TextEmphasisMarkNone
-        || (checkFonts && (!parentStyle.font().getFontMetrics().hasIdenticalAscentDescentAndLineGap(style()->font().getFontMetrics())
-        || parentStyle.lineHeight() != style()->lineHeight()));
+        || (checkFonts && fontDifferenceRequiresLineBox(styleRef(), parentStyle));
 
     if (!alwaysCreateLineBoxesNew && checkFonts && document().styleEngine().usesFirstLineRules()) {
         // Have to check the first line style as well.
@@ -356,7 +366,7 @@ void LayoutInline::splitInlines(LayoutBlockFlow* fromBlock, LayoutBlockFlow* toB
     // parent. Since the splitting logic expects |this| to be the parent, set
     // |beforeChild| to be the LayoutFullScreen.
     if (Fullscreen* fullscreen = Fullscreen::fromIfExists(document())) {
-        const Element* fullScreenElement = fullscreen->webkitCurrentFullScreenElement();
+        const Element* fullScreenElement = fullscreen->currentFullScreenElement();
         if (fullScreenElement && beforeChild && beforeChild->node() == fullScreenElement)
             beforeChild = fullscreen->fullScreenLayoutObject();
     }
@@ -621,7 +631,7 @@ public:
     void operator()(const LayoutRect& rect)
     {
         IntRect intRect = enclosingIntRect(rect);
-        intRect.move(m_accumulatedOffset.x(), m_accumulatedOffset.y());
+        intRect.move(m_accumulatedOffset.x().toInt(), m_accumulatedOffset.y().toInt());
         m_rects.append(intRect);
     }
 private:
@@ -1050,7 +1060,7 @@ LayoutRect LayoutInline::localOverflowRectForPaintInvalidation() const
     if (!alwaysCreateLineBoxes())
         return LayoutRect();
 
-    if (style()->visibility() != VISIBLE)
+    if (style()->visibility() != EVisibility::Visible)
         return LayoutRect();
 
     return visualOverflowRect();
@@ -1090,23 +1100,21 @@ bool LayoutInline::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* an
     if (!container)
         return true;
 
-    LayoutPoint topLeft = rect.location();
-
     if (style()->hasInFlowPosition() && layer()) {
         // Apply the in-flow position offset when invalidating a rectangle. The layer
         // is translated, but the layout box isn't, so we need to do this to get the
         // right dirty rect. Since this is called from LayoutObject::setStyle, the relative position
         // flag on the LayoutObject has been cleared, so use the one on the style().
-        topLeft += layer()->offsetForInFlowPosition();
+        rect.move(layer()->offsetForInFlowPosition());
     }
 
-    // FIXME: We ignore the lightweight clipping rect that controls use, since if |o| is in mid-layout,
-    // its controlClipRect will be wrong. For overflow clip we use the values cached by the layer.
-    rect.setLocation(topLeft);
-
-    if (container->isBox() && !toLayoutBox(container)->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
+    LayoutBox* containerBox = container->isBox() ? toLayoutBox(container) : nullptr;
+    if (containerBox && !containerBox->mapScrollingContentsRectToBoxSpace(rect, container == ancestor ? ApplyNonScrollOverflowClip : ApplyOverflowClip, visualRectFlags))
         return false;
 
+    // TODO(wkorman): Generalize Ruby specialization and/or document more clearly.
+    if (containerBox && !isRuby())
+        containerBox->flipForWritingMode(rect);
     return container->mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
 }
 
@@ -1128,13 +1136,6 @@ PaintLayerType LayoutInline::layerTypeRequired() const
 {
     return isInFlowPositioned() || createsGroup() || hasClipPath() || style()->shouldCompositeForCurrentAnimations()
         ||  style()->hasCompositorProxy() || style()->containsPaint() ? NormalPaintLayer : NoPaintLayer;
-}
-
-void LayoutInline::updateDragState(bool dragOn)
-{
-    LayoutBoxModelObject::updateDragState(dragOn);
-    if (LayoutBoxModelObject* continuation = this->continuation())
-        continuation->updateDragState(dragOn);
 }
 
 void LayoutInline::childBecameNonInline(LayoutObject* child)
@@ -1231,7 +1232,7 @@ int LayoutInline::baselinePosition(FontBaseline baselineType, bool firstLine, Li
 {
     ASSERT(linePositionMode == PositionOnContainingLine);
     const FontMetrics& fontMetrics = style(firstLine)->getFontMetrics();
-    return fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2;
+    return (fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2).toInt();
 }
 
 LayoutSize LayoutInline::offsetForInFlowPositionedInline(const LayoutBox& child) const
@@ -1338,7 +1339,7 @@ void LayoutInline::computeSelfHitTestRects(Vector<LayoutRect>& rects, const Layo
 void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
 {
     // Convert the style regions to absolute coordinates.
-    if (style()->visibility() != VISIBLE)
+    if (style()->visibility() != EVisibility::Visible)
         return;
 
     if (style()->getDraggableRegionMode() == DraggableRegionNone)
@@ -1361,10 +1362,11 @@ void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
 
 void LayoutInline::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    LayoutBoxModelObject::invalidateDisplayItemClients(invalidationReason);
+    ObjectPaintInvalidator paintInvalidator(*this);
+    paintInvalidator.invalidateDisplayItemClient(*this, invalidationReason);
 
     for (InlineFlowBox* box = firstLineBox(); box; box = box->nextLineBox())
-        invalidateDisplayItemClient(*box, invalidationReason);
+        paintInvalidator.invalidateDisplayItemClient(*box, invalidationReason);
 }
 
 } // namespace blink

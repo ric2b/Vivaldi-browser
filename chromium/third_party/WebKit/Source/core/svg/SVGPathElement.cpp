@@ -70,6 +70,11 @@ DEFINE_TRACE(SVGPathElement)
 
 DEFINE_NODE_FACTORY(SVGPathElement)
 
+Path SVGPathElement::attributePath() const
+{
+    return m_path->currentValue()->stylePath()->path();
+}
+
 const StylePath* SVGPathElement::stylePath() const
 {
     if (LayoutObject* layoutObject = this->layoutObject()) {
@@ -205,6 +210,14 @@ void SVGPathElement::removedFrom(ContainerNode* rootParent)
 {
     SVGGeometryElement::removedFrom(rootParent);
     invalidateMPathDependencies();
+}
+
+FloatRect SVGPathElement::getBBox()
+{
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+
+    // We want the exact bounds.
+    return SVGPathElement::asPath().boundingRect(Path::BoundsType::Exact);
 }
 
 } // namespace blink

@@ -31,7 +31,7 @@
 #include "core/animation/EffectInput.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/EffectModelOrDictionarySequenceOrDictionary.h"
+#include "bindings/core/v8/DictionarySequenceOrDictionary.h"
 #include "core/animation/AnimationInputHelpers.h"
 #include "core/animation/CompositorAnimations.h"
 #include "core/animation/KeyframeEffectModel.h"
@@ -78,32 +78,26 @@ bool getAndCheckOffset(const Dictionary& keyframeDictionary, double& offset, dou
     return true;
 }
 
-// Returns true if the property passed in is a compositable property.
-bool setKeyframeValue(Element& element, StringKeyframe& keyframe, const String& property, const String& value)
+void setKeyframeValue(Element& element, StringKeyframe& keyframe, const String& property, const String& value)
 {
     StyleSheetContents* styleSheetContents = element.document().elementSheet().contents();
     CSSPropertyID cssProperty = AnimationInputHelpers::keyframeAttributeToCSSProperty(property, element.document());
     if (cssProperty != CSSPropertyInvalid) {
         keyframe.setCSSPropertyValue(cssProperty, value, &element, styleSheetContents);
-        return CompositorAnimations::isCompositableProperty(cssProperty);
+        return;
     }
     cssProperty = AnimationInputHelpers::keyframeAttributeToPresentationAttribute(property, element);
     if (cssProperty != CSSPropertyInvalid) {
         keyframe.setPresentationAttributeValue(cssProperty, value, &element, styleSheetContents);
-        return false;
+        return;
     }
     const QualifiedName* svgAttribute = AnimationInputHelpers::keyframeAttributeToSVGAttribute(property, element);
     if (svgAttribute)
         keyframe.setSVGAttributeValue(*svgAttribute, value);
-    return false;
 }
 
-EffectModel* createEffectModelFromKeyframes(Element& element, const StringKeyframeVector& keyframes, bool encounteredCompositableProperty, ExceptionState& exceptionState)
+EffectModel* createEffectModelFromKeyframes(Element& element, const StringKeyframeVector& keyframes, ExceptionState& exceptionState)
 {
-    // TODO(alancutter): Remove this once composited animations no longer depend on AnimatableValues.
-    if (encounteredCompositableProperty && element.inActiveDocument())
-        element.document().updateStyleAndLayoutTreeForNode(&element);
-
     StringKeyframeEffectModel* keyframeEffectModel = StringKeyframeEffectModel::create(keyframes, LinearTimingFunction::shared());
     if (!RuntimeEnabledFeatures::cssAdditiveAnimationsEnabled()) {
         for (const auto& keyframeGroup : keyframeEffectModel->getPropertySpecificKeyframeGroups()) {
@@ -123,9 +117,8 @@ EffectModel* createEffectModelFromKeyframes(Element& element, const StringKeyfra
             }
         }
     }
-    keyframeEffectModel->forceConversionsToAnimatableValues(element, element.computedStyle());
 
-    ASSERT(!exceptionState.hadException());
+    DCHECK(!exceptionState.hadException());
     return keyframeEffectModel;
 }
 
@@ -145,11 +138,8 @@ bool exhaustDictionaryIterator(DictionaryIterator& iterator, ExecutionContext* e
 } // namespace
 
 // Spec: http://w3c.github.io/web-animations/#processing-a-frames-argument
-EffectModel* EffectInput::convert(Element* element, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExecutionContext* executionContext, ExceptionState& exceptionState)
+EffectModel* EffectInput::convert(Element* element, const DictionarySequenceOrDictionary& effectInput, ExecutionContext* executionContext, ExceptionState& exceptionState)
 {
-    if (effectInput.isEffectModel())
-        return effectInput.getAsEffectModel();
-
     if (effectInput.isNull() || !element)
         return nullptr;
 
@@ -173,7 +163,6 @@ EffectModel* EffectInput::convertArrayForm(Element& element, const Vector<Dictio
 {
     StringKeyframeVector keyframes;
     double lastOffset = 0;
-    bool encounteredCompositableProperty = false;
 
     for (const Dictionary& keyframeDictionary : keyframeDictionaries) {
         RefPtr<StringKeyframe> keyframe = StringKeyframe::create();
@@ -221,20 +210,19 @@ EffectModel* EffectInput::convertArrayForm(Element& element, const Vector<Dictio
             String value;
             DictionaryHelper::get(keyframeDictionary, property, value);
 
-            encounteredCompositableProperty |= setKeyframeValue(element, *keyframe.get(), property, value);
+            setKeyframeValue(element, *keyframe.get(), property, value);
         }
         keyframes.append(keyframe);
     }
 
-    ASSERT(!exceptionState.hadException());
+    DCHECK(!exceptionState.hadException());
 
-    return createEffectModelFromKeyframes(element, keyframes, encounteredCompositableProperty, exceptionState);
+    return createEffectModelFromKeyframes(element, keyframes, exceptionState);
 }
 
 EffectModel* EffectInput::convertObjectForm(Element& element, const Dictionary& keyframeDictionary, ExceptionState& exceptionState)
 {
     StringKeyframeVector keyframes;
-    bool encounteredCompositableProperty = false;
 
     String timingFunctionString;
     RefPtr<TimingFunction> timingFunction = nullptr;
@@ -288,16 +276,16 @@ EffectModel* EffectInput::convertObjectForm(Element& element, const Dictionary& 
                 keyframe->setComposite(EffectModel::CompositeAdd);
             // TODO(alancutter): Support "accumulate" keyframe composition.
 
-            encounteredCompositableProperty |= setKeyframeValue(element, *keyframe.get(), property, values[i]);
+            setKeyframeValue(element, *keyframe.get(), property, values[i]);
             keyframes.append(keyframe);
         }
     }
 
     std::sort(keyframes.begin(), keyframes.end(), compareKeyframes);
 
-    ASSERT(!exceptionState.hadException());
+    DCHECK(!exceptionState.hadException());
 
-    return createEffectModelFromKeyframes(element, keyframes, encounteredCompositableProperty, exceptionState);
+    return createEffectModelFromKeyframes(element, keyframes, exceptionState);
 }
 
 } // namespace blink

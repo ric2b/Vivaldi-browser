@@ -145,7 +145,7 @@ bool XcodeWriter::RunAndWriteFiles(const std::string& workspace_name,
                                    const std::string& ninja_extra_args,
                                    const std::string& dir_filters_string,
                                    const BuildSettings* build_settings,
-                                   Builder* builder,
+                                   const Builder& builder,
                                    Err* err) {
   const XcodeWriter::TargetOsType target_os =
       GetTargetOs(build_settings->build_args());
@@ -169,7 +169,7 @@ bool XcodeWriter::RunAndWriteFiles(const std::string& workspace_name,
           .AsUTF8Unsafe();
 
   std::string config_name = build_settings->build_dir()
-                                .Resolve(base::FilePath())
+                                .Resolve(base::FilePath(), true)
                                 .StripTrailingSeparators()
                                 .BaseName()
                                 .AsUTF8Unsafe();
@@ -180,7 +180,7 @@ bool XcodeWriter::RunAndWriteFiles(const std::string& workspace_name,
     config_name = config_name.substr(0, separator);
 
   std::vector<const Target*> targets;
-  std::vector<const Target*> all_targets = builder->GetAllResolvedTargets();
+  std::vector<const Target*> all_targets = builder.GetAllResolvedTargets();
   if (!XcodeWriter::FilterTargets(build_settings, all_targets,
                                   dir_filters_string, &targets, err)) {
     return false;
@@ -419,7 +419,7 @@ void XcodeWriter::WriteProjectContent(std::ostream& out, PBXProject* project) {
               [](const PBXObject* a, const PBXObject* b) {
                 return a->id() < b->id();
               });
-    for (const auto& object : pair.second) {
+    for (auto* object : pair.second) {
       object->Print(out, 2);
     }
     out << "/* End " << ToString(pair.first) << " section */\n";

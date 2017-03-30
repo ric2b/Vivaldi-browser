@@ -7,19 +7,21 @@
 #include <utility>
 #include <vector>
 
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_popup_item_container.h"
 #include "ash/common/wm_shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
+#include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -35,7 +37,9 @@ namespace {
 // we may not know the height of the default view, or the default view may
 // be too short, so we use this as a default and minimum height for any
 // detailed view.
-const int kDetailedBubbleMaxHeight = kTrayPopupItemHeight * 5;
+int GetDetailedBubbleMaxHeight() {
+  return GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT) * 5;
+}
 
 // Duration of swipe animation used when transitioning from a default to
 // detailed view or vice versa.
@@ -186,8 +190,8 @@ void SystemTrayBubble::InitView(views::View* anchor,
   DCHECK(!bubble_view_);
 
   if (bubble_type_ == BUBBLE_TYPE_DETAILED &&
-      init_params->max_height < kDetailedBubbleMaxHeight) {
-    init_params->max_height = kDetailedBubbleMaxHeight;
+      init_params->max_height < GetDetailedBubbleMaxHeight()) {
+    init_params->max_height = GetDetailedBubbleMaxHeight();
   } else if (bubble_type_ == BUBBLE_TYPE_NOTIFICATION) {
     init_params->close_on_deactivate = false;
   }
@@ -209,8 +213,14 @@ void SystemTrayBubble::FocusDefaultIfNeeded() {
 
   views::View* view =
       manager->GetNextFocusableView(nullptr, nullptr, false, false);
-  if (view)
+  // TODO(oshima): RequestFocus calls View::OnFocus even if the widget
+  // is not active (crbug.com/621791). Remove this check once the bug
+  // is fixed.
+  if (bubble_view_->GetWidget()->IsActive()) {
     view->RequestFocus();
+  } else {
+    manager->SetStoredFocusView(view);
+  }
 }
 
 void SystemTrayBubble::DestroyItemViews() {
@@ -296,7 +306,6 @@ void SystemTrayBubble::RecordVisibleRowMetrics() {
 void SystemTrayBubble::CreateItemViews(LoginStatus login_status) {
   tray_item_view_map_.clear();
 
-  std::vector<views::View*> item_views;
   // If a system modal dialog is present, create the same tray as
   // in locked state.
   if (WmShell::Get()->IsSystemModalWindowOpen() &&
@@ -330,26 +339,24 @@ void SystemTrayBubble::CreateItemViews(LoginStatus login_status) {
       tray_item_view_map_[items_[i]->uma_type()] = tray_popup_item_container;
     }
   }
-  // For default view, draw bottom border for each item, except the last
-  // 2 items, which are the bottom header row and the one just above it.
-  if (is_default_bubble) {
-    const int last_item_with_border =
-        static_cast<int>(item_containers.size()) - 2;
-    for (int i = 0; i < last_item_with_border; ++i)
-      item_containers.at(i)->SetDrawBorder(true);
+
+  if (!MaterialDesignController::IsSystemTrayMenuMaterial()) {
+    // For default view, draw bottom border for each item, except the last
+    // 2 items, which are the bottom header row and the one just above it.
+    if (is_default_bubble) {
+      const int last_item_with_border =
+          static_cast<int>(item_containers.size()) - 2;
+      for (int i = 0; i < last_item_with_border; ++i) {
+        item_containers.at(i)->SetBorder(views::Border::CreateSolidSidedBorder(
+            0, 0, 1, 0, kBorderLightColor));
+      }
+    }
   }
 
-  // For default view, draw bottom border for each item, except the last
-  // 2 items, which are the bottom header row and the one just above it.
-  if (is_default_bubble) {
-    const int last_item_with_border =
-        static_cast<int>(item_containers.size()) - 2;
-    for (int i = 0; i < last_item_with_border; ++i)
-      item_containers.at(i)->SetDrawBorder(true);
-  }
-
-  if (focus_view)
+  if (focus_view) {
+    tray_->ActivateBubble();
     focus_view->RequestFocus();
+  }
 }
 
 }  // namespace ash

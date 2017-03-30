@@ -51,7 +51,6 @@ class ProxyConfigService;
 class ProxyService;
 class SSLConfigService;
 class TransportSecurityState;
-class URLRequestBackoffManager;
 class URLRequestContext;
 class URLRequestContextGetter;
 class URLRequestJobFactory;
@@ -60,6 +59,8 @@ class URLRequestJobFactory;
 namespace net_log {
 class ChromeNetLog;
 }  // namespace net_log
+
+class SystemURLRequestContextGetter;
 
 // Contains state associated with, initialized and cleaned up on, and
 // primarily used on, the IO thread.
@@ -117,7 +118,6 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
     std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences;
     std::unique_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory;
     std::unique_ptr<net::HttpServerProperties> http_server_properties;
-    std::unique_ptr<net::URLRequestBackoffManager> url_request_backoff_manager;
     std::unique_ptr<net::ProxyService> system_proxy_service;
     std::unique_ptr<net::HttpNetworkSession> system_http_network_session;
     std::unique_ptr<net::HttpTransactionFactory>
@@ -225,7 +225,7 @@ class IOSChromeIOThread : public web::WebThreadDelegate {
 
   std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
 
-  scoped_refptr<net::URLRequestContextGetter>
+  scoped_refptr<SystemURLRequestContextGetter>
       system_url_request_context_getter_;
 
   const base::TimeTicks creation_time_;

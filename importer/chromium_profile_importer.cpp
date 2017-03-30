@@ -2,7 +2,7 @@
 
 #include "importer/chromium_profile_importer.h"
 #include "base/files/file_util.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "base/json/json_reader.h"
 #include "importer/chrome_importer_utils.h"
@@ -25,6 +25,7 @@ ChromiumProfileImporter::~ChromiumProfileImporter(){
 
 ChromiumProfileImporter::ChromiumProfileImporter() {
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_CHROME));
+  chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_CHROMIUM));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_YANDEX));
   chromeProfiles.push_back(GetChromeProfile(ImporterType::TYPE_OPERA_OPIUM));
   chromeProfiles.push_back(
@@ -44,6 +45,11 @@ ChromiumProfileImporter::GetChromeProfile(ImporterType importerType) {
   case ImporterType::TYPE_CHROME:
     prof.importer_type = importerType;
     prof.import_name_resource_idx = IDS_IMPORT_FROM_GOOGLE_CHROME;
+    return prof;
+
+  case ImporterType::TYPE_CHROMIUM:
+    prof.importer_type = importerType;
+    prof.import_name_resource_idx = IDS_IMPORT_FROM_CHROMIUM;
     return prof;
 
   case ImporterType::TYPE_YANDEX:
@@ -154,7 +160,6 @@ void ChromiumProfileImporter::ReadProfiles(vector<ChromeProfileInfo> *cp,
 
     vInfoCache->GetAsDictionary(&vDictValue);
     for (DictionaryValue::Iterator it(*vDictValue); !it.IsAtEnd(); it.Advance()){
-      const Value* child_copy = &it.value();
       string profileName = it.key();
 
       const DictionaryValue* roots_sd_value =

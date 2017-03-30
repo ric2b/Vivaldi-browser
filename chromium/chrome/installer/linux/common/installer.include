@@ -117,9 +117,6 @@ stage_install_common() {
   DEBUGFILE="${STRIPTEMP}/${PROGNAME}.debug"
   STRIPPEDFILE="${STRIPTEMP}/${PROGNAME}.stripped"
   "${BUILDDIR}/installer/common/eu-strip" -o "${STRIPPEDFILE}" -f "${DEBUGFILE}" "${BUILDDIR}/${PROGNAME}"
-  # Change RPATH to RUNPATH for $ORIGIN/lib/. Needed so LD_LIBRARY_PATH can
-  # override the location of libffmpeg.so.
-  chrpath -c "${STRIPPEDFILE}"
   install -m 755 "${STRIPPEDFILE}" "${STAGEDIR}/${INSTALLDIR}/${PROGNAME}-bin"
   rm "${DEBUGFILE}" "${STRIPPEDFILE}"
   rm -rf "${STRIPTEMP}"
@@ -142,6 +139,10 @@ stage_install_common() {
   cp -rf "${BUILDDIR}/resources/vivaldi" "${STAGEDIR}/${INSTALLDIR}/resources/"
   find "${STAGEDIR}/${INSTALLDIR}/resources/vivaldi" -type f -exec chmod 644 '{}' \;
   find "${STAGEDIR}/${INSTALLDIR}/resources/vivaldi" -type d -exec chmod 755 '{}' \;
+  # The features file
+  if [ -f "${BUILDDIR}/features.json" ]; then
+    install -m 644 "${BUILDDIR}/features.json" "${STAGEDIR}/${INSTALLDIR}/"
+  fi
 
   # ICU data file; only necessary when icu_use_data_file_flag is set to 1
   # in build/common.gypi.
@@ -181,17 +182,6 @@ stage_install_common() {
   if [ "${CHANNEL}" != "stable" ]; then
     install -m 644 "${BUILDDIR}/libGLESv2.so" "${STAGEDIR}/${INSTALLDIR}/"
     install -m 644 "${BUILDDIR}/libEGL.so" "${STAGEDIR}/${INSTALLDIR}/"
-  fi
-
-  # Pepper Flash.
-  PEPPERFLASH_SRCDIR="${BUILDDIR}/PepperFlash"
-  if [ -f "${PEPPERFLASH_SRCDIR}/libpepflashplayer.so" ]; then
-    PEPPERFLASH_DESTDIR="${STAGEDIR}/${INSTALLDIR}/PepperFlash"
-    install -m 755 -d "${PEPPERFLASH_DESTDIR}"
-    install -m 644 -s "${PEPPERFLASH_SRCDIR}/libpepflashplayer.so" \
-      "${PEPPERFLASH_DESTDIR}/"
-    install -m 644 "${PEPPERFLASH_SRCDIR}/manifest.json" \
-      "${PEPPERFLASH_DESTDIR}/"
   fi
 
   # libc++

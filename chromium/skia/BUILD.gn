@@ -363,7 +363,6 @@ component("skia") {
     "//third_party/skia/src/utils/SkInterpolator.cpp",
     "//third_party/skia/src/utils/SkLayer.cpp",
     "//third_party/skia/src/utils/SkMeshUtils.cpp",
-    "//third_party/skia/src/utils/SkNinePatch.cpp",
     "//third_party/skia/src/utils/SkOSFile.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
 
@@ -428,10 +427,10 @@ component("skia") {
 
   if (!is_linux) {
     sources -= [
-      "//third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp",
       "//third_party/skia/src/ports/SkFontConfigInterface_direct.cpp",
       "//third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp",
-      "//third_party/skia/src/ports/SkFontHost_fontconfig.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp",
+      "//third_party/skia/src/ports/SkFontMgr_FontConfigInterface_factory.cpp",
     ]
   }
 
@@ -481,7 +480,6 @@ component("skia") {
     ":skia_opts",
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//third_party/zlib",
   ]
 
   if (is_linux) {
@@ -508,13 +506,16 @@ component("skia") {
   }
 
   if (skia_support_pdf) {
-    deps += [ "//third_party/sfntly" ]
+    deps += [
+      "//third_party/sfntly",
+      "//third_party/zlib",
+    ]
     sources += gypi_skia_pdf.sources
   } else {
     sources += [ "//third_party/skia/src/pdf/SkDocument_PDF_None.cpp" ]
   }
 
-  if (is_android && !is_debug) {
+  if (!is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }
@@ -522,7 +523,6 @@ component("skia") {
   if (is_mac) {
     libs = [
       "AppKit.framework",
-      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "CoreText.framework",
@@ -547,6 +547,19 @@ component("skia") {
 
 # Separated out so it can be compiled with different flags for SSE.
 if (!skia_build_no_opts) {
+  if (current_cpu == "arm64") {
+    source_set("skia_opts_crc32") {
+      sources = gypi_skia_opts.crc32_sources
+      cflags = [ "-march=armv8-a+crc" ]
+      visibility = [ ":skia_opts" ]
+      configs -= [ "//build/config/compiler:chromium_code" ]
+      configs += [
+        ":skia_config",
+        ":skia_library_config",
+        "//build/config/compiler:no_chromium_code",
+      ]
+    }
+  }
   if (current_cpu == "x86" || current_cpu == "x64") {
     source_set("skia_opts_sse3") {
       sources = gypi_skia_opts.ssse3_sources
@@ -672,6 +685,7 @@ source_set("skia_opts") {
     }
   } else if (current_cpu == "arm64") {
     sources = gypi_skia_opts.arm64_sources
+    deps += [ ":skia_opts_crc32" ]
   } else if (current_cpu == "mipsel") {
     cflags += [ "-fomit-frame-pointer" ]
 
@@ -687,7 +701,7 @@ source_set("skia_opts") {
     assert(false, "Need to port cpu specific stuff from skia_library_opts.gyp")
   }
 
-  if (is_android && !is_debug) {
+  if (!is_debug) {
     configs -= [ "//build/config/compiler:default_optimization" ]
     configs += [ "//build/config/compiler:optimize_max" ]
   }

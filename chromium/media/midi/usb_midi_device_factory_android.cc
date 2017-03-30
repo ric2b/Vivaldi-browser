@@ -16,6 +16,8 @@
 #include "jni/UsbMidiDeviceFactoryAndroid_jni.h"
 #include "media/midi/usb_midi_device_android.h"
 
+using base::android::JavaParamRef;
+
 namespace media {
 namespace midi {
 
@@ -31,7 +33,7 @@ UsbMidiDeviceFactoryAndroid::~UsbMidiDeviceFactoryAndroid() {
   JNIEnv* env = base::android::AttachCurrentThread();
   if (!raw_factory_.is_null())
     Java_UsbMidiDeviceFactoryAndroid_close(
-        env, raw_factory_.obj(), base::android::GetApplicationContext());
+        env, raw_factory_, base::android::GetApplicationContext());
 }
 
 void UsbMidiDeviceFactoryAndroid::EnumerateDevices(
@@ -47,7 +49,7 @@ void UsbMidiDeviceFactoryAndroid::EnumerateDevices(
   callback_ = callback;
 
   if (Java_UsbMidiDeviceFactoryAndroid_enumerateDevices(
-          env, raw_factory_.obj(), base::android::GetApplicationContext())) {
+          env, raw_factory_, base::android::GetApplicationContext())) {
     // Asynchronous operation.
     return;
   }
@@ -78,7 +80,7 @@ void UsbMidiDeviceFactoryAndroid::OnUsbMidiDeviceAttached(
     const JavaParamRef<jobject>& caller,
     const JavaParamRef<jobject>& device) {
   delegate_->OnDeviceAttached(
-      base::WrapUnique(new UsbMidiDeviceAndroid(device, delegate_)));
+      base::MakeUnique<UsbMidiDeviceAndroid>(device, delegate_));
 }
 
 // Called from the Java world.

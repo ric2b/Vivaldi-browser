@@ -45,7 +45,6 @@
 #include "chrome/installer/util/l10n_string_util.h"
 #include "base/win/registry.h"
 
-
 namespace {
 
 void LogShortcutOperation(ShellUtil::ShortcutLocation location,
@@ -243,12 +242,12 @@ installer::InstallStatus InstallNewVersion(
     const base::FilePath& archive_path,
     const base::FilePath& src_path,
     const base::FilePath& temp_path,
-    const Version& new_version,
-    std::unique_ptr<Version>* current_version,
+    const base::Version& new_version,
+    std::unique_ptr<base::Version>* current_version,
     bool is_downgrade_allowed) {
   DCHECK(current_version);
 
-  installer_state.UpdateStage(installer::BUILDING);
+  installer_state.SetStage(installer::BUILDING);
 
   current_version->reset(installer_state.GetCurrentVersion(original_state));
   installer::SetCurrentVersionCrashKey(current_version->get());
@@ -268,10 +267,10 @@ installer::InstallStatus InstallNewVersion(
   base::FilePath new_chrome_exe(
       installer_state.target_path().Append(installer::kChromeNewExe));
 
-  installer_state.UpdateStage(installer::EXECUTING);
+  installer_state.SetStage(installer::EXECUTING);
 
   if (!install_list->Do()) {
-    installer_state.UpdateStage(installer::ROLLINGBACK);
+    installer_state.SetStage(installer::ROLLINGBACK);
     installer::InstallStatus result =
         base::PathExists(new_chrome_exe) && current_version->get() &&
         new_version == *current_version->get() ?
@@ -283,7 +282,7 @@ installer::InstallStatus InstallNewVersion(
     return result;
   }
 
-  installer_state.UpdateStage(installer::REFRESHING_POLICY);
+  installer_state.SetStage(installer::REFRESHING_POLICY);
 
   installer::RefreshElevationPolicy();
 
@@ -433,7 +432,7 @@ void EscapeXmlAttributeValueInSingleQuotes(base::string16* att_value) {
 }
 
 bool CreateVisualElementsManifest(const base::FilePath& src_path,
-                                  const Version& version) {
+                                  const base::Version& version) {
   // Construct the relative path to the versioned VisualElements directory.
   base::string16 elements_dir(base::ASCIIToUTF16(version.GetString()));
   elements_dir.push_back(base::FilePath::kSeparators[0]);
@@ -455,9 +454,9 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
             "xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance'>\r\n"
         "  <VisualElements\r\n"
         "      ShowNameOnSquare150x150Logo='on'\r\n"
-        "      Square150x150Logo='%ls\\Logo.png'\r\n"
-        "      Square70x70Logo='%ls\\SmallLogo.png'\r\n"
-        "      Square44x44Logo='%ls\\SmallLogo.png'\r\n"
+        "      Square150x150Logo='%ls\\Logo%ls.png'\r\n"
+        "      Square70x70Logo='%ls\\SmallLogo%ls.png'\r\n"
+        "      Square44x44Logo='%ls\\SmallLogo%ls.png'\r\n"
         "      ForegroundText='light'\r\n"
         "      BackgroundColor='#212121'/>\r\n"
         "</Application>\r\n";
@@ -473,9 +472,11 @@ bool CreateVisualElementsManifest(const base::FilePath& src_path,
     EscapeXmlAttributeValueInSingleQuotes(&display_name);
 
     // Fill the manifest with the desired values.
-    base::string16 manifest16(
-        base::StringPrintf(manifest_template.c_str(), elements_dir.c_str(),
-                           elements_dir.c_str(), elements_dir.c_str()));
+    const base::char16* canary_str =
+        InstallUtil::IsChromeSxSProcess() ? L"Canary" : L"";
+    base::string16 manifest16(base::StringPrintf(
+        manifest_template.c_str(), elements_dir.c_str(), canary_str,
+        elements_dir.c_str(), canary_str, elements_dir.c_str(), canary_str));
 
     // Write the manifest to |src_path|.
     const std::string manifest(base::UTF16ToUTF8(manifest16));
@@ -663,7 +664,7 @@ InstallStatus InstallOrUpdateProduct(
     const base::FilePath& src_path,
     const base::FilePath& prefs_path,
     const MasterPreferences& prefs,
-    const Version& new_version) {
+    const base::Version& new_version) {
   DCHECK(!installer_state.products().empty());
 
   // TODO(robertshield): Removing the pending on-reboot moves should be done
@@ -677,10 +678,10 @@ InstallStatus InstallOrUpdateProduct(
   // Create VisualElementManifest.xml in |src_path| (if required) so that it
   // looks as if it had been extracted from the archive when calling
   // InstallNewVersion() below.
-  installer_state.UpdateStage(installer::CREATING_VISUAL_MANIFEST);
+  installer_state.SetStage(CREATING_VISUAL_MANIFEST);
   CreateVisualElementsManifest(src_path, new_version);
 
-  std::unique_ptr<Version> existing_version;
+  std::unique_ptr<base::Version> existing_version;
   InstallStatus result =
       InstallNewVersion(original_state, installer_state, setup_path,
                         archive_path, src_path, install_temp_path, new_version,
@@ -689,13 +690,13 @@ InstallStatus InstallOrUpdateProduct(
   // TODO(robertshield): Everything below this line should instead be captured
   // by WorkItems.
   if (!InstallUtil::GetInstallReturnCode(result)) {
-    installer_state.UpdateStage(installer::UPDATING_CHANNELS);
+    installer_state.SetStage(UPDATING_CHANNELS);
 
     // Update the modifiers on the channel values for the product(s) being
     // installed and for the binaries in case of multi-install.
     installer_state.UpdateChannels();
 
-    installer_state.UpdateStage(installer::COPYING_PREFERENCES_FILE);
+    installer_state.SetStage(COPYING_PREFERENCES_FILE);
 #if defined(VIVALDI_PREINSTALLED_BOOKMARKS)
     if (result == FIRST_INSTALL_SUCCESS ||
         result == INSTALL_REPAIRED ||
@@ -707,7 +708,7 @@ InstallStatus InstallOrUpdateProduct(
     if (result == FIRST_INSTALL_SUCCESS && !prefs_path.empty())
       CopyPreferenceFileForFirstRun(installer_state, prefs_path);
 #endif
-    installer_state.UpdateStage(installer::CREATING_SHORTCUTS);
+    installer_state.SetStage(CREATING_SHORTCUTS);
 
     const installer::Product* chrome_product =
         installer_state.FindProduct(BrowserDistribution::CHROME_BROWSER);
@@ -742,7 +743,7 @@ InstallStatus InstallOrUpdateProduct(
 
     if (chrome_product) {
       // Register Chrome and, if requested, make Chrome the default browser.
-      installer_state.UpdateStage(installer::REGISTERING_CHROME);
+      installer_state.SetStage(REGISTERING_CHROME);
 
       bool make_chrome_default = false;
       prefs.GetBool(master_preferences::kMakeChromeDefault,
@@ -772,7 +773,7 @@ InstallStatus InstallOrUpdateProduct(
       }
     }
 
-    installer_state.UpdateStage(installer::REMOVING_OLD_VERSIONS);
+    installer_state.SetStage(REMOVING_OLD_VERSIONS);
 
     installer_state.RemoveOldVersionDirectories(
         new_version,

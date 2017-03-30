@@ -88,23 +88,23 @@ HTMLOptionElement* HTMLOptionElement::createForJSConstructor(Document& document,
     return element;
 }
 
-void HTMLOptionElement::attach(const AttachContext& context)
+void HTMLOptionElement::attachLayoutTree(const AttachContext& context)
 {
     AttachContext optionContext(context);
     if (context.resolvedStyle) {
-        ASSERT(!m_style || m_style == context.resolvedStyle);
+        DCHECK(!m_style || m_style == context.resolvedStyle);
         m_style = context.resolvedStyle;
     } else if (parentComputedStyle()) {
         updateNonComputedStyle();
         optionContext.resolvedStyle = m_style.get();
     }
-    HTMLElement::attach(optionContext);
+    HTMLElement::attachLayoutTree(optionContext);
 }
 
-void HTMLOptionElement::detach(const AttachContext& context)
+void HTMLOptionElement::detachLayoutTree(const AttachContext& context)
 {
     m_style.clear();
-    HTMLElement::detach(context);
+    HTMLElement::detachLayoutTree(context);
 }
 
 bool HTMLOptionElement::supportsFocus() const
@@ -171,7 +171,7 @@ void HTMLOptionElement::setText(const String &text, ExceptionState& exceptionSta
 void HTMLOptionElement::accessKeyAction(bool)
 {
     if (HTMLSelectElement* select = ownerSelectElement())
-        select->accessKeySetSelectedIndex(index());
+        select->selectOptionByAccessKey(this);
 }
 
 int HTMLOptionElement::index() const
@@ -183,13 +183,8 @@ int HTMLOptionElement::index() const
         return 0;
 
     int optionIndex = 0;
-
-    const HeapVector<Member<HTMLElement>>& items = selectElement->listItems();
-    size_t length = items.size();
-    for (size_t i = 0; i < length; ++i) {
-        if (!isHTMLOptionElement(*items[i]))
-            continue;
-        if (items[i].get() == this)
+    for (const auto& option : selectElement->optionList()) {
+        if (option == this)
             return optionIndex;
         ++optionIndex;
     }
@@ -469,7 +464,7 @@ bool HTMLOptionElement::isDisplayNone() const
         // display:none doesn't override children's display properties in
         // ComputedStyle.
         Element* parent = parentElement();
-        ASSERT(parent);
+        DCHECK(parent);
         if (isHTMLOptGroupElement(*parent)) {
             const ComputedStyle* parentStyle = parent->computedStyle() ? parent->computedStyle() : parent->ensureComputedStyle();
             return !parentStyle || parentStyle->display() == NONE;

@@ -1,0 +1,41 @@
+declare_args() {
+  build_branch = "master"
+}
+
+_vivaldi_version_py_path = "//build/util/version.py"
+
+_vivaldi_product_kind_file = "//vivaldi/VIVALDI_PRODUCT"
+
+_vivaldi_release_py_path = "//vivaldi/scripts/get_preview.py"
+
+release_kind =
+    exec_script(_vivaldi_release_py_path, [ build_branch ], "trim string")
+official_product_kind_string =
+    exec_script(_vivaldi_version_py_path,
+                [
+                  "-f",
+                  rebase_path(_vivaldi_product_kind_file, root_build_dir),
+                  "-t",
+                  "@VIVALDI_PRODUCT@",
+                ],
+                "trim string")
+
+if (release_kind == "final") {
+  extra_grit_defines = [
+    "-D",
+    "vivaldi_release_final",
+  ]
+  VIVALDI_RELEASE_KIND = "vivaldi_final"
+} else if (is_official_build) {
+  extra_grit_defines = [
+    "-D",
+    "vivaldi_release_snapshot",
+  ]
+  VIVALDI_RELEASE_KIND = "vivaldi_snapshot"
+} else {
+  extra_grit_defines = [
+    "-D",
+    "vivaldi_release_sopranos",
+  ]
+  VIVALDI_RELEASE_KIND = "vivaldi_sopranos"
+}

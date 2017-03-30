@@ -292,8 +292,10 @@ class Target : public Item {
   const OutputFile& dependency_output_file() const {
     return dependency_output_file_;
   }
-  const OutputFile& runtime_link_output_file() const {
-    return runtime_link_output_file_;
+
+  // The subset of computed_outputs that are considered runtime outputs.
+  const std::vector<OutputFile>& runtime_outputs() const {
+    return runtime_outputs_;
   }
 
   // Computes the set of output files resulting from compiling the given source
@@ -308,12 +310,25 @@ class Target : public Item {
                                Toolchain::ToolType* computed_tool_type,
                                std::vector<OutputFile>* outputs) const;
 
+  // <Vivaldi>
+  bool is_disabled() const {
+    return target_is_disabled;
+  }
+  void set_is_disabled(bool flag) {
+    target_is_disabled = flag;
+  }
+  const std::string &pool() const {
+    return target_pool;
+  }
+  void set_pool(const std::string &pool) {
+    target_pool = pool;
+  }
+  // </Vivaldi>
  private:
   FRIEND_TEST_ALL_PREFIXES(Target, ResolvePrecompiledHeaders);
 
   // Pulls necessary information from dependencies to this one when all
   // dependencies have been resolved.
-  void PullDependentTargetConfigsFrom(const Target* dep);
   void PullDependentTargetConfigs();
   void PullDependentTargetLibsFrom(const Target* dep, bool is_public);
   void PullDependentTargetLibs();
@@ -393,7 +408,12 @@ class Target : public Item {
   std::vector<OutputFile> computed_outputs_;
   OutputFile link_output_file_;
   OutputFile dependency_output_file_;
-  OutputFile runtime_link_output_file_;
+  std::vector<OutputFile> runtime_outputs_;
+
+  // <Vivaldi>
+  bool target_is_disabled=false;
+  std::string target_pool;
+  // </Vivaldi>
 
   DISALLOW_COPY_AND_ASSIGN(Target);
 };

@@ -4,14 +4,15 @@
 
 #include "core/editing/InputMethodController.h"
 
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Range.h"
+#include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLDocument.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,7 +23,7 @@ namespace blink {
 class InputMethodControllerTest : public ::testing::Test {
 protected:
     InputMethodController& controller() { return frame().inputMethodController(); }
-    HTMLDocument& document() const { return *m_document; }
+    Document& document() const { return *m_document; }
     LocalFrame& frame() const { return m_dummyPageHolder->frame(); }
     Element* insertHTMLElement(const char* elementCode, const char* elementId);
 
@@ -30,13 +31,13 @@ private:
     void SetUp() override;
 
     std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
-    Persistent<HTMLDocument> m_document;
+    Persistent<Document> m_document;
 };
 
 void InputMethodControllerTest::SetUp()
 {
     m_dummyPageHolder = DummyPageHolder::create(IntSize(800, 600));
-    m_document = toHTMLDocument(&m_dummyPageHolder->document());
+    m_document = &m_dummyPageHolder->document();
     DCHECK(m_document);
 }
 
@@ -349,7 +350,75 @@ TEST_F(InputMethodControllerTest, SetCompositionForContentEditableWithDifferentN
     EXPECT_EQ(24u, controller().getSelectionOffsets().end());
 }
 
-TEST_F(InputMethodControllerTest, CompositionFireBeforeInput)
+TEST_F(InputMethodControllerTest, SetCompositionWithEmptyText)
+{
+    Element* div = insertHTMLElement(
+        "<div id='sample' contenteditable='true'>hello</div>",
+        "sample");
+
+    controller().setEditableSelectionOffsets(PlainTextRange(2, 2));
+    EXPECT_STREQ("hello", div->innerText().utf8().data());
+    EXPECT_EQ(2u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(2u, controller().getSelectionOffsets().end());
+
+    Vector<CompositionUnderline> underlines0;
+    underlines0.append(CompositionUnderline(0, 0, Color(255, 0, 0), false, 0));
+    Vector<CompositionUnderline> underlines2;
+    underlines2.append(CompositionUnderline(0, 2, Color(255, 0, 0), false, 0));
+
+    controller().setComposition("AB", underlines2, 2, 2);
+    // With previous composition.
+    controller().setComposition("", underlines0, 2, 2);
+    EXPECT_STREQ("hello", div->innerText().utf8().data());
+    EXPECT_EQ(4u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(4u, controller().getSelectionOffsets().end());
+
+    // Without previous composition.
+    controller().setComposition("", underlines0, -1, -1);
+    EXPECT_STREQ("hello", div->innerText().utf8().data());
+    EXPECT_EQ(3u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(3u, controller().getSelectionOffsets().end());
+}
+
+TEST_F(InputMethodControllerTest, InsertLineBreakWhileComposingText)
+{
+    Element* div = insertHTMLElement(
+        "<div id='sample' contenteditable='true'></div>",
+        "sample");
+
+    Vector<CompositionUnderline> underlines;
+    underlines.append(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
+    controller().setComposition("hello", underlines, 5, 5);
+    EXPECT_STREQ("hello", div->innerText().utf8().data());
+    EXPECT_EQ(5u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(5u, controller().getSelectionOffsets().end());
+
+    frame().editor().insertLineBreak();
+    EXPECT_STREQ("\n\n", div->innerText().utf8().data());
+    EXPECT_EQ(1u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(1u, controller().getSelectionOffsets().end());
+}
+
+TEST_F(InputMethodControllerTest, InsertLineBreakAfterConfirmingText)
+{
+    Element* div = insertHTMLElement(
+        "<div id='sample' contenteditable='true'></div>",
+        "sample");
+
+    controller().confirmCompositionOrInsertText("hello", InputMethodController::ConfirmCompositionBehavior::KeepSelection);
+    EXPECT_STREQ("hello", div->innerText().utf8().data());
+
+    controller().setEditableSelectionOffsets(PlainTextRange(2, 2));
+    EXPECT_EQ(2u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(2u, controller().getSelectionOffsets().end());
+
+    frame().editor().insertLineBreak();
+    EXPECT_STREQ("he\nllo", div->innerText().utf8().data());
+    EXPECT_EQ(3u, controller().getSelectionOffsets().start());
+    EXPECT_EQ(3u, controller().getSelectionOffsets().end());
+}
+
+TEST_F(InputMethodControllerTest, CompositionInputEventIsComposing)
 {
     document().settings()->setScriptEnabled(true);
     Element* editable = insertHTMLElement("<div id='sample' contentEditable='true'></div>", "sample");
@@ -376,8 +445,42 @@ TEST_F(InputMethodControllerTest, CompositionFireBeforeInput)
 
     document().setTitle(emptyString());
     controller().confirmComposition();
-    // Last 'beforeinput' should also be inside composition scope.
+    // Last pair of InputEvent should also be inside composition scope.
     EXPECT_STREQ("beforeinput.isComposing:true;input.isComposing:true;", document().title().utf8().data());
+}
+
+TEST_F(InputMethodControllerTest, CompositionInputEventData)
+{
+    document().settings()->setScriptEnabled(true);
+    Element* editable = insertHTMLElement("<div id='sample' contentEditable='true'></div>", "sample");
+    Element* script = document().createElement("script", ASSERT_NO_EXCEPTION);
+    script->setInnerHTML(
+        "document.getElementById('sample').addEventListener('beforeinput', function(event) {"
+        "    document.title = `beforeinput.data:${event.data};`;"
+        "});"
+        "document.getElementById('sample').addEventListener('input', function(event) {"
+        "    document.title += `input.data:${event.data};`;"
+        "});",
+        ASSERT_NO_EXCEPTION);
+    document().body()->appendChild(script, ASSERT_NO_EXCEPTION);
+    document().view()->updateAllLifecyclePhases();
+
+    // Simulate composition in the |contentEditable|.
+    Vector<CompositionUnderline> underlines;
+    underlines.append(CompositionUnderline(0, 5, Color(255, 0, 0), false, 0));
+    editable->focus();
+
+    document().setTitle(emptyString());
+    controller().setComposition("n", underlines, 0, 1);
+    EXPECT_STREQ("beforeinput.data:n;input.data:n;", document().title().utf8().data());
+
+    document().setTitle(emptyString());
+    controller().setComposition("ni", underlines, 0, 1);
+    EXPECT_STREQ("beforeinput.data:ni;input.data:ni;", document().title().utf8().data());
+
+    document().setTitle(emptyString());
+    controller().confirmComposition();
+    EXPECT_STREQ("beforeinput.data:ni;input.data:ni;", document().title().utf8().data());
 }
 
 } // namespace blink

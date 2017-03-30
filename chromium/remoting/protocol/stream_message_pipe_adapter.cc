@@ -36,11 +36,13 @@ StreamMessagePipeAdapter::StreamMessagePipeAdapter(
 
 StreamMessagePipeAdapter::~StreamMessagePipeAdapter() {}
 
-void StreamMessagePipeAdapter::StartReceiving(
-    const MessageReceivedCallback& callback) {
-  reader_.StartReading(socket_.get(), callback,
+void StreamMessagePipeAdapter::Start(EventHandler* event_handler) {
+  reader_.StartReading(socket_.get(),
+                       base::Bind(&EventHandler::OnMessageReceived,
+                                  base::Unretained(event_handler)),
                        base::Bind(&StreamMessagePipeAdapter::CloseOnError,
                                   base::Unretained(this)));
+  event_handler->OnMessagePipeOpen();
 }
 
 void StreamMessagePipeAdapter::Send(google::protobuf::MessageLite* message,
@@ -85,8 +87,8 @@ void StreamMessageChannelFactoryAdapter::OnChannelCreated(
     error_callback_.Run(net::ERR_FAILED);
     return;
   }
-  callback.Run(base::WrapUnique(
-      new StreamMessagePipeAdapter(std::move(socket), error_callback_)));
+  callback.Run(base::MakeUnique<StreamMessagePipeAdapter>(std::move(socket),
+                                                          error_callback_));
 }
 
 }  // namespace protocol

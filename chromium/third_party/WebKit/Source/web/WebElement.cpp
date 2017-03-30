@@ -34,6 +34,7 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Element.h"
 #include "core/dom/custom/V0CustomElementProcessingStack.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLTextFormControlElement.h"
 #include "platform/graphics/Image.h"
 #include "public/platform/WebRect.h"
@@ -61,7 +62,8 @@ bool WebElement::isEditable() const
 {
     const Element* element = constUnwrap<Element>();
 
-    if (element->isContentEditable())
+    element->document().updateStyleAndLayoutTree();
+    if (hasEditableStyle(*element))
         return true;
 
     if (element->isTextFormControl()) {
@@ -70,7 +72,7 @@ bool WebElement::isEditable() const
             return true;
     }
 
-    return equalIgnoringCase(element->getAttribute(roleAttr), "textbox");
+    return equalIgnoringASCIICase(element->getAttribute(roleAttr), "textbox");
 }
 
 WebString WebElement::tagName() const

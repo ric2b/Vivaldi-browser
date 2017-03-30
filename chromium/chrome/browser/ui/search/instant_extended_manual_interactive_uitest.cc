@@ -13,7 +13,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/search_types.h"
+#include "chrome/common/search/search_types.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/interactive_test_utils.h"
@@ -72,10 +72,6 @@ class InstantExtendedManualTest : public InProcessBrowserTest,
   }
 
  protected:
-  void SetUpInProcessBrowserTestFixture() override {
-    search::EnableQueryExtractionForTesting();
-  }
-
   content::WebContents* active_tab() {
     return browser()->tab_strip_model()->GetActiveWebContents();
   }

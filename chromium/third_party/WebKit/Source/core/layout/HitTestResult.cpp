@@ -26,6 +26,7 @@
 #include "core/dom/PseudoElement.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/frame/LocalFrame.h"
@@ -399,7 +400,7 @@ bool HitTestResult::isContentEditable() const
         return !inputElement.isDisabledOrReadOnly() && inputElement.isTextField();
     }
 
-    return m_innerNode->hasEditableStyle();
+    return hasEditableStyle(*m_innerNode);
 }
 
 ListBasedHitTestBehavior HitTestResult::addNodeToListBasedTestResult(Node* node, const HitTestLocation& location, const LayoutRect& rect)

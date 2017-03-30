@@ -55,7 +55,7 @@ PassRefPtr<const SkPicture> LayoutSVGResourceMasker::createContentPicture(Affine
     GraphicsContext& context)
 {
     SVGUnitTypes::SVGUnitType contentUnits = toSVGMaskElement(element())->maskContentUnits()->currentValue()->enumValue();
-    if (contentUnits == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX) {
+    if (contentUnits == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
         contentTransformation.translate(targetBoundingBox.x(), targetBoundingBox.y());
         contentTransformation.scaleNonUniform(targetBoundingBox.width(), targetBoundingBox.height());
     }
@@ -81,7 +81,7 @@ PassRefPtr<const SkPicture> LayoutSVGResourceMasker::createContentPicture(Affine
         if (!layoutObject)
             continue;
         const ComputedStyle* style = layoutObject->style();
-        if (!style || style->display() == NONE || style->visibility() != VISIBLE)
+        if (!style || style->display() == NONE || style->visibility() != EVisibility::Visible)
             continue;
 
         SVGPaintContext::paintSubtree(pictureBuilder.context(), layoutObject);
@@ -98,7 +98,7 @@ void LayoutSVGResourceMasker::calculateMaskContentPaintInvalidationRect()
         if (!layoutObject)
             continue;
         const ComputedStyle* style = layoutObject->style();
-        if (!style || style->display() == NONE || style->visibility() != VISIBLE)
+        if (!style || style->display() == NONE || style->visibility() != EVisibility::Visible)
             continue;
         m_maskContentBoundaries.unite(layoutObject->localToSVGParentTransform().mapRect(layoutObject->paintInvalidationRectInLocalSVGCoordinates()));
     }
@@ -120,7 +120,7 @@ FloatRect LayoutSVGResourceMasker::resourceBoundingBox(const LayoutObject* objec
         calculateMaskContentPaintInvalidationRect();
 
     FloatRect maskRect = m_maskContentBoundaries;
-    if (maskElement->maskContentUnits()->currentValue()->value() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX) {
+    if (maskElement->maskContentUnits()->currentValue()->value() == SVGUnitTypes::kSvgUnitTypeObjectboundingbox) {
         AffineTransform transform;
         transform.translate(objectBoundingBox.x(), objectBoundingBox.y());
         transform.scaleNonUniform(objectBoundingBox.width(), objectBoundingBox.height());

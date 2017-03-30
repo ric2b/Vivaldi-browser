@@ -269,6 +269,7 @@
 <translation id="3392045790598181549">„<ph name="NAME" />“, елемент от меню</translation>
 <translation id="3406283310380167331">Показване на списъка с формуляри</translation>
 <translation id="3422338090358345848">Отваряне на инструмента за изследване на клавиатурата</translation>
+<translation id="3423495725743882470">ред $1, колона $2</translation>
 <translation id="3457000393508828486">Частично натиснато</translation>
 <translation id="3462439746547587373">„<ph name="NAME" />“, бутон</translation>
 <translation id="3473644018603298796"><ph name="COUNT" /> избрани</translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Автоматично довършване в списък</translation>
 <translation id="3810838688059735925">Видео</translation>
+<translation id="3812237531158591503">Поставяне на $1.</translation>
 <translation id="3816633764618089385">Следващият мултимедиен елемент</translation>
 <translation id="3819376190738087562">Няма преминавания.</translation>
 <translation id="385383972552776628">Отваряне на страницата с опции</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">Няма формуляри.</translation>
 <translation id="5005670136041063723">Няма повече подобни елементи.</translation>
 <translation id="501473567976723023">януари</translation>
+<translation id="5040591161308540832">Таблица $1 – $2 х $3</translation>
 <translation id="5041394372352067729">Преместване на брайловия дисплей в горната част на страницата</translation>
 <translation id="5042770794184672516">Увеличаване на силата на звука на говора</translation>
 <translation id="5050015258024679800">Предишното заглавие от четвърто ниво</translation>
@@ -518,7 +521,6 @@
 <translation id="5876817486144482042">Намаляване на силата на звука на говора</translation>
 <translation id="5887397643266327462">Брайловите надписи са активирани.</translation>
 <translation id="5891934789323004067">Таблица</translation>
-<translation id="5919442531159595654">копиране.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{знак за равенство}other{# знака за равенство}}</translation>
 <translation id="5939518447894949180">Нулиране</translation>
 <translation id="5948123859135882163">Превключвайте между структурно и семантично интерпретиране на математическите изрази</translation>
@@ -554,6 +556,8 @@
 <translation id="6355910664415701303">Няма предишен списъчен елемент.</translation>
 <translation id="6364795331201459219">заглавие от шесто ниво</translation>
 <translation id="6368143427468974988">Предишното заглавие</translation>
+<translation id="6378565991815958969">Копиране на $1.</translation>
+<translation id="6385591741672306837">кол.</translation>
 <translation id="6387719785439924554">странично съдържание</translation>
 <translation id="6411426777058107714">Няма предишен бутон за избор.</translation>
 <translation id="6414968628640960377">Предишният различен елемент.</translation>
@@ -653,7 +657,6 @@
 <translation id="7532613204005497612">юни</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, „<ph name="NAME" />“, плъзгач</translation>
 <translation id="7552432549459840808">Полезни клавишни комбинации в Chrome</translation>
-<translation id="7586163296341959563">поставяне.</translation>
 <translation id="7596919493010894443">открояването е изчистено</translation>
 <translation id="7604026522577407655">Към началото на текущата графа</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@
 <translation id="8153880621934657047">Не сте в таблицата.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{долна черта}other{# долни черти}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">ред</translation>
 <translation id="8186185314313222077">превключване на режима на цял екран</translation>
-<translation id="81960742267269908">изрязване.</translation>
 <translation id="8199231515320852133">Съобщаване на заглавките за текущата клетка</translation>
 <translation id="820417203470636242">Празна клетка.</translation>
 <translation id="8215202828671303819">Избор на няколко елемента</translation>
@@ -782,6 +785,7 @@
 <translation id="9077213568694924680">премахнати от открояването</translation>
 <translation id="9082874451376019682">Няма предишен плъзгач.</translation>
 <translation id="9089864840575085222">Цикъл на ехото при въвеждане</translation>
+<translation id="9105227991373418255">Изрязване на $1.</translation>
 <translation id="9107530006868467849">Няма предишно приспособление за мултимедия.</translation>
 <translation id="9108370397979208512">математически израз</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@
 <translation id="9115913704608474258">ноември</translation>
 <translation id="9128414153595658330">диалогов прозорец</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Раздел</translation>
 <translation id="9151211641321628915">Съобщава кратко описание на текущата позиция</translation>
 <translation id="9153606228985488238">Височина: <ph name="PERCENT" /> процента</translation>
 <translation id="9160096769946561184">Към края на текущата графа</translation>

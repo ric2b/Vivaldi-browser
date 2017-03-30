@@ -1,0 +1,65 @@
+if (is_win) {
+  foreach(_target,
+          [
+            "//chrome/test:interactive_ui_tests",
+            "//chrome/test:browser_tests",
+            "//chrome/test:unit_tests",
+            "//chrome/test:sync_integration_tests",
+            "//components:components_unittests",
+            "//ash:ash_unittests",
+            "//content/test:content_browsertests",
+          ]) {
+    post_process_template(_target) {
+      pool = "build_toolchain_win_huge_pool"
+    }
+  }
+  foreach(_target,
+          [
+            "//chrome:chrome_child",
+            "//chrome:main_dll",
+            "//content/shell:content_shell",
+          ]) {
+    post_process_target(_target) {
+      pool = "build_toolchain_win_huge_pool"
+    }
+  }
+
+  foreach(_target,
+          [
+            "//ash:ash_unittests",
+            "//content/test:content_unittests",
+            "//chrome/test:browser_tests",
+            "//content/test:content_browsertests",
+            "//components:components_unittests",
+          ]) {
+    post_process_template(_target) {
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs += [ "//build/config/win:no_incremental_linking" ]
+    }
+  }
+}
+
+if (is_mac) {
+  post_process_template("//chrome/:chrome_framework") {
+    ldflags += [
+      "-Wl,-rpath,@loader_path/../../../Frameworks",
+    ]
+  }
+
+  foreach(_target,
+          [
+            "//chrome/test:unit_tests",
+            "//chrome/test:browser_tests",
+            "//chrome/test:interactive_ui_tests",
+            "//chrome/test:sync_integration_tests",
+          ]) {
+    post_process_template(_target) {
+      if (!defined(ldflags)) {
+        ldflags = []
+      }
+      ldflags += [
+        "-Wl,-rpath,@executable_path/../../third_party/sparkle_lib/",
+      ]
+    }
+  }
+}

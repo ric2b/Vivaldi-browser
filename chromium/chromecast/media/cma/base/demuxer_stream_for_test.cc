@@ -78,6 +78,19 @@ bool DemuxerStreamForTest::SupportsConfigChanges() {
   return ::media::VIDEO_ROTATION_0;
 }
 
+bool DemuxerStreamForTest::enabled() const {
+  return true;
+}
+
+void DemuxerStreamForTest::set_enabled(bool enabled, base::TimeDelta time) {
+  NOTIMPLEMENTED();
+}
+
+void DemuxerStreamForTest::SetStreamStatusChangeCB(
+    const StreamStatusChangeCB& cb) {
+  NOTIMPLEMENTED();
+}
+
 void DemuxerStreamForTest::DoRead(const ReadCB& read_cb) {
   has_pending_read_ = false;
 

@@ -69,14 +69,16 @@ class PasswordStoreX : public password_manager::PasswordStoreDefault {
         base::Time delete_end,
         password_manager::PasswordStoreChangeList* changes) = 0;
 
-    // Sets the 'skip_zero_click' flag to 'true' for all logins in the database.
-    virtual bool DisableAutoSignInForAllLogins(
+    // Sets the 'skip_zero_click' flag to 'true' for all logins in the database
+    // that match |origin_filter|.
+    virtual bool DisableAutoSignInForOrigins(
+        const base::Callback<bool(const GURL&)>& origin_filter,
         password_manager::PasswordStoreChangeList* changes) = 0;
 
     // The three methods below overwrite |forms| with all stored credentials
     // matching |form|, all stored non-blacklisted credentials, and all stored
     // blacklisted credentials, respectively. On success, they return true.
-    virtual bool GetLogins(const autofill::PasswordForm& form,
+    virtual bool GetLogins(const FormDigest& form,
                            ScopedVector<autofill::PasswordForm>* forms)
         WARN_UNUSED_RESULT = 0;
     virtual bool GetAutofillableLogins(
@@ -116,14 +118,14 @@ class PasswordStoreX : public password_manager::PasswordStoreDefault {
   password_manager::PasswordStoreChangeList RemoveLoginsSyncedBetweenImpl(
       base::Time delete_begin,
       base::Time delete_end) override;
-  password_manager::PasswordStoreChangeList DisableAutoSignInForAllLoginsImpl()
-      override;
-  ScopedVector<autofill::PasswordForm> FillMatchingLogins(
-      const autofill::PasswordForm& form) override;
+  password_manager::PasswordStoreChangeList DisableAutoSignInForOriginsImpl(
+      const base::Callback<bool(const GURL&)>& origin_filter) override;
+  std::vector<std::unique_ptr<autofill::PasswordForm>> FillMatchingLogins(
+      const FormDigest& form) override;
   bool FillAutofillableLogins(
-      ScopedVector<autofill::PasswordForm>* forms) override;
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) override;
   bool FillBlacklistLogins(
-      ScopedVector<autofill::PasswordForm>* forms) override;
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) override;
 
   // Check to see whether migration is necessary, and perform it if so.
   void CheckMigration();

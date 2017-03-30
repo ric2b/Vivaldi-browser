@@ -19,7 +19,7 @@
 #include "ui/gfx/geometry/rect.h"
 
 #if defined(OS_ANDROID)
-#include "content/browser/renderer_host/compositor_impl_android.h"
+#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
 #else
 #include "content/browser/compositor/image_transport_factory.h"
 #include "ui/compositor/compositor.h"  // nogncheck
@@ -76,7 +76,7 @@ void PrepareTextureCopyOutputResult(
   if (!bitmap->tryAllocPixels(SkImageInfo::Make(
           dst_size_in_pixel.width(), dst_size_in_pixel.height(), color_type,
           kOpaque_SkAlphaType))) {
-    scoped_callback_runner.Reset(base::Bind(
+    scoped_callback_runner.ReplaceClosure(base::Bind(
         callback, SkBitmap(), content::READBACK_BITMAP_ALLOCATION_FAILURE));
     return;
   }
@@ -158,18 +158,18 @@ void PrepareBitmapCopyOutputResult(
 
 namespace content {
 
-std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() {
+uint32_t AllocateSurfaceClientId() {
 #if defined(OS_ANDROID)
-  return CompositorImpl::CreateSurfaceIdAllocator();
+  return ContextProviderFactoryImpl::GetInstance()->AllocateSurfaceClientId();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  return factory->GetContextFactory()->CreateSurfaceIdAllocator();
+  return factory->GetContextFactory()->AllocateSurfaceClientId();
 #endif
 }
 
 cc::SurfaceManager* GetSurfaceManager() {
 #if defined(OS_ANDROID)
-  return CompositorImpl::GetSurfaceManager();
+  return ContextProviderFactoryImpl::GetInstance()->GetSurfaceManager();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   if (factory == NULL)

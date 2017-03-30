@@ -32,7 +32,6 @@
           font-size: inherit;
           height: var(--item-height);
           line-height: inherit;
-          padding: 0 16px;
         };
         --paper-item-disabled: {
           color: inherit;
@@ -42,10 +41,6 @@
         };
         --paper-item-focused-before: {
           background: none;
-        };
-        --paper-item-selected: {
-          background: rgba(0, 0, 0, .04);
-          font-weight: normal;
         };
       }
 
@@ -68,7 +63,7 @@
     <user-manager-dialog id="dialog">
       <div class="title">$i18n{supervisedUserImportTitle}</div>
       <div class="body">
-        <div id="message">[[getMessage_(supervisedUsers_)]]</div>
+        <div id="message">$i18n{supervisedUserImportText}</div>
         <paper-listbox class="no-padding" selected="{{supervisedUserIndex_}}">
           <template is="dom-repeat" items="[[supervisedUsers_]]">
             <paper-item disabled="[[item.onCurrentDevice]]">

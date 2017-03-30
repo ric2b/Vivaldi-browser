@@ -93,6 +93,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/test/gtest_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
@@ -107,6 +108,7 @@
 #include "net/url_request/url_request_redirect_job.h"
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -125,6 +127,9 @@
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_comptr.h"
 #endif
+
+using net::test::IsError;
+using net::test::IsOk;
 
 using base::ASCIIToUTF16;
 using base::Time;
@@ -669,9 +674,12 @@ class MockCertificateReportSender
   MockCertificateReportSender() {}
   ~MockCertificateReportSender() override {}
 
-  void Send(const GURL& report_uri, const std::string& report) override {
+  void Send(const GURL& report_uri,
+            base::StringPiece content_type,
+            base::StringPiece report) override {
     latest_report_uri_ = report_uri;
-    latest_report_ = report;
+    report.CopyToString(&latest_report_);
+    content_type.CopyToString(&latest_content_type_);
   }
 
   void SetErrorCallback(
@@ -679,16 +687,43 @@ class MockCertificateReportSender
 
   const GURL& latest_report_uri() { return latest_report_uri_; }
   const std::string& latest_report() { return latest_report_; }
+  const std::string& latest_content_type() { return latest_content_type_; }
 
  private:
   GURL latest_report_uri_;
   std::string latest_report_;
+  std::string latest_content_type_;
 };
 
 class TestExperimentalFeaturesNetworkDelegate : public TestNetworkDelegate {
  public:
   bool OnAreExperimentalCookieFeaturesEnabled() const override { return true; }
   bool OnAreStrictSecureCookiesEnabled() const override { return true; }
+};
+
+// OCSPErrorTestDelegate caches the SSLInfo passed to OnSSLCertificateError.
+// This is needed because after the certificate failure, the URLRequest will
+// retry the connection, and return a partial SSLInfo with a cached cert status.
+// The partial SSLInfo does not have the OCSP information filled out.
+class OCSPErrorTestDelegate : public TestDelegate {
+ public:
+  void OnSSLCertificateError(URLRequest* request,
+                             const SSLInfo& ssl_info,
+                             bool fatal) override {
+    ssl_info_ = ssl_info;
+    on_ssl_certificate_error_called_ = true;
+    TestDelegate::OnSSLCertificateError(request, ssl_info, fatal);
+  }
+
+  bool on_ssl_certificate_error_called() {
+    return on_ssl_certificate_error_called_;
+  }
+
+  SSLInfo ssl_info() { return ssl_info_; }
+
+ private:
+  bool on_ssl_certificate_error_called_ = false;
+  SSLInfo ssl_info_;
 };
 
 }  // namespace
@@ -2129,10 +2164,11 @@ TEST_F(URLRequestTest, MAYBE_NetworkDelegateProxyError) {
   // The proxy server is not set before failure.
   EXPECT_TRUE(req->proxy_server().IsEmpty());
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
-  EXPECT_EQ(ERR_PROXY_CONNECTION_FAILED, req->status().error());
+  EXPECT_THAT(req->status().error(), IsError(ERR_PROXY_CONNECTION_FAILED));
 
   EXPECT_EQ(1, network_delegate.error_count());
-  EXPECT_EQ(ERR_PROXY_CONNECTION_FAILED, network_delegate.last_error());
+  EXPECT_THAT(network_delegate.last_error(),
+              IsError(ERR_PROXY_CONNECTION_FAILED));
   EXPECT_EQ(1, network_delegate.completed_requests());
 }
 
@@ -3167,7 +3203,7 @@ class URLRequestTestHTTP : public URLRequestTest {
     base::RunLoop().Run();
     EXPECT_EQ(redirect_method, req->method());
     EXPECT_EQ(URLRequestStatus::SUCCESS, req->status().status());
-    EXPECT_EQ(OK, req->status().error());
+    EXPECT_THAT(req->status().error(), IsOk());
     if (include_data) {
       if (request_method == redirect_method) {
         EXPECT_TRUE(req->extra_request_headers().HasHeader(
@@ -3508,7 +3544,7 @@ TEST_F(TokenBindingURLRequestTest, DontForwardHeaderFromHttp) {
 }
 
 // Test that if a server supporting Token Binding redirects (with
-// Include-Referer-Token-Binding-ID) to an https url on a server that does not
+// Include-Referred-Token-Binding-ID) to an https url on a server that does not
 // support Token Binding, then we do not send a Sec-Token-Binding when following
 // the redirect.
 TEST_F(TokenBindingURLRequestTest, ForwardWithoutTokenBinding) {
@@ -3571,7 +3607,7 @@ TEST_F(URLRequestTestHTTP, ProxyTunnelRedirectTest) {
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
     // The proxy server is not set before failure.
     EXPECT_TRUE(r->proxy_server().IsEmpty());
-    EXPECT_EQ(ERR_TUNNEL_CONNECTION_FAILED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_TUNNEL_CONNECTION_FAILED));
     EXPECT_EQ(1, d.response_started_count());
     // We should not have followed the redirect.
     EXPECT_EQ(0, d.received_redirect_count());
@@ -3599,13 +3635,14 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateTunnelConnectionFailed) {
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
     // The proxy server is not set before failure.
     EXPECT_TRUE(r->proxy_server().IsEmpty());
-    EXPECT_EQ(ERR_TUNNEL_CONNECTION_FAILED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_TUNNEL_CONNECTION_FAILED));
     EXPECT_EQ(1, d.response_started_count());
     // We should not have followed the redirect.
     EXPECT_EQ(0, d.received_redirect_count());
 
     EXPECT_EQ(1, network_delegate.error_count());
-    EXPECT_EQ(ERR_TUNNEL_CONNECTION_FAILED, network_delegate.last_error());
+    EXPECT_THAT(network_delegate.last_error(),
+                IsError(ERR_TUNNEL_CONNECTION_FAILED));
   }
 }
 
@@ -3675,7 +3712,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelRequest) {
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
     // The proxy server is not set before cancellation.
     EXPECT_TRUE(r->proxy_server().IsEmpty());
-    EXPECT_EQ(ERR_EMPTY_RESPONSE, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_EMPTY_RESPONSE));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -3708,7 +3745,7 @@ void NetworkDelegateCancelRequest(BlockingNetworkDelegate::BlockMode block_mode,
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
     // The proxy server is not set before cancellation.
     EXPECT_TRUE(r->proxy_server().IsEmpty());
-    EXPECT_EQ(ERR_BLOCKED_BY_CLIENT, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_BLOCKED_BY_CLIENT));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -3960,7 +3997,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateRedirectRequestOnHeadersReceived) {
     EXPECT_TRUE(network_delegate.last_observed_proxy().Equals(
         http_test_server()->host_port_pair()));
 
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(redirect_url, r->url());
     EXPECT_EQ(original_url, r->original_url());
     EXPECT_EQ(2U, r->url_chain().size());
@@ -4144,7 +4181,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateOnAuthRequiredSyncCancel) {
     base::RunLoop().Run();
 
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(401, r->GetResponseCode());
     EXPECT_FALSE(d.auth_required_called());
     EXPECT_EQ(1, network_delegate.created_requests());
@@ -4249,7 +4286,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateOnAuthRequiredAsyncCancel) {
     base::RunLoop().Run();
 
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(401, r->GetResponseCode());
     EXPECT_FALSE(d.auth_required_called());
     EXPECT_EQ(1, network_delegate.created_requests());
@@ -4287,7 +4324,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting1) {
     // Ensure that network delegate is notified.
     EXPECT_EQ(1, network_delegate.completed_requests());
     EXPECT_EQ(URLRequestStatus::CANCELED, r->status().status());
-    EXPECT_EQ(ERR_ABORTED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_ABORTED));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -4325,7 +4362,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting2) {
     // Ensure that network delegate is notified.
     EXPECT_EQ(1, network_delegate.completed_requests());
     EXPECT_EQ(URLRequestStatus::CANCELED, r->status().status());
-    EXPECT_EQ(ERR_ABORTED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_ABORTED));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -4361,7 +4398,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting3) {
     // Ensure that network delegate is notified.
     EXPECT_EQ(1, network_delegate.completed_requests());
     EXPECT_EQ(URLRequestStatus::CANCELED, r->status().status());
-    EXPECT_EQ(ERR_ABORTED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_ABORTED));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -4397,7 +4434,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting4) {
     // Ensure that network delegate is notified.
     EXPECT_EQ(1, network_delegate.completed_requests());
     EXPECT_EQ(URLRequestStatus::CANCELED, r->status().status());
-    EXPECT_EQ(ERR_ABORTED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_ABORTED));
     EXPECT_EQ(1, network_delegate.created_requests());
     EXPECT_EQ(0, network_delegate.destroyed_requests());
   }
@@ -4449,7 +4486,7 @@ TEST_F(URLRequestTestHTTP, UnexpectedServerAuthTest) {
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
     // The proxy server is not set before failure.
     EXPECT_TRUE(r->proxy_server().IsEmpty());
-    EXPECT_EQ(ERR_TUNNEL_CONNECTION_FAILED, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_TUNNEL_CONNECTION_FAILED));
   }
 }
 
@@ -4623,7 +4660,14 @@ TEST_F(URLRequestTestHTTP, GetZippedTest) {
   const bool test_expect_success[num_tests] =
       { true, true, false, false, true };
 
-  for (int i = 0; i < num_tests ; i++) {
+  base::FilePath file_path;
+  PathService::Get(base::DIR_SOURCE_ROOT, &file_path);
+  file_path = file_path.Append(kTestFilePath);
+  file_path = file_path.Append(FILE_PATH_LITERAL("BullRunSpeech.txt"));
+  std::string expected_content;
+  ASSERT_TRUE(base::ReadFileToString(file_path, &expected_content));
+
+  for (int i = 0; i < num_tests; i++) {
     TestDelegate d;
     {
       std::string test_file = base::StringPrintf(
@@ -4649,6 +4693,13 @@ TEST_F(URLRequestTestHTTP, GetZippedTest) {
       if (test_expect_success[i]) {
         EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status())
             << " Parameter = \"" << test_file << "\"";
+        if (test_parameters[i] == 'S') {
+          // When content length is smaller than both compressed length and
+          // uncompressed length, HttpStreamParser might not read the full
+          // response body.
+          continue;
+        }
+        EXPECT_EQ(expected_content, d.data_received());
       } else {
         EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
         EXPECT_EQ(ERR_CONTENT_LENGTH_MISMATCH, r->status().error())
@@ -4785,21 +4836,6 @@ class AsyncDelegateLogger : public base::RefCounted<AsyncDelegateLogger> {
     EXPECT_EQ(NetLog::TYPE_DELEGATE_INFO, entries[log_position].type);
     EXPECT_EQ(NetLog::PHASE_END, entries[log_position].phase);
 
-    return log_position + 1;
-  }
-
-  // Find delegate request begin and end messages for OnBeforeNetworkStart.
-  // Returns the position of the end message.
-  static size_t ExpectBeforeNetworkEvents(const TestNetLogEntry::List& entries,
-                                          size_t log_position) {
-    log_position =
-        ExpectLogContainsSomewhereAfter(entries,
-                                        log_position,
-                                        NetLog::TYPE_URL_REQUEST_DELEGATE,
-                                        NetLog::PHASE_BEGIN);
-    EXPECT_EQ(NetLog::TYPE_URL_REQUEST_DELEGATE,
-              entries[log_position + 1].type);
-    EXPECT_EQ(NetLog::PHASE_END, entries[log_position + 1].phase);
     return log_position + 1;
   }
 
@@ -5115,11 +5151,6 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfo) {
     ASSERT_LT(log_position, entries.size());
     EXPECT_EQ(NetLog::TYPE_URL_REQUEST_DELEGATE, entries[log_position].type);
     EXPECT_EQ(NetLog::PHASE_END, entries[log_position].phase);
-
-    if (i == 1) {
-      log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-          entries, log_position + 1);
-    }
   }
 
   EXPECT_FALSE(LogContainsEntryWithTypeAfter(
@@ -5174,11 +5205,6 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfoRedirect) {
     ASSERT_LT(log_position, entries.size());
     EXPECT_EQ(NetLog::TYPE_URL_REQUEST_DELEGATE, entries[log_position].type);
     EXPECT_EQ(NetLog::PHASE_END, entries[log_position].phase);
-
-    if (i == 1) {
-      log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-          entries, log_position + 1);
-    }
   }
 
   // The URLRequest::Delegate then gets informed about the redirect.
@@ -5258,11 +5284,6 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfoAuth) {
     ASSERT_LT(log_position, entries.size());
     EXPECT_EQ(NetLog::TYPE_URL_REQUEST_DELEGATE, entries[log_position].type);
     EXPECT_EQ(NetLog::PHASE_END, entries[log_position].phase);
-
-    if (i == 1) {
-      log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-          entries, log_position + 1);
-    }
   }
 
   EXPECT_FALSE(LogContainsEntryWithTypeAfter(
@@ -5307,9 +5328,6 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateInfo) {
   net_log_.GetEntries(&entries);
 
   size_t log_position = 0;
-
-  log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-      entries, log_position);
 
   // The delegate info should only have been logged on header complete.  Other
   // times it should silently be ignored.
@@ -5364,11 +5382,6 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateInfoOnRedirect) {
   // OnResponseStarted.
   size_t log_position = 0;
   for (int i = 0; i < 2; ++i) {
-    if (i == 0) {
-      log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-                         entries, log_position) + 1;
-    }
-
     log_position = ExpectLogContainsSomewhereAfter(
             entries,
             log_position,
@@ -5428,11 +5441,6 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateOnRedirectCancelled) {
     // still currently supported in that call.
     size_t log_position = 0;
     for (int i = 0; i < 2; ++i) {
-      if (i == 0) {
-        log_position = AsyncDelegateLogger::ExpectBeforeNetworkEvents(
-                           entries, log_position) + 1;
-      }
-
       log_position = ExpectLogContainsSomewhereAfter(
               entries,
               log_position,
@@ -5762,7 +5770,7 @@ TEST_F(URLRequestTestHTTP, PostUnreadableFileTest) {
     EXPECT_FALSE(d.received_data_before_response());
     EXPECT_EQ(0, d.bytes_received());
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
-    EXPECT_EQ(ERR_FILE_NOT_FOUND, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_FILE_NOT_FOUND));
   }
 }
 
@@ -5955,31 +5963,16 @@ TEST_F(URLRequestTestHTTP, STSNotProcessedOnIP) {
       security_state->GetDynamicSTSState(test_server_hostname, &sts_state));
 }
 
-// Android's CertVerifyProc does not (yet) handle pins. Therefore, it will
-// reject HPKP headers, and a test setting only HPKP headers will fail (no
-// PKPState present because header rejected).
-#if defined(OS_ANDROID)
-#define MAYBE_ProcessPKP DISABLED_ProcessPKP
-#define MAYBE_ProcessPKPAndSendReport DISABLED_ProcessPKPAndSendReport
-#define MAYBE_ProcessPKPReportOnly DISABLED_ProcessPKPReportOnly
-#define MAYBE_ProcessPKPReportOnlyWithNoViolation \
-  DISABLED_ProcessPKPReportOnlyWithNoViolation
-#else
-#define MAYBE_ProcessPKP ProcessPKP
-#define MAYBE_ProcessPKPAndSendReport ProcessPKPAndSendReport
-#define MAYBE_ProcessPKPReportOnly ProcessPKPReportOnly
-#define MAYBE_ProcessPKPReportOnlyWithNoViolation \
-  ProcessPKPReportOnlyWithNoViolation
-#endif
-
 namespace {
 const char kExpectCTStaticHostname[] = "preloaded-expect-ct.badssl.com";
+const char kExpectStapleStaticHostname[] = "preloaded-expect-staple.badssl.com";
+const char kExpectStapleReportURI[] = "https://report.badssl.com/expect-staple";
 const char kHPKPReportUri[] = "https://hpkp-report.test";
 }  // namespace
 
 // Tests that enabling HPKP on a domain does not affect the HSTS
 // validity/expiration.
-TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKP) {
+TEST_F(URLRequestTestHTTP, ProcessPKP) {
   GURL report_uri(kHPKPReportUri);
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6013,7 +6006,7 @@ TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKP) {
 }
 
 // Tests that reports get sent on HPKP violations when a report-uri is set.
-TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPAndSendReport) {
+TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   GURL report_uri(kHPKPReportUri);
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6078,6 +6071,8 @@ TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPAndSendReport) {
   // Check that a report was sent.
   EXPECT_EQ(report_uri, mock_report_sender.latest_report_uri());
   ASSERT_FALSE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ("application/json; charset=utf-8",
+            mock_report_sender.latest_content_type());
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
@@ -6091,7 +6086,7 @@ TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPAndSendReport) {
 
 // Tests that reports get sent on requests with
 // Public-Key-Pins-Report-Only headers.
-TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPReportOnly) {
+TEST_F(URLRequestTestHTTP, ProcessPKPReportOnly) {
   GURL report_uri(kHPKPReportUri);
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6141,6 +6136,8 @@ TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPReportOnly) {
   // Check that a report was sent.
   EXPECT_EQ(report_uri, mock_report_sender.latest_report_uri());
   ASSERT_FALSE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ("application/json; charset=utf-8",
+            mock_report_sender.latest_content_type());
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
@@ -6154,7 +6151,7 @@ TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPReportOnly) {
 
 // Tests that reports do not get sent on requests with
 // Public-Key-Pins-Report-Only headers that don't have pin violations.
-TEST_F(URLRequestTestHTTP, MAYBE_ProcessPKPReportOnlyWithNoViolation) {
+TEST_F(URLRequestTestHTTP, ProcessPKPReportOnlyWithNoViolation) {
   GURL report_uri(kHPKPReportUri);
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6556,7 +6553,7 @@ TEST_F(URLRequestTestHTTP, RestrictFileRedirects) {
   base::RunLoop().Run();
 
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
-  EXPECT_EQ(ERR_UNSAFE_REDIRECT, req->status().error());
+  EXPECT_THAT(req->status().error(), IsError(ERR_UNSAFE_REDIRECT));
 }
 #endif  // !defined(DISABLE_FILE_SUPPORT)
 
@@ -6571,7 +6568,7 @@ TEST_F(URLRequestTestHTTP, RestrictDataRedirects) {
   base::RunLoop().Run();
 
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
-  EXPECT_EQ(ERR_UNSAFE_REDIRECT, req->status().error());
+  EXPECT_THAT(req->status().error(), IsError(ERR_UNSAFE_REDIRECT));
 }
 
 TEST_F(URLRequestTestHTTP, RedirectToInvalidURL) {
@@ -6585,7 +6582,7 @@ TEST_F(URLRequestTestHTTP, RedirectToInvalidURL) {
   base::RunLoop().Run();
 
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
-  EXPECT_EQ(ERR_INVALID_URL, req->status().error());
+  EXPECT_THAT(req->status().error(), IsError(ERR_INVALID_URL));
 }
 
 // Make sure redirects are cached, despite not reading their bodies.
@@ -6683,7 +6680,7 @@ TEST_F(URLRequestTestHTTP, UnsafeRedirectToWhitelistedUnsafeURL) {
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
 
     EXPECT_EQ(2U, r->url_chain().size());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(unsafe_url, r->url());
     EXPECT_EQ("this-is-considered-an-unsafe-url", d.data_received());
   }
@@ -6709,7 +6706,7 @@ TEST_F(URLRequestTestHTTP, UnsafeRedirectToDifferentUnsafeURL) {
     base::RunLoop().Run();
 
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
-    EXPECT_EQ(ERR_UNSAFE_REDIRECT, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_UNSAFE_REDIRECT));
   }
 }
 
@@ -6735,7 +6732,7 @@ TEST_F(URLRequestTestHTTP, UnsafeRedirectWithDifferentReferenceFragment) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(original_url, r->original_url());
     EXPECT_EQ(expected_url, r->url());
   }
@@ -6765,7 +6762,7 @@ TEST_F(URLRequestTestHTTP, RedirectWithReferenceFragmentAndUnrelatedUnsafeUrl) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(original_url, r->original_url());
     EXPECT_EQ(expected_redirect_url, r->url());
   }
@@ -6794,7 +6791,7 @@ TEST_F(URLRequestTestHTTP, RedirectWithReferenceFragment) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(original_url, r->original_url());
     EXPECT_EQ(redirect_url, r->url());
   }
@@ -6822,7 +6819,7 @@ TEST_F(URLRequestTestHTTP, RedirectJobWithReferenceFragment) {
   base::RunLoop().Run();
 
   EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-  EXPECT_EQ(OK, r->status().error());
+  EXPECT_THAT(r->status().error(), IsOk());
   EXPECT_EQ(original_url, r->original_url());
   EXPECT_EQ(redirect_url, r->url());
 }
@@ -6879,96 +6876,6 @@ TEST_F(URLRequestTestHTTP, EmptyReferrerAfterValidReferrer) {
   base::RunLoop().Run();
 
   EXPECT_EQ(std::string("None"), d.data_received());
-}
-
-// Defer network start and then resume, checking that the request was a success
-// and bytes were received.
-TEST_F(URLRequestTestHTTP, DeferredBeforeNetworkStart) {
-  ASSERT_TRUE(http_test_server()->Start());
-
-  TestDelegate d;
-  {
-    d.set_quit_on_network_start(true);
-    GURL test_url(http_test_server()->GetURL("/echo"));
-    std::unique_ptr<URLRequest> req(
-        default_context_.CreateRequest(test_url, DEFAULT_PRIORITY, &d));
-
-    req->Start();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.received_before_network_start_count());
-    EXPECT_EQ(0, d.response_started_count());
-
-    req->ResumeNetworkStart();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.response_started_count());
-    EXPECT_NE(0, d.bytes_received());
-    EXPECT_EQ(URLRequestStatus::SUCCESS, req->status().status());
-  }
-}
-
-// Check that OnBeforeNetworkStart is only called once even if there is a
-// redirect.
-TEST_F(URLRequestTestHTTP, BeforeNetworkStartCalledOnce) {
-  ASSERT_TRUE(http_test_server()->Start());
-
-  TestDelegate d;
-  {
-    d.set_quit_on_redirect(true);
-    d.set_quit_on_network_start(true);
-    std::unique_ptr<URLRequest> req(default_context_.CreateRequest(
-        http_test_server()->GetURL("/server-redirect?echo"), DEFAULT_PRIORITY,
-        &d));
-
-    req->Start();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.received_before_network_start_count());
-    EXPECT_EQ(0, d.response_started_count());
-    EXPECT_EQ(0, d.received_redirect_count());
-
-    req->ResumeNetworkStart();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.received_redirect_count());
-    req->FollowDeferredRedirect();
-    base::RunLoop().Run();
-
-    // Check that the redirect's new network transaction does not get propagated
-    // to a second OnBeforeNetworkStart() notification.
-    EXPECT_EQ(1, d.received_before_network_start_count());
-
-    EXPECT_EQ(1, d.response_started_count());
-    EXPECT_NE(0, d.bytes_received());
-    EXPECT_EQ(URLRequestStatus::SUCCESS, req->status().status());
-  }
-}
-
-// Cancel the request after learning that the request would use the network.
-TEST_F(URLRequestTestHTTP, CancelOnBeforeNetworkStart) {
-  ASSERT_TRUE(http_test_server()->Start());
-
-  TestDelegate d;
-  {
-    d.set_quit_on_network_start(true);
-    GURL test_url(http_test_server()->GetURL("/echo"));
-    std::unique_ptr<URLRequest> req(
-        default_context_.CreateRequest(test_url, DEFAULT_PRIORITY, &d));
-
-    req->Start();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.received_before_network_start_count());
-    EXPECT_EQ(0, d.response_started_count());
-
-    req->Cancel();
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, d.response_started_count());
-    EXPECT_EQ(0, d.bytes_received());
-    EXPECT_EQ(URLRequestStatus::CANCELED, req->status().status());
-  }
 }
 
 TEST_F(URLRequestTestHTTP, CancelRedirect) {
@@ -7463,7 +7370,7 @@ TEST_F(URLRequestTestHTTP, NoRedirectOn308WithoutLocationHeader) {
   request->Start();
   base::RunLoop().Run();
   EXPECT_EQ(URLRequestStatus::SUCCESS, request->status().status());
-  EXPECT_EQ(OK, request->status().error());
+  EXPECT_THAT(request->status().error(), IsOk());
   EXPECT_EQ(0, d.received_redirect_count());
   EXPECT_EQ(308, request->response_headers()->response_code());
   EXPECT_EQ("This is not a redirect.", d.data_received());
@@ -7486,7 +7393,7 @@ TEST_F(URLRequestTestHTTP, Redirect302PreserveReferenceFragment) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(original_url, r->original_url());
     EXPECT_EQ(expected_url, r->url());
   }
@@ -7509,7 +7416,7 @@ TEST_F(URLRequestTestHTTP, RedirectPreserveFirstPartyURL) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(first_party_url, r->first_party_for_cookies());
   }
 }
@@ -7534,7 +7441,7 @@ TEST_F(URLRequestTestHTTP, RedirectUpdateFirstPartyURL) {
 
     EXPECT_EQ(2U, r->url_chain().size());
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
-    EXPECT_EQ(OK, r->status().error());
+    EXPECT_THAT(r->status().error(), IsOk());
     EXPECT_EQ(expected_first_party_url, r->first_party_for_cookies());
   }
 }
@@ -7825,7 +7732,7 @@ TEST_F(URLRequestTestHTTP, NetworkSuspendTest) {
 
   EXPECT_TRUE(d.request_failed());
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
-  EXPECT_EQ(ERR_NETWORK_IO_SUSPENDED, req->status().error());
+  EXPECT_THAT(req->status().error(), IsError(ERR_NETWORK_IO_SUSPENDED));
 }
 
 namespace {
@@ -8669,7 +8576,7 @@ TEST_F(HTTPSRequestTest, DHE) {
     EXPECT_EQ(1, d.response_started_count());
     EXPECT_FALSE(r->status().is_success());
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
-    EXPECT_EQ(ERR_SSL_OBSOLETE_CIPHER, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_SSL_OBSOLETE_CIPHER));
   }
 }
 
@@ -9087,26 +8994,41 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
 #endif
   }
 
-  void DoConnection(const SpawnedTestServer::SSLOptions& ssl_options,
-                    CertStatus* out_cert_status) {
-    // We always overwrite out_cert_status.
-    *out_cert_status = 0;
+  void DoConnectionWithDelegate(
+      const SpawnedTestServer::SSLOptions& ssl_options,
+      TestDelegate* delegate,
+      SSLInfo* out_ssl_info) {
+    // Always overwrite |out_ssl_info|.
+    out_ssl_info->Reset();
+
     SpawnedTestServer test_server(
         SpawnedTestServer::TYPE_HTTPS,
         ssl_options,
         base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
     ASSERT_TRUE(test_server.Start());
 
-    TestDelegate d;
-    d.set_allow_certificate_errors(true);
-    std::unique_ptr<URLRequest> r(
-        context_.CreateRequest(test_server.GetURL("/"), DEFAULT_PRIORITY, &d));
+    delegate->set_allow_certificate_errors(true);
+    std::unique_ptr<URLRequest> r(context_.CreateRequest(
+        test_server.GetURL("/"), DEFAULT_PRIORITY, delegate));
     r->Start();
 
     base::RunLoop().Run();
+    EXPECT_EQ(1, delegate->response_started_count());
 
-    EXPECT_EQ(1, d.response_started_count());
-    *out_cert_status = r->ssl_info().cert_status;
+    *out_ssl_info = r->ssl_info();
+  }
+
+  void DoConnection(const SpawnedTestServer::SSLOptions& ssl_options,
+                    CertStatus* out_cert_status) {
+    // Always overwrite |out_cert_status|.
+    *out_cert_status = 0;
+
+    TestDelegate d;
+    SSLInfo ssl_info;
+    ASSERT_NO_FATAL_FAILURE(
+        DoConnectionWithDelegate(ssl_options, &d, &ssl_info));
+
+    *out_cert_status = ssl_info.cert_status;
   }
 
   ~HTTPSOCSPTest() override {
@@ -9261,7 +9183,8 @@ TEST_F(HTTPSOCSPTest, Invalid) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -9325,6 +9248,371 @@ TEST_F(HTTPSOCSPTest, MAYBE_RevokedStapled) {
   EXPECT_TRUE(cert_status & CERT_STATUS_REV_CHECKING_ENABLED);
 }
 
+TEST_F(HTTPSOCSPTest, ExpectStapleReportSentOnMissing) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Set up a MockCertVerifier to accept the certificate that the server sends,
+  // but not provide any OCSP information.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.ocsp_result.response_status = OCSPVerifyResult::MISSING;
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+
+  // Catch the Expect-Staple report.
+  TransportSecurityState transport_security_state;
+  MockCertificateReportSender mock_report_sender;
+  transport_security_state.SetReportSender(&mock_report_sender);
+
+  // Use a MockHostResolver (which by default maps all hosts to 127.0.0.1) so
+  // that the request can be sent to a site on the Expect-Staple preload list.
+  MockHostResolver host_resolver;
+  TestNetworkDelegate network_delegate;
+  TestURLRequestContext context(true);
+  context.set_host_resolver(&host_resolver);
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.Init();
+
+  // Now send a request to trigger the violation.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/");
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr(kExpectStapleStaticHostname);
+  url = url.ReplaceComponents(replace_host);
+  std::unique_ptr<URLRequest> violating_request(
+      context.CreateRequest(url, DEFAULT_PRIORITY, &d));
+  violating_request->Start();
+  base::RunLoop().Run();
+
+  // Confirm a report was sent.
+  EXPECT_FALSE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ(GURL(kExpectStapleReportURI),
+            mock_report_sender.latest_report_uri());
+}
+
+TEST_F(HTTPSOCSPTest, ExpectStapleReportNotSentOnValid) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Set up a MockCertVerifier to accept the certificate that the server sends,
+  // and provide GOOD revocation status.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.ocsp_result.response_status = OCSPVerifyResult::PROVIDED;
+  verify_result.ocsp_result.revocation_status = OCSPRevocationStatus::GOOD;
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+
+  // Catch the Expect-Staple report.
+  TransportSecurityState transport_security_state;
+  MockCertificateReportSender mock_report_sender;
+  transport_security_state.SetReportSender(&mock_report_sender);
+
+  // Use a MockHostResolver (which by default maps all hosts to 127.0.0.1) so
+  // that the request can be sent to a site on the Expect-Staple preload list.
+  MockHostResolver host_resolver;
+  TestNetworkDelegate network_delegate;
+  TestURLRequestContext context(true);
+  context.set_host_resolver(&host_resolver);
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.Init();
+
+  // This request should not not trigger an Expect-Staple violation.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/");
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr(kExpectStapleStaticHostname);
+  url = url.ReplaceComponents(replace_host);
+  std::unique_ptr<URLRequest> ok_request(
+      context.CreateRequest(url, DEFAULT_PRIORITY, &d));
+  ok_request->Start();
+  base::RunLoop().Run();
+
+  // Check that no report was sent.
+  EXPECT_TRUE(mock_report_sender.latest_report().empty());
+  EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
+}
+
+static const struct OCSPVerifyTestData {
+  std::vector<SpawnedTestServer::SSLOptions::OCSPSingleResponse> ocsp_responses;
+  SpawnedTestServer::SSLOptions::OCSPProduced ocsp_produced;
+  OCSPVerifyResult::ResponseStatus response_status;
+  bool has_revocation_status;
+  OCSPRevocationStatus cert_status;
+} kOCSPVerifyData[] = {
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::GOOD},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_TRY_LATER,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::ERROR_RESPONSE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PARSE_RESPONSE_ERROR,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE_DATA,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PARSE_RESPONSE_DATA_ERROR,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_BEFORE_CERT,
+     OCSPVerifyResult::BAD_PRODUCED_AT,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_AFTER_CERT,
+     OCSPVerifyResult::BAD_PRODUCED_AT,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_AFTER_CERT,
+     OCSPVerifyResult::BAD_PRODUCED_AT,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::REVOKED},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::GOOD},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::GOOD},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::GOOD},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::GOOD},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_OLD},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::INVALID_DATE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
+      {SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::REVOKED},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_UNKNOWN,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID},
+      {SpawnedTestServer::SSLOptions::OCSP_REVOKED,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_LONG},
+      {SpawnedTestServer::SSLOptions::OCSP_OK,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::PROVIDED,
+     true,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_MISMATCHED_SERIAL,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_VALID}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::NO_MATCHING_RESPONSE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+    {{{SpawnedTestServer::SSLOptions::OCSP_MISMATCHED_SERIAL,
+       SpawnedTestServer::SSLOptions::OCSP_DATE_EARLY}},
+     SpawnedTestServer::SSLOptions::OCSP_PRODUCED_VALID,
+     OCSPVerifyResult::NO_MATCHING_RESPONSE,
+     false,
+     OCSPRevocationStatus::UNKNOWN},
+
+};
+
+class HTTPSOCSPVerifyTest
+    : public HTTPSOCSPTest,
+      public testing::WithParamInterface<OCSPVerifyTestData> {};
+
+TEST_P(HTTPSOCSPVerifyTest, VerifyResult) {
+  SpawnedTestServer::SSLOptions ssl_options(
+      SpawnedTestServer::SSLOptions::CERT_AUTO);
+  OCSPVerifyTestData test = GetParam();
+
+  ssl_options.ocsp_responses = test.ocsp_responses;
+  ssl_options.ocsp_produced = test.ocsp_produced;
+  ssl_options.staple_ocsp_response = true;
+
+  SSLInfo ssl_info;
+  OCSPErrorTestDelegate delegate;
+  ASSERT_NO_FATAL_FAILURE(
+      DoConnectionWithDelegate(ssl_options, &delegate, &ssl_info));
+
+  // The SSLInfo must be extracted from |delegate| on error, due to how
+  // URLRequest caches certificate errors.
+  if (delegate.have_certificate_errors()) {
+    ASSERT_TRUE(delegate.on_ssl_certificate_error_called());
+    ssl_info = delegate.ssl_info();
+  }
+
+  EXPECT_EQ(test.response_status, ssl_info.ocsp_result.response_status);
+
+  if (test.has_revocation_status)
+    EXPECT_EQ(test.cert_status, ssl_info.ocsp_result.revocation_status);
+}
+
+INSTANTIATE_TEST_CASE_P(OCSPVerify,
+                        HTTPSOCSPVerifyTest,
+                        testing::ValuesIn(kOCSPVerifyData));
+
 class HTTPSHardFailTest : public HTTPSOCSPTest {
  protected:
   void SetupContext() override {
@@ -9350,7 +9638,8 @@ TEST_F(HTTPSHardFailTest, FailsOnOCSPInvalid) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -9381,7 +9670,8 @@ TEST_F(HTTPSEVCRLSetTest, MissingCRLSetAndInvalidOCSP) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
   SSLConfigService::SetCRLSet(scoped_refptr<CRLSet>());
 
   CertStatus cert_status;
@@ -9453,7 +9743,8 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSet) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
   SSLConfigService::SetCRLSet(
       scoped_refptr<CRLSet>(CRLSet::ExpiredCRLSetForTesting()));
 
@@ -9476,7 +9767,8 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetCovered) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
   SSLConfigService::SetCRLSet(
       scoped_refptr<CRLSet>(CRLSet::ForTesting(
           false, &kOCSPTestCertSPKI, "")));
@@ -9501,7 +9793,8 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetNotCovered) {
 
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
   SSLConfigService::SetCRLSet(
       scoped_refptr<CRLSet>(CRLSet::EmptyCRLSetForTesting()));
 
@@ -9561,7 +9854,8 @@ class HTTPSCRLSetTest : public HTTPSOCSPTest {
 TEST_F(HTTPSCRLSetTest, ExpiredCRLSet) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_AUTO);
-  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_INVALID;
+  ssl_options.ocsp_status =
+      SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
   SSLConfigService::SetCRLSet(
       scoped_refptr<CRLSet>(CRLSet::ExpiredCRLSetForTesting()));
 
@@ -9657,7 +9951,7 @@ TEST_F(URLRequestTestFTP, UnsafePort) {
 
     EXPECT_FALSE(r->is_pending());
     EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
-    EXPECT_EQ(ERR_UNSAFE_PORT, r->status().error());
+    EXPECT_THAT(r->status().error(), IsError(ERR_UNSAFE_PORT));
   }
 }
 
@@ -9920,25 +10214,6 @@ TEST_F(URLRequestTestFTP, RawBodyBytes) {
 }
 
 #endif  // !defined(DISABLE_FTP_SUPPORT)
-
-TEST_F(URLRequestTest, NetworkAccessedClearBeforeNetworkStart) {
-  TestDelegate d;
-  std::unique_ptr<URLRequest> req(default_context_.CreateRequest(
-      GURL("http://test_intercept/foo"), DEFAULT_PRIORITY, &d));
-  d.set_quit_on_network_start(true);
-
-  EXPECT_FALSE(req->response_info().network_accessed);
-
-  req->Start();
-  base::RunLoop().Run();
-
-  EXPECT_EQ(1, d.received_before_network_start_count());
-  EXPECT_EQ(0, d.response_started_count());
-  EXPECT_FALSE(req->response_info().network_accessed);
-
-  req->ResumeNetworkStart();
-  base::RunLoop().Run();
-}
 
 TEST_F(URLRequestTest, NetworkAccessedClearOnDataRequest) {
   TestDelegate d;

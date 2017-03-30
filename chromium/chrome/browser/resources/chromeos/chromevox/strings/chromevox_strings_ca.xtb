@@ -269,6 +269,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="3392045790598181549"><ph name="NAME" />, element de menú</translation>
 <translation id="3406283310380167331">Mostra la llista de formularis.</translation>
 <translation id="3422338090358345848">Obre l'explorador del teclat.</translation>
+<translation id="3423495725743882470">fila $1, columna $2</translation>
 <translation id="3457000393508828486">S'ha premut parcialment.</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, botó</translation>
 <translation id="3473644018603298796">control lliscant <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Llista de compleció automàtica</translation>
 <translation id="3810838688059735925">Vídeo</translation>
+<translation id="3812237531158591503">enganxa $1.</translation>
 <translation id="3816633764618089385">Fitxer multimèdia següent</translation>
 <translation id="3819376190738087562">No hi ha cap salt.</translation>
 <translation id="385383972552776628">Obre la pàgina d'opcions</translation>
@@ -411,6 +413,7 @@ Si has acabat el tutorial, fes servir ChromeVox per desplaçar-te fins al botó 
 <translation id="5000760171916499057">No hi ha cap formulari.</translation>
 <translation id="5005670136041063723">No hi ha més elements similars.</translation>
 <translation id="501473567976723023">Gener</translation>
+<translation id="5040591161308540832">Taula $1, $2 per $3</translation>
 <translation id="5041394372352067729">Mou la pantalla Braille a la part superior de la pàgina.</translation>
 <translation id="5042770794184672516">Augmenta el volum de la veu.</translation>
 <translation id="5050015258024679800">Capçalera del nivell 4 anterior</translation>
@@ -518,7 +521,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="5876817486144482042">Redueix el volum de la veu.</translation>
 <translation id="5887397643266327462">Subtítols en braille activats.</translation>
 <translation id="5891934789323004067">Taula</translation>
-<translation id="5919442531159595654">copia.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{signe igual}other{# signes igual}}</translation>
 <translation id="5939518447894949180">Restableix</translation>
 <translation id="5948123859135882163">Canvia la interpretació de les expressions matemàtiques, entre estructural i semàntica.</translation>
@@ -554,6 +556,8 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="6355910664415701303">No hi ha cap element de llista anterior.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Capçalera anterior</translation>
+<translation id="6378565991815958969">copia $1.</translation>
+<translation id="6385591741672306837">columna</translation>
 <translation id="6387719785439924554">complement</translation>
 <translation id="6411426777058107714">No hi ha cap botó d'opció anterior.</translation>
 <translation id="6414968628640960377">Element diferent anterior.</translation>
@@ -653,7 +657,6 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="7532613204005497612">Juny</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, control lliscant</translation>
 <translation id="7552432549459840808">Dreceres útils de Chrome</translation>
-<translation id="7586163296341959563">enganxa.</translation>
 <translation id="7596919493010894443">S'ha esborrat la selecció.</translation>
 <translation id="7604026522577407655">Vés al principi de la columna actual</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="8153880621934657047">No sou dins la taula.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{ratlla baixa}other{# ratlles baixes}}</translation>
 <translation id="8179976553408161302">Retorn</translation>
+<translation id="8184828902145951186">fila</translation>
 <translation id="8186185314313222077">activa la pantalla completa</translation>
-<translation id="81960742267269908">retalla</translation>
 <translation id="8199231515320852133">Presenta les capçaleres de la cel·la actual.</translation>
 <translation id="820417203470636242">Cel·la buida</translation>
 <translation id="8215202828671303819">Selecció múltiple</translation>
@@ -782,6 +785,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="9077213568694924680">s'ha suprimit de la selecció.</translation>
 <translation id="9082874451376019682">No hi ha cap control lliscant anterior.</translation>
 <translation id="9089864840575085222">Retorn de l'escriptura del cicle</translation>
+<translation id="9105227991373418255">retalla $1.</translation>
 <translation id="9107530006868467849">No hi ha cap widget multimèdia anterior.</translation>
 <translation id="9108370397979208512">matemàtiques</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Per obrir el menú de Chrome, prem Alt+F.</translation>
 <translation id="9115913704608474258">Novembre</translation>
 <translation id="9128414153595658330">diàleg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Pestanya</translation>
 <translation id="9151211641321628915">Anuncia una breu descripció de la posició actual.</translation>
 <translation id="9153606228985488238">Presenta un <ph name="PERCENT" /> per cent</translation>
 <translation id="9160096769946561184">Vés al final de la columna actual.</translation>

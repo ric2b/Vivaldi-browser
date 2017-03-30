@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -21,8 +22,8 @@
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/policy_builder.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/rsa_private_key.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -45,7 +46,7 @@ class CloudPolicyValidatorTest : public testing::Test {
       : timestamp_(base::Time::UnixEpoch() +
                    base::TimeDelta::FromMilliseconds(
                        PolicyBuilder::kFakeTimestamp)),
-        timestamp_option_(CloudPolicyValidatorBase::TIMESTAMP_REQUIRED),
+        timestamp_option_(CloudPolicyValidatorBase::TIMESTAMP_FULLY_VALIDATED),
         ignore_missing_dm_token_(CloudPolicyValidatorBase::DM_TOKEN_REQUIRED),
         allow_key_rotation_(true),
         existing_dm_token_(PolicyBuilder::kFakeToken),
@@ -72,7 +73,7 @@ class CloudPolicyValidatorTest : public testing::Test {
     validator.release()->StartValidation(
         base::Bind(&CloudPolicyValidatorTest::ValidationCompletion,
                    base::Unretained(this)));
-    loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     Mock::VerifyAndClearExpectations(this);
   }
 
@@ -188,7 +189,7 @@ TEST_F(CloudPolicyValidatorTest, ErrorNoTimestamp) {
 }
 
 TEST_F(CloudPolicyValidatorTest, IgnoreMissingTimestamp) {
-  timestamp_option_ = CloudPolicyValidatorBase::TIMESTAMP_NOT_REQUIRED;
+  timestamp_option_ = CloudPolicyValidatorBase::TIMESTAMP_NOT_VALIDATED;
   policy_.policy_data().clear_timestamp();
   Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
 }
@@ -216,30 +217,30 @@ TEST_F(CloudPolicyValidatorTest, IgnoreErrorTimestampFromTheFuture) {
   Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_OK));
 }
 
-TEST_F(CloudPolicyValidatorTest, ErrorNoRequestToken) {
+TEST_F(CloudPolicyValidatorTest, ErrorNoDMToken) {
   policy_.policy_data().clear_request_token();
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_WRONG_TOKEN));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_DM_TOKEN));
 }
 
-TEST_F(CloudPolicyValidatorTest, ErrorNoRequestTokenNotRequired) {
-  // Even though DMTokens are not required, if the existing policy has a token,
+TEST_F(CloudPolicyValidatorTest, ErrorNoDMTokenNotRequired) {
+  // Even though DM tokens are not required, if the existing policy has a token,
   // we should still generate an error if the new policy has none.
   policy_.policy_data().clear_request_token();
   ignore_missing_dm_token_ = CloudPolicyValidatorBase::DM_TOKEN_NOT_REQUIRED;
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_WRONG_TOKEN));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_DM_TOKEN));
 }
 
-TEST_F(CloudPolicyValidatorTest, ErrorNoRequestTokenNoTokenPassed) {
+TEST_F(CloudPolicyValidatorTest, ErrorNoDMTokenNoTokenPassed) {
   // Mimic the first fetch of policy (no existing DM token) - should still
-  // complain about not having any DMToken.
+  // complain about not having any DM token.
   existing_dm_token_.clear();
   policy_.policy_data().clear_request_token();
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_WRONG_TOKEN));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_DM_TOKEN));
 }
 
-TEST_F(CloudPolicyValidatorTest, ErrorInvalidRequestToken) {
+TEST_F(CloudPolicyValidatorTest, ErrorInvalidDMToken) {
   policy_.policy_data().set_request_token("invalid");
-  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_WRONG_TOKEN));
+  Validate(CheckStatus(CloudPolicyValidatorBase::VALIDATION_BAD_DM_TOKEN));
 }
 
 TEST_F(CloudPolicyValidatorTest, ErrorNoPolicyValue) {

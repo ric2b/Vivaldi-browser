@@ -10,8 +10,11 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
+#include "chrome/browser/extensions/component_migration_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -46,10 +49,14 @@ class ExtensionActionUtilFactory : public BrowserContextKeyedServiceFactory {
 
 // A class observing being an observer on ExtensionActionAPI
 
-class ExtensionActionUtil : public KeyedService,
-                            public extensions::ExtensionActionAPI::Observer,
-                            public extensions::ExtensionRegistryObserver,
-                            public TabStripModelObserver {
+class ExtensionActionUtil
+    : public KeyedService,
+      public extensions::ExtensionActionAPI::Observer,
+      public extensions::ExtensionRegistryObserver,
+      public TabStripModelObserver,
+      public extensions::ComponentMigrationHelper::ComponentActionDelegate,
+      public chrome::BrowserListObserver,
+      public ToolbarActionViewDelegate {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
   Profile* profile_;
 
@@ -60,7 +67,16 @@ class ExtensionActionUtil : public KeyedService,
   ScopedObserver<ExtensionActionAPI, ExtensionActionAPI::Observer>
       extension_action_api_observer_;
 
+  std::unique_ptr<extensions::ComponentMigrationHelper>
+      component_migration_helper_;
+
   void OnImageLoaded(const std::string& extension_id, const gfx::Image& image);
+
+  // Component extensions is first added and removed and then added to this set
+  // separately.
+  std::set<std::string> component_extension_actions_;
+
+  content::WebContents* current_webcontents_ = nullptr;
 
  public:
 
@@ -104,6 +120,27 @@ class ExtensionActionUtil : public KeyedService,
                         int index,
                         int reason) override;
 
+  // ComponentMigrationHelper::ComponentActionDelegate:
+  void AddComponentAction(const std::string& action_id) override;
+  void RemoveComponentAction(const std::string& action_id) override;
+  bool HasComponentAction(const std::string& action_id) const override;
+
+  // BrowserListObserver
+  void OnBrowserAdded(Browser* browser) override;
+
+  // ToolbarActionViewDelegate
+  content::WebContents* GetCurrentWebContents() const override;
+
+  // Updates the view to reflect current state.
+  void UpdateState() override;
+
+  // Returns true if a context menu is running.
+  bool IsMenuRunning() const override;
+
+  extensions::ComponentMigrationHelper* component_migration_helper() {
+    return component_migration_helper_.get();
+  }
+
   // Fills the relevant information about an extensionaction for a specific tab.
   // return true if the action should be added.
   static bool FillInfoForTabId(
@@ -112,11 +149,23 @@ class ExtensionActionUtil : public KeyedService,
       int tab_id,
       Profile* profile);
 
+  static bool FillInfoFromComponentExtension(
+      const std::string *action_id,
+      vivaldi::extension_action_utils::ExtensionInfo &info, Profile* profile);
+
   static bool GetWindowIdFromExtData(const std::string& extdata,
                               std::string& windowId);
 
   // Encodes the passed bitmap as a PNG represented as a dataurl.
   static std::string* EncodeBitmapToPng(const SkBitmap* bitmap);
+
+  std::set<std::string> component_extension_actions() {
+    return component_extension_actions_;
+  }
+
+  void set_current_webcontents(content::WebContents *contents) {
+    current_webcontents_ = contents;
+  }
 
   ExtensionActionUtil(Profile*);
   ~ExtensionActionUtil() override;

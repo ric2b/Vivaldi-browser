@@ -246,6 +246,7 @@ cr.define('cr.ui.Oobe', function() {
      */
     setUsageStats: function(checked) {
       $('usage-stats').checked = checked;
+      $('oobe-eula-md').usageStatsChecked = checked;
     },
 
     /**
@@ -287,6 +288,8 @@ cr.define('cr.ui.Oobe', function() {
       $('screen-magnifier').checked = data.screenMagnifierEnabled;
       $('large-cursor').checked = data.largeCursorEnabled;
       $('virtual-keyboard').checked = data.virtualKeyboardEnabled;
+
+      $('oobe-welcome-md').a11yStatus = data;
     },
 
     /**
@@ -304,13 +307,23 @@ cr.define('cr.ui.Oobe', function() {
       Oobe.setupSelect($('keyboard-select'), data.inputMethodsList);
       Oobe.setupSelect($('timezone-select'), data.timezoneList);
 
-      // ---------- Welcome screen
-      $('oobe-welcome-md').currentLanguage =
-          Oobe.getSelectedTitle(data.languageList);
-
+      // ---------- MD OOBE screen
       if (data.newOobeUI == 'on') {
+        // Welcome + etc...
+        var welcomeScreen = $('oobe-welcome-md');
+        welcomeScreen.currentLanguage =
+            Oobe.getSelectedTitle(data.languageList);
+        welcomeScreen.languages = data.languageList;
+
+        welcomeScreen.keyboards = data.inputMethodsList;
+
         $('oobe-connect').hidden = true;
-        $('oobe-welcome-md').hidden = false;
+        welcomeScreen.hidden = false;
+        welcomeScreen.enabled = true;
+        // EULA
+        $('oobe-poly-eula').hidden = false;
+        $('oobe-eula').hidden = true;
+        $('oobe').setAttribute('md-mode', 'true');
       } else {
         $('oobe-connect').hidden = false;
         $('oobe-welcome-md').hidden = true;
@@ -328,6 +341,6 @@ cr.define('cr.ui.Oobe', function() {
     updateLocalizedContent: function() {
       // Buttons, headers and links.
       Oobe.getInstance().updateLocalizedContent_();
-    }
+    },
   };
 });

@@ -269,6 +269,7 @@ Se concluiu o tutorial, utilize o ChromeVox para navegar para o botão Fechar e 
 <translation id="3392045790598181549"><ph name="NAME" />, item de menu</translation>
 <translation id="3406283310380167331">Mostrar lista de formulários</translation>
 <translation id="3422338090358345848">Abrir explorador do teclado</translation>
+<translation id="3423495725743882470">linha $1, coluna $2</translation>
 <translation id="3457000393508828486">Parcialmente premido</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, botão</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Se concluiu o tutorial, utilize o ChromeVox para navegar para o botão Fechar e 
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Lista de preenchimento automático</translation>
 <translation id="3810838688059735925">Vídeo</translation>
+<translation id="3812237531158591503">colar $1.</translation>
 <translation id="3816633764618089385">Multimédia seguinte</translation>
 <translation id="3819376190738087562">Não existem avanços.</translation>
 <translation id="385383972552776628">Abrir página de opções</translation>
@@ -411,6 +413,7 @@ Se concluiu o tutorial, utilize o ChromeVox para navegar para o botão Fechar e 
 <translation id="5000760171916499057">Não existem formulários.</translation>
 <translation id="5005670136041063723">Não existem mais elementos semelhantes.</translation>
 <translation id="501473567976723023">Janeiro</translation>
+<translation id="5040591161308540832">Tabela $1, $2 por $3</translation>
 <translation id="5041394372352067729">Mover linha braille para o início da página</translation>
 <translation id="5042770794184672516">Aumentar o volume de voz</translation>
 <translation id="5050015258024679800">Título de nível 4 anterior</translation>
@@ -518,7 +521,6 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="5876817486144482042">Diminuir volume de voz</translation>
 <translation id="5887397643266327462">Legendas braille ativadas.</translation>
 <translation id="5891934789323004067">Tabela</translation>
-<translation id="5919442531159595654">copiar.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{igual}other{# sinais de igual}}</translation>
 <translation id="5939518447894949180">Repor</translation>
 <translation id="5948123859135882163">Alternar interpretação de expressões matemáticas entre estrutural e semântica</translation>
@@ -554,6 +556,8 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="6355910664415701303">Não existe nenhum item de lista anterior.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Título anterior</translation>
+<translation id="6378565991815958969">copiar $1.</translation>
+<translation id="6385591741672306837">coluna</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6411426777058107714">Não existe nenhum botão de opção anterior.</translation>
 <translation id="6414968628640960377">Elemento diferente anterior.</translation>
@@ -653,7 +657,6 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="7532613204005497612">Junho</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, controlo de deslize</translation>
 <translation id="7552432549459840808">Atalhos úteis do Chrome</translation>
-<translation id="7586163296341959563">colar.</translation>
 <translation id="7596919493010894443">seleção limpa</translation>
 <translation id="7604026522577407655">Ir para o início da coluna atual</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="8153880621934657047">Não está dentro da tabela.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{sublinhado}other{# sublinhados}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">linha</translation>
 <translation id="8186185314313222077">ativar/desativar ecrã inteiro</translation>
-<translation id="81960742267269908">cortar.</translation>
 <translation id="8199231515320852133">Anunciar os cabeçalhos da célula atual</translation>
 <translation id="820417203470636242">Célula vazia.</translation>
 <translation id="8215202828671303819">Seleção múltipla</translation>
@@ -782,6 +785,7 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="9077213568694924680">removido da seleção</translation>
 <translation id="9082874451376019682">Não existe nenhum controlo de deslize anterior.</translation>
 <translation id="9089864840575085222">Eco da digitação de ciclo</translation>
+<translation id="9105227991373418255">cortar $1.</translation>
 <translation id="9107530006868467849">Não existe nenhum widget multimédia anterior.</translation>
 <translation id="9108370397979208512">math</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Para abrir o menu do navegador Chrome, prima Alt + F.</translation>
 <translation id="9115913704608474258">Novembro</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Tabulação</translation>
 <translation id="9151211641321628915">Anuncia uma breve descrição da posição atual</translation>
 <translation id="9153606228985488238">Timbre: <ph name="PERCENT" />%</translation>
 <translation id="9160096769946561184">Ir para o fim da coluna atual</translation>

@@ -117,9 +117,6 @@ class WebStateImpl;
 // |CRWWebDelegate webControllerDidSuppressDialog:| will be called.
 @property(nonatomic, assign) BOOL shouldSuppressDialogs;
 
-// YES if Mojo should be used for WebUI, defaults to NO.
-@property(nonatomic, assign) BOOL useMojoForWebUI;
-
 // Designated initializer. Initializes web controller with |webState|. The
 // calling code must retain the ownership of |webState|.
 - (instancetype)initWithWebState:(web::WebStateImpl*)webState;
@@ -207,7 +204,11 @@ class WebStateImpl;
 // TODO(rohitrao): Remove this from the public API.
 - (void)prepareForGoBack;
 
+// Executes |script| in the web view, registering user interaction.
+- (void)executeUserJavaScript:(NSString*)script
+            completionHandler:(web::JavaScriptResultBlock)completion;
 // Evaluates the user-entered |script| in the web view.
+// DEPRECATED. TODO(crbug.com/595761): Remove this API.
 - (void)evaluateUserJavaScript:(NSString*)script;
 
 // Dismisses the soft keyboard.
@@ -314,9 +315,6 @@ class WebStateImpl;
 - (void)resetInjectedWebViewContentView;
 // Returns the number of observers registered for this CRWWebController.
 - (NSUInteger)observerCount;
-// Returns the current window id.
-- (NSString*)windowId;
-- (void)setWindowId:(NSString*)windowId;
 - (void)setURLOnStartLoading:(const GURL&)url;
 - (void)simulateLoadRequestWithURL:(const GURL&)URL;
 - (NSString*)externalRequestWindowName;

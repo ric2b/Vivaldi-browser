@@ -22,15 +22,15 @@
 
 #include "core/fetch/MemoryCache.h"
 
-#include "platform/Logging.h"
+#include "core/fetch/ResourceLoadingLog.h"
 #include "platform/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityOriginHash.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
+#include "wtf/AutoReset.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/MathExtras.h"
-#include "wtf/TemporaryChange.h"
 #include "wtf/text/CString.h"
 
 namespace blink {
@@ -104,6 +104,8 @@ inline MemoryCache::MemoryCache()
 #endif
 {
     MemoryCacheDumpProvider::instance()->setMemoryCache(this);
+    if (ProcessHeap::isLowEndDevice())
+        MemoryCoordinator::instance().registerClient(this);
 #ifdef MEMORY_CACHE_STATS
     const double statsIntervalInSeconds = 15;
     m_statsTimer.startRepeating(statsIntervalInSeconds, BLINK_FROM_HERE);
@@ -127,6 +129,7 @@ DEFINE_TRACE(MemoryCache)
     visitor->trace(m_liveDecodedResources);
     visitor->trace(m_resourceMaps);
     MemoryCacheDumpClient::trace(visitor);
+    MemoryCoordinatorClient::trace(visitor);
 }
 
 KURL MemoryCache::removeFragmentIdentifierIfNeeded(const KURL& originalURL)
@@ -167,7 +170,7 @@ void MemoryCache::add(Resource* resource)
     resources->set(url, MemoryCacheEntry::create(resource));
     update(resource, 0, resource->size(), true);
 
-    WTF_LOG(ResourceLoading, "MemoryCache::add Added '%s', resource %p\n", resource->url().getString().latin1().data(), resource);
+    RESOURCE_LOADING_DVLOG(1) << "MemoryCache::add Added " << resource->url().getString() << ", resource " << resource;
 }
 
 void MemoryCache::remove(Resource* resource)
@@ -201,10 +204,7 @@ Resource* MemoryCache::resourceForURL(const KURL& resourceURL, const String& cac
     MemoryCacheEntry* entry = resources->get(url);
     if (!entry)
         return nullptr;
-    Resource* resource = entry->resource();
-    if (resource && !resource->lock())
-        return nullptr;
-    return resource;
+    return entry->resource();
 }
 
 HeapVector<Member<Resource>> MemoryCache::resourcesForURL(const KURL& resourceURL)
@@ -365,7 +365,8 @@ void MemoryCache::evict(MemoryCacheEntry* entry)
     ASSERT(WTF::isMainThread());
 
     Resource* resource = entry->resource();
-    WTF_LOG(ResourceLoading, "Evicting resource %p for '%s' from cache", resource, resource->url().getString().latin1().data());
+    RESOURCE_LOADING_DVLOG(1) << "Evicting resource " << resource << " for " << resource->url().getString() << " from cache";
+    TRACE_EVENT1("blink", "MemoryCache::evict", "resource", resource->url().getString().utf8());
     // The resource may have already been removed by someone other than our caller,
     // who needed a fresh copy for a reload. See <http://bugs.webkit.org/show_bug.cgi?id=12479#c6>.
     update(resource, resource->size(), 0, false);
@@ -581,15 +582,12 @@ void MemoryCache::removeURLFromCache(const KURL& url)
 
 void MemoryCache::TypeStatistic::addResource(Resource* o)
 {
-    bool purgeable = o->isPurgeable();
-    size_t pageSize = (o->encodedSize() + o->overheadSize() + 4095) & ~4095;
     count++;
     size += o->size();
     liveSize += o->hasClientsOrObservers() ? o->size() : 0;
     decodedSize += o->decodedSize();
     encodedSize += o->encodedSize();
     encodedSizeDuplicatedInDataURLs += o->url().protocolIsData() ? o->encodedSize() : 0;
-    purgeableSize += purgeable ? pageSize : 0;
 }
 
 MemoryCache::Statistics MemoryCache::getStatistics()
@@ -711,7 +709,7 @@ void MemoryCache::pruneNow(double currentTime, PruneStrategy strategy)
         Platform::current()->currentThread()->removeTaskObserver(this);
     }
 
-    TemporaryChange<bool> reentrancyProtector(m_inPruneResources, true);
+    AutoReset<bool> reentrancyProtector(&m_inPruneResources, true);
     pruneDeadResources(strategy); // Prune dead first, in case it was "borrowing" capacity from live.
     pruneLiveResources(strategy);
     m_pruneFrameTimeStamp = m_lastFramePaintTimeStamp;
@@ -734,6 +732,11 @@ bool MemoryCache::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail, WebProc
     return true;
 }
 
+void MemoryCache::onMemoryPressure(WebMemoryPressureLevel level)
+{
+    pruneAll();
+}
+
 bool MemoryCache::isInSameLRUListForTest(const Resource* x, const Resource* y)
 {
     MemoryCacheEntry* ex = getEntryForResource(x);
@@ -745,7 +748,7 @@ bool MemoryCache::isInSameLRUListForTest(const Resource* x, const Resource* y)
 
 #ifdef MEMORY_CACHE_STATS
 
-void MemoryCache::dumpStats(Timer<MemoryCache>*)
+void MemoryCache::dumpStats(TimerBase*)
 {
     Statistics s = getStatistics();
     printf("%-13s %-13s %-13s %-13s %-13s %-13s %-13s\n", "", "Count", "Size", "LiveSize", "DecodedSize", "PurgeableSize", "PurgedSize");
@@ -778,7 +781,7 @@ void MemoryCache::dumpLRULists(bool includeLive) const
         while (current) {
             Resource* currentResource = current->resource();
             if (includeLive || !currentResource->hasClientsOrObservers())
-                printf("(%.1fK, %.1fK, %uA, %dR, %d); ", currentResource->decodedSize() / 1024.0f, (currentResource->encodedSize() + currentResource->overheadSize()) / 1024.0f, current->m_accessCount, currentResource->hasClientsOrObservers(), currentResource->isPurgeable());
+                printf("(%.1fK, %.1fK, %uA, %dR); ", currentResource->decodedSize() / 1024.0f, (currentResource->encodedSize() + currentResource->overheadSize()) / 1024.0f, current->m_accessCount, currentResource->hasClientsOrObservers());
 
             current = current->m_previousInAllResourcesList;
         }

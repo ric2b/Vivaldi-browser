@@ -27,7 +27,6 @@
 #define SMILTimeContainer_h
 
 #include "core/dom/QualifiedName.h"
-#include "core/svg/animation/SMILTime.h"
 #include "platform/Timer.h"
 #include "platform/graphics/ImageAnimationPolicy.h"
 #include "platform/heap/Handle.h"
@@ -39,6 +38,7 @@
 namespace blink {
 
 class Document;
+class SMILTime;
 class SVGElement;
 class SVGSMILElement;
 class SVGSVGElement;
@@ -52,15 +52,15 @@ public:
     void unschedule(SVGSMILElement*, SVGElement*, const QualifiedName&);
     void notifyIntervalsChanged();
 
-    SMILTime elapsed() const;
+    double elapsed() const;
 
     bool isPaused() const;
     bool isStarted() const;
 
-    void begin();
+    void start();
     void pause();
     void resume();
-    void setElapsed(SMILTime);
+    void setElapsed(double);
 
     void serviceAnimations();
     bool hasAnimations() const;
@@ -96,34 +96,37 @@ private:
     };
 
     bool isTimelineRunning() const;
-    void scheduleAnimationFrame(SMILTime fireTime);
+    void synchronizeToDocumentTimeline();
+    void scheduleAnimationFrame(double delayTime);
     void cancelAnimationFrame();
-    void wakeupTimerFired(Timer<SMILTimeContainer>*);
+    void wakeupTimerFired(TimerBase*);
     void scheduleAnimationPolicyTimer();
     void cancelAnimationPolicyTimer();
-    void animationPolicyTimerFired(Timer<SMILTimeContainer>*);
+    void animationPolicyTimerFired(TimerBase*);
     ImageAnimationPolicy animationPolicy() const;
     bool handleAnimationPolicy(AnimationPolicyOnceAction);
-    void updateAnimationsAndScheduleFrameIfNeeded(SMILTime elapsed, bool seekToTime = false);
-    SMILTime updateAnimations(SMILTime elapsed, bool seekToTime = false);
+    bool canScheduleFrame(SMILTime earliestFireTime) const;
+    void updateAnimationsAndScheduleFrameIfNeeded(double elapsed, bool seekToTime = false);
+    SMILTime updateAnimations(double elapsed, bool seekToTime);
     void serviceOnNextFrame();
     void scheduleWakeUp(double delayTime, FrameSchedulingState);
     bool hasPendingSynchronization() const;
 
     void updateDocumentOrderIndexes();
-    double lastResumeTime() const { return m_resumeTime ? m_resumeTime : m_beginTime; }
 
     SVGSVGElement& ownerSVGElement() const;
     Document& document() const;
-    double currentTime() const;
 
-    double m_beginTime;
-    double m_pauseTime;
-    double m_resumeTime;
-    double m_accumulatedActiveTime;
-    double m_presetStartTime;
+    // The latest "restart" time for the time container's timeline. If the
+    // timeline has not been manipulated (seeked, paused) this will be zero.
+    double m_presentationTime;
+    // The time on the document timeline corresponding to |m_presentationTime|.
+    double m_referenceTime;
 
     FrameSchedulingState m_frameSchedulingState;
+    bool m_started; // The timeline has been started.
+    bool m_paused; // The timeline is paused.
+
     bool m_documentOrderIndexesDirty;
 
     Timer<SMILTimeContainer> m_wakeupTimer;

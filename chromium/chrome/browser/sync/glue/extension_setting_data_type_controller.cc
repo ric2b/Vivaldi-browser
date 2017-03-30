@@ -8,10 +8,10 @@
 #include "base/metrics/histogram.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/sync_driver/generic_change_processor.h"
+#include "components/sync/api/syncable_service.h"
+#include "components/sync/driver/generic_change_processor.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/extension_system.h"
-#include "sync/api/syncable_service.h"
 
 using content::BrowserThread;
 
@@ -23,7 +23,7 @@ ExtensionSettingDataTypeController::ExtensionSettingDataTypeController(
     sync_driver::SyncClient* sync_client,
     Profile* profile)
     : NonUIDataTypeController(
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
           error_callback,
           sync_client),
       type_(type),

@@ -73,6 +73,10 @@ class TargetGenerator {
   bool FillAssertNoDeps();
   bool FillWriteRuntimeDeps();
 
+  // <Vivaldi>
+  bool FillDisabledTarget();
+  // </Vivaldi>
+
   // Reads configs/deps from the given var name, and uses the given setting on
   // the target to save them.
   bool FillGenericConfigs(const char* var_name,

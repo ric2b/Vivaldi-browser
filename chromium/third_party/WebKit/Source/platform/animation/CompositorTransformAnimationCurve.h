@@ -34,17 +34,9 @@ public:
 
     ~CompositorTransformAnimationCurve() override;
 
-    void addLinearKeyframe(const CompositorTransformKeyframe&);
-    void addCubicBezierKeyframe(const CompositorTransformKeyframe&, CubicBezierTimingFunction::EaseType);
-    // Adds the keyframe with a custom, bezier timing function. Note, it is
-    // assumed that x0 = y0, and x3 = y3 = 1.
-    void addCubicBezierKeyframe(const CompositorTransformKeyframe&, double x1, double y1, double x2, double y2);
-    void addStepsKeyframe(const CompositorTransformKeyframe&, int steps, StepsTimingFunction::StepPosition);
-
-    void setLinearTimingFunction();
-    void setCubicBezierTimingFunction(CubicBezierTimingFunction::EaseType);
-    void setCubicBezierTimingFunction(double x1, double y1, double x2, double y2);
-    void setStepsTimingFunction(int numberOfSteps, StepsTimingFunction::StepPosition);
+    void addKeyframe(const CompositorTransformKeyframe&);
+    void setTimingFunction(const TimingFunction&);
+    void setScaledDuration(double);
 
     // CompositorAnimationCurve implementation.
     std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;

@@ -18,7 +18,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/connector.h"
-#include "mojo/public/cpp/bindings/lib/filter_chain.h"
+#include "mojo/public/cpp/bindings/filter_chain.h"
+#include "mojo/public/cpp/bindings/message.h"
 
 namespace mojo {
 namespace internal {
@@ -58,6 +59,8 @@ class Router : public MessageReceiverWithResponder {
     return connector_.is_valid();
   }
 
+  void AddFilter(std::unique_ptr<MessageReceiver> filter);
+
   // Please note that this method shouldn't be called unless it results from an
   // explicit request of the user of bindings (e.g., the user sets an
   // InterfacePtr to null or closes a Binding).
@@ -89,6 +92,8 @@ class Router : public MessageReceiverWithResponder {
   }
 
   // See Binding for details of pause/resume.
+  // Note: This doesn't strictly pause incoming calls. If there are
+  // queued messages, they may be dispatched during pause.
   void PauseIncomingMethodCallProcessing() {
     DCHECK(thread_checker_.CalledOnValidThread());
     connector_.PauseIncomingMethodCallProcessing();
@@ -124,7 +129,7 @@ class Router : public MessageReceiverWithResponder {
     explicit SyncResponseInfo(bool* in_response_received);
     ~SyncResponseInfo();
 
-    std::unique_ptr<Message> response;
+    Message response;
 
     // Points to a stack-allocated variable.
     bool* response_received;
@@ -161,7 +166,7 @@ class Router : public MessageReceiverWithResponder {
   SyncResponseMap sync_responses_;
   uint64_t next_request_id_;
   bool testing_mode_;
-  std::queue<std::unique_ptr<Message>> pending_messages_;
+  std::queue<Message> pending_messages_;
   // Whether a task has been posted to trigger processing of
   // |pending_messages_|.
   bool pending_task_for_messages_;

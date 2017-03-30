@@ -47,7 +47,6 @@ namespace media {
 class AudioBufferConverter;
 class AudioBus;
 class AudioClock;
-class AudioHardwareConfig;
 class AudioSplicer;
 class DecryptingDemuxerStream;
 
@@ -301,6 +300,9 @@ class MEDIA_EXPORT AudioRendererImpl
   // Set by OnSuspend() and OnResume() to indicate when the system is about to
   // suspend/is suspended and when it resumes.
   bool is_suspending_;
+
+  // Track the last reported media time.
+  base::TimeDelta last_reported_media_time_;
 
   // End variables which must be accessed under |lock_|. ----------------------
 

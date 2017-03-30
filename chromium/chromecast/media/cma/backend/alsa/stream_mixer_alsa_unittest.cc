@@ -208,13 +208,13 @@ class MockInputQueue : public StreamMixerAlsa::InputQueue {
 std::unique_ptr<::media::AudioBus> GetMixedAudioData(
     const std::vector<testing::StrictMock<MockInputQueue>*>& inputs) {
   int read_size = std::numeric_limits<int>::max();
-  for (const auto input : inputs) {
+  for (auto* input : inputs) {
     CHECK(input);
     read_size = std::min(input->MaxReadSize(), read_size);
   }
 
   // Verify all inputs are the right size.
-  for (const auto input : inputs) {
+  for (auto* input : inputs) {
     CHECK_EQ(kNumChannels, input->data().channels());
     CHECK_LE(read_size, input->data().frames());
   }
@@ -228,7 +228,7 @@ std::unique_ptr<::media::AudioBus> GetMixedAudioData(
 
       // Sum the sample from each input stream, scaling each stream.
       *result = 0.0;
-      for (const auto input : inputs)
+      for (auto* input : inputs)
         *result += *(input->data().channel(c) + f) * input->multiplier();
 
       // Clamp the mixed sample between 1.0 and -1.0.
@@ -272,6 +272,7 @@ class StreamMixerAlsaTest : public testing::Test {
 
   ~StreamMixerAlsaTest() override {
     StreamMixerAlsa::Get()->ClearInputsForTest();
+    StreamMixerAlsa::Get()->SetAlsaWrapperForTest(nullptr);
   }
 
   MockAlsaWrapper* mock_alsa() { return mock_alsa_; }
@@ -284,7 +285,7 @@ class StreamMixerAlsaTest : public testing::Test {
 };
 
 TEST_F(StreamMixerAlsaTest, AddSingleInput) {
-  auto input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
 
   EXPECT_CALL(*input, Initialize(_)).Times(1);
@@ -293,8 +294,8 @@ TEST_F(StreamMixerAlsaTest, AddSingleInput) {
 }
 
 TEST_F(StreamMixerAlsaTest, AddMultipleInputs) {
-  auto input1 = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
-  auto input2 =
+  auto* input1 = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  auto* input2 =
       new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond * 2);
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
 
@@ -361,7 +362,7 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   inputs[0]->SetMaxReadSize(1024);
   inputs[1]->SetMaxReadSize(512);
   inputs[2]->SetMaxReadSize(2048);
-  for (const auto input : inputs) {
+  for (auto* input : inputs) {
     EXPECT_CALL(*input, GetResampledData(_, 512)).Times(1);
     EXPECT_CALL(*input, AfterWriteFrames(_)).Times(1);
   }
@@ -376,7 +377,7 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
   inputs[1]->SetPrimary(false);
   inputs[1]->SetMaxReadSize(0);
   inputs[2]->SetPrimary(false);
-  for (const auto input : inputs) {
+  for (auto* input : inputs) {
     if (input != inputs[1])
       EXPECT_CALL(*input, GetResampledData(_, 1024)).Times(1);
     EXPECT_CALL(*input, AfterWriteFrames(_)).Times(1);
@@ -393,7 +394,7 @@ TEST_F(StreamMixerAlsaTest, WriteFrames) {
 }
 
 TEST_F(StreamMixerAlsaTest, OneStreamMixesProperly) {
-  auto input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
   input->SetPaused(false);
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
@@ -422,7 +423,7 @@ TEST_F(StreamMixerAlsaTest, OneStreamMixesProperly) {
 }
 
 TEST_F(StreamMixerAlsaTest, OneStreamIsScaledDownProperly) {
-  auto input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
   input->SetPaused(false);
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
@@ -564,7 +565,7 @@ TEST_F(StreamMixerAlsaTest, TwoUnscaledStreamsMixProperlyWithEdgeCases) {
 }
 
 TEST_F(StreamMixerAlsaTest, WriteBuffersOfVaryingLength) {
-  auto input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
+  auto* input = new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond);
   input->SetPaused(false);
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
@@ -595,6 +596,101 @@ TEST_F(StreamMixerAlsaTest, WriteBuffersOfVaryingLength) {
   EXPECT_CALL(*input, GetResampledData(_, 1024));
   EXPECT_CALL(*input, AfterWriteFrames(_));
   EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, 1024)).Times(1);
+  mixer->WriteFramesForTest();
+}
+
+TEST_F(StreamMixerAlsaTest, StuckStreamWithoutUnderrun) {
+  // Create a group of input streams.
+  std::vector<testing::StrictMock<MockInputQueue>*> inputs;
+  const int kNumInputs = 2;
+  for (int i = 0; i < kNumInputs; ++i) {
+    inputs.push_back(
+        new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond));
+    inputs.back()->SetMaxReadSize(0);
+    inputs.back()->SetPaused(false);
+  }
+
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
+    mixer->AddInput(base::WrapUnique(inputs[i]));
+  }
+
+  // Poll the inputs for data. Should not pull any data since one input has none
+  // to give.
+  inputs[0]->SetData(GetTestData(0));
+  EXPECT_CALL(*inputs[0], GetResampledData(_, _)).Times(0);
+  EXPECT_CALL(*inputs[0], AfterWriteFrames(_)).Times(0);
+
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, _)).Times(0);
+  mixer->WriteFramesForTest();
+}
+
+TEST_F(StreamMixerAlsaTest, StuckStreamWithUnderrun) {
+  // Create a group of input streams.
+  std::vector<testing::StrictMock<MockInputQueue>*> inputs;
+  const int kNumInputs = 2;
+  for (int i = 0; i < kNumInputs; ++i) {
+    inputs.push_back(
+        new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond));
+    inputs.back()->SetMaxReadSize(0);
+    inputs.back()->SetPaused(false);
+  }
+
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
+    mixer->AddInput(base::WrapUnique(inputs[i]));
+  }
+
+  mock_alsa()->set_state(SND_PCM_STATE_XRUN);
+
+  // Poll the inputs for data. The first input will provide data (since the
+  // output is in an underrun condition); the second input can't provide any
+  // data, but AfterWriteFrames() will still be called on it so that it has the
+  // correct rendering delay.
+  const int kNumFrames = 32;
+  inputs[0]->SetData(GetTestData(0));
+  EXPECT_CALL(*inputs[0], GetResampledData(_, kNumFrames));
+  EXPECT_CALL(*inputs[0], AfterWriteFrames(_));
+  EXPECT_CALL(*inputs[1], GetResampledData(_, _)).Times(0);
+  EXPECT_CALL(*inputs[1], AfterWriteFrames(_));
+
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kNumFrames)).Times(1);
+  mixer->WriteFramesForTest();
+}
+
+TEST_F(StreamMixerAlsaTest, StuckStreamWithLowBuffer) {
+  // Create a group of input streams.
+  std::vector<testing::StrictMock<MockInputQueue>*> inputs;
+  const int kNumInputs = 2;
+  for (int i = 0; i < kNumInputs; ++i) {
+    inputs.push_back(
+        new testing::StrictMock<MockInputQueue>(kTestSamplesPerSecond));
+    inputs.back()->SetMaxReadSize(0);
+    inputs.back()->SetPaused(false);
+  }
+
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    EXPECT_CALL(*inputs[i], Initialize(_)).Times(1);
+    mixer->AddInput(base::WrapUnique(inputs[i]));
+  }
+
+  mock_alsa()->set_avail(4086);
+
+  // Poll the inputs for data. The first input will provide data (since the
+  // output is in an low buffer condition); the second input can't provide any
+  // data, but AfterWriteFrames() will still be called on it so that it has the
+  // correct rendering delay.
+  const int kNumFrames = 32;
+  inputs[0]->SetData(GetTestData(0));
+  EXPECT_CALL(*inputs[0], GetResampledData(_, kNumFrames));
+  EXPECT_CALL(*inputs[0], AfterWriteFrames(_));
+  EXPECT_CALL(*inputs[1], GetResampledData(_, _)).Times(0);
+  EXPECT_CALL(*inputs[1], AfterWriteFrames(_));
+
+  EXPECT_CALL(*mock_alsa(), PcmWritei(_, _, kNumFrames)).Times(1);
   mixer->WriteFramesForTest();
 }
 

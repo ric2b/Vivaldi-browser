@@ -69,42 +69,6 @@ private:
     bool m_sync;
 };
 
-class CORE_EXPORT StyleRecalc {
-    STACK_ALLOCATED();
-public:
-    StyleRecalc(Document*);
-    ~StyleRecalc();
-private:
-    Member<InstrumentingAgents> m_instrumentingAgents;
-};
-
-class CORE_EXPORT JavaScriptDialog {
-    STACK_ALLOCATED();
-public:
-    JavaScriptDialog(LocalFrame*, const String& message, ChromeClient::DialogType);
-    void setResult(bool);
-    ~JavaScriptDialog();
-private:
-    Member<InstrumentingAgents> m_instrumentingAgents;
-    bool m_result;
-};
-
-class CORE_EXPORT FrontendCounter {
-    STATIC_ONLY(FrontendCounter);
-private:
-    friend void frontendCreated();
-    friend void frontendDeleted();
-    friend bool hasFrontends();
-    static int s_frontendCounter;
-};
-
-inline void frontendCreated() { atomicIncrement(&FrontendCounter::s_frontendCounter); }
-inline void frontendDeleted() { atomicDecrement(&FrontendCounter::s_frontendCounter); }
-inline bool hasFrontends() { return acquireLoad(&FrontendCounter::s_frontendCounter); }
-
-CORE_EXPORT void registerInstrumentingAgents(InstrumentingAgents*);
-CORE_EXPORT void unregisterInstrumentingAgents(InstrumentingAgents*);
-
 // Called from generated instrumentation code.
 CORE_EXPORT InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope*);
 CORE_EXPORT InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext*);

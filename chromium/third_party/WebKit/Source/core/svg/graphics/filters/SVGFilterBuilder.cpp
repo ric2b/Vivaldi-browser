@@ -147,7 +147,7 @@ static EColorInterpolation colorInterpolationForElement(SVGElement& element, ECo
     // No layout has been performed, try to determine the property value
     // "manually" (used by external SVG files.)
     if (const StylePropertySet* propertySet = element.presentationAttributeStyle()) {
-        CSSValue* cssValue = propertySet->getPropertyCSSValue(CSSPropertyColorInterpolationFilters);
+        const CSSValue* cssValue = propertySet->getPropertyCSSValue(CSSPropertyColorInterpolationFilters);
         if (cssValue && cssValue->isPrimitiveValue()) {
             const CSSPrimitiveValue& primitiveValue = toCSSPrimitiveValue(*cssValue);
             return primitiveValue.convertTo<EColorInterpolation>();
@@ -156,6 +156,11 @@ static EColorInterpolation colorInterpolationForElement(SVGElement& element, ECo
     // 'auto' is the default (per Filter Effects), but since the property is
     // inherited, propagate the parent's value.
     return parentColorInterpolation;
+}
+
+ColorSpace SVGFilterBuilder::resolveColorSpace(EColorInterpolation colorInterpolation)
+{
+    return colorInterpolation == CI_LINEARRGB ? ColorSpaceLinearRGB : ColorSpaceDeviceRGB;
 }
 
 void SVGFilterBuilder::buildGraph(Filter* filter, SVGFilterElement& filterElement, const FloatRect& referenceBox)
@@ -177,7 +182,7 @@ void SVGFilterBuilder::buildGraph(Filter* filter, SVGFilterElement& filterElemen
         effectElement->setStandardAttributes(effect);
         effect->setEffectBoundaries(SVGLengthContext::resolveRectangle<SVGFilterPrimitiveStandardAttributes>(effectElement, filterElement.primitiveUnits()->currentValue()->enumValue(), referenceBox));
         EColorInterpolation colorInterpolation = colorInterpolationForElement(*effectElement, filterColorInterpolation);
-        effect->setOperatingColorSpace(colorInterpolation == CI_LINEARRGB ? ColorSpaceLinearRGB : ColorSpaceDeviceRGB);
+        effect->setOperatingColorSpace(resolveColorSpace(colorInterpolation));
         if (effectElement->taintsOrigin(effect->inputsTaintOrigin()))
             effect->setOriginTainted();
 

@@ -79,6 +79,8 @@ class ExternalProcessImporterHost
   void NotifyImportItemStarted(importer::ImportItem item);
   void NotifyImportItemEnded(importer::ImportItem item);
   void NotifyImportEnded();
+  void NotifyImportItemFailed(importer::ImportItem item,
+                              const std::string& error);
 
  private:
   // ExternalProcessImporterHost deletes itself in OnImportEnded().

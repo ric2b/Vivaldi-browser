@@ -13,7 +13,8 @@
 #include "cc/output/filter_operations.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/render_pass_id.h"
-#include "cc/resources/resource_provider.h"
+
+#include "ui/gfx/geometry/point_f.h"
 
 namespace cc {
 
@@ -34,6 +35,7 @@ class CC_EXPORT RenderPassDrawQuad : public DrawQuad {
               const gfx::Size& mask_texture_size,
               const FilterOperations& filters,
               const gfx::Vector2dF& filters_scale,
+              const gfx::PointF& filters_origin,
               const FilterOperations& background_filters);
 
   void SetAll(const SharedQuadState* shared_quad_state,
@@ -47,6 +49,7 @@ class CC_EXPORT RenderPassDrawQuad : public DrawQuad {
               const gfx::Size& mask_texture_size,
               const FilterOperations& filters,
               const gfx::Vector2dF& filters_scale,
+              const gfx::PointF& filters_origin,
               const FilterOperations& background_filters);
 
   RenderPassId render_pass_id;
@@ -61,6 +64,10 @@ class CC_EXPORT RenderPassDrawQuad : public DrawQuad {
   // parameters for pixel-moving filters. This scale should include
   // content-to-target-space scale, and device pixel ratio.
   gfx::Vector2dF filters_scale;
+
+  // The origin for post-processing filters which will be used to offset
+  // crop rects, lights, etc.
+  gfx::PointF filters_origin;
 
   // Post-processing filters, applied to the pixels showing through the
   // background of the render pass, from behind it.

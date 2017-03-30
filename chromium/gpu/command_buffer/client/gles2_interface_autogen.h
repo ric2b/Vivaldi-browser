@@ -676,7 +676,6 @@ virtual GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
                                                   GLsizei height,
                                                   GLenum internalformat,
                                                   GLenum usage) = 0;
-virtual void GetImageivCHROMIUM(GLuint image_id, GLenum param, GLint* data) = 0;
 virtual void DescheduleUntilFinishedCHROMIUM() = 0;
 virtual void GetTranslatedShaderSourceANGLE(GLuint shader,
                                             GLsizei bufsize,
@@ -755,16 +754,16 @@ virtual void ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
                                           GLfloat uv_y,
                                           GLfloat uv_width,
                                           GLfloat uv_height) = 0;
+virtual void ScheduleCALayerSharedStateCHROMIUM(GLfloat opacity,
+                                                GLboolean is_clipped,
+                                                const GLfloat* clip_rect,
+                                                GLint sorting_context_id,
+                                                const GLfloat* transform) = 0;
 virtual void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                      const GLfloat* contents_rect,
-                                     GLfloat opacity,
                                      GLuint background_color,
                                      GLuint edge_aa_mask,
                                      const GLfloat* bounds_rect,
-                                     GLboolean is_clipped,
-                                     const GLfloat* clip_rect,
-                                     GLint sorting_context_id,
-                                     const GLfloat* transform,
                                      GLuint filter) = 0;
 virtual void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
                                                const GLuint* textures) = 0;
@@ -880,5 +879,5 @@ virtual GLint GetFragDataIndexEXT(GLuint program, const char* name) = 0;
 virtual void UniformMatrix4fvStreamTextureMatrixCHROMIUM(
     GLint location,
     GLboolean transpose,
-    const GLfloat* default_value) = 0;
+    const GLfloat* transform) = 0;
 #endif  // GPU_COMMAND_BUFFER_CLIENT_GLES2_INTERFACE_AUTOGEN_H_

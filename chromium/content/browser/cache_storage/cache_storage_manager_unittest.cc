@@ -205,13 +205,26 @@ class CacheStorageManagerTest : public testing::Test {
 
   bool StorageMatch(const GURL& origin,
                     const std::string& cache_name,
-                    const GURL& url) {
-    std::unique_ptr<ServiceWorkerFetchRequest> request(
-        new ServiceWorkerFetchRequest());
-    request->url = url;
+                    const GURL& url,
+                    const CacheStorageCacheQueryParams& match_params =
+                        CacheStorageCacheQueryParams()) {
+    ServiceWorkerFetchRequest request;
+    request.url = url;
+    return StorageMatchWithRequest(origin, cache_name, request, match_params);
+  }
+
+  bool StorageMatchWithRequest(
+      const GURL& origin,
+      const std::string& cache_name,
+      const ServiceWorkerFetchRequest& request,
+      const CacheStorageCacheQueryParams& match_params =
+          CacheStorageCacheQueryParams()) {
+    std::unique_ptr<ServiceWorkerFetchRequest> unique_request =
+        base::MakeUnique<ServiceWorkerFetchRequest>(request);
+
     base::RunLoop loop;
     cache_manager_->MatchCache(
-        origin, cache_name, std::move(request),
+        origin, cache_name, std::move(unique_request), match_params,
         base::Bind(&CacheStorageManagerTest::CacheMatchCallback,
                    base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -219,13 +232,25 @@ class CacheStorageManagerTest : public testing::Test {
     return callback_error_ == CACHE_STORAGE_OK;
   }
 
-  bool StorageMatchAll(const GURL& origin, const GURL& url) {
-    std::unique_ptr<ServiceWorkerFetchRequest> request(
-        new ServiceWorkerFetchRequest());
-    request->url = url;
+  bool StorageMatchAll(const GURL& origin,
+                       const GURL& url,
+                       const CacheStorageCacheQueryParams& match_params =
+                           CacheStorageCacheQueryParams()) {
+    ServiceWorkerFetchRequest request;
+    request.url = url;
+    return StorageMatchAllWithRequest(origin, request, match_params);
+  }
+
+  bool StorageMatchAllWithRequest(
+      const GURL& origin,
+      const ServiceWorkerFetchRequest& request,
+      const CacheStorageCacheQueryParams& match_params =
+          CacheStorageCacheQueryParams()) {
+    std::unique_ptr<ServiceWorkerFetchRequest> unique_request =
+        base::MakeUnique<ServiceWorkerFetchRequest>(request);
     base::RunLoop loop;
     cache_manager_->MatchAllCaches(
-        origin, std::move(request),
+        origin, std::move(unique_request), match_params,
         base::Bind(&CacheStorageManagerTest::CacheMatchCallback,
                    base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -234,25 +259,35 @@ class CacheStorageManagerTest : public testing::Test {
   }
 
   bool CachePut(CacheStorageCache* cache, const GURL& url) {
-    return CachePutWithStatusCode(cache, url, 200);
-  }
-
-  bool CachePutWithStatusCode(CacheStorageCache* cache,
-                              const GURL& url,
-                              int status_code) {
     ServiceWorkerFetchRequest request;
     request.url = url;
 
+    return CachePutWithStatusCode(cache, request, 200);
+  }
+
+  bool CachePutWithRequestAndHeaders(
+      CacheStorageCache* cache,
+      const ServiceWorkerFetchRequest& request,
+      const ServiceWorkerHeaderMap& response_headers) {
+    return CachePutWithStatusCode(cache, request, 200, response_headers);
+  }
+
+  bool CachePutWithStatusCode(CacheStorageCache* cache,
+                              const ServiceWorkerFetchRequest& request,
+                              int status_code,
+                              const ServiceWorkerHeaderMap& response_headers =
+                                  ServiceWorkerHeaderMap()) {
     std::unique_ptr<storage::BlobDataBuilder> blob_data(
         new storage::BlobDataBuilder(base::GenerateGUID()));
-    blob_data->AppendData(url.spec());
+    blob_data->AppendData(request.url.spec());
 
     std::unique_ptr<storage::BlobDataHandle> blob_handle =
         blob_storage_context_->AddFinishedBlob(blob_data.get());
     ServiceWorkerResponse response(
-        url, status_code, "OK", blink::WebServiceWorkerResponseTypeDefault,
-        ServiceWorkerHeaderMap(), blob_handle->uuid(), url.spec().size(),
-        GURL(), blink::WebServiceWorkerResponseErrorUnknown, base::Time(),
+        request.url, status_code, "OK",
+        blink::WebServiceWorkerResponseTypeDefault, response_headers,
+        blob_handle->uuid(), request.url.spec().size(), GURL(),
+        blink::WebServiceWorkerResponseErrorUnknown, base::Time(),
         false /* is_in_cache_storage */,
         std::string() /* cache_storage_cache_name */,
         ServiceWorkerHeaderList() /* cors_exposed_header_names */);
@@ -277,7 +312,7 @@ class CacheStorageManagerTest : public testing::Test {
         new ServiceWorkerFetchRequest());
     request->url = url;
     base::RunLoop loop;
-    cache->Match(std::move(request),
+    cache->Match(std::move(request), CacheStorageCacheQueryParams(),
                  base::Bind(&CacheStorageManagerTest::CacheMatchCallback,
                             base::Unretained(this), base::Unretained(&loop)));
     loop.Run();
@@ -555,7 +590,6 @@ TEST_P(CacheStorageManagerTestP, DropRefAfterNewCacheWithSameNameCreated) {
   // 1. Create cache A and hang onto the handle
   const GURL kTestURL = GURL("http://example.com/foo");
   EXPECT_TRUE(Open(origin1_, "foo"));
-  EXPECT_FALSE(CacheMatch(callback_cache_handle_->value(), kTestURL));
   std::unique_ptr<CacheStorageCacheHandle> cache_handle =
       std::move(callback_cache_handle_);
 
@@ -564,7 +598,6 @@ TEST_P(CacheStorageManagerTestP, DropRefAfterNewCacheWithSameNameCreated) {
 
   // 3. Create cache B (with the same name)
   EXPECT_TRUE(Open(origin1_, "foo"));
-  EXPECT_FALSE(CacheMatch(callback_cache_handle_->value(), kTestURL));
 
   // 4. Drop handle to A
   cache_handle.reset();
@@ -573,13 +606,41 @@ TEST_P(CacheStorageManagerTestP, DropRefAfterNewCacheWithSameNameCreated) {
   EXPECT_FALSE(CacheMatch(callback_cache_handle_->value(), kTestURL));
 }
 
+TEST_P(CacheStorageManagerTestP, DeleteCorrectDirectory) {
+  // This test reproduces crbug.com/630036.
+  // 1. Cache A with name "foo" is created
+  const GURL kTestURL = GURL("http://example.com/foo");
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  std::unique_ptr<CacheStorageCacheHandle> cache_handle =
+      std::move(callback_cache_handle_);
+
+  // 2. Cache A is doomed, but js hangs onto the handle.
+  EXPECT_TRUE(Delete(origin1_, "foo"));
+
+  // 3. Cache B with name "foo" is created
+  EXPECT_TRUE(Open(origin1_, "foo"));
+
+  // 4. Cache B is doomed, and both handles are reset.
+  EXPECT_TRUE(Delete(origin1_, "foo"));
+  cache_handle.reset();
+  callback_cache_handle_.reset();
+
+  // Do some busy work on a different cache to move the cache pool threads
+  // along and trigger the bug.
+  EXPECT_TRUE(Open(origin1_, "bar"));
+  EXPECT_TRUE(CachePut(callback_cache_handle_->value(), kTestURL));
+  EXPECT_TRUE(CacheMatch(callback_cache_handle_->value(), kTestURL));
+}
+
 TEST_P(CacheStorageManagerTestP, StorageMatchAllEntryExistsTwice) {
   EXPECT_TRUE(Open(origin1_, "foo"));
-  EXPECT_TRUE(CachePutWithStatusCode(callback_cache_handle_->value(),
-                                     GURL("http://example.com/foo"), 200));
+  ServiceWorkerFetchRequest request;
+  request.url = GURL("http://example.com/foo");
+  EXPECT_TRUE(
+      CachePutWithStatusCode(callback_cache_handle_->value(), request, 200));
   EXPECT_TRUE(Open(origin1_, "bar"));
-  EXPECT_TRUE(CachePutWithStatusCode(callback_cache_handle_->value(),
-                                     GURL("http://example.com/foo"), 201));
+  EXPECT_TRUE(
+      CachePutWithStatusCode(callback_cache_handle_->value(), request, 201));
 
   EXPECT_TRUE(StorageMatchAll(origin1_, GURL("http://example.com/foo")));
 
@@ -675,6 +736,11 @@ TEST_F(CacheStorageManagerTest, DropReference) {
   EXPECT_TRUE(Open(origin1_, "foo"));
   base::WeakPtr<CacheStorageCache> cache =
       callback_cache_handle_->value()->AsWeakPtr();
+  // Run a cache operation to ensure that the cache has finished initializing so
+  // that when the handle is dropped it can close immediately.
+  EXPECT_FALSE(CacheMatch(callback_cache_handle_->value(),
+                          GURL("http://example.com/foo")));
+
   callback_cache_handle_ = nullptr;
   EXPECT_FALSE(cache);
 }
@@ -900,6 +966,109 @@ TEST_P(CacheStorageManagerTestP, SizeThenCloseStorageAccessed) {
   EXPECT_EQ(0, quota_manager_proxy_->notify_storage_accessed_count());
 }
 
+TEST_P(CacheStorageManagerTestP, StorageMatch_IgnoreSearch) {
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_handle_->value(),
+                       GURL("http://example.com/foo?bar")));
+
+  EXPECT_FALSE(StorageMatch(origin1_, "foo", GURL("http://example.com/foo")));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_search = true;
+  EXPECT_TRUE(StorageMatch(origin1_, "foo", GURL("http://example.com/foo"),
+                           match_params));
+}
+
+TEST_P(CacheStorageManagerTestP, StorageMatch_IgnoreMethod) {
+  GURL url = GURL("http://example.com/foo");
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_handle_->value(), url));
+
+  ServiceWorkerFetchRequest post_request;
+  post_request.url = url;
+  post_request.method = "POST";
+  EXPECT_FALSE(StorageMatchWithRequest(origin1_, "foo", post_request));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_method = true;
+  EXPECT_TRUE(
+      StorageMatchWithRequest(origin1_, "foo", post_request, match_params));
+}
+
+TEST_P(CacheStorageManagerTestP, StorageMatch_IgnoreVary) {
+  GURL url = GURL("http://example.com/foo");
+  EXPECT_TRUE(Open(origin1_, "foo"));
+
+  ServiceWorkerFetchRequest request;
+  request.url = url;
+  request.headers["vary_foo"] = "foo";
+
+  ServiceWorkerHeaderMap response_headers;
+  response_headers["vary"] = "vary_foo";
+
+  EXPECT_TRUE(CachePutWithRequestAndHeaders(callback_cache_handle_->value(),
+                                            request, response_headers));
+  EXPECT_TRUE(StorageMatchWithRequest(origin1_, "foo", request));
+
+  request.headers["vary_foo"] = "bar";
+  EXPECT_FALSE(StorageMatchWithRequest(origin1_, "foo", request));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_vary = true;
+  EXPECT_TRUE(StorageMatchWithRequest(origin1_, "foo", request, match_params));
+}
+
+TEST_P(CacheStorageManagerTestP, StorageMatchAll_IgnoreSearch) {
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_handle_->value(),
+                       GURL("http://example.com/foo?bar")));
+
+  EXPECT_FALSE(StorageMatchAll(origin1_, GURL("http://example.com/foo")));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_search = true;
+  EXPECT_TRUE(
+      StorageMatchAll(origin1_, GURL("http://example.com/foo"), match_params));
+}
+
+TEST_P(CacheStorageManagerTestP, StorageMatchAll_IgnoreMethod) {
+  GURL url = GURL("http://example.com/foo");
+  EXPECT_TRUE(Open(origin1_, "foo"));
+  EXPECT_TRUE(CachePut(callback_cache_handle_->value(), url));
+
+  ServiceWorkerFetchRequest post_request;
+  post_request.url = url;
+  post_request.method = "POST";
+  EXPECT_FALSE(StorageMatchAllWithRequest(origin1_, post_request));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_method = true;
+  EXPECT_TRUE(StorageMatchAllWithRequest(origin1_, post_request, match_params));
+}
+
+TEST_P(CacheStorageManagerTestP, StorageMatchAll_IgnoreVary) {
+  GURL url = GURL("http://example.com/foo");
+  EXPECT_TRUE(Open(origin1_, "foo"));
+
+  ServiceWorkerFetchRequest request;
+  request.url = url;
+  request.headers["vary_foo"] = "foo";
+
+  ServiceWorkerHeaderMap response_headers;
+  response_headers["vary"] = "vary_foo";
+
+  EXPECT_TRUE(CachePutWithRequestAndHeaders(callback_cache_handle_->value(),
+                                            request, response_headers));
+  EXPECT_TRUE(StorageMatchAllWithRequest(origin1_, request));
+
+  request.headers["vary_foo"] = "bar";
+  EXPECT_FALSE(StorageMatchAllWithRequest(origin1_, request));
+
+  CacheStorageCacheQueryParams match_params;
+  match_params.ignore_vary = true;
+  EXPECT_TRUE(StorageMatchAllWithRequest(origin1_, request, match_params));
+}
+
 class CacheStorageMigrationTest : public CacheStorageManagerTest {
  protected:
   CacheStorageMigrationTest() : cache1_("foo"), cache2_("bar") {}
@@ -919,6 +1088,10 @@ class CacheStorageMigrationTest : public CacheStorageManagerTest {
     ASSERT_TRUE(Open(origin1_, cache1_));
     ASSERT_TRUE(Open(origin1_, cache2_));
     callback_cache_handle_.reset();
+
+    // Let the caches shut down.
+    base::RunLoop().RunUntilIdle();
+
     ASSERT_FALSE(base::DirectoryExists(legacy_path_));
     ASSERT_TRUE(base::DirectoryExists(new_path_));
 

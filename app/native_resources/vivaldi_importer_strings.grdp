@@ -19,8 +19,11 @@
   <message name="IDS_IMPORT_FROM_OPERA_OPIUM_DEV" desc="Name of import profile from Chromium based Opera developer">
     Opera version 15+ (Developer)
   </message>
-  <message name="IDS_IMPORT_FROM_VIVALDI" desc="Name of import profile from Chromium based Opera">
+  <message name="IDS_IMPORT_FROM_VIVALDI" desc="Name of import profile from Vivaldi">
     Vivaldi
+  </message>
+  <message name="IDS_IMPORT_FROM_CHROMIUM" desc="Name of import profile from Chromium">
+    Chromium
   </message>
   <message name="IDS_OPERA_IMPORT_FROM_BOOKMARKS_HTML_FILE" desc="browser combo box: Opera Bookmarks HTML File">
     Opera Bookmarks File

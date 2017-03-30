@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
@@ -78,7 +79,7 @@ TEST_F(IPCChannelTest, ChannelTestExistingPipe) {
   IPC::TestChannelListener::SendOneMessage(sender(), "hello from parent");
 
   // Run message loop.
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Close the channel so the client's OnChannelError() gets fired.
   channel()->Close();
@@ -161,7 +162,8 @@ MULTIPROCESS_IPC_TEST_CLIENT_MAIN(GenericClient) {
 
   // Set up IPC channel.
   std::unique_ptr<IPC::Channel> channel(IPC::Channel::CreateClient(
-      IPCTestBase::GetChannelName("GenericClient"), &listener));
+      IPCTestBase::GetChannelName("GenericClient"), &listener,
+      main_message_loop.task_runner()));
   CHECK(channel->Connect());
   listener.Init(channel.get());
   IPC::TestChannelListener::SendOneMessage(channel.get(), "hello from child");

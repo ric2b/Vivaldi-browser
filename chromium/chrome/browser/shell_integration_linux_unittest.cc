@@ -46,7 +46,7 @@ class MockEnvironment : public base::Environment {
   }
 
   bool GetVar(base::StringPiece variable_name, std::string* result) override {
-    if (ContainsKey(variables_, variable_name.as_string())) {
+    if (base::ContainsKey(variables_, variable_name.as_string())) {
       *result = variables_[variable_name.as_string()];
       return true;
     }
@@ -652,6 +652,22 @@ TEST(ShellIntegrationTest, GetDirectoryFileContents) {
               GetDirectoryFileContents(base::ASCIIToUTF16(test_cases[i].title),
                                        test_cases[i].icon_name));
   }
+}
+
+TEST(ShellIntegrationTest, WmClass) {
+  base::CommandLine command_line((base::FilePath()));
+  EXPECT_EQ("foo", internal::GetProgramClassName(command_line, "foo.desktop"));
+  EXPECT_EQ("Foo", internal::GetProgramClassClass(command_line, "foo.desktop"));
+
+  command_line.AppendSwitchASCII("class", "baR");
+  EXPECT_EQ("foo", internal::GetProgramClassName(command_line, "foo.desktop"));
+  EXPECT_EQ("baR", internal::GetProgramClassClass(command_line, "foo.desktop"));
+
+  command_line = base::CommandLine(base::FilePath());
+  command_line.AppendSwitchASCII("user-data-dir", "/tmp/baz");
+  EXPECT_EQ("foo (/tmp/baz)",
+            internal::GetProgramClassName(command_line, "foo.desktop"));
+  EXPECT_EQ("Foo", internal::GetProgramClassClass(command_line, "foo.desktop"));
 }
 
 }  // namespace shell_integration_linux

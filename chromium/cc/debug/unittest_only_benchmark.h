@@ -8,10 +8,6 @@
 #include "base/memory/weak_ptr.h"
 #include "cc/debug/micro_benchmark.h"
 
-namespace base {
-class SingleThreadIdleTaskRunner;
-}
-
 namespace cc {
 
 class CC_EXPORT UnittestOnlyBenchmark : public MicroBenchmark {
@@ -20,7 +16,7 @@ class CC_EXPORT UnittestOnlyBenchmark : public MicroBenchmark {
                         const DoneCallback& callback);
   ~UnittestOnlyBenchmark() override;
 
-  void DidUpdateLayers(LayerTreeHost* host) override;
+  void DidUpdateLayers(LayerTree* layer_tree) override;
   bool ProcessMessage(std::unique_ptr<base::Value> value) override;
 
  protected:

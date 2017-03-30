@@ -4,13 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/opaque_browser_frame_view.h"
 
-#include <algorithm>
-#include <string>
-
-#include "base/compiler_specific.h"
-#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/views/frame/browser_frame.h"
@@ -22,10 +16,6 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_header_helper.h"
-#include "components/signin/core/common/profile_management_switches.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/web_contents.h"
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
@@ -41,19 +31,19 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/resources/grit/ui_resources.h"
 #include "ui/views/controls/button/image_button.h"
-#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/views_delegate.h"
-#include "ui/views/widget/root_view.h"
 #include "ui/views/window/frame_background.h"
 #include "ui/views/window/window_shape.h"
 
 #if defined(OS_LINUX)
 #include "ui/views/controls/menu/menu_runner.h"
+#endif
+
+#if defined(OS_WIN)
+#include "ui/display/win/screen_win.h"
 #endif
 
 using content::WebContents;
@@ -63,11 +53,6 @@ namespace {
 // In the window corners, the resize areas don't actually expand bigger, but the
 // 16 px at the end of each edge triggers diagonal resizing.
 const int kResizeAreaCornerSize = 16;
-
-#if !defined(OS_WIN)
-// The icon never shrinks below 16 px on a side.
-const int kIconMinimumSize = 16;
-#endif
 
 }  // namespace
 
@@ -365,8 +350,10 @@ int OpaqueBrowserFrameView::GetIconSize() const {
 #if defined(OS_WIN)
   // This metric scales up if either the titlebar height or the titlebar font
   // size are increased.
-  return GetSystemMetrics(SM_CYSMICON);
+  return display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON);
 #else
+  // The icon never shrinks below 16 px on a side.
+  const int kIconMinimumSize = 16;
   return std::max(BrowserFrame::GetTitleFontList().GetHeight(),
                   kIconMinimumSize);
 #endif
@@ -384,8 +371,8 @@ bool OpaqueBrowserFrameView::IsRegularOrGuestSession() const {
   return browser_view()->IsRegularOrGuestSession();
 }
 
-gfx::ImageSkia OpaqueBrowserFrameView::GetOTRAvatarIcon() const {
-  return BrowserNonClientFrameView::GetOTRAvatarIcon();
+gfx::ImageSkia OpaqueBrowserFrameView::GetIncognitoAvatarIcon() const {
+  return BrowserNonClientFrameView::GetIncognitoAvatarIcon();
 }
 
 bool OpaqueBrowserFrameView::IsMaximized() const {
@@ -653,8 +640,7 @@ void OpaqueBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
     gfx::ScopedCanvas scoped_canvas(canvas);
     gfx::Rect tabstrip_bounds(GetBoundsForTabStrip(browser_view()->tabstrip()));
     tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
-    canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
-                                  SkRegion::kDifference_Op);
+    canvas->ClipRect(tabstrip_bounds, SkRegion::kDifference_Op);
     separator_rect.set_y(tabstrip_bounds.bottom());
     BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
                                         separator_rect, true);
@@ -729,7 +715,7 @@ void OpaqueBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const ui::ThemeProvider* tp = GetThemeProvider();
   const bool md = ui::MaterialDesignController::IsModeMaterial();
   const gfx::Rect toolbar_bounds(browser_view()->GetToolbarBounds());
-  const bool incognito = browser_view()->IsOffTheRecord();
+  const bool incognito = browser_view()->IsIncognito();
   const bool toolbar_visible = IsToolbarVisible();
   int img_y_offset = 0;
   if (tabstrip_visible) {

@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -42,6 +41,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/origin_trial_policy.h"
 #include "content/public/common/url_constants.h"
 #include "crypto/sha2.h"
 #include "net/url_request/url_request_context.h"
@@ -82,10 +82,8 @@ class BlobProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
       // the main thread but we want blob_protocol_handler_ constructed
       // on the IO thread.
       blob_protocol_handler_.reset(new storage::BlobProtocolHandler(
-          blob_storage_context_->context(),
-          file_system_context_.get(),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)
-              .get()));
+          blob_storage_context_->context(), file_system_context_.get(),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
     }
     return blob_protocol_handler_->MaybeCreateJob(request, network_delegate);
   }
@@ -378,8 +376,6 @@ StoragePartitionImplMap::StoragePartitionImplMap(
 }
 
 StoragePartitionImplMap::~StoragePartitionImplMap() {
-  STLDeleteContainerPairSecondPointers(partitions_.begin(),
-                                       partitions_.end());
 }
 
 StoragePartitionImpl* StoragePartitionImplMap::Get(
@@ -392,14 +388,16 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
 
   PartitionMap::const_iterator it = partitions_.find(partition_config);
   if (it != partitions_.end())
-    return it->second;
+    return it->second.get();
 
   base::FilePath relative_partition_path =
       GetStoragePartitionPath(partition_domain, partition_name);
 
-  StoragePartitionImpl* partition = StoragePartitionImpl::Create(
-      browser_context_, in_memory, relative_partition_path);
-  partitions_[partition_config] = partition;
+  std::unique_ptr<StoragePartitionImpl> partition_ptr(
+      StoragePartitionImpl::Create(browser_context_, in_memory,
+                                   relative_partition_path));
+  StoragePartitionImpl* partition = partition_ptr.get();
+  partitions_[partition_config] = std::move(partition_ptr);
 
   partition->GetQuotaManager()->SetTemporaryStorageEvictionPolicy(
       GetContentClient()->browser()->GetTemporaryStorageEvictionPolicy(
@@ -447,8 +445,7 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
   request_interceptors.push_back(
       ServiceWorkerRequestHandler::CreateInterceptor(
           browser_context_->GetResourceContext()).release());
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableExperimentalWebPlatformFeatures)) {
+  if (ForeignFetchRequestHandler::IsForeignFetchEnabled()) {
     request_interceptors.push_back(
         ForeignFetchRequestHandler::CreateInterceptor(
             browser_context_->GetResourceContext())
@@ -562,7 +559,7 @@ void StoragePartitionImplMap::ForEach(
   for (PartitionMap::const_iterator it = partitions_.begin();
        it != partitions_.end();
        ++it) {
-    callback.Run(it->second);
+    callback.Run(it->second.get());
   }
 }
 
@@ -604,8 +601,7 @@ void StoragePartitionImplMap::PostCreateInitialization(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&ServiceWorkerContextWrapper::InitializeResourceContext,
                    partition->GetServiceWorkerContext(),
-                   browser_context_->GetResourceContext(),
-                   base::RetainedRef(partition->GetURLRequestContext())));
+                   browser_context_->GetResourceContext()));
 
     // We do not call InitializeURLRequestContext() for media contexts because,
     // other than the HTTP cache, the media contexts share the same backing

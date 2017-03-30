@@ -4,8 +4,7 @@
 
 #include "platform/animation/TimingFunction.h"
 
-#include "platform/animation/CubicBezierControlPoints.h"
-#include "wtf/MathExtras.h"
+#include "wtf/text/StringBuilder.h"
 
 namespace blink {
 
@@ -22,6 +21,12 @@ double LinearTimingFunction::evaluate(double fraction, double) const
 void LinearTimingFunction::range(double* minValue, double* maxValue) const
 {
 }
+
+std::unique_ptr<cc::TimingFunction> LinearTimingFunction::cloneToCC() const
+{
+    return nullptr;
+}
+
 
 String CubicBezierTimingFunction::toString() const
 {
@@ -46,66 +51,29 @@ String CubicBezierTimingFunction::toString() const
 
 double CubicBezierTimingFunction::evaluate(double fraction, double accuracy) const
 {
-    return m_bezier.SolveWithEpsilon(fraction, accuracy);
+    return m_bezier->bezier().SolveWithEpsilon(fraction, accuracy);
 }
 
-// This works by taking taking the derivative of the cubic bezier, on the y
-// axis. We can then solve for where the derivative is zero to find the min
-// and max distace along the line. We the have to solve those in terms of time
-// rather than distance on the x-axis
 void CubicBezierTimingFunction::range(double* minValue, double* maxValue) const
 {
-    if (0 <= m_y1 && m_y2 < 1 && 0 <= m_y2 && m_y2 <= 1) {
-        return;
-    }
-
-    double a = 3.0 * (m_y1 - m_y2) + 1.0;
-    double b = 2.0 * (m_y2 - 2.0 * m_y1);
-    double c = m_y1;
-
-    if (std::abs(a) < std::numeric_limits<double>::epsilon()
-        && std::abs(b) < std::numeric_limits<double>::epsilon()) {
-        return;
-    }
-
-    double t1 = 0.0;
-    double t2 = 0.0;
-
-    if (std::abs(a) < std::numeric_limits<double>::epsilon()) {
-        t1 = -c / b;
-    } else {
-        double discriminant = b * b - 4 * a * c;
-        if (discriminant < 0)
-            return;
-        double discriminantSqrt = sqrt(discriminant);
-        t1 = (-b + discriminantSqrt) / (2 * a);
-        t2 = (-b - discriminantSqrt) / (2 * a);
-    }
-
-    double solution1 = 0.0;
-    double solution2 = 0.0;
-
-    // If the solution is in the range [0,1] then we include it, otherwise we
-    // ignore it.
-
-    // An interesting fact about these beziers is that they are only
-    // actually evaluated in [0,1]. After that we take the tangent at that point
-    // and linearly project it out.
-    if (0 < t1 && t1 < 1)
-        solution1 = m_bezier.SampleCurveY(t1);
-
-    if (0 < t2 && t2 < 1)
-        solution2 = m_bezier.SampleCurveY(t2);
+    const double solution1 = m_bezier->bezier().range_min();
+    const double solution2 = m_bezier->bezier().range_max();
 
     // Since our input values can be out of the range 0->1 so we must also
     // consider the minimum and maximum points.
-    double solutionMin = m_bezier.SolveWithEpsilon(*minValue, std::numeric_limits<double>::epsilon());
-    double solutionMax = m_bezier.SolveWithEpsilon(*maxValue, std::numeric_limits<double>::epsilon());
+    double solutionMin = m_bezier->bezier().SolveWithEpsilon(*minValue, std::numeric_limits<double>::epsilon());
+    double solutionMax = m_bezier->bezier().SolveWithEpsilon(*maxValue, std::numeric_limits<double>::epsilon());
     *minValue = std::min(std::min(solutionMin, solutionMax), 0.0);
     *maxValue = std::max(std::max(solutionMin, solutionMax), 1.0);
     *minValue = std::min(std::min(*minValue, solution1), solution2);
     *maxValue = std::max(std::max(*maxValue, solution1), solution2);
 }
+
+std::unique_ptr<cc::TimingFunction> CubicBezierTimingFunction::cloneToCC() const
+{
+    return m_bezier->Clone();
+}
+
 
 String StepsTimingFunction::toString() const
 {
@@ -144,30 +112,51 @@ void StepsTimingFunction::range(double* minValue, double* maxValue) const
 
 double StepsTimingFunction::evaluate(double fraction, double) const
 {
-    double startOffset = 0;
-    switch (m_stepPosition) {
-    case StepPosition::START:
-        startOffset = 1;
-        break;
-    case StepPosition::MIDDLE:
-        startOffset = 0.5;
-        break;
-    case StepPosition::END:
-        startOffset = 0;
-        break;
-    }
-    return clampTo(floor((m_steps * fraction) + startOffset) / m_steps, 0.0, 1.0);
+    return m_steps->GetPreciseValue(fraction);
 }
+
+std::unique_ptr<cc::TimingFunction> StepsTimingFunction::cloneToCC() const
+{
+    return m_steps->Clone();
+}
+
+
+PassRefPtr<TimingFunction> createCompositorTimingFunctionFromCC(const cc::TimingFunction* timingFunction)
+{
+    if (!timingFunction)
+        return LinearTimingFunction::shared();
+
+    switch (timingFunction->GetType()) {
+    case cc::TimingFunction::Type::CUBIC_BEZIER: {
+        auto cubicTimingFunction = static_cast<const cc::CubicBezierTimingFunction*>(timingFunction);
+        if (cubicTimingFunction->ease_type() != cc::CubicBezierTimingFunction::EaseType::CUSTOM)
+            return CubicBezierTimingFunction::preset(cubicTimingFunction->ease_type());
+
+        const auto& bezier = cubicTimingFunction->bezier();
+        return CubicBezierTimingFunction::create(bezier.GetX1(), bezier.GetY1(), bezier.GetX2(), bezier.GetY2());
+    }
+
+    case cc::TimingFunction::Type::STEPS: {
+        auto stepsTimingFunction = static_cast<const cc::StepsTimingFunction*>(timingFunction);
+        return StepsTimingFunction::create(stepsTimingFunction->steps(), stepsTimingFunction->step_position());
+    }
+
+    default:
+        NOTREACHED();
+        return nullptr;
+    }
+}
+
 
 // Equals operators
 bool operator==(const LinearTimingFunction& lhs, const TimingFunction& rhs)
 {
-    return rhs.type() == TimingFunction::kLinearFunction;
+    return rhs.getType() == TimingFunction::Type::LINEAR;
 }
 
 bool operator==(const CubicBezierTimingFunction& lhs, const TimingFunction& rhs)
 {
-    if (rhs.type() != TimingFunction::kCubicBezierFunction)
+    if (rhs.getType() != TimingFunction::Type::CUBIC_BEZIER)
         return false;
 
     const CubicBezierTimingFunction& ctf = toCubicBezierTimingFunction(rhs);
@@ -179,7 +168,7 @@ bool operator==(const CubicBezierTimingFunction& lhs, const TimingFunction& rhs)
 
 bool operator==(const StepsTimingFunction& lhs, const TimingFunction& rhs)
 {
-    if (rhs.type() != TimingFunction::kStepsFunction)
+    if (rhs.getType() != TimingFunction::Type::STEPS)
         return false;
 
     const StepsTimingFunction& stf = toStepsTimingFunction(rhs);
@@ -190,16 +179,16 @@ bool operator==(const StepsTimingFunction& lhs, const TimingFunction& rhs)
 // non-generic operator== otherwise it will end up calling itself.
 bool operator==(const TimingFunction& lhs, const TimingFunction& rhs)
 {
-    switch (lhs.type()) {
-    case TimingFunction::kLinearFunction: {
+    switch (lhs.getType()) {
+    case TimingFunction::Type::LINEAR: {
         const LinearTimingFunction& linear = toLinearTimingFunction(lhs);
         return (linear == rhs);
     }
-    case TimingFunction::kCubicBezierFunction: {
+    case TimingFunction::Type::CUBIC_BEZIER: {
         const CubicBezierTimingFunction& cubic = toCubicBezierTimingFunction(lhs);
         return (cubic == rhs);
     }
-    case TimingFunction::kStepsFunction: {
+    case TimingFunction::Type::STEPS: {
         const StepsTimingFunction& step = toStepsTimingFunction(lhs);
         return (step == rhs);
     }

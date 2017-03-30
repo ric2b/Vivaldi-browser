@@ -29,6 +29,7 @@
 #include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
+#include "components/ntp_snippets/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/policy/core/browser/autofill_policy_handler.h"
 #include "components/policy/core/browser/configuration_policy_handler.h"
@@ -40,14 +41,14 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/policy/core/common/schema.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_prefs.h"
-#include "components/sync_driver/sync_policy_handler.h"
+#include "components/sync/driver/sync_policy_handler.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "components/variations/pref_names.h"
-#include "policy/policy_constants.h"
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/search/contextual_search_policy_handler_android.h"
@@ -75,6 +76,10 @@
 #include "chrome/browser/extensions/policy_handlers.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/manifest.h"
+#endif
+
+#if defined(ENABLE_SPELLCHECK)
+#include "components/spellcheck/browser/pref_names.h"
 #endif
 
 namespace policy {
@@ -107,9 +112,6 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
   { key::kPacHttpsUrlStrippingEnabled,
     prefs::kPacHttpsUrlStrippingEnabled,
-    base::Value::TYPE_BOOLEAN },
-  { key::kDisableSpdy,
-    prefs::kDisableSpdy,
     base::Value::TYPE_BOOLEAN },
   { key::kSafeBrowsingEnabled,
     prefs::kSafeBrowsingEnabled,
@@ -237,6 +239,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kRequireOnlineRevocationChecksForLocalAnchors,
     ssl_config::prefs::kCertRevocationCheckingRequiredLocalAnchors,
     base::Value::TYPE_BOOLEAN },
+  { key::kEnableSha1ForLocalAnchors,
+    ssl_config::prefs::kCertEnableSha1LocalAnchors,
+    base::Value::TYPE_BOOLEAN },
   { key::kAuthSchemes,
     prefs::kAuthSchemes,
     base::Value::TYPE_STRING },
@@ -357,10 +362,13 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kAllowedDomainsForApps,
     prefs::kAllowedDomainsForApps,
     base::Value::TYPE_STRING },
+  { key::kComponentUpdatesEnabled,
+    prefs::kComponentUpdatesEnabled,
+    base::Value::TYPE_BOOLEAN },
 
 #if defined(ENABLE_SPELLCHECK)
   { key::kSpellCheckServiceEnabled,
-    prefs::kSpellCheckUseSpellingService,
+    spellcheck::prefs::kSpellCheckUseSpellingService,
     base::Value::TYPE_BOOLEAN },
 #endif  // defined(ENABLE_SPELLCHECK)
 
@@ -394,11 +402,19 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kDHEEnabled,
     ssl_config::prefs::kDHEEnabled,
     base::Value::TYPE_BOOLEAN },
+  { key::kNTPContentSuggestionsEnabled,
+    ntp_snippets::prefs::kEnableSnippets,
+    base::Value::TYPE_BOOLEAN },
 #if defined(ENABLE_MEDIA_ROUTER)
   { key::kEnableMediaRouter,
     prefs::kEnableMediaRouter,
     base::Value::TYPE_BOOLEAN },
 #endif  // defined(ENABLE_MEDIA_ROUTER)
+#if defined(ENABLE_WEBRTC)
+  { key::kWebRtcUdpPortRange,
+    prefs::kWebRTCUDPPortRange,
+    base::Value::TYPE_STRING },
+#endif  // defined(ENABLE_WEBRTC)
 #if !defined(OS_MACOSX)
   { key::kFullscreenAllowed,
     prefs::kFullscreenAllowed,
@@ -425,6 +441,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
   { key::kExternalStorageDisabled,
     prefs::kExternalStorageDisabled,
+    base::Value::TYPE_BOOLEAN },
+  { key::kExternalStorageReadOnly,
+    prefs::kExternalStorageReadOnly,
     base::Value::TYPE_BOOLEAN },
   { key::kAudioOutputAllowed,
     chromeos::prefs::kAudioOutputAllowed,

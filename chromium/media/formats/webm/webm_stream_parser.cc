@@ -200,7 +200,7 @@ int WebMStreamParser::ParseInfoAndTracks(const uint8_t* data, int size) {
   bytes_parsed += result;
 
   double timecode_scale_in_us = info_parser.timecode_scale() / 1000.0;
-  InitParameters params(kInfiniteDuration());
+  InitParameters params(kInfiniteDuration);
 
   if (info_parser.duration() > 0) {
     int64_t duration_in_us = info_parser.duration() * timecode_scale_in_us;
@@ -264,15 +264,12 @@ int WebMStreamParser::ParseCluster(const uint8_t* data, int size) {
   if (bytes_parsed < 0)
     return bytes_parsed;
 
-  const BufferQueue& audio_buffers = cluster_parser_->GetAudioBuffers();
-  const BufferQueue& video_buffers = cluster_parser_->GetVideoBuffers();
-  const TextBufferQueueMap& text_map = cluster_parser_->GetTextBuffers();
+  BufferQueueMap buffer_queue_map;
+  cluster_parser_->GetBuffers(&buffer_queue_map);
 
   bool cluster_ended = cluster_parser_->cluster_ended();
 
-  if ((!audio_buffers.empty() || !video_buffers.empty() ||
-       !text_map.empty()) &&
-      !new_buffers_cb_.Run(audio_buffers, video_buffers, text_map)) {
+  if (!buffer_queue_map.empty() && !new_buffers_cb_.Run(buffer_queue_map)) {
     return -1;
   }
 

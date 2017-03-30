@@ -14,7 +14,7 @@
 #include "cc/layers/layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/trees/draw_property_utils.h"
-#include "cc/trees/layer_tree_host.h"
+#include "cc/trees/layer_tree.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -63,18 +63,20 @@ InvalidationBenchmark::InvalidationBenchmark(
 InvalidationBenchmark::~InvalidationBenchmark() {
 }
 
-void InvalidationBenchmark::DidUpdateLayers(LayerTreeHost* host) {
+void InvalidationBenchmark::DidUpdateLayers(LayerTree* layer_tree) {
   LayerTreeHostCommon::CallFunctionForEveryLayer(
-      host, [this](Layer* layer) { layer->RunMicroBenchmark(this); });
+      layer_tree, [this](Layer* layer) { layer->RunMicroBenchmark(this); });
 }
 
 void InvalidationBenchmark::RunOnLayer(PictureLayer* layer) {
-  PropertyTrees* property_trees = layer->layer_tree_host()->property_trees();
-  LayerList update_list;
-  update_list.push_back(layer);
-  draw_property_utils::ComputeVisibleRectsForTesting(
-      property_trees, property_trees->non_root_surfaces_enabled, &update_list);
-  gfx::Rect visible_layer_rect = layer->visible_layer_rect_for_testing();
+  gfx::Rect visible_layer_rect = gfx::Rect(layer->bounds());
+  gfx::Transform from_screen;
+  bool invertible = layer->screen_space_transform().GetInverse(&from_screen);
+  if (!invertible)
+    from_screen = gfx::Transform();
+  gfx::Rect viewport_rect = MathUtil::ProjectEnclosingClippedRect(
+      from_screen, gfx::Rect(layer->GetLayerTree()->device_viewport_size()));
+  visible_layer_rect.Intersect(viewport_rect);
   switch (mode_) {
     case FIXED_SIZE: {
       // Invalidation with a random position and fixed size.
@@ -105,7 +107,7 @@ void InvalidationBenchmark::RunOnLayer(PictureLayer* layer) {
     }
     case VIEWPORT: {
       // Invalidate entire viewport.
-      layer->SetNeedsDisplayRect(layer->visible_layer_rect_for_testing());
+      layer->SetNeedsDisplayRect(visible_layer_rect);
       break;
     }
   }

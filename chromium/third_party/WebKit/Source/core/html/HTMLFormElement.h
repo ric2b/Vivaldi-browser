@@ -66,7 +66,7 @@ public:
     void disassociate(HTMLImageElement&);
     void didAssociateByParser();
 
-    void prepareForSubmission(Event*);
+    void prepareForSubmission(Event*, HTMLFormControlElement* submitButton);
     void submitFromJavaScript();
     void reset();
 
@@ -119,7 +119,7 @@ private:
     void copyNonAttributePropertiesFromElement(const Element&) override;
 
     void submitDialog(FormSubmission*);
-    void submit(Event*, bool activateSubmitButton);
+    void submit(Event*, HTMLFormControlElement* submitButton);
 
     void scheduleFormSubmission(FormSubmission*);
 
@@ -150,17 +150,20 @@ private:
     // Do not access m_imageElements directly. Use imageElements() instead.
     HeapVector<Member<HTMLImageElement>> m_imageElements;
 
+    // https://html.spec.whatwg.org/multipage/forms.html#planned-navigation
+    // Unlike the specification, we use this only for web-exposed submit()
+    // function in 'submit' event handler.
+    Member<FormSubmission> m_plannedNavigation;
+
+    bool m_isSubmitting = false;
+    bool m_inUserJSSubmitEvent = false;
+
     bool m_associatedElementsAreDirty : 1;
     bool m_imageElementsAreDirty : 1;
     bool m_hasElementsAssociatedByParser : 1;
     bool m_hasElementsAssociatedByFormAttribute : 1;
     bool m_didFinishParsingChildren : 1;
-
-    bool m_isSubmittingOrInUserJSSubmitEvent : 1;
-    bool m_shouldSubmit : 1;
-
     bool m_isInResetFunction : 1;
-
     bool m_wasDemoted : 1;
 };
 

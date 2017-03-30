@@ -17,6 +17,7 @@
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
@@ -33,6 +34,10 @@ namespace chromeos {
 class DisplayNotificationsTest;
 }
 
+namespace display {
+class DisplayLayoutStore;
+}
+
 namespace gfx {
 class Insets;
 class Rect;
@@ -40,7 +45,6 @@ class Rect;
 
 namespace ash {
 class AcceleratorControllerTest;
-class DisplayLayoutStore;
 class MouseWarpController;
 class ScreenAsh;
 
@@ -101,7 +105,7 @@ class ASH_EXPORT DisplayManager
   virtual ~DisplayManager();
 #endif
 
-  DisplayLayoutStore* layout_store() { return layout_store_.get(); }
+  display::DisplayLayoutStore* layout_store() { return layout_store_.get(); }
 
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 
@@ -164,7 +168,8 @@ class ASH_EXPORT DisplayManager
   // ui-scale change, and device scale factor change. Returns true if it changes
   // the display resolution so that the caller needs to show a notification in
   // case the new resolution actually doesn't work.
-  bool SetDisplayMode(int64_t display_id, const DisplayMode& display_mode);
+  bool SetDisplayMode(int64_t display_id,
+                      const scoped_refptr<ManagedDisplayMode>& display_mode);
 
   // Register per display properties. |overscan_insets| is NULL if
   // the display has no custom overscan insets.
@@ -193,12 +198,13 @@ class ASH_EXPORT DisplayManager
   }
 
   // Returns the display mode of |display_id| which is currently used.
-  DisplayMode GetActiveModeForDisplayId(int64_t display_id) const;
+  scoped_refptr<ManagedDisplayMode> GetActiveModeForDisplayId(
+      int64_t display_id) const;
 
   // Returns the display's selected mode. This returns false and doesn't
   // set |mode_out| if the display mode is in default.
-  bool GetSelectedModeForDisplayId(int64_t display_id,
-                                   DisplayMode* mode_out) const;
+  scoped_refptr<ManagedDisplayMode> GetSelectedModeForDisplayId(
+      int64_t display_id) const;
 
   // Tells if the virtual resolution feature is enabled.
   bool IsDisplayUIScalingEnabled() const;
@@ -233,6 +239,15 @@ class ASH_EXPORT DisplayManager
   // Returns the logical number of displays. This returns 1
   // when displays are mirrored.
   size_t GetNumDisplays() const;
+
+  // Returns only the currently active displays. This list does not include the
+  // displays that will be removed if |UpdateDisplaysWith| is currently
+  // executing.
+  // See https://crbug.com/632755
+  const display::DisplayList& active_only_display_list() const {
+    return is_updating_display_list_ ? active_only_display_list_
+                                     : active_display_list();
+  }
 
   const display::DisplayList& active_display_list() const {
     return active_display_list_;
@@ -323,7 +338,7 @@ class ASH_EXPORT DisplayManager
   // A unit test may change the internal display id (which never happens on
   // a real device). This will update the mode list for internal display
   // for this test scenario.
-  void UpdateInternalDisplayModeListForTest();
+  void UpdateInternalManagedDisplayModeListForTest();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, ConvertPoint);
@@ -403,12 +418,21 @@ class ASH_EXPORT DisplayManager
 
   std::unique_ptr<ScreenAsh> screen_;
 
-  std::unique_ptr<DisplayLayoutStore> layout_store_;
+  std::unique_ptr<display::DisplayLayoutStore> layout_store_;
 
   int64_t first_display_id_;
 
   // List of current active displays.
   display::DisplayList active_display_list_;
+  // This list does not include the displays that will be removed if
+  // |UpdateDisplaysWith| is under execution.
+  // See https://crbug.com/632755
+  display::DisplayList active_only_display_list_;
+
+  // True if active_display_list is being modified and has displays that are not
+  // presently active.
+  // See https://crbug.com/632755
+  bool is_updating_display_list_;
 
   int num_connected_displays_;
 
@@ -418,7 +442,7 @@ class ASH_EXPORT DisplayManager
   std::map<int64_t, DisplayInfo> display_info_;
 
   // Selected display modes for displays. Key is the displays' ID.
-  std::map<int64_t, DisplayMode> display_modes_;
+  std::map<int64_t, scoped_refptr<ManagedDisplayMode>> display_modes_;
 
   // When set to true, the host window's resize event updates
   // the display's size. This is set to true when running on

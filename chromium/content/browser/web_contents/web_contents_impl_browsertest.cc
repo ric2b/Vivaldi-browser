@@ -922,7 +922,7 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
   TestNavigationManager cross_site_delayer(shell()->web_contents(),
                                            kCrossSiteURL);
   shell()->LoadURL(kCrossSiteURL);
-  cross_site_delayer.WaitForWillStartRequest();
+  EXPECT_TRUE(cross_site_delayer.WaitForWillStartRequest());
 
   // Click on a link in the page. This will show the BeforeUnload dialog.
   // Ensure the dialog is not dismissed, which will cause it to still be
@@ -937,7 +937,6 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   // Have the cross-site navigation commit. The main RenderFrameHost should
   // still be loading after that.
-  cross_site_delayer.ResumeNavigation();
   cross_site_delayer.WaitForNavigationFinished();
   EXPECT_TRUE(shell()->web_contents()->IsLoading());
 }
@@ -1170,6 +1169,45 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
 namespace {
 
+class DownloadImageObserver {
+ public:
+  MOCK_METHOD5(OnFinishDownloadImage, void(
+      int id,
+      int status_code,
+      const GURL& image_url,
+      const std::vector<SkBitmap>& bitmap,
+      const std::vector<gfx::Size>& sizes));
+  ~DownloadImageObserver() = default;
+};
+
+void DownloadImageTestInternal(Shell* shell,
+                               const GURL &image_url,
+                               int expected_http_status) {
+  using ::testing::_;
+  using ::testing::InvokeWithoutArgs;
+
+  // Set up everything.
+  DownloadImageObserver download_image_observer;
+  scoped_refptr<MessageLoopRunner> loop_runner =
+      new MessageLoopRunner();
+
+  // Set up expectation and stub.
+  EXPECT_CALL(download_image_observer,
+              OnFinishDownloadImage(_, expected_http_status, _, _, _));
+  ON_CALL(download_image_observer, OnFinishDownloadImage(_, _, _, _, _))
+      .WillByDefault(
+          InvokeWithoutArgs(loop_runner.get(), &MessageLoopRunner::Quit));
+
+  shell->LoadURL(GURL("about:blank"));
+  shell->web_contents()->DownloadImage(
+      image_url, false, 1024, false,
+      base::Bind(&DownloadImageObserver::OnFinishDownloadImage,
+                 base::Unretained(&download_image_observer)));
+
+  // Wait for response.
+  loop_runner->Run();
+}
+
 void ExpectNoValidImageCallback(const base::Closure& quit_closure,
                                 int id,
                                 int status_code,
@@ -1183,6 +1221,21 @@ void ExpectNoValidImageCallback(const base::Closure& quit_closure,
 }
 
 }  // anonymous namespace
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DownloadImage_HttpImage) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL kImageUrl =
+      embedded_test_server()->GetURL("/image.jpg");
+  DownloadImageTestInternal(shell(), kImageUrl, 200);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       DownloadImage_Deny_FileImage) {
+  const GURL kImageUrl =
+      GetTestUrl("", "image.jpg");
+  DownloadImageTestInternal(shell(), kImageUrl, 0);
+}
 
 IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest, DownloadImage_NoValidImage) {
   ASSERT_TRUE(embedded_test_server()->Start());

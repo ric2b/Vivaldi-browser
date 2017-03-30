@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2015-2016 Vivaldi Technologies AS. All rights reserved.
 
 [
   {
@@ -8,7 +8,7 @@
       {
         "id": "ThumbnailQueryResult",
         "type": "object",
-        "description": "A structure contain the result of the isThumbnailAvailable call.",
+        "description": "A structure containing the result of the isThumbnailAvailable call.",
         "properties": {
           "hasThumbnail": {
             "type": "boolean",
@@ -17,6 +17,33 @@
           "thumbnailUrl": {
             "type": "string",
             "description": "The url pointing to the available thumbnail"
+          }
+        }
+      },
+      {
+        "id": "CaptureUIParams",
+        "type": "object",
+        "description": "A structure containing parameters for the captureUI call.",
+        "properties": {
+          "appWindowId": {
+            "type": "string",
+            "description": "App window id to capture."
+          },
+          "posX": {
+            "type": "integer",
+            "description": "X offset inside the given app window."
+          },
+          "posY": {
+            "type": "integer",
+            "description": "Y offset inside the given app window."
+          },
+          "width": {
+            "type": "integer",
+            "description": "Width of the capture."
+          },
+          "height": {
+            "type": "integer",
+            "description": "Height of the capture."
           }
         }
       }
@@ -45,6 +72,28 @@
               {
                 "name": "result",
                 "$ref": "ThumbnailQueryResult"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "captureUI",
+        "type": "function",
+        "description": "Captures a part of the visible UI for the given app window.",
+        "parameters": [
+          {
+            "name": "params",
+            "$ref": "CaptureUIParams"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "image",
+                "type": "string",
+                "description": "base64-encoded png of the captured image."
               }
             ]
           }

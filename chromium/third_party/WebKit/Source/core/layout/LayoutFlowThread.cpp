@@ -99,12 +99,7 @@ void LayoutFlowThread::validateColumnSets()
 bool LayoutFlowThread::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, VisualRectFlags visualRectFlags) const
 {
     ASSERT(ancestor != this); // A flow thread should never be an invalidation container.
-    // |rect| is a layout rectangle, where the block direction coordinate is flipped for writing
-    // mode. fragmentsBoundingBox(), on the other hand, works on physical rectangles, so we need to
-    // flip the rectangle before and after calling it.
-    flipForWritingMode(rect);
     rect = fragmentsBoundingBox(rect);
-    flipForWritingMode(rect);
     return LayoutBlockFlow::mapToVisualRectInAncestorSpace(ancestor, rect, visualRectFlags);
 }
 
@@ -190,6 +185,24 @@ LayoutRect LayoutFlowThread::fragmentsBoundingBox(const LayoutRect& layerBoundin
         result.unite(columnSet->fragmentsBoundingBox(layerBoundingBox));
 
     return result;
+}
+
+void LayoutFlowThread::flowThreadToContainingCoordinateSpace(LayoutUnit& blockPosition, LayoutUnit& inlinePosition) const
+{
+    LayoutPoint position(inlinePosition, blockPosition);
+    // First we have to make |position| physical, because that's what offsetLeft() expects and returns.
+    if (!isHorizontalWritingMode())
+        position = position.transposedPoint();
+    position = flipForWritingMode(position);
+
+    position.move(columnOffset(position));
+
+    // Make |position| logical again, and read out the values.
+    position = flipForWritingMode(position);
+    if (!isHorizontalWritingMode())
+        position = position.transposedPoint();
+    blockPosition = position.y();
+    inlinePosition = position.x();
 }
 
 void LayoutFlowThread::MultiColumnSetSearchAdapter::collectIfNeeded(const MultiColumnSetInterval& interval)

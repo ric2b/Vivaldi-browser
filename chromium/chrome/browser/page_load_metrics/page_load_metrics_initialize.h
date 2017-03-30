@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_INITIALIZE_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_PAGE_LOAD_METRICS_INITIALIZE_H_
 
-#include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
+#include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 
 namespace content {
 class WebContents;
@@ -15,15 +15,6 @@ namespace chrome {
 
 void InitializePageLoadMetricsForWebContents(
     content::WebContents* web_contents);
-
-class PageLoadMetricsEmbedder
-    : public page_load_metrics::PageLoadMetricsEmbedderInterface {
- public:
-  // PageLoadMetricsEmbedderInterface:
-  ~PageLoadMetricsEmbedder() override;
-  bool IsPrerendering(content::WebContents* web_contents) override;
-  void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override;
-};
 
 }  // namespace chrome
 

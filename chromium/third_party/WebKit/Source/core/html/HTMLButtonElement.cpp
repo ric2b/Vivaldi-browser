@@ -76,7 +76,7 @@ const AtomicString& HTMLButtonElement::formControlType() const
     }
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return emptyAtom;
 }
 
@@ -101,7 +101,7 @@ void HTMLButtonElement::parseAttribute(const QualifiedName& name, const AtomicSt
         else
             m_type = SUBMIT;
         setNeedsWillValidateCheck();
-        if (formOwner() && inShadowIncludingDocument())
+        if (formOwner() && isConnected())
             formOwner()->invalidateDefaultButtonStyle();
     } else {
         if (name == formactionAttr)
@@ -114,10 +114,8 @@ void HTMLButtonElement::defaultEventHandler(Event* event)
 {
     if (event->type() == EventTypeNames::DOMActivate && !isDisabledFormControl()) {
         if (form() && m_type == SUBMIT) {
-            m_isActivatedSubmit = true;
-            form()->prepareForSubmission(event);
+            form()->prepareForSubmission(event, this);
             event->setDefaultHandled();
-            m_isActivatedSubmit = false; // Do this in case submission was canceled.
         }
         if (form() && m_type == RESET) {
             form()->reset();

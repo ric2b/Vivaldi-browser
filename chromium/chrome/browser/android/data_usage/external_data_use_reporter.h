@@ -8,13 +8,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <deque>
 #include <memory>
 #include <string>
 
+#include "base/callback.h"
 #include "base/containers/hash_tables.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
+#include "chrome/browser/android/data_usage/data_use_tab_model.h"
 #include "net/base/network_change_notifier.h"
 
 #if defined(OS_ANDROID)
@@ -29,9 +33,6 @@ namespace chrome {
 
 namespace android {
 
-class DataUseTabModel;
-class ExternalDataUseObserverBridge;
-
 // This class receives data use observations from ExternalDataUseObserver,
 // labels the data use using DataUseTabModel, and buffers the data use report.
 // The buffered reports are submitted to the platform when a minimum number of
@@ -40,6 +41,21 @@ class ExternalDataUseObserverBridge;
 // must only be accessed on UI thread.
 class ExternalDataUseReporter {
  public:
+  typedef base::Callback<bool(SessionID::id_type,
+                              const base::TimeTicks,
+                              DataUseTabModel::TrackingInfo*)>
+      GetTrackingInfoCallback;
+
+  typedef base::Callback<void(const std::string&,
+                              const std::string&,
+                              net::NetworkChangeNotifier::ConnectionType,
+                              const std::string&,
+                              const base::Time,
+                              const base::Time,
+                              int64_t,
+                              int64_t)>
+      ReportDataUseCallback;
+
   // Result of data usage report submission.  This enum must remain synchronized
   // with the enum of the same name in metrics/histograms/histograms.xml.
   enum DataUsageReportSubmissionResult {
@@ -60,16 +76,18 @@ class ExternalDataUseReporter {
   // paramenters from.
   ExternalDataUseReporter(
       const char* field_trial,
-      DataUseTabModel* data_use_tab_model,
-      ExternalDataUseObserverBridge* external_data_use_observer_bridge);
+      const GetTrackingInfoCallback& get_tracking_info_callback,
+      const ReportDataUseCallback& report_data_use_callback);
+
   virtual ~ExternalDataUseReporter();
 
   void InitOnUIThread();
 
-  // Notifies the ExternalDataUseReporter of data usage. The data use is
-  // labeled using |data_use_tab_model_|, buffered and then reported to
+  // Notifies the ExternalDataUseReporter of data usage. The data use is labeled
+  // using |data_use_tab_model_|, buffered and then reported to
   // |external_data_use_observer_bridge_| later.
-  void OnDataUse(const data_usage::DataUse& data_use);
+  void OnDataUse(std::unique_ptr<const std::deque<const data_usage::DataUse>>
+                     data_use_list);
 
   void OnReportDataUseDone(bool success);
 
@@ -188,12 +206,11 @@ class ExternalDataUseReporter {
   void OnApplicationStateChange(base::android::ApplicationState new_state);
 #endif
 
-  // Pointer to the ExternalDataUseObserverBridge in UI thread. Not owned by
-  // |this|.
-  ExternalDataUseObserverBridge* external_data_use_observer_bridge_;
+  // Callback to be run to get the tracking info for a tab at a particular time.
+  const GetTrackingInfoCallback get_tracking_info_callback_;
 
-  // Pointer to the DataUseTabModel in UI thread, Not owned by |this|.
-  DataUseTabModel* data_use_tab_model_;
+  // Callback to be run to report the data usage to the underlying platform.
+  const ReportDataUseCallback report_data_use_callback_;
 
 #if defined(OS_ANDROID)
   // Listens to when Chromium gets backgrounded and submits buffered data use

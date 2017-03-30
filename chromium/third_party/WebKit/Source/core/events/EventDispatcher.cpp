@@ -47,7 +47,9 @@ namespace blink {
 DispatchEventResult EventDispatcher::dispatchEvent(Node& node, EventDispatchMediator* mediator)
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "EventDispatcher::dispatchEvent");
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
     EventDispatcher dispatcher(node, &mediator->event());
     return mediator->dispatchEvent(dispatcher);
 }
@@ -55,11 +57,8 @@ DispatchEventResult EventDispatcher::dispatchEvent(Node& node, EventDispatchMedi
 EventDispatcher::EventDispatcher(Node& node, Event* event)
     : m_node(node)
     , m_event(event)
-#if ENABLE(ASSERT)
-    , m_eventDispatched(false)
-#endif
 {
-    ASSERT(m_event.get());
+    DCHECK(m_event.get());
     m_view = node.document().view();
     m_event->initEventPath(*m_node);
 }
@@ -108,8 +107,8 @@ DispatchEventResult EventDispatcher::dispatch()
 {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("blink.debug"), "EventDispatcher::dispatch");
 
-#if ENABLE(ASSERT)
-    ASSERT(!m_eventDispatched);
+#if DCHECK_IS_ON()
+    DCHECK(!m_eventDispatched);
     m_eventDispatched = true;
 #endif
     if (event().eventPath().isEmpty()) {
@@ -119,8 +118,10 @@ DispatchEventResult EventDispatcher::dispatch()
     m_event->eventPath().ensureWindowEventContext();
 
     m_event->setTarget(EventPath::eventTargetRespectingTargetRules(*m_node));
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
-    ASSERT(m_event->target());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
+    DCHECK(m_event->target());
     TRACE_EVENT1("devtools.timeline", "EventDispatch", "data", InspectorEventDispatchEvent::data(*m_event));
     EventDispatchHandlingState* preDispatchEventHandlerResult = nullptr;
     if (dispatchEventPreProcess(preDispatchEventHandlerResult) == ContinueDispatching) {
@@ -150,7 +151,7 @@ inline EventDispatchContinuation EventDispatcher::dispatchEventPreProcess(EventD
 inline EventDispatchContinuation EventDispatcher::dispatchEventAtCapturing()
 {
     // Trigger capturing event handlers, starting at the top and working our way down.
-    m_event->setEventPhase(Event::CAPTURING_PHASE);
+    m_event->setEventPhase(Event::kCapturingPhase);
 
     if (m_event->eventPath().windowEventContext().handleLocalEvents(*m_event) && m_event->propagationStopped())
         return DoneDispatching;
@@ -169,7 +170,7 @@ inline EventDispatchContinuation EventDispatcher::dispatchEventAtCapturing()
 
 inline EventDispatchContinuation EventDispatcher::dispatchEventAtTarget()
 {
-    m_event->setEventPhase(Event::AT_TARGET);
+    m_event->setEventPhase(Event::kAtTarget);
     m_event->eventPath()[0].handleLocalEvents(*m_event);
     return m_event->propagationStopped() ? DoneDispatching : ContinueDispatching;
 }
@@ -181,9 +182,9 @@ inline void EventDispatcher::dispatchEventAtBubbling()
     for (size_t i = 1; i < size; ++i) {
         const NodeEventContext& eventContext = m_event->eventPath()[i];
         if (eventContext.currentTargetSameAsTarget()) {
-            m_event->setEventPhase(Event::AT_TARGET);
+            m_event->setEventPhase(Event::kAtTarget);
         } else if (m_event->bubbles() && !m_event->cancelBubble()) {
-            m_event->setEventPhase(Event::BUBBLING_PHASE);
+            m_event->setEventPhase(Event::kBubblingPhase);
         } else {
             if (m_event->bubbles() && m_event->cancelBubble() && eventContext.node() && eventContext.node()->hasEventListeners(m_event->type()))
                 UseCounter::count(eventContext.node()->document(), UseCounter::EventCancelBubbleAffected);
@@ -194,7 +195,7 @@ inline void EventDispatcher::dispatchEventAtBubbling()
             return;
     }
     if (m_event->bubbles() && !m_event->cancelBubble()) {
-        m_event->setEventPhase(Event::BUBBLING_PHASE);
+        m_event->setEventPhase(Event::kBubblingPhase);
         m_event->eventPath().windowEventContext().handleLocalEvents(*m_event);
     } else if (m_event->bubbles() && m_event->eventPath().windowEventContext().window() && m_event->eventPath().windowEventContext().window()->hasEventListeners(m_event->type())) {
         UseCounter::count(m_event->eventPath().windowEventContext().window()->getExecutionContext(), UseCounter::EventCancelBubbleAffected);
@@ -238,7 +239,7 @@ inline void EventDispatcher::dispatchEventPostProcess(EventDispatchHandlingState
         // Non-bubbling events call only one default event handler, the one for the target.
         m_node->willCallDefaultEventHandler(*m_event);
         m_node->defaultEventHandler(m_event.get());
-        ASSERT(!m_event->defaultPrevented());
+        DCHECK(!m_event->defaultPrevented());
         // For bubbling events, call default event handlers on the same targets in the
         // same order as the bubbling phase.
         if (!m_event->defaultHandled() && m_event->bubbles()) {
@@ -246,7 +247,7 @@ inline void EventDispatcher::dispatchEventPostProcess(EventDispatchHandlingState
             for (size_t i = 1; i < size; ++i) {
                 m_event->eventPath()[i].node()->willCallDefaultEventHandler(*m_event);
                 m_event->eventPath()[i].node()->defaultEventHandler(m_event.get());
-                ASSERT(!m_event->defaultPrevented());
+                DCHECK(!m_event->defaultPrevented());
                 if (m_event->defaultHandled())
                     break;
             }

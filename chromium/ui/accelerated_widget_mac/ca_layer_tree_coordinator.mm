@@ -6,20 +6,27 @@
 
 #include <AVFoundation/AVFoundation.h>
 
+#include "base/mac/mac_util.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/base/cocoa/animation_utils.h"
 
 namespace ui {
 
-CALayerTreeCoordinator::CALayerTreeCoordinator(bool allow_remote_layers)
-    : allow_remote_layers_(allow_remote_layers) {
+CALayerTreeCoordinator::CALayerTreeCoordinator(
+    bool allow_remote_layers,
+    bool allow_av_sample_buffer_display_layer)
+    : allow_remote_layers_(allow_remote_layers),
+      allow_av_sample_buffer_display_layer_(
+          allow_av_sample_buffer_display_layer) {
   if (allow_remote_layers_) {
     root_ca_layer_.reset([[CALayer alloc] init]);
     [root_ca_layer_ setGeometryFlipped:YES];
     [root_ca_layer_ setOpaque:YES];
 
-    fullscreen_low_power_layer_.reset(
-        [[AVSampleBufferDisplayLayer alloc] init]);
+    if (allow_av_sample_buffer_display_layer_) {
+      fullscreen_low_power_layer_.reset(
+          [[AVSampleBufferDisplayLayer alloc] init]);
+    }
   }
 }
 
@@ -55,7 +62,9 @@ CARendererLayerTree* CALayerTreeCoordinator::GetPendingCARendererLayerTree() {
                    "specified, but not both.";
   }
   if (!pending_ca_renderer_layer_tree_)
-    pending_ca_renderer_layer_tree_.reset(new CARendererLayerTree);
+    pending_ca_renderer_layer_tree_.reset(
+        new CARendererLayerTree(allow_av_sample_buffer_display_layer_,
+                                !base::mac::IsOSSierraOrLater()));
   return pending_ca_renderer_layer_tree_.get();
 }
 

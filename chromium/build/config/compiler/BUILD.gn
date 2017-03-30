@@ -74,14 +74,6 @@ declare_args() {
   # explore favoring size over speed in this case as well.
   optimize_for_size = is_android || is_ios
 
-  # If this is set to true, or if LLVM_FORCE_HEAD_REVISION is set to 1
-  # in the environment, we use the revision in the llvm repo to determine
-  # the CLANG_REVISION to use, instead of the version hard-coded into
-  # //tools/clang/scripts/update.py. This should only be used in
-  # conjunction with setting LLVM_FORCE_HEAD_REVISION in the
-  # environment when `gclient runhooks` is run as well.
-  llvm_force_head_revision = false
-
   # Enable fatal linker warnings. Building Chromium with certain versions
   # of binutils can cause linker warning.
   # See: https://bugs.chromium.org/p/chromium/issues/detail?id=457359
@@ -108,8 +100,9 @@ if (gold_path == false) {
 }
 
 if (use_debug_fission == "default") {
-  use_debug_fission = is_debug && !is_win && use_gold &&
-                      linux_use_bundled_binutils && cc_wrapper == ""
+  use_debug_fission =
+      is_debug && !is_win && use_gold && linux_use_bundled_binutils &&
+      (!use_cc_wrapper || cc_wrapper == "")
 }
 
 # default_include_dirs ---------------------------------------------------------
@@ -208,8 +201,7 @@ config("compiler") {
     }
 
     # Linker warnings.
-    if ( fatal_linker_warnings &&
-        !(is_chromeos && current_cpu == "arm") &&
+    if (fatal_linker_warnings && !(is_chromeos && current_cpu == "arm") &&
         !(is_android && use_order_profiling) && !is_mac && !is_ios) {
       # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
       # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
@@ -318,18 +310,19 @@ config("compiler") {
         cflags += [ "-mstackrealign" ]
       }
     } else {
-      ldflags += [
-        "-B$gold_path",
-        # Experimentation found that using four linking threads
-        # saved ~20% of link time.
-        # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
-        # Only apply this to the target linker, since the host
-        # linker might not be gold, but isn't used much anyway.
-        # TODO(raymes): Disable threading because gold is frequently
-        # crashing on the bots: crbug.com/161942.
-        #"-Wl,--threads",
-        #"-Wl,--thread-count=4",
-      ]
+      ldflags += [ "-B$gold_path" ]
+
+      if (linux_use_bundled_binutils) {
+        ldflags += [
+          # Experimentation found that using four linking threads
+          # saved ~20% of link time.
+          # https://groups.google.com/a/chromium.org/group/chromium-dev/browse_thread/thread/281527606915bb36
+          # Only apply this to the target linker, since the host
+          # linker might not be gold, but isn't used much anyway.
+          "-Wl,--threads",
+          "-Wl,--thread-count=4",
+        ]
+      }
     }
 
     if (gdb_index) {
@@ -357,12 +350,13 @@ config("compiler") {
   if (is_posix && (use_gold || (use_lld && !is_nacl)) && !using_sanitizer &&
       !(is_android && use_order_profiling)) {
     # TODO(crbug.com/576197) - gcc on x86 platforms + gold + icf=all
-    # doesn't currently work. Once it does, use icf=all everywhere.
+    # doesn't currently work on non-chromeos platforms.
     # Additionally, on Android x86 --icf=safe seems to cause issues as well.
     # Additionally, on cast Android x86, --icf=all causes issues.
     if (is_android && current_cpu == "x86") {
       ldflags += [ "-Wl,--icf=none" ]
-    } else if (is_clang || (current_cpu != "x86" && current_cpu != "x64")) {
+    } else if (is_clang || is_chromeos ||
+               (current_cpu != "x86" && current_cpu != "x64")) {
       ldflags += [ "-Wl,--icf=all" ]
     } else if (!is_android) {
       ldflags += [ "-Wl,--icf=safe" ]
@@ -471,11 +465,8 @@ config("compiler") {
       ldflags += [ "-Wl,-plugin-opt,-function-sections" ]
     }
 
-    # TODO(pcc): Make these flags work correctly with CFI.
-    if (!is_cfi) {
-      cflags += [ "-fwhole-program-vtables" ]
-      ldflags += [ "-fwhole-program-vtables" ]
-    }
+    cflags += [ "-fwhole-program-vtables" ]
+    ldflags += [ "-fwhole-program-vtables" ]
   }
 
   # Pass the same C/C++ flags to the objective C/C++ compiler.
@@ -545,7 +536,7 @@ config("compiler_cpu_abi") {
         cflags += [ "--target=aarch64-linux-gnu" ]
         ldflags += [ "--target=aarch64-linux-gnu" ]
       }
-    } else if (current_cpu == "mipsel") {
+    } else if (current_cpu == "mipsel" && !is_nacl) {
       if (is_clang) {
         # Temporarily needed due to unsupported MIPS macro instructions
         # in inline asm code in third_party projects (libwebp and webrtc).
@@ -570,6 +561,14 @@ config("compiler_cpu_abi") {
               "-Wl,-melf32ltsmip",
             ]
           }
+        }
+        if (mips_use_msa == true) {
+          cflags += [
+            "-mmsa",
+            "-mfp64",
+            "-msched-weight",
+            "-mload-store-pairs",
+          ]
         }
       } else if (mips_arch_variant == "r2") {
         if (is_clang) {
@@ -646,6 +645,14 @@ config("compiler_cpu_abi") {
             "-Wa,-mips64r6",
           ]
           ldflags += [ "-mips64r6" ]
+        }
+        if (mips_use_msa == true) {
+          cflags += [
+            "-mmsa",
+            "-mfp64",
+            "-msched-weight",
+            "-mload-store-pairs",
+          ]
         }
       } else if (mips_arch_variant == "r2") {
         cflags += [
@@ -933,7 +940,10 @@ config("default_warnings") {
       # availability is newer than the deployment target. This is not
       # required when compiling Chrome for iOS.
       cflags += [ "-Wpartial-availability" ]
-    }
+
+      # Silence warnings in media patched
+      cflags += [ "-Wno-unguarded-availability" ]
+   }
 
     # Suppress warnings about ABI changes on ARM (Clang doesn't give this
     # warning).
@@ -1024,6 +1034,9 @@ config("default_warnings") {
 
         # TODO(thakis): https://crbug.com/617318
         "-Wno-nonportable-include-path",
+
+        # TODO(hans): https://crbug.com/637306
+        "-Wno-address-of-packed-member",
       ]
     }
   }
@@ -1416,6 +1429,41 @@ config("optimize_max") {
   }
 }
 
+# Turns down the optimization level to medium
+config("optimize_medium") {
+  if (is_nacl_irt) {
+    # The NaCl IRT is a special case and always wants its own config.
+    # Various components do:
+    #   if (!is_debug) {
+    #     configs -= [ "//build/config/compiler:default_optimization" ]
+    #     configs += [ "//build/config/compiler:optimize_max" ]
+    #   }
+    # So this config has to have the selection logic just like
+    # "default_optimization", below.
+    configs = [ "//build/config/nacl:irt_optimize" ]
+  } else {
+    ldflags = common_optimize_on_ldflags
+    if (is_win) {
+      # Favor speed over size, /O2 must be before the common flags. The GYP
+      # build also specifies /Ot, /Oi, and /GF, but these are implied by /O2.
+      cflags = [ "/O1" ] + common_optimize_on_cflags
+
+      # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+      if (is_official_build && !is_clang) {
+        cflags += [
+          # Disable Warning 4702 ("Unreachable code") for the WPO/PGO builds.
+          # Probably anything that this would catch that wouldn't be caught in a
+          # normal build isn't going to actually be a bug, so the incremental
+          # value of C4702 for PGO builds is likely very small.
+          "/wd4702",
+        ]
+      }
+    } else {
+      cflags = [ "-O1" ] + common_optimize_on_cflags
+    }
+  }
+}
+
 # This config can be used to override the default settings for per-component
 # and whole-program optimization, optimizing the particular target for speed
 # instead of code size. This config is exactly the same as "optimize_max"
@@ -1488,8 +1536,11 @@ config("default_optimization") {
 config("symbols") {
   if (is_win) {
     import("//build/toolchain/goma.gni")
-    if (use_goma) {
-      cflags = [ "/Z7" ]  # No PDB file
+    if (use_goma || use_cc_wrapper) {
+      # Disable symbols during goma compilation because otherwise the redundant
+      # debug information (repeated in every .obj file) makes linker memory
+      # consumption and link times unsustainable (crbug.com/630074).
+      cflags = []
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }

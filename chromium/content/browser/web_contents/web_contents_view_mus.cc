@@ -5,13 +5,13 @@
 #include "content/browser/web_contents/web_contents_view_mus.h"
 
 #include "build/build_config.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_mus.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_view_delegate.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/aura/client/window_tree_client.h"
 #include "ui/aura/window.h"
@@ -23,18 +23,18 @@ using blink::WebDragOperationsMask;
 namespace content {
 
 WebContentsViewMus::WebContentsViewMus(
-    mus::Window* parent_window,
+    ui::Window* parent_window,
     WebContentsImpl* web_contents,
     WebContentsViewDelegate* delegate,
     RenderViewHostDelegateView** delegate_view)
     : web_contents_(web_contents), delegate_(delegate) {
   DCHECK(parent_window);
   *delegate_view = this;
-  mus::Window* window = parent_window->window_tree()->NewWindow();
+  ui::Window* window = parent_window->window_tree()->NewWindow();
   window->SetVisible(true);
   window->SetBounds(gfx::Rect(300, 300));
   parent_window->AddChild(window);
-  mus_window_.reset(new mus::ScopedWindowPtr(window));
+  mus_window_.reset(new ui::ScopedWindowPtr(window));
 }
 
 WebContentsViewMus::~WebContentsViewMus() {}
@@ -60,6 +60,11 @@ gfx::NativeView WebContentsViewMus::GetContentNativeView() const {
 gfx::NativeWindow WebContentsViewMus::GetTopLevelNativeWindow() const {
   gfx::NativeWindow window = aura_window_->GetToplevelWindow();
   return window ? window : delegate_->GetNativeWindow();
+}
+
+void WebContentsViewMus::GetScreenInfo(
+    blink::WebScreenInfo* web_screen_info) const {
+  // TODO(wjmaclean) Figure out what goes here.
 }
 
 void WebContentsViewMus::GetContainerBounds(gfx::Rect* out) const {

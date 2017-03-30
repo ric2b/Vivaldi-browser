@@ -8,7 +8,6 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/page/Page.h"
-#include "platform/Logging.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/geometry/IntRect.h"
 
@@ -216,7 +215,7 @@ void AutoplayExperimentHelper::triggerAutoplayViewportCheckForTesting()
     viewportTimerFired(nullptr);
 }
 
-void AutoplayExperimentHelper::viewportTimerFired(Timer<AutoplayExperimentHelper>*)
+void AutoplayExperimentHelper::viewportTimerFired(TimerBase*)
 {
     double now = monotonicallyIncreasingTime();
     double delta = now - m_lastLocationUpdateTime;

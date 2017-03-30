@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "content/browser/service_worker/service_worker_database.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseError.h"
@@ -106,16 +107,23 @@ class ServiceWorkerMetrics {
     FOREIGN_FETCH = 15,
     FETCH_WAITUNTIL = 16,
     FOREIGN_FETCH_WAITUNTIL = 17,
+    NAVIGATION_HINT_LINK_MOUSE_DOWN = 18,
+    NAVIGATION_HINT_LINK_TAP_UNCONFIRMED = 19,
+    NAVIGATION_HINT_LINK_TAP_DOWN = 20,
     // Add new events to record here.
     NUM_TYPES
   };
 
   // Used for UMA. Append only.
   enum class Site {
-    OTHER,  // Obsolete
+    OTHER,  // Obsolete for UMA. Use WITH_FETCH_HANDLER or
+            // WITHOUT_FETCH_HANDLER.
     NEW_TAB_PAGE,
     WITH_FETCH_HANDLER,
     WITHOUT_FETCH_HANDLER,
+    PLUS,
+    INBOX,
+    DOCS,
     NUM_TYPES
   };
 
@@ -133,11 +141,16 @@ class ServiceWorkerMetrics {
   // Converts an event type to a string. Used for tracing.
   static const char* EventTypeToString(EventType event_type);
 
+  // If the |url| is not a special site, returns Site::OTHER.
+  static Site SiteFromURL(const GURL& url);
+
+  // Returns true when the event is for a navigation hint.
+  static bool IsNavigationHintEvent(EventType event_type);
+
   // Excludes NTP scope from UMA for now as it tends to dominate the stats and
   // makes the results largely skewed. Some metrics don't follow this policy
   // and hence don't call this function.
   static bool ShouldExcludeSiteFromHistogram(Site site);
-  static bool ShouldExcludeURLFromHistogram(const GURL& url);
 
   // Used for ServiceWorkerDiskCache.
   static void CountInitDiskCacheResult(bool result);
@@ -155,8 +168,8 @@ class ServiceWorkerMetrics {
   static void RecordDeleteAndStartOverResult(DeleteAndStartOverResult result);
 
   // Counts the number of page loads controlled by a Service Worker.
-  static void CountControlledPageLoad(const GURL& url,
-                                      bool has_fetch_handler,
+  static void CountControlledPageLoad(Site site,
+                                      const GURL& url,
                                       bool is_main_frame_load);
 
   // Records the result of trying to start a worker. |is_installed| indicates
@@ -189,11 +202,21 @@ class ServiceWorkerMetrics {
                                         bool is_shutdown);
   static void RecordInstallEventStatus(ServiceWorkerStatusCode status);
 
+  static void RecordForeignFetchRegistrationCount(size_t scope_count,
+                                                  size_t origin_count);
+
   // Records how much of dispatched events are handled while a Service
   // Worker is awake (i.e. after it is woken up until it gets stopped).
   static void RecordEventHandledRatio(EventType event,
                                       size_t handled_events,
                                       size_t fired_events);
+
+  // Records the precision of the speculative launch of Service Workers for
+  // each navigation hint type when the worker is stopped. If there was no
+  // main/sub frame fetch event fired on the worker, |frame_fetch_event_fired|
+  // is false. This means that the speculative launch wasn't helpful.
+  static void RecordNavigationHintPrecision(EventType start_worker_purpose,
+                                            bool frame_fetch_event_fired);
 
   // Records how often a dispatched event times out.
   static void RecordEventTimeout(EventType event);
@@ -202,6 +225,13 @@ class ServiceWorkerMetrics {
   static void RecordEventDuration(EventType event,
                                   base::TimeDelta time,
                                   bool was_handled);
+
+  // Records the time taken between sending an event IPC from the browser
+  // process to a Service Worker and executing the event handler in the Service
+  // Worker.
+  static void RecordEventDispatchingDelay(EventType event,
+                                          base::TimeDelta time,
+                                          Site site_for_metrics);
 
   // Records the result of dispatching a fetch event to a service worker.
   static void RecordFetchEventStatus(bool is_main_resource,

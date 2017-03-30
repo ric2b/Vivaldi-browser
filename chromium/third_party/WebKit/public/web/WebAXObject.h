@@ -33,10 +33,10 @@
 
 #include "../platform/WebCommon.h"
 #include "../platform/WebPoint.h"
-#include "../platform/WebPrivateOwnPtr.h"
 #include "../platform/WebPrivatePtr.h"
 #include "../platform/WebVector.h"
 #include "WebAXEnums.h"
+#include <memory>
 
 #if BLINK_IMPLEMENTATION
 namespace WTF { template <typename T> class PassRefPtr; }
@@ -68,7 +68,7 @@ public:
     BLINK_EXPORT WebAXObject root() const;
 
 private:
-    WebPrivateOwnPtr<ScopedAXObjectCache> m_private;
+    std::unique_ptr<ScopedAXObjectCache> m_private;
 };
 
 // A container for passing around a reference to AXObject.
@@ -186,8 +186,8 @@ public:
 
     // The following selection functions get or set the global document
     // selection and can be called on any object in the tree.
-    BLINK_EXPORT void selection(WebAXObject& anchorObject, int& anchorOffset,
-        WebAXObject& focusObject, int& focusOffset) const;
+    BLINK_EXPORT void selection(WebAXObject& anchorObject, int& anchorOffset, WebAXTextAffinity& anchorAffinity,
+        WebAXObject& focusObject, int& focusOffset, WebAXTextAffinity& focusAffinity) const;
     BLINK_EXPORT void setSelection(const WebAXObject& anchorObject, int anchorOffset,
         const WebAXObject& focusObject, int focusOffset) const;
 

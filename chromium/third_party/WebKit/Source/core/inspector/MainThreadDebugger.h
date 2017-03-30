@@ -41,8 +41,11 @@
 
 namespace blink {
 
+class ConsoleMessage;
+class ErrorEvent;
 class LocalFrame;
 class SecurityOrigin;
+class SourceLocation;
 
 class CORE_EXPORT MainThreadDebugger final : public ThreadDebugger {
     WTF_MAKE_NONCOPYABLE(MainThreadDebugger);
@@ -53,6 +56,7 @@ public:
         virtual ~ClientMessageLoop() { }
         virtual void run(LocalFrame*) = 0;
         virtual void quitNow() = 0;
+        virtual void runIfWaitingForDebugger(LocalFrame*) = 0;
     };
 
     explicit MainThreadDebugger(v8::Isolate*);
@@ -63,34 +67,42 @@ public:
 
     InspectorTaskRunner* taskRunner() const { return m_taskRunner.get(); }
     bool isWorker() override { return false; }
+    bool isPaused() const { return m_paused; }
     void setClientMessageLoop(std::unique_ptr<ClientMessageLoop>);
+
+    // TODO(dgozman): by making this method virtual, we can move many methods to ThreadDebugger and avoid some duplication. Should be careful about performance.
     int contextGroupId(LocalFrame*);
     void didClearContextsForFrame(LocalFrame*);
     void contextCreated(ScriptState*, LocalFrame*, SecurityOrigin*);
     void contextWillBeDestroyed(ScriptState*);
-
-    void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
-
-    v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override;
-    void messageAddedToConsole(int contextGroupId, MessageSource, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override;
+    void exceptionThrown(ExecutionContext*, ErrorEvent*);
 
 private:
-    // V8DebuggerClient implementation.
+    void reportConsoleMessage(ExecutionContext*, MessageSource, MessageLevel, const String& message, SourceLocation*) override;
+    int contextGroupId(ExecutionContext*) override;
+
+    // V8InspectorClient implementation.
     void runMessageLoopOnPause(int contextGroupId) override;
     void quitMessageLoopOnPause() override;
-    void muteWarningsAndDeprecations() override;
-    void unmuteWarningsAndDeprecations() override;
-    bool callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target) override;
+    void muteMetrics(int contextGroupId) override;
+    void unmuteMetrics(int contextGroupId) override;
     v8::Local<v8::Context> ensureDefaultContextInGroup(int contextGroupId) override;
-
-    std::unique_ptr<ClientMessageLoop> m_clientMessageLoop;
-    std::unique_ptr<InspectorTaskRunner> m_taskRunner;
-
-    static MainThreadDebugger* s_instance;
+    void beginEnsureAllContextsInGroup(int contextGroupId) override;
+    void endEnsureAllContextsInGroup(int contextGroupId) override;
+    bool canExecuteScripts(int contextGroupId) override;
+    void runIfWaitingForDebugger(int contextGroupId) override;
+    void consoleAPIMessage(int contextGroupId, v8_inspector::V8ConsoleAPIType, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, v8_inspector::V8StackTrace*) override;
+    void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
+    v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override;
 
     static void querySelectorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
     static void querySelectorAllCallback(const v8::FunctionCallbackInfo<v8::Value>&);
     static void xpathSelectorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+    std::unique_ptr<ClientMessageLoop> m_clientMessageLoop;
+    std::unique_ptr<InspectorTaskRunner> m_taskRunner;
+    bool m_paused;
+    static MainThreadDebugger* s_instance;
 };
 
 } // namespace blink

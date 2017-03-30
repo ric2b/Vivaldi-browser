@@ -226,6 +226,17 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'win',
     },
+    'Win7 Release (AMD R7 240)': {
+      'swarming_dimensions': {
+        'gpu': '1002:6613',
+        'os': 'Windows-2008ServerR2-SP1'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'win',
+    },
     'Win7 x64 Release (NVIDIA)': {
       'swarming_dimensions': {
         'gpu': '10de:104a',
@@ -324,6 +335,17 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'mac',
     },
+    'Mac 10.11 Retina Release (AMD)': {
+      'swarming_dimensions': {
+        'gpu': '1002:6821',
+        'hidpi': '1',
+        'os': 'Mac-10.11'
+      },
+      'build_config': 'Release',
+      # This bot is a one-off for testing purposes.
+      'swarming': False,
+      'os_type': 'mac',
+    },
     'Linux Release (NVIDIA)': {
       'swarming_dimensions': {
         'gpu': '10de:104a',
@@ -392,6 +414,17 @@ FYI_WATERFALL = {
         'os': 'Linux'
       },
       'build_config': 'Debug',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'linux',
+    },
+    'Linux Release (AMD R7 240)': {
+      'swarming_dimensions': {
+        'gpu': '1002:6613',
+        'os': 'Linux'
+      },
+      'build_config': 'Release',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
@@ -619,11 +652,22 @@ COMMON_GTESTS = {
   'angle_end2end_tests': {
     'tester_configs': [
       {
+        'allow_on_android': True,
         'fyi_only': True,
         'run_on_optional': True,
       },
     ],
-    'args': ['--use-gpu-in-tests']
+    'disabled_tester_configs': [
+      {
+        'names': [
+          # TODO(ynovikov) Investigate why the test breaks on older devices.
+          'Android Release (Nexus 5)',
+          'Android Release (Nexus 6)',
+          'Android Release (Nexus 9)',
+        ],
+      },
+    ],
+    'desktop_args': ['--use-gpu-in-tests']
   },
   'angle_unittests': {
     'tester_configs': [
@@ -659,6 +703,15 @@ COMMON_GTESTS = {
       {
         'allow_on_android': True,
       }
+    ],
+    'disabled_tester_configs': [
+      {
+        'names': [
+          # TODO(kbr): investigate inability to recognize this
+          # configuration in the various tests. crbug.com/624621
+          'Android Release (Pixel C)',
+        ],
+      },
     ],
     'desktop_args': ['--use-gpu-in-tests']
   },
@@ -782,13 +835,6 @@ TELEMETRY_TESTS = {
       '--test-machine-name',
       '${buildername}',
     ],
-    'tester_configs': [
-      {
-        'allow_on_android': True,
-      },
-    ],
-  },
-  'memory_test': {
     'tester_configs': [
       {
         'allow_on_android': True,
@@ -920,22 +966,22 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
           # http://crbug.com/599451: this test is currently too slow
           # to run on x64 in Debug mode. Need to shard the tests.
           'Win7 x64 Debug (NVIDIA)',
-          # http://crbug.com/540543: Linux Intel driver is GL 3.0 and
-          # doesn't support features needed for ES3
-          'Linux Release (New Intel)',
-          'Linux Debug (New Intel)',
         ],
       },
     ],
     'target_name': 'webgl_conformance',
     'args': [
       '--webgl-conformance-version=2.0.0',
-      '--webgl2-only=true',
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
-      # These tests currently take about an hour to run. Split them
-      # into roughly 5-minute shards.
-      'shards': 12,
+      # These tests currently take about an hour and fifteen minutes
+      # to run. Split them into roughly 5-minute shards.
+      'shards': 15,
     },
   },
   'webgl2_conformance_angle_tests': {
@@ -965,12 +1011,16 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
     'args': [
       '--webgl-conformance-version=2.0.0',
-      '--webgl2-only=true',
+      # The current working directory when run via isolate is
+      # out/Debug or out/Release. Reference this file relatively to
+      # it.
+      '--read-abbreviated-json-results-from=' + \
+      '../../content/test/data/gpu/webgl2_conformance_tests_output.json',
     ],
     'swarming': {
-      # These tests currently take about an hour to run. Split them
-      # into roughly 5-minute shards.
-      'shards': 12,
+      # These tests currently take about an hour and fifteen minutes
+      # to run. Split them into roughly 5-minute shards.
+      'shards': 15,
     },
   },
 }
@@ -1006,6 +1056,9 @@ def tester_config_matches_tester(tester_name, tester_config, tc, is_fyi,
       return False
 
   if 'names' in tc:
+    # Give priority to matching the tester_name.
+    if tester_name in tc['names']:
+      return True
     if not tester_name in tc['names']:
       return False
   if 'os_types' in tc:
@@ -1050,6 +1103,9 @@ def generate_gtest(tester_name, tester_config, test, test_config, is_fyi):
   if 'tester_configs' in result:
     # Don't print the tester_configs in the JSON.
     result.pop('tester_configs')
+  if 'disabled_tester_configs' in result:
+    # Don't print the disabled_tester_configs in the JSON.
+    result.pop('disabled_tester_configs')
   if 'test' in result:
     result['name'] = test
   else:
@@ -1067,12 +1123,32 @@ def generate_gtest(tester_name, tester_config, test, test_config, is_fyi):
       'can_use_on_swarming_builders': True,
       'dimension_sets': [
         tester_config['swarming_dimensions']
-      ],
+      ]
     })
     if is_android(tester_config):
       # Override the isolate target to get rid of any "_apk" suffix
       # that would be added by the recipes.
       result['override_isolate_target'] = test
+      # Integrate with the unified logcat system.
+      result['swarming'].update({
+        'cipd_packages': [
+          {
+            'cipd_package': 'infra/tools/luci/logdog/butler/${platform}',
+            'location': 'bin',
+            'revision': 'git_revision:3ff24775a900b675866fbcacf2a8f98a18b2a16a'
+          }
+        ],
+        'output_links': [
+          {
+            'link': [
+              'https://luci-logdog.appspot.com/v/?s',
+              '=android%2Fswarming%2Flogcats%2F',
+              '${TASK_ID}%2F%2B%2Funified_logcats'
+            ],
+            'name': 'shard #${SHARD_INDEX} logcats'
+          }
+        ]
+      })
   if 'desktop_args' in result:
     if not is_android(tester_config):
       if not 'args' in result:

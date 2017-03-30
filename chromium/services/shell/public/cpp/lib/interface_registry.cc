@@ -8,8 +8,19 @@
 
 namespace shell {
 
-InterfaceRegistry::InterfaceRegistry(Connection* connection)
-    : binding_(this), connection_(connection), weak_factory_(this) {}
+InterfaceRegistry::InterfaceRegistry()
+    : binding_(this), allow_all_interfaces_(true), weak_factory_(this) {}
+
+InterfaceRegistry::InterfaceRegistry(
+    const Identity& remote_identity,
+    const CapabilityRequest& capability_request)
+    : binding_(this),
+      remote_identity_(remote_identity),
+      capability_request_(capability_request),
+      allow_all_interfaces_(capability_request.interfaces.size() == 1 &&
+                            capability_request.interfaces.count("*") == 1),
+      weak_factory_(this) {}
+
 InterfaceRegistry::~InterfaceRegistry() {}
 
 void InterfaceRegistry::Bind(
@@ -27,8 +38,7 @@ bool InterfaceRegistry::AddInterface(
     const base::Callback<void(mojo::ScopedMessagePipeHandle)>& callback,
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
   return SetInterfaceBinderForName(
-      base::WrapUnique(
-          new internal::GenericCallbackBinder(callback, task_runner)),
+      base::MakeUnique<internal::GenericCallbackBinder>(callback, task_runner),
       name);
 }
 
@@ -39,41 +49,72 @@ void InterfaceRegistry::RemoveInterface(const std::string& name) {
 }
 
 void InterfaceRegistry::PauseBinding() {
-  DCHECK(!pending_request_.is_pending());
-  DCHECK(binding_.is_bound());
-  pending_request_ = binding_.Unbind();
+  DCHECK(!is_paused_);
+  is_paused_ = true;
 }
 
 void InterfaceRegistry::ResumeBinding() {
-  DCHECK(pending_request_.is_pending());
-  DCHECK(!binding_.is_bound());
-  binding_.Bind(std::move(pending_request_));
+  DCHECK(is_paused_);
+  is_paused_ = false;
+
+  while (!pending_interface_requests_.empty()) {
+    auto& request = pending_interface_requests_.front();
+    GetInterface(request.first, std::move(request.second));
+    pending_interface_requests_.pop();
+  }
+}
+
+void InterfaceRegistry::GetInterfaceNames(
+    std::set<std::string>* interface_names) {
+  DCHECK(interface_names);
+  for (auto& entry : name_to_binder_)
+    interface_names->insert(entry.first);
+}
+
+void InterfaceRegistry::SetConnectionLostClosure(
+    const base::Closure& connection_lost_closure) {
+  binding_.set_connection_error_handler(connection_lost_closure);
 }
 
 // mojom::InterfaceProvider:
-void InterfaceRegistry::GetInterface(const mojo::String& interface_name,
+void InterfaceRegistry::GetInterface(const std::string& interface_name,
                                      mojo::ScopedMessagePipeHandle handle) {
+  if (is_paused_) {
+    pending_interface_requests_.emplace(interface_name, std::move(handle));
+    return;
+  }
+
   auto iter = name_to_binder_.find(interface_name);
   if (iter != name_to_binder_.end()) {
-    iter->second->BindInterface(connection_, interface_name, std::move(handle));
-  } else if (connection_ && !connection_->AllowsInterface(interface_name)) {
-    LOG(ERROR) << "Connection CapabilityFilter prevented binding to "
-               << "interface: " << interface_name << " connection_name:"
-               << connection_->GetConnectionName() << " remote_name:"
-               << connection_->GetRemoteIdentity().name();
+    iter->second->BindInterface(remote_identity_,
+                                interface_name,
+                                std::move(handle));
+  } else if (!CanBindRequestForInterface(interface_name)) {
+    LOG(ERROR) << "Capability spec prevented service: "
+               << remote_identity_.name()
+               << " from binding interface: " << interface_name;
+  } else if (!default_binder_.is_null()) {
+    default_binder_.Run(interface_name, std::move(handle));
+  } else {
+    LOG(ERROR) << "Failed to locate a binder for interface: " << interface_name;
   }
 }
 
 bool InterfaceRegistry::SetInterfaceBinderForName(
     std::unique_ptr<InterfaceBinder> binder,
     const std::string& interface_name) {
-  if (!connection_ ||
-      (connection_ && connection_->AllowsInterface(interface_name))) {
+  if (CanBindRequestForInterface(interface_name)) {
     RemoveInterface(interface_name);
     name_to_binder_[interface_name] = std::move(binder);
     return true;
   }
   return false;
+}
+
+bool InterfaceRegistry::CanBindRequestForInterface(
+    const std::string& interface_name) const {
+  return allow_all_interfaces_ ||
+      capability_request_.interfaces.count(interface_name);
 }
 
 }  // namespace shell

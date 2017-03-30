@@ -36,6 +36,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
@@ -151,12 +152,12 @@ void LayoutBoxModelObject::styleWillChange(StyleDifference diff, const ComputedS
     if (hasLayer()
         && enclosingLayer()->stackingNode()
         && enclosingLayer()->stackingNode()->isStackingContext()
-        && newStyle.hasAutoZIndex()) {
+        && !newStyle.isStackingContext()) {
         // The following disablers are valid because we need to invalidate based on the current
         // status.
         DisableCompositingQueryAsserts compositingDisabler;
         DisablePaintInvalidationStateAsserts paintDisabler;
-        invalidatePaintIncludingNonCompositingDescendants();
+        ObjectPaintInvalidator(*this).invalidatePaintIncludingNonCompositingDescendants();
     }
 
     FloatStateForStyleChange::setWasFloating(this, isFloating());
@@ -253,7 +254,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         bool newStyleIsFixedPosition = style()->position() == FixedPosition;
         bool oldStyleIsFixedPosition = oldStyle->position() == FixedPosition;
         if (newStyleIsFixedPosition != oldStyleIsFixedPosition)
-            invalidateDisplayItemClientsIncludingNonCompositingDescendants(PaintInvalidationStyleChange);
+            ObjectPaintInvalidator(*this).invalidateDisplayItemClientsIncludingNonCompositingDescendants(PaintInvalidationStyleChange);
     }
 
     // The used style for body background may change due to computed style change
@@ -379,7 +380,7 @@ static bool hasPercentageTransform(const ComputedStyle& style)
 
 void LayoutBoxModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
-    ASSERT(!needsLayout());
+    ensureIsReadyForPaintInvalidation();
 
     PaintInvalidationState newPaintInvalidationState(paintInvalidationState, *this);
     if (!shouldCheckForPaintInvalidation(newPaintInvalidationState))
@@ -391,7 +392,7 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& 
     LayoutRect previousPaintInvalidationRect = this->previousPaintInvalidationRect();
     LayoutPoint previousPosition = previousPositionFromPaintInvalidationBacking();
     PaintInvalidationReason reason = invalidatePaintIfNeeded(newPaintInvalidationState);
-    clearPaintInvalidationFlags(newPaintInvalidationState);
+    clearPaintInvalidationFlags();
 
     if (previousPosition != previousPositionFromPaintInvalidationBacking())
         newPaintInvalidationState.setForceSubtreeInvalidationCheckingWithinContainer();
@@ -407,37 +408,12 @@ void LayoutBoxModelObject::invalidateTreeIfNeeded(const PaintInvalidationState& 
     if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()
         && previousPaintInvalidationRect != this->previousPaintInvalidationRect()
         && !usesCompositedScrolling()
-        && hasOverflowClip())
+        // Note that isLayoutView() below becomes unnecessary after the launch of root layer scrolling.
+        && (hasOverflowClip() || isLayoutView()))
         newPaintInvalidationState.setForceSubtreeInvalidationRectUpdateWithinContainer();
 
     newPaintInvalidationState.updateForChildren(reason);
     invalidatePaintOfSubtreesIfNeeded(newPaintInvalidationState);
-}
-
-void LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRect& r, PaintInvalidationReason invalidationReason, const LayoutObject& object) const
-{
-    // TODO(wangxianzhu): Enable the following assert after paint invalidation for spv2 is ready.
-    // ASSERT(!RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-
-    // https://bugs.webkit.org/show_bug.cgi?id=61159 describes an unreproducible crash here,
-    // so assert but check that the layer is composited.
-    ASSERT(compositingState() != NotComposited);
-
-    // FIXME: generalize accessors to backing GraphicsLayers so that this code is squashing-agnostic.
-    if (layer()->groupedMapping()) {
-        LayoutRect paintInvalidationRect = r;
-        if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer()) {
-            // Note: the subpixel accumulation of layer() does not need to be added here. It is already taken into account.
-            squashingLayer->setNeedsDisplayInRect(enclosingIntRect(paintInvalidationRect), invalidationReason, object);
-        }
-    } else if (object.compositedScrollsWithRespectTo(*this)) {
-        layer()->compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(r, invalidationReason, object);
-    } else if (usesCompositedScrolling()) {
-        layer()->compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(r, invalidationReason, object);
-    } else {
-        // Otherwise invalidate everything.
-        layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r, invalidationReason, object);
-    }
 }
 
 void LayoutBoxModelObject::addOutlineRectsForNormalChildren(Vector<LayoutRect>& rects, const LayoutPoint& additionalOffset, IncludeBlockVisualOverflowOrNot includeBlockOverflows) const
@@ -487,12 +463,6 @@ void LayoutBoxModelObject::addOutlineRectsForDescendant(const LayoutObject& desc
     descendant.addOutlineRects(rects, additionalOffset, includeBlockOverflows);
 }
 
-bool LayoutBoxModelObject::calculateHasBoxDecorations() const
-{
-    const ComputedStyle& styleToUse = styleRef();
-    return hasBackground() || styleToUse.hasBorderDecoration() || styleToUse.hasAppearance() || styleToUse.boxShadow();
-}
-
 bool LayoutBoxModelObject::hasNonEmptyLayoutSize() const
 {
     for (const LayoutBoxModelObject* root = this; root; root = root->continuation()) {
@@ -516,7 +486,7 @@ bool LayoutBoxModelObject::hasNonEmptyLayoutSize() const
 void LayoutBoxModelObject::updateFromStyle()
 {
     const ComputedStyle& styleToUse = styleRef();
-    setHasBoxDecorationBackground(calculateHasBoxDecorations());
+    setHasBoxDecorationBackground(styleToUse.hasBoxDecorationBackground());
     setInline(styleToUse.isDisplayInlineType());
     setPositionState(styleToUse.position());
     setHorizontalWritingMode(styleToUse.isHorizontalWritingMode());
@@ -555,7 +525,7 @@ LayoutBlock* LayoutBoxModelObject::containingBlockForAutoHeightDetection(Length 
     return cb;
 }
 
-bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
+bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight(bool checkingContainingBlock) const
 {
     const LayoutBox* thisBox = isBox() ? toLayoutBox(this) : nullptr;
     Length logicalHeightLength = style()->logicalHeight();
@@ -567,6 +537,12 @@ bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
         if (flexBox.childLogicalHeightForPercentageResolution(*thisBox) != LayoutUnit(-1))
             return false;
     }
+    if (thisBox && thisBox->isGridItem()) {
+        if (checkingContainingBlock && thisBox->hasOverrideLogicalContentHeight())
+            return false;
+        if (!checkingContainingBlock && thisBox->hasOverrideContainingBlockLogicalHeight())
+            return false;
+    }
     if (logicalHeightLength.isAuto())
         return true;
 
@@ -575,8 +551,13 @@ bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
 
     // If the height of the containing block computes to 'auto', then it hasn't been 'specified explicitly'.
     if (cb)
-        return cb->hasAutoHeightOrContainingBlockWithAutoHeight();
+        return cb->hasAutoHeightOrContainingBlockWithAutoHeight(true);
     return false;
+}
+
+bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
+{
+    return hasAutoHeightOrContainingBlockWithAutoHeight(false);
 }
 
 LayoutSize LayoutBoxModelObject::relativePositionOffset() const
@@ -621,7 +602,6 @@ LayoutSize LayoutBoxModelObject::relativePositionOffset() const
 
 void LayoutBoxModelObject::updateStickyPositionConstraints() const
 {
-    // TODO(flackr): This method is reasonably complicated and should have some direct unit testing.
     const FloatSize constrainingSize = computeStickyConstrainingRect().size();
 
     PaintLayerScrollableArea* scrollableArea = layer()->ancestorOverflowLayer()->getScrollableArea();
@@ -635,20 +615,33 @@ void LayoutBoxModelObject::updateStickyPositionConstraints() const
     }
     LayoutBox* scrollAncestor = layer()->ancestorOverflowLayer()->isRootLayer() ? nullptr : toLayoutBox(layer()->ancestorOverflowLayer()->layoutObject());
 
-    LayoutRect containerContentRect = containingBlock->contentBoxRect();
-    LayoutUnit maxWidth = containingBlock->availableLogicalWidth();
-
+    LayoutRect containerContentRect = containingBlock->layoutOverflowRect();
+    LayoutUnit maxContainerWidth = containingBlock->isLayoutView() ? containingBlock->logicalWidth() : containingBlock->containingBlockLogicalWidthForContent();
     // Sticky positioned element ignore any override logical width on the containing block (as they don't call
     // containingBlockLogicalWidthForContent). It's unclear whether this is totally fine.
     // Compute the container-relative area within which the sticky element is allowed to move.
+    LayoutUnit maxWidth = containingBlock->availableLogicalWidth();
+
+    // This is removing the padding of the containing block's overflow rect to get the flow
+    // box rectangle and removing the margin of the sticky element to ensure that space between
+    // the sticky element and its containing flow box. It is an open issue whether the margin
+    // should collapse (See https://www.w3.org/TR/css-position-3/#sticky-pos).
     containerContentRect.contractEdges(
-        minimumValueForLength(style()->marginTop(), maxWidth),
-        minimumValueForLength(style()->marginRight(), maxWidth),
-        minimumValueForLength(style()->marginBottom(), maxWidth),
-        minimumValueForLength(style()->marginLeft(), maxWidth));
+        minimumValueForLength(containingBlock->style()->paddingTop(), maxContainerWidth) + minimumValueForLength(style()->marginTop(), maxWidth),
+        minimumValueForLength(containingBlock->style()->paddingRight(), maxContainerWidth) + minimumValueForLength(style()->marginRight(), maxWidth),
+        minimumValueForLength(containingBlock->style()->paddingBottom(), maxContainerWidth) + minimumValueForLength(style()->marginBottom(), maxWidth),
+        minimumValueForLength(containingBlock->style()->paddingLeft(), maxContainerWidth) + minimumValueForLength(style()->marginLeft(), maxWidth));
 
     // Map to the scroll ancestor.
-    constraints.setScrollContainerRelativeContainingBlockRect(containingBlock->localToAncestorQuad(FloatRect(containerContentRect), scrollAncestor).boundingBox());
+    FloatRect scrollContainerRelativeContainingBlockRect(containingBlock->localToAncestorQuad(FloatRect(containerContentRect), scrollAncestor).boundingBox());
+    FloatSize scrollOffset(scrollAncestor ? toFloatSize(scrollAncestor->getScrollableArea()->adjustedScrollOffset()) : FloatSize());
+
+    // The sticky position constraint rects should be independent of the current scroll position, so after
+    // mapping we add in the scroll position to get the container's position within the ancestor scroller's
+    // unscrolled layout overflow.
+    if (containingBlock != scrollAncestor)
+        scrollContainerRelativeContainingBlockRect.move(scrollOffset);
+    constraints.setScrollContainerRelativeContainingBlockRect(scrollContainerRelativeContainingBlockRect);
 
     FloatRect stickyBoxRect = isLayoutInline()
         ? FloatRect(toLayoutInline(this)->linesBoundingBox())
@@ -660,13 +653,11 @@ void LayoutBoxModelObject::updateStickyPositionConstraints() const
     // TODO(flackr): Unfortunate to call localToAncestorQuad again, but we can't just offset from the previously computed rect if there are transforms.
     // Map to the scroll ancestor.
     FloatRect scrollContainerRelativeContainerFrame = containingBlock->localToAncestorQuad(FloatRect(FloatPoint(), FloatSize(containingBlock->size())), scrollAncestor).boundingBox();
-
-    // If the containing block is our scroll ancestor, its location will not include the scroll offset which we need to include as
-    // part of the sticky box rect so we include it here.
-    if (containingBlock->hasOverflowClip()) {
-        FloatSize scrollOffset(toFloatSize(containingBlock->layer()->getScrollableArea()->adjustedScrollOffset()));
-        stickyLocation -= scrollOffset;
-    }
+    // The sticky position constraint rects should be independent of the current scroll position, so after
+    // mapping we add in the scroll position to get the container's position within the ancestor scroller's
+    // unscrolled layout overflow.
+    if (containingBlock != scrollAncestor)
+        scrollContainerRelativeContainerFrame.move(scrollOffset);
 
     constraints.setScrollContainerRelativeStickyBoxRect(FloatRect(scrollContainerRelativeContainerFrame.location() + toFloatSize(stickyLocation), flippedStickyBoxRect.size()));
 
@@ -724,7 +715,7 @@ FloatRect LayoutBoxModelObject::computeStickyConstrainingRect() const
 
     LayoutBox* enclosingClippingBox = toLayoutBox(layer()->ancestorOverflowLayer()->layoutObject());
     FloatRect constrainingRect;
-    constrainingRect = FloatRect(enclosingClippingBox->overflowClipRect(LayoutPoint()));
+    constrainingRect = FloatRect(enclosingClippingBox->overflowClipRect(LayoutPoint(DoublePoint(enclosingClippingBox->getScrollableArea()->adjustedScrollOffset()))));
     constrainingRect.move(enclosingClippingBox->paddingLeft(), enclosingClippingBox->paddingTop());
     constrainingRect.contract(FloatSize(enclosingClippingBox->paddingLeft() + enclosingClippingBox->paddingRight(),
         enclosingClippingBox->paddingTop() + enclosingClippingBox->paddingBottom()));
@@ -755,7 +746,6 @@ LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeTo(const LayoutPoint& 
         return LayoutPoint();
 
     LayoutPoint referencePoint = startPoint;
-    referencePoint.move(parent()->columnOffset(referencePoint));
 
     // If the base element is null, return the distance between the canvas origin and
     // the left border edge of the element and stop this algorithm.
@@ -763,25 +753,27 @@ LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeTo(const LayoutPoint& 
         return referencePoint;
 
     if (const LayoutBoxModelObject* offsetParent = element->layoutBoxModelObject()) {
-        if (offsetParent->isBox() && !offsetParent->isBody())
-            referencePoint.move(-toLayoutBox(offsetParent)->borderLeft(), -toLayoutBox(offsetParent)->borderTop());
-        if (!isOutOfFlowPositioned() || flowThreadContainingBlock()) {
+        if (!isOutOfFlowPositioned()) {
             if (isInFlowPositioned())
                 referencePoint.move(offsetForInFlowPosition());
 
-            LayoutObject* current;
-            for (current = parent(); current != offsetParent && current->parent(); current = current->parent()) {
+            // Note that we may fail to find |offsetParent| while walking the container chain, if
+            // |offsetParent| is an inline split into continuations.
+            // <body style="display:inline;" id="offsetParent"><div></div><span id="this">
+            // This is why we have to do a nullptr check here.
+            // offset(Left|Top) is generally broken when offsetParent is inline.
+            for (const LayoutObject* current = container(); current && current != offsetParent; current = current->container()) {
                 // FIXME: What are we supposed to do inside SVG content?
-                if (!isOutOfFlowPositioned()) {
-                    if (current->isBox() && !current->isTableRow())
-                        referencePoint.moveBy(toLayoutBox(current)->topLeftLocation());
-                    referencePoint.move(current->parent()->columnOffset(referencePoint));
-                }
+                referencePoint.move(current->columnOffset(referencePoint));
+                if (current->isBox() && !current->isTableRow())
+                    referencePoint.moveBy(toLayoutBox(current)->topLeftLocation());
             }
 
             if (offsetParent->isBox() && offsetParent->isBody() && !offsetParent->isPositioned())
                 referencePoint.moveBy(toLayoutBox(offsetParent)->topLeftLocation());
         }
+        if (offsetParent->isBox() && !offsetParent->isBody())
+            referencePoint.move(-toLayoutBox(offsetParent)->borderLeft(), -toLayoutBox(offsetParent)->borderTop());
     }
 
     return referencePoint;
@@ -922,7 +914,7 @@ void LayoutBoxModelObject::computeLayerHitTestRects(LayerHitTestRects& rects) co
 
 LayoutRect LayoutBoxModelObject::localCaretRectForEmptyElement(LayoutUnit width, LayoutUnit textIndentOffset)
 {
-    ASSERT(!slowFirstChild());
+    DCHECK(!slowFirstChild() || slowFirstChild()->isPseudoElement());
 
     // FIXME: This does not take into account either :first-line or :first-letter
     // However, as soon as some content is entered, the line boxes will be

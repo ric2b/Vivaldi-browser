@@ -114,6 +114,21 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
     SCOPED_TRACE("~AudioRendererImplTest()");
   }
 
+  // Reconfigures a renderer without config change support using given params.
+  void ConfigureBasicRenderer(const AudioParameters& params) {
+    hardware_params_ = params;
+    sink_ = new FakeAudioRendererSink(hardware_params_);
+    decoder_ = new MockAudioDecoder();
+    ScopedVector<AudioDecoder> decoders;
+    decoders.push_back(decoder_);
+    renderer_.reset(new AudioRendererImpl(message_loop_.task_runner(),
+                                          sink_.get(), std::move(decoders),
+                                          new MediaLog()));
+    testing::Mock::VerifyAndClearExpectations(&demuxer_stream_);
+    EXPECT_CALL(demuxer_stream_, SupportsConfigChanges())
+        .WillRepeatedly(Return(false));
+  }
+
   void ExpectUnsupportedAudioDecoder() {
     EXPECT_CALL(*decoder_, Initialize(_, _, _, _))
         .WillOnce(DoAll(SaveArg<3>(&output_cb_), RunCallback<2>(false)));
@@ -132,6 +147,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
   MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size&));
   MOCK_METHOD1(OnVideoOpacityChange, void(bool));
+  MOCK_METHOD1(OnDurationChange, void(base::TimeDelta));
 
   void InitializeRenderer(const PipelineStatusCB& pipeline_status_cb) {
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
@@ -536,6 +552,37 @@ TEST_F(AudioRendererImplTest, Underflow_CapacityResetsAfterFlush) {
   EXPECT_EQ(buffer_capacity().value, initial_capacity.value);
 }
 
+TEST_F(AudioRendererImplTest, Underflow_CapacityIncreasesBeforeHaveNothing) {
+  Initialize();
+  Preroll();
+  StartTicking();
+
+  // Verify the next FillBuffer() call triggers the underflow callback
+  // since the decoder hasn't delivered any data after it was drained.
+  OutputFrames initial_capacity = buffer_capacity();
+
+  // Drain internal buffer, we should have a pending read.
+  EXPECT_FALSE(ConsumeBufferedData(OutputFrames(frames_buffered().value + 1)));
+
+  // Verify that the buffer capacity increased despite not sending have nothing.
+  EXPECT_GT(buffer_capacity().value, initial_capacity.value);
+}
+
+TEST_F(AudioRendererImplTest, CapacityAppropriateForHardware) {
+  // Verify that initial capacity is reasonable in normal case.
+  Initialize();
+  EXPECT_GT(buffer_capacity().value, hardware_params_.frames_per_buffer());
+
+  // Verify in the no-config-changes-expected case.
+  ConfigureBasicRenderer(AudioParameters(
+      AudioParameters::AUDIO_PCM_LOW_LATENCY, kChannelLayout,
+      kOutputSamplesPerSecond, SampleFormatToBytesPerChannel(kSampleFormat) * 8,
+      1024 * 15));
+
+  Initialize();
+  EXPECT_GT(buffer_capacity().value, hardware_params_.frames_per_buffer());
+}
+
 TEST_F(AudioRendererImplTest, Underflow_Flush) {
   Initialize();
   Preroll();
@@ -708,7 +755,13 @@ TEST_F(AudioRendererImplTest, CurrentMediaTimeBehavior) {
   StopTicking();
   EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
   tick_clock_->Advance(kConsumptionDuration * 2);
-  timestamp_helper.AddFrames(frames_to_consume.value);
+
+  // TODO(chcunningham): Uncomment the AddFrames() call below. AudioClock should
+  // be expected to advance time through the last rendered buffer's samples, but
+  // we've currently capped it to not advance time after ticking stops as a
+  // short term workaround for messy blink code. See longterm solution at
+  // http://crrev.com/2425463002.
+  // timestamp_helper.AddFrames(frames_to_consume.value);
   EXPECT_EQ(timestamp_helper.GetTimestamp(), CurrentMediaTime());
 }
 

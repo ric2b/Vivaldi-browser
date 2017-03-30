@@ -8,11 +8,11 @@
 
 class OperaAdrFileReader {
  public:
-  void LoadFile(base::FilePath &file);
+  bool LoadFile(base::FilePath& file);
 
  protected:
-  virtual void HandleEntry(const std::string &category,
-                           const base::DictionaryValue &entries) = 0;
+  virtual void HandleEntry(const std::string& category,
+                           const base::DictionaryValue& entries) = 0;
 
   OperaAdrFileReader();
   virtual ~OperaAdrFileReader();

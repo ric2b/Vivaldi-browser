@@ -50,10 +50,6 @@ const char kAllowSandboxDebugging[]         = "allow-sandbox-debugging";
 // This is used in blimp to emulate android fonts on linux.
 const char kAndroidFontsPath[]          = "android-fonts-path";
 
-// Choose which logging channels in blink platform to activate.  See
-// Logging.cpp in blink's Source/platform for a list of available channels.
-const char kBlinkPlatformLogChannels[]      = "blink-platform-log-channels";
-
 // Set blink settings. Format is <name>[=<value],<name>[=<value>],...
 // The names are declared in Settings.in. For boolean type, use "true", "false",
 // or omit '=<value>' part to set to true. For enum type, use the int value of
@@ -107,6 +103,10 @@ const char kDisableBackingStoreLimit[]      = "disable-backing-store-limit";
 // nondeterministic behavior.
 extern const char kDisableBackgroundingOccludedWindowsForTesting[] =
     "disable-backgrounding-occluded-windows";
+
+// Disable task throttling of timer tasks from background pages.
+const char kDisableBackgroundTimerThrottling[] =
+    "disable-background-timer-throttling";
 
 // Disable one or more Blink runtime-enabled features.
 // Use names from RuntimeEnabledFeatures.in, separated by commas.
@@ -243,6 +243,9 @@ const char kDisablePepper3d[]               = "disable-pepper-3d";
 // Disables the Permissions API.
 const char kDisablePermissionsAPI[]         = "disable-permissions-api";
 
+// Disable Image Chromium for Pepper 3d.
+const char kDisablePepper3DImageChromium[] = "disable-pepper-3d-image-chromium";
+
 // Disables compositor-accelerated touch-screen pinch gestures.
 const char kDisablePinch[]                  = "disable-pinch";
 
@@ -268,6 +271,10 @@ const char kDisableRendererAccessibility[]  = "disable-renderer-accessibility";
 
 // Prevent renderer process backgrounding when set.
 const char kDisableRendererBackgrounding[]  = "disable-renderer-backgrounding";
+
+// Whether the resize lock is disabled. Default is false. This is generally only
+// useful for tests that want to force disabling.
+const char kDisableResizeLock[] = "disable-resize-lock";
 
 // Disable the seccomp filter sandbox (seccomp-bpf) (Linux only).
 const char kDisableSeccompFilterSandbox[]   = "disable-seccomp-filter-sandbox";
@@ -307,6 +314,9 @@ const char kDisableXSSAuditor[]             = "disable-xss-auditor";
 
 // Disable rasterizer that writes directly to GPU memory associated with tiles.
 const char kDisableZeroCopy[]                = "disable-zero-copy";
+
+// Disable the video decoder from drawing directly to a texture.
+const char kDisableZeroCopyDxgiVideo[]      = "disable-zero-copy-dxgi-video";
 
 // Specifies if the |DOMAutomationController| needs to be bound in the
 // renderer. This binding happens on per-frame basis and hence can potentially
@@ -354,6 +364,14 @@ const char kEnableDisplayList2dCanvas[]     = "enable-display-list-2d-canvas";
 const char kForceDisplayList2dCanvas[]      = "force-display-list-2d-canvas";
 const char kDisableDisplayList2dCanvas[]    = "disable-display-list-2d-canvas";
 
+// Enables dynamic rendering pipeline switching to optimize the
+// performance of 2d canvas
+const char kEnableCanvas2dDynamicRenderingModeSwitching[] =
+    "enable-canvas-2d-dynamic-rendering-mode-switching";
+
+// Enable color space aware rasterization and compositing.
+const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
+
 // Enable experimental canvas features, e.g. canvas 2D context attributes
 const char kEnableExperimentalCanvasFeatures[] =
     "enable-experimental-canvas-features";
@@ -376,6 +394,9 @@ const char kEnableWebFontsInterventionV2SwitchValueEnabledWithSlow2G[] =
     "enabled-slow2g";
 const char kEnableWebFontsInterventionV2SwitchValueDisabled[] = "disabled";
 
+// Enables Generic Sensor API functionality.
+const char kEnableGenericSensors[] = "enable-generic-sensors";
+
 // Makes the GL worker context run asynchronously by using a separate stream.
 const char kEnableGpuAsyncWorkerContext[] = "enable-gpu-async-worker-context";
 
@@ -395,9 +416,6 @@ const char kEnableGpuRasterization[]        = "enable-gpu-rasterization";
 // When using CPU rasterizing generate low resolution tiling. Low res
 // tiles may be displayed during fast scrolls especially on slower devices.
 const char kEnableLowResTiling[] = "enable-low-res-tiling";
-
-// Dynamically apply color profiles to web content images.
-const char kEnableImageColorProfiles[]      = "enable-image-color-profiles";
 
 // Force logging to be enabled.  Logging is disabled by default in release
 // builds.
@@ -519,9 +537,6 @@ const char kEnableWebVR[] = "enable-webvr";
 // Enable rasterizer that writes directly to GPU memory associated with tiles.
 const char kEnableZeroCopy[]                = "enable-zero-copy";
 
-// Enable the video decoder to draw directly to a texture.
-const char kEnableZeroCopyDxgiVideo[] = "enable-zero-copy-dxgi-video";
-
 // Explicitly allows additional ports using a comma-separated list of port
 // numbers.
 const char kExplicitlyAllowedPorts[]        = "explicitly-allowed-ports";
@@ -585,6 +600,9 @@ const char kGpuStartupDialog[]              = "gpu-startup-dialog";
 // Passes gpu vendor_id from browser process to GPU process.
 const char kGpuVendorID[]                   = "gpu-vendor-id";
 
+// Ignores certificate-related errors.
+const char kIgnoreCertificateErrors[]       = "ignore-certificate-errors";
+
 // These mappings only apply to the host resolver.
 const char kHostResolverRules[]             = "host-resolver-rules";
 
@@ -601,12 +619,18 @@ const char kInProcessGPU[]                  = "in-process-gpu";
 // connection from the browser before killing itself.
 const char kIPCConnectionTimeout[]          = "ipc-connection-timeout";
 
+// Chrome is running in Mash.
+const char kIsRunningInMash[] = "is-running-in-mash";
+
 // Disable latest shipping ECMAScript 6 features.
 const char kDisableJavaScriptHarmonyShipping[] =
     "disable-javascript-harmony-shipping";
 
 // Enables experimental Harmony (ECMAScript 6) features.
 const char kJavaScriptHarmony[]             = "javascript-harmony";
+
+// Enables experimental Asm.js to WebAssembly.
+const char kEnableAsmWasm[]                 = "enable-asm-wasm";
 
 // Enables experimental WebAssembly.
 const char kEnableWasm[]                    = "enable-wasm";
@@ -823,6 +847,10 @@ const char kStartFullscreen[] = "start-fullscreen";
 const char kStatsCollectionController[] =
     "enable-stats-collection-bindings";
 
+// Allows for forcing socket connections to http/https to use fixed ports.
+const char kTestingFixedHttpPort[]          = "testing-fixed-http-port";
+const char kTestingFixedHttpsPort[]         = "testing-fixed-https-port";
+
 // Type of the current test harness ("browser" or "ui").
 const char kTestType[]                      = "test-type";
 
@@ -1028,6 +1056,7 @@ const char kEnableWin32kLockDownMimeTypes[] =
     "enable-win32k-lockdown-mimetypes";
 
 // Enables experimental hardware acceleration for VP8/VP9 video decoding.
+// Bitmask - 0x1=Microsoft, 0x2=AMD, 0x03=Try all.
 const char kEnableAcceleratedVpxDecode[] = "enable-accelerated-vpx-decode";
 
 // Enables H264 HW decode acceleration for WebRtc on Win 7.

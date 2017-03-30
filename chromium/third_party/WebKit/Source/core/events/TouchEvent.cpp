@@ -105,15 +105,15 @@ void logTouchTargetHistogram(EventTarget* eventTarget, unsigned short phase, boo
 
     switch (phase) {
     default:
-    case Event::NONE:
+    case Event::kNone:
         return;
-    case Event::CAPTURING_PHASE:
+    case Event::kCapturingPhase:
         result += kCapturingOffset;
         break;
-    case Event::AT_TARGET:
+    case Event::kAtTarget:
         result += kAtTargetOffset;
         break;
-    case Event::BUBBLING_PHASE:
+    case Event::kBubblingPhase:
         result += kBubblingOffset;
         break;
     }
@@ -187,30 +187,6 @@ TouchEvent::~TouchEvent()
 {
 }
 
-void TouchEvent::initTouchEvent(ScriptState* scriptState, TouchList* touches, TouchList* targetTouches,
-    TouchList* changedTouches, const AtomicString& type,
-    AbstractView* view,
-    int, int, int, int,
-    bool ctrlKey, bool altKey, bool shiftKey, bool metaKey)
-{
-    if (isBeingDispatched())
-        return;
-
-    if (scriptState->world().isIsolatedWorld())
-        UIEventWithKeyState::didCreateEventInIsolatedWorld(ctrlKey, altKey, shiftKey, metaKey);
-
-    bool cancelable = true;
-    if (type == EventTypeNames::touchcancel)
-        cancelable = false;
-
-    initUIEvent(type, true, cancelable, view, 0);
-
-    m_touches = touches;
-    m_targetTouches = targetTouches;
-    m_changedTouches = changedTouches;
-    initModifiers(ctrlKey, altKey, shiftKey, metaKey);
-}
-
 const AtomicString& TouchEvent::interfaceName() const
 {
     return EventNames::TouchEvent;
@@ -228,7 +204,7 @@ void TouchEvent::preventDefault()
     // A common developer error is to wait too long before attempting to stop
     // scrolling by consuming a touchmove event. Generate a warning if this
     // event is uncancelable.
-    if (!cancelable() && view() && view()->isLocalDOMWindow() && view()->frame()) {
+    if (!cancelable() && handlingPassive() == PassiveMode::NotPassive && view() && view()->isLocalDOMWindow() && view()->frame()) {
         toLocalDOMWindow(view())->frame()->console().addMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel,
             "Ignored attempt to cancel a " + type() + " event with cancelable=false, for example because scrolling is in progress and cannot be interrupted."));
     }

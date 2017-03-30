@@ -1,0 +1,60 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
+import("//testing/test.gni")
+
+source_set("lib") {
+  sources = [
+    "ime_registrar_impl.cc",
+    "ime_registrar_impl.h",
+    "ime_server_impl.cc",
+    "ime_server_impl.h",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/common",
+    "//mojo/public/cpp/bindings",
+    "//services/shell/public/cpp",
+    "//services/tracing/public/cpp",
+    "//services/ui/public/interfaces",
+  ]
+}
+
+group("tests") {
+  testonly = true
+  deps = [
+    ":mus_ime_unittests",
+  ]
+}
+
+test("mus_ime_unittests") {
+  sources = [
+    "ime_unittest.cc",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/common",
+    "//services/shell/public/cpp:service_test_support",
+    "//services/shell/public/cpp:sources",
+    "//services/shell/public/cpp/test:run_all_shelltests",
+    "//services/ui/public/interfaces",
+  ]
+
+  data_deps = [
+    ":test_manifest",
+    ":lib",
+    "//services/ui",
+    "//services/ui/ime/test_ime_driver",
+  ]
+}
+
+service_manifest("test_manifest") {
+  type = "exe"
+  name = "mus_ime_unittests"
+  source = "test_manifest.json"
+}

@@ -37,7 +37,7 @@ class StubContextFactory : public ui::ContextFactory {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() override;
+  uint32_t AllocateSurfaceClientId() override;
   cc::SurfaceManager* GetSurfaceManager() override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
@@ -45,6 +45,9 @@ class StubContextFactory : public ui::ContextFactory {
                             const gfx::ColorSpace& color_space) override;
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override {}
+  void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                 base::TimeTicks timebase,
+                                 base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
   void AddObserver(ui::ContextFactoryObserver* observer) override {}
   void RemoveObserver(ui::ContextFactoryObserver* observer) override {}

@@ -30,7 +30,7 @@
 
 namespace blink {
 
-BiquadFilterNode::BiquadFilterNode(AbstractAudioContext& context)
+BiquadFilterNode::BiquadFilterNode(BaseAudioContext& context)
     : AudioNode(context)
     , m_frequency(AudioParam::create(context, ParamTypeBiquadFilterFrequency, 350.0, 0, context.sampleRate() / 2))
     , m_q(AudioParam::create(context, ParamTypeBiquadFilterQ, 1.0))
@@ -54,7 +54,7 @@ BiquadFilterNode::BiquadFilterNode(AbstractAudioContext& context)
     setType("lowpass");
 }
 
-BiquadFilterNode* BiquadFilterNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+BiquadFilterNode* BiquadFilterNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 
@@ -149,7 +149,9 @@ bool BiquadFilterNode::setType(unsigned type)
 
 void BiquadFilterNode::getFrequencyResponse(const DOMFloat32Array* frequencyHz, DOMFloat32Array* magResponse, DOMFloat32Array* phaseResponse)
 {
-    ASSERT(frequencyHz && magResponse && phaseResponse);
+    DCHECK(frequencyHz);
+    DCHECK(magResponse);
+    DCHECK(phaseResponse);
 
     int n = std::min(frequencyHz->length(), std::min(magResponse->length(), phaseResponse->length()));
     if (n)

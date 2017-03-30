@@ -97,7 +97,7 @@ class CONTENT_EXPORT RenderWidgetCompositor
       std::unique_ptr<base::Value> value,
       const base::Callback<void(std::unique_ptr<base::Value>)>& callback);
   bool SendMessageToMicroBenchmark(int id, std::unique_ptr<base::Value> value);
-  void SetSurfaceIdNamespace(uint32_t surface_id_namespace);
+  void SetSurfaceClientId(uint32_t surface_id_namespace);
   void OnHandleCompositorProto(const std::vector<uint8_t>& proto);
   void SetPaintedDeviceScaleFactor(float device_scale);
 
@@ -161,6 +161,9 @@ class CONTENT_EXPORT RenderWidgetCompositor
                               bool animate) override;
   void setTopControlsHeight(float height, bool shrink) override;
   void setTopControlsShownRatio(float) override;
+  // TODO(ianwen): Move this method to WebLayerTreeView and implement main
+  // thread scrolling.
+  virtual void setBottomControlsHeight(float height);
 
   // cc::LayerTreeHostClient implementation.
   void WillBeginMainFrame() override;
@@ -219,7 +222,6 @@ class CONTENT_EXPORT RenderWidgetCompositor
   bool never_visible_;
 
   blink::WebLayoutAndPaintAsyncCallback* layout_and_paint_async_callback_;
-  std::unique_ptr<cc::CopyOutputRequest> temporary_copy_output_request_;
 
   cc::RemoteProtoChannel::ProtoReceiver* remote_proto_channel_receiver_;
 

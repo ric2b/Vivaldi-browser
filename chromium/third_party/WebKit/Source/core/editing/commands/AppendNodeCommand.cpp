@@ -26,6 +26,7 @@
 #include "core/editing/commands/AppendNodeCommand.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/editing/EditingUtilities.h"
 
 namespace blink {
 
@@ -38,12 +39,12 @@ AppendNodeCommand::AppendNodeCommand(ContainerNode* parent, Node* node)
     DCHECK(m_node);
     DCHECK(!m_node->parentNode()) << m_node;
 
-    DCHECK(m_parent->hasEditableStyle() || !m_parent->inActiveDocument()) << m_parent;
+    DCHECK(hasEditableStyle(*m_parent) || !m_parent->inActiveDocument()) << m_parent;
 }
 
 void AppendNodeCommand::doApply(EditingState*)
 {
-    if (!m_parent->hasEditableStyle() && m_parent->inActiveDocument())
+    if (!hasEditableStyle(*m_parent) && m_parent->inActiveDocument())
         return;
 
     m_parent->appendChild(m_node.get(), IGNORE_EXCEPTION);
@@ -51,7 +52,7 @@ void AppendNodeCommand::doApply(EditingState*)
 
 void AppendNodeCommand::doUnapply()
 {
-    if (!m_parent->hasEditableStyle())
+    if (!hasEditableStyle(*m_parent))
         return;
 
     m_node->remove(IGNORE_EXCEPTION);

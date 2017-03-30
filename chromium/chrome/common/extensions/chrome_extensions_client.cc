@@ -12,17 +12,18 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/extensions/api/api_features.h"
+#include "chrome/common/extensions/api/behavior_features.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/api/generated_schemas.h"
+#include "chrome/common/extensions/api/manifest_features.h"
+#include "chrome/common/extensions/api/permission_features.h"
 #include "chrome/common/extensions/chrome_manifest_handlers.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chrome/common/extensions/features/chrome_channel_feature_filter.h"
-#include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/extensions/manifest_handlers/theme_handler.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/common_resources.h"
-#include "chrome/grit/extensions_api_resources.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/url_constants.h"
@@ -34,8 +35,8 @@
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/api_feature.h"
-#include "extensions/common/features/base_feature_provider.h"
 #include "extensions/common/features/behavior_feature.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/json_feature_provider_source.h"
 #include "extensions/common/features/manifest_feature.h"
@@ -68,10 +69,7 @@ const char kThumbsWhiteListedExtension[] = "khopmbdjffemhegeeobelklnbglcdgfh";
 
 template <class FeatureClass>
 SimpleFeature* CreateFeature() {
-  SimpleFeature* feature = new FeatureClass;
-  feature->AddFilter(std::unique_ptr<SimpleFeatureFilter>(
-      new ChromeChannelFeatureFilter(feature)));
-  return feature;
+  return new FeatureClass();
 }
 
 // Mirrors version_info::Channel for histograms.
@@ -110,10 +108,7 @@ static base::LazyInstance<ChromeExtensionsClient> g_client =
 static ChromeExtensionsClient::ChromeExtensionsClientInstanceFetcher
        g_alternative_get_instance = NULL;
 
-ChromeExtensionsClient::ChromeExtensionsClient()
-    : chrome_api_permissions_(ChromeAPIPermissions()),
-      extensions_api_permissions_(ExtensionsAPIPermissions()) {
-}
+ChromeExtensionsClient::ChromeExtensionsClient() {}
 
 ChromeExtensionsClient::~ChromeExtensionsClient() {
 }
@@ -152,20 +147,14 @@ const std::string ChromeExtensionsClient::GetProductName() {
 std::unique_ptr<FeatureProvider> ChromeExtensionsClient::CreateFeatureProvider(
     const std::string& name) const {
   std::unique_ptr<FeatureProvider> provider;
-  std::unique_ptr<JSONFeatureProviderSource> source(
-      CreateFeatureProviderSource(name));
   if (name == "api") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<APIFeature>));
+    provider.reset(new APIFeatureProvider());
   } else if (name == "manifest") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<ManifestFeature>));
+    provider.reset(new ManifestFeatureProvider());
   } else if (name == "permission") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<PermissionFeature>));
+    provider.reset(new PermissionFeatureProvider());
   } else if (name == "behavior") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<BehaviorFeature>));
+    provider.reset(new BehaviorFeatureProvider());
   } else {
     NOTREACHED();
   }
@@ -173,25 +162,11 @@ std::unique_ptr<FeatureProvider> ChromeExtensionsClient::CreateFeatureProvider(
 }
 
 std::unique_ptr<JSONFeatureProviderSource>
-ChromeExtensionsClient::CreateFeatureProviderSource(
-    const std::string& name) const {
+ChromeExtensionsClient::CreateAPIFeatureSource() const {
   std::unique_ptr<JSONFeatureProviderSource> source(
-      new JSONFeatureProviderSource(name));
-  if (name == "api") {
-    source->LoadJSON(IDR_EXTENSION_API_FEATURES);
-    source->LoadJSON(IDR_CHROME_EXTENSION_API_FEATURES);
-  } else if (name == "manifest") {
-    source->LoadJSON(IDR_EXTENSION_MANIFEST_FEATURES);
-    source->LoadJSON(IDR_CHROME_EXTENSION_MANIFEST_FEATURES);
-  } else if (name == "permission") {
-    source->LoadJSON(IDR_EXTENSION_PERMISSION_FEATURES);
-    source->LoadJSON(IDR_CHROME_EXTENSION_PERMISSION_FEATURES);
-  } else if (name == "behavior") {
-    source->LoadJSON(IDR_EXTENSION_BEHAVIOR_FEATURES);
-  } else {
-    NOTREACHED();
-    source.reset();
-  }
+      new JSONFeatureProviderSource("api"));
+  source->LoadJSON(IDR_EXTENSION_API_FEATURES);
+  source->LoadJSON(IDR_CHROME_EXTENSION_API_FEATURES);
   return source;
 }
 
@@ -288,31 +263,6 @@ base::StringPiece ChromeExtensionsClient::GetAPISchema(
   return api::GeneratedSchemas::Get(name);
 }
 
-void ChromeExtensionsClient::RegisterAPISchemaResources(
-    ExtensionAPI* api) const {
-  api->RegisterSchemaResource("accessibilityPrivate",
-                              IDR_EXTENSION_API_JSON_ACCESSIBILITYPRIVATE);
-  api->RegisterSchemaResource("app", IDR_EXTENSION_API_JSON_APP);
-  api->RegisterSchemaResource("browserAction",
-                              IDR_EXTENSION_API_JSON_BROWSERACTION);
-  api->RegisterSchemaResource("commands", IDR_EXTENSION_API_JSON_COMMANDS);
-  api->RegisterSchemaResource("declarativeContent",
-                              IDR_EXTENSION_API_JSON_DECLARATIVE_CONTENT);
-  api->RegisterSchemaResource("fileBrowserHandler",
-                              IDR_EXTENSION_API_JSON_FILEBROWSERHANDLER);
-  api->RegisterSchemaResource("inputMethodPrivate",
-                              IDR_EXTENSION_API_JSON_INPUTMETHODPRIVATE);
-  api->RegisterSchemaResource("pageAction", IDR_EXTENSION_API_JSON_PAGEACTION);
-  api->RegisterSchemaResource("privacy", IDR_EXTENSION_API_JSON_PRIVACY);
-  api->RegisterSchemaResource("proxy", IDR_EXTENSION_API_JSON_PROXY);
-  api->RegisterSchemaResource("ttsEngine", IDR_EXTENSION_API_JSON_TTSENGINE);
-  api->RegisterSchemaResource("tts", IDR_EXTENSION_API_JSON_TTS);
-  api->RegisterSchemaResource("types", IDR_EXTENSION_API_JSON_TYPES);
-  api->RegisterSchemaResource("types.private",
-                              IDR_EXTENSION_API_JSON_TYPES_PRIVATE);
-  api->RegisterSchemaResource("webstore", IDR_EXTENSION_API_JSON_WEBSTORE);
-}
-
 bool ChromeExtensionsClient::ShouldSuppressFatalErrors() const {
   // Suppress fatal everywhere until the cause of bugs like http://crbug/471599
   // are fixed. This would typically be:
@@ -365,8 +315,7 @@ std::set<base::FilePath> ChromeExtensionsClient::GetBrowserImagePaths(
       ExtensionsClient::GetBrowserImagePaths(extension);
 
   // Theme images
-  const base::DictionaryValue* theme_images =
-      extensions::ThemeInfo::GetImages(extension);
+  const base::DictionaryValue* theme_images = ThemeInfo::GetImages(extension);
   if (theme_images) {
     for (base::DictionaryValue::Iterator it(*theme_images); !it.IsAtEnd();
          it.Advance()) {
@@ -376,13 +325,12 @@ std::set<base::FilePath> ChromeExtensionsClient::GetBrowserImagePaths(
     }
   }
 
-  const extensions::ActionInfo* page_action =
-      extensions::ActionInfo::GetPageActionInfo(extension);
+  const ActionInfo* page_action = ActionInfo::GetPageActionInfo(extension);
   if (page_action && !page_action->default_icon.empty())
     page_action->default_icon.GetPaths(&image_paths);
 
-  const extensions::ActionInfo* browser_action =
-      extensions::ActionInfo::GetBrowserActionInfo(extension);
+  const ActionInfo* browser_action =
+      ActionInfo::GetBrowserActionInfo(extension);
   if (browser_action && !browser_action->default_icon.empty())
     browser_action->default_icon.GetPaths(&image_paths);
 

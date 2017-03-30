@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.ntp;
 
 import android.app.Activity;
 import android.graphics.Canvas;
+import android.support.v4.view.ViewCompat;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.TextView;
@@ -83,7 +84,8 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
 
     @Override
     public void destroy() {
-        assert getView().getParent() == null : "Destroy called before removed from window";
+        assert !ViewCompat
+                .isAttachedToWindow(getView()) : "Destroy called before removed from window";
     }
 
     @Override
@@ -104,6 +106,11 @@ public class IncognitoNewTabPage implements NativePage, InvalidationAwareThumbna
     @Override
     public int getThemeColor() {
         return mThemeColor;
+    }
+
+    @Override
+    public boolean needsToolbarShadow() {
+        return true;
     }
 
     @Override

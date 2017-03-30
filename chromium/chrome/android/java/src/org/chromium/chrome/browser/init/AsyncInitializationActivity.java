@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.init;
 
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -70,6 +72,8 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     }
 
     @Override
+    // TODO(estevenson): Replace with Build.VERSION_CODES.N when available.
+    @TargetApi(24)
     protected void attachBaseContext(Context newBase) {
         super.attachBaseContext(newBase);
 
@@ -182,7 +186,7 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
     /**
      * Actions that may be run at some point after startup. Place tasks that are not critical to the
      * startup path here.  This method will be called automatically and should not be called
-     * directly by subclasses.  Overriding methods should call super.onDeferredStartup().
+     * directly by subclasses.
      */
     protected void onDeferredStartup() { }
 
@@ -200,7 +204,14 @@ public abstract class AsyncInitializationActivity extends AppCompatActivity impl
      * be called on that order.
      */
     @Override
+    @SuppressLint("MissingSuperCall")  // Called in onCreateInternal.
     protected final void onCreate(Bundle savedInstanceState) {
+        TraceEvent.begin("AsyncInitializationActivity.onCreate()");
+        onCreateInternal(savedInstanceState);
+        TraceEvent.end("AsyncInitializationActivity.onCreate()");
+    }
+
+    private final void onCreateInternal(Bundle savedInstanceState) {
         if (DocumentModeAssassin.getInstance().isMigrationNecessary()) {
             super.onCreate(null);
 

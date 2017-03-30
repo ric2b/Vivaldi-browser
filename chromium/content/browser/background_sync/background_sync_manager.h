@@ -249,8 +249,7 @@ class CONTENT_EXPORT BackgroundSyncManager
       const base::Closure& event_fired_callback,
       const base::Closure& event_completed_callback,
       ServiceWorkerStatusCode service_worker_status,
-      const scoped_refptr<ServiceWorkerRegistration>&
-          service_worker_registration);
+      scoped_refptr<ServiceWorkerRegistration> service_worker_registration);
   void FireReadyEventsAllEventsFiring(const base::Closure& callback);
 
   // Called when a sync event has completed.
@@ -285,26 +284,7 @@ class CONTENT_EXPORT BackgroundSyncManager
   void SetMaxSyncAttemptsImpl(int max_sync_attempts,
                               const base::Closure& callback);
 
-  // Operation Scheduling callback and convenience functions.
-  template <typename CallbackT, typename... Params>
-  void CompleteOperationCallback(const CallbackT& callback,
-                                 Params... parameters);
-  void CompleteStatusAndRegistrationCallback(
-      StatusAndRegistrationCallback callback,
-      BackgroundSyncStatus status,
-      std::unique_ptr<BackgroundSyncRegistration> registration);
-  void CompleteStatusAndRegistrationsCallback(
-      StatusAndRegistrationsCallback callback,
-      BackgroundSyncStatus status,
-      std::unique_ptr<ScopedVector<BackgroundSyncRegistration>> registrations);
   base::Closure MakeEmptyCompletion();
-  base::Closure MakeClosureCompletion(const base::Closure& callback);
-  StatusAndRegistrationCallback MakeStatusAndRegistrationCompletion(
-      const StatusAndRegistrationCallback& callback);
-  StatusAndRegistrationsCallback MakeStatusAndRegistrationsCompletion(
-      const StatusAndRegistrationsCallback& callback);
-  BackgroundSyncManager::StatusCallback MakeStatusCompletion(
-      const StatusCallback& callback);
 
   SWIdToRegistrationsMap active_registrations_;
   CacheStorageScheduler op_scheduler_;

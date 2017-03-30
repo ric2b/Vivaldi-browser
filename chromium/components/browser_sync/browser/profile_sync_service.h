@@ -27,32 +27,32 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
-#include "components/sync_driver/data_type_controller.h"
-#include "components/sync_driver/data_type_manager.h"
-#include "components/sync_driver/data_type_manager_observer.h"
-#include "components/sync_driver/data_type_status_table.h"
-#include "components/sync_driver/glue/sync_backend_host.h"
-#include "components/sync_driver/local_device_info_provider.h"
-#include "components/sync_driver/protocol_event_observer.h"
-#include "components/sync_driver/startup_controller.h"
-#include "components/sync_driver/sync_client.h"
-#include "components/sync_driver/sync_frontend.h"
-#include "components/sync_driver/sync_prefs.h"
-#include "components/sync_driver/sync_service.h"
-#include "components/sync_driver/sync_stopped_reporter.h"
+#include "components/sync/base/experiments.h"
+#include "components/sync/base/model_type.h"
+#include "components/sync/base/unrecoverable_error_handler.h"
+#include "components/sync/core/network_time_update_callback.h"
+#include "components/sync/core/shutdown_reason.h"
+#include "components/sync/core/sync_manager_factory.h"
+#include "components/sync/core/user_share.h"
+#include "components/sync/device_info/local_device_info_provider.h"
+#include "components/sync/driver/data_type_controller.h"
+#include "components/sync/driver/data_type_manager.h"
+#include "components/sync/driver/data_type_manager_observer.h"
+#include "components/sync/driver/data_type_status_table.h"
+#include "components/sync/driver/glue/sync_backend_host.h"
+#include "components/sync/driver/protocol_event_observer.h"
+#include "components/sync/driver/startup_controller.h"
+#include "components/sync/driver/sync_client.h"
+#include "components/sync/driver/sync_frontend.h"
+#include "components/sync/driver/sync_prefs.h"
+#include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_stopped_reporter.h"
+#include "components/sync/engine/model_safe_worker.h"
+#include "components/sync/js/sync_js_controller.h"
 #include "components/version_info/version_info.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "net/base/backoff_entry.h"
-#include "sync/internal_api/public/base/model_type.h"
-#include "sync/internal_api/public/engine/model_safe_worker.h"
-#include "sync/internal_api/public/network_time_update_callback.h"
-#include "sync/internal_api/public/shutdown_reason.h"
-#include "sync/internal_api/public/sync_manager_factory.h"
-#include "sync/internal_api/public/user_share.h"
-#include "sync/internal_api/public/util/experiments.h"
-#include "sync/internal_api/public/util/unrecoverable_error_handler.h"
-#include "sync/js/sync_js_controller.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -316,7 +316,7 @@ class ProfileSyncService : public sync_driver::SyncService,
   bool QueryDetailedSyncStatus(syncer::SyncStatus* result) override;
   base::string16 GetLastSyncedTimeString() const override;
   std::string GetBackendInitializationStateString() const override;
-  syncer::sessions::SyncSessionSnapshot GetLastSessionSnapshot() const override;
+  syncer::SyncCycleSnapshot GetLastCycleSnapshot() const override;
   base::Value* GetTypeStatusMap() const override;
   const GURL& sync_service_url() const override;
   std::string unrecoverable_error_message() const override;

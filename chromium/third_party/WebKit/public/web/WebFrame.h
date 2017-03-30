@@ -31,21 +31,14 @@
 #ifndef WebFrame_h
 #define WebFrame_h
 
-#include "WebCompositionUnderline.h"
-#include "WebHistoryItem.h"
 #include "WebIconURL.h"
 #include "WebNode.h"
 #include "WebURLLoaderOptions.h"
-#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebCanvas.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
-#include "public/platform/WebMessagePortChannel.h"
-#include "public/platform/WebPrivateOwnPtr.h"
-#include "public/platform/WebReferrerPolicy.h"
-#include "public/platform/WebURL.h"
-#include "public/platform/WebURLRequest.h"
 #include "public/web/WebFrameLoadType.h"
 #include "public/web/WebTreeScopeType.h"
+#include <memory>
 
 struct NPObject;
 
@@ -71,7 +64,6 @@ class WebFrameImplBase;
 class WebLayer;
 class WebLocalFrame;
 class WebPerformance;
-class WebRange;
 class WebRemoteFrame;
 class WebSecurityOrigin;
 class WebSharedWorkerRepositoryClient;
@@ -82,16 +74,11 @@ class WebURLRequest;
 class WebView;
 enum class WebSandboxFlags;
 struct WebConsoleMessage;
-struct WebFindOptions;
-struct WebFloatPoint;
-struct WebFloatRect;
 struct WebFrameOwnerProperties;
-struct WebPoint;
 struct WebPrintParams;
 struct WebRect;
 struct WebScriptSource;
 struct WebSize;
-struct WebURLLoaderOptions;
 
 template <typename T> class WebVector;
 
@@ -402,70 +389,6 @@ public:
     virtual bool isLoading() const;
 
 
-    // Editing -------------------------------------------------------------
-
-    virtual void insertText(const WebString& text) = 0;
-
-    virtual void setMarkedText(const WebString& text, unsigned location, unsigned length) = 0;
-    virtual void unmarkText() = 0;
-    virtual bool hasMarkedText() const = 0;
-
-    virtual WebRange markedRange() const = 0;
-
-    // Returns the text range rectangle in the viepwort coordinate space.
-    virtual bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const = 0;
-
-    // Returns the index of a character in the Frame's text stream at the given
-    // point. The point is in the viewport coordinate space. Will return
-    // WTF::notFound if the point is invalid.
-    virtual size_t characterIndexForPoint(const WebPoint&) const = 0;
-
-    // Supports commands like Undo, Redo, Cut, Copy, Paste, SelectAll,
-    // Unselect, etc. See EditorCommand.cpp for the full list of supported
-    // commands.
-    virtual bool executeCommand(const WebString&) = 0;
-    virtual bool executeCommand(const WebString&, const WebString& value) = 0;
-    virtual bool isCommandEnabled(const WebString&) const = 0;
-
-    // Spell-checking support.
-    virtual void enableContinuousSpellChecking(bool) = 0;
-    virtual bool isContinuousSpellCheckingEnabled() const = 0;
-    virtual void requestTextChecking(const WebElement&) = 0;
-    virtual void removeSpellingMarkers() = 0;
-
-    // Selection -----------------------------------------------------------
-
-    virtual bool hasSelection() const = 0;
-
-    virtual WebRange selectionRange() const = 0;
-
-    virtual WebString selectionAsText() const = 0;
-    virtual WebString selectionAsMarkup() const = 0;
-
-    // Expands the selection to a word around the caret and returns
-    // true. Does nothing and returns false if there is no caret or
-    // there is ranged selection.
-    virtual bool selectWordAroundCaret() = 0;
-
-    // DEPRECATED: Use moveRangeSelection.
-    virtual void selectRange(const WebPoint& base, const WebPoint& extent) = 0;
-
-    virtual void selectRange(const WebRange&) = 0;
-
-    // Move the current selection to the provided viewport point/points. If the
-    // current selection is editable, the new selection will be restricted to
-    // the root editable element.
-    // |TextGranularity| represents character wrapping granularity. If
-    // WordGranularity is set, WebFrame extends selection to wrap word.
-    virtual void moveRangeSelection(const WebPoint& base, const WebPoint& extent, WebFrame::TextGranularity = CharacterGranularity) = 0;
-    virtual void moveCaretSelection(const WebPoint&) = 0;
-
-    virtual bool setEditableSelectionOffsets(int start, int end) = 0;
-    virtual bool setCompositionFromExistingText(int compositionStart, int compositionEnd, const WebVector<WebCompositionUnderline>& underlines) = 0;
-    virtual void extendSelectionAndDelete(int before, int after) = 0;
-
-    virtual void setCaretVisible(bool) = 0;
-
     // Printing ------------------------------------------------------------
 
     // Reformats the WebFrame for printing. WebPrintParams specifies the printable
@@ -493,29 +416,6 @@ public:
     // plugin whose content indicates that printed output should not be scaled,
     // return true, otherwise return false.
     virtual bool isPrintScalingDisabledForPlugin(const WebNode& = WebNode()) = 0;
-
-    // CSS3 Paged Media ----------------------------------------------------
-
-    // Returns true if page box (margin boxes and page borders) is visible.
-    virtual bool isPageBoxVisible(int pageIndex) = 0;
-
-    // Returns true if the page style has custom size information.
-    virtual bool hasCustomPageSizeStyle(int pageIndex) = 0;
-
-    // Returns the preferred page size and margins in pixels, assuming 96
-    // pixels per inch. pageSize, marginTop, marginRight, marginBottom,
-    // marginLeft must be initialized to the default values that are used if
-    // auto is specified.
-    virtual void pageSizeAndMarginsInPixels(int pageIndex,
-                                            WebSize& pageSize,
-                                            int& marginTop,
-                                            int& marginRight,
-                                            int& marginBottom,
-                                            int& marginLeft) = 0;
-
-    // Returns the value for a page property that is only defined when printing.
-    // printBegin must have been called before this method.
-    virtual WebString pageProperty(const WebString& propertyName, int pageIndex) = 0;
 
 
     // Events --------------------------------------------------------------
@@ -603,7 +503,7 @@ private:
     WebFrame* m_lastChild;
 
     WebFrame* m_opener;
-    WebPrivateOwnPtr<OpenedFrameTracker> m_openedFrameTracker;
+    std::unique_ptr<OpenedFrameTracker> m_openedFrameTracker;
 };
 
 } // namespace blink

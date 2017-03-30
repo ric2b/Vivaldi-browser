@@ -5,16 +5,22 @@
 #ifndef ASH_TOUCH_TOUCH_OBSERVER_UMA_H_
 #define ASH_TOUCH_TOUCH_OBSERVER_UMA_H_
 
-#include <map>
-
-#include "ash/shell.h"
+#include "ash/ash_export.h"
+#include "ash/common/metrics/gesture_action_type.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "ui/gfx/geometry/point.h"
-#include "ui/views/widget/widget.h"
 
 namespace aura {
 class Window;
+}
+
+namespace ui {
+class GestureEvent;
+class TouchEvent;
+}
+
+namespace gfx {
+class Point;
 }
 
 namespace ash {
@@ -23,34 +29,6 @@ namespace ash {
 // targetted to which components etc.)
 class ASH_EXPORT TouchUMA {
  public:
-  enum GestureActionType {
-    GESTURE_UNKNOWN,
-    GESTURE_OMNIBOX_PINCH,
-    GESTURE_OMNIBOX_SCROLL,
-    GESTURE_TABSTRIP_PINCH,
-    GESTURE_TABSTRIP_SCROLL,
-    GESTURE_BEZEL_SCROLL,
-    GESTURE_DESKTOP_SCROLL,
-    GESTURE_DESKTOP_PINCH,
-    GESTURE_WEBPAGE_PINCH,
-    GESTURE_WEBPAGE_SCROLL,
-    GESTURE_WEBPAGE_TAP,
-    GESTURE_TABSTRIP_TAP,
-    GESTURE_BEZEL_DOWN,
-    GESTURE_TABSWITCH_TAP,
-    GESTURE_TABNOSWITCH_TAP,
-    GESTURE_TABCLOSE_TAP,
-    GESTURE_NEWTAB_TAP,
-    GESTURE_ROOTVIEWTOP_TAP,
-    GESTURE_FRAMEMAXIMIZE_TAP,
-    GESTURE_FRAMEVIEW_TAP,
-    GESTURE_MAXIMIZE_DOUBLETAP,
-    // NOTE: Add new action types only immediately above this line. Also,
-    // make sure the enum list in tools/histogram/histograms.xml is
-    // updated with any change in here.
-    GESTURE_ACTION_COUNT
-  };
-
   // Returns the singleton instance.
   static TouchUMA* GetInstance();
 

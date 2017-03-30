@@ -7,10 +7,12 @@
 #include <utility>
 #include <vector>
 
-#include "ash/desktop_background/user_wallpaper_delegate.h"
-#include "ash/new_window_delegate.h"
+#include "ash/common/new_window_delegate.h"
+#include "ash/common/shell_delegate.h"
+#include "ash/common/wallpaper/wallpaper_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
+#include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
 #include "components/arc/intent_helper/activity_icon_loader.h"
 #include "components/arc/intent_helper/link_handler_model_impl.h"
@@ -70,18 +72,18 @@ void ArcIntentHelperBridge::OnOpenDownloads() {
   // downloads by default, which is what we want.  However if it is open it will
   // simply be brought to the forgeground without forcibly being navigated to
   // downloads, which is probably not ideal.
-  ash::Shell::GetInstance()->new_window_delegate()->OpenFileManager();
+  ash::WmShell::Get()->new_window_delegate()->OpenFileManager();
 }
 
 void ArcIntentHelperBridge::OnOpenUrl(const mojo::String& url) {
   DCHECK(thread_checker_.CalledOnValidThread());
   GURL gurl(url.get());
-  ash::Shell::GetInstance()->delegate()->OpenUrlFromArc(gurl);
+  ash::WmShell::Get()->delegate()->OpenUrlFromArc(gurl);
 }
 
 void ArcIntentHelperBridge::OpenWallpaperPicker() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  ash::Shell::GetInstance()->user_wallpaper_delegate()->OpenSetWallpaperPage();
+  ash::WmShell::Get()->wallpaper_delegate()->OpenSetWallpaperPage();
 }
 
 void ArcIntentHelperBridge::SetWallpaper(mojo::Array<uint8_t> jpeg_data) {
@@ -116,6 +118,49 @@ ArcIntentHelperBridge::FilterOutIntentHelper(
     handlers_filtered.push_back(std::move(handler));
   }
   return handlers_filtered;
+}
+
+// static
+mojom::IntentHelperInstance*
+ArcIntentHelperBridge::GetIntentHelperInstanceWithErrorCode(
+    int min_instance_version,
+    GetResult* out_error_code) {
+  ArcBridgeService* bridge_service = ArcBridgeService::Get();
+  if (!bridge_service) {
+    if (!ArcBridgeService::GetEnabled(base::CommandLine::ForCurrentProcess())) {
+      VLOG(2) << "ARC bridge is not supported.";
+      if (out_error_code)
+        *out_error_code = GetResult::FAILED_ARC_NOT_SUPPORTED;
+    } else {
+      VLOG(2) << "ARC bridge is not ready.";
+      if (out_error_code)
+        *out_error_code = GetResult::FAILED_ARC_NOT_READY;
+    }
+    return nullptr;
+  }
+  mojom::IntentHelperInstance* intent_helper_instance =
+      bridge_service->intent_helper()->instance();
+  if (!intent_helper_instance) {
+    VLOG(2) << "ARC intent helper instance is not ready.";
+    if (out_error_code)
+      *out_error_code = GetResult::FAILED_ARC_NOT_READY;
+    return nullptr;
+  }
+  const int version = bridge_service->intent_helper()->version();
+  if (version < min_instance_version) {
+    VLOG(1) << "ARC intent helper instance is too old. required: "
+            << min_instance_version << ", actual: " << version;
+    if (out_error_code)
+      *out_error_code = GetResult::FAILED_ARC_NOT_SUPPORTED;
+    return nullptr;
+  }
+  return intent_helper_instance;
+}
+
+// static
+mojom::IntentHelperInstance* ArcIntentHelperBridge::GetIntentHelperInstance(
+    int min_instance_version) {
+  return GetIntentHelperInstanceWithErrorCode(min_instance_version, nullptr);
 }
 
 void ArcIntentHelperBridge::OnIntentFiltersUpdated(

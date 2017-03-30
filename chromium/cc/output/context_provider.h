@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "cc/base/cc_export.h"
+#include "cc/output/context_cache_controller.h"
 #include "gpu/command_buffer/common/capabilities.h"
 
 class GrContext;
@@ -35,18 +36,10 @@ class ContextProvider : public base::RefCountedThreadSafe<ContextProvider> {
   // lock from GetLock(), so is not always supported. Most use of
   // ContextProvider should be single-thread only on the thread that
   // BindToCurrentThread is run on.
-  class ScopedContextLock {
+  class CC_EXPORT ScopedContextLock {
    public:
-    explicit ScopedContextLock(ContextProvider* context_provider)
-        : context_provider_(context_provider),
-          context_lock_(*context_provider_->GetLock()) {
-      // Allow current thread to use |context_provider_|.
-      context_provider_->DetachFromThread();
-    }
-    ~ScopedContextLock() {
-      // Allow usage by thread for which |context_provider_| is bound to.
-      context_provider_->DetachFromThread();
-    }
+    explicit ScopedContextLock(ContextProvider* context_provider);
+    ~ScopedContextLock();
 
     gpu::gles2::GLES2Interface* ContextGL() {
       return context_provider_->ContextGL();
@@ -55,6 +48,7 @@ class ContextProvider : public base::RefCountedThreadSafe<ContextProvider> {
    private:
     ContextProvider* const context_provider_;
     base::AutoLock context_lock_;
+    std::unique_ptr<ContextCacheController::ScopedBusy> busy_;
   };
 
   // Bind the 3d context to the current thread. This should be called before
@@ -68,6 +62,7 @@ class ContextProvider : public base::RefCountedThreadSafe<ContextProvider> {
   virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
   virtual gpu::ContextSupport* ContextSupport() = 0;
   virtual class GrContext* GrContext() = 0;
+  virtual ContextCacheController* CacheController() = 0;
 
   // Invalidates the cached OpenGL state in GrContext.
   // See skia GrContext::resetContext for details.
@@ -75,9 +70,6 @@ class ContextProvider : public base::RefCountedThreadSafe<ContextProvider> {
 
   // Returns the capabilities of the currently bound 3d context.
   virtual gpu::Capabilities ContextCapabilities() = 0;
-
-  // Delete all cached gpu resources.
-  virtual void DeleteCachedResources() = 0;
 
   // Sets a callback to be called when the context is lost. This should be
   // called from the same thread that the context is bound to. To avoid races,

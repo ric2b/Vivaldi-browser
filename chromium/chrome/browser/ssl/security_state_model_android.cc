@@ -9,6 +9,8 @@
 #include "content/public/browser/web_contents.h"
 #include "jni/SecurityStateModel_jni.h"
 
+using base::android::JavaParamRef;
+
 // static
 bool RegisterSecurityStateModelAndroid(JNIEnv* env) {
   return RegisterNativesImpl(env);
@@ -57,8 +59,8 @@ jboolean IsPassiveMixedContentPresent(
       ChromeSecurityStateModelClient::FromWebContents(web_contents);
   DCHECK(model_client);
   return model_client->GetSecurityInfo().mixed_content_status ==
-             security_state::SecurityStateModel::DISPLAYED_MIXED_CONTENT ||
+             security_state::SecurityStateModel::CONTENT_STATUS_DISPLAYED ||
          model_client->GetSecurityInfo().mixed_content_status ==
              security_state::SecurityStateModel::
-                 RAN_AND_DISPLAYED_MIXED_CONTENT;
+                 CONTENT_STATUS_DISPLAYED_AND_RAN;
 }

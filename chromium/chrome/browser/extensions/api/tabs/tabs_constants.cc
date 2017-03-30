@@ -31,6 +31,8 @@ const char kOldWindowIdKey[] = "oldWindowId";
 const char kOpenerTabIdKey[] = "openerTabId";
 const char kPinnedKey[] = "pinned";
 const char kAudibleKey[] = "audible";
+const char kDiscardedKey[] = "discarded";
+const char kAutoDiscardableKey[] = "autoDiscardable";
 const char kMutedKey[] = "muted";
 const char kMutedInfoKey[] = "mutedInfo";
 const char kQualityKey[] = "quality";
@@ -57,7 +59,6 @@ const char kZoomSettingsScope[] = "scope";
 const char kExtDataKey[] = "extData";
 const char kLastActiveTimeKey[] = "lastActiveTime";
 const char kWindowExtDataKey[] = "extData";
-const char kDiscardedKey[] = "discarded";
 
 const char kShowStateValueNormal[] = "normal";
 const char kShowStateValueMinimized[] = "minimized";
@@ -89,6 +90,8 @@ const char kPerOriginOnlyInAutomaticError[] = "Can only set scope to "
 const char kWindowNotFoundError[] = "No window with id: *.";
 const char kTabIndexNotFoundError[] = "No tab at index: *.";
 const char kTabNotFoundError[] = "No tab with id: *.";
+const char kCannotDiscardTab[] = "Cannot discard tab with id: *.";
+const char kCannotFindTabToDiscard[] = "Cannot find a tab to discard.";
 const char kTabStripNotEditableError[] =
     "Tabs cannot be edited right now (user may be dragging a tab).";
 const char kNoSelectedTabError[] = "No selected tab";

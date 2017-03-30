@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '274142'
+CLANG_REVISION = '278861'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -71,7 +71,7 @@ BINUTILS_BIN_DIR = os.path.join(BINUTILS_DIR, BINUTILS_DIR,
                                 'Linux_x64', 'Release', 'bin')
 BFD_PLUGINS_DIR = os.path.join(BINUTILS_DIR, 'Linux_x64', 'Release',
                                'lib', 'bfd-plugins')
-VERSION = '3.9.0'
+VERSION = '4.0.0'
 ANDROID_NDK_DIR = os.path.join(
     CHROMIUM_DIR, 'third_party', 'android_tools', 'ndk')
 
@@ -373,6 +373,24 @@ def CopyDiaDllTo(target_dir):
   CopyFile(dia_dll, target_dir)
 
 
+def VeryifyVersionOfBuiltClangMatchesVERSION():
+  """Checks that `clang --version` outputs VERSION.  If this fails, VERSION
+  in this file is out-of-date and needs to be updated (possibly in an
+  `if use_head_revision:` block in main() first)."""
+  clang = os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')
+  if sys.platform == 'win32':
+    # TODO: Parse `clang-cl /?` output for built clang's version and check that
+    # to check the binary we're actually shipping? But clang-cl.exe is just
+    # a copy of clang.exe, so this does check the same thing.
+    clang += '.exe'
+  version_out = subprocess.check_output([clang, '--version'])
+  version_out = re.match(r'clang version ([0-9.]+)', version_out).group(1)
+  if version_out != VERSION:
+    print ('unexpected clang version %s (not %s), update VERSION in update.py'
+           % (version_out, VERSION))
+    sys.exit(1)
+
+
 def UpdateClang(args):
   print 'Updating Clang to %s...' % PACKAGE_VERSION
 
@@ -648,7 +666,7 @@ def UpdateClang(args):
   elif sys.platform.startswith('linux'):
     RunCommand(['strip', os.path.join(LLVM_BUILD_DIR, 'bin', 'clang')])
 
-  # TODO(thakis): Check that `clang --version` matches VERSION.
+  VeryifyVersionOfBuiltClangMatchesVERSION()
 
   # Do an out-of-tree build of compiler-rt.
   # On Windows, this is used to get the 32-bit ASan run-time.

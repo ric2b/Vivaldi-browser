@@ -90,6 +90,7 @@ public:
     String lang() const;
     String body() const;
     String tag() const;
+    String image() const;
     String icon() const;
     String badge() const;
     NavigatorVibration::VibrationPattern vibrate() const;
@@ -113,7 +114,7 @@ public:
     // ActiveDOMObject interface.
     void stop() override;
 
-    // ActiveScriptWrappable interface.
+    // ScriptWrappable interface.
     bool hasPendingActivity() const final;
 
     DECLARE_VIRTUAL_TRACE();
@@ -140,9 +141,6 @@ private:
     void setPersistentId(int64_t persistentId) { m_persistentId = persistentId; }
 
     WebNotificationData m_data;
-
-    // ScriptValue representations of the developer-associated data. Initialized lazily on first access.
-    ScriptValue m_developerData;
 
     // Notifications can either be bound to the page, which means they're identified by
     // their delegate, or persistent, which means they're identified by a persistent Id

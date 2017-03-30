@@ -55,7 +55,7 @@ static void setFocusForDialog(HTMLDialogElement* dialog)
         Element* element = toElement(node);
         if (element->isFormControlElement()) {
             HTMLFormControlElement* control = toHTMLFormControlElement(node);
-            if (control->isAutofocusable()) {
+            if (control->isAutofocusable() && control->isFocusable()) {
                 control->focus();
                 return;
             }
@@ -152,7 +152,7 @@ void HTMLDialogElement::showModal(ExceptionState& exceptionState)
         exceptionState.throwDOMException(InvalidStateError, "The element already has an 'open' attribute, and therefore cannot be opened modally.");
         return;
     }
-    if (!inShadowIncludingDocument()) {
+    if (!isConnected()) {
         exceptionState.throwDOMException(InvalidStateError, "The element is not in a Document.");
         return;
     }
@@ -177,7 +177,7 @@ void HTMLDialogElement::removedFrom(ContainerNode* insertionPoint)
 
 void HTMLDialogElement::setCentered(LayoutUnit centeredPosition)
 {
-    ASSERT(m_centeringMode == NeedsCentering);
+    DCHECK_EQ(m_centeringMode, NeedsCentering);
     m_centeredPosition = centeredPosition;
     m_centeringMode = Centered;
 }

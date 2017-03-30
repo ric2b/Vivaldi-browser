@@ -32,6 +32,10 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
 
+#if defined(OS_ANDROID) || defined(OS_IOS)
+#include "components/autofill/core/browser/autofill_assistant.h"
+#endif
+
 // This define protects some debugging code (see DumpAutofillData). This
 // is here to make it easier to delete this code when the test is complete,
 // and to prevent adding the code on mobile where there is no desktop (the
@@ -93,6 +97,11 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Whether the |field| should show an entry to scan a credit card.
   virtual bool ShouldShowScanCreditCard(const FormData& form,
                                         const FormFieldData& field);
+
+  // Whether we should show the signin promo, based on the triggered |field|
+  // inside the |form|.
+  virtual bool ShouldShowCreditCardSigninPromo(const FormData& form,
+                                               const FormFieldData& field);
 
   // Called from our external delegate so they cannot be private.
   virtual void FillOrPreviewForm(AutofillDriver::RendererFormDataAction action,
@@ -246,7 +255,6 @@ class AutofillManager : public AutofillDownloadManager::Observer,
 
   ScopedVector<FormStructure>* form_structures() { return &form_structures_; }
 
- protected:
   // Exposed for testing.
   AutofillExternalDelegate* external_delegate() {
     return external_delegate_;
@@ -530,6 +538,10 @@ class AutofillManager : public AutofillDownloadManager::Observer,
   // Delegate used in test to get notifications on certain events.
   AutofillManagerTestDelegate* test_delegate_;
 
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  AutofillAssistant autofill_assistant_;
+#endif
+
   base::WeakPtrFactory<AutofillManager> weak_ptr_factory_;
 
   friend class AutofillManagerTest;
@@ -569,33 +581,9 @@ class AutofillManager : public AutofillDownloadManager::Observer,
                            UserHappinessFormLoadAndSubmission);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, UserHappinessFormInteraction);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           FormSubmittedAutocompleteEnabled);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            OnLoadedServerPredictions);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            OnLoadedServerPredictions_ResetManager);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           AutocompleteSuggestions_SomeWhenAutofillDisabled);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           AutocompleteSuggestions_SomeWhenAutofillEmpty);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           AutocompleteSuggestions_NoneWhenAutofillPresent);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillManagerTest,
-      AutocompleteSuggestions_CreditCardNameFieldShouldAutocomplete);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillManagerTest,
-      AutocompleteSuggestions_CreditCardNumberShouldNotAutocomplete);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillManagerTest,
-      AutocompleteSuggestions_AutofillDisabledAndFieldShouldNotAutocomplete);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillManagerTest,
-      AutocompleteSuggestions_NoneWhenAutofillEmptyFieldShouldNotAutocomplete);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           AutocompleteOffRespectedForAutocomplete);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           DontSaveCvcInAutocompleteHistory);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, DontOfferToSavePaymentsCard);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, FillInUpdatedExpirationDate);
   DISALLOW_COPY_AND_ASSIGN(AutofillManager);

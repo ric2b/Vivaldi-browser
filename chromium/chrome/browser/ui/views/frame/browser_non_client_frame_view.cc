@@ -55,7 +55,7 @@ BrowserNonClientFrameView::~BrowserNonClientFrameView() {
 
 void BrowserNonClientFrameView::OnBrowserViewInitViewsComplete() {}
 
-gfx::ImageSkia BrowserNonClientFrameView::GetOTRAvatarIcon() const {
+gfx::ImageSkia BrowserNonClientFrameView::GetIncognitoAvatarIcon() const {
   if (!ui::MaterialDesignController::IsModeMaterial())
     return *GetThemeProviderForProfile()->GetImageSkiaNamed(IDR_OTR_ICON);
   const SkColor icon_color = color_utils::PickContrastingColor(
@@ -70,7 +70,7 @@ SkColor BrowserNonClientFrameView::GetToolbarTopSeparatorColor() const {
           : ThemeProperties::COLOR_TOOLBAR_TOP_SEPARATOR_INACTIVE;
   return ShouldPaintAsThemed() ? GetThemeProvider()->GetColor(color_id)
                                : ThemeProperties::GetDefaultColor(
-                                     color_id, browser_view_->IsOffTheRecord());
+                                     color_id, browser_view_->IsIncognito());
 }
 
 void BrowserNonClientFrameView::UpdateToolbar() {
@@ -102,10 +102,10 @@ SkColor BrowserNonClientFrameView::GetFrameColor(bool active) const {
   ThemeProperties::OverwritableByUserThemeProperty color_id =
       active ? ThemeProperties::COLOR_FRAME
              : ThemeProperties::COLOR_FRAME_INACTIVE;
-  return ShouldPaintAsThemed() ?
-      GetThemeProviderForProfile()->GetColor(color_id) :
-      ThemeProperties::GetDefaultColor(color_id,
-                                       browser_view_->IsOffTheRecord());
+  return ShouldPaintAsThemed()
+             ? GetThemeProviderForProfile()->GetColor(color_id)
+             : ThemeProperties::GetDefaultColor(color_id,
+                                                browser_view_->IsIncognito());
 }
 
 gfx::ImageSkia BrowserNonClientFrameView::GetFrameImage(bool active) const {
@@ -134,7 +134,7 @@ gfx::ImageSkia BrowserNonClientFrameView::GetFrameImage(bool active) const {
 
 gfx::ImageSkia BrowserNonClientFrameView::GetFrameOverlayImage(
     bool active) const {
-  if (browser_view_->IsOffTheRecord() || !browser_view_->IsBrowserTypeNormal())
+  if (browser_view_->IsIncognito() || !browser_view_->IsBrowserTypeNormal())
     return gfx::ImageSkia();
 
   const ui::ThemeProvider* tp = frame_->GetThemeProvider();
@@ -170,7 +170,7 @@ void BrowserNonClientFrameView::UpdateProfileIndicatorIcon() {
   gfx::Image icon;
   const Profile* profile = browser_view()->browser()->profile();
   if (profile->GetProfileType() == Profile::INCOGNITO_PROFILE) {
-    icon = gfx::Image(GetOTRAvatarIcon());
+    icon = gfx::Image(GetIncognitoAvatarIcon());
     if (!ui::MaterialDesignController::IsModeMaterial())
       profile_indicator_icon_->EnableCanvasFlippingForRTLUI(true);
   } else {

@@ -3,27 +3,17 @@
 <link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-dropdown/iron-dropdown.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
 <link rel="import" href="/on_startup_page/startup_urls_page_browser_proxy.html">
 <link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-startup-url-entry">
   <template>
     <style include="settings-shared">
-      .dropdown-content {
-        background: white;
-        box-shadow: 0 2px 6px grey;
-      }
-
       .hide-overflow {
         overflow: hidden;
       }
-
-      paper-item:hover {
-        background-color: var(--settings-hover-color);
-      }
     </style>
-    <div class="list-item underbar">
+    <div class="list-item">
       <div class="favicon-image"
           style="background-image: [[getIconSet_(model.url)]]">
       </div>
@@ -32,15 +22,19 @@
         <div class="text-elide secondary">[[model.url]]</div>
       </div>
       <paper-icon-button id="dots" icon="cr:more-vert" toggles
-          active="{{menuOpened}}"></paper-icon-button>
+          active="{{menuOpened}}" tabindex$="[[tabindex]]">
+      </paper-icon-button>
       <template is="dom-if" if="[[menuOpened]]">
-        <iron-dropdown vertical-align="top" horizontal-align="right"
+        <iron-dropdown vertical-align="auto" horizontal-align="right"
             opened="{{menuOpened}}">
           <div class="dropdown-content">
-            <paper-item on-tap="onEditTap_">$i18n{onStartupEdit}</paper-item>
-            <paper-item id="remove" on-tap="onRemoveTap_">
+            <button class="dropdown-item" role="option" on-tap="onEditTap_">
+              $i18n{onStartupEdit}
+            </button>
+            <button class="dropdown-item" role="option" id="remove"
+                on-tap="onRemoveTap_">
               $i18n{onStartupRemove}
-            </paper-item>
+            </button>
           </div>
         </iron-dropdown>
       </template>

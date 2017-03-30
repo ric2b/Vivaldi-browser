@@ -38,10 +38,12 @@
 //                --Stephen Adams <sra@chromium.org>
 // 2010-05-26 - Use a paged array for V and I. The address space may be too
 //              fragmented for these big arrays to be contiguous.
-//               --Stephen Adams <sra@chromium.org>
+//                --Stephen Adams <sra@chromium.org>
 // 2015-08-03 - Extract qsufsort portion to a separate file.
 //                --Samuel Huang <huangs@chromium.org>
 // 2015-08-12 - Interface change to search().
+//                --Samuel Huang <huangs@chromium.org>
+// 2016-07-29 - Replacing qsufsort with divsufsort.
 //                --Samuel Huang <huangs@chromium.org>
 
 // Copyright 2016 The Chromium Authors. All rights reserved.
@@ -53,6 +55,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+
 #include <algorithm>
 
 #include "base/logging.h"
@@ -63,9 +66,20 @@
 #include "courgette/streams.h"
 #include "courgette/third_party/bsdiff/bsdiff_search.h"
 #include "courgette/third_party/bsdiff/paged_array.h"
-#include "courgette/third_party/bsdiff/qsufsort.h"
+#include "courgette/third_party/divsufsort/divsufsort.h"
 
-namespace courgette {
+namespace {
+
+using courgette::CalculateCrc;
+using courgette::PagedArray;
+using courgette::SinkStream;
+using courgette::SinkStreamSet;
+using courgette::SourceStream;
+using courgette::SourceStreamSet;
+
+}  // namespace
+
+namespace bsdiff {
 
 static CheckBool WriteHeader(SinkStream* stream, MBSPatchHeader* header) {
   bool ok = stream->Write(header->tag, sizeof(header->tag));
@@ -95,8 +109,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
 
   uint32_t pending_diff_zeros = 0;
 
-  PagedArray<int> I;
-  PagedArray<int> V;
+  PagedArray<divsuf::saidx_t> I;
 
   if (!I.Allocate(oldsize + 1)) {
     LOG(ERROR) << "Could not allocate I[], " << ((oldsize + 1) * sizeof(int))
@@ -104,17 +117,13 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
     return MEM_ERROR;
   }
 
-  if (!V.Allocate(oldsize + 1)) {
-    LOG(ERROR) << "Could not allocate V[], " << ((oldsize + 1) * sizeof(int))
-               << " bytes";
-    return MEM_ERROR;
-  }
-
   base::Time q_start_time = base::Time::Now();
-  qsuf::qsufsort<PagedArray<int>&>(I, V, old, oldsize);
-  VLOG(1) << " done qsufsort "
+  divsuf::saint_t result = divsuf::divsufsort_include_empty(
+      old, I.begin(), oldsize);
+  VLOG(1) << " done divsufsort "
           << (base::Time::Now() - q_start_time).InSecondsF();
-  V.clear();
+  if (result != 0)
+    return UNEXPECTED_ERROR;
 
   const uint8_t* newbuf = new_stream->Buffer();
   const int newsize = static_cast<int>(new_stream->Remaining());
@@ -165,26 +174,26 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
   int lastscan = 0, lastpos = 0, lastoffset = 0;
 
   int scan = 0;
-  int match_length = 0;
+  SearchResult match(0, 0);
 
   while (scan < newsize) {
-    int pos = 0;
     int oldscore = 0;  // Count of how many bytes of the current match at |scan|
                        // extend the match at |lastscan|.
+    match.pos = 0;
 
-    scan += match_length;
+    scan += match.size;
     for (int scsc = scan; scan < newsize; ++scan) {
-      match_length = courgette::search<PagedArray<int>&>(
-          I, old, oldsize, newbuf + scan, newsize - scan, &pos);
+      match = search<PagedArray<divsuf::saidx_t>&>(
+          I, old, oldsize, newbuf + scan, newsize - scan);
 
-      for (; scsc < scan + match_length; scsc++)
+      for (; scsc < scan + match.size; scsc++)
         if ((scsc + lastoffset < oldsize) &&
             (old[scsc + lastoffset] == newbuf[scsc]))
           oldscore++;
 
-      if ((match_length == oldscore) && (match_length != 0))
+      if ((match.size == oldscore) && (match.size != 0))
         break;  // Good continuing match, case (1)
-      if (match_length > oldscore + 8)
+      if (match.size > oldscore + 8)
         break;  // New seed match, case (2)
 
       if ((scan + lastoffset < oldsize) &&
@@ -193,7 +202,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
       // Case (3) continues in this loop until we fall out of the loop (4).
     }
 
-    if ((match_length != oldscore) || (scan == newsize)) {  // Cases (2) and (4)
+    if ((match.size != oldscore) || (scan == newsize)) {  // Cases (2) and (4)
       // This next chunk of code finds the boundary between the bytes to be
       // copied as part of the current triple, and the bytes to be copied as
       // part of the next triple.  The |lastscan| match is extended forwards as
@@ -206,8 +215,8 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
       int lenb = 0;
       if (scan < newsize) {  // i.e. not case (4); there is a match to extend.
         int score = 0, Sb = 0;
-        for (int i = 1; (scan >= lastscan + i) && (pos >= i); i++) {
-          if (old[pos - i] == newbuf[scan - i])
+        for (int i = 1; (scan >= lastscan + i) && (match.pos >= i); i++) {
+          if (old[match.pos - i] == newbuf[scan - i])
             score++;
           if (score * 2 - i > Sb * 2 - lenb) {
             Sb = score;
@@ -247,7 +256,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
               old[lastpos + lenf - overlap + i]) {
             score++;
           }
-          if (newbuf[scan - lenb + i] == old[pos - lenb + i]) {
+          if (newbuf[scan - lenb + i] == old[match.pos - lenb + i]) {
             score--;
           }
           if (score > Ss) {
@@ -284,7 +293,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
 
       uint32_t copy_count = lenf;
       uint32_t extra_count = gap;
-      int32_t seek_adjustment = ((pos - lenb) - (lastpos + lenf));
+      int32_t seek_adjustment = ((match.pos - lenb) - (lastpos + lenf));
 
       if (!control_stream_copy_counts->WriteVarint32(copy_count) ||
           !control_stream_extra_counts->WriteVarint32(extra_count) ||
@@ -300,7 +309,7 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
 #endif
 
       lastscan = scan - lenb;  // Include the backward extension in seed.
-      lastpos = pos - lenb;    //  ditto.
+      lastpos = match.pos - lenb;    //  ditto.
       lastoffset = lastpos - lastscan;
     }
   }
@@ -339,4 +348,4 @@ BSDiffStatus CreateBinaryPatch(SourceStream* old_stream,
   return OK;
 }
 
-}  // namespace courgette
+}  // namespace bsdiff

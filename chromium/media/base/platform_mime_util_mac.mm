@@ -11,8 +11,7 @@
 namespace media {
 
 bool IsPlatformMediaPipelineAvailable(PlatformMediaCheckType /* check_type */) {
-  // AVAssetResourceLoaderDelegate is required.
-  return base::mac::IsOSMavericksOrLater();
+  return true;
 }
 
 bool IsPlatformAudioDecoderAvailable(AudioCodec /* codec */) {
@@ -20,8 +19,7 @@ bool IsPlatformAudioDecoderAvailable(AudioCodec /* codec */) {
 }
 
 bool IsPlatformVideoDecoderAvailable() {
-  // VTVideoDecodeAccelerator currently requires 10.9.
-  return base::mac::IsOSMavericksOrLater();
+  return true;
 }
 
 }  // namespace media

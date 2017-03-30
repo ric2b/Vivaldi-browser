@@ -34,8 +34,8 @@
 #include "components/history/core/browser/keyword_id.h"
 #include "components/history/core/browser/typed_url_syncable_service.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/sync/api/syncable_service.h"
 #include "sql/init_status.h"
-#include "sync/api/syncable_service.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -83,6 +83,9 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
  public:
   // Callback for value asynchronously returned by TopHosts().
   typedef base::Callback<void(const TopHostsList&)> TopHostsCallback;
+
+  // Callback for value asynchronously returned by TopUrlsPerDay().
+  typedef base::Callback<void(const TopUrlsPerDayList&)> TopUrlsPerDayCallback;
 
   // Must call Init after construction. The empty constructor provided only for
   // unit tests. When using the full constructor, |history_client| may only be
@@ -158,6 +161,12 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   // Note: Virtual needed for mocking.
   virtual void TopHosts(size_t num_hosts,
                         const TopHostsCallback& callback) const;
+
+  // Computes the |num_hosts| most-visited hostnames. First version uses all
+  // history.
+  // Note: Virtual needed for mocking.
+  virtual void TopUrlsPerDay(size_t num_hosts,
+                             const TopUrlsPerDayCallback& callback) const;
 
   // Gets the counts and most recent visit date of URLs that belong to |origins|
   // in the history database.
@@ -784,7 +793,8 @@ class HistoryService : public syncer::SyncableService, public KeyedService {
   void SetInMemoryBackend(std::unique_ptr<InMemoryHistoryBackend> mem_backend);
 
   // Called by our BackendDelegate when there is a problem reading the database.
-  void NotifyProfileError(sql::InitStatus init_status);
+  void NotifyProfileError(sql::InitStatus init_status,
+                          const std::string& diagnostics);
 
   // Call to schedule a given task for running on the history thread with the
   // specified priority. The task will have ownership taken.

@@ -85,7 +85,6 @@ class DirectOutputSurface : public cc::OutputSurface {
     context_provider_->ContextSupport()->SignalSyncToken(
         sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
                                weak_ptr_factory_.GetWeakPtr()));
-    client_->DidSwapBuffers();
   }
   uint32_t GetFramebufferCopyTextureFormat() override {
     auto* gl = static_cast<InProcessContextProvider*>(context_provider());
@@ -103,7 +102,7 @@ class DirectOutputSurface : public cc::OutputSurface {
 InProcessContextFactory::InProcessContextFactory(
     bool context_factory_for_test,
     cc::SurfaceManager* surface_manager)
-    : next_surface_id_namespace_(1u),
+    : next_surface_client_id_(1u),
       use_test_surface_(true),
       context_factory_for_test_(context_factory_for_test),
       surface_manager_(surface_manager) {
@@ -160,12 +159,12 @@ void InProcessContextFactory::CreateOutputSurface(
   std::unique_ptr<cc::OutputSurface> display_output_surface;
   if (use_test_surface_) {
     bool flipped_output_surface = false;
-    display_output_surface = base::WrapUnique(new cc::PixelTestOutputSurface(
+    display_output_surface = base::MakeUnique<cc::PixelTestOutputSurface>(
         context_provider, shared_worker_context_provider_,
-        flipped_output_surface));
+        flipped_output_surface);
   } else {
-    display_output_surface = base::WrapUnique(new DirectOutputSurface(
-        context_provider, shared_worker_context_provider_));
+    display_output_surface = base::MakeUnique<DirectOutputSurface>(
+        context_provider, shared_worker_context_provider_);
   }
 
   if (surface_manager_) {
@@ -177,12 +176,11 @@ void InProcessContextFactory::CreateOutputSurface(
         begin_frame_source.get(), compositor->task_runner().get(),
         display_output_surface->capabilities().max_frames_pending));
     per_compositor_data_[compositor.get()] = base::MakeUnique<cc::Display>(
-        surface_manager_, GetSharedBitmapManager(), GetGpuMemoryBufferManager(),
-        compositor->GetRendererSettings(),
-        compositor->surface_id_allocator()->id_namespace(),
-        std::move(begin_frame_source), std::move(display_output_surface),
-        std::move(scheduler), base::MakeUnique<cc::TextureMailboxDeleter>(
-                                  compositor->task_runner().get()));
+        GetSharedBitmapManager(), GetGpuMemoryBufferManager(),
+        compositor->GetRendererSettings(), std::move(begin_frame_source),
+        std::move(display_output_surface), std::move(scheduler),
+        base::MakeUnique<cc::TextureMailboxDeleter>(
+            compositor->task_runner().get()));
 
     auto* display = per_compositor_data_[compositor.get()].get();
     std::unique_ptr<cc::SurfaceDisplayOutputSurface> surface_output_surface(
@@ -249,17 +247,19 @@ cc::TaskGraphRunner* InProcessContextFactory::GetTaskGraphRunner() {
   return &task_graph_runner_;
 }
 
-std::unique_ptr<cc::SurfaceIdAllocator>
-InProcessContextFactory::CreateSurfaceIdAllocator() {
-  std::unique_ptr<cc::SurfaceIdAllocator> allocator(
-      new cc::SurfaceIdAllocator(next_surface_id_namespace_++));
-  if (surface_manager_)
-    allocator->RegisterSurfaceIdNamespace(surface_manager_);
-  return allocator;
+uint32_t InProcessContextFactory::AllocateSurfaceClientId() {
+  return next_surface_client_id_++;
 }
 
 cc::SurfaceManager* InProcessContextFactory::GetSurfaceManager() {
   return surface_manager_;
+}
+
+void InProcessContextFactory::SetDisplayVisible(ui::Compositor* compositor,
+                                                bool visible) {
+  if (!per_compositor_data_.count(compositor))
+    return;
+  per_compositor_data_[compositor]->SetVisible(visible);
 }
 
 void InProcessContextFactory::ResizeDisplay(ui::Compositor* compositor,

@@ -4,6 +4,7 @@
 
 #include "ui/arc/notification/arc_custom_notification_view.h"
 
+#include "base/auto_reset.h"
 #include "components/exo/notification_surface.h"
 #include "components/exo/surface.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -42,7 +43,33 @@ class ArcCustomNotificationView::EventForwarder : public ui::EventHandler {
       return;
     }
 
-    owner_->OnEvent(event);
+    if (event->IsScrollEvent()) {
+      ForwardScrollEvent(event->AsScrollEvent());
+    } else if (event->IsMouseWheelEvent()) {
+      ForwardMouseWheelEvent(event->AsMouseWheelEvent());
+    } else if (!event->IsTouchEvent()) {
+      // Forward the rest events to |owner_| except touches because View
+      // should no longer receive touch events. See View::OnTouchEvent.
+      owner_->OnEvent(event);
+    }
+  }
+
+  void ForwardScrollEvent(ui::ScrollEvent* event) {
+    views::Widget* widget = owner_->GetWidget();
+    if (!widget)
+      return;
+
+    event->target()->ConvertEventToTarget(widget->GetNativeWindow(), event);
+    widget->OnScrollEvent(event);
+  }
+
+  void ForwardMouseWheelEvent(ui::MouseWheelEvent* event) {
+    views::Widget* widget = owner_->GetWidget();
+    if (!widget)
+      return;
+
+    event->target()->ConvertEventToTarget(widget->GetNativeWindow(), event);
+    widget->OnMouseEvent(event);
   }
 
   ArcCustomNotificationView* const owner_;
@@ -87,6 +114,8 @@ class ArcCustomNotificationView::SlideHelper
     if (!owner_->surface_ || !owner_->surface_->window())
       return;
     surface_copy_ = ::wm::RecreateLayers(owner_->surface_->window(), nullptr);
+    // |surface_copy_| is at (0, 0) in owner_->layer().
+    surface_copy_->root()->SetBounds(gfx::Rect(surface_copy_->root()->size()));
     owner_->layer()->Add(surface_copy_->root());
     owner_->surface_->window()->layer()->SetOpacity(0.0f);
   }
@@ -269,6 +298,9 @@ void ArcCustomNotificationView::AttachSurface() {
 
   // Creates slide helper after this view is added to its parent.
   slide_helper_.reset(new SlideHelper(this));
+
+  // Invokes Update() in case surface is attached during a slide.
+  slide_helper_->Update();
 }
 
 void ArcCustomNotificationView::ViewHierarchyChanged(
@@ -295,30 +327,36 @@ void ArcCustomNotificationView::ViewHierarchyChanged(
 }
 
 void ArcCustomNotificationView::Layout() {
+  base::AutoReset<bool> auto_reset_in_layout(&in_layout_, true);
+
   views::NativeViewHost::Layout();
 
   if (!surface_ || !GetWidget())
     return;
 
+  const gfx::Rect contents_bounds = GetContentsBounds();
+
   // Scale notification surface if necessary.
   gfx::Transform transform;
   const gfx::Size surface_size = surface_->GetSize();
-  const gfx::Size contents_size = GetContentsBounds().size();
+  const gfx::Size contents_size = contents_bounds.size();
   if (!surface_size.IsEmpty() && !contents_size.IsEmpty()) {
     transform.Scale(
         static_cast<float>(contents_size.width()) / surface_size.width(),
         static_cast<float>(contents_size.height()) / surface_size.height());
   }
-  surface_->window()->SetTransform(transform);
+
+  // Apply the transform to the surface content so that close button can
+  // be positioned without the need to consider the transform.
+  surface_->window()->children()[0]->SetTransform(transform);
 
   if (!floating_close_button_widget_)
     return;
 
-  gfx::Rect surface_local_bounds(surface_->GetSize());
   gfx::Rect close_button_bounds(floating_close_button_->GetPreferredSize());
-  close_button_bounds.set_x(surface_local_bounds.right() -
+  close_button_bounds.set_x(contents_bounds.right() -
                             close_button_bounds.width());
-  close_button_bounds.set_y(surface_local_bounds.y());
+  close_button_bounds.set_y(contents_bounds.y());
   floating_close_button_widget_->SetBounds(close_button_bounds);
 
   UpdateCloseButtonVisiblity();
@@ -345,7 +383,10 @@ void ArcCustomNotificationView::OnKeyEvent(ui::KeyEvent* event) {
 void ArcCustomNotificationView::OnGestureEvent(ui::GestureEvent* event) {
   // Forward to parent CustomNotificationView to handle sliding out.
   parent()->OnGestureEvent(event);
-  slide_helper_->Update();
+
+  // |slide_helper_| could be null before |surface_| is attached.
+  if (slide_helper_)
+    slide_helper_->Update();
 }
 
 void ArcCustomNotificationView::OnMouseEntered(const ui::MouseEvent&) {
@@ -367,7 +408,11 @@ void ArcCustomNotificationView::OnWindowBoundsChanged(
     aura::Window* window,
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds) {
+  if (in_layout_)
+    return;
+
   UpdatePreferredSize();
+  Layout();
 }
 
 void ArcCustomNotificationView::OnWindowDestroying(aura::Window* window) {

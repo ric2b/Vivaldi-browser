@@ -6,7 +6,6 @@ package org.chromium.chromoting;
 
 import android.content.Context;
 import android.graphics.Matrix;
-import android.graphics.Point;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.view.GestureDetector;
@@ -20,8 +19,9 @@ import android.view.ViewConfiguration;
  * are passed to the InputStrategyInterface implementation set by the DesktopView.
  */
 public class TouchInputHandler {
-    private final DesktopViewInterface mViewer;
+    private static final float EPSILON = 0.001f;
 
+    private final DesktopView mViewer;
     private final Context mContext;
     private final RenderData mRenderData;
     private final DesktopCanvas mDesktopCanvas;
@@ -104,11 +104,9 @@ public class TouchInputHandler {
         @Override
         protected void processAction(float deltaX, float deltaY) {
             float[] delta = {deltaX, deltaY};
-            synchronized (mRenderData) {
-                Matrix canvasToImage = new Matrix();
-                mRenderData.transform.invert(canvasToImage);
-                canvasToImage.mapVectors(delta);
-            }
+            Matrix canvasToImage = new Matrix();
+            mRenderData.transform.invert(canvasToImage);
+            canvasToImage.mapVectors(delta);
 
             moveViewportByOffset(-delta[0], -delta[1]);
         }
@@ -180,7 +178,7 @@ public class TouchInputHandler {
         }
     }
 
-    public TouchInputHandler(DesktopViewInterface viewer, Context context, RenderData renderData) {
+    public TouchInputHandler(DesktopView viewer, Context context, RenderData renderData) {
         mViewer = viewer;
         mContext = context;
         mRenderData = renderData;
@@ -243,7 +241,7 @@ public class TouchInputHandler {
                 });
     }
 
-    private void attachViewEvents(DesktopViewInterface viewer) {
+    private void attachViewEvents(DesktopView viewer) {
         viewer.onTouch().add(new Event.ParameterRunnable<TouchEventParameter>() {
             @Override
             public void run(TouchEventParameter parameter) {
@@ -300,14 +298,12 @@ public class TouchInputHandler {
 
     private void handleSystemUiVisibilityChanged(
             SystemUiVisibilityChangedEventParameter parameter) {
-        synchronized (mRenderData) {
-            if (parameter.softInputMethodVisible) {
-                mDesktopCanvas.setSystemUiOffsetValues(parameter.left, parameter.top,
-                        mRenderData.screenWidth - parameter.right,
-                        mRenderData.screenHeight - parameter.bottom);
-            } else {
-                mDesktopCanvas.setSystemUiOffsetValues(0, 0, 0, 0);
-            }
+        if (parameter.softInputMethodVisible) {
+            mDesktopCanvas.setSystemUiOffsetValues(parameter.left, parameter.top,
+                    mRenderData.screenWidth - parameter.right,
+                    mRenderData.screenHeight - parameter.bottom);
+        } else {
+            mDesktopCanvas.setSystemUiOffsetValues(0, 0, 0, 0);
         }
 
         mDesktopCanvas.repositionImage(true);
@@ -357,15 +353,13 @@ public class TouchInputHandler {
 
     private void resizeImageToFitScreen() {
         mDesktopCanvas.resizeImageToFitScreen();
-        float screenCenterX;
-        float screenCenterY;
-        synchronized (mRenderData) {
-            screenCenterX = (float) mRenderData.screenWidth / 2;
-            screenCenterY = (float) mRenderData.screenHeight / 2;
 
-            float[] imagePoint = mapScreenPointToImagePoint(screenCenterX, screenCenterY);
-            mDesktopCanvas.setViewportPosition(imagePoint[0], imagePoint[1]);
-        }
+        float screenCenterX = (float) mRenderData.screenWidth / 2;
+        float screenCenterY = (float) mRenderData.screenHeight / 2;
+
+        float[] imagePoint = mapScreenPointToImagePoint(screenCenterX, screenCenterY);
+        mDesktopCanvas.setViewportPosition(imagePoint[0], imagePoint[1]);
+
         moveCursorToScreenPoint(screenCenterX, screenCenterY);
         mDesktopCanvas.repositionImage(true);
     }
@@ -393,10 +387,10 @@ public class TouchInputHandler {
         // If the user is dragging, then the viewport should always follow the user's finger.
         PointF newPos = mDesktopCanvas.moveViewportCenter(!followCursor, deltaX, deltaY);
 
-        // If we are in an indirect mode or are in the middle of a drag operation, then we want to
-        // keep the cursor centered, if possible, as the viewport moves.
-        if (followCursor) {
-            moveCursor((int) newPos.x, (int) newPos.y);
+        // If we are in an indirect mode, then we want to keep the cursor centered, if possible, as
+        // the viewport moves.
+        if (mInputStrategy.isIndirectInputMode()) {
+            moveCursor(newPos.x, newPos.y);
         }
 
         mDesktopCanvas.repositionImage(true);
@@ -405,17 +399,16 @@ public class TouchInputHandler {
     /** Moves the cursor to the specified position on the screen. */
     private void moveCursorToScreenPoint(float screenX, float screenY) {
         float[] imagePoint = mapScreenPointToImagePoint(screenX, screenY);
-        moveCursor((int) imagePoint[0], (int) imagePoint[1]);
+        moveCursor(imagePoint[0], imagePoint[1]);
     }
 
     /** Moves the cursor to the specified position on the remote host. */
-    private void moveCursor(int newX, int newY) {
-        synchronized (mRenderData) {
-            boolean cursorMoved = mRenderData.setCursorPosition(newX, newY);
-            if (cursorMoved) {
-                mInputStrategy.injectCursorMoveEvent(newX, newY);
-            }
+    private void moveCursor(float newX, float newY) {
+        boolean cursorMoved = mRenderData.setCursorPosition(newX, newY);
+        if (cursorMoved) {
+            mInputStrategy.injectCursorMoveEvent((int) newX, (int) newY);
         }
+
         mViewer.cursorMoved();
     }
 
@@ -441,9 +434,9 @@ public class TouchInputHandler {
     private float[] mapScreenPointToImagePoint(float screenX, float screenY) {
         float[] mappedPoints = {screenX, screenY};
         Matrix screenToImage = new Matrix();
-        synchronized (mRenderData) {
-            mRenderData.transform.invert(screenToImage);
-        }
+
+        mRenderData.transform.invert(screenToImage);
+
         screenToImage.mapPoints(mappedPoints);
 
         return mappedPoints;
@@ -468,7 +461,7 @@ public class TouchInputHandler {
                 return false;
             }
 
-            if (pointerCount == 3 && !mSwipeCompleted) {
+            if (pointerCount >= 3 && !mSwipeCompleted) {
                 // Note that distance values are reversed. For example, dragging a finger in the
                 // direction of increasing Y coordinate (downwards) results in distanceY being
                 // negative.
@@ -495,13 +488,17 @@ public class TouchInputHandler {
             }
 
             float[] delta = {distanceX, distanceY};
-            synchronized (mRenderData) {
-                Matrix canvasToImage = new Matrix();
-                mRenderData.transform.invert(canvasToImage);
-                canvasToImage.mapVectors(delta);
-            }
+
+            Matrix canvasToImage = new Matrix();
+            mRenderData.transform.invert(canvasToImage);
+            canvasToImage.mapVectors(delta);
 
             moveViewportByOffset(delta[0], delta[1]);
+            if (!mInputStrategy.isIndirectInputMode() && mIsDragging) {
+                // Ensure the cursor follows the user's finger when the user is dragging under
+                // direct input mode.
+                moveCursorToScreenPoint(e2.getX(), e2.getY());
+            }
             return true;
         }
 
@@ -541,10 +538,10 @@ public class TouchInputHandler {
             }
 
             float scaleFactor = detector.getScaleFactor();
-            synchronized (mRenderData) {
-                mRenderData.transform.postScale(
-                        scaleFactor, scaleFactor, detector.getFocusX(), detector.getFocusY());
-            }
+
+            mRenderData.transform.postScale(
+                    scaleFactor, scaleFactor, detector.getFocusX(), detector.getFocusY());
+
             // For indirect input modes we want to zoom using the cursor as the focal point, for
             // direct modes we use the actual focal point of the gesture.
             mDesktopCanvas.repositionImageWithZoom(mInputStrategy.isIndirectInputMode());
@@ -582,14 +579,15 @@ public class TouchInputHandler {
             }
 
             if (!mInputStrategy.isIndirectInputMode()) {
+                if (screenPointLiesOutsideImageBoundary(x, y)) {
+                    return false;
+                }
                 moveCursorToScreenPoint(x, y);
             }
 
             if (mInputStrategy.onTap(button)) {
-                Point pos;
-                synchronized (mRenderData) {
-                    pos = mRenderData.getCursorPosition();
-                }
+                PointF pos = mRenderData.getCursorPosition();
+
                 mViewer.showInputFeedback(mInputStrategy.getShortPressFeedbackType(), pos);
             }
             return true;
@@ -604,14 +602,15 @@ public class TouchInputHandler {
             }
 
             if (!mInputStrategy.isIndirectInputMode()) {
+                if (screenPointLiesOutsideImageBoundary(x, y)) {
+                    return;
+                }
                 moveCursorToScreenPoint(x, y);
             }
 
             if (mInputStrategy.onPressAndHold(button)) {
-                Point pos;
-                synchronized (mRenderData) {
-                    pos = mRenderData.getCursorPosition();
-                }
+                PointF pos = mRenderData.getCursorPosition();
+
                 mViewer.showInputFeedback(mInputStrategy.getLongPressFeedbackType(), pos);
                 mSuppressFling = true;
                 mIsDragging = true;
@@ -630,6 +629,17 @@ public class TouchInputHandler {
                 default:
                     return InputStub.BUTTON_UNDEFINED;
             }
+        }
+
+        /** Determines whether the given screen point lies outside the desktop image. */
+        private boolean screenPointLiesOutsideImageBoundary(float screenX, float screenY) {
+            float[] mappedPoints = mapScreenPointToImagePoint(screenX, screenY);
+
+            float imageWidth = (float) mRenderData.imageWidth + EPSILON;
+            float imageHeight = (float) mRenderData.imageHeight + EPSILON;
+
+            return mappedPoints[0] < -EPSILON || mappedPoints[0] > imageWidth
+                    || mappedPoints[1] < -EPSILON || mappedPoints[1] > imageHeight;
         }
     }
 }

@@ -24,6 +24,7 @@
 #include "core/dom/ChildListMutationScope.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
+#include "wtf/AutoReset.h"
 
 namespace blink {
 
@@ -38,7 +39,7 @@ DEFINE_NODE_FACTORY(SVGTitleElement)
 Node::InsertionNotificationRequest SVGTitleElement::insertedInto(ContainerNode* rootParent)
 {
     SVGElement::insertedInto(rootParent);
-    if (!rootParent->inShadowIncludingDocument())
+    if (!rootParent->isConnected())
         return InsertionDone;
     if (hasChildren() && document().isSVGDocument())
         document().setTitleElement(this);
@@ -48,14 +49,14 @@ Node::InsertionNotificationRequest SVGTitleElement::insertedInto(ContainerNode* 
 void SVGTitleElement::removedFrom(ContainerNode* rootParent)
 {
     SVGElement::removedFrom(rootParent);
-    if (rootParent->inShadowIncludingDocument() && document().isSVGDocument())
+    if (rootParent->isConnected() && document().isSVGDocument())
         document().removeTitle(this);
 }
 
 void SVGTitleElement::childrenChanged(const ChildrenChange& change)
 {
     SVGElement::childrenChanged(change);
-    if (inShadowIncludingDocument() && document().isSVGDocument() && !m_ignoreTitleUpdatesWhenChildrenChange)
+    if (isConnected() && document().isSVGDocument() && !m_ignoreTitleUpdatesWhenChildrenChange)
         document().setTitleElement(this);
 }
 
@@ -65,7 +66,7 @@ void SVGTitleElement::setText(const String& value)
 
     {
         // Avoid calling Document::setTitleElement() during intermediate steps.
-        TemporaryChange<bool> inhibitTitleUpdateScope(m_ignoreTitleUpdatesWhenChildrenChange, !value.isEmpty());
+        AutoReset<bool> inhibitTitleUpdateScope(&m_ignoreTitleUpdatesWhenChildrenChange, !value.isEmpty());
         removeChildren(OmitSubtreeModifiedEvent);
     }
 

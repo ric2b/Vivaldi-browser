@@ -4,41 +4,39 @@
 
 #include "net/cert/internal/trust_store.h"
 
-#include "net/cert/internal/parsed_certificate.h"
-
 namespace net {
 
-TrustStore::TrustStore() {}
-TrustStore::~TrustStore() {}
-
-void TrustStore::Clear() {
-  anchors_.clear();
+scoped_refptr<TrustAnchor> TrustAnchor::CreateFromCertificateNoConstraints(
+    scoped_refptr<ParsedCertificate> cert) {
+  return scoped_refptr<TrustAnchor>(new TrustAnchor(std::move(cert), false));
 }
 
-void TrustStore::AddTrustedCertificate(
-    scoped_refptr<ParsedCertificate> anchor) {
-  // TODO(mattm): should this check for duplicate certs?
-  anchors_.insert(std::make_pair(anchor->normalized_subject().AsStringPiece(),
-                                 std::move(anchor)));
+scoped_refptr<TrustAnchor> TrustAnchor::CreateFromCertificateWithConstraints(
+    scoped_refptr<ParsedCertificate> cert) {
+  return scoped_refptr<TrustAnchor>(new TrustAnchor(std::move(cert), true));
 }
 
-void TrustStore::FindTrustAnchorsByNormalizedName(
-    const der::Input& normalized_name,
-    std::vector<scoped_refptr<ParsedCertificate>>* matches) const {
-  auto range = anchors_.equal_range(normalized_name.AsStringPiece());
-  for (auto it = range.first; it != range.second; ++it)
-    matches->push_back(it->second);
+der::Input TrustAnchor::spki() const {
+  return cert_->tbs().spki_tlv;
 }
 
-bool TrustStore::IsTrustedCertificate(const ParsedCertificate* cert) const {
-  auto range = anchors_.equal_range(cert->normalized_subject().AsStringPiece());
-  for (auto it = range.first; it != range.second; ++it) {
-    // First compare the ParsedCertificate pointers as an optimization, fall
-    // back to comparing full DER encoding.
-    if (it->second == cert || it->second->der_cert() == cert->der_cert())
-      return true;
-  }
-  return false;
+der::Input TrustAnchor::normalized_subject() const {
+  return cert_->normalized_subject();
 }
+
+const scoped_refptr<ParsedCertificate>& TrustAnchor::cert() const {
+  return cert_;
+}
+
+TrustAnchor::TrustAnchor(scoped_refptr<ParsedCertificate> cert,
+                         bool enforces_constraints)
+    : cert_(std::move(cert)), enforces_constraints_(enforces_constraints) {
+  DCHECK(cert_);
+}
+
+TrustAnchor::~TrustAnchor() = default;
+
+TrustStore::TrustStore() = default;
+TrustStore::~TrustStore() = default;
 
 }  // namespace net

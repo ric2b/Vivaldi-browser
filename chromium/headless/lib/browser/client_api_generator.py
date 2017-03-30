@@ -59,9 +59,17 @@ def CamelCaseToHackerStyle(name):
   return name.lower()
 
 
-def MangleEnum(value):
-  # Rename NULL enumeration values to avoid a clash with the actual NULL.
-  return 'NONE' if value == 'NULL' else value
+def SanitizeLiteral(literal):
+  return {
+    # Rename null enumeration values to avoid a clash with the NULL macro.
+    'null': 'none',
+    # Rename mathematical constants to avoid colliding with C macros.
+    'Infinity': 'InfinityValue',
+    '-Infinity': 'NegativeInfinityValue',
+    'NaN': 'NaNValue',
+    # Turn negative zero into a safe identifier.
+    '-0': 'NegativeZeroValue',
+  }.get(literal, literal)
 
 
 def InitializeJinjaEnv(cache_dir):
@@ -77,7 +85,7 @@ def InitializeJinjaEnv(cache_dir):
     'to_title_case': ToTitleCase,
     'dash_to_camelcase': DashToCamelCase,
     'camelcase_to_hacker_style': CamelCaseToHackerStyle,
-    'mangle_enum': MangleEnum,
+    'sanitize_literal': SanitizeLiteral,
   })
   jinja_env.add_extension('jinja2.ext.loopcontrols')
   return jinja_env
@@ -353,27 +361,33 @@ def SynthesizeEventTypes(json_api):
       domain['types'].append(event_type)
 
 
-def PatchHiddenCommandsAndEvents(json_api):
+def PatchExperimentalCommandsAndEvents(json_api):
   """
-  Mark all commands and events in hidden domains as hidden and make sure hidden
-  commands have at least empty parameters and return values.
+  Mark all commands and events in experimental domains as experimental
+  and make sure experimental commands have at least empty parameters
+  and return values.
   """
   for domain in json_api['domains']:
-    if domain.get('hidden', False):
+    if domain.get('experimental', False):
       for command in domain.get('commands', []):
-        command['hidden'] = True
+        command['experimental'] = True
       for event in domain.get('events', []):
-        event['hidden'] = True
+        event['experimental'] = True
+
+
+def EnsureCommandsHaveParametersAndReturnTypes(json_api):
+  """
+  Make sure all commands have at least empty parameters and return values. This
+  guarantees API compatibility if a previously experimental command is made
+  stable.
+  """
+  for domain in json_api['domains']:
     for command in domain.get('commands', []):
-      if not command.get('hidden', False):
-        continue
       if not 'parameters' in command:
         command['parameters'] = []
       if not 'returns' in command:
         command['returns'] = []
     for event in domain.get('events', []):
-      if not event.get('hidden', False):
-        continue
       if not 'parameters' in event:
         event['parameters'] = []
 
@@ -412,7 +426,8 @@ def GenerateDomains(jinja_env, output_dirname, json_api, class_name,
 if __name__ == '__main__':
   json_api, output_dirname = ParseArguments(sys.argv[1:])
   jinja_env = InitializeJinjaEnv(output_dirname)
-  PatchHiddenCommandsAndEvents(json_api)
+  PatchExperimentalCommandsAndEvents(json_api)
+  EnsureCommandsHaveParametersAndReturnTypes(json_api)
   SynthesizeCommandTypes(json_api)
   SynthesizeEventTypes(json_api)
   PatchFullQualifiedRefs(json_api)

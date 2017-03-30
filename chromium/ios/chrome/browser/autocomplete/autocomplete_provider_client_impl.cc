@@ -10,7 +10,8 @@
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/sync_service_utils.h"
+#include "components/sync/driver/sync_service_utils.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "ios/chrome/browser/autocomplete/in_memory_url_index_factory.h"
 #include "ios/chrome/browser/autocomplete/shortcuts_backend_factory.h"
@@ -101,6 +102,11 @@ std::unique_ptr<KeywordExtensionsDelegate>
 AutocompleteProviderClientImpl::GetKeywordExtensionsDelegate(
     KeywordProvider* keyword_provider) {
   return nullptr;
+}
+
+PhysicalWebDataSource*
+AutocompleteProviderClientImpl::GetPhysicalWebDataSource() {
+  return GetApplicationContext()->GetPhysicalWebDataSource();
 }
 
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {

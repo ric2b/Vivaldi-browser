@@ -13,6 +13,10 @@ namespace media {
 
 namespace video_toolbox {
 
+namespace {
+static const char kAnnexBHeaderBytes[4] = {0, 0, 0, 1};
+}  // anonymous namespace
+
 base::ScopedCFTypeRef<CFDictionaryRef>
 DictionaryWithKeysAndValues(CFTypeRef* keys, CFTypeRef* values, size_t size) {
   return base::ScopedCFTypeRef<CFDictionaryRef>(CFDictionaryCreate(
@@ -35,7 +39,7 @@ base::ScopedCFTypeRef<CFArrayRef> ArrayWithIntegers(const int* v, size_t size) {
   base::ScopedCFTypeRef<CFArrayRef> array(CFArrayCreate(
       kCFAllocatorDefault, reinterpret_cast<const void**>(&numbers[0]),
       numbers.size(), &kCFTypeArrayCallBacks));
-  for (auto& number : numbers) {
+  for (auto* number : numbers) {
     CFRelease(number);
   }
   return array;
@@ -49,7 +53,7 @@ base::ScopedCFTypeRef<CFArrayRef> ArrayWithIntegerAndFloat(int int_val,
   base::ScopedCFTypeRef<CFArrayRef> array(CFArrayCreate(
       kCFAllocatorDefault, reinterpret_cast<const void**>(numbers.data()),
       numbers.size(), &kCFTypeArrayCallBacks));
-  for (auto& number : numbers)
+  for (auto* number : numbers)
     CFRelease(number);
   return array;
 }
@@ -113,7 +117,6 @@ void CopyNalsToAnnexB(char* avcc_buffer,
   static_assert(sizeof(NalSizeType) == 1 || sizeof(NalSizeType) == 2 ||
                     sizeof(NalSizeType) == 4,
                 "NAL size type has unsupported size");
-  static const char startcode_3[3] = {0, 0, 1};
   DCHECK(avcc_buffer);
   DCHECK(annexb_buffer);
   size_t bytes_left = avcc_size;
@@ -125,7 +128,7 @@ void CopyNalsToAnnexB(char* avcc_buffer,
     avcc_buffer += sizeof(NalSizeType);
 
     DCHECK_GE(bytes_left, nal_size);
-    annexb_buffer->Append(startcode_3, sizeof(startcode_3));
+    annexb_buffer->Append(kAnnexBHeaderBytes, sizeof(kAnnexBHeaderBytes));
     annexb_buffer->Append(avcc_buffer, nal_size);
     bytes_left -= nal_size;
     avcc_buffer += nal_size;
@@ -142,9 +145,9 @@ bool CopySampleBufferToAnnexBBuffer(CoreMediaGlue::CMSampleBufferRef sbuf,
   OSStatus status;
 
   // Get the sample buffer's block buffer and format description.
-  auto bb = CoreMediaGlue::CMSampleBufferGetDataBuffer(sbuf);
+  auto* bb = CoreMediaGlue::CMSampleBufferGetDataBuffer(sbuf);
   DCHECK(bb);
-  auto fdesc = CoreMediaGlue::CMSampleBufferGetFormatDescription(sbuf);
+  auto* fdesc = CoreMediaGlue::CMSampleBufferGetFormatDescription(sbuf);
   DCHECK(fdesc);
 
   size_t bb_size = CoreMediaGlue::CMBlockBufferGetDataLength(bb);
@@ -203,8 +206,7 @@ bool CopySampleBufferToAnnexBBuffer(CoreMediaGlue::CMSampleBufferRef sbuf,
             << status;
         return false;
       }
-      static const char startcode_4[4] = {0, 0, 0, 1};
-      annexb_buffer->Append(startcode_4, sizeof(startcode_4));
+      annexb_buffer->Append(kAnnexBHeaderBytes, sizeof(kAnnexBHeaderBytes));
       annexb_buffer->Append(reinterpret_cast<const char*>(pset), pset_size);
     }
   }

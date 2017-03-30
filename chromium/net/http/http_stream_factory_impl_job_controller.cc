@@ -7,12 +7,22 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "net/base/host_mapping_rules.h"
 #include "net/http/bidirectional_stream_impl.h"
 #include "net/http/transport_security_state.h"
 #include "net/spdy/spdy_session.h"
 
 namespace net {
+
+// Returns parameters associated with the delay of the HTTP stream job.
+std::unique_ptr<base::Value> NetLogHttpStreamJobDelayCallback(
+    base::TimeDelta delay,
+    NetLogCaptureMode /* capture_mode */) {
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  dict->SetInteger("resume_after_ms", static_cast<int>(delay.InMilliseconds()));
+  return std::move(dict);
+}
 
 HttpStreamFactoryImpl::JobController::JobController(
     HttpStreamFactoryImpl* factory,
@@ -26,7 +36,9 @@ HttpStreamFactoryImpl::JobController::JobController(
       delegate_(delegate),
       is_preconnect_(false),
       job_bound_(false),
-      bound_job_(nullptr) {
+      main_job_is_blocked_(false),
+      bound_job_(nullptr),
+      ptr_factory_(this) {
   DCHECK(factory);
 }
 
@@ -158,7 +170,7 @@ void HttpStreamFactoryImpl::JobController::OnStreamReady(
   std::unique_ptr<HttpStream> stream = job->ReleaseStream();
   DCHECK(stream);
 
-  MarkRequestComplete(job->was_npn_negotiated(), job->protocol_negotiated(),
+  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -181,7 +193,7 @@ void HttpStreamFactoryImpl::JobController::OnBidirectionalStreamImplReady(
     return;
   }
 
-  MarkRequestComplete(job->was_npn_negotiated(), job->protocol_negotiated(),
+  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -204,7 +216,7 @@ void HttpStreamFactoryImpl::JobController::OnWebSocketHandshakeStreamReady(
     WebSocketHandshakeStreamBase* stream) {
   DCHECK(job);
 
-  MarkRequestComplete(job->was_npn_negotiated(), job->protocol_negotiated(),
+  MarkRequestComplete(job->was_npn_negotiated(), job->negotiated_protocol(),
                       job->using_spdy());
 
   if (!request_)
@@ -222,6 +234,8 @@ void HttpStreamFactoryImpl::JobController::OnStreamFailed(
     Job* job,
     int status,
     const SSLConfig& used_ssl_config) {
+  MaybeResumeMainJob(job, base::TimeDelta());
+
   if (job_bound_ && bound_job_ != job) {
     // We have bound a job to the associated Request, |job| has been orphaned.
     OnOrphanedJobComplete(job);
@@ -261,6 +275,8 @@ void HttpStreamFactoryImpl::JobController::OnCertificateError(
     int status,
     const SSLConfig& used_ssl_config,
     const SSLInfo& ssl_info) {
+  MaybeResumeMainJob(job, base::TimeDelta());
+
   if (job_bound_ && bound_job_ != job) {
     // We have bound a job to the associated Request, |job| has been orphaned.
     OnOrphanedJobComplete(job);
@@ -282,6 +298,8 @@ void HttpStreamFactoryImpl::JobController::OnHttpsProxyTunnelResponse(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
     HttpStream* stream) {
+  MaybeResumeMainJob(job, base::TimeDelta());
+
   if (job_bound_ && bound_job_ != job) {
     // We have bound a job to the associated Request, |job| has been orphaned.
     OnOrphanedJobComplete(job);
@@ -300,6 +318,8 @@ void HttpStreamFactoryImpl::JobController::OnNeedsClientAuth(
     Job* job,
     const SSLConfig& used_ssl_config,
     SSLCertRequestInfo* cert_info) {
+  MaybeResumeMainJob(job, base::TimeDelta());
+
   if (job_bound_ && bound_job_ != job) {
     // We have bound a job to the associated Request, |job| has been orphaned.
     OnOrphanedJobComplete(job);
@@ -319,6 +339,8 @@ void HttpStreamFactoryImpl::JobController::OnNeedsProxyAuth(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
     HttpAuthController* auth_controller) {
+  MaybeResumeMainJob(job, base::TimeDelta());
+
   if (job_bound_ && bound_job_ != job) {
     // We have bound a job to the associated Request, |job| has been orphaned.
     OnOrphanedJobComplete(job);
@@ -346,7 +368,7 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
   const SSLConfig used_ssl_config = job->server_ssl_config();
   const ProxyInfo used_proxy_info = job->proxy_info();
   const bool was_npn_negotiated = job->was_npn_negotiated();
-  const NextProto protocol_negotiated = job->protocol_negotiated();
+  const NextProto negotiated_protocol = job->negotiated_protocol();
   const bool using_spdy = job->using_spdy();
   const BoundNetLog net_log = job->net_log();
 
@@ -362,7 +384,7 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
       BindJob(job);
     }
 
-    MarkRequestComplete(was_npn_negotiated, protocol_negotiated, using_spdy);
+    MarkRequestComplete(was_npn_negotiated, negotiated_protocol, using_spdy);
 
     std::unique_ptr<HttpStream> stream;
     std::unique_ptr<BidirectionalStreamImpl> bidirectional_stream_impl;
@@ -389,7 +411,7 @@ void HttpStreamFactoryImpl::JobController::OnNewSpdySessionReady(
   if (spdy_session && spdy_session->IsAvailable()) {
     factory->OnNewSpdySessionReady(spdy_session, direct, used_ssl_config,
                                    used_proxy_info, was_npn_negotiated,
-                                   protocol_negotiated, using_spdy, net_log);
+                                   negotiated_protocol, using_spdy, net_log);
   }
   if (is_job_orphaned) {
     OnOrphanedJobComplete(job);
@@ -426,6 +448,63 @@ void HttpStreamFactoryImpl::JobController::AddConnectionAttemptsToRequest(
   request_->AddConnectionAttempts(attempts);
 }
 
+void HttpStreamFactoryImpl::JobController::ResumeMainJob() {
+  main_job_->net_log().AddEvent(
+      NetLog::TYPE_HTTP_STREAM_JOB_DELAYED,
+      base::Bind(&NetLogHttpStreamJobDelayCallback, main_job_wait_time_));
+
+  main_job_->Resume();
+  main_job_wait_time_ = base::TimeDelta();
+}
+
+void HttpStreamFactoryImpl::JobController::MaybeResumeMainJob(
+    Job* job,
+    const base::TimeDelta& delay) {
+  DCHECK(job == main_job_.get() || job == alternative_job_.get());
+  if (!main_job_is_blocked_ || job != alternative_job_.get() || !main_job_)
+    return;
+
+  main_job_is_blocked_ = false;
+
+  if (!main_job_->is_waiting())
+    return;
+
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&HttpStreamFactoryImpl::JobController::ResumeMainJob,
+                 ptr_factory_.GetWeakPtr()),
+      main_job_wait_time_);
+}
+
+void HttpStreamFactoryImpl::JobController::OnConnectionInitialized(Job* job,
+                                                                   int rv) {
+  if (rv != OK) {
+    // Resume the main job as there's an error raised in connection
+    // initiation.
+    return MaybeResumeMainJob(job, main_job_wait_time_);
+  }
+}
+
+bool HttpStreamFactoryImpl::JobController::ShouldWait(Job* job) {
+  // The alternative job never waits.
+  if (job == alternative_job_.get())
+    return false;
+
+  if (main_job_is_blocked_)
+    return true;
+
+  if (main_job_wait_time_.is_zero())
+    return false;
+
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&HttpStreamFactoryImpl::JobController::ResumeMainJob,
+                 ptr_factory_.GetWeakPtr()),
+      main_job_wait_time_);
+
+  return true;
+}
+
 void HttpStreamFactoryImpl::JobController::SetSpdySessionKey(
     Job* job,
     const SpdySessionKey& spdy_session_key) {
@@ -436,7 +515,7 @@ void HttpStreamFactoryImpl::JobController::SetSpdySessionKey(
   if (!request_->HasSpdySessionKey()) {
     RequestSet& request_set =
         factory_->spdy_session_request_map_[spdy_session_key];
-    DCHECK(!ContainsKey(request_set, request_));
+    DCHECK(!base::ContainsKey(request_set, request_));
     request_set.insert(request_);
     request_->SetSpdySessionKey(spdy_session_key);
   }
@@ -457,9 +536,9 @@ void HttpStreamFactoryImpl::JobController::
   if (spdy_session_key) {
     SpdySessionRequestMap& spdy_session_request_map =
         factory_->spdy_session_request_map_;
-    DCHECK(ContainsKey(spdy_session_request_map, *spdy_session_key));
+    DCHECK(base::ContainsKey(spdy_session_request_map, *spdy_session_key));
     RequestSet& request_set = spdy_session_request_map[*spdy_session_key];
-    DCHECK(ContainsKey(request_set, request_));
+    DCHECK(base::ContainsKey(request_set, request_));
     request_set.erase(request_);
     if (request_set.empty())
       spdy_session_request_map.erase(*spdy_session_key);
@@ -473,6 +552,12 @@ const BoundNetLog* HttpStreamFactoryImpl::JobController::GetNetLog(
     return nullptr;
   DCHECK(request_);
   return &request_->net_log();
+}
+
+void HttpStreamFactoryImpl::JobController::MaybeSetWaitTimeForMainJob(
+    const base::TimeDelta& delay) {
+  if (main_job_is_blocked_)
+    main_job_wait_time_ = delay;
 }
 
 WebSocketHandshakeStreamBase::CreateHelper* HttpStreamFactoryImpl::
@@ -520,10 +605,7 @@ void HttpStreamFactoryImpl::JobController::CreateJobs(
         alternative_service, net_log.net_log()));
     AttachJob(alternative_job_.get());
 
-    main_job_->WaitFor(alternative_job_.get());
-    // Make sure to wait until we call WaitFor(), before starting
-    // |alternative_job|, otherwise |alternative_job| will not notify |job|
-    // appropriately.
+    main_job_is_blocked_ = true;
     alternative_job_->Start(request_->stream_type());
   }
   // Even if |alternative_job| has already finished, it will not have notified
@@ -623,10 +705,10 @@ void HttpStreamFactoryImpl::JobController::OnJobSucceeded(Job* job) {
 
 void HttpStreamFactoryImpl::JobController::MarkRequestComplete(
     bool was_npn_negotiated,
-    NextProto protocol_negotiated,
+    NextProto negotiated_protocol,
     bool using_spdy) {
   if (request_)
-    request_->Complete(was_npn_negotiated, protocol_negotiated, using_spdy);
+    request_->Complete(was_npn_negotiated, negotiated_protocol, using_spdy);
 }
 
 void HttpStreamFactoryImpl::JobController::MaybeNotifyFactoryOfCompletion() {
@@ -668,8 +750,8 @@ bool HttpStreamFactoryImpl::JobController::IsQuicWhitelistedForHost(
   if (session_->params().transport_security_state->IsGooglePinnedHost(host))
     return true;
 
-  return ContainsKey(session_->params().quic_host_whitelist,
-                     base::ToLowerASCII(host));
+  return base::ContainsKey(session_->params().quic_host_whitelist,
+                           base::ToLowerASCII(host));
 }
 
 AlternativeService
@@ -750,10 +832,6 @@ HttpStreamFactoryImpl::JobController::GetAlternativeServiceForInternal(
 
     if (alternative_service.protocol >= NPN_SPDY_MINIMUM_VERSION &&
         alternative_service.protocol <= NPN_SPDY_MAXIMUM_VERSION) {
-      if (alternative_service.protocol == NPN_SPDY_3_1 &&
-          !HttpStreamFactory::spdy_enabled())
-        continue;
-
       if (origin.host() != alternative_service.host &&
           !session_->params()
                .enable_http2_alternative_service_with_different_host) {

@@ -192,6 +192,14 @@ class AppWindow : public content::WebContentsDelegate,
     // If true, the window will be visible on all workspaces. Defaults to false.
     bool visible_on_all_workspaces;
 
+    // If true, the window will have its own shelf icon. Otherwise the window
+    // will be grouped in the shelf with other windows that are associated with
+    // the app. Defaults to false.
+    bool show_in_shelf;
+
+    // Icon URL to be used for setting the window icon.
+    GURL window_icon_url;
+
     // (Vivaldi) If true, this window will be used as a hidden window for
     // thumbnail generation.
     bool thumbnail_window = false;
@@ -376,6 +384,10 @@ class AppWindow : public content::WebContentsDelegate,
   // anywhere other than app_window_launcher_controller after M45. Otherwise,
   // remove this TODO.
   bool is_ime_window() const { return is_ime_window_; }
+
+  bool show_in_shelf() const { return show_in_shelf_; }
+
+  const GURL& window_icon_url() const { return window_icon_url_; }
 
   void SetAppWindowContentsForTesting(
       std::unique_ptr<AppWindowContents> contents) {
@@ -580,6 +592,14 @@ class AppWindow : public content::WebContentsDelegate,
 
   // Whether |is_ime_window| was set in the CreateParams.
   bool is_ime_window_;
+
+  // Whether |show_in_shelf| was set in the CreateParams.
+  bool show_in_shelf_;
+
+  // Icon URL to be used for setting the window icon. If not empty,
+  // app_icon_ will be fetched and set using this URL and will have
+  // app_icon_image_ as a badge.
+  GURL window_icon_url_;
 
   // PlzNavigate: this is called when the first navigation is ready to commit.
   base::Closure on_first_commit_callback_;

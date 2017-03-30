@@ -2,23 +2,12 @@
 
 class {{class_name}} {
  public:
-  static {{class_name}}* New(mojo::internal::Buffer* buf);
+  static {{class_name}}* New(mojo::internal::Buffer* buf) {
+    return new (buf->Allocate(sizeof({{class_name}}))) {{class_name}}();
+  }
 
   static bool Validate(const void* data,
                        mojo::internal::ValidationContext* validation_context);
-
-  void EncodePointers();
-  void DecodePointers();
-
-{% from "enum_macros.tmpl" import enum_data_decl -%}
-{#--- Enums #}
-{%- for enum in struct.enums -%}
-{%-   if enum|is_native_only_kind %}
-  using {{enum.name}}_Data = mojo::internal::NativeEnum_Data;
-{%-   else %}
-  {{enum_data_decl(enum)|indent(2)}}
-{%-   endif %}
-{%- endfor %}
 
   mojo::internal::StructHeader header_;
 {%- for packed_field in struct.packed.packed_fields %}
@@ -49,7 +38,8 @@ class {{class_name}} {
 {%- endif %}
 
  private:
-  {{class_name}}();
+  {{class_name}}() : header_({sizeof(*this), {{struct.versions[-1].version}}}) {
+  }
   ~{{class_name}}() = delete;
 };
 static_assert(sizeof({{class_name}}) == {{struct.versions[-1].num_bytes}},

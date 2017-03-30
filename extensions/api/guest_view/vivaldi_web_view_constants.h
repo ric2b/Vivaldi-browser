@@ -14,6 +14,7 @@ extern const char kEventPasteAndGo[];
 extern const char kEventWebContentsDiscarded[];
 extern const char kAttributeExtensionHost[];
 extern const char kEventOnFullscreen[];
+extern const char kEventContentBlocked[];
 
 extern const char kNewSearchName[];
 extern const char kNewSearchUrl[];

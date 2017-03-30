@@ -12,6 +12,8 @@
 #include "ui/android/view_android.h"
 #include "url/gurl.h"
 
+using base::android::ScopedJavaLocalRef;
+
 namespace platform_util {
 
 // TODO: crbug/115682 to track implementation of the following methods.
@@ -31,7 +33,7 @@ void OpenExternal(Profile* profile, const GURL& url) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_url =
       base::android::ConvertUTF8ToJavaString(env, url.spec());
-  Java_PlatformUtil_launchExternalProtocol(env, j_url.obj());
+  Java_PlatformUtil_launchExternalProtocol(env, j_url);
 }
 
 gfx::NativeWindow GetTopLevel(gfx::NativeView view) {
@@ -56,10 +58,6 @@ void ActivateWindow(gfx::NativeWindow window) {
 bool IsVisible(gfx::NativeView view) {
   NOTIMPLEMENTED();
   return true;
-}
-
-bool RegisterPlatformUtil(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 } // namespace platform_util

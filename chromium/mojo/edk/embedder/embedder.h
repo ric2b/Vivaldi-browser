@@ -70,22 +70,25 @@ MOJO_SYSTEM_IMPL_EXPORT void SetParentPipeHandle(ScopedPlatformHandle pipe);
 // PlatformChannelPair for details.
 MOJO_SYSTEM_IMPL_EXPORT void SetParentPipeHandleFromCommandLine();
 
+// Called to connect to a peer process. This should be called only if there
+// is no common ancestor for the processes involved within this mojo system.
+// Both processes must call this function, each passing one end of a platform
+// channel. This returns one end of a message pipe to each process.
+MOJO_SYSTEM_IMPL_EXPORT ScopedMessagePipeHandle
+ConnectToPeerProcess(ScopedPlatformHandle pipe);
+
 // Must be called first, or just after setting configuration parameters, to
 // initialize the (global, singleton) system.
 MOJO_SYSTEM_IMPL_EXPORT void Init();
 
+// Sets a default callback to invoke when an internal error is reported but
+// cannot be associated with a specific child process.
+MOJO_SYSTEM_IMPL_EXPORT void SetDefaultProcessErrorCallback(
+    const ProcessErrorCallback& callback);
+
 // Basic functions -------------------------------------------------------------
 
 // The functions in this section are available once |Init()| has been called.
-
-// Start waiting on the handle asynchronously. On success, |callback| will be
-// called exactly once, when |handle| satisfies a signal in |signals| or it
-// becomes known that it will never do so. |callback| will be executed on an
-// arbitrary thread, so it must not call any Mojo system or embedder functions.
-MOJO_SYSTEM_IMPL_EXPORT MojoResult
-AsyncWait(MojoHandle handle,
-          MojoHandleSignals signals,
-          const base::Callback<void(MojoResult)>& callback);
 
 // Creates a |MojoHandle| that wraps the given |PlatformHandle| (taking
 // ownership of it). This |MojoHandle| can then, e.g., be passed through message

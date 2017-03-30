@@ -57,9 +57,6 @@ const int kNumberOfMismatchesThreshold = 3;
 const int kCommonNamePrefixRemovalFieldThreshold = 3;
 const int kMinCommonNamePrefixLength = 16;
 
-// Maximum number of characters in the field label to be encoded in a proto.
-const int kMaxFieldLabelNumChars = 200;
-
 // Helper for |EncodeUploadRequest()| that creates a bit field corresponding to
 // |available_field_types| and returns the hex representation as a string.
 std::string EncodeFieldTypes(const ServerFieldTypeSet& available_field_types) {
@@ -293,6 +290,14 @@ std::ostream& operator<<(
   return out;
 }
 
+bool IsCreditCardExpirationType(ServerFieldType type) {
+  return type == CREDIT_CARD_EXP_MONTH ||
+         type == CREDIT_CARD_EXP_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_4_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR ||
+         type == CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR;
+}
+
 }  // namespace
 
 FormStructure::FormStructure(const FormData& form)
@@ -435,7 +440,7 @@ bool FormStructure::EncodeQueryRequest(
   // Some badly formatted web sites repeat forms - detect that and encode only
   // one form as returned data would be the same for all the repeated forms.
   std::set<std::string> processed_forms;
-  for (const auto& form : forms) {
+  for (const auto* form : forms) {
     std::string signature(form->FormSignature());
     if (processed_forms.find(signature) != processed_forms.end())
       continue;
@@ -448,10 +453,7 @@ bool FormStructure::EncodeQueryRequest(
     encoded_signatures->push_back(signature);
   }
 
-  if (!encoded_signatures->size())
-    return false;
-
-  return true;
+  return !encoded_signatures->empty();
 }
 
 // static
@@ -581,6 +583,22 @@ bool FormStructure::IsAutofillable() const {
     return false;
 
   return ShouldBeParsed();
+}
+
+bool FormStructure::IsCompleteCreditCardForm() const {
+  bool found_cc_number = false;
+  bool found_cc_expiration = false;
+  for (const AutofillField* field : fields_) {
+    ServerFieldType type = field->Type().GetStorableType();
+    if (!found_cc_expiration && IsCreditCardExpirationType(type)) {
+      found_cc_expiration = true;
+    } else if (!found_cc_number && type == CREDIT_CARD_NUMBER) {
+      found_cc_number = true;
+    }
+    if (found_cc_expiration && found_cc_number)
+      return true;
+  }
+  return false;
 }
 
 void FormStructure::UpdateAutofillCount() {
@@ -1130,12 +1148,6 @@ void FormStructure::EncodeFormForQuery(
       if (!field->name.empty())
         added_field->set_name(base::UTF16ToUTF8(field->name));
 
-      if (!field->label.empty()) {
-        std::string truncated;
-        base::TruncateUTF8ToByteSize(base::UTF16ToUTF8(field->label),
-                                     kMaxFieldLabelNumChars, &truncated);
-        added_field->set_label(truncated);
-      }
     }
   }
 }
@@ -1159,6 +1171,11 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
       if (field->generation_type())
         added_field->set_generation_type(field->generation_type());
 
+      if (field->form_classifier_outcome()) {
+        added_field->set_form_classifier_outcome(
+            field->form_classifier_outcome());
+      }
+
       unsigned sig = 0;
       // The signature is a required field. If it can't be parsed, the proto
       // would not serialize.
@@ -1172,18 +1189,14 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
         if (!field->name.empty())
           added_field->set_name(base::UTF16ToUTF8(field->name));
 
-        if (!field->label.empty()) {
-          std::string truncated;
-          base::TruncateUTF8ToByteSize(base::UTF16ToUTF8(field->label),
-                                       kMaxFieldLabelNumChars, &truncated);
-          added_field->set_label(truncated);
-        }
-
         if (!field->autocomplete_attribute.empty())
           added_field->set_autocomplete(field->autocomplete_attribute);
 
         if (!field->css_classes.empty())
           added_field->set_css_classes(base::UTF16ToUTF8(field->css_classes));
+
+        if (field->properties_mask)
+          added_field->set_properties_mask(field->properties_mask);
       }
     }
   }

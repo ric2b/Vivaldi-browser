@@ -29,37 +29,32 @@ namespace ui {
 
 namespace {
 
-const int kEventFlagsMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+const int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
                             ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN;
+
+const int kInterestingFlagsMask =
+    kModifierMask | ui::EF_IS_SYNTHESIZED | ui::EF_IS_REPEAT;
 
 }  // namespace
 
 Accelerator::Accelerator()
-    : key_code_(ui::VKEY_UNKNOWN),
-      type_(ui::ET_KEY_PRESSED),
-      modifiers_(0),
-      is_repeat_(false) {
-}
+    : key_code_(ui::VKEY_UNKNOWN), type_(ui::ET_KEY_PRESSED), modifiers_(0) {}
 
 Accelerator::Accelerator(KeyboardCode keycode, int modifiers)
     : key_code_(keycode),
       type_(ui::ET_KEY_PRESSED),
-      modifiers_(modifiers),
-      is_repeat_(false) {
-}
+      modifiers_(modifiers & kInterestingFlagsMask) {}
 
 Accelerator::Accelerator(const KeyEvent& key_event)
     : key_code_(key_event.key_code()),
       type_(key_event.type()),
-      modifiers_(MaskOutKeyEventFlags(key_event.flags())),
-      is_repeat_(key_event.is_repeat()) {
-}
+      // |modifiers_| may include the repeat flag.
+      modifiers_(key_event.flags() & kInterestingFlagsMask) {}
 
 Accelerator::Accelerator(const Accelerator& accelerator) {
   key_code_ = accelerator.key_code_;
   type_ = accelerator.type_;
   modifiers_ = accelerator.modifiers_;
-  is_repeat_ = accelerator.is_repeat_;
   if (accelerator.platform_accelerator_.get())
     platform_accelerator_ = accelerator.platform_accelerator_->CreateCopy();
 }
@@ -69,7 +64,7 @@ Accelerator::~Accelerator() {
 
 // static
 int Accelerator::MaskOutKeyEventFlags(int flags) {
-  return flags & kEventFlagsMask;
+  return flags & kModifierMask;
 }
 
 Accelerator& Accelerator::operator=(const Accelerator& accelerator) {
@@ -77,7 +72,6 @@ Accelerator& Accelerator::operator=(const Accelerator& accelerator) {
     key_code_ = accelerator.key_code_;
     type_ = accelerator.type_;
     modifiers_ = accelerator.modifiers_;
-    is_repeat_ = accelerator.is_repeat_;
     if (accelerator.platform_accelerator_.get())
       platform_accelerator_ = accelerator.platform_accelerator_->CreateCopy();
     else
@@ -91,12 +85,14 @@ bool Accelerator::operator <(const Accelerator& rhs) const {
     return key_code_ < rhs.key_code_;
   if (type_ != rhs.type_)
     return type_ < rhs.type_;
-  return modifiers_ < rhs.modifiers_;
+  return MaskOutKeyEventFlags(modifiers_) <
+         MaskOutKeyEventFlags(rhs.modifiers_);
 }
 
 bool Accelerator::operator ==(const Accelerator& rhs) const {
   if ((key_code_ == rhs.key_code_) && (type_ == rhs.type_) &&
-      (modifiers_ == rhs.modifiers_))
+      (MaskOutKeyEventFlags(modifiers_) ==
+       MaskOutKeyEventFlags(rhs.modifiers_)))
     return true;
 
   bool platform_equal =
@@ -127,7 +123,7 @@ bool Accelerator::IsCmdDown() const {
 }
 
 bool Accelerator::IsRepeat() const {
-  return is_repeat_;
+  return (modifiers_ & EF_IS_REPEAT) != 0;
 }
 
 base::string16 Accelerator::GetShortcutText() const {

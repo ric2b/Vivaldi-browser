@@ -23,7 +23,7 @@
 #include "net/http/http_status_code.h"
 #include "net/http/http_transaction_factory.h"
 #include "net/http/http_util.h"
-#include "net/quic/quic_protocol.h"
+#include "net/quic/core/quic_protocol.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/ssl/ssl_info.h"
 #include "net/url_request/http_user_agent_settings.h"
@@ -32,6 +32,7 @@
 
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::ScopedJavaLocalRef;
 
 namespace cronet {
 

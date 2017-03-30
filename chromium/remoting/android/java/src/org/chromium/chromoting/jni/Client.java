@@ -4,11 +4,17 @@
 
 package org.chromium.chromoting.jni;
 
+import android.content.Context;
+
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.chromoting.CapabilityManager;
+import org.chromium.chromoting.Desktop;
+import org.chromium.chromoting.DesktopView;
+import org.chromium.chromoting.DesktopViewFactory;
 import org.chromium.chromoting.InputStub;
+import org.chromium.chromoting.Preconditions;
 import org.chromium.chromoting.SessionAuthenticator;
 
 /**
@@ -23,8 +29,8 @@ public class Client implements InputStub {
     // Pointer to the C++ object, cast to a |long|.
     private long mNativeJniClient;
 
-    // Implementation-dependent display object used by the desktop view.
-    private Object mDisplay;
+    // The factory to create implementation-dependent desktop view.
+    private DesktopViewFactory mDesktopViewFactory;
 
     // The global Client instance (may be null). This needs to be a global singleton so that the
     // Client can be passed between Activities.
@@ -40,21 +46,20 @@ public class Client implements InputStub {
     }
 
     /**
-     * Sets the display object. Called by the native code when the connection starts.
-     * @param display the implementation-dependent object used by the desktop view.
+     * Sets the desktop view factory to be used by {@link Client#createDesktopView(Context)}.
+     * @param factory The factory to create implementation-dependent desktop view.
      */
-    @CalledByNative
-    private void setDisplay(Object display) {
-        mDisplay = display;
+    public void setDesktopViewFactory(DesktopViewFactory factory) {
+        mDesktopViewFactory = factory;
     }
 
     /**
-     * Returns the display object. It will be null before calling connectToHost() or after calling
-     * disconnectFromHost().
-     * @return the display object.
+     * Creates an implementation specific {@link DesktopView} using the
+     * {@link DesktopViewFactory} set by {@link Client#setDesktopViewFactory(DesktopViewFactory)}.
      */
-    public Object getDisplay() {
-        return mDisplay;
+    public DesktopView createDesktopView(Desktop desktop, Client client) {
+        Preconditions.notNull(mDesktopViewFactory);
+        return mDesktopViewFactory.createDesktopView(desktop, client);
     }
 
     // Suppress FindBugs warning, since |sClient| is only used on the UI thread.
@@ -130,8 +135,6 @@ public class Client implements InputStub {
         mConnectionListener = null;
         mConnected = false;
         mCapabilityManager.onHostDisconnect();
-
-        mDisplay = null;
     }
 
     /** Called whenever the connection status changes. */

@@ -2,15 +2,14 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-menu/paper-menu.html">
-<link rel="import" href="chrome://resources/html/cr/ui/position_util.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_shared_menu/cr_shared_menu.html">
+<link rel="import" href="chrome://history/lazy_render.html">
 <link rel="import" href="chrome://history/shared_style.html">
 <link rel="import" href="chrome://history/synced_device_card.html">
 
 <dom-module id="history-synced-device-manager">
-  <style include="shared-style"></style>
   <template>
-    <style>
+    <style include="shared-style">
       :host {
         display: block;
         overflow: auto;
@@ -40,22 +39,24 @@
       }
 
       #sign-in-promo {
-        color: #333;
-        font-size: 28px;
+        color: var(--primary-text-color);
+        font-size: 215%;
         margin-top: 40px;
       }
 
       #sign-in-promo-desc {
         color: #848484;
-        font-size: 16px;
+        font-size: 123%;
         margin-top: 10px;
       }
 
       #sign-in-button {
         background-color: var(--google-blue-500);
         color: white;
-        font-size: 14px;
+        font-weight: 500;
         margin-top: 24px;
+        padding-left: 12px;
+        padding-right: 12px;
       }
 
       #synced-device-list {
@@ -68,15 +69,19 @@
             last-update-time="[[syncedDevice.lastUpdateTime]]"
             tabs="[[syncedDevice.tabs]]"
             separator-indexes="[[syncedDevice.separatorIndexes]]"
-            searched-term="[[searchedTerm]]">
+            search-term="[[searchTerm]]"
+            session-tag="[[syncedDevice.tag]]"
+            opened="{{syncedDevice.opened}}">
         </history-synced-device-card>
       </template>
     </div>
     <div id="no-synced-tabs" class="centered-message"
-      hidden="[[!showNoSyncedMessage(signInState_, syncedDevices_.length)]]">
+        hidden="[[!showNoSyncedMessage(signInState, syncedDevices_.length,
+                                       guestSession_)]]">
       [[noSyncedTabsMessage(fetchingSyncedTabs_)]]
     </div>
-    <div id="sign-in-guide" hidden$="[[signInState_]]">
+    <div id="sign-in-guide"
+        hidden="[[!showSignInGuide(signInState, guestSession_)]]">
       <div id="illustration"></div>
       <div id="sign-in-promo">$i18n{signInPromo}</div>
       <div id="sign-in-promo-desc">$i18n{signInPromoDesc}</div>
@@ -84,6 +89,19 @@
         $i18n{signInButton}
       </paper-button>
     </div>
+
+    <template is="history-lazy-render" id="menu">
+      <cr-shared-menu>
+        <paper-item id="menuOpenButton" class="menu-item"
+            on-tap="onOpenAllTap_">
+          $i18n{openAll}
+        </paper-item>
+        <paper-item id="menuDeleteButton" class="menu-item"
+            on-tap="onDeleteSessionTap_">
+          $i18n{deleteSession}
+        </paper-item>
+      </cr-shared-menu>
+    </template>
   </template>
   <script src="chrome://history/synced_device_manager.js"></script>
 </dom-module>

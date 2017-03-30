@@ -10,9 +10,8 @@
 #include <memory>
 #include <string>
 
-#include "ash/shell_delegate.h"
-#include "ash/wm/lock_state_observer.h"
-#include "base/compiler_specific.h"
+#include "ash/common/shell_observer.h"
+#include "ash/common/wm/lock_state_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
@@ -56,7 +55,7 @@ class WebUIScreenLocker : public WebUILoginView,
                           public ash::LockStateObserver,
                           public views::WidgetObserver,
                           public PowerManagerClient::Observer,
-                          public ash::VirtualKeyboardStateObserver,
+                          public ash::ShellObserver,
                           public keyboard::KeyboardControllerObserver,
                           public display::DisplayObserver,
                           public content::WebContentsObserver {
@@ -115,7 +114,7 @@ class WebUIScreenLocker : public WebUILoginView,
   // content::WebContentsObserver:
   void RenderProcessGone(base::TerminationStatus status) override;
 
-  // ash::KeyboardStateObserver:
+  // ash::ShellObserver:
   void OnVirtualKeyboardStateChanged(bool activated) override;
 
   // keyboard::KeyboardControllerObserver:

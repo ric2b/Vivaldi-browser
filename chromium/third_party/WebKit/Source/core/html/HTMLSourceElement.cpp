@@ -34,7 +34,6 @@
 #include "core/events/EventSender.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPictureElement.h"
-#include "platform/Logging.h"
 
 #define SOURCE_LOG_LEVEL 3
 
@@ -150,7 +149,7 @@ void HTMLSourceElement::cancelPendingErrorEvent()
 
 void HTMLSourceElement::dispatchPendingEvent(SourceEventSender* eventSender)
 {
-    ASSERT_UNUSED(eventSender, eventSender == &sourceErrorEventSender());
+    DCHECK_EQ(eventSender, &sourceErrorEventSender());
     DVLOG(SOURCE_LOG_LEVEL) << "dispatchPendingEvent - " << (void*)this;
     dispatchEvent(Event::createCancelable(EventTypeNames::error));
 }

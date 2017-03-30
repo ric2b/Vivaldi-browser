@@ -55,6 +55,11 @@ void BluetoothAdapter::RemoveObserver(BluetoothAdapter::Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
+bool BluetoothAdapter::HasObserver(BluetoothAdapter::Observer* observer) {
+  DCHECK(observer);
+  return observers_.HasObserver(observer);
+}
+
 void BluetoothAdapter::StartDiscoverySession(
     const DiscoverySessionCallback& callback,
     const ErrorCallback& error_callback) {
@@ -336,7 +341,7 @@ BluetoothAdapter::GetMergedDiscoveryFilterHelper(
   bool first_merge = true;
 
   std::set<BluetoothDiscoverySession*> temp(discovery_sessions_);
-  for (const auto& iter : temp) {
+  for (auto* iter : temp) {
     const BluetoothDiscoveryFilter* curr_filter = iter->GetDiscoveryFilter();
 
     if (!iter->IsActive())

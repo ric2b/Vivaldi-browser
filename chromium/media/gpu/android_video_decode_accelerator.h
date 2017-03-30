@@ -158,7 +158,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   void OnFrameAvailable();
 
  private:
-  friend class AVDATimerManager;
+  friend class AVDAManager;
 
   // TODO(timav): evaluate the need for more states in the AVDA state machine.
   enum State {
@@ -211,9 +211,6 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // select a software decoder manually (false).  This is because fallback to
     // software when autodetecting can sometimes hang mediaserver.
     bool allow_autodetection_ = false;
-
-    // Should we notify AVDATimerManager when codec configuration completes?
-    bool notify_completion_ = false;
 
    protected:
     friend class base::RefCountedThreadSafe<CodecConfig>;
@@ -362,10 +359,9 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   static bool UseDeferredRenderingStrategy(
       const gpu::GpuPreferences& gpu_preferences);
 
-  // Returns true if frame's COPY_REQUIRED flag needs to be set when using
-  // deferred strategy.
-  static bool UseTextureCopyForDeferredStrategy(
-      const gpu::GpuPreferences& gpu_preferences);
+  // Indicates if MediaCodec should not be used for software decoding since we
+  // have safer versions elsewhere.
+  bool IsMediaCodecSoftwareDecodingForbidden() const;
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;

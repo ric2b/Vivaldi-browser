@@ -78,6 +78,8 @@
 #include "chrome/browser/safe_browsing/protocol_manager_helper.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using content::BrowserThread;
 
 namespace safe_browsing {
@@ -159,7 +161,7 @@ SafeBrowsingURLRequestContextGetter::SafeBrowsingURLRequestContextGetter(
     : shut_down_(false),
       system_context_getter_(system_context_getter),
       network_task_runner_(
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)) {}
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)) {}
 
 net::URLRequestContext*
 SafeBrowsingURLRequestContextGetter::GetURLRequestContext() {
@@ -281,8 +283,6 @@ SafeBrowsingService* SafeBrowsingService::CreateSafeBrowsingService() {
 
 SafeBrowsingService::SafeBrowsingService()
     : services_delegate_(ServicesDelegate::Create(this)),
-      protocol_manager_(nullptr),
-      ping_manager_(nullptr),
       enabled_(false),
       enabled_by_prefs_(false) {}
 
@@ -336,7 +336,7 @@ void SafeBrowsingService::Initialize() {
 void SafeBrowsingService::ShutDown() {
   // Deletes the PrefChangeRegistrars, whose dtors also unregister |this| as an
   // observer of the preferences.
-  STLDeleteValues(&prefs_map_);
+  base::STLDeleteValues(&prefs_map_);
 
   // Remove Profile creation/destruction observers.
   prefs_registrar_.RemoveAll();
@@ -390,12 +390,16 @@ SafeBrowsingService::database_manager() const {
 
 SafeBrowsingProtocolManager* SafeBrowsingService::protocol_manager() const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return protocol_manager_;
+#if defined(SAFE_BROWSING_DB_LOCAL)
+  return protocol_manager_.get();
+#else
+  return nullptr;
+#endif
 }
 
 SafeBrowsingPingManager* SafeBrowsingService::ping_manager() const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return ping_manager_;
+  return ping_manager_.get();
 }
 
 std::unique_ptr<TrackedPreferenceValidationDelegate>
@@ -487,14 +491,14 @@ std::string SafeBrowsingService::GetProtocolConfigClientName() const {
   // On Windows, get the safe browsing client name from the browser
   // distribution classes in installer util. These classes don't yet have
   // an analog on non-Windows builds so just keep the name specified here.
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(espen/yngve): google servers did not recognize "vivaldi".
+    client_name = "chromium";
+  } else {
 #if defined(OS_WIN)
-#if 0
-  // NOTE(yngve) Disabled because google servers did not recognize "vivaldi"
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   client_name = dist->GetSafeBrowsingName();
 #else
-  client_name = "chromium";
-#endif
 #if defined(GOOGLE_CHROME_BUILD)
   client_name = "googlechrome";
 #else
@@ -507,6 +511,7 @@ std::string SafeBrowsingService::GetProtocolConfigClientName() const {
 #endif
 
 #endif  // defined(OS_WIN)
+  }
 
   return client_name;
 }
@@ -573,11 +578,9 @@ void SafeBrowsingService::StopOnIOThread(bool shutdown) {
     // This cancels all in-flight GetHash requests. Note that
     // |database_manager_| relies on |protocol_manager_| so if the latter is
     // destroyed, the former must be stopped.
-    delete protocol_manager_;
-    protocol_manager_ = nullptr;
+    protocol_manager_.reset();
 #endif
-    delete ping_manager_;
-    ping_manager_ = NULL;
+    ping_manager_.reset();
   }
 }
 

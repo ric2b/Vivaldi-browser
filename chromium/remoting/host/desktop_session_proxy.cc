@@ -110,31 +110,31 @@ DesktopSessionProxy::DesktopSessionProxy(
 std::unique_ptr<AudioCapturer> DesktopSessionProxy::CreateAudioCapturer() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  return base::WrapUnique(new IpcAudioCapturer(this));
+  return base::MakeUnique<IpcAudioCapturer>(this);
 }
 
 std::unique_ptr<InputInjector> DesktopSessionProxy::CreateInputInjector() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  return base::WrapUnique(new IpcInputInjector(this));
+  return base::MakeUnique<IpcInputInjector>(this);
 }
 
 std::unique_ptr<ScreenControls> DesktopSessionProxy::CreateScreenControls() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  return base::WrapUnique(new IpcScreenControls(this));
+  return base::MakeUnique<IpcScreenControls>(this);
 }
 
 std::unique_ptr<webrtc::DesktopCapturer>
 DesktopSessionProxy::CreateVideoCapturer() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
-  return base::WrapUnique(new IpcVideoFrameCapturer(this));
+  return base::MakeUnique<IpcVideoFrameCapturer>(this);
 }
 
 std::unique_ptr<webrtc::MouseCursorMonitor>
 DesktopSessionProxy::CreateMouseCursorMonitor() {
-  return base::WrapUnique(new IpcMouseCursorMonitor(this));
+  return base::MakeUnique<IpcMouseCursorMonitor>(this);
 }
 
 std::string DesktopSessionProxy::GetCapabilities() const {
@@ -483,6 +483,10 @@ void DesktopSessionProxy::OnCaptureResult(
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   --pending_capture_frame_requests_;
+
+  if (!video_capturer_) {
+    return;
+  }
 
   if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
     video_capturer_->OnCaptureResult(result, nullptr);

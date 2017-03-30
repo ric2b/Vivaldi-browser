@@ -7,9 +7,12 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
+#include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
@@ -19,6 +22,9 @@
 #include "ipc/ipc_endpoint.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_interface_request.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -139,6 +145,67 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
   void AddFilter(MessageFilter* filter);
   void RemoveFilter(MessageFilter* filter);
 
+  using GenericAssociatedInterfaceFactory =
+      base::Callback<void(mojo::ScopedInterfaceEndpointHandle)>;
+
+  // Adds a generic associated interface factory to bind incoming interface
+  // requests directly on the IO thread. MUST be called before Init().
+  void AddGenericAssociatedInterfaceForIOThread(
+      const std::string& name,
+      const GenericAssociatedInterfaceFactory& factory);
+
+  // Adds a generic associated interface factory to bind incoming interface
+  // requests on the ChannelProxy's thread. MUST be called before Init().
+  void AddGenericAssociatedInterface(
+      const std::string& name,
+      const GenericAssociatedInterfaceFactory& factory);
+
+  template <typename Interface>
+  using AssociatedInterfaceFactory =
+      base::Callback<void(mojo::AssociatedInterfaceRequest<Interface>)>;
+
+  // Helper to bind an IO-thread associated interface factory, inferring the
+  // interface name from the callback argument's type. MUST be called before
+  // Init().
+  template <typename Interface>
+  void AddAssociatedInterfaceForIOThread(
+      const AssociatedInterfaceFactory<Interface>& factory) {
+    AddGenericAssociatedInterfaceForIOThread(
+        Interface::Name_,
+        base::Bind(&ChannelProxy::BindAssociatedInterfaceRequest<Interface>,
+                   factory));
+  }
+
+  // Helper to bind a ChannelProxy-thread associated interface factory,
+  // inferring the interface name from the callback argument's type. MUST be
+  // called before Init().
+  template <typename Interface>
+  void AddAssociatedInterface(
+      const AssociatedInterfaceFactory<Interface>& factory) {
+    AddGenericAssociatedInterface(
+        Interface::Name_,
+        base::Bind(&ChannelProxy::BindAssociatedInterfaceRequest<Interface>,
+                   factory));
+  }
+
+  // Gets the AssociatedGroup used to create new associated endpoints on this
+  // ChannelProxy.
+  mojo::AssociatedGroup* GetAssociatedGroup();
+
+  // Requests an associated interface from the remote endpoint.
+  void GetGenericRemoteAssociatedInterface(
+      const std::string& name,
+      mojo::ScopedInterfaceEndpointHandle handle);
+
+  // Template helper to request associated interfaces from the remote endpoint.
+  template <typename Interface>
+  void GetRemoteAssociatedInterface(
+      mojo::AssociatedInterfacePtr<Interface>* proxy) {
+    mojo::AssociatedInterfaceRequest<Interface> request =
+        mojo::GetProxy(proxy, GetAssociatedGroup());
+    GetGenericRemoteAssociatedInterface(Interface::Name_, request.PassHandle());
+  }
+
 #if defined(ENABLE_IPC_FUZZER)
   void set_outgoing_message_filter(OutgoingMessageFilter* filter) {
     outgoing_message_filter_ = filter;
@@ -162,7 +229,7 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
   class Context;
   // A subclass uses this constructor if it needs to add more information
   // to the internal state.
-  ChannelProxy(Context* context);
+  explicit ChannelProxy(Context* context);
 
 
   // Used internally to hold state that is referenced on the IPC thread.
@@ -185,6 +252,11 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
 
     // Indicates if the underlying channel's Send is thread-safe.
     bool IsChannelSendThreadSafe() const;
+
+    // Requests a remote associated interface on the IPC thread.
+    void GetRemoteAssociatedInterface(
+        const std::string& name,
+        mojo::ScopedInterfaceEndpointHandle handle);
 
    protected:
     friend class base::RefCountedThreadSafe<Context>;
@@ -238,6 +310,15 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     void SendFromThisThread(Message* message);
     void ClearChannel();
 
+    mojo::AssociatedGroup* associated_group() { return &associated_group_; }
+
+    void AddGenericAssociatedInterface(
+        const std::string& name,
+        const GenericAssociatedInterfaceFactory& factory);
+    void AddGenericAssociatedInterfaceForIOThread(
+        const std::string& name,
+        const GenericAssociatedInterfaceFactory& factory);
+
     scoped_refptr<base::SingleThreadTaskRunner> listener_task_runner_;
     Listener* listener_;
 
@@ -273,10 +354,20 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
     // Cached copy of the peer process ID. Set on IPC but read on both IPC and
     // listener threads.
     base::ProcessId peer_pid_;
+    base::Lock peer_pid_lock_;
 
     // Whether this channel is used as an endpoint for sending and receiving
     // brokerable attachment messages to/from the broker process.
     bool attachment_broker_endpoint_;
+
+    mojo::AssociatedGroup associated_group_;
+
+    // Holds associated interface binders added by AddGenericAssociatedInterface
+    // or AddGenericAssociatedInterfaceForIOThread until the underlying channel
+    // has been initialized.
+    base::Lock pending_interfaces_lock_;
+    std::vector<std::pair<std::string, GenericAssociatedInterfaceFactory>>
+        pending_interfaces_;
   };
 
   Context* context() { return context_.get(); }
@@ -292,6 +383,15 @@ class IPC_EXPORT ChannelProxy : public Endpoint, public base::NonThreadSafe {
 
  private:
   friend class IpcSecurityTestUtil;
+
+  template <typename Interface>
+  static void BindAssociatedInterfaceRequest(
+      const AssociatedInterfaceFactory<Interface>& factory,
+      mojo::ScopedInterfaceEndpointHandle handle) {
+    mojo::AssociatedInterfaceRequest<Interface> request;
+    request.Bind(std::move(handle));
+    factory.Run(std::move(request));
+  }
 
   // Always called once immediately after Init.
   virtual void OnChannelInit();

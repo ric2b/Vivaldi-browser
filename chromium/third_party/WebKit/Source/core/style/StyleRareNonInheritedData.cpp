@@ -89,7 +89,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
     , m_visitedLinkBorderTopColor(StyleColor::currentColor())
     , m_visitedLinkBorderBottomColor(StyleColor::currentColor())
     , m_alignContent(ComputedStyle::initialContentAlignment())
-    , m_alignItems(ComputedStyle::initialSelfAlignment())
+    , m_alignItems(ComputedStyle::initialDefaultAlignment())
     , m_alignSelf(ComputedStyle::initialSelfAlignment())
     , m_justifyContent(ComputedStyle::initialContentAlignment())
     , m_justifyItems(ComputedStyle::initialSelfAlignment())
@@ -103,8 +103,6 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
     , marginAfterCollapse(MarginCollapseCollapse)
     , m_appearance(ComputedStyle::initialAppearance())
     , m_textDecorationStyle(ComputedStyle::initialTextDecorationStyle())
-    , m_wrapFlow(ComputedStyle::initialWrapFlow())
-    , m_wrapThrough(ComputedStyle::initialWrapThrough())
     , m_hasCurrentOpacityAnimation(false)
     , m_hasCurrentTransformAnimation(false)
     , m_hasCurrentFilterAnimation(false)
@@ -113,6 +111,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData()
     , m_runningTransformAnimationOnCompositor(false)
     , m_runningFilterAnimationOnCompositor(false)
     , m_runningBackdropFilterAnimationOnCompositor(false)
+    , m_isStackingContext(false)
     , m_effectiveBlendMode(ComputedStyle::initialBlendMode())
     , m_touchAction(ComputedStyle::initialTouchAction())
     , m_objectFit(ComputedStyle::initialObjectFit())
@@ -185,8 +184,6 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , marginAfterCollapse(o.marginAfterCollapse)
     , m_appearance(o.m_appearance)
     , m_textDecorationStyle(o.m_textDecorationStyle)
-    , m_wrapFlow(o.m_wrapFlow)
-    , m_wrapThrough(o.m_wrapThrough)
     , m_hasCurrentOpacityAnimation(o.m_hasCurrentOpacityAnimation)
     , m_hasCurrentTransformAnimation(o.m_hasCurrentTransformAnimation)
     , m_hasCurrentFilterAnimation(o.m_hasCurrentFilterAnimation)
@@ -195,6 +192,7 @@ StyleRareNonInheritedData::StyleRareNonInheritedData(const StyleRareNonInherited
     , m_runningTransformAnimationOnCompositor(o.m_runningTransformAnimationOnCompositor)
     , m_runningFilterAnimationOnCompositor(o.m_runningFilterAnimationOnCompositor)
     , m_runningBackdropFilterAnimationOnCompositor(o.m_runningBackdropFilterAnimationOnCompositor)
+    , m_isStackingContext(o.m_isStackingContext)
     , m_effectiveBlendMode(o.m_effectiveBlendMode)
     , m_touchAction(o.m_touchAction)
     , m_objectFit(o.m_objectFit)
@@ -271,12 +269,11 @@ bool StyleRareNonInheritedData::operator==(const StyleRareNonInheritedData& o) c
         && marginAfterCollapse == o.marginAfterCollapse
         && m_appearance == o.m_appearance
         && m_textDecorationStyle == o.m_textDecorationStyle
-        && m_wrapFlow == o.m_wrapFlow
-        && m_wrapThrough == o.m_wrapThrough
         && m_hasCurrentOpacityAnimation == o.m_hasCurrentOpacityAnimation
         && m_hasCurrentTransformAnimation == o.m_hasCurrentTransformAnimation
         && m_hasCurrentFilterAnimation == o.m_hasCurrentFilterAnimation
         && m_hasCurrentBackdropFilterAnimation == o.m_hasCurrentBackdropFilterAnimation
+        && m_isStackingContext == o.m_isStackingContext
         && m_effectiveBlendMode == o.m_effectiveBlendMode
         && m_touchAction == o.m_touchAction
         && m_objectFit == o.m_objectFit

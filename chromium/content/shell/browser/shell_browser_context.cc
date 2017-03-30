@@ -14,7 +14,6 @@
 #include "base/path_service.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
-#include "components/network_session_configurator/switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
@@ -63,6 +62,7 @@ ShellBrowserContext::ShellBrowserContext(bool off_the_record,
 }
 
 ShellBrowserContext::~ShellBrowserContext() {
+  ShutdownStoragePartitions();
   if (resource_context_) {
     BrowserThread::DeleteSoon(
       BrowserThread::IO, FROM_HERE, resource_context_.release());
@@ -132,8 +132,8 @@ ShellBrowserContext::CreateURLRequestContextGetter(
     URLRequestInterceptorScopedVector request_interceptors) {
   return new ShellURLRequestContextGetter(
       ignore_certificate_errors_, GetPath(),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
       protocol_handlers, std::move(request_interceptors), net_log_);
 }
 

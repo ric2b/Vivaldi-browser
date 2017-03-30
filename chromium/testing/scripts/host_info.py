@@ -10,7 +10,6 @@ import platform
 import subprocess
 import sys
 
-
 import common
 
 
@@ -58,19 +57,26 @@ def get_device_info(args, failures):
     return {}
 
   with common.temporary_file() as tempfile_path:
-    rc = common.run_command([
+    test_cmd = [
         sys.executable,
         os.path.join(args.paths['checkout'],
-                     'build',
+                     'third_party',
+                     'catapult',
+                     'devil',
+                     'devil',
                      'android',
-                     'buildbot',
-                     'bb_device_status_check.py'),
+                     'tools',
+                     'device_status.py'),
         '--json-output', tempfile_path,
         '--blacklist-file', os.path.join(
-            args.paths['checkout'], 'out', 'bad_devices.json')])
+              args.paths['checkout'], 'out', 'bad_devices.json')
+    ]
+    if args.args:
+      test_cmd.extend(args.args)
 
+    rc = common.run_command(test_cmd)
     if rc:
-      failures.append('bb_device_status_check')
+      failures.append('device_status')
       return {}
 
     with open(tempfile_path, 'r') as src:
@@ -79,7 +85,8 @@ def get_device_info(args, failures):
   results = {}
   results['devices'] = sorted(v['serial'] for v in device_info)
 
-  details = [v['build_detail'] for v in device_info if not v['blacklisted']]
+  details = [
+      v['ro.build.fingerprint'] for v in device_info if not v['blacklisted']]
 
   def unique_build_details(index):
     return sorted(list(set([v.split(':')[index] for v in details])))
@@ -126,7 +133,9 @@ def main_run(args):
       '_host_info': host_info,
   }, args.output)
 
-  return len(failures) != 0
+  if len(failures) != 0:
+    return common.INFRA_FAILURE_EXIT_CODE
+  return 0
 
 
 def main_compile_targets(args):

@@ -9,6 +9,7 @@
 #include <stddef.h>
 
 #include "base/trace_event/trace_event.h"
+#include "ui/events/devices/stylus_state.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -22,6 +23,9 @@ namespace {
 // Values for EV_KEY.
 const int kKeyReleaseValue = 0;
 const int kKeyRepeatValue = 2;
+
+// Values for the EV_SW code.
+const int kSwitchStylusInserted = 15;
 
 }  // namespace
 
@@ -129,6 +133,13 @@ void EventConverterEvdevImpl::ProcessEvents(const input_event* inputs,
         else if (input.code == SYN_REPORT)
           FlushEvents(input);
         break;
+      case EV_SW:
+        if (input.code == kSwitchStylusInserted) {
+          dispatcher_->DispatchStylusStateChanged(
+              input.value ? ui::StylusState::INSERTED
+                          : ui::StylusState::REMOVED);
+        }
+        break;
     }
   }
 }
@@ -226,7 +237,7 @@ void EventConverterEvdevImpl::OnButtonChange(int code,
   mouse_button_state_.set(button_offset, down);
 
   dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
-      input_device_.id, cursor_->GetLocation(), code, down,
+      input_device_.id, EF_NONE, cursor_->GetLocation(), code, down,
       /* allow_remap */ true,
       PointerDetails(EventPointerType::POINTER_TYPE_MOUSE), timestamp));
 }
@@ -238,7 +249,7 @@ void EventConverterEvdevImpl::FlushEvents(const input_event& input) {
   cursor_->MoveCursor(gfx::Vector2dF(x_offset_, y_offset_));
 
   dispatcher_->DispatchMouseMoveEvent(
-      MouseMoveEventParams(input_device_.id, cursor_->GetLocation(),
+      MouseMoveEventParams(input_device_.id, EF_NONE, cursor_->GetLocation(),
                            PointerDetails(EventPointerType::POINTER_TYPE_MOUSE),
                            TimeTicksFromInputEvent(input)));
 

@@ -7,131 +7,50 @@
 
 namespace mojo {
 
-namespace {
-
-bool ReadDrawQuad(cc::mojom::DrawQuadDataView data, cc::DrawQuad* quad) {
-  cc::DrawQuad::Material material;
-  if (!data.ReadMaterial(&material) || material != quad->material) {
-    return false;
-  }
-  if (!data.ReadRect(&quad->rect) || !data.ReadOpaqueRect(&quad->opaque_rect) ||
-      !data.ReadVisibleRect(&quad->visible_rect)) {
-    return false;
-  }
-  quad->needs_blending = data.needs_blending();
-  return true;
-}
-
-bool AllocateAndConstruct(cc::DrawQuad::Material material, cc::QuadList* list) {
+cc::DrawQuad* AllocateAndConstruct(
+    cc::mojom::DrawQuadState::DataView::Tag material,
+    cc::QuadList* list) {
   cc::DrawQuad* quad = nullptr;
   switch (material) {
-    case cc::DrawQuad::INVALID:
-      break;
-    case cc::DrawQuad::DEBUG_BORDER:
+    case cc::mojom::DrawQuadState::DataView::Tag::DEBUG_BORDER_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::DebugBorderDrawQuad>();
-      break;
-    case cc::DrawQuad::PICTURE_CONTENT:
-      quad = list->AllocateAndConstruct<cc::PictureDrawQuad>();
-      break;
-    case cc::DrawQuad::RENDER_PASS:
+      quad->material = cc::DrawQuad::DEBUG_BORDER;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::RENDER_PASS_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::RenderPassDrawQuad>();
-      break;
-    case cc::DrawQuad::SOLID_COLOR:
+      quad->material = cc::DrawQuad::RENDER_PASS;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::SOLID_COLOR_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::SolidColorDrawQuad>();
-      break;
-    case cc::DrawQuad::STREAM_VIDEO_CONTENT:
+      quad->material = cc::DrawQuad::SOLID_COLOR;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::STREAM_VIDEO_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::StreamVideoDrawQuad>();
-      break;
-    case cc::DrawQuad::SURFACE_CONTENT:
+      quad->material = cc::DrawQuad::STREAM_VIDEO_CONTENT;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::SURFACE_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::SurfaceDrawQuad>();
-      break;
-    case cc::DrawQuad::TEXTURE_CONTENT:
+      quad->material = cc::DrawQuad::SURFACE_CONTENT;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::TEXTURE_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::TextureDrawQuad>();
-      break;
-    case cc::DrawQuad::TILED_CONTENT:
+      quad->material = cc::DrawQuad::TEXTURE_CONTENT;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::TILE_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::TileDrawQuad>();
-      break;
-    case cc::DrawQuad::YUV_VIDEO_CONTENT:
+      quad->material = cc::DrawQuad::TILED_CONTENT;
+      return quad;
+    case cc::mojom::DrawQuadState::DataView::Tag::YUV_VIDEO_QUAD_STATE:
       quad = list->AllocateAndConstruct<cc::YUVVideoDrawQuad>();
-      break;
+      quad->material = cc::DrawQuad::YUV_VIDEO_CONTENT;
+      return quad;
   }
-  if (quad)
-    quad->material = material;
-  return quad != nullptr;
-}
-
-}  // namespace
-
-// static
-cc::mojom::Material
-EnumTraits<cc::mojom::Material, cc::DrawQuad::Material>::ToMojom(
-    cc::DrawQuad::Material material) {
-  switch (material) {
-    case cc::DrawQuad::INVALID:
-      return cc::mojom::Material::INVALID;
-    case cc::DrawQuad::DEBUG_BORDER:
-      return cc::mojom::Material::DEBUG_BORDER;
-    case cc::DrawQuad::PICTURE_CONTENT:
-      return cc::mojom::Material::PICTURE_CONTENT;
-    case cc::DrawQuad::RENDER_PASS:
-      return cc::mojom::Material::RENDER_PASS;
-    case cc::DrawQuad::SOLID_COLOR:
-      return cc::mojom::Material::SOLID_COLOR;
-    case cc::DrawQuad::STREAM_VIDEO_CONTENT:
-      return cc::mojom::Material::STREAM_VIDEO_CONTENT;
-    case cc::DrawQuad::SURFACE_CONTENT:
-      return cc::mojom::Material::SURFACE_CONTENT;
-    case cc::DrawQuad::TEXTURE_CONTENT:
-      return cc::mojom::Material::TEXTURE_CONTENT;
-    case cc::DrawQuad::TILED_CONTENT:
-      return cc::mojom::Material::TILED_CONTENT;
-    case cc::DrawQuad::YUV_VIDEO_CONTENT:
-      return cc::mojom::Material::YUV_VIDEO_CONTENT;
-  }
-  return cc::mojom::Material::INVALID;
+  NOTREACHED();
+  return nullptr;
 }
 
 // static
-bool EnumTraits<cc::mojom::Material, cc::DrawQuad::Material>::FromMojom(
-    cc::mojom::Material input,
-    cc::DrawQuad::Material* out) {
-  switch (input) {
-    case cc::mojom::Material::INVALID:
-      *out = cc::DrawQuad::INVALID;
-      return true;
-    case cc::mojom::Material::DEBUG_BORDER:
-      *out = cc::DrawQuad::DEBUG_BORDER;
-      return true;
-    case cc::mojom::Material::PICTURE_CONTENT:
-      *out = cc::DrawQuad::PICTURE_CONTENT;
-      return true;
-    case cc::mojom::Material::RENDER_PASS:
-      *out = cc::DrawQuad::RENDER_PASS;
-      return true;
-    case cc::mojom::Material::SOLID_COLOR:
-      *out = cc::DrawQuad::SOLID_COLOR;
-      return true;
-    case cc::mojom::Material::STREAM_VIDEO_CONTENT:
-      *out = cc::DrawQuad::STREAM_VIDEO_CONTENT;
-      return true;
-    case cc::mojom::Material::SURFACE_CONTENT:
-      *out = cc::DrawQuad::SURFACE_CONTENT;
-      return true;
-    case cc::mojom::Material::TEXTURE_CONTENT:
-      *out = cc::DrawQuad::TEXTURE_CONTENT;
-      return true;
-    case cc::mojom::Material::TILED_CONTENT:
-      *out = cc::DrawQuad::TILED_CONTENT;
-      return true;
-    case cc::mojom::Material::YUV_VIDEO_CONTENT:
-      *out = cc::DrawQuad::YUV_VIDEO_CONTENT;
-      return true;
-  }
-  return false;
-}
-
-// static
-bool StructTraits<cc::mojom::DebugBorderQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::DebugBorderQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::DebugBorderQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::DebugBorderDrawQuad* quad = static_cast<cc::DebugBorderDrawQuad*>(out);
@@ -141,7 +60,7 @@ bool StructTraits<cc::mojom::DebugBorderQuadState, cc::DrawQuad>::Read(
 }
 
 // static
-bool StructTraits<cc::mojom::RenderPassQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::RenderPassQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::RenderPassQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::RenderPassDrawQuad* quad = static_cast<cc::RenderPassDrawQuad*>(out);
@@ -153,11 +72,12 @@ bool StructTraits<cc::mojom::RenderPassQuadState, cc::DrawQuad>::Read(
          data.ReadMaskTextureSize(&quad->mask_texture_size) &&
          data.ReadFilters(&quad->filters) &&
          data.ReadFiltersScale(&quad->filters_scale) &&
+         data.ReadFiltersOrigin(&quad->filters_origin) &&
          data.ReadBackgroundFilters(&quad->background_filters);
 }
 
 // static
-bool StructTraits<cc::mojom::SolidColorQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::SolidColorQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::SolidColorQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::SolidColorDrawQuad* quad = static_cast<cc::SolidColorDrawQuad*>(out);
@@ -167,7 +87,7 @@ bool StructTraits<cc::mojom::SolidColorQuadState, cc::DrawQuad>::Read(
 }
 
 // static
-bool StructTraits<cc::mojom::StreamVideoQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::StreamVideoQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::StreamVideoQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::StreamVideoDrawQuad* quad = static_cast<cc::StreamVideoDrawQuad*>(out);
@@ -181,7 +101,7 @@ bool StructTraits<cc::mojom::StreamVideoQuadState, cc::DrawQuad>::Read(
 }
 
 // static
-bool StructTraits<cc::mojom::SurfaceQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::SurfaceQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::SurfaceQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::SurfaceDrawQuad* quad = static_cast<cc::SurfaceDrawQuad*>(out);
@@ -189,7 +109,7 @@ bool StructTraits<cc::mojom::SurfaceQuadState, cc::DrawQuad>::Read(
 }
 
 // static
-bool StructTraits<cc::mojom::TextureQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::TextureQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::TextureQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::TextureDrawQuad* quad = static_cast<cc::TextureDrawQuad*>(out);
@@ -213,7 +133,7 @@ bool StructTraits<cc::mojom::TextureQuadState, cc::DrawQuad>::Read(
 }
 
 // static
-bool StructTraits<cc::mojom::TileQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::TileQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::TileQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::TileDrawQuad* quad = static_cast<cc::TileDrawQuad*>(out);
@@ -263,7 +183,7 @@ bool EnumTraits<cc::mojom::YUVColorSpace, cc::YUVVideoDrawQuad::ColorSpace>::
 }
 
 // static
-bool StructTraits<cc::mojom::YUVVideoQuadState, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::YUVVideoQuadStateDataView, cc::DrawQuad>::Read(
     cc::mojom::YUVVideoQuadStateDataView data,
     cc::DrawQuad* out) {
   cc::YUVVideoDrawQuad* quad = static_cast<cc::YUVVideoDrawQuad*>(out);
@@ -290,87 +210,24 @@ bool StructTraits<cc::mojom::YUVVideoQuadState, cc::DrawQuad>::Read(
     return false;
   quad->resource_offset = data.resource_offset();
   quad->resource_multiplier = data.resource_multiplier();
+  quad->bits_per_channel = data.bits_per_channel();
+  if (quad->bits_per_channel < cc::YUVVideoDrawQuad::kMinBitsPerChannel ||
+      quad->bits_per_channel > cc::YUVVideoDrawQuad::kMaxBitsPerChannel) {
+    return false;
+  }
   return true;
 }
 
 // static
-bool StructTraits<cc::mojom::DrawQuad, cc::DrawQuad>::Read(
+bool StructTraits<cc::mojom::DrawQuadDataView, cc::DrawQuad>::Read(
     cc::mojom::DrawQuadDataView data,
     cc::DrawQuad* out) {
-  if (!ReadDrawQuad(data, out))
+  if (!data.ReadRect(&out->rect) || !data.ReadOpaqueRect(&out->opaque_rect) ||
+      !data.ReadVisibleRect(&out->visible_rect)) {
     return false;
-  switch (data.material()) {
-    case cc::mojom::Material::INVALID:
-      break;
-    case cc::mojom::Material::DEBUG_BORDER:
-      return data.ReadDebugBorderQuadState(out);
-    case cc::mojom::Material::PICTURE_CONTENT:
-      // TODO(fsamuel): Implement PictureDrawQuad
-      // serialization/deserialization.
-      break;
-    case cc::mojom::Material::RENDER_PASS:
-      return data.ReadRenderPassQuadState(out);
-    case cc::mojom::Material::SOLID_COLOR:
-      return data.ReadSolidColorQuadState(out);
-    case cc::mojom::Material::STREAM_VIDEO_CONTENT:
-      return data.ReadStreamVideoQuadState(out);
-    case cc::mojom::Material::SURFACE_CONTENT:
-      return data.ReadSurfaceQuadState(out);
-    case cc::mojom::Material::TEXTURE_CONTENT:
-      return data.ReadTextureQuadState(out);
-    case cc::mojom::Material::TILED_CONTENT:
-      return data.ReadTileQuadState(out);
-    case cc::mojom::Material::YUV_VIDEO_CONTENT:
-      return data.ReadYuvVideoQuadState(out);
   }
-  NOTREACHED();
-  return false;
-}
-
-// static
-void* StructTraits<cc::mojom::QuadList, cc::QuadList>::SetUpContext(
-    const cc::QuadList& quad_list) {
-  mojo::Array<cc::DrawQuad::Material>* materials =
-      new mojo::Array<cc::DrawQuad::Material>(quad_list.size());
-  for (auto it = quad_list.begin(); it != quad_list.end(); ++it)
-    (*materials)[it.index()] = it->material;
-  return materials;
-}
-
-// static
-void StructTraits<cc::mojom::QuadList, cc::QuadList>::TearDownContext(
-    const cc::QuadList& quad_list,
-    void* context) {
-  // static_cast to ensure the destructor is called.
-  delete static_cast<mojo::Array<cc::DrawQuad::Material>*>(context);
-}
-
-// static
-const mojo::Array<cc::DrawQuad::Material>&
-StructTraits<cc::mojom::QuadList, cc::QuadList>::quad_types(
-    const cc::QuadList& quad_list,
-    void* context) {
-  return *static_cast<mojo::Array<cc::DrawQuad::Material>*>(context);
-}
-
-// static
-bool StructTraits<cc::mojom::QuadList, cc::QuadList>::Read(
-    cc::mojom::QuadListDataView data,
-    cc::QuadList* out) {
-  // TODO(fsamuel): Once we have ArrayTraits DataViews we can delete
-  // this field. This field exists so we can pre-allocate DrawQuads
-  // in the QuadList according to their material.
-  mojo::Array<cc::DrawQuad::Material> materials;
-  if (!data.ReadQuadTypes(&materials))
-    return false;
-  for (size_t i = 0; i < materials.size(); ++i) {
-    if (!AllocateAndConstruct(materials[i], out))
-      return false;
-  }
-  // The materials array and the quads array are expected to be the same size.
-  // If they are not, then deserialization will fail.
-  QuadListArray quad_list_array = {materials.size(), out};
-  return data.ReadQuads(&quad_list_array);
+  out->needs_blending = data.needs_blending();
+  return data.ReadDrawQuadState(out);
 }
 
 }  // namespace mojo

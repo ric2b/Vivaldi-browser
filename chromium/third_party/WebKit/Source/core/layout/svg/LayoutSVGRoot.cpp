@@ -157,6 +157,11 @@ void LayoutSVGRoot::layout()
     // (hence no one is interested in viewport size changes).
     m_isLayoutSizeChanged = svg->hasRelativeLengths() && (selfNeedsLayout() || oldSize != size());
 
+    // The scale of one or more of the SVG elements may have changed, so mark
+    // the entire subtree as needing paint invalidation checking.
+    if (m_isLayoutSizeChanged)
+        setMayNeedPaintInvalidationSubtree();
+
     SVGLayoutSupport::layoutChildren(firstChild(), false, m_didScreenScaleFactorChange, m_isLayoutSizeChanged);
 
     if (m_needsBoundariesOrTransformUpdate) {
@@ -174,7 +179,7 @@ void LayoutSVGRoot::layout()
     }
 
     updateLayerTransformAfterLayout();
-    m_hasBoxDecorationBackground = isDocumentElement() ? calculateHasBoxDecorations() : hasBoxDecorationBackground();
+    m_hasBoxDecorationBackground = isDocumentElement() ? styleRef().hasBoxDecorationBackground() : hasBoxDecorationBackground();
     invalidateBackgroundObscurationStatus();
 
     clearNeedsLayout();
@@ -216,7 +221,7 @@ void LayoutSVGRoot::styleDidChange(StyleDifference diff, const ComputedStyle* ol
         setNeedsBoundariesUpdate();
     if (diff.needsPaintInvalidation()) {
         // Box decorations may have appeared/disappeared - recompute status.
-        m_hasBoxDecorationBackground = calculateHasBoxDecorations();
+        m_hasBoxDecorationBackground = styleRef().hasBoxDecorationBackground();
     }
 
     LayoutReplaced::styleDidChange(diff, oldStyle);
@@ -341,7 +346,7 @@ LayoutRect LayoutSVGRoot::localOverflowRectForPaintInvalidation() const
     // (does not have background/border/etc., see LayoutSVGRootTest.OverflowRectMappingWithViewportClipWithoutBorder).
 
     // Return early for any cases where we don't actually paint.
-    if (style()->visibility() != VISIBLE && !enclosingLayer()->hasVisibleContent())
+    if (style()->visibility() != EVisibility::Visible && !enclosingLayer()->hasVisibleContent())
         return LayoutRect();
 
     // Compute the paint invalidation rect of the content of the SVG in the border-box coordinate space.

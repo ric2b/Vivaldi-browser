@@ -2722,7 +2722,6 @@ interface KeyboardEvent : UIEvent
     getter code
     getter ctrlKey
     getter keyCode
-    getter keyIdentifier
     getter location
     getter metaKey
     getter repeat
@@ -4378,13 +4377,6 @@ interface SVGViewSpec
     getter zoomAndPan
     method constructor
     setter zoomAndPan
-interface SVGZoomEvent : UIEvent
-    getter newScale
-    getter newTranslate
-    getter previousScale
-    getter previousTranslate
-    getter zoomRectScreen
-    method constructor
 interface Screen
     getter availHeight
     getter availLeft
@@ -4654,7 +4646,6 @@ interface TouchEvent : UIEvent
     getter targetTouches
     getter touches
     method constructor
-    method initTouchEvent
 interface TouchList
     getter length
     method constructor

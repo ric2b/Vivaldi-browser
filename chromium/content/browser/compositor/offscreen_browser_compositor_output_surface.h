@@ -49,7 +49,6 @@ class OffscreenBrowserCompositorOutputSurface
 
   // BrowserCompositorOutputSurface
   void OnReflectorChanged() override;
-  base::Closure CreateCompositionStartedCallback() override;
   void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,
@@ -58,8 +57,8 @@ class OffscreenBrowserCompositorOutputSurface
   void SetSurfaceSuspendedForRecycle(bool suspended) override {};
 #endif
 
-  uint32_t fbo_;
-  bool is_backbuffer_discarded_;
+  uint32_t fbo_ = 0;
+  bool reflector_changed_ = false;
   std::unique_ptr<ReflectorTexture> reflector_texture_;
 
   base::WeakPtrFactory<OffscreenBrowserCompositorOutputSurface>

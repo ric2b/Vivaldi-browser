@@ -5,6 +5,7 @@
 import logging
 
 from telemetry.testing import serially_executed_browser_test_case
+from telemetry.util import screenshot
 
 from gpu_tests import exception_formatter
 from gpu_tests import gpu_test_expectations
@@ -20,7 +21,7 @@ class _EmulatedPage(object):
 
 
 class GpuIntegrationTest(
-    serially_executed_browser_test_case.SeriallyBrowserTestCase):
+    serially_executed_browser_test_case.SeriallyExecutedBrowserTestCase):
 
   _cached_expectations = None
 
@@ -29,13 +30,35 @@ class GpuIntegrationTest(
     for test_name, url, args in cls.GenerateGpuTests(options):
       yield test_name, (url, test_name, args)
 
+  @classmethod
+  def StartBrowser(cls):
+    for x in range(0, 3):
+      try:
+        restart = 'Starting browser, attempt %d of 3' % (x + 1)
+        logging.warning(restart)
+        super(GpuIntegrationTest, cls).StartBrowser()
+        return
+      except Exception:
+        # If we are on the last try and there is an exception take a screenshot
+        # to try and capture more about the browser failure and raise
+        if x == 2:
+          url = screenshot.TryCaptureScreenShotAndUploadToCloudStorage(
+            cls.platform)
+          if url is not None:
+            logging.info("GpuIntegrationTest screenshot of browser failure " +
+              "located at " + url)
+          else:
+            logging.warning("GpuIntegrationTest unable to take screenshot")
+          raise
+
   def _RestartBrowser(self, reason):
-    logging.warning('Restarting browser due to ' + reason)
+    logging.warning('Restarting browser due to '+ reason)
     self.StopBrowser()
-    self.StartBrowser(self._finder_options)
+    self.SetBrowserOptions(self._finder_options)
+    self.StartBrowser()
     self.tab = self.browser.tabs[0]
 
-  def _RunGpuTest(self, url, test_name, args):
+  def _RunGpuTest(self, url, test_name, *args):
     temp_page = _EmulatedPage(url, test_name)
     expectations = self.__class__.GetExpectations()
     expectation = expectations.GetExpectationForPage(
@@ -59,6 +82,11 @@ class GpuIntegrationTest(
       elif expectation == 'fail':
         msg = 'Expected exception while running %s' % test_name
         exception_formatter.PrintFormattedException(msg=msg)
+        # Even though this is a known failure, the browser might still
+        # be in a bad state; for example, certain kinds of timeouts
+        # will affect the next test. Restart the browser to prevent
+        # these kinds of failures propagating to the next test.
+        self._RestartBrowser('expected test failure')
         return
       if expectation != 'flaky':
         logging.warning(
@@ -125,4 +153,11 @@ class GpuIntegrationTest(
     raise NotImplementedError
 
   def setUp(self):
-    self.tab = self.browser.tabs[0]
+    try:
+      self.tab = self.browser.tabs[0]
+    except Exception:
+      # restart the browser to make sure a failure in a test doesn't
+      # propagate to the next test iteration.
+      logging.exception("Failure during browser startup")
+      self._RestartBrowser('failure in setup')
+      raise

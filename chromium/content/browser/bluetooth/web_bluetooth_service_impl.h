@@ -31,7 +31,6 @@ class Origin;
 namespace content {
 
 class BluetoothDeviceChooserController;
-class BluetoothAdapterFactoryWrapper;
 class FrameConnectedBluetoothDevices;
 class RenderFrameHost;
 class RenderProcessHost;
@@ -46,9 +45,10 @@ class RenderProcessHost;
 // from the renderer when the first Web Bluetooth API request is handled.
 // RenderFrameHostImpl will create an instance of this class and keep
 // ownership of it.
-class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
-                                public WebContentsObserver,
-                                public device::BluetoothAdapter::Observer {
+class CONTENT_EXPORT WebBluetoothServiceImpl
+    : public NON_EXPORTED_BASE(blink::mojom::WebBluetoothService),
+      public WebContentsObserver,
+      public device::BluetoothAdapter::Observer {
  public:
   // |render_frame_host|: The RFH that owns this instance.
   // |request|: The instance will be bound to this request's pipe.
@@ -62,6 +62,7 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
   void SetClientConnectionErrorHandler(base::Closure closure);
 
  private:
+  friend class FrameConnectedBluetoothDevicesTest;
   typedef base::Callback<void(device::BluetoothDevice*)>
       PrimaryServicesRequestCallback;
 
@@ -97,13 +98,13 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
   void RequestDevice(blink::mojom::WebBluetoothRequestDeviceOptionsPtr options,
                      const RequestDeviceCallback& callback) override;
   void RemoteServerConnect(
-      const mojo::String& device_id,
+      const WebBluetoothDeviceId& device_id,
       const RemoteServerConnectCallback& callback) override;
-  void RemoteServerDisconnect(const mojo::String& device_id) override;
+  void RemoteServerDisconnect(const WebBluetoothDeviceId& device_id) override;
   void RemoteServerGetPrimaryServices(
-      const mojo::String& device_id,
+      const WebBluetoothDeviceId& device_id,
       blink::mojom::WebBluetoothGATTQueryQuantity quantity,
-      const base::Optional<device::BluetoothUUID>& services_uuid,
+      const base::Optional<device::BluetoothUUID>& service_uuid,
       const RemoteServerGetPrimaryServicesCallback& callback) override;
   void RemoteServiceGetCharacteristics(
       const mojo::String& service_instance_id,
@@ -132,7 +133,7 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
   // Should only be run after the services have been discovered for
   // |device_address|.
   void RemoteServerGetPrimaryServicesImpl(
-      const mojo::String& device_id,
+      const WebBluetoothDeviceId& device_id,
       blink::mojom::WebBluetoothGATTQueryQuantity quantity,
       const base::Optional<device::BluetoothUUID>& services_uuid,
       const RemoteServerGetPrimaryServicesCallback& callback,
@@ -148,12 +149,11 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
 
   // Callbacks for BluetoothDevice::CreateGattConnection.
   void OnCreateGATTConnectionSuccess(
-      const std::string& device_id,
+      const WebBluetoothDeviceId& device_id,
       base::TimeTicks start_time,
       const RemoteServerConnectCallback& callback,
       std::unique_ptr<device::BluetoothGattConnection> connection);
   void OnCreateGATTConnectionFailed(
-      const std::string& device_id,
       base::TimeTicks start_time,
       const RemoteServerConnectCallback& callback,
       device::BluetoothDevice::ConnectErrorCode error_code);
@@ -195,7 +195,7 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
 
   // Queries the platform cache for a Device with |device_id| for |origin|.
   // Fills in the |outcome| field and the |device| field if successful.
-  CacheQueryResult QueryCacheForDevice(const std::string& device_id);
+  CacheQueryResult QueryCacheForDevice(const WebBluetoothDeviceId& device_id);
 
   // Queries the platform cache for a Service with |service_instance_id|. Fills
   // in the |outcome| field, and |device| and |service| fields if successful.
@@ -208,7 +208,6 @@ class WebBluetoothServiceImpl : public blink::mojom::WebBluetoothService,
       const std::string& characteristic_instance_id);
 
   RenderProcessHost* GetRenderProcessHost();
-  BluetoothAdapterFactoryWrapper* GetBluetoothAdapterFactoryWrapper();
   device::BluetoothAdapter* GetAdapter();
   url::Origin GetOrigin();
 

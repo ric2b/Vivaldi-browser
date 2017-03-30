@@ -33,6 +33,7 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLDListElement.h"
@@ -493,12 +494,22 @@ AccessibilityRole AXNodeObject::nativeAccessibilityRoleIgnoringAria() const
     }
 
     // There should only be one banner/contentInfo per page. If header/footer are being used within an article or section
-    // then it should not be exposed as whole page's banner/contentInfo
-    if (getNode()->hasTagName(headerTag) && !isDescendantOfElementType(articleTag) && !isDescendantOfElementType(sectionTag))
+    // then it should not be exposed as whole page's banner/contentInfo but as a group role.
+    if (getNode()->hasTagName(headerTag)) {
+        if (isDescendantOfElementType(articleTag) || isDescendantOfElementType(sectionTag)
+            || (getNode()->parentElement() && getNode()->parentElement()->hasTagName(mainTag))) {
+            return GroupRole;
+        }
         return BannerRole;
+    }
 
-    if (getNode()->hasTagName(footerTag) && !isDescendantOfElementType(articleTag) && !isDescendantOfElementType(sectionTag))
+    if (getNode()->hasTagName(footerTag)) {
+        if (isDescendantOfElementType(articleTag) || isDescendantOfElementType(sectionTag)
+            || (getNode()->parentElement() && getNode()->parentElement()->hasTagName(mainTag))) {
+            return GroupRole;
+        }
         return FooterRole;
+    }
 
     if (getNode()->hasTagName(blockquoteTag))
         return BlockquoteRole;
@@ -578,8 +589,15 @@ void AXNodeObject::accessibilityChildrenFromAttribute(QualifiedName attr, AXObje
 
     AXObjectCacheImpl& cache = axObjectCache();
     for (const auto& element : elements) {
-        if (AXObject* child = cache.getOrCreate(element))
+        if (AXObject* child = cache.getOrCreate(element)) {
+            // Only aria-labelledby and aria-describedby can target hidden elements.
+            if (child->accessibilityIsIgnored()
+                && attr != aria_labelledbyAttr && attr != aria_labeledbyAttr
+                && attr != aria_describedbyAttr) {
+                continue;
+            }
             children.append(child);
+        }
     }
 }
 
@@ -1051,7 +1069,7 @@ bool AXNodeObject::isReadOnly() const
             return input.isReadOnly();
     }
 
-    return !node->hasEditableStyle();
+    return !hasEditableStyle(*node);
 }
 
 bool AXNodeObject::isRequired() const
@@ -1133,10 +1151,14 @@ int AXNodeObject::headingLevel() const
     if (!node)
         return 0;
 
-    if (roleValue() == HeadingRole && hasAttribute(aria_levelAttr)) {
-        int level = getAttribute(aria_levelAttr).toInt();
-        if (level >= 1 && level <= 9)
-            return level;
+    if (roleValue() == HeadingRole) {
+        String levelStr = getAttribute(aria_levelAttr);
+        if (!levelStr.isEmpty()) {
+            int level = levelStr.toInt();
+            if (level >= 1 && level <= 9)
+                return level;
+            return 1;
+        }
     }
 
     if (!node->isHTMLElement())
@@ -1169,10 +1191,15 @@ unsigned AXNodeObject::hierarchicalLevel() const
     Node* node = this->getNode();
     if (!node || !node->isElementNode())
         return 0;
+
     Element* element = toElement(node);
-    String ariaLevel = element->getAttribute(aria_levelAttr);
-    if (!ariaLevel.isEmpty())
-        return ariaLevel.toInt();
+    String levelStr = element->getAttribute(aria_levelAttr);
+    if (!levelStr.isEmpty()) {
+        int level = levelStr.toInt();
+        if (level > 0)
+            return level;
+        return 1;
+    }
 
     // Only tree item will calculate its level through the DOM currently.
     if (roleValue() != TreeItemRole)
@@ -1380,8 +1407,14 @@ InvalidState AXNodeObject::getInvalidState() const
 int AXNodeObject::posInSet() const
 {
     if (supportsSetSizeAndPosInSet()) {
-        if (hasAttribute(aria_posinsetAttr))
-            return getAttribute(aria_posinsetAttr).toInt();
+        String posInSetStr = getAttribute(aria_posinsetAttr);
+        if (!posInSetStr.isEmpty()) {
+            int posInSet = posInSetStr.toInt();
+            if (posInSet > 0)
+                return posInSet;
+            return 1;
+        }
+
         return AXObject::indexInParent() + 1;
     }
 
@@ -1391,8 +1424,13 @@ int AXNodeObject::posInSet() const
 int AXNodeObject::setSize() const
 {
     if (supportsSetSizeAndPosInSet()) {
-        if (hasAttribute(aria_setsizeAttr))
-            return getAttribute(aria_setsizeAttr).toInt();
+        String setSizeStr = getAttribute(aria_setsizeAttr);
+        if (!setSizeStr.isEmpty()) {
+            int setSize = setSizeStr.toInt();
+            if (setSize > 0)
+                return setSize;
+            return 1;
+        }
 
         if (parentObject()) {
             const auto& siblings = parentObject()->children();
@@ -1757,8 +1795,13 @@ bool AXNodeObject::nameFromLabelElement() const
 LayoutRect AXNodeObject::elementRect() const
 {
     // First check if it has a custom rect, for example if this element is tied to a canvas path.
-    if (!m_explicitElementRect.isEmpty())
-        return m_explicitElementRect;
+    if (!m_explicitElementRect.isEmpty()) {
+        LayoutRect bounds = m_explicitElementRect;
+        AXObject* canvas = axObjectCache().objectFromAXID(m_explicitContainerID);
+        if (canvas)
+            bounds.moveBy(canvas->elementRect().location());
+        return bounds;
+    }
 
     // FIXME: If there are a lot of elements in the canvas, it will be inefficient.
     // We can avoid the inefficient calculations by using AXComputedObjectAttributeCache.
@@ -1796,6 +1839,60 @@ LayoutRect AXNodeObject::elementRect() const
     }
 
     return boundingBox;
+}
+
+void AXNodeObject::getRelativeBounds(AXObject** outContainer, FloatRect& outBoundsInContainer, SkMatrix44& outContainerTransform) const
+{
+    *outContainer = nullptr;
+    outBoundsInContainer = FloatRect();
+    outContainerTransform.setIdentity();
+
+    // First check if it has explicit bounds, for example if this element is tied to a
+    // canvas path. When explicit coordinates are provided, the ID of the explicit container
+    // element that the coordinates are relative to must be provided too.
+    if (!m_explicitElementRect.isEmpty()) {
+        *outContainer = axObjectCache().objectFromAXID(m_explicitContainerID);
+        if (*outContainer) {
+            outBoundsInContainer = FloatRect(m_explicitElementRect);
+            return;
+        }
+    }
+
+    // If it's in a canvas but doesn't have an explicit rect, get the bounding rect of its children.
+    if (getNode()->parentElement()->isInCanvasSubtree()) {
+        Vector<FloatRect> rects;
+        for (Node& child : NodeTraversal::childrenOf(*getNode())) {
+            if (child.isHTMLElement()) {
+                if (AXObject* obj = axObjectCache().get(&child)) {
+                    AXObject* container;
+                    FloatRect bounds;
+                    obj->getRelativeBounds(&container, bounds, outContainerTransform);
+                    if (container) {
+                        *outContainer = container;
+                        rects.append(bounds);
+                    }
+                }
+            }
+        }
+
+        if (*outContainer) {
+            outBoundsInContainer = unionRect(rects);
+            return;
+        }
+    }
+
+    // If this object doesn't have an explicit element rect or computable from its children,
+    // for now, let's return the position of the ancestor that does have a position,
+    // and make it the width of that parent, and about the height of a line of text, so that
+    // it's clear the object is a child of the parent.
+    for (AXObject* positionProvider = parentObject(); positionProvider; positionProvider = positionProvider->parentObject()) {
+        if (positionProvider->isAXLayoutObject()) {
+            positionProvider->getRelativeBounds(outContainer, outBoundsInContainer, outContainerTransform);
+            if (*outContainer)
+                outBoundsInContainer.setSize(FloatSize(outBoundsInContainer.width(), std::min(10.0f, outBoundsInContainer.height())));
+            break;
+        }
+    }
 }
 
 static Node* getParentNodeForComputeParent(Node* node)
@@ -1985,7 +2082,6 @@ Element* AXNodeObject::actionElement() const
     case MenuItemRole:
     case MenuItemCheckBoxRole:
     case MenuItemRadioRole:
-    case ListItemRole:
         return toElement(node);
     default:
         break;
@@ -2188,7 +2284,7 @@ void AXNodeObject::computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedCh
         return;
 
     Vector<String> idVector;
-    if (canHaveChildren())
+    if (canHaveChildren() && !isNativeTextControl() && !hasContentEditableAttributeSet())
         tokenVectorFromAttribute(idVector, aria_ownsAttr);
 
     axObjectCache().updateAriaOwns(this, idVector, ownedChildren);

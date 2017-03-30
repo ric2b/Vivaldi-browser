@@ -51,6 +51,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   scoped_refptr<Dispatcher> GetDispatcher(MojoHandle handle);
 
+  void SetDefaultProcessErrorCallback(const ProcessErrorCallback& callback);
+
   // Called in the parent process any time a new child is launched.
   void AddChild(base::ProcessHandle process_handle,
                 ScopedPlatformHandle platform_handle,
@@ -59,6 +61,13 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Called in the parent process when a child process fails to launch.
   void ChildLaunchFailed(const std::string& child_token);
+
+  // Called to connect to a peer process. This should be called only if there
+  // is no common ancestor for the processes involved within this mojo system.
+  // Both processes must call this function, each passing one end of a platform
+  // channel. This returns one end of a message pipe to each process.
+  ScopedMessagePipeHandle ConnectToPeerProcess(
+      ScopedPlatformHandle pipe_handle);
 
   // Called in a child process exactly once during early initialization.
   void InitChild(ScopedPlatformHandle platform_handle);
@@ -115,14 +124,6 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // until the callback is called. If there is no running loop, the |callback|
   // may be called from any thread. Beware!
   void RequestShutdown(const base::Closure& callback);
-
-  // Watches on the given handle for the given signals, calling |callback| when
-  // a signal is satisfied or when all signals become unsatisfiable. |callback|
-  // must satisfy stringent requirements -- see |Awakable::Awake()| in
-  // awakable.h. In particular, it must not call any Mojo system functions.
-  MojoResult AsyncWait(MojoHandle handle,
-                       MojoHandleSignals signals,
-                       const base::Callback<void(MojoResult)>& callback);
 
   MojoResult SetProperty(MojoPropertyType type, const void* value);
 
@@ -297,6 +298,10 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // This is lazily initialized on first access. Always use GetNodeController()
   // to access it.
   std::unique_ptr<NodeController> node_controller_;
+
+  // The default callback to invoke, if any, when a process error is reported
+  // but cannot be associated with a specific process.
+  ProcessErrorCallback default_process_error_callback_;
 
   base::Lock handles_lock_;
   HandleTable handles_;

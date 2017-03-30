@@ -9,19 +9,19 @@
 #include "ash/app_list/app_list_presenter_delegate.h"
 #include "ash/app_list/app_list_presenter_delegate_factory.h"
 #include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
+#include "ash/common/new_window_delegate.h"
+#include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_shell.h"
-#include "ash/gpu_support_stub.h"
-#include "ash/new_window_delegate.h"
-#include "ash/pointer_watcher_delegate_aura.h"
 #include "ash/test/test_keyboard_ui.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_system_tray_delegate.h"
-#include "ash/test/test_user_wallpaper_delegate.h"
+#include "ash/test/test_wallpaper_delegate.h"
 #include "ash/wm/window_util.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -148,22 +148,6 @@ keyboard::KeyboardUI* TestShellDelegate::CreateKeyboardUI() {
   return new TestKeyboardUI;
 }
 
-void TestShellDelegate::VirtualKeyboardActivated(bool activated) {
-  FOR_EACH_OBSERVER(ash::VirtualKeyboardStateObserver,
-                    keyboard_state_observer_list_,
-                    OnVirtualKeyboardStateChanged(activated));
-}
-
-void TestShellDelegate::AddVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-  keyboard_state_observer_list_.AddObserver(observer);
-}
-
-void TestShellDelegate::RemoveVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-  keyboard_state_observer_list_.RemoveObserver(observer);
-}
-
 void TestShellDelegate::OpenUrlFromArc(const GURL& url) {}
 
 app_list::AppListPresenter* TestShellDelegate::GetAppListPresenter() {
@@ -182,8 +166,9 @@ SystemTrayDelegate* TestShellDelegate::CreateSystemTrayDelegate() {
   return new TestSystemTrayDelegate;
 }
 
-UserWallpaperDelegate* TestShellDelegate::CreateUserWallpaperDelegate() {
-  return new TestUserWallpaperDelegate();
+std::unique_ptr<WallpaperDelegate>
+TestShellDelegate::CreateWallpaperDelegate() {
+  return base::MakeUnique<TestWallpaperDelegate>();
 }
 
 TestSessionStateDelegate* TestShellDelegate::CreateSessionStateDelegate() {
@@ -202,9 +187,8 @@ MediaDelegate* TestShellDelegate::CreateMediaDelegate() {
   return new MediaDelegateImpl;
 }
 
-std::unique_ptr<PointerWatcherDelegate>
-TestShellDelegate::CreatePointerWatcherDelegate() {
-  return base::WrapUnique(new PointerWatcherDelegateAura);
+std::unique_ptr<PaletteDelegate> TestShellDelegate::CreatePaletteDelegate() {
+  return nullptr;
 }
 
 ui::MenuModel* TestShellDelegate::CreateContextMenu(WmShelf* wm_shelf,

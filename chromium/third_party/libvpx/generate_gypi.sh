@@ -382,6 +382,7 @@ function print_config_basic {
 # Generate *_rtcd.h files.
 # $1 - Header file directory.
 # $2 - Architecture.
+# $3 - Optional - any additional arguments to pass through.
 function gen_rtcd_header {
   echo "Generate $LIBVPX_CONFIG_DIR/$1/*_rtcd.h files."
 
@@ -397,28 +398,28 @@ function gen_rtcd_header {
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
-    --sym=vp8_rtcd $DISABLE_AVX \
+    --sym=vp8_rtcd $DISABLE_AVX $3 \
     --config=$BASE_DIR/$TEMP_DIR/libvpx.config \
     $BASE_DIR/$LIBVPX_SRC_DIR/vp8/common/rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp8_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
-    --sym=vp9_rtcd $DISABLE_AVX \
+    --sym=vp9_rtcd $DISABLE_AVX $3 \
     --config=$BASE_DIR/$TEMP_DIR/libvpx.config \
     $BASE_DIR/$LIBVPX_SRC_DIR/vp9/common/vp9_rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vp9_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
-    --sym=vpx_scale_rtcd $DISABLE_AVX \
+    --sym=vpx_scale_rtcd $DISABLE_AVX $3 \
     --config=$BASE_DIR/$TEMP_DIR/libvpx.config \
     $BASE_DIR/$LIBVPX_SRC_DIR/vpx_scale/vpx_scale_rtcd.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_scale_rtcd.h
 
   $BASE_DIR/$LIBVPX_SRC_DIR/build/make/rtcd.pl \
     --arch=$2 \
-    --sym=vpx_dsp_rtcd $DISABLE_AVX \
+    --sym=vpx_dsp_rtcd $DISABLE_AVX $3 \
     --config=$BASE_DIR/$TEMP_DIR/libvpx.config \
     $BASE_DIR/$LIBVPX_SRC_DIR/vpx_dsp/vpx_dsp_rtcd_defs.pl \
     > $BASE_DIR/$LIBVPX_CONFIG_DIR/$1/vpx_dsp_rtcd.h
@@ -451,6 +452,24 @@ function gen_config_files {
   rm -rf vpx_config.*
 }
 
+function update_readme {
+  local IFS=$'\n'
+  # Split git log output '<date>\n<commit hash>' on the newline to produce 2
+  # array entries.
+  local vals=($(git --no-pager log -1 --format="%cd%n%H" \
+    --date=format:"%A %B %d %Y"))
+  sed -E -i '' \
+    -e "s/^(Date:)[[:space:]]+.*$/\1 ${vals[0]}/" \
+    -e "s/^(Commit:)[[:space:]]+[a-f0-9]{40}/\1 ${vals[1]}/" \
+    ${BASE_DIR}/README.chromium
+  cat <<EOF
+
+README.chromium updated with:
+Date: ${vals[0]}
+Commit: ${vals[1]}
+EOF
+}
+
 find_duplicates
 
 echo "Create temporary directory."
@@ -463,10 +482,10 @@ echo "Generate config files."
 all_platforms="--enable-external-build --enable-postproc --disable-install-srcs --enable-multi-res-encoding --enable-temporal-denoising --disable-unit-tests --disable-install-docs --disable-examples --enable-vp9-temporal-denoising --enable-vp9-postproc --size-limit=16384x16384 $DISABLE_AVX --as=yasm"
 gen_config_files linux/ia32 "--target=x86-linux-gcc --disable-ccache --enable-pic --enable-realtime-only ${all_platforms}"
 gen_config_files linux/x64 "--target=x86_64-linux-gcc --disable-ccache --enable-pic --enable-realtime-only ${all_platforms}"
-gen_config_files linux/arm "--target=armv6-linux-gcc --enable-pic --enable-realtime-only --disable-install-bins --disable-install-libs --disable-edsp ${all_platforms}"
-gen_config_files linux/arm-neon "--target=armv7-linux-gcc --enable-pic --enable-realtime-only --disable-edsp ${all_platforms}"
-gen_config_files linux/arm-neon-cpu-detect "--target=armv7-linux-gcc --enable-pic --enable-realtime-only --enable-runtime-cpu-detect --disable-edsp ${all_platforms}"
-gen_config_files linux/arm64 "--force-target=armv8-linux-gcc --enable-pic --enable-realtime-only --disable-edsp ${all_platforms}"
+gen_config_files linux/arm "--target=armv7-linux-gcc --enable-pic --enable-realtime-only --disable-install-bins --disable-install-libs --disable-neon ${all_platforms}"
+gen_config_files linux/arm-neon "--target=armv7-linux-gcc --enable-pic --enable-realtime-only ${all_platforms}"
+gen_config_files linux/arm-neon-cpu-detect "--target=armv7-linux-gcc --enable-pic --enable-realtime-only --enable-runtime-cpu-detect ${all_platforms}"
+gen_config_files linux/arm64 "--force-target=armv8-linux-gcc --enable-pic --enable-realtime-only ${all_platforms}"
 gen_config_files linux/mipsel "--target=mips32-linux-gcc ${all_platforms}"
 gen_config_files linux/mips64el "--target=mips64-linux-gcc ${all_platforms}"
 gen_config_files linux/generic "--target=generic-gnu --enable-pic --enable-realtime-only ${all_platforms}"
@@ -504,7 +523,7 @@ cd $TEMP_DIR
 
 gen_rtcd_header linux/ia32 x86
 gen_rtcd_header linux/x64 x86_64
-gen_rtcd_header linux/arm armv6
+gen_rtcd_header linux/arm armv7 "--disable-neon --disable-neon_asm"
 gen_rtcd_header linux/arm-neon armv7
 gen_rtcd_header linux/arm-neon-cpu-detect armv7
 gen_rtcd_header linux/arm64 armv8
@@ -594,9 +613,7 @@ gn format --in-place $BASE_DIR/BUILD.gn
 gn format --in-place $BASE_DIR/libvpx_srcs.gni
 
 cd $BASE_DIR/$LIBVPX_SRC_DIR
-echo
-echo "Update README.chromium:"
-git log -1 --format="%cd%nCommit: %H" --date=format:"Date: %A %B %d %Y"
+update_readme
 
 cd $BASE_DIR
 

@@ -2604,6 +2604,19 @@ void ConsumeTextureCHROMIUMImmediate(GLenum target, const GLbyte* mailbox) {
   }
 }
 
+void CreateAndConsumeTextureINTERNALImmediate(GLenum target,
+                                              GLuint texture,
+                                              const GLbyte* mailbox) {
+  const uint32_t size =
+      gles2::cmds::CreateAndConsumeTextureINTERNALImmediate::ComputeSize();
+  gles2::cmds::CreateAndConsumeTextureINTERNALImmediate* c =
+      GetImmediateCmdSpaceTotalSize<
+          gles2::cmds::CreateAndConsumeTextureINTERNALImmediate>(size);
+  if (c) {
+    c->Init(target, texture, mailbox);
+  }
+}
+
 void BindUniformLocationCHROMIUMBucket(GLuint program,
                                        GLint location,
                                        uint32_t name_bucket_id) {
@@ -2675,36 +2688,6 @@ void InsertFenceSyncCHROMIUM(GLuint64 release_count) {
   }
 }
 
-void GenSyncTokenCHROMIUMImmediate(GLuint64 fence_sync) {
-  const uint32_t s = 0;
-  gles2::cmds::GenSyncTokenCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<gles2::cmds::GenSyncTokenCHROMIUMImmediate>(
-          s);
-  if (c) {
-    c->Init(fence_sync);
-  }
-}
-
-void GenUnverifiedSyncTokenCHROMIUMImmediate(GLuint64 fence_sync) {
-  const uint32_t s = 0;
-  gles2::cmds::GenUnverifiedSyncTokenCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::GenUnverifiedSyncTokenCHROMIUMImmediate>(s);
-  if (c) {
-    c->Init(fence_sync);
-  }
-}
-
-void VerifySyncTokensCHROMIUMImmediate(GLsizei count) {
-  const uint32_t s = 0;
-  gles2::cmds::VerifySyncTokensCHROMIUMImmediate* c =
-      GetImmediateCmdSpaceTotalSize<
-          gles2::cmds::VerifySyncTokensCHROMIUMImmediate>(s);
-  if (c) {
-    c->Init(count);
-  }
-}
-
 void WaitSyncTokenCHROMIUM(GLint namespace_id,
                            GLuint64 command_buffer_id,
                            GLuint64 release_count) {
@@ -2753,20 +2736,29 @@ void ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
   }
 }
 
+void ScheduleCALayerSharedStateCHROMIUM(GLfloat opacity,
+                                        GLboolean is_clipped,
+                                        GLint sorting_context_id,
+                                        GLuint shm_id,
+                                        GLuint shm_offset) {
+  gles2::cmds::ScheduleCALayerSharedStateCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::ScheduleCALayerSharedStateCHROMIUM>();
+  if (c) {
+    c->Init(opacity, is_clipped, sorting_context_id, shm_id, shm_offset);
+  }
+}
+
 void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
-                             GLfloat opacity,
                              GLuint background_color,
                              GLuint edge_aa_mask,
-                             GLboolean is_clipped,
-                             GLint sorting_context_id,
                              GLuint filter,
                              GLuint shm_id,
                              GLuint shm_offset) {
   gles2::cmds::ScheduleCALayerCHROMIUM* c =
       GetCmdSpace<gles2::cmds::ScheduleCALayerCHROMIUM>();
   if (c) {
-    c->Init(contents_texture_id, opacity, background_color, edge_aa_mask,
-            is_clipped, sorting_context_id, filter, shm_id, shm_offset);
+    c->Init(contents_texture_id, background_color, edge_aa_mask, filter, shm_id,
+            shm_offset);
   }
 }
 
@@ -3142,7 +3134,7 @@ void GetFragDataIndexEXT(GLuint program,
 void UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate(
     GLint location,
     GLboolean transpose,
-    const GLfloat* default_value) {
+    const GLfloat* transform) {
   const uint32_t size = gles2::cmds::
       UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate::ComputeSize();
   gles2::cmds::UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate* c =
@@ -3150,7 +3142,7 @@ void UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate(
           gles2::cmds::UniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate>(
           size);
   if (c) {
-    c->Init(location, transpose, default_value);
+    c->Init(location, transpose, transform);
   }
 }
 

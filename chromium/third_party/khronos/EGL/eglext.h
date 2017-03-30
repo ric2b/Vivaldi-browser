@@ -561,12 +561,33 @@ typedef EGLint (EGLAPIENTRYP PFNEGLDUPNATIVEFENCEFDANDROIDPROC)(EGLDisplay dpy, 
 #define EGL_YUV_NARROW_RANGE_EXT		0x3283
 #define EGL_YUV_CHROMA_SITING_0_EXT		0x3284
 #define EGL_YUV_CHROMA_SITING_0_5_EXT		0x3285
+#define EGL_LINUX_DRM_PLANE0_MODIFIER0_EXT	0x3286
+#define EGL_LINUX_DRM_PLANE0_MODIFIER1_EXT	0x3287
+#define EGL_LINUX_DRM_PLANE1_MODIFIER0_EXT	0x3288
+#define EGL_LINUX_DRM_PLANE1_MODIFIER1_EXT	0x3289
+#define EGL_LINUX_DRM_PLANE2_MODIFIER0_EXT	0x328a
+#define EGL_LINUX_DRM_PLANE2_MODIFIER1_EXT	0x328b
 #endif
 
 #ifndef EGL_ARM_implicit_external_sync
 #define EGL_ARM_implicit_external_sync 1
 #define EGL_SYNC_PRIOR_COMMANDS_IMPLICIT_EXTERNAL_ARM 0x328A
 #endif /* EGL_ARM_implicit_external_sync */
+
+#ifndef EGL_EXT_image_flush_external
+#define EGL_EXT_image_flush_external 1
+#ifdef EGL_EGLEXT_PROTOTYPES
+EGLAPI EGLBoolean EGLAPIENTRY
+eglImageFlushExternalEXT(EGLDisplay dpy,
+                         EGLImageKHR image,
+                         const EGLint* attrib_list);
+#else
+typedef EGLBoolean(EGLAPIENTRYP PFNGLEGLIMAGEFLUSHEXTERNALEXT)(
+    EGLDisplay dpy,
+    EGLImageKHR image,
+    const EGLint* attrib_list);
+#endif
+#endif
 
 #ifdef __cplusplus
 }

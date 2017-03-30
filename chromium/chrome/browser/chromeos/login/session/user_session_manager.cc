@@ -1655,6 +1655,7 @@ void UserSessionManager::ActiveUserChanged(
       input_method::InputMethodManager::Get();
   manager->SetState(
       GetDefaultIMEState(ProfileHelper::Get()->GetProfileByUser(active_user)));
+  manager->MaybeNotifyImeMenuActivationChanged();
 }
 
 scoped_refptr<input_method::InputMethodManager::State>
@@ -1673,7 +1674,7 @@ void UserSessionManager::CheckEolStatus(Profile* profile) {
   std::map<Profile*, std::unique_ptr<EolNotification>, ProfileCompare>::iterator
       iter = eol_notification_handler_.find(profile);
   if (iter == eol_notification_handler_.end()) {
-    auto eol_notification = base::WrapUnique(new EolNotification(profile));
+    auto eol_notification = base::MakeUnique<EolNotification>(profile);
     iter = eol_notification_handler_
                .insert(std::make_pair(profile, std::move(eol_notification)))
                .first;
@@ -1739,6 +1740,15 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
 
   if (HatsNotificationController::ShouldShowSurveyToProfile(profile))
     hats_notification_controller_ = new HatsNotificationController(profile);
+
+  if (QuickUnlockNotificationController::ShouldShow(profile) &&
+      quick_unlock_notification_handler_.find(profile) ==
+          quick_unlock_notification_handler_.end()) {
+    auto* qu_feature_notification_controller =
+        new QuickUnlockNotificationController(profile);
+    quick_unlock_notification_handler_.insert(
+        std::make_pair(profile, qu_feature_notification_controller));
+  }
 
   // Mark login host for deletion after browser starts.  This
   // guarantees that the message loop will be referenced by the
@@ -1846,7 +1856,7 @@ bool UserSessionManager::TokenHandlesEnabled() {
     return false;
   bool ephemeral_users_enabled = false;
   bool show_names_on_signin = true;
-  auto cros_settings = CrosSettings::Get();
+  auto* cros_settings = CrosSettings::Get();
   cros_settings->GetBoolean(kAccountsPrefEphemeralUsersEnabled,
                             &ephemeral_users_enabled);
   cros_settings->GetBoolean(kAccountsPrefShowUserNamesOnSignIn,

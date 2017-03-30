@@ -12,12 +12,13 @@
  * @param {!QuickViewModel} quickViewModel
  * @param {!TaskController} taskController
  * @param {!cr.ui.ListSelectionModel} fileListSelectionModel
+ * @param {!QuickViewUma} quickViewUma
  *
  * @constructor
  */
 function QuickViewController(
     quickView, metadataModel, selectionHandler, listContainer, quickViewModel,
-    taskController, fileListSelectionModel) {
+    taskController, fileListSelectionModel, quickViewUma) {
   /**
    * @type {!FilesQuickView}
    * @private
@@ -29,6 +30,12 @@ function QuickViewController(
    * @private
    */
   this.quickViewModel_ = quickViewModel;
+
+  /**
+   * @type {!QuickViewUma}
+   * @private
+   */
+  this.quickViewUma_ = quickViewUma;
 
   /**
    * @type {!MetadataModel}
@@ -84,7 +91,7 @@ function QuickViewController(
 QuickViewController.prototype.onOpenInNewButtonTap_ = function(event) {
   this.taskController_.executeDefaultTask();
   this.quickView_.close();
-}
+};
 
 /**
  * Handles key event on listContainer if it's relevent to quick view.
@@ -110,6 +117,7 @@ QuickViewController.prototype.onKeyDownToOpen_ = function(event) {
 QuickViewController.prototype.onQuickViewKeyDown_ = function(event) {
   switch (event.key) {
     case ' ':
+    case 'Escape':
       event.preventDefault();
       this.quickView_.close();
       this.listContainer_.focus();
@@ -138,6 +146,7 @@ QuickViewController.prototype.display_ = function() {
   this.updateQuickView_().then(function() {
     if (!this.quickView_.isOpened()) {
       this.quickView_.open();
+      this.quickViewUma_.onOpened(this.entries_[0]);
     }
   }.bind(this));
 };
@@ -172,6 +181,7 @@ QuickViewController.prototype.updateQuickView_ = function() {
   var entry =
       (/** @type {!FileEntry} */ (this.quickViewModel_.getSelectedEntry()));
   assert(entry);
+  this.quickViewUma_.onEntryChanged(entry);
   return this.metadataModel_.get([entry], ['thumbnailUrl', 'externalFileUrl'])
       .then(this.onMetadataLoaded_.bind(this, entry));
 };
@@ -184,66 +194,127 @@ QuickViewController.prototype.updateQuickView_ = function() {
  * @private
  */
 QuickViewController.prototype.onMetadataLoaded_ = function(entry, items) {
+  return this.getQuickViewParameters_(entry, items).then(function(params) {
+    this.quickView_.contentUrl = params.contentUrl || '';
+    this.quickView_.type = params.type || '';
+    this.quickView_.filePath = params.filePath || '';
+    this.quickView_.videoPoster = params.videoPoster || '';
+    this.quickView_.audioArtwork = params.audioArtwork || '';
+    this.quickView_.autoplay = params.autoplay || false;
+  }.bind(this));
+};
+
+/**
+ * @typedef {{
+ *   type: string,
+ *   filePath: string,
+ *   contentUrl: (string|undefined),
+ *   videoPoster: (string|undefined),
+ *   audioArtwork: (string|undefined),
+ *   autoplay: (boolean|undefined)
+ * }}
+ */
+var QuickViewParams;
+
+/**
+ * @param {!FileEntry} entry
+ * @param {Array<MetadataItem>} items
+ * @return !Promise<!QuickViewParams>
+ *
+ * @private
+ */
+QuickViewController.prototype.getQuickViewParameters_ = function(entry, items) {
   var item = items[0];
   var type = FileType.getType(entry).type;
 
-  this.quickView_.clear();
-  this.quickView_.filePath = entry.name;
-  this.quickView_.type = type;
+  /** @type {!QuickViewParams} */
+  var params = {
+    type: type,
+    filePath: entry.name,
+  };
+
+  /**
+   * @type function(!FileEntry): !Promise<!File>
+   */
+  var getFile = function(entry) {
+    return new Promise(function(resolve, reject) {
+      entry.file(resolve, reject);
+    });
+  };
+
   if (type === 'image') {
     if (item.externalFileUrl) {
       if (item.thumbnailUrl) {
-        this.loadThumbnailFromDrive_(item.thumbnailUrl, function(result) {
-          if (result.status !== 'success') {
-            return;
-          }
-          this.quickView_.contentUrl = result.data;
-        }.bind(this));
+        return this.loadThumbnailFromDrive_(item.thumbnailUrl)
+            .then(function(result) {
+              if (result.status === 'success')
+                params.contentUrl = result.data;
+              return params;
+            }.bind(this));
       }
     } else {
-      this.quickView_.contentUrl = item.thumbnailUrl || entry.toURL();
+      return getFile(entry).then(function(file) {
+        params.contentUrl = URL.createObjectURL(file);
+        return params;
+      });
     }
   } else if (type === 'video') {
     if (item.externalFileUrl) {
       if (item.thumbnailUrl) {
-        this.loadThumbnailFromDrive_(item.thumbnailUrl, function(result) {
-          if (result.status !== 'success') {
-            return;
-          }
-          this.quickView_.videoPoster = result.data;
-        }.bind(this));
+        return this.loadThumbnailFromDrive_(item.thumbnailUrl)
+            .then(function(result) {
+              if (result.status === 'success') {
+                params.videoPoster = result.data;
+              }
+              return params;
+            });
       }
     } else {
-      this.quickView_.contentUrl = entry.toURL();
-      if (item.thumbnailUrl)
-        this.quickView_.videoPoster = item.thumbnailUrl;
-      this.quickView_.autoplay = true;
+      params.autoplay = true;
+      if (item.thumbnailUrl) {
+        params.videoPoster = item.thumbnailUrl;
+      }
+      return getFile(entry).then(function(file) {
+        params.contentUrl = URL.createObjectURL(file);
+        return params;
+      });
     }
   } else if (type === 'audio') {
     if (item.externalFileUrl) {
       // If the file is in Drive, we ask user to open it with external app.
     } else {
-      this.quickView_.contentUrl = entry.toURL();
-      this.quickView_.autoplay = true;
-      this.metadataModel_.get([entry], ['contentThumbnailUrl'])
-          .then(function(entry, items) {
+      params.autoplay = true;
+      return Promise
+          .all([
+            this.metadataModel_.get([entry], ['contentThumbnailUrl']),
+            getFile(entry)
+          ])
+          .then(function(values) {
+            /** @type {!Array<!MetadataItem>} */
+            var items = values[0];
+            /** @type {!File} */
+            var file = values[1];
             var item = items[0];
-            if (item.contentThumbnailUrl)
-              this.quickView_.audioArtwork = item.contentThumbnailUrl;
-          }.bind(this, entry));
+            if (item.contentThumbnailUrl) {
+              params.audioArtwork = item.contentThumbnailUrl;
+            }
+            params.contentUrl = URL.createObjectURL(file);
+            return params;
+          });
     }
   }
+  return Promise.resolve(params);
 };
 
 /**
  * Loads a thumbnail from Drive.
  *
  * @param {string} url Thumbnail url
- * @param {function({status: string, data:string, width:number,
- *     height:number})} callback
+ * @return Promise<{{status: string, data:string, width:number, height:number}}>
  * @private
  */
-QuickViewController.prototype.loadThumbnailFromDrive_ = function(
-    url, callback) {
-  ImageLoaderClient.getInstance().load(url, callback);
+QuickViewController.prototype.loadThumbnailFromDrive_ = function(url) {
+  return new Promise(function(resolve) {
+    ImageLoaderClient.getInstance().load(url, resolve)
+  });
 };

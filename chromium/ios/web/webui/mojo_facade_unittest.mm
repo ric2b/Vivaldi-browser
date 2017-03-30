@@ -15,6 +15,7 @@
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #include "ios/web/test/mojo_test.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/shell/public/cpp/identity.h"
 #include "services/shell/public/cpp/interface_factory.h"
 #include "services/shell/public/cpp/interface_registry.h"
 #import "testing/gtest_mac.h"
@@ -50,7 +51,7 @@ class TestUIHandlerFactory : public shell::InterfaceFactory<TestUIHandlerMojo> {
 
  private:
   // shell::InterfaceFactory overrides.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojo::InterfaceRequest<TestUIHandlerMojo> request) override {}
 };
 
@@ -60,7 +61,7 @@ class TestUIHandlerFactory : public shell::InterfaceFactory<TestUIHandlerMojo> {
 class MojoFacadeTest : public WebTest {
  protected:
   MojoFacadeTest() {
-    interface_registry_.reset(new shell::InterfaceRegistry(nullptr));
+    interface_registry_.reset(new shell::InterfaceRegistry);
     interface_registry_->AddInterface(&ui_handler_factory_);
     evaluator_.reset([[OCMockObject
         mockForProtocol:@protocol(CRWJSInjectionEvaluator)] retain]);
@@ -79,13 +80,13 @@ class MojoFacadeTest : public WebTest {
   std::unique_ptr<MojoFacade> facade_;
 };
 
-// Tests connecting to existing service and closing the handle.
-TEST_F(MojoFacadeTest, ConnectToServiceAndCloseHandle) {
-  // Connect to the service.
+// Tests connecting to existing interface and closing the handle.
+TEST_F(MojoFacadeTest, GetInterfaceAndCloseHandle) {
+  // Bind to the interface.
   NSDictionary* connect = @{
-    @"name" : @"service_provider.connectToService",
+    @"name" : @"interface_provider.getInterface",
     @"args" : @{
-      @"serviceName" : @"::TestUIHandlerMojo",
+      @"interfaceName" : @"::TestUIHandlerMojo",
     },
   };
 

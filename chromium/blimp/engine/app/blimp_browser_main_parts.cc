@@ -4,12 +4,16 @@
 
 #include "blimp/engine/app/blimp_browser_main_parts.h"
 
+#include <utility>
+
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/engine/app/blimp_engine_config.h"
 #include "blimp/engine/app/settings_manager.h"
 #include "blimp/engine/common/blimp_browser_context.h"
+#include "blimp/engine/feature/geolocation/blimp_location_provider.h"
 #include "blimp/engine/session/blimp_engine_session.h"
 #include "blimp/net/blimp_connection.h"
 #include "content/public/browser/browser_thread.h"
@@ -62,6 +66,10 @@ SettingsManager* BlimpBrowserMainParts::GetSettingsManager() {
 
 BlobChannelSender* BlimpBrowserMainParts::GetBlobChannelSender() {
   return engine_session_->blob_channel_sender();
+}
+
+BlobChannelService* BlimpBrowserMainParts::GetBlobChannelService() {
+  return engine_session_->GetBlobChannelService();
 }
 
 BlimpEngineSession* BlimpBrowserMainParts::GetBlimpEngineSession() {

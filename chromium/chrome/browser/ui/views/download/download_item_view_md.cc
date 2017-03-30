@@ -187,7 +187,7 @@ DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
       creation_time_(base::Time::Now()),
       time_download_warning_shown_(base::Time()),
       weak_ptr_factory_(this) {
-  SetHasInkDrop(ui::MaterialDesignController::IsModeMaterial());
+  SetInkDropMode(InkDropMode::ON);
   DCHECK(download());
   DCHECK(ui::MaterialDesignController::IsModeMaterial());
   download()->AddObserver(this);
@@ -572,18 +572,8 @@ void DownloadItemViewMd::ButtonPressed(views::Button* sender,
 
   // WARNING: all end states after this point delete |this|.
   DCHECK_EQ(discard_button_, sender);
-  if (model_.IsMalicious()) {
-    UMA_HISTOGRAM_LONG_TIMES("clickjacking.dismiss_download", warning_duration);
-    // ExperienceSampling: User chose to dismiss the dangerous download.
-    if (sampling_event_.get()) {
-      sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kDeny);
-      sampling_event_.reset(NULL);
-    }
-    shelf_->RemoveDownloadView(this);
-    return;
-  }
   UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download", warning_duration);
-  if (model_.ShouldAllowDownloadFeedback() &&
+  if (!model_.IsMalicious() && model_.ShouldAllowDownloadFeedback() &&
       !shelf_->browser()->profile()->IsOffTheRecord()) {
     if (!shelf_->browser()->profile()->GetPrefs()->HasPrefPath(
             prefs::kSafeBrowsingExtendedReportingEnabled)) {
@@ -975,10 +965,8 @@ void DownloadItemViewMd::ShowWarningDialog() {
         this, model_.GetWarningConfirmButtonText());
     AddChildView(save_button_);
   }
-  int discard_button_message =
-      model_.IsMalicious() ? IDS_DISMISS_DOWNLOAD : IDS_DISCARD_DOWNLOAD;
   discard_button_ = views::MdTextButton::CreateMdButton(
-      this, l10n_util::GetStringUTF16(discard_button_message));
+      this, l10n_util::GetStringUTF16(IDS_DISCARD_DOWNLOAD));
   AddChildView(discard_button_);
 
   base::string16 dangerous_label =

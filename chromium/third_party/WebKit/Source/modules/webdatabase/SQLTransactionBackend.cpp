@@ -38,9 +38,9 @@
 #include "modules/webdatabase/SQLTransaction.h"
 #include "modules/webdatabase/SQLTransactionClient.h"
 #include "modules/webdatabase/SQLTransactionCoordinator.h"
+#include "modules/webdatabase/StorageLog.h"
 #include "modules/webdatabase/sqlite/SQLValue.h"
 #include "modules/webdatabase/sqlite/SQLiteTransaction.h"
-#include "platform/Logging.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include <memory>
@@ -485,8 +485,9 @@ void SQLTransactionBackend::computeNextStateAndCleanupIfNeeded()
             || m_nextState == SQLTransactionState::PostflightAndCommit
             || m_nextState == SQLTransactionState::CleanupAndTerminate
             || m_nextState == SQLTransactionState::CleanupAfterTransactionErrorCallback);
-
-        WTF_LOG(StorageAPI, "State %s\n", nameForSQLTransactionState(m_nextState));
+#if DCHECK_IS_ON()
+        STORAGE_DVLOG(1) << "State " << nameForSQLTransactionState(m_nextState);
+#endif
         return;
     }
 
@@ -496,7 +497,7 @@ void SQLTransactionBackend::computeNextStateAndCleanupIfNeeded()
     m_nextState = SQLTransactionState::End;
 
     // If the database was stopped, don't do anything and cancel queued work
-    WTF_LOG(StorageAPI, "Database was stopped or interrupted - cancelling work for this transaction");
+    STORAGE_DVLOG(1) << "Database was stopped or interrupted - cancelling work for this transaction";
 
     // The current SQLite transaction should be stopped, as well
     if (m_sqliteTransaction) {
@@ -556,7 +557,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
     ASSERT(!m_database->sqliteDatabase().transactionInProgress());
     ASSERT(m_lockAcquired);
 
-    WTF_LOG(StorageAPI, "Opening and preflighting transaction %p", this);
+    STORAGE_DVLOG(1) << "Opening and preflighting transaction " << this;
 
     // Set the maximum usage for this transaction if this transactions is not read-only
     if (!m_readOnly)
@@ -573,8 +574,8 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
     // Spec 4.3.2.1+2: Open a transaction to the database, jumping to the error callback if that fails
     if (!m_sqliteTransaction->inProgress()) {
         ASSERT(!m_database->sqliteDatabase().transactionInProgress());
-        m_database->reportStartTransactionResult(2, SQLError::DATABASE_ERR, m_database->sqliteDatabase().lastError());
-        m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "unable to begin transaction",
+        m_database->reportStartTransactionResult(2, SQLError::kDatabaseErr, m_database->sqliteDatabase().lastError());
+        m_transactionError = SQLErrorData::create(SQLError::kDatabaseErr, "unable to begin transaction",
             m_database->sqliteDatabase().lastError(), m_database->sqliteDatabase().lastErrorMsg());
         m_sqliteTransaction.reset();
         return nextStateForTransactionError();
@@ -585,8 +586,8 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
     // the actual version. In single-process browsers, this is just a map lookup.
     String actualVersion;
     if (!m_database->getActualVersionForTransaction(actualVersion)) {
-        m_database->reportStartTransactionResult(3, SQLError::DATABASE_ERR, m_database->sqliteDatabase().lastError());
-        m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "unable to read version",
+        m_database->reportStartTransactionResult(3, SQLError::kDatabaseErr, m_database->sqliteDatabase().lastError());
+        m_transactionError = SQLErrorData::create(SQLError::kDatabaseErr, "unable to read version",
             m_database->sqliteDatabase().lastError(), m_database->sqliteDatabase().lastErrorMsg());
         m_database->disableAuthorizer();
         m_sqliteTransaction.reset();
@@ -603,8 +604,8 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
         if (m_wrapper->sqlError()) {
             m_transactionError = SQLErrorData::create(*m_wrapper->sqlError());
         } else {
-            m_database->reportStartTransactionResult(4, SQLError::UNKNOWN_ERR, 0);
-            m_transactionError = SQLErrorData::create(SQLError::UNKNOWN_ERR, "unknown error occurred during transaction preflight");
+            m_database->reportStartTransactionResult(4, SQLError::kUnknownErr, 0);
+            m_transactionError = SQLErrorData::create(SQLError::kUnknownErr, "unknown error occurred during transaction preflight");
         }
         return nextStateForTransactionError();
     }
@@ -706,8 +707,8 @@ SQLTransactionState SQLTransactionBackend::nextStateForCurrentStatementError()
     if (m_currentStatementBackend->sqlError()) {
         m_transactionError = SQLErrorData::create(*m_currentStatementBackend->sqlError());
     } else {
-        m_database->reportCommitTransactionResult(1, SQLError::DATABASE_ERR, 0);
-        m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "the statement failed to execute");
+        m_database->reportCommitTransactionResult(1, SQLError::kDatabaseErr, 0);
+        m_transactionError = SQLErrorData::create(SQLError::kDatabaseErr, "the statement failed to execute");
     }
     return nextStateForTransactionError();
 }
@@ -721,8 +722,8 @@ SQLTransactionState SQLTransactionBackend::postflightAndCommit()
         if (m_wrapper->sqlError()) {
             m_transactionError = SQLErrorData::create(*m_wrapper->sqlError());
         } else {
-            m_database->reportCommitTransactionResult(3, SQLError::UNKNOWN_ERR, 0);
-            m_transactionError = SQLErrorData::create(SQLError::UNKNOWN_ERR, "unknown error occurred during transaction postflight");
+            m_database->reportCommitTransactionResult(3, SQLError::kUnknownErr, 0);
+            m_transactionError = SQLErrorData::create(SQLError::kUnknownErr, "unknown error occurred during transaction postflight");
         }
         return nextStateForTransactionError();
     }
@@ -738,8 +739,8 @@ SQLTransactionState SQLTransactionBackend::postflightAndCommit()
     if (m_sqliteTransaction->inProgress()) {
         if (m_wrapper)
             m_wrapper->handleCommitFailedAfterPostflight(this);
-        m_database->reportCommitTransactionResult(4, SQLError::DATABASE_ERR, m_database->sqliteDatabase().lastError());
-        m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "unable to commit transaction",
+        m_database->reportCommitTransactionResult(4, SQLError::kDatabaseErr, m_database->sqliteDatabase().lastError());
+        m_transactionError = SQLErrorData::create(SQLError::kDatabaseErr, "unable to commit transaction",
             m_database->sqliteDatabase().lastError(), m_database->sqliteDatabase().lastErrorMsg());
         return nextStateForTransactionError();
     }
@@ -763,7 +764,7 @@ SQLTransactionState SQLTransactionBackend::cleanupAndTerminate()
     ASSERT(m_lockAcquired);
 
     // Spec 4.3.2.9: End transaction steps. There is no next step.
-    WTF_LOG(StorageAPI, "Transaction %p is complete\n", this);
+    STORAGE_DVLOG(1) << "Transaction " << this << " is complete";
     ASSERT(!m_database->sqliteDatabase().transactionInProgress());
 
     // Phase 5 cleanup. See comment on the SQLTransaction life-cycle above.
@@ -787,7 +788,7 @@ SQLTransactionState SQLTransactionBackend::cleanupAfterTransactionErrorCallback(
 {
     ASSERT(m_lockAcquired);
 
-    WTF_LOG(StorageAPI, "Transaction %p is complete with an error\n", this);
+    STORAGE_DVLOG(1) << "Transaction " << this << " is complete with an error";
     m_database->disableAuthorizer();
     if (m_sqliteTransaction) {
         // Spec 4.3.2.10: Rollback the transaction.
@@ -808,7 +809,9 @@ SQLTransactionState SQLTransactionBackend::cleanupAfterTransactionErrorCallback(
 // modify is m_requestedState which is meant for this purpose.
 void SQLTransactionBackend::requestTransitToState(SQLTransactionState nextState)
 {
-    WTF_LOG(StorageAPI, "Scheduling %s for transaction %p\n", nameForSQLTransactionState(nextState), this);
+#if DCHECK_IS_ON()
+    STORAGE_DVLOG(1) << "Scheduling " << nameForSQLTransactionState(nextState) << " for transaction " << this;
+#endif
     m_requestedState = nextState;
     ASSERT(m_requestedState != SQLTransactionState::End);
     m_database->scheduleTransactionStep(this);

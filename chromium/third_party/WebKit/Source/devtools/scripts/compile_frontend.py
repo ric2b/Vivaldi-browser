@@ -30,7 +30,6 @@
 from modular_build import read_file, write_file
 import os
 import os.path as path
-import generate_injected_script_externs
 import generate_protocol_externs
 import modular_build
 import re
@@ -87,8 +86,8 @@ runtime_module_name = '_runtime'
 type_checked_jsdoc_tags_list = ['param', 'return', 'type', 'enum']
 type_checked_jsdoc_tags_or = '|'.join(type_checked_jsdoc_tags_list)
 
-# Basic regex for invalid JsDoc types: an object type name ([A-Z][A-Za-z0-9.]+[A-Za-z0-9]) not preceded by '!', '?', ':' (this, new), or '.' (object property).
-invalid_type_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*\{.*(?<![!?:.A-Za-z0-9])([A-Z][A-Za-z0-9.]+[A-Za-z0-9])[^/]*\}')
+# Basic regex for invalid JsDoc types: an object type name ([A-Z][_A-Za-z0-9.]+[A-Za-z0-9]) not preceded by '!', '?', ':' (this, new), or '.' (object property).
+invalid_type_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*\{.*(?<![!?:._A-Za-z0-9])([A-Z][_A-Za-z0-9.]+[A-Za-z0-9])[^/]*\}')
 invalid_type_designator_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*.*(?<![{: ])([?!])=?\}')
 invalid_non_object_type_regex = re.compile(r'@(?:' + type_checked_jsdoc_tags_or + r')\s*\{.*(![a-z]+)[^/]*\}')
 error_warning_regex = re.compile(r'WARNING|ERROR')
@@ -420,6 +419,7 @@ print 'Compiling devtools.js...'
 command = spawned_compiler_command + [
     '--externs', to_platform_path(global_externs_file),
     '--externs', to_platform_path(path.join(devtools_frontend_path, 'host', 'InspectorFrontendHostAPI.js')),
+    '--jscomp_off=externsValidation',
     '--module', jsmodule_name_prefix + 'devtools_js' + ':1',
     '--js', to_platform_path(path.join(devtools_frontend_path, 'devtools.js'))
 ]

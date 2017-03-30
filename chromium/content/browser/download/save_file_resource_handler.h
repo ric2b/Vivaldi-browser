@@ -43,7 +43,6 @@ class SaveFileResourceHandler : public ResourceHandler {
                           int render_process_host_id,
                           int render_frame_routing_id,
                           const GURL& url,
-                          SaveFileManager* manager,
                           AuthorizationState authorization_state);
   ~SaveFileResourceHandler() override;
 
@@ -60,9 +59,6 @@ class SaveFileResourceHandler : public ResourceHandler {
 
   // Pass-through implementation.
   bool OnWillStart(const GURL& url, bool* defer) override;
-
-  // Pass-through implementation.
-  bool OnBeforeNetworkStart(const GURL& url, bool* defer) override;
 
   // Creates a new buffer, which will be handed to the download thread for file
   // writing and deletion.

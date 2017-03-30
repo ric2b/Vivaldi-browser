@@ -25,6 +25,7 @@
 #define HTMLFrameSetElement_h
 
 #include "core/dom/Document.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/html/HTMLDimension.h"
 #include "core/html/HTMLElement.h"
 
@@ -64,7 +65,7 @@ private:
     bool isPresentationAttribute(const QualifiedName&) const override;
     void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) override;
 
-    void attach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
     bool layoutObjectIsNeeded(const ComputedStyle&) override;
     LayoutObject* createLayoutObject(const ComputedStyle&) override;
 

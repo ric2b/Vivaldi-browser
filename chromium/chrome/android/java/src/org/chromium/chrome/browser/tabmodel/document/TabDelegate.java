@@ -5,12 +5,16 @@
 package org.chromium.chrome.browser.tabmodel.document;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Bundle;
+import android.provider.Browser;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.ServiceTabLauncher;
 import org.chromium.chrome.browser.TabState;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -19,10 +23,11 @@ import org.chromium.chrome.browser.tab.TabIdManager;
 import org.chromium.chrome.browser.tabmodel.AsyncTabParamsManager;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
-import org.chromium.components.service_tab_launcher.ServiceTabLauncher;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.PageTransition;
+
+import java.util.Map;
 
 /**
  * Asynchronously creates Tabs by creating/starting up Activities.
@@ -76,7 +81,8 @@ public class TabDelegate extends TabCreator {
      */
     public void createTabInOtherWindow(LoadUrlParams loadUrlParams, Activity activity,
             int parentId) {
-        Intent intent = createNewTabIntent(new AsyncTabCreationParams(loadUrlParams), parentId);
+        Intent intent = createNewTabIntent(
+                new AsyncTabCreationParams(loadUrlParams), parentId, false);
 
         Class<? extends Activity> targetActivity =
                 MultiWindowUtils.getInstance().getOpenInOtherWindowActivity(activity);
@@ -112,20 +118,44 @@ public class TabDelegate extends TabCreator {
         assert !(type == TabLaunchType.FROM_LONGPRESS_BACKGROUND
                 && asyncParams.getWebContents() != null);
 
-        Intent intent = createNewTabIntent(asyncParams, parentId);
+        Intent intent = createNewTabIntent(
+                asyncParams, parentId, type == TabLaunchType.FROM_CHROME_UI);
         IntentHandler.startActivityForTrustedIntent(intent, ContextUtils.getApplicationContext());
     }
 
-    private Intent createNewTabIntent(AsyncTabCreationParams asyncParams, int parentId) {
+    private Intent createNewTabIntent(
+            AsyncTabCreationParams asyncParams, int parentId, boolean isChromeUI) {
         int assignedTabId = TabIdManager.getInstance().generateValidId(Tab.INVALID_TAB_ID);
         AsyncTabParamsManager.add(assignedTabId, asyncParams);
 
         Intent intent = new Intent(
                 Intent.ACTION_VIEW, Uri.parse(asyncParams.getLoadUrlParams().getUrl()));
-        intent.setClass(ContextUtils.getApplicationContext(), ChromeLauncherActivity.class);
+
+        ComponentName componentName = asyncParams.getComponentName();
+        if (componentName == null) {
+            intent.setClass(ContextUtils.getApplicationContext(), ChromeLauncherActivity.class);
+        } else {
+            intent.setComponent(componentName);
+        }
+
+        Map<String, String> extraHeaders = asyncParams.getLoadUrlParams().getExtraHeaders();
+        if (extraHeaders != null && !extraHeaders.isEmpty()) {
+            Bundle bundle = new Bundle();
+            for (Map.Entry<String, String> header : extraHeaders.entrySet()) {
+                bundle.putString(header.getKey(), header.getValue());
+            }
+            intent.putExtra(Browser.EXTRA_HEADERS, bundle);
+        }
+
         intent.putExtra(IntentHandler.EXTRA_TAB_ID, assignedTabId);
         intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, mIsIncognito);
         intent.putExtra(IntentHandler.EXTRA_PARENT_TAB_ID, parentId);
+
+        if (isChromeUI) {
+            intent.putExtra(Browser.EXTRA_APPLICATION_ID,
+                    ContextUtils.getApplicationContext().getPackageName());
+            intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+        }
 
         Activity parentActivity = ActivityDelegate.getActivityForTabId(parentId);
         if (parentActivity != null && parentActivity.getIntent() != null) {

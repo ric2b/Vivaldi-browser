@@ -271,44 +271,6 @@ TEST_F(ResourceBundleTest, DelegateLoadDataResourceBytes) {
   EXPECT_EQ(static_memory, result);
 }
 
-TEST_F(ResourceBundleTest, LoadDataResourceBytesGzip) {
-  base::ScopedTempDir dir;
-  ASSERT_TRUE(dir.CreateUniqueTempDir());
-  base::FilePath data_path = dir.path().Append(FILE_PATH_LITERAL("sample.pak"));
-
-  char kCompressedEntryPakContents[] = {
-      0x04u, 0x00u, 0x00u, 0x00u,                // header(version
-      0x01u, 0x00u, 0x00u, 0x00u,                //        no. entries
-      0x01u,                                     //        encoding)
-      0x04u, 0x00u, 0x15u, 0x00u, 0x00u, 0x00u,  // index entry 4
-      0x00u, 0x00u, 0x3bu, 0x00u, 0x00u,
-      0x00u,  // extra entry for the size of last
-      // Entry 4 is a compressed gzip file (with custom leading byte) saying:
-      // "This is compressed\n"
-      ResourceBundle::CUSTOM_GZIP_HEADER[0], 0x1fu, 0x8bu, 0x08u, 0x00u, 0x00u,
-      0x00u, 0x00u, 0x00u, 0x00u, 0x03u, 0x0bu, 0xc9u, 0xc8u, 0x2cu, 0x56u,
-      0x00u, 0xa2u, 0xe4u, 0xfcu, 0xdcu, 0x82u, 0xa2u, 0xd4u, 0xe2u, 0xe2u,
-      0xd4u, 0x14u, 0x2eu, 0x00u, 0xd9u, 0xf8u, 0xc4u, 0x6fu, 0x13u, 0x00u,
-      0x00u, 0x00u};
-
-  size_t compressed_entry_pak_size = sizeof(kCompressedEntryPakContents);
-
-  // Dump contents into the pak file.
-  ASSERT_EQ(base::WriteFile(data_path, kCompressedEntryPakContents,
-      compressed_entry_pak_size), static_cast<int>(compressed_entry_pak_size));
-
-  ResourceBundle* resource_bundle = CreateResourceBundle(nullptr);
-  resource_bundle->AddDataPackFromPath(data_path, SCALE_FACTOR_NONE);
-
-  // Load the compressed resource.
-  scoped_refptr<base::RefCountedMemory> result =
-      resource_bundle->LoadDataResourceBytes(4);
-  EXPECT_EQ(
-      strncmp("This is compressed\n",
-              reinterpret_cast<const char*>(result->front()), result->size()),
-      0);
-}
-
 TEST_F(ResourceBundleTest, DelegateGetRawDataResource) {
   MockResourceBundleDelegate delegate;
   ResourceBundle* resource_bundle = CreateResourceBundle(&delegate);
@@ -416,20 +378,6 @@ class ResourceBundleImageTest : public ResourceBundleTest {
   size_t NumDataPacksInResourceBundle(ResourceBundle* resource_bundle) {
     DCHECK(resource_bundle);
     return resource_bundle->data_packs_.size();
-  }
-
-  // Returns the number of DataPacks managed by |resource_bundle| which are
-  // flagged as containing only material design resources.
-  size_t NumMaterialDesignDataPacksInResourceBundle(
-      ResourceBundle* resource_bundle) {
-    DCHECK(resource_bundle);
-    size_t num_material_packs = 0;
-    for (size_t i = 0; i < resource_bundle->data_packs_.size(); i++) {
-      if (resource_bundle->data_packs_[i]->HasOnlyMaterialDesignAssets())
-        num_material_packs++;
-    }
-
-    return num_material_packs;
   }
 
  private:
@@ -552,101 +500,6 @@ TEST_F(ResourceBundleImageTest, GetImageNamed) {
   // ImageSkia scales image if the one for the requested scale factor is not
   // available.
   EXPECT_EQ(1.4f, image_skia->GetRepresentation(1.4f).scale());
-}
-
-// Verifies that the correct number of DataPacks managed by ResourceBundle
-// are flagged as containing only material design assets.
-TEST_F(ResourceBundleImageTest, CountMaterialDesignDataPacksInResourceBundle) {
-  ResourceBundle* resource_bundle = CreateResourceBundle(nullptr);
-  EXPECT_EQ(0u, NumDataPacksInResourceBundle(resource_bundle));
-  EXPECT_EQ(0u, NumMaterialDesignDataPacksInResourceBundle(resource_bundle));
-
-  // Add a non-material data pack.
-  base::FilePath default_path = dir_path().AppendASCII("default.pak");
-  CreateDataPackWithSingleBitmap(default_path, 10, base::StringPiece());
-  resource_bundle->AddDataPackFromPath(default_path, SCALE_FACTOR_100P);
-  EXPECT_EQ(1u, NumDataPacksInResourceBundle(resource_bundle));
-  EXPECT_EQ(0u, NumMaterialDesignDataPacksInResourceBundle(resource_bundle));
-
-  // Add a material data pack.
-  base::FilePath material_path1 = dir_path().AppendASCII("material1.pak");
-  CreateDataPackWithSingleBitmap(material_path1, 10, base::StringPiece());
-  resource_bundle->AddMaterialDesignDataPackFromPath(material_path1,
-                                                     SCALE_FACTOR_100P);
-  EXPECT_EQ(2u, NumDataPacksInResourceBundle(resource_bundle));
-  EXPECT_EQ(1u, NumMaterialDesignDataPacksInResourceBundle(resource_bundle));
-}
-
-// Verifies that data packs containing material design resources are permitted
-// to have resource IDs which are present within other data packs managed by
-// ResourceBundle. This test passes if it does not trigger the DCHECK in
-// DataPack::CheckForDuplicateResources().
-TEST_F(ResourceBundleImageTest, NoCrashWithDuplicateMaterialDesignResources) {
-  // Create two data packs, each containing a single asset with the same ID.
-  base::FilePath default_path = dir_path().AppendASCII("default.pak");
-  base::FilePath material_path = dir_path().AppendASCII("material.pak");
-  CreateDataPackWithSingleBitmap(default_path, 10, base::StringPiece());
-  CreateDataPackWithSingleBitmap(material_path, 10, base::StringPiece());
-
-  // Should not crash.
-  ResourceBundle* resource_bundle = CreateResourceBundleWithEmptyLocalePak();
-  resource_bundle->AddMaterialDesignDataPackFromPath(material_path,
-                                                     SCALE_FACTOR_100P);
-  resource_bundle->AddDataPackFromPath(default_path, SCALE_FACTOR_100P);
-}
-
-// Verifies that ResourceBundle searches data pack A before data pack B for
-// an asset if A was added to the ResourceBundle before B.
-TEST_F(ResourceBundleImageTest, DataPackSearchOrder) {
-  // Create two .pak files, each containing a single image with the
-  // same asset ID but different sizes (note that the images must be
-  // different sizes in this test in order to correctly determine
-  // from which data pack the asset was pulled). Note also that the value
-  // of |material_size| was chosen to be divisible by 3, since iOS may
-  // use this scale factor.
-  const int default_size = 10;
-  const int material_size = 48;
-  ASSERT_NE(default_size, material_size);
-  base::FilePath default_path = dir_path().AppendASCII("default.pak");
-  base::FilePath material_path = dir_path().AppendASCII("material.pak");
-  CreateDataPackWithSingleBitmap(default_path,
-                                 default_size,
-                                 base::StringPiece());
-  CreateDataPackWithSingleBitmap(material_path,
-                                 material_size,
-                                 base::StringPiece());
-
-  ScaleFactor scale_factor = SCALE_FACTOR_100P;
-  int expected_size = material_size;
-  ResourceBundle* resource_bundle = CreateResourceBundleWithEmptyLocalePak();
-
-#if defined(OS_IOS)
-  // iOS retina devices do not use 100P scaling. See crbug.com/298406.
-  scale_factor = resource_bundle->GetMaxScaleFactor();
-  expected_size = material_size / GetScaleForScaleFactor(scale_factor);
-#endif
-
-  // Load the 'material' data pack into ResourceBundle first.
-  resource_bundle->AddMaterialDesignDataPackFromPath(material_path,
-                                                     scale_factor);
-  resource_bundle->AddDataPackFromPath(default_path, scale_factor);
-
-  // A request for the image with ID 3 should return the image from the material
-  // data pack.
-  gfx::ImageSkia* image_skia = resource_bundle->GetImageSkiaNamed(3);
-  const SkBitmap* bitmap = image_skia->bitmap();
-  ASSERT_TRUE(bitmap);
-  EXPECT_EQ(expected_size, bitmap->width());
-  EXPECT_EQ(expected_size, bitmap->height());
-
-  // A subsequent request for the image with ID 3 (i.e., after the image
-  // has been cached by ResourceBundle) should also return the image
-  // from the material data pack.
-  gfx::ImageSkia* image_skia2 = resource_bundle->GetImageSkiaNamed(3);
-  const SkBitmap* bitmap2 = image_skia2->bitmap();
-  ASSERT_TRUE(bitmap2);
-  EXPECT_EQ(expected_size, bitmap2->width());
-  EXPECT_EQ(expected_size, bitmap2->height());
 }
 
 // Test that GetImageNamed() behaves properly for images which GRIT has

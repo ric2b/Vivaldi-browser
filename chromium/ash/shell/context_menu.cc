@@ -27,7 +27,7 @@ ContextMenu::~ContextMenu() {}
 
 bool ContextMenu::IsCommandIdChecked(int command_id) const {
   if (command_id == MENU_AUTO_HIDE)
-    return wm_shelf_->GetAutoHideBehavior() == SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
+    return wm_shelf_->auto_hide_behavior() == SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
   return false;
 }
 
@@ -35,14 +35,9 @@ bool ContextMenu::IsCommandIdEnabled(int command_id) const {
   return true;
 }
 
-bool ContextMenu::GetAcceleratorForCommandId(int command_id,
-                                             ui::Accelerator* accelerator) {
-  return false;
-}
-
 void ContextMenu::ExecuteCommand(int command_id, int event_flags) {
   if (command_id == MENU_AUTO_HIDE) {
-    wm_shelf_->SetAutoHideBehavior(wm_shelf_->GetAutoHideBehavior() ==
+    wm_shelf_->SetAutoHideBehavior(wm_shelf_->auto_hide_behavior() ==
                                            SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS
                                        ? SHELF_AUTO_HIDE_BEHAVIOR_NEVER
                                        : SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);

@@ -12,14 +12,19 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/plugins/plugin_filter_utils.h"
 #include "chrome/browser/plugins/plugin_finder.h"
 #include "chrome/browser/plugins/plugin_metadata.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/content/common/content_settings_messages.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/browser/plugins_field_trial.h"
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/browser_thread.h"
@@ -30,6 +35,7 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_constants.h"
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -41,6 +47,24 @@ using content::PluginService;
 
 namespace {
 
+class ProfileContentSettingObserver : public content_settings::Observer {
+ public:
+  explicit ProfileContentSettingObserver(Profile* profile)
+      : profile_(profile) {}
+  ~ProfileContentSettingObserver() override {}
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type,
+                               std::string resource_identifier) override {
+    DCHECK(base::FeatureList::IsEnabled(features::kPreferHtmlOverPlugins));
+    if (content_type == CONTENT_SETTINGS_TYPE_PLUGINS)
+      PluginService::GetInstance()->PurgePluginListCache(profile_, false);
+  }
+
+ private:
+  Profile* profile_;
+};
+
 void AuthorizeRenderer(content::RenderFrameHost* render_frame_host) {
   ChromePluginServiceFilter::GetInstance()->AuthorizePlugin(
       render_frame_host->GetProcess()->GetID(), base::FilePath());
@@ -48,17 +72,49 @@ void AuthorizeRenderer(content::RenderFrameHost* render_frame_host) {
 
 }  // namespace
 
+struct ChromePluginServiceFilter::ContextInfo {
+  ContextInfo(
+      const scoped_refptr<PluginPrefs>& plugin_prefs,
+      const scoped_refptr<HostContentSettingsMap>& host_content_settings_map,
+      Profile* profile);
+  ~ContextInfo();
+
+  scoped_refptr<PluginPrefs> plugin_prefs;
+  scoped_refptr<HostContentSettingsMap> host_content_settings_map;
+  ProfileContentSettingObserver observer;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContextInfo);
+};
+
+ChromePluginServiceFilter::ContextInfo::ContextInfo(
+    const scoped_refptr<PluginPrefs>& plugin_prefs,
+    const scoped_refptr<HostContentSettingsMap>& host_content_settings_map,
+    Profile* profile)
+    : plugin_prefs(plugin_prefs),
+      host_content_settings_map(host_content_settings_map),
+      observer(ProfileContentSettingObserver(profile)) {
+  if (base::FeatureList::IsEnabled(features::kPreferHtmlOverPlugins))
+    host_content_settings_map->AddObserver(&observer);
+}
+
+ChromePluginServiceFilter::ContextInfo::~ContextInfo() {
+  if (base::FeatureList::IsEnabled(features::kPreferHtmlOverPlugins))
+    host_content_settings_map->RemoveObserver(&observer);
+}
+
 // static
 ChromePluginServiceFilter* ChromePluginServiceFilter::GetInstance() {
   return base::Singleton<ChromePluginServiceFilter>::get();
 }
 
-void ChromePluginServiceFilter::RegisterResourceContext(
-    PluginPrefs* plugin_prefs,
-    const void* context) {
+void ChromePluginServiceFilter::RegisterResourceContext(Profile* profile,
+                                                        const void* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::AutoLock lock(lock_);
-  resource_context_map_[context] = plugin_prefs;
+  resource_context_map_[context] = base::MakeUnique<ContextInfo>(
+      PluginPrefs::GetForProfile(profile),
+      HostContentSettingsMapFactory::GetForProfile(profile), profile);
 }
 
 void ChromePluginServiceFilter::UnregisterResourceContext(
@@ -105,14 +161,39 @@ bool ChromePluginServiceFilter::IsPluginAvailable(
   }
 
   // Check whether the plugin is disabled.
-  ResourceContextMap::iterator prefs_it =
-      resource_context_map_.find(context);
-  if (prefs_it == resource_context_map_.end())
+  auto context_info_it = resource_context_map_.find(context);
+  // The context might not be found because RenderFrameMessageFilter might
+  // outlive the Profile (the context is unregistered during the Profile
+  // destructor).
+  if (context_info_it == resource_context_map_.end())
     return false;
 
-  PluginPrefs* plugin_prefs = prefs_it->second.get();
-  if (!plugin_prefs->IsPluginEnabled(*plugin))
+  if (!context_info_it->second->plugin_prefs.get()->IsPluginEnabled(*plugin))
     return false;
+
+  // Check whether PreferHtmlOverPlugins feature is enabled.
+  if (plugin->name == base::ASCIIToUTF16(content::kFlashPluginName) &&
+      base::FeatureList::IsEnabled(features::kPreferHtmlOverPlugins)) {
+    ContentSetting plugin_setting = CONTENT_SETTING_DEFAULT;
+    std::unique_ptr<PluginMetadata> plugin_metadata =
+        PluginFinder::GetInstance()->GetPluginMetadata(*plugin);
+    // When IsPluginAvailable() is called to check whether a plugin should be
+    // advertised, |url| has the same value of |policy_url| (i.e. the main frame
+    // origin). The intended behavior is that Flash is advertised only if a
+    // Flash embed hosted on the same origin as the main frame origin is allowed
+    // to run.
+    GetPluginContentSetting(
+        context_info_it->second->host_content_settings_map.get(), *plugin,
+        policy_url, url, plugin_metadata->identifier(), &plugin_setting,
+        nullptr, nullptr);
+    plugin_setting =
+        content_settings::PluginsFieldTrial::EffectiveContentSetting(
+            CONTENT_SETTINGS_TYPE_PLUGINS, plugin_setting);
+    if (plugin_setting == CONTENT_SETTING_BLOCK ||
+        plugin_setting == CONTENT_SETTING_DETECT_IMPORTANT_CONTENT) {
+      return false;
+    }
+  }
 
   return true;
 }
@@ -224,4 +305,3 @@ ChromePluginServiceFilter::ProcessDetails::ProcessDetails(
 
 ChromePluginServiceFilter::ProcessDetails::~ProcessDetails() {
 }
-

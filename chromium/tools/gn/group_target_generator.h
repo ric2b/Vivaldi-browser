@@ -21,6 +21,7 @@ class GroupTargetGenerator : public TargetGenerator {
   void DoRun() override;
 
  private:
+  bool FillOutputName();
   DISALLOW_COPY_AND_ASSIGN(GroupTargetGenerator);
 };
 

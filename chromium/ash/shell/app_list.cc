@@ -9,10 +9,8 @@
 
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/wm_shell.h"
-#include "ash/shell.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/shell_delegate.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/i18n/case_conversion.h"
@@ -250,12 +248,6 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
 
   app_list::SpeechUIModel* GetSpeechUI() override { return &speech_ui_; }
 
-  void GetShortcutPathForApp(
-      const std::string& app_id,
-      const base::Callback<void(const base::FilePath&)>& callback) override {
-    callback.Run(base::FilePath());
-  }
-
   void OpenSearchResult(app_list::SearchResult* result,
                         bool auto_launch,
                         int event_flags) override {
@@ -305,15 +297,11 @@ class ExampleAppListViewDelegate : public app_list::AppListViewDelegate {
   }
 
   void Dismiss() override {
-    DCHECK(Shell::HasInstance());
-    Shell::GetInstance()->DismissAppList();
+    DCHECK(WmShell::HasInstance());
+    WmShell::Get()->DismissAppList();
   }
 
   void ViewClosing() override {
-    // Nothing needs to be done.
-  }
-
-  void OpenSettings() override {
     // Nothing needs to be done.
   }
 

@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_util.h"
+#include "base/trace_event/trace_event.h"
 #include "base/win/windows_version.h"
 #include "content/renderer/media/webrtc/processed_local_audio_source.h"
 #include "content/renderer/media/webrtc_audio_renderer.h"
@@ -68,7 +69,7 @@ void WebRtcAudioDeviceImpl::RenderData(media::AudioBus* audio_bus,
 #if DCHECK_IS_ON()
     DCHECK(renderer_->CurrentThreadIsRenderingThread());
     if (!audio_renderer_thread_checker_.CalledOnValidThread()) {
-      for (const auto& sink : playout_sinks_)
+      for (auto* sink : playout_sinks_)
         sink->OnRenderThreadChanged();
     }
 #endif
@@ -94,9 +95,12 @@ void WebRtcAudioDeviceImpl::RenderData(media::AudioBus* audio_bus,
   int64_t ntp_time_ms = -1;
   static const int kBitsPerByte = 8;
   int16_t* audio_data = &render_buffer_[0];
+
+  TRACE_EVENT_BEGIN0("audio", "VoE::PullRenderData");
   audio_transport_callback_->PullRenderData(
       bytes_per_sample * kBitsPerByte, sample_rate, audio_bus->channels(),
       frames_per_10_ms, audio_data, &elapsed_time_ms, &ntp_time_ms);
+  TRACE_EVENT_END0("audio", "VoE::PullRenderData");
   if (elapsed_time_ms >= 0) {
     *current_time = base::TimeDelta::FromMilliseconds(elapsed_time_ms);
   }
@@ -134,7 +138,7 @@ void WebRtcAudioDeviceImpl::AudioRendererThreadStopped() {
   // Notify the playout sink of the change.
   // Not holding |lock_| because the caller must guarantee that the audio
   // renderer thread is dead, so no race is possible with |playout_sinks_|
-  for (const auto& sink : playout_sinks_)
+  for (auto* sink : playout_sinks_)
     sink->OnPlayoutDataSourceChanged();
 }
 

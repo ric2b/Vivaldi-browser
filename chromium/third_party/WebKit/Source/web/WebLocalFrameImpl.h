@@ -36,12 +36,12 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "public/platform/WebFileSystemType.h"
-#include "public/web/WebFrameWidget.h"
 #include "public/web/WebLocalFrame.h"
 #include "web/FrameLoaderClientImpl.h"
 #include "web/UserMediaClientImpl.h"
 #include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
+#include "web/WebFrameWidgetBase.h"
 #include "wtf/Compiler.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
@@ -149,8 +149,8 @@ public:
     bool executeCommand(const WebString&) override;
     bool executeCommand(const WebString&, const WebString& value) override;
     bool isCommandEnabled(const WebString&) const override;
-    void enableContinuousSpellChecking(bool) override;
-    bool isContinuousSpellCheckingEnabled() const override;
+    void enableSpellChecking(bool) override;
+    bool isSpellCheckingEnabled() const override;
     void requestTextChecking(const WebElement&) override;
     void replaceMisspelledRange(const WebString&) override;
     void removeSpellingMarkers() override;
@@ -161,6 +161,7 @@ public:
     bool selectWordAroundCaret() override;
     void selectRange(const WebPoint& base, const WebPoint& extent) override;
     void selectRange(const WebRange&) override;
+    WebString rangeAsText(const WebRange&) override;
     void moveRangeSelectionExtent(const WebPoint&) override;
     void moveRangeSelection(const WebPoint& base, const WebPoint& extent, WebFrame::TextGranularity = CharacterGranularity) override;
     void moveCaretSelection(const WebPoint&) override;
@@ -178,7 +179,7 @@ public:
     bool isPageBoxVisible(int pageIndex) override;
     void pageSizeAndMarginsInPixels(
         int pageIndex,
-        WebSize& pageSize,
+        WebDoubleSize& pageSize,
         int& marginTop,
         int& marginRight,
         int& marginBottom,
@@ -203,8 +204,6 @@ public:
     void setDevToolsAgentClient(WebDevToolsAgentClient*) override;
     WebDevToolsAgent* devToolsAgent() override;
     WebLocalFrameImpl* localRoot() override;
-    WebLocalFrame* traversePreviousLocal(bool wrap) const override;
-    WebLocalFrame* traverseNextLocal(bool wrap) const override;
     void sendPings(const WebURL& destinationURL) override;
     bool dispatchBeforeUnloadEvent(bool) override;
     WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const override;
@@ -226,26 +225,24 @@ public:
     void didCallAddSearchProvider() override;
     void didCallIsSearchProviderInstalled() override;
     void replaceSelection(const WebString&) override;
+    void requestFind(int identifier, const WebString& searchText,
+        const WebFindOptions&) override;
     bool find(
         int identifier, const WebString& searchText, const WebFindOptions&,
-        bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow = nullptr) override;
+        bool wrapWithinFrame, bool* activeNow = nullptr) override;
     void stopFinding(StopFindAction) override;
-    void scopeStringMatches(
-        int identifier, const WebString& searchText, const WebFindOptions&,
-        bool reset) override;
-    void cancelPendingScopingEffort() override;
     void increaseMatchCount(int count, int identifier) override;
-    void resetMatchCount() override;
     int findMatchMarkersVersion() const override;
     WebFloatRect activeFindMatchRect() override;
     void findMatchRects(WebVector<WebFloatRect>&) override;
     int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
     float distanceToNearestFindMatch(const WebFloatPoint&) override;
     void setTickmarks(const WebVector<WebRect>&) override;
-    WebFrameWidget* frameWidget() const override;
+    WebFrameWidgetBase* frameWidget() const override;
     void copyImageAt(const WebPoint&) override;
     void saveImageAt(const WebPoint&) override;
     void clearActiveFindMatch() override;
+    void usageCountChromeLoadTimes(const WebString& metric) override;
 
     // WebFrameImplBase methods:
     void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
@@ -322,7 +319,7 @@ public:
     // Returns a hit-tested VisiblePosition for the given point
     VisiblePosition visiblePositionForViewportPoint(const WebPoint&);
 
-    void setFrameWidget(WebFrameWidget*);
+    void setFrameWidget(WebFrameWidgetBase*);
 
     // DevTools front-end bindings.
     void setDevToolsFrontend(WebDevToolsFrontendImpl* frontend) { m_webDevToolsFrontend = frontend; }
@@ -370,14 +367,14 @@ private:
     Member<WebDevToolsAgentImpl> m_devToolsAgent;
 
     // This is set if the frame is the root of a local frame tree, and requires a widget for layout.
-    WebFrameWidget* m_frameWidget;
+    WebFrameWidgetBase* m_frameWidget;
 
     WebFrameClient* m_client;
     WebAutofillClient* m_autofillClient;
     WebContentSettingsClient* m_contentSettingsClient;
     std::unique_ptr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
 
-    // Will be initialized after first call to find() or scopeStringMatches().
+    // Will be initialized after first call to ensureTextFinder().
     Member<TextFinder> m_textFinder;
 
     // Valid between calls to BeginPrint() and EndPrint(). Containts the print
@@ -387,8 +384,6 @@ private:
     // Stores the additional input events offset and scale when device metrics emulation is enabled.
     IntSize m_inputEventsOffsetForEmulation;
     float m_inputEventsScaleFactorForEmulation;
-
-    UserMediaClientImpl m_userMediaClientImpl;
 
     WebDevToolsFrontendImpl* m_webDevToolsFrontend;
 

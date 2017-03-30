@@ -356,7 +356,7 @@ void RunSimulation(const base::FilePath& source_path,
   sender_env->logger()->Subscribe(&video_event_subscriber);
 
   // Audio sender config.
-  AudioSenderConfig audio_sender_config = GetDefaultAudioSenderConfig();
+  FrameSenderConfig audio_sender_config = GetDefaultAudioSenderConfig();
   audio_sender_config.min_playout_delay =
       audio_sender_config.max_playout_delay = base::TimeDelta::FromMilliseconds(
           GetIntegerSwitchValue(kTargetDelay, 400));
@@ -368,7 +368,7 @@ void RunSimulation(const base::FilePath& source_path,
       audio_sender_config.max_playout_delay.InMilliseconds();
 
   // Video sender config.
-  VideoSenderConfig video_sender_config = GetDefaultVideoSenderConfig();
+  FrameSenderConfig video_sender_config = GetDefaultVideoSenderConfig();
   video_sender_config.max_bitrate = 2500000;
   video_sender_config.min_bitrate = 2000000;
   video_sender_config.start_bitrate = 2000000;
@@ -390,11 +390,10 @@ void RunSimulation(const base::FilePath& source_path,
   PacketProxy packet_proxy;
 
   // Cast receiver.
-  std::unique_ptr<CastTransport> transport_receiver(
-      new CastTransportImpl(&testing_clock, base::TimeDelta::FromSeconds(1),
-                            base::WrapUnique(new TransportClient(
-                                receiver_env->logger(), &packet_proxy)),
-                            base::WrapUnique(receiver_to_sender), task_runner));
+  std::unique_ptr<CastTransport> transport_receiver(new CastTransportImpl(
+      &testing_clock, base::TimeDelta::FromSeconds(1),
+      base::MakeUnique<TransportClient>(receiver_env->logger(), &packet_proxy),
+      base::WrapUnique(receiver_to_sender), task_runner));
   std::unique_ptr<CastReceiver> cast_receiver(
       CastReceiver::Create(receiver_env, audio_receiver_config,
                            video_receiver_config, transport_receiver.get()));
@@ -404,7 +403,7 @@ void RunSimulation(const base::FilePath& source_path,
   // Cast sender and transport sender.
   std::unique_ptr<CastTransport> transport_sender(new CastTransportImpl(
       &testing_clock, base::TimeDelta::FromSeconds(1),
-      base::WrapUnique(new TransportClient(sender_env->logger(), nullptr)),
+      base::MakeUnique<TransportClient>(sender_env->logger(), nullptr),
       base::WrapUnique(sender_to_receiver), task_runner));
   std::unique_ptr<CastSender> cast_sender(
       CastSender::Create(sender_env, transport_sender.get()));

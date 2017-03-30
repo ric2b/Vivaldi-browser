@@ -12,11 +12,14 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/native_library.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/overlay_transform.h"
+#include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface.h"
 #include "ui/ozone/ozone_base_export.h"
 #include "ui/ozone/public/native_pixmap.h"
 
@@ -24,26 +27,27 @@ namespace ui {
 
 class NativePixmap;
 class SurfaceOzoneCanvas;
-class SurfaceOzoneEGL;
 
 // The Ozone interface allows external implementations to hook into Chromium to
 // provide a system specific implementation. The Ozone interface supports two
-// drawing modes: 1) accelerated drawing through EGL and 2) software drawing
+// drawing modes: 1) accelerated drawing using GL and 2) software drawing
 // through Skia.
 //
-// If you want to paint on a window with ozone, you need to create a
-// SurfaceOzoneEGL or SurfaceOzoneCanvas for that window. The platform can
-// support software, EGL, or both for painting on the window.
-// The following functionality is specific to the drawing mode and may not have
-// any meaningful implementation in the other mode. An implementation must
-// provide functionality for at least one mode.
+// If you want to paint on a window with ozone, you need to create a GLSurface
+// or SurfaceOzoneCanvas for that window. The platform can support software, GL,
+// or both for painting on the window. The following functionality is specific
+// to the drawing mode and may not have any meaningful implementation in the
+// other mode. An implementation must provide functionality for at least one
+// mode.
 //
-// 1) Accelerated Drawing (EGL path):
+// 1) Accelerated Drawing (GL path):
 //
-// The following functions are specific to EGL:
-//  - GetNativeDisplay
-//  - LoadEGLGLES2Bindings
-//  - CreateEGLSurfaceForWidget
+// The following functions are specific to GL:
+//  - GetNativeDisplay (EGL only)
+//  - LoadEGLGLES2Bindings (EGL only)
+//  - CreateViewGLSurface (all GL implementations)
+//  - CreateSurfacelessViewGLSurface (EGL only)
+//  - CreateOffscreenGLSurface (all GL implementations)
 //
 // 2) Software Drawing (Skia):
 //
@@ -57,28 +61,29 @@ class SurfaceOzoneEGL;
 // modes (See comments bellow for descriptions).
 class OZONE_BASE_EXPORT SurfaceFactoryOzone {
  public:
-  typedef void* (*GLGetProcAddressProc)(const char* name);
-  typedef base::Callback<void(base::NativeLibrary)> AddGLLibraryCallback;
-  typedef base::Callback<void(GLGetProcAddressProc)>
-      SetGLGetProcAddressProcCallback;
-
   // Returns native platform display handle. This is used to obtain the EGL
   // display connection for the native display.
   virtual intptr_t GetNativeDisplay();
 
-  // Create SurfaceOzoneEGL for the specified gfx::AcceleratedWidget.
-  //
-  // Note: When used from content, this is called in the GPU process. The
-  // platform must support creation of SurfaceOzoneEGL from the GPU process
-  // using only the handle contained in gfx::AcceleratedWidget.
-  virtual std::unique_ptr<SurfaceOzoneEGL> CreateEGLSurfaceForWidget(
+  // Creates a GL surface that renders directly to a view for the specified GL
+  // implementation.
+  virtual scoped_refptr<gl::GLSurface> CreateViewGLSurface(
+      gl::GLImplementation implementation,
       gfx::AcceleratedWidget widget);
 
-  // Create an EGL surface that isn't backed by any buffers, and is used
-  // for overlay-only displays. This will return NULL if this mode is
-  // not supported.
-  virtual std::unique_ptr<SurfaceOzoneEGL> CreateSurfacelessEGLSurfaceForWidget(
+  // Creates a GL surface that renders directly into a window with surfaceless
+  // semantics for the specified GL implementation. The surface is not backed
+  // by any buffers and is used for overlay-only displays. This will return
+  // nullptr if surfaceless mode unsupported.
+  virtual scoped_refptr<gl::GLSurface> CreateSurfacelessViewGLSurface(
+      gl::GLImplementation implementation,
       gfx::AcceleratedWidget widget);
+
+  // Creates a GL surface used for offscreen rendering for the specified GL
+  // implementation.
+  virtual scoped_refptr<gl::GLSurface> CreateOffscreenGLSurface(
+      gl::GLImplementation implementation,
+      const gfx::Size& size);
 
   // Create SurfaceOzoneCanvas for the specified gfx::AcceleratedWidget.
   //
@@ -87,11 +92,8 @@ class OZONE_BASE_EXPORT SurfaceFactoryOzone {
   virtual std::unique_ptr<SurfaceOzoneCanvas> CreateCanvasForWidget(
       gfx::AcceleratedWidget widget);
 
-  // Sets up GL bindings for the native surface. Takes two callback parameters
-  // that allow Ozone to register the GL bindings.
-  virtual bool LoadEGLGLES2Bindings(
-      AddGLLibraryCallback add_gl_library,
-      SetGLGetProcAddressProcCallback set_gl_get_proc_address) = 0;
+  // Sets up GL bindings for the native surface.
+  virtual bool LoadEGLGLES2Bindings();
 
   // Returns all scanout formats for |widget| representing a particular display
   // controller or default display controller for kNullAcceleratedWidget.

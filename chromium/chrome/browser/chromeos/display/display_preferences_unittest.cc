@@ -10,7 +10,8 @@
 #include <utility>
 #include <vector>
 
-#include "ash/display/display_layout_store.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
 #include "ash/display/json_converter.h"
@@ -21,7 +22,6 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -36,6 +36,7 @@
 #include "components/prefs/testing_pref_service.h"
 #include "ui/display/chromeos/display_configurator.h"
 #include "ui/display/manager/display_layout_builder.h"
+#include "ui/display/manager/display_layout_store.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/message_center/message_center.h"
@@ -153,7 +154,7 @@ class DisplayPreferencesTest : public ash::test::AshTestBase {
                                        const std::string& key,
                                        bool value) {
     StoreDisplayPropertyForList(
-        list, key, base::WrapUnique(new base::FundamentalValue(value)));
+        list, key, base::MakeUnique<base::FundamentalValue>(value));
   }
 
   void StoreDisplayLayoutPrefForList(const display::DisplayIdList& list,
@@ -377,8 +378,9 @@ TEST_F(DisplayPreferencesTest, BasicStores) {
   EXPECT_FALSE(property->GetInteger("width", &width));
   EXPECT_FALSE(property->GetInteger("height", &height));
 
-  ash::DisplayMode mode(gfx::Size(300, 200), 60.0f, false, true);
-  mode.device_scale_factor = 1.25f;
+  scoped_refptr<ash::ManagedDisplayMode> mode(new ash::ManagedDisplayMode(
+      gfx::Size(300, 200), 60.0f, false, true, 1.0 /* ui_scale */,
+      1.25f /* device_scale_factor */));
   display_manager->SetDisplayMode(id2, mode);
 
   window_tree_host_manager->SetPrimaryDisplayId(id2);
@@ -526,10 +528,11 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
   // Set display's resolution in single display. It creates the notification and
   // display preferences should not stored meanwhile.
   ash::Shell* shell = ash::Shell::GetInstance();
-  ash::DisplayMode old_mode;
-  ash::DisplayMode new_mode;
-  old_mode.size = gfx::Size(400, 300);
-  new_mode.size = gfx::Size(500, 400);
+
+  scoped_refptr<ash::ManagedDisplayMode> old_mode(
+      new ash::ManagedDisplayMode(gfx::Size(400, 300)));
+  scoped_refptr<ash::ManagedDisplayMode> new_mode(
+      new ash::ManagedDisplayMode(gfx::Size(500, 400)));
   if (shell->display_manager()->SetDisplayMode(id, new_mode)) {
     shell->resolution_notification_controller()->PrepareNotification(
         id, old_mode, new_mode, base::Closure());
@@ -555,7 +558,8 @@ TEST_F(DisplayPreferencesTest, PreventStore) {
   // Once the notification is removed, the specified resolution will be stored
   // by SetDisplayMode.
   ash::Shell::GetInstance()->display_manager()->SetDisplayMode(
-      id, ash::DisplayMode(gfx::Size(300, 200), 60.0f, false, true));
+      id, make_scoped_refptr(new ash::ManagedDisplayMode(gfx::Size(300, 200),
+                                                         60.0f, false, true)));
   UpdateDisplay("300x200#500x400|400x300|300x200");
 
   property = nullptr;
@@ -789,7 +793,8 @@ TEST_F(DisplayPreferencesTest, DontSaveMaximizeModeControllerRotations) {
   update->Set(chromeos::ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD, 0.0f, 0.0f,
              kMeanGravity);
   update->Set(chromeos::ACCELEROMETER_SOURCE_SCREEN, 0.0f, -kMeanGravity, 0.0f);
-  ash::MaximizeModeController* controller = shell->maximize_mode_controller();
+  ash::MaximizeModeController* controller =
+      ash::WmShell::Get()->maximize_mode_controller();
   controller->OnAccelerometerUpdated(update);
   EXPECT_TRUE(controller->IsMaximizeModeWindowManagerEnabled());
 
@@ -936,7 +941,7 @@ TEST_F(DisplayPreferencesTest, LoadRotationNoLogin) {
              kMeanGravity);
   update->Set(chromeos::ACCELEROMETER_SOURCE_SCREEN, 0.0f, -kMeanGravity, 0.0f);
   ash::MaximizeModeController* maximize_mode_controller =
-      shell->maximize_mode_controller();
+      ash::WmShell::Get()->maximize_mode_controller();
   maximize_mode_controller->OnAccelerometerUpdated(update);
   EXPECT_TRUE(maximize_mode_controller->IsMaximizeModeWindowManagerEnabled());
   bool screen_orientation_rotation_lock = IsRotationLocked();
@@ -1031,7 +1036,7 @@ TEST_F(DisplayPreferencesTest, RestoreUnifiedMode) {
   StoreDisplayBoolPropertyForList(list, "default_unified", true);
   StoreDisplayPropertyForList(
       list, "primary-id",
-      base::WrapUnique(new base::StringValue(base::Int64ToString(id1))));
+      base::MakeUnique<base::StringValue>(base::Int64ToString(id1)));
   LoadDisplayPreferences(false);
 
   // Should not restore to unified unless unified desktop is enabled.

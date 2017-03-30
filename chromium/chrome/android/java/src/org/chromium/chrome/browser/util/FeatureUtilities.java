@@ -23,12 +23,14 @@ import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
-import org.chromium.chrome.browser.AppLinkHandler;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.download.DownloadUtils;
+import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
-import org.chromium.sync.signin.AccountManagerHelper;
+import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
+import org.chromium.components.sync.signin.AccountManagerHelper;
 import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.List;
@@ -156,30 +158,6 @@ public class FeatureUtilities {
         nativeSetIsInMultiWindowMode(isInMultiWindowMode);
     }
 
-    /**
-     * Check whether tab switching is enabled for the current context.
-     * Note that this may return false if native library is not yet ready.
-     * @param context The context
-     * @return Whether tab switching is enabled for the current context.
-     */
-    public static boolean isTabSwitchingEnabled(Context context) {
-        return !isDocumentMode(context) || isTabSwitchingEnabledInDocumentModeInternal();
-    }
-
-    /**
-     * Check whether tab switching is enabled in document mode.
-     * Note that this may return false if native library is not yet ready.
-     * @return Whether tab switching is enabled in document mode.
-     */
-    public static boolean isTabSwitchingEnabledInDocumentMode(Context context) {
-        return isDocumentMode(context) && isTabSwitchingEnabledInDocumentModeInternal();
-    }
-
-    private static boolean isTabSwitchingEnabledInDocumentModeInternal() {
-        return CommandLine.getInstance().hasSwitch(
-                ChromeSwitches.ENABLE_TAB_SWITCHER_IN_DOCUMENT_MODE);
-    }
-
     private static boolean isHerbDisallowed(Context context) {
         return isDocumentMode(context);
     }
@@ -216,8 +194,10 @@ public class FeatureUtilities {
      */
     public static void cacheNativeFlags(ChromeApplication application) {
         cacheHerbFlavor();
-        AppLinkHandler.getInstance(application).cacheAppLinkEnabled(
+        DownloadUtils.cacheIsDownloadHomeEnabled();
+        InstantAppsHandler.getInstance(application).cacheInstantAppsEnabled(
                 application.getApplicationContext());
+        ChromeWebApkHost.cacheEnabledStateForNextLaunch();
     }
 
     /**
@@ -273,11 +253,10 @@ public class FeatureUtilities {
     }
 
     /**
-     * @return True if theme colors in the tab switcher are enabled.
+     * @return True if tab model merging for Android N+ is enabled.
      */
-    public static boolean areTabSwitcherThemeColorsEnabled() {
-        return CommandLine.getInstance().hasSwitch(
-                ChromeSwitches.ENABLE_TAB_SWITCHER_THEME_COLORS);
+    public static boolean isTabModelMergingEnabled() {
+        return Build.VERSION.SDK_INT > Build.VERSION_CODES.M;
     }
 
     private static native void nativeSetDocumentModeEnabled(boolean enabled);

@@ -32,19 +32,14 @@ SurfacesInstance* g_surfaces_instance = nullptr;
 }  // namespace
 
 // static
-scoped_refptr<SurfacesInstance> SurfacesInstance::GetOrCreateInstance(
-    int framebuffer_binding_ext) {
-  if (g_surfaces_instance) {
-    g_surfaces_instance->SetBackingFrameBufferObject(framebuffer_binding_ext);
+scoped_refptr<SurfacesInstance> SurfacesInstance::GetOrCreateInstance() {
+  if (g_surfaces_instance)
     return make_scoped_refptr(g_surfaces_instance);
-  }
-  return make_scoped_refptr(new SurfacesInstance(framebuffer_binding_ext));
+  return make_scoped_refptr(new SurfacesInstance);
 }
 
-SurfacesInstance::SurfacesInstance(int framebuffer_binding_ext)
-  : next_surface_id_namespace_(1u),
-    gl_surface_(new AwGLSurface) {
-  gl_surface_->SetBackingFrameBufferObject(framebuffer_binding_ext);
+SurfacesInstance::SurfacesInstance()
+    : next_surface_client_id_(1u) {
   cc::RendererSettings settings;
 
   // Should be kept in sync with compositor_impl_android.cc.
@@ -56,8 +51,8 @@ SurfacesInstance::SurfacesInstance(int framebuffer_binding_ext)
 
   surface_manager_.reset(new cc::SurfaceManager);
   surface_id_allocator_.reset(
-      new cc::SurfaceIdAllocator(next_surface_id_namespace_++));
-  surface_id_allocator_->RegisterSurfaceIdNamespace(surface_manager_.get());
+      new cc::SurfaceIdAllocator(next_surface_client_id_++));
+  surface_manager_->RegisterSurfaceClientId(surface_id_allocator_->client_id());
 
   std::unique_ptr<cc::BeginFrameSource> begin_frame_source(
       new cc::StubBeginFrameSource);
@@ -65,18 +60,20 @@ SurfacesInstance::SurfacesInstance(int framebuffer_binding_ext)
       new cc::TextureMailboxDeleter(nullptr));
   std::unique_ptr<ParentOutputSurface> output_surface_holder(
       new ParentOutputSurface(AwRenderThreadContextProvider::Create(
-          gl_surface_, DeferredGpuCommandService::GetInstance())));
+          make_scoped_refptr(new AwGLSurface),
+          DeferredGpuCommandService::GetInstance())));
   output_surface_ = output_surface_holder.get();
   std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
       begin_frame_source.get(), nullptr,
       output_surface_holder->capabilities().max_frames_pending));
   display_.reset(new cc::Display(
-      surface_manager_.get(), nullptr /* shared_bitmap_manager */,
+      nullptr /* shared_bitmap_manager */,
       nullptr /* gpu_memory_buffer_manager */, settings,
-      surface_id_allocator_->id_namespace(), std::move(begin_frame_source),
-      std::move(output_surface_holder), std::move(scheduler),
-      std::move(texture_mailbox_deleter)));
-  display_->Initialize(this);
+      std::move(begin_frame_source), std::move(output_surface_holder),
+      std::move(scheduler), std::move(texture_mailbox_deleter)));
+  display_->Initialize(this, surface_manager_.get(),
+                       surface_id_allocator_->client_id());
+  display_->SetVisible(true);
 
   surface_factory_.reset(new cc::SurfaceFactory(surface_manager_.get(), this));
 
@@ -92,31 +89,24 @@ SurfacesInstance::~SurfacesInstance() {
   DCHECK(child_ids_.empty());
   if (!root_id_.is_null())
     surface_factory_->Destroy(root_id_);
+
+  surface_manager_->InvalidateSurfaceClientId(
+      surface_id_allocator_->client_id());
 }
 
-std::unique_ptr<cc::SurfaceIdAllocator>
-SurfacesInstance::CreateSurfaceIdAllocator() {
-  std::unique_ptr<cc::SurfaceIdAllocator> allocator = base::WrapUnique(
-      new cc::SurfaceIdAllocator(next_surface_id_namespace_++));
-  allocator->RegisterSurfaceIdNamespace(surface_manager_.get());
-  return allocator;
+uint32_t SurfacesInstance::AllocateSurfaceClientId() {
+  return next_surface_client_id_++;
 }
 
 cc::SurfaceManager* SurfacesInstance::GetSurfaceManager() {
   return surface_manager_.get();
 }
 
-void SurfacesInstance::SetBackingFrameBufferObject(
-    int framebuffer_binding_ext) {
-  gl_surface_->SetBackingFrameBufferObject(framebuffer_binding_ext);
-}
-
 void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
                                    const gfx::Rect& clip,
                                    const gfx::Transform& transform,
                                    const gfx::Size& frame_size,
-                                   const cc::SurfaceId& child_id,
-                                   const ScopedAppGLStateRestore& gl_state) {
+                                   const cc::SurfaceId& child_id) {
   DCHECK(std::find(child_ids_.begin(), child_ids_.end(), child_id) !=
          child_ids_.end());
 
@@ -153,7 +143,7 @@ void SurfacesInstance::DrawAndSwap(const gfx::Size& viewport,
   surface_factory_->SubmitCompositorFrame(root_id_, std::move(frame),
                                           cc::SurfaceFactory::DrawCallback());
 
-  output_surface_->SetGLState(gl_state);
+  output_surface_->UpdateStencilTest();
   display_->Resize(viewport);
   display_->SetExternalClip(clip);
   display_->DrawAndSwap();

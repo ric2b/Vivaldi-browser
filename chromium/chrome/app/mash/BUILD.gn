@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/service_manifest.gni")
 
 source_set("mash") {
   sources = [
@@ -12,9 +12,9 @@ source_set("mash") {
   deps = [
     "//ash/mus:lib",
     "//ash/resources",
-    "//ash/sysui:lib",
+    "//ash/touch_hud/mus:lib",
     "//base:i18n",
-    "//components/mus:lib",
+    "//components/tracing:startup_tracing",
     "//content/public/common",
     "//mash/app_driver:lib",
     "//mash/quick_launch:lib",
@@ -27,6 +27,7 @@ source_set("mash") {
     "//services/shell/runner/common",
     "//services/shell/runner/host:child_process_base",
     "//services/shell/runner/host:lib",
+    "//services/ui:lib",
     "//url",
   ]
   data_deps = [
@@ -38,31 +39,31 @@ source_set("mash") {
   }
 }
 
-mojo_application_manifest("manifest") {
+service_manifest("manifest") {
   type = "exe"
-  application_name = "chrome_mash"
+  name = "chrome_mash"
   source = "chrome_mash_manifest.json"
   deps = [
     "//ash/mus:manifest",
-    "//ash/sysui:manifest",
-    "//components/mus:manifest",
+    "//ash/touch_hud/mus:manifest",
     "//mash/app_driver:manifest",
     "//mash/quick_launch:manifest",
     "//mash/session:manifest",
     "//mash/task_viewer:manifest",
+    "//services/ui:manifest",
   ]
-  packaged_applications = [
+  packaged_services = [
     "app_driver",
     "ash",
-    "ash_sysui",
     "mash_session",
-    "mus",
     "quick_launch",
     "task_viewer",
+    "touch_hud",
+    "ui",
   ]
 
   if (is_linux && !is_android) {
     deps += [ "//components/font_service:manifest" ]
-    packaged_applications += [ "font_service" ]
+    packaged_services += [ "font_service" ]
   }
 }

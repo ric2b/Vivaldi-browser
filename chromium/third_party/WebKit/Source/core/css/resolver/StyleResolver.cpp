@@ -80,11 +80,12 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLSlotElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/GeneratedChildren.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/style/StyleVariableData.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGElement.h"
@@ -116,7 +117,7 @@ bool cacheCustomPropertiesForApplyAtRules(StyleResolverState& state, const Match
             StylePropertySet::PropertyReference current = properties.propertyAt(i);
             if (current.id() != CSSPropertyApplyAtRule)
                 continue;
-            AtomicString name(toCSSCustomIdentValue(current.value())->value());
+            AtomicString name(toCSSCustomIdentValue(current.value()).value());
             CSSVariableData* variableData = state.style()->variables()->getVariable(name);
             if (!variableData)
                 continue;
@@ -226,10 +227,10 @@ void StyleResolver::removePendingAuthorStyleSheets(const HeapVector<Member<CSSSt
 
 void StyleResolver::appendCSSStyleSheet(CSSStyleSheet& cssSheet)
 {
-    ASSERT(!cssSheet.disabled());
-    ASSERT(cssSheet.ownerDocument());
-    ASSERT(cssSheet.ownerNode());
-    ASSERT(isHTMLStyleElement(cssSheet.ownerNode()) || isSVGStyleElement(cssSheet.ownerNode()) || cssSheet.ownerNode()->treeScope() == cssSheet.ownerDocument());
+    DCHECK(!cssSheet.disabled());
+    DCHECK(cssSheet.ownerDocument());
+    DCHECK(cssSheet.ownerNode());
+    DCHECK(isHTMLStyleElement(cssSheet.ownerNode()) || isSVGStyleElement(cssSheet.ownerNode()) || cssSheet.ownerNode()->isConnected());
 
     if (cssSheet.mediaQueries() && !m_medium->eval(cssSheet.mediaQueries(), &m_viewportDependentMediaQueryResults, &m_deviceDependentMediaQueryResults))
         return;
@@ -272,8 +273,8 @@ void StyleResolver::finishAppendAuthorStyleSheets()
 {
     collectFeatures();
 
-    if (document().layoutView() && document().layoutView()->style())
-        document().layoutView()->style()->font().update(document().styleEngine().fontSelector());
+    if (!document().layoutViewItem().isNull() && document().layoutViewItem().style())
+        document().layoutViewItem().style()->font().update(document().styleEngine().fontSelector());
 
     m_viewportStyleResolver->collectViewportRules();
 
@@ -680,9 +681,10 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document)
     documentStyle->setRTLOrdering(document.visuallyOrdered() ? VisualOrder : LogicalOrder);
     documentStyle->setZoom(frame && !document.printing() ? frame->pageZoomFactor() : 1);
     FontDescription documentFontDescription = documentStyle->getFontDescription();
-    documentFontDescription.setLocale(document.contentLanguage());
+    documentFontDescription.setLocale(LayoutLocale::get(document.contentLanguage()));
     documentStyle->setFontDescription(documentFontDescription);
     documentStyle->setZIndex(0);
+    documentStyle->setIsStackingContext(true);
     documentStyle->setUserModify(document.inDesignMode() ? READ_WRITE : READ_ONLY);
     // These are designed to match the user-agent stylesheet values for the document element
     // so that the common case doesn't need to create a new ComputedStyle in
@@ -697,8 +699,7 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForDocument(Document& document)
 
 void StyleResolver::adjustComputedStyle(StyleResolverState& state, Element* element)
 {
-    StyleAdjuster adjuster;
-    adjuster.adjustComputedStyle(state.mutableStyleRef(), *state.parentStyle(), element);
+    StyleAdjuster::adjustComputedStyle(state.mutableStyleRef(), *state.parentStyle(), element);
 }
 
 // Start loading resources referenced by this style.
@@ -792,6 +793,16 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(Element* element, const
 
         matchAllRules(state, collector, matchingBehavior != MatchAllRulesExcludingSMIL);
 
+        // TODO(dominicc): Remove this counter when Issue 590014 is fixed.
+        if (element->hasTagName(HTMLNames::summaryTag)) {
+            MatchedPropertiesRange properties = collector.matchedResult().authorRules();
+            for (auto it = properties.begin(); it != properties.end(); ++it) {
+                const CSSValue* value = it->properties->getPropertyCSSValue(CSSPropertyDisplay);
+                if (value && value->isPrimitiveValue() && toCSSPrimitiveValue(*value).getValueID() == CSSValueBlock)
+                    UseCounter::count(element->document(), UseCounter::SummaryElementWithDisplayBlockAuthorRule);
+            }
+        }
+
         if (element->computedStyle() && element->computedStyle()->textAutosizingMultiplier() != state.style()->textAutosizingMultiplier()) {
             // Preserve the text autosizing multiplier on style recalc. Autosizer will update it during layout if needed.
             // NOTE: this must occur before applyMatchedProperties for correct computation of font-relative lengths.
@@ -839,17 +850,12 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(Element* element, const
     return state.takeStyle();
 }
 
-// This function is used by the WebAnimations JavaScript API method animate().
-// FIXME: Remove this when animate() switches away from resolution-dependent parsing.
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle* baseStyle, CSSPropertyID property, const CSSValue* value)
+// TODO(alancutter): Create compositor keyframe values directly instead of intermediate AnimatableValues.
+PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle& baseStyle, const ComputedStyle* parentStyle, CSSPropertyID property, const CSSValue* value)
 {
-    StyleResolverState state(element.document(), &element);
-    state.setStyle(baseStyle ? ComputedStyle::clone(*baseStyle) : ComputedStyle::create());
-    return createAnimatableValueSnapshot(state, property, value);
-}
-
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, const CSSValue* value)
-{
+    // TODO(alancutter): Avoid creating a StyleResolverState just to apply a single value on a ComputedStyle.
+    StyleResolverState state(element.document(), &element, parentStyle);
+    state.setStyle(ComputedStyle::clone(baseStyle));
     if (value) {
         StyleBuilder::applyProperty(property, state, *value);
         state.fontBuilder().createFont(state.document().styleEngine().fontSelector(), state.mutableStyleRef());
@@ -1120,6 +1126,8 @@ bool StyleResolver::applyAnimatedProperties(StyleResolverState& state, const Ele
     if (state.animationUpdate().isEmpty())
         return false;
 
+    CSSAnimations::snapshotCompositorKeyframes(*element, state.animationUpdate(), *state.style(), state.parentStyle());
+
     if (state.style()->insideLink() != NotInsideLink) {
         ASSERT(state.applyPropertyToRegularStyle());
         state.setApplyPropertyToVisitedLinkStyle(true);
@@ -1384,7 +1392,7 @@ static inline bool isPropertyInWhitelist(PropertyWhitelistType propertyWhitelist
 // This method expands the 'all' shorthand property to longhand properties
 // and applies the expanded longhand properties.
 template <CSSPropertyPriority priority>
-void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allValue, bool inheritedOnly, PropertyWhitelistType propertyWhitelistType)
+void StyleResolver::applyAllProperty(StyleResolverState& state, const CSSValue& allValue, bool inheritedOnly, PropertyWhitelistType propertyWhitelistType)
 {
     // The 'all' property doesn't apply to variables:
     // https://drafts.csswg.org/css-variables/#defining-variables
@@ -1418,17 +1426,19 @@ void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allVal
         if (inheritedOnly && !CSSPropertyMetadata::isInheritedProperty(propertyId))
             continue;
 
-        StyleBuilder::applyProperty(propertyId, state, *allValue);
+        StyleBuilder::applyProperty(propertyId, state, allValue);
     }
 }
 
 template <CSSPropertyPriority priority>
-void StyleResolver::applyPropertiesForApplyAtRule(StyleResolverState& state, const CSSValue* value, bool isImportant, bool inheritedOnly, PropertyWhitelistType propertyWhitelistType)
+void StyleResolver::applyPropertiesForApplyAtRule(StyleResolverState& state, const CSSValue& value, bool isImportant, PropertyWhitelistType propertyWhitelistType)
 {
+    state.style()->setHasVariableReferenceFromNonInheritedProperty();
     if (!state.style()->variables())
         return;
-    const String& name = toCSSCustomIdentValue(value)->value();
+    const String& name = toCSSCustomIdentValue(value).value();
     const StylePropertySet* propertySet = state.customPropertySetForApplyAtRule(name);
+    bool inheritedOnly = false;
     if (propertySet)
         applyProperties<priority>(state, propertySet, isImportant, inheritedOnly, propertyWhitelistType);
 }
@@ -1442,7 +1452,8 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
         CSSPropertyID property = current.id();
 
         if (property == CSSPropertyApplyAtRule) {
-            applyPropertiesForApplyAtRule<priority>(state, current.value(), isImportant, inheritedOnly, propertyWhitelistType);
+            DCHECK(!inheritedOnly);
+            applyPropertiesForApplyAtRule<priority>(state, current.value(), isImportant, propertyWhitelistType);
             continue;
         }
 
@@ -1461,14 +1472,14 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
             // If the property value is explicitly inherited, we need to apply further non-inherited properties
             // as they might override the value inherited here. For this reason we don't allow declarations with
             // explicitly inherited properties to be cached.
-            ASSERT(!current.value()->isInheritedValue());
+            DCHECK(!current.value().isInheritedValue());
             continue;
         }
 
         if (!CSSPropertyPriorityData<priority>::propertyHasPriority(property))
             continue;
 
-        StyleBuilder::applyProperty(current.id(), state, *current.value());
+        StyleBuilder::applyProperty(current.id(), state, current.value());
     }
 }
 

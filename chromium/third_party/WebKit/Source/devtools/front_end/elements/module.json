@@ -1,11 +1,11 @@
 {
     "extensions": [
         {
-            "type": "@WebInspector.PanelFactory",
+            "type": "@WebInspector.Panel",
             "name": "elements",
             "title": "Elements",
             "order": 10,
-            "className": "WebInspector.ElementsPanelFactory"
+            "className": "WebInspector.ElementsPanel"
         },
         {
             "type": "@WebInspector.ContextMenu.Provider",
@@ -21,6 +21,11 @@
             "type": "@WebInspector.Revealer",
             "contextTypes": ["WebInspector.DOMNode", "WebInspector.DeferredDOMNode", "WebInspector.RemoteObject" ],
             "className": "WebInspector.ElementsPanel.DOMNodeRevealer"
+        },
+        {
+            "type": "@WebInspector.Revealer",
+            "contextTypes": ["WebInspector.CSSProperty" ],
+            "className": "WebInspector.ElementsPanel.CSSPropertyRevealer"
         },
         {
             "type": "setting",
@@ -62,9 +67,28 @@
         {
             "type": "setting",
             "category": "Elements",
+            "order": 3,
+            "title": "Show HTML comments",
+            "settingName": "showHTMLComments",
+            "settingType": "boolean",
+            "defaultValue": true,
+            "options": [
+                { "value": true, "title": "Show HTML comments" },
+                { "value": false, "title": "Hide HTML comments" }
+            ]
+        },
+        {
+            "type": "setting",
+            "category": "Elements",
             "order": 4,
-            "title": "Reveal DOM node on hover.",
+            "title": "Reveal DOM node on hover",
             "settingName": "highlightNodeOnHoverInOverlay",
+            "settingType": "boolean",
+            "defaultValue": true
+        },
+        {
+            "type": "setting",
+            "settingName": "showEventListenersForAncestors",
             "settingType": "boolean",
             "defaultValue": true
         },
@@ -78,6 +102,12 @@
             "type": "@WebInspector.ToolbarItem.Provider",
             "className": "WebInspector.ClassesPaneWidget.ButtonProvider",
             "order": 2,
+            "location": "styles-sidebarpane-toolbar"
+        },
+        {
+            "type": "@WebInspector.ToolbarItem.Provider",
+            "className": "WebInspector.StylesSidebarPane.ButtonProvider",
+            "order": 100,
             "location": "styles-sidebarpane-toolbar"
         },
         {
@@ -109,7 +139,7 @@
         },
         {
             "type": "@WebInspector.DOMPresentationUtils.MarkerDecorator",
-            "className": "WebInspector.DOMPresentationUtils.GenericDecorator",
+            "factoryName": "WebInspector.DOMPresentationUtils.GenericDecorator",
             "marker": "hidden-marker",
             "title": "Element is hidden",
             "color": "#555"
@@ -143,6 +173,39 @@
             "order": 4,
             "location": "styles-sidebarpane-toolbar",
             "experiment": "layoutEditor"
+        },
+        {
+            "type": "@WebInspector.ViewLocationResolver",
+            "name": "elements-sidebar",
+            "className": "WebInspector.ElementsPanel"
+        },
+        {
+            "type": "view",
+            "location": "elements-sidebar",
+            "id": "elements.eventListeners",
+            "title": "Event Listeners",
+            "order": 5,
+            "hasToolbar": true,
+            "persistence": "permanent",
+            "className": "WebInspector.EventListenersWidget"
+        },
+        {
+            "type": "view",
+            "location": "elements-sidebar",
+            "id": "elements.domBreakpoints",
+            "title": "DOM Breakpoints",
+            "order": 6,
+            "persistence": "permanent",
+            "factoryName": "WebInspector.DOMBreakpointsSidebarPane.Proxy"
+        },
+        {
+            "type": "view",
+            "location": "elements-sidebar",
+            "id": "elements.domProperties",
+            "title": "Properties",
+            "order": 7,
+            "persistence": "permanent",
+            "className": "WebInspector.PropertiesWidget"
         }
     ],
     "dependencies": [
@@ -152,15 +215,13 @@
     "scripts": [
         "InspectElementModeController.js",
         "BezierUI.js",
-        "StylesPopoverHelper.js",
+        "ColorSwatchPopoverIcon.js",
         "BezierEditor.js",
-        "Spectrum.js",
+        "ComputedStyleModel.js",
         "ElementsBreadcrumbs.js",
         "ElementsSidebarPane.js",
-        "ElementsSidebarView.js",
         "ElementsTreeElement.js",
         "ElementsTreeOutline.js",
-        "SharedSidebarModel.js",
         "EventListenersWidget.js",
         "MetricsSidebarPane.js",
         "PlatformFontsWidget.js",
@@ -179,7 +240,6 @@
         "computedStyleSidebarPane.css",
         "elementsPanel.css",
         "elementsTreeOutline.css",
-        "spectrum.css",
         "platformFontsWidget.css"
     ]
 }

@@ -34,8 +34,13 @@
 #include "net/http/http_response_info.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/socket_test_util.h"
+#include "net/test/gtest_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
+
+using net::test::IsError;
+using net::test::IsOk;
 
 namespace net {
 
@@ -56,7 +61,7 @@ std::unique_ptr<ClientSocketHandle> CreateConnectedSocketHandle(
       new MockTCPClientSocket(net::AddressList(), nullptr, data));
 
   TestCompletionCallback callback;
-  EXPECT_EQ(OK, socket->Connect(callback.callback()));
+  EXPECT_THAT(socket->Connect(callback.callback()), IsOk());
 
   std::unique_ptr<ClientSocketHandle> socket_handle(new ClientSocketHandle);
   socket_handle->SetSocket(std::move(socket));
@@ -74,7 +79,7 @@ class ReadErrorUploadDataStream : public UploadDataStream {
   void CompleteRead() { UploadDataStream::OnReadCompleted(ERR_FAILED); }
 
   // UploadDataStream implementation:
-  int InitInternal() override { return OK; }
+  int InitInternal(const BoundNetLog& net_log) override { return OK; }
 
   int ReadInternal(IOBuffer* buf, int buf_len) override {
     if (async_ == FailureMode::ASYNC) {
@@ -107,7 +112,9 @@ TEST(HttpStreamParser, DataReadErrorSynchronous) {
 
   ReadErrorUploadDataStream upload_data_stream(
       ReadErrorUploadDataStream::FailureMode::SYNC);
-  ASSERT_EQ(OK, upload_data_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(upload_data_stream.Init(TestCompletionCallback().callback(),
+                                      BoundNetLog()),
+              IsOk());
 
   HttpRequestInfo request;
   request.method = "POST";
@@ -125,7 +132,7 @@ TEST(HttpStreamParser, DataReadErrorSynchronous) {
   TestCompletionCallback callback;
   int result = parser.SendRequest("POST / HTTP/1.1\r\n", headers, &response,
                                   callback.callback());
-  EXPECT_EQ(ERR_FAILED, callback.GetResult(result));
+  EXPECT_THAT(callback.GetResult(result), IsError(ERR_FAILED));
 
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)), parser.sent_bytes());
 }
@@ -142,7 +149,9 @@ TEST(HttpStreamParser, DataReadErrorAsynchronous) {
 
   ReadErrorUploadDataStream upload_data_stream(
       ReadErrorUploadDataStream::FailureMode::ASYNC);
-  ASSERT_EQ(OK, upload_data_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(upload_data_stream.Init(TestCompletionCallback().callback(),
+                                      BoundNetLog()),
+              IsOk());
 
   HttpRequestInfo request;
   request.method = "POST";
@@ -160,9 +169,9 @@ TEST(HttpStreamParser, DataReadErrorAsynchronous) {
   TestCompletionCallback callback;
   int result = parser.SendRequest("POST / HTTP/1.1\r\n", headers, &response,
                                   callback.callback());
-  EXPECT_EQ(ERR_IO_PENDING, result);
+  EXPECT_THAT(result, IsError(ERR_IO_PENDING));
 
-  EXPECT_EQ(ERR_FAILED, callback.GetResult(result));
+  EXPECT_THAT(callback.GetResult(result), IsError(ERR_FAILED));
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)), parser.sent_bytes());
 }
 
@@ -221,7 +230,7 @@ TEST(HttpStreamParser, EncodeChunk_TooLargePayload) {
   const std::string kPayload(kMaxPayloadSize + 1, '\xff');
   const int num_bytes_written =
       HttpStreamParser::EncodeChunk(kPayload, output, sizeof(output));
-  ASSERT_EQ(ERR_INVALID_ARGUMENT, num_bytes_written);
+  ASSERT_THAT(num_bytes_written, IsError(ERR_INVALID_ARGUMENT));
 }
 
 TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_NoBody) {
@@ -234,7 +243,7 @@ TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_EmptyBody) {
   std::vector<std::unique_ptr<UploadElementReader>> element_readers;
   std::unique_ptr<UploadDataStream> body(base::WrapUnique(
       new ElementsUploadDataStream(std::move(element_readers), 0)));
-  ASSERT_EQ(OK, body->Init(CompletionCallback()));
+  ASSERT_THAT(body->Init(CompletionCallback(), BoundNetLog()), IsOk());
   // Shouldn't be merged if upload data is empty.
   ASSERT_FALSE(HttpStreamParser::ShouldMergeRequestHeadersAndBody(
       "some header", body.get()));
@@ -244,7 +253,8 @@ TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_ChunkedBody) {
   const std::string payload = "123";
   std::unique_ptr<ChunkedUploadDataStream> body(new ChunkedUploadDataStream(0));
   body->AppendData(payload.data(), payload.size(), true);
-  ASSERT_EQ(OK, body->Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(body->Init(TestCompletionCallback().callback(), BoundNetLog()),
+              IsOk());
   // Shouldn't be merged if upload data carries chunked data.
   ASSERT_FALSE(HttpStreamParser::ShouldMergeRequestHeadersAndBody(
       "some header", body.get()));
@@ -267,8 +277,9 @@ TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_FileBody) {
     std::unique_ptr<UploadDataStream> body(
         new ElementsUploadDataStream(std::move(element_readers), 0));
     TestCompletionCallback callback;
-    ASSERT_EQ(ERR_IO_PENDING, body->Init(callback.callback()));
-    ASSERT_EQ(OK, callback.WaitForResult());
+    ASSERT_THAT(body->Init(callback.callback(), BoundNetLog()),
+                IsError(ERR_IO_PENDING));
+    ASSERT_THAT(callback.WaitForResult(), IsOk());
     // Shouldn't be merged if upload data carries a file, as it's not in-memory.
     ASSERT_FALSE(HttpStreamParser::ShouldMergeRequestHeadersAndBody(
         "some header", body.get()));
@@ -286,7 +297,7 @@ TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_SmallBodyInMemory) {
 
   std::unique_ptr<UploadDataStream> body(
       new ElementsUploadDataStream(std::move(element_readers), 0));
-  ASSERT_EQ(OK, body->Init(CompletionCallback()));
+  ASSERT_THAT(body->Init(CompletionCallback(), BoundNetLog()), IsOk());
   // Yes, should be merged if the in-memory body is small here.
   ASSERT_TRUE(HttpStreamParser::ShouldMergeRequestHeadersAndBody(
       "some header", body.get()));
@@ -300,7 +311,7 @@ TEST(HttpStreamParser, ShouldMergeRequestHeadersAndBody_LargeBodyInMemory) {
 
   std::unique_ptr<UploadDataStream> body(
       new ElementsUploadDataStream(std::move(element_readers), 0));
-  ASSERT_EQ(OK, body->Init(CompletionCallback()));
+  ASSERT_THAT(body->Init(CompletionCallback(), BoundNetLog()), IsOk());
   // Shouldn't be merged if the in-memory body is large here.
   ASSERT_FALSE(HttpStreamParser::ShouldMergeRequestHeadersAndBody(
       "some header", body.get()));
@@ -442,7 +453,9 @@ TEST(HttpStreamParser, SentBytesPost) {
   element_readers.push_back(
       base::WrapUnique(new UploadBytesElementReader("hello world!", 12)));
   ElementsUploadDataStream upload_data_stream(std::move(element_readers), 0);
-  ASSERT_EQ(OK, upload_data_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(upload_data_stream.Init(TestCompletionCallback().callback(),
+                                      BoundNetLog()),
+              IsOk());
 
   HttpRequestInfo request;
   request.method = "POST";
@@ -479,7 +492,9 @@ TEST(HttpStreamParser, SentBytesChunkedPostError) {
       CreateConnectedSocketHandle(&data);
 
   ChunkedUploadDataStream upload_data_stream(0);
-  ASSERT_EQ(OK, upload_data_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(upload_data_stream.Init(TestCompletionCallback().callback(),
+                                      BoundNetLog()),
+              IsOk());
 
   HttpRequestInfo request;
   request.method = "POST";
@@ -504,7 +519,7 @@ TEST(HttpStreamParser, SentBytesChunkedPostError) {
   base::RunLoop().RunUntilIdle();
   // This write should fail.
   upload_data_stream.AppendData(kChunk, arraysize(kChunk) - 1, false);
-  EXPECT_EQ(ERR_FAILED, callback.WaitForResult());
+  EXPECT_THAT(callback.WaitForResult(), IsError(ERR_FAILED));
 
   EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)), parser.sent_bytes());
 }
@@ -535,7 +550,9 @@ TEST(HttpStreamParser, AsyncSingleChunkAndAsyncSocket) {
   };
 
   ChunkedUploadDataStream upload_stream(0);
-  ASSERT_EQ(OK, upload_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(
+      upload_stream.Init(TestCompletionCallback().callback(), BoundNetLog()),
+      IsOk());
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
   std::unique_ptr<ClientSocketHandle> socket_handle =
@@ -567,11 +584,12 @@ TEST(HttpStreamParser, AsyncSingleChunkAndAsyncSocket) {
 
   // Now append the only chunk and wait for the callback.
   upload_stream.AppendData(kChunk, arraysize(kChunk) - 1, true);
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Attempt to read the response status and the response headers.
-  ASSERT_EQ(ERR_IO_PENDING, parser.ReadResponseHeaders(callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()),
+              IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Finally, attempt to read the response body.
   scoped_refptr<IOBuffer> body_buffer(new IOBuffer(kBodySize));
@@ -610,7 +628,9 @@ TEST(HttpStreamParser, SyncSingleChunkAndAsyncSocket) {
   };
 
   ChunkedUploadDataStream upload_stream(0);
-  ASSERT_EQ(OK, upload_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(
+      upload_stream.Init(TestCompletionCallback().callback(), BoundNetLog()),
+      IsOk());
   // Append the only chunk.
   upload_stream.AppendData(kChunk, arraysize(kChunk) - 1, true);
 
@@ -637,11 +657,12 @@ TEST(HttpStreamParser, SyncSingleChunkAndAsyncSocket) {
   ASSERT_EQ(ERR_IO_PENDING,
             parser.SendRequest("GET /one.html HTTP/1.1\r\n", request_headers,
                                &response_info, callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Attempt to read the response status and the response headers.
-  ASSERT_EQ(ERR_IO_PENDING, parser.ReadResponseHeaders(callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()),
+              IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Finally, attempt to read the response body.
   scoped_refptr<IOBuffer> body_buffer(new IOBuffer(kBodySize));
@@ -689,7 +710,9 @@ TEST(HttpStreamParser, AsyncChunkAndAsyncSocketWithMultipleChunks) {
 
   ChunkedUploadDataStream upload_stream(0);
   upload_stream.AppendData(kChunk1, arraysize(kChunk1) - 1, false);
-  ASSERT_EQ(OK, upload_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(
+      upload_stream.Init(TestCompletionCallback().callback(), BoundNetLog()),
+      IsOk());
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
   std::unique_ptr<ClientSocketHandle> socket_handle =
@@ -730,11 +753,12 @@ TEST(HttpStreamParser, AsyncChunkAndAsyncSocketWithMultipleChunks) {
   ASSERT_FALSE(callback.have_result());
 
   // Wait for writes to complete.
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Attempt to read the response status and the response headers.
-  ASSERT_EQ(ERR_IO_PENDING, parser.ReadResponseHeaders(callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()),
+              IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Finally, attempt to read the response body.
   scoped_refptr<IOBuffer> body_buffer(new IOBuffer(kBodySize));
@@ -770,7 +794,9 @@ TEST(HttpStreamParser, AsyncEmptyChunkedUpload) {
   };
 
   ChunkedUploadDataStream upload_stream(0);
-  ASSERT_EQ(OK, upload_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(
+      upload_stream.Init(TestCompletionCallback().callback(), BoundNetLog()),
+      IsOk());
 
   SequencedSocketData data(reads, arraysize(reads), writes, arraysize(writes));
   std::unique_ptr<ClientSocketHandle> socket_handle =
@@ -800,11 +826,12 @@ TEST(HttpStreamParser, AsyncEmptyChunkedUpload) {
   upload_stream.AppendData(nullptr, 0, true);
   ASSERT_FALSE(callback.have_result());
 
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Attempt to read the response status and the response headers.
-  ASSERT_EQ(ERR_IO_PENDING, parser.ReadResponseHeaders(callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()),
+              IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Finally, attempt to read the response body.
   scoped_refptr<IOBuffer> body_buffer(new IOBuffer(kBodySize));
@@ -840,7 +867,9 @@ TEST(HttpStreamParser, SyncEmptyChunkedUpload) {
   };
 
   ChunkedUploadDataStream upload_stream(0);
-  ASSERT_EQ(OK, upload_stream.Init(TestCompletionCallback().callback()));
+  ASSERT_THAT(
+      upload_stream.Init(TestCompletionCallback().callback(), BoundNetLog()),
+      IsOk());
   // Append final empty chunk.
   upload_stream.AppendData(nullptr, 0, true);
 
@@ -869,11 +898,12 @@ TEST(HttpStreamParser, SyncEmptyChunkedUpload) {
                                &response_info, callback.callback()));
 
   // Complete writing the request headers and body.
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Attempt to read the response status and the response headers.
-  ASSERT_EQ(ERR_IO_PENDING, parser.ReadResponseHeaders(callback.callback()));
-  ASSERT_EQ(OK, callback.WaitForResult());
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()),
+              IsError(ERR_IO_PENDING));
+  ASSERT_THAT(callback.WaitForResult(), IsOk());
 
   // Finally, attempt to read the response body.
   scoped_refptr<IOBuffer> body_buffer(new IOBuffer(kBodySize));
@@ -968,16 +998,16 @@ TEST(HttpStreamParser, TruncatedHeaders) {
       EXPECT_EQ(CountWriteBytes(writes, arraysize(writes)),
                 parser.sent_bytes());
       if (i == arraysize(reads) - 1) {
-        EXPECT_EQ(OK, rv);
+        EXPECT_THAT(rv, IsOk());
         EXPECT_TRUE(response_info.headers.get());
         EXPECT_EQ(CountReadBytes(reads[i], 2), parser.received_bytes());
       } else {
         if (protocol == HTTP) {
-          EXPECT_EQ(ERR_CONNECTION_CLOSED, rv);
+          EXPECT_THAT(rv, IsError(ERR_CONNECTION_CLOSED));
           EXPECT_TRUE(response_info.headers.get());
           EXPECT_EQ(CountReadBytes(reads[i], 2), parser.received_bytes());
         } else {
-          EXPECT_EQ(ERR_RESPONSE_HEADERS_TRUNCATED, rv);
+          EXPECT_THAT(rv, IsError(ERR_RESPONSE_HEADERS_TRUNCATED));
           EXPECT_FALSE(response_info.headers.get());
           EXPECT_EQ(0, parser.received_bytes());
         }
@@ -1021,7 +1051,7 @@ TEST(HttpStreamParser, Websocket101Response) {
   ASSERT_EQ(OK, parser.SendRequest("GET / HTTP/1.1\r\n", request_headers,
                                    &response_info, callback.callback()));
 
-  EXPECT_EQ(OK, parser.ReadResponseHeaders(callback.callback()));
+  EXPECT_THAT(parser.ReadResponseHeaders(callback.callback()), IsOk());
   ASSERT_TRUE(response_info.headers.get());
   EXPECT_EQ(101, response_info.headers->response_code());
   EXPECT_TRUE(response_info.headers->HasHeaderValue("Connection", "Upgrade"));
@@ -1082,7 +1112,7 @@ class SimpleGetRunner {
 
   void ReadHeaders() {
     TestCompletionCallback callback;
-    EXPECT_EQ(OK, parser_->ReadResponseHeaders(callback.callback()));
+    EXPECT_THAT(parser_->ReadResponseHeaders(callback.callback()), IsOk());
   }
 
   void ReadBody(int user_buf_len, int* read_lengths) {
@@ -1382,7 +1412,7 @@ TEST(HttpStreamParser, ReadAfterUnownedObjectsDestroyed) {
   TestCompletionCallback callback;
   ASSERT_EQ(OK, parser.SendRequest("GET /foo.html HTTP/1.1\r\n",
             *request_headers, response_info.get(), callback.callback()));
-  ASSERT_EQ(OK, parser.ReadResponseHeaders(callback.callback()));
+  ASSERT_THAT(parser.ReadResponseHeaders(callback.callback()), IsOk());
 
   // If the object that owns the HttpStreamParser is deleted, it takes the
   // objects passed to the HttpStreamParser with it.

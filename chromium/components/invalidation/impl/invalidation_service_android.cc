@@ -14,12 +14,14 @@
 
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaRef;
+using base::android::JavaParamRef;
 
 namespace invalidation {
 
-InvalidationServiceAndroid::InvalidationServiceAndroid(jobject context)
-    : invalidator_state_(syncer::INVALIDATIONS_ENABLED),
-      logger_() {
+InvalidationServiceAndroid::InvalidationServiceAndroid(
+    const JavaRef<jobject>& context)
+    : invalidator_state_(syncer::INVALIDATIONS_ENABLED), logger_() {
   DCHECK(CalledOnValidThread());
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> local_java_ref =
@@ -27,6 +29,7 @@ InvalidationServiceAndroid::InvalidationServiceAndroid(jobject context)
           context,
           reinterpret_cast<intptr_t>(this));
   java_ref_.Reset(env, local_java_ref.obj());
+  logger_.OnStateChange(invalidator_state_);
 }
 
 InvalidationServiceAndroid::~InvalidationServiceAndroid() { }
@@ -61,10 +64,8 @@ bool InvalidationServiceAndroid::UpdateRegisteredInvalidationIds(
   }
 
   Java_InvalidationService_setRegisteredObjectIds(
-      env,
-      java_ref_.obj(),
-      base::android::ToJavaIntArray(env, sources).obj(),
-      base::android::ToJavaArrayOfStrings(env, names).obj());
+      env, java_ref_, base::android::ToJavaIntArray(env, sources),
+      base::android::ToJavaArrayOfStrings(env, names));
 
   logger_.OnUpdateIds(invalidator_registrar_.GetSanitizedHandlersIdsMap());
   return true;
@@ -90,7 +91,7 @@ std::string InvalidationServiceAndroid::GetInvalidatorClientId() const {
 
   // Ask the Java code to for the invalidator ID it's currently using.
   base::android::ScopedJavaLocalRef<_jbyteArray*> id_bytes_java =
-      Java_InvalidationService_getInvalidatorClientId(env, java_ref_.obj());
+      Java_InvalidationService_getInvalidatorClientId(env, java_ref_);
 
   // Convert it into a more convenient format for C++.
   std::vector<uint8_t> id_bytes;

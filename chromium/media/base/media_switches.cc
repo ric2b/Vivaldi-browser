@@ -22,17 +22,9 @@ const char kReportVp9AsAnUnsupportedMimeType[] =
     "report-vp9-as-an-unsupported-mime-type";
 
 #if defined(OS_ANDROID)
-// Sets the MediaSource player that uses UI thread for frame processing.
-const char kDisableMediaThreadForMediaPlayback[] =
-    "disable-media-thread-for-media-playback";
-
 // Use WebMediaPlayerAndroid instead of WebMediaPlayerImpl. This is a temporary
 // switch for holding back the new unified media pipeline.
 const char kDisableUnifiedMediaPipeline[] = "disable-unified-media-pipeline";
-
-// Sets the MediaSource player that uses the separate media thread
-const char kEnableMediaThreadForMediaPlayback[] =
-    "enable-media-thread-for-media-playback";
 #endif
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
@@ -123,24 +115,52 @@ const char kDisableRTCSmoothnessAlgorithm[] =
 // if MP4 demuxing is not enabled in the build.
 const char kEnableVp9InMp4[] = "enable-vp9-in-mp4";
 
-// Switches which method is used to compute the encoder utilization metric
-// (e.g., --cast-encoder-util-heuristic=backlog).
-//
-// TODO(miu): This is temporary, for lab performance testing, until a
-// good "works for all" solution is confirmed.
-// https://code.google.com/p/chrome-os-partner/issues/detail?id=54806
-const char kCastEncoderUtilHeuristic[] = "cast-encoder-util-heuristic";
+// Force media player using SurfaceView instead of SurfaceTexture on Android.
+const char kForceVideoOverlays[] = "force-video-overlays";
+
+// Allows explicitly specifying MSE audio/video buffer sizes.
+// Default values are 150M for video and 12M for audio.
+const char kMSEAudioBufferSizeLimit[] = "mse-audio-buffer-size-limit";
+const char kMSEVideoBufferSizeLimit[] = "mse-video-buffer-size-limit";
 
 }  // namespace switches
 
 namespace media {
 
+#if defined(OS_WIN)
+// Enables H264 HW encode acceleration using Media Foundation for Windows.
+const base::Feature kMediaFoundationH264Encoding{
+    "MediaFoundationH264Encoding", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_WIN)
+
+#if defined(ENABLE_PLUGINS)
+// Let flash join and be controlled by media session, only valid when
+// |kEnableDefaultMediaSession| is on.
+const base::Feature kFlashJoinsMediaSession{"flash-join-media-session",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(ENABLE_PLUGINS)
+
 // Use new audio rendering mixer.
 const base::Feature kNewAudioRenderingMixingStrategy{
     "NewAudioRenderingMixingStrategy", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Let videos be resumed via remote controls (for example, the notification)
+// when in background.
+const base::Feature kResumeBackgroundVideo {
+  "resume-background-video",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+};
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+};
+#endif
+
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
+// Correct video colors based on output display?
+const base::Feature kVideoColorManagement{"video-color-management",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace media

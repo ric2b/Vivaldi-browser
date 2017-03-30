@@ -19,11 +19,11 @@
 #include "content/browser/media/capture/desktop_capture_device_uma_types.h"
 #include "content/browser/media/capture/web_contents_audio_input_stream.h"
 #include "content/browser/media/media_internals.h"
-#include "content/browser/media/webrtc/webrtc_internals.h"
 #include "content/browser/renderer_host/media/audio_input_debug_writer.h"
 #include "content/browser/renderer_host/media/audio_input_device_manager.h"
 #include "content/browser/renderer_host/media/audio_input_sync_writer.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
+#include "content/browser/webrtc/webrtc_internals.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_bus.h"
@@ -290,17 +290,6 @@ void AudioInputRendererHost::DoHandleError(
     return;
   }
 
-  // This is a fix for crbug.com/357501. The error can be triggered when closing
-  // the lid on Macs, which causes more problems than it fixes.
-  // Also, in crbug.com/357569, the goal is to remove usage of the error since
-  // it was added to solve a crash on Windows that no longer can be reproduced.
-  if (error_code == media::AudioInputController::NO_DATA_ERROR) {
-    // TODO(henrika): it might be possible to do something other than just
-    // logging when we detect many NO_DATA_ERROR calls for a stream.
-    LogMessage(entry->stream_id, "AIC::DoCheckForNoData: NO_DATA_ERROR", false);
-    return;
-  }
-
   std::ostringstream oss;
   oss << "AIC reports error_code=" << error_code;
   LogMessage(entry->stream_id, oss.str(), false);
@@ -470,7 +459,9 @@ void AudioInputRendererHost::DoCreateStream(
     // Only count for captures from desktop media picker dialog and system loop
     // back audio.
     if (entry->controller.get() && type == MEDIA_DESKTOP_AUDIO_CAPTURE &&
-        device_id == media::AudioDeviceDescription::kLoopbackInputDeviceId) {
+        (device_id == media::AudioDeviceDescription::kLoopbackInputDeviceId ||
+         device_id ==
+             media::AudioDeviceDescription::kLoopbackWithMuteDeviceId)) {
       IncrementDesktopCaptureCounter(SYSTEM_LOOPBACK_AUDIO_CAPTURER_CREATED);
     }
   }

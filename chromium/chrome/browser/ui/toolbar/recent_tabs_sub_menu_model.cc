@@ -46,7 +46,7 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #endif  // defined(USE_ASH)
 
 namespace {
@@ -252,7 +252,8 @@ bool RecentTabsSubMenuModel::IsCommandIdEnabled(int command_id) const {
 }
 
 bool RecentTabsSubMenuModel::GetAcceleratorForCommandId(
-    int command_id, ui::Accelerator* accelerator) {
+    int command_id,
+    ui::Accelerator* accelerator) const {
   // If there are no recently closed items, we show the accelerator beside
   // the header, otherwise, we show it beside the first item underneath it.
   int index_in_menu = GetIndexOfCommandId(command_id);
@@ -439,27 +440,28 @@ void RecentTabsSubMenuModel::BuildLocalEntries() {
 #endif
 
     int added_count = 0;
-    sessions::TabRestoreService::Entries entries = service->entries();
-    for (sessions::TabRestoreService::Entries::const_iterator it =
-             entries.begin();
-         it != entries.end() && added_count < kMaxLocalEntries; ++it) {
-      sessions::TabRestoreService::Entry* entry = *it;
-      if (entry->type == sessions::TabRestoreService::TAB) {
-        sessions::TabRestoreService::Tab* tab =
-            static_cast<sessions::TabRestoreService::Tab*>(entry);
-        const sessions::SerializedNavigationEntry& current_navigation =
-            tab->navigations.at(tab->current_navigation_index);
-        BuildLocalTabItem(
-            entry->id,
-            current_navigation.title(),
-            current_navigation.virtual_url(),
-            ++last_local_model_index_);
-      } else  {
-        DCHECK_EQ(entry->type, sessions::TabRestoreService::WINDOW);
-        BuildLocalWindowItem(
-            entry->id, static_cast<sessions::TabRestoreService::Window*>(entry)
-                           ->tabs.size(),
-            ++last_local_model_index_);
+    for (const auto& entry : service->entries()) {
+      if (added_count == kMaxLocalEntries)
+        break;
+      switch (entry->type) {
+        case sessions::TabRestoreService::TAB: {
+          auto& tab =
+              static_cast<const sessions::TabRestoreService::Tab&>(*entry);
+          const sessions::SerializedNavigationEntry& current_navigation =
+              tab.navigations.at(tab.current_navigation_index);
+          BuildLocalTabItem(entry->id, current_navigation.title(),
+                            current_navigation.virtual_url(),
+                            ++last_local_model_index_);
+          break;
+        }
+        case sessions::TabRestoreService::WINDOW: {
+          BuildLocalWindowItem(
+              entry->id,
+              static_cast<const sessions::TabRestoreService::Window&>(*entry)
+                  .tabs.size(),
+              ++last_local_model_index_);
+          break;
+        }
       }
       ++added_count;
     }

@@ -10,6 +10,7 @@
 #include "base/time/time.h"
 #include "cc/base/cc_export.h"
 #include "cc/output/context_provider.h"
+#include "cc/resources/returned_resource.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -20,7 +21,6 @@ class Transform;
 namespace cc {
 
 class BeginFrameSource;
-class CompositorFrameAck;
 struct ManagedMemoryPolicy;
 
 class CC_EXPORT OutputSurfaceClient {
@@ -34,11 +34,15 @@ class CC_EXPORT OutputSurfaceClient {
   virtual void SetBeginFrameSource(BeginFrameSource* source) = 0;
 
   virtual void SetNeedsRedrawRect(const gfx::Rect& damage_rect) = 0;
-  virtual void DidSwapBuffers() = 0;
+  // For LayerTreeHostImpl, this is more of a OnSwapBuffersAck from the display
+  // compositor that it received and will use the frame, unblocking it from
+  // producing more frames.
+  // For the display compositor this is literally a notification that the swap
+  // to the hardware is complete.
   virtual void DidSwapBuffersComplete() = 0;
   virtual void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) = 0;
-  virtual void ReclaimResources(const CompositorFrameAck* ack) = 0;
+  virtual void ReclaimResources(const ReturnedResourceArray& resources) = 0;
   virtual void DidLoseOutputSurface() = 0;
   virtual void SetExternalTilePriorityConstraints(
       const gfx::Rect& viewport_rect,
@@ -52,7 +56,6 @@ class CC_EXPORT OutputSurfaceClient {
   // This allows the output surface to ask its client for a draw.
   virtual void OnDraw(const gfx::Transform& transform,
                       const gfx::Rect& viewport,
-                      const gfx::Rect& clip,
                       bool resourceless_software_draw) = 0;
 
  protected:

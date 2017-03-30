@@ -19,7 +19,25 @@ namespace internal {
 
 // Checks whether decoding the pointer will overflow and produce a pointer
 // smaller than |offset|.
-bool ValidateEncodedPointer(const uint64_t* offset);
+inline bool ValidateEncodedPointer(const uint64_t* offset) {
+  // - Make sure |*offset| is no more than 32-bits.
+  // - Cast |offset| to uintptr_t so overflow behavior is well defined across
+  //   32-bit and 64-bit systems.
+  return *offset <= std::numeric_limits<uint32_t>::max() &&
+         (reinterpret_cast<uintptr_t>(offset) +
+              static_cast<uint32_t>(*offset) >=
+          reinterpret_cast<uintptr_t>(offset));
+}
+
+template <typename T>
+bool ValidatePointer(const Pointer<T>& input,
+                     ValidationContext* validation_context) {
+  bool result = ValidateEncodedPointer(&input.offset);
+  if (!result)
+    ReportValidationError(validation_context, VALIDATION_ERROR_ILLEGAL_POINTER);
+
+  return result;
+}
 
 // Validates that |data| contains a valid struct header, in terms of alignment
 // and size (i.e., the |num_bytes| field of the header is sufficient for storing
@@ -118,40 +136,18 @@ bool ValidateHandleOrInterfaceNonNullable(
     ValidationContext* validation_context);
 
 template <typename T>
-bool ValidateArray(const Pointer<Array_Data<T>>& input,
-                   ValidationContext* validation_context,
-                   const ContainerValidateParams* validate_params) {
-  if (!ValidateEncodedPointer(&input.offset)) {
-    ReportValidationError(validation_context, VALIDATION_ERROR_ILLEGAL_POINTER);
-    return false;
-  }
-
-  return Array_Data<T>::Validate(DecodePointerRaw(&input.offset),
-                                 validation_context, validate_params);
-}
-
-template <typename T>
-bool ValidateMap(const Pointer<T>& input,
-                 ValidationContext* validation_context,
-                 const ContainerValidateParams* validate_params) {
-  if (!ValidateEncodedPointer(&input.offset)) {
-    ReportValidationError(validation_context, VALIDATION_ERROR_ILLEGAL_POINTER);
-    return false;
-  }
-
-  return T::Validate(DecodePointerRaw(&input.offset), validation_context,
-                     validate_params);
+bool ValidateContainer(const Pointer<T>& input,
+                       ValidationContext* validation_context,
+                       const ContainerValidateParams* validate_params) {
+  return ValidatePointer(input, validation_context) &&
+         T::Validate(input.Get(), validation_context, validate_params);
 }
 
 template <typename T>
 bool ValidateStruct(const Pointer<T>& input,
                     ValidationContext* validation_context) {
-  if (!ValidateEncodedPointer(&input.offset)) {
-    ReportValidationError(validation_context, VALIDATION_ERROR_ILLEGAL_POINTER);
-    return false;
-  }
-
-  return T::Validate(DecodePointerRaw(&input.offset), validation_context);
+  return ValidatePointer(input, validation_context) &&
+         T::Validate(input.Get(), validation_context);
 }
 
 template <typename T>
@@ -163,13 +159,8 @@ bool ValidateInlinedUnion(const T& input,
 template <typename T>
 bool ValidateNonInlinedUnion(const Pointer<T>& input,
                              ValidationContext* validation_context) {
-  if (!ValidateEncodedPointer(&input.offset)) {
-    ReportValidationError(validation_context, VALIDATION_ERROR_ILLEGAL_POINTER);
-    return false;
-  }
-
-  return T::Validate(DecodePointerRaw(&input.offset), validation_context,
-                     false);
+  return ValidatePointer(input, validation_context) &&
+         T::Validate(input.Get(), validation_context, false);
 }
 
 bool ValidateHandleOrInterface(const AssociatedInterface_Data& input,

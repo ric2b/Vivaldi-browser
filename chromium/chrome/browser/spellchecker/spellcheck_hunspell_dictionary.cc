@@ -15,11 +15,11 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "chrome/browser/spellchecker/spellcheck_platform.h"
 #include "chrome/browser/spellchecker/spellcheck_service.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/spellcheck_common.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
+#include "components/spellcheck/browser/spellcheck_platform.h"
+#include "components/spellcheck/common/spellcheck_common.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "net/base/load_flags.h"
@@ -324,7 +324,7 @@ SpellcheckHunspellDictionary::InitializeDictionaryLocation(
   base::FilePath dict_dir;
   PathService::Get(chrome::DIR_APP_DICTIONARIES, &dict_dir);
   base::FilePath dict_path =
-      chrome::spellcheck_common::GetVersionedFileName(language, dict_dir);
+      spellcheck::GetVersionedFileName(language, dict_dir);
 
   return OpenDictionaryFile(dict_path);
 }

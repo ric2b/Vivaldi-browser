@@ -40,7 +40,9 @@ struct ShortcutInfo {
   // Updates the source of the shortcut.
   void UpdateSource(const Source source);
 
+  GURL manifest_url;
   GURL url;
+  GURL scope;
   base::string16 user_title;
   base::string16 name;
   base::string16 short_name;
@@ -49,7 +51,7 @@ struct ShortcutInfo {
   Source source;
   int64_t theme_color;
   int64_t background_color;
-  bool is_icon_generated;
+  GURL icon_url;
 };
 
 #endif  // CHROME_BROWSER_ANDROID_SHORTCUT_INFO_H_

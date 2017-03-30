@@ -23,6 +23,7 @@
 #ifndef LayoutTextFragment_h
 #define LayoutTextFragment_h
 
+#include "core/editing/EditingUtilities.h"
 #include "core/layout/LayoutText.h"
 #include "platform/heap/Handle.h"
 
@@ -42,7 +43,7 @@ public:
 
     bool isTextFragment() const override { return true; }
 
-    bool canBeSelectionLeaf() const override { return node() && node()->hasEditableStyle(); }
+    bool canBeSelectionLeaf() const override { return node() && hasEditableStyle(*node()); }
 
     unsigned start() const { return m_start; }
     unsigned fragmentLength() const { return m_fragmentLength; }
@@ -87,7 +88,7 @@ private:
     unsigned m_fragmentLength;
     bool m_isRemainingTextLayoutObject;
     RefPtr<StringImpl> m_contentString;
-    // Reference back to FirstLetterPseudoElement; cleared by FirstLetterPseudoElement::detach() if
+    // Reference back to FirstLetterPseudoElement; cleared by FirstLetterPseudoElement::detachLayoutTree() if
     // it goes away first.
     UntracedMember<FirstLetterPseudoElement> m_firstLetterPseudoElement;
 };

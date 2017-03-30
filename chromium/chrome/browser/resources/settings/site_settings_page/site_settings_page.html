@@ -1,6 +1,6 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
 <link rel="import" href="/icons.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_shared_css.html">
 <link rel="import" href="/site_settings/constants.html">
 <link rel="import" href="/site_settings/site_settings_behavior.html">
@@ -32,7 +32,7 @@
     <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.GEOLOCATION]]" on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.GEOLOCATION)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.GEOLOCATION)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.GEOLOCATION)]]
         <div id="geolocation" class="secondary"></div>
@@ -41,7 +41,7 @@
     <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.CAMERA]]" on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.CAMERA)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.CAMERA)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.CAMERA)]]
         <div id="camera" class="secondary"></div>
@@ -50,7 +50,7 @@
     <div class="settings-box two-line" category$="[[ContentSettingsTypes.MIC]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.MIC)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.MIC)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.MIC)]]
         <div id="mic" class="secondary"></div>
@@ -60,7 +60,7 @@
         category$="[[ContentSettingsTypes.NOTIFICATIONS]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.NOTIFICATIONS)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.NOTIFICATIONS)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.NOTIFICATIONS)]]
         <div id="notifications" class="secondary"></div>
@@ -70,7 +70,7 @@
         category$="[[ContentSettingsTypes.JAVASCRIPT]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.JAVASCRIPT)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.JAVASCRIPT)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.JAVASCRIPT)]]
         <div id="javascript" class="secondary"></div>
@@ -80,7 +80,7 @@
         category$="[[ContentSettingsTypes.PLUGINS]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.PLUGINS)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.PLUGINS)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.PLUGINS)]]
         <div id="plugins" class="secondary"></div>
@@ -89,7 +89,7 @@
     <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.IMAGES]]" on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.IMAGES)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.IMAGES)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.IMAGES)]]
         <div id="images" class="secondary"></div>
@@ -98,7 +98,7 @@
     <div class="settings-box two-line"
         category$="[[ContentSettingsTypes.POPUPS]]" on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.POPUPS)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.POPUPS)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(ContentSettingsTypes.POPUPS)]]
         <div id="popups" class="secondary"></div>
@@ -108,7 +108,7 @@
         category$="[[ContentSettingsTypes.BACKGROUND_SYNC]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.BACKGROUND_SYNC)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.BACKGROUND_SYNC)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(
             ContentSettingsTypes.BACKGROUND_SYNC)]]
@@ -119,7 +119,7 @@
         category$="[[ContentSettingsTypes.KEYGEN]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.KEYGEN)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.KEYGEN)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(
             ContentSettingsTypes.KEYGEN)]]
@@ -130,7 +130,7 @@
         category$="[[ContentSettingsTypes.AUTOMATIC_DOWNLOADS]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.AUTOMATIC_DOWNLOADS)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.AUTOMATIC_DOWNLOADS)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(
             ContentSettingsTypes.AUTOMATIC_DOWNLOADS)]]
@@ -141,11 +141,30 @@
         category$="[[ContentSettingsTypes.UNSANDBOXED_PLUGINS]]"
         on-tap="onTapCategory">
       <iron-icon icon="[[computeIconForContentCategory(
-          ContentSettingsTypes.UNSANDBOXED_PLUGINS)]]" item-icon=""></iron-icon>
+          ContentSettingsTypes.UNSANDBOXED_PLUGINS)]]"></iron-icon>
       <div class="middle">
         [[computeTitleForContentCategory(
             ContentSettingsTypes.UNSANDBOXED_PLUGINS)]]
         <div id="unsandboxedPlugins" class="secondary"></div>
+      </div>
+    </div>
+    <div class="settings-box two-line"
+        category$="[[ContentSettingsTypes.PROTOCOL_HANDLERS]]"
+        on-tap="onTapCategory">
+      <iron-icon icon="[[computeIconForContentCategory(
+          ContentSettingsTypes.PROTOCOL_HANDLERS)]]"></iron-icon>
+      <div class="middle">
+        [[computeTitleForContentCategory(
+            ContentSettingsTypes.PROTOCOL_HANDLERS)]]
+        <div id="handlers" class="secondary"></div>
+      </div>
+    </div>
+    <div class="settings-box" category$="[[ContentSettingsTypes.USB_DEVICES]]"
+        on-tap="onTapCategory">
+      <iron-icon icon="[[computeIconForContentCategory(
+          ContentSettingsTypes.USB_DEVICES)]]"></iron-icon>
+      <div class="middle">
+        [[computeTitleForContentCategory(ContentSettingsTypes.USB_DEVICES)]]
       </div>
     </div>
   </template>

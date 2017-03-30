@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/api_permission_set.h"
@@ -28,8 +29,8 @@ APIPermission* CreateAPIPermission(const APIPermissionInfo* permission) {
 
 }  // namespace
 
-std::vector<APIPermissionInfo*> ChromeAPIPermissions::GetAllPermissions()
-    const {
+std::vector<std::unique_ptr<APIPermissionInfo>>
+ChromeAPIPermissions::GetAllPermissions() const {
   // WARNING: If you are modifying a permission message in this list, be sure to
   // add the corresponding permission message rule to
   // ChromePermissionMessageProvider::GetCoalescedPermissionMessages as well.
@@ -63,7 +64,6 @@ std::vector<APIPermissionInfo*> ChromeAPIPermissions::GetAllPermissions()
       {APIPermission::kAccessibilityPrivate, "accessibilityPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kActiveTab, "activeTab"},
-      {APIPermission::kAudioModem, "audioModem"},
       {APIPermission::kBookmark, "bookmarks"},
       {APIPermission::kBrailleDisplayPrivate, "brailleDisplayPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
@@ -72,8 +72,6 @@ std::vector<APIPermissionInfo*> ChromeAPIPermissions::GetAllPermissions()
       {APIPermission::kContentSettings, "contentSettings"},
       {APIPermission::kContextMenus, "contextMenus"},
       {APIPermission::kCookie, "cookies"},
-      {APIPermission::kCopresence, "copresence"},
-      {APIPermission::kCopresencePrivate, "copresencePrivate"},
       {APIPermission::kCryptotokenPrivate, "cryptotokenPrivate"},
       {APIPermission::kDataReductionProxy, "dataReductionProxy",
        APIPermissionInfo::kFlagImpliesFullURLAccess |
@@ -260,10 +258,11 @@ std::vector<APIPermissionInfo*> ChromeAPIPermissions::GetAllPermissions()
        &CreateAPIPermission<SettingsOverrideAPIPermission>},
   };
 
-  std::vector<APIPermissionInfo*> permissions;
+  std::vector<std::unique_ptr<APIPermissionInfo>> permissions;
 
   for (size_t i = 0; i < arraysize(permissions_to_register); ++i)
-    permissions.push_back(new APIPermissionInfo(permissions_to_register[i]));
+    permissions.push_back(
+        base::WrapUnique(new APIPermissionInfo(permissions_to_register[i])));
   return permissions;
 }
 

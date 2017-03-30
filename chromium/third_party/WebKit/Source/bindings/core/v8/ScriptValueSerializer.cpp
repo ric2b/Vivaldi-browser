@@ -23,6 +23,7 @@
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileList.h"
+#include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebBlobInfo.h"
@@ -327,10 +328,11 @@ void SerializedScriptValueWriter::writeImageData(uint32_t width, uint32_t height
     doWriteImageData(width, height, pixelData, pixelDataLength);
 }
 
-void SerializedScriptValueWriter::writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, const uint8_t* pixelData, uint32_t pixelDataLength)
+void SerializedScriptValueWriter::writeImageBitmap(uint32_t width, uint32_t height, uint32_t isOriginClean, uint32_t isPremultiplied, const uint8_t* pixelData, uint32_t pixelDataLength)
 {
     append(ImageBitmapTag);
     append(isOriginClean);
+    append(isPremultiplied);
     doWriteImageData(width, height, pixelData, pixelDataLength);
 }
 
@@ -360,13 +362,16 @@ void SerializedScriptValueWriter::writeTransferredImageBitmap(uint32_t index)
     doWriteUint32(index);
 }
 
-void SerializedScriptValueWriter::writeTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id)
+void SerializedScriptValueWriter::writeTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t canvasId, uint32_t clientId, uint32_t localId, uint64_t nonce)
 {
     append(OffscreenCanvasTransferTag);
     doWriteUint32(index);
     doWriteUint32(width);
     doWriteUint32(height);
-    doWriteUint32(id);
+    doWriteUint32(canvasId);
+    doWriteUint32(clientId);
+    doWriteUint32(localId);
+    doWriteUint64(nonce);
 }
 
 void SerializedScriptValueWriter::writeTransferredSharedArrayBuffer(uint32_t index)
@@ -715,8 +720,23 @@ void ScriptValueSerializer::copyTransferables(const Transferables& transferables
     }
 }
 
+static void recordValueCounts(int primitiveCount, int jsObjectCount, int domWrapperCount)
+{
+    struct ObjectCountHistograms {
+        CustomCountHistogram primitiveCount{"Blink.ScriptValueSerializer.PrimitiveCount", 0, 100000, 50};
+        CustomCountHistogram jsObjectCount{"Blink.ScriptValueSerializer.JSObjectCount", 0, 100000, 50};
+        CustomCountHistogram domWrapperCount{"Blink.ScriptValueSerializer.DOMWrapperCount", 0, 100000, 50};
+    };
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(ObjectCountHistograms, histograms, new ObjectCountHistograms);
+    histograms.primitiveCount.count(primitiveCount);
+    histograms.jsObjectCount.count(jsObjectCount);
+    histograms.domWrapperCount.count(domWrapperCount);
+}
+
 PassRefPtr<SerializedScriptValue> ScriptValueSerializer::serialize(v8::Local<v8::Value> value, Transferables* transferables, ExceptionState& exceptionState)
 {
+    m_primitiveCount = m_jsObjectCount = m_domWrapperCount = 0;
+
     DCHECK(!m_blobDataHandles);
 
     RefPtr<SerializedScriptValue> serializedValue = SerializedScriptValue::create();
@@ -733,6 +753,7 @@ PassRefPtr<SerializedScriptValue> ScriptValueSerializer::serialize(v8::Local<v8:
 
     switch (m_status) {
     case Status::Success:
+        recordValueCounts(m_primitiveCount, m_jsObjectCount, m_domWrapperCount);
         transferData(transferables, exceptionState, serializedValue.get());
         break;
     case Status::InputError:
@@ -797,9 +818,15 @@ ScriptValueSerializer::StateBase* ScriptValueSerializer::doSerialize(v8::Local<v
         m_writer.writeObjectReference(objectReference);
         return nullptr;
     }
-    if (value->IsObject())
+    if (value->IsObject()) {
+        if (V8DOMWrapper::isWrapper(isolate(), value))
+            m_domWrapperCount++;
+        else
+            m_jsObjectCount++;
         return doSerializeObject(value.As<v8::Object>(), next);
+    }
 
+    m_primitiveCount++;
     if (value->IsUndefined()) {
         m_writer.writeUndefined();
     } else if (value->IsNull()) {
@@ -1107,8 +1134,8 @@ ScriptValueSerializer::StateBase* ScriptValueSerializer::writeAndGreyImageBitmap
         m_writer.writeTransferredImageBitmap(index);
     } else {
         greyObject(object);
-        std::unique_ptr<uint8_t[]> pixelData = imageBitmap->copyBitmapData(PremultiplyAlpha);
-        m_writer.writeImageBitmap(imageBitmap->width(), imageBitmap->height(), static_cast<uint32_t>(imageBitmap->originClean()), pixelData.get(), imageBitmap->width() * imageBitmap->height() * 4);
+        RefPtr<Uint8Array> pixelData = imageBitmap->copyBitmapData(imageBitmap->isPremultiplied() ? PremultiplyAlpha : DontPremultiplyAlpha, N32ColorType);
+        m_writer.writeImageBitmap(imageBitmap->width(), imageBitmap->height(), static_cast<uint32_t>(imageBitmap->originClean()), static_cast<uint32_t>(imageBitmap->isPremultiplied()), pixelData->data(), imageBitmap->width() * imageBitmap->height() * 4);
     }
     return nullptr;
 }
@@ -1175,7 +1202,7 @@ ScriptValueSerializer::StateBase* ScriptValueSerializer::writeTransferredOffscre
         return handleError(Status::DataCloneError, "An OffscreenCanvas is detached and could not be cloned.", next);
     if (offscreenCanvas->renderingContext())
         return handleError(Status::DataCloneError, "An OffscreenCanvas with a context could not be cloned.", next);
-    m_writer.writeTransferredOffscreenCanvas(index, offscreenCanvas->width(), offscreenCanvas->height(), offscreenCanvas->getAssociatedCanvasId());
+    m_writer.writeTransferredOffscreenCanvas(index, offscreenCanvas->width(), offscreenCanvas->height(), offscreenCanvas->getAssociatedCanvasId(), offscreenCanvas->clientId(), offscreenCanvas->localId(), offscreenCanvas->nonce());
     return nullptr;
 }
 
@@ -1530,16 +1557,23 @@ bool SerializedScriptValueReader::readWithTag(SerializationTag tag, v8::Local<v8
     case OffscreenCanvasTransferTag: {
         if (!m_version)
             return false;
-        uint32_t index, width, height, id;
+        uint32_t index, width, height, canvasId, clientId, localId;
+        uint64_t nonce;
         if (!doReadUint32(&index))
             return false;
         if (!doReadUint32(&width))
             return false;
         if (!doReadUint32(&height))
             return false;
-        if (!doReadUint32(&id))
+        if (!doReadUint32(&canvasId))
             return false;
-        if (!deserializer.tryGetTransferredOffscreenCanvas(index, width, height, id, value))
+        if (!doReadUint32(&clientId))
+            return false;
+        if (!doReadUint32(&localId))
+            return false;
+        if (!doReadUint64(&nonce))
+            return false;
+        if (!deserializer.tryGetTransferredOffscreenCanvas(index, width, height, canvasId, clientId, localId, nonce, value))
             return false;
         break;
     }
@@ -1625,7 +1659,7 @@ bool SerializedScriptValueReader::readString(v8::Local<v8::Value>* value)
         return false;
     if (m_position + length > m_length)
         return false;
-    *value = v8AtomicString(isolate(), reinterpret_cast<const char*>(m_buffer + m_position), length);
+    *value = v8StringFromUtf8(isolate(), reinterpret_cast<const char*>(m_buffer + m_position), length);
     m_position += length;
     return true;
 }
@@ -1711,32 +1745,33 @@ bool SerializedScriptValueReader::readNumberObject(v8::Local<v8::Value>* value)
     return true;
 }
 
-// Helper function shared by readImageData and readImageBitmap
-ImageData* SerializedScriptValueReader::doReadImageData()
+// Helper function used by readImageData and readImageBitmap.
+bool SerializedScriptValueReader::doReadImageDataProperties(uint32_t* width, uint32_t* height, uint32_t* pixelDataLength)
+{
+    if (!doReadUint32(width))
+        return false;
+    if (!doReadUint32(height))
+        return false;
+    if (!doReadUint32(pixelDataLength))
+        return false;
+    if (m_length - m_position < *pixelDataLength)
+        return false;
+    return true;
+}
+
+bool SerializedScriptValueReader::readImageData(v8::Local<v8::Value>* value)
 {
     uint32_t width;
     uint32_t height;
     uint32_t pixelDataLength;
-    if (!doReadUint32(&width))
-        return nullptr;
-    if (!doReadUint32(&height))
-        return nullptr;
-    if (!doReadUint32(&pixelDataLength))
-        return nullptr;
-    if (m_position + pixelDataLength > m_length)
-        return nullptr;
+    if (!doReadImageDataProperties(&width, &height, &pixelDataLength))
+        return false;
     ImageData* imageData = ImageData::create(IntSize(width, height));
     DOMUint8ClampedArray* pixelArray = imageData->data();
     ASSERT(pixelArray);
     ASSERT(pixelArray->length() >= pixelDataLength);
     memcpy(pixelArray->data(), m_buffer + m_position, pixelDataLength);
     m_position += pixelDataLength;
-    return imageData;
-}
-
-bool SerializedScriptValueReader::readImageData(v8::Local<v8::Value>* value)
-{
-    ImageData* imageData = doReadImageData();
     if (!imageData)
         return false;
     *value = toV8(imageData, m_scriptState->context()->Global(), isolate());
@@ -1748,12 +1783,18 @@ bool SerializedScriptValueReader::readImageBitmap(v8::Local<v8::Value>* value)
     uint32_t isOriginClean;
     if (!doReadUint32(&isOriginClean))
         return false;
-    ImageData* imageData = doReadImageData();
-    if (!imageData)
+    uint32_t isPremultiplied;
+    if (!doReadUint32(&isPremultiplied))
         return false;
-    ImageBitmapOptions options;
-    options.setPremultiplyAlpha("none");
-    ImageBitmap* imageBitmap = ImageBitmap::create(imageData, IntRect(0, 0, imageData->width(), imageData->height()), options, true, isOriginClean);
+    uint32_t width;
+    uint32_t height;
+    uint32_t pixelDataLength;
+    if (!doReadImageDataProperties(&width, &height, &pixelDataLength))
+        return false;
+    std::unique_ptr<uint8_t[]> pixelData = wrapArrayUnique(new uint8_t[pixelDataLength]);
+    memcpy(pixelData.get(), m_buffer + m_position, pixelDataLength);
+    m_position += pixelDataLength;
+    ImageBitmap* imageBitmap = ImageBitmap::create(std::move(pixelData), width, height, isPremultiplied, isOriginClean);
     if (!imageBitmap)
         return false;
     *value = toV8(imageBitmap, m_scriptState->context()->Global(), isolate());
@@ -2324,10 +2365,11 @@ bool ScriptValueDeserializer::tryGetTransferredSharedArrayBuffer(uint32_t index,
     return true;
 }
 
-bool ScriptValueDeserializer::tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t id, v8::Local<v8::Value>* object)
+bool ScriptValueDeserializer::tryGetTransferredOffscreenCanvas(uint32_t index, uint32_t width, uint32_t height, uint32_t canvasId, uint32_t clientId, uint32_t localId, uint64_t nonce, v8::Local<v8::Value>* object)
 {
     OffscreenCanvas* offscreenCanvas = OffscreenCanvas::create(width, height);
-    offscreenCanvas->setAssociatedCanvasId(id);
+    offscreenCanvas->setAssociatedCanvasId(canvasId);
+    offscreenCanvas->setSurfaceId(clientId, localId, nonce);
     *object = toV8(offscreenCanvas, m_reader.getScriptState());
     if ((*object).IsEmpty())
         return false;

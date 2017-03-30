@@ -95,6 +95,14 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
 
   TabDragDelegate* tab_drag_delegate() { return event_router_.get(); }
 
+  void SetDropDataBackup(TabDragDataCollection& drop_data) {
+    drop_data_backup_ = drop_data;
+  }
+
+  TabDragDataCollection& GetDropDataBackup() {
+    return drop_data_backup_;
+  }
+
  private:
   friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
 
@@ -107,6 +115,12 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
   static const bool kServiceIsNULLWhileTesting = true;
 
   std::unique_ptr<TabsPrivateEventRouter> event_router_;
+
+  // This is only used in the case where no dragenter event is fired internally
+  // due to a drag starting outside a WebContents and never entering the
+  // WebContents again before a drop is performed. On drop, no drop data is then
+  // available and we will use this data instead.
+  TabDragDataCollection drop_data_backup_;
 };
 
 // Tab contents observer that forward private settings to any new renderer.
@@ -134,8 +148,6 @@ class VivaldiPrivateTabObserver
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }
   bool enable_plugins() { return enable_plugins_; }
-
-  void OnTabDiscarded(content::WebContents* contents, bool discarded);
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();

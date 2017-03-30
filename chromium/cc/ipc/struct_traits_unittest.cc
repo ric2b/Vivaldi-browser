@@ -63,14 +63,9 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
     callback.Run(f);
   }
 
-  void EchoQuadList(const QuadList& q,
-                    const EchoQuadListCallback& callback) override {
-    callback.Run(q);
-  }
-
-  void EchoRenderPass(const std::unique_ptr<RenderPass>& r,
+  void EchoRenderPass(std::unique_ptr<RenderPass> r,
                       const EchoRenderPassCallback& callback) override {
-    callback.Run(r);
+    callback.Run(std::move(r));
   }
 
   void EchoRenderPassId(const RenderPassId& r,
@@ -267,8 +262,12 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   const float max_page_scale_factor = 4.6f;
   const bool root_overflow_x_hidden = true;
   const bool root_overflow_y_hidden = true;
-  const gfx::Vector2dF location_bar_offset(1234.5f, 5432.1f);
-  const gfx::Vector2dF location_bar_content_translation(1234.5f, 5432.1f);
+  const bool may_contain_video = true;
+  const bool is_resourceless_software_draw_with_scroll_or_animation = true;
+  const float top_bar_height(1234.5f);
+  const float top_bar_shown_ratio(1.0f);
+  const float bottom_bar_height(1234.5f);
+  const float bottom_bar_shown_ratio(1.0f);
   const uint32_t root_background_color = 1337;
   Selection<gfx::SelectionBound> selection;
   selection.start.SetEdge(gfx::PointF(1234.5f, 67891.f),
@@ -300,8 +299,13 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   input.max_page_scale_factor = max_page_scale_factor;
   input.root_overflow_x_hidden = root_overflow_x_hidden;
   input.root_overflow_y_hidden = root_overflow_y_hidden;
-  input.location_bar_offset = location_bar_offset;
-  input.location_bar_content_translation = location_bar_content_translation;
+  input.may_contain_video = may_contain_video;
+  input.is_resourceless_software_draw_with_scroll_or_animation =
+      is_resourceless_software_draw_with_scroll_or_animation;
+  input.top_controls_height = top_bar_height;
+  input.top_controls_shown_ratio = top_bar_shown_ratio;
+  input.bottom_controls_height = bottom_bar_height;
+  input.bottom_controls_shown_ratio = bottom_bar_shown_ratio;
   input.root_background_color = root_background_color;
   input.selection = selection;
   input.latency_info = latency_infos;
@@ -320,9 +324,13 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   EXPECT_EQ(max_page_scale_factor, output.max_page_scale_factor);
   EXPECT_EQ(root_overflow_x_hidden, output.root_overflow_x_hidden);
   EXPECT_EQ(root_overflow_y_hidden, output.root_overflow_y_hidden);
-  EXPECT_EQ(location_bar_offset, output.location_bar_offset);
-  EXPECT_EQ(location_bar_content_translation,
-            output.location_bar_content_translation);
+  EXPECT_EQ(may_contain_video, output.may_contain_video);
+  EXPECT_EQ(is_resourceless_software_draw_with_scroll_or_animation,
+            output.is_resourceless_software_draw_with_scroll_or_animation);
+  EXPECT_EQ(top_bar_height, output.top_controls_height);
+  EXPECT_EQ(top_bar_shown_ratio, output.top_controls_shown_ratio);
+  EXPECT_EQ(bottom_bar_height, output.bottom_controls_height);
+  EXPECT_EQ(bottom_bar_shown_ratio, output.bottom_controls_shown_ratio);
   EXPECT_EQ(root_background_color, output.root_background_color);
   EXPECT_EQ(selection, output.selection);
   EXPECT_EQ(latency_infos.size(), output.latency_info.size());
@@ -409,27 +417,31 @@ TEST_F(StructTraitsTest, FilterOperations) {
 }
 
 TEST_F(StructTraitsTest, QuadListBasic) {
-  SharedQuadState sqs;
-  QuadList input;
+  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  render_pass->SetNew(RenderPassId(1, 1), gfx::Rect(), gfx::Rect(),
+                      gfx::Transform());
+
+  SharedQuadState* sqs = render_pass->CreateAndAppendSharedQuadState();
 
   const gfx::Rect rect1(1234, 4321, 1357, 7531);
   const SkColor color1 = SK_ColorRED;
   const int32_t width1 = 1337;
   DebugBorderDrawQuad* debug_quad =
-      input.AllocateAndConstruct<DebugBorderDrawQuad>();
-  debug_quad->SetNew(&sqs, rect1, rect1, color1, width1);
+      render_pass->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
+  debug_quad->SetNew(sqs, rect1, rect1, color1, width1);
 
   const gfx::Rect rect2(2468, 8642, 4321, 1234);
   const uint32_t color2 = 0xffffffff;
   const bool force_anti_aliasing_off = true;
   SolidColorDrawQuad* solid_quad =
-      input.AllocateAndConstruct<SolidColorDrawQuad>();
-  solid_quad->SetNew(&sqs, rect2, rect2, color2, force_anti_aliasing_off);
+      render_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  solid_quad->SetNew(sqs, rect2, rect2, color2, force_anti_aliasing_off);
 
   const gfx::Rect rect3(1029, 3847, 5610, 2938);
   const SurfaceId surface_id(1234, 5678, 2468);
-  SurfaceDrawQuad* surface_quad = input.AllocateAndConstruct<SurfaceDrawQuad>();
-  surface_quad->SetNew(&sqs, rect3, rect3, surface_id);
+  SurfaceDrawQuad* surface_quad =
+      render_pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
+  surface_quad->SetNew(sqs, rect3, rect3, surface_id);
 
   const gfx::Rect rect4(1234, 5678, 9101112, 13141516);
   const ResourceId resource_id4(1337);
@@ -440,16 +452,17 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   filters.Append(FilterOperation::CreateBlurFilter(0.f));
   filters.Append(FilterOperation::CreateZoomFilter(2.0f, 1));
   gfx::Vector2dF filters_scale(1234.1f, 4321.2f);
+  gfx::PointF filters_origin(8765.4f, 4567.8f);
   FilterOperations background_filters;
   background_filters.Append(FilterOperation::CreateSaturateFilter(4.f));
   background_filters.Append(FilterOperation::CreateZoomFilter(2.0f, 1));
   background_filters.Append(FilterOperation::CreateSaturateFilter(2.f));
 
   RenderPassDrawQuad* render_pass_quad =
-      input.AllocateAndConstruct<RenderPassDrawQuad>();
-  render_pass_quad->SetNew(&sqs, rect4, rect4, render_pass_id, resource_id4,
+      render_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
+  render_pass_quad->SetNew(sqs, rect4, rect4, render_pass_id, resource_id4,
                            mask_uv_scale, mask_texture_size, filters,
-                           filters_scale, background_filters);
+                           filters_scale, filters_origin, background_filters);
 
   const gfx::Rect rect5(123, 567, 91011, 131415);
   const ResourceId resource_id5(1337);
@@ -462,8 +475,8 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   const bool nearest_neighbor = true;
   const bool secure_output_only = true;
   TextureDrawQuad* texture_draw_quad =
-      input.AllocateAndConstruct<TextureDrawQuad>();
-  texture_draw_quad->SetNew(&sqs, rect5, rect5, rect5, resource_id5,
+      render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
+  texture_draw_quad->SetNew(sqs, rect5, rect5, rect5, resource_id5,
                             premultiplied_alpha, uv_top_left, uv_bottom_right,
                             background_color, vertex_opacity, y_flipped,
                             nearest_neighbor, secure_output_only);
@@ -475,25 +488,25 @@ TEST_F(StructTraitsTest, QuadListBasic) {
                               9.8f, 8.1f, 7.3f, 6.3f, 5.7f, 4.8f, 3.4f, 2.4f,
                               1.2f);
   StreamVideoDrawQuad* stream_video_draw_quad =
-      input.AllocateAndConstruct<StreamVideoDrawQuad>();
-  stream_video_draw_quad->SetNew(&sqs, rect6, rect6, rect6, resource_id6,
+      render_pass->CreateAndAppendDrawQuad<StreamVideoDrawQuad>();
+  stream_video_draw_quad->SetNew(sqs, rect6, rect6, rect6, resource_id6,
                                  resource_size_in_pixels, matrix);
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  QuadList output;
-  proxy->EchoQuadList(input, &output);
+  std::unique_ptr<RenderPass> output;
+  proxy->EchoRenderPass(render_pass->DeepCopy(), &output);
 
-  ASSERT_EQ(input.size(), output.size());
+  ASSERT_EQ(render_pass->quad_list.size(), output->quad_list.size());
 
   const DebugBorderDrawQuad* out_debug_border_draw_quad =
-      DebugBorderDrawQuad::MaterialCast(output.ElementAt(0));
+      DebugBorderDrawQuad::MaterialCast(output->quad_list.ElementAt(0));
   EXPECT_EQ(rect1, out_debug_border_draw_quad->rect);
   EXPECT_EQ(rect1, out_debug_border_draw_quad->visible_rect);
   EXPECT_EQ(color1, out_debug_border_draw_quad->color);
   EXPECT_EQ(width1, out_debug_border_draw_quad->width);
 
   const SolidColorDrawQuad* out_solid_color_draw_quad =
-      SolidColorDrawQuad::MaterialCast(output.ElementAt(1));
+      SolidColorDrawQuad::MaterialCast(output->quad_list.ElementAt(1));
   EXPECT_EQ(rect2, out_solid_color_draw_quad->rect);
   EXPECT_EQ(rect2, out_solid_color_draw_quad->visible_rect);
   EXPECT_EQ(color2, out_solid_color_draw_quad->color);
@@ -501,13 +514,13 @@ TEST_F(StructTraitsTest, QuadListBasic) {
             out_solid_color_draw_quad->force_anti_aliasing_off);
 
   const SurfaceDrawQuad* out_surface_draw_quad =
-      SurfaceDrawQuad::MaterialCast(output.ElementAt(2));
+      SurfaceDrawQuad::MaterialCast(output->quad_list.ElementAt(2));
   EXPECT_EQ(rect3, out_surface_draw_quad->rect);
   EXPECT_EQ(rect3, out_surface_draw_quad->visible_rect);
   EXPECT_EQ(surface_id, out_surface_draw_quad->surface_id);
 
   const RenderPassDrawQuad* out_render_pass_draw_quad =
-      RenderPassDrawQuad::MaterialCast(output.ElementAt(3));
+      RenderPassDrawQuad::MaterialCast(output->quad_list.ElementAt(3));
   EXPECT_EQ(rect4, out_render_pass_draw_quad->rect);
   EXPECT_EQ(rect4, out_render_pass_draw_quad->visible_rect);
   EXPECT_EQ(render_pass_id, out_render_pass_draw_quad->render_pass_id);
@@ -524,7 +537,7 @@ TEST_F(StructTraitsTest, QuadListBasic) {
               out_render_pass_draw_quad->background_filters.at(i));
 
   const TextureDrawQuad* out_texture_draw_quad =
-      TextureDrawQuad::MaterialCast(output.ElementAt(4));
+      TextureDrawQuad::MaterialCast(output->quad_list.ElementAt(4));
   EXPECT_EQ(rect5, out_texture_draw_quad->rect);
   EXPECT_EQ(rect5, out_texture_draw_quad->opaque_rect);
   EXPECT_EQ(rect5, out_texture_draw_quad->visible_rect);
@@ -542,7 +555,7 @@ TEST_F(StructTraitsTest, QuadListBasic) {
   EXPECT_EQ(secure_output_only, out_texture_draw_quad->secure_output_only);
 
   const StreamVideoDrawQuad* out_stream_video_draw_quad =
-      StreamVideoDrawQuad::MaterialCast(output.ElementAt(5));
+      StreamVideoDrawQuad::MaterialCast(output->quad_list.ElementAt(5));
   EXPECT_EQ(rect6, out_stream_video_draw_quad->rect);
   EXPECT_EQ(rect6, out_stream_video_draw_quad->opaque_rect);
   EXPECT_EQ(rect6, out_stream_video_draw_quad->visible_rect);
@@ -601,7 +614,7 @@ TEST_F(StructTraitsTest, RenderPass) {
 
   std::unique_ptr<RenderPass> output;
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  proxy->EchoRenderPass(input, &output);
+  proxy->EchoRenderPass(input->DeepCopy(), &output);
 
   EXPECT_EQ(input->quad_list.size(), output->quad_list.size());
   EXPECT_EQ(input->shared_quad_state_list.size(),
@@ -659,6 +672,33 @@ TEST_F(StructTraitsTest, RenderPass) {
   EXPECT_EQ(surface_quad->rect, out_surface_quad->rect);
   EXPECT_EQ(surface_quad->visible_rect, out_surface_quad->visible_rect);
   EXPECT_EQ(surface_quad->surface_id, out_surface_quad->surface_id);
+}
+
+TEST_F(StructTraitsTest, RenderPassWithEmptySharedQuadStateList) {
+  const RenderPassId id(3, 2);
+  const gfx::Rect output_rect(45, 22, 120, 13);
+  const gfx::Transform transform_to_root =
+      gfx::Transform(1.0, 0.5, 0.5, -0.5, -1.0, 0.0);
+  const gfx::Rect damage_rect(56, 123, 19, 43);
+  const bool has_transparent_background = true;
+  std::unique_ptr<RenderPass> input = RenderPass::Create();
+  input->SetAll(id, output_rect, damage_rect, transform_to_root,
+                has_transparent_background);
+
+  // Unlike the previous test, don't add any quads to the list; we need to
+  // verify that the serialization code can deal with that.
+  std::unique_ptr<RenderPass> output;
+  mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
+  proxy->EchoRenderPass(input->DeepCopy(), &output);
+
+  EXPECT_EQ(input->quad_list.size(), output->quad_list.size());
+  EXPECT_EQ(input->shared_quad_state_list.size(),
+            output->shared_quad_state_list.size());
+  EXPECT_EQ(id, output->id);
+  EXPECT_EQ(output_rect, output->output_rect);
+  EXPECT_EQ(damage_rect, output->damage_rect);
+  EXPECT_EQ(transform_to_root, output->transform_to_root_target);
+  EXPECT_EQ(has_transparent_background, output->has_transparent_background);
 }
 
 TEST_F(StructTraitsTest, RenderPassId) {
@@ -724,26 +764,26 @@ TEST_F(StructTraitsTest, Selection) {
 }
 
 TEST_F(StructTraitsTest, SurfaceId) {
-  const uint32_t id_namespace = 1337;
+  const uint32_t client_id = 1337;
   const uint32_t local_id = 0xfbadbeef;
   const uint64_t nonce = 0xdeadbeef;
-  SurfaceId input(id_namespace, local_id, nonce);
+  SurfaceId input(client_id, local_id, nonce);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   SurfaceId output;
   proxy->EchoSurfaceId(input, &output);
-  EXPECT_EQ(id_namespace, output.id_namespace());
+  EXPECT_EQ(client_id, output.client_id());
   EXPECT_EQ(local_id, output.local_id());
   EXPECT_EQ(nonce, output.nonce());
 }
 
 TEST_F(StructTraitsTest, SurfaceSequence) {
-  const uint32_t id_namespace = 2016;
+  const uint32_t client_id = 2016;
   const uint32_t sequence = 0xfbadbeef;
-  SurfaceSequence input(id_namespace, sequence);
+  SurfaceSequence input(client_id, sequence);
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
   SurfaceSequence output;
   proxy->EchoSurfaceSequence(input, &output);
-  EXPECT_EQ(id_namespace, output.id_namespace);
+  EXPECT_EQ(client_id, output.client_id);
   EXPECT_EQ(sequence, output.sequence);
 }
 
@@ -826,6 +866,10 @@ TEST_F(StructTraitsTest, TransferableResource) {
 }
 
 TEST_F(StructTraitsTest, YUVDrawQuad) {
+  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  render_pass->SetNew(RenderPassId(1, 1), gfx::Rect(), gfx::Rect(),
+                      gfx::Transform());
+
   const DrawQuad::Material material = DrawQuad::YUV_VIDEO_CONTENT;
   const gfx::Rect rect(1234, 4321, 1357, 7531);
   const gfx::Rect opaque_rect(1357, 8642, 432, 123);
@@ -840,27 +884,29 @@ TEST_F(StructTraitsTest, YUVDrawQuad) {
   const uint32_t v_plane_resource_id = 2468;
   const uint32_t a_plane_resource_id = 7890;
   const YUVVideoDrawQuad::ColorSpace color_space = YUVVideoDrawQuad::JPEG;
+  const gfx::ColorSpace video_color_space = gfx::ColorSpace::CreateJpeg();
   const float resource_offset = 1337.5f;
   const float resource_multiplier = 1234.6f;
+  const uint32_t bits_per_channel = 13;
 
-  SharedQuadState sqs;
-  QuadList input;
-  YUVVideoDrawQuad* quad = input.AllocateAndConstruct<YUVVideoDrawQuad>();
-  quad->SetAll(&sqs, rect, opaque_rect, visible_rect, needs_blending,
+  SharedQuadState* sqs = render_pass->CreateAndAppendSharedQuadState();
+  YUVVideoDrawQuad* quad =
+      render_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
+  quad->SetAll(sqs, rect, opaque_rect, visible_rect, needs_blending,
                ya_tex_coord_rect, uv_tex_coord_rect, ya_tex_size, uv_tex_size,
                y_plane_resource_id, u_plane_resource_id, v_plane_resource_id,
-               a_plane_resource_id, color_space, resource_offset,
-               resource_multiplier);
+               a_plane_resource_id, color_space, video_color_space,
+               resource_offset, resource_multiplier, bits_per_channel);
 
   mojom::TraitsTestServicePtr proxy = GetTraitsTestProxy();
-  QuadList output;
-  proxy->EchoQuadList(input, &output);
+  std::unique_ptr<RenderPass> output;
+  proxy->EchoRenderPass(render_pass->DeepCopy(), &output);
 
-  ASSERT_EQ(input.size(), output.size());
+  ASSERT_EQ(render_pass->quad_list.size(), output->quad_list.size());
 
-  ASSERT_EQ(material, output.ElementAt(0)->material);
+  ASSERT_EQ(material, output->quad_list.ElementAt(0)->material);
   const YUVVideoDrawQuad* out_quad =
-      YUVVideoDrawQuad::MaterialCast(output.ElementAt(0));
+      YUVVideoDrawQuad::MaterialCast(output->quad_list.ElementAt(0));
   EXPECT_EQ(rect, out_quad->rect);
   EXPECT_EQ(opaque_rect, out_quad->opaque_rect);
   EXPECT_EQ(visible_rect, out_quad->visible_rect);
@@ -876,6 +922,7 @@ TEST_F(StructTraitsTest, YUVDrawQuad) {
   EXPECT_EQ(color_space, out_quad->color_space);
   EXPECT_EQ(resource_offset, out_quad->resource_offset);
   EXPECT_EQ(resource_multiplier, out_quad->resource_multiplier);
+  EXPECT_EQ(bits_per_channel, out_quad->bits_per_channel);
 }
 
 }  // namespace cc

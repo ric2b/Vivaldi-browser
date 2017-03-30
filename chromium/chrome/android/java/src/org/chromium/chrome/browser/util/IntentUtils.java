@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.util;
 
+import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.os.Binder;
 import android.os.Bundle;
@@ -37,6 +39,18 @@ public class IntentUtils {
             // Catches un-parceling exceptions.
             Log.e(TAG, "hasExtra failed on intent " + intent);
             return false;
+        }
+    }
+
+    /**
+     * Just like {@link Intent#removeExtra(String)} but doesn't throw exceptions.
+     */
+    public static void safeRemoveExtra(Intent intent, String name) {
+        try {
+            intent.removeExtra(name);
+        } catch (Throwable t) {
+            // Catches un-parceling exceptions.
+            Log.e(TAG, "removeExtra failed on intent " + intent);
         }
     }
 
@@ -211,6 +225,18 @@ public class IntentUtils {
     }
 
     /**
+     * Just like {@link Intent#getParcelableArrayExtra(String)} but doesn't throw exceptions.
+     */
+    public static Parcelable[] safeGetParcelableArrayExtra(Intent intent, String name) {
+        try {
+            return intent.getParcelableArrayExtra(name);
+        } catch (Throwable t) {
+            Log.e(TAG, "getParcelableArrayExtra failed on intent " + intent);
+            return null;
+        }
+    }
+
+    /**
      * Just like {@link Intent#getStringArrayListExtra(String)} but doesn't throw exceptions.
      */
     public static ArrayList<String> safeGetStringArrayListExtra(Intent intent, String name) {
@@ -283,6 +309,21 @@ public class IntentUtils {
             Log.e(TAG, "putBinder failed on bundle " + bundle);
         }
         intent.putExtras(bundle);
+    }
+
+    /**
+     * Catches any failures to start an Activity.
+     * @param context Context to use when starting the Activity.
+     * @param intent  Intent to fire.
+     * @return Whether or not Android accepted the Intent.
+     */
+    public static boolean safeStartActivity(Context context, Intent intent) {
+        try {
+            context.startActivity(intent);
+            return true;
+        } catch (ActivityNotFoundException e) {
+            return false;
+        }
     }
 
     /**

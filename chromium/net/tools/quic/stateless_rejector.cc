@@ -4,8 +4,8 @@
 
 #include "net/tools/quic/stateless_rejector.h"
 
-#include "net/quic/quic_crypto_server_stream.h"
-#include "net/quic/quic_flags.h"
+#include "net/quic/core/quic_crypto_server_stream.h"
+#include "net/quic/core/quic_flags.h"
 
 namespace net {
 
@@ -18,7 +18,9 @@ class StatelessRejector::ValidateCallback
   ~ValidateCallback() override {}
 
   void RunImpl(const CryptoHandshakeMessage& client_hello,
-               const Result& result) override {
+               const Result& result,
+               std::unique_ptr<ProofSource::Details> /* proof_source_details */)
+      override {
     rejector_->ProcessClientHello(client_hello, result);
   }
 
@@ -33,6 +35,7 @@ StatelessRejector::StatelessRejector(
     QuicCompressedCertsCache* compressed_certs_cache,
     const QuicClock* clock,
     QuicRandom* random,
+    QuicByteCount chlo_packet_size,
     const IPEndPoint& client_address,
     const IPEndPoint& server_address)
     : state_(FAILED),
@@ -40,6 +43,7 @@ StatelessRejector::StatelessRejector(
       version_(version),
       versions_(versions),
       connection_id_(0),
+      chlo_packet_size_(chlo_packet_size),
       client_address_(client_address),
       server_address_(server_address),
       clock_(clock),
@@ -84,8 +88,9 @@ void StatelessRejector::ProcessClientHello(
       /*reject_only=*/true, connection_id_, server_address_.address(),
       client_address_, version_, versions_,
       /*use_stateless_rejects=*/true, server_designated_connection_id_, clock_,
-      random_, compressed_certs_cache_, &params, &proof_, &reply_,
-      &diversification_nonce, &error_details_);
+      random_, compressed_certs_cache_, &params, &proof_,
+      QuicCryptoStream::CryptoMessageFramingOverhead(version_),
+      chlo_packet_size_, &reply_, &diversification_nonce, &error_details_);
   if (error != QUIC_NO_ERROR) {
     error_ = error;
     return;

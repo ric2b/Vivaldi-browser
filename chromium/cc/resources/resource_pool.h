@@ -16,7 +16,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/base/cc_export.h"
-#include "cc/output/renderer.h"
 #include "cc/resources/resource.h"
 #include "cc/resources/resource_format.h"
 #include "cc/resources/scoped_resource.h"
@@ -25,30 +24,56 @@ namespace cc {
 
 class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
  public:
+  // Delay before a resource is considered expired.
+  static base::TimeDelta kDefaultExpirationDelay;
+
   static std::unique_ptr<ResourcePool> CreateForGpuMemoryBufferResources(
       ResourceProvider* resource_provider,
-      base::SingleThreadTaskRunner* task_runner) {
-    return base::WrapUnique(
-        new ResourcePool(resource_provider, task_runner, true));
+      base::SingleThreadTaskRunner* task_runner,
+      gfx::BufferUsage usage,
+      const base::TimeDelta& expiration_delay) {
+    std::unique_ptr<ResourcePool> pool(new ResourcePool(
+        resource_provider, task_runner, true, expiration_delay));
+    pool->usage_ = usage;
+    return pool;
   }
 
   static std::unique_ptr<ResourcePool> Create(
       ResourceProvider* resource_provider,
-      base::SingleThreadTaskRunner* task_runner) {
-    return base::WrapUnique(
-        new ResourcePool(resource_provider, task_runner, false));
+      base::SingleThreadTaskRunner* task_runner,
+      const base::TimeDelta& expiration_delay) {
+    return base::WrapUnique(new ResourcePool(resource_provider, task_runner,
+                                             false, expiration_delay));
   }
 
   ~ResourcePool() override;
 
-  Resource* AcquireResource(const gfx::Size& size, ResourceFormat format);
-  Resource* TryAcquireResourceWithContentId(uint64_t content_id);
-  void ReleaseResource(Resource* resource, uint64_t content_id);
+  // Tries to reuse a resource. If none are available, makes a new one.
+  Resource* AcquireResource(const gfx::Size& size,
+                            ResourceFormat format,
+                            const gfx::ColorSpace& color_space);
+
+  // Tries to acquire the resource with |previous_content_id| for us in partial
+  // raster. If successful, this function will retun the invalidated rect which
+  // must be re-rastered in |total_invalidated_rect|.
+  Resource* TryAcquireResourceForPartialRaster(
+      uint64_t new_content_id,
+      const gfx::Rect& new_invalidated_rect,
+      uint64_t previous_content_id,
+      gfx::Rect* total_invalidated_rect);
+
+  // Called when a resource's content has been fully replaced (and is completely
+  // valid). Updates the resource's content ID to its new value.
+  void OnContentReplaced(ResourceId resource_id, uint64_t content_id);
+  void ReleaseResource(Resource* resource);
 
   void SetResourceUsageLimits(size_t max_memory_usage_bytes,
                               size_t max_resource_count);
 
   void ReduceResourceUsage();
+
+  // Must be called regularly to move resources from the busy pool to the unused
+  // pool.
   void CheckBusyResources();
 
   size_t memory_usage_bytes() const { return in_use_memory_usage_bytes_; }
@@ -67,18 +92,17 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
   size_t GetBusyResourceCountForTesting() const {
     return busy_resources_.size();
   }
-  void SetResourceExpirationDelayForTesting(base::TimeDelta delay) {
-    resource_expiration_delay_ = delay;
-  }
 
  protected:
   ResourcePool(ResourceProvider* resource_provider,
                base::SingleThreadTaskRunner* task_runner,
-               bool use_gpu_memory_buffers);
+               bool use_gpu_memory_buffers,
+               const base::TimeDelta& expiration_delay);
 
   bool ResourceUsageTooHigh();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(ResourcePoolTest, ReuseResource);
   class PoolResource : public ScopedResource {
    public:
     static std::unique_ptr<PoolResource> Create(
@@ -95,15 +119,35 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
     base::TimeTicks last_usage() const { return last_usage_; }
     void set_last_usage(base::TimeTicks time) { last_usage_ = time; }
 
+    gfx::Rect invalidated_rect() const { return invalidated_rect_; }
+    void set_invalidated_rect(const gfx::Rect& invalidated_rect) {
+      invalidated_rect_ = invalidated_rect;
+    }
+
    private:
     explicit PoolResource(ResourceProvider* resource_provider)
         : ScopedResource(resource_provider), content_id_(0) {}
     uint64_t content_id_;
     base::TimeTicks last_usage_;
+    gfx::Rect invalidated_rect_;
   };
+
+  // Tries to reuse a resource. Returns |nullptr| if none are available.
+  Resource* ReuseResource(const gfx::Size& size,
+                          ResourceFormat format,
+                          const gfx::ColorSpace& color_space);
+
+  // Creates a new resource without trying to reuse an old one.
+  Resource* CreateResource(const gfx::Size& size,
+                           ResourceFormat format,
+                           const gfx::ColorSpace& color_space);
 
   void DidFinishUsingResource(std::unique_ptr<PoolResource> resource);
   void DeleteResource(std::unique_ptr<PoolResource> resource);
+  static void UpdateResourceContentIdAndInvalidation(
+      PoolResource* resource,
+      uint64_t new_content_id,
+      const gfx::Rect& new_invalidated_rect);
 
   // Functions which manage periodic eviction of expired resources.
   void ScheduleEvictExpiredResourcesIn(base::TimeDelta time_from_now);
@@ -114,6 +158,7 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
 
   ResourceProvider* resource_provider_;
   bool use_gpu_memory_buffers_;
+  gfx::BufferUsage usage_;
   size_t max_memory_usage_bytes_;
   size_t max_resource_count_;
   size_t in_use_memory_usage_bytes_;
@@ -125,11 +170,12 @@ class CC_EXPORT ResourcePool : public base::trace_event::MemoryDumpProvider {
   ResourceDeque unused_resources_;
   ResourceDeque busy_resources_;
 
-  std::map<ResourceId, std::unique_ptr<PoolResource>> in_use_resources_;
+  using InUseResourceMap = std::map<ResourceId, std::unique_ptr<PoolResource>>;
+  InUseResourceMap in_use_resources_;
 
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   bool evict_expired_resources_pending_;
-  base::TimeDelta resource_expiration_delay_;
+  const base::TimeDelta resource_expiration_delay_;
 
   base::WeakPtrFactory<ResourcePool> weak_ptr_factory_;
 

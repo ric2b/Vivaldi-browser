@@ -3,24 +3,24 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Certificate chain with 1 intermediary and a trusted root. The target
+"""Certificate chain with 1 intermediate and a trusted root. The target
 certificate is signed using a weak RSA key (512-bit modulus), and so
 verification is expected to fail."""
 
 import common
 
-# Self-signed root certificate (part of trust store).
+# Self-signed root certificate (used as trust anchor).
 root = common.create_self_signed_root_certificate('Root')
 
-# Intermediary with a very weak key size (512-bit RSA).
-intermediary = common.create_intermediary_certificate('Intermediary', root)
-intermediary.generate_rsa_key(512)
+# Intermediate with a very weak key size (512-bit RSA).
+intermediate = common.create_intermediate_certificate('Intermediate', root)
+intermediate.set_key(common.generate_rsa_key(512))
 
 # Target certificate.
-target = common.create_end_entity_certificate('Target', intermediary)
+target = common.create_end_entity_certificate('Target', intermediate)
 
-chain = [target, intermediary]
-trusted = [root]
+chain = [target, intermediate]
+trusted = common.TrustAnchor(root, constrained=False)
 time = common.DEFAULT_TIME
 verify_result = False
 

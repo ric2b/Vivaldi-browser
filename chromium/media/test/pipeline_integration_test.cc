@@ -10,11 +10,10 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/single_thread_task_runner.h"
+#include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -42,7 +41,7 @@
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
 #include "services/shell/public/cpp/connect.h"
-#include "services/shell/public/cpp/shell_test.h"
+#include "services/shell/public/cpp/service_test.h"
 
 // TODO(dalecurtis): The mojo renderer is in another process, so we have no way
 // currently to get hashes for video and audio samples.  This also means that
@@ -223,7 +222,6 @@ class FakeEncryptedMedia {
     virtual void OnSessionMessage(const std::string& session_id,
                                   MediaKeys::MessageType message_type,
                                   const std::vector<uint8_t>& message,
-                                  const GURL& legacy_destination_url,
                                   AesDecryptor* decryptor) = 0;
 
     virtual void OnSessionClosed(const std::string& session_id) = 0;
@@ -231,14 +229,6 @@ class FakeEncryptedMedia {
     virtual void OnSessionKeysChange(const std::string& session_id,
                                      bool has_additional_usable_key,
                                      CdmKeysInfo keys_info) = 0;
-
-    // Errors are not expected unless overridden.
-    virtual void OnLegacySessionError(const std::string& session_id,
-                                      const std::string& error_name,
-                                      uint32_t system_code,
-                                      const std::string& error_message) {
-      FAIL() << "Unexpected Key Error";
-    }
 
     virtual void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
                                           const std::vector<uint8_t>& init_data,
@@ -262,10 +252,8 @@ class FakeEncryptedMedia {
   // Callbacks for firing session events. Delegate to |app_|.
   void OnSessionMessage(const std::string& session_id,
                         MediaKeys::MessageType message_type,
-                        const std::vector<uint8_t>& message,
-                        const GURL& legacy_destination_url) {
-    app_->OnSessionMessage(session_id, message_type, message,
-                           legacy_destination_url, decryptor_.get());
+                        const std::vector<uint8_t>& message) {
+    app_->OnSessionMessage(session_id, message_type, message, decryptor_.get());
   }
 
   void OnSessionClosed(const std::string& session_id) {
@@ -277,14 +265,6 @@ class FakeEncryptedMedia {
                            CdmKeysInfo keys_info) {
     app_->OnSessionKeysChange(session_id, has_additional_usable_key,
                               std::move(keys_info));
-  }
-
-  void OnLegacySessionError(const std::string& session_id,
-                            const std::string& error_name,
-                            uint32_t system_code,
-                            const std::string& error_message) {
-    app_->OnLegacySessionError(session_id, error_name, system_code,
-                               error_message);
   }
 
   void OnEncryptedMediaInitData(EmeInitDataType init_data_type,
@@ -356,7 +336,6 @@ class KeyProvidingApp : public FakeEncryptedMedia::AppBase {
   void OnSessionMessage(const std::string& session_id,
                         MediaKeys::MessageType message_type,
                         const std::vector<uint8_t>& message,
-                        const GURL& legacy_destination_url,
                         AesDecryptor* decryptor) override {
     EXPECT_FALSE(session_id.empty());
     EXPECT_FALSE(message.empty());
@@ -478,7 +457,6 @@ class NoResponseApp : public FakeEncryptedMedia::AppBase {
   void OnSessionMessage(const std::string& session_id,
                         MediaKeys::MessageType message_type,
                         const std::vector<uint8_t>& message,
-                        const GURL& legacy_destination_url,
                         AesDecryptor* decryptor) override {
     EXPECT_FALSE(session_id.empty());
     EXPECT_FALSE(message.empty());
@@ -552,7 +530,7 @@ class MockMediaSource {
     chunk_demuxer_->StartWaitingForSeek(seek_time);
 
     chunk_demuxer_->ResetParserState(kSourceId, base::TimeDelta(),
-                                     kInfiniteDuration(),
+                                     kInfiniteDuration,
                                      &last_timestamp_offset_);
 
     DCHECK_LT(new_position, file_data_->data_size());
@@ -572,7 +550,7 @@ class MockMediaSource {
 
     ASSERT_TRUE(chunk_demuxer_->AppendData(
         kSourceId, file_data_->data() + current_position_, size,
-        base::TimeDelta(), kInfiniteDuration(), &last_timestamp_offset_));
+        base::TimeDelta(), kInfiniteDuration, &last_timestamp_offset_));
     current_position_ += size;
   }
 
@@ -582,7 +560,7 @@ class MockMediaSource {
     CHECK(!chunk_demuxer_->IsParsingMediaSegment(kSourceId));
     bool success =
         chunk_demuxer_->AppendData(kSourceId, pData, size, base::TimeDelta(),
-                                   kInfiniteDuration(), &timestamp_offset);
+                                   kInfiniteDuration, &timestamp_offset);
     last_timestamp_offset_ = timestamp_offset;
     return success;
   }
@@ -618,7 +596,7 @@ class MockMediaSource {
     if (!chunk_demuxer_)
       return;
     chunk_demuxer_->ResetParserState(kSourceId, base::TimeDelta(),
-                                     kInfiniteDuration(),
+                                     kInfiniteDuration,
                                      &last_timestamp_offset_);
     chunk_demuxer_->Shutdown();
     chunk_demuxer_ = NULL;
@@ -717,14 +695,14 @@ class MockMediaSource {
 //               preferably by eliminating multiple inheritance here which is
 //               banned by Google C++ style.
 #if defined(MOJO_RENDERER) && defined(ENABLE_MOJO_PIPELINE_INTEGRATION_TEST)
-class PipelineIntegrationTestHost : public shell::test::ShellTest,
+class PipelineIntegrationTestHost : public shell::test::ServiceTest,
                                     public PipelineIntegrationTestBase {
  public:
   PipelineIntegrationTestHost()
-      : shell::test::ShellTest("exe:media_pipeline_integration_shelltests") {}
+      : shell::test::ServiceTest("exe:media_pipeline_integration_shelltests") {}
 
   void SetUp() override {
-    ShellTest::SetUp();
+    ServiceTest::SetUp();
     InitializeMediaLibrary();
   }
 
@@ -733,10 +711,11 @@ class PipelineIntegrationTestHost : public shell::test::ShellTest,
     connector()->ConnectToInterface("mojo:media", &media_service_factory_);
 
     mojom::RendererPtr mojo_renderer;
-    media_service_factory_->CreateRenderer(mojo::GetProxy(&mojo_renderer));
+    media_service_factory_->CreateRenderer(std::string(),
+                                           mojo::GetProxy(&mojo_renderer));
 
-    return base::WrapUnique(new MojoRenderer(message_loop_.task_runner(),
-                                             std::move(mojo_renderer)));
+    return base::MakeUnique<MojoRenderer>(message_loop_.task_runner(),
+                                          std::move(mojo_renderer));
   }
 
  private:
@@ -814,7 +793,7 @@ class PipelineIntegrationTest : public PipelineIntegrationTestHost {
           base::Bind(&FakeEncryptedMedia::OnEncryptedMediaInitData,
                      base::Unretained(encrypted_media)));
     }
-    message_loop_.Run();
+    base::RunLoop().Run();
     return pipeline_status_;
   }
 
@@ -969,6 +948,83 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackHashed) {
   EXPECT_HASH_EQ("f0be120a90a811506777c99a2cdf7cc1", GetVideoHash());
   EXPECT_HASH_EQ("-3.59,-2.06,-0.43,2.15,0.77,-0.95,", GetAudioHash());
   EXPECT_TRUE(demuxer_->GetTimelineOffset().is_null());
+}
+
+TEST_F(PipelineIntegrationTest, PlaybackWithAudioTrackDisabledThenEnabled) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+
+  // Disable audio.
+  std::vector<MediaTrack::Id> empty;
+  pipeline_->OnEnabledAudioTracksChanged(empty);
+  base::RunLoop().RunUntilIdle();
+
+  // Seek to flush the pipeline and ensure there's no prerolled audio data.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+
+  Play();
+  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
+  Pause();
+
+  // Verify that no audio has been played, since we disabled audio tracks.
+  EXPECT_HASH_EQ(kNullAudioHash, GetAudioHash());
+
+  // Re-enable audio.
+  std::vector<MediaTrack::Id> audioTrackId;
+  audioTrackId.push_back("2");
+  pipeline_->OnEnabledAudioTracksChanged(audioTrackId);
+  base::RunLoop().RunUntilIdle();
+
+  // Restart playback from 500ms position.
+  ASSERT_TRUE(Seek(k500ms));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+
+  // Verify that audio has been playing after being enabled.
+  EXPECT_HASH_EQ("-1.53,0.21,1.23,1.56,-0.34,-0.94,", GetAudioHash());
+}
+
+TEST_F(PipelineIntegrationTest, PlaybackWithVideoTrackDisabledThenEnabled) {
+  ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
+
+  // Disable video.
+  std::vector<MediaTrack::Id> empty;
+  pipeline_->OnSelectedVideoTrackChanged(empty);
+  base::RunLoop().RunUntilIdle();
+
+  // Seek to flush the pipeline and ensure there's no prerolled video data.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+
+  // Reset the video hash in case some of the prerolled video frames have been
+  // hashed already.
+  ResetVideoHash();
+
+  Play();
+  const base::TimeDelta k500ms = base::TimeDelta::FromMilliseconds(500);
+  ASSERT_TRUE(WaitUntilCurrentTimeIsAfter(k500ms));
+  Pause();
+
+  // Verify that no video has been rendered, since we disabled video tracks.
+  EXPECT_HASH_EQ(kNullVideoHash, GetVideoHash());
+
+  // Re-enable video.
+  std::vector<MediaTrack::Id> videoTrackId;
+  videoTrackId.push_back("1");
+  pipeline_->OnSelectedVideoTrackChanged(videoTrackId);
+  base::RunLoop().RunUntilIdle();
+
+  // Seek to flush video pipeline and reset the video hash again to clear state
+  // if some prerolled frames got hashed after enabling video.
+  ASSERT_TRUE(Seek(base::TimeDelta()));
+  ResetVideoHash();
+
+  // Restart playback from 500ms position.
+  ASSERT_TRUE(Seek(k500ms));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+
+  // Verify that video has been rendered after being enabled.
+  EXPECT_HASH_EQ("fd59357dfd9c144ab4fb8181b2de32c3", GetVideoHash());
 }
 
 TEST_F(PipelineIntegrationTest,
@@ -1296,7 +1352,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_Remove_Updates_BufferedRanges) {
 
   source.RemoveRange(base::TimeDelta::FromMilliseconds(1000),
                      base::TimeDelta::FromMilliseconds(k320WebMFileDurationMs));
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   buffered_ranges = pipeline_->GetBufferedTimeRanges();
   EXPECT_EQ(1u, buffered_ranges.size());
@@ -1332,7 +1388,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_FillUp_Buffer) {
     source.EvictCodedFrames(media_time, file->data_size());
     ASSERT_TRUE(
         source.AppendAtTime(media_time, file->data(), file->data_size()));
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
     buffered_ranges = pipeline_->GetBufferedTimeRanges();
   } while (buffered_ranges.size() == 1 &&
@@ -1389,7 +1445,7 @@ TEST_F(PipelineIntegrationTest,
 
   source.EndOfStream();
 
-  message_loop_.Run();
+  base::RunLoop().Run();
   EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());
@@ -1475,7 +1531,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_ADTS_TimestampOffset) {
 
   scoped_refptr<DecoderBuffer> second_file = ReadTestDataFile("sfx.adts");
   source.AppendAtTimeWithWindow(
-      append_time, append_time + adts_preroll_duration, kInfiniteDuration(),
+      append_time, append_time + adts_preroll_duration, kInfiniteDuration,
       second_file->data(), second_file->data_size());
   source.EndOfStream();
 
@@ -1674,7 +1730,7 @@ TEST_F(PipelineIntegrationTest, MediaSource_MP3_TimestampOffset) {
 
   scoped_refptr<DecoderBuffer> second_file = ReadTestDataFile("sfx.mp3");
   source.AppendAtTimeWithWindow(append_time, append_time + mp3_preroll_duration,
-                                kInfiniteDuration(), second_file->data(),
+                                kInfiniteDuration, second_file->data(),
                                 second_file->data_size());
   source.EndOfStream();
 
@@ -1828,7 +1884,7 @@ TEST_F(PipelineIntegrationTest,
 
   source.EndOfStream();
 
-  message_loop_.Run();
+  base::RunLoop().Run();
   EXPECT_EQ(CHUNK_DEMUXER_ERROR_APPEND_FAILED, pipeline_status_);
 
   EXPECT_EQ(1u, pipeline_->GetBufferedTimeRanges().size());

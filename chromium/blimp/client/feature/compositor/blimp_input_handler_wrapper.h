@@ -43,6 +43,9 @@ class BlimpInputHandlerWrapper : public ui::InputHandlerProxyClient {
       blink::WebGestureDevice device_source,
       const blink::WebFloatPoint& velocity,
       const blink::WebSize& cumulative_scroll) override;
+  void DispatchNonBlockingEventToMainThread(
+    ui::ScopedWebInputEvent event,
+    const ui::LatencyInfo& latency_info) override;
   void DidOverscroll(const gfx::Vector2dF& accumulated_overscroll,
                      const gfx::Vector2dF& latest_overscroll_delta,
                      const gfx::Vector2dF& current_fling_velocity,

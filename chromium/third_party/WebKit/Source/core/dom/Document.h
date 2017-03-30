@@ -61,7 +61,7 @@
 namespace blink {
 
 class AnimationClock;
-class AnimationTimeline;
+class DocumentTimeline;
 class AXObjectCache;
 class Attr;
 class CDATASection;
@@ -142,6 +142,7 @@ class PlatformMouseEvent;
 class ProcessingInstruction;
 class QualifiedName;
 class Range;
+class ResizeObserverController;
 class ResourceFetcher;
 class RootScrollerController;
 class SVGDocumentExtensions;
@@ -353,6 +354,11 @@ public:
     bool hidden() const;
     void didChangeVisibilityState();
 
+    // If the document is "prefetch only", it will not be fully contstructed,
+    // and should never be displayed. Only a few resources will be loaded and
+    // scanned, in order to warm up caches.
+    bool isPrefetchOnly() const;
+
     Node* adoptNode(Node* source, ExceptionState&);
 
     HTMLCollection* images();
@@ -460,12 +466,12 @@ public:
     // pixels per inch. pageSize, marginTop, marginRight, marginBottom,
     // marginLeft must be initialized to the default values that are used if
     // auto is specified.
-    void pageSizeAndMarginsInPixels(int pageIndex, IntSize& pageSize, int& marginTop, int& marginRight, int& marginBottom, int& marginLeft);
+    void pageSizeAndMarginsInPixels(int pageIndex, DoubleSize& pageSize, int& marginTop, int& marginRight, int& marginBottom, int& marginLeft);
 
     ResourceFetcher* fetcher() { return m_fetcher.get(); }
 
-    void attach(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
 
     // If you have a Document, use layoutView() instead which is faster.
     void layoutObject() const = delete;
@@ -651,7 +657,7 @@ public:
     void attachRange(Range*);
     void detachRange(Range*);
 
-    void updateRangesAfterNodeMovedToAnotherDocument(const Node&);
+    void didMoveTreeToNewDocument(const Node& root);
     // nodeChildrenWillBeRemoved is used when removing all node children at once.
     void nodeChildrenWillBeRemoved(ContainerNode&);
     // nodeWillBeRemoved is only safe when removing one node at a time.
@@ -705,6 +711,9 @@ public:
     IntersectionObserverController* intersectionObserverController();
     IntersectionObserverController& ensureIntersectionObserverController();
     NodeIntersectionObserverData& ensureIntersectionObserverData();
+
+    ResizeObserverController* resizeObserverController() const { return m_resizeObserverController; }
+    ResizeObserverController& ensureResizeObserverController();
 
     void updateViewportDescription();
 
@@ -950,7 +959,7 @@ public:
     void cancelIdleCallback(int id);
 
     EventTarget* errorEventTarget() final;
-    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) final;
+    void exceptionThrown(ErrorEvent*) final;
 
     void initDNSPrefetch();
 
@@ -988,7 +997,7 @@ public:
     Locale& getCachedLocale(const AtomicString& locale = nullAtom);
 
     AnimationClock& animationClock();
-    AnimationTimeline& timeline() const { return *m_timeline; }
+    DocumentTimeline& timeline() const { return *m_timeline; }
     CompositorPendingAnimations& compositorPendingAnimations() { return *m_compositorPendingAnimations; }
 
     void addToTopLayer(Element*, const Element* before = nullptr);
@@ -1002,13 +1011,12 @@ public:
     Document* templateDocumentHost() { return m_templateDocumentHost; }
 
     // TODO(thestig): Rename these and related functions, since we can call them
-    // for labels and input fields outside of forms as well.
+    // for controls outside of forms as well.
     void didAssociateFormControl(Element*);
-    void removeFormAssociation(Element*);
 
     void addConsoleMessage(ConsoleMessage*) final;
 
-    LocalDOMWindow* executingWindow() final;
+    LocalDOMWindow* executingWindow() const final;
     LocalFrame* executingFrame();
 
     DocumentLifecycle& lifecycle() { return m_lifecycle; }
@@ -1071,9 +1079,6 @@ public:
 
     SnapCoordinator* snapCoordinator();
 
-    WebTaskRunner* loadingTaskRunner() const;
-    WebTaskRunner* timerTaskRunner() const;
-
     void enforceInsecureRequestPolicy(WebInsecureRequestPolicy);
 
     bool mayContainV0Shadow() const { return m_mayContainV0Shadow; }
@@ -1085,11 +1090,7 @@ public:
 
     Element* rootScroller() const;
     void setRootScroller(Element*, ExceptionState&);
-    const Element* effectiveRootScroller() const;
-
-    // TODO(bokan): Temporarily added to allow ScrollCustomization to properly
-    // opt out for wheel scrolls. crbug.com/623079.
-    bool isViewportScrollCallback(const ScrollStateCallback*);
+    RootScrollerController* rootScrollerController() const { return m_rootScrollerController.get(); }
 
     bool isInMainFrame() const;
 
@@ -1157,24 +1158,22 @@ private:
     const KURL& virtualURL() const final; // Same as url(), but needed for ExecutionContext to implement it without a performance loss for direct calls.
     KURL virtualCompleteURL(const String&) const final; // Same as completeURL() for the same reason as above.
 
-    void reportBlockedScriptExecutionToInspector(const String& directiveText) final;
-
     void updateTitle(const String&);
-    void updateFocusAppearanceTimerFired(Timer<Document>*);
+    void updateFocusAppearanceTimerFired(TimerBase*);
     void updateBaseURL();
 
     void executeScriptsWaitingForResources();
 
-    void loadEventDelayTimerFired(Timer<Document>*);
-    void pluginLoadingTimerFired(Timer<Document>*);
+    void loadEventDelayTimerFired(TimerBase*);
+    void pluginLoadingTimerFired(TimerBase*);
 
     void addListenerType(ListenerType listenerType) { m_listenerTypes |= listenerType; }
     void addMutationEventListenerTypeIfEnabled(ListenerType);
 
-    void didAssociateFormControlsTimerFired(Timer<Document>*);
+    void didAssociateFormControlsTimerFired(TimerBase*);
 
     void clearFocusedElementSoon();
-    void clearFocusedElementTimerFired(Timer<Document>*);
+    void clearFocusedElementTimerFired(TimerBase*);
 
     bool haveScriptBlockingStylesheetsLoaded() const;
     bool haveRenderBlockingStylesheetsLoaded() const;
@@ -1377,7 +1376,7 @@ private:
     Member<V0CustomElementRegistrationContext> m_registrationContext;
     Member<V0CustomElementMicrotaskRunQueue> m_customElementMicrotaskRunQueue;
 
-    void elementDataCacheClearTimerFired(Timer<Document>*);
+    void elementDataCacheClearTimerFired(TimerBase*);
     Timer<Document> m_elementDataCacheClearTimer;
 
     Member<ElementDataCache> m_elementDataCache;
@@ -1385,14 +1384,13 @@ private:
     using LocaleIdentifierToLocaleMap = HashMap<AtomicString, std::unique_ptr<Locale>>;
     LocaleIdentifierToLocaleMap m_localeCache;
 
-    Member<AnimationTimeline> m_timeline;
+    Member<DocumentTimeline> m_timeline;
     Member<CompositorPendingAnimations> m_compositorPendingAnimations;
 
     Member<Document> m_templateDocument;
     Member<Document> m_templateDocumentHost;
 
     Timer<Document> m_didAssociateFormControlsTimer;
-    HeapHashSet<Member<Element>> m_associatedFormControls;
 
     HeapHashSet<Member<SVGUseElement>> m_useElementsNeedingUpdate;
     HeapHashSet<Member<Element>> m_layerUpdateSVGFilterElements;
@@ -1411,6 +1409,7 @@ private:
 
     Member<IntersectionObserverController> m_intersectionObserverController;
     Member<NodeIntersectionObserverData> m_intersectionObserverData;
+    Member<ResizeObserverController> m_resizeObserverController;
 
     int m_nodeCount;
 

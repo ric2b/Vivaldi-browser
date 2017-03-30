@@ -382,7 +382,10 @@ CodeMirror.prototype = {
     doc: null,
     addKeyMap: function(map) { },
     addLineClass: function(handle, where, cls) { },
-    /** @param {?Object=} options */
+    /**
+     * @param {?Object=} options
+     * @return {!CodeMirror.LineWidget}
+     */
     addLineWidget: function(handle, node, options) { },
     /**
      * @param {string|!Object} spec
@@ -408,6 +411,7 @@ CodeMirror.prototype = {
     eachLine: function(from, to, op) { },
     execCommand: function(cmd) { },
     extendSelection: function(from, to) { },
+    findMarks: function(from, to) { },
     findMarksAt: function(pos) { },
     /**
      * @param {!CodeMirror.Pos} from
@@ -585,6 +589,20 @@ CodeMirror.StringStream.prototype = {
     sol: function() { }
 }
 
+/** @constructor */
+CodeMirror.TextMarker = function(doc, type) { }
+CodeMirror.TextMarker.prototype = {
+    clear: function() { },
+    find: function() { }
+}
+
+/** @constructor */
+CodeMirror.LineWidget = function() { }
+CodeMirror.LineWidget.prototype = {
+    clear: function() { }
+}
+
+
 /** @type {Object.<string, !Object.<string, string>>} */
 CodeMirror.keyMap;
 
@@ -751,3 +769,10 @@ Gonzales.Node = function()
     /** @type {(string|!Array<!Gonzales.Node>)} */
     this.content;
 }
+
+/**
+ * @type {string}
+ * @see http://heycam.github.io/webidl/#es-DOMException-prototype-object
+ * TODO(jsbell): DOMException should be a subclass of Error.
+ */
+DOMException.prototype.message;

@@ -28,6 +28,7 @@ source_set("android") {
   deps = [
     ":capture_jni_headers",
     "//media/mojo/interfaces:image_capture",
+    "//third_party/libyuv",
   ]
 }
 
@@ -42,7 +43,8 @@ generate_jni("capture_jni_headers") {
 
 java_cpp_enum("media_java_enums_srcjar") {
   sources = [
-    "../video_capture_device.h",
+    "../video_capture_device_descriptor.h",
+    "photo_capabilities.h",
     "video_capture_device_android.h",
   ]
 }
@@ -50,6 +52,7 @@ java_cpp_enum("media_java_enums_srcjar") {
 android_library("capture_java") {
   deps = [
     "//base:base_java",
+    "//third_party/android_tools:android_support_annotations_java",
   ]
 
   srcjar_deps = [ ":media_java_enums_srcjar" ]

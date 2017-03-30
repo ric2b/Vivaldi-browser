@@ -258,8 +258,6 @@
         'base/audio_discard_helper.h',
         'base/audio_fifo.cc',
         'base/audio_fifo.h',
-        'base/audio_hardware_config.cc',
-        'base/audio_hardware_config.h',
         'base/audio_hash.cc',
         'base/audio_hash.h',
         'base/audio_latency.cc',
@@ -313,6 +311,8 @@
         'base/channel_mixer.h',
         'base/channel_mixing_matrix.cc',
         'base/channel_mixing_matrix.h',
+        'base/color_helper.cc',
+        'base/color_helper.h',
         'base/container_names.cc',
         'base/container_names.h',
         'base/data_buffer.cc',
@@ -342,6 +342,7 @@
         'base/eme_constants.h',
         'base/encryption_scheme.cc',
         'base/encryption_scheme.h',
+        'base/feedback_signal_accumulator.h',
         'base/key_system_names.cc',
         'base/key_system_names.h',
         'base/key_system_properties.cc',
@@ -453,6 +454,8 @@
         'base/video_capturer_source.h',
         'base/video_codecs.cc',
         'base/video_codecs.h',
+        'base/video_color_space.cc',
+        'base/video_color_space.h',
         'base/video_decoder.cc',
         'base/video_decoder.h',
         'base/video_decoder_config.cc',
@@ -520,8 +523,6 @@
         'filters/decrypting_demuxer_stream.h',
         'filters/decrypting_video_decoder.cc',
         'filters/decrypting_video_decoder.h',
-        'filters/default_media_permission.cc',
-        'filters/default_media_permission.h',
         'filters/ffmpeg_audio_decoder.cc',
         'filters/ffmpeg_audio_decoder.h',
         'filters/ffmpeg_bitstream_converter.h',
@@ -571,10 +572,16 @@
         'filters/vp8_bool_decoder.h',
         'filters/vp8_parser.cc',
         'filters/vp8_parser.h',
+        'filters/vp9_bool_decoder.cc',
+        'filters/vp9_bool_decoder.h',
+        'filters/vp9_compressed_header_parser.cc',
+        'filters/vp9_compressed_header_parser.h',
         'filters/vp9_parser.cc',
         'filters/vp9_parser.h',
         'filters/vp9_raw_bits_reader.cc',
         'filters/vp9_raw_bits_reader.h',
+        'filters/vp9_uncompressed_header_parser.cc',
+        'filters/vp9_uncompressed_header_parser.h',
         'filters/vpx_video_decoder.cc',
         'filters/vpx_video_decoder.h',
         'filters/webvtt_util.h',
@@ -708,76 +715,6 @@
             'filters/vpx_video_decoder.h',
           ],
         }],
-        ['system_proprietary_codecs==1 and OS=="mac"', {
-          'sources': [
-            'filters/at_aac_helper.cc',
-            'filters/at_aac_helper.h',
-            'filters/at_audio_decoder.cc',
-            'filters/at_audio_decoder.h',
-            'filters/at_codec_helper.h',
-            'filters/at_mp3_helper.cc',
-            'filters/at_mp3_helper.h',
-            'filters/core_audio_demuxer.cc',
-            'filters/core_audio_demuxer.h',
-            'filters/core_audio_demuxer_stream.cc',
-            'filters/core_audio_demuxer_stream.h',
-          ],
-        }],
-        ['system_proprietary_codecs==1 and OS=="win"', {
-          'dependencies': [
-            'mf_initializer',
-          ],
-          'sources': [
-            'filters/wmf_audio_decoder.cc',
-            'filters/wmf_audio_decoder.h',
-            'filters/wmf_decoder_impl.cc',
-            'filters/wmf_decoder_impl.h',
-            'filters/wmf_video_decoder.cc',
-            'filters/wmf_video_decoder.h',
-          ],
-        }],
-        ['system_proprietary_codecs==1', {
-          'dependencies': [
-            '<(DEPTH)/net/net.gyp:net', # For GetMimeTypeFromFile
-          ],
-          'sources': [
-            'base/mac/framework_type_conversions.h',
-            'base/mac/framework_type_conversions.mm',
-            'base/mac/mediatoolbox_glue.h',
-            'base/mac/mediatoolbox_glue.mm',
-            'base/mac/scoped_audio_queue_ref.h',
-            'base/pipeline_stats.cc',
-            'base/pipeline_stats.h',
-            'base/platform_mime_util.h',
-            'base/platform_mime_util_mac.mm',
-            'base/platform_mime_util_win.cc',
-            'base/win/mf_util.cc',
-            'base/win/mf_util.h',
-            'filters/ipc_audio_decoder.cc',
-            'filters/ipc_audio_decoder.h',
-            'filters/ipc_demuxer.cc',
-            'filters/ipc_demuxer.h',
-            'filters/ipc_demuxer_stream.cc',
-            'filters/ipc_demuxer_stream.h',
-            'filters/ipc_media_pipeline_host.h',
-            'filters/pass_through_audio_decoder.cc',
-            'filters/pass_through_audio_decoder.h',
-            'filters/pass_through_decoder_impl.cc',
-            'filters/pass_through_decoder_impl.h',
-            'filters/pass_through_decoder_texture.cc',
-            'filters/pass_through_decoder_texture.h',
-            'filters/pass_through_video_decoder.cc',
-            'filters/pass_through_video_decoder.h',
-            'filters/platform_media_pipeline_constants.cc',
-            'filters/platform_media_pipeline_constants.h',
-            'filters/platform_media_pipeline_types.cc',
-            'filters/platform_media_pipeline_types.h',
-            'filters/platform_media_pipeline_types_mac.h',
-            'filters/platform_media_pipeline_types_mac.mm',
-            'filters/protocol_sniffer.cc',
-            'filters/protocol_sniffer.h',
-          ],
-        }],
         ['OS=="android"', {
           'dependencies': [
             'media_android_jni_headers',
@@ -902,7 +839,6 @@
             '<!@(<(pkg-config) --cflags libpulse)',
           ],
           'defines': [
-            'BRANDING="<(branding)"',
             'USE_PULSEAUDIO',
           ],
           'conditions': [
@@ -1190,9 +1126,8 @@
         'base/audio_converter_unittest.cc',
         'base/audio_discard_helper_unittest.cc',
         'base/audio_fifo_unittest.cc',
-        'base/audio_hardware_config_unittest.cc',
         'base/audio_hash_unittest.cc',
-	'base/audio_latency_unittest.cc',
+        'base/audio_latency_unittest.cc',
         'base/audio_parameters_unittest.cc',
         'base/audio_point_unittest.cc',
         'base/audio_pull_fifo_unittest.cc',
@@ -1216,6 +1151,7 @@
         'base/decoder_buffer_unittest.cc',
         'base/djb2_unittest.cc',
         'base/fake_demuxer_stream_unittest.cc',
+        'base/feedback_signal_accumulator_unittest.cc',
         'base/gmock_callback_support_unittest.cc',
         'base/key_systems_unittest.cc',
         'base/mac/video_frame_mac_unittests.cc',
@@ -1237,6 +1173,8 @@
         'base/user_input_monitor_unittest.cc',
         'base/vector_math_testing.h',
         'base/vector_math_unittest.cc',
+        'base/video_codecs_unittest.cc',
+        'base/video_color_space_unittest.cc',
         'base/video_decoder_config_unittest.cc',
         'base/video_frame_pool_unittest.cc',
         'base/video_frame_unittest.cc',
@@ -1426,6 +1364,22 @@
         ['use_x11==1', {
           'dependencies': [
             '../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+          ],
+        }],
+        ['use_cras==1', {
+          'dependencies': [
+            '../chromeos/chromeos.gyp:chromeos',
+          ],
+          'cflags': [
+            '<!@(<(pkg-config) --cflags libcras)',
+          ],
+          'link_settings': {
+            'libraries': [
+              '<!@(<(pkg-config) --libs libcras)',
+            ],
+          },
+          'defines': [
+            'USE_CRAS',
           ],
         }],
       ],
@@ -1655,13 +1609,8 @@
         'renderers/mock_gpu_video_accelerator_factories.h',
         'video/mock_video_decode_accelerator.cc',
         'video/mock_video_decode_accelerator.h',
-      ],
-      'conditions': [
-        ['system_proprietary_codecs==1', {
-          'sources': [
-            'test/pipeline_integration_test_base.cc',
-          ],
-        }],
+        'video/mock_video_encode_accelerator.cc',
+        'video/mock_video_encode_accelerator.h',
       ],
     },
     {
@@ -1801,6 +1750,8 @@
           'include_dirs': [ '..', ],
           'defines': [ 'MF_INITIALIZER_IMPLEMENTATION', ],
           'sources': [
+            'base/win/mf_helpers.cc',
+            'base/win/mf_helpers.h',
             'base/win/mf_initializer_export.h',
             'base/win/mf_initializer.cc',
             'base/win/mf_initializer.h',
@@ -2019,7 +1970,7 @@
     }],
     # TODO(watk): Refactor tests that could be made to run on Android. See
     # http://crbug.com/570762
-    ['media_use_ffmpeg==1 and OS!="android"', {
+    ['0 and media_use_ffmpeg==1 and OS!="android"', {
       'targets': [
         {
           # GN version: //media:ffmpeg_regression_tests
@@ -2145,26 +2096,26 @@
             'media_unittests.isolate',
           ],
         },
-        {
-          'target_name': 'audio_unittests_run',
-          'type': 'none',
-          'dependencies': [
-            'audio_unittests',
-          ],
-          'includes': [
-            '../build/isolate.gypi',
-          ],
-          'sources': [
-            'audio_unittests.isolate',
-          ],
-          'conditions': [
-            ['use_x11==1', {
-              'dependencies': [
-                '../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
-              ],
-            }],
-          ],
-        },
+        #{
+        #  'target_name': 'audio_unittests_run',
+        #  'type': 'none',
+        #  'dependencies': [
+        #    'audio_unittests',
+        #  ],
+        #  'includes': [
+        #    '../build/isolate.gypi',
+        #  ],
+        #  'sources': [
+        #    'audio_unittests.isolate',
+        #  ],
+        #  'conditions': [
+        #    ['use_x11==1', {
+        #      'dependencies': [
+        #        '../tools/xdisplaycheck/xdisplaycheck.gyp:xdisplaycheck',
+        #      ],
+        #    }],
+        #  ],
+        #},
       ],
     }],
     ['chromeos==1', {
@@ -2194,7 +2145,7 @@
         }
       ]
     }],
-    ['chromeos==1 or OS=="mac"', {
+    ['chromeos==1 or OS=="mac" or OS=="win"', {
       'targets': [
         {
           'target_name': 'video_encode_accelerator_unittest',
@@ -2224,6 +2175,11 @@
             ['OS=="mac"', {
               'dependencies': [
                 '../third_party/webrtc/common_video/common_video.gyp:common_video',
+              ],
+            }],
+            ['OS=="win"', {
+              'dependencies': [
+                '../media/media.gyp:mf_initializer',
               ],
             }],
             ['use_x11==1', {

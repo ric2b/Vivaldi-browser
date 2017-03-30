@@ -16,7 +16,7 @@
 #elif defined(COMPILER_MSVC)
 #define PRETTY_THIS base::StringPrintf("%s@%p ", __FUNCSIG__, this)
 #else
-#define PRETTY_THIS base::StringPrintf("%s@%p ", __FUNCTION__, this)
+#define PRETTY_THIS base::StringPrintf("%s@%p ", __func__, this)
 #endif
 
 namespace net {
@@ -197,7 +197,7 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
 
  public:
   explicit NestedSpdyFramerDecoder(SpdyFramer* outer)
-      : framer_(HTTP2, false), outer_(outer) {
+      : framer_(HTTP2, nullptr), outer_(outer) {
     DVLOG(1) << PRETTY_THIS;
   }
   ~NestedSpdyFramerDecoder() override { DVLOG(1) << PRETTY_THIS; }
@@ -218,6 +218,13 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
     framer_.set_debug_visitor(debug_visitor);
   }
 
+  // Passes the call on to the wrapped SpdyFramer.
+  void SetDecoderHeaderTableDebugVisitor(
+      std::unique_ptr<HpackHeaderTable::DebugVisitorInterface> visitor)
+      override {
+        framer_.SetDecoderHeaderTableDebugVisitor(std::move(visitor));
+  }
+
   // Passes the call on to the base adapter class and wrapped SpdyFramer.
   void set_process_single_input_frame(bool v) override {
     SpdyFramerDecoderAdapter::set_process_single_input_frame(v);
@@ -226,6 +233,12 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
 
   size_t ProcessInput(const char* data, size_t len) override {
     DVLOG(2) << "ProcessInput(data, " << len << ")";
+    const bool use_new_methods = outer_->use_new_methods_for_test();
+    if (framer_.use_new_methods_for_test() != use_new_methods) {
+      DVLOG(1) << "Overriding use_new_methods_ in nested framer, setting="
+               << (use_new_methods ? "true" : "false");
+      framer_.set_use_new_methods_for_test(use_new_methods);
+    }
     size_t result = framer_.ProcessInput(data, len);
     DVLOG(2) << "ProcessInput(data, " << len << ")  returning " << result;
     return result;
@@ -247,8 +260,10 @@ class NestedSpdyFramerDecoder : public SpdyFramerDecoderAdapter {
   std::unique_ptr<SpdyFramerVisitorAdapter> visitor_adapter_;
 };
 
-SpdyFramerDecoderAdapter* CreateNestedSpdyFramerDecoder(SpdyFramer* outer) {
-  return new NestedSpdyFramerDecoder(outer);
+std::unique_ptr<SpdyFramerDecoderAdapter> CreateNestedSpdyFramerDecoder(
+    SpdyFramer* outer) {
+  return std::unique_ptr<SpdyFramerDecoderAdapter>(
+      new NestedSpdyFramerDecoder(outer));
 }
 
 }  // namespace net

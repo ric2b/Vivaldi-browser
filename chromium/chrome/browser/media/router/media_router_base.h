@@ -12,7 +12,6 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/threading/thread_checker.h"
 #include "chrome/browser/media/router/media_route.h"
 #include "chrome/browser/media/router/media_router.h"
 #include "chrome/browser/media/router/media_routes_observer.h"
@@ -29,9 +28,9 @@ class MediaRouterBase : public MediaRouter {
       const content::PresentationConnectionStateChangedCallback& callback)
       override;
 
-  // Called when the off the record (incognito) profile for this instance is
-  // being shut down.  This will terminate all off the record media routes.
-  void OnOffTheRecordProfileShutdown() override;
+  // Called when the incognito profile for this instance is being shut down.
+  // This will terminate all incognito media routes.
+  void OnIncognitoProfileShutdown() override;
 
  protected:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoImplTest,
@@ -63,8 +62,6 @@ class MediaRouterBase : public MediaRouter {
       MediaRoute::Id,
       std::unique_ptr<PresentationConnectionStateChangedCallbacks>>
       presentation_connection_state_callbacks_;
-
-  base::ThreadChecker thread_checker_;
 
  private:
   friend class MediaRouterFactory;

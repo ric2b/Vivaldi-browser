@@ -87,7 +87,10 @@ static inline bool parseSimpleLength(const CharacterType* characters, unsigned l
     // not represent a double.
     bool ok;
     number = charactersToDouble(characters, length, &ok);
-    return ok && CSSParserToken::isValidNumericValue(number);
+    if (!ok)
+        return false;
+    number = clampTo<double>(number, -std::numeric_limits<float>::max(), std::numeric_limits<float>::max());
+    return true;
 }
 
 static CSSValue* parseSimpleLengthValue(CSSPropertyID propertyId, const String& string, CSSParserMode cssParserMode)
@@ -475,8 +478,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         // auto | baseline | before-edge | text-before-edge | middle |
         // central | after-edge | text-after-edge | ideographic | alphabetic |
         // hanging | mathematical
-        return valueID == CSSValueAuto || valueID == CSSValueBaseline || valueID == CSSValueMiddle
-            || (valueID >= CSSValueBeforeEdge && valueID <= CSSValueMathematical);
+        return valueID == CSSValueAuto || valueID == CSSValueAlphabetic || valueID == CSSValueBaseline
+            || valueID == CSSValueMiddle || (valueID >= CSSValueBeforeEdge && valueID <= CSSValueMathematical);
     case CSSPropertyAll:
         return false; // Only accepts css-wide keywords
     case CSSPropertyBackgroundRepeatX: // repeat | no-repeat
@@ -523,7 +526,7 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         // auto | use-script | no-change | reset-size | ideographic |
         // alphabetic | hanging | mathematical | central | middle |
         // text-after-edge | text-before-edge
-        return valueID == CSSValueAuto || valueID == CSSValueMiddle
+        return valueID == CSSValueAuto || valueID == CSSValueAlphabetic || valueID == CSSValueMiddle
             || (valueID >= CSSValueUseScript && valueID <= CSSValueResetSize)
             || (valueID >= CSSValueCentral && valueID <= CSSValueMathematical);
     case CSSPropertyEmptyCells: // show | hide
@@ -535,7 +538,7 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
     case CSSPropertyFontStretch: // normal | ultra-condensed | extra-condensed | condensed | semi-condensed | semi-expanded | expanded | extra-expanded | ultra-expanded
         return valueID == CSSValueNormal || (valueID >= CSSValueUltraCondensed && valueID <= CSSValueUltraExpanded);
     case CSSPropertyImageRendering: // auto | optimizeContrast | pixelated
-        return valueID == CSSValueAuto || valueID == CSSValueWebkitOptimizeContrast || (RuntimeEnabledFeatures::imageRenderingPixelatedEnabled() && valueID == CSSValuePixelated);
+        return valueID == CSSValueAuto || valueID == CSSValueWebkitOptimizeContrast || valueID == CSSValuePixelated;
     case CSSPropertyIsolation: // auto | isolate
         return valueID == CSSValueAuto || valueID == CSSValueIsolate;
     case CSSPropertyListStylePosition: // inside | outside
@@ -550,6 +553,8 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueFill || valueID == CSSValueContain || valueID == CSSValueCover || valueID == CSSValueNone || valueID == CSSValueScaleDown;
     case CSSPropertyOutlineStyle: // (<border-style> except hidden) | auto
         return valueID == CSSValueAuto || valueID == CSSValueNone || (valueID >= CSSValueInset && valueID <= CSSValueDouble);
+    case CSSPropertyOverflowAnchor:
+        return valueID == CSSValueVisible || valueID == CSSValueNone || valueID == CSSValueAuto;
     case CSSPropertyOverflowWrap: // normal | break-word
     case CSSPropertyWordWrap:
         return valueID == CSSValueNormal || valueID == CSSValueBreakWord;
@@ -691,7 +696,7 @@ bool CSSParserFastPaths::isValidKeywordPropertyAndValue(CSSPropertyID propertyId
         return valueID == CSSValueAuto || valueID == CSSValueNone || valueID == CSSValueElement;
     case CSSPropertyWebkitUserModify: // read-only | read-write
         return valueID == CSSValueReadOnly || valueID == CSSValueReadWrite || valueID == CSSValueReadWritePlaintextOnly;
-    case CSSPropertyWebkitUserSelect: // auto | none | text | all
+    case CSSPropertyUserSelect: // auto | none | text | all
         return valueID == CSSValueAuto || valueID == CSSValueNone || valueID == CSSValueText || valueID == CSSValueAll;
     case CSSPropertyWebkitWritingMode:
         return valueID >= CSSValueHorizontalTb && valueID <= CSSValueVerticalLr;
@@ -750,6 +755,7 @@ bool CSSParserFastPaths::isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyMaskType:
     case CSSPropertyObjectFit:
     case CSSPropertyOutlineStyle:
+    case CSSPropertyOverflowAnchor:
     case CSSPropertyOverflowWrap:
     case CSSPropertyOverflowX:
     case CSSPropertyOverflowY:
@@ -812,7 +818,7 @@ bool CSSParserFastPaths::isKeywordPropertyID(CSSPropertyID propertyId)
     case CSSPropertyTransformStyle:
     case CSSPropertyWebkitUserDrag:
     case CSSPropertyWebkitUserModify:
-    case CSSPropertyWebkitUserSelect:
+    case CSSPropertyUserSelect:
     case CSSPropertyWebkitWritingMode:
     case CSSPropertyWhiteSpace:
     case CSSPropertyWordBreak:

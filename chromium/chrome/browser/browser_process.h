@@ -24,8 +24,8 @@ class BackgroundModeManager;
 class CRLSetFetcher;
 class DownloadRequestLimiter;
 class DownloadStatusUpdater;
-class GLStringManager;
 class GpuModeManager;
+class GpuProfileCache;
 class IconManager;
 class IntranetRedirectDetector;
 class IOThread;
@@ -180,9 +180,9 @@ class BrowserProcess {
 
   virtual IconManager* icon_manager() = 0;
 
-  virtual GLStringManager* gl_string_manager() = 0;
-
   virtual GpuModeManager* gpu_mode_manager() = 0;
+
+  virtual GpuProfileCache* gpu_profile_cache() = 0;
 
   // Create and bind remote debugging server to a given |ip| and |port|.
   // Passing empty |ip| results in binding to localhost:
@@ -201,7 +201,10 @@ class BrowserProcess {
 
   virtual IntranetRedirectDetector* intranet_redirect_detector() = 0;
 
-  // Returns the locale used by the application.
+  // Returns the locale used by the application. It is the IETF language tag,
+  // defined in BCP 47. The region subtag is not included when it adds no
+  // distinguishing information to the language tag (e.g. both "en-US" and "fr"
+  // are correct here).
   virtual const std::string& GetApplicationLocale() = 0;
   virtual void SetApplicationLocale(const std::string& locale) = 0;
 
@@ -266,7 +269,7 @@ class BrowserProcess {
 
   virtual gcm::GCMDriver* gcm_driver() = 0;
 
-  // Returns the tab manager if it exists, null otherwise.
+  // Returns the tab manager. On non-supported platforms, this returns null.
   virtual memory::TabManager* GetTabManager() = 0;
 
   // Returns the default web client state of Chrome (i.e., was it the user's

@@ -57,7 +57,6 @@ class DetachableResourceHandler : public ResourceHandler,
                          bool open_when_done,
                          bool ask_for_target) override;
   bool OnWillStart(const GURL& url, bool* defer) override;
-  bool OnBeforeNetworkStart(const GURL& url, bool* defer) override;
   bool OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                   int* buf_size,
                   int min_size) override;

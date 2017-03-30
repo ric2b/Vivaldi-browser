@@ -38,6 +38,8 @@
 #include "WebString.h"
 #include "WebVector.h"
 
+#include <memory>
+
 #if INSIDE_BLINK
 #include "platform/heap/Handle.h"
 #endif
@@ -170,10 +172,8 @@ public:
     // Inputs
     // -----------------------
     //
-    //   * Data buffers are passed as (basePointer, byteLength) pairs.
-    //     These buffers are only valid during the call itself. Asynchronous
-    //     implementations wishing to access it after the function returns
-    //     should make a copy.
+    //   * Data buffers are transfered as WebVectors. Implementations are free
+    //     to re-use or transfer their storage.
     //
     //   * All WebCryptoKeys are guaranteeed to be !isNull().
     //
@@ -198,27 +198,24 @@ public:
     //  * The key usages permit the operation being requested.
     //  * The key's algorithm matches that of the requested operation.
     //
-    virtual void encrypt(const WebCryptoAlgorithm&, const WebCryptoKey&, const unsigned char* data, unsigned dataSize, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void decrypt(const WebCryptoAlgorithm&, const WebCryptoKey&, const unsigned char* data, unsigned dataSize, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void sign(const WebCryptoAlgorithm&, const WebCryptoKey&, const unsigned char* data, unsigned dataSize, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void verifySignature(const WebCryptoAlgorithm&, const WebCryptoKey&, const unsigned char* signature, unsigned signatureSize, const unsigned char* data, unsigned dataSize, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void digest(const WebCryptoAlgorithm&, const unsigned char* data, unsigned dataSize, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void encrypt(const WebCryptoAlgorithm&, const WebCryptoKey&, WebVector<unsigned char> data, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void decrypt(const WebCryptoAlgorithm&, const WebCryptoKey&, WebVector<unsigned char> data, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void sign(const WebCryptoAlgorithm&, const WebCryptoKey&, WebVector<unsigned char> data, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void verifySignature(const WebCryptoAlgorithm&, const WebCryptoKey&, WebVector<unsigned char> signature, WebVector<unsigned char> data, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void digest(const WebCryptoAlgorithm&, WebVector<unsigned char> data, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void generateKey(const WebCryptoAlgorithm&, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void importKey(WebCryptoKeyFormat, const unsigned char* keyData, unsigned keyDataSize, const WebCryptoAlgorithm&, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void importKey(WebCryptoKeyFormat, WebVector<unsigned char> keyData, const WebCryptoAlgorithm&, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void exportKey(WebCryptoKeyFormat, const WebCryptoKey&, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void wrapKey(WebCryptoKeyFormat, const WebCryptoKey& key, const WebCryptoKey& wrappingKey, const WebCryptoAlgorithm&, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
-    virtual void unwrapKey(WebCryptoKeyFormat, const unsigned char* wrappedKey, unsigned wrappedKeySize, const WebCryptoKey&, const WebCryptoAlgorithm& unwrapAlgorithm, const WebCryptoAlgorithm& unwrappedKeyAlgorithm, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
+    virtual void unwrapKey(WebCryptoKeyFormat, WebVector<unsigned char> wrappedKey, const WebCryptoKey&, const WebCryptoAlgorithm& unwrapAlgorithm, const WebCryptoAlgorithm& unwrappedKeyAlgorithm, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void deriveBits(const WebCryptoAlgorithm&, const WebCryptoKey&, unsigned length, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
     virtual void deriveKey(const WebCryptoAlgorithm& algorithm, const WebCryptoKey& baseKey, const WebCryptoAlgorithm& importAlgorithm, const WebCryptoAlgorithm& keyLengthAlgorithm, bool extractable, WebCryptoKeyUsageMask, WebCryptoResult result) { result.completeWithError(WebCryptoErrorTypeNotSupported, ""); }
 
     // This is the exception to the "Completing the request" guarantees
     // outlined above. This is useful for Blink internal crypto and is not part
     // of the WebCrypto standard. createDigestor must provide the result via
-    // the WebCryptoDigestor object synchronously. createDigestor may return 0
-    // if it fails to create a WebCryptoDigestor. If it succeeds, the
-    // WebCryptoDigestor returned by createDigestor must be freed by the
-    // caller.
-    virtual WebCryptoDigestor* createDigestor(WebCryptoAlgorithmId algorithmId) { return nullptr; }
+    // the WebCryptoDigestor object synchronously. This will never return null.
+    virtual std::unique_ptr<WebCryptoDigestor> createDigestor(WebCryptoAlgorithmId algorithmId) { return nullptr; }
 
     // -----------------------
     // Structured clone

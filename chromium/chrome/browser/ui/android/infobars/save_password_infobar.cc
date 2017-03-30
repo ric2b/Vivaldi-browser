@@ -11,6 +11,8 @@
 #include "base/memory/ptr_util.h"
 #include "jni/SavePasswordInfoBar_jni.h"
 
+using base::android::JavaParamRef;
+
 SavePasswordInfoBar::SavePasswordInfoBar(
     std::unique_ptr<SavePasswordInfoBarDelegate> delegate)
     : ConfirmInfoBar(std::move(delegate)) {}
@@ -35,19 +37,15 @@ SavePasswordInfoBar::CreateRenderInfoBar(JNIEnv* env) {
           env, save_password_delegate->GetFirstRunExperienceMessage());
 
   return Java_SavePasswordInfoBar_show(
-      env, GetEnumeratedIconId(), message_text.obj(),
+      env, GetEnumeratedIconId(), message_text,
       save_password_delegate->message_link_range().start(),
-      save_password_delegate->message_link_range().end(), ok_button_text.obj(),
-      cancel_button_text.obj(), first_run_experience_message.obj());
+      save_password_delegate->message_link_range().end(), ok_button_text,
+      cancel_button_text, first_run_experience_message);
 }
 
 void SavePasswordInfoBar::OnLinkClicked(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
   GetDelegate()->LinkClicked(NEW_FOREGROUND_TAB);
-}
-
-bool SavePasswordInfoBar::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 std::unique_ptr<infobars::InfoBar> CreateSavePasswordInfoBar(

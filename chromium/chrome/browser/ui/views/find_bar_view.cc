@@ -91,7 +91,7 @@ const SkColor kBackgroundColorNoMatch = SkColorSetRGB(255, 102, 102);
 
 // The default number of average characters that the text box will be.
 const int kDefaultCharWidth = 43;
-const int kDefaultCharWidthMd = 26;
+const int kDefaultCharWidthMd = 30;
 
 // The match count label is like a normal label, but can process events (which
 // makes it easier to forward events to the text input --- see
@@ -607,7 +607,7 @@ void FindBarView::Find(const base::string16& search_text) {
 }
 
 void FindBarView::UpdateMatchCountAppearance(bool no_match) {
-  bool enable_buttons = !match_count_text_->text().empty() && !no_match;
+  bool enable_buttons = !find_text_->text().empty() && !no_match;
   find_previous_button_->SetEnabled(enable_buttons);
   find_next_button_->SetEnabled(enable_buttons);
 

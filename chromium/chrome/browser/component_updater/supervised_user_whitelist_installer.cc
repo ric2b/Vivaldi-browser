@@ -250,7 +250,7 @@ class SupervisedUserWhitelistComponentInstallerTraits
   // ComponentInstallerTraits overrides:
   bool VerifyInstallation(const base::DictionaryValue& manifest,
                           const base::FilePath& install_dir) const override;
-  bool CanAutoUpdate() const override;
+  bool SupportsGroupPolicyEnabledComponentUpdates() const override;
   bool RequiresNetworkEncryption() const override;
   bool OnCustomInstall(const base::DictionaryValue& manifest,
                        const base::FilePath& install_dir) override;
@@ -261,6 +261,7 @@ class SupervisedUserWhitelistComponentInstallerTraits
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
   update_client::InstallerAttributes GetInstallerAttributes() const override;
+  std::vector<std::string> GetMimeTypes() const override;
 
   std::string crx_id_;
   std::string name_;
@@ -277,8 +278,9 @@ bool SupervisedUserWhitelistComponentInstallerTraits::VerifyInstallation(
   return base::PathExists(GetRawWhitelistPath(manifest, install_dir));
 }
 
-bool SupervisedUserWhitelistComponentInstallerTraits::CanAutoUpdate() const {
-  return true;
+bool SupervisedUserWhitelistComponentInstallerTraits::
+    SupportsGroupPolicyEnabledComponentUpdates() const {
+  return false;
 }
 
 bool SupervisedUserWhitelistComponentInstallerTraits::
@@ -324,6 +326,11 @@ update_client::InstallerAttributes
 SupervisedUserWhitelistComponentInstallerTraits::GetInstallerAttributes()
     const {
   return update_client::InstallerAttributes();
+}
+
+std::vector<std::string>
+SupervisedUserWhitelistComponentInstallerTraits::GetMimeTypes() const {
+  return std::vector<std::string>();
 }
 
 class SupervisedUserWhitelistInstallerImpl
@@ -635,8 +642,8 @@ std::vector<uint8_t> SupervisedUserWhitelistInstaller::GetHashFromCrxId(
 void SupervisedUserWhitelistInstaller::TriggerComponentUpdate(
     OnDemandUpdater* updater,
     const std::string& crx_id) {
-  const bool result = updater->OnDemandUpdate(crx_id);
-  DCHECK(result);
+  // TODO(sorin): use a callback to check the result (crbug.com/639189).
+  updater->OnDemandUpdate(crx_id, ComponentUpdateService::CompletionCallback());
 }
 
 }  // namespace component_updater

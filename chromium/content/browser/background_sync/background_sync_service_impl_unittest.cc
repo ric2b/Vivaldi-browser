@@ -51,9 +51,9 @@ void RegisterServiceWorkerCallback(bool* called,
 void FindServiceWorkerRegistrationCallback(
     scoped_refptr<ServiceWorkerRegistration>* out_registration,
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   EXPECT_EQ(SERVICE_WORKER_OK, status) << ServiceWorkerStatusToString(status);
-  *out_registration = registration;
+  *out_registration = std::move(registration);
 }
 
 // Callbacks from BackgroundSyncServiceImpl methods
@@ -135,7 +135,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     storage_partition_impl_.reset(new StoragePartitionImpl(
         embedded_worker_helper_->browser_context(), base::FilePath(), nullptr,
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-        nullptr, nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr));
     embedded_worker_helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
   }

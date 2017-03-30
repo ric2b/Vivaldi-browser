@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
+#include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_child_process_observer.h"
 #include "content/public/browser/browser_thread.h"
@@ -34,6 +35,7 @@ class CommandLine;
 namespace content {
 
 class RenderFrameHost;
+class TestMojoShellContext;
 
 // Turns on nestable tasks, runs the message loop, then resets nestable tasks
 // to what they were originally. Prefer this over MessageLoop::Run for in
@@ -117,6 +119,8 @@ class MessageLoopRunner : public base::RefCounted<MessageLoopRunner> {
   bool quit_closure_called_;
 
   base::RunLoop run_loop_;
+
+  base::ThreadChecker thread_checker_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageLoopRunner);
 };
@@ -237,6 +241,7 @@ class InProcessUtilityThreadHelper : public BrowserChildProcessObserver {
 
   int child_thread_count_;
   scoped_refptr<MessageLoopRunner> runner_;
+  std::unique_ptr<TestMojoShellContext> shell_context_;
 
   DISALLOW_COPY_AND_ASSIGN(InProcessUtilityThreadHelper);
 };

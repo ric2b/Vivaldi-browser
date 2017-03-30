@@ -54,7 +54,7 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
                     properties.transform = transform;
                 if (clip)
                     properties.clip = clip;
-                scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
+                scopedPaintChunkProperties.emplace(context.getPaintController(), *frameView().layoutView(), properties);
             }
         }
 
@@ -78,7 +78,7 @@ void FramePainter::paint(GraphicsContext& context, const GlobalPaintFlags global
             if (TransformPaintPropertyNode* transform = m_frameView->preTranslation()) {
                 PaintChunkProperties properties(context.getPaintController().currentPaintChunkProperties());
                 properties.transform = transform;
-                scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
+                scopedPaintChunkProperties.emplace(context.getPaintController(), *frameView().layoutView(), properties);
             }
         }
 
@@ -95,27 +95,8 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
 {
     Document* document = frameView().frame().document();
 
-    if (frameView().shouldThrottleRendering())
+    if (frameView().shouldThrottleRendering() || !document->isActive())
         return;
-
-#ifndef NDEBUG
-    bool fillWithRed;
-    if (document->printing())
-        fillWithRed = false; // Printing, don't fill with red (can't remember why).
-    else if (frameView().frame().owner())
-        fillWithRed = false; // Subframe, don't fill with red.
-    else if (frameView().isTransparent())
-        fillWithRed = false; // Transparent, don't fill with red.
-    else if (globalPaintFlags & GlobalPaintSelectionOnly)
-        fillWithRed = false; // Selections are transparent, don't fill with red.
-    else
-        fillWithRed = true;
-
-    if (fillWithRed && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(context, *frameView().layoutView(), DisplayItem::DebugRedFill)) {
-        IntRect contentRect(IntPoint(), frameView().contentsSize());
-        LayoutObjectDrawingRecorder drawingRecorder(context, *frameView().layoutView(), DisplayItem::DebugRedFill, contentRect);
-    }
-#endif
 
     LayoutView* layoutView = frameView().layoutView();
     if (!layoutView) {
@@ -127,9 +108,11 @@ void FramePainter::paintContents(GraphicsContext& context, const GlobalPaintFlag
     if (!frameView().checkDoesNotNeedLayout())
         return;
 
+    // TODO(wangxianzhu): The following check should be stricter, but currently this is blocked
+    // by the svg root issue (crbug.com/442939).
     ASSERT(document->lifecycle().state() >= DocumentLifecycle::CompositingClean);
 
-    TRACE_EVENT1("devtools.timeline", "Paint", "data", InspectorPaintEvent::data(layoutView, LayoutRect(rect), 0));
+    TRACE_EVENT1("devtools.timeline,rail", "Paint", "data", InspectorPaintEvent::data(layoutView, LayoutRect(rect), 0));
 
     bool isTopLevelPainter = !s_inPaintContents;
     s_inPaintContents = true;

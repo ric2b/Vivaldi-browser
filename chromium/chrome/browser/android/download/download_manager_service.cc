@@ -22,11 +22,49 @@
 using base::android::JavaParamRef;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::ScopedJavaLocalRef;
+
+namespace {
+
+bool ShouldShowDownloadItem(content::DownloadItem* item) {
+  return !item->IsTemporary() &&
+      !item->GetFileNameToReportUser().empty() &&
+      !item->GetTargetFilePath().empty() &&
+      item->GetState() == content::DownloadItem::COMPLETE;
+}
+
+void updateNotifier(DownloadManagerService* service,
+                    content::DownloadManager* manager,
+                    std::unique_ptr<AllDownloadItemNotifier>& notifier) {
+  if (manager) {
+    if (!notifier || notifier->GetManager() != manager)
+      notifier.reset(new AllDownloadItemNotifier(manager, service));
+  } else {
+    notifier.reset(nullptr);
+  }
+}
+
+}  // namespace
 
 // static
 bool DownloadManagerService::RegisterDownloadManagerService(JNIEnv* env) {
   return RegisterNativesImpl(env);
 }
+
+// static
+void DownloadManagerService::OnDownloadCanceled(
+    content::DownloadItem* download,
+    DownloadController::DownloadCancelReason reason) {
+  bool has_no_external_storage =
+      (reason == DownloadController::CANCEL_REASON_NO_EXTERNAL_STORAGE);
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> jname =
+      ConvertUTF8ToJavaString(env, download->GetURL().ExtractFileName());
+  Java_DownloadManagerService_onDownloadItemCanceled(env, jname,
+                                                     has_no_external_storage);
+  DownloadController::RecordDownloadCancelReason(reason);
+}
+
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
@@ -44,7 +82,8 @@ DownloadManagerService::DownloadManagerService(
     JNIEnv* env,
     jobject obj)
     : java_ref_(env, obj),
-      is_history_query_complete_(false) {
+      is_history_query_complete_(false),
+      pending_get_downloads_actions_(NONE) {
   DownloadControllerBase::Get()->SetDefaultDownloadFileName(
       l10n_util::GetStringUTF8(IDS_DEFAULT_DOWNLOAD_FILENAME));
 }
@@ -54,10 +93,11 @@ DownloadManagerService::~DownloadManagerService() {}
 void DownloadManagerService::ResumeDownload(
     JNIEnv* env,
     jobject obj,
-    const JavaParamRef<jstring>& jdownload_guid) {
+    const JavaParamRef<jstring>& jdownload_guid,
+    bool is_off_the_record) {
   std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
-  if (is_history_query_complete_)
-    ResumeDownloadInternal(download_guid);
+  if (is_history_query_complete_ || is_off_the_record)
+    ResumeDownloadInternal(download_guid, is_off_the_record);
   else
     EnqueueDownloadAction(download_guid, RESUME);
 }
@@ -65,12 +105,85 @@ void DownloadManagerService::ResumeDownload(
 void DownloadManagerService::PauseDownload(
     JNIEnv* env,
     jobject obj,
-    const JavaParamRef<jstring>& jdownload_guid) {
+    const JavaParamRef<jstring>& jdownload_guid,
+    bool is_off_the_record) {
   std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
-  if (is_history_query_complete_)
-    PauseDownloadInternal(download_guid);
+  if (is_history_query_complete_ || is_off_the_record)
+    PauseDownloadInternal(download_guid, is_off_the_record);
   else
     EnqueueDownloadAction(download_guid, PAUSE);
+}
+
+void DownloadManagerService::RemoveDownload(
+    JNIEnv* env,
+    jobject obj,
+    const JavaParamRef<jstring>& jdownload_guid,
+    bool is_off_the_record) {
+  std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
+  if (is_history_query_complete_ || is_off_the_record)
+    RemoveDownloadInternal(download_guid, is_off_the_record);
+  else
+    EnqueueDownloadAction(download_guid, REMOVE);
+}
+
+void DownloadManagerService::GetAllDownloads(JNIEnv* env,
+                                             const JavaParamRef<jobject>& obj,
+                                             bool is_off_the_record) {
+  if (is_history_query_complete_)
+    GetAllDownloadsInternal(is_off_the_record);
+  else if (is_off_the_record)
+    pending_get_downloads_actions_ |= OFF_THE_RECORD;
+  else
+    pending_get_downloads_actions_ |= REGULAR;
+}
+
+void DownloadManagerService::GetAllDownloadsInternal(bool is_off_the_record) {
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
+  if (java_ref_.is_null() || !manager)
+    return;
+
+  content::DownloadManager::DownloadVector all_items;
+  manager->GetAllDownloads(&all_items);
+
+  // Create a Java array of all of the visible DownloadItems.
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> j_download_item_list =
+      Java_DownloadManagerService_createDownloadItemList(env, java_ref_);
+
+  for (size_t i = 0; i < all_items.size(); i++) {
+    content::DownloadItem* item = all_items[i];
+    if (!ShouldShowDownloadItem(item))
+      continue;
+
+    Java_DownloadManagerService_addDownloadItemToList(
+        env, java_ref_, j_download_item_list,
+        ConvertUTF8ToJavaString(env, item->GetGuid()),
+        ConvertUTF8ToJavaString(env, item->GetFileNameToReportUser().value()),
+        ConvertUTF8ToJavaString(env, item->GetTargetFilePath().value()),
+        ConvertUTF8ToJavaString(env, item->GetTabUrl().spec()),
+        ConvertUTF8ToJavaString(env, item->GetMimeType()),
+        item->GetStartTime().ToJavaTime(), item->GetTotalBytes(),
+        item->GetFileExternallyRemoved());
+  }
+
+  Java_DownloadManagerService_onAllDownloadsRetrieved(
+      env, java_ref_, j_download_item_list, is_off_the_record);
+}
+
+void DownloadManagerService::CheckForExternallyRemovedDownloads(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    bool is_off_the_record) {
+  // Once the history query is complete, download_history.cc will check for the
+  // removal of history files. If the history query is not yet complete, ignore
+  // requests to check for externally removed downloads.
+  if (!is_history_query_complete_)
+    return;
+
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
+  if (!manager)
+    return;
+  manager->CheckForHistoryFilesRemoval();
 }
 
 void DownloadManagerService::CancelDownload(
@@ -80,20 +193,12 @@ void DownloadManagerService::CancelDownload(
     bool is_off_the_record,
     bool is_notification_dismissed) {
   std::string download_guid = ConvertJavaStringToUTF8(env, jdownload_guid);
-
   DownloadController::RecordDownloadCancelReason(
       is_notification_dismissed ?
           DownloadController::CANCEL_REASON_NOTIFICATION_DISMISSED :
           DownloadController::CANCEL_REASON_ACTION_BUTTON);
-  // Incognito download can only be cancelled in the same browser session, no
-  // need to wait for download history.
-  if (is_off_the_record) {
-    CancelDownloadInternal(download_guid, true);
-    return;
-  }
-
-  if (is_history_query_complete_)
-    CancelDownloadInternal(download_guid, false);
+  if (is_history_query_complete_ || is_off_the_record)
+    CancelDownloadInternal(download_guid, is_off_the_record);
   else
     EnqueueDownloadAction(download_guid, CANCEL);
 }
@@ -106,10 +211,10 @@ void DownloadManagerService::OnHistoryQueryComplete() {
     std::string download_guid = iter->first;
     switch (action) {
       case RESUME:
-        ResumeDownloadInternal(download_guid);
+        ResumeDownloadInternal(download_guid, false);
         break;
       case PAUSE:
-        PauseDownloadInternal(download_guid);
+        PauseDownloadInternal(download_guid, false);
         break;
       case CANCEL:
         CancelDownloadInternal(download_guid, false);
@@ -120,11 +225,60 @@ void DownloadManagerService::OnHistoryQueryComplete() {
     }
   }
   pending_actions_.clear();
+
+  // Respond to any requests to get all downloads.
+  if (pending_get_downloads_actions_ & REGULAR)
+    GetAllDownloadsInternal(false);
+  if (pending_get_downloads_actions_ & OFF_THE_RECORD)
+    GetAllDownloadsInternal(true);
+
+  // Monitor all DownloadItems for changes.
+  updateNotifier(this, GetDownloadManager(false), original_notifier_);
+  updateNotifier(this, GetDownloadManager(true), off_the_record_notifier_);
+}
+
+void DownloadManagerService::OnDownloadUpdated(
+    content::DownloadManager* manager, content::DownloadItem* item) {
+  if (java_ref_.is_null())
+    return;
+
+  // Ignore anything that isn't a completed download notification.
+  if (item->GetState() != content::DownloadItem::DownloadState::COMPLETE)
+    return;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_DownloadManagerService_onDownloadItemUpdated(
+      env,
+      java_ref_.obj(),
+      ConvertUTF8ToJavaString(env, item->GetGuid()).obj(),
+      ConvertUTF8ToJavaString(
+          env, item->GetFileNameToReportUser().value()).obj(),
+      ConvertUTF8ToJavaString(
+          env, item->GetTargetFilePath().value()).obj(),
+      ConvertUTF8ToJavaString(env, item->GetTabUrl().spec()).obj(),
+      ConvertUTF8ToJavaString(env, item->GetMimeType()).obj(),
+      item->GetStartTime().ToJavaTime(),
+      item->GetTotalBytes(),
+      item->GetBrowserContext()->IsOffTheRecord(),
+      item->GetFileExternallyRemoved());
+}
+
+void DownloadManagerService::OnDownloadRemoved(
+    content::DownloadManager* manager, content::DownloadItem* item) {
+  if (java_ref_.is_null())
+    return;
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_DownloadManagerService_onDownloadItemRemoved(
+      env,
+      java_ref_.obj(),
+      ConvertUTF8ToJavaString(env, item->GetGuid()),
+      item->GetBrowserContext()->IsOffTheRecord());
 }
 
 void DownloadManagerService::ResumeDownloadInternal(
-    const std::string& download_guid) {
-  content::DownloadManager* manager = GetDownloadManager(false);
+    const std::string& download_guid, bool is_off_the_record) {
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
   if (!manager) {
     OnResumptionFailed(download_guid);
     return;
@@ -157,8 +311,8 @@ void DownloadManagerService::CancelDownloadInternal(
 }
 
 void DownloadManagerService::PauseDownloadInternal(
-    const std::string& download_guid) {
-  content::DownloadManager* manager = GetDownloadManager(false);
+    const std::string& download_guid, bool is_off_the_record) {
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
   if (!manager)
     return;
   content::DownloadItem* item = manager->GetDownloadByGuid(download_guid);
@@ -166,6 +320,16 @@ void DownloadManagerService::PauseDownloadInternal(
     item->Pause();
     item->RemoveObserver(DownloadControllerBase::Get());
   }
+}
+
+void DownloadManagerService::RemoveDownloadInternal(
+    const std::string& download_guid, bool is_off_the_record) {
+  content::DownloadManager* manager = GetDownloadManager(is_off_the_record);
+  if (!manager)
+    return;
+  content::DownloadItem* item = manager->GetDownloadByGuid(download_guid);
+  if (item)
+    item->Remove();
 }
 
 void DownloadManagerService::EnqueueDownloadAction(
@@ -188,6 +352,9 @@ void DownloadManagerService::EnqueueDownloadAction(
     case CANCEL:
       iter->second = action;
       break;
+    case REMOVE:
+      iter->second = action;
+      break;
     default:
       NOTREACHED();
       break;
@@ -208,8 +375,7 @@ void DownloadManagerService::OnResumptionFailedInternal(
   if (!java_ref_.is_null()) {
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_DownloadManagerService_onResumptionFailed(
-        env, java_ref_.obj(),
-        ConvertUTF8ToJavaString(env, download_guid).obj());
+        env, java_ref_, ConvertUTF8ToJavaString(env, download_guid));
   }
   if (!resume_callback_for_testing_.is_null())
     resume_callback_for_testing_.Run(false);
@@ -220,5 +386,13 @@ content::DownloadManager* DownloadManagerService::GetDownloadManager(
   Profile* profile = ProfileManager::GetActiveUserProfile();
   if (is_off_the_record)
     profile = profile->GetOffTheRecordProfile();
-  return content::BrowserContext::GetDownloadManager(profile);
+  content::DownloadManager* manager =
+      content::BrowserContext::GetDownloadManager(profile);
+
+  // Update notifiers to monitor any newly created DownloadManagers.
+  updateNotifier(
+      this, manager,
+      is_off_the_record ? off_the_record_notifier_ : original_notifier_);
+
+  return manager;
 }

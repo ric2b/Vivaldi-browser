@@ -10,17 +10,17 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
-#include "net/quic/crypto/crypto_handshake.h"
-#include "net/quic/crypto/quic_crypto_server_config.h"
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_chromium_connection_helper.h"
-#include "net/quic/quic_config.h"
-#include "net/quic/quic_connection.h"
-#include "net/quic/quic_packet_writer.h"
-#include "net/quic/quic_protocol.h"
-#include "net/tools/quic/quic_dispatcher.h"
+#include "net/quic/chromium/quic_chromium_connection_helper.h"
+#include "net/quic/core/crypto/crypto_handshake.h"
+#include "net/quic/core/crypto/quic_crypto_server_config.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_config.h"
+#include "net/quic/core/quic_connection.h"
+#include "net/quic/core/quic_packet_writer.h"
+#include "net/quic/core/quic_protocol.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
+#include "net/tools/quic/quic_simple_dispatcher.h"
 #include "net/tools/quic/quic_simple_server_session.h"
 #include "net/tools/quic/quic_simple_server_session_helper.h"
 #include "net/tools/quic/quic_simple_server_stream.h"
@@ -75,21 +75,21 @@ class CustomStreamSession : public QuicSimpleServerSession {
   QuicTestServer::CryptoStreamFactory* crypto_stream_factory_;  // Not owned.
 };
 
-class QuicTestDispatcher : public QuicDispatcher {
+class QuicTestDispatcher : public QuicSimpleDispatcher {
  public:
   QuicTestDispatcher(
       const QuicConfig& config,
       const QuicCryptoServerConfig* crypto_config,
-      const QuicVersionVector& versions,
+      QuicVersionManager* version_manager,
       std::unique_ptr<QuicConnectionHelperInterface> helper,
       std::unique_ptr<QuicServerSessionBase::Helper> session_helper,
       std::unique_ptr<QuicAlarmFactory> alarm_factory)
-      : QuicDispatcher(config,
-                       crypto_config,
-                       versions,
-                       std::move(helper),
-                       std::move(session_helper),
-                       std::move(alarm_factory)),
+      : QuicSimpleDispatcher(config,
+                             crypto_config,
+                             version_manager,
+                             std::move(helper),
+                             std::move(session_helper),
+                             std::move(alarm_factory)),
         session_factory_(nullptr),
         stream_factory_(nullptr),
         crypto_stream_factory_(nullptr) {}
@@ -99,7 +99,7 @@ class QuicTestDispatcher : public QuicDispatcher {
     base::AutoLock lock(factory_lock_);
     if (session_factory_ == nullptr && stream_factory_ == nullptr &&
         crypto_stream_factory_ == nullptr) {
-      return QuicDispatcher::CreateQuicSession(id, client);
+      return QuicSimpleDispatcher::CreateQuicSession(id, client);
     }
     QuicConnection* connection = new QuicConnection(
         id, client, helper(), alarm_factory(), CreatePerConnectionWriter(),
@@ -149,20 +149,20 @@ class QuicTestDispatcher : public QuicDispatcher {
   QuicTestServer::CryptoStreamFactory* crypto_stream_factory_;  // Not owned.
 };
 
-QuicTestServer::QuicTestServer(ProofSource* proof_source)
-    : QuicServer(proof_source) {}
+QuicTestServer::QuicTestServer(std::unique_ptr<ProofSource> proof_source)
+    : QuicServer(std::move(proof_source)) {}
 
-QuicTestServer::QuicTestServer(ProofSource* proof_source,
+QuicTestServer::QuicTestServer(std::unique_ptr<ProofSource> proof_source,
                                const QuicConfig& config,
                                const QuicVersionVector& supported_versions)
-    : QuicServer(proof_source,
+    : QuicServer(std::move(proof_source),
                  config,
                  QuicCryptoServerConfig::ConfigOptions(),
                  supported_versions) {}
 
 QuicDispatcher* QuicTestServer::CreateQuicDispatcher() {
   return new QuicTestDispatcher(
-      config(), &crypto_config(), supported_versions(),
+      config(), &crypto_config(), version_manager(),
       std::unique_ptr<QuicEpollConnectionHelper>(new QuicEpollConnectionHelper(
           epoll_server(), QuicAllocator::BUFFER_POOL)),
       std::unique_ptr<QuicServerSessionBase::Helper>(

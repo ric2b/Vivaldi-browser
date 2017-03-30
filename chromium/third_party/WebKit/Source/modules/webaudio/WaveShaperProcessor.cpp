@@ -51,7 +51,14 @@ void WaveShaperProcessor::setCurve(DOMFloat32Array* curve)
     // This synchronizes with process().
     MutexLocker processLocker(m_processLock);
 
-    m_curve = curve;
+    // Copy the curve data, if any, to our internal buffer.
+    if (!curve) {
+        m_curve = nullptr;
+        return;
+    }
+
+    m_curve = wrapUnique(new Vector<float>(curve->length()));
+    memcpy(m_curve->data(), curve->data(), sizeof(float)*curve->length());
 }
 
 void WaveShaperProcessor::setOversample(OverSampleType oversample)
@@ -77,7 +84,7 @@ void WaveShaperProcessor::process(const AudioBus* source, AudioBus* destination,
     }
 
     bool channelCountMatches = source->numberOfChannels() == destination->numberOfChannels() && source->numberOfChannels() == m_kernels.size();
-    ASSERT(channelCountMatches);
+    DCHECK(channelCountMatches);
     if (!channelCountMatches)
         return;
 

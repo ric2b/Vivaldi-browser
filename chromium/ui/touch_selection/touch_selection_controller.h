@@ -64,12 +64,6 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
     // Controls whether drag selection after a longpress is enabled.
     // Defaults to false.
     bool enable_longpress_drag_selection;
-
-    // Controls whether an insertion handle is shown on a tap for an empty
-    // editable text. Defauls to false.
-    // TODO(mohsen): This flag used to be set to |true| on Aura. That's not the
-    // case anymore and it is always |false|. Consider removing it.
-    bool show_on_tap_for_empty_editable;
   };
 
   TouchSelectionController(TouchSelectionControllerClient* client,
@@ -146,6 +140,10 @@ class UI_TOUCH_SELECTION_EXPORT TouchSelectionController
   const gfx::SelectionBound& end() const { return end_; }
 
   ActiveStatus active_status() const { return active_status_; }
+
+  bool insertion_active_or_requested() const {
+    return activate_insertion_automatically_;
+  }
 
  private:
   friend class TouchSelectionControllerTestApi;

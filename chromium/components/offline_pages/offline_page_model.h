@@ -82,9 +82,12 @@ class OfflinePageModel : public base::SupportsUserData {
   virtual void RemoveObserver(Observer* observer) = 0;
 
   // Attempts to save a page addressed by |url| offline. Requires that the model
-  // is loaded.  Generates a new offline id and returns it.
+  // is loaded.  Generates a new offline id and returns
+  // it. |proposed_offline_id| is used for the offline_id for the saved file if
+  // it is non-zero.  If it is zero, a new, random ID will be generated.
   virtual void SavePage(const GURL& url,
                         const ClientId& client_id,
+                        int64_t proposed_offline_id,
                         std::unique_ptr<OfflinePageArchiver> archiver,
                         const SavePageCallback& callback) = 0;
 
@@ -100,8 +103,8 @@ class OfflinePageModel : public base::SupportsUserData {
   virtual void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                                       const DeletePageCallback& callback) = 0;
 
-  // Deletes offline pages matching the URL predicate.
-  virtual void DeletePagesByURLPredicate(
+  // Deletes cached offline pages matching the URL predicate.
+  virtual void DeleteCachedPagesByURLPredicate(
       const UrlPredicate& predicate,
       const DeletePageCallback& callback) = 0;
 
@@ -118,6 +121,10 @@ class OfflinePageModel : public base::SupportsUserData {
 
   // Gets all offline pages.
   virtual void GetAllPages(const MultipleOfflinePageItemCallback& callback) = 0;
+
+  // Gets all offline pages including expired ones.
+  virtual void GetAllPagesWithExpired(
+      const MultipleOfflinePageItemCallback& callback) = 0;
 
   // Gets all offline ids where the offline page has the matching client id.
   virtual void GetOfflineIdsForClientId(
@@ -160,16 +167,6 @@ class OfflinePageModel : public base::SupportsUserData {
   virtual void GetPagesByOnlineURL(
       const GURL& online_url,
       const MultipleOfflinePageItemCallback& callback) = 0;
-
-  // Returns via callback an offline page saved for |online_url|, if any. The
-  // best page is chosen based on creation date; a more recently created offline
-  // page will be preferred over an older one. This API function does not
-  // respect namespaces, as it is used to choose which page is rendered in a
-  // tab. Today all namespaces are treated equally for the purposes of this
-  // selection.
-  virtual void GetBestPageForOnlineURL(
-      const GURL& online_url,
-      const SingleOfflinePageItemCallback callback) = 0;
 
   // Returns an offline page saved for |online_url|. A nullptr is returned if
   // not found.  See |GetBestPageForOnlineURL| for selection criteria.

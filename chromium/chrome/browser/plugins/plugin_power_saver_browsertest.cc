@@ -179,10 +179,10 @@ bool SnapshotMatches(const base::FilePath& reference, const SkBitmap& bitmap) {
   int w = 0;
   int h = 0;
   std::vector<unsigned char> decoded;
-  if (!gfx::PNGCodec::Decode(
-          reinterpret_cast<unsigned char*>(string_as_array(&reference_data)),
-          reference_data.size(), gfx::PNGCodec::FORMAT_BGRA, &decoded, &w,
-          &h)) {
+  if (!gfx::PNGCodec::Decode(reinterpret_cast<unsigned char*>(
+                                 base::string_as_array(&reference_data)),
+                             reference_data.size(), gfx::PNGCodec::FORMAT_BGRA,
+                             &decoded, &w, &h)) {
     return false;
   }
 
@@ -345,7 +345,7 @@ class PluginPowerSaverBrowserTest : public InProcessBrowserTest {
                                             const gfx::Point& point) {
     WaitForPlaceholderReady(GetActiveWebContents(), element_id);
     content::SimulateMouseClickAt(GetActiveWebContents(), 0 /* modifiers */,
-                                  blink::WebMouseEvent::ButtonLeft, point);
+                                  blink::WebMouseEvent::Button::Left, point);
 
     VerifyPluginMarkedEssential(GetActiveWebContents(), element_id);
   }

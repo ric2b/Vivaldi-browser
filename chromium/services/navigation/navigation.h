@@ -5,11 +5,15 @@
 #ifndef SERVICES_NAVIGATION_NAVIGATION_H_
 #define SERVICES_NAVIGATION_NAVIGATION_H_
 
+#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
+#include "content/public/common/connection_filter.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/shell/public/cpp/shell_connection_ref.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_context_ref.h"
 
 namespace content {
 class BrowserContext;
@@ -17,37 +21,35 @@ class BrowserContext;
 
 namespace navigation {
 
-class Navigation : public shell::ShellClient,
-                   public shell::InterfaceFactory<mojom::ViewFactory>,
-                   public mojom::ViewFactory {
+class Navigation : public content::ConnectionFilter, public mojom::ViewFactory {
  public:
   Navigation();
   ~Navigation() override;
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t instance_id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
-
-  // shell::InterfaceFactory<mojom::ViewFactory>:
-  void Create(shell::Connection* connection,
-              mojom::ViewFactoryRequest request) override;
+  // content::ConnectionFilter:
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry,
+                 shell::Connector* connector) override;
 
   // mojom::ViewFactory:
   void CreateView(mojom::ViewClientPtr client,
                   mojom::ViewRequest request) override;
 
+  void CreateViewFactory(mojom::ViewFactoryRequest request);
   void ViewFactoryLost();
+
+  scoped_refptr<base::SequencedTaskRunner> view_task_runner_;
 
   shell::Connector* connector_ = nullptr;
   std::string client_user_id_;
 
-  shell::ShellConnectionRefFactory ref_factory_;
-  std::set<std::unique_ptr<shell::ShellConnectionRef>> refs_;
+  shell::ServiceContextRefFactory ref_factory_;
+  std::set<std::unique_ptr<shell::ServiceContextRef>> refs_;
 
   mojo::BindingSet<mojom::ViewFactory> bindings_;
+
+  base::WeakPtrFactory<Navigation> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Navigation);
 };

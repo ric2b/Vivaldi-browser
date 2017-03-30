@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
-<translation id="1008557486741366299">Inte nu</translation>
 <translation id="1047726139967079566">Skapa bokmärke för den här sidan...</translation>
 <translation id="1172898394251786223">Nästa fält</translation>
 <translation id="2320166752086256636">Dölj tangentbordet</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">Uppdatera</translation>
 <translation id="4875622588773761625">Vill du att lösenordet för den här webbplatsen ska uppdateras med <ph name="PASSWORD_MANAGER_BRAND" />?</translation>
 <translation id="5317780077021120954">Spara</translation>
+<translation id="6039694632319341016">Vill du att <ph name="PASSWORD_MANAGER_BRAND" /> ska uppdatera lösenordet för <ph name="USERNAME" /> på den här webbplatsen?</translation>
 <translation id="605721222689873409">ÅÅ</translation>
 <translation id="6149061208933997199">Använd lösenordet</translation>
 <translation id="6196207969502475924">Röstsökning</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">Rensa text</translation>
 <translation id="6456425917241817154">Lösenord från Chrome</translation>
 <translation id="6535543971741225613">Webbplatsen som du försöker nå beter sig inte som väntat och Chrome kan inte verifiera att webbadressen är korrekt. Av säkerhetsskäl bör du inte fortsätta. Försök hellre igen imorgon eller fortsätt till en annan sida.</translation>
-<translation id="6647073004883890710">Vill du att <ph name="PASSWORD_MANAGER_BRAND" /> ska uppdatera lösenordet för <ph name="USERNAME" /> på den här webbplatsen?</translation>
 <translation id="7222245588540287464">Om kontextsökning är aktiverad eller inte.</translation>
-<translation id="7378627244592794276">Nej</translation>
 <translation id="7456847797759667638">Öppna plats...</translation>
 <translation id="7481312909269577407">Framåt</translation>
 <translation id="7484580869648358686">Varning! Något står inte rätt till här.</translation>

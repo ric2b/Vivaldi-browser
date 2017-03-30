@@ -31,10 +31,12 @@
 #ifndef LayoutUnit_h
 #define LayoutUnit_h
 
+#include "platform/PlatformExport.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
 #include "wtf/MathExtras.h"
 #include "wtf/SaturatedArithmetic.h"
+#include "wtf/text/WTFString.h"
 #include <algorithm>
 #include <limits.h>
 #include <limits>
@@ -55,7 +57,7 @@ const int intMaxForLayoutUnit = INT_MAX / kFixedPointDenominator;
 const int intMinForLayoutUnit = INT_MIN / kFixedPointDenominator;
 
 // TODO(thakis): Remove these two lines once http://llvm.org/PR26504 is resolved
-class LayoutUnit;
+class PLATFORM_EXPORT LayoutUnit;
 inline bool operator<(const LayoutUnit&, const LayoutUnit&);
 
 class LayoutUnit {
@@ -105,8 +107,12 @@ public:
     }
     unsigned toUnsigned() const { REPORT_OVERFLOW(m_value >= 0); return toInt(); }
 
-    operator int() const { return toInt(); }
-    operator unsigned() const { return toUnsigned(); }
+    // Conversion to int or unsigned is lossy. 'explicit' on these operators won't work because
+    // there are also other implicit conversion paths (e.g. operator bool then to int which would
+    // generate wrong result). Use toInt() and toUnsigned() instead.
+    operator int() const = delete;
+    operator unsigned() const = delete;
+
     operator double() const { return toDouble(); }
     operator float() const { return toFloat(); }
     operator bool() const { return m_value; }
@@ -211,6 +217,8 @@ public:
     {
         return clampTo<LayoutUnit>(value, LayoutUnit::min(), LayoutUnit::max());
     }
+
+    String toString() const;
 
 private:
     static bool isInBounds(int value)
@@ -645,7 +653,7 @@ inline float operator-(const float a, const LayoutUnit& b)
 inline LayoutUnit operator-(const LayoutUnit& a)
 {
     LayoutUnit returnVal;
-    returnVal.setRawValue(-a.rawValue());
+    returnVal.setRawValue(saturatedNegative(a.rawValue()));
     return returnVal;
 }
 
@@ -808,7 +816,7 @@ inline LayoutUnit clampToLayoutUnit(LayoutUnit value, LayoutUnit min, LayoutUnit
 
 inline std::ostream& operator<<(std::ostream& stream, const LayoutUnit& value)
 {
-    return stream << value.toDouble();
+    return stream << value.toString();
 }
 
 } // namespace blink

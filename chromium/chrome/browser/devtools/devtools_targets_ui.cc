@@ -234,7 +234,7 @@ void LocalTargetsUIHandler::SendTargets(
   base::ListValue list_value;
   std::map<std::string, base::DictionaryValue*> id_to_descriptor;
 
-  STLDeleteValues(&targets_);
+  base::STLDeleteValues(&targets_);
   for (DevToolsTargetImpl* target : targets) {
     targets_[target->GetId()] = target;
     id_to_descriptor[target->GetId()] = Serialize(*target);
@@ -324,7 +324,7 @@ AdbTargetsUIHandler::GetBrowserAgentHost(
 void AdbTargetsUIHandler::DeviceListChanged(
     const DevToolsAndroidBridge::RemoteDevices& devices) {
   remote_browsers_.clear();
-  STLDeleteValues(&targets_);
+  base::STLDeleteValues(&targets_);
   if (!android_bridge_)
     return;
 
@@ -401,7 +401,7 @@ DevToolsTargetsUIHandler::DevToolsTargetsUIHandler(
 }
 
 DevToolsTargetsUIHandler::~DevToolsTargetsUIHandler() {
-  STLDeleteValues(&targets_);
+  base::STLDeleteValues(&targets_);
 }
 
 // static
@@ -446,7 +446,7 @@ base::DictionaryValue* DevToolsTargetsUIHandler::Serialize(
   target_data->SetString(kTargetTypeField, target.GetType());
   target_data->SetBoolean(kAttachedField, target.IsAttached());
   target_data->SetString(kUrlField, target.GetURL().spec());
-  target_data->SetString(kNameField, net::EscapeForHTML(target.GetTitle()));
+  target_data->SetString(kNameField, target.GetTitle());
   target_data->SetString(kFaviconUrlField, target.GetFaviconURL().spec());
   target_data->SetString(kDescriptionField, target.GetDescription());
   return target_data;

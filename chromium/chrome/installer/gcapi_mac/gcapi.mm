@@ -58,8 +58,8 @@ bool IsOSXVersionSupported() {
   // 10.2.
   int mac_os_x_minor_version = darwin_major_version - 4;
 
-  // Chrome is known to work on 10.9 - 10.11.
-  return mac_os_x_minor_version >= 9 && mac_os_x_minor_version <= 11;
+  // Chrome is known to work on 10.9 - 10.12.
+  return mac_os_x_minor_version >= 9 && mac_os_x_minor_version <= 12;
 }
 
 // Returns the pid/gid of the logged-in user, even if getuid() claims that the
@@ -313,10 +313,6 @@ bool isbrandchar(int c) {
 int GoogleChromeCompatibilityCheck(unsigned* reasons) {
   unsigned local_reasons = 0;
   @autoreleasepool {
-    passwd* user = GetRealUserId();
-    if (!user)
-      return GCCC_ERROR_ACCESSDENIED;
-
     if (!IsOSXVersionSupported())
       local_reasons |= GCCC_ERROR_OSNOTSUPPORTED;
 
@@ -327,7 +323,10 @@ int GoogleChromeCompatibilityCheck(unsigned* reasons) {
         local_reasons |= GCCC_ERROR_ACCESSDENIED;
     }
 
-    if (FindChromeTicket(kUserTicket, user, NULL))
+    passwd* user = GetRealUserId();
+    if (!user)
+      local_reasons |= GCCC_ERROR_ACCESSDENIED;
+    else if (FindChromeTicket(kUserTicket, user, NULL))
       local_reasons |= GCCC_ERROR_ALREADYPRESENT;
 
     if ([[NSFileManager defaultManager] fileExistsAtPath:kChromeInstallPath])
@@ -338,8 +337,8 @@ int GoogleChromeCompatibilityCheck(unsigned* reasons) {
               isWritableFileAtPath:@"/Applications"])
       local_reasons |= GCCC_ERROR_ACCESSDENIED;
     }
-
   }
+
   if (reasons != NULL)
     *reasons = local_reasons;
   return local_reasons == 0;

@@ -4,22 +4,24 @@
 
 #include "services/shell/tests/lifecycle/app_client.h"
 
-#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/public/cpp/service_context.h"
 
 namespace shell {
 namespace test {
 
 AppClient::AppClient() {}
-AppClient::AppClient(shell::mojom::ShellClientRequest request)
-    : connection_(new ShellConnection(this, std::move(request))) {}
+AppClient::AppClient(shell::mojom::ServiceRequest request)
+    : context_(new ServiceContext(this, std::move(request))) {}
 AppClient::~AppClient() {}
 
-bool AppClient::AcceptConnection(Connection* connection) {
-  connection->AddInterface<LifecycleControl>(this);
+bool AppClient::OnConnect(const Identity& remote_identity,
+                          InterfaceRegistry* registry) {
+  registry->AddInterface<LifecycleControl>(this);
   return true;
 }
 
-void AppClient::Create(Connection* connection,
+void AppClient::Create(const Identity& remote_identity,
                        LifecycleControlRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
@@ -41,7 +43,7 @@ void AppClient::Crash() {
 
 void AppClient::CloseShellConnection() {
   DCHECK(runner_);
-  runner_->DestroyShellConnection();
+  runner_->DestroyServiceContext();
   // Quit the app once the caller goes away.
   bindings_.set_connection_error_handler(
       base::Bind(&AppClient::BindingLost, base::Unretained(this)));

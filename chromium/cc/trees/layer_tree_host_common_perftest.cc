@@ -51,11 +51,11 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
 
   void SetupTree() override {
     gfx::Size viewport = gfx::Size(720, 1038);
-    layer_tree_host()->SetViewportSize(viewport);
+    layer_tree()->SetViewportSize(viewport);
     scoped_refptr<Layer> root =
         ParseTreeFromJson(json_, &content_layer_client_);
     ASSERT_TRUE(root.get());
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree()->SetRootLayer(root);
     content_layer_client_.set_bounds(viewport);
   }
 
@@ -80,7 +80,7 @@ class LayerTreeHostCommonPerfTest : public LayerTreeTest {
 
 class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
  public:
-  void RunCalcDrawProps() { RunTest(CompositorMode::SINGLE_THREADED, false); }
+  void RunCalcDrawProps() { RunTest(CompositorMode::SINGLE_THREADED); }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -119,6 +119,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
         can_render_to_separate_surface,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
         false,  // do not verify_clip_tree_calculation for perf tests
+        false,  // do not verify_transform_tree_calculation for perf tests
         &update_list, active_tree->property_trees());
     LayerTreeHostCommon::CalculateDrawProperties(&inputs);
   }
@@ -127,7 +128,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
 class BspTreePerfTest : public CalcDrawPropsTest {
  public:
   BspTreePerfTest() : num_duplicates_(1) {}
-  void RunSortLayers() { RunTest(CompositorMode::SINGLE_THREADED, false); }
+  void RunSortLayers() { RunTest(CompositorMode::SINGLE_THREADED); }
 
   void SetNumberOfDuplicates(int num_duplicates) {
     num_duplicates_ = num_duplicates;

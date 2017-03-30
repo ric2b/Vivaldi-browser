@@ -27,7 +27,7 @@ class UI_BASE_EXPORT OSExchangeDataProviderAura
   ~OSExchangeDataProviderAura() override;
 
   // Overridden from OSExchangeData::Provider:
-  Provider* Clone() const override;
+  std::unique_ptr<Provider> Clone() const override;
   void MarkOriginatedFromRenderer() override;
   bool DidOriginateFromRenderer() const override;
   void SetString(const base::string16& data) override;
@@ -60,6 +60,10 @@ class UI_BASE_EXPORT OSExchangeDataProviderAura
 
  private:
   typedef std::map<Clipboard::FormatType, base::Pickle> PickleData;
+
+  // Returns true if |formats_| contains a file format and the file name can be
+  // parsed as a URL.
+  bool GetFileURL(GURL* url) const;
 
   // Returns true if |formats_| contains a string format and the string can be
   // parsed as a URL.

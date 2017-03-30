@@ -7,23 +7,18 @@ package org.chromium.chrome.browser.compositor.layouts.content;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.os.AsyncTask;
 import android.util.SparseArray;
 import android.view.View;
 
 import org.chromium.base.CommandLine;
-import org.chromium.base.PathUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.NativePage;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.ui.base.DeviceFormFactor;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -234,8 +229,8 @@ public class TabContentManager {
                         mThumbnailScale);
                 nativePageBitmap.recycle();
             } else {
-                nativeCacheTab(mNativeTabContentManager, tab, tab.getContentViewCore(),
-                        mThumbnailScale);
+                if (tab.getWebContents() == null) return;
+                nativeCacheTab(mNativeTabContentManager, tab, mThumbnailScale);
             }
         }
     }
@@ -312,42 +307,6 @@ public class TabContentManager {
         }
     }
 
-    /**
-     * Remove on-disk thumbnails that are no longer needed.
-     * @param modelSelector The selector that answers whether a tab is currently present.
-     */
-    public void cleanUpPersistentData(final TabModelSelector modelSelector) {
-        if (mNativeTabContentManager == 0) return;
-
-        // BUG: We support multiple tab model selectors, and they all share the same thumbnail
-        // directory. This cleanup code checks only the current model selector to see if the
-        // thumbnails are no longer used. It should instead consult with *all* tab model selectors
-        // (which may not even be in memory).
-        new AsyncTask<Void, Void, String[]>() {
-            @Override
-            protected String[] doInBackground(Void... voids) {
-                String thumbnailDirectory = PathUtils.getThumbnailCacheDirectory(mContext);
-                return new File(thumbnailDirectory).list();
-            }
-
-            @Override
-            protected void onPostExecute(String[] fileNames) {
-                for (String fileName : fileNames) {
-                    try {
-                        int id = Integer.parseInt(fileName);
-                        if (TabModelUtils.getTabById(modelSelector.getModel(false), id) == null
-                                && TabModelUtils.getTabById(modelSelector.getModel(true), id)
-                                        == null) {
-                            removeTabThumbnail(id);
-                        }
-                    } catch (NumberFormatException expected) {
-                        // This is an unknown file name, we'll leave it there.
-                    }
-                }
-            }
-        }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-    }
-
     @CalledByNative
     protected void notifyListenersOfThumbnailChange(int tabId) {
         for (ThumbnailChangeListener listener : mListeners) {
@@ -359,8 +318,8 @@ public class TabContentManager {
     private native long nativeInit(int defaultCacheSize, int approximationCacheSize,
             int compressionQueueMaxSize, int writeQueueMaxSize, boolean useApproximationThumbnail);
     private native boolean nativeHasFullCachedThumbnail(long nativeTabContentManager, int tabId);
-    private native void nativeCacheTab(long nativeTabContentManager, Object tab,
-            Object contentViewCore, float thumbnailScale);
+    private native void nativeCacheTab(
+            long nativeTabContentManager, Object tab, float thumbnailScale);
     private native void nativeCacheTabWithBitmap(long nativeTabContentManager, Object tab,
             Object bitmap, float thumbnailScale);
     private native void nativeInvalidateIfChanged(long nativeTabContentManager, int tabId,

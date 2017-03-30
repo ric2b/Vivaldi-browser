@@ -157,7 +157,6 @@ class EVENTS_EXPORT Event {
       case ET_GESTURE_LONG_TAP:
       case ET_GESTURE_SWIPE:
       case ET_GESTURE_SHOW_PRESS:
-      case ET_GESTURE_WIN8_EDGE_SWIPE:
         // When adding a gesture event which is paired with an event which
         // occurs earlier, add the event to |IsEndingEvent|.
         return true;
@@ -728,26 +727,19 @@ class EVENTS_EXPORT PointerEvent : public LocatedEvent {
                const gfx::Point& root_location,
                int flags,
                int pointer_id,
+               int changed_button_flags,
                const PointerDetails& pointer_details,
                base::TimeTicks time_stamp);
 
   int32_t pointer_id() const { return pointer_id_; }
+  int changed_button_flags() const { return changed_button_flags_; }
+  void set_changed_button_flags(int flags) { changed_button_flags_ = flags; }
   const PointerDetails& pointer_details() const { return details_; }
 
  private:
   int32_t pointer_id_;
+  int changed_button_flags_;
   PointerDetails details_;
-};
-
-// An interface that individual platforms can use to store additional data on
-// KeyEvent.
-//
-// Currently only used in mojo.
-class EVENTS_EXPORT ExtendedKeyEventData {
- public:
-  virtual ~ExtendedKeyEventData() {}
-
-  virtual ExtendedKeyEventData* Clone() const = 0;
 };
 
 // A KeyEvent is really two distinct classes, melded together due to the
@@ -826,17 +818,6 @@ class EVENTS_EXPORT KeyEvent : public Event {
   KeyEvent& operator=(const KeyEvent& rhs);
 
   ~KeyEvent() override;
-
-  // TODO(erg): While we transition to mojo, we have to hack around a mismatch
-  // in our event types. Our ui::Events don't really have all the data we need
-  // to process key events, and we instead do per-platform conversions with
-  // native HWNDs or XEvents. And we can't reliably send those native data
-  // types across mojo types in a cross-platform way. So instead, we set the
-  // resulting data when read across IPC boundaries.
-  void SetExtendedKeyEventData(std::unique_ptr<ExtendedKeyEventData> data);
-  const ExtendedKeyEventData* extended_key_event_data() const {
-    return extended_key_event_data_.get();
-  }
 
   // This bypasses the normal mapping from keystroke events to characters,
   // which allows an I18N virtual keyboard to fabricate a keyboard event that
@@ -936,12 +917,6 @@ class EVENTS_EXPORT KeyEvent : public Event {
   // This is not necessarily initialized when the event is constructed;
   // it may be set only if and when GetCharacter() or GetDomKey() is called.
   mutable DomKey key_ = DomKey::NONE;
-
-  // Parts of our event handling require raw native events (see both the
-  // windows and linux implementations of web_input_event in content/). Because
-  // mojo instead serializes and deserializes events in potentially different
-  // processes, we need to have a mechanism to keep track of this data.
-  std::unique_ptr<ExtendedKeyEventData> extended_key_event_data_;
 
   static bool IsRepeated(const KeyEvent& event);
 

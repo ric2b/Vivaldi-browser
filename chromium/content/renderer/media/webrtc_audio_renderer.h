@@ -213,7 +213,7 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // Protects access to |state_|, |source_|, |audio_fifo_|,
   // |audio_delay_milliseconds_|, |fifo_delay_milliseconds_|, |current_time_|,
-  // |sink_params_| and |render_callback_count_|
+  // |sink_params_|, |render_callback_count_| and |max_render_time_|.
   mutable base::Lock lock_;
 
   // Ref count for the MediaPlayers which are playing audio.
@@ -250,9 +250,9 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   // before being destructed (PlayingState object goes out of scope).
   SourcePlayingStates source_playing_states_;
 
-  // Used for triggering new UMA histogram. Counts number of render
-  // callbacks modulo |kNumCallbacksBetweenRenderTimeHistograms|.
-  int render_callback_count_;
+  // Stores the maximum time spent waiting for render data from the source. Used
+  // for logging UMA data. Logged and reset when Stop() is called.
+  base::TimeDelta max_render_time_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(WebRtcAudioRenderer);
 };

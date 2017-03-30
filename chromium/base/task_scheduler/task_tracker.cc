@@ -4,9 +4,14 @@
 
 #include "base/task_scheduler/task_tracker.h"
 
+#include <limits>
+
+#include "base/atomicops.h"
 #include "base/callback.h"
 #include "base/debug/task_annotator.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/sequence_token.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -36,33 +41,141 @@ void RecordNumBlockShutdownTasksPostedDuringShutdown(
 
 }  // namespace
 
-TaskTracker::TaskTracker() = default;
+// Atomic internal state used by TaskTracker. Sequential consistency shouldn't
+// be assumed from these calls (i.e. a thread reading
+// |HasShutdownStarted() == true| isn't guaranteed to see all writes made before
+// |StartShutdown()| on the thread that invoked it).
+class TaskTracker::State {
+ public:
+  State() = default;
+
+  // Sets a flag indicating that shutdown has started. Returns true if there are
+  // tasks blocking shutdown. Can only be called once.
+  bool StartShutdown() {
+    const auto new_value =
+        subtle::NoBarrier_AtomicIncrement(&bits_, kShutdownHasStartedMask);
+
+    // Check that the "shutdown has started" bit isn't zero. This would happen
+    // if it was incremented twice.
+    DCHECK(new_value & kShutdownHasStartedMask);
+
+    const auto num_tasks_blocking_shutdown =
+        new_value >> kNumTasksBlockingShutdownBitOffset;
+    return num_tasks_blocking_shutdown != 0;
+  }
+
+  // Returns true if shutdown has started.
+  bool HasShutdownStarted() const {
+    return subtle::NoBarrier_Load(&bits_) & kShutdownHasStartedMask;
+  }
+
+  // Returns true if there are tasks blocking shutdown.
+  bool AreTasksBlockingShutdown() const {
+    const auto num_tasks_blocking_shutdown =
+        subtle::NoBarrier_Load(&bits_) >> kNumTasksBlockingShutdownBitOffset;
+    DCHECK_GE(num_tasks_blocking_shutdown, 0);
+    return num_tasks_blocking_shutdown != 0;
+  }
+
+  // Increments the number of tasks blocking shutdown. Returns true if shutdown
+  // has started.
+  bool IncrementNumTasksBlockingShutdown() {
+#if DCHECK_IS_ON()
+    // Verify that no overflow will occur.
+    const auto num_tasks_blocking_shutdown =
+        subtle::NoBarrier_Load(&bits_) >> kNumTasksBlockingShutdownBitOffset;
+    DCHECK_LT(num_tasks_blocking_shutdown,
+              std::numeric_limits<subtle::Atomic32>::max() -
+                  kNumTasksBlockingShutdownIncrement);
+#endif
+
+    const auto new_bits = subtle::NoBarrier_AtomicIncrement(
+        &bits_, kNumTasksBlockingShutdownIncrement);
+    return new_bits & kShutdownHasStartedMask;
+  }
+
+  // Decrements the number of tasks blocking shutdown. Returns true if shutdown
+  // has started and the number of tasks blocking shutdown becomes zero.
+  bool DecrementNumTasksBlockingShutdown() {
+    const auto new_bits = subtle::NoBarrier_AtomicIncrement(
+        &bits_, -kNumTasksBlockingShutdownIncrement);
+    const bool shutdown_has_started = new_bits & kShutdownHasStartedMask;
+    const auto num_tasks_blocking_shutdown =
+        new_bits >> kNumTasksBlockingShutdownBitOffset;
+    DCHECK_GE(num_tasks_blocking_shutdown, 0);
+    return shutdown_has_started && num_tasks_blocking_shutdown == 0;
+  }
+
+ private:
+  static constexpr subtle::Atomic32 kShutdownHasStartedMask = 1;
+  static constexpr subtle::Atomic32 kNumTasksBlockingShutdownBitOffset = 1;
+  static constexpr subtle::Atomic32 kNumTasksBlockingShutdownIncrement =
+      1 << kNumTasksBlockingShutdownBitOffset;
+
+  // The LSB indicates whether shutdown has started. The other bits count the
+  // number of tasks blocking shutdown.
+  // No barriers are required to read/write |bits_| as this class is only used
+  // as an atomic state checker, it doesn't provide sequential consistency
+  // guarantees w.r.t. external state. Sequencing of the TaskTracker::State
+  // operations themselves is guaranteed by the AtomicIncrement RMW (read-
+  // modify-write) semantics however. For example, if two threads are racing to
+  // call IncrementNumTasksBlockingShutdown() and StartShutdown() respectively,
+  // either the first thread will win and the StartShutdown() call will see the
+  // blocking task or the second thread will win and
+  // IncrementNumTasksBlockingShutdown() will know that shutdown has started.
+  subtle::Atomic32 bits_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(State);
+};
+
+TaskTracker::TaskTracker() : state_(new State) {}
 TaskTracker::~TaskTracker() = default;
 
 void TaskTracker::Shutdown() {
-  AutoSchedulerLock auto_lock(lock_);
+  {
+    AutoSchedulerLock auto_lock(shutdown_lock_);
 
-  // This method should only be called once.
-  DCHECK(!shutdown_completed_);
-  DCHECK(!shutdown_cv_);
+    // This method can only be called once.
+    DCHECK(!shutdown_event_);
+    DCHECK(!num_block_shutdown_tasks_posted_during_shutdown_);
+    DCHECK(!state_->HasShutdownStarted());
 
-  shutdown_cv_ = lock_.CreateConditionVariable();
+    shutdown_event_.reset(
+        new WaitableEvent(WaitableEvent::ResetPolicy::MANUAL,
+                          WaitableEvent::InitialState::NOT_SIGNALED));
 
-  // Wait until the number of tasks blocking shutdown is zero.
-  while (num_tasks_blocking_shutdown_ != 0)
-    shutdown_cv_->Wait();
+    const bool tasks_are_blocking_shutdown = state_->StartShutdown();
 
-  shutdown_cv_.reset();
-  shutdown_completed_ = true;
+    // From now, if a thread causes the number of tasks blocking shutdown to
+    // become zero, it will call OnBlockingShutdownTasksComplete().
 
-  // Record the TaskScheduler.BlockShutdownTasksPostedDuringShutdown if less
-  // than |kMaxBlockShutdownTasksPostedDuringShutdown| BLOCK_SHUTDOWN tasks were
-  // posted during shutdown. Otherwise, the histogram has already been recorded
-  // in BeforePostTask().
-  if (num_block_shutdown_tasks_posted_during_shutdown_ <
-      kMaxBlockShutdownTasksPostedDuringShutdown) {
-    RecordNumBlockShutdownTasksPostedDuringShutdown(
-        num_block_shutdown_tasks_posted_during_shutdown_);
+    if (!tasks_are_blocking_shutdown) {
+      // If another thread posts a BLOCK_SHUTDOWN task at this moment, it will
+      // block until this method releases |shutdown_lock_|. Then, it will fail
+      // DCHECK(!shutdown_event_->IsSignaled()). This is the desired behavior
+      // because posting a BLOCK_SHUTDOWN task when TaskTracker::Shutdown() has
+      // started and no tasks are blocking shutdown isn't allowed.
+      shutdown_event_->Signal();
+      return;
+    }
+  }
+
+  // It is safe to access |shutdown_event_| without holding |lock_| because the
+  // pointer never changes after being set above.
+  shutdown_event_->Wait();
+
+  {
+    AutoSchedulerLock auto_lock(shutdown_lock_);
+
+    // Record TaskScheduler.BlockShutdownTasksPostedDuringShutdown if less than
+    // |kMaxBlockShutdownTasksPostedDuringShutdown| BLOCK_SHUTDOWN tasks were
+    // posted during shutdown. Otherwise, the histogram has already been
+    // recorded in BeforePostTask().
+    if (num_block_shutdown_tasks_posted_during_shutdown_ <
+        kMaxBlockShutdownTasksPostedDuringShutdown) {
+      RecordNumBlockShutdownTasksPostedDuringShutdown(
+          num_block_shutdown_tasks_posted_during_shutdown_);
+    }
   }
 }
 
@@ -78,8 +191,11 @@ bool TaskTracker::WillPostTask(const Task* task) {
   return true;
 }
 
-void TaskTracker::RunTask(const Task* task) {
-  DCHECK(task);
+void TaskTracker::RunNextTaskInSequence(const Sequence* sequence) {
+  DCHECK(sequence);
+  DCHECK(sequence->PeekTask());
+
+  const Task* task = sequence->PeekTask();
 
   const TaskShutdownBehavior shutdown_behavior =
       task->traits.shutdown_behavior();
@@ -94,6 +210,10 @@ void TaskTracker::RunTask(const Task* task) {
       TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN);
 
   {
+    // Set up SequenceToken as expected for the scope of the task.
+    ScopedSetSequenceTokenForCurrentThread
+        scoped_set_sequence_token_for_current_thread(sequence->token());
+
     // Set up TaskRunnerHandle as expected for the scope of the task.
     std::unique_ptr<SequencedTaskRunnerHandle> sequenced_task_runner_handle;
     std::unique_ptr<ThreadTaskRunnerHandle> single_thread_task_runner_handle;
@@ -116,29 +236,33 @@ void TaskTracker::RunTask(const Task* task) {
   AfterRunTask(shutdown_behavior);
 }
 
-bool TaskTracker::IsShuttingDownForTesting() const {
-  AutoSchedulerLock auto_lock(lock_);
-  return !!shutdown_cv_;
+bool TaskTracker::HasShutdownStarted() const {
+  return state_->HasShutdownStarted();
+}
+
+bool TaskTracker::IsShutdownComplete() const {
+  AutoSchedulerLock auto_lock(shutdown_lock_);
+  return shutdown_event_ && shutdown_event_->IsSignaled();
+}
+
+void TaskTracker::SetHasShutdownStartedForTesting() {
+  state_->StartShutdown();
 }
 
 bool TaskTracker::BeforePostTask(TaskShutdownBehavior shutdown_behavior) {
-  AutoSchedulerLock auto_lock(lock_);
-
-  if (shutdown_completed_) {
-    // A BLOCK_SHUTDOWN task posted after shutdown has completed is an ordering
-    // bug. This DCHECK aims to catch those early.
-    DCHECK_NE(shutdown_behavior, TaskShutdownBehavior::BLOCK_SHUTDOWN);
-
-    // No task is allowed to be posted after shutdown.
-    return false;
-  }
-
   if (shutdown_behavior == TaskShutdownBehavior::BLOCK_SHUTDOWN) {
     // BLOCK_SHUTDOWN tasks block shutdown between the moment they are posted
     // and the moment they complete their execution.
-    ++num_tasks_blocking_shutdown_;
+    const bool shutdown_started = state_->IncrementNumTasksBlockingShutdown();
 
-    if (shutdown_cv_) {
+    if (shutdown_started) {
+      AutoSchedulerLock auto_lock(shutdown_lock_);
+
+      // A BLOCK_SHUTDOWN task posted after shutdown has completed is an
+      // ordering bug. This aims to catch those early.
+      DCHECK(shutdown_event_);
+      DCHECK(!shutdown_event_->IsSignaled());
+
       ++num_block_shutdown_tasks_posted_during_shutdown_;
 
       if (num_block_shutdown_tasks_posted_during_shutdown_ ==
@@ -152,45 +276,52 @@ bool TaskTracker::BeforePostTask(TaskShutdownBehavior shutdown_behavior) {
       }
     }
 
-    // A BLOCK_SHUTDOWN task is allowed to be posted iff shutdown hasn't
-    // completed.
     return true;
   }
 
   // A non BLOCK_SHUTDOWN task is allowed to be posted iff shutdown hasn't
   // started.
-  return !shutdown_cv_;
+  return !state_->HasShutdownStarted();
 }
 
 bool TaskTracker::BeforeRunTask(TaskShutdownBehavior shutdown_behavior) {
-  AutoSchedulerLock auto_lock(lock_);
-
-  if (shutdown_completed_) {
-    // Trying to run a BLOCK_SHUTDOWN task after shutdown has completed is
-    // unexpected as it either shouldn't have been posted if shutdown completed
-    // or should be blocking shutdown if it was posted before it did.
-    DCHECK_NE(shutdown_behavior, TaskShutdownBehavior::BLOCK_SHUTDOWN);
-
-    // A worker might extract a non BLOCK_SHUTDOWN task from a PriorityQueue
-    // after shutdown. It shouldn't be allowed to run it.
-    return false;
-  }
-
   switch (shutdown_behavior) {
-    case TaskShutdownBehavior::BLOCK_SHUTDOWN:
-      DCHECK_GT(num_tasks_blocking_shutdown_, 0U);
+    case TaskShutdownBehavior::BLOCK_SHUTDOWN: {
+      // The number of tasks blocking shutdown has been incremented when the
+      // task was posted.
+      DCHECK(state_->AreTasksBlockingShutdown());
+
+      // Trying to run a BLOCK_SHUTDOWN task after shutdown has completed is
+      // unexpected as it either shouldn't have been posted if shutdown
+      // completed or should be blocking shutdown if it was posted before it
+      // did.
+      DCHECK(!state_->HasShutdownStarted() || !IsShutdownComplete());
+
       return true;
+    }
 
-    case TaskShutdownBehavior::SKIP_ON_SHUTDOWN:
-      if (shutdown_cv_)
-        return false;
-
+    case TaskShutdownBehavior::SKIP_ON_SHUTDOWN: {
       // SKIP_ON_SHUTDOWN tasks block shutdown while they are running.
-      ++num_tasks_blocking_shutdown_;
-      return true;
+      const bool shutdown_started = state_->IncrementNumTasksBlockingShutdown();
 
-    case TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN:
-      return !shutdown_cv_;
+      if (shutdown_started) {
+        // The SKIP_ON_SHUTDOWN task isn't allowed to run during shutdown.
+        // Decrement the number of tasks blocking shutdown that was wrongly
+        // incremented.
+        const bool shutdown_started_and_no_tasks_block_shutdown =
+            state_->DecrementNumTasksBlockingShutdown();
+        if (shutdown_started_and_no_tasks_block_shutdown)
+          OnBlockingShutdownTasksComplete();
+
+        return false;
+      }
+
+      return true;
+    }
+
+    case TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN: {
+      return !state_->HasShutdownStarted();
+    }
   }
 
   NOTREACHED();
@@ -200,12 +331,21 @@ bool TaskTracker::BeforeRunTask(TaskShutdownBehavior shutdown_behavior) {
 void TaskTracker::AfterRunTask(TaskShutdownBehavior shutdown_behavior) {
   if (shutdown_behavior == TaskShutdownBehavior::BLOCK_SHUTDOWN ||
       shutdown_behavior == TaskShutdownBehavior::SKIP_ON_SHUTDOWN) {
-    AutoSchedulerLock auto_lock(lock_);
-    DCHECK_GT(num_tasks_blocking_shutdown_, 0U);
-    --num_tasks_blocking_shutdown_;
-    if (num_tasks_blocking_shutdown_ == 0 && shutdown_cv_)
-      shutdown_cv_->Signal();
+    const bool shutdown_started_and_no_tasks_block_shutdown =
+        state_->DecrementNumTasksBlockingShutdown();
+    if (shutdown_started_and_no_tasks_block_shutdown)
+      OnBlockingShutdownTasksComplete();
   }
+}
+
+void TaskTracker::OnBlockingShutdownTasksComplete() {
+  AutoSchedulerLock auto_lock(shutdown_lock_);
+
+  // This method can only be called after shutdown has started.
+  DCHECK(state_->HasShutdownStarted());
+  DCHECK(shutdown_event_);
+
+  shutdown_event_->Signal();
 }
 
 }  // namespace internal

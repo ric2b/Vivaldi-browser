@@ -55,6 +55,7 @@
 #include "core/loader/NavigationScheduler.h"
 #include "platform/UserGestureIndicator.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
+#include "wtf/AutoReset.h"
 #include "wtf/text/AtomicString.h"
 #include <limits>
 
@@ -69,8 +70,6 @@ HTMLFormElement::HTMLFormElement(Document& document)
     , m_hasElementsAssociatedByParser(false)
     , m_hasElementsAssociatedByFormAttribute(false)
     , m_didFinishParsingChildren(false)
-    , m_isSubmittingOrInUserJSSubmitEvent(false)
-    , m_shouldSubmit(false)
     , m_isInResetFunction(false)
     , m_wasDemoted(false)
 {
@@ -92,6 +91,7 @@ DEFINE_TRACE(HTMLFormElement)
     visitor->trace(m_radioButtonGroupScope);
     visitor->trace(m_associatedElements);
     visitor->trace(m_imageElements);
+    visitor->trace(m_plannedNavigation);
     HTMLElement::trace(visitor);
 }
 
@@ -138,7 +138,7 @@ Node::InsertionNotificationRequest HTMLFormElement::insertedInto(ContainerNode* 
 {
     HTMLElement::insertedInto(insertionPoint);
     logAddElementIfIsolatedWorldAndInDocument("form", methodAttr, actionAttr);
-    if (insertionPoint->inShadowIncludingDocument())
+    if (insertionPoint->isConnected())
         this->document().didAssociateFormControl(this);
     return InsertionDone;
 }
@@ -185,7 +185,7 @@ void HTMLFormElement::removedFrom(ContainerNode* insertionPoint)
 void HTMLFormElement::handleLocalEvents(Event& event)
 {
     Node* targetNode = event.target()->toNode();
-    if (event.eventPhase() != Event::CAPTURING_PHASE && targetNode && targetNode != this && (event.type() == EventTypeNames::submit || event.type() == EventTypeNames::reset)) {
+    if (event.eventPhase() != Event::kCapturingPhase && targetNode && targetNode != this && (event.type() == EventTypeNames::submit || event.type() == EventTypeNames::reset)) {
         event.stopPropagation();
         return;
     }
@@ -234,17 +234,7 @@ void HTMLFormElement::submitImplicitly(Event* event, bool fromImplicitSubmission
         }
     }
     if (fromImplicitSubmissionTrigger && submissionTriggerCount == 1)
-        prepareForSubmission(event);
-}
-
-// FIXME: Consolidate this and similar code in FormSubmission.cpp.
-static inline HTMLFormControlElement* submitElementFromEvent(const Event* event)
-{
-    for (Node* node = event->target()->toNode(); node; node = node->parentOrShadowHostNode()) {
-        if (node->isElementNode() && toElement(node)->isFormControlElement())
-            return toHTMLFormControlElement(node);
-    }
-    return 0;
+        prepareForSubmission(event, nullptr);
 }
 
 bool HTMLFormElement::validateInteractively()
@@ -290,16 +280,20 @@ bool HTMLFormElement::validateInteractively()
     return false;
 }
 
-void HTMLFormElement::prepareForSubmission(Event* event)
+void HTMLFormElement::prepareForSubmission(Event* event, HTMLFormControlElement* submitButton)
 {
     LocalFrame* frame = document().frame();
-    if (!frame || m_isSubmittingOrInUserJSSubmitEvent)
+    if (!frame || m_isSubmitting || m_inUserJSSubmitEvent)
         return;
 
+    if (document().isSandboxed(SandboxForms)) {
+        document().addConsoleMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Blocked form submission to '" + m_attributes.action() + "' because the form's frame is sandboxed and the 'allow-forms' permission is not set."));
+        return;
+    }
+
     bool skipValidation = !document().page() || noValidate();
-    ASSERT(event);
-    HTMLFormControlElement* submitElement = submitElementFromEvent(event);
-    if (submitElement && submitElement->formNoValidate())
+    DCHECK(event);
+    if (submitButton && submitButton->formNoValidate())
         skipValidation = true;
 
     UseCounter::count(document(), UseCounter::FormSubmissionStarted);
@@ -307,23 +301,26 @@ void HTMLFormElement::prepareForSubmission(Event* event)
     if (!skipValidation && !validateInteractively())
         return;
 
-    m_isSubmittingOrInUserJSSubmitEvent = true;
-    m_shouldSubmit = false;
-
-    frame->loader().client()->dispatchWillSendSubmitEvent(this);
-
-    if (dispatchEvent(Event::createCancelableBubble(EventTypeNames::submit)) == DispatchEventResult::NotCanceled)
-        m_shouldSubmit = true;
-
-    m_isSubmittingOrInUserJSSubmitEvent = false;
-
-    if (m_shouldSubmit)
-        submit(event, true);
+    bool shouldSubmit;
+    {
+        AutoReset<bool> submitEventHandlerScope(&m_inUserJSSubmitEvent, true);
+        frame->loader().client()->dispatchWillSendSubmitEvent(this);
+        shouldSubmit = dispatchEvent(Event::createCancelableBubble(EventTypeNames::submit)) == DispatchEventResult::NotCanceled;
+    }
+    if (shouldSubmit) {
+        m_plannedNavigation = nullptr;
+        submit(event, submitButton);
+    }
+    if (!m_plannedNavigation)
+        return;
+    AutoReset<bool> submitScope(&m_isSubmitting, true);
+    scheduleFormSubmission(m_plannedNavigation);
+    m_plannedNavigation = nullptr;
 }
 
 void HTMLFormElement::submitFromJavaScript()
 {
-    submit(0, false);
+    submit(nullptr, nullptr);
 }
 
 void HTMLFormElement::submitDialog(FormSubmission* formSubmission)
@@ -336,62 +333,60 @@ void HTMLFormElement::submitDialog(FormSubmission* formSubmission)
     }
 }
 
-void HTMLFormElement::submit(Event* event, bool activateSubmitButton)
+void HTMLFormElement::submit(Event* event, HTMLFormControlElement* submitButton)
 {
     FrameView* view = document().view();
     LocalFrame* frame = document().frame();
     if (!view || !frame || !frame->page())
         return;
+
     // See crbug.com/586749.
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         UseCounter::count(document(), UseCounter::FormSubmissionNotInDocumentTree);
 
-    if (m_isSubmittingOrInUserJSSubmitEvent) {
-        m_shouldSubmit = true;
+    if (m_isSubmitting)
         return;
-    }
 
-    m_isSubmittingOrInUserJSSubmitEvent = true;
+    // Delay dispatching 'close' to dialog until done submitting.
+    EventQueueScope scopeForDialogClose;
+    AutoReset<bool> submitScope(&m_isSubmitting, true);
 
-    HTMLFormControlElement* firstSuccessfulSubmitButton = nullptr;
-    bool needButtonActivation = activateSubmitButton; // do we need to activate a submit button?
-
-    const FormAssociatedElement::List& elements = associatedElements();
-    for (unsigned i = 0; i < elements.size(); ++i) {
-        FormAssociatedElement* associatedElement = elements[i];
-        if (!associatedElement->isFormControlElement())
-            continue;
-        if (needButtonActivation) {
+    if (event && !submitButton) {
+        // In a case of implicit submission without a submit button, 'submit'
+        // event handler might add a submit button. We search for a submit
+        // button again.
+        // TODO(tkent): Do we really need to activate such submit button?
+        for (const auto& associatedElement : associatedElements()) {
+            if (!associatedElement->isFormControlElement())
+                continue;
             HTMLFormControlElement* control = toHTMLFormControlElement(associatedElement);
-            if (control->isActivatedSubmit())
-                needButtonActivation = false;
-            else if (firstSuccessfulSubmitButton == 0 && control->isSuccessfulSubmitButton())
-                firstSuccessfulSubmitButton = control;
+            DCHECK(!control->isActivatedSubmit());
+            if (control->isSuccessfulSubmitButton()) {
+                submitButton = control;
+                break;
+            }
         }
     }
 
-    if (needButtonActivation && firstSuccessfulSubmitButton)
-        firstSuccessfulSubmitButton->setActivatedSubmit(true);
-
-    FormSubmission* formSubmission = FormSubmission::create(this, m_attributes, event);
-    EventQueueScope scopeForDialogClose; // Delay dispatching 'close' to dialog until done submitting.
-    if (formSubmission->method() == FormSubmission::DialogMethod)
+    FormSubmission* formSubmission = FormSubmission::create(this, m_attributes, event, submitButton);
+    if (formSubmission->method() == FormSubmission::DialogMethod) {
         submitDialog(formSubmission);
-    else
+    } else if (m_inUserJSSubmitEvent) {
+        // Need to postpone the submission in order to make this cancelable by
+        // another submission request.
+        m_plannedNavigation = formSubmission;
+    } else {
+        // This runs JavaScript code if action attribute value is javascript:
+        // protocol.
         scheduleFormSubmission(formSubmission);
-
-    if (needButtonActivation && firstSuccessfulSubmitButton)
-        firstSuccessfulSubmitButton->setActivatedSubmit(false);
-
-    m_shouldSubmit = false;
-    m_isSubmittingOrInUserJSSubmitEvent = false;
+    }
 }
 
 void HTMLFormElement::scheduleFormSubmission(FormSubmission* submission)
 {
-    ASSERT(submission->method() == FormSubmission::PostMethod || submission->method() == FormSubmission::GetMethod);
-    ASSERT(submission->data());
-    ASSERT(submission->form());
+    DCHECK(submission->method() == FormSubmission::PostMethod || submission->method() == FormSubmission::GetMethod);
+    DCHECK(submission->data());
+    DCHECK(submission->form());
     if (submission->action().isEmpty())
         return;
     if (document().isSandboxed(SandboxForms)) {
@@ -558,9 +553,9 @@ const FormAssociatedElement::List& HTMLFormElement::associatedElements() const
     Node* scope = mutableThis;
     if (m_hasElementsAssociatedByParser)
         scope = &NodeTraversal::highestAncestorOrSelf(*mutableThis);
-    if (inShadowIncludingDocument() && m_hasElementsAssociatedByFormAttribute)
+    if (isConnected() && m_hasElementsAssociatedByFormAttribute)
         scope = &treeScope().rootNode();
-    ASSERT(scope);
+    DCHECK(scope);
     collectAssociatedElements(*scope, mutableThis->m_associatedElements);
     mutableThis->m_associatedElementsAreDirty = false;
     return m_associatedElements;
@@ -667,16 +662,16 @@ Element* HTMLFormElement::elementFromPastNamesMap(const AtomicString& pastName)
     if (pastName.isEmpty() || !m_pastNamesMap)
         return 0;
     Element* element = m_pastNamesMap->get(pastName);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     if (!element)
         return 0;
-    ASSERT_WITH_SECURITY_IMPLICATION(toHTMLElement(element)->formOwner() == this);
+    SECURITY_DCHECK(toHTMLElement(element)->formOwner() == this);
     if (isHTMLImageElement(*element)) {
-        ASSERT_WITH_SECURITY_IMPLICATION(imageElements().find(element) != kNotFound);
+        SECURITY_DCHECK(imageElements().find(element) != kNotFound);
     } else if (isHTMLObjectElement(*element)) {
-        ASSERT_WITH_SECURITY_IMPLICATION(associatedElements().find(toHTMLObjectElement(element)) != kNotFound);
+        SECURITY_DCHECK(associatedElements().find(toHTMLObjectElement(element)) != kNotFound);
     } else {
-        ASSERT_WITH_SECURITY_IMPLICATION(associatedElements().find(toHTMLFormControlElement(element)) != kNotFound);
+        SECURITY_DCHECK(associatedElements().find(toHTMLFormControlElement(element)) != kNotFound);
     }
 #endif
     return element;
@@ -751,7 +746,7 @@ void HTMLFormElement::anonymousNamedGetter(const AtomicString& name, RadioNodeLi
     // but if the first the size cannot be zero.
     HeapVector<Member<Element>> elements;
     getNamedElements(name, elements);
-    ASSERT(!elements.isEmpty());
+    DCHECK(!elements.isEmpty());
 
     bool onlyMatchImg = !elements.isEmpty() && isHTMLImageElement(*elements.first());
     if (onlyMatchImg) {

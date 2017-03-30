@@ -42,6 +42,12 @@ class MEDIA_EXPORT CoreAudioDemuxer : public Demuxer {
   base::TimeDelta GetStartTime() const override;
   base::Time GetTimelineOffset() const override;
   int64_t GetMemoryUsage() const override;
+  void OnEnabledAudioTracksChanged(
+      const std::vector<MediaTrack::Id>& track_ids,
+      base::TimeDelta currTime) override;
+  void OnSelectedVideoTrackChanged(
+      const std::vector<MediaTrack::Id>& track_ids,
+      base::TimeDelta currTime) override;
 
   void ResetDataSourceOffset();
   void ReadDataSourceIfNeeded();

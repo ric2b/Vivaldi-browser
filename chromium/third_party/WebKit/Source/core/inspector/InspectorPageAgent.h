@@ -39,6 +39,10 @@
 #include "wtf/HashMap.h"
 #include "wtf/text/WTFString.h"
 
+namespace v8_inspector {
+class V8InspectorSession;
+}
+
 namespace blink {
 
 class Resource;
@@ -51,7 +55,6 @@ class KURL;
 class LocalFrame;
 class SharedBuffer;
 class TextResourceDecoder;
-class V8InspectorSession;
 
 using blink::protocol::Maybe;
 
@@ -62,7 +65,7 @@ public:
     public:
         virtual ~Client() { }
         virtual void pageLayoutInvalidated(bool resized) { }
-        virtual void setPausedInDebuggerMessage(const String&) { }
+        virtual void configureOverlay(bool suspended, const String& message) { }
         virtual void waitForCreateWindow(LocalFrame*) { }
     };
 
@@ -82,7 +85,7 @@ public:
         OtherResource
     };
 
-    static InspectorPageAgent* create(InspectedFrames*, Client*, InspectorResourceContentLoader*, V8InspectorSession*);
+    static InspectorPageAgent* create(InspectedFrames*, Client*, InspectorResourceContentLoader*, v8_inspector::V8InspectorSession*);
 
     static HeapVector<Member<Document>> importsForFrame(LocalFrame*);
     static bool cachedResourceContent(Resource*, String* result, bool* base64Encoded);
@@ -103,12 +106,12 @@ public:
     void reload(ErrorString*, const Maybe<bool>& bypassCache, const Maybe<String>& scriptToEvaluateOnLoad) override;
     void navigate(ErrorString*, const String& url, String* frameId) override;
     void getResourceTree(ErrorString*, std::unique_ptr<protocol::Page::FrameResourceTree>* frameTree) override;
-    void getResourceContent(ErrorString*, const String& frameId, const String& url, std::unique_ptr<GetResourceContentCallback>) override;
-    void searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& caseSensitive, const Maybe<bool>& isRegex, std::unique_ptr<SearchInResourceCallback>) override;
+    void getResourceContent(const String& frameId, const String& url, std::unique_ptr<GetResourceContentCallback>) override;
+    void searchInResource(const String& frameId, const String& url, const String& query, const Maybe<bool>& caseSensitive, const Maybe<bool>& isRegex, std::unique_ptr<SearchInResourceCallback>) override;
     void setDocumentContent(ErrorString*, const String& frameId, const String& html) override;
     void startScreencast(ErrorString*, const Maybe<String>& format, const Maybe<int>& quality, const Maybe<int>& maxWidth, const Maybe<int>& maxHeight, const Maybe<int>& everyNthFrame) override;
     void stopScreencast(ErrorString*) override;
-    void setOverlayMessage(ErrorString*, const Maybe<String>& message) override;
+    void configureOverlay(ErrorString*, const Maybe<bool>& suspended, const Maybe<String>& message) override;
     void setBlockedEventsWarningThreshold(ErrorString*, double threshold) override;
 
     // InspectorInstrumentation API
@@ -136,7 +139,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    InspectorPageAgent(InspectedFrames*, Client*, InspectorResourceContentLoader*, V8InspectorSession*);
+    InspectorPageAgent(InspectedFrames*, Client*, InspectorResourceContentLoader*, v8_inspector::V8InspectorSession*);
 
     void finishReload();
     void getResourceContentAfterResourcesContentLoaded(const String& frameId, const String& url, std::unique_ptr<GetResourceContentCallback>);
@@ -147,7 +150,7 @@ private:
     std::unique_ptr<protocol::Page::Frame> buildObjectForFrame(LocalFrame*);
     std::unique_ptr<protocol::Page::FrameResourceTree> buildObjectForFrameTree(LocalFrame*);
     Member<InspectedFrames> m_inspectedFrames;
-    V8InspectorSession* m_v8Session;
+    v8_inspector::V8InspectorSession* m_v8Session;
     Client* m_client;
     long m_lastScriptIdentifier;
     String m_pendingScriptToEvaluateOnLoadOnce;

@@ -40,11 +40,11 @@ class CC_SURFACES_EXPORT Surface {
  public:
   using DrawCallback = SurfaceFactory::DrawCallback;
 
-  Surface(SurfaceId id, SurfaceFactory* factory);
+  Surface(const SurfaceId& id, SurfaceFactory* factory);
   ~Surface();
 
-  SurfaceId surface_id() const { return surface_id_; }
-  SurfaceId previous_frame_surface_id() const {
+  const SurfaceId& surface_id() const { return surface_id_; }
+  const SurfaceId& previous_frame_surface_id() const {
     return previous_frame_surface_id_;
   }
 
@@ -67,7 +67,7 @@ class CC_SURFACES_EXPORT Surface {
   int frame_index() const { return frame_index_; }
 
   void TakeLatencyInfo(std::vector<ui::LatencyInfo>* latency_info);
-  void RunDrawCallbacks(SurfaceDrawStatus drawn);
+  void RunDrawCallbacks();
 
   base::WeakPtr<SurfaceFactory> factory() { return factory_; }
 

@@ -11,6 +11,9 @@
 // (chromium/src/components/autofill/core/common/form_data.h) for further
 // processing.
 
+/* Beginning of anonymous object. */
+(function() {
+
 /** @typedef {HTMLInputElement|HTMLTextAreaElement|HTMLSelectElement} */
 var FormControlElement;
 
@@ -71,7 +74,7 @@ __gCrWeb.autofill.MAX_DATA_LENGTH = 1024;
  *
  * @const {number}
  */
-__gCrWeb.autofill.MAX_PARSEABLE_FIELDS = 100;
+__gCrWeb.autofill.MAX_PARSEABLE_FIELDS = 200;
 
 /**
  * A bit field mask to extract data from WebFormControlElement for
@@ -135,13 +138,6 @@ __gCrWeb.autofill.ROLE_ATTRIBUTE_PRESENTATION = 0;
  * @type {Element}
  */
 __gCrWeb.autofill.lastAutoFilledElement = null;
-
-/**
- * The last element that was active (used to restore focus if necessary).
- *
- * @type {Element}
- */
-__gCrWeb.autofill.lastActiveElement = null;
 
 /**
  * Whether CSS for autofilled elements has been injected into the page.
@@ -556,34 +552,12 @@ __gCrWeb.autofill['extractForms'] = function(requiredFields) {
 };
 
 /**
- * Stores the current active element. This is used to make the element active
- * again in case the web view loses focus when a dialog is presented over it.
- */
-__gCrWeb.autofill['storeActiveElement'] = function() {
-  __gCrWeb.autofill.lastActiveElement = document.activeElement;
-}
-
-/**
- * Clears the current active element by setting it to null.
- */
-__gCrWeb.autofill['clearActiveElement'] = function() {
-  __gCrWeb.autofill.lastActiveElement = null;
-}
-
-/**
- * Fills data into the active form field. The active form field is either
- * document.activeElement or the value of lastActiveElement if that value is
- * non-null.
+ * Fills data into the active form field.
  *
  * @param {AutofillFormFieldData} data The data to fill in.
  */
 __gCrWeb.autofill['fillActiveFormField'] = function(data) {
   var activeElement = document.activeElement;
-  if (__gCrWeb.autofill.lastActiveElement) {
-    activeElement = __gCrWeb.autofill.lastActiveElement;
-    activeElement.focus();
-    __gCrWeb.autofill.lastActiveElement = null;
-  }
   if (data['name'] !== __gCrWeb['common'].nameForAutofill(activeElement)) {
     return;
   }
@@ -2091,3 +2065,5 @@ __gCrWeb.autofill['fillPredictionData'] = function(data) {
     }
   }
 };
+
+}());  // End of anonymous object

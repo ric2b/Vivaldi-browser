@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/resources/returned_resource.h"
 #include "cc/test/begin_frame_args_test.h"
@@ -24,14 +23,6 @@ FakeOutputSurface::FakeOutputSurface(
                         delegated_rendering) {}
 
 FakeOutputSurface::FakeOutputSurface(
-    std::unique_ptr<SoftwareOutputDevice> software_device,
-    bool delegated_rendering)
-    : FakeOutputSurface(nullptr,
-                        nullptr,
-                        std::move(software_device),
-                        delegated_rendering) {}
-
-FakeOutputSurface::FakeOutputSurface(
     scoped_refptr<ContextProvider> context_provider,
     scoped_refptr<ContextProvider> worker_context_provider,
     std::unique_ptr<SoftwareOutputDevice> software_device,
@@ -42,29 +33,37 @@ FakeOutputSurface::FakeOutputSurface(
   capabilities_.delegated_rendering = delegated_rendering;
 }
 
-FakeOutputSurface::~FakeOutputSurface() {}
+FakeOutputSurface::~FakeOutputSurface() = default;
 
 void FakeOutputSurface::SwapBuffers(CompositorFrame frame) {
-  std::unique_ptr<CompositorFrame> frame_copy(new CompositorFrame);
-  *frame_copy = std::move(frame);
-  if (frame_copy->delegated_frame_data || !context_provider()) {
-    last_sent_frame_ = std::move(frame_copy);
+  ReturnResourcesHeldByParent();
 
-    if (last_sent_frame_->delegated_frame_data) {
-      resources_held_by_parent_.insert(
-          resources_held_by_parent_.end(),
-          last_sent_frame_->delegated_frame_data->resource_list.begin(),
-          last_sent_frame_->delegated_frame_data->resource_list.end());
-    }
+  last_sent_frame_.reset(new CompositorFrame(std::move(frame)));
+  ++num_sent_frames_;
 
-    ++num_sent_frames_;
+  if (last_sent_frame_->delegated_frame_data) {
+    auto* frame_data = last_sent_frame_->delegated_frame_data.get();
+    last_swap_rect_ = frame_data->render_pass_list.back()->damage_rect;
+    last_swap_rect_valid_ = true;
+  } else if (context_provider()) {
+    last_swap_rect_ = last_sent_frame_->gl_frame_data->sub_buffer_rect;
+    last_swap_rect_valid_ = true;
   } else {
-    last_swap_rect_ = frame_copy->gl_frame_data->sub_buffer_rect;
-    last_sent_frame_ = std::move(frame_copy);
-    ++num_sent_frames_;
+    // Unknown for direct software frames.
+    last_swap_rect_ = gfx::Rect();
+    last_swap_rect_valid_ = false;
   }
+
+  if (last_sent_frame_->delegated_frame_data || !context_provider()) {
+    if (last_sent_frame_->delegated_frame_data) {
+      auto* frame_data = last_sent_frame_->delegated_frame_data.get();
+      resources_held_by_parent_.insert(resources_held_by_parent_.end(),
+                                       frame_data->resource_list.begin(),
+                                       frame_data->resource_list.end());
+    }
+  }
+
   PostSwapBuffersComplete();
-  client_->DidSwapBuffers();
 }
 
 void FakeOutputSurface::BindFramebuffer() {
@@ -96,23 +95,9 @@ bool FakeOutputSurface::BindToClient(OutputSurfaceClient* client) {
   }
 }
 
-void FakeOutputSurface::SetTreeActivationCallback(
-    const base::Closure& callback) {
-  DCHECK(client_);
-  client_->SetTreeActivationCallback(callback);
-}
-
-void FakeOutputSurface::ReturnResource(unsigned id, CompositorFrameAck* ack) {
-  TransferableResourceArray::iterator it;
-  for (it = resources_held_by_parent_.begin();
-       it != resources_held_by_parent_.end();
-       ++it) {
-    if (it->id == id)
-      break;
-  }
-  DCHECK(it != resources_held_by_parent_.end());
-  ack->resources.push_back(it->ToReturnedResource());
-  resources_held_by_parent_.erase(it);
+void FakeOutputSurface::DetachFromClient() {
+  ReturnResourcesHeldByParent();
+  OutputSurface::DetachFromClient();
 }
 
 bool FakeOutputSurface::HasExternalStencilTest() const {
@@ -131,6 +116,19 @@ OverlayCandidateValidator* FakeOutputSurface::GetOverlayCandidateValidator()
 void FakeOutputSurface::SetMemoryPolicyToSetAtBind(
     std::unique_ptr<ManagedMemoryPolicy> memory_policy_to_set_at_bind) {
   memory_policy_to_set_at_bind_.swap(memory_policy_to_set_at_bind);
+}
+
+void FakeOutputSurface::ReturnResourcesHeldByParent() {
+  // Check |delegated_frame_data| because we shouldn't reclaim resources
+  // for the Display which does not swap delegated frames.
+  if (last_sent_frame_ && last_sent_frame_->delegated_frame_data) {
+    // Return the last frame's resources immediately.
+    ReturnedResourceArray resources;
+    for (const auto& resource : resources_held_by_parent_)
+      resources.push_back(resource.ToReturnedResource());
+    resources_held_by_parent_.clear();
+    client_->ReclaimResources(resources);
+  }
 }
 
 }  // namespace cc

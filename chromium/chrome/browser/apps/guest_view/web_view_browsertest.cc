@@ -36,7 +36,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
-#include "chrome/browser/task_management/task_manager_browsertest_util.h"
+#include "chrome/browser/task_manager/task_manager_browsertest_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -108,15 +108,15 @@ using guest_view::TestGuestViewManager;
 using guest_view::TestGuestViewManagerFactory;
 using prerender::PrerenderLinkManager;
 using prerender::PrerenderLinkManagerFactory;
-using task_management::browsertest_util::MatchAboutBlankTab;
-using task_management::browsertest_util::MatchAnyApp;
-using task_management::browsertest_util::MatchAnyBackground;
-using task_management::browsertest_util::MatchAnyTab;
-using task_management::browsertest_util::MatchAnyWebView;
-using task_management::browsertest_util::MatchApp;
-using task_management::browsertest_util::MatchBackground;
-using task_management::browsertest_util::MatchWebView;
-using task_management::browsertest_util::WaitForTaskManagerRows;
+using task_manager::browsertest_util::MatchAboutBlankTab;
+using task_manager::browsertest_util::MatchAnyApp;
+using task_manager::browsertest_util::MatchAnyBackground;
+using task_manager::browsertest_util::MatchAnyTab;
+using task_manager::browsertest_util::MatchAnyWebView;
+using task_manager::browsertest_util::MatchApp;
+using task_manager::browsertest_util::MatchBackground;
+using task_manager::browsertest_util::MatchWebView;
+using task_manager::browsertest_util::WaitForTaskManagerRows;
 using ui::MenuModel;
 
 namespace {
@@ -174,7 +174,7 @@ class ContextMenuCallCountObserver {
   bool OnMenuShown(const content::NotificationSource& source,
                    const content::NotificationDetails& details) {
     ++num_times_shown_;
-    auto context_menu = content::Source<RenderViewContextMenu>(source).ptr();
+    auto* context_menu = content::Source<RenderViewContextMenu>(source).ptr();
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&RenderViewContextMenuBase::Cancel,
                               base::Unretained(context_menu)));
@@ -307,7 +307,7 @@ class LeftMouseClick {
     DCHECK(click_completed_);
     click_completed_ = false;
     mouse_event_.type = blink::WebInputEvent::MouseDown;
-    mouse_event_.button = blink::WebMouseEvent::ButtonLeft;
+    mouse_event_.button = blink::WebMouseEvent::Button::Left;
     mouse_event_.x = point.x();
     mouse_event_.y = point.y();
     mouse_event_.modifiers = 0;
@@ -776,7 +776,7 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
   void OpenContextMenu(content::WebContents* web_contents) {
     blink::WebMouseEvent mouse_event;
     mouse_event.type = blink::WebInputEvent::MouseDown;
-    mouse_event.button = blink::WebMouseEvent::ButtonRight;
+    mouse_event.button = blink::WebMouseEvent::Button::Right;
     mouse_event.x = 1;
     mouse_event.y = 1;
     web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
@@ -869,11 +869,12 @@ INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewVisibilityTest, testing::Bool());
 class WebViewSpeechAPITest : public WebViewTest {};
 INSTANTIATE_TEST_CASE_P(WebViewTests, WebViewSpeechAPITest, testing::Bool());
 
-// The following test suits are created to group tests based on specific
+// The following test suites are created to group tests based on specific
 // features of <webview>.
-// These features current would not work with
+// These features currently would not work with
 // --use-cross-process-frames-for-guest and is disabled on
 // UseCrossProcessFramesForGuests.
+// TODO(avallee): https://crbug.com/610795: Enable this for testing::Bool().
 class WebViewAccessibilityTest : public WebViewTest {};
 INSTANTIATE_TEST_CASE_P(WebViewTests,
                         WebViewAccessibilityTest,
@@ -1257,7 +1258,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, SelectShowHide) {
 
   // Important, pass mouse click to embedder in order to transfer focus. Note
   // that SelectControlWaiter may be waited ealier than click is completed.
-  LeftMouseClick mouse_click(embedder_contents);
+  LeftMouseClick mouse_click(GetParam() ? guest_contents : embedder_contents);
   SelectControlWaiter select_control_waiter;
 
   for (int i = 0; i < 5; ++i) {
@@ -1687,16 +1688,9 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardown) {
 
 // This test makes sure the browser process does not crash if browser is shut
 // down while an interstitial page is being shown in guest.
-// Flaky on Windows. http://crbug.com/619508.
-#if defined(OS_WIN)
-#define MAYBE_InterstitialTeardownOnBrowserShutdown \
-    DISABLED_InterstitialTeardownOnBrowserShutdown
-#else
-#define MAYBE_InterstitialTeardownOnBrowserShutdown \
-    InterstitialTeardownOnBrowserShutdown
-#endif
+// Flaky. http://crbug.com/627962.
 IN_PROC_BROWSER_TEST_P(WebViewTest,
-                       MAYBE_InterstitialTeardownOnBrowserShutdown) {
+                       DISABLED_InterstitialTeardownOnBrowserShutdown) {
   InterstitialTeardownTestHelper();
 
   // Now close the app while interstitial page being shown in guest.
@@ -2103,7 +2097,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ContextMenusAPI_Basic) {
 static bool ContextMenuNotificationCallback(
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  auto context_menu = content::Source<RenderViewContextMenu>(source).ptr();
+  auto* context_menu = content::Source<RenderViewContextMenu>(source).ptr();
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&RenderViewContextMenuBase::Cancel,
                             base::Unretained(context_menu)));
@@ -2501,7 +2495,8 @@ const char kDownloadPathPrefix[] = "/download_cookie_isolation_test";
 std::unique_ptr<net::test_server::HttpResponse> HandleDownloadRequestWithCookie(
     std::queue<net::HttpStatusCode>* status_codes,
     const net::test_server::HttpRequest& request) {
-  if (request.relative_url.find(kDownloadPathPrefix) != 0) {
+  if (!base::StartsWith(request.relative_url, kDownloadPathPrefix,
+                        base::CompareCase::SENSITIVE)) {
     return std::unique_ptr<net::test_server::HttpResponse>();
   }
 
@@ -2649,7 +2644,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
           download_manager, 2,
           content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
 
-  for (auto& download : downloads) {
+  for (auto* download : downloads) {
     ASSERT_TRUE(download->CanResume());
     EXPECT_EQ(content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
               download->GetLastReason());
@@ -2659,7 +2654,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
   completion_observer->WaitForFinished();
 
   std::set<std::string> cookies;
-  for (auto& download : downloads) {
+  for (auto* download : downloads) {
     ASSERT_EQ(content::DownloadItem::COMPLETE, download->GetState());
     ASSERT_TRUE(base::PathExists(download->GetTargetFilePath()));
     std::string content;
@@ -2763,7 +2758,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
   // try to talk to the old EmbeddedTestServer instance. We need to update the
   // URL to point to the new instance, which should only differ by the port
   // number.
-  for (auto& download : saved_downloads) {
+  for (auto* download : saved_downloads) {
     const std::string port_string =
         base::UintToString(embedded_test_server()->port());
     url::Replacements<char> replacements;
@@ -2790,7 +2785,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
           download_manager, 2,
           content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
 
-  for (auto& download : downloads) {
+  for (auto* download : downloads) {
     ASSERT_TRUE(download->CanResume());
     ASSERT_TRUE(
         temporary_download_dir.path().IsParent(download->GetTargetFilePath()));
@@ -3186,7 +3181,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestGarbageCollect) {
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestCloseNewWindowCleanup) {
   TestHelper("testCloseNewWindowCleanup", "web_view/shim", NEEDS_TEST_SERVER);
-  auto gvm = GetGuestViewManager();
+  auto* gvm = GetGuestViewManager();
   gvm->WaitForLastGuestDeleted();
   ASSERT_EQ(gvm->num_embedder_processes_destroyed(), 0);
 }
@@ -3236,11 +3231,27 @@ IN_PROC_BROWSER_TEST_P(WebViewTest,
              "web_view/shim", NEEDS_TEST_SERVER);
 }
 
+// Tests that the embedder can create a blob URL and navigate a WebView to it.
+// See https://crbug.com/652077.
+IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestBlobURL) {
+  TestHelper("testBlobURL", "web_view/shim", NEEDS_TEST_SERVER);
+}
+
 // Tests that a WebView accessible resource can actually be loaded from a
 // webpage in a WebView.
 IN_PROC_BROWSER_TEST_P(WebViewTest, LoadWebviewAccessibleResource) {
   TestHelper("testLoadWebviewAccessibleResource",
              "web_view/load_webview_accessible_resource", NEEDS_TEST_SERVER);
+}
+
+IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, LoadWebViewAccessibility) {
+  LoadAppWithGuest("web_view/focus_accessibility");
+  content::WebContents* web_contents = GetFirstAppWindowWebContents();
+  content::EnableAccessibilityForWebContents(web_contents);
+  content::WebContents* guest_web_contents = GetGuestWebContents();
+  content::EnableAccessibilityForWebContents(guest_web_contents);
+  content::WaitForAccessibilityTreeToContainNodeWithName(web_contents,
+                                                         "Guest button");
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
@@ -3485,6 +3496,95 @@ IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTest,
 INSTANTIATE_TEST_CASE_P(WebViewScrollBubbling,
                         WebViewGuestScrollTouchTest,
                         testing::Combine(testing::Bool(), testing::Bool()));
+
+#if defined(USE_AURA)
+class WebViewGuestTouchFocusTest : public WebViewTestBase {
+ public:
+  WebViewGuestTouchFocusTest() {}
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    WebViewTestBase::SetUpCommandLine(command_line);
+
+    command_line->AppendSwitchASCII(switches::kTouchEvents,
+                                    switches::kTouchEventsEnabled);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WebViewGuestTouchFocusTest);
+};
+
+class FocusChangeWaiter {
+ public:
+  explicit FocusChangeWaiter(content::WebContents* web_contents,
+                             bool expected_focus)
+      : web_contents_(web_contents), expected_focus_(expected_focus) {}
+  ~FocusChangeWaiter() {}
+
+  void WaitForFocusChange() {
+    while (expected_focus_ !=
+           IsWebContentsBrowserPluginFocused(web_contents_)) {
+      base::RunLoop().RunUntilIdle();
+    }
+  }
+
+ private:
+  content::WebContents* web_contents_;
+  bool expected_focus_;
+};
+
+IN_PROC_BROWSER_TEST_F(WebViewGuestTouchFocusTest,
+                       TouchFocusesBrowserPluginInEmbedder) {
+  // This test is only relevant for non-OOPIF WebView.
+  if (content::BrowserPluginGuestMode::UseCrossProcessFramesForGuests())
+    return;
+
+  LoadAppWithGuest("web_view/guest_focus_test");
+
+  // Lookup relevant information about guest and embedder.
+  content::WebContents* embedder_contents = GetEmbedderWebContents();
+
+  std::vector<content::WebContents*> guest_web_contents_list;
+  GetGuestViewManager()->WaitForNumGuestsCreated(1u);
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_web_contents_list);
+  ASSERT_EQ(1u, guest_web_contents_list.size());
+
+  content::WebContents* guest_contents = guest_web_contents_list[0];
+
+  gfx::Rect embedder_rect = embedder_contents->GetContainerBounds();
+  gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+
+  guest_rect.set_x(guest_rect.x() - embedder_rect.x());
+  guest_rect.set_y(guest_rect.y() - embedder_rect.y());
+  embedder_rect.set_x(0);
+  embedder_rect.set_y(0);
+
+  // Don't send events that need to be routed until we know the child's surface
+  // is ready for hit testing.
+  WaitForGuestSurfaceReady(guest_contents);
+
+  // 1) BrowserPlugin should not be focused at start.
+  EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
+
+  // 2) Send touch event to guest, now BrowserPlugin should get focus.
+  {
+    gfx::Point point = guest_rect.CenterPoint();
+    FocusChangeWaiter focus_waiter(guest_contents, true);
+    SendRoutedTouchTapSequence(embedder_contents, point);
+    SendRoutedGestureTapSequence(embedder_contents, point);
+    focus_waiter.WaitForFocusChange();
+    EXPECT_TRUE(IsWebContentsBrowserPluginFocused(guest_contents));
+  }
+
+  // 3) Send touch start to embedder, now BrowserPlugin should lose focus.
+  {
+    gfx::Point point(10, 10);
+    FocusChangeWaiter focus_waiter(guest_contents, false);
+    SendRoutedTouchTapSequence(embedder_contents, point);
+    SendRoutedGestureTapSequence(embedder_contents,point);
+    focus_waiter.WaitForFocusChange();
+    EXPECT_FALSE(IsWebContentsBrowserPluginFocused(guest_contents));
+  }
+}
+#endif
 
 IN_PROC_BROWSER_TEST_P(WebViewGuestScrollTouchTest,
                        TestGuestGestureScrollsBubble) {

@@ -35,6 +35,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
   // is mostly to implement support for walking the accessibility tree.
   virtual const AXNodeData& GetData() = 0;
 
+  // Get the window the node is contained in.
+  virtual gfx::NativeWindow GetTopLevelWidget() = 0;
+
   // Get the parent of the node, which may be an AXPlatformNode or it may
   // be a native accessible object implemented by another class.
   virtual gfx::NativeViewAccessible GetParent() = 0;
@@ -83,6 +86,9 @@ class AX_EXPORT AXPlatformNodeDelegate {
 
   // Change the value of a control, such as the text content of a text field.
   virtual bool SetStringValue(const base::string16& new_value) = 0;
+
+  // Whether the string value is settable.
+  virtual bool CanSetStringValue() = 0;
 };
 
 }  // namespace ui

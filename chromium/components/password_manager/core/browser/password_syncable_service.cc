@@ -14,8 +14,8 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store_sync.h"
+#include "components/sync/api/sync_error_factory.h"
 #include "net/base/escape.h"
-#include "sync/api/sync_error_factory.h"
 
 namespace password_manager {
 
@@ -50,7 +50,6 @@ bool AreLocalAndSyncPasswordsEqual(
               password_specifics.username_value() &&
           base::UTF16ToUTF8(password_form.password_value) ==
               password_specifics.password_value() &&
-          password_form.ssl_valid == password_specifics.ssl_valid() &&
           password_form.preferred == password_specifics.preferred() &&
           password_form.date_created.ToInternalValue() ==
               password_specifics.date_created() &&
@@ -314,8 +313,9 @@ bool PasswordSyncableService::ReadFromPasswordStore(
     ScopedVector<autofill::PasswordForm>* password_entries,
     PasswordEntryMap* passwords_entry_map) const {
   DCHECK(password_entries);
-  ScopedVector<autofill::PasswordForm> blacklist_entries;
-  if (!password_store_->FillAutofillableLogins(password_entries) ||
+  std::vector<std::unique_ptr<autofill::PasswordForm>> autofillable_entries;
+  std::vector<std::unique_ptr<autofill::PasswordForm>> blacklist_entries;
+  if (!password_store_->FillAutofillableLogins(&autofillable_entries) ||
       !password_store_->FillBlacklistLogins(&blacklist_entries)) {
     // Password store often fails to load passwords. Track failures with UMA.
     // (http://crbug.com/249000)
@@ -324,12 +324,16 @@ bool PasswordSyncableService::ReadFromPasswordStore(
                               syncer::MODEL_TYPE_COUNT);
     return false;
   }
-  // Move |blacklist_entries| to |password_entries|.
-  password_entries->reserve(password_entries->size() +
-                            blacklist_entries.size());
-  password_entries->insert(password_entries->end(), blacklist_entries.begin(),
-                           blacklist_entries.end());
-  blacklist_entries.weak_clear();
+  password_entries->clear();
+  password_entries->resize(autofillable_entries.size() +
+                           blacklist_entries.size());
+  auto next = password_entries->begin();
+  for (auto& autofillable : autofillable_entries) {
+    *next++ = autofillable.release();
+  }
+  for (auto& blacklisted : blacklist_entries) {
+    *next++ = blacklisted.release();
+  }
 
   if (!passwords_entry_map)
     return true;
@@ -454,7 +458,6 @@ syncer::SyncData SyncDataFromPassword(
   CopyStringField(password_element);
   CopyStringField(username_value);
   CopyStringField(password_value);
-  CopyField(ssl_valid);
   CopyField(preferred);
   password_specifics->set_date_created(
       password_form.date_created.ToInternalValue());
@@ -488,7 +491,6 @@ autofill::PasswordForm PasswordFromSpecifics(
       base::UTF8ToUTF16(password.password_element());
   new_password.username_value = base::UTF8ToUTF16(password.username_value());
   new_password.password_value = base::UTF8ToUTF16(password.password_value());
-  new_password.ssl_valid = password.ssl_valid();
   new_password.preferred = password.preferred();
   new_password.date_created =
       base::Time::FromInternalValue(password.date_created());

@@ -509,7 +509,9 @@ ServiceWorkerRegistration* ServiceWorkerContextCore::GetLiveRegistration(
 
 void ServiceWorkerContextCore::AddLiveRegistration(
     ServiceWorkerRegistration* registration) {
-  DCHECK(!GetLiveRegistration(registration->id()));
+  // TODO(nhiroki): Change CHECK to DCHECK after https://crbug.com/619294 is
+  // fixed.
+  CHECK(!GetLiveRegistration(registration->id()));
   live_registrations_[registration->id()] = registration;
   if (observer_list_.get()) {
     observer_list_->Notify(FROM_HERE,
@@ -823,7 +825,7 @@ void ServiceWorkerContextCore::DidFindRegistrationForCheckHasServiceWorker(
     const GURL& other_url,
     const ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   if (status != SERVICE_WORKER_OK) {
     callback.Run(false);
     return;
@@ -852,7 +854,7 @@ void ServiceWorkerContextCore::DidFindRegistrationForCheckHasServiceWorker(
 
 void ServiceWorkerContextCore::OnRegistrationFinishedForCheckHasServiceWorker(
     const ServiceWorkerContext::CheckHasServiceWorkerCallback callback,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   callback.Run(registration->active_version() ||
                registration->waiting_version());
 }

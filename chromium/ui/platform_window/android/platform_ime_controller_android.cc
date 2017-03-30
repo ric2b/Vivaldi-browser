@@ -8,6 +8,9 @@
 #include "base/android/jni_string.h"
 #include "jni/PlatformImeControllerAndroid_jni.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace ui {
 
 // static
@@ -35,14 +38,9 @@ void PlatformImeControllerAndroid::UpdateTextInputState(
   if (scoped_obj.is_null())
     return;
   Java_PlatformImeControllerAndroid_updateTextInputState(
-      env,
-      scoped_obj.obj(),
-      state.type,
-      state.flags,
-      base::android::ConvertUTF8ToJavaString(env, state.text).obj(),
-      state.selection_start,
-      state.selection_end,
-      state.composition_start,
+      env, scoped_obj, state.type, state.flags,
+      base::android::ConvertUTF8ToJavaString(env, state.text),
+      state.selection_start, state.selection_end, state.composition_start,
       state.composition_end);
 }
 
@@ -52,8 +50,7 @@ void PlatformImeControllerAndroid::SetImeVisibility(bool visible) {
       java_platform_ime_controller_android_.get(env);
   if (scoped_obj.is_null())
     return;
-  Java_PlatformImeControllerAndroid_setImeVisibility(
-      env, scoped_obj.obj(), visible);
+  Java_PlatformImeControllerAndroid_setImeVisibility(env, scoped_obj, visible);
 }
 
 }  // namespace ui

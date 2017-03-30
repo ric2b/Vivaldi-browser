@@ -26,12 +26,12 @@ namespace media {
 // process and return the same value throughout the lifetime of the process.
 MEDIA_EXPORT bool LoadMFCommonLibraries();
 MEDIA_EXPORT void LoadMFAudioDecoderLibraries();
-bool LoadMFAudioDecoderLibrary(AudioCodec codec);
+MEDIA_EXPORT bool LoadMFAudioDecoderLibrary(AudioCodec codec);
 MEDIA_EXPORT bool LoadMFVideoDecoderLibraries();
-bool LoadMFSourceReaderLibraries();
+MEDIA_EXPORT bool LoadMFSourceReaderLibraries();
 
-std::string GetMFAudioDecoderLibraryName(AudioCodec codec);
-std::string GetMFVideoDecoderLibraryName();
+MEDIA_EXPORT std::string GetMFAudioDecoderLibraryName(AudioCodec codec);
+MEDIA_EXPORT std::string GetMFVideoDecoderLibraryName();
 
 MEDIA_EXPORT FARPROC
 GetFunctionFromLibrary(const char* function_name, const char* library_name);

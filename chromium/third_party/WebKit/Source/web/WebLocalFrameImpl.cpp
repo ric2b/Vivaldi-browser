@@ -153,16 +153,7 @@
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "modules/app_banner/AppBannerController.h"
-#include "modules/audio_output_devices/AudioOutputDeviceClient.h"
-#include "modules/bluetooth/BluetoothSupplement.h"
-#include "modules/installedapp/InstalledAppController.h"
-#include "modules/notifications/NotificationPermissionClient.h"
-#include "modules/permissions/PermissionController.h"
-#include "modules/presentation/PresentationController.h"
-#include "modules/push_messaging/PushController.h"
 #include "modules/screen_orientation/ScreenOrientationController.h"
-#include "modules/vr/VRController.h"
-#include "modules/wake_lock/ScreenWakeLock.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -182,7 +173,8 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/WebDoubleSize.h"
 #include "public/platform/WebFloatPoint.h"
 #include "public/platform/WebFloatRect.h"
 #include "public/platform/WebLayer.h"
@@ -216,14 +208,8 @@
 #include "public/web/WebTreeScopeType.h"
 #include "skia/ext/platform_canvas.h"
 #include "web/AssociatedURLLoader.h"
-#include "web/AudioOutputDeviceClientImpl.h"
 #include "web/CompositionUnderlineVectorBuilder.h"
 #include "web/FindInPageCoordinates.h"
-#include "web/IndexedDBClientImpl.h"
-#include "web/LocalFileSystemClient.h"
-#include "web/MIDIClientProxy.h"
-#include "web/NavigatorContentUtilsClientImpl.h"
-#include "web/NotificationPermissionClientImpl.h"
 #include "web/RemoteFrameOwner.h"
 #include "web/SharedWorkerRepositoryClientImpl.h"
 #include "web/SuspendableScriptExecutor.h"
@@ -656,7 +642,7 @@ WebSize WebLocalFrameImpl::contentsSize() const
 bool WebLocalFrameImpl::hasVisibleContent() const
 {
     if (LayoutPart* layoutObject = frame()->ownerLayoutObject()) {
-        if (layoutObject->style()->visibility() != VISIBLE)
+        if (layoutObject->style()->visibility() != EVisibility::Visible)
             return false;
     }
 
@@ -766,7 +752,6 @@ void WebLocalFrameImpl::addMessageToConsole(const WebConsoleMessage& message)
         break;
     // Unsupported values.
     case WebConsoleMessage::LevelInfo:
-    case WebConsoleMessage::LevelRevokedError:
         break;
     }
 
@@ -832,7 +817,7 @@ v8::Local<v8::Value> WebLocalFrameImpl::callFunctionEvenIfScriptDisabled(v8::Loc
 {
     DCHECK(frame());
     v8::Local<v8::Value> result;
-    if (!frame()->script().callFunction(function, receiver, argc, static_cast<v8::Local<v8::Value>*>(argv)).ToLocal(&result))
+    if (!V8ScriptRunner::callFunction(function, frame()->document(), receiver, argc, static_cast<v8::Local<v8::Value>*>(argv), toIsolate(frame())).ToLocal(&result))
         return v8::Local<v8::Value>();
     return result;
 }
@@ -846,7 +831,7 @@ v8::Local<v8::Context> WebLocalFrameImpl::mainWorldScriptContext() const
 
 bool WebFrame::scriptCanAccess(WebFrame* target)
 {
-    return BindingSecurity::shouldAllowAccessToFrame(mainThreadIsolate(), currentDOMWindow(mainThreadIsolate()), target->toImplBase()->frame(), DoNotReportSecurityError);
+    return BindingSecurity::shouldAllowAccessToFrame(currentDOMWindow(mainThreadIsolate()), target->toImplBase()->frame(), BindingSecurity::ErrorReportOption::DoNotReport);
 }
 
 void WebLocalFrameImpl::reload(WebFrameLoadType loadType)
@@ -938,8 +923,7 @@ void WebLocalFrameImpl::setReferrerForRequest(WebURLRequest& request, const WebU
 
 void WebLocalFrameImpl::dispatchWillSendRequest(WebURLRequest& request)
 {
-    ResourceResponse response;
-    frame()->loader().client()->dispatchWillSendRequest(0, 0, request.toMutableResourceRequest(), response);
+    frame()->loader().client()->dispatchWillSendRequest(request.toMutableResourceRequest());
 }
 
 WebURLLoader* WebLocalFrameImpl::createAssociatedURLLoader(const WebURLLoaderOptions& options)
@@ -985,7 +969,7 @@ bool WebLocalFrameImpl::hasMarkedText() const
 
 WebRange WebLocalFrameImpl::markedRange() const
 {
-    return frame()->inputMethodController().compositionRange();
+    return frame()->inputMethodController().compositionEphemeralRange();
 }
 
 bool WebLocalFrameImpl::firstRectForCharacterRange(unsigned location, unsigned length, WebRect& rectInViewport) const
@@ -996,6 +980,11 @@ bool WebLocalFrameImpl::firstRectForCharacterRange(unsigned location, unsigned l
     Element* editable = frame()->selection().rootEditableElementOrDocumentElement();
     if (!editable)
         return false;
+
+    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+    // see http://crbug.com/590369 for more details.
+    editable->document().updateStyleAndLayoutIgnorePendingStylesheets();
+
     const EphemeralRange range = PlainTextRange(location, location + length).createRange(*editable);
     if (range.isNull())
         return false;
@@ -1063,16 +1052,16 @@ bool WebLocalFrameImpl::isCommandEnabled(const WebString& name) const
     return frame()->editor().createCommand(name).isEnabled();
 }
 
-void WebLocalFrameImpl::enableContinuousSpellChecking(bool enable)
+void WebLocalFrameImpl::enableSpellChecking(bool enable)
 {
-    if (enable == isContinuousSpellCheckingEnabled())
+    if (enable == isSpellCheckingEnabled())
         return;
-    frame()->spellChecker().toggleContinuousSpellChecking();
+    frame()->spellChecker().toggleSpellCheckingEnabled();
 }
 
-bool WebLocalFrameImpl::isContinuousSpellCheckingEnabled() const
+bool WebLocalFrameImpl::isSpellCheckingEnabled() const
 {
-    return frame()->spellChecker().isContinuousSpellCheckingEnabled();
+    return frame()->spellChecker().isSpellCheckingEnabled();
 }
 
 void WebLocalFrameImpl::requestTextChecking(const WebElement& webElement)
@@ -1107,7 +1096,7 @@ bool WebLocalFrameImpl::hasSelection() const
 
 WebRange WebLocalFrameImpl::selectionRange() const
 {
-    return createRange(frame()->selection().selection().toNormalizedEphemeralRange());
+    return frame()->selection().selection().toNormalizedEphemeralRange();
 }
 
 WebString WebLocalFrameImpl::selectionAsText() const
@@ -1156,8 +1145,25 @@ void WebLocalFrameImpl::selectRange(const WebPoint& baseInViewport, const WebPoi
 void WebLocalFrameImpl::selectRange(const WebRange& webRange)
 {
     TRACE_EVENT0("blink", "WebLocalFrameImpl::selectRange");
-    if (Range* range = static_cast<Range*>(webRange))
-        frame()->selection().setSelectedRange(range, VP_DEFAULT_AFFINITY, SelectionDirectionalMode::NonDirectional, NotUserTriggered);
+
+    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+    // see http://crbug.com/590369 for more details.
+    frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+    DocumentLifecycle::DisallowTransitionScope(frame()->document()->lifecycle());
+
+    frame()->selection().setSelectedRange(webRange.createEphemeralRange(frame()), VP_DEFAULT_AFFINITY, SelectionDirectionalMode::NonDirectional, NotUserTriggered);
+}
+
+WebString WebLocalFrameImpl::rangeAsText(const WebRange& webRange)
+{
+    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
+    // see http://crbug.com/590369 for more details.
+    frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+    DocumentLifecycle::DisallowTransitionScope(frame()->document()->lifecycle());
+
+    return plainText(webRange.createEphemeralRange(frame()), TextIteratorEmitsObjectReplacementCharacter);
 }
 
 void WebLocalFrameImpl::moveRangeSelectionExtent(const WebPoint& point)
@@ -1326,9 +1332,9 @@ bool WebLocalFrameImpl::isPageBoxVisible(int pageIndex)
     return frame()->document()->isPageBoxVisible(pageIndex);
 }
 
-void WebLocalFrameImpl::pageSizeAndMarginsInPixels(int pageIndex, WebSize& pageSize, int& marginTop, int& marginRight, int& marginBottom, int& marginLeft)
+void WebLocalFrameImpl::pageSizeAndMarginsInPixels(int pageIndex, WebDoubleSize& pageSize, int& marginTop, int& marginRight, int& marginBottom, int& marginLeft)
 {
-    IntSize size = pageSize;
+    DoubleSize size = pageSize;
     frame()->document()->pageSizeAndMarginsInPixels(pageIndex, size, marginTop, marginRight, marginBottom, marginLeft);
     pageSize = size;
 }
@@ -1397,7 +1403,7 @@ WebLocalFrameImpl* WebLocalFrameImpl::createProvisional(WebFrameClient* client, 
     // disappear, so Page::m_mainFrame can't be updated just yet.
     FrameOwner* tempOwner = DummyFrameOwner::create();
     // TODO(dcheng): This block is very similar to initializeCoreFrame. Try to reuse it here.
-    LocalFrame* frame = LocalFrame::create(webFrame->m_frameLoaderClientImpl.get(), oldFrame->host(), tempOwner, client ? client->serviceRegistry() : nullptr);
+    LocalFrame* frame = LocalFrame::create(webFrame->m_frameLoaderClientImpl.get(), oldFrame->host(), tempOwner, client ? client->interfaceProvider() : nullptr);
     // Set the name and unique name directly, bypassing any of the normal logic
     // to calculate unique name.
     frame->tree().setPrecalculatedName(toWebRemoteFrameImpl(oldWebFrame)->frame()->tree().name(), toWebRemoteFrameImpl(oldWebFrame)->frame()->tree().uniqueName());
@@ -1423,7 +1429,6 @@ WebLocalFrameImpl::WebLocalFrameImpl(WebTreeScopeType scope, WebFrameClient* cli
     , m_autofillClient(0)
     , m_contentSettingsClient(0)
     , m_inputEventsScaleFactorForEmulation(1)
-    , m_userMediaClientImpl(this)
     , m_webDevToolsFrontend(0)
     , m_selfKeepAlive(this)
 {
@@ -1458,47 +1463,11 @@ DEFINE_TRACE(WebLocalFrameImpl)
 void WebLocalFrameImpl::setCoreFrame(LocalFrame* frame)
 {
     m_frame = frame;
-
-    // FIXME: we shouldn't add overhead to every frame by registering these objects when they're not used.
-    if (!m_frame)
-        return;
-
-    if (m_client)
-        providePushControllerTo(*m_frame, m_client->pushClient());
-
-    provideNotificationPermissionClientTo(*m_frame, NotificationPermissionClientImpl::create());
-    provideUserMediaTo(*m_frame, &m_userMediaClientImpl);
-    provideMIDITo(*m_frame, MIDIClientProxy::create(m_client ? m_client->webMIDIClient() : nullptr));
-    provideIndexedDBClientTo(*m_frame, IndexedDBClientImpl::create());
-    provideLocalFileSystemTo(*m_frame, LocalFileSystemClient::create());
-    provideNavigatorContentUtilsTo(*m_frame, NavigatorContentUtilsClientImpl::create(this));
-
-    bool enableWebBluetooth = RuntimeEnabledFeatures::webBluetoothEnabled();
-#if OS(CHROMEOS) || OS(ANDROID) || OS(MACOSX)
-    enableWebBluetooth = true;
-#endif
-    if (enableWebBluetooth)
-        BluetoothSupplement::provideTo(*m_frame, m_client ? m_client->bluetooth() : nullptr);
-
-    if (RuntimeEnabledFeatures::screenOrientationEnabled())
-        ScreenOrientationController::provideTo(*m_frame, m_client ? m_client->webScreenOrientationClient() : nullptr);
-    if (RuntimeEnabledFeatures::presentationEnabled())
-        PresentationController::provideTo(*m_frame, m_client ? m_client->presentationClient() : nullptr);
-    if (RuntimeEnabledFeatures::permissionsEnabled())
-        PermissionController::provideTo(*m_frame, m_client ? m_client->permissionClient() : nullptr);
-    if (RuntimeEnabledFeatures::webVREnabled())
-        VRController::provideTo(*m_frame, m_client ? m_client->serviceRegistry() : nullptr);
-    if (RuntimeEnabledFeatures::wakeLockEnabled())
-        ScreenWakeLock::provideTo(*m_frame, m_client ? m_client->serviceRegistry(): nullptr);
-    if (RuntimeEnabledFeatures::audioOutputDevicesEnabled())
-        provideAudioOutputDeviceClientTo(*m_frame, AudioOutputDeviceClientImpl::create());
-    if (RuntimeEnabledFeatures::installedAppEnabled())
-        InstalledAppController::provideTo(*m_frame, m_client ? m_client->installedAppClient() : nullptr);
 }
 
 void WebLocalFrameImpl::initializeCoreFrame(FrameHost* host, FrameOwner* owner, const AtomicString& name, const AtomicString& uniqueName)
 {
-    setCoreFrame(LocalFrame::create(m_frameLoaderClientImpl.get(), host, owner, client() ? client()->serviceRegistry() : nullptr));
+    setCoreFrame(LocalFrame::create(m_frameLoaderClientImpl.get(), host, owner, client() ? client()->interfaceProvider() : nullptr));
     frame()->tree().setPrecalculatedName(name, uniqueName);
     // We must call init() after m_frame is assigned because it is referenced
     // during init(). Note that this may dispatch JS events; the frame may be
@@ -1649,6 +1618,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
                     node = host;
             }
         }
+        const EphemeralRange activeMatchRange(activeMatch);
         if (node) {
             for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*node)) {
                 if (!runner.isElementNode())
@@ -1657,7 +1627,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
                 if (element.isFocusable()) {
                     // Found a focusable parent node. Set the active match as the
                     // selection and focus to the focusable node.
-                    frame()->selection().setSelection(VisibleSelection(EphemeralRange(activeMatch)));
+                    frame()->selection().setSelection(VisibleSelection(activeMatchRange));
                     frame()->document()->setFocusedElement(&element, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
                     return;
                 }
@@ -1667,13 +1637,12 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
         // Iterate over all the nodes in the range until we find a focusable node.
         // This, for example, sets focus to the first link if you search for
         // text and text that is within one or more links.
-        node = activeMatch->firstNode();
-        for (; node && node != activeMatch->pastLastNode(); node = NodeTraversal::next(*node)) {
-            if (!node->isElementNode())
+        for (Node& runner : activeMatchRange.nodes()) {
+            if (!runner.isElementNode())
                 continue;
-            Element* element = toElement(node);
-            if (element->isFocusable()) {
-                frame()->document()->setFocusedElement(element, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
+            Element& element = toElement(runner);
+            if (element.isFocusable()) {
+                frame()->document()->setFocusedElement(&element, FocusParams(SelectionBehaviorOnFocus::None, WebFocusTypeNone, nullptr));
                 return;
             }
         }
@@ -1683,7 +1652,7 @@ void WebLocalFrameImpl::setFindEndstateFocusAndSelection()
         // you'll have the last thing you found highlighted) and make sure that
         // we have nothing focused (otherwise you might have text selected but
         // a link focused, which is weird).
-        frame()->selection().setSelection(VisibleSelection(EphemeralRange(activeMatch)));
+        frame()->selection().setSelection(VisibleSelection(activeMatchRange));
         frame()->document()->clearFocusedElement();
 
         // Finally clear the active match, for two reasons:
@@ -1817,22 +1786,6 @@ WebLocalFrameImpl* WebLocalFrameImpl::localRoot()
     return localRoot;
 }
 
-WebLocalFrame* WebLocalFrameImpl::traversePreviousLocal(bool wrap) const
-{
-    WebFrame* previousLocalFrame = this->traversePrevious(wrap);
-    while (previousLocalFrame && !previousLocalFrame->isWebLocalFrame())
-        previousLocalFrame = previousLocalFrame->traversePrevious(wrap);
-    return previousLocalFrame ? previousLocalFrame->toWebLocalFrame() : nullptr;
-}
-
-WebLocalFrame* WebLocalFrameImpl::traverseNextLocal(bool wrap) const
-{
-    WebFrame* nextLocalFrame = this->traverseNext(wrap);
-    while (nextLocalFrame && !nextLocalFrame->isWebLocalFrame())
-        nextLocalFrame = nextLocalFrame->traverseNext(wrap);
-    return nextLocalFrame ? nextLocalFrame->toWebLocalFrame() : nullptr;
-}
-
 void WebLocalFrameImpl::sendPings(const WebURL& destinationURL)
 {
     DCHECK(frame());
@@ -1954,7 +1907,7 @@ void WebLocalFrameImpl::sendOrientationChangeEvent()
 
 void WebLocalFrameImpl::willShowInstallBannerPrompt(int requestId, const WebVector<WebString>& platforms, WebAppBannerPromptReply* reply)
 {
-    if (!RuntimeEnabledFeatures::appBannerEnabled() || !frame())
+    if (!frame())
         return;
 
     AppBannerController::willShowInstallBannerPrompt(requestId, client()->appBannerClient(), frame(), platforms, reply);
@@ -1977,14 +1930,78 @@ void WebLocalFrameImpl::didCallIsSearchProviderInstalled()
     UseCounter::count(frame(), UseCounter::ExternalIsSearchProviderInstalled);
 }
 
-bool WebLocalFrameImpl::find(int identifier, const WebString& searchText, const WebFindOptions& options, bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow)
+void WebLocalFrameImpl::requestFind(int identifier, const WebString& searchText, const WebFindOptions& options)
 {
+    // Send "no results" if this frame has no visible content.
+    if (!hasVisibleContent()) {
+        client()->reportFindInPageMatchCount(identifier, 0 /* count */, true /* finalUpdate */);
+        return;
+    }
+
+    WebRange currentSelection = selectionRange();
+    bool result = false;
+    bool activeNow = false;
+
     // Search for an active match only if this frame is focused or if this is a
     // find next request.
-    if (isFocused() || options.findNext)
-        return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, selectionRect, activeNow);
+    if (isFocused() || options.findNext) {
+        result = find(identifier, searchText, options, false /* wrapWithinFrame */, &activeNow);
+    }
 
-    return false;
+    if (result && !options.findNext) {
+        // Indicate that at least one match has been found. 1 here means
+        // possibly more matches could be coming.
+        client()->reportFindInPageMatchCount(identifier, 1 /* count */, false /* finalUpdate */);
+    }
+
+    // There are three cases in which scoping is needed:
+    //
+    // (1) This is an initial find request (|options.findNext| is false). This
+    // will be the first scoping effort for this find session.
+    //
+    // (2) Something has been selected since the last search. This means that we
+    // cannot just increment the current match ordinal; we need to re-generate
+    // it.
+    //
+    // (3) TextFinder::Find() found what should be the next match (|result| is
+    // true), but was unable to activate it (|activeNow| is false). This means
+    // that the text containing this match was dynamically added since the last
+    // scope of the frame. The frame needs to be re-scoped so that any matches
+    // in the new text can be highlighted and included in the reported number of
+    // matches.
+    //
+    // If none of these cases are true, then we just report the current match
+    // count without scoping.
+    if (/* (1) */ options.findNext
+        && /* (2) */ currentSelection.isNull()
+        && /* (3) */ !(result && !activeNow)) {
+        // Force report of the actual count.
+        increaseMatchCount(0, identifier);
+        return;
+    }
+
+    // Scoping effort begins.
+    ensureTextFinder().resetMatchCount();
+    textFinder()->cancelPendingScopingEffort();
+
+    // Start a new scoping request. If the scoping function determines that it
+    // needs to scope, it will defer until later.
+    textFinder()->scopeStringMatches(identifier, searchText, options, true /* reset */);
+}
+
+bool WebLocalFrameImpl::find(int identifier, const WebString& searchText, const WebFindOptions& options, bool wrapWithinFrame, bool* activeNow)
+{
+    if (!frame())
+        return false;
+
+    // Unlikely, but just in case we try to find-in-page on a detached frame.
+    DCHECK(frame()->host());
+
+    // Up-to-date, clean tree is required for finding text in page, since it relies
+    // on TextIterator to look over the text.
+    frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+
+    return ensureTextFinder().find(identifier, searchText, options, wrapWithinFrame, activeNow);
 }
 
 void WebLocalFrameImpl::stopFinding(StopFindAction action)
@@ -2009,25 +2026,9 @@ void WebLocalFrameImpl::stopFinding(StopFindAction action)
     }
 }
 
-void WebLocalFrameImpl::scopeStringMatches(int identifier, const WebString& searchText, const WebFindOptions& options, bool reset)
-{
-    ensureTextFinder().scopeStringMatches(identifier, searchText, options, reset);
-}
-
-void WebLocalFrameImpl::cancelPendingScopingEffort()
-{
-    if (m_textFinder)
-        m_textFinder->cancelPendingScopingEffort();
-}
-
 void WebLocalFrameImpl::increaseMatchCount(int count, int identifier)
 {
     ensureTextFinder().increaseMatchCount(identifier, count);
-}
-
-void WebLocalFrameImpl::resetMatchCount()
-{
-    ensureTextFinder().resetMatchCount();
 }
 
 void WebLocalFrameImpl::dispatchMessageEventWithOriginCheck(const WebSecurityOrigin& intendedTargetOrigin, const WebDOMEvent& event)
@@ -2110,12 +2111,12 @@ TextFinder& WebLocalFrameImpl::ensureTextFinder()
     return *m_textFinder;
 }
 
-void WebLocalFrameImpl::setFrameWidget(WebFrameWidget* frameWidget)
+void WebLocalFrameImpl::setFrameWidget(WebFrameWidgetBase* frameWidget)
 {
     m_frameWidget = frameWidget;
 }
 
-WebFrameWidget* WebLocalFrameImpl::frameWidget() const
+WebFrameWidgetBase* WebLocalFrameImpl::frameWidget() const
 {
     return m_frameWidget;
 }
@@ -2165,6 +2166,39 @@ void WebLocalFrameImpl::forceSandboxFlags(WebSandboxFlags flags)
 void WebLocalFrameImpl::clearActiveFindMatch()
 {
     ensureTextFinder().clearActiveFindMatch();
+}
+
+void WebLocalFrameImpl::usageCountChromeLoadTimes(const WebString& metric)
+{
+    UseCounter::Feature feature = UseCounter::ChromeLoadTimesUnknown;
+    if (metric == "requestTime") {
+        feature = UseCounter::ChromeLoadTimesRequestTime;
+    } else if (metric == "startLoadTime") {
+        feature = UseCounter::ChromeLoadTimesStartLoadTime;
+    } else if (metric == "commitLoadTime") {
+        feature = UseCounter::ChromeLoadTimesCommitLoadTime;
+    } else if (metric == "finishDocumentLoadTime") {
+        feature = UseCounter::ChromeLoadTimesFinishDocumentLoadTime;
+    } else if (metric == "finishLoadTime") {
+        feature = UseCounter::ChromeLoadTimesFinishLoadTime;
+    } else if (metric == "firstPaintTime") {
+        feature = UseCounter::ChromeLoadTimesFirstPaintTime;
+    } else if (metric == "firstPaintAfterLoadTime") {
+        feature = UseCounter::ChromeLoadTimesFirstPaintAfterLoadTime;
+    } else if (metric == "navigationType") {
+        feature = UseCounter::ChromeLoadTimesNavigationType;
+    } else if (metric == "wasFetchedViaSpdy") {
+        feature = UseCounter::ChromeLoadTimesWasFetchedViaSpdy;
+    } else if (metric == "wasNpnNegotiated") {
+        feature = UseCounter::ChromeLoadTimesWasNpnNegotiated;
+    } else if (metric == "npnNegotiatedProtocol") {
+        feature = UseCounter::ChromeLoadTimesNpnNegotiatedProtocol;
+    } else if (metric == "wasAlternateProtocolAvailable") {
+        feature = UseCounter::ChromeLoadTimesWasAlternateProtocolAvailable;
+    } else if (metric == "connectionInfo") {
+        feature = UseCounter::ChromeLoadTimesConnectionInfo;
+    }
+    UseCounter::count(frame(), feature);
 }
 
 } // namespace blink

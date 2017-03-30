@@ -8,16 +8,12 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "components/mus/public/cpp/context_provider.h"
-#include "components/mus/public/cpp/output_surface.h"
-#include "components/mus/public/interfaces/command_buffer.mojom.h"
-#include "components/mus/public/interfaces/surface.mojom.h"
-#include "components/mus/public/interfaces/window_tree.mojom.h"
-#include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
-#include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/output_surface.h"
+#include "services/ui/public/interfaces/surface.mojom.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 
 namespace content {
 
@@ -29,7 +25,7 @@ base::LazyInstance<ConnectionMap>::Leaky g_connections =
 }
 
 void RenderWidgetMusConnection::Bind(
-    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request) {
+    mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request) {
   DCHECK(thread_checker_.CalledOnValidThread());
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   compositor_mus_connection_ = new CompositorMusConnection(
@@ -43,14 +39,14 @@ void RenderWidgetMusConnection::Bind(
 }
 
 std::unique_ptr<cc::OutputSurface>
-RenderWidgetMusConnection::CreateOutputSurface() {
+RenderWidgetMusConnection::CreateOutputSurface(
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_surface_binding_);
-  scoped_refptr<cc::ContextProvider> context_provider(new mus::ContextProvider(
-      MojoShellConnection::GetForProcess()->GetConnector()));
 
-  std::unique_ptr<cc::OutputSurface> surface(new mus::OutputSurface(
-      context_provider, mus::WindowSurface::Create(&window_surface_binding_)));
+  std::unique_ptr<cc::OutputSurface> surface(new ui::OutputSurface(
+      std::move(gpu_channel_host),
+      ui::WindowSurface::Create(&window_surface_binding_)));
   if (compositor_mus_connection_) {
     compositor_mus_connection_->AttachSurfaceOnMainThread(
         std::move(window_surface_binding_));
@@ -105,7 +101,7 @@ void RenderWidgetMusConnection::OnDidHandleKeyEvent() {
 }
 
 void RenderWidgetMusConnection::OnDidOverscroll(
-    const DidOverscrollParams& params) {
+    const ui::DidOverscrollParams& params) {
   NOTIMPLEMENTED();
 }
 
@@ -114,8 +110,8 @@ void RenderWidgetMusConnection::OnInputEventAck(
   DCHECK(!pending_ack_.is_null());
   pending_ack_.Run(input_event_ack->state ==
                            InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED
-                       ? mus::mojom::EventResult::HANDLED
-                       : mus::mojom::EventResult::UNHANDLED);
+                       ? ui::mojom::EventResult::HANDLED
+                       : ui::mojom::EventResult::UNHANDLED);
   pending_ack_.Reset();
 }
 
@@ -158,12 +154,12 @@ void RenderWidgetMusConnection::OnConnectionLost() {
 
 void RenderWidgetMusConnection::OnWindowInputEvent(
     std::unique_ptr<blink::WebInputEvent> input_event,
-    const base::Callback<void(mus::mojom::EventResult)>& ack) {
+    const base::Callback<void(ui::mojom::EventResult)>& ack) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // If we don't yet have a RenderWidgetInputHandler then we don't yet have
   // an initialized RenderWidget.
   if (!input_handler_) {
-    ack.Run(mus::mojom::EventResult::UNHANDLED);
+    ack.Run(ui::mojom::EventResult::UNHANDLED);
     return;
   }
   // TODO(fsamuel): It would be nice to add this DCHECK but the reality is an

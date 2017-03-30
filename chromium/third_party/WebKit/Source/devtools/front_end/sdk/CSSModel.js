@@ -32,14 +32,15 @@
  * @constructor
  * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
+ * @param {!WebInspector.DOMModel} domModel
  */
-WebInspector.CSSModel = function(target)
+WebInspector.CSSModel = function(target, domModel)
 {
     WebInspector.SDKModel.call(this, WebInspector.CSSModel, target);
-    this._domModel = WebInspector.DOMModel.fromTarget(target);
+    this._domModel = domModel;
     this._agent = target.cssAgent();
     this._styleLoader = new WebInspector.CSSModel.ComputedStyleLoader(this);
-    target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._mainFrameNavigated, this);
+    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
     target.registerCSSDispatcher(new WebInspector.CSSDispatcher(this));
     this._agent.enable().then(this._wasEnabled.bind(this));
     /** @type {!Map.<string, !WebInspector.CSSStyleSheetHeader>} */
@@ -60,17 +61,19 @@ WebInspector.CSSModel = function(target)
     WebInspector.moduleSetting("cssSourceMapsEnabled").addChangeListener(this._toggleSourceMapSupport, this);
 }
 
+/** @enum {symbol} */
 WebInspector.CSSModel.Events = {
-    LayoutEditorChange: "LayoutEditorChange",
-    MediaQueryResultChanged: "MediaQueryResultChanged",
-    ModelWasEnabled: "ModelWasEnabled",
-    PseudoStateForced: "PseudoStateForced",
-    StyleSheetAdded: "StyleSheetAdded",
-    StyleSheetChanged: "StyleSheetChanged",
-    StyleSheetRemoved: "StyleSheetRemoved",
-    SourceMapAttached: "SourceMapAttached",
-    SourceMapDetached: "SourceMapDetached",
-    SourceMapChanged: "SourceMapChanged"
+    LayoutEditorChange: Symbol("LayoutEditorChange"),
+    FontsUpdated: Symbol("FontsUpdated"),
+    MediaQueryResultChanged: Symbol("MediaQueryResultChanged"),
+    ModelWasEnabled: Symbol("ModelWasEnabled"),
+    PseudoStateForced: Symbol("PseudoStateForced"),
+    StyleSheetAdded: Symbol("StyleSheetAdded"),
+    StyleSheetChanged: Symbol("StyleSheetChanged"),
+    StyleSheetRemoved: Symbol("StyleSheetRemoved"),
+    SourceMapAttached: Symbol("SourceMapAttached"),
+    SourceMapDetached: Symbol("SourceMapDetached"),
+    SourceMapChanged: Symbol("SourceMapChanged")
 }
 
 WebInspector.CSSModel.MediaTypes = ["all", "braille", "embossed", "handheld", "print", "projection", "screen", "speech", "tty", "tv"];
@@ -160,7 +163,7 @@ WebInspector.CSSModel.prototype = {
             var factoryExtension = this._factoryForSourceMap(sourceMap);
             if (!factoryExtension)
                 return Promise.resolve(/** @type {?WebInspector.SourceMap} */(sourceMap));
-            return factoryExtension.instancePromise()
+            return factoryExtension.instance()
                 .then(factory => factory.editableSourceMap(this.target(), sourceMap))
                 .then(map => map || sourceMap)
                 .catchException(/** @type {?WebInspector.SourceMap} */(null));
@@ -236,7 +239,7 @@ WebInspector.CSSModel.prototype = {
      */
     domModel: function()
     {
-        return /** @type {!WebInspector.DOMModel} */(this._domModel);
+        return this._domModel;
     },
 
     /**
@@ -727,7 +730,7 @@ WebInspector.CSSModel.prototype = {
      */
     requestViaInspectorStylesheet: function(node, userCallback)
     {
-        var frameId = node.frameId() || this.target().resourceTreeModel.mainFrame.id;
+        var frameId = node.frameId() || WebInspector.ResourceTreeModel.fromTarget(this.target()).mainFrame.id;
         var headers = this._styleSheetIdToHeader.valuesArray();
         for (var i = 0; i < headers.length; ++i) {
             var styleSheetHeader = headers[i];
@@ -756,6 +759,11 @@ WebInspector.CSSModel.prototype = {
     mediaQueryResultChanged: function()
     {
         this.dispatchEventToListeners(WebInspector.CSSModel.Events.MediaQueryResultChanged);
+    },
+
+    fontsUpdated: function()
+    {
+        this.dispatchEventToListeners(WebInspector.CSSModel.Events.FontsUpdated);
     },
 
     /**
@@ -939,8 +947,13 @@ WebInspector.CSSModel.prototype = {
             .catchException(/** @type {string} */(""));
     },
 
-    _mainFrameNavigated: function()
+    /**
+     * @param {!WebInspector.Event} event
+     */
+    _mainFrameNavigated: function(event)
     {
+        if (event.data.target() !== this.target())
+            return;
         this._resetStyleSheets();
     },
 
@@ -994,6 +1007,26 @@ WebInspector.CSSModel.prototype = {
     setEffectivePropertyValueForNode: function(nodeId, name, value)
     {
         this._agent.setEffectivePropertyValueForNode(nodeId, name, value);
+    },
+
+    /**
+     * @param {!WebInspector.DOMNode} node
+     * @return {!Promise.<?WebInspector.CSSMatchedStyles>}
+     */
+    cachedMatchedCascadeForNode: function(node)
+    {
+        if (this._cachedMatchedCascadeNode !== node)
+            this.discardCachedMatchedCascade();
+        this._cachedMatchedCascadeNode = node;
+        if (!this._cachedMatchedCascadePromise)
+            this._cachedMatchedCascadePromise = this.matchedStylesPromise(node.id);
+        return this._cachedMatchedCascadePromise;
+    },
+
+    discardCachedMatchedCascade: function()
+    {
+        delete this._cachedMatchedCascadeNode;
+        delete this._cachedMatchedCascadePromise;
     },
 
     __proto__: WebInspector.SDKModel.prototype
@@ -1076,6 +1109,14 @@ WebInspector.CSSDispatcher.prototype = {
     mediaQueryResultChanged: function()
     {
         this._cssModel.mediaQueryResultChanged();
+    },
+
+    /**
+     * @override
+     */
+    fontsUpdated: function()
+    {
+        this._cssModel.fontsUpdated();
     },
 
     /**
@@ -1173,8 +1214,6 @@ WebInspector.CSSModel.ComputedStyleLoader.prototype = {
  */
 WebInspector.CSSModel.fromTarget = function(target)
 {
-    if (!target.isPage())
-        return null;
     return /** @type {?WebInspector.CSSModel} */ (target.model(WebInspector.CSSModel));
 }
 

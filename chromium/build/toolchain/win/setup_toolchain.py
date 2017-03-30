@@ -17,12 +17,16 @@ import re
 import subprocess
 import sys
 
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+import gn_helpers
+
 SCRIPT_DIR = os.path.dirname(__file__)
 
 def _ExtractImportantEnvironment(output_of_set):
   """Extracts environment variables required for the toolchain to run from
   a textual dump output by the cmd.exe 'set' command."""
   envvars_to_save = (
+      'clcache_.*',
       'goma_.*', # TODO(scottmg): This is ugly, but needed for goma.
       'include',
       'lib',
@@ -118,8 +122,8 @@ def _LoadToolchainEnv(cpu, sdk_dir):
       assert _ExtractImportantEnvironment(variables) == \
              _ExtractImportantEnvironment(_LoadEnvFromBat([script, '/' + cpu]))
   else:
-    #if 'GYP_MSVS_OVERRIDE_PATH' not in os.environ:
-    #  os.environ['GYP_MSVS_OVERRIDE_PATH'] = _DetectVisualStudioPath()
+    if 'GYP_MSVS_OVERRIDE_PATH' not in os.environ:
+      os.environ['GYP_MSVS_OVERRIDE_PATH'] = _DetectVisualStudioPath()
     # We only support x64-hosted tools.
     script_path = os.path.normpath(os.path.join(
                                        os.environ['GYP_MSVS_OVERRIDE_PATH'],
@@ -204,8 +208,8 @@ def main():
           break
       # The separator for INCLUDE here must match the one used in
       # _LoadToolchainEnv() above.
-      include = ' '.join([include_prefix + p
-                          for p in env['INCLUDE'].split(';')])
+      include = [include_prefix + p for p in env['INCLUDE'].split(';') if p]
+      include = ' '.join(['"' + i.replace('"', r'\"') + '"' for i in include])
 
     env_block = _FormatAsEnvironmentBlock(env)
     with open('environment.' + cpu, 'wb') as f:
@@ -221,11 +225,9 @@ def main():
       f.write(env_block)
 
   assert vc_bin_dir
-  assert '"' not in vc_bin_dir
-  print 'vc_bin_dir = "%s"' % vc_bin_dir
+  print 'vc_bin_dir = ' + gn_helpers.ToGNString(vc_bin_dir)
   assert include
-  assert '"' not in include
-  print 'include_flags = "%s"' % include
+  print 'include_flags = ' + gn_helpers.ToGNString(include)
 
 if __name__ == '__main__':
   main()

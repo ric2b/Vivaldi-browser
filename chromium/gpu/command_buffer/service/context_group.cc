@@ -160,9 +160,13 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, &max_color_attachments_);
     if (max_color_attachments_ < 1)
       max_color_attachments_ = 1;
+    if (max_color_attachments_ > 16)
+      max_color_attachments_ = 16;
     GetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, &max_draw_buffers_);
     if (max_draw_buffers_ < 1)
       max_draw_buffers_ = 1;
+    if (max_draw_buffers_ > 16)
+      max_draw_buffers_ = 16;
   }
   if (feature_info_->feature_flags().ext_blend_func_extended) {
     GetIntegerv(GL_MAX_DUAL_SOURCE_DRAW_BUFFERS_EXT,
@@ -430,8 +434,12 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
   path_manager_.reset(new PathManager());
 
   program_manager_.reset(
-      new ProgramManager(program_cache_, max_varying_vectors_,
-                         max_dual_source_draw_buffers_, gpu_preferences_,
+      new ProgramManager(program_cache_,
+                         max_varying_vectors_,
+                         max_draw_buffers_,
+                         max_dual_source_draw_buffers_,
+                         max_vertex_attribs_,
+                         gpu_preferences_,
                          feature_info_.get()));
 
   if (!texture_manager_->Initialize()) {

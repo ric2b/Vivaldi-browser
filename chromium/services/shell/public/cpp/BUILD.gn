@@ -3,16 +3,15 @@
 # found in the LICENSE file.
 
 # GYP version: mojo/mojo_base.gyp:mojo_application_base
-source_set("cpp") {
+group("cpp") {
   public_deps = [
     ":sources",
   ]
 }
 
 # TODO(rockot): Rename this to "cpp".
-source_set("sources") {
+static_library("sources") {
   sources = [
-    "application_runner.h",
     "capabilities.h",
     "connect.h",
     "connection.h",
@@ -23,7 +22,6 @@ source_set("sources") {
     "interface_factory_impl.h",
     "interface_provider.h",
     "interface_registry.h",
-    "lib/application_runner.cc",
     "lib/callback_binder.cc",
     "lib/callback_binder.h",
     "lib/capabilities.cc",
@@ -36,13 +34,15 @@ source_set("sources") {
     "lib/interface_provider.cc",
     "lib/interface_registry.cc",
     "lib/names.cc",
-    "lib/shell_client.cc",
-    "lib/shell_connection.cc",
-    "lib/shell_connection_ref.cc",
+    "lib/service.cc",
+    "lib/service_context.cc",
+    "lib/service_context_ref.cc",
+    "lib/service_runner.cc",
     "names.h",
-    "shell_client.h",
-    "shell_connection.h",
-    "shell_connection_ref.h",
+    "service.h",
+    "service_context.h",
+    "service_context_ref.h",
+    "service_runner.h",
   ]
 
   public_deps = [
@@ -55,6 +55,8 @@ source_set("sources") {
 }
 
 if (!is_ios) {
+  # This cannot be a static library because it needs to export the symbols from
+  # initialize_base_and_icu.cc.
   source_set("application_support") {
     sources = [
       "lib/init_commandline.cc",
@@ -68,11 +70,11 @@ if (!is_ios) {
     ]
   }
 
-  source_set("shell_test_support") {
+  static_library("service_test_support") {
     testonly = true
     sources = [
-      "lib/shell_test.cc",
-      "shell_test.h",
+      "lib/service_test.cc",
+      "service_test.h",
     ]
 
     public_deps = [

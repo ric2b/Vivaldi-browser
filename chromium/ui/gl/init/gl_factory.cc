@@ -22,8 +22,7 @@ bool InitializeGLOneOff() {
 
   DCHECK_EQ(kGLImplementationNone, GetGLImplementation());
 
-  std::vector<GLImplementation> allowed_impls;
-  GetAllowedGLImplementations(&allowed_impls);
+  std::vector<GLImplementation> allowed_impls = GetAllowedGLImplementations();
   DCHECK(!allowed_impls.empty());
 
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
@@ -44,7 +43,7 @@ bool InitializeGLOneOff() {
       impl = kGLImplementationEGLGLES2;
     } else {
       impl = GetNamedGLImplementation(requested_implementation_name);
-      if (!ContainsValue(allowed_impls, impl)) {
+      if (!base::ContainsValue(allowed_impls, impl)) {
         LOG(ERROR) << "Requested GL implementation is not available.";
         return false;
       }
@@ -81,6 +80,13 @@ bool InitializeGLOneOffImplementation(GLImplementation impl,
       InitializeNullDrawGLBindings();
   }
   return initialized;
+}
+
+void ClearGLBindings() {
+  ClearGLBindingsPlatform();
+
+  SetGLImplementation(kGLImplementationNone);
+  UnloadGLNativeLibraries();
 }
 
 }  // namespace init

@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -63,7 +64,8 @@ bool CanUnregisterServiceWorker(const GURL& document_url,
                                 const GURL& pattern) {
   DCHECK(document_url.is_valid());
   DCHECK(pattern.is_valid());
-  return document_url.GetOrigin() == pattern.GetOrigin() &&
+  return ServiceWorkerUtils::PassOriginEqualitySecurityCheck<GURL>(document_url,
+                                                                   pattern) &&
          OriginCanAccessServiceWorkers(document_url) &&
          OriginCanAccessServiceWorkers(pattern);
 }
@@ -73,14 +75,16 @@ bool CanUpdateServiceWorker(const GURL& document_url, const GURL& pattern) {
   DCHECK(pattern.is_valid());
   DCHECK(OriginCanAccessServiceWorkers(document_url));
   DCHECK(OriginCanAccessServiceWorkers(pattern));
-  return document_url.GetOrigin() == pattern.GetOrigin();
+  return ServiceWorkerUtils::PassOriginEqualitySecurityCheck<GURL>(document_url,
+                                                                   pattern);
 }
 
 bool CanGetRegistration(const GURL& document_url,
                         const GURL& given_document_url) {
   DCHECK(document_url.is_valid());
   DCHECK(given_document_url.is_valid());
-  return document_url.GetOrigin() == given_document_url.GetOrigin() &&
+  return ServiceWorkerUtils::PassOriginEqualitySecurityCheck<GURL>(
+             document_url, given_document_url) &&
          OriginCanAccessServiceWorkers(document_url) &&
          OriginCanAccessServiceWorkers(given_document_url);
 }
@@ -320,6 +324,13 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
 
   if (!ServiceWorkerUtils::CanRegisterServiceWorker(
           provider_host->document_url(), pattern, script_url)) {
+    // Temporary debugging for https://crbug.com/630495
+    base::debug::ScopedCrashKey host_url_key(
+        "swdh_register_cannot_host_url", provider_host->document_url().spec());
+    base::debug::ScopedCrashKey scope_url_key("swdh_register_cannot_scope_url",
+                                              pattern.spec());
+    base::debug::ScopedCrashKey script_url_key(
+        "swdh_register_cannot_script_url", script_url.spec());
     bad_message::ReceivedBadMessage(this, bad_message::SWDH_REGISTER_CANNOT);
     return;
   }
@@ -486,6 +497,12 @@ void ServiceWorkerDispatcherHost::OnUnregisterServiceWorker(
 
   if (!CanUnregisterServiceWorker(provider_host->document_url(),
                                   registration->pattern())) {
+    // Temporary debugging for https://crbug.com/619294
+    base::debug::ScopedCrashKey host_url_key(
+        "swdh_unregister_cannot_host_url",
+        provider_host->document_url().spec());
+    base::debug::ScopedCrashKey scope_url_key(
+        "swdh_unregister_cannot_scope_url", registration->pattern().spec());
     bad_message::ReceivedBadMessage(this, bad_message::SWDH_UNREGISTER_CANNOT);
     return;
   }
@@ -555,6 +572,12 @@ void ServiceWorkerDispatcherHost::OnGetRegistration(
   }
 
   if (!CanGetRegistration(provider_host->document_url(), document_url)) {
+    // Temporary debugging for https://crbug.com/630496
+    base::debug::ScopedCrashKey host_url_key(
+        "swdh_get_registration_cannot_host_url",
+        provider_host->document_url().spec());
+    base::debug::ScopedCrashKey document_url_key(
+        "swdh_get_registration_cannot_document_url", document_url.spec());
     bad_message::ReceivedBadMessage(this,
                                     bad_message::SWDH_GET_REGISTRATION_CANNOT);
     return;
@@ -1285,7 +1308,7 @@ void ServiceWorkerDispatcherHost::GetRegistrationComplete(
     int provider_id,
     int request_id,
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   TRACE_EVENT_ASYNC_END2(
       "ServiceWorker", "ServiceWorkerDispatcherHost::GetRegistration",
       request_id, "Status", status, "Registration ID",

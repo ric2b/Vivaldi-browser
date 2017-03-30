@@ -1,6 +1,7 @@
 include_rules = [
   "+chrome/grit",  # For generated headers
   "+components/autofill/content/common",
+  "+components/autofill/content/public/interfaces",
   "+components/autofill/content/renderer",
   "+components/autofill/core/common",
   "+components/cdm/renderer",
@@ -14,10 +15,11 @@ include_rules = [
   "+components/dom_distiller/content/renderer",
   "+components/dom_distiller/core",
   "+components/guest_view/renderer",
+  "+components/metrics/leak_detector",
+  "+components/metrics/proto",
   "+components/nacl/common",
   "+components/nacl/renderer",
   "+components/network_hints/renderer",
-  "+components/page_load_metrics/renderer",
   "+components/password_manager/content/renderer",
   "+components/password_manager/core/common",
   "+components/pdf/renderer",
@@ -25,6 +27,8 @@ include_rules = [
   "+components/printing/common",
   "+components/printing/renderer",
   "+components/signin/core/common",
+  "+components/spellcheck/common",
+  "+components/spellcheck/renderer",
   "+components/startup_metric_utils/common",
   "+components/strings/grit",  # For generated headers
   "+components/subresource_filter/content/renderer",
@@ -38,6 +42,7 @@ include_rules = [
   "+content/app/resources/grit",  # For generated headers
   "+content/app/strings/grit",  # For generated headers
   "+content/public/child",
+  "+content/public/common",
   "+content/public/renderer",
   "+extensions/common",
   "+extensions/renderer",
@@ -50,3 +55,10 @@ include_rules = [
   "+skia",
   "+storage/common",
 ]
+
+specific_include_rules = {
+  "chrome_content_renderer_client_browsertest\.cc" : [
+    "+chrome/browser/ui",
+    "+chrome/browser/ui/tabs",
+  ],
+}

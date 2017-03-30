@@ -761,14 +761,71 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_MANY_ENTRIES_SELECTED" desc="Many items (both files and directories) selected.">
     <ph name="SELCTED_FILES_COUNT">$1<ex>21</ex></ph> items selected
   </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_ALBUM_TITLE" desc="Label for audio album title.">
+    Album
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_AUDIO_INFO" desc="Category label for audio file info.">
+    Audio Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CODEC" desc="Label for video codec.">
+    Codec
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CREATED_BY" desc="Label for who created the file.">
+    Created By
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_CREATION_TIME" desc="Label for file creation time.">
+    Created Time
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_DURATION" desc="Label for audio/video duration.">
+    Duration
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_FILE_PATH" desc="Label for file path.">
+    Path
+  </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_FILE_SIZE" desc="Label fo file size.">
     Size
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_FRAME_RATE" desc="Label for video frame rate.">
+    Frame Rate
   </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_GENERAL_INFO" desc="Category label for general file info.">
     General Info
   </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_GENRE" desc="Label for audio genre.">
+    Genre
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_IMAGE_INFO" desc="Category label for image file info.">
+    Image Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_ARTIST" desc="Label for media artist.">
+    Artist
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_MIME_TYPE" desc="Label for media mime type.">
+    Type
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MEDIA_TITLE" desc="Label for media title.">
+    Title
+  </message>
   <message name="IDS_FILE_BROWSER_METADATA_BOX_MODIFICATION_TIME" desc="Label for file modification time.">
     Modified Time
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_MODIFIED_BY" desc="Label for who modified the file.">
+    Modified By
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_PAGE_COUNT" desc="Label for pdf page count.">
+    Page Count
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_RESOLUTION" desc="Label for image resolution.">
+    Resolution
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_SOURCE" desc="Label for the device used to capture the image.">
+    Source
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_VIDEO_INFO" desc="Category label for video file info.">
+    Video Info
+  </message>
+  <message name="IDS_FILE_BROWSER_METADATA_BOX_YEAR_RECORDED" desc="Label for audio recorded year.">
+    Year Recorded
   </message>
   <message name="IDS_FILE_BROWSER_CALCULATING_SIZE" desc="Message informing the user that total items size is being calculated.">
     Calculating size
@@ -783,10 +840,10 @@ Press any key to continue exploring.
     To save these files for offline use, get back online, right-click the files, and select the <ph name="OFFLINE_CHECKBOX_NAME">'$1'<ex>'Available offline'</ex></ph> option.
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_NO_PLAYBACK_AVAILABLE" desc="Massage for user to notify no playback is available.">
-    No playback available.
+    No playback available
   </message>
   <message name="IDS_FILE_BROWSER_QUICK_VIEW_NO_PREVIEW_AVAILABLE" desc="Massage for user to notify no preview is available.">
-    No preview available.
+    No preview available
   </message>
   <message name="IDS_FILE_BROWSER_HOSTED_OFFLINE_MESSAGE" desc="Message informing the user that the selected file is only available online.">
     You must be online to access this file.
@@ -1086,7 +1143,7 @@ Press any key to continue exploring.
   </message>
 
   <message name="IDS_FILE_BROWSER_SPACE_AVAILABLE" desc="Menu item showing space left for storage.">
-    <ph name="SPACE_AVAILABLE">$1<ex>4.8 GB</ex></ph> left
+    <ph name="SPACE_AVAILABLE">$1<ex>4.8 GB</ex></ph> available
   </message>
   <message name="IDS_FILE_BROWSER_WAITING_FOR_SPACE_INFO" desc="Menu item, saying that FileBrowser is waiting for space information for storage. When actual data arrives, this item will be replaced with IDS_FILE_BROWSER_SPACE_AVAILABLE">
     Waiting for space info...
@@ -1329,6 +1386,12 @@ Press any key to continue exploring.
   <message name="IDS_FLAGS_FULLSCREEN_APP_LIST_DESCRIPTION" desc="Description for the flag to enable experimental fullscreen app list.">
     The app-list will appear as fullscreen mode when it's in touch view mode. This flag does nothing outside of the mode.
   </message>
+  <message name="IDS_FLAGS_QUICK_UNLOCK_PIN" desc="Title of the flag used to enable quick unlock pin.">
+    Quick Unlock (PIN)
+  </message>
+  <message name="IDS_FLAGS_QUICK_UNLOCK_PIN_DESCRIPTION" desc="Description of the flag used to enable quick unlock pin.">
+    Enabling PIN quick unlock allows you to use a PIN to unlock your Chromebook on the lock screen after you have signed into your device.
+  </message>
   <message name="IDS_FLAGS_STORAGE_MANAGER_NAME" desc="Description for the flag to enable experimental storage manager.">
     Storage manager
   </message>
@@ -1569,7 +1632,25 @@ Press any key to continue exploring.
   <message name="IDS_NETWORK_ENABLE_DEV_FEATURES_LINK" desc="Text shown on continue button" meaning="Link shown on OOBE screens that opens enable debugging features dialog">
     Enable debugging features
   </message>
-  <message name="IDS_NETWORK_SECTION_TITE" desc="Tile of newtork selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
+  <message name="IDS_LANGUAGE_DROPDOWN_TITLE" desc="Title of language selection dropdown menu" meaning="Small title near language dropdown menu suggesting that this is a language selector.">
+    Language
+  </message>
+  <message name="IDS_KEYBOARD_DROPDOWN_TITLE" desc="Title of keyboard selection dropdown menu" meaning="Small title near keyboard dropdown menu suggesting that this is a keyboard layout selector.">
+    Keyboard
+  </message>
+  <message name="IDS_OOBE_OK_BUTTON_TEXT" desc="Text on 'OK' button" meaning="This is 'OK' text for all 'OK' buttons on ChromeOS initial device setup screens.">
+    OK
+  </message>
+  <message name="IDS_LANGUAGE_SECTION_TITLE" desc="Title of language selection screen" meaning="A title of the dialog where user should select ChromeOS UI language and default keyboard layout during initial device setup.">
+    Choose your language &amp; keyboard
+  </message>
+  <message name="IDS_ACCESSIBILITY_SECTION_TITLE" desc="Title of accessibility options screen" meaning="A title of the dialog where user can control ChromeOS UI accessibility (like large cursor or screen reader) options during initial device setup.">
+    Accessibility settings
+  </message>
+  <message name="IDS_ACCESSIBILITY_SECTION_HINT" desc="Under-title line on the accessibility options screen" meaning="A hint to the user that these settings help to make device more usable.">
+    Configure your device to be more usable.
+  </message>
+  <message name="IDS_NETWORK_SECTION_TITLE" desc="Title of network selection screen" meaning="A title of the dialog where user should select network to connect to Internet">
     Connect to network
   </message>
   <message name="IDS_NETWORK_SECTION_HINT" desc="Under-title line on the network selection screen" meaning="A hint to the user why device should be connected to the network">
@@ -1584,17 +1665,47 @@ Press any key to continue exploring.
   <message name="IDS_OOBE_SPOKEN_FEEDBACK_OPTION" desc="Spoken feedback option shown on OOBE screens accessibility menu.">
     ChromeVox (spoken feedback)
   </message>
+  <message name="IDS_SPOKEN_FEEDBACK_OPTION_OFF" desc="A value for Spoken Feedback accessibility option when it is off.">
+    Off
+  </message>
+  <message name="IDS_SPOKEN_FEEDBACK_OPTION_ON" desc="A value for Spoken Feedback accessibility option when it is on.">
+    On
+  </message>
   <message name="IDS_OOBE_LARGE_CURSOR_OPTION" desc="Large mouse cursor option shown on OOBE screens accessibility menu.">
     Large mouse cursor
+  </message>
+  <message name="IDS_LARGE_CURSOR_OPTION_OFF" desc="A value for Large Mouse Cursor accessibility option when it is off.">
+    Normal
+  </message>
+  <message name="IDS_LARGE_CURSOR_OPTION_ON" desc="A value for Large Mouse Cursor accessibility option when it is on.">
+    Large
   </message>
   <message name="IDS_OOBE_HIGH_CONTRAST_MODE_OPTION" desc="High contrast mode option shown on OOBE screens accessibility menu.">
     High contrast mode
   </message>
+  <message name="IDS_HIGH_CONTRAST_OPTION_OFF" desc="A value for High Contrast Mode accessibility option when it is off.">
+    Off
+  </message>
+  <message name="IDS_HIGH_CONTRAST_OPTION_ON" desc="A value for High Contrast Mode accessibility option when it is on.">
+    On
+  </message>
   <message name="IDS_OOBE_SCREEN_MAGNIFIER_OPTION" desc="Screen magnifier option shown on OOBE screens accessibility menu.">
     Screen magnifier
   </message>
+  <message name="IDS_SCREEN_MAGNIFIER_OPTION_OFF" desc="A value for Screen Magnifier Option accessibility option when it is off.">
+    Off
+  </message>
+  <message name="IDS_SCREEN_MAGNIFIER_OPTION_ON" desc="A value for Screen Magnifier Option accessibility option when it is on.">
+    On
+  </message>
   <message name="IDS_OOBE_VIRTUAL_KEYBOARD_OPTION" desc="Virtual keyboard option shown on the OOBE screens accessibility menu.">
     On-screen keyboard
+  </message>
+  <message name="IDS_VIRTUAL_KEYBOARD_OPTION_OFF" desc="A value for Virtual Keyboard accessibility option when it is off.">
+    Off
+  </message>
+  <message name="IDS_VIRTUAL_KEYBOARD_OPTION_ON" desc="A value for Virtual Keyboard accessibility option when it is on.">
+    On
   </message>
   <message name="IDS_OOBE_CLOSE_ACCESSIBILITY_MENU" desc="Text to be spoken when focus is set to the close button of accessibility options menu.">
     Close accessibility menu
@@ -1604,6 +1715,12 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OOBE_OTHER_KEYBOARD_LAYOUTS" desc="Option group name dividing vendor-configured keyboard layouts from other available layouts in out-of-box 'Select your keyboard' select control.">
     Other keyboards
+  </message>
+  <message name="IDS_OOBE_EULA_SECTION_TITLE" desc="Title of Terms of Service screen">
+    Google Chrome OS Terms
+  </message>
+  <message name="IDS_OOBE_EULA_ACCEPT_AND_CONTINUE_BUTTON_TEXT" desc="Label on a button on the Title of Terms of Service OOBE screen to accept EULA and continue.">
+    Accept and continue
   </message>
   <message name="IDS_LOGIN_TITLE" desc="Title of sign-in box">
     Sign in
@@ -1638,8 +1755,11 @@ Press any key to continue exploring.
   <message name="IDS_APP_START_NETWORK_WAIT_TIMEOUT_MESSAGE" desc="Message displayed while the network wait is timed out during app launching.">
     Internet disconnected. Please check your internet connection.
   </message>
+  <message name="IDS_APP_START_SHOWING_NETWORK_CONFIGURE_UI_MESSAGE" desc="Message displayed while waiting for the requested network configure UI to show up in kiosk mode.">
+    Network configure UI requested, please wait...
+  </message>
   <message name="IDS_APP_START_BAILOUT_SHORTCUT_FORMAT" desc="Message displayed at the bottom of app launch splash screen to show user the shortcut key to bailout the launch.">
-  Press Ctrl + Alt + S to switch to <ph name="IDS_SHORT_PRODUCT_OS_NAME">$1<ex>Chrome OS</ex></ph>
+    Press Ctrl + Alt + S to switch to <ph name="IDS_SHORT_PRODUCT_OS_NAME">$1<ex>Chrome OS</ex></ph>
   </message>
   <message name="IDS_LOGIN_CHANGE_PHOTO">
     Change picture
@@ -2360,7 +2480,10 @@ Press any key to continue exploring.
     Enable accessibility features to make your device easier to use.
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SETTINGS" desc="Text of the link to open ChromeVox settings.">
-    Settings
+    ChromeVox Settings
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TALKBACK_SETTINGS" desc="Text of the link to open TalkBack settings.">
+    TalkBack Settings
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_LARGE_CURSOR_DESCRIPTION" desc="In the settings tab, the text next to the checkbox for the large mouse cursor.">
     Show large mouse cursor
@@ -2431,14 +2554,65 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_FOCUS_HIGHLIGHT_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to highlight the focused object to make it easier to see.">
     Highlight the object with keyboard focus when it changes
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable an option to hold a key and click to speak any on-screen text out loud.">
-    Select-to-speak: Hold down Search and click or drag to speak anything
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_TITLE" desc="In the settings tab, the text next to the checkbox to enable an option to hold a key and click to speak any on-screen text out loud.">
+    Select-to-speak
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SELECT_TO_SPEAK_DESCRIPTION" desc="In the settings tab, the description of an option to hold a key and click to speak any on-screen text out loud.">
+    Hold down Search and click or drag to speak anything
   </message>
   <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_SWITCH_ACCESS_DESCRIPTION" desc="In the settings tab, the text next to the checkbox to enable switch access (for users with limited motor control).">
     Switch access (control the computer with just one or two switches)
   </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MANAGE_ACCESSIBILITY_FEATURES" desc="In the settings tab, the title of a link that opens a screen allowing the user to change accessibility features.">
+    Manage accessibility features
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_TEXT_TO_SPEECH_HEADING" desc="In the settings tab, the heading for accessibility features that enable the computer to speak text from the computer screen.">
+    Text-to-Speech
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_HEADING" desc="In the settings tab, the heading for accessibility features related to the computer's display.">
+    Display
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_TITLE" desc="In the settings tab, the title of a link to open display settings.">
+    Open display device settings
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_DISPLAY_SETTINGS_DESCRIPTION" desc="In the settings tab, an explanation that the display settings have options to adjust the screen resolution.">
+    Allows you to adjust your screen resolution
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_TITLE" desc="In the settings tab, the title of a link to open appearance settings.">
+    Open appearance settings
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_APPEARANCE_SETTINGS_DESCRIPTION" desc="In the settings tab, an explanation that the appearance settings allows you to change the size of text on the screen.">
+    Customize your text size
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_HEADING" desc="In the settings tab, the heading above settings related to the keyboard.">
+    Keyboard
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_TITLE" desc="In the settings tab, the title of a link to open keyboard settings.">
+    Open keyboard device settings
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_KEYBOARD_SETTINGS_DESCRIPTION" desc="In the settings tab, an explanation that the keyboard settings let you adjust the rate at which keys automatically repeat when held down, automatic prediction of words, and more.">
+    Allows you to adjust your keyboard repeat rate, word prediction, and more
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_AND_TOUCHPAD_HEADING" desc="In the settings tab, the heading for the section on mouse and touchpad settings.">
+    Mouse and touchpad
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_TITLE" desc="In the settings tab, the title of a link to open mouse and touchpad settings.">
+    Open mouse and touchpad device settings
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_MOUSE_SETTINGS_DESCRIPTION" desc="In the settings tab, an explanation that the mouse and touchpad settings allows you to turn the tap-to-click feature on and off.">
+    Allows you to enable/disable tap-to-click
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_AUDIO_HEADING" desc="In the settings tab, the heading for the section on audio / sound settings.">
+    Audio
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_TITLE" desc="In the settings tab, the title of a link that adds additional accessibility features not found in the built-in settings.">
+    Add additional features
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_ACCESSIBILITY_ADDITIONAL_FEATURES_DESCRIPTION" desc="In the settings tab, an explanation that additional accessibility features are found on the Chrome Web Store.">
+    Choose from the Chrome Web Store
+  </message>
   <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_NAME" desc="Name of the about:flag option for experimental accessibility features.">
-    Experimental acecssibility features
+    Experimental accessibility features
   </message>
   <message name="IDS_FLAGS_EXPERIMENTAL_ACCESSIBILITY_FEATURES_DESCRIPTION" desc="Description of the about:flag option for experimental accessibility features.">
     Enable additional accessibility features in the Settings page.
@@ -2694,6 +2868,12 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_OPTIONS_ENABLE_SCREENLOCKER_CHECKBOX" desc="In the Personal Stuff settings tab, the text on the checkbox to enable screenlocker for current user.">
     Require password to wake from sleep
+  </message>
+  <message name="IDS_OPTIONS_ENABLE_SCREENLOCKER_CHECKBOX_WITH_QUICK_UNLOCK" desc="In the Personal Stuff settings tab, the text on the checkbox to enable screenlocker for current user with option of quick unlock.">
+    Require screen lock to wake from sleep.
+  </message>
+  <message name="IDS_OPTIONS_MANAGE_SCREENLOCKER" desc="The link that is clicked to manage screen lock">
+    Manage screen lock
   </message>
   <message name="IDS_SET_WALLPAPER_BUTTON" desc="The button to set wallpaper.">
     Set wallpaper...
@@ -3364,441 +3544,7 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_CONTROLLED_SETTING_SHARED_SCREEN_LOCK" desc="Text displayed in the controlled settings bubble for the screen lock option, indicating screen lock is enabled if it's set for any profile in a session.">
     Passwords are required for signed-in users, as one or more users has this setting turned on.
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTINGS_TITLE"
-           desc="The title for the Chewing input settings dialog. Please note that 'Chewing' here is name of an input method and not 'an act of biting and grinding with the teeth'.">
-    Chewing input settings
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_AUTO_SHIFT_CUR"
-           desc="The checkbox label for a Chewing input method preference">
-    Automatically move cursor to the next character
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_ADD_PHRASE_DIRECTION"
-           desc="The checkbox label for a Chewing input method preference">
-    Add phrases in front
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_EASY_SYMBOL_INPUT"
-           desc="The checkbox label for a Chewing input method preference">
-    Easy symbol input
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_ESC_CLEAN_ALL_BUF"
-           desc="The checkbox label for a Chewing input method preference">
-    Esc cleans whole pre-edit buffer
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_FORCE_LOWER_CASE_ENGLISH"
-           desc="The checkbox label for a Chewing input method preference">
-    Ignore CapsLock status and input lowercase by default
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_PLAIN_ZHUYIN"
-           desc="The checkbox label for a Chewing input method preference">
-    Plain Zhuyin mode.  Automatic candidate selection and related options
-    are disabled or ignored.
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_PHRASE_CHOICE_REARWARD"
-           desc="The checkbox label for a Chewing input method preference">
-    Choose phrases from the back, without moving the cursor
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_SPACE_AS_SELECTION"
-           desc="The checkbox label for a Chewing input method preference">
-    Press Space to select the candidate
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_MAX_CHI_SYMBOL_LEN"
-           desc="The label for a Chewing input method preference">
-    Maximum Chinese characters in pre-edit buffer, including inputing Zhuyin
-    symbols
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SETTING_CAND_PER_PAGE"
-           desc="The label for a Chewing input method preference">
-    Number of candidates to display per page
-  </message>
 
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE"
-           desc="The combobox description for the Chewing keyboard type">
-    Keyboard type
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_DEFAULT"
-           desc="The combobox value for the Chewing keyboard type">
-    Default
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_HSU"
-           desc="The combobox value for the Chewing keyboard type">
-    Hsu
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_IBM"
-           desc="The combobox value for the Chewing keyboard type">
-    IBM
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_GIN_YIEH"
-           desc="The combobox value for the Chewing keyboard type">
-    Gin Yieh
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_ETEN"
-           desc="The combobox value for the Chewing keyboard type">
-    Eten
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_ETEN26"
-           desc="The combobox value for the Chewing keyboard type">
-    Eten 26
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_DVORAK"
-           desc="The combobox value for the Chewing keyboard type">
-    Dvorak
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_DVORAK_HSU"
-           desc="The combobox value for the Chewing keyboard type">
-    Dvorak (Hsu)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_DACHEN_26"
-           desc="The combobox value for the Chewing keyboard type">
-    Dachen 26
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_KEYBOARD_TYPE_HANYU"
-           desc="The combobox value for the Chewing keyboard type">
-    Hanyu
-  </message>
-
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS"
-           desc="The combobox description for the Chewing selection keys">
-    Selection keys
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_1234567890"
-           desc="The combobox value for the Chewing selection keys">
-    1234567890
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_ASDFGHJKLS"
-           desc="The combobox value for the Chewing selection keys">
-    asdfghjkl;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_ASDFZXCV89"
-           desc="The combobox value for the Chewing selection keys">
-    asdfzxcv89
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_ASDFJKL789"
-           desc="The combobox value for the Chewing selection keys">
-    asdfjkl789
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_AOEUSQJKIX"
-           desc="The combobox value for the Chewing selection keys">
-    aoeu;qjkix (Dvorak)
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_AOEUHTNSID"
-           desc="The combobox value for the Chewing selection keys">
-    aoeuhtnsid (Dvorak)
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_AOEUIDHTNS"
-           desc="The combobox value for the Chewing selection keys">
-    aoeuidhtns (Dvorak)
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_SEL_KEYS_1234QWERAS"
-           desc="The combobox value for the Chewing selection keys">
-    1234qweras
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_HSU_SEL_KEY_TYPE"
-           desc="The combobox description for the Hsu selection key type">
-    Hsu's keyboard selection keys
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_HSU_SEL_KEY_TYPE_1"
-           desc="The combobox value for the Hsu selection key type">
-    asdfjkl789
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_HSU_SEL_KEY_TYPE_2"
-           desc="The combobox value for the Hsu selection key type">
-    asdfzxcv89
-  </message>
-
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_TITLE"
-           desc="The title for the Hangul input settings dialog">
-    Hangul input settings
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_KEYBOARD_2_SET"
-           desc="The keyboard layout name for Korean input. (Dubeol-sik)">
-    2 Set
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_KEYBOARD_3_SET_FINAL"
-           desc="The keyboard layout name for Korean input. (Sebeol-sik Final)">
-    3 Set (Final)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_KEYBOARD_3_SET_390"
-           desc="The keyboard layout name for Korean input. (Sebeol-sik 390)">
-    3 Set (390)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_KEYBOARD_3_SET_NO_SHIFT"
-           desc="The keyboard layout name for Korean input. (Sebeol-sik No-shift)">
-    3 Set (No shift)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_HANGUL_SETTINGS_KEYBOARD_ROMAJA"
-           desc="The keyboard layout name for Korean input. (Romaja)">
-    Romaja
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTINGS_TITLE"
-           desc="The title for the Pinyin input settings dialog">
-    Pinyin input settings
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_CORRECT_PINYIN"
-           desc="The checkbox label for a Pinyin input method preference">
-    Automatically correct input
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_FUZZY_PINYIN"
-           desc="The checkbox label for a Pinyin input method preference">
-    Enable Fuzzy-Pinyin mode
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_SHIFT_SELECT_PINYIN"
-           desc="The checkbox label for a Pinyin input method preference">
-    Use left and right Shift keys to select 2nd and 3rd candidates
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_MINUS_EQUAL_PAGE"
-           desc="The checkbox label for a Pinyin input method preference">
-    Use - and = keys to page a candidate list
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_COMMA_PERIOD_PAGE"
-           desc="The checkbox label for a Pinyin input method preference">
-    Use , and . keys to page a candidate list
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_AUTO_COMMIT"
-           desc="The checkbox label for a Pinyin input method preference">
-    Auto-commit a string
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_DOUBLE_PINYIN"
-           desc="The checkbox label for a Pinyin input method preference">
-    Enable Double-Pinyin mode
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_INIT_CHINESE"
-           desc="The checkbox label for a Pinyin input method preference">
-    Initial input language is Chinese
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_INIT_FULL"
-           desc="The checkbox label for a Pinyin input method preference">
-    Initial character width is Full
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_INIT_FULL_PUNCT"
-           desc="The checkbox label for a Pinyin input method preference">
-    Initial punctuation width is Full
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_SETTING_INIT_SIMPLIFIED_CHINESE"
-           desc="The checkbox label for a Pinyin input method preference">
-    Initial Chinese mode is Simplified Chinese
-  </message>
-
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA"
-           desc="The combobox description for the double Pinyin schema">
-    Double Pinyin schema
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA_MSPY"
-           desc="The combobox value for the double Pinyin schema (might be non-translateable?)">
-    MSPY
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA_ZRM"
-           desc="The combobox value for the double Pinyin schema (might be non-translateable?)">
-    ZRM
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA_ABC"
-           desc="The combobox value for the double Pinyin schema (might be non-translateable?)">
-    ABC
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA_ZGPY"
-           desc="The combobox value for the double Pinyin schema (might be non-translateable?)">
-    ZGPY
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DOUBLE_SCHEMA_PYJJ"
-           desc="The combobox value for the double Pinyin schema (might be non-translateable?)">
-    PYJJ
-  </message>
-
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SETTINGS_TITLE"
-           desc="The title for the Mozc Japanese input settings dialog">
-    Japanese input settings
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PREEDIT_METHOD"
-           desc="The combobox description for the Mozc input method preference">
-    Input method
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PREEDIT_METHOD_ROMAN"
-           desc="The combobox value for the Mozc input method preference">
-    Romaji
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PREEDIT_METHOD_KANA"
-           desc="The combobox value for the Mozc input method preference">
-    Kana
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SESSION_KEYMAP"
-           desc="The combobox description for the Mozc input method preference">
-    Keymap style
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SESSION_KEYMAP_ATOK"
-           desc="The combobox value for the Mozc input method preference (might be non-translateable?)">
-    ATOK
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SESSION_KEYMAP_MSIME"
-           desc="The combobox value for the Mozc input method preference (might be non-translateable?)">
-    MS-IME
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SESSION_KEYMAP_KOTOERI"
-           desc="The combobox value for the Mozc input method preference. When lang is ja, it should be written in Hiragana">
-    Kotoeri
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PUNCTUATION_METHOD"
-           desc="The combobox description for the Mozc input method preference">
-    Punctuation style
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PUNCTUATION_METHOD_KUTEN_TOUTEN"
-           desc="The combobox value for the Mozc input method preference">
-    &#x3001;&#x3002;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PUNCTUATION_METHOD_COMMA_PERIOD"
-           desc="The combobox value for the Mozc input method preference">
-    &#xff0c;&#xff0e;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PUNCTUATION_METHOD_KUTEN_PERIOD"
-           desc="The combobox value for the Mozc input method preference">
-    &#x3001;&#xff0e;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_PUNCTUATION_METHOD_COMMA_TOUTEN"
-           desc="The combobox value for the Mozc input method preference">
-    &#xff0c;&#x3002;
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SYMBOL_METHOD"
-           desc="The combobox description for the Mozc input method preference">
-    Symbol style
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SYMBOL_METHOD_CORNER_BRACKET_MIDDLE_DOT"
-           desc="The combobox value for the Mozc input method preference">
-    &#x300c;&#x300d;&#x30fb;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SYMBOL_METHOD_SQUARE_BRACKET_SLASH"
-           desc="The combobox value for the Mozc input method preference">
-    &#xff3b;&#xff3d;&#xff0f;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SYMBOL_METHOD_CORNER_BRACKET_SLASH"
-           desc="The combobox value for the Mozc input method preference">
-    &#x300c;&#x300d;&#xff0f;
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SYMBOL_METHOD_SQUARE_BRACKET_MIDDLE_DOT"
-           desc="The combobox value for the Mozc input method preference">
-    &#xff3b;&#xff3d;&#x30fb;
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SPACE_CHARACTER_FORM"
-           desc="The combobox description for the Mozc input method preference">
-    Space input style
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SPACE_CHARACTER_FORM_FUNDAMENTAL_INPUT_MODE"
-           desc="The combobox value for the Mozc input method preference">
-    Follow input mode
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SPACE_CHARACTER_FORM_FUNDAMENTAL_FULL_WIDTH"
-           desc="The combobox value for the Mozc input method preference">
-    Fullwidth
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SPACE_CHARACTER_FORM_FUNDAMENTAL_HALF_WIDTH"
-           desc="The combobox value for the Mozc input method preference">
-    Halfwidth
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_HISTORY_LEARNING_LEVEL"
-           desc="The combobox description for the Mozc input method preference">
-    Adjust conversion based on previous input
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_HISTORY_LEARNING_LEVEL_DEFAULT_HISTORY"
-           desc="The combobox value for the Mozc input method preference">
-    Yes
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_HISTORY_LEARNING_LEVEL_READ_ONLY"
-           desc="The combobox value for the Mozc input method preference">
-    Yes (don't record new data)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_HISTORY_LEARNING_LEVEL_NO_HISTORY"
-           desc="The combobox value for the Mozc input method preference">
-    No
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SELECTION_SHORTCUT"
-           desc="The combobox description for the Mozc input method preference">
-    Selection shortcut
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SELECTION_SHORTCUT_NO_SHORTCUT"
-           desc="The combobox value for the Mozc input method preference">
-    No shortcut
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SELECTION_SHORTCUT_SHORTCUT_123456789"
-           desc="The combobox value for the Mozc input method preference">
-    1 -- 9
-  </message>
-  <message translateable="false"
-           name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SELECTION_SHORTCUT_SHORTCUT_ASDFGHJKL"
-           desc="The combobox value for the Mozc input method preference">
-    A -- L
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SHIFT_KEY_MODE_SWITCH"
-           desc="The combobox description for the Mozc input method preference">
-    Shift key mode switch
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SHIFT_KEY_MODE_SWITCH_OFF"
-           desc="The combobox value for the Mozc input method preference">
-    Off
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SHIFT_KEY_MODE_SWITCH_ASCII_INPUT_MODE"
-           desc="The combobox value for the Mozc input method preference">
-    Alphanumeric
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SHIFT_KEY_MODE_SWITCH_KATAKANA_INPUT_MODE"
-           desc="The combobox value for the Mozc input method preference">
-    Katakana
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_NUMPAD_CHARACTER_FORM"
-           desc="The combobox description for the Mozc input method preference">
-    Numpad style
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_NUMPAD_CHARACTER_FORM_NUMPAD_INPUT_MODE"
-           desc="The combobox value for the Mozc input method preference">
-    Follow input mode
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_NUMPAD_CHARACTER_FORM_NUMPAD_FULL_WIDTH"
-           desc="The combobox value for the Mozc input method preference">
-    Fullwidth
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_NUMPAD_CHARACTER_FORM_NUMPAD_HALF_WIDTH"
-           desc="The combobox value for the Mozc input method preference">
-    Halfwidth
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_NUMPAD_CHARACTER_FORM_NUMPAD_DIRECT_INPUT"
-           desc="The combobox value for the Mozc input method preference">
-    Direct input
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_INCOGNITO_MODE"
-           desc="The checkbox label for a Mozc input method preference">
-    Temporarily disable conversion personalization, history-based suggestions and user dictionary
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_USE_AUTO_IME_TURN_OFF"
-           desc="The checkbox label for a Mozc input method preference">
-    Automatically switch to halfwidth
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_USE_HISTORY_SUGGEST"
-           desc="The checkbox label for a Mozc input method preference">
-    Use input history
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_USE_DICTIONARY_SUGGEST"
-           desc="The checkbox label for a Mozc input method preference">
-    Use system dictionary
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_MOZC_SUGGESTIONS_SIZE"
-           desc="The slider label for a Mozc input method preference">
-    Maximum number of suggestions
-  </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CONFIGURE"
            desc="The label for the configure button for input methods">
     Configure...
@@ -3851,90 +3597,6 @@ Press any key to continue exploring.
            desc="Description of extension IMEs">
     Select which extension IMEs will be available in the language menu.
   </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_TAMIL_PHONETIC"
-           desc="The label for a Tamil input method">
-    Tamil input method (Phonetic)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_TAMIL_INSCRIPT"
-           desc="The label for a Tamil input method">
-    Tamil input method (InScript)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_TAMIL_TAMIL99"
-           desc="The label for a Tamil input method">
-    Tamil input method (Tamil99)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_TAMIL_ITRANS"
-           desc="The label for a Tamil input method">
-    Tamil input method (itrans)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_TAMIL_TYPEWRITER"
-           desc="The label for a Tamil input method">
-    Tamil input method (Typewriter)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_STANDARD_INPUT_METHOD"
-           desc="The label for a input method">
-    Standard input method
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_CHINESE_CANGJIE_INPUT_METHOD"
-           desc="The label for the Chinese input method">
-    Chinese input method (cangjie)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_CHINESE_QUICK_INPUT_METHOD"
-           desc="The label for the Chinese input method">
-    Chinese input method (quick)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_PERSIAN_ISIRI_2901_INPUT_METHOD"
-           desc="The label for the Persian (Farsi) input method">
-    Persian input method (ISIRI 2901 layout)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_THAI_KESMANEE_INPUT_METHOD"
-           desc="The label for the Thai input method">
-    Thai input method (Kesmanee keyboard)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_THAI_TIS820_INPUT_METHOD"
-           desc="The label for the Thai input method">
-    Thai input method (TIS-820.2538 keyboard)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_THAI_PATTACHOTE_INPUT_METHOD"
-           desc="The label for the Thai input method">
-    Thai input method (Pattachote keyboard)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_VIETNAMESE_TCVN_INPUT_METHOD"
-           desc="The label for the Vietnamese input method">
-    Vietnamese input method (TCVN6064)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_VIETNAMESE_TELEX_INPUT_METHOD"
-           desc="The label for the Vietnamese input method">
-    Vietnamese input method (TELEX)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_VIETNAMESE_VIQR_INPUT_METHOD"
-           desc="The label for the Vietnamese input method">
-    Vietnamese input method (VIQR)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_M17N_VIETNAMESE_VNI_INPUT_METHOD"
-           desc="The label for the Vietnamese input method">
-    Vietnamese input method (VNI)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_CHEWING_INPUT_METHOD"
-           desc="The label for the Chewing traditional Chinese input method">
-    Chewing input method
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_INPUT_METHOD"
-           desc="The label for the Pinyin simplified Chinese input method">
-    Pinyin input method
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_PINYIN_DV_INPUT_METHOD"
-           desc="The label for the Pinyin simplified Chinese input method">
-    Pinyin input method (for US Dvorak keyboard)
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_JAPANESE_HANDWRITING_INPUT_METHOD"
-           desc="The label for the Japanese handwriting input method">
-    Handwriting input method for Japanese
-  </message>
-  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_KOREAN_INPUT_METHOD"
-           desc="The label for the Korean input method">
-    Korean input method
-  </message>
   <message name="IDS_OPTIONS_KEYBOARD_OVERLAY_TITLE"
            desc="The title for 'Keyboard settings' overlay">
     Keyboard settings
@@ -3954,6 +3616,14 @@ Press any key to continue exploring.
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_CAPS_LOCK_LABEL"
            desc="The label for customizing the caps-lock key in the 'Keyboard settings' overlay">
     Caps Lock
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_ESCAPE_KEY_LABEL"
+           desc="The label for customizing the escape key in the 'Keyboard settings' overlay">
+    Escape
+  </message>
+  <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_BACKSPACE_KEY_LABEL"
+           desc="The label for customizing the backspace key in the 'Keyboard settings' overlay">
+    Backspace
   </message>
   <message name="IDS_OPTIONS_SETTINGS_LANGUAGES_KEY_DIAMOND_KEY_LABEL"
            desc="The label for customizing the diamond key in the 'Keyboard settings' overlay">
@@ -4988,44 +4658,6 @@ Battery full
     Zoom screen out
   </message>
   <!-- END GENERATED KEYBOARD OVERLAY STRINGS -->
-  <if expr="lang == 'ja'">
-  </if>
-  <if expr="lang != 'ja'">
-    <message translateable="false" name="IDS_STATUSBAR_IME_JAPANESE_IME_STATUS_HIRAGANA" desc="">
-      Hiragana
-    </message>
-    <message translateable="false" name="IDS_STATUSBAR_IME_JAPANESE_IME_STATUS_KATAKANA" desc="">
-      Katakana
-    </message>
-  </if>
-  <message name="IDS_STATUSBAR_IME_KOREAN_HANJA_INPUT_MODE" desc="In the language menu button, this shows the input mode.">
-    Hanja mode
-  </message>
-  <message name="IDS_STATUSBAR_IME_KOREAN_HANGUL_INPUT_MODE" desc="In the language menu button, this shows the input mode.">
-    Hangul mode
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_PINYIN_TOGGLE_CHINESE_ENGLISH" desc="In the language menu button, this shows the input mode.">
-    Toggle Chinese/English mode
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_PINYIN_TOGGLE_FULL_HALF" desc="In the language menu button, this shows the input mode.">
-    Toggle full/half width mode
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_PINYIN_TOGGLE_FULL_HALF_PUNCTUATION" desc="In the language menu button, this shows the input mode.">
-    Toggle full/half width punctuation mode
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_PINYIN_TOGGLE_S_T_CHINESE" desc="In the language menu button, this shows the input mode.">
-    Toggle Simplified/Traditional Chinese mode
-  </message>
-
-  <message name="IDS_STATUSBAR_IME_CHINESE_MOZC_CHEWING_ENGLISH_MODE" desc="In the language menu button, this shows the input mode.">
-    English
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_MOZC_CHEWING_CHINESE_MODE" desc="In the language menu button, this shows the input mode.">
-    Chinese
-  </message>
-  <message name="IDS_STATUSBAR_IME_CHINESE_MOZC_CHEWING_FULL_WIDTH_ENGLISH_MODE" desc="In the language menu button, this shows the input mode.">
-    Full-width English
-  </message>
 
   <message name="IDS_STATUSBAR_LAYOUT_JAPAN" desc="In the language menu button, this shows the input mode [Japanese keyboard].">
     Japanese
@@ -6366,6 +5998,9 @@ All users must sign out to continue.
   <message name="IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_ERROR" desc="Error message shown when successfully enrolled, but the device attribute update has failed.">
   Your device has successfully been enrolled for enterprise management, but failed to send its asset and location information. Please manually enter this information from your Admin console for this device.
   </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_REGISTRATION_CERT_FETCH_FAILED" desc="Error message shown when a registration certificate could not be obtained.">
+    A registration certificate could not be obtained.
+  </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE" desc="The title on the enterprise enrollment dialog.">
     Enterprise enrollment
   </message>
@@ -6520,77 +6155,6 @@ All users must sign out to continue.
   </message>
   <message name="IDS_NFC_DEBUG_ERROR_FAILED_TO_SUBMIT_PREFIX" desc="Error message shown when an NDEF form could not be submitted." translateable="false">
     Failed to submit NDEF:
-  </message>
-
-  <!-- About consumer management service -->
-  <message name="IDS_OPTIONS_DEVICE_CONTROL_SECTION_TITLE" desc="The title of the device control section in the settings page.">
-    Device control
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_DESCRIPTION" desc="Description of the consumer management service in the settings page.">
-    Let Google help you remotely lock, erase, and locate your device.
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_ENROLL_BUTTON" desc="The text of the consumer management button in the settings page when the device is not enrolled.">
-    Enroll
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_ENROLLING_BUTTON" desc="The text of the consumer management button in the settings page when enrollment is in progress.">
-    Enrolling...
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_UNENROLL_BUTTON" desc="The text of the consumer management button in the settings page when the device is enrolled.">
-    Unenroll
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_UNENROLLING_BUTTON" desc="The text of the consumer management button in the settings page when unenrollment is in progress.">
-    Unenrolling...
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY" desc="The title of the consumer management overlay in the settings page used for both enrollment and unenrollment.">
-    Consumer management
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_ENROLL_TITLE" desc="The title of the consumer management overlay in the settings page for enrollment.">
-    Enroll <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_ENROLL_MESSAGE" desc="The description of the consumer management overlay in the settings page for enrollment.">
-    You are about to enroll this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> with Google to enable the ability to remotely locate, wipe, and lock the device. This will require a reboot. Do you wish to continue?
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_ENROLL" desc="The button text of the consumer management overlay in the settings page for enrollment.">
-    Enroll and restart
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_UNENROLL_TITLE" desc="The title of the consumer management overlay in the settings page for unenrollment.">
-    Unenroll <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_UNENROLL_MESSAGE" desc="The description of the consumer management overlay in the settings page for unenrollment.">
-    You are about to unenroll this <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> with Google to disable the ability to remotely locate, wipe, and lock the device. This will require a reboot. Do you wish to continue?
-  </message>
-  <message name="IDS_OPTIONS_CONSUMER_MANAGEMENT_OVERLAY_UNENROLL" desc="The button text of the consumer management overlay in the settings page for unenrollment.">
-    Unenroll and restart
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_ENROLLMENT_NOTIFICATION_TITLE" desc="The title of the desktop notification shown when consumer management enrollment is completed">
-    Enrolled
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_ENROLLMENT_NOTIFICATION_BODY" desc="The body of the desktop notification shown when consumer management enrollment is completed">
-    You can now lock this device remotely anytime on Chrome Manager.
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_ENROLLMENT_FAILURE_NOTIFICATION_TITLE" desc="The title of the desktop notification shown when consumer management enrollment fails">
-    Unable to enroll
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_ENROLLMENT_FAILURE_NOTIFICATION_BODY" desc="The body of the desktop notification shown when consumer management enrollment fails">
-    Enrollment in Google Device Manager was not successful.
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_UNENROLLMENT_NOTIFICATION_TITLE" desc="The title of the desktop notification shown when consumer management unenrollment is completed">
-    Unenrolled
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_UNENROLLMENT_NOTIFICATION_BODY" desc="The body of the desktop notification shown when consumer management unenrollment is completed">
-    This device can no longer be managed remotely by the owner (you).
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_UNENROLLMENT_FAILURE_NOTIFICATION_TITLE" desc="The title of the desktop notification shown when consumer management unenrollment fails">
-    Failed to unenroll
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_UNENROLLMENT_FAILURE_NOTIFICATION_BODY" desc="The body of the desktop notification shown when consumer management unenrollment fails">
-    Unenrollment from remote management was not successful.
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_NOTIFICATION_MODIFY_SETTINGS_BUTTON" desc="The label of the modify settings button on the desktop notification shown when consumer management enrollment or unenrollment is completed">
-    Modify settings
-  </message>
-  <message name="IDS_CONSUMER_MANAGEMENT_NOTIFICATION_TRY_AGAIN_BUTTON" desc="The label of the modify settings button on the desktop notification shown when consumer management enrollment or unenrollment fails">
-    Try again
   </message>
 
   <!-- Set time/date UI display strings -->

@@ -30,7 +30,6 @@
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
-#include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThreadLifecycleObserver.h"
 #include "platform/LifecycleNotifier.h"
@@ -43,10 +42,11 @@
 
 namespace blink {
 
+class ConsoleMessageStorage;
 class InspectorTaskRunner;
 class WorkerBackingThread;
-class WorkerGlobalScope;
 class WorkerInspectorController;
+class WorkerOrWorkletGlobalScope;
 class WorkerReportingProxy;
 class WorkerThreadStartupData;
 
@@ -109,13 +109,10 @@ public:
     static void terminateAndWaitForAllWorkers();
 
     virtual WorkerBackingThread& workerBackingThread() = 0;
+    virtual void clearWorkerBackingThread() = 0;
+    ConsoleMessageStorage* consoleMessageStorage() const { return m_consoleMessageStorage.get(); }
     virtual bool shouldAttachThreadDebugger() const { return true; }
     v8::Isolate* isolate();
-
-    // Can be used to wait for this worker thread to terminate.
-    // (This is signaled on the main thread, so it's assumed to be waited on
-    // the worker context thread)
-    WaitableEvent* terminationEvent() { return m_terminationEvent.get(); }
 
     bool isCurrentThread();
 
@@ -134,9 +131,10 @@ public:
     void startRunningDebuggerTasksOnPauseOnWorkerThread();
     void stopRunningDebuggerTasksOnPauseOnWorkerThread();
 
-    // Can be called only on the worker thread, WorkerGlobalScope is not thread
-    // safe.
-    WorkerGlobalScope* workerGlobalScope();
+    // Can be called only on the worker thread, WorkerOrWorkletGlobalScope
+    // and WorkerInspectorController are not thread safe.
+    WorkerOrWorkletGlobalScope* globalScope();
+    WorkerInspectorController* workerInspectorController();
 
     // Called for creating WorkerThreadLifecycleObserver on both the main thread
     // and the worker thread.
@@ -150,7 +148,7 @@ public:
 
     PlatformThreadId platformThreadId();
 
-    ExitCode getExitCode();
+    bool isForciblyTerminated();
 
     void waitForShutdownForTesting() { m_shutdownEvent->wait(); }
 
@@ -159,7 +157,7 @@ protected:
 
     // Factory method for creating a new worker context for the thread.
     // Called on the worker thread.
-    virtual WorkerGlobalScope* createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData>) = 0;
+    virtual WorkerOrWorkletGlobalScope* createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData>) = 0;
 
     // Returns true when this WorkerThread owns the associated
     // WorkerBackingThread exclusively. If this function returns true, the
@@ -167,9 +165,6 @@ protected:
     // workerBackingThread() should be initialized / shutdown properly
     // out of this class.
     virtual bool isOwningBackingThread() const { return true; }
-
-    // Called on the worker thread.
-    virtual void postInitialize() { }
 
 private:
     friend class WorkerThreadTest;
@@ -207,14 +202,25 @@ private:
     void performDebuggerTaskOnWorkerThread(std::unique_ptr<CrossThreadClosure>);
     void performDebuggerTaskDontWaitOnWorkerThread();
 
+    ExitCode getExitCodeForTesting();
+
     // Accessed only on the main thread.
-    bool m_started = false;
+    bool m_requestedToStart = false;
 
     // Set on the main thread and checked on both the main and worker threads.
-    bool m_terminated = false;
+    bool m_requestedToTerminate = false;
 
-    // Set on the worker thread and checked on both the main and worker threads.
-    bool m_readyToShutdown = false;
+    // Represents the state of this worker thread. A caller may need to acquire
+    // a lock |m_threadStateMutex| before accessing this:
+    //   - Only the worker thread can set this with the lock.
+    //   - The worker thread can read this without the lock.
+    //   - The main thread can read this with the lock.
+    enum class ThreadState {
+        NotStarted,
+        Running,
+        ReadyToShutdown,
+    };
+    ThreadState m_threadState = ThreadState::NotStarted;
 
     // Accessed only on the worker thread.
     bool m_pausedInDebugger = false;
@@ -232,15 +238,13 @@ private:
     RefPtr<WorkerLoaderProxy> m_workerLoaderProxy;
     WorkerReportingProxy& m_workerReportingProxy;
 
-    // This lock protects |m_workerGlobalScope|, |m_terminated|,
-    // |m_readyToShutdown|, |m_runningDebuggerTask|, |m_exitCode| and
-    // |m_microtaskRunner|.
+    // This lock protects |m_globalScope|, |m_requestedToTerminate|,
+    // |m_threadState|, |m_runningDebuggerTask| and |m_exitCode|.
     Mutex m_threadStateMutex;
 
-    Persistent<WorkerGlobalScope> m_workerGlobalScope;
-
-    // Signaled when the thread starts termination on the main thread.
-    std::unique_ptr<WaitableEvent> m_terminationEvent;
+    Persistent<ConsoleMessageStorage> m_consoleMessageStorage;
+    Persistent<WorkerOrWorkletGlobalScope> m_globalScope;
+    Persistent<WorkerInspectorController> m_workerInspectorController;
 
     // Signaled when the thread completes termination on the worker thread.
     std::unique_ptr<WaitableEvent> m_shutdownEvent;

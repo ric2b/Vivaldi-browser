@@ -24,11 +24,28 @@
 
 namespace content {
 
-SaveFileManager::SaveFileManager() {}
+namespace {
+
+// Pointer to the singleton SaveFileManager instance.
+static SaveFileManager* g_save_file_manager = nullptr;
+
+}  // namespace
+
+SaveFileManager::SaveFileManager() {
+  DCHECK(g_save_file_manager == nullptr);
+  g_save_file_manager = this;
+}
 
 SaveFileManager::~SaveFileManager() {
   // Check for clean shutdown.
   DCHECK(save_file_map_.empty());
+  DCHECK(g_save_file_manager);
+  g_save_file_manager = nullptr;
+}
+
+// static
+SaveFileManager* SaveFileManager::Get() {
+  return g_save_file_manager;
 }
 
 // Called during the browser shutdown process to clean up any state (open files,
@@ -42,7 +59,7 @@ void SaveFileManager::Shutdown() {
 // Stop file thread operations.
 void SaveFileManager::OnShutdown() {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  STLDeleteValues(&save_file_map_);
+  base::STLDeleteValues(&save_file_map_);
 }
 
 SaveFile* SaveFileManager::LookupSaveFile(SaveItemId save_item_id) {
@@ -199,8 +216,7 @@ void SaveFileManager::UpdateSaveProgress(SaveItemId save_item_id,
 void SaveFileManager::SaveFinished(SaveItemId save_item_id,
                                    SavePackageId save_package_id,
                                    bool is_success) {
-  DVLOG(20) << " " << __FUNCTION__ << "()"
-            << " save_item_id = " << save_item_id
+  DVLOG(20) << __func__ << "() save_item_id = " << save_item_id
             << " save_package_id = " << save_package_id
             << " is_success = " << is_success;
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
@@ -209,8 +225,7 @@ void SaveFileManager::SaveFinished(SaveItemId save_item_id,
   SaveFile* save_file = LookupSaveFile(save_item_id);
   if (save_file != nullptr) {
     DCHECK(save_file->InProgress());
-    DVLOG(20) << " " << __FUNCTION__ << "()"
-              << " save_file = " << save_file->DebugString();
+    DVLOG(20) << __func__ << "() save_file = " << save_file->DebugString();
     bytes_so_far = save_file->BytesSoFar();
     save_file->Finish();
     save_file->Detach();

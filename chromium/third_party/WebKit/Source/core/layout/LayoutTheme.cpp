@@ -180,7 +180,11 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e)
                 if (style.setFontDescription(controlFont))
                     style.font().update(nullptr);
             }
+            break;
         }
+        case ProgressBarPart:
+            adjustProgressBarBounds(style);
+            break;
         default:
             break;
         }
@@ -210,6 +214,12 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e)
         return adjustMenuListStyle(style, e);
     case MenulistButtonPart:
         return adjustMenuListButtonStyle(style, e);
+    case SliderHorizontalPart:
+    case SliderVerticalPart:
+    case MediaFullScreenVolumeSliderPart:
+    case MediaSliderPart:
+    case MediaVolumeSliderPart:
+        return adjustSliderContainerStyle(style, e);
     case SliderThumbHorizontalPart:
     case SliderThumbVerticalPart:
         return adjustSliderThumbStyle(style);
@@ -376,7 +386,7 @@ int LayoutTheme::baselinePosition(const LayoutObject* o) const
 
     if (m_platformTheme)
         return box->size().height() + box->marginTop() + m_platformTheme->baselinePositionAdjustment(o->style()->appearance()) * o->style()->effectiveZoom();
-    return box->size().height() + box->marginTop();
+    return (box->size().height() + box->marginTop()).toInt();
 }
 
 bool LayoutTheme::isControlContainer(ControlPart appearance) const
@@ -627,6 +637,19 @@ void LayoutTheme::adjustMenuListButtonStyle(ComputedStyle&, Element*) const
 {
 }
 
+void LayoutTheme::adjustSliderContainerStyle(ComputedStyle& style, Element* e) const
+{
+    if (e && (e->shadowPseudoId() == "-webkit-media-slider-container" || e->shadowPseudoId() == "-webkit-slider-container")) {
+        if (style.appearance() == SliderVerticalPart) {
+            style.setTouchAction(TouchActionPanX);
+            style.setAppearance(NoControlPart);
+        } else {
+            style.setTouchAction(TouchActionPanY);
+            style.setAppearance(NoControlPart);
+        }
+    }
+}
+
 void LayoutTheme::adjustSliderThumbStyle(ComputedStyle& style) const
 {
     adjustSliderThumbSize(style);
@@ -647,6 +670,16 @@ void LayoutTheme::adjustSearchFieldCancelButtonStyle(ComputedStyle&) const
 void LayoutTheme::platformColorsDidChange()
 {
     Page::platformColorsChanged();
+}
+
+void LayoutTheme::setCaretBlinkInterval(double interval)
+{
+    m_caretBlinkInterval = interval;
+}
+
+double LayoutTheme::caretBlinkInterval() const
+{
+    return m_caretBlinkInterval;
 }
 
 static FontDescription& getCachedFontDescription(CSSValueID systemFontID)

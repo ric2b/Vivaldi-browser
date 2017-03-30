@@ -26,7 +26,7 @@ bool ShouldShowNotificationAsPopup(
     const Notification& notification,
     const NotificationBlockers& blockers) {
   for (size_t i = 0; i < blockers.size(); ++i) {
-    if (!blockers[i]->ShouldShowNotificationAsPopup(notification.notifier_id()))
+    if (!blockers[i]->ShouldShowNotificationAsPopup(notification))
       return false;
   }
   return true;
@@ -61,7 +61,8 @@ NotificationList::NotificationList(MessageCenter* message_center)
 }
 
 NotificationList::~NotificationList() {
-  STLDeleteContainerPointers(notifications_.begin(), notifications_.end());
+  base::STLDeleteContainerPointers(notifications_.begin(),
+                                   notifications_.end());
 }
 
 void NotificationList::SetNotificationsShown(
@@ -280,7 +281,7 @@ NotificationList::Notifications NotificationList::GetVisibleNotifications(
        iter != notifications_.end(); ++iter) {
     bool should_show = true;
     for (size_t i = 0; i < blockers.size(); ++i) {
-      if (!blockers[i]->ShouldShowNotification((*iter)->notifier_id())) {
+      if (!blockers[i]->ShouldShowNotification(**iter)) {
         should_show = false;
         break;
       }

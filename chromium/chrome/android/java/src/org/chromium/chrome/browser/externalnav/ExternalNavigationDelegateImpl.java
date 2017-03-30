@@ -40,7 +40,6 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationHandler.OverrideUrlLoadingResult;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
@@ -248,7 +247,7 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     @VisibleForTesting
     static ArrayList<String> getSpecializedHandlersWithFilter(
             List<ResolveInfo> infos, String filterPackageName) {
-        ArrayList<String> result = new ArrayList<String>();
+        ArrayList<String> result = new ArrayList<>();
         if (infos == null) {
             return result;
         }
@@ -298,11 +297,8 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     @Override
-    public String findValidWebApkPackageName(List<ResolveInfo> infos) {
-        String webApkPackageName = WebApkValidator.findWebApkPackage(infos);
-        return WebApkValidator.isValidWebApk(mApplicationContext, webApkPackageName)
-                ? webApkPackageName
-                : null;
+    public String findWebApkPackageName(List<ResolveInfo> infos) {
+        return WebApkValidator.findWebApkPackage(mApplicationContext, infos);
     }
 
     @Override
@@ -501,11 +497,6 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
         Context context = getAvailableContext();
         if (!(context instanceof ChromeTabbedActivity2)) return;
         intent.putExtra(IntentHandler.EXTRA_WINDOW_ID, 2);
-    }
-
-    @Override
-    public boolean isDocumentMode() {
-        return FeatureUtilities.isDocumentMode(mApplicationContext);
     }
 
     @Override

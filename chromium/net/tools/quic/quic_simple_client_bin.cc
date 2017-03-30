@@ -57,10 +57,10 @@
 #include "net/http/http_request_info.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
-#include "net/quic/crypto/proof_verifier_chromium.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_server_id.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/chromium/crypto/proof_verifier_chromium.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/tools/quic/quic_simple_client.h"
@@ -240,7 +240,7 @@ int main(int argc, char* argv[]) {
   // Build the client, and try to connect.
   net::QuicServerId server_id(url.host(), url.EffectiveIntPort(),
                               net::PRIVACY_MODE_DISABLED);
-  net::QuicVersionVector versions = net::QuicSupportedVersions();
+  net::QuicVersionVector versions = net::AllSupportedVersions();
   if (FLAGS_quic_version != -1) {
     versions.clear();
     versions.push_back(static_cast<net::QuicVersion>(FLAGS_quic_version));
@@ -254,11 +254,12 @@ int main(int argc, char* argv[]) {
       new TransportSecurityState);
   std::unique_ptr<CTVerifier> ct_verifier(new MultiLogCTVerifier());
   std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer(new CTPolicyEnforcer());
-  ProofVerifierChromium* proof_verifier = new ProofVerifierChromium(
-      cert_verifier.get(), ct_policy_enforcer.get(),
-      transport_security_state.get(), ct_verifier.get());
+  std::unique_ptr<ProofVerifierChromium> proof_verifier(
+      new ProofVerifierChromium(cert_verifier.get(), ct_policy_enforcer.get(),
+                                transport_security_state.get(),
+                                ct_verifier.get()));
   net::QuicSimpleClient client(net::IPEndPoint(ip_addr, port), server_id,
-                               versions, proof_verifier);
+                               versions, std::move(proof_verifier));
   client.set_initial_max_packet_length(
       FLAGS_initial_mtu != 0 ? FLAGS_initial_mtu : net::kDefaultMaxPacketSize);
   if (!client.Initialize()) {
@@ -316,8 +317,7 @@ int main(int argc, char* argv[]) {
   // Send the request.
   net::SpdyHeaderBlock header_block;
   net::CreateSpdyHeadersFromHttpRequest(request, request.extra_headers,
-                                        net::HTTP2, /*direct=*/true,
-                                        &header_block);
+                                        /*direct=*/true, &header_block);
   client.SendRequestAndWaitForResponse(request, body, /*fin=*/true);
 
   // Print request and response details.
@@ -326,9 +326,8 @@ int main(int argc, char* argv[]) {
     cout << "headers:" << header_block.DebugString();
     if (!FLAGS_body_hex.empty()) {
       // Print the user provided hex, rather than binary body.
-      cout << "body hex:   " << FLAGS_body_hex << endl;
-      cout << "body ascii: " << net::QuicUtils::BinaryToAscii(
-                                    net::QuicUtils::HexDecode(FLAGS_body_hex))
+      cout << "body:\n"
+           << net::QuicUtils::HexDump(net::QuicUtils::HexDecode(FLAGS_body_hex))
            << endl;
     } else {
       cout << "body: " << body << endl;
@@ -339,10 +338,7 @@ int main(int argc, char* argv[]) {
     string response_body = client.latest_response_body();
     if (!FLAGS_body_hex.empty()) {
       // Assume response is binary data.
-      cout << "body hex:   " << net::QuicUtils::HexEncode(response_body)
-           << endl;
-      cout << "body ascii: " << net::QuicUtils::BinaryToAscii(response_body)
-           << endl;
+      cout << "body:\n" << net::QuicUtils::HexDump(response_body) << endl;
     } else {
       cout << "body: " << response_body << endl;
     }

@@ -25,20 +25,24 @@ class StubOfflinePageModel : public OfflinePageModel {
   void RemoveObserver(Observer* observer) override;
   void SavePage(const GURL& url,
                 const ClientId& client_id,
+                int64_t proposed_offline_id,
                 std::unique_ptr<OfflinePageArchiver> archiver,
                 const SavePageCallback& callback) override;
   void MarkPageAccessed(int64_t offline_id) override;
   void ClearAll(const base::Closure& callback) override;
   void DeletePagesByOfflineId(const std::vector<int64_t>& offline_ids,
                               const DeletePageCallback& callback) override;
-  void DeletePagesByURLPredicate(const UrlPredicate& predicate,
-                                 const DeletePageCallback& callback) override;
+  void DeleteCachedPagesByURLPredicate(
+      const UrlPredicate& predicate,
+      const DeletePageCallback& callback) override;
   void HasPages(const std::string& name_space,
                 const HasPagesCallback& callback) override;
   void CheckPagesExistOffline(
       const std::set<GURL>& urls,
       const CheckPagesExistOfflineCallback& callback) override;
   void GetAllPages(const MultipleOfflinePageItemCallback& callback) override;
+  void GetAllPagesWithExpired(
+      const MultipleOfflinePageItemCallback& callback) override;
   void GetOfflineIdsForClientId(
       const ClientId& client_id,
       const MultipleOfflineIdCallback& callback) override;
@@ -57,9 +61,6 @@ class StubOfflinePageModel : public OfflinePageModel {
   void GetPagesByOnlineURL(
       const GURL& online_url,
       const MultipleOfflinePageItemCallback& callback) override;
-  void GetBestPageForOnlineURL(
-      const GURL& online_url,
-      const SingleOfflinePageItemCallback callback) override;
   const OfflinePageItem* MaybeGetBestPageForOnlineURL(
       const GURL& online_url) const override;
   void CheckMetadataConsistency() override;

@@ -27,11 +27,6 @@
             "type": "boolean",
             "optional": true,
             "description": "Enable plugins on this tab. Default is true."
-          },
-          "discarded": {
-            "type": "boolean",
-            "optional": true,
-            "description": "True if the tab has been discarded. (Thrown out of memory and reloaded when activated.)"
           }
         }
       },
@@ -129,18 +124,6 @@
                 "$ref": "UpdateTabInfo"
               }
             ]
-          }
-        ]
-      },
-      {
-        "name": "discard",
-        "type": "function",
-        "description": "This will replace the current |WebContent| with an empty one causing the memory to be freed. Note the content will be reloaded the next time the tab is focussed, or reload is pressed. Calls |TabManager::DiscardTabById()|",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "tabId",
-            "minimum": 0
           }
         ]
       },

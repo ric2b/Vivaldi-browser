@@ -16,8 +16,8 @@
 #include "modules/imagecapture/PhotoSettings.h"
 #include "modules/mediastream/MediaStreamTrack.h"
 #include "platform/mojo/MojoHelper.h"
+#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
-#include "public/platform/ServiceRegistry.h"
 #include "public/platform/WebImageCaptureFrameGrabber.h"
 #include "public/platform/WebMediaStreamTrack.h"
 #include "wtf/PtrUtil.h"
@@ -33,6 +33,17 @@ bool trackIsInactive(const MediaStreamTrack& track)
     // Spec instructs to return an exception if the Track's readyState() is not
     // "live". Also reject if the track is disabled or muted.
     return track.readyState() != "live" || !track.enabled() || track.muted();
+}
+
+media::mojom::blink::MeteringMode parseMeteringMode(const String& blinkMode)
+{
+    if (blinkMode == "manual")
+        return media::mojom::blink::MeteringMode::MANUAL;
+    if (blinkMode == "single-shot")
+        return media::mojom::blink::MeteringMode::SINGLE_SHOT;
+    if (blinkMode == "continuous")
+        return media::mojom::blink::MeteringMode::CONTINUOUS;
+    return media::mojom::blink::MeteringMode::UNAVAILABLE;
 }
 
 } // anonymous namespace
@@ -92,7 +103,7 @@ ScriptPromise ImageCapture::getPhotoCapabilities(ScriptState* scriptState, Excep
     // m_streamTrack->component()->source()->id() is the renderer "name" of the camera;
     // TODO(mcasas) consider sending the security origin as well:
     // scriptState->getExecutionContext()->getSecurityOrigin()->toString()
-    m_service->GetCapabilities(m_streamTrack->component()->source()->id(), createBaseCallback(WTF::bind(&ImageCapture::onCapabilities, wrapPersistent(this), wrapPersistent(resolver))));
+    m_service->GetCapabilities(m_streamTrack->component()->source()->id(), convertToBaseCallback(WTF::bind(&ImageCapture::onCapabilities, wrapPersistent(this), wrapPersistent(resolver))));
     return promise;
 }
 
@@ -118,8 +129,28 @@ ScriptPromise ImageCapture::setOptions(ScriptState* scriptState, const PhotoSett
     settings->has_zoom = photoSettings.hasZoom();
     if (settings->has_zoom)
         settings->zoom = photoSettings.zoom();
+    settings->has_height = photoSettings.hasImageHeight();
+    if (settings->has_height)
+        settings->height = photoSettings.imageHeight();
+    settings->has_width = photoSettings.hasImageWidth();
+    if (settings->has_width)
+        settings->width = photoSettings.imageWidth();
+    settings->has_focus_mode = photoSettings.hasFocusMode();
+    if (settings->has_focus_mode)
+        settings->focus_mode = parseMeteringMode(photoSettings.focusMode());
+    settings->has_exposure_mode = photoSettings.hasExposureMode();
+    if (settings->has_exposure_mode)
+        settings->exposure_mode = parseMeteringMode(photoSettings.exposureMode());
+    if (photoSettings.hasPointsOfInterest()) {
+        for (const auto& point : photoSettings.pointsOfInterest()) {
+            auto mojoPoint = media::mojom::blink::Point2D::New();
+            mojoPoint->x = point.x();
+            mojoPoint->y = point.y();
+            settings->points_of_interest.append(std::move(mojoPoint));
+        }
+    }
 
-    m_service->SetOptions(m_streamTrack->component()->source()->id(), std::move(settings), createBaseCallback(WTF::bind(&ImageCapture::onSetOptions, wrapPersistent(this), wrapPersistent(resolver))));
+    m_service->SetOptions(m_streamTrack->component()->source()->id(), std::move(settings), convertToBaseCallback(WTF::bind(&ImageCapture::onSetOptions, wrapPersistent(this), wrapPersistent(resolver))));
     return promise;
 }
 
@@ -144,7 +175,7 @@ ScriptPromise ImageCapture::takePhoto(ScriptState* scriptState, ExceptionState& 
     // m_streamTrack->component()->source()->id() is the renderer "name" of the camera;
     // TODO(mcasas) consider sending the security origin as well:
     // scriptState->getExecutionContext()->getSecurityOrigin()->toString()
-    m_service->TakePhoto(m_streamTrack->component()->source()->id(), createBaseCallback(WTF::bind(&ImageCapture::onTakePhoto, wrapPersistent(this), wrapPersistent(resolver))));
+    m_service->TakePhoto(m_streamTrack->component()->source()->id(), convertToBaseCallback(WTF::bind(&ImageCapture::onTakePhoto, wrapPersistent(this), wrapPersistent(resolver))));
     return promise;
 }
 
@@ -182,24 +213,32 @@ ImageCapture::ImageCapture(ExecutionContext* context, MediaStreamTrack* track)
     DCHECK(m_streamTrack);
     DCHECK(!m_service.is_bound());
 
-    Platform::current()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_service));
+    Platform::current()->interfaceProvider()->getInterface(mojo::GetProxy(&m_service));
 
-    m_service.set_connection_error_handler(createBaseCallback(WTF::bind(&ImageCapture::onServiceConnectionError, wrapWeakPersistent(this))));
+    m_service.set_connection_error_handler(convertToBaseCallback(WTF::bind(&ImageCapture::onServiceConnectionError, wrapWeakPersistent(this))));
 
 }
 
 void ImageCapture::onCapabilities(ScriptPromiseResolver* resolver, media::mojom::blink::PhotoCapabilitiesPtr capabilities)
 {
-    DVLOG(1) << __FUNCTION__;
+    DVLOG(1) << __func__;
     if (!m_serviceRequests.contains(resolver))
         return;
     if (capabilities.is_null()) {
         resolver->reject(DOMException::create(UnknownError, "platform error"));
     } else {
         // TODO(mcasas): Should be using a mojo::StructTraits.
+        MediaSettingsRange* iso = MediaSettingsRange::create(capabilities->iso->max, capabilities->iso->min, capabilities->iso->current);
+        MediaSettingsRange* height = MediaSettingsRange::create(capabilities->height->max, capabilities->height->min, capabilities->height->current);
+        MediaSettingsRange* width = MediaSettingsRange::create(capabilities->width->max, capabilities->width->min, capabilities->width->current);
         MediaSettingsRange* zoom = MediaSettingsRange::create(capabilities->zoom->max, capabilities->zoom->min, capabilities->zoom->current);
         PhotoCapabilities* caps = PhotoCapabilities::create();
+        caps->setIso(iso);
+        caps->setImageHeight(height);
+        caps->setImageWidth(width);
         caps->setZoom(zoom);
+        caps->setFocusMode(capabilities->focus_mode);
+        caps->setExposureMode(capabilities->exposure_mode);
         resolver->resolve(caps);
     }
     m_serviceRequests.remove(resolver);
@@ -217,22 +256,25 @@ void ImageCapture::onSetOptions(ScriptPromiseResolver* resolver, bool result)
     m_serviceRequests.remove(resolver);
 }
 
-void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver, const String& mimeType, mojo::WTFArray<uint8_t> data)
+void ImageCapture::onTakePhoto(ScriptPromiseResolver* resolver, media::mojom::blink::BlobPtr blob)
 {
     if (!m_serviceRequests.contains(resolver))
         return;
 
-    if (data.is_null() || data.empty()) {
+    // TODO(mcasas): Should be using a mojo::StructTraits.
+    if (blob->data.isEmpty())
         resolver->reject(DOMException::create(UnknownError, "platform error"));
-    } else {
-        const auto& storage = data.storage();
-        resolver->resolve(Blob::create(storage.data(), storage.size(), mimeType));
-    }
+    else
+        resolver->resolve(Blob::create(blob->data.data(), blob->data.size(), blob->mime_type));
     m_serviceRequests.remove(resolver);
 }
 
 void ImageCapture::onServiceConnectionError()
 {
+    if (!Platform::current()) {
+        // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+        return;
+    }
     m_service.reset();
     for (ScriptPromiseResolver* resolver : m_serviceRequests)
         resolver->reject(DOMException::create(NotFoundError, kNoServiceError));

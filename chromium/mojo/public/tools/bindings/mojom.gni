@@ -69,11 +69,50 @@ foreach(configuration, _bindings_configurations) {
 #   testonly (optional)
 #
 #   visibility (optional)
+#
+#   use_new_wrapper_types (optional)
+#       If set to true, mojom array/map/string will be mapped to STL (for
+#       chromium variant) or WTF (for blink) types. Otherwise, they will be
+#       mapped to mojo::Array/Map/String/etc.
+#       Default value is true.
+#       TODO(yzshen):
+#         - convert all users to use the new mode;
+#         - remove support for the old mode.
+#
+# The following parameters are used to support the component build. They are
+# needed so that bindings which are linked with a component can use the same
+# export settings for classes. The first three are for the chromium variant, and
+# the last three are for the blink variant.
+#   export_class_attribute (optional)
+#       The attribute to add to the class declaration. e.g. "CONTENT_EXPORT"
+#   export_define (optional)
+#       A define to be added to the source_set which is needed by the export
+#       header. e.g. "CONTENT_IMPLEMENTATION=1"
+#   export_header (optional)
+#       A header to be added to the generated bindings to support the component
+#       build. e.g. "content/common/content_export.h"
+#   export_class_attribute_blink (optional)
+#   export_define_blink (optional)
+#   export_header_blink (optional)
+#       These three parameters are the blink variants of the previous 3.
 template("mojom") {
   assert(
       defined(invoker.sources) || defined(invoker.deps) ||
           defined(invoker.public_deps),
       "\"sources\" or \"deps\" must be defined for the $target_name template.")
+  if (defined(invoker.export_class_attribute) ||
+      defined(invoker.export_define) || defined(invoker.export_header)) {
+    assert(defined(invoker.export_class_attribute))
+    assert(defined(invoker.export_define))
+    assert(defined(invoker.export_header))
+  }
+  if (defined(invoker.export_class_attribute_blink) ||
+      defined(invoker.export_define_blink) ||
+      defined(invoker.export_header_blink)) {
+    assert(defined(invoker.export_class_attribute_blink))
+    assert(defined(invoker.export_define_blink))
+    assert(defined(invoker.export_header_blink))
+  }
 
   all_deps = []
   if (defined(invoker.deps)) {
@@ -97,6 +136,77 @@ template("mojom") {
     }
   }
 
+  # Generate code that is shared by different variants.
+  if (defined(invoker.sources)) {
+    common_generator_args = [
+      "--use_bundled_pylibs",
+      "generate",
+      "{{source}}",
+      "-d",
+      rebase_path("//", root_build_dir),
+      "-I",
+      rebase_path("//", root_build_dir),
+      "-o",
+      rebase_path(root_gen_dir),
+      "--bytecode_path",
+      rebase_path("$root_gen_dir/mojo/public/tools/bindings"),
+    ]
+
+    if (defined(invoker.import_dirs)) {
+      foreach(import_dir, invoker.import_dirs) {
+        common_generator_args += [
+          "-I",
+          rebase_path(import_dir, root_build_dir),
+        ]
+      }
+    }
+
+    generator_shared_cpp_outputs = [
+      "{{source_gen_dir}}/{{source_name_part}}.mojom-shared-internal.h",
+      "{{source_gen_dir}}/{{source_name_part}}.mojom-shared.cc",
+      "{{source_gen_dir}}/{{source_name_part}}.mojom-shared.h",
+    ]
+    generator_shared_target_name = "${target_name}_shared__generator"
+    action_foreach(generator_shared_target_name) {
+      script = mojom_generator_script
+      inputs = mojom_generator_sources
+      sources = invoker.sources
+      deps = [
+        "//mojo/public/tools/bindings:precompile_templates",
+      ]
+      outputs = generator_shared_cpp_outputs
+      args = common_generator_args
+      args += [
+        "--generate_non_variant_code",
+        "-g",
+        "c++",
+      ]
+    }
+  }
+
+  shared_cpp_sources_suffix = "shared_cpp_sources"
+  shared_cpp_sources_target_name = "${target_name}_${shared_cpp_sources_suffix}"
+  source_set(shared_cpp_sources_target_name) {
+    if (defined(invoker.testonly)) {
+      testonly = invoker.testonly
+    }
+    deps = []
+    if (defined(invoker.sources)) {
+      sources =
+          process_file_template(invoker.sources, generator_shared_cpp_outputs)
+      deps += [ ":$generator_shared_target_name" ]
+    }
+    public_deps = []
+    foreach(d, all_deps) {
+      # Resolve the name, so that a target //mojo/something becomes
+      # //mojo/something:something and we can append shared_cpp_sources_suffix
+      # to get the cpp dependency name.
+      full_name = get_label_info("$d", "label_no_toolchain")
+      public_deps += [ "${full_name}_${shared_cpp_sources_suffix}" ]
+    }
+  }
+
+  # Generate code for variants.
   foreach(bindings_configuration, _bindings_configurations) {
     cpp_only = false
     variant_suffix = ""
@@ -124,7 +234,6 @@ template("mojom") {
       generator_cpp_outputs += [
         "{{source_gen_dir}}/{{source_name_part}}.mojom${variant_dash_suffix}.cc",
         "{{source_gen_dir}}/{{source_name_part}}.mojom${variant_dash_suffix}.h",
-        "{{source_gen_dir}}/{{source_name_part}}.mojom${variant_dash_suffix}-internal.h",
       ]
       enabled_sources = []
       if (defined(bindings_configuration.blacklist)) {
@@ -168,28 +277,7 @@ template("mojom") {
         ]
         outputs = generator_cpp_outputs + generator_java_outputs +
                   generator_js_outputs
-        args = [
-          "--use_bundled_pylibs",
-          "generate",
-          "{{source}}",
-          "-d",
-          rebase_path("//", root_build_dir),
-          "-I",
-          rebase_path("//", root_build_dir),
-          "-o",
-          rebase_path(root_gen_dir),
-          "--bytecode_path",
-          rebase_path("$root_gen_dir/mojo/public/tools/bindings"),
-        ]
-
-        if (defined(invoker.import_dirs)) {
-          foreach(import_dir, invoker.import_dirs) {
-            args += [
-              "-I",
-              rebase_path(import_dir, root_build_dir),
-            ]
-          }
-        }
+        args = common_generator_args
 
         if (cpp_only) {
           args += [
@@ -218,6 +306,28 @@ template("mojom") {
         if (defined(bindings_configuration.for_blink) &&
             bindings_configuration.for_blink) {
           args += [ "--for_blink" ]
+          if (defined(invoker.export_class_attribute_blink)) {
+            args += [
+              "--export_attribute",
+              invoker.export_class_attribute_blink,
+              "--export_header",
+              invoker.export_header_blink,
+            ]
+          }
+        } else {
+          if (defined(invoker.export_class_attribute)) {
+            args += [
+              "--export_attribute",
+              invoker.export_class_attribute,
+              "--export_header",
+              invoker.export_header,
+            ]
+          }
+        }
+
+        if (!defined(invoker.use_new_wrapper_types) ||
+            invoker.use_new_wrapper_types) {
+          args += [ "--use_new_wrapper_types" ]
         }
       }
     }
@@ -311,8 +421,15 @@ template("mojom") {
     # this target *except* mojo/public/cpp/bindings and other *_cpp_sources
     # targets.
     source_set(cpp_sources_target_name) {
+      defines = []
       if (defined(invoker.testonly)) {
         testonly = invoker.testonly
+      }
+      if (defined(invoker.export_define)) {
+        defines += [ invoker.export_define ]
+      }
+      if (defined(invoker.export_define_blink)) {
+        defines += [ invoker.export_define_blink ]
       }
       if (enabled_sources != []) {
         sources = process_file_template(enabled_sources, generator_cpp_outputs)
@@ -320,11 +437,13 @@ template("mojom") {
       deps = [
         "//mojo/public/cpp/bindings:struct_traits",
         "//mojo/public/interfaces/bindings:bindings__generator",
+        "//mojo/public/interfaces/bindings:bindings_shared__generator",
       ]
       if (enabled_sources != []) {
         deps += [ ":$generator_target_name" ]
       }
       public_deps = [
+        ":$shared_cpp_sources_target_name",
         "//base",
       ]
       foreach(d, all_deps) {

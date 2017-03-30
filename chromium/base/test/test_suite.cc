@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
+#include "base/debug/profiler.h"
 #include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
@@ -25,6 +26,7 @@
 #include "base/process/memory.h"
 #include "base/test/gtest_xml_unittest_result_printer.h"
 #include "base/test/gtest_xml_util.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_switches.h"
@@ -93,6 +95,20 @@ class TestClientInitializer : public testing::EmptyTestEventListener {
 
   DISALLOW_COPY_AND_ASSIGN(TestClientInitializer);
 };
+
+std::string GetProfileName() {
+  static const char kDefaultProfileName[] = "test-profile-{pid}";
+  CR_DEFINE_STATIC_LOCAL(std::string, profile_name, ());
+  if (profile_name.empty()) {
+    const base::CommandLine& command_line =
+        *base::CommandLine::ForCurrentProcess();
+    if (command_line.HasSwitch(switches::kProfilingFile))
+      profile_name = command_line.GetSwitchValueASCII(switches::kProfilingFile);
+    else
+      profile_name = std::string(kDefaultProfileName);
+  }
+  return profile_name;
+}
 
 }  // namespace
 
@@ -338,10 +354,8 @@ void TestSuite::Initialize() {
     logging::SetLogAssertHandler(UnitTestAssertHandler);
   }
 
-  if (!CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kTestDoNotInitializeIcu)) {
-    i18n::InitializeICU();
-  }
+  base::test::InitializeICUForTesting();
+
   // On the Mac OS X command line, the default locale is *_POSIX. In Chromium,
   // the locale is set via an OS X locale API and is never *_POSIX.
   // Some tests (such as those involving word break iterator) will behave
@@ -368,9 +382,13 @@ void TestSuite::Initialize() {
   TestTimeouts::Initialize();
 
   trace_to_file_.BeginTracingFromCommandLineOptions();
+
+  base::debug::StartProfiling(GetProfileName());
 }
 
 void TestSuite::Shutdown() {
+  base::debug::StopProfiling();
+
   // Clear the FeatureList that was created by Initialize().
   if (created_feature_list_)
     FeatureList::ClearInstanceForTesting();

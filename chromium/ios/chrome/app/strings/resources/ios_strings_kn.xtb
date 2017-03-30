@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kn">
-<translation id="1008557486741366299">ಈಗಲೇ ಅಲ್ಲ</translation>
 <translation id="1047726139967079566">ಈ ಪುಟವನ್ನು ಬುಕ್‌ಮಾರ್ಕ್ ಮಾಡಿ...</translation>
 <translation id="1172898394251786223">ಮುಂದಿನ ಕ್ಷೇತ್ರ</translation>
 <translation id="2320166752086256636">ಕೀಬೋರ್ಡ್ ಮರೆಮಾಡಿ</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">ಅಪ್‌ಡೇಟ್‌‌</translation>
 <translation id="4875622588773761625">ಈ ಸೈಟ್‌ಗೆ ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್‌ <ph name="PASSWORD_MANAGER_BRAND" /> ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಬಯಸುವಿರಾ?</translation>
 <translation id="5317780077021120954">ಉಳಿಸು</translation>
+<translation id="6039694632319341016">ನೀವು ಈ ಸೈಟ್‌ಗೆ <ph name="USERNAME" /> ಅವರ ಪಾಸ್‌ವ್‌ರ್ಡ್‌ ಅನ್ನು <ph name="PASSWORD_MANAGER_BRAND" /> ಅಪ್‌ಡೇಟ್ ಮಾಡಬೇಕೆಂದು ಬಯಸುವಿರಾ?</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6149061208933997199">ಪಾಸ್‌ವರ್ಡ್ ಬಳಸಿ</translation>
 <translation id="6196207969502475924">ಧ್ವನಿ ಹುಡುಕಾಟ</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">ಪಠ್ಯವನ್ನು ತೆರವುಗೊಳಿಸಿ</translation>
 <translation id="6456425917241817154">ಪಾಸ್‌ವರ್ಡ್ ಅನ್ನು Chrome ಮೂಲಕ ರಚಿಸಲಾಗಿದೆ</translation>
 <translation id="6535543971741225613">ನೀವು ಪ್ರವೇಶಿಸಲು ಪ್ರಯತ್ನಿಸುತ್ತಿರುವ ಸೈಟ್ ವಿಲಕ್ಷಣವಾಗಿ ವರ್ತಿಸುತ್ತಿದೆ, ಮತ್ತು ಅದರ URL ಸರಿಯಾಗಿದೆಯೇ ಎಂಬುದನ್ನು ಪರಿಶೀಲಿಸಲು Chrome ವಿಫಲಗೊಂಡಿದೆ. ಭದ್ರತಾ ಕಾರಣಗಳಿಗಾಗಿ, ನೀವು ಮುಂದುವರಿಯಬಾರದು, ಮತ್ತು ಪ್ರಾಯಶಃ ನಾಳೆ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ ಅಥವಾ ಬೇರೆಲ್ಲಿಗಾದರೂ ಹೋಗಿ.</translation>
-<translation id="6647073004883890710">ನೀವು ಈ ಸೈಟ್‌ನ <ph name="USERNAME" /> ಗೆ ಪಾಸ್‌ವ್‌ರ್ಡ್‌ ಅಪ್‌ಡೇಟ್‌ ಮಾಡಲು <ph name="PASSWORD_MANAGER_BRAND" /> ಬಳಸಲು ಬಯಸುವಿರಾ?</translation>
 <translation id="7222245588540287464">ಸಂದರ್ಭೋಚಿತ ಹುಡುಕಾಟವನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿರಲಿ ಅಥವಾ ಇಲ್ಲದಿರಲಿ.</translation>
-<translation id="7378627244592794276">ಬೇಡ</translation>
 <translation id="7456847797759667638">ಸ್ಥಳವನ್ನು ತೆರೆ...</translation>
 <translation id="7481312909269577407">ಫಾರ್ವರ್ಡ್</translation>
 <translation id="7484580869648358686">ಎಚ್ಚರಿಕೆ: ಇಲ್ಲಿ ಏನೊ ಚೆನ್ನಾಗಿಲ್ಲ!</translation>

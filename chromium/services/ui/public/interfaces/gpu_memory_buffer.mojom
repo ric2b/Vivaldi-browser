@@ -1,0 +1,37 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+module ui.mojom;
+
+enum GpuMemoryBufferType {
+  EMPTY,
+  SHARED_MEMORY,
+  IO_SURFACE,
+  SURFACE_TEXTURE,
+  OZONE_NATIVE_PIXMAP,
+  LAST = OZONE_NATIVE_PIXMAP
+};
+
+struct GpuMemoryBufferId {
+  int32 id;
+};
+
+struct NativePixmapHandle {
+  // A file descriptor for the underlying memory object (usually dmabuf).
+  handle fd;
+
+  // The stride used when accessing the buffer via a memory mapping.
+  int32 stride;
+};
+
+
+struct GpuMemoryBufferHandle {
+  GpuMemoryBufferType type;
+  GpuMemoryBufferId id;
+  handle buffer_handle;
+  uint32 offset;
+  int32 stride;
+  NativePixmapHandle? native_pixmap_handle;
+  // TODO(fsamuel): Add support for Machports.
+};

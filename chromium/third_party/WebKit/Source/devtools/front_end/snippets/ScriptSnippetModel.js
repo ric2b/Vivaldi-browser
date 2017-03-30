@@ -96,9 +96,8 @@ WebInspector.ScriptSnippetModel.prototype = {
 
     _loadSnippets: function()
     {
-        var snippets = this._snippetStorage.snippets();
-        for (var i = 0; i < snippets.length; ++i)
-            this._addScriptSnippet(snippets[i]);
+        for (var snippet of this._snippetStorage.snippets())
+            this._addScriptSnippet(snippet);
     },
 
     /**
@@ -146,6 +145,8 @@ WebInspector.ScriptSnippetModel.prototype = {
             return;
         var snippetId = this._snippetIdForUISourceCode.get(uiSourceCode) || "";
         var snippet = this._snippetStorage.snippetForId(snippetId);
+        if (!snippet)
+            return;
         this._snippetStorage.deleteSnippet(snippet);
         this._removeBreakpoints(uiSourceCode);
         this._releaseSnippetScript(uiSourceCode);
@@ -224,9 +225,17 @@ WebInspector.ScriptSnippetModel.prototype = {
         var mapping = this._mappingForTarget.get(target);
         mapping._setEvaluationIndex(evaluationIndex, uiSourceCode);
         var evaluationUrl = mapping._evaluationSourceURL(uiSourceCode);
-        var expression = uiSourceCode.workingCopy();
-        WebInspector.console.show();
-        runtimeModel.compileScript(expression, "", true, executionContext.id, compileCallback.bind(this));
+        uiSourceCode.requestContent().then(compileSnippet.bind(this));
+
+        /**
+         * @this {WebInspector.ScriptSnippetModel}
+         */
+        function compileSnippet()
+        {
+            var expression = uiSourceCode.workingCopy();
+            WebInspector.console.show();
+            runtimeModel.compileScript(expression, "", true, executionContext.id, compileCallback.bind(this));
+        }
 
         /**
          * @param {!RuntimeAgent.ScriptId=} scriptId
@@ -239,12 +248,13 @@ WebInspector.ScriptSnippetModel.prototype = {
             if (mapping.evaluationIndex(uiSourceCode) !== evaluationIndex)
                 return;
 
+            var script = /** @type {!WebInspector.Script} */(executionContext.debuggerModel.scriptForId(/** @type {string} */ (scriptId || exceptionDetails.scriptId)));
+            mapping._addScript(script, uiSourceCode);
             if (!scriptId) {
-                this._printRunOrCompileScriptResultFailure(target, exceptionDetails, evaluationUrl);
+                this._printRunOrCompileScriptResultFailure(target, /** @type {!RuntimeAgent.ExceptionDetails} */ (exceptionDetails), evaluationUrl);
                 return;
             }
 
-            mapping._addScript(executionContext.debuggerModel.scriptForId(scriptId), uiSourceCode);
             var breakpointLocations = this._removeBreakpoints(uiSourceCode);
             this._restoreBreakpoints(uiSourceCode, breakpointLocations);
 
@@ -260,7 +270,7 @@ WebInspector.ScriptSnippetModel.prototype = {
     _runScript: function(scriptId, executionContext, sourceURL)
     {
         var target = executionContext.target();
-        target.runtimeModel.runScript(scriptId, executionContext.id, "console", false, true, runCallback.bind(this, target));
+        target.runtimeModel.runScript(scriptId, executionContext.id, "console", /* silent */ false, /* includeCommandLineAPI */ true, /* returnByValue */ false, /* generatePreview */ true, /* awaitPromise */ undefined, runCallback.bind(this, target));
 
         /**
          * @param {!WebInspector.Target} target
@@ -271,7 +281,7 @@ WebInspector.ScriptSnippetModel.prototype = {
         function runCallback(target, result, exceptionDetails)
         {
             if (!exceptionDetails)
-                this._printRunScriptResult(target, result, sourceURL);
+                this._printRunScriptResult(target, result, scriptId, sourceURL);
             else
                 this._printRunOrCompileScriptResultFailure(target, exceptionDetails, sourceURL);
         }
@@ -280,9 +290,10 @@ WebInspector.ScriptSnippetModel.prototype = {
     /**
      * @param {!WebInspector.Target} target
      * @param {?RuntimeAgent.RemoteObject} result
+     * @param {!RuntimeAgent.ScriptId} scriptId
      * @param {?string=} sourceURL
      */
-    _printRunScriptResult: function(target, result, sourceURL)
+    _printRunScriptResult: function(target, result, scriptId, sourceURL)
     {
         var consoleMessage = new WebInspector.ConsoleMessage(
             target,
@@ -295,30 +306,21 @@ WebInspector.ScriptSnippetModel.prototype = {
             undefined,
             undefined,
             [result],
-            undefined);
+            undefined,
+            undefined,
+            undefined,
+            scriptId);
         target.consoleModel.addMessage(consoleMessage);
     },
 
     /**
      * @param {!WebInspector.Target} target
-     * @param {?RuntimeAgent.ExceptionDetails=} exceptionDetails
+     * @param {!RuntimeAgent.ExceptionDetails} exceptionDetails
      * @param {?string=} sourceURL
      */
     _printRunOrCompileScriptResultFailure: function(target, exceptionDetails, sourceURL)
     {
-        var consoleMessage = new WebInspector.ConsoleMessage(
-            target,
-            exceptionDetails.source,
-            WebInspector.ConsoleMessage.MessageLevel.Error,
-            exceptionDetails.text,
-            undefined,
-            sourceURL,
-            exceptionDetails.line,
-            exceptionDetails.column,
-            undefined,
-            undefined,
-            exceptionDetails.stack);
-        target.consoleModel.addMessage(consoleMessage);
+        target.consoleModel.addMessage(WebInspector.ConsoleMessage.fromException(target, exceptionDetails, undefined, undefined, sourceURL || undefined));
     },
 
     /**

@@ -74,7 +74,6 @@
 <translation id="2676780859508944670">กำลังทำงาน…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">โดยปกติการอัปเดตซอฟต์แวร์จะทำงานโดยอัตโนมัติ แต่อาจล้มเหลวในบางกรณีซึ่งพบไม่บ่อย การอัปเดตซอฟต์แวร์จะใช้เวลาไม่เกินสองสามนาที และสามารถดำเนินการขณะเชื่อมต่อคอมพิวเตอร์จากระยะไกล</translation>
-<translation id="2813770873348017932">การเชื่อมต่อกับคอมพิวเตอร์ระยะไกลถูกบล็อกไว้ชั่วคราว เนื่องจากมีผู้พยายามเชื่อมต่อกับคอมพิวเตอร์ดังกล่าวโดยใช้ PIN ที่ไม่ถูกต้อง โปรดลองอีกครั้งในภายหลัง</translation>
 <translation id="2841013758207633010">เวลา</translation>
 <translation id="2851674870054673688">เมื่อพวกเขาป้อนรหัสแล้ว เซสชันการแชร์ของคุณจะเริ่มขึ้น</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Host</translation>
 <translation id="4573676252416618192">Chrome Remote
 Desktop Host</translation>
 <translation id="4619978527973181021">ยอมรับและติดตั้ง</translation>
-<translation id="4647791084836149355">แสดงมุมมอง Cardboard</translation>
 <translation id="4703302905453407178">คอมโพเนนต์ที่ต้องใช้หยุดทำงาน โปรดรายงานปัญหานี้ไปยังนักพัฒนาซอฟต์แวร์</translation>
 <translation id="4703799847237267011">เซสชัน Chromoting ของคุณได้สิ้นสุดลงแล้ว</translation>
 <translation id="4736223761657662401">ประวัติการเชื่อมต่อ</translation>
@@ -210,7 +208,6 @@ Desktop Host</translation>
 <translation id="6284412385303060032">โฮสต์ที่ทำงานที่หน้าจอตรรกะของคอนโซลได้ปิดตัวลงเพื่อสนับสนุนโหมด Curtain โดยการเปลี่ยนไปเป็นโฮสต์ที่ทำงานในเซสชันเฉพาะผู้ใช้</translation>
 <translation id="629730747756840877">บัญชี</translation>
 <translation id="6304318647555713317">ไคลเอ็นต์</translation>
-<translation id="6324708100353784493">คุณได้เปิดใช้โหมดการผนวกรวม Google Cardboard หากต้องการใช้โหมดนี้ ให้ใส่อุปกรณ์ของคุณในอุปกรณ์ดูภาพที่ใช้งานได้กับ Google Cardboard</translation>
 <translation id="6381670701864002291">มีปัญหาอื่น</translation>
 <translation id="6398765197997659313">ออกจากการแสดงแบบเต็มหน้าจอ</translation>
 <translation id="6408143143164565232">• ฟังเสียงจากคอมพิวเตอร์ที่ใช้ Windows หรือ Linux
@@ -236,6 +233,7 @@ Desktop Host</translation>
 <translation id="6930242544192836755">ระยะเวลา</translation>
 <translation id="6939719207673461467">แสดง/ซ่อนแป้นพิมพ์</translation>
 <translation id="6944854424004126054">กู้คืนหน้าต่าง</translation>
+<translation id="6963936880795878952">การเชื่อมต่อกับคอมพิวเตอร์ระยะไกลถูกบล็อกไว้ชั่วคราว เนื่องจากมีผู้พยายามเชื่อมต่อกับคอมพิวเตอร์ดังกล่าวโดยใช้ PIN ที่ไม่ถูกต้อง โปรดลองอีกครั้งในภายหลัง</translation>
 <translation id="6965382102122355670">ตกลง</translation>
 <translation id="6985691951107243942">คุณแน่ใจหรือไม่ว่าต้องการปิดใช้งานการเชื่อมต่อระยะไกลกับ <ph name="HOSTNAME" /> หากคุณเปลี่ยนใจภายหลัง คุณจะต้องไปที่คอมพิวเตอร์เครื่องนั้นเพื่อเปิดใช้งานการเชื่อมต่ออีกครั้ง</translation>
 <translation id="6998989275928107238">ถึง</translation>
@@ -282,7 +280,7 @@ Desktop Host</translation>
 <translation id="837021510621780684">จากคอมพิวเตอร์เครื่องนี้</translation>
 <translation id="8383794970363966105">ในการใช้ Chromoting คุณจะต้องเพิ่มบัญชี Google ลงในอุปกรณ์ของคุณ</translation>
 <translation id="8386846956409881180">โฮสต์ได้รับการกำหนดค่าด้วยข้อมูลรับรอง OAuth ที่ไม่ถูกต้อง</translation>
-<translation id="8445362773033888690">ดูใน Google Play สโตร์</translation>
+<translation id="8445362773033888690">ดูใน Google Play Store</translation>
 <translation id="8509907436388546015">Desktop Integration Process</translation>
 <translation id="8513093439376855948">โฮสต์การรับส่งข้อความดั้งเดิมสำหรับการจัดการโฮสต์ระยะไกล</translation>
 <translation id="8525306231823319788">เต็มหน้าจอ</translation>

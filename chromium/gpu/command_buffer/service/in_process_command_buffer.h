@@ -87,7 +87,8 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                   const gles2::ContextCreationAttribHelper& attribs,
                   InProcessCommandBuffer* share_group,
                   GpuMemoryBufferManager* gpu_memory_buffer_manager,
-                  ImageFactory* image_factory);
+                  ImageFactory* image_factory,
+                  scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // CommandBuffer implementation:
   State GetLastState() override;
@@ -115,7 +116,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
-  int32_t GetImageGpuMemoryBufferId(unsigned image_id) override;
   void SignalQuery(uint32_t query_id, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   void EnsureWorkVisible() override;
@@ -272,9 +272,6 @@ class GPU_EXPORT InProcessCommandBuffer : public CommandBuffer,
   // the client thread.
   std::unique_ptr<base::SequenceChecker> sequence_checker_;
 
-  // A map from image id to GpuMemoryBuffer id.
-  std::map<int32_t, int32_t> image_gmb_ids_map_;
-
   base::WeakPtr<InProcessCommandBuffer> client_thread_weak_ptr_;
   base::WeakPtr<InProcessCommandBuffer> gpu_thread_weak_ptr_;
   base::WeakPtrFactory<InProcessCommandBuffer> client_thread_weak_ptr_factory_;
@@ -310,7 +307,6 @@ class GPU_EXPORT GpuInProcessThread
   scoped_refptr<gpu::gles2::ShaderTranslatorCache> shader_translator_cache_;
   scoped_refptr<gpu::gles2::FramebufferCompletenessCache>
       framebuffer_completeness_cache_;
-
   DISALLOW_COPY_AND_ASSIGN(GpuInProcessThread);
 };
 

@@ -71,6 +71,12 @@ void SimpleMenuModel::Delegate::MenuWillShow(SimpleMenuModel* /*source*/) {
 void SimpleMenuModel::Delegate::MenuClosed(SimpleMenuModel* /*source*/) {
 }
 
+bool SimpleMenuModel::Delegate::GetAcceleratorForCommandId(
+    int command_id,
+    ui::Accelerator* accelerator) const {
+  return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SimpleMenuModel, public:
 
@@ -256,8 +262,8 @@ void SimpleMenuModel::Clear() {
   MenuItemsChanged();
 }
 
-int SimpleMenuModel::GetIndexOfCommandId(int command_id) {
-  for (ItemVector::iterator i = items_.begin(); i != items_.end(); ++i) {
+int SimpleMenuModel::GetIndexOfCommandId(int command_id) const {
+  for (ItemVector::const_iterator i = items_.begin(); i != items_.end(); ++i) {
     if (i->command_id == command_id)
       return static_cast<int>(std::distance(items_.begin(), i));
   }

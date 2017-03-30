@@ -9,9 +9,9 @@
 #include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "net/quic/quic_alarm.h"
-#include "net/quic/quic_client_promised_info.h"
-#include "net/quic/spdy_utils.h"
+#include "net/quic/core/quic_alarm.h"
+#include "net/quic/core/quic_client_promised_info.h"
+#include "net/quic/core/spdy_utils.h"
 #include "net/spdy/spdy_protocol.h"
 #include "net/tools/quic/quic_client_session.h"
 #include "net/tools/quic/spdy_balsa_utils.h"
@@ -149,12 +149,10 @@ void QuicSpdyClientStream::OnPromiseHeaderList(
 }
 
 void QuicSpdyClientStream::OnDataAvailable() {
-  if (FLAGS_quic_supports_push_promise) {
-    // For push streams, visitor will not be set until the rendezvous
-    // between server promise and client request is complete.
-    if (visitor() == nullptr)
-      return;
-  }
+  // For push streams, visitor will not be set until the rendezvous
+  // between server promise and client request is complete.
+  if (visitor() == nullptr)
+    return;
 
   while (HasBytesToRead()) {
     struct iovec iov;

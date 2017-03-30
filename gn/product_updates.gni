@@ -1,0 +1,88 @@
+post_process_target("//chrome:chrome_initial") {
+  if (is_win) {
+    output_name = "initialexe/vivaldi"
+  } else {
+    output_name = "vivaldi"
+  }
+}
+
+post_process_target("//chrome:main_dll") {
+  if (is_win) {
+    output_name = "vivaldi"
+  }
+}
+
+post_process_target("//chrome:chrome_child") {
+  if (is_win) {
+    output_name = "vivaldi_child"
+  }
+}
+
+post_process_target("//chrome/chrome_watcher:chrome_watcher") {
+  if (is_win) {
+    output_name = "vivaldi_watcher"
+  }
+}
+
+post_process_target("//chrome_elf:chrome_elf") {
+  output_name = "vivaldi_elf"
+}
+
+post_process_action("//chrome:reorder_imports") {
+  inputs -= inputs
+  outputs -= outputs
+  inputs = [
+    "$root_out_dir/initialexe/vivaldi.exe",
+  ]
+  outputs = [
+    "$root_out_dir/vivaldi.exe",
+    "$root_out_dir/vivaldi.exe.pdb",
+  ]
+}
+
+post_process_action(
+    "//chrome/installer/mini_installer:mini_installer_archive") {
+  inputs -= [
+    "$root_out_dir/chrome.dll",
+    "$root_out_dir/chrome.exe",
+  ]
+  inputs += [
+    "$root_out_dir/vivaldi.dll",
+    "$root_out_dir/vivaldi.exe",
+  ]
+  sign_executables =
+      defined(invoker.sign_executables) && invoker.sign_executables
+  outputs -= [ "$output_dir/chrome.7z" ]
+  if (!is_component_build) {
+    outputs -= [ "$output_dir/chrome.packed.7z" ]
+  }
+
+  # Have to keep the sequence due to the archive.d file being keyed to the first name
+  temp = outputs
+  outputs = []
+  outputs += [ "$output_dir/vivaldi.7z" ]
+  if (!is_component_build) {
+    outputs += [ "$output_dir/vivaldi.packed.7z" ]
+  }
+  outputs += temp
+  args -= [ "--distribution=_google_chrome" ]
+  args += [
+    "--distribution=vivaldi",
+    "--vivaldi-version",
+    rebase_path("//vivaldi/VIVALDI_VERSION", root_build_dir),
+    "--vivaldi-build-version",
+    "$GLOBAL_BUILDNUM",
+  ]
+  if (sign_executables) {
+    args += [ "--sign-executables" ]
+  }
+}
+
+post_process_template(
+    "//chrome/app/version_assembly:version_assembly_manifest") {
+  output = "$root_build_dir/$vivaldi_version_full.manifest"
+}
+
+post_process_action("//chrome/installer/linux:linux_packages_all") {
+  visibility += [ "//vivaldi:All" ]
+}

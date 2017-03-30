@@ -29,15 +29,17 @@
 using bookmarks::BookmarkModel;
 
 // static
-BookmarkModel* BookmarkModelFactory::GetForProfile(Profile* profile) {
+BookmarkModel* BookmarkModelFactory::GetForBrowserContext(
+    content::BrowserContext* context) {
   return static_cast<BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserContext(profile, true));
+      GetInstance()->GetServiceForBrowserContext(context, true));
 }
 
 // static
-BookmarkModel* BookmarkModelFactory::GetForProfileIfExists(Profile* profile) {
+BookmarkModel* BookmarkModelFactory::GetForBrowserContextIfExists(
+    content::BrowserContext* context) {
   return static_cast<BookmarkModel*>(
-      GetInstance()->GetServiceForBrowserContext(profile, false));
+      GetInstance()->GetServiceForBrowserContext(context, false));
 }
 
 // static
@@ -63,11 +65,10 @@ KeyedService* BookmarkModelFactory::BuildServiceInstanceFor(
   BookmarkModel* bookmark_model =
       new BookmarkModel(base::WrapUnique(new ChromeBookmarkClient(
           profile, ManagedBookmarkServiceFactory::GetForProfile(profile))));
-  bookmark_model->Load(profile->GetPrefs(),
-                       profile->GetPath(),
+  bookmark_model->Load(profile->GetPrefs(), profile->GetPath(),
                        StartupTaskRunnerServiceFactory::GetForProfile(profile)
                            ->GetBookmarkTaskRunner(),
-                       content::BrowserThread::GetMessageLoopProxyForThread(
+                       content::BrowserThread::GetTaskRunnerForThread(
                            content::BrowserThread::UI));
   bool register_bookmark_undo_service_as_observer = true;
 #if !BUILDFLAG(ANDROID_JAVA_UI)

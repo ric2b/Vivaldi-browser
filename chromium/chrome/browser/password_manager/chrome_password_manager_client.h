@@ -73,10 +73,11 @@ class ChromePasswordManagerClient
       std::unique_ptr<password_manager::PasswordFormManager> saved_form_manager)
       override;
   void PasswordWasAutofilled(
-      const autofill::PasswordFormMap& best_matches,
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          best_matches,
       const GURL& origin,
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>*
-          federated_matches) const override;
+      const std::vector<const autofill::PasswordForm*>* federated_matches)
+      const override;
   PrefService* GetPrefs() override;
   password_manager::PasswordStore* GetPasswordStore() const override;
   password_manager::PasswordSyncState GetPasswordSyncState() const override;
@@ -88,6 +89,7 @@ class ChromePasswordManagerClient
   const GURL& GetMainFrameURL() const override;
   bool IsUpdatePasswordUIEnabled() const override;
   const GURL& GetLastCommittedEntryURL() const override;
+  void AnnotateNavigationEntry(bool has_password_field) override;
   const password_manager::CredentialsFilter* GetStoreResultFilter()
       const override;
   const password_manager::LogManager* GetLogManager() const override;
@@ -162,6 +164,10 @@ class ChromePasswordManagerClient
   void OnCredentialsChosen(const CredentialsCallback& callback,
                            bool one_local_credential,
                            const autofill::PasswordForm* form);
+
+  // Returns true if this profile has metrics reporting and active sync
+  // without custom sync passphrase.
+  static bool ShouldAnnotateNavigationEntries(Profile* profile);
 
   Profile* const profile_;
 

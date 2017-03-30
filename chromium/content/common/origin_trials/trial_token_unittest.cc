@@ -28,6 +28,13 @@ namespace {
 //  0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2, 0x9a,
 //  0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f, 0x64,
 //  0x90, 0x08, 0x8e, 0xa8, 0xe0, 0x56, 0x3a, 0x04, 0xd0
+//
+//  This private key can also be found in tools/origin_trials/eftest.key in
+//  binary form. Please update that if changing the key.
+//
+//  To use this with a real browser, use --origin-trial-public-key with the
+//  public key, base-64-encoded:
+//  --origin-trial-public-key=dRCs+TocuKkocNKa0AtZ4awrt9XKH2SQCI6o4FY6BNA=
 const uint8_t kTestPublicKey[] = {
     0x75, 0x10, 0xac, 0xf9, 0x3a, 0x1c, 0xb8, 0xa9, 0x28, 0x70, 0xd2,
     0x9a, 0xd0, 0x0b, 0x59, 0xe1, 0xac, 0x2b, 0xb7, 0xd5, 0xca, 0x1f,
@@ -287,32 +294,17 @@ TEST_F(TrialTokenTest, ValidateValidToken) {
   EXPECT_FALSE(ValidateDate(token.get(), invalid_timestamp_));
 }
 
-TEST_F(TrialTokenTest, TokenIsValidForFeature) {
+TEST_F(TrialTokenTest, TokenIsValid) {
   std::unique_ptr<TrialToken> token = Parse(kSampleTokenJSON);
   ASSERT_TRUE(token);
   EXPECT_EQ(blink::WebOriginTrialTokenStatus::Success,
-            token->IsValidForFeature(expected_origin_, kExpectedFeatureName,
-                                     valid_timestamp_));
-  EXPECT_EQ(blink::WebOriginTrialTokenStatus::WrongFeature,
-            token->IsValidForFeature(expected_origin_,
-                                     base::ToUpperASCII(kExpectedFeatureName),
-                                     valid_timestamp_));
-  EXPECT_EQ(blink::WebOriginTrialTokenStatus::WrongFeature,
-            token->IsValidForFeature(expected_origin_,
-                                     base::ToLowerASCII(kExpectedFeatureName),
-                                     valid_timestamp_));
+            token->IsValid(expected_origin_, valid_timestamp_));
   EXPECT_EQ(blink::WebOriginTrialTokenStatus::WrongOrigin,
-            token->IsValidForFeature(invalid_origin_, kExpectedFeatureName,
-                                     valid_timestamp_));
+            token->IsValid(invalid_origin_, valid_timestamp_));
   EXPECT_EQ(blink::WebOriginTrialTokenStatus::WrongOrigin,
-            token->IsValidForFeature(insecure_origin_, kExpectedFeatureName,
-                                     valid_timestamp_));
-  EXPECT_EQ(blink::WebOriginTrialTokenStatus::WrongFeature,
-            token->IsValidForFeature(expected_origin_, kInvalidFeatureName,
-                                     valid_timestamp_));
+            token->IsValid(insecure_origin_, valid_timestamp_));
   EXPECT_EQ(blink::WebOriginTrialTokenStatus::Expired,
-            token->IsValidForFeature(expected_origin_, kExpectedFeatureName,
-                                     invalid_timestamp_));
+            token->IsValid(expected_origin_, invalid_timestamp_));
 }
 
 // Test overall extraction, to ensure output status matches returned token

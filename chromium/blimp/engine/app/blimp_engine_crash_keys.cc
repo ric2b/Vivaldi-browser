@@ -70,11 +70,31 @@ size_t RegisterEngineCrashKeys() {
       { "initrf_root_process_is_live", crash_keys::kSmallSize},
       { "initrf_root_proxy_is_live", crash_keys::kSmallSize},
 
+      // Temporary for https://crbug.com/630103.
+      { "origin_mismatch_url", crash_keys::kLargeSize },
+      { "origin_mismatch_origin", crash_keys::kMediumSize },
+      { "origin_mismatch_transition", crash_keys::kSmallSize },
+      { "origin_mismatch_redirects", crash_keys::kSmallSize },
+      { "origin_mismatch_same_page", crash_keys::kSmallSize },
+
       // Temporary for https://crbug.com/612711.
       { "aci_wrong_sp_extension_id", crash_keys::kSmallSize },
 
       // Temporary for https://crbug.com/616149.
       { "existing_extension_pref_value_type", crash_keys::kSmallSize },
+
+      // Temporary for https://crbug.com/630495.
+      { "swdh_register_cannot_host_url", crash_keys::kLargeSize },
+      { "swdh_register_cannot_scope_url", crash_keys::kLargeSize },
+      { "swdh_register_cannot_script_url", crash_keys::kLargeSize },
+
+      // Temporary for https://crbug.com/619294.
+      { "swdh_unregister_cannot_host_url", crash_keys::kLargeSize },
+      { "swdh_unregister_cannot_scope_url", crash_keys::kLargeSize },
+
+      // Temporary for https://crbug.com/630496.
+      { "swdh_get_registration_cannot_host_url", crash_keys::kLargeSize },
+      { "swdh_get_registration_cannot_document_url", crash_keys::kLargeSize },
     };
 
   return base::debug::InitCrashKeys(engine_keys, arraysize(engine_keys),

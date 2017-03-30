@@ -55,6 +55,7 @@ class FontMetrics;
 class HitRegion;
 class HitRegionOptions;
 class HitRegionManager;
+class HitTestCanvasResult;
 class Path2D;
 class SVGMatrixTearOff;
 class TextMetrics;
@@ -134,7 +135,7 @@ public:
     void willProcessTask() override { }
 
     void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle) override;
-    std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint& location) override;
+    HitTestCanvasResult* getControlAndIdIfHitRegionExists(const LayoutPoint& location) override;
     String getIdFromControl(const Element*) override;
 
     // SVGResourceClient implementation
@@ -166,6 +167,12 @@ public:
 
     void validateStateStack() final;
 
+    bool isAccelerationOptimalForCanvasContent() const;
+
+    void resetUsageTracking();
+
+    void incrementFrameCount() { m_usageCounters.numFramesSinceReset++; };
+
 private:
     friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
 
@@ -173,9 +180,9 @@ private:
 
     void dispose();
 
-    void dispatchContextLostEvent(Timer<CanvasRenderingContext2D>*);
-    void dispatchContextRestoredEvent(Timer<CanvasRenderingContext2D>*);
-    void tryRestoreContextEvent(Timer<CanvasRenderingContext2D>*);
+    void dispatchContextLostEvent(TimerBase*);
+    void dispatchContextRestoredEvent(TimerBase*);
+    void tryRestoreContextEvent(TimerBase*);
 
     void unwindStateStack();
 
@@ -197,7 +204,7 @@ private:
     CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::Context2d; }
     bool is2d() const override { return true; }
     bool isAccelerated() const override;
-    bool hasAlpha() const override { return m_hasAlpha; }
+    bool hasAlpha() const override { return creationAttributes().alpha(); }
     void setIsHidden(bool) override;
     void stop() final;
     DECLARE_VIRTUAL_TRACE();
@@ -207,7 +214,6 @@ private:
     WebLayer* platformLayer() const override;
 
     Member<HitRegionManager> m_hitRegionManager;
-    bool m_hasAlpha;
     LostContextMode m_contextLostMode;
     bool m_contextRestorable;
     unsigned m_tryRestoreContextAttemptCount;
@@ -218,9 +224,16 @@ private:
     HashMap<String, Font> m_fontsResolvedUsingCurrentStyle;
     bool m_pruneLocalFontCacheScheduled;
     ListHashSet<String> m_fontLRUList;
+
+    bool isPaintable() const final
+    {
+        NOTREACHED();
+        return false;
+    }
 };
 
-DEFINE_TYPE_CASTS(CanvasRenderingContext2D, CanvasRenderingContext, context, context->is2d(), context.is2d());
+DEFINE_TYPE_CASTS(CanvasRenderingContext2D, CanvasRenderingContext, context,
+    context->is2d() && context->canvas(), context.is2d() && context.canvas());
 
 } // namespace blink
 

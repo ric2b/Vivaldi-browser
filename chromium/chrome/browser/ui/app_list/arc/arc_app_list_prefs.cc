@@ -589,19 +589,41 @@ void ArcAppListPrefs::RemoveAllApps() {
 }
 
 void ArcAppListPrefs::OnOptInEnabled(bool enabled) {
+  UpdateDefaultAppsHiddenState();
+
   if (enabled)
     NotifyRegisteredApps();
   else
     RemoveAllApps();
 }
 
+void ArcAppListPrefs::UpdateDefaultAppsHiddenState() {
+  const arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
+  const bool was_hidden = default_apps_.is_hidden();
+  default_apps_.set_hidden(!auth_service->IsArcEnabled() &&
+                           auth_service->IsArcManaged());
+  if (was_hidden && !default_apps_.is_hidden())
+    RegisterDefaultApps();
+}
+
 void ArcAppListPrefs::OnDefaultAppsReady() {
   // Apply uninstalled packages now.
+
   const std::vector<std::string> uninstalled_package_names =
       GetPackagesFromPrefs(false);
   for (const auto& uninstalled_package_name : uninstalled_package_names)
     default_apps_.MaybeMarkPackageUninstalled(uninstalled_package_name, true);
 
+  UpdateDefaultAppsHiddenState();
+
+  default_apps_ready_ = true;
+  if (!default_apps_ready_callback_.is_null())
+    default_apps_ready_callback_.Run();
+
+  StartPrefs();
+}
+
+void ArcAppListPrefs::RegisterDefaultApps() {
   // Report default apps first, note, app_map includes uninstalled apps as well.
   for (const auto& default_app : default_apps_.app_map()) {
     const std::string& app_id = default_app.first;
@@ -620,12 +642,6 @@ void ArcAppListPrefs::OnDefaultAppsReady() {
                       true /* launchable */,
                       arc::mojom::OrientationLock::NONE);
   }
-
-  default_apps_ready_ = true;
-  if (!default_apps_ready_callback_.is_null())
-    default_apps_ready_callback_.Run();
-
-  StartPrefs();
 }
 
 void ArcAppListPrefs::SetDefaltAppsReadyCallback(base::Closure callback) {
@@ -664,6 +680,7 @@ void ArcAppListPrefs::OnInstanceClosed() {
   }
 
   is_initialized_ = false;
+  package_list_initial_refreshed_ = false;
 }
 
 void ArcAppListPrefs::MaybeAddNonLaunchableApp(const std::string& name,
@@ -1134,12 +1151,13 @@ void ArcAppListPrefs::OnPackageListRefreshed(
       RemovePackageFromPrefs(prefs_, package_name);
   }
 
-  // Start ArcPackageSyncService ASAP. This is the call_back of
-  // app_instance->RefreshAppList() in OnInstanceReady(). SyncStarted() should
-  // only be called after packagelist refresh is completed. SyncStarted() is
-  // no-op after first time setup or if sync is disabled.
-  DCHECK(sync_service_);
-  sync_service_->SyncStarted();
+  // TODO(lgcheng@) File http://b/31944261. Remove the flag after Android side
+  // cleanup.
+  if (package_list_initial_refreshed_)
+    return;
+
+  package_list_initial_refreshed_ = true;
+  FOR_EACH_OBSERVER(Observer, observer_list_, OnPackageListInitialRefreshed());
 }
 
 std::vector<std::string> ArcAppListPrefs::GetPackagesFromPrefs() const {

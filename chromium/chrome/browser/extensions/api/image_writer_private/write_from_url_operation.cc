@@ -88,8 +88,7 @@ void WriteFromUrlOperation::Download(const base::Closure& continuation) {
 
   url_fetcher_->SetRequestContext(request_context_);
   url_fetcher_->SaveResponseToFileAtPath(
-      image_path_,
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+      image_path_, BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
 
   AddCleanUpFunction(
       base::Bind(&WriteFromUrlOperation::DestroyUrlFetcher, this));
@@ -109,7 +108,8 @@ void WriteFromUrlOperation::OnURLFetchUploadProgress(
 void WriteFromUrlOperation::OnURLFetchDownloadProgress(
     const net::URLFetcher* source,
     int64_t current,
-    int64_t total) {
+    int64_t total,
+    int64_t current_network_bytes) {
   DCHECK_CURRENTLY_ON(BrowserThread::FILE);
 
   if (IsCancelled()) {

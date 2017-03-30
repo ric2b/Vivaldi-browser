@@ -62,7 +62,7 @@ void copyToActiveInterpolationsMap(const Vector<RefPtr<Interpolation>>& source, 
 
 bool compareSampledEffects(const Member<SampledEffect>& sampledEffect1, const Member<SampledEffect>& sampledEffect2)
 {
-    ASSERT(sampledEffect1 && sampledEffect2);
+    DCHECK(sampledEffect1 && sampledEffect2);
     return sampledEffect1->sequenceNumber() < sampledEffect2->sequenceNumber();
 }
 
@@ -85,7 +85,7 @@ AnimationStack::AnimationStack()
 bool AnimationStack::hasActiveAnimationsOnCompositor(CSSPropertyID property) const
 {
     for (const auto& sampledEffect : m_sampledEffects) {
-        // TODO(dstockwell): move the playing check into AnimationEffect and expose both hasAnimations and hasActiveAnimations
+        // TODO(dstockwell): move the playing check into AnimationEffectReadOnly and expose both hasAnimations and hasActiveAnimations
         if (sampledEffect->effect() && sampledEffect->effect()->animation()->playing() && sampledEffect->effect()->hasActiveAnimationsOnCompositor(property))
             return true;
     }

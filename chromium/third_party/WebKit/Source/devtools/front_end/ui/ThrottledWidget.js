@@ -4,12 +4,12 @@
 
 /**
  * @constructor
- * @extends {WebInspector.Widget}
+ * @extends {WebInspector.VBox}
  * @param {boolean=} isWebComponent
  */
 WebInspector.ThrottledWidget = function(isWebComponent)
 {
-    WebInspector.Widget.call(this, isWebComponent);
+    WebInspector.VBox.call(this, isWebComponent);
     this._updateThrottler = new WebInspector.Throttler(100);
     this._updateWhenVisible = false;
 }
@@ -51,10 +51,10 @@ WebInspector.ThrottledWidget.prototype = {
      */
     wasShown: function()
     {
-        WebInspector.Widget.prototype.wasShown.call(this);
+        WebInspector.VBox.prototype.wasShown.call(this);
         if (this._updateWhenVisible)
             this.update();
     },
 
-    __proto__: WebInspector.Widget.prototype
+    __proto__: WebInspector.VBox.prototype
 }

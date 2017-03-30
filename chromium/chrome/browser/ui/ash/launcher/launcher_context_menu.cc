@@ -7,11 +7,11 @@
 #include <string>
 
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shelf/wm_shelf.h"
+#include "ash/common/wallpaper/wallpaper_delegate.h"
 #include "ash/common/wm_shell.h"
-#include "ash/desktop_background/user_wallpaper_delegate.h"
-#include "ash/shelf/shelf_widget.h"
-#include "ash/shell.h"
 #include "build/build_config.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
@@ -85,7 +85,7 @@ base::string16 LauncherContextMenu::GetLabelForCommandId(int command_id) const {
 
 bool LauncherContextMenu::IsCommandIdChecked(int command_id) const {
   if (command_id == MENU_AUTO_HIDE) {
-    return wm_shelf_->GetAutoHideBehavior() ==
+    return wm_shelf_->auto_hide_behavior() ==
            ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
   }
   DCHECK(command_id < MENU_ITEM_COUNT);
@@ -97,8 +97,8 @@ bool LauncherContextMenu::IsCommandIdEnabled(int command_id) const {
     case MENU_PIN:
       return controller_->IsPinnable(item_.id);
     case MENU_CHANGE_WALLPAPER:
-      return ash::Shell::GetInstance()
-          ->user_wallpaper_delegate()
+      return ash::WmShell::Get()
+          ->wallpaper_delegate()
           ->CanOpenSetWallpaperPage();
     case MENU_AUTO_HIDE:
       return CanUserModifyShelfAutoHideBehavior(controller_->GetProfile());
@@ -106,12 +106,6 @@ bool LauncherContextMenu::IsCommandIdEnabled(int command_id) const {
       DCHECK(command_id < MENU_ITEM_COUNT);
       return true;
   }
-}
-
-bool LauncherContextMenu::GetAcceleratorForCommandId(
-      int command_id,
-      ui::Accelerator* accelerator) {
-  return false;
 }
 
 void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
@@ -122,9 +116,7 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
     case MENU_CLOSE:
       if (item_.type == ash::TYPE_DIALOG) {
         ash::ShelfItemDelegate* item_delegate =
-            ash::Shell::GetInstance()
-                ->shelf_item_delegate_manager()
-                ->GetShelfItemDelegate(item_.id);
+            ash::WmShell::Get()->shelf_model()->GetShelfItemDelegate(item_.id);
         DCHECK(item_delegate);
         item_delegate->Close();
       } else {
@@ -139,7 +131,7 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
     case MENU_AUTO_HIDE:
       wm_shelf_->SetAutoHideBehavior(
-          wm_shelf_->GetAutoHideBehavior() ==
+          wm_shelf_->auto_hide_behavior() ==
                   ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS
               ? ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER
               : ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
@@ -147,8 +139,7 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
     case MENU_ALIGNMENT_MENU:
       break;
     case MENU_CHANGE_WALLPAPER:
-      ash::Shell::GetInstance()->user_wallpaper_delegate()->
-          OpenSetWallpaperPage();
+      ash::WmShell::Get()->wallpaper_delegate()->OpenSetWallpaperPage();
       break;
     default:
       NOTREACHED();

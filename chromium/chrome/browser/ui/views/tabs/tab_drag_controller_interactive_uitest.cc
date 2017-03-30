@@ -40,6 +40,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_switches.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -65,9 +66,11 @@
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/cursor_manager_test_api.h"
+#include "ash/test/immersive_fullscreen_controller_test_api.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
+#include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/test/event_generator_delegate_aura.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -206,6 +209,10 @@ void TabDragControllerTest::SetWindowFinderForTabStrip(
     std::unique_ptr<WindowFinder> window_finder) {
   ASSERT_TRUE(tab_strip->drag_controller_.get());
   tab_strip->drag_controller_->window_finder_ = std::move(window_finder);
+}
+
+void TabDragControllerTest::SetUpCommandLine(base::CommandLine* command_line) {
+  command_line->AppendSwitch(switches::kDisableResizeLock);
 }
 
 namespace {
@@ -532,7 +539,7 @@ class DetachToBrowserTabDragControllerTest
       // Schedule observer to quit message loop when done dragging. This has to
       // be async so the message loop can run.
       test::QuitWhenNotDraggingImpl();
-      base::MessageLoop::current()->Run();
+      base::RunLoop().Run();
     } else {
       // Touch events are sync, so we know we're not in a drag session. But some
       // tests rely on the browser fully closing, which is async. So, run all
@@ -666,9 +673,8 @@ void DragToSeparateWindowStep2(DetachToBrowserTabDragControllerTest* test,
 
 }  // namespace
 
-#if defined(OS_CHROMEOS) || defined(OS_LINUX)
-// TODO(sky,sad): Disabled as it fails due to resize locks with a real
-// compositor. crbug.com/331924
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO: Disabled as mouse isn't updated propertly, http://crbug.com/640741.
 #define MAYBE_DragToSeparateWindow DISABLED_DragToSeparateWindow
 #else
 #define MAYBE_DragToSeparateWindow DragToSeparateWindow
@@ -1324,9 +1330,8 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest, MAYBE_DragAll) {
   // Size unchanged, but it should have moved down.
   EXPECT_EQ(initial_bounds.size(), final_bounds.size());
   EXPECT_EQ(initial_bounds.origin().x(), final_bounds.origin().x());
-  // TODO(mblsha): Fails on MacViews because of crbug.com/518740
-  // EXPECT_EQ(initial_bounds.origin().y() + GetDetachY(tab_strip),
-  //           final_bounds.origin().y());
+  EXPECT_EQ(initial_bounds.origin().y() + GetDetachY(tab_strip),
+            final_bounds.origin().y());
 }
 
 namespace {
@@ -2048,7 +2053,11 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserInSeparateDisplayTabDragControllerTest,
   BrowserView* browser_view2 = BrowserView::GetBrowserViewForBrowser(browser2);
   ImmersiveModeController* immersive_controller2 =
       browser_view2->immersive_mode_controller();
-  immersive_controller2->SetupForTest();
+  ASSERT_EQ(ImmersiveModeController::Type::ASH, immersive_controller2->type());
+  ash::ImmersiveFullscreenControllerTestApi(
+      static_cast<ImmersiveModeControllerAsh*>(immersive_controller2)
+          ->controller())
+      .SetupForTest();
   chrome::ToggleFullscreenMode(browser2);
   ASSERT_TRUE(immersive_controller2->IsEnabled());
   ASSERT_FALSE(immersive_controller2->IsRevealed());

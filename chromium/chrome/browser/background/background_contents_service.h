@@ -14,6 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/background/background_contents.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -21,6 +22,7 @@
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/common/window_container_type.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "net/base/backoff_entry.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
@@ -215,6 +217,11 @@ class BackgroundContentsService : private content::NotificationObserver,
   // set of background apps as new background contents are opened/closed).
   void SendChangeNotification(Profile* profile);
 
+  // Checks whether there has been additional |extension_id| failures. If not,
+  // delete the BackoffEntry corresponding to |extension_id|, if exists.
+  void MaybeClearBackoffEntry(const std::string extension_id,
+                              int expected_failure_count);
+
   // Delay (in ms) before restarting a force-installed extension that crashed.
   static int restart_delay_in_ms_;
 
@@ -239,9 +246,17 @@ class BackgroundContentsService : private content::NotificationObserver,
       BackgroundContentsMap;
   BackgroundContentsMap contents_map_;
 
+  // Map associating component extensions that have attempted to reload with a
+  // BackoffEntry keeping track of retry timing.
+  typedef std::map<extensions::ExtensionId, std::unique_ptr<net::BackoffEntry>>
+      ComponentExtensionBackoffEntryMap;
+  ComponentExtensionBackoffEntryMap component_backoff_map_;
+
   ScopedObserver<extensions::ExtensionRegistry,
                  extensions::ExtensionRegistryObserver>
       extension_registry_observer_;
+
+  base::WeakPtrFactory<BackgroundContentsService> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BackgroundContentsService);
 };

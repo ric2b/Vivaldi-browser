@@ -7,6 +7,7 @@
 #ifndef V8TestInterfacePartial_h
 #define V8TestInterfacePartial_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/ToV8.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -26,6 +27,7 @@ public:
     static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
 
     static void installOriginTrialPartialFeature(ScriptState*, v8::Local<v8::Object> instance);
+    static void installOriginTrialPartialFeature(ScriptState*);
 private:
     static void installV8TestInterfaceTemplate(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
 };

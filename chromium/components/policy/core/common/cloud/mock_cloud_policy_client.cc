@@ -5,8 +5,8 @@
 #include <utility>
 
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 namespace em = enterprise_management;
 
@@ -16,6 +16,7 @@ MockCloudPolicyClient::MockCloudPolicyClient()
     : CloudPolicyClient(std::string(),
                         std::string(),
                         std::string(),
+                        nullptr,
                         nullptr,
                         nullptr) {}
 

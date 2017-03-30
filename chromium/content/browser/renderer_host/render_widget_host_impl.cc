@@ -29,7 +29,6 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "content/browser/accessibility/accessibility_mode_helper.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/bad_message.h"
@@ -50,6 +49,7 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/renderer_host/render_widget_host_owner_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/cursors/webcursor.h"
@@ -63,6 +63,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_iterator.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
@@ -222,10 +223,10 @@ RenderWidgetHostImpl::RenderWidgetHostImpl(RenderWidgetHostDelegate* delegate,
 #if defined(OS_WIN)
   // Update the display color profile cache so that it is likely to be up to
   // date when the renderer process requests the color profile.
-  if (gfx::ColorSpace::CachedProfilesNeedUpdate()) {
+  if (gfx::ICCProfile::CachedProfilesNeedUpdate()) {
     BrowserThread::PostBlockingPoolTask(
         FROM_HERE,
-        base::Bind(&gfx::ColorSpace::UpdateCachedProfilesOnBackgroundThread));
+        base::Bind(&gfx::ICCProfile::UpdateCachedProfilesOnBackgroundThread));
   }
 #endif
 
@@ -323,16 +324,21 @@ RenderWidgetHostImpl* RenderWidgetHostImpl::From(RenderWidgetHost* rwh) {
 }
 
 void RenderWidgetHostImpl::SetView(RenderWidgetHostViewBase* view) {
-  if (view)
+  if (view) {
     view_ = view->GetWeakPtr();
-  else
+    // Views start out not needing begin frames, so only update its state
+    // if the value has changed.
+    if (needs_begin_frames_)
+      view_->SetNeedsBeginFrames(needs_begin_frames_);
+  } else {
     view_.reset();
+  }
 
   // If the renderer has not yet been initialized, then the surface ID
   // namespace will be sent during initialization.
   if (view_ && renderer_initialized_) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(routing_id_,
-                                           view_->GetSurfaceIdNamespace()));
+    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
+                                        view_->GetSurfaceClientId()));
   }
 
   synthetic_gesture_controller_.reset();
@@ -404,8 +410,8 @@ void RenderWidgetHostImpl::Init() {
   // If the RWHV has not yet been set, the surface ID namespace will get
   // passed down by the call to SetView().
   if (view_) {
-    Send(new ViewMsg_SetSurfaceIdNamespace(routing_id_,
-                                           view_->GetSurfaceIdNamespace()));
+    Send(new ViewMsg_SetSurfaceClientId(routing_id_,
+                                        view_->GetSurfaceClientId()));
   }
 
   SendScreenRects();
@@ -437,9 +443,18 @@ bool RenderWidgetHostImpl::IsLoading() const {
 }
 
 bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
-  // Only process messages if the RenderWidget is alive.
-  if (!renderer_initialized())
-    return false;
+  // Only process most messages if the RenderWidget is alive.
+  if (!renderer_initialized()) {
+    // SetNeedsBeginFrame messages are only sent by the renderer once and so
+    // should never be dropped.
+    bool handled = true;
+    IPC_BEGIN_MESSAGE_MAP(RenderWidgetHostImpl, msg)
+      IPC_MESSAGE_HANDLER(ViewHostMsg_SetNeedsBeginFrames,
+                          OnSetNeedsBeginFrames)
+      IPC_MESSAGE_UNHANDLED(handled = false)
+    IPC_END_MESSAGE_MAP()
+    return handled;
+  }
 
   if (owner_delegate_ && owner_delegate_->OnMessageReceived(msg))
     return true;
@@ -476,6 +491,7 @@ bool RenderWidgetHostImpl::OnMessageReceived(const IPC::Message &msg) {
                         OnFirstPaintAfterLoad)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ForwardCompositorProto,
                         OnForwardCompositorProto)
+    IPC_MESSAGE_HANDLER(ViewHostMsg_SetNeedsBeginFrames, OnSetNeedsBeginFrames)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -592,10 +608,14 @@ bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
 
   if (view_) {
     resize_params->new_size = view_->GetRequestedRendererSize();
+    // TODO(wjmaclean): Can we just get rid of physical_backing_size and just
+    // deal with it on the renderer side? It seems to always be
+    // ScaleToCeiledSize(new_size, device_scale_factor) ??
     resize_params->physical_backing_size = view_->GetPhysicalBackingSize();
     resize_params->top_controls_height = view_->GetTopControlsHeight();
     resize_params->top_controls_shrink_blink_size =
         view_->DoTopControlsShrinkBlinkSize();
+    resize_params->bottom_controls_height = view_->GetBottomControlsHeight();
     resize_params->visible_viewport_size = view_->GetVisibleViewportSize();
   }
 
@@ -615,6 +635,8 @@ bool RenderWidgetHostImpl::GetResizeParams(ResizeParams* resize_params) {
           resize_params->top_controls_height ||
       old_resize_params_->top_controls_shrink_blink_size !=
           resize_params->top_controls_shrink_blink_size ||
+      old_resize_params_->bottom_controls_height !=
+          resize_params->bottom_controls_height ||
       old_resize_params_->visible_viewport_size !=
           resize_params->visible_viewport_size;
 
@@ -1225,10 +1247,11 @@ void RenderWidgetHostImpl::RemoveInputEventObserver(
 
 void RenderWidgetHostImpl::GetWebScreenInfo(blink::WebScreenInfo* result) {
   TRACE_EVENT0("renderer_host", "RenderWidgetHostImpl::GetWebScreenInfo");
-  if (view_)
-    view_->GetScreenInfo(result);
+  if (delegate_)
+    delegate_->GetScreenInfo(result);
   else
-    RenderWidgetHostViewBase::GetDefaultScreenInfo(result);
+    NOTREACHED();
+
   // TODO(sievers): find a way to make this done another way so the method
   // can be const.
   latency_tracker_.set_device_scale_factor(result->deviceScaleFactor);
@@ -1265,12 +1288,15 @@ void RenderWidgetHostImpl::GetSnapshotFromBrowser(
     power_save_blocker_.reset(new device::PowerSaveBlocker(
         device::PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
         device::PowerSaveBlocker::kReasonOther, "GetSnapshot",
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
   }
 #endif
   pending_browser_snapshots_.insert(std::make_pair(id, callback));
-  Send(new ViewMsg_ForceRedraw(GetRoutingID(), id));
+  ui::LatencyInfo latency_info;
+  latency_info.AddLatencyNumber(ui::WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT, 0,
+                                id);
+  Send(new ViewMsg_ForceRedraw(GetRoutingID(), latency_info));
 }
 
 const NativeWebKeyboardEvent*
@@ -1296,6 +1322,15 @@ void RenderWidgetHostImpl::OnForwardCompositorProto(
     const std::vector<uint8_t>& proto) {
   if (delegate_)
     delegate_->ForwardCompositorProto(this, proto);
+}
+
+void RenderWidgetHostImpl::OnSetNeedsBeginFrames(bool needs_begin_frames) {
+  if (needs_begin_frames_ == needs_begin_frames)
+    return;
+
+  needs_begin_frames_ = needs_begin_frames;
+  if (view_)
+    view_->SetNeedsBeginFrames(needs_begin_frames);
 }
 
 void RenderWidgetHostImpl::UpdateVSyncParameters(base::TimeTicks timebase,
@@ -1586,15 +1621,14 @@ bool RenderWidgetHostImpl::OnSwapCompositorFrame(
     view_->OnSwapCompositorFrame(output_surface_id, std::move(frame));
     view_->DidReceiveRendererFrame();
   } else {
-    cc::CompositorFrameAck ack;
-    if (frame.gl_frame_data) {
-      ack.gl_frame_data = std::move(frame.gl_frame_data);
-    } else if (frame.delegated_frame_data) {
+    cc::ReturnedResourceArray resources;
+    if (frame.delegated_frame_data) {
       cc::TransferableResource::ReturnResources(
-          frame.delegated_frame_data->resource_list, &ack.resources);
+          frame.delegated_frame_data->resource_list, &resources);
     }
-    SendSwapCompositorFrameAck(routing_id_, output_surface_id,
-                               process_->GetID(), ack);
+    SendReclaimCompositorResources(routing_id_, output_surface_id,
+                                   process_->GetID(), true /* is_swap_ack */,
+                                   resources);
   }
 
   RenderProcessHost* rph = GetProcess();
@@ -1883,7 +1917,8 @@ void RenderWidgetHostImpl::DidFlush() {
     synthetic_gesture_controller_->OnDidFlushInput();
 }
 
-void RenderWidgetHostImpl::DidOverscroll(const DidOverscrollParams& params) {
+void RenderWidgetHostImpl::DidOverscroll(
+    const ui::DidOverscrollParams& params) {
   if (view_)
     view_->DidOverscroll(params);
 }
@@ -2028,29 +2063,17 @@ bool RenderWidgetHostImpl::GotResponseToLockMouseRequest(bool allowed) {
 }
 
 // static
-void RenderWidgetHostImpl::SendSwapCompositorFrameAck(
-    int32_t route_id,
-    uint32_t output_surface_id,
-    int renderer_host_id,
-    const cc::CompositorFrameAck& ack) {
-  RenderProcessHost* host = RenderProcessHost::FromID(renderer_host_id);
-  if (!host)
-    return;
-  host->Send(new ViewMsg_SwapCompositorFrameAck(
-      route_id, output_surface_id, ack));
-}
-
-// static
 void RenderWidgetHostImpl::SendReclaimCompositorResources(
     int32_t route_id,
     uint32_t output_surface_id,
     int renderer_host_id,
-    const cc::CompositorFrameAck& ack) {
+    bool is_swap_ack,
+    const cc::ReturnedResourceArray& resources) {
   RenderProcessHost* host = RenderProcessHost::FromID(renderer_host_id);
   if (!host)
     return;
-  host->Send(
-      new ViewMsg_ReclaimCompositorResources(route_id, output_surface_id, ack));
+  host->Send(new ViewMsg_ReclaimCompositorResources(route_id, output_surface_id,
+                                                    is_swap_ack, resources));
 }
 
 void RenderWidgetHostImpl::DelayedAutoResized() {
@@ -2092,7 +2115,12 @@ void RenderWidgetHostImpl::FrameSwapped(const ui::LatencyInfo& latency_info) {
 #endif
   }
 
-  latency_tracker_.OnFrameSwapped(latency_info);
+  const bool is_running_navigation_hint_task =
+      static_cast<ServiceWorkerContextWrapper*>(
+          GetProcess()->GetStoragePartition()->GetServiceWorkerContext())
+          ->IsRunningNavigationHintTask(GetProcess()->GetID());
+  latency_tracker_.OnFrameSwapped(latency_info,
+                                  is_running_navigation_hint_task);
 }
 
 void RenderWidgetHostImpl::DidReceiveRendererFrame() {

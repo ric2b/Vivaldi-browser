@@ -4,21 +4,29 @@
 
 import("//build/config/features.gni")
 import("//remoting/remoting_enable.gni")
-import("//remoting/remoting_srcs.gni")
 import("//remoting/remoting_locales.gni")
+import("//remoting/remoting_version.gni")
 
 if (is_win) {
   import("//remoting/host/predefines_win.gni")
 }
 if (is_mac) {
   import("//build/config/mac/rules.gni")
+  import("//third_party/icu/config.gni")
 }
 
 source_set("common") {
-  sources = rebase_path(
-          remoting_host_srcs_gypi_values.remoting_it2me_host_static_sources,
-          ".",
-          "//remoting")
+  sources = [
+    "it2me_confirmation_dialog.cc",
+    "it2me_confirmation_dialog.h",
+    "it2me_confirmation_dialog_chromeos.cc",
+    "it2me_confirmation_dialog_proxy.cc",
+    "it2me_confirmation_dialog_proxy.h",
+    "it2me_host.cc",
+    "it2me_host.h",
+    "it2me_native_messaging_host.cc",
+    "it2me_native_messaging_host.h",
+  ]
 
   if (is_android) {
     sources -= [
@@ -34,7 +42,7 @@ source_set("common") {
 
   deps = [
     "//base:i18n",
-    "//net:net",
+    "//net",
     "//remoting/base",
     "//remoting/host",
     "//remoting/protocol",
@@ -92,6 +100,28 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
           ]
         }
       }
+
+      mac_xib_bundle_data("remote_assistance_host_xibs") {
+        sources = [
+          "//remoting/host/disconnect_window.xib",
+        ]
+      }
+
+      if (icu_use_data_file) {
+        bundle_data("remote_assistance_host_resources") {
+          sources = [
+            "$root_out_dir/icudtl.dat",
+          ]
+
+          outputs = [
+            "{{bundle_resources_dir}}/{{source_file_part}}",
+          ]
+
+          public_deps = [
+            "//third_party/icu:icudata",
+          ]
+        }
+      }
     } else {
       app_target_type = "executable"
     }
@@ -99,6 +129,12 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
     target(app_target_type, "remote_assistance_host") {
       if (is_mac) {
         info_plist = "remote_assistance_host-Info.plist"
+        extra_substitutions = [
+          "BUNDLE_ID=$remote_assistance_host_bundle_id",
+          "VERSION_FULL=$remoting_version_full",
+          "VERSION_SHORT=$remoting_version_short",
+          "MACOSX_DEPLOYMENT_TARGET=10.7",
+        ]
         extra_configs = [
           "//build/config/compiler:wexit_time_destructors",
           "//remoting:version",
@@ -132,9 +168,13 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
           ]
         }
         deps += [
+          ":remote_assistance_host_xibs",
           "//remoting/host:remoting_infoplist_strings",
           "//remoting/resources:copy_locales",
         ]
+        if (icu_use_data_file) {
+          deps += [ ":remote_assistance_host_resources" ]
+        }
       }
 
       if (enable_webrtc) {

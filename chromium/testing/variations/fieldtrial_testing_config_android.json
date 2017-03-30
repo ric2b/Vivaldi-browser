@@ -1,10 +1,10 @@
 {
     "AllBookmarks": [
         {
-            "enable_features": [
+            "disable_features": [
                 "AllBookmarks"
             ],
-            "group_name": "Enabled"
+            "group_name": "Disabled"
         }
     ],
     "AndroidSessionNotifications": [
@@ -56,15 +56,13 @@
     ],
     "ContextualSearch": [
         {
-            "group_name": "OptOut",
+            "group_name": "Expected",
             "params": {
-                "enabled": "true"
+                "enable_quick_answers": "true",
+                "enable_translation": "true",
+                "recent_scroll_duration_ms": "300",
+                "suppression_taps": "10"
             }
-        }
-    ],
-    "CreditCardScan": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "DataCompressionProxyDevRollout": [
@@ -96,9 +94,21 @@
     ],
     "DataReductionProxyServerExperiments": [
         {
-            "group_name": "TamperDetection_enabled",
+            "group_name": "Prefetch",
             "params": {
-                "exp": "ctd"
+                "exp": "prefetch"
+            }
+        },
+        {
+            "group_name": "Control1",
+            "params": {
+                "exp": "finch_control1"
+            }
+        },
+        {
+            "group_name": "Control2",
+            "params": {
+                "exp": "finch_control2"
             }
         }
     ],
@@ -114,13 +124,30 @@
             ],
             "group_name": "DocumentWriteEvaluatorGroup",
             "params": {
-                "disallowFetchForDocWrittenScriptsInMainFrame": "false"
+                "disallowFetchForDocWrittenScriptsInMainFrame": "false",
+                "disallowFetchForDocWrittenScriptsInMainFrameOnSlowConnections": "false"
             }
+        }
+    ],
+    "DownloadsUi": [
+        {
+            "enable_features": [
+                "DownloadsUi"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "EnableMediaThreadForMediaPlayback": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
         }
     ],
     "ImeThread": [
@@ -129,6 +156,14 @@
                 "ImeThread"
             ],
             "group_name": "Enabled"
+        }
+    ],
+    "ImportantSitesInCBD": [
+        {
+            "enable_features": [
+                "ImportantSitesInCBD"
+            ],
+            "group_name": "DialogEnabled"
         }
     ],
     "InvalidationsGCMUpstream": [
@@ -155,14 +190,6 @@
             }
         }
     ],
-    "MainFrameBeforeActivation": [
-        {
-            "enable_features": [
-                "MainFrameBeforeActivation"
-            ],
-            "group_name": "Enabled"
-        }
-    ],
     "MinidumpDirectoryObserver": [
         {
             "group_name": "ObserverExperimentGroup",
@@ -186,6 +213,14 @@
             "group_name": "Enabled"
         }
     ],
+    "NTPSnippets": [
+        {
+            "enable_features": [
+                "NTPSnippets"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "NetworkQualityEstimator": [
         {
             "group_name": "Enabled",
@@ -203,10 +238,12 @@
                 "HalfLifeSeconds": "60",
                 "None.DefaultMedianKbps": "567",
                 "None.DefaultMedianRTTMsec": "272",
+                "Slow2G.ThresholdMedianHttpRTTMsec": "2000",
                 "Unknown.DefaultMedianKbps": "1916",
                 "Unknown.DefaultMedianRTTMsec": "121",
                 "WiFi.DefaultMedianKbps": "2736",
-                "WiFi.DefaultMedianRTTMsec": "168"
+                "WiFi.DefaultMedianRTTMsec": "168",
+                "correlation_logging_probability": "0.001"
             }
         }
     ],
@@ -260,6 +297,26 @@
             "group_name": "Enabled"
         }
     ],
+    "ParseHTMLOnMainThread": [
+        {
+            "enable_features": [
+                "ParseHTMLOnMainThread"
+            ],
+            "group_name": "Enabled",
+            "params": {
+                "parseHTMLOnMainThreadCoalesceChunks": "false",
+                "parseHTMLOnMainThreadSyncTokenize": "false"
+            }
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "PasswordBranding": [
         {
             "group_name": "SmartLockBrandingSavePromptOnly"
@@ -274,6 +331,14 @@
         {
             "enable_features": [
                 "PhysicalWeb"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
             ],
             "group_name": "Enabled"
         }
@@ -339,24 +404,6 @@
             }
         },
         {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "-1.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "0.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "abcdef"
-            }
-        },
-        {
             "group_name": "DontShowAndDontSend"
         }
     ],
@@ -393,27 +440,15 @@
             "group_name": "Enabled"
         }
     ],
-    "SpeculativeResourcePrefetching": [
+    "SpeculativeLaunchServiceWorker": [
         {
-            "group_name": "v=1a:Prefetching=Enabled:Predictor=Url"
+            "enable_features": [
+                "SpeculativeLaunchServiceWorker"
+            ],
+            "group_name": "Enabled"
         },
         {
-            "group_name": "v=1b:Prefetching=Enabled:Predictor=Url:Confidence=High"
-        },
-        {
-            "group_name": "v=1c:Prefetching=Enabled:Predictor=Url:Confidence=Low"
-        },
-        {
-            "group_name": "v=1d:Prefetching=Enabled:Predictor=Host"
-        },
-        {
-            "group_name": "v=1e:Prefetching=Enabled:Predictor=Host:Confidence=High"
-        },
-        {
-            "group_name": "v=1f:Prefetching=Enabled:Predictor=Host:Confidence=Low"
-        },
-        {
-            "group_name": "v=1:Prefetching=Learning"
+            "group_name": "Disabled"
         }
     ],
     "StrictSecureCookies": [
@@ -523,6 +558,11 @@
             "params": {
                 "fetch_period_min": "30"
             }
+        }
+    ],
+    "WebFontsInterventionV2": [
+        {
+            "group_name": "Enabled-slow2g"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

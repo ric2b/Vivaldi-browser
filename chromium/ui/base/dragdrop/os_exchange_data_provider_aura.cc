@@ -5,7 +5,9 @@
 #include "ui/base/dragdrop/os_exchange_data_provider_aura.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "net/base/filename_util.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/dragdrop/file_info.h"
@@ -18,7 +20,8 @@ OSExchangeDataProviderAura::OSExchangeDataProviderAura()
 
 OSExchangeDataProviderAura::~OSExchangeDataProviderAura() {}
 
-OSExchangeData::Provider* OSExchangeDataProviderAura::Clone() const {
+std::unique_ptr<OSExchangeData::Provider>
+OSExchangeDataProviderAura::Clone() const {
   OSExchangeDataProviderAura* ret = new OSExchangeDataProviderAura();
   ret->formats_ = formats_;
   ret->string_ = string_;
@@ -30,7 +33,7 @@ OSExchangeData::Provider* OSExchangeDataProviderAura::Clone() const {
   ret->html_ = html_;
   ret->base_url_ = base_url_;
 
-  return ret;
+  return base::WrapUnique<OSExchangeData::Provider>(ret);
 }
 
 void OSExchangeDataProviderAura::MarkOriginatedFromRenderer() {
@@ -89,10 +92,10 @@ bool OSExchangeDataProviderAura::GetURLAndTitle(
     OSExchangeData::FilenameToURLPolicy policy,
     GURL* url,
     base::string16* title) const {
-  // TODO(dcheng): implement filename conversion.
   if ((formats_ & OSExchangeData::URL) == 0) {
     title->clear();
-    return GetPlainTextURL(url);
+    return GetPlainTextURL(url) ||
+           (policy == OSExchangeData::CONVERT_FILENAMES && GetFileURL(url));
   }
 
   if (!url_.is_valid())
@@ -136,12 +139,12 @@ bool OSExchangeDataProviderAura::HasString() const {
 
 bool OSExchangeDataProviderAura::HasURL(
     OSExchangeData::FilenameToURLPolicy policy) const {
-  // TODO(dcheng): implement filename conversion.
   if ((formats_ & OSExchangeData::URL) != 0) {
     return true;
   }
   // No URL, see if we have plain text that can be parsed as a URL.
-  return GetPlainTextURL(NULL);
+  return GetPlainTextURL(NULL) ||
+         (policy == OSExchangeData::CONVERT_FILENAMES && GetFileURL(nullptr));
 }
 
 bool OSExchangeDataProviderAura::HasFile() const {
@@ -189,6 +192,20 @@ OSExchangeDataProviderAura::GetDragImageOffset() const {
   return drag_image_offset_;
 }
 
+bool OSExchangeDataProviderAura::GetFileURL(GURL* url) const {
+  base::FilePath file_path;
+  if (!GetFilename(&file_path))
+    return false;
+
+  GURL test_url = net::FilePathToFileURL(file_path);
+  if (!test_url.is_valid())
+    return false;
+
+  if (url)
+    *url = test_url;
+  return true;
+}
+
 bool OSExchangeDataProviderAura::GetPlainTextURL(GURL* url) const {
   if ((formats_ & OSExchangeData::STRING) == 0)
     return false;
@@ -200,14 +217,6 @@ bool OSExchangeDataProviderAura::GetPlainTextURL(GURL* url) const {
   if (url)
     *url = test_url;
   return true;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// OSExchangeData, public:
-
-// static
-OSExchangeData::Provider* OSExchangeData::CreateProvider() {
-  return new OSExchangeDataProviderAura();
 }
 
 }  // namespace ui

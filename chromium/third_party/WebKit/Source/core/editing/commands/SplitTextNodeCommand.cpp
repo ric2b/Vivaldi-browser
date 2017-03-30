@@ -29,6 +29,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "wtf/Assertions.h"
 
@@ -52,7 +53,7 @@ SplitTextNodeCommand::SplitTextNodeCommand(Text* text, int offset)
 void SplitTextNodeCommand::doApply(EditingState*)
 {
     ContainerNode* parent = m_text2->parentNode();
-    if (!parent || !parent->hasEditableStyle())
+    if (!parent || !hasEditableStyle(*parent))
         return;
 
     String prefixText = m_text2->substringData(0, m_offset, IGNORE_EXCEPTION);
@@ -68,7 +69,7 @@ void SplitTextNodeCommand::doApply(EditingState*)
 
 void SplitTextNodeCommand::doUnapply()
 {
-    if (!m_text1 || !m_text1->hasEditableStyle())
+    if (!m_text1 || !hasEditableStyle(*m_text1))
         return;
 
     DCHECK_EQ(m_text1->document(), document());
@@ -88,7 +89,7 @@ void SplitTextNodeCommand::doReapply()
         return;
 
     ContainerNode* parent = m_text2->parentNode();
-    if (!parent || !parent->hasEditableStyle())
+    if (!parent || !hasEditableStyle(*parent))
         return;
 
     insertText1AndTrimText2();

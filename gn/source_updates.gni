@@ -1,0 +1,447 @@
+import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/gn/config/product.gni")
+
+post_process_target("//chrome/test:browser_tests") {
+  sources += [
+    "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
+    "//vivaldi/importer/viv_importer_browsertest.cpp",
+  ]
+}
+
+post_process_target("//chrome/browser:test_support") {
+  sources += [
+    "//vivaldi/extraparts/vivaldi_unit_test_suite.cpp",
+    "//vivaldi/extraparts/vivaldi_unit_test_suite.h",
+  ]
+}
+
+post_process_target("//base:base") {
+  if (!defined(sources)) {
+    sources = []
+  }
+  sources += [
+    "//vivaldi/app/vivaldi_apptools.h",
+    "//vivaldi/base/vivaldi_running.cpp",
+  ]
+}
+
+post_process_target("//content/public/browser:browser_sources") {
+  sources += [ "//content/public/browser/resource_controller.cc" ]
+}
+
+post_process_target("//base:base_static") {
+  sources += [
+    "//vivaldi/app/vivaldi_apptools.cpp",
+    "//vivaldi/app/vivaldi_apptools.h",
+    "//vivaldi/app/vivaldi_constants.cc",
+    "//vivaldi/app/vivaldi_constants.h",
+    "//vivaldi/base/vivaldi_switches.cpp",
+    "//vivaldi/base/vivaldi_switches.h",
+  ]
+}
+
+post_process_template("//chrome/browser:browser") {
+  sources += [
+    "//vivaldi/browser/menus/vivaldi_menu_enums.h",
+    "//vivaldi/browser/menus/vivaldi_menus.cpp",
+    "//vivaldi/browser/menus/vivaldi_menus.h",
+  ]
+  if (is_mac) {
+    sources += [
+      "//vivaldi/browser/mac/sparkle_util.h",
+      "//vivaldi/browser/mac/sparkle_util.mm",
+    ]
+  }
+}
+
+post_process_template("//chrome/browser/ui:ui") {
+  sources += [
+    "//vivaldi/browser/startup_vivaldi_browser.cpp",
+    "//vivaldi/browser/startup_vivaldi_browser.h",
+    "//vivaldi/ui/vivaldi_browser_window.cc",
+    "//vivaldi/ui/vivaldi_browser_window.h",
+    "//vivaldi/ui/vivaldi_session_service.cc",
+    "//vivaldi/ui/vivaldi_session_service.h",
+    "//vivaldi/ui/vivaldi_ui_utils.cc",
+    "//vivaldi/ui/vivaldi_ui_utils.h",
+  ]
+  if (is_mac) {
+    sources += [
+      "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.h",
+      "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.mm",
+      "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.h",
+      "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.mm",
+      "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.h",
+      "//vivaldi/ui/cocoa/vivaldi_main_menu_mac.mm",
+    ]
+  } else {
+    sources += [
+      "//vivaldi/ui/views/vivaldi_context_menu_views.cc",
+      "//vivaldi/ui/views/vivaldi_context_menu_views.h",
+      "//vivaldi/ui/views/vivaldi_main_menu_views.cc",
+    ]
+  }
+}
+
+post_process_target("//chrome/renderer:renderer") {
+  sources += [
+    "//vivaldi/renderer/vivaldi_render_view_observer.cc",
+    "//vivaldi/renderer/vivaldi_render_view_observer.h",
+  ]
+}
+
+post_process_target("//chrome:chrome_resources") {
+  sources -= [
+    "app/theme/$branding_path_component/mac/app.icns",
+    "app/theme/$branding_path_component/mac/document.icns",
+  ]
+  sources += [
+    "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/app.icns",
+    "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/document.icns",
+  ]
+}
+
+post_process_target("//components:components_unittests") {
+  sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
+}
+
+post_process_target("//chrome/installer/setup:setup") {
+  sources += [
+    "//vivaldi/installer/util/vivaldi_install_dialog.cc",
+    "//vivaldi/installer/util/vivaldi_install_dialog.h",
+    "//vivaldi/installer/util/vivaldi_progress_dialog.cc",
+    "//vivaldi/installer/util/vivaldi_progress_dialog.h",
+  ]
+}
+
+post_process_target("//testing/gtest:gtest") {
+  sources += [
+    "//vivaldi/testing/disable_unittests.cpp",
+    "//vivaldi/testing/disable_unittests_api.h",
+    "//vivaldi/testing/disabled_unittests.h",
+    "//vivaldi/testing/disabled_unittests_lin.h",
+    "//vivaldi/testing/disabled_unittests_lin_mac.h",
+    "//vivaldi/testing/disabled_unittests_mac.h",
+    "//vivaldi/testing/disabled_unittests_win.h",
+    "//vivaldi/testing/disabled_unittests_win_lin.h",
+    "//vivaldi/testing/disabled_unittests_win_mac.h",
+    "//vivaldi/testing/permanent_disabled_unittests.h",
+    "//vivaldi/testing/permanent_disabled_unittests_lin.h",
+    "//vivaldi/testing/permanent_disabled_unittests_lin_mac.h",
+    "//vivaldi/testing/permanent_disabled_unittests_mac.h",
+    "//vivaldi/testing/permanent_disabled_unittests_win.h",
+    "//vivaldi/testing/permanent_disabled_unittests_win_lin.h",
+    "//vivaldi/testing/permanent_disabled_unittests_win_mac.h",
+  ]
+}
+
+post_process_target("//chrome/common:constants") {
+  sources += [
+    "//vivaldi/browser/win/vivaldi_standalone.cpp",
+    "//vivaldi/browser/win/vivaldi_standalone.h",
+  ]
+}
+
+post_process_target("//extensions/browser:browser") {
+  sources +=
+      [ "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp" ]
+  deps += [
+    "//third_party/WebKit/public:blink_headers",
+    "//vivaldi/extensions/schema:api",
+  ]
+}
+
+post_process_target("//extensions/renderer:renderer") {
+  sources += [
+    "//vivaldi/extensions/vivaldi_script_dispatcher.cpp",
+    "//vivaldi/extensions/vivaldi_script_dispatcher.h",
+  ]
+}
+
+if (is_win) {
+  post_process_target("//ui/base:base") {
+    sources += [
+      "//vivaldi/ui/dragging/custom_drag_source_win.cc",
+      "//vivaldi/ui/dragging/custom_drag_source_win.h",
+    ]
+  }
+
+  post_process_target("//third_party/WebKit/Source/platform:blink_common") {
+    deps += [ "//ui/events:events" ]
+  }
+}
+
+_main_dll_targets = [
+  "//chrome:main_dll",
+  "//chrome:chrome_child",
+]
+if (!is_mac && !is_win) {
+  _main_dll_targets += [ "//chrome:chrome_initial" ]
+}
+if (is_mac) {
+  _main_dll_targets += [ "//chrome:chrome_dll" ]
+}
+foreach(_target, _main_dll_targets) {
+  post_process_target(_target) {
+    sources += [
+      "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
+      "//vivaldi/extraparts/vivaldi_main_delegate.h",
+    ]
+    deps += [ "//vivaldi/extensions:extensions_client" ]
+  }
+}
+
+post_process_target("//chrome/test:test_support") {
+  sources += [
+    "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
+    "//vivaldi/extraparts/vivaldi_main_delegate.h",
+  ]
+  public_deps += [ "//vivaldi/extensions:extensions_client" ]
+}
+
+resource_targets = [ "//chrome/tests::browser_tests" ]
+if (is_linux || is_win) {
+  resource_targets += [
+    "//chrome:chrome_initial",
+    "//chrome/test:interactive_ui_tests",
+    "//chrome/test:sync_integration_tests",
+    "//chrome/test:unit_tests",
+  ]
+}
+foreach(_target, resource_targets) {
+  post_process_target(_target) {
+    if (!defined(data)) {
+      data = []
+    }
+    data += [
+      #"$root_out_dir/vivaldi_100_percent.pak",
+    ]
+  }
+}
+
+resource_targets = []
+resource_targets = [ ":browser_tests" ]
+if (is_linux || is_win) {
+  resource_targets += [
+    ":interactive_ui_tests",
+    ":sync_integration_tests",
+    "//chrome/tests:unit_tests",
+  ]
+}
+foreach(_target, resource_targets) {
+  post_process_target(_target) {
+    if (!defined(data)) {
+      data = []
+    }
+    data += [ "$root_out_dir/vivaldi_200_percent.pak" ]
+  }
+}
+
+if (is_mac) {
+  post_process_target("//chrome:chrome_framework_resources") {
+    sources -= [
+      "$root_out_dir/chrome_100_percent.pak",
+      "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
+    ]
+    sources += [
+      "$root_out_dir/vivaldi_100_percent.pak",
+      "$root_out_dir/resources/vivaldi",
+      "//vivaldi/app/resources/theme/default_100_percent/vivaldi/product_logo_32.png",
+    ]
+    if (enable_hidpi) {
+      sources -= [ "$root_out_dir/chrome_200_percent.pak" ]
+      sources += [ "$root_out_dir/vivaldi_200_percent.pak" ]
+    }
+    public_deps += [
+      "//vivaldi/vivapp:vivaldi_app",
+    ]
+  }
+}
+
+#post_process_target("//ui/resources:ui_test_pak_bundle_data_100_percent") {
+#  sources += [
+#    "../../tools/licenses_vivaldi.py",
+#    "../../tools/licenses_vivaldi_texts.py",
+#  ]
+#outputs = []
+#outputs += [
+#  "{{bundle_resources_dir}}/vivaldi_100_percent.pak",
+#]
+#}
+
+if (is_win) {
+  platform_suffix = ""
+  if (target_cpu == "x64") {
+    platform_suffix = ".x64"
+  }
+  post_process_target("//chrome/installer/mini_installer:mini_installer") {
+    #chrome_dll_file = "$root_out_dir/vivaldi.dll"
+    output_name = "Vivaldi.$vivaldi_version_full$platform_suffix"
+  }
+  post_process_target(
+      "//chrome/installer/mini_installer:next_version_mini_installer") {
+    disabled = true
+    deps = []
+    inputs = []
+
+    #inputs -= ["$root_out_dir/mini_installer.exe",]
+    #inputs += ["$root_out_dir/Vivaldi.$vivaldi_version_full$platform_suffix.exe"]
+    #args += [
+    #  "--mini_installer=Vivaldi.$vivaldi_version_full$platform_suffix.exe",
+    #  "--7za_path=../../../third_party/lzma_sdk/Executable"
+    #]
+  }
+}
+post_process_target("//chrome/tools/build/win/syzygy::chrome_dll_syzygy") {
+  dll_name = "vivaldi"
+  binary_name = "vivaldi.dll"
+}
+
+post_process_target(
+    "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy") {
+  dll_name = "vivaldi_child"
+  binary_name = "vivaldi_child.dll"
+}
+
+post_process_target("//components/sessions:sessions") {
+  sources += [ "core/live_tab_context.cc" ]
+}
+
+foreach(
+    _target_config,
+    [
+      [
+        "//chrome/app:generated_resources",
+        "//vivaldi/app/resources/generated/vivaldi_generated_resources.grd",
+        {
+        },
+      ],
+      [
+        "//chrome/app:chromium_strings",
+        "//vivaldi/app/resources/strings/vivaldi_strings.grd",
+        {
+        },
+      ],
+      [
+        "//chrome/app:google_chrome_strings",
+        "//vivaldi/app/resources/strings/vivaldi_strings.grd",
+        {
+        },
+      ],
+      [
+        "//chrome/app/resources:locale_settings",
+        "//vivaldi/app/resources/locale/vivaldi_locale_strings.grd",
+        {
+          translation_dir_setting = "."
+        },
+      ],
+      [
+        "//chrome/renderer:resources",
+        "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//chrome/app/theme:theme_resources",
+        "//vivaldi/app/resources/theme/vivaldi_theme.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//chrome/app/theme:chrome_unscaled_resources",
+        "//vivaldi/app/resources/theme/vivaldi_unscaled_resources.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//ui/resources:ui_resources_grd",
+        "//vivaldi/app/resources/ui/vivaldi_ui_resources.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+      [
+        "//components/strings:components_strings",
+        "//vivaldi/app/resources/components_strings/vivaldi_components_strings.grd",
+        {
+          translation_dir_setting = "strings"
+        },
+      ],
+      [
+        "//components/strings:components_chromium_strings",
+        "//vivaldi/app/resources/components/vivaldi_components.grd",
+        {
+          translation_dir_setting = "strings"
+        },
+      ],
+      [
+        "//components/strings:components_google_chrome_strings",
+        "//vivaldi/app/resources/components/vivaldi_components.grd",
+        {
+          translation_dir_setting = "strings"
+        },
+      ],
+      [
+        "//components/strings:components_locale_settings",
+        "//vivaldi/app/resources/components_locale_settings/vivaldi_components_locale_settings.grd",
+        {
+          translation_dir_setting = "strings"
+        },
+      ],
+      [
+        "//components/resources:components_scaled_resources",
+        "//vivaldi/app/resources/components_scaled/vivaldi_components_scaled.grd",
+        {
+          have_strings_flag = false
+        },
+      ],
+    ]) {
+  _target = _target_config[0]
+  vivaldi_source = _target_config[1]
+  _flags = {
+  }
+  _flags = _target_config[2]
+  resource_dir = get_label_info(_target, "dir")
+  have_strings_flag =
+      !defined(_flags.have_strings_flag) || _flags.have_strings_flag
+  have_translation = defined(_flags.translation_dir_setting)
+  if (have_translation) {
+    translation_dir_setting = _flags.translation_dir_setting
+  }
+
+  post_process_template(_target) {
+    #print (target_name)
+    actual_target_name = target_name
+    temp = rebase_path(get_label_info(_target, "target_gen_dir"), root_gen_dir)
+    target_dir = "$root_gen_dir/vivaldi_resources/$temp/$actual_target_name"
+    target_filename = "$actual_target_name.grd"
+    full_target_path = "$target_dir/$target_filename"
+    main_resource_dir = resource_dir
+    merge_main_file = source
+    vivaldi_resource_path = vivaldi_source
+    combined_target_dir = target_dir
+    have_strings = have_strings_flag
+    if (have_translation) {
+      translation_dir = translation_dir_setting
+    }
+    if (!defined(grit_flags)) {
+      grit_flags = []
+    }
+    grit_flags += extra_grit_defines
+  }
+}
+
+post_process_template("//chrome/common/extensions/api:api_features") {
+  sources += [ "//vivaldi/extensions/api/_api_features.json" ]
+}
+
+post_process_template("//chrome/common/extensions/api:permission_features") {
+  sources += [ "//vivaldi/extensions/api/_permission_features.json" ]
+}
+
+post_process_template("//chrome/common/extensions/api:manifest_features") {
+  sources += [ "//vivaldi/extensions/api/_manifest_features.json" ]
+}

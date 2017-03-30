@@ -1316,11 +1316,6 @@ GLES2CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
   return gles2::GetGLContext()->CreateGpuMemoryBufferImageCHROMIUM(
       width, height, internalformat, usage);
 }
-void GL_APIENTRY GLES2GetImageivCHROMIUM(GLuint image_id,
-                                         GLenum param,
-                                         GLint* data) {
-  gles2::GetGLContext()->GetImageivCHROMIUM(image_id, param, data);
-}
 void GL_APIENTRY GLES2DescheduleUntilFinishedCHROMIUM() {
   gles2::GetGLContext()->DescheduleUntilFinishedCHROMIUM();
 }
@@ -1472,21 +1467,24 @@ void GL_APIENTRY GLES2ScheduleOverlayPlaneCHROMIUM(GLint plane_z_order,
       plane_z_order, plane_transform, overlay_texture_id, bounds_x, bounds_y,
       bounds_width, bounds_height, uv_x, uv_y, uv_width, uv_height);
 }
+void GL_APIENTRY
+GLES2ScheduleCALayerSharedStateCHROMIUM(GLfloat opacity,
+                                        GLboolean is_clipped,
+                                        const GLfloat* clip_rect,
+                                        GLint sorting_context_id,
+                                        const GLfloat* transform) {
+  gles2::GetGLContext()->ScheduleCALayerSharedStateCHROMIUM(
+      opacity, is_clipped, clip_rect, sorting_context_id, transform);
+}
 void GL_APIENTRY GLES2ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                               const GLfloat* contents_rect,
-                                              GLfloat opacity,
                                               GLuint background_color,
                                               GLuint edge_aa_mask,
                                               const GLfloat* bounds_rect,
-                                              GLboolean is_clipped,
-                                              const GLfloat* clip_rect,
-                                              GLint sorting_context_id,
-                                              const GLfloat* transform,
                                               GLuint filter) {
   gles2::GetGLContext()->ScheduleCALayerCHROMIUM(
-      contents_texture_id, contents_rect, opacity, background_color,
-      edge_aa_mask, bounds_rect, is_clipped, clip_rect, sorting_context_id,
-      transform, filter);
+      contents_texture_id, contents_rect, background_color, edge_aa_mask,
+      bounds_rect, filter);
 }
 void GL_APIENTRY
 GLES2ScheduleCALayerInUseQueryCHROMIUM(GLsizei count, const GLuint* textures) {
@@ -1696,9 +1694,9 @@ GLint GL_APIENTRY GLES2GetFragDataIndexEXT(GLuint program, const char* name) {
 void GL_APIENTRY
 GLES2UniformMatrix4fvStreamTextureMatrixCHROMIUM(GLint location,
                                                  GLboolean transpose,
-                                                 const GLfloat* default_value) {
+                                                 const GLfloat* transform) {
   gles2::GetGLContext()->UniformMatrix4fvStreamTextureMatrixCHROMIUM(
-      location, transpose, default_value);
+      location, transpose, transform);
 }
 
 namespace gles2 {
@@ -2705,10 +2703,6 @@ extern const NameToFunc g_gles2_function_table[] = {
             glCreateGpuMemoryBufferImageCHROMIUM),
     },
     {
-        "glGetImageivCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glGetImageivCHROMIUM),
-    },
-    {
         "glDescheduleUntilFinishedCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(
             glDescheduleUntilFinishedCHROMIUM),
@@ -2827,6 +2821,11 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glScheduleOverlayPlaneCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glScheduleOverlayPlaneCHROMIUM),
+    },
+    {
+        "glScheduleCALayerSharedStateCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glScheduleCALayerSharedStateCHROMIUM),
     },
     {
         "glScheduleCALayerCHROMIUM",

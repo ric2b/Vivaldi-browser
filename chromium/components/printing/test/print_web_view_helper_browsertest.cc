@@ -41,11 +41,10 @@ namespace printing {
 
 namespace {
 
-#if !defined(OS_CHROMEOS)
-
 // A simple web page.
 const char kHelloWorldHTML[] = "<body><p>Hello World!</p></body>";
 
+#if !defined(OS_CHROMEOS)
 // A simple webpage with a button to print itself with.
 const char kPrintOnUserAction[] =
     "<body>"
@@ -335,7 +334,7 @@ TEST_F(MAYBE_PrintWebViewHelperTest, AllowUserOriginatedPrinting) {
   EXPECT_FALSE(bounds.IsEmpty());
   blink::WebMouseEvent mouse_event;
   mouse_event.type = blink::WebInputEvent::MouseDown;
-  mouse_event.button = blink::WebMouseEvent::ButtonLeft;
+  mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = bounds.CenterPoint().x();
   mouse_event.y = bounds.CenterPoint().y();
   mouse_event.clickCount = 1;
@@ -642,7 +641,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, PrintWithJavaScript) {
   EXPECT_FALSE(bounds.IsEmpty());
   blink::WebMouseEvent mouse_event;
   mouse_event.type = blink::WebInputEvent::MouseDown;
-  mouse_event.button = blink::WebMouseEvent::ButtonLeft;
+  mouse_event.button = blink::WebMouseEvent::Button::Left;
   mouse_event.x = bounds.CenterPoint().x();
   mouse_event.y = bounds.CenterPoint().y();
   mouse_event.clickCount = 1;
@@ -898,8 +897,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintPreviewForSelectedPages) {
 // Test to verify that preview generated only for one page.
 TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintPreviewForSelectedText) {
   LoadHTML(kMultipageHTML);
-  GetMainFrame()->selectRange(
-      blink::WebRange::fromDocumentRange(GetMainFrame(), 1, 3));
+  GetMainFrame()->selectRange(blink::WebRange(1, 3));
 
   // Fill in some dummy values.
   base::DictionaryValue dict;

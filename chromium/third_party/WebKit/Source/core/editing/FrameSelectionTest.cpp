@@ -9,13 +9,14 @@
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingTestBase.h"
+#include "core/editing/FrameCaret.h"
 #include "core/frame/FrameView.h"
 #include "core/html/HTMLBodyElement.h"
-#include "core/html/HTMLDocument.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/testing/DummyPageHolder.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/PassRefPtr.h"
@@ -37,6 +38,11 @@ protected:
 
     bool shouldPaintCaretForTesting() const { return selection().shouldPaintCaretForTesting(); }
     bool isPreviousCaretDirtyForTesting() const { return selection().isPreviousCaretDirtyForTesting(); }
+
+    PositionWithAffinity caretPosition() const
+    {
+        return selection().m_frameCaret->caretPosition();
+    }
 
 private:
     Persistent<Text> m_textNode;
@@ -205,6 +211,24 @@ TEST_F(FrameSelectionTest, ModifyExtendWithFlatTree)
     EXPECT_EQ(PositionInFlatTree(two, 3), visibleSelectionInFlatTree().end());
 }
 
+TEST_F(FrameSelectionTest, ModifyWithUserTriggered)
+{
+    setBodyContent("<div id=sample>abc</div>");
+    Element* sample = document().getElementById("sample");
+    const Position endOfText(sample->firstChild(), 3);
+    selection().setSelection(VisibleSelection(endOfText));
+
+    EXPECT_FALSE(selection().modify(FrameSelection::AlterationMove, DirectionForward, CharacterGranularity, NotUserTriggered))
+        << "Selection.modify() returns false for non-user-triggered call when selection isn't modified.";
+    EXPECT_EQ(endOfText, selection().start())
+        << "Selection isn't modified";
+
+    EXPECT_TRUE(selection().modify(FrameSelection::AlterationMove, DirectionForward, CharacterGranularity, UserTriggered))
+        << "Selection.modify() returns true for user-triggered call";
+    EXPECT_EQ(endOfText, selection().start())
+        << "Selection isn't modified";
+}
+
 TEST_F(FrameSelectionTest, MoveRangeSelectionTest)
 {
     // "Foo Bar Baz,"
@@ -269,6 +293,28 @@ TEST_F(FrameSelectionTest, SelectAllWithUnselectableRoot)
     document().replaceChild(select, document().documentElement());
     selection().selectAll();
     EXPECT_TRUE(selection().isNone()) << "Nothing should be selected if the content of the documentElement is not selctable.";
+}
+
+TEST_F(FrameSelectionTest, updateIfNeededAndFrameCaret)
+{
+    setBodyContent("<style id=sample></style>");
+    document().setDesignMode("on");
+    Element* sample = document().getElementById("sample");
+    setSelection(VisibleSelection(Position(sample, 0)));
+    EXPECT_EQ(Position(document().body(), 0), selection().start());
+    EXPECT_EQ(selection().start(), caretPosition().position());
+    document().body()->remove();
+    // TODO(yosin): Once lazy canonicalization implemented, selection.start
+    // should be Position(HTML, 0).
+    EXPECT_EQ(Position(document().documentElement(), 1), selection().start());
+    EXPECT_EQ(selection().start(), caretPosition().position());
+    selection().updateIfNeeded();
+
+    // TODO(yosin): Once lazy canonicalization implemented, selection.start
+    // should be Position(HTML, 0).
+    EXPECT_EQ(Position(), selection().start())
+        << "updateIfNeeded() makes selection to null.";
+    EXPECT_EQ(selection().start(), caretPosition().position());
 }
 
 } // namespace blink

@@ -20,6 +20,7 @@
 #include "chrome/browser/media/media_stream_capture_indicator.h"
 #include "chrome/browser/media/media_stream_device_permissions.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
+#include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
@@ -72,23 +73,31 @@ bool ContentTypeIsRequested(content::PermissionType type,
 }
 
 using PermissionActionCallback =
-    base::Callback<void(content::PermissionType, const GURL&)>;
+    base::Callback<void(content::PermissionType,
+                        PermissionRequestGestureType,
+                        const GURL&,
+                        Profile*)>;
 
 void RecordSinglePermissionAction(const content::MediaStreamRequest& request,
                                   content::PermissionType permission_type,
+                                  Profile* profile,
                                   PermissionActionCallback callback) {
   if (ContentTypeIsRequested(permission_type, request)) {
-    callback.Run(permission_type, request.security_origin);
+    // TODO(stefanocs): Pass the actual |gesture_type| once this file has been
+    // refactored into PermissionContext.
+    callback.Run(permission_type, PermissionRequestGestureType::UNKNOWN,
+                 request.security_origin, profile);
   }
 }
 
 // Calls |action_function| for each permission requested by |request|.
 void RecordPermissionAction(const content::MediaStreamRequest& request,
+                            Profile* profile,
                             PermissionActionCallback callback) {
   RecordSinglePermissionAction(request, content::PermissionType::AUDIO_CAPTURE,
-                               callback);
+                               profile, callback);
   RecordSinglePermissionAction(request, content::PermissionType::VIDEO_CAPTURE,
-                               callback);
+                               profile, callback);
 }
 
 // This helper class helps to measure the number of media stream requests that
@@ -107,7 +116,7 @@ class MediaPermissionRequestLogger : content::WebContentsObserver {
                          bool is_secure) {
     RequestMap::key_type key =
         std::make_pair(render_process_id, render_frame_id);
-    if (!ContainsKey(GetRequestMap(), key)) {
+    if (!base::ContainsKey(GetRequestMap(), key)) {
       UMA_HISTOGRAM_BOOLEAN("Pepper.SecureOrigin.MediaStreamRequest",
                             is_secure);
       GetRequestMap()[key] =
@@ -156,8 +165,7 @@ MediaStreamDevicesController::MediaStreamDevicesController(
     const content::MediaResponseCallback& callback)
     : web_contents_(web_contents),
       request_(request),
-      callback_(callback),
-      persist_permission_changes_(true) {
+      callback_(callback) {
   if (request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY) {
     MediaPermissionRequestLogger::LogRequest(
         web_contents, request.render_process_id, request.render_frame_id,
@@ -204,8 +212,8 @@ MediaStreamDevicesController::MediaStreamDevicesController(
 
 MediaStreamDevicesController::~MediaStreamDevicesController() {
   if (!callback_.is_null()) {
-    RecordPermissionAction(
-        request_, base::Bind(PermissionUmaUtil::PermissionIgnored));
+    RecordPermissionAction(request_, profile_,
+                           base::Bind(PermissionUmaUtil::PermissionIgnored));
     callback_.Run(content::MediaStreamDevices(),
                   content::MEDIA_DEVICE_FAILED_DUE_TO_SHUTDOWN,
                   std::unique_ptr<content::MediaStreamUI>());
@@ -249,9 +257,18 @@ base::string16 MediaStreamDevicesController::GetMessageText() const {
           GetOrigin(), url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
 
+content::PermissionType
+MediaStreamDevicesController::GetPermissionTypeForContentSettingsType(
+    ContentSettingsType content_type) const {
+  DCHECK(content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC ||
+         content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
+  content::PermissionType permission = content::PermissionType::NUM;
+  CHECK(PermissionUtil::GetPermissionType(content_type, &permission));
+  return permission;
+}
+
 void MediaStreamDevicesController::ForcePermissionDeniedTemporarily() {
-  base::AutoReset<bool> persist_permissions(
-      &persist_permission_changes_, false);
+  set_persist(false);
   // TODO(tsergeant): Determine whether it is appropriate to record permission
   // action metrics here, as this is a different sort of user action.
   RunCallback(CONTENT_SETTING_BLOCK,
@@ -280,8 +297,8 @@ GURL MediaStreamDevicesController::GetOrigin() const {
 }
 
 void MediaStreamDevicesController::PermissionGranted() {
-  RecordPermissionAction(
-      request_, base::Bind(PermissionUmaUtil::PermissionGranted));
+  RecordPermissionAction(request_, profile_,
+                         base::Bind(PermissionUmaUtil::PermissionGranted));
   RunCallback(GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
                             old_audio_setting_, CONTENT_SETTING_ALLOW),
               GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
@@ -290,8 +307,8 @@ void MediaStreamDevicesController::PermissionGranted() {
 }
 
 void MediaStreamDevicesController::PermissionDenied() {
-  RecordPermissionAction(
-      request_, base::Bind(PermissionUmaUtil::PermissionDenied));
+  RecordPermissionAction(request_, profile_,
+                         base::Bind(PermissionUmaUtil::PermissionDenied));
   RunCallback(GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
                             old_audio_setting_, CONTENT_SETTING_BLOCK),
               GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
@@ -302,11 +319,11 @@ void MediaStreamDevicesController::PermissionDenied() {
 void MediaStreamDevicesController::GroupedRequestFinished(bool audio_accepted,
                                                           bool video_accepted) {
   RecordSinglePermissionAction(
-      request_, content::PermissionType::AUDIO_CAPTURE,
+      request_, content::PermissionType::AUDIO_CAPTURE, profile_,
       base::Bind(audio_accepted ? PermissionUmaUtil::PermissionGranted
                                 : PermissionUmaUtil::PermissionDenied));
   RecordSinglePermissionAction(
-      request_, content::PermissionType::VIDEO_CAPTURE,
+      request_, content::PermissionType::VIDEO_CAPTURE, profile_,
       base::Bind(video_accepted ? PermissionUmaUtil::PermissionGranted
                                 : PermissionUmaUtil::PermissionDenied));
 
@@ -321,9 +338,13 @@ void MediaStreamDevicesController::GroupedRequestFinished(bool audio_accepted,
               content::MEDIA_DEVICE_PERMISSION_DENIED);
 }
 
+bool MediaStreamDevicesController::ShouldShowPersistenceToggle() const {
+  return PermissionUtil::ShouldShowPersistenceToggle();
+}
+
 void MediaStreamDevicesController::Cancelled() {
-  RecordPermissionAction(
-      request_, base::Bind(PermissionUmaUtil::PermissionDismissed));
+  RecordPermissionAction(request_, profile_,
+                         base::Bind(PermissionUmaUtil::PermissionDismissed));
   RunCallback(old_audio_setting_, old_video_setting_,
               content::MEDIA_DEVICE_PERMISSION_DISMISSED);
 }
@@ -332,9 +353,9 @@ void MediaStreamDevicesController::RequestFinished() {
   delete this;
 }
 
-PermissionBubbleType MediaStreamDevicesController::GetPermissionBubbleType()
+PermissionRequestType MediaStreamDevicesController::GetPermissionRequestType()
     const {
-  return PermissionBubbleType::MEDIA_STREAM;
+  return PermissionRequestType::MEDIA_STREAM;
 }
 
 content::MediaStreamDevices MediaStreamDevicesController::GetDevices(
@@ -454,9 +475,9 @@ void MediaStreamDevicesController::RunCallback(
 
   // If the kill switch is on we don't update the tab context or persist the
   // setting.
-  if (persist_permission_changes_ &&
-      denial_reason != content::MEDIA_DEVICE_KILL_SWITCH_ON) {
-    StorePermission(audio_setting, video_setting);
+  if (denial_reason != content::MEDIA_DEVICE_KILL_SWITCH_ON) {
+    if (persist())
+      StorePermission(audio_setting, video_setting);
     UpdateTabSpecificContentSettings(audio_setting, video_setting);
   }
 
@@ -571,14 +592,8 @@ ContentSetting MediaStreamDevicesController::GetContentSetting(
     return CONTENT_SETTING_BLOCK;
   }
 
-  content::PermissionType permission_type;
-  if (content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC) {
-    permission_type = content::PermissionType::AUDIO_CAPTURE;
-  } else {
-    DCHECK(content_type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
-    permission_type = content::PermissionType::VIDEO_CAPTURE;
-  }
-
+  content::PermissionType permission_type =
+      GetPermissionTypeForContentSettingsType(content_type);
   if (ContentTypeIsRequested(permission_type, request)) {
     DCHECK(content::IsOriginSecure(request_.security_origin) ||
            request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);

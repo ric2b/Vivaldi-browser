@@ -47,7 +47,7 @@ bool ReadBool(Scope* scope,
 bool ReadString(Scope* scope,
                 const char* var,
                 Tool* tool,
-                void (Tool::*set)(const std::string&),
+                void (Tool::*set)(std::string),
                 Err* err) {
   const Value* v = scope->GetValue(var, true);
   if (!v)
@@ -64,9 +64,8 @@ bool ReadString(Scope* scope,
 bool ReadLabel(Scope* scope,
                const char* var,
                Tool* tool,
-               const ParseNode* origin,
                const Label& current_toolchain,
-               void (Tool::*set)(const LabelPtrPair<Pool>&),
+               void (Tool::*set)(LabelPtrPair<Pool>),
                Err* err) {
   const Value* v = scope->GetValue(var, true);
   if (!v)
@@ -78,9 +77,9 @@ bool ReadLabel(Scope* scope,
     return false;
 
   LabelPtrPair<Pool> pair(label);
-  pair.origin = origin;
+  pair.origin = tool->defined_from();
 
-  (tool->*set)(pair);
+  (tool->*set)(std::move(pair));
   return true;
 }
 
@@ -105,7 +104,7 @@ bool ReadPattern(Scope* scope,
                  const char* name,
                  bool (*validate)(SubstitutionType),
                  Tool* tool,
-                 void (Tool::*set)(const SubstitutionPattern&),
+                 void (Tool::*set)(SubstitutionPattern),
                  Err* err) {
   const Value* value = scope->GetValue(name, true);
   if (!value)
@@ -119,7 +118,31 @@ bool ReadPattern(Scope* scope,
   if (!ValidateSubstitutionList(pattern.required_types(), validate, value, err))
     return false;
 
-  (tool->*set)(pattern);
+  (tool->*set)(std::move(pattern));
+  return true;
+}
+
+bool ReadPatternList(Scope* scope,
+                     const char* name,
+                     bool (*validate)(SubstitutionType),
+                     Tool* tool,
+                     void (Tool::*set)(SubstitutionList),
+                     Err* err) {
+  const Value* value = scope->GetValue(name, true);
+  if (!value)
+    return true;  // Not present is fine.
+  if (!value->VerifyTypeIs(Value::LIST, err))
+    return false;
+
+  SubstitutionList list;
+  if (!list.Parse(*value, err))
+    return false;
+
+  // Validate the right kinds of patterns are used.
+  if (!ValidateSubstitutionList(list.required_types(), validate, value, err))
+    return false;
+
+  (tool->*set)(std::move(list));
   return true;
 }
 
@@ -182,35 +205,6 @@ bool ReadDepsFormat(Scope* scope, Tool* tool, Err* err) {
   return true;
 }
 
-bool ReadOutputs(Scope* scope,
-                 const FunctionCallNode* tool_function,
-                 bool (*validate)(SubstitutionType),
-                 Tool* tool,
-                 Err* err) {
-  const Value* value = scope->GetValue("outputs", true);
-  if (!value) {
-    *err = Err(tool_function, "\"outputs\" must be specified for this tool.");
-    return false;
-  }
-
-  SubstitutionList list;
-  if (!list.Parse(*value, err))
-    return false;
-
-  // Validate the right kinds of patterns are used.
-  if (!ValidateSubstitutionList(list.required_types(), validate, value, err))
-    return false;
-
-  // There should always be at least one output.
-  if (list.list().empty()) {
-    *err = Err(*value, "Outputs list is empty.", "I need some outputs.");
-    return false;
-  }
-
-  tool->set_outputs(list);
-  return true;
-}
-
 bool IsCompilerTool(Toolchain::ToolType type) {
   return type == Toolchain::TYPE_CC ||
          type == Toolchain::TYPE_CXX ||
@@ -238,6 +232,68 @@ bool IsPatternInOutputList(const SubstitutionList& output_list,
   return false;
 }
 
+
+bool ValidateOutputs(const Tool* tool, Err* err) {
+  if (tool->outputs().list().empty()) {
+    *err = Err(tool->defined_from(),
+               "\"outputs\" must be specified for this tool.");
+    return false;
+  }
+  return true;
+}
+
+// Validates either link_output or depend_output. To generalize to either, pass
+// the associated pattern, and the variable name that should appear in error
+// messages.
+bool ValidateLinkAndDependOutput(const Tool* tool,
+                                 Toolchain::ToolType tool_type,
+                                 const SubstitutionPattern& pattern,
+                                 const char* variable_name,
+                                 Err* err) {
+  if (pattern.empty())
+    return true;  // Empty is always OK.
+
+  // It should only be specified for certain tool types.
+  if (tool_type != Toolchain::TYPE_SOLINK &&
+      tool_type != Toolchain::TYPE_SOLINK_MODULE) {
+    *err = Err(tool->defined_from(),
+        "This tool specifies a " + std::string(variable_name) + ".",
+        "This is only valid for solink and solink_module tools.");
+    return false;
+  }
+
+  if (!IsPatternInOutputList(tool->outputs(), pattern)) {
+    *err = Err(tool->defined_from(), "This tool's link_output is bad.",
+               "It must match one of the outputs.");
+    return false;
+  }
+
+  return true;
+}
+
+bool ValidateRuntimeOutputs(const Tool* tool,
+                            Toolchain::ToolType tool_type,
+                            Err* err) {
+  if (tool->runtime_outputs().list().empty())
+    return true;  // Empty is always OK.
+
+  if (!IsLinkerTool(tool_type)) {
+    *err = Err(tool->defined_from(), "This tool specifies runtime_outputs.",
+        "This is only valid for linker tools (alink doesn't count).");
+    return false;
+  }
+
+  for (const SubstitutionPattern& pattern : tool->runtime_outputs().list()) {
+    if (!IsPatternInOutputList(tool->outputs(), pattern)) {
+      *err = Err(tool->defined_from(), "This tool's runtime_outputs is bad.",
+                 "It must be a subset of the outputs. The bad one is:\n  " +
+                  pattern.AsString());
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 // toolchain -------------------------------------------------------------------
@@ -258,10 +314,25 @@ const char kToolchain_Help[] =
     "    The tool() function call specifies the commands commands to run for\n"
     "    a given step. See \"gn help tool\".\n"
     "\n"
-    "  toolchain_args()\n"
-    "    List of arguments to pass to the toolchain when invoking this\n"
-    "    toolchain. This applies only to non-default toolchains. See\n"
-    "    \"gn help toolchain_args\" for more.\n"
+    "  toolchain_args\n"
+    "    Overrides for build arguments to pass to the toolchain when invoking\n"
+    "    it. This is a variable of type \"scope\" where the variable names\n"
+    "    correspond to variables in declare_args() blocks.\n"
+    "\n"
+    "    When you specify a target using an alternate toolchain, the master\n"
+    "    build configuration file is re-interpreted in the context of that\n"
+    "    toolchain. toolchain_args allows you to control the arguments\n"
+    "    passed into this alternate invocation of the build.\n"
+    "\n"
+    "    Any default system arguments or arguments passed in via \"gn args\"\n"
+    "    will also be passed to the alternate invocation unless explicitly\n"
+    "    overridden by toolchain_args.\n"
+    "\n"
+    "    The toolchain_args will be ignored when the toolchain being defined\n"
+    "    is the default. In this case, it's expected you want the default\n"
+    "    argument values.\n"
+    "\n"
+    "    See also \"gn help buildargs\" for an overview of these arguments.\n"
     "\n"
     "  deps\n"
     "    Dependencies of this toolchain. These dependencies will be resolved\n"
@@ -275,20 +346,6 @@ const char kToolchain_Help[] =
     "    This concept is somewhat inefficient to express in Ninja (it\n"
     "    requires a lot of duplicate of rules) so should only be used when\n"
     "    absolutely necessary.\n"
-    "\n"
-    "  concurrent_links\n"
-    "    In integer expressing the number of links that Ninja will perform in\n"
-    "    parallel. GN will create a pool for shared library and executable\n"
-    "    link steps with this many processes. Since linking is memory- and\n"
-    "    I/O-intensive, projects with many large targets may want to limit\n"
-    "    the number of parallel steps to avoid overloading the computer.\n"
-    "    Since creating static libraries is generally not as intensive\n"
-    "    there is no limit to \"alink\" steps.\n"
-    "\n"
-    "    Defaults to 0 which Ninja interprets as \"no limit\".\n"
-    "\n"
-    "    The value used will be the one from the default toolchain of the\n"
-    "    current build.\n"
     "\n"
     "Invoking targets in toolchains:\n"
     "\n"
@@ -308,20 +365,19 @@ const char kToolchain_Help[] =
     "      by the toolchain label).\n"
     "   2. Re-runs the master build configuration file, applying the\n"
     "      arguments specified by the toolchain_args section of the toolchain\n"
-    "      definition (see \"gn help toolchain_args\").\n"
+    "      definition.\n"
     "   3. Loads the destination build file in the context of the\n"
     "      configuration file in the previous step.\n"
     "\n"
-    "Example:\n"
-    "  toolchain(\"plugin_toolchain\") {\n"
-    "    concurrent_links = 8\n"
+    "Example\n"
     "\n"
+    "  toolchain(\"plugin_toolchain\") {\n"
     "    tool(\"cc\") {\n"
     "      command = \"gcc {{source}}\"\n"
     "      ...\n"
     "    }\n"
     "\n"
-    "    toolchain_args() {\n"
+    "    toolchain_args = {\n"
     "      is_plugin = true\n"
     "      is_32bit = true\n"
     "      is_64bit = false\n"
@@ -372,19 +428,15 @@ Value RunToolchain(Scope* scope,
       return Value();
   }
 
-  // Read concurrent_links (if any).
-  const Value* concurrent_links_value =
-      block_scope.GetValue("concurrent_links", true);
-  if (concurrent_links_value) {
-    if (!concurrent_links_value->VerifyTypeIs(Value::INTEGER, err))
+  // Read toolchain args (if any).
+  const Value* toolchain_args = block_scope.GetValue("toolchain_args", true);
+  if (toolchain_args) {
+    if (!toolchain_args->VerifyTypeIs(Value::SCOPE, err))
       return Value();
-    if (concurrent_links_value->int_value() < 0 ||
-        concurrent_links_value->int_value() > std::numeric_limits<int>::max()) {
-      *err = Err(*concurrent_links_value, "Value out of range.");
-      return Value();
-    }
-    toolchain->set_concurrent_links(
-        static_cast<int>(concurrent_links_value->int_value()));
+
+    Scope::KeyValueMap values;
+    toolchain_args->scope_value()->GetCurrentScopeValues(&values);
+    toolchain->args() = values;
   }
 
   if (!block_scope.CheckForUnusedVars(err))
@@ -527,9 +579,7 @@ const char kTool_Help[] =
     "\n"
     "        If you specify more than one output for shared library links,\n"
     "        you should consider setting link_output, depend_output, and\n"
-    "        runtime_link_output. Otherwise, the first entry in the\n"
-    "        outputs list should always be the main output which will be\n"
-    "        linked to.\n"
+    "        runtime_outputs.\n"
     "\n"
     "        Example for a compiler tool that produces .obj files:\n"
     "          outputs = [\n"
@@ -555,16 +605,14 @@ const char kTool_Help[] =
     "\n"
     "    link_output  [string with substitutions]\n"
     "    depend_output  [string with substitutions]\n"
-    "    runtime_link_output  [string with substitutions]\n"
     "        Valid for: \"solink\" only (optional)\n"
     "\n"
-    "        These three files specify which of the outputs from the solink\n"
+    "        These two files specify which of the outputs from the solink\n"
     "        tool should be used for linking and dependency tracking. These\n"
     "        should match entries in the \"outputs\". If unspecified, the\n"
     "        first item in the \"outputs\" array will be used for all. See\n"
     "        \"Separate linking and dependencies for shared libraries\"\n"
-    "        below for more. If link_output is set but runtime_link_output\n"
-    "        is not set, runtime_link_output defaults to link_output.\n"
+    "        below for more.\n"
     "\n"
     "        On Windows, where the tools produce a .dll shared library and\n"
     "        a .lib import library, you will want the first two to be the\n"
@@ -641,6 +689,14 @@ const char kTool_Help[] =
     "            rspfile = \"{{output}}.rsp\"\n"
     "            rspfile_content = \"{{inputs}} {{solibs}} {{libs}}\"\n"
     "          }\n"
+    "\n"
+    "    runtime_outputs  [string list with substitutions]\n"
+    "        Valid for: linker tools\n"
+    "\n"
+    "        If specified, this list is the subset of the outputs that should\n"
+    "        be added to runtime deps (see \"gn help runtime_deps\"). By\n"
+    "        default (if runtime_outputs is empty or unspecified), it will be\n"
+    "        the link_output.\n"
     "\n"
     "Expansions for tool variables\n"
     "\n"
@@ -802,7 +858,17 @@ const char kTool_Help[] =
     "  copied.\n"
     "\n"
     "  The compile_xcassets tool will be called with one or more source (each\n"
-    "  an asset catalog) that needs to be compiled to a single output.\n"
+    "  an asset catalog) that needs to be compiled to a single output. The\n"
+    "  following substitutions are avaiable:\n"
+    "\n"
+    "    {{inputs}}\n"
+    "        Expands to the list of .xcassets to use as input to compile the\n"
+    "        asset catalog.\n"
+    "\n"
+    "    {{bundle_product_type}}\n"
+    "        Expands to the product_type of the bundle that will contain the\n"
+    "        compiled asset catalog. Usually corresponds to the product_type\n"
+    "        property of the corresponding create_bundle target.\n"
     "\n"
     "Separate linking and dependencies for shared libraries\n"
     "\n"
@@ -915,6 +981,7 @@ Value RunTool(Scope* scope,
   }
 
   std::unique_ptr<Tool> tool(new Tool);
+  tool->set_defined_from(function);
 
   if (!ReadPattern(&block_scope, "command", subst_validator, tool.get(),
                    &Tool::set_command, err) ||
@@ -932,8 +999,8 @@ Value RunTool(Scope* scope,
                    &Tool::set_link_output, err) ||
       !ReadPattern(&block_scope, "depend_output", subst_validator, tool.get(),
                    &Tool::set_depend_output, err) ||
-      !ReadPattern(&block_scope, "runtime_link_output", subst_validator,
-                   tool.get(), &Tool::set_runtime_link_output, err) ||
+      !ReadPatternList(&block_scope, "runtime_outputs", subst_validator,
+                       tool.get(), &Tool::set_runtime_outputs, err) ||
       !ReadString(&block_scope, "output_prefix", tool.get(),
                   &Tool::set_output_prefix, err) ||
       !ReadPattern(&block_scope, "default_output_dir", subst_validator,
@@ -944,7 +1011,7 @@ Value RunTool(Scope* scope,
                    &Tool::set_rspfile, err) ||
       !ReadPattern(&block_scope, "rspfile_content", subst_validator, tool.get(),
                    &Tool::set_rspfile_content, err) ||
-      !ReadLabel(&block_scope, "pool", tool.get(), function, toolchain->label(),
+      !ReadLabel(&block_scope, "pool", tool.get(), toolchain->label(),
                  &Tool::set_pool, err)) {
     return Value();
   }
@@ -955,58 +1022,26 @@ Value RunTool(Scope* scope,
       tool_type != Toolchain::TYPE_COMPILE_XCASSETS) {
     // All tools should have outputs, except the copy, stamp, copy_bundle_data
     // and compile_xcassets tools that generate their outputs internally.
-    if (!ReadOutputs(&block_scope, function, subst_output_validator,
-                     tool.get(), err))
+    if (!ReadPatternList(&block_scope, "outputs", subst_output_validator,
+                         tool.get(), &Tool::set_outputs, err) ||
+        !ValidateOutputs(tool.get(), err))
       return Value();
   }
+  if (!ValidateRuntimeOutputs(tool.get(), tool_type, err))
+    return Value();
 
-  // Validate that the link_output, depend_output, and runtime_link_output
-  // refer to items in the outputs and aren't defined for irrelevant tool
-  // types.
-  if (!tool->link_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK &&
-        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
-      *err = Err(function, "This tool specifies a link_output.",
-          "This is only valid for solink and solink_module tools.");
-      return Value();
-    }
-    if (!IsPatternInOutputList(tool->outputs(), tool->link_output())) {
-      *err = Err(function, "This tool's link_output is bad.",
-                 "It must match one of the outputs.");
-      return Value();
-    }
-  }
-  if (!tool->depend_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK &&
-        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
-      *err = Err(function, "This tool specifies a depend_output.",
-          "This is only valid for solink and solink_module tools.");
-      return Value();
-    }
-    if (!IsPatternInOutputList(tool->outputs(), tool->depend_output())) {
-      *err = Err(function, "This tool's depend_output is bad.",
-                 "It must match one of the outputs.");
-      return Value();
-    }
-  }
+  // Validate link_output and depend_output.
+  if (!ValidateLinkAndDependOutput(tool.get(), tool_type, tool->link_output(),
+                                   "link_output", err))
+    return Value();
+  if (!ValidateLinkAndDependOutput(tool.get(), tool_type, tool->depend_output(),
+                                   "depend_output", err))
+    return Value();
   if ((!tool->link_output().empty() && tool->depend_output().empty()) ||
       (tool->link_output().empty() && !tool->depend_output().empty())) {
     *err = Err(function, "Both link_output and depend_output should either "
         "be specified or they should both be empty.");
     return Value();
-  }
-  if (!tool->runtime_link_output().empty()) {
-    if (tool_type != Toolchain::TYPE_SOLINK &&
-        tool_type != Toolchain::TYPE_SOLINK_MODULE) {
-      *err = Err(function, "This tool specifies a runtime_link_output.",
-          "This is only valid for solink and solink_module tools.");
-      return Value();
-    }
-    if (!IsPatternInOutputList(tool->outputs(), tool->runtime_link_output())) {
-      *err = Err(function, "This tool's runtime_link_output is bad.",
-                 "It must match one of the outputs.");
-      return Value();
-    }
   }
 
   // Make sure there weren't any vars set in this tool that were unused.
@@ -1014,82 +1049,6 @@ Value RunTool(Scope* scope,
     return Value();
 
   toolchain->SetTool(tool_type, std::move(tool));
-  return Value();
-}
-
-// toolchain_args --------------------------------------------------------------
-
-extern const char kToolchainArgs[] = "toolchain_args";
-extern const char kToolchainArgs_HelpShort[] =
-    "toolchain_args: Set build arguments for toolchain build setup.";
-extern const char kToolchainArgs_Help[] =
-    "toolchain_args: Set build arguments for toolchain build setup.\n"
-    "\n"
-    "  Used inside a toolchain definition to pass arguments to an alternate\n"
-    "  toolchain's invocation of the build.\n"
-    "\n"
-    "  When you specify a target using an alternate toolchain, the master\n"
-    "  build configuration file is re-interpreted in the context of that\n"
-    "  toolchain (see \"gn help toolchain\"). The toolchain_args function\n"
-    "  allows you to control the arguments passed into this alternate\n"
-    "  invocation of the build.\n"
-    "\n"
-    "  Any default system arguments or arguments passed in on the command-\n"
-    "  line will also be passed to the alternate invocation unless explicitly\n"
-    "  overridden by toolchain_args.\n"
-    "\n"
-    "  The toolchain_args will be ignored when the toolchain being defined\n"
-    "  is the default. In this case, it's expected you want the default\n"
-    "  argument values.\n"
-    "\n"
-    "  See also \"gn help buildargs\" for an overview of these arguments.\n"
-    "\n"
-    "Example:\n"
-    "  toolchain(\"my_weird_toolchain\") {\n"
-    "    ...\n"
-    "    toolchain_args() {\n"
-    "      # Override the system values for a generic Posix system.\n"
-    "      is_win = false\n"
-    "      is_posix = true\n"
-    "\n"
-    "      # Pass this new value for specific setup for my toolchain.\n"
-    "      is_my_weird_system = true\n"
-    "    }\n"
-    "  }\n";
-
-Value RunToolchainArgs(Scope* scope,
-                       const FunctionCallNode* function,
-                       const std::vector<Value>& args,
-                       BlockNode* block,
-                       Err* err) {
-  // Find the toolchain definition we're executing inside of. The toolchain
-  // function will set a property pointing to it that we'll pick up.
-  Toolchain* toolchain = reinterpret_cast<Toolchain*>(
-      scope->GetProperty(&kToolchainPropertyKey, nullptr));
-  if (!toolchain) {
-    *err = Err(function->function(),
-               "toolchain_args() called outside of toolchain().",
-               "The toolchain_args() function can only be used inside a "
-               "toolchain() definition.");
-    return Value();
-  }
-
-  if (!args.empty()) {
-    *err = Err(function->function(), "This function takes no arguments.");
-    return Value();
-  }
-
-  // This function makes a new scope with various variable sets on it, which
-  // we then save on the toolchain to use when re-invoking the build.
-  Scope block_scope(scope);
-  block->Execute(&block_scope, err);
-  if (err->has_error())
-    return Value();
-
-  Scope::KeyValueMap values;
-  block_scope.GetCurrentScopeValues(&values);
-  toolchain->args() = values;
-
   return Value();
 }
 

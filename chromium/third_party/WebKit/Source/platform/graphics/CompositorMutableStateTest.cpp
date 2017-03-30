@@ -33,7 +33,7 @@ using cc::TestSharedBitmapManager;
 class CompositorMutableStateTest : public testing::Test {
 public:
     CompositorMutableStateTest()
-        : m_outputSurface(FakeOutputSurface::Create3d())
+        : m_outputSurface(FakeOutputSurface::CreateDelegating3d())
     {
         LayerTreeSettings settings;
         settings.layer_transforms_should_scale_layer_contents = true;
@@ -44,7 +44,7 @@ public:
 
     void SetLayerPropertiesForTesting(LayerImpl* layer)
     {
-        layer->SetTransform(gfx::Transform());
+        layer->test_properties()->transform = gfx::Transform();
         layer->SetPosition(gfx::PointF());
         layer->SetBounds(gfx::Size(100, 100));
         layer->Set3dSortingContextId(0);
@@ -118,7 +118,7 @@ TEST_F(CompositorMutableStateTest, MutableStateMutableProperties)
     EXPECT_TRUE(state.get());
 
     EXPECT_EQ(1.0, rootLayer()->Opacity());
-    EXPECT_EQ(gfx::Transform().ToString(), rootLayer()->transform().ToString());
+    EXPECT_EQ(gfx::Transform().ToString(), rootLayer()->Transform().ToString());
     EXPECT_EQ(0.0, layer->CurrentScrollOffset().x());
     EXPECT_EQ(0.0, layer->CurrentScrollOffset().y());
 
@@ -129,7 +129,7 @@ TEST_F(CompositorMutableStateTest, MutableStateMutableProperties)
     state->setScrollTop(1.0);
 
     EXPECT_EQ(0.5, rootLayer()->Opacity());
-    EXPECT_EQ(zero.ToString(), rootLayer()->transform().ToString());
+    EXPECT_EQ(zero.ToString(), rootLayer()->Transform().ToString());
     EXPECT_EQ(1.0, layer->CurrentScrollOffset().x());
     EXPECT_EQ(1.0, layer->CurrentScrollOffset().y());
 

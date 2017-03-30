@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
+#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/common/resource_response.h"
 #include "net/url_request/redirect_info.h"
 #include "third_party/WebKit/public/platform/WebURLLoader.h"
@@ -39,7 +40,7 @@ class CONTENT_EXPORT WebURLLoaderImpl
 
   // Takes ownership of |web_task_runner|.
   WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                   std::unique_ptr<blink::WebTaskRunner> web_task_runner);
+                   mojom::URLLoaderFactory* url_loader_factory);
   ~WebURLLoaderImpl() override;
 
   static void PopulateURLResponse(const GURL& url,
@@ -54,11 +55,11 @@ class CONTENT_EXPORT WebURLLoaderImpl
       blink::WebURLRequest* new_request);
 
   // WebURLLoader methods:
-  void loadSynchronously(
-      const blink::WebURLRequest& request,
-      blink::WebURLResponse& response,
-      blink::WebURLError& error,
-      blink::WebData& data) override;
+  void loadSynchronously(const blink::WebURLRequest& request,
+                         blink::WebURLResponse& response,
+                         blink::WebURLError& error,
+                         blink::WebData& data,
+                         int64_t& encoded_data_length) override;
   void loadAsynchronously(
       const blink::WebURLRequest& request,
       blink::WebURLLoaderClient* client) override;

@@ -14,15 +14,25 @@
     android:paddingTop="@dimen/toolbar_height_no_shadow"
     android:visibility="gone" >
 
-    <!-- Spacer. Note: this must have layout_weight="1" and the other spacers must have
-         layout_weight="0". The NewTabPageLayout will redistribute the extra space between
-         them. -->
+    <!-- Top spacer. Note: the top spacer must have layout_weight="1" and the middle and bottom
+         spacers must have layout_weight="0". The NewTabPageLayout will redistribute the extra space
+         between them. -->
     <View
         android:id="@+id/ntp_top_spacer"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:visibility="invisible" />
+
+    <!-- Spacer above the search provider logo that can be used to distribute extra space in order
+         to push part of Most Visited below the fold, suggesting that the page can be scrolled. This
+         is only used when there is not enough space to show the peeking card. -->
+    <View
+        android:id="@+id/search_provider_logo_spacer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="0"
+        android:visibility="gone" />
 
     <!-- Search provider logo -->
     <org.chromium.chrome.browser.ntp.LogoView
@@ -32,7 +42,17 @@
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
         android:layout_marginTop="26dp"
-        android:layout_marginBottom="27dp" />
+        android:layout_marginBottom="23dp" />
+
+    <!-- Spacer above the search box that can be used to distribute extra space in order to push
+         part of Most Visited below the fold, suggesting that the page can be scrolled. This
+         is only used when there is not enough space to show the peeking card. -->
+    <View
+        android:id="@+id/search_box_spacer"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_weight="0"
+        android:visibility="gone" />
 
     <!-- Search box -->
     <LinearLayout
@@ -41,7 +61,7 @@
         android:layout_height="48dp"
         android:layout_marginStart="12dp"
         android:layout_marginEnd="12dp"
-        android:layout_marginTop="3dp"
+        android:layout_marginTop="7dp"
         android:layout_marginBottom="8dp"
         android:gravity="center_vertical"
         android:background="@drawable/bg_ntp_search_box"
@@ -70,7 +90,7 @@
             android:src="@drawable/btn_mic" />
     </LinearLayout>
 
-    <!-- Spacer -->
+    <!-- Middle spacer -->
     <View
         android:id="@+id/ntp_middle_spacer"
         android:layout_width="0dp"
@@ -99,7 +119,7 @@
         android:inflatedId="@+id/most_visited_placeholder"
         android:layout="@layout/most_visited_placeholder" />
 
-    <!-- Spacer -->
+    <!-- Bottom spacer -->
     <View
         android:id="@+id/ntp_bottom_spacer"
         android:layout_width="0dp"
@@ -107,6 +127,7 @@
         android:layout_weight="0"
         android:visibility="invisible" />
 
+    <!-- Spacer for when there is no search provider logo. -->
     <View
         android:id="@+id/no_search_logo_spacer"
         android:layout_width="match_parent"
@@ -114,6 +135,7 @@
         android:layout_weight="1"
         android:visibility="gone" />
 
+    <!-- Spacer to make the page scrollable when needed. -->
     <View
         android:id="@+id/ntp_scroll_spacer"
         android:layout_width="match_parent"

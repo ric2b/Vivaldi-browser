@@ -71,7 +71,7 @@ SavedPasswordItem* SavedpasswordsGetListFunction::GetSavedPasswordItem(
 }
 
 void SavedpasswordsGetListFunction::SendAsyncResponse() {
-  base::MessageLoop::current()->PostTask(
+  base::MessageLoop::current()->task_runner()->PostTask(
     FROM_HERE,
     base::Bind(&SavedpasswordsGetListFunction::SendResponseToCallback, this));
 }
@@ -149,7 +149,7 @@ void SavedpasswordsRemoveFunction::SendResponseToCallback() {
 }
 
 void SavedpasswordsRemoveFunction::SendAsyncResponse() {
-  base::MessageLoop::current()->PostTask(
+  base::MessageLoop::current()->task_runner()->PostTask(
     FROM_HERE,
     base::Bind(&SavedpasswordsRemoveFunction::SendResponseToCallback, this));
 }

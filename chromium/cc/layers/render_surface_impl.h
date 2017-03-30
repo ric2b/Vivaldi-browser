@@ -53,6 +53,9 @@ class CC_EXPORT RenderSurfaceImpl {
   }
   float draw_opacity() const { return draw_properties_.draw_opacity; }
 
+  SkXfermode::Mode BlendMode() const;
+  bool UsesDefaultBlendMode() const;
+
   void SetNearestOcclusionImmuneAncestor(const RenderSurfaceImpl* surface) {
     nearest_occlusion_immune_ancestor_ = surface;
   }
@@ -151,7 +154,10 @@ class CC_EXPORT RenderSurfaceImpl {
   LayerImpl* ReplicaMaskLayer();
   bool HasReplicaMask() const;
 
+  const FilterOperations& Filters() const;
   const FilterOperations& BackgroundFilters() const;
+  gfx::PointF FiltersOrigin() const;
+  gfx::Transform FiltersTransform() const;
 
   bool HasCopyRequest() const;
 

@@ -4,6 +4,7 @@
 
 #include "platform/fonts/AcceptLanguagesResolver.h"
 
+#include "platform/LayoutLocale.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -16,6 +17,7 @@ TEST(AcceptLanguagesResolverTest, AcceptLanguagesChanged)
         const char* locale;
     } tests[] = {
         // Non-Han script cases.
+        { nullptr, USCRIPT_COMMON, nullptr },
         { "", USCRIPT_COMMON, nullptr },
         { "en-US", USCRIPT_COMMON, nullptr },
         { ",en-US", USCRIPT_COMMON, nullptr },
@@ -26,6 +28,11 @@ TEST(AcceptLanguagesResolverTest, AcceptLanguagesChanged)
         { "zh-CN", USCRIPT_SIMPLIFIED_HAN, "zh-Hans" },
         { "zh-HK", USCRIPT_TRADITIONAL_HAN, "zh-Hant" },
         { "zh-TW", USCRIPT_TRADITIONAL_HAN, "zh-Hant" },
+
+        // Language only.
+        { "ja", USCRIPT_KATAKANA_OR_HIRAGANA, "ja-jp" },
+        { "ko", USCRIPT_HANGUL, "ko-kr" },
+        { "zh", USCRIPT_SIMPLIFIED_HAN, "zh-Hans" },
 
         // Unusual combinations.
         { "en-JP", USCRIPT_KATAKANA_OR_HIRAGANA, "ja-jp" },
@@ -39,13 +46,19 @@ TEST(AcceptLanguagesResolverTest, AcceptLanguagesChanged)
         { "zh-TW,ja-JP", USCRIPT_TRADITIONAL_HAN, "zh-Hant" },
     };
 
-    for (auto& test : tests) {
-        AcceptLanguagesResolver::updateFromAcceptLanguages(test.acceptLanguages);
+    for (const auto& test : tests) {
+        const LayoutLocale* locale =
+            AcceptLanguagesResolver::localeForHanFromAcceptLanguages(
+                test.acceptLanguages);
 
-        EXPECT_EQ(test.script, AcceptLanguagesResolver::preferredHanScript())
-            << test.acceptLanguages;
-        EXPECT_STREQ(test.locale,
-            AcceptLanguagesResolver::preferredHanSkFontMgrLocale())
+        if (test.script == USCRIPT_COMMON) {
+            EXPECT_EQ(nullptr, locale) << test.acceptLanguages;
+            continue;
+        }
+
+        ASSERT_NE(nullptr, locale) << test.acceptLanguages;
+        EXPECT_EQ(test.script, locale->scriptForHan()) << test.acceptLanguages;
+        EXPECT_STRCASEEQ(test.locale, locale->localeForHanForSkFontMgr())
             << test.acceptLanguages;
     }
 }

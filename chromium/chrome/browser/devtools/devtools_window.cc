@@ -17,7 +17,7 @@
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -376,6 +376,7 @@ void DevToolsWindow::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kDevToolsPortForwardingDefaultSet,
                                 false);
   registry->RegisterDictionaryPref(prefs::kDevToolsPortForwardingConfig);
+  registry->RegisterListPref(prefs::kDevToolsTargetDiscoveryConfig);
   registry->RegisterDictionaryPref(prefs::kDevToolsPreferences);
 }
 
@@ -452,7 +453,7 @@ void DevToolsWindow::OpenDevToolsWindowForWorker(
 DevToolsWindow* DevToolsWindow::CreateDevToolsWindowForWorker(
     Profile* profile) {
   content::RecordAction(base::UserMetricsAction("DevTools_InspectWorker"));
-  return Create(profile, GURL(), NULL, true, std::string(), false, "");
+  return Create(profile, GURL(), NULL, true, false, std::string(), false, "");
 }
 
 // static
@@ -475,8 +476,8 @@ void DevToolsWindow::OpenDevToolsWindow(
     const scoped_refptr<content::DevToolsAgentHost>& agent_host) {
   DevToolsWindow* window = FindDevToolsWindow(agent_host.get());
   if (!window) {
-    window = DevToolsWindow::Create(
-        profile, GURL(), nullptr, false, std::string(), false, std::string());
+    window = DevToolsWindow::Create(profile, GURL(), nullptr, false, false,
+                                    std::string(), false, std::string());
     if (!window)
       return;
     window->bindings_->AttachTo(agent_host);
@@ -505,10 +506,11 @@ void DevToolsWindow::OpenExternalFrontend(
     Profile* profile,
     const std::string& frontend_url,
     const scoped_refptr<content::DevToolsAgentHost>& agent_host,
-    bool isWorker) {
+    bool is_worker,
+    bool is_v8_only) {
   DevToolsWindow* window = FindDevToolsWindow(agent_host.get());
   if (!window) {
-    window = Create(profile, GURL(), nullptr, isWorker,
+    window = Create(profile, GURL(), nullptr, is_worker, is_v8_only,
         DevToolsUI::GetProxyURL(frontend_url).spec(), false, std::string());
     if (!window)
       return;
@@ -533,11 +535,10 @@ void DevToolsWindow::ToggleDevToolsWindow(
         inspected_web_contents->GetBrowserContext());
     content::RecordAction(
         base::UserMetricsAction("DevTools_InspectRenderer"));
-    window = Create(
-        profile, GURL(), inspected_web_contents,
-        false, std::string(),
-        !vivaldi::IsVivaldiRunning(),
-        settings);
+    window = Create(profile, GURL(), inspected_web_contents,
+                    false, false, std::string(),
+                    !vivaldi::IsVivaldiRunning(),
+                    settings);
     if (!window)
       return;
     window->bindings_->AttachTo(agent.get());
@@ -572,12 +573,12 @@ void DevToolsWindow::InspectElement(
     OpenDevToolsWindow(Profile::FromBrowserContext(agent->GetBrowserContext()),
                        agent);
   }
-
-  agent->InspectElement(x, y);
-
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
-  if (should_measure_time && window)
-    window->inspect_element_start_time_ = start_time;
+  if (window) {
+    agent->InspectElement(window->bindings_, x, y);
+    if (should_measure_time)
+      window->inspect_element_start_time_ = start_time;
+  }
 }
 
 void DevToolsWindow::ScheduleShow(const DevToolsToggleAction& action) {
@@ -773,8 +774,7 @@ DevToolsWindow::DevToolsWindow(Profile* profile,
 
   // Tag the DevTools main WebContents with its TaskManager specific UserData
   // so that it shows up in the task manager.
-  task_management::WebContentsTags::CreateForDevToolsContents(
-      main_web_contents_);
+  task_manager::WebContentsTags::CreateForDevToolsContents(main_web_contents_);
 
   std::vector<base::Callback<void(DevToolsWindow*)>> copy(
       g_creation_callbacks.Get());
@@ -788,6 +788,7 @@ DevToolsWindow* DevToolsWindow::Create(
     const GURL& frontend_url,
     content::WebContents* inspected_web_contents,
     bool shared_worker_frontend,
+    bool v8_only_frontend,
     const std::string& remote_frontend,
     bool can_dock,
     const std::string& settings) {
@@ -809,6 +810,7 @@ DevToolsWindow* DevToolsWindow::Create(
   // Create WebContents with devtools.
   GURL url(GetDevToolsURL(profile, frontend_url,
                           shared_worker_frontend,
+                          v8_only_frontend,
                           remote_frontend,
                           can_dock));
   std::unique_ptr<WebContents> main_web_contents(
@@ -830,6 +832,7 @@ DevToolsWindow* DevToolsWindow::Create(
 GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     const GURL& base_url,
                                     bool shared_worker_frontend,
+                                    bool v8_only_frontend,
                                     const std::string& remote_frontend,
                                     bool can_dock) {
   // Compatibility errors are encoded with data urls, pass them
@@ -846,6 +849,8 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
       ((frontend_url.find("?") == std::string::npos) ? "?" : "&"));
   if (shared_worker_frontend)
     url_string += "&isSharedWorker=true";
+  if (v8_only_frontend)
+    url_string += "&v8only=true";
   if (remote_frontend.size()) {
     url_string += "&remoteFrontend=true";
   } else {
@@ -964,7 +969,7 @@ void DevToolsWindow::WebContentsCreated(WebContents* source_contents,
 
     // Tag the DevTools toolbox WebContents with its TaskManager specific
     // UserData so that it shows up in the task manager.
-    task_management::WebContentsTags::CreateForDevToolsContents(
+    task_manager::WebContentsTags::CreateForDevToolsContents(
         toolbox_web_contents_);
   }
 }

@@ -38,7 +38,7 @@ struct BuildInfoSingletonTraits {
   }
 
   static const bool kRegisterAtExit = false;
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   static const bool kAllowedToAccessOnNonjoinableThread = true;
 #endif
 };
@@ -79,11 +79,6 @@ void BuildInfo::SetJavaExceptionInfo(const std::string& info) {
 void BuildInfo::ClearJavaExceptionInfo() {
   delete java_exception_info_;
   java_exception_info_ = nullptr;
-}
-
-// static
-bool BuildInfo::RegisterBindings(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

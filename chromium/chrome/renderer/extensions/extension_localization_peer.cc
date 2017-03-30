@@ -23,14 +23,16 @@ namespace {
 class StringData final : public content::RequestPeer::ReceivedData {
  public:
   explicit StringData(const std::string& data) : data_(data) {}
-  void Append(const char* data, int length) { data_.append(data, length); }
 
   const char* payload() const override { return data_.data(); }
   int length() const override { return data_.size(); }
-  int encoded_length() const override { return -1; }
+  int encoded_data_length() const override { return -1; }
+  // The original data has substitutions applied, so the original
+  // encoded_body_length no longer applies.
+  int encoded_body_length() const override { return data_.size(); }
 
  private:
-  std::string data_;
+  const std::string data_;
 
   DISALLOW_COPY_AND_ASSIGN(StringData);
 };

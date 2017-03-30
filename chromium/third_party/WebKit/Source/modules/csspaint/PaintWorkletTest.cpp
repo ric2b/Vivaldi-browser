@@ -17,15 +17,6 @@
 
 namespace blink {
 
-namespace {
-
-static void clearHandle(const v8::WeakCallbackInfo<ScopedPersistent<v8::Function>>& data)
-{
-    data.GetParameter()->clear();
-}
-
-} // namespace
-
 class PaintWorkletTest : public testing::Test {
 public:
     PaintWorkletTest()
@@ -35,7 +26,7 @@ public:
 
     PaintWorklet* paintWorklet()
     {
-        return WindowPaintWorklet::from(*m_page->frame().localDOMWindow()).paintWorklet(&m_page->document());
+        return WindowPaintWorklet::from(*m_page->frame().localDOMWindow()).paintWorklet();
     }
 
 protected:
@@ -58,7 +49,7 @@ TEST_F(PaintWorkletTest, GarbageCollectionOfCSSPaintDefinition)
     {
         v8::HandleScope handleScope(isolate);
         handle.set(isolate, definition->paintFunctionForTesting(isolate));
-        handle.setWeak(&handle, clearHandle);
+        handle.setPhantom();
     }
     ASSERT(!handle.isEmpty());
     ASSERT(handle.isWeak());

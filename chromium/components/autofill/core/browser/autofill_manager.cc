@@ -12,10 +12,12 @@
 #include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/containers/adapters.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -50,7 +52,6 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_data_validation.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
-#include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -66,7 +67,6 @@
 #include "url/gurl.h"
 
 #if defined(OS_IOS)
-#include "components/autofill/core/browser/autofill_field_trial_ios.h"
 #include "components/autofill/core/browser/keyboard_accessory_metrics_logger.h"
 #endif
 
@@ -210,6 +210,9 @@ AutofillManager::AutofillManager(
       user_did_accept_upload_prompt_(false),
       external_delegate_(NULL),
       test_delegate_(NULL),
+#if defined(OS_ANDROID) || defined(OS_IOS)
+      autofill_assistant_(this),
+#endif
       weak_ptr_factory_(this) {
   if (enable_download_manager == ENABLE_AUTOFILL_DOWNLOAD_MANAGER) {
     download_manager_.reset(new AutofillDownloadManager(driver, this));
@@ -224,6 +227,10 @@ AutofillManager::~AutofillManager() {}
 // static
 void AutofillManager::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  // This pref is not synced because it's for a signin promo, which by
+  // definition will not be synced.
+  registry->RegisterIntegerPref(
+      prefs::kAutofillCreditCardSigninPromoImpressionCount, 0);
   registry->RegisterBooleanPref(
       prefs::kAutofillEnabled,
       true,
@@ -254,24 +261,56 @@ void AutofillManager::ShowAutofillSettings() {
 
 bool AutofillManager::ShouldShowScanCreditCard(const FormData& form,
                                                const FormFieldData& field) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableCreditCardScan)) {
-    return false;
-  }
-
   if (!client_->HasCreditCardScanFeature())
     return false;
 
   AutofillField* autofill_field = GetAutofillField(form, field);
-  if (!autofill_field ||
-      autofill_field->Type().GetStorableType() != CREDIT_CARD_NUMBER) {
+  if (!autofill_field)
     return false;
-  }
+
+  bool is_card_number_field =
+      autofill_field->Type().GetStorableType() == CREDIT_CARD_NUMBER &&
+      base::ContainsOnlyChars(CreditCard::StripSeparators(field.value),
+                              base::ASCIIToUTF16("0123456789"));
+
+  bool is_scannable_name_on_card_field =
+      autofill_field->Type().GetStorableType() == CREDIT_CARD_NAME_FULL &&
+      base::FeatureList::IsEnabled(kAutofillScanCardholderName);
+
+  if (!is_card_number_field && !is_scannable_name_on_card_field)
+    return false;
 
   static const int kShowScanCreditCardMaxValueLength = 6;
-  return field.value.size() <= kShowScanCreditCardMaxValueLength &&
-         base::ContainsOnlyChars(CreditCard::StripSeparators(field.value),
-                                 base::ASCIIToUTF16("0123456789"));
+  return field.value.size() <= kShowScanCreditCardMaxValueLength;
+}
+
+bool AutofillManager::ShouldShowCreditCardSigninPromo(
+    const FormData& form,
+    const FormFieldData& field) {
+  if (!IsAutofillCreditCardSigninPromoEnabled())
+    return false;
+
+  // Check whether we are dealing with a credit card field and whether it's
+  // appropriate to show the promo (e.g. the platform is supported).
+  AutofillField* autofill_field = GetAutofillField(form, field);
+  if (!autofill_field || autofill_field->Type().group() != CREDIT_CARD ||
+      !client_->ShouldShowSigninPromo())
+    return false;
+
+  // The last step is checking if we are under the limit of impressions (a limit
+  // of 0 means there is no limit);
+  int impression_limit = GetCreditCardSigninPromoImpressionLimit();
+  int impression_count = client_->GetPrefs()->GetInteger(
+      prefs::kAutofillCreditCardSigninPromoImpressionCount);
+  if (impression_limit == 0 || impression_count < impression_limit) {
+    // The promo will be shown. Increment the impression count.
+    client_->GetPrefs()->SetInteger(
+        prefs::kAutofillCreditCardSigninPromoImpressionCount,
+        impression_count + 1);
+    return true;
+  }
+
+  return false;
 }
 
 void AutofillManager::OnFormsSeen(const std::vector<FormData>& forms,
@@ -507,11 +546,15 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
           GetProfileSuggestions(*form_structure, field, *autofill_field);
     }
     if (!suggestions.empty()) {
+      bool is_context_secure =
+          client_->IsContextSecure(form_structure->source_url());
+      if (is_filling_credit_card)
+        AutofillMetrics::LogIsQueriedCreditCardFormSecure(is_context_secure);
+
       // Don't provide credit card suggestions for non-secure pages, but do
       // provide them for secure pages with passive mixed content (see impl. of
       // IsContextSecure).
-      if (is_filling_credit_card &&
-          !client_->IsContextSecure(form_structure->source_url())) {
+      if (is_filling_credit_card && !is_context_secure) {
         Suggestion warning_suggestion(l10n_util::GetStringUTF16(
             IDS_AUTOFILL_WARNING_INSECURE_CONNECTION));
         warning_suggestion.frontend_id = POPUP_ITEM_ID_WARNING_MESSAGE;
@@ -553,11 +596,12 @@ void AutofillManager::OnQueryFormFieldAutofill(int query_id,
 
   // If there are no Autofill suggestions, consider showing Autocomplete
   // suggestions. We will not show Autocomplete suggestions for a field that
-  // specifies autocomplete=off or a field that we think is a credit card
-  // expiration, cvc or number.
+  // specifies autocomplete=off (or an unrecognized type) or a field that we
+  // think is a credit card expiration, cvc or number.
   if (suggestions.empty() && field.should_autocomplete &&
       !(autofill_field &&
         (IsCreditCardExpirationType(autofill_field->Type().GetStorableType()) ||
+         autofill_field->Type().html_type() == HTML_TYPE_UNRECOGNIZED ||
          autofill_field->Type().GetStorableType() == CREDIT_CARD_NUMBER ||
          autofill_field->Type().GetStorableType() ==
              CREDIT_CARD_VERIFICATION_CODE))) {
@@ -582,13 +626,6 @@ bool AutofillManager::WillFillCreditCardNumber(const FormData& form,
 
   if (autofill_field->Type().GetStorableType() == CREDIT_CARD_NUMBER)
     return true;
-
-#if defined(OS_IOS)
-  // On iOS, we only fill out one field at a time (assuming the new full-form
-  // feature isn't enabled). So we only need to check the current field.
-  if (!AutofillFieldTrialIOS::IsFullFormAutofillEnabled())
-    return false;
-#endif
 
   // If the relevant section is already autofilled, the new fill operation will
   // only fill |autofill_field|.
@@ -1028,7 +1065,7 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     recently_autofilled_forms_.push_back(
         std::map<std::string, base::string16>());
     auto& map = recently_autofilled_forms_.back();
-    for (const auto& field : submitted_form) {
+    for (const auto* field : submitted_form) {
       AutofillType type = field->Type();
       // Even though this is for development only, mask full credit card #'s.
       if (type.GetStorableType() == CREDIT_CARD_NUMBER &&
@@ -1093,7 +1130,7 @@ void AutofillManager::ImportFormData(const FormStructure& submitted_form) {
     }
 
     // All required data is available, start the upload process.
-    payments_client_->GetUploadDetails(app_locale_);
+    payments_client_->GetUploadDetails(upload_request_.profiles, app_locale_);
   }
 }
 
@@ -1262,6 +1299,9 @@ void AutofillManager::Reset() {
       new AutofillMetrics::FormEventLogger(false /* is_for_credit_card */));
   credit_card_form_event_logger_.reset(
       new AutofillMetrics::FormEventLogger(true /* is_for_credit_card */));
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  autofill_assistant_.Reset();
+#endif
   has_logged_autofill_enabled_ = false;
   has_logged_address_suggestions_count_ = false;
   did_show_suggestions_ = false;
@@ -1301,6 +1341,9 @@ AutofillManager::AutofillManager(AutofillDriver* driver,
       unmasking_query_id_(-1),
       external_delegate_(NULL),
       test_delegate_(NULL),
+#if defined(OS_ANDROID) || defined(OS_IOS)
+      autofill_assistant_(this),
+#endif
       weak_ptr_factory_(this) {
   DCHECK(driver_);
   DCHECK(client_);
@@ -1748,6 +1791,21 @@ void AutofillManager::ParseForms(const std::vector<FormData>& forms) {
     KeyboardAccessoryMetricsLogger::OnFormsLoaded();
 #endif
   }
+
+#if defined(OS_ANDROID) || defined(OS_IOS)
+  // When a credit card form is parsed and conditions are met, show an infobar
+  // prompt for credit card assisted filling. Upon accepting the infobar, the
+  // form will automatically be filled with the user's information through this
+  // class' FillCreditCardForm().
+  if (autofill_assistant_.CanShowCreditCardAssist(form_structures_.get())) {
+    const std::vector<CreditCard*> cards =
+        personal_data_->GetCreditCardsToSuggest();
+    // Expired cards are last in the sorted order, so if the first one is
+    // expired, they all are.
+    if (!cards.empty() && !cards.front()->IsExpired(base::Time::Now()))
+      autofill_assistant_.ShowAssistForCreditCard(*cards.front());
+  }
+#endif
 
   // For the |non_queryable_forms|, we have all the field type info we're ever
   // going to get about them.  For the other forms, we'll wait until we get a

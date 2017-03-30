@@ -9,6 +9,9 @@
 #include "core/frame/Settings.h"
 #include "core/page/Page.h"
 #include "platform/geometry/DoubleRect.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebThread.h"
+#include "public/platform/WebViewScheduler.h"
 #include "web/DevToolsEmulator.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
@@ -29,6 +32,7 @@ InspectorEmulationAgent* InspectorEmulationAgent::create(WebLocalFrameImpl* webL
 InspectorEmulationAgent::InspectorEmulationAgent(WebLocalFrameImpl* webLocalFrameImpl, Client* client)
     : m_webLocalFrameImpl(webLocalFrameImpl)
     , m_client(client)
+    , m_virtualTimeBudgetExpiredTask(CancellableTaskFactory::create(this, &InspectorEmulationAgent::virtualTimeBudgetExpired))
 {
 }
 
@@ -56,6 +60,7 @@ void InspectorEmulationAgent::disable(ErrorString*)
     ErrorString error;
     setScriptExecutionDisabled(&error, false);
     setTouchEmulationEnabled(&error, false, protocol::Maybe<String>());
+    setCPUThrottlingRate(&error, 1);
     setEmulatedMedia(&error, String());
 }
 
@@ -90,6 +95,30 @@ void InspectorEmulationAgent::setEmulatedMedia(ErrorString*, const String& media
 void InspectorEmulationAgent::setCPUThrottlingRate(ErrorString*, double throttlingRate)
 {
     m_client->setCPUThrottlingRate(throttlingRate);
+}
+
+void InspectorEmulationAgent::setVirtualTimePolicy(ErrorString*, const String& in_policy, const Maybe<int>& in_budget)
+{
+    if (protocol::Emulation::VirtualTimePolicyEnum::Advance == in_policy) {
+        m_webLocalFrameImpl->view()->scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::ADVANCE);
+    } else if (protocol::Emulation::VirtualTimePolicyEnum::Pause == in_policy) {
+        m_webLocalFrameImpl->view()->scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::PAUSE);
+    } else if (protocol::Emulation::VirtualTimePolicyEnum::PauseIfNetworkFetchesPending == in_policy) {
+        m_webLocalFrameImpl->view()->scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::DETERMINISTIC_LOADING);
+    }
+    m_webLocalFrameImpl->view()->scheduler()->enableVirtualTime();
+
+    if (in_budget.isJust()) {
+        WebTaskRunner* taskRunner = Platform::current()->currentThread()->getWebTaskRunner();
+        long long delayMillis = static_cast<long long>(in_budget.fromJust());
+        taskRunner->postDelayedTask(BLINK_FROM_HERE, m_virtualTimeBudgetExpiredTask->cancelAndCreate(), delayMillis);
+    }
+}
+
+void InspectorEmulationAgent::virtualTimeBudgetExpired()
+{
+    m_webLocalFrameImpl->view()->scheduler()->setVirtualTimePolicy(WebViewScheduler::VirtualTimePolicy::PAUSE);
+    frontend()->virtualTimeBudgetExpired();
 }
 
 DEFINE_TRACE(InspectorEmulationAgent)

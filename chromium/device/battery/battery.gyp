@@ -18,6 +18,9 @@
         'battery_monitor.mojom',
         'battery_status.mojom',
       ],
+      'variables': {
+        'use_new_wrapper_types': 'false',
+      },
     },
     {
       # GN version: //device/battery:mojo_bindings_blink
@@ -25,6 +28,7 @@
       'type': 'static_library',
       'variables': {
         'for_blink': 'true',
+        'use_new_wrapper_types': 'false',
       },
       'includes': [
         '../../mojo/mojom_bindings_generator.gypi',
@@ -116,6 +120,7 @@
             'battery_monitor_impl.h',
             'battery_status_manager_chromeos.cc',
             'battery_status_manager_default.cc',
+            'battery_status_manager_linux-inl.h',
             'battery_status_manager_linux.cc',
             'battery_status_manager_linux.h',
             'battery_status_manager_mac.cc',

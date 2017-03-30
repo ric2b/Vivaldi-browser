@@ -32,49 +32,64 @@
  * @constructor
  * @extends {WebInspector.SDKModel}
  * @param {!WebInspector.Target} target
+ * @param {?WebInspector.NetworkManager} networkManager
+ * @param {!WebInspector.SecurityOriginManager} securityOriginManager
  */
-WebInspector.ResourceTreeModel = function(target)
+WebInspector.ResourceTreeModel = function(target, networkManager, securityOriginManager)
 {
     WebInspector.SDKModel.call(this, WebInspector.ResourceTreeModel, target);
-
-    target.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.RequestFinished, this._onRequestFinished, this);
-    target.networkManager.addEventListener(WebInspector.NetworkManager.EventTypes.RequestUpdateDropped, this._onRequestUpdateDropped, this);
+    if (networkManager) {
+        networkManager.addEventListener(WebInspector.NetworkManager.Events.RequestFinished,
+            this._onRequestFinished, this);
+        networkManager.addEventListener(WebInspector.NetworkManager.Events.RequestUpdateDropped,
+            this._onRequestUpdateDropped, this);
+    }
 
     this._agent = target.pageAgent();
     this._agent.enable();
+    this._securityOriginManager = securityOriginManager;
 
     this._fetchResourceTree();
 
     target.registerPageDispatcher(new WebInspector.PageDispatcher(this));
 
-    this._securityOriginFrameCount = {};
-    this._inspectedPageURL = "";
     this._pendingReloadOptions = null;
     this._reloadSuspensionCount = 0;
+    this._fireExecutionContextOrderChanged = target.runtimeModel.fireExecutionContextOrderChanged.bind(target.runtimeModel);
+
+    target.runtimeModel.setExecutionContextComparator(this._executionContextComparator.bind(this));
 }
 
-WebInspector.ResourceTreeModel.EventTypes = {
-    FrameAdded: "FrameAdded",
-    FrameNavigated: "FrameNavigated",
-    FrameDetached: "FrameDetached",
-    FrameResized: "FrameResized",
-    FrameWillNavigate: "FrameWillNavigate",
-    MainFrameNavigated: "MainFrameNavigated",
-    ResourceAdded: "ResourceAdded",
-    WillLoadCachedResources: "WillLoadCachedResources",
-    CachedResourcesLoaded: "CachedResourcesLoaded",
-    DOMContentLoaded: "DOMContentLoaded",
-    Load: "Load",
-    PageReloadRequested: "PageReloadRequested",
-    WillReloadPage: "WillReloadPage",
-    InspectedURLChanged: "InspectedURLChanged",
-    SecurityOriginAdded: "SecurityOriginAdded",
-    SecurityOriginRemoved: "SecurityOriginRemoved",
-    ScreencastFrame: "ScreencastFrame",
-    ScreencastVisibilityChanged: "ScreencastVisibilityChanged",
-    ColorPicked: "ColorPicked"
+/** @enum {symbol} */
+WebInspector.ResourceTreeModel.Events = {
+    FrameAdded: Symbol("FrameAdded"),
+    FrameNavigated: Symbol("FrameNavigated"),
+    FrameDetached: Symbol("FrameDetached"),
+    FrameResized: Symbol("FrameResized"),
+    FrameWillNavigate: Symbol("FrameWillNavigate"),
+    MainFrameNavigated: Symbol("MainFrameNavigated"),
+    ResourceAdded: Symbol("ResourceAdded"),
+    WillLoadCachedResources: Symbol("WillLoadCachedResources"),
+    CachedResourcesLoaded: Symbol("CachedResourcesLoaded"),
+    DOMContentLoaded: Symbol("DOMContentLoaded"),
+    Load: Symbol("Load"),
+    PageReloadRequested: Symbol("PageReloadRequested"),
+    WillReloadPage: Symbol("WillReloadPage"),
+    ScreencastFrame: Symbol("ScreencastFrame"),
+    ScreencastVisibilityChanged: Symbol("ScreencastVisibilityChanged"),
+    ColorPicked: Symbol("ColorPicked"),
+    InterstitialShown: Symbol("InterstitialShown"),
+    InterstitialHidden: Symbol("InterstitialHidden")
 }
 
+/**
+ * @param {!WebInspector.Target} target
+ * @return {?WebInspector.ResourceTreeModel}
+ */
+WebInspector.ResourceTreeModel.fromTarget = function(target)
+{
+    return /** @type {?WebInspector.ResourceTreeModel} */ (target.model(WebInspector.ResourceTreeModel));
+}
 
 /**
  * @return {!Array.<!WebInspector.ResourceTreeFrame>}
@@ -82,8 +97,8 @@ WebInspector.ResourceTreeModel.EventTypes = {
 WebInspector.ResourceTreeModel.frames = function()
 {
     var result = [];
-    for (var target of WebInspector.targetManager.targets())
-        result = result.concat(Object.values(target.resourceTreeModel._frames));
+    for (var target of WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM))
+        result = result.concat(WebInspector.ResourceTreeModel.fromTarget(target)._frames.valuesArray());
     return result;
 }
 
@@ -93,8 +108,8 @@ WebInspector.ResourceTreeModel.frames = function()
  */
 WebInspector.ResourceTreeModel.resourceForURL = function(url)
 {
-    for (var target of WebInspector.targetManager.targets()) {
-        var mainFrame = target.resourceTreeModel.mainFrame;
+    for (var target of WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM)) {
+        var mainFrame = WebInspector.ResourceTreeModel.fromTarget(target).mainFrame;
         var result = mainFrame ? mainFrame.resourceForURL(url) : null;
         if (result)
             return result;
@@ -105,49 +120,22 @@ WebInspector.ResourceTreeModel.resourceForURL = function(url)
 WebInspector.ResourceTreeModel.prototype = {
     _fetchResourceTree: function()
     {
-        /** @type {!Object.<string, !WebInspector.ResourceTreeFrame>} */
-        this._frames = {};
+        /** @type {!Map<string, !WebInspector.ResourceTreeFrame>} */
+        this._frames = new Map();
         this._cachedResourcesProcessed = false;
         this._agent.getResourceTree(this._processCachedResources.bind(this));
     },
 
     _processCachedResources: function(error, mainFramePayload)
     {
-        if (error) {
-            this._cachedResourcesProcessed = true;
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded);
-            return;
-        }
-
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.WillLoadCachedResources);
-        this._inspectedPageURL = mainFramePayload.frame.url;
-
-        // Do not process SW resources.
-        if (this.target().isPage())
+        if (!error) {
+            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.WillLoadCachedResources);
             this._addFramesRecursively(null, mainFramePayload);
-        else
-            this._addSecurityOrigin(mainFramePayload.frame.securityOrigin);
-
-        this._dispatchInspectedURLChanged();
+            this.target().setInspectedURL(mainFramePayload.frame.url);
+        }
         this._cachedResourcesProcessed = true;
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.CachedResourcesLoaded);
-    },
-
-    /**
-     * @return {string}
-     */
-    inspectedPageURL: function()
-    {
-        return this._inspectedPageURL;
-    },
-
-    /**
-     * @return {string}
-     */
-    inspectedPageDomain: function()
-    {
-        var parsedURL = this._inspectedPageURL ? this._inspectedPageURL.asParsedURL() : null;
-        return parsedURL ? parsedURL.host : "";
+        this._fireExecutionContextOrderChanged();
+        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.CachedResourcesLoaded);
     },
 
     /**
@@ -158,60 +146,20 @@ WebInspector.ResourceTreeModel.prototype = {
         return this._cachedResourcesProcessed;
     },
 
-    _dispatchInspectedURLChanged: function()
-    {
-        InspectorFrontendHost.inspectedURLChanged(this._inspectedPageURL);
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.InspectedURLChanged, this._inspectedPageURL);
-    },
-
     /**
      * @param {!WebInspector.ResourceTreeFrame} frame
      * @param {boolean=} aboutToNavigate
      */
     _addFrame: function(frame, aboutToNavigate)
     {
-        this._frames[frame.id] = frame;
-        if (frame.isMainFrame())
+        this._frames.set(frame.id, frame);
+        if (frame.isMainFrame()) {
             this.mainFrame = frame;
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.FrameAdded, frame);
+            this._securityOriginManager.setMainSecurityOrigin(frame.url);
+        }
+        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.FrameAdded, frame);
         if (!aboutToNavigate)
-            this._addSecurityOrigin(frame.securityOrigin);
-    },
-
-    /**
-     * @param {string} securityOrigin
-     */
-    _addSecurityOrigin: function(securityOrigin)
-    {
-        if (!this._securityOriginFrameCount[securityOrigin]) {
-            this._securityOriginFrameCount[securityOrigin] = 1;
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.SecurityOriginAdded, securityOrigin);
-            return;
-        }
-        this._securityOriginFrameCount[securityOrigin] += 1;
-    },
-
-    /**
-     * @param {string|undefined} securityOrigin
-     */
-    _removeSecurityOrigin: function(securityOrigin)
-    {
-        if (typeof securityOrigin === "undefined")
-            return;
-        if (this._securityOriginFrameCount[securityOrigin] === 1) {
-            delete this._securityOriginFrameCount[securityOrigin];
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.SecurityOriginRemoved, securityOrigin);
-            return;
-        }
-        this._securityOriginFrameCount[securityOrigin] -= 1;
-    },
-
-    /**
-     * @return {!Array.<string>}
-     */
-    securityOrigins: function()
-    {
-        return Object.keys(this._securityOriginFrameCount);
+            this._securityOriginManager.addSecurityOrigin(frame.securityOrigin);
     },
 
     /**
@@ -228,7 +176,7 @@ WebInspector.ResourceTreeModel.prototype = {
             for (var i = 0; i < frame.childFrames.length; ++i)
                 removeOriginForFrame.call(this, frame.childFrames[i]);
             if (!frame.isMainFrame())
-                this._removeSecurityOrigin(frame.securityOrigin);
+                this._securityOriginManager.removeSecurityOrigin(frame.securityOrigin);
         }
         removeOriginForFrame.call(this, mainFrame);
     },
@@ -243,10 +191,10 @@ WebInspector.ResourceTreeModel.prototype = {
         // Do nothing unless cached resource tree is processed - it will overwrite everything.
         if (!this._cachedResourcesProcessed && parentFrameId)
             return null;
-        if (this._frames[frameId])
+        if (this._frames.has(frameId))
             return null;
 
-        var parentFrame = parentFrameId ? this._frames[parentFrameId] : null;
+        var parentFrame = parentFrameId ? (this._frames.get(parentFrameId) || null) : null;
         var frame = new WebInspector.ResourceTreeFrame(this, parentFrame, frameId);
         if (frame.isMainFrame() && this.mainFrame) {
             this._handleMainFrameDetached(this.mainFrame);
@@ -265,7 +213,7 @@ WebInspector.ResourceTreeModel.prototype = {
         // Do nothing unless cached resource tree is processed - it will overwrite everything.
         if (!this._cachedResourcesProcessed && framePayload.parentId)
             return;
-        var frame = this._frames[framePayload.id];
+        var frame = this._frames.get(framePayload.id);
         if (!frame) {
             // Simulate missed "frameAttached" for a main frame navigation to the new backend process.
             console.assert(!framePayload.parentId, "Main frame shouldn't have parent frame id.");
@@ -273,28 +221,30 @@ WebInspector.ResourceTreeModel.prototype = {
             console.assert(frame);
         }
 
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.FrameWillNavigate, frame);
+        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.FrameWillNavigate, frame);
 
-        this._removeSecurityOrigin(frame.securityOrigin);
+        this._securityOriginManager.removeSecurityOrigin(frame.securityOrigin);
         frame._navigate(framePayload);
         var addedOrigin = frame.securityOrigin;
 
-        if (frame.isMainFrame())
-            this._inspectedPageURL = frame.url;
-
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, frame);
-        if (frame.isMainFrame())
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, frame);
+        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.FrameNavigated, frame);
+        if (frame.isMainFrame()) {
+            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.MainFrameNavigated, frame);
+            if (WebInspector.moduleSetting("preserveConsoleLog").get())
+                WebInspector.console.log(WebInspector.UIString("Navigated to %s", frame.url));
+            else
+                this.target().consoleModel.clear();
+        }
         if (addedOrigin)
-            this._addSecurityOrigin(addedOrigin);
+            this._securityOriginManager.addSecurityOrigin(addedOrigin);
 
         // Fill frame with retained resources (the ones loaded using new loader).
         var resources = frame.resources();
         for (var i = 0; i < resources.length; ++i)
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, resources[i]);
+            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ResourceAdded, resources[i]);
 
         if (frame.isMainFrame())
-            this._dispatchInspectedURLChanged();
+            this.target().setInspectedURL(frame.url);
     },
 
     /**
@@ -306,11 +256,11 @@ WebInspector.ResourceTreeModel.prototype = {
         if (!this._cachedResourcesProcessed)
             return;
 
-        var frame = this._frames[frameId];
+        var frame = this._frames.get(frameId);
         if (!frame)
             return;
 
-        this._removeSecurityOrigin(frame.securityOrigin);
+        this._securityOriginManager.removeSecurityOrigin(frame.securityOrigin);
         if (frame.parentFrame)
             frame.parentFrame._removeChildFrame(frame);
         else
@@ -329,7 +279,7 @@ WebInspector.ResourceTreeModel.prototype = {
         if (request.failed || request.resourceType() === WebInspector.resourceTypes.XHR)
             return;
 
-        var frame = this._frames[request.frameId];
+        var frame = this._frames.get(request.frameId);
         if (frame)
             frame._addRequest(request);
     },
@@ -343,7 +293,7 @@ WebInspector.ResourceTreeModel.prototype = {
             return;
 
         var frameId = event.data.frameId;
-        var frame = this._frames[frameId];
+        var frame = this._frames.get(frameId);
         if (!frame)
             return;
 
@@ -361,7 +311,7 @@ WebInspector.ResourceTreeModel.prototype = {
      */
     frameForId: function(frameId)
     {
-        return this._frames[frameId];
+        return this._frames.get(frameId);
     },
 
     /**
@@ -376,11 +326,11 @@ WebInspector.ResourceTreeModel.prototype = {
     },
 
     /**
-     * @return {!Array.<!WebInspector.ResourceTreeFrame>}
+     * @return {!Array<!WebInspector.ResourceTreeFrame>}
      */
     frames: function()
     {
-        return Object.values(this._frames);
+        return this._frames.valuesArray();
     },
 
     /**
@@ -404,8 +354,6 @@ WebInspector.ResourceTreeModel.prototype = {
         this._addFrame(frame);
 
         var frameResource = this._createResourceFromFramePayload(framePayload, framePayload.url, WebInspector.resourceTypes.Document, framePayload.mimeType);
-        if (frame.isMainFrame())
-            this._inspectedPageURL = frameResource.url;
         frame.addResource(frameResource);
 
         for (var i = 0; frameTreePayload.childFrames && i < frameTreePayload.childFrames.length; ++i)
@@ -451,13 +399,13 @@ WebInspector.ResourceTreeModel.prototype = {
     {
         // Only dispatch PageReloadRequested upon first reload request to simplify client logic.
         if (!this._pendingReloadOptions)
-            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.PageReloadRequested);
+            this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.PageReloadRequested);
         if (this._reloadSuspensionCount) {
             this._pendingReloadOptions = [bypassCache, scriptToEvaluateOnLoad];
             return;
         }
         this._pendingReloadOptions = null;
-        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.WillReloadPage);
+        this.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.WillReloadPage);
         this._agent.reload(bypassCache, scriptToEvaluateOnLoad);
     },
 
@@ -481,6 +429,49 @@ WebInspector.ResourceTreeModel.prototype = {
             }
             callback(url, data || null, errors);
         }
+    },
+    /**
+     * @param {!WebInspector.ExecutionContext} a
+     * @param {!WebInspector.ExecutionContext} b
+     * @return {number}
+     */
+    _executionContextComparator: function(a,b)
+    {
+        /**
+         * @param {!WebInspector.ResourceTreeFrame} frame
+         */
+        function framePath(frame)
+        {
+            var currentFrame = frame;
+            var parents = [];
+            while (currentFrame) {
+                parents.push(currentFrame);
+                currentFrame = currentFrame.parentFrame;
+            }
+            return parents.reverse();
+        }
+
+        var framesA = a.frameId ? framePath(this.frameForId(a.frameId)) : [];
+        var framesB = b.frameId ? framePath(this.frameForId(b.frameId)) : [];
+        var frameA;
+        var frameB;
+        for (var i = 0; ; i++) {
+            if (!framesA[i] || !framesB[i] || (framesA[i] !== framesB[i])) {
+                frameA = framesA[i];
+                frameB = framesB[i];
+                break;
+            }
+        }
+        if (!frameA && frameB)
+            return -1;
+
+        if (!frameB && frameA)
+            return 1;
+
+        if (frameA && frameB) {
+            return frameA.id.localeCompare(frameB.id);
+        }
+        return WebInspector.ExecutionContext.comparator(a,b);
     },
 
     __proto__: WebInspector.SDKModel.prototype
@@ -523,15 +514,28 @@ WebInspector.ResourceTreeFrame = function(model, parentFrame, frameId, payload)
 }
 
 /**
+ * @param {!WebInspector.ExecutionContext|!WebInspector.CSSStyleSheetHeader|!WebInspector.Resource} object
+ * @return {?WebInspector.ResourceTreeFrame}
+ */
+WebInspector.ResourceTreeFrame._fromObject = function(object)
+{
+    var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(object.target());
+    var frameId = object.frameId;
+    if (!resourceTreeModel || !frameId)
+        return null;
+    return resourceTreeModel.frameForId(frameId);
+}
+
+/**
  * @param {!WebInspector.Script} script
  * @return {?WebInspector.ResourceTreeFrame}
  */
 WebInspector.ResourceTreeFrame.fromScript = function(script)
 {
     var executionContext = script.executionContext();
-    if (!executionContext || !executionContext.frameId)
+    if (!executionContext)
         return null;
-    return script.target().resourceTreeModel.frameForId(executionContext.frameId);
+    return WebInspector.ResourceTreeFrame._fromObject(executionContext);
 }
 
 /**
@@ -540,7 +544,7 @@ WebInspector.ResourceTreeFrame.fromScript = function(script)
  */
 WebInspector.ResourceTreeFrame.fromStyleSheet = function(header)
 {
-    return header.target().resourceTreeModel.frameForId(header.frameId);
+    return WebInspector.ResourceTreeFrame._fromObject(header);
 }
 
 /**
@@ -549,7 +553,7 @@ WebInspector.ResourceTreeFrame.fromStyleSheet = function(header)
  */
 WebInspector.ResourceTreeFrame.fromResource = function(resource)
 {
-    return resource.target().resourceTreeModel.frameForId(resource.frameId);
+    return WebInspector.ResourceTreeFrame._fromObject(resource);
 }
 
 WebInspector.ResourceTreeFrame.prototype = {
@@ -671,8 +675,8 @@ WebInspector.ResourceTreeFrame.prototype = {
     _remove: function()
     {
         this._removeChildFrames();
-        delete this._model._frames[this.id];
-        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.FrameDetached, this);
+        this._model._frames.delete(this.id);
+        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.FrameDetached, this);
     },
 
     /**
@@ -685,7 +689,7 @@ WebInspector.ResourceTreeFrame.prototype = {
             return;
         }
         this._resourcesMap[resource.url] = resource;
-        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, resource);
+        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ResourceAdded, resource);
     },
 
     /**
@@ -701,7 +705,7 @@ WebInspector.ResourceTreeFrame.prototype = {
         }
         resource = new WebInspector.Resource(this.target(), request, request.url, request.documentURL, request.frameId, request.loaderId, request.resourceType(), request.mimeType);
         this._resourcesMap[resource.url] = resource;
-        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ResourceAdded, resource);
+        this._model.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ResourceAdded, resource);
         return resource;
     },
 
@@ -785,7 +789,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     domContentEventFired: function(time)
     {
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.DOMContentLoaded, time);
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.DOMContentLoaded, time);
     },
 
     /**
@@ -794,7 +798,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     loadEventFired: function(time)
     {
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.Load, time);
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.Load, time);
     },
 
     /**
@@ -863,7 +867,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     frameResized: function()
     {
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.FrameResized, null);
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.FrameResized, null);
     },
 
     /**
@@ -892,7 +896,7 @@ WebInspector.PageDispatcher.prototype = {
     screencastFrame: function(data, metadata, sessionId)
     {
         this._resourceTreeModel._agent.screencastFrameAck(sessionId);
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ScreencastFrame, { data: data, metadata: metadata });
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ScreencastFrame, { data: data, metadata: metadata });
     },
 
     /**
@@ -901,7 +905,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     screencastVisibilityChanged: function(visible)
     {
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ScreencastVisibilityChanged, { visible: visible });
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ScreencastVisibilityChanged, { visible: visible });
     },
 
     /**
@@ -910,7 +914,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     colorPicked: function(color)
     {
-        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.EventTypes.ColorPicked, color);
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.ColorPicked, color);
     },
 
     /**
@@ -918,7 +922,7 @@ WebInspector.PageDispatcher.prototype = {
      */
     interstitialShown: function()
     {
-        // Frontend is not interested in interstitials.
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.InterstitialShown);
     },
 
     /**
@@ -926,6 +930,15 @@ WebInspector.PageDispatcher.prototype = {
      */
     interstitialHidden: function()
     {
-        // Frontend is not interested in interstitials.
+        this._resourceTreeModel.dispatchEventToListeners(WebInspector.ResourceTreeModel.Events.InterstitialHidden);
+    },
+
+    /**
+     * @override
+     */
+    navigationRequested: function()
+    {
+       // Frontend is not interested in when navigations are requested.
     }
+
 }

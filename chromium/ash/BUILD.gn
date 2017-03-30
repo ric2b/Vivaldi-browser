@@ -22,10 +22,12 @@ component("ash") {
   defines = [ "ASH_IMPLEMENTATION" ]
 
   public_deps = [
+    "//ash/common/strings",
     "//ash/resources",
-    "//ash/strings",
   ]
   deps = [
+    "//ash/autoclick/common:autoclick",
+    "//ash/touch_hud",
     "//base",
     "//base:i18n",
     "//base/third_party/dynamic_annotations",
@@ -113,7 +115,7 @@ component("ash") {
       # TODO(msw): Remove this; only ash_with_content should depend on webkit.
       "//third_party/WebKit/public:blink_headers",
       "//third_party/qcms",
-      "//ui/chromeos:ui_chromeos",
+      "//ui/chromeos",
       "//ui/chromeos/resources",
       "//ui/chromeos/strings",
       "//ui/display/util",
@@ -121,6 +123,17 @@ component("ash") {
 
     data = [
       "display/test_data/",
+    ]
+
+    sources += [
+      "laser/laser_pointer_controller.cc",
+      "laser/laser_pointer_controller.h",
+      "laser/laser_pointer_points.cc",
+      "laser/laser_pointer_points.h",
+      "laser/laser_pointer_view.cc",
+      "laser/laser_pointer_view.h",
+      "magnifier/partial_magnification_controller.cc",
+      "magnifier/partial_magnification_controller.h",
     ]
   } else {
     sources -= [
@@ -138,6 +151,8 @@ component("ash") {
       "touch/touchscreen_util.h",
       "virtual_keyboard_controller.cc",
       "virtual_keyboard_controller.h",
+      "wm/stylus_metrics_recorder.cc",
+      "wm/stylus_metrics_recorder.h",
     ]
   }
 
@@ -181,7 +196,7 @@ component("ash_with_content") {
 }
 
 # TODO(msw): Move support code with content deps to test_support_with_content.
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = gypi_values.ash_test_support_sources
   configs += [ "//build/config:precompiled_headers" ]
@@ -234,10 +249,17 @@ source_set("test_support") {
       "//chromeos",
       "//ui/display",
     ]
+
+    sources += [
+      "laser/laser_pointer_controller_test_api.cc",
+      "laser/laser_pointer_controller_test_api.h",
+      "laser/laser_pointer_points_test_api.cc",
+      "laser/laser_pointer_points_test_api.h",
+    ]
   }
 }
 
-source_set("test_support_with_content") {
+static_library("test_support_with_content") {
   testonly = true
   sources = gypi_values.ash_test_support_with_content_sources
   configs += [ "//build/config:precompiled_headers" ]
@@ -249,7 +271,7 @@ source_set("test_support_with_content") {
   ]
 }
 
-source_set("interactive_ui_test_support") {
+static_library("interactive_ui_test_support") {
   testonly = true
   configs += [ "//build/config:precompiled_headers" ]
   public_deps = [
@@ -280,8 +302,8 @@ static_library("ash_shell_lib") {
     ":ash",
     ":ash_with_content",
     ":test_support",
+    "//ash/common/strings",
     "//ash/resources",
-    "//ash/strings",
     "//base",
     "//base:i18n",
     "//components/user_manager",
@@ -347,8 +369,10 @@ test("ash_unittests") {
     ":ash_with_content",
     ":test_support",
     ":test_support_with_content",
+    "//ash/autoclick/common:autoclick",
+    "//ash/common/strings",
     "//ash/resources",
-    "//ash/strings",
+    "//ash/touch_hud",
     "//base",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -391,7 +415,7 @@ test("ash_unittests") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
+    "//ash/common/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
   ]
@@ -403,6 +427,9 @@ test("ash_unittests") {
 
       # All tests for multiple displays: not supported on Windows Ash.
       "wm/drag_window_resizer_unittest.cc",
+
+      # Talks to ChromeOS system services.
+      "wm/lock_state_controller_unittest.cc",
 
       # Maximize mode is only available on Chrome OS.
       "wm/maximize_mode/maximize_mode_controller_unittest.cc",
@@ -423,7 +450,11 @@ test("ash_unittests") {
     sources -= [ "host/ash_window_tree_host_x11_unittest.cc" ]
   }
   if (is_chromeos) {
-    sources += [ "first_run/first_run_helper_unittest.cc" ]
+    sources += [
+      "first_run/first_run_helper_unittest.cc",
+      "laser/laser_pointer_controller_unittest.cc",
+      "magnifier/partial_magnification_controller_unittest.cc"
+    ]
     deps += [
       "//chromeos",
       "//chromeos:power_manager_proto",
@@ -431,7 +462,7 @@ test("ash_unittests") {
       "//components/quirks",
       "//device/bluetooth",
       "//net:net",
-      "//ui/chromeos:ui_chromeos",
+      "//ui/chromeos",
       "//ui/display",
       "//ui/display:test_support",
       "//ui/display:test_util",
@@ -471,7 +502,7 @@ executable("ash_shell_with_content") {
   ]
 
   data_deps = [
-    "//ash/strings:ash_test_strings",
+    "//ash/common/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
   ]

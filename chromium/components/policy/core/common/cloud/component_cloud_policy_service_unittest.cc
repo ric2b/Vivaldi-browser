@@ -25,13 +25,13 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/core/common/schema_map.h"
+#include "components/policy/proto/chrome_extension_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/sha2.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/proto/chrome_extension_policy.pb.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -394,7 +394,7 @@ TEST_F(ComponentCloudPolicyServiceTest, LoadAndPurgeCache) {
   std::map<std::string, std::string> contents;
   cache_->LoadAllSubkeys("extension-policy", &contents);
   EXPECT_EQ(1u, contents.size());
-  EXPECT_TRUE(ContainsKey(contents, kTestExtension2));
+  EXPECT_TRUE(base::ContainsKey(contents, kTestExtension2));
 }
 
 TEST_F(ComponentCloudPolicyServiceTest, SignInAfterStartup) {
@@ -538,8 +538,8 @@ TEST_F(ComponentCloudPolicyServiceTest, PurgeWhenServerRemovesPolicy) {
   std::map<std::string, std::string> contents;
   cache_->LoadAllSubkeys("extension-policy", &contents);
   ASSERT_EQ(2u, contents.size());
-  EXPECT_TRUE(ContainsKey(contents, kTestExtension));
-  EXPECT_TRUE(ContainsKey(contents, kTestExtension2));
+  EXPECT_TRUE(base::ContainsKey(contents, kTestExtension));
+  EXPECT_TRUE(base::ContainsKey(contents, kTestExtension2));
 
   PolicyBundle expected_bundle;
   const PolicyNamespace ns(POLICY_DOMAIN_EXTENSIONS, kTestExtension);
@@ -566,8 +566,8 @@ TEST_F(ComponentCloudPolicyServiceTest, PurgeWhenServerRemovesPolicy) {
   contents.clear();
   cache_->LoadAllSubkeys("extension-policy", &contents);
   ASSERT_EQ(1u, contents.size());
-  EXPECT_TRUE(ContainsKey(contents, kTestExtension));
-  EXPECT_FALSE(ContainsKey(contents, kTestExtension2));
+  EXPECT_TRUE(base::ContainsKey(contents, kTestExtension));
+  EXPECT_FALSE(base::ContainsKey(contents, kTestExtension2));
 
   // And the service isn't publishing policy for the second extension anymore.
   expected_bundle.Clear();

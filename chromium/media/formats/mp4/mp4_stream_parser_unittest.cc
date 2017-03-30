@@ -76,6 +76,8 @@ class MP4StreamParserTest : public testing::Test {
   AudioDecoderConfig audio_decoder_config_;
   VideoDecoderConfig video_decoder_config_;
   DecodeTimestamp lower_bound_;
+  StreamParser::TrackId audio_track_id_;
+  StreamParser::TrackId video_track_id_;
 
   bool AppendData(const uint8_t* data, size_t length) {
     return parser_->Parse(data, length);
@@ -121,12 +123,14 @@ class MP4StreamParserTest : public testing::Test {
     for (const auto& track : tracks->tracks()) {
       const auto& track_id = track->bytestream_track_id();
       if (track->type() == MediaTrack::Audio) {
+        audio_track_id_ = track_id;
         audio_decoder_config_ = tracks->getAudioConfig(track_id);
         DVLOG(1) << "Audio track " << track_id << " config="
                  << (audio_decoder_config_.IsValidConfig()
                          ? audio_decoder_config_.AsHumanReadableString()
                          : "INVALID");
       } else if (track->type() == MediaTrack::Video) {
+        video_track_id_ = track_id;
         video_decoder_config_ = tracks->getVideoConfig(track_id);
         DVLOG(1) << "Video track " << track_id << " config="
                  << (video_decoder_config_.IsValidConfig()
@@ -138,27 +142,30 @@ class MP4StreamParserTest : public testing::Test {
     return true;
   }
 
-  void DumpBuffers(const std::string& label,
-                   const StreamParser::BufferQueue& buffers) {
-    DVLOG(2) << "DumpBuffers: " << label << " size " << buffers.size();
-    for (StreamParser::BufferQueue::const_iterator buf = buffers.begin();
-         buf != buffers.end(); buf++) {
-      DVLOG(3) << "  n=" << buf - buffers.begin()
-               << ", size=" << (*buf)->data_size()
-               << ", dur=" << (*buf)->duration().InMilliseconds();
+  bool NewBuffersF(const StreamParser::BufferQueueMap& buffer_queue_map) {
+    // Ensure that track ids are properly assigned on all emitted buffers.
+    for (const auto& it : buffer_queue_map) {
+      DVLOG(3) << "Buffers for track_id=" << it.first;
+      for (const auto& buf : it.second) {
+        DVLOG(3) << "  track_id=" << buf->track_id()
+                 << ", size=" << buf->data_size()
+                 << ", pts=" << buf->timestamp().InSecondsF()
+                 << ", dts=" << buf->GetDecodeTimestamp().InSecondsF()
+                 << ", dur=" << buf->duration().InSecondsF();
+        EXPECT_EQ(it.first, buf->track_id());
+      }
     }
-  }
 
-  bool NewBuffersF(const StreamParser::BufferQueue& audio_buffers,
-                   const StreamParser::BufferQueue& video_buffers,
-                   const StreamParser::TextBufferQueueMap& text_map) {
-    DumpBuffers("audio_buffers", audio_buffers);
-    DumpBuffers("video_buffers", video_buffers);
+    const StreamParser::BufferQueue empty_buffers;
+    const auto& itr_audio = buffer_queue_map.find(audio_track_id_);
+    const StreamParser::BufferQueue& audio_buffers =
+        (itr_audio == buffer_queue_map.end()) ? empty_buffers
+                                              : itr_audio->second;
 
-    // TODO(wolenetz/acolwell): Add text track support to more MSE parsers. See
-    // http://crbug.com/336926.
-    if (!text_map.empty())
-      return false;
+    const auto& itr_video = buffer_queue_map.find(video_track_id_);
+    const StreamParser::BufferQueue& video_buffers =
+        (itr_video == buffer_queue_map.end()) ? empty_buffers
+                                              : itr_video->second;
 
     // Find the second highest timestamp so that we know what the
     // timestamps on the next set of buffers must be >= than.
@@ -214,7 +221,7 @@ class MP4StreamParserTest : public testing::Test {
   StreamParser::InitParameters GetDefaultInitParametersExpectations() {
     // Most unencrypted test mp4 files have zero duration and are treated as
     // live streams.
-    StreamParser::InitParameters params(kInfiniteDuration());
+    StreamParser::InitParameters params(kInfiniteDuration);
     params.liveness = DemuxerStream::LIVENESS_LIVE;
     params.detected_audio_track_count = 1;
     params.detected_video_track_count = 1;

@@ -11,9 +11,14 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/trace_event/trace_event.h"
+#include "blimp/client/public/blimp_client_context.h"
+#include "blimp/client/public/contents/blimp_contents.h"
+#include "blimp/client/public/contents/blimp_navigation_controller.h"
 #include "cc/layers/layer.h"
+#include "chrome/browser/android/blimp/blimp_client_context_factory.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 #include "chrome/browser/android/metrics/uma_utils.h"
+#include "chrome/browser/android/offline_pages/offline_page_bridge.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
 #include "chrome/browser/android/tab_web_contents_delegate_android.h"
@@ -29,6 +34,7 @@
 #include "chrome/browser/printing/print_view_manager_basic.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/search.h"
@@ -47,8 +53,8 @@
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
-#include "chrome/common/instant_types.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -65,7 +71,6 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/android/compositor.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
@@ -81,15 +86,18 @@
 #include "net/base/escape.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/WebKit/public/platform/WebReferrerPolicy.h"
+#include "ui/android/view_android.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
-#include "ui/gfx/android/device_display_info.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/image/image_skia.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using content::BrowserThread;
 using content::GlobalRequestID;
 using content::NavigationController;
@@ -97,8 +105,10 @@ using content::WebContents;
 using navigation_interception::InterceptNavigationDelegate;
 using navigation_interception::NavigationParams;
 
-TabAndroid* TabAndroid::FromWebContents(content::WebContents* web_contents) {
-  CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(web_contents);
+TabAndroid* TabAndroid::FromWebContents(
+  const content::WebContents* web_contents) {
+  const CoreTabHelper* core_tab_helper = CoreTabHelper::FromWebContents(
+      web_contents);
   if (!core_tab_helper)
     return NULL;
 
@@ -130,7 +140,7 @@ TabAndroid::TabAndroid(JNIEnv* env, jobject obj)
 TabAndroid::~TabAndroid() {
   GetContentLayer()->RemoveAllChildren();
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_clearNativePtr(env, weak_java_tab_.get(env).obj());
+  Java_Tab_clearNativePtr(env, weak_java_tab_.get(env));
 }
 
 base::android::ScopedJavaLocalRef<jobject> TabAndroid::GetJavaObject() {
@@ -144,36 +154,29 @@ scoped_refptr<cc::Layer> TabAndroid::GetContentLayer() const {
 
 int TabAndroid::GetAndroidId() const {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_Tab_getId(env, weak_java_tab_.get(env).obj());
+  return Java_Tab_getId(env, weak_java_tab_.get(env));
 }
 
 int TabAndroid::GetSyncId() const {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_Tab_getSyncId(env, weak_java_tab_.get(env).obj());
+  return Java_Tab_getSyncId(env, weak_java_tab_.get(env));
 }
 
 base::string16 TabAndroid::GetTitle() const {
   JNIEnv* env = base::android::AttachCurrentThread();
   return base::android::ConvertJavaStringToUTF16(
-      Java_Tab_getTitle(env, weak_java_tab_.get(env).obj()));
+      Java_Tab_getTitle(env, weak_java_tab_.get(env)));
 }
 
 GURL TabAndroid::GetURL() const {
   JNIEnv* env = base::android::AttachCurrentThread();
   return GURL(base::android::ConvertJavaStringToUTF8(
-      Java_Tab_getUrl(env, weak_java_tab_.get(env).obj())));
+      Java_Tab_getUrl(env, weak_java_tab_.get(env))));
 }
 
 bool TabAndroid::LoadIfNeeded() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_Tab_loadIfNeeded(env, weak_java_tab_.get(env).obj());
-}
-
-content::ContentViewCore* TabAndroid::GetContentViewCore() const {
-  if (!web_contents())
-    return NULL;
-
-  return content::ContentViewCore::FromWebContents(web_contents());
+  return Java_Tab_loadIfNeeded(env, weak_java_tab_.get(env));
 }
 
 Profile* TabAndroid::GetProfile() const {
@@ -200,7 +203,7 @@ void TabAndroid::SetWindowSessionID(SessionID::id_type window_id) {
 
 void TabAndroid::SetSyncId(int sync_id) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_setSyncId(env, weak_java_tab_.get(env).obj(), sync_id);
+  Java_Tab_setSyncId(env, weak_java_tab_.get(env), sync_id);
 }
 
 void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
@@ -224,12 +227,7 @@ void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
     ScopedJavaLocalRef<jobject> jpost_data;
     if (params->uses_post && params->post_data)
       jpost_data = params->post_data->ToJavaObject(env);
-    Java_Tab_openNewTab(env,
-                        jobj.obj(),
-                        jurl.obj(),
-                        jheaders.obj(),
-                        jpost_data.obj(),
-                        disposition,
+    Java_Tab_openNewTab(env, jobj, jurl, jheaders, jpost_data, disposition,
                         params->created_with_opener,
                         params->is_renderer_initiated);
   } else {
@@ -261,12 +259,9 @@ void TabAndroid::SwapTabContents(content::WebContents* old_contents,
                                  bool did_start_load,
                                  bool did_finish_load) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_swapWebContents(
-      env,
-      weak_java_tab_.get(env).obj(),
-      new_contents->GetJavaWebContents().obj(),
-      did_start_load,
-      did_finish_load);
+  Java_Tab_swapWebContents(env, weak_java_tab_.get(env),
+                           new_contents->GetJavaWebContents(), did_start_load,
+                           did_finish_load);
 }
 
 void TabAndroid::DefaultSearchProviderChanged(
@@ -305,8 +300,7 @@ void TabAndroid::OnWebContentsInstantSupportDisabled(
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_onWebContentsInstantSupportDisabled(env,
-                                               weak_java_tab_.get(env).obj());
+  Java_Tab_onWebContentsInstantSupportDisabled(env, weak_java_tab_.get(env));
 }
 
 void TabAndroid::Observe(int type,
@@ -335,7 +329,7 @@ void TabAndroid::Observe(int type,
       break;
     }
     case content::NOTIFICATION_NAV_ENTRY_CHANGED:
-      Java_Tab_onNavEntryChanged(env, weak_java_tab_.get(env).obj());
+      Java_Tab_onNavEntryChanged(env, weak_java_tab_.get(env));
       break;
     default:
       NOTREACHED() << "Unexpected notification " << type;
@@ -358,8 +352,8 @@ void TabAndroid::OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,
     return;
 
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_onFaviconAvailable(env, weak_java_tab_.get(env).obj(),
-                              gfx::ConvertToJavaBitmap(&favicon).obj());
+  Java_Tab_onFaviconAvailable(env, weak_java_tab_.get(env),
+                              gfx::ConvertToJavaBitmap(&favicon));
 }
 
 void TabAndroid::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -370,16 +364,13 @@ void TabAndroid::InitWebContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean incognito,
-    const JavaParamRef<jobject>& jcontent_view_core,
+    const JavaParamRef<jobject>& jweb_contents,
     const JavaParamRef<jobject>& jweb_contents_delegate,
     const JavaParamRef<jobject>& jcontext_menu_populator) {
-  content::ContentViewCore* content_view_core =
-      content::ContentViewCore::GetNativeContentViewCore(env,
-                                                         jcontent_view_core);
-  DCHECK(content_view_core);
-  DCHECK(content_view_core->GetWebContents());
+  web_contents_.reset(
+      content::WebContents::FromJavaWebContents(jweb_contents.obj()));
+  DCHECK(web_contents_.get());
 
-  web_contents_.reset(content_view_core->GetWebContents());
   AttachTabHelpers(web_contents_.get());
 
   SetWindowSessionID(session_window_id_.id());
@@ -389,7 +380,7 @@ void TabAndroid::InitWebContents(
   ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
       jcontext_menu_populator);
   ViewAndroidHelper::FromWebContents(web_contents())->
-      SetViewAndroid(content_view_core);
+      SetViewAndroid(web_contents()->GetNativeView());
   CoreTabHelper::FromWebContents(web_contents())->set_delegate(this);
   SearchTabHelper::FromWebContents(web_contents())->set_delegate(this);
   web_contents_delegate_.reset(
@@ -425,7 +416,21 @@ void TabAndroid::InitWebContents(
   if (instant_service)
     instant_service->AddObserver(this);
 
-  content_layer_->InsertChild(content_view_core->GetLayer(), 0);
+  content_layer_->InsertChild(web_contents_->GetNativeView()->GetLayer(), 0);
+}
+
+base::android::ScopedJavaLocalRef<jobject> TabAndroid::InitBlimpContents(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& j_profile) {
+  Profile* profile = ProfileAndroid::FromProfileAndroid(j_profile.obj());
+  DCHECK(!profile->IsOffTheRecord());
+  blimp::client::BlimpClientContext* context =
+      BlimpClientContextFactory::GetForBrowserContext(profile);
+  DCHECK(context);
+  blimp_contents_ = context->CreateBlimpContents();
+  DCHECK(blimp_contents_);
+  return blimp_contents_->GetJavaObject();
 }
 
 void TabAndroid::UpdateDelegates(
@@ -446,9 +451,8 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
                                     jboolean delete_native) {
   DCHECK(web_contents());
 
-  content::ContentViewCore* content_view_core = GetContentViewCore();
-  if (content_view_core)
-    content_view_core->GetLayer()->RemoveFromParent();
+  if (web_contents()->GetNativeView())
+    web_contents()->GetNativeView()->GetLayer()->RemoveFromParent();
 
   notification_registrar_.Remove(
       this,
@@ -572,6 +576,11 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
       content::RecordAction(base::UserMetricsAction("ShowHistory"));
     }
 
+    if (blimp_contents()) {
+      blimp_contents()->GetNavigationController().LoadURL(fixed_url);
+      return DEFAULT_PAGE_LOAD;
+    }
+
     content::NavigationController::LoadURLParams load_params(fixed_url);
     if (j_extra_headers) {
       load_params.extra_headers = base::android::ConvertJavaStringToUTF8(
@@ -647,7 +656,7 @@ bool TabAndroid::Print(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 
 void TabAndroid::SetPendingPrint() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_setPendingPrint(env, weak_java_tab_.get(env).obj());
+  Java_Tab_setPendingPrint(env, weak_java_tab_.get(env));
 }
 
 ScopedJavaLocalRef<jobject> TabAndroid::GetFavicon(
@@ -663,8 +672,8 @@ ScopedJavaLocalRef<jobject> TabAndroid::GetFavicon(
   // Always return the default favicon in Android.
   SkBitmap favicon = favicon_driver->GetFavicon().AsBitmap();
   if (!favicon.empty()) {
-    gfx::DeviceDisplayInfo device_info;
-    const float device_scale_factor = device_info.GetDIPScale();
+    const float device_scale_factor =
+        display::Screen::GetScreen()->GetPrimaryDisplay().device_scale_factor();
     int target_size_dip = device_scale_factor * gfx::kFaviconSize;
     if (favicon.width() != target_size_dip ||
         favicon.height() != target_size_dip) {
@@ -763,7 +772,7 @@ jlong TabAndroid::GetBookmarkId(JNIEnv* env,
   bookmarks::ManagedBookmarkService* managed =
       ManagedBookmarkServiceFactory::GetForProfile(profile);
   bookmarks::BookmarkModel* model =
-      BookmarkModelFactory::GetForProfile(profile);
+      BookmarkModelFactory::GetForBrowserContext(profile);
 
   model->GetNodesByURL(url, &nodes);
   std::sort(nodes.begin(), nodes.end(), &bookmarks::MoreRecentlyAdded);
@@ -780,43 +789,31 @@ jlong TabAndroid::GetBookmarkId(JNIEnv* env,
 
 void TabAndroid::ShowOfflinePages() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_showOfflinePages(env, weak_java_tab_.get(env).obj());
+  Java_Tab_showOfflinePages(env, weak_java_tab_.get(env));
 }
 
 void TabAndroid::OnLoFiResponseReceived(bool is_preview) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_onLoFiResponseReceived(env, weak_java_tab_.get(env).obj(),
-                                  is_preview);
-}
-
-jboolean TabAndroid::HasOfflineCopy(JNIEnv* env,
-                                    const JavaParamRef<jobject>& obj) {
-  GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
-      web_contents()->GetURL());
-  return offline_pages::OfflinePageUtils::HasOfflinePageForOnlineURL(
-      GetProfile(), url);
+  Java_Tab_onLoFiResponseReceived(env, weak_java_tab_.get(env), is_preview);
 }
 
 jboolean TabAndroid::IsOfflinePage(JNIEnv* env,
                                    const JavaParamRef<jobject>& obj) {
-  GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
-      web_contents()->GetURL());
-  return offline_pages::OfflinePageUtils::IsOfflinePage(GetProfile(), url);
+  return offline_pages::OfflinePageUtils::GetOfflinePageFromWebContents(
+      web_contents()) != nullptr;
 }
 
-ScopedJavaLocalRef<jstring> TabAndroid::GetOfflinePageOriginalUrl(
+ScopedJavaLocalRef<jobject> TabAndroid::GetOfflinePage(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  GURL url = dom_distiller::url_utils::GetOriginalUrlFromDistillerUrl(
-      web_contents()->GetURL());
-  GURL original_url =
-      offline_pages::OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
-          GetProfile(), url);
-  if (!original_url.is_valid())
-    return ScopedJavaLocalRef<jstring>();
+  const offline_pages::OfflinePageItem* offline_page =
+      offline_pages::OfflinePageUtils::GetOfflinePageFromWebContents(
+          web_contents());
+  if (!offline_page)
+    return ScopedJavaLocalRef<jobject>();
 
-  return ScopedJavaLocalRef<jstring>(
-      ConvertUTF8ToJavaString(env, original_url.spec()));
+  return offline_pages::android::OfflinePageBridge::ConvertToJavaOfflinePage(
+      env, *offline_page);
 }
 
 bool TabAndroid::HasPrerenderedUrl(JNIEnv* env,
@@ -871,31 +868,31 @@ void TabAndroid::AttachToTabContentManager(
     tab_content_manager_->AttachLiveLayer(GetAndroidId(), GetContentLayer());
 }
 
-void TabAndroid::AttachOverlayContentViewCore(
+void TabAndroid::AttachOverlayWebContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& jcontent_view_core,
+    const JavaParamRef<jobject>& jweb_contents,
     jboolean visible) {
-  content::ContentViewCore* content_view_core =
-      content::ContentViewCore::GetNativeContentViewCore(env,
-                                                         jcontent_view_core);
-  DCHECK(content_view_core);
+  WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents.obj());
+  DCHECK(web_contents);
+  DCHECK(web_contents->GetNativeView());
 
-  content_view_core->GetLayer()->SetHideLayerAndSubtree(!visible);
-  content_layer_->AddChild(content_view_core->GetLayer());
+  web_contents->GetNativeView()->GetLayer()->SetHideLayerAndSubtree(!visible);
+  content_layer_->AddChild(web_contents->GetNativeView()->GetLayer());
 }
 
-void TabAndroid::DetachOverlayContentViewCore(
+void TabAndroid::DetachOverlayWebContents(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& jcontent_view_core) {
-  content::ContentViewCore* content_view_core =
-      content::ContentViewCore::GetNativeContentViewCore(env,
-                                                         jcontent_view_core);
-  DCHECK(content_view_core);
+    const JavaParamRef<jobject>& jweb_contents) {
+  WebContents* web_contents =
+      content::WebContents::FromJavaWebContents(jweb_contents.obj());
+  DCHECK(web_contents);
+  DCHECK(web_contents->GetNativeView());
 
-  if (content_view_core->GetLayer()->parent() == content_layer_)
-    content_view_core->GetLayer()->RemoveFromParent();
+  if (web_contents->GetNativeView()->GetLayer()->parent() == content_layer_)
+    web_contents->GetNativeView()->GetLayer()->RemoveFromParent();
 }
 
 static void Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {

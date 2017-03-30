@@ -12,21 +12,22 @@
 
 namespace filesystem {
 
-FilesTestBase::FilesTestBase() : ShellTest("exe:filesystem_service_unittests") {
+FilesTestBase::FilesTestBase()
+    : ServiceTest("exe:filesystem_service_unittests") {
 }
 
 FilesTestBase::~FilesTestBase() {
 }
 
 void FilesTestBase::SetUp() {
-  ShellTest::SetUp();
+  ServiceTest::SetUp();
   connector()->ConnectToInterface("mojo:filesystem", &files_);
 }
 
 void FilesTestBase::GetTemporaryRoot(mojom::DirectoryPtr* directory) {
   mojom::FileError error = mojom::FileError::FAILED;
-  files()->OpenTempDirectory(GetProxy(directory), Capture(&error));
-  ASSERT_TRUE(files().WaitForIncomingResponse());
+  bool handled = files()->OpenTempDirectory(GetProxy(directory), &error);
+  ASSERT_TRUE(handled);
   ASSERT_EQ(mojom::FileError::OK, error);
 }
 

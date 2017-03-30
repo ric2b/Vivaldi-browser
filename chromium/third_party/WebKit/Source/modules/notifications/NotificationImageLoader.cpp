@@ -65,11 +65,7 @@ void NotificationImageLoader::stop()
     m_stopped = true;
     if (m_threadableLoader) {
         m_threadableLoader->cancel();
-        // WorkerThreadableLoader keeps a Persistent<WorkerGlobalScope> to the
-        // ExecutionContext it received in |create|. Kill it to prevent
-        // reference cycles involving a mix of GC and non-GC types that fail to
-        // clear in ThreadState::cleanup.
-        m_threadableLoader.reset();
+        m_threadableLoader = nullptr;
     }
 }
 
@@ -94,9 +90,9 @@ void NotificationImageLoader::didFinishLoading(unsigned long resourceIdentifier,
         DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, fileSizeHistogram, new CustomCountHistogram("Notifications.Icon.FileSize", 1, 10000000 /* ~10mb max */, 50 /* buckets */));
         fileSizeHistogram.count(m_data->size());
 
-        std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(*m_data.get(), ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
+        std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(m_data, true /* dataComplete */,
+            ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
         if (decoder) {
-            decoder->setData(m_data.get(), true /* allDataReceived */);
             // The |ImageFrame*| is owned by the decoder.
             ImageFrame* imageFrame = decoder->frameBufferAtIndex(0);
             if (imageFrame) {

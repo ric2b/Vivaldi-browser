@@ -11,14 +11,6 @@ Polymer({
 
   properties: {
     /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * List of default search engines available.
      * @private {!Array<!SearchEngine>}
      */
@@ -47,7 +39,7 @@ Polymer({
 
   /** @private */
   onManageSearchEnginesTap_: function() {
-    this.$.pages.setSubpageChain(['search-engines']);
+    settings.navigateTo(settings.Route.SEARCH_ENGINES);
   },
 
   /** @private */

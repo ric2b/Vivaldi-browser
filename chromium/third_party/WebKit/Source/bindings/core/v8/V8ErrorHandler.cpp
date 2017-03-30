@@ -76,7 +76,7 @@ v8::Local<v8::Value> V8ErrorHandler::callListenerFunction(ScriptState* scriptSta
     if (scriptState->getExecutionContext()->isWorkerGlobalScope()) {
         result = V8ScriptRunner::callFunction(callFunction, scriptState->getExecutionContext(), thisValue, WTF_ARRAY_LENGTH(parameters), parameters, isolate());
     } else {
-        result = ScriptController::callFunction(scriptState->getExecutionContext(), callFunction, thisValue, WTF_ARRAY_LENGTH(parameters), parameters, isolate());
+        result = V8ScriptRunner::callFunction(callFunction, scriptState->getExecutionContext(), thisValue, WTF_ARRAY_LENGTH(parameters), parameters, isolate());
     }
     v8::Local<v8::Value> returnValue;
     if (!result.ToLocal(&returnValue))
@@ -95,6 +95,21 @@ void V8ErrorHandler::storeExceptionOnErrorEventWrapper(ScriptState* scriptState,
     DCHECK(wrappedEvent->IsObject());
     auto privateError = V8PrivateProperty::getErrorEventError(scriptState->isolate());
     privateError.set(scriptState->context(), wrappedEvent.As<v8::Object>(), data);
+}
+
+// static
+v8::Local<v8::Value> V8ErrorHandler::loadExceptionFromErrorEventWrapper(ScriptState* scriptState, ErrorEvent* event, v8::Local<v8::Object> creationContext)
+{
+    v8::Local<v8::Value> wrappedEvent = toV8(event, creationContext, scriptState->isolate());
+    if (wrappedEvent.IsEmpty() || !wrappedEvent->IsObject())
+        return v8::Local<v8::Value>();
+
+    DCHECK(wrappedEvent->IsObject());
+    auto privateError = V8PrivateProperty::getErrorEventError(scriptState->isolate());
+    v8::Local<v8::Value> error = privateError.getOrUndefined(scriptState->context(), wrappedEvent.As<v8::Object>());
+    if (error->IsUndefined())
+        return v8::Local<v8::Value>();
+    return error;
 }
 
 bool V8ErrorHandler::shouldPreventDefault(v8::Local<v8::Value> returnValue)

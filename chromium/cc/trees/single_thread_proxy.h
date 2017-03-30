@@ -36,13 +36,11 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   ~SingleThreadProxy() override;
 
   // Proxy implementation
-  void FinishAllRendering() override;
   bool IsStarted() const override;
   bool CommitToActiveTree() const override;
   void SetOutputSurface(OutputSurface* output_surface) override;
   void ReleaseOutputSurface() override;
   void SetVisible(bool visible) override;
-  const RendererCapabilities& GetRendererCapabilities() const override;
   void SetNeedsAnimate() override;
   void SetNeedsUpdateLayers() override;
   void SetNeedsCommit() override;
@@ -77,13 +75,11 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void SendBeginMainFrameNotExpectedSoon() override;
 
   // LayerTreeHostImplClient implementation
-  void UpdateRendererCapabilitiesOnImplThread() override;
   void DidLoseOutputSurfaceOnImplThread() override;
   void CommitVSyncParameters(base::TimeTicks timebase,
                              base::TimeDelta interval) override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetEstimatedParentDrawTime(base::TimeDelta draw_time) override;
-  void DidSwapBuffersOnImplThread() override;
   void DidSwapBuffersCompleteOnImplThread() override;
   void OnCanDrawStateChanged(bool can_draw) override;
   void NotifyReadyToActivate() override;
@@ -138,7 +134,6 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   // Used on the Thread, but checked on main thread during
   // initialization/shutdown.
   std::unique_ptr<LayerTreeHostImpl> layer_tree_host_impl_;
-  RendererCapabilities renderer_capabilities_for_main_thread_;
 
   // Accessed from both threads.
   std::unique_ptr<BeginFrameSource> external_begin_frame_source_;

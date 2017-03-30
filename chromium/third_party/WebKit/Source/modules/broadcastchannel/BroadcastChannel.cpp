@@ -9,8 +9,8 @@
 #include "core/events/EventQueue.h"
 #include "core/events/MessageEvent.h"
 #include "platform/mojo/MojoHelper.h"
+#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
-#include "public/platform/ServiceRegistry.h"
 #include "wtf/Functional.h"
 
 namespace blink {
@@ -22,11 +22,11 @@ namespace {
 // connection as basis for all connections to channels from the same thread. The
 // actual connections used to send/receive messages are then created using
 // associated interfaces, ensuring proper message ordering.
-webmessaging::mojom::blink::BroadcastChannelProviderPtr& getThreadSpecificProvider()
+mojom::blink::BroadcastChannelProviderPtr& getThreadSpecificProvider()
 {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<webmessaging::mojom::blink::BroadcastChannelProviderPtr>, provider, new ThreadSpecific<webmessaging::mojom::blink::BroadcastChannelProviderPtr>);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<mojom::blink::BroadcastChannelProviderPtr>, provider, new ThreadSpecific<mojom::blink::BroadcastChannelProviderPtr>);
     if (!provider.isSet()) {
-        Platform::current()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&*provider));
+        Platform::current()->interfaceProvider()->getInterface(mojo::GetProxy(&*provider));
     }
     return *provider;
 }
@@ -63,8 +63,11 @@ void BroadcastChannel::postMessage(const ScriptValue& message, ExceptionState& e
     if (exceptionState.hadException())
         return;
 
-    String data = value->toWireString();
-    m_remoteClient->OnMessage(data);
+    Vector<char> data;
+    value->toWireBytes(data);
+    Vector<uint8_t> mojoData;
+    mojoData.appendVector(data);
+    m_remoteClient->OnMessage(std::move(mojoData));
 }
 
 void BroadcastChannel::close()
@@ -95,10 +98,10 @@ DEFINE_TRACE(BroadcastChannel)
     EventTargetWithInlineData::trace(visitor);
 }
 
-void BroadcastChannel::OnMessage(const String& message)
+void BroadcastChannel::OnMessage(mojo::WTFArray<uint8_t> message)
 {
     // Queue a task to dispatch the event.
-    RefPtr<SerializedScriptValue> value = SerializedScriptValue::create(message);
+    RefPtr<SerializedScriptValue> value = SerializedScriptValue::create(reinterpret_cast<const char*>(&message.front()), message.size());
     MessageEvent* event = MessageEvent::create(nullptr, value.release(), getExecutionContext()->getSecurityOrigin()->toString());
     event->setTarget(this);
     bool success = getExecutionContext()->getEventQueue()->enqueueEvent(event);
@@ -118,19 +121,21 @@ BroadcastChannel::BroadcastChannel(ExecutionContext* executionContext, const Str
     , m_name(name)
     , m_binding(this)
 {
-    webmessaging::mojom::blink::BroadcastChannelProviderPtr& provider = getThreadSpecificProvider();
+    ThreadState::current()->registerPreFinalizer(this);
+
+    mojom::blink::BroadcastChannelProviderPtr& provider = getThreadSpecificProvider();
 
     // Local BroadcastChannelClient for messages send from the browser to this channel.
-    webmessaging::mojom::blink::BroadcastChannelClientAssociatedPtrInfo localClientInfo;
+    mojom::blink::BroadcastChannelClientAssociatedPtrInfo localClientInfo;
     m_binding.Bind(&localClientInfo, provider.associated_group());
-    m_binding.set_connection_error_handler(createBaseCallback(WTF::bind(&BroadcastChannel::onError, wrapWeakPersistent(this))));
+    m_binding.set_connection_error_handler(convertToBaseCallback(WTF::bind(&BroadcastChannel::onError, wrapWeakPersistent(this))));
 
     // Remote BroadcastChannelClient for messages send from this channel to the browser.
-    webmessaging::mojom::blink::BroadcastChannelClientAssociatedPtrInfo remoteClientInfo;
-    mojo::AssociatedInterfaceRequest<webmessaging::mojom::blink::BroadcastChannelClient> remoteCientRequest;
+    mojom::blink::BroadcastChannelClientAssociatedPtrInfo remoteClientInfo;
+    mojo::AssociatedInterfaceRequest<mojom::blink::BroadcastChannelClient> remoteCientRequest;
     provider.associated_group()->CreateAssociatedInterface(mojo::AssociatedGroup::WILL_PASS_REQUEST, &remoteClientInfo, &remoteCientRequest);
     m_remoteClient.Bind(std::move(remoteClientInfo));
-    m_remoteClient.set_connection_error_handler(createBaseCallback(WTF::bind(&BroadcastChannel::onError, wrapWeakPersistent(this))));
+    m_remoteClient.set_connection_error_handler(convertToBaseCallback(WTF::bind(&BroadcastChannel::onError, wrapWeakPersistent(this))));
 
     provider->ConnectToChannel(m_origin, m_name, std::move(localClientInfo), std::move(remoteCientRequest));
 }

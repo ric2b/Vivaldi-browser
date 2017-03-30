@@ -76,24 +76,24 @@ TEST(SpdyHeaderBlockTest, KeyMemoryReclaimedOnLookup) {
 
 // This test verifies that headers can be set in a variety of ways.
 TEST(SpdyHeaderBlockTest, AddHeaders) {
-  SpdyHeaderBlock block1;
-  block1["foo"] = string(300, 'x');
-  block1["bar"] = "baz";
-  block1.ReplaceOrAppendHeader("qux", "qux1");
-  block1["qux"] = "qux2";
-  block1.insert(make_pair("key", "value"));
+  SpdyHeaderBlock block;
+  block["foo"] = string(300, 'x');
+  block["bar"] = "baz";
+  block.ReplaceOrAppendHeader("qux", "qux1");
+  block["qux"] = "qux2";
+  block.insert(std::make_pair("key", "value"));
 
-  EXPECT_EQ(Pair("foo", string(300, 'x')), *block1.find("foo"));
-  EXPECT_EQ("baz", block1["bar"]);
-  EXPECT_EQ("baz", block1.GetHeader("bar"));
+  EXPECT_EQ(Pair("foo", string(300, 'x')), *block.find("foo"));
+  EXPECT_EQ("baz", block["bar"]);
+  EXPECT_EQ("baz", block.GetHeader("bar"));
   string qux("qux");
-  EXPECT_EQ("qux2", block1[qux]);
-  EXPECT_EQ("qux2", block1.GetHeader(qux));
-  EXPECT_EQ(Pair("key", "value"), *block1.find("key"));
+  EXPECT_EQ("qux2", block[qux]);
+  EXPECT_EQ("qux2", block.GetHeader(qux));
+  EXPECT_EQ(Pair("key", "value"), *block.find("key"));
 
-  block1.erase("key");
-  EXPECT_EQ(block1.end(), block1.find("key"));
-  EXPECT_EQ("", block1.GetHeader("key"));
+  block.erase("key");
+  EXPECT_EQ(block.end(), block.find("key"));
+  EXPECT_EQ("", block.GetHeader("key"));
 }
 
 // This test verifies that SpdyHeaderBlock can be copied using Clone().
@@ -139,6 +139,67 @@ TEST(SpdyHeaderBlockTest, Equality) {
 
   block2["baz"] = "qux";
   EXPECT_NE(block1, block2);
+}
+
+// Test that certain methods do not crash on moved-from instances.
+TEST(SpdyHeaderBlockTest, MovedFromIsValid) {
+  SpdyHeaderBlock block1;
+  block1["foo"] = "bar";
+
+  SpdyHeaderBlock block2(std::move(block1));
+  EXPECT_THAT(block2, ElementsAre(Pair("foo", "bar")));
+
+  block1.ReplaceOrAppendHeader("baz", "qux");
+
+  SpdyHeaderBlock block3(std::move(block1));
+
+  block1["foo"] = "bar";
+
+  SpdyHeaderBlock block4(std::move(block1));
+
+  block1.clear();
+  EXPECT_TRUE(block1.empty());
+
+  block1["foo"] = "bar";
+  EXPECT_THAT(block1, ElementsAre(Pair("foo", "bar")));
+}
+
+// This test verifies that headers can be appended to no matter how they were
+// added originally.
+TEST(SpdyHeaderBlockTest, AppendHeaders) {
+  SpdyHeaderBlock block;
+  block["foo"] = "foo";
+  block.AppendValueOrAddHeader("foo", "bar");
+  EXPECT_EQ(Pair("foo", string("foo\0bar", 7)), *block.find("foo"));
+
+  block.insert(std::make_pair("foo", "baz"));
+  EXPECT_EQ("baz", block["foo"]);
+  EXPECT_EQ(Pair("foo", "baz"), *block.find("foo"));
+
+  // Try all four methods of adding an entry.
+  block["cookie"] = "key1=value1";
+  block.AppendValueOrAddHeader("h1", "h1v1");
+  block.insert(std::make_pair("h2", "h2v1"));
+  block.ReplaceOrAppendHeader("h3", "h3v1");
+
+  block.AppendValueOrAddHeader("h3", "h3v2");
+  block.AppendValueOrAddHeader("h2", "h2v2");
+  block.AppendValueOrAddHeader("h1", "h1v2");
+  block.AppendValueOrAddHeader("cookie", "key2=value2");
+
+  block.ReplaceOrAppendHeader("h4", "h4v1");
+
+  block.AppendValueOrAddHeader("cookie", "key3=value3");
+  block.AppendValueOrAddHeader("h1", "h1v3");
+  block.AppendValueOrAddHeader("h2", "h2v3");
+  block.AppendValueOrAddHeader("h3", "h3v3");
+
+  EXPECT_EQ("key1=value1; key2=value2; key3=value3", block["cookie"]);
+  EXPECT_EQ("baz", block["foo"]);
+  EXPECT_EQ(string("h1v1\0h1v2\0h1v3", 14), block["h1"]);
+  EXPECT_EQ(string("h2v1\0h2v2\0h2v3", 14), block["h2"]);
+  EXPECT_EQ(string("h3v1\0h3v2\0h3v3", 14), block["h3"]);
+  EXPECT_EQ("h4v1", block["h4"]);
 }
 
 }  // namespace test

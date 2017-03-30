@@ -35,9 +35,11 @@ class ClientApiGeneratorTest(unittest.TestCase):
     self.assertEqual(client_api_generator.CamelCaseToHackerStyle('LoLoLoL'),
                      'lo_lo_lol')
 
-  def test_MangleEnum(self):
-    self.assertEqual(client_api_generator.MangleEnum('FOO'), 'FOO')
-    self.assertEqual(client_api_generator.MangleEnum('NULL'), 'NONE')
+  def test_SanitizeLiteralEnum(self):
+    self.assertEqual(client_api_generator.SanitizeLiteral('foo'), 'foo')
+    self.assertEqual(client_api_generator.SanitizeLiteral('null'), 'none')
+    self.assertEqual(client_api_generator.SanitizeLiteral('Infinity'),
+                                                          'InfinityValue')
 
   def test_PatchFullQualifiedRefs(self):
     json_api = {
@@ -349,12 +351,12 @@ class ClientApiGeneratorTest(unittest.TestCase):
     types = json_api['domains'][0]['types']
     self.assertListEqual(types, expected_types)
 
-  def test_PatchHiddenDomains(self):
+  def test_PatchExperimentalDomains(self):
     json_api = {
       'domains': [
         {
           'domain': 'domain',
-          'hidden': True,
+          'experimental': True,
           'commands': [
             {
               'name': 'FooCommand',
@@ -368,37 +370,13 @@ class ClientApiGeneratorTest(unittest.TestCase):
         }
       ]
     }
-    expected_types = [
-      {
-        'type': 'object',
-        'id': 'FooCommandParams',
-        'description': 'Parameters for the FooCommand command.',
-        'properties': [],
-      },
-      {
-        'type': 'object',
-        'id': 'FooCommandResult',
-        'description': 'Result for the FooCommand command.',
-        'properties': [],
-      },
-      {
-        'type': 'object',
-        'id': 'BarEventParams',
-        'description': 'Parameters for the BarEvent event.',
-        'properties': [],
-      }
-    ]
-    client_api_generator.PatchHiddenCommandsAndEvents(json_api)
-    client_api_generator.SynthesizeCommandTypes(json_api)
-    client_api_generator.SynthesizeEventTypes(json_api)
+    client_api_generator.PatchExperimentalCommandsAndEvents(json_api)
     for command in json_api['domains'][0]['commands']:
-      self.assertTrue(command['hidden'])
+      self.assertTrue(command['experimental'])
     for event in json_api['domains'][0]['events']:
-      self.assertTrue(command['hidden'])
-    types = json_api['domains'][0]['types']
-    self.assertListEqual(types, expected_types)
+      self.assertTrue(command['experimental'])
 
-  def test_PatchHiddenCommandsAndEvents(self):
+  def test_EnsureCommandsHaveParametersAndReturnTypes(self):
     json_api = {
       'domains': [
         {
@@ -406,13 +384,11 @@ class ClientApiGeneratorTest(unittest.TestCase):
           'commands': [
             {
               'name': 'FooCommand',
-              'hidden': True,
             }
           ],
           'events': [
             {
               'name': 'BarEvent',
-              'hidden': True,
             }
           ]
         }
@@ -438,13 +414,9 @@ class ClientApiGeneratorTest(unittest.TestCase):
         'properties': [],
       }
     ]
-    client_api_generator.PatchHiddenCommandsAndEvents(json_api)
+    client_api_generator.EnsureCommandsHaveParametersAndReturnTypes(json_api)
     client_api_generator.SynthesizeCommandTypes(json_api)
     client_api_generator.SynthesizeEventTypes(json_api)
-    for command in json_api['domains'][0]['commands']:
-      self.assertTrue(command['hidden'])
-    for event in json_api['domains'][0]['events']:
-      self.assertTrue(command['hidden'])
     types = json_api['domains'][0]['types']
     self.assertListEqual(types, expected_types)
 

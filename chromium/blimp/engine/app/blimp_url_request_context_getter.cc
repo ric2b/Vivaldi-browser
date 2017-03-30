@@ -69,7 +69,7 @@ net::URLRequestContext* BlimpURLRequestContextGetter::GetURLRequestContext() {
 
     std::vector<std::unique_ptr<net::URLRequestInterceptor>>
         request_interceptors;
-    for (auto i : request_interceptors_) {
+    for (auto* i : request_interceptors_) {
       request_interceptors.push_back(base::WrapUnique(i));
     }
     request_interceptors_.weak_clear();
@@ -91,7 +91,7 @@ net::URLRequestContext* BlimpURLRequestContextGetter::GetURLRequestContext() {
 
 scoped_refptr<base::SingleThreadTaskRunner>
 BlimpURLRequestContextGetter::GetNetworkTaskRunner() const {
-  return content::BrowserThread::GetMessageLoopProxyForThread(
+  return content::BrowserThread::GetTaskRunnerForThread(
       content::BrowserThread::IO);
 }
 

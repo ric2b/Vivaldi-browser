@@ -22,7 +22,7 @@ public:
 
     EVisibility visibility() const
     {
-        ASSERT(m_isSingle);
+        DCHECK(m_isSingle);
         return m_start;
     }
 
@@ -32,8 +32,8 @@ public:
             return m_start;
         if (fraction >= 1)
             return m_end;
-        if (m_start == VISIBLE || m_end == VISIBLE)
-            return VISIBLE;
+        if (m_start == EVisibility::Visible || m_end == EVisibility::Visible)
+            return EVisibility::Visible;
         return fraction < 0.5 ? m_start : m_end;
     }
 
@@ -95,7 +95,7 @@ private:
         return m_visibility == environment.state().parentStyle()->visibility();
     }
 
-    const double m_visibility;
+    const EVisibility m_visibility;
 };
 
 InterpolationValue CSSVisibilityInterpolationType::createVisibilityValue(EVisibility visibility) const
@@ -113,7 +113,7 @@ InterpolationValue CSSVisibilityInterpolationType::maybeConvertNeutral(const Int
 
 InterpolationValue CSSVisibilityInterpolationType::maybeConvertInitial(const StyleResolverState&, ConversionCheckers&) const
 {
-    return createVisibilityValue(VISIBLE);
+    return createVisibilityValue(EVisibility::Visible);
 }
 
 InterpolationValue CSSVisibilityInterpolationType::maybeConvertInherit(const StyleResolverState& state, ConversionCheckers& conversionCheckers) const

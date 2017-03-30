@@ -12,11 +12,9 @@ WebInspector.Console = function()
     this._messages = [];
 }
 
-/**
- * @enum {string}
- */
+/** @enum {symbol} */
 WebInspector.Console.Events = {
-    MessageAdded: "messageAdded"
+    MessageAdded: Symbol("messageAdded")
 }
 
 /**
@@ -43,29 +41,7 @@ WebInspector.Console.Message = function(text, level, timestamp, show)
     this.show = show;
 }
 
-/**
- * @interface
- */
-WebInspector.Console.UIDelegate = function()
-{
-}
-
-WebInspector.Console.UIDelegate.prototype = {
-    /**
-     * @return {!Promise.<undefined>}
-     */
-    showConsole: function() { }
-}
-
 WebInspector.Console.prototype = {
-    /**
-     * @param {!WebInspector.Console.UIDelegate} uiDelegate
-     */
-    setUIDelegate: function(uiDelegate)
-    {
-        this._uiDelegate = uiDelegate;
-    },
-
     /**
      * @param {string} text
      * @param {!WebInspector.Console.MessageLevel} level
@@ -120,9 +96,7 @@ WebInspector.Console.prototype = {
      */
     showPromise: function()
     {
-        if (this._uiDelegate)
-            return this._uiDelegate.showConsole();
-        return Promise.reject();
+        return WebInspector.Revealer.revealPromise(this);
     },
 
     __proto__: WebInspector.Object.prototype

@@ -26,8 +26,6 @@
 
 typedef unsigned long XSharedMemoryId;  // ShmSeg in the X headers.
 typedef unsigned long Cursor;
-typedef struct _XcursorImage XcursorImage;
-typedef union _XEvent XEvent;
 
 namespace gfx {
 class Canvas;
@@ -204,7 +202,7 @@ UI_BASE_X_EXPORT bool GetCustomFramePrefDefault();
 static const int kAllDesktops = -1;
 // Queries the desktop |window| is on, kAllDesktops if sticky. Returns false if
 // property not found.
-bool GetWindowDesktop(XID window, int* desktop);
+UI_BASE_X_EXPORT bool GetWindowDesktop(XID window, int* desktop);
 
 // Translates an X11 error code into a printable string.
 UI_BASE_X_EXPORT std::string GetX11ErrorString(XDisplay* display, int err);

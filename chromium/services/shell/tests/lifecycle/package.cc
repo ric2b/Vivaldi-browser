@@ -7,26 +7,26 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
-#include "services/shell/public/cpp/shell_connection.h"
-#include "services/shell/public/interfaces/shell_client_factory.mojom.h"
+#include "services/shell/public/c/main.h"
+#include "services/shell/public/cpp/service_context.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/shell/public/interfaces/service_factory.mojom.h"
 #include "services/shell/tests/lifecycle/app_client.h"
 #include "services/shell/tests/lifecycle/lifecycle_unittest.mojom.h"
 
 namespace {
 
-class PackagedApp : public shell::ShellClient,
+class PackagedApp : public shell::Service,
                     public shell::InterfaceFactory<LifecycleControl>,
                     public LifecycleControl {
  public:
   using DestructCallback = base::Callback<void(PackagedApp*)>;
 
-  PackagedApp(shell::mojom::ShellClientRequest request,
+  PackagedApp(shell::mojom::ServiceRequest request,
               const DestructCallback& shell_connection_closed_callback,
               const DestructCallback& destruct_callback)
-      : connection_(new shell::ShellConnection(this, std::move(request))),
+      : connection_(new shell::ServiceContext(this, std::move(request))),
         shell_connection_closed_callback_(shell_connection_closed_callback),
         destruct_callback_(destruct_callback) {
     bindings_.set_connection_error_handler(base::Bind(&PackagedApp::BindingLost,
@@ -37,14 +37,15 @@ class PackagedApp : public shell::ShellClient,
   }
 
  private:
-  // shell::ShellClient:
-  bool AcceptConnection(shell::Connection* connection) override {
-    connection->AddInterface<LifecycleControl>(this);
+  // shell::Service:
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override {
+    registry->AddInterface<LifecycleControl>(this);
     return true;
   }
 
   // shell::InterfaceFactory<LifecycleControl>
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               LifecycleControlRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -75,7 +76,7 @@ class PackagedApp : public shell::ShellClient,
       delete this;
   }
 
-  std::unique_ptr<shell::ShellConnection> connection_;
+  std::unique_ptr<shell::ServiceContext> connection_;
   mojo::BindingSet<LifecycleControl> bindings_;
   // Run when this object's connection to the shell is closed.
   DestructCallback shell_connection_closed_callback_;
@@ -86,33 +87,34 @@ class PackagedApp : public shell::ShellClient,
 };
 
 class Package
-    : public shell::ShellClient,
-      public shell::InterfaceFactory<shell::mojom::ShellClientFactory>,
-      public shell::mojom::ShellClientFactory {
+    : public shell::Service,
+      public shell::InterfaceFactory<shell::mojom::ServiceFactory>,
+      public shell::mojom::ServiceFactory {
  public:
   Package() {}
   ~Package() override {}
 
-  void set_runner(shell::ApplicationRunner* runner) {
+  void set_runner(shell::ServiceRunner* runner) {
     app_client_.set_runner(runner);
   }
 
  private:
   // shell::test::AppClient:
-  bool AcceptConnection(shell::Connection* connection) override {
-    connection->AddInterface<shell::mojom::ShellClientFactory>(this);
-    return app_client_.AcceptConnection(connection);
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override {
+    registry->AddInterface<shell::mojom::ServiceFactory>(this);
+    return app_client_.OnConnect(remote_identity, registry);
   }
 
-  // shell::InterfaceFactory<shell::mojom::ShellClientFactory>:
-  void Create(shell::Connection* connection,
-              shell::mojom::ShellClientFactoryRequest request) override {
+  // shell::InterfaceFactory<shell::mojom::ServiceFactory>:
+  void Create(const shell::Identity& remote_identity,
+              shell::mojom::ServiceFactoryRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
 
-  // shell::mojom::ShellClientFactory:
-  void CreateShellClient(shell::mojom::ShellClientRequest request,
-                         const mojo::String& name) override {
+  // shell::mojom::ServiceFactory:
+  void CreateService(shell::mojom::ServiceRequest request,
+                     const std::string& name) override {
     ++shell_connection_refcount_;
     apps_.push_back(
         new PackagedApp(std::move(request),
@@ -137,7 +139,7 @@ class Package
 
   shell::test::AppClient app_client_;
   int shell_connection_refcount_ = 0;
-  mojo::BindingSet<shell::mojom::ShellClientFactory> bindings_;
+  mojo::BindingSet<shell::mojom::ServiceFactory> bindings_;
   std::vector<PackagedApp*> apps_;
 
   DISALLOW_COPY_AND_ASSIGN(Package);
@@ -145,9 +147,9 @@ class Package
 
 }  // namespace
 
-MojoResult MojoMain(MojoHandle shell_handle) {
+MojoResult ServiceMain(MojoHandle service_request_handle) {
   Package* package = new Package;
-  shell::ApplicationRunner runner(package);
+  shell::ServiceRunner runner(package);
   package->set_runner(&runner);
-  return runner.Run(shell_handle);
+  return runner.Run(service_request_handle);
 }

@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "media/base/media_keys.h"
+#include "media/base/media_url_demuxer.h"
 #include "media/base/renderer.h"
 #include "media/mojo/services/demuxer_stream_provider_shim.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
@@ -24,7 +25,6 @@ MojoRendererService::MojoRendererService(
     : binding_(this, std::move(request)),
       mojo_cdm_service_context_(mojo_cdm_service_context),
       state_(STATE_UNINITIALIZED),
-      last_media_time_usec_(0),
       renderer_(std::move(renderer)),
       weak_factory_(this) {
   DVLOG(1) << __FUNCTION__;
@@ -33,20 +33,33 @@ MojoRendererService::MojoRendererService(
   weak_this_ = weak_factory_.GetWeakPtr();
 }
 
-MojoRendererService::~MojoRendererService() {
-}
+MojoRendererService::~MojoRendererService() {}
 
 void MojoRendererService::Initialize(mojom::RendererClientPtr client,
                                      mojom::DemuxerStreamPtr audio,
                                      mojom::DemuxerStreamPtr video,
+                                     const base::Optional<GURL>& url,
                                      const InitializeCallback& callback) {
   DVLOG(1) << __FUNCTION__;
   DCHECK_EQ(state_, STATE_UNINITIALIZED);
   client_ = std::move(client);
   state_ = STATE_INITIALIZING;
-  stream_provider_.reset(new DemuxerStreamProviderShim(
-      std::move(audio), std::move(video),
-      base::Bind(&MojoRendererService::OnStreamReady, weak_this_, callback)));
+
+  if (url == base::nullopt) {
+    stream_provider_.reset(new DemuxerStreamProviderShim(
+        std::move(audio), std::move(video),
+        base::Bind(&MojoRendererService::OnStreamReady, weak_this_, callback)));
+    return;
+  }
+
+  DCHECK(!audio);
+  DCHECK(!video);
+  DCHECK(!url.value().is_empty());
+  stream_provider_.reset(new MediaUrlDemuxer(nullptr, url.value()));
+  renderer_->Initialize(
+      stream_provider_.get(), this,
+      base::Bind(&MojoRendererService::OnRendererInitializeDone, weak_this_,
+                 callback));
 }
 
 void MojoRendererService::Flush(const FlushCallback& callback) {
@@ -59,16 +72,15 @@ void MojoRendererService::Flush(const FlushCallback& callback) {
       base::Bind(&MojoRendererService::OnFlushCompleted, weak_this_, callback));
 }
 
-void MojoRendererService::StartPlayingFrom(int64_t time_delta_usec) {
-  DVLOG(2) << __FUNCTION__ << ": " << time_delta_usec;
-  renderer_->StartPlayingFrom(
-      base::TimeDelta::FromMicroseconds(time_delta_usec));
+void MojoRendererService::StartPlayingFrom(base::TimeDelta time_delta) {
+  DVLOG(2) << __FUNCTION__ << ": " << time_delta;
+  renderer_->StartPlayingFrom(time_delta);
   SchedulePeriodicMediaTimeUpdates();
 }
 
 void MojoRendererService::SetPlaybackRate(double playback_rate) {
   DVLOG(2) << __FUNCTION__ << ": " << playback_rate;
-  DCHECK_EQ(state_, STATE_PLAYING);
+  DCHECK(state_ == STATE_PLAYING || state_ == STATE_ERROR);
   renderer_->SetPlaybackRate(playback_rate);
 }
 
@@ -115,7 +127,8 @@ void MojoRendererService::OnEnded() {
 }
 
 void MojoRendererService::OnStatisticsUpdate(const PipelineStatistics& stats) {
-  // TODO(alokp): Plumb the event to mojom::RendererClient. crbug/585287
+  DVLOG(3) << __FUNCTION__;
+  client_->OnStatisticsUpdate(stats);
 }
 
 void MojoRendererService::OnBufferingStateChange(BufferingState state) {
@@ -124,12 +137,17 @@ void MojoRendererService::OnBufferingStateChange(BufferingState state) {
 }
 
 void MojoRendererService::OnWaitingForDecryptionKey() {
-  // TODO(alokp): Plumb the event to mojom::RendererClient. crbug/585287
+  DVLOG(1) << __FUNCTION__;
+  client_->OnWaitingForDecryptionKey();
 }
 
 void MojoRendererService::OnVideoNaturalSizeChange(const gfx::Size& size) {
   DVLOG(2) << __FUNCTION__ << "(" << size.ToString() << ")";
   client_->OnVideoNaturalSizeChange(size);
+}
+
+void MojoRendererService::OnDurationChange(base::TimeDelta duration) {
+  client_->OnDurationChange(duration);
 }
 
 void MojoRendererService::OnVideoOpacityChange(bool opaque) {
@@ -164,12 +182,12 @@ void MojoRendererService::OnRendererInitializeDone(
 }
 
 void MojoRendererService::UpdateMediaTime(bool force) {
-  const uint64_t media_time = renderer_->GetMediaTime().InMicroseconds();
-  if (!force && media_time == last_media_time_usec_)
+  base::TimeDelta media_time = renderer_->GetMediaTime();
+  if (!force && media_time == last_media_time_)
     return;
 
   client_->OnTimeUpdate(media_time, media_time);
-  last_media_time_usec_ = media_time;
+  last_media_time_ = media_time;
 }
 
 void MojoRendererService::CancelPeriodicMediaTimeUpdates() {

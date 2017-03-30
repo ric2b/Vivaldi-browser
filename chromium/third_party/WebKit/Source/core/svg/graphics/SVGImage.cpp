@@ -27,10 +27,9 @@
 
 #include "core/svg/graphics/SVGImage.h"
 
-#include "core/animation/AnimationTimeline.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
-#include "core/frame/Deprecation.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -187,7 +186,7 @@ FloatSize SVGImage::concreteObjectSize(const FloatSize& defaultObjectSize) const
     if (intrinsicSizingInfo.hasWidth && intrinsicSizingInfo.hasHeight)
         return intrinsicSizingInfo.size;
 
-    if (svg->preserveAspectRatio()->currentValue()->align() == SVGPreserveAspectRatio::SVG_PRESERVEASPECTRATIO_NONE) {
+    if (svg->preserveAspectRatio()->currentValue()->align() == SVGPreserveAspectRatio::kSvgPreserveaspectratioNone) {
         // TODO(davve): The intrinsic aspect ratio is not used to resolve a missing intrinsic width
         // or height when preserveAspectRatio is none. It's unclear whether this is correct. See
         // crbug.com/584172.
@@ -305,12 +304,18 @@ PassRefPtr<SkImage> SVGImage::imageForCurrentFrameForContainer(const KURL& url, 
     if (!m_page)
         return nullptr;
 
-    SkPictureRecorder recorder;
-    SkCanvas* canvas = recorder.beginRecording(width(), height());
-    drawForContainer(canvas, SkPaint(), containerSize, 1, rect(), rect(), url);
+    const FloatRect containerRect(FloatPoint(), containerSize);
 
+    SkPictureRecorder recorder;
+    SkCanvas* canvas = recorder.beginRecording(containerRect);
+    drawForContainer(canvas, SkPaint(), containerSize, 1, containerRect, containerRect, url);
+
+    const IntSize imageSize = roundedIntSize(containerSize);
+    const SkMatrix residualScale = SkMatrix::MakeScale(
+        static_cast<float>(imageSize.width()) / containerSize.width(),
+        static_cast<float>(imageSize.height()) / containerSize.height());
     return fromSkSp(SkImage::MakeFromPicture(recorder.finishRecordingAsPicture(),
-        SkISize::Make(width(), height()), nullptr, nullptr));
+        SkISize::Make(imageSize.width(), imageSize.height()), &residualScale, nullptr));
 }
 
 static bool drawNeedsLayer(const SkPaint& paint)
@@ -497,17 +502,17 @@ void SVGImage::updateUseCounters(Document& document) const
 {
     if (SVGSVGElement* rootElement = svgRootElement(m_page.get())) {
         if (rootElement->timeContainer()->hasAnimations())
-            Deprecation::countDeprecation(document, UseCounter::SVGSMILAnimationInImageRegardlessOfCache);
+            UseCounter::count(document, UseCounter::SVGSMILAnimationInImageRegardlessOfCache);
     }
 }
 
-bool SVGImage::dataChanged(bool allDataReceived)
+Image::SizeAvailability SVGImage::dataChanged(bool allDataReceived)
 {
     TRACE_EVENT0("blink", "SVGImage::dataChanged");
 
     // Don't do anything if is an empty image.
     if (!data()->size())
-        return true;
+        return SizeAvailable;
 
     if (allDataReceived) {
         // SVGImage will fire events (and the default C++ handlers run) but doesn't
@@ -521,7 +526,7 @@ bool SVGImage::dataChanged(bool allDataReceived)
         if (m_page) {
             toLocalFrame(m_page->mainFrame())->loader().load(FrameLoadRequest(0, blankURL(), SubstituteData(data(), AtomicString("image/svg+xml"),
                 AtomicString("UTF-8"), KURL(), ForceSynchronousLoad)));
-            return true;
+            return SizeAvailable;
         }
 
         Page::PageClients pageClients;
@@ -581,7 +586,7 @@ bool SVGImage::dataChanged(bool allDataReceived)
         m_intrinsicSize = roundedIntSize(concreteObjectSize(FloatSize(LayoutReplaced::defaultWidth, LayoutReplaced::defaultHeight)));
     }
 
-    return m_page;
+    return m_page ? SizeAvailable : SizeUnavailable;
 }
 
 String SVGImage::filenameExtension() const

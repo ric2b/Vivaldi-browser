@@ -65,6 +65,7 @@
     "videoCapture",
     "webview",
     "zoom",
+    "browsingData",
     {"fileSystem": ["write"]},
     {"socket": ["tcp-connect:*:*"]}
   ],
@@ -79,6 +80,8 @@
           "components/settings/settings.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",
+          "components/experiments/experiments.html",
+          "components/actionlog/actionlog.html",
           "style/*",
           "resources/*",
           "defaultsPlatformSpecific.js",

@@ -8,6 +8,8 @@
 #include "base/android/jni_android.h"
 #include "jni/TimeZoneMonitor_jni.h"
 
+using base::android::JavaParamRef;
+
 namespace content {
 
 TimeZoneMonitorAndroid::TimeZoneMonitorAndroid() : TimeZoneMonitor() {
@@ -18,7 +20,7 @@ TimeZoneMonitorAndroid::TimeZoneMonitorAndroid() : TimeZoneMonitor() {
 }
 
 TimeZoneMonitorAndroid::~TimeZoneMonitorAndroid() {
-  Java_TimeZoneMonitor_stop(base::android::AttachCurrentThread(), impl_.obj());
+  Java_TimeZoneMonitor_stop(base::android::AttachCurrentThread(), impl_);
 }
 
 // static

@@ -130,8 +130,8 @@ void HidDeviceManager::GetApiDevices(
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback, base::Passed(&devices)));
   } else {
-    pending_enumerations_.push_back(base::WrapUnique(
-        new GetApiDevicesParams(extension, filters, callback)));
+    pending_enumerations_.push_back(
+        base::MakeUnique<GetApiDevicesParams>(extension, filters, callback));
   }
 }
 
@@ -217,7 +217,7 @@ void HidDeviceManager::OnDeviceAdded(scoped_refptr<HidDeviceInfo> device_info) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_LT(next_resource_id_, std::numeric_limits<int>::max());
   int new_id = next_resource_id_++;
-  DCHECK(!ContainsKey(resource_ids_, device_info->device_id()));
+  DCHECK(!base::ContainsKey(resource_ids_, device_info->device_id()));
   resource_ids_[device_info->device_id()] = new_id;
   device_ids_[new_id] = device_info->device_id();
 

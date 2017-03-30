@@ -87,13 +87,13 @@ class InterfaceImpl : public sample::Provider {
     }
   }
 
-  void EchoString(const String& a,
+  void EchoString(const std::string& a,
                   const EchoStringCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
 
-  void EchoStrings(const String& a,
-                   const String& b,
+  void EchoStrings(const std::string& a,
+                   const std::string& b,
                    const EchoStringsCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
@@ -129,7 +129,7 @@ class BindingCallbackTest : public testing::Test {
   int32_t last_client_callback_value_seen_;
   sample::ProviderPtr interface_ptr_;
 
-  void PumpMessages() { loop_.RunUntilIdle(); }
+  void PumpMessages() { base::RunLoop().RunUntilIdle(); }
 
  private:
   base::MessageLoop loop_;

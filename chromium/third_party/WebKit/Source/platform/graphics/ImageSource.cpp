@@ -46,15 +46,26 @@ size_t ImageSource::clearCacheExceptFrame(size_t clearExceptFrame)
     return m_decoder ? m_decoder->clearCacheExceptFrame(clearExceptFrame) : 0;
 }
 
-void ImageSource::setData(SharedBuffer& data, bool allDataReceived)
+PassRefPtr<SharedBuffer> ImageSource::data()
 {
-    // Create a decoder by sniffing the encoded data. If insufficient data bytes are available to
-    // determine the encoded image type, no decoder is created.
-    if (!m_decoder)
-        m_decoder = DeferredImageDecoder::create(data, ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
+    return m_decoder ? m_decoder->data() : nullptr;
+}
 
-    if (m_decoder)
-        m_decoder->setData(data, allDataReceived);
+bool ImageSource::setData(PassRefPtr<SharedBuffer> passData, bool allDataReceived)
+{
+    RefPtr<SharedBuffer> data = passData;
+
+    if (m_decoder) {
+        m_decoder->setData(data.release(), allDataReceived);
+        // If the decoder is pre-instantiated, it means we've already validated the data/signature
+        // at some point.
+        return true;
+    }
+
+    m_decoder = DeferredImageDecoder::create(data, allDataReceived, ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
+
+    // Insufficient data is not a failure.
+    return m_decoder || !ImageDecoder::hasSufficientDataToSniffImageType(*data);
 }
 
 String ImageSource::filenameExtension() const

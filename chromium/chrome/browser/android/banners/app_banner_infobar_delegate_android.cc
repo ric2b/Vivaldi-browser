@@ -8,12 +8,13 @@
 #include "base/android/jni_string.h"
 #include "base/guid.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/shortcut_info.h"
 #include "chrome/browser/android/tab_android.h"
-#include "chrome/browser/banners/app_banner_data_fetcher.h"
+#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/browser_process.h"
@@ -22,7 +23,6 @@
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/rappor/rappor_utils.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/manifest.h"
@@ -34,38 +34,44 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertUTF16ToJavaString;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace banners {
 
 AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
-    int event_request_id,
-    scoped_refptr<AppBannerDataFetcherAndroid> data_fetcher,
+    base::WeakPtr<AppBannerManager> weak_manager,
     const base::string16& app_title,
-    SkBitmap* app_icon,
-    const content::Manifest& web_app_data)
-    : data_fetcher_(data_fetcher),
+    const GURL& manifest_url,
+    const content::Manifest& manifest,
+    const GURL& icon_url,
+    std::unique_ptr<SkBitmap> icon,
+    int event_request_id)
+    : weak_manager_(weak_manager),
       app_title_(app_title),
-      app_icon_(app_icon),
+      manifest_url_(manifest_url),
+      manifest_(manifest),
+      icon_url_(icon_url),
+      icon_(std::move(icon)),
       event_request_id_(event_request_id),
-      web_app_data_(web_app_data),
       has_user_interaction_(false) {
-  DCHECK(!web_app_data.IsEmpty());
+  DCHECK(!manifest.IsEmpty());
   CreateJavaDelegate();
 }
 
 AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
-    int event_request_id,
     const base::string16& app_title,
-    SkBitmap* app_icon,
     const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
+    std::unique_ptr<SkBitmap> icon,
     const std::string& native_app_package,
-    const std::string& referrer)
+    const std::string& referrer,
+    int event_request_id)
     : app_title_(app_title),
-      app_icon_(app_icon),
-      event_request_id_(event_request_id),
       native_app_data_(native_app_data),
+      icon_(std::move(icon)),
       native_app_package_(native_app_package),
       referrer_(referrer),
+      event_request_id_(event_request_id),
       has_user_interaction_(false) {
   DCHECK(!native_app_data_.is_null());
   CreateJavaDelegate();
@@ -75,14 +81,13 @@ AppBannerInfoBarDelegateAndroid::~AppBannerInfoBarDelegateAndroid() {
   if (!has_user_interaction_) {
     if (!native_app_data_.is_null())
       TrackUserResponse(USER_RESPONSE_NATIVE_APP_IGNORED);
-    else if (!web_app_data_.IsEmpty())
+    else if (!manifest_.IsEmpty())
       TrackUserResponse(USER_RESPONSE_WEB_APP_IGNORED);
   }
 
   TrackDismissEvent(DISMISS_EVENT_DISMISSED);
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AppBannerInfoBarDelegateAndroid_destroy(env,
-                                        java_delegate_.obj());
+  Java_AppBannerInfoBarDelegateAndroid_destroy(env, java_delegate_);
   java_delegate_.Reset();
 }
 
@@ -93,9 +98,7 @@ void AppBannerInfoBarDelegateAndroid::UpdateInstallState(
     return;
 
   int newState = Java_AppBannerInfoBarDelegateAndroid_determineInstallState(
-      env,
-      java_delegate_.obj(),
-      native_app_data_.obj());
+      env, java_delegate_, native_app_data_);
   static_cast<AppBannerInfoBarAndroid*>(infobar())
       ->OnInstallStateChanged(newState);
 }
@@ -118,7 +121,7 @@ void AppBannerInfoBarDelegateAndroid::OnInstallIntentReturned(
         web_contents->GetURL(),
         native_app_package_,
         AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
-        AppBannerDataFetcher::GetCurrentTime());
+        AppBannerManager::GetCurrentTime());
 
     TrackInstallEvent(INSTALL_EVENT_NATIVE_APP_INSTALL_STARTED);
     rappor::SampleDomainAndRegistryFromGURL(g_browser_process->rappor_service(),
@@ -168,7 +171,7 @@ AppBannerInfoBarDelegateAndroid::GetIdentifier() const {
 }
 
 gfx::Image AppBannerInfoBarDelegateAndroid::GetIcon() const {
-  return gfx::Image::CreateFrom1xBitmap(*app_icon_.get());
+  return gfx::Image::CreateFrom1xBitmap(*icon_.get());
 }
 
 void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
@@ -188,10 +191,10 @@ void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
     TrackUserResponse(USER_RESPONSE_NATIVE_APP_DISMISSED);
     AppBannerSettingsHelper::RecordBannerDismissEvent(
         web_contents, native_app_package_, AppBannerSettingsHelper::NATIVE);
-  } else if (!web_app_data_.IsEmpty()) {
+  } else if (!manifest_.IsEmpty()) {
     TrackUserResponse(USER_RESPONSE_WEB_APP_DISMISSED);
     AppBannerSettingsHelper::RecordBannerDismissEvent(
-        web_contents, web_app_data_.start_url.spec(),
+        web_contents, manifest_.start_url.spec(),
         AppBannerSettingsHelper::WEB);
   }
 }
@@ -226,12 +229,10 @@ bool AppBannerInfoBarDelegateAndroid::Accept() {
     ScopedJavaLocalRef<jstring> jreferrer(
         ConvertUTF8ToJavaString(env, referrer_));
 
-    bool was_opened = Java_AppBannerInfoBarDelegateAndroid_installOrOpenNativeApp(
-        env,
-        java_delegate_.obj(),
-        tab->GetJavaObject().obj(),
-        native_app_data_.obj(),
-        jreferrer.obj());
+    bool was_opened =
+        Java_AppBannerInfoBarDelegateAndroid_installOrOpenNativeApp(
+            env, java_delegate_, tab->GetJavaObject(), native_app_data_,
+            jreferrer);
 
     if (was_opened) {
       TrackDismissEvent(DISMISS_EVENT_APP_OPEN);
@@ -240,23 +241,25 @@ bool AppBannerInfoBarDelegateAndroid::Accept() {
     }
     SendBannerAccepted(web_contents, "play");
     return was_opened;
-  } else if (!web_app_data_.IsEmpty()) {
+  } else if (!manifest_.IsEmpty()) {
     TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
 
     AppBannerSettingsHelper::RecordBannerInstallEvent(
-        web_contents, web_app_data_.start_url.spec(),
+        web_contents, manifest_.start_url.spec(),
         AppBannerSettingsHelper::WEB);
 
-    ShortcutInfo info(GURL::EmptyGURL());
-    info.UpdateFromManifest(web_app_data_);
-    info.UpdateSource(ShortcutInfo::SOURCE_APP_BANNER);
+    if (weak_manager_) {
+      ShortcutInfo info(GURL::EmptyGURL());
+      info.UpdateFromManifest(manifest_);
+      info.manifest_url = manifest_url_;
+      info.icon_url = icon_url_;
+      info.UpdateSource(ShortcutInfo::SOURCE_APP_BANNER);
 
-    const std::string& uid = base::GenerateGUID();
-    content::BrowserThread::PostTask(
-        content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&ShortcutHelper::AddShortcutInBackgroundWithSkBitmap, info,
-                   uid, *app_icon_.get(),
-                   data_fetcher_->FetchWebappSplashScreenImageCallback(uid)));
+      const std::string& uid = base::GenerateGUID();
+      ShortcutHelper::AddToLauncherWithSkBitmap(
+          web_contents->GetBrowserContext(), info, uid, *icon_.get(),
+          weak_manager_->FetchWebappSplashScreenImageCallback(uid));
+    }
 
     SendBannerAccepted(web_contents, "web");
     return true;
@@ -282,10 +285,8 @@ bool AppBannerInfoBarDelegateAndroid::LinkClicked(
     return true;
   }
 
-  Java_AppBannerInfoBarDelegateAndroid_showAppDetails(env,
-                                               java_delegate_.obj(),
-                                               tab->GetJavaObject().obj(),
-                                               native_app_data_.obj());
+  Java_AppBannerInfoBarDelegateAndroid_showAppDetails(
+      env, java_delegate_, tab->GetJavaObject(), native_app_data_);
 
   TrackDismissEvent(DISMISS_EVENT_BANNER_CLICK);
   return true;

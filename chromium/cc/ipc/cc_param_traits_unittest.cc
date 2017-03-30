@@ -138,6 +138,7 @@ class CCParamTraitsTest : public testing::Test {
       }
     }
     EXPECT_EQ(a->filters_scale, b->filters_scale);
+    EXPECT_EQ(a->filters_origin, b->filters_origin);
     EXPECT_EQ(a->background_filters, b->background_filters);
   }
 
@@ -190,6 +191,7 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->v_plane_resource_id(), b->v_plane_resource_id());
     EXPECT_EQ(a->a_plane_resource_id(), b->a_plane_resource_id());
     EXPECT_EQ(a->color_space, b->color_space);
+    EXPECT_EQ(a->bits_per_channel, b->bits_per_channel);
   }
 
   void Compare(const TransferableResource& a, const TransferableResource& b) {
@@ -250,7 +252,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   int arbitrary_context_id1 = 12;
   int arbitrary_context_id2 = 57;
   int arbitrary_context_id3 = -503;
-  int arbitrary_int = 5;
+  int arbitrary_int = 13;
   SkColor arbitrary_color = SkColorSetARGB(25, 36, 47, 58);
   SkXfermode::Mode arbitrary_blend_mode1 = SkXfermode::kScreen_Mode;
   SkXfermode::Mode arbitrary_blend_mode2 = SkXfermode::kLighten_Mode;
@@ -262,6 +264,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   SkScalar arbitrary_sigma = SkFloatToScalar(2.0f);
   YUVVideoDrawQuad::ColorSpace arbitrary_color_space =
       YUVVideoDrawQuad::REC_601;
+  gfx::ColorSpace arbitrary_video_color_space = gfx::ColorSpace::CreateREC601();
 
   RenderPassId child_id(30, 5);
   RenderPassId root_id(10, 14);
@@ -324,7 +327,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       shared_state2_in, arbitrary_rect1, arbitrary_rect2_inside_rect1,
       arbitrary_rect1_inside_rect1, arbitrary_bool1, child_id,
       arbitrary_resourceid2, arbitrary_vector2df1, arbitrary_size1,
-      arbitrary_filters1, arbitrary_vector2df2, arbitrary_filters2);
+      arbitrary_filters1, arbitrary_vector2df2, arbitrary_pointf2,
+      arbitrary_filters2);
   pass_cmp->CopyFromAndAppendRenderPassDrawQuad(
       renderpass_in, renderpass_in->shared_quad_state,
       renderpass_in->render_pass_id);
@@ -389,7 +393,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       arbitrary_rect1_inside_rect1, arbitrary_bool1, arbitrary_rectf1,
       arbitrary_rectf2, arbitrary_size1, arbitrary_size2, arbitrary_resourceid1,
       arbitrary_resourceid2, arbitrary_resourceid3, arbitrary_resourceid4,
-      arbitrary_color_space, arbitrary_float1, arbitrary_float2);
+      arbitrary_color_space, arbitrary_video_color_space, arbitrary_float1,
+      arbitrary_float2, arbitrary_int);
   pass_cmp->CopyFromAndAppendDrawQuad(yuvvideo_in,
                                       yuvvideo_in->shared_quad_state);
 

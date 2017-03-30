@@ -21,6 +21,9 @@ class SchemeAndOriginWhitelist {
   ~SchemeAndOriginWhitelist() {}
 
   void Reset() {
+    secure_schemes_.clear();
+    secure_origins_.clear();
+    service_worker_schemes_.clear();
     GetContentClient()->AddSecureSchemesAndOrigins(&secure_schemes_,
                                                    &secure_origins_);
     GetContentClient()->AddServiceWorkerSchemes(&service_worker_schemes_);
@@ -59,11 +62,12 @@ bool IsOriginSecure(const GURL& url) {
   if (net::IsLocalhost(hostname))
     return true;
 
-  if (ContainsKey(g_trustworthy_whitelist.Get().secure_schemes(), url.scheme()))
+  if (base::ContainsKey(g_trustworthy_whitelist.Get().secure_schemes(),
+                        url.scheme()))
     return true;
 
-  if (ContainsKey(g_trustworthy_whitelist.Get().secure_origins(),
-                  url.GetOrigin())) {
+  if (base::ContainsKey(g_trustworthy_whitelist.Get().secure_origins(),
+                        url.GetOrigin())) {
     return true;
   }
 
@@ -74,8 +78,8 @@ bool OriginCanAccessServiceWorkers(const GURL& url) {
   if (url.SchemeIsHTTPOrHTTPS() && IsOriginSecure(url))
     return true;
 
-  if (ContainsKey(g_trustworthy_whitelist.Get().service_worker_schemes(),
-                  url.scheme())) {
+  if (base::ContainsKey(g_trustworthy_whitelist.Get().service_worker_schemes(),
+                        url.scheme())) {
     return true;
   }
 

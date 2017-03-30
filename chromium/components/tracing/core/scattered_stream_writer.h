@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "components/tracing/tracing_export.h"
 
@@ -16,6 +17,10 @@ namespace v2 {
 struct ContiguousMemoryRange {
   uint8_t* begin;
   uint8_t* end;  // STL style: one byte past the end of the buffer.
+
+  inline bool is_valid() const { return begin != nullptr; }
+  inline void reset() { begin = nullptr; }
+  inline size_t size() { return static_cast<size_t>(end - begin); }
 };
 
 // This class deals with the following problem: append-only proto messages want
@@ -33,8 +38,9 @@ struct ContiguousMemoryRange {
 // ContiguousMemoryRange and defers the chunk-chaining logic to the Delegate.
 class TRACING_EXPORT ScatteredStreamWriter {
  public:
-  class Delegate {
+  class TRACING_EXPORT Delegate {
    public:
+    virtual ~Delegate();
     virtual ContiguousMemoryRange GetNewBuffer() = 0;
   };
 
@@ -47,6 +53,16 @@ class TRACING_EXPORT ScatteredStreamWriter {
   // Reserves a fixed amount of bytes to be backfilled later. The reserved range
   // is guaranteed to be contiguous and not span across chunks.
   ContiguousMemoryRange ReserveBytes(size_t size);
+
+  // Fast (but unsafe) version of the above. The caller must have previously
+  // checked that there are at least |size| contiguos bytes available.
+  // Returns only the start pointer of the reservation.
+  uint8_t* ReserveBytesUnsafe(size_t size) {
+    uint8_t* begin = write_ptr_;
+    write_ptr_ += size;
+    DCHECK_LE(write_ptr_, cur_range_.end);
+    return begin;
+  }
 
   // Resets the buffer boundaries and the write pointer to the given |range|.
   // Subsequent WriteByte(s) will write into |range|.

@@ -6,6 +6,8 @@
 #define COMPONENTS_SUBRESOURCE_FILTER_SUBRESOURCE_FILTER_FEATURES_H_
 
 #include "base/feature_list.h"
+#include "components/subresource_filter/core/common/activation_list.h"
+#include "components/subresource_filter/core/common/activation_scope.h"
 #include "components/subresource_filter/core/common/activation_state.h"
 
 namespace subresource_filter {
@@ -19,10 +21,30 @@ extern const char kActivationStateDryRun[];
 extern const char kActivationStateEnabled[];
 extern const char kActivationStateDisabled[];
 
+extern const char kActivationScopeParameterName[];
+extern const char kActivationScopeAllSites[];
+extern const char kActivationScopeActivationList[];
+extern const char kActivationScopeNoSites[];
+
+extern const char kActivationListsParameterName[];
+extern const char kActivationListSocialEngineeringAdsInterstitial[];
+extern const char kActivationListPhishingInterstitial[];
+
 // Returns the maximum degree to which subresource filtering should be activated
 // on any RenderFrame. This will be ActivationState::DISABLED unless the feature
 // is enabled and variation parameters prescribe a higher activation state.
 ActivationState GetMaximumActivationState();
+
+// Returns the current activation scope, that is, the subset of page loads where
+// subresource filtering should be activated. The function returns
+// ActivationScope::NO_SITES unless the feature is enabled and variation
+// parameters prescribe a wider activation scope.
+ActivationScope GetCurrentActivationScope();
+
+// Returns current activation list, based on the values from variation params in
+// the feature |kSafeBrowsingSubresourceFilter|. When the corresponding
+// variation param is empty, returns most conservative ActivationList::NONE.
+ActivationList GetCurrentActivationList();
 
 }  // namespace subresource_filter
 

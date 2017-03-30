@@ -38,6 +38,8 @@
 #include "ui/gfx/skbitmap_operations.h"
 #include "url/gurl.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // Returns the default icon image for extensions.
@@ -80,6 +82,9 @@ bool HasValue(const std::map<int, T>& map, int tab_id) {
 }  // namespace
 
 extension_misc::ExtensionIcons ExtensionAction::ActionIconSize() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return extension_misc::EXTENSION_ICON_MEDIUM;
+  }
   return ui::MaterialDesignController::IsModeMaterial()
              ? extension_misc::EXTENSION_ICON_BITTY
              : extension_misc::EXTENSION_ICON_ACTION;

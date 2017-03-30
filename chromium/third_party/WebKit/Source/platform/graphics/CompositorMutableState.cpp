@@ -27,20 +27,20 @@ void CompositorMutableState::setOpacity(double opacity)
 {
     if (!m_mainLayer)
         return;
-    m_mainLayer->OnOpacityAnimated(opacity);
+    m_mainLayer->layer_tree_impl()->property_trees()->effect_tree.OnOpacityAnimated(opacity, m_mainLayer->effect_tree_index(), m_mainLayer->layer_tree_impl());
     m_mutation->setOpacity(opacity);
 }
 
 const SkMatrix44& CompositorMutableState::transform() const
 {
-    return m_mainLayer ? m_mainLayer->transform().matrix() : SkMatrix44::I();
+    return m_mainLayer ? m_mainLayer->Transform().matrix() : SkMatrix44::I();
 }
 
 void CompositorMutableState::setTransform(const SkMatrix44& matrix)
 {
     if (!m_mainLayer)
         return;
-    m_mainLayer->OnTransformAnimated(gfx::Transform(matrix));
+    m_mainLayer->layer_tree_impl()->property_trees()->transform_tree.OnTransformAnimated(gfx::Transform(matrix), m_mainLayer->transform_tree_index(), m_mainLayer->layer_tree_impl());
     m_mutation->setTransform(matrix);
 }
 

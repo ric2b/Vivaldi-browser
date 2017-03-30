@@ -104,7 +104,7 @@ def CompressUsingLZMA(build_dir, compressed_file, input_file, verbose):
     if exit_code != 8:
       return None
     raise LZMA_OOM("Out of memory during compression")
-    
+
   if os.path.exists(compressed_file):
     os.remove(compressed_file)
   RunSystemCommand(cmd, verbose, retry_fun = retry)
@@ -137,38 +137,44 @@ def CopySectionFilesToStagingDir(config, section, staging_dir, src_dir):
 
     dst_dir = os.path.join(staging_dir, config.get(section, option))
     src_paths = glob.glob(os.path.join(src_dir, option))
-    if src_paths and not os.path.exists(dst_dir):
+    if src_paths and not os.path.exists(dst_dir) and (len(src_paths) != 1 or not os.path.isdir(src_paths[0])):
       os.makedirs(dst_dir)
     for src_path in src_paths:
+      if os.path.isdir(src_path):
+        for root, dirs, files in os.walk(src_path):
+          for f in files:
+            g_archive_inputs.append(os.path.join(root, f))
+        shutil.copytree(src_path, dst_dir)
+        continue
       dst_path = os.path.join(dst_dir, os.path.basename(src_path))
       if not os.path.exists(dst_path):
         g_archive_inputs.append(src_path)
         shutil.copy(src_path, dst_dir)
 
 def SignTarget(target):
-  if not (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and 
-	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
+  if not (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
+    os.environ.get("VIVALDI_SIGNING_KEY", None)):
     return;
   if target.rpartition(".")[-1].lower() not in ["dll", "exe"]:
     return
 
   print "Starting Signing of", target
   signcommand = ([os.environ.get("VIVALDI_SIGN_EXECUTABLE"),
-		"sign",
-		"/v",
-		] +
-		os.environ.get("VIVALDI_SIGNING_KEY").split()+
-		[
-		target # target file
-		])
+      "sign",
+      "/v",
+    ] +
+    os.environ.get("VIVALDI_SIGNING_KEY").split()+
+    [
+      target # target file
+    ])
 
   ret = subprocess.call(signcommand)
   if ret != 0:
     raise Exception("Signing %s failed", target)
 
 def SignTargets(config, distribution, staging_dir,enable_hidpi):
-  if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and 
-	  os.environ.get("VIVALDI_SIGNING_KEY", None)):
+  if (os.environ.get("VIVALDI_SIGN_EXECUTABLE", None) and
+    os.environ.get("VIVALDI_SIGNING_KEY", None)):
 
     print "Start Signing"
     sections = ['GENERAL']
@@ -309,9 +315,7 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
     with open(options.depfile, 'wb') as f:
       f.write(path_fixup(os.path.relpath(archive_file, options.build_dir)) +
               ': \\\n')
-      f.write('  ' + ' \\\n  '.join(path_fixup(x if os.path.isabs(x) and
-              os.path.splitdrive(x) != os.path.splitdrive(options.build_dir) else
-                  os.path.relpath(x, options.build_dir)) for x in g_archive_inputs))
+      f.write('  ' + ' \\\n  '.join(path_fixup(x) for x in g_archive_inputs))
 
   # It is important to use abspath to create the path to the directory because
   # if you use a relative path without any .. sequences then 7za.exe uses the
@@ -365,7 +369,7 @@ def CreateArchiveFile(options, staging_dir, current_version, prev_version):
                       options.verbose)
   except LZMA_OOM:
     return os.path.basename(orig_file)
-    
+
 
   return compressed_archive_file
 
@@ -656,7 +660,7 @@ def main(options):
 
   if options.sign_executables:
     SignTargets(config, options.distribution,
-                             staging_dir, 
+                             staging_dir,
                              options.enable_hidpi)
 
   if options.component_build == '1':
@@ -760,6 +764,9 @@ def _ParseOptions():
 
   if not options.output_dir:
     options.output_dir = options.build_dir
+
+  options.output_dir = options.output_dir.replace("\\","/")
+  options.build_dir = options.build_dir.replace("\\","/")
 
   if not options.resource_file_path:
     options.resource_file_path = os.path.join(options.build_dir,

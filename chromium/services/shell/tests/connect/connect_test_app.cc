@@ -9,12 +9,13 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "services/shell/tests/connect/connect_test.mojom.h"
 
@@ -28,7 +29,7 @@ void QuitLoop(base::RunLoop* loop) {
 
 void ReceiveString(std::string* string,
                    base::RunLoop* loop,
-                   mojo::String response) {
+                   const std::string& response) {
   *string = response;
   loop->Quit();
 }
@@ -37,7 +38,7 @@ void ReceiveString(std::string* string,
 
 using GetTitleCallback = test::mojom::ConnectTestService::GetTitleCallback;
 
-class ConnectTestApp : public ShellClient,
+class ConnectTestApp : public Service,
                        public InterfaceFactory<test::mojom::ConnectTestService>,
                        public InterfaceFactory<test::mojom::StandaloneApp>,
                        public InterfaceFactory<test::mojom::BlockedInterface>,
@@ -51,12 +52,9 @@ class ConnectTestApp : public ShellClient,
   ~ConnectTestApp() override {}
 
  private:
-  // shell::ShellClient:
-  void Initialize(Connector* connector, const Identity& identity,
-                  uint32_t id) override {
-    connector_ = connector;
+  // shell::Service:
+  void OnStart(const Identity& identity) override {
     identity_ = identity;
-    id_ = id;
     bindings_.set_connection_error_handler(
         base::Bind(&ConnectTestApp::OnConnectionError,
                    base::Unretained(this)));
@@ -64,47 +62,45 @@ class ConnectTestApp : public ShellClient,
         base::Bind(&ConnectTestApp::OnConnectionError,
                    base::Unretained(this)));
   }
-  bool AcceptConnection(Connection* connection) override {
-    connection->AddInterface<test::mojom::ConnectTestService>(this);
-    connection->AddInterface<test::mojom::StandaloneApp>(this);
-    connection->AddInterface<test::mojom::BlockedInterface>(this);
-    connection->AddInterface<test::mojom::UserIdTest>(this);
+  bool OnConnect(const Identity& remote_identity,
+                 InterfaceRegistry* registry) override {
+    registry->AddInterface<test::mojom::ConnectTestService>(this);
+    registry->AddInterface<test::mojom::StandaloneApp>(this);
+    registry->AddInterface<test::mojom::BlockedInterface>(this);
+    registry->AddInterface<test::mojom::UserIdTest>(this);
 
-    uint32_t remote_id = connection->GetRemoteInstanceID();
     test::mojom::ConnectionStatePtr state(test::mojom::ConnectionState::New());
-    state->connection_local_name = connection->GetConnectionName();
-    state->connection_remote_name = connection->GetRemoteIdentity().name();
-    state->connection_remote_userid = connection->GetRemoteIdentity().user_id();
-    state->connection_remote_id = remote_id;
+    state->connection_remote_name = remote_identity.name();
+    state->connection_remote_userid = remote_identity.user_id();
     state->initialize_local_name = identity_.name();
-    state->initialize_id = id_;
     state->initialize_userid = identity_.user_id();
-    connection->GetInterface(&caller_);
+
+    connector()->ConnectToInterface(remote_identity, &caller_);
     caller_->ConnectionAccepted(std::move(state));
 
     return true;
   }
 
   // InterfaceFactory<test::mojom::ConnectTestService>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               test::mojom::ConnectTestServiceRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
 
   // InterfaceFactory<test::mojom::StandaloneApp>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               test::mojom::StandaloneAppRequest request) override {
     standalone_bindings_.AddBinding(this, std::move(request));
   }
 
   // InterfaceFactory<test::mojom::BlockedInterface>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               test::mojom::BlockedInterfaceRequest request) override {
     blocked_bindings_.AddBinding(this, std::move(request));
   }
 
   // InterfaceFactory<test::mojom::UserIdTest>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               test::mojom::UserIdTestRequest request) override {
     user_id_test_bindings_.AddBinding(this, std::move(request));
   }
@@ -122,7 +118,7 @@ class ConnectTestApp : public ShellClient,
       const ConnectToAllowedAppInBlockedPackageCallback& callback) override {
     base::RunLoop run_loop;
     std::unique_ptr<Connection> connection =
-        connector_->Connect("mojo:connect_test_a");
+        connector()->Connect("mojo:connect_test_a");
     connection->SetConnectionLostClosure(
         base::Bind(&ConnectTestApp::OnConnectionBlocked,
                    base::Unretained(this), callback, &run_loop));
@@ -142,7 +138,7 @@ class ConnectTestApp : public ShellClient,
   void ConnectToClassInterface(
       const ConnectToClassInterfaceCallback& callback) override {
     std::unique_ptr<Connection> connection =
-        connector_->Connect("mojo:connect_test_class_app");
+        connector()->Connect("mojo:connect_test_class_app");
     test::mojom::ClassInterfacePtr class_interface;
     connection->GetInterface(&class_interface);
     std::string ping_response;
@@ -173,10 +169,11 @@ class ConnectTestApp : public ShellClient,
 
   // test::mojom::UserIdTest:
   void ConnectToClassAppAsDifferentUser(
-      mojom::IdentityPtr target,
+      const shell::Identity& target,
       const ConnectToClassAppAsDifferentUserCallback& callback) override {
-    Connector::ConnectParams params(target.To<Identity>());
-    std::unique_ptr<Connection> connection = connector_->Connect(&params);
+    Connector::ConnectParams params(target);
+    std::unique_ptr<Connection> connection =
+        connector()->Connect(&params);
     {
       base::RunLoop loop;
       connection->AddConnectionCompletedClosure(base::Bind(&QuitLoop, &loop));
@@ -185,7 +182,7 @@ class ConnectTestApp : public ShellClient,
       loop.Run();
     }
     callback.Run(static_cast<int32_t>(connection->GetResult()),
-                 mojom::Identity::From(connection->GetRemoteIdentity()));
+                 connection->GetRemoteIdentity());
   }
 
   void OnConnectionBlocked(
@@ -198,7 +195,7 @@ class ConnectTestApp : public ShellClient,
   void OnGotTitle(
       const ConnectToAllowedAppInBlockedPackageCallback& callback,
       base::RunLoop* run_loop,
-      mojo::String title) {
+      const std::string& title) {
     callback.Run(title);
     run_loop->Quit();
   }
@@ -208,9 +205,7 @@ class ConnectTestApp : public ShellClient,
       base::MessageLoop::current()->QuitWhenIdle();
   }
 
-  Connector* connector_ = nullptr;
   Identity identity_;
-  uint32_t id_ = mojom::kInvalidInstanceID;
   mojo::BindingSet<test::mojom::ConnectTestService> bindings_;
   mojo::BindingSet<test::mojom::StandaloneApp> standalone_bindings_;
   mojo::BindingSet<test::mojom::BlockedInterface> blocked_bindings_;
@@ -222,8 +217,7 @@ class ConnectTestApp : public ShellClient,
 
 }  // namespace shell
 
-MojoResult MojoMain(MojoHandle shell_handle) {
-  MojoResult rv =
-      shell::ApplicationRunner(new shell::ConnectTestApp).Run(shell_handle);
-  return rv;
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  shell::ServiceRunner runner(new shell::ConnectTestApp);
+  return runner.Run(service_request_handle);
 }

@@ -37,11 +37,11 @@
 #include "components/policy/core/common/cloud/cloud_policy_service.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
 #include "components/policy/core/common/remote_commands/remote_commands_factory.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/sha2.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "url/gurl.h"
 
 using content::BrowserThread;
@@ -56,6 +56,7 @@ namespace {
 const char kNoRequisition[] = "none";
 const char kRemoraRequisition[] = "remora";
 const char kSharkRequisition[] = "shark";
+const char kRialtoRequisition[] = "rialto";
 
 // Zero-touch enrollment flag values.
 const char kZeroTouchEnrollmentForced[] = "forced";
@@ -121,8 +122,8 @@ DeviceCloudPolicyManagerChromeOS::DeviceCloudPolicyManagerChromeOS(
           std::string(),
           store.get(),
           task_runner,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
       device_store_(std::move(store)),
       state_keys_broker_(state_keys_broker),
       task_runner_(task_runner),
@@ -140,7 +141,6 @@ void DeviceCloudPolicyManagerChromeOS::Initialize(PrefService* local_state) {
                  base::Unretained(this)));
 
   InitializeRequisition();
-  InitializeEnrollment();
 }
 
 void DeviceCloudPolicyManagerChromeOS::AddDeviceCloudPolicyManagerObserver(
@@ -247,6 +247,29 @@ std::string DeviceCloudPolicyManagerChromeOS::GetMachineModel() {
   return GetMachineStatistic(chromeos::system::kHardwareClassKey);
 }
 
+// static
+ZeroTouchEnrollmentMode
+DeviceCloudPolicyManagerChromeOS::GetZeroTouchEnrollmentMode() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(
+          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment)) {
+    return ZeroTouchEnrollmentMode::DISABLED;
+  }
+
+  std::string value = command_line->GetSwitchValueASCII(
+      chromeos::switches::kEnterpriseEnableZeroTouchEnrollment);
+  if (value == kZeroTouchEnrollmentForced) {
+    return ZeroTouchEnrollmentMode::FORCED;
+  }
+  if (value.empty()) {
+    return ZeroTouchEnrollmentMode::ENABLED;
+  }
+  LOG(WARNING) << "Malformed value \"" << value << "\" for switch --"
+               << chromeos::switches::kEnterpriseEnableZeroTouchEnrollment
+               << ". Ignoring switch.";
+  return ZeroTouchEnrollmentMode::DISABLED;
+}
+
 void DeviceCloudPolicyManagerChromeOS::StartConnection(
     std::unique_ptr<CloudPolicyClient> client_to_connect,
     EnterpriseInstallAttributes* install_attributes) {
@@ -323,7 +346,8 @@ void DeviceCloudPolicyManagerChromeOS::InitializeRequisition() {
       local_state_->SetString(prefs::kDeviceEnrollmentRequisition,
                               requisition);
       if (requisition == kRemoraRequisition ||
-          requisition == kSharkRequisition) {
+          requisition == kSharkRequisition ||
+          requisition == kRialtoRequisition) {
         SetDeviceEnrollmentAutoStart();
       } else {
         local_state_->SetBoolean(
@@ -336,21 +360,6 @@ void DeviceCloudPolicyManagerChromeOS::InitializeRequisition() {
                            false));
       }
     }
-  }
-}
-
-void DeviceCloudPolicyManagerChromeOS::InitializeEnrollment() {
-  // Enrollment happens during OOBE only.
-  if (chromeos::StartupUtils::IsOobeCompleted())
-    return;
-
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(
-          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment) &&
-      command_line->GetSwitchValueASCII(
-          chromeos::switches::kEnterpriseEnableZeroTouchEnrollment) ==
-          kZeroTouchEnrollmentForced) {
-    SetDeviceEnrollmentAutoStart();
   }
 }
 
@@ -367,12 +376,12 @@ void DeviceCloudPolicyManagerChromeOS::NotifyDisconnected() {
 void DeviceCloudPolicyManagerChromeOS::CreateStatusUploader() {
   status_uploader_.reset(new StatusUploader(
       client(),
-      base::WrapUnique(new DeviceStatusCollector(
+      base::MakeUnique<DeviceStatusCollector>(
           local_state_, chromeos::system::StatisticsProvider::GetInstance(),
           DeviceStatusCollector::LocationUpdateRequester(),
           DeviceStatusCollector::VolumeInfoFetcher(),
           DeviceStatusCollector::CPUStatisticsFetcher(),
-          DeviceStatusCollector::CPUTempFetcher())),
+          DeviceStatusCollector::CPUTempFetcher()),
       task_runner_));
 }
 

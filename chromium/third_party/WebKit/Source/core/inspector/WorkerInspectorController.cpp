@@ -32,31 +32,32 @@
 
 #include "core/InstrumentingAgents.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/inspector/InspectorLogAgent.h"
 #include "core/inspector/WorkerThreadDebugger.h"
-#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
-#include "platform/inspector_protocol/DispatcherBase.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
-#include "platform/v8_inspector/public/V8InspectorSession.h"
+#include "platform/WebThreadSupportingGC.h"
+#include "platform/inspector_protocol/InspectorProtocol.h"
 
 namespace blink {
 
-WorkerInspectorController* WorkerInspectorController::create(WorkerGlobalScope* workerGlobalScope)
+WorkerInspectorController* WorkerInspectorController::create(WorkerThread* thread)
 {
-    WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(workerGlobalScope->thread()->isolate());
-    return debugger ? new WorkerInspectorController(workerGlobalScope, debugger) : nullptr;
+    WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(thread->isolate());
+    return debugger ? new WorkerInspectorController(thread, debugger) : nullptr;
 }
 
-WorkerInspectorController::WorkerInspectorController(WorkerGlobalScope* workerGlobalScope, WorkerThreadDebugger* debugger)
+WorkerInspectorController::WorkerInspectorController(WorkerThread* thread, WorkerThreadDebugger* debugger)
     : m_debugger(debugger)
-    , m_workerGlobalScope(workerGlobalScope)
+    , m_thread(thread)
     , m_instrumentingAgents(new InstrumentingAgents())
 {
 }
 
 WorkerInspectorController::~WorkerInspectorController()
 {
+    DCHECK(!m_thread);
 }
 
 void WorkerInspectorController::connectFrontend()
@@ -65,7 +66,9 @@ void WorkerInspectorController::connectFrontend()
         return;
 
     // sessionId will be overwritten by WebDevToolsAgent::sendProtocolNotification call.
-    m_session = new InspectorSession(this, nullptr, m_instrumentingAgents.get(), 0, true /* autoFlush */, m_debugger->debugger(), m_debugger->contextGroupId(), nullptr);
+    m_session = new InspectorSession(this, m_instrumentingAgents.get(), 0, m_debugger->v8Inspector(), m_debugger->contextGroupId(), nullptr);
+    m_session->append(new InspectorLogAgent(m_thread->consoleMessageStorage()));
+    m_thread->workerBackingThread().backingThread().addTaskObserver(this);
 }
 
 void WorkerInspectorController::disconnectFrontend()
@@ -74,6 +77,7 @@ void WorkerInspectorController::disconnectFrontend()
         return;
     m_session->dispose();
     m_session.clear();
+    m_thread->workerBackingThread().backingThread().removeTaskObserver(this);
 }
 
 void WorkerInspectorController::dispatchMessageFromFrontend(const String& message)
@@ -89,27 +93,33 @@ void WorkerInspectorController::dispatchMessageFromFrontend(const String& messag
 void WorkerInspectorController::dispose()
 {
     disconnectFrontend();
+    m_thread = nullptr;
 }
 
-void WorkerInspectorController::resumeStartup()
+void WorkerInspectorController::flushProtocolNotifications()
 {
-    m_workerGlobalScope->thread()->stopRunningDebuggerTasksOnPauseOnWorkerThread();
-}
-
-void WorkerInspectorController::consoleEnabled()
-{
-    m_workerGlobalScope->thread()->workerReportingProxy().postWorkerConsoleAgentEnabled();
+    if (m_session)
+        m_session->flushProtocolNotifications();
 }
 
 void WorkerInspectorController::sendProtocolMessage(int sessionId, int callId, const String& response, const String& state)
 {
     // Worker messages are wrapped, no need to handle callId or state.
-    m_workerGlobalScope->thread()->workerReportingProxy().postMessageToPageInspector(response);
+    m_thread->workerReportingProxy().postMessageToPageInspector(response);
+}
+
+void WorkerInspectorController::willProcessTask()
+{
+}
+
+void WorkerInspectorController::didProcessTask()
+{
+    if (m_session)
+        m_session->flushProtocolNotifications();
 }
 
 DEFINE_TRACE(WorkerInspectorController)
 {
-    visitor->trace(m_workerGlobalScope);
     visitor->trace(m_instrumentingAgents);
     visitor->trace(m_session);
 }

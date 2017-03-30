@@ -66,14 +66,11 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/accelerators/accelerator_commands.h"
+#include "ash/accelerators/accelerator_commands_aura.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "ash/common/session/session_state_delegate.h"
-#include "ash/multi_profile_uma.h"
-#include "ash/shell.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser_commands_chromeos.h"

@@ -27,10 +27,14 @@
          clear_uniforms_before_first_program_use)            \
   GPU_OP(COUNT_ALL_IN_VARYINGS_PACKING,                      \
          count_all_in_varyings_packing)                      \
+  GPU_OP(CREATE_DEFAULT_GL_CONTEXT,                          \
+         create_default_gl_context)                          \
   GPU_OP(DISABLE_ANGLE_INSTANCED_ARRAYS,                     \
          disable_angle_instanced_arrays)                     \
   GPU_OP(DISABLE_ASYNC_READPIXELS,                           \
          disable_async_readpixels)                           \
+  GPU_OP(DISABLE_AV_SAMPLE_BUFFER_DISPLAY_LAYER,             \
+         disable_av_sample_buffer_display_layer)             \
   GPU_OP(DISABLE_BLEND_EQUATION_ADVANCED,                    \
          disable_blend_equation_advanced)                    \
   GPU_OP(DISABLE_CHROMIUM_FRAMEBUFFER_MULTISAMPLE,           \
@@ -55,22 +59,24 @@
          disable_gl_rgb_format)                              \
   GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
          disable_multimonitor_multisampling)                 \
-  GPU_OP(DISABLE_MULTISAMPLED_RENDER_TO_TEXTURE,             \
-         disable_multisampled_render_to_texture)             \
   GPU_OP(DISABLE_OVERLAY_CA_LAYERS,                          \
          disable_overlay_ca_layers)                          \
   GPU_OP(DISABLE_POST_SUB_BUFFERS_FOR_ONSCREEN_SURFACES,     \
          disable_post_sub_buffers_for_onscreen_surfaces)     \
   GPU_OP(DISABLE_PROGRAM_CACHE,                              \
          disable_program_cache)                              \
+  GPU_OP(DISABLE_PROGRAM_DISK_CACHE,                         \
+         disable_program_disk_cache)                         \
   GPU_OP(DISABLE_TEXTURE_CUBE_MAP_SEAMLESS,                  \
          disable_texture_cube_map_seamless)                  \
   GPU_OP(DISABLE_TEXTURE_STORAGE,                            \
          disable_texture_storage)                            \
   GPU_OP(DISABLE_TIMESTAMP_QUERIES,                          \
          disable_timestamp_queries)                          \
-  GPU_OP(DISABLE_WEBGL_MULTISAMPLING_COLOR_MASK_USAGE,       \
-         disable_webgl_multisampling_color_mask_usage)       \
+  GPU_OP(DISABLE_MULTISAMPLING_COLOR_MASK_USAGE,             \
+         disable_multisampling_color_mask_usage)             \
+  GPU_OP(DISABLE_TRANSPARENT_VISUALS,                        \
+         disable_transparent_visuals)                        \
   GPU_OP(DISABLE_WEBGL_RGB_MULTISAMPLING_USAGE,              \
          disable_webgl_rgb_multisampling_usage)              \
   GPU_OP(ETC1_POWER_OF_TWO_ONLY,                             \
@@ -85,6 +91,8 @@
          force_discrete_gpu)                                 \
   GPU_OP(FORCE_INTEGRATED_GPU,                               \
          force_integrated_gpu)                               \
+  GPU_OP(GET_FRAG_DATA_INFO_BUG,                             \
+         get_frag_data_info_bug)                             \
   GPU_OP(GL_CLEAR_BROKEN,                                    \
          gl_clear_broken)                                    \
   GPU_OP(IGNORE_EGL_SYNC_FAILURES,                           \
@@ -93,8 +101,6 @@
          init_gl_position_in_vertex_shader)                  \
   GPU_OP(INIT_TEXTURE_MAX_ANISOTROPY,                        \
          init_texture_max_anisotropy)                        \
-  GPU_OP(INIT_VARYINGS_WITHOUT_STATIC_USE,                   \
-         init_varyings_without_static_use)                   \
   GPU_OP(INIT_VERTEX_ATTRIBUTES,                             \
          init_vertex_attributes)                             \
   GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_1048576,             \
@@ -117,6 +123,8 @@
          needs_offscreen_buffer_workaround)                  \
   GPU_OP(PACK_PARAMETERS_WORKAROUND_WITH_PACK_BUFFER,        \
          pack_parameters_workaround_with_pack_buffer)        \
+  GPU_OP(REBIND_TRANSFORM_FEEDBACK_BEFORE_RESUME,            \
+         rebind_transform_feedback_before_resume)            \
   GPU_OP(REGENERATE_STRUCT_NAMES,                            \
          regenerate_struct_names)                            \
   GPU_OP(REMOVE_POW_WITH_CONSTANT_EXPONENT,                  \

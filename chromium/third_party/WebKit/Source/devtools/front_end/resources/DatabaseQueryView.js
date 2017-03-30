@@ -48,19 +48,12 @@ WebInspector.DatabaseQueryView = function(database)
     this.element.addEventListener("click", this._messagesClicked.bind(this), true);
 }
 
+/** @enum {symbol} */
 WebInspector.DatabaseQueryView.Events = {
-    SchemaUpdated: "SchemaUpdated"
+    SchemaUpdated: Symbol("SchemaUpdated")
 }
 
 WebInspector.DatabaseQueryView.prototype = {
-    /**
-     * @return {!Array.<!WebInspector.ToolbarItem>}
-     */
-    toolbarItems: function()
-    {
-        return [];
-    },
-
     _messagesClicked: function()
     {
         if (!this._prompt.isCaretInsidePrompt() && this.element.isComponentSelectionCollapsed())
@@ -69,13 +62,11 @@ WebInspector.DatabaseQueryView.prototype = {
 
     /**
      * @param {!Element} proxyElement
-     * @param {string} text
-     * @param {number} cursorOffset
      * @param {!Range} wordRange
      * @param {boolean} force
      * @param {function(!Array.<string>, number=)} completionsReadyCallback
      */
-    completions: function(proxyElement, text, cursorOffset, wordRange, force, completionsReadyCallback)
+    completions: function(proxyElement, wordRange, force, completionsReadyCallback)
     {
         var prefix = wordRange.toString().toLowerCase();
         if (!prefix)
@@ -143,7 +134,7 @@ WebInspector.DatabaseQueryView.prototype = {
         if (!query.length)
             return;
 
-        this._prompt.pushHistoryItem(query);
+        this._prompt.history().pushHistoryItem(query);
         this._prompt.setText("");
 
         this.database.executeSql(query, this._queryFinished.bind(this, query), this._queryError.bind(this, query));

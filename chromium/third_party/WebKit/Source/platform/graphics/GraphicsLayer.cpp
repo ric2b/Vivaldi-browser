@@ -71,8 +71,6 @@
 
 namespace blink {
 
-static bool s_drawDebugRedFill = true;
-
 struct PaintInvalidationInfo {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
     // This is for comparison only. Don't dereference because the client may have died.
@@ -130,8 +128,6 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_hasScrollParent(false)
     , m_hasClipParent(false)
     , m_painted(false)
-    , m_textPainted(false)
-    , m_imagePainted(false)
     , m_isTrackingPaintInvalidations(client && client->isTrackingPaintInvalidations())
     , m_paintingPhase(GraphicsLayerPaintAllWithOverflowClip)
     , m_parent(0)
@@ -190,11 +186,6 @@ LayoutRect GraphicsLayer::visualRect() const
 void GraphicsLayer::setHasWillChangeTransformHint(bool hasWillChangeTransform)
 {
     m_layer->layer()->setHasWillChangeTransformHint(hasWillChangeTransform);
-}
-
-void GraphicsLayer::setDrawDebugRedFillForTesting(bool enabled)
-{
-    s_drawDebugRedFill = enabled;
 }
 
 void GraphicsLayer::setParent(GraphicsLayer* layer)
@@ -324,6 +315,7 @@ void GraphicsLayer::setOffsetDoubleFromLayoutObject(const DoubleSize& offset, Sh
         return;
 
     m_offsetFromLayoutObject = offset;
+    platformLayer()->setFiltersOrigin(FloatPoint() - toFloatSize(offset));
 
     // If the compositing layer offset changes, we need to repaint.
     if (shouldSetNeedsDisplay == SetNeedsDisplay)
@@ -381,16 +373,6 @@ bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsCont
 
     GraphicsContext context(getPaintController(), disabledMode);
 
-#ifndef NDEBUG
-    if (contentsOpaque() && s_drawDebugRedFill) {
-        FloatRect rect(FloatPoint(), size());
-        if (!DrawingRecorder::useCachedDrawingIfPossible(context, *this, DisplayItem::DebugRedFill)) {
-            DrawingRecorder recorder(context, *this, DisplayItem::DebugRedFill, rect);
-            context.fillRect(rect, SK_ColorRED);
-        }
-    }
-#endif
-
     m_previousInterestRect = *interestRect;
     m_client->paintContents(this, context, m_paintingPhase, *interestRect);
     notifyFirstPaintToClient();
@@ -399,25 +381,19 @@ bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsCont
 
 void GraphicsLayer::notifyFirstPaintToClient()
 {
+    bool isFirstPaint = false;
     if (!m_painted) {
         DisplayItemList& itemList = m_paintController->newDisplayItemList();
         for (DisplayItem& item : itemList) {
             DisplayItem::Type type = item.getType();
-            if (DisplayItem::isDrawingType(type) && type != DisplayItem::DocumentBackground && type != DisplayItem::DebugRedFill && static_cast<const DrawingDisplayItem&>(item).picture()) {
+            if (DisplayItem::isDrawingType(type) && type != DisplayItem::DocumentBackground && static_cast<const DrawingDisplayItem&>(item).picture()) {
                 m_painted = true;
-                m_client->notifyFirstPaint();
+                isFirstPaint = true;
                 break;
             }
         }
     }
-    if (!m_textPainted && m_paintController->textPainted()) {
-        m_textPainted = true;
-        m_client->notifyFirstTextPaint();
-    }
-    if (!m_imagePainted && m_paintController->imagePainted()) {
-        m_imagePainted = true;
-        m_client->notifyFirstImagePaint();
-    }
+    m_client->notifyPaint(isFirstPaint, m_paintController->textPainted(), m_paintController->imagePainted());
 }
 
 void GraphicsLayer::updateChildList()
@@ -635,31 +611,31 @@ static bool comparePaintInvalidationInfo(const PaintInvalidationInfo& a, const P
 }
 
 template <typename T>
-static PassRefPtr<JSONArray> pointAsJSONArray(const T& point)
+static std::unique_ptr<JSONArray> pointAsJSONArray(const T& point)
 {
-    RefPtr<JSONArray> array = JSONArray::create();
-    array->pushNumber(point.x());
-    array->pushNumber(point.y());
+    std::unique_ptr<JSONArray> array = JSONArray::create();
+    array->pushDouble(point.x());
+    array->pushDouble(point.y());
     return array;
 }
 
 template <typename T>
-static PassRefPtr<JSONArray> sizeAsJSONArray(const T& size)
+static std::unique_ptr<JSONArray> sizeAsJSONArray(const T& size)
 {
-    RefPtr<JSONArray> array = JSONArray::create();
-    array->pushNumber(size.width());
-    array->pushNumber(size.height());
+    std::unique_ptr<JSONArray> array = JSONArray::create();
+    array->pushDouble(size.width());
+    array->pushDouble(size.height());
     return array;
 }
 
 template <typename T>
-static PassRefPtr<JSONArray> rectAsJSONArray(const T& rect)
+static std::unique_ptr<JSONArray> rectAsJSONArray(const T& rect)
 {
-    RefPtr<JSONArray> array = JSONArray::create();
-    array->pushNumber(rect.x());
-    array->pushNumber(rect.y());
-    array->pushNumber(rect.width());
-    array->pushNumber(rect.height());
+    std::unique_ptr<JSONArray> array = JSONArray::create();
+    array->pushDouble(rect.x());
+    array->pushDouble(rect.y());
+    array->pushDouble(rect.width());
+    array->pushDouble(rect.height());
     return array;
 }
 
@@ -668,40 +644,40 @@ static double roundCloseToZero(double number)
     return std::abs(number) < 1e-7 ? 0 : number;
 }
 
-static PassRefPtr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
+static std::unique_ptr<JSONArray> transformAsJSONArray(const TransformationMatrix& t)
 {
-    RefPtr<JSONArray> array = JSONArray::create();
+    std::unique_ptr<JSONArray> array = JSONArray::create();
     {
-        RefPtr<JSONArray> row = JSONArray::create();
-        row->pushNumber(roundCloseToZero(t.m11()));
-        row->pushNumber(roundCloseToZero(t.m12()));
-        row->pushNumber(roundCloseToZero(t.m13()));
-        row->pushNumber(roundCloseToZero(t.m14()));
-        array->pushArray(row);
+        std::unique_ptr<JSONArray> row = JSONArray::create();
+        row->pushDouble(roundCloseToZero(t.m11()));
+        row->pushDouble(roundCloseToZero(t.m12()));
+        row->pushDouble(roundCloseToZero(t.m13()));
+        row->pushDouble(roundCloseToZero(t.m14()));
+        array->pushArray(std::move(row));
     }
     {
-        RefPtr<JSONArray> row = JSONArray::create();
-        row->pushNumber(roundCloseToZero(t.m21()));
-        row->pushNumber(roundCloseToZero(t.m22()));
-        row->pushNumber(roundCloseToZero(t.m23()));
-        row->pushNumber(roundCloseToZero(t.m24()));
-        array->pushArray(row);
+        std::unique_ptr<JSONArray> row = JSONArray::create();
+        row->pushDouble(roundCloseToZero(t.m21()));
+        row->pushDouble(roundCloseToZero(t.m22()));
+        row->pushDouble(roundCloseToZero(t.m23()));
+        row->pushDouble(roundCloseToZero(t.m24()));
+        array->pushArray(std::move(row));
     }
     {
-        RefPtr<JSONArray> row = JSONArray::create();
-        row->pushNumber(roundCloseToZero(t.m31()));
-        row->pushNumber(roundCloseToZero(t.m32()));
-        row->pushNumber(roundCloseToZero(t.m33()));
-        row->pushNumber(roundCloseToZero(t.m34()));
-        array->pushArray(row);
+        std::unique_ptr<JSONArray> row = JSONArray::create();
+        row->pushDouble(roundCloseToZero(t.m31()));
+        row->pushDouble(roundCloseToZero(t.m32()));
+        row->pushDouble(roundCloseToZero(t.m33()));
+        row->pushDouble(roundCloseToZero(t.m34()));
+        array->pushArray(std::move(row));
     }
     {
-        RefPtr<JSONArray> row = JSONArray::create();
-        row->pushNumber(roundCloseToZero(t.m41()));
-        row->pushNumber(roundCloseToZero(t.m42()));
-        row->pushNumber(roundCloseToZero(t.m43()));
-        row->pushNumber(roundCloseToZero(t.m44()));
-        array->pushArray(row);
+        std::unique_ptr<JSONArray> row = JSONArray::create();
+        row->pushDouble(roundCloseToZero(t.m41()));
+        row->pushDouble(roundCloseToZero(t.m42()));
+        row->pushDouble(roundCloseToZero(t.m43()));
+        row->pushDouble(roundCloseToZero(t.m44()));
+        array->pushArray(std::move(row));
     }
     return array;
 }
@@ -713,15 +689,15 @@ static String pointerAsString(const void* ptr)
     return ts.release();
 }
 
-PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags) const
+std::unique_ptr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags) const
 {
     RenderingContextMap renderingContextMap;
     return layerTreeAsJSONInternal(flags, renderingContextMap);
 }
 
-PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags flags, RenderingContextMap& renderingContextMap) const
+std::unique_ptr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags flags, RenderingContextMap& renderingContextMap) const
 {
-    RefPtr<JSONObject> json = JSONObject::create();
+    std::unique_ptr<JSONObject> json = JSONObject::create();
 
     if (flags & LayerTreeIncludesDebugInfo)
         json->setString("this", pointerAsString(this));
@@ -738,7 +714,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags fla
         json->setArray("bounds", sizeAsJSONArray(m_size));
 
     if (m_opacity != 1)
-        json->setNumber("opacity", m_opacity);
+        json->setDouble("opacity", m_opacity);
 
     if (m_blendMode != WebBlendModeNormal)
         json->setString("blendMode", compositeOperatorName(CompositeSourceOver, m_blendMode));
@@ -760,7 +736,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags fla
         else
             contextId = it->value;
 
-        json->setNumber("3dRenderingContext", contextId);
+        json->setInteger("3dRenderingContext", contextId);
     }
 
     if (m_drawsContent)
@@ -793,37 +769,37 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags fla
             Vector<PaintInvalidationInfo>& infos = it->value.trackedPaintInvalidations;
             if (!infos.isEmpty()) {
                 std::sort(infos.begin(), infos.end(), &comparePaintInvalidationInfo);
-                RefPtr<JSONArray> paintInvalidationsJSON = JSONArray::create();
+                std::unique_ptr<JSONArray> paintInvalidationsJSON = JSONArray::create();
                 for (auto& info : infos) {
-                    RefPtr<JSONObject> infoJSON = JSONObject::create();
+                    std::unique_ptr<JSONObject> infoJSON = JSONObject::create();
                     infoJSON->setString("object", info.clientDebugName);
                     if (!info.rect.isEmpty())
                         infoJSON->setArray("rect", rectAsJSONArray(info.rect));
                     infoJSON->setString("reason", paintInvalidationReasonToString(info.reason));
-                    paintInvalidationsJSON->pushObject(infoJSON);
+                    paintInvalidationsJSON->pushObject(std::move(infoJSON));
                 }
-                json->setArray("paintInvalidations", paintInvalidationsJSON);
+                json->setArray("paintInvalidations", std::move(paintInvalidationsJSON));
             }
 #if DCHECK_IS_ON()
             Vector<UnderPaintInvalidation>& underPaintInvalidations = it->value.underPaintInvalidations;
             if (!underPaintInvalidations.isEmpty()) {
-                RefPtr<JSONArray> underPaintInvalidationsJSON = JSONArray::create();
+                std::unique_ptr<JSONArray> underPaintInvalidationsJSON = JSONArray::create();
                 for (auto& underPaintInvalidation : underPaintInvalidations) {
-                    RefPtr<JSONObject> underPaintInvalidationJSON = JSONObject::create();
-                    underPaintInvalidationJSON->setNumber("x", underPaintInvalidation.x);
-                    underPaintInvalidationJSON->setNumber("y", underPaintInvalidation.x);
+                    std::unique_ptr<JSONObject> underPaintInvalidationJSON = JSONObject::create();
+                    underPaintInvalidationJSON->setDouble("x", underPaintInvalidation.x);
+                    underPaintInvalidationJSON->setDouble("y", underPaintInvalidation.x);
                     underPaintInvalidationJSON->setString("oldPixel", Color(underPaintInvalidation.oldPixel).nameForLayoutTreeAsText());
                     underPaintInvalidationJSON->setString("newPixel", Color(underPaintInvalidation.newPixel).nameForLayoutTreeAsText());
-                    underPaintInvalidationsJSON->pushObject(underPaintInvalidationJSON);
+                    underPaintInvalidationsJSON->pushObject(std::move(underPaintInvalidationJSON));
                 }
-                json->setArray("underPaintInvalidations", underPaintInvalidationsJSON);
+                json->setArray("underPaintInvalidations", std::move(underPaintInvalidationsJSON));
             }
 #endif
         }
     }
 
     if ((flags & LayerTreeIncludesPaintingPhases) && m_paintingPhase) {
-        RefPtr<JSONArray> paintingPhasesJSON = JSONArray::create();
+        std::unique_ptr<JSONArray> paintingPhasesJSON = JSONArray::create();
         if (m_paintingPhase & GraphicsLayerPaintBackground)
             paintingPhasesJSON->pushString("GraphicsLayerPaintBackground");
         if (m_paintingPhase & GraphicsLayerPaintForeground)
@@ -836,7 +812,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags fla
             paintingPhasesJSON->pushString("GraphicsLayerPaintOverflowContents");
         if (m_paintingPhase & GraphicsLayerPaintCompositedScroll)
             paintingPhasesJSON->pushString("GraphicsLayerPaintCompositedScroll");
-        json->setArray("paintingPhases", paintingPhasesJSON);
+        json->setArray("paintingPhases", std::move(paintingPhasesJSON));
     }
 
     if (flags & LayerTreeIncludesClipAndScrollParents) {
@@ -848,26 +824,26 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags fla
 
     if (flags & (LayerTreeIncludesDebugInfo | LayerTreeIncludesCompositingReasons)) {
         bool debug = flags & LayerTreeIncludesDebugInfo;
-        RefPtr<JSONArray> compositingReasonsJSON = JSONArray::create();
+        std::unique_ptr<JSONArray> compositingReasonsJSON = JSONArray::create();
         for (size_t i = 0; i < kNumberOfCompositingReasons; ++i) {
             if (m_debugInfo.getCompositingReasons() & kCompositingReasonStringMap[i].reason)
                 compositingReasonsJSON->pushString(debug ? kCompositingReasonStringMap[i].description : kCompositingReasonStringMap[i].shortName);
         }
-        json->setArray("compositingReasons", compositingReasonsJSON);
+        json->setArray("compositingReasons", std::move(compositingReasonsJSON));
 
-        RefPtr<JSONArray> squashingDisallowedReasonsJSON = JSONArray::create();
+        std::unique_ptr<JSONArray> squashingDisallowedReasonsJSON = JSONArray::create();
         for (size_t i = 0; i < kNumberOfSquashingDisallowedReasons; ++i) {
             if (m_debugInfo.getSquashingDisallowedReasons() & kSquashingDisallowedReasonStringMap[i].reason)
                 squashingDisallowedReasonsJSON->pushString(debug ? kSquashingDisallowedReasonStringMap[i].description : kSquashingDisallowedReasonStringMap[i].shortName);
         }
-        json->setArray("squashingDisallowedReasons", squashingDisallowedReasonsJSON);
+        json->setArray("squashingDisallowedReasons", std::move(squashingDisallowedReasonsJSON));
     }
 
     if (m_children.size()) {
-        RefPtr<JSONArray> childrenJSON = JSONArray::create();
+        std::unique_ptr<JSONArray> childrenJSON = JSONArray::create();
         for (size_t i = 0; i < m_children.size(); i++)
             childrenJSON->pushObject(m_children[i]->layerTreeAsJSONInternal(flags, renderingContextMap));
-        json->setArray("children", childrenJSON);
+        json->setArray("children", std::move(childrenJSON));
     }
 
     return json;
@@ -946,11 +922,6 @@ void GraphicsLayer::setSize(const FloatSize& size)
 
     m_layer->layer()->setBounds(flooredIntSize(m_size));
     // Note that we don't resize m_contentsLayer. It's up the caller to do that.
-
-#ifndef NDEBUG
-    // The red debug fill and needs to be invalidated if the layer resizes.
-    setDisplayItemsUncached();
-#endif
 }
 
 void GraphicsLayer::setTransform(const TransformationMatrix& transform)
@@ -1183,16 +1154,16 @@ WebLayer* GraphicsLayer::platformLayer() const
 
 void GraphicsLayer::setFilters(const FilterOperations& filters)
 {
-    std::unique_ptr<CompositorFilterOperations> compositorFilters = CompositorFilterOperations::create();
-    SkiaImageFilterBuilder::buildFilterOperations(filters, compositorFilters.get());
-    m_layer->layer()->setFilters(compositorFilters->asFilterOperations());
+    CompositorFilterOperations compositorFilters;
+    SkiaImageFilterBuilder::buildFilterOperations(filters, &compositorFilters);
+    m_layer->layer()->setFilters(compositorFilters.releaseCcFilterOperations());
 }
 
 void GraphicsLayer::setBackdropFilters(const FilterOperations& filters)
 {
-    std::unique_ptr<CompositorFilterOperations> compositorFilters = CompositorFilterOperations::create();
-    SkiaImageFilterBuilder::buildFilterOperations(filters, compositorFilters.get());
-    m_layer->layer()->setBackgroundFilters(compositorFilters->asFilterOperations());
+    CompositorFilterOperations compositorFilters;
+    SkiaImageFilterBuilder::buildFilterOperations(filters, &compositorFilters);
+    m_layer->layer()->setBackgroundFilters(compositorFilters.releaseCcFilterOperations());
 }
 
 void GraphicsLayer::setFilterQuality(SkFilterQuality filterQuality)
@@ -1223,16 +1194,17 @@ void GraphicsLayer::removeLinkHighlight(LinkHighlight* linkHighlight)
     updateChildList();
 }
 
-void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea, bool isViewport)
+void GraphicsLayer::setScrollableArea(ScrollableArea* scrollableArea, bool isVisualViewport)
 {
     if (m_scrollableArea == scrollableArea)
         return;
 
     m_scrollableArea = scrollableArea;
 
-    // Viewport scrolling may involve pinch zoom and gets routed through
-    // WebViewImpl explicitly rather than via GraphicsLayer::didScroll.
-    if (isViewport)
+    // VisualViewport scrolling may involve pinch zoom and gets routed through
+    // WebViewImpl explicitly rather than via GraphicsLayer::didScroll since it
+    // needs to be set in tandem with the page scale delta.
+    if (isVisualViewport)
         m_layer->layer()->setScrollClient(0);
     else
         m_layer->layer()->setScrollClient(this);
@@ -1254,6 +1226,11 @@ std::unique_ptr<base::trace_event::ConvertableToTraceFormat> GraphicsLayer::Take
     std::unique_ptr<base::trace_event::TracedValue> tracedValue(m_debugInfo.asTracedValue());
     tracedValue->SetString("layer_name", WTF::StringUTF8Adaptor(debugName(layer)).asStringPiece());
     return std::move(tracedValue);
+}
+
+void GraphicsLayer::didUpdateMainThreadScrollingReasons()
+{
+    m_debugInfo.setMainThreadScrollingReasons(platformLayer()->mainThreadScrollingReasons());
 }
 
 PaintController& GraphicsLayer::getPaintController()

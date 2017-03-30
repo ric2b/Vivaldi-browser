@@ -143,8 +143,8 @@ void BattOrConnectionImpl::SendBytes(BattOrMessageType type,
   LogSerial(StringPrintf("Bytes sent: %s.", CharVectorToString(data).c_str()));
 
   pending_write_length_ = data.size();
-  io_handler_->Write(base::WrapUnique(new device::SendBuffer(
-      data, base::Bind(&BattOrConnectionImpl::OnBytesSent, AsWeakPtr()))));
+  io_handler_->Write(base::MakeUnique<device::SendBuffer>(
+      data, base::Bind(&BattOrConnectionImpl::OnBytesSent, AsWeakPtr())));
 }
 
 void BattOrConnectionImpl::ReadMessage(BattOrMessageType type) {
@@ -205,9 +205,9 @@ void BattOrConnectionImpl::BeginReadBytes(size_t max_bytes_to_read) {
   auto on_receive_buffer_filled =
       base::Bind(&BattOrConnectionImpl::OnBytesRead, AsWeakPtr());
 
-  io_handler_->Read(base::WrapUnique(new device::ReceiveBuffer(
+  io_handler_->Read(base::MakeUnique<device::ReceiveBuffer>(
       pending_read_buffer_, static_cast<uint32_t>(max_bytes_to_read),
-      on_receive_buffer_filled)));
+      on_receive_buffer_filled));
 }
 
 void BattOrConnectionImpl::OnBytesRead(int bytes_read,
@@ -228,9 +228,17 @@ void BattOrConnectionImpl::OnBytesRead(int bytes_read,
     return;
   }
 
-  LogSerial(StringPrintf(
-      "%d more bytes read: %s.", bytes_read,
-      CharArrayToString(pending_read_buffer_->data(), bytes_read).c_str()));
+  if (pending_read_message_type_ == BATTOR_MESSAGE_TYPE_SAMPLES) {
+    // If we're reading samples, don't log every byte that we receive. This
+    // exacerbates a problem on Mac wherein we can't process sample frames
+    // quickly enough to prevent the serial buffer from overflowing, causing us
+    // to drop frames.
+    LogSerial(StringPrintf("%d more bytes read.", bytes_read));
+  } else {
+    LogSerial(StringPrintf(
+        "%d more bytes read: %s.", bytes_read,
+        CharArrayToString(pending_read_buffer_->data(), bytes_read).c_str()));
+  }
 
   already_read_buffer_.insert(already_read_buffer_.end(),
                               pending_read_buffer_->data(),

@@ -10,6 +10,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
+#include "headless/lib/browser/headless_devtools_manager_delegate.h"
 
 namespace headless {
 
@@ -22,9 +23,14 @@ HeadlessContentBrowserClient::~HeadlessContentBrowserClient() {}
 content::BrowserMainParts* HeadlessContentBrowserClient::CreateBrowserMainParts(
     const content::MainFunctionParams&) {
   std::unique_ptr<HeadlessBrowserMainParts> browser_main_parts =
-      base::WrapUnique(new HeadlessBrowserMainParts(browser_));
+      base::MakeUnique<HeadlessBrowserMainParts>(browser_);
   browser_->set_browser_main_parts(browser_main_parts.get());
   return browser_main_parts.release();
+}
+
+content::DevToolsManagerDelegate*
+HeadlessContentBrowserClient::GetDevToolsManagerDelegate() {
+  return new HeadlessDevToolsManagerDelegate(browser_->GetWeakPtr());
 }
 
 }  // namespace headless

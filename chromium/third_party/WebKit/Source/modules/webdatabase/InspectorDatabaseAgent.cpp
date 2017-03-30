@@ -46,7 +46,6 @@
 #include "modules/webdatabase/SQLTransactionCallback.h"
 #include "modules/webdatabase/SQLTransactionErrorCallback.h"
 #include "modules/webdatabase/sqlite/SQLValue.h"
-#include "platform/inspector_protocol/Values.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 
@@ -304,7 +303,7 @@ void InspectorDatabaseAgent::getDatabaseTableNames(ErrorString* error, const Str
     }
 }
 
-void InspectorDatabaseAgent::executeSQL(ErrorString*, const String& databaseId, const String& query, std::unique_ptr<ExecuteSQLCallback> prpRequestCallback)
+void InspectorDatabaseAgent::executeSQL(const String& databaseId, const String& query, std::unique_ptr<ExecuteSQLCallback> prpRequestCallback)
 {
     std::unique_ptr<ExecuteSQLCallback> requestCallback = std::move(prpRequestCallback);
 

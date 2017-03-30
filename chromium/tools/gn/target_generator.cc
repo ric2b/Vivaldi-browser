@@ -61,6 +61,11 @@ void TargetGenerator::Run() {
   if (!FillWriteRuntimeDeps())
     return;
 
+  // <Vivaldi>
+  if (!FillDisabledTarget())
+    return;
+  // </Vivaldi>
+
   // Do type-specific generation.
   DoRun();
 }
@@ -305,7 +310,7 @@ bool TargetGenerator::FillOutputs(bool allow_substitutions) {
     if (!outputs.required_types().empty()) {
       *err_ = Err(*value, "Source expansions not allowed here.",
           "The outputs of this target used source {{expansions}} but this "
-          "targe type\ndoesn't support them. Just express the outputs "
+          "target type\ndoesn't support them. Just express the outputs "
           "literally.");
       return false;
     }
@@ -405,3 +410,22 @@ bool TargetGenerator::FillWriteRuntimeDeps() {
 
   return true;
 }
+
+// <Vivaldi>
+bool TargetGenerator::FillDisabledTarget() {
+  const Value* value = scope_->GetValue(variables::kDisabled, true);
+  if (!value) {
+    const Value* invoker = scope_->GetValue(variables::kInvoker, true);
+    if (!invoker || invoker->type() != Value::SCOPE)
+      return true;
+    const Scope* invoker_scope = invoker->scope_value();
+    value = invoker_scope->GetValue(variables::kDisabled);
+    if(!value)
+      return true;
+  }
+  if (!value->VerifyTypeIs(Value::BOOLEAN, err_))
+    return false;
+  target_->set_is_disabled(value->boolean_value());
+  return true;
+}
+// </Vivaldi>

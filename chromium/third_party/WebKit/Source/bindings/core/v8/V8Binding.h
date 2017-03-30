@@ -48,8 +48,8 @@
 #include "bindings/core/v8/V8ValueCache.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/text/CompressibleString.h"
 #include "wtf/text/AtomicString.h"
+#include "wtf/text/StringView.h"
 #include <v8.h>
 
 namespace blink {
@@ -414,23 +414,18 @@ inline v8::Local<v8::Value> v8StringOrNull(v8::Isolate* isolate, const AtomicStr
     return V8PerIsolateData::from(isolate)->getStringCache()->v8ExternalString(isolate, string.impl());
 }
 
-inline v8::Local<v8::String> v8String(v8::Isolate* isolate, const CompressibleString& string)
+inline v8::Local<v8::String> v8AtomicString(v8::Isolate* isolate, const StringView& string)
 {
-    if (string.isNull())
-        return v8::String::Empty(isolate);
-    return V8PerIsolateData::from(isolate)->getStringCache()->v8ExternalString(isolate, string);
+    DCHECK(isolate);
+    if (string.is8Bit())
+        return v8::String::NewFromOneByte(isolate, reinterpret_cast<const uint8_t*>(string.characters8()), v8::NewStringType::kInternalized, static_cast<int>(string.length())).ToLocalChecked();
+    return v8::String::NewFromTwoByte(isolate, reinterpret_cast<const uint16_t*>(string.characters16()), v8::NewStringType::kInternalized, static_cast<int>(string.length())).ToLocalChecked();
 }
 
-inline v8::Local<v8::String> v8AtomicString(v8::Isolate* isolate, const char* str, int length = -1)
+inline v8::Local<v8::String> v8StringFromUtf8(v8::Isolate* isolate, const char* bytes, int length)
 {
-    ASSERT(isolate);
-    v8::Local<v8::String> value;
-    if (LIKELY(v8::String::NewFromUtf8(isolate, str, v8::NewStringType::kInternalized, length).ToLocal(&value)))
-        return value;
-    // Immediately crashes when NewFromUtf8() fails because it only fails the
-    // given str is too long.
-    RELEASE_NOTREACHED();
-    return v8::String::Empty(isolate);
+    DCHECK(isolate);
+    return v8::String::NewFromUtf8(isolate, bytes, v8::NewStringType::kNormal, length).ToLocalChecked();
 }
 
 inline v8::Local<v8::Value> v8Undefined()
@@ -567,13 +562,15 @@ inline v8::Local<v8::Boolean> v8Boolean(bool value, v8::Isolate* isolate)
     return value ? v8::True(isolate) : v8::False(isolate);
 }
 
-inline double toCoreDate(v8::Isolate* isolate, v8::Local<v8::Value> object)
+inline double toCoreDate(v8::Isolate* isolate, v8::Local<v8::Value> object, ExceptionState& exceptionState)
 {
-    if (object->IsDate())
-        return object.As<v8::Date>()->ValueOf();
-    if (object->IsNumber())
-        return object.As<v8::Number>()->Value();
-    return std::numeric_limits<double>::quiet_NaN();
+    if (object->IsNull())
+        return std::numeric_limits<double>::quiet_NaN();
+    if (!object->IsDate()) {
+        exceptionState.throwTypeError("The provided value is not a Date.");
+        return 0;
+    }
+    return object.As<v8::Date>()->ValueOf();
 }
 
 inline v8::MaybeLocal<v8::Value> v8DateOrNaN(v8::Isolate* isolate, double value)
@@ -905,12 +902,6 @@ inline bool isUndefinedOrNull(v8::Local<v8::Value> value)
 }
 v8::Local<v8::Function> getBoundFunction(v8::Local<v8::Function>);
 
-// Attaches |environment| to |function| and returns it.
-inline v8::Local<v8::Function> createClosure(v8::FunctionCallback function, v8::Local<v8::Value> environment, v8::Isolate* isolate)
-{
-    return v8::Function::New(isolate->GetCurrentContext(), function, environment, 0, v8::ConstructorBehavior::kThrow).ToLocalChecked();
-}
-
 // FIXME: This will be soon embedded in the generated code.
 template<typename Collection> static void indexedPropertyEnumerator(const v8::PropertyCallbackInfo<v8::Array>& info)
 {
@@ -964,8 +955,6 @@ private:
     v8::Isolate* m_isolate;
 };
 
-// Callback functions used by generated code.
-CORE_EXPORT void v8ConstructorAttributeGetter(v8::Local<v8::Name> propertyName, const v8::PropertyCallbackInfo<v8::Value>&);
 
 typedef void (*InstallTemplateFunction)(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
 

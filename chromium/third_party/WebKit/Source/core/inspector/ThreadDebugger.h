@@ -6,10 +6,11 @@
 #define ThreadDebugger_h
 
 #include "core/CoreExport.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "platform/Timer.h"
 #include "platform/UserGestureIndicator.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
-#include "platform/v8_inspector/public/V8DebuggerClient.h"
+#include "platform/v8_inspector/public/V8Inspector.h"
+#include "platform/v8_inspector/public/V8InspectorClient.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
 #include <memory>
@@ -18,14 +19,19 @@
 namespace blink {
 
 class ConsoleMessage;
-class WorkerThread;
+class ExecutionContext;
+class SourceLocation;
 
-class CORE_EXPORT ThreadDebugger : public V8DebuggerClient {
+// TODO(dgozman): rename this to ThreadInspector (and subclasses).
+class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient {
     WTF_MAKE_NONCOPYABLE(ThreadDebugger);
 public:
     explicit ThreadDebugger(v8::Isolate*);
     ~ThreadDebugger() override;
+
     static ThreadDebugger* from(v8::Isolate*);
+    virtual bool isWorker() = 0;
+    v8_inspector::V8Inspector* v8Inspector() const { return m_v8Inspector.get(); }
 
     static void willExecuteScript(v8::Isolate*, int scriptId);
     static void didExecuteScript(v8::Isolate*);
@@ -37,51 +43,46 @@ public:
     void allAsyncTasksCanceled();
     void asyncTaskStarted(void* task);
     void asyncTaskFinished(void* task);
+    unsigned promiseRejected(v8::Local<v8::Context>, const String& errorMessage, v8::Local<v8::Value> exception, std::unique_ptr<SourceLocation>);
+    void promiseRejectionRevoked(v8::Local<v8::Context>, unsigned promiseRejectionId);
 
-    // V8DebuggerClient implementation.
+protected:
+    virtual int contextGroupId(ExecutionContext*) = 0;
+    virtual void reportConsoleMessage(ExecutionContext*, MessageSource, MessageLevel, const String& message, SourceLocation*) = 0;
+    void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
+    void createFunctionProperty(v8::Local<v8::Context>, v8::Local<v8::Object>, const char* name, v8::FunctionCallback, const char* description);
+    static v8::Maybe<bool> createDataPropertyInArray(v8::Local<v8::Context>, v8::Local<v8::Array>, int index, v8::Local<v8::Value>);
+    static MessageLevel consoleAPITypeToMessageLevel(v8_inspector::V8ConsoleAPIType);
+
+    v8::Isolate* m_isolate;
+
+private:
+    // V8InspectorClient implementation.
     void beginUserGesture() override;
     void endUserGesture() override;
     String16 valueSubtype(v8::Local<v8::Value>) override;
     bool formatAccessorsAsProperties(v8::Local<v8::Value>) override;
-    bool isExecutionAllowed() override;
     double currentTimeMS() override;
     bool isInspectableHeapObject(v8::Local<v8::Object>) override;
-    void enableAsyncInstrumentation() override;
-    void disableAsyncInstrumentation() override;
-    void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
     void consoleTime(const String16& title) override;
     void consoleTimeEnd(const String16& title) override;
     void consoleTimeStamp(const String16& title) override;
-    void startRepeatingTimer(double, V8DebuggerClient::TimerCallback, void* data) override;
+    void startRepeatingTimer(double, v8_inspector::V8InspectorClient::TimerCallback, void* data) override;
     void cancelTimer(void* data) override;
 
-    V8Debugger* debugger() const { return m_debugger.get(); }
-    virtual bool isWorker() { return true; }
-
-protected:
-    void createFunctionProperty(v8::Local<v8::Context>, v8::Local<v8::Object>, const char* name, v8::FunctionCallback, const char* description);
-    static v8::Maybe<bool> createDataPropertyInArray(v8::Local<v8::Context>, v8::Local<v8::Array>, int index, v8::Local<v8::Value>);
-    void onTimer(Timer<ThreadDebugger>*);
-
-    v8::Isolate* m_isolate;
-    std::unique_ptr<V8Debugger> m_debugger;
-
-private:
-    v8::Local<v8::Function> eventLogFunction();
+    void onTimer(TimerBase*);
 
     static void setMonitorEventsCallback(const v8::FunctionCallbackInfo<v8::Value>&, bool enabled);
     static void monitorEventsCallback(const v8::FunctionCallbackInfo<v8::Value>&);
     static void unmonitorEventsCallback(const v8::FunctionCallbackInfo<v8::Value>&);
-    static void logCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 
     static void getEventListenersCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 
-    bool m_asyncInstrumentationEnabled;
+    std::unique_ptr<v8_inspector::V8Inspector> m_v8Inspector;
     Vector<std::unique_ptr<Timer<ThreadDebugger>>> m_timers;
-    Vector<V8DebuggerClient::TimerCallback> m_timerCallbacks;
+    Vector<v8_inspector::V8InspectorClient::TimerCallback> m_timerCallbacks;
     Vector<void*> m_timerData;
     std::unique_ptr<UserGestureIndicator> m_userGestureIndicator;
-    v8::Global<v8::Function> m_eventLogFunction;
 };
 
 } // namespace blink

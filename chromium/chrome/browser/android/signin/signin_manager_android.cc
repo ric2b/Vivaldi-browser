@@ -46,6 +46,7 @@
 #include "jni/SigninManager_jni.h"
 #include "net/url_request/url_request_context_getter.h"
 
+using base::android::JavaParamRef;
 using bookmarks::BookmarkModel;
 
 namespace {
@@ -59,8 +60,9 @@ class ProfileDataRemover : public BrowsingDataRemover::Observer {
         origin_runner_(base::ThreadTaskRunnerHandle::Get()),
         remover_(BrowsingDataRemoverFactory::GetForBrowserContext(profile)) {
     remover_->AddObserver(this);
-    remover_->Remove(BrowsingDataRemover::Unbounded(),
-                     BrowsingDataRemover::REMOVE_ALL, BrowsingDataHelper::ALL);
+    remover_->RemoveAndReply(BrowsingDataRemover::Unbounded(),
+                             BrowsingDataRemover::REMOVE_ALL,
+                             BrowsingDataHelper::ALL, this);
   }
 
   ~ProfileDataRemover() override {}
@@ -139,8 +141,7 @@ void SigninManagerAndroid::FetchPolicyBeforeSignIn(
   // This shouldn't be called when ShouldLoadPolicyForUser() is false, or when
   // CheckPolicyBeforeSignIn() failed.
   NOTREACHED();
-  Java_SigninManager_onPolicyFetchedBeforeSignIn(env,
-                                                 java_signin_manager_.obj());
+  Java_SigninManager_onPolicyFetchedBeforeSignIn(env, java_signin_manager_);
 }
 
 void SigninManagerAndroid::AbortSignIn(
@@ -215,20 +216,18 @@ void SigninManagerAndroid::OnPolicyRegisterDone(
     username_.clear();
   }
 
-  Java_SigninManager_onPolicyCheckedBeforeSignIn(env,
-                                                 java_signin_manager_.obj(),
-                                                 domain.obj());
+  Java_SigninManager_onPolicyCheckedBeforeSignIn(env, java_signin_manager_,
+                                                 domain);
 }
 
 void SigninManagerAndroid::OnPolicyFetchDone(bool success) {
   Java_SigninManager_onPolicyFetchedBeforeSignIn(
-      base::android::AttachCurrentThread(),
-      java_signin_manager_.obj());
+      base::android::AttachCurrentThread(), java_signin_manager_);
 }
 
 void SigninManagerAndroid::OnBrowsingDataRemoverDone(
     const base::android::ScopedJavaGlobalRef<jobject>& callback) {
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile_);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
   model->RemoveAllUserBookmarks();
 
   // All the Profile data has been wiped. Clear the last signed in username as
@@ -236,8 +235,7 @@ void SigninManagerAndroid::OnBrowsingDataRemoverDone(
   ClearLastSignedInUser();
 
   Java_SigninManager_onProfileDataWiped(base::android::AttachCurrentThread(),
-                                        java_signin_manager_.obj(),
-                                        callback.obj());
+                                        java_signin_manager_, callback);
 }
 
 void SigninManagerAndroid::ClearLastSignedInUser(
@@ -288,12 +286,12 @@ void SigninManagerAndroid::GoogleSignedOut(const std::string& account_id,
                                            const std::string& username) {
   DCHECK(thread_checker_.CalledOnValidThread());
   Java_SigninManager_onNativeSignOut(base::android::AttachCurrentThread(),
-                                     java_signin_manager_.obj());
+                                     java_signin_manager_);
 }
 
 void SigninManagerAndroid::OnSigninAllowedPrefChanged() {
   Java_SigninManager_onSigninAllowedByPolicyChanged(
-      base::android::AttachCurrentThread(), java_signin_manager_.obj(),
+      base::android::AttachCurrentThread(), java_signin_manager_,
       SigninManagerFactory::GetForProfile(profile_)->IsSigninAllowed());
 }
 

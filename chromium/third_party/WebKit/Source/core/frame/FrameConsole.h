@@ -29,8 +29,8 @@
 #ifndef FrameConsole_h
 #define FrameConsole_h
 
-#include "bindings/core/v8/ScriptState.h"
 #include "core/CoreExport.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
@@ -38,8 +38,10 @@ namespace blink {
 
 class ConsoleMessage;
 class DocumentLoader;
+class LocalFrame;
 class ResourceError;
 class ResourceResponse;
+class SourceLocation;
 
 // FrameConsole takes per-frame console messages and routes them up through the FrameHost to the ChromeClient and Inspector.
 // It's meant as an abstraction around ChromeClient calls and the way that Blink core/ can add messages to the console.
@@ -51,15 +53,12 @@ public:
     }
 
     void addMessage(ConsoleMessage*);
-    bool addMessageToStorage(ConsoleMessage*);
-    void reportMessageToClient(ConsoleMessage*);
+    void addMessageFromWorker(MessageLevel, const String& message, std::unique_ptr<SourceLocation>, const String& workerId);
 
-    void reportWorkerMessage(ConsoleMessage*);
-    void adoptWorkerMessage(ConsoleMessage*);
+    bool addMessageToStorage(ConsoleMessage*);
+    void reportMessageToClient(MessageSource, MessageLevel, const String& message, SourceLocation*);
 
     void reportResourceResponseReceived(DocumentLoader*, unsigned long requestIdentifier, const ResourceResponse&);
-
-    void clearMessages();
 
     void didFailLoading(unsigned long requestIdentifier, const ResourceError&);
 
@@ -67,12 +66,6 @@ public:
 
 private:
     explicit FrameConsole(LocalFrame&);
-
-    LocalFrame& frame() const
-    {
-        ASSERT(m_frame);
-        return *m_frame;
-    }
 
     Member<LocalFrame> m_frame;
 };

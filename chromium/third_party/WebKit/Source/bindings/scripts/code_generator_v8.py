@@ -84,7 +84,9 @@ from v8_methods import method_filters
 import v8_types
 import v8_union
 from v8_utilities import capitalize, cpp_name, for_origin_trial_feature, unique_by
-from utilities import idl_filename_to_component, is_valid_component_dependency, is_testing_target, shorten_union_name
+from utilities import (
+    idl_filename_to_component, is_valid_component_dependency, is_testing_target,
+    shorten_union_name, format_blink_cpp_source_code)
 
 
 def normalize_and_sort_includes(include_paths):
@@ -328,7 +330,7 @@ class CodeGeneratorDictionaryImpl(CodeGeneratorBase):
 
     def generate_code_internal(self, definitions, definition_name):
         if not definition_name in definitions.dictionaries:
-            raise ValueError('%s is not an IDL dictionary')
+            raise ValueError('%s is not an IDL dictionary' % definition_name)
         interfaces_info = self.info_provider.interfaces_info
         dictionary = definitions.dictionaries[definition_name]
         interface_info = interfaces_info[definition_name]
@@ -427,7 +429,9 @@ def initialize_jinja_env(cache_dir):
         'blink_capitalize': capitalize,
         'exposed': exposed_if,
         'for_origin_trial_feature': for_origin_trial_feature,
+        'format_blink_cpp_source_code': format_blink_cpp_source_code,
         'runtime_enabled': runtime_enabled_if,
+        'secure_context': secure_context_if,
         'unique_by': unique_by,
         })
     jinja_env.filters.update(attribute_filters())
@@ -449,6 +453,13 @@ def exposed_if(code, exposed_test):
     if not exposed_test:
         return code
     return generate_indented_conditional(code, 'executionContext && (%s)' % exposed_test)
+
+
+# [SecureContext]
+def secure_context_if(code, secure_context_test):
+    if not secure_context_test:
+        return code
+    return generate_indented_conditional(code, 'executionContext && (%s)' % secure_context_test)
 
 
 # [RuntimeEnabled]

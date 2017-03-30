@@ -32,11 +32,12 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
-#include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/MessagePort.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/origin_trials/OriginTrials.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "modules/background_sync/SyncEvent.h"
@@ -145,6 +146,7 @@ void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int responseID, int event
     eventInit.setIsReload(webRequest.isReload());
     FetchEvent* fetchEvent = FetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::fetch, eventInit, respondWithObserver, waitUntilObserver);
     waitUntilObserver->willDispatchEvent();
+    respondWithObserver->willDispatchEvent();
     DispatchEventResult dispatchResult = workerGlobalScope()->dispatchEvent(fetchEvent);
     respondWithObserver->didDispatchEvent(dispatchResult);
     // false is okay because waitUntil for fetch event doesn't care about the
@@ -154,6 +156,16 @@ void ServiceWorkerGlobalScopeProxy::dispatchFetchEvent(int responseID, int event
 
 void ServiceWorkerGlobalScopeProxy::dispatchForeignFetchEvent(int responseID, int eventFinishID, const WebServiceWorkerRequest& webRequest)
 {
+    if (!OriginTrials::foreignFetchEnabled(workerGlobalScope())) {
+        // If origin trial tokens have expired, or are otherwise no longer valid
+        // no events should be dispatched.
+        // TODO(mek): Ideally the browser wouldn't even start the service worker
+        // if its tokens have expired.
+        ServiceWorkerGlobalScopeClient::from(workerGlobalScope())->respondToFetchEvent(responseID, WTF::currentTime());
+        ServiceWorkerGlobalScopeClient::from(workerGlobalScope())->didHandleFetchEvent(eventFinishID, WebServiceWorkerEventResultCompleted, WTF::currentTime());
+        return;
+    }
+
     ScriptState::Scope scope(workerGlobalScope()->scriptController()->getScriptState());
     RefPtr<SecurityOrigin> origin = SecurityOrigin::create(webRequest.referrerUrl());
     WaitUntilObserver* waitUntilObserver = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Fetch, eventFinishID);
@@ -166,6 +178,7 @@ void ServiceWorkerGlobalScopeProxy::dispatchForeignFetchEvent(int responseID, in
     eventInit.setOrigin(origin->toString());
     ForeignFetchEvent* fetchEvent = ForeignFetchEvent::create(workerGlobalScope()->scriptController()->getScriptState(), EventTypeNames::foreignfetch, eventInit, respondWithObserver, waitUntilObserver);
     waitUntilObserver->willDispatchEvent();
+    respondWithObserver->willDispatchEvent();
     DispatchEventResult dispatchResult = workerGlobalScope()->dispatchEvent(fetchEvent);
     respondWithObserver->didDispatchEvent(dispatchResult);
     // false is okay because waitUntil for foreign fetch event doesn't care
@@ -177,7 +190,7 @@ void ServiceWorkerGlobalScopeProxy::dispatchInstallEvent(int eventID)
 {
     WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Install, eventID);
     Event* event;
-    if (RuntimeEnabledFeatures::foreignFetchEnabled())
+    if (OriginTrials::foreignFetchEnabled(workerGlobalScope()))
         event = InstallEvent::create(EventTypeNames::install, ExtendableEventInit(), observer);
     else
         event = ExtendableEvent::create(EventTypeNames::install, ExtendableEventInit(), observer);
@@ -215,7 +228,7 @@ void ServiceWorkerGlobalScopeProxy::dispatchPushEvent(int eventID, const WebStri
 void ServiceWorkerGlobalScopeProxy::dispatchSyncEvent(int eventID, const WebString& tag, LastChanceOption lastChance)
 {
     if (!RuntimeEnabledFeatures::backgroundSyncEnabled()) {
-        ServiceWorkerGlobalScopeClient::from(workerGlobalScope())->didHandleSyncEvent(eventID, WebServiceWorkerEventResultCompleted);
+        ServiceWorkerGlobalScopeClient::from(workerGlobalScope())->didHandleSyncEvent(eventID, WebServiceWorkerEventResultCompleted, WTF::currentTime());
         return;
     }
     WaitUntilObserver* observer = WaitUntilObserver::create(workerGlobalScope(), WaitUntilObserver::Sync, eventID);
@@ -229,14 +242,14 @@ bool ServiceWorkerGlobalScopeProxy::hasFetchEventHandler()
     return m_workerGlobalScope->hasEventListeners(EventTypeNames::fetch);
 }
 
-void ServiceWorkerGlobalScopeProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void ServiceWorkerGlobalScopeProxy::reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location, int exceptionId)
 {
     client().reportException(errorMessage, location->lineNumber(), location->columnNumber(), location->url());
 }
 
-void ServiceWorkerGlobalScopeProxy::reportConsoleMessage(ConsoleMessage* consoleMessage)
+void ServiceWorkerGlobalScopeProxy::reportConsoleMessage(MessageSource source, MessageLevel level, const String& message, SourceLocation* location)
 {
-    client().reportConsoleMessage(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->location()->lineNumber(), consoleMessage->location()->url());
+    client().reportConsoleMessage(source, level, message, location->lineNumber(), location->url());
 }
 
 void ServiceWorkerGlobalScopeProxy::postMessageToPageInspector(const String& message)
@@ -256,7 +269,7 @@ void ServiceWorkerGlobalScopeProxy::didInitializeWorkerContext()
     client().didInitializeWorkerContext(workerGlobalScope()->scriptController()->context());
 }
 
-void ServiceWorkerGlobalScopeProxy::workerGlobalScopeStarted(WorkerGlobalScope* workerGlobalScope)
+void ServiceWorkerGlobalScopeProxy::workerGlobalScopeStarted(WorkerOrWorkletGlobalScope* workerGlobalScope)
 {
     DCHECK(!m_workerGlobalScope);
     m_workerGlobalScope = static_cast<ServiceWorkerGlobalScope*>(workerGlobalScope);

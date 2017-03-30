@@ -13,7 +13,6 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.physicalweb.PhysicalWeb;
@@ -27,6 +26,7 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
     static final String PREF_CRASH_DUMP_UPLOAD = "crash_dump_upload";
     static final String PREF_CRASH_DUMP_UPLOAD_NO_CELLULAR = "crash_dump_upload_no_cellular";
     static final String PREF_METRICS_REPORTING = "metrics_reporting";
+    private static final String PREF_METRICS_IN_SAMPLE = "in_metrics_sample";
     private static final String PREF_NETWORK_PREDICTIONS = "network_predictions";
     private static final String PREF_BANDWIDTH_OLD = "prefetch_bandwidth";
     private static final String PREF_BANDWIDTH_NO_CELLULAR_OLD = "prefetch_bandwidth_no_cellular";
@@ -147,11 +147,6 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
                         newValue = false;
                     }
                 }
-            }
-            // But disable after all if kNetworkPredictionEnabled was disabled by the user.
-            if (prefService.obsoleteNetworkPredictionEnabledHasUserSetting()
-                    && !prefService.obsoleteGetNetworkPredictionEnabledUserPrefValue()) {
-                newValue = false;
             }
             // Save new value in Chrome PrefService.
             prefService.setNetworkPredictionEnabled(newValue);
@@ -283,6 +278,27 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
     }
 
     /**
+     * Sets whether this client is in-sample. See
+     * {@link org.chromium.chrome.browser.metrics.UmaUtils#isClientInMetricsSample} for details.
+     */
+    public void setClientInMetricsSample(boolean inSample) {
+        mSharedPreferences.edit().putBoolean(PREF_METRICS_IN_SAMPLE, inSample).apply();
+    }
+
+    /**
+     * Checks whether this client is in-sample. See
+     * {@link org.chromium.chrome.browser.metrics.UmaUtils#isClientInMetricsSample} for details.
+     *
+     * @returns boolean Whether client is in-sample.
+     */
+    public boolean isClientInMetricsSample() {
+        // The default value is true to avoid sampling out crashes that occur before native code has
+        // been initialized on first run. We'd rather have some extra crashes than none from that
+        // time.
+        return mSharedPreferences.getBoolean(PREF_METRICS_IN_SAMPLE, true);
+    }
+
+    /**
      * Sets the crash upload preference, which determines whether crash dumps will be uploaded
      * always, never, or only on wifi.
      *
@@ -307,19 +323,10 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
     }
 
     /**
-     * Check whether crash dump upload preference is disabled according to corresponding preference.
+     * Check whether crash dump upload preference is set to allow uploads or is set to not allow
+     * uploads for any connection type.
      *
-     * @return boolean {@code true} if the option is set to not send.
-     */
-    public boolean isNeverUploadCrashDump() {
-        if (isCellularExperimentEnabled()) return !isUsageAndCrashReportingEnabled();
-        return !isUploadCrashDumpEnabled();
-    }
-
-    /**
-     * Check whether crash dump upload preference is set to NEVER only.
-     *
-     * @return boolean {@code true} if the option is set to NEVER.
+     * @return boolean {@code true} if the option is set to allow uploads.
      */
     public boolean isUploadCrashDumpEnabled() {
         if (isMobileNetworkCapable()) {
@@ -331,8 +338,7 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
     }
 
     /**
-     * Sets the initial value for whether crash stacks may be uploaded.
-     * This should be called only once, the first time Chrome is launched.
+     * Sets the value for whether crash stacks may be uploaded.
      */
     public void initCrashUploadPreference(boolean allowCrashUpload) {
         SharedPreferences.Editor ed = mSharedPreferences.edit();
@@ -406,14 +412,11 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
      */
     @Override
     public boolean isUploadUserPermitted() {
+        // If user is in cellular experiment read new two-option prefs.
         if (isCellularExperimentEnabled()) return isUsageAndCrashReportingEnabled();
 
-        if (isMobileNetworkCapable()) {
-            String option =
-                    mSharedPreferences.getString(PREF_CRASH_DUMP_UPLOAD, mCrashDumpNeverUpload);
-            return option.equals(mCrashDumpAlwaysUpload) || option.equals(mCrashDumpWifiOnlyUpload);
-        }
-        return mSharedPreferences.getBoolean(PREF_CRASH_DUMP_UPLOAD_NO_CELLULAR, false);
+        // If user is not in cellular experiment read old three-option prefs.
+        return isUploadCrashDumpEnabled();
     }
 
     /**
@@ -441,10 +444,10 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
         mSharedPreferences.edit().putInt(PREF_PHYSICAL_WEB, state).apply();
         if (enabled) {
             if (!isOnboarding) {
-                PhysicalWeb.startPhysicalWeb((ChromeApplication) mContext);
+                PhysicalWeb.startPhysicalWeb();
             }
         } else {
-            PhysicalWeb.stopPhysicalWeb((ChromeApplication) mContext);
+            PhysicalWeb.stopPhysicalWeb();
         }
     }
 

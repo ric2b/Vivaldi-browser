@@ -14,6 +14,7 @@
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
+#include "chrome/browser/ui/browser.h"
 #include "components/renderer_context_menu/context_menu_content_type.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
@@ -95,6 +96,10 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
 #endif
   void RecordUsedItem(int id) override;
 
+  // Returns true if the browser is in HTML fullscreen mode, initiated by the
+  // page (as opposed to the user). Used to determine which shortcut to display.
+  bool IsHTML5Fullscreen() const;
+
  private:
   friend class RenderViewContextMenuTest;
   friend class TestRenderViewContextMenu;
@@ -134,6 +139,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void AppendMediaItems();
   void AppendPluginItems();
   void AppendPageItems();
+  void AppendExitFullscreenItem();
   void AppendCopyItem();
   void AppendPrintItem();
   void AppendMediaRouterItem();
@@ -163,6 +169,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   bool IsSavePageEnabled() const;
   bool IsPasteEnabled() const;
   bool IsPasteAndMatchStyleEnabled() const;
+  bool IsPrintPreviewEnabled() const;
   bool IsRouteMediaEnabled() const;
 
   // Command execution functions.
@@ -173,6 +180,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   void ExecInspectBackgroundPage();
   void ExecSaveLinkAs();
   void ExecSaveAs();
+  void ExecExitFullscreen();
   void ExecCopyLinkText();
   void ExecCopyImageAt();
   void ExecSearchWebForImage();
@@ -198,6 +206,8 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
                            const blink::WebMediaPlayerAction& action);
   void PluginActionAt(const gfx::Point& location,
                       const blink::WebPluginAction& action);
+
+  Browser* GetBrowser() const;
 
   // Returns a list of registered ProtocolHandlers that can handle the clicked
   // on URL.

@@ -26,6 +26,7 @@
 
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 
 // static
 static jlong Init(JNIEnv* env,
@@ -82,7 +83,7 @@ void WebsiteSettingsPopupAndroid::RecordWebsiteSettingsAction(
 void WebsiteSettingsPopupAndroid::SetIdentityInfo(
     const IdentityInfo& identity_info) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_WebsiteSettingsPopup_showDialog(env, popup_jobject_.obj());
+  Java_WebsiteSettingsPopup_showDialog(env, popup_jobject_);
 }
 
 void WebsiteSettingsPopupAndroid::SetCookieInfo(
@@ -93,8 +94,6 @@ void WebsiteSettingsPopupAndroid::SetCookieInfo(
 void WebsiteSettingsPopupAndroid::SetPermissionInfo(
     const PermissionInfoList& permission_info_list,
     const ChosenObjectInfoList& chosen_object_info_list) {
-  // TODO(reillyg): Display the contents of |chosen_object_info_list|.
-  // https://crbug.com/424667.
   JNIEnv* env = base::android::AttachCurrentThread();
 
   // On Android, we only want to display a subset of the available options in a
@@ -113,27 +112,36 @@ void WebsiteSettingsPopupAndroid::SetPermissionInfo(
       user_specified_settings_to_display;
 
   for (const auto& permission : permission_info_list) {
-    if (ContainsValue(permissions_to_display, permission.type) &&
+    if (base::ContainsValue(permissions_to_display, permission.type) &&
         permission.setting != CONTENT_SETTING_DEFAULT) {
       user_specified_settings_to_display[permission.type] = permission.setting;
     }
   }
 
   for (const auto& permission : permissions_to_display) {
-    if (ContainsKey(user_specified_settings_to_display, permission)) {
+    if (base::ContainsKey(user_specified_settings_to_display, permission)) {
       base::string16 setting_title =
           WebsiteSettingsUI::PermissionTypeToUIString(permission);
 
       Java_WebsiteSettingsPopup_addPermissionSection(
-          env,
-          popup_jobject_.obj(),
-          ConvertUTF16ToJavaString(env, setting_title).obj(),
+          env, popup_jobject_, ConvertUTF16ToJavaString(env, setting_title),
           static_cast<jint>(permission),
           static_cast<jint>(user_specified_settings_to_display[permission]));
     }
   }
 
-  Java_WebsiteSettingsPopup_updatePermissionDisplay(env, popup_jobject_.obj());
+  for (auto* chosen_object : chosen_object_info_list) {
+    base::string16 object_title =
+        WebsiteSettingsUI::ChosenObjectToUIString(*chosen_object);
+
+    Java_WebsiteSettingsPopup_addPermissionSection(
+        env, popup_jobject_, ConvertUTF16ToJavaString(env, object_title),
+        static_cast<jint>(chosen_object->ui_info.content_settings_type),
+        static_cast<jint>(CONTENT_SETTING_ALLOW));
+    delete chosen_object;
+  }
+
+  Java_WebsiteSettingsPopup_updatePermissionDisplay(env, popup_jobject_);
 }
 
 void WebsiteSettingsPopupAndroid::SetSelectedTab(

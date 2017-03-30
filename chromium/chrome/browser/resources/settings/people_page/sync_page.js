@@ -49,6 +49,7 @@ Polymer({
   behaviors: [
     I18nBehavior,
     WebUIListenerBehavior,
+    settings.RouteObserverBehavior,
   ],
 
   properties: {
@@ -60,20 +61,14 @@ Polymer({
     },
 
     /**
-     * The curerntly displayed page.
+     * The current page status. Defaults to |CONFIGURE| such that the searching
+     * algorithm can search useful content when the page is not visible to the
+     * user.
      * @private {?settings.PageStatus}
      */
-    selectedPage_: {
+    pageStatus_: {
       type: String,
-      value: settings.PageStatus.SPINNER,
-    },
-
-    /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      observer: 'currentRouteChanged_',
+      value: settings.PageStatus.CONFIGURE,
     },
 
     /**
@@ -131,49 +126,47 @@ Polymer({
     this.addWebUIListener('sync-prefs-changed',
                           this.handleSyncPrefsChanged_.bind(this));
 
-    if (this.isCurrentRouteOnSyncPage_())
+    if (settings.getCurrentRoute() == settings.Route.SYNC)
       this.onNavigateToPage_();
   },
 
   /** @override */
   detached: function() {
-    if (this.isCurrentRouteOnSyncPage_())
+    if (settings.getCurrentRoute() == settings.Route.SYNC)
+      this.onNavigateAwayFromPage_();
+  },
+
+  /** @protected */
+  currentRouteChanged: function() {
+    if (!this.isAttached)
+      return;
+
+    if (settings.getCurrentRoute() == settings.Route.SYNC)
+      this.onNavigateToPage_();
+    else
       this.onNavigateAwayFromPage_();
   },
 
   /**
+   * @param {!settings.PageStatus} expectedPageStatus
+   * @return {boolean}
    * @private
-   * @return {boolean} Whether the current route shows the sync page.
    */
-  isCurrentRouteOnSyncPage_: function() {
-    return this.currentRoute &&
-        this.currentRoute.section == 'people' &&
-        this.currentRoute.subpage.length == 1 &&
-        this.currentRoute.subpage[0] == 'sync';
-  },
-
-  /** @private */
-  currentRouteChanged_: function() {
-    if (!this.isAttached)
-      return;
-
-    if (this.isCurrentRouteOnSyncPage_())
-      this.onNavigateToPage_();
-    else
-      this.onNavigateAwayFromPage_();
+  isStatus_: function(expectedPageStatus) {
+    return expectedPageStatus == this.pageStatus_;
   },
 
   /** @private */
   onNavigateToPage_: function() {
     // The element is not ready for C++ interaction until it is attached.
     assert(this.isAttached);
-    assert(this.isCurrentRouteOnSyncPage_());
+    assert(settings.getCurrentRoute() == settings.Route.SYNC);
 
     if (this.unloadCallback_)
       return;
 
     // Display loading page until the settings have been retrieved.
-    this.selectedPage_ = settings.PageStatus.SPINNER;
+    this.pageStatus_ = settings.PageStatus.SPINNER;
 
     this.browserProxy_.didNavigateToSyncPage();
 
@@ -185,6 +178,10 @@ Polymer({
   onNavigateAwayFromPage_: function() {
     if (!this.unloadCallback_)
       return;
+
+    // Reset the status to CONFIGURE such that the searching algorithm can
+    // search useful content when the page is not visible to the user.
+    this.pageStatus_ = settings.PageStatus.CONFIGURE;
 
     this.browserProxy_.didNavigateAwayFromSyncPage();
 
@@ -198,7 +195,7 @@ Polymer({
    */
   handleSyncPrefsChanged_: function(syncPrefs) {
     this.syncPrefs = syncPrefs;
-    this.selectedPage_ = settings.PageStatus.CONFIGURE;
+    this.pageStatus_ = settings.PageStatus.CONFIGURE;
 
     // If autofill is not registered or synced, force Payments integration off.
     if (!this.syncPrefs.autofillRegistered || !this.syncPrefs.autofillSynced)
@@ -309,16 +306,14 @@ Polymer({
       case settings.PageStatus.SPINNER:
       case settings.PageStatus.TIMEOUT:
       case settings.PageStatus.CONFIGURE:
-        this.selectedPage_ = pageStatus;
+        this.pageStatus_ = pageStatus;
         return;
       case settings.PageStatus.DONE:
-        if (this.isCurrentRouteOnSyncPage_()) {
-          // Event is caught by settings-animated-pages.
-          this.fire('subpage-back');
-        }
+        if (settings.getCurrentRoute() == settings.Route.SYNC)
+          settings.navigateTo(settings.Route.PEOPLE);
         return;
       case settings.PageStatus.PASSPHRASE_FAILED:
-        if (this.selectedPage_ == this.pages.CONFIGURE &&
+        if (this.pageStatus_ == this.pages.CONFIGURE &&
             this.syncPrefs && this.syncPrefs.passphraseRequired) {
           this.$$('#existingPassphraseInput').invalid = true;
         }

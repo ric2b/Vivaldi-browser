@@ -6,6 +6,8 @@ Polymer({
   is: 'history-toolbar',
   properties: {
     // Number of history items currently selected.
+    // TODO(calamity): bind this to
+    // listContainer.selectedItem.selectedPaths.length.
     count: {
       type: Number,
       value: 0,
@@ -32,6 +34,12 @@ Polymer({
     spinnerActive: {
       type: Boolean,
       value: false
+    },
+
+    hasDrawer: {
+      type: Boolean,
+      observer: 'hasDrawerChanged_',
+      reflectToAttribute: true,
     },
 
     // Whether domain-grouped history is enabled.
@@ -96,6 +104,16 @@ Polymer({
     this.fire('delete-selected');
   },
 
+  get searchBar() {
+    return this.$['main-toolbar'].getSearchField();
+  },
+
+  showSearchField: function() {
+    /** @type {!CrToolbarElement} */(this.$['main-toolbar'])
+        .getSearchField()
+        .showAndFocus();
+  },
+
   /**
    * If the user is a supervised user the delete button is not shown.
    * @private
@@ -112,5 +130,10 @@ Polymer({
     // TODO(calamity): Fix the format of these dates.
     return loadTimeData.getStringF(
       'historyInterval', queryStartTime, queryEndTime);
-  }
+  },
+
+  /** @private */
+  hasDrawerChanged_: function() {
+    this.updateStyles();
+  },
 });

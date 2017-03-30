@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#import "base/auto_reset.h"
 #include "base/command_line.h"
 #import "base/mac/mac_util.h"
 #include "base/mac/sdk_forward_declarations.h"
@@ -17,17 +18,20 @@
 
 namespace {
 
-// The activation zone for the main menu is 4 pixels high; if we make it any
-// smaller, then the menu can be made to appear without the bar sliding down.
-const CGFloat kDropdownActivationZoneHeight = 4;
-const NSTimeInterval kDropdownAnimationDuration = 0.12;
-const NSTimeInterval kMouseExitCheckDelay = 0.1;
-// This show delay attempts to match the delay for the main menu.
-const NSTimeInterval kDropdownShowDelay = 0.3;
-const NSTimeInterval kDropdownHideDelay = 0.2;
+// The duration of the toolbar show/hide animation.
+const NSTimeInterval kDropdownAnimationDuration = 0.20;
 
-// The duration the toolbar is revealed for tab strip changes.
-const NSTimeInterval kDropdownForTabStripChangesDuration = 0.75;
+// If the fullscreen toolbar is hidden, it is difficult for the user to see
+// changes in the tabstrip. As a result, if a tab is inserted or the current
+// tab switched to a new one, the toolbar must animate in and out to display
+// the tabstrip changes to the user. The animation drops down the toolbar and
+// then wait for 0.75 seconds before it hides the toolbar.
+const NSTimeInterval kTabStripChangesDelay = 0.75;
+
+// Additional height threshold added at the toolbar's bottom. This is to mimic
+// threshold the mouse position needs to be at before the menubar automatically
+// hides.
+const CGFloat kTrackingAreaAdditionalThreshold = 20;
 
 // The event kind value for a undocumented menubar show/hide Carbon event.
 const CGFloat kMenuBarRevealEventKind = 2004;
@@ -36,6 +40,15 @@ const CGFloat kMenuBarRevealEventKind = 2004;
 // when the toolbar is hidden. (We can't use |-[NSMenu menuBarHeight]| since it
 // returns 0 when the menu bar is hidden.)
 const CGFloat kFloatingBarVerticalOffset = 22;
+
+// Visibility fractions for the menubar and toolbar.
+const CGFloat kHideFraction = 0.0;
+const CGFloat kShowFraction = 1.0;
+
+// Helper function for comparing CGFloat values.
+BOOL IsCGFloatEqual(CGFloat a, CGFloat b) {
+  return fabs(a - b) <= std::numeric_limits<CGFloat>::epsilon();
+}
 
 OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
                               EventRef event,
@@ -50,17 +63,17 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   // As such, we should ignore the kMenuBarRevealEventKind event if it gives
   // us a fraction of 0.0 or 1.0, and rely on kEventMenuBarShown and
   // kEventMenuBarHidden to set these values.
-  if ([self isMainWindow] && ![self isFullscreenTransitionInProgress]) {
+  if (![self isFullscreenTransitionInProgress] && [self isInFullscreen]) {
     if (GetEventKind(event) == kMenuBarRevealEventKind) {
       CGFloat revealFraction = 0;
       GetEventParameter(event, FOUR_CHAR_CODE('rvlf'), typeCGFloat, NULL,
                         sizeof(CGFloat), NULL, &revealFraction);
-      if (revealFraction > 0.0 && revealFraction < 1.0)
+      if (revealFraction > kHideFraction && revealFraction < kShowFraction)
         [self setMenuBarRevealProgress:revealFraction];
     } else if (GetEventKind(event) == kEventMenuBarShown) {
-      [self setMenuBarRevealProgress:1.0];
+      [self setMenuBarRevealProgress:kShowFraction];
     } else {
-      [self setMenuBarRevealProgress:0.0];
+      [self setMenuBarRevealProgress:kHideFraction];
     }
   }
 
@@ -77,10 +90,11 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   FullscreenToolbarController* controller_;
   CGFloat startFraction_;
   CGFloat endFraction_;
+  CGFloat toolbarFraction_;
 }
 
-@property(readonly, nonatomic) CGFloat startFraction;
 @property(readonly, nonatomic) CGFloat endFraction;
+@property(readonly, nonatomic) CGFloat toolbarFraction;
 
 // Designated initializer.  Asks |controller| for the current shown fraction, so
 // if the bar is already partially shown or partially hidden, the animation
@@ -94,8 +108,8 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 
 @implementation DropdownAnimation
 
-@synthesize startFraction = startFraction_;
 @synthesize endFraction = endFraction_;
+@synthesize toolbarFraction = toolbarFraction_;
 
 - (id)initWithFraction:(CGFloat)toFraction
           fullDuration:(CGFloat)fullDuration
@@ -103,7 +117,7 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
             controller:(FullscreenToolbarController*)controller {
   // Calculate the effective duration, based on the current shown fraction.
   DCHECK(controller);
-  CGFloat fromFraction = controller.toolbarFraction;
+  CGFloat fromFraction = [controller toolbarFraction];
   CGFloat effectiveDuration = fabs(fullDuration * (fromFraction - toFraction));
 
   if ((self = [super gtm_initWithDuration:effectiveDuration
@@ -119,9 +133,9 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 // Called once per animation step.  Overridden to change the floating bar's
 // position based on the animation's progress.
 - (void)setCurrentProgress:(NSAnimationProgress)progress {
-  CGFloat fraction =
+  toolbarFraction_ =
       startFraction_ + (progress * (endFraction_ - startFraction_));
-  [controller_ changeToolbarFraction:fraction];
+  [controller_ updateToolbar];
 }
 
 @end
@@ -130,6 +144,13 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 
 // Updates the visibility of the menu bar and the dock.
 - (void)updateMenuBarAndDockVisibility;
+
+// Methods to set up or remove the tracking area.
+- (void)updateTrackingArea;
+- (void)removeTrackingAreaIfNecessary;
+
+// Returns YES if the mouse is inside the tracking area.
+- (BOOL)mouseInsideTrackingArea;
 
 // Whether the current screen is expected to have a menu bar, regardless of
 // current visibility of the menu bar.
@@ -142,55 +163,18 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 // |kFullScreenModeHideDock| when the overlay is shown.
 - (base::mac::FullScreenMode)desiredSystemFullscreenMode;
 
-// Change the overlay to the given fraction, with or without animation. Only
-// guaranteed to work properly with |fraction == 0| or |fraction == 1|. This
-// performs the show/hide (animation) immediately. It does not touch the timers.
-- (void)changeOverlayToFraction:(CGFloat)fraction withAnimation:(BOOL)animate;
+// Animate the overlay to the given visibility with animation. If |visible|
+// is true, animate the toolbar to a fraction of 1.0. Otherwise it's 0.0.
+- (void)animateToolbarVisibility:(BOOL)visible;
 
-// Schedule the floating bar to be shown/hidden because of mouse position.
-- (void)scheduleShowForMouse;
-- (void)scheduleHideForMouse;
-
-// Set up the tracking area used to activate the sliding bar or keep it active
-// using with the rectangle in |trackingAreaBounds_|, or remove the tracking
-// area if one was previously set up.
-- (void)setupTrackingArea;
-- (void)removeTrackingAreaIfNecessary;
-
-// Returns YES if the mouse is currently in any current tracking rectangle, NO
-// otherwise.
-- (BOOL)mouseInsideTrackingRect;
-
-// The tracking area can "falsely" report exits when the menu slides down over
-// it. In that case, we have to monitor for a "real" mouse exit on a timer.
-// |-setupMouseExitCheck| schedules a check; |-cancelMouseExitCheck| cancels any
-// scheduled check.
-- (void)setupMouseExitCheck;
-- (void)cancelMouseExitCheck;
-
-// Called (after a delay) by |-setupMouseExitCheck|, to check whether the mouse
-// has exited or not; if it hasn't, it will schedule another check.
-- (void)checkForMouseExit;
-
-// Start timers for showing/hiding the floating bar.
-- (void)startShowTimer;
-- (void)startHideTimer;
-- (void)cancelShowTimer;
+// Cancels the timer for hiding the floating bar.
 - (void)cancelHideTimer;
-- (void)cancelAllTimers;
 
-// Methods called when the show/hide timers fire. Do not call directly.
-- (void)showTimerFire:(NSTimer*)timer;
+// Methods called when the hide timers fire. Do not call directly.
 - (void)hideTimerFire:(NSTimer*)timer;
 
-// Stops any running animations, removes tracking areas, etc.
+// Stops any running animations, etc.
 - (void)cleanup;
-
-// Shows and hides the UI associated with this window being active (having main
-// status).  This includes hiding the menu bar.  These functions are called when
-// the window gains or loses main status as well as in |-cleanup|.
-- (void)showActiveWindowUI;
-- (void)hideActiveWindowUI;
 
 // Whether the menu bar should be shown in immersive fullscreen for the screen
 // that contains the window.
@@ -201,14 +185,14 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 @implementation FullscreenToolbarController
 
 @synthesize slidingStyle = slidingStyle_;
-@synthesize toolbarFraction = toolbarFraction_;
 
 - (id)initWithBrowserController:(BrowserWindowController*)controller
-                          style:(fullscreen_mac::SlidingStyle)style {
+                          style:(FullscreenSlidingStyle)style {
   if ((self = [super init])) {
     browserController_ = controller;
     systemFullscreenMode_ = base::mac::kFullScreenModeNormal;
     slidingStyle_ = style;
+    menubarState_ = FullscreenMenubarState::HIDDEN;
   }
 
   // Install the Carbon event handler for the menubar show, hide and
@@ -233,17 +217,14 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 - (void)dealloc {
   RemoveEventHandler(menuBarTrackingHandler_);
   DCHECK(!inFullscreenMode_);
-  DCHECK(!trackingArea_);
   [super dealloc];
 }
 
-- (void)setupFullscreenToolbarForContentView:(NSView*)contentView
-                                showDropdown:(BOOL)showDropdown {
+- (void)setupFullscreenToolbarForContentView:(NSView*)contentView {
   DCHECK(!inFullscreenMode_);
-  settingUp_ = YES;
-  inFullscreenMode_ = YES;
   contentView_ = contentView;
-  [self changeToolbarFraction:(showDropdown ? 1 : 0)];
+  inFullscreenMode_ = YES;
+
   [self updateMenuBarAndDockVisibility];
 
   // Register for notifications.  Self is removed as an observer in |-cleanup|.
@@ -260,7 +241,12 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
              name:NSWindowDidResignMainNotification
            object:window];
 
-  settingUp_ = NO;
+  // Register for Active Space change notifications.
+  [[[NSWorkspace sharedWorkspace] notificationCenter]
+      addObserver:self
+         selector:@selector(activeSpaceDidChange:)
+             name:NSWorkspaceActiveSpaceDidChangeNotification
+           object:nil];
 }
 
 - (void)exitFullscreenMode {
@@ -279,94 +265,68 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 }
 
 - (void)windowDidBecomeMain:(NSNotification*)notification {
-  [self showActiveWindowUI];
+  [self updateMenuBarAndDockVisibility];
 }
 
 - (void)windowDidResignMain:(NSNotification*)notification {
-  [self hideActiveWindowUI];
+  [self updateMenuBarAndDockVisibility];
 }
 
-// On OSX 10.8+, the menu bar shows on the secondary screen in fullscreen.
+- (void)activeSpaceDidChange:(NSNotification*)notification {
+  menubarFraction_ = kHideFraction;
+  menubarState_ = FullscreenMenubarState::HIDDEN;
+  [browserController_ layoutSubviews];
+}
+
 - (CGFloat)floatingBarVerticalOffset {
   return kFloatingBarVerticalOffset;
 }
 
-- (void)overlayFrameChanged:(NSRect)frame {
-  if (!inFullscreenMode_)
-    return;
-
-  // Make sure |trackingAreaBounds_| always reflects either the tracking area or
-  // the desired tracking area.
-  trackingAreaBounds_ = frame;
-  // The tracking area should always be at least the height of activation zone.
-  NSRect contentBounds = [contentView_ bounds];
-  trackingAreaBounds_.origin.y =
-      std::min(trackingAreaBounds_.origin.y,
-               NSMaxY(contentBounds) - kDropdownActivationZoneHeight);
-  trackingAreaBounds_.size.height =
-      NSMaxY(contentBounds) - trackingAreaBounds_.origin.y + 1;
-
-  // If an animation is currently running, do not set up a tracking area now.
-  // Instead, leave it to be created it in |-animationDidEnd:|.
-  if (currentAnimation_)
-    return;
-
-  // If this is part of the initial setup, lock bar visibility if the mouse is
-  // within the tracking area bounds.
-  if (settingUp_ && [self mouseInsideTrackingRect])
-    [browserController_ lockBarVisibilityForOwner:self
-                                    withAnimation:NO
-                                            delay:NO];
-  [self setupTrackingArea];
+- (void)lockBarVisibilityWithAnimation:(BOOL)animate {
+  base::AutoReset<BOOL> autoReset(&isLockingBarVisibility_, YES);
+  [self ensureOverlayShownWithAnimation:animate];
 }
 
-- (void)ensureOverlayShownWithAnimation:(BOOL)animate delay:(BOOL)delay {
+- (void)releaseBarVisibilityWithAnimation:(BOOL)animate {
+  base::AutoReset<BOOL> autoReset(&isReleasingBarVisibility_, YES);
+  [self ensureOverlayHiddenWithAnimation:animate];
+}
+
+- (void)ensureOverlayShownWithAnimation:(BOOL)animate {
   if (!inFullscreenMode_)
     return;
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode))
     return;
 
-  if (self.slidingStyle == fullscreen_mac::OMNIBOX_TABS_PRESENT)
+  if (self.slidingStyle != FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN)
     return;
 
-  if (animate) {
-    if (delay) {
-      [self startShowTimer];
-    } else {
-      [self cancelAllTimers];
-      [self changeOverlayToFraction:1 withAnimation:YES];
-    }
-  } else {
-    DCHECK(!delay);
-    [self cancelAllTimers];
-    [self changeOverlayToFraction:1 withAnimation:NO];
-  }
+  [self cancelHideTimer];
+  [self animateToolbarVisibility:YES];
 }
 
-- (void)ensureOverlayHiddenWithAnimation:(BOOL)animate delay:(BOOL)delay {
+- (void)ensureOverlayHiddenWithAnimation:(BOOL)animate {
   if (!inFullscreenMode_)
     return;
 
-  if (self.slidingStyle == fullscreen_mac::OMNIBOX_TABS_PRESENT)
+  if (self.slidingStyle != FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN)
     return;
 
-  if (animate) {
-    if (delay) {
-      [self startHideTimer];
-    } else {
-      [self cancelAllTimers];
-      [self changeOverlayToFraction:0 withAnimation:YES];
-    }
-  } else {
-    DCHECK(!delay);
-    [self cancelAllTimers];
-    [self changeOverlayToFraction:0 withAnimation:NO];
+  if ([browserController_ isBarVisibilityLockedForOwner:nil])
+    return;
+
+  if ([self mouseInsideTrackingArea] ||
+      menubarState_ == FullscreenMenubarState::SHOWN) {
+    return;
   }
+
+  [self cancelHideTimer];
+  [self animateToolbarVisibility:NO];
 }
 
-- (void)cancelAnimationAndTimers {
-  [self cancelAllTimers];
+- (void)cancelAnimationAndTimer {
+  [self cancelHideTimer];
   [currentAnimation_ stopAnimation];
   currentAnimation_.reset();
 }
@@ -377,8 +337,11 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
     return;
   }
 
-  revealToolbarForTabStripChanges_ = YES;
-  [self ensureOverlayShownWithAnimation:YES delay:NO];
+  // Reveal the toolbar for tabstrip changes if the toolbar is hidden.
+  if (IsCGFloatEqual([self toolbarFraction], kHideFraction)) {
+    isRevealingToolbarForTabStripChanges_ = YES;
+    [self ensureOverlayShownWithAnimation:YES];
+  }
 }
 
 - (void)setSystemFullscreenModeTo:(base::mac::FullScreenMode)mode {
@@ -393,8 +356,27 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   systemFullscreenMode_ = mode;
 }
 
-- (void)changeToolbarFraction:(CGFloat)fraction {
-  toolbarFraction_ = fraction;
+- (void)mouseEntered:(NSEvent*)event {
+  // Empty implementation. Required for CrTrackingArea.
+}
+
+- (void)mouseExited:(NSEvent*)event {
+  DCHECK(inFullscreenMode_);
+  DCHECK_EQ([event trackingArea], trackingArea_.get());
+
+  if ([browserController_ isBarVisibilityLockedForOwner:nil])
+    return;
+
+  // If the menubar is gone, animate the toolbar out.
+  if (menubarState_ == FullscreenMenubarState::HIDDEN) {
+    base::AutoReset<BOOL> autoReset(&shouldAnimateToolbarOut_, YES);
+    [self ensureOverlayHiddenWithAnimation:YES];
+  }
+
+  [self removeTrackingAreaIfNecessary];
+}
+
+- (void)updateToolbar {
   [browserController_ layoutSubviews];
 
   // In AppKit fullscreen, moving the mouse to the top of the screen toggles
@@ -423,96 +405,112 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
              : 0;
 }
 
+- (CGFloat)toolbarFraction {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kKioskMode))
+    return kHideFraction;
+
+  switch (slidingStyle_) {
+    case FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT:
+      return kShowFraction;
+    case FullscreenSlidingStyle::OMNIBOX_TABS_NONE:
+      return kHideFraction;
+    case FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN:
+      if (menubarState_ == FullscreenMenubarState::SHOWN)
+        return kShowFraction;
+
+      if ([self mouseInsideTrackingArea])
+        return kShowFraction;
+
+      if (currentAnimation_.get())
+        return [currentAnimation_ toolbarFraction];
+
+      if (isLockingBarVisibility_)
+        return kHideFraction;
+      else if (isReleasingBarVisibility_)
+        return kShowFraction;
+      else if ([browserController_ isBarVisibilityLockedForOwner:nil])
+        return kShowFraction;
+
+      if (hideTimer_.get() || shouldAnimateToolbarOut_)
+        return kShowFraction;
+
+      return menubarFraction_;
+  }
+}
+
 - (BOOL)isFullscreenTransitionInProgress {
   return [browserController_ isFullscreenTransitionInProgress];
 }
 
-- (BOOL)isMainWindow {
-  return [browserController_ window].isMainWindow;
+- (BOOL)isInFullscreen {
+  return inFullscreenMode_;
 }
 
-// Used to activate the floating bar if the toolbar is hidden.
-- (void)mouseEntered:(NSEvent*)event {
-  DCHECK(inFullscreenMode_);
-
-  // Having gotten a mouse entered, we no longer need to do exit checks.
-  [self cancelMouseExitCheck];
-
-  if ([event trackingArea] == trackingArea_.get()) {
-    // The tracking area shouldn't be active during animation.
-    DCHECK(!currentAnimation_);
-
-    // Don't show anything if the style is set to OMNIBOX_TABS_NONE.
-    if (self.slidingStyle != fullscreen_mac::OMNIBOX_TABS_NONE)
-      [self scheduleShowForMouse];
-  }
+- (BOOL)isMouseOnScreen {
+  return NSMouseInRect([NSEvent mouseLocation],
+                       [[browserController_ window] screen].frame, false);
 }
 
-// Used to deactivate the floating bar if the toolbar is hidden.
-- (void)mouseExited:(NSEvent*)event {
-  DCHECK(inFullscreenMode_);
-
-  if ([event trackingArea] == trackingArea_.get()) {
-    // The tracking area shouldn't be active during animation.
-    DCHECK(!currentAnimation_);
-
-    // We can get a false mouse exit when the menu slides down, so if the mouse
-    // is still actually over the tracking area, we ignore the mouse exit, but
-    // we set up to check the mouse position again after a delay.
-    if ([self mouseInsideTrackingRect]) {
-      [self setupMouseExitCheck];
-      return;
-    }
-
-    if (self.slidingStyle != fullscreen_mac::OMNIBOX_TABS_NONE)
-      [self scheduleHideForMouse];
-  }
+- (void)setTrackingAreaFromOverlayFrame:(NSRect)frame {
+  NSRect contentBounds = [contentView_ bounds];
+  trackingAreaFrame_ = frame;
+  trackingAreaFrame_.origin.y -= kTrackingAreaAdditionalThreshold;
+  trackingAreaFrame_.size.height =
+      NSMaxY(contentBounds) - trackingAreaFrame_.origin.y;
 }
 
 - (void)animationDidStop:(NSAnimation*)animation {
-  // Reset the |currentAnimation_| pointer now that the animation is over.
-  currentAnimation_.reset();
-
-  // Invariant says that the tracking area is not installed while animations are
-  // in progress. Ensure this is true.
-  DCHECK(!trackingArea_);
-  [self removeTrackingAreaIfNecessary];  // For paranoia.
-
-  // Don't automatically set up a new tracking area. When explicitly stopped,
-  // either another animation is going to start immediately or the state will be
-  // changed immediately.
-  if (revealToolbarForTabStripChanges_) {
-    if (toolbarFraction_ > 0.0) {
+  if (isRevealingToolbarForTabStripChanges_) {
+    if ([self toolbarFraction] > 0.0) {
       // Set the timer to hide the toolbar.
       [hideTimer_ invalidate];
-      hideTimer_.reset([[NSTimer
-          scheduledTimerWithTimeInterval:kDropdownForTabStripChangesDuration
-                                  target:self
-                                selector:@selector(hideTimerFire:)
-                                userInfo:nil
-                                 repeats:NO] retain]);
+      hideTimer_.reset(
+          [[NSTimer scheduledTimerWithTimeInterval:kTabStripChangesDelay
+                                            target:self
+                                          selector:@selector(hideTimerFire:)
+                                          userInfo:nil
+                                           repeats:NO] retain]);
     } else {
-      revealToolbarForTabStripChanges_ = NO;
+      isRevealingToolbarForTabStripChanges_ = NO;
     }
   }
+
+  // Reset the |currentAnimation_| pointer now that the animation is over.
+  currentAnimation_.reset();
 }
 
 - (void)animationDidEnd:(NSAnimation*)animation {
   [self animationDidStop:animation];
-
-  // |trackingAreaBounds_| contains the correct tracking area bounds, including
-  // |any updates that may have come while the animation was running. Install a
-  // new tracking area with these bounds.
-  [self setupTrackingArea];
-
-  // TODO(viettrungluu): Better would be to check during the animation; doing it
-  // here means that the timing is slightly off.
-  if (![self mouseInsideTrackingRect])
-    [self scheduleHideForMouse];
+  [self updateTrackingArea];
 }
 
 - (void)setMenuBarRevealProgress:(CGFloat)progress {
+  // If the menubarFraction increases, check if we are in the right screen
+  // so that the toolbar is not revealed on the wrong screen.
+  if (![self isMouseOnScreen] && progress > menubarFraction_)
+    return;
+
+  // Ignore the menubarFraction changes if the Space is inactive.
+  if (![[browserController_ window] isOnActiveSpace])
+    return;
+
+  if (IsCGFloatEqual(progress, kShowFraction))
+    menubarState_ = FullscreenMenubarState::SHOWN;
+  else if (IsCGFloatEqual(progress, kHideFraction))
+    menubarState_ = FullscreenMenubarState::HIDDEN;
+  else if (progress < menubarFraction_)
+    menubarState_ = FullscreenMenubarState::HIDING;
+  else if (progress > menubarFraction_)
+    menubarState_ = FullscreenMenubarState::SHOWING;
+
   menubarFraction_ = progress;
+
+  if (slidingStyle_ == FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN) {
+    if (menubarState_ == FullscreenMenubarState::HIDDEN ||
+        menubarState_ == FullscreenMenubarState::SHOWN) {
+      [self updateTrackingArea];
+    }
+  }
 
   // If an animation is not running, then -layoutSubviews will not be called
   // for each tick of the menu bar reveal. Do that manually.
@@ -528,7 +526,8 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
 @implementation FullscreenToolbarController (PrivateMethods)
 
 - (void)updateMenuBarAndDockVisibility {
-  if (![self isMainWindow] || ![browserController_ isInImmersiveFullscreen]) {
+  if (![self isMouseOnScreen] ||
+      ![browserController_ isInImmersiveFullscreen]) {
     [self setSystemFullscreenModeTo:base::mac::kFullScreenModeNormal];
     return;
   }
@@ -540,6 +539,51 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   }
 
   [self setSystemFullscreenModeTo:[self desiredSystemFullscreenMode]];
+}
+
+- (void)updateTrackingArea {
+  // Remove the tracking area if the toolbar isn't fully shown.
+  if (!IsCGFloatEqual([self toolbarFraction], kShowFraction)) {
+    [self removeTrackingAreaIfNecessary];
+    return;
+  }
+
+  if (trackingArea_) {
+    // If the tracking rectangle is already |trackingAreaBounds_|, quit early.
+    NSRect oldRect = [trackingArea_ rect];
+    if (NSEqualRects(trackingAreaFrame_, oldRect))
+      return;
+
+    // Otherwise, remove it.
+    [self removeTrackingAreaIfNecessary];
+  }
+
+  // Create and add a new tracking area for |frame|.
+  trackingArea_.reset([[CrTrackingArea alloc]
+      initWithRect:trackingAreaFrame_
+           options:NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow
+             owner:self
+          userInfo:nil]);
+  DCHECK(contentView_);
+  [contentView_ addTrackingArea:trackingArea_];
+}
+
+- (void)removeTrackingAreaIfNecessary {
+  if (trackingArea_) {
+    DCHECK(contentView_);  // |contentView_| better be valid.
+    [contentView_ removeTrackingArea:trackingArea_];
+    trackingArea_.reset();
+  }
+}
+
+- (BOOL)mouseInsideTrackingArea {
+  if (!trackingArea_)
+    return NO;
+
+  NSWindow* window = [browserController_ window];
+  NSPoint mouseLoc = [window mouseLocationOutsideOfEventStream];
+  NSPoint mousePos = [contentView_ convertPoint:mouseLoc fromView:nil];
+  return NSMouseInRect(mousePos, trackingAreaFrame_, [contentView_ isFlipped]);
 }
 
 - (BOOL)doesScreenHaveMenuBar {
@@ -563,16 +607,11 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   return base::mac::kFullScreenModeHideAll;
 }
 
-- (void)changeOverlayToFraction:(CGFloat)fraction withAnimation:(BOOL)animate {
-  // The non-animated case is really simple, so do it and return.
-  if (!animate) {
-    [currentAnimation_ stopAnimation];
-    [self changeToolbarFraction:fraction];
-    return;
-  }
+- (void)animateToolbarVisibility:(BOOL)visible {
+  CGFloat fraction = visible ? kShowFraction : kHideFraction;
 
-  // If we're already animating to the given fraction, then there's nothing more
-  // to do.
+  // If we're already animating to the given fraction, then there's nothing
+  // more to do.
   if (currentAnimation_ && [currentAnimation_ endFraction] == fraction)
     return;
 
@@ -597,152 +636,25 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   [currentAnimation_ startAnimation];
 }
 
-- (void)scheduleShowForMouse {
-  [browserController_ lockBarVisibilityForOwner:self
-                                  withAnimation:YES
-                                          delay:YES];
-}
-
-- (void)scheduleHideForMouse {
-  [browserController_ releaseBarVisibilityForOwner:self
-                                     withAnimation:YES
-                                             delay:YES];
-}
-
-- (void)setupTrackingArea {
-  if (trackingArea_) {
-    // If the tracking rectangle is already |trackingAreaBounds_|, quit early.
-    NSRect oldRect = [trackingArea_ rect];
-    if (NSEqualRects(trackingAreaBounds_, oldRect))
-      return;
-
-    // Otherwise, remove it.
-    [self removeTrackingAreaIfNecessary];
-  }
-
-  // Create and add a new tracking area for |frame|.
-  trackingArea_.reset([[CrTrackingArea alloc]
-      initWithRect:trackingAreaBounds_
-           options:NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow
-             owner:self
-          userInfo:nil]);
-  DCHECK(contentView_);
-  [contentView_ addTrackingArea:trackingArea_];
-}
-
-- (void)removeTrackingAreaIfNecessary {
-  if (trackingArea_) {
-    DCHECK(contentView_);  // |contentView_| better be valid.
-    [contentView_ removeTrackingArea:trackingArea_];
-    trackingArea_.reset();
-  }
-}
-
-- (BOOL)mouseInsideTrackingRect {
-  NSWindow* window = [browserController_ window];
-  NSPoint mouseLoc = [window mouseLocationOutsideOfEventStream];
-  NSPoint mousePos = [contentView_ convertPoint:mouseLoc fromView:nil];
-  return NSMouseInRect(mousePos, trackingAreaBounds_, [contentView_ isFlipped]);
-}
-
-- (void)setupMouseExitCheck {
-  [self performSelector:@selector(checkForMouseExit)
-             withObject:nil
-             afterDelay:kMouseExitCheckDelay];
-}
-
-- (void)cancelMouseExitCheck {
-  [NSObject cancelPreviousPerformRequestsWithTarget:self
-                                           selector:@selector(checkForMouseExit)
-                                             object:nil];
-}
-
-- (void)checkForMouseExit {
-  if ([self mouseInsideTrackingRect])
-    [self setupMouseExitCheck];
-  else
-    [self scheduleHideForMouse];
-}
-
-- (void)startShowTimer {
-  // If there's already a show timer going, just keep it.
-  if (showTimer_) {
-    DCHECK([showTimer_ isValid]);
-    DCHECK(!hideTimer_);
-    return;
-  }
-
-  // Cancel the hide timer (if necessary) and set up the new show timer.
-  [self cancelHideTimer];
-  showTimer_.reset(
-      [[NSTimer scheduledTimerWithTimeInterval:kDropdownShowDelay
-                                        target:self
-                                      selector:@selector(showTimerFire:)
-                                      userInfo:nil
-                                       repeats:NO] retain]);
-  DCHECK([showTimer_ isValid]);  // This also checks that |showTimer_ != nil|.
-}
-
-- (void)startHideTimer {
-  // If there's already a hide timer going, just keep it.
-  if (hideTimer_) {
-    DCHECK([hideTimer_ isValid]);
-    DCHECK(!showTimer_);
-    return;
-  }
-
-  // Cancel the show timer (if necessary) and set up the new hide timer.
-  [self cancelShowTimer];
-  hideTimer_.reset(
-      [[NSTimer scheduledTimerWithTimeInterval:kDropdownHideDelay
-                                        target:self
-                                      selector:@selector(hideTimerFire:)
-                                      userInfo:nil
-                                       repeats:NO] retain]);
-  DCHECK([hideTimer_ isValid]);  // This also checks that |hideTimer_ != nil|.
-}
-
-- (void)cancelShowTimer {
-  [showTimer_ invalidate];
-  showTimer_.reset();
-}
-
 - (void)cancelHideTimer {
   [hideTimer_ invalidate];
   hideTimer_.reset();
-}
-
-- (void)cancelAllTimers {
-  [self cancelShowTimer];
-  [self cancelHideTimer];
-}
-
-- (void)showTimerFire:(NSTimer*)timer {
-  DCHECK_EQ(showTimer_, timer);  // This better be our show timer.
-  [showTimer_ invalidate];       // Make sure it doesn't repeat.
-  showTimer_.reset();            // And get rid of it.
-  [self changeOverlayToFraction:1 withAnimation:YES];
 }
 
 - (void)hideTimerFire:(NSTimer*)timer {
   DCHECK_EQ(hideTimer_, timer);  // This better be our hide timer.
   [hideTimer_ invalidate];       // Make sure it doesn't repeat.
   hideTimer_.reset();            // And get rid of it.
-  [self changeOverlayToFraction:0 withAnimation:YES];
+  base::AutoReset<BOOL> autoReset(&shouldAnimateToolbarOut_, YES);
+  [self animateToolbarVisibility:NO];
 }
 
 - (void)cleanup {
-  [self cancelMouseExitCheck];
-  [self cancelAnimationAndTimers];
+  [self cancelAnimationAndTimer];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
+  [[[NSWorkspace sharedWorkspace] notificationCenter] removeObserver:self];
 
   [self removeTrackingAreaIfNecessary];
-  contentView_ = nil;
-
-  // This isn't tracked when not in fullscreen mode.
-  [browserController_ releaseBarVisibilityForOwner:self
-                                     withAnimation:NO
-                                             delay:NO];
 
   // Call the main status resignation code to perform the associated cleanup,
   // since we will no longer be receiving actual status resignation
@@ -753,20 +665,8 @@ OSStatus MenuBarRevealHandler(EventHandlerCallRef handler,
   browserController_ = nil;
 }
 
-- (void)showActiveWindowUI {
-  [self updateMenuBarAndDockVisibility];
-
-  // TODO(rohitrao): Insert the Exit Fullscreen button.  http://crbug.com/35956
-}
-
-- (void)hideActiveWindowUI {
-  [self updateMenuBarAndDockVisibility];
-
-  // TODO(rohitrao): Remove the Exit Fullscreen button.  http://crbug.com/35956
-}
-
 - (BOOL)shouldShowMenubarInImmersiveFullscreen {
-  return [self doesScreenHaveMenuBar] && toolbarFraction_ > 0.99;
+  return [self doesScreenHaveMenuBar] && [self toolbarFraction] > 0.99;
 }
 
 @end

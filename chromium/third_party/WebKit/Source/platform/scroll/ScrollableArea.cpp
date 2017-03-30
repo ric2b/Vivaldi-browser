@@ -32,7 +32,6 @@
 #include "platform/scroll/ScrollableArea.h"
 
 #include "platform/HostWindow.h"
-#include "platform/Logging.h"
 #include "platform/geometry/DoubleRect.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/LayoutRect.h"
@@ -193,8 +192,10 @@ void ScrollableArea::setScrollPosition(const DoublePoint& position, ScrollType s
 
     switch (scrollType) {
     case CompositorScroll:
-    case AnchoringScroll:
         scrollPositionChanged(clampScrollPosition(position), scrollType);
+        break;
+    case AnchoringScroll:
+        scrollAnimator().adjustAnimationAndSetScrollPosition(position, scrollType);
         break;
     case ProgrammaticScroll:
         programmaticScrollHelper(position, behavior);

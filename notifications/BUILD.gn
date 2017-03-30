@@ -1,0 +1,9 @@
+source_set("notifications") {
+  sources = [
+    "notification_permission_context_extensions.cc",
+    "notification_permission_context_extensions.h",
+  ]
+  deps = [
+    "//skia",
+  ]
+}

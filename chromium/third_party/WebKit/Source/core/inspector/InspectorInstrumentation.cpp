@@ -46,7 +46,7 @@
 #include "core/page/Page.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
+#include "core/workers/WorkerThread.h"
 
 namespace blink {
 
@@ -124,57 +124,9 @@ NativeBreakpoint::~NativeBreakpoint()
         domDebuggerAgent->cancelNativeBreakpoint();
 }
 
-StyleRecalc::StyleRecalc(Document* document)
-    : m_instrumentingAgents(instrumentingAgentsFor(document))
-{
-    if (!m_instrumentingAgents || m_instrumentingAgents->hasInspectorNetworkAgents())
-        return;
-    for (InspectorNetworkAgent* networkAgent : m_instrumentingAgents->inspectorNetworkAgents())
-        networkAgent->willRecalculateStyle(document);
-}
-
-StyleRecalc::~StyleRecalc()
-{
-    if (!m_instrumentingAgents)
-        return;
-    if (m_instrumentingAgents->hasInspectorNetworkAgents()) {
-        for (InspectorNetworkAgent* networkAgent : m_instrumentingAgents->inspectorNetworkAgents())
-            networkAgent->didRecalculateStyle();
-    }
-    if (m_instrumentingAgents->hasInspectorPageAgents()) {
-        for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
-            pageAgent->didRecalculateStyle();
-    }
-}
-
-JavaScriptDialog::JavaScriptDialog(LocalFrame* frame, const String& message, ChromeClient::DialogType dialogType)
-    : m_instrumentingAgents(instrumentingAgentsFor(frame))
-    , m_result(false)
-{
-    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorPageAgents())
-        return;
-    for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
-        pageAgent->willRunJavaScriptDialog(message, dialogType);
-}
-
-void JavaScriptDialog::setResult(bool result)
-{
-    m_result = result;
-}
-
-JavaScriptDialog::~JavaScriptDialog()
-{
-    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorPageAgents())
-        return;
-    for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
-        pageAgent->didRunJavaScriptDialog(m_result);
-}
-
-int FrontendCounter::s_frontendCounter = 0;
-
 bool isDebuggerPaused(LocalFrame*)
 {
-    return MainThreadDebugger::instance()->debugger()->isPaused();
+    return MainThreadDebugger::instance()->isPaused();
 }
 
 void didReceiveResourceResponseButCanceled(LocalFrame* frame, DocumentLoader* loader, unsigned long identifier, const ResourceResponse& r, Resource* resource)
@@ -196,7 +148,7 @@ InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope* workerGlobalScope
 {
     if (!workerGlobalScope)
         return nullptr;
-    if (WorkerInspectorController* controller = workerGlobalScope->workerInspectorController())
+    if (WorkerInspectorController* controller = workerGlobalScope->thread()->workerInspectorController())
         return controller->instrumentingAgents();
     return nullptr;
 }

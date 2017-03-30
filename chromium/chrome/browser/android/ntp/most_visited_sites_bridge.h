@@ -18,6 +18,8 @@
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 
+using ntp_tiles::NTPTilesVector;
+
 class Profile;
 
 // Provides the list of most visited sites and their thumbnails to Java.
@@ -42,13 +44,13 @@ class MostVisitedSitesBridge {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jintArray>& jtile_types,
-      const base::android::JavaParamRef<jintArray>& jsources,
-      const base::android::JavaParamRef<jintArray>& jprovider_indices);
+      const base::android::JavaParamRef<jintArray>& jsources);
   void RecordOpenedMostVisitedItem(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jint index,
-      jint tile_type);
+      jint tile_type,
+      jint source);
 
   // Registers JNI methods.
   static bool Register(JNIEnv* env);
@@ -81,6 +83,7 @@ class MostVisitedSitesBridge {
   };
   SupervisorBridge supervisor_;
 
+  ntp_tiles::PopularSites popular_sites_;
   ntp_tiles::MostVisitedSites most_visited_;
 
   DISALLOW_COPY_AND_ASSIGN(MostVisitedSitesBridge);

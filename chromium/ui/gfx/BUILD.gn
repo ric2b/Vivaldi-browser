@@ -4,6 +4,7 @@
 
 import("//build/config/ui.gni")
 import("//testing/test.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -19,6 +20,12 @@ source_set("gfx_export") {
     "gfx_export.h",
   ]
 }
+
+vector_icons_sources_gypi =
+    exec_script("//build/gypi_to_gn.py",
+                [ rebase_path("vector_icons_sources.gypi") ],
+                "scope",
+                [ "vector_icons_sources.gypi" ])
 
 vector_icons_cc_file = "$target_gen_dir/vector_icons.cc"
 vector_icons_h_file = "$target_gen_dir/vector_icons.h"
@@ -64,8 +71,8 @@ component("gfx") {
     "color_palette.h",
     "color_space.cc",
     "color_space.h",
-    "color_space_mac.mm",
-    "color_space_win.cc",
+    "color_transform.cc",
+    "color_transform.h",
     "color_utils.cc",
     "color_utils.h",
     "favicon_size.cc",
@@ -92,6 +99,10 @@ component("gfx") {
     "gdi_util.h",
     "gfx_paths.cc",
     "gfx_paths.h",
+    "icc_profile.cc",
+    "icc_profile.h",
+    "icc_profile_mac.mm",
+    "icc_profile_win.cc",
     "icon_util.cc",
     "icon_util.h",
     "image/image.cc",
@@ -183,6 +194,7 @@ component("gfx") {
     "ui_gfx_exports.cc",
     "utf16_indexing.cc",
     "utf16_indexing.h",
+    "vsync_provider.cc",
     "vsync_provider.h",
     "win/direct_manipulation.cc",
     "win/direct_manipulation.h",
@@ -255,6 +267,7 @@ component("gfx") {
     "//skia",
     "//third_party/harfbuzz-ng",
     "//third_party/libpng",
+    "//third_party/qcms",
     "//third_party/zlib",
   ]
 
@@ -320,10 +333,7 @@ component("gfx") {
       configs += [ "//build/config/compiler:optimize_max" ]
     }
 
-    deps += [
-      ":gfx_jni_headers",
-      "//base:base_java",
-    ]
+    deps += [ ":gfx_jni_headers" ]
     libs = [
       "android",
       "jnigraphics",
@@ -350,7 +360,10 @@ component("gfx") {
     cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()), which is
                             # uninteresting.
 
-    libs = [ "setupapi.lib" ]
+    libs = [
+      "setupapi.lib",
+      "dwrite.lib",
+    ]
   } else {
     sources -= [
       "gdi_util.cc",
@@ -380,7 +393,6 @@ component("gfx") {
   if (is_mac) {
     libs = [
       "AppKit.framework",
-      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "CoreText.framework",
@@ -413,193 +425,18 @@ component("gfx") {
 action("aggregate_vector_icons") {
   script = "vector_icons/aggregate_vector_icons.py"
 
-  # TODO(estade): move all platform-specific icons into their own directories.
-  sources = [
-    "vector_icons/account_box.icon",
-    "vector_icons/account_child_invert.icon",
-    "vector_icons/account_circle.icon",
-    "vector_icons/apps.icon",
-    "vector_icons/autologin.icon",
-    "vector_icons/bar_close.1x.icon",
-    "vector_icons/bar_close.icon",
-    "vector_icons/blocked_badge.icon",
-    "vector_icons/browser_tools.1x.icon",
-    "vector_icons/browser_tools.icon",
-    "vector_icons/browser_tools_error.1x.icon",
-    "vector_icons/browser_tools_error.icon",
-    "vector_icons/browser_tools_update.1x.icon",
-    "vector_icons/browser_tools_update.icon",
-    "vector_icons/browser_tools_warning.1x.icon",
-    "vector_icons/browser_tools_warning.icon",
-    "vector_icons/business.icon",
-    "vector_icons/check_circle.icon",
-    "vector_icons/checkbox_active.icon",
-    "vector_icons/checkbox_normal.icon",
-    "vector_icons/chrome_product.icon",
-    "vector_icons/close_all.icon",
-    "vector_icons/code.icon",
-    "vector_icons/combobox_arrow_mac_disabled.icon",
-    "vector_icons/combobox_arrow_mac_enabled.icon",
-    "vector_icons/cookie.icon",
-    "vector_icons/crashed_tab.icon",
-    "vector_icons/credit_card.1x.icon",
-    "vector_icons/credit_card.icon",
-    "vector_icons/eol.icon",
-    "vector_icons/error_circle.icon",
-    "vector_icons/extension.icon",
-    "vector_icons/extension_crashed.icon",
-    "vector_icons/file_download.icon",
-    "vector_icons/file_download_incognito.1x.icon",
-    "vector_icons/file_download_incognito.icon",
-    "vector_icons/file_download_shelf.icon",
-    "vector_icons/find_next.1x.icon",
-    "vector_icons/find_next.icon",
-    "vector_icons/find_prev.1x.icon",
-    "vector_icons/find_prev.icon",
-    "vector_icons/folder.1x.icon",
-    "vector_icons/folder.icon",
-    "vector_icons/folder_managed.1x.icon",
-    "vector_icons/folder_managed.icon",
-    "vector_icons/folder_supervised.1x.icon",
-    "vector_icons/folder_supervised.icon",
-    "vector_icons/fullscreen.icon",
-    "vector_icons/globe.icon",
-    "vector_icons/help_outline.icon",
-    "vector_icons/image.icon",
-    "vector_icons/incognito.1x.icon",
-    "vector_icons/incognito.icon",
-    "vector_icons/info_outline.icon",
-    "vector_icons/laptop.icon",
-    "vector_icons/location_bar_http.1x.icon",
-    "vector_icons/location_bar_http.icon",
-    "vector_icons/location_bar_https_invalid.1x.icon",
-    "vector_icons/location_bar_https_invalid.icon",
-    "vector_icons/location_bar_https_valid.1x.icon",
-    "vector_icons/location_bar_https_valid.icon",
-    "vector_icons/location_bar_https_valid_in_chip.1x.icon",
-    "vector_icons/location_bar_https_valid_in_chip.icon",
-    "vector_icons/location_bar_star.icon",
-    "vector_icons/location_bar_star_active.icon",
-    "vector_icons/location_on.icon",
-    "vector_icons/lock.icon",
-    "vector_icons/menu_check.1x.icon",
-    "vector_icons/menu_check.icon",
-    "vector_icons/menu_radio_empty.icon",
-    "vector_icons/menu_radio_selected.icon",
-    "vector_icons/midi.icon",
-    "vector_icons/mixed_content.icon",
-    "vector_icons/mode_edit.icon",
-    "vector_icons/my_location.icon",
-    "vector_icons/navigate_back.1x.icon",
-    "vector_icons/navigate_back.icon",
-    "vector_icons/navigate_forward.1x.icon",
-    "vector_icons/navigate_forward.icon",
-    "vector_icons/navigate_home.1x.icon",
-    "vector_icons/navigate_home.icon",
-    "vector_icons/navigate_reload.1x.icon",
-    "vector_icons/navigate_reload.icon",
-    "vector_icons/navigate_stop.1x.icon",
-    "vector_icons/navigate_stop.icon",
-    "vector_icons/notifications.icon",
-    "vector_icons/notifications_off.icon",
-    "vector_icons/omnibox_calculator.1x.icon",
-    "vector_icons/omnibox_calculator.icon",
-    "vector_icons/omnibox_extension_app.1x.icon",
-    "vector_icons/omnibox_extension_app.icon",
-    "vector_icons/omnibox_http.icon",
-    "vector_icons/omnibox_keyword_search.icon",
-    "vector_icons/omnibox_search.icon",
-    "vector_icons/omnibox_star.1x.icon",
-    "vector_icons/omnibox_star.icon",
-    "vector_icons/overflow_chevron.1x.icon",
-    "vector_icons/overflow_chevron.icon",
-    "vector_icons/paintbrush.icon",
-    "vector_icons/pdf.1x.icon",
-    "vector_icons/pdf.icon",
-    "vector_icons/photo_camera.icon",
-    "vector_icons/protocol_handler.icon",
-    "vector_icons/radio_button_active.icon",
-    "vector_icons/radio_button_normal.icon",
-    "vector_icons/remove_box.icon",
-    "vector_icons/remove_circle.icon",
-    "vector_icons/sad_tab.icon",
-    "vector_icons/settings.icon",
-    "vector_icons/shelf_applist.1x.icon",
-    "vector_icons/shelf_applist.icon",
-    "vector_icons/shelf_keyboard.1x.icon",
-    "vector_icons/shelf_keyboard.icon",
-    "vector_icons/shelf_notifications.1x.icon",
-    "vector_icons/shelf_notifications.icon",
-    "vector_icons/shelf_overflow.1x.icon",
-    "vector_icons/shelf_overflow.icon",
-    "vector_icons/shelf_overview.1x.icon",
-    "vector_icons/shelf_overview.icon",
-    "vector_icons/smartphone.icon",
-    "vector_icons/submenu_arrow.1x.icon",
-    "vector_icons/submenu_arrow.icon",
-    "vector_icons/supervisor_account.icon",
-    "vector_icons/sync_problem.icon",
-    "vector_icons/system_tray_battery.1x.icon",
-    "vector_icons/system_tray_battery.icon",
-    "vector_icons/system_tray_battery_alert.1x.icon",
-    "vector_icons/system_tray_battery_alert.icon",
-    "vector_icons/system_tray_battery_bolt.1x.icon",
-    "vector_icons/system_tray_battery_bolt.icon",
-    "vector_icons/system_tray_battery_unreliable.1x.icon",
-    "vector_icons/system_tray_battery_unreliable.icon",
-    "vector_icons/system_tray_battery_x.1x.icon",
-    "vector_icons/system_tray_battery_x.icon",
-    "vector_icons/tab.icon",
-    "vector_icons/tab_audio.1x.icon",
-    "vector_icons/tab_audio.icon",
-    "vector_icons/tab_audio_muting.1x.icon",
-    "vector_icons/tab_audio_muting.icon",
-    "vector_icons/tab_bluetooth_connected.icon",
-    "vector_icons/tab_close_hovered_pressed.1x.icon",
-    "vector_icons/tab_close_hovered_pressed.icon",
-    "vector_icons/tab_close_normal.1x.icon",
-    "vector_icons/tab_close_normal.icon",
-    "vector_icons/tab_media_capturing.icon",
-    "vector_icons/tab_media_recording.icon",
-    "vector_icons/tab_usb_connected.1x.icon",
-    "vector_icons/tab_usb_connected.icon",
-    "vector_icons/tablet.icon",
-    "vector_icons/translate.icon",
-    "vector_icons/upgrade_menu_item.icon",
-    "vector_icons/videocam.icon",
-    "vector_icons/warning.icon",
-    "vector_icons/warning_badge.icon",
-    "vector_icons/web.icon",
-    "vector_icons/window_control_back.1x.icon",
-    "vector_icons/window_control_back.icon",
-    "vector_icons/window_control_close.1x.icon",
-    "vector_icons/window_control_close.icon",
-    "vector_icons/window_control_left_snapped.1x.icon",
-    "vector_icons/window_control_left_snapped.icon",
-    "vector_icons/window_control_maximize.1x.icon",
-    "vector_icons/window_control_maximize.icon",
-    "vector_icons/window_control_minimize.1x.icon",
-    "vector_icons/window_control_minimize.icon",
-    "vector_icons/window_control_restore.1x.icon",
-    "vector_icons/window_control_restore.icon",
-    "vector_icons/window_control_right_snapped.1x.icon",
-    "vector_icons/window_control_right_snapped.icon",
-    "vector_icons/zoom_minus.icon",
-    "vector_icons/zoom_plus.icon",
-  ]
+  inputs = vector_icons_sources_gypi.common
 
   outputs = [
     vector_icons_cc_file,
     vector_icons_h_file,
   ]
 
+  response_file_contents = rebase_path(inputs, root_build_dir)
+
   args = [
-    # TODO(brettw) bug 535386: This should not take a directory as an input,
-    # but rather a response file listing the inputs or sometimes the build will
-    # be incorrect. In this case, Ninja won't be able to do proper dependency
-    # tracking since if a file is deleted, the command line will be the same
-    # and the action will not be re-run.
     "--working_directory=" + rebase_path("vector_icons/"),
+    "--file_list={{response_file_name}}",
     "--output_cc=" + rebase_path(vector_icons_cc_file, root_build_dir),
     "--output_h=" + rebase_path(vector_icons_h_file, root_build_dir),
   ]
@@ -631,6 +468,7 @@ group("selection_bound") {
 }
 
 # Depend on this to use selection_bound.h without pulling in all of gfx.
+# Cannot be a static_library in component builds due to exported functions
 source_set("selection_bound_sources") {
   visibility = [ ":*" ]
 
@@ -665,6 +503,8 @@ group("memory_buffer") {
     ]
   }
 }
+
+# Cannot be a static_library in component builds due to exported functions
 source_set("memory_buffer_sources") {
   visibility = [ ":*" ]  # Depend on through ":memory_buffer".
 
@@ -703,7 +543,7 @@ source_set("memory_buffer_sources") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "image/image_unittest_util.cc",
@@ -777,6 +617,7 @@ test("gfx_unittests") {
       "codec/jpeg_codec_unittest.cc",
       "codec/png_codec_unittest.cc",
       "color_analysis_unittest.cc",
+      "color_transform_unittest.cc",
       "color_utils_unittest.cc",
       "font_fallback_mac_unittest.cc",
       "font_list_unittest.cc",
@@ -877,6 +718,7 @@ test("gfx_unittests") {
     libs = [
       "d2d1.lib",
       "d3d10_1.lib",
+      "dwrite.lib",
       "imm32.lib",
       "oleacc.lib",
     ]
@@ -901,4 +743,14 @@ if (is_android) {
     ]
     jni_package = "gfx"
   }
+}
+
+fuzzer_test("color_transform_fuzztest") {
+  sources = [
+    "color_transform_fuzzer.cc",
+  ]
+  deps = [
+    ":gfx",
+  ]
+  libfuzzer_options = [ "max_len=1024" ]
 }

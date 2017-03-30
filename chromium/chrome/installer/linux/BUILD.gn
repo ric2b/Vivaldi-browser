@@ -12,7 +12,11 @@ if (current_cpu == "x86" || current_cpu == "x64") {
   import("//media/cdm/ppapi/cdm_paths.gni")
 }
 
-assert(is_linux && is_chrome_branded)
+if (is_vivaldi) {
+  import("//vivaldi/gn/config/product.gni")
+}
+
+assert(is_linux && (is_chrome_branded || is_vivaldi))
 
 # This target builds all "normal" Linux installers.
 # GYP version: chrome/chrome_installer.gypi:linux_packages_all
@@ -61,9 +65,14 @@ group("linux_packages_all") {
   ]
 }
 
-branding_dir = "//chrome/app/theme/$branding_path_component"
-branding_dir_100 =
-    "//chrome/app/theme/default_100_percent/$branding_path_component"
+if (is_vivaldi) {
+  branding_dir = "//vivaldi/app/resources/theme/vivaldi"
+  branding_dir_100 = "//vivaldi/app/resources/theme/default_100_percent/vivaldi"
+} else {
+  branding_dir = "//chrome/app/theme/$branding_path_component"
+  branding_dir_100 =
+      "//chrome/app/theme/default_100_percent/$branding_path_component"
+}
 
 copy("common_packaging_files") {
   visibility = [ ":*" ]
@@ -72,7 +81,6 @@ copy("common_packaging_files") {
     "common/default-app-block.template",
     "common/default-app.template",
     "common/desktop.template",
-    "common/google-chrome/google-chrome.info",
     "common/installer.include",
     "common/postinst.include",
     "common/prerm.include",
@@ -81,7 +89,9 @@ copy("common_packaging_files") {
     "common/rpmrepo.cron",
     "common/symlinks.include",
     "common/variables.include",
+    "common/vivaldi/vivaldi.info",
     "common/wrapper",
+    "common/xfce-helper.template",
   ]
 
   if (current_cpu == "x86") {
@@ -117,16 +127,20 @@ copy("theme_files") {
   visibility = [ ":*" ]
   sources = [
     "$branding_dir/BRANDING",
-    "$branding_dir/linux/product_logo_32.xpm",
-    "$branding_dir/product_logo_128.png",
-    "$branding_dir/product_logo_22.png",
-    "$branding_dir/product_logo_24.png",
-    "$branding_dir/product_logo_256.png",
-    "$branding_dir/product_logo_48.png",
-    "$branding_dir/product_logo_64.png",
     "$branding_dir_100/product_logo_16.png",
     "$branding_dir_100/product_logo_32.png",
   ]
+  if (is_vivaldi) {
+    sources += [
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/linux/product_logo_32.xpm",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_128.png",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_22.png",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_24.png",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_256.png",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_48.png",
+      "$branding_dir/../$VIVALDI_RELEASE_KIND/product_logo_64.png",
+    ]
+  }
   outputs = [
     "$root_out_dir/installer/theme/{{source_file_part}}",
   ]
@@ -137,9 +151,9 @@ if (!is_chromeos) {
     visibility = [ ":*" ]
     sources = [
       "rpm/build.sh",
-      "rpm/chrome.spec.template",
       "rpm/expected_deps_i386",
       "rpm/expected_deps_x86_64",
+      "rpm/vivaldi.spec.template",
     ]
     outputs = [
       "$root_out_dir/installer/rpm/{{source_file_part}}",
@@ -168,7 +182,6 @@ group("installer_deps") {
     "//chrome",
     "//chrome:packed_resources",
     "//sandbox/linux:chrome_sandbox",
-    "//third_party/adobe/flash:flapper_binaries",
   ]
   if (enable_nacl) {
     public_deps += [
@@ -209,25 +222,23 @@ template("linux_package") {
   packaging_files_binaries = [
     # TODO(mmoss) Any convenient way to get all the relevant build
     # files? (e.g. all locales, resources, etc.)
-    "$root_out_dir/chrome",
+    "$root_out_dir/vivaldi",
     "$root_out_dir/chrome_sandbox",
     "$root_out_dir/xdg-mime",
     "$root_out_dir/xdg-settings",
     "$root_out_dir/locales/en-US.pak",
 
-    "$root_out_dir/nacl_helper",
-    "$root_out_dir/nacl_helper_bootstrap",
-    "$root_out_dir/PepperFlash/libpepflashplayer.so",
-    "$root_out_dir/PepperFlash/manifest.json",
+    #"$root_out_dir/nacl_helper",
+    #"$root_out_dir/nacl_helper_bootstrap",
   ]
 
-  if (current_cpu == "x86") {
+  if (false && current_cpu == "x86") {
     packaging_files_binaries += [
       "$root_out_dir/nacl_irt_x86_32.nexe",
       "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
       "$root_out_dir/$widevine_cdm_path/libwidevinecdm.so",
     ]
-  } else if (current_cpu == "x64") {
+  } else if (false && current_cpu == "x64") {
     packaging_files_binaries += [
       "$root_out_dir/nacl_irt_x86_64.nexe",
       "$root_out_dir/$widevine_cdm_path/libwidevinecdmadapter.so",
@@ -256,9 +267,15 @@ template("linux_package") {
     }
 
     inputs = packaging_files_binaries
-    outputs = [
-      "$root_out_dir/google-chrome-${channel}_${chrome_version_full}-1_${deb_arch}.deb",
-    ]
+    if (is_vivaldi) {
+      outputs = [
+        "$root_out_dir/vivaldi-${channel}_${vivaldi_version_full}-1_${deb_arch}.deb",
+      ]
+    } else {
+      outputs = [
+        "$root_out_dir/google-chrome-${channel}_${chrome_version_full}-1_${deb_arch}.deb",
+      ]
+    }
 
     args = [
       rebase_path("$root_out_dir/linux_package.lock", root_build_dir),
@@ -297,7 +314,7 @@ template("linux_package") {
 
       inputs = packaging_files_binaries
       outputs = [
-        "$root_out_dir/google-chrome-${channel}_${chrome_version_full}-1.${rpm_arch}.rpm",
+        "$root_out_dir/vivaldi-${channel}_${vivaldi_version_full}-1.${rpm_arch}.rpm",
       ]
 
       args = [
@@ -338,7 +355,7 @@ linux_package("beta") {
   channel = "beta"
 }
 linux_package("unstable") {
-  channel = "unstable"
+  channel = "snapshot"
 }
 
 # Other packages that we support that aren't included in the default "linux"

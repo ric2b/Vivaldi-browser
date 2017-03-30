@@ -20,20 +20,16 @@ class AwGLSurface : public gl::GLSurface {
   // Implement GLSurface.
   void Destroy() override;
   bool IsOffscreen() override;
-  unsigned int GetBackingFrameBufferObject() override;
+  unsigned int GetBackingFramebufferObject() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
   void* GetHandle() override;
   void* GetDisplay() override;
 
-  void SetBackingFrameBufferObject(unsigned int fbo);
-
  protected:
   ~AwGLSurface() override;
 
  private:
-  unsigned int fbo_;
-
   DISALLOW_COPY_AND_ASSIGN(AwGLSurface);
 };
 

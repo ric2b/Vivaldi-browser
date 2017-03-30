@@ -11,6 +11,10 @@ component("android") {
   output_name = "ui_android"
   sources = [
     "animation_utils.h",
+    "context_provider_factory.cc",
+    "context_provider_factory.h",
+    "delegated_frame_host_android.cc",
+    "delegated_frame_host_android.h",
     "edge_effect.cc",
     "edge_effect.h",
     "edge_effect_base.cc",
@@ -31,6 +35,7 @@ component("android") {
     "ui_android_export.h",
     "ui_android_jni_registrar.cc",
     "ui_android_jni_registrar.h",
+    "view_android.cc",
     "view_android.h",
     "window_android.cc",
     "window_android.h",
@@ -45,7 +50,9 @@ component("android") {
     ":ui_android_jni_headers",
     "//base",
     "//cc",
+    "//cc/surfaces",
     "//skia",
+    "//ui/display",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -53,6 +60,7 @@ component("android") {
 
 generate_jni("ui_android_jni_headers") {
   sources = [
+    "java/src/org/chromium/ui/base/ViewAndroidDelegate.java",
     "java/src/org/chromium/ui/base/WindowAndroid.java",
     "java/src/org/chromium/ui/resources/ResourceManager.java",
   ]
@@ -204,6 +212,7 @@ android_library("ui_java") {
   deps = [
     ":ui_java_resources",
     "//base:base_java",
+    "//third_party/android_tools:android_support_annotations_java",
   ]
   srcjar_deps = [ ":java_enums_srcjar" ]
 }
@@ -229,7 +238,6 @@ junit_binary("ui_junit_tests") {
   ]
   deps = [
     "//base:base_java",
-    "//base:base_junit_test_support",
     "//ui/android:ui_java",
   ]
 }

@@ -7,11 +7,17 @@
 
 #include <list>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "content/browser/cache_storage/cache_storage_scheduler_client.h"
 #include "content/common/content_export.h"
 
 namespace content {
+
+class CacheStorageOperation;
 
 // TODO(jkarlin): Support readers and writers so operations can run in parallel.
 // TODO(jkarlin): Support operation identification so that ops can be checked in
@@ -23,7 +29,7 @@ namespace content {
 // the next operation.
 class CONTENT_EXPORT CacheStorageScheduler {
  public:
-  CacheStorageScheduler();
+  explicit CacheStorageScheduler(CacheStorageSchedulerClient client_type);
   virtual ~CacheStorageScheduler();
 
   // Adds the operation to the tail of the queue and starts it if the scheduler
@@ -37,12 +43,35 @@ class CONTENT_EXPORT CacheStorageScheduler {
   // Returns true if there are any running or pending operations.
   bool ScheduledOperations() const;
 
+  // Wraps |callback| to also call CompleteOperationAndRunNext.
+  template <typename... Args>
+  base::Callback<void(Args...)> WrapCallbackToRunNext(
+      const base::Callback<void(Args...)>& callback) {
+    return base::Bind(&CacheStorageScheduler::RunNextContinuation<Args...>,
+                      weak_ptr_factory_.GetWeakPtr(), callback);
+  }
+
  private:
   void RunOperationIfIdle();
 
-  // The list of operations waiting on initialization.
-  std::list<base::Closure> pending_operations_;
-  bool operation_running_;
+  template <typename... Args>
+  void RunNextContinuation(const base::Callback<void(Args...)>& callback,
+                           Args... args) {
+    // Grab a weak ptr to guard against the scheduler being deleted during the
+    // callback.
+    base::WeakPtr<CacheStorageScheduler> scheduler =
+        weak_ptr_factory_.GetWeakPtr();
+
+    callback.Run(std::forward<Args>(args)...);
+    if (scheduler)
+      CompleteOperationAndRunNext();
+  }
+
+  std::list<std::unique_ptr<CacheStorageOperation>> pending_operations_;
+  std::unique_ptr<CacheStorageOperation> running_operation_;
+  CacheStorageSchedulerClient client_type_;
+
+  base::WeakPtrFactory<CacheStorageScheduler> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(CacheStorageScheduler);
 };

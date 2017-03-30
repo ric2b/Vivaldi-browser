@@ -41,10 +41,12 @@ namespace gles2 {
 
 class ContextGroup;
 class ErrorState;
+class FeatureInfo;
 class GLES2Util;
 class ImageManager;
 class Logger;
 class QueryManager;
+class ShaderTranslatorInterface;
 class Texture;
 class TransformFeedbackManager;
 class VertexArrayManager;
@@ -170,7 +172,7 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   virtual void ReturnFrontBuffer(const Mailbox& mailbox, bool is_lost) = 0;
 
   // Resize an offscreen frame buffer.
-  virtual bool ResizeOffscreenFrameBuffer(const gfx::Size& size) = 0;
+  virtual bool ResizeOffscreenFramebuffer(const gfx::Size& size) = 0;
 
   // Make this decoder's GL context current.
   virtual bool MakeCurrent() = 0;
@@ -183,6 +185,7 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
 
   // Gets the associated ContextGroup
   virtual ContextGroup* GetContextGroup() = 0;
+  virtual const FeatureInfo* GetFeatureInfo() const = 0;
 
   virtual Capabilities GetCapabilities() = 0;
 
@@ -327,6 +330,8 @@ class GPU_EXPORT GLES2Decoder : public base::SupportsWeakPtr<GLES2Decoder>,
   virtual void EndDecoding();
 
   virtual const ContextState* GetContextState() = 0;
+  virtual scoped_refptr<ShaderTranslatorInterface> GetTranslator(
+      unsigned int type) = 0;
 
  protected:
   GLES2Decoder();

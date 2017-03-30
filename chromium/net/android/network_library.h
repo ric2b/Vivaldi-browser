@@ -77,8 +77,9 @@ NET_EXPORT std::string GetTelephonySimOperator();
 // true, it suggests that use of data may incur extra costs.
 NET_EXPORT bool GetIsRoaming();
 
-// Register JNI methods
-NET_EXPORT bool RegisterNetworkLibrary(JNIEnv* env);
+// Gets the SSID of the currently associated WiFi access point if there is one.
+// Otherwise, returns empty string.
+NET_EXPORT_PRIVATE std::string GetWifiSSID();
 
 }  // namespace android
 }  // namespace net

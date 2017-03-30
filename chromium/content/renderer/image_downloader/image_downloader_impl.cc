@@ -17,6 +17,7 @@
 #include "content/renderer/fetchers/multi_resolution_image_resource_fetcher.h"
 #include "net/base/data_url.h"
 #include "skia/ext/image_operations.h"
+#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -78,7 +79,7 @@ void FilterAndResizeImagesForMaximalSize(
   images->clear();
   original_image_sizes->clear();
 
-  if (!unfiltered.size())
+  if (unfiltered.empty())
     return;
 
   if (max_image_size == 0)
@@ -129,7 +130,12 @@ ImageDownloaderImpl::ImageDownloaderImpl(
 }
 
 ImageDownloaderImpl::~ImageDownloaderImpl() {
-  RenderThread::Get()->RemoveObserver(this);
+  RenderThread* thread = RenderThread::Get();
+  // As ImageDownloaderImpl is a strong binding with message pipe, the
+  // destructor may run after message loop shutdown, so we need to check whether
+  // RenderThread is null.
+  if (thread)
+    thread->RemoveObserver(this);
 }
 
 // static
@@ -223,8 +229,7 @@ void ImageDownloaderImpl::ReplyDownloadResult(
     const std::vector<SkBitmap>& result_images,
     const std::vector<gfx::Size>& result_original_image_sizes,
     const DownloadImageCallback& callback) {
-  callback.Run(http_status_code, mojo::Array<SkBitmap>::From(result_images),
-               result_original_image_sizes);
+  callback.Run(http_status_code, result_images, result_original_image_sizes);
 }
 
 void ImageDownloaderImpl::OnDestruct() {

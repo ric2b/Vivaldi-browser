@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("mus") {
+static_library("mus") {
   # Depend on this only via //content/renderer.
   visibility = [ "//content/renderer/*" ]
 
@@ -20,16 +20,18 @@ source_set("mus") {
   deps = [
     "//base",
     "//cc",
-    "//components/mus/public/cpp",
-    "//components/mus/public/interfaces",
     "//content/common",
+    "//content/public/child:child_sources",
     "//content/public/common:common_sources",
     "//mojo/common",
     "//mojo/converters/blink",
     "//services/shell/public/cpp",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
     "//third_party/WebKit/public:blink",
     "//ui/events:events",
     "//ui/events:events_base",
+    "//ui/events/blink",
     "//ui/gfx/geometry/mojo",
   ]
 }

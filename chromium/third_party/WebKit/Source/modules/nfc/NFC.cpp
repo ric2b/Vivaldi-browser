@@ -16,7 +16,8 @@
 #include "modules/nfc/NFCMessage.h"
 #include "modules/nfc/NFCPushOptions.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 
 namespace nfc = device::nfc::blink;
 
@@ -102,7 +103,7 @@ NFCRecordType deduceRecordTypeFromDataType(const blink::NFCRecord& record)
 
 void setMediaType(NFCRecordPtr& recordPtr, const WTF::String& recordMediaType, const WTF::String& defaultMediaType)
 {
-    recordPtr->mediaType = recordMediaType.isEmpty() ? defaultMediaType : recordMediaType;
+    recordPtr->media_type = recordMediaType.isEmpty() ? defaultMediaType : recordMediaType;
 }
 
 template <>
@@ -131,9 +132,9 @@ struct TypeConverter<NFCRecordPtr, WTF::String> {
     static NFCRecordPtr Convert(const WTF::String& string)
     {
         NFCRecordPtr record = NFCRecord::New();
-        record->recordType = NFCRecordType::TEXT;
-        record->mediaType = kPlainTextMimeType;
-        record->mediaType.append(kCharSetUTF8);
+        record->record_type = NFCRecordType::TEXT;
+        record->media_type = kPlainTextMimeType;
+        record->media_type.append(kCharSetUTF8);
         record->data = mojo::WTFArray<uint8_t>::From(string);
         return record;
     }
@@ -144,8 +145,8 @@ struct TypeConverter<NFCRecordPtr, blink::DOMArrayBuffer*> {
     static NFCRecordPtr Convert(blink::DOMArrayBuffer* buffer)
     {
         NFCRecordPtr record = NFCRecord::New();
-        record->recordType = NFCRecordType::OPAQUE_RECORD;
-        record->mediaType = kOpaqueMimeType;
+        record->record_type = NFCRecordType::OPAQUE_RECORD;
+        record->media_type = kOpaqueMimeType;
         record->data = mojo::WTFArray<uint8_t>::From(buffer);
         return record;
     }
@@ -178,7 +179,7 @@ struct TypeConverter<mojo::WTFArray<uint8_t>, blink::ScriptValue> {
         }
 
         if (value->IsObject() && !value->IsArrayBuffer()) {
-            RefPtr<blink::JSONValue> jsonResult = blink::toJSONValue(scriptValue.context(), value);
+            std::unique_ptr<blink::JSONValue> jsonResult = blink::toJSONValue(scriptValue.context(), value);
             if (jsonResult && (jsonResult->getType() == blink::JSONValue::TypeObject))
                 return mojo::WTFArray<uint8_t>::From(jsonResult->toJSONString());
         }
@@ -197,20 +198,20 @@ struct TypeConverter<NFCRecordPtr, blink::NFCRecord> {
         NFCRecordPtr recordPtr = NFCRecord::New();
 
         if (record.hasRecordType())
-            recordPtr->recordType = toNFCRecordType(record.recordType());
+            recordPtr->record_type = toNFCRecordType(record.recordType());
         else
-            recordPtr->recordType = deduceRecordTypeFromDataType(record);
+            recordPtr->record_type = deduceRecordTypeFromDataType(record);
 
         // If record type is "empty", no need to set media type or data.
         // https://w3c.github.io/web-nfc/#creating-web-nfc-message
-        if (recordPtr->recordType == NFCRecordType::EMPTY)
+        if (recordPtr->record_type == NFCRecordType::EMPTY)
             return recordPtr;
 
-        switch (recordPtr->recordType) {
+        switch (recordPtr->record_type) {
         case NFCRecordType::TEXT:
         case NFCRecordType::URL:
             setMediaType(recordPtr, record.mediaType(), kPlainTextMimeType);
-            recordPtr->mediaType.append(kCharSetUTF8);
+            recordPtr->media_type.append(kCharSetUTF8);
             break;
         case NFCRecordType::JSON:
             setMediaType(recordPtr, record.mediaType(), kJsonMimeType);
@@ -303,9 +304,9 @@ struct TypeConverter<NFCPushOptionsPtr, blink::NFCPushOptions> {
             pushOptionsPtr->timeout = std::numeric_limits<double>::infinity();
 
         if (pushOptions.hasIgnoreRead())
-            pushOptionsPtr->ignoreRead = pushOptions.ignoreRead();
+            pushOptionsPtr->ignore_read = pushOptions.ignoreRead();
         else
-            pushOptionsPtr->ignoreRead = true;
+            pushOptionsPtr->ignore_read = true;
 
         return pushOptionsPtr;
     }
@@ -438,13 +439,13 @@ bool setURL(const String& origin, nfc::NFCMessagePtr& message)
 } // anonymous namespace
 
 NFC::NFC(LocalFrame* frame)
-    : PageLifecycleObserver(frame->page())
+    : PageVisibilityObserver(frame->page())
     , ContextLifecycleObserver(frame->document())
     , m_client(this)
 {
     ThreadState::current()->registerPreFinalizer(this);
-    frame->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_nfc));
-    m_nfc.set_connection_error_handler(createBaseCallback(WTF::bind(&NFC::OnConnectionError, wrapWeakPersistent(this))));
+    frame->interfaceProvider()->getInterface(mojo::GetProxy(&m_nfc));
+    m_nfc.set_connection_error_handler(convertToBaseCallback(WTF::bind(&NFC::OnConnectionError, wrapWeakPersistent(this))));
     m_nfc->SetClient(m_client.CreateInterfacePtrAndBind());
 }
 
@@ -495,7 +496,7 @@ ScriptPromise NFC::push(ScriptState* scriptState, const NFCPushMessage& pushMess
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     m_requests.add(resolver);
-    auto callback = createBaseCallback(WTF::bind(&NFC::OnRequestCompleted, wrapPersistent(this), wrapPersistent(resolver)));
+    auto callback = convertToBaseCallback(WTF::bind(&NFC::OnRequestCompleted, wrapPersistent(this), wrapPersistent(resolver)));
     m_nfc->Push(std::move(message), nfc::NFCPushOptions::From(options), callback);
 
     return resolver->promise();
@@ -512,7 +513,7 @@ ScriptPromise NFC::cancelPush(ScriptState* scriptState, const String& target)
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     m_requests.add(resolver);
-    auto callback = createBaseCallback(WTF::bind(&NFC::OnRequestCompleted, wrapPersistent(this), wrapPersistent(resolver)));
+    auto callback = convertToBaseCallback(WTF::bind(&NFC::OnRequestCompleted, wrapPersistent(this), wrapPersistent(resolver)));
     m_nfc->CancelPush(mojo::toNFCPushTarget(target), callback);
 
     return resolver->promise();
@@ -564,6 +565,11 @@ void NFC::OnRequestCompleted(ScriptPromiseResolver* resolver, nfc::NFCErrorPtr e
 
 void NFC::OnConnectionError()
 {
+    if (!Platform::current()) {
+        // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+        return;
+    }
+
     m_nfc.reset();
 
     // If NFCService is not available or disappears when NFC hardware is
@@ -581,7 +587,7 @@ void NFC::OnWatch(mojo::WTFArray<uint32_t> ids, nfc::NFCMessagePtr)
 
 DEFINE_TRACE(NFC)
 {
-    PageLifecycleObserver::trace(visitor);
+    PageVisibilityObserver::trace(visitor);
     ContextLifecycleObserver::trace(visitor);
     visitor->trace(m_requests);
 }

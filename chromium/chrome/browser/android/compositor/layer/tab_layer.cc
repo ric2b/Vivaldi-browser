@@ -4,9 +4,8 @@
 
 #include "chrome/browser/android/compositor/layer/tab_layer.h"
 
-#include "base/base_switches.h"
-#include "base/command_line.h"
 #include "base/i18n/rtl.h"
+#include "base/memory/ptr_util.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/nine_patch_layer.h"
@@ -18,7 +17,6 @@
 #include "chrome/browser/android/compositor/layer/toolbar_layer.h"
 #include "chrome/browser/android/compositor/layer_title_cache.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
-#include "chrome/common/chrome_switches.h"
 #include "content/public/browser/android/compositor.h"
 #include "ui/android/resources/resource_manager.h"
 #include "ui/base/l10n/l10n_util_android.h"
@@ -136,6 +134,7 @@ void TabLayer::SetProperties(int id,
                              bool show_toolbar,
                              int default_theme_color,
                              int toolbar_background_color,
+                             int close_button_color,
                              bool anonymize_toolbar,
                              int toolbar_textbox_resource_id,
                              int toolbar_textbox_background_color,
@@ -154,8 +153,8 @@ void TabLayer::SetProperties(int id,
 
   // Grab required resources
   ui::ResourceManager::Resource* border_resource =
-      resource_manager_->GetResource(ui::ANDROID_RESOURCE_TYPE_STATIC,
-                                     border_resource_id);
+      resource_manager_->GetStaticResourceWithTint(border_resource_id,
+                                                   toolbar_background_color);
   ui::ResourceManager::Resource* border_inner_shadow_resource =
       resource_manager_->GetResource(ui::ANDROID_RESOURCE_TYPE_STATIC,
                                      border_inner_shadow_resource_id);
@@ -166,8 +165,8 @@ void TabLayer::SetProperties(int id,
       resource_manager_->GetResource(ui::ANDROID_RESOURCE_TYPE_STATIC,
                                      contour_resource_id);
   ui::ResourceManager::Resource* close_btn_resource =
-      resource_manager_->GetResource(ui::ANDROID_RESOURCE_TYPE_STATIC,
-                                     close_button_resource_id);
+      resource_manager_->GetStaticResourceWithTint(close_button_resource_id,
+                                                   close_button_color);
   ui::ResourceManager::Resource* back_logo_resource = nullptr;
 
   DecorationTitle* title_layer = nullptr;
@@ -479,26 +478,6 @@ void TabLayer::SetProperties(int id,
     front_border_->SetBounds(border_size);
     front_border_->SetOpacity(border_alpha);
     front_border_->SetNearestNeighbor(toolbar_visible);
-
-    int tab_switcher_color = default_theme_color;
-
-    // Colorize the tab decoration if enabled.
-    if (tab_switcher_themes_enabled_) {
-        tab_switcher_color = toolbar_background_color;
-    }
-
-    if (toolbar_background_color != toolbar_background_color_) {
-      toolbar_background_color_ = toolbar_background_color;
-      cc::FilterOperations filters;
-      SkScalar colorMatrix[] = {
-          SkColorGetR(tab_switcher_color) / 255.0f, 0, 0, 0, 0,
-          0, SkColorGetG(tab_switcher_color) / 255.0f, 0, 0, 0,
-          0, 0, SkColorGetB(tab_switcher_color) / 255.0f, 0, 0,
-          0, 0, 0, 1, 0,
-      };
-      filters.Append(cc::FilterOperation::CreateColorMatrixFilter(colorMatrix));
-      front_border_->SetFilters(filters);
-    }
   }
 
   front_border_inner_shadow_->SetHideLayerAndSubtree(
@@ -645,8 +624,6 @@ TabLayer::TabLayer(bool incognito,
                    LayerTitleCache* layer_title_cache,
                    TabContentManager* tab_content_manager)
     : incognito_(incognito),
-      toolbar_background_color_(0),
-      tab_switcher_themes_enabled_(false),
       resource_manager_(resource_manager),
       layer_title_cache_(layer_title_cache),
       layer_(cc::Layer::Create()),
@@ -684,10 +661,6 @@ TabLayer::TabLayer(bool incognito,
   back_logo_->SetIsDrawable(true);
 
   front_border_->SetFillCenter(false);
-
-  tab_switcher_themes_enabled_ =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableTabSwitcherThemeColors);
 }
 
 TabLayer::~TabLayer() {

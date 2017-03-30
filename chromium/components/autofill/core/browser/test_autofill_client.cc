@@ -66,6 +66,12 @@ void TestAutofillClient::ConfirmSaveCreditCardToCloud(
   callback.Run();
 }
 
+void TestAutofillClient::ConfirmCreditCardFillAssist(
+    const CreditCard& card,
+    const base::Closure& callback) {
+  callback.Run();
+}
+
 void TestAutofillClient::LoadRiskData(
     const base::Callback<void(const std::string&)>& callback) {
   callback.Run("some risk data");
@@ -114,5 +120,11 @@ void TestAutofillClient::OnFirstUserGestureObserved() {
 bool TestAutofillClient::IsContextSecure(const GURL& form_origin) {
   return is_context_secure_;
 }
+
+bool TestAutofillClient::ShouldShowSigninPromo() {
+  return false;
+}
+
+void TestAutofillClient::StartSigninFlow() {}
 
 }  // namespace autofill

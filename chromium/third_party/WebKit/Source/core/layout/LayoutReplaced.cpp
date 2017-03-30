@@ -28,6 +28,8 @@
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutInline.h"
+#include "core/layout/LayoutPart.h"
+#include "core/layout/LayoutVideo.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
@@ -319,7 +321,7 @@ void LayoutReplaced::computePositionedLogicalWidth(LogicalExtentComputedValues& 
         logicalLeftValue = valueForLength(logicalLeft, containerLogicalWidth);
         // If the containing block is right-to-left, then push the left position as far to the right as possible
         if (containerDirection == RTL) {
-            int totalLogicalWidth = computedValues.m_extent + logicalLeftValue + logicalRightValue +  marginLogicalLeftAlias + marginLogicalRightAlias;
+            int totalLogicalWidth = (computedValues.m_extent + logicalLeftValue + logicalRightValue +  marginLogicalLeftAlias + marginLogicalRightAlias).toInt();
             logicalLeftValue = containerLogicalWidth - (totalLogicalWidth - logicalLeftValue);
         }
     }
@@ -485,7 +487,7 @@ void LayoutReplaced::computePositionedLogicalHeight(LogicalExtentComputedValues&
     computedValues.m_position = logicalTopPos;
 }
 
-LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntrinsicSize) const
+LayoutRect LayoutReplaced::computeObjectFit(const LayoutSize* overriddenIntrinsicSize) const
 {
     LayoutRect contentRect = contentBoxRect();
     ObjectFit objectFit = style()->getObjectFit();
@@ -525,6 +527,11 @@ LayoutRect LayoutReplaced::replacedContentRect(const LayoutSize* overriddenIntri
     finalRect.move(xOffset, yOffset);
 
     return finalRect;
+}
+
+LayoutRect LayoutReplaced::replacedContentRect() const
+{
+    return computeObjectFit();
 }
 
 void LayoutReplaced::computeIntrinsicSizingInfo(IntrinsicSizingInfo& intrinsicSizingInfo) const

@@ -15,8 +15,7 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/ssl/ssl_cert_error_handler.h"
-#include "content/browser/ssl/ssl_request_info.h"
+#include "content/browser/ssl/ssl_error_handler.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
@@ -36,15 +35,46 @@ enum SSLGoodCertSeenEvent {
   HAD_PREVIOUS_EXCEPTION = 1,
   SSL_GOOD_CERT_SEEN_EVENT_MAX = 2
 };
+
+void OnAllowCertificate(SSLErrorHandler* handler,
+                        const SSLPolicy* const policy,
+                        CertificateRequestResultType decision) {
+  DCHECK(handler->ssl_info().is_valid());
+  switch (decision) {
+    case CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE:
+      // Note that we should not call SetMaxSecurityStyle here, because
+      // the active NavigationEntry has just been deleted (in
+      // HideInterstitialPage) and the new NavigationEntry will not be
+      // set until DidNavigate.  This is ok, because the new
+      // NavigationEntry will have its max security style set within
+      // DidNavigate.
+      //
+      // While AllowCertForHost() executes synchronously on this thread,
+      // ContinueRequest() gets posted to a different thread. Calling
+      // AllowCertForHost() first ensures deterministic ordering.
+      policy->backend()->AllowCertForHost(*handler->ssl_info().cert.get(),
+                                          handler->request_url().host(),
+                                          handler->cert_error());
+      handler->ContinueRequest();
+      return;
+    case CERTIFICATE_REQUEST_RESULT_TYPE_DENY:
+      handler->DenyRequest();
+      return;
+    case CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL:
+      handler->CancelRequest();
+      return;
+  }
 }
+
+}  // namespace
 
 SSLPolicy::SSLPolicy(SSLPolicyBackend* backend)
     : backend_(backend) {
   DCHECK(backend_);
 }
 
-void SSLPolicy::OnCertError(SSLCertErrorHandler* handler) {
-  bool expired_previous_decision;
+void SSLPolicy::OnCertError(std::unique_ptr<SSLErrorHandler> handler) {
+  bool expired_previous_decision = false;
   // First we check if we know the policy for this error.
   DCHECK(handler->ssl_info().is_valid());
   SSLHostStateDelegate::CertJudgment judgment =
@@ -76,7 +106,7 @@ void SSLPolicy::OnCertError(SSLCertErrorHandler* handler) {
         options_mask |= STRICT_ENFORCEMENT;
       if (expired_previous_decision)
         options_mask |= EXPIRED_PREVIOUS_DECISION;
-      OnCertErrorInternal(handler, options_mask);
+      OnCertErrorInternal(std::move(handler), options_mask);
       break;
     case net::ERR_CERT_NO_REVOCATION_MECHANISM:
       // Ignore this error.
@@ -96,7 +126,7 @@ void SSLPolicy::OnCertError(SSLCertErrorHandler* handler) {
         options_mask |= STRICT_ENFORCEMENT;
       if (expired_previous_decision)
         options_mask |= EXPIRED_PREVIOUS_DECISION;
-      OnCertErrorInternal(handler, options_mask);
+      OnCertErrorInternal(std::move(handler), options_mask);
       break;
     default:
       NOTREACHED();
@@ -118,9 +148,24 @@ void SSLPolicy::DidRunInsecureContent(NavigationEntryImpl* entry,
                                    site_instance->GetProcess()->GetID());
 }
 
-void SSLPolicy::OnRequestStarted(SSLRequestInfo* info) {
-  if (info->ssl_cert_id() && info->url().SchemeIsCryptographic() &&
-      !net::IsCertStatusError(info->ssl_cert_status())) {
+void SSLPolicy::DidRunContentWithCertErrors(NavigationEntryImpl* entry,
+                                            const GURL& security_origin) {
+  if (!entry)
+    return;
+
+  SiteInstance* site_instance = entry->site_instance();
+  if (!site_instance)
+    return;
+
+  backend_->HostRanContentWithCertErrors(security_origin.host(),
+                                         site_instance->GetProcess()->GetID());
+}
+
+void SSLPolicy::OnRequestStarted(const GURL& url,
+                                 int cert_id,
+                                 net::CertStatus cert_status) {
+  if (cert_id && url.SchemeIsCryptographic() &&
+      !net::IsCertStatusError(cert_status)) {
     // If the scheme is https: or wss: *and* the security info for the
     // cert has been set (i.e. the cert id is not 0) and the cert did
     // not have any errors, revoke any previous decisions that
@@ -128,11 +173,12 @@ void SSLPolicy::OnRequestStarted(SSLRequestInfo* info) {
     // isn't known if the connection was actually a valid connection or if it
     // had a cert error.
     SSLGoodCertSeenEvent event = NO_PREVIOUS_EXCEPTION;
-    if (backend_->HasAllowException(info->url().host())) {
+    if (backend_->HasAllowException(url.host())) {
       // If there's no certificate error, a good certificate has been seen, so
       // clear out any exceptions that were made by the user for bad
-      // certificates.
-      backend_->RevokeUserAllowExceptions(info->url().host());
+      // certificates. This intentionally does not apply to cached resources
+      // (see https://crbug.com/634553 for an explanation).
+      backend_->RevokeUserAllowExceptions(url.host());
       event = HAD_PREVIOUS_EXCEPTION;
     }
     UMA_HISTOGRAM_ENUMERATION("interstitial.ssl.good_cert_seen", event,
@@ -144,19 +190,27 @@ void SSLPolicy::UpdateEntry(NavigationEntryImpl* entry,
                             WebContents* web_contents) {
   DCHECK(entry);
 
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+
   InitializeEntryIfNeeded(entry);
 
   if (entry->GetSSL().security_style == SECURITY_STYLE_UNAUTHENTICATED)
     return;
 
-  if (!web_contents->DisplayedInsecureContent())
+  if (!web_contents_impl->DisplayedInsecureContent())
     entry->GetSSL().content_status &= ~SSLStatus::DISPLAYED_INSECURE_CONTENT;
 
-  if (web_contents->DisplayedInsecureContent())
+  if (web_contents_impl->DisplayedInsecureContent())
     entry->GetSSL().content_status |= SSLStatus::DISPLAYED_INSECURE_CONTENT;
 
-  if (entry->GetSSL().security_style == SECURITY_STYLE_AUTHENTICATION_BROKEN)
-    return;
+  if (!web_contents_impl->DisplayedContentWithCertErrors())
+    entry->GetSSL().content_status &=
+        ~SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS;
+
+  if (web_contents_impl->DisplayedContentWithCertErrors())
+    entry->GetSSL().content_status |=
+        SSLStatus::DISPLAYED_CONTENT_WITH_CERT_ERRORS;
 
   SiteInstance* site_instance = entry->site_instance();
   // Note that |site_instance| can be NULL here because NavigationEntries don't
@@ -168,7 +222,13 @@ void SSLPolicy::UpdateEntry(NavigationEntryImpl* entry,
     entry->GetSSL().security_style =
         SECURITY_STYLE_AUTHENTICATION_BROKEN;
     entry->GetSSL().content_status |= SSLStatus::RAN_INSECURE_CONTENT;
-    return;
+  }
+
+  if (site_instance &&
+      backend_->DidHostRunContentWithCertErrors(
+          entry->GetURL().host(), site_instance->GetProcess()->GetID())) {
+    entry->GetSSL().security_style = SECURITY_STYLE_AUTHENTICATION_BROKEN;
+    entry->GetSSL().content_status |= SSLStatus::RAN_CONTENT_WITH_CERT_ERRORS;
   }
 }
 
@@ -193,61 +253,25 @@ SecurityStyle SSLPolicy::GetSecurityStyleForResource(
   return SECURITY_STYLE_AUTHENTICATED;
 }
 
-void SSLPolicy::OnAllowCertificate(scoped_refptr<SSLCertErrorHandler> handler,
-                                   bool allow) {
-  DCHECK(handler->ssl_info().is_valid());
-  if (allow) {
-    // Default behavior for accepting a certificate.
-    // Note that we should not call SetMaxSecurityStyle here, because the active
-    // NavigationEntry has just been deleted (in HideInterstitialPage) and the
-    // new NavigationEntry will not be set until DidNavigate.  This is ok,
-    // because the new NavigationEntry will have its max security style set
-    // within DidNavigate.
-    //
-    // While AllowCertForHost() executes synchronously on this thread,
-    // ContinueRequest() gets posted to a different thread. Calling
-    // AllowCertForHost() first ensures deterministic ordering.
-    backend_->AllowCertForHost(*handler->ssl_info().cert.get(),
-                               handler->request_url().host(),
-                               handler->cert_error());
-    handler->ContinueRequest();
-  } else {
-    // Default behavior for rejecting a certificate.
-    handler->CancelRequest();
-  }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // Certificate Error Routines
 
-void SSLPolicy::OnCertErrorInternal(SSLCertErrorHandler* handler,
+void SSLPolicy::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
                                     int options_mask) {
   bool overridable = (options_mask & OVERRIDABLE) != 0;
   bool strict_enforcement = (options_mask & STRICT_ENFORCEMENT) != 0;
   bool expired_previous_decision =
       (options_mask & EXPIRED_PREVIOUS_DECISION) != 0;
-  CertificateRequestResultType result =
-      CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE;
+
+  WebContents* web_contents = handler->web_contents();
+  int cert_error = handler->cert_error();
+  const net::SSLInfo& ssl_info = handler->ssl_info();
+  const GURL& request_url = handler->request_url();
+  ResourceType resource_type = handler->resource_type();
   GetContentClient()->browser()->AllowCertificateError(
-      handler->GetManager()->controller()->GetWebContents(),
-      handler->cert_error(), handler->ssl_info(), handler->request_url(),
-      handler->resource_type(), overridable, strict_enforcement,
-      expired_previous_decision,
-      base::Bind(&SSLPolicy::OnAllowCertificate, base::Unretained(this),
-                 make_scoped_refptr(handler)),
-      &result);
-  switch (result) {
-    case CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE:
-      break;
-    case CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL:
-      handler->CancelRequest();
-      break;
-    case CERTIFICATE_REQUEST_RESULT_TYPE_DENY:
-      handler->DenyRequest();
-      break;
-    default:
-      NOTREACHED();
-  }
+      web_contents, cert_error, ssl_info, request_url, resource_type,
+      overridable, strict_enforcement, expired_previous_decision,
+      base::Bind(&OnAllowCertificate, base::Owned(handler.release()), this));
 }
 
 void SSLPolicy::InitializeEntryIfNeeded(NavigationEntryImpl* entry) {
@@ -256,12 +280,6 @@ void SSLPolicy::InitializeEntryIfNeeded(NavigationEntryImpl* entry) {
 
   entry->GetSSL().security_style = GetSecurityStyleForResource(
       entry->GetURL(), entry->GetSSL().cert_id, entry->GetSSL().cert_status);
-}
-
-void SSLPolicy::OriginRanInsecureContent(const std::string& origin, int pid) {
-  GURL parsed_origin(origin);
-  if (parsed_origin.SchemeIsCryptographic())
-    backend_->HostRanInsecureContent(parsed_origin.host(), pid);
 }
 
 }  // namespace content

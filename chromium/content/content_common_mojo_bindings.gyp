@@ -15,10 +15,15 @@
           'common/image_downloader/image_downloader.mojom',
           'common/leveldb_wrapper.mojom',
           'common/process_control.mojom',
+          'common/render_frame_message_filter.mojom',
           'common/service_worker/embedded_worker_setup.mojom',
           'common/storage_partition_service.mojom',
+          'common/websocket.mojom',
+          '../third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom',
         ],
         'mojom_typemaps': [
+          'common/bluetooth/web_bluetooth_device_id.typemap',
+          '../device/bluetooth/public/interfaces/bluetooth_uuid.typemap',
           '../skia/public/interfaces/skbitmap.typemap',
           '../ui/gfx/geometry/mojo/geometry.typemap',
           '../url/mojo/gurl.typemap',
@@ -42,6 +47,7 @@
         'enable_wexit_time_destructors': 1,
       },
       'dependencies': [
+        '../device/sensors/sensors.gyp:device_sensors_mojo_bindings',
         '../url/url.gyp:url_mojom',
         '../skia/skia.gyp:skia',
         'content_common_mojo_bindings_mojom',

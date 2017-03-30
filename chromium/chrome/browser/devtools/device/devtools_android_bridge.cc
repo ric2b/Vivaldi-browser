@@ -364,9 +364,11 @@ DevToolsAndroidBridge::AgentHostDelegate::~AgentHostDelegate() {
 void DevToolsAndroidBridge::AgentHostDelegate::Attach(
     content::DevToolsExternalAgentProxy* proxy) {
   proxy_ = proxy;
-  content::RecordAction(browser_id_.second.find(kWebViewSocketPrefix) == 0 ?
-      base::UserMetricsAction("DevTools_InspectAndroidWebView") :
-      base::UserMetricsAction("DevTools_InspectAndroidPage"));
+  content::RecordAction(
+      base::StartsWith(browser_id_.second, kWebViewSocketPrefix,
+                       base::CompareCase::SENSITIVE)
+          ? base::UserMetricsAction("DevTools_InspectAndroidWebView")
+          : base::UserMetricsAction("DevTools_InspectAndroidPage"));
 
   // Retain the device so it's not released until AgentHost is detached.
   if (bridge_)
@@ -466,7 +468,7 @@ static std::string GetFrontendURL(const base::DictionaryValue& value) {
   size_t ws_param = frontend_url.find("?ws");
   if (ws_param != std::string::npos)
     frontend_url = frontend_url.substr(0, ws_param);
-  if (frontend_url.find("http:") == 0)
+  if (base::StartsWith(frontend_url, "http:", base::CompareCase::SENSITIVE))
     frontend_url = "https:" + frontend_url.substr(5);
   return frontend_url;
 }
@@ -474,7 +476,7 @@ static std::string GetFrontendURL(const base::DictionaryValue& value) {
 static std::string GetTargetPath(const base::DictionaryValue& value) {
   std::string target_path = GetStringProperty(value, "webSocketDebuggerUrl");
 
-  if (target_path.find("ws://") == 0) {
+  if (base::StartsWith(target_path, "ws://", base::CompareCase::SENSITIVE)) {
     size_t pos = target_path.find("/", 5);
     if (pos == std::string::npos)
       pos = 5;
@@ -525,10 +527,11 @@ static void NoOp(int, const std::string&) {}
 
 void DevToolsAndroidBridge::RemotePageTarget::Inspect(Profile* profile) const {
   Activate();
-  bool isWorker = remote_type_ == kTargetTypeWorker ||
-                  remote_type_ == kTargetTypeServiceWorker;
+  bool is_worker = remote_type_ == kTargetTypeWorker ||
+                   remote_type_ == kTargetTypeServiceWorker;
+  bool is_v8_only = remote_type_ == kTargetTypeNode;
   DevToolsWindow::OpenExternalFrontend(profile, frontend_url_, GetAgentHost(),
-                                       isWorker);
+                                       is_worker, is_v8_only);
 }
 
 bool DevToolsAndroidBridge::RemotePageTarget::Activate() const {
@@ -725,6 +728,9 @@ DevToolsAndroidBridge::DevToolsAndroidBridge(
   pref_change_registrar_.Add(prefs::kDevToolsDiscoverUsbDevicesEnabled,
       base::Bind(&DevToolsAndroidBridge::CreateDeviceProviders,
                  base::Unretained(this)));
+  pref_change_registrar_.Add(prefs::kDevToolsTargetDiscoveryConfig,
+      base::Bind(&DevToolsAndroidBridge::CreateDeviceProviders,
+                 base::Unretained(this)));
   CreateDeviceProviders();
 }
 
@@ -900,15 +906,37 @@ void DevToolsAndroidBridge::ScheduleTaskDefault(const base::Closure& task) {
       base::TimeDelta::FromMilliseconds(kAdbPollingIntervalMs));
 }
 
-static scoped_refptr<TCPDeviceProvider> CreateTCPDeviceProvider() {
+static std::set<net::HostPortPair> ParseTargetDiscoveryPreferenceValue(
+    const base::ListValue* preferenceValue) {
+  std::set<net::HostPortPair> targets;
+  if (!preferenceValue || preferenceValue->empty())
+    return targets;
+  std::string address;
+  for (size_t i = 0; i < preferenceValue->GetSize(); i++) {
+    if (!preferenceValue->GetString(i, &address))
+      continue;
+    net::HostPortPair target = net::HostPortPair::FromString(address);
+    if (target.IsEmpty()) {
+      LOG(WARNING) << "Invalid target: " << address;
+      continue;
+    }
+    targets.insert(target);
+  }
+  return targets;
+}
+
+static scoped_refptr<TCPDeviceProvider> CreateTCPDeviceProvider(
+    const base::ListValue* targetDiscoveryConfig) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (!command_line->HasSwitch(switches::kRemoteDebuggingTargets))
+  std::set<net::HostPortPair> targets =
+      ParseTargetDiscoveryPreferenceValue(targetDiscoveryConfig);
+  if (targets.empty() &&
+      !command_line->HasSwitch(switches::kRemoteDebuggingTargets))
     return nullptr;
   std::string value =
       command_line->GetSwitchValueASCII(switches::kRemoteDebuggingTargets);
   std::vector<std::string> addresses = base::SplitString(
       value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  std::set<net::HostPortPair> targets;
   for (const std::string& address : addresses) {
     net::HostPortPair target = net::HostPortPair::FromString(address);
     if (target.IsEmpty()) {
@@ -924,8 +952,14 @@ static scoped_refptr<TCPDeviceProvider> CreateTCPDeviceProvider() {
 
 void DevToolsAndroidBridge::CreateDeviceProviders() {
   AndroidDeviceManager::DeviceProviders device_providers;
+  PrefService* service = profile_->GetPrefs();
+  const base::ListValue* targets =
+      service->GetList(prefs::kDevToolsTargetDiscoveryConfig);
+  scoped_refptr<TCPDeviceProvider> provider = CreateTCPDeviceProvider(targets);
+  if (tcp_provider_callback_)
+    tcp_provider_callback_.Run(provider);
 
-  if (scoped_refptr<TCPDeviceProvider> provider = CreateTCPDeviceProvider())
+  if (provider)
     device_providers.push_back(provider);
 
 #if defined(ENABLE_SERVICE_DISCOVERY)
@@ -934,7 +968,6 @@ void DevToolsAndroidBridge::CreateDeviceProviders() {
 
   device_providers.push_back(new AdbDeviceProvider());
 
-  PrefService* service = profile_->GetPrefs();
   const PrefService::Preference* pref =
       service->FindPreference(prefs::kDevToolsDiscoverUsbDevicesEnabled);
   const base::Value* pref_value = pref->GetValue();
@@ -949,4 +982,10 @@ void DevToolsAndroidBridge::CreateDeviceProviders() {
     StopDeviceListPolling();
     StartDeviceListPolling();
   }
+}
+
+void DevToolsAndroidBridge::set_tcp_provider_callback_for_test(
+    TCPProviderCallback callback) {
+  tcp_provider_callback_ = callback;
+  CreateDeviceProviders();
 }

@@ -25,7 +25,7 @@
 .platform-windows .monospace,
 .platform-windows .source-code {
     font-size: 12px !important;
-    font-family: Consolas, Lucida Console, monospace;
+    font-family: Consolas, Lucida Console, Courier New, monospace;
 }
 
 :host-context(.platform-linux) .monospace,
@@ -89,6 +89,10 @@ iframe.fill {
     position: relative;
 }
 
+.view-container > .toolbar {
+    border-bottom: 1px solid #eee;
+}
+
 .flex-auto {
     flex: auto;
 }
@@ -105,6 +109,10 @@ iframe.fill {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.overflow-auto {
+    overflow: auto;
 }
 
 iframe.widget {
@@ -157,7 +165,7 @@ input {
     background-color: white;
 }
 
-:host-context(.-theme-with-dark-background) input[type="checkbox"] {
+:host-context(.-theme-with-dark-background) input[type="checkbox"]::not(.-theme-preserve) {
     -webkit-filter: invert(80%);
 }
 
@@ -165,7 +173,6 @@ input[type="search"]:focus,
 input[type="text"]:focus {
     outline: auto rgb(56, 121, 217);
 }
-
 
 .highlighted-search-result.current-search-result {
     border-radius: 1px;
@@ -180,8 +187,9 @@ input[type="text"]:focus {
 
 .editing {
     -webkit-user-select: text;
-    box-shadow: rgba(0, 0, 0, .5) 3px 3px 4px;
-    outline: 1px solid rgb(66%, 66%, 66%) !important;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2),
+                0 2px 4px rgba(0, 0, 0, 0.2),
+                0 2px 6px rgba(0, 0, 0, 0.1);
     background-color: white;
     -webkit-user-modify: read-write-plaintext-only;
     text-overflow: clip !important;
@@ -272,6 +280,13 @@ body.inactive select.chrome-select,
     border-radius: 2px;
     background-color: #333;
     -webkit-box-shadow: inset 0 0 1px rgba(255,255,255,0.5);
+}
+
+.gray-info-message {
+    text-align: center;
+    font-style: italic;
+    padding: 6px;
+    color: #888;
 }
 
 label[is=dt-icon-label] {

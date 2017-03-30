@@ -29,6 +29,7 @@
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
+#include "ipc/ipc_message_macros.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/log/net_log.h"
@@ -70,6 +71,14 @@ void InitializeResourceBufferConstants() {
   GetNumericArg("resource-buffer-size", &kBufferSize);
   GetNumericArg("resource-buffer-min-allocation-size", &kMinAllocationSize);
   GetNumericArg("resource-buffer-max-allocation-size", &kMaxAllocationSize);
+}
+
+// Updates |*cached| to |updated| and returns the difference from the old
+// value.
+int TrackDifference(int64_t updated, int64_t* cached) {
+  int difference = updated - *cached;
+  *cached = updated;
+  return difference;
 }
 
 }  // namespace
@@ -117,6 +126,7 @@ class AsyncResourceHandler::InliningHelper {
   // Returns true if the received data is sent to the consumer.
   bool SendInlinedDataIfApplicable(int bytes_read,
                                    int encoded_data_length,
+                                   int encoded_body_length,
                                    IPC::Sender* sender,
                                    int request_id) {
     DCHECK(sender);
@@ -129,7 +139,7 @@ class AsyncResourceHandler::InliningHelper {
     leading_chunk_buffer_ = nullptr;
 
     sender->Send(new ResourceMsg_InlinedDataChunkReceived(
-        request_id, data, encoded_data_length));
+        request_id, data, encoded_data_length, encoded_body_length));
     return true;
   }
 
@@ -206,7 +216,8 @@ AsyncResourceHandler::AsyncResourceHandler(
       inlining_helper_(new InliningHelper),
       last_upload_position_(0),
       waiting_for_upload_progress_ack_(false),
-      reported_transfer_size_(0) {
+      reported_transfer_size_(0),
+      reported_encoded_body_length_(0) {
   InitializeResourceBufferConstants();
 }
 
@@ -297,16 +308,12 @@ bool AsyncResourceHandler::OnRequestRedirected(
   *defer = did_defer_ = true;
   OnDefer();
 
-  if (rdh_->delegate()) {
-    rdh_->delegate()->OnRequestRedirected(
-        redirect_info.new_url, request(), info->GetContext(), response);
-  }
-
   NetLogObserver::PopulateResponseInfo(request(), response);
   response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   reported_transfer_size_ = 0;
   response->head.request_start = request()->creation_time();
   response->head.response_start = TimeTicks::Now();
+  response->head.encoded_data_length = request()->GetTotalReceivedBytes();
   // TODO(davidben): Is it necessary to pass the new first party URL for
   // cookies? The only case where it can change is top-level navigation requests
   // and hopefully those will eventually all be owned by the browser. It's
@@ -339,8 +346,8 @@ bool AsyncResourceHandler::OnResponseStarted(ResourceResponse* response,
   }
 
   if (rdh_->delegate()) {
-    rdh_->delegate()->OnResponseStarted(
-        request(), info->GetContext(), response, info->filter());
+    rdh_->delegate()->OnResponseStarted(request(), info->GetContext(),
+                                        response);
   }
 
   NetLogObserver::PopulateResponseInfo(request(), response);
@@ -399,10 +406,6 @@ bool AsyncResourceHandler::OnWillStart(const GURL& url, bool* defer) {
   return true;
 }
 
-bool AsyncResourceHandler::OnBeforeNetworkStart(const GURL& url, bool* defer) {
-  return true;
-}
-
 bool AsyncResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                                       int* buf_size,
                                       int min_size) {
@@ -440,10 +443,12 @@ bool AsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
     return false;
 
   int encoded_data_length = CalculateEncodedDataLengthToReport();
+  int encoded_body_length = CalculateEncodedBodyLengthToReport();
 
   // Return early if InliningHelper handled the received data.
   if (inlining_helper_->SendInlinedDataIfApplicable(
-          bytes_read, encoded_data_length, filter, GetRequestID()))
+          bytes_read, encoded_data_length, encoded_body_length, filter,
+          GetRequestID()))
     return true;
 
   buffer_->ShrinkLastAllocation(bytes_read);
@@ -461,8 +466,9 @@ bool AsyncResourceHandler::OnReadCompleted(int bytes_read, bool* defer) {
 
   int data_offset = buffer_->GetLastAllocationOffset();
 
-  filter->Send(new ResourceMsg_DataReceived(
-      GetRequestID(), data_offset, bytes_read, encoded_data_length));
+  filter->Send(new ResourceMsg_DataReceived(GetRequestID(), data_offset,
+                                            bytes_read, encoded_data_length,
+                                            encoded_body_length));
   ++pending_data_count_;
 
   if (!buffer_->CanAllocate()) {
@@ -513,16 +519,6 @@ void AsyncResourceHandler::OnResponseCompleted(
   // requests ignored by the handler should be canceled (which should result in
   // the ERR_ABORTED error code).
   DCHECK(!was_ignored_by_handler || error_code == net::ERR_ABORTED);
-
-  // TODO(mkosiba): Fix up cases where we create a URLRequestStatus
-  // with a status() != SUCCESS and an error_code() == net::OK.
-  if (status.status() == net::URLRequestStatus::CANCELED &&
-      error_code == net::OK) {
-    error_code = net::ERR_ABORTED;
-  } else if (status.status() == net::URLRequestStatus::FAILED &&
-             error_code == net::OK) {
-    error_code = net::ERR_FAILED;
-  }
 
   ResourceRequestCompletionStatus request_complete_data;
   request_complete_data.error_code = error_code;
@@ -576,10 +572,13 @@ bool AsyncResourceHandler::CheckForSufficientResource() {
 }
 
 int AsyncResourceHandler::CalculateEncodedDataLengthToReport() {
-  int64_t current_transfer_size = request()->GetTotalReceivedBytes();
-  int encoded_data_length = current_transfer_size - reported_transfer_size_;
-  reported_transfer_size_ = current_transfer_size;
-  return encoded_data_length;
+  return TrackDifference(request()->GetTotalReceivedBytes(),
+                         &reported_transfer_size_);
+}
+
+int AsyncResourceHandler::CalculateEncodedBodyLengthToReport() {
+  return TrackDifference(request()->GetRawBodyBytes(),
+                         &reported_encoded_body_length_);
 }
 
 void AsyncResourceHandler::RecordHistogram() {

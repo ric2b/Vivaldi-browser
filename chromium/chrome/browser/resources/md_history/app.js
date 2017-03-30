@@ -2,67 +2,85 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * @typedef {{querying: boolean,
- *            searchTerm: string,
- *            results: ?Array<!HistoryEntry>,
- *            info: ?HistoryQuery,
- *            incremental: boolean,
- *            range: HistoryRange,
- *            groupedOffset: number,
- *            sessionList: ?Array<!ForeignSession>}}
- */
-var QueryState;
-
 Polymer({
   is: 'history-app',
 
+  behaviors: [Polymer.IronScrollTargetBehavior],
+
   properties: {
+    showSidebarFooter: Boolean,
+
     // The id of the currently selected page.
-    selectedPage_: {
-      type: String,
-      value: 'history-list',
-      observer: 'unselectAll'
-    },
+    selectedPage_: {type: String, observer: 'unselectAll'},
 
     // Whether domain-grouped history is enabled.
-    grouped_: {
-      type: Boolean,
-      reflectToAttribute: true
-    },
-
-    // Whether the first set of results have returned.
-    firstLoad_: { type: Boolean, value: true },
-
-    // True if the history queries are disabled.
-    queryingDisabled_: Boolean,
+    grouped_: {type: Boolean, reflectToAttribute: true},
 
     /** @type {!QueryState} */
-    // TODO(calamity): Split out readOnly data into a separate property which is
-    // only set on result return.
     queryState_: {
       type: Object,
       value: function() {
         return {
-          // A query is initiated by page load.
-          querying: true,
-          searchTerm: '',
-          results: null,
           // Whether the most recent query was incremental.
           incremental: false,
-          info: null,
-          range: HistoryRange.ALL_TIME,
-          // TODO(calamity): Make history toolbar buttons change the offset.
+          // A query is initiated by page load.
+          querying: true,
+          queryingDisabled: false,
+          _range: HistoryRange.ALL_TIME,
+          searchTerm: '',
+          // TODO(calamity): Make history toolbar buttons change the offset
           groupedOffset: 0,
+
+          set range(val) { this._range = Number(val); },
+          get range() { return this._range; },
+        };
+      }
+    },
+
+    /** @type {!QueryResult} */
+    queryResult_: {
+      type: Object,
+      value: function() {
+        return {
+          info: null,
+          results: null,
           sessionList: null,
         };
       }
     },
+
+    // Route data for the current page.
+    routeData_: Object,
+
+    // The query params for the page.
+    queryParams_: Object,
+
+    // True if the window is narrow enough for the page to have a drawer.
+    hasDrawer_: Boolean,
+
+    isUserSignedIn_: {
+      type: Boolean,
+      // Updated on synced-device-manager attach by chrome.sending
+      // 'otherDevicesInitialized'.
+      value: loadTimeData.getBoolean('isUserSignedIn'),
+    },
+
+    toolbarShadow_: {
+      type: Boolean,
+      reflectToAttribute: true,
+      notify: true,
+    }
   },
 
   observers: [
+    // routeData_.page <=> selectedPage
+    'routeDataChanged_(routeData_.page)',
+    'selectedPageChanged_(selectedPage_)',
+
+    // queryParams_.q <=> queryState.searchTerm
     'searchTermChanged_(queryState_.searchTerm)',
-    'groupedRangeChanged_(queryState_.range)',
+    'searchQueryParamChanged_(queryParams_.q)',
+
   ],
 
   // TODO(calamity): Replace these event listeners with data bound properties.
@@ -72,17 +90,51 @@ Polymer({
     'unselect-all': 'unselectAll',
     'delete-selected': 'deleteSelected',
     'search-domain': 'searchDomain_',
-    'load-more-history': 'loadMoreHistory_',
+    'history-close-drawer': 'closeDrawer_',
+    'history-view-changed': 'historyViewChanged_',
   },
 
   /** @override */
   ready: function() {
     this.grouped_ = loadTimeData.getBoolean('groupByDomain');
+
+    cr.ui.decorate('command', cr.ui.Command);
+    document.addEventListener('canExecute', this.onCanExecute_.bind(this));
+    document.addEventListener('command', this.onCommand_.bind(this));
+
+    // Redirect legacy search URLs to URLs compatible with material history.
+    if (window.location.hash) {
+      window.location.href = window.location.href.split('#')[0] + '?' +
+          window.location.hash.substr(1);
+    }
+  },
+
+  onFirstRender: function() {
+    // requestAnimationFrame allows measurement immediately before the next
+    // repaint, but after the first page of <iron-list> items has stamped.
+    requestAnimationFrame(function() {
+      chrome.send(
+          'metricsHandler:recordTime',
+          ['History.ResultsRenderedTime', window.performance.now()]);
+    });
+
+    // Focus the search field on load. Done here to ensure the history page
+    // is rendered before we try to take focus.
+    if (!this.hasDrawer_) {
+      this.focusToolbarSearchField();
+    }
+  },
+
+  /** Overridden from IronScrollTargetBehavior */
+  _scrollHandler: function() {
+    this.toolbarShadow_ = this.scrollTarget.scrollTop != 0;
   },
 
   /** @private */
   onMenuTap_: function() {
-    this.$['side-bar'].toggle();
+    var drawer = this.$$('#drawer');
+    if (drawer)
+      drawer.toggle();
   },
 
   /**
@@ -91,8 +143,9 @@ Polymer({
    * @param {{detail: {countAddition: number}}} e
    */
   checkboxSelected: function(e) {
-    var toolbar = /** @type {HistoryToolbarElement} */(this.$.toolbar);
-    toolbar.count += e.detail.countAddition;
+    var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
+    toolbar.count = /** @type {HistoryListContainerElement} */ (this.$.history)
+                        .getSelectedItemCount();
   },
 
   /**
@@ -101,43 +154,14 @@ Polymer({
    * @private
    */
   unselectAll: function() {
-    var historyList =
-        /** @type {HistoryListElement} */(this.$['history-list']);
-    var toolbar = /** @type {HistoryToolbarElement} */(this.$.toolbar);
-    historyList.unselectAllItems(toolbar.count);
+    var listContainer =
+        /** @type {HistoryListContainerElement} */ (this.$.history);
+    var toolbar = /** @type {HistoryToolbarElement} */ (this.$.toolbar);
+    listContainer.unselectAllItems(toolbar.count);
     toolbar.count = 0;
   },
 
-  /**
-   * Listens for call to delete all selected items and loops through all items
-   * to determine which ones are selected and deletes these.
-   */
-  deleteSelected: function() {
-    if (!loadTimeData.getBoolean('allowDeletingHistory'))
-      return;
-
-    // TODO(hsampson): add a popup to check whether the user definitely
-    // wants to delete the selected items.
-    /** @type {HistoryListElement} */(this.$['history-list']).deleteSelected();
-  },
-
-  initializeResults_: function(info, results) {
-    if (results.length == 0)
-      return;
-
-    var currentDate = results[0].dateRelativeDay;
-
-    for (var i = 0; i < results.length; i++) {
-      // Sets the default values for these fields to prevent undefined types.
-      results[i].selected = false;
-      results[i].readableTimestamp =
-          info.term == '' ? results[i].dateTimeOfDay : results[i].dateShort;
-
-      if (results[i].dateRelativeDay != currentDate) {
-        currentDate = results[i].dateRelativeDay;
-      }
-    }
-  },
+  deleteSelected: function() { this.$.history.deleteSelectedWithPrompt(); },
 
   /**
    * @param {HistoryQuery} info An object containing information about the
@@ -145,70 +169,73 @@ Polymer({
    * @param {!Array<HistoryEntry>} results A list of results.
    */
   historyResult: function(info, results) {
-    this.firstLoad_ = false;
-    this.set('queryState_.info', info);
-    this.set('queryState_.results', results);
     this.set('queryState_.querying', false);
-
-    this.initializeResults_(info, results);
-
-    if (this.grouped_ && this.queryState_.range != HistoryRange.ALL_TIME) {
-      this.$$('history-grouped-list').historyData = results;
-      return;
-    }
-
-    var list = /** @type {HistoryListElement} */(this.$['history-list']);
-    list.addNewResults(results);
-    if (info.finished)
-      list.disableResultLoading();
+    this.set('queryResult_.info', info);
+    this.set('queryResult_.results', results);
+    var listContainer =
+        /** @type {HistoryListContainerElement} */ (this.$['history']);
+    listContainer.historyResult(info, results);
   },
+
+  /**
+   * Focuses the search bar in the toolbar.
+   */
+  focusToolbarSearchField: function() { this.$.toolbar.showSearchField(); },
 
   /**
    * Fired when the user presses 'More from this site'.
    * @param {{detail: {domain: string}}} e
    */
-  searchDomain_: function(e) {
-    this.$.toolbar.setSearchTerm(e.detail.domain);
-  },
+  searchDomain_: function(e) { this.$.toolbar.setSearchTerm(e.detail.domain); },
 
-  searchTermChanged_: function(searchTerm) {
-    this.queryHistory(false);
-  },
-
-  groupedRangeChanged_: function(range) {
-    this.queryHistory(false);
-  },
-
-  loadMoreHistory_: function() {
-    this.queryHistory(true);
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onCanExecute_: function(e) {
+    e = /** @type {cr.ui.CanExecuteEvent} */(e);
+    switch (e.command.id) {
+      case 'find-command':
+        e.canExecute = true;
+        break;
+      case 'slash-command':
+        e.canExecute = !this.$.toolbar.searchBar.isSearchFocused();
+        break;
+      case 'delete-command':
+        e.canExecute = this.$.toolbar.count > 0;
+        break;
+    }
   },
 
   /**
-   * Queries the history backend for results based on queryState_.
-   * @param {boolean} incremental Whether the new query should continue where
-   *    the previous query stopped.
+   * @param {string} searchTerm
+   * @private
    */
-  queryHistory: function(incremental) {
-    if (this.queryingDisabled_ || this.firstLoad_)
-      return;
+  searchTermChanged_: function(searchTerm) {
+    this.set('queryParams_.q', searchTerm || null);
+    this.$['history'].queryHistory(false);
+    // TODO(tsergeant): Ignore incremental searches in this metric.
+    if (this.queryState_.searchTerm)
+      md_history.BrowserService.getInstance().recordAction('Search');
+  },
 
-    this.set('queryState_.querying', true);
-    this.set('queryState_.incremental', incremental);
+  /**
+   * @param {string} searchQuery
+   * @private
+   */
+  searchQueryParamChanged_: function(searchQuery) {
+    this.$.toolbar.setSearchTerm(searchQuery || '');
+  },
 
-    var queryState = this.queryState_;
-
-    var lastVisitTime = 0;
-    if (incremental) {
-      var lastVisit = queryState.results.slice(-1)[0];
-      lastVisitTime = lastVisit ? lastVisit.time : 0;
-    }
-
-    var maxResults =
-      queryState.range == HistoryRange.ALL_TIME ? RESULTS_PER_PAGE : 0;
-    chrome.send('queryHistory', [
-      queryState.searchTerm, queryState.groupedOffset, Number(queryState.range),
-      lastVisitTime, maxResults
-    ]);
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onCommand_: function(e) {
+    if (e.command.id == 'find-command' || e.command.id == 'slash-command')
+      this.focusToolbarSearchField();
+    if (e.command.id == 'delete-command')
+      this.deleteSelected();
   },
 
   /**
@@ -217,22 +244,23 @@ Polymer({
    * @param {boolean} isTabSyncEnabled Is tab sync enabled for this profile?
    */
   setForeignSessions: function(sessionList, isTabSyncEnabled) {
-    if (!isTabSyncEnabled)
+    if (!isTabSyncEnabled) {
+      var syncedDeviceManagerElem =
+      /** @type {HistorySyncedDeviceManagerElement} */this
+          .$$('history-synced-device-manager');
+      if (syncedDeviceManagerElem)
+        syncedDeviceManagerElem.tabSyncDisabled();
       return;
+    }
 
-    this.set('queryState_.sessionList', sessionList);
+    this.set('queryResult_.sessionList', sessionList);
   },
 
   /**
-   * @param {string} selectedPage
-   * @param {HistoryRange} range
-   * @return {string}
+   * Called when browsing data is cleared.
    */
-  getSelectedPage: function(selectedPage, range) {
-    if (selectedPage == 'history-list' && range != HistoryRange.ALL_TIME)
-      return 'history-grouped-list';
-
-    return selectedPage;
+  historyDeleted: function() {
+    this.$.history.historyDeleted();
   },
 
   /**
@@ -240,10 +268,7 @@ Polymer({
    * @param {boolean} isUserSignedIn
    */
   updateSignInState: function(isUserSignedIn) {
-    var syncedDeviceManagerElem =
-      /** @type {HistorySyncedDeviceManagerElement} */this
-          .$$('history-synced-device-manager');
-    syncedDeviceManagerElem.updateSignInState(isUserSignedIn);
+    this.isUserSignedIn_ = isUserSignedIn;
   },
 
   /**
@@ -252,7 +277,7 @@ Polymer({
    * @private
    */
   syncedTabsSelected_: function(selectedPage) {
-    return selectedPage == 'history-synced-device-manager';
+    return selectedPage == 'syncedTabs';
   },
 
   /**
@@ -265,5 +290,79 @@ Polymer({
    */
   shouldShowSpinner_: function(querying, incremental, searchTerm) {
     return querying && !incremental && searchTerm != '';
-  }
+  },
+
+  /**
+   * @param {string} page
+   * @private
+   */
+  routeDataChanged_: function(page) { this.selectedPage_ = page; },
+
+  /**
+   * @param {string} selectedPage
+   * @private
+   */
+  selectedPageChanged_: function(selectedPage) {
+    this.set('routeData_.page', selectedPage);
+    this.historyViewChanged_();
+  },
+
+  /** @private */
+  historyViewChanged_: function() {
+    // This allows the synced-device-manager to render so that it can be set as
+    // the scroll target.
+    requestAnimationFrame(function() {
+      this.scrollTarget = this.$.content.selectedItem.getContentScrollTarget();
+      this._scrollHandler();
+    }.bind(this));
+    this.recordHistoryPageView_();
+  },
+
+  /**
+   * This computed binding is needed to make the iron-pages selector update when
+   * the synced-device-manager is instantiated for the first time. Otherwise the
+   * fallback selection will continue to be used after the corresponding item is
+   * added as a child of iron-pages.
+   * @param {string} selectedPage
+   * @param {Array} items
+   * @return {string}
+   * @private
+   */
+  getSelectedPage_: function(selectedPage, items) { return selectedPage; },
+
+  /** @private */
+  closeDrawer_: function() {
+    var drawer = this.$$('#drawer');
+    if (drawer)
+      drawer.close();
+  },
+
+  /** @private */
+  recordHistoryPageView_: function() {
+    var histogramValue = HistoryPageViewHistogram.END;
+    switch (this.selectedPage_) {
+      case 'syncedTabs':
+        histogramValue = this.isUserSignedIn_ ?
+            HistoryPageViewHistogram.SYNCED_TABS :
+            HistoryPageViewHistogram.SIGNIN_PROMO;
+        break;
+      default:
+        switch (this.queryState_.range) {
+          case HistoryRange.ALL_TIME:
+            histogramValue = HistoryPageViewHistogram.HISTORY;
+            break;
+          case HistoryRange.WEEK:
+            histogramValue = HistoryPageViewHistogram.GROUPED_WEEK;
+            break;
+          case HistoryRange.MONTH:
+            histogramValue = HistoryPageViewHistogram.GROUPED_MONTH;
+            break;
+        }
+        break;
+    }
+
+    md_history.BrowserService.getInstance().recordHistogram(
+      'History.HistoryPageView', histogramValue, HistoryPageViewHistogram.END
+    );
+  },
 });

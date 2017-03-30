@@ -84,13 +84,12 @@ public:
     bool hasFetchEventHandler() override;
 
     // WorkerReportingProxy overrides:
-    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>) override;
-    void reportConsoleMessage(ConsoleMessage*) override;
+    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId) override;
+    void reportConsoleMessage(MessageSource, MessageLevel, const String& message, SourceLocation*) override;
     void postMessageToPageInspector(const String&) override;
-    void postWorkerConsoleAgentEnabled() override { }
     void didEvaluateWorkerScript(bool success) override;
     void didInitializeWorkerContext() override;
-    void workerGlobalScopeStarted(WorkerGlobalScope*) override;
+    void workerGlobalScopeStarted(WorkerOrWorkletGlobalScope*) override;
     void workerGlobalScopeClosed() override;
     void willDestroyWorkerGlobalScope() override;
     void workerThreadTerminated() override;

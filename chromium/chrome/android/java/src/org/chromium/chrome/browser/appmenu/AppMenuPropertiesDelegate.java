@@ -4,17 +4,18 @@
 
 package org.chromium.chrome.browser.appmenu;
 
-import android.text.TextUtils;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.view.Menu;
 import android.view.MenuItem;
 
-import org.chromium.base.CommandLine;
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
+import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
@@ -23,7 +24,6 @@ import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
-import org.chromium.printing.PrintingController;
 import org.chromium.ui.base.DeviceFormFactor;
 
 /**
@@ -106,10 +106,29 @@ public class AppMenuPropertiesDelegate {
 
                 MenuItem bookmarkMenuItem = menu.findItem(R.id.bookmark_this_page_id);
                 updateBookmarkMenuItem(bookmarkMenuItem, currentTab);
+
+                MenuItem offlineMenuItem = menu.findItem(R.id.offline_page_id);
+                if (offlineMenuItem != null) {
+                    if (DownloadUtils.isDownloadHomeEnabled()) {
+                        boolean isValidTab = !currentTab.isOfflinePage()
+                                && !currentTab.isShowingErrorPage()
+                                && !currentTab.isShowingInterstitialPage();
+                        offlineMenuItem.setEnabled(!isChromeScheme && !isIncognito && isValidTab);
+                        Drawable drawable = offlineMenuItem.getIcon();
+                        if (drawable != null) {
+                            int iconTint = ApiCompatibilityUtils.getColor(
+                                    mActivity.getResources(), R.color.light_normal_color);
+                            drawable.mutate();
+                            drawable.setColorFilter(iconTint, PorterDuff.Mode.SRC_ATOP);
+                        }
+                    } else {
+                        offlineMenuItem.setVisible(false);
+                    }
+                }
             }
 
-            menu.findItem(R.id.downloads_menu_id).setVisible(
-                    CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_DOWNLOAD_MANAGER_UI));
+            menu.findItem(R.id.downloads_menu_id)
+                    .setVisible(DownloadUtils.isDownloadHomeEnabled());
 
             menu.findItem(R.id.update_menu_id).setVisible(
                     UpdateMenuItemHelper.getInstance().shouldShowMenuItem(mActivity));
@@ -154,14 +173,6 @@ public class AppMenuPropertiesDelegate {
                     ? mActivity.getString(R.string.menu_request_desktop_site_on)
                     : mActivity.getString(R.string.menu_request_desktop_site_off));
 
-            PrintingController printingController =
-                    mActivity.getChromeApplication().getPrintingController();
-            disableEnableMenuItem(menu, R.id.print_id,
-                    printingController != null && !currentTab.isNativePage(),
-                    printingController != null && !printingController.isBusy()
-                            && PrefServiceBridge.getInstance().isPrintingEnabled(),
-                    PrefServiceBridge.getInstance().isPrintingManaged());
-
             // Only display reader mode settings menu option if the current page is in reader mode.
             menu.findItem(R.id.reader_mode_prefs_id)
                     .setVisible(DomDistillerUrlUtils.isDistilledPage(currentTab.getUrl()));
@@ -182,17 +193,12 @@ public class AppMenuPropertiesDelegate {
             }
         }
 
-        // Incognito NTP in Document mode should not show "New incognito tab" menu item.
-        boolean incognitoItemVisible = !FeatureUtilities.isDocumentMode(mActivity)
-                || (currentTab == null)
-                || !(TextUtils.equals(currentTab.getUrl(), UrlConstants.NTP_URL) && isIncognito);
-
         // Disable new incognito tab when it is blocked (e.g. by a policy).
         // findItem(...).setEnabled(...)" is not enough here, because of the inflated
         // main_menu.xml contains multiple items with the same id in different groups
         // e.g.: new_incognito_tab_menu_id.
         disableEnableMenuItem(menu, R.id.new_incognito_tab_menu_id,
-                incognitoItemVisible,
+                true,
                 PrefServiceBridge.getInstance().isIncognitoModeEnabled(),
                 PrefServiceBridge.getInstance().isIncognitoModeManaged());
         mActivity.prepareMenu(menu);

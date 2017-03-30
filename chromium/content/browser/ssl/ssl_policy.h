@@ -9,6 +9,8 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "content/common/content_export.h"
+#include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/security_style.h"
 #include "net/cert/cert_status_flags.h"
@@ -17,11 +19,9 @@ class GURL;
 
 namespace content {
 class NavigationEntryImpl;
-class SSLCertErrorHandler;
+class SSLErrorHandler;
 class SSLPolicyBackend;
-class SSLRequestInfo;
 class WebContents;
-struct SSLStatus;
 
 // SSLPolicy
 //
@@ -29,18 +29,24 @@ struct SSLStatus;
 // SSL trust indicators.  It relies on the SSLPolicyBackend to actually enact
 // the decisions it reaches.
 //
-class SSLPolicy {
+class CONTENT_EXPORT SSLPolicy {
  public:
   explicit SSLPolicy(SSLPolicyBackend* backend);
 
   // An error occurred with the certificate in an SSL connection.
-  void OnCertError(SSLCertErrorHandler* handler);
+  void OnCertError(std::unique_ptr<SSLErrorHandler> handler);
 
   void DidRunInsecureContent(NavigationEntryImpl* entry,
                              const GURL& security_origin);
 
-  // We have started a resource request with the given info.
-  void OnRequestStarted(SSLRequestInfo* info);
+  void DidRunContentWithCertErrors(NavigationEntryImpl* entry,
+                                   const GURL& security_origin);
+
+  // We have started a resource request for |url| with the given |cert_id| and
+  // |cert_status|.
+  void OnRequestStarted(const GURL& url,
+                        int cert_id,
+                        net::CertStatus cert_status);
 
   // Update the SSL information in |entry| to match the current state.
   // |web_contents| is the WebContents associated with this entry.
@@ -62,10 +68,6 @@ class SSLPolicy {
     EXPIRED_PREVIOUS_DECISION = 1 << 2
   };
 
-  // Callback that the user chose to accept or deny the certificate.
-  void OnAllowCertificate(scoped_refptr<SSLCertErrorHandler> handler,
-                          bool allow);
-
   // Helper method for derived classes handling certificate errors.
   //
   // Options should be a bitmask combination of OnCertErrorInternalOptionsMask.
@@ -76,14 +78,12 @@ class SSLPolicy {
   // certificate validation (e.g. with HTTP Strict-Transport-Security).
   // EXPIRED_PREVIOUS_DECISION indicates whether a user decision had been
   // previously made but the decision has expired.
-  void OnCertErrorInternal(SSLCertErrorHandler* handler, int options_mask);
+  void OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
+                           int options_mask);
 
   // If the security style of |entry| has not been initialized, then initialize
   // it with the default style for its URL.
   void InitializeEntryIfNeeded(NavigationEntryImpl* entry);
-
-  // Mark |origin| as having run insecure content in the process with ID |pid|.
-  void OriginRanInsecureContent(const std::string& origin, int pid);
 
   // The backend we use to enact our decisions.
   SSLPolicyBackend* backend_;

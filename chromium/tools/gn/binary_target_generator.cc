@@ -63,6 +63,9 @@ void BinaryTargetGenerator::DoRun() {
   if (!FillCompleteStaticLib())
     return;
 
+  if(!FillTargetPool())
+  	return;
+
   // Config values (compiler flags, etc.) set directly on this target.
   ConfigValuesGenerator gen(&target_->config_values(), scope_,
                             scope_->GetSourceDir(), err_);
@@ -172,3 +175,15 @@ bool BinaryTargetGenerator::FillAllowCircularIncludesFrom() {
     target_->allow_circular_includes_from().insert(cur);
   return true;
 }
+
+// <Vivaldi>
+bool BinaryTargetGenerator::FillTargetPool() {
+  const Value* value = scope_->GetValue(functions::kPool, true);
+  if (!value)
+    return true;
+  if (!value->VerifyTypeIs(Value::STRING, err_))
+    return false;
+  target_->set_pool(value->string_value());
+  return true;
+}
+// </Vivaldi>

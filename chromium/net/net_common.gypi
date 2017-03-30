@@ -203,12 +203,10 @@
         ],
       },
     ],
-    # client_cert_store_nss.c requires NSS_CmpCertChainWCANames from NSS's
-    # libssl, but our bundled copy is not built in OpenSSL ports. Pull that
-    # file in directly.
     [ 'use_nss_certs == 1', {
         'sources': [
-          'third_party/nss/ssl/cmpcert.c',
+          'third_party/nss/ssl/cmpcert.cc',
+          'third_party/nss/ssl/cmpcert.h',
         ],
     }],
     [ 'enable_websockets == 1', {
@@ -223,10 +221,6 @@
           'dns/mdns_client.h',
           'dns/mdns_client_impl.cc',
           'dns/mdns_client_impl.h',
-          'dns/record_parsed.cc',
-          'dns/record_parsed.h',
-          'dns/record_rdata.cc',
-          'dns/record_rdata.h',
         ]
     }],
     [ 'OS == "win"', {

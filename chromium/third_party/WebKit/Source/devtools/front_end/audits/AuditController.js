@@ -37,7 +37,7 @@ WebInspector.AuditController = function(auditsPanel)
 {
     this._auditsPanel = auditsPanel;
     WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.Load, this._didMainResourceLoad, this);
-    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.EventTypes.RequestFinished, this._didLoadResource, this);
+    WebInspector.targetManager.addModelListener(WebInspector.NetworkManager, WebInspector.NetworkManager.Events.RequestFinished, this._didLoadResource, this);
 }
 
 WebInspector.AuditController.prototype = {
@@ -61,7 +61,7 @@ WebInspector.AuditController.prototype = {
         }
 
         var results = [];
-        var mainResourceURL = target.resourceTreeModel.inspectedPageURL();
+        var mainResourceURL = target.inspectedURL();
         var categoriesDone = 0;
 
         function categoryDoneCallback()
@@ -71,7 +71,8 @@ WebInspector.AuditController.prototype = {
             resultCallback(mainResourceURL, results);
         }
 
-        var requests = target.networkLog.requests().slice();
+        var networkLog = WebInspector.NetworkLog.fromTarget(target);
+        var requests = networkLog ? networkLog.requests().slice() : [];
         var compositeProgress = new WebInspector.CompositeProgress(this._progress);
         var subprogresses = [];
         for (var i = 0; i < categories.length; ++i)

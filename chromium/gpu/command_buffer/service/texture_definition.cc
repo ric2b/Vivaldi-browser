@@ -9,7 +9,6 @@
 #include <list>
 
 #include "base/lazy_instance.h"
-#include "base/memory/linked_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread_local.h"
 // gl_stream_texture_image.h is included to work around crbug.com/595189, a
@@ -50,6 +49,7 @@ class GLImageSync : public gl::GLImage {
                             gfx::OverlayTransform transform,
                             const gfx::Rect& bounds_rect,
                             const gfx::RectF& crop_rect) override;
+  void Flush() override {}
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     uint64_t process_tracing_id,
                     const std::string& dump_name) override;

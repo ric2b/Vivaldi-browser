@@ -19,7 +19,7 @@
 #include "components/policy/core/common/policy_bundle.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
-#include "policy/policy_constants.h"
+#include "components/policy/policy_constants.h"
 
 namespace policy {
 
@@ -100,7 +100,7 @@ PolicyServiceImpl::~PolicyServiceImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   for (Iterator it = providers_.begin(); it != providers_.end(); ++it)
     (*it)->RemoveObserver(this);
-  STLDeleteValues(&observers_);
+  base::STLDeleteValues(&observers_);
 }
 
 void PolicyServiceImpl::AddObserver(PolicyDomain domain,

@@ -36,11 +36,11 @@ MultiVersionStructPtr MakeMultiVersionStruct() {
   MultiVersionStructPtr output(MultiVersionStruct::New());
   output->f_int32 = 123;
   output->f_rect = MakeRect(5);
-  output->f_string = "hello";
-  output->f_array = Array<int8_t>(3);
-  output->f_array[0] = 10;
-  output->f_array[1] = 9;
-  output->f_array[2] = 8;
+  output->f_string.emplace("hello");
+  output->f_array.emplace(3);
+  (*output->f_array)[0] = 10;
+  (*output->f_array)[1] = 9;
+  (*output->f_array)[2] = 8;
   MessagePipe pipe;
   output->f_message_pipe = std::move(pipe.handle0);
   output->f_int16 = 42;
@@ -50,16 +50,20 @@ MultiVersionStructPtr MakeMultiVersionStruct() {
 
 template <typename U, typename T>
 U SerializeAndDeserialize(T input) {
-  using InputDataType = typename mojo::internal::MojomTypeTraits<T>::Data*;
-  using OutputDataType = typename mojo::internal::MojomTypeTraits<U>::Data*;
+  using InputMojomType = typename T::Struct::DataView;
+  using OutputMojomType = typename U::Struct::DataView;
+
+  using InputDataType =
+      typename mojo::internal::MojomTypeTraits<InputMojomType>::Data*;
+  using OutputDataType =
+      typename mojo::internal::MojomTypeTraits<OutputMojomType>::Data*;
 
   mojo::internal::SerializationContext context;
-  size_t size = mojo::internal::PrepareToSerialize<T>(input, &context);
+  size_t size =
+      mojo::internal::PrepareToSerialize<InputMojomType>(input, &context);
   mojo::internal::FixedBufferForTesting buf(size + 32);
   InputDataType data;
-  mojo::internal::Serialize<T>(input, &buf, &data, &context);
-
-  data->EncodePointers();
+  mojo::internal::Serialize<InputMojomType>(input, &buf, &data, &context);
 
   // Set the subsequent area to a special value, so that we can find out if we
   // mistakenly access the area.
@@ -67,10 +71,9 @@ U SerializeAndDeserialize(T input) {
   memset(subsequent_area, 0xAA, 32);
 
   OutputDataType output_data = reinterpret_cast<OutputDataType>(data);
-  output_data->DecodePointers();
 
   U output;
-  mojo::internal::Deserialize<U>(output_data, &output, &context);
+  mojo::internal::Deserialize<OutputMojomType>(output_data, &output, &context);
   return std::move(output);
 }
 
@@ -110,19 +113,19 @@ TEST_F(StructTest, Clone) {
 
   region = NamedRegion::New();
   clone_region = region.Clone();
-  EXPECT_TRUE(clone_region->name.is_null());
-  EXPECT_TRUE(clone_region->rects.is_null());
+  EXPECT_FALSE(clone_region->name);
+  EXPECT_FALSE(clone_region->rects);
 
-  region->name = "hello world";
+  region->name.emplace("hello world");
   clone_region = region.Clone();
   EXPECT_EQ(region->name, clone_region->name);
 
-  region->rects = Array<RectPtr>(2);
-  region->rects[1] = MakeRect();
+  region->rects.emplace(2);
+  (*region->rects)[1] = MakeRect();
   clone_region = region.Clone();
-  EXPECT_EQ(2u, clone_region->rects.size());
-  EXPECT_TRUE(clone_region->rects[0].is_null());
-  CheckRect(*clone_region->rects[1]);
+  EXPECT_EQ(2u, clone_region->rects->size());
+  EXPECT_TRUE((*clone_region->rects)[0].is_null());
+  CheckRect(*(*clone_region->rects)[1]);
 
   // NoDefaultFieldValues contains handles, so Clone() is not available, but
   // NoDefaultFieldValuesPtr should still compile.
@@ -134,15 +137,15 @@ TEST_F(StructTest, Clone) {
 TEST_F(StructTest, Serialization_Basic) {
   RectPtr rect(MakeRect());
 
-  size_t size = mojo::internal::PrepareToSerialize<RectPtr>(rect, nullptr);
+  size_t size = mojo::internal::PrepareToSerialize<RectDataView>(rect, nullptr);
   EXPECT_EQ(8U + 16U, size);
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::Rect_Data* data;
-  mojo::internal::Serialize<RectPtr>(rect, &buf, &data, nullptr);
+  mojo::internal::Serialize<RectDataView>(rect, &buf, &data, nullptr);
 
   RectPtr rect2;
-  mojo::internal::Deserialize<RectPtr>(data, &rect2, nullptr);
+  mojo::internal::Deserialize<RectDataView>(data, &rect2, nullptr);
 
   CheckRect(*rect2);
 }
@@ -167,15 +170,16 @@ TEST_F(StructTest, Serialization_StructPointers) {
   pair->first = MakeRect();
   pair->second = MakeRect();
 
-  size_t size = mojo::internal::PrepareToSerialize<RectPairPtr>(pair, nullptr);
+  size_t size =
+      mojo::internal::PrepareToSerialize<RectPairDataView>(pair, nullptr);
   EXPECT_EQ(8U + 16U + 2 * (8U + 16U), size);
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::RectPair_Data* data;
-  mojo::internal::Serialize<RectPairPtr>(pair, &buf, &data, nullptr);
+  mojo::internal::Serialize<RectPairDataView>(pair, &buf, &data, nullptr);
 
   RectPairPtr pair2;
-  mojo::internal::Deserialize<RectPairPtr>(data, &pair2, nullptr);
+  mojo::internal::Deserialize<RectPairDataView>(data, &pair2, nullptr);
 
   CheckRect(*pair2->first);
   CheckRect(*pair2->second);
@@ -184,13 +188,13 @@ TEST_F(StructTest, Serialization_StructPointers) {
 // Serialization test of a struct with an array member.
 TEST_F(StructTest, Serialization_ArrayPointers) {
   NamedRegionPtr region(NamedRegion::New());
-  region->name = "region";
-  region->rects = Array<RectPtr>::New(4);
-  for (size_t i = 0; i < region->rects.size(); ++i)
-    region->rects[i] = MakeRect(static_cast<int32_t>(i) + 1);
+  region->name.emplace("region");
+  region->rects.emplace(4);
+  for (size_t i = 0; i < region->rects->size(); ++i)
+    (*region->rects)[i] = MakeRect(static_cast<int32_t>(i) + 1);
 
   size_t size =
-      mojo::internal::PrepareToSerialize<NamedRegionPtr>(region, nullptr);
+      mojo::internal::PrepareToSerialize<NamedRegionDataView>(region, nullptr);
   EXPECT_EQ(8U +            // header
                 8U +        // name pointer
                 8U +        // rects pointer
@@ -204,26 +208,26 @@ TEST_F(StructTest, Serialization_ArrayPointers) {
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::NamedRegion_Data* data;
-  mojo::internal::Serialize<NamedRegionPtr>(region, &buf, &data, nullptr);
+  mojo::internal::Serialize<NamedRegionDataView>(region, &buf, &data, nullptr);
 
   NamedRegionPtr region2;
-  mojo::internal::Deserialize<NamedRegionPtr>(data, &region2, nullptr);
+  mojo::internal::Deserialize<NamedRegionDataView>(data, &region2, nullptr);
 
-  EXPECT_EQ(String("region"), region2->name);
+  EXPECT_EQ("region", *region2->name);
 
-  EXPECT_EQ(4U, region2->rects.size());
-  for (size_t i = 0; i < region2->rects.size(); ++i)
-    CheckRect(*region2->rects[i], static_cast<int32_t>(i) + 1);
+  EXPECT_EQ(4U, region2->rects->size());
+  for (size_t i = 0; i < region2->rects->size(); ++i)
+    CheckRect(*(*region2->rects)[i], static_cast<int32_t>(i) + 1);
 }
 
 // Serialization test of a struct with null array pointers.
 TEST_F(StructTest, Serialization_NullArrayPointers) {
   NamedRegionPtr region(NamedRegion::New());
-  EXPECT_TRUE(region->name.is_null());
-  EXPECT_TRUE(region->rects.is_null());
+  EXPECT_FALSE(region->name);
+  EXPECT_FALSE(region->rects);
 
   size_t size =
-      mojo::internal::PrepareToSerialize<NamedRegionPtr>(region, nullptr);
+      mojo::internal::PrepareToSerialize<NamedRegionDataView>(region, nullptr);
   EXPECT_EQ(8U +      // header
                 8U +  // name pointer
                 8U,   // rects pointer
@@ -231,13 +235,13 @@ TEST_F(StructTest, Serialization_NullArrayPointers) {
 
   mojo::internal::FixedBufferForTesting buf(size);
   internal::NamedRegion_Data* data;
-  mojo::internal::Serialize<NamedRegionPtr>(region, &buf, &data, nullptr);
+  mojo::internal::Serialize<NamedRegionDataView>(region, &buf, &data, nullptr);
 
   NamedRegionPtr region2;
-  mojo::internal::Deserialize<NamedRegionPtr>(data, &region2, nullptr);
+  mojo::internal::Deserialize<NamedRegionDataView>(data, &region2, nullptr);
 
-  EXPECT_TRUE(region2->name.is_null());
-  EXPECT_TRUE(region2->rects.is_null());
+  EXPECT_FALSE(region2->name);
+  EXPECT_FALSE(region2->rects);
 }
 
 // Tests deserializing structs as a newer version.
@@ -272,11 +276,11 @@ TEST_F(StructTest, Versioning_OldToNew) {
     MultiVersionStructV3Ptr input(MultiVersionStructV3::New());
     input->f_int32 = 123;
     input->f_rect = MakeRect(5);
-    input->f_string = "hello";
+    input->f_string.emplace("hello");
     MultiVersionStructPtr expected_output(MultiVersionStruct::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
+    expected_output->f_string.emplace("hello");
 
     MultiVersionStructPtr output =
         SerializeAndDeserialize<MultiVersionStructPtr>(std::move(input));
@@ -288,19 +292,19 @@ TEST_F(StructTest, Versioning_OldToNew) {
     MultiVersionStructV5Ptr input(MultiVersionStructV5::New());
     input->f_int32 = 123;
     input->f_rect = MakeRect(5);
-    input->f_string = "hello";
-    input->f_array = Array<int8_t>(3);
-    input->f_array[0] = 10;
-    input->f_array[1] = 9;
-    input->f_array[2] = 8;
+    input->f_string.emplace("hello");
+    input->f_array.emplace(3);
+    (*input->f_array)[0] = 10;
+    (*input->f_array)[1] = 9;
+    (*input->f_array)[2] = 8;
     MultiVersionStructPtr expected_output(MultiVersionStruct::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
-    expected_output->f_array = Array<int8_t>(3);
-    expected_output->f_array[0] = 10;
-    expected_output->f_array[1] = 9;
-    expected_output->f_array[2] = 8;
+    expected_output->f_string.emplace("hello");
+    expected_output->f_array.emplace(3);
+    (*expected_output->f_array)[0] = 10;
+    (*expected_output->f_array)[1] = 9;
+    (*expected_output->f_array)[2] = 8;
 
     MultiVersionStructPtr output =
         SerializeAndDeserialize<MultiVersionStructPtr>(std::move(input));
@@ -312,22 +316,22 @@ TEST_F(StructTest, Versioning_OldToNew) {
     MultiVersionStructV7Ptr input(MultiVersionStructV7::New());
     input->f_int32 = 123;
     input->f_rect = MakeRect(5);
-    input->f_string = "hello";
-    input->f_array = Array<int8_t>(3);
-    input->f_array[0] = 10;
-    input->f_array[1] = 9;
-    input->f_array[2] = 8;
+    input->f_string.emplace("hello");
+    input->f_array.emplace(3);
+    (*input->f_array)[0] = 10;
+    (*input->f_array)[1] = 9;
+    (*input->f_array)[2] = 8;
     MessagePipe pipe;
     input->f_message_pipe = std::move(pipe.handle0);
 
     MultiVersionStructPtr expected_output(MultiVersionStruct::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
-    expected_output->f_array = Array<int8_t>(3);
-    expected_output->f_array[0] = 10;
-    expected_output->f_array[1] = 9;
-    expected_output->f_array[2] = 8;
+    expected_output->f_string.emplace("hello");
+    expected_output->f_array.emplace(3);
+    (*expected_output->f_array)[0] = 10;
+    (*expected_output->f_array)[1] = 9;
+    (*expected_output->f_array)[2] = 8;
     // Save the raw handle value separately so that we can compare later.
     MojoHandle expected_handle = input->f_message_pipe.get().value();
 
@@ -347,11 +351,11 @@ TEST_F(StructTest, Versioning_NewToOld) {
     MultiVersionStructV7Ptr expected_output(MultiVersionStructV7::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
-    expected_output->f_array = Array<int8_t>(3);
-    expected_output->f_array[0] = 10;
-    expected_output->f_array[1] = 9;
-    expected_output->f_array[2] = 8;
+    expected_output->f_string.emplace("hello");
+    expected_output->f_array.emplace(3);
+    (*expected_output->f_array)[0] = 10;
+    (*expected_output->f_array)[1] = 9;
+    (*expected_output->f_array)[2] = 8;
     // Save the raw handle value separately so that we can compare later.
     MojoHandle expected_handle = input->f_message_pipe.get().value();
 
@@ -368,11 +372,11 @@ TEST_F(StructTest, Versioning_NewToOld) {
     MultiVersionStructV5Ptr expected_output(MultiVersionStructV5::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
-    expected_output->f_array = Array<int8_t>(3);
-    expected_output->f_array[0] = 10;
-    expected_output->f_array[1] = 9;
-    expected_output->f_array[2] = 8;
+    expected_output->f_string.emplace("hello");
+    expected_output->f_array.emplace(3);
+    (*expected_output->f_array)[0] = 10;
+    (*expected_output->f_array)[1] = 9;
+    (*expected_output->f_array)[2] = 8;
 
     MultiVersionStructV5Ptr output =
         SerializeAndDeserialize<MultiVersionStructV5Ptr>(std::move(input));
@@ -385,7 +389,7 @@ TEST_F(StructTest, Versioning_NewToOld) {
     MultiVersionStructV3Ptr expected_output(MultiVersionStructV3::New());
     expected_output->f_int32 = 123;
     expected_output->f_rect = MakeRect(5);
-    expected_output->f_string = "hello";
+    expected_output->f_string.emplace("hello");
 
     MultiVersionStructV3Ptr output =
         SerializeAndDeserialize<MultiVersionStructV3Ptr>(std::move(input));
@@ -423,38 +427,40 @@ TEST_F(StructTest, Serialization_NativeStruct) {
   {
     // Serialization of a null native struct.
     NativeStructPtr native;
-    size_t size =
-        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    size_t size = mojo::internal::PrepareToSerialize<NativeStructDataView>(
+        native, nullptr);
     EXPECT_EQ(0u, size);
     mojo::internal::FixedBufferForTesting buf(size);
 
     Data* data = nullptr;
-    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
-                                               nullptr);
+    mojo::internal::Serialize<NativeStructDataView>(std::move(native), &buf,
+                                                    &data, nullptr);
 
     EXPECT_EQ(nullptr, data);
 
     NativeStructPtr output_native;
-    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    mojo::internal::Deserialize<NativeStructDataView>(data, &output_native,
+                                                      nullptr);
     EXPECT_TRUE(output_native.is_null());
   }
 
   {
     // Serialization of a native struct with null data.
     NativeStructPtr native(NativeStruct::New());
-    size_t size =
-        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    size_t size = mojo::internal::PrepareToSerialize<NativeStructDataView>(
+        native, nullptr);
     EXPECT_EQ(0u, size);
     mojo::internal::FixedBufferForTesting buf(size);
 
     Data* data = nullptr;
-    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
-                                               nullptr);
+    mojo::internal::Serialize<NativeStructDataView>(std::move(native), &buf,
+                                                    &data, nullptr);
 
     EXPECT_EQ(nullptr, data);
 
     NativeStructPtr output_native;
-    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    mojo::internal::Deserialize<NativeStructDataView>(data, &output_native,
+                                                      nullptr);
     EXPECT_TRUE(output_native.is_null());
   }
 
@@ -464,22 +470,20 @@ TEST_F(StructTest, Serialization_NativeStruct) {
     native->data[0] = 'X';
     native->data[1] = 'Y';
 
-    size_t size =
-        mojo::internal::PrepareToSerialize<NativeStructPtr>(native, nullptr);
+    size_t size = mojo::internal::PrepareToSerialize<NativeStructDataView>(
+        native, nullptr);
     EXPECT_EQ(16u, size);
     mojo::internal::FixedBufferForTesting buf(size);
 
     Data* data = nullptr;
-    mojo::internal::Serialize<NativeStructPtr>(std::move(native), &buf, &data,
-                                               nullptr);
+    mojo::internal::Serialize<NativeStructDataView>(std::move(native), &buf,
+                                                    &data, nullptr);
 
     EXPECT_NE(nullptr, data);
 
-    data->EncodePointers();
-    data->DecodePointers();
-
     NativeStructPtr output_native;
-    mojo::internal::Deserialize<NativeStructPtr>(data, &output_native, nullptr);
+    mojo::internal::Deserialize<NativeStructDataView>(data, &output_native,
+                                                      nullptr);
     EXPECT_FALSE(output_native.is_null());
     EXPECT_FALSE(output_native->data.is_null());
     EXPECT_EQ(2u, output_native->data.size());
@@ -526,10 +530,10 @@ TEST_F(StructTest, Serialization_PublicAPI) {
   {
     // A struct containing other objects.
     NamedRegionPtr region(NamedRegion::New());
-    region->name = "region";
-    region->rects = Array<RectPtr>::New(4);
-    for (size_t i = 0; i < region->rects.size(); ++i)
-      region->rects[i] = MakeRect(static_cast<int32_t>(i) + 1);
+    region->name.emplace("region");
+    region->rects.emplace(3);
+    for (size_t i = 0; i < region->rects->size(); ++i)
+      (*region->rects)[i] = MakeRect(static_cast<int32_t>(i) + 1);
 
     NamedRegionPtr cloned_region = region.Clone();
     mojo::Array<uint8_t> data = NamedRegion::Serialize(&region);

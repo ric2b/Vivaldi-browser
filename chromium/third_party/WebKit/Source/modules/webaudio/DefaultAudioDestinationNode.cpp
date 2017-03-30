@@ -26,8 +26,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
-#include "modules/webaudio/AbstractAudioContext.h"
-#include "platform/Logging.h"
+#include "modules/webaudio/BaseAudioContext.h"
 
 namespace blink {
 
@@ -48,7 +47,7 @@ PassRefPtr<DefaultAudioDestinationHandler> DefaultAudioDestinationHandler::creat
 
 DefaultAudioDestinationHandler::~DefaultAudioDestinationHandler()
 {
-    ASSERT(!isInitialized());
+    DCHECK(!isInitialized());
 }
 
 void DefaultAudioDestinationHandler::dispose()
@@ -59,7 +58,7 @@ void DefaultAudioDestinationHandler::dispose()
 
 void DefaultAudioDestinationHandler::initialize()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (isInitialized())
         return;
 
@@ -69,7 +68,7 @@ void DefaultAudioDestinationHandler::initialize()
 
 void DefaultAudioDestinationHandler::uninitialize()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (!isInitialized())
         return;
 
@@ -89,18 +88,18 @@ void DefaultAudioDestinationHandler::createDestination()
 
 void DefaultAudioDestinationHandler::startRendering()
 {
-    ASSERT(isInitialized());
+    DCHECK(isInitialized());
     if (isInitialized()) {
-        ASSERT(!m_destination->isPlaying());
+        DCHECK(!m_destination->isPlaying());
         m_destination->start();
     }
 }
 
 void DefaultAudioDestinationHandler::stopRendering()
 {
-    ASSERT(isInitialized());
+    DCHECK(isInitialized());
     if (isInitialized()) {
-        ASSERT(m_destination->isPlaying());
+        DCHECK(m_destination->isPlaying());
         m_destination->stop();
     }
 }
@@ -116,7 +115,7 @@ void DefaultAudioDestinationHandler::setChannelCount(unsigned long channelCount,
     // send to the audio hardware. It can only be set depending on the maximum number of
     // channels supported by the hardware.
 
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (!maxChannelCount() || channelCount > maxChannelCount()) {
         exceptionState.throwDOMException(
@@ -138,13 +137,13 @@ void DefaultAudioDestinationHandler::setChannelCount(unsigned long channelCount,
 
 // ----------------------------------------------------------------
 
-DefaultAudioDestinationNode::DefaultAudioDestinationNode(AbstractAudioContext& context)
+DefaultAudioDestinationNode::DefaultAudioDestinationNode(BaseAudioContext& context)
     : AudioDestinationNode(context)
 {
     setHandler(DefaultAudioDestinationHandler::create(*this));
 }
 
-DefaultAudioDestinationNode* DefaultAudioDestinationNode::create(AbstractAudioContext* context)
+DefaultAudioDestinationNode* DefaultAudioDestinationNode::create(BaseAudioContext* context)
 {
     return new DefaultAudioDestinationNode(*context);
 }

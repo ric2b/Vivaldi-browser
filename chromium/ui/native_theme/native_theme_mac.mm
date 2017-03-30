@@ -15,6 +15,7 @@
 #include "third_party/skia/include/core/SkDrawLooper.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/shadow_value.h"
@@ -91,6 +92,17 @@ SkColor NSSystemColorToSkColor(NSColor* color) {
                         SkScalarRoundToInt(255.0 * components[0]));
 }
 
+// Converts an SkColor to grayscale by using luminance for all three components.
+// Experimentally, this seems to produce a better result than a flat average or
+// a min/max average for UI controls.
+SkColor ColorToGrayscale(SkColor color) {
+  SkScalar luminance = SkColorGetR(color) * 0.21 +
+                       SkColorGetG(color) * 0.72 +
+                       SkColorGetB(color) * 0.07;
+  uint8_t component = SkScalarRoundToInt(luminance);
+  return SkColorSetARGB(SkColorGetA(color), component, component, component);
+}
+
 }  // namespace
 
 namespace ui {
@@ -106,6 +118,13 @@ NativeThemeMac* NativeThemeMac::instance() {
   return &s_native_theme;
 }
 
+// static
+SkColor NativeThemeMac::ApplySystemControlTint(SkColor color) {
+  if ([NSColor currentControlTint] == NSGraphiteControlTint)
+    return ColorToGrayscale(color);
+  return color;
+}
+
 SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
   // TODO(tapted): Add caching for these, and listen for
   // NSSystemColorsDidChangeNotification.
@@ -113,7 +132,9 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_WindowBackground:
       return NSSystemColorToSkColor([NSColor windowBackgroundColor]);
     case kColorId_DialogBackground:
-      return kDialogBackgroundColor;
+      return ui::MaterialDesignController::IsSecondaryUiMaterial()
+                ? GetAuraColor(color_id, this)
+                : kDialogBackgroundColor;
     case kColorId_BubbleBackground:
       return SK_ColorWHITE;
 
@@ -132,6 +153,8 @@ SkColor NativeThemeMac::GetSystemColor(ColorId color_id) const {
     case kColorId_ButtonEnabledColor:
     case kColorId_EnabledMenuButtonBorderColor:
     case kColorId_LabelEnabledColor:
+      return NSSystemColorToSkColor([NSColor controlTextColor]);
+    case kColorId_CallToActionColor:
       return NSSystemColorToSkColor([NSColor controlTextColor]);
     case kColorId_ButtonDisabledColor:
     case kColorId_LabelDisabledColor:
@@ -287,6 +310,9 @@ sk_sp<SkShader> NativeThemeMac::GetButtonBackgroundShader(
 
   SkColor gradient_colors[] = {start_colors[type], end_colors[type]};
 
+  for (size_t i = 0; i < arraysize(gradient_colors); ++i)
+    gradient_colors[i] = ApplySystemControlTint(gradient_colors[i]);
+
   return SkGradientShader::MakeLinear(
       gradient_points, gradient_colors, gradient_positions,
       arraysize(gradient_positions),
@@ -320,6 +346,9 @@ sk_sp<SkShader> NativeThemeMac::GetButtonBorderShader(ButtonBackgroundType type,
 
   SkColor gradient_colors[] = {top_edge[type], bottom_edge[type]};
 
+  for (size_t i = 0; i < arraysize(gradient_colors); ++i)
+    gradient_colors[i] = ApplySystemControlTint(gradient_colors[i]);
+
   return SkGradientShader::MakeLinear(
       gradient_points, gradient_colors, gradient_positions,
       arraysize(gradient_positions), SkShader::kClamp_TileMode);
@@ -334,7 +363,8 @@ void NativeThemeMac::PaintStyledGradientButton(SkCanvas* canvas,
                                                bool focus) {
   const SkScalar kBorderThickness = 1;
   const SkScalar kFocusRingThickness = 4;
-  const SkColor kFocusRingColor = SkColorSetARGB(0x94, 0x79, 0xa7, 0xe9);
+  const SkColor kFocusRingColor = ApplySystemControlTint(
+      SkColorSetARGB(0x94, 0x79, 0xa7, 0xe9));
 
   const SkVector kNoCurve = {0, 0};
   const SkVector kCurve = {kButtonCornerRadius, kButtonCornerRadius};

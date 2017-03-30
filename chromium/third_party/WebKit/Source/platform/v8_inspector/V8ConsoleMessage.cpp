@@ -6,64 +6,38 @@
 
 #include "platform/v8_inspector/InspectedContext.h"
 #include "platform/v8_inspector/V8ConsoleAgentImpl.h"
-#include "platform/v8_inspector/V8DebuggerImpl.h"
+#include "platform/v8_inspector/V8InspectorImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
+#include "platform/v8_inspector/V8RuntimeAgentImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
-#include "platform/v8_inspector/public/V8DebuggerClient.h"
+#include "platform/v8_inspector/public/V8InspectorClient.h"
 
-namespace blink {
+namespace v8_inspector {
 
 namespace {
 
-String messageSourceValue(MessageSource source)
-{
-    switch (source) {
-    case XMLMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Xml;
-    case JSMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Javascript;
-    case NetworkMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Network;
-    case ConsoleAPIMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::ConsoleApi;
-    case StorageMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Storage;
-    case AppCacheMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Appcache;
-    case RenderingMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Rendering;
-    case SecurityMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Security;
-    case OtherMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Other;
-    case DeprecationMessageSource: return protocol::Console::ConsoleMessage::SourceEnum::Deprecation;
-    }
-    return protocol::Console::ConsoleMessage::SourceEnum::Other;
-}
-
-
-String messageTypeValue(MessageType type)
+String16 consoleAPITypeValue(ConsoleAPIType type)
 {
     switch (type) {
-    case LogMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Log;
-    case ClearMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Clear;
-    case DirMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Dir;
-    case DirXMLMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Dirxml;
-    case TableMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Table;
-    case TraceMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Trace;
-    case StartGroupMessageType: return protocol::Console::ConsoleMessage::TypeEnum::StartGroup;
-    case StartGroupCollapsedMessageType: return protocol::Console::ConsoleMessage::TypeEnum::StartGroupCollapsed;
-    case EndGroupMessageType: return protocol::Console::ConsoleMessage::TypeEnum::EndGroup;
-    case AssertMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Assert;
-    case TimeEndMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Log;
-    case CountMessageType: return protocol::Console::ConsoleMessage::TypeEnum::Log;
+    case ConsoleAPIType::kLog: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Log;
+    case ConsoleAPIType::kDebug: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Debug;
+    case ConsoleAPIType::kInfo: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Info;
+    case ConsoleAPIType::kError: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Error;
+    case ConsoleAPIType::kWarning: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Warning;
+    case ConsoleAPIType::kClear: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Clear;
+    case ConsoleAPIType::kDir: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Dir;
+    case ConsoleAPIType::kDirXML: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Dirxml;
+    case ConsoleAPIType::kTable: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Table;
+    case ConsoleAPIType::kTrace: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Trace;
+    case ConsoleAPIType::kStartGroup: return protocol::Runtime::ConsoleAPICalled::TypeEnum::StartGroup;
+    case ConsoleAPIType::kStartGroupCollapsed: return protocol::Runtime::ConsoleAPICalled::TypeEnum::StartGroupCollapsed;
+    case ConsoleAPIType::kEndGroup: return protocol::Runtime::ConsoleAPICalled::TypeEnum::EndGroup;
+    case ConsoleAPIType::kAssert: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Assert;
+    case ConsoleAPIType::kTimeEnd: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Debug;
+    case ConsoleAPIType::kCount: return protocol::Runtime::ConsoleAPICalled::TypeEnum::Debug;
     }
-    return protocol::Console::ConsoleMessage::TypeEnum::Log;
-}
-
-String messageLevelValue(MessageLevel level)
-{
-    switch (level) {
-    case DebugMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::Debug;
-    case LogMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::Log;
-    case WarningMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::Warning;
-    case ErrorMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::Error;
-    case InfoMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::Info;
-    case RevokedErrorMessageLevel: return protocol::Console::ConsoleMessage::LevelEnum::RevokedError;
-    }
-    return protocol::Console::ConsoleMessage::LevelEnum::Log;
+    return protocol::Runtime::ConsoleAPICalled::TypeEnum::Log;
 }
 
 const unsigned maxConsoleMessageCount = 1000;
@@ -110,7 +84,7 @@ private:
         if (value->IsSymbolObject())
             return append(v8::Local<v8::SymbolObject>::Cast(value)->ValueOf());
         if (value->IsNumberObject()) {
-            m_builder.appendNumber(v8::Local<v8::NumberObject>::Cast(value)->ValueOf());
+            m_builder.append(String16::fromDoublePrecision6(v8::Local<v8::NumberObject>::Cast(value)->ValueOf()));
             return true;
         }
         if (value->IsBooleanObject()) {
@@ -141,8 +115,10 @@ private:
 
     bool append(v8::Local<v8::Array> array)
     {
-        if (m_visitedArrays.contains(array))
-            return true;
+        for (const auto& it : m_visitedArrays) {
+            if (it == array)
+                return true;
+        }
         uint32_t length = array->Length();
         if (length > m_arrayLimit)
             return false;
@@ -151,7 +127,7 @@ private:
 
         bool result = true;
         m_arrayLimit -= length;
-        m_visitedArrays.append(array);
+        m_visitedArrays.push_back(array);
         for (uint32_t i = 0; i < length; ++i) {
             if (i)
                 m_builder.append(',');
@@ -160,7 +136,7 @@ private:
                 break;
             }
         }
-        m_visitedArrays.removeLast();
+        m_visitedArrays.pop_back();
         return result;
     }
 
@@ -191,37 +167,23 @@ private:
     uint32_t m_arrayLimit;
     v8::Isolate* m_isolate;
     String16Builder m_builder;
-    Vector<v8::Local<v8::Array>> m_visitedArrays;
+    std::vector<v8::Local<v8::Array>> m_visitedArrays;
     v8::TryCatch m_tryCatch;
 };
 
 } // namespace
 
-V8ConsoleMessage::V8ConsoleMessage(
-    double timestampMS,
-    MessageSource source,
-    MessageLevel level,
-    const String16& message,
-    const String16& url,
-    unsigned lineNumber,
-    unsigned columnNumber,
-    std::unique_ptr<V8StackTrace> stackTrace,
-    int scriptId,
-    const String16& requestIdentifier)
-    : m_timestamp(timestampMS / 1000.0)
-    , m_source(source)
-    , m_level(level)
+V8ConsoleMessage::V8ConsoleMessage(V8MessageOrigin origin, double timestamp, const String16& message)
+    : m_origin(origin)
+    , m_timestamp(timestamp)
     , m_message(message)
-    , m_url(url)
-    , m_lineNumber(lineNumber)
-    , m_columnNumber(columnNumber)
-    , m_stackTrace(std::move(stackTrace))
-    , m_scriptId(scriptId)
-    , m_requestIdentifier(requestIdentifier)
+    , m_lineNumber(0)
+    , m_columnNumber(0)
+    , m_scriptId(0)
     , m_contextId(0)
-    , m_type(LogMessageType)
-    , m_messageId(0)
-    , m_relatedMessageId(0)
+    , m_type(ConsoleAPIType::kLog)
+    , m_exceptionId(0)
+    , m_revokedExceptionId(0)
 {
 }
 
@@ -229,49 +191,53 @@ V8ConsoleMessage::~V8ConsoleMessage()
 {
 }
 
-std::unique_ptr<protocol::Console::ConsoleMessage> V8ConsoleMessage::buildInspectorObject(V8InspectorSessionImpl* session, bool generatePreview) const
+void V8ConsoleMessage::setLocation(const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTraceImpl> stackTrace, int scriptId)
 {
-    std::unique_ptr<protocol::Console::ConsoleMessage> result =
-        protocol::Console::ConsoleMessage::create()
-        .setSource(messageSourceValue(m_source))
-        .setLevel(messageLevelValue(m_level))
-        .setText(m_message)
-        .setTimestamp(m_timestamp)
-        .build();
-    result->setType(messageTypeValue(m_type));
-    result->setLine(static_cast<int>(m_lineNumber));
-    result->setColumn(static_cast<int>(m_columnNumber));
-    if (m_scriptId)
-        result->setScriptId(String::number(m_scriptId));
-    result->setUrl(m_url);
-    if (m_source == NetworkMessageSource && !m_requestIdentifier.isEmpty())
-        result->setNetworkRequestId(m_requestIdentifier);
-    if (m_contextId)
-        result->setExecutionContextId(m_contextId);
-    appendArguments(result.get(), session, generatePreview);
-    if (m_stackTrace)
-        result->setStack(m_stackTrace->buildInspectorObject());
-    if (m_messageId)
-        result->setMessageId(m_messageId);
-    if (m_relatedMessageId)
-        result->setRelatedMessageId(m_relatedMessageId);
-    return result;
+    m_url = url;
+    m_lineNumber = lineNumber;
+    m_columnNumber = columnNumber;
+    m_stackTrace = std::move(stackTrace);
+    m_scriptId = scriptId;
 }
 
-void V8ConsoleMessage::appendArguments(protocol::Console::ConsoleMessage* result, V8InspectorSessionImpl* session, bool generatePreview) const
+void V8ConsoleMessage::reportToFrontend(protocol::Console::Frontend* frontend) const
+{
+    DCHECK(m_origin == V8MessageOrigin::kConsole);
+    String16 level = protocol::Console::ConsoleMessage::LevelEnum::Log;
+    if (m_type == ConsoleAPIType::kDebug || m_type == ConsoleAPIType::kCount || m_type == ConsoleAPIType::kTimeEnd)
+        level = protocol::Console::ConsoleMessage::LevelEnum::Debug;
+    else if (m_type == ConsoleAPIType::kError || m_type == ConsoleAPIType::kAssert)
+        level = protocol::Console::ConsoleMessage::LevelEnum::Error;
+    else if (m_type == ConsoleAPIType::kWarning)
+        level = protocol::Console::ConsoleMessage::LevelEnum::Warning;
+    else if (m_type == ConsoleAPIType::kInfo)
+        level = protocol::Console::ConsoleMessage::LevelEnum::Info;
+    std::unique_ptr<protocol::Console::ConsoleMessage> result =
+        protocol::Console::ConsoleMessage::create()
+        .setSource(protocol::Console::ConsoleMessage::SourceEnum::ConsoleApi)
+        .setLevel(level)
+        .setText(m_message)
+        .build();
+    result->setLine(static_cast<int>(m_lineNumber));
+    result->setColumn(static_cast<int>(m_columnNumber));
+    result->setUrl(m_url);
+    frontend->messageAdded(std::move(result));
+}
+
+std::unique_ptr<protocol::Array<protocol::Runtime::RemoteObject>> V8ConsoleMessage::wrapArguments(V8InspectorSessionImpl* session, bool generatePreview) const
 {
     if (!m_arguments.size() || !m_contextId)
-        return;
-    InspectedContext* inspectedContext = session->debugger()->getContext(session->contextGroupId(), m_contextId);
+        return nullptr;
+    InspectedContext* inspectedContext = session->inspector()->getContext(session->contextGroupId(), m_contextId);
     if (!inspectedContext)
-        return;
+        return nullptr;
 
     v8::Isolate* isolate = inspectedContext->isolate();
     v8::HandleScope handles(isolate);
     v8::Local<v8::Context> context = inspectedContext->context();
 
     std::unique_ptr<protocol::Array<protocol::Runtime::RemoteObject>> args = protocol::Array<protocol::Runtime::RemoteObject>::create();
-    if (m_type == TableMessageType && generatePreview) {
+    if (m_type == ConsoleAPIType::kTable && generatePreview) {
         v8::Local<v8::Value> table = m_arguments[0]->Get(isolate);
         v8::Local<v8::Value> columns = m_arguments.size() > 1 ? m_arguments[1]->Get(isolate) : v8::Local<v8::Value>();
         std::unique_ptr<protocol::Runtime::RemoteObject> wrapped = session->wrapTable(context, table, columns);
@@ -289,55 +255,134 @@ void V8ConsoleMessage::appendArguments(protocol::Console::ConsoleMessage* result
             args->addItem(std::move(wrapped));
         }
     }
-    if (args)
-        result->setParameters(std::move(args));
+    return args;
 }
 
-unsigned V8ConsoleMessage::argumentCount() const
+void V8ConsoleMessage::reportToFrontend(protocol::Runtime::Frontend* frontend, V8InspectorSessionImpl* session, bool generatePreview) const
 {
-    return m_arguments.size();
+    if (m_origin == V8MessageOrigin::kException) {
+        std::unique_ptr<protocol::Runtime::RemoteObject> exception = wrapException(session, generatePreview);
+        std::unique_ptr<protocol::Runtime::ExceptionDetails> exceptionDetails = protocol::Runtime::ExceptionDetails::create()
+            .setExceptionId(m_exceptionId)
+            .setText(exception ? m_message : m_detailedMessage)
+            .setLineNumber(m_lineNumber ? m_lineNumber - 1 : 0)
+            .setColumnNumber(m_columnNumber ? m_columnNumber - 1 : 0)
+            .build();
+        if (m_scriptId)
+            exceptionDetails->setScriptId(String16::fromInteger(m_scriptId));
+        if (!m_url.isEmpty())
+            exceptionDetails->setUrl(m_url);
+        if (m_stackTrace)
+            exceptionDetails->setStackTrace(m_stackTrace->buildInspectorObjectImpl());
+        if (m_contextId)
+            exceptionDetails->setExecutionContextId(m_contextId);
+        if (exception)
+            exceptionDetails->setException(std::move(exception));
+        frontend->exceptionThrown(m_timestamp, std::move(exceptionDetails));
+        return;
+    }
+    if (m_origin == V8MessageOrigin::kRevokedException) {
+        frontend->exceptionRevoked(m_message, m_revokedExceptionId);
+        return;
+    }
+    if (m_origin == V8MessageOrigin::kConsole) {
+        std::unique_ptr<protocol::Array<protocol::Runtime::RemoteObject>> arguments = wrapArguments(session, generatePreview);
+        if (!arguments) {
+            arguments = protocol::Array<protocol::Runtime::RemoteObject>::create();
+            if (!m_message.isEmpty()) {
+                std::unique_ptr<protocol::Runtime::RemoteObject> messageArg = protocol::Runtime::RemoteObject::create().setType(protocol::Runtime::RemoteObject::TypeEnum::String).build();
+                messageArg->setValue(protocol::StringValue::create(m_message));
+                arguments->addItem(std::move(messageArg));
+            }
+        }
+        frontend->consoleAPICalled(consoleAPITypeValue(m_type), std::move(arguments), m_contextId, m_timestamp, m_stackTrace ? m_stackTrace->buildInspectorObjectImpl() : nullptr);
+        return;
+    }
+    NOTREACHED();
 }
 
-MessageType V8ConsoleMessage::type() const
+std::unique_ptr<protocol::Runtime::RemoteObject> V8ConsoleMessage::wrapException(V8InspectorSessionImpl* session, bool generatePreview) const
+{
+    if (!m_arguments.size() || !m_contextId)
+        return nullptr;
+    DCHECK_EQ(1u, m_arguments.size());
+    InspectedContext* inspectedContext = session->inspector()->getContext(session->contextGroupId(), m_contextId);
+    if (!inspectedContext)
+        return nullptr;
+
+    v8::Isolate* isolate = inspectedContext->isolate();
+    v8::HandleScope handles(isolate);
+    // TODO(dgozman): should we use different object group?
+    return session->wrapObject(inspectedContext->context(), m_arguments[0]->Get(isolate), "console", generatePreview);
+}
+
+V8MessageOrigin V8ConsoleMessage::origin() const
+{
+    return m_origin;
+}
+
+ConsoleAPIType V8ConsoleMessage::type() const
 {
     return m_type;
 }
 
 // static
-std::unique_ptr<V8ConsoleMessage> V8ConsoleMessage::createForConsoleAPI(double timestampMS, MessageType type, MessageLevel level, const String16& messageText, std::vector<v8::Local<v8::Value>>* arguments, std::unique_ptr<V8StackTrace> stackTrace, InspectedContext* context)
+std::unique_ptr<V8ConsoleMessage> V8ConsoleMessage::createForConsoleAPI(double timestamp, ConsoleAPIType type, const std::vector<v8::Local<v8::Value>>& arguments, std::unique_ptr<V8StackTraceImpl> stackTrace, InspectedContext* context)
 {
     v8::Isolate* isolate = context->isolate();
     int contextId = context->contextId();
     int contextGroupId = context->contextGroupId();
-    V8DebuggerImpl* debugger = context->debugger();
+    V8InspectorImpl* inspector = context->inspector();
 
-    String16 url;
-    unsigned lineNumber = 0;
-    unsigned columnNumber = 0;
+    std::unique_ptr<V8ConsoleMessage> message = wrapUnique(new V8ConsoleMessage(V8MessageOrigin::kConsole, timestamp, String16()));
     if (stackTrace && !stackTrace->isEmpty()) {
-        url = stackTrace->topSourceURL();
-        lineNumber = stackTrace->topLineNumber();
-        columnNumber = stackTrace->topColumnNumber();
+        message->m_url = stackTrace->topSourceURL();
+        message->m_lineNumber = stackTrace->topLineNumber();
+        message->m_columnNumber = stackTrace->topColumnNumber();
     }
-
-    String16 actualMessage = messageText;
-
-    Arguments messageArguments;
-    if (arguments && arguments->size()) {
-        for (size_t i = 0; i < arguments->size(); ++i)
-            messageArguments.push_back(wrapUnique(new v8::Global<v8::Value>(isolate, arguments->at(i))));
-        if (actualMessage.isEmpty())
-            actualMessage = V8ValueStringBuilder::toString(messageArguments.at(0)->Get(isolate), isolate);
-    }
-
-    std::unique_ptr<V8ConsoleMessage> message = wrapUnique(new V8ConsoleMessage(timestampMS, ConsoleAPIMessageSource, level, actualMessage, url, lineNumber, columnNumber, std::move(stackTrace), 0 /* scriptId */, String16() /* requestIdentifier */));
+    message->m_stackTrace = std::move(stackTrace);
     message->m_type = type;
-    if (messageArguments.size()) {
-        message->m_contextId = contextId;
-        message->m_arguments.swap(messageArguments);
-    }
+    message->m_contextId = contextId;
+    for (size_t i = 0; i < arguments.size(); ++i)
+        message->m_arguments.push_back(wrapUnique(new v8::Global<v8::Value>(isolate, arguments.at(i))));
+    if (arguments.size())
+        message->m_message = V8ValueStringBuilder::toString(arguments[0], isolate);
 
-    debugger->client()->messageAddedToConsole(contextGroupId, message->m_source, message->m_level, message->m_message, message->m_url, message->m_lineNumber, message->m_columnNumber, message->m_stackTrace.get());
+    V8ConsoleAPIType clientType = V8ConsoleAPIType::kLog;
+    if (type == ConsoleAPIType::kDebug || type == ConsoleAPIType::kCount || type == ConsoleAPIType::kTimeEnd)
+        clientType = V8ConsoleAPIType::kDebug;
+    else if (type == ConsoleAPIType::kError || type == ConsoleAPIType::kAssert)
+        clientType = V8ConsoleAPIType::kError;
+    else if (type == ConsoleAPIType::kWarning)
+        clientType = V8ConsoleAPIType::kWarning;
+    else if (type == ConsoleAPIType::kInfo)
+        clientType = V8ConsoleAPIType::kInfo;
+    else if (type == ConsoleAPIType::kClear)
+        clientType = V8ConsoleAPIType::kClear;
+    inspector->client()->consoleAPIMessage(contextGroupId, clientType, message->m_message, message->m_url, message->m_lineNumber, message->m_columnNumber, message->m_stackTrace.get());
+
+    return message;
+}
+
+// static
+std::unique_ptr<V8ConsoleMessage> V8ConsoleMessage::createForException(double timestamp, const String16& detailedMessage, const String16& url, unsigned lineNumber, unsigned columnNumber, std::unique_ptr<V8StackTraceImpl> stackTrace, int scriptId, v8::Isolate* isolate, const String16& message, int contextId, v8::Local<v8::Value> exception, unsigned exceptionId)
+{
+    std::unique_ptr<V8ConsoleMessage> consoleMessage = wrapUnique(new V8ConsoleMessage(V8MessageOrigin::kException, timestamp, message));
+    consoleMessage->setLocation(url, lineNumber, columnNumber, std::move(stackTrace), scriptId);
+    consoleMessage->m_exceptionId = exceptionId;
+    consoleMessage->m_detailedMessage = detailedMessage;
+    if (contextId && !exception.IsEmpty()) {
+        consoleMessage->m_contextId = contextId;
+        consoleMessage->m_arguments.push_back(wrapUnique(new v8::Global<v8::Value>(isolate, exception)));
+    }
+    return consoleMessage;
+}
+
+// static
+std::unique_ptr<V8ConsoleMessage> V8ConsoleMessage::createForRevokedException(double timestamp, const String16& messageText, unsigned revokedExceptionId)
+{
+    std::unique_ptr<V8ConsoleMessage> message = wrapUnique(new V8ConsoleMessage(V8MessageOrigin::kRevokedException, timestamp, messageText));
+    message->m_revokedExceptionId = revokedExceptionId;
     return message;
 }
 
@@ -352,29 +397,10 @@ void V8ConsoleMessage::contextDestroyed(int contextId)
     m_arguments.swap(empty);
 }
 
-void V8ConsoleMessage::assignId(unsigned id)
-{
-    m_messageId = id;
-}
-
-void V8ConsoleMessage::assignRelatedId(unsigned id)
-{
-    m_relatedMessageId = id;
-}
-
-void V8ConsoleMessage::addArguments(v8::Isolate* isolate, int contextId, std::vector<v8::Local<v8::Value>>* arguments)
-{
-    if (!arguments || !contextId)
-        return;
-    m_contextId = contextId;
-    for (size_t i = 0; i < arguments->size(); ++i)
-        m_arguments.push_back(wrapUnique(new v8::Global<v8::Value>(isolate, arguments->at(i))));
-}
-
 // ------------------------ V8ConsoleMessageStorage ----------------------------
 
-V8ConsoleMessageStorage::V8ConsoleMessageStorage(V8DebuggerImpl* debugger, int contextGroupId)
-    : m_debugger(debugger)
+V8ConsoleMessageStorage::V8ConsoleMessageStorage(V8InspectorImpl* inspector, int contextGroupId)
+    : m_inspector(inspector)
     , m_contextGroupId(contextGroupId)
     , m_expiredCount(0)
 {
@@ -388,15 +414,17 @@ V8ConsoleMessageStorage::~V8ConsoleMessageStorage()
 void V8ConsoleMessageStorage::addMessage(std::unique_ptr<V8ConsoleMessage> message)
 {
     int contextGroupId = m_contextGroupId;
-    V8DebuggerImpl* debugger = m_debugger;
-
-    if (message->type() == ClearMessageType)
+    V8InspectorImpl* inspector = m_inspector;
+    if (message->type() == ConsoleAPIType::kClear)
         clear();
 
-    V8InspectorSessionImpl* session = debugger->sessionForContextGroup(contextGroupId);
-    if (session)
-        session->consoleAgent()->messageAdded(message.get());
-    if (!debugger->hasConsoleMessageStorage(contextGroupId))
+    V8InspectorSessionImpl* session = inspector->sessionForContextGroup(m_contextGroupId);
+    if (session) {
+        if (message->origin() == V8MessageOrigin::kConsole)
+            session->consoleAgent()->messageAdded(message.get());
+        session->runtimeAgent()->messageAdded(message.get());
+    }
+    if (!inspector->hasConsoleMessageStorage(contextGroupId))
         return;
 
     DCHECK(m_messages.size() <= maxConsoleMessageCount);
@@ -411,12 +439,8 @@ void V8ConsoleMessageStorage::clear()
 {
     m_messages.clear();
     m_expiredCount = 0;
-    V8InspectorSessionImpl* session = m_debugger->sessionForContextGroup(m_contextGroupId);
-    if (session) {
-        session->consoleAgent()->reset();
+    if (V8InspectorSessionImpl* session = m_inspector->sessionForContextGroup(m_contextGroupId))
         session->releaseObjectGroup("console");
-        session->client()->consoleCleared();
-    }
 }
 
 void V8ConsoleMessageStorage::contextDestroyed(int contextId)
@@ -425,4 +449,4 @@ void V8ConsoleMessageStorage::contextDestroyed(int contextId)
         m_messages[i]->contextDestroyed(contextId);
 }
 
-} // namespace blink
+} // namespace v8_inspector

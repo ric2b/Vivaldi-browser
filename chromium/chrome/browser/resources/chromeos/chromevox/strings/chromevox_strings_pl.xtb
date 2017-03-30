@@ -269,6 +269,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3392045790598181549"><ph name="NAME" />, element menu</translation>
 <translation id="3406283310380167331">Pokaż listę formularzy</translation>
 <translation id="3422338090358345848">Otwórz eksploratora klawiatury</translation>
+<translation id="3423495725743882470">wiersz $1, kolumna $2</translation>
 <translation id="3457000393508828486">Częściowo naciśnięte</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, przycisk</translation>
 <translation id="3473644018603298796">zaznaczono <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}few{#}many{#}other{#}}</translation>
 <translation id="3801735343383419236">Autouzupełnianie list</translation>
 <translation id="3810838688059735925">Wideo</translation>
+<translation id="3812237531158591503">wklej $1.</translation>
 <translation id="3816633764618089385">Następny plik multimedialny</translation>
 <translation id="3819376190738087562">Brak przejść.</translation>
 <translation id="385383972552776628">Otwórz stronę opcji</translation>
@@ -411,6 +413,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5000760171916499057">Brak formularzy.</translation>
 <translation id="5005670136041063723">Nie ma więcej podobnych elementów.</translation>
 <translation id="501473567976723023">styczeń</translation>
+<translation id="5040591161308540832">Tabela $1, $2 na $3</translation>
 <translation id="5041394372352067729">Przenieś wyświetlacz brajlowski na górę strony</translation>
 <translation id="5042770794184672516">Zwiększ głośność mowy</translation>
 <translation id="5050015258024679800">Poprzedni nagłówek poziomu 4</translation>
@@ -480,7 +483,7 @@ Jeśli nie korzystasz już z samouczka, użyj czytnika ChromeVox, by przejść 
 <translation id="5623842676595125836">Dziennik</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5637871198229500030">Brak poprzedniej tabeli.</translation>
-<translation id="5653397561111110475">Korzystanie z funkcji ułatwień dostępu na ekranie dotykowym Chromebooka</translation>
+<translation id="5653397561111110475">Korzystanie z ułatwień dostępu na ekranie dotykowym Chromebooka</translation>
 <translation id="5655682562155942719">Polecenia nawigacyjne</translation>
 <translation id="56637627897541303">Obszar tekstu</translation>
 <translation id="5678161956734658133">mled</translation>
@@ -518,7 +521,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="5876817486144482042">Zmniejsz głośność mowy</translation>
 <translation id="5887397643266327462">Napisy brajlowskie włączone.</translation>
 <translation id="5891934789323004067">Tabela</translation>
-<translation id="5919442531159595654">kopiuj.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{równy}few{# znaki równości}many{# znaków równości}other{# equal signs}}</translation>
 <translation id="5939518447894949180">Resetuj</translation>
 <translation id="5948123859135882163">Włącz/wyłącz strukturalne lub semantyczne interpretowanie wyrażeń matematycznych</translation>
@@ -554,6 +556,8 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="6355910664415701303">Brak poprzedniego elementu listy.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Poprzedni nagłówek</translation>
+<translation id="6378565991815958969">kopiuj $1.</translation>
+<translation id="6385591741672306837">kol.</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6411426777058107714">Brak poprzedniego przycisku radiowego.</translation>
 <translation id="6414968628640960377">Poprzedni różniący się element.</translation>
@@ -653,7 +657,6 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="7532613204005497612">czerwiec</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, suwak</translation>
 <translation id="7552432549459840808">Przydatne skróty Chrome</translation>
-<translation id="7586163296341959563">wklej.</translation>
 <translation id="7596919493010894443">zaznaczenie zostało wyczyszczone</translation>
 <translation id="7604026522577407655">Przejdź na początek bieżącej kolumny</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="8153880621934657047">Poza tabelą.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{podkreślenie}few{# znaki podkreślenia}many{# znaków podkreślenia}other{# underscores}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">wiersz</translation>
 <translation id="8186185314313222077">przełącz pełny ekran</translation>
-<translation id="81960742267269908">wytnij.</translation>
 <translation id="8199231515320852133">Przeczytaj nagłówki bieżącej komórki</translation>
 <translation id="820417203470636242">Pusta komórka.</translation>
 <translation id="8215202828671303819">Wybór wielokrotny</translation>
@@ -782,6 +785,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="9077213568694924680">usunięto zaznaczenie</translation>
 <translation id="9082874451376019682">Brak poprzedniego suwaka.</translation>
 <translation id="9089864840575085222">Włącz/wyłącz odczytywanie podczas pisania</translation>
+<translation id="9105227991373418255">wytnij $1.</translation>
 <translation id="9107530006868467849">Brak widżetu poprzedniego pliku multimedialnego.</translation>
 <translation id="9108370397979208512">matematyczny</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Aby otworzyć menu przeglądarki Chrome, naciśnij Alt + F.</translation>
 <translation id="9115913704608474258">listopad</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Karta</translation>
 <translation id="9151211641321628915">Przedstawia skrócony opis aktualnej pozycji</translation>
 <translation id="9153606228985488238">Ton: <ph name="PERCENT" /> procent</translation>
 <translation id="9160096769946561184">Przejdź na koniec bieżącej kolumny</translation>

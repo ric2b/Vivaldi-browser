@@ -8,16 +8,22 @@
 
 #include "base/json/json_reader.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
+#include "components/cronet/stale_host_resolver.h"
+#include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/cert_verify_proc.h"
+#include "net/cert/multi_threaded_cert_verifier.h"
 #include "net/dns/host_resolver.h"
+#include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_server_properties.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/url_request/url_request_context_builder.h"
 
@@ -49,11 +55,34 @@ const char kQuicUserAgentId[] = "user_agent_id";
 const char kQuicMigrateSessionsEarly[] = "migrate_sessions_early";
 const char kQuicDisableBidirectionalStreams[] =
     "quic_disable_bidirectional_streams";
+const char kQuicRaceCertVerification[] = "race_cert_verification";
 
 // AsyncDNS experiment dictionary name.
 const char kAsyncDnsFieldTrialName[] = "AsyncDNS";
 // Name of boolean to enable AsyncDNS experiment.
 const char kAsyncDnsEnable[] = "enable";
+
+// Stale DNS (StaleHostResolver) experiment dictionary name.
+const char kStaleDnsFieldTrialName[] = "StaleDNS";
+// Name of boolean to enable stale DNS experiment.
+const char kStaleDnsEnable[] = "enable";
+// Name of integer delay in milliseconds before a stale DNS result will be
+// used.
+const char kStaleDnsDelayMs[] = "delay_ms";
+// Name of integer maximum age (past expiration) in milliseconds of a stale DNS
+// result that will be used, or 0 for no limit.
+const char kStaleDnsMaxExpiredTimeMs[] = "max_expired_time_ms";
+// Name of integer maximum times each stale DNS result can be used, or 0 for no
+// limit.
+const char kStaleDnsMaxStaleUses[] = "max_stale_uses";
+// Name of boolean to allow stale DNS results from other networks to be used on
+// the current network.
+const char kStaleDnsAllowOtherNetwork[] = "allow_other_network";
+
+// Rules to override DNS resolution. Intended for testing.
+// See explanation of format in net/dns/mapped_host_resolver.h.
+const char kHostResolverRulesFieldTrialName[] = "HostResolverRules";
+const char kHostResolverRules[] = "host_resolver_rules";
 
 const char kSSLKeyLogFile[] = "ssl_key_log_file";
 
@@ -64,6 +93,8 @@ void ParseAndSetExperimentalOptions(
     const scoped_refptr<base::SequencedTaskRunner>& file_task_runner) {
   if (experimental_options.empty())
     return;
+
+  DCHECK(net_log);
 
   DVLOG(1) << "Experimental Options:" << experimental_options;
   std::unique_ptr<base::Value> options =
@@ -183,22 +214,78 @@ void ParseAndSetExperimentalOptions(
       context_builder->set_quic_disable_bidirectional_streams(
           quic_disable_bidirectional_streams);
     }
+
+    bool quic_race_cert_verification = false;
+    if (quic_args->GetBoolean(kQuicRaceCertVerification,
+                              &quic_race_cert_verification)) {
+      context_builder->set_quic_race_cert_verification(
+          quic_race_cert_verification);
+    }
   }
 
+  bool async_dns_enable = false;
+  bool stale_dns_enable = false;
+  bool host_resolver_rules_enable = false;
+  StaleHostResolver::StaleOptions stale_dns_options;
+  std::string host_resolver_rules_string;
+
   const base::DictionaryValue* async_dns_args = nullptr;
-  if (dict->GetDictionary(kAsyncDnsFieldTrialName, &async_dns_args)) {
-    bool async_dns_enable = false;
-    if (async_dns_args->GetBoolean(kAsyncDnsEnable, &async_dns_enable) &&
-        async_dns_enable) {
-      if (net_log == nullptr) {
-        DCHECK(false) << "AsyncDNS experiment requires NetLog.";
-      } else {
-        std::unique_ptr<net::HostResolver> host_resolver(
-            net::HostResolver::CreateDefaultResolver(net_log));
-        host_resolver->SetDnsClientEnabled(true);
-        context_builder->set_host_resolver(std::move(host_resolver));
+  if (dict->GetDictionary(kAsyncDnsFieldTrialName, &async_dns_args))
+    async_dns_args->GetBoolean(kAsyncDnsEnable, &async_dns_enable);
+
+  const base::DictionaryValue* stale_dns_args = nullptr;
+  if (dict->GetDictionary(kStaleDnsFieldTrialName, &stale_dns_args)) {
+    if (stale_dns_args->GetBoolean(kStaleDnsEnable, &stale_dns_enable) &&
+        stale_dns_enable) {
+      int delay;
+      if (stale_dns_args->GetInteger(kStaleDnsDelayMs, &delay))
+        stale_dns_options.delay = base::TimeDelta::FromMilliseconds(delay);
+      int max_expired_time_ms;
+      if (stale_dns_args->GetInteger(kStaleDnsMaxExpiredTimeMs,
+                                     &max_expired_time_ms)) {
+        stale_dns_options.max_expired_time =
+            base::TimeDelta::FromMilliseconds(max_expired_time_ms);
+      }
+      int max_stale_uses;
+      if (stale_dns_args->GetInteger(kStaleDnsMaxStaleUses, &max_stale_uses))
+        stale_dns_options.max_stale_uses = max_stale_uses;
+      bool allow_other_network;
+      if (stale_dns_args->GetBoolean(kStaleDnsAllowOtherNetwork,
+                                     &allow_other_network)) {
+        stale_dns_options.allow_other_network = allow_other_network;
       }
     }
+  }
+
+  const base::DictionaryValue* host_resolver_rules_args = nullptr;
+  if (dict->GetDictionary(kHostResolverRulesFieldTrialName,
+                          &host_resolver_rules_args)) {
+    host_resolver_rules_enable = host_resolver_rules_args->GetString(
+        kHostResolverRules, &host_resolver_rules_string);
+  }
+
+  if (async_dns_enable || stale_dns_enable || host_resolver_rules_enable) {
+    if (net_log == nullptr) {
+      CHECK(false) << "AsyncDNS, StaleDNS, and HostResolverRules experiments "
+                   << "require NetLog.";
+    }
+    std::unique_ptr<net::HostResolver> host_resolver;
+    if (stale_dns_enable) {
+      host_resolver.reset(new StaleHostResolver(
+          net::HostResolver::CreateDefaultResolverImpl(net_log),
+          stale_dns_options));
+    } else {
+      host_resolver = net::HostResolver::CreateDefaultResolver(net_log);
+    }
+    if (async_dns_enable)
+      host_resolver->SetDnsClientEnabled(true);
+    if (host_resolver_rules_enable) {
+      std::unique_ptr<net::MappedHostResolver> remapped_resolver(
+          new net::MappedHostResolver(std::move(host_resolver)));
+      remapped_resolver->SetRulesFromString(host_resolver_rules_string);
+      host_resolver = std::move(remapped_resolver);
+    }
+    context_builder->set_host_resolver(std::move(host_resolver));
   }
 
   std::string ssl_key_log_file_string;
@@ -250,7 +337,9 @@ URLRequestContextConfig::URLRequestContextConfig(
     const std::string& data_reduction_fallback_proxy,
     const std::string& data_reduction_secure_proxy_check_url,
     std::unique_ptr<net::CertVerifier> mock_cert_verifier,
-    bool enable_network_quality_estimator)
+    bool enable_network_quality_estimator,
+    bool bypass_public_key_pinning_for_local_trust_anchors,
+    const std::string& cert_verifier_data)
     : enable_quic(enable_quic),
       quic_user_agent_id(quic_user_agent_id),
       enable_spdy(enable_spdy),
@@ -267,7 +356,10 @@ URLRequestContextConfig::URLRequestContextConfig(
       data_reduction_secure_proxy_check_url(
           data_reduction_secure_proxy_check_url),
       mock_cert_verifier(std::move(mock_cert_verifier)),
-      enable_network_quality_estimator(enable_network_quality_estimator) {}
+      enable_network_quality_estimator(enable_network_quality_estimator),
+      bypass_public_key_pinning_for_local_trust_anchors(
+          bypass_public_key_pinning_for_local_trust_anchors),
+      cert_verifier_data(cert_verifier_data) {}
 
 URLRequestContextConfig::~URLRequestContextConfig() {}
 
@@ -275,6 +367,8 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
     net::URLRequestContextBuilder* context_builder,
     net::NetLog* net_log,
     const scoped_refptr<base::SequencedTaskRunner>& file_task_runner) {
+  DCHECK(net_log);
+
   std::string config_cache;
   if (http_cache != DISABLED) {
     net::URLRequestContextBuilder::HttpCacheParams cache_params;
@@ -301,8 +395,17 @@ void URLRequestContextConfig::ConfigureURLRequestContextBuilder(
   ParseAndSetExperimentalOptions(experimental_options, context_builder, net_log,
                                  file_task_runner);
 
-  if (mock_cert_verifier)
-    context_builder->SetCertVerifier(std::move(mock_cert_verifier));
+  std::unique_ptr<net::CertVerifier> cert_verifier;
+  if (mock_cert_verifier) {
+    // Because |context_builder| expects CachingCertVerifier, wrap
+    // |mock_cert_verifier| into a CachingCertVerifier.
+    cert_verifier = base::MakeUnique<net::CachingCertVerifier>(
+        std::move(mock_cert_verifier));
+  } else {
+    // net::CertVerifier::CreateDefault() returns a CachingCertVerifier.
+    cert_verifier = net::CertVerifier::CreateDefault();
+  }
+  context_builder->SetCertVerifier(std::move(cert_verifier));
   // TODO(mef): Use |config| to set cookies.
 }
 

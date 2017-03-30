@@ -83,9 +83,9 @@ LayoutObject* HTMLVideoElement::createLayoutObject(const ComputedStyle&)
     return new LayoutVideo(this);
 }
 
-void HTMLVideoElement::attach(const AttachContext& context)
+void HTMLVideoElement::attachLayoutTree(const AttachContext& context)
 {
-    HTMLMediaElement::attach(context);
+    HTMLMediaElement::attachLayoutTree(context);
 
     updateDisplayState();
     if (shouldDisplayPosterImage()) {
@@ -327,22 +327,23 @@ IntSize HTMLVideoElement::bitmapSourceSize() const
     return IntSize(videoWidth(), videoHeight());
 }
 
-ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, int sx, int sy, int sw, int sh, const ImageBitmapOptions& options, ExceptionState& exceptionState)
+ScriptPromise HTMLVideoElement::createImageBitmap(ScriptState* scriptState, EventTarget& eventTarget, Optional<IntRect> cropRect, const ImageBitmapOptions& options, ExceptionState& exceptionState)
 {
     DCHECK(eventTarget.toLocalDOMWindow());
-    if (getNetworkState() == HTMLMediaElement::NETWORK_EMPTY) {
+    if (getNetworkState() == HTMLMediaElement::kNetworkEmpty) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element has not retrieved data.");
         return ScriptPromise();
     }
-    if (getReadyState() <= HTMLMediaElement::HAVE_METADATA) {
+    if (getReadyState() <= HTMLMediaElement::kHaveMetadata) {
         exceptionState.throwDOMException(InvalidStateError, "The provided element's player has no current data.");
         return ScriptPromise();
     }
-    if (!sw || !sh) {
-        exceptionState.throwDOMException(IndexSizeError, String::format("The source %s provided is 0.", sw ? "height" : "width"));
+    if ((cropRect && !ImageBitmap::isSourceSizeValid(cropRect->width(), cropRect->height(), exceptionState))
+        || !ImageBitmap::isSourceSizeValid(bitmapSourceSize().width(), bitmapSourceSize().height(), exceptionState))
         return ScriptPromise();
-    }
-    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, IntRect(sx, sy, sw, sh), eventTarget.toLocalDOMWindow()->document(), options));
+    if (!ImageBitmap::isResizeOptionValid(options, exceptionState))
+        return ScriptPromise();
+    return ImageBitmapSource::fulfillImageBitmap(scriptState, ImageBitmap::create(this, cropRect, eventTarget.toLocalDOMWindow()->document(), options));
 }
 
 } // namespace blink

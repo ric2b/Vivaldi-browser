@@ -7,6 +7,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
+import("//media/media_options.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("../../chrome_browser_ui.gypi") ],
@@ -49,8 +50,8 @@ split_static_library("ui") {
   # browser, then we can clean up these dependencies.
   public_deps = [
     "//components/dom_distiller/core",
+    "//components/sync",
     "//content/public/browser",
-    "//sync",
   ]
   deps = [
     # NOTE: New dependencies should generally be added in the OS!="ios"
@@ -93,7 +94,7 @@ split_static_library("ui") {
     "//components/password_manager/content/browser",
     "//components/password_manager/core/browser",
     "//components/pdf/browser",
-    "//components/policy",
+    "//components/policy:generated",
     "//components/pref_registry",
     "//components/proximity_auth",
     "//components/proxy_config",
@@ -110,7 +111,7 @@ split_static_library("ui") {
     "//components/ssl_errors",
     "//components/startup_metric_utils/browser:lib",
     "//components/strings",
-    "//components/sync_driver",
+    "//components/sync",
     "//components/sync_sessions",
     "//components/toolbar",
     "//components/translate/core/browser",
@@ -148,6 +149,10 @@ split_static_library("ui") {
     deps += [ "//extensions/browser" ]
   }
 
+  if (is_chromeos && use_cras) {
+    defines += [ "USE_CRAS" ]
+  }
+
   if (!is_ios) {
     sources += rebase_path(gypi_values.chrome_browser_ui_non_ios_sources,
                            ".",
@@ -161,6 +166,7 @@ split_static_library("ui") {
       "//chrome/browser/ui/webui/engagement:mojo_bindings",
       "//chrome/browser/ui/webui/omnibox:mojo_bindings",
       "//chrome/browser/ui/webui/plugins:mojo_bindings",
+      "//chrome/browser/ui/webui/usb_internals:mojo_bindings",
       "//chrome/common/net",
       "//chrome/installer/util:with_no_strings",
       "//components/autofill/content/browser:risk_proto",
@@ -168,7 +174,6 @@ split_static_library("ui") {
       "//components/bubble:bubble",
       "//components/crash/core/browser",
       "//components/net_log",
-      "//components/page_load_metrics/browser",
       "//components/power",
       "//components/suggestions/proto",
       "//components/url_formatter",
@@ -208,16 +213,10 @@ split_static_library("ui") {
     deps += [
       "//chrome/browser/profile_resetter:profile_reset_report_proto",
       "//chrome/common:features",
-      "//components/chooser_controller:chooser_controller",
-      "//components/copresence",
       "//components/feedback/proto",
       "//components/proximity_auth/webui",
       "//device/bluetooth",
     ]
-  }
-
-  if (use_aura) {
-    defines += [ "MOJO_RUNNER_CLIENT" ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
@@ -280,8 +279,8 @@ split_static_library("ui") {
     deps += [
       "//ash",
       "//ash:ash_with_content",
-      "//ash/strings",
-      "//ash/sysui/public/interfaces",
+      "//ash/common/strings",
+      "//ash/public/interfaces",
       "//components/user_manager",
       "//mash/shelf/public/interfaces",
       "//ui/app_list/presenter",
@@ -321,8 +320,15 @@ split_static_library("ui") {
                       "//chrome")
       if (use_aura) {
         deps += [
-          "//components/mus/public/cpp",
-          "//components/mus/public/interfaces",
+          "//services/ui/public/cpp",
+          "//services/ui/public/interfaces",
+        ]
+
+        # TODO(erg): These files hard depend on mus, and thus can't be in a gyp
+        # build. When gyp goes away, merge this back into the sources list.
+        sources += [
+          "views/tabs/window_finder_mus.cc",
+          "views/tabs/window_finder_mus.h",
         ]
       }
       if (enable_extensions) {
@@ -343,10 +349,11 @@ split_static_library("ui") {
       deps -= [ "//chrome/browser/ui/views" ]
     }
   }
+  if (use_gio) {
+    deps += [ "//build/linux/libgio" ]
+  }
   if (use_aura && !use_ozone && is_desktop_linux) {
     deps += [
-      "//build/linux/libgio",
-
       # gtk2 is the only component that can interact with gtk2 in our new
       # world.
       "//chrome/browser/ui/libgtk2ui",
@@ -380,7 +387,6 @@ split_static_library("ui") {
       "//ui/keyboard:resources",
       "//ui/wm",
     ]
-    defines += [ "MOJO_SHELL_CLIENT" ]
     if (!is_chromeos) {
       sources += rebase_path(gypi_values.chrome_browser_ui_aura_non_chromeos,
                              ".",
@@ -479,7 +485,6 @@ split_static_library("ui") {
       "//ui/views/controls/webview",
     ]
     deps += [
-      "//chrome/installer/util:strings",
       "//components/search_engines",
       "//google_update",
       "//third_party/iaccessible2",
@@ -581,6 +586,7 @@ split_static_library("ui") {
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:api_registration",
     ]
+    allow_circular_includes_from = [ "//chrome/browser/extensions" ]
     sources += rebase_path(gypi_values.chrome_browser_ui_extensions_sources,
                            ".",
                            "//chrome")
@@ -670,8 +676,8 @@ static_library("test_support") {
       "passwords/manage_passwords_ui_controller_mock.h",
       "passwords/password_dialog_controller_mock.cc",
       "passwords/password_dialog_controller_mock.h",
-      "website_settings/mock_permission_bubble_request.cc",
-      "website_settings/mock_permission_bubble_request.h",
+      "passwords/passwords_model_delegate_mock.cc",
+      "passwords/passwords_model_delegate_mock.h",
     ]
   }
 

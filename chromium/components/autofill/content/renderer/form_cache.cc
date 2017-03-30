@@ -123,7 +123,7 @@ std::vector<FormData> FormCache::ExtractNewForms() {
 
     FormData form;
     if (!WebFormElementToFormData(form_element, WebFormControlElement(),
-                                  extract_mask, &form, nullptr)) {
+                                  nullptr, extract_mask, &form, nullptr)) {
       continue;
     }
 
@@ -131,7 +131,7 @@ std::vector<FormData> FormCache::ExtractNewForms() {
     if (num_fields_seen > form_util::kMaxParseableFields)
       return forms;
 
-    if (!ContainsKey(parsed_forms_, form) &&
+    if (!base::ContainsKey(parsed_forms_, form) &&
         IsFormInteresting(form, num_editable_elements)) {
       for (auto it = parsed_forms_.begin(); it != parsed_forms_.end(); ++it) {
         if (it->SameFormAs(form)) {

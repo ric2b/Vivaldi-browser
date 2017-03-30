@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.autofill;
 
 import android.test.suitebuilder.annotation.SmallTest;
+import android.view.View;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
@@ -50,18 +51,21 @@ public class AutofillTest extends ChromeActivityTestCaseBase<ChromeActivity> {
     public void setUp() throws Exception {
         super.setUp();
 
-        final ChromeActivity activity = getActivity();
         mMockAutofillCallback = new MockAutofillCallback();
+        final ChromeActivity activity = getActivity();
         final ViewAndroidDelegate viewDelegate =
-                activity.getCurrentContentViewCore().getViewAndroidDelegate();
+                ViewAndroidDelegate.createBasicDelegate(
+                        activity.getCurrentContentViewCore().getContainerView());
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
+                View anchorView = viewDelegate.acquireView();
+                viewDelegate.setViewPosition(anchorView, 50f, 500f, 500f, 500f, 1f, 10, 10);
+
                 mWindowAndroid = new ActivityWindowAndroid(activity);
-                mAutofillPopup = new AutofillPopup(activity, viewDelegate, mMockAutofillCallback);
+                mAutofillPopup = new AutofillPopup(activity, anchorView, mMockAutofillCallback);
                 mAutofillPopup.filterAndShow(new AutofillSuggestion[0], false);
-                mAutofillPopup.setAnchorRect(50, 500, 500, 50);
             }
         });
     }

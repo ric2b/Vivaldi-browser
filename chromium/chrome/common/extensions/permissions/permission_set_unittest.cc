@@ -18,13 +18,13 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_test_util.h"
-#include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/extensions/permissions/chrome_permission_message_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/version_info/version_info.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permission_message_test_util.h"
 #include "extensions/common/permissions/permission_message_util.h"
@@ -379,9 +379,9 @@ TEST(PermissionsTest, CreateUnion) {
                                scriptable_hosts2));
   union_set = PermissionSet::CreateUnion(*set1, *set2);
   EXPECT_TRUE(set1->Contains(*set2));
-  EXPECT_TRUE(set1->Contains(*union_set.get()));
+  EXPECT_TRUE(set1->Contains(*union_set));
   EXPECT_FALSE(set2->Contains(*set1));
-  EXPECT_FALSE(set2->Contains(*union_set.get()));
+  EXPECT_FALSE(set2->Contains(*union_set));
   EXPECT_TRUE(union_set->Contains(*set1));
   EXPECT_TRUE(union_set->Contains(*set2));
 
@@ -436,9 +436,9 @@ TEST(PermissionsTest, CreateUnion) {
   union_set = PermissionSet::CreateUnion(*set1, *set2);
 
   EXPECT_FALSE(set1->Contains(*set2));
-  EXPECT_FALSE(set1->Contains(*union_set.get()));
+  EXPECT_FALSE(set1->Contains(*union_set));
   EXPECT_FALSE(set2->Contains(*set1));
-  EXPECT_FALSE(set2->Contains(*union_set.get()));
+  EXPECT_FALSE(set2->Contains(*union_set));
   EXPECT_TRUE(union_set->Contains(*set1));
   EXPECT_TRUE(union_set->Contains(*set2));
 
@@ -740,13 +740,11 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kAlwaysOnTopWindows);
   skip.insert(APIPermission::kAppView);
   skip.insert(APIPermission::kAudio);
-  skip.insert(APIPermission::kAudioModem);
   skip.insert(APIPermission::kBrowsingData);
   skip.insert(APIPermission::kCastStreaming);
   skip.insert(APIPermission::kCommandsAccessibility);
   skip.insert(APIPermission::kContextMenus);
   skip.insert(APIPermission::kCryptotokenPrivate);
-  skip.insert(APIPermission::kCopresencePrivate);
   skip.insert(APIPermission::kDesktopCapturePrivate);
   skip.insert(APIPermission::kDiagnostics);
   skip.insert(APIPermission::kDns);
@@ -791,6 +789,7 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kBackground);
 
   skip.insert(APIPermission::kClipboardWrite);
+  skip.insert(APIPermission::kClipboard);
 
   // The cookie permission does nothing unless you have associated host
   // permissions.

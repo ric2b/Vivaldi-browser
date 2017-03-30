@@ -201,7 +201,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
                 (HttpURLConnection) url.openConnection();
         connection.setDoOutput(true);
         connection.setRequestMethod("POST");
-        if (Build.VERSION.SDK_INT >= 19) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             String dataString = "some very important data";
             byte[] data = dataString.getBytes();
             Class<?> c = connection.getClass();
@@ -846,20 +846,11 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
     public void testServerHangsUp() throws Exception {
-        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        URL url = new URL(NativeTestServer.getExabyteResponseURL());
         final HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        // Make the server echo a large request body, so it exceeds the internal
-        // read buffer.
-        connection.setDoOutput(true);
-        connection.setRequestMethod("POST");
-        byte[] largeData = TestUtil.getLargeData();
-        connection.setFixedLengthStreamingMode(largeData.length);
-        OutputStream out = connection.getOutputStream();
-        out.write(largeData);
-
         InputStream in = connection.getInputStream();
         // Read one byte and shut down the server.
-        assertTrue(in.read() != 1);
+        assertTrue(in.read() != -1);
         NativeTestServer.shutdownNativeTestServer();
         // Continue reading, and make sure the message loop will not block.
         try {
@@ -867,24 +858,32 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
             while (b != -1) {
                 b = in.read();
             }
-            // Server closes the connection before EOF can be received.
-            fail();
+            // On KitKat, the default implementation doesn't throw an error.
+            if (!testingSystemHttpURLConnection()) {
+                // Server closes the connection before EOF can be received.
+                fail();
+            }
         } catch (IOException e) {
             // Expected.
             // Cronet gives a net::ERR_CONTENT_LENGTH_MISMATCH while the
-            // default implementation gives a java.net.ProtocolException with
-            // "unexpected end of stream" message.
+            // default implementation sometimes gives a
+            // java.net.ProtocolException with "unexpected end of stream"
+            // message.
         }
 
         // Read once more, and make sure exception is thrown.
         try {
             in.read();
-            fail();
+            // On KitKat, the default implementation doesn't throw an error.
+            if (!testingSystemHttpURLConnection()) {
+                fail();
+            }
         } catch (IOException e) {
             // Expected.
             // Cronet gives a net::ERR_CONTENT_LENGTH_MISMATCH while the
-            // default implementation gives a java.net.ProtocolException with
-            // "unexpected end of stream" message.
+            // default implementation sometimes gives a
+            // java.net.ProtocolException with "unexpected end of stream"
+            // message.
         }
         // Spins up server to avoid crash when shutting it down in tearDown().
         assertTrue(NativeTestServer.startNativeTestServer(getContext()));
@@ -996,7 +995,7 @@ public class CronetHttpURLConnectionTest extends CronetTestBase {
         assertEquals(302, connection.getResponseCode());
         assertEquals("Found", connection.getResponseMessage());
         // Behavior changed in Android Marshmallow to not update the URL.
-        if (testingSystemHttpURLConnection() && Build.VERSION.SDK_INT == Build.VERSION_CODES.M) {
+        if (testingSystemHttpURLConnection() && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             // Redirected port is randomized, verify everything but port.
             assertEquals(url.getProtocol(), connection.getURL().getProtocol());
             assertEquals(url.getHost(), connection.getURL().getHost());

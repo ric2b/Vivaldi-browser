@@ -263,12 +263,26 @@ void ReloadExtension(const std::string& extension_id, Profile* profile) {
 const char kUrlKey[] = "url";
 const char kFrameNameKey[] = "name";
 
+// Defines the backoff policy used for attempting to reload extensions.
+const net::BackoffEntry::Policy kExtensionReloadBackoffPolicy = {
+  0,                // Initial errors to ignore before applying backoff.
+  3000,             // Initial delay: 3 seconds.
+  2,                // Multiply factor.
+  0.1,              // Fuzzing percentage.
+  -1,               // Maximum backoff time: -1 for no maximum.
+  -1,               // Entry lifetime: -1 to never discard.
+  false,            // Whether to always use initial delay. No-op as there are
+                    // no initial errors to ignore.
+};
+
 int BackgroundContentsService::restart_delay_in_ms_ = 3000;  // 3 seconds.
 
 BackgroundContentsService::BackgroundContentsService(
     Profile* profile,
     const base::CommandLine* command_line)
-    : prefs_(NULL), extension_registry_observer_(this) {
+    : prefs_(NULL),
+      extension_registry_observer_(this),
+      weak_ptr_factory_(this) {
   // Don't load/store preferences if the parent profile is incognito.
   if (!profile->IsOffTheRecord())
     prefs_ = profile->GetPrefs();
@@ -466,6 +480,23 @@ void BackgroundContentsService::OnExtensionLoaded(
     }
   }
 
+  // If there is an existing BackoffEntry for the extension, clear it if
+  // the component extension stays loaded for 60 seconds. This avoids the
+  // situation of effectively disabling an extension for the entire browser
+  // session if there was a periodic crash (sometimes caused by another source).
+  if (extensions::Manifest::IsComponentLocation(extension->location())) {
+    ComponentExtensionBackoffEntryMap::const_iterator it =
+        component_backoff_map_.find(extension->id());
+    if (it != component_backoff_map_.end()) {
+      net::BackoffEntry* entry = component_backoff_map_[extension->id()].get();
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(FROM_HERE,
+          base::Bind(&BackgroundContentsService::MaybeClearBackoffEntry,
+              weak_ptr_factory_.GetWeakPtr(), extension->id(),
+              entry->failure_count()),
+          base::TimeDelta::FromSeconds(60));
+    }
+  }
+
   // Close the crash notification balloon for the app/extension, if any.
   ScheduleCloseBalloon(extension->id(), profile);
   SendChangeNotification(profile);
@@ -523,9 +554,33 @@ void BackgroundContentsService::OnExtensionUninstalled(
 void BackgroundContentsService::RestartForceInstalledExtensionOnCrash(
     const Extension* extension,
     Profile* profile) {
+  int restart_delay = restart_delay_in_ms_;
+
+  // If the extension was a component extension, use exponential backoff when
+  // attempting to reload.
+  if (extensions::Manifest::IsComponentLocation(extension->location())) {
+    ComponentExtensionBackoffEntryMap::const_iterator it =
+        component_backoff_map_.find(extension->id());
+
+    // Create a BackoffEntry if this is the first time we try to reload this
+    // particular extension.
+    if (it == component_backoff_map_.end()) {
+      std::unique_ptr<net::BackoffEntry> backoff_entry(
+          new net::BackoffEntry(&kExtensionReloadBackoffPolicy));
+      component_backoff_map_.insert(
+          std::pair<extensions::ExtensionId,
+                    std::unique_ptr<net::BackoffEntry>>(
+              extension->id(), std::move(backoff_entry)));
+    }
+
+    net::BackoffEntry* entry = component_backoff_map_[extension->id()].get();
+    entry->InformOfRequest(false);
+    restart_delay = entry->GetTimeUntilRelease().InMilliseconds();
+  }
+
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&ReloadExtension, extension->id(), profile),
-      base::TimeDelta::FromMilliseconds(restart_delay_in_ms_));
+      base::TimeDelta::FromMilliseconds(restart_delay));
 }
 
 // Loads all background contents whose urls have been stored in prefs.
@@ -566,6 +621,22 @@ void BackgroundContentsService::SendChangeNotification(Profile* profile) {
       chrome::NOTIFICATION_BACKGROUND_CONTENTS_SERVICE_CHANGED,
       content::Source<Profile>(profile),
       content::Details<BackgroundContentsService>(this));
+}
+
+void BackgroundContentsService::MaybeClearBackoffEntry(
+    const std::string extension_id,
+    int expected_failure_count) {
+  ComponentExtensionBackoffEntryMap::const_iterator it =
+      component_backoff_map_.find(extension_id);
+  if (it == component_backoff_map_.end())
+    return;
+
+  net::BackoffEntry* entry = component_backoff_map_[extension_id].get();
+
+  // Only remove the BackoffEntry if there has has been no failure for
+  // |extension_id| since loading.
+  if (entry->failure_count() == expected_failure_count)
+    component_backoff_map_.erase(it);
 }
 
 void BackgroundContentsService::LoadBackgroundContentsForExtension(

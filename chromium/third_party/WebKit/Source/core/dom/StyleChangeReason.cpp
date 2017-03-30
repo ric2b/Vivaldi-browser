@@ -19,7 +19,6 @@ const char ControlValue[] = "ControlValue";
 const char Control[] = "Control";
 const char DeclarativeContent[] = "Extension declarativeContent.css";
 const char DesignMode[] = "DesignMode";
-const char Drag[] = "Drag";
 const char FontSizeChange[] = "FontSizeChange";
 const char Fonts[] = "Fonts";
 const char FullScreen[] = "FullScreen";
@@ -36,10 +35,8 @@ const char SVGCursor[] = "SVGCursor";
 const char SVGFilterLayerUpdate[] = "SVGFilterLayerUpdate";
 const char Settings[] = "Settings";
 const char Shadow[] = "Shadow";
-const char SiblingSelector[] = "SiblingSelector";
 const char StyleInvalidator[] = "StyleInvalidator";
 const char StyleSheetChange[] = "StyleSheetChange";
-const char Validate[] = "Validate";
 const char ViewportUnits[] = "ViewportUnits";
 const char VisitedLink[] = "VisitedLink";
 const char VisuallyOrdered[] = "VisuallyOrdered";
@@ -50,6 +47,7 @@ const char Zoom[] = "Zoom";
 namespace StyleChangeExtraData {
 DEFINE_GLOBAL(AtomicString, Active)
 DEFINE_GLOBAL(AtomicString, Disabled)
+DEFINE_GLOBAL(AtomicString, Drag)
 DEFINE_GLOBAL(AtomicString, Focus)
 DEFINE_GLOBAL(AtomicString, Hover)
 DEFINE_GLOBAL(AtomicString, Past)
@@ -61,6 +59,7 @@ void init()
 
     new (NotNull, (void*)&Active) AtomicString(":active");
     new (NotNull, (void*)&Disabled) AtomicString(":disabled");
+    new (NotNull, (void*)&Drag) AtomicString(":-webkit-drag");
     new (NotNull, (void*)&Focus) AtomicString(":focus");
     new (NotNull, (void*)&Hover) AtomicString(":hover");
     new (NotNull, (void*)&Past) AtomicString(":past");

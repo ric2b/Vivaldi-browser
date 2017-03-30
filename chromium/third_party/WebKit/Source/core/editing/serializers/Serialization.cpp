@@ -161,22 +161,12 @@ bool propertyMissingOrEqualToNone(StylePropertySet* style, CSSPropertyID propert
 {
     if (!style)
         return false;
-    CSSValue* value = style->getPropertyCSSValue(propertyID);
+    const CSSValue* value = style->getPropertyCSSValue(propertyID);
     if (!value)
         return true;
     if (!value->isPrimitiveValue())
         return false;
     return toCSSPrimitiveValue(value)->getValueID() == CSSValueNone;
-}
-
-static bool isPresentationalHTMLElement(const Node* node)
-{
-    if (!node->isHTMLElement())
-        return false;
-
-    const HTMLElement& element = toHTMLElement(*node);
-    return element.hasTagName(uTag) || element.hasTagName(sTag) || element.hasTagName(strikeTag)
-        || element.hasTagName(iTag) || element.hasTagName(emTag) || element.hasTagName(bTag) || element.hasTagName(strongTag);
 }
 
 template<typename Strategy>
@@ -293,7 +283,7 @@ static bool findNodesSurroundingContext(DocumentFragment* fragment, Comment*& no
     if (!fragment->firstChild())
         return false;
     for (Node& node : NodeTraversal::startsAt(*fragment->firstChild())) {
-        if (node.getNodeType() == Node::COMMENT_NODE && toComment(node).data() == fragmentMarkerTag) {
+        if (node.getNodeType() == Node::kCommentNode && toComment(node).data() == fragmentMarkerTag) {
             if (!nodeBeforeContext) {
                 nodeBeforeContext = &toComment(node);
             } else {

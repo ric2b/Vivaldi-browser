@@ -8,18 +8,14 @@
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/scoped_observer.h"
-#include "components/sync_driver/sync_service_observer.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/signin/core/browser/signin_manager.h"
 
-class SigninManagerBase;
-
-namespace sync_driver {
-class SyncService;
-}
+class PrefRegistrySimple;
+class PrefService;
 
 namespace ntp_snippets {
 
-// On Android builds, a Java counterpart will be generated for this enum.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.ntp.snippets
 enum class DisabledReason : int {
   // Snippets are enabled
   NONE,
@@ -27,26 +23,20 @@ enum class DisabledReason : int {
   EXPLICITLY_DISABLED,
   // The user is not signed in, and the service requires it to be enabled.
   SIGNED_OUT,
-  // Sync is not enabled, and the service requires it to be enabled.
-  SYNC_DISABLED,
-  // The service requires passphrase encryption to be disabled.
-  PASSPHRASE_ENCRYPTION_ENABLED,
-  // History sync is not enabled, and the service requires it to be enabled.
-  HISTORY_SYNC_DISABLED,
-  // The sync service is not completely initialized, and the status is unknown.
-  HISTORY_SYNC_STATE_UNKNOWN
 };
 
-// Aggregates data from sync and signin to notify the snippet service of
+// Aggregates data from preferences and signin to notify the snippet service of
 // relevant changes in their states.
-class NTPSnippetsStatusService : public sync_driver::SyncServiceObserver {
+class NTPSnippetsStatusService : public SigninManagerBase::Observer {
  public:
   typedef base::Callback<void(DisabledReason)> DisabledReasonChangeCallback;
 
   NTPSnippetsStatusService(SigninManagerBase* signin_manager,
-                           sync_driver::SyncService* sync_service);
+                           PrefService* pref_service);
 
   ~NTPSnippetsStatusService() override;
+
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Starts listening for changes from the dependencies. |callback| will be
   // called when a significant change in state is detected.
@@ -55,24 +45,32 @@ class NTPSnippetsStatusService : public sync_driver::SyncServiceObserver {
   DisabledReason disabled_reason() const { return disabled_reason_; }
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsStatusServiceTest,
-                           SyncStateCompatibility);
+  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsStatusServiceTest, DisabledViaPref);
 
-  // sync_driver::SyncServiceObserver implementation
-  void OnStateChanged() override;
+  // SigninManagerBase::Observer implementation
+  void GoogleSigninSucceeded(const std::string& account_id,
+                             const std::string& username,
+                             const std::string& password) override;
+  void GoogleSignedOut(const std::string& account_id,
+                       const std::string& username) override;
+
+  // Callback for the PrefChangeRegistrar.
+  void OnStateChanged();
 
   DisabledReason GetDisabledReasonFromDeps() const;
 
   DisabledReason disabled_reason_;
   DisabledReasonChangeCallback disabled_reason_change_callback_;
 
+  bool require_signin_;
   SigninManagerBase* signin_manager_;
-  sync_driver::SyncService* sync_service_;
+  PrefService* pref_service_;
 
-  // The observer for the SyncService. When the sync state changes,
-  // SyncService will call |OnStateChanged|.
-  ScopedObserver<sync_driver::SyncService, sync_driver::SyncServiceObserver>
-      sync_service_observer_;
+  PrefChangeRegistrar pref_change_registrar_;
+
+  // The observer for the SigninManager.
+  ScopedObserver<SigninManagerBase, SigninManagerBase::Observer>
+      signin_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsStatusService);
 };

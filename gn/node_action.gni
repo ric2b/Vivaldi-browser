@@ -1,0 +1,42 @@
+import("command_action.gni")
+
+template("node_action") {
+  forward_variables_from(invoker, "*")
+  command_args = args
+  command_inputs = inputs
+  if (defined(sources)) {
+    command_sources = sources
+  }
+  if (defined(deps)) {
+    command_deps = deps
+  }
+  if (defined(cwd)) {
+    command_cwd = cwd
+  }
+  command_outputs = outputs
+  command_base(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    if (defined(command_cwd)) {
+      command_script = rebase_path(script, command_cwd)
+      cwd = command_cwd
+    } else {
+      command_script = rebase_path(script, root_build_dir)
+    }
+
+    command = "node"
+    if (defined(command_deps)) {
+      deps = []
+      deps = command_deps
+    }
+    inputs = []
+    inputs = command_inputs
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    outputs = []
+    outputs = command_outputs
+    args = []
+    args = [ command_script ] + command_args
+  }
+}

@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_LOGIN_DATABASE_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_LOGIN_DATABASE_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,8 @@
 
 namespace password_manager {
 
+class SQLTableBuilder;
+
 extern const int kCurrentVersionNumber;
 extern const int kCompatibleVersionNumber;
 
@@ -36,7 +39,7 @@ extern const int kCompatibleVersionNumber;
 // the login information.
 class LoginDatabase {
  public:
-  LoginDatabase(const base::FilePath& db_path);
+  explicit LoginDatabase(const base::FilePath& db_path);
   virtual ~LoginDatabase();
 
   // Actually creates/opens the database. If false is returned, no other method
@@ -77,17 +80,17 @@ class LoginDatabase {
   bool RemoveLoginsSyncedBetween(base::Time delete_begin,
                                  base::Time delete_end);
 
-  // Sets the 'skip_zero_click' flag to 'true' for all logins.
-  bool DisableAutoSignInForAllLogins();
+  // Sets the 'skip_zero_click' flag on all forms on |origin| to 'true'.
+  bool DisableAutoSignInForOrigin(const GURL& origin);
 
   // All Get* methods below overwrite |forms| with the returned credentials. On
   // success, those methods return true.
 
   // Gets a list of credentials matching |form|, including blacklisted matches
   // and federated credentials.
-  bool GetLogins(const autofill::PasswordForm& form,
-                 ScopedVector<autofill::PasswordForm>* forms) const
-      WARN_UNUSED_RESULT;
+  bool GetLogins(const PasswordStore::FormDigest& form,
+                 std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
+      const WARN_UNUSED_RESULT;
 
   // Gets all logins created from |begin| onwards (inclusive) and before |end|.
   // You may use a null Time value to do an unbounded search in either
@@ -106,12 +109,13 @@ class LoginDatabase {
       WARN_UNUSED_RESULT;
 
   // Gets the complete list of not blacklisted credentials.
-  bool GetAutofillableLogins(ScopedVector<autofill::PasswordForm>* forms) const
+  bool GetAutofillableLogins(
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) const
       WARN_UNUSED_RESULT;
 
   // Gets the complete list of blacklisted credentials.
-  bool GetBlacklistLogins(ScopedVector<autofill::PasswordForm>* forms) const
-      WARN_UNUSED_RESULT;
+  bool GetBlacklistLogins(std::vector<std::unique_ptr<autofill::PasswordForm>>*
+                              forms) const WARN_UNUSED_RESULT;
 
   // Gets the list of auto-sign-inable credentials.
   bool GetAutoSignInLogins(ScopedVector<autofill::PasswordForm>* forms) const
@@ -170,30 +174,31 @@ class LoginDatabase {
   static EncryptionResult DecryptedString(const std::string& cipher_text,
                                           base::string16* plain_text);
 
-  bool InitLoginsTable();
-  bool MigrateOldVersionsAsNeeded();
-
   // Fills |form| from the values in the given statement (which is assumed to
   // be of the form used by the Get*Logins methods).
   // Returns the EncryptionResult from decrypting the password in |s|; if not
   // ENCRYPTION_RESULT_SUCCESS, |form| is not filled.
   static EncryptionResult InitPasswordFormFromStatement(
       autofill::PasswordForm* form,
-      sql::Statement& s);
+      const sql::Statement& s);
 
   // Gets all blacklisted or all non-blacklisted (depending on |blacklisted|)
   // credentials. On success returns true and overwrites |forms| with the
   // result.
   bool GetAllLoginsWithBlacklistSetting(
       bool blacklisted,
-      ScopedVector<autofill::PasswordForm>* forms) const;
+      std::vector<std::unique_ptr<autofill::PasswordForm>>* forms) const;
 
   // Overwrites |forms| with credentials retrieved from |statement|. If
   // |matched_form| is not null, filters out all results but those PSL-matching
   // |*matched_form| or federated credentials for it. On success returns true.
   static bool StatementToForms(sql::Statement* statement,
-                               const autofill::PasswordForm* matched_form,
+                               const PasswordStore::FormDigest* matched_form,
                                ScopedVector<autofill::PasswordForm>* forms);
+
+  // Initializes all the *_statement_ data members with appropriate SQL
+  // fragments based on |builder|.
+  void InitializeStatementStrings(const SQLTableBuilder& builder);
 
   base::FilePath db_path_;
   mutable sql::Connection db_;
@@ -206,6 +211,21 @@ class LoginDatabase {
   // This is a temporary measure for migration the Keychain on Mac.
   // crbug.com/466638
   bool clear_password_values_;
+
+  // These cached strings are used to build SQL statements.
+  std::string add_statement_;
+  std::string add_replace_statement_;
+  std::string update_statement_;
+  std::string delete_statement_;
+  std::string autosignin_statement_;
+  std::string get_statement_;
+  std::string get_statement_psl_;
+  std::string get_statement_federated_;
+  std::string get_statement_psl_federated_;
+  std::string created_statement_;
+  std::string synced_statement_;
+  std::string blacklisted_statement_;
+  std::string encrypted_statement_;
 
   DISALLOW_COPY_AND_ASSIGN(LoginDatabase);
 };

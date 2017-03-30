@@ -9,11 +9,6 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %})
 {
-    {% if attribute.is_reflect and not attribute.is_url
-          and attribute.idl_type == 'DOMString' and is_node
-          and not attribute.is_implemented_in_private_script %}
-    {% set cpp_class, v8_class = 'Element', 'V8Element' %}
-    {% endif %}
     {# holder #}
     {% if not attribute.is_static %}
     {% if attribute.is_lenient_this %}
@@ -53,16 +48,16 @@ const v8::FunctionCallbackInfo<v8::Value>& info
         }
     }
     {% endif %}
-    {% if interface_name == 'Window' and attribute.idl_type == 'EventHandler' %}
-    if (!impl->document())
-        return;
-    {% endif %}
     {# Local variables #}
     {% if attribute.is_call_with_execution_context %}
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     {% endif %}
     {% if attribute.is_call_with_script_state %}
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    {% if attribute.is_static %}
+    ScriptState* scriptState = ScriptState::forFunctionObject(info);
+    {% else %}
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
+    {% endif %}
     {% endif %}
     {% if (attribute.is_check_security_for_receiver and
            not attribute.is_data_type_property) or
@@ -88,7 +83,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {# Security checks #}
     {% if not attribute.is_data_type_property %}
     {% if attribute.is_check_security_for_receiver %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -96,7 +91,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
     {% endif %}
     {% if attribute.is_check_security_for_return_value %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), {{attribute.cpp_value}}, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), {{attribute.cpp_value}}, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -123,10 +118,8 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     if ({{attribute.cpp_value}} && DOMDataStore::setReturnValue{{world_suffix}}(info.GetReturnValue(), {{attribute.cpp_value}}))
         return;
     v8::Local<v8::Value> v8Value(toV8({{attribute.cpp_value}}, holder, info.GetIsolate()));
-    if (!v8Value.IsEmpty()) {
-        V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "{{attribute.name}}"), v8Value);
-        {{attribute.v8_set_return_value}};
-    }
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, v8AtomicString(info.GetIsolate(), "{{attribute.name}}"), v8Value);
+    {{attribute.v8_set_return_value}};
     {% elif world_suffix %}
     {{attribute.v8_set_return_value_for_main_world}};
     {% else %}
@@ -193,7 +186,11 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('AttributeGetter')}});
     {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
-    ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
+    {% if attribute.is_static %}
+    ScriptState* scriptState = ScriptState::forFunctionObject(info);
+    {% else %}
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
+    {% endif %}
     V8PerContextData* contextData = scriptState->perContextData();
     {% if attribute.activity_logging_world_check %}
     if (scriptState->world().isIsolatedWorld() && contextData && contextData->activityLogger())
@@ -235,10 +232,6 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
 v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %})
 {
-    {% if attribute.is_reflect and attribute.idl_type == 'DOMString'
-          and is_node and not attribute.is_implemented_in_private_script %}
-    {% set cpp_class, v8_class = 'Element', 'V8Element' %}
-    {% endif %}
     {% if attribute.has_setter_exception_state or
           ((not attribute.is_replaceable and
             not attribute.constructor_type and
@@ -279,16 +272,12 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
             not attribute.constructor_type %}
     {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     {% endif %}
-    {% if attribute.idl_type == 'EventHandler' and interface_name == 'Window' %}
-    if (!impl->document())
-        return;
-    {% endif %}
     {# Security checks #}
     {% if not attribute.is_replaceable and
           not attribute.constructor_type %}
     {% if not attribute.is_data_type_property %}
     {% if attribute.is_check_security_for_receiver %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValue(info, v8Value);
         exceptionState.throwIfNeeded();
         return;
@@ -342,7 +331,11 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
     ExecutionContext* executionContext = currentExecutionContext(info.GetIsolate());
     {% endif %}
     {% if attribute.is_call_with_script_state %}
-    ScriptState* scriptState = ScriptState::current(info.GetIsolate());
+    {% if attribute.is_static %}
+    ScriptState* scriptState = ScriptState::forFunctionObject(info);
+    {% else %}
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
+    {% endif %}
     {% endif %}
     {# Set #}
     {% if attribute.cpp_setter %}
@@ -378,7 +371,11 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     UseCounter::countIfNotPrivateScript(info.GetIsolate(), currentExecutionContext(info.GetIsolate()), UseCounter::{{attribute.measure_as('AttributeSetter')}});
     {% endif %}
     {% if world_suffix in attribute.activity_logging_world_list_for_setter %}
-    ScriptState* scriptState = ScriptState::from(info.GetIsolate()->GetCurrentContext());
+    {% if attribute.is_static %}
+    ScriptState* scriptState = ScriptState::forFunctionObject(info);
+    {% else %}
+    ScriptState* scriptState = ScriptState::forReceiverObject(info);
+    {% endif %}
     V8PerContextData* contextData = scriptState->perContextData();
     {% if attribute.activity_logging_world_check %}
     if (scriptState->world().isIsolatedWorld() && contextData && contextData->activityLogger()) {
@@ -420,10 +417,6 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeGetter(LocalFrame* 
 
     ScriptState::Scope scope(scriptState);
     v8::Local<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
-    if (holder.IsEmpty())
-        return false;
-
-
     ExceptionState exceptionState(ExceptionState::GetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     v8::Local<v8::Value> v8Value = PrivateScriptRunner::runDOMAttributeGetter(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{attribute.name}}", holder);
     if (v8Value.IsEmpty())
@@ -452,9 +445,6 @@ bool {{v8_class}}::PrivateScript::{{attribute.name}}AttributeSetter(LocalFrame* 
 
     ScriptState::Scope scope(scriptState);
     v8::Local<v8::Value> holder = toV8(holderImpl, scriptState->context()->Global(), scriptState->isolate());
-    if (holder.IsEmpty())
-        return false;
-
     ExceptionState exceptionState(ExceptionState::SetterContext, "{{attribute.name}}", "{{cpp_class}}", scriptState->context()->Global(), scriptState->isolate());
     return PrivateScriptRunner::runDOMAttributeSetter(scriptState, scriptStateInUserScript, "{{cpp_class}}", "{{attribute.name}}", holder, {{attribute.private_script_cpp_value_to_v8_value}});
 }

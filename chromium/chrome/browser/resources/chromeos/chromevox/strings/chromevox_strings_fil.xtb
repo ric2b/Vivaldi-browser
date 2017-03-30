@@ -269,6 +269,7 @@ Kung tapos ka na sa tutorial, gamitin ang ChromeVox upang mag-navigate sa button
 <translation id="3392045790598181549"><ph name="NAME" />, item sa menu</translation>
 <translation id="3406283310380167331">Ipakita ang listahan ng mga form</translation>
 <translation id="3422338090358345848">Buksan ang keyboard explorer</translation>
+<translation id="3423495725743882470">row $1 column $2</translation>
 <translation id="3457000393508828486">Bahagyang napindot</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, button</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Kung tapos ka na sa tutorial, gamitin ang ChromeVox upang mag-navigate sa button
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}one{#}other{#}}</translation>
 <translation id="3801735343383419236">Listahan ng autocompletion</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">i-paste ang $1.</translation>
 <translation id="3816633764618089385">Susunod na media</translation>
 <translation id="3819376190738087562">Walang mga jump.</translation>
 <translation id="385383972552776628">Buksan ang page ng mga opsyon</translation>
@@ -411,6 +413,7 @@ Kung tapos ka na sa tutorial, gamitin ang ChromeVox upang mag-navigate sa button
 <translation id="5000760171916499057">Walang mga form.</translation>
 <translation id="5005670136041063723">Wala nang mga katulad na elemento.</translation>
 <translation id="501473567976723023">Enero</translation>
+<translation id="5040591161308540832">Talahanayan $1, $2 by $3</translation>
 <translation id="5041394372352067729">Ilipat ang display ng braille sa itaas ng page</translation>
 <translation id="5042770794184672516">Lakasan ang volume ng speech</translation>
 <translation id="5050015258024679800">Nakaraang heading sa antas 4</translation>
@@ -518,7 +521,6 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="5876817486144482042">Hinaan ang volume ng speech</translation>
 <translation id="5887397643266327462">Na-enable ang mga caption ng braille.</translation>
 <translation id="5891934789323004067">Talahanayan</translation>
-<translation id="5919442531159595654">kopyahin.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{equal}one{# equal sign}other{# na equal sign}}</translation>
 <translation id="5939518447894949180">I-reset</translation>
 <translation id="5948123859135882163">I-toggle ang pag-interpret sa mga math expression sa pagitan ng structural at semantic</translation>
@@ -554,6 +556,8 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="6355910664415701303">Walang nakaraang item sa listahan.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Nakaraang heading</translation>
+<translation id="6378565991815958969">kopyahin ang $1.</translation>
+<translation id="6385591741672306837">col</translation>
 <translation id="6387719785439924554">aside</translation>
 <translation id="6411426777058107714">Walang nakaraang radio button.</translation>
 <translation id="6414968628640960377">Nakaraang naiibang elemento.</translation>
@@ -653,7 +657,6 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="7532613204005497612">Hunyo</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, slider</translation>
 <translation id="7552432549459840808">Mga Kapaki-pakinabang na Shortcut sa Chrome</translation>
-<translation id="7586163296341959563">i-paste.</translation>
 <translation id="7596919493010894443">na-clear ang pagpili</translation>
 <translation id="7604026522577407655">Pumunta sa umpisa ng kasalukuyang column</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="8153880621934657047">Wala sa loob ng talahanayan.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{underscore}one{# underscore}other{# na underscore}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">row</translation>
 <translation id="8186185314313222077">i-toggle ang full screen</translation>
-<translation id="81960742267269908">i-cut.</translation>
 <translation id="8199231515320852133">Ianunsyo ang mga header ng kasalukuyang cell</translation>
 <translation id="820417203470636242">Walang lamang cell.</translation>
 <translation id="8215202828671303819">Maramihang pagpili</translation>
@@ -782,6 +785,7 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="9077213568694924680">inalis sa pagpili</translation>
 <translation id="9082874451376019682">Walang nakaraang slider.</translation>
 <translation id="9089864840575085222">Echo ng cycle typing</translation>
+<translation id="9105227991373418255">i-cut ang $1.</translation>
 <translation id="9107530006868467849">Walang nakaraang widget ng media.</translation>
 <translation id="9108370397979208512">math</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Upang buksan ang menu ng Chrome browser, pindutin ang Alt+F.</translation>
 <translation id="9115913704608474258">Nobyembre</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Tab</translation>
 <translation id="9151211641321628915">Nag-aanunsyo ng maikling paglalarawan sa kasalukuyang posisyon</translation>
 <translation id="9153606228985488238"><ph name="PERCENT" /> (na) porsyento ang pitch</translation>
 <translation id="9160096769946561184">Pumunta sa dulo ng kasalukuyang column</translation>

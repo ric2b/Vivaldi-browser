@@ -28,6 +28,10 @@ extern const int kTrayImageItemHorizontalPaddingBottomAlignment;
 extern const int kTrayImageItemHorizontalPaddingVerticalAlignment;
 extern const int kTrayImageItemVerticalPaddingVerticalAlignment;
 
+extern const int kTrayImeIconSize;
+extern const int kTrayImeBottomRowPadding;
+extern const int kTrayImeBottomRowPaddingBetweenItems;
+
 ASH_EXPORT extern const int kTrayItemSize;
 
 extern const int kTrayLabelItemHorizontalPaddingBottomAlignment;
@@ -43,7 +47,6 @@ extern const int kTrayPopupPaddingBetweenItems;
 extern const int kTrayPopupTextSpacingVertical;
 extern const int kTrayPopupUserCardVerticalPadding;
 
-extern const int kTrayPopupItemHeight;
 extern const int kTrayPopupDetailsIconWidth;
 extern const int kTrayPopupDetailsLabelExtraLeftMargin;
 extern const SkColor kTrayPopupHoverBackgroundColor;
@@ -73,6 +76,23 @@ extern const int kTrayNotificationContentsWidth;
 
 extern const int kMessageCenterBubblePadding;
 
+// Extra padding used to adjust hitting region around tray items.
+extern const int kHitRegionPadding;
+
+// Color and width of a line used to separate tray items in the shelf.
+extern const SkColor kSeparatorColor;
+extern const int kSeparatorWidth;
+
+// The size and foreground color of the icons appearing in the material design
+// system tray.
+extern const int kTrayIconSize;
+extern const SkColor kTrayIconColor;
+
+// The size and foreground color of the icons appearing in the material design
+// system menu.
+extern const int kMenuIconSize;
+extern const SkColor kMenuIconColor;
+
 enum TrayConstant {
   // A legacy height value used in non-MD calculations for applying additional
   // borders on tray items.
@@ -83,6 +103,9 @@ enum TrayConstant {
 
   // Padding between the edge of shelf and the item in status tray area.
   TRAY_PADDING_FROM_EDGE_OF_SHELF,
+
+  // The height of the rows in the system tray menu.
+  TRAY_POPUP_ITEM_HEIGHT,
 
   // The width and height of the virtual keyboard button in the status tray
   // area. For non-MD, adjustments are made to the button dimensions based on

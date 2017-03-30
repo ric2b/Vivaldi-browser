@@ -11,7 +11,7 @@
 #include "mojo/public/cpp/bindings/array_traits_standard.h"
 #include "mojo/public/cpp/bindings/array_traits_stl.h"
 #include "mojo/public/cpp/bindings/lib/array_serialization.h"
-#include "mojo/public/cpp/bindings/lib/fixed_buffer.h"
+#include "mojo/public/cpp/bindings/lib/buffer.h"
 #include "mojo/public/cpp/bindings/lib/handle_interface_serialization.h"
 #include "mojo/public/cpp/bindings/lib/map_serialization.h"
 #include "mojo/public/cpp/bindings/lib/native_enum_serialization.h"
@@ -53,12 +53,10 @@ DataArrayType StructSerializeImpl(UserType* input) {
     DCHECK(IsAligned(result_buffer));
   }
 
-  FixedBuffer buffer;
+  Buffer buffer;
   buffer.Initialize(result_buffer, size);
-  typename MojomType::Struct::Data_* data = nullptr;
+  typename MojomTypeTraits<MojomType>::Data* data = nullptr;
   Serialize<MojomType>(*input, &buffer, &data, &context);
-
-  data->EncodePointers();
 
   if (need_copy) {
     memcpy(&result.front(), result_buffer, size);
@@ -69,15 +67,18 @@ DataArrayType StructSerializeImpl(UserType* input) {
 }
 
 template <typename MojomType, typename DataArrayType, typename UserType>
-bool StructDeserializeImpl(DataArrayType input, UserType* output) {
+bool StructDeserializeImpl(const DataArrayType& input, UserType* output) {
   static_assert(BelongsTo<MojomType, MojomTypeCategory::STRUCT>::value,
                 "Unexpected type.");
-  using DataType = typename MojomType::Struct::Data_;
+  using DataType = typename MojomTypeTraits<MojomType>::Data;
 
   if (input.is_null())
     return false;
 
-  void* input_buffer = input.empty() ? nullptr : &input.front();
+  void* input_buffer =
+      input.empty()
+          ? nullptr
+          : const_cast<void*>(reinterpret_cast<const void*>(&input.front()));
 
   // Please see comments in StructSerializeImpl.
   bool need_copy = !IsAligned(input_buffer);
@@ -92,9 +93,6 @@ bool StructDeserializeImpl(DataArrayType input, UserType* output) {
   bool result = false;
   if (DataType::Validate(input_buffer, &validation_context)) {
     auto data = reinterpret_cast<DataType*>(input_buffer);
-    if (data)
-      data->DecodePointers();
-
     SerializationContext context;
     result = Deserialize<MojomType>(data, output, &context);
   }

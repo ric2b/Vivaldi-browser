@@ -112,7 +112,7 @@ void HttpServerPropertiesImpl::InitializeAlternativeServiceServers(
     url::SchemeHostPort canonical_server(kCanonicalScheme, canonical_suffix,
                                          kCanonicalPort);
     // If we already have a valid canonical server, we're done.
-    if (ContainsKey(canonical_host_to_origin_map_, canonical_server) &&
+    if (base::ContainsKey(canonical_host_to_origin_map_, canonical_server) &&
         (alternative_service_map_.Peek(
              canonical_host_to_origin_map_[canonical_server]) !=
          alternative_service_map_.end())) {
@@ -413,8 +413,27 @@ bool HttpServerPropertiesImpl::SetAlternativeServices(
   if (it != alternative_service_map_.end()) {
     DCHECK(!it->second.empty());
     if (it->second.size() == alternative_service_info_vector.size()) {
-      changed = !std::equal(it->second.begin(), it->second.end(),
-                            alternative_service_info_vector.begin());
+      const base::Time now = base::Time::Now();
+      changed = false;
+      auto new_it = alternative_service_info_vector.begin();
+      for (const auto& old : it->second) {
+        // Persist to disk immediately if new entry has different scheme, host,
+        // or port.
+        if (old.alternative_service != new_it->alternative_service) {
+          changed = true;
+          break;
+        }
+        // Also persist to disk if new expiration it more that twice as far or
+        // less than half as far in the future.
+        base::Time old_time = old.expiration;
+        base::Time new_time = new_it->expiration;
+        if (new_time - now > 2 * (old_time - now) ||
+            2 * (new_time - now) < (old_time - now)) {
+          changed = true;
+          break;
+        }
+        ++new_it;
+      }
     }
   }
 
@@ -473,7 +492,8 @@ void HttpServerPropertiesImpl::MarkAlternativeServiceBroken(
 
 void HttpServerPropertiesImpl::MarkAlternativeServiceRecentlyBroken(
     const AlternativeService& alternative_service) {
-  if (!ContainsKey(recently_broken_alternative_services_, alternative_service))
+  if (!base::ContainsKey(recently_broken_alternative_services_,
+                         alternative_service))
     recently_broken_alternative_services_[alternative_service] = 1;
 }
 
@@ -481,15 +501,15 @@ bool HttpServerPropertiesImpl::IsAlternativeServiceBroken(
     const AlternativeService& alternative_service) const {
   // Empty host means use host of origin, callers are supposed to substitute.
   DCHECK(!alternative_service.host.empty());
-  return ContainsKey(broken_alternative_services_, alternative_service);
+  return base::ContainsKey(broken_alternative_services_, alternative_service);
 }
 
 bool HttpServerPropertiesImpl::WasAlternativeServiceRecentlyBroken(
     const AlternativeService& alternative_service) {
   if (alternative_service.protocol == UNINITIALIZED_ALTERNATE_PROTOCOL)
     return false;
-  return ContainsKey(recently_broken_alternative_services_,
-                     alternative_service);
+  return base::ContainsKey(recently_broken_alternative_services_,
+                           alternative_service);
 }
 
 void HttpServerPropertiesImpl::ConfirmAlternativeService(

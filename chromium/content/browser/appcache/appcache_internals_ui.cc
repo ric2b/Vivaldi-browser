@@ -265,7 +265,7 @@ void AppCacheInternalsUI::Proxy::RequestFileDetails(
 }
 
 void AppCacheInternalsUI::Proxy::HandleFileDetailsRequest() {
-  if (preparing_response_ || !response_enquiries_.size() || !appcache_service_)
+  if (preparing_response_ || response_enquiries_.empty() || !appcache_service_)
     return;
   preparing_response_ = true;
   appcache_service_->storage()->LoadResponseInfo(
@@ -351,6 +351,7 @@ AppCacheInternalsUI::AppCacheInternalsUI(WebUI* web_ui)
   source->AddResourcePath("appcache_internals.js", IDR_APPCACHE_INTERNALS_JS);
   source->AddResourcePath("appcache_internals.css", IDR_APPCACHE_INTERNALS_CSS);
   source->SetDefaultResource(IDR_APPCACHE_INTERNALS_HTML);
+  source->DisableI18nAndUseGzipForAllPaths();
 
   WebUIDataSource::Add(browser_context(), source);
 

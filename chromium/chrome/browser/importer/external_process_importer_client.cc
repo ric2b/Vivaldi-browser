@@ -66,7 +66,7 @@ void ExternalProcessImporterClient::Cancel() {
 }
 
 void ExternalProcessImporterClient::OnProcessCrashed(int exit_code) {
-  DLOG(ERROR) << __FUNCTION__;
+  DLOG(ERROR) << __func__;
   if (cancelled_)
     return;
 
@@ -89,6 +89,8 @@ bool ExternalProcessImporterClient::OnMessageReceived(
                         OnImportItemStart)
     IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_ImportItem_Finished,
                         OnImportItemFinished)
+    IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_ImportItem_Failed,
+                        OnImportItemFailed)
     // Data messages containing items to be written to the user profile.
     IPC_MESSAGE_HANDLER(ProfileImportProcessHostMsg_NotifyHistoryImportStart,
                         OnHistoryImportStart)
@@ -167,6 +169,21 @@ void ExternalProcessImporterClient::OnImportItemFinished(int item_data) {
       base::Bind(&ExternalProcessImporterClient::NotifyItemFinishedOnIOThread,
                  this,
                  import_item));
+}
+
+void ExternalProcessImporterClient::OnImportItemFailed(
+    int item_data,
+    const std::string& error_msg) {
+  if (cancelled_)
+    return;
+
+  importer::ImportItem import_item =
+    static_cast<importer::ImportItem>(item_data);
+  bridge_->NotifyItemFailed(import_item, error_msg);
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&ExternalProcessImporterClient::NotifyItemFailedOnIOThread,
+                 this, import_item, error_msg));
 }
 
 void ExternalProcessImporterClient::OnHistoryImportStart(
@@ -361,11 +378,19 @@ void ExternalProcessImporterClient::NotifyItemFinishedOnIOThread(
       new ProfileImportProcessMsg_ReportImportItemFinished(import_item));
 }
 
+void ExternalProcessImporterClient::NotifyItemFailedOnIOThread(
+    importer::ImportItem import_item,
+    const std::string& error) {
+  utility_process_host_->Send(
+      new ProfileImportProcessMsg_ReportImportItemFailed(import_item, error));
+}
+
 void ExternalProcessImporterClient::StartProcessOnIOThread(
     BrowserThread::ID thread_id) {
-  utility_process_host_ = UtilityProcessHost::Create(
-      this, BrowserThread::GetMessageLoopProxyForThread(thread_id).get())
-      ->AsWeakPtr();
+  utility_process_host_ =
+      UtilityProcessHost::Create(
+          this, BrowserThread::GetTaskRunnerForThread(thread_id).get())
+          ->AsWeakPtr();
   utility_process_host_->SetName(l10n_util::GetStringUTF16(
       IDS_UTILITY_PROCESS_PROFILE_IMPORTER_NAME));
   utility_process_host_->DisableSandbox();

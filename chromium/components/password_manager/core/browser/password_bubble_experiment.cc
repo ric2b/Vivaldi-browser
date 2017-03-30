@@ -13,7 +13,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/sync_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/variations/variations_associated_data.h"
 
 namespace password_bubble_experiment {
@@ -46,7 +46,8 @@ int GetSmartBubbleDismissalThreshold() {
   std::string param = variations::GetVariationParamValue(
       kSmartBubbleExperimentName, kSmartBubbleThresholdParam);
   int threshold = 0;
-  return base::StringToInt(param, &threshold) ? threshold : 0;
+  // 3 is the default magic number that proved to show the best result.
+  return base::StringToInt(param, &threshold) ? threshold : 3;
 }
 
 bool IsSmartLockUser(const sync_driver::SyncService* sync_service) {

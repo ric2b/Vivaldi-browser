@@ -32,7 +32,6 @@
 #include "content/public/browser/navigation_details.h"
 #include "ui/base/l10n/l10n_util.h"
 
-using autofill::PasswordFormMap;
 using password_manager::PasswordFormManager;
 
 namespace {
@@ -45,7 +44,7 @@ password_manager::PasswordStore* GetPasswordStore(
 }
 
 std::vector<std::unique_ptr<autofill::PasswordForm>> CopyFormVector(
-    const ScopedVector<autofill::PasswordForm>& forms) {
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& forms) {
   std::vector<std::unique_ptr<autofill::PasswordForm>> result(forms.size());
   for (size_t i = 0; i < forms.size(); ++i)
     result[i].reset(new autofill::PasswordForm(*forms[i]));
@@ -59,7 +58,8 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(ManagePasswordsUIController);
 ManagePasswordsUIController::ManagePasswordsUIController(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
-      bubble_status_(NOT_SHOWN) {
+      bubble_status_(NOT_SHOWN),
+      weak_ptr_factory_(this) {
   passwords_data_.set_client(
       ChromePasswordManagerClient::FromWebContents(web_contents));
   password_manager::PasswordStore* password_store =
@@ -76,7 +76,8 @@ void ManagePasswordsUIController::OnPasswordSubmitted(
   DestroyAccountChooser();
   passwords_data_.OnPendingPassword(std::move(form_manager));
   if (show_bubble) {
-    password_manager::InteractionsStats* stats = GetCurrentInteractionStats();
+    const password_manager::InteractionsStats* stats =
+        GetCurrentInteractionStats();
     const int show_threshold =
         password_bubble_experiment::GetSmartBubbleDismissalThreshold();
     if (stats && show_threshold > 0 && stats->dismissal_count >= show_threshold)
@@ -114,8 +115,8 @@ void ManagePasswordsUIController::OnUpdatePasswordSubmitted(
 }
 
 bool ManagePasswordsUIController::OnChooseCredentials(
-    ScopedVector<autofill::PasswordForm> local_credentials,
-    ScopedVector<autofill::PasswordForm> federated_credentials,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> federated_credentials,
     const GURL& origin,
     const ManagePasswordsState::CredentialsCallback& callback) {
   DCHECK(!local_credentials.empty() || !federated_credentials.empty());
@@ -137,7 +138,7 @@ bool ManagePasswordsUIController::OnChooseCredentials(
 }
 
 void ManagePasswordsUIController::OnAutoSignin(
-    ScopedVector<autofill::PasswordForm> local_forms,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> local_forms,
     const GURL& origin) {
   DCHECK(!local_forms.empty());
   DestroyAccountChooser();
@@ -166,10 +167,10 @@ void ManagePasswordsUIController::OnAutomaticPasswordSave(
 }
 
 void ManagePasswordsUIController::OnPasswordAutofilled(
-    const autofill::PasswordFormMap& password_form_map,
+    const std::map<base::string16, const autofill::PasswordForm*>&
+        password_form_map,
     const GURL& origin,
-    const std::vector<std::unique_ptr<autofill::PasswordForm>>*
-        federated_matches) {
+    const std::vector<const autofill::PasswordForm*>* federated_matches) {
   // To change to managed state only when the managed state is more important
   // for the user that the current state.
   if (passwords_data_.state() == password_manager::ui::INACTIVE_STATE ||
@@ -192,6 +193,8 @@ void ManagePasswordsUIController::UpdateIconAndBubbleState(
     ManagePasswordsIconView* icon) {
   if (bubble_status_ == SHOULD_POP_UP) {
     DCHECK(!dialog_controller_);
+    // This will detach any existing bubble so OnBubbleHidden() isn't called.
+    weak_ptr_factory_.InvalidateWeakPtrs();
     // We must display the icon before showing the bubble, as the bubble would
     // be otherwise unanchored.
     icon->SetState(GetState());
@@ -207,6 +210,15 @@ void ManagePasswordsUIController::UpdateIconAndBubbleState(
       state = password_manager::ui::INACTIVE_STATE;
     icon->SetState(state);
   }
+}
+
+base::WeakPtr<PasswordsModelDelegate>
+ManagePasswordsUIController::GetModelDelegateProxy() {
+  return weak_ptr_factory_.GetWeakPtr();
+}
+
+content::WebContents* ManagePasswordsUIController::GetWebContents() const {
+  return web_contents();
 }
 
 const GURL& ManagePasswordsUIController::GetOrigin() const {
@@ -237,23 +249,23 @@ bool ManagePasswordsUIController::IsPasswordOverridden() const {
   return form_manager ? form_manager->password_overridden() : false;
 }
 
-const std::vector<const autofill::PasswordForm*>&
+const std::vector<std::unique_ptr<autofill::PasswordForm>>&
 ManagePasswordsUIController::GetCurrentForms() const {
   return passwords_data_.GetCurrentForms();
 }
 
-const std::vector<const autofill::PasswordForm*>&
+const std::vector<std::unique_ptr<autofill::PasswordForm>>&
 ManagePasswordsUIController::GetFederatedForms() const {
-  return passwords_data_.federated_credentials_forms();
+  return passwords_data_.federation_providers_forms();
 }
 
-password_manager::InteractionsStats*
+const password_manager::InteractionsStats*
 ManagePasswordsUIController::GetCurrentInteractionStats() const {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, GetState());
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
   return password_manager::FindStatsByUsername(
-      form_manager->interactions_stats(),
+      form_manager->form_fetcher()->GetInteractionsStats(),
       form_manager->pending_credentials().username_value);
 }
 
@@ -316,13 +328,16 @@ void ManagePasswordsUIController::UpdatePassword(
 }
 
 void ManagePasswordsUIController::ChooseCredential(
-    autofill::PasswordForm form,
+    const autofill::PasswordForm& form,
     password_manager::CredentialType credential_type) {
   DCHECK(dialog_controller_);
   DCHECK_EQ(password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD,
             credential_type);
+  // Copy the argument before destroying the controller. |form| is a member of
+  // |dialog_controller_|.
+  autofill::PasswordForm copy_form = form;
   dialog_controller_.reset();
-  passwords_data_.ChooseCredential(&form);
+  passwords_data_.ChooseCredential(&copy_form);
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
   UpdateBubbleAndIconVisibility();
 }

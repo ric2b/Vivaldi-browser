@@ -47,7 +47,7 @@ BackgroundTest.prototype = {
    */
   doCmd: function(cmd) {
     return function() {
-      ChromeVoxState.instance.onGotCommand(cmd);
+      CommandHandler.onCommand(cmd);
     };
   },
 
@@ -81,19 +81,18 @@ BackgroundTest.prototype = {
 
   disappearingObjectDoc: function() {/*!
     <p>start</p>
-    <article>
+    <div role="group">
       <p>Before1</p>
       <p>Before2</p>
       <p>Before3</p>
-    </article>
-    <article>
+    </div>
+    <div role="group">
       <p id="disappearing">Disappearing</p>
-    </article>
-    <article>
+    </div>
+    <div role="group">
       <p>After1</p>
       <p>After2</p>
       <p>After3</p>
-    </article>
     </div>
     <div id="live" aria-live="polite"></div>
     <div id="delete" role="button">Delete</div>
@@ -377,15 +376,17 @@ TEST_F('BackgroundTest', 'UseEditableState', function() {
         assertTrue(
             !ChromeVoxState.desktopAutomationHandler.editableTextHandler_);
         evt.stopPropagation();
+
+        // Focus the other text field here to make this test not racey.
+        editable.focus();
       });
 
       var editable = rootNode.find({ role: RoleType.textField });
       var nonEditable = rootNode.find({ role: RoleType.paragraph });
 
-      this.listenOnce(editable, 'focus', assertExists);
       this.listenOnce(nonEditable, 'focus', assertDoesntExist);
+      this.listenOnce(editable, 'focus', assertExists);
 
-      editable.focus();
       nonEditable.focus();
     }.bind(this));
 });
@@ -437,7 +438,7 @@ TEST_F('BackgroundTest', 'EarconsForControls', function() {
 TEST_F('BackgroundTest', 'ToggleChromeVoxVersion', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(this.linksAndHeadingsDoc, function() {
-    var gotCmd = ChromeVoxState.instance.onGotCommand;
+    var gotCmd = CommandHandler.onCommand;
 
     // The command came from the background keyboard handler.
     var togglerFromBackground = gotCmd.bind(gotCmd, 'toggleChromeVoxVersion');
@@ -447,7 +448,7 @@ TEST_F('BackgroundTest', 'ToggleChromeVoxVersion', function() {
                                          true);
 
     mockFeedback.call(togglerFromBackground)
-        .expectSpeech('Switched to Classic ChromeVox')   
+        .expectSpeech('Switched to Classic ChromeVox')
         .call(togglerFromContent)
         .expectSpeech('Switched to ChromeVox Next')
         .call(togglerFromBackground)
@@ -466,7 +467,8 @@ SYNC_TEST_F('BackgroundTest', 'GlobsToRegExp', function() {
       Background.globsToRegExp_(['url1*', 'u?l2', '*url3']).toString());
 });
 
-TEST_F('BackgroundTest', 'ActiveOrInactive', function() {
+// Flaky, see http://crbug.com/635032
+TEST_F('BackgroundTest', 'DISABLED_ActiveOrInactive', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
       <a href="a">a</a>
@@ -582,7 +584,7 @@ TEST_F('BackgroundTest', 'FocusIframe', function() {
     };
     var b = ChromeVoxState.instance;
     b.currentRange_ = cursors.Range.fromNode(button);
-    b.onGotCommand('previousElement');
+    doCmd('previousElement');
     assertFalse(didFocus);
   }.bind(this));
 });
@@ -686,7 +688,7 @@ TEST_F('BackgroundTest', 'ForwardNavigationThroughIframeButtons', function() {
 
       desktopNode.addEventListener('loadComplete', function(evt) {
         runTestIfIframeIsLoaded(rootNode);
-      }, true);      
+      }, true);
     });
   });
 });
@@ -732,7 +734,7 @@ TEST_F('BackgroundTest', 'ForwardObjectNavigationThroughIframes', function() {
 
       desktopNode.addEventListener('loadComplete', function(evt) {
         runTestIfIframeIsLoaded(rootNode);
-      }, true);      
+      }, true);
     });
   });
 });
@@ -769,7 +771,7 @@ TEST_F('BackgroundTest', 'ToggleButton', function() {
     <div aria-pressed role="button">close</div>
   */}, function(root) {
     var b = ChromeVoxState.instance;
-    var move = b.onGotCommand.bind(b, 'nextObject');
+    var move = doCmd('nextObject');
     mockFeedback.call(move)
         .expectSpeech('ok')
         .expectSpeech('Button')
@@ -942,6 +944,7 @@ TEST_F('BackgroundTest', 'SymetricComplexHeading', function() {
 TEST_F('BackgroundTest', 'ContentEditableJumpSyncsRange', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function(root) {/*!
+    <p>start</p>
     <div contenteditable>
       <h1>Top News</h1>
       <h1>Most Popular</h1>
@@ -955,15 +958,200 @@ TEST_F('BackgroundTest', 'ContentEditableJumpSyncsRange', function() {
       };
     };
 
-    mockFeedback.call(doCmd('nextHeading'))
+    mockFeedback.call(doCmd('nextEditText'))
+        .expectSpeech('Top News')
+        .call(doCmd('nextHeading'))
         .expectSpeech('Top News')
         .call(assertRangeHasText('Top News'))
         .call(doCmd('nextHeading'))
         .expectSpeech('Most Popular')
         .call(assertRangeHasText('Most Popular'))
-        .call(doCmd('nextLine'))
+        .call(doCmd('nextHeading'))
         .expectSpeech('Sports')
         .call(assertRangeHasText('Sports'))
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'Selection', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <p>simple</p>
+    <p>doc</p>
+  */}, function(root) {
+    // Fakes a toggleSelection command.
+    root.addEventListener('textSelectionChanged', function() {
+      if (root.focusOffset == 3)
+        CommandHandler.onCommand('toggleSelection');
+    }, true);
+
+    mockFeedback.call(doCmd('toggleSelection'))
+        .expectSpeech('simple', 'selected')
+        .call(doCmd('nextCharacter'))
+        .expectSpeech('i', 'selected')
+        .call(doCmd('previousCharacter'))
+        .expectSpeech('i', 'unselected')
+        .call(doCmd('nextCharacter'))
+        .expectSpeech('i', 'selected')
+        .call(doCmd('nextCharacter'))
+        .expectSpeech('m', 'selected')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'BasicTableCommands', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+  <table border=1>
+    <tr><td>name</td><td>title</td><td>address</td><td>phone</td></tr>
+    <tr><td>Dan</td><td>Mr</td><td>666 Elm Street</td><td>212 222 5555</td></tr>
+  </table>
+  */}, function(root) {
+    mockFeedback.call(doCmd('nextRow'))
+        .expectSpeech('Dan', 'row 2 column 1')
+        .call(doCmd('previousRow'))
+        .expectSpeech('name', 'row 1 column 1')
+        .call(doCmd('previousRow'))
+        .expectSpeech('No cell above.')
+        .call(doCmd('nextCol'))
+        .expectSpeech('title', 'row 1 column 2')
+        .call(doCmd('nextRow'))
+        .expectSpeech('Mr', 'row 2 column 2')
+        .call(doCmd('previousRow'))
+        .expectSpeech('title', 'row 1 column 2')
+        .call(doCmd('nextCol'))
+        .expectSpeech('address', 'row 1 column 3')
+        .call(doCmd('nextCol'))
+        .expectSpeech('phone', 'row 1 column 4')
+        .call(doCmd('nextCol'))
+        .expectSpeech('No cell right.')
+        .call(doCmd('previousRow'))
+        .expectSpeech('No cell above.')
+        .call(doCmd('nextRow'))
+        .expectSpeech('212 222 5555', 'row 2 column 4')
+        .call(doCmd('nextRow'))
+        .expectSpeech('No cell below.')
+        .call(doCmd('nextCol'))
+        .expectSpeech('No cell right.')
+        .call(doCmd('previousCol'))
+        .expectSpeech('666 Elm Street', 'row 2 column 3')
+        .call(doCmd('previousCol'))
+        .expectSpeech('Mr', 'row 2 column 2')
+
+        .call(doCmd('goToRowLastCell'))
+        .expectSpeech('212 222 5555', 'row 2 column 4')
+        .call(doCmd('goToRowLastCell'))
+        .expectSpeech('212 222 5555')
+        .call(doCmd('goToRowFirstCell'))
+        .expectSpeech('Dan', 'row 2 column 1')
+        .call(doCmd('goToRowFirstCell'))
+        .expectSpeech('Dan')
+
+        .call(doCmd('goToColFirstCell'))
+    .expectSpeech('name', 'row 1 column 1')
+        .call(doCmd('goToColFirstCell'))
+        .expectSpeech('name')
+        .call(doCmd('goToColLastCell'))
+    .expectSpeech('Dan', 'row 2 column 1')
+        .call(doCmd('goToColLastCell'))
+        .expectSpeech('Dan')
+
+        .call(doCmd('goToLastCell'))
+        .expectSpeech('212 222 5555', 'row 2 column 4')
+        .call(doCmd('goToLastCell'))
+        .expectSpeech('212 222 5555')
+        .call(doCmd('goToFirstCell'))
+        .expectSpeech('name', 'row 1 column 1')
+        .call(doCmd('goToFirstCell'))
+        .expectSpeech('name')
+
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'MissingTableCells', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+  <table border=1>
+    <tr><td>a</td><td>b</td><td>c</td></tr>
+    <tr><td>d</td><td>e</td></tr>
+    <tr><td>f</td></tr>
+  </table>
+  */}, function(root) {
+    mockFeedback.call(doCmd('goToRowLastCell'))
+        .expectSpeech('c', 'row 1 column 3')
+        .call(doCmd('goToRowLastCell'))
+        .expectSpeech('c')
+        .call(doCmd('goToRowFirstCell'))
+        .expectSpeech('a', 'row 1 column 1')
+        .call(doCmd('goToRowFirstCell'))
+        .expectSpeech('a')
+
+        .call(doCmd('nextCol'))
+        .expectSpeech('b', 'row 1 column 2')
+
+        .call(doCmd('goToColLastCell'))
+        .expectSpeech('e', 'row 2 column 2')
+        .call(doCmd('goToColLastCell'))
+        .expectSpeech('e')
+        .call(doCmd('goToColFirstCell'))
+        .expectSpeech('b', 'row 1 column 2')
+        .call(doCmd('goToColFirstCell'))
+        .expectSpeech('b')
+
+        .call(doCmd('goToFirstCell'))
+        .expectSpeech('a', 'row 1 column 1')
+        .call(doCmd('goToFirstCell'))
+        .expectSpeech('a')
+        .call(doCmd('goToLastCell'))
+        .expectSpeech('f', 'row 3 column 1')
+        .call(doCmd('goToLastCell'))
+        .expectSpeech('f')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'DisabledState', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <button aria-disabled="true">ok</button>
+  */}, function(root) {
+    mockFeedback.expectSpeech('ok', 'Disabled', 'Button').replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'HeadingLevels', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <h1>1</h1><h2>2</h2><h3>3</h3><h4>4</h4><h5>5</h5><h6>6</h6>
+  */}, function(root) {
+    var makeLevelAssertions = function(level) {
+      mockFeedback.call(doCmd('nextHeading' + level))
+          .expectSpeech('Heading ' + level)
+          .call(doCmd('nextHeading' + level))
+          .expectSpeech('No next level ' + level + ' heading.')
+          .call(doCmd('previousHeading' + level))
+          .expectSpeech('No previous level ' + level + ' heading.');
+    };
+    for (var i = 1; i <= 6; i++)
+      makeLevelAssertions(i);
+    mockFeedback.replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'EditableNavigation', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <div contenteditable>this is a test</div>
+  */}, function(root) {
+    mockFeedback.call(doCmd('nextObject'))
+        .expectSpeech('this is a test')
+        .call(doCmd('nextObject'))
+        .expectSpeech(/data*/)
+        .call(doCmd('nextObject'))
+        .expectSpeech('this is a test')
+        .call(doCmd('nextWord'))
+        .expectSpeech('is', 'selected')
         .replay();
   });
 });

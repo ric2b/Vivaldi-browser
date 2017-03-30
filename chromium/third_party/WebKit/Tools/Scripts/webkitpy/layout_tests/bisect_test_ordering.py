@@ -63,7 +63,7 @@ class Bisector(object):
             self.print_result()
             return 0
         if not self.test_fails(self.tests):
-            _log.error('%s does not fail' % self.expected_failure)
+            _log.error('%s does not fail', self.expected_failure)
             return 1
         # Split the list of test into buckets. Each bucket has at least one test required to cause
         # the expected failure at the end. Split buckets in half until there are only buckets left
@@ -82,7 +82,7 @@ class Bisector(object):
     def verify_non_flaky(self):
         print 'Verifying the failure is not flaky by running 10 times.'
         count_failures = 0
-        for i in range(0, 10):
+        for _ in range(0, 10):
             if self.test_bucket_list_fails(self.buckets):
                 count_failures += 1
         print 'Failed %d/10 times' % count_failures
@@ -161,7 +161,7 @@ def main(argv):
     option_parser.add_option('--test-list', action='store',
                              help='file that list tests to bisect. The last test in the list is the expected failure.', metavar='FILE'),
     option_parser.add_option('--debug', action='store_true', default=False, help='whether to use a debug build'),
-    options, args = option_parser.parse_args(argv)
+    options, _ = option_parser.parse_args(argv)
 
     tests = open(options.test_list).read().strip().split('\n')
     bisector = Bisector(tests, is_debug=options.debug)

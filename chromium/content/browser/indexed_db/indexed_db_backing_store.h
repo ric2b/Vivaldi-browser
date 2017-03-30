@@ -16,9 +16,9 @@
 #include <vector>
 
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -47,7 +47,7 @@ class FileWriterDelegate;
 }
 
 namespace net {
-class URLRequestContext;
+class URLRequestContextGetter;
 }
 
 namespace content {
@@ -56,6 +56,7 @@ class IndexedDBFactory;
 class LevelDBComparator;
 class LevelDBDatabase;
 class LevelDBFactory;
+struct IndexedDBDataLossInfo;
 struct IndexedDBValue;
 
 class CONTENT_EXPORT IndexedDBBackingStore
@@ -110,17 +111,17 @@ class CONTENT_EXPORT IndexedDBBackingStore
     const std::vector<IndexedDBBlobInfo>& blob_info() const {
       return blob_info_;
     }
-    void SetHandles(ScopedVector<storage::BlobDataHandle>* handles);
+    void SetHandles(
+        std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles);
     std::unique_ptr<BlobChangeRecord> Clone() const;
 
    private:
     std::string key_;
     int64_t object_store_id_;
     std::vector<IndexedDBBlobInfo> blob_info_;
-    ScopedVector<storage::BlobDataHandle> handles_;
+    std::vector<std::unique_ptr<storage::BlobDataHandle>> handles_;
     DISALLOW_COPY_AND_ASSIGN(BlobChangeRecord);
   };
-  typedef std::map<std::string, BlobChangeRecord*> BlobChangeMap;
 
   class CONTENT_EXPORT Transaction {
    public:
@@ -153,12 +154,13 @@ class CONTENT_EXPORT IndexedDBBackingStore
         int64_t object_store_id,
         const std::string& object_store_data_key,
         std::vector<IndexedDBBlobInfo>*,
-        ScopedVector<storage::BlobDataHandle>* handles);
-    void PutBlobInfo(int64_t database_id,
-                     int64_t object_store_id,
-                     const std::string& object_store_data_key,
-                     std::vector<IndexedDBBlobInfo>*,
-                     ScopedVector<storage::BlobDataHandle>* handles);
+        std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles);
+    void PutBlobInfo(
+        int64_t database_id,
+        int64_t object_store_id,
+        const std::string& object_store_data_key,
+        std::vector<IndexedDBBlobInfo>*,
+        std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles);
 
     LevelDBTransaction* transaction() { return transaction_.get(); }
 
@@ -259,8 +261,9 @@ class CONTENT_EXPORT IndexedDBBackingStore
 
     IndexedDBBackingStore* backing_store_;
     scoped_refptr<LevelDBTransaction> transaction_;
-    BlobChangeMap blob_change_map_;
-    BlobChangeMap incognito_blob_map_;
+    std::map<std::string, std::unique_ptr<BlobChangeRecord>> blob_change_map_;
+    std::map<std::string, std::unique_ptr<BlobChangeRecord>>
+        incognito_blob_map_;
     int64_t database_id_;
 
     // List of blob files being newly written as part of this transaction.
@@ -278,6 +281,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
     // indicate that the committing_transaction_count_ on the backing store
     // has been bumped, and journal cleaning should be deferred.
     bool committing_;
+
+    DISALLOW_COPY_AND_ASSIGN(Transaction);
   };
 
   class Cursor {
@@ -315,7 +320,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
     bool Advance(uint32_t count, leveldb::Status*);
     bool FirstSeek(leveldb::Status*);
 
-    virtual Cursor* Clone() = 0;
+    virtual std::unique_ptr<Cursor> Clone() const = 0;
     virtual const IndexedDBKey& primary_key() const;
     virtual IndexedDBValue* value() = 0;
     virtual const RecordIdentifier& record_identifier() const;
@@ -372,9 +377,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
       IndexedDBFactory* indexed_db_factory,
       const url::Origin& origin,
       const base::FilePath& path_base,
-      net::URLRequestContext* request_context,
-      blink::WebIDBDataLoss* data_loss,
-      std::string* data_loss_message,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      IndexedDBDataLossInfo* data_loss_info,
       bool* disk_full,
       base::SequencedTaskRunner* task_runner,
       bool clean_journal,
@@ -383,9 +387,8 @@ class CONTENT_EXPORT IndexedDBBackingStore
       IndexedDBFactory* indexed_db_factory,
       const url::Origin& origin,
       const base::FilePath& path_base,
-      net::URLRequestContext* request_context,
-      blink::WebIDBDataLoss* data_loss,
-      std::string* data_loss_message,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      IndexedDBDataLossInfo* data_loss_info,
       bool* disk_full,
       LevelDBFactory* leveldb_factory,
       base::SequencedTaskRunner* task_runner,
@@ -427,7 +430,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
                                    const std::string& message);
   leveldb::Status GetObjectStores(
       int64_t database_id,
-      IndexedDBDatabaseMetadata::ObjectStoreMap* map) WARN_UNUSED_RESULT;
+      std::map<int64_t, IndexedDBObjectStoreMetadata>* map) WARN_UNUSED_RESULT;
   virtual leveldb::Status CreateObjectStore(
       IndexedDBBackingStore::Transaction* transaction,
       int64_t database_id,
@@ -452,7 +455,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       int64_t object_store_id,
       const IndexedDBKey& key,
       IndexedDBValue* value,
-      ScopedVector<storage::BlobDataHandle>* handles,
+      std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles,
       RecordIdentifier* record) WARN_UNUSED_RESULT;
   virtual leveldb::Status ClearObjectStore(
       IndexedDBBackingStore::Transaction* transaction,
@@ -564,13 +567,14 @@ class CONTENT_EXPORT IndexedDBBackingStore
  protected:
   friend class base::RefCounted<IndexedDBBackingStore>;
 
-  IndexedDBBackingStore(IndexedDBFactory* indexed_db_factory,
-                        const url::Origin& origin,
-                        const base::FilePath& blob_path,
-                        net::URLRequestContext* request_context,
-                        std::unique_ptr<LevelDBDatabase> db,
-                        std::unique_ptr<LevelDBComparator> comparator,
-                        base::SequencedTaskRunner* task_runner);
+  IndexedDBBackingStore(
+      IndexedDBFactory* indexed_db_factory,
+      const url::Origin& origin,
+      const base::FilePath& blob_path,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+      std::unique_ptr<LevelDBDatabase> db,
+      std::unique_ptr<LevelDBComparator> comparator,
+      base::SequencedTaskRunner* task_runner);
   virtual ~IndexedDBBackingStore();
 
   bool is_incognito() const { return !indexed_db_factory_; }
@@ -597,11 +601,13 @@ class CONTENT_EXPORT IndexedDBBackingStore
   void CleanPrimaryJournalIgnoreReturn();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(IndexedDBBackingStoreTest, ReadCorruptionInfo);
+
   static scoped_refptr<IndexedDBBackingStore> Create(
       IndexedDBFactory* indexed_db_factory,
       const url::Origin& origin,
       const base::FilePath& blob_path,
-      net::URLRequestContext* request_context,
+      scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       std::unique_ptr<LevelDBDatabase> db,
       std::unique_ptr<LevelDBComparator> comparator,
       base::SequencedTaskRunner* task_runner,
@@ -621,7 +627,7 @@ class CONTENT_EXPORT IndexedDBBackingStore
       bool* found);
   leveldb::Status GetIndexes(int64_t database_id,
                              int64_t object_store_id,
-                             IndexedDBObjectStoreMetadata::IndexMap* map)
+                             std::map<int64_t, IndexedDBIndexMetadata>* map)
       WARN_UNUSED_RESULT;
 
   // Remove the blob directory for the specified database and all contained
@@ -651,10 +657,10 @@ class CONTENT_EXPORT IndexedDBBackingStore
   // provides for future flexibility.
   const std::string origin_identifier_;
 
-  net::URLRequestContext* request_context_;
+  scoped_refptr<net::URLRequestContextGetter> request_context_getter_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   std::set<int> child_process_ids_granted_;
-  BlobChangeMap incognito_blob_map_;
+  std::map<std::string, std::unique_ptr<BlobChangeRecord>> incognito_blob_map_;
   base::OneShotTimer journal_cleaning_timer_;
 
   std::unique_ptr<LevelDBDatabase> db_;

@@ -12,6 +12,7 @@
           'audio_output.mojom',
           'audio_parameters.mojom',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'dependencies': [
        '../../../mojo/mojo_public.gyp:mojo_cpp_bindings',
@@ -36,6 +37,9 @@
         'platform_verification.mojom',
       ],
       'includes': [ '../../../mojo/mojom_bindings_generator.gypi' ],
+      'variables': {
+        'use_new_wrapper_types': 'false',
+      },
     },
     {
       'target_name': 'platform_verification_api',
@@ -58,6 +62,7 @@
         'mojom_files': [
           'provision_fetcher.mojom',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'includes': [ '../../../mojo/mojom_bindings_generator_explicit.gypi' ],
     },

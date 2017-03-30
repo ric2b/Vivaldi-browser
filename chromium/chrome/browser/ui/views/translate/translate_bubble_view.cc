@@ -298,8 +298,8 @@ void TranslateBubbleView::OnMenuButtonClicked(views::MenuButton* source,
         DenialMenuItem::NEVER_TRANSLATE_SITE,
         IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_SITE);
 
-    denial_menu_runner_.reset(
-        new views::MenuRunner(denial_menu_model_.get(), 0));
+    denial_menu_runner_.reset(new views::MenuRunner(denial_menu_model_.get(),
+                                                    views::MenuRunner::ASYNC));
   }
   gfx::Rect screen_bounds = source->GetBoundsInScreen();
   screen_bounds.Inset(source->GetInsets());
@@ -314,12 +314,6 @@ bool TranslateBubbleView::IsCommandIdChecked(int command_id) const {
 
 bool TranslateBubbleView::IsCommandIdEnabled(int command_id) const {
   return true;
-}
-
-bool TranslateBubbleView::GetAcceleratorForCommandId(
-    int command_id,
-    ui::Accelerator* accelerator) {
-  return false;
 }
 
 void TranslateBubbleView::ExecuteCommand(int command_id, int event_flags) {
@@ -590,7 +584,7 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
     base::string16 target_language_name =
         model_->GetLanguageNameAt(model_->GetTargetLanguageIndex());
     std::vector<size_t> offsets;
-    auto styled_label = new views::StyledLabel(
+    auto* styled_label = new views::StyledLabel(
         l10n_util::GetStringFUTF16(IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_NEW,
                                    original_language_name, target_language_name,
                                    &offsets),

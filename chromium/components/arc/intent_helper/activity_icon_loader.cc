@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <tuple>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
@@ -26,30 +27,6 @@ const size_t kLargeIconSizeInDip = 20;
 const size_t kMaxIconSizeInPx = 200;
 
 const int kMinInstanceVersion = 3;  // see intent_helper.mojom
-
-mojom::IntentHelperInstance* GetIntentHelperInstance(
-    ActivityIconLoader::GetResult* out_error_code) {
-  DCHECK(out_error_code);
-  ArcBridgeService* bridge_service = arc::ArcBridgeService::Get();
-  if (!bridge_service) {
-    VLOG(2) << "ARC bridge is not ready.";
-    *out_error_code = ActivityIconLoader::GetResult::FAILED_ARC_NOT_SUPPORTED;
-    return nullptr;
-  }
-  mojom::IntentHelperInstance* intent_helper_instance =
-      bridge_service->intent_helper()->instance();
-  if (!intent_helper_instance) {
-    VLOG(2) << "ARC intent helper instance is not ready.";
-    *out_error_code = ActivityIconLoader::GetResult::FAILED_ARC_NOT_READY;
-    return nullptr;
-  }
-  if (bridge_service->intent_helper()->version() < kMinInstanceVersion) {
-    VLOG(1) << "ARC intent helper instance is too old.";
-    *out_error_code = ActivityIconLoader::GetResult::FAILED_ARC_NOT_SUPPORTED;
-    return nullptr;
-  }
-  return intent_helper_instance;
-}
 
 ui::ScaleFactor GetSupportedScaleFactor() {
   std::vector<ui::ScaleFactor> scale_factors = ui::GetSupportedScaleFactors();
@@ -111,13 +88,21 @@ ActivityIconLoader::GetResult ActivityIconLoader::GetActivityIcons(
     return GetResult::SUCCEEDED_SYNC;
   }
 
-  GetResult error_code = GetResult::FAILED_ARC_NOT_SUPPORTED;
-  mojom::IntentHelperInstance* instance = GetIntentHelperInstance(&error_code);
+  ArcIntentHelperBridge::GetResult error_code;
+  mojom::IntentHelperInstance* instance =
+      ArcIntentHelperBridge::GetIntentHelperInstanceWithErrorCode(
+          kMinInstanceVersion, &error_code);
   if (!instance) {
     // The mojo channel is not yet ready (or not supported at all). Run the
     // callback with |result| that could be empty.
     cb.Run(std::move(result));
-    return error_code;
+    switch (error_code) {
+      case ArcIntentHelperBridge::GetResult::FAILED_ARC_NOT_READY:
+        return GetResult(GetResult::FAILED_ARC_NOT_READY);
+      case ArcIntentHelperBridge::GetResult::FAILED_ARC_NOT_SUPPORTED:
+        return GetResult(GetResult::FAILED_ARC_NOT_SUPPORTED);
+    }
+    NOTREACHED();
   }
 
   // Fetch icons from ARC.

@@ -73,6 +73,7 @@ public:
     void setFrameVisible(bool) override { }
     WebTaskRunner* loadingTaskRunner() override;
     WebTaskRunner* timerTaskRunner() override;
+    WebTaskRunner* unthrottledTaskRunner() override;
 };
 
 WebTaskRunner* EmptyFrameScheduler::loadingTaskRunner()
@@ -81,6 +82,11 @@ WebTaskRunner* EmptyFrameScheduler::loadingTaskRunner()
 }
 
 WebTaskRunner* EmptyFrameScheduler::timerTaskRunner()
+{
+    return Platform::current()->currentThread()->getWebTaskRunner();
+}
+
+WebTaskRunner* EmptyFrameScheduler::unthrottledTaskRunner()
 {
     return Platform::current()->currentThread()->getWebTaskRunner();
 }
@@ -123,11 +129,6 @@ NavigationPolicy EmptyFrameLoaderClient::decidePolicyForNavigation(const Resourc
     return NavigationPolicyIgnore;
 }
 
-bool EmptyFrameLoaderClient::hasPendingNavigation()
-{
-    return false;
-}
-
 void EmptyFrameLoaderClient::dispatchWillSendSubmitEvent(HTMLFormElement*)
 {
 }
@@ -162,6 +163,10 @@ std::unique_ptr<WebMediaSession> EmptyFrameLoaderClient::createWebMediaSession()
 }
 
 void EmptyTextCheckerClient::requestCheckingOfString(TextCheckingRequest*)
+{
+}
+
+void EmptyTextCheckerClient::cancelAllPendingRequests()
 {
 }
 

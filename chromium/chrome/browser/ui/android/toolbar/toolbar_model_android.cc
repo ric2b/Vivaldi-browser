@@ -18,6 +18,7 @@
 #include "jni/ToolbarModel_jni.h"
 #include "net/cert/x509_certificate.h"
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 ToolbarModelAndroid::ToolbarModelAndroid(JNIEnv* env, jobject jdelegate)
@@ -35,8 +36,8 @@ void ToolbarModelAndroid::Destroy(JNIEnv* env,
 ScopedJavaLocalRef<jstring> ToolbarModelAndroid::GetText(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return base::android::ConvertUTF16ToJavaString(env,
-                                                 toolbar_model_->GetText());
+  return base::android::ConvertUTF16ToJavaString(
+      env, toolbar_model_->GetFormattedURL(nullptr));
 }
 
 content::WebContents* ToolbarModelAndroid::GetActiveWebContents() const {
@@ -45,7 +46,7 @@ content::WebContents* ToolbarModelAndroid::GetActiveWebContents() const {
   if (!jdelegate.obj())
     return NULL;
   ScopedJavaLocalRef<jobject> jweb_contents =
-      Java_ToolbarModelDelegate_getActiveWebContents(env, jdelegate.obj());
+      Java_ToolbarModelDelegate_getActiveWebContents(env, jdelegate);
   return content::WebContents::FromJavaWebContents(jweb_contents.obj());
 }
 

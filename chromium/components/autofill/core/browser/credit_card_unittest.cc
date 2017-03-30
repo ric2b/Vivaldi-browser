@@ -50,9 +50,7 @@ const char* const kValidNumbers[] = {
   "4222-2222-2222-2",
   "5019717010103742",
   "6331101999990016",
-
-  // A UnionPay card that doesn't pass the Luhn checksum
-  "6200000000000000",
+  "6247130048162403",
 };
 const char* const kInvalidNumbers[] = {
   "4111 1111 112", /* too short */
@@ -642,7 +640,7 @@ TEST(CreditCardTest, GetCreditCardType) {
     { "4222222222222", kVisaCard, true },
 
     // The relevant sample numbers from
-    // http://auricsystems.com/support-center/sample-credit-card-numbers/
+    // https://www.auricsystems.com/sample-credit-card-numbers/
     { "343434343434343", kAmericanExpressCard, true },
     { "371144371144376", kAmericanExpressCard, true },
     { "341134113411347", kAmericanExpressCard, true },
@@ -665,9 +663,9 @@ TEST(CreditCardTest, GetCreditCardType) {
     { "5111005111051128", kMasterCard, true },
     { "5112345112345114", kMasterCard, true },
     { "5115915115915118", kMasterCard, true },
-
-    // A UnionPay card that doesn't pass the Luhn checksum
-    { "6200000000000000", kUnionPay, true },
+    { "6247130048162403", kUnionPay, true },
+    { "6247130048162403", kUnionPay, true },
+    { "622384452162063648", kUnionPay, true },
 
     // Empty string
     { std::string(), kGenericCard, false },
@@ -678,6 +676,7 @@ TEST(CreditCardTest, GetCreditCardType) {
 
     // Fails Luhn check.
     { "4111111111111112", kVisaCard, false },
+    { "6247130048162413", kUnionPay, false },
 
     // Invalid length.
     { "3434343434343434", kAmericanExpressCard, false },
@@ -797,16 +796,6 @@ TEST(CreditCardTest, LastFourDigits) {
   ASSERT_EQ(base::ASCIIToUTF16("489"), card.LastFourDigits());
 }
 
-TEST(CreditCardTest, CanBuildFromCardNumberAndExpirationDate) {
-  base::string16 card_number = base::ASCIIToUTF16("test");
-  int month = 1;
-  int year = 2999;
-  CreditCard card(card_number, month, year);
-  EXPECT_EQ(card_number, card.number());
-  EXPECT_EQ(month, card.expiration_month());
-  EXPECT_EQ(year, card.expiration_year());
-}
-
 // Verifies that a credit card should be updated.
 TEST(CreditCardTest, ShouldUpdateExpiration) {
   base::Time now = base::Time::Now();
@@ -894,8 +883,9 @@ TEST(CreditCardTest, ShouldUpdateExpiration) {
   };
 
   for (size_t i = 0; i < arraysize(kTestCases); ++i) {
-    CreditCard card(base::ASCIIToUTF16("1234"), kTestCases[i].month,
-                    kTestCases[i].year);
+    CreditCard card;
+    card.SetExpirationMonth(kTestCases[i].month);
+    card.SetExpirationYear(kTestCases[i].year);
     card.set_record_type(kTestCases[i].record_type);
     if (card.record_type() != CreditCard::LOCAL_CARD)
       card.SetServerStatus(kTestCases[i].server_status);

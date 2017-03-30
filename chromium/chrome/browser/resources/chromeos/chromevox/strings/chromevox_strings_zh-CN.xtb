@@ -269,6 +269,7 @@
 <translation id="3392045790598181549"><ph name="NAME" />，菜单项</translation>
 <translation id="3406283310380167331">显示表单列表</translation>
 <translation id="3422338090358345848">打开Keyboard Explorer</translation>
+<translation id="3423495725743882470">第 $1 行，第 $2 列</translation>
 <translation id="3457000393508828486">部分已按下</translation>
 <translation id="3462439746547587373"><ph name="NAME" />，按钮</translation>
 <translation id="3473644018603298796">已选择<ph name="COUNT" />项</translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">自动填充列表</translation>
 <translation id="3810838688059735925">视频</translation>
+<translation id="3812237531158591503">粘贴 $1。</translation>
 <translation id="3816633764618089385">下一个媒体内容</translation>
 <translation id="3819376190738087562">无跳转内容。</translation>
 <translation id="385383972552776628">打开选项页面</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">无表单。</translation>
 <translation id="5005670136041063723">不存在其他类似元素。</translation>
 <translation id="501473567976723023">1月</translation>
+<translation id="5040591161308540832">表 $1，$2 x $3</translation>
 <translation id="5041394372352067729">将盲文显示移动到页首</translation>
 <translation id="5042770794184672516">调大朗读音量</translation>
 <translation id="5050015258024679800">上一个4级标题</translation>
@@ -518,7 +521,6 @@
 <translation id="5876817486144482042">调小朗读音量</translation>
 <translation id="5887397643266327462">已启用盲文字幕功能。</translation>
 <translation id="5891934789323004067">表格</translation>
-<translation id="5919442531159595654">复制。</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{1个等号}other{#个等号}}</translation>
 <translation id="5939518447894949180">重置</translation>
 <translation id="5948123859135882163">在数学表达式的结构化解释和语义解释之间来回切换</translation>
@@ -554,6 +556,8 @@
 <translation id="6355910664415701303">不存在上一个列表项。</translation>
 <translation id="6364795331201459219">6级标题标记</translation>
 <translation id="6368143427468974988">上一个标题</translation>
+<translation id="6378565991815958969">复制 $1。</translation>
+<translation id="6385591741672306837">列</translation>
 <translation id="6387719785439924554">边栏内容标记</translation>
 <translation id="6411426777058107714">不存在上一个单选按钮。</translation>
 <translation id="6414968628640960377">上一个不同元素。</translation>
@@ -653,7 +657,6 @@
 <translation id="7532613204005497612">6月</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />，<ph name="NAME" />，滑块</translation>
 <translation id="7552432549459840808">实用的 Chrome 快捷键</translation>
-<translation id="7586163296341959563">粘贴。</translation>
 <translation id="7596919493010894443">已清除所选内容</translation>
 <translation id="7604026522577407655">转到当前列的开头</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@
 <translation id="8153880621934657047">不在表格内。</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{1个下划线}other{#个下划线}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">行</translation>
 <translation id="8186185314313222077">切换全屏模式</translation>
-<translation id="81960742267269908">剪切。</translation>
 <translation id="8199231515320852133">读出当前单元格的标题</translation>
 <translation id="820417203470636242">空白单元格。</translation>
 <translation id="8215202828671303819">多选</translation>
@@ -782,6 +785,7 @@
 <translation id="9077213568694924680">已从所选文字中移除</translation>
 <translation id="9082874451376019682">不存在上一个滑块。</translation>
 <translation id="9089864840575085222">循环输入回显</translation>
+<translation id="9105227991373418255">剪切 $1。</translation>
 <translation id="9107530006868467849">不存在上一个媒体小部件。</translation>
 <translation id="9108370397979208512">数学</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@
 <translation id="9115913704608474258">11月</translation>
 <translation id="9128414153595658330">对话框</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">标签</translation>
 <translation id="9151211641321628915">读出关于当前位置的简短说明</translation>
 <translation id="9153606228985488238">音高为<ph name="PERCENT" />%</translation>
 <translation id="9160096769946561184">转到当前列的末尾</translation>

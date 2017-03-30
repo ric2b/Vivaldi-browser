@@ -12,11 +12,14 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "chrome/common/chrome_features.h"
+#include "components/ntp_snippets/features.h"
 #include "components/offline_pages/offline_page_feature.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/common/content_features.h"
 #include "jni/ChromeFeatureList_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 
 namespace chrome {
 namespace android {
@@ -32,20 +35,27 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kSimplifiedFullscreenUI,
     &features::kWebPayments,
     &kAllBookmarksFeature,
+    &kDownloadsUiFeature,
     &kAndroidPayIntegrationV1,
     &kImportantSitesInCBD,
-    &kMediaStyleNotification,
+    &ntp_snippets::kContentSuggestionsFeature,
+    &ntp_snippets::kSaveToOfflineFeature,
     &kNTPFakeOmniboxTextFeature,
     &kNTPMaterialDesign,
     &kNTPOfflinePagesFeature,
-    &kNTPSnippetsFeature,
-    &kNTPToolbarFeature,
     &kPhysicalWebFeature,
     &kPhysicalWebIgnoreOtherClientsFeature,
     &kReadItLaterInMenu,
+    &kSpecialLocaleFeature,
+    &kSpecialLocaleWrapper,
     &kSystemDownloadManager,
+    &kTabReparenting,
+    &kCCTExternalLinkHandling,
     &offline_pages::kOfflinePagesBackgroundLoadingFeature,
+    &offline_pages::kBackgroundLoaderForDownloadsFeature,
     &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
+    &offline_pages::kOfflinePagesSharingFeature,
+    &password_manager::features::kViewPasswords,
 };
 
 }  // namespace
@@ -53,51 +63,48 @@ const base::Feature* kFeaturesExposedToJava[] = {
 const base::Feature kAllBookmarksFeature{"AllBookmarks",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kImportantSitesInCBD{"ImportantSitesInCBD",
+const base::Feature kDownloadsUiFeature{"DownloadsUi",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kMediaStyleNotification {
-  "MediaStyleNotification", base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kImportantSitesInCBD{"ImportantSitesInCBD",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNTPMaterialDesign{"NTPMaterialDesign",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kNTPOfflinePagesFeature {
-  "NTPOfflinePages", base::FEATURE_DISABLED_BY_DEFAULT
+const base::Feature kNTPOfflinePagesFeature{"NTPOfflinePages",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kNTPFakeOmniboxTextFeature{
+    "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kPhysicalWebFeature{"PhysicalWeb",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kPhysicalWebIgnoreOtherClientsFeature{
+    "PhysicalWebIgnoreOtherClients", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kReadItLaterInMenu{"ReadItLaterInMenu",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSpecialLocaleFeature{"SpecialLocale",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSpecialLocaleWrapper{"SpecialLocaleWrapper",
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kSystemDownloadManager{"SystemDownloadManager",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kTabReparenting {
+  "TabReparenting", base::FEATURE_ENABLED_BY_DEFAULT
 };
 
-const base::Feature kNTPSnippetsFeature {
-  "NTPSnippets", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
-const base::Feature kNTPToolbarFeature {
-  "NTPToolbar", base::FEATURE_ENABLED_BY_DEFAULT
-};
-
-const base::Feature kNTPFakeOmniboxTextFeature {
-  "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
-const base::Feature kAndroidPayIntegrationV1 {
-  "AndroidPayIntegrationV1", base::FEATURE_ENABLED_BY_DEFAULT
-};
-
-const base::Feature kPhysicalWebFeature {
-  "PhysicalWeb", base::FEATURE_ENABLED_BY_DEFAULT
-};
-
-const base::Feature kPhysicalWebIgnoreOtherClientsFeature {
-  "PhysicalWebIgnoreOtherClients", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
-const base::Feature kReadItLaterInMenu {
-  "ReadItLaterInMenu", base::FEATURE_DISABLED_BY_DEFAULT
-};
-
-const base::Feature kSystemDownloadManager {
-  "SystemDownloadManager", base::FEATURE_ENABLED_BY_DEFAULT
-};
+const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
 
 static jboolean IsEnabled(JNIEnv* env,
                           const JavaParamRef<jclass>& clazz,

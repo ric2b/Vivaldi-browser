@@ -66,8 +66,8 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/power/freezer_cgroup_process_manager.h"
 #include "chrome/browser/chromeos/power/idle_action_warning_observer.h"
+#include "chrome/browser/chromeos/power/login_lock_state_notifier.h"
 #include "chrome/browser/chromeos/power/peripheral_battery_observer.h"
-#include "chrome/browser/chromeos/power/power_button_observer.h"
 #include "chrome/browser/chromeos/power/power_data_collector.h"
 #include "chrome/browser/chromeos/power/power_prefs.h"
 #include "chrome/browser/chromeos/power/renderer_freezer.h"
@@ -119,8 +119,6 @@
 #include "chromeos/network/portal_detector/network_portal_detector_stub.h"
 #include "chromeos/system/statistics_provider.h"
 #include "chromeos/tpm/tpm_token_loader.h"
-#include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_service_manager.h"
 #include "components/browser_sync/common/browser_sync_switches.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/metrics/metrics_service.h"
@@ -214,7 +212,7 @@ class DBusServices {
 
     ScopedVector<CrosDBusService::ServiceProviderInterface> service_providers;
     service_providers.push_back(ProxyResolutionServiceProvider::Create(
-        base::WrapUnique(new ChromeProxyResolverDelegate())));
+        base::MakeUnique<ChromeProxyResolverDelegate>()));
     service_providers.push_back(new DisplayPowerServiceProvider(
         base::WrapUnique(new ChromeDisplayPowerServiceProviderDelegate)));
     service_providers.push_back(new LivenessServiceProvider);
@@ -382,7 +380,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
 void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   // Set the crypto thread after the IO thread has been created/started.
   TPMTokenLoader::Get()->SetCryptoTaskRunner(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO));
 
   CrasAudioHandler::Initialize(
@@ -399,7 +397,7 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   // will ensure that loading is aborted on early exit.
   bool load_oem_statistics = !StartupUtils::IsOobeCompleted();
   system::StatisticsProvider::GetInstance()->StartLoadingMachineStatistics(
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::FILE),
       load_oem_statistics);
 
@@ -678,14 +676,6 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   // available.
   idle_action_warning_observer_.reset(new IdleActionWarningObserver());
 
-  // Tell the window manager observer to monitor window manager changes. To do
-  // so, the ash::shell needs to be available (which it is now).
-  if (arc::ArcBridgeService::GetEnabled(
-          base::CommandLine::ForCurrentProcess())) {
-    DCHECK(arc::ArcServiceManager::Get());
-    arc::ArcServiceManager::Get()->OnAshStarted();
-  }
-
   // Start watching for low disk space events to notify the user.
   low_disk_notification_.reset(new LowDiskNotification());
 
@@ -711,13 +701,15 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
     SystemKeyEventListener::Initialize();
   }
 
-  // Listen for XI_HierarchyChanged events. Note: if this is moved to
-  // PreMainMessageLoopRun() then desktopui_PageCyclerTests fail for unknown
-  // reasons, see http://crosbug.com/24833.
-  XInputHierarchyChangedEventListener::GetInstance();
+  if (!chrome::IsRunningInMash()) {
+    // Listen for XI_HierarchyChanged events. Note: if this is moved to
+    // PreMainMessageLoopRun() then desktopui_PageCyclerTests fail for unknown
+    // reasons, see http://crosbug.com/24833.
+    XInputHierarchyChangedEventListener::GetInstance();
 
-  // Start the CrOS input device UMA watcher
-  DeviceUMA::GetInstance();
+    // Start the CrOS input device UMA watcher
+    DeviceUMA::GetInstance();
+  }
 #endif
 
   // -- This used to be in ChromeBrowserMainParts::PreMainMessageLoopRun()
@@ -733,15 +725,15 @@ void ChromeBrowserMainPartsChromeos::PreBrowserStart() {
 }
 
 void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
-  system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
-
   if (!chrome::IsRunningInMash()) {
+    system::InputDeviceSettings::Get()->InitTouchDevicesStatusFromLocalPrefs();
+
     // These are dependent on the ash::Shell singleton already having been
     // initialized. Consequently, these cannot be used when running as a mus
     // client.
-    // TODO(oshima): Remove ash dependency in PowerButtonObserver.
+    // TODO(oshima): Remove ash dependency in LoginLockStateNotifier.
     // crbug.com/408832.
-    power_button_observer_.reset(new PowerButtonObserver);
+    login_lock_state_notifier_.reset(new LoginLockStateNotifier);
     data_promo_notification_.reset(new DataPromoNotification());
 
     keyboard_event_rewriters_.reset(new EventRewriterController());
@@ -799,11 +791,13 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   keyboard_event_rewriters_.reset();
   low_disk_notification_.reset();
 #if defined(USE_X11)
-  // The XInput2 event listener needs to be shut down earlier than when
-  // Singletons are finally destroyed in AtExitManager.
-  XInputHierarchyChangedEventListener::GetInstance()->Stop();
+  if (!chrome::IsRunningInMash()) {
+    // The XInput2 event listener needs to be shut down earlier than when
+    // Singletons are finally destroyed in AtExitManager.
+    XInputHierarchyChangedEventListener::GetInstance()->Stop();
 
-  DeviceUMA::GetInstance()->Stop();
+    DeviceUMA::GetInstance()->Stop();
+  }
 
   // SystemKeyEventListener::Shutdown() is always safe to call,
   // even if Initialize() wasn't called.
@@ -811,7 +805,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 #endif
 
   // Detach D-Bus clients before DBusThreadManager is shut down.
-  power_button_observer_.reset();
+  login_lock_state_notifier_.reset();
   idle_action_warning_observer_.reset();
 
   if (!chrome::IsRunningInMash())

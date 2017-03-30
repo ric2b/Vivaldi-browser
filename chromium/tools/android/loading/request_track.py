@@ -209,6 +209,7 @@ class Request(object):
     self.timing = None
     self.status = None
     self.status_text = None
+    self.response_headers_length = 0
     self.encoded_data_length = 0
     self.data_chunks = []
     self.failed = False
@@ -253,24 +254,20 @@ class Request(object):
       result.timing = Timing(request_time=result.timestamp)
     return result
 
-  def GetEncodedDataLength(self):
+  def GetResponseTransportLength(self):
     """Get the total amount of encoded data no matter whether load has finished
     or not.
     """
     assert self.HasReceivedResponse()
     assert not self.from_disk_cache and not self.served_from_cache
-    assert self.protocol != 'about'
-    if self.failed:
-      # TODO(gabadie): Once crbug.com/622018 is fixed, remove this branch.
-      return 0
+    assert self.protocol not in {'about', 'blob', 'data'}
     if self.timing.loading_finished != Timing.UNVAILABLE:
       encoded_data_length = self.encoded_data_length
-      assert encoded_data_length > 0
     else:
       encoded_data_length = sum(
           [chunk_size for _, chunk_size in self.data_chunks])
       assert encoded_data_length > 0 or len(self.data_chunks) == 0
-    return encoded_data_length
+    return encoded_data_length + self.response_headers_length
 
   def GetHTTPResponseHeader(self, header_name):
     """Gets the value of a HTTP response header.
@@ -344,7 +341,7 @@ class Request(object):
     directives = [s.strip() for s in cache_control_str.split(',')]
     for directive in directives:
       parts = directive.split('=')
-      if len(parts) == 1:
+      if len(parts) != 2:
         continue
       (name, value) = parts
       if name == directive_name:
@@ -388,10 +385,12 @@ class Request(object):
     net::HttpResponseHeaders's constructor.
     """
     assert not self.IsDataRequest()
-    headers = '{} {} {}\x00'.format(
-        self.protocol.upper(), self.status, self.status_text)
+    assert self.HasReceivedResponse()
+    headers = bytes('{} {} {}\x00'.format(
+        self.protocol.upper(), self.status, self.status_text))
     for key in sorted(self.response_headers.keys()):
-      headers += '{}: {}\x00'.format(key, self.response_headers[key])
+      headers += (bytes(key.encode('latin-1')) + b': ' +
+          bytes(self.response_headers[key].encode('latin-1')) + b'\x00')
     return headers
 
   def __eq__(self, o):
@@ -695,10 +694,12 @@ class RequestTrack(devtools_monitor.Track):
     # Several "requestWillBeSent" events can be dispatched in a row in the case
     # of redirects.
     redirect_initiator = None
+    if request_id in self._completed_requests_by_id:
+      assert request_id not in self._requests_in_flight
+      return
     if request_id in self._requests_in_flight:
       redirect_initiator = self._HandleRedirect(request_id, params)
-    assert (request_id not in self._requests_in_flight
-            and request_id not in self._completed_requests_by_id)
+    assert (request_id not in self._requests_in_flight)
     r = Request()
     r.request_id = request_id
     _CopyFromDictToObject(
@@ -734,7 +735,7 @@ class RequestTrack(devtools_monitor.Track):
 
     _CopyFromDictToObject(redirect_response, r,
                           (('headers', 'response_headers'),
-                           ('encodedDataLength', 'encoded_data_length'),
+                           ('encodedDataLength', 'response_headers_length'),
                            ('fromDiskCache', 'from_disk_cache'),
                            ('protocol', 'protocol'), ('status', 'status'),
                            ('statusText', 'status_text')))
@@ -759,6 +760,9 @@ class RequestTrack(devtools_monitor.Track):
     request.served_from_cache = True
 
   def _ResponseReceived(self, request_id, params):
+    if request_id in self._completed_requests_by_id:
+      assert request_id not in self._requests_in_flight
+      return
     assert request_id in self._requests_in_flight
     (r, status) = self._requests_in_flight[request_id]
     if status == RequestTrack._STATUS_RESPONSE:
@@ -771,7 +775,8 @@ class RequestTrack(devtools_monitor.Track):
       self.duplicates_count += 1
       return
     assert status == RequestTrack._STATUS_SENT
-    assert r.frame_id == params['frameId']
+    assert (r.frame_id == params['frameId'] or
+            params['response']['protocol'] == 'data')
     assert r.timestamp <= params['timestamp']
     if r.resource_type == 'Other':
       r.resource_type = params.get('type', 'Other')
@@ -786,6 +791,7 @@ class RequestTrack(devtools_monitor.Track):
                       # Actual request headers are not known before reaching the
                       # network stack.
                       ('requestHeaders', 'request_headers'),
+                      ('encodedDataLength', 'response_headers_length'),
                       ('headers', 'response_headers')))
     timing_dict = {}
     # Some URLs don't have a timing dict (e.g. data URLs), and timings for
@@ -816,8 +822,6 @@ class RequestTrack(devtools_monitor.Track):
     assert (status == RequestTrack._STATUS_RESPONSE
             or status == RequestTrack._STATUS_DATA)
     r.encoded_data_length = params['encodedDataLength']
-    assert (r.encoded_data_length > 0 or r.protocol == 'about' or
-            r.from_disk_cache or r.served_from_cache)
     r.timing.loading_finished = r._TimestampOffsetFromStartMs(
         params['timestamp'])
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)
@@ -834,8 +838,6 @@ class RequestTrack(devtools_monitor.Track):
     self._FinalizeRequest(request_id)
 
   def _FinalizeRequest(self, request_id):
-    if request_id not in self._requests_in_flight:
-      return
     (request, status) = self._requests_in_flight[request_id]
     assert status == RequestTrack._STATUS_FINISHED
     del self._requests_in_flight[request_id]

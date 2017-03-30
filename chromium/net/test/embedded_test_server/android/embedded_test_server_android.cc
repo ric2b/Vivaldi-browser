@@ -12,6 +12,8 @@
 #include "base/trace_event/trace_event.h"
 #include "net/test/jni/EmbeddedTestServerImpl_jni.h"
 
+using base::android::JavaParamRef;
+
 namespace net {
 namespace test_server {
 
@@ -23,8 +25,7 @@ EmbeddedTestServerAndroid::EmbeddedTestServerAndroid(JNIEnv* env, jobject jobj)
 
 EmbeddedTestServerAndroid::~EmbeddedTestServerAndroid() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_EmbeddedTestServerImpl_clearNativePtr(env,
-                                             weak_java_server_.get(env).obj());
+  Java_EmbeddedTestServerImpl_clearNativePtr(env, weak_java_server_.get(env));
 }
 
 jboolean EmbeddedTestServerAndroid::Start(JNIEnv* env,

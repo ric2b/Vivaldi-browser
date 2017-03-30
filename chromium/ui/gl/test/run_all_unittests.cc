@@ -7,7 +7,6 @@
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
 #include "build/build_config.h"
-#include "ui/gl/test/gl_image_test_support.h"
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
 #include "base/test/mock_chrome_application_mac.h"
@@ -30,12 +29,12 @@ class GlTestSuite : public base::TestSuite {
   void Initialize() override {
     base::TestSuite::Initialize();
 #if defined(USE_OZONE)
+    main_loop_.reset(new base::MessageLoopForUI());
     // Make Ozone run in single-process mode, where it doesn't expect a GPU
     // process and it spawns and starts its own DRM thread.
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        "mojo-platform-channel-handle");
-    main_loop_.reset(new base::MessageLoopForUI());
-    ui::OzonePlatform::InitializeForUI();
+    ui::OzonePlatform::InitParams params;
+    params.single_process = true;
+    ui::OzonePlatform::InitializeForUI(params);
 #endif
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)

@@ -53,13 +53,15 @@ void InvalidationSet::cacheTracingFlag()
 }
 
 InvalidationSet::InvalidationSet(InvalidationType type)
-    : m_type(type)
+    : m_refCount(1)
+    , m_type(type)
     , m_allDescendantsMightBeInvalid(false)
     , m_invalidatesSelf(false)
     , m_customPseudoInvalid(false)
     , m_treeBoundaryCrossing(false)
     , m_insertionPointCrossing(false)
     , m_invalidatesSlotted(false)
+    , m_isAlive(true)
 {
 }
 

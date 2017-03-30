@@ -60,9 +60,10 @@ bool FakeCompositorDependencies::IsGpuMemoryBufferCompositorResourcesEnabled() {
 bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
   return true;
 }
-std::vector<unsigned> FakeCompositorDependencies::GetImageTextureTargets() {
-  return std::vector<unsigned>(static_cast<size_t>(gfx::BufferFormat::LAST) + 1,
-                               GL_TEXTURE_2D);
+
+const cc::BufferToTextureTargetMap&
+FakeCompositorDependencies::GetBufferToTextureTargetMap() {
+  return buffer_to_texture_target_map_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -84,7 +85,7 @@ FakeCompositorDependencies::GetGpuMemoryBufferManager() {
   return &gpu_memory_buffer_manager_;
 }
 
-scheduler::RendererScheduler*
+blink::scheduler::RendererScheduler*
 FakeCompositorDependencies::GetRendererScheduler() {
   return &renderer_scheduler_;
 }

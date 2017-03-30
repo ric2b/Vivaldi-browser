@@ -12,8 +12,8 @@
 #include "base/macros.h"
 #include "mash/public/interfaces/launchable.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/tracing/public/cpp/provider.h"
 
 namespace views {
 class AuraInit;
@@ -24,7 +24,7 @@ class WindowManagerConnection;
 namespace mash {
 namespace catalog_viewer {
 
-class CatalogViewer : public shell::ShellClient,
+class CatalogViewer : public shell::Service,
                       public mojom::Launchable,
                       public shell::InterfaceFactory<mojom::Launchable> {
  public:
@@ -34,25 +34,22 @@ class CatalogViewer : public shell::ShellClient,
   void RemoveWindow(views::Widget* window);
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
+  // shell::Service:
+  void OnStart(const shell::Identity& identity) override;
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override;
 
   // mojom::Launchable:
   void Launch(uint32_t what, mojom::LaunchMode how) override;
 
   // shell::InterfaceFactory<mojom::Launchable>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::LaunchableRequest request) override;
 
-
-  shell::Connector* connector_ = nullptr;
   mojo::BindingSet<mojom::Launchable> bindings_;
   std::vector<views::Widget*> windows_;
 
-  mojo::TracingImpl tracing_;
+  tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
   std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 

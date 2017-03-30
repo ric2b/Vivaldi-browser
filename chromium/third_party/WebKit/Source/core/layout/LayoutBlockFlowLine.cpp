@@ -21,6 +21,7 @@
  */
 
 #include "core/dom/AXObjectCache.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/layout/BidiRunForLine.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutRubyRun.h"
@@ -58,6 +59,12 @@ public:
         if (text.is8Bit()) {
             opportunitiesInRun = Character::expansionOpportunityCount(text.characters8() + run.m_start,
                 run.m_stop - run.m_start, run.m_box->direction(), isAfterExpansion, textJustify);
+        } else if (run.m_lineLayoutItem.isCombineText()) {
+            // Justfication applies to before and after the combined text as if
+            // it is an ideographic character, and is prohibited inside the
+            // combined text.
+            opportunitiesInRun = isAfterExpansion ? 1 : 2;
+            isAfterExpansion = true;
         } else {
             opportunitiesInRun = Character::expansionOpportunityCount(text.characters16() + run.m_start,
                 run.m_stop - run.m_start, run.m_box->direction(), isAfterExpansion, textJustify);
@@ -96,7 +103,7 @@ public:
                 if (r->m_lineLayoutItem.style()->whiteSpace() != PRE) {
                     InlineTextBox* textBox = toInlineTextBox(r->m_box);
                     RELEASE_ASSERT(m_totalOpportunities);
-                    int expansion = (availableLogicalWidth - totalLogicalWidth) * opportunitiesInRun / m_totalOpportunities;
+                    int expansion = ((availableLogicalWidth - totalLogicalWidth) * opportunitiesInRun / m_totalOpportunities).toInt();
                     textBox->setExpansion(expansion);
                     totalLogicalWidth += expansion;
                 }
@@ -774,7 +781,7 @@ void LayoutBlockFlow::layoutRunsAndFloats(LineLayoutState& layoutState)
 // Before restarting the layout loop with a new logicalHeight, remove all floats that were added and reset the resolver.
 inline const InlineIterator& LayoutBlockFlow::restartLayoutRunsAndFloatsInRange(LayoutUnit oldLogicalHeight, LayoutUnit newLogicalHeight,  FloatingObject* lastFloatFromPreviousLine, InlineBidiResolver& resolver,  const InlineIterator& oldEnd)
 {
-    removeFloatingObjectsBelow(lastFloatFromPreviousLine, oldLogicalHeight);
+    removeFloatingObjectsBelow(lastFloatFromPreviousLine, oldLogicalHeight.toInt());
     setLogicalHeight(newLogicalHeight);
     resolver.setPositionIgnoringNestedIsolates(oldEnd);
     return oldEnd;
@@ -866,6 +873,7 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState,
         }
 
         ASSERT(endOfLine != resolver.position());
+        RootInlineBox* lineBox = nullptr;
 
         // This is a short-cut for empty lines.
         if (layoutState.lineInfo().isEmpty()) {
@@ -894,7 +902,7 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState,
             // inline flow boxes.
 
             LayoutUnit oldLogicalHeight = logicalHeight();
-            RootInlineBox* lineBox = createLineBoxesFromBidiRuns(resolver.status().context->level(), bidiRuns, endOfLine, layoutState.lineInfo(), verticalPositionCache, trailingSpaceRun, wordMeasurements);
+            lineBox = createLineBoxesFromBidiRuns(resolver.status().context->level(), bidiRuns, endOfLine, layoutState.lineInfo(), verticalPositionCache, trailingSpaceRun, wordMeasurements);
 
             bidiRuns.deleteRuns();
             resolver.markCurrentRunEmpty(); // FIXME: This can probably be replaced by an ASSERT (or just removed).
@@ -939,8 +947,17 @@ void LayoutBlockFlow::layoutRunsAndFloatsInRange(LineLayoutState& layoutState,
         }
 
         if (!paginationStrutFromDeletedLine) {
-            for (size_t i = 0; i < lineBreaker.positionedObjects().size(); ++i)
-                setStaticPositions(LineLayoutBlockFlow(this), LineLayoutBox(lineBreaker.positionedObjects()[i]), DoNotIndentText);
+            for (const auto& positionedObject : lineBreaker.positionedObjects()) {
+                if (positionedObject.style()->isOriginalDisplayInlineType()) {
+                    // Auto-positioend "inline" out-of-flow objects have already been positioned,
+                    // but if we're paginated, we need to update their position now, since the line
+                    // they "belong" to may have been pushed by a pagination strut.
+                    if (paginated && lineBox)
+                        positionedObject.layer()->setStaticBlockPosition(lineBox->lineTopWithLeading());
+                    continue;
+                }
+                setStaticPositions(LineLayoutBlockFlow(this), positionedObject, DoNotIndentText);
+            }
 
             if (!layoutState.lineInfo().isEmpty())
                 layoutState.lineInfo().setFirstLine(false);
@@ -1607,9 +1624,9 @@ void LayoutBlockFlow::layoutInlineChildren(bool relayoutChildren, LayoutUnit aft
     if (lastRootBox()) {
         LayoutUnit lowestAllowedPosition = std::max(lastRootBox()->lineBottom(), logicalHeight() + paddingAfter());
         if (!style()->isFlippedLinesWritingMode())
-            lastLineAnnotationsAdjustment = lastRootBox()->computeUnderAnnotationAdjustment(lowestAllowedPosition);
+            lastLineAnnotationsAdjustment = lastRootBox()->computeUnderAnnotationAdjustment(lowestAllowedPosition).toInt();
         else
-            lastLineAnnotationsAdjustment = lastRootBox()->computeOverAnnotationAdjustment(lowestAllowedPosition);
+            lastLineAnnotationsAdjustment = lastRootBox()->computeOverAnnotationAdjustment(lowestAllowedPosition).toInt();
     }
 
     // Now add in the bottom border/padding.
@@ -1878,7 +1895,7 @@ void LayoutBlockFlow::addOverflowFromInlineChildren()
 {
     LayoutUnit endPadding = hasOverflowClip() ? paddingEnd() : LayoutUnit();
     // FIXME: Need to find another way to do this, since scrollbars could show when we don't want them to.
-    if (hasOverflowClip() && !endPadding && node() && node()->isRootEditableElement() && style()->isLeftToRightDirection())
+    if (hasOverflowClip() && !endPadding && node() && isRootEditableElement(*node()) && style()->isLeftToRightDirection())
         endPadding = LayoutUnit(1);
     for (RootInlineBox* curr = firstRootBox(); curr; curr = curr->nextRootBox()) {
         addLayoutOverflow(curr->paddedLayoutOverflowRect(endPadding));
@@ -1986,7 +2003,7 @@ void LayoutBlockFlow::checkLinesForTextOverflow()
 
             LayoutUnit width(indentText == IndentText ? firstLineEllipsisWidth : ellipsisWidth);
             LayoutUnit blockEdge = ltr ? blockRightEdge : blockLeftEdge;
-            if (curr->lineCanAccommodateEllipsis(ltr, blockEdge, lineBoxEdge, width)) {
+            if (curr->lineCanAccommodateEllipsis(ltr, blockEdge.toInt(), lineBoxEdge.toInt(), width.toInt())) {
                 LayoutUnit totalLogicalWidth = curr->placeEllipsis(selectedEllipsisStr, ltr, blockLeftEdge, blockRightEdge, width);
                 LayoutUnit logicalLeft; // We are only interested in the delta from the base position.
                 LayoutUnit availableLogicalWidth = blockRightEdge - blockLeftEdge;
@@ -2061,22 +2078,13 @@ void LayoutBlockFlow::setShouldDoFullPaintInvalidationForFirstLine()
         firstRootBox->setShouldDoFullPaintInvalidationRecursively();
 }
 
-PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
+bool LayoutBlockFlow::paintedOutputOfObjectHasNoEffectRegardlessOfSize() const
 {
-    if (containsFloats())
-        paintInvalidationState.paintingLayer().setNeedsPaintPhaseFloat();
+    // LayoutBlockFlow is in charge of paint invalidation of the first line.
+    if (firstLineBox())
+        return false;
 
-    PaintInvalidationReason reason = LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
-    if (reason == PaintInvalidationNone)
-        return reason;
-    RootInlineBox* line = firstRootBox();
-    if (!line || !line->isFirstLineStyle())
-        return reason;
-    // It's the RootInlineBox that paints the ::first-line background. Note that since it may be
-    // expensive to figure out if the first line is affected by any ::first-line selectors at all,
-    // we just invalidate it unconditionally, since that's typically cheaper.
-    invalidateDisplayItemClient(*line, reason);
-    return reason;
+    return LayoutBlock::paintedOutputOfObjectHasNoEffectRegardlessOfSize();
 }
 
 } // namespace blink

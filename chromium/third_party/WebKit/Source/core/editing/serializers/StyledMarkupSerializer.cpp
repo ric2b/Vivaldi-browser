@@ -189,8 +189,18 @@ String StyledMarkupSerializer<Strategy>::createMarkup()
         }
     }
 
-    if (!m_lastClosed)
+    // If there is no the highest node in the selected nodes, |m_lastClosed| can be #text
+    // when its parent is a formatting tag. In this case, #text is wrapped by <span> tag,
+    // but this text should be wrapped by the formatting tag. See http://crbug.com/634482
+    bool shouldAppendParentTag = false;
+    if (!m_lastClosed) {
         m_lastClosed = StyledMarkupTraverser<Strategy>().traverse(firstNode, pastEnd);
+        if (m_lastClosed && m_lastClosed->isTextNode() && isPresentationalHTMLElement(m_lastClosed->parentNode())) {
+            m_lastClosed = m_lastClosed->parentElement();
+            shouldAppendParentTag = true;
+        }
+    }
+
     StyledMarkupTraverser<Strategy> traverser(&markupAccumulator, m_lastClosed);
     Node* lastClosed = traverser.traverse(firstNode, pastEnd);
 
@@ -240,6 +250,9 @@ String StyledMarkupSerializer<Strategy>::createMarkup()
             if (ancestor == m_highestNodeToBeSerialized)
                 break;
         }
+    } else if (shouldAppendParentTag) {
+        EditingStyle* style = traverser.createInlineStyleIfNeeded(*m_lastClosed);
+        traverser.wrapWithNode(*toContainerNode(m_lastClosed), style);
     }
 
     // FIXME: The interchange newline should be placed in the block that it's in, not after all of the content, unconditionally.
@@ -406,7 +419,7 @@ void StyledMarkupTraverser<Strategy>::appendStartMarkup(Node& node)
     if (!m_accumulator)
         return;
     switch (node.getNodeType()) {
-    case Node::TEXT_NODE: {
+    case Node::kTextNode: {
         Text& text = toText(node);
         if (text.parentElement() && isHTMLTextAreaElement(text.parentElement())) {
             m_accumulator->appendText(text);
@@ -424,7 +437,7 @@ void StyledMarkupTraverser<Strategy>::appendStartMarkup(Node& node)
         m_accumulator->appendTextWithInlineStyle(text, inlineStyle);
         break;
     }
-    case Node::ELEMENT_NODE: {
+    case Node::kElementNode: {
         Element& element = toElement(node);
         if ((element.isHTMLElement() && shouldAnnotate()) || shouldApplyWrappingStyle(element)) {
             EditingStyle* inlineStyle = createInlineStyle(element);

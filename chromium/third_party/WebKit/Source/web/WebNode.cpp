@@ -37,6 +37,7 @@
 #include "core/dom/NodeList.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/TagCollection.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/events/Event.h"
 #include "core/html/HTMLCollection.h"
@@ -158,7 +159,7 @@ bool WebNode::isTextNode() const
 
 bool WebNode::isCommentNode() const
 {
-    return m_private->getNodeType() == Node::COMMENT_NODE;
+    return m_private->getNodeType() == Node::kCommentNode;
 }
 
 bool WebNode::isFocusable() const
@@ -171,7 +172,8 @@ bool WebNode::isFocusable() const
 
 bool WebNode::isContentEditable() const
 {
-    return m_private->isContentEditable();
+    m_private->document().updateStyleAndLayoutTree();
+    return hasEditableStyle(*m_private);
 }
 
 bool WebNode::isInsideFocusableElementOrARIAWidget() const
@@ -191,7 +193,7 @@ bool WebNode::isDocumentNode() const
 
 bool WebNode::isDocumentTypeNode() const
 {
-    return m_private->getNodeType() == Node::DOCUMENT_TYPE_NODE;
+    return m_private->getNodeType() == Node::kDocumentTypeNode;
 }
 
 void WebNode::simulateClick()

@@ -56,9 +56,6 @@ class AppListTestViewDelegate : public AppListViewDelegate {
   void SetProfileByPath(const base::FilePath& profile_path) override;
   AppListModel* GetModel() override;
   SpeechUIModel* GetSpeechUI() override;
-  void GetShortcutPathForApp(
-      const std::string& app_id,
-      const base::Callback<void(const base::FilePath&)>& callback) override;
   void StartSearch() override {}
   void StopSearch() override {}
   void OpenSearchResult(SearchResult* result,
@@ -72,7 +69,6 @@ class AppListTestViewDelegate : public AppListViewDelegate {
   void ViewInitialized() override {}
   void Dismiss() override;
   void ViewClosing() override {}
-  void OpenSettings() override {}
   void OpenHelp() override {}
   void OpenFeedback() override {}
   void StartSpeechRecognition() override {}

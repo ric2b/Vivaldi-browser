@@ -44,7 +44,7 @@ class V4L2CaptureDelegate final
   static std::list<uint32_t> GetListOfUsableFourCcs(bool prefer_mjpeg);
 
   V4L2CaptureDelegate(
-      const VideoCaptureDevice::Name& device_name,
+      const VideoCaptureDeviceDescriptor& device_descriptor,
       const scoped_refptr<base::SingleThreadTaskRunner>& v4l2_task_runner,
       int power_line_frequency);
 
@@ -71,7 +71,7 @@ class V4L2CaptureDelegate final
                      const std::string& reason);
 
   const scoped_refptr<base::SingleThreadTaskRunner> v4l2_task_runner_;
-  const VideoCaptureDevice::Name device_name_;
+  const VideoCaptureDeviceDescriptor device_descriptor_;
   const int power_line_frequency_;
 
   // The following members are only known on AllocateAndStart().
@@ -86,6 +86,8 @@ class V4L2CaptureDelegate final
 
   bool is_capturing_;
   int timeout_count_;
+
+  base::TimeTicks first_ref_time_;
 
   // Clockwise rotation in degrees. This value should be 0, 90, 180, or 270.
   int rotation_;

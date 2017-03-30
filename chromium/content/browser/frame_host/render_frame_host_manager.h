@@ -49,6 +49,7 @@ class TestWebContents;
 class WebUIImpl;
 struct CommonNavigationParams;
 struct ContentSecurityPolicyHeader;
+struct FrameOwnerProperties;
 struct FrameReplicationState;
 
 // Manages RenderFrameHosts for a FrameTreeNode. It maintains a
@@ -442,10 +443,9 @@ class CONTENT_EXPORT RenderFrameHostManager
 
   // Called on a frame to notify it that its out-of-process parent frame
   // changed a property (such as allowFullscreen) on its <iframe> element.
-  // Sends updated WebFrameOwnerProperties to the RenderFrame and to all
-  // proxies, skipping the parent process.
-  void OnDidUpdateFrameOwnerProperties(
-      const blink::WebFrameOwnerProperties& properties);
+  // Sends updated FrameOwnerProperties to the RenderFrame and to all proxies,
+  // skipping the parent process.
+  void OnDidUpdateFrameOwnerProperties(const FrameOwnerProperties& properties);
 
   // Send updated origin to all frame proxies when the frame navigates to a new
   // origin.
@@ -494,8 +494,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   int GetProxyCount();
 
   // Sends an IPC message to every process in the FrameTree. This should only be
-  // called in the top-level RenderFrameHostManager.
-  void SendPageMessage(IPC::Message* msg);
+  // called in the top-level RenderFrameHostManager.  |instance_to_skip|, if
+  // not null, specifies the SiteInstance to which the message should not be
+  // sent.
+  void SendPageMessage(IPC::Message* msg, SiteInstance* instance_to_skip);
 
   // Returns a const reference to the map of proxy hosts. The keys are
   // SiteInstance IDs, the values are RenderFrameProxyHosts.
@@ -507,6 +509,10 @@ class CONTENT_EXPORT RenderFrameHostManager
   // SiteInstanceImpl::Observer
   void ActiveFrameCountIsZero(SiteInstanceImpl* site_instance) override;
   void RenderProcessGone(SiteInstanceImpl* site_instance) override;
+
+  // Cancels and destroys the pending or speculative RenderFrameHost if they
+  // match the provided |render_frame_host|.
+  void CancelPendingIfNecessary(RenderFrameHostImpl* render_frame_host);
 
   // Sets up the necessary state for a new RenderViewHost.  If |proxy| is not
   // null, it creates a RenderFrameProxy in the target renderer process which is
@@ -681,6 +687,11 @@ class CONTENT_EXPORT RenderFrameHostManager
   // above.
   bool InitRenderFrame(RenderFrameHostImpl* render_frame_host);
 
+  // Helper to reinitialize the RenderFrame, RenderView, and the opener chain
+  // for the provided |render_frame_host|.  Used when the |render_frame_host|
+  // needs to be reused for a new navigation, but it is not live.
+  bool ReinitializeRenderFrame(RenderFrameHostImpl* render_frame_host);
+
   // Makes the pending WebUI on the current RenderFrameHost active. Call this
   // when the current RenderFrameHost commits and it has a pending WebUI.
   void CommitPendingWebUI();
@@ -710,8 +721,7 @@ class CONTENT_EXPORT RenderFrameHostManager
   void DiscardUnusedFrame(
       std::unique_ptr<RenderFrameHostImpl> render_frame_host);
 
-  // Helper method to terminate the pending RenderFrameHost. The frame may be
-  // deleted immediately, or it may be kept around in hopes of later reuse.
+  // Terminates and deletes the pending RenderFrameHost.
   void CancelPending();
 
   // Clears pending_render_frame_host_, returning it to the caller for disposal.

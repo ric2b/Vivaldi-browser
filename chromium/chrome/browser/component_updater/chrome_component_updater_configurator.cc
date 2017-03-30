@@ -18,10 +18,12 @@
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/update_client/chrome_update_query_params_delegate.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/pref_names.h"
 #if defined(OS_WIN)
 #include "chrome/installer/util/google_update_settings.h"
 #endif
 #include "components/component_updater/configurator_impl.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -32,7 +34,8 @@ namespace {
 class ChromeConfigurator : public update_client::Configurator {
  public:
   ChromeConfigurator(const base::CommandLine* cmdline,
-                     net::URLRequestContextGetter* url_request_getter);
+                     net::URLRequestContextGetter* url_request_getter,
+                     PrefService* pref_service);
 
   // update_client::Configurator overrides.
   int InitialDelay() const override;
@@ -52,9 +55,10 @@ class ChromeConfigurator : public update_client::Configurator {
   net::URLRequestContextGetter* RequestContext() const override;
   scoped_refptr<update_client::OutOfProcessPatcher> CreateOutOfProcessPatcher()
       const override;
-  bool DeltasEnabled() const override;
-  bool UseBackgroundDownloader() const override;
-  bool UseCupSigning() const override;
+  bool EnabledDeltas() const override;
+  bool EnabledComponentUpdates() const override;
+  bool EnabledBackgroundDownloader() const override;
+  bool EnabledCupSigning() const override;
   scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunner()
       const override;
   PrefService* GetPrefService() const override;
@@ -63,6 +67,7 @@ class ChromeConfigurator : public update_client::Configurator {
   friend class base::RefCountedThreadSafe<ChromeConfigurator>;
 
   ConfiguratorImpl configurator_impl_;
+  PrefService* pref_service_;  // This member is not owned by this class.
 
   ~ChromeConfigurator() override {}
 };
@@ -72,8 +77,12 @@ class ChromeConfigurator : public update_client::Configurator {
 // a custom message signing protocol and it does not depend on using HTTPS.
 ChromeConfigurator::ChromeConfigurator(
     const base::CommandLine* cmdline,
-    net::URLRequestContextGetter* url_request_getter)
-    : configurator_impl_(cmdline, url_request_getter, false) {}
+    net::URLRequestContextGetter* url_request_getter,
+    PrefService* pref_service)
+    : configurator_impl_(cmdline, url_request_getter, false),
+      pref_service_(pref_service) {
+  DCHECK(pref_service_);
+}
 
 int ChromeConfigurator::InitialDelay() const {
   return configurator_impl_.InitialDelay();
@@ -151,16 +160,20 @@ ChromeConfigurator::CreateOutOfProcessPatcher() const {
   return make_scoped_refptr(new ChromeOutOfProcessPatcher);
 }
 
-bool ChromeConfigurator::DeltasEnabled() const {
-  return configurator_impl_.DeltasEnabled();
+bool ChromeConfigurator::EnabledDeltas() const {
+  return configurator_impl_.EnabledDeltas();
 }
 
-bool ChromeConfigurator::UseBackgroundDownloader() const {
-  return configurator_impl_.UseBackgroundDownloader();
+bool ChromeConfigurator::EnabledComponentUpdates() const {
+  return pref_service_->GetBoolean(prefs::kComponentUpdatesEnabled);
 }
 
-bool ChromeConfigurator::UseCupSigning() const {
-  return configurator_impl_.UseCupSigning();
+bool ChromeConfigurator::EnabledBackgroundDownloader() const {
+  return configurator_impl_.EnabledBackgroundDownloader();
+}
+
+bool ChromeConfigurator::EnabledCupSigning() const {
+  return configurator_impl_.EnabledCupSigning();
 }
 
 // Returns a task runner to run blocking tasks. The task runner continues to run
@@ -176,16 +189,24 @@ ChromeConfigurator::GetSequencedTaskRunner() const {
 }
 
 PrefService* ChromeConfigurator::GetPrefService() const {
-  return g_browser_process->local_state();
+  DCHECK(pref_service_);
+  return pref_service_;
 }
 
 }  // namespace
 
+void RegisterPrefsForChromeComponentUpdaterConfigurator(
+    PrefRegistrySimple* registry) {
+  // The component updates are enabled by default, if the preference is not set.
+  registry->RegisterBooleanPref(prefs::kComponentUpdatesEnabled, true);
+}
+
 scoped_refptr<update_client::Configurator>
 MakeChromeComponentUpdaterConfigurator(
     const base::CommandLine* cmdline,
-    net::URLRequestContextGetter* context_getter) {
-  return new ChromeConfigurator(cmdline, context_getter);
+    net::URLRequestContextGetter* context_getter,
+    PrefService* pref_service) {
+  return new ChromeConfigurator(cmdline, context_getter, pref_service);
 }
 
 }  // namespace component_updater

@@ -78,15 +78,6 @@ class UrlManager {
     private NotificationManagerProxy mNotificationManager;
     private PwsClient mPwsClient;
 
-    private final Comparator<String> mScanTimestampComparator = new Comparator<String>() {
-        @Override
-        public int compare(String url1, String url2) {
-            UrlInfo urlInfo1 = mUrlInfoMap.get(url1);
-            UrlInfo urlInfo2 = mUrlInfoMap.get(url2);
-            return Long.compare(urlInfo1.getScanTimestamp(), urlInfo2.getScanTimestamp());
-        }
-    };
-
     /**
      * Interface for observers that should be notified when the nearby URL list changes.
      */
@@ -103,6 +94,7 @@ class UrlManager {
      * Construct the UrlManager.
      * @param context An instance of android.content.Context
      */
+    @VisibleForTesting
     public UrlManager(Context context) {
         mContext = context;
         mNotificationManager = new NotificationManagerProxyImpl(
@@ -112,20 +104,35 @@ class UrlManager {
         mNearbyUrls = new HashSet<>();
         mResolvedUrls = new HashSet<>();
         mUrlInfoMap = new HashMap<>();
-        mUrlsSortedByTimestamp = new PriorityQueue<String>(1, mScanTimestampComparator);
+        mUrlsSortedByTimestamp = new PriorityQueue<String>(1, new Comparator<String>() {
+            @Override
+            public int compare(String url1, String url2) {
+                Long scanTimestamp1 = Long.valueOf(mUrlInfoMap.get(url1).getScanTimestamp());
+                Long scanTimestamp2 = Long.valueOf(mUrlInfoMap.get(url2).getScanTimestamp());
+                return scanTimestamp1.compareTo(scanTimestamp2);
+            }
+        });
         initSharedPreferences();
     }
 
     /**
      * Get a singleton instance of this class.
-     * @param context An instance of android.content.Context.
+     * @return A singleton instance of this class.
+     */
+    public static UrlManager getInstance() {
+        if (sInstance == null) {
+            sInstance = new UrlManager(ContextUtils.getApplicationContext());
+        }
+        return sInstance;
+    }
+
+    /**
+     * Get a singleton instance of this class.
+     * @param context unused
      * @return A singleton instance of this class.
      */
     public static UrlManager getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new UrlManager(context);
-        }
-        return sInstance;
+        return getInstance();
     }
 
     /**
@@ -166,21 +173,12 @@ class UrlManager {
         mNearbyUrls.add(urlInfo.getUrl());
         putCachedNearbyUrls();
 
-        if (!PhysicalWeb.isOnboarding(mContext) && !mResolvedUrls.contains(urlInfo.getUrl())) {
+        if (!PhysicalWeb.isOnboarding() && !mResolvedUrls.contains(urlInfo.getUrl())) {
             // We need to resolve the URL.
             resolveUrl(urlInfo);
             return;
         }
         registerNewDisplayableUrl(urlInfo);
-    }
-
-    /**
-     * Add a URL to the store of URLs.
-     */
-    // TODO(conleyo) we should remove this method after calling code only passes us a UrlInfo.
-    @VisibleForTesting
-    public void addUrl(String url) {
-        addUrl(new UrlInfo(url, -1.0, System.currentTimeMillis()));
     }
 
     /**
@@ -196,18 +194,9 @@ class UrlManager {
         putCachedNearbyUrls();
 
         // If there are no URLs nearby to display, clear the notification.
-        if (getUrls(PhysicalWeb.isOnboarding(mContext)).isEmpty()) {
+        if (getUrls(PhysicalWeb.isOnboarding()).isEmpty()) {
             clearNotification();
         }
-    }
-
-    /**
-     * Remove a URL to the store of URLs.
-     */
-    // TODO(conleyo) we should remove this method after calling code only passes us a UrlInfo.
-    @VisibleForTesting
-    public void removeUrl(String url) {
-        removeUrl(new UrlInfo(url));
     }
 
     /**
@@ -241,10 +230,16 @@ class UrlManager {
         Collections.sort(urlInfos, new Comparator<UrlInfo>() {
             @Override
             public int compare(UrlInfo urlInfo1, UrlInfo urlInfo2) {
-                return Double.compare(urlInfo1.getDistance(), urlInfo2.getDistance());
+                Double distance1 = Double.valueOf(urlInfo1.getDistance());
+                Double distance2 = Double.valueOf(urlInfo2.getDistance());
+                return distance1.compareTo(distance2);
             }
         });
         return urlInfos;
+    }
+
+    public UrlInfo getUrlInfoByUrl(String url) {
+        return mUrlInfoMap.get(url);
     }
 
     public Set<String> getNearbyUrls() {
@@ -320,7 +315,7 @@ class UrlManager {
         putCachedResolvedUrls();
 
         // If there are no URLs nearby to display, clear the notification.
-        if (getUrls(PhysicalWeb.isOnboarding(mContext)).isEmpty()) {
+        if (getUrls(PhysicalWeb.isOnboarding()).isEmpty()) {
             clearNotification();
         }
     }
@@ -481,18 +476,18 @@ class UrlManager {
             return;
         }
 
-        if (PhysicalWeb.isOnboarding(mContext)) {
-            if (PhysicalWeb.getOptInNotifyCount(mContext) < PhysicalWeb.OPTIN_NOTIFY_MAX_TRIES) {
+        if (PhysicalWeb.isOnboarding()) {
+            if (PhysicalWeb.getOptInNotifyCount() < PhysicalWeb.OPTIN_NOTIFY_MAX_TRIES) {
                 // high priority notification
                 createOptInNotification(true);
-                PhysicalWeb.recordOptInNotification(mContext);
+                PhysicalWeb.recordOptInNotification();
                 PhysicalWebUma.onOptInHighPriorityNotificationShown(mContext);
             } else {
                 // min priority notification
                 createOptInNotification(false);
                 PhysicalWebUma.onOptInMinPriorityNotificationShown(mContext);
             }
-        } else if (PhysicalWeb.isPhysicalWebPreferenceEnabled(mContext)) {
+        } else if (PhysicalWeb.isPhysicalWebPreferenceEnabled()) {
             createNotification();
         }
     }
@@ -578,7 +573,7 @@ class UrlManager {
         // Only trigger the notification if we know we didn't have a notification up already
         // (i.e., we have exactly 1 displayble URL) or this URL doesn't exist in the cache
         // (and hence the user hasn't swiped away a notification for this URL recently).
-        if (getUrls(PhysicalWeb.isOnboarding(mContext)).size() != 1
+        if (getUrls(PhysicalWeb.isOnboarding()).size() != 1
                 && urlInfo.hasBeenDisplayed()) {
             return;
         }

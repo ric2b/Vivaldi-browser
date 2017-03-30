@@ -155,15 +155,11 @@ class MenuModel;
 // Updates the tooltip with the download's path.
 - (void)updateToolTip;
 
-// Updates |progressView_| by calling setNeedsDisplay:YES.
-- (void)updateDownloadItemView;
-
 // Handling of dangerous downloads
 - (void)clearDangerousMode;
 - (BOOL)isDangerousMode;
 - (IBAction)saveDownload:(id)sender;
 - (IBAction)discardDownload:(id)sender;
-- (IBAction)dismissMaliciousDownload:(id)sender;
 - (IBAction)showContextMenu:(id)sender;
 
 @end

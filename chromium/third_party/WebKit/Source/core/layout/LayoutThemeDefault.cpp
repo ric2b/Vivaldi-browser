@@ -37,15 +37,6 @@
 
 namespace blink {
 
-enum PaddingType {
-    TopPadding,
-    RightPadding,
-    BottomPadding,
-    LeftPadding
-};
-
-static const int styledMenuListInternalPadding[4] = { 1, 4, 1, 4 };
-
 // These values all match Safari/Win.
 static const float defaultControlFontPixelSize = 13;
 static const float defaultCancelButtonSize = 9;
@@ -201,11 +192,6 @@ void LayoutThemeDefault::adjustSliderThumbSize(ComputedStyle& style) const
     }
 }
 
-void LayoutThemeDefault::setCaretBlinkInterval(double interval)
-{
-    m_caretBlinkInterval = interval;
-}
-
 void LayoutThemeDefault::setSelectionColors(
     unsigned activeBackgroundColor,
     unsigned activeForegroundColor,
@@ -286,7 +272,7 @@ double LayoutThemeDefault::caretBlinkInterval() const
     if (LayoutTestSupport::isRunningLayoutTest())
         return 0;
 
-    return m_caretBlinkInterval;
+    return LayoutTheme::caretBlinkInterval();
 }
 
 void LayoutThemeDefault::systemFont(CSSValueID systemFontID, FontStyle& fontStyle, FontWeight& fontWeight, float& fontSize, AtomicString& fontFamily) const
@@ -345,24 +331,27 @@ void LayoutThemeDefault::adjustMenuListButtonStyle(ComputedStyle& style, Element
     adjustMenuListStyle(style, e);
 }
 
-int LayoutThemeDefault::popupInternalPaddingLeft(const ComputedStyle& style) const
+// The following internal paddings are in addition to the user-supplied padding.
+// Matches the Firefox behavior.
+
+int LayoutThemeDefault::popupInternalPaddingStart(const ComputedStyle& style) const
 {
-    return menuListInternalPadding(style, LeftPadding);
+    return menuListInternalPadding(style, 4);
 }
 
-int LayoutThemeDefault::popupInternalPaddingRight(const ComputedStyle& style) const
+int LayoutThemeDefault::popupInternalPaddingEnd(const ComputedStyle& style) const
 {
-    return menuListInternalPadding(style, RightPadding);
+    return menuListInternalPadding(style, 4 + menuListArrowPaddingSize);
 }
 
 int LayoutThemeDefault::popupInternalPaddingTop(const ComputedStyle& style) const
 {
-    return menuListInternalPadding(style, TopPadding);
+    return menuListInternalPadding(style, 1);
 }
 
 int LayoutThemeDefault::popupInternalPaddingBottom(const ComputedStyle& style) const
 {
-    return menuListInternalPadding(style, BottomPadding);
+    return menuListInternalPadding(style, 1);
 }
 
 // static
@@ -371,21 +360,10 @@ void LayoutThemeDefault::setDefaultFontSize(int fontSize)
     LayoutThemeFontProvider::setDefaultFontSize(fontSize);
 }
 
-int LayoutThemeDefault::menuListInternalPadding(const ComputedStyle& style, int paddingType) const
+int LayoutThemeDefault::menuListInternalPadding(const ComputedStyle& style, int padding) const
 {
     if (style.appearance() == NoControlPart)
         return 0;
-    // This internal padding is in addition to the user-supplied padding.
-    // Matches the FF behavior.
-    int padding = styledMenuListInternalPadding[paddingType];
-
-    // Reserve the space for right arrow here. The rest of the padding is
-    // set by adjustMenuListStyle, since PopMenuWin.cpp uses the padding from
-    // LayoutMenuList to lay out the individual items in the popup.
-    const int barType = style.direction() == LTR ? RightPadding : LeftPadding;
-    if (paddingType == barType)
-        padding += menuListArrowPaddingSize;
-
     return padding * style.effectiveZoom();
 }
 

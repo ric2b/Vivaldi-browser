@@ -41,7 +41,6 @@ class CC_EXPORT ChannelMain {
   virtual void MainThreadHasStoppedFlingingOnImpl() = 0;
   virtual void SetInputThrottledUntilCommitOnImpl(bool is_throttled) = 0;
   virtual void SetDeferCommitsOnImpl(bool defer_commits) = 0;
-  virtual void FinishAllRenderingOnImpl(CompletionEvent* completion) = 0;
   virtual void SetVisibleOnImpl(bool visible) = 0;
   virtual void ReleaseOutputSurfaceOnImpl(CompletionEvent* completion) = 0;
   virtual void MainFrameWillHappenOnImplForTesting(
@@ -51,11 +50,12 @@ class CC_EXPORT ChannelMain {
   virtual void SetNeedsCommitOnImpl() = 0;
   virtual void BeginMainFrameAbortedOnImpl(
       CommitEarlyOutReason reason,
-      base::TimeTicks main_thread_start_time) = 0;
-  virtual void StartCommitOnImpl(CompletionEvent* completion,
-                                 LayerTreeHost* layer_tree_host,
-                                 base::TimeTicks main_thread_start_time,
-                                 bool hold_commit_for_activation) = 0;
+      base::TimeTicks main_thread_start_time,
+      std::vector<std::unique_ptr<SwapPromise>> swap_promises) = 0;
+  virtual void NotifyReadyToCommitOnImpl(CompletionEvent* completion,
+                                         LayerTreeHost* layer_tree_host,
+                                         base::TimeTicks main_thread_start_time,
+                                         bool hold_commit_for_activation) = 0;
 
   // Must be called before using the channel.
   virtual void SynchronouslyInitializeImpl(

@@ -12,7 +12,6 @@ import android.app.Instrumentation;
 import android.app.Instrumentation.ActivityMonitor;
 import android.app.Instrumentation.ActivityResult;
 import android.app.PendingIntent;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -56,6 +55,7 @@ import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabsOpenedFromExternalAppTest;
 import org.chromium.chrome.browser.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -89,25 +89,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * Instrumentation tests for app menu, context menu, and toolbar of a {@link CustomTabActivity}.
  */
 public class CustomTabActivityTest extends CustomTabActivityTestBase {
-
-    /**
-     * An empty {@link BroadcastReceiver} that exists only to make the PendingIntent to carry an
-     * explicit intent. Otherwise the framework will not send it after {@link PendingIntent#send()}.
-     */
-    public class DummyBroadcastReceiver extends BroadcastReceiver {
-        // The url has to be copied from the instrumentation class, because a BroadcastReceiver is
-        // deployed as a different package, and it cannot get access to data from the
-        // instrumentation package.
-        private static final String TEST_PAGE_COPY = "/chrome/test/data/android/google.html";
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            // Note: even if this assertion fails, the test might still pass, because
-            // BroadcastReceiver is not treated as part of the instrumentation test.
-            assertEquals(mTestServer.getURL(TEST_PAGE_COPY), intent.getDataString());
-        }
-    }
-
     private static final String READ_IT_LATER_FEATURE = "ReadItLaterInMenu";
     private static final int MAX_MENU_CUSTOM_ITEMS = 5;
     private static final int NUM_CHROME_MENU_ITEMS = 2;
@@ -181,11 +162,8 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
      * @return The pending intent associated with the menu entry.
      */
     private PendingIntent addMenuEntriesToIntent(Intent intent, int numEntries) {
-        Intent menuIntent = new Intent();
-        menuIntent.setClass(getInstrumentation().getContext(), DummyBroadcastReceiver.class);
-        menuIntent.setAction(TEST_ACTION);
         PendingIntent pi = PendingIntent.getBroadcast(getInstrumentation().getTargetContext(), 0,
-                menuIntent, 0);
+                new Intent(), 0);
         ArrayList<Bundle> menuItems = new ArrayList<Bundle>();
         for (int i = 0; i < numEntries; i++) {
             Bundle bundle = new Bundle();
@@ -206,15 +184,11 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
      * @return The {@link PendingIntent} that will be triggered when the action button is clicked.
      */
     private PendingIntent addActionButtonToIntent(Intent intent, Bitmap icon, String description) {
-        Intent actionIntent = new Intent();
-        actionIntent.setClass(getInstrumentation().getContext(), DummyBroadcastReceiver.class);
-        actionIntent.setAction(TEST_ACTION);
-
         Bundle bundle = new Bundle();
         bundle.putParcelable(CustomTabsIntent.KEY_ICON, icon);
         bundle.putString(CustomTabsIntent.KEY_DESCRIPTION, description);
         PendingIntent pi = PendingIntent.getBroadcast(getInstrumentation().getTargetContext(), 0,
-                actionIntent, 0);
+                new Intent(), 0);
         bundle.putParcelable(CustomTabsIntent.KEY_PENDING_INTENT, pi);
 
         intent.putExtra(CustomTabsIntent.EXTRA_ACTION_BUTTON_BUNDLE, bundle);
@@ -223,11 +197,8 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
 
     private Bundle makeBottomBarBundle(int id, Bitmap icon, String description) {
         Bundle bundle = new Bundle();
-        Intent testIntent = new Intent();
-        testIntent.setClass(getInstrumentation().getContext(), DummyBroadcastReceiver.class);
-        testIntent.setAction(TEST_ACTION);
         PendingIntent pi = PendingIntent.getBroadcast(getInstrumentation().getTargetContext(), 0,
-                testIntent, 0);
+                new Intent(), 0);
 
         bundle.putInt(CustomTabsIntent.KEY_ID, sIdToIncrement++);
         bundle.putString(CustomTabsIntent.KEY_DESCRIPTION, description);
@@ -797,39 +768,20 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
     @SmallTest
     public void testCallbacksAreSent() {
         final ArrayList<Integer> navigationEvents = new ArrayList<>();
-        final AtomicReference<Intent> intent = new AtomicReference<Intent>(null);
-        CustomTabsClient.bindCustomTabsService(getInstrumentation().getContext(),
-                getInstrumentation().getTargetContext().getPackageName(),
-                new CustomTabsServiceConnection() {
-                    @Override
-                    public void onServiceDisconnected(ComponentName name) {
-                    }
+        CustomTabsSession session = bindWithCallback(new CustomTabsCallback() {
+            @Override
+            public void onNavigationEvent(int navigationEvent, Bundle extras) {
+                navigationEvents.add(navigationEvent);
+            }
+        });
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.setData(Uri.parse(mTestPage));
+        intent.setComponent(new ComponentName(
+                getInstrumentation().getTargetContext(), ChromeLauncherActivity.class));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-                    @Override
-                    public void onCustomTabsServiceConnected(ComponentName name,
-                            CustomTabsClient client) {
-                        client.warmup(0);
-                        CustomTabsSession session = client.newSession(new CustomTabsCallback() {
-                            @Override
-                            public void onNavigationEvent(int navigationEvent, Bundle extras) {
-                                navigationEvents.add(navigationEvent);
-                            }
-                        });
-                        intent.set(new CustomTabsIntent.Builder(session).build().intent);
-                    }
-                });
         try {
-            CriteriaHelper.pollInstrumentationThread(new Criteria() {
-                @Override
-                public boolean isSatisfied() {
-                    return intent.get() != null;
-                }
-            });
-            intent.get().setData(Uri.parse(mTestPage));
-            intent.get().setComponent(new ComponentName(getInstrumentation().getTargetContext(),
-                    ChromeLauncherActivity.class));
-            intent.get().addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startCustomTabActivityWithIntent(intent.get());
+            startCustomTabActivityWithIntent(intent);
             CriteriaHelper.pollInstrumentationThread(new Criteria() {
                 @Override
                 public boolean isSatisfied() {
@@ -847,6 +799,46 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         }
         assertFalse(navigationEvents.contains(CustomTabsCallback.NAVIGATION_FAILED));
         assertFalse(navigationEvents.contains(CustomTabsCallback.NAVIGATION_ABORTED));
+    }
+
+    /**
+     * Tests that Time To First Contentful Paint is sent.
+     */
+    @SmallTest
+    public void testPageLoadMetricIsSent() {
+        Context context = getInstrumentation().getTargetContext().getApplicationContext();
+        CustomTabsConnection connection = CustomTabsConnection.getInstance((Application) context);
+        connection.enablePageLoadMetricsCallbacks();
+
+        final AtomicReference<Long> firstContentfulPaintMs = new AtomicReference<>(-1L);
+        CustomTabsCallback cb = new CustomTabsCallback() {
+            @Override
+            public void extraCallback(String callbackName, Bundle args) {
+                assertEquals(CustomTabsConnection.PAGE_LOAD_METRICS_CALLBACK, callbackName);
+                long value = args.getLong(PageLoadMetrics.FIRST_CONTENTFUL_PAINT, -1);
+                assertTrue(value > 0);
+                firstContentfulPaintMs.set(value);
+            }
+        };
+
+        CustomTabsSession session = bindWithCallback(cb);
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.setData(Uri.parse(mTestPage));
+        intent.setComponent(new ComponentName(
+                getInstrumentation().getTargetContext(), ChromeLauncherActivity.class));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        try {
+            startCustomTabActivityWithIntent(intent);
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return firstContentfulPaintMs.get() > 0;
+                }
+            });
+        } catch (InterruptedException e) {
+            fail();
+        }
     }
 
     /**
@@ -1069,9 +1061,13 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         } catch (InterruptedException e) {
             fail();
         }
-        assertFalse(
-                "Warmup() should have allocated a child connection",
-                mActivity.shouldAllocateChildConnection());
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                assertFalse("Warmup() should have allocated a child connection",
+                        mActivity.shouldAllocateChildConnection());
+            }
+        });
     }
 
     /**
@@ -1092,9 +1088,13 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         } catch (InterruptedException e) {
             fail();
         }
-        assertTrue(
-                "No spare renderer available, should allocate a child connection.",
-                mActivity.shouldAllocateChildConnection());
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                assertTrue("No spare renderer available, should allocate a child connection.",
+                        mActivity.shouldAllocateChildConnection());
+            }
+        });
     }
 
     /**
@@ -1114,9 +1114,13 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         } catch (InterruptedException e) {
             fail();
         }
-        assertFalse(
-                "Prerendering should have allocated a child connection",
-                mActivity.shouldAllocateChildConnection());
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                assertFalse("Prerendering should have allocated a child connection",
+                        mActivity.shouldAllocateChildConnection());
+            }
+        });
     }
 
     /**
@@ -1426,9 +1430,36 @@ public class CustomTabActivityTest extends CustomTabActivityTestBase {
         });
     }
 
+    private CustomTabsSession bindWithCallback(final CustomTabsCallback callback) {
+        final AtomicReference<CustomTabsSession> sessionReference = new AtomicReference<>(null);
+        CustomTabsClient.bindCustomTabsService(getInstrumentation().getContext(),
+                getInstrumentation().getTargetContext().getPackageName(),
+                new CustomTabsServiceConnection() {
+                    @Override
+                    public void onServiceDisconnected(ComponentName name) {}
+
+                    @Override
+                    public void onCustomTabsServiceConnected(
+                            ComponentName name, CustomTabsClient client) {
+                        sessionReference.set(client.newSession(callback));
+                    }
+                });
+        try {
+            CriteriaHelper.pollInstrumentationThread(new Criteria() {
+                @Override
+                public boolean isSatisfied() {
+                    return sessionReference.get() != null;
+                }
+            });
+        } catch (InterruptedException e) {
+            fail();
+        }
+        return sessionReference.get();
+    }
+
     /**
-     * A helper class to monitor sending status of a {@link PendingIntent}.
-     */
+      * A helper class to monitor sending status of a {@link PendingIntent}.
+      */
     private class OnFinishedForTest implements PendingIntent.OnFinished {
 
         private final PendingIntent mPi;

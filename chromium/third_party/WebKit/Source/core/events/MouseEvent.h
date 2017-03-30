@@ -61,7 +61,6 @@ public:
     ~MouseEvent() override;
 
     static unsigned short platformModifiersToButtons(unsigned modifiers);
-    static unsigned short buttonToButtons(short button);
 
     void initMouseEvent(ScriptState*, const AtomicString& type, bool canBubble, bool cancelable, AbstractView*,
         int detail, int screenX, int screenY, int clientX, int clientY,
@@ -92,13 +91,6 @@ public:
     int which() const final;
 
     EventDispatchMediator* createMediator() override;
-
-    enum class Buttons : unsigned {
-        None = 0,
-        Left = 1 << 0,
-        Right = 1 << 1,
-        Middle = 1 << 2
-    };
 
     DECLARE_VIRTUAL_TRACE();
 

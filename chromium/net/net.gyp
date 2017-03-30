@@ -85,13 +85,13 @@
       'target_name': 'net_quic_proto',
       'type': 'static_library',
       'sources': [
-        'quic/proto/cached_network_parameters.proto',
-        'quic/proto/source_address_token.proto',
+        'quic/core/proto/cached_network_parameters.proto',
+        'quic/core/proto/source_address_token.proto',
       ],
       'variables': {
         'enable_wexit_time_destructors': 1,
-        'proto_in_dir': 'quic/proto',
-        'proto_out_dir': 'net/quic/proto',
+        'proto_in_dir': 'quic/core/proto',
+        'proto_out_dir': 'net/quic/core/proto',
         'cc_generator_options': 'dllexport_decl=NET_EXPORT_PRIVATE:',
         'cc_include': 'net/base/net_export.h',
       },
@@ -117,7 +117,6 @@
             ['OS == "android"', {
               'sources': [
                 'base/net_string_util_icu_alternatives_android.cc',
-                'base/net_string_util_icu_alternatives_android.h',
               ],
             }],
             ['OS == "ios"', {
@@ -191,7 +190,6 @@
           'dependencies': [
             'epoll_quic_tools',
             'epoll_server',
-            'flip_in_mem_edsm_server_base',
           ],
           'sources': [
             '<@(net_linux_test_sources)',
@@ -346,8 +344,6 @@
               'dns/mdns_cache_unittest.cc',
               'dns/mdns_client_unittest.cc',
               'dns/mdns_query_unittest.cc',
-              'dns/record_parsed_unittest.cc',
-              'dns/record_rdata_unittest.cc',
             ],
         }],
         [ 'OS == "win"', {
@@ -580,6 +576,8 @@
         'http/http_stream_factory_test_util.h',
         'http/http_transaction_test_util.cc',
         'http/http_transaction_test_util.h',
+        'http/http_stream_factory_test_util.cc',
+        'http/http_stream_factory_test_util.h',
         'log/test_net_log.cc',
         'log/test_net_log.h',
         'log/test_net_log_entry.cc',
@@ -826,7 +824,7 @@
         'net_quic_proto',
       ],
       'sources': [
-	'tools/quic/chlo_extractor.h',
+        'tools/quic/chlo_extractor.h',
         'tools/quic/chlo_extractor.cc',
         'tools/quic/quic_client_base.cc',
         'tools/quic/quic_client_base.h',
@@ -841,6 +839,8 @@
         'tools/quic/quic_process_packet_interface.h',
         'tools/quic/quic_simple_client.cc',
         'tools/quic/quic_simple_client.h',
+        'tools/quic/quic_simple_dispatcher.cc',
+        'tools/quic/quic_simple_dispatcher.h',
         'tools/quic/quic_simple_per_connection_packet_writer.cc',
         'tools/quic/quic_simple_per_connection_packet_writer.h',
         'tools/quic/quic_simple_server.cc',
@@ -927,6 +927,7 @@
             'mojom_typemaps': [
               '../url/mojo/gurl.typemap',
             ],
+            'use_new_wrapper_types': 'false',
           },
           'includes': [
             '../mojo/mojom_bindings_generator.gypi',
@@ -1018,6 +1019,8 @@
             'tools/cert_verify_tool/cert_verify_tool_util.h',
             'tools/cert_verify_tool/verify_using_cert_verify_proc.cc',
             'tools/cert_verify_tool/verify_using_cert_verify_proc.h',
+            'tools/cert_verify_tool/verify_using_path_builder.cc',
+            'tools/cert_verify_tool/verify_using_path_builder.h',
           ],
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
           'msvs_disabled_warnings': [4267, ],
@@ -1138,15 +1141,6 @@
             'net',
             'net_with_v8',
           ],
-          'conditions': [
-            [ 'use_glib == 1', {
-                'dependencies': [
-                  '../build/linux/system.gyp:gconf',
-                  '../build/linux/system.gyp:gio',
-                ],
-              },
-            ],
-          ],
           'sources': [
             'tools/net_watcher/net_watcher.cc',
           ],
@@ -1259,89 +1253,6 @@
           ],
         },
         {
-          'target_name': 'flip_in_mem_edsm_server_base',
-          'type': 'static_library',
-          'cflags': [
-            '-Wno-deprecated',
-          ],
-          'dependencies': [
-            '../base/base.gyp:base',
-            '../third_party/boringssl/boringssl.gyp:boringssl',
-            'balsa',
-            'epoll_server',
-            'net',
-          ],
-          'sources': [
-            'tools/flip_server/acceptor_thread.cc',
-            'tools/flip_server/acceptor_thread.h',
-            'tools/flip_server/constants.h',
-            'tools/flip_server/flip_config.cc',
-            'tools/flip_server/flip_config.h',
-            'tools/flip_server/http_interface.cc',
-            'tools/flip_server/http_interface.h',
-            'tools/flip_server/mem_cache.cc',
-            'tools/flip_server/mem_cache.h',
-            'tools/flip_server/output_ordering.cc',
-            'tools/flip_server/output_ordering.h',
-            'tools/flip_server/ring_buffer.cc',
-            'tools/flip_server/ring_buffer.h',
-            'tools/flip_server/sm_connection.cc',
-            'tools/flip_server/sm_connection.h',
-            'tools/flip_server/sm_interface.h',
-            'tools/flip_server/spdy_interface.cc',
-            'tools/flip_server/spdy_interface.h',
-            'tools/flip_server/spdy_ssl.cc',
-            'tools/flip_server/spdy_ssl.h',
-            'tools/flip_server/spdy_util.cc',
-            'tools/flip_server/spdy_util.h',
-            'tools/flip_server/streamer_interface.cc',
-            'tools/flip_server/streamer_interface.h',
-            'tools/flip_server/tcp_socket_util.cc',
-            'tools/flip_server/tcp_socket_util.h',
-            'tools/flip_server/url_to_filename_encoder.cc',
-            'tools/flip_server/url_to_filename_encoder.h',
-            'tools/flip_server/url_utilities.cc',
-            'tools/flip_server/url_utilities.h',
-          ],
-        },
-        {
-          'target_name': 'flip_in_mem_edsm_server_unittests',
-          'type': 'executable',
-          'dependencies': [
-              '../testing/gtest.gyp:gtest',
-              '../testing/gmock.gyp:gmock',
-              '../third_party/boringssl/boringssl.gyp:boringssl',
-              'flip_in_mem_edsm_server_base',
-              'net',
-              'net_test_support',
-          ],
-          'sources': [
-            'tools/flip_server/flip_test_utils.cc',
-            'tools/flip_server/flip_test_utils.h',
-            'tools/flip_server/http_interface_test.cc',
-            'tools/flip_server/mem_cache_test.cc',
-            'tools/flip_server/run_all_tests.cc',
-            'tools/flip_server/spdy_interface_test.cc',
-            'tools/flip_server/url_to_filename_encoder_unittest.cc',
-            'tools/flip_server/url_utilities_unittest.cc',
-          ],
-        },
-        {
-          'target_name': 'flip_in_mem_edsm_server',
-          'type': 'executable',
-          'cflags': [
-            '-Wno-deprecated',
-          ],
-          'dependencies': [
-            '../base/base.gyp:base',
-            'flip_in_mem_edsm_server_base',
-            'net',
-          ],
-          'sources': [
-            'tools/flip_server/flip_in_mem_edsm_server.cc',
-          ],
-        },
-        {
           'target_name': 'epoll_quic_tools',
           'type': 'static_library',
           'dependencies': [
@@ -1409,6 +1320,7 @@
           'target_name': 'net_jni_headers',
           'type': 'none',
           'sources': [
+            'android/java/src/org/chromium/net/AndroidCellularSignalStrength.java',
             'android/java/src/org/chromium/net/AndroidCertVerifyResult.java',
             'android/java/src/org/chromium/net/AndroidKeyStore.java',
             'android/java/src/org/chromium/net/AndroidNetworkLibrary.java',
@@ -1446,6 +1358,7 @@
           },
           'dependencies': [
             '../base/base.gyp:base',
+            'cellular_signal_strength_error_java',
             'cert_verify_status_android_java',
             'certificate_mime_types_java',
             'network_change_notifier_types_java',
@@ -1574,6 +1487,14 @@
             'template_deps': ['base/net_error_list.h'],
           },
           'includes': [ '../build/android/java_cpp_template.gypi' ],
+        },
+        {
+          'target_name': 'cellular_signal_strength_error_java',
+          'type': 'none',
+          'variables': {
+            'source_file': 'android/cellular_signal_strength.cc',
+          },
+          'includes': [ '../build/android/java_cpp_enum.gypi' ],
         },
         {
           'target_name': 'certificate_mime_types_java',

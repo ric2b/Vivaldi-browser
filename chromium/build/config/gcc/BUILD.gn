@@ -112,7 +112,9 @@ config("executable_ldconfig") {
       #
       # Newer binutils don't set DT_RPATH unless you disable "new" dtags
       # and the new DT_RUNPATH doesn't work without --no-as-needed flag.
-      "-Wl,--disable-new-dtags",
+
+      # VB-22261 This overrides our additional --enable-new-dtags
+      # "-Wl,--disable-new-dtags",
     ]
   }
 }

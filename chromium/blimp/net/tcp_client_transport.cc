@@ -5,12 +5,13 @@
 #include "blimp/net/tcp_client_transport.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "blimp/net/blimp_connection_statistics.h"
+#include "blimp/net/message_port.h"
 #include "blimp/net/stream_socket_connection.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/stream_socket.h"
@@ -19,14 +20,10 @@
 namespace blimp {
 
 TCPClientTransport::TCPClientTransport(const net::IPEndPoint& ip_endpoint,
-                                       BlimpConnectionStatistics* statistics,
                                        net::NetLog* net_log)
     : ip_endpoint_(ip_endpoint),
-      blimp_connection_statistics_(statistics),
       net_log_(net_log),
-      socket_factory_(net::ClientSocketFactory::GetDefaultFactory()) {
-  DCHECK(blimp_connection_statistics_);
-}
+      socket_factory_(net::ClientSocketFactory::GetDefaultFactory()) {}
 
 TCPClientTransport::~TCPClientTransport() {}
 
@@ -54,11 +51,10 @@ void TCPClientTransport::Connect(const net::CompletionCallback& callback) {
   OnTCPConnectComplete(result);
 }
 
-std::unique_ptr<BlimpConnection> TCPClientTransport::TakeConnection() {
+std::unique_ptr<MessagePort> TCPClientTransport::TakeMessagePort() {
   DCHECK(connect_callback_.is_null());
   DCHECK(socket_);
-  return base::WrapUnique(new StreamSocketConnection(
-      std::move(socket_), blimp_connection_statistics_));
+  return MessagePort::CreateForStreamSocketWithCompression(std::move(socket_));
 }
 
 const char* TCPClientTransport::GetName() const {

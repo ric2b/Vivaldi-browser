@@ -12,6 +12,7 @@
 #include <vector>
 #include "app/vivaldi_constants.h"
 #include "base/files/file_util.h"
+#include "base/i18n/time_formatting.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,6 +24,7 @@
 #include "components/sessions/core/session_service_commands.h"
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/schema/vivaldi_sessions.h"
 #include "ui/vivaldi_session_service.h"
 
 using extensions::vivaldi::sessions_private::SessionItem;
@@ -154,6 +156,10 @@ bool SessionsPrivateGetAllFunction::RunAsync() {
       filename.erase(ext, std::string::npos);
     }
     new_item->name.assign(filename);
+
+    base::FileEnumerator::FileInfo info = iter.GetInfo();
+    base::Time modified = info.GetLastModifiedTime();
+    new_item->create_date_js = modified.ToJsTime();
 
     sessions.push_back(std::move(*new_item));
   }

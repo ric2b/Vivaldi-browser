@@ -66,8 +66,8 @@ public:
     IntSize sliderTickSize() const override;
     int sliderTickOffsetFromTrackCenter() const override;
 
-    int popupInternalPaddingLeft(const ComputedStyle&) const override;
-    int popupInternalPaddingRight(const ComputedStyle&) const override;
+    int popupInternalPaddingStart(const ComputedStyle&) const override;
+    int popupInternalPaddingEnd(const ComputedStyle&) const override;
     int popupInternalPaddingTop(const ComputedStyle&) const override;
     int popupInternalPaddingBottom(const ComputedStyle&) const override;
 
@@ -131,10 +131,6 @@ public:
     // A view associated to the contained document. Subclasses may not have such a view and return a fake.
     NSView* documentViewFor(const LayoutObject&) const;
 
-    int minimumProgressBarHeight(const ComputedStyle&) const;
-    const IntSize* progressBarSizes() const;
-    const int* progressBarMargins(NSControlSize) const;
-
     void updateActiveState(NSCell*, const LayoutObject&);
 
     // We estimate the animation rate of a Mac OS X progress bar is 33 fps.
@@ -147,8 +143,8 @@ public:
     static constexpr float menuListBaseArrowHeight = 4.0f;
     static constexpr float menuListBaseArrowWidth = 5.0f;
     static constexpr float menuListBaseSpaceBetweenArrows = 2.0f;
-    static const int menuListArrowPaddingLeft = 4;
-    static const int menuListArrowPaddingRight = 4;
+    static const int menuListArrowPaddingStart = 4;
+    static const int menuListArrowPaddingEnd = 4;
     static const int sliderThumbWidth = 15;
     static const int sliderThumbHeight = 15;
     static const int sliderThumbShadowBlur = 1;
@@ -165,7 +161,11 @@ protected:
 
     bool shouldUseFallbackTheme(const ComputedStyle&) const override;
 
+    void adjustProgressBarBounds(ComputedStyle&) const override;
+
 private:
+    const int* progressBarHeights() const;
+    const int* progressBarMargins(NSControlSize) const;
     String fileListNameForWidth(Locale&, const FileList*, const Font&, int width) const override;
     String extraDefaultStyleSheet() override;
     bool themeDrawsFocusRing(const ComputedStyle&) const override;

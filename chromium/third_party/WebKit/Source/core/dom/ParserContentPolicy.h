@@ -30,7 +30,6 @@ namespace blink {
 
 enum ParserContentPolicy {
     DisallowScriptingAndPluginContent,
-    DisallowScriptingContent,
     AllowScriptingContent,
     AllowScriptingContentAndDoNotMarkAlreadyStarted,
 };
@@ -38,13 +37,6 @@ enum ParserContentPolicy {
 static inline bool scriptingContentIsAllowed(ParserContentPolicy parserContentPolicy)
 {
     return parserContentPolicy == AllowScriptingContent || parserContentPolicy == AllowScriptingContentAndDoNotMarkAlreadyStarted;
-}
-
-static inline ParserContentPolicy disallowScriptingContent(ParserContentPolicy parserContentPolicy)
-{
-    if (!scriptingContentIsAllowed(parserContentPolicy))
-        return parserContentPolicy;
-    return DisallowScriptingContent;
 }
 
 static inline bool pluginContentIsAllowed(ParserContentPolicy parserContentPolicy)

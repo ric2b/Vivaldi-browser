@@ -276,15 +276,6 @@ class ASH_EXPORT WindowState {
     can_consume_system_keys_ = can_consume_system_keys;
   }
 
-  // True if this window has requested that the top-row keys (back, forward,
-  // brightness, volume) should be treated as function keys.
-  bool top_row_keys_are_function_keys() const {
-    return top_row_keys_are_function_keys_;
-  }
-  void set_top_row_keys_are_function_keys(bool value) {
-    top_row_keys_are_function_keys_ = value;
-  }
-
   // True if the window is in "immersive full screen mode" which is slightly
   // different from the normal fullscreen mode by allowing the user to reveal
   // the top portion of the window through a touch / mouse gesture. It might
@@ -391,7 +382,6 @@ class ASH_EXPORT WindowState {
   bool panel_attached_;
   bool ignored_by_shelf_;
   bool can_consume_system_keys_;
-  bool top_row_keys_are_function_keys_;
   std::unique_ptr<DragDetails> drag_details_;
 
   bool unminimize_to_restore_bounds_;

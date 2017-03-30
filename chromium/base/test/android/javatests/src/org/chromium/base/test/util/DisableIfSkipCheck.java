@@ -28,11 +28,22 @@ public class DisableIfSkipCheck extends SkipCheck {
         if (method == null) return true;
 
         for (DisableIf.Build v : getAnnotations(method, DisableIf.Build.class)) {
-            if (abi(v) && hardware(v) && sdk(v)) {
+            if (abi(v) && hardware(v) && product(v) && sdk(v)) {
                 if (!v.message().isEmpty()) {
                     Log.i(TAG, "%s is disabled: %s", testCase.toString(), v.message());
                 }
                 return true;
+            }
+        }
+
+        for (DisableIf.Device d : getAnnotations(method, DisableIf.Device.class)) {
+            for (String deviceType : d.type()) {
+                if (deviceTypeApplies(deviceType)) {
+                    Log.i(TAG, "Test " + testCase.getClass().getName() + "#"
+                            + testCase.getName() + " disabled because of "
+                            + d);
+                    return true;
+                }
             }
         }
 
@@ -64,6 +75,10 @@ public class DisableIfSkipCheck extends SkipCheck {
     private boolean sdk(DisableIf.Build v) {
         return Build.VERSION.SDK_INT > v.sdk_is_greater_than()
                 && Build.VERSION.SDK_INT < v.sdk_is_less_than();
+    }
+
+    protected boolean deviceTypeApplies(String type) {
+        return false;
     }
 
 }

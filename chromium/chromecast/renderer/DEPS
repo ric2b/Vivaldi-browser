@@ -4,10 +4,12 @@ include_rules = [
   "+chromecast/media",
   "+components/cdm/renderer",
   "+components/network_hints/renderer",
+  "+content/public/common",
   "+content/public/renderer",
   "+media/base",
   "+media/media_features.h",
   "+media/renderers",
+  "+services/shell/public",
   "+third_party/WebKit/public/platform",
   "+third_party/WebKit/public/web",
 ]

@@ -66,6 +66,15 @@ class Toolchain : public Item {
   static const char* kToolCopyBundleData;
   static const char* kToolCompileXCAssets;
 
+  // The Settings of an Item is always the context in which the Item was
+  // defined. For a toolchain this is confusing because this is NOT the
+  // settings object that applies to the things in the toolchain.
+  //
+  // To get the Settings object corresponding to objects loaded in the context
+  // of this toolchain (probably what you want instead), see
+  // Loader::GetToolchainSettings(). Many toolchain objects may be created in a
+  // given build, but only a few might be used, and the Loader is in charge of
+  // this process.
   Toolchain(const Settings* settings, const Label& label);
   ~Toolchain() override;
 
@@ -115,15 +124,8 @@ class Toolchain : public Item {
     return substitution_bits_;
   }
 
-  void set_concurrent_links(int cl) { concurrent_links_ = cl; }
-  int concurrent_links() const { return concurrent_links_; }
-
  private:
   std::unique_ptr<Tool> tools_[TYPE_NUMTYPES];
-
-  // How many links to run in parallel. Only the default toolchain's version of
-  // this variable applies.
-  int concurrent_links_;
 
   bool setup_complete_;
 

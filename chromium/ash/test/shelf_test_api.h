@@ -5,7 +5,7 @@
 #ifndef ASH_TEST_SHELF_TEST_API_H_
 #define ASH_TEST_SHELF_TEST_API_H_
 
-#include "ash/shelf/shelf.h"
+#include "ash/common/shelf/shelf.h"
 #include "base/macros.h"
 
 namespace ash {
@@ -20,12 +20,6 @@ class ShelfTestAPI {
   WmShelf* wm_shelf() { return shelf_->wm_shelf_; }
 
   ShelfView* shelf_view() { return shelf_->shelf_view_; }
-
-  ShelfLockingManager* shelf_locking_manager() {
-    return &shelf_->shelf_locking_manager_;
-  }
-
-  void set_delegate(ShelfDelegate* delegate) { shelf_->delegate_ = delegate; }
 
  private:
   Shelf* shelf_;

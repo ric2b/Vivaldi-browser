@@ -11,9 +11,8 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/common/instant_types.h"
-#include "chrome/common/ntp_logging_events.h"
-#include "chrome/common/search_provider.h"
+#include "chrome/common/search/instant_types.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "chrome/common/web_application_info.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -42,6 +41,7 @@ enum class ChromeViewHostMsg_GetPluginInfo_Status {
   kOutdatedBlocked,
   kOutdatedDisallowed,
   kPlayImportantContent,
+  kComponentUpdateRequired,
   kUnauthorized,
 };
 
@@ -69,11 +69,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(ChromeViewHostMsg_GetPluginInfo_Status,
 IPC_ENUM_TRAITS_MAX_VALUE(OmniboxFocusChangeReason,
                           OMNIBOX_FOCUS_CHANGE_REASON_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(OmniboxFocusState, OMNIBOX_FOCUS_STATE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(search_provider::OSDDType,
-                          search_provider::OSDD_TYPE_LAST)
-IPC_ENUM_TRAITS_MIN_MAX_VALUE(search_provider::InstallState,
-                              search_provider::DENIED,
-                              search_provider::INSTALLED_STATE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageAlignment,
                           THEME_BKGRND_IMAGE_ALIGN_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(ThemeBackgroundImageTiling, THEME_BKGRND_IMAGE_LAST)
@@ -165,6 +160,9 @@ IPC_STRUCT_TRAITS_END()
 IPC_ENUM_TRAITS_MAX_VALUE(NTPLoggingEventType,
                           NTP_EVENT_TYPE_LAST)
 
+IPC_ENUM_TRAITS_MAX_VALUE(NTPLoggingTileSource,
+                          NTPLoggingTileSource::LAST)
+
 IPC_ENUM_TRAITS_MAX_VALUE(WebApplicationInfo::MobileCapable,
                           WebApplicationInfo::MOBILE_CAPABLE_APPLE)
 
@@ -213,18 +211,12 @@ IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetPageSequenceNumber,
 
 IPC_MESSAGE_ROUTED0(ChromeViewMsg_DetermineIfPageSupportsInstant)
 
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_SearchBoxSetDisplayInstantResults,
-                    bool /* display_instant_results */)
-
 IPC_MESSAGE_ROUTED2(ChromeViewMsg_SearchBoxFocusChanged,
                     OmniboxFocusState /* new_focus_state */,
                     OmniboxFocusChangeReason /* reason */)
 
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SearchBoxMostVisitedItemsChanged,
                     std::vector<InstantMostVisitedItem> /* items */)
-
-IPC_MESSAGE_ROUTED1(ChromeViewMsg_SearchBoxPromoInformation,
-                    bool /* is_app_launcher_enabled */)
 
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SearchBoxSetInputInProgress,
                     bool /* input_in_progress */)
@@ -417,6 +409,18 @@ IPC_MESSAGE_ROUTED1(ChromeViewMsg_ErrorDownloadingPlugin,
                     std::string /* message */)
 #endif  // defined(ENABLE_PLUGIN_INSTALLATION)
 
+// Notifies a missing plugin placeholder that we have finished component-
+// updating the plug-in.
+IPC_MESSAGE_ROUTED0(ChromeViewMsg_PluginComponentUpdateSuccess)
+
+// Notifies a missing plugin placeholder that we have failed to component-update
+// the plug-in.
+IPC_MESSAGE_ROUTED0(ChromeViewMsg_PluginComponentUpdateFailure)
+
+// Notifies a missing plugin placeholder that we have started the component
+// download.
+IPC_MESSAGE_ROUTED0(ChromeViewMsg_PluginComponentUpdateDownloading)
+
 // Notifies a missing plugin placeholder that the user cancelled downloading
 // the plugin.
 IPC_MESSAGE_ROUTED0(ChromeViewMsg_CancelledDownloadingPlugin)
@@ -451,15 +455,14 @@ IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_PageHasOSDD,
                     GURL /* page_url */,
                     GURL /* osdd_url */)
 
-// Find out if the given url's security origin is installed as a search
-// provider.
-IPC_SYNC_MESSAGE_ROUTED2_1(ChromeViewHostMsg_GetSearchProviderInstallState,
-                           GURL /* page url */,
-                           GURL /* inquiry url */,
-                           search_provider::InstallState /* install */)
-
 // Notifies when a plugin couldn't be loaded because it's outdated.
 IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_BlockedOutdatedPlugin,
+                    int /* placeholder ID */,
+                    std::string /* plugin group identifier */)
+
+// Notifies when a plugin couldn't be loaded because it requires a component
+// update.
+IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_BlockedComponentUpdatedPlugin,
                     int /* placeholder ID */,
                     std::string /* plugin group identifier */)
 
@@ -488,14 +491,14 @@ IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_LogEvent,
 IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_LogMostVisitedImpression,
                     int /* page_seq_no */,
                     int /* position */,
-                    base::string16 /* provider */)
+                    NTPLoggingTileSource /* tile_source */)
 
 // Logs a navigation on one of the Most Visited tile on the InstantExtended
 // New Tab Page.
 IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_LogMostVisitedNavigation,
                     int /* page_seq_no */,
                     int /* position */,
-                    base::string16 /* provider */)
+                    NTPLoggingTileSource /* tile_source */)
 
 // The Instant page asks whether the user syncs its history.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_HistorySyncCheck,

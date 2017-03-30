@@ -119,7 +119,7 @@ static bool dragTypeIsValid(DragSourceAction action)
 static PlatformMouseEvent createMouseEvent(DragData* dragData)
 {
     return PlatformMouseEvent(dragData->clientPosition(), dragData->globalPosition(),
-        LeftButton, PlatformEvent::MouseMoved, 0,
+        WebPointerProperties::Button::Left, PlatformEvent::MouseMoved, 0,
         static_cast<PlatformEvent::Modifiers>(dragData->modifiers()),
         PlatformMouseEvent::RealOrIndistinguishable, monotonicallyIncreasingTime());
 }
@@ -424,7 +424,7 @@ DragOperation DragController::operationForLoad(DragData* dragData)
     ASSERT(dragData);
     Document* doc = m_page->deprecatedLocalMainFrame()->documentAtPoint(dragData->clientPosition());
 
-    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || doc->hasEditableStyle()))
+    if (doc && (m_didInitiateDrag || doc->isPluginDocument() || hasEditableStyle(*doc)))
         return DragOperationNone;
     return dragOperation(dragData);
 }
@@ -564,9 +564,9 @@ bool DragController::canProcessDrag(DragData* dragData)
 
     if (isHTMLPlugInElement(*result.innerNode())) {
         HTMLPlugInElement* plugin = toHTMLPlugInElement(result.innerNode());
-        if (!plugin->canProcessDrag() && !result.innerNode()->hasEditableStyle())
+        if (!plugin->canProcessDrag() && !hasEditableStyle(*result.innerNode()))
             return false;
-    } else if (!result.innerNode()->hasEditableStyle()) {
+    } else if (!hasEditableStyle(*result.innerNode())) {
         return false;
     }
 
@@ -584,7 +584,7 @@ static DragOperation defaultOperationForDrag(DragOperation srcOpMask)
         return DragOperationCopy;
     if (srcOpMask == DragOperationNone)
         return DragOperationNone;
-    if (srcOpMask & DragOperationMove || srcOpMask & DragOperationGeneric)
+    if (srcOpMask & DragOperationMove)
         return DragOperationMove;
     if (srcOpMask & DragOperationCopy)
         return DragOperationCopy;
@@ -718,7 +718,8 @@ static Image* getImage(Element* element)
 
 static void prepareDataTransferForImageDrag(LocalFrame* source, DataTransfer* dataTransfer, Element* node, const KURL& linkURL, const KURL& imageURL, const String& label)
 {
-    if (node->isContentRichlyEditable()) {
+    node->document().updateStyleAndLayoutTree();
+    if (hasRichlyEditableStyle(*node)) {
         Range* range = source->document()->createRange();
         range->selectNode(node, ASSERT_NO_EXCEPTION);
         source->selection().setSelection(VisibleSelection(EphemeralRange(range)));

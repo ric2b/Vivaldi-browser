@@ -14,10 +14,12 @@ addEventListener('DOMContentLoaded', resolve);
 }());window.Polymer = {
 Settings: function () {
 var settings = window.Polymer || {};
+if (!settings.noUrlSettings) {
 var parts = location.search.slice(1).split('&');
 for (var i = 0, o; i < parts.length && (o = parts[i]); i++) {
 o = o.split('=');
 o[0] && (settings[o[0]] = o[1] || true);
+}
 }
 settings.wantShadow = settings.dom === 'shadow';
 settings.hasShadow = Boolean(Element.prototype.createShadowRoot);
@@ -28,6 +30,8 @@ settings.useNativeImports = settings.hasNativeImports;
 settings.useNativeCustomElements = !window.CustomElements || window.CustomElements.useNative;
 settings.useNativeShadow = settings.useShadow && settings.nativeShadow;
 settings.usePolyfillProto = !settings.useNativeCustomElements && !Object.__proto__;
+settings.hasNativeCSSProperties = !navigator.userAgent.match('AppleWebKit/601') && window.CSS && CSS.supports && CSS.supports('box-shadow', '0 0 0 var(--foo)');
+settings.useNativeCSSProperties = settings.hasNativeCSSProperties && settings.lazyRegister && settings.useNativeCSSProperties;
 return settings;
 }()
 };(function () {
@@ -115,6 +119,9 @@ fn,
 args
 ]);
 },
+hasRendered: function () {
+return this._ready;
+},
 _watchNextRender: function () {
 if (!this._waitingNextRender) {
 this._waitingNextRender = true;
@@ -160,8 +167,14 @@ _addFeature: function (feature) {
 this.extend(this, feature);
 },
 registerCallback: function () {
+if (settings.lazyRegister === 'max') {
+if (this.beforeRegister) {
+this.beforeRegister();
+}
+} else {
 this._desugarBehaviors();
 this._doBehavior('beforeRegister');
+}
 this._registerFeatures();
 if (!settings.lazyRegister) {
 this.ensureRegisterFinished();
@@ -180,7 +193,11 @@ ensureRegisterFinished: function () {
 this._ensureRegisterFinished(this);
 },
 _ensureRegisterFinished: function (proto) {
-if (proto.__hasRegisterFinished !== proto.is) {
+if (proto.__hasRegisterFinished !== proto.is || !proto.is) {
+if (settings.lazyRegister === 'max') {
+proto._desugarBehaviors();
+proto._doBehaviorOnly('beforeRegister');
+}
 proto.__hasRegisterFinished = proto.is;
 if (proto._finishRegisterFeatures) {
 proto._finishRegisterFeatures();
@@ -216,14 +233,14 @@ newValue
 _attributeChangedImpl: function (name) {
 this._setAttributeToProperty(this, name);
 },
-extend: function (prototype, api) {
-if (prototype && api) {
-var n$ = Object.getOwnPropertyNames(api);
+extend: function (target, source) {
+if (target && source) {
+var n$ = Object.getOwnPropertyNames(source);
 for (var i = 0, n; i < n$.length && (n = n$[i]); i++) {
-this.copyOwnProperty(n, api, prototype);
+this.copyOwnProperty(n, source, target);
 }
 }
-return prototype || api;
+return target || source;
 },
 mixin: function (target, source) {
 for (var i in source) {
@@ -414,6 +431,11 @@ for (var i = 0; i < this.behaviors.length; i++) {
 this._invokeBehavior(this.behaviors[i], name, args);
 }
 this._invokeBehavior(this, name, args);
+},
+_doBehaviorOnly: function (name, args) {
+for (var i = 0; i < this.behaviors.length; i++) {
+this._invokeBehavior(this.behaviors[i], name, args);
+}
 },
 _invokeBehavior: function (b, name, args) {
 var fn = b[name];
@@ -666,7 +688,7 @@ default:
 return value != null ? value : undefined;
 }
 }
-});Polymer.version = "1.5.0";Polymer.Base._addFeature({
+});Polymer.version = "1.6.1";Polymer.Base._addFeature({
 _registerFeatures: function () {
 this._prepIs();
 this._prepBehaviors();

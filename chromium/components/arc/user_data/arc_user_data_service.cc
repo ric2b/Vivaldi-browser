@@ -4,6 +4,10 @@
 
 #include "components/arc/user_data/arc_user_data_service.h"
 
+#include <utility>
+
+#include "base/command_line.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/prefs/pref_member.h"
@@ -18,8 +22,14 @@ ArcUserDataService::ArcUserDataService(
     const AccountId& account_id)
     : ArcService(bridge_service),
       arc_enabled_pref_(std::move(arc_enabled_pref)),
-      primary_user_account_id_(account_id) {
+      primary_user_account_id_(account_id),
+      weak_ptr_factory_(this) {
   arc_bridge_service()->AddObserver(this);
+  pref_change_registrar_.Init(arc_enabled_pref_->prefs());
+  pref_change_registrar_.Add(
+      arc_enabled_pref_->GetPrefName(),
+      base::Bind(&ArcUserDataService::OnOptInPreferenceChanged,
+                 weak_ptr_factory_.GetWeakPtr()));
   WipeIfRequired();
 }
 
@@ -50,12 +60,15 @@ void ArcUserDataService::RequireUserDataWiped(const ArcDataCallback& callback) {
 
 void ArcUserDataService::WipeIfRequired() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (arc_bridge_service()->state() != ArcBridgeService::State::STOPPED) {
+  if (!arc_bridge_service()->stopped()) {
     LOG(ERROR) << "ARC instance not stopped, user data can't be wiped";
     return;
   }
-  if (arc_enabled_pref_->GetValue() && !arc_user_data_wipe_required_)
+  if ((arc_enabled_pref_->GetValue() && !arc_user_data_wipe_required_) ||
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kDisableArcDataWipe)) {
     return;
+  }
   VLOG(1) << "Wipe ARC user data.";
   arc_user_data_wipe_required_ = false;
   const cryptohome::Identification cryptohome_id(primary_user_account_id_);
@@ -63,6 +76,11 @@ void ArcUserDataService::WipeIfRequired() {
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
   session_manager_client->RemoveArcData(cryptohome_id, callback_);
   callback_.Reset();
+}
+
+void ArcUserDataService::OnOptInPreferenceChanged() {
+  if (!arc_enabled_pref_->GetValue())
+    arc_user_data_wipe_required_ = true;
 }
 
 }  // namespace arc

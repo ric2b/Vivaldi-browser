@@ -8,6 +8,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -22,7 +23,8 @@
 #include "content/public/browser/notification_registrar.h"
 #include "media/audio/audio_logging.h"
 #include "media/base/media_log.h"
-#include "media/capture/video/video_capture_device_info.h"
+#include "media/base/video_capture_types.h"
+#include "media/capture/video/video_capture_device_descriptor.h"
 
 namespace media {
 class AudioParameters;
@@ -73,7 +75,9 @@ class CONTENT_EXPORT MediaInternals
 
   // Called to inform of the capabilities enumerated for video devices.
   void UpdateVideoCaptureDeviceCapabilities(
-      const media::VideoCaptureDeviceInfos& video_capture_device_infos);
+      const std::vector<std::tuple<media::VideoCaptureDeviceDescriptor,
+                                   media::VideoCaptureFormats>>&
+          descriptors_and_formats);
 
   // AudioLogFactory implementation.  Safe to call from any thread.
   std::unique_ptr<media::AudioLog> CreateAudioLog(
@@ -94,12 +98,6 @@ class CONTENT_EXPORT MediaInternals
   friend class AudioLogImpl;
   friend class MediaInternalsTest;
   friend struct base::DefaultLazyInstanceTraits<MediaInternals>;
-
-  // Pending events for a particular process.
-  using PendingEvents = std::list<media::MediaLogEvent>;
-
-  // The maps between process ID and PendingEvents.
-  using PendingEventsMap = std::map<int, PendingEvents>;
 
   MediaInternals();
 
@@ -126,7 +124,9 @@ class CONTENT_EXPORT MediaInternals
 
   // Must only be accessed on the UI thread.
   std::vector<UpdateCallback> update_callbacks_;
-  PendingEventsMap pending_events_map_;
+
+  // Saved events by process ID for showing recent players in the UI.
+  std::map<int, std::list<media::MediaLogEvent>> saved_events_by_process_;
 
   // Must only be accessed on the IO thread.
   base::ListValue video_capture_capabilities_cached_data_;

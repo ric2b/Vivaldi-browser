@@ -56,7 +56,7 @@ LinkImport::~LinkImport()
 
 Document* LinkImport::importedDocument() const
 {
-    if (!m_child || !m_owner || !m_owner->inShadowIncludingDocument())
+    if (!m_child || !m_owner || !m_owner->isConnected())
         return nullptr;
     if (m_child->loader()->hasError())
         return nullptr;
@@ -75,7 +75,7 @@ void LinkImport::process()
     if (!m_owner->document().importsController()) {
         // The document should be the master.
         Document& master = m_owner->document();
-        ASSERT(master.frame());
+        DCHECK(master.frame());
         master.setImportsController(HTMLImportsController::create(master));
     }
 
@@ -97,14 +97,14 @@ void LinkImport::process()
 
 void LinkImport::didFinish()
 {
-    if (!m_owner || !m_owner->inShadowIncludingDocument())
+    if (!m_owner || !m_owner->isConnected())
         return;
     m_owner->scheduleEvent();
 }
 
 void LinkImport::importChildWasDisposed(HTMLImportChild* child)
 {
-    ASSERT(m_child == child);
+    DCHECK_EQ(m_child, child);
     m_child = nullptr;
     m_owner = nullptr;
 }

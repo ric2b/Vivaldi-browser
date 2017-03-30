@@ -4,22 +4,22 @@ include_rules = [
   "+components/filesystem",
   "+components/leveldb",
   "+components/link_header_util",
+  "+components/memory_coordinator/browser",
+  "+components/memory_coordinator/common",
   "+components/mime_util",
-  "+components/mus/common",
-  "+components/mus/public/interfaces",
-  "+components/mus/public",
-  "+components/network_session_configurator/switches.h",
   "+components/profile_service",
   "+components/scheduler/common",
   "+components/tracing",
   "+components/url_formatter",
-  "+components/webmessaging",
 
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
   "+device/battery",  # For battery status service.
   "+device/gamepad", # For gamepad API
+  "+device/generic_sensor",  # For sensors service.
+  "+device/geolocation",
   "+device/power_save_blocker",
+  "+device/sensors/public",
   "+device/vibration",  # For Vibration API
   "+device/vr",  # For WebVR API
   "+gin/v8_initializer.h",
@@ -59,12 +59,13 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebGamepad.h",
   "+third_party/WebKit/public/platform/WebGamepads.h",
   "+third_party/WebKit/public/platform/WebInsecureRequestPolicy.h",
+  "+third_party/WebKit/public/platform/WebNavigationHintType.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebString.h",
   "+third_party/WebKit/public/platform/mime_registry.mojom.h",
   "+third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h",
-  "+third_party/WebKit/public/platform/modules/geolocation/geolocation.mojom.h",
+  "+third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom.h",
   "+third_party/WebKit/public/platform/modules/imagecapture/image_capture.mojom.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h",
   "+third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h",
@@ -95,7 +96,6 @@ include_rules = [
   "+third_party/WebKit/public/web/WebDragStatus.h",
   "+third_party/WebKit/public/web/WebFindOptions.h",
   "+third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h",
-  "+third_party/WebKit/public/web/WebFrameOwnerProperties.h",
   "+third_party/WebKit/public/web/WebInputEvent.h",
   "+third_party/WebKit/public/web/WebMediaPlayerAction.h",
   "+third_party/WebKit/public/web/WebPluginAction.h",

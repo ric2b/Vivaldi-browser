@@ -17,14 +17,6 @@
 
 namespace cc {
 
-std::unique_ptr<RemoteChannelImpl> RemoteChannelImpl::Create(
-    LayerTreeHost* layer_tree_host,
-    RemoteProtoChannel* remote_proto_channel,
-    TaskRunnerProvider* task_runner_provider) {
-  return base::WrapUnique(new RemoteChannelImpl(
-      layer_tree_host, remote_proto_channel, task_runner_provider));
-}
-
 RemoteChannelImpl::RemoteChannelImpl(LayerTreeHost* layer_tree_host,
                                      RemoteProtoChannel* remote_proto_channel,
                                      TaskRunnerProvider* task_runner_provider)
@@ -51,8 +43,9 @@ std::unique_ptr<ProxyImpl> RemoteChannelImpl::CreateProxyImpl(
     std::unique_ptr<BeginFrameSource> external_begin_frame_source) {
   DCHECK(task_runner_provider_->IsImplThread());
   DCHECK(!external_begin_frame_source);
-  return ProxyImpl::Create(channel_impl, layer_tree_host, task_runner_provider,
-                           std::move(external_begin_frame_source));
+  return base::MakeUnique<ProxyImpl>(channel_impl, layer_tree_host,
+                                     task_runner_provider,
+                                     std::move(external_begin_frame_source));
 }
 
 void RemoteChannelImpl::OnProtoReceived(
@@ -125,9 +118,9 @@ void RemoteChannelImpl::HandleProto(
         VLOG(1) << "Starting commit.";
         ImplThreadTaskRunner()->PostTask(
             FROM_HERE,
-            base::Bind(&ProxyImpl::StartCommitOnImpl, proxy_impl_weak_ptr_,
-                       &completion, main().layer_tree_host,
-                       main_thread_start_time, false));
+            base::Bind(&ProxyImpl::NotifyReadyToCommitOnImpl,
+                       proxy_impl_weak_ptr_, &completion,
+                       main().layer_tree_host, main_thread_start_time, false));
         completion.Wait();
       }
     } break;
@@ -137,12 +130,14 @@ void RemoteChannelImpl::HandleProto(
           proto.begin_main_frame_aborted_message();
       CommitEarlyOutReason reason = CommitEarlyOutReasonFromProtobuf(
           begin_main_frame_aborted_message.reason());
+      std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
       VLOG(1) << "Received BeginMainFrameAborted from the engine with reason: "
               << CommitEarlyOutReasonToString(reason);
       ImplThreadTaskRunner()->PostTask(
           FROM_HERE,
           base::Bind(&ProxyImpl::BeginMainFrameAbortedOnImpl,
-                     proxy_impl_weak_ptr_, reason, main_thread_start_time));
+                     proxy_impl_weak_ptr_, reason, main_thread_start_time,
+                     base::Passed(&empty_swap_promises)));
     } break;
     case proto::CompositorMessageToImpl::SET_NEEDS_REDRAW: {
       VLOG(1) << "Received redraw request from the engine.";
@@ -153,10 +148,6 @@ void RemoteChannelImpl::HandleProto(
       PostSetNeedsRedrawToImpl(damaged_rect);
     } break;
   }
-}
-
-void RemoteChannelImpl::FinishAllRendering() {
-  NOTREACHED() << "Should not be called on the remote client LayerTreeHost";
 }
 
 bool RemoteChannelImpl::IsStarted() const {
@@ -200,11 +191,6 @@ void RemoteChannelImpl::SetVisible(bool visible) {
   ImplThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&ProxyImpl::SetVisibleOnImpl, proxy_impl_weak_ptr_, visible));
-}
-
-const RendererCapabilities& RemoteChannelImpl::GetRendererCapabilities() const {
-  NOTREACHED() << "Should not be called on the remote client LayerTreeHost";
-  return main().renderer_capabilities;
 }
 
 void RemoteChannelImpl::SetNeedsAnimate() {
@@ -333,9 +319,6 @@ void RemoteChannelImpl::DidCompleteSwapBuffers() {
                             impl().remote_channel_weak_ptr));
 }
 
-void RemoteChannelImpl::SetRendererCapabilitiesMainCopy(
-    const RendererCapabilities& capabilities) {}
-
 void RemoteChannelImpl::BeginMainFrameNotExpectedSoon() {}
 
 void RemoteChannelImpl::DidCommitAndDrawFrame() {
@@ -364,15 +347,13 @@ void RemoteChannelImpl::RequestNewOutputSurface() {
                             impl().remote_channel_weak_ptr));
 }
 
-void RemoteChannelImpl::DidInitializeOutputSurface(
-    bool success,
-    const RendererCapabilities& capabilities) {
+void RemoteChannelImpl::DidInitializeOutputSurface(bool success) {
   DCHECK(task_runner_provider_->IsImplThread());
 
   MainThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&RemoteChannelImpl::DidInitializeOutputSurfaceOnMain,
-                 impl().remote_channel_weak_ptr, success, capabilities));
+                 impl().remote_channel_weak_ptr, success));
 }
 
 void RemoteChannelImpl::DidCompletePageScaleAnimation() {}
@@ -425,9 +406,7 @@ void RemoteChannelImpl::RequestNewOutputSurfaceOnMain() {
   main().layer_tree_host->RequestNewOutputSurface();
 }
 
-void RemoteChannelImpl::DidInitializeOutputSurfaceOnMain(
-    bool success,
-    const RendererCapabilities& capabilities) {
+void RemoteChannelImpl::DidInitializeOutputSurfaceOnMain(bool success) {
   DCHECK(task_runner_provider_->IsMainThread());
 
   if (!success) {
@@ -436,7 +415,6 @@ void RemoteChannelImpl::DidInitializeOutputSurfaceOnMain(
   }
 
   VLOG(1) << "OutputSurface initialized successfully";
-  main().renderer_capabilities = capabilities;
   main().layer_tree_host->DidInitializeOutputSurface();
 
   // If we were waiting for output surface initialization, we might have queued
@@ -451,8 +429,8 @@ void RemoteChannelImpl::DidInitializeOutputSurfaceOnMain(
 
   // The commit after a new output surface can early out, in which case we will
   // never redraw. Schedule one just to be safe.
-  PostSetNeedsRedrawToImpl(
-      gfx::Rect(main().layer_tree_host->device_viewport_size()));
+  PostSetNeedsRedrawToImpl(gfx::Rect(
+      main().layer_tree_host->GetLayerTree()->device_viewport_size()));
 }
 
 void RemoteChannelImpl::SendMessageProtoOnMain(
@@ -479,8 +457,9 @@ void RemoteChannelImpl::InitializeImplOnImpl(CompletionEvent* completion,
 
   impl().proxy_impl =
       CreateProxyImpl(this, layer_tree_host, task_runner_provider_, nullptr);
-  impl().proxy_impl_weak_factory = base::WrapUnique(
-      new base::WeakPtrFactory<ProxyImpl>(impl().proxy_impl.get()));
+  impl().proxy_impl_weak_factory =
+      base::MakeUnique<base::WeakPtrFactory<ProxyImpl>>(
+          impl().proxy_impl.get());
   proxy_impl_weak_ptr_ = impl().proxy_impl_weak_factory->GetWeakPtr();
   completion->Signal();
 }

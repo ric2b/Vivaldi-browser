@@ -145,7 +145,7 @@ void SatisfyCallback(cc::SurfaceManager* manager,
                      const cc::SurfaceSequence& sequence) {
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
-  manager->DidSatisfySequences(sequence.id_namespace, &sequences);
+  manager->DidSatisfySequences(sequence.client_id, &sequences);
 }
 
 void RequireCallback(cc::SurfaceManager* manager,
@@ -192,7 +192,12 @@ void SurfaceFactoryOwner::SetBeginFrameSource(
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceFactoryOwner, private:
 
-SurfaceFactoryOwner::~SurfaceFactoryOwner() {}
+SurfaceFactoryOwner::~SurfaceFactoryOwner() {
+  if (surface_factory_->manager()) {
+    surface_factory_->manager()->InvalidateSurfaceClientId(
+        id_allocator_->client_id());
+  }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Surface, public:
@@ -210,8 +215,10 @@ Surface::Surface()
   window_->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter));
   window_->set_owned_by_parent(false);
   factory_owner_->surface_ = this;
-  factory_owner_->id_allocator_ =
-      aura::Env::GetInstance()->context_factory()->CreateSurfaceIdAllocator();
+  factory_owner_->id_allocator_.reset(new cc::SurfaceIdAllocator(
+      aura::Env::GetInstance()->context_factory()->AllocateSurfaceClientId()));
+  surface_manager_->RegisterSurfaceClientId(
+      factory_owner_->id_allocator_->client_id());
   factory_owner_->surface_factory_.reset(
       new cc::SurfaceFactory(surface_manager_, factory_owner_.get()));
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
@@ -610,7 +617,7 @@ void Surface::OnLayerRecreated(ui::Layer* old_layer, ui::Layer* new_layer) {
   SetSurfaceLayerContents(new_layer);
 }
 
-void Surface::WillDraw(cc::SurfaceId id) {
+void Surface::WillDraw(const cc::SurfaceId& id) {
   while (!active_frame_callbacks_.empty()) {
     active_frame_callbacks_.front().Run(base::TimeTicks::Now());
     active_frame_callbacks_.pop_front();
@@ -801,6 +808,8 @@ void Surface::UpdateSurface(bool full_damage) {
                            current_resource_.id, true, uv_top_left,
                            uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
                            false, false, state_.only_visible_on_secure_output);
+      if (current_resource_.is_overlay_candidate)
+        texture_quad->set_resource_size_in_pixels(current_resource_.size);
       delegated_frame->resource_list.push_back(current_resource_);
     }
   } else {

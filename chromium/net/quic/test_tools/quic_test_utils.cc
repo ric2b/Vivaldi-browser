@@ -9,16 +9,16 @@
 #include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "net/quic/crypto/crypto_framer.h"
-#include "net/quic/crypto/crypto_handshake.h"
-#include "net/quic/crypto/crypto_utils.h"
-#include "net/quic/crypto/null_encrypter.h"
-#include "net/quic/crypto/quic_decrypter.h"
-#include "net/quic/crypto/quic_encrypter.h"
-#include "net/quic/quic_data_writer.h"
-#include "net/quic/quic_framer.h"
-#include "net/quic/quic_packet_creator.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/crypto_framer.h"
+#include "net/quic/core/crypto/crypto_handshake.h"
+#include "net/quic/core/crypto/crypto_utils.h"
+#include "net/quic/core/crypto/null_encrypter.h"
+#include "net/quic/core/crypto/quic_decrypter.h"
+#include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/quic_data_writer.h"
+#include "net/quic/core/quic_framer.h"
+#include "net/quic/core/quic_packet_creator.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/spdy/spdy_frame_builder.h"
@@ -251,7 +251,7 @@ MockQuicConnection::MockQuicConnection(MockQuicConnectionHelper* helper,
                          helper,
                          alarm_factory,
                          perspective,
-                         QuicSupportedVersions()) {}
+                         AllSupportedVersions()) {}
 
 MockQuicConnection::MockQuicConnection(IPEndPoint address,
                                        MockQuicConnectionHelper* helper,
@@ -262,7 +262,7 @@ MockQuicConnection::MockQuicConnection(IPEndPoint address,
                          helper,
                          alarm_factory,
                          perspective,
-                         QuicSupportedVersions()) {}
+                         AllSupportedVersions()) {}
 
 MockQuicConnection::MockQuicConnection(QuicConnectionId connection_id,
                                        MockQuicConnectionHelper* helper,
@@ -273,7 +273,7 @@ MockQuicConnection::MockQuicConnection(QuicConnectionId connection_id,
                          helper,
                          alarm_factory,
                          perspective,
-                         QuicSupportedVersions()) {}
+                         CurrentSupportedVersions()) {}
 
 MockQuicConnection::MockQuicConnection(
     MockQuicConnectionHelper* helper,
@@ -329,7 +329,7 @@ PacketSavingConnection::PacketSavingConnection(
                          supported_versions) {}
 
 PacketSavingConnection::~PacketSavingConnection() {
-  STLDeleteElements(&encrypted_packets_);
+  base::STLDeleteElements(&encrypted_packets_);
 }
 
 void PacketSavingConnection::SendOrQueuePacket(SerializedPacket* packet) {
@@ -350,7 +350,9 @@ MockQuicSession::MockQuicSession(QuicConnection* connection)
       .WillByDefault(testing::Return(QuicConsumedData(0, false)));
 }
 
-MockQuicSession::~MockQuicSession() {}
+MockQuicSession::~MockQuicSession() {
+  delete connection();
+}
 
 // static
 QuicConsumedData MockQuicSession::ConsumeAllData(
@@ -371,7 +373,9 @@ MockQuicSpdySession::MockQuicSpdySession(QuicConnection* connection)
       .WillByDefault(testing::Return(QuicConsumedData(0, false)));
 }
 
-MockQuicSpdySession::~MockQuicSpdySession() {}
+MockQuicSpdySession::~MockQuicSpdySession() {
+  delete connection();
+}
 
 TestQuicSpdyServerSession::TestQuicSpdyServerSession(
     QuicConnection* connection,
@@ -392,7 +396,9 @@ TestQuicSpdyServerSession::TestQuicSpdyServerSession(
       .WillByDefault(testing::Return(true));
 }
 
-TestQuicSpdyServerSession::~TestQuicSpdyServerSession() {}
+TestQuicSpdyServerSession::~TestQuicSpdyServerSession() {
+  delete connection();
+}
 
 QuicCryptoServerStreamBase*
 TestQuicSpdyServerSession::CreateQuicCryptoServerStream(
@@ -502,11 +508,11 @@ IPAddress TestPeerIPAddress() {
 }
 
 QuicVersion QuicVersionMax() {
-  return QuicSupportedVersions().front();
+  return AllSupportedVersions().front();
 }
 
 QuicVersion QuicVersionMin() {
-  return QuicSupportedVersions().back();
+  return AllSupportedVersions().back();
 }
 
 IPAddress Loopback4() {
@@ -601,8 +607,9 @@ QuicEncryptedPacket* ConstructEncryptedPacket(
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
   frames.push_back(frame);
-  QuicFramer framer(versions != nullptr ? *versions : QuicSupportedVersions(),
-                    QuicTime::Zero(), perspective);
+  QuicFramer framer(
+      versions != nullptr ? *versions : CurrentSupportedVersions(),
+      QuicTime::Zero(), perspective);
 
   std::unique_ptr<QuicPacket> packet(
       BuildUnsizedDataPacket(&framer, header, frames));
@@ -651,7 +658,7 @@ QuicEncryptedPacket* ConstructMisFramedEncryptedPacket(
   QuicFrame frame(&stream_frame);
   QuicFrames frames;
   frames.push_back(frame);
-  QuicFramer framer(versions != nullptr ? *versions : QuicSupportedVersions(),
+  QuicFramer framer(versions != nullptr ? *versions : AllSupportedVersions(),
                     QuicTime::Zero(), perspective);
 
   std::unique_ptr<QuicPacket> packet(
@@ -730,7 +737,7 @@ static QuicPacket* ConstructPacketFromHandshakeMessage(
   CryptoFramer crypto_framer;
   std::unique_ptr<QuicData> data(
       crypto_framer.ConstructHandshakeMessage(message));
-  QuicFramer quic_framer(QuicSupportedVersions(), QuicTime::Zero(),
+  QuicFramer quic_framer(AllSupportedVersions(), QuicTime::Zero(),
                          Perspective::IS_CLIENT);
 
   QuicPacketHeader header;
@@ -831,6 +838,14 @@ MockReceivedPacketManager::MockReceivedPacketManager(QuicConnectionStats* stats)
     : QuicReceivedPacketManager(stats) {}
 
 MockReceivedPacketManager::~MockReceivedPacketManager() {}
+
+MockSentPacketManager::MockSentPacketManager() {}
+
+MockSentPacketManager::~MockSentPacketManager() {}
+
+MockConnectionCloseDelegate::MockConnectionCloseDelegate() {}
+
+MockConnectionCloseDelegate::~MockConnectionCloseDelegate() {}
 
 void CreateClientSessionForTest(QuicServerId server_id,
                                 bool supports_stateless_rejects,

@@ -91,6 +91,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_blend_func_extended;
     bool ext_read_format_bgra;
     bool desktop_srgb_support;
+    bool arb_es3_compatibility;
   };
 
   FeatureInfo();
@@ -109,6 +110,8 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
 
   // Helper that defaults to no disallowed features and a GLES2 context.
   bool InitializeForTesting();
+  // Helper that defaults to no disallowed Features.
+  bool InitializeForTesting(ContextType context_type);
   // Helper that defaults to a GLES2 context.
   bool InitializeForTesting(const DisallowedFeatures& disallowed_features);
 
@@ -147,6 +150,8 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   bool disable_shader_translator() const { return disable_shader_translator_; }
 
   bool IsWebGLContext() const;
+  bool IsWebGL1OrES2Context() const;
+  bool IsWebGL2OrES3Context() const;
 
   void EnableCHROMIUMColorBufferFloatRGBA();
   void EnableCHROMIUMColorBufferFloatRGB();

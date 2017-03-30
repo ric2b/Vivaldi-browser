@@ -50,11 +50,10 @@ enum class Option : int { ALWAYS = -2, JUST_ONCE };
 
 // static
 void IntentPickerBubbleView::ShowBubble(
-    content::NavigationHandle* handle,
+    content::WebContents* web_contents,
     const std::vector<NameAndIcon>& app_info,
     const ThrottleCallback& throttle_cb) {
-  Browser* browser =
-      chrome::FindBrowserWithWebContents(handle->GetWebContents());
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (!browser) {
     throttle_cb.Run(kAppTagNoneSelected,
                     arc::ArcNavigationThrottle::CloseReason::ERROR);
@@ -67,8 +66,8 @@ void IntentPickerBubbleView::ShowBubble(
     return;
   }
 
-  IntentPickerBubbleView* delegate = new IntentPickerBubbleView(
-      app_info, throttle_cb, handle->GetWebContents());
+  IntentPickerBubbleView* delegate =
+      new IntentPickerBubbleView(app_info, throttle_cb, web_contents);
   delegate->set_margins(gfx::Insets());
   delegate->set_parent_window(browser_view->GetNativeWindow());
   views::Widget* widget =
@@ -237,10 +236,10 @@ IntentPickerBubbleView::~IntentPickerBubbleView() {
 // the callback so the caller can Resume the navigation.
 void IntentPickerBubbleView::OnWidgetDestroying(views::Widget* widget) {
   if (!was_callback_run_) {
+    was_callback_run_ = true;
     throttle_cb_.Run(
         kAppTagNoneSelected,
         arc::ArcNavigationThrottle::CloseReason::DIALOG_DEACTIVATED);
-    was_callback_run_ = true;
   }
 }
 
@@ -252,16 +251,16 @@ void IntentPickerBubbleView::ButtonPressed(views::Button* sender,
                                            const ui::Event& event) {
   switch (sender->tag()) {
     case static_cast<int>(Option::ALWAYS):
+      was_callback_run_ = true;
       throttle_cb_.Run(selected_app_tag_,
                        arc::ArcNavigationThrottle::CloseReason::ALWAYS_PRESSED);
-      was_callback_run_ = true;
       GetWidget()->Close();
       break;
     case static_cast<int>(Option::JUST_ONCE):
+      was_callback_run_ = true;
       throttle_cb_.Run(
           selected_app_tag_,
           arc::ArcNavigationThrottle::CloseReason::JUST_ONCE_PRESSED);
-      was_callback_run_ = true;
       GetWidget()->Close();
       break;
     default:
@@ -298,9 +297,9 @@ gfx::Size IntentPickerBubbleView::GetPreferredSize() const {
 // should inform the caller about this error.
 void IntentPickerBubbleView::WebContentsDestroyed() {
   if (!was_callback_run_) {
+    was_callback_run_ = true;
     throttle_cb_.Run(kAppTagNoneSelected,
                      arc::ArcNavigationThrottle::CloseReason::ERROR);
-    was_callback_run_ = true;
   }
   GetWidget()->Close();
 }

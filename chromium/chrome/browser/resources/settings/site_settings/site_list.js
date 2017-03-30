@@ -4,24 +4,16 @@
 
 /**
  * @fileoverview
- * 'settings-site-list' shows a list of Allowed and Blocked sites for a given
+ * 'site-list' shows a list of Allowed and Blocked sites for a given
  * category.
  */
 Polymer({
 
-  is: 'settings-site-list',
+  is: 'site-list',
 
   behaviors: [SiteSettingsBehavior, WebUIListenerBehavior],
 
   properties: {
-    /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
     /**
      * The site that was selected by the user in the dropdown list.
      * @type {SiteException}
@@ -169,6 +161,24 @@ Polymer({
   },
 
   /**
+   * @param {string} source Where the setting came from.
+   * @return {boolean}
+   * @private
+   */
+  isPolicyControlled_: function(source) {
+    return source == 'policy';
+  },
+
+  /**
+   * @param {string} source Where the setting came from.
+   * @return {boolean}
+   * @private
+   */
+  shouldShowMenu_: function(source) {
+    return !(this.isPolicyControlled_(source) || this.allSites);
+  },
+
+  /**
    * Makes sure the visibility is correct for this widget.
    * @private
    */
@@ -188,7 +198,7 @@ Polymer({
 
     dialog.open(this.categorySubtype);
 
-    dialog.addEventListener('iron-overlay-closed', function() {
+    dialog.addEventListener('close', function() {
       dialog.remove();
     });
   },
@@ -243,6 +253,15 @@ Polymer({
   getAllSitesList_: function() {
     var promiseList = [];
     for (var type in settings.ContentSettingsTypes) {
+      if (settings.ContentSettingsTypes[type] ==
+          settings.ContentSettingsTypes.PROTOCOL_HANDLERS ||
+          settings.ContentSettingsTypes[type] ==
+          settings.ContentSettingsTypes.USB_DEVICES) {
+        // Protocol handlers and USB devices don't have data stored the way all
+        // the other categories do.
+        continue;
+      }
+
       promiseList.push(
           this.browserProxy_.getExceptionList(
               settings.ContentSettingsTypes[type]));
@@ -285,14 +304,18 @@ Polymer({
       return null;
     // TODO(finnur): Hmm, it would probably be better to ensure scheme on the
     //     JS/C++ boundary.
-    return new URL(
-        this.ensureUrlHasScheme(originOrPattern.replace('[*.]', '')));
+    // TODO(dschuyler): I agree. This filtering should be done in one go, rather
+    // that during the sort. The URL generation should be wrapped in a try/catch
+    // as well.
+    originOrPattern = originOrPattern.replace('*://', '');
+    originOrPattern = originOrPattern.replace('[*.]', '');
+    return new URL(this.ensureUrlHasScheme(originOrPattern));
   },
 
   /**
    * Converts an unordered site list to an ordered array, sorted by site name
    * then protocol and de-duped (by origin).
-   * @param {!Array<SiteException>} sites A list of sites to sort and de-dup.
+   * @param {!Array<SiteException>} sites A list of sites to sort and de-dupe.
    * @return {!Array<SiteException>} Sorted and de-duped list.
    * @private
    */
@@ -347,6 +370,7 @@ Polymer({
          originForDisplay: originForDisplay,
          embeddingOrigin: embeddingOrigin,
          embeddingOriginForDisplay: embeddingOriginForDisplay,
+         source: sites[i].source,
       });
 
       lastOrigin = originForDisplay;
@@ -375,15 +399,10 @@ Polymer({
    */
   onOriginTap_: function(event) {
     this.selectedSite = event.model.item;
-    var categorySelected =
-        this.allSites ?
-        'all-sites' :
-        'site-settings-category-' + this.computeCategoryTextId(this.category);
-    this.currentRoute = {
-      page: this.currentRoute.page,
-      section: 'privacy',
-      subpage: ['site-settings', categorySelected, 'site-details'],
-    };
+    if (this.isPolicyControlled_(this.selectedSite.source))
+      return;
+
+    settings.navigateTo(settings.Route.SITE_SETTINGS_SITE_DETAILS);
   },
 
   /**

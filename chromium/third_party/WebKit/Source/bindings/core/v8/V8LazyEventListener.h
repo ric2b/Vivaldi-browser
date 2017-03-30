@@ -59,21 +59,18 @@ public:
     const String& code() const { return m_code; }
 
 protected:
-    void prepareListenerObject(ExecutionContext*) override;
+    v8::Local<v8::Object> getListenerObjectInternal(ExecutionContext*) override;
 
 private:
     V8LazyEventListener(v8::Isolate*, const AtomicString& functionName, const AtomicString& eventParameterName, const String& code, const String sourceURL, const TextPosition&, Node*);
 
     v8::Local<v8::Value> callListenerFunction(ScriptState*, v8::Local<v8::Value>, Event*) override;
 
-    // Needs to return true for all event handlers implemented in JavaScript so that
-    // the SVG code does not add the event handler in both
-    // SVGUseElement::buildShadowTree and again in
-    // SVGUseElement::transferEventListenersToShadowTree
-    bool wasCreatedFromMarkup() const override { return true; }
+    void compileScript(ScriptState*, ExecutionContext*);
 
     void fireErrorEvent(v8::Local<v8::Context>, ExecutionContext*, v8::Local<v8::Message>);
 
+    bool m_wasCompilationFailed;
     AtomicString m_functionName;
     AtomicString m_eventParameterName;
     String m_code;

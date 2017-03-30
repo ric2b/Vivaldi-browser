@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fil">
-<translation id="1008557486741366299">Hindi Ngayon</translation>
 <translation id="1047726139967079566">Bookmark This Page...</translation>
 <translation id="1172898394251786223">Susunod na field</translation>
 <translation id="2320166752086256636">Itago ang keyboard</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">Mag-update</translation>
 <translation id="4875622588773761625">Gusto mo bang i-update ng <ph name="PASSWORD_MANAGER_BRAND" /> ang iyong password para sa site na ito?</translation>
 <translation id="5317780077021120954">I-save</translation>
+<translation id="6039694632319341016">Gusto mo bang i-update ng <ph name="PASSWORD_MANAGER_BRAND" /> ang password mo para kay <ph name="USERNAME" /> sa site na ito?</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6149061208933997199">Gamitin ang Password</translation>
 <translation id="6196207969502475924">Paghahanap gamit ang boses</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">I-clear ang Teksto</translation>
 <translation id="6456425917241817154">Binuo ng Chrome ang Password</translation>
 <translation id="6535543971741225613">Kakaiba ang pagkilos ng site na sinusubukan mong i-access, at hindi ma-verify ng Chrome na tama ang URL nito. Para sa mga dahilang panseguridad, hindi ka dapat magpatuloy, at marahil ay subukan na lang muli bukas o sa ibang site na lang pumunta.</translation>
-<translation id="6647073004883890710">Gusto mo bang i-update ng <ph name="PASSWORD_MANAGER_BRAND" /> ang password para kay <ph name="USERNAME" /> para sa site na ito?</translation>
 <translation id="7222245588540287464">Naka-enable man o hindi ang Paghahanap ayon sa Konteksto.</translation>
-<translation id="7378627244592794276">Hindi</translation>
 <translation id="7456847797759667638">Buksan ang Lokasyon...</translation>
 <translation id="7481312909269577407">Sumulong</translation>
 <translation id="7484580869648358686">Babala: Mayroong Hindi Tama Dito!</translation>

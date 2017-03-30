@@ -68,7 +68,7 @@ GURL ShortenUberURL(const GURL& url) {
   std::string url_string = url.spec();
   const std::string long_prefix = "chrome://chrome/";
   const std::string short_prefix = "chrome://";
-  if (url_string.find(long_prefix) != 0)
+  if (!base::StartsWith(url_string, long_prefix, base::CompareCase::SENSITIVE))
     return url;
   url_string.replace(0, long_prefix.length(), short_prefix);
   return GURL(url_string);
@@ -675,12 +675,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_IncognitoRefocus) {
   EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
   EXPECT_EQ(2, incognito_browser->tab_strip_model()->count());
-}
-
-// This test verifies that no navigation action occurs when
-// WindowOpenDisposition = SUPPRESS_OPEN.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_SuppressOpen) {
-  RunSuppressTest(SUPPRESS_OPEN);
 }
 
 // This test verifies that no navigation action occurs when

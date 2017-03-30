@@ -44,19 +44,17 @@
 #include "cc/surfaces/display_scheduler.h"
 #include "cc/surfaces/surface_display_output_surface.h"
 #include "cc/surfaces/surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "components/display_compositor/compositor_overlay_candidate_validator_android.h"
 #include "components/display_compositor/gl_helper.h"
 #include "content/browser/android/child_process_launcher_android.h"
-#include "content/browser/gpu/browser_gpu_channel_host_factory.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_surface_tracker.h"
+#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/host_shared_bitmap_manager.h"
 #include "content/public/browser/android/compositor.h"
 #include "content/public/browser/android/compositor_client.h"
@@ -82,6 +80,64 @@ namespace content {
 namespace {
 
 const unsigned int kMaxDisplaySwapBuffers = 1U;
+
+gpu::SharedMemoryLimits GetCompositorContextSharedMemoryLimits() {
+  constexpr size_t kBytesPerPixel = 4;
+  const size_t full_screen_texture_size_in_bytes =
+      gfx::DeviceDisplayInfo().GetDisplayHeight() *
+      gfx::DeviceDisplayInfo().GetDisplayWidth() * kBytesPerPixel;
+
+  gpu::SharedMemoryLimits limits;
+  // This limit is meant to hold the contents of the display compositor
+  // drawing the scene. See discussion here:
+  // https://codereview.chromium.org/1900993002/diff/90001/content/browser/renderer_host/compositor_impl_android.cc?context=3&column_width=80&tab_spaces=8
+  limits.command_buffer_size = 64 * 1024;
+  // These limits are meant to hold the uploads for the browser UI without
+  // any excess space.
+  limits.start_transfer_buffer_size = 64 * 1024;
+  limits.min_transfer_buffer_size = 64 * 1024;
+  limits.max_transfer_buffer_size = full_screen_texture_size_in_bytes;
+  // Texture uploads may use mapped memory so give a reasonable limit for
+  // them.
+  limits.mapped_memory_reclaim_limit = full_screen_texture_size_in_bytes;
+
+  return limits;
+}
+
+gpu::gles2::ContextCreationAttribHelper GetCompositorContextAttributes(
+    bool has_transparent_background) {
+  // This is used for the browser compositor (offscreen) and for the display
+  // compositor (onscreen), so ask for capabilities needed by either one.
+  // The default framebuffer for an offscreen context is not used, so it does
+  // not need alpha, stencil, depth, antialiasing. The display compositor does
+  // not use these things either, except for alpha when it has a transparent
+  // background.
+  gpu::gles2::ContextCreationAttribHelper attributes;
+  attributes.alpha_size = -1;
+  attributes.stencil_size = 0;
+  attributes.depth_size = 0;
+  attributes.samples = 0;
+  attributes.sample_buffers = 0;
+  attributes.bind_generates_resource = false;
+
+  if (has_transparent_background) {
+    attributes.alpha_size = 8;
+  } else if (base::SysInfo::IsLowEndDevice()) {
+    // In this case we prefer to use RGB565 format instead of RGBA8888 if
+    // possible.
+    // TODO(danakj): GpuCommandBufferStub constructor checks for alpha == 0 in
+    // order to enable 565, but it should avoid using 565 when -1s are
+    // specified
+    // (IOW check that a <= 0 && rgb > 0 && rgb <= 565) then alpha should be
+    // -1.
+    attributes.alpha_size = 0;
+    attributes.red_size = 5;
+    attributes.green_size = 6;
+    attributes.blue_size = 5;
+  }
+
+  return attributes;
+}
 
 class ExternalBeginFrameSource : public cc::BeginFrameSource,
                                  public CompositorImpl::VSyncObserver {
@@ -184,7 +240,6 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface {
              gfx::Rect(frame.gl_frame_data->size));
       context_provider_->ContextSupport()->Swap();
     }
-    client_->DidSwapBuffers();
   }
 
   bool BindToClient(cc::OutputSurfaceClient* client) override {
@@ -268,7 +323,6 @@ class VulkanOutputSurface : public cc::OutputSurface {
   void SwapBuffers(cc::CompositorFrame frame) override {
     surface_->SwapBuffers();
     PostSwapBuffersComplete();
-    client_->DidSwapBuffers();
   }
 
   void Destroy() {
@@ -291,15 +345,7 @@ class VulkanOutputSurface : public cc::OutputSurface {
 };
 #endif
 
-base::LazyInstance<scoped_refptr<cc::VulkanInProcessContextProvider>>
-    g_shared_vulkan_context_provider_android_ = LAZY_INSTANCE_INITIALIZER;
-
 static bool g_initialized = false;
-
-base::LazyInstance<cc::SurfaceManager> g_surface_manager =
-    LAZY_INSTANCE_INITIALIZER;
-
-int g_surface_id_namespace = 0;
 
 class SingleThreadTaskGraphRunner : public cc::SingleThreadTaskGraphRunner {
  public:
@@ -334,40 +380,11 @@ bool CompositorImpl::IsInitialized() {
   return g_initialized;
 }
 
-// static
-cc::SurfaceManager* CompositorImpl::GetSurfaceManager() {
-  return g_surface_manager.Pointer();
-}
-
-// static
-std::unique_ptr<cc::SurfaceIdAllocator>
-CompositorImpl::CreateSurfaceIdAllocator() {
-  std::unique_ptr<cc::SurfaceIdAllocator> allocator(
-      new cc::SurfaceIdAllocator(++g_surface_id_namespace));
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  DCHECK(manager);
-  allocator->RegisterSurfaceIdNamespace(manager);
-  return allocator;
-}
-
-// static
-scoped_refptr<cc::VulkanInProcessContextProvider>
-CompositorImpl::SharedVulkanContextProviderAndroid() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableVulkan)) {
-    scoped_refptr<cc::VulkanInProcessContextProvider>* context_provider =
-        g_shared_vulkan_context_provider_android_.Pointer();
-    if (!*context_provider)
-      *context_provider = cc::VulkanInProcessContextProvider::Create();
-    return *context_provider;
-  }
-  return nullptr;
-}
-
 CompositorImpl::CompositorImpl(CompositorClient* client,
                                gfx::NativeWindow root_window)
-    : root_layer_(cc::Layer::Create()),
-      surface_id_allocator_(CreateSurfaceIdAllocator()),
+    : surface_id_allocator_(
+          new cc::SurfaceIdAllocator(ui::ContextProviderFactory::GetInstance()
+                                         ->AllocateSurfaceClientId())),
       resource_manager_(root_window),
       has_transparent_background_(false),
       device_scale_factor_(1),
@@ -381,8 +398,16 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
       output_surface_request_pending_(false),
       needs_begin_frames_(false),
       weak_factory_(this) {
+  ui::ContextProviderFactory::GetInstance()
+      ->GetSurfaceManager()
+      ->RegisterSurfaceClientId(surface_id_allocator_->client_id());
   DCHECK(client);
   DCHECK(root_window);
+  DCHECK(root_window->GetLayer() == nullptr);
+  root_window->SetLayer(cc::Layer::Create());
+  readback_layer_tree_ = cc::Layer::Create();
+  readback_layer_tree_->SetHideLayerAndSubtree(true);
+  root_window->GetLayer()->AddChild(readback_layer_tree_);
   root_window->AttachCompositor(this);
   CreateLayerTreeHost();
   resource_manager_.Init(host_.get());
@@ -390,8 +415,12 @@ CompositorImpl::CompositorImpl(CompositorClient* client,
 
 CompositorImpl::~CompositorImpl() {
   root_window_->DetachCompositor();
+  root_window_->SetLayer(nullptr);
   // Clean-up any surface references.
   SetSurface(NULL);
+  ui::ContextProviderFactory::GetInstance()
+      ->GetSurfaceManager()
+      ->InvalidateSurfaceClientId(surface_id_allocator_->client_id());
 }
 
 ui::UIResourceProvider& CompositorImpl::GetUIResourceProvider() {
@@ -407,9 +436,9 @@ void CompositorImpl::SetRootLayer(scoped_refptr<cc::Layer> root_layer) {
     subroot_layer_->RemoveFromParent();
     subroot_layer_ = NULL;
   }
-  if (root_layer.get()) {
-    subroot_layer_ = root_layer;
-    root_layer_->AddChild(root_layer);
+  if (root_window_->GetLayer()) {
+    subroot_layer_ = root_window_->GetLayer();
+    root_window_->GetLayer()->AddChild(root_layer);
   }
 }
 
@@ -475,11 +504,12 @@ void CompositorImpl::CreateLayerTreeHost() {
   params.animation_host = cc::AnimationHost::CreateMainInstance();
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   DCHECK(!host_->visible());
-  host_->SetRootLayer(root_layer_);
-  host_->set_surface_id_namespace(surface_id_allocator_->id_namespace());
-  host_->SetViewportSize(size_);
-  host_->set_has_transparent_background(has_transparent_background_);
-  host_->SetDeviceScaleFactor(device_scale_factor_);
+  host_->GetLayerTree()->SetRootLayer(root_window_->GetLayer());
+  host_->set_surface_client_id(surface_id_allocator_->client_id());
+  host_->GetLayerTree()->SetViewportSize(size_);
+  host_->GetLayerTree()->set_has_transparent_background(
+      has_transparent_background_);
+  host_->GetLayerTree()->SetDeviceScaleFactor(device_scale_factor_);
 
   if (needs_animate_)
     host_->SetNeedsAnimate();
@@ -489,23 +519,29 @@ void CompositorImpl::SetVisible(bool visible) {
   TRACE_EVENT1("cc", "CompositorImpl::SetVisible", "visible", visible);
   if (!visible) {
     DCHECK(host_->visible());
+
+    // Make a best effort to try to complete pending readbacks.
+    // TODO(crbug.com/637035): Consider doing this in a better way,
+    // ideally with the guarantee of readbacks completing.
+    if (display_.get() && HavePendingReadbacks())
+      display_->ForceImmediateDrawAndSwapIfPossible();
+
     host_->SetVisible(false);
     if (!host_->output_surface_lost())
       host_->ReleaseOutputSurface();
     pending_swapbuffers_ = 0;
-    establish_gpu_channel_timeout_.Stop();
     display_.reset();
   } else {
     host_->SetVisible(true);
     if (output_surface_request_pending_)
-      RequestNewOutputSurface();
+      HandlePendingOutputSurfaceRequest();
   }
 }
 
 void CompositorImpl::setDeviceScaleFactor(float factor) {
   device_scale_factor_ = factor;
   if (host_)
-    host_->SetDeviceScaleFactor(factor);
+    host_->GetLayerTree()->SetDeviceScaleFactor(factor);
 }
 
 void CompositorImpl::SetWindowBounds(const gfx::Size& size) {
@@ -514,16 +550,16 @@ void CompositorImpl::SetWindowBounds(const gfx::Size& size) {
 
   size_ = size;
   if (host_)
-    host_->SetViewportSize(size);
+    host_->GetLayerTree()->SetViewportSize(size);
   if (display_)
     display_->Resize(size);
-  root_layer_->SetBounds(size);
+  root_window_->GetLayer()->SetBounds(size);
 }
 
 void CompositorImpl::SetHasTransparentBackground(bool flag) {
   has_transparent_background_ = flag;
   if (host_)
-    host_->set_has_transparent_background(flag);
+    host_->GetLayerTree()->set_has_transparent_background(flag);
 }
 
 void CompositorImpl::SetNeedsComposite() {
@@ -541,39 +577,12 @@ void CompositorImpl::UpdateLayerTreeHost() {
   }
 }
 
-void CompositorImpl::OnGpuChannelEstablished() {
-  establish_gpu_channel_timeout_.Stop();
-  CreateOutputSurface();
-}
-
-void CompositorImpl::OnGpuChannelTimeout() {
-  LOG(FATAL) << "Timed out waiting for GPU channel.";
-}
-
 void CompositorImpl::RequestNewOutputSurface() {
+  DCHECK(!output_surface_request_pending_)
+      << "Output Surface Request is already pending?";
+
   output_surface_request_pending_ = true;
-
-#if defined(ADDRESS_SANITIZER) || defined(THREAD_SANITIZER) || \
-  defined(SYZYASAN) || defined(CYGPROFILE_INSTRUMENTATION)
-  const int64_t kGpuChannelTimeoutInSeconds = 40;
-#else
-  const int64_t kGpuChannelTimeoutInSeconds = 10;
-#endif
-
-  BrowserGpuChannelHostFactory* factory =
-      BrowserGpuChannelHostFactory::instance();
-  if (!factory->GetGpuChannel()) {
-    factory->EstablishGpuChannel(
-        CAUSE_FOR_GPU_LAUNCH_DISPLAY_COMPOSITOR_CONTEXT,
-        base::Bind(&CompositorImpl::OnGpuChannelEstablished,
-                   weak_factory_.GetWeakPtr()));
-    establish_gpu_channel_timeout_.Start(
-        FROM_HERE, base::TimeDelta::FromSeconds(kGpuChannelTimeoutInSeconds),
-        this, &CompositorImpl::OnGpuChannelTimeout);
-    return;
-  }
-
-  CreateOutputSurface();
+  HandlePendingOutputSurfaceRequest();
 }
 
 void CompositorImpl::DidInitializeOutputSurface() {
@@ -585,24 +594,39 @@ void CompositorImpl::DidFailToInitializeOutputSurface() {
   LOG(ERROR) << "Failed to init OutputSurface for compositor.";
   LOG_IF(FATAL, ++num_successive_context_creation_failures_ >= 2)
       << "Too many context creation failures. Giving up... ";
-  RequestNewOutputSurface();
+  HandlePendingOutputSurfaceRequest();
 }
 
-void CompositorImpl::CreateOutputSurface() {
-  // We might have had a request from a LayerTreeHost that was then
-  // hidden (and hidden means we don't have a native surface).
-  // Also make sure we only handle this once.
-  if (!output_surface_request_pending_ || !host_->visible())
+void CompositorImpl::HandlePendingOutputSurfaceRequest() {
+  DCHECK(output_surface_request_pending_);
+
+  // We might have been made invisible now.
+  if (!host_->visible())
     return;
 
-  scoped_refptr<ContextProviderCommandBuffer> context_provider;
-  scoped_refptr<cc::VulkanInProcessContextProvider> vulkan_context_provider =
-      SharedVulkanContextProviderAndroid();
-  std::unique_ptr<cc::OutputSurface> display_output_surface;
 #if defined(ENABLE_VULKAN)
-  std::unique_ptr<VulkanOutputSurface> vulkan_surface;
+  CreateVulkanOutputSurface()
+  if (display_)
+    return;
+#endif
+
+  DCHECK(surface_handle_ != gpu::kNullSurfaceHandle);
+  ContextProviderFactoryImpl::GetInstance()->RequestGpuChannelHost(base::Bind(
+      &CompositorImpl::OnGpuChannelEstablished, weak_factory_.GetWeakPtr()));
+}
+
+#if defined(ENABLE_VULKAN)
+void CompositorImpl::CreateVulkanOutputSurface() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableVulkan))
+    return;
+
+  std::unique_ptr<cc::OutputSurface> display_output_surface;
+  scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider =
+      ui::ContextProviderFactory::GetInstance()
+          ->GetSharedVulkanContextProvider();
   if (vulkan_context_provider) {
-    vulkan_surface.reset(
+    std::unique_ptr<VulkanOutputSurface> vulkan_surface(
         new VulkanOutputSurface(std::move(vulkan_context_provider)));
     if (!vulkan_surface->Initialize(window_)) {
       vulkan_surface->Destroy();
@@ -611,91 +635,73 @@ void CompositorImpl::CreateOutputSurface() {
       display_output_surface = std::move(vulkan_surface);
     }
   }
+
+  if (!display_output_surface)
+    return;
+
+  InitializeDisplay(std::move(display_output_surface),
+                    std::move(vulkan_context_provider), nullptr);
+}
 #endif
 
-  if (!display_output_surface) {
-    // This is used for the browser compositor (offscreen) and for the display
-    // compositor (onscreen), so ask for capabilities needed by either one.
-    // The default framebuffer for an offscreen context is not used, so it does
-    // not need alpha, stencil, depth, antialiasing. The display compositor does
-    // not use these things either, except for alpha when it has a transparent
-    // background.
-    gpu::gles2::ContextCreationAttribHelper attributes;
-    attributes.alpha_size = -1;
-    attributes.stencil_size = 0;
-    attributes.depth_size = 0;
-    attributes.samples = 0;
-    attributes.sample_buffers = 0;
-    attributes.bind_generates_resource = false;
+void CompositorImpl::OnGpuChannelEstablished(
+    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host,
+    ui::ContextProviderFactory::GpuChannelHostResult result) {
+  // We might end up queing multiple GpuChannel requests for the same
+  // OutputSurface request as the visibility of the compositor changes, so the
+  // OutputSurface request could have been handled already.
+  if (!output_surface_request_pending_)
+    return;
 
-    if (has_transparent_background_) {
-      attributes.alpha_size = 8;
-    } else if (base::SysInfo::IsLowEndDevice()) {
-      // In this case we prefer to use RGB565 format instead of RGBA8888 if
-      // possible.
-      // TODO(danakj): GpuCommandBufferStub constructor checks for alpha == 0 in
-      // order to enable 565, but it should avoid using 565 when -1s are
-      // specified
-      // (IOW check that a <= 0 && rgb > 0 && rgb <= 565) then alpha should be
-      // -1.
-      attributes.alpha_size = 0;
-      attributes.red_size = 5;
-      attributes.green_size = 6;
-      attributes.blue_size = 5;
-    }
+  switch (result) {
+    // Don't retry if we are shutting down.
+    case ui::ContextProviderFactory::GpuChannelHostResult::
+        FAILURE_FACTORY_SHUTDOWN:
+      break;
+    case ui::ContextProviderFactory::GpuChannelHostResult::
+        FAILURE_GPU_PROCESS_INITIALIZATION_FAILED:
+      HandlePendingOutputSurfaceRequest();
+      break;
+    case ui::ContextProviderFactory::GpuChannelHostResult::SUCCESS:
+      // We don't need the context anymore if we are invisible.
+      if (!host_->visible())
+        return;
 
-    pending_swapbuffers_ = 0;
+      DCHECK(window_);
+      DCHECK_NE(surface_handle_, gpu::kNullSurfaceHandle);
+      scoped_refptr<cc::ContextProvider> context_provider =
+          ContextProviderFactoryImpl::GetInstance()
+              ->CreateDisplayContextProvider(
+                  surface_handle_, GetCompositorContextSharedMemoryLimits(),
+                  GetCompositorContextAttributes(has_transparent_background_),
+                  false /*support_locking*/, false /*automatic_flushes*/,
+                  std::move(gpu_channel_host));
 
-    DCHECK(window_);
-    DCHECK_NE(surface_handle_, gpu::kNullSurfaceHandle);
-
-    BrowserGpuChannelHostFactory* factory =
-        BrowserGpuChannelHostFactory::instance();
-    scoped_refptr<gpu::GpuChannelHost> gpu_channel_host(
-        factory->GetGpuChannel());
-    // If the channel was already lost, we'll get null back here and need to
-    // try again.
-    if (!gpu_channel_host) {
-      RequestNewOutputSurface();
-      return;
-    }
-
-    GURL url("chrome://gpu/CompositorImpl::CreateOutputSurface");
-    constexpr bool automatic_flushes = false;
-    constexpr bool support_locking = false;
-
-    constexpr size_t kBytesPerPixel = 4;
-    const size_t full_screen_texture_size_in_bytes =
-        gfx::DeviceDisplayInfo().GetDisplayHeight() *
-        gfx::DeviceDisplayInfo().GetDisplayWidth() * kBytesPerPixel;
-
-    gpu::SharedMemoryLimits limits;
-    // This limit is meant to hold the contents of the display compositor
-    // drawing the scene. See discussion here:
-    // https://codereview.chromium.org/1900993002/diff/90001/content/browser/renderer_host/compositor_impl_android.cc?context=3&column_width=80&tab_spaces=8
-    limits.command_buffer_size = 64 * 1024;
-    // These limits are meant to hold the uploads for the browser UI without
-    // any excess space.
-    limits.start_transfer_buffer_size = 64 * 1024;
-    limits.min_transfer_buffer_size = 64 * 1024;
-    limits.max_transfer_buffer_size = full_screen_texture_size_in_bytes;
-    // Texture uploads may use mapped memory so give a reasonable limit for
-    // them.
-    limits.mapped_memory_reclaim_limit = full_screen_texture_size_in_bytes;
-
-    context_provider = new ContextProviderCommandBuffer(
-        std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
-        gpu::GpuStreamPriority::NORMAL, surface_handle_, url, automatic_flushes,
-        support_locking, limits, attributes, nullptr,
-        command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
-    DCHECK(context_provider.get());
-
-    display_output_surface = base::WrapUnique(new OutputSurfaceWithoutParent(
-        context_provider, base::Bind(&CompositorImpl::PopulateGpuCapabilities,
-                                     base::Unretained(this))));
+      scoped_refptr<ContextProviderCommandBuffer>
+          context_provider_command_buffer =
+              static_cast<ContextProviderCommandBuffer*>(
+                  context_provider.get());
+      std::unique_ptr<cc::OutputSurface> display_output_surface(
+          new OutputSurfaceWithoutParent(
+              context_provider_command_buffer,
+              base::Bind(&CompositorImpl::PopulateGpuCapabilities,
+                         base::Unretained(this))));
+      InitializeDisplay(std::move(display_output_surface), nullptr,
+                        std::move(context_provider));
+      break;
   }
+}
 
-  cc::SurfaceManager* manager = GetSurfaceManager();
+void CompositorImpl::InitializeDisplay(
+    std::unique_ptr<cc::OutputSurface> display_output_surface,
+    scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
+    scoped_refptr<cc::ContextProvider> context_provider) {
+  DCHECK(output_surface_request_pending_);
+
+  pending_swapbuffers_ = 0;
+
+  cc::SurfaceManager* manager =
+      ui::ContextProviderFactory::GetInstance()->GetSurfaceManager();
   auto* task_runner = base::ThreadTaskRunnerHandle::Get().get();
   std::unique_ptr<ExternalBeginFrameSource> begin_frame_source(
       new ExternalBeginFrameSource(this));
@@ -704,23 +710,21 @@ void CompositorImpl::CreateOutputSurface() {
       display_output_surface->capabilities().max_frames_pending));
 
   display_.reset(new cc::Display(
-      manager, HostSharedBitmapManager::current(),
+      HostSharedBitmapManager::current(),
       BrowserGpuMemoryBufferManager::current(),
-      host_->settings().renderer_settings,
-      surface_id_allocator_->id_namespace(), std::move(begin_frame_source),
+      host_->settings().renderer_settings, std::move(begin_frame_source),
       std::move(display_output_surface), std::move(scheduler),
       base::MakeUnique<cc::TextureMailboxDeleter>(task_runner)));
 
   std::unique_ptr<cc::SurfaceDisplayOutputSurface> delegated_output_surface(
-      vulkan_context_provider
-          ? new cc::SurfaceDisplayOutputSurface(
-                manager, surface_id_allocator_.get(), display_.get(),
-                static_cast<scoped_refptr<cc::VulkanContextProvider>>(
-                    vulkan_context_provider))
-          : new cc::SurfaceDisplayOutputSurface(
-                manager, surface_id_allocator_.get(), display_.get(),
-                context_provider, nullptr));
+      vulkan_context_provider ? new cc::SurfaceDisplayOutputSurface(
+                                    manager, surface_id_allocator_.get(),
+                                    display_.get(), vulkan_context_provider)
+                              : new cc::SurfaceDisplayOutputSurface(
+                                    manager, surface_id_allocator_.get(),
+                                    display_.get(), context_provider, nullptr));
 
+  display_->SetVisible(true);
   display_->Resize(size_);
   host_->SetOutputSurface(std::move(delegated_output_surface));
 }
@@ -780,12 +784,12 @@ void CompositorImpl::DidCommit() {
 }
 
 void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
-  root_layer_->AddChild(layer);
+  readback_layer_tree_->AddChild(layer);
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(
     std::unique_ptr<cc::CopyOutputRequest> request) {
-  root_layer_->RequestCopyOfOutput(std::move(request));
+  root_window_->GetLayer()->RequestCopyOfOutput(std::move(request));
 }
 
 void CompositorImpl::OnVSync(base::TimeTicks frame_time,
@@ -812,6 +816,10 @@ void CompositorImpl::SetNeedsAnimate() {
 
   TRACE_EVENT0("compositor", "Compositor::SetNeedsAnimate");
   host_->SetNeedsAnimate();
+}
+
+bool CompositorImpl::HavePendingReadbacks() {
+  return !readback_layer_tree_->children().empty();
 }
 
 }  // namespace content

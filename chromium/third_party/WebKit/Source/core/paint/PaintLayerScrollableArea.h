@@ -71,7 +71,7 @@ class SubtreeLayoutScope;
 
 typedef WTF::HashMap<PaintLayer*, StickyPositionScrollingConstraints> StickyConstraintsMap;
 
-struct PaintLayerScrollableAreaRareData {
+struct CORE_EXPORT PaintLayerScrollableAreaRareData {
     WTF_MAKE_NONCOPYABLE(PaintLayerScrollableAreaRareData);
     USING_FAST_MALLOC(PaintLayerScrollableAreaRareData);
 public:
@@ -392,6 +392,7 @@ public:
 
     IntRect resizerCornerRect(const IntRect&, ResizerHitTestType) const;
 
+    // TODO(ymalik): Remove box() and update callers to use layoutBox() instead.
     LayoutBox& box() const;
     PaintLayer* layer() const;
 
@@ -404,8 +405,11 @@ public:
     IntRect rectForVerticalScrollbar(const IntRect& borderBoxRect) const;
 
     Widget* getWidget() override;
+    bool shouldPerformScrollAnchoring() const override;
     ScrollAnchor& scrollAnchor() { return m_scrollAnchor; }
     bool isPaintLayerScrollableArea() const override { return true; }
+
+    LayoutBox* layoutBox() const override { return &box(); }
 
     bool shouldRebuildHorizontalScrollbarLayer() const { return m_rebuildHorizontalScrollbarLayer; }
     bool shouldRebuildVerticalScrollbarLayer() const { return m_rebuildVerticalScrollbarLayer; }
@@ -468,7 +472,6 @@ private:
     void updateResizerAreaSet();
     void updateResizerStyle();
 
-
     void updateScrollableAreaSet(bool hasOverflow);
 
     void updateCompositingLayersAfterScroll();
@@ -484,9 +487,6 @@ private:
             m_rareData = wrapUnique(new PaintLayerScrollableAreaRareData());
         return *m_rareData.get();
     }
-
-    // PaintInvalidationCapableScrollableArea
-    LayoutBox& boxForScrollControlPaintInvalidation() const { return box(); }
 
     PaintLayer& m_layer;
 

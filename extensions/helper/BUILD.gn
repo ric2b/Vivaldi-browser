@@ -1,0 +1,14 @@
+static_library("helper") {
+  deps = [
+    "//content/public/browser:browser",
+    "//skia",
+  ]
+  sources = [
+    "../helper/vivaldi_app_helper.cc",
+    "../helper/vivaldi_app_helper.h",
+    "../helper/vivaldi_frame_observer.cc",
+    "../helper/vivaldi_frame_observer.h",
+    "../helper/vivaldi_init_helpers.cc",
+    "../helper/vivaldi_init_helpers.h",
+  ]
+}

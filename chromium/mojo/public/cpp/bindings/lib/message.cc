@@ -11,16 +11,50 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_local.h"
 
 namespace mojo {
+
+namespace {
+
+base::LazyInstance<base::ThreadLocalPointer<internal::MessageDispatchContext>>
+    g_tls_message_dispatch_context = LAZY_INSTANCE_INITIALIZER;
+
+base::LazyInstance<base::ThreadLocalPointer<SyncMessageResponseContext>>
+    g_tls_sync_response_context = LAZY_INSTANCE_INITIALIZER;
+
+void DoNotifyBadMessage(Message message, const std::string& error) {
+  message.NotifyBadMessage(error);
+}
+
+}  // namespace
 
 Message::Message() {
 }
 
+Message::Message(Message&& other)
+    : buffer_(std::move(other.buffer_)), handles_(std::move(other.handles_)) {
+}
+
 Message::~Message() {
   CloseHandles();
+}
+
+Message& Message::operator=(Message&& other) {
+  Reset();
+  std::swap(other.buffer_, buffer_);
+  std::swap(other.handles_, handles_);
+  return *this;
+}
+
+void Message::Reset() {
+  CloseHandles();
+  handles_.clear();
+  buffer_.reset();
 }
 
 void Message::Initialize(size_t capacity, bool zero_initialized) {
@@ -34,18 +68,6 @@ void Message::InitializeFromMojoMessage(ScopedMessageHandle message,
   DCHECK(!buffer_);
   buffer_.reset(new internal::MessageBuffer(std::move(message), num_bytes));
   handles_.swap(*handles);
-}
-
-void Message::MoveTo(Message* destination) {
-  DCHECK(this != destination);
-
-  // No copy needed.
-  std::swap(destination->buffer_, buffer_);
-  std::swap(destination->handles_, handles_);
-
-  CloseHandles();
-  handles_.clear();
-  buffer_.reset();
 }
 
 ScopedMessageHandle Message::TakeMojoMessage() {
@@ -80,6 +102,7 @@ ScopedMessageHandle Message::TakeMojoMessage() {
 }
 
 void Message::NotifyBadMessage(const std::string& error) {
+  DCHECK(buffer_);
   buffer_->NotifyBadMessage(error);
 }
 
@@ -89,6 +112,40 @@ void Message::CloseHandles() {
     if (it->is_valid())
       CloseRaw(*it);
   }
+}
+
+PassThroughFilter::PassThroughFilter() {}
+
+PassThroughFilter::~PassThroughFilter() {}
+
+bool PassThroughFilter::Accept(Message* message) { return true; }
+
+SyncMessageResponseContext::SyncMessageResponseContext()
+    : outer_context_(current()) {
+  g_tls_sync_response_context.Get().Set(this);
+}
+
+SyncMessageResponseContext::~SyncMessageResponseContext() {
+  DCHECK_EQ(current(), this);
+  g_tls_sync_response_context.Get().Set(outer_context_);
+}
+
+// static
+SyncMessageResponseContext* SyncMessageResponseContext::current() {
+  return g_tls_sync_response_context.Get().Get();
+}
+
+void SyncMessageResponseContext::ReportBadMessage(const std::string& error) {
+  GetBadMessageCallback().Run(error);
+}
+
+const ReportBadMessageCallback&
+SyncMessageResponseContext::GetBadMessageCallback() {
+  if (bad_message_callback_.is_null()) {
+    bad_message_callback_ =
+        base::Bind(&DoNotifyBadMessage, base::Passed(&response_));
+  }
+  return bad_message_callback_;
 }
 
 MojoResult ReadMessage(MessagePipeHandle handle, Message* message) {
@@ -121,5 +178,54 @@ MojoResult ReadMessage(MessagePipeHandle handle, Message* message) {
       std::move(mojo_message), num_bytes, &handles);
   return MOJO_RESULT_OK;
 }
+
+void ReportBadMessage(const std::string& error) {
+  internal::MessageDispatchContext* context =
+      internal::MessageDispatchContext::current();
+  DCHECK(context);
+  context->GetBadMessageCallback().Run(error);
+}
+
+ReportBadMessageCallback GetBadMessageCallback() {
+  internal::MessageDispatchContext* context =
+      internal::MessageDispatchContext::current();
+  DCHECK(context);
+  return context->GetBadMessageCallback();
+}
+
+namespace internal {
+
+MessageDispatchContext::MessageDispatchContext(Message* message)
+    : outer_context_(current()), message_(message) {
+  g_tls_message_dispatch_context.Get().Set(this);
+}
+
+MessageDispatchContext::~MessageDispatchContext() {
+  DCHECK_EQ(current(), this);
+  g_tls_message_dispatch_context.Get().Set(outer_context_);
+}
+
+// static
+MessageDispatchContext* MessageDispatchContext::current() {
+  return g_tls_message_dispatch_context.Get().Get();
+}
+
+const ReportBadMessageCallback&
+MessageDispatchContext::GetBadMessageCallback() {
+  if (bad_message_callback_.is_null()) {
+    bad_message_callback_ =
+        base::Bind(&DoNotifyBadMessage, base::Passed(message_));
+  }
+  return bad_message_callback_;
+}
+
+// static
+void SyncMessageResponseSetup::SetCurrentSyncResponseMessage(Message* message) {
+  SyncMessageResponseContext* context = SyncMessageResponseContext::current();
+  if (context)
+    context->response_ = std::move(*message);
+}
+
+}  // namespace internal
 
 }  // namespace mojo

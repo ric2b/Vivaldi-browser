@@ -41,41 +41,6 @@ namespace {
 void DummyCallback(EventType, const gfx::Vector2dF&) {
 }
 
-// A proxy for TickClock that allows passing the same underlying clock
-// to multiple consumers, each retaining a unique_ptr to their own
-// instance of TickClock proxy.
-class ClonableTickClock : public base::TickClock,
-                          public base::RefCounted<ClonableTickClock> {
- private:
-  class TickClockProxy : public base::TickClock {
-   public:
-    explicit TickClockProxy(ClonableTickClock* tick_clock)
-        : tick_clock_(tick_clock) {}
-
-   private:
-    base::TimeTicks NowTicks() override { return tick_clock_->NowTicks(); }
-
-    scoped_refptr<ClonableTickClock> tick_clock_;
-    DISALLOW_COPY_AND_ASSIGN(TickClockProxy);
-  };
-
- public:
-  explicit ClonableTickClock(std::unique_ptr<base::TickClock> tick_clock)
-      : tick_clock_(std::move(tick_clock)) {}
-
-  base::TimeTicks NowTicks() override { return tick_clock_->NowTicks(); }
-  std::unique_ptr<TickClock> Clone() {
-    return WrapUnique(new TickClockProxy(this));
-  }
-
- private:
-  friend class base::RefCounted<ClonableTickClock>;
-  ~ClonableTickClock() override = default;
-  std::unique_ptr<TickClock> tick_clock_;
-
-  DISALLOW_COPY_AND_ASSIGN(ClonableTickClock);
-};
-
 class TestTickClock : public base::TickClock {
  public:
   // Starts off with a clock set to TimeTicks().
@@ -113,6 +78,12 @@ class TestTouchEvent : public ui::TouchEvent {
 };
 
 const int kAllButtonMask = ui::EF_LEFT_MOUSE_BUTTON | ui::EF_RIGHT_MOUSE_BUTTON;
+
+void ConvertToPenPointerEvent(ui::MouseEvent* event) {
+  auto details = event->pointer_details();
+  details.pointer_type = ui::EventPointerType::POINTER_TYPE_PEN;
+  event->set_pointer_details(details);
+}
 
 }  // namespace
 
@@ -201,6 +172,14 @@ void EventGenerator::MoveMouseWheel(int delta_x, int delta_y) {
   Dispatch(&wheelev);
 }
 
+void EventGenerator::SendMouseEnter() {
+  gfx::Point enter_location(current_location_);
+  delegate()->ConvertPointToTarget(current_target_, &enter_location);
+  ui::MouseEvent mouseev(ui::ET_MOUSE_ENTERED, enter_location, enter_location,
+                         ui::EventTimeForNow(), flags_, 0);
+  Dispatch(&mouseev);
+}
+
 void EventGenerator::SendMouseExit() {
   gfx::Point exit_location(current_location_);
   delegate()->ConvertPointToTarget(current_target_, &exit_location);
@@ -215,20 +194,21 @@ void EventGenerator::MoveMouseToWithNative(const gfx::Point& point_in_host,
   ui::ScopedXI2Event xevent;
   xevent.InitMotionEvent(point_in_host, point_for_native, flags_);
   static_cast<XEvent*>(xevent)->xmotion.time =
-      (Now() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
+      (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
   ui::MouseEvent mouseev(xevent);
 #elif defined(USE_OZONE)
   // Ozone uses the location in native event as a system location.
   // Create a fake event with the point in host, which will be passed
   // to the non native event, then update the native event with the native
   // (root) one.
-  std::unique_ptr<ui::MouseEvent> native_event(new ui::MouseEvent(
-      ui::ET_MOUSE_MOVED, point_in_host, point_in_host, Now(), flags_, 0));
+  std::unique_ptr<ui::MouseEvent> native_event(
+      new ui::MouseEvent(ui::ET_MOUSE_MOVED, point_in_host, point_in_host,
+                         ui::EventTimeForNow(), flags_, 0));
   ui::MouseEvent mouseev(native_event.get());
   native_event->set_location(point_for_native);
 #else
   ui::MouseEvent mouseev(ui::ET_MOUSE_MOVED, point_in_host, point_for_native,
-                         Now(), flags_, 0);
+                         ui::EventTimeForNow(), flags_, 0);
   LOG(FATAL)
       << "Generating a native motion event is not supported on this platform";
 #endif
@@ -287,14 +267,21 @@ void EventGenerator::MoveMouseToCenterOf(EventTarget* window) {
   MoveMouseTo(CenterOfWindow(window));
 }
 
+void EventGenerator::EnterPenPointerMode() {
+  pen_pointer_mode_ = true;
+}
+
+void EventGenerator::ExitPenPointerMode() {
+  pen_pointer_mode_ = false;
+}
+
 void EventGenerator::PressTouch() {
   PressTouchId(0);
 }
 
 void EventGenerator::PressTouchId(int touch_id) {
-  TestTouchEvent touchev(
-      ui::ET_TOUCH_PRESSED, GetLocationInCurrentRoot(), touch_id, flags_,
-      Now());
+  TestTouchEvent touchev(ui::ET_TOUCH_PRESSED, GetLocationInCurrentRoot(),
+                         touch_id, flags_, ui::EventTimeForNow());
   Dispatch(&touchev);
 }
 
@@ -304,9 +291,8 @@ void EventGenerator::MoveTouch(const gfx::Point& point) {
 
 void EventGenerator::MoveTouchId(const gfx::Point& point, int touch_id) {
   current_location_ = point;
-  TestTouchEvent touchev(
-      ui::ET_TOUCH_MOVED, GetLocationInCurrentRoot(), touch_id, flags_,
-      Now());
+  TestTouchEvent touchev(ui::ET_TOUCH_MOVED, GetLocationInCurrentRoot(),
+                         touch_id, flags_, ui::EventTimeForNow());
   Dispatch(&touchev);
 
   if (!grab_)
@@ -318,9 +304,8 @@ void EventGenerator::ReleaseTouch() {
 }
 
 void EventGenerator::ReleaseTouchId(int touch_id) {
-  TestTouchEvent touchev(
-      ui::ET_TOUCH_RELEASED, GetLocationInCurrentRoot(), touch_id, flags_,
-      Now());
+  TestTouchEvent touchev(ui::ET_TOUCH_RELEASED, GetLocationInCurrentRoot(),
+                         touch_id, flags_, ui::EventTimeForNow());
   Dispatch(&touchev);
 }
 
@@ -334,19 +319,10 @@ void EventGenerator::PressMoveAndReleaseTouchToCenterOf(EventTarget* window) {
   PressMoveAndReleaseTouchTo(CenterOfWindow(window));
 }
 
-void EventGenerator::GestureEdgeSwipe() {
-  GestureEventDetails details(ET_GESTURE_WIN8_EDGE_SWIPE);
-  details.set_device_type(GestureDeviceType::DEVICE_TOUCHSCREEN);
-  GestureEvent gesture(0, 0, 0, Now(), details);
-  Dispatch(&gesture);
-}
-
 void EventGenerator::GestureTapAt(const gfx::Point& location) {
   const int kTouchId = 2;
-  ui::TouchEvent press(ui::ET_TOUCH_PRESSED,
-                       location,
-                       kTouchId,
-                       Now());
+  ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, kTouchId,
+                       ui::EventTimeForNow());
   Dispatch(&press);
 
   ui::TouchEvent release(
@@ -357,10 +333,8 @@ void EventGenerator::GestureTapAt(const gfx::Point& location) {
 
 void EventGenerator::GestureTapDownAndUp(const gfx::Point& location) {
   const int kTouchId = 3;
-  ui::TouchEvent press(ui::ET_TOUCH_PRESSED,
-                       location,
-                       kTouchId,
-                       Now());
+  ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, kTouchId,
+                       ui::EventTimeForNow());
   Dispatch(&press);
 
   ui::TouchEvent release(
@@ -394,7 +368,7 @@ void EventGenerator::GestureScrollSequenceWithCallback(
     int steps,
     const ScrollStepCallback& callback) {
   const int kTouchId = 5;
-  base::TimeTicks timestamp = Now();
+  base::TimeTicks timestamp = ui::EventTimeForNow();
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, start, 0, kTouchId,
                        timestamp, 5.0f, 5.0f, 0.0f, 1.0f);
   Dispatch(&press);
@@ -454,7 +428,7 @@ void EventGenerator::GestureMultiFingerScrollWithDelays(
     points[i] = start[i];
   }
 
-  base::TimeTicks press_time_first = Now();
+  base::TimeTicks press_time_first = ui::EventTimeForNow();
   base::TimeTicks press_time[kMaxTouchPoints];
   bool pressed[kMaxTouchPoints];
   for (int i = 0; i < count; ++i) {
@@ -506,7 +480,7 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
                                     float y_offset,
                                     int steps,
                                     int num_fingers) {
-  base::TimeTicks timestamp = Now();
+  base::TimeTicks timestamp = ui::EventTimeForNow();
   ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL,
                                start,
                                timestamp,
@@ -545,7 +519,7 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
                                     const std::vector<gfx::PointF>& offsets,
                                     int num_fingers) {
   size_t steps = offsets.size();
-  base::TimeTicks timestamp = Now();
+  base::TimeTicks timestamp = ui::EventTimeForNow();
   ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL,
                                start,
                                timestamp,
@@ -589,24 +563,9 @@ void EventGenerator::Dispatch(ui::Event* event) {
   DoDispatchEvent(event, async_);
 }
 
-void EventGenerator::SetTickClock(std::unique_ptr<base::TickClock> tick_clock) {
-  scoped_refptr<ClonableTickClock> clonable =
-      new ClonableTickClock(std::move(tick_clock));
-  ui::SetEventTickClockForTesting(clonable->Clone());
-  tick_clock_ = clonable->Clone();
-}
-
-base::TimeTicks EventGenerator::Now() {
-  // This is the same as what EventTimeForNow() does, but here we do it
-  // with a tick clock that can be replaced with a simulated clock for tests.
-  // TODO(majidvp): The tick clock used by |ui::EventTimeForNow()| is now
-  // mockable so we no longer need this.
-  return tick_clock_->NowTicks();
-}
-
 void EventGenerator::Init(gfx::NativeWindow root_window,
                           gfx::NativeWindow window_context) {
-  SetTickClock(WrapUnique(new TestTickClock()));
+  ui::SetEventTickClockForTesting(base::MakeUnique<TestTickClock>());
   delegate()->SetContext(this, root_window, window_context);
   if (window_context)
     current_location_ = delegate()->CenterOfWindow(window_context);
@@ -631,7 +590,8 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
   }
   MSG native_event =
       { NULL, (is_press ? key_press : WM_KEYUP), key_code, 0 };
-  native_event.time = (Now() - base::TimeTicks()).InMicroseconds();
+  native_event.time =
+      (ui::EventTimeForNow() - base::TimeTicks()).InMicroseconds();
   ui::KeyEvent keyev(native_event, flags);
 #elif defined(USE_X11)
   ui::ScopedXI2Event xevent;
@@ -639,7 +599,7 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
                       key_code,
                       flags);
   static_cast<XEvent*>(xevent)->xkey.time =
-      (Now() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
+      (ui::EventTimeForNow() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
   ui::KeyEvent keyev(xevent);
 #else
   ui::EventType type = is_press ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED;
@@ -685,6 +645,9 @@ gfx::Point EventGenerator::CenterOfWindow(const EventTarget* window) const {
 }
 
 void EventGenerator::DoDispatchEvent(ui::Event* event, bool async) {
+  if (pen_pointer_mode_ && event->IsMouseEvent())
+    ConvertToPenPointerEvent(static_cast<ui::MouseEvent*>(event));
+
   if (async) {
     std::unique_ptr<ui::Event> pending_event = ui::Event::Clone(*event);
     if (pending_events_.empty()) {

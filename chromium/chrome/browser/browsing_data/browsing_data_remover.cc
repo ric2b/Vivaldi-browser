@@ -31,7 +31,9 @@
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/ntp_snippets/content_suggestions_service_factory.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -44,7 +46,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
-#include "components/browsing_data/storage_partition_http_cache_data_remover.h"
+#include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -55,6 +57,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/pnacl_host.h"
+#include "components/ntp_snippets/content_suggestions_service.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/power/origin_power_map.h"
@@ -89,6 +92,20 @@
 #include "components/precache/content/precache_manager.h"
 #endif
 
+#if defined(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/activity_log/activity_log.h"
+#include "extensions/browser/extension_prefs.h"
+#endif
+
+#if defined(ENABLE_PLUGINS)
+#include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
+#endif
+
+#if defined(ENABLE_SESSION_SERVICE)
+#include "chrome/browser/sessions/session_service.h"
+#include "chrome/browser/sessions/session_service_factory.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/attestation/attestation_constants.h"
@@ -96,16 +113,6 @@
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/user_manager/user.h"
-#endif
-
-#if defined(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/activity_log/activity_log.h"
-#include "extensions/browser/extension_prefs.h"
-#endif
-
-#if defined(ENABLE_SESSION_SERVICE)
-#include "chrome/browser/sessions/session_service.h"
-#include "chrome/browser/sessions/session_service_factory.h"
 #endif
 
 #if defined(ENABLE_WEBRTC)
@@ -119,20 +126,6 @@ using content::BrowserThread;
 using content::DOMStorageContext;
 
 namespace {
-
-using CallbackList =
-    base::CallbackList<void(const BrowsingDataRemover::NotificationDetails&)>;
-
-// Contains all registered callbacks for browsing data removed notifications.
-CallbackList* g_on_browsing_data_removed_callbacks = nullptr;
-
-// Accessor for |*g_on_browsing_data_removed_callbacks|. Creates a new object
-// the first time so that it always returns a valid object.
-CallbackList* GetOnBrowsingDataRemovedCallbacks() {
-  if (!g_on_browsing_data_removed_callbacks)
-    g_on_browsing_data_removed_callbacks = new CallbackList();
-  return g_on_browsing_data_removed_callbacks;
-}
 
 void UIThreadTrampolineHelper(const base::Closure& callback) {
   BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, callback);
@@ -266,29 +259,10 @@ void ClearChannelIDsOnIOThread(
 BrowsingDataRemover::CompletionInhibitor*
     BrowsingDataRemover::completion_inhibitor_ = nullptr;
 
-BrowsingDataRemover::NotificationDetails::NotificationDetails()
-    : removal_begin(base::Time()),
-      removal_mask(-1),
-      origin_type_mask(-1) {
+bool BrowsingDataRemover::TimeRange::operator==(
+    const BrowsingDataRemover::TimeRange& other) const {
+  return begin == other.begin && end == other.end;
 }
-
-BrowsingDataRemover::NotificationDetails::NotificationDetails(
-    const BrowsingDataRemover::NotificationDetails& details)
-    : removal_begin(details.removal_begin),
-      removal_mask(details.removal_mask),
-      origin_type_mask(details.origin_type_mask) {
-}
-
-BrowsingDataRemover::NotificationDetails::NotificationDetails(
-    base::Time removal_begin,
-    int removal_mask,
-    int origin_type_mask)
-    : removal_begin(removal_begin),
-      removal_mask(removal_mask),
-      origin_type_mask(origin_type_mask) {
-}
-
-BrowsingDataRemover::NotificationDetails::~NotificationDetails() {}
 
 // static
 BrowsingDataRemover::TimeRange BrowsingDataRemover::Unbounded() {
@@ -296,27 +270,23 @@ BrowsingDataRemover::TimeRange BrowsingDataRemover::Unbounded() {
 }
 
 // static
-BrowsingDataRemover::TimeRange BrowsingDataRemover::Period(TimePeriod period) {
+BrowsingDataRemover::TimeRange BrowsingDataRemover::Period(
+    browsing_data::TimePeriod period) {
   switch (period) {
-    case LAST_HOUR:
-      content::RecordAction(
-          UserMetricsAction("ClearBrowsingData_LastHour"));
+    case browsing_data::LAST_HOUR:
+      content::RecordAction(UserMetricsAction("ClearBrowsingData_LastHour"));
       break;
-    case LAST_DAY:
-      content::RecordAction(
-          UserMetricsAction("ClearBrowsingData_LastDay"));
+    case browsing_data::LAST_DAY:
+      content::RecordAction(UserMetricsAction("ClearBrowsingData_LastDay"));
       break;
-    case LAST_WEEK:
-      content::RecordAction(
-          UserMetricsAction("ClearBrowsingData_LastWeek"));
+    case browsing_data::LAST_WEEK:
+      content::RecordAction(UserMetricsAction("ClearBrowsingData_LastWeek"));
       break;
-    case FOUR_WEEKS:
-      content::RecordAction(
-          UserMetricsAction("ClearBrowsingData_LastMonth"));
+    case browsing_data::FOUR_WEEKS:
+      content::RecordAction(UserMetricsAction("ClearBrowsingData_LastMonth"));
       break;
-    case EVERYTHING:
-      content::RecordAction(
-          UserMetricsAction("ClearBrowsingData_Everything"));
+    case browsing_data::ALL_TIME:
+      content::RecordAction(UserMetricsAction("ClearBrowsingData_Everything"));
       break;
   }
   return TimeRange(CalculateBeginDeleteTime(period), base::Time::Max());
@@ -325,7 +295,12 @@ BrowsingDataRemover::TimeRange BrowsingDataRemover::Period(TimePeriod period) {
 BrowsingDataRemover::BrowsingDataRemover(
     content::BrowserContext* browser_context)
     : profile_(Profile::FromBrowserContext(browser_context)),
+      remove_mask_(-1),
+      origin_type_mask_(-1),
       is_removing_(false),
+#if defined(ENABLE_PLUGINS)
+      flash_lso_helper_(BrowsingDataFlashLSOHelper::Create(profile_)),
+#endif
 #if BUILDFLAG(ANDROID_JAVA_UI)
       webapp_registry_(new WebappRegistry()),
 #endif
@@ -334,12 +309,20 @@ BrowsingDataRemover::BrowsingDataRemover(
 }
 
 BrowsingDataRemover::~BrowsingDataRemover() {
-  // If we are still removing data, notify observers so they can remove
-  // themselves from the observer list.
+  if (!task_queue_.empty()) {
+    VLOG(1) << "BrowsingDataRemover shuts down with " << task_queue_.size()
+            << " pending tasks";
+  }
+
+  // If we are still removing data, notify observers that their task has been
+  // (albeit unsucessfuly) processed, so they can unregister themselves.
   // TODO(bauerb): If it becomes a problem that browsing data might not actually
   // be fully cleared when an observer is notified, add a success flag.
-  if (is_removing_)
-    Notify();
+  while (!task_queue_.empty()) {
+    if (observer_list_.HasObserver(task_queue_.front().observer))
+      task_queue_.front().observer->OnBrowsingDataRemoverDone();
+    task_queue_.pop();
+  }
 }
 
 void BrowsingDataRemover::Shutdown() {
@@ -355,20 +338,86 @@ void BrowsingDataRemover::SetRemoving(bool is_removing) {
 void BrowsingDataRemover::Remove(const TimeRange& time_range,
                                  int remove_mask,
                                  int origin_type_mask) {
-  // Any instance of BrowsingDataFilterBuilder that |IsEmptyBlacklist()|
-  // is OK to pass here.
-  RegistrableDomainFilterBuilder builder(
-      RegistrableDomainFilterBuilder::BLACKLIST);
-  DCHECK(builder.IsEmptyBlacklist());
-  RemoveImpl(time_range, remove_mask, builder, origin_type_mask);
+  RemoveInternal(time_range, remove_mask, origin_type_mask,
+                 std::unique_ptr<RegistrableDomainFilterBuilder>(), nullptr);
+}
+
+void BrowsingDataRemover::RemoveAndReply(
+    const TimeRange& time_range,
+    int remove_mask,
+    int origin_type_mask,
+    Observer* observer) {
+  DCHECK(observer);
+  RemoveInternal(time_range, remove_mask, origin_type_mask,
+                 std::unique_ptr<RegistrableDomainFilterBuilder>(), observer);
 }
 
 void BrowsingDataRemover::RemoveWithFilter(
     const TimeRange& time_range,
     int remove_mask,
     int origin_type_mask,
-    const BrowsingDataFilterBuilder& filter_builder) {
-  RemoveImpl(time_range, remove_mask, filter_builder, origin_type_mask);
+    std::unique_ptr<BrowsingDataFilterBuilder> filter_builder) {
+  DCHECK_EQ(0, remove_mask & ~FILTERABLE_DATATYPES);
+  DCHECK(filter_builder);
+  RemoveInternal(time_range, remove_mask, origin_type_mask,
+                 std::move(filter_builder), nullptr);
+}
+
+void BrowsingDataRemover::RemoveWithFilterAndReply(
+    const TimeRange& time_range,
+    int remove_mask,
+    int origin_type_mask,
+    std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+    Observer* observer) {
+  DCHECK_EQ(0, remove_mask & ~FILTERABLE_DATATYPES);
+  DCHECK(filter_builder);
+  DCHECK(observer);
+  RemoveInternal(time_range, remove_mask, origin_type_mask,
+                 std::move(filter_builder), observer);
+}
+
+void BrowsingDataRemover::RemoveInternal(
+    const TimeRange& time_range,
+    int remove_mask,
+    int origin_type_mask,
+    std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+    Observer* observer) {
+  DCHECK(!observer || observer_list_.HasObserver(observer))
+      << "Every observer must register itself (by calling AddObserver()) "
+      << "before observing a removal task.";
+
+  // Remove() and RemoveAndReply() pass a null pointer to indicate no filter.
+  // No filter is equivalent to one that |IsEmptyBlacklist()|.
+  if (!filter_builder) {
+    filter_builder = base::WrapUnique(new RegistrableDomainFilterBuilder(
+        RegistrableDomainFilterBuilder::BLACKLIST));
+    DCHECK(filter_builder->IsEmptyBlacklist());
+  }
+
+  task_queue_.emplace(
+      time_range,
+      remove_mask,
+      origin_type_mask,
+      std::move(filter_builder),
+      observer);
+
+  // If this is the only scheduled task, execute it immediately. Otherwise,
+  // it will be automatically executed when all tasks scheduled before it
+  // finish.
+  if (task_queue_.size() == 1) {
+    SetRemoving(true);
+    RunNextTask();
+  }
+}
+
+void BrowsingDataRemover::RunNextTask() {
+  DCHECK(!task_queue_.empty());
+  const RemovalTask& removal_task = task_queue_.front();
+
+  RemoveImpl(removal_task.time_range,
+             removal_task.remove_mask,
+             *removal_task.filter_builder,
+             removal_task.origin_type_mask);
 }
 
 void BrowsingDataRemover::RemoveImpl(
@@ -376,13 +425,23 @@ void BrowsingDataRemover::RemoveImpl(
     int remove_mask,
     const BrowsingDataFilterBuilder& filter_builder,
     int origin_type_mask) {
+  // =============== README before adding more storage backends ===============
+  //
+  // If you're adding a data storage backend that is included among
+  // RemoveDataMask::FILTERABLE_DATATYPES, you must do one of the following:
+  // 1. Support one of the filters generated by |filter_builder|.
+  // 2. Add a comment explaining why is it acceptable in your case to delete all
+  //    data without filtering URLs / origins / domains.
+  // 3. Do not support partial deletion, i.e. only delete your data if
+  //    |filter_builder.IsEmptyBlacklist()|. Add a comment explaining why this
+  //    is acceptable.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  waiting_for_synchronous_clear_operations_ = true;
 
   // crbug.com/140910: Many places were calling this with base::Time() as
   // delete_end, even though they should've used base::Time::Max().
   DCHECK_NE(base::Time(), time_range.end);
 
-  SetRemoving(true);
   delete_begin_ = time_range.begin;
   delete_end_ = time_range.end;
   remove_mask_ = remove_mask;
@@ -392,6 +451,12 @@ void BrowsingDataRemover::RemoveImpl(
       filter_builder.BuildGeneralFilter();
   base::Callback<bool(const ContentSettingsPattern& url)> same_pattern_filter =
       filter_builder.BuildWebsiteSettingsPatternMatchesFilter();
+
+  // Some backends support a filter that |is_null()| to make complete deletion
+  // more efficient.
+  base::Callback<bool(const GURL&)> nullable_filter =
+      filter_builder.IsEmptyBlacklist() ? base::Callback<bool(const GURL&)>()
+                                        : filter;
 
   PrefService* prefs = profile_->GetPrefs();
   bool may_delete_history = prefs->GetBoolean(
@@ -446,6 +511,13 @@ void BrowsingDataRemover::RemoveImpl(
 #endif
     }
 
+    ntp_snippets::ContentSuggestionsService* content_suggestions_service =
+        ContentSuggestionsServiceFactory::GetForProfile(profile_);
+    if (content_suggestions_service) {
+      content_suggestions_service->ClearHistory(delete_begin_, delete_end_,
+                                                filter);
+    }
+
 #if defined(ENABLE_EXTENSIONS)
     // Clear launch times as they are a form of history.
     extensions::ExtensionPrefs* extension_prefs =
@@ -455,11 +527,10 @@ void BrowsingDataRemover::RemoveImpl(
 
     // The power consumption history by origin contains details of websites
     // that were visited.
-    // TODO(dmurph): Support all backends with filter (crbug.com/113621).
     power::OriginPowerMap* origin_power_map =
         power::OriginPowerMapFactory::GetForBrowserContext(profile_);
     if (origin_power_map)
-      origin_power_map->ClearOriginMap();
+      origin_power_map->ClearOriginMap(nullable_filter);
 
     // Need to clear the host cache and accumulated speculative data, as it also
     // reveals some history: we have no mechanism to track when these items were
@@ -733,17 +804,26 @@ void BrowsingDataRemover::RemoveImpl(
   if (remove_mask & REMOVE_PLUGIN_DATA &&
       origin_type_mask_ & BrowsingDataHelper::UNPROTECTED_WEB) {
     content::RecordAction(UserMetricsAction("ClearBrowsingData_LSOData"));
+    waiting_for_clear_plugin_data_count_ = 1;
 
-    waiting_for_clear_plugin_data_ = true;
-    DCHECK(!plugin_data_remover_);
-    plugin_data_remover_.reset(content::PluginDataRemover::Create(profile_));
-    base::WaitableEvent* event =
-        plugin_data_remover_->StartRemoving(delete_begin_);
+    if (filter_builder.IsEmptyBlacklist()) {
+      DCHECK(!plugin_data_remover_);
+      plugin_data_remover_.reset(content::PluginDataRemover::Create(profile_));
+      base::WaitableEvent* event =
+          plugin_data_remover_->StartRemoving(delete_begin_);
 
-    base::WaitableEventWatcher::EventCallback watcher_callback =
-        base::Bind(&BrowsingDataRemover::OnWaitableEventSignaled,
-                   weak_ptr_factory_.GetWeakPtr());
-    watcher_.StartWatching(event, watcher_callback);
+      base::WaitableEventWatcher::EventCallback watcher_callback =
+          base::Bind(&BrowsingDataRemover::OnWaitableEventSignaled,
+                     weak_ptr_factory_.GetWeakPtr());
+      watcher_.StartWatching(event, watcher_callback);
+    } else {
+      // TODO(msramek): Store filters from the currently executed task on the
+      // object to avoid having to copy them to callback methods.
+      flash_lso_helper_->StartFetching(base::Bind(
+          &BrowsingDataRemover::OnSitesWithFlashDataFetched,
+          weak_ptr_factory_.GetWeakPtr(),
+          filter_builder.BuildPluginFilter()));
+    }
   }
 #endif
 
@@ -759,6 +839,8 @@ void BrowsingDataRemover::RemoveImpl(
         HostContentSettingsMapFactory::GetForProfile(profile_),
         CONTENT_SETTINGS_TYPE_APP_BANNER,
         base::Bind(&ForwardPrimaryPatternCallback, same_pattern_filter));
+
+    PermissionDecisionAutoBlocker::RemoveCountsByUrl(profile_, filter);
   }
 
   if (remove_mask & REMOVE_PASSWORDS) {
@@ -788,7 +870,8 @@ void BrowsingDataRemover::RemoveImpl(
       base::Closure on_cleared_auto_sign_in =
           base::Bind(&BrowsingDataRemover::OnClearedAutoSignIn,
                      weak_ptr_factory_.GetWeakPtr());
-      password_store->DisableAutoSignInForAllLogins(on_cleared_auto_sign_in);
+      password_store->DisableAutoSignInForOrigins(
+          filter, on_cleared_auto_sign_in);
     }
   }
 
@@ -889,9 +972,6 @@ void BrowsingDataRemover::RemoveImpl(
     storage_partition_remove_mask |=
         content::StoragePartition::REMOVE_DATA_MASK_SHADER_CACHE;
 
-    storage_partition_remove_mask |=
-        content::StoragePartition::REMOVE_DATA_MASK_WEBRTC_IDENTITY;
-
     // When clearing cache, wipe accumulated network related data
     // (TransportSecurityState and HttpServerPropertiesManager data).
     waiting_for_clear_networking_history_ = true;
@@ -899,11 +979,11 @@ void BrowsingDataRemover::RemoveImpl(
         delete_begin_,
         base::Bind(&BrowsingDataRemover::OnClearedNetworkingHistory,
                    weak_ptr_factory_.GetWeakPtr()));
-  }
 
-  if (remove_mask & REMOVE_WEBRTC_IDENTITY) {
-    storage_partition_remove_mask |=
-        content::StoragePartition::REMOVE_DATA_MASK_WEBRTC_IDENTITY;
+    ntp_snippets::ContentSuggestionsService* content_suggestions_service =
+        ContentSuggestionsServiceFactory::GetForProfile(profile_);
+    if (content_suggestions_service)
+      content_suggestions_service->ClearAllCachedSuggestions();
   }
 
   // Content Decryption Modules used by Encrypted Media store licenses in a
@@ -987,7 +1067,9 @@ void BrowsingDataRemover::RemoveImpl(
 #endif  // defined(ENABLE_PLUGINS)
   }
 
-  // Remove omnibox zero-suggest cache results.
+  // Remove omnibox zero-suggest cache results. Filtering is not supported.
+  // This is not a problem, as deleting more data than necessary will just cause
+  // another server round-trip; no data is actually lost.
   if ((remove_mask & (REMOVE_CACHE | REMOVE_COOKIES)))
     prefs->SetString(omnibox::kZeroSuggestCachedResults, std::string());
 
@@ -1005,6 +1087,7 @@ void BrowsingDataRemover::RemoveImpl(
       waiting_for_clear_domain_reliability_monitor_ = true;
       service->ClearBrowsingData(
           mode,
+          filter,
           base::Bind(&BrowsingDataRemover::OnClearedDomainReliabilityMonitor,
                      weak_ptr_factory_.GetWeakPtr()));
     }
@@ -1015,7 +1098,8 @@ void BrowsingDataRemover::RemoveImpl(
     // Clear all data associated with registered webapps. The webapp_registry
     // makes a JNI call into a Java-side AsyncTask, so don't wait for the reply.
     waiting_for_clear_webapp_data_ = true;
-    webapp_registry_->UnregisterWebapps(
+    webapp_registry_->UnregisterWebappsForUrls(
+        filter,
         base::Bind(&BrowsingDataRemover::OnClearedWebappData,
                    weak_ptr_factory_.GetWeakPtr()));
   }
@@ -1025,10 +1109,9 @@ void BrowsingDataRemover::RemoveImpl(
   if ((remove_mask & REMOVE_CACHE) && offline_pages::IsOfflinePagesEnabled()) {
     waiting_for_clear_offline_page_data_ = true;
     offline_pages::OfflinePageModelFactory::GetForBrowserContext(profile_)
-        ->DeletePagesByURLPredicate(
-            filter,
-            base::Bind(&BrowsingDataRemover::OnClearedOfflinePageData,
-                       weak_ptr_factory_.GetWeakPtr()));
+        ->DeleteCachedPagesByURLPredicate(
+            filter, base::Bind(&BrowsingDataRemover::OnClearedOfflinePageData,
+                               weak_ptr_factory_.GetWeakPtr()));
   }
 #endif
 
@@ -1043,6 +1126,7 @@ void BrowsingDataRemover::RemoveImpl(
   }
 
   // Notify in case all actions taken were synchronous.
+  waiting_for_synchronous_clear_operations_ = false;
   NotifyIfDone();
 
   UMA_HISTOGRAM_ENUMERATION(
@@ -1070,6 +1154,43 @@ void BrowsingDataRemover::OverrideWebappRegistryForTesting(
 }
 #endif
 
+#if defined(ENABLE_PLUGINS)
+void BrowsingDataRemover::OverrideFlashLSOHelperForTesting(
+    scoped_refptr<BrowsingDataFlashLSOHelper> flash_lso_helper) {
+  flash_lso_helper_ = flash_lso_helper;
+}
+#endif
+
+const base::Time& BrowsingDataRemover::GetLastUsedBeginTime() {
+  return delete_begin_;
+}
+
+const base::Time& BrowsingDataRemover::GetLastUsedEndTime() {
+  return delete_end_;
+}
+
+int BrowsingDataRemover::GetLastUsedRemovalMask() {
+  return remove_mask_;
+}
+
+int BrowsingDataRemover::GetLastUsedOriginTypeMask() {
+  return origin_type_mask_;
+}
+
+BrowsingDataRemover::RemovalTask::RemovalTask(
+    const TimeRange& time_range,
+    int remove_mask,
+    int origin_type_mask,
+    std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+    Observer* observer)
+    : time_range(time_range),
+      remove_mask(remove_mask),
+      origin_type_mask(origin_type_mask),
+      filter_builder(std::move(filter_builder)),
+      observer(observer) {}
+
+BrowsingDataRemover::RemovalTask::~RemovalTask() {}
+
 void BrowsingDataRemover::ClearSettingsForOneTypeWithPredicate(
     HostContentSettingsMap* content_settings_map,
     ContentSettingsType content_type,
@@ -1088,32 +1209,9 @@ void BrowsingDataRemover::ClearSettingsForOneTypeWithPredicate(
   }
 }
 
-base::Time BrowsingDataRemover::CalculateBeginDeleteTime(
-    TimePeriod time_period) {
-  base::TimeDelta diff;
-  base::Time delete_begin_time = base::Time::Now();
-  switch (time_period) {
-    case LAST_HOUR:
-      diff = base::TimeDelta::FromHours(1);
-      break;
-    case LAST_DAY:
-      diff = base::TimeDelta::FromHours(24);
-      break;
-    case LAST_WEEK:
-      diff = base::TimeDelta::FromHours(7*24);
-      break;
-    case FOUR_WEEKS:
-      diff = base::TimeDelta::FromHours(4*7*24);
-      break;
-    case EVERYTHING:
-      delete_begin_time = base::Time();
-      break;
-  }
-  return delete_begin_time - diff;
-}
-
 bool BrowsingDataRemover::AllDone() {
-  return !waiting_for_clear_autofill_origin_urls_ &&
+  return !waiting_for_synchronous_clear_operations_ &&
+         !waiting_for_clear_autofill_origin_urls_ &&
          !waiting_for_clear_cache_ &&
          !waiting_for_clear_flash_content_licenses_ &&
          !waiting_for_clear_channel_ids_ && !waiting_for_clear_cookies_count_ &&
@@ -1124,7 +1222,8 @@ bool BrowsingDataRemover::AllDone() {
          !waiting_for_clear_network_predictor_ &&
          !waiting_for_clear_networking_history_ &&
          !waiting_for_clear_passwords_ && !waiting_for_clear_passwords_stats_ &&
-         !waiting_for_clear_platform_keys_ && !waiting_for_clear_plugin_data_ &&
+         !waiting_for_clear_platform_keys_ &&
+         !waiting_for_clear_plugin_data_count_ &&
          !waiting_for_clear_pnacl_cache_ &&
 #if BUILDFLAG(ANDROID_JAVA_UI)
          !waiting_for_clear_precache_history_ &&
@@ -1151,15 +1250,40 @@ void BrowsingDataRemover::OnKeywordsLoaded() {
 }
 
 void BrowsingDataRemover::Notify() {
-  SetRemoving(false);
+  // Some tests call |RemoveImpl| directly, without using the task scheduler.
+  // TODO(msramek): Improve those tests so we don't have to do this. Tests
+  // relying on |RemoveImpl| do so because they need to pass in
+  // BrowsingDataFilterBuilder while still keeping ownership of it. Making
+  // BrowsingDataFilterBuilder copyable would solve this.
+  if (!is_removing_) {
+    DCHECK(task_queue_.empty());
+    return;
+  }
 
-  // Notify observers.
-  BrowsingDataRemover::NotificationDetails details(delete_begin_, remove_mask_,
-      origin_type_mask_);
+  // Inform the observer of the current task unless it has unregistered
+  // itself in the meantime.
+  DCHECK(!task_queue_.empty());
 
-  GetOnBrowsingDataRemovedCallbacks()->Notify(details);
+  if (task_queue_.front().observer != nullptr &&
+      observer_list_.HasObserver(task_queue_.front().observer)) {
+    task_queue_.front().observer->OnBrowsingDataRemoverDone();
+  }
 
-  FOR_EACH_OBSERVER(Observer, observer_list_, OnBrowsingDataRemoverDone());
+  task_queue_.pop();
+
+  if (task_queue_.empty()) {
+    // All removal tasks have finished. Inform the observers that we're idle.
+    SetRemoving(false);
+    return;
+  }
+
+  // Yield to the UI thread before executing the next removal task.
+  // TODO(msramek): Consider also adding a backoff if too many tasks
+  // are scheduled.
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(&BrowsingDataRemover::RunNextTask,
+                 weak_ptr_factory_.GetWeakPtr()));
 }
 
 void BrowsingDataRemover::NotifyIfDone() {
@@ -1228,9 +1352,41 @@ void BrowsingDataRemover::ClearedPnaclCache() {
 void BrowsingDataRemover::OnWaitableEventSignaled(
     base::WaitableEvent* waitable_event) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  waiting_for_clear_plugin_data_ = false;
+
+  DCHECK_EQ(1, waiting_for_clear_plugin_data_count_);
+  waiting_for_clear_plugin_data_count_ = 0;
+
   plugin_data_remover_.reset();
   watcher_.StopWatching();
+  NotifyIfDone();
+}
+
+void BrowsingDataRemover::OnSitesWithFlashDataFetched(
+    base::Callback<bool(const std::string&)> plugin_filter,
+    const std::vector<std::string>& sites) {
+  DCHECK_EQ(1, waiting_for_clear_plugin_data_count_);
+  waiting_for_clear_plugin_data_count_ = 0;
+
+  std::vector<std::string> sites_to_delete;
+  for (const std::string& site : sites) {
+    if (plugin_filter.Run(site))
+      sites_to_delete.push_back(site);
+  }
+
+  waiting_for_clear_plugin_data_count_ = sites_to_delete.size();
+
+  for (const std::string& site : sites_to_delete) {
+    flash_lso_helper_->DeleteFlashLSOsForSite(
+        site,
+        base::Bind(&BrowsingDataRemover::OnFlashDataDeleted,
+                   weak_ptr_factory_.GetWeakPtr()));
+  }
+
+  NotifyIfDone();
+}
+
+void BrowsingDataRemover::OnFlashDataDeleted() {
+  waiting_for_clear_plugin_data_count_--;
   NotifyIfDone();
 }
 
@@ -1347,11 +1503,4 @@ void BrowsingDataRemover::OnClearedDomainReliabilityMonitor() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   waiting_for_clear_domain_reliability_monitor_ = false;
   NotifyIfDone();
-}
-
-// static
-BrowsingDataRemover::CallbackSubscription
-    BrowsingDataRemover::RegisterOnBrowsingDataRemovedCallback(
-        const BrowsingDataRemover::Callback& callback) {
-  return GetOnBrowsingDataRemovedCallbacks()->Add(callback);
 }

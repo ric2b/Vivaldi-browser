@@ -45,8 +45,8 @@
 #include "chrome/browser/devtools/remote_debugging_server.h"
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_status_updater.h"
-#include "chrome/browser/gpu/gl_string_manager.h"
 #include "chrome/browser/gpu/gpu_mode_manager.h"
+#include "chrome/browser/gpu/gpu_profile_cache.h"
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/intranet_redirect_detector.h"
 #include "chrome/browser/io_thread.h"
@@ -78,6 +78,7 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/chrome_extensions_client.h"
+#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/switch_utils.h"
@@ -101,6 +102,7 @@
 #include "components/subresource_filter/content/browser/content_ruleset_distributor.h"
 #include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/update_client/update_query_params.h"
 #include "components/web_resource/web_resource_pref_names.h"
@@ -129,6 +131,7 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/lifetime/keep_alive_registry.h"
+#include "chrome/browser/services/gcm/gcm_product_util.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "components/gcm_driver/gcm_client_factory.h"
 #include "components/gcm_driver/gcm_desktop_utils.h"
@@ -218,10 +221,22 @@ BrowserProcessImpl::BrowserProcessImpl(
       net_log_path, GetNetCaptureModeFromCommandLine(command_line),
       command_line.GetCommandLineString(), chrome::GetChannelString()));
 
-  ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-      extensions::kExtensionScheme);
-  ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
-      extensions::kExtensionResourceScheme);
+#if defined(ENABLE_EXTENSIONS)
+  if (extensions::IsIsolateExtensionsEnabled()) {
+    // chrome-extension:// URLs are safe to request anywhere, but may only
+    // commit (including in iframes) in extension processes.
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
+        extensions::kExtensionScheme, true);
+    // TODO(nick): Kill off kExtensionResourceScheme.
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeIsolatedScheme(
+        extensions::kExtensionResourceScheme, false);
+  } else {
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+        extensions::kExtensionScheme);
+    ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
+        extensions::kExtensionResourceScheme);
+  }
+#endif
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
 
@@ -256,6 +271,10 @@ BrowserProcessImpl::BrowserProcessImpl(
 }
 
 BrowserProcessImpl::~BrowserProcessImpl() {
+#if defined(ENABLE_EXTENSIONS)
+  extensions::ExtensionsBrowserClient::Set(nullptr);
+#endif
+
 #if !defined(OS_ANDROID)
   KeepAliveRegistry::GetInstance()->RemoveObserver(this);
 #endif  // !defined(OS_ANDROID)
@@ -617,11 +636,11 @@ IconManager* BrowserProcessImpl::icon_manager() {
   return icon_manager_.get();
 }
 
-GLStringManager* BrowserProcessImpl::gl_string_manager() {
+GpuProfileCache* BrowserProcessImpl::gpu_profile_cache() {
   DCHECK(CalledOnValidThread());
-  if (!gl_string_manager_.get())
-    gl_string_manager_.reset(new GLStringManager());
-  return gl_string_manager_.get();
+  if (!gpu_profile_cache_.get())
+    gpu_profile_cache_.reset(GpuProfileCache::Create());
+  return gpu_profile_cache_.get();
 }
 
 GpuModeManager* BrowserProcessImpl::gpu_mode_manager() {
@@ -888,7 +907,8 @@ BrowserProcessImpl::component_updater() {
     scoped_refptr<update_client::Configurator> configurator =
         component_updater::MakeChromeComponentUpdaterConfigurator(
             base::CommandLine::ForCurrentProcess(),
-            io_thread()->system_url_request_context_getter());
+            io_thread()->system_url_request_context_getter(),
+            g_browser_process->local_state());
     // Creating the component updater does not do anything, components
     // need to be registered and Start() needs to be called.
     component_updater_.reset(component_updater::ComponentUpdateServiceFactory(
@@ -948,8 +968,7 @@ void BrowserProcessImpl::OnKeepAliveStateChanged(bool is_keeping_alive) {
     Unpin();
 }
 
-void BrowserProcessImpl::OnKeepAliveRestartStateChanged(bool can_restart){
-}
+void BrowserProcessImpl::OnKeepAliveRestartStateChanged(bool can_restart) {}
 
 void BrowserProcessImpl::CreateWatchdogThread() {
   DCHECK(!created_watchdog_thread_ && !watchdog_thread_);
@@ -1085,11 +1104,11 @@ void BrowserProcessImpl::CreateNotificationPlatformBridge() {
 }
 
 void BrowserProcessImpl::CreateNotificationUIManager() {
-// Android does not use the NotificationUIManager anuymore
+// Android does not use the NotificationUIManager anymore
 // All notification traffic is routed through NotificationPlatformBridge.
 #if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
   DCHECK(!notification_ui_manager_);
-  notification_ui_manager_.reset(NotificationUIManager::Create(local_state()));
+  notification_ui_manager_.reset(NotificationUIManager::Create());
   created_notification_ui_manager_ = true;
 #endif
 }
@@ -1142,6 +1161,11 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
   DCHECK(!subresource_filter_ruleset_service_);
   created_subresource_filter_ruleset_service_ = true;
 
+  if (!base::FeatureList::IsEnabled(
+          subresource_filter::kSafeBrowsingSubresourceFilter)) {
+    return;
+  }
+
   base::SequencedWorkerPool* blocking_pool =
       content::BrowserThread::GetBlockingPool();
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
@@ -1151,10 +1175,12 @@ void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
 
   base::FilePath user_data_dir;
   PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  base::FilePath indexed_ruleset_base_dir =
+      user_data_dir.Append(subresource_filter::kTopLevelDirectoryName)
+          .Append(subresource_filter::kIndexedRulesetBaseDirectoryName);
   subresource_filter_ruleset_service_.reset(
       new subresource_filter::RulesetService(
-          local_state(), blocking_task_runner,
-          user_data_dir.Append(subresource_filter::kRulesetBaseDirectoryName)));
+          local_state(), blocking_task_runner, indexed_ruleset_base_dir));
   subresource_filter_ruleset_service_->RegisterDistributor(
       base::WrapUnique(new subresource_filter::ContentRulesetDistributor));
 }
@@ -1181,9 +1207,10 @@ void BrowserProcessImpl::CreateGCMDriver() {
   gcm_driver_ = gcm::CreateGCMDriverDesktop(
       base::WrapUnique(new gcm::GCMClientFactory), local_state(), store_path,
       system_request_context(), chrome::GetChannel(),
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      gcm::GetProductCategoryForSubtypes(local_state()),
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::UI),
-      content::BrowserThread::GetMessageLoopProxyForThread(
+      content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::IO),
       blocking_task_runner);
 #endif  // defined(OS_ANDROID)

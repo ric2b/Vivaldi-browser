@@ -74,10 +74,10 @@ const float kTextFilterTopScreenProportion = 0.02f;
 const int kTextFilterWidthMD = 280;
 
 // The font style used for text filtering textbox.
-static const ::ui::ResourceBundle::FontStyle kTextFilterFontStyle =
-    ::ui::ResourceBundle::FontStyle::MediumFont;
-static const ::ui::ResourceBundle::FontStyle kTextFilterFontStyleMD =
-    ::ui::ResourceBundle::FontStyle::BaseFont;
+static const ui::ResourceBundle::FontStyle kTextFilterFontStyle =
+    ui::ResourceBundle::FontStyle::MediumFont;
+static const ui::ResourceBundle::FontStyle kTextFilterFontStyleMD =
+    ui::ResourceBundle::FontStyle::BaseFont;
 
 // The color of the text and its background in the text filtering textbox.
 const SkColor kTextFilterTextColor = SK_ColorWHITE;
@@ -179,7 +179,8 @@ gfx::Rect GetTextFilterPosition(WmWindow* root_window) {
                 kShellWindowId_DefaultContainer)));
     return gfx::Rect(0.5 * (total_bounds.width() -
                             std::min(kTextFilterWidthMD, total_bounds.width())),
-                     total_bounds.height() * kTextFilterTopScreenProportion,
+                     total_bounds.y() +
+                         total_bounds.height() * kTextFilterTopScreenProportion,
                      std::min(kTextFilterWidthMD, total_bounds.width()),
                      kTextFilterHeightMD);
   }
@@ -205,6 +206,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.accept_events = true;
   params.bounds = GetTextFilterPosition(root_window);
+  params.name = "OverviewModeTextFilter";
   *text_filter_bottom = params.bounds.bottom();
   root_window->GetRootWindowController()->ConfigureWidgetInitParamsForContainer(
       widget, kShellWindowId_StatusContainer, &params);
@@ -217,7 +219,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
       material ? kTextFilterCornerRadiusMD : kTextFilterCornerRadius,
       material ? kTextFilterBackgroundColorMD : kTextFilterBackgroundColor);
   ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  const ::ui::ResourceBundle::FontStyle font_style =
+  const ui::ResourceBundle::FontStyle font_style =
       material ? kTextFilterFontStyleMD : kTextFilterFontStyle;
   const int text_height =
       std::max(kTextFilterIconSize, bundle.GetFontList(font_style).GetHeight());
@@ -264,8 +266,9 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
 // static
 bool WindowSelector::IsSelectable(WmWindow* window) {
   wm::WindowState* state = window->GetWindowState();
-  if (state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED ||
-      state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED) {
+  if (!ash::MaterialDesignController::IsOverviewMaterial() &&
+      (state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED ||
+       state->GetStateType() == wm::WINDOW_STATE_TYPE_DOCKED_MINIMIZED)) {
     return false;
   }
   return state->IsUserPositionable();
@@ -279,7 +282,7 @@ WindowSelector::WindowSelector(WindowSelectorDelegate* delegate)
       overview_start_time_(base::Time::Now()),
       num_key_presses_(0),
       num_items_(0),
-      showing_selection_widget_(false),
+      showing_text_filter_(false),
       text_filter_string_length_(0),
       num_times_textfield_cleared_(0),
       restoring_minimized_windows_(false),
@@ -369,7 +372,7 @@ void WindowSelector::Init(const WindowList& windows) {
   display::Screen::GetScreen()->AddObserver(this);
   shell->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
   // Send an a11y alert.
-  WmShell::Get()->GetAccessibilityDelegate()->TriggerAccessibilityAlert(
+  WmShell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
       A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
 
   UpdateShelfVisibility();
@@ -380,6 +383,18 @@ void WindowSelector::Init(const WindowList& windows) {
 // calls to restoring_minimized_windows() on a partially destructed object.
 void WindowSelector::Shutdown() {
   is_shut_down_ = true;
+  // Stop observing screen metrics changes first to avoid auto-positioning
+  // windows in response to work area changes from window activation.
+  display::Screen::GetScreen()->RemoveObserver(this);
+
+  size_t remaining_items = 0;
+  for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
+    for (WindowSelectorItem* window_selector_item : window_grid->window_list())
+      window_selector_item->RestoreWindow();
+    remaining_items += window_grid->size();
+  }
+
+  // Setting focus after restoring windows' state avoids unnecessary animations.
   ResetFocusRestoreWindow(true);
   RemoveAllObservers();
 
@@ -388,13 +403,6 @@ void WindowSelector::Shutdown() {
     // Un-hide the callout widgets for panels. It is safe to call this for
     // root_windows that don't contain any panel windows.
     PanelLayoutManager::Get(window)->SetShowCalloutWidgets(true);
-  }
-
-  size_t remaining_items = 0;
-  for (std::unique_ptr<WindowGrid>& window_grid : grid_list_) {
-    for (WindowSelectorItem* window_selector_item : window_grid->window_list())
-      window_selector_item->RestoreWindow();
-    remaining_items += window_grid->size();
   }
 
   for (std::unique_ptr<WindowGrid>& window_grid : grid_list_)
@@ -503,12 +511,24 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
       break;
     case ui::VKEY_RIGHT:
     case ui::VKEY_TAB:
-      num_key_presses_++;
-      Move(WindowSelector::RIGHT, true);
-      break;
+      if (key_event.key_code() == ui::VKEY_RIGHT ||
+          !(key_event.flags() & ui::EF_SHIFT_DOWN)) {
+        num_key_presses_++;
+        Move(WindowSelector::RIGHT, true);
+        break;
+      }
     case ui::VKEY_LEFT:
       num_key_presses_++;
       Move(WindowSelector::LEFT, true);
+      break;
+    case ui::VKEY_W:
+      if (!(key_event.flags() & ui::EF_CONTROL_DOWN) ||
+          !grid_list_[selected_grid_index_]->is_selecting()) {
+        // Allow the textfield to handle 'W' key when not used with Ctrl.
+        return false;
+      }
+      WmShell::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW_CLOSE_KEY);
+      grid_list_[selected_grid_index_]->SelectedWindow()->CloseWindow();
       break;
     case ui::VKEY_RETURN:
       // Ignore if no item is selected.
@@ -539,12 +559,8 @@ void WindowSelector::OnDisplayRemoved(const display::Display& display) {
 
 void WindowSelector::OnDisplayMetricsChanged(const display::Display& display,
                                              uint32_t metrics) {
-  // If only the work area changes, there is no need to reposition windows in
-  // overview.
-  if (metrics != DISPLAY_METRIC_WORK_AREA) {
-    PositionWindows(/* animate */ false);
-    RepositionTextFilterOnDisplayMetricsChange();
-  }
+  PositionWindows(/* animate */ false);
+  RepositionTextFilterOnDisplayMetricsChange();
 }
 
 void WindowSelector::OnWindowTreeChanged(WmWindow* window,
@@ -594,8 +610,12 @@ void WindowSelector::OnWindowActivated(WmWindow* gained_active,
   auto iter = std::find_if(windows.begin(), windows.end(),
                            WindowSelectorItemTargetComparator(gained_active));
 
-  if (iter != windows.end())
+  if (iter != windows.end()) {
     (*iter)->ShowWindowOnExit();
+  } else if (showing_text_filter_ &&
+             lost_active == GetTextFilterWidgetWindow()) {
+    return;
+  }
 
   // Don't restore focus on exit if a window was just activated.
   ResetFocusRestoreWindow(false);
@@ -613,19 +633,19 @@ void WindowSelector::ContentsChanged(views::Textfield* sender,
   if (!text_filter_string_length_)
     num_times_textfield_cleared_++;
 
-  bool should_show_selection_widget = !new_contents.empty();
-  if (showing_selection_widget_ != should_show_selection_widget) {
+  bool should_show_text_filter = !new_contents.empty();
+  if (showing_text_filter_ != should_show_text_filter) {
     WmWindow* text_filter_widget_window = GetTextFilterWidgetWindow();
     ui::ScopedLayerAnimationSettings animation_settings(
         text_filter_widget_window->GetLayer()->GetAnimator());
     animation_settings.SetPreemptionStrategy(
         ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-    animation_settings.SetTweenType(showing_selection_widget_
+    animation_settings.SetTweenType(showing_text_filter_
                                         ? gfx::Tween::FAST_OUT_LINEAR_IN
                                         : gfx::Tween::LINEAR_OUT_SLOW_IN);
 
     gfx::Transform transform;
-    if (should_show_selection_widget) {
+    if (should_show_text_filter) {
       transform.Translate(0, 0);
       text_filter_widget_window->SetOpacity(1);
     } else {
@@ -634,7 +654,7 @@ void WindowSelector::ContentsChanged(views::Textfield* sender,
     }
 
     text_filter_widget_window->SetTransform(transform);
-    showing_selection_widget_ = should_show_selection_widget;
+    showing_text_filter_ = should_show_text_filter;
   }
   for (auto iter = grid_list_.begin(); iter != grid_list_.end(); iter++)
     (*iter)->FilterItems(new_contents);

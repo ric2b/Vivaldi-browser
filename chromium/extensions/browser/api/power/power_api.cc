@@ -46,18 +46,17 @@ std::unique_ptr<device::PowerSaveBlocker> CreatePowerSaveBlocker(
 
 }  // namespace
 
-bool PowerRequestKeepAwakeFunction::RunSync() {
+ExtensionFunction::ResponseAction PowerRequestKeepAwakeFunction::Run() {
   std::unique_ptr<api::power::RequestKeepAwake::Params> params(
       api::power::RequestKeepAwake::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
-  EXTENSION_FUNCTION_VALIDATE(params->level != api::power::LEVEL_NONE);
   PowerAPI::Get(browser_context())->AddRequest(extension_id(), params->level);
-  return true;
+  return RespondNow(NoArguments());
 }
 
-bool PowerReleaseKeepAwakeFunction::RunSync() {
+ExtensionFunction::ResponseAction PowerReleaseKeepAwakeFunction::Run() {
   PowerAPI::Get(browser_context())->RemoveRequest(extension_id());
-  return true;
+  return RespondNow(NoArguments());
 }
 
 // static
@@ -82,7 +81,7 @@ void PowerAPI::RemoveRequest(const std::string& extension_id) {
 }
 
 void PowerAPI::SetCreateBlockerFunctionForTesting(
-    CreateBlockerFunction function) {
+    const CreateBlockerFunction& function) {
   create_blocker_function_ =
       !function.is_null() ? function : base::Bind(&CreatePowerSaveBlocker);
 }
@@ -127,9 +126,9 @@ void PowerAPI::UpdatePowerSaveBlocker() {
         create_blocker_function_.Run(
             type, device::PowerSaveBlocker::kReasonOther,
             kPowerSaveBlockerDescription,
-            content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::UI),
-            content::BrowserThread::GetMessageLoopProxyForThread(
+            content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::FILE)));
     power_save_blocker_.swap(new_blocker);
     current_level_ = new_level;

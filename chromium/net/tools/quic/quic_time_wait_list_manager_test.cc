@@ -7,17 +7,16 @@
 #include <errno.h>
 #include <memory>
 
-#include "net/quic/crypto/crypto_protocol.h"
-#include "net/quic/crypto/null_encrypter.h"
-#include "net/quic/crypto/quic_decrypter.h"
-#include "net/quic/crypto/quic_encrypter.h"
-#include "net/quic/quic_chromium_connection_helper.h"
-#include "net/quic/quic_data_reader.h"
-#include "net/quic/quic_flags.h"
-#include "net/quic/quic_framer.h"
-#include "net/quic/quic_packet_writer.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/crypto_protocol.h"
+#include "net/quic/core/crypto/null_encrypter.h"
+#include "net/quic/core/crypto/quic_decrypter.h"
+#include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/quic_data_reader.h"
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/core/quic_framer.h"
+#include "net/quic/core/quic_packet_writer.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
@@ -177,7 +176,7 @@ class ValidatePublicResetPacketPredicate
       const std::tr1::tuple<const char*, int> packet_buffer,
       testing::MatchResultListener* /* listener */) const override {
     FramerVisitorCapturingPublicReset visitor;
-    QuicFramer framer(QuicSupportedVersions(), QuicTime::Zero(),
+    QuicFramer framer(AllSupportedVersions(), QuicTime::Zero(),
                       Perspective::IS_CLIENT);
     framer.set_visitor(&visitor);
     QuicEncryptedPacket encrypted(std::tr1::get<0>(packet_buffer),
@@ -227,15 +226,14 @@ TEST_F(QuicTimeWaitListManagerTest, CheckStatelessConnectionIdInTimeWait) {
 TEST_F(QuicTimeWaitListManagerTest, SendVersionNegotiationPacket) {
   std::unique_ptr<QuicEncryptedPacket> packet(
       QuicFramer::BuildVersionNegotiationPacket(connection_id_,
-                                                QuicSupportedVersions()));
+                                                AllSupportedVersions()));
   EXPECT_CALL(writer_,
               WritePacket(_, packet->length(), server_address_.address(),
                           client_address_, _))
       .WillOnce(Return(WriteResult(WRITE_STATUS_OK, 1)));
 
   time_wait_list_manager_.SendVersionNegotiationPacket(
-      connection_id_, QuicSupportedVersions(), server_address_,
-      client_address_);
+      connection_id_, AllSupportedVersions(), server_address_, client_address_);
   EXPECT_EQ(0u, time_wait_list_manager_.num_connections());
 }
 
@@ -353,11 +351,11 @@ TEST_F(QuicTimeWaitListManagerTest, CleanUpOldConnectionIds) {
 
   QuicTime::Delta offset = QuicTime::Delta::FromMicroseconds(39);
   // Now set the current time as time_wait_period + offset usecs.
-  epoll_server_.set_now_in_usec(time_wait_period.Add(offset).ToMicroseconds());
+  epoll_server_.set_now_in_usec((time_wait_period + offset).ToMicroseconds());
   // After all the old connection_ids are cleaned up, check the next alarm
   // interval.
   int64_t next_alarm_time = epoll_server_.ApproximateNowInUsec() +
-                            time_wait_period.Subtract(offset).ToMicroseconds();
+                            (time_wait_period - offset).ToMicroseconds();
   EXPECT_CALL(epoll_server_, RegisterAlarm(next_alarm_time, _));
 
   time_wait_list_manager_.CleanUpOldConnectionIds();
@@ -479,7 +477,7 @@ TEST_F(QuicTimeWaitListManagerTest, AddConnectionIdTwice) {
 
   QuicTime::Delta offset = QuicTime::Delta::FromMicroseconds(39);
   // Now set the current time as time_wait_period + offset usecs.
-  epoll_server_.set_now_in_usec(time_wait_period.Add(offset).ToMicroseconds());
+  epoll_server_.set_now_in_usec((time_wait_period + offset).ToMicroseconds());
   // After the connection_ids are cleaned up, check the next alarm interval.
   int64_t next_alarm_time =
       epoll_server_.ApproximateNowInUsec() + time_wait_period.ToMicroseconds();

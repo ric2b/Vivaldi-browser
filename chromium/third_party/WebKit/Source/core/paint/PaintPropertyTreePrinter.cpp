@@ -14,19 +14,26 @@
 namespace blink {
 namespace {
 
-template <typename PaintPropertyTreeNode>
+template <typename PropertyTreeNode>
 class PropertyTreePrinterTraits;
 
 template <typename PropertyTreeNode>
 class PropertyTreePrinter {
 public:
-    PropertyTreePrinter(const FrameView& frameView)
+    void showTree(const FrameView& frameView)
     {
+        if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+            LOG(ERROR) << "This is for slimmingPaintV2 only";
+            return;
+        }
         collectPropertyNodes(frameView);
+        showAllPropertyNodes(nullptr);
     }
 
-    void show()
+    void showPath(const PropertyTreeNode* node)
     {
+        for (const PropertyTreeNode* n = node; n; n = n->parent())
+            addPropertyNode(n, "");
         showAllPropertyNodes(nullptr);
     }
 
@@ -54,7 +61,7 @@ private:
     void collectPropertyNodes(const LayoutObject& object)
     {
         if (const ObjectPaintProperties* paintProperties = object.objectPaintProperties())
-            Traits::addObjectPaintProperties(*paintProperties, *this);
+            Traits::addObjectPaintProperties(object, *paintProperties, *this);
         for (LayoutObject* child = object.slowFirstChild(); child; child = child->nextSibling())
             collectPropertyNodes(*child);
     }
@@ -86,26 +93,28 @@ class PropertyTreePrinterTraits<TransformPaintPropertyNode> {
 public:
     static void addFrameViewProperties(const FrameView& frameView, PropertyTreePrinter<TransformPaintPropertyNode>& printer)
     {
+        if (const TransformPaintPropertyNode* rootTransform = frameView.rootTransform())
+            printer.addPropertyNode(rootTransform, "RootTransform (FrameView)");
         if (const TransformPaintPropertyNode* preTranslation = frameView.preTranslation())
-            printer.addPropertyNode(preTranslation, "PreTranslation");
+            printer.addPropertyNode(preTranslation, "PreTranslation (FrameView)");
         if (const TransformPaintPropertyNode* scrollTranslation = frameView.scrollTranslation())
-            printer.addPropertyNode(scrollTranslation, "ScrollTranslation");
+            printer.addPropertyNode(scrollTranslation, "ScrollTranslation (FrameView)");
     }
 
-    static void addObjectPaintProperties(const ObjectPaintProperties& paintProperties, PropertyTreePrinter<TransformPaintPropertyNode>& printer)
+    static void addObjectPaintProperties(const LayoutObject& object, const ObjectPaintProperties& paintProperties, PropertyTreePrinter<TransformPaintPropertyNode>& printer)
     {
         if (const TransformPaintPropertyNode* paintOffsetTranslation = paintProperties.paintOffsetTranslation())
-            printer.addPropertyNode(paintOffsetTranslation, "PaintOffsetTranslation");
+            printer.addPropertyNode(paintOffsetTranslation, "PaintOffsetTranslation (" + object.debugName() + ")");
         if (const TransformPaintPropertyNode* transform = paintProperties.transform())
-            printer.addPropertyNode(transform, "Transform");
+            printer.addPropertyNode(transform, "Transform (" + object.debugName() + ")");
         if (const TransformPaintPropertyNode* perspective = paintProperties.perspective())
-            printer.addPropertyNode(perspective, "Perspective");
+            printer.addPropertyNode(perspective, "Perspective (" + object.debugName() + ")");
         if (const TransformPaintPropertyNode* svgLocalToBorderBoxTransform = paintProperties.svgLocalToBorderBoxTransform())
-            printer.addPropertyNode(svgLocalToBorderBoxTransform, "SvgLocalToBorderBoxTransform");
+            printer.addPropertyNode(svgLocalToBorderBoxTransform, "SvgLocalToBorderBoxTransform (" + object.debugName() + ")");
         if (const TransformPaintPropertyNode* scrollTranslation = paintProperties.scrollTranslation())
-            printer.addPropertyNode(scrollTranslation, "ScrollTranslation");
+            printer.addPropertyNode(scrollTranslation, "ScrollTranslation (" + object.debugName() + ")");
         if (const TransformPaintPropertyNode* scrollbarPaintOffset = paintProperties.scrollbarPaintOffset())
-            printer.addPropertyNode(scrollbarPaintOffset, "ScrollbarPaintOffset");
+            printer.addPropertyNode(scrollbarPaintOffset, "ScrollbarPaintOffset (" + object.debugName() + ")");
     }
 
     static void printNodeAsString(const TransformPaintPropertyNode* node, StringBuilder& stringBuilder)
@@ -134,18 +143,20 @@ class PropertyTreePrinterTraits<ClipPaintPropertyNode> {
 public:
     static void addFrameViewProperties(const FrameView& frameView, PropertyTreePrinter<ClipPaintPropertyNode>& printer)
     {
+        if (const ClipPaintPropertyNode* rootClip = frameView.rootClip())
+            printer.addPropertyNode(rootClip, "RootClip (FrameView)");
         if (const ClipPaintPropertyNode* contentClip = frameView.contentClip())
-            printer.addPropertyNode(contentClip, "ContentClip");
+            printer.addPropertyNode(contentClip, "ContentClip (FrameView)");
     }
 
-    static void addObjectPaintProperties(const ObjectPaintProperties& paintProperties, PropertyTreePrinter<ClipPaintPropertyNode>& printer)
+    static void addObjectPaintProperties(const LayoutObject& object, const ObjectPaintProperties& paintProperties, PropertyTreePrinter<ClipPaintPropertyNode>& printer)
     {
         if (const ClipPaintPropertyNode* cssClip = paintProperties.cssClip())
-            printer.addPropertyNode(cssClip, "CssClip");
+            printer.addPropertyNode(cssClip, "CssClip (" + object.debugName() + ")");
         if (const ClipPaintPropertyNode* cssClipFixedPosition = paintProperties.cssClipFixedPosition())
-            printer.addPropertyNode(cssClipFixedPosition, "CssClipFixedPosition");
+            printer.addPropertyNode(cssClipFixedPosition, "CssClipFixedPosition (" + object.debugName() + ")");
         if (const ClipPaintPropertyNode* overflowClip = paintProperties.overflowClip())
-            printer.addPropertyNode(overflowClip, "OverflowClip");
+            printer.addPropertyNode(overflowClip, "OverflowClip (" + object.debugName() + ")");
     }
 
     static void printNodeAsString(const ClipPaintPropertyNode* node, StringBuilder& stringBuilder)
@@ -162,13 +173,14 @@ class PropertyTreePrinterTraits<EffectPaintPropertyNode> {
 public:
     static void addFrameViewProperties(const FrameView& frameView, PropertyTreePrinter<EffectPaintPropertyNode>& printer)
     {
-        // FrameView does not create any effect nodes.
+        if (const EffectPaintPropertyNode* rootEffect = frameView.rootEffect())
+            printer.addPropertyNode(rootEffect, "RootEffect (FrameView)");
     }
 
-    static void addObjectPaintProperties(const ObjectPaintProperties& paintProperties, PropertyTreePrinter<EffectPaintPropertyNode>& printer)
+    static void addObjectPaintProperties(const LayoutObject& object, const ObjectPaintProperties& paintProperties, PropertyTreePrinter<EffectPaintPropertyNode>& printer)
     {
         if (const EffectPaintPropertyNode* effect = paintProperties.effect())
-            printer.addPropertyNode(effect, "Effect");
+            printer.addPropertyNode(effect, "Effect (" + object.debugName() + ")");
     }
 
     static void printNodeAsString(const EffectPaintPropertyNode* node, StringBuilder& stringBuilder)
@@ -178,25 +190,36 @@ public:
 };
 
 } // anonymous namespace
-
-void showTransformPropertyTree(const FrameView& rootFrame)
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    PropertyTreePrinter<TransformPaintPropertyNode>(rootFrame).show();
-}
-
-void showClipPropertyTree(const FrameView& rootFrame)
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    PropertyTreePrinter<ClipPaintPropertyNode>(rootFrame).show();
-}
-
-void showEffectPropertyTree(const FrameView& rootFrame)
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    PropertyTreePrinter<EffectPaintPropertyNode>(rootFrame).show();
-}
-
 } // namespace blink
+
+void showTransformPropertyTree(const blink::FrameView& rootFrame)
+{
+    blink::PropertyTreePrinter<blink::TransformPaintPropertyNode>().showTree(rootFrame);
+}
+
+void showClipPropertyTree(const blink::FrameView& rootFrame)
+{
+    blink::PropertyTreePrinter<blink::ClipPaintPropertyNode>().showTree(rootFrame);
+}
+
+void showEffectPropertyTree(const blink::FrameView& rootFrame)
+{
+    blink::PropertyTreePrinter<blink::EffectPaintPropertyNode>().showTree(rootFrame);
+}
+
+void showPaintPropertyPath(const blink::TransformPaintPropertyNode* node)
+{
+    blink::PropertyTreePrinter<blink::TransformPaintPropertyNode>().showPath(node);
+}
+
+void showPaintPropertyPath(const blink::ClipPaintPropertyNode* node)
+{
+    blink::PropertyTreePrinter<blink::ClipPaintPropertyNode>().showPath(node);
+}
+
+void showPaintPropertyPath(const blink::EffectPaintPropertyNode* node)
+{
+    blink::PropertyTreePrinter<blink::EffectPaintPropertyNode>().showPath(node);
+}
 
 #endif

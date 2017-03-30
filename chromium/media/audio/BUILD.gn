@@ -60,6 +60,8 @@ source_set("audio") {
     "audio_device_name.h",
     "audio_device_thread.cc",
     "audio_device_thread.h",
+    "audio_features.cc",
+    "audio_features.h",
     "audio_input_controller.cc",
     "audio_input_controller.h",
     "audio_input_device.cc",
@@ -274,7 +276,7 @@ if (use_pulseaudio && link_pulseaudio) {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "audio_unittest_util.cc",
@@ -350,6 +352,10 @@ source_set("unittests") {
       "sounds/test_data.h",
       "sounds/wav_audio_handler_unittest.cc",
     ]
+
+    if (!is_chromecast) {
+      deps += [ "//chromeos:chromeos" ]
+    }
 
     if (use_cras) {
       sources += [

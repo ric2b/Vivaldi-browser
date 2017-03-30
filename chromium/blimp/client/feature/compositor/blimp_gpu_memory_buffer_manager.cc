@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "blimp/client/feature/compositor/blimp_gpu_memory_buffer_manager.h"
-
+#include <blimp/client/feature/compositor/blimp_gpu_memory_buffer_manager.h>
+#include <GLES2/gl2.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -37,8 +37,7 @@ class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
   // Overridden from gfx::GpuMemoryBuffer:
   bool Map() override {
     DCHECK(!mapped_);
-    DCHECK_EQ(stride_, gfx::RowSizeForBufferFormat(size_.width(),
-                                                   format_, 0));
+    DCHECK_EQ(stride_, gfx::RowSizeForBufferFormat(size_.width(), format_, 0));
     if (!shared_memory_->Map(offset_ +
                              gfx::BufferSizeForBufferFormat(size_, format_)))
       return false;
@@ -50,7 +49,7 @@ class GpuMemoryBufferImpl : public gfx::GpuMemoryBuffer {
     DCHECK(mapped_);
     DCHECK_LT(plane, gfx::NumberOfPlanesForBufferFormat(format_));
     return reinterpret_cast<uint8_t*>(shared_memory_->memory()) + offset_ +
-        gfx::BufferOffsetForBufferFormat(size_, format_, plane);
+           gfx::BufferOffsetForBufferFormat(size_, format_, plane);
   }
 
   void Unmap() override {
@@ -101,6 +100,24 @@ BlimpGpuMemoryBufferManager::BlimpGpuMemoryBufferManager() {}
 
 BlimpGpuMemoryBufferManager::~BlimpGpuMemoryBufferManager() {}
 
+// static
+cc::BufferToTextureTargetMap
+BlimpGpuMemoryBufferManager::GetDefaultBufferToTextureTargetMap() {
+  cc::BufferToTextureTargetMap image_targets;
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      image_targets.insert(cc::BufferToTextureTargetMap::value_type(
+          cc::BufferToTextureTargetKey(usage, format), GL_TEXTURE_2D));
+    }
+  }
+  return image_targets;
+}
+
 std::unique_ptr<gfx::GpuMemoryBuffer>
 BlimpGpuMemoryBufferManager::AllocateGpuMemoryBuffer(
     const gfx::Size& size,
@@ -128,8 +145,7 @@ BlimpGpuMemoryBufferManager::CreateGpuMemoryBufferFromHandle(
     return nullptr;
 
   return base::WrapUnique<gfx::GpuMemoryBuffer>(new GpuMemoryBufferImpl(
-      size, format,
-      base::WrapUnique(new base::SharedMemory(handle.handle, false)),
+      size, format, base::MakeUnique<base::SharedMemory>(handle.handle, false),
       handle.offset, handle.stride));
 }
 

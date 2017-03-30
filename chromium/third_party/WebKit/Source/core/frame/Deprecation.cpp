@@ -32,6 +32,8 @@ const char* milestoneString(int milestone)
         return "M54, around October 2016";
     case 55:
         return "M55, around November 2016";
+    case 56:
+        return "M56, around January 2017";
     }
 
     ASSERT_NOT_REACHED();
@@ -63,6 +65,7 @@ String replacedWillBeRemoved(const char* feature, const char* replacement, int m
 namespace blink {
 
 Deprecation::Deprecation()
+    : m_muteCount(0)
 {
     m_cssPropertyDeprecationBits.ensureSize(lastUnresolvedCSSProperty + 1);
 }
@@ -76,12 +79,23 @@ void Deprecation::clearSuppression()
     m_cssPropertyDeprecationBits.clearAll();
 }
 
+void Deprecation::muteForInspector()
+{
+    m_muteCount++;
+}
+
+void Deprecation::unmuteForInspector()
+{
+    m_muteCount--;
+}
+
 void Deprecation::suppress(CSSPropertyID unresolvedProperty)
 {
     ASSERT(unresolvedProperty >= firstCSSProperty);
     ASSERT(unresolvedProperty <= lastUnresolvedCSSProperty);
     m_cssPropertyDeprecationBits.quickSet(unresolvedProperty);
 }
+
 bool Deprecation::isSuppressed(CSSPropertyID unresolvedProperty)
 {
     ASSERT(unresolvedProperty >= firstCSSProperty);
@@ -92,7 +106,7 @@ bool Deprecation::isSuppressed(CSSPropertyID unresolvedProperty)
 void Deprecation::warnOnDeprecatedProperties(const LocalFrame* frame, CSSPropertyID unresolvedProperty)
 {
     FrameHost* host = frame ? frame->host() : nullptr;
-    if (!host || host->deprecation().isSuppressed(unresolvedProperty))
+    if (!host || host->deprecation().m_muteCount || host->deprecation().isSuppressed(unresolvedProperty))
         return;
 
     String message = deprecationMessage(unresolvedProperty);
@@ -115,7 +129,7 @@ void Deprecation::countDeprecation(const LocalFrame* frame, UseCounter::Feature 
     if (!frame)
         return;
     FrameHost* host = frame->host();
-    if (!host)
+    if (!host || host->deprecation().m_muteCount)
         return;
 
     if (!host->useCounter().hasRecordedMeasurement(feature)) {
@@ -176,9 +190,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::ConsoleMarkTimeline:
         return replacedBy("'console.markTimeline'", "'console.timeStamp'");
-
-    case UseCounter::FileError:
-        return String::format("'FileError is deprecated and will be removed in %s. Please use the 'name' or 'message' attributes of the error rather than 'code'. See https://www.chromestatus.com/features/6687420359639040 for more details.", milestoneString(54));
 
     case UseCounter::CSSStyleSheetInsertRuleOptionalArg:
         return "Calling CSSStyleSheet.insertRule() with one argument is deprecated. Please pass the index argument as well: insertRule(x, 0).";
@@ -253,7 +264,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return "'getMatchedCSSRules()' is deprecated. For more help, check https://code.google.com/p/chromium/issues/detail?id=437569#c2";
 
     case UseCounter::PrefixedImageSmoothingEnabled:
-        return replacedBy("'CanvasRenderingContext2D.webkitImageSmoothingEnabled'", "'CanvasRenderingContext2D.imageSmoothingEnabled'");
+        return replacedWillBeRemoved("'CanvasRenderingContext2D.webkitImageSmoothingEnabled'", "'CanvasRenderingContext2D.imageSmoothingEnabled'", 55, "5639849247768576");
 
     case UseCounter::AudioListenerDopplerFactor:
         return dopplerWillBeRemoved("'AudioListener.dopplerFactor'", 55, "5238926818148352");
@@ -322,10 +333,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::CSSSelectorPseudoShadow:
         return "::shadow pseudo-element is deprecated. See https://www.chromestatus.com/features/6750456638341120 for more details.";
 
-    case UseCounter::SVGSMILElementInDocument:
-    case UseCounter::SVGSMILAnimationInImageRegardlessOfCache:
-        return "SVG's SMIL animations (<animate>, <set>, etc.) are deprecated and will be removed. Please use CSS animations or Web animations instead.";
-
     case UseCounter::PrefixedPerformanceClearResourceTimings:
         return replacedBy("'Performance.webkitClearResourceTimings'", "'Performance.clearResourceTimings'");
 
@@ -338,53 +345,47 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::MediaStreamTrackGetSources:
         return "MediaStreamTrack.getSources is deprecated. See https://www.chromestatus.com/feature/4765305641369600 for more details.";
 
-    case UseCounter::V8TouchEvent_InitTouchEvent_Method:
-        return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 54, "5730982598541312");
-
-    case UseCounter::ObjectObserve:
-        return willBeRemoved("'Object.observe'", 50, "6147094632988672");
-
-    case UseCounter::SVGZoomEvent:
-        return willBeRemoved("'SVGZoomEvent'", 52, "5760883808534528");
-
     case UseCounter::WebAnimationHyphenatedProperty:
         return "Hyphenated property names in Web Animations keyframes are invalid and therefore ignored. Please use camelCase instead.";
 
     case UseCounter::HTMLKeygenElement:
-        return willBeRemoved("The <keygen> element", 54, "5716060992962560");
-
-    case UseCounter::WebAnimationsEasingAsFunctionLinear:
-        return String::format("Specifying animation easing as a function is deprecated and all support will be removed in %s, at which point this will throw a TypeError. This warning may have been triggered by the Web Animations or Polymer polyfills. See http://crbug.com/601672 for details.", milestoneString(54));
+        return willBeRemoved("The <keygen> element", 56, "5716060992962560");
 
     case UseCounter::WindowPostMessageWithLegacyTargetOriginArgument:
-        return replacedWillBeRemoved("'window.postMessage(message, transferables, targetOrigin)'", "'window.postMessage(message, targetOrigin, transferables)'", 54, "5719033043222528");
+        return replacedWillBeRemoved("'window.postMessage(message, transferables, targetOrigin)'", "'window.postMessage(message, targetOrigin, transferables)'", 55, "5719033043222528");
 
     case UseCounter::EncryptedMediaAllSelectedContentTypesMissingCodecs:
-        return String::format("EME requires that contentType strings accepted by requestMediaKeySystemAccess() include codecs. Non-standard support for contentType strings without codecs will be removed in %s. Please specify the desired codec(s) as part of the contentType.", milestoneString(54));
-
-    case UseCounter::V8KeyboardEvent_KeyIdentifier_AttributeGetter:
-        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 54, "5316065118650368");
-
-    case UseCounter::During_Microtask_SyncXHR:
-        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 54, "5647113010544640");
-
-    case UseCounter::MediaStreamOnEnded:
-        return willBeRemoved("The MediaStream 'ended' event", 54, "5730404371791872");
+        return String::format("EME requires that contentType strings accepted by requestMediaKeySystemAccess() include codecs. Non-standard support for contentType strings without codecs will be removed in %s. Please specify the desired codec(s) as part of the contentType.", milestoneString(56));
 
     case UseCounter::UntrustedEventDefaultHandled:
         return String::format("A DOM event generated from JavaScript has triggered a default action inside the browser. This behavior is non-standard and will be removed in %s. See https://www.chromestatus.com/features/5718803933560832 for more details.", milestoneString(53));
 
-    case UseCounter::UnloadHandler_Navigation:
-        return "Navigating in the unload handler is deprecated and will be removed.";
-
     case UseCounter::TouchStartUserGestureUtilized:
-        return willBeRemoved("Performing operations that require explicit user interaction on touchstart events", 54, "5649871251963904");
+        return willBeRemoved("Performing operations that require explicit user interaction on touchstart events", 55, "5649871251963904");
 
     case UseCounter::TouchMoveUserGestureUtilized:
-        return willBeRemoved("Performing operations that require explicit user interaction on touchmove events", 54, "5649871251963904");
+        return willBeRemoved("Performing operations that require explicit user interaction on touchmove events", 55, "5649871251963904");
 
     case UseCounter::TouchEndDuringScrollUserGestureUtilized:
-        return willBeRemoved("Performing operations that require explicit user interaction on touchend events that occur as part of a scroll", 54, "5649871251963904");
+        return willBeRemoved("Performing operations that require explicit user interaction on touchend events that occur as part of a scroll", 55, "5649871251963904");
+
+    case UseCounter::MIDIMessageEventReceivedTime:
+        return willBeRemoved("MIDIMessageEvent.receivedTime", 56, "5665772797952000");
+
+    case UseCounter::V8SVGSVGElement_UseCurrentView_AttributeGetter:
+        return willBeRemoved("SVGSVGElement.useCurrentView", 56, "4511711998509056");
+
+    case UseCounter::V8SVGSVGElement_CurrentView_AttributeGetter:
+        return willBeRemoved("SVGSVGElement.currentView", 56, "4511711998509056");
+
+    case UseCounter::V8SVGSVGElement_Viewport_AttributeGetter:
+        return willBeRemoved("SVGSVGElement.viewport", 55, "5686865248124928");
+
+    case UseCounter::NavigatorPointerEnabled:
+        return "Navigator.pointerEnabled is a non-standard API added for experiments only. It will be removed in near future.";
+
+    case UseCounter::WebAudioAutoplayCrossOriginIframe:
+        return willBeRemoved("Web Audio autoplay (without user gesture) from cross-origin iframes", 55, "6406908126691328");
 
     // Features that aren't deprecated don't have a deprecation message.
     default:

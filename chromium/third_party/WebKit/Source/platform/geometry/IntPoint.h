@@ -31,6 +31,7 @@
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/MathExtras.h"
+#include "wtf/SaturatedArithmetic.h"
 #include "wtf/VectorTraits.h"
 
 #if OS(MACOSX)
@@ -61,6 +62,12 @@ public:
     void move(const IntSize& s) { move(s.width(), s.height()); }
     void moveBy(const IntPoint& offset) { move(offset.x(), offset.y()); }
     void move(int dx, int dy) { m_x += dx; m_y += dy; }
+    void saturatedMove(int dx, int dy)
+    {
+        m_x = saturatedAddition(m_x, dx);
+        m_y = saturatedAddition(m_y, dy);
+    }
+
     void scale(float sx, float sy)
     {
         m_x = lroundf(static_cast<float>(m_x * sx));
@@ -101,9 +108,7 @@ public:
 #endif
 #endif
 
-#ifndef NDEBUG
     String toString() const;
-#endif
 
 private:
     int m_x, m_y;
@@ -165,6 +170,10 @@ inline int IntPoint::distanceSquaredToPoint(const IntPoint& point) const
 {
     return ((*this) - point).diagonalLengthSquared();
 }
+
+// Redeclared here to avoid ODR issues.
+// See platform/testing/GeometryPrinters.h.
+void PrintTo(const IntPoint&, std::ostream*);
 
 } // namespace blink
 

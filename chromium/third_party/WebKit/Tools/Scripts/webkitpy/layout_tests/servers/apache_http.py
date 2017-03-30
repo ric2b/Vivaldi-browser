@@ -29,7 +29,6 @@
 """Start and stop the Apache HTTP server as it is used by the layout tests."""
 
 import logging
-import os
 import socket
 
 from webkitpy.layout_tests.servers import server_base
@@ -58,7 +57,6 @@ class ApacheHTTP(server_base.ServerBase):
 
         test_dir = self._port_obj.layout_tests_dir()
         document_root = self._filesystem.join(test_dir, "http", "tests")
-        js_test_resources_dir = self._filesystem.join(test_dir, "resources")
         forms_test_resources_dir = self._filesystem.join(test_dir, "fast", "forms", "resources")
         imported_resources_dir = self._filesystem.join(test_dir, "imported", "wpt", "resources")
         media_resources_dir = self._filesystem.join(test_dir, "media")
@@ -88,6 +86,7 @@ class ApacheHTTP(server_base.ServerBase):
             '-c', 'PidFile %s' % self._pid_file,
             '-c', 'SSLCertificateFile "%s"' % cert_file,
             '-c', 'Alias /inspector-sources "%s"' % inspector_sources_dir,
+            '-c', 'DefaultType None',
         ]
 
         if self._is_win:
@@ -96,7 +95,7 @@ class ApacheHTTP(server_base.ServerBase):
             start_cmd += ['-c', "StartServers %d" % self._number_of_servers,
                           '-c', "MinSpareServers %d" % self._number_of_servers,
                           '-c', "MaxSpareServers %d" % self._number_of_servers,
-                          '-C', 'User "%s"' % os.environ.get('USERNAME', os.environ.get('USER', '')),
+                          '-C', 'User "%s"' % self._port_obj.host.environ.get('USERNAME', self._port_obj.host.environ.get('USER', '')),
                           '-k', 'start']
 
         enable_ipv6 = self._port_obj.http_server_supports_ipv6()
@@ -135,7 +134,7 @@ class ApacheHTTP(server_base.ServerBase):
         self._start_cmd = start_cmd
 
     def _spawn_process(self):
-        _log.debug('Starting %s server, cmd="%s"' % (self._name, str(self._start_cmd)))
+        _log.debug('Starting %s server, cmd="%s"', self._name, str(self._start_cmd))
         self._process = self._executive.popen(self._start_cmd)
         retval = self._process.returncode
         if retval:

@@ -8,6 +8,8 @@
 
 #include "base/logging.h"
 
+#include "content/browser/loader/resource_request_info_impl.h"
+
 namespace content {
 
 LayeredResourceHandler::LayeredResourceHandler(
@@ -39,7 +41,10 @@ bool LayeredResourceHandler::OnRequestRedirected(
 
 bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
                                                bool* defer) {
-  return OnResponseStarted(response,defer, false, false);
+  // Vivaldi specific save info override.
+  ResourceRequestInfoImpl* info = GetRequestInfo();
+  return OnResponseStarted(response, defer, info->open_when_downloaded(),
+                           info->ask_for_save_target());
 }
 
 bool LayeredResourceHandler::OnResponseStarted(ResourceResponse* response,
@@ -57,12 +62,6 @@ bool LayeredResourceHandler::OnWillStart(const GURL& url,
                                          bool* defer) {
   DCHECK(next_handler_.get());
   return next_handler_->OnWillStart(url, defer);
-}
-
-bool LayeredResourceHandler::OnBeforeNetworkStart(const GURL& url,
-                                                  bool* defer) {
-  DCHECK(next_handler_.get());
-  return next_handler_->OnBeforeNetworkStart(url, defer);
 }
 
 bool LayeredResourceHandler::OnWillRead(scoped_refptr<net::IOBuffer>* buf,

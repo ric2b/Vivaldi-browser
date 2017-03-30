@@ -42,6 +42,7 @@
 #include "core/layout/TextAutosizer.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/TablePaintInvalidator.h"
 #include "core/paint/TablePainter.h"
 #include "core/style/StyleInheritedData.h"
 #include "wtf/PtrUtil.h"
@@ -658,9 +659,9 @@ void LayoutTable::addOverflowFromChildren()
     // Technically it's odd that we are incorporating the borders into layout overflow, which is only supposed to be about overflow from our
     // descendant objects, but since tables don't support overflow:auto, this works out fine.
     if (collapseBorders()) {
-        int rightBorderOverflow = size().width() + outerBorderRight() - borderRight();
+        int rightBorderOverflow = (size().width() + outerBorderRight() - borderRight()).toInt();
         int leftBorderOverflow = borderLeft() - outerBorderLeft();
-        int bottomBorderOverflow = size().height() + outerBorderBottom() - borderBottom();
+        int bottomBorderOverflow = (size().height() + outerBorderBottom() - borderBottom()).toInt();
         int topBorderOverflow = borderTop() - outerBorderTop();
         IntRect borderOverflowRect(leftBorderOverflow, topBorderOverflow, rightBorderOverflow - leftBorderOverflow, bottomBorderOverflow - topBorderOverflow);
         if (borderOverflowRect != pixelSnappedBorderBoxRect()) {
@@ -730,7 +731,7 @@ void LayoutTable::computePreferredLogicalWidths()
 
     computeIntrinsicLogicalWidths(m_minPreferredLogicalWidth, m_maxPreferredLogicalWidth);
 
-    int bordersPaddingAndSpacing = bordersPaddingAndSpacingInRowDirection();
+    int bordersPaddingAndSpacing = bordersPaddingAndSpacingInRowDirection().toInt();
     m_minPreferredLogicalWidth += bordersPaddingAndSpacing;
     m_maxPreferredLogicalWidth += bordersPaddingAndSpacing;
 
@@ -1340,12 +1341,12 @@ int LayoutTable::firstLineBoxBaseline() const
 
     int baseline = topNonEmptySection->firstLineBoxBaseline();
     if (baseline >= 0)
-        return topNonEmptySection->logicalTop() + baseline;
+        return (topNonEmptySection->logicalTop() + baseline).toInt();
 
     // FF, Presto and IE use the top of the section as the baseline if its first row is empty of cells or content.
     // The baseline of an empty row isn't specified by CSS 2.1.
     if (topNonEmptySection->firstRow() && !topNonEmptySection->firstRow()->firstCell())
-        return topNonEmptySection->logicalTop();
+        return topNonEmptySection->logicalTop().toInt();
 
     return -1;
 }
@@ -1428,63 +1429,23 @@ const BorderValue& LayoutTable::tableEndBorderAdjoiningCell(const LayoutTableCel
     return style()->borderStart();
 }
 
+void LayoutTable::ensureIsReadyForPaintInvalidation()
+{
+    LayoutBlock::ensureIsReadyForPaintInvalidation();
+    recalcCollapsedBordersIfNeeded();
+}
+
 PaintInvalidationReason LayoutTable::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
 {
-    // Information of collapsed borders doesn't affect layout and are for painting only.
-    // Do it now instead of during painting to invalidate table cells if needed.
-    recalcCollapsedBordersIfNeeded();
     if (collapseBorders() && !m_collapsedBorders.isEmpty())
         paintInvalidationState.paintingLayer().setNeedsPaintPhaseDescendantBlockBackgrounds();
 
     return LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
 }
 
-void LayoutTable::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState& childPaintInvalidationState)
+PaintInvalidationReason LayoutTable::invalidatePaintIfNeeded(const PaintInvalidatorContext& context) const
 {
-    // Table cells paint background from the containing column group, column, section and row.
-    // If background of any of them changed, we need to invalidate all affected cells.
-    // Here use shouldDoFullPaintInvalidation() as a broader condition of background change.
-
-    // If any col changed background, we'll check all cells for background changes.
-    bool hasColChangedBackground = false;
-    for (LayoutTableCol* col = firstColumn(); col; col = col->nextColumn()) {
-        if (col->backgroundChangedSinceLastPaintInvalidation()) {
-            hasColChangedBackground = true;
-            break;
-        }
-    }
-    for (LayoutObject* child = firstChild(); child; child = child->nextSibling()) {
-        if (!child->isTableSection())
-            continue;
-        LayoutTableSection* section = toLayoutTableSection(child);
-        if (!hasColChangedBackground && !section->shouldCheckForPaintInvalidationRegardlessOfPaintInvalidationState())
-            continue;
-        for (LayoutTableRow* row = section->firstRow(); row; row = row->nextRow()) {
-            if (!hasColChangedBackground && !section->backgroundChangedSinceLastPaintInvalidation() && !row->backgroundChangedSinceLastPaintInvalidation())
-                continue;
-            for (LayoutTableCell* cell = row->firstCell(); cell; cell = cell->nextCell()) {
-                bool invalidated = false;
-                // Table cells paint container's background on the container's backing instead of its own (if any),
-                // so we must invalidate it by the containers.
-                if (section->backgroundChangedSinceLastPaintInvalidation()) {
-                    section->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
-                    invalidated = true;
-                } else if (hasColChangedBackground) {
-                    ColAndColGroup colAndColGroup = colElementAtAbsoluteColumn(cell->absoluteColumnIndex());
-                    LayoutTableCol* column = colAndColGroup.col;
-                    LayoutTableCol* columnGroup = colAndColGroup.colgroup;
-                    if ((columnGroup && columnGroup->backgroundChangedSinceLastPaintInvalidation())
-                        || (column && column->backgroundChangedSinceLastPaintInvalidation())) {
-                        section->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
-                        invalidated = true;
-                    }
-                }
-                if ((!invalidated || row->hasSelfPaintingLayer()) && row->backgroundChangedSinceLastPaintInvalidation())
-                    row->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
-            }
-        }
-    }
-    LayoutBlock::invalidatePaintOfSubtreesIfNeeded(childPaintInvalidationState);
+    return TablePaintInvalidator(*this, context).invalidatePaintIfNeeded();
 }
 
 LayoutUnit LayoutTable::paddingTop() const

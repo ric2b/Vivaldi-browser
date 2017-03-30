@@ -99,11 +99,13 @@ void SaveCardBubbleViewBridge::OnBubbleClosed() {
 }
 
 void SaveCardBubbleViewBridge::Hide() {
-  // SaveCardBubbleViewBridge::OnBubbleClosed won't be able to call
-  // OnBubbleClosed on the bubble controller since we null the reference to it
-  // below. So we need to call it here.
-  controller_->OnBubbleClosed();
-  controller_ = nullptr;
+  if (controller_) {
+    // SaveCardBubbleViewBridge::OnBubbleClosed won't be able to call
+    // OnBubbleClosed on the bubble controller since we null the reference to it
+    // below. So we need to call it here.
+    controller_->OnBubbleClosed();
+    controller_ = nullptr;
+  }
   [view_controller_ close];
 }
 
@@ -284,7 +286,7 @@ void SaveCardBubbleViewBridge::Hide() {
 
   // Cancel button.
   base::scoped_nsobject<NSButton> cancelButton([SaveCardBubbleViewCocoa
-      makeButton:l10n_util::GetNSString(IDS_AUTOFILL_SAVE_CARD_PROMPT_DENY)]);
+      makeButton:l10n_util::GetNSString(IDS_NO_THANKS)]);
   [cancelButton setTarget:self];
   [cancelButton setAction:@selector(onCancelButton:)];
   [cancelButton setKeyEquivalent:@"\e"];

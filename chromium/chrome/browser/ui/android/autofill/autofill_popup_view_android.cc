@@ -23,6 +23,9 @@
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/rect_f.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace autofill {
 
 AutofillPopupViewAndroid::AutofillPopupViewAndroid(
@@ -36,11 +39,14 @@ void AutofillPopupViewAndroid::Show() {
   ui::ViewAndroid* view_android = controller_->container_view();
 
   DCHECK(view_android);
+  popup_view_ = view_android->AcquireAnchorView();
+  const ScopedJavaLocalRef<jobject> view = popup_view_.view();
+  if (view.is_null())
+    return;
 
   java_object_.Reset(Java_AutofillPopupBridge_create(
-      env, reinterpret_cast<intptr_t>(this),
-      view_android->GetWindowAndroid()->GetJavaObject().obj(),
-      view_android->GetViewAndroidDelegate().obj()));
+      env, view, reinterpret_cast<intptr_t>(this),
+      view_android->GetWindowAndroid()->GetJavaObject()));
 
   UpdateBoundsAndRedrawPopup();
 }
@@ -48,18 +54,27 @@ void AutofillPopupViewAndroid::Show() {
 void AutofillPopupViewAndroid::Hide() {
   controller_ = NULL;
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AutofillPopupBridge_dismiss(env, java_object_.obj());
+  if (!java_object_.is_null()) {
+    Java_AutofillPopupBridge_dismiss(env, java_object_);
+  } else {
+    // Hide() should delete |this| either via Java dismiss or directly.
+    delete this;
+  }
 }
 
 void AutofillPopupViewAndroid::UpdateBoundsAndRedrawPopup() {
+  if (java_object_.is_null())
+    return;
+
+  const ScopedJavaLocalRef<jobject> view = popup_view_.view();
+  if (view.is_null())
+    return;
+
+  ui::ViewAndroid* view_android = controller_->container_view();
+
+  DCHECK(view_android);
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AutofillPopupBridge_setAnchorRect(
-      env,
-      java_object_.obj(),
-      controller_->element_bounds().x(),
-      controller_->element_bounds().y(),
-      controller_->element_bounds().width(),
-      controller_->element_bounds().height());
+  view_android->SetAnchorRect(view, controller_->element_bounds());
 
   size_t count = controller_->GetLineCount();
   ScopedJavaLocalRef<jobjectArray> data_array =
@@ -82,14 +97,15 @@ void AutofillPopupViewAndroid::UpdateBoundsAndRedrawPopup() {
     bool deletable =
         controller_->GetRemovalConfirmationText(i, nullptr, nullptr);
     bool is_label_multiline =
-        suggestion.frontend_id == POPUP_ITEM_ID_WARNING_MESSAGE;
+        suggestion.frontend_id == POPUP_ITEM_ID_WARNING_MESSAGE ||
+        suggestion.frontend_id == POPUP_ITEM_ID_CREDIT_CARD_SIGNIN_PROMO;
     Java_AutofillPopupBridge_addToAutofillSuggestionArray(
-        env, data_array.obj(), i, value.obj(), label.obj(), android_icon_id,
+        env, data_array, i, value, label, android_icon_id,
         suggestion.frontend_id, deletable, is_label_multiline);
   }
 
-  Java_AutofillPopupBridge_show(
-      env, java_object_.obj(), data_array.obj(), controller_->IsRTL());
+  Java_AutofillPopupBridge_show(env, java_object_, data_array,
+                                controller_->IsRTL());
 }
 
 void AutofillPopupViewAndroid::SuggestionSelected(
@@ -105,7 +121,7 @@ void AutofillPopupViewAndroid::DeletionRequested(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint list_index) {
-  if (!controller_)
+  if (!controller_ || java_object_.is_null())
     return;
 
   base::string16 confirmation_title, confirmation_body;
@@ -116,12 +132,9 @@ void AutofillPopupViewAndroid::DeletionRequested(
 
   deleting_index_ = list_index;
   Java_AutofillPopupBridge_confirmDeletion(
-      env,
-      java_object_.obj(),
-      base::android::ConvertUTF16ToJavaString(
-          env, confirmation_title).obj(),
-      base::android::ConvertUTF16ToJavaString(
-          env, confirmation_body).obj());
+      env, java_object_,
+      base::android::ConvertUTF16ToJavaString(env, confirmation_title),
+      base::android::ConvertUTF16ToJavaString(env, confirmation_body));
 }
 
 void AutofillPopupViewAndroid::DeletionConfirmed(

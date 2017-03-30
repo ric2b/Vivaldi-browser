@@ -7,11 +7,13 @@
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 #include "services/shell/tests/lifecycle/lifecycle_unittest.mojom.h"
 
 namespace {
@@ -20,38 +22,33 @@ void QuitLoop(base::RunLoop* loop) {
   loop->Quit();
 }
 
-class Parent : public shell::ShellClient,
+class Parent : public shell::Service,
                public shell::InterfaceFactory<shell::test::mojom::Parent>,
                public shell::test::mojom::Parent {
  public:
   Parent() {}
   ~Parent() override {
-    connector_ = nullptr;
     child_connection_.reset();
     parent_bindings_.CloseAllBindings();
   }
 
  private:
-  // ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override {
-    connector_ = connector;
-  }
-  bool AcceptConnection(shell::Connection* connection) override {
-    connection->AddInterface<shell::test::mojom::Parent>(this);
+  // Service:
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override {
+    registry->AddInterface<shell::test::mojom::Parent>(this);
     return true;
   }
 
   // InterfaceFactory<shell::test::mojom::Parent>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               shell::test::mojom::ParentRequest request) override {
     parent_bindings_.AddBinding(this, std::move(request));
   }
 
   // Parent:
   void ConnectToChild(const ConnectToChildCallback& callback) override {
-    child_connection_ = connector_->Connect("mojo:lifecycle_unittest_app");
+    child_connection_ = connector()->Connect("mojo:lifecycle_unittest_app");
     shell::test::mojom::LifecycleControlPtr lifecycle;
     child_connection_->GetInterface(&lifecycle);
     {
@@ -67,7 +64,6 @@ class Parent : public shell::ShellClient,
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
-  shell::Connector* connector_;
   std::unique_ptr<shell::Connection> child_connection_;
   mojo::BindingSet<shell::test::mojom::Parent> parent_bindings_;
 
@@ -76,7 +72,7 @@ class Parent : public shell::ShellClient,
 
 }  // namespace
 
-MojoResult MojoMain(MojoHandle shell_handle) {
+MojoResult ServiceMain(MojoHandle service_request_handle) {
   Parent* parent = new Parent;
-  return shell::ApplicationRunner(parent).Run(shell_handle);
+  return shell::ServiceRunner(parent).Run(service_request_handle);
 }

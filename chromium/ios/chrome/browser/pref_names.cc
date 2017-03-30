@@ -68,6 +68,10 @@ const char kIosBookmarkPromoAlreadySeen[] = "ios.bookmark.promo_already_seen";
 // devices that share an iCloud account.
 const char kIosHandoffToOtherDevices[] = "ios.handoff_to_other_devices";
 
+// Whether the user has enabled the Physical Web feature to surface URLs
+// broadcast by nearby devices.
+const char kIosPhysicalWebEnabled[] = "ios.physical_web_enabled";
+
 // True if the previous session exited cleanly.
 // This can be different from kStabilityExitedCleanly, because the last run of
 // the program may not have included a browsing session, and thus the last run
@@ -75,10 +79,6 @@ const char kIosHandoffToOtherDevices[] = "ios.handoff_to_other_devices";
 // session.
 const char kLastSessionExitedCleanly[] =
     "ios.user_experience_metrics.last_session_exited_cleanly";
-
-// True if the previous session was selected into the WKWebView control group.
-const char kLastSessionUsedWKWebViewControlGroup[] =
-    "ios.wkwebview_trial.was_control";
 
 // Preference that hold a boolean indicating whether metrics reporting should
 // be limited to wifi (when enabled).
@@ -148,10 +148,5 @@ const char kOmniboxGeolocationLastAuthorizationAlertVersion[] =
 // last shown.
 const char kRateThisAppDialogLastShownTime[] =
     "ios.ratethisapp.dialog_last_shown_time";
-
-// TODO(vasilii): drop the pref in M54.
-// True if the safe browsing cookie store was deleted on the disk.
-extern const char kDroppedSafeBrowsingCookies[] =
-    "safebrowsing.cookie_store_deleted";
 
 }  // namespace prefs

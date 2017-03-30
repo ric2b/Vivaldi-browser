@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -15,19 +16,17 @@
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_animator.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/power_button_controller.h"
 #include "ash/wm/session_state_animator.h"
 #include "base/memory/scoped_vector.h"
 #include "base/time/time.h"
-#include "ui/events/test/event_generator.h"
-#include "ui/gfx/geometry/size.h"
-
-#if defined(OS_CHROMEOS)
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_session_manager_client.h"
 #include "ui/display/chromeos/display_configurator.h"
 #include "ui/display/chromeos/test/test_display_snapshot.h"
 #include "ui/display/types/display_constants.h"
-#endif
+#include "ui/events/test/event_generator.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace ash {
 namespace test {
@@ -47,13 +46,17 @@ void CheckCalledCallback(bool* flag) {
 class LockStateControllerTest : public AshTestBase {
  public:
   LockStateControllerTest()
-      : power_button_controller_(NULL),
-        lock_state_controller_(NULL),
-        lock_state_controller_delegate_(NULL),
-        test_animator_(NULL) {}
+      : power_button_controller_(nullptr),
+        lock_state_controller_(nullptr),
+        lock_state_controller_delegate_(nullptr),
+        session_manager_client_(nullptr),
+        test_animator_(nullptr) {}
   ~LockStateControllerTest() override {}
 
   void SetUp() override {
+    session_manager_client_ = new chromeos::FakeSessionManagerClient;
+    chromeos::DBusThreadManager::GetSetterForTesting()->SetSessionManagerClient(
+        base::WrapUnique(session_manager_client_));
     AshTestBase::SetUp();
 
     std::unique_ptr<LockStateControllerDelegate> lock_state_controller_delegate(
@@ -70,7 +73,12 @@ class LockStateControllerTest : public AshTestBase {
     power_button_controller_ = Shell::GetInstance()->power_button_controller();
 
     shell_delegate_ =
-        static_cast<TestShellDelegate*>(Shell::GetInstance()->delegate());
+        static_cast<TestShellDelegate*>(WmShell::Get()->delegate());
+  }
+
+  void TearDown() override {
+    AshTestBase::TearDown();
+    chromeos::DBusThreadManager::Shutdown();
   }
 
  protected:
@@ -301,9 +309,8 @@ class LockStateControllerTest : public AshTestBase {
   }
 
   void EnableMaximizeMode(bool enable) {
-    Shell::GetInstance()
-        ->maximize_mode_controller()
-        ->EnableMaximizeModeWindowManager(enable);
+    WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+        enable);
   }
 
   void Initialize(bool legacy_button, LoginStatus status) {
@@ -320,6 +327,8 @@ class LockStateControllerTest : public AshTestBase {
   LockStateController* lock_state_controller_;      // not owned
   TestLockStateControllerDelegate*
       lock_state_controller_delegate_;            // not owned
+  // Ownership is passed on to chromeos::DBusThreadManager.
+  chromeos::FakeSessionManagerClient* session_manager_client_;
   TestSessionStateAnimator* test_animator_;       // not owned
   std::unique_ptr<LockStateController::TestApi> test_api_;
   TestShellDelegate* shell_delegate_;  // not owned
@@ -347,7 +356,7 @@ TEST_F(LockStateControllerTest, LegacyLockAndShutDown) {
   test_animator_->CompleteAllAnimations(true);
   ExpectPreLockAnimationFinished();
 
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 
   // Notify that we locked successfully.
   lock_state_controller_->OnStartingLock();
@@ -454,12 +463,12 @@ TEST_F(LockStateControllerTest, LockAndUnlock) {
 
   ExpectPreLockAnimationStarted();
   EXPECT_TRUE(test_api_->is_lock_cancellable());
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 
   test_animator_->CompleteAllAnimations(true);
   ExpectPreLockAnimationFinished();
 
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 
   // Notify that we locked successfully.
   lock_state_controller_->OnStartingLock();
@@ -524,7 +533,7 @@ TEST_F(LockStateControllerTest, LockAndCancel) {
 
   Advance(SessionStateAnimator::ANIMATION_SPEED_MOVE_WINDOWS);
   ExpectUnlockedState();
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 }
 
 // Test that we deal with cancelling lock correctly.
@@ -556,11 +565,11 @@ TEST_F(LockStateControllerTest, LockAndCancelAndLockAgain) {
 
   AdvancePartially(SessionStateAnimator::ANIMATION_SPEED_UNDOABLE, 0.6f);
 
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 
   AdvancePartially(SessionStateAnimator::ANIMATION_SPEED_UNDOABLE, 0.6f);
   ExpectPreLockAnimationFinished();
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 }
 
 // Hold the power button down from the unlocked state to eventual shutdown.
@@ -632,7 +641,7 @@ TEST_F(LockStateControllerTest, Lock) {
 
   Advance(SessionStateAnimator::ANIMATION_SPEED_UNDOABLE);
 
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
   EXPECT_TRUE(test_api_->lock_fail_timer_is_running());
   // We shouldn't start the lock-to-shutdown timer until the screen has actually
   // been locked and this was animated.
@@ -651,7 +660,7 @@ TEST_F(LockStateControllerTest, LockButtonBasicNotLoggedIn) {
   PressLockButton();
   EXPECT_FALSE(test_api_->is_animating_lock());
   ReleaseLockButton();
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 }
 
 // Test the basic operation of the lock button (guest).
@@ -662,7 +671,7 @@ TEST_F(LockStateControllerTest, LockButtonBasicGuest) {
   PressLockButton();
   EXPECT_FALSE(test_api_->is_animating_lock());
   ReleaseLockButton();
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 }
 
 // Test the basic operation of the lock button.
@@ -681,14 +690,14 @@ TEST_F(LockStateControllerTest, LockButtonBasic) {
   Advance(SessionStateAnimator::ANIMATION_SPEED_MOVE_WINDOWS);
 
   ExpectUnlockedState();
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 
   // Press the button again and let the lock timeout fire.  We should request
   // that the screen be locked.
   PressLockButton();
   ExpectPreLockAnimationStarted();
   Advance(SessionStateAnimator::ANIMATION_SPEED_UNDOABLE);
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 
   // Pressing the lock button while we have a pending lock request shouldn't do
   // anything.
@@ -773,7 +782,7 @@ TEST_F(LockStateControllerTest, LockWithoutButton) {
   EXPECT_LT(0u, test_animator_->GetAnimationCount());
 
   test_animator_->CompleteAllAnimations(true);
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 }
 
 // When we hear that the process is exiting but we haven't had a chance to
@@ -876,11 +885,10 @@ TEST_F(LockStateControllerTest, IgnorePowerButtonIfScreenIsOff) {
   ReleasePowerButton();
 }
 
-#if defined(OS_CHROMEOS)
 TEST_F(LockStateControllerTest, HonorPowerButtonInDockedMode) {
   std::vector<std::unique_ptr<const ui::DisplayMode>> modes;
   modes.push_back(
-      base::WrapUnique(new ui::DisplayMode(gfx::Size(1, 1), false, 60.0f)));
+      base::MakeUnique<ui::DisplayMode>(gfx::Size(1, 1), false, 60.0f));
 
   // Create two outputs, the first internal and the second external.
   ui::DisplayConfigurator::DisplayStateList outputs;
@@ -891,7 +899,7 @@ TEST_F(LockStateControllerTest, HonorPowerButtonInDockedMode) {
 
   modes.clear();
   modes.push_back(
-      base::WrapUnique(new ui::DisplayMode(gfx::Size(1, 1), false, 60.0f)));
+      base::MakeUnique<ui::DisplayMode>(gfx::Size(1, 1), false, 60.0f));
   ui::TestDisplaySnapshot external_display;
   external_display.set_type(ui::DISPLAY_CONNECTION_TYPE_HDMI);
   external_display.set_modes(std::move(modes));
@@ -916,7 +924,6 @@ TEST_F(LockStateControllerTest, HonorPowerButtonInDockedMode) {
   EXPECT_TRUE(test_api_->is_animating_lock());
   ReleasePowerButton();
 }
-#endif
 
 // Test that hidden background appears and revers correctly on lock/cancel.
 TEST_F(LockStateControllerTest, TestHiddenBackgroundLockCancel) {
@@ -1061,7 +1068,7 @@ TEST_F(LockStateControllerTest, QuickLockWhileNotInMaximizeMode) {
 
   ReleasePowerButton();
 
-  EXPECT_EQ(0, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(0, session_manager_client_->request_lock_screen_call_count());
 }
 
 // Tests that a lock action is not cancellable when quick lock is turned on and
@@ -1082,7 +1089,7 @@ TEST_F(LockStateControllerTest, QuickLockWhileInMaximizeMode) {
   ExpectPreLockAnimationStarted();
 
   test_animator_->CompleteAllAnimations(true);
-  EXPECT_EQ(1, lock_state_controller_delegate_->num_lock_requests());
+  EXPECT_EQ(1, session_manager_client_->request_lock_screen_call_count());
 }
 
 }  // namespace test

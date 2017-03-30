@@ -4,6 +4,9 @@
 
 #include "ash/common/system/tray/system_tray_delegate.h"
 
+#include "ash/common/system/tray/ime_info.h"
+#include "ash/common/system/tray/system_tray_item.h"
+
 namespace ash {
 
 NetworkIconInfo::NetworkIconInfo()
@@ -19,18 +22,8 @@ BluetoothDeviceInfo::BluetoothDeviceInfo()
 
 BluetoothDeviceInfo::~BluetoothDeviceInfo() {}
 
-IMEInfo::IMEInfo() : selected(false), third_party(false) {}
-
-IMEInfo::IMEInfo(const IMEInfo& other) = default;
-
-IMEInfo::~IMEInfo() {}
-
-IMEPropertyInfo::IMEPropertyInfo() : selected(false) {}
-
-IMEPropertyInfo::~IMEPropertyInfo() {}
-
 UpdateInfo::UpdateInfo()
-    : severity(UPDATE_NORMAL),
+    : severity(UPDATE_NONE),
       update_required(false),
       factory_reset_required(false) {}
 
@@ -81,7 +74,7 @@ bool SystemTrayDelegate::IsUserChild() const {
 }
 
 void SystemTrayDelegate::GetSystemUpdateInfo(UpdateInfo* info) const {
-  info->severity = UpdateInfo::UPDATE_NORMAL;
+  info->severity = UpdateInfo::UPDATE_NONE;
   info->update_required = false;
   info->factory_reset_required = false;
 }
@@ -120,6 +113,10 @@ void SystemTrayDelegate::ShowAccessibilityHelp() {}
 
 void SystemTrayDelegate::ShowAccessibilitySettings() {}
 
+void SystemTrayDelegate::ShowPaletteHelp() {}
+
+void SystemTrayDelegate::ShowPaletteSettings() {}
+
 void SystemTrayDelegate::ShowPublicAccountInfo() {}
 
 void SystemTrayDelegate::ShowEnterpriseInfo() {}
@@ -129,8 +126,6 @@ void SystemTrayDelegate::ShowSupervisedUserInfo() {}
 void SystemTrayDelegate::ShowUserLogin() {}
 
 void SystemTrayDelegate::SignOut() {}
-
-void SystemTrayDelegate::RequestLockScreen() {}
 
 void SystemTrayDelegate::RequestRestartForUpdate() {}
 
@@ -231,6 +226,16 @@ void SystemTrayDelegate::ShouldRebootOnShutdown(
     const RebootOnShutdownCallback& callback) {}
 
 VPNDelegate* SystemTrayDelegate::GetVPNDelegate() const {
+  return nullptr;
+}
+
+std::unique_ptr<SystemTrayItem> SystemTrayDelegate::CreateDisplayTrayItem(
+    SystemTray* tray) {
+  return nullptr;
+}
+
+std::unique_ptr<SystemTrayItem> SystemTrayDelegate::CreateRotationLockTrayItem(
+    SystemTray* tray) {
   return nullptr;
 }
 

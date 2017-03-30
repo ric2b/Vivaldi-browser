@@ -29,6 +29,9 @@
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace chrome {
 
 namespace {
@@ -92,14 +95,10 @@ void StartClientCertificateRequest(
   jlong request_id = reinterpret_cast<intptr_t>(delegate.get());
 
   if (!chrome::android::
-      Java_SSLClientCertificateRequest_selectClientCertificate(
-          env,
-          request_id,
-          window->GetJavaObject().obj(),
-          key_types_ref.obj(),
-          principals_ref.obj(),
-          host_name_ref.obj(),
-          cert_request_info->host_and_port.port())) {
+          Java_SSLClientCertificateRequest_selectClientCertificate(
+              env, request_id, window->GetJavaObject(), key_types_ref,
+              principals_ref, host_name_ref,
+              cert_request_info->host_and_port.port())) {
     return;
   }
 

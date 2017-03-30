@@ -12,6 +12,8 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "jni/AccountManagementScreenHelper_jni.h"
 
+using base::android::JavaParamRef;
+
 // static
 void AccountManagementScreenHelper::OpenAccountManagementScreen(
     Profile* profile,
@@ -22,7 +24,7 @@ void AccountManagementScreenHelper::OpenAccountManagementScreen(
   Java_AccountManagementScreenHelper_openAccountManagementScreen(
       base::android::AttachCurrentThread(),
       base::android::GetApplicationContext(),
-      ProfileAndroid::FromProfile(profile)->GetJavaObject().obj(),
+      ProfileAndroid::FromProfile(profile)->GetJavaObject(),
       static_cast<int>(service_type));
 }
 

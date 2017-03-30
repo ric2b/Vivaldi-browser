@@ -9,7 +9,6 @@ import android.app.Notification;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.os.Build;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 
@@ -18,9 +17,9 @@ import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
-import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
@@ -54,7 +53,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         // Validate the contents of the notification.
         assertEquals("MyNotification", notification.extras.getString(Notification.EXTRA_TITLE));
         assertEquals("Hello", notification.extras.getString(Notification.EXTRA_TEXT));
-        assertEquals(UrlUtilities.formatUrlForSecurityDisplay(getOrigin(), false /* showScheme */),
+        assertEquals(UrlFormatter.formatUrlForSecurityDisplay(getOrigin(), false /* showScheme */),
                 notification.extras.getString(Notification.EXTRA_SUB_TEXT));
 
         // Verify that the ticker text contains the notification's title and body.
@@ -67,14 +66,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         // no significance, but needs to be high enough to not cause flakiness as it's set by the
         // renderer process on notification creation.
         assertTrue(Math.abs(System.currentTimeMillis() - notification.when) < 60 * 1000);
-
-        // Validate the appearance style of the notification. The EXTRA_TEMPLATE was introduced
-        // in Android Lollipop, we cannot verify this in earlier versions.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                && !NotificationPlatformBridge.useCustomLayouts()) {
-            assertEquals("android.app.Notification$BigTextStyle",
-                    notification.extras.getString(Notification.EXTRA_TEMPLATE));
-        }
 
         assertNotNull(notification.largeIcon);
 

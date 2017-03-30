@@ -98,6 +98,11 @@ private:
         m_webPrerenders.push_back(*prerender);
     }
 
+    bool isPrefetchOnly() override
+    {
+        return false;
+    }
+
     std::unique_ptr<WebPrerender::ExtraData> m_extraData;
     std::list<WebPrerender> m_webPrerenders;
 };
@@ -199,7 +204,7 @@ public:
 
     Element& console()
     {
-        Document* document = m_webViewHelper.webViewImpl()->mainFrameImpl()->frame()->document();
+        Document* document = m_webViewHelper.webView()->mainFrameImpl()->frame()->document();
         Element* console = document->getElementById("console");
         DCHECK(isHTMLUListElement(console));
         return *console;

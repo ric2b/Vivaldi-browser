@@ -4,6 +4,9 @@
 
 #include "blimp/net/blob_channel/blob_channel_sender_impl.h"
 
+#include <utility>
+
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "blimp/common/blob_cache/blob_cache.h"
 #include "blimp/common/blob_cache/id_util.h"
@@ -12,12 +15,29 @@ namespace blimp {
 
 BlobChannelSenderImpl::BlobChannelSenderImpl(std::unique_ptr<BlobCache> cache,
                                              std::unique_ptr<Delegate> delegate)
-    : cache_(std::move(cache)), delegate_(std::move(delegate)) {
+    : cache_(std::move(cache)),
+      delegate_(std::move(delegate)),
+      weak_factory_(this) {
   DCHECK(cache_);
   DCHECK(delegate_);
 }
 
 BlobChannelSenderImpl::~BlobChannelSenderImpl() {}
+
+std::vector<BlobChannelSender::CacheStateEntry>
+BlobChannelSenderImpl::GetCachedBlobIds() const {
+  const auto cache_state = cache_->GetCachedBlobIds();
+  std::vector<CacheStateEntry> output;
+  output.reserve(cache_state.size());
+  for (const std::string& cached_id : cache_state) {
+    CacheStateEntry next_output;
+    next_output.id = cached_id;
+    next_output.was_delivered =
+        base::ContainsKey(receiver_cache_contents_, cached_id);
+    output.push_back(next_output);
+  }
+  return output;
+}
 
 void BlobChannelSenderImpl::PutBlob(const BlobId& id, BlobDataPtr data) {
   DCHECK(data);

@@ -386,14 +386,17 @@ bool ScrollingCoordinator::scrollableAreaScrollLayerDidChange(ScrollableArea* sc
 
     GraphicsLayer* scrollLayer = scrollableArea->layerForScrolling();
 
-    if (scrollLayer)
-        scrollLayer->setScrollableArea(scrollableArea, isForViewport(scrollableArea));
+    if (scrollLayer) {
+        bool isForVisualViewport =
+            scrollableArea == &m_page->frameHost().visualViewport();
+        scrollLayer->setScrollableArea(scrollableArea, isForVisualViewport);
+    }
 
     WebLayer* webLayer = toWebLayer(scrollableArea->layerForScrolling());
     WebLayer* containerLayer = toWebLayer(scrollableArea->layerForContainer());
     if (webLayer) {
         webLayer->setScrollClipLayer(containerLayer);
-        DoublePoint scrollPosition(scrollableArea->scrollPositionDouble() - scrollableArea->minimumScrollPositionDouble());
+        DoublePoint scrollPosition(scrollableArea->scrollPositionDouble() + toDoubleSize(scrollableArea->scrollOrigin()));
         webLayer->setScrollPositionDouble(scrollPosition);
 
         webLayer->setBounds(scrollableArea->contentsSize());
@@ -436,10 +439,10 @@ static void makeLayerChildFrameMap(const LocalFrame* currentFrame, LayerFrameMap
     for (const Frame* child = tree.firstChild(); child; child = child->tree().nextSibling()) {
         if (!child->isLocalFrame())
             continue;
-        const LayoutObject* ownerLayoutObject = toLocalFrame(child)->ownerLayoutObject();
-        if (!ownerLayoutObject)
+        const LayoutItem ownerLayoutItem = toLocalFrame(child)->ownerLayoutItem();
+        if (ownerLayoutItem.isNull())
             continue;
-        const PaintLayer* containingLayer = ownerLayoutObject->enclosingLayer();
+        const PaintLayer* containingLayer = ownerLayoutItem.enclosingLayer();
         LayerFrameMap::iterator iter = map->find(containingLayer);
         if (iter == map->end())
             map->add(containingLayer, HeapVector<Member<const LocalFrame>>()).storedValue->value.append(toLocalFrame(child));
@@ -537,9 +540,12 @@ static void projectRectsToGraphicsLayerSpace(LocalFrame* mainFrame, const LayerH
 
             if (layer->parent()) {
                 layer = layer->parent();
-            } else if (LayoutObject* parentDocLayoutObject = layer->layoutObject()->frame()->ownerLayoutObject()) {
-                layer = parentDocLayoutObject->enclosingLayer();
-                touchHandlerInChildFrame = true;
+            } else {
+                LayoutItem parentDocLayoutItem = layer->layoutObject()->frame()->ownerLayoutItem();
+                if (!parentDocLayoutItem.isNull()) {
+                    layer = parentDocLayoutItem.enclosingLayer();
+                    touchHandlerInChildFrame = true;
+                }
             }
         } while (layer);
     }
@@ -671,6 +677,8 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
     if (!m_page->mainFrame()->isLocalFrame() || !m_page->deprecatedLocalMainFrame()->view())
         return;
 
+    GraphicsLayer* visualViewportLayer = m_page->frameHost().visualViewport().scrollLayer();
+    WebLayer* visualViewportScrollLayer = toWebLayer(visualViewportLayer);
     GraphicsLayer* layer = m_page->deprecatedLocalMainFrame()->view()->layerForScrolling();
     if (WebLayer* scrollLayer = toWebLayer(layer)) {
         m_lastMainThreadScrollingReasons = mainThreadScrollingReasons;
@@ -680,12 +688,21 @@ void ScrollingCoordinator::setShouldUpdateScrollLayerPositionOnMainThread(MainTh
                 scrollAnimator->takeOverCompositorAnimation();
             }
             scrollLayer->addMainThreadScrollingReasons(mainThreadScrollingReasons);
+            if (visualViewportScrollLayer) {
+                if (ScrollAnimatorBase* scrollAnimator = visualViewportLayer->getScrollableArea()->existingScrollAnimator()) {
+                    DCHECK(m_page->deprecatedLocalMainFrame()->document()->lifecycle().state() >= DocumentLifecycle::CompositingClean);
+                    scrollAnimator->takeOverCompositorAnimation();
+                }
+                visualViewportScrollLayer->addMainThreadScrollingReasons(mainThreadScrollingReasons);
+            }
         } else {
             // Clear all main thread scrolling reasons except the one that's set
             // if there is a running scroll animation.
             uint32_t mainThreadScrollingReasonsToClear = ~0u;
             mainThreadScrollingReasonsToClear &= ~MainThreadScrollingReason::kAnimatingScrollOnMainThread;
             scrollLayer->clearMainThreadScrollingReasons(mainThreadScrollingReasonsToClear);
+            if (visualViewportScrollLayer)
+                visualViewportScrollLayer->clearMainThreadScrollingReasons(mainThreadScrollingReasonsToClear);
         }
     }
 }
@@ -824,7 +841,7 @@ static void accumulateDocumentTouchEventTargetRects(LayerHitTestRects& rects, co
     for (const auto& eventTarget : *targets) {
         EventTarget* target = eventTarget.key;
         Node* node = target->toNode();
-        if (!node || !node->inShadowIncludingDocument())
+        if (!node || !node->isConnected())
             continue;
 
         // If the document belongs to an invisible subframe it does not have a composited layer
@@ -921,15 +938,6 @@ bool ScrollingCoordinator::isForMainFrame(ScrollableArea* scrollableArea) const
 
     // FIXME(305811): Refactor for OOPI.
     return scrollableArea == m_page->deprecatedLocalMainFrame()->view();
-}
-
-bool ScrollingCoordinator::isForViewport(ScrollableArea* scrollableArea) const
-{
-    bool isForOuterViewport = m_page->settings().rootLayerScrolls() ?
-        isForRootLayer(scrollableArea) :
-        isForMainFrame(scrollableArea);
-
-    return isForOuterViewport || scrollableArea == &m_page->frameHost().visualViewport();
 }
 
 void ScrollingCoordinator::frameViewRootLayerDidChange(FrameView* frameView)
@@ -1043,33 +1051,16 @@ MainThreadScrollingReasons ScrollingCoordinator::mainThreadScrollingReasons() co
     return reasons;
 }
 
-String ScrollingCoordinator::mainThreadScrollingReasonsAsText(MainThreadScrollingReasons reasons)
-{
-    StringBuilder stringBuilder;
-
-    if (reasons & MainThreadScrollingReason::kHasBackgroundAttachmentFixedObjects)
-        stringBuilder.append("Has background-attachment:fixed, ");
-    if (reasons & MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects)
-        stringBuilder.append("Has non-layer viewport-constrained objects, ");
-    if (reasons & MainThreadScrollingReason::kHasStickyPositionObjects)
-        stringBuilder.append("Has sticky position objects, ");
-    if (reasons & MainThreadScrollingReason::kThreadedScrollingDisabled)
-        stringBuilder.append("Threaded scrolling is disabled, ");
-    if (reasons & MainThreadScrollingReason::kAnimatingScrollOnMainThread)
-        stringBuilder.append("Animating scroll on main thread, ");
-
-    if (stringBuilder.length())
-        stringBuilder.resize(stringBuilder.length() - 2);
-    return stringBuilder.toString();
-}
-
 String ScrollingCoordinator::mainThreadScrollingReasonsAsText() const
 {
     ASSERT(m_page->deprecatedLocalMainFrame()->document()->lifecycle().state() >= DocumentLifecycle::CompositingClean);
-    if (WebLayer* scrollLayer = toWebLayer(m_page->deprecatedLocalMainFrame()->view()->layerForScrolling()))
-        return mainThreadScrollingReasonsAsText(scrollLayer->mainThreadScrollingReasons());
+    if (WebLayer* scrollLayer = toWebLayer(m_page->deprecatedLocalMainFrame()->view()->layerForScrolling())) {
+        String result(MainThreadScrollingReason::mainThreadScrollingReasonsAsText(scrollLayer->mainThreadScrollingReasons()).c_str());
+        return result;
+    }
 
-    return mainThreadScrollingReasonsAsText(m_lastMainThreadScrollingReasons);
+    String result(MainThreadScrollingReason::mainThreadScrollingReasonsAsText(m_lastMainThreadScrollingReasons).c_str());
+    return result;
 }
 
 bool ScrollingCoordinator::frameViewIsDirty() const

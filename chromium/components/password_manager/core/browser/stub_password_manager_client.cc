@@ -12,17 +12,6 @@
 
 namespace password_manager {
 
-ScopedVector<autofill::PasswordForm>
-StubPasswordManagerClient::PassThroughCredentialsFilter::FilterResults(
-    ScopedVector<autofill::PasswordForm> results) const {
-  return results;
-}
-
-bool StubPasswordManagerClient::PassThroughCredentialsFilter::ShouldSave(
-    const autofill::PasswordForm& form) const {
-  return true;
-}
-
 StubPasswordManagerClient::StubPasswordManagerClient() {}
 
 StubPasswordManagerClient::~StubPasswordManagerClient() {}

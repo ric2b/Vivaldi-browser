@@ -101,16 +101,9 @@ void AddRenderPassQuad(RenderPass* to_pass, RenderPass* contributing_pass) {
                        0);
   RenderPassDrawQuad* quad =
       to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-  quad->SetNew(shared_state,
-               output_rect,
-               output_rect,
-               contributing_pass->id,
-               0,
-               gfx::Vector2dF(),
-               gfx::Size(),
-               FilterOperations(),
-               gfx::Vector2dF(),
-               FilterOperations());
+  quad->SetNew(shared_state, output_rect, output_rect, contributing_pass->id, 0,
+               gfx::Vector2dF(), gfx::Size(), FilterOperations(),
+               gfx::Vector2dF(), gfx::PointF(), FilterOperations());
 }
 
 void AddRenderPassQuad(RenderPass* to_pass,
@@ -132,15 +125,9 @@ void AddRenderPassQuad(RenderPass* to_pass,
   RenderPassDrawQuad* quad =
       to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
   gfx::Size arbitrary_nonzero_size(1, 1);
-  quad->SetNew(shared_state,
-               output_rect,
-               output_rect,
-               contributing_pass->id,
-               mask_resource_id,
-               gfx::Vector2dF(1.f, 1.f),
-               arbitrary_nonzero_size,
-               filters,
-               gfx::Vector2dF(),
+  quad->SetNew(shared_state, output_rect, output_rect, contributing_pass->id,
+               mask_resource_id, gfx::Vector2dF(1.f, 1.f),
+               arbitrary_nonzero_size, filters, gfx::Vector2dF(), gfx::PointF(),
                FilterOperations());
 }
 
@@ -164,32 +151,32 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
 
   ResourceId resource1 = resource_provider->CreateResource(
       gfx::Size(45, 5), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource1);
   ResourceId resource2 = resource_provider->CreateResource(
       gfx::Size(346, 61), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource2);
   ResourceId resource3 = resource_provider->CreateResource(
       gfx::Size(12, 134), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource3);
   ResourceId resource4 = resource_provider->CreateResource(
       gfx::Size(56, 12), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource4);
   gfx::Size resource5_size(73, 26);
   ResourceId resource5 = resource_provider->CreateResource(
       resource5_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource5);
   ResourceId resource6 = resource_provider->CreateResource(
       gfx::Size(64, 92), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource6);
   ResourceId resource7 = resource_provider->CreateResource(
       gfx::Size(9, 14), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-      resource_provider->best_texture_format());
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resource_provider->AllocateForTesting(resource7);
 
   unsigned target = GL_TEXTURE_2D;
@@ -213,17 +200,17 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
   if (child_pass.layer_id) {
     RenderPassDrawQuad* render_pass_quad =
         to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
-    render_pass_quad->SetNew(shared_state, rect, visible_rect, child_pass,
-                             resource5, gfx::Vector2dF(1.f, 1.f),
-                             resource5_size, FilterOperations(),
-                             gfx::Vector2dF(), FilterOperations());
+    render_pass_quad->SetNew(
+        shared_state, rect, visible_rect, child_pass, resource5,
+        gfx::Vector2dF(1.f, 1.f), resource5_size, FilterOperations(),
+        gfx::Vector2dF(), gfx::PointF(), FilterOperations());
 
     RenderPassDrawQuad* render_pass_replica_quad =
         to_pass->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
     render_pass_replica_quad->SetNew(
         shared_state, rect, visible_rect, child_pass, resource5,
         gfx::Vector2dF(1.f, 1.f), resource5_size, FilterOperations(),
-        gfx::Vector2dF(), FilterOperations());
+        gfx::Vector2dF(), gfx::PointF(), FilterOperations());
   }
 
   SolidColorDrawQuad* solid_color_quad =
@@ -282,18 +269,19 @@ void AddOneOfEveryQuadType(RenderPass* to_pass,
   for (int i = 0; i < 4; ++i) {
     plane_resources[i] = resource_provider->CreateResource(
         gfx::Size(20, 12), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-        resource_provider->best_texture_format());
+        resource_provider->best_texture_format(), gfx::ColorSpace());
     resource_provider->AllocateForTesting(plane_resources[i]);
   }
   YUVVideoDrawQuad::ColorSpace color_space = YUVVideoDrawQuad::REC_601;
+
   YUVVideoDrawQuad* yuv_quad =
       to_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
   yuv_quad->SetNew(shared_state2, rect, opaque_rect, visible_rect,
                    gfx::RectF(.0f, .0f, 100.0f, 100.0f),
                    gfx::RectF(.0f, .0f, 50.0f, 50.0f), gfx::Size(100, 100),
                    gfx::Size(50, 50), plane_resources[0], plane_resources[1],
-                   plane_resources[2], plane_resources[3], color_space, 0.0,
-                   1.0);
+                   plane_resources[2], plane_resources[3], color_space,
+                   gfx::ColorSpace::CreateJpeg(), 0.0, 1.0, 8);
 }
 
 }  // namespace cc

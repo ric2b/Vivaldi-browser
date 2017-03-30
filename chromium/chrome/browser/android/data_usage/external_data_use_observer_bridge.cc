@@ -12,6 +12,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/data_usage/data_use_tab_model.h"
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
@@ -38,6 +39,20 @@ const std::string GetControlAppPackageName() {
       "control_app_package_name");
 }
 
+// Returns the google variation ID from the field trial.
+variations::VariationID GetGoogleVariationID() {
+  variations::VariationID variation_id;
+  std::string variation_value = variations::GetVariationParamValue(
+      chrome::android::ExternalDataUseObserver::
+          kExternalDataUseObserverFieldTrial,
+      "variation_id");
+  if (!variation_value.empty() &&
+      base::StringToInt(variation_value, &variation_id)) {
+    return variation_id;
+  }
+  return variations::EMPTY_ID;
+}
+
 }  // namespace
 
 namespace chrome {
@@ -59,8 +74,7 @@ ExternalDataUseObserverBridge::~ExternalDataUseObserverBridge() {
   if (j_external_data_use_observer_.is_null())
     return;
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_ExternalDataUseObserver_onDestroy(env,
-                                         j_external_data_use_observer_.obj());
+  Java_ExternalDataUseObserver_onDestroy(env, j_external_data_use_observer_);
 }
 
 void ExternalDataUseObserverBridge::Init(
@@ -86,8 +100,8 @@ void ExternalDataUseObserverBridge::Init(
   DCHECK(!j_external_data_use_observer_.is_null());
 
   Java_ExternalDataUseObserver_initControlAppManager(
-      env, j_external_data_use_observer_.obj(),
-      ConvertUTF8ToJavaString(env, GetControlAppPackageName()).obj());
+      env, j_external_data_use_observer_,
+      ConvertUTF8ToJavaString(env, GetControlAppPackageName()));
 }
 
 void ExternalDataUseObserverBridge::FetchMatchingRules() const {
@@ -95,7 +109,7 @@ void ExternalDataUseObserverBridge::FetchMatchingRules() const {
 
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_ExternalDataUseObserver_fetchMatchingRules(
-      env, j_external_data_use_observer_.obj());
+      env, j_external_data_use_observer_);
 }
 
 void ExternalDataUseObserverBridge::FetchMatchingRulesDone(
@@ -142,8 +156,8 @@ void ExternalDataUseObserverBridge::ReportDataUse(
     const std::string& tag,
     net::NetworkChangeNotifier::ConnectionType connection_type,
     const std::string& mcc_mnc,
-    const base::Time& start_time,
-    const base::Time& end_time,
+    base::Time start_time,
+    base::Time end_time,
     int64_t bytes_downloaded,
     int64_t bytes_uploaded) const {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -158,10 +172,9 @@ void ExternalDataUseObserverBridge::ReportDataUse(
     start_time_milliseconds = end_time_milliseconds - 1;
 
   Java_ExternalDataUseObserver_reportDataUse(
-      env, j_external_data_use_observer_.obj(),
-      ConvertUTF8ToJavaString(env, label).obj(),
-      ConvertUTF8ToJavaString(env, tag).obj(), connection_type,
-      ConvertUTF8ToJavaString(env, mcc_mnc).obj(), start_time_milliseconds,
+      env, j_external_data_use_observer_, ConvertUTF8ToJavaString(env, label),
+      ConvertUTF8ToJavaString(env, tag), connection_type,
+      ConvertUTF8ToJavaString(env, mcc_mnc), start_time_milliseconds,
       end_time_milliseconds, bytes_downloaded, bytes_uploaded);
 }
 
@@ -197,18 +210,20 @@ void ExternalDataUseObserverBridge::ShouldRegisterAsDataUseObserver(
       base::Bind(&ExternalDataUseObserver::ShouldRegisterAsDataUseObserver,
                  external_data_use_observer_, should_register));
 
-  // Set or clear the variation id for the enabled group.
-  JNIEnv* env = base::android::AttachCurrentThread();
-  variations::AssociateGoogleVariationID(
-      variations::GOOGLE_WEB_PROPERTIES, kSyntheticFieldTrial,
-      kSyntheticFieldTrialEnabledGroup,
-      should_register ? Java_ExternalDataUseObserver_getGoogleVariationID(
-                            env, j_external_data_use_observer_.obj())
-                      : variations::EMPTY_ID);
-  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
-      kSyntheticFieldTrial, should_register
-                                ? kSyntheticFieldTrialEnabledGroup
-                                : kSyntheticFieldTrialDisabledGroup);
+  variations::VariationID variation_id = GetGoogleVariationID();
+  if (variation_id != variations::EMPTY_ID) {
+    // Set variation id for the enabled group if |should_register| is true.
+    // Otherwise clear the variation id for the enabled group by setting to
+    // EMPTY_ID.
+    variations::AssociateGoogleVariationID(
+        variations::GOOGLE_WEB_PROPERTIES, kSyntheticFieldTrial,
+        kSyntheticFieldTrialEnabledGroup,
+        should_register ? variation_id : variations::EMPTY_ID);
+    ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
+        kSyntheticFieldTrial, should_register
+                                  ? kSyntheticFieldTrialEnabledGroup
+                                  : kSyntheticFieldTrialDisabledGroup);
+  }
 }
 
 bool RegisterExternalDataUseObserver(JNIEnv* env) {

@@ -32,6 +32,7 @@
 #define Timing_h
 
 #include "core/style/DataEquivalency.h"
+#include "platform/animation/CompositorAnimation.h"
 #include "platform/animation/TimingFunction.h"
 #include "wtf/Allocator.h"
 #include "wtf/MathExtras.h"
@@ -42,23 +43,10 @@ namespace blink {
 struct Timing {
     USING_FAST_MALLOC(Timing);
 public:
-    enum FillMode {
-        FillModeAuto,
-        FillModeNone,
-        FillModeForwards,
-        FillModeBackwards,
-        FillModeBoth
-    };
+    using FillMode = CompositorAnimation::FillMode;
+    using PlaybackDirection = CompositorAnimation::Direction;
 
     static String fillModeString(FillMode);
-
-    enum PlaybackDirection {
-        PlaybackDirectionNormal,
-        PlaybackDirectionReverse,
-        PlaybackDirectionAlternate,
-        PlaybackDirectionAlternateReverse
-    };
-
     static String playbackDirectionString(PlaybackDirection);
 
     static const Timing& defaults()
@@ -70,26 +58,26 @@ public:
     Timing()
         : startDelay(0)
         , endDelay(0)
-        , fillMode(FillModeAuto)
+        , fillMode(FillMode::AUTO)
         , iterationStart(0)
         , iterationCount(1)
         , iterationDuration(std::numeric_limits<double>::quiet_NaN())
         , playbackRate(1)
-        , direction(PlaybackDirectionNormal)
+        , direction(PlaybackDirection::NORMAL)
         , timingFunction(LinearTimingFunction::shared())
     {
     }
 
     void assertValid() const
     {
-        ASSERT(std::isfinite(startDelay));
-        ASSERT(std::isfinite(endDelay));
-        ASSERT(std::isfinite(iterationStart));
-        ASSERT(iterationStart >= 0);
-        ASSERT(iterationCount >= 0);
-        ASSERT(std::isnan(iterationDuration) || iterationDuration >= 0);
-        ASSERT(std::isfinite(playbackRate));
-        ASSERT(timingFunction);
+        DCHECK(std::isfinite(startDelay));
+        DCHECK(std::isfinite(endDelay));
+        DCHECK(std::isfinite(iterationStart));
+        DCHECK_GE(iterationStart, 0);
+        DCHECK_GE(iterationCount, 0);
+        DCHECK(std::isnan(iterationDuration) || iterationDuration >= 0);
+        DCHECK(std::isfinite(playbackRate));
+        DCHECK(timingFunction);
     }
 
     bool operator==(const Timing &other) const
@@ -116,6 +104,8 @@ public:
     double iterationStart;
     double iterationCount;
     double iterationDuration;
+
+    // TODO(crbug.com/630915) Remove playbackRate
     double playbackRate;
     PlaybackDirection direction;
     RefPtr<TimingFunction> timingFunction;

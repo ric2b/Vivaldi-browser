@@ -7,30 +7,25 @@
 #include <cmath>
 #include <cstdlib>
 
-#include "ash/common/ash_switches.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_view.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_user_wallpaper_delegate.h"
+#include "ash/test/test_wallpaper_delegate.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/layer_animator_test_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/widget/widget.h"
 
-using aura::RootWindow;
-using aura::Window;
-using wallpaper::WallpaperLayout;
 using wallpaper::WALLPAPER_LAYOUT_CENTER;
 using wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
 using wallpaper::WALLPAPER_LAYOUT_STRETCH;
@@ -46,8 +41,8 @@ const int kLockScreenBackgroundId =
 
 // Returns number of child windows in a shell window container.
 int ChildCountForContainer(int container_id) {
-  Window* root = ash::Shell::GetPrimaryRootWindow();
-  Window* container = root->GetChildById(container_id);
+  aura::Window* root = ash::Shell::GetPrimaryRootWindow();
+  aura::Window* container = root->GetChildById(container_id);
   return static_cast<int>(container->children().size());
 }
 
@@ -121,8 +116,8 @@ class DesktopBackgroundControllerTest : public test::AshTestBase {
     root_window_controller->SetWallpaperController(NULL);
     root_window_controller->SetAnimatingWallpaperController(NULL);
     controller_ = Shell::GetInstance()->desktop_background_controller();
-    wallpaper_delegate_ = static_cast<test::TestUserWallpaperDelegate*>(
-        Shell::GetInstance()->user_wallpaper_delegate());
+    wallpaper_delegate_ = static_cast<test::TestWallpaperDelegate*>(
+        WmShell::Get()->wallpaper_delegate());
     controller_->set_wallpaper_reload_delay_for_test(0);
   }
 
@@ -194,7 +189,7 @@ class DesktopBackgroundControllerTest : public test::AshTestBase {
 
   DesktopBackgroundController* controller_;  // Not owned.
 
-  test::TestUserWallpaperDelegate* wallpaper_delegate_;
+  test::TestWallpaperDelegate* wallpaper_delegate_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DesktopBackgroundControllerTest);

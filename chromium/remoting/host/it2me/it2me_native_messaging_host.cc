@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "remoting/base/auto_thread_task_runner.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/host_exit_codes.h"
 #include "remoting/host/service_urls.h"
@@ -189,14 +190,14 @@ void It2MeNativeMessagingHost::ProcessConnect(
     return;
   }
 
-  if (!net::ParseHostAndPort(address, &xmpp_server_config_.host,
-                             &xmpp_server_config_.port)) {
+  if (!net::ParseHostAndPort(address, &xmpp_config.host,
+                             &xmpp_config.port)) {
     SendErrorAndExit(std::move(response),
                      "Invalid 'xmppServerAddress': " + address);
     return;
   }
 
-  if (!message.GetBoolean("xmppServerUseTls", &xmpp_server_config_.use_tls)) {
+  if (!message.GetBoolean("xmppServerUseTls", &xmpp_config.use_tls)) {
     SendErrorAndExit(std::move(response),
                      "'xmppServerUseTls' not found in request.");
     return;

@@ -9,12 +9,13 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="/icons.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="add_languages_dialog.html">
 <link rel="import" href="language_detail_page.html">
 <link rel="import" href="languages.html">
-<link rel="import" href="manage_languages_page.html">
 
 <if expr="not is_macosx">
 <link rel="import" href="edit_dictionary_page.html">
@@ -30,20 +31,12 @@
       .list-button {
         @apply(--settings-actionable);
       }
-
-      .dropdown-content {
-        background: white;
-        box-shadow: 0 2px 6px grey;
-      }
-
-      paper-item:hover {
-        background-color: var(--settings-hover-color);
-      }
     </style>
-    <settings-languages languages="{{languages}}"></settings-languages>
-    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
-        section="languages">
-      <neon-animatable id="main">
+    <settings-languages languages="{{languages}}" prefs="{{prefs}}"
+        language-helper="{{languageHelper}}">
+    </settings-languages>
+    <settings-animated-pages id="pages" section="languages">
+      <neon-animatable route-path="default">
         <div class="settings-box first two-line">
           <div class="start">
             <div>$i18n{languagesListTitle}</div>
@@ -87,36 +80,46 @@
 </if>
                 <paper-icon-button id="more-[[item.language.code]]"
                     icon="cr:more-vert" toggles
-                    active="{{item.optionsMenuOpened}}">
+                    active="{{item.optionsMenuOpened}}"
+                    on-tap="stopPropagationHandler_">
                 </paper-icon-button>
                 <iron-dropdown opened="{{item.optionsMenuOpened}}"
-                    horizontal-align="right" vertical-align="top">
-                  <div class="dropdown-content">
-                    <paper-item on-tap="onMoveUpTap_"
+                    horizontal-align="right" vertical-align="auto">
+                  <div class="dropdown-content"
+                      on-tap="stopPropagationHandler_">
+                    <button class="dropdown-item" role="option"
+                        on-tap="onMoveUpTap_"
                         hidden="[[isFirstLanguage_(index,
                                                    languages.enabled.*)]]">
                       $i18n{moveUp}
-                    </paper-item>
-                    <paper-item on-tap="onMoveDownTap_"
+                    </button>
+                    <button class="dropdown-item" role="option"
+                        on-tap="onMoveDownTap_"
                         hidden="[[isLastLanguage_(index,
                                                   languages.enabled.*)]]">
                       $i18n{moveDown}
-                    </paper-item>
-                    <paper-item class="language-detail-item"
+                    </button>
+                    <button class="dropdown-item" role="option"
                         on-tap="onShowLanguageDetailTap_">
                       $i18n{languageDetail}
-                    </paper-item>
+                    </button>
+                    <button class="dropdown-item" role="option"
+                        on-tap="onRemoveLanguageTap_"
+                        disabled="[[!item.removable]]">
+                      $i18n{removeLanguage}
+                    </button>
                   </div>
                 </iron-dropdown>
               </div>
             </template>
-            <div class="list-item list-button" on-tap="onManageLanguagesTap_">
-              $i18n{manageLanguages}
+            <div class="list-item list-button" on-tap="onAddLanguagesTap_">
+              $i18n{addLanguages}
             </div>
           </div>
         </iron-collapse>
 <if expr="chromeos">
-        <div class="settings-box two-line">
+        <div id="manage-input-methods-subpage-trigger"
+              class="settings-box two-line">
           <div class="start">
             <div>$i18n{inputMethodsListTitle}</div>
             <div class="secondary">
@@ -155,7 +158,7 @@
         </iron-collapse>
 </if>
 <if expr="not is_macosx">
-        <div class="settings-box two-line">
+        <div id="spellcheck-subpage-trigger" class="settings-box two-line">
           <div class="start">
             <div>$i18n{spellCheckListTitle}</div>
             <div class="secondary">
@@ -191,36 +194,40 @@
         </iron-collapse>
 </if>
       </neon-animatable>
-      <template is="dom-if" name="manage-languages">
-        <settings-subpage page-title="$i18n{manageLanguagesPageTitle}">
-          <settings-manage-languages-page
-              prefs="{{prefs}}"></settings-manage-languages-page>
-        </settings-subpage>
-      </template>
-      <template is="dom-if" name="language-detail">
-        <settings-subpage
-            page-title="[[detailLanguage_.language.displayName]]">
+      <template is="dom-if" route-path="/languages/edit" no-search>
+        <settings-subpage page-title="[[detailLanguage_.language.displayName]]">
           <settings-language-detail-page id="languageDetailPage"
-              prefs="{{prefs}}" detail="[[detailLanguage_]]">
+              languages="{{languages}}" prefs="{{prefs}}"
+              detail="[[detailLanguage_]]" language-helper="[[languageHelper]]">
           </settings-language-detail-page>
         </settings-subpage>
       </template>
 <if expr="chromeos">
-      <template is="dom-if" name="manage-input-methods">
-        <settings-subpage page-title="$i18n{manageInputMethodsPageTitle}">
-          <settings-manage-input-methods-page>
+      <template is="dom-if" route-path="/inputMethods">
+        <settings-subpage
+            associated-control="[[$$('#manage-input-methods-subpage-trigger')]]"
+            page-title="$i18n{manageInputMethodsPageTitle}">
+          <settings-manage-input-methods-page languages="{{languages}}"
+              language-helper="[[languageHelper]]">
           </settings-manage-input-methods-page>
         </settings-subpage>
       </template>
 </if>
 <if expr="not is_macosx">
-      <template is="dom-if" name="edit-dictionary">
-        <settings-subpage page-title="$i18n{editDictionaryPageTitle}">
+      <template is="dom-if" route-path="/editDictionary">
+        <settings-subpage
+            associated-control="[[$$('#spellcheck-subpage-trigger')]]"
+            page-title="$i18n{editDictionaryPageTitle}">
           <settings-edit-dictionary-page></settings-edit-dictionary-page>
         </settings-subpage>
       </template>
 </if>
     </settings-animated-pages>
+    <template is="dom-if" if="[[showAddLanguagesDialog_]]" restamp>
+      <settings-add-languages-dialog languages="{{languages}}"
+          language-helper="[[languageHelper]]">
+      </settings-add-languages-dialog>
+    </template>
   </template>
   <script src="languages_page.js"></script>
 </dom-module>

@@ -39,7 +39,6 @@ class CC_EXPORT RemoteChannelMain : public ChannelMain,
   void MainThreadHasStoppedFlingingOnImpl() override;
   void SetInputThrottledUntilCommitOnImpl(bool is_throttled) override;
   void SetDeferCommitsOnImpl(bool defer_commits) override;
-  void FinishAllRenderingOnImpl(CompletionEvent* completion) override;
   void SetVisibleOnImpl(bool visible) override;
   void ReleaseOutputSurfaceOnImpl(CompletionEvent* completion) override;
   void MainFrameWillHappenOnImplForTesting(
@@ -49,11 +48,12 @@ class CC_EXPORT RemoteChannelMain : public ChannelMain,
   void SetNeedsCommitOnImpl() override;
   void BeginMainFrameAbortedOnImpl(
       CommitEarlyOutReason reason,
-      base::TimeTicks main_thread_start_time) override;
-  void StartCommitOnImpl(CompletionEvent* completion,
-                         LayerTreeHost* layer_tree_host,
-                         base::TimeTicks main_thread_start_time,
-                         bool hold_commit_for_activation) override;
+      base::TimeTicks main_thread_start_time,
+      std::vector<std::unique_ptr<SwapPromise>> swap_promises) override;
+  void NotifyReadyToCommitOnImpl(CompletionEvent* completion,
+                                 LayerTreeHost* layer_tree_host,
+                                 base::TimeTicks main_thread_start_time,
+                                 bool hold_commit_for_activation) override;
   void SynchronouslyInitializeImpl(
       LayerTreeHost* layer_tree_host,
       std::unique_ptr<BeginFrameSource> external_begin_frame_source) override;

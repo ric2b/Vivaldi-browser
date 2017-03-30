@@ -38,20 +38,54 @@ void RequestQueueInMemoryStore::AddOrUpdateRequest(
 void RequestQueueInMemoryStore::RemoveRequests(
     const std::vector<int64_t>& request_ids,
     const RemoveCallback& callback) {
-  // In case the |request_ids| is empty, the result will be true, but the count
-  // of deleted pages will be empty.
-  int count = 0;
+  RequestQueue::UpdateMultipleRequestResults results;
+  RequestQueue::UpdateRequestResult result;
+  std::vector<SavePageRequest> requests;
   RequestsMap::iterator iter;
+
+  // If we find a request, mark it as succeeded, and put it in the request list.
+  // Otherwise mark it as failed.
   for (auto request_id : request_ids) {
     iter = requests_.find(request_id);
     if (iter != requests_.end()) {
+      SavePageRequest request = iter->second;
       requests_.erase(iter);
-      ++count;
+      result = RequestQueue::UpdateRequestResult::SUCCESS;
+      requests.push_back(request);
+    } else {
+      result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;
     }
+    results.push_back(std::make_pair(request_id, result));
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(callback, true, count));
+      FROM_HERE, base::Bind(callback, results, requests));
+}
+
+void RequestQueueInMemoryStore::ChangeRequestsState(
+    const std::vector<int64_t>& request_ids,
+    const SavePageRequest::RequestState new_state,
+    const UpdateMultipleRequestsCallback& callback) {
+  RequestQueue::UpdateMultipleRequestResults results;
+  std::vector<SavePageRequest> requests;
+  RequestQueue::UpdateRequestResult result;
+  for (int64_t request_id : request_ids) {
+    auto pair = requests_.find(request_id);
+    // If we find this request id, modify it, and return the modified request in
+    // the request list.
+    if (pair != requests_.end()) {
+      pair->second.set_request_state(new_state);
+      requests.push_back(pair->second);
+      result = RequestQueue::UpdateRequestResult::SUCCESS;
+    } else {
+      result = RequestQueue::UpdateRequestResult::REQUEST_DOES_NOT_EXIST;;
+    }
+
+    results.push_back(std::make_pair(request_id, result));
+  }
+
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, results, requests));
 }
 
 void RequestQueueInMemoryStore::Reset(const ResetCallback& callback) {

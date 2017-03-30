@@ -31,6 +31,10 @@
 #include "ui/views/window/window_resources.h"
 #include "ui/views/window/window_shape.h"
 
+#if defined(OS_WIN)
+#include "ui/display/win/screen_win.h"
+#endif
+
 namespace views {
 
 namespace {
@@ -52,11 +56,6 @@ const int kIconLeftSpacing = 2;
 const int kTitleIconOffsetX = 4;
 // The space between the title text and the caption buttons.
 const int kTitleCaptionSpacing = 5;
-
-#if !defined(OS_WIN)
-// The icon never shrinks below 16 px on a side.
-const int kIconMinimumSize = 16;
-#endif
 
 #if defined(OS_CHROMEOS)
 // Chrome OS uses a dark gray.
@@ -304,8 +303,10 @@ int CustomFrameView::IconSize() const {
 #if defined(OS_WIN)
   // This metric scales up if either the titlebar height or the titlebar font
   // size are increased.
-  return GetSystemMetrics(SM_CYSMICON);
+  return display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON);
 #else
+  // The icon never shrinks below 16 px on a side.
+  const int kIconMinimumSize = 16;
   return std::max(GetTitleFontList().GetHeight(), kIconMinimumSize);
 #endif
 }

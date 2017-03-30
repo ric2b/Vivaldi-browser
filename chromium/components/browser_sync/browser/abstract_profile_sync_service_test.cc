@@ -14,13 +14,13 @@
 #include "base/run_loop.h"
 #include "components/browser_sync/browser/test_http_bridge_factory.h"
 #include "components/browser_sync/browser/test_profile_sync_service.h"
-#include "components/sync_driver/glue/sync_backend_host_core.h"
-#include "components/sync_driver/sync_api_component_factory_mock.h"
+#include "components/sync/core/test/sync_manager_factory_for_profile_sync_test.h"
+#include "components/sync/core/test/test_internal_components_factory.h"
+#include "components/sync/core/test/test_user_share.h"
+#include "components/sync/driver/glue/sync_backend_host_core.h"
+#include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "sync/internal_api/public/test/sync_manager_factory_for_profile_sync_test.h"
-#include "sync/internal_api/public/test/test_internal_components_factory.h"
-#include "sync/internal_api/public/test/test_user_share.h"
-#include "sync/protocol/sync.pb.h"
 
 using syncer::ModelType;
 using testing::_;
@@ -191,7 +191,7 @@ void AbstractProfileSyncServiceTest::CreateSyncService(
       profile_sync_service_bundle_.CreateBasicInitParams(
           ProfileSyncService::AUTO_START, std::move(sync_client));
   sync_service_ =
-      base::WrapUnique(new TestProfileSyncService(std::move(init_params)));
+      base::MakeUnique<TestProfileSyncService>(std::move(init_params));
 
   SyncApiComponentFactoryMock* components =
       profile_sync_service_bundle_.component_factory();

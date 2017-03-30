@@ -7,7 +7,7 @@
 #include "base/macros.h"
 #include "cc/animation/animation_host.h"
 #include "cc/resources/ui_resource_bitmap.h"
-#include "cc/test/fake_layer_tree_host_client.h"
+#include "cc/test/stub_layer_tree_host_client.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -52,7 +52,7 @@ class TestResourceManagerImpl : public ResourceManagerImpl {
     canvas.drawColor(SK_ColorWHITE);
     small_bitmap.setImmutable();
 
-    OnResourceReady(NULL, NULL, res_type, res_id,
+    OnResourceReady(nullptr, nullptr, res_type, res_id,
                     gfx::ConvertToJavaBitmap(&small_bitmap), 0, 0, 0, 0, 0, 0,
                     0, 0);
   }
@@ -90,11 +90,10 @@ class ResourceManagerTest : public testing::Test {
  public:
   ResourceManagerTest()
       : window_android_(WindowAndroid::createForTesting()),
-        resource_manager_(window_android_),
-        fake_client_(cc::FakeLayerTreeHostClient::DIRECT_3D) {
+        resource_manager_(window_android_) {
     cc::LayerTreeHost::InitParams params;
     cc::LayerTreeSettings settings;
-    params.client = &fake_client_;
+    params.client = &stub_client_;
     params.settings = &settings;
     params.task_graph_runner = &task_graph_runner_;
     params.animation_host =
@@ -104,7 +103,9 @@ class ResourceManagerTest : public testing::Test {
     resource_manager_.Init(host_.get());
   }
 
-  ~ResourceManagerTest() override { window_android_->Destroy(NULL, NULL); }
+  ~ResourceManagerTest() override {
+    window_android_->Destroy(nullptr, nullptr);
+  }
 
   void PreloadResource(ui::SystemUIResourceType type) {
     resource_manager_.PreloadResource(ui::ANDROID_RESOURCE_TYPE_SYSTEM, type);
@@ -127,7 +128,7 @@ class ResourceManagerTest : public testing::Test {
   std::unique_ptr<MockLayerTreeHost> host_;
   TestResourceManagerImpl resource_manager_;
   cc::TestTaskGraphRunner task_graph_runner_;
-  cc::FakeLayerTreeHostClient fake_client_;
+  cc::StubLayerTreeHostClient stub_client_;
 };
 
 TEST_F(ResourceManagerTest, GetResource) {

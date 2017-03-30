@@ -20,6 +20,19 @@
 
 namespace net {
 
+namespace {
+template <typename ConstIterator>
+void TrimLWSImplementation(ConstIterator* begin, ConstIterator* end) {
+  // leading whitespace
+  while (*begin < *end && HttpUtil::IsLWS((*begin)[0]))
+    ++(*begin);
+
+  // trailing whitespace
+  while (*begin < *end && HttpUtil::IsLWS((*end)[-1]))
+    --(*end);
+}
+}  // namespace
+
 // Helpers --------------------------------------------------------------------
 
 // Returns the index of the closing quote of the string, if any.  |start| points
@@ -340,16 +353,19 @@ bool HttpUtil::IsSafeHeader(const std::string& name) {
 }
 
 // static
-bool HttpUtil::IsValidHeaderName(const std::string& name) {
+bool HttpUtil::IsValidHeaderName(const base::StringPiece& name) {
   // Check whether the header name is RFC 2616-compliant.
   return HttpUtil::IsToken(name);
 }
 
 // static
-bool HttpUtil::IsValidHeaderValue(const std::string& value) {
-  // Just a sanity check: disallow NUL and CRLF.
-  return value.find('\0') == std::string::npos &&
-      value.find("\r\n") == std::string::npos;
+bool HttpUtil::IsValidHeaderValue(const base::StringPiece& value) {
+  // Just a sanity check: disallow NUL, CR and LF.
+  for (char c : value) {
+    if (c == '\0' || c == '\r' || c == '\n')
+      return false;
+  }
+  return true;
 }
 
 // static
@@ -410,15 +426,18 @@ bool HttpUtil::IsLWS(char c) {
   return strchr(HTTP_LWS, c) != NULL;
 }
 
+// static
 void HttpUtil::TrimLWS(std::string::const_iterator* begin,
                        std::string::const_iterator* end) {
-  // leading whitespace
-  while (*begin < *end && IsLWS((*begin)[0]))
-    ++(*begin);
+  TrimLWSImplementation(begin, end);
+}
 
-  // trailing whitespace
-  while (*begin < *end && IsLWS((*end)[-1]))
-    --(*end);
+// static
+base::StringPiece HttpUtil::TrimLWS(const base::StringPiece& string) {
+  const char* begin = string.data();
+  const char* end = string.data() + string.size();
+  TrimLWSImplementation(&begin, &end);
+  return base::StringPiece(begin, end - begin);
 }
 
 bool HttpUtil::IsQuote(char c) {
@@ -438,12 +457,11 @@ bool IsTokenChar(unsigned char c) {
 }  // anonymous namespace
 
 // See RFC 2616 Sec 2.2 for the definition of |token|.
-bool HttpUtil::IsToken(std::string::const_iterator begin,
-                       std::string::const_iterator end) {
-  if (begin == end)
+bool HttpUtil::IsToken(const base::StringPiece& string) {
+  if (string.empty())
     return false;
-  for (std::string::const_iterator iter = begin; iter != end; ++iter) {
-    if (!IsTokenChar(*iter))
+  for (char c : string) {
+    if (!IsTokenChar(c))
       return false;
   }
   return true;
@@ -892,7 +910,8 @@ bool HttpUtil::HeadersIterator::GetNext() {
       continue;
 
     TrimLWS(&name_begin_, &name_end_);
-    if (!IsToken(name_begin_, name_end_))
+    DCHECK(name_begin_ < name_end_);
+    if (!IsToken(base::StringPiece(name_begin_, name_end_)))
       continue;  // skip malformed header
 
     values_begin_ = colon + 1;

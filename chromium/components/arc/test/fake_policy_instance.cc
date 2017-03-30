@@ -2,37 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "components/arc/test/fake_policy_instance.h"
 #include "base/run_loop.h"
 
 namespace arc {
 
-FakePolicyInstance::FakePolicyInstance(
-    mojo::InterfaceRequest<mojom::PolicyInstance> request,
-    ArcBridgeService* bridge_service)
-    : binding_(this, std::move(request)), bridge_service_(bridge_service) {
-  bridge_service_->policy()->AddObserver(this);
-}
+FakePolicyInstance::FakePolicyInstance() = default;
 
-FakePolicyInstance::~FakePolicyInstance() {
-  bridge_service_->policy()->RemoveObserver(this);
-}
-
-void FakePolicyInstance::OnPolicyUpdated() {}
+FakePolicyInstance::~FakePolicyInstance() = default;
 
 void FakePolicyInstance::Init(mojom::PolicyHostPtr host_ptr) {
   host_ptr_ = std::move(host_ptr);
 }
 
-void FakePolicyInstance::OnInstanceReady() {
-  ready_ = true;
-}
-
-void FakePolicyInstance::WaitForOnPolicyInstanceReady() {
-  while (!ready_) {
-    base::RunLoop().RunUntilIdle();
-  }
-}
+void FakePolicyInstance::OnPolicyUpdated() {}
 
 void FakePolicyInstance::CallGetPolicies(
     const mojom::PolicyHost::GetPoliciesCallback& callback) {

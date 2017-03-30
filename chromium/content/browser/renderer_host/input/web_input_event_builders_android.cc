@@ -7,9 +7,9 @@
 #include <android/input.h>
 
 #include "base/logging.h"
-#include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "ui/events/android/key_event_utils.h"
 #include "ui/events/android/motion_event_android.h"
+#include "ui/events/blink/blink_event_util.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
@@ -93,7 +93,7 @@ WebKeyboardEvent WebKeyboardEventBuilder::Build(
   result.timeStampSeconds = time_sec;
   result.windowsKeyCode = ui::LocatedToNonLocatedKeyboardCode(
       ui::KeyboardCodeFromAndroidKeyCode(keycode));
-  result.modifiers |= DomCodeToWebInputEventModifiers(dom_code);
+  result.modifiers |= ui::DomCodeToWebInputEventModifiers(dom_code);
   result.nativeKeyCode = keycode;
   result.domCode = static_cast<int>(dom_code);
   result.domKey = GetDomKeyFromEvent(env, android_key_event, keycode, modifiers,
@@ -107,7 +107,6 @@ WebKeyboardEvent WebKeyboardEventBuilder::Build(
   }
   result.text[0] = result.unmodifiedText[0];
   result.isSystemKey = is_system_key;
-  result.setKeyIdentifierFromWindowsKeyCode();
 
   return result;
 }
@@ -138,7 +137,7 @@ WebMouseEvent WebMouseEventBuilder::Build(
   if (type == WebInputEvent::MouseDown || type == WebInputEvent::MouseUp)
     result.button = button;
   else
-    result.button = WebMouseEvent::ButtonNone;
+    result.button = WebMouseEvent::Button::NoButton;
 
   return result;
 }
@@ -157,7 +156,7 @@ WebMouseWheelEvent WebMouseWheelEventBuilder::Build(float ticks_x,
   result.windowX = window_x;
   result.windowY = window_y;
   result.timeStampSeconds = time_sec;
-  result.button = WebMouseEvent::ButtonNone;
+  result.button = WebMouseEvent::Button::NoButton;
   result.hasPreciseScrollingDeltas = true;
   result.deltaX = ticks_x * tick_multiplier;
   result.deltaY = ticks_y * tick_multiplier;

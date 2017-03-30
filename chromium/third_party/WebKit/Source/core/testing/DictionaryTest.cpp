@@ -7,6 +7,7 @@
 #include "bindings/core/v8/V8ObjectBuilder.h"
 #include "core/testing/InternalDictionary.h"
 #include "core/testing/InternalDictionaryDerived.h"
+#include "core/testing/InternalDictionaryDerivedDerived.h"
 
 namespace blink {
 
@@ -148,6 +149,19 @@ void DictionaryTest::getDerived(InternalDictionaryDerived& result)
     result.setRequiredBooleanMember(m_requiredBooleanMember);
 }
 
+void DictionaryTest::setDerivedDerived(const InternalDictionaryDerivedDerived& derived)
+{
+    setDerived(derived);
+    if (derived.hasDerivedDerivedStringMember())
+        m_derivedDerivedStringMember = derived.derivedDerivedStringMember();
+}
+
+void DictionaryTest::getDerivedDerived(InternalDictionaryDerivedDerived& result)
+{
+    getDerived(result);
+    result.setDerivedDerivedStringMember(m_derivedDerivedStringMember);
+}
+
 String DictionaryTest::stringFromIterable(ExecutionContext* executionContext, Dictionary iterable, ExceptionState& exceptionState) const
 {
     StringBuilder result;
@@ -163,7 +177,7 @@ String DictionaryTest::stringFromIterable(ExecutionContext* executionContext, Di
         if (firstLoop)
             firstLoop = false;
         else
-            result.append(",");
+            result.append(',');
 
         v8::Local<v8::Value> value;
         if (v8Call(iterator.value(), value))

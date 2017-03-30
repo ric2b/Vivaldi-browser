@@ -205,9 +205,8 @@ Thumbnail* ThumbnailCache::Get(TabId tab_id,
     return thumbnail;
   }
 
-  if (force_disk_read &&
-      ContainsValue(visible_ids_, tab_id) &&
-      !ContainsValue(read_queue_, tab_id)) {
+  if (force_disk_read && base::ContainsValue(visible_ids_, tab_id) &&
+      !base::ContainsValue(read_queue_, tab_id)) {
     read_queue_.push_back(tab_id);
     ReadNextThumbnail();
   }
@@ -295,8 +294,7 @@ void ThumbnailCache::UpdateVisibleIds(const TabIdList& priority) {
   while (iter != priority.end() && count < ids_size) {
     TabId tab_id = *iter;
     visible_ids_.push_back(tab_id);
-    if (!cache_.Get(tab_id) &&
-        !ContainsValue(read_queue_, tab_id))
+    if (!cache_.Get(tab_id) && !base::ContainsValue(read_queue_, tab_id))
       read_queue_.push_back(tab_id);
     iter++;
     count++;
@@ -403,8 +401,7 @@ void ThumbnailCache::ReadNextThumbnail() {
 }
 
 void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
-  if (cache_.Get(tab_id) ||
-      !ContainsValue(visible_ids_, tab_id) ||
+  if (cache_.Get(tab_id) || !base::ContainsValue(visible_ids_, tab_id) ||
       cache_.size() < cache_.MaximumCacheSize()) {
     return;
   }
@@ -416,7 +413,7 @@ void ThumbnailCache::MakeSpaceForNewItemIfNecessary(TabId tab_id) {
   for (ExpiringThumbnailCache::iterator iter = cache_.begin();
        iter != cache_.end();
        iter++) {
-    if (!ContainsValue(visible_ids_, iter->first)) {
+    if (!base::ContainsValue(visible_ids_, iter->first)) {
       key_to_remove = iter->first;
       found_key_to_remove = true;
       break;
@@ -569,7 +566,7 @@ void ThumbnailCache::CompressionTask(
                                          encoded_size.height(),
                                          kUnknown_SkColorType,
                                          kUnpremul_SkAlphaType);
-    sk_sp<SkData> etc1_pixel_data(SkData::NewUninitialized(encoded_bytes));
+    sk_sp<SkData> etc1_pixel_data(SkData::MakeUninitialized(encoded_bytes));
     sk_sp<SkMallocPixelRef> etc1_pixel_ref(
         SkMallocPixelRef::NewWithData(info, 0, NULL, etc1_pixel_data.get()));
 
@@ -685,7 +682,7 @@ bool ReadFromFile(base::File& file,
   }
 
   int data_size = etc1_get_encoded_data_size(raw_width, raw_height);
-  sk_sp<SkData> etc1_pixel_data(SkData::NewUninitialized(data_size));
+  sk_sp<SkData> etc1_pixel_data(SkData::MakeUninitialized(data_size));
 
   int pixel_bytes_read = file.ReadAtCurrentPos(
       reinterpret_cast<char*>(etc1_pixel_data->writable_data()),

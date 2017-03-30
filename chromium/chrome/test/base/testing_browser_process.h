@@ -73,7 +73,7 @@ class TestingBrowserProcess : public BrowserProcess {
   policy::BrowserPolicyConnector* browser_policy_connector() override;
   policy::PolicyService* policy_service() override;
   IconManager* icon_manager() override;
-  GLStringManager* gl_string_manager() override;
+  GpuProfileCache* gpu_profile_cache() override;
   GpuModeManager* gpu_mode_manager() override;
   BackgroundModeManager* background_mode_manager() override;
   void set_background_mode_manager_for_test(
@@ -178,6 +178,12 @@ class TestingBrowserProcess : public BrowserProcess {
       subresource_filter_ruleset_service_;
 
   std::unique_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
+
+  // |tab_manager_| is null by default and will be created when
+  // GetTabManager() is invoked on supported platforms.
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+  std::unique_ptr<memory::TabManager> tab_manager_;
+#endif
 
   // The following objects are not owned by TestingBrowserProcess:
   PrefService* local_state_;

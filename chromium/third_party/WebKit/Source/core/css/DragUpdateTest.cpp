@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
 #include "core/frame/FrameView.h"
-#include "core/html/HTMLDocument.h"
-#include "core/html/HTMLElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,9 +19,9 @@ TEST(DragUpdateTest, AffectedByDragUpdate)
     // single element style recalc.
 
     std::unique_ptr<DummyPageHolder> dummyPageHolder = DummyPageHolder::create(IntSize(800, 600));
-    HTMLDocument& document = toHTMLDocument(dummyPageHolder->document());
+    Document& document = dummyPageHolder->document();
     document.documentElement()->setInnerHTML("<style>div {width:100px;height:100px} div:-webkit-drag { background-color: green }</style>"
-        "<div>"
+        "<div id='div'>"
         "<span></span>"
         "<span></span>"
         "<span></span>"
@@ -32,7 +31,7 @@ TEST(DragUpdateTest, AffectedByDragUpdate)
     document.view()->updateAllLifecyclePhases();
     unsigned startCount = document.styleEngine().styleForElementCount();
 
-    document.documentElement()->layoutObject()->updateDragState(true);
+    document.getElementById("div")->setDragged(true);
     document.view()->updateAllLifecyclePhases();
 
     unsigned elementCount = document.styleEngine().styleForElementCount() - startCount;
@@ -46,9 +45,9 @@ TEST(DragUpdateTest, ChildAffectedByDragUpdate)
     // single element style recalc.
 
     std::unique_ptr<DummyPageHolder> dummyPageHolder = DummyPageHolder::create(IntSize(800, 600));
-    HTMLDocument& document = toHTMLDocument(dummyPageHolder->document());
+    Document& document = dummyPageHolder->document();
     document.documentElement()->setInnerHTML("<style>div {width:100px;height:100px} div:-webkit-drag .drag { background-color: green }</style>"
-        "<div>"
+        "<div id='div'>"
         "<span></span>"
         "<span></span>"
         "<span class='drag'></span>"
@@ -58,7 +57,7 @@ TEST(DragUpdateTest, ChildAffectedByDragUpdate)
     document.updateStyleAndLayout();
     unsigned startCount = document.styleEngine().styleForElementCount();
 
-    document.documentElement()->layoutObject()->updateDragState(true);
+    document.getElementById("div")->setDragged(true);
     document.updateStyleAndLayout();
 
     unsigned elementCount = document.styleEngine().styleForElementCount() - startCount;
@@ -72,9 +71,9 @@ TEST(DragUpdateTest, SiblingAffectedByDragUpdate)
     // single element style recalc.
 
     std::unique_ptr<DummyPageHolder> dummyPageHolder = DummyPageHolder::create(IntSize(800, 600));
-    HTMLDocument& document = toHTMLDocument(dummyPageHolder->document());
+    Document& document = dummyPageHolder->document();
     document.documentElement()->setInnerHTML("<style>div {width:100px;height:100px} div:-webkit-drag + .drag { background-color: green }</style>"
-        "<div>"
+        "<div id='div'>"
         "<span></span>"
         "<span></span>"
         "<span></span>"
@@ -85,7 +84,7 @@ TEST(DragUpdateTest, SiblingAffectedByDragUpdate)
     document.updateStyleAndLayout();
     unsigned startCount = document.styleEngine().styleForElementCount();
 
-    document.documentElement()->layoutObject()->updateDragState(true);
+    document.getElementById("div")->setDragged(true);
     document.updateStyleAndLayout();
 
     unsigned elementCount = document.styleEngine().styleForElementCount() - startCount;

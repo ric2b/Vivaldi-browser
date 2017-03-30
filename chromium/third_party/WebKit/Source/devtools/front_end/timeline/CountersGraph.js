@@ -75,14 +75,6 @@ WebInspector.CountersGraph = function(delegate, model, filters)
 }
 
 WebInspector.CountersGraph.prototype = {
-    /**
-     * @return {?WebInspector.Target}
-     */
-    target: function()
-    {
-        return this._model.target();
-    },
-
     _createCurrentValuesBar: function()
     {
         this._currentValuesBar = this._graphsContainer.element.createChild("div");
@@ -395,6 +387,7 @@ WebInspector.CountersGraph.CounterUI = function(memoryCountersPane, title, curre
 
     this._setting = WebInspector.settings.createSetting("timelineCountersGraph-" + title, true);
     this._filter = new WebInspector.ToolbarCheckbox(title, title, this._setting);
+    this._filter.inputElement.classList.add("-theme-preserve");
     var color = WebInspector.Color.parse(graphColor).setAlpha(0.5).asString(WebInspector.Color.Format.RGBA);
     if (color) {
         this._filter.element.backgroundColor = color;

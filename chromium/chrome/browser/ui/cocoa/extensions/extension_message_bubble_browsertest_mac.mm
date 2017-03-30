@@ -90,9 +90,11 @@ class ExtensionMessageBubbleBrowserTestMac
   ExtensionMessageBubbleBrowserTestMac() {}
   ~ExtensionMessageBubbleBrowserTestMac() override {}
 
- private:
   // ExtensionMessageBubbleBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override;
+
+ private:
+  // ExtensionMessageBubbleBrowserTest:
   void CheckBubbleNative(Browser* browser, AnchorPosition anchor) override;
   void CloseBubbleNative(Browser* browser) override;
   void CheckBubbleIsNotPresentNative(Browser* browser) override;
@@ -101,6 +103,17 @@ class ExtensionMessageBubbleBrowserTestMac
   void ClickDismissButton(Browser* browser) override;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionMessageBubbleBrowserTestMac);
+};
+
+class ExtensionMessageBubbleBrowserTestLegacyMac
+    : public ExtensionMessageBubbleBrowserTestMac {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    ExtensionMessageBubbleBrowserTestMac::SetUpCommandLine(command_line);
+    override_redesign_.reset();
+    override_redesign_.reset(new extensions::FeatureSwitch::ScopedOverride(
+        extensions::FeatureSwitch::extension_action_redesign(), false));
+  }
 };
 
 void ExtensionMessageBubbleBrowserTestMac::SetUpCommandLine(
@@ -167,12 +180,12 @@ IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
   TestBubbleAnchoredToExtensionAction();
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
+IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestLegacyMac,
                        ExtensionBubbleAnchoredToAppMenu) {
   TestBubbleAnchoredToAppMenu();
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
+IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestLegacyMac,
                        ExtensionBubbleAnchoredToAppMenuWithOtherAction) {
   TestBubbleAnchoredToAppMenuWithOtherAction();
 }
@@ -215,4 +228,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
 IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
                        TestClickingDismissButton) {
   TestClickingDismissButton();
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
+                       TestControlledHomeMessageBubble) {
+  TestControlledHomeBubbleShown();
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionMessageBubbleBrowserTestMac,
+                       TestControlledSearchMessageBubble) {
+  TestControlledSearchBubbleShown();
 }

@@ -35,7 +35,6 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/settings_strings.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
@@ -45,7 +44,7 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync_driver/sync_prefs.h"
+#include "components/sync/driver/sync_prefs.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -563,12 +562,13 @@ void PeopleHandler::CloseSyncSetup() {
   // LoginUIService can be nullptr if page is brought up in incognito mode
   // (i.e. if the user is running in guest mode in cros and brings up settings).
   LoginUIService* service = GetLoginUIService();
-  if (service && (service->current_login_ui() == this)) {
+  if (service) {
     // Don't log a cancel event if the sync setup dialog is being
     // automatically closed due to an auth error.
-    if (!sync_service || (!sync_service->IsFirstSetupComplete() &&
-                          sync_service->GetAuthError().state() ==
-                              GoogleServiceAuthError::NONE)) {
+    if ((service->current_login_ui() == this) &&
+        (!sync_service || (!sync_service->IsFirstSetupComplete() &&
+                           sync_service->GetAuthError().state() ==
+                               GoogleServiceAuthError::NONE))) {
       if (configuring_sync_) {
         ProfileSyncService::SyncEvent(
             ProfileSyncService::CANCEL_DURING_CONFIGURE);
@@ -596,7 +596,7 @@ void PeopleHandler::CloseSyncSetup() {
       }
     }
 
-    GetLoginUIService()->LoginUIClosed(this);
+    service->LoginUIClosed(this);
   }
 
   // Alert the sync service anytime the sync setup dialog is closed. This can

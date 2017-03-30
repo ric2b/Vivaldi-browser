@@ -4,8 +4,10 @@
 
 package org.chromium.chrome.browser.compositor.bottombar.readermode;
 
+import android.app.Activity;
 import android.content.Context;
 
+import org.chromium.base.ActivityState;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
@@ -311,16 +313,26 @@ public class ReaderModePanel extends OverlayPanel {
     }
 
     @Override
-    public void onSizeChanged(float width, float height) {
-        super.onSizeChanged(width, height);
+    public void onLayoutChanged(float width, float height, float visibleViewportOffsetY) {
+        if (width != getWidth()) destroyReaderModeBarControl();
+
+        super.onLayoutChanged(width, height, visibleViewportOffsetY);
+
         if (mManagerDelegate != null) {
-            mManagerDelegate.onSizeChanged();
+            mManagerDelegate.onLayoutChanged();
         }
     }
 
     @Override
     protected float calculateBasePageDesiredOffset() {
         return -getToolbarHeight();
+    }
+
+    @Override
+    public void onActivityStateChange(Activity activity, int newState) {
+        // If the activity is only resuming, don't do anything.
+        if (newState == ActivityState.RESUMED) return;
+        super.onActivityStateChange(activity, newState);
     }
 
     // ============================================================================================

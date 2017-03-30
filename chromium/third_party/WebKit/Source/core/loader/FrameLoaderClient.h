@@ -90,9 +90,8 @@ public:
 
     virtual bool hasWebView() const = 0; // mainly for assertions
 
-    virtual void dispatchWillSendRequest(DocumentLoader*, unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse) = 0;
-    virtual void dispatchDidReceiveResponse(DocumentLoader*, unsigned long identifier, const ResourceResponse&) = 0;
-    virtual void dispatchDidFinishLoading(DocumentLoader*, unsigned long identifier) = 0;
+    virtual void dispatchWillSendRequest(ResourceRequest&) = 0;
+    virtual void dispatchDidReceiveResponse(const ResourceResponse&) = 0;
     virtual void dispatchDidLoadResourceFromMemoryCache(const ResourceRequest&, const ResourceResponse&) = 0;
 
     virtual void dispatchDidHandleOnloadEvents() = 0;
@@ -110,7 +109,6 @@ public:
     virtual void dispatchDidChangeThemeColor() = 0;
 
     virtual NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool shouldReplaceCurrentEntry, bool isClientRedirect) = 0;
-    virtual bool hasPendingNavigation() = 0;
 
     virtual void dispatchWillSendSubmitEvent(HTMLFormElement*) = 0;
     virtual void dispatchWillSubmitForm(HTMLFormElement*) = 0;
@@ -242,8 +240,6 @@ public:
     // If an HTML document is being loaded, informs the embedder that the document will have its <body> attached soon.
     virtual void dispatchWillInsertBody() { }
 
-    virtual void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue) { }
-
     virtual std::unique_ptr<WebServiceWorkerProvider> createServiceWorkerProvider() = 0;
 
     virtual bool isControlledByServiceWorker(DocumentLoader&) = 0;
@@ -273,6 +269,10 @@ public:
 
     // Effective connection type when this frame was loaded.
     virtual WebEffectiveConnectionType getEffectiveConnectionType() { return WebEffectiveConnectionType::TypeUnknown; }
+
+    // Overwrites the given URL to use an HTML5 embed if possible.
+    // An empty URL is returned if the URL is not overriden.
+    virtual KURL overrideFlashEmbedWithHTML(const KURL&) { return KURL(); }
 
     // VB-6063:
     virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

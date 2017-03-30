@@ -170,7 +170,7 @@ void MediaControlPanelElement::stopTimer()
         m_transitionTimer.stop();
 }
 
-void MediaControlPanelElement::transitionTimerFired(Timer<MediaControlPanelElement>*)
+void MediaControlPanelElement::transitionTimerFired(TimerBase*)
 {
     if (!m_opaque)
         setIsWanted(false);
@@ -572,10 +572,10 @@ MediaControlTimelineElement* MediaControlTimelineElement::create(MediaControls& 
 
 void MediaControlTimelineElement::defaultEventHandler(Event* event)
 {
-    if (event->isMouseEvent() && toMouseEvent(event)->button() != LeftButton)
+    if (event->isMouseEvent() && toMouseEvent(event)->button() != static_cast<short>(WebPointerProperties::Button::Left))
         return;
 
-    if (!inShadowIncludingDocument() || !document().isActive())
+    if (!isConnected() || !document().isActive())
         return;
 
     if (event->type() == EventTypeNames::mousedown) {
@@ -608,7 +608,7 @@ void MediaControlTimelineElement::defaultEventHandler(Event* event)
 
 bool MediaControlTimelineElement::willRespondToMouseClickEvents()
 {
-    return inShadowIncludingDocument() && document().isActive();
+    return isConnected() && document().isActive();
 }
 
 void MediaControlTimelineElement::setPosition(double currentTime)
@@ -652,10 +652,10 @@ MediaControlVolumeSliderElement* MediaControlVolumeSliderElement::create(MediaCo
 
 void MediaControlVolumeSliderElement::defaultEventHandler(Event* event)
 {
-    if (event->isMouseEvent() && toMouseEvent(event)->button() != LeftButton)
+    if (event->isMouseEvent() && toMouseEvent(event)->button() != static_cast<short>(WebPointerProperties::Button::Left))
         return;
 
-    if (!inShadowIncludingDocument() || !document().isActive())
+    if (!isConnected() || !document().isActive())
         return;
 
     MediaControlInputElement::defaultEventHandler(event);
@@ -676,7 +676,7 @@ void MediaControlVolumeSliderElement::defaultEventHandler(Event* event)
 
 bool MediaControlVolumeSliderElement::willRespondToMouseMoveEvents()
 {
-    if (!inShadowIncludingDocument() || !document().isActive())
+    if (!isConnected() || !document().isActive())
         return false;
 
     return MediaControlInputElement::willRespondToMouseMoveEvents();
@@ -684,7 +684,7 @@ bool MediaControlVolumeSliderElement::willRespondToMouseMoveEvents()
 
 bool MediaControlVolumeSliderElement::willRespondToMouseClickEvents()
 {
-    if (!inShadowIncludingDocument() || !document().isActive())
+    if (!isConnected() || !document().isActive())
         return false;
 
     return MediaControlInputElement::willRespondToMouseClickEvents();

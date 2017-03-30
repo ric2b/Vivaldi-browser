@@ -86,9 +86,7 @@ class AutofillClient {
     UNMASK_FOR_AUTOFILL,
   };
 
-  typedef base::Callback<void(const base::string16& /* card number */,
-                              int /* exp month */,
-                              int /* exp year */)> CreditCardScanCallback;
+  typedef base::Callback<void(const CreditCard&)> CreditCardScanCallback;
 
   virtual ~AutofillClient() {}
 
@@ -131,6 +129,11 @@ class AutofillClient {
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
       const base::Closure& callback) = 0;
+
+  // Will show an infobar to get user consent for Credit Card assistive filling.
+  // Will run |callback| on success.
+  virtual void ConfirmCreditCardFillAssist(const CreditCard& card,
+                                           const base::Closure& callback) = 0;
 
   // Gathers risk data and provides it to |callback|.
   virtual void LoadRiskData(
@@ -181,6 +184,13 @@ class AutofillClient {
 
   // If the context is secure.
   virtual bool IsContextSecure(const GURL& form_origin) = 0;
+
+  // Whether it is appropriate to show a signin promo for this user.
+  virtual bool ShouldShowSigninPromo() = 0;
+
+  // Starts the signin flow. Should not be called if ShouldShowSigninPromo()
+  // returns false.
+  virtual void StartSigninFlow() = 0;
 };
 
 }  // namespace autofill

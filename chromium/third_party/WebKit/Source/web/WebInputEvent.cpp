@@ -36,8 +36,6 @@
 #include "wtf/StringExtras.h"
 #include <ctype.h>
 
-#include "browser/keycode_translation.h"
-
 namespace blink {
 
 struct SameSizeAsWebInputEvent {
@@ -45,7 +43,7 @@ struct SameSizeAsWebInputEvent {
 };
 
 struct SameSizeAsWebKeyboardEvent : public SameSizeAsWebInputEvent {
-    int keyboardData[14];
+    int keyboardData[9];
 };
 
 struct SameSizeAsWebMouseEvent : public SameSizeAsWebInputEvent {
@@ -61,7 +59,7 @@ struct SameSizeAsWebGestureEvent : public SameSizeAsWebInputEvent {
 };
 
 struct SameSizeAsWebTouchEvent : public SameSizeAsWebInputEvent {
-    WebTouchPoint touchPoints[WebTouchEvent::touchesLengthCap];
+    WebTouchPoint touchPoints[WebTouchEvent::kTouchesLengthCap];
     int touchData[4];
 };
 
@@ -72,144 +70,50 @@ static_assert(sizeof(WebMouseWheelEvent) == sizeof(SameSizeAsWebMouseWheelEvent)
 static_assert(sizeof(WebGestureEvent) == sizeof(SameSizeAsWebGestureEvent), "WebGestureEvent should not have gaps");
 static_assert(sizeof(WebTouchEvent) == sizeof(SameSizeAsWebTouchEvent), "WebTouchEvent should not have gaps");
 
-static const char* staticKeyIdentifiers(unsigned short keyCode)
+#define CASE_TYPE(t) case WebInputEvent::t: return #t
+// static
+const char* WebInputEvent::GetName(WebInputEvent::Type type)
 {
-    switch (keyCode) {
-    case VKEY_MENU:
-        return "Alt";
-    case VKEY_CONTROL:
-        return "Control";
-    case VKEY_SHIFT:
-        return "Shift";
-    case VKEY_CAPITAL:
-        return "CapsLock";
-    case VKEY_LWIN:
-    case VKEY_RWIN:
-        return "Win";
-    case VKEY_CLEAR:
-        return "Clear";
-    case VKEY_DOWN:
-        return "Down";
-    case VKEY_END:
-        return "End";
-    case 0x0A: // Carriage return
-    case VKEY_RETURN:
-        return "Enter";
-    case VKEY_EXECUTE:
-        return "Execute";
-    case VKEY_F1:
-        return "F1";
-    case VKEY_F2:
-        return "F2";
-    case VKEY_F3:
-        return "F3";
-    case VKEY_F4:
-        return "F4";
-    case VKEY_F5:
-        return "F5";
-    case VKEY_F6:
-        return "F6";
-    case VKEY_F7:
-        return "F7";
-    case VKEY_F8:
-        return "F8";
-    case VKEY_F9:
-        return "F9";
-    case VKEY_F10:
-        return "F10";
-    case VKEY_F11:
-        return "F11";
-    case VKEY_F12:
-        return "F12";
-    case VKEY_F13:
-        return "F13";
-    case VKEY_F14:
-        return "F14";
-    case VKEY_F15:
-        return "F15";
-    case VKEY_F16:
-        return "F16";
-    case VKEY_F17:
-        return "F17";
-    case VKEY_F18:
-        return "F18";
-    case VKEY_F19:
-        return "F19";
-    case VKEY_F20:
-        return "F20";
-    case VKEY_F21:
-        return "F21";
-    case VKEY_F22:
-        return "F22";
-    case VKEY_F23:
-        return "F23";
-    case VKEY_F24:
-        return "F24";
-    case VKEY_HELP:
-        return "Help";
-    case VKEY_HOME:
-        return "Home";
-    case VKEY_INSERT:
-        return "Insert";
-    case VKEY_LEFT:
-        return "Left";
-    case VKEY_NEXT:
-        return "PageDown";
-    case VKEY_PRIOR:
-        return "PageUp";
-    case VKEY_PAUSE:
-        return "Pause";
-    case VKEY_SNAPSHOT:
-        return "PrintScreen";
-    case VKEY_RIGHT:
-        return "Right";
-    case VKEY_SCROLL:
-        return "Scroll";
-    case VKEY_SELECT:
-        return "Select";
-    case VKEY_UP:
-        return "Up";
-    case VKEY_DELETE:
-        return "U+007F"; // Standard says that DEL becomes U+007F.
-    case VKEY_MEDIA_NEXT_TRACK:
-        return "MediaNextTrack";
-    case VKEY_MEDIA_PREV_TRACK:
-        return "MediaPreviousTrack";
-    case VKEY_MEDIA_STOP:
-        return "MediaStop";
-    case VKEY_MEDIA_PLAY_PAUSE:
-        return "MediaPlayPause";
-    case VKEY_VOLUME_MUTE:
-        return "VolumeMute";
-    case VKEY_VOLUME_DOWN:
-        return "VolumeDown";
-    case VKEY_VOLUME_UP:
-        return "VolumeUp";
+    switch (type) {
+        CASE_TYPE(Undefined);
+        CASE_TYPE(MouseDown);
+        CASE_TYPE(MouseUp);
+        CASE_TYPE(MouseMove);
+        CASE_TYPE(MouseEnter);
+        CASE_TYPE(MouseLeave);
+        CASE_TYPE(ContextMenu);
+        CASE_TYPE(MouseWheel);
+        CASE_TYPE(RawKeyDown);
+        CASE_TYPE(KeyDown);
+        CASE_TYPE(KeyUp);
+        CASE_TYPE(Char);
+        CASE_TYPE(GestureScrollBegin);
+        CASE_TYPE(GestureScrollEnd);
+        CASE_TYPE(GestureScrollUpdate);
+        CASE_TYPE(GestureFlingStart);
+        CASE_TYPE(GestureFlingCancel);
+        CASE_TYPE(GestureShowPress);
+        CASE_TYPE(GestureTap);
+        CASE_TYPE(GestureTapUnconfirmed);
+        CASE_TYPE(GestureTapDown);
+        CASE_TYPE(GestureTapCancel);
+        CASE_TYPE(GestureDoubleTap);
+        CASE_TYPE(GestureTwoFingerTap);
+        CASE_TYPE(GestureLongPress);
+        CASE_TYPE(GestureLongTap);
+        CASE_TYPE(GesturePinchBegin);
+        CASE_TYPE(GesturePinchEnd);
+        CASE_TYPE(GesturePinchUpdate);
+        CASE_TYPE(TouchStart);
+        CASE_TYPE(TouchMove);
+        CASE_TYPE(TouchEnd);
+        CASE_TYPE(TouchCancel);
+        CASE_TYPE(TouchScrollStarted);
     default:
-        return 0;
+        NOTREACHED();
+        return "";
     }
 }
-
-void WebKeyboardEvent::setKeyIdentifierFromWindowsKeyCode()
-{
-    const char* id = staticKeyIdentifiers(windowsKeyCode);
-    if (id) {
-        strncpy(keyIdentifier, id, sizeof(keyIdentifier) - 1);
-        keyIdentifier[sizeof(keyIdentifier) - 1] = '\0';
-    } else {
-        // NOTE(daniel@vivaldi): Do nothing if already set
-#if !OS(MACOSX)
-        using namespace std;
-        if(strlen(keyIdentifier) && strcmp(keyIdentifier, "U+0000") != 0) {
-            return;
-        }
-#endif
-        wchar_t keyId = windowsKeyCode;
-#if OS(WIN)
-        keyId = ::vivaldi::setKeyIdentifierWithWinapi(windowsKeyCode);
-#endif
-        snprintf(keyIdentifier, sizeof(keyIdentifier), "U+%04X", toASCIIUpper(keyId));
-    }
-}
+#undef CASE_TYPE
 
 } // namespace blink

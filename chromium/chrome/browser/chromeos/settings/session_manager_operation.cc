@@ -17,10 +17,10 @@
 #include "chrome/browser/net/nss_context.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/rsa_private_key.h"
 #include "crypto/signature_creator.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 using ownership::OwnerKeyUtil;
 using ownership::PublicKey;
@@ -173,7 +173,7 @@ void SessionManagerOperation::ValidateDeviceSettings(
   // server.
   validator->ValidateAgainstCurrentPolicy(
       policy_data_.get(),
-      policy::CloudPolicyValidatorBase::TIMESTAMP_NOT_REQUIRED,
+      policy::CloudPolicyValidatorBase::TIMESTAMP_NOT_VALIDATED,
       policy::CloudPolicyValidatorBase::DM_TOKEN_NOT_REQUIRED);
   validator->ValidatePolicyType(policy::dm_protocol::kChromeDevicePolicyType);
   validator->ValidatePayload();

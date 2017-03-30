@@ -73,6 +73,7 @@ class ExternalProcessImporterClient : public content::UtilityProcessHostClient {
   void OnImportFinished(bool succeeded, const std::string& error_msg);
   void OnImportItemStart(int item);
   void OnImportItemFinished(int item);
+  void OnImportItemFailed(int item, const std::string& error_msg);
   void OnHistoryImportStart(size_t total_history_rows_count);
   void OnHistoryImportGroup(
       const std::vector<ImporterURLRow>& history_rows_group,
@@ -118,6 +119,10 @@ class ExternalProcessImporterClient : public content::UtilityProcessHostClient {
 
   // Report item completely downloaded on IO thread.
   void NotifyItemFinishedOnIOThread(importer::ImportItem import_item);
+
+  // Report item import failed on IO thread
+  void NotifyItemFailedOnIOThread(importer::ImportItem import_item,
+                                  const std::string& error);
 
   // Creates a new UtilityProcessHost, which launches the import process.
   void StartProcessOnIOThread(content::BrowserThread::ID thread_id);

@@ -229,7 +229,7 @@ SPECIAL_CASES = {
         "URL": "http://www.netlib.org/fdlibm/",
         "License": "Freely Distributable",
         # Absolute path here is resolved as relative to the source root.
-        "License File" : "/v8/src/third_party/fdlibm/LICENSE",
+        "License File" : "/v8/LICENSE.fdlibm",
         "License Android Compatible" : "yes",
     },
     os.path.join('third_party', 'khronos_glcts'): {
@@ -245,6 +245,13 @@ SPECIAL_CASES = {
         "URL": "https://cloud.google.com/storage/docs/gsutil",
         "License": "Apache 2.0",
         "License File": "NOT_SHIPPED",
+    },
+    os.path.join('third_party', 'swiftshader'): {
+        "Name": "SwiftShader",
+        "URL": "https://swiftshader.googlesource.com/SwiftShader",
+        "License": "Apache 2.0 and compatible licenses",
+        "License Android Compatible": "yes",
+        "License File": "/third_party/swiftshader/LICENSE.txt",
     },
     os.path.join('..', 'third_party', '_winsparkle_lib'): {
         "Name": "WinSparkle",

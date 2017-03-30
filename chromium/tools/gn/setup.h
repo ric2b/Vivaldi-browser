@@ -82,7 +82,7 @@ class Setup {
   }
 
   BuildSettings& build_settings() { return build_settings_; }
-  Builder* builder() { return builder_.get(); }
+  Builder& builder() { return builder_; }
   LoaderImpl* loader() { return loader_.get(); }
 
   // Name of the file in the root build directory that contains the build
@@ -100,7 +100,8 @@ class Setup {
 
   // Fills the build arguments from the command line or from the build arg file.
   bool FillArgsFromCommandLine(const std::string& args);
-  bool FillArgsFromFile();
+  bool FillArgsFromFile(SourceFile *arg_file=NULL,
+                        const std::string *global_args=NULL);
 
   // Given an already-loaded args_input_file_, parses and saves the resulting
   // arguments. Backend for the different FillArgs variants.
@@ -128,7 +129,7 @@ class Setup {
 
   BuildSettings build_settings_;
   scoped_refptr<LoaderImpl> loader_;
-  scoped_refptr<Builder> builder_;
+  Builder builder_;
 
   SourceFile root_build_file_;
 

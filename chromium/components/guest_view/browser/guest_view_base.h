@@ -337,6 +337,10 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   void SetGuestZoomLevelToMatchEmbedder();
 
+  void VivaldiStopTrackingEmbedderZoomLevel() {
+    StopTrackingEmbedderZoomLevel();
+  };
+
  private:
   friend class GuestViewMessageFilter;
 

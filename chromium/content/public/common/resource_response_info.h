@@ -16,10 +16,10 @@
 #include "content/public/common/resource_devtools_info.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/load_timing_info.h"
+#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
-#include "net/nqe/network_quality_estimator.h"
-#include "net/ssl/signed_certificate_timestamp_and_status.h"
+#include "net/nqe/effective_connection_type.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
 #include "url/gurl.h"
 
@@ -27,10 +27,10 @@ namespace content {
 
 // Note: when modifying this structure, also update ResourceResponse::DeepCopy
 // in resource_response.cc.
-struct ResourceResponseInfo {
-  CONTENT_EXPORT ResourceResponseInfo();
-  CONTENT_EXPORT ResourceResponseInfo(const ResourceResponseInfo& other);
-  CONTENT_EXPORT ~ResourceResponseInfo();
+struct CONTENT_EXPORT ResourceResponseInfo {
+  ResourceResponseInfo();
+  ResourceResponseInfo(const ResourceResponseInfo& other);
+  ~ResourceResponseInfo();
 
   // The time at which the request was made that resulted in this response.
   // For cached responses, this time could be "far" in the past.
@@ -63,6 +63,10 @@ struct ResourceResponseInfo {
   // Length of the encoded data transferred over the network. In case there is
   // no data, contains -1.
   int64_t encoded_data_length;
+
+  // Length of the response body data before decompression. -1 unless the body
+  // has been read to the end.
+  int64_t encoded_body_length;
 
   // The appcache this response was loaded from, or kAppCacheNoCacheId.
   int64_t appcache_id;
@@ -114,6 +118,9 @@ struct ResourceResponseInfo {
   // True if the response was fetched by a ServiceWorker.
   bool was_fetched_via_service_worker;
 
+  // True if the response was fetched by a foreign fetch ServiceWorker;
+  bool was_fetched_via_foreign_fetch;
+
   // True when the request whoes mode is |CORS| or |CORS-with-forced-preflight|
   // is sent to a ServiceWorker but FetchEvent.respondWith is not called. So the
   // renderer have to resend the request with skip service worker flag
@@ -150,8 +157,7 @@ struct ResourceResponseInfo {
 
   // Effective connection type when the resource was fetched. This is populated
   // only for responses that correspond to main frame requests.
-  net::NetworkQualityEstimator::EffectiveConnectionType
-      effective_connection_type;
+  net::EffectiveConnectionType effective_connection_type;
 
   // List of Signed Certificate Timestamps (SCTs) and their corresponding
   // validation status. Only present if the renderer process set

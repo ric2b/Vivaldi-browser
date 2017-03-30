@@ -1,16 +1,16 @@
 {
     "extensions": [
         {
-            "type": "@WebInspector.PanelFactory",
+            "type": "@WebInspector.Panel",
             "name": "sources",
             "title": "Sources",
             "order": 30,
-            "className": "WebInspector.SourcesPanelFactory"
+            "className": "WebInspector.SourcesPanel"
         },
         {
             "type": "@WebInspector.ContextMenu.Provider",
-            "contextTypes": ["WebInspector.UISourceCode", "WebInspector.UILocation", "WebInspector.RemoteObject", "WebInspector.NetworkRequest"],
-            "className": "WebInspector.SourcesPanel.ContextMenuProvider"
+            "contextTypes": ["WebInspector.UISourceCode", "WebInspector.UILocation", "WebInspector.RemoteObject", "WebInspector.NetworkRequest", "WebInspector.UISourceCodeFrame"],
+            "className": "WebInspector.SourcesPanel"
         },
         {
             "type": "@WebInspector.ActionDelegate",
@@ -146,6 +146,35 @@
             ]
         },
         {
+            "type": "@WebInspector.ActionDelegate",
+            "actionId": "sources.add-to-watch",
+            "className": "WebInspector.WatchExpressionsSidebarPane",
+            "title": "Add selected text to watches",
+            "contextTypes": ["WebInspector.UISourceCodeFrame"],
+            "bindings": [
+                {
+                    "shortcut": "Ctrl+Shift+A'"
+                }
+            ]
+        },
+        {
+            "type": "@WebInspector.ContextMenu.Provider",
+            "contextTypes": ["WebInspector.CodeMirrorTextEditor"],
+            "className": "WebInspector.WatchExpressionsSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ActionDelegate",
+            "actionId": "debugger.evaluate-selection",
+            "className": "WebInspector.SourcesPanel.DebuggingActionDelegate",
+            "title": "Evaluate in console",
+            "contextTypes": ["WebInspector.UISourceCodeFrame"],
+            "bindings": [
+                {
+                    "shortcut": "Ctrl+E'"
+                }
+            ]
+        },
+        {
             "type": "context-menu-item",
             "location": "mainMenu/navigate",
             "actionId": "sources.search.toggle"
@@ -184,27 +213,45 @@
             "className": "WebInspector.ScriptFormatterEditorAction"
         },
         {
-            "type": "navigator-view",
-            "name": "sources",
+            "type": "view",
+            "location": "navigator-view",
+            "id": "sources",
             "title": "Sources",
             "order": 1,
             "persistence": "permanent",
             "className": "WebInspector.SourcesNavigatorView"
         },
         {
-            "type": "navigator-view",
-            "name": "contentScripts",
+            "type": "view",
+            "location": "navigator-view",
+            "id": "contentScripts",
             "title": "Content scripts",
             "order": 2,
             "persistence": "permanent",
             "className": "WebInspector.ContentScriptsNavigatorView"
         },
         {
-            "type": "navigator-view",
-            "name": "snippets",
+            "type": "view",
+            "location": "navigator-view",
+            "id": "snippets",
             "title": "Snippets",
             "order": 3,
             "persistence": "permanent",
+            "className": "WebInspector.SnippetsNavigatorView"
+        },
+        {
+            "type": "@WebInspector.NavigatorView",
+            "viewId": "sources",
+            "className": "WebInspector.SourcesNavigatorView"
+        },
+        {
+            "type": "@WebInspector.NavigatorView",
+            "viewId": "contentScripts",
+            "className": "WebInspector.ContentScriptsNavigatorView"
+        },
+        {
+            "type": "@WebInspector.NavigatorView",
+            "viewId": "snippets",
             "className": "WebInspector.SnippetsNavigatorView"
         },
         {
@@ -311,23 +358,26 @@
             "defaultValue": true
         },
         {
-            "type": "drawer-view",
-            "name": "sources.search",
+            "type": "view",
+            "location": "drawer-view",
+            "id": "sources.search",
             "title": "Search",
             "persistence": "closeable",
             "order": 100,
             "className": "WebInspector.AdvancedSearchView"
         },
         {
-            "type": "drawer-view",
-            "name": "sources.history",
+            "type": "view",
+            "location": "drawer-view",
+            "id": "sources.history",
             "title": "History",
-            "persistence": "temporary",
+            "persistence": "transient",
             "className": "WebInspector.RevisionHistoryView"
         },
         {
-            "type": "drawer-view",
-            "name": "sources.quick",
+            "type": "view",
+            "location": "drawer-view",
+            "id": "sources.quick",
             "title": "Quick source",
             "persistence": "closeable",
             "order": 1000,
@@ -339,6 +389,108 @@
             "actionId": "sources.close-all",
             "className": "WebInspector.SourcesView.CloseAllActionDelegate",
             "title": "Close All"
+        },
+        {
+            "type": "@WebInspector.ViewLocationResolver",
+            "name": "navigator-view",
+            "className": "WebInspector.SourcesPanel"
+        },
+        {
+            "type": "@WebInspector.ViewLocationResolver",
+            "name": "sources-sidebar",
+            "className": "WebInspector.SourcesPanel"
+        },
+        {
+            "type": "view",
+            "location": "sources-sidebar",
+            "id": "sources.xhrBreakpoints",
+            "title": "XHR Breakpoints",
+            "order": 5,
+            "hasToolbar": "true",
+            "persistence": "permanent",
+            "className": "WebInspector.XHRBreakpointsSidebarPane"
+        },
+        {
+            "type": "view",
+            "location": "sources-sidebar",
+            "id": "sources.domBreakpoints",
+            "title": "DOM Breakpoints",
+            "order": 7,
+            "persistence": "permanent",
+            "factoryName": "WebInspector.DOMBreakpointsSidebarPane.Proxy"
+        },
+        {
+            "type": "view",
+            "location": "sources-sidebar",
+            "id": "sources.globalListeners",
+            "title": "Global Listeners",
+            "order": 8,
+            "hasToolbar": "true",
+            "persistence": "permanent",
+            "className": "WebInspector.ObjectEventListenersSidebarPane"
+        },
+        {
+            "type": "view",
+            "location": "sources-sidebar",
+            "id": "sources.eventListenerBreakpoints",
+            "title": "Event Listener Breakpoints",
+            "order": 9,
+            "persistence": "permanent",
+            "className": "WebInspector.EventListenerBreakpointsSidebarPane"
+        },
+        {
+            "type": "view",
+            "id": "sources.threads",
+            "title": "Threads",
+            "persistence": "permanent",
+            "className": "WebInspector.ThreadsSidebarPane"
+        },
+        {
+            "type": "view",
+            "id": "sources.scopeChain",
+            "title": "Scope",
+            "persistence": "permanent",
+            "className": "WebInspector.ScopeChainSidebarPane"
+        },
+        {
+            "type": "view",
+            "id": "sources.watch",
+            "title": "Watch",
+            "hasToolbar": true,
+            "persistence": "permanent",
+            "className": "WebInspector.WatchExpressionsSidebarPane"
+        },
+        {
+            "type": "view",
+            "id": "sources.jsBreakpoints",
+            "title": "Breakpoints",
+            "persistence": "permanent",
+            "className": "WebInspector.JavaScriptBreakpointsSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ContextFlavorListener",
+            "contextTypes": ["WebInspector.DebuggerPausedDetails"],
+            "className": "WebInspector.JavaScriptBreakpointsSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ContextFlavorListener",
+            "contextTypes": ["WebInspector.DebuggerPausedDetails"],
+            "className": "WebInspector.XHRBreakpointsSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ContextFlavorListener",
+            "contextTypes": ["WebInspector.DebuggerPausedDetails"],
+            "className": "WebInspector.DOMBreakpointsSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ContextFlavorListener",
+            "contextTypes": ["WebInspector.DebuggerPausedDetails"],
+            "className": "WebInspector.CallStackSidebarPane"
+        },
+        {
+            "type": "@WebInspector.ContextFlavorListener",
+            "contextTypes": ["WebInspector.DebuggerModel.CallFrame"],
+            "className": "WebInspector.ScopeChainSidebarPane"
         }
     ],
     "dependencies": [
@@ -387,7 +539,6 @@
         "ObjectEventListenersSidebarPane.js"
     ],
     "resources": [
-        "addSourceMapURLDialog.css",
         "uiList.css",
         "navigatorView.css",
         "revisionHistory.css",

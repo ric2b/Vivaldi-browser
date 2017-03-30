@@ -190,22 +190,26 @@ public class CronetPerfTestActivity extends Activity {
                     new CronetEngine.Builder(CronetPerfTestActivity.this);
             cronetEngineBuilder.setLibraryName("cronet_tests");
             if (mProtocol == Protocol.QUIC) {
-                cronetEngineBuilder.enableQUIC(true);
+                cronetEngineBuilder.enableQuic(true);
                 cronetEngineBuilder.addQuicHint(host, port, port);
                 cronetEngineBuilder.setMockCertVerifierForTesting(
                         MockCertVerifier.createMockCertVerifier(
-                                new String[] {getConfigString("QUIC_CERT_FILE")}));
+                                new String[] {getConfigString("QUIC_CERT_FILE")}, true));
             }
 
             try {
                 JSONObject quicParams = new JSONObject().put("host_whitelist", host);
-                JSONObject experimentalOptions = new JSONObject().put("QUIC", quicParams);
+                JSONObject hostResolverParams =
+                        CronetTestUtil.generateHostResolverRules(getConfigString("HOST_IP"));
+                JSONObject experimentalOptions =
+                        new JSONObject()
+                                .put("QUIC", quicParams)
+                                .put("HostResolverRules", hostResolverParams);
                 cronetEngineBuilder.setExperimentalOptions(experimentalOptions.toString());
             } catch (JSONException e) {
                 throw new IllegalStateException("JSON failed: " + e);
             }
             mCronetEngine = cronetEngineBuilder.build();
-            CronetTestUtil.registerHostResolverProc(mCronetEngine, getConfigString("HOST_IP"));
             mName = buildBenchmarkName(mode, direction, protocol, concurrency, mIterations);
             mConcurrency = concurrency;
             mResults = results;

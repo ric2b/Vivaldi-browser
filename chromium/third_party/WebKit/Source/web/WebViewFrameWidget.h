@@ -6,7 +6,7 @@
 #define WebViewFrameWidget_h
 
 #include "platform/heap/Handle.h"
-#include "public/web/WebFrameWidget.h"
+#include "web/WebFrameWidgetBase.h"
 #include "wtf/Noncopyable.h"
 #include "wtf/RefPtr.h"
 
@@ -31,7 +31,7 @@ class WebWidgetClient;
 // into one class.
 // A more detailed writeup of this transition can be read at
 // https://goo.gl/7yVrnb.
-class WebViewFrameWidget : public WebFrameWidget {
+class WebViewFrameWidget : public WebFrameWidgetBase {
     WTF_MAKE_NONCOPYABLE(WebViewFrameWidget);
 public:
     explicit WebViewFrameWidget(WebWidgetClient*, WebViewImpl&, WebLocalFrameImpl&);
@@ -42,8 +42,8 @@ public:
     WebSize size() override;
     void resize(const WebSize&) override;
     void resizeVisualViewport(const WebSize&) override;
-    void didEnterFullScreen() override;
-    void didExitFullScreen() override;
+    void didEnterFullscreen() override;
+    void didExitFullscreen() override;
     void beginFrame(double lastFrameTimeMonotonic) override;
     void updateAllLifecyclePhases() override;
     void paint(WebCanvas*, const WebRect& viewPort) override;
@@ -92,9 +92,14 @@ public:
     bool isTransparent() const override;
     void setIsTransparent(bool) override;
     void setBaseBackgroundColor(WebColor) override;
-    bool forSubframe() const { return false; }
+
+    // WebFrameWidgetBase overrides:
+    bool forSubframe() const override { return false; }
     void scheduleAnimation() override;
     CompositorProxyClient* createCompositorProxyClient() override;
+    void setRootGraphicsLayer(GraphicsLayer*) override;
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*) override;
     WebWidgetClient* client() const override { return m_client; }
 
 private:

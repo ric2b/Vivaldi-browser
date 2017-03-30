@@ -28,7 +28,6 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import logging
-import os
 import sys
 
 from webkitpy.common.checkout.scm.detection import SCMDetector
@@ -73,10 +72,10 @@ class Host(SystemHost):
         # messages and svn.py will fail to parse them.
         # FIXME: We should do these overrides *only* for the subprocesses we know need them!
         # This hack only works in unix environments.
-        os.environ['LANGUAGE'] = 'en'
-        os.environ['LANG'] = 'en_US.UTF-8'
-        os.environ['LC_MESSAGES'] = 'en_US.UTF-8'
-        os.environ['LC_ALL'] = ''
+        self.environ['LANGUAGE'] = 'en'
+        self.environ['LANG'] = 'en_US.UTF-8'
+        self.environ['LC_MESSAGES'] = 'en_US.UTF-8'
+        self.environ['LC_ALL'] = ''
 
     # FIXME: This is a horrible, horrible hack for WinPort and should be removed.
     # Maybe this belongs in Git in some more generic "find the git binary" codepath?
@@ -85,7 +84,7 @@ class Host(SystemHost):
     def _engage_awesome_windows_hacks(self):
         try:
             self.executive.run_command(['git', 'help'])
-        except OSError as e:
+        except OSError:
             try:
                 self.executive.run_command(['git.bat', 'help'])
                 # The Win port uses the depot_tools package, which contains a number
@@ -101,7 +100,7 @@ class Host(SystemHost):
                 _log.debug('Engaging git.bat Windows hack.')
                 from webkitpy.common.checkout.scm.git import Git
                 Git.executable_name = 'git.bat'
-            except OSError as e:
+            except OSError:
                 _log.debug('Failed to engage git.bat Windows hack.')
 
     def initialize_scm(self, patch_directories=None):

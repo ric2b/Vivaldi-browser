@@ -58,7 +58,7 @@ void AffiliatedMatchHelper::Initialize() {
 }
 
 void AffiliatedMatchHelper::GetAffiliatedAndroidRealms(
-    const autofill::PasswordForm& observed_form,
+    const PasswordStore::FormDigest& observed_form,
     const AffiliatedRealmsCallback& result_callback) {
   if (IsValidWebCredential(observed_form)) {
     FacetURI facet_uri(
@@ -73,7 +73,7 @@ void AffiliatedMatchHelper::GetAffiliatedAndroidRealms(
 }
 
 void AffiliatedMatchHelper::GetAffiliatedWebRealms(
-    const autofill::PasswordForm& android_form,
+    const PasswordStore::FormDigest& android_form,
     const AffiliatedRealmsCallback& result_callback) {
   if (IsValidAndroidCredential(android_form)) {
     affiliation_service_->GetAffiliations(
@@ -87,12 +87,12 @@ void AffiliatedMatchHelper::GetAffiliatedWebRealms(
 }
 
 void AffiliatedMatchHelper::InjectAffiliatedWebRealms(
-    ScopedVector<autofill::PasswordForm> forms,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> forms,
     const PasswordFormsCallback& result_callback) {
   std::vector<autofill::PasswordForm*> android_credentials;
-  for (auto* form : forms) {
-    if (IsValidAndroidCredential(*form))
-      android_credentials.push_back(form);
+  for (const auto& form : forms) {
+    if (IsValidAndroidCredential(PasswordStore::FormDigest(*form)))
+      android_credentials.push_back(form.get());
   }
   base::Closure on_get_all_realms(
       base::Bind(result_callback, base::Passed(&forms)));
@@ -131,16 +131,16 @@ void AffiliatedMatchHelper::TrimAffiliationCache() {
 
 // static
 bool AffiliatedMatchHelper::IsValidAndroidCredential(
-    const autofill::PasswordForm& form) {
+    const PasswordStore::FormDigest& form) {
   return form.scheme == autofill::PasswordForm::SCHEME_HTML &&
          IsValidAndroidFacetURI(form.signon_realm);
 }
 
 // static
 bool AffiliatedMatchHelper::IsValidWebCredential(
-    const autofill::PasswordForm& form) {
+    const PasswordStore::FormDigest& form) {
   FacetURI facet_uri(FacetURI::FromPotentiallyInvalidSpec(form.signon_realm));
-  return form.scheme == autofill::PasswordForm::SCHEME_HTML && form.ssl_valid &&
+  return form.scheme == autofill::PasswordForm::SCHEME_HTML &&
          facet_uri.IsValidWebFacetURI();
 }
 
@@ -217,8 +217,8 @@ void AffiliatedMatchHelper::OnLoginsChanged(
 }
 
 void AffiliatedMatchHelper::OnGetPasswordStoreResults(
-    ScopedVector<autofill::PasswordForm> results) {
-  for (autofill::PasswordForm* form : results) {
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+  for (const auto& form : results) {
     FacetURI facet_uri;
     if (IsAndroidApplicationCredential(*form, &facet_uri))
       affiliation_service_->Prefetch(facet_uri, base::Time::Max());

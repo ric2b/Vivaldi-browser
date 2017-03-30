@@ -49,6 +49,8 @@ public:
     Vector<PaintChunk>& paintChunks() { return m_paintChunks; }
     const Vector<PaintChunk>& paintChunks() const { return m_paintChunks; }
 
+    Vector<PaintChunk>::const_iterator findChunkByDisplayItemIndex(size_t) const;
+
     bool isSuitableForGpuRasterization() const { return m_isSuitableForGpuRasterization; }
 
     // Resets to an empty paint artifact.
@@ -68,8 +70,6 @@ private:
     DisplayItemList m_displayItemList;
     Vector<PaintChunk> m_paintChunks;
     bool m_isSuitableForGpuRasterization;
-
-    friend class PaintControllerTest;
 };
 
 } // namespace blink

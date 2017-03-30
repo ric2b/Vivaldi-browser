@@ -31,8 +31,8 @@
 #include "core/animation/DocumentAnimations.h"
 
 #include "core/animation/AnimationClock.h"
-#include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorPendingAnimations.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
@@ -69,9 +69,9 @@ void DocumentAnimations::updateAnimationTimingIfNeeded(Document& document)
 
 void DocumentAnimations::updateCompositorAnimations(Document& document)
 {
-    ASSERT(document.lifecycle().state() == DocumentLifecycle::CompositingClean);
+    DCHECK_EQ(document.lifecycle().state(), DocumentLifecycle::CompositingClean);
     if (document.compositorPendingAnimations().update()) {
-        ASSERT(document.view());
+        DCHECK(document.view());
         document.view()->scheduleAnimation();
     }
 

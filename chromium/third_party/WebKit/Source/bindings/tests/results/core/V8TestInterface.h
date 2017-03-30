@@ -7,6 +7,7 @@
 #ifndef V8TestInterface_h
 #define V8TestInterface_h
 
+#include "bindings/core/v8/GeneratedCodeHelper.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "bindings/core/v8/StringOrDouble.h"
 #include "bindings/core/v8/ToV8.h"
@@ -50,7 +51,6 @@ public:
         visitor->traceWrappers(scriptWrappable->toImpl<TestInterfaceImplementation>());
     }
     static void visitDOMWrapper(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
-    static ActiveScriptWrappable* toActiveScriptWrappable(v8::Local<v8::Object>);
     static void implementsCustomVoidMethodMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&);
     static void legacyCallCustom(const v8::FunctionCallbackInfo<v8::Value>&);
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;

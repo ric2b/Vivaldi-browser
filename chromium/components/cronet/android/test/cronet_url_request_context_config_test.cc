@@ -14,6 +14,8 @@
 #include "components/cronet/version.h"
 #include "jni/CronetUrlRequestContextTest_jni.h"
 
+using base::android::JavaParamRef;
+
 namespace cronet {
 
 // Verifies that all the configuration options set by
@@ -29,6 +31,7 @@ static void VerifyUrlRequestContextConfig(
   CHECK_EQ(config->enable_spdy, false);
   CHECK_EQ(config->enable_quic, true);
   CHECK_EQ(config->enable_sdch, true);
+  CHECK_EQ(config->bypass_public_key_pinning_for_local_trust_anchors, false);
   CHECK_EQ(config->quic_hints.size(), 1u);
   CHECK_EQ((*config->quic_hints.begin())->host, "example.com");
   CHECK_EQ((*config->quic_hints.begin())->port, 12);
@@ -36,6 +39,7 @@ static void VerifyUrlRequestContextConfig(
   CHECK_NE(config->quic_user_agent_id.find("Cronet/" CRONET_VERSION),
            std::string::npos);
   CHECK_EQ(config->load_disable_cache, false);
+  CHECK_EQ(config->cert_verifier_data, "test_cert_verifier_data");
   CHECK_EQ(config->http_cache, URLRequestContextConfig::HttpCacheType::MEMORY);
   CHECK_EQ(config->http_cache_max_size, 54321);
   CHECK_EQ(config->data_reduction_proxy_key, "abcd");

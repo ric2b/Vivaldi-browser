@@ -36,6 +36,12 @@ source_set("exo") {
     "touch.cc",
     "touch.h",
     "touch_delegate.h",
+    "wm_helper.cc",
+    "wm_helper.h",
+    "wm_helper_ash.cc",
+    "wm_helper_ash.h",
+    "wm_helper_mus.cc",
+    "wm_helper_mus.h",
   ]
 
   deps = [
@@ -46,6 +52,7 @@ source_set("exo") {
     "//device/gamepad",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
+    "//services/ui/public/cpp",
     "//skia",
     "//ui/aura",
     "//ui/compositor",
@@ -53,6 +60,7 @@ source_set("exo") {
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/views",
+    "//ui/views/mus",
     "//ui/wm:wm",
   ]
 }
@@ -68,6 +76,7 @@ source_set("test_support") {
   ]
 
   deps = [
+    ":exo",
     "//ash:test_support",
     "//base",
     "//gpu",
@@ -139,9 +148,9 @@ test("exo_unittests") {
   ]
 
   data_deps = [
+    "//ash/common/strings:ash_test_strings",
     "//ash/resources:ash_test_resources_100_percent",
     "//ash/resources:ash_test_resources_200_percent",
-    "//ash/strings:ash_test_strings",
   ]
 
   if (use_x11) {

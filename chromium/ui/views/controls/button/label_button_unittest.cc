@@ -14,6 +14,7 @@
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -79,12 +80,13 @@ class LabelButtonTest : public test::WidgetTest {
 
     // Establish the expected text colors for testing changes due to state.
     themed_normal_text_color_ = button_->GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_ButtonEnabledColor);
+        ui::NativeTheme::kColorId_LabelEnabledColor);
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
     // The Linux theme provides a non-black highlight text color, but it's not
     // used for styled buttons.
-    styled_highlight_text_color_ = themed_normal_text_color_;
-    styled_normal_text_color_ = themed_normal_text_color_;
+    styled_highlight_text_color_ = styled_normal_text_color_ =
+        button_->GetNativeTheme()->GetSystemColor(
+            ui::NativeTheme::kColorId_ButtonEnabledColor);
 #else
     styled_highlight_text_color_ = button_->GetNativeTheme()->GetSystemColor(
         ui::NativeTheme::kColorId_ButtonHighlightColor);
@@ -310,16 +312,29 @@ TEST_F(LabelButtonTest, ChangeTextSize) {
   const base::string16 text(ASCIIToUTF16("abc"));
   const base::string16 longer_text(ASCIIToUTF16("abcdefghijklm"));
   button_->SetText(text);
-
+  button_->SizeToPreferredSize();
+  gfx::Rect bounds(button_->bounds());
   const int original_width = button_->GetPreferredSize().width();
+  EXPECT_EQ(original_width, bounds.width());
 
-  // The button size increases when the text size is increased.
+  // Reserve more space in the button.
+  bounds.set_width(bounds.width() * 10);
+  button_->SetBoundsRect(bounds);
+
+  // Label view in the button is sized to short text.
+  const int original_label_width = button_->label()->bounds().width();
+
+  // The button preferred size and the label size increase when the text size
+  // is increased.
   button_->SetText(longer_text);
-  EXPECT_GT(button_->GetPreferredSize().width(), original_width);
+  EXPECT_GT(button_->label()->bounds().width(), original_label_width * 2);
+  EXPECT_GT(button_->GetPreferredSize().width(), original_width * 2);
 
-  // The button returns to its original size when the original text is restored.
+  // The button and the label view return to its original size when the original
+  // text is restored.
   button_->SetMinSize(gfx::Size());
   button_->SetText(text);
+  EXPECT_EQ(original_label_width, button_->label()->bounds().width());
   EXPECT_EQ(original_width, button_->GetPreferredSize().width());
 }
 
@@ -403,6 +418,21 @@ TEST_F(LabelButtonTest, HighlightedButtonStyle) {
   TestLabelButton* default_before = AddStyledButton("OK", true);
   EXPECT_EQ(styled_highlight_text_color_,
             default_before->label()->enabled_color());
+}
+
+// Ensure the label gets the correct enabled color after
+// LabelButton::ResetColorsFromNativeTheme() is invoked.
+TEST_F(LabelButtonTest, ResetColorsFromNativeTheme) {
+  ASSERT_FALSE(color_utils::IsInvertedColorScheme());
+  ASSERT_NE(button_->label()->background_color(), SK_ColorBLACK);
+  EXPECT_EQ(themed_normal_text_color_, button_->label()->enabled_color());
+
+  button_->label()->SetBackgroundColor(SK_ColorBLACK);
+  button_->label()->SetAutoColorReadabilityEnabled(true);
+  EXPECT_NE(themed_normal_text_color_, button_->label()->enabled_color());
+
+  button_->ResetColorsFromNativeTheme();
+  EXPECT_EQ(themed_normal_text_color_, button_->label()->enabled_color());
 }
 
 // Test fixture for a LabelButton that has an ink drop configured.

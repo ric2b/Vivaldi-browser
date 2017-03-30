@@ -40,15 +40,29 @@ using content::BrowserThread;
 
 namespace {
 
+// Sorted by decreasing likelihood according to HTTP archive.
+const char* kFontMimeTypes[] = {"font/woff2",
+                                "application/x-font-woff",
+                                "application/font-woff",
+                                "application/font-woff2",
+                                "font/x-woff",
+                                "application/x-font-ttf",
+                                "font/woff",
+                                "font/ttf",
+                                "application/x-font-otf",
+                                "x-font/woff",
+                                "application/font-sfnt",
+                                "application/font-ttf"};
+
 // For reporting whether a subresource is handled or not, and for what reasons.
 enum ResourceStatus {
   RESOURCE_STATUS_HANDLED = 0,
-  RESOURCE_STATUS_NOT_HTTP_PAGE = 1,
-  RESOURCE_STATUS_NOT_HTTP_RESOURCE = 2,
-  RESOURCE_STATUS_UNSUPPORTED_MIME_TYPE = 4,
+  RESOURCE_STATUS_NOT_HTTP_OR_HTTPS_PAGE = 1,
+  RESOURCE_STATUS_NOT_HTTP_OR_HTTPS_RESOURCE = 2,
+  RESOURCE_STATUS_UNSUPPORTED_RESOURCE_TYPE = 4,
   RESOURCE_STATUS_NOT_GET = 8,
   RESOURCE_STATUS_URL_TOO_LONG = 16,
-  RESOURCE_STATUS_NOT_CACHEABLE = 32,
+  RESOURCE_STATUS_NO_STORE = 32,
   RESOURCE_STATUS_HEADERS_MISSING = 64,
   RESOURCE_STATUS_MAX = 128,
 };
@@ -211,8 +225,10 @@ bool ResourcePrefetchPredictor::ShouldRecordResponse(
   if (!request_info->IsMainFrame())
     return false;
 
-  return request_info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME ?
-      IsHandledMainPage(response) : IsHandledSubresource(response);
+  content::ResourceType resource_type = request_info->GetResourceType();
+  return resource_type == content::RESOURCE_TYPE_MAIN_FRAME
+             ? IsHandledMainPage(response)
+             : IsHandledSubresource(response, resource_type);
 }
 
 // static
@@ -232,26 +248,25 @@ bool ResourcePrefetchPredictor::ShouldRecordRedirect(
 
 // static
 bool ResourcePrefetchPredictor::IsHandledMainPage(net::URLRequest* request) {
-  return request->original_url().scheme() == url::kHttpScheme;
+  return request->url().SchemeIsHTTPOrHTTPS();
 }
 
 // static
 bool ResourcePrefetchPredictor::IsHandledSubresource(
-    net::URLRequest* response) {
+    net::URLRequest* response,
+    content::ResourceType resource_type) {
   int resource_status = 0;
-  if (response->first_party_for_cookies().scheme() != url::kHttpScheme)
-    resource_status |= RESOURCE_STATUS_NOT_HTTP_PAGE;
 
-  if (response->original_url().scheme() != url::kHttpScheme)
-    resource_status |= RESOURCE_STATUS_NOT_HTTP_RESOURCE;
+  if (!response->first_party_for_cookies().SchemeIsHTTPOrHTTPS())
+    resource_status |= RESOURCE_STATUS_NOT_HTTP_OR_HTTPS_PAGE;
+
+  if (!response->url().SchemeIsHTTPOrHTTPS())
+    resource_status |= RESOURCE_STATUS_NOT_HTTP_OR_HTTPS_RESOURCE;
 
   std::string mime_type;
   response->GetMimeType(&mime_type);
-  if (!mime_type.empty() && !mime_util::IsSupportedImageMimeType(mime_type) &&
-      !mime_util::IsSupportedJavascriptMimeType(mime_type) &&
-      !net::MatchesMimeType("text/css", mime_type)) {
-    resource_status |= RESOURCE_STATUS_UNSUPPORTED_MIME_TYPE;
-  }
+  if (!IsHandledResourceType(resource_type, mime_type))
+    resource_status |= RESOURCE_STATUS_UNSUPPORTED_RESOURCE_TYPE;
 
   if (response->method() != "GET")
     resource_status |= RESOURCE_STATUS_NOT_GET;
@@ -264,45 +279,72 @@ bool ResourcePrefetchPredictor::IsHandledSubresource(
   if (!response->response_info().headers.get())
     resource_status |= RESOURCE_STATUS_HEADERS_MISSING;
 
-  if (!IsCacheable(response))
-    resource_status |= RESOURCE_STATUS_NOT_CACHEABLE;
-
-  UMA_HISTOGRAM_ENUMERATION("ResourcePrefetchPredictor.ResourceStatus",
-                            resource_status,
-                            RESOURCE_STATUS_MAX);
+  if (IsNoStore(response))
+    resource_status |= RESOURCE_STATUS_NO_STORE;
 
   return resource_status == 0;
 }
 
 // static
-bool ResourcePrefetchPredictor::IsCacheable(const net::URLRequest* response) {
-  if (response->was_cached())
-    return true;
+bool ResourcePrefetchPredictor::IsHandledResourceType(
+    content::ResourceType resource_type,
+    const std::string& mime_type) {
+  content::ResourceType actual_resource_type =
+      GetResourceType(resource_type, mime_type);
+  return actual_resource_type == content::RESOURCE_TYPE_STYLESHEET ||
+         actual_resource_type == content::RESOURCE_TYPE_SCRIPT ||
+         actual_resource_type == content::RESOURCE_TYPE_IMAGE ||
+         actual_resource_type == content::RESOURCE_TYPE_FONT_RESOURCE;
+}
 
-  // For non cached responses, we will ensure that the freshness lifetime is
-  // some sane value.
+// static
+content::ResourceType ResourcePrefetchPredictor::GetResourceType(
+    content::ResourceType resource_type,
+    const std::string& mime_type) {
+  // Restricts content::RESOURCE_TYPE_{PREFETCH,SUB_RESOURCE} to a small set of
+  // mime types, because these resource types don't communicate how the
+  // resources will be used.
+  if (resource_type == content::RESOURCE_TYPE_PREFETCH ||
+      resource_type == content::RESOURCE_TYPE_SUB_RESOURCE) {
+    return GetResourceTypeFromMimeType(mime_type,
+                                       content::RESOURCE_TYPE_LAST_TYPE);
+  }
+  return resource_type;
+}
+
+// static
+bool ResourcePrefetchPredictor::IsNoStore(const net::URLRequest* response) {
+  if (response->was_cached())
+    return false;
+
   const net::HttpResponseInfo& response_info = response->response_info();
   if (!response_info.headers.get())
     return false;
-  base::Time response_time(response_info.response_time);
-  response_time += base::TimeDelta::FromSeconds(1);
-  base::TimeDelta freshness =
-      response_info.headers->GetFreshnessLifetimes(response_time).freshness;
-  return freshness > base::TimeDelta();
+  return response_info.headers->HasHeaderValue("cache-control", "no-store");
 }
 
 // static
 content::ResourceType ResourcePrefetchPredictor::GetResourceTypeFromMimeType(
     const std::string& mime_type,
     content::ResourceType fallback) {
-  if (mime_util::IsSupportedImageMimeType(mime_type))
-    return content::RESOURCE_TYPE_IMAGE;
-  else if (mime_util::IsSupportedJavascriptMimeType(mime_type))
-    return content::RESOURCE_TYPE_SCRIPT;
-  else if (net::MatchesMimeType("text/css", mime_type))
-    return content::RESOURCE_TYPE_STYLESHEET;
-  else
+  if (mime_type.empty()) {
     return fallback;
+  } else if (mime_util::IsSupportedImageMimeType(mime_type)) {
+    return content::RESOURCE_TYPE_IMAGE;
+  } else if (mime_util::IsSupportedJavascriptMimeType(mime_type)) {
+    return content::RESOURCE_TYPE_SCRIPT;
+  } else if (net::MatchesMimeType("text/css", mime_type)) {
+    return content::RESOURCE_TYPE_STYLESHEET;
+  } else {
+    bool found =
+        std::any_of(std::begin(kFontMimeTypes), std::end(kFontMimeTypes),
+                    [&mime_type](const std::string& mime) {
+                      return net::MatchesMimeType(mime, mime_type);
+                    });
+    if (found)
+      return content::RESOURCE_TYPE_FONT_RESOURCE;
+  }
+  return fallback;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -310,20 +352,61 @@ content::ResourceType ResourcePrefetchPredictor::GetResourceTypeFromMimeType(
 
 ResourcePrefetchPredictor::URLRequestSummary::URLRequestSummary()
     : resource_type(content::RESOURCE_TYPE_LAST_TYPE),
-      was_cached(false) {
-}
+      priority(net::IDLE),
+      was_cached(false),
+      has_validators(false),
+      always_revalidate(false) {}
 
 ResourcePrefetchPredictor::URLRequestSummary::URLRequestSummary(
     const URLRequestSummary& other)
-        : navigation_id(other.navigation_id),
-          resource_url(other.resource_url),
-          resource_type(other.resource_type),
-          mime_type(other.mime_type),
-          was_cached(other.was_cached),
-          redirect_url(other.redirect_url) {
-}
+    : navigation_id(other.navigation_id),
+      resource_url(other.resource_url),
+      resource_type(other.resource_type),
+      priority(other.priority),
+      mime_type(other.mime_type),
+      was_cached(other.was_cached),
+      redirect_url(other.redirect_url),
+      has_validators(other.has_validators),
+      always_revalidate(other.always_revalidate) {}
 
 ResourcePrefetchPredictor::URLRequestSummary::~URLRequestSummary() {
+}
+
+// static
+bool ResourcePrefetchPredictor::URLRequestSummary::SummarizeResponse(
+    const net::URLRequest& request,
+    URLRequestSummary* summary) {
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(&request);
+  if (!info)
+    return false;
+
+  int render_process_id, render_frame_id;
+  if (!info->GetAssociatedRenderFrame(&render_process_id, &render_frame_id))
+    return false;
+
+  summary->navigation_id = NavigationID(render_process_id, render_frame_id,
+                                        request.first_party_for_cookies());
+  summary->navigation_id.creation_time = request.creation_time();
+  summary->resource_url = request.original_url();
+  content::ResourceType resource_type_from_request = info->GetResourceType();
+  summary->priority = request.priority();
+  request.GetMimeType(&summary->mime_type);
+  summary->was_cached = request.was_cached();
+  summary->resource_type =
+      GetResourceType(resource_type_from_request, summary->mime_type);
+
+  scoped_refptr<net::HttpResponseHeaders> headers =
+      request.response_info().headers;
+  if (headers.get()) {
+    summary->has_validators = headers->HasValidators();
+    // RFC 2616, section 14.9.
+    summary->always_revalidate =
+        headers->HasHeaderValue("cache-control", "no-cache") ||
+        headers->HasHeaderValue("pragma", "no-cache") ||
+        headers->HasHeaderValue("vary", "*");
+  }
+  return true;
 }
 
 ResourcePrefetchPredictor::Result::Result(
@@ -894,6 +977,9 @@ void ResourcePrefetchPredictor::LearnNavigation(
       row_to_add.resource_type = new_resources[i].resource_type;
       row_to_add.number_of_hits = 1;
       row_to_add.average_position = i + 1;
+      row_to_add.priority = new_resources[i].priority;
+      row_to_add.has_validators = new_resources[i].has_validators;
+      row_to_add.always_revalidate = new_resources[i].always_revalidate;
       cache_entry->second.resources.push_back(row_to_add);
       resources_seen.insert(new_resources[i].resource_url);
     }
@@ -931,6 +1017,8 @@ void ResourcePrefetchPredictor::LearnNavigation(
         if (new_row.resource_type != content::RESOURCE_TYPE_LAST_TYPE)
           old_row.resource_type = new_row.resource_type;
 
+        old_row.priority = new_row.priority;
+
         int position = new_index[old_row.resource_url] + 1;
         int total = old_row.number_of_hits + old_row.number_of_misses;
         old_row.average_position =
@@ -952,6 +1040,9 @@ void ResourcePrefetchPredictor::LearnNavigation(
       row_to_add.resource_type = summary.resource_type;
       row_to_add.number_of_hits = 1;
       row_to_add.average_position = i + 1;
+      row_to_add.priority = summary.priority;
+      row_to_add.has_validators = new_resources[i].has_validators;
+      row_to_add.always_revalidate = new_resources[i].always_revalidate;
       old_resources.push_back(row_to_add);
 
       // To ensure we dont add the same url twice.
@@ -969,8 +1060,7 @@ void ResourcePrefetchPredictor::LearnNavigation(
     else
       ++it;
   }
-  std::sort(resources.begin(), resources.end(),
-            ResourcePrefetchPredictorTables::ResourceRowSorter());
+  ResourcePrefetchPredictorTables::SortResourceRows(&resources);
   if (resources.size() > config_.max_resources_per_entry)
     resources.resize(config_.max_resources_per_entry);
 

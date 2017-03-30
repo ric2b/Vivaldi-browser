@@ -9,17 +9,9 @@
 Polymer({
   is: 'settings-about-page',
 
-  behaviors: [WebUIListenerBehavior, RoutableBehavior, I18nBehavior],
+  behaviors: [WebUIListenerBehavior, MainPageBehavior, I18nBehavior],
 
   properties: {
-    /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
     /** @private {?UpdateStatusChangedEvent} */
     currentUpdateStatusEvent_: Object,
 
@@ -54,13 +46,6 @@ Polymer({
 
   /** @private {?settings.LifetimeBrowserProxy} */
   lifetimeBrowserProxy_: null,
-
-  /**
-   * @type {string} Selector to get the sections.
-   * TODO(michaelpg): replace duplicate docs with @override once b/24294625
-   * is fixed.
-   */
-  sectionSelector: 'settings-section',
 
   /** @override */
   attached: function() {
@@ -183,7 +168,10 @@ Polymer({
 </if>
         return this.i18n('aboutUpgradeUpdating');
       default:
-        return this.currentUpdateStatusEvent_.message || '';
+        var message = this.currentUpdateStatusEvent_.message;
+        return message ?
+            parseHtmlSubset('<b>' + message + '</b>').firstChild.innerHTML :
+            '';
     }
   },
 
@@ -250,9 +238,7 @@ Polymer({
 
   /** @private */
   onDetailedBuildInfoTap_: function() {
-    var animatedPages = /** @type {!SettingsAnimatedPagesElement} */ (
-        this.$.pages);
-    animatedPages.setSubpageChain(['detailed-build-info']);
+    settings.navigateTo(settings.Route.DETAILED_BUILD_INFO);
   },
 
   /** @private */

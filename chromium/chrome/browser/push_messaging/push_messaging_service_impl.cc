@@ -12,8 +12,8 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/push_messaging/push_messaging_service_observer.h"
 #include "chrome/browser/services/gcm/gcm_profile_service_factory.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -94,14 +95,12 @@ void UnregisterCallbackToClosure(const base::Closure& closure,
 bool UseBackgroundMode() {
   // Note: if push is ever enabled in incognito, the background mode integration
   // should not be enabled for it.
-  std::string group_name =
-      base::FieldTrialList::FindFullName("PushApiBackgroundMode");
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDisablePushApiBackgroundMode))
     return false;
   if (command_line->HasSwitch(switches::kEnablePushApiBackgroundMode))
     return true;
-  return group_name == "Enabled";
+  return base::FeatureList::IsEnabled(features::kPushMessagingBackgroundMode);
 }
 #endif  // BUILDFLAG(ENABLE_BACKGROUND)
 
@@ -204,6 +203,10 @@ void PushMessagingServiceImpl::OnMessage(const std::string& app_id,
   in_flight_message_deliveries_.insert(app_id);
 
 #if BUILDFLAG(ENABLE_BACKGROUND)
+  UMA_HISTOGRAM_BOOLEAN("PushMessaging.ReceivedMessageInBackground",
+                        g_browser_process->background_mode_manager()
+                            ->IsBackgroundWithoutWindows());
+
   if (!in_flight_keep_alive_) {
     in_flight_keep_alive_.reset(
         new ScopedKeepAlive(KeepAliveOrigin::IN_FLIGHT_PUSH_MESSAGE,
@@ -404,7 +407,7 @@ void PushMessagingServiceImpl::SubscribeFromDocument(
   // Push does not allow permission requests from iframes.
   profile_->GetPermissionManager()->RequestPermission(
       content::PermissionType::PUSH_MESSAGING, web_contents->GetMainFrame(),
-      requesting_origin,
+      requesting_origin, true /* user_gesture */,
       base::Bind(&PushMessagingServiceImpl::DidRequestPermission,
                  weak_factory_.GetWeakPtr(), app_identifier, options,
                  callback));
@@ -683,10 +686,8 @@ void PushMessagingServiceImpl::OnContentSettingChanged(
     const ContentSettingsPattern& secondary_pattern,
     ContentSettingsType content_type,
     std::string resource_identifier) {
-  if (content_type != CONTENT_SETTINGS_TYPE_PUSH_MESSAGING &&
-      content_type != CONTENT_SETTINGS_TYPE_NOTIFICATIONS) {
+  if (content_type != CONTENT_SETTINGS_TYPE_NOTIFICATIONS)
     return;
-  }
 
   std::vector<PushMessagingAppIdentifier> all_app_identifiers =
       PushMessagingAppIdentifier::GetAll(profile_);

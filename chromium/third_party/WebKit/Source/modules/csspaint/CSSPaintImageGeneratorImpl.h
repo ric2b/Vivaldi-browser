@@ -22,9 +22,10 @@ public:
     static CSSPaintImageGenerator* create(const String& name, Document&, Observer*);
     ~CSSPaintImageGeneratorImpl() override;
 
-    PassRefPtr<Image> paint(const LayoutObject&, const IntSize&) final;
+    PassRefPtr<Image> paint(const LayoutObject&, const IntSize&, float zoom) final;
     const Vector<CSSPropertyID>& nativeInvalidationProperties() const final;
     const Vector<AtomicString>& customInvalidationProperties() const final;
+    bool hasAlpha() const final;
 
     // Should be called from the PaintWorkletGlobalScope when a javascript class
     // is registered with the same name.

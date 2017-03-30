@@ -64,7 +64,7 @@ BookmarkEditorView::BookmarkEditorView(
       title_tf_(NULL),
       parent_(parent),
       details_(details),
-      bb_model_(BookmarkModelFactory::GetForProfile(profile)),
+      bb_model_(BookmarkModelFactory::GetForBrowserContext(profile)),
       running_menu_for_root_(false),
       show_tree_(configuration == SHOW_TREE) {
   DCHECK(profile);
@@ -190,7 +190,7 @@ bool BookmarkEditorView::IsCommandIdEnabled(int command_id) const {
 
 bool BookmarkEditorView::GetAcceleratorForCommandId(
     int command_id,
-    ui::Accelerator* accelerator) {
+    ui::Accelerator* accelerator) const {
   return GetWidget()->GetAccelerator(command_id, accelerator);
 }
 
@@ -244,8 +244,9 @@ void BookmarkEditorView::ShowContextMenuForView(
        tree_model_->GetRoot());
 
   context_menu_runner_.reset(new views::MenuRunner(
-      GetMenuModel(),
-      views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
+      GetMenuModel(), views::MenuRunner::HAS_MNEMONICS |
+                          views::MenuRunner::CONTEXT_MENU |
+                          views::MenuRunner::ASYNC));
 
   if (context_menu_runner_->RunMenuAt(source->GetWidget()->GetTopLevelWidget(),
                                       NULL,

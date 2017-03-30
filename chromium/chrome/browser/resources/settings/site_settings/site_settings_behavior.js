@@ -96,11 +96,57 @@ var SiteSettingsBehaviorImpl = {
         return 'plugins';
       case settings.ContentSettingsTypes.POPUPS:
         return 'popups';
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
+        return 'handlers';
       case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
         return 'unsandboxed-plugins';
+      case settings.ContentSettingsTypes.USB_DEVICES:
+        return 'usb-devices';
       default:
         return '';
     }
+  },
+
+  /**
+   * A utility function to lookup the route for a category name.
+   * @param {string} category The category ID to look up.
+   * @return {!settings.Route}
+   * @protected
+   */
+  computeCategoryRoute: function(category) {
+    switch (category) {
+      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
+        return settings.Route.SITE_SETTINGS_AUTOMATIC_DOWNLOADS;
+      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
+        return settings.Route.SITE_SETTINGS_BACKGROUND_SYNC;
+      case settings.ContentSettingsTypes.CAMERA:
+        return settings.Route.SITE_SETTINGS_CAMERA;
+      case settings.ContentSettingsTypes.COOKIES:
+        return settings.Route.SITE_SETTINGS_COOKIES;
+      case settings.ContentSettingsTypes.GEOLOCATION:
+        return settings.Route.SITE_SETTINGS_LOCATION;
+      case settings.ContentSettingsTypes.IMAGES:
+        return settings.Route.SITE_SETTINGS_IMAGES;
+      case settings.ContentSettingsTypes.JAVASCRIPT:
+        return settings.Route.SITE_SETTINGS_JAVASCRIPT;
+      case settings.ContentSettingsTypes.KEYGEN:
+        return settings.Route.SITE_SETTINGS_KEYGEN;
+      case settings.ContentSettingsTypes.MIC:
+        return settings.Route.SITE_SETTINGS_MICROPHONE;
+      case settings.ContentSettingsTypes.NOTIFICATIONS:
+        return settings.Route.SITE_SETTINGS_NOTIFICATIONS;
+      case settings.ContentSettingsTypes.PLUGINS:
+        return settings.Route.SITE_SETTINGS_PLUGINS;
+      case settings.ContentSettingsTypes.POPUPS:
+        return settings.Route.SITE_SETTINGS_POPUPS;
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
+        return settings.Route.SITE_SETTINGS_HANDLERS;
+      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
+        return settings.Route.SITE_SETTINGS_UNSANDBOXED_PLUGINS;
+      case settings.ContentSettingsTypes.USB_DEVICES:
+        return settings.Route.SITE_SETTINGS_USB_DEVICES;
+    }
+    assertNotReached();
   },
 
   /**
@@ -139,8 +185,12 @@ var SiteSettingsBehaviorImpl = {
         return 'cr:extension';
       case settings.ContentSettingsTypes.POPUPS:
         return 'settings:open-in-new';
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
+        return 'settings:open-with';
       case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
         return 'cr:extension';
+      case settings.ContentSettingsTypes.USB_DEVICES:
+        return 'settings:usb';
       default:
         assertNotReached('Invalid category: ' + category);
         return '';
@@ -183,8 +233,12 @@ var SiteSettingsBehaviorImpl = {
         return loadTimeData.getString('siteSettingsPlugins');
       case settings.ContentSettingsTypes.POPUPS:
         return loadTimeData.getString('siteSettingsPopups');
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
+        return loadTimeData.getString('siteSettingsHandlers');
       case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
         return loadTimeData.getString('siteSettingsUnsandboxedPlugins');
+      case settings.ContentSettingsTypes.USB_DEVICES:
+        return loadTimeData.getString('siteSettingsUsbDevices');
       default:
         assertNotReached('Invalid category: ' + category);
         return '';
@@ -245,6 +299,14 @@ var SiteSettingsBehaviorImpl = {
         return showRecommendation ?
             loadTimeData.getString('siteSettingsCookiesAllowedRecommended') :
             loadTimeData.getString('siteSettingsCookiesAllowed');
+      case settings.ContentSettingsTypes.PROTOCOL_HANDLERS:
+        // "Allow sites to ask to become default handlers" vs "Blocked".
+        if (!categoryEnabled) {
+          return loadTimeData.getString('siteSettingsHandlersBlocked');
+        }
+        return showRecommendation ?
+            loadTimeData.getString('siteSettingsHandlersAskRecommended') :
+            loadTimeData.getString('siteSettingsHandlersAsk');
       case settings.ContentSettingsTypes.IMAGES:
         if (!categoryEnabled) {
           return loadTimeData.getString('siteSettingsDontShowImages');
@@ -362,12 +424,12 @@ var SiteSettingsBehaviorImpl = {
 
   /**
    * Returns the icon to use for a given site.
-   * @param {SiteException} site The url of the site to fetch the icon for.
+   * @param {string} site The url of the site to fetch the icon for.
    * @return {string} The background-image style with the favicon.
    * @private
    */
   computeSiteIcon: function(site) {
-    var url = this.ensureUrlHasScheme(site.originForDisplay);
+    var url = this.ensureUrlHasScheme(site);
     return 'background-image: ' + cr.icon.getFaviconImageSet(url);
   },
 };

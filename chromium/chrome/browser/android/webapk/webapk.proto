@@ -1,0 +1,76 @@
+// Copyright 2016 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+syntax = "proto2";
+
+option optimize_for = LITE_RUNTIME;
+
+package webapk;
+
+// Response after creating or updating a WebAPK.
+message WebApkResponse {
+  // Package name to install WebAPK at.
+  optional string package_name = 1;
+
+  // Version code of the WebAPK.
+  optional string version = 2;
+
+  // URL to download WebAPK.
+  optional string signed_download_url = 3;
+
+  reserved 4;
+}
+
+// Sent as part of request to create or update a WebAPK.
+message WebApk {
+  // Package name of the WebAPK.
+  optional string package_name = 1;
+
+  // Version code of the WebAPK.
+  optional string version = 2;
+
+  // The URL of the Web App Manifest.
+  optional string manifest_url = 3;
+
+  // Chrome's package name.
+  optional string requester_application_package = 5;
+
+  // Chrome's version.
+  optional string requester_application_version = 6;
+
+  // The Web App Manifest.
+  optional WebAppManifest manifest = 7;
+
+  reserved 4;
+}
+
+// Contains data from the Web App Manifest.
+message WebAppManifest {
+  optional string name = 1;
+  optional string short_name = 2;
+  optional string start_url = 4;
+  repeated string scopes = 5;
+  repeated Image icons = 6;
+  optional string orientation = 9;
+  optional string display_mode = 10;
+  optional string theme_color = 11;
+  optional string background_color = 12;
+
+  reserved 3, 7, 8, 13, 14;
+}
+
+message Image {
+  // Image's URL.
+  optional string src = 1;
+
+  // Murmur2 hash of the icon's bytes. There should not be any transformations
+  // applied to the icon's bytes prior to taking the Murmur2 hash.
+  optional string hash = 5;
+
+  // Actual bytes of the image. This image may be re-encoded from the original
+  // image and may not match the murmur2 hash field above.
+  optional bytes image_data = 6;
+
+  reserved 2 to 4;
+}

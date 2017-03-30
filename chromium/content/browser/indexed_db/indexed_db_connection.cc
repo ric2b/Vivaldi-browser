@@ -4,6 +4,8 @@
 
 #include "content/browser/indexed_db/indexed_db_connection.h"
 
+#include "base/logging.h"
+
 namespace content {
 
 IndexedDBConnection::IndexedDBConnection(
@@ -13,6 +15,11 @@ IndexedDBConnection::IndexedDBConnection(
 
 IndexedDBConnection::~IndexedDBConnection() {}
 
+void IndexedDBConnection::set_id(int32_t id) {
+  DCHECK_EQ(id_, kInvalidId);
+  id_ = id;
+}
+
 void IndexedDBConnection::Close() {
   if (!callbacks_.get())
     return;
@@ -21,6 +28,7 @@ void IndexedDBConnection::Close() {
   if (this_obj) {
     database_ = nullptr;
     callbacks_ = nullptr;
+    active_observers_.clear();
   }
 }
 
@@ -35,6 +43,7 @@ void IndexedDBConnection::ForceClose() {
   if (this_obj) {
     database_ = nullptr;
     callbacks_ = nullptr;
+    active_observers_.clear();
   }
   callbacks->OnForcedClose();
 }
@@ -47,6 +56,33 @@ void IndexedDBConnection::VersionChangeIgnored() {
 
 bool IndexedDBConnection::IsConnected() {
   return database_.get() != NULL;
+}
+
+// The observers begin listening to changes only once they are activated.
+void IndexedDBConnection::ActivatePendingObservers(
+    std::vector<std::unique_ptr<IndexedDBObserver>> pending_observers) {
+  for (auto& observer : pending_observers) {
+    active_observers_.push_back(std::move(observer));
+  }
+  pending_observers.clear();
+}
+
+void IndexedDBConnection::RemoveObservers(
+    const std::vector<int32_t>& observer_ids_to_remove) {
+  std::vector<int32_t> pending_observer_ids;
+  for (int32_t id_to_remove : observer_ids_to_remove) {
+    const auto& it = std::find_if(
+        active_observers_.begin(), active_observers_.end(),
+        [&id_to_remove](const std::unique_ptr<IndexedDBObserver>& o) {
+          return o->id() == id_to_remove;
+        });
+    if (it != active_observers_.end())
+      active_observers_.erase(it);
+    else
+      pending_observer_ids.push_back(id_to_remove);
+  }
+  if (!pending_observer_ids.empty())
+    database_->RemovePendingObservers(this, pending_observer_ids);
 }
 
 }  // namespace content

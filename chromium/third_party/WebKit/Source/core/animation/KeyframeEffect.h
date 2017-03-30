@@ -32,7 +32,7 @@
 #define KeyframeEffect_h
 
 #include "core/CoreExport.h"
-#include "core/animation/AnimationEffect.h"
+#include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/EffectInput.h"
 #include "core/animation/EffectModel.h"
 #include "core/animation/TimingInput.h"
@@ -50,16 +50,16 @@ class SampledEffect;
 
 // Represents the effect of an Animation on an Element's properties.
 // http://w3c.github.io/web-animations/#keyframe-effect
-class CORE_EXPORT KeyframeEffect final : public AnimationEffect {
+class CORE_EXPORT KeyframeEffect final : public AnimationEffectReadOnly {
     DEFINE_WRAPPERTYPEINFO();
 public:
     enum Priority { DefaultPriority, TransitionPriority };
 
     static KeyframeEffect* create(Element*, EffectModel*, const Timing&, Priority = DefaultPriority, EventDelegate* = nullptr);
     // Web Animations API Bindings constructors.
-    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, double duration, ExceptionState&);
-    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState&);
-    static KeyframeEffect* create(ExecutionContext*, Element*, const EffectModelOrDictionarySequenceOrDictionary& effectInput, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const DictionarySequenceOrDictionary& effectInput, double duration, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const DictionarySequenceOrDictionary& effectInput, const KeyframeEffectOptions& timingInput, ExceptionState&);
+    static KeyframeEffect* create(ExecutionContext*, Element*, const DictionarySequenceOrDictionary& effectInput, ExceptionState&);
 
     ~KeyframeEffect() override;
 
@@ -117,7 +117,7 @@ private:
     friend class AnimationAnimationV8Test;
 };
 
-DEFINE_TYPE_CASTS(KeyframeEffect, AnimationEffect, animationNode, animationNode->isKeyframeEffect(), animationNode.isKeyframeEffect());
+DEFINE_TYPE_CASTS(KeyframeEffect, AnimationEffectReadOnly, animationNode, animationNode->isKeyframeEffect(), animationNode.isKeyframeEffect());
 
 } // namespace blink
 

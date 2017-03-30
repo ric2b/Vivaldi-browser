@@ -290,6 +290,14 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
+			<string>Vivaldi</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vivaldi</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
 			<string>Web site URL</string>
 			<key>CFBundleURLSchemes</key>
 			<array>

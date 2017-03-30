@@ -180,7 +180,7 @@ class PipelineIntegrationTestBase::DecodingMockVDA
                 gfx::Rect(kMaxPictureWidth, kMaxPictureHeight), false));
     available_picture_buffer_ids_.pop();
 
-    base::MessageLoop::current()->PostTask(
+    base::MessageLoop::current()->task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&VideoDecodeAccelerator::Client::NotifyEndOfBitstreamBuffer,
                    base::Unretained(client_), bitstream_buffer_id));
@@ -188,7 +188,7 @@ class PipelineIntegrationTestBase::DecodingMockVDA
     if (!finished_bitstream_buffers_ids_.empty() &&
         finished_bitstream_buffers_ids_.front() == kFlush) {
       finished_bitstream_buffers_ids_.pop();
-      base::MessageLoop::current()->PostTask(
+      base::MessageLoop::current()->task_runner()->PostTask(
           FROM_HERE,
           base::Bind(&VideoDecodeAccelerator::Client::NotifyFlushDone,
                      base::Unretained(client_)));
@@ -228,7 +228,7 @@ PipelineIntegrationTestBase::PipelineIntegrationTestBase()
       mse_mpeg_aac_enabler_(base::kFeatureMseAudioMpegAac, true)
 #endif
       {
-  base::MD5Init(&md5_context_);
+  ResetVideoHash();
 }
 
 PipelineIntegrationTestBase::~PipelineIntegrationTestBase() {
@@ -369,8 +369,8 @@ PipelineStatus PipelineIntegrationTestBase::Start(const std::string& filename,
 PipelineStatus PipelineIntegrationTestBase::Start(const uint8_t* data,
                                                   size_t size,
                                                   uint8_t test_type) {
-  return StartInternal(base::WrapUnique(new MemoryDataSource(data, size)),
-                       nullptr, test_type);
+  return StartInternal(base::MakeUnique<MemoryDataSource>(data, size), nullptr,
+                       test_type);
 }
 
 void PipelineIntegrationTestBase::Play() {
@@ -389,6 +389,7 @@ bool PipelineIntegrationTestBase::Seek(base::TimeDelta seek_time) {
   pipeline_->Seek(seek_time, base::Bind(&PipelineIntegrationTestBase::OnSeeked,
                                         base::Unretained(this), seek_time));
   base::RunLoop().Run();
+  EXPECT_CALL(*this, OnBufferingStateChange(_)).Times(AnyNumber());
   return (pipeline_status_ == PIPELINE_OK);
 }
 
@@ -607,7 +608,13 @@ void PipelineIntegrationTestBase::OnVideoFramePaint(
   if (!hashing_enabled_ || last_frame_ == frame)
     return;
   last_frame_ = frame;
+  DVLOG(3) << __FUNCTION__ << " pts=" << frame->timestamp().InSecondsF();
   VideoFrame::HashFrameForTesting(&md5_context_, frame);
+}
+
+void PipelineIntegrationTestBase::ResetVideoHash() {
+  DVLOG(1) << __FUNCTION__;
+  base::MD5Init(&md5_context_);
 }
 
 std::string PipelineIntegrationTestBase::GetVideoHash() {

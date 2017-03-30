@@ -25,6 +25,18 @@
         },
         {
             "type": "setting",
+            "category": "Console",
+            "title": "Preserve log upon navigation",
+            "settingName": "preserveConsoleLog",
+            "settingType": "boolean",
+            "defaultValue": false,
+            "options": [
+                { "value": true, "title": "Preserve log upon navigation" },
+                { "value": false, "title": "Do not preserve log upon navigation" }
+            ]
+        },
+        {
+            "type": "setting",
             "category": "Debugger",
             "settingName": "pauseOnExceptionEnabled",
             "settingType": "boolean",
@@ -69,6 +81,7 @@
         "ContentProviders.js",
         "CookieParser.js",
         "ProfileTreeModel.js",
+        "ServerTiming.js",
         "CPUProfileDataModel.js",
         "CPUProfilerModel.js",
         "CSSMatchedStyles.js",
@@ -94,6 +107,7 @@
         "RemoteObject.js",
         "Resource.js",
         "ResourceTreeModel.js",
+        "SecurityOriginManager.js",
         "SourceMap.js",
         "NetworkManager.js",
         "NetworkRequest.js",

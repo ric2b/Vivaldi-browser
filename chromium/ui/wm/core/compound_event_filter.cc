@@ -218,7 +218,8 @@ void CompoundEventFilter::OnMouseEvent(ui::MouseEvent* event) {
         event->type() == ui::ET_MOUSE_PRESSED ||
         event->type() == ui::ET_MOUSEWHEEL)) {
     SetMouseEventsEnableStateOnEvent(window, event, true);
-    SetCursorVisibilityOnEvent(window, event, true);
+    SetCursorVisibilityOnEvent(window, event,
+                               !(event->flags() & ui::EF_DIRECT_INPUT));
     UpdateCursor(window, event);
   }
 
@@ -245,17 +246,6 @@ void CompoundEventFilter::OnGestureEvent(ui::GestureEvent* event) {
     while (!event->stopped_propagation() && (handler = it.GetNext()) != NULL)
       handler->OnGestureEvent(event);
   }
-
-#if defined(OS_WIN)
-  // A Win8 edge swipe event is a special event that does not have location
-  // information associated with it, and is not preceeded by an ET_TOUCH_PRESSED
-  // event.  So we treat it specially here.
-  if (!event->handled() && event->type() == ui::ET_GESTURE_WIN8_EDGE_SWIPE &&
-      !aura::Env::GetInstance()->IsMouseButtonDown()) {
-    SetMouseEventsEnableStateOnEvent(
-        static_cast<aura::Window*>(event->target()), event, false);
-  }
-#endif
 }
 
 }  // namespace wm

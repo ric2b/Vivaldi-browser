@@ -27,6 +27,7 @@
 using autofill::PasswordForm;
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
+using password_manager::PasswordStore;
 
 namespace {
 const char kEmptyString[] = "";
@@ -50,7 +51,6 @@ const SecretSchema kLibsecretSchema = {
      {"password_element", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"submit_element", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"signon_realm", SECRET_SCHEMA_ATTRIBUTE_STRING},
-     {"ssl_valid", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
      {"preferred", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
      {"date_created", SECRET_SCHEMA_ATTRIBUTE_STRING},
      {"blacklisted_by_user", SECRET_SCHEMA_ATTRIBUTE_INTEGER},
@@ -103,7 +103,6 @@ std::unique_ptr<PasswordForm> FormOutOfAttributes(GHashTable* attrs) {
   form->submit_element =
       UTF8ToUTF16(GetStringFromAttributes(attrs, "submit_element"));
   form->signon_realm = GetStringFromAttributes(attrs, "signon_realm");
-  form->ssl_valid = GetUintFromAttributes(attrs, "ssl_valid");
   form->preferred = GetUintFromAttributes(attrs, "preferred");
   int64_t date_created = 0;
   bool date_ok = base::StringToInt64(
@@ -281,14 +280,15 @@ bool NativeBackendLibsecret::RemoveLoginsSyncedBetween(
   return RemoveLoginsBetween(delete_begin, delete_end, SYNC_TIMESTAMP, changes);
 }
 
-bool NativeBackendLibsecret::DisableAutoSignInForAllLogins(
+bool NativeBackendLibsecret::DisableAutoSignInForOrigins(
+    const base::Callback<bool(const GURL&)>& origin_filter,
     password_manager::PasswordStoreChangeList* changes) {
   ScopedVector<autofill::PasswordForm> all_forms;
   if (!GetLoginsList(nullptr, ALL_LOGINS, &all_forms))
     return false;
 
-  for (auto& form : all_forms) {
-    if (!form->skip_zero_click) {
+  for (auto* form : all_forms) {
+    if (origin_filter.Run(form->origin) && !form->skip_zero_click) {
       form->skip_zero_click = true;
       if (!UpdateLogin(*form, changes))
         return false;
@@ -299,7 +299,7 @@ bool NativeBackendLibsecret::DisableAutoSignInForAllLogins(
 }
 
 bool NativeBackendLibsecret::GetLogins(
-    const PasswordForm& form,
+    const PasswordStore::FormDigest& form,
     ScopedVector<autofill::PasswordForm>* forms) {
   return GetLoginsList(&form, ALL_LOGINS, forms);
 }
@@ -329,7 +329,8 @@ bool NativeBackendLibsecret::AddUpdateLoginSearch(
     return false;
   }
 
-  *forms = ConvertFormList(found, &lookup_form);
+  PasswordStore::FormDigest form(lookup_form);
+  *forms = ConvertFormList(found, &form);
   return true;
 }
 
@@ -358,7 +359,6 @@ bool NativeBackendLibsecret::RawAddLogin(const PasswordForm& form) {
       "password_element", UTF16ToUTF8(form.password_element).c_str(),
       "submit_element", UTF16ToUTF8(form.submit_element).c_str(),
       "signon_realm", form.signon_realm.c_str(),
-      "ssl_valid", form.ssl_valid,
       "preferred", form.preferred,
       "date_created", base::Int64ToString(date_created).c_str(),
       "blacklisted_by_user", form.blacklisted_by_user,
@@ -404,7 +404,7 @@ bool NativeBackendLibsecret::GetAllLogins(
 }
 
 bool NativeBackendLibsecret::GetLoginsList(
-    const PasswordForm* lookup_form,
+    const PasswordStore::FormDigest* lookup_form,
     GetLoginsListOptions options,
     ScopedVector<autofill::PasswordForm>* forms) {
   LibsecretAttributesBuilder attrs;
@@ -469,7 +469,7 @@ bool NativeBackendLibsecret::GetLoginsBetween(
       date_to_compare == CREATION_TIMESTAMP
           ? &autofill::PasswordForm::date_created
           : &autofill::PasswordForm::date_synced;
-  for (auto& saved_form : all_forms) {
+  for (auto*& saved_form : all_forms) {
     if (get_begin <= saved_form->*date_member &&
         (get_end.is_null() || saved_form->*date_member < get_end)) {
       forms->push_back(saved_form);
@@ -500,7 +500,7 @@ bool NativeBackendLibsecret::RemoveLoginsBetween(
 
 ScopedVector<autofill::PasswordForm> NativeBackendLibsecret::ConvertFormList(
     GList* found,
-    const PasswordForm* lookup_form) {
+    const PasswordStore::FormDigest* lookup_form) {
   ScopedVector<autofill::PasswordForm> forms;
   password_manager::PSLDomainMatchMetric psl_domain_match_metric =
       password_manager::PSL_DOMAIN_MATCH_NONE;

@@ -53,6 +53,11 @@ enum class PositionMoveType {
     GraphemeCluster,
 };
 
+enum class DeleteDirection {
+    Forward,
+    Backward,
+};
+
 class Document;
 class Element;
 class HTMLBRElement;
@@ -72,15 +77,20 @@ CORE_EXPORT bool needsLayoutTreeUpdate(const Position&);
 // Node
 // -------------------------------------------------------------------------
 
-// Functions returning Node
-
+CORE_EXPORT bool hasEditableStyle(const Node&);
+CORE_EXPORT bool hasRichlyEditableStyle(const Node&);
+CORE_EXPORT bool isRootEditableElement(const Node&);
+CORE_EXPORT Element* rootEditableElement(const Node&);
+Element* rootEditableElementOf(const Position&);
+Element* rootEditableElementOf(const PositionInFlatTree&);
+Element* rootEditableElementOf(const VisiblePosition&);
 // highestEditableRoot returns the highest editable node. If the
 // rootEditableElement of the speicified Position is <body>, this returns the
 // <body>. Otherwise, this searches ancestors for the highest editable node in
 // defiance of editing boundaries. This returns a Document if designMode="on"
 // and the specified Position is not in the <body>.
-CORE_EXPORT ContainerNode* highestEditableRoot(const Position&, EditableType = ContentIsEditable);
-ContainerNode* highestEditableRoot(const PositionInFlatTree&, EditableType = ContentIsEditable);
+CORE_EXPORT ContainerNode* highestEditableRoot(const Position&, Element*(*)(const Position&) = rootEditableElementOf, bool(*)(const Node&) = hasEditableStyle);
+ContainerNode* highestEditableRoot(const PositionInFlatTree&);
 
 Node* highestEnclosingNodeOfType(const Position&, bool (*nodeIsOfType)(const Node*),
     EditingBoundaryCrossingRule = CannotCrossEditingBoundary, Node* stayWithin = nullptr);
@@ -156,6 +166,7 @@ bool isEmptyTableCell(const Node*);
 bool isTableStructureNode(const Node*);
 bool isHTMLListElement(Node*);
 bool isListItem(const Node*);
+bool isPresentationalHTMLElement(const Node*);
 bool isNodeRendered(const Node&);
 bool isNodeVisiblyContainedWithin(Node&, const Range&);
 bool isRenderedAsNonInlineTableImageOrHR(const Node*);
@@ -165,6 +176,7 @@ CORE_EXPORT bool areIdenticalElements(const Node&, const Node&);
 bool isNonTableCellHTMLBlockElement(const Node*);
 bool isBlockFlowElement(const Node&);
 bool nodeIsUserSelectAll(const Node*);
+EUserSelect usedValueOfUserSelect(const Node&);
 bool isTextSecurityNode(const Node*);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const Position&);
 CORE_EXPORT TextDirection directionOfEnclosingBlock(const PositionInFlatTree&);
@@ -232,11 +244,10 @@ int comparePositions(const PositionWithAffinity&, const PositionWithAffinity&);
 // FIXME: Both isEditablePosition and isRichlyEditablePosition rely on up-to-date
 // style to give proper results. They shouldn't update style by default, but
 // should make it clear that that is the contract.
-CORE_EXPORT bool isEditablePosition(const Position&, EditableType = ContentIsEditable);
-bool isEditablePosition(const PositionInFlatTree&, EditableType = ContentIsEditable);
-bool isRichlyEditablePosition(const Position&, EditableType = ContentIsEditable);
+CORE_EXPORT bool isEditablePosition(const Position&);
+bool isEditablePosition(const PositionInFlatTree&);
+bool isRichlyEditablePosition(const Position&);
 bool lineBreakExistsAtPosition(const Position&);
-bool isAtUnsplittableElement(const Position&);
 
 // miscellaneous functions on Position
 
@@ -273,14 +284,14 @@ CORE_EXPORT VisiblePositionInFlatTree firstEditableVisiblePositionAfterPositionI
 // specified position due by canonicalization.
 CORE_EXPORT VisiblePosition lastEditableVisiblePositionBeforePositionInRoot(const Position&, ContainerNode&);
 CORE_EXPORT VisiblePositionInFlatTree lastEditableVisiblePositionBeforePositionInRoot(const PositionInFlatTree&, ContainerNode&);
-VisiblePosition visiblePositionBeforeNode(Node&);
+CORE_EXPORT VisiblePosition visiblePositionBeforeNode(Node&);
 VisiblePosition visiblePositionAfterNode(Node&);
 
 bool lineBreakExistsAtVisiblePosition(const VisiblePosition&);
 
 int comparePositions(const VisiblePosition&, const VisiblePosition&);
 
-int indexForVisiblePosition(const VisiblePosition&, ContainerNode*& scope);
+CORE_EXPORT int indexForVisiblePosition(const VisiblePosition&, ContainerNode*& scope);
 EphemeralRange makeRange(const VisiblePosition&, const VisiblePosition&);
 EphemeralRange normalizeRange(const EphemeralRange&);
 EphemeralRangeInFlatTree normalizeRange(const EphemeralRangeInFlatTree&);
@@ -307,11 +318,6 @@ Node* enclosingListChild(Node*);
 
 HTMLSpanElement* createTabSpanElement(Document&);
 HTMLSpanElement* createTabSpanElement(Document&, const String& tabText);
-
-Element* rootEditableElementOf(const Position&, EditableType = ContentIsEditable);
-Element* rootEditableElementOf(const PositionInFlatTree&, EditableType = ContentIsEditable);
-Element* rootEditableElementOf(const VisiblePosition&);
-Element* unsplittableElementForPosition(const Position&);
 
 // Boolean functions on Element
 
@@ -347,7 +353,7 @@ inline bool isAmbiguousBoundaryCharacter(UChar character)
     return character == '\'' || character == rightSingleQuotationMarkCharacter || character == hebrewPunctuationGershayimCharacter;
 }
 
-String stringWithRebalancedWhitespace(const String&, bool startIsStartOfParagraph, bool endIsEndOfParagraph);
+String stringWithRebalancedWhitespace(const String&, bool startIsStartOfParagraph, bool shouldEmitNBSPbeforeEnd);
 const String& nonBreakingSpaceString();
 
 // -------------------------------------------------------------------------
@@ -358,6 +364,8 @@ const String& nonBreakingSpaceString();
 DispatchEventResult dispatchBeforeInputInsertText(EventTarget*, const String& data);
 DispatchEventResult dispatchBeforeInputFromComposition(EventTarget*, InputEvent::InputType, const String& data, InputEvent::EventCancelable);
 DispatchEventResult dispatchBeforeInputEditorCommand(EventTarget*, InputEvent::InputType, const String& data, const RangeVector*);
+
+InputEvent::InputType deletionInputTypeFromTextGranularity(DeleteDirection, TextGranularity);
 
 } // namespace blink
 

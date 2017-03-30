@@ -9,6 +9,7 @@
 #include "content/browser/renderer_host/ui_events_helper.h"
 #include "content/common/input_messages.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
 #include "ui/events/latency_info.h"
 
@@ -43,9 +44,8 @@ SyntheticGestureTargetBase::~SyntheticGestureTargetBase() {
 
 void SyntheticGestureTargetBase::DispatchInputEventToPlatform(
     const WebInputEvent& event) {
-  TRACE_EVENT1("input",
-               "SyntheticGestureTarget::DispatchInputEventToPlatform",
-               "type", WebInputEventTraits::GetName(event.type));
+  TRACE_EVENT1("input", "SyntheticGestureTarget::DispatchInputEventToPlatform",
+               "type", WebInputEvent::GetName(event.type));
 
   ui::LatencyInfo latency_info;
   latency_info.AddLatencyNumber(ui::INPUT_EVENT_LATENCY_UI_COMPONENT, 0, 0);
@@ -55,13 +55,11 @@ void SyntheticGestureTargetBase::DispatchInputEventToPlatform(
         static_cast<const WebTouchEvent&>(event);
 
     // Check that all touch pointers are within the content bounds.
-    if (web_touch.type == WebInputEvent::TouchStart) {
-      for (unsigned i = 0; i < web_touch.touchesLength; i++)
-        CHECK(web_touch.touches[i].state != WebTouchPoint::StatePressed ||
-              PointIsWithinContents(web_touch.touches[i].position.x,
-                                    web_touch.touches[i].position.y))
-            << "Touch coordinates are not within content bounds on TouchStart.";
-    }
+    for (unsigned i = 0; i < web_touch.touchesLength; i++)
+      CHECK(web_touch.touches[i].state != WebTouchPoint::StatePressed ||
+            PointIsWithinContents(web_touch.touches[i].position.x,
+                                  web_touch.touches[i].position.y))
+          << "Touch coordinates are not within content bounds on TouchStart.";
 
     DispatchWebTouchEventToPlatform(web_touch, latency_info);
   } else if (event.type == WebInputEvent::MouseWheel) {

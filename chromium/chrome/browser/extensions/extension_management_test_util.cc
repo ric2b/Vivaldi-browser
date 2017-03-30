@@ -14,7 +14,7 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_types.h"
-#include "policy/policy_constants.h"
+#include "components/policy/policy_constants.h"
 
 namespace extensions {
 
@@ -60,7 +60,7 @@ void ExtensionManagementPrefUpdaterBase::SetBlacklistedByDefault(bool value) {
 
 void ExtensionManagementPrefUpdaterBase::
     ClearInstallationModesForIndividualExtensions() {
-  for (base::DictionaryValue::Iterator it(*pref_.get()); !it.IsAtEnd();
+  for (base::DictionaryValue::Iterator it(*pref_); !it.IsAtEnd();
        it.Advance()) {
     DCHECK(it.value().IsType(base::Value::TYPE_DICTIONARY));
     if (it.key() != schema::kWildcard) {

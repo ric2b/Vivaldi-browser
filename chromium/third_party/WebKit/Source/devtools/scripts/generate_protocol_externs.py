@@ -61,9 +61,13 @@ def full_qualified_type_id(domain_name, type_id):
 
 
 def fix_camel_case(name):
+    prefix = ""
+    if name[0] == "-":
+        prefix = "Negative"
+        name = name[1:]
     refined = re.sub(r'-(\w)', lambda pat: pat.group(1).upper(), name)
     refined = to_title_case(refined)
-    return re.sub(r'(?i)HTML|XML|WML|API', lambda pat: pat.group(0).upper(), refined)
+    return prefix + re.sub(r'(?i)HTML|XML|WML|API', lambda pat: pat.group(0).upper(), refined)
 
 
 def to_title_case(name):
@@ -238,9 +242,10 @@ if __name__ == "__main__":
     import sys
     import os.path
     program_name = os.path.basename(__file__)
-    if len(sys.argv) < 4 or sys.argv[1] != "-o":
-        sys.stderr.write("Usage: %s -o OUTPUT_FILE INPUT_FILE\n" % program_name)
+    if len(sys.argv) < 5 or sys.argv[1] != "-o":
+        sys.stderr.write("Usage: %s -o OUTPUT_FILE INPUT_FILE_1 INPUT_FILE_2\n" % program_name)
         exit(1)
     output_path = sys.argv[2]
-    input_path = sys.argv[3]
-    generate_protocol_externs(output_path, input_path)
+    input_path_1 = sys.argv[3]
+    input_path_2 = sys.argv[4]
+    generate_protocol_externs(output_path, input_path_1, input_path_2)

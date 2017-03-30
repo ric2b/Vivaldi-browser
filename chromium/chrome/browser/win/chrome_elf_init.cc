@@ -18,6 +18,7 @@
 #include "chrome_elf/dll_hash/dll_hash.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
 
 const char kBrowserBlacklistTrialName[] = "BrowserBlacklist";
 const char kBrowserBlacklistTrialDisabledGroupName[] = "NoBlacklist";
@@ -95,7 +96,6 @@ void InitializeChromeElf() {
     base::win::RegKey blacklist_registry_key(HKEY_CURRENT_USER);
     blacklist_registry_key.DeleteKey(blacklist::kRegistryBeaconPath);
   } else {
-    AddFinchBlacklistToRegistry();
     BrowserBlacklistBeaconSetup();
   }
 
@@ -110,35 +110,21 @@ void InitializeChromeElf() {
       FROM_HERE,
       base::Bind(&ReportSuccessfulBlocks),
       base::TimeDelta::FromSeconds(kBlacklistReportingDelaySec));
-}
 
-// Note that running multiple chrome instances with distinct user data
-// directories could lead to deletion (and/or replacement) of the finch
-// blacklist registry data in one instance before the second has a chance to
-// read those values.
-void AddFinchBlacklistToRegistry() {
-  base::win::RegKey finch_blacklist_registry_key(
-      HKEY_CURRENT_USER, blacklist::kRegistryFinchListPath, KEY_SET_VALUE);
+  // Make sure the early finch emergency "off switch" for
+  // sandbox::MITIGATION_EXTENSION_POINT_DISABLE is set properly in reg.
+  // Note: the very existence of this key signals elf to not enable
+  // this mitigation on browser next start.
+  base::win::RegKey finch_security_registry_key(
+      HKEY_CURRENT_USER, elf_sec::kRegSecurityFinchPath, KEY_READ);
 
-  // No point in trying to continue if the registry key isn't valid.
-  if (!finch_blacklist_registry_key.Valid())
-    return;
-
-  // Delete and recreate the key to clear the registry.
-  finch_blacklist_registry_key.DeleteKey(L"");
-  finch_blacklist_registry_key.Create(
-      HKEY_CURRENT_USER, blacklist::kRegistryFinchListPath, KEY_SET_VALUE);
-
-  std::map<std::string, std::string> params;
-  variations::GetVariationParams(kBrowserBlacklistTrialName, &params);
-
-  for (std::map<std::string, std::string>::iterator it = params.begin();
-       it != params.end();
-       ++it) {
-    std::wstring name = base::UTF8ToWide(it->first);
-    std::wstring val = base::UTF8ToWide(it->second);
-
-    finch_blacklist_registry_key.WriteValue(name.c_str(), val.c_str());
+  if (base::FeatureList::IsEnabled(features::kWinSboxDisableExtensionPoints)) {
+    if (finch_security_registry_key.Valid())
+      finch_security_registry_key.DeleteKey(L"");
+  } else {
+    if (!finch_security_registry_key.Valid())
+      finch_security_registry_key.Create(
+          HKEY_CURRENT_USER, elf_sec::kRegSecurityFinchPath, KEY_WRITE);
   }
 }
 

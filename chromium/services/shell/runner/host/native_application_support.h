@@ -7,7 +7,7 @@
 
 #include "base/native_library.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/shell/public/interfaces/shell_client.mojom.h"
+#include "services/shell/public/interfaces/service.mojom.h"
 
 namespace base {
 class FilePath;
@@ -28,10 +28,10 @@ base::NativeLibrary LoadNativeApplication(const base::FilePath& app_path);
 // Runs the native Mojo application from the DSO that was loaded using
 // |LoadNativeApplication()|; this tolerates |app_library| being null. This
 // should be called on the same thread as |LoadNativeApplication()|. Returns
-// true if |MojoMain()| was called (even if it returns an error), and false
+// true if |ServiceMain()| was called (even if it returns an error), and false
 // otherwise.
 bool RunNativeApplication(base::NativeLibrary app_library,
-                          mojom::ShellClientRequest request);
+                          mojom::ServiceRequest request);
 
 }  // namespace shell
 

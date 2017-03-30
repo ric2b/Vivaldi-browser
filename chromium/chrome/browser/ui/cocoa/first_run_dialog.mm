@@ -8,7 +8,9 @@
 #import "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/first_run/first_run_dialog.h"
 #include "chrome/browser/metrics/metrics_reporting_state.h"
@@ -73,8 +75,7 @@ bool ShowFirstRun(Profile* profile) {
     // If the dialog asked the user to opt-in for stats and crash reporting,
     // record the decision and enable the crash reporter if appropriate.
     bool consent_given = [dialog.get() statsEnabled];
-    InitiateMetricsReportingChange(consent_given,
-                                   OnMetricsReportingCallbackType());
+    ChangeMetricsReportingState(consent_given);
 
     // If selected set as default browser.
     BOOL make_default_browser = [dialog.get() makeDefaultBrowser];
@@ -144,9 +145,9 @@ bool ShowFirstRunDialog(Profile* profile) {
   // Therefore the main MessageLoop is run so things work.
 
   scoped_refptr<FirstRunShowBridge> bridge(new FirstRunShowBridge(self));
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-      base::Bind(&FirstRunShowBridge::ShowDialog, bridge.get()));
-  base::MessageLoop::current()->Run();
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&FirstRunShowBridge::ShowDialog, bridge.get()));
+  base::RunLoop().Run();
 }
 
 - (void)show {

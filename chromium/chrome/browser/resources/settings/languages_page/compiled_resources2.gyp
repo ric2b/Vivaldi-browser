@@ -36,9 +36,10 @@
     {
       'target_name': 'languages_page',
       'dependencies': [
+        '../compiled_resources2.gyp:route',
+        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
-        '../settings_page/compiled_resources2.gyp:settings_animated_pages',
         'languages',
         'languages_types',
       ],
@@ -64,7 +65,7 @@
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
-      'target_name': 'manage_languages_page',
+      'target_name': 'add_languages_dialog',
       'dependencies': [
         '<(DEPTH)/third_party/polymer/v1_0/components-chromium/paper-checkbox/compiled_resources2.gyp:paper-checkbox-extracted',
         'languages',

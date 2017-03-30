@@ -414,7 +414,7 @@ Polymer({
   ],
 
   ready: function() {
-    this.elementReadyTimeMs_ = performance.now();
+    this.elementReadyTimeMs_ = window.performance.now();
     this.showSinkList_();
 
     Polymer.RenderStatus.afterNextRender(this, function() {
@@ -508,13 +508,17 @@ Polymer({
     });
 
     if (initialAction == media_router.MediaRouterUserAction.CLOSE) {
-      var timeToClose = performance.now() - this.elementReadyTimeMs_;
+      var timeToClose = window.performance.now() - this.elementReadyTimeMs_;
       this.fire('report-initial-action-close', {
         timeMs: timeToClose,
       });
     }
 
     this.userHasTakenInitialAction_ = true;
+  },
+
+  get header() {
+    return this.$['container-header'];
   },
 
   /**
@@ -1309,7 +1313,7 @@ Polymer({
         sinksToShow.length != 0) {
       // Only set |populatedSinkListSeenTimeMs_| if it has not already been set.
       if (this.populatedSinkListSeenTimeMs_ == -1)
-        this.populatedSinkListSeenTimeMs_ = performance.now();
+        this.populatedSinkListSeenTimeMs_ = window.performance.now();
     } else {
       // Reset |populatedSinkListLastSeen_| if the sink list isn't being shown
       // or if there aren't any sinks available for display.
@@ -2224,7 +2228,7 @@ Polymer({
         });
 
         var timeToSelectSink =
-            performance.now() - this.populatedSinkListSeenTimeMs_;
+            window.performance.now() - this.populatedSinkListSeenTimeMs_;
         this.fire('report-sink-click-time', {timeMs: timeToSelectSink});
       }
       this.currentLaunchingSinkId_ = sink.id;
@@ -2312,7 +2316,7 @@ Polymer({
   updateElementPositioning_: function() {
     // Ensures that conditionally templated elements have finished stamping.
     this.async(function() {
-      var headerHeight = this.$$('#container-header').offsetHeight;
+      var headerHeight = this.header.offsetHeight;
       var firstRunFlowHeight = this.$$('#first-run-flow') &&
           this.$$('#first-run-flow').style.display != 'none' ?
               this.$$('#first-run-flow').offsetHeight : 0;
@@ -2325,7 +2329,7 @@ Polymer({
       var searchPadding =
           hasSearch ? this.computeElementVerticalPadding_(search) : 0;
 
-      this.$['container-header'].style.marginTop = firstRunFlowHeight + 'px';
+      this.header.style.marginTop = firstRunFlowHeight + 'px';
       this.$['content'].style.marginTop =
           firstRunFlowHeight + headerHeight + 'px';
 

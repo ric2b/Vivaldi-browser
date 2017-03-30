@@ -19,6 +19,7 @@
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "android_webview/browser/net_disk_cache_remover.h"
 #include "android_webview/browser/renderer_host/aw_resource_dispatcher_host_delegate.h"
+#include "android_webview/browser/tracing/aw_tracing_delegate.h"
 #include "android_webview/common/aw_descriptors.h"
 #include "android_webview/common/aw_switches.h"
 #include "android_webview/common/render_view_messages.h"
@@ -32,12 +33,10 @@
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/crash/content/browser/crash_micro_dump_manager_android.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "content/public/browser/access_token_store.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -47,12 +46,19 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
+#include "device/geolocation/access_token_store.h"
+#include "device/geolocation/geolocation_delegate.h"
 #include "net/android/network_library.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_info.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/resource/resource_bundle_android.h"
 #include "ui/resources/grit/ui_resources.h"
+
+#if defined(ENABLE_SPELLCHECK)
+#include "components/spellcheck/browser/spellcheck_message_filter_platform.h"
+#include "components/spellcheck/common/spellcheck_switches.h"
+#endif
 
 using content::BrowserThread;
 using content::ResourceType;
@@ -129,6 +135,8 @@ void AwContentsMessageFilter::OnShouldOverrideUrlLoading(
   if (client) {
     *ignore_navigation = client->ShouldOverrideUrlLoading(
         url, has_user_gesture, is_redirect, is_main_frame);
+    // If the shouldOverrideUrlLoading call caused a java exception we should
+    // always return immediately here!
   } else {
     LOG(WARNING) << "Failed to find the associated render view host for url: "
                  << url;
@@ -140,39 +148,6 @@ void AwContentsMessageFilter::OnSubFrameCreated(int parent_render_frame_id,
   AwContentsIoThreadClient::SubFrameCreated(
       process_id_, parent_render_frame_id, child_render_frame_id);
 }
-
-class AwAccessTokenStore : public content::AccessTokenStore {
- public:
-  AwAccessTokenStore() { }
-
-  // content::AccessTokenStore implementation
-  void LoadAccessTokens(const LoadAccessTokensCallback& request) override {
-    AccessTokenStore::AccessTokenMap access_token_map;
-    // AccessTokenMap and net::URLRequestContextGetter not used on Android,
-    // but Run needs to be called to finish the geolocation setup.
-    request.Run(access_token_map, NULL);
-  }
-  void SaveAccessToken(const GURL& server_url,
-                       const base::string16& access_token) override {}
-
- private:
-  ~AwAccessTokenStore() override {}
-
-  DISALLOW_COPY_AND_ASSIGN(AwAccessTokenStore);
-};
-
-// A provider of Geolocation services to override AccessTokenStore.
-class AwGeolocationDelegate : public content::GeolocationDelegate {
- public:
-  AwGeolocationDelegate() = default;
-
-  content::AccessTokenStore* CreateAccessTokenStore() final {
-    return new AwAccessTokenStore();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(AwGeolocationDelegate);
-};
 
 AwLocaleManager* g_locale_manager = NULL;
 
@@ -199,18 +174,22 @@ AwBrowserContext* AwContentBrowserClient::GetAwBrowserContext() {
 AwContentBrowserClient::AwContentBrowserClient(
     JniDependencyFactory* native_factory)
     : native_factory_(native_factory) {
-  base::FilePath user_data_dir;
-  if (!PathService::Get(base::DIR_ANDROID_APP_DATA, &user_data_dir)) {
-    NOTREACHED() << "Failed to get app data directory for Android WebView";
-  }
-  browser_context_.reset(
-      new AwBrowserContext(user_data_dir, native_factory_));
   g_locale_manager = native_factory->CreateAwLocaleManager();
 }
 
 AwContentBrowserClient::~AwContentBrowserClient() {
   delete g_locale_manager;
   g_locale_manager = NULL;
+}
+
+AwBrowserContext* AwContentBrowserClient::InitBrowserContext() {
+  base::FilePath user_data_dir;
+  if (!PathService::Get(base::DIR_ANDROID_APP_DATA, &user_data_dir)) {
+    NOTREACHED() << "Failed to get app data directory for Android WebView";
+  }
+  browser_context_.reset(
+      new AwBrowserContext(user_data_dir, native_factory_));
+  return browser_context_.get();
 }
 
 void AwContentBrowserClient::AddCertificate(net::CertificateMimeType cert_type,
@@ -224,7 +203,7 @@ void AwContentBrowserClient::AddCertificate(net::CertificateMimeType cert_type,
 
 content::BrowserMainParts* AwContentBrowserClient::CreateBrowserMainParts(
     const content::MainFunctionParams& parameters) {
-  return new AwBrowserMainParts(browser_context_.get());
+  return new AwBrowserMainParts(this);
 }
 
 content::WebContentsViewDelegate*
@@ -244,6 +223,10 @@ void AwContentBrowserClient::RenderProcessWillLaunch(
   host->AddFilter(new AwContentsMessageFilter(host->GetID()));
   host->AddFilter(new cdm::CdmMessageFilterAndroid());
   host->AddFilter(new AwPrintingMessageFilter(host->GetID()));
+
+#if defined(ENABLE_SPELLCHECK)
+  host->AddFilter(new SpellCheckMessageFilterPlatform(host->GetID()));
+#endif
 }
 
 bool AwContentBrowserClient::IsHandledURL(const GURL& url) {
@@ -380,8 +363,8 @@ void AwContentBrowserClient::AllowCertificateError(
     bool overridable,
     bool strict_enforcement,
     bool expired_previous_decision,
-    const base::Callback<void(bool)>& callback,
-    content::CertificateRequestResultType* result) {
+    const base::Callback<void(content::CertificateRequestResultType)>&
+        callback) {
   AwContentsClientBridgeBase* client =
       AwContentsClientBridgeBase::FromWebContents(web_contents);
   bool cancel_request = true;
@@ -392,7 +375,7 @@ void AwContentBrowserClient::AllowCertificateError(
                                   callback,
                                   &cancel_request);
   if (cancel_request)
-    *result = content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY;
+    callback.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_DENY);
 }
 
 void AwContentBrowserClient::SelectClientCertificate(
@@ -412,6 +395,7 @@ bool AwContentBrowserClient::CanCreateWindow(
     WindowContainerType container_type,
     const GURL& target_url,
     const content::Referrer& referrer,
+    const std::string& frame_name,
     WindowOpenDisposition disposition,
     const blink::WebWindowFeatures& features,
     bool user_gesture,
@@ -440,23 +424,6 @@ void AwContentBrowserClient::ResourceDispatcherHostCreated() {
 
 net::NetLog* AwContentBrowserClient::GetNetLog() {
   return browser_context_->GetAwURLRequestContext()->GetNetLog();
-}
-
-content::GeolocationDelegate*
-AwContentBrowserClient::CreateGeolocationDelegate() {
-  return new AwGeolocationDelegate();
-}
-
-bool AwContentBrowserClient::IsFastShutdownPossible() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSingleProcess)) {
-    NOTREACHED()
-        << "Android WebView is single process, so IsFastShutdownPossible"
-        << " should never be called";
-    return false;
-  } else {
-    return true;
-  }
 }
 
 void AwContentBrowserClient::ClearCache(content::RenderFrameHost* rfh) {
@@ -503,6 +470,10 @@ bool AwContentBrowserClient::IsPepperVpnProviderAPIAllowed(
   return false;
 }
 
+content::TracingDelegate* AwContentBrowserClient::GetTracingDelegate() {
+  return new AwTracingDelegate();
+}
+
 void AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,
@@ -511,6 +482,10 @@ void AwContentBrowserClient::GetAdditionalMappedFilesForChildProcess(
   int fd = ui::GetMainAndroidPackFd(
       &(*regions)[kAndroidWebViewMainPakDescriptor]);
   mappings->Share(kAndroidWebViewMainPakDescriptor, fd);
+
+  fd = ui::GetCommonResourcesPackFd(
+      &(*regions)[kAndroidWebView100PercentPakDescriptor]);
+  mappings->Share(kAndroidWebView100PercentPakDescriptor, fd);
 
   fd = ui::GetLocalePackFd(&(*regions)[kAndroidWebViewLocalePakDescriptor]);
   mappings->Share(kAndroidWebViewLocalePakDescriptor, fd);

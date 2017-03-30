@@ -269,6 +269,7 @@
 <translation id="3392045790598181549"><ph name="NAME" />, മെനു ഇനം</translation>
 <translation id="3406283310380167331">ഫോമുകളുടെ ലിസ്റ്റ് കാണിക്കുക</translation>
 <translation id="3422338090358345848">കീബോർഡ് എക്സ്പ്ലോറർ തുറക്കുക</translation>
+<translation id="3423495725743882470">വരി $1 കോളം $2</translation>
 <translation id="3457000393508828486">ഭാഗികമായി അമർത്തിയത്</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, ബട്ടൺ</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">യാന്ത്രികപൂർത്തീകരണം ലിസ്റ്റ്</translation>
 <translation id="3810838688059735925">വീഡിയോ</translation>
+<translation id="3812237531158591503">$1 ഒട്ടിക്കുക.</translation>
 <translation id="3816633764618089385">അടുത്ത മീഡിയ</translation>
 <translation id="3819376190738087562">ജംപുകൾ ഒന്നുമില്ല.</translation>
 <translation id="385383972552776628">ഓപ്ഷനുകളുടെ പേജ് തുറക്കുക</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">ഫോമുകൾ ഒന്നുമില്ല.</translation>
 <translation id="5005670136041063723">മറ്റ് സമാന ഘടകങ്ങൾ ഒന്നുമില്ല.</translation>
 <translation id="501473567976723023">ജനുവരി</translation>
+<translation id="5040591161308540832">പട്ടിക $1, $2/$3</translation>
 <translation id="5041394372352067729">ബ്രെയ്‌ലി ഡിസ്‌പ്ലേ പേജിന് മുകളിലേക്ക് നീക്കുക</translation>
 <translation id="5042770794184672516">സംഭാഷണ ശബ്ദം വർദ്ധിപ്പിക്കുക</translation>
 <translation id="5050015258024679800">മുൻ നില 4 ശീർഷകം</translation>
@@ -518,7 +521,6 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="5876817486144482042">സംഭാഷണ ശബ്ദം കുറയ്‌ക്കുക</translation>
 <translation id="5887397643266327462">ബ്രെയ്‌ലി അടിക്കുറിപ്പുകൾ പ്രവർത്തനക്ഷമമാക്കി.</translation>
 <translation id="5891934789323004067">പട്ടിക</translation>
-<translation id="5919442531159595654">പകര്‍ത്തുക.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{സമചിഹ്നം}other{# സമചിഹ്നങ്ങൾ}}</translation>
 <translation id="5939518447894949180">വീണ്ടും സജ്ജീകരിക്കുക</translation>
 <translation id="5948123859135882163">ഘടനാപരമായതിനും സെമാന്റിക്കിനുമിടയിൽ മാത്ത് എക്‌സ്‌പ്രഷനുകളുടെ വ്യാഖ്യാനം ടോഗിൾ ചെയ്യുക</translation>
@@ -554,6 +556,8 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="6355910664415701303">മുൻ ലിസ്റ്റ് ഇനം ഒന്നുമില്ല.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">മുൻ ശീർഷകം</translation>
+<translation id="6378565991815958969">$1 പകർത്തുക.</translation>
+<translation id="6385591741672306837">കോളം</translation>
 <translation id="6387719785439924554">അരികിൽ</translation>
 <translation id="6411426777058107714">മുൻ റേഡിയോ ബട്ടൺ ഒന്നുമില്ല.</translation>
 <translation id="6414968628640960377">വ്യത്യസ്‌തമായ മുൻ ഘടകം.</translation>
@@ -653,7 +657,6 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="7532613204005497612">ജൂൺ</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, സ്ലൈഡർ</translation>
 <translation id="7552432549459840808">സഹായകരമായ Chrome കുറുക്കുവഴികൾ</translation>
-<translation id="7586163296341959563">ഒട്ടിക്കുക.</translation>
 <translation id="7596919493010894443">തിരഞ്ഞെടുത്തവ മായ്‌ച്ചു</translation>
 <translation id="7604026522577407655">നിലവിലെ നിരയുടെ തുടക്കത്തിലേക്ക് പോകുക</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="8153880621934657047">പട്ടികയ്‌ക്കുള്ളിലല്ല.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{അടിവര}other{# അടിവരകൾ}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">വരി</translation>
 <translation id="8186185314313222077">പൂർണ്ണ സ്‌ക്രീൻ ടോഗിൾ ചെയ്യുക</translation>
-<translation id="81960742267269908">മുറിക്കുക.</translation>
 <translation id="8199231515320852133">നിലവിലുള്ള സെല്ലിന്റെ ശീർഷകങ്ങൾ അറിയിക്കുക</translation>
 <translation id="820417203470636242">ശൂന്യ സെൽ.</translation>
 <translation id="8215202828671303819">ഒന്നിലധികം തിരഞ്ഞെടുക്കൽ</translation>
@@ -782,6 +785,7 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="9077213568694924680">തിരഞ്ഞെടുത്തതിൽ നിന്നും നീക്കംചെയ്‌തു</translation>
 <translation id="9082874451376019682">മുൻ സ്ലൈഡർ ഒന്നുമില്ല.</translation>
 <translation id="9089864840575085222">സൈക്കിൾ ടൈപ്പുചെയ്യൽ എക്കൊ</translation>
+<translation id="9105227991373418255">$1 മുറിക്കുക.</translation>
 <translation id="9107530006868467849">മുമ്പത്തെ മീഡിയ വിജറ്റൊന്നുമില്ല.</translation>
 <translation id="9108370397979208512">മാത്ത്</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Chrome ബ്രൗസർ മെനു തുറക്കാൻ, Alt+F അമർ
 <translation id="9115913704608474258">നവംബർ</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">ടാബ്</translation>
 <translation id="9151211641321628915">നിലവിലുള്ള അവസ്ഥയുടെ ഒരു സംക്ഷിപ്‌ത വിവരണം അറിയിക്കുന്നു</translation>
 <translation id="9153606228985488238"><ph name="PERCENT" /> ശതമാനം ആവൃത്തി</translation>
 <translation id="9160096769946561184">നിലവിലെ നിരയുടെ അവസാനം പോകുക</translation>

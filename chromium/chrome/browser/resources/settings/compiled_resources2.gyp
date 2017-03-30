@@ -10,6 +10,7 @@
         'a11y_page/compiled_resources2.gyp:*',
         'about_page/compiled_resources2.gyp:*',
         'advanced_page/compiled_resources2.gyp:*',
+        'animation/compiled_resources2.gyp:*',
         'appearance_page/compiled_resources2.gyp:*',
         'basic_page/compiled_resources2.gyp:*',
         'bluetooth_page/compiled_resources2.gyp:*',
@@ -34,6 +35,7 @@
         'settings_main/compiled_resources2.gyp:*',
         'settings_menu/compiled_resources2.gyp:*',
         'settings_page/compiled_resources2.gyp:*',
+        'settings_ui/compiled_resources2.gyp:*',
         'site_settings/compiled_resources2.gyp:*',
         'site_settings_page/compiled_resources2.gyp:*',
         'system_page/compiled_resources2.gyp:*',
@@ -53,6 +55,30 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(EXTERNS_GYP):chrome_send',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'route',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'search_settings',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'settings',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        'direction_delegate',
+        'route',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

@@ -19,7 +19,7 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
 {
   "name": "gpu driver bug list",
   // Please update the version number whenever you change this file.
-  "version": "8.93",
+  "version": "9.02",
   "entries": [
     {
       "id": 1,
@@ -496,17 +496,6 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
       ]
     },
     {
-      "id": 57,
-      "cr_bugs": [322760],
-      "description": "Mac drivers handle varyings without static use incorrectly",
-      "os": {
-        "type": "macosx"
-      },
-      "features": [
-        "init_varyings_without_static_use"
-      ]
-    },
-    {
       "id": 59,
       "description": "Multisampling is buggy in Intel IvyBridge",
       "cr_bugs": [116370],
@@ -546,13 +535,13 @@ const char kGpuDriverBugListJson[] = LONG_STRING_CONST(
     },
     {
       "id": 68,
-      "description": "Disable partial swaps on linux drivers",
+      "description": "Disable partial swaps on Mesa drivers (detected with GL_RENDERER)",
       "cr_bugs": [339493],
       "os": {
         "type": "linux"
       },
       "gl_type": "gl",
-      "driver_vendor": "Mesa",
+      "gl_renderer": ".*Mesa.*",
       "features": [
         "disable_post_sub_buffers_for_onscreen_surfaces"
       ]
@@ -645,8 +634,8 @@ LONG_STRING_CONST(
       },
       "gl_vendor": "ARM.*",
       "gl_renderer": ".*Mali-4.*",
-      "features": [
-        "disable_multisampled_render_to_texture"
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
       ]
     },
     {
@@ -1135,8 +1124,8 @@ LONG_STRING_CONST(
         }
       },
       "gl_renderer": "Adreno \\(TM\\) 4.*",
-      "features": [
-        "disable_multisampled_render_to_texture"
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
       ]
     },
     {
@@ -1226,7 +1215,7 @@ LONG_STRING_CONST(
       },
       "gl_renderer": "Adreno \\(TM\\) [45].*",
       "features": [
-        "disable_program_cache"
+        "disable_program_disk_cache"
       ]
     },
     {
@@ -1609,8 +1598,8 @@ LONG_STRING_CONST(
       },
       "gl_vendor": "Vivante Corporation",
       "gl_renderer": "Vivante GC1000",
-      "features": [
-        "disable_multisampled_render_to_texture"
+      "disabled_extensions": [
+        "GL_EXT_multisampled_render_to_texture"
       ]
     },
     {
@@ -1661,6 +1650,8 @@ LONG_STRING_CONST(
           "value": "10.10"
         }
       },
+      "vendor_id": "0x10de",
+      "device_id": ["0x0fd5"],
       "features": [
         "disable_overlay_ca_layers"
       ]
@@ -1752,9 +1743,9 @@ LONG_STRING_CONST(
         "type": "macosx"
       },
       "vendor_id": "0x1002",
-      "device_id": ["0x68b8"],
+      "device_id": ["0x68b8", "0x6720", "0x6741"],
       "features": [
-        "disable_webgl_multisampling_color_mask_usage"
+        "disable_multisampling_color_mask_usage"
       ]
     },
     {
@@ -1764,18 +1755,6 @@ LONG_STRING_CONST(
       "gl_vendor": "NVIDIA.*",
       "features": [
         "unpack_overlapping_rows_separately_unpack_buffer"
-      ]
-    },
-    {
-      "id": 166,
-      "cr_bugs": [612474],
-      "description": "Crash reports for glDiscardFramebuffer on Adreno 530",
-      "gl_renderer": "Adreno \\(TM\\) 5.*",
-      "os": {
-        "type": "android"
-      },
-      "features": [
-        "disable_discard_framebuffer"
       ]
     },
     {
@@ -1846,8 +1825,37 @@ LONG_STRING_CONST(
       "id": 172,
       "description": "Limited enabling of Chromium GL_INTEL_framebuffer_CMAA",
       "cr_bugs": [535198],
+      "exceptions" : [
+        {
+          "os": {
+            "type" : "chromeos"
+          },
+          "vendor_id": "0x8086",
+          "device_id": ["0x1602", "0x1606", "0x160a", "0x160b", "0x160d",
+                        "0x160e", "0x1612", "0x1616", "0x161a", "0x161b",
+                        "0x161d", "0x161e", "0x1622", "0x1626", "0x162a",
+                        "0x162b", "0x162d", "0x162e", "0x22b0", "0x22b1",
+                        "0x22b2", "0x22b3"]
+        }
+      ],
       "features": [
         "disable_framebuffer_cmaa"
+      ]
+    },
+    {
+      "id": 173,
+      "description": "Limit transparent visuals to drivers known to work",
+      "cr_bugs": [369209],
+      "os": {
+        "type": "linux"
+      },
+      "exceptions" : [
+        {
+          "driver_vendor": "Mesa"
+        }
+      ],
+      "features": [
+        "disable_transparent_visuals"
       ]
     },
     {
@@ -1899,6 +1907,46 @@ LONG_STRING_CONST(
     },
     {
       "id": 177,
+      "description": "glGetFragData{Location|Index} works incorrectly on Max",
+      "cr_bugs": [638340],
+      "os": {
+        "type": "macosx"
+      },
+      "features": [
+        "get_frag_data_info_bug"
+      ]
+    },
+    {
+      "id": 178,
+      "description": "GL_KHR_blend_equation_advanced is incorrectly implemented on Intel BayTrail on KitKat",
+      "cr_bugs": [639470],
+      "os": {
+        "type": "android",
+        "version": {
+          "op": "<",
+          "value": "5.0"
+        }
+      },
+      "gl_vendor": "Intel.*",
+      "gl_renderer": "Intel(R) HD Graphics for BayTrail",
+      "features": [
+        "disable_blend_equation_advanced"
+      ]
+    },
+    {
+      "id": 179,
+      "description": "glResumeTransformFeedback works incorrectly on Intel GPUs",
+      "cr_bugs": [638514],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "features": [
+        "rebind_transform_feedback_before_resume"
+      ]
+    },
+    {
+      "id": 180,
       "cr_bugs": [632461],
       "description": "eglCreateImageKHR fails for L8 textures on PowerVR",
       "os": {
@@ -1908,6 +1956,46 @@ LONG_STRING_CONST(
       "gl_renderer": "PowerVR SGX.*",
       "features": [
         "avda_no_eglimage_for_luminance_tex"
+      ]
+    },
+    {
+      "id": 185,
+      "description": "Zero-copy NV12 video displays incorrect colors on NVIDIA drivers.",
+      "cr_bugs": [635319],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x10de",
+      "features": [
+        "disable_dxgi_zero_copy_video"
+      ]
+    },
+    {
+      "id": 188,
+      "description": "AVSampleBufferDisplayLayer leaks IOSurfaces on 10.9.",
+      "cr_bugs": [632178],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<=",
+          "value": "10.10"
+        }
+      },
+      "features": [
+        "disable_av_sample_buffer_display_layer"
+      ]
+    },
+    {
+      "id": 190,
+      "description": "Disable partial swaps on Mesa drivers (detected with GL_VERSION)",
+      "cr_bugs": [339493],
+      "os": {
+        "type": "linux"
+      },
+      "gl_type": "gl",
+      "gl_version_string": ".*Mesa.*",
+      "features": [
+        "disable_post_sub_buffers_for_onscreen_surfaces"
       ]
     }
   ]

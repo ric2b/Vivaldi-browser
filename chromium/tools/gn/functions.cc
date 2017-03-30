@@ -101,7 +101,7 @@ bool FillTargetBlockScope(const Scope* scope,
 
   // Set the target name variable to the current target, and mark it used
   // because we don't want to issue an error if the script ignores it.
-  const base::StringPiece target_name("target_name");
+  const base::StringPiece target_name(variables::kTargetName);
   block_scope->SetValue(target_name, Value(function, args[0].string_value()),
                         function);
   block_scope->MarkUsed(target_name);
@@ -612,10 +612,12 @@ const char kSetSourcesAssignmentFilter_Help[] =
     "\n"
     "  The sources assignment filter is a list of patterns that remove files\n"
     "  from the list implicitly whenever the \"sources\" variable is\n"
-    "  assigned to. This is intended to be used to globally filter out files\n"
-    "  with platform-specific naming schemes when they don't apply, for\n"
-    "  example, you may want to filter out all \"*_win.cc\" files on non-\n"
-    "  Windows platforms.\n"
+    "  assigned to. This will do nothing for non-lists.\n"
+    "\n"
+    "  This is intended to be used to globally filter out files with\n"
+    "  platform-specific naming schemes when they don't apply, for example\n"
+    "  you may want to filter out all \"*_win.cc\" files on non-Windows\n"
+    "  platforms.\n"
     "\n"
     "  Typically this will be called once in the master build config script\n"
     "  to set up the filter for the current platform. Subsequent calls will\n"
@@ -757,6 +759,16 @@ Value RunPool(const FunctionCallNode* function,
   std::unique_ptr<Pool> pool(new Pool(scope->settings(), label));
   pool->set_depth(depth->int_value());
 
+  const Value* is_global = scope->GetValue("global", true);
+  if (is_global) {
+     if (!is_global->VerifyTypeIs(Value::BOOLEAN, err))
+       return Value();
+
+     if (is_global->boolean_value())
+       ((BuildSettings*)(scope->settings()->build_settings()))->
+                                add_global_pool(pool.get());
+  }
+
   // Save the generated item.
   Scope::ItemVector* collector = scope->GetItemCollector();
   if (!collector) {
@@ -804,9 +816,10 @@ Value RunPrint(Scope* scope,
 
   const BuildSettings::PrintCallback& cb =
       scope->settings()->build_settings()->print_callback();
-  if (cb.is_null())
+  if (cb.is_null()) {
     printf("%s", output.c_str());
-  else
+    fflush(stdout);
+  } else
     cb.Run(output);
 
   return Value();
@@ -895,6 +908,100 @@ Value RunSplitList(Scope* scope,
 
   return result;
 }
+
+// declare_overrides ----------------------------------------------------------
+
+const char kDeclareOverrides[] = "declare_overrides";
+const char kDeclareOverrides_HelpShort[] =
+    "declare_overrides: Declare override build arguments.";
+const char kDeclareOverrides_Help[] =
+    "declare_overrides: Declare override build arguments.\n"
+    "\n"
+    "  Introduces the given arguments into the current scope, overriding any\n"
+    "  subsequent declare_args declarations, but not any already declared. If\n"
+    "  they are not specified on the command line or in a toolchain's\n"
+    "  arguments, the default values given in the declare_overrides block will\n"
+    "  be used. However, these defaults will not override command-line values.\n"
+    "\n"
+    "  This command should be the first run or imported by the root BUILD.gn,\n"
+    "  before importing any other .gni files or calling declare_args()\n"
+    "\n"
+    "  See also \"gn help buildargs\" for an overview.\n"
+    "\n"
+    "  The precise behavior of declare args is:\n"
+    "\n"
+    "   1. The declare_overrides block executes. Any variables in the enclosing\n"
+    "      scope are available for reading.\n"
+    "\n"
+    "   2. At the end of executing the block, any variables set within that\n"
+    "      scope are saved globally as build arguments, with their current\n"
+    "      values being saved as the \"default value\" for that argument.\n"
+    "\n"
+    "   3. User-defined overrides are applied. Anything set in \"gn args\"\n"
+    "      now overrides any default values. The resulting set of variables\n"
+    "      is promoted to be readable from the following code in the file.\n"
+    "\n"
+    "  This has some ramifications that may not be obvious:\n"
+    "\n"
+    "    - You should not perform difficult work inside a declare_overrides block\n"
+    "      since this only sets a default value that may be discarded. In\n"
+    "      particular, don't use the result of exec_script() to set the\n"
+    "      default value. If you want to have a script-defined default, set\n"
+    "      some default \"undefined\" value like [], \"\", or -1, and after\n"
+    "      the declare_args block, call exec_script if the value is unset by\n"
+    "      the user.\n"
+    "\n"
+    "    - Any code inside of the declare_overrides block will see the default\n"
+    "      values of previous variables defined in the block rather than\n"
+    "      the user-overridden value. This can be surprising because you will\n"
+    "      be used to seeing the overridden value. If you need to make the\n"
+    "      default value of one arg dependent on the possibly-overridden\n"
+    "      value of another, write two separate declare_args blocks:\n"
+    "\n"
+    "        declare_overrides() {\n"
+    "          enable_foo = true\n"
+    "        }\n"
+    "        declare_overrides() {\n"
+    "          # Bar defaults to same user-overridden state as foo.\n"
+    "          enable_bar = enable_foo\n"
+    "        }\n"
+    "\n"
+    "Example\n"
+    "\n"
+    "  declare_overrides() {\n"
+    "    enable_teleporter = true\n"
+    "    enable_doom_melon = false\n"
+    "  }\n"
+    "\n"
+    "  If you want to override the (default disabled) Doom Melon:\n"
+    "    gn --args=\"enable_doom_melon=true enable_teleporter=false\"\n"
+    "  This also sets the teleporter, but it's already defaulted to on so\n"
+    "  it will have no effect.\n";
+
+Value RunDeclareOverrides(Scope* scope,
+                     const FunctionCallNode* function,
+                     const std::vector<Value>& args,
+                     BlockNode* block,
+                     Err* err) {
+  NonNestableBlock non_nestable(scope, function, "declare_overrides");
+  if (!non_nestable.Enter(err))
+    return Value();
+
+  Scope block_scope(scope);
+  block->Execute(&block_scope, err);
+  if (err->has_error())
+    return Value();
+
+  // Pass the values from our scope into the Args object for adding to the
+  // overrides with the proper values (taking into account the defaults given in
+  // the block_scope, and arguments passed into the build).
+  Scope::KeyValueMap values;
+  block_scope.GetCurrentScopeValues(&values);
+  ((BuildSettings *) scope->settings()->build_settings())->build_args().
+      AddArgOverrides(values, true, scope);
+  return Value();
+}
+
 
 // -----------------------------------------------------------------------------
 
@@ -1012,8 +1119,17 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(Template, false)
     INSERT_FUNCTION(Tool, false)
     INSERT_FUNCTION(Toolchain, false)
-    INSERT_FUNCTION(ToolchainArgs, false)
     INSERT_FUNCTION(WriteFile, false)
+
+    // <Vivaldi>
+    INSERT_FUNCTION(PreProcessAction,false)
+    INSERT_FUNCTION(PreProcessTarget,false)
+    INSERT_FUNCTION(PreProcessTemplate,false)
+    INSERT_FUNCTION(PostProcessAction,false)
+    INSERT_FUNCTION(PostProcessTarget,false)
+    INSERT_FUNCTION(PostProcessTemplate,false)
+    INSERT_FUNCTION(DeclareOverrides,false)
+    // </Vivaldi>
 
     #undef INSERT_FUNCTION
   }
@@ -1036,13 +1152,14 @@ Value RunFunction(Scope* scope,
       function_map.find(name.value());
   if (found_function == function_map.end()) {
     // No built-in function matching this, check for a template.
-    const Template* templ =
-        scope->GetTemplate(function->function().value().as_string());
+    std::string template_name = function->function().value().as_string();
+    const Template* templ = scope->GetTemplate(template_name);
     if (templ) {
       Value args = args_list->Execute(scope, err);
       if (err->has_error())
         return Value();
-      return templ->Invoke(scope, function, args.list_value(), block, err);
+      return templ->Invoke(scope, function, template_name, args.list_value(),
+                           block, err);
     }
 
     *err = Err(name, "Unknown function.");
@@ -1080,11 +1197,25 @@ Value RunFunction(Scope* scope,
       FillNeedsBlockError(function, err);
       return Value();
     }
-
     Scope block_scope(scope);
+    if (function->function().value().as_string() == "copy") {
+      // <Vivaldi>
+      if (!PrePostProcessTheTarget(false, &block_scope, function,
+                                   args.list_value(), block, err))
+        return Value();
+      // </Vivaldi>
+    }
+
     block->Execute(&block_scope, err);
     if (err->has_error())
       return Value();
+    if (function->function().value().as_string() == "copy") {
+      // <Vivaldi>
+      if (!PrePostProcessTheTarget(true, &block_scope, function,
+                                   args.list_value(), block, err))
+        return Value();
+      // </Vivaldi>
+    }
 
     Value result = found_function->second.executed_block_runner(
         function, args.list_value(), &block_scope, err);

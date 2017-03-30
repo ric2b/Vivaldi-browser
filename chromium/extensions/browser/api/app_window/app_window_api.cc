@@ -75,6 +75,8 @@ const char kImeWindowMustBeImeWindowOrPanel[] =
     "IME extensions must create ime window ( with \"ime: true\" and "
     "\"frame: 'none'\") or panel window (with \"type: panel\").";
 #endif
+const char kShowInShelfWindowKeyNotSet[] =
+    "The \"showInShelf\" option requires the \"id\" option to be set.";
 }  // namespace app_window_constants
 
 const char kNoneFrameOption[] = "none";
@@ -193,8 +195,8 @@ bool AppWindowCreateFunction::RunAsync() {
             frame_id = existing_frame->GetRoutingID();
           }
 
-          if (!options->hidden.get() || !*options->hidden.get()) {
-            if (options->focused.get() && !*options->focused.get())
+          if (!options->hidden.get() || !*options->hidden) {
+            if (options->focused.get() && !*options->focused)
               existing_window->Show(AppWindow::SHOW_INACTIVE);
             else
               existing_window->Show(AppWindow::SHOW_ACTIVE);
@@ -309,13 +311,13 @@ bool AppWindowCreateFunction::RunAsync() {
     }
 
     if (options->hidden.get())
-      create_params.hidden = *options->hidden.get();
+      create_params.hidden = *options->hidden;
 
     if (options->resizable.get())
-      create_params.resizable = *options->resizable.get();
+      create_params.resizable = *options->resizable;
 
     if (options->always_on_top.get()) {
-      create_params.always_on_top = *options->always_on_top.get();
+      create_params.always_on_top = *options->always_on_top;
 
       if (create_params.always_on_top &&
           !extension()->permissions_data()->HasAPIPermission(
@@ -326,11 +328,31 @@ bool AppWindowCreateFunction::RunAsync() {
     }
 
     if (options->focused.get())
-      create_params.focused = *options->focused.get();
+      create_params.focused = *options->focused;
 
     if (options->visible_on_all_workspaces.get()) {
       create_params.visible_on_all_workspaces =
-          *options->visible_on_all_workspaces.get();
+          *options->visible_on_all_workspaces;
+    }
+
+    if (options->show_in_shelf.get()) {
+      create_params.show_in_shelf = *options->show_in_shelf.get();
+
+      if (create_params.show_in_shelf && create_params.window_key.empty()) {
+        error_ = app_window_constants::kShowInShelfWindowKeyNotSet;
+        return false;
+      }
+    }
+
+    if (options->icon.get()) {
+      // First, check if the window icon URL is a valid global URL.
+      create_params.window_icon_url = GURL(*options->icon.get());
+
+      // If the URL is not global, check for a valid extension local URL.
+      if (!create_params.window_icon_url.is_valid()) {
+        create_params.window_icon_url =
+            extension()->GetResourceURL(*options->icon.get());
+      }
     }
 
     if (options->type != app_window::WINDOW_TYPE_PANEL) {
@@ -471,33 +493,33 @@ bool AppWindowCreateFunction::GetBoundsSpec(
     // This will be preserved as apps may be relying on this behavior.
 
     if (options.default_width.get())
-      params->content_spec.bounds.set_width(*options.default_width.get());
+      params->content_spec.bounds.set_width(*options.default_width);
     if (options.default_height.get())
-      params->content_spec.bounds.set_height(*options.default_height.get());
+      params->content_spec.bounds.set_height(*options.default_height);
     if (options.default_left.get())
-      params->window_spec.bounds.set_x(*options.default_left.get());
+      params->window_spec.bounds.set_x(*options.default_left);
     if (options.default_top.get())
-      params->window_spec.bounds.set_y(*options.default_top.get());
+      params->window_spec.bounds.set_y(*options.default_top);
 
     if (options.width.get())
-      params->content_spec.bounds.set_width(*options.width.get());
+      params->content_spec.bounds.set_width(*options.width);
     if (options.height.get())
-      params->content_spec.bounds.set_height(*options.height.get());
+      params->content_spec.bounds.set_height(*options.height);
     if (options.left.get())
-      params->window_spec.bounds.set_x(*options.left.get());
+      params->window_spec.bounds.set_x(*options.left);
     if (options.top.get())
-      params->window_spec.bounds.set_y(*options.top.get());
+      params->window_spec.bounds.set_y(*options.top);
 
     if (options.bounds.get()) {
       app_window::ContentBounds* bounds = options.bounds.get();
       if (bounds->width.get())
-        params->content_spec.bounds.set_width(*bounds->width.get());
+        params->content_spec.bounds.set_width(*bounds->width);
       if (bounds->height.get())
-        params->content_spec.bounds.set_height(*bounds->height.get());
+        params->content_spec.bounds.set_height(*bounds->height);
       if (bounds->left.get())
-        params->window_spec.bounds.set_x(*bounds->left.get());
+        params->window_spec.bounds.set_x(*bounds->left);
       if (bounds->top.get())
-        params->window_spec.bounds.set_y(*bounds->top.get());
+        params->window_spec.bounds.set_y(*bounds->top);
     }
 
     gfx::Size& minimum_size = params->content_spec.minimum_size;

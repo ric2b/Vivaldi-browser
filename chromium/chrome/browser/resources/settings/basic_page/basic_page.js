@@ -9,22 +9,11 @@
 Polymer({
   is: 'settings-basic-page',
 
-  behaviors: [SettingsPageVisibility, RoutableBehavior],
+  behaviors: [SettingsPageVisibility, MainPageBehavior],
 
   properties: {
-    /**
-     * Preferences state.
-     */
+    /** Preferences state. */
     prefs: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
-     * The current active route.
-     * @type {SettingsRoute}
-     */
-    currentRoute: {
       type: Object,
       notify: true,
     },
@@ -39,15 +28,7 @@ Polymer({
         return loadTimeData.getBoolean('showResetProfileBanner');
       },
     },
-
   },
-
-  /**
-   * @type {string} Selector to get the sections.
-   * TODO(michaelpg): replace duplicate docs with @override once b/24294625
-   * is fixed.
-   */
-  sectionSelector: 'settings-section',
 
   onResetDone_: function() {
     this.showResetProfileBanner_ = false;

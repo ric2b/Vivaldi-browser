@@ -1030,7 +1030,7 @@ WebInspector.HeapSnapshot.prototype = {
         this._dominatorsTree = this._buildDominatorTree(result.postOrderIndex2NodeOrdinal, result.nodeOrdinal2PostOrderIndex);
         this._progress.updateStatus("Calculating retained sizes\u2026");
         this._calculateRetainedSizes(result.postOrderIndex2NodeOrdinal);
-        this._progress.updateStatus("Buiding dominated nodes\u2026");
+        this._progress.updateStatus("Building dominated nodes\u2026");
         this._buildDominatedNodes();
         this._progress.updateStatus("Calculating statistics\u2026");
         this._calculateStatistics();
@@ -1274,7 +1274,7 @@ WebInspector.HeapSnapshot.prototype = {
         function traceIdFilter(node)
         {
             return !!set[node.traceNodeId()];
-        };
+        }
         return traceIdFilter;
     },
 
@@ -1596,6 +1596,20 @@ WebInspector.HeapSnapshot.prototype = {
                 });
     },
 
+    /**
+     * The function checks is the edge should be considered during building
+     * postorder iterator and dominator tree.
+     *
+     * @param {number} nodeIndex
+     * @param {number} edgeType
+     * @return {boolean}
+     */
+    _isEssentialEdge: function(nodeIndex, edgeType)
+    {
+        // Shortcuts at the root node have special meaning of marking user global objects.
+        return edgeType !== this._edgeWeakType && (edgeType !== this._edgeShortcutType || nodeIndex === this._rootNodeIndex);
+    },
+
     _buildPostOrderIndex: function()
     {
         var nodeFieldCount = this._nodeFieldCount;
@@ -1605,8 +1619,6 @@ WebInspector.HeapSnapshot.prototype = {
         var edgeFieldsCount = this._edgeFieldsCount;
         var edgeTypeOffset = this._edgeTypeOffset;
         var edgeToNodeOffset = this._edgeToNodeOffset;
-        var edgeShortcutType = this._edgeShortcutType;
-        var edgeWeakType = this._edgeWeakType;
         var firstEdgeIndexes = this._firstEdgeIndexes;
         var containmentEdges = this.containmentEdges;
 
@@ -1637,7 +1649,7 @@ WebInspector.HeapSnapshot.prototype = {
                 if (edgeIndex < edgesEnd) {
                     stackCurrentEdge[stackTop] += edgeFieldsCount;
                     var edgeType = containmentEdges[edgeIndex + edgeTypeOffset];
-                    if (edgeType === edgeWeakType || edgeType === edgeShortcutType)
+                    if (!this._isEssentialEdge(nodeOrdinal * nodeFieldCount, edgeType))
                         continue;
                     var childNodeIndex = containmentEdges[edgeIndex + edgeToNodeOffset];
                     var childNodeOrdinal = childNodeIndex / nodeFieldCount;
@@ -1663,7 +1675,7 @@ WebInspector.HeapSnapshot.prototype = {
 
             if (postOrderIndex === nodeCount || iteration > 1)
                 break;
-            var errors = new WebInspector.HeapSnapshotProblemReport("Heap snapshot: " + (nodeCount - postOrderIndex) + " nodes are unreachable from the root. Following nodes have only weak retainers:");
+            var errors = new WebInspector.HeapSnapshotProblemReport(`Heap snapshot: ${nodeCount - postOrderIndex} nodes are unreachable from the root. Following nodes have only weak retainers:`);
             var dumpNode = this.rootNode();
             // Remove root from the result (last node in the array) and put it at the bottom of the stack so that it is
             // visited after all orphan nodes and their subgraphs.
@@ -1672,16 +1684,19 @@ WebInspector.HeapSnapshot.prototype = {
             stackNodes[0] = rootNodeOrdinal;
             stackCurrentEdge[0] = firstEdgeIndexes[rootNodeOrdinal + 1]; // no need to reiterate its edges
             for (var i = 0; i < nodeCount; ++i) {
-                if (!visited[i]) {
-                    dumpNode.nodeIndex = i * nodeFieldCount;
-                    // Add all nodes that have only weak retainers to traverse their subgraphs.
-                    if (this._hasOnlyWeakRetainers(i)) {
-                        stackNodes[++stackTop] = i;
-                        stackCurrentEdge[stackTop] = firstEdgeIndexes[i];
-                        visited[i] = 1;
-                        errors.addError(dumpNode.name() + " @" + dumpNode.id());
-                    }
-                }
+                if (visited[i] || !this._hasOnlyWeakRetainers(i))
+                    continue;
+
+                // Add all nodes that have only weak retainers to traverse their subgraphs.
+                stackNodes[++stackTop] = i;
+                stackCurrentEdge[stackTop] = firstEdgeIndexes[i];
+                visited[i] = 1;
+
+                dumpNode.nodeIndex = i * nodeFieldCount;
+                var retainers = [];
+                for (var it = dumpNode.retainers(); it.hasNext(); it.next())
+                    retainers.push(`${it.item().node().name()}@${it.item().node().id()}.${it.item().name()}`);
+                errors.addError(`${dumpNode.name()} @${dumpNode.id()}  weak retainers: ${retainers.join(", ")}`);
             }
             console.warn(errors.toString());
         }
@@ -1748,8 +1763,6 @@ WebInspector.HeapSnapshot.prototype = {
         var edgeFieldsCount = this._edgeFieldsCount;
         var edgeTypeOffset = this._edgeTypeOffset;
         var edgeToNodeOffset = this._edgeToNodeOffset;
-        var edgeShortcutType = this._edgeShortcutType;
-        var edgeWeakType = this._edgeWeakType;
         var firstEdgeIndexes = this._firstEdgeIndexes;
         var containmentEdges = this.containmentEdges;
         var rootNodeIndex = this._rootNodeIndex;
@@ -1774,11 +1787,9 @@ WebInspector.HeapSnapshot.prototype = {
         { // Mark the root direct children as affected.
             nodeOrdinal = this._rootNodeIndex / nodeFieldCount;
             var endEdgeIndex = firstEdgeIndexes[nodeOrdinal + 1];
-            for (var edgeIndex = firstEdgeIndexes[nodeOrdinal];
-                 edgeIndex < endEdgeIndex;
-                 edgeIndex += edgeFieldsCount) {
+            for (var edgeIndex = firstEdgeIndexes[nodeOrdinal]; edgeIndex < endEdgeIndex; edgeIndex += edgeFieldsCount) {
                 var edgeType = containmentEdges[edgeIndex + edgeTypeOffset];
-                if (edgeType === edgeWeakType || edgeType === edgeShortcutType)
+                if (!this._isEssentialEdge(this._rootNodeIndex, edgeType))
                     continue;
                 var childNodeOrdinal = containmentEdges[edgeIndex + edgeToNodeOffset] / nodeFieldCount;
                 affected[nodeOrdinal2PostOrderIndex[childNodeOrdinal]] = 1;
@@ -1805,10 +1816,10 @@ WebInspector.HeapSnapshot.prototype = {
                 for (var retainerIndex = beginRetainerIndex; retainerIndex < endRetainerIndex; ++retainerIndex) {
                     var retainerEdgeIndex = retainingEdges[retainerIndex];
                     var retainerEdgeType = containmentEdges[retainerEdgeIndex + edgeTypeOffset];
-                    if (retainerEdgeType === edgeWeakType || retainerEdgeType === edgeShortcutType)
+                    var retainerNodeIndex = retainingNodes[retainerIndex];
+                    if (!this._isEssentialEdge(retainerNodeIndex, retainerEdgeType))
                         continue;
                     orphanNode = false;
-                    var retainerNodeIndex = retainingNodes[retainerIndex];
                     var retainerNodeOrdinal = retainerNodeIndex / nodeFieldCount;
                     var retainerNodeFlag = !flags || (flags[retainerNodeOrdinal] & flag);
                     // We are skipping the edges from non-page-owned nodes to page-owned nodes.

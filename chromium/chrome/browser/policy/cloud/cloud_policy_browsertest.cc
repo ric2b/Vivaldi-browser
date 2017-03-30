@@ -39,15 +39,15 @@
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/policy/policy_constants.h"
+#include "components/policy/proto/chrome_settings.pb.h"
+#include "components/policy/proto/cloud_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/test/test_utils.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/policy_constants.h"
-#include "policy/proto/chrome_settings.pb.h"
-#include "policy/proto/cloud_policy.pb.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -149,6 +149,9 @@ std::string GetTestPolicy(const char* homepage, int key_version) {
 }
 
 void GetExpectedDefaultPolicy(PolicyMap* policy_map) {
+  policy_map->Set(key::kNTPContentSuggestionsEnabled, POLICY_LEVEL_MANDATORY,
+                  POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
+                  base::WrapUnique(new base::FundamentalValue(false)), nullptr);
 #if defined(OS_CHROMEOS)
   policy_map->Set(
       key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
@@ -174,6 +177,8 @@ void GetExpectedDefaultPolicy(PolicyMap* policy_map) {
 }
 
 void GetExpectedTestPolicy(PolicyMap* expected, const char* homepage) {
+  GetExpectedDefaultPolicy(expected);
+
   expected->Set(key::kShowHomeButton, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                 POLICY_SOURCE_CLOUD,
                 base::WrapUnique(new base::FundamentalValue(true)), nullptr);
@@ -191,28 +196,6 @@ void GetExpectedTestPolicy(PolicyMap* expected, const char* homepage) {
   expected->Set(key::kHomepageLocation, POLICY_LEVEL_RECOMMENDED,
                 POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                 base::WrapUnique(new base::StringValue(homepage)), nullptr);
-#if defined(OS_CHROMEOS)
-  expected->Set(key::kChromeOsMultiProfileUserBehavior, POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::StringValue("primary-only")),
-                nullptr);
-  expected->Set(key::kEasyUnlockAllowed, POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  expected->Set(key::kCaptivePortalAuthenticationIgnoresProxy,
-                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-                POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  expected->Set(key::kAllowDinosaurEasterEgg, POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  expected->Set(key::kArcEnabled, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-                POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-  expected->Set(key::kPacHttpsUrlStrippingEnabled, POLICY_LEVEL_MANDATORY,
-                POLICY_SCOPE_USER, POLICY_SOURCE_ENTERPRISE_DEFAULT,
-                base::WrapUnique(new base::FundamentalValue(false)), nullptr);
-#endif
 }
 
 }  // namespace
@@ -484,9 +467,11 @@ TEST(CloudPolicyProtoTest, VerifyProtobufEquivalence) {
   list->add_entries("ftp");
   list->add_entries("mailto");
   // Try explicitly setting a policy mode too.
-  chrome_settings.mutable_disablespdy()->set_disablespdy(false);
-  chrome_settings.mutable_disablespdy()->mutable_policy_options()->set_mode(
-      em::PolicyOptions::MANDATORY);
+  chrome_settings.mutable_searchsuggestenabled()->set_searchsuggestenabled(
+      false);
+  chrome_settings.mutable_searchsuggestenabled()
+      ->mutable_policy_options()
+      ->set_mode(em::PolicyOptions::MANDATORY);
   chrome_settings.mutable_syncdisabled()->set_syncdisabled(true);
   chrome_settings.mutable_syncdisabled()->mutable_policy_options()->set_mode(
       em::PolicyOptions::RECOMMENDED);
@@ -499,9 +484,10 @@ TEST(CloudPolicyProtoTest, VerifyProtobufEquivalence) {
   list = cloud_policy.mutable_disabledschemes()->mutable_value();
   list->add_entries("ftp");
   list->add_entries("mailto");
-  cloud_policy.mutable_disablespdy()->set_value(false);
-  cloud_policy.mutable_disablespdy()->mutable_policy_options()->set_mode(
-      em::PolicyOptions::MANDATORY);
+  cloud_policy.mutable_searchsuggestenabled()->set_value(false);
+  cloud_policy.mutable_searchsuggestenabled()
+      ->mutable_policy_options()
+      ->set_mode(em::PolicyOptions::MANDATORY);
   cloud_policy.mutable_syncdisabled()->set_value(true);
   cloud_policy.mutable_syncdisabled()->mutable_policy_options()->set_mode(
       em::PolicyOptions::RECOMMENDED);

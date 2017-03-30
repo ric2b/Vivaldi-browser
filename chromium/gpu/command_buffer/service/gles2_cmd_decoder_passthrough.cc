@@ -143,7 +143,7 @@ void GLES2DecoderPassthroughImpl::TakeFrontBuffer(const Mailbox& mailbox) {}
 void GLES2DecoderPassthroughImpl::ReturnFrontBuffer(const Mailbox& mailbox,
                                                     bool is_lost) {}
 
-bool GLES2DecoderPassthroughImpl::ResizeOffscreenFrameBuffer(
+bool GLES2DecoderPassthroughImpl::ResizeOffscreenFramebuffer(
     const gfx::Size& size) {
   return true;
 }
@@ -171,6 +171,10 @@ gl::GLContext* GLES2DecoderPassthroughImpl::GetGLContext() {
 }
 
 gpu::gles2::ContextGroup* GLES2DecoderPassthroughImpl::GetContextGroup() {
+  return nullptr;
+}
+
+const FeatureInfo* GLES2DecoderPassthroughImpl::GetFeatureInfo() const {
   return nullptr;
 }
 
@@ -362,6 +366,11 @@ gpu::gles2::Logger* GLES2DecoderPassthroughImpl::GetLogger() {
 }
 
 const gpu::gles2::ContextState* GLES2DecoderPassthroughImpl::GetContextState() {
+  return nullptr;
+}
+
+scoped_refptr<ShaderTranslatorInterface>
+GLES2DecoderPassthroughImpl::GetTranslator(GLenum type) {
   return nullptr;
 }
 

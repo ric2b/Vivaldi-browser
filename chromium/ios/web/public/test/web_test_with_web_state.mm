@@ -4,10 +4,14 @@
 
 #import "ios/web/public/test/web_test_with_web_state.h"
 
+#import <WebKit/WebKit.h>
+
 #include "base/base64.h"
+#include "base/strings/sys_string_conversions.h"
 #include "base/test/ios/wait_util.h"
 #import "ios/testing/ocmock_complex_type_helper.h"
 #import "ios/web/navigation/crw_session_controller.h"
+#import "ios/web/public/web_state/url_verification_constants.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 
@@ -145,32 +149,24 @@ void WebTestWithWebState::WaitForCondition(ConditionBlock condition) {
                                       base::TimeDelta::FromSeconds(10));
 }
 
-NSString* WebTestWithWebState::EvaluateJavaScriptAsString(NSString* script) {
-  __block base::scoped_nsobject<NSString> evaluationResult;
-  [GetWebController(web_state())
-       evaluateJavaScript:script
-      stringResultHandler:^(NSString* result, NSError*) {
-        DCHECK([result isKindOfClass:[NSString class]]);
-        evaluationResult.reset([result copy]);
-      }];
-  base::test::ios::WaitUntilCondition(^bool() {
-    return evaluationResult;
-  });
-  return [[evaluationResult retain] autorelease];
-}
-
 id WebTestWithWebState::ExecuteJavaScript(NSString* script) {
   __block base::scoped_nsprotocol<id> executionResult;
   __block bool executionCompleted = false;
-  [GetWebController(web_state()) executeJavaScript:script
-                                 completionHandler:^(id result, NSError*) {
-                                   executionResult.reset([result copy]);
-                                   executionCompleted = true;
-                                 }];
+  [GetWebController(web_state())
+      executeJavaScript:script
+      completionHandler:^(id result, NSError* error) {
+        executionResult.reset([result copy]);
+        executionCompleted = true;
+      }];
   base::test::ios::WaitUntilCondition(^{
     return executionCompleted;
   });
   return [[executionResult retain] autorelease];
+}
+
+std::string WebTestWithWebState::BaseUrl() const {
+  web::URLVerificationTrustLevel unused_level;
+  return web_state()->GetCurrentURL(&unused_level).spec();
 }
 
 web::WebState* WebTestWithWebState::web_state() {
@@ -182,9 +178,9 @@ const web::WebState* WebTestWithWebState::web_state() const {
 }
 
 bool WebTestWithWebState::ResetPageIfNavigationStalled(NSString* load_check) {
-  NSString* inner_html = EvaluateJavaScriptAsString(
+  id inner_html = ExecuteJavaScript(
       @"(document && document.body && document.body.innerHTML) || 'undefined'");
-  if ([inner_html rangeOfString:load_check].location == NSNotFound) {
+  if (![inner_html rangeOfString:load_check].length) {
     web_state_->SetWebUsageEnabled(false);
     web_state_->SetWebUsageEnabled(true);
     [GetWebController(web_state()) triggerPendingLoad];

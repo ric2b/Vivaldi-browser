@@ -10,6 +10,7 @@
 #include "core/events/Event.h"
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentRequestUpdateEventInit.h"
+#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -24,21 +25,22 @@ class MODULES_EXPORT PaymentRequestUpdateEvent final : public Event {
 public:
     ~PaymentRequestUpdateEvent() override;
 
-    static PaymentRequestUpdateEvent* create();
     static PaymentRequestUpdateEvent* create(const AtomicString& type, const PaymentRequestUpdateEventInit& = PaymentRequestUpdateEventInit());
 
     void setPaymentDetailsUpdater(PaymentUpdater*);
 
     void updateWith(ScriptState*, ScriptPromise, ExceptionState&);
 
+    void onTimerFired(TimerBase*);
+
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    PaymentRequestUpdateEvent();
     PaymentRequestUpdateEvent(const AtomicString& type, const PaymentRequestUpdateEventInit&);
 
     Member<PaymentUpdater> m_updater;
     bool m_waitForUpdate;
+    Timer<PaymentRequestUpdateEvent> m_abortTimer;
 };
 
 } // namespace blink

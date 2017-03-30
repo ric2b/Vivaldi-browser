@@ -179,6 +179,10 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::typeWithCalcResolved() const
         return UnitType::CalcPercentageWithNumber;
     case CalcPercentLength:
         return UnitType::CalcPercentageWithLength;
+    case CalcLengthNumber:
+        return UnitType::CalcLengthWithNumber;
+    case CalcPercentLengthNumber:
+        return UnitType::CalcPercentageWithLengthAndNumber;
     case CalcTime:
         return UnitType::Milliseconds;
     case CalcOther:
@@ -554,7 +558,7 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::lengthUnitTypeToUnitType(LengthUn
     return CSSPrimitiveValue::UnitType::Unknown;
 }
 
-static String formatNumber(double number, const char* suffix, unsigned suffixLength)
+static String formatNumber(double number, const StringView& suffix)
 {
 #if OS(WIN) && _MSC_VER < 1900
     unsigned oldFormat = _set_output_format(_TWO_DIGIT_EXPONENT);
@@ -563,19 +567,8 @@ static String formatNumber(double number, const char* suffix, unsigned suffixLen
 #if OS(WIN) && _MSC_VER < 1900
     _set_output_format(oldFormat);
 #endif
-    result.append(suffix, suffixLength);
+    result.append(suffix);
     return result;
-}
-
-template <unsigned characterCount>
-ALWAYS_INLINE static String formatNumber(double number, const char (&characters)[characterCount])
-{
-    return formatNumber(number, characters, characterCount - 1);
-}
-
-static String formatNumber(double number, const char* characters)
-{
-    return formatNumber(number, characters, strlen(characters));
 }
 
 const char* CSSPrimitiveValue::unitTypeToString(UnitType type)
@@ -645,6 +638,8 @@ const char* CSSPrimitiveValue::unitTypeToString(UnitType type)
     case UnitType::Calc:
     case UnitType::CalcPercentageWithNumber:
     case UnitType::CalcPercentageWithLength:
+    case UnitType::CalcLengthWithNumber:
+    case UnitType::CalcPercentageWithLengthAndNumber:
         break;
     };
     ASSERT_NOT_REACHED();
@@ -706,6 +701,8 @@ String CSSPrimitiveValue::customCSSText() const
         break;
     case UnitType::CalcPercentageWithNumber:
     case UnitType::CalcPercentageWithLength:
+    case UnitType::CalcLengthWithNumber:
+    case UnitType::CalcPercentageWithLengthAndNumber:
         ASSERT_NOT_REACHED();
         break;
     }
@@ -761,6 +758,8 @@ bool CSSPrimitiveValue::equals(const CSSPrimitiveValue& other) const
     case UnitType::Chs:
     case UnitType::CalcPercentageWithNumber:
     case UnitType::CalcPercentageWithLength:
+    case UnitType::CalcLengthWithNumber:
+    case UnitType::CalcPercentageWithLengthAndNumber:
     case UnitType::QuirkyEms:
         return false;
     }

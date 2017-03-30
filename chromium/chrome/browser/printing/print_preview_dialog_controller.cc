@@ -19,7 +19,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
 #include "chrome/browser/printing/print_view_manager.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -347,6 +347,18 @@ void PrintPreviewDialogController::OnNavEntryCommitted(
     NOTREACHED();
     return;
   }
+  if (details) {
+    ui::PageTransition type = details->entry->GetTransitionType();
+    content::NavigationType nav_type = details->type;
+    if (nav_type == content::NAVIGATION_TYPE_EXISTING_PAGE &&
+        (ui::PageTransitionTypeIncludingQualifiersIs(
+             type,
+             ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                       ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)) ||
+         ui::PageTransitionTypeIncludingQualifiersIs(type,
+                                                     ui::PAGE_TRANSITION_LINK)))
+      return;
+  }
 
   RemoveInitiator(contents);
 }
@@ -378,7 +390,7 @@ WebContents* PrintPreviewDialogController::CreatePrintPreviewDialog(
   waiting_for_new_preview_page_ = true;
 
   // Make the print preview WebContents show up in the task manager.
-  task_management::WebContentsTags::CreateForPrintingContents(preview_dialog);
+  task_manager::WebContentsTags::CreateForPrintingContents(preview_dialog);
 
   AddObservers(initiator);
   AddObservers(preview_dialog);
@@ -409,8 +421,16 @@ void PrintPreviewDialogController::AddObservers(WebContents* contents) {
       contents->GetRenderProcessHost());
   if (!registrar_.IsRegistered(this,
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED, rph_source)) {
+    // Not registered for this host yet, so add the notification and add the
+    // host to the count map with a count of 1.
     registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
                    rph_source);
+    host_contents_count_map_[contents->GetRenderProcessHost()] = 1;
+  } else {
+    // This host's notification is already registered. Increment its count in
+    // the map so that the notification will not be removed from the registry
+    // until all web contents that use it are destroyed.
+    ++host_contents_count_map_[contents->GetRenderProcessHost()];
   }
 }
 
@@ -426,8 +446,17 @@ void PrintPreviewDialogController::RemoveObservers(WebContents* contents) {
       contents->GetRenderProcessHost());
   if (registrar_.IsRegistered(this,
       content::NOTIFICATION_RENDERER_PROCESS_CLOSED, rph_source)) {
-    registrar_.Remove(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
-                      rph_source);
+    if (host_contents_count_map_[contents->GetRenderProcessHost()] == 1) {
+      // This is the last contents that has this render process host, so we can
+      // remove the notification.
+      registrar_.Remove(this, content::NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                        rph_source);
+      host_contents_count_map_.erase(contents->GetRenderProcessHost());
+    } else {
+      // Other initializers and/or dialogs are still connected to the host, so
+      // we can't remove the notification. Decrement the count in the map.
+      --host_contents_count_map_[contents->GetRenderProcessHost()];
+    }
   }
 }
 

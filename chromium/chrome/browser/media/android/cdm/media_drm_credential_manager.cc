@@ -20,6 +20,7 @@
 
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 
 namespace {
@@ -29,7 +30,7 @@ void MediaDrmCredentialManagerCallback(
     bool succeeded) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_MediaDrmCredentialManagerCallback_onCredentialResetFinished(
-      env, j_media_drm_credential_manager_callback.obj(), succeeded);
+      env, j_media_drm_credential_manager_callback, succeeded);
 }
 
 }  // namespace

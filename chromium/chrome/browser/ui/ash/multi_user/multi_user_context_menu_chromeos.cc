@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 
+#include "ash/common/multi_profile_uma.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/wm_shell.h"
-#include "ash/multi_profile_uma.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
@@ -40,10 +40,6 @@ class MultiUserContextMenuChromeos : public ui::SimpleMenuModel,
   // SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override { return false; }
   bool IsCommandIdEnabled(int command_id) const override { return true; }
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override {
-    return false;
-  }
   void ExecuteCommand(int command_id, int event_flags) override;
 
  private:

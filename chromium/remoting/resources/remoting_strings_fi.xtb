@@ -74,7 +74,6 @@ Lisätietoja tietosuojasta on Googlen tietosuojakäytännössä (http://goo.gl/S
 <translation id="2676780859508944670">Käsitellään…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Ohjelmistopäivitykset tapahtuvat yleensä automaattisesti, mutta voivat epäonnistua joissakin harvinaisissa tapauksissa. Ohjelmiston päivittäminen kestää yleensä vain muutaman minuutin, ja se voidaan suorittaa etäyhteyden välityksellä.</translation>
-<translation id="2813770873348017932">Yhteydet etätietokoneeseen on väliaikaisesti estetty, sillä siihen yritettiin ottaa yhteys virheellisellä PIN-koodilla. Yritä myöhemmin uudelleen.</translation>
 <translation id="2841013758207633010">Aika</translation>
 <translation id="2851674870054673688">Tietokoneen jakaminen aloitetaan käyttäjän annettua käyttökoodin.</translation>
 <translation id="2851754573186462851">Chromium-sovellusten suoratoisto</translation>
@@ -149,7 +148,6 @@ isäntä</translation>
 <translation id="4573676252416618192">Chrome-etäkäytön
 isäntä</translation>
 <translation id="4619978527973181021">Hyväksy ja asenna</translation>
-<translation id="4647791084836149355">Näytä Cardboard-näkymä</translation>
 <translation id="4703302905453407178">Tarvittava osa ei toimi enää. Ilmoita tästä ongelmasta kehittäjille.</translation>
 <translation id="4703799847237267011">Chromoting-käyttökerta on päättynyt.</translation>
 <translation id="4736223761657662401">Yhteyshistoria</translation>
@@ -210,7 +208,6 @@ isäntä</translation>
 <translation id="6284412385303060032">Konsolin logiikkaruudussa käynnissä ollut isäntä sulkeutui tukeakseen verhotilaa. Vaihdetaan käyttäjäkohtaisessa istunnossa käynnissä olevaan isäntään.</translation>
 <translation id="629730747756840877">Tili</translation>
 <translation id="6304318647555713317">Asiakas</translation>
-<translation id="6324708100353784493">Otit käyttöön Google Cardboard -integraatiotilan. Käytä tilaa asettamalla laitteesi Google Cardboard -yhteensopivaan katselukoteloon.</translation>
 <translation id="6381670701864002291">Jokin muu syy.</translation>
 <translation id="6398765197997659313">Poistu koko näytön tilasta</translation>
 <translation id="6408143143164565232">• Kuuntele äänisisältöä Windows- tai Linux-tietokoneilta
@@ -236,6 +233,7 @@ isäntä</translation>
 <translation id="6930242544192836755">Kesto</translation>
 <translation id="6939719207673461467">Näytä/piilota näppäimistö</translation>
 <translation id="6944854424004126054">Palauta ikkuna</translation>
+<translation id="6963936880795878952">Yhteydet etätietokoneeseen on väliaikaisesti estetty, sillä siihen yritettiin muodostaa yhteys virheellisellä PIN-koodilla. Yritä myöhemmin uudelleen.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Haluatko varmasti poistaa käytöstä etäyhteydet kohteeseen <ph name="HOSTNAME" />? Jos muutat mieltäsi, yhteydet täytyy palauttaa käyttöön kyseisellä tietokoneella.</translation>
 <translation id="6998989275928107238">Vastaanottaja</translation>

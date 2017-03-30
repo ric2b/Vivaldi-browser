@@ -26,11 +26,11 @@
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_switches.h"
 #include "components/policy/core/common/policy_test_utils.h"
+#include "components/policy/proto/chrome_extension_policy.pb.h"
+#include "components/policy/proto/cloud_policy.pb.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/proto/chrome_extension_policy.pb.h"
-#include "policy/proto/cloud_policy.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -136,6 +136,11 @@ class ComponentCloudPolicyTest : public ExtensionBrowserTest {
     EXPECT_TRUE(event_listener_->WaitUntilSatisfied());
 
     ExtensionBrowserTest::SetUpOnMainThread();
+  }
+
+  void TearDownOnMainThread() override {
+    event_listener_.reset();
+    ExtensionBrowserTest::TearDownOnMainThread();
   }
 
   scoped_refptr<const extensions::Extension> LoadExtension(
@@ -256,6 +261,9 @@ IN_PROC_BROWSER_TEST_F(ComponentCloudPolicyTest, UpdateExtensionPolicy) {
 }
 
 IN_PROC_BROWSER_TEST_F(ComponentCloudPolicyTest, InstallNewExtension) {
+  event_listener_->Reply("idle");
+  event_listener_.reset();
+
   EXPECT_TRUE(test_server_.UpdatePolicyData(
       dm_protocol::kChromeExtensionPolicyType, kTestExtension2, kTestPolicy2));
   // Installing a new extension doesn't trigger another policy fetch because

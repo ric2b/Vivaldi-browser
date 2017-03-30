@@ -1,10 +1,11 @@
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-collapse/iron-collapse.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/html/icon.html">
+<link rel="import" href="chrome://history/browser_service.html">
+<link rel="import" href="chrome://history/constants.html">
 <link rel="import" href="chrome://history/searched_label.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
@@ -12,42 +13,30 @@
   <template>
     <style include="shared-style">
       :host {
-        @apply(--layout-center);
-        @apply(--layout-vertical);
-        padding: 0 var(--card-padding-side) var(--card-padding-between);
+        @apply(--card-sizing);
+        display: block;
+        padding-bottom: var(--card-padding-between);
       }
 
       #card-heading {
-        @apply(--layout-justified);
         cursor: pointer;
-      }
-
-      #icon {
-        -webkit-margin-start: 20px;
+        justify-content: space-between;
       }
 
       #tab-item-list {
         padding: 8px 0;
       }
 
-      #open-tabs {
-        -webkit-margin-start: 20px;
-        color: rgb(102, 136, 238);
-        cursor: pointer;
-      }
-
-      #open-tabs:hover {
-        text-decoration: underline;
-      }
-
       #last-update-time {
-        color: #969696;
+        color: var(--secondary-text-color);
       }
 
-      #dropdown-indicator {
-        -webkit-margin-end: 12px;
-        height: 20px;
-        width: 20px;
+      #right-buttons {
+        -webkit-margin-end: 4px;
+      }
+
+      #menu-button {
+        -webkit-margin-end: 8px;
       }
 
       #collapse {
@@ -55,18 +44,16 @@
       }
 
       #history-item-container {
+        @apply(--card-box-shadow);
         background: #fff;
-        border: 1px solid var(--card-border-color);
-        border-bottom-width: 2px;
-        max-width: var(--card-max-width);
-        min-width: var(--card-min-width);
-        width: 100%;
+        border-radius: 2px;
       }
 
       #item-container {
-        @apply(--layout-center);
-        @apply(--layout-horizontal);
-        min-height: 40px;
+        align-items: center;
+        display: flex;
+        margin: 0 20px;
+        min-height: var(--item-height);
       }
 
       #window-separator {
@@ -77,32 +64,44 @@
       }
     </style>
     <div id="history-item-container">
-      <div class="card-title" id="card-heading" aria-expanded$="[[cardOpen_]]"
+      <div class="card-title" id="card-heading" aria-expanded$="[[opened]]"
           aria-controls="collapse" on-tap="toggleTabCard">
         <div>
           [[device]]
           <span id="last-update-time">[[lastUpdateTime]]</span>
         </div>
-        <iron-icon icon="cr:expand-less" id="dropdown-indicator"></iron-icon>
+        <div id="right-buttons">
+          <button is="paper-icon-button-light" id="menu-button"
+              class="more-vert-button" on-tap="onMenuButtonTap_"
+              title="$i18n{moreActionsButton}">
+            <div></div>
+            <div></div>
+            <div></div>
+          </button>
+          <button is="paper-icon-button-light" class="icon-button"
+              title$="[[getCollapseTitle_(opened)]]">
+            <iron-icon icon="[[getCollapseIcon_(opened)]]"
+                id="dropdown-indicator">
+            </iron-icon>
+          </button>
+        </div>
       </div>
 
-      <iron-collapse opened="{{cardOpen_}}" id="collapse">
+      <iron-collapse opened="{{opened}}" id="collapse">
         <div id="tab-item-list">
           <template is="dom-repeat" items="[[tabs]]" as="tab" id="tab-list">
             <div id="item-container">
               <div id="icon" class="website-icon"></div>
-              <a href="[[tab.url]]" class="website-title" title="[[tab.title]]">
+              <a href="[[tab.url]]" class="website-title" title="[[tab.title]]"
+                  on-click="openTab_" on-contextmenu="onLinkRightClick_">
                 <history-searched-label title="[[tab.title]]"
-                    search-term="[[searchedTerm]]"></history-searched-label>
+                    search-term="[[searchTerm]]"></history-searched-label>
               </a>
             </div>
             <div id="window-separator"
                 hidden$="[[!isWindowSeparatorIndex_(index, separatorIndexes)]]">
             </div>
           </template>
-          <div class="item-container">
-            <p on-tap="openAllTabs_" id="open-tabs">$i18n{openAll}</p>
-          </div>
         </div>
       </iron-collapse>
     </div>

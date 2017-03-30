@@ -18,6 +18,7 @@
 #include "chrome/browser/ssl/ssl_cert_reporter.h"
 #include "components/captive_portal/captive_portal_detector.h"
 #include "components/certificate_reporting/error_reporter.h"
+#include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_interstitials/core/controller_client.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/wifi/wifi_service.h"
@@ -54,7 +55,7 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
     const GURL& login_url,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const net::SSLInfo& ssl_info,
-    const base::Callback<void(bool)>& callback)
+    const base::Callback<void(content::CertificateRequestResultType)>& callback)
     : SecurityInterstitialPage(web_contents, request_url),
       login_url_(login_url),
       callback_(callback) {
@@ -119,6 +120,8 @@ void CaptivePortalBlockingPage::PopulateInterstitialStrings(
   load_time_data->SetString("iconClass", "icon-offline");
   load_time_data->SetString("type", "CAPTIVE_PORTAL");
   load_time_data->SetBoolean("overridable", false);
+  security_interstitials::common_string_util::PopulateNewIconStrings(
+      load_time_data);
 
   // |IsWifiConnection| isn't accurate on some platforms, so always try to get
   // the Wi-Fi SSID even if |IsWifiConnection| is false.
@@ -217,7 +220,7 @@ void CaptivePortalBlockingPage::OnDontProceed() {
   // Need to explicity deny the certificate via the callback, otherwise memory
   // is leaked.
   if (!callback_.is_null()) {
-    callback_.Run(false);
+    callback_.Run(content::CERTIFICATE_REQUEST_RESULT_TYPE_CANCEL);
     callback_.Reset();
   }
 }

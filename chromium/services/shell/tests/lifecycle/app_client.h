@@ -10,37 +10,39 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/shell/public/interfaces/shell_client.mojom.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/shell/public/interfaces/service.mojom.h"
 #include "services/shell/tests/lifecycle/lifecycle_unittest.mojom.h"
 
 using LifecycleControl = shell::test::mojom::LifecycleControl;
 using LifecycleControlRequest = shell::test::mojom::LifecycleControlRequest;
 
 namespace shell {
-class ShellConnection;
+class ServiceContext;
 
 namespace test {
 
-class AppClient : public ShellClient,
+class AppClient : public Service,
                   public InterfaceFactory<LifecycleControl>,
                   public LifecycleControl {
  public:
   AppClient();
-  explicit AppClient(shell::mojom::ShellClientRequest request);
+  explicit AppClient(shell::mojom::ServiceRequest request);
   ~AppClient() override;
 
-  void set_runner(ApplicationRunner* runner) {
+  void set_runner(ServiceRunner* runner) {
     runner_ = runner;
   }
 
-  // ShellClient:
-  bool AcceptConnection(Connection* connection) override;
+  // Service:
+  bool OnConnect(const Identity& remote_identity,
+                 InterfaceRegistry* registry) override;
 
   // InterfaceFactory<LifecycleControl>:
-  void Create(Connection* connection, LifecycleControlRequest request) override;
+  void Create(const Identity& remote_identity,
+              LifecycleControlRequest request) override;
 
   // LifecycleControl:
   void Ping(const PingCallback& callback) override;
@@ -51,9 +53,9 @@ class AppClient : public ShellClient,
  private:
   void BindingLost();
 
-  ApplicationRunner* runner_ = nullptr;
+  ServiceRunner* runner_ = nullptr;
   mojo::BindingSet<LifecycleControl> bindings_;
-  std::unique_ptr<ShellConnection> connection_;
+  std::unique_ptr<ServiceContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(AppClient);
 };

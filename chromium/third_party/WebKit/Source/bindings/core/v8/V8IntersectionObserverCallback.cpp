@@ -38,12 +38,6 @@ void V8IntersectionObserverCallback::handleEvent(const HeapVector<Member<Interse
     if (m_callback.isEmpty())
         return;
     v8::Local<v8::Value> observerHandle = toV8(&observer, m_scriptState->context()->Global(), m_scriptState->isolate());
-    if (observerHandle.IsEmpty()) {
-        if (!isScriptControllerTerminating())
-            CRASH();
-        return;
-    }
-
     if (!observerHandle->IsObject())
         return;
 
@@ -56,7 +50,7 @@ void V8IntersectionObserverCallback::handleEvent(const HeapVector<Member<Interse
 
     v8::TryCatch exceptionCatcher(m_scriptState->isolate());
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunction(m_scriptState->getExecutionContext(), m_callback.newLocal(m_scriptState->isolate()), thisObject, 2, argv, m_scriptState->isolate());
+    V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), thisObject, 2, argv, m_scriptState->isolate());
 }
 
 DEFINE_TRACE(V8IntersectionObserverCallback)

@@ -1,0 +1,22 @@
+{
+  "flags": {
+    "drag_tabs_out_of_window": {
+      "friendly_name": "Drag Tabs Out of Window",
+      "description": "Enable detaching or moving tabs between windows by dragging.",
+      "value": "true",
+      "internal_value": "true"
+    },
+    "new_history_page": {
+      "friendly_name": "New History Page",
+      "description": "Enable the new history page (under heavy development).",
+      "value": "false",
+      "internal_value": "true"
+    },
+    "hue_integration": {
+      "friendly_name": "Philips Hue Integration",
+      "description": "Lets Vivaldi integrate with an existing Philips Hue Lighting system.",
+      "value": "true",
+      "internal_value": "true"
+    }
+  }
+}

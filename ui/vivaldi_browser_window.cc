@@ -351,3 +351,7 @@ gfx::Size VivaldiBrowserWindow::GetContentsSize() const {
 std::string VivaldiBrowserWindow::GetWorkspace() const {
   return std::string();
 }
+
+bool VivaldiBrowserWindow::IsVisibleOnAllWorkspaces() const {
+  return false;
+}

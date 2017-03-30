@@ -31,7 +31,7 @@
 /**
  * @constructor
  * @extends {WebInspector.ThrottledWidget}
- * @param {!WebInspector.SharedSidebarModel} sharedModel
+ * @param {!WebInspector.ComputedStyleModel} sharedModel
  */
 WebInspector.PlatformFontsWidget = function(sharedModel)
 {
@@ -39,22 +39,13 @@ WebInspector.PlatformFontsWidget = function(sharedModel)
     this.registerRequiredCSS("elements/platformFontsWidget.css");
 
     this._sharedModel = sharedModel;
-    this._sharedModel.addEventListener(WebInspector.SharedSidebarModel.Events.ComputedStyleChanged, this.update, this);
+    this._sharedModel.addEventListener(WebInspector.ComputedStyleModel.Events.ComputedStyleChanged, this.update, this);
 
     this._sectionTitle = createElementWithClass("div", "title");
+    this.contentElement.classList.add("platform-fonts");
     this.contentElement.appendChild(this._sectionTitle);
     this._sectionTitle.textContent = WebInspector.UIString("Rendered Fonts");
     this._fontStatsSection = this.contentElement.createChild("div", "stats-section");
-}
-
-/**
- * @param {!WebInspector.SharedSidebarModel} sharedModel
- * @return {!WebInspector.ElementsSidebarViewWrapperPane}
- */
-WebInspector.PlatformFontsWidget.createSidebarWrapper = function(sharedModel)
-{
-    var widget = new WebInspector.PlatformFontsWidget(sharedModel);
-    return new WebInspector.ElementsSidebarViewWrapperPane(WebInspector.UIString("Fonts"), widget)
 }
 
 WebInspector.PlatformFontsWidget.prototype = {

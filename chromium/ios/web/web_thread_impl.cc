@@ -12,6 +12,7 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
@@ -87,7 +88,10 @@ base::LazyInstance<WebThreadTaskRunners>::Leaky g_task_runners =
 
 struct WebThreadGlobals {
   WebThreadGlobals()
-      : blocking_pool(new base::SequencedWorkerPool(3, "WebBlocking")) {
+      : blocking_pool(
+            new base::SequencedWorkerPool(3,
+                                          "WebBlocking",
+                                          base::TaskPriority::USER_VISIBLE)) {
     memset(threads, 0, WebThread::ID_COUNT * sizeof(threads[0]));
     memset(thread_delegates, 0,
            WebThread::ID_COUNT * sizeof(thread_delegates[0]));
@@ -122,7 +126,7 @@ WebThreadImpl::WebThreadImpl(ID identifier)
 
 WebThreadImpl::WebThreadImpl(ID identifier, base::MessageLoop* message_loop)
     : Thread(GetThreadName(identifier)), identifier_(identifier) {
-  set_message_loop(message_loop);
+  SetMessageLoop(message_loop);
   Initialize();
 }
 
@@ -168,66 +172,66 @@ void WebThreadImpl::Init() {
   }
 }
 
-NOINLINE void WebThreadImpl::UIThreadRun(base::MessageLoop* message_loop) {
+NOINLINE void WebThreadImpl::UIThreadRun(base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
-NOINLINE void WebThreadImpl::DBThreadRun(base::MessageLoop* message_loop) {
+NOINLINE void WebThreadImpl::DBThreadRun(base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
-NOINLINE void WebThreadImpl::FileThreadRun(base::MessageLoop* message_loop) {
+NOINLINE void WebThreadImpl::FileThreadRun(base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
 NOINLINE void WebThreadImpl::FileUserBlockingThreadRun(
-    base::MessageLoop* message_loop) {
+    base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
-NOINLINE void WebThreadImpl::CacheThreadRun(base::MessageLoop* message_loop) {
+NOINLINE void WebThreadImpl::CacheThreadRun(base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
-NOINLINE void WebThreadImpl::IOThreadRun(base::MessageLoop* message_loop) {
+NOINLINE void WebThreadImpl::IOThreadRun(base::RunLoop* run_loop) {
   volatile int line_number = __LINE__;
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
   CHECK_GT(line_number, 0);
 }
 
-void WebThreadImpl::Run(base::MessageLoop* message_loop) {
+void WebThreadImpl::Run(base::RunLoop* run_loop) {
   WebThread::ID thread_id = ID_COUNT;
   if (!GetCurrentThreadIdentifier(&thread_id))
-    return Thread::Run(message_loop);
+    return Thread::Run(run_loop);
 
   switch (thread_id) {
     case WebThread::UI:
-      return UIThreadRun(message_loop);
+      return UIThreadRun(run_loop);
     case WebThread::DB:
-      return DBThreadRun(message_loop);
+      return DBThreadRun(run_loop);
     case WebThread::FILE:
-      return FileThreadRun(message_loop);
+      return FileThreadRun(run_loop);
     case WebThread::FILE_USER_BLOCKING:
-      return FileUserBlockingThreadRun(message_loop);
+      return FileUserBlockingThreadRun(run_loop);
     case WebThread::CACHE:
-      return CacheThreadRun(message_loop);
+      return CacheThreadRun(run_loop);
     case WebThread::IO:
-      return IOThreadRun(message_loop);
+      return IOThreadRun(run_loop);
     case WebThread::ID_COUNT:
       CHECK(false);  // This shouldn't actually be reached!
       break;
   }
-  Thread::Run(message_loop);
+  Thread::Run(run_loop);
 }
 
 void WebThreadImpl::CleanUp() {

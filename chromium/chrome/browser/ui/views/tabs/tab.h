@@ -185,13 +185,6 @@ class Tab : public gfx::AnimationDelegate,
   class TabCloseButton;
   class ThrobberView;
 
-  // All metadata necessary to uniquely identify a cached image.
-  struct ImageCacheEntryMetadata;
-
-  // A cached image and the metadata used to generate it.
-  struct ImageCacheEntry;
-  typedef std::list<ImageCacheEntry> ImageCache;
-
   // gfx::AnimationDelegate:
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
@@ -238,25 +231,21 @@ class Tab : public gfx::AnimationDelegate,
   // Invoked from SetData after |data_| has been updated to the new data.
   void DataChanged(const TabRendererData& old);
 
-  // Paint with the normal tab style.
-  void PaintTab(gfx::Canvas* canvas);
+  // Paint with the normal tab style.  If |clip| is non-empty, the tab border
+  // should be clipped against it.
+  void PaintTab(gfx::Canvas* canvas, const gfx::Path& clip);
 
   // Paint with the "immersive mode" light-bar style.
   void PaintImmersiveTab(gfx::Canvas* canvas);
 
   // Paint various portions of the Tab.
-  void PaintTabBackground(gfx::Canvas* canvas);
-  void PaintInactiveTabBackground(gfx::Canvas* canvas);
-  void PaintTabBackgroundUsingFillId(gfx::Canvas* canvas,
+  void PaintInactiveTabBackground(gfx::Canvas* canvas, const gfx::Path& clip);
+  void PaintTabBackgroundUsingFillId(gfx::Canvas* fill_canvas,
+                                     gfx::Canvas* stroke_canvas,
                                      bool is_active,
                                      int fill_id,
                                      bool has_custom_image,
                                      int y_offset);
-  void PaintTabFill(gfx::Canvas* canvas,
-                    gfx::ImageSkia* fill_image,
-                    int x_offset,
-                    int y_offset,
-                    bool is_active);
 
   // Paints the pinned tab title changed indicator and |favicon_|. |favicon_|
   // may be null. |favicon_draw_bounds| is |favicon_bounds_| adjusted for rtl
@@ -307,24 +296,8 @@ class Tab : public gfx::AnimationDelegate,
   // Schedules repaint task for icon.
   void ScheduleIconPaint();
 
-  // Computes a path corresponding to the tab's content region inside the outer
-  // stroke.
-  void GetFillPath(float scale, SkPath* path) const;
-
-  // Computes a path corresponding to the tab's outer border for a given |scale|
-  // and stores it in |path|.  If |extend_to_top| is true, the path is extended
-  // vertically to the top of the tab bounds.  The caller uses this for Fitts'
-  // Law purposes in maximized/fullscreen mode.
-  void GetBorderPath(float scale, bool extend_to_top, SkPath* path) const;
-
   // Returns the rectangle for the light bar in immersive mode.
   gfx::Rect GetImmersiveBarRect() const;
-
-  // Performs a one-time initialization of static resources such as tab images.
-  static void InitTabResources();
-
-  // Loads the images to be used for the tab background.
-  static void LoadTabImages();
 
   // The controller, never NULL.
   TabController* const controller_;
@@ -374,17 +347,6 @@ class Tab : public gfx::AnimationDelegate,
   // The offset used to paint the inactive background image.
   gfx::Point background_offset_;
 
-  struct TabImages {
-    gfx::ImageSkia* image_l;
-    gfx::ImageSkia* image_c;
-    gfx::ImageSkia* image_r;
-    int l_width;
-    int r_width;
-  };
-  static TabImages active_images_;
-  static TabImages inactive_images_;
-  static TabImages mask_images_;
-
   // Whether we're showing the icon. It is cached so that we can detect when it
   // changes and layout appropriately.
   bool showing_icon_;
@@ -404,10 +366,6 @@ class Tab : public gfx::AnimationDelegate,
   // data().favicon and may be modified for theming. It is created on demand
   // and thus may be null.
   gfx::ImageSkia favicon_;
-
-  // As the majority of the tabs are inactive, and painting tabs is slowish,
-  // we cache a handful of the inactive tab backgrounds here.
-  static ImageCache* image_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(Tab);
 };

@@ -25,12 +25,15 @@
 namespace component_updater {
 
 namespace {
+
 // Default time constants.
 const int kDelayOneMinute = 60;
 const int kDelayOneHour = kDelayOneMinute * 60;
 
-// Debug values you can pass to --component-updater=value1,value2.
-// Speed up component checking.
+// Debug values you can pass to --component-updater=value1,value2. Do not
+// use these values in production code.
+
+// Speed up the initial component checking.
 const char kSwitchFastUpdate[] = "fast-update";
 
 // Add "testrequest=1" attribute to the update check request.
@@ -123,7 +126,7 @@ int ConfiguratorImpl::InitialDelay() const {
 }
 
 int ConfiguratorImpl::NextCheckDelay() const {
-  return fast_update_ ? 60 : (6 * kDelayOneHour);
+  return 6 * kDelayOneHour;
 }
 
 int ConfiguratorImpl::StepDelay() const {
@@ -177,15 +180,19 @@ net::URLRequestContextGetter* ConfiguratorImpl::RequestContext() const {
   return url_request_getter_;
 }
 
-bool ConfiguratorImpl::DeltasEnabled() const {
+bool ConfiguratorImpl::EnabledDeltas() const {
   return deltas_enabled_;
 }
 
-bool ConfiguratorImpl::UseBackgroundDownloader() const {
+bool ConfiguratorImpl::EnabledComponentUpdates() const {
+  return true;
+}
+
+bool ConfiguratorImpl::EnabledBackgroundDownloader() const {
   return background_downloads_enabled_;
 }
 
-bool ConfiguratorImpl::UseCupSigning() const {
+bool ConfiguratorImpl::EnabledCupSigning() const {
   return true;
 }
 

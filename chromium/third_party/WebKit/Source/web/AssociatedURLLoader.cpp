@@ -113,7 +113,7 @@ public:
 private:
     ClientAdapter(AssociatedURLLoader*, WebURLLoaderClient*, const WebURLLoaderOptions&);
 
-    void notifyError(Timer<ClientAdapter>*);
+    void notifyError(TimerBase*);
 
     AssociatedURLLoader* m_loader;
     WebURLLoaderClient* m_client;
@@ -149,7 +149,8 @@ void AssociatedURLLoader::ClientAdapter::willFollowRedirect(ResourceRequest& new
 
     WrappedResourceRequest wrappedNewRequest(newRequest);
     WrappedResourceResponse wrappedRedirectResponse(redirectResponse);
-    m_client->willFollowRedirect(m_loader, wrappedNewRequest, wrappedRedirectResponse);
+    // TODO(ricea): Do we need to set encodedDataLength here?
+    m_client->willFollowRedirect(m_loader, wrappedNewRequest, wrappedRedirectResponse, 0);
 }
 
 void AssociatedURLLoader::ClientAdapter::didSendData(unsigned long long bytesSent, unsigned long long totalBytesToBeSent)
@@ -208,7 +209,7 @@ void AssociatedURLLoader::ClientAdapter::didReceiveData(const char* data, unsign
 
     CHECK_LE(dataLength, static_cast<unsigned>(std::numeric_limits<int>::max()));
 
-    m_client->didReceiveData(m_loader, data, dataLength, -1);
+    m_client->didReceiveData(m_loader, data, dataLength, -1, dataLength);
 }
 
 void AssociatedURLLoader::ClientAdapter::didReceiveCachedMetadata(const char* data, int dataLength)
@@ -257,7 +258,7 @@ void AssociatedURLLoader::ClientAdapter::enableErrorNotifications()
         m_errorTimer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void AssociatedURLLoader::ClientAdapter::notifyError(Timer<ClientAdapter>* timer)
+void AssociatedURLLoader::ClientAdapter::notifyError(TimerBase* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_errorTimer);
 
@@ -321,7 +322,7 @@ STATIC_ASSERT_ENUM(WebURLLoaderOptions::ConsiderPreflight, ConsiderPreflight);
 STATIC_ASSERT_ENUM(WebURLLoaderOptions::ForcePreflight, ForcePreflight);
 STATIC_ASSERT_ENUM(WebURLLoaderOptions::PreventPreflight, PreventPreflight);
 
-void AssociatedURLLoader::loadSynchronously(const WebURLRequest& request, WebURLResponse& response, WebURLError& error, WebData& data)
+void AssociatedURLLoader::loadSynchronously(const WebURLRequest& request, WebURLResponse& response, WebURLError& error, WebData& data, int64_t& encodedDataLength)
 {
     DCHECK(0); // Synchronous loading is not supported.
 }
@@ -403,7 +404,7 @@ void AssociatedURLLoader::cancelLoader()
 
     if (m_loader) {
         m_loader->cancel();
-        m_loader.reset();
+        m_loader = nullptr;
     }
     m_clientAdapter.reset();
 }

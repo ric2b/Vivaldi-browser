@@ -26,6 +26,7 @@
 #include "core/editing/commands/RemoveNodePreservingChildrenCommand.h"
 
 #include "core/dom/Node.h"
+#include "core/editing/EditingUtilities.h"
 #include "wtf/Assertions.h"
 
 namespace blink {
@@ -41,7 +42,7 @@ RemoveNodePreservingChildrenCommand::RemoveNodePreservingChildrenCommand(Node* n
 void RemoveNodePreservingChildrenCommand::doApply(EditingState* editingState)
 {
     ABORT_EDITING_COMMAND_IF(!m_node->parentNode());
-    ABORT_EDITING_COMMAND_IF(!m_node->parentNode()->hasEditableStyle());
+    ABORT_EDITING_COMMAND_IF(!hasEditableStyle(*m_node->parentNode()));
     if (m_node->isContainerNode()) {
         NodeVector children;
         getChildNodes(toContainerNode(*m_node), children);

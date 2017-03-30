@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "base/location.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,6 +28,7 @@
 using autofill::PasswordForm;
 using base::UTF8ToUTF16;
 using base::UTF16ToUTF8;
+using password_manager::PasswordStore;
 using password_manager::PasswordStoreChange;
 using password_manager::PasswordStoreChangeList;
 using testing::Pointee;
@@ -161,7 +163,7 @@ gboolean mock_secret_password_clear_sync(const SecretSchema* schema,
 
   ScopedVector<MockSecretItem> kept_mock_libsecret_items;
   kept_mock_libsecret_items.reserve(global_mock_libsecret_items->size());
-  for (auto& item : *global_mock_libsecret_items) {
+  for (auto*& item : *global_mock_libsecret_items) {
     if (!Matches(item, attributes)) {
       kept_mock_libsecret_items.push_back(item);
       item = nullptr;
@@ -337,12 +339,12 @@ class NativeBackendLibsecretTest : public testing::Test {
   void TearDown() override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
     ASSERT_TRUE(global_mock_libsecret_items);
     global_mock_libsecret_items = nullptr;
   }
 
-  void RunUIThread() { base::MessageLoop::current()->Run(); }
+  void RunUIThread() { base::RunLoop().Run(); }
 
   void CheckUint32Attribute(const MockSecretItem* item,
                             const std::string& attribute,
@@ -374,7 +376,7 @@ class NativeBackendLibsecretTest : public testing::Test {
                            const PasswordForm& form,
                            const std::string& app_string) {
     EXPECT_EQ(UTF16ToUTF8(form.password_value), item->value->password);
-    EXPECT_EQ(22u, g_hash_table_size(item->attributes));
+    EXPECT_EQ(21u, g_hash_table_size(item->attributes));
     CheckStringAttribute(item, "origin_url", form.origin.spec());
     CheckStringAttribute(item, "action_url", form.action.spec());
     CheckStringAttribute(item, "username_element",
@@ -386,7 +388,6 @@ class NativeBackendLibsecretTest : public testing::Test {
     CheckStringAttribute(item, "submit_element",
                          UTF16ToUTF8(form.submit_element));
     CheckStringAttribute(item, "signon_realm", form.signon_realm);
-    CheckUint32Attribute(item, "ssl_valid", form.ssl_valid);
     CheckUint32Attribute(item, "preferred", form.preferred);
     // We don't check the date created. It varies.
     CheckUint32Attribute(item, "blacklisted_by_user", form.blacklisted_by_user);
@@ -427,15 +428,13 @@ class NativeBackendLibsecretTest : public testing::Test {
 
     VerifiedAdd(&backend, credentials);
 
-    PasswordForm target_form;
-    target_form.origin = url;
-    target_form.signon_realm = url.spec();
+    PasswordStore::FormDigest target_form = {PasswordForm::SCHEME_HTML,
+                                             url.spec(), url};
     if (scheme != PasswordForm::SCHEME_HTML) {
       // For non-HTML forms, the realm used for authentication
       // (http://tools.ietf.org/html/rfc1945#section-10.2) is appended to the
       // signon_realm. Just use a default value for now.
       target_form.signon_realm.append("Realm");
-      target_form.scheme = scheme;
     }
     ScopedVector<autofill::PasswordForm> form_list;
     EXPECT_TRUE(backend.GetLogins(target_form, &form_list));
@@ -466,9 +465,8 @@ class NativeBackendLibsecretTest : public testing::Test {
 
     // Get the PSL-matched copy of the saved login for m.facebook.
     const GURL kMobileURL("http://m.facebook.com/");
-    PasswordForm m_facebook_lookup;
-    m_facebook_lookup.origin = kMobileURL;
-    m_facebook_lookup.signon_realm = kMobileURL.spec();
+    PasswordStore::FormDigest m_facebook_lookup = {
+        PasswordForm::SCHEME_HTML, kMobileURL.spec(), kMobileURL};
     ScopedVector<autofill::PasswordForm> form_list;
     EXPECT_TRUE(backend.GetLogins(m_facebook_lookup, &form_list));
 
@@ -515,7 +513,8 @@ class NativeBackendLibsecretTest : public testing::Test {
     form_list.clear();
 
     // Check that www.facebook.com login was modified by the update.
-    EXPECT_TRUE(backend.GetLogins(form_facebook_, &form_list));
+    EXPECT_TRUE(backend.GetLogins(PasswordStore::FormDigest(form_facebook_),
+                                  &form_list));
     // There should be two results -- the exact one, and the PSL-matched one.
     EXPECT_EQ(2u, form_list.size());
     index_non_psl = 0;
@@ -887,7 +886,7 @@ TEST_F(NativeBackendLibsecretTest, RemoveLoginsSyncedBetween) {
   CheckRemoveLoginsBetween(SYNCED);
 }
 
-TEST_F(NativeBackendLibsecretTest, DisableAutoSignInForAllLogins) {
+TEST_F(NativeBackendLibsecretTest, DisableAutoSignInForOrigins) {
   NativeBackendLibsecret backend(42);
   backend.Init();
   form_google_.skip_zero_click = false;
@@ -897,7 +896,7 @@ TEST_F(NativeBackendLibsecretTest, DisableAutoSignInForAllLogins) {
   VerifiedAdd(&backend, form_facebook_);
 
   EXPECT_EQ(2u, global_mock_libsecret_items->size());
-  for (const auto& item : *global_mock_libsecret_items)
+  for (auto* item : *global_mock_libsecret_items)
     CheckUint32Attribute(item, "should_skip_zero_click", 0);
 
   // Set the canonical forms to the updated value for the following comparison.
@@ -906,16 +905,22 @@ TEST_F(NativeBackendLibsecretTest, DisableAutoSignInForAllLogins) {
   PasswordStoreChangeList expected_changes;
   expected_changes.push_back(
       PasswordStoreChange(PasswordStoreChange::UPDATE, form_facebook_));
-  expected_changes.push_back(
-      PasswordStoreChange(PasswordStoreChange::UPDATE, form_google_));
 
   PasswordStoreChangeList changes;
-  EXPECT_TRUE(backend.DisableAutoSignInForAllLogins(&changes));
+  EXPECT_TRUE(backend.DisableAutoSignInForOrigins(
+      base::Bind(&GURL::operator==, base::Unretained(&form_facebook_.origin)),
+      &changes));
   CheckPasswordChanges(expected_changes, changes);
 
   EXPECT_EQ(2u, global_mock_libsecret_items->size());
-  for (const auto& item : *global_mock_libsecret_items)
-    CheckUint32Attribute(item, "should_skip_zero_click", 1);
+  CheckStringAttribute((*global_mock_libsecret_items)[0],
+                       "origin_url", form_google_.origin.spec());
+  CheckUint32Attribute((*global_mock_libsecret_items)[0],
+                       "should_skip_zero_click", 0);
+  CheckStringAttribute((*global_mock_libsecret_items)[1],
+                       "origin_url", form_facebook_.origin.spec());
+  CheckUint32Attribute((*global_mock_libsecret_items)[1],
+                       "should_skip_zero_click", 1);
 }
 
 TEST_F(NativeBackendLibsecretTest, SomeKeyringAttributesAreMissing) {
@@ -928,14 +933,14 @@ TEST_F(NativeBackendLibsecretTest, SomeKeyringAttributesAreMissing) {
   // Remove a string attribute.
   (*global_mock_libsecret_items)[0]->RemoveAttribute("avatar_url");
   // Remove an integer attribute.
-  (*global_mock_libsecret_items)[0]->RemoveAttribute("ssl_valid");
+  (*global_mock_libsecret_items)[0]->RemoveAttribute("times_used");
 
   ScopedVector<autofill::PasswordForm> form_list;
   EXPECT_TRUE(backend.GetAutofillableLogins(&form_list));
 
   EXPECT_EQ(1u, form_list.size());
   EXPECT_EQ(GURL(""), form_list[0]->icon_url);
-  EXPECT_FALSE(form_list[0]->ssl_valid);
+  EXPECT_EQ(0, form_list[0]->times_used);
 }
 
 TEST_F(NativeBackendLibsecretTest, ReadDuplicateForms) {

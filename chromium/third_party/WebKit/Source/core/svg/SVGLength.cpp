@@ -73,8 +73,16 @@ bool SVGLength::operator==(const SVGLength& other) const
 
 float SVGLength::value(const SVGLengthContext& context) const
 {
+    if (isCalculated())
+        return context.resolveValue(*asCSSPrimitiveValue(), unitMode());
+
     return context.convertValueToUserUnits(
         m_value->getFloatValue(), unitMode(), m_value->typeWithCalcResolved());
+}
+
+void SVGLength::setValueAsNumber(float value)
+{
+    m_value = CSSPrimitiveValue::create(value, CSSPrimitiveValue::UnitType::UserUnits);
 }
 
 void SVGLength::setValue(float value, const SVGLengthContext& context)
@@ -84,9 +92,15 @@ void SVGLength::setValue(float value, const SVGLengthContext& context)
         m_value->typeWithCalcResolved());
 }
 
-bool isSupportedCSSUnitType(CSSPrimitiveValue::UnitType type)
+static bool isCalcCSSUnitType(CSSPrimitiveValue::UnitType type)
 {
-    return (CSSPrimitiveValue::isLength(type) || type == CSSPrimitiveValue::UnitType::Number || type == CSSPrimitiveValue::UnitType::Percentage)
+    return type >= CSSPrimitiveValue::UnitType::Calc && type <= CSSPrimitiveValue::UnitType::CalcPercentageWithLengthAndNumber;
+}
+
+static bool isSupportedCSSUnitType(CSSPrimitiveValue::UnitType type)
+{
+    return (CSSPrimitiveValue::isLength(type) || type == CSSPrimitiveValue::UnitType::Number
+        || type == CSSPrimitiveValue::UnitType::Percentage || isCalcCSSUnitType(type))
         && type != CSSPrimitiveValue::UnitType::QuirkyEms;
 }
 
@@ -134,13 +148,12 @@ SVGParsingError SVGLength::setValueAsString(const String& string)
     }
 
     CSSParserContext svgParserContext(SVGAttributeMode, nullptr);
-    CSSValue* parsed = CSSParser::parseSingleValue(CSSPropertyX, string, svgParserContext);
+    const CSSValue* parsed = CSSParser::parseSingleValue(CSSPropertyX, string, svgParserContext);
     if (!parsed || !parsed->isPrimitiveValue())
         return SVGParseStatus::ExpectedLength;
 
-    CSSPrimitiveValue* newValue = toCSSPrimitiveValue(parsed);
-    // TODO(fs): Enable calc for SVG lengths
-    if (newValue->isCalculated() || !isSupportedCSSUnitType(newValue->typeWithCalcResolved()))
+    const CSSPrimitiveValue* newValue = toCSSPrimitiveValue(parsed);
+    if (!isSupportedCSSUnitType(newValue->typeWithCalcResolved()))
         return SVGParseStatus::ExpectedLength;
 
     m_value = newValue;
@@ -207,21 +220,18 @@ SVGLengthMode SVGLength::lengthModeForAnimatedLengthAttribute(const QualifiedNam
 
 bool SVGLength::negativeValuesForbiddenForAnimatedLengthAttribute(const QualifiedName& attrName)
 {
-    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, s_noNegativeValuesSet, ());
-
-    if (s_noNegativeValuesSet.isEmpty()) {
-        s_noNegativeValuesSet.add(SVGNames::frAttr);
-        s_noNegativeValuesSet.add(SVGNames::rAttr);
-        s_noNegativeValuesSet.add(SVGNames::rxAttr);
-        s_noNegativeValuesSet.add(SVGNames::ryAttr);
-        s_noNegativeValuesSet.add(SVGNames::widthAttr);
-        s_noNegativeValuesSet.add(SVGNames::heightAttr);
-        s_noNegativeValuesSet.add(SVGNames::markerWidthAttr);
-        s_noNegativeValuesSet.add(SVGNames::markerHeightAttr);
-        s_noNegativeValuesSet.add(SVGNames::textLengthAttr);
-    }
-
-    return s_noNegativeValuesSet.contains(attrName);
+    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, noNegativeValuesSet, ({
+        SVGNames::frAttr,
+        SVGNames::rAttr,
+        SVGNames::rxAttr,
+        SVGNames::ryAttr,
+        SVGNames::widthAttr,
+        SVGNames::heightAttr,
+        SVGNames::markerWidthAttr,
+        SVGNames::markerHeightAttr,
+        SVGNames::textLengthAttr,
+    }));
+    return noNegativeValuesSet.contains(attrName);
 }
 
 void SVGLength::add(SVGPropertyBase* other, SVGElement* contextElement)
@@ -249,7 +259,15 @@ void SVGLength::calculateAnimatedValue(SVGAnimationElement* animationElement,
 
     ASSERT(unitMode() == lengthModeForAnimatedLengthAttribute(animationElement->attributeName()));
 
-    CSSPrimitiveValue::UnitType newUnit = percentage < 0.5 ? fromLength->typeWithCalcResolved() : toLength->typeWithCalcResolved();
+    // TODO(shanmuga.m): Construct a calc() expression if the units fall in different categories.
+    CSSPrimitiveValue::UnitType newUnit = CSSPrimitiveValue::UnitType::UserUnits;
+    if (percentage < 0.5) {
+        if (!fromLength->isCalculated())
+            newUnit = fromLength->typeWithCalcResolved();
+    } else {
+        if (!toLength->isCalculated())
+            newUnit = toLength->typeWithCalcResolved();
+    }
     animatedNumber = lengthContext.convertValueFromUserUnits(animatedNumber, unitMode(), newUnit);
     m_value = CSSPrimitiveValue::create(animatedNumber, newUnit);
 }

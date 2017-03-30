@@ -14,6 +14,7 @@ namespace blink {
 
 class FrameView;
 class LayoutAPIShim;
+class LayoutViewItem;
 class Node;
 class ObjectPaintProperties;
 
@@ -32,12 +33,13 @@ public:
 
     LayoutItem() : m_layoutObject(0) { }
 
-    // TODO(leviw): This should be an UnspecifiedBoolType, but
+    // TODO(leviw): This should be "explicit operator bool", but
     // using this operator allows the API to be landed in pieces.
     // https://crbug.com/499321
     operator LayoutObject*() const { return m_layoutObject; }
 
-    // TODO(pilgrim): Remove this when we replace the operator above with UnspecifiedBoolType.
+    // TODO(pilgrim): Remove this when we replace the operator above with
+    // operator bool.
     bool isNull() const
     {
         return !m_layoutObject;
@@ -178,15 +180,27 @@ public:
         return m_layoutObject->styleRef();
     }
 
+    ComputedStyle* mutableStyle() const
+    {
+        return m_layoutObject->mutableStyle();
+    }
+
     ComputedStyle& mutableStyleRef() const
     {
         return m_layoutObject->mutableStyleRef();
+    }
+
+    void setStyle(PassRefPtr<ComputedStyle> style)
+    {
+        m_layoutObject->setStyle(style);
     }
 
     LayoutSize offsetFromContainer(const LayoutItem& item) const
     {
         return m_layoutObject->offsetFromContainer(item.layoutObject());
     }
+
+    LayoutViewItem view() const;
 
     FrameView* frameView() const
     {
@@ -228,6 +242,11 @@ public:
         m_layoutObject->computeLayerHitTestRects(layerRects);
     }
 
+    FloatQuad localToAbsoluteQuad(const FloatQuad& quad, MapCoordinatesFlags mode = 0) const
+    {
+        return m_layoutObject->localToAbsoluteQuad(quad, mode);
+    }
+
     FloatPoint absoluteToLocal(const FloatPoint& point, MapCoordinatesFlags mode = 0) const
     {
         return m_layoutObject->absoluteToLocal(point, mode);
@@ -241,6 +260,16 @@ public:
     void setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReasonForTracing reason)
     {
         m_layoutObject->setNeedsLayoutAndPrefWidthsRecalc(reason);
+    }
+
+    bool wasNotifiedOfSubtreeChange() const
+    {
+        return m_layoutObject->wasNotifiedOfSubtreeChange();
+    }
+
+    void handleSubtreeModifications()
+    {
+        m_layoutObject->handleSubtreeModifications();
     }
 
     bool needsOverflowRecalcAfterStyleChange() const
@@ -268,9 +297,14 @@ public:
         return m_layoutObject->resolveColor(colorProperty);
     }
 
-    ObjectPaintProperties* objectPaintProperties() const
+    const ObjectPaintProperties* objectPaintProperties() const
     {
         return m_layoutObject->objectPaintProperties();
+    }
+
+    void invalidatePaintRectangle(const LayoutRect& dirtyRect) const
+    {
+        m_layoutObject->invalidatePaintRectangle(dirtyRect);
     }
 
 protected:

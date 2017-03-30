@@ -136,10 +136,6 @@ const char kChromeUITabModalConfirmDialogURL[] =
     "chrome://tab-modal-confirm-dialog/";
 #endif
 
-#if !defined(OS_ANDROID)
-const char kChromeUICopresenceURL[] = "chrome://copresence/";
-#endif
-
 #if defined(ENABLE_WEBRTC)
 const char kChromeUIWebRtcLogsURL[] = "chrome://webrtc-logs/";
 #endif
@@ -254,11 +250,10 @@ const char kChromeUITouchIconHost[] = "touch-icon";
 const char kChromeUITranslateInternalsHost[] = "translate-internals";
 const char kChromeUIUberFrameHost[] = "uber-frame";
 const char kChromeUIUberHost[] = "chrome";
+const char kChromeUIUsbInternalsHost[] = "usb-internals";
 const char kChromeUIUserActionsHost[] = "user-actions";
 const char kChromeUIVersionHost[] = "version";
 const char kChromeUIWorkersHost[] = "workers";
-
-const char kChromeUIThemePath[] = "theme";
 
 #if defined(ENABLE_PRINT_PREVIEW)
 const char kChromeUIPrintHost[] = "print";
@@ -325,10 +320,6 @@ const char kChromeUIMetroFlowHost[] = "make-metro";
 const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
 #endif
 
-#if !defined(OS_ANDROID)
-const char kChromeUICopresenceHost[] = "copresence";
-#endif
-
 #if defined(ENABLE_WEBRTC)
 const char kChromeUIWebRtcLogsHost[] = "webrtc-logs";
 #endif
@@ -359,6 +350,7 @@ const char kResetProfileSettingsSubPage[] = "resetProfileSettings";
 const char kSearchEnginesSubPage[] = "searchEngines";
 const char kSearchSubPage[] = "search";
 const char kSearchUsersSubPage[] = "search#Users";
+const char kSignOutSubPage[] = "signOut";
 const char kSyncSetupSubPage[] = "syncSetup";
 const char kTriggeredResetProfileSettingsSubPage[] =
     "triggeredResetProfileSettings";
@@ -435,6 +427,8 @@ const char kChromeAccessibilityHelpURL[] =
     "https://support.google.com/chromebook/?p=accessibility_menu";
 const char kChromeAccessibilitySettingsURL[] =
     "/chromevox/background/options.html";
+const char kChromePaletteHelpURL[] =
+    "https://support.google.com/chromebook?p=stylus_help";
 #endif  // defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
@@ -589,7 +583,7 @@ const char kNaturalScrollHelpURL[] =
 
 #if defined(OS_CHROMEOS)
 const char kLearnMoreEnterpriseURL[] =
-    "https://support.google.com/chromebook/answer/2535613";
+    "https://support.google.com/chromebook/?p=managed";
 #endif
 
 const char kRemoveNonCWSExtensionURL[] =
@@ -632,6 +626,7 @@ const char* const kChromeHostURLs[] = {
   kChromeUITermsHost,
   kChromeUIThumbnailListHost,
   kChromeUITranslateInternalsHost,
+  kChromeUIUsbInternalsHost,
   kChromeUIUserActionsHost,
   kChromeUIVersionHost,
   content::kChromeUIAccessibilityHost,
@@ -667,8 +662,6 @@ const char* const kChromeHostURLs[] = {
   kChromeUIOfflineInternalsHost,
   kChromeUIPopularSitesInternalsHost,
   kChromeUISnippetsInternalsHost,
-#else  // non-mobile
-  kChromeUICopresenceHost,
 #endif
 #if defined(OS_CHROMEOS)
   kChromeUICertificateManagerHost,
@@ -723,6 +716,7 @@ const char* const kChromeDebugURLs[] = {
   content::kChromeUIGpuCleanURL,
   content::kChromeUIGpuCrashURL,
   content::kChromeUIGpuHangURL,
+  content::kChromeUIMemoryExhaustURL,
   content::kChromeUIPpapiFlashCrashURL,
   content::kChromeUIPpapiFlashHangURL,
   chrome::kChromeUIQuitURL,

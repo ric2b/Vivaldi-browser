@@ -412,9 +412,10 @@ AppCacheServiceImpl::AppCacheServiceImpl(
 
 AppCacheServiceImpl::~AppCacheServiceImpl() {
   DCHECK(backends_.empty());
+  FOR_EACH_OBSERVER(Observer, observers_, OnServiceDestructionImminent(this));
   for (auto* helper : pending_helpers_)
     helper->Cancel();
-  STLDeleteElements(&pending_helpers_);
+  base::STLDeleteElements(&pending_helpers_);
   if (quota_client_)
     quota_client_->NotifyAppCacheDestroyed();
 

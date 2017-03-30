@@ -12,9 +12,9 @@
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_request.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
 #include "components/url_formatter/elide_url.h"
@@ -31,7 +31,7 @@
 #include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #else
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #endif
 
 namespace {
@@ -44,7 +44,7 @@ const int64_t kRequestLargeQuotaThreshold = 5 * 1024 * 1024;
 
 // QuotaPermissionRequest ---------------------------------------------
 
-class QuotaPermissionRequest : public PermissionBubbleRequest {
+class QuotaPermissionRequest : public PermissionRequest {
  public:
   QuotaPermissionRequest(
       ChromeQuotaPermissionContext* context,
@@ -54,7 +54,7 @@ class QuotaPermissionRequest : public PermissionBubbleRequest {
   ~QuotaPermissionRequest() override;
 
  private:
-  // PermissionBubbleRequest:
+  // PermissionRequest:
   int GetIconId() const override;
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
@@ -62,7 +62,7 @@ class QuotaPermissionRequest : public PermissionBubbleRequest {
   void PermissionDenied() override;
   void Cancelled() override;
   void RequestFinished() override;
-  PermissionBubbleType GetPermissionBubbleType() const override;
+  PermissionRequestType GetPermissionRequestType() const override;
 
   scoped_refptr<ChromeQuotaPermissionContext> context_;
   GURL origin_url_;
@@ -121,8 +121,8 @@ void QuotaPermissionRequest::RequestFinished() {
   delete this;
 }
 
-PermissionBubbleType QuotaPermissionRequest::GetPermissionBubbleType() const {
-  return PermissionBubbleType::QUOTA;
+PermissionRequestType QuotaPermissionRequest::GetPermissionRequestType() const {
+  return PermissionRequestType::QUOTA;
 }
 
 #if defined(OS_ANDROID)
@@ -270,10 +270,10 @@ void ChromeQuotaPermissionContext::RequestQuotaPermission(
     return;
   }
 #else
-  PermissionBubbleManager* bubble_manager =
-      PermissionBubbleManager::FromWebContents(web_contents);
-  if (bubble_manager) {
-    bubble_manager->AddRequest(
+  PermissionRequestManager* permission_request_manager =
+      PermissionRequestManager::FromWebContents(web_contents);
+  if (permission_request_manager) {
+    permission_request_manager->AddRequest(
         new QuotaPermissionRequest(this, params.origin_url, callback));
     return;
   }

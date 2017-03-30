@@ -269,6 +269,7 @@
 <translation id="3392045790598181549"><ph name="NAME" />, ಮೆನು ಐಟಂ</translation>
 <translation id="3406283310380167331">ಫಾರ್ಮ್‌ಗಳ ಪಟ್ಟಿಯನ್ನು ತೋರಿಸಿ</translation>
 <translation id="3422338090358345848">ಕೀಬೋರ್ಡ್ ಎಕ್ಸ್‌ಪ್ಲೋರರ್ ಅನ್ನು ತೆರೆಯಿರಿ</translation>
+<translation id="3423495725743882470">ಸಾಲು $1 ಕಾಲಮ್ $2</translation>
 <translation id="3457000393508828486">ಭಾಗಶಃ ಒತ್ತಿದಾಗ</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, ಬಟನ್</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}one{#}other{#}}</translation>
 <translation id="3801735343383419236">ಸ್ವಯಂಪೂರ್ಣಗೊಳಿಸುವಿಕೆ ಪಟ್ಟಿ</translation>
 <translation id="3810838688059735925">ವೀಡಿಯೊ</translation>
+<translation id="3812237531158591503">$1 ಅಂಟಿಸಿ.</translation>
 <translation id="3816633764618089385">ಮುಂದಿನ ಮಾಧ್ಯಮ</translation>
 <translation id="3819376190738087562">ಯಾವುದೇ ಜಂಪ್‌ಗಳಿಲ್ಲ.</translation>
 <translation id="385383972552776628">ಆಯ್ಕೆಗಳ ಪುಟವನ್ನು ತೆರೆಯಿರಿ</translation>
@@ -411,6 +413,7 @@
 <translation id="5000760171916499057">ಯಾವುದೇ ಫಾರ್ಮ್‌ಗಳಿಲ್ಲ.</translation>
 <translation id="5005670136041063723">ಇನ್ಯಾವುದೇ ಒಂದೇ ರೀತಿಯ ಅಂಶಗಳಿಲ್ಲ</translation>
 <translation id="501473567976723023">ಜನವರಿ</translation>
+<translation id="5040591161308540832">ಕೋಷ್ಟಕ $1, $3 ರಿಂದ $2</translation>
 <translation id="5041394372352067729">ಬ್ರೈಲಿ ಪ್ರದರ್ಶನವನ್ನು ಪುಟದ ಮೇಲ್ಭಾಗಕ್ಕೆ ಸರಿಸು</translation>
 <translation id="5042770794184672516">ಧ್ವನಿಯ ವಾಲ್ಯೂಮ್ ಹೆಚ್ಚಿಸಿ</translation>
 <translation id="5050015258024679800">ಹಿಂದಿನ ಹಂತದ 4 ಶಿರೋನಾಮೆ</translation>
@@ -505,7 +508,7 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="5728409797179002635">ಯಾವುದೇ ಕೋಷ್ಟಕ ಕಂಡುಬಂದಿಲ್ಲ.</translation>
 <translation id="5748623122140342504">ಹಿಂದಿನ ಹಂತದ 5 ಶಿರೋನಾಮೆ</translation>
 <translation id="5750633686117194034">ಯಾವುದೇ ಮಾರ್ಪಡಿಸುವಿಕೆಯನ್ನು ಒತ್ತಲಾಗಿಲ್ಲ; ದಯವಿಟ್ಟು ಒಂದು ಅಥವಾ ಇನ್ನಷ್ಟು ಮಾರ್ಪಾಡುಗಳನ್ನು ಒತ್ತಿ ಮತ್ತು ಒತ್ತಿ ಹಿಡಿಯಿರಿ; ಒಮ್ಮೆ ಮುಗಿದ ನಂತರ ನಿಮ್ಮ ಬೆರಳುಗಳನ್ನು ಮೇಲೆಕ್ಕೆತ್ತಿ ಹಾಗೂ ನೀವು ಕೀಲಿಗಳ ಹೊಂದಿಸುವಿಕೆಯನ್ನು ಕೇಳುವಿರಿ. ನಿರ್ಗಮಿಸಲು ಟ್ಯಾಬ್.</translation>
-<translation id="5788275253279308023">ಅಜ್ಞಾತ ವಿಂಡೋ <ph name="TITLE" /> ಟ್ಯಾಬ್</translation>
+<translation id="5788275253279308023">ಅದೃಶ್ಯ ವಿಂಡೋ <ph name="TITLE" /> ಟ್ಯಾಬ್</translation>
 <translation id="5806206155699461681">ನಿರ್ದಿಷ್ಟ ಸೈಟ್‌ಗಳನ್ನು ವರ್ಧಿಸಿ (Google ಹುಡುಕಾಟದಂತಹದು).</translation>
 <translation id="5819072574982403430">ಟ್ರೀ ಐಟಂ</translation>
 <translation id="5826479389509458994">ಸಾಲು <ph name="ROW" /> ಕಾಲಮ್ <ph name="COL" /></translation>
@@ -518,7 +521,6 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="5876817486144482042">ಧ್ವನಿಯ ವಾಲ್ಯೂಮ್ ಕಡಿಮೆ ಮಾಡಿ</translation>
 <translation id="5887397643266327462">ಬ್ರೈಲಿ ಶೀರ್ಷಿಕೆಗಳು ಸಕ್ರಿಯವಾಗಿವೆ.</translation>
 <translation id="5891934789323004067">ಕೋಷ್ಠಕ</translation>
-<translation id="5919442531159595654">ನಕಲು ಮಾಡಿ.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{ಸಮ}one{# ಸಮ ಚಿಹ್ನೆಗಳು}other{# ಸಮ ಚಿಹ್ನೆಗಳು}}</translation>
 <translation id="5939518447894949180">ಮರುಹೊಂದಿಸು</translation>
 <translation id="5948123859135882163">ರಚನಾತ್ಮಕ ಮತ್ತು ಶಬ್ದಾರ್ಥದ ನಡುವಿನ ಗಣಿತದ ಅಭಿವ್ಯಕ್ತಿಗಳ ವ್ಯಾಖ್ಯಾನವನ್ನು ಬದಲಾಯಿಸಿ</translation>
@@ -554,6 +556,8 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="6355910664415701303">ಮುಂದಿನ ಯಾವುದೇ ಪಟ್ಟಿ ಐಟಂಯಿಲ್ಲ.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">ಹಿಂದಿನ ಶಿರೋನಾಮೆ</translation>
+<translation id="6378565991815958969">$1 ನಕಲಿಸಿ.</translation>
+<translation id="6385591741672306837">ಕಾಲಮ್</translation>
 <translation id="6387719785439924554">ಪಕ್ಕದಲ್ಲಿ</translation>
 <translation id="6411426777058107714">ಹಿಂದಿನ ರೇಡಿಯೊ ಬಟನ್ ಇಲ್ಲ.</translation>
 <translation id="6414968628640960377">ಹಿಂದಿನ ವಿಭಿನ್ನ ಅಂಶ.</translation>
@@ -653,7 +657,6 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="7532613204005497612">ಜೂನ್</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, ಸ್ಲೈಡರ್</translation>
 <translation id="7552432549459840808">ಉಪಯುಕ್ತ Chrome ಶಾರ್ಟ್‌ಕಟ್‌ಗಳು</translation>
-<translation id="7586163296341959563">ಅಂಟಿಸು.</translation>
 <translation id="7596919493010894443">ಆಯ್ಕೆ ತೆರವುಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="7604026522577407655">ಪ್ರಸ್ತುತ ಕಾಲಮ್‌ನ ಆರಂಭಕ್ಕೆ ಹೋಗಿ</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -682,7 +685,7 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="7870596830398826354">ಗಣಿತ ML ಟ್ರಿ</translation>
 <translation id="78826985582142166">sldr</translation>
 <translation id="7894517696028036636">ChromeVox ಕ್ಲಾಸಿಕ್‌‌ ಟಾಗಲ್ ಮಾಡಿ</translation>
-<translation id="7895896691902835279">ಅಜ್ಞಾತ ಲಿಂಕ್</translation>
+<translation id="7895896691902835279">ಅಪರಿಚಿತ ಲಿಂಕ್</translation>
 <translation id="7927711904086083099">ಆಯ್ಕೆಮಾಡಲಾಗಿಲ್ಲ</translation>
 <translation id="7935627501098484003">ಸಮಯ ನಿಯಂತ್ರಣ</translation>
 <translation id="7939428177581522200">ಆಯ್ಕೆಗೆ ಸೇರಿಸಲಾಗಿದೆ</translation>
@@ -704,8 +707,8 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="8153880621934657047">ಕೋಷ್ಟಕದ ಒಳಗೆ ಇಲ್ಲ.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{ಅಡಿಗೆರೆ}one{# ಅಡಿಗೆರೆಗಳು}other{# ಅಡಿಗೆರೆಗಳು}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">ಸಾಲು</translation>
 <translation id="8186185314313222077">ಪೂರ್ಣ ಪರದೆಯನ್ನು ಟಾಗಲ್ ಮಾಡಿ</translation>
-<translation id="81960742267269908">ಕತ್ತರಿಸಿ.</translation>
 <translation id="8199231515320852133">ಪ್ರಸ್ತುತ ಸೆಲ್‌ನ ಶಿರೋನಾಮೆಗಳನ್ನು ಪ್ರಕಟಿಸಿ</translation>
 <translation id="820417203470636242">ಕೋಶವನ್ನು ಖಾಲಿಗೊಳಿಸಿ.</translation>
 <translation id="8215202828671303819">ಬಹು ಆಯ್ಕೆ</translation>
@@ -782,6 +785,7 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="9077213568694924680">ಆಯ್ಕೆಯಿಂದ ತೆಗೆದುಹಾಕಲಾಗಿದೆ</translation>
 <translation id="9082874451376019682">ಹಿಂದಿನ ಸ್ಲೈಡರ್ ಇಲ್ಲ.</translation>
 <translation id="9089864840575085222">ಸೈಕಲ್ ಟೈಪಿಂಗ್ ಇಕೋ</translation>
+<translation id="9105227991373418255">$1 ಕತ್ತರಿಸಿ.</translation>
 <translation id="9107530006868467849">ಯಾವುದೇ ಹಿಂದಿನ ಮಾಧ್ಯಮ ವಿಜೆಟ್ ಇಲ್ಲ.</translation>
 <translation id="9108370397979208512">ಮ್ಯಾಥ್</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Chrome ಬ್ರೌಸರ್ ಮೆನು ತೆರೆಯಲು, Alt+F ಒತ್
 <translation id="9115913704608474258">ನವೆಂಬರ್</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">ಟ್ಯಾಬ್</translation>
 <translation id="9151211641321628915">ಪ್ರಸ್ತುತ ಸ್ಥಾನದ ಸಂಕ್ಷಿಪ್ತ ವಿವರಣೆಯ ಪ್ರಕಟಣೆ</translation>
 <translation id="9153606228985488238">ಪಿಚ್‌ <ph name="PERCENT" /> ಶೇಕಡಾ ಹೊಂದಿದೆ</translation>
 <translation id="9160096769946561184">ಪ್ರಸ್ತುತ ಕಾಲಮ್‌ನ ಅಂತ್ಯಕ್ಕೆ ಹೋಗಿ</translation>

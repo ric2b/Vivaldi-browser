@@ -186,22 +186,22 @@ AtomicString HTMLSlotElement::name() const
     return normalizeSlotName(fastGetAttribute(HTMLNames::nameAttr));
 }
 
-void HTMLSlotElement::attach(const AttachContext& context)
+void HTMLSlotElement::attachLayoutTree(const AttachContext& context)
 {
     for (auto& node : m_distributedNodes) {
         if (node->needsAttach())
-            node->attach(context);
+            node->attachLayoutTree(context);
     }
 
-    HTMLElement::attach(context);
+    HTMLElement::attachLayoutTree(context);
 }
 
-void HTMLSlotElement::detach(const AttachContext& context)
+void HTMLSlotElement::detachLayoutTree(const AttachContext& context)
 {
     for (auto& node : m_distributedNodes)
         node->lazyReattachIfAttached();
 
-    HTMLElement::detach(context);
+    HTMLElement::detachLayoutTree(context);
 }
 
 void HTMLSlotElement::attributeChanged(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& newValue, AttributeModificationReason reason)
@@ -233,7 +233,7 @@ Node::InsertionNotificationRequest HTMLSlotElement::insertedInto(ContainerNode* 
         root->owner()->setNeedsDistributionRecalc();
         // Relevant DOM Standard: https://dom.spec.whatwg.org/#concept-node-insert
         // - 6.4:  Run assign slotables for a tree with node's tree and a set containing each inclusive descendant of node that is a slot.
-        if (!wasInShadowTreeBeforeInserted(*this, *insertionPoint))
+        if (root->isV1() && !wasInShadowTreeBeforeInserted(*this, *insertionPoint))
             root->ensureSlotAssignment().slotAdded(*this);
     }
 
@@ -277,7 +277,7 @@ void HTMLSlotElement::removedFrom(ContainerNode* insertionPoint)
 
 void HTMLSlotElement::willRecalcStyle(StyleRecalcChange change)
 {
-    if (change < Inherit && getStyleChangeType() < SubtreeStyleChange)
+    if (change < IndependentInherit && getStyleChangeType() < SubtreeStyleChange)
         return;
 
     for (auto& node : m_distributedNodes)

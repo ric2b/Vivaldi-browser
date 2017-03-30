@@ -18,6 +18,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
 #include "components/prefs/json_pref_store.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/nqe/network_quality_observation_source.h"
 
@@ -35,6 +36,7 @@ class ProxyConfigService;
 class SdchOwner;
 class URLRequestContext;
 class WriteToFileNetLogObserver;
+class BoundedFileNetLogObserver;
 }  // namespace net
 
 namespace cronet {
@@ -49,7 +51,8 @@ bool CronetUrlRequestContextAdapterRegisterJni(JNIEnv* env);
 
 // Adapter between Java CronetUrlRequestContext and net::URLRequestContext.
 class CronetURLRequestContextAdapter
-    : public net::NetworkQualityEstimator::RTTObserver,
+    : public net::NetworkQualityEstimator::EffectiveConnectionTypeObserver,
+      public net::NetworkQualityEstimator::RTTObserver,
       public net::NetworkQualityEstimator::ThroughputObserver {
  public:
   explicit CronetURLRequestContextAdapter(
@@ -82,22 +85,29 @@ class CronetURLRequestContextAdapter
                          const base::android::JavaParamRef<jstring>& jfile_name,
                          jboolean jlog_all);
 
+  // Starts NetLog logging to disk with a bounded amount of disk space. This
+  // can be called on any thread.
+  void StartNetLogToDisk(JNIEnv* env,
+                         const base::android::JavaParamRef<jobject>& jcaller,
+                         const base::android::JavaParamRef<jstring>& jdir_name,
+                         jboolean jlog_all,
+                         jint jmax_size);
+
   // Stops NetLog logging to file. This can be called on any thread. This will
   // flush any remaining writes to disk.
   void StopNetLog(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& jcaller);
+
+  // Posts a task to Network thread to get serialized results of certificate
+  // verifications of |context_|'s |cert_verifier|.
+  void GetCertVerifierData(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& jcaller);
 
   // Default net::LOAD flags used to create requests.
   int default_load_flags() const { return default_load_flags_; }
 
   // Called on main Java thread to initialize URLRequestContext.
   void InitRequestContextOnMainThread();
-
-  // Enables the network quality estimator.
-  // TODO(tbansal):  http://crbug.com/618034 Remove this API.
-  void EnableNetworkQualityEstimator(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& jcaller);
 
   // Configures the network quality estimator to observe localhost requests, and
   // to consider smaller responses when observing throughput for testing. This
@@ -133,12 +143,12 @@ class CronetURLRequestContextAdapter
 
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner() const;
 
+  // Serializes results of certificate verifications of |context_|'s
+  // |cert_verifier| on the Network thread.
+  void GetCertVerifierDataOnNetworkThread();
+
   // Gets the file thread. Create one if there is none.
   base::Thread* GetFileThread();
-
-  // Instantiate and configure the network quality estimator.
-  // TODO(tbansal):  http://crbug.com/618034 Remove this API.
-  void EnableNetworkQualityEstimatorOnNetworkThread();
 
   // Configures the network quality estimator to observe requests to localhost,
   // as well as to use smaller responses when estimating throughput. This
@@ -150,6 +160,11 @@ class CronetURLRequestContextAdapter
   void ProvideRTTObservationsOnNetworkThread(bool should);
   void ProvideThroughputObservationsOnNetworkThread(bool should);
 
+  // net::NetworkQualityEstimator::EffectiveConnectionTypeObserver
+  // implementation.
+  void OnEffectiveConnectionTypeChanged(
+      net::EffectiveConnectionType effective_connection_type) override;
+
   // net::NetworkQualityEstimator::RTTObserver implementation.
   void OnRTTObservation(int32_t rtt_ms,
                         const base::TimeTicks& timestamp,
@@ -160,6 +175,19 @@ class CronetURLRequestContextAdapter
       int32_t throughput_kbps,
       const base::TimeTicks& timestamp,
       net::NetworkQualityObservationSource source) override;
+
+  // Same as StartNetLogToDisk, but called only on the network thread.
+  void StartNetLogToBoundedFileOnNetworkThread(const std::string& dir_path,
+                                               bool include_socket_bytes,
+                                               int size);
+
+  // Stops NetLog logging to file by calling StopObserving() and destroying
+  // the |bounded_file_observer_|.
+  void StopBoundedFileNetLogOnNetworkThread();
+
+  // Callback for StopObserving() that unblocks the Java ConditionVariable and
+  // signals that it is safe to access the NetLog files.
+  void StopNetLogCompleted();
 
   // Helper method to stop NetLog logging to file. This can be called on any
   // thread. This will flush any remaining writes to disk.
@@ -175,6 +203,8 @@ class CronetURLRequestContextAdapter
   // |write_to_file_observer_lock_|.
   std::unique_ptr<net::WriteToFileNetLogObserver> write_to_file_observer_;
   base::Lock write_to_file_observer_lock_;
+
+  std::unique_ptr<net::BoundedFileNetLogObserver> bounded_file_observer_;
 
   // |pref_service_| should outlive the HttpServerPropertiesManager owned by
   // |context_|.

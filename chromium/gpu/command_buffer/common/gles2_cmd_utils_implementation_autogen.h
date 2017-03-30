@@ -655,9 +655,6 @@ static const GLES2Util::EnumToString enum_to_string_table[] = {
         0x78FC, "GL_RGB_YCBCR_420V_CHROMIUM",
     },
     {
-        0x78FD, "GL_GPU_MEMORY_BUFFER_ID",
-    },
-    {
         0x8, "GL_CA_LAYER_EDGE_TOP_CHROMIUM",
     },
     {
@@ -3475,6 +3472,17 @@ std::string GLES2Util::GetStringAttachment(uint32_t value) {
       {GL_DEPTH_ATTACHMENT, "GL_DEPTH_ATTACHMENT"},
       {GL_STENCIL_ATTACHMENT, "GL_STENCIL_ATTACHMENT"},
       {GL_DEPTH_STENCIL_ATTACHMENT, "GL_DEPTH_STENCIL_ATTACHMENT"},
+  };
+  return GLES2Util::GetQualifiedEnumString(string_table,
+                                           arraysize(string_table), value);
+}
+
+std::string GLES2Util::GetStringAttachmentQuery(uint32_t value) {
+  static const EnumToString string_table[] = {
+      {GL_COLOR_ATTACHMENT0, "GL_COLOR_ATTACHMENT0"},
+      {GL_DEPTH_ATTACHMENT, "GL_DEPTH_ATTACHMENT"},
+      {GL_STENCIL_ATTACHMENT, "GL_STENCIL_ATTACHMENT"},
+      {GL_DEPTH_STENCIL_ATTACHMENT, "GL_DEPTH_STENCIL_ATTACHMENT"},
       {GL_COLOR_EXT, "GL_COLOR_EXT"},
       {GL_DEPTH_EXT, "GL_DEPTH_EXT"},
       {GL_STENCIL_EXT, "GL_STENCIL_EXT"},
@@ -3720,7 +3728,7 @@ std::string GLES2Util::GetStringFaceType(uint32_t value) {
                                            arraysize(string_table), value);
 }
 
-std::string GLES2Util::GetStringFrameBufferParameter(uint32_t value) {
+std::string GLES2Util::GetStringFramebufferParameter(uint32_t value) {
   static const EnumToString string_table[] = {
       {GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
        "GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE"},
@@ -3753,7 +3761,7 @@ std::string GLES2Util::GetStringFrameBufferParameter(uint32_t value) {
                                            arraysize(string_table), value);
 }
 
-std::string GLES2Util::GetStringFrameBufferTarget(uint32_t value) {
+std::string GLES2Util::GetStringFramebufferTarget(uint32_t value) {
   static const EnumToString string_table[] = {
       {GL_FRAMEBUFFER, "GL_FRAMEBUFFER"},
       {GL_DRAW_FRAMEBUFFER, "GL_DRAW_FRAMEBUFFER"},

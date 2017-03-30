@@ -29,8 +29,7 @@
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/x/x11_atom_cache.h"
-
-typedef union _XEvent XEvent;
+#include "ui/gfx/x/x11_types.h"
 
 namespace ui {
 
@@ -108,6 +107,10 @@ class EVENTS_DEVICES_X11_EXPORT DeviceDataManagerX11
 
     DT_LAST_ENTRY  // This must come last.
   };
+
+  // A Device ID number that can be passed to InvalidateScrollClasses that
+  // invalidates all devices.
+  static const int kAllDevices = -1;
 
   // Data struct to store extracted data from an input event.
   typedef std::map<int, double> EventData;
@@ -200,8 +203,9 @@ class EVENTS_DEVICES_X11_EXPORT DeviceDataManagerX11
                              double* y_offset);
 
   // Invalidate stored scroll class counters, since they can change when
-  // pointing at other windows.
-  void InvalidateScrollClasses();
+  // pointing at other windows. If kAllDevices is specified, all devices are
+  // invalidated.
+  void InvalidateScrollClasses(int device_id);
 
   // Extract data from a fling event. User must first verify the event type
   // with IsFlingEvent. Pointers shouldn't be NULL.
@@ -358,6 +362,9 @@ class EVENTS_DEVICES_X11_EXPORT DeviceDataManagerX11
   // Index table to find the valuator for DataType on the specific device
   // by valuator_lookup_[device_id][data_type].
   std::vector<int> valuator_lookup_[kMaxDeviceNum];
+
+  // Indicates if the user has disabled high precision scrolling support.
+  bool high_precision_scrolling_disabled_;
 
   // Index table to find the horizontal and vertical scroll valuator
   // numbers, scroll increments and scroll position.

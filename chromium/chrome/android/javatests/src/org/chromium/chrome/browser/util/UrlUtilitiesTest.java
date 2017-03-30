@@ -6,23 +6,28 @@ package org.chromium.chrome.browser.util;
 
 import android.test.suitebuilder.annotation.SmallTest;
 
-import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.NativeLibraryTestBase;
-
-import java.net.URI;
 
 /** Tests for {@link UrlUtilities}. */
 public class UrlUtilitiesTest extends NativeLibraryTestBase {
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        loadNativeLibraryNoBrowserProcess();
+    }
+
     @SmallTest
     public void testIsAcceptedScheme() {
         assertTrue(UrlUtilities.isAcceptedScheme("about:awesome"));
         assertTrue(UrlUtilities.isAcceptedScheme("data:data"));
         assertTrue(UrlUtilities.isAcceptedScheme(
-                "https://user:pass@:awesome.com:9000/bad-scheme:#fake:"));
+                "https://user:pass@awesome.com:9000/bad-scheme/#fake"));
         assertTrue(UrlUtilities.isAcceptedScheme("http://awesome.example.com/"));
-        assertTrue(UrlUtilities.isAcceptedScheme("file://awesome.example.com/"));
+        assertTrue(UrlUtilities.isAcceptedScheme("file://hostname/path/to/file"));
         assertTrue(UrlUtilities.isAcceptedScheme("inline:skates.co.uk"));
         assertTrue(UrlUtilities.isAcceptedScheme("javascript:alert(1)"));
+        assertTrue(UrlUtilities.isAcceptedScheme("http://foo.bar/has[square].html"));
 
         assertFalse(UrlUtilities.isAcceptedScheme("super:awesome"));
         assertFalse(UrlUtilities.isAcceptedScheme(
@@ -33,19 +38,18 @@ public class UrlUtilitiesTest extends NativeLibraryTestBase {
                  "google-search://https:password@example.com/?http:#http:"));
         assertFalse(UrlUtilities.isAcceptedScheme("chrome://http://version"));
         assertFalse(UrlUtilities.isAcceptedScheme(""));
-        assertFalse(UrlUtilities.isAcceptedScheme("  http://awesome.example.com/"));
-        assertFalse(UrlUtilities.isAcceptedScheme("ht\ntp://awesome.example.com/"));
     }
 
     @SmallTest
     public void testIsDownloadableScheme() {
         assertTrue(UrlUtilities.isDownloadableScheme("data:data"));
         assertTrue(UrlUtilities.isDownloadableScheme(
-                "https://user:pass@:awesome.com:9000/bad-scheme:#fake:"));
+                "https://user:pass@awesome.com:9000/bad-scheme:#fake:"));
         assertTrue(UrlUtilities.isDownloadableScheme("http://awesome.example.com/"));
-        assertTrue(UrlUtilities.isDownloadableScheme("filesystem://awesome.example.com/"));
+        assertTrue(UrlUtilities.isDownloadableScheme(
+                "filesystem:https://user:pass@google.com:99/t/foo;bar?q=a#ref"));
         assertTrue(UrlUtilities.isDownloadableScheme("blob:https://awesome.example.com/"));
-        assertTrue(UrlUtilities.isDownloadableScheme("file://awesome.example.com/"));
+        assertTrue(UrlUtilities.isDownloadableScheme("file://hostname/path/to/file"));
 
         assertFalse(UrlUtilities.isDownloadableScheme("inline:skates.co.uk"));
         assertFalse(UrlUtilities.isDownloadableScheme("javascript:alert(1)"));
@@ -58,56 +62,16 @@ public class UrlUtilitiesTest extends NativeLibraryTestBase {
                 "google-search://https:password@example.com/?http:#http:"));
         assertFalse(UrlUtilities.isDownloadableScheme("chrome://http://version"));
         assertFalse(UrlUtilities.isDownloadableScheme(""));
-        assertFalse(UrlUtilities.isDownloadableScheme("  http://awesome.example.com/"));
-        assertFalse(UrlUtilities.isDownloadableScheme("ht\ntp://awesome.example.com/"));
     }
 
     @SmallTest
     public void testIsValidForIntentFallbackUrl() {
         assertTrue(UrlUtilities.isValidForIntentFallbackNavigation(
-                "https://user:pass@:awesome.com:9000/bad-scheme:#fake:"));
+                "https://user:pass@awesome.com:9000/bad-scheme:#fake:"));
         assertTrue(UrlUtilities.isValidForIntentFallbackNavigation("http://awesome.example.com/"));
         assertFalse(UrlUtilities.isValidForIntentFallbackNavigation("inline:skates.co.uk"));
         assertFalse(UrlUtilities.isValidForIntentFallbackNavigation("javascript:alert(1)"));
         assertFalse(UrlUtilities.isValidForIntentFallbackNavigation(""));
-    }
-
-    @SmallTest
-    @Feature({"Webapps"})
-    public void testFormatUrlForSecurityDisplay() {
-        loadNativeLibraryNoBrowserProcess();
-
-        URI uri;
-
-        uri = URI.create("http://chopped.com/is/awesome");
-        assertEquals("http://chopped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("chopped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("http://lopped.com");
-        assertEquals("http://lopped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("lopped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("http://dropped.com?things");
-        assertEquals("http://dropped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("dropped.com", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("http://dfalcant@stopped.com:1234");
-        assertEquals(
-                "http://stopped.com:1234", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("stopped.com:1234", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("http://dfalcant:secret@stopped.com:9999");
-        assertEquals(
-                "http://stopped.com:9999", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("stopped.com:9999", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("chrome://settings:443");
-        assertEquals("chrome://settings:443", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("chrome://settings:443", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
-
-        uri = URI.create("about:blank");
-        assertEquals("about:blank", UrlUtilities.formatUrlForSecurityDisplay(uri, true));
-        assertEquals("about:blank", UrlUtilities.formatUrlForSecurityDisplay(uri, false));
     }
 
     @SmallTest
@@ -180,8 +144,6 @@ public class UrlUtilitiesTest extends NativeLibraryTestBase {
 
     @SmallTest
     public void testUrlsMatchIgnoringFragments() {
-        loadNativeLibraryNoBrowserProcess();
-
         String url = "http://www.example.com/path";
         assertTrue(UrlUtilities.urlsMatchIgnoringFragments(url, url));
         assertTrue(UrlUtilities.urlsMatchIgnoringFragments(url + "#fragment", url));
@@ -195,8 +157,6 @@ public class UrlUtilitiesTest extends NativeLibraryTestBase {
 
     @SmallTest
     public void testUrlsFragmentsDiffer() {
-        loadNativeLibraryNoBrowserProcess();
-
         String url = "http://www.example.com/path";
         assertFalse(UrlUtilities.urlsFragmentsDiffer(url, url));
         assertTrue(UrlUtilities.urlsFragmentsDiffer(url + "#fragment", url));

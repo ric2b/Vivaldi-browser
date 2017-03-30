@@ -5,15 +5,16 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_H_
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_MANAGER_H_
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/observer_list.h"
 #include "base/stl_util.h"
+#include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
@@ -60,13 +61,14 @@ class PasswordManager : public LoginModel {
 
   // Called by a PasswordFormManager when it decides a form can be autofilled
   // on the page.
-  void Autofill(password_manager::PasswordManagerDriver* driver,
-                const autofill::PasswordForm& form_for_autofill,
-                const autofill::PasswordFormMap& best_matches,
-                const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-                    federated_matches,
-                const autofill::PasswordForm& preferred_match,
-                bool wait_for_username) const;
+  void Autofill(
+      password_manager::PasswordManagerDriver* driver,
+      const autofill::PasswordForm& form_for_autofill,
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          best_matches,
+      const std::vector<const autofill::PasswordForm*>& federated_matches,
+      const autofill::PasswordForm& preferred_match,
+      bool wait_for_username) const;
 
   // Called by a PasswordFormManager when a page initially loads and it decides
   // that a form can be autofilled on the page, but a menu of account options
@@ -78,16 +80,17 @@ class PasswordManager : public LoginModel {
   void ShowInitialPasswordAccountSuggestions(
       password_manager::PasswordManagerDriver* driver,
       const autofill::PasswordForm& form_for_autofill,
-      const autofill::PasswordFormMap& best_matches,
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
-          federated_matches,
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          best_matches,
       const autofill::PasswordForm& preferred_match,
       bool wait_for_username) const;
 
   // Called by a PasswordFormManager when it decides a HTTP auth dialog can be
   // autofilled.
-  void AutofillHttpAuth(const autofill::PasswordFormMap& best_matches,
-                        const autofill::PasswordForm& preferred_match) const;
+  void AutofillHttpAuth(
+      const std::map<base::string16, const autofill::PasswordForm*>&
+          best_matches,
+      const autofill::PasswordForm& preferred_match) const;
 
   // LoginModel implementation.
   void AddObserverAndDeliverCredentials(
@@ -236,7 +239,7 @@ class PasswordManager : public LoginModel {
   // When a form is "seen" on a page, a PasswordFormManager is created
   // and stored in this collection until user navigates away from page.
 
-  ScopedVector<PasswordFormManager> pending_login_managers_;
+  std::vector<std::unique_ptr<PasswordFormManager>> pending_login_managers_;
 
   // When the user submits a password/credential, this contains the
   // PasswordFormManager for the form in question until we deem the login

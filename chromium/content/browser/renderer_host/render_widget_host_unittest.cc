@@ -32,11 +32,14 @@
 #include "content/test/test_render_view_host.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/display/screen.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
 
 #if defined(OS_ANDROID)
+#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
+#include "content/test/mock_gpu_channel_establish_factory.h"
 #endif
 
 #if defined(USE_AURA) || defined(OS_MACOSX)
@@ -72,7 +75,7 @@ std::string GetInputMessageTypes(MockRenderProcessHost* process) {
     const WebInputEvent* event = std::get<0>(params);
     if (i != 0)
       result += " ";
-    result += WebInputEventTraits::GetName(event->type);
+    result += WebInputEvent::GetName(event->type);
   }
   process->sink().ClearMessages();
   return result;
@@ -275,9 +278,6 @@ class TestView : public TestRenderWidgetHostView {
   void ClearMockPhysicalBackingSize() {
     use_fake_physical_backing_size_ = false;
   }
-  void SetScreenInfo(const blink::WebScreenInfo& screen_info) {
-    screen_info_ = screen_info;
-  }
 
   // RenderWidgetHostView override.
   gfx::Rect GetViewBounds() const override { return bounds_; }
@@ -303,9 +303,6 @@ class TestView : public TestRenderWidgetHostView {
       return mock_physical_backing_size_;
     return TestRenderWidgetHostView::GetPhysicalBackingSize();
   }
-  void GetScreenInfo(blink::WebScreenInfo* screen_info) override {
-    *screen_info = screen_info_;
-  }
 #if defined(USE_AURA)
   ~TestView() override {
     // Simulate the mouse exit event dispatched when an aura window is
@@ -330,7 +327,6 @@ class TestView : public TestRenderWidgetHostView {
   bool use_fake_physical_backing_size_;
   gfx::Size mock_physical_backing_size_;
   InputEventAckState ack_result_;
-  blink::WebScreenInfo screen_info_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestView);
@@ -386,6 +382,15 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
 
   bool unresponsive_timer_fired() const { return unresponsive_timer_fired_; }
 
+  void SetScreenInfo(const blink::WebScreenInfo& screen_info) {
+    screen_info_ = screen_info;
+  }
+
+  // RenderWidgetHostDelegate overrides.
+  void GetScreenInfo(blink::WebScreenInfo* web_screen_info) override {
+    *web_screen_info = screen_info_;
+  }
+
  protected:
   bool PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
                               bool* is_keyboard_shortcut) override {
@@ -428,6 +433,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   bool handle_wheel_event_called_;
 
   bool unresponsive_timer_fired_;
+
+  blink::WebScreenInfo screen_info_;
 };
 
 // RenderWidgetHostTest --------------------------------------------------------
@@ -465,6 +472,11 @@ class RenderWidgetHostTest : public testing::Test {
         std::unique_ptr<ImageTransportFactory>(
             new NoTransportImageTransportFactory));
 #endif
+#if defined(OS_ANDROID)
+    ContextProviderFactoryImpl::Initialize(&gpu_channel_factory_);
+    ui::ContextProviderFactory::SetInstance(
+        ContextProviderFactoryImpl::GetInstance());
+#endif
 #if defined(USE_AURA)
     screen_.reset(aura::TestScreen::Create(gfx::Size()));
     display::Screen::SetScreenInstance(screen_.get());
@@ -492,6 +504,10 @@ class RenderWidgetHostTest : public testing::Test {
 #endif
 #if defined(USE_AURA) || defined(OS_MACOSX)
     ImageTransportFactory::Terminate();
+#endif
+#if defined(OS_ANDROID)
+    ui::ContextProviderFactory::SetInstance(nullptr);
+    ContextProviderFactoryImpl::Terminate();
 #endif
 
     // Process all pending tasks to avoid leaks.
@@ -569,7 +585,7 @@ class RenderWidgetHostTest : public testing::Test {
     WebMouseEvent event =
         SyntheticWebMouseEventBuilder::Build(type, x, y, modifiers);
     if (pressed)
-      event.button = WebMouseEvent::ButtonLeft;
+      event.button = WebMouseEvent::Button::Left;
     event.timeStampSeconds = GetNextSimulatedEventTimeSeconds();
     host_->ForwardMouseEvent(event);
   }
@@ -637,6 +653,10 @@ class RenderWidgetHostTest : public testing::Test {
   bool handle_mouse_event_;
   double last_simulated_event_time_seconds_;
   double simulated_event_time_delta_seconds_;
+
+#if defined(OS_ANDROID)
+  MockGpuChannelEstablishFactory gpu_channel_factory_;
+#endif
 
  private:
   SyntheticWebTouchEvent touch_event_;
@@ -783,7 +803,10 @@ TEST_F(RenderWidgetHostTest, ResizeScreenInfo) {
   screen_info.orientationAngle = 0;
   screen_info.orientationType = blink::WebScreenOrientationPortraitPrimary;
 
-  view_->SetScreenInfo(screen_info);
+  auto host_delegate =
+      static_cast<MockRenderWidgetHostDelegate*>(host_->delegate());
+
+  host_delegate->SetScreenInfo(screen_info);
   host_->WasResized();
   EXPECT_FALSE(host_->resize_ack_pending_);
   EXPECT_TRUE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
@@ -792,7 +815,7 @@ TEST_F(RenderWidgetHostTest, ResizeScreenInfo) {
   screen_info.orientationAngle = 180;
   screen_info.orientationType = blink::WebScreenOrientationLandscapePrimary;
 
-  view_->SetScreenInfo(screen_info);
+  host_delegate->SetScreenInfo(screen_info);
   host_->WasResized();
   EXPECT_FALSE(host_->resize_ack_pending_);
   EXPECT_TRUE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
@@ -800,14 +823,14 @@ TEST_F(RenderWidgetHostTest, ResizeScreenInfo) {
 
   screen_info.deviceScaleFactor = 2.f;
 
-  view_->SetScreenInfo(screen_info);
+  host_delegate->SetScreenInfo(screen_info);
   host_->WasResized();
   EXPECT_FALSE(host_->resize_ack_pending_);
   EXPECT_TRUE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
   process_->sink().ClearMessages();
 
   // No screen change.
-  view_->SetScreenInfo(screen_info);
+  host_delegate->SetScreenInfo(screen_info);
   host_->WasResized();
   EXPECT_FALSE(host_->resize_ack_pending_);
   EXPECT_FALSE(process_->sink().GetUniqueMessageMatching(ViewMsg_Resize::ID));
@@ -865,11 +888,8 @@ TEST_F(RenderWidgetHostTest, Background) {
   ViewMsg_SetBackgroundOpaque::Read(set_background, &sent_background);
   EXPECT_FALSE(std::get<0>(sent_background));
 
-#if defined(USE_AURA)
-  // See the comment above |InitAsChild(NULL)|.
   host_->SetView(NULL);
   static_cast<RenderWidgetHostViewBase*>(view.release())->Destroy();
-#endif
 }
 #endif
 
@@ -1085,7 +1105,7 @@ TEST_F(RenderWidgetHostTest, DontPostponeHangMonitorTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMilliseconds(10));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(delegate_->unresponsive_timer_fired());
 }
 
@@ -1108,7 +1128,7 @@ TEST_F(RenderWidgetHostTest, StopAndStartHangMonitorTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMilliseconds(40));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(delegate_->unresponsive_timer_fired());
 }
 
@@ -1130,7 +1150,7 @@ TEST_F(RenderWidgetHostTest, ShorterDelayHangMonitorTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMilliseconds(25));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(delegate_->unresponsive_timer_fired());
 }
 
@@ -1148,7 +1168,7 @@ TEST_F(RenderWidgetHostTest, HangMonitorTimeoutDisabledForInputWhenHidden) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(2));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
 
   // The timeout should never reactivate while hidden.
@@ -1156,7 +1176,7 @@ TEST_F(RenderWidgetHostTest, HangMonitorTimeoutDisabledForInputWhenHidden) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(2));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
 
   // Showing the widget should restore the timeout, as the events have
@@ -1165,7 +1185,7 @@ TEST_F(RenderWidgetHostTest, HangMonitorTimeoutDisabledForInputWhenHidden) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(2));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(delegate_->unresponsive_timer_fired());
 }
 
@@ -1187,7 +1207,7 @@ TEST_F(RenderWidgetHostTest, MultipleInputEvents) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(delegate_->unresponsive_timer_fired());
 }
 
@@ -1203,7 +1223,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_FALSE(host_->new_content_rendering_timeout_fired());
 
@@ -1214,7 +1234,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_FALSE(host_->new_content_rendering_timeout_fired());
 
@@ -1223,7 +1243,7 @@ TEST_F(RenderWidgetHostTest, NewContentRenderingTimeout) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       TimeDelta::FromMicroseconds(20));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_TRUE(host_->new_content_rendering_timeout_fired());
 }
 

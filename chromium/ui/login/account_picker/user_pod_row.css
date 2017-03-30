@@ -46,23 +46,18 @@ pin-keyboard {
 
 .pod.flying-pin-pod {
   transition: height 180ms ease-in-out,
-              padding 180ms ease-in-out,
-              top 180ms ease-in-out,
-              width 180ms ease-in-out;
+              top 180ms ease-in-out;
 }
 
 .pod.pin-enabled {
-  height: 600px;
-  padding: 10px;
-  top: -200px !important;
-  width: 256px;
+  height: 417px;
+  top: -87px !important;
 }
 
 .pod .pin-container {
-  height: 334px;
+  height: 204px;
   position: absolute;
-  top: 276px;
-  width: 256px;
+  top: 170px;
 }
 
 .pod.faded {
@@ -99,21 +94,9 @@ podrow[ncolumns='6'] .pod {
   z-index: 3;
 }
 
-.user-image-pane.pin-enabled {
-  height: 230px;
-  left: 20px;
-  top: 20px;
-  width: 230px;
-}
-
 html[dir=rtl] .user-image-pane {
   left: auto;
   right: 10px;
-}
-
-html[dir=rtl] .user-image-pane.pin-enabled {
-  left: auto;
-  right: 20px;
 }
 
 .user-image-container {
@@ -135,13 +118,6 @@ html:not([screen=login-add-user]) .pod .user-image {
   max-width: 160px;
   opacity: 0.7;
   position: absolute;
-  transition: max-height 180ms ease-in-out,
-              max-width 180ms ease-in-out;
-}
-
-html:not([screen=login-add-user]) .pod .user-image.pin-enabled {
-  max-height: 256px;
-  max-width: 256px;
 }
 
 html:not([screen=login-add-user]) .pod.focused .user-image {
@@ -164,12 +140,7 @@ html:not([screen=login-add-user]) .pod.focused .user-image {
   position: absolute;
   text-align: center;
   top: 0;
-  transition: width 180ms ease-in-out;
   width: 100%;
-}
-
-.pod.signed-in .signed-in-indicator.pin-enabled {
-  width: 256px;
 }
 
 .main-pane {
@@ -190,35 +161,49 @@ html[dir=rtl] .main-pane {
   display: flex;
   position: absolute;
   top: 160px;
+/* On chromeos we extend the width to cover the padding on the user pods. This
+ is so the submit button on chromeos can extend onto the padding as shown on
+ mocks. */
+<if expr="not chromeos">
   width: 160px;
+</if>
+<if expr="chromeos">
+  width: 170px;
+</if>
 }
 
-.pod.focused:not(.multiprofiles-policy-applied) .auth-container {
-  background-color: white;
-  position: absolute;
-  top: 160px;
-  width: 160px;
+.auth-container .submit-button[disabled] {
+  color: #000;
+  opacity: 0.26;
 }
 
-.auth-container.pin-disabled {
-  opacity: 1;
-  transition: opacity 200ms ease-in-out 180ms,
-              visibility 200ms ease-in-out 180ms;
-  visibility: visible;
+.auth-container .submit-button {
+  box-sizing: border-box;
+  color: var(--google-blue-500);
+  height: 43px;
+  min-height: 43px;
+  min-width: 43px;
+  padding: 11.5px 10px;
+  position: relative;
+  width: 43px;
 }
 
-.auth-container.pin-enabled {
-  opacity: 0;
-  transition: none;
-  visibility: hidden;
+.auth-container .submit-button.error-shown {
+  color: #CD2A00;
 }
 
 .name-container {
-  transition: transform 180ms;
+  transition: transform 180ms,
+              opacity 180ms ease-in-out 180ms,
+              visibility 180ms ease-in-out 180ms;
+  opacity : 1;
+  visibility: visible;
 }
 
-.pod.focused .name-container {
-  display: none;
+.name-container.pin-enabled {
+  opacity : 0;
+  transition: none;
+  visibility: hidden;
 }
 
 .pod.focused.multiprofiles-policy-applied .name-container {
@@ -269,16 +254,22 @@ html[dir=rtl] .main-pane {
   display: none;
 }
 
+<if expr="chromeos">
 .capslock-on .capslock-hint-container {
   display: block;
   flex: none;
+  height: 43px;
+  position: relative;
+  width: 20px;
 }
+</if>
 
 .capslock-hint {
   -webkit-margin-end: 6px;
   -webkit-margin-start: -2px;
+  margin: auto;
   position: relative;
-  top: 11px;
+  top: 15px;
 }
 
 .password-label,
@@ -305,6 +296,7 @@ html[dir=rtl] .main-pane {
   background-repeat: no-repeat;
   flex: none;
   height: 27px;
+  margin: 8px 0;
   width: 27px;
 }
 
@@ -422,9 +414,8 @@ html[dir=rtl] .main-pane {
   display: flex;
   flex: none;
   flex-direction: column;
-  height: 40px;
-  justify-content: center;
-  width: 40px;
+  height: 43px;
+  width: 27px;
 }
 
 .launch-app-button-container {
@@ -664,10 +655,15 @@ html[dir=rtl] .action-box-area.active ~ .action-box-menu {
   text-align: end;
 }
 
+.remove-warning-button {
+  font-weight: bold;
+}
+
 /* Hide dialog elements not in a correct category. Only combinations currently
    in use are included here. */
 .pod.legacy-supervised .non-sync,
 .pod.legacy-supervised .action-box-remove-user-warning-text,
+.pod.legacy-supervised .action-box-remove-non-owner-user-warning-text,
 .pod:not(.legacy-supervised)
     .action-box-remove-legacy-supervised-user-warning-text,
 .pod.synced .non-sync,

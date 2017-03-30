@@ -174,6 +174,8 @@ const char kTotalBytesKey[] = "totalBytes";
 const char kTotalBytesLessKey[] = "totalBytesLess";
 const char kUrlKey[] = "url";
 const char kUrlRegexKey[] = "urlRegex";
+const char kFinalUrlKey[] = "finalUrl";
+const char kFinalUrlRegexKey[] = "finalUrlRegex";
 
 // Note: Any change to the danger type strings, should be accompanied by a
 // corresponding change to downloads.json.
@@ -255,6 +257,9 @@ std::unique_ptr<base::DictionaryValue> DownloadItemToJSON(
   json->SetInteger(kIdKey, download_item->GetId());
   const GURL& url = download_item->GetOriginalUrl();
   json->SetString(kUrlKey, (url.is_valid() ? url.spec() : std::string()));
+  const GURL& finalUrl = download_item->GetURL();
+  json->SetString(kFinalUrlKey,
+                  (finalUrl.is_valid() ? finalUrl.spec() : std::string()));
   const GURL& referrer = download_item->GetReferrerUrl();
   json->SetString(kReferrerUrlKey, (referrer.is_valid() ? referrer.spec()
                                                         : std::string()));
@@ -376,8 +381,10 @@ void InitFilterTypeMap(FilterTypeMap* filter_types_ptr) {
   filter_types[kTotalBytesGreaterKey] =
     DownloadQuery::FILTER_TOTAL_BYTES_GREATER;
   filter_types[kTotalBytesLessKey] = DownloadQuery::FILTER_TOTAL_BYTES_LESS;
-  filter_types[kUrlKey] = DownloadQuery::FILTER_URL;
-  filter_types[kUrlRegexKey] = DownloadQuery::FILTER_URL_REGEX;
+  filter_types[kUrlKey] = DownloadQuery::FILTER_ORIGINAL_URL;
+  filter_types[kUrlRegexKey] = DownloadQuery::FILTER_ORIGINAL_URL_REGEX;
+  filter_types[kFinalUrlKey] = DownloadQuery::FILTER_URL;
+  filter_types[kFinalUrlRegexKey] = DownloadQuery::FILTER_URL_REGEX;
 }
 
 typedef base::hash_map<std::string, DownloadQuery::SortType> SortTypeMap;
@@ -394,7 +401,8 @@ void InitSortTypeMap(SortTypeMap* sorter_types_ptr) {
   sorter_types[kStartTimeKey] = DownloadQuery::SORT_START_TIME;
   sorter_types[kStateKey] = DownloadQuery::SORT_STATE;
   sorter_types[kTotalBytesKey] = DownloadQuery::SORT_TOTAL_BYTES;
-  sorter_types[kUrlKey] = DownloadQuery::SORT_URL;
+  sorter_types[kUrlKey] = DownloadQuery::SORT_ORIGINAL_URL;
+  sorter_types[kFinalUrlKey] = DownloadQuery::SORT_URL;
 }
 
 bool IsNotTemporaryDownloadFilter(const DownloadItem& download_item) {
@@ -506,11 +514,11 @@ void RunDownloadQuery(
 
   size_t limit = 1000;
   if (query_in.limit.get()) {
-    if (*query_in.limit.get() < 0) {
+    if (*query_in.limit < 0) {
       *error = errors::kInvalidQueryLimit;
       return;
     }
-    limit = *query_in.limit.get();
+    limit = *query_in.limit;
   }
   if (limit > 0) {
     query_out.Limit(limit);
@@ -537,13 +545,13 @@ void RunDownloadQuery(
     query_out.AddFilter(danger_type);
   }
   if (query_in.order_by.get()) {
-    CompileDownloadQueryOrderBy(*query_in.order_by.get(), error, &query_out);
+    CompileDownloadQueryOrderBy(*query_in.order_by, error, &query_out);
     if (!error->empty())
       return;
   }
 
   std::unique_ptr<base::DictionaryValue> query_in_value(query_in.ToValue());
-  for (base::DictionaryValue::Iterator query_json_field(*query_in_value.get());
+  for (base::DictionaryValue::Iterator query_json_field(*query_in_value);
        !query_json_field.IsAtEnd(); query_json_field.Advance()) {
     FilterTypeMap::const_iterator filter_type =
         filter_types.Get().find(query_json_field.key());
@@ -557,9 +565,9 @@ void RunDownloadQuery(
 
   DownloadQuery::DownloadVector all_items;
   if (query_in.id.get()) {
-    DownloadItem* download_item = manager->GetDownload(*query_in.id.get());
+    DownloadItem* download_item = manager->GetDownload(*query_in.id);
     if (!download_item && incognito_manager)
-      download_item = incognito_manager->GetDownload(*query_in.id.get());
+      download_item = incognito_manager->GetDownload(*query_in.id);
     if (download_item)
       all_items.push_back(download_item);
   } else {
@@ -618,7 +626,7 @@ class ExtensionDownloadsEventRouterData : public base::SupportsUserData::Data {
     }
   }
 
-  const base::DictionaryValue& json() const { return *json_.get(); }
+  const base::DictionaryValue& json() const { return *json_; }
   void set_json(std::unique_ptr<base::DictionaryValue> json_item) {
     json_ = std::move(json_item);
   }
@@ -907,6 +915,7 @@ bool InvalidId(DownloadItem* valid_item, std::string* message_out) {
 
 bool IsDownloadDeltaField(const std::string& field) {
   return ((field == kUrlKey) ||
+          (field == kFinalUrlKey) ||
           (field == kFilenameKey) ||
           (field == kDangerKey) ||
           (field == kMimeKey) ||
@@ -982,7 +991,7 @@ bool DownloadsDownloadFunction::RunAsync() {
         kFilenameKey, &filename16));
     creator_suggested_filename = base::FilePath(filename16);
 #elif defined(OS_POSIX)
-    creator_suggested_filename = base::FilePath(*options.filename.get());
+    creator_suggested_filename = base::FilePath(*options.filename);
 #endif
     if (!net::IsSafePortableRelativePath(creator_suggested_filename)) {
       error_ = errors::kInvalidFilename;
@@ -991,7 +1000,7 @@ bool DownloadsDownloadFunction::RunAsync() {
   }
 
   if (options.save_as.get())
-    download_params->set_prompt(*options.save_as.get());
+    download_params->set_prompt(*options.save_as);
 
   if (options.headers.get()) {
     for (const downloads::HeaderNameValuePair& name_value : *options.headers) {
@@ -1016,7 +1025,7 @@ bool DownloadsDownloadFunction::RunAsync() {
   if (!method_string.empty())
     download_params->set_method(method_string);
   if (options.body.get())
-    download_params->set_post_body(*options.body.get());
+    download_params->set_post_body(*options.body);
   download_params->set_callback(base::Bind(
       &DownloadsDownloadFunction::OnStarted, this,
       creator_suggested_filename, options.conflict_action));
@@ -1037,7 +1046,7 @@ void DownloadsDownloadFunction::OnStarted(
     DownloadItem* item,
     content::DownloadInterruptReason interrupt_reason) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  VLOG(1) << __FUNCTION__ << " " << item << " " << interrupt_reason;
+  VLOG(1) << __func__ << " " << item << " " << interrupt_reason;
   if (item) {
     DCHECK_EQ(content::DOWNLOAD_INTERRUPT_REASON_NONE, interrupt_reason);
     SetResult(base::MakeUnique<base::FundamentalValue>(
@@ -1315,7 +1324,7 @@ DownloadsShowFunction::DownloadsShowFunction() {}
 
 DownloadsShowFunction::~DownloadsShowFunction() {}
 
-bool DownloadsShowFunction::RunAsync() {
+bool DownloadsShowFunction::RunSync() {
   std::unique_ptr<downloads::Show::Params> params(
       downloads::Show::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -1332,7 +1341,7 @@ DownloadsShowDefaultFolderFunction::DownloadsShowDefaultFolderFunction() {}
 
 DownloadsShowDefaultFolderFunction::~DownloadsShowDefaultFolderFunction() {}
 
-bool DownloadsShowDefaultFolderFunction::RunAsync() {
+bool DownloadsShowDefaultFolderFunction::RunSync() {
   DownloadManager* manager = NULL;
   DownloadManager* incognito_manager = NULL;
   GetManagers(GetProfile(), include_incognito(), &manager, &incognito_manager);
@@ -1375,7 +1384,7 @@ DownloadsDragFunction::DownloadsDragFunction() {}
 
 DownloadsDragFunction::~DownloadsDragFunction() {}
 
-bool DownloadsDragFunction::RunAsync() {
+bool DownloadsDragFunction::RunSync() {
   std::unique_ptr<downloads::Drag::Params> params(
       downloads::Drag::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -1477,7 +1486,7 @@ bool DownloadsGetFileIconFunction::RunAsync() {
       params->options.get();
   int icon_size = kDefaultIconSize;
   if (options && options->size.get())
-    icon_size = *options->size.get();
+    icon_size = *options->size;
   DownloadItem* download_item =
       GetDownload(GetProfile(), include_incognito(), params->download_id);
   if (InvalidId(download_item, &error_) ||
@@ -1802,8 +1811,8 @@ void ExtensionDownloadsEventRouter::OnDownloadUpdated(
   // the bytesReceived field, if the field has changed from the previous old
   // json, set the differences in the |delta| object and remember that something
   // significant changed.
-  for (base::DictionaryValue::Iterator iter(*new_json.get());
-       !iter.IsAtEnd(); iter.Advance()) {
+  for (base::DictionaryValue::Iterator iter(*new_json); !iter.IsAtEnd();
+       iter.Advance()) {
     new_fields.insert(iter.key());
     if (IsDownloadDeltaField(iter.key())) {
       const base::Value* old_value = NULL;

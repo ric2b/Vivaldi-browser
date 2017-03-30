@@ -74,7 +74,6 @@ Du kan få flere oplysninger om privatliv i privatlivspolitikkerne for Google (h
 <translation id="2676780859508944670">Arbejder...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Softwareopdateringer udføres sædvanligvis automatisk, men de kan i sjældne tilfælde mislykkes. Det bør ikke tage mere end et par minutter at opdatere softwaren, og opdateringen kan udføres, mens du er forbundet til din computer via en fjernforbindelse.</translation>
-<translation id="2813770873348017932">Forbindelserne til fjerncomputeren er midlertidigt blokeret, fordi nogen forsøgte at få forbindelse til den med en ugyldig pinkode. Prøv igen senere.</translation>
 <translation id="2841013758207633010">Tid</translation>
 <translation id="2851674870054673688">Når personen indtaster koden, startes delingssessionen.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ host</translation>
 <translation id="4573676252416618192">Host for Chrome
 Fjernskrivebord</translation>
 <translation id="4619978527973181021">Acceptér, og installer</translation>
-<translation id="4647791084836149355">Se udsigten gennem Cardboard</translation>
 <translation id="4703302905453407178">En nødvendig komponent er holdt op med at fungere. Sørg for at rapportere dette problem til udviklerne.</translation>
 <translation id="4703799847237267011">Din session med Chromoting er afsluttet.</translation>
 <translation id="4736223761657662401">Forbindelseshistorik</translation>
@@ -210,7 +208,6 @@ Fjernskrivebord</translation>
 <translation id="6284412385303060032">Hosten, der kører på loginskærmen for konsollen, er lukket ned for at understøtte curtain mode ved at skifte til en host, der kører i en brugerspecifik session.</translation>
 <translation id="629730747756840877">Konto</translation>
 <translation id="6304318647555713317">Klient</translation>
-<translation id="6324708100353784493">Du har aktiveret integrationstilstanden for Google Cardboard. Du kan bruge denne tilstand ved at indsætte din enhed i en Google Cardboard-kompatibel fremviser.</translation>
 <translation id="6381670701864002291">Noget andet.</translation>
 <translation id="6398765197997659313">Afslut fuld skærm</translation>
 <translation id="6408143143164565232">• Hør lyd fra Windows- eller Linux-computere.
@@ -236,6 +233,7 @@ Fjernskrivebord</translation>
 <translation id="6930242544192836755">Varighed</translation>
 <translation id="6939719207673461467">Vis/skjul tastatur.</translation>
 <translation id="6944854424004126054">Gendan vinduet</translation>
+<translation id="6963936880795878952">Forbindelserne til fjerncomputeren er midlertidigt blokerede, fordi nogen forsøgte at få forbindelse til den med en ugyldig pinkode. Prøv igen senere.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Er du sikker på, at du vil deaktivere fjernforbindelserne til <ph name="HOSTNAME" />? Hvis du ombestemmer dig, skal du genaktivere forbindelserne på den computer.</translation>
 <translation id="6998989275928107238">Til</translation>

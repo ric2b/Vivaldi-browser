@@ -25,6 +25,8 @@
 #include "net/url_request/url_request_context_getter.h"
 
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace {
 
@@ -118,8 +120,7 @@ void ChromeApplication::OpenClearBrowsingData(
   DCHECK(tab);
   Java_ChromeApplication_openClearBrowsingData(
       base::android::AttachCurrentThread(),
-      base::android::GetApplicationContext(),
-      tab->GetJavaObject().obj());
+      base::android::GetApplicationContext(), tab->GetJavaObject());
 }
 
 bool ChromeApplication::AreParentalControlsEnabled() {

@@ -1,0 +1,63 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
+<link rel="import" href="/icons.html">
+<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="/site_settings/site_data_details_dialog.html">
+<link rel="import" href="/site_settings/site_settings_behavior.html">
+
+<dom-module id="site-data">
+  <template>
+    <style include="settings-shared">
+      :host {
+        display: block;
+        margin-top: 18px;
+        width: 100%;
+      }
+
+      .list-frame {
+        -webkit-margin-end: -29px;
+        -webkit-padding-start: 36px;
+        margin-top: 10px;
+      }
+
+      .site-header {
+        margin-top: 10px;
+      }
+
+      .site {
+        margin-top: 7px;
+      }
+    </style>
+    <div class="layout horizontal">
+      <div class="flex site-header">$i18n{siteSettingsCookieHeader}</div>
+      <div class="secondary-action" hidden$="[[!removeAllIsVisible_(sites)]]">
+        <paper-button on-tap="onDeleteAllSites_" class="secondary-button">
+          $i18n{siteSettingsCookieRemoveAll}
+        </paper-button>
+      </div>
+    </div>
+
+    <div class="list-frame vertical-list">
+      <template is="dom-repeat" items="[[sites]]">
+        <div class="list-item layout horizontal">
+          <div class="layout horizontal flex" on-tap="onSiteTap_" actionable>
+            <div class="favicon-image site"
+                style$="[[computeSiteIcon(item.site)]]">
+            </div>
+            <div class="flex middle">[[item.site]]</div>
+            <div class="site">[[item.localData]]</div>
+          </div>
+          <div>
+            <paper-icon-button on-tap="onDeleteSite_"
+                icon="settings:delete"></paper-icon-button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </template>
+  <script src="cookie_info.js"></script>
+  <script src="cookie_tree_node.js"></script>
+  <script src="site_data.js"></script>
+</dom-module>

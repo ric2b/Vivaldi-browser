@@ -76,7 +76,7 @@ void GeoNotifier::stopTimer()
     m_timer.stop();
 }
 
-void GeoNotifier::timerFired(Timer<GeoNotifier>*)
+void GeoNotifier::timerFired(TimerBase*)
 {
     m_timer.stop();
 
@@ -98,7 +98,7 @@ void GeoNotifier::timerFired(Timer<GeoNotifier>*)
     }
 
     if (m_errorCallback)
-        m_errorCallback->handleEvent(PositionError::create(PositionError::TIMEOUT, "Timeout expired"));
+        m_errorCallback->handleEvent(PositionError::create(PositionError::kTimeout, "Timeout expired"));
 
     DEFINE_STATIC_LOCAL(CustomCountHistogram, timeoutExpiredHistogram, ("Geolocation.TimeoutExpired", 0, 1000 * 60 * 10 /* 10 minute max */, 20 /* buckets */));
     timeoutExpiredHistogram.count(m_options.timeout());

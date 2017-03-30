@@ -994,7 +994,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NullOpenerRedirectForksProcess) {
   https_test_server.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
   ASSERT_TRUE(https_test_server.Start());
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  GURL https_url(https_test_server.GetURL(std::string("/")));
+  GURL https_url(https_test_server.GetURL("/title2.html"));
 
   // Start with an http URL.
   ui_test_utils::NavigateToURL(browser(), http_url);
@@ -1083,7 +1083,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OtherRedirectsDontForkProcess) {
   https_test_server.ServeFilesFromSourceDirectory(base::FilePath(kDocRoot));
   ASSERT_TRUE(https_test_server.Start());
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  GURL https_url(https_test_server.GetURL("/"));
+  GURL https_url(https_test_server.GetURL("/title2.html"));
 
   // Start with an http URL.
   ui_test_utils::NavigateToURL(browser(), http_url);
@@ -2417,7 +2417,7 @@ class ClickModifierTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenBasicClickTest) {
   int modifiers = 0;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_FOREGROUND_TAB;
   RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
 }
@@ -2428,7 +2428,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenBasicClickTest) {
 // Shift-clicks open in a new window.
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenShiftClickTest) {
   int modifiers = blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_WINDOW;
   RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
 }
@@ -2441,7 +2441,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenControlClickTest) {
 #else
   int modifiers = blink::WebInputEvent::ControlKey;
 #endif
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_BACKGROUND_TAB;
   RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
 }
@@ -2455,29 +2455,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenControlShiftClickTest) {
   int modifiers = blink::WebInputEvent::ControlKey;
 #endif
   modifiers |= blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
-  WindowOpenDisposition disposition = NEW_FOREGROUND_TAB;
-  RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
-}
-
-// Middle-clicks open in a background tab.
-#if defined(OS_LINUX)
-// http://crbug.com/396347
-#define MAYBE_WindowOpenMiddleClickTest DISABLED_WindowOpenMiddleClickTest
-#else
-#define MAYBE_WindowOpenMiddleClickTest WindowOpenMiddleClickTest
-#endif
-IN_PROC_BROWSER_TEST_F(ClickModifierTest, MAYBE_WindowOpenMiddleClickTest) {
-  int modifiers = 0;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonMiddle;
-  WindowOpenDisposition disposition = NEW_BACKGROUND_TAB;
-  RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
-}
-
-// Shift-middle-clicks open in a foreground tab.
-IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenShiftMiddleClickTest) {
-  int modifiers = blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonMiddle;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_FOREGROUND_TAB;
   RunTest(browser(), GetWindowOpenURL(), modifiers, button, disposition);
 }
@@ -2486,7 +2464,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, WindowOpenShiftMiddleClickTest) {
 
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefBasicClickTest) {
   int modifiers = 0;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = CURRENT_TAB;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2497,7 +2475,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefBasicClickTest) {
 // Shift-clicks open in a new window.
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefShiftClickTest) {
   int modifiers = blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_WINDOW;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2510,7 +2488,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefControlClickTest) {
 #else
   int modifiers = blink::WebInputEvent::ControlKey;
 #endif
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_BACKGROUND_TAB;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2525,7 +2503,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefControlShiftClickTest) {
   int modifiers = blink::WebInputEvent::ControlKey;
 #endif
   modifiers |= blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonLeft;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Left;
   WindowOpenDisposition disposition = NEW_FOREGROUND_TAB;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2533,7 +2511,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefControlShiftClickTest) {
 // Middle-clicks open in a background tab.
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefMiddleClickTest) {
   int modifiers = 0;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonMiddle;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Middle;
   WindowOpenDisposition disposition = NEW_BACKGROUND_TAB;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2542,7 +2520,7 @@ IN_PROC_BROWSER_TEST_F(ClickModifierTest, HrefMiddleClickTest) {
 // http://crbug.com/396347
 IN_PROC_BROWSER_TEST_F(ClickModifierTest, DISABLED_HrefShiftMiddleClickTest) {
   int modifiers = blink::WebInputEvent::ShiftKey;
-  blink::WebMouseEvent::Button button = blink::WebMouseEvent::ButtonMiddle;
+  blink::WebMouseEvent::Button button = blink::WebMouseEvent::Button::Middle;
   WindowOpenDisposition disposition = NEW_FOREGROUND_TAB;
   RunTest(browser(), GetHrefURL(), modifiers, button, disposition);
 }
@@ -2769,7 +2747,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_ChangeDisplayMode) {
   ui_test_utils::BrowserAddedObserver browser_added_observer;
   Browser* app_browser = CreateBrowserForApp("blah", profile);
   browser_added_observer.WaitForSingleNewBrowser();
-  auto app_contents = app_browser->tab_strip_model()->GetActiveWebContents();
+  auto* app_contents = app_browser->tab_strip_model()->GetActiveWebContents();
   CheckDisplayModeMQ(ASCIIToUTF16("standalone"), app_contents);
 
   app_browser->exclusive_access_manager()->context()->EnterFullscreen(

@@ -50,7 +50,6 @@
               ],
               'sources': [
                 'url_canon_icu_alternatives_android.cc',
-                'url_canon_icu_alternatives_android.h',
               ],
             }],
             ['OS == "ios"', {
@@ -140,6 +139,10 @@
       'export_dependent_settings': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
       ],
+      # url_interfaces_mojom generates headers and is a hard dependency.
+      # That hard dependency status is not propagated to this target, so
+      # we must set it explicitly.
+      'hard_dependency': 1,
       'dependencies': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         'url_interfaces_mojom',

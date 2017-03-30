@@ -36,6 +36,8 @@ extern const char kOldWindowIdKey[];
 extern const char kOpenerTabIdKey[];
 extern const char kPinnedKey[];
 extern const char kAudibleKey[];
+extern const char kDiscardedKey[];
+extern const char kAutoDiscardableKey[];
 extern const char kMutedKey[];
 extern const char kMutedInfoKey[];
 extern const char kQualityKey[];
@@ -61,7 +63,6 @@ extern const char kZoomSettingsScope[];
 extern const char kExtDataKey[];
 extern const char kLastActiveTimeKey[];
 extern const char kWindowExtDataKey[];
-extern const char kDiscardedKey[];
 
 // Value consts.
 extern const char kCanOnlyMoveTabsWithinNormalWindowsError[];
@@ -89,6 +90,8 @@ extern const char kPerOriginOnlyInAutomaticError[];
 extern const char kWindowNotFoundError[];
 extern const char kTabIndexNotFoundError[];
 extern const char kTabNotFoundError[];
+extern const char kCannotDiscardTab[];
+extern const char kCannotFindTabToDiscard[];
 extern const char kTabStripNotEditableError[];
 extern const char kNoHighlightedTabError[];
 extern const char kNoSelectedTabError[];

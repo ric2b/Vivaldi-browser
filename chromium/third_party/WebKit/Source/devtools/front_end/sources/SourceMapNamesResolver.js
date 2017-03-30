@@ -263,6 +263,8 @@ WebInspector.SourceMapNamesResolver._resolveExpression = function(callFrame, uiS
         return Promise.resolve("");
 
     var script = rawLocation.script();
+    if (!script)
+        return Promise.resolve("");
     var sourceMap = WebInspector.debuggerWorkspaceBinding.sourceMapForScript(script);
     if (!sourceMap)
         return Promise.resolve("");
@@ -571,24 +573,6 @@ WebInspector.SourceMapNamesResolver.RemoteObject.prototype = {
     isNode: function()
     {
         return this._object.isNode();
-    },
-
-    /**
-     * @override
-     * @param {function(?WebInspector.DebuggerModel.FunctionDetails)} callback
-     */
-    functionDetails: function(callback)
-    {
-        this._object.functionDetails(callback);
-    },
-
-    /**
-     * @override
-     * @param {function(?WebInspector.DebuggerModel.GeneratorObjectDetails)} callback
-     */
-    generatorObjectDetails: function(callback)
-    {
-        this._object.generatorObjectDetails(callback);
     },
 
     __proto__: WebInspector.RemoteObject.prototype

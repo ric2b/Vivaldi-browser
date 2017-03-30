@@ -54,6 +54,7 @@ class BrowserPluginGuestManager;
 class DownloadManager;
 class DownloadManagerDelegate;
 class IndexedDBContext;
+class MojoShellConnection;
 class PermissionManager;
 class PushMessagingService;
 class ResourceContext;
@@ -166,8 +167,17 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // to connect to service instances bound as this user.
   static shell::Connector* GetShellConnectorFor(
       BrowserContext* browser_context);
+  static MojoShellConnection* GetMojoShellConnectionFor(
+      BrowserContext* browser_context);
 
   ~BrowserContext() override;
+
+  // Shuts down the storage partitions associated to this browser context.
+  // This must be called before the browser context is actually destroyed
+  // and before a clean-up task for its corresponding IO thread residents (e.g.
+  // ResourceContext) is posted, so that the classes that hung on
+  // StoragePartition can have time to do necessary cleanups on IO thread.
+  void ShutdownStoragePartitions();
 
   // Creates a delegate to initialize a HostZoomMap and persist its information.
   // This is called during creation of each StoragePartition.

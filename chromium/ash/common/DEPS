@@ -2,6 +2,13 @@ include_rules = [
   "-ash",
   "+ash/ash_export.h",
   "+ash/common",
+  "+ash/shared",
   "+ui",
   "-ui/aura",
 ]
+
+specific_include_rules = {
+  ".*test\.cc": [
+    "+ash/test",
+  ]
+}

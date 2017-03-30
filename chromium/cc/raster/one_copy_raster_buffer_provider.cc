@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/resources/platform_color.h"
 #include "cc/resources/resource_format.h"
@@ -104,9 +105,9 @@ OneCopyRasterBufferProvider::AcquireBufferForRaster(
     uint64_t previous_content_id) {
   // TODO(danakj): If resource_content_id != 0, we only need to copy/upload
   // the dirty rect.
-  return base::WrapUnique(new RasterBufferImpl(this, resource_provider_,
-                                               resource, previous_content_id,
-                                               async_worker_context_enabled_));
+  return base::MakeUnique<RasterBufferImpl>(this, resource_provider_, resource,
+                                            previous_content_id,
+                                            async_worker_context_enabled_);
 }
 
 void OneCopyRasterBufferProvider::ReleaseBufferForRaster(
@@ -147,9 +148,16 @@ ResourceFormat OneCopyRasterBufferProvider::GetResourceFormat(
   return resource_provider_->best_texture_format();
 }
 
-bool OneCopyRasterBufferProvider::GetResourceRequiresSwizzle(
+bool OneCopyRasterBufferProvider::IsResourceSwizzleRequired(
     bool must_support_alpha) const {
   return ResourceFormatRequiresSwizzle(GetResourceFormat(must_support_alpha));
+}
+
+bool OneCopyRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
+  // While OneCopyRasterBufferProvider has an internal partial raster
+  // implementation, it cannot directly partial raster into the externally
+  // owned resource provided in AcquireBufferForRaster.
+  return false;
 }
 
 void OneCopyRasterBufferProvider::Shutdown() {
@@ -211,10 +219,7 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
         resource_provider_->gpu_memory_buffer_manager()
             ->AllocateGpuMemoryBuffer(
                 staging_buffer->size, BufferFormat(resource->format()),
-                use_partial_raster_
-                    ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
-                    : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
-                gpu::kNullSurfaceHandle);
+                StagingBufferUsage(), gpu::kNullSurfaceHandle);
   }
 
   gfx::Rect playback_rect = raster_full_rect;
@@ -227,14 +232,16 @@ void OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
 
   // Log a histogram of the percentage of pixels that were saved due to
   // partial raster.
+  const char* client_name = GetClientNameForMetrics();
   float full_rect_size = raster_full_rect.size().GetArea();
-  if (full_rect_size > 0) {
+  if (full_rect_size > 0 && client_name) {
     float fraction_partial_rastered =
         static_cast<float>(playback_rect.size().GetArea()) / full_rect_size;
     float fraction_saved = 1.0f - fraction_partial_rastered;
-
-    UMA_HISTOGRAM_PERCENTAGE("Renderer4.PartialRasterPercentageSaved.OneCopy",
-                             100.0f * fraction_saved);
+    UMA_HISTOGRAM_PERCENTAGE(
+        base::StringPrintf("Renderer4.%s.PartialRasterPercentageSaved.OneCopy",
+                           client_name),
+        100.0f * fraction_saved);
   }
 
   if (staging_buffer->gpu_memory_buffer) {
@@ -273,8 +280,8 @@ void OneCopyRasterBufferProvider::CopyOnWorkerThread(
       gl, resource_lock, async_worker_context_enabled_);
 
   unsigned resource_texture_id = scoped_texture.texture_id();
-  unsigned image_target =
-      resource_provider_->GetImageTextureTarget(resource_lock->format());
+  unsigned image_target = resource_provider_->GetImageTextureTarget(
+      StagingBufferUsage(), staging_buffer->format);
 
   // Create and bind staging texture.
   if (!staging_buffer->texture_id) {
@@ -371,6 +378,12 @@ void OneCopyRasterBufferProvider::CopyOnWorkerThread(
   gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, resource_sync_token.GetData());
   resource_lock->set_sync_token(resource_sync_token);
   resource_lock->set_synchronized(!async_worker_context_enabled_);
+}
+
+gfx::BufferUsage OneCopyRasterBufferProvider::StagingBufferUsage() const {
+  return use_partial_raster_
+             ? gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT
+             : gfx::BufferUsage::GPU_READ_CPU_READ_WRITE;
 }
 
 }  // namespace cc

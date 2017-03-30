@@ -19,6 +19,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread.h"
@@ -224,9 +225,9 @@ int main(int argc, char** argv) {
   LOG(INFO) << "Sending to " << remote_ip_address << ":" << remote_port
             << ".";
 
-  media::cast::AudioSenderConfig audio_config =
+  media::cast::FrameSenderConfig audio_config =
       media::cast::GetDefaultAudioSenderConfig();
-  media::cast::VideoSenderConfig video_config =
+  media::cast::FrameSenderConfig video_config =
       media::cast::GetDefaultVideoSenderConfig();
 
   // Running transport on the main thread.
@@ -265,10 +266,10 @@ int main(int argc, char** argv) {
   std::unique_ptr<media::cast::CastTransport> transport_sender =
       media::cast::CastTransport::Create(
           cast_environment->Clock(), base::TimeDelta::FromSeconds(1),
-          base::WrapUnique(new TransportClient(cast_environment->logger())),
-          base::WrapUnique(new media::cast::UdpTransport(
+          base::MakeUnique<TransportClient>(cast_environment->logger()),
+          base::MakeUnique<media::cast::UdpTransport>(
               nullptr, io_message_loop.task_runner(), net::IPEndPoint(),
-              remote_endpoint, base::Bind(&UpdateCastTransportStatus))),
+              remote_endpoint, base::Bind(&UpdateCastTransportStatus)),
           io_message_loop.task_runner());
 
   // Set up event subscribers.
@@ -343,15 +344,15 @@ int main(int argc, char** argv) {
                  base::Bind(&QuitLoopOnInitializationResult),
                  media::cast::CreateDefaultVideoEncodeAcceleratorCallback(),
                  media::cast::CreateDefaultVideoEncodeMemoryCallback()));
-  io_message_loop.Run();  // Wait for video initialization.
+  base::RunLoop().Run();  // Wait for video initialization.
   io_message_loop.task_runner()->PostTask(
       FROM_HERE, base::Bind(&media::cast::CastSender::InitializeAudio,
                             base::Unretained(cast_sender.get()), audio_config,
                             base::Bind(&QuitLoopOnInitializationResult)));
-  io_message_loop.Run();  // Wait for audio initialization.
+  base::RunLoop().Run();  // Wait for audio initialization.
 
   fake_media_source->Start(cast_sender->audio_frame_input(),
                            cast_sender->video_frame_input());
-  io_message_loop.Run();
+  base::RunLoop().Run();
   return 0;
 }

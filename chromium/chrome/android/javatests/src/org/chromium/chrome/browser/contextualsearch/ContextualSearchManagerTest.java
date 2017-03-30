@@ -31,7 +31,6 @@ import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
@@ -46,7 +45,6 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 import org.chromium.chrome.test.util.ChromeRestriction;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -77,19 +75,22 @@ import java.util.concurrent.TimeoutException;
 /**
  * Tests the Contextual Search Manager using instrumentation tests.
  */
-@CommandLineFlags.Add(ChromeSwitches.ENABLE_CONTEXTUAL_SEARCH_FOR_TESTING)
+
 public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<ChromeActivity> {
 
     private static final String TEST_PAGE =
             "/chrome/test/data/android/contextualsearch/tap_test.html";
     private static final int TEST_TIMEOUT = 15000;
     private static final int TEST_EXPECTED_FAILURE_TIMEOUT = 1000;
+    private static final int PLENTY_OF_TAPS = 1000;
 
     // TODO(donnd): get these from TemplateURL once the low-priority or Contextual Search API
     // is fully supported.
     private static final String NORMAL_PRIORITY_SEARCH_ENDPOINT = "/search?";
     private static final String LOW_PRIORITY_SEARCH_ENDPOINT = "/s?";
     private static final String CONTEXTUAL_SEARCH_PREFETCH_PARAM = "&pf=c";
+    // The number of ms to delay startup for all tests.
+    private static final int ACTIVITY_STARTUP_DELAY_MS = 1000;
 
     private ActivityMonitor mActivityMonitor;
     private ContextualSearchFakeServer mFakeServer;
@@ -222,6 +223,10 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @Override
     public void startMainActivity() throws InterruptedException {
         startMainActivityWithURL(mTestServer.getURL(TEST_PAGE));
+        // There's a problem with immediate startup that causes flakes due to the page not being
+        // ready, so specify a startup-delay of 1000 for legacy behavior.  See crbug.com/635661.
+        // TODO(donnd): find a better way to wait for page-ready, or at least reduce the delay!
+        Thread.sleep(ACTIVITY_STARTUP_DELAY_MS);
     }
 
     //============================================================================================
@@ -321,20 +326,21 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         private final String mSearchTerm;
         private final String mDisplayText;
         private final String mAlternateTerm;
+        private final String mMid;
         private final boolean mDoPreventPreload;
         private final int mStartAdjust;
         private final int mEndAdjust;
         private final String mContextLanguage;
 
         public FakeResponseOnMainThread(boolean isNetworkUnavailable, int responseCode,
-                                        String searchTerm, String displayText, String alternateTerm,
-                                        boolean doPreventPreload, int startAdjust, int endAdjudst,
-                                        String contextLanguage) {
+                String searchTerm, String displayText, String alternateTerm, String mid,
+                boolean doPreventPreload, int startAdjust, int endAdjudst, String contextLanguage) {
             mIsNetworkUnavailable = isNetworkUnavailable;
             mResponseCode = responseCode;
             mSearchTerm = searchTerm;
             mDisplayText = displayText;
             mAlternateTerm = alternateTerm;
+            mMid = mid;
             mDoPreventPreload = doPreventPreload;
             mStartAdjust = startAdjust;
             mEndAdjust = endAdjudst;
@@ -344,8 +350,8 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         @Override
         public void run() {
             mFakeServer.handleSearchTermResolutionResponse(mIsNetworkUnavailable, mResponseCode,
-                    mSearchTerm, mDisplayText, mAlternateTerm, mDoPreventPreload, mStartAdjust,
-                    mEndAdjust, mContextLanguage);
+                    mSearchTerm, mDisplayText, mAlternateTerm, mMid, mDoPreventPreload,
+                    mStartAdjust, mEndAdjust, mContextLanguage);
         }
     }
 
@@ -356,7 +362,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     private void fakeResponse(boolean isNetworkUnavailable, int responseCode,
             String searchTerm, String displayText, String alternateTerm, boolean doPreventPreload) {
         fakeResponse(isNetworkUnavailable, responseCode, searchTerm, displayText, alternateTerm,
-                doPreventPreload, 0, 0, "");
+                null, doPreventPreload, 0, 0, "");
     }
 
     /**
@@ -364,11 +370,11 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
      * {@See ContextualSearchManager#handleSearchTermResolutionResponse}.
      */
     private void fakeResponse(boolean isNetworkUnavailable, int responseCode, String searchTerm,
-            String displayText, String alternateTerm, boolean doPreventPreload, int startAdjust,
-            int endAdjust, String contextLanguage) {
+            String displayText, String alternateTerm, String mid, boolean doPreventPreload,
+            int startAdjust, int endAdjust, String contextLanguage) {
         if (mFakeServer.getSearchTermRequested() != null) {
             getInstrumentation().runOnMainSync(new FakeResponseOnMainThread(isNetworkUnavailable,
-                    responseCode, searchTerm, displayText, alternateTerm, doPreventPreload,
+                    responseCode, searchTerm, displayText, alternateTerm, mid, doPreventPreload,
                     startAdjust, endAdjust, contextLanguage));
         }
     }
@@ -1440,8 +1446,6 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
             }
         };
         getActivity().getTabModelSelector().addObserver(observer);
-        // This tab tracking requires document mode be disabled.
-        assertFalse(FeatureUtilities.isDocumentMode(getInstrumentation().getTargetContext()));
 
         // -------- TEST ---------
         // Start a slow-resolve search and maximize the Panel.
@@ -1975,9 +1979,10 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction(RESTRICTION_TYPE_NON_LOW_END_DEVICE)
+    @CommandLineFlags.Add(ContextualSearchFieldTrial.SUPPRESSION_TAPS + "=" + PLENTY_OF_TAPS)
     public void testTapALot() throws InterruptedException, TimeoutException {
-        mPolicy.setTapLimitForDecidedForTesting(200);
-        mPolicy.setTapLimitForUndecidedForTesting(200);
+        mPolicy.setTapLimitForDecidedForTesting(PLENTY_OF_TAPS);
+        mPolicy.setTapLimitForUndecidedForTesting(PLENTY_OF_TAPS);
         for (int i = 0; i < 50; i++) {
             clickToTriggerPrefetch();
             waitForSelectionDissolved();
@@ -2081,7 +2086,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
         waitForPanelToPeek();
 
         fakeResponse(false, 200, "Intelligence", "United States Intelligence", "alternate-term",
-                false, -14, 0, "");
+                null, false, -14, 0, "");
         waitForSelectionToBe("United States Intelligence");
     }
 
@@ -2282,7 +2287,7 @@ public class ContextualSearchManagerTest extends ChromeActivityTestCaseBase<Chro
     /**
      * Tests that chained searches load correctly.
      */
-    @DisabledTest // https://crbug.com/551711
+    @DisabledTest(message = "crbug.com/551711")
     @SmallTest
     @Feature({"ContextualSearch"})
     @Restriction({ChromeRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})

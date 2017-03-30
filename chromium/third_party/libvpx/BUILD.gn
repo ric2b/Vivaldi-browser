@@ -90,7 +90,7 @@ config("libvpx_external_config") {
   include_dirs = [ "//third_party/libvpx/source/libvpx" ]
 }
 
-if (current_cpu == "x86" || current_cpu == "x64") {
+if (current_cpu == "x86" || (current_cpu == "x64" && !is_msan)) {
   yasm_assemble("libvpx_yasm") {
     if (current_cpu == "x86") {
       sources = libvpx_srcs_x86_assembly
@@ -113,8 +113,14 @@ if (current_cpu == "x86" || current_cpu == "x64") {
   }
 }
 
-if (current_cpu == "x86" || current_cpu == "x64") {
-  static_library("libvpx_intrinsics_mmx") {
+if (current_cpu == "x86" || (current_cpu == "x64" && !is_msan)) {
+  # The following targets are deliberately source_set rather than
+  # static_library. The :libvpx target exposes these intrinsic implementations
+  # via global function pointer symbols, which hides the object dependency at
+  # link time. On Mac, this results in undefined references to the intrinsic
+  # symbols.
+
+  source_set("libvpx_intrinsics_mmx") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -129,7 +135,7 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
   }
 
-  static_library("libvpx_intrinsics_sse2") {
+  source_set("libvpx_intrinsics_sse2") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -144,7 +150,7 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
   }
 
-  static_library("libvpx_intrinsics_ssse3") {
+  source_set("libvpx_intrinsics_ssse3") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -159,7 +165,7 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
   }
 
-  static_library("libvpx_intrinsics_sse4_1") {
+  source_set("libvpx_intrinsics_sse4_1") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -174,7 +180,7 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
   }
 
-  static_library("libvpx_intrinsics_avx") {
+  source_set("libvpx_intrinsics_avx") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -191,7 +197,7 @@ if (current_cpu == "x86" || current_cpu == "x64") {
     }
   }
 
-  static_library("libvpx_intrinsics_avx2") {
+  source_set("libvpx_intrinsics_avx2") {
     configs += [ ":libvpx_config" ]
     configs -= [ "//build/config/compiler:chromium_code" ]
     configs += [ "//build/config/compiler:no_chromium_code" ]
@@ -219,24 +225,34 @@ if (cpu_arch_full == "arm-neon-cpu-detect") {
   }
 }
 
-# Converts ARM assembly files to GAS style.
 if (current_cpu == "arm") {
+  if (cpu_arch_full == "arm-neon") {
+    arm_assembly_sources = libvpx_srcs_arm_neon_assembly
+  } else if (cpu_arch_full == "arm-neon-cpu-detect") {
+    arm_assembly_sources = libvpx_srcs_arm_neon_cpu_detect_assembly
+  } else {
+    arm_assembly_sources = libvpx_srcs_arm_assembly
+  }
+}
+
+# Converts ARM assembly files to GAS style.
+if (current_cpu == "arm" && arm_assembly_sources != []) {
   action_foreach("convert_arm_assembly") {
     script = "//third_party/libvpx/run_perl.py"
-    if (cpu_arch_full == "arm-neon") {
-      sources = libvpx_srcs_arm_neon_assembly
-    } else if (cpu_arch_full == "arm-neon-cpu-detect") {
-      sources = libvpx_srcs_arm_neon_cpu_detect_assembly
-    } else {
-      sources = libvpx_srcs_arm_assembly
-    }
+    sources = arm_assembly_sources
     outputs = [
       "$target_gen_dir/{{source_name_part}}.S",
     ]
+    if (is_ios) {
+      ads2gas_script =
+          "//third_party/libvpx/source/libvpx/build/make/ads2gas_apple.pl"
+    } else {
+      ads2gas_script =
+          "//third_party/libvpx/source/libvpx/build/make/ads2gas.pl"
+    }
     args = [
       "-s",
-      rebase_path("//third_party/libvpx/source/libvpx/build/make/ads2gas.pl",
-                  root_build_dir),
+      rebase_path(ads2gas_script, root_build_dir),
       "-i",
       "{{source}}",
       "-o",
@@ -310,7 +326,7 @@ static_library("libvpx") {
   if (is_android) {
     deps += [ "//third_party/android_tools:cpu_features" ]
   }
-  if (current_cpu == "arm") {
+  if (current_cpu == "arm" && arm_assembly_sources != []) {
     deps += [ ":libvpx_assembly_arm" ]
   }
 

@@ -61,9 +61,9 @@ def main():
           if parse_version(s) >= parse_version(min_sdk_version)]
   if not sdks:
     raise Exception('No %s+ SDK found' % min_sdk_version)
-  best_sdk = sorted(sdks, key=parse_version)[0]
+  best_sdk = sorted(sdks, key=parse_version)[-1]
 
-  if options.verify and best_sdk != min_sdk_version and not options.sdk_path:
+  if options.verify and best_sdk < min_sdk_version and not options.sdk_path:
     print >> sys.stderr, ''
     print >> sys.stderr, '                                           vvvvvvv'
     print >> sys.stderr, ''
@@ -75,7 +75,7 @@ def main():
     print >> sys.stderr, ''
     print >> sys.stderr, '                                           ^^^^^^^'
     print >> sys.stderr, ''
-    return min_sdk_version
+    sys.exit(1)
 
   if options.print_sdk_path:
     print subprocess.check_output(

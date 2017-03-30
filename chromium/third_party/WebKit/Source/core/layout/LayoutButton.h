@@ -21,6 +21,7 @@
 #ifndef LayoutButton_h
 #define LayoutButton_h
 
+#include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/layout/LayoutFlexibleBox.h"
 
@@ -37,7 +38,7 @@ public:
     const char* name() const override { return "LayoutButton"; }
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectLayoutButton || LayoutFlexibleBox::isOfType(type); }
 
-    bool canBeSelectionLeaf() const override { return node() && node()->hasEditableStyle(); }
+    bool canBeSelectionLeaf() const override { return node() && hasEditableStyle(*node()); }
 
     void addChild(LayoutObject* newChild, LayoutObject *beforeChild = nullptr) override;
     void removeChild(LayoutObject*) override;

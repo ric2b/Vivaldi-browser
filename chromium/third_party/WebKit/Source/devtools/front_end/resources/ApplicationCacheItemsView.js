@@ -25,11 +25,11 @@
 
 /**
  * @constructor
- * @extends {WebInspector.VBox}
+ * @extends {WebInspector.SimpleView}
  */
 WebInspector.ApplicationCacheItemsView = function(model, frameId)
 {
-    WebInspector.VBox.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("AppCache"));
 
     this._model = model;
 
@@ -62,9 +62,10 @@ WebInspector.ApplicationCacheItemsView = function(model, frameId)
 
 WebInspector.ApplicationCacheItemsView.prototype = {
     /**
+     * @override
      * @return {!Array.<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         return [
             this._deleteButton,
@@ -257,6 +258,6 @@ WebInspector.ApplicationCacheItemsView.prototype = {
         // this._update();
     },
 
-    __proto__: WebInspector.VBox.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }
 

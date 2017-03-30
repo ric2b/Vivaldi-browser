@@ -4,6 +4,10 @@
 
 #include "components/memory_coordinator/child/child_memory_coordinator_impl.h"
 
+#if defined(OS_ANDROID)
+#include "components/memory_coordinator/child/child_memory_coordinator_impl_android.h"
+#endif  // defined(OS_ANDROID)
+
 #include <memory>
 
 #include "base/message_loop/message_loop.h"
@@ -13,25 +17,54 @@
 
 namespace memory_coordinator {
 
-namespace {
+class MockMemoryCoordinatorHandle : public mojom::MemoryCoordinatorHandle {
+ public:
+  MockMemoryCoordinatorHandle() : binding_(this) {}
 
-class ChildMemoryCoordinatorImplTest : public testing::Test {
+  void AddChild(mojom::ChildMemoryCoordinatorPtr child) override {
+    child_ = std::move(child);
+  }
+
+  mojom::MemoryCoordinatorHandlePtr Bind() {
+    DCHECK(!binding_.is_bound());
+    return binding_.CreateInterfacePtrAndBind();
+  }
+
+  mojom::ChildMemoryCoordinatorPtr& child() { return child_; }
+
+ private:
+  mojo::Binding<mojom::MemoryCoordinatorHandle> binding_;
+  mojom::ChildMemoryCoordinatorPtr child_ = nullptr;
+};
+
+class ChildMemoryCoordinatorImplTest : public testing::Test,
+                                       public ChildMemoryCoordinatorDelegate {
  public:
   ChildMemoryCoordinatorImplTest()
-      : clients_(new ChildMemoryCoordinatorImpl::ClientList),
-        message_loop_(new base::MessageLoop),
-        coordinator_impl_(mojo::GetProxy(&coordinator_), clients_) {}
+      : message_loop_(new base::MessageLoop) {
+    auto parent = coordinator_handle_.Bind();
+    coordinator_impl_ = CreateChildMemoryCoordinator(std::move(parent), this);
+    // Needs to run loop to initalize mojo pointers including |child_| in
+    // MockMemoryCoordinatorHandle.
+    base::RunLoop loop;
+    loop.RunUntilIdle();
+  }
 
   void RegisterClient(MemoryCoordinatorClient* client) {
-    clients_->AddObserver(client);
+    coordinator_impl_->RegisterClient(client);
   }
 
   void UnregisterClient(MemoryCoordinatorClient* client) {
-    clients_->RemoveObserver(client);
+    coordinator_impl_->UnregisterClient(client);
   }
 
-  mojom::ChildMemoryCoordinatorPtr& coordinator() { return coordinator_; }
-  ChildMemoryCoordinatorImpl& coordinator_impl() { return coordinator_impl_; }
+  mojom::ChildMemoryCoordinatorPtr& coordinator() {
+    return coordinator_handle_.child();
+  }
+
+  ChildMemoryCoordinatorImpl& coordinator_impl() {
+    return *coordinator_impl_.get();
+  }
 
   void ChangeState(mojom::MemoryState state) {
     base::RunLoop loop;
@@ -39,16 +72,23 @@ class ChildMemoryCoordinatorImplTest : public testing::Test {
     loop.RunUntilIdle();
   }
 
+  // ChildMemoryCoordinatorDelegate implementation:
+  void OnTrimMemoryImmediately() override {
+    on_trim_memory_called_ = true;
+  }
+
  protected:
-  scoped_refptr<ChildMemoryCoordinatorImpl::ClientList> clients_;
+  bool on_trim_memory_called_ = false;
 
  private:
   std::unique_ptr<base::MessageLoop> message_loop_;
-  mojom::ChildMemoryCoordinatorPtr coordinator_ = nullptr;
-  ChildMemoryCoordinatorImpl coordinator_impl_;
+  MockMemoryCoordinatorHandle coordinator_handle_;
+  std::unique_ptr<ChildMemoryCoordinatorImpl> coordinator_impl_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildMemoryCoordinatorImplTest);
 };
+
+namespace {
 
 class MockMemoryCoordinatorClient final : public MemoryCoordinatorClient {
 public:
@@ -67,12 +107,12 @@ class MemoryCoordinatorTestThread : public base::Thread,
  public:
   MemoryCoordinatorTestThread(
       const std::string& name,
-      scoped_refptr<ChildMemoryCoordinatorImpl::ClientList> clients)
-      : Thread(name), clients_(clients) {}
+      ChildMemoryCoordinatorImpl& coordinator)
+      : Thread(name), coordinator_(coordinator) {}
   ~MemoryCoordinatorTestThread() override { Stop(); }
 
   void Init() override {
-    clients_->AddObserver(this);
+    coordinator_.RegisterClient(this);
   }
 
   void OnMemoryStateChange(mojom::MemoryState state) override {
@@ -94,7 +134,7 @@ class MemoryCoordinatorTestThread : public base::Thread,
     EXPECT_EQ(state, last_state_);
   }
 
-  scoped_refptr<ChildMemoryCoordinatorImpl::ClientList> clients_;
+  ChildMemoryCoordinatorImpl& coordinator_;
   mojom::MemoryState last_state_ = mojom::MemoryState::UNKNOWN;
 };
 
@@ -114,8 +154,8 @@ TEST_F(ChildMemoryCoordinatorImplTest, SingleClient) {
 }
 
 TEST_F(ChildMemoryCoordinatorImplTest, MultipleClients) {
-  MemoryCoordinatorTestThread t1("thread 1", clients_);
-  MemoryCoordinatorTestThread t2("thread 2", clients_);
+  MemoryCoordinatorTestThread t1("thread 1", coordinator_impl());
+  MemoryCoordinatorTestThread t2("thread 2", coordinator_impl());
 
   t1.StartAndWaitForTesting();
   t2.StartAndWaitForTesting();
@@ -131,6 +171,18 @@ TEST_F(ChildMemoryCoordinatorImplTest, MultipleClients) {
   t1.Stop();
   t2.Stop();
 }
+
+#if defined(OS_ANDROID)
+TEST_F(ChildMemoryCoordinatorImplTest, OnTrimMemoryImmediately) {
+  // TRIM_MEMORY_COMPLETE defined in ComponentCallbacks2.
+  static const int kTrimMemoryComplete = 80;
+
+  ChildMemoryCoordinatorImplAndroid& coordinator_android =
+      static_cast<ChildMemoryCoordinatorImplAndroid&>(coordinator_impl());
+  coordinator_android.OnTrimMemory(kTrimMemoryComplete);
+  EXPECT_EQ(true, on_trim_memory_called_);
+}
+#endif  // defined(OS_ANDROID)
 
 }  // namespace
 

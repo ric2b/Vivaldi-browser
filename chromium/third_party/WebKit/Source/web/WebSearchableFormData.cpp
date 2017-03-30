@@ -102,12 +102,8 @@ HTMLFormControlElement* buttonToActivate(const HTMLFormElement& form)
 // selected state.
 bool isSelectInDefaultState(const HTMLSelectElement& select)
 {
-    const HeapVector<Member<HTMLElement>>& listItems = select.listItems();
     if (select.multiple() || select.size() > 1) {
-        for (const auto& item : listItems) {
-            if (!isHTMLOptionElement(*item))
-                continue;
-            HTMLOptionElement* optionElement = toHTMLOptionElement(item);
+        for (const auto& optionElement : select.optionList()) {
             if (optionElement->selected() != optionElement->fastHasAttribute(selectedAttr))
                 return false;
         }
@@ -117,10 +113,7 @@ bool isSelectInDefaultState(const HTMLSelectElement& select)
     // The select is rendered as a combobox (called menulist in WebKit). At
     // least one item is selected, determine which one.
     HTMLOptionElement* initialSelected = nullptr;
-    for (const auto& item : listItems) {
-        if (!isHTMLOptionElement(*item))
-            continue;
-        HTMLOptionElement* optionElement = toHTMLOptionElement(item);
+    for (const auto& optionElement : select.optionList()) {
         if (optionElement->fastHasAttribute(selectedAttr)) {
             // The page specified the option to select.
             initialSelected = optionElement;
@@ -237,7 +230,7 @@ WebSearchableFormData::WebSearchableFormData(const WebFormElement& form, const W
 
     // Only consider forms that GET data.
     // Allow HTTPS only when an input element is provided.
-    if (equalIgnoringCase(formElement->getAttribute(methodAttr), "post")
+    if (equalIgnoringASCIICase(formElement->getAttribute(methodAttr), "post")
         || (!isHTTPFormSubmit(*formElement) && !inputElement))
         return;
 

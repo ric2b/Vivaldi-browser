@@ -25,6 +25,10 @@ const char kANGLEImplementationOpenGLESName[] = "gles";
 
 namespace switches {
 
+// Ask the GLX driver for the default context instead of trying to get the
+// highest version possible.
+const char kCreateDefaultGLContext[] = "create-default-gl-context";
+
 // Disables use of D3D11.
 const char kDisableD3D11[]                  = "disable-d3d11";
 
@@ -82,6 +86,10 @@ const char kUseGpuInTests[] = "use-gpu-in-tests";
 // Enable OpenGL ES 3 APIs without proper service side validation.
 const char kEnableUnsafeES3APIs[] = "enable-unsafe-es3-apis";
 
+// Enable use of the SGI_video_sync extension, which can have
+// driver/sandbox/window manager compatibility issues.
+const char kEnableSgiVideoSync[] = "enable-sgi-video-sync";
+
 // Disables GL drawing operations which produce pixel output. With this
 // the GL output will not be correct but tests will run faster.
 const char kDisableGLDrawingForTests[] = "disable-gl-drawing-for-tests";
@@ -102,6 +110,7 @@ const char* kGLSwitchesCopiedFromGpuProcessHost[] = {
     kEnableGPUServiceLogging,
     kEnableGPUServiceTracing,
     kEnableUnsafeES3APIs,
+    kEnableSgiVideoSync,
     kGpuNoContextLost,
     kDisableGLDrawingForTests,
     kOverrideUseGLWithOSMesaForTests,

@@ -16,7 +16,15 @@ class NotificationCommon {
   enum Operation {
     CLICK = 0,
     CLOSE = 1,
-    SETTINGS = 2
+    SETTINGS = 2,
+    OPERATION_MAX = SETTINGS
+  };
+
+  // Possible kinds of notifications
+  enum Type {
+    PERSISTENT = 0,
+    NON_PERSISTENT = 1,
+    TYPE_MAX = NON_PERSISTENT
   };
 
   // Open the Notification settings screen when clicking the right button.

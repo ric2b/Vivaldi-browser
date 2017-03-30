@@ -41,12 +41,13 @@
 
 namespace blink {
 
-class InProcessWorkerObjectProxy;
-class WorkerThread;
 class ExecutionContext;
 class InProcessWorkerBase;
+class InProcessWorkerObjectProxy;
+class ParentFrameTaskRunners;
 class WorkerClients;
 class WorkerInspectorProxy;
+class WorkerThread;
 
 // TODO(nhiroki): "MessagingProxy" is not well-defined term among worker
 // components. Probably we should rename this to something more suitable.
@@ -67,16 +68,20 @@ public:
     // These methods come from worker context thread via
     // InProcessWorkerObjectProxy and are called on the parent context thread.
     void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>, std::unique_ptr<MessagePortChannelArray>);
-    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>);
+    void dispatchErrorEvent(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId);
     void reportConsoleMessage(MessageSource, MessageLevel, const String& message, std::unique_ptr<SourceLocation>);
     void postMessageToPageInspector(const String&);
-    void postWorkerConsoleAgentEnabled();
-    void confirmMessageFromWorkerObject(bool hasPendingActivity);
-    void reportPendingActivity(bool hasPendingActivity);
-    void workerThreadTerminated();
+
+    // 'virtual' for testing.
+    virtual void confirmMessageFromWorkerObject();
+    virtual void pendingActivityFinished();
+    virtual void workerThreadTerminated();
+
     void workerThreadCreated();
 
     ExecutionContext* getExecutionContext() const { return m_executionContext.get(); }
+
+    ParentFrameTaskRunners* getParentFrameTaskRunners() { return m_parentFrameTaskRunners.get(); }
 
     // Number of live messaging proxies, used by leak detection.
     static int proxyCount();
@@ -91,14 +96,16 @@ protected:
     InProcessWorkerObjectProxy& workerObjectProxy() { return *m_workerObjectProxy.get(); }
 
 private:
+    friend class InProcessWorkerMessagingProxyForTest;
+    InProcessWorkerMessagingProxy(ExecutionContext*, InProcessWorkerBase*, WorkerClients*);
+
     void workerObjectDestroyedInternal();
-    void terminateInternally();
 
     // WorkerLoaderProxyProvider
     // These methods are called on different threads to schedule loading
     // requests and to send callbacks back to WorkerGlobalScope.
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     // Returns true if this is called on the parent context thread.
     bool isParentContextThread() const;
@@ -112,10 +119,7 @@ private:
     // Unconfirmed messages from the parent context thread to the worker thread.
     unsigned m_unconfirmedMessageCount;
 
-    // The latest confirmation from worker thread reported that it was still
-    // active.
-    bool m_workerThreadHadPendingActivity;
-
+    bool m_workerGlobalScopeMayHavePendingActivity;
     bool m_askedToTerminate;
 
     // Tasks are queued here until there's a thread object created.
@@ -124,6 +128,8 @@ private:
     Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
 
     Persistent<WorkerClients> m_workerClients;
+
+    Persistent<ParentFrameTaskRunners> m_parentFrameTaskRunners;
 
     RefPtr<WorkerLoaderProxy> m_loaderProxy;
 };

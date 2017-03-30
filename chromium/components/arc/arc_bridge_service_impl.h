@@ -30,8 +30,6 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   explicit ArcBridgeServiceImpl(std::unique_ptr<ArcBridgeBootstrap> bootstrap);
   ~ArcBridgeServiceImpl() override;
 
-  void SetDetectedAvailability(bool available) override;
-
   void HandleStartup() override;
 
   void Shutdown() override;
@@ -58,18 +56,14 @@ class ArcBridgeServiceImpl : public ArcBridgeService,
   void OnConnectionEstablished(mojom::ArcBridgeInstancePtr instance) override;
   void OnStopped(StopReason reason) override;
 
-  // Called when the bridge channel is closed. This typically only happens when
-  // the ARC instance crashes. This is not called during shutdown.
-  void OnChannelClosed();
-
   std::unique_ptr<ArcBridgeBootstrap> bootstrap_;
-
-  // Mojo endpoints.
-  mojo::Binding<mojom::ArcBridgeHost> binding_;
-  mojom::ArcBridgeInstancePtr instance_ptr_;
 
   // If the user's session has started.
   bool session_started_;
+
+  // Mojo endpoint.
+  // TODO(hidehiko): Move this to ArcBridgeBootstrap.
+  std::unique_ptr<mojom::ArcBridgeHost> arc_bridge_host_;
 
   // If the instance had already been started but the connection to it was
   // lost. This should make the instance restart.

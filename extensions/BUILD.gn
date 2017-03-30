@@ -1,0 +1,48 @@
+import("//tools/grit/grit_rule.gni")
+
+static_library("extensions") {
+  public_deps = [
+    ":resources",
+    "api:apis",
+    "schema",
+  ]
+  deps = [
+    ":resources",
+    "helper",
+    "permissions",
+    "schema",
+    "tools",
+    "//skia",
+  ]
+  sources = [
+    "vivaldi_extensions_init.cpp",
+    "vivaldi_extensions_init.h",
+  ]
+}
+
+static_library("extensions_client") {
+  public_deps = [
+    "permissions",
+
+    #"api:apis",
+    "schema",
+    "//chrome/common",
+  ]
+  deps = [
+    ":resources",
+  ]
+  sources = [
+    "vivaldi_extensions_client.cpp",
+    "vivaldi_extensions_client.h",
+  ]
+}
+
+grit("resources") {
+  source = "vivaldi_extension_resources.grd"
+  output_dir = "$root_gen_dir/vivaldi"
+  resource_ids = "//vivaldi/extensions/gritsettings/resource_ids"
+  outputs = [
+    "grit/vivaldi_extension_resources.h",
+    "vivaldi_extension_resources.pak",
+  ]
+}

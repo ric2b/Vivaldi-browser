@@ -13,8 +13,9 @@ from devil.android import flag_changer
 from devil.utils import reraiser_thread
 from pylib import valgrind_tools
 from pylib.base import base_test_result
+from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
-
+import tombstones
 
 TIMEOUT_ANNOTATIONS = [
   ('Manual', 10 * 60 * 60),
@@ -67,7 +68,7 @@ class LocalDeviceInstrumentationTestRun(
       else:
         return d
 
-    @local_device_test_run.handle_shard_failures_with(
+    @local_device_environment.handle_shard_failures_with(
         self._env.BlacklistDevice)
     def individual_device_set_up(dev, host_device_tuples):
       def install_apk():
@@ -142,13 +143,15 @@ class LocalDeviceInstrumentationTestRun(
       else:
         for step in steps:
           step()
+      if self._test_instance.store_tombstones:
+        tombstones.ClearAllTombstones(dev)
 
     self._env.parallel_devices.pMap(
         individual_device_set_up,
         self._test_instance.GetDataDependencies())
 
   def TearDown(self):
-    @local_device_test_run.handle_shard_failures_with(
+    @local_device_environment.handle_shard_failures_with(
         self._env.BlacklistDevice)
     def individual_device_tear_down(dev):
       if str(dev) in self._flag_changers:
@@ -328,7 +331,27 @@ class LocalDeviceInstrumentationTestRun(
           self._test_instance.coverage_directory)
       device.RunShellCommand('rm -f %s' % os.path.join(coverage_directory,
           '*'))
+    if self._test_instance.store_tombstones:
+      for result in results:
+        if result.GetType() == base_test_result.ResultType.CRASH:
+          resolved_tombstones = tombstones.ResolveTombstones(
+              device,
+              resolve_all_tombstones=True,
+              include_stack_symbols=False,
+              wipe_tombstones=True)
+          result.SetTombstones('\n'.join(resolved_tombstones))
     return results
+
+  #override
+  def _ShouldRetry(self, test):
+    if 'RetryOnFailure' in test.get('annotations', {}):
+      return True
+
+    # TODO(jbudorick): Remove this log message and switch the return value to
+    # False after tests have been annotated with @RetryOnFailure.
+    # See crbug.com/619055 for more details.
+    logging.warning('Default retries are being phased out. crbug.com/619055')
+    return True
 
   #override
   def _ShouldShard(self):

@@ -142,7 +142,8 @@ private:
 - (void)addSubviewToPermanentList:(NSView*)aView;
 - (void)regenerateSubviewList;
 - (NSInteger)indexForContentsView:(NSView*)view;
-- (NSImage*)iconImageForContents:(content::WebContents*)contents;
+- (NSImage*)iconImageForContents:(content::WebContents*)contents
+                         atIndex:(NSInteger)modelIndex;
 - (void)updateIconsForContents:(content::WebContents*)contents
                        atIndex:(NSInteger)modelIndex;
 - (void)layoutTabsWithAnimation:(BOOL)animate
@@ -292,7 +293,7 @@ private:
 // to let it know that |controller_| is ready to be removed from the model.
 // Since we only maintain weak references, the tab strip must call -invalidate:
 // to prevent the use of dangling pointers.
-@interface TabCloseAnimationDelegate : NSObject {
+@interface TabCloseAnimationDelegate : NSObject <CAAnimationDelegate> {
  @private
   TabStripController* strip_;  // weak; owns us indirectly
   TabController* controller_;  // weak
@@ -308,7 +309,8 @@ private:
 // prevent attempts to call into the released object.
 - (void)invalidate;
 
-// CAAnimation delegate method
+// CAAnimation delegate methods
+- (void)animationDidStart:(CAAnimation*)animation;
 - (void)animationDidStop:(CAAnimation*)animation finished:(BOOL)finished;
 
 @end
@@ -330,6 +332,9 @@ private:
   controller_ = nil;
 }
 
+- (void)animationDidStart:(CAAnimation*)theAnimation {
+  // CAAnimationDelegate method added on OSX 10.12.
+}
 - (void)animationDidStop:(CAAnimation*)animation finished:(BOOL)finished {
   [strip_ animationDidStop:animation
              forController:controller_
@@ -580,43 +585,22 @@ private:
   // positions.
   ScopedCAActionDisabler ca_disabler;
 
-  // Resize the new view to fit the window. Calling |view| may lazily
-  // instantiate the TabContentsController from the nib. Until we call
-  // |-ensureContentsVisible|, the controller doesn't install the RWHVMac into
-  // the view hierarchy. This is in order to avoid sending the renderer a
-  // spurious default size loaded from the nib during the call to |-view|.
-  NSView* newView = [controller view];
+  // Ensure the nib is loaded. Sizing won't occur until it's added to the view
+  // hierarchy with -ensureContentsVisibleInSuperview:.
+  [controller view];
 
-  // Turns content autoresizing off, so removing and inserting views won't
-  // trigger unnecessary content relayout.
-  [controller ensureContentsSizeDoesNotChange];
+  // Remove the old view from the view hierarchy to suppress resizes. We know
+  // there's only one child of |switchView_| because we're the one who put it
+  // there. There may not be any children in the case of a tab that's been
+  // closed, in which case there's nothing removed.
+  [[[switchView_ subviews] firstObject] removeFromSuperview];
 
-  // Remove the old view from the view hierarchy. We know there's only one
-  // child of |switchView_| because we're the one who put it there. There
-  // may not be any children in the case of a tab that's been closed, in
-  // which case there's no swapping going on.
-  NSArray* subviews = [switchView_ subviews];
-  if ([subviews count]) {
-    NSView* oldView = [subviews objectAtIndex:0];
-    // Set newView frame to the oldVew frame to prevent NSSplitView hosting
-    // sidebar and tab content from resizing sidebar's content view.
-    // ensureContentsVisible (see below) sets content size and autoresizing
-    // properties.
-    [newView setFrame:[oldView frame]];
-    // Remove the old view first, to ensure ConstrainedWindowSheets keyed to the
-    // old WebContents are removed before adding new ones.
-    [oldView removeFromSuperview];
-    [switchView_ addSubview:newView];
-  } else {
-    [newView setFrame:[switchView_ bounds]];
-    [switchView_ addSubview:newView];
-  }
-
-  // New content is in place, delegate should adjust itself accordingly.
+  // Prepare the container with any infobars or docked devtools it wants.
   [delegate_ onActivateTabWithContents:[controller webContents]];
 
-  // It also restores content autoresizing properties.
-  [controller ensureContentsVisible];
+  // Sizes the WebContents to match the possibly updated size of |switchView_|,
+  // then adds it and starts auto-resizing again.
+  [controller ensureContentsVisibleInSuperview:switchView_];
 }
 
 // Create a new tab view and set its cell correctly so it draws the way we want
@@ -1318,6 +1302,7 @@ private:
                                           NSUInteger index,
                                           BOOL* stop) {
       [current setActive:index == activeIndex];
+      [self updateIconsForContents:newContents atIndex:modelIndex];
   }];
 
   // Tell the new tab contents it is about to become the selected tab. Here it
@@ -1349,6 +1334,7 @@ private:
     BOOL selected = iter != selection.end() &&
         [self indexFromModelIndex:*iter] == i;
     [current setSelected:selected];
+    [self updateIconsForContents:tabStripModel_->GetWebContentsAt(i) atIndex:i];
     if (selected)
       ++iter;
     ++i;
@@ -1424,7 +1410,7 @@ private:
 - (void)animationDidStop:(CAAnimation*)animation
            forController:(TabController*)controller
                 finished:(BOOL)finished{
-  [[animation delegate] invalidate];
+  [(TabCloseAnimationDelegate *)[animation delegate] invalidate];
   [closingControllers_ removeObject:controller];
   [self removeTab:controller];
 }
@@ -1495,7 +1481,8 @@ private:
 
 // A helper routine for creating an NSImageView to hold the favicon or app icon
 // for |contents|.
-- (NSImage*)iconImageForContents:(content::WebContents*)contents {
+- (NSImage*)iconImageForContents:(content::WebContents*)contents
+                         atIndex:(NSInteger)modelIndex {
   extensions::TabHelper* extensions_tab_helper =
       extensions::TabHelper::FromWebContents(contents);
   BOOL isApp = extensions_tab_helper->is_app();
@@ -1508,12 +1495,8 @@ private:
     if (icon)
       image = skia::SkBitmapToNSImageWithColorSpace(*icon, colorSpace);
   } else {
-    TabController* tab = [tabArray_ firstObject];
-    NSColor* titleColor = [[tab tabView] titleColor];
-    NSColor* deviceColor =
-        [titleColor colorUsingColorSpace:[NSColorSpace deviceRGBColorSpace]];
-    image = mac::FaviconForWebContents(
-        contents, skia::NSDeviceColorToSkColor(deviceColor));
+    TabController* tab = [tabArray_ objectAtIndex:modelIndex];
+    image = mac::FaviconForWebContents(contents, [[tab tabView] iconColor]);
   }
 
   // Either we don't have a valid favicon or there was some issue converting it
@@ -1592,7 +1575,8 @@ private:
       oldHasIcon != newHasIcon) {
     if (newHasIcon) {
       if (newState == kTabDone) {
-        [tabController setIconImage:[self iconImageForContents:contents]];
+        [tabController setIconImage:[self iconImageForContents:contents
+                                                       atIndex:modelIndex]];
       } else if (newState == kTabCrashed) {
         [tabController setIconImage:sadFaviconImage withToastAnimation:YES];
       } else {
@@ -2328,6 +2312,9 @@ private:
 
 - (void)themeDidChangeNotification:(NSNotification*)notification {
   [newTabButton_ setImages];
+  for (int i = 0; i < tabStripModel_->count(); i++) {
+    [self updateIconsForContents:tabStripModel_->GetWebContentsAt(i) atIndex:i];
+  }
 }
 
 - (void)setVisualEffectsDisabledForFullscreen:(BOOL)fullscreen {

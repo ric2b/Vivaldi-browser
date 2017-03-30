@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
+<translation id="1007441141628883408">Keď toto pravidlo nenastavíte alebo nastavíte na možnosť True, umožňuje aktualizovať všetky komponenty prehliadača <ph name="PRODUCT_NAME" />.
+
+      Ak ho nastavíte na možnosť False, aktualizácie komponentov budú zakázané. Na niektoré komponenty sa však toto pravidlo nevzťahuje: aktualizácie komponentov, ktoré neobsahujú spustiteľný kód, podstatne nemenia správanie prehliadača alebo ktoré sú nevyhnutné z hľadiska zabezpečenia, nebudú zakázané.
+      Medzi príklady takýchto komponentov patria zoznamy zrušených certifikátov a údaje bezpečného prehliadania. </translation>
 <translation id="101438888985615157">Otočiť obrazovku o 180 stupňov</translation>
 <translation id="1017967144265860778">Správa možností napájania na prihlasovacej obrazovke</translation>
 <translation id="1019101089073227242">Nastaviť adresár používateľských údajov</translation>
@@ -21,13 +25,6 @@
       Ak je nastavené na možnosť True alebo nie je nastavené, štatistiky budú hlásené.</translation>
 <translation id="1046484220783400299">Povoliť zastarané funkcie webovej platformy na obmedzený čas</translation>
 <translation id="1047128214168693844">Nepovoliť žiadnym stránkam sledovať fyzickú polohu používateľov</translation>
-<translation id="1057535219415338480">Povolí predvídanie siete v prehliadači <ph name="PRODUCT_NAME" /> a zabráni používateľom toto nastavenie zmeniť.
-
-      Toto pravidlo ovláda spoločne s predbežným načítaním servera DNS aj predbežné pripojenie pomocou protokolu TCP a technológie SSL a predbežné vykreslenie webových stránok. Názov pravidla je založený na predbežnom načítaní servera DNS z historických dôvodov.
-
-      Ak toto nastavenie povolíte alebo zakážete, používatelia ho v prehliadači <ph name="PRODUCT_NAME" /> nebudú môcť prepísať.
-
-      Ak toto pravidlo ponecháte nenastavené, nastavenie bude povolené, ale používateľ ho bude môcť zmeniť.</translation>
 <translation id="1062011392452772310">Povoliť pre zariadenie vzdialené overenie</translation>
 <translation id="1090892140761957285">Webová adresa na potvrdenie tokenu na overenie totožnosti klienta vzdialeného prístupu.
 
@@ -126,11 +123,6 @@
       bude vypnutý. V tomto prípade ho používateľ nemôže zapnúť.</translation>
 <translation id="1474273443907024088">Zakázať funkciu TLS False Start</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Určuje interval v milisekundách, v ktorom sa budú službe správy zariadenia odosielať informačné žiadosti o pravidlách pre zariadenie.
-
-      Nastavením tohto pravidla sa nahradí predvolená hodnota 3 hodiny. Platné hodnoty pre toto pravidlo sa pohybujú v rozmedzí od 1 800 000 (30 minút) do 86 400 000 (1 deň). Ak zadáte hodnoty mimo tento rozsah, použije sa príslušná medzná hodnota.
-
-      Ak toto pravidlo ponecháte nenastavené, systém <ph name="PRODUCT_OS_NAME" /> použije predvolenú hodnotu 3 hodiny.</translation>
 <translation id="1504431521196476721">Diaľkové overenie</translation>
 <translation id="1509692106376861764">Toto pravidlo sa prestalo používať v prehliadači <ph name="PRODUCT_NAME" /> verzie 29.</translation>
 <translation id="1522425503138261032">Povoliť stránkam sledovať fyzickú polohu používateľov</translation>
@@ -141,6 +133,7 @@
 Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť podnikoví používatelia používať funkciu ARC.</translation>
 <translation id="1561424797596341174">Prepísania pravidiel pre zostavy ladenia používané hostiteľom vzdialeného prístupu</translation>
 <translation id="1583248206450240930">Používať v predvolenom nastavení doplnok <ph name="PRODUCT_FRAME_NAME" /></translation>
+<translation id="1606958238518590302">Ak je toto pravidlo nastavené na možnosť True, používatelia nemôžu zapisovať na externé úložné zariadenia.</translation>
 <translation id="1608755754295374538">Webové adresy, ktorým bude udelený prístup k zariadeniam na zachytávanie zvuku bez zobrazenia výzvy</translation>
 <translation id="1617235075406854669">Povoliť odstránenie histórie prehliadača a sťahovania</translation>
 <translation id="1617384279878333801">Povoliť pridanie osoby pomocou správcu profilov</translation>
@@ -244,6 +237,13 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
       Ak toto pravidlo nastavíte na hodnotu true, systém <ph name="PRODUCT_OS_NAME" /> sa bude pokúšať sťahovať dátové časti automatických aktualizácií prostredníctvom protokolu HTTP. Ak pravidlo nastavíte na hodnotu false alebo ho nenastavíte, na sťahovanie dátových častí automatických aktualizácií sa použije protokol HTTPS.</translation>
 <translation id="2006530844219044261">Správa možností napájania</translation>
 <translation id="201557587962247231">Frekvencia nahrávania hlásení stavu zariadenia</translation>
+<translation id="2018836497795982119">Určuje interval (v ms), v ktorom budú službe správy zariadenia odosielané žiadosti o informácie o pravidlách pre používateľov.
+
+      Nastavením tohto pravidla bude prepísaná predvolená hodnota 3 hodiny. Platné hodnoty pre toto pravidlo sa pohybujú v rozmedzí od 1800000 (30 minút) do 86400000 (1 deň). Hodnoty mimo daného rozsahu budú upravené na príslušnú medznú hodnotu. Ak platforma podporuje upozornenia na pravidlá, oneskorenie obnovenia bude nastavené na 24 hodín, pretože sa očakáva, že upozornenia na pravidlá vynútia automatické obnovenie po každej zmene pravidiel.
+
+      Ak toto pravidlo nenastavíte, <ph name="PRODUCT_NAME" /> použije predvolenú hodnotu – 3 hodiny.
+
+      Upozorňujeme, že ak platforma podporuje upozornenia na pravidlá, oneskorenie obnovenia bude nastavené na 24 hodín (všetky predvolené nastavenia a hodnota určená v tomto pravidle budú ignorované), pretože sa očakáva, že upozornenia na pravidlá vynútia automatické obnovenie po každej zmene pravidiel. Častejšie obnovenia sú preto zbytočné.</translation>
 <translation id="2024476116966025075">Konfigurovať požadovaný názov domény pre klientov vzdialeného prístupu</translation>
 <translation id="2030905906517501646">Kľúčové slovo predvoleného poskytovateľa vyhľadávania</translation>
 <translation id="206623763829450685">Určuje, ktoré schémy overenia totožnosti pomocou protokolu HTTP bude prehliadač <ph name="PRODUCT_NAME" /> podporovať.
@@ -333,11 +333,6 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 
       Na to, aby sa po povolení rozhrania Bluetooth uplatnili zmeny, je potrebné zariadenie reštartovať (pri zakázaní rozhrania Bluetooth sa reštart zariadenia nevyžaduje).</translation>
 <translation id="2366415278352956652">Povolenie prenosu</translation>
-<translation id="2371309782685318247">Určuje interval v milisekundách, v ktorom budú službe správy zariadenia odosielané žiadosti o informácie o pravidlách pre používateľov.
-
-      Nastavením tohto pravidla bude prepísaná predvolená hodnota 3 hodiny. Platné hodnoty pre toto pravidlo sa pohybujú v rozmedzí od 1 800 000 (30 minút) do 86 400 000 (1 deň). Namiesto hodnôt mimo tento rozsah bude použitá príslušná medzná hodnota.
-
-      Ak toto nastavenie ponecháte nenastavené, v prehliadači <ph name="PRODUCT_NAME" /> sa použije predvolená hodnota 3 hodiny.</translation>
 <translation id="2372547058085956601">Oneskorenie automatického prihlásenia do verejnej relácie.
 
       Ak nie je nastavené pravidlo |DeviceLocalAccountAutoLoginId|, nebude mať toto pravidlo žiadny vplyv. V opačnom prípade platí:
@@ -542,6 +537,7 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
       Ak je toto nastavenie zakázané, webové stránky nebudú môcť používať jazyk JavaScript a používateľ toto nastavenie nebude môcť zmeniť.
 
       Ak toto pravidlo ponecháte nenastavené, webové stránky budú môcť používať jazyk JavaScript, ale používateľ bude môcť toto nastavenie zmeniť.</translation>
+<translation id="2753637905605932878">Obmedzenie rozsahu miestnych portov UDP používaných rozhraním WebRTC</translation>
 <translation id="2757054304033424106">Typy rozšírení/aplikácií, ktorých inštalácia je povolená</translation>
 <translation id="2759224876420453487">Ovládať správanie používateľa v relácii viacerých profilov</translation>
 <translation id="2761483219396643566">Oneskorenie upozornenia na nečinnosť pri napájaní z batérie</translation>
@@ -675,6 +671,7 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 
           Ak toto pravidlo ponecháte nenastavené, použije sa pravidlo „AllowJavaScript“ a používateľ to bude môcť zmeniť.</translation>
 <translation id="3038323923255997294">Po uzavretí prehliadača <ph name="PRODUCT_NAME" /> ponechať aplikácie na pozadí spustené</translation>
+<translation id="3046192273793919231">Odosielať sieťové pakety na správcovský server s cieľom sledovania online stavu</translation>
 <translation id="3048744057455266684">Ak je toto pravidlo nastavené a webová adresa vyhľadávania navrhnutá vo všeobecnom poli obsahuje tento parameter v reťazci dopytu alebo v identifikátore fragmentu, potom odporúčanie zobrazí hľadané výrazy a poskytovateľa vyhľadávania namiesto nespracovanej webovej adresy vyhľadávania.
 
           Toto pravidlo je voliteľné. Ak nie je nastavené, nedôjde k žiadnej výmene hľadaných výrazov.
@@ -775,6 +772,15 @@ Ak je toto nastavenie zakázané alebo nie je nakonfigurované, nebudú môcť p
 <translation id="3264793472749429012">Kódovania predvoleného poskytovateľa vyhľadávania</translation>
 <translation id="3273221114520206906">Predvolené nastavenie kódu JavaScript</translation>
 <translation id="3288595667065905535">Kanál verzie</translation>
+<translation id="3291367259589875381">Podpora tohto pravidla bola ukončená vo verzii M48. Toto pravidlo bolo nahradené pravidlom <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" /> a odstránené vo verzii M54.
+
+      Umožňuje povoliť predvídanie siete v prehliadači <ph name="PRODUCT_NAME" /> a zabráni používateľom toto nastavenie zmeniť.
+
+      Toto pravidlo ovláda spoločne s predbežným načítaním servera DNS aj predbežné pripojenie pomocou protokolu TCP a technológie SSL a predbežné vykreslenie webových stránok. Názov pravidla je založený na predbežnom načítaní servera DNS z historických dôvodov.
+
+      Ak toto nastavenie povolíte alebo zakážete, používatelia ho v prehliadači <ph name="PRODUCT_NAME" /> nebudú môcť prepísať.
+
+      Ak toto pravidlo ponecháte nenastavené, nastavenie bude povolené, ale používateľ ho bude môcť zmeniť.</translation>
 <translation id="3292147213643666827">Umožňuje prehliadaču <ph name="PRODUCT_NAME" /> fungovať ako server proxy medzi službou <ph name="CLOUD_PRINT_NAME" /> a staršími tlačiarňami pripojenými k počítaču.
 
       Ak je toto nastavenie povolené alebo nebolo nakonfigurované, používatelia môžu povoliť server proxy pre tlač z cloudu prostredníctvom overenia totožnosti pomocou účtu Google.
@@ -874,6 +880,7 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 <translation id="3780152581321609624">Do hlavného názvu služby protokolu Kerberos zahrnúť neštandardný port</translation>
 <translation id="3788662722837364290">Nastavenia správy spotreby energie, keď je používateľ nečinný</translation>
 <translation id="3793095274466276777">Slúži na konfiguráciu kontroly predvoleného prehliadača v prehliadači <ph name="PRODUCT_NAME" /> a bráni používateľom toto nastavenie zmeniť. Ak toto nastavenie povolíte, prehliadač <ph name="PRODUCT_NAME" /> pri spustení vždy skontroluje, či je predvoleným prehliadačom, a ak to bude možné, automaticky sa registruje. Ak je toto nastavenie zakázané, prehliadač <ph name="PRODUCT_NAME" /> nebude kontrolovať, či je predvoleným prehliadačom, a zakáže používateľské ovládacie prvky na nastavenie tejto možnosti. Ak toto nastavenie nebolo nakonfigurované, prehliadač <ph name="PRODUCT_NAME" /> umožní používateľovi určiť, či ho chce nastaviť ako predvolený prehliadač a či sa v prípade, ak ním nie je, majú používateľovi zobraziť upozornenia.</translation>
+<translation id="379659290574555063">Považovať externé úložné zariadenia za položky iba na čítanie</translation>
 <translation id="3800626789999016379">Umožňuje nakonfigurovať adresár, ktorý bude prehliadač <ph name="PRODUCT_NAME" /> používať na sťahovanie súborov.
 
       Ak nastavíte toto pravidlo, prehliadač <ph name="PRODUCT_NAME" /> bude používať zadaný adresár bez ohľadu na to, či používateľ určil takýto adresár alebo povolil príznak na zobrazenie výzvy na zadanie umiestnenia pre stiahnuté položky pri každom sťahovaní.
@@ -925,14 +932,20 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 <translation id="3864818549971490907">Predvolené nastavenie doplnkov</translation>
 <translation id="3866249974567520381">Popis</translation>
 <translation id="3866530186104388232">Ak je toto pravidlo nastavené na hodnotu pravda alebo je nenakonfigurované, systém <ph name="PRODUCT_OS_NAME" /> na prihlasovacej obrazovke zobrazí existujúcich používateľov a umožní vybrať jedného z nich. Ak je pravidlo nastavené na hodnotu false, systém <ph name="PRODUCT_OS_NAME" /> použije pri prihlásení výzvu na zadanie používateľského mena a hesla.</translation>
-<translation id="3866824067696705379">Ako často sa odosiela sledovanie signálov heartbeat (v milisekundách).
-
-      Ak toto pravidlo nie je nastavené, použije sa predvolená frekvencia tri minúty. Minimálna frekvencia je 30 sekúnd a maximálna 24 hodín – hodnoty mimo tohto rozsahu budú prispôsobené na príslušnú hranicu.</translation>
 <translation id="3868347814555911633">Toto pravidlo je aktívne iba v režime predaja.
 
       Zoznam rozšírení, ktoré sa automaticky nainštalujú pre používateľa ukážky v zariadeniach v režime predaja. Tieto rozšírenia sa uložia v zariadení a po inštalácii môžu byť nainštalované v režime offline.
 
       Každý záznam v zozname obsahuje adresár, ktorý musí zahŕňať ID rozšírenia v poli „extension-id“ a jeho webovú adresu pre aktualizácie v poli „update-url“.</translation>
+<translation id="388237772682176890">Podpora tohto pravidla bola ukončená vo verzii M53. Toto pravidlo bolo odstránené vo verzii M54, pretože bola ukončená podpora protokolu SPDY/3.1.
+
+      Umožňuje zakázať protokol SPDY v prehliadači <ph name="PRODUCT_NAME" />.
+
+      Keď ho povolíte, protokol SPDY nebude k dispozícii v prehliadači <ph name="PRODUCT_NAME" />.
+
+      Ak ho zakážete, povolíte tým používanie protokolu SPDY.
+
+      Ak toto pravidlo ponecháte nenastavené, protokol SPDY bude k dispozícii.</translation>
 <translation id="3891357445869647828">Povoliť kód JavaScript</translation>
 <translation id="3898060089412156345">Povolí alebo zamietne zaznamenávanie zvuku.
 
@@ -950,6 +963,11 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 
           Ak toto pravidlo nie je nastavené alebo ak je nastavené na hodnotu False, používatelia budú môcť prenášať súbory na Disk Google.</translation>
 <translation id="3915395663995367577">Webová adresa súboru PAC servera proxy</translation>
+<translation id="3939893074578116847">Odosielanie sieťových paketov na správcovský server s cieľom sledovania online stavu, ktoré umožní
+       serveru zistiť, či je zariadenie v režime offline.
+
+      Ak je toto pravidlo nastavené na hodnotu True, budú sa odosielať sledovacie sieťové pakety (tzv. <ph name="HEARTBEATS_TERM" />).
+      Ak je nastavené na hodnotu False alebo nie je nastavené, pakety sa odosielať nebudú.</translation>
 <translation id="3964909636571393861">Umožňuje prístup k zoznamu webových adries</translation>
 <translation id="3965339130942650562">Časový limit pred odhlásením nečinného používateľa</translation>
 <translation id="3967075520570946456">Aktivovať zobrazenie uvítacej stránky pri prvom spustení prehliadača po prechode na vyššiu verziu OS</translation>
@@ -1149,7 +1167,6 @@ Ak toto nastavenie zakážete, v okne správcu hesiel nebude možné zobraziť 
 
           Ak pravidlo nenastavíte, prehliadač <ph name="PRODUCT_NAME" /> nebude delegovať poverenia používateľov ani v prípade, ak je server v sieti intranet.</translation>
 <translation id="4752880493649142945">Certifikát klienta na pripojenie k adrese RemoteAccessHostTokenValidationUrl</translation>
-<translation id="4768493164188395498">Frekvencia sledovania signálov heartbeat</translation>
 <translation id="4791031774429044540">Povolí veľký kurzor (funkcia na uľahčenie prístupu).
 
       Ak toto pravidlo povolíte, bude veľký kurzor vždy zapnutý.
@@ -1258,6 +1275,9 @@ Ak toto pravidlo nie je nastavené alebo je prázdne, akýkoľvek používateľ 
           Hodnota * v zozname zakázaných položiek znamená, že všetci hostitelia pre odosielanie natívnych správ sú zakázaní. Povolení budú iba tí, ktorí sú výslovne uvedení na bielej listine.
 
           Ak toto pravidlo nebude nastavené, produkt <ph name="PRODUCT_NAME" /> načíta všetkých nainštalovaných hostiteľov pre odosielanie natívnych správ.</translation>
+<translation id="5288772341821359899">Ak toto pravidlo nastavíte, rozsah portov UDP používaných rozhraním WebRTC bude obmedzovaný na špecifikovaný interval portov (vrátane koncových bodov).
+
+      Ak toto pravidlo nenastavíte, použijete prázdny reťazec alebo neplatný rozsah portov, rozhranie WebRTC bude môcť použiť ľubovoľný dostupný miestny port UDP.</translation>
 <translation id="5290940294294002042">Určiť zoznam doplnkov, ktoré môže používateľ povoliť alebo zakázať</translation>
 <translation id="5302612588919538756">Podpora tohto pravidla je ukončená. Skúste namiesto toho použiť pravidlo SyncDisabled.
 
@@ -1328,6 +1348,16 @@ Ak toto pravidlo nie je nastavené alebo je prázdne, akýkoľvek používateľ 
       Ak je pravidlo nastavené, zariadenie sa po uplynutí určitého časového obdobia nečinnosti používateľa na prihlasovacej obrazovke automaticky prihlási do určenej relácie. Verejná relácia už musí byť nakonfigurovaná (prečítajte si časť |DeviceLocalAccounts|).
 
       Ak pravidlo nastavené nie je, automatické prihlásenie nenastane.</translation>
+<translation id="5529037166721644841">Určuje interval (v ms), v ktorom budú službe správy zariadenia odosielané žiadosti o informácie o pravidlách pre zariadenie.
+
+      Nastavením tohto pravidla bude prepísaná predvolená hodnota 3 hodiny. Platné hodnoty pre toto pravidlo sa pohybujú v rozmedzí od 1800000 (30 minút) do 86400000 (1 deň). Hodnoty mimo daného rozsahu budú upravené na príslušnú medznú hodnotu.
+
+      Ak toto pravidlo nenastavíte, <ph name="PRODUCT_OS_NAME" /> použije predvolenú hodnotu – 3 hodiny.
+
+      Upozorňujeme, že ak platforma podporuje upozornenia na pravidlá, oneskorenie obnovenia bude nastavené na 24 hodín (všetky predvolené nastavenia a hodnota určená v tomto pravidle budú ignorované), pretože sa očakáva, že upozornenia na pravidlá vynútia automatické obnovenie po každej zmene pravidiel. Častejšie obnovenia sú preto zbytočné.</translation>
+<translation id="5535957389335373033">Ako často sa odosielajú sledovacie sieťové pakety (v milisekundách).
+
+      Ak toto pravidlo nie je nastavené, použije sa predvolená frekvencia tri minúty. Minimálna frekvencia je 30 sekúnd a maximálna 24 hodín – hodnoty mimo tohto rozsahu budú prispôsobené na príslušnú hranicu.</translation>
 <translation id="5535973522252703021">Zoznam povolených serverov delegovania protokolu Kerberos</translation>
 <translation id="5560039246134246593">Pridá parameter k načítaniu počiatočnej hodnoty variácie v prehliadači <ph name="PRODUCT_NAME" />.
 
@@ -1367,6 +1397,7 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
 
           Ak toto nastavenie zakážete alebo nenastavíte, hostiteľa vzdialeného prístupu bude možné priradiť k ľubovoľnému miestnemu používateľovi.</translation>
 <translation id="5697306356229823047">Nahlásiť používateľov zariadenia</translation>
+<translation id="570062449808736508">Ak je toto pravidlo nastavené na reťazec, ktorý neobsahuje prázdne hodnoty, zobrazenie WebView bude čítať obmedzenia týkajúce sa webových adries od poskytovateľa obsahu s uvedeným názvom autority.</translation>
 <translation id="5703863730741917647">Určte akciu, ktorá sa má uskutočniť po uplynutí určitého času nečinnosti.
 
           Upozorňujeme, že podpora tohto pravidla bola ukončená a v budúcnosti sa odstráni.
@@ -1633,6 +1664,7 @@ Pozrite si tiež pravidlo RemoteAccessHostDomain.</translation>
           Ak toto pravidlo nastavíte, používatelia ho budú môcť dočasne prepísať aktiváciou alebo deaktiváciou klávesnice na obrazovke. Voľba používateľa však nebude trvalá a po opätovnom zobrazení prihlasovacej obrazovky alebo nečinnosti používateľa na prihlasovacej obrazovke počas jednej minúty sa obnoví pôvodné nastavenie.
 
           Ak toto pravidlo nenastavíte, bude pri prvom zobrazení prihlasovacej obrazovky klávesnica na obrazovke deaktivovaná. Používatelia budú môcť klávesnicu na obrazovke kedykoľvek aktivovať alebo deaktivovať a zvolený stav na prihlasovacej obrazovke pretrvá aj u iných používateľov.</translation>
+<translation id="6573305661369899995">Nastavenie externého zdroja na obmedzenie webových adries</translation>
 <translation id="6598235178374410284">Obrázok avatara používateľa</translation>
 <translation id="6628646143828354685">Umožňuje nastaviť, či môžu weby získať prístup k zariadeniam Bluetooth v blízkosti. Prístup môže byť úplne zablokovaný alebo je možné používateľa požiadať, keď chce web získať prístup k zariadeniam Bluetooth v blízkosti.
 
@@ -1764,6 +1796,7 @@ Ak je toto nastavenie povolené, hostiteľov je možné zdieľať iba pomocou ú
 Ak je toto nastavenie zakázané alebo nie je nastavené, hostiteľov je možné zdieľať pomocou ľubovoľného účtu.
 
 Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
+<translation id="6979510692034647325">Umožňuje aktualizácie komponentov v prehliadači <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6997592395211691850">Toto pravidlo určuje, či sa pre miestne dôveryhodné ukotvenia vyžadujú kontroly OCSP/CRL online</translation>
 <translation id="7003334574344702284">Ak je toto pravidlo povolené, uložené heslá sú importované z predchádzajúceho predvoleného prehliadača. Povolenie tohto pravidla má vplyv aj na dialógové okno importu.
 
@@ -1895,6 +1928,9 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
           Toto pravidlo sa použije iba v prípade, že je povolené pravidlo DefaultSearchProviderEnabled.</translation>
 <translation id="7302043767260300182">Oneskorenie uzamknutia obrazovky pri používaní napájacieho zdroja</translation>
+<translation id="7311458740754205918">Ak toto pravidlo nastavíte na hodnotu True alebo ho nenastavíte, na stránke na novej karte sa môžu zobrazovať návrhy obsahu na základe používateľovej histórie prehliadania, záujmov alebo polohy.
+
+      Ak toto pravidlo nastavíte na možnosť False, automaticky generované návrhy obsahu sa na stránke na novej karte nezobrazujú.</translation>
 <translation id="7323896582714668701">Dodatočné parametre príkazového riadka pre <ph name="PRODUCT_NAME" /></translation>
 <translation id="7329842439428490522">Určuje dobu nečinnosti používateľa, po ktorej sa obrazovka pri napájaní z batérie vypne.
 
@@ -1922,7 +1958,6 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
       Ak sa toto pravidlo nenastaví, automatické čistenie použije predvolenú vstavanú stratégiu, ktorá v súčasnosti predstavuje stratégiu RemoveLRUIfDormant.</translation>
 <translation id="7336878834592315572">Uchovať súbory cookie počas trvania relácie</translation>
 <translation id="7340034977315324840">Hlásiť časy aktivity zariadenia</translation>
-<translation id="7381326101471547614">Zakáže v prehliadači <ph name="PRODUCT_NAME" /> použitie protokolu SPDY. Ak je toto pravidlo povolené, protokol SPDY nebude v prehliadači <ph name="PRODUCT_NAME" /> k dispozícii. Zakázaním tohto pravidla použitie protokolu SPDY umožníte. Ak toto pravidlo ponecháte nenastavené, protokol SPDY bude k dispozícii.</translation>
 <translation id="7384999953864505698">Povolenie protokolu QUIC</translation>
 <translation id="7406651467768226499">Ovláda, či má byť povolené verejnej aplikácii, ktorá sa spúšťa automaticky s nulovým oneskorením, ovládať verziu systému <ph name="PRODUCT_OS_NAME" />.
 
@@ -1941,6 +1976,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7443616896860707393">Požiadavky typu cross-origin štandardu HTTP Basic Auth</translation>
 <translation id="7468416082528382842">Umiestnenie v registri systému Windows:</translation>
 <translation id="7469554574977894907">Povoliť návrhy pre vyhľadávanie</translation>
+<translation id="7474249562477552702">Či sú povolené certifikáty podpísané algoritmom SHA-1 vydané miestnymi ukotveniami dôvery</translation>
 <translation id="7485481791539008776">Pravidlá výberu predvolenej tlačiarne</translation>
 <translation id="749556411189861380">Nahlásenie verzie operačného systému a firmvéru registrovaných zariadení.
 
@@ -1948,7 +1984,6 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7511361072385293666">Ak je toto pravidlo nastavené na možnosť True alebo nie je nastavené vôbec, použitie protokolu QUIC je v prehliadači <ph name="PRODUCT_NAME" /> povolené.
       Ak je toto pravidlo nastavené na možnosť False, použitie protokolu QUIC je zakázané.</translation>
 <translation id="7519251620064708155">Povoliť generovanie kľúčov na týchto webových stránkach</translation>
-<translation id="7523476810162382273">Odosielanie sledovania signálov heartbeat na správcovský server</translation>
 <translation id="7529100000224450960">Umožňuje nastaviť zoznam vzorov webových adries určujúcich webové stránky, ktoré môžu otvárať kontextové okná.
 
           Ak toto pravidlo ponecháte nenastavené, použije sa v prípade všetkých webových stránok globálna predvolená hodnota buď z pravidla „DefaultPopupsSetting“ (ak je nastavené), alebo z osobnej konfigurácie používateľa.</translation>
@@ -1959,6 +1994,11 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
       Ak ho nastavíte na možnosť SAML_INTERSTITIAL, počas prihlásenia bude mať používateľ k dispozícii intersticiálnu obrazovku umožňujúcu pokračovať s overením totožnosti prostredníctvom poskytovateľa identity SAML z domény registrácie príslušného zariadenia, prípadne sa vrátiť na normálne prihlásenie prostredníctvom štandardu GAIA.</translation>
 <translation id="7567380065339179813">Povoliť doplnky na týchto stránkach</translation>
+<translation id="757395965347379751">Ak je toto nastavenie aktivované, prehliadač <ph name="PRODUCT_NAME" /> povolí certifikáty podpísané algoritmom SHA-1, ktoré sú úspešne overené a pripojené k reťazcu miestne nainštalovaných certifikátov CA.
+
+      Upozorňujeme, že toto pravidlo je závislé od balíka súborov na overovanie totožnosti certifikátov operačných systémov, ktorý povoľuje podpisy algoritmom SHA-1. Ak sa v dôsledku aktualizácie operačného systému zmení spracovávanie certifikátov SHA-1 operačným systémom, toto pravidlo nemusí byť uplatňované. Toto pravidlo má fungovať ako dočasné riešenie, ktoré podnikom poskytne viac času na ukončenie používania algoritmu SHA-1. Bude odstránené približne 1. januára 2019.
+
+      Ak toto pravidlo nenastavíte alebo nastavíte na možnosť False, prehliadač <ph name="PRODUCT_NAME" /> bude nasledovať zverejnený plán ukončenia podpory algoritmu SHA-1.</translation>
 <translation id="7593523670408385997">Umožňuje nakonfigurovať veľkosť vyrovnávacej pamäte, ktorú služba <ph name="PRODUCT_NAME" /> použije na ukladanie súborov vo vyrovnávacej pamäti na disk.
 
       Ak nastavíte toto pravidlo, služba <ph name="PRODUCT_NAME" /> použije uvedenú veľkosť vyrovnávacej pamäte bez ohľadu na to, či používateľ určil príznak --disk-cache-size. Hodnota určená v tomto pravidle nie je pevnou hraničnou hodnotou, ale skôr návrhom pre systém ukladania do vyrovnávacej pamäte. Každá hodnota menšia ako niekoľko megabajtov je príliš malá a zaokrúhli sa smerom nahor na rozumné minimum.
@@ -2016,6 +2056,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 
           Ak je toto nastavenie zakázané alebo nie je nastavené, dvojfázové overenie totožnosti nebude povolené a namiesto neho bude použitá predvolená možnosť – používateľom zadaný kód PIN.</translation>
 <translation id="7750991880413385988">Otvoriť stránku Nová karta</translation>
+<translation id="7761446981238915769">Konfigurácia zoznamu nainštalovaných aplikácií na prihlasovacej obrazovke</translation>
 <translation id="7761526206824804472">Nastaví jedno alebo viac odporúčaných miestnych nastavení pre verejnú reláciu a umožní používateľom poľahky z nich niektoré vybrať.
 
       Používateľ si môže vybrať miestne nastavenie a rozloženie klávesnice ešte pred spustením verejnej relácie. Predvolene sú všetky miestne nastavenia, ktoré <ph name="PRODUCT_OS_NAME" /> podporuje, uvedené v abecednom poradí. Pomocou tohto pravidla môžete presunúť skupinu odporúčaných miestnych nastavení na začiatok zoznamu.
@@ -2038,6 +2079,7 @@ Pozrite si tiež pravidlo RemoteAccessHostClientDomain.</translation>
 <translation id="7763479091692861127"> Typy pripojení, ktoré je možné používať na aktualizáciu operačného systému. Aktualizácie operačného systému môžu vzhľadom na objem dát významne zaťažovať pripojenie a môžu tak zvýšiť vaše poplatky. Predvolene preto nie sú povolené pre typy pripojení, ktoré sú považované za finančne nákladné, ako sú momentálne pripojenia WiMax, Bluetooth a mobilné pripojenie.
 
       Medzi uznávané identifikátory typov pripojení patria "ethernet", "wifi", "wimax", "bluetooth" a "cellular".</translation>
+<translation id="7763614521440615342">Zobrazovať návrhy obsahu na stránke na novej karte</translation>
 <translation id="7766336524667238790">Nahlasuje informácie o aktívnej relácii režimu verejného terminálu, ako sú
       identifikátor a verzia aplikácie.
 
@@ -2429,6 +2471,14 @@ Odporúčaný spôsob nastavenia pravidiel v systéme Windows je prostredníctv
 <translation id="8858642179038618439">Vynútenie Bezpečnostného režimu v službe YouTube</translation>
 <translation id="8864975621965365890">Potlačí výzvu o zamietnutie, ktorá sa zobrazí pri vykreslení stránky rámcom <ph name="PRODUCT_FRAME_NAME" />.</translation>
 <translation id="8870318296973696995">Domovská stránka</translation>
+<translation id="88890388118515381">
+      Určuje zoznam aplikácií, ktoré sú nainštalované na pozadí na prihlasovacej obrazovke bez pričinenia používateľa a ktoré sa nedajú odinštalovať. Všetky povolenia požadované aplikáciou sú udeľované implicitne bez pričinenia používateľa, a to vrátane všetkých dodatočných povolení požadovaných budúcimi verziami aplikácie.
+
+Ak bude zo zoznamu odstránená aplikácia, ktorá bola predtým nainštalovaná vynútene, <ph name="PRODUCT_NAME" /> ju automaticky odinštaluje.
+
+Každá položka zoznamu v pravidlách predstavuje reťazec, ktorý obsahuje ID rozšírenia a webovú adresu na aktualizáciu oddelené bodkočiarkou (<ph name="SEMICOLON" />). ID rozšírenia je 32-znakový reťazec a nájdete ho napríklad na adrese <ph name="CHROME_EXTENSIONS_LINK" /> (v režime pre vývojárov). Webová adresa na aktualizáciu by mala odkazovať na dokument XML manifestu aktualizácie (tak, ako je opísané na adrese <ph name="LINK_TO_EXTENSION_DOC1" />). Webová adresa na aktualizáciu nastavená v tomto pravidle slúži iba na počiatočnú inštaláciu. Ďalšie aktualizácie rozšírenia budú používať webovú adresu na aktualizáciu uvedenú v manifeste rozšírenia.
+
+<ph name="EXTENSION_POLICY_EXAMPLE" /> napríklad nainštaluje aplikáciu <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> zo štandardnej webovej adresy na aktualizáciu z Internetového obchodu Chrome. Ďalšie informácie o hostení rozšírení nájdete na adrese <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">Server Quirks poskytuje konfiguračné súbory pre konkrétny hardvér, ako
       napríklad profily obrazoviek ICC na úpravu kalibrácie monitorov.
 
@@ -2481,11 +2531,6 @@ Odporúčaný spôsob nastavenia pravidiel v systéme Windows je prostredníctv
 <translation id="9088444059179765143">Konfigurovať spôsob automatického zisťovania časového pásma</translation>
 <translation id="9096086085182305205">Zoznam povolených overovacích serverov</translation>
 <translation id="9098553063150791878">Pravidlá pre overenie HTTP</translation>
-<translation id="9104138886225968319">Odosielanie sledovania signálov heartbeat na správcovský server,
-      čo umožní serveru zistiť, že je zariadenie v režime offline.
-
-      Ak je toto pravidlo nastavené na možnosť True, sledovanie signálov heartbeat sa bude odosielať. Ak je nastavené
-      na možnosť False alebo nie je nastavené vôbec, nebudú sa odosielať žiadne signály heartbeat.</translation>
 <translation id="9112897538922695510">Umožňuje zaregistrovať zoznam obslužných nástrojov protokolu. Môže to byť iba odporúčané pravidlo. Vlastnosť |protocol| by mala byť nastavená na schému, ako napríklad „mailto“, a vlasnosť |url| by mala byť nastavená na vzor webovej adresy aplikácie, ktorá danú schému obsluhuje. Vzor môže zahrnovať reťazec „%s“, ktorý bude nahradený obsluhovanou webovou adresou (ak bude použitý).
 
           Obslužné nástroje protokolu, ktoré sú registrované týmto pravidlom, budú zlúčené s nástrojmi registrovanými používateľom a budú všetky k dispozícii na použitie. Používateľ môže prepísať obslužné nástroje protokolu nainštalované pravidlom inštaláciou nového predvoleného obslužného nástroja. Obslužný protokol registrovaný pravidlom však nie je možné odstrániť.</translation>
@@ -2527,6 +2572,7 @@ Odporúčaný spôsob nastavenia pravidiel v systéme Windows je prostredníctv
 <translation id="9187743794267626640">Zákaz pripojenia externého ukladacieho priestoru</translation>
 <translation id="9197740283131855199">Percentuálna hodnota, o ktorú sa predĺži oneskorenie stmavenia obrazovky, keď sa zaznamená aktivita používateľa po stmavení obrazovky</translation>
 <translation id="9200828125069750521">Parametre pre webovú adresu obrázkov, ktorá používa metódu POST</translation>
+<translation id="9217154963008402249">Frekvencia odosielania sledovacích sieťových paketov</translation>
 <translation id="922540222991413931">Konfigurácia zdrojov inštalácie rozšírenia, aplikácie a skriptov používateľa</translation>
 <translation id="924557436754151212">Import uložených hesiel z predvoleného prehliadača pri prvom spustení</translation>
 <translation id="930930237275114205">Nastaviť adresár na údaje používateľov pre aplikáciu <ph name="PRODUCT_FRAME_NAME" /></translation>

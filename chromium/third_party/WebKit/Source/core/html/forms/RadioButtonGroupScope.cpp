@@ -143,7 +143,7 @@ void RadioButtonGroup::requiredAttributeChanged(HTMLInputElement* button)
 {
     DCHECK_EQ(button->type(), InputTypeNames::radio);
     auto it = m_members.find(button);
-    ASSERT(it != m_members.end());
+    DCHECK_NE(it, m_members.end());
     bool wasValid = isValid();
     // Synchronize the 'required' flag for the button, along with
     // updating the overall count.
@@ -232,10 +232,18 @@ void RadioButtonGroupScope::addButton(HTMLInputElement* element)
     if (!m_nameToGroupMap)
         m_nameToGroupMap = new NameToGroupMap;
 
-    Member<RadioButtonGroup>& group = m_nameToGroupMap->add(element->name(), nullptr).storedValue->value;
-    if (!group)
-        group = RadioButtonGroup::create();
-    group->add(element);
+    auto keyValue = m_nameToGroupMap->add(element->name(), nullptr).storedValue;
+    if (!keyValue->value) {
+        keyValue->value = RadioButtonGroup::create();
+    } else {
+        if (keyValue->key == element->name())
+            UseCounter::count(element->document(), UseCounter::RadioNameMatchingStrict);
+        else if (equalIgnoringASCIICase(keyValue->key, element->name()))
+            UseCounter::count(element->document(), UseCounter::RadioNameMatchingASCIICaseless);
+        else
+            UseCounter::count(element->document(), UseCounter::RadioNameMatchingCaseFolding);
+    }
+    keyValue->value->add(element);
 }
 
 void RadioButtonGroupScope::updateCheckedState(HTMLInputElement* element)

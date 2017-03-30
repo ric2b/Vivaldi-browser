@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<grit latest_public_release="0" current_release="1">
+<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
   <outputs>
     <output filename="grit/ios_web_resources.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -21,7 +21,7 @@
       <include name="IDR_IOS_MOJO_SYNC_MESSAGE_CHANNEL_JS" file="webui/resources/sync_message_channel.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_IOS_MOJO_HANDLE_UTIL_JS" file="webui/resources/handle_util.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_IOS_MOJO_CORE_JS" file="webui/resources/core.js" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_IOS_MOJO_SERVICE_REGISTRY_JS" file="webui/resources/service_registry.js" flattenhtml="true" type="BINDATA" />
+      <include name="IDR_IOS_SHELL_INTERFACE_PROVIDER_JS" file="webui/resources/interface_provider.js" flattenhtml="true" type="BINDATA" />
     </includes>
   </release>
 </grit>

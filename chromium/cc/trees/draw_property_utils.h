@@ -20,14 +20,20 @@ class ClipTree;
 struct DrawProperties;
 class Layer;
 class LayerImpl;
-class LayerTreeHost;
+class LayerTree;
 class RenderSurfaceImpl;
 class EffectTree;
 class TransformTree;
 class PropertyTrees;
+struct EffectNode;
 
 namespace draw_property_utils {
 
+void CC_EXPORT PostConcatSurfaceContentsScale(const EffectNode* effect_node,
+                                              gfx::Transform* transform);
+
+void CC_EXPORT ConcatInverseSurfaceContentsScale(const EffectNode* effect_node,
+                                                 gfx::Transform* transform);
 // Computes combined clips for every node in |clip_tree|. This function requires
 // that |transform_tree| has been updated via |ComputeTransforms|.
 void CC_EXPORT ComputeClips(ClipTree* clip_tree,
@@ -59,7 +65,7 @@ void CC_EXPORT BuildPropertyTreesAndComputeVisibleRects(
 void CC_EXPORT UpdatePropertyTrees(PropertyTrees* property_trees,
                                    bool can_render_to_separate_surface);
 
-void CC_EXPORT FindLayersThatNeedUpdates(LayerTreeHost* layer_tree_host,
+void CC_EXPORT FindLayersThatNeedUpdates(LayerTree* layer_tree,
                                          const TransformTree& transform_tree,
                                          const EffectTree& effect_tree,
                                          LayerList* update_layer_list);
@@ -99,8 +105,12 @@ bool CC_EXPORT LayerNeedsUpdate(LayerImpl* layer,
 void CC_EXPORT VerifyClipTreeCalculations(const LayerImplList& layer_list,
                                           PropertyTrees* property_trees);
 
+void CC_EXPORT VerifyTransformTreeCalculations(const LayerImplList& layer_list,
+                                               PropertyTrees* property_trees);
+
 gfx::Transform CC_EXPORT DrawTransform(const LayerImpl* layer,
-                                       const TransformTree& tree);
+                                       const TransformTree& transform_tree,
+                                       const EffectTree& effect_tree);
 
 gfx::Transform CC_EXPORT ScreenSpaceTransform(const Layer* layer,
                                               const TransformTree& tree);

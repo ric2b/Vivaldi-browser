@@ -8,9 +8,9 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "net/quic/quic_framer.h"
-#include "net/quic/quic_http_utils.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/quic_framer.h"
+#include "net/quic/core/quic_http_utils.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
 using std::make_pair;
@@ -296,6 +296,7 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeDataPacket(
     base::StringPiece data) {
   InitializeHeader(packet_number, should_include_version);
   QuicStreamFrame frame(stream_id, fin, offset, data);
+  DVLOG(1) << "Adding frame: " << frame;
   return MakePacket(header_, QuicFrame(&frame));
 }
 
@@ -518,6 +519,24 @@ std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakePushPromisePacket(
   }
 }
 
+std::unique_ptr<QuicReceivedPacket> QuicTestPacketMaker::MakeForceHolDataPacket(
+    QuicPacketNumber packet_number,
+    QuicStreamId stream_id,
+    bool should_include_version,
+    bool fin,
+    QuicStreamOffset* offset,
+    base::StringPiece data) {
+  SpdyDataIR spdy_data(stream_id, data);
+  spdy_data.set_fin(fin);
+  SpdySerializedFrame spdy_frame(
+      spdy_request_framer_.SerializeFrame(spdy_data));
+  InitializeHeader(packet_number, should_include_version);
+  QuicStreamFrame quic_frame(kHeadersStreamId, false, *offset,
+                             StringPiece(spdy_frame.data(), spdy_frame.size()));
+  *offset += spdy_frame.size();
+  return MakePacket(header_, QuicFrame(&quic_frame));
+}
+
 // If |offset| is provided, will use the value when creating the packet.
 // Will also update the value after packet creation.
 std::unique_ptr<QuicReceivedPacket>
@@ -610,7 +629,7 @@ SpdyHeaderBlock QuicTestPacketMaker::GetResponseHeaders(
     const std::string& alt_svc) {
   SpdyHeaderBlock headers;
   headers[":status"] = status;
-  headers["Alt-Svc"] = alt_svc;
+  headers["alt-svc"] = alt_svc;
   headers["content-type"] = "text/plain";
   return headers;
 }

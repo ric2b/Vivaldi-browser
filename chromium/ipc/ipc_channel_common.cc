@@ -12,11 +12,12 @@ namespace IPC {
 // static
 std::unique_ptr<Channel> Channel::CreateClient(
     const IPC::ChannelHandle& channel_handle,
-    Listener* listener) {
+    Listener* listener,
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
   if (channel_handle.mojo_handle.is_valid()) {
     return ChannelMojo::Create(
         mojo::ScopedMessagePipeHandle(channel_handle.mojo_handle),
-        Channel::MODE_CLIENT, listener);
+        Channel::MODE_CLIENT, listener, ipc_task_runner);
   }
   return Channel::Create(channel_handle, Channel::MODE_CLIENT, listener);
 }
@@ -35,24 +36,15 @@ std::unique_ptr<Channel> Channel::CreateNamedClient(
   return Channel::Create(channel_handle, Channel::MODE_NAMED_CLIENT, listener);
 }
 
-#if defined(OS_POSIX)
-// static
-std::unique_ptr<Channel> Channel::CreateOpenNamedServer(
-    const IPC::ChannelHandle& channel_handle,
-    Listener* listener) {
-  return Channel::Create(channel_handle, Channel::MODE_OPEN_NAMED_SERVER,
-                         listener);
-}
-#endif
-
 // static
 std::unique_ptr<Channel> Channel::CreateServer(
     const IPC::ChannelHandle& channel_handle,
-    Listener* listener) {
+    Listener* listener,
+    const scoped_refptr<base::SingleThreadTaskRunner>& ipc_task_runner) {
   if (channel_handle.mojo_handle.is_valid()) {
     return ChannelMojo::Create(
         mojo::ScopedMessagePipeHandle(channel_handle.mojo_handle),
-        Channel::MODE_SERVER, listener);
+        Channel::MODE_SERVER, listener, ipc_task_runner);
   }
   return Channel::Create(channel_handle, Channel::MODE_SERVER, listener);
 }
@@ -82,6 +74,10 @@ void Channel::GenerateMojoChannelHandlePair(
 }
 
 Channel::~Channel() {
+}
+
+Channel::AssociatedInterfaceSupport* Channel::GetAssociatedInterfaceSupport() {
+  return nullptr;
 }
 
 bool Channel::IsSendThreadSafe() const {

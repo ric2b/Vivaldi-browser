@@ -9,6 +9,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_painted_layer_delegates.h"
 #include "ui/views/background.h"
@@ -19,9 +20,6 @@
 namespace views {
 
 namespace {
-
-// Inset between clickable region border and button contents (text).
-const int kHorizontalPadding = 16;
 
 // Minimum size to reserve for the button contents.
 const int kMinWidth = 48;
@@ -172,6 +170,14 @@ SkColor MdTextButton::GetInkDropBaseColor() const {
   return color_utils::DeriveDefaultIconColor(label()->enabled_color());
 }
 
+std::unique_ptr<views::InkDropRipple> MdTextButton::CreateInkDropRipple()
+    const {
+  return std::unique_ptr<views::InkDropRipple>(
+      new views::FloodFillInkDropRipple(
+          GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+          GetInkDropBaseColor(), ink_drop_visible_opacity()));
+}
+
 std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
     const {
   if (!ShouldShowInkDropHighlight())
@@ -190,10 +196,10 @@ std::unique_ptr<views::InkDropHighlight> MdTextButton::CreateInkDropHighlight()
   shadows.push_back(gfx::ShadowValue(gfx::Vector2d(0, kYOffset),
                                      2 * kSkiaBlurRadius,
                                      SkColorSetA(SK_ColorBLACK, 0x3D)));
-  return base::WrapUnique(new InkDropHighlight(
+  return base::MakeUnique<InkDropHighlight>(
       gfx::RectF(GetLocalBounds()).CenterPoint(),
       base::WrapUnique(new BorderShadowLayerDelegate(
-          shadows, GetLocalBounds(), kInkDropSmallCornerRadius))));
+          shadows, GetLocalBounds(), kInkDropSmallCornerRadius)));
 }
 
 bool MdTextButton::ShouldShowInkDropForFocus() const {
@@ -206,68 +212,99 @@ void MdTextButton::SetEnabledTextColors(SkColor color) {
   UpdateColors();
 }
 
+void MdTextButton::SetText(const base::string16& text) {
+  LabelButton::SetText(text);
+  UpdatePadding();
+}
+
+void MdTextButton::AdjustFontSize(int size_delta) {
+  LabelButton::AdjustFontSize(size_delta);
+  UpdatePadding();
+}
+
 void MdTextButton::UpdateStyleToIndicateDefaultStatus() {
   UpdateColors();
+}
+
+void MdTextButton::SetFontList(const gfx::FontList& font_list) {
+  NOTREACHED()
+      << "Don't call MdTextButton::SetFontList (it will soon be protected)";
 }
 
 MdTextButton::MdTextButton(ButtonListener* listener)
     : LabelButton(listener, base::string16()),
       focus_ring_(new internal::MdFocusRing()),
       is_cta_(false) {
-  SetHasInkDrop(true);
+  SetInkDropMode(InkDropMode::ON);
   set_has_ink_drop_action_on_click(true);
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
   SetFocusForPlatform();
   SetMinSize(gfx::Size(kMinWidth, 0));
   SetFocusPainter(nullptr);
   label()->SetAutoColorReadabilityEnabled(false);
-  SetFontList(GetMdFontList());
-
   AddChildView(focus_ring_);
   focus_ring_->SetVisible(false);
   set_request_focus_on_press(false);
-
-  // Top and bottom padding depend on the font. Example: if font cap height is
-  // 9dp, use 8dp bottom padding and 7dp top padding to total 24dp.
-  const gfx::FontList& font = label()->font_list();
-  int text_height = font.GetCapHeight();
-  int even_text_height = text_height - (text_height % 2);
-  const int top_padding = even_text_height - (text_height - even_text_height);
-  const int bottom_padding = even_text_height;
-  DCHECK_EQ(3 * even_text_height, top_padding + text_height + bottom_padding);
-
-  const int inbuilt_top_padding = font.GetBaseline() - font.GetCapHeight();
-  const int inbuilt_bottom_padding =
-      font.GetHeight() - label()->font_list().GetBaseline();
-
-  // TODO(estade): can we get rid of the platform style border hoopla if
-  // we apply the MD treatment to all buttons, even GTK buttons?
-  SetBorder(Border::CreateEmptyBorder(
-      top_padding - inbuilt_top_padding, kHorizontalPadding,
-      bottom_padding - inbuilt_bottom_padding, kHorizontalPadding));
+  LabelButton::SetFontList(GetMdFontList());
 }
 
 MdTextButton::~MdTextButton() {}
+
+void MdTextButton::UpdatePadding() {
+  // Don't use font-based padding when there's no text visible.
+  if (GetText().empty()) {
+    SetBorder(Border::NullBorder());
+    return;
+  }
+
+  // Text buttons default to 28dp in height on all platforms when the base font
+  // is in use, but should grow or shrink if the font size is adjusted up or
+  // down. When the system font size has been adjusted, the base font will be
+  // larger than normal such that 28dp might not be enough, so also enforce a
+  // minimum height of twice the font size.
+  // Example 1:
+  // * Normal button on ChromeOS, 12pt Roboto. Button height of 28dp.
+  // * Button on ChromeOS that has been adjusted to 14pt Roboto. Button height
+  // of 28 + 2 * 2 = 32dp.
+  // * Linux user sets base system font size to 17dp. For a normal button, the
+  // |size_delta| will be zero, so to adjust upwards we double 17 to get 34.
+  int size_delta =
+      label()->font_list().GetFontSize() - GetMdFontList().GetFontSize();
+  const int kBaseHeight = 28;
+  int target_height = std::max(kBaseHeight + size_delta * 2,
+                               label()->font_list().GetFontSize() * 2);
+
+  int label_height = label()->GetPreferredSize().height();
+  int top_padding = (target_height - label_height) / 2;
+  int bottom_padding = (target_height - label_height + 1) / 2;
+  DCHECK_EQ(target_height, label_height + top_padding + bottom_padding);
+
+  // TODO(estade): can we get rid of the platform style border hoopla if
+  // we apply the MD treatment to all buttons, even GTK buttons?
+  const int kHorizontalPadding = 16;
+  SetBorder(Border::CreateEmptyBorder(top_padding, kHorizontalPadding,
+                                      bottom_padding, kHorizontalPadding));
+}
 
 void MdTextButton::UpdateColors() {
   ui::NativeTheme::ColorId fg_color_id =
       is_cta_ ? ui::NativeTheme::kColorId_TextOnCallToActionColor
               : ui::NativeTheme::kColorId_ButtonEnabledColor;
 
-  // When there's no call to action, respect a color override if one has
-  // been set. For call to action styling, don't let individual buttons
-  // specify a color.
   ui::NativeTheme* theme = GetNativeTheme();
-  if (is_cta_ || !explicitly_set_normal_color())
+  if (!explicitly_set_normal_color())
     LabelButton::SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
 
   SkColor text_color = label()->enabled_color();
   SkColor bg_color =
-      is_cta_
-          ? theme->GetSystemColor(ui::NativeTheme::kColorId_CallToActionColor)
-          : is_default()
-                ? color_utils::BlendTowardOppositeLuma(text_color, 0xD8)
-                : SK_ColorTRANSPARENT;
+      bg_color_override_
+          ? *bg_color_override_
+          : is_cta_
+                ? theme->GetSystemColor(
+                      ui::NativeTheme::kColorId_CallToActionColor)
+                : is_default()
+                      ? color_utils::BlendTowardOppositeLuma(text_color, 0xD8)
+                      : SK_ColorTRANSPARENT;
 
   const SkAlpha kStrokeOpacity = 0x1A;
   SkColor stroke_color = (is_cta_ || color_utils::IsDark(text_color))

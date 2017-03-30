@@ -55,8 +55,9 @@ STHSetComponentInstallerTraits::STHSetComponentInstallerTraits(
 
 STHSetComponentInstallerTraits::~STHSetComponentInstallerTraits() {}
 
-bool STHSetComponentInstallerTraits::CanAutoUpdate() const {
-  return true;
+bool STHSetComponentInstallerTraits::
+    SupportsGroupPolicyEnabledComponentUpdates() const {
+  return false;
 }
 
 // Public data is delivered via this component, no need for encryption.
@@ -104,6 +105,10 @@ std::string STHSetComponentInstallerTraits::GetName() const {
 update_client::InstallerAttributes
 STHSetComponentInstallerTraits::GetInstallerAttributes() const {
   return update_client::InstallerAttributes();
+}
+
+std::vector<std::string> STHSetComponentInstallerTraits::GetMimeTypes() const {
+  return std::vector<std::string>();
 }
 
 void STHSetComponentInstallerTraits::LoadSTHsFromDisk(

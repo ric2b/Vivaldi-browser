@@ -16,7 +16,7 @@
 
 namespace cronet {
 
-TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
+TEST(URLRequestContextConfigTest, TestExperimentalOptionPassing) {
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
@@ -46,8 +46,11 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
       "\"packet_loss_threshold\":0.5,"
       "\"idle_connection_timeout_seconds\":300,"
       "\"close_sessions_on_ip_change\":true,"
+      "\"race_cert_verification\":true,"
       "\"connection_options\":\"TIME,TBBR,REJ\"},"
-      "\"AsyncDNS\":{\"enable\":true}}",
+      "\"AsyncDNS\":{\"enable\":true},"
+      "\"HostResolverRules\":{\"host_resolver_rules\":"
+      "\"MAP * 127.0.0.1\"}}",
       // Data reduction proxy key.
       "",
       // Data reduction proxy.
@@ -59,7 +62,11 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
-      false);
+      false,
+      // Enable Public Key Pinning bypass for local trust anchors.
+      true,
+      // Certificate verifier cache data.
+      "");
 
   net::URLRequestContextBuilder builder;
   net::NetLog net_log;
@@ -99,8 +106,16 @@ TEST(URLRequestContextConfigTest, SetQuicExperimentalOptions) {
   EXPECT_TRUE(params->quic_close_sessions_on_ip_change);
   EXPECT_FALSE(params->quic_migrate_sessions_on_network_change);
 
+  // Check race_cert_verification.
+  EXPECT_TRUE(params->quic_race_cert_verification);
+
   // Check AsyncDNS resolver is enabled.
   EXPECT_TRUE(context->host_resolver()->GetDnsConfigAsValue());
+
+  net::HostResolver::RequestInfo info(net::HostPortPair("abcde", 80));
+  net::AddressList addresses;
+  EXPECT_EQ(net::OK, context->host_resolver()->ResolveFromCache(
+                         info, &addresses, net::BoundNetLog()));
 }
 
 TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
@@ -138,7 +153,11 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
       // MockCertVerifier to use for testing purposes.
       std::unique_ptr<net::CertVerifier>(),
       // Enable network quality estimator.
-      false);
+      false,
+      // Enable Public Key Pinning bypass for local trust anchors.
+      true,
+      // Certificate verifier cache data.
+      "");
 
   net::URLRequestContextBuilder builder;
   net::NetLog net_log;
@@ -154,5 +173,7 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
   EXPECT_TRUE(params->quic_migrate_sessions_on_network_change);
   EXPECT_TRUE(params->quic_migrate_sessions_early);
 }
+
+// See stale_host_resolver_unittest.cc for test of StaleDNS options.
 
 }  // namespace cronet

@@ -74,7 +74,6 @@ Para mais informações acerca da privacidade, consulte a Política de Privacida
 <translation id="2676780859508944670">Em execução...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">As atualizações de software normalmente ocorrem automaticamente, embora possam falhar nalguns casos raros. A atualização de software não deve demorar mais do que alguns minutos e pode ser feita através do acesso remoto ao seu computador.</translation>
-<translation id="2813770873348017932">As ligações ao computador remoto estão temporariamente bloqueadas, porque alguém tentou estabelecer ligação com um PIN inválido. Volte a tentar mais tarde.</translation>
 <translation id="2841013758207633010">Tempo</translation>
 <translation id="2851674870054673688">A sessão de partilha começa assim que introduzirem o código.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Anfitrião do Ambiente de Trabalho
 Remoto do Chrome</translation>
 <translation id="4619978527973181021">Aceitar e instalar</translation>
-<translation id="4647791084836149355">Mostrar vista do Cardboard</translation>
 <translation id="4703302905453407178">Um componente necessário deixou de funcionar. Comunique este problema aos programadores.</translation>
 <translation id="4703799847237267011">A sessão do Chromoting terminou.</translation>
 <translation id="4736223761657662401">Histórico de Ligações</translation>
@@ -210,7 +208,6 @@ Remoto do Chrome</translation>
 <translation id="6284412385303060032">O anfitrião em execução no ecrã de início de sessão da consola foi encerrado para suportar o modo de cortina ao alternar para um anfitrião em execução numa sessão específica de utilizador.</translation>
 <translation id="629730747756840877">Conta</translation>
 <translation id="6304318647555713317">Cliente</translation>
-<translation id="6324708100353784493">Ativou o modo de integração do Google Cardboard. Para utilizar este modo, insira o seu dispositivo num visualizador compatível com o Google Cardboard.</translation>
 <translation id="6381670701864002291">Outro.</translation>
 <translation id="6398765197997659313">Sair do modo de ecrã inteiro</translation>
 <translation id="6408143143164565232">• Ouça áudio a partir de computadores com Windows ou Linux.
@@ -236,6 +233,7 @@ Remoto do Chrome</translation>
 <translation id="6930242544192836755">Duração</translation>
 <translation id="6939719207673461467">Mostrar/ocultar teclado.</translation>
 <translation id="6944854424004126054">Restaurar janela</translation>
+<translation id="6963936880795878952">As ligações ao computador remoto estão temporariamente bloqueadas porque alguém tentou estabelecer ligação com um PIN inválido. Tente novamente mais tarde.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Tem a certeza de que pretende desativar as ligações remotas a <ph name="HOSTNAME" />? Se mudar de ideias, será necessário aceder a esse computador e voltar a ativar as ligações.</translation>
 <translation id="6998989275928107238">Para</translation>

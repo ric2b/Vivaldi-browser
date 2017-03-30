@@ -11,7 +11,6 @@
 #include "extensions/common/common_manifest_handlers.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/features/api_feature.h"
-#include "extensions/common/features/base_feature_provider.h"
 #include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/json_feature_provider_source.h"
 #include "extensions/common/features/manifest_feature.h"
@@ -23,6 +22,10 @@
 #include "extensions/common/permissions/permissions_provider.h"
 #include "extensions/common/url_pattern_set.h"
 #include "extensions/shell/common/api/generated_schemas.h"
+#include "extensions/shell/common/api/shell_api_features.h"
+#include "extensions/shell/common/api/shell_behavior_features.h"
+#include "extensions/shell/common/api/shell_manifest_features.h"
+#include "extensions/shell/common/api/shell_permission_features.h"
 #include "grit/app_shell_resources.h"
 #include "grit/extensions_resources.h"
 
@@ -99,20 +102,14 @@ const std::string ShellExtensionsClient::GetProductName() {
 std::unique_ptr<FeatureProvider> ShellExtensionsClient::CreateFeatureProvider(
     const std::string& name) const {
   std::unique_ptr<FeatureProvider> provider;
-  std::unique_ptr<JSONFeatureProviderSource> source(
-      CreateFeatureProviderSource(name));
   if (name == "api") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<APIFeature>));
+    provider.reset(new ShellAPIFeatureProvider());
   } else if (name == "manifest") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<ManifestFeature>));
+    provider.reset(new ShellManifestFeatureProvider());
   } else if (name == "permission") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<PermissionFeature>));
+    provider.reset(new ShellPermissionFeatureProvider());
   } else if (name == "behavior") {
-    provider.reset(new BaseFeatureProvider(source->dictionary(),
-                                           CreateFeature<BehaviorFeature>));
+    provider.reset(new ShellBehaviorFeatureProvider());
   } else {
     NOTREACHED();
   }
@@ -120,23 +117,11 @@ std::unique_ptr<FeatureProvider> ShellExtensionsClient::CreateFeatureProvider(
 }
 
 std::unique_ptr<JSONFeatureProviderSource>
-ShellExtensionsClient::CreateFeatureProviderSource(
-    const std::string& name) const {
+ShellExtensionsClient::CreateAPIFeatureSource() const {
   std::unique_ptr<JSONFeatureProviderSource> source(
-      new JSONFeatureProviderSource(name));
-  if (name == "api") {
-    source->LoadJSON(IDR_EXTENSION_API_FEATURES);
-    source->LoadJSON(IDR_SHELL_EXTENSION_API_FEATURES);
-  } else if (name == "manifest") {
-    source->LoadJSON(IDR_EXTENSION_MANIFEST_FEATURES);
-  } else if (name == "permission") {
-    source->LoadJSON(IDR_EXTENSION_PERMISSION_FEATURES);
-  } else if (name == "behavior") {
-    source->LoadJSON(IDR_EXTENSION_BEHAVIOR_FEATURES);
-  } else {
-    NOTREACHED();
-    source.reset();
-  }
+      new JSONFeatureProviderSource("api"));
+  source->LoadJSON(IDR_EXTENSION_API_FEATURES);
+  source->LoadJSON(IDR_SHELL_EXTENSION_API_FEATURES);
   return source;
 }
 
@@ -185,10 +170,6 @@ base::StringPiece ShellExtensionsClient::GetAPISchema(
 
   // Core extensions APIs.
   return api::GeneratedSchemas::Get(name);
-}
-
-void ShellExtensionsClient::RegisterAPISchemaResources(
-    ExtensionAPI* api) const {
 }
 
 bool ShellExtensionsClient::ShouldSuppressFatalErrors() const {

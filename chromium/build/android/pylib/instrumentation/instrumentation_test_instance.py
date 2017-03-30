@@ -48,7 +48,7 @@ _EXTRA_TIMEOUT_SCALE = (
 
 _PARAMETERIZED_TEST_ANNOTATION = 'ParameterizedTest'
 _PARAMETERIZED_TEST_SET_ANNOTATION = 'ParameterizedTest$Set'
-_NATIVE_CRASH_RE = re.compile('native crash', re.IGNORECASE)
+_NATIVE_CRASH_RE = re.compile('(process|native) crash', re.IGNORECASE)
 _PICKLE_FORMAT_VERSION = 10
 
 
@@ -240,7 +240,7 @@ def FilterTests(tests, test_filter=None, annotations=None,
     return any(
         ak in all_annotations
         and annotation_value_matches(av, all_annotations[ak])
-        for ak, av in filter_annotations.iteritems())
+        for ak, av in filter_annotations)
 
   def annotation_value_matches(filter_av, av):
     if filter_av is None:
@@ -372,7 +372,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     self._isolate_abs_path = None
     self._isolate_delegate = None
     self._isolated_abs_path = None
-    self._test_data = None
     self._initializeDataDependencyAttributes(args, isolate_delegate)
 
     self._annotations = None
@@ -393,6 +392,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
     self._coverage_directory = None
     self._initializeTestCoverageAttributes(args)
+
+    self._store_tombstones = False
+    self._initializeTombstonesAttributes(args)
 
   def _initializeApkAttributes(self, args, error_func):
     if args.apk_under_test:
@@ -471,48 +473,36 @@ class InstrumentationTestInstance(test_instance.TestInstance):
     else:
       self._isolate_delegate = None
 
-    # TODO(jbudorick): Deprecate and remove --test-data once data dependencies
-    # are fully converted to isolate.
-    if args.test_data:
-      logging.info('Data dependencies specified via --test-data')
-      self._test_data = args.test_data
-    else:
-      self._test_data = None
-
-    if not self._isolate_delegate and not self._test_data:
+    if not self._isolate_delegate:
       logging.warning('No data dependencies will be pushed.')
 
   def _initializeTestFilterAttributes(self, args):
     if args.test_filter:
       self._test_filter = args.test_filter.replace('#', '.')
 
-    def annotation_dict_element(a):
-      a = a.split('=')
+    def annotation_element(a):
+      a = a.split('=', 1)
       return (a[0], a[1] if len(a) == 2 else None)
 
     if args.annotation_str:
-      self._annotations = dict(
-          annotation_dict_element(a)
-          for a in args.annotation_str.split(','))
+      self._annotations = [
+          annotation_element(a) for a in args.annotation_str.split(',')]
     elif not self._test_filter:
-      self._annotations = dict(
-          annotation_dict_element(a)
-          for a in _DEFAULT_ANNOTATIONS)
+      self._annotations = [
+          annotation_element(a) for a in _DEFAULT_ANNOTATIONS]
     else:
-      self._annotations = {}
+      self._annotations = []
 
     if args.exclude_annotation_str:
-      self._excluded_annotations = dict(
-          annotation_dict_element(a)
-          for a in args.exclude_annotation_str.split(','))
+      self._excluded_annotations = [
+          annotation_element(a) for a in args.exclude_annotation_str.split(',')]
     else:
-      self._excluded_annotations = {}
+      self._excluded_annotations = []
 
-    self._excluded_annotations.update(
-        {
-          a: None for a in _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS
-          if a not in self._annotations
-        })
+    requested_annotations = set(a[0] for a in self._annotations)
+    self._excluded_annotations.extend(
+        annotation_element(a) for a in _EXCLUDE_UNLESS_REQUESTED_ANNOTATIONS
+        if a not in requested_annotations)
 
   def _initializeFlagAttributes(self, args):
     self._flags = ['--enable-test-intents']
@@ -529,6 +519,8 @@ class InstrumentationTestInstance(test_instance.TestInstance):
         args.strict_mode and
         args.strict_mode != 'off'):
       self._flags.append('--strict-mode=' + args.strict_mode)
+    if hasattr(args, 'regenerate_goldens') and args.regenerate_goldens:
+      self._flags.append('--regenerate-goldens')
 
   def _initializeDriverAttributes(self):
     self._driver_apk = os.path.join(
@@ -547,6 +539,9 @@ class InstrumentationTestInstance(test_instance.TestInstance):
 
   def _initializeTestCoverageAttributes(self, args):
     self._coverage_directory = args.coverage_dir
+
+  def _initializeTombstonesAttributes(self, args):
+    self._store_tombstones = args.store_tombstones
 
   @property
   def additional_apks(self):
@@ -587,6 +582,10 @@ class InstrumentationTestInstance(test_instance.TestInstance):
   @property
   def screenshot_dir(self):
     return self._screenshot_dir
+
+  @property
+  def store_tombstones(self):
+    return self._store_tombstones
 
   @property
   def suite(self):
@@ -631,16 +630,6 @@ class InstrumentationTestInstance(test_instance.TestInstance):
           self._isolate_abs_path, self._isolated_abs_path)
       self._isolate_delegate.MoveOutputDeps()
       self._data_deps.extend([(self._isolate_delegate.isolate_deps_dir, None)])
-
-    # TODO(jbudorick): Convert existing tests that depend on the --test-data
-    # mechanism to isolate, then remove this.
-    if self._test_data:
-      for t in self._test_data:
-        device_rel_path, host_rel_path = t.split(':')
-        host_abs_path = os.path.join(host_paths.DIR_SOURCE_ROOT, host_rel_path)
-        self._data_deps.extend(
-            [(host_abs_path,
-              [None, 'chrome', 'test', 'data', device_rel_path])])
 
   def GetDataDependencies(self):
     return self._data_deps

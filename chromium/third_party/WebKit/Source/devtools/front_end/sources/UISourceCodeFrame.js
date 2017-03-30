@@ -37,8 +37,12 @@ WebInspector.UISourceCodeFrame = function(uiSourceCode)
     WebInspector.SourceFrame.call(this, uiSourceCode.contentURL(), workingCopy);
 
     if (Runtime.experiments.isEnabled("sourceDiff"))
-        this._diff = new WebInspector.SourceCodeDiff(uiSourceCode, this.textEditor);
-    this.textEditor.setAutocompleteDelegate(new WebInspector.SimpleAutocompleteDelegate());
+        this._diff = new WebInspector.SourceCodeDiff(uiSourceCode.requestOriginalContent(), this.textEditor);
+
+    /** @type {?WebInspector.AutocompleteConfig} */
+    this._autocompleteConfig = {isWordChar: WebInspector.TextUtils.isWordChar};
+    WebInspector.moduleSetting("textEditorAutocompletion").addChangeListener(this._updateAutocomplete, this);
+    this._updateAutocomplete();
 
     this._rowMessageBuckets = {};
     /** @type {!Set<string>} */
@@ -87,9 +91,28 @@ WebInspector.UISourceCodeFrame.prototype = {
     willHide: function()
     {
         WebInspector.SourceFrame.prototype.willHide.call(this);
+        WebInspector.context.setFlavor(WebInspector.UISourceCodeFrame, null);
         this.element.ownerDocument.defaultView.removeEventListener("focus", this._boundWindowFocused, false);
         delete this._boundWindowFocused;
         this._uiSourceCode.removeWorkingCopyGetter();
+    },
+
+    /**
+     * @override
+     */
+    editorFocused: function()
+    {
+        WebInspector.SourceFrame.prototype.editorFocused.call(this);
+        WebInspector.context.setFlavor(WebInspector.UISourceCodeFrame, this);
+    },
+
+    /**
+     * @override
+     */
+    editorBlurred: function()
+    {
+        WebInspector.context.setFlavor(WebInspector.UISourceCodeFrame, null);
+        WebInspector.SourceFrame.prototype.editorBlurred.call(this);
     },
 
     /**
@@ -131,9 +154,11 @@ WebInspector.UISourceCodeFrame.prototype = {
     /**
      * @override
      */
-    onTextEditorContentLoaded: function()
+    onTextEditorContentSet: function()
     {
-        WebInspector.SourceFrame.prototype.onTextEditorContentLoaded.call(this);
+        if (this._diff)
+            this._diff.updateDiffMarkersImmediately();
+        WebInspector.SourceFrame.prototype.onTextEditorContentSet.call(this);
         for (var message of this._uiSourceCode.messages())
             this._addMessageToSource(message);
         this._decorateAllTypes();
@@ -146,6 +171,8 @@ WebInspector.UISourceCodeFrame.prototype = {
      */
     onTextChanged: function(oldRange, newRange)
     {
+        if (this._diff)
+            this._diff.updateDiffMarkersWhenPossible();
         WebInspector.SourceFrame.prototype.onTextChanged.call(this, oldRange, newRange);
         this._clearMessages();
         if (this._isSettingContent)
@@ -163,8 +190,6 @@ WebInspector.UISourceCodeFrame.prototype = {
      */
     _onWorkingCopyChanged: function(event)
     {
-        if (this._diff)
-            this._diff.updateDiffMarkersWhenPossible();
         if (this._muteSourceCodeEvents)
             return;
         this._innerSetContent(this._uiSourceCode.workingCopy());
@@ -182,8 +207,6 @@ WebInspector.UISourceCodeFrame.prototype = {
         }
         this._textEditor.markClean();
         this._updateStyle();
-        if (this._diff)
-            this._diff.updateDiffMarkersWhenPossible();
     },
 
     _updateStyle: function()
@@ -195,6 +218,20 @@ WebInspector.UISourceCodeFrame.prototype = {
     {
     },
 
+    _updateAutocomplete: function()
+    {
+        this._textEditor.configureAutocomplete(WebInspector.moduleSetting("textEditorAutocompletion").get() ? this._autocompleteConfig : null);
+    },
+
+    /**
+     * @param {?WebInspector.AutocompleteConfig} config
+     */
+    configureAutocomplete: function(config)
+    {
+        this._autocompleteConfig = config;
+        this._updateAutocomplete();
+    },
+
     /**
      * @param {string} content
      */
@@ -204,7 +241,6 @@ WebInspector.UISourceCodeFrame.prototype = {
         if (this._diff) {
             var oldContent = this._textEditor.text();
             this.setContent(content);
-            this._diff.updateDiffMarkersImmediately();
             this._diff.highlightModifiedLines(oldContent, content);
         } else {
             this.setContent(content);
@@ -225,7 +261,6 @@ WebInspector.UISourceCodeFrame.prototype = {
         {
             contextMenu.appendApplicableItems(this._uiSourceCode);
             contextMenu.appendApplicableItems(new WebInspector.UILocation(this._uiSourceCode, lineNumber, columnNumber));
-            contextMenu.appendSeparator();
         }
 
         return WebInspector.SourceFrame.prototype.populateTextAreaContextMenu.call(this, contextMenu, lineNumber, columnNumber)
@@ -250,6 +285,7 @@ WebInspector.UISourceCodeFrame.prototype = {
     dispose: function()
     {
         this._textEditor.dispose();
+        WebInspector.moduleSetting("textEditorAutocompletion").removeChangeListener(this._updateAutocomplete, this);
         this.detach();
     },
 
@@ -386,7 +422,7 @@ WebInspector.UISourceCodeFrame.prototype = {
         if (this._typeDecorationsPending.has(type))
             return;
         this._typeDecorationsPending.add(type);
-        self.runtime.extensions(WebInspector.UISourceCodeFrame.LineDecorator).find(extension => extension.descriptor()["decoratorType"] === type).instancePromise().then(decorator => {
+        self.runtime.extensions(WebInspector.UISourceCodeFrame.LineDecorator).find(extension => extension.descriptor()["decoratorType"] === type).instance().then(decorator => {
             this._typeDecorationsPending.delete(type);
             decorator.decorate(this.uiSourceCode(), this._textEditor);
         });
@@ -404,6 +440,10 @@ WebInspector.UISourceCodeFrame.prototype = {
 WebInspector.UISourceCodeFrame._iconClassPerLevel = {};
 WebInspector.UISourceCodeFrame._iconClassPerLevel[WebInspector.UISourceCode.Message.Level.Error] = "error-icon";
 WebInspector.UISourceCodeFrame._iconClassPerLevel[WebInspector.UISourceCode.Message.Level.Warning] = "warning-icon";
+
+WebInspector.UISourceCodeFrame._bubbleTypePerLevel = {};
+WebInspector.UISourceCodeFrame._bubbleTypePerLevel[WebInspector.UISourceCode.Message.Level.Error] = "error";
+WebInspector.UISourceCodeFrame._bubbleTypePerLevel[WebInspector.UISourceCode.Message.Level.Warning] = "warning";
 
 WebInspector.UISourceCodeFrame._lineClassPerLevel = {};
 WebInspector.UISourceCodeFrame._lineClassPerLevel[WebInspector.UISourceCode.Message.Level.Error] = "text-editor-line-with-error";
@@ -433,7 +473,8 @@ WebInspector.UISourceCodeFrame.RowMessage = function(message)
     this.element = createElementWithClass("div", "text-editor-row-message");
     this._icon = this.element.createChild("label", "", "dt-icon-label");
     this._icon.type = WebInspector.UISourceCodeFrame._iconClassPerLevel[message.level()];
-    this._repeatCountElement = this.element.createChild("span", "bubble-repeat-count hidden error");
+    this._repeatCountElement = this.element.createChild("label", "message-repeat-count hidden", "dt-small-bubble");
+    this._repeatCountElement.type = WebInspector.UISourceCodeFrame._bubbleTypePerLevel[message.level()];
     var linesContainer = this.element.createChild("div", "text-editor-row-message-lines");
     var lines = this._message.text().split("\n");
     for (var i = 0; i < lines.length; ++i) {
@@ -491,8 +532,7 @@ WebInspector.UISourceCodeFrame.RowMessageBucket = function(sourceFrame, textEdit
     this._decoration._messageBucket = this;
     this._wave = this._decoration.createChild("div", "text-editor-line-decoration-wave");
     this._icon = this._wave.createChild("label", "text-editor-line-decoration-icon", "dt-icon-label");
-
-    this._textEditor.addDecoration(lineNumber, this._decoration);
+    this._hasDecoration = false;
 
     this._messagesDescriptionElement = createElementWithClass("div", "text-editor-messages-description-container");
     /** @type {!Array.<!WebInspector.UISourceCodeFrame.RowMessage>} */
@@ -512,14 +552,10 @@ WebInspector.UISourceCodeFrame.RowMessageBucket.prototype = {
         var lineText = this._textEditor.line(lineNumber);
         columnNumber = Math.min(columnNumber, lineText.length);
         var lineIndent = WebInspector.TextUtils.lineIndent(lineText).length;
-        var base = this._textEditor.cursorPositionToCoordinates(lineNumber, 0);
-
-        var start = this._textEditor.cursorPositionToCoordinates(lineNumber, Math.max(columnNumber - 1, lineIndent));
-        var end = this._textEditor.cursorPositionToCoordinates(lineNumber, lineText.length);
-        /** @const */
-        var codeMirrorLinesLeftPadding = 4;
-        this._wave.style.left = (start.x - base.x + codeMirrorLinesLeftPadding) + "px";
-        this._wave.style.width = (end.x - start.x) + "px";
+        if (this._hasDecoration)
+            this._textEditor.removeDecoration(this._decoration, lineNumber);
+        this._hasDecoration = true;
+        this._textEditor.addDecoration(this._decoration, lineNumber, Math.max(columnNumber - 1, lineIndent));
     },
 
     /**
@@ -542,7 +578,9 @@ WebInspector.UISourceCodeFrame.RowMessageBucket.prototype = {
         var lineNumber = position.lineNumber;
         if (this._level)
             this._textEditor.toggleLineClass(lineNumber, WebInspector.UISourceCodeFrame._lineClassPerLevel[this._level], false);
-        this._textEditor.removeDecoration(lineNumber, this._decoration);
+        if (this._hasDecoration)
+            this._textEditor.removeDecoration(this._decoration, lineNumber);
+        this._hasDecoration = false;
     },
 
     /**

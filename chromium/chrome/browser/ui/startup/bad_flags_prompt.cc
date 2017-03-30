@@ -22,7 +22,6 @@
 #include "components/infobars/core/simple_alert_infobar_delegate.h"
 #include "components/invalidation/impl/invalidation_switches.h"
 #include "components/nacl/common/nacl_switches.h"
-#include "components/network_session_configurator/switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "content/public/common/content_switches.h"
@@ -86,12 +85,6 @@ void ShowBadFlagsPrompt(Browser* browser) {
     // This flag allows people to whitelist certain origins as secure, even
     // if they are not.
     switches::kUnsafelyTreatInsecureOriginAsSecure,
-
-    // This flag enables Web Bluetooth. Since the UI for Web Bluetooth is
-    // not yet implemented, websites could take control over paired devices
-    // without the users knowledge, so we need to show a warning for when
-    // the flag is enabled.
-    switches::kEnableWebBluetooth,
 
     // This flag disables WebUSB's CORS-like checks for origin to device
     // communication, allowing any origin to ask the user for permission to

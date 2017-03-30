@@ -35,7 +35,6 @@
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/input/mouse_wheel_event_queue.h"
-#include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
@@ -75,17 +74,21 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_observer.h"
+#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
 #include "ui/events/blink/blink_event_util.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/selection_bound.h"
 #include "ui/wm/core/default_activation_client.h"
 #include "ui/wm/core/default_screen_position_client.h"
 #include "ui/wm/core/window_util.h"
@@ -98,6 +101,7 @@ using blink::WebMouseEvent;
 using blink::WebMouseWheelEvent;
 using blink::WebTouchEvent;
 using blink::WebTouchPoint;
+using ui::WebInputEventTraits;
 
 namespace content {
 namespace {
@@ -160,13 +164,29 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
 
 class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
  public:
-  MockRenderWidgetHostDelegate() : rwh_(nullptr), is_fullscreen_(false) {}
+  MockRenderWidgetHostDelegate()
+      : rwh_(nullptr),
+        is_fullscreen_(false),
+        focused_widget_(nullptr),
+        last_device_scale_factor_(0.0) {}
   ~MockRenderWidgetHostDelegate() override {}
   const NativeWebKeyboardEvent* last_event() const { return last_event_.get(); }
   void set_widget_host(RenderWidgetHostImpl* rwh) { rwh_ = rwh; }
   void set_is_fullscreen(bool is_fullscreen) { is_fullscreen_ = is_fullscreen; }
   TextInputManager* GetTextInputManager() override {
     return &text_input_manager_;
+  }
+  RenderWidgetHostImpl* GetFocusedRenderWidgetHost(
+      RenderWidgetHostImpl* widget_host) override {
+    return !!focused_widget_ ? focused_widget_ : widget_host;
+  }
+  void set_focused_widget(RenderWidgetHostImpl* focused_widget) {
+    focused_widget_ = focused_widget;
+  }
+
+  double get_last_device_scale_factor() { return last_device_scale_factor_; }
+  void UpdateDeviceScaleFactor(double device_scale_factor) override {
+    last_device_scale_factor_ = device_scale_factor;
   }
 
  protected:
@@ -191,6 +211,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   RenderWidgetHostImpl* rwh_;
   bool is_fullscreen_;
   TextInputManager text_input_manager_;
+  RenderWidgetHostImpl* focused_widget_;
+  double last_device_scale_factor_;
 
   DISALLOW_COPY_AND_ASSIGN(MockRenderWidgetHostDelegate);
 };
@@ -213,17 +235,24 @@ class TestWindowObserver : public aura::WindowObserver {
   void OnWindowDestroyed(aura::Window* window) override {
     CHECK_EQ(window, window_);
     destroyed_ = true;
-    window_ = NULL;
+    window_ = nullptr;
   }
 
  private:
-  // Window that we're observing, or NULL if it's been destroyed.
+  // Window that we're observing, or nullptr if it's been destroyed.
   aura::Window* window_;
 
   // Was |window_| destroyed?
   bool destroyed_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowObserver);
+};
+
+class FakeSurfaceDamageObserver : public cc::SurfaceDamageObserver {
+ public:
+  void OnSurfaceDamaged(const cc::SurfaceId& id, bool* changed) override {
+    *changed = true;
+  }
 };
 
 class FakeFrameSubscriber : public RenderWidgetHostViewFrameSubscriber {
@@ -345,6 +374,12 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->ReleasedFrontLockActiveForTesting();
   }
 
+  void ReturnResources(const cc::ReturnedResourceArray& resources) {
+    GetDelegatedFrameHost()->ReturnResources(resources);
+  }
+
+  void ResetCompositor() { GetDelegatedFrameHost()->ResetCompositor(); }
+
   // A lock that doesn't actually do anything to the compositor, and does not
   // time out.
   class FakeResizeLock : public ResizeLock {
@@ -403,7 +438,7 @@ const WebInputEvent* GetInputEventFromMessage(const IPC::Message& message) {
   const char* data;
   int data_length;
   if (!iter.ReadData(&data, &data_length))
-    return NULL;
+    return nullptr;
   return reinterpret_cast<const WebInputEvent*>(data);
 }
 
@@ -438,7 +473,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     delegates_.back()->set_widget_host(parent_host_);
     parent_view_ = new RenderWidgetHostViewAura(parent_host_,
                                                 is_guest_view_hack_);
-    parent_view_->InitAsChild(NULL);
+    parent_view_->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(parent_view_->GetNativeView(),
                                           aura_test_helper_->root_window(),
                                           gfx::Rect());
@@ -453,8 +488,8 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   }
 
   void TearDownEnvironment() {
-    sink_ = NULL;
-    process_host_ = NULL;
+    sink_ = nullptr;
+    process_host_ = nullptr;
     if (view_) {
       // For guest-views, |view_| is not the view used by |widget_host_|.
       if (!is_guest_view_hack_) {
@@ -477,8 +512,9 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
     browser_context_.reset();
     aura_test_helper_->TearDown();
 
-    message_loop_.DeleteSoon(FROM_HERE, browser_context_.release());
-    message_loop_.RunUntilIdle();
+    message_loop_.task_runner()->DeleteSoon(FROM_HERE,
+                                            browser_context_.release());
+    base::RunLoop().RunUntilIdle();
     ImageTransportFactory::Terminate();
   }
 
@@ -552,11 +588,23 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
  protected:
   BrowserContext* browser_context() { return browser_context_.get(); }
 
+  MockRenderWidgetHostDelegate* render_widget_host_delegate() const {
+    return delegates_.back().get();
+  }
+
   // Sets the |view| active in TextInputManager with the given |type|. |type|
   // cannot be ui::TEXT_INPUT_TYPE_NONE.
+  // Must not be called in the destruction path of |view|.
   void ActivateViewForTextInputManager(RenderWidgetHostViewBase* view,
                                        ui::TextInputType type) {
     DCHECK_NE(ui::TEXT_INPUT_TYPE_NONE, type);
+    // First mock-focus the widget if not already.
+    if (render_widget_host_delegate()->GetFocusedRenderWidgetHost(
+            widget_host_) != view->GetRenderWidgetHost()) {
+      render_widget_host_delegate()->set_focused_widget(
+          RenderWidgetHostImpl::From(view->GetRenderWidgetHost()));
+    }
+
     TextInputManager* manager =
         static_cast<RenderWidgetHostImpl*>(view->GetRenderWidgetHost())
             ->delegate()
@@ -586,12 +634,12 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   std::vector<std::unique_ptr<MockRenderWidgetHostDelegate>> delegates_;
   MockRenderProcessHost* process_host_;
 
-  // Tests should set these to NULL if they've already triggered their
+  // Tests should set these to nullptr if they've already triggered their
   // destruction.
   RenderWidgetHostImpl* parent_host_;
   RenderWidgetHostViewAura* parent_view_;
 
-  // Tests should set these to NULL if they've already triggered their
+  // Tests should set these to nullptr if they've already triggered their
   // destruction.
   RenderWidgetHostImpl* widget_host_;
   FakeRenderWidgetHostViewAura* view_;
@@ -619,8 +667,9 @@ class RenderWidgetHostViewGuestAuraTest : public RenderWidgetHostViewAuraTest {
 
     RenderWidgetHostViewAuraTest::SetUp();
 
-    guest_view_weak_ = (new RenderWidgetHostViewGuest(
-        widget_host_, NULL, view_->GetWeakPtr()))->GetWeakPtr();
+    guest_view_weak_ = (new RenderWidgetHostViewGuest(widget_host_, nullptr,
+                                                      view_->GetWeakPtr()))
+                           ->GetWeakPtr();
   }
 
   void TearDown() override {
@@ -661,7 +710,7 @@ class RenderWidgetHostViewAuraOverscrollTest
     overscroll_delegate_.reset(new TestOverscrollDelegate(view_));
     view_->overscroll_controller()->set_delegate(overscroll_delegate_.get());
 
-    view_->InitAsChild(NULL);
+    view_->InitAsChild(nullptr);
     view_->SetBounds(gfx::Rect(0, 0, 400, 200));
     view_->Show();
 
@@ -707,7 +756,7 @@ class RenderWidgetHostViewAuraOverscrollTest
     WebMouseEvent event =
         SyntheticWebMouseEventBuilder::Build(type, x, y, modifiers);
     if (pressed)
-      event.button = WebMouseEvent::ButtonLeft;
+      event.button = WebMouseEvent::Button::Left;
     widget_host_->ForwardMouseEvent(event);
   }
 
@@ -850,7 +899,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestructionBeforeProperInitialization) {
 TEST_F(RenderWidgetHostViewAuraTest, FocusFullscreen) {
   view_->InitAsFullscreen(parent_view_);
   aura::Window* window = view_->GetNativeView();
-  ASSERT_TRUE(window != NULL);
+  ASSERT_TRUE(window != nullptr);
   EXPECT_EQ(ui::SHOW_STATE_FULLSCREEN,
             window->GetProperty(aura::client::kShowStateKey));
 
@@ -897,12 +946,12 @@ TEST_F(RenderWidgetHostViewAuraTest, PositionChildPopup) {
   gfx::Point new_origin = window->bounds().origin();
   EXPECT_EQ(original_origin.ToString(), new_origin.ToString());
 
-  aura::client::SetScreenPositionClient(root, NULL);
+  aura::client::SetScreenPositionClient(root, nullptr);
 }
 
 // Checks that moving parent sends new screen bounds.
 TEST_F(RenderWidgetHostViewAuraTest, ParentMovementUpdatesScreenRect) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
 
   aura::Window* root = parent_view_->GetNativeView()->GetRootWindow();
 
@@ -923,7 +972,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ParentMovementUpdatesScreenRect) {
   parent2->SetBounds(gfx::Rect(2, 2, 200, 200));
   view_->SetBounds(gfx::Rect(3, 3, 100, 100));
   // view_ will be destroyed when parent is destroyed.
-  view_ = NULL;
+  view_ = nullptr;
 
   // Flush the state after initial setup is done.
   widget_host_->OnMessageReceived(
@@ -965,7 +1014,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ParentMovementUpdatesScreenRect) {
 TEST_F(RenderWidgetHostViewAuraTest, DestroyFullscreenOnBlur) {
   view_->InitAsFullscreen(parent_view_);
   aura::Window* window = view_->GetNativeView();
-  ASSERT_TRUE(window != NULL);
+  ASSERT_TRUE(window != nullptr);
   ASSERT_TRUE(window->HasFocus());
 
   // After we create and focus another window, the RWHVA's window should be
@@ -980,8 +1029,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyFullscreenOnBlur) {
   ASSERT_TRUE(sibling->HasFocus());
   ASSERT_TRUE(observer.destroyed());
 
-  widget_host_ = NULL;
-  view_ = NULL;
+  widget_host_ = nullptr;
+  view_ = nullptr;
 }
 
 // Checks that a popup view is destroyed when a user clicks outside of the popup
@@ -994,7 +1043,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupClickOutsidePopup) {
 
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   aura::Window* window = view_->GetNativeView();
-  ASSERT_TRUE(window != NULL);
+  ASSERT_TRUE(window != nullptr);
 
   gfx::Point click_point;
   EXPECT_FALSE(window->GetBoundsInRootWindow().Contains(click_point));
@@ -1007,8 +1056,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupClickOutsidePopup) {
   ASSERT_TRUE(parent_view_->HasFocus());
   ASSERT_TRUE(observer.destroyed());
 
-  widget_host_ = NULL;
-  view_ = NULL;
+  widget_host_ = nullptr;
+  view_ = nullptr;
 }
 
 // Checks that a popup view is destroyed when a user taps outside of the popup
@@ -1021,7 +1070,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
 
   view_->InitAsPopup(parent_view_, gfx::Rect(10, 10, 100, 100));
   aura::Window* window = view_->GetNativeView();
-  ASSERT_TRUE(window != NULL);
+  ASSERT_TRUE(window != nullptr);
 
   gfx::Point tap_point;
   EXPECT_FALSE(window->GetBoundsInRootWindow().Contains(tap_point));
@@ -1034,8 +1083,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DestroyPopupTapOutsidePopup) {
   ASSERT_TRUE(parent_view_->HasFocus());
   ASSERT_TRUE(observer.destroyed());
 
-  widget_host_ = NULL;
-  view_ = NULL;
+  widget_host_ = nullptr;
+  view_ = nullptr;
 }
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -1088,13 +1137,13 @@ TEST_F(RenderWidgetHostViewAuraTest, PopupClosesWhenParentLosesFocus) {
   ASSERT_TRUE(wm::IsActiveWindow(dialog_window.get()));
   EXPECT_TRUE(observer.destroyed());
 
-  widget_host_ = NULL;
-  view_ = NULL;
+  widget_host_ = nullptr;
+  view_ = nullptr;
 }
 
 // Checks that IME-composition-event state is maintained correctly.
 TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
   ActivateViewForTextInputManager(view_, ui::TEXT_INPUT_TYPE_TEXT);
 
@@ -1120,7 +1169,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
   {
     const IPC::Message* msg =
       sink_->GetFirstMessageMatching(InputMsg_ImeSetComposition::ID);
-    ASSERT_TRUE(msg != NULL);
+    ASSERT_TRUE(msg != nullptr);
 
     InputMsg_ImeSetComposition::Param params;
     InputMsg_ImeSetComposition::Read(msg, &params);
@@ -1149,7 +1198,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SetCompositionText) {
 // Checks that sequence of IME-composition-event and mouse-event when mouse
 // clicking to cancel the composition.
 TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
   ActivateViewForTextInputManager(view_, ui::TEXT_INPUT_TYPE_TEXT);
 
@@ -1192,7 +1241,7 @@ TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
 
 // Checks that touch-event state is maintained correctly.
 TEST_F(RenderWidgetHostViewAuraTest, TouchEventState) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
   GetSentMessageCountAndResetSink();
 
@@ -1362,7 +1411,7 @@ TEST_F(RenderWidgetHostViewAuraTest, MultiTouchPointsStates) {
 // Checks that touch-events are queued properly when there is a touch-event
 // handler on the page.
 TEST_F(RenderWidgetHostViewAuraTest, TouchEventSyncAsync) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
 
   widget_host_->OnMessageReceived(ViewHostMsg_HasTouchEventHandlers(0, true));
@@ -1397,7 +1446,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventSyncAsync) {
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -1424,43 +1473,26 @@ TEST_F(RenderWidgetHostViewAuraTest, PhysicalBackingSizeWithScale) {
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(2.0f);
   EXPECT_EQ("200x200", view_->GetPhysicalBackingSize().ToString());
   // Extra ScreenInfoChanged message for |parent_view_|.
-  EXPECT_EQ(1u, sink_->message_count());
-  {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(ViewMsg_Resize::ID, msg->type());
-    ViewMsg_Resize::Param params;
-    ViewMsg_Resize::Read(msg, &params);
-    EXPECT_EQ(2.0f, std::get<0>(params).screen_info.deviceScaleFactor);
-    EXPECT_EQ("100x100", std::get<0>(params).new_size.ToString());  // dip size
-    EXPECT_EQ(
-        "200x200",
-        std::get<0>(params).physical_backing_size.ToString());  // backing size
-  }
+  EXPECT_EQ(0u, sink_->message_count());
+  auto view_delegate = static_cast<MockRenderWidgetHostDelegate*>(
+      static_cast<RenderWidgetHostImpl*>(view_->GetRenderWidgetHost())
+          ->delegate());
+  EXPECT_EQ(2.0f, view_delegate->get_last_device_scale_factor());
 
   widget_host_->ResetSizeAndRepaintPendingFlags();
   sink_->ClearMessages();
 
   aura_test_helper_->test_screen()->SetDeviceScaleFactor(1.0f);
   // Extra ScreenInfoChanged message for |parent_view_|.
-  EXPECT_EQ(1u, sink_->message_count());
+  EXPECT_EQ(0u, sink_->message_count());
+  EXPECT_EQ(1.0f, view_delegate->get_last_device_scale_factor());
   EXPECT_EQ("100x100", view_->GetPhysicalBackingSize().ToString());
-  {
-    const IPC::Message* msg = sink_->GetMessageAt(0);
-    EXPECT_EQ(ViewMsg_Resize::ID, msg->type());
-    ViewMsg_Resize::Param params;
-    ViewMsg_Resize::Read(msg, &params);
-    EXPECT_EQ(1.0f, std::get<0>(params).screen_info.deviceScaleFactor);
-    EXPECT_EQ("100x100", std::get<0>(params).new_size.ToString());  // dip size
-    EXPECT_EQ(
-        "100x100",
-        std::get<0>(params).physical_backing_size.ToString());  // backing size
-  }
 }
 
 // Checks that InputMsg_CursorVisibilityChange IPC messages are dispatched
 // to the renderer at the correct times.
 TEST_F(RenderWidgetHostViewAuraTest, CursorVisibilityChange) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -1541,7 +1573,7 @@ TEST_F(RenderWidgetHostViewAuraTest, CursorVisibilityChange) {
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, UpdateCursorIfOverSelf) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -1596,7 +1628,142 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
   pass->SetNew(
       cc::RenderPassId(1, 1), gfx::Rect(size), damage, gfx::Transform());
   frame.delegated_frame_data->render_pass_list.push_back(std::move(pass));
+  if (!size.IsEmpty()) {
+    cc::TransferableResource resource;
+    resource.id = 1;
+    frame.delegated_frame_data->resource_list.push_back(std::move(resource));
+  }
   return frame;
+}
+
+// If the ui::Compositor has been reset then resources are returned back to the
+// client in response to the swap. This test verifies that the returned
+// resources are indeed reported as being in response to a swap.
+TEST_F(RenderWidgetHostViewAuraTest, ResettingCompositorReturnsResources) {
+  FakeSurfaceDamageObserver damage_observer;
+  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+  cc::SurfaceManager* manager = factory->GetSurfaceManager();
+  manager->AddObserver(&damage_observer);
+
+  gfx::Size view_size(100, 100);
+  gfx::Rect view_rect(view_size);
+
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->SetSize(view_size);
+  view_->Show();
+  sink_->ClearMessages();
+
+  view_->ResetCompositor();
+
+  // Swapping a frame should trigger a swap ACK IPC because we have reset the
+  // compositor.
+  view_->OnSwapCompositorFrame(0,
+                               MakeDelegatedFrame(1.f, view_size, view_rect));
+  EXPECT_EQ(1u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(0);
+    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
+    ViewMsg_ReclaimCompositorResources::Param params;
+    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
+    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_TRUE(std::get<1>(params));    // is_swap_ack
+  }
+  manager->RemoveObserver(&damage_observer);
+}
+
+// This test verifies that returned resources do not require a pending ack.
+TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
+  gfx::Size view_size(100, 100);
+  gfx::Rect view_rect(view_size);
+
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->SetSize(view_size);
+  view_->Show();
+  sink_->ClearMessages();
+
+  // Accumulate some returned resources. This should not trigger an IPC.
+  cc::ReturnedResourceArray resources;
+  cc::ReturnedResource resource;
+  resource.id = 1;
+  resources.push_back(resource);
+  view_->ReturnResources(resources);
+  EXPECT_EQ(1u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(0);
+    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
+    ViewMsg_ReclaimCompositorResources::Param params;
+    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
+    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_FALSE(std::get<1>(params));   // is_swap_ack
+  }
+}
+
+// This test verifies that when the output_surface_id changes, then
+// DelegateFrameHost returns compositor resources without a swap ack.
+TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
+  FakeSurfaceDamageObserver damage_observer;
+  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+  cc::SurfaceManager* manager = factory->GetSurfaceManager();
+  manager->AddObserver(&damage_observer);
+
+  gfx::Size view_size(100, 100);
+  gfx::Rect view_rect(view_size);
+
+  view_->InitAsChild(nullptr);
+  aura::client::ParentWindowWithContext(
+      view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
+      gfx::Rect());
+  view_->SetSize(view_size);
+  view_->Show();
+  sink_->ClearMessages();
+
+  view_->OnSwapCompositorFrame(0,
+                               MakeDelegatedFrame(1.f, view_size, view_rect));
+
+  // Accumulate some returned resources. This should not trigger an IPC.
+  cc::ReturnedResourceArray resources;
+  cc::ReturnedResource resource;
+  resource.id = 1;
+  resources.push_back(resource);
+  view_->ReturnResources(resources);
+  EXPECT_EQ(0u, sink_->message_count());
+
+  // Swap another CompositorFrame but this time from another output_surface_id.
+  // This should trigger a non-ACK ReclaimCompositorResources IPC.
+  view_->OnSwapCompositorFrame(1,
+                               MakeDelegatedFrame(1.f, view_size, view_rect));
+  EXPECT_EQ(1u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(0);
+    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
+    ViewMsg_ReclaimCompositorResources::Param params;
+    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
+    EXPECT_EQ(0u, std::get<0>(params));  // output_surface_id
+    EXPECT_FALSE(std::get<1>(params));   // is_swap_ack
+  }
+  sink_->ClearMessages();
+
+  // Report that the surface is drawn to trigger an ACK.
+  cc::Surface* surface = manager->GetSurfaceForId(view_->surface_id());
+  EXPECT_TRUE(surface);
+  surface->RunDrawCallbacks();
+  EXPECT_EQ(1u, sink_->message_count());
+  {
+    const IPC::Message* msg = sink_->GetMessageAt(0);
+    EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID, msg->type());
+    ViewMsg_ReclaimCompositorResources::Param params;
+    ViewMsg_ReclaimCompositorResources::Read(msg, &params);
+    EXPECT_EQ(1u, std::get<0>(params));    // output_surface_id
+    EXPECT_EQ(true, std::get<1>(params));  // is_swap_ack
+  }
+
+  manager->RemoveObserver(&damage_observer);
 }
 
 // Resizing in fullscreen mode should send the up-to-date screen info.
@@ -1659,7 +1826,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SwapNotifiesWindow) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -1691,7 +1858,7 @@ TEST_F(RenderWidgetHostViewAuraTest, RecreateLayers) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
@@ -1724,7 +1891,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   // Prevent the DelegatedFrameHost from skipping frames.
   view_->can_create_resize_lock_ = false;
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), parent_view_->GetNativeView()->GetRootWindow(),
       gfx::Rect());
@@ -1772,7 +1939,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
   gfx::Size size3(300, 300);
 
   aura::Window* root_window = parent_view_->GetNativeView()->GetRootWindow();
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(), root_window, gfx::Rect(size1));
   view_->Show();
@@ -1819,7 +1986,8 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
       0, MakeDelegatedFrame(1.f, size3, gfx::Rect(size3)));
   // Expect the frame ack;
   EXPECT_EQ(1u, sink_->message_count());
-  EXPECT_EQ(ViewMsg_SwapCompositorFrameAck::ID, sink_->GetMessageAt(0)->type());
+  EXPECT_EQ(ViewMsg_ReclaimCompositorResources::ID,
+            sink_->GetMessageAt(0)->type());
   sink_->ClearMessages();
   EXPECT_EQ(size2.ToString(), view_->GetRequestedRendererSize().ToString());
 
@@ -1858,7 +2026,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
         EXPECT_EQ(blink::WebInputEvent::MouseMove, event->type);
         break;
       }
-      case ViewMsg_SwapCompositorFrameAck::ID:
+      case ViewMsg_ReclaimCompositorResources::ID:
         break;
       case ViewMsg_Resize::ID: {
         EXPECT_FALSE(has_resize);
@@ -1885,7 +2053,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -1972,7 +2140,7 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -2013,7 +2181,7 @@ TEST_F(RenderWidgetHostViewAuraTest, OutputSurfaceIdChange) {
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
 
   size_t max_renderer_frames =
       RendererFrameManager::GetInstance()->GetMaxNumberOfSavedFrames();
@@ -2037,7 +2205,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
-    views[i]->InitAsChild(NULL);
+    views[i]->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(
         views[i]->GetNativeView(),
         parent_view_->GetNativeView()->GetRootWindow(),
@@ -2178,7 +2346,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
 
   size_t max_renderer_frames =
       RendererFrameManager::GetInstance()->GetMaxNumberOfSavedFrames();
@@ -2202,7 +2370,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
-    views[i]->InitAsChild(NULL);
+    views[i]->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(
         views[i]->GetNativeView(),
         parent_view_->GetNativeView()->GetRootWindow(),
@@ -2245,7 +2413,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
 // Test that changing the memory pressure should delete saved frames. This test
 // only applies to ChromeOS.
 TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
 
   // The test logic below relies on having max_renderer_frames > 2.  By default,
   // this value is calculated from total physical memory and causes the test to
@@ -2273,7 +2441,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
     delegates_.back()->set_widget_host(hosts[i]);
     hosts[i]->Init();
     views[i] = new FakeRenderWidgetHostViewAura(hosts[i], false);
-    views[i]->InitAsChild(NULL);
+    views[i]->InitAsChild(nullptr);
     aura::client::ParentWindowWithContext(
         views[i]->GetNativeView(),
         parent_view_->GetNativeView()->GetRootWindow(),
@@ -2292,21 +2460,21 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
 
   // If we hide one, it should not get evicted.
   views[0]->Hide();
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(views[0]->HasFrameData());
   // Using a lesser memory pressure event however, should evict.
   SimulateMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(views[0]->HasFrameData());
 
   // Check the same for a higher pressure event.
   views[1]->Hide();
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(views[1]->HasFrameData());
   SimulateMemoryPressure(
       base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL);
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(views[1]->HasFrameData());
 
   for (size_t i = 0; i < renderer_count; ++i) {
@@ -2319,7 +2487,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SoftwareDPIChange) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size(100, 100);
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -2370,7 +2538,7 @@ class RenderWidgetHostViewAuraCopyRequestTest
   }
 
   void InitializeView() {
-    view_->InitAsChild(NULL);
+    view_->InitAsChild(nullptr);
     view_->GetDelegatedFrameHost()->SetRequestCopyOfOutputCallbackForTesting(
         base::Bind(&FakeRenderWidgetHostViewAura::InterceptCopyOfOutput,
                    base::Unretained(view_)));
@@ -2598,7 +2766,7 @@ TEST_F(RenderWidgetHostViewAuraCopyRequestTest, PresentTime) {
 TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
   gfx::Rect view_rect(100, 100);
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
       view_->GetNativeView(),
       parent_view_->GetNativeView()->GetRootWindow(),
@@ -2617,7 +2785,7 @@ TEST_F(RenderWidgetHostViewAuraTest, VisibleViewportTest) {
 
   const IPC::Message *message = sink_->GetFirstMessageMatching(
       ViewMsg_Resize::ID);
-  ASSERT_TRUE(message != NULL);
+  ASSERT_TRUE(message != nullptr);
 
   ViewMsg_Resize::Param params;
   ViewMsg_Resize::Read(message, &params);
@@ -2629,7 +2797,7 @@ TEST_F(RenderWidgetHostViewAuraTest, TouchEventPositionsArentRounded) {
   const float kX = 30.58f;
   const float kY = 50.23f;
 
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
 
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, gfx::Point(), 0,
@@ -3153,7 +3321,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(15));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
@@ -3260,7 +3428,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(10));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_EQ(1U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
@@ -3306,7 +3474,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(10));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
@@ -3341,7 +3509,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromMilliseconds(10));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->completed_mode());
@@ -3600,7 +3768,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
 
-  view_->OnWindowFocused(NULL, view_->GetNativeView());
+  view_->OnWindowFocused(nullptr, view_->GetNativeView());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
@@ -3633,7 +3801,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
 // Tests that when view initiated shutdown happens (i.e. RWHView is deleted
 // before RWH), we clean up properly and don't leak the RWHVGuest.
 TEST_F(RenderWidgetHostViewGuestAuraTest, GuestViewDoesNotLeak) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   TearDownEnvironment();
   ASSERT_FALSE(guest_view_weak_.get());
 }
@@ -3642,7 +3810,7 @@ TEST_F(RenderWidgetHostViewGuestAuraTest, GuestViewDoesNotLeak) {
 // synchronously.
 TEST_F(RenderWidgetHostViewAuraTest,
        InvalidEventsHaveSyncHandlingDisabled) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
   GetSentMessageCountAndResetSink();
 
@@ -3671,7 +3839,7 @@ TEST_F(RenderWidgetHostViewAuraTest,
 
 // Checks key event codes.
 TEST_F(RenderWidgetHostViewAuraTest, KeyEvent) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
 
   ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_A, ui::DomCode::US_A,
@@ -3688,7 +3856,7 @@ TEST_F(RenderWidgetHostViewAuraTest, KeyEvent) {
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, SetCanScrollForWebMouseWheelEvent) {
-  view_->InitAsChild(NULL);
+  view_->InitAsChild(nullptr);
   view_->Show();
 
   sink_->ClearMessages();
@@ -3860,20 +4028,20 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
 
 // Tests the RenderWidgetHostImpl sends the correct surface ID namespace to
 // the renderer process.
-TEST_F(RenderWidgetHostViewAuraTest, SurfaceIdNamespaceInitialized) {
+TEST_F(RenderWidgetHostViewAuraTest, SurfaceClientIdInitialized) {
   gfx::Size size(5, 5);
 
   const IPC::Message* msg =
-      sink_->GetUniqueMessageMatching(ViewMsg_SetSurfaceIdNamespace::ID);
+      sink_->GetUniqueMessageMatching(ViewMsg_SetSurfaceClientId::ID);
   EXPECT_TRUE(msg);
-  ViewMsg_SetSurfaceIdNamespace::Param params;
-  ViewMsg_SetSurfaceIdNamespace::Read(msg, &params);
-  view_->InitAsChild(NULL);
+  ViewMsg_SetSurfaceClientId::Param params;
+  ViewMsg_SetSurfaceClientId::Read(msg, &params);
+  view_->InitAsChild(nullptr);
   view_->Show();
   view_->SetSize(size);
   view_->OnSwapCompositorFrame(0,
                                MakeDelegatedFrame(1.f, size, gfx::Rect(size)));
-  EXPECT_EQ(view_->GetSurfaceIdNamespace(), std::get<0>(params));
+  EXPECT_EQ(view_->GetSurfaceClientId(), std::get<0>(params));
 }
 
 // This class provides functionality to test a RenderWidgetHostViewAura
@@ -4030,19 +4198,13 @@ TEST_F(RenderWidgetHostViewAuraWithViewHarnessTest,
 // ----------------------------------------------------------------------------
 // TextInputManager and IME-Related Tests
 
-// A group of tests which verify that the IME method results are routed to the
-// right RenderWidget in the OOPIF structure.
+// The test class for OOPIF IME related unit tests in RenderWidgetHostViewAura.
 // In each test, 3 views are created where one is in process with main frame and
-// the other two are in distinct processes (this makes a total of 4 RWHVs). Then
-// each test will verify the correctness of routing for one of the IME result
-// methods. The method is called on ui::TextInputClient (i.e., RWHV for the tab
-// in aura) and then the test verifies that the IPC is routed to the
-// RenderWidget corresponding to the active view (i.e., the RenderWidget
-// with focused <input>).
-class InputMethodResultAuraTest : public RenderWidgetHostViewAuraTest {
+// the other two are in distinct processes (this makes a total of 4 RWHVs).
+class InputMethodAuraTestBase : public RenderWidgetHostViewAuraTest {
  public:
-  InputMethodResultAuraTest() {}
-  ~InputMethodResultAuraTest() override {}
+  InputMethodAuraTestBase() {}
+  ~InputMethodAuraTestBase() override {}
 
   void SetUp() override {
     RenderWidgetHostViewAuraTest::SetUp();
@@ -4086,18 +4248,6 @@ class InputMethodResultAuraTest : public RenderWidgetHostViewAuraTest {
   }
 
  protected:
-  const IPC::Message* RunAndReturnIPCSent(const base::Closure closure,
-                                          MockRenderProcessHost* process,
-                                          int32_t message_id) {
-    process->sink().ClearMessages();
-    closure.Run();
-    return process->sink().GetFirstMessageMatching(message_id);
-  }
-
-  MockRenderWidgetHostDelegate* render_widget_host_delegate() const {
-    return delegates_.back().get();
-  }
-
   ui::TextInputClient* text_input_client() const { return view_; }
 
   bool has_composition_text() const {
@@ -4156,12 +4306,35 @@ class InputMethodResultAuraTest : public RenderWidgetHostViewAuraTest {
   MockRenderProcessHost* third_process_host_;
   TestRenderWidgetHostView* view_for_third_process_;
 
+  DISALLOW_COPY_AND_ASSIGN(InputMethodAuraTestBase);
+};
+
+// A group of tests which verify that the IME method results are routed to the
+// right RenderWidget when there are multiple RenderWidgetHostViews on tab. Each
+// test will verify the correctness of routing for one of the IME result
+// methods. The method is called on ui::TextInputClient (i.e., RWHV for the tab
+// in aura) and then the test verifies that the IPC is routed to the
+// RenderWidget corresponding to the active view (i.e., the RenderWidget
+// with focused <input>).
+class InputMethodResultAuraTest : public InputMethodAuraTestBase {
+ public:
+  InputMethodResultAuraTest() {}
+  ~InputMethodResultAuraTest() override {}
+
+ protected:
+  const IPC::Message* RunAndReturnIPCSent(const base::Closure closure,
+                                          MockRenderProcessHost* process,
+                                          int32_t message_id) {
+    process->sink().ClearMessages();
+    closure.Run();
+    return process->sink().GetFirstMessageMatching(message_id);
+  }
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(InputMethodResultAuraTest);
 };
 
-// This test verifies that ui::TextInputClient::SetCompositionText call leads to
-// IPC message InputMsg_ImeSetComposition being sent to the right renderer
-// process.
+// This test verifies ui::TextInputClient::SetCompositionText.
 TEST_F(InputMethodResultAuraTest, SetCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::SetCompositionText,
@@ -4173,9 +4346,7 @@ TEST_F(InputMethodResultAuraTest, SetCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::ConfirmCompositionText call
-// leads to IPC message InputMsg_ImeConfirmComposition being sent to the right
-// renderer process.
+// This test is for ui::TextInputClient::ConfirmCompositionText.
 TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::ConfirmCompositionText,
@@ -4188,9 +4359,7 @@ TEST_F(InputMethodResultAuraTest, ConfirmCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::ConfirmCompositionText call
-// leads to IPC message InputMsg_ImeSetComposition being sent to the right
-// renderer process.
+// This test is for ui::TextInputClient::ConfirmCompositionText.
 TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::ClearCompositionText,
@@ -4203,8 +4372,7 @@ TEST_F(InputMethodResultAuraTest, ClearCompositionText) {
   }
 }
 
-// This test verifies that ui::TextInputClient::InsertText call leads to IPC
-// message InputMsg_ImeSetComposition being sent to the right renderer process.
+// This test is for that ui::TextInputClient::InsertText.
 TEST_F(InputMethodResultAuraTest, InsertText) {
   base::Closure ime_call =
       base::Bind(&ui::TextInputClient::InsertText,
@@ -4216,10 +4384,8 @@ TEST_F(InputMethodResultAuraTest, InsertText) {
   }
 }
 
-// This test makes a specific child frame's view active and then forces the
-// tab's view end the current IME composition session by sending out an IME
-// IPC to confirm composition. The test then verifies that the message is sent
-//  to the active widget's process.
+// This test is for RenderWidgetHostViewAura::FinishImeCompositionSession which
+// is in response to a mouse click during an ongoing composition.
 TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
   base::Closure ime_finish_session_call =
       base::Bind(&RenderWidgetHostViewAura::FinishImeCompositionSession,
@@ -4232,5 +4398,186 @@ TEST_F(InputMethodResultAuraTest, FinishImeCompositionSession) {
                                       InputMsg_ImeConfirmComposition::ID));
   }
 }
+
+// This test is for ui::TextInputClient::ChangeTextDirectionAndLayoutAlignment.
+TEST_F(InputMethodResultAuraTest, ChangeTextDirectionAndLayoutAlignment) {
+  base::Closure ime_finish_session_call = base::Bind(
+      base::IgnoreResult(
+          &RenderWidgetHostViewAura::ChangeTextDirectionAndLayoutAlignment),
+      base::Unretained(tab_view()), base::i18n::LEFT_TO_RIGHT);
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    EXPECT_TRUE(!!RunAndReturnIPCSent(ime_finish_session_call,
+                                      processes_[index],
+                                      ViewMsg_SetTextDirection::ID));
+  }
+}
+
+// A class of tests which verify the correctness of some tracked IME related
+// state at the browser side. Each test verifies the correctness tracking for
+// one specific state. To do so, the views are activated in a predetermined
+// sequence and each time, the IPC call for the corresponding state is simulated
+// through calling the method on the view. Then the test verifies that the value
+// returned by the view or ui::TextInputClient is the expected value from IPC.
+class InputMethodStateAuraTest : public InputMethodAuraTestBase {
+ public:
+  InputMethodStateAuraTest() {}
+  ~InputMethodStateAuraTest() override {}
+
+ protected:
+  gfx::SelectionBound GetSelectionBoundFromRect(const gfx::Rect& rect) {
+    gfx::SelectionBound bound;
+    bound.SetEdge(gfx::PointF(rect.origin()), gfx::PointF(rect.bottom_left()));
+    return bound;
+  }
+
+  gfx::Rect TransformRectToViewsRootCoordSpace(const gfx::Rect rect,
+                                               RenderWidgetHostView* view) {
+    return gfx::Rect(view->TransformPointToRootCoordSpace(rect.origin()),
+                     rect.size());
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(InputMethodStateAuraTest);
+};
+
+// This test is for caret bounds which are calculated based on the tracked value
+// for selection bounds.
+TEST_F(InputMethodStateAuraTest, GetCaretBounds) {
+  ViewHostMsg_SelectionBounds_Params params;
+  params.is_anchor_first = true;
+  params.anchor_dir = blink::WebTextDirectionLeftToRight;
+  params.focus_dir = blink::WebTextDirectionLeftToRight;
+  params.anchor_rect = gfx::Rect(0, 0, 10, 10);
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    params.focus_rect = gfx::Rect(10 + index, 10 + index, 10, 10);
+    views_[index]->SelectionBoundsChanged(params);
+
+    // Calculate the bounds.
+    gfx::SelectionBound anchor_bound = GetSelectionBoundFromRect(
+        TransformRectToViewsRootCoordSpace(params.anchor_rect, views_[index]));
+    gfx::SelectionBound focus_bound = GetSelectionBoundFromRect(
+        TransformRectToViewsRootCoordSpace(params.focus_rect, views_[index]));
+    anchor_bound.set_type(gfx::SelectionBound::LEFT);
+    focus_bound.set_type(gfx::SelectionBound::RIGHT);
+    gfx::Rect measured_rect =
+        gfx::RectBetweenSelectionBounds(anchor_bound, focus_bound);
+
+    EXPECT_EQ(measured_rect, text_input_client()->GetCaretBounds());
+  }
+}
+
+// This test is for composition character bounds.
+TEST_F(InputMethodStateAuraTest, GetCompositionCharacterBounds) {
+  gfx::Rect bound;
+  // Initially, there should be no bounds.
+  EXPECT_FALSE(text_input_client()->GetCompositionCharacterBounds(0, &bound));
+  for (auto index : active_view_sequence_) {
+    ActivateViewForTextInputManager(views_[index], ui::TEXT_INPUT_TYPE_TEXT);
+    // Simulate an IPC to set character bounds for the view.
+    views_[index]->ImeCompositionRangeChanged(gfx::Range(),
+                                              {gfx::Rect(1, 2, 3, 4 + index)});
+
+    // No bounds at index 1.
+    EXPECT_FALSE(text_input_client()->GetCompositionCharacterBounds(1, &bound));
+
+    // Valid bound at index 0.
+    EXPECT_TRUE(text_input_client()->GetCompositionCharacterBounds(0, &bound));
+    EXPECT_EQ(4 + (int)index, bound.height());
+  }
+}
+
+// This test is for selected text.
+TEST_F(InputMethodStateAuraTest, GetSelectedText) {
+  base::string16 text = base::ASCIIToUTF16("some text of length 22");
+  size_t offset = 0U;
+  gfx::Range selection_range(20, 21);
+
+  for (auto index : active_view_sequence_) {
+    render_widget_host_delegate()->set_focused_widget(
+        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
+    views_[index]->SelectionChanged(text, offset, selection_range);
+    base::string16 expected_text = text.substr(
+        selection_range.GetMin() - offset, selection_range.length());
+
+    EXPECT_EQ(expected_text, views_[index]->GetSelectedText());
+
+    // Changing offset to make sure that the next view has a different text
+    // selection.
+    offset++;
+  }
+}
+
+// This test is for text range.
+TEST_F(InputMethodStateAuraTest, GetTextRange) {
+  base::string16 text = base::ASCIIToUTF16("some text of length 22");
+  size_t offset = 0U;
+  gfx::Range selection_range;
+
+  for (auto index : active_view_sequence_) {
+    render_widget_host_delegate()->set_focused_widget(
+        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
+    gfx::Range expected_range(offset, offset + text.length());
+    views_[index]->SelectionChanged(text, offset, selection_range);
+    gfx::Range range_from_client;
+
+    // For aura this always returns true.
+    EXPECT_TRUE(text_input_client()->GetTextRange(&range_from_client));
+    EXPECT_EQ(expected_range, range_from_client);
+
+    // Changing offset to make sure that the next view has a different text
+    // selection.
+    offset++;
+  }
+}
+
+// This test is for selection range.
+TEST_F(InputMethodStateAuraTest, GetSelectionRange) {
+  base::string16 text;
+  gfx::Range expected_range(0U, 1U);
+
+  for (auto index : active_view_sequence_) {
+    render_widget_host_delegate()->set_focused_widget(
+        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
+    views_[index]->SelectionChanged(text, 0U, expected_range);
+    gfx::Range range_from_client;
+
+    // This method always returns true.
+    EXPECT_TRUE(text_input_client()->GetSelectionRange(&range_from_client));
+    EXPECT_EQ(expected_range, range_from_client);
+
+    // Changing range to make sure that the next view has a different text
+    // selection.
+    expected_range.set_end(expected_range.end() + 1U);
+  }
+}
+
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+// This test will verify that after selection, the selected text is written to
+// the clipboard from the focused widget.
+TEST_F(InputMethodStateAuraTest, SelectedTextCopiedToClipboard) {
+  ui::Clipboard* clipboard = ui::Clipboard::GetForCurrentThread();
+  EXPECT_TRUE(!!clipboard);
+  std::vector<std::string> texts = {"text0", "text1", "text2", "text3"};
+  for (auto index : active_view_sequence_) {
+    clipboard->Clear(ui::CLIPBOARD_TYPE_SELECTION);
+
+    // Focus the corresponding widget.
+    render_widget_host_delegate()->set_focused_widget(
+        RenderWidgetHostImpl::From(views_[index]->GetRenderWidgetHost()));
+
+    // Change the selection of the currently focused widget. It suffices to just
+    // call the method on the view.
+    base::string16 expected_text = base::ASCIIToUTF16(texts[index]);
+    views_[index]->SelectionChanged(expected_text, 0U, gfx::Range(0, 5));
+
+    // Retrieve the selected text from clipboard and verify it is as expected.
+    base::string16 result_text;
+    clipboard->ReadText(ui::CLIPBOARD_TYPE_SELECTION, &result_text);
+    EXPECT_EQ(expected_text, result_text);
+  }
+}
+#endif
 
 }  // namespace content

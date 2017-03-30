@@ -33,7 +33,8 @@ class RenderFrameImpl;
 class CONTENT_EXPORT PluginInstanceThrottlerImpl
     : public PluginInstanceThrottler {
  public:
-  PluginInstanceThrottlerImpl();
+  explicit PluginInstanceThrottlerImpl(
+      RenderFrame::RecordPeripheralDecision record_decision);
 
   ~PluginInstanceThrottlerImpl() override;
 
@@ -65,7 +66,7 @@ class CONTENT_EXPORT PluginInstanceThrottlerImpl
 
   // Called when the plugin flushes it's graphics context. Supplies the
   // throttler with a candidate to use as the representative keyframe.
-  void OnImageFlush(const SkBitmap* bitmap);
+  void OnImageFlush(const SkBitmap& bitmap);
 
   // Returns true if |event| was handled and shouldn't be further processed.
   bool ConsumeInputEvent(const blink::WebInputEvent& event);
@@ -89,6 +90,8 @@ class CONTENT_EXPORT PluginInstanceThrottlerImpl
 
   void AudioThrottledFrameTimeout();
   void EngageThrottle();
+
+  RenderFrame::RecordPeripheralDecision record_decision_;
 
   ThrottlerState state_;
 

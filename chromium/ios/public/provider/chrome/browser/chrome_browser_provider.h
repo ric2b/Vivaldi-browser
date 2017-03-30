@@ -6,6 +6,7 @@
 #define IOS_PUBLIC_PROVIDER_CHROME_BROWSER_CHROME_BROWSER_PROVIDER_H_
 
 #include <CoreGraphics/CoreGraphics.h>
+#import <Foundation/Foundation.h>
 #include <stddef.h>
 
 #include <memory>
@@ -21,7 +22,6 @@ class GURL;
 class InfoBarViewDelegate;
 class PrefRegistrySimple;
 class PrefService;
-class ProfileOAuth2TokenServiceIOSProvider;
 
 namespace autofill {
 class CardUnmaskPromptController;
@@ -71,16 +71,13 @@ class ChromeBrowserProvider {
   // Registers all prefs that will be used via a PrefService attached to a
   // Profile.
   virtual void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
-  // Returns an instance of profile OAuth2 token service provider.
-  virtual ProfileOAuth2TokenServiceIOSProvider*
-  GetProfileOAuth2TokenServiceIOSProvider();
   // Returns an UpdatableResourceProvider instance.
   virtual UpdatableResourceProvider* GetUpdatableResourceProvider();
   // Returns an infobar view conforming to the InfoBarViewProtocol. The returned
   // object is retained.
   virtual InfoBarViewPlaceholder CreateInfoBarView(
       CGRect frame,
-      InfoBarViewDelegate* delegate);
+      InfoBarViewDelegate* delegate) NS_RETURNS_RETAINED;
   // Returns an instance of a signin resources provider.
   virtual SigninResourcesProvider* GetSigninResourcesProvider();
   // Returns an instance of a Chrome identity service.

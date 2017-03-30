@@ -5,281 +5,107 @@
 package org.chromium.chromoting;
 
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
-import android.graphics.Point;
-import android.os.Looper;
-import android.os.SystemClock;
+import android.graphics.PointF;
 import android.text.InputType;
-import android.util.AttributeSet;
 import android.view.MotionEvent;
-import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import android.view.inputmethod.InputMethodManager;
 
-import org.chromium.base.Log;
 import org.chromium.chromoting.jni.Client;
-import org.chromium.chromoting.jni.Display;
 
 /**
- * The user interface for viewing and interacting with a specific remote host.
- * It provides a canvas onto which the video feed is rendered, handles
- * multitouch pan and zoom gestures, and collects and forwards input events.
+ * The abstract class for viewing and interacting with a specific remote host. Handles logic
+ * for touch input and render data.
  */
-/** GUI element that holds the drawing canvas. */
-public class DesktopView extends SurfaceView implements DesktopViewInterface,
-        SurfaceHolder.Callback {
+public abstract class DesktopView extends SurfaceView {
     /** Used to define the animation feedback shown when a user touches the screen. */
-    public enum InputFeedbackType { NONE, SMALL_ANIMATION, LARGE_ANIMATION }
+    public enum InputFeedbackType {
+        NONE,
+        SHORT_TOUCH_ANIMATION,
+        LONG_TOUCH_ANIMATION,
+        LONG_TRACKPAD_ANIMATION
+    }
 
-    private static final String TAG = "Chromoting";
+    protected final RenderData mRenderData;
+    protected final TouchInputHandler mInputHandler;
 
-    private final RenderData mRenderData;
-    private final TouchInputHandler mInputHandler;
+    /**
+     * Subclass should trigger this event when the client view size is changed.
+     */
+    protected final Event.Raisable<SizeChangedEventParameter> mOnClientSizeChanged =
+            new Event.Raisable<>();
+
+    /**
+     * Subclass should trigger this event when the host (desktop frame) size is changed.
+     */
+    protected final Event.Raisable<SizeChangedEventParameter> mOnHostSizeChanged =
+            new Event.Raisable<>();
+
+    private final int mTinyFeedbackPixelRadius;
+    private final int mSmallFeedbackPixelRadius;
+    private final int mLargeFeedbackPixelRadius;
 
     /** The parent Desktop activity. */
-    private Desktop mDesktop;
+    private final Desktop mDesktop;
 
-    /** The Client connection, used to inject input and fetch the video frames. */
-    private Client mClient;
-
-    private Display mDisplay;
-
-
-    // Flag to prevent multiple repaint requests from being backed up. Requests for repainting will
-    // be dropped if this is already set to true. This is used by the main thread and the painting
-    // thread, so the access should be synchronized on |mRenderData|.
-    private boolean mRepaintPending;
-
-    // Flag used to ensure that the SurfaceView is only painted between calls to surfaceCreated()
-    // and surfaceDestroyed(). Accessed on main thread and display thread, so this should be
-    // synchronized on |mRenderData|.
-    private boolean mSurfaceCreated = false;
-
-    private final Event.Raisable<PaintEventParameter> mOnPaint = new Event.Raisable<>();
-    private final Event.Raisable<SizeChangedEventParameter> mOnClientSizeChanged =
-            new Event.Raisable<>();
-    private final Event.Raisable<SizeChangedEventParameter> mOnHostSizeChanged =
-            new Event.Raisable<>();
     private final Event.Raisable<TouchEventParameter> mOnTouch = new Event.Raisable<>();
 
-    // Variables to control animation by the TouchInputHandler.
-
-    /** Protects mInputAnimationRunning. */
-    private final Object mAnimationLock = new Object();
-
-    /** Whether the TouchInputHandler has requested animation to be performed. */
-    private boolean mInputAnimationRunning = false;
-
-    public DesktopView(Context context, AttributeSet attributes) {
-        super(context, attributes);
+    public DesktopView(Desktop desktop, Client client) {
+        super(desktop);
+        Preconditions.notNull(desktop);
+        Preconditions.notNull(client);
+        mDesktop = desktop;
+        mRenderData = new RenderData();
+        mInputHandler = new TouchInputHandler(this, desktop, mRenderData);
+        mInputHandler.init(desktop, new InputEventSender(client));
 
         // Give this view keyboard focus, allowing us to customize the soft keyboard's settings.
         setFocusableInTouchMode(true);
 
-        mRenderData = new RenderData();
-        mInputHandler = new TouchInputHandler(this, context, mRenderData);
+        mTinyFeedbackPixelRadius =
+                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_tiny);
 
-        mRepaintPending = false;
+        mSmallFeedbackPixelRadius =
+                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_small);
 
-        getHolder().addCallback(this);
+        mLargeFeedbackPixelRadius =
+                getResources().getDimensionPixelSize(R.dimen.feedback_animation_radius_large);
     }
 
-    @Override
-    public void init(Desktop desktop, Client client) {
-        Preconditions.isNull(mDesktop);
-        Preconditions.isNull(mClient);
-        Preconditions.isNull(mDisplay);
-        Preconditions.notNull(desktop);
-        Preconditions.notNull(client);
-        Preconditions.notNull(client.getDisplay());
-        Preconditions.isTrue(client.getDisplay() instanceof Display);
-        mDesktop = desktop;
-        mClient = client;
-        mDisplay = (Display) client.getDisplay();
-        mInputHandler.init(desktop, new InputEventSender(client));
+    // TODO(yuweih): move showActionBar and showKeyboard out of this abstract class.
+    /** Shows the action bar. */
+    public final void showActionBar() {
+        mDesktop.showSystemUi();
     }
 
-    public Event<PaintEventParameter> onPaint() {
-        return mOnPaint;
+    /** Shows the software keyboard. */
+    public final void showKeyboard() {
+        InputMethodManager inputManager =
+                (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        inputManager.showSoftInput(this, 0);
     }
 
-    public Event<SizeChangedEventParameter> onClientSizeChanged() {
-        return mOnClientSizeChanged;
-    }
-
-    public Event<SizeChangedEventParameter> onHostSizeChanged() {
-        return mOnHostSizeChanged;
-    }
-
-    public Event<TouchEventParameter> onTouch() {
+    /** An {@link Event} which is triggered when user touches the screen. */
+    public final Event<TouchEventParameter> onTouch() {
         return mOnTouch;
     }
 
-    /** Request repainting of the desktop view. */
-    void requestRepaint() {
-        synchronized (mRenderData) {
-            if (mRepaintPending) {
-                return;
-            }
-            mRepaintPending = true;
-        }
-        mDisplay.redrawGraphics();
+    /** An {@link Event} which is triggered when the client size is changed. */
+    public final Event<SizeChangedEventParameter> onClientSizeChanged() {
+        return mOnClientSizeChanged;
     }
 
-    /**
-     * Redraws the canvas. This should be done on a non-UI thread or it could
-     * cause the UI to lag. Specifically, it is currently invoked on the native
-     * graphics thread using a JNI.
-     */
-    public void paint() {
-        long startTimeMs = SystemClock.uptimeMillis();
-
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            Log.w(TAG, "Canvas being redrawn on UI thread");
-        }
-
-        Bitmap image = mDisplay.getVideoFrame();
-        if (image == null) {
-            // This can happen if the client is connected, but a complete video frame has not yet
-            // been decoded.
-            return;
-        }
-
-        int width = image.getWidth();
-        int height = image.getHeight();
-        boolean sizeChanged = false;
-        synchronized (mRenderData) {
-            if (mRenderData.imageWidth != width || mRenderData.imageHeight != height) {
-                // TODO(lambroslambrou): Move this code into a sizeChanged() callback, to be
-                // triggered from native code (on the display thread) when the remote screen size
-                // changes.
-                mRenderData.imageWidth = width;
-                mRenderData.imageHeight = height;
-                sizeChanged = true;
-            }
-        }
-        if (sizeChanged) {
-            mOnHostSizeChanged.raise(new SizeChangedEventParameter(width, height));
-        }
-
-        Canvas canvas;
-        Point cursorPosition;
-        boolean drawCursor;
-        synchronized (mRenderData) {
-            mRepaintPending = false;
-            // Don't try to lock the canvas before it is ready, as the implementation of
-            // lockCanvas() may throttle these calls to a slow rate in order to avoid consuming CPU.
-            // Note that a successful call to lockCanvas() will prevent the framework from
-            // destroying the Surface until it is unlocked.
-            if (!mSurfaceCreated) {
-                return;
-            }
-            canvas = getHolder().lockCanvas();
-            if (canvas == null) {
-                return;
-            }
-            canvas.setMatrix(mRenderData.transform);
-            drawCursor = mRenderData.drawCursor;
-            cursorPosition = mRenderData.getCursorPosition();
-        }
-
-        canvas.drawColor(Color.BLACK);
-        canvas.drawBitmap(image, 0, 0, new Paint());
-
-        float scaleFactor;
-        synchronized (mRenderData) {
-            scaleFactor = mRenderData.transform.mapRadius(1);
-        }
-        mOnPaint.raise(new PaintEventParameter(cursorPosition, canvas, scaleFactor));
-
-        if (drawCursor) {
-            Bitmap cursorBitmap = mDisplay.getCursorBitmap();
-            if (cursorBitmap != null) {
-                Point hotspot = mDisplay.getCursorHotspot();
-                canvas.drawBitmap(cursorBitmap, cursorPosition.x - hotspot.x,
-                        cursorPosition.y - hotspot.y, new Paint());
-            }
-        }
-
-        getHolder().unlockCanvasAndPost(canvas);
-
-        synchronized (mAnimationLock) {
-            if (mInputAnimationRunning || !mOnPaint.isEmpty()) {
-                getHandler().postAtTime(new Runnable() {
-                    @Override
-                    public void run() {
-                        processAnimation();
-                    }
-                }, startTimeMs + 30);
-            }
-        }
+    /** An {@link Event} which is triggered when the host size is changed. */
+    public final Event<SizeChangedEventParameter> onHostSizeChanged() {
+        return mOnHostSizeChanged;
     }
 
-    private void processAnimation() {
-        boolean running;
-        synchronized (mAnimationLock) {
-            running = mInputAnimationRunning;
-        }
-        if (running) {
-            mInputHandler.processAnimation();
-            requestRepaint();
-        } else if (!mOnPaint.isEmpty()) {
-            requestRepaint();
-        }
-    }
-
-    /**
-     * Called after the canvas is initially created, then after every subsequent resize, as when
-     * the display is rotated.
-     */
-    @Override
-    public void surfaceChanged(SurfaceHolder holder, int format, int width, int height) {
-        synchronized (mRenderData) {
-            mRenderData.screenWidth = width;
-            mRenderData.screenHeight = height;
-        }
-
-        attachRedrawCallback();
-        mOnClientSizeChanged.raise(new SizeChangedEventParameter(width, height));
-        requestRepaint();
-    }
-
-    public void attachRedrawCallback() {
-        mDisplay.provideRedrawCallback(new Runnable() {
-            @Override
-            public void run() {
-                paint();
-            }
-        });
-    }
-
-    /** Called when the canvas is first created. */
-    @Override
-    public void surfaceCreated(SurfaceHolder holder) {
-        synchronized (mRenderData) {
-            mSurfaceCreated = true;
-        }
-    }
-
-    /**
-     * Called when the canvas is finally destroyed. Marks the canvas as needing a redraw so that it
-     * will not be blank if the user later switches back to our window.
-     */
-    @Override
-    public void surfaceDestroyed(SurfaceHolder holder) {
-        synchronized (mRenderData) {
-            mSurfaceCreated = false;
-        }
-    }
-
+    // View overrides.
     /** Called when a software keyboard is requested, and specifies its options. */
     @Override
-    public InputConnection onCreateInputConnection(EditorInfo outAttrs) {
+    public final InputConnection onCreateInputConnection(EditorInfo outAttrs) {
         // Disables rich input support and instead requests simple key events.
         outAttrs.inputType = InputType.TYPE_NULL;
 
@@ -297,56 +123,60 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
 
     /** Called whenever the user attempts to touch the canvas. */
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public final boolean onTouchEvent(MotionEvent event) {
         TouchEventParameter parameter = new TouchEventParameter(event);
         mOnTouch.raise(parameter);
         return parameter.handled;
     }
 
-    @Override
-    public void showInputFeedback(InputFeedbackType feedbackToShow, Point pos) {
-        if (feedbackToShow != InputFeedbackType.NONE) {
-            FeedbackAnimator.startAnimation(this, pos, feedbackToShow);
-            requestRepaint();
+    /**
+     * Returns the radius of the given feedback type.
+     * 0.0f will be returned if no feedback should be shown.
+     */
+    protected final float getFeedbackRadius(InputFeedbackType feedbackToShow, float scaleFactor) {
+        switch (feedbackToShow) {
+            case NONE:
+                return 0.0f;
+            case SHORT_TOUCH_ANIMATION:
+                return mSmallFeedbackPixelRadius / scaleFactor;
+            case LONG_TOUCH_ANIMATION:
+                return mLargeFeedbackPixelRadius / scaleFactor;
+            case LONG_TRACKPAD_ANIMATION:
+                // The size of the longpress trackpad animation is supposed to be close to the size
+                // of the cursor so it doesn't need to be normalized and should be scaled with the
+                // canvas.
+                return mTinyFeedbackPixelRadius;
+            default:
+                // Unreachable, but required by Google Java style and findbugs.
+                assert false : "Unreached";
+                return 0.0f;
         }
     }
 
-    @Override
-    public void showActionBar() {
-        mDesktop.showSystemUi();
-    }
+    /** Triggers a brief animation to indicate the existence and location of an input event. */
+    public abstract void showInputFeedback(InputFeedbackType feedbackToShow, PointF pos);
 
-    @Override
-    public void showKeyboard() {
-        InputMethodManager inputManager =
-                (InputMethodManager) getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
-        inputManager.showSoftInput(this, 0);
-    }
+    /**
+     * Informs the view that its transformation matrix (for rendering the remote desktop bitmap)
+     * has been changed by the TouchInputHandler, which requires repainting.
+     */
+    public abstract void transformationChanged();
 
-    @Override
-    public void transformationChanged() {
-        requestRepaint();
-    }
+    /**
+     * Informs the view that the cursor has been moved by the TouchInputHandler, which requires
+     * repainting.
+     */
+    public abstract void cursorMoved();
 
-    @Override
-    public void cursorMoved() {
-        // For current implementation, cursorMoved() is always followed by transformationChanged()
-        // even if the canvas isn't really changed. For future we should improve this by not calling
-        // transformationChanged() if the cursor is moved but the canvas is not changed.
-    }
+    /**
+     * Informs the view that the cursor visibility has been changed (for different input mode) by
+     * the TouchInputHandler, which requires repainting.
+     */
+    public abstract void cursorVisibilityChanged();
 
-    @Override
-    public void cursorVisibilityChanged() {
-        requestRepaint();
-    }
-
-    @Override
-    public void setAnimationEnabled(boolean enabled) {
-        synchronized (mAnimationLock) {
-            if (enabled && !mInputAnimationRunning) {
-                requestRepaint();
-            }
-            mInputAnimationRunning = enabled;
-        }
-    }
+    /**
+     * Starts or stops an animation. Whilst the animation is running, the DesktopView will
+     * periodically call TouchInputHandler.processAnimation() and repaint itself.
+     */
+    public abstract void setAnimationEnabled(boolean enabled);
 }

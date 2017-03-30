@@ -19,11 +19,11 @@ cr.define('cr.ui', function() {
    * Bubble key codes.
    * @enum {number}
    */
-  var KeyCodes = {
-    TAB: 'U+0009',
+  var Keys = {
+    TAB: 'Tab',
     ENTER: 'Enter',
-    ESC: 'U+001B',
-    SPACE: 'U+0020'
+    ESC: 'Escape',
+    SPACE: ' '
   };
 
   /**
@@ -61,6 +61,10 @@ cr.define('cr.ui', function() {
       this.selfClickHandler_ = this.handleSelfClick_.bind(this);
       this.ownerDocument.addEventListener('click',
                                           this.handleDocClick_.bind(this));
+      // Set useCapture to true because scroll event does not bubble.
+      this.ownerDocument.addEventListener('scroll',
+                                          this.handleScroll_.bind(this),
+                                          true);
       this.ownerDocument.addEventListener('keydown',
                                           this.docKeyDownHandler_);
       window.addEventListener('blur', this.handleWindowBlur_.bind(this));
@@ -301,6 +305,15 @@ cr.define('cr.ui', function() {
     },
 
     /**
+     * Handler of scroll event.
+     * @private
+     */
+    handleScroll_: function(e) {
+      if (!this.hidden)
+        this.hide();
+    },
+
+    /**
      * Handler of document click event.
      * @private
      */
@@ -327,20 +340,20 @@ cr.define('cr.ui', function() {
       }
       // Artificial tab-cycle.
 
-      if (e.keyIdentifier == KeyCodes.TAB && e.shiftKey == true &&
+      if (e.key == Keys.TAB && e.shiftKey == true &&
           e.target == this.firstBubbleElement_) {
         this.lastBubbleElement_.focus();
         e.preventDefault();
       }
-      if (e.keyIdentifier == KeyCodes.TAB && e.shiftKey == false &&
+      if (e.key == Keys.TAB && e.shiftKey == false &&
           e.target == this.lastBubbleElement_) {
         this.firstBubbleElement_.focus();
         e.preventDefault();
       }
       // Close bubble on ESC or on hitting spacebar or Enter at close-button.
-      if (e.keyIdentifier == KeyCodes.ESC ||
-          ((e.keyIdentifier == KeyCodes.ENTER ||
-            e.keyIdentifier == KeyCodes.SPACE) &&
+      if (e.key == Keys.ESC ||
+          ((e.key == Keys.ENTER ||
+            e.key == Keys.SPACE) &&
              e.target && e.target.classList.contains('close-button')))
         this.hide();
     },

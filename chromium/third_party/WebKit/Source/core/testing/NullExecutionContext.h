@@ -32,13 +32,12 @@ public:
     bool tasksNeedSuspension() override { return m_tasksNeedSuspension; }
     void setTasksNeedSuspension(bool flag) { m_tasksNeedSuspension = flag; }
 
-    void reportBlockedScriptExecutionToInspector(const String& directiveText) override { }
     void didUpdateSecurityOrigin() override { }
     SecurityContext& securityContext() override { return *this; }
     DOMTimerCoordinator* timers() override { return nullptr; }
 
     void addConsoleMessage(ConsoleMessage*) override { }
-    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) override { }
+    void exceptionThrown(ErrorEvent*) override { }
 
     void setIsSecureContext(bool);
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;

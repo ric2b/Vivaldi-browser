@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -99,6 +100,21 @@ TEST_F(DesktopNativeWidgetAuraTest, NativeViewInitiallyHidden) {
   init_params.native_widget = new DesktopNativeWidgetAura(&widget);
   widget.Init(init_params);
   EXPECT_FALSE(widget.GetNativeView()->IsVisible());
+}
+
+// Verifies that if the DesktopWindowTreeHost is already shown, the native view
+// still reports not visible as we haven't shown the content window.
+TEST_F(DesktopNativeWidgetAuraTest, WidgetNotVisibleOnlyWindowTreeHostShown) {
+  Widget widget;
+  Widget::InitParams init_params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.native_widget = new DesktopNativeWidgetAura(&widget);
+  widget.Init(init_params);
+  DesktopNativeWidgetAura* desktop_native_widget_aura =
+      static_cast<DesktopNativeWidgetAura*>(widget.native_widget());
+  desktop_native_widget_aura->host()->Show();
+  EXPECT_FALSE(widget.IsVisible());
 }
 
 // Verify that the cursor state is shared between two native widgets.
@@ -239,10 +255,10 @@ TEST_F(DesktopNativeWidgetAuraTest, WidgetCanBeDestroyedFromNestedLoop) {
   // |RunWithDispatcher()| below.
   base::RunLoop run_loop;
   base::Closure quit_runloop = run_loop.QuitClosure();
-  message_loop()->PostTask(FROM_HERE,
-                           base::Bind(&QuitNestedLoopAndCloseWidget,
-                                      base::Passed(&widget),
-                                      base::Unretained(&quit_runloop)));
+  message_loop()->task_runner()->PostTask(
+      FROM_HERE,
+      base::Bind(&QuitNestedLoopAndCloseWidget, base::Passed(&widget),
+                 base::Unretained(&quit_runloop)));
   run_loop.Run();
 }
 
@@ -509,6 +525,8 @@ TEST_F(DesktopAuraWidgetTest, CloseWidgetDuringMouseReleased) {
   RunCloseWidgetDuringDispatchTest(this, ui::ET_MOUSE_RELEASED);
 }
 
+namespace {
+
 // Provides functionality to create a window modal dialog.
 class ModalDialogDelegate : public DialogDelegateView {
  public:
@@ -521,6 +539,8 @@ class ModalDialogDelegate : public DialogDelegateView {
  private:
   DISALLOW_COPY_AND_ASSIGN(ModalDialogDelegate);
 };
+
+}  // namespace
 
 // This test verifies that whether mouse events when a modal dialog is
 // displayed are eaten or recieved by the dialog.

@@ -27,6 +27,7 @@
 #define HTMLDocumentParser_h
 
 #include "bindings/core/v8/DocumentWriteEvaluator.h"
+#include "core/CoreExport.h"
 #include "core/dom/ParserContentPolicy.h"
 #include "core/dom/ScriptableDocumentParser.h"
 #include "core/fetch/ResourceClient.h"
@@ -35,6 +36,7 @@
 #include "core/html/parser/CompactHTMLToken.h"
 #include "core/html/parser/HTMLInputStream.h"
 #include "core/html/parser/HTMLParserOptions.h"
+#include "core/html/parser/HTMLParserReentryPermit.h"
 #include "core/html/parser/HTMLPreloadScanner.h"
 #include "core/html/parser/HTMLScriptRunnerHost.h"
 #include "core/html/parser/HTMLSourceTracker.h"
@@ -47,6 +49,7 @@
 #include "core/html/parser/XSSAuditorDelegate.h"
 #include "platform/text/SegmentedString.h"
 #include "wtf/Deque.h"
+#include "wtf/RefPtr.h"
 #include "wtf/WeakPtr.h"
 #include "wtf/text/TextPosition.h"
 #include <memory>
@@ -64,11 +67,12 @@ class HTMLParserScheduler;
 class HTMLResourcePreloader;
 class HTMLScriptRunner;
 class HTMLTreeBuilder;
-class ParsedChunkQueue;
 class PumpSession;
+class TokenizedChunkQueue;
 
-class HTMLDocumentParser :  public ScriptableDocumentParser, private HTMLScriptRunnerHost {
+class CORE_EXPORT HTMLDocumentParser :  public ScriptableDocumentParser, private HTMLScriptRunnerHost {
     USING_GARBAGE_COLLECTED_MIXIN(HTMLDocumentParser);
+    USING_PRE_FINALIZER(HTMLDocumentParser, dispose);
 public:
     static HTMLDocumentParser* create(HTMLDocument& document, ParserSynchronizationPolicy backgroundParsingPolicy)
     {
@@ -77,10 +81,16 @@ public:
     ~HTMLDocumentParser() override;
     DECLARE_VIRTUAL_TRACE();
 
+    // TODO(alexclarke): Remove when background parser goes away.
+    void dispose();
+
     // Exposed for HTMLParserScheduler
     void resumeParsingAfterYield();
 
     static void parseDocumentFragment(const String&, DocumentFragment*, Element* contextElement, ParserContentPolicy = AllowScriptingContent);
+
+    // Exposed for testing.
+    HTMLScriptRunnerHost* asHTMLScriptRunnerHostForTesting() { return this; }
 
     HTMLTokenizer* tokenizer() const { return m_tokenizer.get(); }
 
@@ -91,8 +101,10 @@ public:
     void suspendScheduledTasks() final;
     void resumeScheduledTasks() final;
 
-    struct ParsedChunk {
-        USING_FAST_MALLOC(ParsedChunk);
+    HTMLParserReentryPermit* reentryPermit() { return m_reentryPermit.get(); }
+
+    struct TokenizedChunk {
+        USING_FAST_MALLOC(TokenizedChunk);
     public:
         std::unique_ptr<CompactHTMLTokenStream> tokens;
         PreloadRequestStream preloads;
@@ -105,8 +117,14 @@ public:
         bool startingScript;
         // Indices into |tokens|.
         Vector<int> likelyDocumentWriteScriptIndices;
+        // Index into |tokens| of the last <meta> csp tag in |tokens|. Preloads
+        // will be deferred until this token is parsed. Will be
+        // noPendingToken if there are no csp tokens.
+        int pendingCSPMetaTokenIndex;
+
+        static constexpr int noPendingToken = -1;
     };
-    void notifyPendingParsedChunks();
+    void notifyPendingTokenizedChunks();
     void didReceiveEncodingDataFromBackgroundParser(const DocumentEncodingData&);
 
     void appendBytes(const char* bytes, size_t length) override;
@@ -130,6 +148,7 @@ private:
     {
         return new HTMLDocumentParser(fragment, contextElement, parserContentPolicy);
     }
+    HTMLDocumentParser(Document&, ParserContentPolicy, ParserSynchronizationPolicy);
 
     // DocumentParser
     void detach() final;
@@ -149,9 +168,9 @@ private:
 
     void startBackgroundParser();
     void stopBackgroundParser();
-    void validateSpeculations(std::unique_ptr<ParsedChunk> lastChunk);
-    void discardSpeculationsAndResumeFrom(std::unique_ptr<ParsedChunk> lastChunk, std::unique_ptr<HTMLToken>, std::unique_ptr<HTMLTokenizer>);
-    size_t processParsedChunkFromBackgroundParser(std::unique_ptr<ParsedChunk>);
+    void validateSpeculations(std::unique_ptr<TokenizedChunk> lastChunk);
+    void discardSpeculationsAndResumeFrom(std::unique_ptr<TokenizedChunk> lastChunk, std::unique_ptr<HTMLToken>, std::unique_ptr<HTMLTokenizer>);
+    size_t processTokenizedChunkFromBackgroundParser(std::unique_ptr<TokenizedChunk>);
     void pumpPendingSpeculations();
 
     bool canTakeNextToken();
@@ -177,7 +196,8 @@ private:
 
     std::unique_ptr<HTMLPreloadScanner> createPreloadScanner();
 
-    int preloadInsertion(const SegmentedString& source);
+    void fetchQueuedPreloads();
+
     void evaluateAndPreloadScriptForDocumentWrite(const String& source);
 
     // Temporary enum for the ParseHTMLOnMainThread experiment. This is used to
@@ -199,6 +219,7 @@ private:
 
     HTMLParserOptions m_options;
     HTMLInputStream m_input;
+    RefPtr<HTMLParserReentryPermit> m_reentryPermit;
 
     std::unique_ptr<HTMLToken> m_token;
     std::unique_ptr<HTMLTokenizer> m_tokenizer;
@@ -215,15 +236,24 @@ private:
 
     // FIXME: m_lastChunkBeforeScript, m_tokenizer, m_token, and m_input should be combined into a single state object
     // so they can be set and cleared together and passed between threads together.
-    std::unique_ptr<ParsedChunk> m_lastChunkBeforeScript;
-    Deque<std::unique_ptr<ParsedChunk>> m_speculations;
+    std::unique_ptr<TokenizedChunk> m_lastChunkBeforeScript;
+    Deque<std::unique_ptr<TokenizedChunk>> m_speculations;
     WeakPtrFactory<HTMLDocumentParser> m_weakFactory;
     WeakPtr<BackgroundHTMLParser> m_backgroundParser;
     Member<HTMLResourcePreloader> m_preloader;
     PreloadRequestStream m_queuedPreloads;
     Vector<String> m_queuedDocumentWriteScripts;
-    RefPtr<ParsedChunkQueue> m_parsedChunkQueue;
+    RefPtr<TokenizedChunkQueue> m_tokenizedChunkQueue;
     std::unique_ptr<DocumentWriteEvaluator> m_evaluator;
+
+    // If this is non-null, then there is a meta CSP token somewhere in the
+    // speculation buffer. Preloads will be deferred until a token matching this
+    // pointer is parsed and the CSP policy is applied. Note that this pointer
+    // tracks the *last* meta token in the speculation buffer, so it
+    // overestimates how long to defer preloads. This is for simplicity, as the
+    // alternative would require keeping track of token positions of preload
+    // requests.
+    CompactHTMLToken* m_pendingCSPMetaToken;
 
     bool m_shouldUseThreading;
     bool m_endWasDelayed;

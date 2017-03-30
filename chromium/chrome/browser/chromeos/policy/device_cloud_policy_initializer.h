@@ -25,7 +25,11 @@ class SequencedTaskRunner;
 }
 
 namespace chromeos {
-class OwnerSettingsServiceChromeOS;
+class CryptohomeClient;
+}
+
+namespace cryptohome {
+class AsyncMethodCaller;
 }
 
 namespace policy {
@@ -50,12 +54,13 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
   DeviceCloudPolicyInitializer(
       PrefService* local_state,
       DeviceManagementService* enterprise_service,
-      DeviceManagementService* consumer_service,
       const scoped_refptr<base::SequencedTaskRunner>& background_task_runner,
       EnterpriseInstallAttributes* install_attributes,
       ServerBackedStateKeysBroker* state_keys_broker,
       DeviceCloudPolicyStoreChromeOS* device_store,
-      DeviceCloudPolicyManagerChromeOS* manager);
+      DeviceCloudPolicyManagerChromeOS* manager,
+      cryptohome::AsyncMethodCaller* async_caller,
+      chromeos::CryptohomeClient* cryptohome_client);
 
   ~DeviceCloudPolicyInitializer() override;
 
@@ -67,12 +72,8 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
   // operation.
   // |allowed_modes| specifies acceptable DEVICE_MODE_* constants for
   // enrollment.
-  // |management_mode| should be either MANAGEMENT_MODE_ENTERPRISE or
-  // MANAGEMENT_MODE_CONSUMER.
   virtual void StartEnrollment(
-      ManagementMode management_mode,
       DeviceManagementService* device_management_service,
-      chromeos::OwnerSettingsServiceChromeOS* owner_settings_service,
       const EnrollmentConfig& enrollment_config,
       const std::string& auth_token,
       const AllowedDeviceModes& allowed_modes,
@@ -107,12 +108,13 @@ class DeviceCloudPolicyInitializer : public CloudPolicyStore::Observer {
 
   PrefService* local_state_;
   DeviceManagementService* enterprise_service_;
-  DeviceManagementService* consumer_service_;
   scoped_refptr<base::SequencedTaskRunner> background_task_runner_;
   EnterpriseInstallAttributes* install_attributes_;
   ServerBackedStateKeysBroker* state_keys_broker_;
   DeviceCloudPolicyStoreChromeOS* device_store_;
   DeviceCloudPolicyManagerChromeOS* manager_;
+  cryptohome::AsyncMethodCaller* async_method_caller_;
+  chromeos::CryptohomeClient* cryptohome_client_;
   bool is_initialized_;
 
   // Non-NULL if there is an enrollment operation pending.

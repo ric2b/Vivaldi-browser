@@ -27,6 +27,7 @@
 #define CompositeEditCommand_h
 
 #include "core/CSSPropertyNames.h"
+#include "core/CoreExport.h"
 #include "core/editing/commands/EditCommand.h"
 #include "core/editing/commands/EditingState.h"
 #include "core/editing/commands/UndoStep.h"
@@ -43,12 +44,12 @@ class Text;
 
 class EditCommandComposition final : public UndoStep {
 public:
-    static EditCommandComposition* create(Document*, const VisibleSelection&, const VisibleSelection&, EditAction);
+    static EditCommandComposition* create(Document*, const VisibleSelection&, const VisibleSelection&, InputEvent::InputType);
 
     bool belongsTo(const LocalFrame&) const override;
     void unapply() override;
     void reapply() override;
-    EditAction editingAction() const override { return m_editAction; }
+    InputEvent::InputType inputType() const override;
     void append(SimpleEditCommand*);
 
     const VisibleSelection& startingSelection() const { return m_startingSelection; }
@@ -61,7 +62,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    EditCommandComposition(Document*, const VisibleSelection& startingSelection, const VisibleSelection& endingSelection, EditAction);
+    EditCommandComposition(Document*, const VisibleSelection& startingSelection, const VisibleSelection& endingSelection, InputEvent::InputType);
 
     Member<Document> m_document;
     VisibleSelection m_startingSelection;
@@ -69,10 +70,10 @@ private:
     HeapVector<Member<SimpleEditCommand>> m_commands;
     Member<Element> m_startingRootEditableElement;
     Member<Element> m_endingRootEditableElement;
-    EditAction m_editAction;
+    InputEvent::InputType m_inputType;
 };
 
-class CompositeEditCommand : public EditCommand {
+class CORE_EXPORT CompositeEditCommand : public EditCommand {
 public:
     enum ShouldPreserveSelection { PreserveSelection, DoNotPreserveSelection };
     enum ShouldPreserveStyle { PreserveStyle, DoNotPreserveStyle };

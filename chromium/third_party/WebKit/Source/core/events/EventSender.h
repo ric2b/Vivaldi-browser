@@ -47,7 +47,7 @@ public:
     void cancelEvent(T*);
     void dispatchPendingEvents();
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     bool hasPendingEvents(T* sender) const
     {
         return m_dispatchSoonList.find(sender) != kNotFound || m_dispatchingList.find(sender) != kNotFound;
@@ -63,7 +63,7 @@ public:
 private:
     explicit EventSender(const AtomicString& eventType);
 
-    void timerFired(Timer<EventSender<T>>*) { dispatchPendingEvents(); }
+    void timerFired(TimerBase*) { dispatchPendingEvents(); }
 
     AtomicString m_eventType;
     Timer<EventSender<T>> m_timer;

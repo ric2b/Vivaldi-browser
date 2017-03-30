@@ -15,9 +15,11 @@ namespace switches {
 extern const char kSwitchValueTrue[];
 extern const char kSwitchValueFalse[];
 
+// Url to upload crash data to.
+extern const char kCrashServerUrl[];
+
 // Media switches
 extern const char kEnableCmaMediaPipeline[];
-extern const char kHdmiSinkSupportedCodecs[];
 
 // Content-implementation switches
 extern const char kEnableLocalFileAccesses[];
@@ -49,6 +51,13 @@ extern const char kAlsaFixedOutputSampleRate[];
 
 // Memory pressure switches
 extern const char kMemPressureSystemReservedKb[];
+
+// GPU process switches
+extern const char kCastInitialScreenWidth[];
+extern const char kCastInitialScreenHeight[];
+
+// Graphics switches
+extern const char kDesktopWindow1080p[];
 
 }  // namespace switches
 

@@ -118,7 +118,7 @@ HeapVector<Member<CSSStyleRule>> filterDuplicateRules(CSSRuleList* ruleList)
     HeapHashSet<Member<CSSRule>> uniqRulesSet;
     for (unsigned i = ruleList ? ruleList->length() : 0; i > 0; --i) {
         CSSRule* rule = ruleList->item(i - 1);
-        if (!rule || rule->type() != CSSRule::STYLE_RULE || uniqRulesSet.contains(rule))
+        if (!rule || rule->type() != CSSRule::kStyleRule || uniqRulesSet.contains(rule))
             continue;
         uniqRulesSet.add(rule);
         uniqRules.append(toCSSStyleRule(rule));
@@ -134,8 +134,8 @@ HeapVector<Member<Element>> elementsFromRect(LayoutRect rect, Document& document
 
     LayoutPoint center = rect.center();
     unsigned leftPadding, rightPadding, topPadding, bottomPadding;
-    leftPadding = rightPadding = rect.width() / 2;
-    topPadding = bottomPadding = rect.height() / 2;
+    leftPadding = rightPadding = (rect.width() / 2).toUnsigned();
+    topPadding = bottomPadding = (rect.height() / 2).toUnsigned();
     HitTestResult result(request, center, topPadding, rightPadding, bottomPadding, leftPadding);
     document.frame()->contentLayoutItem().hitTest(result);
     return document.elementsFromHitTestResult(result);
@@ -441,9 +441,9 @@ public:
         if (m_type != SetStyleText)
             return nullptr;
         CSSRule* rule = takeRule();
-        if (rule->type() == CSSRule::STYLE_RULE)
+        if (rule->type() == CSSRule::kStyleRule)
             return m_styleSheet->buildObjectForStyle(toCSSStyleRule(rule)->style());
-        if (rule->type() == CSSRule::KEYFRAME_RULE)
+        if (rule->type() == CSSRule::kKeyframeRule)
             return m_styleSheet->buildObjectForStyle(toCSSKeyframeRule(rule)->style());
         return nullptr;
     }
@@ -596,7 +596,7 @@ private:
 // static
 CSSStyleRule* InspectorCSSAgent::asCSSStyleRule(CSSRule* rule)
 {
-    if (!rule || rule->type() != CSSRule::STYLE_RULE)
+    if (!rule || rule->type() != CSSRule::kStyleRule)
         return nullptr;
     return toCSSStyleRule(rule);
 }
@@ -604,7 +604,7 @@ CSSStyleRule* InspectorCSSAgent::asCSSStyleRule(CSSRule* rule)
 // static
 CSSMediaRule* InspectorCSSAgent::asCSSMediaRule(CSSRule* rule)
 {
-    if (!rule || rule->type() != CSSRule::MEDIA_RULE)
+    if (!rule || rule->type() != CSSRule::kMediaRule)
         return nullptr;
     return toCSSMediaRule(rule);
 }
@@ -658,7 +658,7 @@ void InspectorCSSAgent::resetNonPersistentData()
     resetPseudoStates();
 }
 
-void InspectorCSSAgent::enable(ErrorString* errorString, std::unique_ptr<EnableCallback> prpCallback)
+void InspectorCSSAgent::enable(std::unique_ptr<EnableCallback> prpCallback)
 {
     if (!m_domAgent->enabled()) {
         prpCallback->sendFailure("DOM agent needs to be enabled first.");
@@ -707,6 +707,12 @@ void InspectorCSSAgent::mediaQueryResultChanged()
 {
     flushPendingProtocolNotifications();
     frontend()->mediaQueryResultChanged();
+}
+
+void InspectorCSSAgent::fontsUpdated()
+{
+    flushPendingProtocolNotifications();
+    frontend()->fontsUpdated();
 }
 
 void InspectorCSSAgent::activeStyleSheetsUpdated(Document* document)
@@ -817,7 +823,7 @@ void InspectorCSSAgent::getMediaQueries(ErrorString* errorString, std::unique_pt
         const CSSRuleVector& flatRules = styleSheet->flatRules();
         for (unsigned i = 0; i < flatRules.size(); ++i) {
             CSSRule* rule = flatRules.at(i).get();
-            if (rule->type() == CSSRule::MEDIA_RULE || rule->type() == CSSRule::IMPORT_RULE)
+            if (rule->type() == CSSRule::kMediaRule || rule->type() == CSSRule::kImportRule)
                 collectMediaQueriesFromRule(rule, medias->get());
         }
     }
@@ -907,11 +913,11 @@ static CSSKeyframesRule* findKeyframesRule(CSSRuleCollection* cssRules, StyleRul
     CSSKeyframesRule* result = 0;
     for (unsigned j = 0; cssRules && j < cssRules->length() && !result; ++j) {
         CSSRule* cssRule = cssRules->item(j);
-        if (cssRule->type() == CSSRule::KEYFRAMES_RULE) {
+        if (cssRule->type() == CSSRule::kKeyframesRule) {
             CSSKeyframesRule* cssStyleRule = toCSSKeyframesRule(cssRule);
             if (cssStyleRule->keyframes() == keyframesRule)
                 result = cssStyleRule;
-        } else if (cssRule->type() == CSSRule::IMPORT_RULE) {
+        } else if (cssRule->type() == CSSRule::kImportRule) {
             CSSImportRule* cssImportRule = toCSSImportRule(cssRule);
             result = findKeyframesRule(cssImportRule->styleSheet(), keyframesRule);
         } else {
@@ -988,8 +994,15 @@ void InspectorCSSAgent::getComputedStyleForNode(ErrorString* errorString, int no
         return;
 
     CSSComputedStyleDeclaration* computedStyleInfo = CSSComputedStyleDeclaration::create(node, true);
-    InspectorStyle* inspectorStyle = InspectorStyle::create(computedStyleInfo, nullptr, nullptr);
-    *style = inspectorStyle->buildArrayForComputedStyle();
+    *style = protocol::Array<protocol::CSS::CSSComputedStyleProperty>::create();
+    for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
+        CSSPropertyID propertyId = static_cast<CSSPropertyID>(id);
+        if (!CSSPropertyMetadata::isEnabledProperty(propertyId) || isShorthandProperty(propertyId) || CSSPropertyMetadata::isDescriptorOnly(propertyId))
+            continue;
+        (*style)->addItem(protocol::CSS::CSSComputedStyleProperty::create()
+            .setName(getPropertyNameString(propertyId))
+            .setValue(computedStyleInfo->getPropertyValue(propertyId)).build());
+    }
 
     if (!RuntimeEnabledFeatures::cssVariablesEnabled())
         return;
@@ -1017,7 +1030,7 @@ void InspectorCSSAgent::collectPlatformFontsForLayoutObject(LayoutObject* layout
     for (InlineTextBox* box = layoutText->firstTextBox(); box; box = box->nextTextBox()) {
         const ComputedStyle& style = layoutText->styleRef(box->isFirstLineStyle());
         const Font& font = style.font();
-        TextRun run = box->constructTextRunForInspector(style, font);
+        TextRun run = box->constructTextRunForInspector(style);
         TextRunPaintInfo paintInfo(run);
         GlyphBuffer glyphBuffer;
         font.buildGlyphBuffer(paintInfo, glyphBuffer);
@@ -1259,9 +1272,9 @@ CSSStyleDeclaration* InspectorCSSAgent::setStyleText(ErrorString* errorString, I
         bool success = m_domAgent->history()->perform(action, exceptionState);
         if (success) {
             CSSRule* rule = action->takeRule();
-            if (rule->type() == CSSRule::STYLE_RULE)
+            if (rule->type() == CSSRule::kStyleRule)
                 return toCSSStyleRule(rule)->style();
-            if (rule->type() == CSSRule::KEYFRAME_RULE)
+            if (rule->type() == CSSRule::kKeyframeRule)
                 return toCSSKeyframeRule(rule)->style();
         }
     }
@@ -1471,11 +1484,11 @@ void InspectorCSSAgent::collectMediaQueriesFromRule(CSSRule* rule, protocol::Arr
     String sourceURL;
     CSSStyleSheet* parentStyleSheet = nullptr;
     bool isMediaRule = true;
-    if (rule->type() == CSSRule::MEDIA_RULE) {
+    if (rule->type() == CSSRule::kMediaRule) {
         CSSMediaRule* mediaRule = toCSSMediaRule(rule);
         mediaList = mediaRule->media();
         parentStyleSheet = mediaRule->parentStyleSheet();
-    } else if (rule->type() == CSSRule::IMPORT_RULE) {
+    } else if (rule->type() == CSSRule::kImportRule) {
         CSSImportRule* importRule = toCSSImportRule(rule);
         mediaList = importRule->media();
         parentStyleSheet = importRule->parentStyleSheet();
@@ -1566,7 +1579,7 @@ void InspectorCSSAgent::collectStyleSheets(CSSStyleSheet* styleSheet, HeapVector
     result.append(styleSheet);
     for (unsigned i = 0, size = styleSheet->length(); i < size; ++i) {
         CSSRule* rule = styleSheet->item(i);
-        if (rule->type() == CSSRule::IMPORT_RULE) {
+        if (rule->type() == CSSRule::kImportRule) {
             CSSStyleSheet* importedStyleSheet = toCSSImportRule(rule)->styleSheet();
             if (importedStyleSheet)
                 InspectorCSSAgent::collectStyleSheets(importedStyleSheet, result);

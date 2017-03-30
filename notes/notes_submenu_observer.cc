@@ -60,10 +60,13 @@ void NotesSubMenuObserver::AddMenuItems(vivaldi::Notes_Node* node) {
   int number_of_notes = node->child_count();
   if (node->GetContent().length() > 0) {
     const int kMaxMenuStringLength = 40;
-    base::string16 content =
-    node->GetContent().length() > kMaxMenuStringLength ?
-      node->GetContent().substr(0, kMaxMenuStringLength - 3) +
-        base::UTF8ToUTF16("...") : node->GetContent();
+    base::string16 data = node->GetTitle();
+    if (data.length() == 0) {
+      data = node->GetContent();
+    }
+    base::string16 content = data.length() > kMaxMenuStringLength
+      ? data.substr(0, kMaxMenuStringLength - 3) + base::UTF8ToUTF16("...")
+      : data;
     submenu_model_.AddItem(node->id(), content);
   }
 

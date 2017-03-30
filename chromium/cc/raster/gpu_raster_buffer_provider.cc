@@ -12,6 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
+#include "cc/base/histograms.h"
 #include "cc/playback/image_hijack_canvas.h"
 #include "cc/playback/raster_source.h"
 #include "cc/raster/scoped_gpu_raster.h"
@@ -45,21 +46,22 @@ static sk_sp<SkPicture> PlaybackToPicture(
 
   // Log a histogram of the percentage of pixels that were saved due to
   // partial raster.
+  const char* client_name = GetClientNameForMetrics();
   float full_rect_size = raster_full_rect.size().GetArea();
-  if (full_rect_size > 0) {
+  if (full_rect_size > 0 && client_name) {
     float fraction_partial_rastered =
         static_cast<float>(playback_rect.size().GetArea()) / full_rect_size;
     float fraction_saved = 1.0f - fraction_partial_rastered;
-
-    UMA_HISTOGRAM_PERCENTAGE("Renderer4.PartialRasterPercentageSaved.Gpu",
-                             100.0f * fraction_saved);
+    UMA_HISTOGRAM_PERCENTAGE(
+        base::StringPrintf("Renderer4.%s.PartialRasterPercentageSaved.Gpu",
+                           client_name),
+        100.0f * fraction_saved);
   }
 
   // Play back raster_source into temp SkPicture.
   SkPictureRecorder recorder;
-  const int flags = SkPictureRecorder::kComputeSaveLayerInfo_RecordFlag;
-  sk_sp<SkCanvas> canvas = sk_ref_sp(recorder.beginRecording(
-      resource_size.width(), resource_size.height(), NULL, flags));
+  sk_sp<SkCanvas> canvas = sk_ref_sp(
+      recorder.beginRecording(resource_size.width(), resource_size.height()));
   canvas->save();
 
   // The GPU image decode controller assumes that Skia is done with an image
@@ -180,9 +182,9 @@ std::unique_ptr<RasterBuffer> GpuRasterBufferProvider::AcquireBufferForRaster(
     uint64_t previous_content_id) {
   bool resource_has_previous_content =
       resource_content_id && resource_content_id == previous_content_id;
-  return base::WrapUnique(new RasterBufferImpl(
+  return base::MakeUnique<RasterBufferImpl>(
       this, resource_provider_, resource->id(), async_worker_context_enabled_,
-      resource_has_previous_content));
+      resource_has_previous_content);
 }
 
 void GpuRasterBufferProvider::ReleaseBufferForRaster(
@@ -217,10 +219,17 @@ ResourceFormat GpuRasterBufferProvider::GetResourceFormat(
   return resource_provider_->best_render_buffer_format();
 }
 
-bool GpuRasterBufferProvider::GetResourceRequiresSwizzle(
+bool GpuRasterBufferProvider::IsResourceSwizzleRequired(
     bool must_support_alpha) const {
   // This doesn't require a swizzle because we rasterize to the correct format.
   return false;
+}
+
+bool GpuRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
+  // Partial raster doesn't support MSAA, as the MSAA resolve is unaware of clip
+  // rects.
+  // TODO(crbug.com/629683): See if we can work around this limitation.
+  return msaa_sample_count_ == 0;
 }
 
 void GpuRasterBufferProvider::Shutdown() {

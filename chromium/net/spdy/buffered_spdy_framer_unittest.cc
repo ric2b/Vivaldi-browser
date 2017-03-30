@@ -16,12 +16,10 @@ namespace {
 
 class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
  public:
-  explicit TestBufferedSpdyVisitor(SpdyMajorVersion spdy_version)
-      : buffered_spdy_framer_(spdy_version),
+  explicit TestBufferedSpdyVisitor()
+      : buffered_spdy_framer_(),
         error_count_(0),
         setting_count_(0),
-        syn_frame_count_(0),
-        syn_reply_frame_count_(0),
         headers_frame_count_(0),
         push_promise_frame_count_(0),
         goaway_count_(0),
@@ -41,38 +39,17 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
     error_count_++;
   }
 
-  void OnSynStream(SpdyStreamId stream_id,
-                   SpdyStreamId associated_stream_id,
-                   SpdyPriority priority,
-                   bool fin,
-                   bool unidirectional,
-                   const SpdyHeaderBlock& headers) override {
-    header_stream_id_ = stream_id;
-    EXPECT_NE(header_stream_id_, SpdyFramer::kInvalidStream);
-    syn_frame_count_++;
-    headers_ = headers.Clone();
-  }
-
-  void OnSynReply(SpdyStreamId stream_id,
-                  bool fin,
-                  const SpdyHeaderBlock& headers) override {
-    header_stream_id_ = stream_id;
-    EXPECT_NE(header_stream_id_, SpdyFramer::kInvalidStream);
-    syn_reply_frame_count_++;
-    headers_ = headers.Clone();
-  }
-
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
                  int weight,
                  SpdyStreamId parent_stream_id,
                  bool exclusive,
                  bool fin,
-                 const SpdyHeaderBlock& headers) override {
+                 SpdyHeaderBlock headers) override {
     header_stream_id_ = stream_id;
     EXPECT_NE(header_stream_id_, SpdyFramer::kInvalidStream);
     headers_frame_count_++;
-    headers_ = headers.Clone();
+    headers_ = std::move(headers);
   }
 
   void OnDataFrameHeader(SpdyStreamId stream_id,
@@ -126,13 +103,13 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
 
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
-                     const SpdyHeaderBlock& headers) override {
+                     SpdyHeaderBlock headers) override {
     header_stream_id_ = stream_id;
     EXPECT_NE(header_stream_id_, SpdyFramer::kInvalidStream);
     push_promise_frame_count_++;
     promised_stream_id_ = promised_stream_id;
     EXPECT_NE(promised_stream_id_, SpdyFramer::kInvalidStream);
-    headers_ = headers.Clone();
+    headers_ = std::move(headers);
   }
 
   void OnAltSvc(SpdyStreamId stream_id,
@@ -174,8 +151,6 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
   // Counters from the visitor callbacks.
   int error_count_;
   int setting_count_;
-  int syn_frame_count_;
-  int syn_reply_frame_count_;
   int headers_frame_count_;
   int push_promise_frame_count_;
   int goaway_count_;
@@ -185,8 +160,7 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
   SpdyStreamId header_stream_id_;
   SpdyStreamId promised_stream_id_;
 
-  // Headers from OnSyn, OnSynReply, OnHeaders and OnPushPromise for
-  // verification.
+  // Headers from OnHeaders and OnPushPromise for verification.
   SpdyHeaderBlock headers_;
 
   // OnGoAway parameters.
@@ -202,27 +176,15 @@ class TestBufferedSpdyVisitor : public BufferedSpdyFramerVisitorInterface {
 
 }  // namespace
 
-class BufferedSpdyFramerTest
-    : public PlatformTest,
-      public ::testing::WithParamInterface<NextProto> {
- protected:
-  SpdyMajorVersion spdy_version() {
-    return NextProtoToSpdyMajorVersion(GetParam());
-  }
-};
+class BufferedSpdyFramerTest : public PlatformTest {};
 
-INSTANTIATE_TEST_CASE_P(NextProto,
-                        BufferedSpdyFramerTest,
-                        testing::Values(kProtoSPDY31,
-                                        kProtoHTTP2));
-
-TEST_P(BufferedSpdyFramerTest, OnSetting) {
-  SpdyFramer framer(spdy_version());
+TEST_F(BufferedSpdyFramerTest, OnSetting) {
+  SpdyFramer framer(HTTP2);
   SpdySettingsIR settings_ir;
   settings_ir.AddSetting(SETTINGS_INITIAL_WINDOW_SIZE, false, false, 2);
   settings_ir.AddSetting(SETTINGS_MAX_CONCURRENT_STREAMS, false, false, 3);
   SpdySerializedFrame control_frame(framer.SerializeSettings(settings_ir));
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
 
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.data()),
@@ -231,39 +193,11 @@ TEST_P(BufferedSpdyFramerTest, OnSetting) {
   EXPECT_EQ(2, visitor.setting_count_);
 }
 
-TEST_P(BufferedSpdyFramerTest, ReadSynStreamHeaderBlock) {
-  if (spdy_version() > SPDY3) {
-    // SYN_STREAM not supported in SPDY>3.
-    return;
-  }
-  SpdyHeaderBlock headers;
-  headers["aa"] = "vv";
-  headers["bb"] = "ww";
-  BufferedSpdyFramer framer(spdy_version());
-  std::unique_ptr<SpdySerializedFrame> control_frame(
-      framer.CreateSynStream(1,  // stream_id
-                             0,  // associated_stream_id
-                             1,  // priority
-                             CONTROL_FLAG_NONE, headers.Clone()));
-  EXPECT_TRUE(control_frame.get() != NULL);
-
-  TestBufferedSpdyVisitor visitor(spdy_version());
-  visitor.SimulateInFramer(
-      reinterpret_cast<unsigned char*>(control_frame.get()->data()),
-      control_frame.get()->size());
-  EXPECT_EQ(0, visitor.error_count_);
-  EXPECT_EQ(1, visitor.syn_frame_count_);
-  EXPECT_EQ(0, visitor.syn_reply_frame_count_);
-  EXPECT_EQ(0, visitor.headers_frame_count_);
-  EXPECT_EQ(0, visitor.push_promise_frame_count_);
-  EXPECT_EQ(headers, visitor.headers_);
-}
-
-TEST_P(BufferedSpdyFramerTest, HeaderListTooLarge) {
+TEST_F(BufferedSpdyFramerTest, HeaderListTooLarge) {
   SpdyHeaderBlock headers;
   std::string long_header_value(256 * 1024, 'x');
   headers["foo"] = long_header_value;
-  BufferedSpdyFramer framer(spdy_version());
+  BufferedSpdyFramer framer;
   std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreateHeaders(1,  // stream_id
                            CONTROL_FLAG_NONE,
@@ -271,55 +205,22 @@ TEST_P(BufferedSpdyFramerTest, HeaderListTooLarge) {
                            std::move(headers)));
   EXPECT_TRUE(control_frame);
 
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.get()->data()),
       control_frame.get()->size());
 
   EXPECT_EQ(1, visitor.error_count_);
-  EXPECT_EQ(0, visitor.syn_frame_count_);
-  EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(0, visitor.headers_frame_count_);
   EXPECT_EQ(0, visitor.push_promise_frame_count_);
   EXPECT_EQ(SpdyHeaderBlock(), visitor.headers_);
 }
 
-TEST_P(BufferedSpdyFramerTest, ReadSynReplyHeaderBlock) {
-  if (spdy_version() > SPDY3) {
-    // SYN_REPLY not supported in SPDY>3.
-    return;
-  }
+TEST_F(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
   SpdyHeaderBlock headers;
   headers["alpha"] = "beta";
   headers["gamma"] = "delta";
-  BufferedSpdyFramer framer(spdy_version());
-  std::unique_ptr<SpdySerializedFrame> control_frame(
-      framer.CreateSynReply(1,  // stream_id
-                            CONTROL_FLAG_NONE, headers.Clone()));
-  EXPECT_TRUE(control_frame.get() != NULL);
-
-  TestBufferedSpdyVisitor visitor(spdy_version());
-  visitor.SimulateInFramer(
-      reinterpret_cast<unsigned char*>(control_frame.get()->data()),
-      control_frame.get()->size());
-  EXPECT_EQ(0, visitor.error_count_);
-  EXPECT_EQ(0, visitor.syn_frame_count_);
-  EXPECT_EQ(0, visitor.push_promise_frame_count_);
-  if (spdy_version() < HTTP2) {
-    EXPECT_EQ(1, visitor.syn_reply_frame_count_);
-    EXPECT_EQ(0, visitor.headers_frame_count_);
-  } else {
-    EXPECT_EQ(0, visitor.syn_reply_frame_count_);
-    EXPECT_EQ(1, visitor.headers_frame_count_);
-  }
-  EXPECT_EQ(headers, visitor.headers_);
-}
-
-TEST_P(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
-  SpdyHeaderBlock headers;
-  headers["alpha"] = "beta";
-  headers["gamma"] = "delta";
-  BufferedSpdyFramer framer(spdy_version());
+  BufferedSpdyFramer framer;
   std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreateHeaders(1,  // stream_id
                            CONTROL_FLAG_NONE,
@@ -327,36 +228,30 @@ TEST_P(BufferedSpdyFramerTest, ReadHeadersHeaderBlock) {
                            headers.Clone()));
   EXPECT_TRUE(control_frame.get() != NULL);
 
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.get()->data()),
       control_frame.get()->size());
   EXPECT_EQ(0, visitor.error_count_);
-  EXPECT_EQ(0, visitor.syn_frame_count_);
-  EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(1, visitor.headers_frame_count_);
   EXPECT_EQ(0, visitor.push_promise_frame_count_);
   EXPECT_EQ(headers, visitor.headers_);
 }
 
-TEST_P(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
-  if (spdy_version() < HTTP2)
-    return;
+TEST_F(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
   SpdyHeaderBlock headers;
   headers["alpha"] = "beta";
   headers["gamma"] = "delta";
-  BufferedSpdyFramer framer(spdy_version());
+  BufferedSpdyFramer framer;
   std::unique_ptr<SpdySerializedFrame> control_frame(
       framer.CreatePushPromise(1, 2, headers.Clone()));
   EXPECT_TRUE(control_frame.get() != NULL);
 
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.get()->data()),
       control_frame.get()->size());
   EXPECT_EQ(0, visitor.error_count_);
-  EXPECT_EQ(0, visitor.syn_frame_count_);
-  EXPECT_EQ(0, visitor.syn_reply_frame_count_);
   EXPECT_EQ(0, visitor.headers_frame_count_);
   EXPECT_EQ(1, visitor.push_promise_frame_count_);
   EXPECT_EQ(headers, visitor.headers_);
@@ -364,14 +259,12 @@ TEST_P(BufferedSpdyFramerTest, ReadPushPromiseHeaderBlock) {
   EXPECT_EQ(2u, visitor.promised_stream_id_);
 }
 
-TEST_P(BufferedSpdyFramerTest, GoAwayDebugData) {
-  if (spdy_version() < HTTP2)
-    return;
-  BufferedSpdyFramer framer(spdy_version());
+TEST_F(BufferedSpdyFramerTest, GoAwayDebugData) {
+  BufferedSpdyFramer framer;
   std::unique_ptr<SpdySerializedFrame> goaway_frame(
       framer.CreateGoAway(2u, GOAWAY_FRAME_SIZE_ERROR, "foo"));
 
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(goaway_frame.get()->data()),
       goaway_frame.get()->size());
@@ -382,10 +275,7 @@ TEST_P(BufferedSpdyFramerTest, GoAwayDebugData) {
   EXPECT_EQ("foo", visitor.goaway_debug_data_);
 }
 
-TEST_P(BufferedSpdyFramerTest, OnAltSvc) {
-  if (spdy_version() < HTTP2)
-    return;
-
+TEST_F(BufferedSpdyFramerTest, OnAltSvc) {
   const SpdyStreamId altsvc_stream_id(1);
   const char altsvc_origin[] = "https://www.example.org";
   SpdyAltSvcIR altsvc_ir(altsvc_stream_id);
@@ -394,10 +284,10 @@ TEST_P(BufferedSpdyFramerTest, OnAltSvc) {
       SpdyAltSvcWireFormat::VersionVector());
   altsvc_ir.add_altsvc(alternative_service);
   altsvc_ir.set_origin(altsvc_origin);
-  BufferedSpdyFramer framer(spdy_version());
+  BufferedSpdyFramer framer;
   SpdySerializedFrame altsvc_frame(framer.SerializeFrame(altsvc_ir));
 
-  TestBufferedSpdyVisitor visitor(spdy_version());
+  TestBufferedSpdyVisitor visitor;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(altsvc_frame.data()),
       altsvc_frame.size());

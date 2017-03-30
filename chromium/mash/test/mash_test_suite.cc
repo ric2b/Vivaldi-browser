@@ -9,6 +9,8 @@
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
+#include "ui/compositor/test/context_factories_for_test.h"
+#include "ui/gl/test/gl_surface_test_support.h"
 
 namespace mash {
 namespace test {
@@ -20,17 +22,18 @@ MashTestSuite::~MashTestSuite() {}
 void MashTestSuite::Initialize() {
   base::TestSuite::Initialize();
 
-  // Load ash resources and en-US strings; not 'common' (Chrome) resources.
-  // TODO(msw): Check ResourceBundle::IsScaleFactorSupported; load 300% etc.
-  base::FilePath path;
-  PathService::Get(base::DIR_MODULE, &path);
-  base::FilePath mash_test_strings =
-      path.Append(FILE_PATH_LITERAL("ash_mus_resources.pak"));
-
-  ui::ResourceBundle::InitSharedInstanceWithPakPath(mash_test_strings);
+  // Load ash mus strings and resources; not 'common' (Chrome) resources.
+  base::FilePath resources;
+  PathService::Get(base::DIR_MODULE, &resources);
+  resources = resources.Append(FILE_PATH_LITERAL("ash_mus_resources.pak"));
+  ui::ResourceBundle::InitSharedInstanceWithPakPath(resources);
 
   base::DiscardableMemoryAllocator::SetInstance(&discardable_memory_allocator_);
   env_ = aura::Env::CreateInstance();
+  gl::GLSurfaceTestSupport::InitializeOneOff();
+  const bool enable_pixel_output = false;
+  env_->set_context_factory(
+      ui::InitializeContextFactoryForTests(enable_pixel_output));
 }
 
 void MashTestSuite::Shutdown() {

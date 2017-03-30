@@ -108,7 +108,6 @@ std::string EventTypeName(ui::EventType type) {
     CASE_TYPE(ET_GESTURE_SCROLL_END);
     CASE_TYPE(ET_GESTURE_SCROLL_UPDATE);
     CASE_TYPE(ET_GESTURE_SHOW_PRESS);
-    CASE_TYPE(ET_GESTURE_WIN8_EDGE_SWIPE);
     CASE_TYPE(ET_GESTURE_TAP);
     CASE_TYPE(ET_GESTURE_TAP_DOWN);
     CASE_TYPE(ET_GESTURE_TAP_CANCEL);
@@ -167,37 +166,35 @@ namespace ui {
 // static
 std::unique_ptr<Event> Event::Clone(const Event& event) {
   if (event.IsKeyEvent()) {
-    return base::WrapUnique(new KeyEvent(static_cast<const KeyEvent&>(event)));
+    return base::MakeUnique<KeyEvent>(static_cast<const KeyEvent&>(event));
   }
 
   if (event.IsMouseEvent()) {
     if (event.IsMouseWheelEvent()) {
-      return base::WrapUnique(
-          new MouseWheelEvent(static_cast<const MouseWheelEvent&>(event)));
+      return base::MakeUnique<MouseWheelEvent>(
+          static_cast<const MouseWheelEvent&>(event));
     }
 
-    return base::WrapUnique(
-        new MouseEvent(static_cast<const MouseEvent&>(event)));
+    return base::MakeUnique<MouseEvent>(static_cast<const MouseEvent&>(event));
   }
 
   if (event.IsTouchEvent()) {
-    return base::WrapUnique(
-        new TouchEvent(static_cast<const TouchEvent&>(event)));
+    return base::MakeUnique<TouchEvent>(static_cast<const TouchEvent&>(event));
   }
 
   if (event.IsGestureEvent()) {
-    return base::WrapUnique(
-        new GestureEvent(static_cast<const GestureEvent&>(event)));
+    return base::MakeUnique<GestureEvent>(
+        static_cast<const GestureEvent&>(event));
   }
 
   if (event.IsPointerEvent()) {
-    return base::WrapUnique(
-        new PointerEvent(static_cast<const PointerEvent&>(event)));
+    return base::MakeUnique<PointerEvent>(
+        static_cast<const PointerEvent&>(event));
   }
 
   if (event.IsScrollEvent()) {
-    return base::WrapUnique(
-        new ScrollEvent(static_cast<const ScrollEvent&>(event)));
+    return base::MakeUnique<ScrollEvent>(
+        static_cast<const ScrollEvent&>(event));
   }
 
   return base::WrapUnique(new Event(event));
@@ -467,7 +464,7 @@ MouseEvent::MouseEvent(const base::NativeEvent& native_event)
 
 MouseEvent::MouseEvent(const PointerEvent& pointer_event)
     : LocatedEvent(pointer_event),
-      changed_button_flags_(0),
+      changed_button_flags_(pointer_event.changed_button_flags()),
       pointer_details_(pointer_event.pointer_details()) {
   DCHECK(pointer_event.IsMousePointerEvent());
   switch (pointer_event.type()) {
@@ -861,11 +858,13 @@ bool PointerEvent::CanConvertFrom(const Event& event) {
 PointerEvent::PointerEvent(const PointerEvent& pointer_event)
     : LocatedEvent(pointer_event),
       pointer_id_(pointer_event.pointer_id()),
+      changed_button_flags_(pointer_event.changed_button_flags()),
       details_(pointer_event.pointer_details()) {}
 
 PointerEvent::PointerEvent(const MouseEvent& mouse_event)
     : LocatedEvent(mouse_event),
       pointer_id_(kMousePointerId),
+      changed_button_flags_(mouse_event.changed_button_flags()),
       details_(mouse_event.pointer_details()) {
   DCHECK(CanConvertFrom(mouse_event));
   switch (mouse_event.type()) {
@@ -898,6 +897,7 @@ PointerEvent::PointerEvent(const MouseEvent& mouse_event)
 PointerEvent::PointerEvent(const TouchEvent& touch_event)
     : LocatedEvent(touch_event),
       pointer_id_(touch_event.touch_id()),
+      changed_button_flags_(0),
       details_(touch_event.pointer_details()) {
   DCHECK(CanConvertFrom(touch_event));
   switch (touch_event.type()) {
@@ -927,6 +927,7 @@ PointerEvent::PointerEvent(EventType type,
                            const gfx::Point& root_location,
                            int flags,
                            int pointer_id,
+                           int changed_button_flags,
                            const PointerDetails& pointer_details,
                            base::TimeTicks time_stamp)
     : LocatedEvent(type,
@@ -935,6 +936,7 @@ PointerEvent::PointerEvent(EventType type,
                    time_stamp,
                    flags),
       pointer_id_(pointer_id),
+      changed_button_flags_(changed_button_flags),
       details_(pointer_details) {}
 
 const int PointerEvent::kMousePointerId = std::numeric_limits<int32_t>::max();
@@ -1048,8 +1050,6 @@ KeyEvent::KeyEvent(const KeyEvent& rhs)
       code_(rhs.code_),
       is_char_(rhs.is_char_),
       key_(rhs.key_) {
-  if (rhs.extended_key_event_data_)
-    extended_key_event_data_.reset(rhs.extended_key_event_data_->Clone());
 }
 
 KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
@@ -1059,19 +1059,11 @@ KeyEvent& KeyEvent::operator=(const KeyEvent& rhs) {
     code_ = rhs.code_;
     key_ = rhs.key_;
     is_char_ = rhs.is_char_;
-
-    if (rhs.extended_key_event_data_)
-      extended_key_event_data_.reset(rhs.extended_key_event_data_->Clone());
   }
   return *this;
 }
 
 KeyEvent::~KeyEvent() {}
-
-void KeyEvent::SetExtendedKeyEventData(
-    std::unique_ptr<ExtendedKeyEventData> data) {
-  extended_key_event_data_ = std::move(data);
-}
 
 void KeyEvent::ApplyLayout() const {
   ui::DomCode code = code_;

@@ -29,8 +29,8 @@
 #include "chrome/browser/ui/browser_instant_controller.h"
 #include "chrome/browser/ui/search/search_tab_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/instant_types.h"
 #include "chrome/common/render_messages.h"
+#include "chrome/common/search/instant_types.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
@@ -64,7 +64,7 @@ class DummyPrerenderContents : public PrerenderContents {
       bool call_did_finish_load);
 
   void StartPrerendering(
-      const gfx::Size& size,
+      const gfx::Rect& bounds,
       content::SessionStorageNamespace* session_storage_namespace) override;
   bool GetChildId(int* child_id) const override;
   bool GetRouteId(int* route_id) const override;
@@ -110,7 +110,7 @@ DummyPrerenderContents::DummyPrerenderContents(
 }
 
 void DummyPrerenderContents::StartPrerendering(
-    const gfx::Size& size,
+    const gfx::Rect& bounds,
     content::SessionStorageNamespace* session_storage_namespace) {
   content::SessionStorageNamespaceMap session_storage_namespace_map;
   session_storage_namespace_map[std::string()] = session_storage_namespace;
@@ -347,16 +347,6 @@ TEST_F(InstantSearchPrerendererTest, PrerenderingAllowed) {
                                    AutocompleteMatchType::URL_WHAT_YOU_TYPED);
   EXPECT_FALSE(AutocompleteMatch::IsSearchType(url_type_match.type));
   EXPECT_FALSE(prerenderer->IsAllowed(url_type_match, active_tab));
-
-  // Search results page supports Instant search. InstantSearchPrerenderer is
-  // used only when the underlying page doesn't support Instant.
-  NavigateAndCommitActiveTab(GURL("https://www.google.com/alt#quux=foo&strk"));
-  active_tab = GetActiveWebContents();
-  EXPECT_FALSE(
-      search::ExtractSearchTermsFromURL(profile(), active_tab->GetURL())
-          .empty());
-  EXPECT_FALSE(search::ShouldPrefetchSearchResultsOnSRP());
-  EXPECT_FALSE(prerenderer->IsAllowed(search_type_match, active_tab));
 }
 
 TEST_F(InstantSearchPrerendererTest, UsePrerenderPage) {
@@ -482,13 +472,6 @@ TEST_F(ReuseInstantSearchBasePageTest,
 
 #if !defined(OS_ANDROID)
 class TestUsePrerenderPage : public InstantSearchPrerendererTest {
- protected:
-  void SetUp() override {
-    // Disable query extraction flag in field trials.
-    ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
-        "EmbeddedSearch", "Group1 strk:20 query_extraction:0"));
-    InstantUnitTestBase::SetUpWithoutQueryExtraction();
-  }
 };
 
 TEST_F(TestUsePrerenderPage, ExtractSearchTermsAndUsePrerenderPage) {

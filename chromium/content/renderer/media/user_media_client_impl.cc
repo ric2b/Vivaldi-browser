@@ -19,6 +19,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/renderer/media/local_media_stream_audio_source.h"
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_constraints_util.h"
 #include "content/renderer/media/media_stream_dispatcher.h"
@@ -477,10 +478,15 @@ void UserMediaClientImpl::FinalizeEnumerateDevices(
   for (size_t i = 0; i  < request->audio_input_devices.size(); ++i) {
     const MediaStreamDevice& device = request->audio_input_devices[i].device;
     DCHECK_EQ(device.type, MEDIA_DEVICE_AUDIO_CAPTURE);
+
+    // We add an arbitrary character to the device ID in order to avoid the same
+    // group ID for the input and output devices that share the same ID but are
+    // not in the same physical device. This may happen with the default and
+    // communication devices.
     std::string group_id = base::UintToString(base::Hash(
-        !device.matched_output_device_id.empty() ?
-            device.matched_output_device_id :
-            device.id));
+        device.matched_output_device_id.empty() ?
+            device.id + "i" :
+            device.matched_output_device_id));
     devices[i].initialize(
         blink::WebString::fromUTF8(device.id),
         blink::WebMediaDeviceInfo::MediaDeviceKindAudioInput,
@@ -640,9 +646,18 @@ void UserMediaClientImpl::InitializeSourceObject(
 MediaStreamAudioSource* UserMediaClientImpl::CreateAudioSource(
     const StreamDeviceInfo& device,
     const blink::WebMediaConstraints& constraints) {
-  // TODO(miu): In a soon-upcoming change, I'll be providing an alternative
-  // MediaStreamAudioSource that bypasses audio processing for the non-WebRTC
-  // use cases. http://crbug.com/577881
+  // If the audio device is a loopback device (for screen capture), or if the
+  // constraints/effects parameters indicate no audio processing is needed,
+  // create an efficient, direct-path MediaStreamAudioSource instance.
+  if (IsScreenCaptureMediaType(device.device.type) ||
+      !MediaStreamAudioProcessor::WouldModifyAudio(
+          constraints, device.device.input.effects)) {
+    return new LocalMediaStreamAudioSource(RenderFrameObserver::routing_id(),
+                                           device);
+  }
+
+  // The audio device is not associated with screen capture and also requires
+  // processing.
   ProcessedLocalAudioSource* source = new ProcessedLocalAudioSource(
       RenderFrameObserver::routing_id(), device, dependency_factory_);
   source->SetSourceConstraints(constraints);

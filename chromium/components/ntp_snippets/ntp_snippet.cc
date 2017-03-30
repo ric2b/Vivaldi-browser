@@ -8,9 +8,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "components/ntp_snippets/content_suggestion.h"
-#include "components/ntp_snippets/content_suggestion_category.h"
-#include "components/ntp_snippets/content_suggestions_provider_type.h"
+
 #include "components/ntp_snippets/proto/ntp_snippets.pb.h"
 
 namespace {
@@ -41,7 +39,7 @@ bool GetURLValue(const base::DictionaryValue& dict,
 namespace ntp_snippets {
 
 NTPSnippet::NTPSnippet(const std::string& id)
-    : id_(id), score_(0), is_discarded_(false), best_source_index_(0) {}
+    : id_(id), score_(0), is_dismissed_(false), best_source_index_(0) {}
 
 NTPSnippet::~NTPSnippet() {}
 
@@ -141,24 +139,24 @@ std::unique_ptr<NTPSnippet> NTPSnippet::CreateFromChromeReaderDictionary(
 // static
 std::unique_ptr<NTPSnippet> NTPSnippet::CreateFromContentSuggestionsDictionary(
     const base::DictionaryValue& dict) {
-  const base::ListValue* id_list;
+  const base::ListValue* ids;
   std::string id;
-  if (!(dict.GetList("id", &id_list) &&
-        id_list->GetString(0, &id))) {  // TODO(sfiera): multiple IDs
+  if (!(dict.GetList("ids", &ids) &&
+        ids->GetString(0, &id))) {  // TODO(sfiera): multiple IDs
     return nullptr;
   }
 
   auto snippet = base::MakeUnique<NTPSnippet>(id);
   snippet->sources_.emplace_back(GURL(), std::string(), GURL());
-  auto source = &snippet->sources_.back();
+  auto* source = &snippet->sources_.back();
   snippet->best_source_index_ = 0;
 
   if (!(dict.GetString("title", &snippet->title_) &&
-        dict.GetString("summaryText", &snippet->snippet_) &&
-        GetTimeValue(dict, "publishTime", &snippet->publish_date_) &&
+        dict.GetString("snippet", &snippet->snippet_) &&
+        GetTimeValue(dict, "creationTime", &snippet->publish_date_) &&
         GetTimeValue(dict, "expirationTime", &snippet->expiry_date_) &&
         GetURLValue(dict, "imageUrl", &snippet->salient_image_url_) &&
-        dict.GetString("publisherName", &source->publisher_name) &&
+        dict.GetString("attribution", &source->publisher_name) &&
         GetURLValue(dict, "fullPageUrl", &source->url))) {
     return nullptr;
   }
@@ -186,7 +184,7 @@ std::unique_ptr<NTPSnippet> NTPSnippet::CreateFromProto(
       base::Time::FromInternalValue(proto.publish_date()));
   snippet->set_expiry_date(base::Time::FromInternalValue(proto.expiry_date()));
   snippet->set_score(proto.score());
-  snippet->set_discarded(proto.discarded());
+  snippet->set_dismissed(proto.dismissed());
 
   for (int i = 0; i < proto.sources_size(); ++i) {
     const SnippetSourceProto& source_proto = proto.sources(i);
@@ -232,7 +230,7 @@ SnippetProto NTPSnippet::ToProto() const {
   if (!expiry_date_.is_null())
     result.set_expiry_date(expiry_date_.ToInternalValue());
   result.set_score(score_);
-  result.set_discarded(is_discarded_);
+  result.set_dismissed(is_dismissed_);
 
   for (const SnippetSource& source : sources_) {
     SnippetSourceProto* source_proto = result.add_sources();
@@ -243,19 +241,6 @@ SnippetProto NTPSnippet::ToProto() const {
       source_proto->set_amp_url(source.amp_url.spec());
   }
 
-  return result;
-}
-
-std::unique_ptr<ContentSuggestion> NTPSnippet::ToContentSuggestion() const {
-  std::unique_ptr<ContentSuggestion> result(new ContentSuggestion(
-      id_, ContentSuggestionsProviderType::ARTICLES,
-      ContentSuggestionCategory::ARTICLE, best_source().url));
-  result->set_amp_url(best_source().amp_url);
-  result->set_title(title_);
-  result->set_snippet_text(snippet_);
-  result->set_publish_date(publish_date_);
-  result->set_publisher_name(best_source().publisher_name);
-  result->set_score(score_);
   return result;
 }
 

@@ -14,15 +14,15 @@
 #include "base/macros.h"
 #include "net/base/ip_endpoint.h"
 #include "net/log/net_log.h"
-#include "net/quic/crypto/crypto_handshake.h"
-#include "net/quic/crypto/quic_crypto_client_config.h"
-#include "net/quic/quic_alarm_factory.h"
-#include "net/quic/quic_bandwidth.h"
-#include "net/quic/quic_client_push_promise_index.h"
-#include "net/quic/quic_config.h"
-#include "net/quic/quic_connection.h"
-#include "net/quic/quic_packet_writer.h"
-#include "net/quic/quic_protocol.h"
+#include "net/quic/core/crypto/crypto_handshake.h"
+#include "net/quic/core/crypto/quic_crypto_client_config.h"
+#include "net/quic/core/quic_alarm_factory.h"
+#include "net/quic/core/quic_bandwidth.h"
+#include "net/quic/core/quic_client_push_promise_index.h"
+#include "net/quic/core/quic_config.h"
+#include "net/quic/core/quic_connection.h"
+#include "net/quic/core/quic_packet_writer.h"
+#include "net/quic/core/quic_protocol.h"
 #include "net/tools/quic/quic_client_session.h"
 #include "net/tools/quic/quic_spdy_client_stream.h"
 
@@ -38,7 +38,7 @@ class QuicClientBase {
                  const QuicConfig& config,
                  QuicConnectionHelperInterface* helper,
                  QuicAlarmFactory* alarm_factory,
-                 ProofVerifier* proof_verifier);
+                 std::unique_ptr<ProofVerifier> proof_verifier);
 
   ~QuicClientBase();
 
@@ -165,6 +165,7 @@ class QuicClientBase {
   }
 
  protected:
+  // Takes ownership of |connection|.
   virtual QuicClientSession* CreateQuicClientSession(
       QuicConnection* connection);
 

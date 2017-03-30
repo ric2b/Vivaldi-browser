@@ -7,9 +7,11 @@
 #include <algorithm>
 
 #include "base/command_line.h"
+#include "base/format_macros.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/stringprintf.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/common/content_switches.h"
@@ -98,9 +100,9 @@ AudioSyncReader::~AudioSyncReader() {
   renderer_missed_callback_count_ > 0 ?
       LogAudioGlitchResult(AUDIO_RENDERER_AUDIO_GLITCHES) :
       LogAudioGlitchResult(AUDIO_RENDERER_NO_AUDIO_GLITCHES);
-  std::string log_string =
-      base::StringPrintf("ASR: number of detected audio glitches=%d",
-                         static_cast<int>(renderer_missed_callback_count_));
+  std::string log_string = base::StringPrintf(
+      "ASR: number of detected audio glitches: %" PRIuS " out of %" PRIuS,
+      renderer_missed_callback_count_, renderer_callback_count_);
   MediaStreamManager::SendMessageToNativeLog(log_string);
   DVLOG(1) << log_string;
 }
@@ -164,6 +166,7 @@ bool AudioSyncReader::PrepareForeignSocket(
 }
 
 bool AudioSyncReader::WaitUntilDataIsReady() {
+  TRACE_EVENT0("audio", "AudioSyncReader::WaitUntilDataIsReady");
   base::TimeDelta timeout = maximum_wait_time_;
   const base::TimeTicks start_time = base::TimeTicks::Now();
   const base::TimeTicks finish_time = start_time + timeout;
@@ -201,7 +204,8 @@ bool AudioSyncReader::WaitUntilDataIsReady() {
   // Receive timed out or another error occurred.  Receive can timeout if the
   // renderer is unable to deliver audio data within the allotted time.
   if (!bytes_received || renderer_buffer_index != buffer_index_) {
-    DVLOG(2) << "AudioSyncReader::WaitUntilDataIsReady() timed out.";
+    TRACE_EVENT_INSTANT0("audio", "AudioSyncReader::Read timed out",
+                         TRACE_EVENT_SCOPE_THREAD);
 
     base::TimeDelta time_since_start = base::TimeTicks::Now() - start_time;
     UMA_HISTOGRAM_CUSTOM_TIMES("Media.AudioOutputControllerDataNotReady",

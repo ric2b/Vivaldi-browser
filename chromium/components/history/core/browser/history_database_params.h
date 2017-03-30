@@ -24,6 +24,7 @@ struct HistoryDatabaseParams {
   base::FilePath history_dir;
   DownloadInterruptReason download_interrupt_reason_none;
   DownloadInterruptReason download_interrupt_reason_crash;
+  int number_of_days_to_keep_visits = 90;
 };
 
 }  // namespace history

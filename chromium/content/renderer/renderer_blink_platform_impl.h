@@ -17,6 +17,7 @@
 #include "cc/blink/web_compositor_support_impl.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/common/content_export.h"
+#include "content/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
 #include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
@@ -32,6 +33,10 @@ class SyncMessageFilter;
 }
 
 namespace blink {
+namespace scheduler {
+class RendererScheduler;
+class WebThreadImplForRendererScheduler;
+}
 class WebCanvasCaptureHandler;
 class WebDeviceMotionData;
 class WebDeviceOrientationData;
@@ -43,20 +48,12 @@ class WebSecurityOrigin;
 class WebServiceWorkerCacheStorage;
 }
 
-namespace scheduler {
-class RendererScheduler;
-class WebThreadImplForRendererScheduler;
-}
-
 namespace shell {
 class InterfaceProvider;
 }
 
 namespace content {
-class BlinkServiceRegistryImpl;
-class DeviceLightEventPump;
-class DeviceMotionEventPump;
-class DeviceOrientationEventPump;
+class BlinkInterfaceProviderImpl;
 class LocalStorageCachedAreas;
 class PlatformEventObserverBase;
 class QuotaMessageFilter;
@@ -70,7 +67,7 @@ class WebFileSystemImpl;
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
   RendererBlinkPlatformImpl(
-      scheduler::RendererScheduler* renderer_scheduler,
+      blink::scheduler::RendererScheduler* renderer_scheduler,
       base::WeakPtr<shell::InterfaceProvider> remote_interfaces);
   ~RendererBlinkPlatformImpl() override;
 
@@ -95,6 +92,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   bool isLinkVisited(unsigned long long linkHash) override;
   void createMessageChannel(blink::WebMessagePortChannel** channel1,
                             blink::WebMessagePortChannel** channel2) override;
+  blink::WebSocketHandle* createWebSocketHandle() override;
   blink::WebPrescientNetworking* prescientNetworking() override;
   void cacheMetadata(const blink::WebURL&,
                      int64_t,
@@ -141,7 +139,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   blink::WebString fileSystemCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
 
-  bool canAccelerate2dCanvas() override;
   bool isThreadedCompositingEnabled() override;
   bool isThreadedAnimationEnabled() override;
   double audioHardwareSampleRate() override;
@@ -191,9 +188,11 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::Platform::GraphicsInfo* gl_info) override;
   blink::WebGraphicsContext3DProvider*
   createSharedOffscreenGraphicsContext3DProvider() override;
+  std::unique_ptr<cc::SharedBitmap> allocateSharedBitmap(
+      const blink::WebSize& size) override;
   blink::WebCompositorSupport* compositorSupport() override;
   blink::WebString convertIDNToUnicode(const blink::WebString& host) override;
-  blink::ServiceRegistry* serviceRegistry() override;
+  blink::InterfaceProvider* interfaceProvider() override;
   void startListening(blink::WebPlatformEventType,
                       blink::WebPlatformEventListener*) override;
   void stopListening(blink::WebPlatformEventType) override;
@@ -285,10 +284,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   WebPublicSuffixListImpl public_suffix_list_;
 
-  std::unique_ptr<DeviceLightEventPump> device_light_event_pump_;
-  std::unique_ptr<DeviceMotionEventPump> device_motion_event_pump_;
-  std::unique_ptr<DeviceOrientationEventPump> device_orientation_event_pump_;
-
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
@@ -303,14 +298,16 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   IDMap<PlatformEventObserverBase, IDMapOwnPointer> platform_event_observers_;
 
-  scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
+  blink::scheduler::RendererScheduler* renderer_scheduler_;  // NOT OWNED
   TopLevelBlameContext top_level_blame_context_;
 
   WebTrialTokenValidatorImpl trial_token_validator_;
 
   std::unique_ptr<LocalStorageCachedAreas> local_storage_cached_areas_;
 
-  std::unique_ptr<BlinkServiceRegistryImpl> blink_service_registry_;
+  std::unique_ptr<BlinkInterfaceProviderImpl> blink_interface_provider_;
+
+  mojom::URLLoaderFactoryPtr url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererBlinkPlatformImpl);
 };

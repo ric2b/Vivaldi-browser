@@ -248,12 +248,12 @@ void DesktopWindowTreeHostX11::HandleNativeWidgetActivationChanged(
 }
 
 void DesktopWindowTreeHostX11::AddObserver(
-    views::DesktopWindowTreeHostObserverX11* observer) {
+    DesktopWindowTreeHostObserverX11* observer) {
   observer_list_.AddObserver(observer);
 }
 
 void DesktopWindowTreeHostX11::RemoveObserver(
-    views::DesktopWindowTreeHostObserverX11* observer) {
+    DesktopWindowTreeHostObserverX11* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
@@ -569,17 +569,28 @@ gfx::Rect DesktopWindowTreeHostX11::GetRestoredBounds() const {
 }
 
 std::string DesktopWindowTreeHostX11::GetWorkspace() const {
-  int workspace_id;
-  if (ui::GetIntProperty(xwindow_, "_NET_WM_DESKTOP", &workspace_id))
-    return base::IntToString(workspace_id);
-  return std::string();
+  if (workspace_.empty())
+    const_cast<DesktopWindowTreeHostX11*>(this)->UpdateWorkspace();
+  return workspace_;
+}
+
+bool DesktopWindowTreeHostX11::UpdateWorkspace() {
+  int workspace_int;
+  if (!ui::GetWindowDesktop(xwindow_, &workspace_int))
+    return false;
+  std::string workspace_str = base::IntToString(workspace_int);
+  if (workspace_ == workspace_str)
+    return false;
+  workspace_ = workspace_str;
+  return true;
 }
 
 gfx::Rect DesktopWindowTreeHostX11::GetWorkAreaBoundsInScreen() const {
   return ToDIPRect(GetWorkAreaBoundsInPixels());
 }
 
-void DesktopWindowTreeHostX11::SetShape(SkRegion* native_region) {
+void DesktopWindowTreeHostX11::SetShape(
+    std::unique_ptr<SkRegion> native_region) {
   custom_window_shape_ = false;
   window_shape_.reset();
 
@@ -599,7 +610,6 @@ void DesktopWindowTreeHostX11::SetShape(SkRegion* native_region) {
     }
 
     custom_window_shape_ = true;
-    delete native_region;
   }
   ResetWindowRegion();
 }
@@ -706,6 +716,7 @@ void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
       return;
   }
 
+  workspace_ = base::IntToString(kAllDesktops);
   XEvent xevent;
   memset (&xevent, 0, sizeof (xevent));
   xevent.type = ClientMessage;
@@ -722,6 +733,14 @@ void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
              &xevent);
 }
 
+bool DesktopWindowTreeHostX11::IsVisibleOnAllWorkspaces() const {
+  // We don't need a check for _NET_WM_STATE_STICKY because that would specify
+  // that the window remain in a fixed position even if the viewport scrolls.
+  // This is different from the type of workspace that's associated with
+  // _NET_WM_DESKTOP.
+  return GetWorkspace() == base::IntToString(kAllDesktops);
+}
+
 bool DesktopWindowTreeHostX11::SetWindowTitle(const base::string16& title) {
   if (window_title_ == title)
     return false;
@@ -736,7 +755,7 @@ bool DesktopWindowTreeHostX11::SetWindowTitle(const base::string16& title) {
                   reinterpret_cast<const unsigned char*>(utf8str.c_str()),
                   utf8str.size());
   XTextProperty xtp;
-  char *c_utf8_str = const_cast<char *>(utf8str.c_str());
+  char* c_utf8_str = const_cast<char*>(utf8str.c_str());
   if (Xutf8TextListToTextProperty(xdisplay_, &c_utf8_str, 1,
                                   XUTF8StringStyle, &xtp) == Success) {
     XSetWMName(xdisplay_, xwindow_, &xtp);
@@ -999,6 +1018,8 @@ void DesktopWindowTreeHostX11::SetBounds(
   XWindowChanges changes = {0};
   unsigned value_mask = 0;
 
+  delayed_resize_task_.Cancel();
+
   if (size_changed) {
     // Update the minimum and maximum sizes in case they have changed.
     UpdateMinAndMaxSize();
@@ -1147,7 +1168,7 @@ void DesktopWindowTreeHostX11::InitX11Window(
 
   Visual* visual;
   int depth;
-  ui::ChooseVisualForWindow(&visual, &depth);
+  ui::ChooseVisualForWindow(true, &visual, &depth);
   if (depth == 32) {
     attribute_mask |= CWColormap;
     swa.colormap =
@@ -1173,7 +1194,7 @@ void DesktopWindowTreeHostX11::InitX11Window(
                            depth, InputOutput, visual, attribute_mask, &swa);
   if (ui::PlatformEventSource::GetInstance())
     ui::PlatformEventSource::GetInstance()->AddPlatformEventDispatcher(this);
-  open_windows().push_back(xwindow_);
+  open_windows().push_front(xwindow_);
 
   // TODO(erg): Maybe need to set a ViewProp here like in RWHL::RWHL().
 
@@ -1240,6 +1261,7 @@ void DesktopWindowTreeHostX11::InitX11Window(
   if (is_always_on_top_)
     state_atom_list.push_back(atom_cache_.GetAtom("_NET_WM_STATE_ABOVE"));
 
+  workspace_.clear();
   if (params.visible_on_all_workspaces) {
     state_atom_list.push_back(atom_cache_.GetAtom("_NET_WM_STATE_STICKY"));
     ui::SetIntProperty(xwindow_, "_NET_WM_DESKTOP", "CARDINAL", kAllDesktops);
@@ -1604,7 +1626,7 @@ void DesktopWindowTreeHostX11::ResetWindowRegion() {
 
   if (!IsMaximized() && !IsFullscreen()) {
     gfx::Path window_mask;
-    views::Widget* widget = native_widget_delegate_->AsWidget();
+    Widget* widget = native_widget_delegate_->AsWidget();
     if (widget->non_client_view()) {
       // Some frame views define a custom (non-rectangular) window mask. If
       // so, use it to define the window shape. If not, fall through.
@@ -2022,12 +2044,14 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
     }
     case PropertyNotify: {
       ::Atom changed_atom = xev->xproperty.atom;
-      if (changed_atom == atom_cache_.GetAtom("_NET_WM_STATE"))
+      if (changed_atom == atom_cache_.GetAtom("_NET_WM_STATE")) {
         OnWMStateUpdated();
-      else if (changed_atom == atom_cache_.GetAtom("_NET_FRAME_EXTENTS"))
+      } else if (changed_atom == atom_cache_.GetAtom("_NET_FRAME_EXTENTS")) {
         OnFrameExtentsUpdated();
-      else if (changed_atom == atom_cache_.GetAtom("_NET_WM_DESKTOP"))
-        OnHostWorkspaceChanged();
+      } else if (changed_atom == atom_cache_.GetAtom("_NET_WM_DESKTOP")) {
+        if (UpdateWorkspace())
+          OnHostWorkspaceChanged();
+      }
       break;
     }
     case SelectionNotify: {
@@ -2092,7 +2116,7 @@ DesktopWindowTreeHost* DesktopWindowTreeHost::Create(
 
 // static
 ui::NativeTheme* DesktopWindowTreeHost::GetNativeTheme(aura::Window* window) {
-  const views::LinuxUI* linux_ui = views::LinuxUI::instance();
+  const LinuxUI* linux_ui = LinuxUI::instance();
   if (linux_ui) {
     ui::NativeTheme* native_theme = linux_ui->GetNativeTheme(window);
     if (native_theme)

@@ -52,6 +52,7 @@
 #include "components/net_log/chrome_net_log.h"
 #include "components/network_session_configurator/network_session_configurator.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
@@ -100,12 +101,10 @@
 #include "net/url_request/ftp_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
 #include "net/url_request/url_fetcher.h"
-#include "net/url_request/url_request_backoff_manager.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_job_factory_impl.h"
-#include "policy/policy_constants.h"
 #include "url/url_constants.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -239,6 +238,16 @@ std::unique_ptr<net::HostResolver> CreateGlobalHostResolver(
   return std::move(remapped_resolver);
 }
 
+int GetSwitchValueAsInt(const base::CommandLine& command_line,
+                        const std::string& switch_name) {
+  int value;
+  if (!base::StringToInt(command_line.GetSwitchValueASCII(switch_name),
+                         &value)) {
+    return 0;
+  }
+  return value;
+}
+
 }  // namespace
 
 class SystemURLRequestContextGetter : public net::URLRequestContextGetter {
@@ -264,8 +273,7 @@ SystemURLRequestContextGetter::SystemURLRequestContextGetter(
     IOThread* io_thread)
     : io_thread_(io_thread),
       network_task_runner_(
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)) {
-}
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)) {}
 
 SystemURLRequestContextGetter::~SystemURLRequestContextGetter() {}
 
@@ -311,12 +319,11 @@ IOThread::IOThread(
       extension_event_router_forwarder_(extension_event_router_forwarder),
 #endif
       globals_(NULL),
-      is_spdy_allowed_by_policy_(true),
       is_quic_allowed_by_policy_(true),
       creation_time_(base::TimeTicks::Now()),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   auth_schemes_ = local_state->GetString(prefs::kAuthSchemes);
   negotiate_disable_cname_lookup_.Init(
       prefs::kDisableAuthNegotiateCnameLookup, local_state,
@@ -358,7 +365,7 @@ IOThread::IOThread(
   ssl_config_service_manager_.reset(
       ssl_config::SSLConfigServiceManager::CreateDefaultManager(
           local_state,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO)));
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
   base::Value* dns_client_enabled_default = new base::FundamentalValue(
       chrome_browser_net::ConfigureAsyncDnsFieldTrial());
@@ -380,12 +387,6 @@ IOThread::IOThread(
   pac_https_url_stripping_enabled_.Init(prefs::kPacHttpsUrlStrippingEnabled,
                                         local_state);
   pac_https_url_stripping_enabled_.MoveToThread(io_thread_proxy);
-
-  is_spdy_allowed_by_policy_ =
-      policy_service
-          ->GetPolicies(policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
-                                                std::string()))
-          .Get(policy::key::kDisableSpdy) == nullptr;
 
   const base::Value* value = policy_service->GetPolicies(
       policy::PolicyNamespace(policy::POLICY_DOMAIN_CHROME,
@@ -468,7 +469,7 @@ void IOThread::Init() {
   if (!ssl_keylog_file.empty()) {
     net::SSLClientSocket::SetSSLKeyLogFile(
         ssl_keylog_file,
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE));
+        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
   }
 
   DCHECK(!globals_);
@@ -511,8 +512,8 @@ void IOThread::Init() {
   globals_->external_data_use_observer.reset(
       new chrome::android::ExternalDataUseObserver(
           globals_->data_use_aggregator.get(),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)));
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)));
 #endif
 
   globals_->system_network_delegate = std::move(chrome_network_delegate);
@@ -545,31 +546,6 @@ void IOThread::Init() {
 
   std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
       net::ct::CreateLogVerifiersForKnownLogs());
-
-  // Add logs from command line
-  if (command_line.HasSwitch(switches::kCertificateTransparencyLog)) {
-    std::string switch_value = command_line.GetSwitchValueASCII(
-        switches::kCertificateTransparencyLog);
-    for (const base::StringPiece& curr_log : base::SplitStringPiece(
-             switch_value, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
-      std::vector<std::string> log_metadata = base::SplitString(
-          curr_log, ":", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-      CHECK_GE(log_metadata.size(), 3u)
-          << "CT log metadata missing: Switch format is "
-          << "'description:base64_key:url_without_schema'.";
-      std::string log_description(log_metadata[0]);
-      std::string log_url(std::string("https://") + log_metadata[2]);
-      std::string ct_public_key_data;
-      CHECK(base::Base64Decode(log_metadata[1], &ct_public_key_data))
-          << "Unable to decode CT public key.";
-      scoped_refptr<const net::CTLogVerifier> external_log_verifier(
-          net::CTLogVerifier::Create(ct_public_key_data, log_description,
-                                     log_url));
-      CHECK(external_log_verifier) << "Unable to parse CT public key.";
-      VLOG(1) << "Adding log with description " << log_description;
-      ct_logs.push_back(external_log_verifier);
-    }
-  }
 
   globals_->ct_logs.assign(ct_logs.begin(), ct_logs.end());
 
@@ -616,33 +592,22 @@ void IOThread::Init() {
         command_line.GetSwitchValueASCII(switches::kHostRules));
     TRACE_EVENT_END0("startup", "IOThread::InitAsync:SetRulesFromString");
   }
-  if (command_line.HasSwitch(
-          switches::kEnableUserAlternateProtocolPorts)) {
-    params_.enable_user_alternate_protocol_ports = true;
-  }
   globals_->enable_brotli =
       base::FeatureList::IsEnabled(features::kBrotliEncoding);
   params_.enable_token_binding =
       base::FeatureList::IsEnabled(features::kTokenBinding);
+
+  // Check for OS support of TCP FastOpen, and turn it on for all connections if
+  // indicated by user.
   // TODO(rch): Make the client socket factory a per-network session instance,
   // constructed from a NetworkSession::Params, to allow us to move this option
   // to IOThread::Globals & HttpNetworkSession::Params.
-  std::string quic_user_agent_id = chrome::GetChannelString();
-  if (!quic_user_agent_id.empty())
-    quic_user_agent_id.push_back(' ');
-  quic_user_agent_id.append(
-      version_info::GetProductNameAndVersionForUserAgent());
-  quic_user_agent_id.push_back(' ');
-  quic_user_agent_id.append(content::BuildOSCpuInfo());
-  network_session_configurator::ParseFieldTrialsAndCommandLine(
-      is_spdy_allowed_by_policy_, is_quic_allowed_by_policy_,
-      quic_user_agent_id, &params_);
-
   bool always_enable_tfo_if_supported =
       command_line.HasSwitch(switches::kEnableTcpFastOpen);
-  // Check for OS support of TCP FastOpen, and turn it on for all connections if
-  // indicated by user.
   net::CheckSupportAndMaybeEnableTCPFastOpen(always_enable_tfo_if_supported);
+
+  ConfigureParamsFromFieldTrialsAndCommandLine(
+      command_line, is_quic_allowed_by_policy_, &params_);
 
   TRACE_EVENT_BEGIN0("startup",
                      "IOThread::Init:ProxyScriptFetcherRequestContext");
@@ -650,14 +615,6 @@ void IOThread::Init() {
       ConstructProxyScriptFetcherContext(globals_, params_, net_log_));
   TRACE_EVENT_END0("startup",
                    "IOThread::Init:ProxyScriptFetcherRequestContext");
-
-  const version_info::Channel channel = chrome::GetChannel();
-  if (channel == version_info::Channel::UNKNOWN ||
-      channel == version_info::Channel::CANARY ||
-      channel == version_info::Channel::DEV) {
-    globals_->url_request_backoff_manager.reset(
-        new net::URLRequestBackoffManager());
-  }
 
 #if defined(OS_MACOSX)
   // Start observing Keychain events. This needs to be done on the UI thread,
@@ -906,7 +863,6 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
       globals->http_user_agent_settings.get());
   context->set_network_quality_estimator(
       globals->network_quality_estimator.get());
-  context->set_backoff_manager(globals->url_request_backoff_manager.get());
 
   context->set_http_server_properties(globals->http_server_properties.get());
 
@@ -924,6 +880,108 @@ net::URLRequestContext* IOThread::ConstructSystemRequestContext(
       globals->system_http_transaction_factory.get());
 
   return context;
+}
+
+// static
+void IOThread::ConfigureParamsFromFieldTrialsAndCommandLine(
+    const base::CommandLine& command_line,
+    bool is_quic_allowed_by_policy,
+    net::HttpNetworkSession::Params* params) {
+  std::string quic_user_agent_id = chrome::GetChannelString();
+  if (!quic_user_agent_id.empty())
+    quic_user_agent_id.push_back(' ');
+  quic_user_agent_id.append(
+      version_info::GetProductNameAndVersionForUserAgent());
+  quic_user_agent_id.push_back(' ');
+  quic_user_agent_id.append(content::BuildOSCpuInfo());
+
+  bool is_quic_force_disabled = !is_quic_allowed_by_policy ||
+                                command_line.HasSwitch(switches::kDisableQuic);
+  bool is_quic_force_enabled = command_line.HasSwitch(switches::kEnableQuic);
+
+  network_session_configurator::ParseFieldTrials(is_quic_force_disabled,
+                                                 is_quic_force_enabled,
+                                                 quic_user_agent_id, params);
+
+  // Command line flags override field trials.
+  if (command_line.HasSwitch(switches::kIgnoreUrlFetcherCertRequests))
+    net::URLFetcher::SetIgnoreCertificateRequests(true);
+
+  if (command_line.HasSwitch(switches::kDisableHttp2))
+    params->enable_http2 = false;
+
+  if (command_line.HasSwitch(switches::kDisableQuicPortSelection)) {
+    params->enable_quic_port_selection = false;
+  } else if (command_line.HasSwitch(switches::kEnableQuicPortSelection)) {
+    params->enable_quic_port_selection = true;
+  }
+
+  if (params->enable_quic) {
+    if (command_line.HasSwitch(switches::kQuicConnectionOptions)) {
+      params->quic_connection_options =
+          net::QuicUtils::ParseQuicConnectionOptions(
+              command_line.GetSwitchValueASCII(
+                  switches::kQuicConnectionOptions));
+    }
+
+    if (command_line.HasSwitch(switches::kQuicHostWhitelist)) {
+      std::string whitelist =
+          command_line.GetSwitchValueASCII(switches::kQuicHostWhitelist);
+      params->quic_host_whitelist.clear();
+      for (const std::string& host : base::SplitString(
+               whitelist, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+        params->quic_host_whitelist.insert(host);
+      }
+    }
+
+    if (command_line.HasSwitch(switches::kQuicMaxPacketLength)) {
+      unsigned value;
+      if (base::StringToUint(
+              command_line.GetSwitchValueASCII(switches::kQuicMaxPacketLength),
+              &value)) {
+        params->quic_max_packet_length = value;
+      }
+    }
+
+    if (command_line.HasSwitch(switches::kQuicVersion)) {
+      net::QuicVersion version = network_session_configurator::ParseQuicVersion(
+          command_line.GetSwitchValueASCII(switches::kQuicVersion));
+      if (version != net::QUIC_VERSION_UNSUPPORTED) {
+        net::QuicVersionVector supported_versions;
+        supported_versions.push_back(version);
+        params->quic_supported_versions = supported_versions;
+      }
+    }
+
+    if (command_line.HasSwitch(switches::kOriginToForceQuicOn)) {
+      std::string origins =
+          command_line.GetSwitchValueASCII(switches::kOriginToForceQuicOn);
+      for (const std::string& host_port : base::SplitString(
+               origins, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+        if (host_port == "*")
+          params->origins_to_force_quic_on.insert(net::HostPortPair());
+        net::HostPortPair quic_origin =
+            net::HostPortPair::FromString(host_port);
+        if (!quic_origin.IsEmpty())
+          params->origins_to_force_quic_on.insert(quic_origin);
+      }
+    }
+  }
+
+  // Parameters only controlled by command line.
+  if (command_line.HasSwitch(switches::kEnableUserAlternateProtocolPorts)) {
+    params->enable_user_alternate_protocol_ports = true;
+  }
+  if (command_line.HasSwitch(switches::kIgnoreCertificateErrors))
+    params->ignore_certificate_errors = true;
+  if (command_line.HasSwitch(switches::kTestingFixedHttpPort)) {
+    params->testing_fixed_http_port =
+        GetSwitchValueAsInt(command_line, switches::kTestingFixedHttpPort);
+  }
+  if (command_line.HasSwitch(switches::kTestingFixedHttpsPort)) {
+    params->testing_fixed_https_port =
+        GetSwitchValueAsInt(command_line, switches::kTestingFixedHttpsPort);
+  }
 }
 
 // static

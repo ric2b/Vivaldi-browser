@@ -266,15 +266,20 @@ Polymer({
   },
 
   /**
-   * Displays the import supervised user popup.
+   * Displays the import supervised user popup or an error message if there are
+   * no existing supervised users.
    * @param {!Array<!SupervisedUser>} supervisedUsers The list of existing
    *     supervised users.
    * @private
    */
   showImportSupervisedUserPopup_: function(supervisedUsers) {
     this.loadingSupervisedUsers_ = false;
-    this.$.importUserPopup.show(this.signedInUser_(this.signedInUserIndex_),
-                                supervisedUsers);
+    if (supervisedUsers.length > 0) {
+      this.$.importUserPopup.show(this.signedInUser_(this.signedInUserIndex_),
+                                  supervisedUsers);
+    } else {
+      this.handleMessage_(this.i18n('noSupervisedUserImportText'));
+    }
   },
 
   /**
@@ -484,14 +489,19 @@ Polymer({
   },
 
   /**
-   * Returns True if the import supervised user link should be hidden.
-   * @param {boolean} createInProgress True if create/import is in progress
+   * Returns True if the import existing supervised user link should be hidden.
+   * @param {boolean} createInProgress True if create/import is in progress.
+   * @param {boolean} loadingSupervisedUsers True if supervised users are being
+   *     loaded.
    * @param {number} signedInUserIndex Index of the selected signed-in user.
    * @return {boolean}
    * @private
    */
-  isImportUserLinkHidden_: function(createInProgress, signedInUserIndex) {
-    return createInProgress || !this.signedInUser_(signedInUserIndex);
+  isImportUserLinkHidden_: function(createInProgress,
+                                    loadingSupervisedUsers,
+                                    signedInUserIndex) {
+    return createInProgress || loadingSupervisedUsers ||
+        !this.signedInUser_(signedInUserIndex);
   },
 
   /**

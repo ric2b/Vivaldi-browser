@@ -56,13 +56,17 @@ namespace gfx {
 class ImageSkia;
 }
 
+namespace gpu {
+class GpuChannelEstablishFactory;
+}
+
 namespace media {
 class CdmFactory;
 }
 
 namespace shell {
 class InterfaceRegistry;
-class ShellClient;
+class Service;
 }
 
 namespace net {
@@ -107,7 +111,7 @@ class BrowserURLHandler;
 class ClientCertificateDelegate;
 class DevToolsManagerDelegate;
 class ExternalVideoSurfaceContainer;
-class GeolocationDelegate;
+class GpuProcessHost;
 class LocationProvider;
 class MediaObserver;
 class NavigationHandle;
@@ -187,17 +191,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual bool ShouldUseProcessPerSite(BrowserContext* browser_context,
                                        const GURL& effective_url);
 
-  // Returns true if site isolation should be enabled for |effective_url|. This
-  // call allows the embedder to supplement the site isolation policy enforced
-  // by the content layer.
+  // Returns true if site isolation should be enabled for |effective_site_url|.
+  // This call allows the embedder to supplement the site isolation policy
+  // enforced by the content layer.
   //
   // Will only be called if both of the following happen:
   //   1. The embedder asked to be consulted, by returning true from
   //      ContentClient::IsSupplementarySiteIsolationModeEnabled().
-  //   2. The content layer didn't decide to isolate |effective_url| according
-  //      to its internal policy (e.g. because of --site-per-process).
+  //   2. The content layer didn't decide to isolate |effective_site_url|
+  //      according to its internal policy (e.g. because of --site-per-process).
   virtual bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
-                                               const GURL& effective_url);
+                                               const GURL& effective_site_url);
 
   // Returns true unless the effective URL is part of a site that cannot live in
   // a process restricted to just that site.  This is only called if site
@@ -231,14 +235,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // authority.
   // This is called on the UI thread.
   virtual bool CanCommitURL(RenderProcessHost* process_host, const GURL& url);
-
-  // Returns true if no URL within |origin| is allowed to commit in the given
-  // process.  Must return false if there exists at least one URL in |origin|
-  // that is allowed to commit.
-  // This is called on the IO thread.
-  virtual bool IsIllegalOrigin(ResourceContext* resource_context,
-                               int child_process_id,
-                               const GURL& origin);
 
   // Returns whether a URL should be allowed to open from a specific context.
   // This also applies in cases where the new URL will open in another process.
@@ -461,19 +457,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Informs the embedder that a certificate error has occured.  If
   // |overridable| is true and if |strict_enforcement| is false, the user
   // can ignore the error and continue. The embedder can call the callback
-  // asynchronously. If |result| is not set to
-  // CERTIFICATE_REQUEST_RESULT_TYPE_CONTINUE, the request will be cancelled
-  // or denied immediately, and the callback won't be run.
-  virtual void AllowCertificateError(WebContents* web_contents,
-                                     int cert_error,
-                                     const net::SSLInfo& ssl_info,
-                                     const GURL& request_url,
-                                     ResourceType resource_type,
-                                     bool overridable,
-                                     bool strict_enforcement,
-                                     bool expired_previous_decision,
-                                     const base::Callback<void(bool)>& callback,
-                                     CertificateRequestResultType* result) {}
+  // asynchronously.
+  virtual void AllowCertificateError(
+      WebContents* web_contents,
+      int cert_error,
+      const net::SSLInfo& ssl_info,
+      const GURL& request_url,
+      ResourceType resource_type,
+      bool overridable,
+      bool strict_enforcement,
+      bool expired_previous_decision,
+      const base::Callback<void(CertificateRequestResultType)>& callback) {}
 
   // Selects a SSL client certificate and returns it to the |delegate|. Note:
   // |delegate| may be called synchronously or asynchronously.
@@ -513,6 +507,7 @@ class CONTENT_EXPORT ContentBrowserClient {
                                WindowContainerType container_type,
                                const GURL& target_url,
                                const Referrer& referrer,
+                               const std::string& frame_name,
                                WindowOpenDisposition disposition,
                                const blink::WebWindowFeatures& features,
                                bool user_gesture,
@@ -535,13 +530,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Getters for common objects.
   virtual net::NetLog* GetNetLog();
 
-  // Allows the embedder to provide a Delegate for Geolocation to override some
-  // functionality of the API (e.g. AccessTokenStore, LocationProvider).
-  virtual GeolocationDelegate* CreateGeolocationDelegate();
-
-  // Returns true if fast shutdown is possible.
-  virtual bool IsFastShutdownPossible();
-
   // Called by WebContents to override the WebKit preferences that are used by
   // the renderer. The content layer will add its own settings, and then it's up
   // to the embedder to update it if it wants.
@@ -557,6 +545,17 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Clears browser cookies.
   virtual void ClearCookies(RenderFrameHost* rfh) {}
+
+  // Clears |browser_context|'s data stored for the given |origin|.
+  // The datatypes to be removed are specified by |remove_cookies|,
+  // |remove_storage|, and |remove_cache|. Note that cookies should be removed
+  // for the entire eTLD+1 of |origin|. Must call |callback| when finished.
+  virtual void ClearSiteData(content::BrowserContext* browser_context,
+                             const url::Origin& origin,
+                             bool remove_cookies,
+                             bool remove_storage,
+                             bool remove_cache,
+                             const base::Closure& callback) {}
 
   // Returns the default download directory.
   // This can be called on any thread.
@@ -577,6 +576,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Gets the host for an external out-of-process plugin.
   virtual BrowserPpapiHost* GetExternalBrowserPpapiHost(
       int plugin_child_id);
+
+  // Gets the factory to use to establish a connection to the GPU process.
+  virtual gpu::GpuChannelEstablishFactory* GetGpuChannelEstablishFactory();
 
   // Returns true if the socket operation specified by |params| is allowed from
   // the given |browser_context| and |url|. If |params| is nullptr, this method
@@ -652,14 +654,16 @@ class CONTENT_EXPORT ContentBrowserClient {
       BrowserContext* browser_context);
 
   // Allows to register browser Mojo interfaces exposed through the
-  // RenderProcessHost.
+  // RenderProcessHost. Note that interface factory callbacks added to
+  // |registry| will by default be run immediately on the IO thread, unless a
+  // task runner is provided.
   virtual void ExposeInterfacesToRenderer(
       shell::InterfaceRegistry* registry,
       RenderProcessHost* render_process_host) {}
 
-  // Allows to register browser Mojo interfaces exposed through the
-  // FrameMojoShell.
-  virtual void RegisterFrameMojoShellInterfaces(
+  // Called when RenderFrameHostImpl connects to the Media service. Expose
+  // interfaces to the service using |registry|.
+  virtual void ExposeInterfacesToMediaService(
       shell::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
@@ -668,6 +672,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void RegisterRenderFrameMojoInterfaces(
       shell::InterfaceRegistry* registry,
       RenderFrameHost* render_frame_host) {}
+
+  // Allows to register browser Mojo interfaces exposed through the
+  // GpuProcessHost. Called on the IO thread. Note that interface factory
+  // callbacks added to |registry| will by default be run immediately on the IO
+  // thread, unless a task runner is provided.
+  virtual void ExposeInterfacesToGpuProcess(
+      shell::InterfaceRegistry* registry,
+      GpuProcessHost* render_process_host) {}
 
   using StaticMojoApplicationMap = std::map<std::string, MojoApplicationInfo>;
 

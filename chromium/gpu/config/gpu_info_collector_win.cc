@@ -55,23 +55,23 @@ enum DisplayLinkInstallationStatus {
 
 // Returns the display link driver version or an invalid version if it is
 // not installed.
-Version DisplayLinkVersion() {
+base::Version DisplayLinkVersion() {
   base::win::RegKey key;
 
   if (key.Open(HKEY_LOCAL_MACHINE, L"SOFTWARE", KEY_READ | KEY_WOW64_64KEY))
-    return Version();
+    return base::Version();
 
   if (key.OpenKey(L"DisplayLink", KEY_READ | KEY_WOW64_64KEY))
-    return Version();
+    return base::Version();
 
   if (key.OpenKey(L"Core", KEY_READ | KEY_WOW64_64KEY))
-    return Version();
+    return base::Version();
 
   base::string16 version;
   if (key.ReadValue(L"Version", &version))
-    return Version();
+    return base::Version();
 
-  return Version(base::UTF16ToASCII(version));
+  return base::Version(base::UTF16ToASCII(version));
 }
 
 // Returns whether Lenovo dCute is installed.
@@ -326,7 +326,6 @@ CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info) {
                         " ps_(\\d+)_(\\d+)",
                         &pixel_shader_major_version,
                         &pixel_shader_minor_version)) {
-    gpu_info->can_lose_context = direct3d_version == "9";
     gpu_info->vertex_shader_version =
         base::StringPrintf("%d.%d",
                            vertex_shader_major_version,

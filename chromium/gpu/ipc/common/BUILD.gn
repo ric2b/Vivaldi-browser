@@ -53,6 +53,7 @@ source_set("command_buffer_traits_sources") {
 
   deps = [
     "//base",
+    "//gpu/command_buffer/common:gles2_utils",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/geometry",
   ]
@@ -95,6 +96,7 @@ source_set("ipc_common_sources") {
     "//gpu/command_buffer/common:common_sources",
     "//gpu/config:config_sources",
     "//ipc",
+    "//ui/base",
     "//ui/events/ipc",
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/geometry",
@@ -119,10 +121,16 @@ source_set("ipc_common_sources") {
 mojom("interfaces") {
   sources = [
     "capabilities.mojom",
-    "command_buffer.mojom",
+    "dx_diag_node.mojom",
+    "gpu_info.mojom",
     "mailbox.mojom",
     "mailbox_holder.mojom",
     "sync_token.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
   ]
 }
 

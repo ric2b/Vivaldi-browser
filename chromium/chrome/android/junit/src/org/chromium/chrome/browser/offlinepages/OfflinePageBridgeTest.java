@@ -7,10 +7,10 @@ package org.chromium.chrome.browser.offlinepages;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.Matchers.anyListOf;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.anyString;
-import static org.mockito.Matchers.eq;
+import static org.mockito.ArgumentMatchers.anyListOf;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
@@ -20,7 +20,6 @@ import static org.mockito.Mockito.verify;
 import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge.OfflinePageModelObserver;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
@@ -33,6 +32,7 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadows.multidex.ShadowMultiDex;
 
 import java.util.List;
 import java.util.Set;
@@ -52,14 +52,15 @@ public class OfflinePageBridgeTest {
     private static final long TEST_OFFLINE_ID = 42;
     private static final ClientId TEST_CLIENT_ID = new ClientId(TEST_NAMESPACE, TEST_ID);
     private static final String TEST_OFFLINE_URL = "TEST_OFFLINE_URL";
+    private static final String TEST_FILE_PATH = "TEST_FILE_PATH";
     private static final long TEST_FILESIZE = 12345;
     private static final long TEST_CREATIONTIMEMS = 150;
     private static final int TEST_ACCESSCOUNT = 1;
     private static final long TEST_LASTACCESSTIMEMS = 20160314;
 
     private static final OfflinePageItem TEST_OFFLINE_PAGE_ITEM = new OfflinePageItem(TEST_URL,
-            TEST_OFFLINE_ID, TEST_NAMESPACE, TEST_ID, TEST_OFFLINE_URL, TEST_FILESIZE,
-            TEST_CREATIONTIMEMS, TEST_ACCESSCOUNT, TEST_LASTACCESSTIMEMS);
+            TEST_OFFLINE_ID, TEST_NAMESPACE, TEST_ID, TEST_OFFLINE_URL, TEST_FILE_PATH,
+            TEST_FILESIZE, TEST_CREATIONTIMEMS, TEST_ACCESSCOUNT, TEST_LASTACCESSTIMEMS);
 
     @Captor
     ArgumentCaptor<List<OfflinePageItem>> mResultArgument;

@@ -87,6 +87,8 @@ class ExternalProcessImporterBridge : public ImporterBridge {
   void NotifyItemStarted(importer::ImportItem item) override;
   void NotifyItemEnded(importer::ImportItem item) override;
   void NotifyEnded() override;
+  void NotifyItemFailed(importer::ImportItem item,
+                        const std::string& error) override;
 
   base::string16 GetLocalizedString(int message_id) override;
   // End ImporterBridge implementation.

@@ -23,7 +23,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/os_crypt/os_crypt.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/connection.h"
 #include "sql/statement.h"
@@ -109,7 +109,7 @@ bool ChromiumImporter::ReadAndParseSignons(const base::FilePath& sqlite_file,
 
   const char query2[] = "SELECT origin_url, action_url, username_element,"
     " username_value, password_element, password_value, "
-    " submit_element, signon_realm, ssl_valid, "
+    " submit_element, signon_realm, "
     " preferred FROM logins";
 
   sql::Statement s2(db.GetUniqueStatement(query2));
@@ -139,8 +139,7 @@ bool ChromiumImporter::ReadAndParseSignons(const base::FilePath& sqlite_file,
 
     form.submit_element = base::UTF8ToUTF16(s2.ColumnString(6));
     form.signon_realm = s2.ColumnString(7);
-    form.ssl_valid = s2.ColumnBool(8);
-    form.preferred = s2.ColumnBool(9);
+    form.preferred = s2.ColumnBool(8);
 
     forms->push_back(form);
 

@@ -85,10 +85,9 @@ typedef HRESULT (STDAPICALLTYPE* RegisterApplicationRestartProc)(
 void InitializeWindowProcExceptions() {
   // Get the breakpad pointer from chrome.exe
   base::win::WinProcExceptionFilter exception_filter =
-      reinterpret_cast<base::win::WinProcExceptionFilter>(
-          ::GetProcAddress(::GetModuleHandle(
-                               chrome::kBrowserProcessExecutableName),
-                           "CrashForException"));
+      reinterpret_cast<base::win::WinProcExceptionFilter>(::GetProcAddress(
+          ::GetModuleHandle(chrome::kChromeElfDllName), "CrashForException"));
+  CHECK(exception_filter);
   exception_filter = base::win::SetWinProcExceptionFilter(exception_filter);
   DCHECK(!exception_filter);
 }
@@ -320,7 +319,7 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
   base::FilePath path(
       profile()->GetPath().AppendASCII("ChromeDWriteFontCache"));
   content::BrowserThread::PostAfterStartupTask(
-      FROM_HERE, content::BrowserThread::GetMessageLoopProxyForThread(
+      FROM_HERE, content::BrowserThread::GetTaskRunnerForThread(
                      content::BrowserThread::FILE),
       base::Bind(base::IgnoreResult(&base::DeleteFile), path, false));
 }

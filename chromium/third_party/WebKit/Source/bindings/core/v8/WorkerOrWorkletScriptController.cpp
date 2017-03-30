@@ -185,7 +185,7 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded()
 
     // Name new context for debugging. For main thread worklet global scopes
     // this is done once the context is initialized.
-    if (m_globalScope->isWorkerGlobalScope()) {
+    if (m_globalScope->isWorkerGlobalScope() || m_globalScope->isThreadedWorkletGlobalScope()) {
         WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(m_isolate);
         if (debugger)
             debugger->contextCreated(context);
@@ -200,7 +200,7 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded()
     return true;
 }
 
-ScriptValue WorkerOrWorkletScriptController::evaluate(const CompressibleString& script, const String& fileName, const TextPosition& scriptStartPosition, CachedMetadataHandler* cacheHandler, V8CacheOptions v8CacheOptions)
+ScriptValue WorkerOrWorkletScriptController::evaluate(const String& script, const String& fileName, const TextPosition& scriptStartPosition, CachedMetadataHandler* cacheHandler, V8CacheOptions v8CacheOptions)
 {
     if (!initializeContextIfNeeded())
         return ScriptValue();
@@ -271,7 +271,7 @@ bool WorkerOrWorkletScriptController::evaluate(const ScriptSourceCode& sourceCod
                 event = state.m_errorEventFromImportedScript.release();
             else
                 event = ErrorEvent::create(state.errorMessage, state.m_location->clone(), m_world.get());
-            m_globalScope->reportException(event, NotSharableCrossOrigin);
+            m_globalScope->dispatchErrorEvent(event, NotSharableCrossOrigin);
         }
         return false;
     }
@@ -316,7 +316,7 @@ void WorkerOrWorkletScriptController::rethrowExceptionFromImportedScript(ErrorEv
     const String& errorMessage = errorEvent->message();
     if (m_executionState)
         m_executionState->m_errorEventFromImportedScript = errorEvent;
-    exceptionState.rethrowV8Exception(V8ThrowException::createGeneralError(m_isolate, errorMessage));
+    exceptionState.rethrowV8Exception(V8ThrowException::createError(m_isolate, errorMessage));
 }
 
 DEFINE_TRACE(WorkerOrWorkletScriptController)

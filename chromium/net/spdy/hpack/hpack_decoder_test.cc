@@ -35,9 +35,6 @@ class HpackDecoderPeer {
     return decoder_->DecodeNextName(in, out);
   }
   HpackHeaderTable* header_table() { return &decoder_->header_table_; }
-  const SpdyHeaderBlock& decoded_block() const {
-    return decoder_->decoded_block_;
-  }
 
   bool DecodeNextStringLiteral(HpackInputStream* in,
                                bool is_header_key,
@@ -88,7 +85,7 @@ class HpackDecoderTest : public ::testing::TestWithParam<bool> {
     if (handler_exists_) {
       return handler_.decoded_block();
     } else {
-      return decoder_peer_.decoded_block();
+      return decoder_.decoded_block();
     }
   }
 
@@ -138,11 +135,7 @@ TEST_P(HpackDecoderTest, AddHeaderDataWithHandleControlFrameHeadersData) {
                                                      second_input.size()));
   // A string which would push the buffer over the threshold is refused.
   const int kThirdInputSize =
-      ((FLAGS_chromium_http2_flag_remove_hpack_decode_buffer_size_limit
-            ? kMaxBufferSizeBytes
-            : kMaxDecodeBufferSize) -
-       (first_input.size() + second_input.size())) +
-      1;
+      (kMaxBufferSizeBytes - (first_input.size() + second_input.size())) + 1;
   string third_input = string(kThirdInputSize, 'y');
   ASSERT_GT(first_input.size() + second_input.size() + third_input.size(),
             kMaxBufferSizeBytes);

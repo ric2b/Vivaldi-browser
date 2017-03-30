@@ -19,11 +19,6 @@ ozone_platform_deps = []
 # Extra dependencies to pull into ozone_unittests for built platforms.
 ozone_platform_test_deps = []
 
-if (ozone_platform_egltest) {
-  ozone_platforms += [ "egltest" ]
-  ozone_platform_deps += [ "platform/egltest" ]
-}
-
 if (ozone_platform_headless) {
   ozone_platforms += [ "headless" ]
   ozone_platform_deps += [ "platform/headless" ]
@@ -87,8 +82,7 @@ component("ozone_base") {
     "public/surface_factory_ozone.cc",
     "public/surface_factory_ozone.h",
     "public/surface_ozone_canvas.h",
-    "public/surface_ozone_egl.cc",
-    "public/surface_ozone_egl.h",
+    "public/swap_completion_callback.h",
     "public/system_input_injector.h",
   ]
 
@@ -107,6 +101,7 @@ component("ozone_base") {
     "//ui/gfx/ipc",
     "//ui/gfx/ipc/geometry",
     "//ui/gfx/ipc/skia",
+    "//ui/gl",
   ]
 
   visibility += [
@@ -114,6 +109,7 @@ component("ozone_base") {
     # things that would otherwise create a cycle.
     "//ui/base",
     "//ui/events/ozone/*",
+    "//ui/ozone/gl",
     "//ui/ozone/platform/*",
     "//ui/ozone/common/*",
   ]
@@ -151,12 +147,14 @@ source_set("platform") {
     "//ui/events/devices",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/ozone/gl",
     "//ui/platform_window",
   ]
 
   deps = [
     ":generate_constructor_list",
     ":generate_ozone_platform_list",
+    "//ui/ozone/public/interfaces",
   ]
 
   deps += ozone_platform_deps

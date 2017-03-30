@@ -63,11 +63,6 @@ AudioRendererImpl::AudioRendererImpl(
   audio_buffer_stream_->set_config_change_observer(base::Bind(
       &AudioRendererImpl::OnConfigChange, weak_factory_.GetWeakPtr()));
 
-// Suspend and resume work differently on Android and are handled at a higher
-// level than here. OnSuspend() notifications will be delivered a few seconds
-// after an application is backgrounded, even if it should still be playing.
-// See http://crbug.com/623066 for more details.
-#if !defined(OS_ANDROID)
   // Tests may not have a power monitor.
   base::PowerMonitor* monitor = base::PowerMonitor::Get();
   if (!monitor)
@@ -85,18 +80,16 @@ AudioRendererImpl::AudioRendererImpl(
                            base::Bind(&base::PowerMonitor::AddObserver,
                                       base::Unretained(monitor), this));
   }
-#endif
+
   // Do not add anything below this line since the above actions are only safe
   // as the last lines of the constructor.
 }
 
 AudioRendererImpl::~AudioRendererImpl() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
-#if !defined(OS_ANDROID)
   if (base::PowerMonitor::Get())
     base::PowerMonitor::Get()->RemoveObserver(this);
-#endif
 
   // If Render() is in progress, this call will wait for Render() to finish.
   // After this call, the |sink_| will not call back into |this| anymore.
@@ -107,12 +100,14 @@ AudioRendererImpl::~AudioRendererImpl() {
 }
 
 void AudioRendererImpl::StartTicking() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  base::AutoLock auto_lock(lock_);
+
   DCHECK(!rendering_);
   rendering_ = true;
 
-  base::AutoLock auto_lock(lock_);
   // Wait for an eventual call to SetPlaybackRate() to start rendering.
   if (playback_rate_ == 0) {
     DCHECK(!sink_playing_);
@@ -123,7 +118,7 @@ void AudioRendererImpl::StartTicking() {
 }
 
 void AudioRendererImpl::StartRendering_Locked() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kPlaying);
   DCHECK(!sink_playing_);
@@ -137,12 +132,14 @@ void AudioRendererImpl::StartRendering_Locked() {
 }
 
 void AudioRendererImpl::StopTicking() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
+
+  base::AutoLock auto_lock(lock_);
+
   DCHECK(rendering_);
   rendering_ = false;
 
-  base::AutoLock auto_lock(lock_);
   // Rendering should have already been stopped with a zero playback rate.
   if (playback_rate_ == 0) {
     DCHECK(!sink_playing_);
@@ -166,7 +163,7 @@ void AudioRendererImpl::StopRendering_Locked() {
 }
 
 void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
-  DVLOG(1) << __FUNCTION__ << "(" << time << ")";
+  DVLOG(1) << __func__ << "(" << time << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
@@ -174,15 +171,31 @@ void AudioRendererImpl::SetMediaTime(base::TimeDelta time) {
   DCHECK_EQ(state_, kFlushed);
 
   start_timestamp_ = time;
-  ended_timestamp_ = kInfiniteDuration();
+  ended_timestamp_ = kInfiniteDuration;
   last_render_time_ = stop_rendering_time_ = base::TimeTicks();
-  first_packet_timestamp_ = kNoTimestamp();
+  first_packet_timestamp_ = kNoTimestamp;
   last_media_timestamp_ = base::TimeDelta();
   audio_clock_.reset(new AudioClock(time, audio_parameters_.sample_rate()));
+  last_reported_media_time_ = kNoTimestamp;
 }
 
 base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
   base::AutoLock auto_lock(lock_);
+
+  // Re-use last reported time if rendering has stopped to avoid confusing blink
+  // layer (avoid currentTime advancing after signaling buffer underflow).
+  // TODO(chcunningham): Do this in blink instead. Patching it here for now
+  // because HTMLMediaElement's currentTime is a mess.
+  if (!rendering_ && last_reported_media_time_ != kNoTimestamp) {
+    // If rendering stops, be sure to at least report the front time of the most
+    // recently rendered audio buffer.
+    if (last_reported_media_time_ < audio_clock_->front_timestamp())
+      last_reported_media_time_ = audio_clock_->front_timestamp();
+
+    DVLOG(3) << __func__ << " Returning cached time while rendering stopped:"
+             << last_reported_media_time_.InMicroseconds();
+    return last_reported_media_time_;
+  }
 
   // Return the current time based on the known extents of the rendered audio
   // data plus an estimate based on the last time those values were calculated.
@@ -201,13 +214,14 @@ base::TimeDelta AudioRendererImpl::CurrentMediaTime() {
   // It is expected that such events are transient and will be recovered as
   // rendering continues over time.
   if (current_media_time < last_media_timestamp_) {
-    DVLOG(2) << __FUNCTION__ << ": " << last_media_timestamp_
+    DVLOG(2) << __func__ << ": " << last_media_timestamp_
              << " (clamped), actual: " << current_media_time;
     return last_media_timestamp_;
   }
 
-  DVLOG(2) << __FUNCTION__ << ": " << current_media_time;
+  DVLOG(2) << __func__ << ": " << current_media_time;
   last_media_timestamp_ = current_media_time;
+  last_reported_media_time_ = current_media_time;
   return current_media_time;
 }
 
@@ -275,7 +289,7 @@ TimeSource* AudioRendererImpl::GetTimeSource() {
 }
 
 void AudioRendererImpl::Flush(const base::Closure& callback) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
@@ -299,6 +313,7 @@ void AudioRendererImpl::DoFlush_Locked() {
   DCHECK(!pending_read_);
   DCHECK_EQ(state_, kFlushed);
 
+  ended_timestamp_ = kInfiniteDuration;
   audio_buffer_stream_->Reset(base::Bind(&AudioRendererImpl::ResetDecoderDone,
                                          weak_factory_.GetWeakPtr()));
 }
@@ -330,7 +345,7 @@ void AudioRendererImpl::ResetDecoderDone() {
 }
 
 void AudioRendererImpl::StartPlaying() {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
@@ -347,7 +362,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
                                    CdmContext* cdm_context,
                                    RendererClient* client,
                                    const PipelineStatusCB& init_cb) {
-  DVLOG(1) << __FUNCTION__;
+  DVLOG(1) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(client);
   DCHECK(stream);
@@ -369,14 +384,17 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   if (!expecting_config_changes_ || !hw_params.IsValid() ||
       hw_params.format() == AudioParameters::AUDIO_FAKE) {
     // The actual buffer size is controlled via the size of the AudioBus
-    // provided to Render(), so just choose something reasonable here for looks.
-    int buffer_size = stream->audio_decoder_config().samples_per_second() / 100;
-    audio_parameters_.Reset(
-        AudioParameters::AUDIO_PCM_LOW_LATENCY,
-        stream->audio_decoder_config().channel_layout(),
-        stream->audio_decoder_config().samples_per_second(),
-        stream->audio_decoder_config().bits_per_channel(),
-        buffer_size);
+    // provided to Render(), but we should choose a value here based on hardware
+    // parameters if possible since it affects the initial buffer size used by
+    // the algorithm. Too little will cause underflow on Bluetooth devices.
+    int buffer_size =
+        std::max(stream->audio_decoder_config().samples_per_second() / 100,
+                 hw_params.IsValid() ? hw_params.frames_per_buffer() : 0);
+    audio_parameters_.Reset(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                            stream->audio_decoder_config().channel_layout(),
+                            stream->audio_decoder_config().samples_per_second(),
+                            stream->audio_decoder_config().bits_per_channel(),
+                            buffer_size);
     buffer_converter_.reset();
   } else {
     // To allow for seamless sample rate adaptations (i.e. changes from say
@@ -448,6 +466,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
 
   audio_clock_.reset(
       new AudioClock(base::TimeDelta(), audio_parameters_.sample_rate()));
+  last_reported_media_time_ = kNoTimestamp;
 
   audio_buffer_stream_->Initialize(
       stream, base::Bind(&AudioRendererImpl::OnAudioBufferStreamInitialized,
@@ -459,7 +478,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
 }
 
 void AudioRendererImpl::OnAudioBufferStreamInitialized(bool success) {
-  DVLOG(1) << __FUNCTION__ << ": " << success;
+  DVLOG(1) << __func__ << ": " << success;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
@@ -471,7 +490,7 @@ void AudioRendererImpl::OnAudioBufferStreamInitialized(bool success) {
   }
 
   if (!audio_parameters_.IsValid()) {
-    DVLOG(1) << __FUNCTION__ << ": Invalid audio parameters: "
+    DVLOG(1) << __func__ << ": Invalid audio parameters: "
              << audio_parameters_.AsHumanReadableString();
     ChangeState_Locked(kUninitialized);
     base::ResetAndReturn(&init_cb_).Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
@@ -546,7 +565,7 @@ void AudioRendererImpl::OnResume() {
 void AudioRendererImpl::DecodedAudioReady(
     AudioBufferStream::Status status,
     const scoped_refptr<AudioBuffer>& buffer) {
-  DVLOG(2) << __FUNCTION__ << "(" << status << ")";
+  DVLOG(2) << __func__ << "(" << status << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   base::AutoLock auto_lock(lock_);
@@ -578,7 +597,7 @@ void AudioRendererImpl::DecodedAudioReady(
   if (expecting_config_changes_) {
     if (last_decoded_sample_rate_ &&
         buffer->sample_rate() != last_decoded_sample_rate_) {
-      DVLOG(1) << __FUNCTION__ << " Updating audio sample_rate."
+      DVLOG(1) << __func__ << " Updating audio sample_rate."
                << " ts:" << buffer->timestamp().InMicroseconds()
                << " old:" << last_decoded_sample_rate_
                << " new:" << buffer->sample_rate();
@@ -664,7 +683,7 @@ bool AudioRendererImpl::HandleSplicerBuffer_Locked(
 
   // Store the timestamp of the first packet so we know when to start actual
   // audio playback.
-  if (first_packet_timestamp_ == kNoTimestamp())
+  if (first_packet_timestamp_ == kNoTimestamp)
     first_packet_timestamp_ = buffer->timestamp();
 
   const size_t memory_usage = algorithm_->GetMemoryUsage();
@@ -733,7 +752,7 @@ bool AudioRendererImpl::CanRead_Locked() {
 }
 
 void AudioRendererImpl::SetPlaybackRate(double playback_rate) {
-  DVLOG(1) << __FUNCTION__ << "(" << playback_rate << ")";
+  DVLOG(1) << __func__ << "(" << playback_rate << ")";
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK_GE(playback_rate, 0);
   DCHECK(sink_.get());
@@ -771,7 +790,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
                               uint32_t frames_delayed,
                               uint32_t frames_skipped) {
   const int frames_requested = audio_bus->frames();
-  DVLOG(4) << __FUNCTION__ << " frames_delayed:" << frames_delayed
+  DVLOG(4) << __func__ << " frames_delayed:" << frames_delayed
            << " frames_skipped:" << frames_skipped
            << " frames_requested:" << frames_requested;
 
@@ -809,7 +828,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
     // Delay playback by writing silence if we haven't reached the first
     // timestamp yet; this can occur if the video starts before the audio.
     if (algorithm_->frames_buffered() > 0) {
-      CHECK_NE(first_packet_timestamp_, kNoTimestamp());
+      CHECK_NE(first_packet_timestamp_, kNoTimestamp);
       CHECK_GE(first_packet_timestamp_, base::TimeDelta());
       const base::TimeDelta play_delay =
           first_packet_timestamp_ - audio_clock_->back_timestamp();
@@ -863,7 +882,7 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
     int frames_after_end_of_stream = 0;
     if (frames_written == 0) {
       if (received_end_of_stream_) {
-        if (ended_timestamp_ == kInfiniteDuration())
+        if (ended_timestamp_ == kInfiniteDuration)
           ended_timestamp_ = audio_clock_->back_timestamp();
         frames_after_end_of_stream = frames_requested;
       } else if (state_ == kPlaying &&
@@ -871,6 +890,10 @@ int AudioRendererImpl::Render(AudioBus* audio_bus,
         algorithm_->IncreaseQueueCapacity();
         SetBufferingState_Locked(BUFFERING_HAVE_NOTHING);
       }
+    } else if (frames_written < frames_requested && !received_end_of_stream_) {
+      // If we only partially filled the request and should have more data, go
+      // ahead and increase queue capacity to try and meet the next request.
+      algorithm_->IncreaseQueueCapacity();
     }
 
     audio_clock_->WroteAudio(frames_written + frames_after_end_of_stream,
@@ -939,7 +962,7 @@ void AudioRendererImpl::HandleAbortedReadOrDecodeError(PipelineStatus status) {
 }
 
 void AudioRendererImpl::ChangeState_Locked(State new_state) {
-  DVLOG(1) << __FUNCTION__ << " : " << state_ << " -> " << new_state;
+  DVLOG(1) << __func__ << " : " << state_ << " -> " << new_state;
   lock_.AssertAcquired();
   state_ = new_state;
 }
@@ -962,7 +985,7 @@ void AudioRendererImpl::OnConfigChange() {
 
 void AudioRendererImpl::SetBufferingState_Locked(
     BufferingState buffering_state) {
-  DVLOG(1) << __FUNCTION__ << " : " << buffering_state_ << " -> "
+  DVLOG(1) << __func__ << " : " << buffering_state_ << " -> "
            << buffering_state;
   DCHECK_NE(buffering_state_, buffering_state);
   lock_.AssertAcquired();

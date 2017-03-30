@@ -1,5 +1,5 @@
 <link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
-<link rel="import" href="/settings_root_css.html">
+<link rel="import" href="/settings_vars_css.html">
 
 <!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
@@ -27,6 +27,63 @@
         background-color: var(--paper-grey-300);
       }
 
+      paper-toggle-button {
+        @apply(--settings-actionable);
+      }
+
+      paper-dropdown-menu {
+        --iron-icon-fill-color: var(--paper-grey-600);
+        --paper-font-subhead: {
+          font-size: inherit;
+        };
+        --paper-input-container-underline: {
+          background: var(--paper-grey-300);
+        };
+      }
+
+      iron-dropdown .dropdown-content,
+      paper-dropdown-menu paper-listbox {
+        min-width: 128px;
+        padding: 8px 0;
+      }
+
+      iron-dropdown .dropdown-item,
+      paper-dropdown-menu .dropdown-item {
+        align-items: center;
+        background: none;
+        border: none;
+        color: var(--paper-grey-800);
+        display: flex;
+        font: inherit;
+        min-height: 32px;
+        padding: 0 24px;
+        text-align: start;
+        width: 100%;
+      }
+
+      paper-dropdown-menu .dropdown-item.iron-selected {
+        font-weight: bold;
+      }
+
+      iron-dropdown .dropdown-item:focus,
+      paper-dropdown-menu .dropdown-item:focus {
+        @apply(--cr-selectable-focus);
+      }
+
+      iron-dropdown .dropdown-content {
+        background-color: white;
+        box-shadow: 0 2px 6px var(--paper-grey-500);
+      }
+
+      iron-dropdown .dropdown-content .dropdown-item:not([disabled]),
+      iron-dropdown .dropdown-content paper-item {
+        @apply(--settings-actionable);
+      }
+
+      iron-dropdown .dropdown-content .dropdown-item[disabled] {
+        opacity: var(--settings-disabled-opacity);
+      }
+
       span ~ a {
         -webkit-margin-start: 4px;
       }
@@ -35,32 +92,28 @@
       [is='action-link']:active,
       [is='action-link']:hover,
       [is='action-link']:visited,
-      paper-button.primary-button,
-      paper-button.tertiary-button {
+      .primary-button,
+      .tertiary-button {
         color: var(--google-blue-700);
       }
 
-      paper-button.primary-button,
-      paper-button.tertiary-button {
+      .primary-button,
+      .tertiary-button {
         --paper-button-flat-keyboard-focus: {
-          background-color: rgba(51, 103, 214, .12);  /* --google-blue-700 */
+          background: rgba(51, 103, 214, .12);  /* --google-blue-700 */
         };
       }
 
       [is='action-link']:hover {
-        /* TODO(dbeam): check with bettes@ on this one, but I'm pretty sure we
-         * shouldn't be showing much :hover stuff on Polymer pages. */
         text-decoration: none;
       }
 
-      /*
-       * There are three main button styles, .primary-button, .secondary-button,
+      /* There are three main button styles, .primary-button, .secondary-button,
        * and .tertiary-button. The primary is the action button (e.g. "edit",
        * "delete") while the secondary is often a "Cancel" button. A tertiary
        * button may be used to get more information or similar, that we expect
-       * most users will not need.
-       */
-      paper-button.primary-button {
+       * most users will not need. */
+      .primary-button {
         --paper-button: {
           font-weight: 500;
           text-align: start;
@@ -68,28 +121,28 @@
       }
 
       /* See notes in .primary-button. */
-      paper-button.secondary-button {
+      .secondary-button {
         --paper-button: {
           color: var(--paper-grey-600);
           text-decoration: none;
           font-weight: 500;
         };
         --paper-button-flat-keyboard-focus: {
-          background-color: rgba(0, 0, 0, .12);
+          background: rgba(0, 0, 0, .12);
         };
       }
 
       /* See notes in .primary-button. */
-      paper-button.tertiary-button {
+      .tertiary-button {
         --paper-button: {
           font-weight: 400;
           text-decoration: none;
         };
       }
 
-      .settings-box paper-button.primary-button,
-      .settings-box paper-button.secondary-button,
-      .settings-box paper-button.secondary-button {
+      .settings-box .primary-button,
+      .settings-box .secondary-button,
+      .settings-box .secondary-button {
         margin-left: -12px;
         margin-right: -12px;
         padding-left: 12px;
@@ -128,18 +181,13 @@
         text-align: end;
       }
 
-      /*
-       * A list-frame is an outer container for list-items. It is intended to be
+      /* A list-frame is an outer container for list-items. It is intended to be
        * outside of a settings-box. A list-frame is likely to follow a
-       * settings box.
-       */
+       * settings box. */
       .list-frame {
-        -webkit-padding-end: 20px;
-        -webkit-padding-start: 56px;
+        @apply(--settings-list-frame-padding);
         align-items: center;
         display: block;
-        padding-bottom: 0;
-        padding-top: 0;
       }
 
       .list-frame .secondary,
@@ -147,10 +195,8 @@
         @apply(--settings-secondary);
       }
 
-      /*
-       * A list-item is intended to be contained within a list-frame. The list
-       * frame will setup the initial start margin.
-       */
+      /* A list-item is intended to be contained within a list-frame. The list
+       * frame will setup the initial start margin. */
       .list-item {
         align-items: center;
         display: flex;
@@ -172,7 +218,7 @@
       }
 
       /* The middle part (horizontally) of a list item. */
-      .list-item > .middle {
+      .list-item .middle {
         flex: 1;
         margin: 8px 16px;
       }
@@ -183,7 +229,7 @@
       }
 
       .list-item > label span[disabled] {
-        opacity: .65;  /* TODO(michaelpg): check this value with bettes. */
+        opacity: var(--settings-disabled-opacity);
       }
 
       .list-item > paper-icon-item {
@@ -192,15 +238,14 @@
 
       /* This button has no ink ripple. */
       .list-item.list-button {
+        @apply(--settings-actionable);
         align-items: center;
         color: var(--google-blue-500);
         font-weight: 500;
       }
 
-      /*
-       * A settings-box is a horizontal row of text or controls within a
-       * setting section (page or subpage).
-       */
+      /* A settings-box is a horizontal row of text or controls within a
+       * setting section (page or subpage). */
       .settings-box {
         align-items: center;
         border-top: var(--settings-separator-line);
@@ -209,11 +254,9 @@
         padding: 0 20px;
       }
 
-      /*
-       * We use an explicit tag to remove the top border, rather than a
+      /* We use an explicit tag to remove the top border, rather than a
        * :first-of-type modifier. This is a conscious choice, please consult
-       * with dbeam@ or dschuyler@ prior to changing it.
-       */
+       * with dbeam@ or dschuyler@ prior to changing it. */
       .settings-box.first,
       .settings-box.continuation {
         border-top: none;
@@ -223,15 +266,20 @@
         display: block;
       }
 
-      /*
-       * A row with two lines of text. Often the lower line will be .secondary.
+      /* A row with two lines of text. Often the lower line will be .secondary.
        */
       .settings-box.two-line {
-        min-height: 56px;
+        min-height: var(--settings-row-two-line-min-height);
       }
 
-      [actionable] {
-        @apply(--settings-actionable);
+      /*
+       * A settings box with a single start-aligned column, generally but not
+       * necessarily used in combination with two-line.
+       */
+      .settings-box.single-column {
+        align-items: flex-start;
+        flex-direction: column;
+        justify-content: center;
       }
 
       /* The lower line of text in a .settings-box.two-line. */
@@ -260,11 +308,11 @@
        *  | Main action area .settings-box    | .secondary-action |
        *  +-------------------------------------------------------+
        *  | Another setting-box without a secondary-action        |
-       *  +-------------------------------------------------------+
-       */
+       *  +-------------------------------------------------------+ */
       .settings-box .secondary-action {
         -webkit-border-start: var(--settings-separator-line);
         -webkit-padding-start: 20px;
+        flex-shrink: 0;
       }
 
       .settings-box paper-item iron-icon {
@@ -296,6 +344,40 @@
         background-size: contain;
         height: 16px;
         width: 16px;
+      }
+
+      .search-bubble {
+        position: absolute;
+        z-index: 1;
+      }
+
+      .search-bubble-innards {
+        align-items: center;
+        background-color: var(--paper-yellow-500);
+        border-radius: 2px;
+        padding: 4px 10px;
+        text-align: center;
+        width: 100px;
+      }
+
+      /* Provides the arrow which points at the anchor element. */
+      .search-bubble-innards::after {
+        -webkit-transform: rotate(-45deg);
+        background-color: var(--paper-yellow-500);
+        content: '';
+        height: 10px;
+        left: 55px;
+        position: absolute;
+        top: -5px;
+        width: 10px;
+      }
+
+      /* Turns the arrow direction downwards, when the bubble is placed above
+       * the anchor element */
+      .search-bubble-innards.above::after {
+        -webkit-transform: rotate(-135deg);
+        bottom: -5px;
+        top: auto;
       }
     </style>
   </template>

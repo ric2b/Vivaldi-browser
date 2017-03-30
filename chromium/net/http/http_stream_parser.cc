@@ -245,8 +245,7 @@ int HttpStreamParser::SendRequest(const std::string& request_line,
                  base::Unretained(&headers),
                  &request_line));
 
-  DVLOG(1) << __FUNCTION__ << "()"
-           << " request_line = \"" << request_line << "\""
+  DVLOG(1) << __func__ << "() request_line = \"" << request_line << "\""
            << " headers = \"" << headers.ToString() << "\"";
   response_ = response;
 
@@ -333,6 +332,7 @@ int HttpStreamParser::ReadResponseHeaders(const CompletionCallback& callback) {
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
   DCHECK_EQ(0, read_buf_unused_offset_);
+  DCHECK(SendRequestBuffersEmpty());
 
   // This function can be called with io_state_ == STATE_DONE if the
   // connection is closed after seeing just a 1xx response code.
@@ -369,6 +369,7 @@ int HttpStreamParser::ReadResponseBody(IOBuffer* buf, int buf_len,
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
   DCHECK_LE(buf_len, kMaxBufSize);
+  DCHECK(SendRequestBuffersEmpty());
   // Added to investigate crbug.com/499663.
   CHECK(buf);
 
@@ -409,19 +410,27 @@ int HttpStreamParser::DoLoop(int result) {
       case STATE_SEND_HEADERS:
         DCHECK_EQ(OK, result);
         result = DoSendHeaders();
+        DCHECK_NE(STATE_NONE, io_state_);
         break;
       case STATE_SEND_HEADERS_COMPLETE:
         result = DoSendHeadersComplete(result);
+        DCHECK_NE(STATE_NONE, io_state_);
         break;
       case STATE_SEND_BODY:
         DCHECK_EQ(OK, result);
         result = DoSendBody();
+        DCHECK_NE(STATE_NONE, io_state_);
         break;
       case STATE_SEND_BODY_COMPLETE:
         result = DoSendBodyComplete(result);
+        DCHECK_NE(STATE_NONE, io_state_);
         break;
       case STATE_SEND_REQUEST_READ_BODY_COMPLETE:
         result = DoSendRequestReadBodyComplete(result);
+        DCHECK_NE(STATE_NONE, io_state_);
+        break;
+      case STATE_SEND_REQUEST_COMPLETE:
+        result = DoSendRequestComplete(result);
         break;
       case STATE_READ_HEADERS:
         net_log_.BeginEvent(NetLog::TYPE_HTTP_STREAM_PARSER_READ_HEADERS);
@@ -475,6 +484,7 @@ int HttpStreamParser::DoSendHeadersComplete(int result) {
     // the headers were sent, but not all of the body way, and |result| is
     // an error that this should try reading after, stash the error for now and
     // act like the request was successfully sent.
+    io_state_ = STATE_SEND_REQUEST_COMPLETE;
     if (request_headers_->BytesConsumed() >= request_headers_length_ &&
         ShouldTryReadingOnUploadError(result)) {
       upload_error_ = result;
@@ -506,6 +516,7 @@ int HttpStreamParser::DoSendHeadersComplete(int result) {
   }
 
   // Finished sending the request.
+  io_state_ = STATE_SEND_REQUEST_COMPLETE;
   return OK;
 }
 
@@ -520,6 +531,7 @@ int HttpStreamParser::DoSendBody() {
 
   if (request_->upload_data_stream->is_chunked() && sent_last_chunk_) {
     // Finished sending the request.
+    io_state_ = STATE_SEND_REQUEST_COMPLETE;
     return OK;
   }
 
@@ -534,6 +546,7 @@ int HttpStreamParser::DoSendBodyComplete(int result) {
   if (result < 0) {
     // If |result| is an error that this should try reading after, stash the
     // error for now and act like the request was successfully sent.
+    io_state_ = STATE_SEND_REQUEST_COMPLETE;
     if (ShouldTryReadingOnUploadError(result)) {
       upload_error_ = result;
       return OK;
@@ -551,8 +564,10 @@ int HttpStreamParser::DoSendBodyComplete(int result) {
 int HttpStreamParser::DoSendRequestReadBodyComplete(int result) {
   // |result| is the result of read from the request body from the last call to
   // DoSendBody().
-  if (result < 0)
+  if (result < 0) {
+    io_state_ = STATE_SEND_REQUEST_COMPLETE;
     return result;
+  }
 
   // Chunked data needs to be encoded.
   if (request_->upload_data_stream->is_chunked()) {
@@ -574,11 +589,21 @@ int HttpStreamParser::DoSendRequestReadBodyComplete(int result) {
     DCHECK(request_->upload_data_stream->IsEOF());
     DCHECK(!request_->upload_data_stream->is_chunked());
     // Finished sending the request.
+    io_state_ = STATE_SEND_REQUEST_COMPLETE;
   } else if (result > 0) {
     request_body_send_buf_->DidAppend(result);
     result = 0;
     io_state_ = STATE_SEND_BODY;
   }
+  return result;
+}
+
+int HttpStreamParser::DoSendRequestComplete(int result) {
+  DCHECK_NE(result, ERR_IO_PENDING);
+  request_headers_ = nullptr;
+  request_body_send_buf_ = nullptr;
+  request_body_read_buf_ = nullptr;
+
   return result;
 }
 
@@ -1008,9 +1033,8 @@ int HttpStreamParser::ParseResponseHeaders(int end_offset) {
     response_->connection_info = HttpResponseInfo::CONNECTION_INFO_HTTP1_1;
   }
   response_->vary_data.Init(*request_, *response_->headers);
-  DVLOG(1) << __FUNCTION__ << "()"
-           << " content_length = \"" << response_->headers->GetContentLength()
-           << "\n\""
+  DVLOG(1) << __func__ << "() content_length = \""
+           << response_->headers->GetContentLength() << "\n\""
            << " headers = \"" << GetResponseHeaderLines(*response_->headers)
            << "\"";
   return OK;
@@ -1192,6 +1216,11 @@ void HttpStreamParser::ValidateStatusLine(const std::string& status_line) {
       HttpStatusLineValidator::ValidateStatusLine(status_line);
   UMA_HISTOGRAM_ENUMERATION("Net.HttpStatusLineStatus", status,
                             HttpStatusLineValidator::STATUS_LINE_MAX);
+}
+
+bool HttpStreamParser::SendRequestBuffersEmpty() {
+  return request_headers_ == nullptr && request_body_send_buf_ == nullptr &&
+         request_body_send_buf_ == nullptr;
 }
 
 }  // namespace net

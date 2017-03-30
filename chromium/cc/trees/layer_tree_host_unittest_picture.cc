@@ -24,7 +24,7 @@ class LayerTreeHostPictureTest : public LayerTreeTest {
     root_picture_layer_->SetBounds(size);
     root->AddChild(root_picture_layer_);
 
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree()->SetRootLayer(root);
     client_.set_bounds(size);
   }
 
@@ -62,7 +62,7 @@ class LayerTreeHostPictureTestTwinLayer
         scoped_refptr<FakePictureLayer> picture =
             FakePictureLayer::Create(&client_);
         picture_id2_ = picture->id();
-        layer_tree_host()->root_layer()->AddChild(picture);
+        layer_tree()->root_layer()->AddChild(picture);
         break;
       }
       case 4:
@@ -158,7 +158,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
     picture_->SetBounds(gfx::Size(768, 960));
     root->AddChild(picture_);
 
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
   }
 
@@ -190,7 +190,7 @@ class LayerTreeHostPictureTestResizeViewportWithGpuRaster
         // Change the picture layer's size along with the viewport, so it will
         // consider picking a new tile size.
         picture_->SetBounds(gfx::Size(768, 1056));
-        layer_tree_host()->SetViewportSize(gfx::Size(768, 1056));
+        layer_tree()->SetViewportSize(gfx::Size(768, 1056));
         break;
       case 2:
         EndTest();
@@ -226,7 +226,7 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
     // force it to have a transform node by making it scrollable.
     picture_->SetScrollClipLayerId(root->id());
 
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
     client_.set_bounds(picture_->bounds());
   }
@@ -250,7 +250,11 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
         // Make the bottom of the layer visible.
         gfx::Transform transform;
         transform.Translate(0.f, -100000.f + 100.f);
-        picture_impl->OnTransformAnimated(transform);
+        impl->active_tree()
+            ->property_trees()
+            ->transform_tree.OnTransformAnimated(
+                transform, picture_impl->transform_tree_index(),
+                impl->active_tree());
         impl->SetNeedsRedraw();
         break;
       }
@@ -261,7 +265,11 @@ class LayerTreeHostPictureTestChangeLiveTilesRectWithRecycleTree
         EXPECT_FALSE(tiling->TileAt(0, 0));
 
         // Make the top of the layer visible again.
-        picture_impl->OnTransformAnimated(gfx::Transform());
+        impl->active_tree()
+            ->property_trees()
+            ->transform_tree.OnTransformAnimated(
+                gfx::Transform(), picture_impl->transform_tree_index(),
+                impl->active_tree());
         impl->SetNeedsRedraw();
         break;
       }
@@ -330,7 +338,7 @@ class LayerTreeHostPictureTestRSLLMembership : public LayerTreeHostPictureTest {
     picture_->SetBounds(gfx::Size(100, 100));
     child_->AddChild(picture_);
 
-    layer_tree_host()->SetRootLayer(root);
+    layer_tree()->SetRootLayer(root);
     LayerTreeHostPictureTest::SetupTree();
   }
 
@@ -421,10 +429,10 @@ class LayerTreeHostPictureTestRSLLMembershipWithScale
     picture_->SetBounds(gfx::Size(100, 100));
     pinch_->AddChild(picture_);
 
-    layer_tree_host()->RegisterViewportLayers(NULL, page_scale_layer, pinch_,
-                                              nullptr);
-    layer_tree_host()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
-    layer_tree_host()->SetRootLayer(root_clip);
+    layer_tree()->RegisterViewportLayers(NULL, page_scale_layer, pinch_,
+                                         nullptr);
+    layer_tree()->SetPageScaleFactorAndLimits(1.f, 1.f, 4.f);
+    layer_tree()->SetRootLayer(root_clip);
     LayerTreeHostPictureTest::SetupTree();
     client_.set_bounds(picture_->bounds());
   }

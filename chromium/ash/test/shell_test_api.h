@@ -7,18 +7,12 @@
 
 #include "base/macros.h"
 
-namespace app_list {
-class AppListPresenter;
-}
-
 namespace ash {
 class AshNativeCursorManager;
 class DragDropController;
 class MaximizeModeWindowManager;
 class SessionStateDelegate;
 class ScreenPositionController;
-class ShelfDelegate;
-class ShelfModel;
 class Shell;
 class SystemGestureEventFilter;
 class WorkspaceController;
@@ -34,14 +28,9 @@ class ShellTestApi {
   WorkspaceController* workspace_controller();
   ScreenPositionController* screen_position_controller();
   AshNativeCursorManager* ash_native_cursor_manager();
-  ShelfModel* shelf_model();
   DragDropController* drag_drop_controller();
-  app_list::AppListPresenter* app_list_presenter();
   MaximizeModeWindowManager* maximize_mode_window_manager();
   void DisableDisplayAnimator();
-
-  // Set ShelfDelegate.
-  void SetShelfDelegate(ShelfDelegate* delegate);
 
   // Set SessionStateDelegate.
   void SetSessionStateDelegate(SessionStateDelegate* session_state_delegate);

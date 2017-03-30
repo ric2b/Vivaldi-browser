@@ -1,0 +1,133 @@
+template("command_base") {
+  forward_variables_from(invoker, "*")
+
+  command_args = args
+  if (defined(deps)) {
+    command_deps = deps
+  }
+  if (defined(sources)) {
+    command_sources = sources
+  }
+  if (defined(cwd)) {
+    command_cwd = cwd
+  }
+  command_inputs = inputs
+  command_outputs = outputs
+  action(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    script = "//vivaldi/scripts/run_node.py"
+    if (defined(command_deps)) {
+      deps = []
+      deps = command_deps
+    }
+    inputs = []
+    inputs = command_inputs
+    outputs = []
+    outputs = command_outputs
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    args = []
+    if (defined(command_cwd)) {
+      args += [
+        "--cwd",
+        rebase_path(command_cwd, root_build_dir),
+      ]
+    }
+
+    args += [ command ] + command_args
+  }
+}
+
+template("command_action") {
+  forward_variables_from(invoker, "*")
+  command_name = command
+  command_args = args
+  if (defined(deps)) {
+    command_deps = deps
+  }
+  if (defined(sources)) {
+    command_sources = sources
+  }
+  if (defined(cwd)) {
+    command_cwd = cwd
+  }
+  command_inputs = inputs
+  command_outputs = outputs
+  command_base(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    if (defined(command_cwd)) {
+      cwd = command_cwd
+      command = rebase_path(command_name, cwd)
+    } else {
+      command = rebase_path(command_name, root_build_dir)
+    }
+    if (defined(command_deps)) {
+      deps = []
+      deps = command_deps
+    }
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    inputs = []
+    inputs = command_inputs
+    outputs = []
+    outputs = command_outputs
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    args = []
+    args = command_args
+  }
+}
+
+template("command_bash") {
+  forward_variables_from(invoker, "*")
+  command_name = command
+  command_args = args
+  if (defined(deps)) {
+    command_deps = deps
+  }
+  if (defined(sources)) {
+    command_sources = sources
+  }
+  if (defined(cwd)) {
+    command_cwd = cwd
+  }
+  command_inputs = inputs
+  command_outputs = outputs
+  command_base(target_name) {
+    forward_variables_from(invoker, [ "testonly" ])
+    command = "bash"
+    if (defined(command_cwd)) {
+      cwd = command_cwd
+      script = rebase_path(command_name, cwd)
+    } else {
+      script = rebase_path(command_name, root_build_dir)
+    }
+    if (defined(command_deps)) {
+      deps = []
+      deps = command_deps
+    }
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    inputs = []
+    inputs = command_inputs
+    outputs = []
+    outputs = command_outputs
+    if (defined(command_sources)) {
+      sources = []
+      sources = command_sources
+    }
+    args = []
+    args = [
+             "--",
+             script,
+           ] + command_args
+  }
+}

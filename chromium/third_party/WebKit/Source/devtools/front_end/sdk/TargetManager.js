@@ -15,21 +15,24 @@ WebInspector.TargetManager = function()
     this._targets = [];
     /** @type {!Array.<!WebInspector.TargetManager.Observer>} */
     this._observers = [];
-    this._observerTypeSymbol = Symbol("observerType");
-    /** @type {!Object.<string, !Array.<{modelClass: !Function, thisObject: (!Object|undefined), listener: function(!WebInspector.Event)}>>} */
-    this._modelListeners = {};
+    this._observerCapabiliesMaskSymbol = Symbol("observerCapabilitiesMask");
+    /** @type {!Map<symbol, !Array<{modelClass: !Function, thisObject: (!Object|undefined), listener: function(!WebInspector.Event)}>>} */
+    this._modelListeners = new Map();
     this._isSuspended = false;
 }
 
+/** @enum {symbol} */
 WebInspector.TargetManager.Events = {
-    InspectedURLChanged: "InspectedURLChanged",
-    MainFrameNavigated: "MainFrameNavigated",
-    Load: "Load",
-    PageReloadRequested: "PageReloadRequested",
-    WillReloadPage: "WillReloadPage",
-    TargetDisposed: "TargetDisposed",
-    SuspendStateChanged: "SuspendStateChanged"
+    InspectedURLChanged: Symbol("InspectedURLChanged"),
+    MainFrameNavigated: Symbol("MainFrameNavigated"),
+    Load: Symbol("Load"),
+    PageReloadRequested: Symbol("PageReloadRequested"),
+    WillReloadPage: Symbol("WillReloadPage"),
+    TargetDisposed: Symbol("TargetDisposed"),
+    SuspendStateChanged: Symbol("SuspendStateChanged")
 }
+
+WebInspector.TargetManager._listenersSymbol = Symbol("WebInspector.TargetManager.Listeners");
 
 WebInspector.TargetManager.prototype = {
     suspendAllTargets: function()
@@ -80,31 +83,18 @@ WebInspector.TargetManager.prototype = {
     /**
      * @return {string}
      */
-    inspectedPageURL: function()
+    inspectedURL: function()
     {
-        if (!this._targets.length)
-            return "";
-
-        return this._targets[0].resourceTreeModel.inspectedPageURL();
+        return this._targets[0] ? this._targets[0].inspectedURL() : "";
     },
 
     /**
-     * @return {string}
-     */
-    inspectedPageDomain: function()
-    {
-        if (!this._targets.length)
-            return "";
-
-        return this._targets[0].resourceTreeModel.inspectedPageDomain();
-    },
-
-    /**
+     * @param {!WebInspector.TargetManager.Events} eventName
      * @param {!WebInspector.Event} event
      */
-    _redispatchEvent: function(event)
+    _redispatchEvent: function(eventName, event)
     {
-        this.dispatchEventToListeners(event.type, event.data);
+        this.dispatchEventToListeners(eventName, event.data);
     },
 
     /**
@@ -113,13 +103,19 @@ WebInspector.TargetManager.prototype = {
      */
     reloadPage: function(bypassCache, injectedScript)
     {
-        if (this._targets.length)
-            this._targets[0].resourceTreeModel.reloadPage(bypassCache, injectedScript);
+        if (!this._targets.length)
+            return;
+
+        var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(this._targets[0]);
+        if (!resourceTreeModel)
+            return;
+
+        resourceTreeModel.reloadPage(bypassCache, injectedScript);
     },
 
     /**
      * @param {!Function} modelClass
-     * @param {string} eventType
+     * @param {symbol} eventType
      * @param {function(!WebInspector.Event)} listener
      * @param {!Object=} thisObject
      */
@@ -130,20 +126,20 @@ WebInspector.TargetManager.prototype = {
             if (model)
                 model.addEventListener(eventType, listener, thisObject);
         }
-        if (!this._modelListeners[eventType])
-            this._modelListeners[eventType] = [];
-        this._modelListeners[eventType].push({ modelClass: modelClass, thisObject: thisObject, listener: listener });
+        if (!this._modelListeners.has(eventType))
+            this._modelListeners.set(eventType, []);
+        this._modelListeners.get(eventType).push({ modelClass: modelClass, thisObject: thisObject, listener: listener });
     },
 
     /**
      * @param {!Function} modelClass
-     * @param {string} eventType
+     * @param {symbol} eventType
      * @param {function(!WebInspector.Event)} listener
      * @param {!Object=} thisObject
      */
     removeModelListener: function(modelClass, eventType, listener, thisObject)
     {
-        if (!this._modelListeners[eventType])
+        if (!this._modelListeners.has(eventType))
             return;
 
         for (var i = 0; i < this._targets.length; ++i) {
@@ -152,25 +148,25 @@ WebInspector.TargetManager.prototype = {
                 model.removeEventListener(eventType, listener, thisObject);
         }
 
-        var listeners = this._modelListeners[eventType];
+        var listeners = this._modelListeners.get(eventType);
         for (var i = 0; i < listeners.length; ++i) {
             if (listeners[i].modelClass === modelClass && listeners[i].listener === listener && listeners[i].thisObject === thisObject)
                 listeners.splice(i--, 1);
         }
         if (!listeners.length)
-            delete this._modelListeners[eventType];
+            this._modelListeners.delete(eventType);
     },
 
     /**
      * @param {!WebInspector.TargetManager.Observer} targetObserver
-     * @param {number=} type
+     * @param {number=} capabilitiesMask
      */
-    observeTargets: function(targetObserver, type)
+    observeTargets: function(targetObserver, capabilitiesMask)
     {
-        if (this._observerTypeSymbol in targetObserver)
+        if (this._observerCapabiliesMaskSymbol in targetObserver)
             throw new Error("Observer can only be registered once");
-        targetObserver[this._observerTypeSymbol] = type || 0x7fff;
-        this.targets(type).forEach(targetObserver.targetAdded.bind(targetObserver));
+        targetObserver[this._observerCapabiliesMaskSymbol] = capabilitiesMask || 0;
+        this.targets(capabilitiesMask).forEach(targetObserver.targetAdded.bind(targetObserver));
         this._observers.push(targetObserver);
     },
 
@@ -179,42 +175,46 @@ WebInspector.TargetManager.prototype = {
      */
     unobserveTargets: function(targetObserver)
     {
-        delete targetObserver[this._observerTypeSymbol];
+        delete targetObserver[this._observerCapabiliesMaskSymbol];
         this._observers.remove(targetObserver);
     },
 
     /**
      * @param {string} name
-     * @param {number} type
+     * @param {number} capabilitiesMask
      * @param {!InspectorBackendClass.Connection} connection
      * @param {?WebInspector.Target} parentTarget
      * @return {!WebInspector.Target}
      */
-    createTarget: function(name, type, connection, parentTarget)
+    createTarget: function(name, capabilitiesMask, connection, parentTarget)
     {
-        var target = new WebInspector.Target(this, name, type, connection, parentTarget);
+        var target = new WebInspector.Target(this, name, capabilitiesMask, connection, parentTarget);
 
         /** @type {!WebInspector.ConsoleModel} */
         target.consoleModel = new WebInspector.ConsoleModel(target);
-        /** @type {!WebInspector.NetworkManager} */
-        target.networkManager = new WebInspector.NetworkManager(target);
-        /** @type {!WebInspector.ResourceTreeModel} */
-        target.resourceTreeModel = new WebInspector.ResourceTreeModel(target);
-        /** @type {!WebInspector.NetworkLog} */
-        target.networkLog = new WebInspector.NetworkLog(target);
-
         /** @type {!WebInspector.RuntimeModel} */
         target.runtimeModel = new WebInspector.RuntimeModel(target);
-        if (target.hasJSContext())
+
+        var networkManager = null;
+        var resourceTreeModel = null;
+        if (target.hasNetworkCapability())
+            networkManager = new WebInspector.NetworkManager(target);
+        if (networkManager && target.hasDOMCapability()) {
+            resourceTreeModel = new WebInspector.ResourceTreeModel(target, networkManager, WebInspector.SecurityOriginManager.fromTarget(target));
+            new WebInspector.NetworkLog(target, resourceTreeModel, networkManager);
+        }
+
+        if (target.hasJSCapability())
             new WebInspector.DebuggerModel(target);
 
-        if (target.type() === WebInspector.Target.Type.Page) {
-            new WebInspector.DOMModel(target);
-            new WebInspector.CSSModel(target);
+        if (resourceTreeModel) {
+            var domModel = new WebInspector.DOMModel(target);
+            // TODO(eostroukhov) CSSModel should not depend on RTM
+            new WebInspector.CSSModel(target, domModel);
         }
 
         /** @type {?WebInspector.WorkerManager} */
-        target.workerManager = !target.isDedicatedWorker() ? new WebInspector.WorkerManager(target) : null;
+        target.workerManager = target.hasWorkerCapability() ? new WebInspector.WorkerManager(target) : null;
         /** @type {!WebInspector.CPUProfilerModel} */
         target.cpuProfilerModel = new WebInspector.CPUProfilerModel(target);
         /** @type {!WebInspector.HeapProfilerModel} */
@@ -222,7 +222,7 @@ WebInspector.TargetManager.prototype = {
 
         target.tracingManager = new WebInspector.TracingManager(target);
 
-        if (target.isPage())
+        if (target.hasBrowserCapability())
             target.serviceWorkerManager = new WebInspector.ServiceWorkerManager(target);
 
         this.addTarget(target);
@@ -230,17 +230,12 @@ WebInspector.TargetManager.prototype = {
     },
 
     /**
-     * @param {number} type
+     * @param {!WebInspector.Target} target
      * @return {!Array<!WebInspector.TargetManager.Observer>}
      */
-    _observersByType: function(type)
+    _observersForTarget: function(target)
     {
-        var result = [];
-        for (var observer of this._observers) {
-            if (observer[this._observerTypeSymbol] & type)
-                result.push(observer);
-        }
-        return result;
+        return this._observers.filter((observer) => target.hasAllCapabilities(observer[this._observerCapabiliesMaskSymbol] || 0));
     },
 
     /**
@@ -249,24 +244,37 @@ WebInspector.TargetManager.prototype = {
     addTarget: function(target)
     {
         this._targets.push(target);
-        if (this._targets.length === 1) {
-            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.InspectedURLChanged, this._redispatchEvent, this);
-            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._redispatchEvent, this);
-            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.Load, this._redispatchEvent, this);
-            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.PageReloadRequested, this._redispatchEvent, this);
-            target.resourceTreeModel.addEventListener(WebInspector.ResourceTreeModel.EventTypes.WillReloadPage, this._redispatchEvent, this);
+        var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(target);
+        if (this._targets.length === 1 && resourceTreeModel) {
+            resourceTreeModel[WebInspector.TargetManager._listenersSymbol] = [
+                setupRedispatch.call(this, WebInspector.ResourceTreeModel.Events.MainFrameNavigated, WebInspector.TargetManager.Events.MainFrameNavigated),
+                setupRedispatch.call(this, WebInspector.ResourceTreeModel.Events.Load, WebInspector.TargetManager.Events.Load),
+                setupRedispatch.call(this, WebInspector.ResourceTreeModel.Events.PageReloadRequested, WebInspector.TargetManager.Events.PageReloadRequested),
+                setupRedispatch.call(this, WebInspector.ResourceTreeModel.Events.WillReloadPage, WebInspector.TargetManager.Events.WillReloadPage)
+            ];
         }
-        var copy = this._observersByType(target.type());
+        var copy = this._observersForTarget(target);
         for (var i = 0; i < copy.length; ++i)
             copy[i].targetAdded(target);
 
-        for (var eventType in this._modelListeners) {
-            var listeners = this._modelListeners[eventType];
+        for (var pair of this._modelListeners) {
+            var listeners = pair[1];
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target.model(listeners[i].modelClass);
                 if (model)
-                    model.addEventListener(eventType, listeners[i].listener, listeners[i].thisObject);
+                    model.addEventListener(pair[0], listeners[i].listener, listeners[i].thisObject);
             }
+        }
+
+        /**
+         * @param {!WebInspector.ResourceTreeModel.Events} sourceEvent
+         * @param {!WebInspector.TargetManager.Events} targetEvent
+         * @return {!WebInspector.EventTarget.EventDescriptor}
+         * @this {WebInspector.TargetManager}
+         */
+        function setupRedispatch(sourceEvent, targetEvent)
+        {
+            return resourceTreeModel.addEventListener(sourceEvent, this._redispatchEvent.bind(this, targetEvent));
         }
     },
 
@@ -276,63 +284,35 @@ WebInspector.TargetManager.prototype = {
     removeTarget: function(target)
     {
         this._targets.remove(target);
-        if (this._targets.length === 0) {
-            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.InspectedURLChanged, this._redispatchEvent, this);
-            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.MainFrameNavigated, this._redispatchEvent, this);
-            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.Load, this._redispatchEvent, this);
-            target.resourceTreeModel.removeEventListener(WebInspector.ResourceTreeModel.EventTypes.WillReloadPage, this._redispatchEvent, this);
-        }
-        var copy = this._observersByType(target.type());
+        var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(target);
+        var treeModelListeners = resourceTreeModel && resourceTreeModel[WebInspector.TargetManager._listenersSymbol];
+        if (treeModelListeners)
+            WebInspector.EventTarget.removeEventListeners(treeModelListeners);
+
+        var copy = this._observersForTarget(target);
         for (var i = 0; i < copy.length; ++i)
             copy[i].targetRemoved(target);
 
-        for (var eventType in this._modelListeners) {
-            var listeners = this._modelListeners[eventType];
+        for (var pair of this._modelListeners) {
+            var listeners = pair[1];
             for (var i = 0; i < listeners.length; ++i) {
                 var model = target.model(listeners[i].modelClass);
                 if (model)
-                    model.removeEventListener(eventType, listeners[i].listener, listeners[i].thisObject);
+                    model.removeEventListener(pair[0], listeners[i].listener, listeners[i].thisObject);
             }
         }
     },
 
     /**
-     * @param {number=} type
-     * @return {boolean}
-     */
-    hasTargets: function(type)
-    {
-        return !!this.targets(type).length;
-    },
-
-    /**
-     * @param {number=} type
+     * @param {number=} capabilitiesMask
      * @return {!Array.<!WebInspector.Target>}
      */
-    targets: function(type)
+    targets: function(capabilitiesMask)
     {
-        if (!type)
+        if (!capabilitiesMask)
             return this._targets.slice();
-
-        var result = [];
-        for (var target of this._targets) {
-            if (target.type() & type)
-                result.push(target);
-        }
-        return result;
-    },
-
-    /**
-     * @return {!Array.<!WebInspector.Target>}
-     */
-    targetsWithJSContext: function()
-    {
-        var result = [];
-        for (var target of this._targets) {
-            if (target.hasJSContext())
-                result.push(target);
-        }
-        return result;
+        else
+            return this._targets.filter((target) => target.hasAllCapabilities(capabilitiesMask || 0));
     },
 
     /**
@@ -355,6 +335,26 @@ WebInspector.TargetManager.prototype = {
     mainTarget: function()
     {
         return this._targets[0] || null;
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    suspendReload: function(target)
+    {
+        var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(target);
+        if (resourceTreeModel)
+            resourceTreeModel.suspendReload();
+    },
+
+    /**
+     * @param {!WebInspector.Target} target
+     */
+    resumeReload: function(target)
+    {
+        var resourceTreeModel = WebInspector.ResourceTreeModel.fromTarget(target);
+        if (resourceTreeModel)
+            setImmediate(resourceTreeModel.resumeReload.bind(resourceTreeModel));
     },
 
     __proto__: WebInspector.Object.prototype

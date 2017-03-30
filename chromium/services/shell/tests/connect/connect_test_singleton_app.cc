@@ -3,22 +3,21 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
-#include "mojo/public/c/system/main.h"
-#include "services/shell/public/cpp/application_runner.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/c/main.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 
 namespace shell {
 
-class ConnectTestSingletonApp : public ShellClient {
+class ConnectTestSingletonApp : public Service {
  public:
   ConnectTestSingletonApp() {}
   ~ConnectTestSingletonApp() override {}
 
  private:
-  // shell::ShellClient:
-  void Initialize(Connector* connector, const Identity& identity,
-                  uint32_t id) override {}
-  bool AcceptConnection(Connection* connection) override {
+  // shell::Service:
+  bool OnConnect(const Identity& remote_identity,
+                 InterfaceRegistry* registry) override {
     return true;
   }
 
@@ -28,7 +27,7 @@ class ConnectTestSingletonApp : public ShellClient {
 }  // namespace shell
 
 
-MojoResult MojoMain(MojoHandle shell_handle) {
-  return shell::ApplicationRunner(new shell::ConnectTestSingletonApp)
-      .Run(shell_handle);
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  shell::ServiceRunner runner(new shell::ConnectTestSingletonApp);
+  return runner.Run(service_request_handle);
 }

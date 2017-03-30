@@ -100,7 +100,7 @@ error::Error GLES2DecoderImpl::HandleBindFramebuffer(
   (void)c;
   GLenum target = static_cast<GLenum>(c.target);
   GLuint framebuffer = c.framebuffer;
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glBindFramebuffer", target, "target");
     return error::kNoError;
   }
@@ -343,7 +343,7 @@ error::Error GLES2DecoderImpl::HandleCheckFramebufferStatus(
   if (!result_dst) {
     return error::kOutOfBounds;
   }
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glCheckFramebufferStatus", target,
                                     "target");
     return error::kNoError;
@@ -1106,7 +1106,7 @@ error::Error GLES2DecoderImpl::HandleCopyTexSubImage3D(
     LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCopyTexSubImage3D", "height < 0");
     return error::kNoError;
   }
-  glCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width,
+  DoCopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y, width,
                       height);
   return error::kNoError;
 }
@@ -1457,7 +1457,7 @@ error::Error GLES2DecoderImpl::HandleFramebufferRenderbuffer(
   GLenum attachment = static_cast<GLenum>(c.attachment);
   GLenum renderbuffertarget = static_cast<GLenum>(c.renderbuffertarget);
   GLuint renderbuffer = c.renderbuffer;
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferRenderbuffer", target,
                                     "target");
     return error::kNoError;
@@ -1488,7 +1488,7 @@ error::Error GLES2DecoderImpl::HandleFramebufferTexture2D(
   GLenum textarget = static_cast<GLenum>(c.textarget);
   GLuint texture = c.texture;
   GLint level = static_cast<GLint>(c.level);
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferTexture2D", target, "target");
     return error::kNoError;
   }
@@ -1519,7 +1519,7 @@ error::Error GLES2DecoderImpl::HandleFramebufferTextureLayer(
   GLuint texture = c.texture;
   GLint level = static_cast<GLint>(c.level);
   GLint layer = static_cast<GLint>(c.layer);
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferTextureLayer", target,
                                     "target");
     return error::kNoError;
@@ -1566,7 +1566,11 @@ error::Error GLES2DecoderImpl::HandleGenBuffersImmediate(
   if (buffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, buffers) || !GenBuffersHelper(n, buffers)) {
+  auto buffers_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* buffers_safe = buffers_copy.get();
+  std::copy(buffers, buffers + n, buffers_safe);
+  if (!CheckUniqueAndNonNullIds(n, buffers_safe) ||
+      !GenBuffersHelper(n, buffers_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1603,8 +1607,11 @@ error::Error GLES2DecoderImpl::HandleGenFramebuffersImmediate(
   if (framebuffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, framebuffers) ||
-      !GenFramebuffersHelper(n, framebuffers)) {
+  auto framebuffers_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* framebuffers_safe = framebuffers_copy.get();
+  std::copy(framebuffers, framebuffers + n, framebuffers_safe);
+  if (!CheckUniqueAndNonNullIds(n, framebuffers_safe) ||
+      !GenFramebuffersHelper(n, framebuffers_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1626,8 +1633,11 @@ error::Error GLES2DecoderImpl::HandleGenRenderbuffersImmediate(
   if (renderbuffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, renderbuffers) ||
-      !GenRenderbuffersHelper(n, renderbuffers)) {
+  auto renderbuffers_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* renderbuffers_safe = renderbuffers_copy.get();
+  std::copy(renderbuffers, renderbuffers + n, renderbuffers_safe);
+  if (!CheckUniqueAndNonNullIds(n, renderbuffers_safe) ||
+      !GenRenderbuffersHelper(n, renderbuffers_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1651,8 +1661,11 @@ error::Error GLES2DecoderImpl::HandleGenSamplersImmediate(
   if (samplers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, samplers) ||
-      !GenSamplersHelper(n, samplers)) {
+  auto samplers_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* samplers_safe = samplers_copy.get();
+  std::copy(samplers, samplers + n, samplers_safe);
+  if (!CheckUniqueAndNonNullIds(n, samplers_safe) ||
+      !GenSamplersHelper(n, samplers_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1674,8 +1687,11 @@ error::Error GLES2DecoderImpl::HandleGenTexturesImmediate(
   if (textures == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, textures) ||
-      !GenTexturesHelper(n, textures)) {
+  auto textures_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* textures_safe = textures_copy.get();
+  std::copy(textures, textures + n, textures_safe);
+  if (!CheckUniqueAndNonNullIds(n, textures_safe) ||
+      !GenTexturesHelper(n, textures_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1699,8 +1715,11 @@ error::Error GLES2DecoderImpl::HandleGenTransformFeedbacksImmediate(
   if (ids == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, ids) ||
-      !GenTransformFeedbacksHelper(n, ids)) {
+  auto ids_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* ids_safe = ids_copy.get();
+  std::copy(ids, ids + n, ids_safe);
+  if (!CheckUniqueAndNonNullIds(n, ids_safe) ||
+      !GenTransformFeedbacksHelper(n, ids_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1870,17 +1889,17 @@ error::Error GLES2DecoderImpl::HandleGetFramebufferAttachmentParameteriv(
   Result* result = GetSharedMemoryAs<Result*>(
       c.params_shm_id, c.params_shm_offset, Result::ComputeSize(num_values));
   GLint* params = result ? result->GetData() : NULL;
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetFramebufferAttachmentParameteriv",
                                     target, "target");
     return error::kNoError;
   }
-  if (!validators_->attachment.IsValid(attachment)) {
+  if (!validators_->attachment_query.IsValid(attachment)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetFramebufferAttachmentParameteriv",
                                     attachment, "attachment");
     return error::kNoError;
   }
-  if (!validators_->frame_buffer_parameter.IsValid(pname)) {
+  if (!validators_->framebuffer_parameter.IsValid(pname)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glGetFramebufferAttachmentParameteriv",
                                     pname, "pname");
     return error::kNoError;
@@ -2520,7 +2539,7 @@ error::Error GLES2DecoderImpl::HandleInvalidateFramebufferImmediate(
   }
   const GLenum* attachments =
       GetImmediateDataAs<const GLenum*>(c, data_size, immediate_data_size);
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glInvalidateFramebuffer", target,
                                     "target");
     return error::kNoError;
@@ -2562,7 +2581,7 @@ error::Error GLES2DecoderImpl::HandleInvalidateSubFramebufferImmediate(
   GLint y = static_cast<GLint>(c.y);
   GLsizei width = static_cast<GLsizei>(c.width);
   GLsizei height = static_cast<GLsizei>(c.height);
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glInvalidateSubFramebuffer", target,
                                     "target");
     return error::kNoError;
@@ -4688,7 +4707,7 @@ error::Error GLES2DecoderImpl::HandleFramebufferTexture2DMultisampleEXT(
   GLuint texture = c.texture;
   GLint level = static_cast<GLint>(c.level);
   GLsizei samples = static_cast<GLsizei>(c.samples);
-  if (!validators_->frame_buffer_target.IsValid(target)) {
+  if (!validators_->framebuffer_target.IsValid(target)) {
     LOCAL_SET_GL_ERROR_INVALID_ENUM("glFramebufferTexture2DMultisampleEXT",
                                     target, "target");
     return error::kNoError;
@@ -4769,8 +4788,11 @@ error::Error GLES2DecoderImpl::HandleGenQueriesEXTImmediate(
   if (queries == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, queries) ||
-      !GenQueriesEXTHelper(n, queries)) {
+  auto queries_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* queries_safe = queries_copy.get();
+  std::copy(queries, queries + n, queries_safe);
+  if (!CheckUniqueAndNonNullIds(n, queries_safe) ||
+      !GenQueriesEXTHelper(n, queries_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -4892,8 +4914,11 @@ error::Error GLES2DecoderImpl::HandleGenVertexArraysOESImmediate(
   if (arrays == NULL) {
     return error::kOutOfBounds;
   }
-  if (!CheckUniqueAndNonNullIds(n, arrays) ||
-      !GenVertexArraysOESHelper(n, arrays)) {
+  auto arrays_copy = base::MakeUnique<GLuint[]>(n);
+  GLuint* arrays_safe = arrays_copy.get();
+  std::copy(arrays, arrays + n, arrays_safe);
+  if (!CheckUniqueAndNonNullIds(n, arrays_safe) ||
+      !GenVertexArraysOESHelper(n, arrays_safe)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -5150,6 +5175,35 @@ error::Error GLES2DecoderImpl::HandleConsumeTextureCHROMIUMImmediate(
     return error::kOutOfBounds;
   }
   DoConsumeTextureCHROMIUM(target, mailbox);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCreateAndConsumeTextureINTERNALImmediate(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::CreateAndConsumeTextureINTERNALImmediate& c = *static_cast<
+      const gles2::cmds::CreateAndConsumeTextureINTERNALImmediate*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLuint texture = static_cast<GLuint>(c.texture);
+  uint32_t data_size;
+  if (!GLES2Util::ComputeDataSize(1, sizeof(GLbyte), 64, &data_size)) {
+    return error::kOutOfBounds;
+  }
+  if (data_size > immediate_data_size) {
+    return error::kOutOfBounds;
+  }
+  const GLbyte* mailbox =
+      GetImmediateDataAs<const GLbyte*>(c, data_size, immediate_data_size);
+  if (!validators_->texture_bind_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCreateAndConsumeTextureINTERNAL", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (mailbox == NULL) {
+    return error::kOutOfBounds;
+  }
+  DoCreateAndConsumeTextureINTERNAL(target, texture, mailbox);
   return error::kNoError;
 }
 
@@ -5512,13 +5566,12 @@ GLES2DecoderImpl::HandleUniformMatrix4fvStreamTextureMatrixCHROMIUMImmediate(
   if (data_size > immediate_data_size) {
     return error::kOutOfBounds;
   }
-  const GLfloat* default_value =
+  const GLfloat* transform =
       GetImmediateDataAs<const GLfloat*>(c, data_size, immediate_data_size);
-  if (default_value == NULL) {
+  if (transform == NULL) {
     return error::kOutOfBounds;
   }
-  DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(location, transpose,
-                                                default_value);
+  DoUniformMatrix4fvStreamTextureMatrixCHROMIUM(location, transpose, transform);
   return error::kNoError;
 }
 

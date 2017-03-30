@@ -7,6 +7,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 
 #include "base/id_map.h"
 #include "base/macros.h"
@@ -16,6 +17,10 @@
 #include "content/common/content_export.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "media/blink/webmediaplayer_delegate.h"
+
+#if defined(OS_ANDROID)
+#include "base/time/time.h"
+#endif  // OS_ANDROID
 
 namespace blink {
 class WebMediaPlayer;
@@ -48,6 +53,7 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   void DidPause(int delegate_id, bool reached_end_of_stream) override;
   void PlayerGone(int delegate_id) override;
   bool IsHidden() override;
+  bool IsPlayingBackgroundVideo() override;
 
   // content::RenderFrameObserver overrides.
   void WasHidden() override;
@@ -64,6 +70,8 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
     return idle_cleanup_timer_.IsRunning();
   }
 
+  friend class RendererWebMediaPlayerDelegateTest;
+
  private:
   void OnMediaDelegatePause(int delegate_id);
   void OnMediaDelegatePlay(int delegate_id);
@@ -78,6 +86,9 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
 
   // Runs periodically to suspend idle delegates in |idle_delegate_map_|.
   void CleanupIdleDelegates();
+
+  // Setter for |is_playing_background_video_| that updates the metrics.
+  void SetIsPlayingBackgroundVideo(bool is_playing);
 
   bool has_played_media_ = false;
   IDMap<Observer> id_map_;
@@ -100,6 +111,21 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   // for testing.
   std::unique_ptr<base::DefaultTickClock> default_tick_clock_;
   base::TickClock* tick_clock_;
+
+  // If a video is playing in the background. Set when user resumes a video
+  // allowing it to play and reset when either user pauses it or it goes
+  // foreground.
+  bool is_playing_background_video_ = false;
+
+#if defined(OS_ANDROID)
+  // Keeps track of when the background video playback started for metrics.
+  base::TimeTicks background_video_playing_start_time_;
+#endif  // OS_ANDROID
+
+  // The currently playing local videos. Used to determine whether
+  // OnMediaDelegatePlay() should allow the videos to play in the background or
+  // not.
+  std::set<int> playing_videos_;
 
   DISALLOW_COPY_AND_ASSIGN(RendererWebMediaPlayerDelegate);
 };

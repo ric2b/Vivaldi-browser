@@ -22,6 +22,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "core/xmlhttprequest/XMLHttpRequest.h"
 #include "platform/TracedValue.h"
@@ -29,7 +30,6 @@
 #include "platform/network/ResourceLoadPriority.h"
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
-#include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/Vector.h"
 #include "wtf/text/TextPosition.h"
@@ -726,8 +726,8 @@ std::unique_ptr<TracedValue> InspectorFunctionCallEvent::data(ExecutionContext* 
         value->setString("functionName", toCoreString(functionName.As<v8::String>()));
     std::unique_ptr<SourceLocation> location = SourceLocation::fromFunction(originalFunction);
     value->setString("scriptId", String::number(location->scriptId()));
-    value->setString("scriptName", location->url());
-    value->setInteger("scriptLine", location->lineNumber());
+    value->setString("url", location->url());
+    value->setInteger("lineNumber", location->lineNumber());
     return value;
 }
 
@@ -839,7 +839,7 @@ std::unique_ptr<TracedValue> InspectorAnimationEvent::data(const Animation& anim
     std::unique_ptr<TracedValue> value = TracedValue::create();
     value->setString("id", String::number(animation.sequenceNumber()));
     value->setString("state", animation.playState());
-    if (const AnimationEffect* effect = animation.effect()) {
+    if (const AnimationEffectReadOnly* effect = animation.effect()) {
         value->setString("name", animation.id());
         if (effect->isKeyframeEffect()) {
             if (Element* target = toKeyframeEffect(effect)->target())

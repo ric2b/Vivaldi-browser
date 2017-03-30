@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
+#include "chrome/browser/installable/installable_logging.h"
 #include "ui/base/page_transition_types.h"
 
 namespace content {
@@ -95,11 +96,13 @@ class AppBannerSettingsHelper {
       ui::PageTransition transition_type);
 
   // Determine if the banner should be shown, given the recorded events for the
-  // supplied app.
-  static bool ShouldShowBanner(content::WebContents* web_contents,
-                               const GURL& origin_url,
-                               const std::string& package_name_or_start_url,
-                               base::Time time);
+  // supplied app. Returns an InstallableStatusCode indicated the reason why the
+  // banner shouldn't be shown, or NO_ERROR_DETECTED if it should be shown.
+  static InstallableStatusCode ShouldShowBanner(
+      content::WebContents* web_contents,
+      const GURL& origin_url,
+      const std::string& package_name_or_start_url,
+      base::Time time);
 
   // Gets the could have been shown events that are stored for the given package
   // or start url. This is only exposed for testing.
@@ -129,6 +132,14 @@ class AppBannerSettingsHelper {
       const GURL& origin_url,
       const std::string& package_name_or_start_url,
       base::Time time);
+
+  // Returns true if any site under |origin| was launched from homescreen in the
+  // last ten days. This allows services outside app banners to utilise the
+  // content setting that ensures app banners are not shown for sites which ave
+  // already been added to homescreen.
+  static bool WasLaunchedRecently(content::WebContents* web_contents,
+                                  const GURL& origin_url,
+                                  base::Time now);
 
   // Set the engagement weights assigned to direct and indirect navigations.
   static void SetEngagementWeights(double direct_engagement,

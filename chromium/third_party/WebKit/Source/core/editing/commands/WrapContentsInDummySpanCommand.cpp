@@ -26,6 +26,7 @@
 #include "core/editing/commands/WrapContentsInDummySpanCommand.h"
 
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/commands/ApplyStyleCommand.h"
 #include "core/html/HTMLSpanElement.h"
 
@@ -60,7 +61,7 @@ void WrapContentsInDummySpanCommand::doUnapply()
 {
     DCHECK(m_element);
 
-    if (!m_dummySpan || !m_element->hasEditableStyle())
+    if (!m_dummySpan || !hasEditableStyle(*m_element))
         return;
 
     NodeVector children;
@@ -76,7 +77,7 @@ void WrapContentsInDummySpanCommand::doReapply()
 {
     DCHECK(m_element);
 
-    if (!m_dummySpan || !m_element->hasEditableStyle())
+    if (!m_dummySpan || !hasEditableStyle(*m_element))
         return;
 
     executeApply();

@@ -4,9 +4,11 @@
 
 #include "chrome/browser/permissions/permission_util.h"
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
+#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/permission_type.h"
 
@@ -58,8 +60,6 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
     *out = PermissionType::NOTIFICATIONS;
   } else if (type == CONTENT_SETTINGS_TYPE_MIDI_SYSEX) {
     *out = PermissionType::MIDI_SYSEX;
-  } else if (type == CONTENT_SETTINGS_TYPE_PUSH_MESSAGING) {
-    *out = PermissionType::PUSH_MESSAGING;
   } else if (type == CONTENT_SETTINGS_TYPE_DURABLE_STORAGE) {
     *out = PermissionType::DURABLE_STORAGE;
   } else if (type == CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA) {
@@ -78,29 +78,61 @@ bool PermissionUtil::GetPermissionType(ContentSettingsType type,
   return true;
 }
 
-void PermissionUtil::SetContentSettingAndRecordRevocation(
+bool PermissionUtil::ShouldShowPersistenceToggle() {
+  return base::FeatureList::IsEnabled(
+      features::kDisplayPersistenceToggleInPermissionPrompts);
+}
+
+PermissionUtil::ScopedRevocationReporter::ScopedRevocationReporter(
     Profile* profile,
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type,
-    std::string resource_identifier,
-    ContentSetting setting) {
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile);
-  ContentSetting previous_value = map->GetContentSetting(
-      primary_url, secondary_url, content_type, resource_identifier);
+    PermissionSourceUI source_ui)
+    : profile_(profile),
+      primary_url_(primary_url),
+      secondary_url_(secondary_url),
+      content_type_(content_type),
+      source_ui_(source_ui) {
+  if (!primary_url_.is_valid() ||
+      (!secondary_url_.is_valid() && !secondary_url_.is_empty())) {
+    is_initially_allowed_ = false;
+    return;
+  }
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  ContentSetting initial_content_setting = settings_map->GetContentSetting(
+      primary_url_, secondary_url_, content_type_, std::string());
+  is_initially_allowed_ = initial_content_setting == CONTENT_SETTING_ALLOW;
+}
 
-  map->SetContentSettingDefaultScope(primary_url, secondary_url, content_type,
-                                     resource_identifier, setting);
+PermissionUtil::ScopedRevocationReporter::ScopedRevocationReporter(
+    Profile* profile,
+    const ContentSettingsPattern& primary_pattern,
+    const ContentSettingsPattern& secondary_pattern,
+    ContentSettingsType content_type,
+    PermissionSourceUI source_ui)
+    : ScopedRevocationReporter(
+          profile,
+          GURL(primary_pattern.ToString()),
+          GURL((secondary_pattern == ContentSettingsPattern::Wildcard())
+                   ? primary_pattern.ToString()
+                   : secondary_pattern.ToString()),
+          content_type,
+          source_ui) {}
 
-  ContentSetting final_value = map->GetContentSetting(
-      primary_url, secondary_url, content_type, resource_identifier);
-
-  if (previous_value == CONTENT_SETTING_ALLOW &&
-      final_value != CONTENT_SETTING_ALLOW) {
+PermissionUtil::ScopedRevocationReporter::~ScopedRevocationReporter() {
+  if (!is_initially_allowed_)
+    return;
+  HostContentSettingsMap* settings_map =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  ContentSetting final_content_setting = settings_map->GetContentSetting(
+      primary_url_, secondary_url_, content_type_, std::string());
+  if (final_content_setting != CONTENT_SETTING_ALLOW) {
     PermissionType permission_type;
-    if (PermissionUtil::GetPermissionType(content_type, &permission_type)) {
-      PermissionUmaUtil::PermissionRevoked(permission_type, primary_url);
+    if (PermissionUtil::GetPermissionType(content_type_, &permission_type)) {
+      PermissionUmaUtil::PermissionRevoked(permission_type, source_ui_,
+                                           primary_url_, profile_);
     }
   }
 }

@@ -2,16 +2,29 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/features.gni")
+
 assert(is_win)
 
 component("win") {
   defines = [ "MF_INITIALIZER_IMPLEMENTATION" ]
   set_sources_assignment_filter([])
   sources = [
+    "mf_helpers.cc",
+    "mf_helpers.h",
     "mf_initializer.cc",
     "mf_initializer.h",
     "mf_initializer_export.h",
   ]
+  if (system_proprietary_codecs) {
+    configs += [
+      "//media:media_implementation",
+    ]
+    sources += [
+      "mf_util.cc",
+      "mf_util.h",
+    ]
+  }
   set_sources_assignment_filter(sources_assignment_filter)
   configs += [
     # TODO(jschuh): https://crbug.com/167187 fix size_t to int truncations.

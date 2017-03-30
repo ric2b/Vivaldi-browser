@@ -18,6 +18,7 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/ntp_tiles/pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_json/safe_json_parser.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_ui.h"
@@ -66,9 +67,12 @@ void PopularSitesInternalsMessageHandler::HandleRegisterForEvents(
       content::BrowserThread::GetBlockingPool(), profile->GetPrefs(),
       TemplateURLServiceFactory::GetForProfile(profile),
       g_browser_process->variations_service(), profile->GetRequestContext(),
-      ChromePopularSites::GetDirectory(), false,
+      ChromePopularSites::GetDirectory(),
+      base::Bind(safe_json::SafeJsonParser::Parse)));
+  popular_sites_->StartFetch(
+      false,
       base::Bind(&PopularSitesInternalsMessageHandler::OnPopularSitesAvailable,
-                 base::Unretained(this), false)));
+                 base::Unretained(this), false));
 }
 
 void PopularSitesInternalsMessageHandler::HandleUpdate(
@@ -107,7 +111,9 @@ void PopularSitesInternalsMessageHandler::HandleUpdate(
       content::BrowserThread::GetBlockingPool(), prefs,
       TemplateURLServiceFactory::GetForProfile(profile),
       g_browser_process->variations_service(), profile->GetRequestContext(),
-      ChromePopularSites::GetDirectory(), true, callback));
+      ChromePopularSites::GetDirectory(),
+      base::Bind(safe_json::SafeJsonParser::Parse)));
+  popular_sites_->StartFetch(true, callback);
 }
 
 void PopularSitesInternalsMessageHandler::HandleViewJson(

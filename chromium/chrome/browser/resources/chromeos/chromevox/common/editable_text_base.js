@@ -352,14 +352,7 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
       this.speak(Msgs.getMsg('Unselected'), evt.triggeredByUser);
     } else if (this.getLineIndex(this.start) !=
         this.getLineIndex(evt.start)) {
-      // Moved to a different line; read it.
-      var lineValue = this.getLine(this.getLineIndex(evt.start));
-      if (lineValue == '') {
-        lineValue = Msgs.getMsg('text_box_blank');
-      } else if (/^\s+$/.test(lineValue)) {
-        lineValue = Msgs.getMsg('text_box_whitespace');
-      }
-      this.speak(lineValue, evt.triggeredByUser);
+      this.describeLine(this.getLineIndex(evt.start), evt.triggeredByUser);
     } else if (this.start == evt.start + 1 ||
         this.start == evt.start - 1) {
       // Moved by one character; read it.
@@ -424,6 +417,22 @@ cvox.ChromeVoxEditableTextBase.prototype.describeSelectionChanged =
       this.speak(Msgs.getMsg('selected'));
     }
   }
+};
+
+/**
+ * Describes a line given a line index and whether it was user triggered.
+ * @param {number} lineIndex
+ * @param {boolean} triggeredByUser
+ */
+cvox.ChromeVoxEditableTextBase.prototype.describeLine =
+    function(lineIndex, triggeredByUser) {
+  var lineValue = this.getLine(lineIndex);
+  if (lineValue == '') {
+    lineValue = Msgs.getMsg('text_box_blank');
+  } else if (/^\s+$/.test(lineValue)) {
+    lineValue = Msgs.getMsg('text_box_whitespace');
+  }
+  this.speak(lineValue, triggeredByUser);
 };
 
 
@@ -493,9 +502,18 @@ cvox.ChromeVoxEditableTextBase.prototype.describeTextChanged = function(evt) {
       evt.start == evtEnd &&
       evtValue.substr(0, prefixLen) == value.substr(0, prefixLen) &&
       evtValue.substr(newLen - suffixLen) ==
-      value.substr(len - suffixLen)) {
-    this.describeTextChangedHelper(
-        evt, prefixLen, suffixLen, autocompleteSuffix, personality);
+          value.substr(len - suffixLen)) {
+    // Forward deletions causes reading of the character immediately to the
+    // right of the caret or the deleted text depending on the iBeam cursor
+    // setting.
+    if (this.start == evt.start &&
+        this.end == evt.end &&
+        !cvox.ChromeVoxEditableTextBase.useIBeamCursor) {
+      this.speak(evt.value[evt.start], evt.triggeredByUser);
+    } else {
+      this.describeTextChangedHelper(
+          evt, prefixLen, suffixLen, autocompleteSuffix, personality);
+    }
     return;
   }
 

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "core/loader/DocumentLoader.h"
+
+#include "core/page/Page.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderClient.h"
@@ -10,7 +13,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 #include <queue>
 
 namespace blink {
@@ -34,7 +37,7 @@ protected:
 
     WebLocalFrameImpl* mainFrame()
     {
-        return m_webViewHelper.webViewImpl()->mainFrameImpl();
+        return m_webViewHelper.webView()->mainFrameImpl();
     }
 
     FrameTestHelpers::WebViewHelper m_webViewHelper;
@@ -47,7 +50,7 @@ TEST_F(DocumentLoaderTest, SingleChunk)
         void didReceiveData(WebURLLoaderClient* originalClient, WebURLLoader* loader, const char* data, int dataLength, int encodedDataLength) override
         {
             EXPECT_EQ(34, dataLength) << "foo.html was not served in a single chunk";
-            originalClient->didReceiveData(loader, data, dataLength, encodedDataLength);
+            originalClient->didReceiveData(loader, data, dataLength, encodedDataLength, dataLength);
         }
     } delegate;
 
@@ -71,7 +74,7 @@ TEST_F(DocumentLoaderTest, MultiChunkNoReentrancy)
             EXPECT_EQ(34, dataLength) << "foo.html was not served in a single chunk";
             // Chunk the reply into one byte chunks.
             for (int i = 0; i < dataLength; ++i)
-                originalClient->didReceiveData(loader, &data[i], 1, 1);
+                originalClient->didReceiveData(loader, &data[i], 1, 1, 1);
         }
     } delegate;
 
@@ -108,7 +111,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
                 // Serve the first byte to the real WebURLLoaderCLient, which
                 // should trigger frameDetach() due to committing a provisional
                 // load.
-                TemporaryChange<bool> dispatching(m_dispatchingDidReceiveData, true);
+                AutoReset<bool> dispatching(&m_dispatchingDidReceiveData, true);
                 dispatchOneByte();
             }
             // Serve the remaining bytes to complete the load.
@@ -118,7 +121,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
         }
 
         // WebFrameClient overrides:
-        void frameDetached(WebFrame* frame, DetachType detachType) override
+        void frameDetached(WebLocalFrame* frame, DetachType detachType) override
         {
             if (m_dispatchingDidReceiveData) {
                 // This should be called by the first didReceiveData() call, since
@@ -138,7 +141,7 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
         {
             char c = m_data.front();
             m_data.pop();
-            m_loaderClient->didReceiveData(m_loader, &c, 1, 1);
+            m_loaderClient->didReceiveData(m_loader, &c, 1, 1, 1);
         }
 
         bool servedReentrantly() const { return m_servedReentrantly; }
@@ -165,6 +168,12 @@ TEST_F(DocumentLoaderTest, MultiChunkWithReentrancy)
     // delegate is a WebFrameClient and stack-allocated, so manually reset() the
     // WebViewHelper here.
     m_webViewHelper.reset();
+}
+
+TEST_F(DocumentLoaderTest, isCommittedButEmpty)
+{
+    WebViewImpl* webViewImpl = m_webViewHelper.initializeAndLoad("about:blank", true);
+    EXPECT_TRUE(toLocalFrame(webViewImpl->page()->mainFrame())->loader().documentLoader()->isCommittedButEmpty());
 }
 
 } // namespace blink

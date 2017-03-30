@@ -6,15 +6,16 @@
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_CLEAR_BROWSING_DATA_HANDLER_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/scoped_observer.h"
-#include "chrome/browser/browsing_data/browsing_data_counter.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/browsing_data/core/counters/browsing_data_counter.h"
 #include "components/prefs/pref_change_registrar.h"
 
 namespace base {
@@ -29,7 +30,6 @@ namespace settings {
 
 // Chrome browser startup settings handler.
 class ClearBrowsingDataHandler : public SettingsPageUIHandler,
-                                 public BrowsingDataRemover::Observer,
                                  public sync_driver::SyncServiceObserver {
  public:
   explicit ClearBrowsingDataHandler(content::WebUI* webui);
@@ -41,12 +41,16 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   void OnJavascriptDisallowed() override;
 
  private:
+  // Observes one |remover| task initiated from ClearBrowsingDataHandler.
+  // Calls |callback| when the task is finished.
+  class TaskObserver;
+
   // Clears browsing data, called by Javascript.
   void HandleClearBrowsingData(const base::ListValue* value);
 
-  // BrowsingDataRemover::Observer implementation.
-  // Re-enables clear button once all requested data has been removed.
-  void OnBrowsingDataRemoverDone() override;
+  // Called when a clearing task finished. |webui_callback_id| is provided
+  // by the WebUI action that initiated it.
+  void OnClearingTaskFinished(const std::string& webui_callback_id);
 
   // Updates UI when the pref to allow clearing history changes.
   virtual void OnBrowsingHistoryPrefChanged();
@@ -72,28 +76,25 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   void UpdateHistoryDeletionDialog(bool show);
 
   // Adds a browsing data |counter|.
-  void AddCounter(std::unique_ptr<BrowsingDataCounter> counter);
+  void AddCounter(std::unique_ptr<browsing_data::BrowsingDataCounter> counter);
 
   // Updates a counter text according to the |result|.
-  void UpdateCounterText(std::unique_ptr<BrowsingDataCounter::Result> result);
+  void UpdateCounterText(
+      std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result);
 
   // Cached profile corresponding to the WebUI of this handler.
   Profile* profile_;
 
   // Counters that calculate the data volume for individual data types.
-  std::vector<std::unique_ptr<BrowsingDataCounter>> counters_;
+  std::vector<std::unique_ptr<browsing_data::BrowsingDataCounter>> counters_;
+
+  // Observes the currently active data clearing task.
+  std::unique_ptr<TaskObserver> task_observer_;
 
   // ProfileSyncService to observe sync state changes.
   ProfileSyncService* sync_service_;
   ScopedObserver<ProfileSyncService, sync_driver::SyncServiceObserver>
       sync_service_observer_;
-
-  // If non-null it means removal is in progress.
-  BrowsingDataRemover* remover_;
-
-  // The WebUI callback ID of the last performClearBrowserData request. There
-  // can only be one such request in-flight.
-  std::string webui_callback_id_;
 
   // Used to listen for pref changes to allow / disallow deleting browsing data.
   PrefChangeRegistrar profile_pref_registrar_;

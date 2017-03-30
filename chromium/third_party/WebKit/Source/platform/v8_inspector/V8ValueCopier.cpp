@@ -4,7 +4,7 @@
 
 #include "platform/v8_inspector/V8ValueCopier.h"
 
-namespace blink {
+namespace v8_inspector {
 
 namespace {
 
@@ -101,4 +101,4 @@ v8::Maybe<bool> createDataProperty(v8::Local<v8::Context> context, v8::Local<v8:
     return array->CreateDataProperty(context, index, value);
 }
 
-} // namespace blink
+} // namespace v8_inspector

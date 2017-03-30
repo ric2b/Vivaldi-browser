@@ -15,21 +15,11 @@
       '<(grit_out_dir)/net_internals_resources.pak',
       '<(grit_out_dir)/password_manager_internals_resources.pak',
       '<(grit_out_dir)/policy_resources.pak',
-      '<(grit_out_dir)/settings_strings.pak',
       '<(grit_out_dir)/translate_internals_resources.pak',
       '<@(repack_extra_resources)',
     ],
     'pak_output': '<(SHARED_INTERMEDIATE_DIR)/repack/resources.pak',
     'conditions': [
-      ['branding=="Chrome"', {
-        'pak_inputs': [
-          '<(grit_out_dir)/settings_google_chrome_strings.pak',
-        ],
-      }, {
-        'pak_inputs': [
-          '<(grit_out_dir)/settings_chromium_strings.pak',
-        ],
-      }],
       ['chromeos==1', {
         'pak_inputs': [
           '<(SHARED_INTERMEDIATE_DIR)/ui/file_manager/file_manager_resources.pak',
@@ -58,7 +48,6 @@
         'pak_inputs': [
           '<(SHARED_INTERMEDIATE_DIR)/extensions/extensions_renderer_resources.pak',
           '<(SHARED_INTERMEDIATE_DIR)/extensions/extensions_resources.pak',
-          '<(grit_out_dir)/extensions_api_resources.pak',
         ],
       }],
     ],

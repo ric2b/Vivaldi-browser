@@ -23,7 +23,7 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestIntegerIndexedPrimaryGlobal::domTemplate, V8TestIntegerIndexedPrimaryGlobal::trace, V8TestIntegerIndexedPrimaryGlobal::traceWrappers, 0, 0, V8TestIntegerIndexedPrimaryGlobal::preparePrototypeAndInterfaceObject, nullptr, "TestIntegerIndexedPrimaryGlobal", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
+const WrapperTypeInfo V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo = { gin::kEmbedderBlink, V8TestIntegerIndexedPrimaryGlobal::domTemplate, V8TestIntegerIndexedPrimaryGlobal::trace, V8TestIntegerIndexedPrimaryGlobal::traceWrappers, 0, V8TestIntegerIndexedPrimaryGlobal::preparePrototypeAndInterfaceObject, nullptr, "TestIntegerIndexedPrimaryGlobal", 0, WrapperTypeInfo::WrapperTypeObjectPrototype, WrapperTypeInfo::ObjectClassId, WrapperTypeInfo::NotInheritFromActiveScriptWrappable, WrapperTypeInfo::NotInheritFromEventTarget, WrapperTypeInfo::Independent };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
@@ -32,6 +32,19 @@ const WrapperTypeInfo V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo = { gin
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
 const WrapperTypeInfo& TestIntegerIndexedPrimaryGlobal::s_wrapperTypeInfo = V8TestIntegerIndexedPrimaryGlobal::wrapperTypeInfo;
+
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, TestIntegerIndexedPrimaryGlobal>::value,
+    "TestIntegerIndexedPrimaryGlobal inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&TestIntegerIndexedPrimaryGlobal::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "TestIntegerIndexedPrimaryGlobal is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 
 namespace TestIntegerIndexedPrimaryGlobalV8Internal {
 
@@ -67,7 +80,7 @@ static void lengthAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Val
 static void voidMethodDocumentMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     if (UNLIKELY(info.Length() < 1)) {
-        V8ThrowException::throwException(createMinimumArityTypeErrorForMethod(info.GetIsolate(), "voidMethodDocument", "TestIntegerIndexedPrimaryGlobal", 1, info.Length()), info.GetIsolate());
+        V8ThrowException::throwException(info.GetIsolate(), createMinimumArityTypeErrorForMethod(info.GetIsolate(), "voidMethodDocument", "TestIntegerIndexedPrimaryGlobal", 1, info.Length()));
         return;
     }
     TestIntegerIndexedPrimaryGlobal* impl = V8TestIntegerIndexedPrimaryGlobal::toImpl(info.Holder());
@@ -185,7 +198,6 @@ v8::Local<v8::FunctionTemplate> V8TestIntegerIndexedPrimaryGlobal::domTemplateFo
 
     return namedPropertiesObjectFunctionTemplate;
 }
-
 
 bool V8TestIntegerIndexedPrimaryGlobal::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {

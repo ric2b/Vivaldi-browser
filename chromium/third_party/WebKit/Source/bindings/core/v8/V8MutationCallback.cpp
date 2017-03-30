@@ -63,12 +63,6 @@ void V8MutationCallback::call(const HeapVector<Member<MutationRecord>>& mutation
     if (m_callback.isEmpty())
         return;
     v8::Local<v8::Value> observerHandle = toV8(observer, m_scriptState->context()->Global(), isolate);
-    if (observerHandle.IsEmpty()) {
-        if (!isScriptControllerTerminating())
-            CRASH();
-        return;
-    }
-
     if (!observerHandle->IsObject())
         return;
 
@@ -80,7 +74,7 @@ void V8MutationCallback::call(const HeapVector<Member<MutationRecord>>& mutation
 
     v8::TryCatch exceptionCatcher(isolate);
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunction(getExecutionContext(), m_callback.newLocal(isolate), thisObject, WTF_ARRAY_LENGTH(argv), argv, isolate);
+    V8ScriptRunner::callFunction(m_callback.newLocal(isolate), getExecutionContext(), thisObject, WTF_ARRAY_LENGTH(argv), argv, isolate);
 }
 
 DEFINE_TRACE(V8MutationCallback)

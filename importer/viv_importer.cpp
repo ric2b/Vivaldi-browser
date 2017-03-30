@@ -3,6 +3,7 @@
 
 #include <stack>
 #include <string>
+#include <vector>
 
 #include "chrome/browser/importer/importer_list.h"
 
@@ -49,6 +50,7 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
           importer::COOKIES |
           importer::SEARCH_ENGINES*/;
 
+#if 0
   // Check if this profile need the master password
   DictionaryValueINIParser inifile_parser;
   base::FilePath ini_file(opera.source_path);
@@ -61,9 +63,15 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
       opera.services_supported |= importer::MASTER_PASSWORD;
     }
   }
+#else
+  // NOTE(pettern):
+  // If we import from a different profile, we can't check the default
+  // profile prefs file. Disable it for now until we have a better solution.
+  opera.services_supported |= importer::MASTER_PASSWORD;
+#endif
   profiles->push_back(opera);
 }
-}
+}  // namespace viv_importer
 
 bool ReadOperaIniFile(const base::FilePath &profile_dir,
                       DictionaryValueINIParser &target) {
@@ -110,60 +118,74 @@ void OperaImporter::StartImport(const importer::SourceProfile &source_profile,
     }
     // Read Inifile
     DictionaryValueINIParser inifile_parser;
-    if (!ReadOperaIniFile(profile_dir_, inifile_parser)) {
-      bridge_->NotifyEnded();
-      return;
+    if (ReadOperaIniFile(profile_dir_, inifile_parser)) {
+      const base::DictionaryValue &inifile = inifile_parser.root();
+
+      inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
+      inifile.GetString("MailBox.NotesFile", &notesfilename_);
+      std::string temp_val;
+      master_password_required_ =
+        (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
+                           &temp_val) &&
+         !temp_val.empty() && atoi(temp_val.c_str()) != 0);
+
+      inifile.GetString("User Prefs.WandStorageFile", &wandfilename_);
+      masterpassword_filename_ =
+          profile_dir_.AppendASCII("opcert6.dat").value();
+    } else {
+      master_password_required_ = false;
     }
-
-    const base::DictionaryValue &inifile = inifile_parser.root();
-
-    inifile.GetString("User Prefs.Hot List File Ver2", &bookmarkfilename_);
-    // Fallback to a bookmkarks.adr file in the profile directory
+    // Fallbacks if the ini file was not found or didn't have paths.
     if (bookmarkfilename_.empty()) {
       bookmarkfilename_ = profile_dir_.AppendASCII("bookmarks.adr").value();
     }
-
-    inifile.GetString("MailBox.NotesFile", &notesfilename_);
     if (notesfilename_.empty()) {
       notesfilename_ = profile_dir_.AppendASCII("notes.adr").value();
     }
-    std::string temp_val;
-    master_password_required_ =
-        (inifile.GetString("Security Prefs.Use Paranoid Mailpassword",
-                            &temp_val) &&
-          !temp_val.empty() && atoi(temp_val.c_str()) != 0);
-
-    if (!inifile.GetString("User Prefs.WandStorageFile", &wandfilename_)) {
+    if (wandfilename_.empty()) {
       wandfilename_ = profile_dir_.AppendASCII("wand.dat").value();
     }
-    masterpassword_filename_ = profile_dir_.AppendASCII("opcert6.dat").value();
   }
   bridge_->NotifyStarted();
 
+  std::string error;
+  bool success;
   if ((items & importer::FAVORITES) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::FAVORITES);
-    ImportBookMarks();
+    success = ImportBookMarks(error);
+    if (!success) {
+      bridge_->NotifyItemFailed(importer::FAVORITES, error);
+    }
     bridge_->NotifyItemEnded(importer::FAVORITES);
   }
   if ((items & importer::NOTES) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::NOTES);
-    ImportNotes();
+    success = ImportNotes(error);
+    if (!success) {
+      bridge_->NotifyItemFailed(importer::NOTES, error);
+    }
     bridge_->NotifyItemEnded(importer::NOTES);
   }
   if ((items & importer::PASSWORDS) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::PASSWORDS);
-    ImportWand();
+    success = ImportWand(error);
+    if (!success) {
+      bridge_->NotifyItemFailed(importer::PASSWORDS, error);
+    }
     bridge_->NotifyItemEnded(importer::PASSWORDS);
   }
   if ((items & importer::SPEED_DIAL) && !cancelled()) {
     bridge_->NotifyItemStarted(importer::SPEED_DIAL);
-    ImportSpeedDial();
+    success = ImportSpeedDial(error);
+    if (!success) {
+      bridge_->NotifyItemFailed(importer::SPEED_DIAL, error);
+    }
     bridge_->NotifyItemEnded(importer::SPEED_DIAL);
   }
   bridge_->NotifyEnded();
 }
 
-void OperaImporter::ImportSpeedDial() {
+bool OperaImporter::ImportSpeedDial(std::string& error) {
   std::vector<ImportedSpeedDialEntry> entries;
   DictionaryValueINIParser inifile_parser;
   base::FilePath ini_file(profile_dir_);
@@ -176,7 +198,8 @@ void OperaImporter::ImportSpeedDial() {
 
       if (key.find("Speed Dial ") != std::string::npos) {
         const base::DictionaryValue* dict = nullptr;
-        std::unique_ptr<ImportedSpeedDialEntry> entry(new ImportedSpeedDialEntry);
+        std::unique_ptr<ImportedSpeedDialEntry> entry(
+            new ImportedSpeedDialEntry);
         if (itr.value().GetAsDictionary(&dict)) {
           for (base::DictionaryValue::Iterator section(*dict);
                !section.IsAtEnd(); section.Advance()) {
@@ -194,8 +217,12 @@ void OperaImporter::ImportSpeedDial() {
         }
       }
     }
+  } else {
+    error = "Could not read speeddial.ini.";
+    return false;
   }
   if (!entries.empty() && !cancelled()) {
     bridge_->AddSpeedDial(entries);
   }
+  return true;
 }

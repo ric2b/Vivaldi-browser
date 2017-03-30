@@ -25,13 +25,14 @@ class ScriptWrappable;
     X(CustomEvent, Detail) \
     X(DOMException, Error) \
     X(ErrorEvent, Error) \
-    X(IDBObserver, Callback)              \
-    X(IntersectionObserver, Callback)     \
+    X(IDBObserver, Callback) \
+    X(IntersectionObserver, Callback) \
     X(MessageEvent, CachedData) \
-    X(MutationObserver, Callback)         \
-    X(PerformanceObserver, Callback)      \
+    X(MutationObserver, Callback) \
+    X(PerformanceObserver, Callback) \
     X(PrivateScriptRunner, IsInitialized) \
     X(SameObject, NotificationActions) \
+    X(SameObject, NotificationData) \
     X(SameObject, NotificationVibrate) \
     X(V8NodeFilterCondition, Filter)
 
@@ -81,7 +82,7 @@ public:
         // Returns the value of the private property if set, or undefined.
         v8::Local<v8::Value> getOrUndefined(v8::Local<v8::Context> context, v8::Local<v8::Object> object) const
         {
-            return v8CallOrCrash(object->GetPrivate(context, m_privateSymbol));
+            return object->GetPrivate(context, m_privateSymbol).ToLocalChecked();
         }
 
         // Returns the value of the private property if set, or an empty handle.

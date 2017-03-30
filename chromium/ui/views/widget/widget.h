@@ -8,7 +8,6 @@
 #include <map>
 #include <memory>
 #include <set>
-#include <stack>
 #include <string>
 #include <vector>
 
@@ -49,10 +48,6 @@ class Point;
 class Rect;
 }
 
-namespace mus {
-class Window;
-}
-
 namespace ui {
 class Accelerator;
 class Compositor;
@@ -62,7 +57,8 @@ class Layer;
 class NativeTheme;
 class OSExchangeData;
 class ThemeProvider;
-}
+class Window;
+}  // namespace ui
 
 namespace views {
 
@@ -245,7 +241,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     ui::WindowShowState show_state;
     gfx::NativeView parent;
     // Used only by mus and is necessitated by mus not being a NativeView.
-    mus::Window* parent_mus = nullptr;
+    ui::Window* parent_mus = nullptr;
     // Specifies the initial bounds of the Widget. Default is empty, which means
     // the NativeWidget may specify a default size. If the parent is specified,
     // |bounds| is in the parent's coordinate system. If the parent is not
@@ -482,8 +478,8 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   void StackBelow(gfx::NativeView native_view);
 
   // Sets a shape on the widget. Passing a NULL |shape| reverts the widget to
-  // be rectangular. Takes ownership of |shape|.
-  void SetShape(SkRegion* shape);
+  // be rectangular.
+  void SetShape(std::unique_ptr<SkRegion> shape);
 
   // Hides the widget then closes it after a return to the message loop.
   virtual void Close();
@@ -526,6 +522,12 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
 
   // Sets the widget to be visible on all work spaces.
   void SetVisibleOnAllWorkspaces(bool always_visible);
+
+  // Is this widget currently visible on all workspaces?
+  // A call to SetVisibleOnAllWorkspaces(true) won't necessarily mean
+  // IsVisbleOnAllWorkspaces() == true (for example, when the platform doesn't
+  // support workspaces).
+  bool IsVisibleOnAllWorkspaces() const;
 
   // Maximizes/minimizes/restores the window.
   void Maximize();

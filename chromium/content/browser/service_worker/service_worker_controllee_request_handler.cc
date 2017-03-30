@@ -27,6 +27,26 @@
 
 namespace content {
 
+namespace {
+
+bool MaybeForwardToServiceWorker(ServiceWorkerURLRequestJob* job,
+                                 const ServiceWorkerVersion* version) {
+  DCHECK(job);
+  DCHECK(version);
+  DCHECK_NE(version->fetch_handler_existence(),
+            ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN);
+  if (version->fetch_handler_existence() ==
+      ServiceWorkerVersion::FetchHandlerExistence::EXISTS) {
+    job->ForwardToServiceWorker();
+    return true;
+  }
+
+  job->FallbackToNetworkOrRenderer();
+  return false;
+}
+
+}  // namespace
+
 ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     base::WeakPtr<ServiceWorkerContextCore> context,
     base::WeakPtr<ServiceWorkerProviderHost> provider_host,
@@ -159,10 +179,10 @@ void ServiceWorkerControlleeRequestHandler::PrepareForMainResource(
                                 weak_factory_.GetWeakPtr()));
 }
 
-void
-ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
-    ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+void ServiceWorkerControlleeRequestHandler::
+    DidLookupRegistrationForMainResource(
+        ServiceWorkerStatusCode status,
+        scoped_refptr<ServiceWorkerRegistration> registration) {
   // The job may have been canceled and then destroyed before this was invoked.
   if (!job_)
     return;
@@ -263,14 +283,21 @@ ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
     return;
   }
 
-  ServiceWorkerMetrics::CountControlledPageLoad(
-      stripped_url_, active_version->has_fetch_handler(), is_main_frame_load_);
+  DCHECK_NE(active_version->fetch_handler_existence(),
+            ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN);
 
-  job_->ForwardToServiceWorker();
+  ServiceWorkerMetrics::CountControlledPageLoad(
+      active_version->site_for_uma(), stripped_url_, is_main_frame_load_);
+
+  bool is_forwarded =
+      MaybeForwardToServiceWorker(job_.get(), active_version.get());
+
   TRACE_EVENT_ASYNC_END2(
       "ServiceWorker",
       "ServiceWorkerControlleeRequestHandler::PrepareForMainResource",
-      job_.get(), "Status", status, "Info", "Forwarded to the ServiceWorker");
+      job_.get(), "Status", status, "Info",
+      (is_forwarded) ? "Forwarded to the ServiceWorker"
+                     : "Skipped the ServiceWorker which has no fetch handler");
 }
 
 void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
@@ -289,12 +316,15 @@ void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
     return;
   }
 
+  DCHECK_NE(version->fetch_handler_existence(),
+            ServiceWorkerVersion::FetchHandlerExistence::UNKNOWN);
   ServiceWorkerMetrics::CountControlledPageLoad(
-      stripped_url_, version->has_fetch_handler(), is_main_frame_load_);
+      version->site_for_uma(), stripped_url_, is_main_frame_load_);
 
   provider_host_->AssociateRegistration(registration,
                                         false /* notify_controllerchange */);
-  job_->ForwardToServiceWorker();
+
+  MaybeForwardToServiceWorker(job_.get(), version);
 }
 
 void ServiceWorkerControlleeRequestHandler::DidUpdateRegistration(
@@ -364,7 +394,7 @@ void ServiceWorkerControlleeRequestHandler::PrepareForSubResource() {
   DCHECK(job_.get());
   DCHECK(context_);
   DCHECK(provider_host_->active_version());
-  job_->ForwardToServiceWorker();
+  MaybeForwardToServiceWorker(job_.get(), provider_host_->active_version());
 }
 
 void ServiceWorkerControlleeRequestHandler::OnPrepareToRestart() {

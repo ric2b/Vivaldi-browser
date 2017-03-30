@@ -36,7 +36,7 @@ struct WebRect;
 }
 
 namespace test_runner {
-class WebTestProxyBase;
+class WebViewTestProxyBase;
 }
 
 namespace content {
@@ -116,7 +116,7 @@ class BlinkTestRunner : public RenderViewObserver,
   void SendBluetoothManualChooserEvent(const std::string& event,
                                        const std::string& argument) override;
   void SetFocus(blink::WebView* web_view, bool focus) override;
-  void SetAcceptAllCookies(bool accept) override;
+  void SetBlockThirdPartyCookies(bool block) override;
   std::string PathToLocalResource(const std::string& resource) override;
   void SetLocale(const std::string& locale) override;
   void OnLayoutTestRuntimeFlagsChanged(
@@ -152,7 +152,7 @@ class BlinkTestRunner : public RenderViewObserver,
   blink::WebPlugin* CreatePluginPlaceholder(
     blink::WebLocalFrame* frame,
     const blink::WebPluginParams& params) override;
-  float GetDeviceScaleFactorForTest() const override;
+  float GetDeviceScaleFactor() const override;
   void RunIdleTasks(const base::Closure& callback) override;
 
   // Resets a RenderView to a known state for layout tests. It is used both when

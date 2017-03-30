@@ -215,8 +215,9 @@ InspectorBackendClass.Connection = function()
     this._isConnected = true;
 }
 
+/** @enum {symbol} */
 InspectorBackendClass.Connection.Events = {
-    Disconnected: "Disconnected",
+    Disconnected: Symbol("Disconnected")
 }
 
 InspectorBackendClass.Connection.prototype = {
@@ -315,6 +316,17 @@ InspectorBackendClass.Connection.prototype = {
     sendMessage: function(messageObject)
     {
         throw "Not implemented";
+    },
+
+    /**
+     * @param {string} method
+     * @param {?Object} params
+     * @param {?function(...*)} callback
+     */
+    sendRawMessageForTesting: function(method, params, callback)
+    {
+        var domain = method.split(".")[0];
+        this._wrapCallbackAndSendMessageObject(domain, method, params, callback);
     },
 
     /**

@@ -276,7 +276,7 @@ GtkWidget* SelectFileDialogImplGTK::CreateFileOpenHelper(
                                   GTK_FILE_CHOOSER_ACTION_OPEN,
                                   "_Cancel", GTK_RESPONSE_CANCEL,
                                   "_Open", GTK_RESPONSE_ACCEPT,
-                                  NULL);
+                                  nullptr);
   SetGtkTransientForAura(dialog, parent);
   AddFilters(GTK_FILE_CHOOSER(dialog));
 
@@ -318,7 +318,7 @@ GtkWidget* SelectFileDialogImplGTK::CreateSelectFolderDialog(
                                   "_Cancel", GTK_RESPONSE_CANCEL,
                                   accept_button_label.c_str(),
                                   GTK_RESPONSE_ACCEPT,
-                                  NULL);
+                                  nullptr);
   SetGtkTransientForAura(dialog, parent);
 
   if (!default_path.empty()) {
@@ -372,7 +372,7 @@ GtkWidget* SelectFileDialogImplGTK::CreateSaveAsDialog(const std::string& title,
                                   GTK_FILE_CHOOSER_ACTION_SAVE,
                                   "_Cancel", GTK_RESPONSE_CANCEL,
                                   "_Save", GTK_RESPONSE_ACCEPT,
-                                  NULL);
+                                  nullptr);
   SetGtkTransientForAura(dialog, parent);
 
   AddFilters(GTK_FILE_CHOOSER(dialog));
@@ -409,23 +409,6 @@ void* SelectFileDialogImplGTK::PopParamsForDialog(GtkWidget* dialog) {
   void* params = iter->second;
   params_map_.erase(iter);
   return params;
-}
-
-void SelectFileDialogImplGTK::FileDialogDestroyed(GtkWidget* dialog) {
-  dialogs_.erase(dialog);
-
-  // |parent| can be NULL when closing the host window
-  // while opening the file-picker.
-  aura::Window* parent = GetAuraTransientParent(dialog);
-  if (!parent)
-    return;
-  std::set<aura::Window*>::iterator iter = parents_.find(parent);
-  if (iter != parents_.end()) {
-    (*iter)->RemoveObserver(this);
-    parents_.erase(iter);
-  } else {
-    NOTREACHED();
-  }
 }
 
 bool SelectFileDialogImplGTK::IsCancelResponse(gint response_id) {
@@ -507,7 +490,20 @@ void SelectFileDialogImplGTK::OnSelectMultiFileDialogResponse(GtkWidget* dialog,
 }
 
 void SelectFileDialogImplGTK::OnFileChooserDestroy(GtkWidget* dialog) {
-  FileDialogDestroyed(dialog);
+  dialogs_.erase(dialog);
+
+  // |parent| can be NULL when closing the host window
+  // while opening the file-picker.
+  aura::Window* parent = GetAuraTransientParent(dialog);
+  if (!parent)
+    return;
+  std::set<aura::Window*>::iterator iter = parents_.find(parent);
+  if (iter != parents_.end()) {
+    (*iter)->RemoveObserver(this);
+    parents_.erase(iter);
+  } else {
+    NOTREACHED();
+  }
 }
 
 void SelectFileDialogImplGTK::OnUpdatePreview(GtkWidget* chooser) {

@@ -24,7 +24,10 @@
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/wtf_array.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
+#include "public/platform/WebTraceLocation.h"
+#include "wtf/HashSet.h"
 #include <utility>
 
 namespace mojo {
@@ -158,6 +161,10 @@ struct TypeConverter<WTFArray<PaymentMethodDataPtr>, WTF::Vector<blink::PaymentR
 namespace blink {
 namespace {
 
+// If the website does not call complete() 60 seconds after show() has been resolved, then behave as if
+// the website called complete("fail").
+static const int completeTimeoutSeconds = 60;
+
 // Validates ShippingOption or PaymentItem, which happen to have identical fields,
 // except for "id", which is present only in ShippingOption.
 template <typename T>
@@ -206,11 +213,18 @@ void validateDisplayItems(const HeapVector<PaymentItem>& items, ExceptionState& 
 
 void validateShippingOptions(const HeapVector<PaymentShippingOption>& options, ExceptionState& exceptionState)
 {
+    HashSet<String> uniqueIds;
     for (const auto& option : options) {
         if (!option.hasId() || option.id().isEmpty()) {
             exceptionState.throwTypeError("ShippingOption id required");
             return;
         }
+
+        if (uniqueIds.contains(option.id())) {
+            exceptionState.throwTypeError("Duplicate shipping option identifiers are not allowed");
+            return;
+        }
+        uniqueIds.add(option.id());
 
         validateShippingOptionOrPaymentItem(option, exceptionState);
         if (exceptionState.hadException())
@@ -225,10 +239,19 @@ void validatePaymentDetailsModifiers(const HeapVector<PaymentDetailsModifier>& m
         return;
     }
 
+    HashSet<String> uniqueMethods;
     for (const auto& modifier : modifiers) {
         if (modifier.supportedMethods().isEmpty()) {
             exceptionState.throwTypeError("Must specify at least one payment method identifier");
             return;
+        }
+
+        for (const auto& method : modifier.supportedMethods()) {
+            if (uniqueMethods.contains(method)) {
+                exceptionState.throwTypeError("Duplicate payment method identifiers are not allowed");
+                return;
+            }
+            uniqueMethods.add(method);
         }
 
         if (modifier.hasTotal()) {
@@ -290,15 +313,24 @@ void validateAndConvertPaymentMethodData(const HeapVector<PaymentMethodData>& pa
         return;
     }
 
+    HashSet<String> uniqueMethods;
     for (const auto& pmd : paymentMethodData) {
         if (pmd.supportedMethods().isEmpty()) {
             exceptionState.throwTypeError("Must specify at least one payment method identifier");
             return;
         }
 
+        for (const auto& method : pmd.supportedMethods()) {
+            if (uniqueMethods.contains(method)) {
+                exceptionState.throwTypeError("Duplicate payment method identifiers are not allowed");
+                return;
+            }
+            uniqueMethods.add(method);
+        }
+
         String stringifiedData = "";
         if (pmd.hasData() && !pmd.data().isEmpty()) {
-            RefPtr<JSONValue> value = toJSONValue(pmd.data().context(), pmd.data().v8Value());
+            std::unique_ptr<JSONValue> value = toJSONValue(pmd.data().context(), pmd.data().v8Value());
             if (!value) {
                 exceptionState.throwTypeError("Unable to parse payment method specific data");
                 return;
@@ -308,7 +340,7 @@ void validateAndConvertPaymentMethodData(const HeapVector<PaymentMethodData>& pa
                     exceptionState.throwTypeError("Data should be a JSON-serializable object");
                     return;
                 }
-                stringifiedData = JSONObject::cast(value)->toJSONString();
+                stringifiedData = JSONObject::cast(value.get())->toJSONString();
             }
         }
         methodData->append(PaymentRequest::MethodData(pmd.supportedMethods(), stringifiedData));
@@ -321,9 +353,9 @@ String getSelectedShippingOption(const PaymentDetails& details)
     if (!details.hasShippingOptions())
         return result;
 
-    for (size_t i = 0; i < details.shippingOptions().size(); ++i) {
+    for (int i = details.shippingOptions().size() - 1; i >= 0; --i) {
         if (details.shippingOptions()[i].hasSelected() && details.shippingOptions()[i].selected()) {
-            result = details.shippingOptions()[i].id();
+            return details.shippingOptions()[i].id();
         }
     }
 
@@ -348,17 +380,13 @@ PaymentRequest::~PaymentRequest()
 
 ScriptPromise PaymentRequest::show(ScriptState* scriptState)
 {
-    if (m_showResolver)
+    if (!m_paymentProvider.is_bound() || m_showResolver)
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(InvalidStateError, "Already called show() once"));
 
     if (!scriptState->domWindow() || !scriptState->domWindow()->frame())
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(InvalidStateError, "Cannot show the payment request"));
 
-    DCHECK(!m_paymentProvider.is_bound());
-    scriptState->domWindow()->frame()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_paymentProvider));
-    m_paymentProvider.set_connection_error_handler(createBaseCallback(WTF::bind(&PaymentRequest::OnError, wrapWeakPersistent(this), mojom::blink::PaymentErrorReason::UNKNOWN)));
-    m_paymentProvider->SetClient(m_clientBinding.CreateInterfacePtrAndBind());
-    m_paymentProvider->Show(mojo::WTFArray<mojom::blink::PaymentMethodDataPtr>::From(m_methodData), mojom::blink::PaymentDetails::From(m_details), mojom::blink::PaymentOptions::From(m_options));
+    m_paymentProvider->Show();
 
     m_showResolver = ScriptPromiseResolver::create(scriptState);
     return m_showResolver->promise();
@@ -377,6 +405,11 @@ ScriptPromise PaymentRequest::abort(ScriptState* scriptState)
     return m_abortResolver->promise();
 }
 
+bool PaymentRequest::hasPendingActivity() const
+{
+    return m_showResolver || m_completeResolver;
+}
+
 const AtomicString& PaymentRequest::interfaceName() const
 {
     return EventTargetNames::PaymentRequest;
@@ -392,9 +425,14 @@ ScriptPromise PaymentRequest::complete(ScriptState* scriptState, PaymentComplete
     if (m_completeResolver)
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(InvalidStateError, "Already called complete() once"));
 
+    if (!m_completeTimer.isActive())
+        return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(InvalidStateError, "Timed out after 60 seconds, complete() called too late"));
+
     // User has cancelled the transaction while the website was processing it.
     if (!m_paymentProvider)
         return ScriptPromise::rejectWithDOMException(scriptState, DOMException::create(InvalidStateError, "Request cancelled"));
+
+    m_completeTimer.stop();
 
     // The payment provider should respond in PaymentRequest::OnComplete().
     m_paymentProvider->Complete(mojom::blink::PaymentComplete(result));
@@ -430,18 +468,17 @@ void PaymentRequest::onUpdatePaymentDetails(const ScriptValue& detailsScriptValu
     m_paymentProvider->UpdateWith(mojom::blink::PaymentDetails::From(details));
 }
 
-void PaymentRequest::onUpdatePaymentDetailsFailure(const ScriptValue& error)
+void PaymentRequest::onUpdatePaymentDetailsFailure(const String& error)
 {
     if (m_showResolver)
-        m_showResolver->reject(error);
+        m_showResolver->reject(DOMException::create(AbortError, error));
     if (m_completeResolver)
-        m_completeResolver->reject(error);
+        m_completeResolver->reject(DOMException::create(AbortError, error));
     clearResolversAndCloseMojoConnection();
 }
 
 DEFINE_TRACE(PaymentRequest)
 {
-    visitor->trace(m_details);
     visitor->trace(m_options);
     visitor->trace(m_shippingAddress);
     visitor->trace(m_showResolver);
@@ -451,13 +488,21 @@ DEFINE_TRACE(PaymentRequest)
     ContextLifecycleObserver::trace(visitor);
 }
 
+void PaymentRequest::onCompleteTimeoutForTesting()
+{
+    m_completeTimer.stop();
+    onCompleteTimeout(0);
+}
+
 PaymentRequest::PaymentRequest(ScriptState* scriptState, const HeapVector<PaymentMethodData>& methodData, const PaymentDetails& details, const PaymentOptions& options, ExceptionState& exceptionState)
     : ContextLifecycleObserver(scriptState->getExecutionContext())
     , ActiveScriptWrappable(this)
     , m_options(options)
     , m_clientBinding(this)
+    , m_completeTimer(this, &PaymentRequest::onCompleteTimeout)
 {
-    validateAndConvertPaymentMethodData(methodData, &m_methodData, exceptionState);
+    Vector<MethodData> validatedMethodData;
+    validateAndConvertPaymentMethodData(methodData, &validatedMethodData, exceptionState);
     if (exceptionState.hadException())
         return;
 
@@ -474,20 +519,18 @@ PaymentRequest::PaymentRequest(ScriptState* scriptState, const HeapVector<Paymen
     validatePaymentDetails(details, exceptionState);
     if (exceptionState.hadException())
         return;
-    m_details = details;
 
     if (m_options.requestShipping())
         m_shippingOption = getSelectedShippingOption(details);
+
+    scriptState->domWindow()->frame()->interfaceProvider()->getInterface(mojo::GetProxy(&m_paymentProvider));
+    m_paymentProvider.set_connection_error_handler(convertToBaseCallback(WTF::bind(&PaymentRequest::OnError, wrapWeakPersistent(this), mojom::blink::PaymentErrorReason::UNKNOWN)));
+    m_paymentProvider->Init(m_clientBinding.CreateInterfacePtrAndBind(), mojo::WTFArray<mojom::blink::PaymentMethodDataPtr>::From(validatedMethodData), mojom::blink::PaymentDetails::From(details), mojom::blink::PaymentOptions::From(m_options));
 }
 
 void PaymentRequest::contextDestroyed()
 {
     clearResolversAndCloseMojoConnection();
-}
-
-bool PaymentRequest::hasPendingActivity() const
-{
-    return m_showResolver || m_completeResolver;
 }
 
 void PaymentRequest::OnShippingAddressChange(mojom::blink::PaymentAddressPtr address)
@@ -528,6 +571,7 @@ void PaymentRequest::OnPaymentResponse(mojom::blink::PaymentResponsePtr response
 {
     DCHECK(m_showResolver);
     DCHECK(!m_completeResolver);
+    DCHECK(!m_completeTimer.isActive());
 
     if (m_options.requestShipping()) {
         if (!response->shipping_address || response->shipping_option.isEmpty()) {
@@ -562,16 +606,23 @@ void PaymentRequest::OnPaymentResponse(mojom::blink::PaymentResponsePtr response
         return;
     }
 
+    m_completeTimer.startOneShot(completeTimeoutSeconds, BLINK_FROM_HERE);
+
     m_showResolver->resolve(new PaymentResponse(std::move(response), this));
 
     // Do not close the mojo connection here. The merchant website should call
-    // PaymentResponse::complete(boolean), which will be forwarded over the mojo
+    // PaymentResponse::complete(String), which will be forwarded over the mojo
     // connection to display a success or failure message to the user.
     m_showResolver.clear();
 }
 
 void PaymentRequest::OnError(mojo::PaymentErrorReason error)
 {
+    if (!Platform::current()) {
+        // TODO(rockot): Clean this up once renderer shutdown sequence is fixed.
+        return;
+    }
+
     bool isError = false;
     ExceptionCode ec = UnknownError;
     String message;
@@ -640,8 +691,15 @@ void PaymentRequest::OnAbort(bool abortedSuccessfully)
     clearResolversAndCloseMojoConnection();
 }
 
+void PaymentRequest::onCompleteTimeout(TimerBase*)
+{
+    m_paymentProvider->Complete(mojom::blink::PaymentComplete(Fail));
+    clearResolversAndCloseMojoConnection();
+}
+
 void PaymentRequest::clearResolversAndCloseMojoConnection()
 {
+    m_completeTimer.stop();
     m_completeResolver.clear();
     m_showResolver.clear();
     m_abortResolver.clear();

@@ -104,7 +104,7 @@ const char kJSCancelStreamUrlType[] = "cancelStreamUrl";
 // Navigate to the given URL (Plugin -> Page)
 const char kJSNavigateType[] = "navigate";
 const char kJSNavigateUrl[] = "url";
-const char kJSNavigateNewTab[] = "newTab";
+const char kJSNavigateWindowOpenDisposition[] = "disposition";
 // Open the email editor with the given parameters (Plugin -> Page)
 const char kJSEmailType[] = "email";
 const char kJSEmailTo[] = "to";
@@ -321,10 +321,9 @@ bool OutOfProcessInstance::Init(uint32_t argc,
   if (!document_url_var.is_string())
     return false;
   std::string document_url = document_url_var.AsString();
-  std::string extension_url = std::string(kChromeExtension);
-  std::string print_preview_url = std::string(kChromePrint);
-  if (!base::StringPiece(document_url).starts_with(kChromeExtension) &&
-      !base::StringPiece(document_url).starts_with(kChromePrint)) {
+  base::StringPiece document_url_piece(document_url);
+  if (!document_url_piece.starts_with(kChromeExtension) &&
+      !document_url_piece.starts_with(kChromePrint)) {
     return false;
   }
 
@@ -977,11 +976,11 @@ void OutOfProcessInstance::ScrollToPage(int page) {
 }
 
 void OutOfProcessInstance::NavigateTo(const std::string& url,
-                                      bool open_in_new_tab) {
+                                      WindowOpenDisposition disposition) {
   pp::VarDictionary message;
   message.Set(kType, kJSNavigateType);
   message.Set(kJSNavigateUrl, url);
-  message.Set(kJSNavigateNewTab, open_in_new_tab);
+  message.Set(kJSNavigateWindowOpenDisposition, pp::Var(disposition));
   PostMessage(message);
 }
 
@@ -1227,6 +1226,9 @@ void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
   progress_message.Set(pp::Var(kJSProgressPercentage), pp::Var(100));
   PostMessage(progress_message);
 
+  if (accessibility_state_ == ACCESSIBILITY_STATE_PENDING)
+    LoadAccessibility();
+
   if (!full_)
     return;
 
@@ -1248,9 +1250,6 @@ void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
   pp::PDF::SetContentRestriction(this, content_restrictions);
 
   uma_.HistogramCustomCounts("PDF.PageCount", page_count, 1, 1000000, 50);
-
-  if (accessibility_state_ == ACCESSIBILITY_STATE_PENDING)
-    LoadAccessibility();
 }
 
 void OutOfProcessInstance::RotateClockwise() {

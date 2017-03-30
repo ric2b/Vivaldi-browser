@@ -69,6 +69,7 @@ public:
     void indexDeleted(int64_t objectStoreId, int64_t indexId);
     void transactionCreated(IDBTransaction*);
     void transactionFinished(const IDBTransaction*);
+    const String& getObjectStoreName(int64_t objectStoreId) const;
 
     // Implement the IDL
     const String& name() const { return m_metadata.name; }
@@ -90,7 +91,7 @@ public:
     void onAbort(int64_t, DOMException*);
     void onComplete(int64_t);
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // ActiveDOMObject

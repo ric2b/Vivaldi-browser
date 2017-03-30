@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/optional.h"
 #include "ui/views/controls/button/label_button.h"
 
 namespace views {
@@ -37,24 +38,34 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
                                int thickness,
                                SkAlpha alpha);
 
+  // See |is_cta_|.
   void SetCallToAction(bool cta);
+  void set_bg_color_override(SkColor color) { bg_color_override_ = color; }
 
   // LabelButton:
   void Layout() override;
   void OnFocus() override;
   void OnBlur() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
       const override;
   SkColor GetInkDropBaseColor() const override;
   bool ShouldShowInkDropForFocus() const override;
   void SetEnabledTextColors(SkColor color) override;
+  void SetText(const base::string16& text) override;
+  void AdjustFontSize(int size_delta) override;
   void UpdateStyleToIndicateDefaultStatus() override;
+
+ protected:
+  // LabelButton:
+  void SetFontList(const gfx::FontList& font_list) override;
 
  private:
   MdTextButton(ButtonListener* listener);
   ~MdTextButton() override;
 
+  void UpdatePadding();
   void UpdateColors();
 
   // The MD-style focus ring. This is not done via a FocusPainter
@@ -64,6 +75,9 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
 
   // True if this button uses call-to-action styling.
   bool is_cta_;
+
+  // When set, this provides the background color.
+  base::Optional<SkColor> bg_color_override_;
 
   DISALLOW_COPY_AND_ASSIGN(MdTextButton);
 };

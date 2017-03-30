@@ -20,10 +20,10 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/child/child_thread.h"
+#include "ipc/ipc.mojom.h"
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
 #include "ipc/ipc_platform_file.h"
 #include "ipc/message_router.h"
-#include "services/shell/public/cpp/shell_client.h"
 
 namespace base {
 class MessageLoop;
@@ -34,6 +34,10 @@ class MessageFilter;
 class SyncChannel;
 class SyncMessageFilter;
 }  // namespace IPC
+
+namespace shell {
+class Connection;
+}  // namespace shell
 
 namespace mojo {
 namespace edk {
@@ -61,15 +65,12 @@ class QuotaDispatcher;
 class QuotaMessageFilter;
 class ResourceDispatcher;
 class ThreadSafeSender;
-class WebSocketDispatcher;
-class WebSocketMessageFilter;
 struct RequestInfo;
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
     : public IPC::Listener,
-      virtual public ChildThread,
-      public NON_EXPORTED_BASE(shell::ShellClient){
+      virtual public ChildThread {
  public:
   struct CONTENT_EXPORT Options;
 
@@ -101,10 +102,6 @@ class CONTENT_EXPORT ChildThreadImpl
   shell::InterfaceRegistry* GetInterfaceRegistry() override;
   shell::InterfaceProvider* GetRemoteInterfaces() override;
 
-  // shell::ShellClient:
-  shell::InterfaceRegistry* GetInterfaceRegistryForConnection() override;
-  shell::InterfaceProvider* GetInterfaceProviderForConnection() override;
-
   IPC::SyncChannel* channel() { return channel_.get(); }
 
   IPC::MessageRouter* GetRouter();
@@ -124,6 +121,11 @@ class CONTENT_EXPORT ChildThreadImpl
       IPC::Sender* sender,
       bool* out_of_memory);
 
+#if defined(OS_LINUX)
+  void SetThreadPriority(base::PlatformThreadId id,
+                         base::ThreadPriority priority);
+#endif
+
   ChildSharedBitmapManager* shared_bitmap_manager() const {
     return shared_bitmap_manager_.get();
   }
@@ -139,10 +141,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   ResourceDispatcher* resource_dispatcher() const {
     return resource_dispatcher_.get();
-  }
-
-  WebSocketDispatcher* websocket_dispatcher() const {
-    return websocket_dispatcher_.get();
   }
 
   FileSystemDispatcher* file_system_dispatcher() const {
@@ -188,10 +186,6 @@ class CONTENT_EXPORT ChildThreadImpl
     return resource_message_filter_.get();
   }
 
-  WebSocketMessageFilter* websocket_message_filter() const {
-    return websocket_message_filter_.get();
-  }
-
   base::MessageLoop* message_loop() const { return message_loop_; }
 
   // Returns the one child thread. Can only be called on the main thread.
@@ -208,6 +202,11 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // Called when the process refcount is 0.
   void OnProcessFinalRelease();
+
+  // Called by subclasses to manually start the MojoShellConnection. Must only
+  // be called if ChildThreadImpl::Options::auto_start_mojo_shell_connection
+  // was set to |false| on ChildThreadImpl construction.
+  void StartMojoShellConnection();
 
   virtual bool OnControlMessageReceived(const IPC::Message& msg);
   virtual void OnProcessBackgrounded(bool backgrounded);
@@ -239,7 +238,7 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // We create the channel first without connecting it so we can add filters
   // prior to any messages being received, then connect it afterwards.
-  void ConnectChannel(bool use_mojo_channel, const std::string& ipc_token);
+  void ConnectChannel(bool use_mojo_channel);
 
   // IPC message handlers.
   void OnShutdown();
@@ -253,9 +252,10 @@ class CONTENT_EXPORT ChildThreadImpl
   void EnsureConnected();
 
   std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
-  std::unique_ptr<MojoShellConnection> mojo_shell_connection_;
   std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
   std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
+  std::unique_ptr<MojoShellConnection> mojo_shell_connection_;
+  std::unique_ptr<shell::Connection> browser_connection_;
 
   std::string channel_name_;
   std::unique_ptr<IPC::SyncChannel> channel_;
@@ -271,8 +271,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   // Handles resource loads for this process.
   std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
-
-  std::unique_ptr<WebSocketDispatcher> websocket_dispatcher_;
 
   // The OnChannelError() callback was invoked - the channel is dead, don't
   // attempt to communicate.
@@ -292,8 +290,6 @@ class CONTENT_EXPORT ChildThreadImpl
 
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
 
-  scoped_refptr<WebSocketMessageFilter> websocket_message_filter_;
-
   scoped_refptr<NotificationDispatcher> notification_dispatcher_;
 
   scoped_refptr<PushDispatcher> push_dispatcher_;
@@ -309,7 +305,10 @@ class CONTENT_EXPORT ChildThreadImpl
 
   scoped_refptr<base::SequencedTaskRunner> browser_process_io_runner_;
 
-  base::WeakPtrFactory<ChildThreadImpl> channel_connected_factory_;
+  std::unique_ptr<base::WeakPtrFactory<ChildThreadImpl>>
+      channel_connected_factory_;
+
+  base::WeakPtrFactory<ChildThreadImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildThreadImpl);
 };
@@ -322,9 +321,10 @@ struct ChildThreadImpl::Options {
 
   std::string channel_name;
   bool use_mojo_channel;
+  bool auto_start_mojo_shell_connection;
+  bool connect_to_browser;
   scoped_refptr<base::SequencedTaskRunner> browser_process_io_runner;
   std::vector<IPC::MessageFilter*> startup_filters;
-  std::string in_process_ipc_token;
   std::string in_process_application_token;
 
  private:
@@ -337,6 +337,8 @@ class ChildThreadImpl::Options::Builder {
 
   Builder& InBrowserProcess(const InProcessChildThreadParams& params);
   Builder& UseMojoChannel(bool use_mojo_channel);
+  Builder& AutoStartMojoShellConnection(bool auto_start);
+  Builder& ConnectToBrowser(bool connect_to_browser);
   Builder& WithChannelName(const std::string& channel_name);
   Builder& AddStartupFilter(IPC::MessageFilter* filter);
 

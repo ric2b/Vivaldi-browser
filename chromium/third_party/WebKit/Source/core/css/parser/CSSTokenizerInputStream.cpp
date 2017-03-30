@@ -5,7 +5,6 @@
 #include "core/css/parser/CSSTokenizerInputStream.h"
 
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/html/parser/InputStreamPreprocessor.h"
 #include "wtf/text/StringToNumber.h"
 
 namespace blink {
@@ -15,14 +14,6 @@ CSSTokenizerInputStream::CSSTokenizerInputStream(String input)
     , m_stringLength(input.length())
     , m_string(input.impl())
 {
-}
-
-UChar CSSTokenizerInputStream::peek(unsigned lookaheadOffset) const
-{
-    if ((m_offset + lookaheadOffset) >= m_stringLength)
-        return kEndOfFileMarker;
-    UChar result = (*m_string)[m_offset + lookaheadOffset];
-    return result ? result : 0xFFFD;
 }
 
 void CSSTokenizerInputStream::advanceUntilNonWhitespace()
@@ -52,12 +43,6 @@ double CSSTokenizerInputStream::getDouble(unsigned start, unsigned end) const
     }
     // FIXME: It looks like callers ensure we have a valid number
     return isResultOK ? result : 0.0;
-}
-
-StringView CSSTokenizerInputStream::rangeAt(unsigned start, unsigned length) const
-{
-    DCHECK(start + length <= m_stringLength);
-    return StringView(m_string.get(), start, length);
 }
 
 } // namespace blink

@@ -13,7 +13,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/public/cpp/service_context.h"
 
 namespace content {
 
@@ -33,7 +33,7 @@ class EmbeddedApplicationRunner::Instance
       application_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   }
 
-  void BindShellClientRequest(shell::mojom::ShellClientRequest request) {
+  void BindServiceRequest(shell::mojom::ServiceRequest request) {
     DCHECK(runner_thread_checker_.CalledOnValidThread());
 
     if (use_own_thread_ && !thread_) {
@@ -46,34 +46,21 @@ class EmbeddedApplicationRunner::Instance
     DCHECK(application_task_runner_);
     application_task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&Instance::BindShellClientRequestOnApplicationThread, this,
+        base::Bind(&Instance::BindServiceRequestOnApplicationThread, this,
                    base::Passed(&request)));
   }
 
   void ShutDown() {
     DCHECK(runner_thread_checker_.CalledOnValidThread());
-    if (thread_) {
-      application_task_runner_ = nullptr;
-      thread_.reset();
+    if (!application_task_runner_)
+      return;
+    // Any extant ServiceContexts must be destroyed on the application thread.
+    if (application_task_runner_->BelongsToCurrentThread()) {
+      Quit();
+    } else {
+      application_task_runner_->PostTask(FROM_HERE,
+                                         base::Bind(&Instance::Quit, this));
     }
-  }
-
- private:
-  void BindShellClientRequestOnApplicationThread(
-      shell::mojom::ShellClientRequest request) {
-    DCHECK(application_task_runner_->BelongsToCurrentThread());
-
-    if (!shell_client_) {
-      shell_client_ = factory_callback_.Run(
-          base::Bind(&Instance::Quit, base::Unretained(this)));
-    }
-
-    shell::ShellConnection* new_connection =
-        new shell::ShellConnection(shell_client_.get(), std::move(request));
-    shell_connections_.push_back(base::WrapUnique(new_connection));
-    new_connection->SetConnectionLostClosure(
-        base::Bind(&Instance::OnShellConnectionLost, base::Unretained(this),
-                   new_connection));
   }
 
  private:
@@ -81,11 +68,28 @@ class EmbeddedApplicationRunner::Instance
 
   ~Instance() {
     // If this instance had its own thread, it MUST be explicitly destroyed by
-    // ShutDown() on the runner's thread by the time this destructor is run.
+    // QuitOnRunnerThread() by the time this destructor is run.
     DCHECK(!thread_);
   }
 
-  void OnShellConnectionLost(shell::ShellConnection* connection) {
+  void BindServiceRequestOnApplicationThread(
+      shell::mojom::ServiceRequest request) {
+    DCHECK(application_task_runner_->BelongsToCurrentThread());
+
+    if (!service_) {
+      service_ = factory_callback_.Run(
+          base::Bind(&Instance::Quit, base::Unretained(this)));
+    }
+
+    shell::ServiceContext* new_connection =
+        new shell::ServiceContext(service_.get(), std::move(request));
+    shell_connections_.push_back(base::WrapUnique(new_connection));
+    new_connection->SetConnectionLostClosure(
+        base::Bind(&Instance::OnStop, base::Unretained(this),
+                   new_connection));
+  }
+
+  void OnStop(shell::ServiceContext* connection) {
     DCHECK(application_task_runner_->BelongsToCurrentThread());
 
     for (auto it = shell_connections_.begin(); it != shell_connections_.end();
@@ -101,14 +105,21 @@ class EmbeddedApplicationRunner::Instance
     DCHECK(application_task_runner_->BelongsToCurrentThread());
 
     shell_connections_.clear();
-    shell_client_.reset();
-    quit_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Instance::QuitOnRunnerThread, this));
+    service_.reset();
+    if (quit_task_runner_->BelongsToCurrentThread()) {
+      QuitOnRunnerThread();
+    } else {
+      quit_task_runner_->PostTask(
+          FROM_HERE, base::Bind(&Instance::QuitOnRunnerThread, this));
+    }
   }
 
   void QuitOnRunnerThread() {
     DCHECK(runner_thread_checker_.CalledOnValidThread());
-    ShutDown();
+    if (thread_) {
+      thread_.reset();
+      application_task_runner_ = nullptr;
+    }
     quit_closure_.Run();
   }
 
@@ -129,8 +140,8 @@ class EmbeddedApplicationRunner::Instance
   // These fields must only be accessed from the application thread, except in
   // the destructor which may run on either the runner thread or the application
   // thread.
-  std::unique_ptr<shell::ShellClient> shell_client_;
-  std::vector<std::unique_ptr<shell::ShellConnection>> shell_connections_;
+  std::unique_ptr<shell::Service> service_;
+  std::vector<std::unique_ptr<shell::ServiceContext>> shell_connections_;
 
   DISALLOW_COPY_AND_ASSIGN(Instance);
 };
@@ -148,9 +159,9 @@ EmbeddedApplicationRunner::~EmbeddedApplicationRunner() {
   instance_->ShutDown();
 }
 
-void EmbeddedApplicationRunner::BindShellClientRequest(
-    shell::mojom::ShellClientRequest request) {
-  instance_->BindShellClientRequest(std::move(request));
+void EmbeddedApplicationRunner::BindServiceRequest(
+    shell::mojom::ServiceRequest request) {
+  instance_->BindServiceRequest(std::move(request));
 }
 
 void EmbeddedApplicationRunner::SetQuitClosure(

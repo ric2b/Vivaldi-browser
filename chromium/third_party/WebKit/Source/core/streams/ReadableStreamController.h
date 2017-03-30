@@ -27,7 +27,7 @@ public:
         : m_scriptState(controller.getScriptState())
         , m_jsController(controller.isolate(), controller.v8Value())
     {
-        m_jsController.setWeak(&m_jsController, ReadableStreamController::controllerWeakCallback);
+        m_jsController.setPhantom();
     }
 
     // Users of the ReadableStreamController can call this to note that the stream has been canceled and thus they
@@ -62,7 +62,7 @@ public:
         m_jsController.clear();
         if (isTerminating(m_scriptState.get()))
             return;
-        v8CallOrCrash(result);
+        result.ToLocalChecked();
     }
 
     double desiredSize() const
@@ -82,7 +82,7 @@ public:
         if (isTerminating(m_scriptState.get()))
             return 0;
 
-        return v8CallOrCrash(result).As<v8::Number>()->Value();
+        return result.ToLocalChecked().As<v8::Number>()->Value();
     }
 
     template <typename ChunkType>
@@ -103,7 +103,7 @@ public:
         v8::MaybeLocal<v8::Value> result = V8ScriptRunner::callExtra(scriptState, "ReadableStreamDefaultControllerEnqueue", args);
         if (isTerminating(m_scriptState.get()))
             return;
-        v8CallOrCrash(result);
+        result.ToLocalChecked();
     }
 
     template <typename ErrorType>
@@ -127,15 +127,10 @@ public:
         m_jsController.clear();
         if (isTerminating(m_scriptState.get()))
             return;
-        v8CallOrCrash(result);
+        result.ToLocalChecked();
     }
 
 private:
-    static void controllerWeakCallback(const v8::WeakCallbackInfo<ScopedPersistent<v8::Value>>& weakInfo)
-    {
-        weakInfo.GetParameter()->clear();
-    }
-
     static bool isTerminating(ScriptState* scriptState)
     {
         ExecutionContext* executionContext = scriptState->getExecutionContext();

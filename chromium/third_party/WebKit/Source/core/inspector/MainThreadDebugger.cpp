@@ -34,18 +34,25 @@
 #include "bindings/core/v8/DOMWrapperWorld.h"
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
+#include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8Node.h"
 #include "bindings/core/v8/V8Window.h"
+#include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/StaticNodeList.h"
+#include "core/events/ErrorEvent.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/FrameConsole.h"
+#include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorTaskRunner.h"
@@ -54,7 +61,7 @@
 #include "core/xml/XPathEvaluator.h"
 #include "core/xml/XPathResult.h"
 #include "platform/UserGestureIndicator.h"
-#include "platform/v8_inspector/public/V8Debugger.h"
+#include "platform/v8_inspector/public/V8Inspector.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/ThreadingPrimitives.h"
 #include <memory>
@@ -75,6 +82,17 @@ Mutex& creationMutex()
     return mutex;
 }
 
+LocalFrame* toFrame(ExecutionContext* context)
+{
+    if (!context)
+        return nullptr;
+    if (context->isDocument())
+        return toDocument(context)->frame();
+    if (context->isMainThreadWorkletGlobalScope())
+        return toMainThreadWorkletGlobalScope(context)->frame();
+    return nullptr;
+}
+
 }
 
 MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
@@ -82,6 +100,7 @@ MainThreadDebugger* MainThreadDebugger::s_instance = nullptr;
 MainThreadDebugger::MainThreadDebugger(v8::Isolate* isolate)
     : ThreadDebugger(isolate)
     , m_taskRunner(wrapUnique(new InspectorTaskRunner()))
+    , m_paused(false)
 {
     MutexLocker locker(creationMutex());
     ASSERT(!s_instance);
@@ -95,6 +114,18 @@ MainThreadDebugger::~MainThreadDebugger()
     s_instance = nullptr;
 }
 
+void MainThreadDebugger::reportConsoleMessage(ExecutionContext* context, MessageSource source, MessageLevel level, const String& message, SourceLocation* location)
+{
+    if (LocalFrame* frame = toFrame(context))
+        frame->console().reportMessageToClient(source, level, message, location);
+}
+
+int MainThreadDebugger::contextGroupId(ExecutionContext* context)
+{
+    LocalFrame* frame = toFrame(context);
+    return frame ? contextGroupId(frame) : 0;
+}
+
 void MainThreadDebugger::setClientMessageLoop(std::unique_ptr<ClientMessageLoop> clientMessageLoop)
 {
     ASSERT(!m_clientMessageLoop);
@@ -106,7 +137,7 @@ void MainThreadDebugger::didClearContextsForFrame(LocalFrame* frame)
 {
     DCHECK(isMainThread());
     if (frame->localFrameRoot() == frame)
-        debugger()->resetContextGroup(contextGroupId(frame));
+        v8Inspector()->resetContextGroup(contextGroupId(frame));
 }
 
 void MainThreadDebugger::contextCreated(ScriptState* scriptState, LocalFrame* frame, SecurityOrigin* origin)
@@ -114,13 +145,50 @@ void MainThreadDebugger::contextCreated(ScriptState* scriptState, LocalFrame* fr
     ASSERT(isMainThread());
     v8::HandleScope handles(scriptState->isolate());
     DOMWrapperWorld& world = scriptState->world();
-    debugger()->contextCreated(V8ContextInfo(scriptState->context(), contextGroupId(frame), world.isMainWorld(), origin ? origin->toRawString() : "", world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "", IdentifiersFactory::frameId(frame), scriptState->getExecutionContext()->isDocument()));
+    std::unique_ptr<protocol::DictionaryValue> auxData = protocol::DictionaryValue::create();
+    auxData->setBoolean("isDefault", world.isMainWorld());
+    auxData->setString("frameId", IdentifiersFactory::frameId(frame));
+    v8_inspector::V8ContextInfo contextInfo(scriptState->context(), contextGroupId(frame), world.isIsolatedWorld() ? world.isolatedWorldHumanReadableName() : "");
+    if (origin)
+        contextInfo.origin = origin->toRawString();
+    contextInfo.auxData = auxData->toJSONString();
+    contextInfo.hasMemoryOnConsole = scriptState->getExecutionContext()->isDocument();
+    v8Inspector()->contextCreated(contextInfo);
 }
 
 void MainThreadDebugger::contextWillBeDestroyed(ScriptState* scriptState)
 {
     v8::HandleScope handles(scriptState->isolate());
-    debugger()->contextDestroyed(scriptState->context());
+    v8Inspector()->contextDestroyed(scriptState->context());
+}
+
+void MainThreadDebugger::exceptionThrown(ExecutionContext* context, ErrorEvent* event)
+{
+    LocalFrame* frame = nullptr;
+    ScriptState* scriptState = nullptr;
+    if (context->isDocument()) {
+        frame = toDocument(context)->frame();
+        if (!frame)
+            return;
+        scriptState = event->world() ? ScriptState::forWorld(frame, *event->world()) : nullptr;
+    } else if (context->isMainThreadWorkletGlobalScope()) {
+        frame = toMainThreadWorkletGlobalScope(context)->frame();
+        if (!frame)
+            return;
+        scriptState = toMainThreadWorkletGlobalScope(context)->scriptController()->getScriptState();
+    } else {
+        NOTREACHED();
+    }
+
+    frame->console().reportMessageToClient(JSMessageSource, ErrorMessageLevel, event->messageForConsole(), event->location());
+
+    const String16 defaultMessage = "Uncaught";
+    if (scriptState && scriptState->contextIsValid()) {
+        ScriptState::Scope scope(scriptState);
+        v8::Local<v8::Value> exception = V8ErrorHandler::loadExceptionFromErrorEventWrapper(scriptState, event, scriptState->context()->Global());
+        SourceLocation* location = event->location();
+        v8Inspector()->exceptionThrown(scriptState->context(), defaultMessage, exception, event->messageForConsole(), location->url(), location->lineNumber(), location->columnNumber(), location->takeStackTrace(), location->scriptId());
+    }
 }
 
 int MainThreadDebugger::contextGroupId(LocalFrame* frame)
@@ -153,6 +221,7 @@ void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId)
     if (!pausedFrame)
         return;
     ASSERT(pausedFrame == pausedFrame->localFrameRoot());
+    m_paused = true;
 
     if (UserGestureToken* token = UserGestureIndicator::currentToken())
         token->setPauseInDebugger();
@@ -163,23 +232,27 @@ void MainThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 
 void MainThreadDebugger::quitMessageLoopOnPause()
 {
+    m_paused = false;
     if (m_clientMessageLoop)
         m_clientMessageLoop->quitNow();
 }
 
-void MainThreadDebugger::muteWarningsAndDeprecations()
+void MainThreadDebugger::muteMetrics(int contextGroupId)
 {
-    UseCounter::muteForInspector();
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    if (frame && frame->host()) {
+        frame->host()->useCounter().muteForInspector();
+        frame->host()->deprecation().muteForInspector();
+    }
 }
 
-void MainThreadDebugger::unmuteWarningsAndDeprecations()
+void MainThreadDebugger::unmuteMetrics(int contextGroupId)
 {
-    UseCounter::unmuteForInspector();
-}
-
-bool MainThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target)
-{
-    return BindingSecurity::shouldAllowAccessTo(m_isolate, calling, target, DoNotReportSecurityError);
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    if (frame && frame->host()) {
+        frame->host()->useCounter().unmuteForInspector();
+        frame->host()->deprecation().unmuteForInspector();
+    }
 }
 
 v8::Local<v8::Context> MainThreadDebugger::ensureDefaultContextInGroup(int contextGroupId)
@@ -189,13 +262,40 @@ v8::Local<v8::Context> MainThreadDebugger::ensureDefaultContextInGroup(int conte
     return scriptState ? scriptState->context() : v8::Local<v8::Context>();
 }
 
-void MainThreadDebugger::messageAddedToConsole(int contextGroupId, MessageSource source, MessageLevel level, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace* stackTrace)
+void MainThreadDebugger::beginEnsureAllContextsInGroup(int contextGroupId)
+{
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    frame->settings()->setForceMainWorldInitialization(true);
+}
+
+void MainThreadDebugger::endEnsureAllContextsInGroup(int contextGroupId)
+{
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    frame->settings()->setForceMainWorldInitialization(false);
+}
+
+bool MainThreadDebugger::canExecuteScripts(int contextGroupId)
+{
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    return frame->script().canExecuteScripts(NotAboutToExecuteScript);
+}
+
+void MainThreadDebugger::runIfWaitingForDebugger(int contextGroupId)
+{
+    LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
+    if (m_clientMessageLoop)
+        m_clientMessageLoop->runIfWaitingForDebugger(frame);
+}
+
+void MainThreadDebugger::consoleAPIMessage(int contextGroupId, v8_inspector::V8ConsoleAPIType type, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, v8_inspector::V8StackTrace* stackTrace)
 {
     LocalFrame* frame = WeakIdentifierMap<LocalFrame>::lookup(contextGroupId);
     if (!frame)
         return;
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(source, level, message, SourceLocation::create(url, lineNumber, columnNumber, stackTrace ? stackTrace->clone() : nullptr, 0));
-    frame->console().reportMessageToClient(consoleMessage);
+    if (type == v8_inspector::V8ConsoleAPIType::kClear && frame->host())
+        frame->host()->consoleMessageStorage().clear();
+    std::unique_ptr<SourceLocation> location = SourceLocation::create(url, lineNumber, columnNumber, stackTrace ? stackTrace->clone() : nullptr, 0);
+    frame->console().reportMessageToClient(ConsoleAPIMessageSource, consoleAPITypeToMessageLevel(type), message, location.get());
 }
 
 v8::MaybeLocal<v8::Value> MainThreadDebugger::memoryInfo(v8::Isolate* isolate, v8::Local<v8::Context> context)
@@ -284,14 +384,14 @@ void MainThreadDebugger::xpathSelectorCallback(const v8::FunctionCallbackInfo<v8
         return;
 
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "$x", "CommandLineAPI", info.Holder(), info.GetIsolate());
-    XPathResult* result = XPathEvaluator::create()->evaluate(selector, node, nullptr, XPathResult::ANY_TYPE, ScriptValue(), exceptionState);
+    XPathResult* result = XPathEvaluator::create()->evaluate(selector, node, nullptr, XPathResult::kAnyType, ScriptValue(), exceptionState);
     if (exceptionState.throwIfNeeded() || !result)
         return;
-    if (result->resultType() == XPathResult::NUMBER_TYPE) {
+    if (result->resultType() == XPathResult::kNumberType) {
         info.GetReturnValue().Set(toV8(result->numberValue(exceptionState), info.Holder(), info.GetIsolate()));
-    } else if (result->resultType() == XPathResult::STRING_TYPE) {
+    } else if (result->resultType() == XPathResult::kStringType) {
         info.GetReturnValue().Set(toV8(result->stringValue(exceptionState), info.Holder(), info.GetIsolate()));
-    } else if (result->resultType() == XPathResult::BOOLEAN_TYPE) {
+    } else if (result->resultType() == XPathResult::kBooleanType) {
         info.GetReturnValue().Set(toV8(result->booleanValue(exceptionState), info.Holder(), info.GetIsolate()));
     } else {
         v8::Isolate* isolate = info.GetIsolate();

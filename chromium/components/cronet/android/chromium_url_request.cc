@@ -16,6 +16,8 @@
 
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace cronet {
 namespace {
@@ -68,8 +70,7 @@ class JniURLRequestAdapterDelegate
       JNIEnv* env = base::android::AttachCurrentThread();
       base::android::ScopedJavaLocalRef<jobject> java_buffer(
           env, env->NewDirectByteBuffer(request_adapter->Data(), bytes_read));
-      cronet::Java_ChromiumUrlRequest_onBytesRead(
-          env, owner_, java_buffer.obj());
+      cronet::Java_ChromiumUrlRequest_onBytesRead(env, owner_, java_buffer);
     }
   }
 
@@ -83,7 +84,7 @@ class JniURLRequestAdapterDelegate
     base::android::ScopedJavaLocalRef<jobject> java_buffer(
         env, env->NewDirectByteBuffer(buf->data(), buf_length));
     jint bytes_read = cronet::Java_ChromiumUrlRequest_readFromUploadChannel(
-        env, owner_, java_buffer.obj());
+        env, owner_, java_buffer);
     return bytes_read;
   }
 
@@ -165,10 +166,10 @@ static void SetUploadData(JNIEnv* env,
   DCHECK(request_adapter);
   SetPostContentType(env, request_adapter, jcontent_type);
 
-  if (jcontent != NULL) {
+  if (jcontent != nullptr) {
     jsize size = env->GetArrayLength(jcontent);
     if (size > 0) {
-      jbyte* content_bytes = env->GetByteArrayElements(jcontent, NULL);
+      jbyte* content_bytes = env->GetByteArrayElements(jcontent, nullptr);
       request_adapter->SetUploadContent(
           reinterpret_cast<const char*>(content_bytes), size);
       env->ReleaseByteArrayElements(jcontent, content_bytes, 0);
@@ -223,7 +224,7 @@ static void Start(JNIEnv* env,
                   jlong jurl_request_adapter) {
   URLRequestAdapter* request_adapter =
       reinterpret_cast<URLRequestAdapter*>(jurl_request_adapter);
-  if (request_adapter != NULL)
+  if (request_adapter != nullptr)
     request_adapter->Start();
 }
 
@@ -233,7 +234,7 @@ static void DestroyRequestAdapter(JNIEnv* env,
                                   jlong jurl_request_adapter) {
   URLRequestAdapter* request_adapter =
       reinterpret_cast<URLRequestAdapter*>(jurl_request_adapter);
-  if (request_adapter != NULL)
+  if (request_adapter != nullptr)
     request_adapter->Destroy();
 }
 
@@ -243,7 +244,7 @@ static void Cancel(JNIEnv* env,
                    jlong jurl_request_adapter) {
   URLRequestAdapter* request_adapter =
       reinterpret_cast<URLRequestAdapter*>(jurl_request_adapter);
-  if (request_adapter != NULL)
+  if (request_adapter != nullptr)
     request_adapter->Cancel();
 }
 
@@ -373,7 +374,7 @@ static void GetAllHeaders(JNIEnv* env,
   DCHECK(request_adapter);
 
   net::HttpResponseHeaders* headers = request_adapter->GetResponseHeaders();
-  if (headers == NULL)
+  if (headers == nullptr)
     return;
 
   size_t iter = 0;
@@ -385,7 +386,7 @@ static void GetAllHeaders(JNIEnv* env,
     ScopedJavaLocalRef<jstring> value =
         ConvertUTF8ToJavaString(env, header_value);
     Java_ChromiumUrlRequest_onAppendResponseHeader(env, jcaller, jheaders_map,
-                                                   name.obj(), value.obj());
+                                                   name, value);
   }
 
   // Some implementations (notably HttpURLConnection) include a mapping for the
@@ -393,7 +394,7 @@ static void GetAllHeaders(JNIEnv* env,
   ScopedJavaLocalRef<jstring> status_line =
       ConvertUTF8ToJavaString(env, headers->GetStatusLine());
   Java_ChromiumUrlRequest_onAppendResponseHeader(env, jcaller, jheaders_map,
-                                                 NULL, status_line.obj());
+                                                 nullptr, status_line);
 }
 
 static ScopedJavaLocalRef<jstring> GetNegotiatedProtocol(

@@ -9,6 +9,7 @@
 #include "base/at_exit.h"
 #include "base/atomicops.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
@@ -18,6 +19,7 @@
 #include "base/macros.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/worker_pool.h"
 #include "components/cronet/ios/version.h"
@@ -73,7 +75,7 @@ void CronetEnvironment::PostToNetworkThread(
 void CronetEnvironment::PostToFileUserBlockingThread(
     const tracked_objects::Location& from_here,
     const base::Closure& task) {
-  file_user_blocking_thread_->message_loop()->PostTask(from_here, task);
+  file_user_blocking_thread_->task_runner()->PostTask(from_here, task);
 }
 
 net::URLRequestContext* CronetEnvironment::GetURLRequestContext() const {
@@ -234,6 +236,7 @@ CronetEnvironment::~CronetEnvironment() {
 
 void CronetEnvironment::InitializeOnNetworkThread() {
   DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
+  base::FeatureList::InitializeInstance(std::string(), std::string());
   // TODO(mef): Use net:UrlRequestContextBuilder instead of manual build.
   main_context_.reset(new net::URLRequestContext);
   main_context_->set_net_log(net_log_.get());

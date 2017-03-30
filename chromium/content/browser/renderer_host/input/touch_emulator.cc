@@ -6,7 +6,6 @@
 
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/motion_event_web.h"
-#include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "content/grit/content_resources.h"
 #include "content/public/common/content_client.h"
@@ -141,12 +140,12 @@ bool TouchEmulator::HandleMouseEvent(const WebMouseEvent& mouse_event) {
   if (!enabled())
     return false;
 
-  if (mouse_event.button == WebMouseEvent::ButtonRight &&
+  if (mouse_event.button == WebMouseEvent::Button::Right &&
       mouse_event.type == WebInputEvent::MouseDown) {
     client_->ShowContextMenuAtPoint(gfx::Point(mouse_event.x, mouse_event.y));
   }
 
-  if (mouse_event.button != WebMouseEvent::ButtonLeft)
+  if (mouse_event.button != WebMouseEvent::Button::Left)
     return true;
 
   if (mouse_event.type == WebInputEvent::MouseMove) {

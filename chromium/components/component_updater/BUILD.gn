@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-source_set("component_updater") {
+static_library("component_updater") {
   sources = [
     "component_updater_paths.cc",
     "component_updater_paths.h",
@@ -21,6 +21,8 @@ source_set("component_updater") {
     "pref_names.h",
     "timer.cc",
     "timer.h",
+    "updater_state_win.cc",
+    "updater_state_win.h",
   ]
 
   deps = [
@@ -32,7 +34,7 @@ source_set("component_updater") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "mock_component_updater_service.cc",
@@ -50,8 +52,10 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "component_updater_service_unittest.cc",
+    "configurator_impl_unittest.cc",
     "default_component_installer_unittest.cc",
     "timer_unittest.cc",
+    "updater_state_unittest_win.cc",
   ]
 
   deps = [

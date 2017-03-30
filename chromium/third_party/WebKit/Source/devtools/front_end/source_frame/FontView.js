@@ -28,13 +28,13 @@
 
 /**
  * @constructor
- * @extends {WebInspector.VBoxWithToolbarItems}
+ * @extends {WebInspector.SimpleView}
  * @param {string} mimeType
  * @param {!WebInspector.ContentProvider} contentProvider
  */
 WebInspector.FontView = function(mimeType, contentProvider)
 {
-    WebInspector.VBoxWithToolbarItems.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("Font"));
     this.registerRequiredCSS("source_frame/fontView.css");
     this.element.classList.add("font-view");
     this._url = contentProvider.contentURL();
@@ -54,7 +54,7 @@ WebInspector.FontView.prototype = {
      * @override
      * @return {!Array<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         return [this._mimeTypeLabel];
     },
@@ -157,5 +157,5 @@ WebInspector.FontView.prototype = {
         this.fontPreviewElement.style.setProperty("font-size", finalFontSize + "px", null);
     },
 
-    __proto__: WebInspector.VBoxWithToolbarItems.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }

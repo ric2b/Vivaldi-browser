@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_CORE_PAGE_LOAD_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_CORE_PAGE_LOAD_METRICS_OBSERVER_H_
 
-#include "components/page_load_metrics/browser/page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 
 namespace internal {
 
@@ -15,15 +15,15 @@ namespace internal {
 // navigation start to the event in question.
 extern const char kHistogramCommit[];
 extern const char kHistogramFirstLayout[];
+extern const char kHistogramFirstPaint[];
 extern const char kHistogramFirstTextPaint[];
 extern const char kHistogramDomContentLoaded[];
-extern const char kHistogramDomLoadingToDomContentLoaded[];
 extern const char kHistogramLoad[];
 extern const char kHistogramFirstContentfulPaint[];
-extern const char kHistogramFirstContentfulPaintImmediate[];
-extern const char kHistogramDomLoadingToFirstContentfulPaint[];
+extern const char kHistogramFirstMeaningfulPaint[];
 extern const char kHistogramParseDuration[];
 extern const char kHistogramParseBlockedOnScriptLoad[];
+extern const char kHistogramParseStartToFirstMeaningfulPaint[];
 
 extern const char kBackgroundHistogramCommit[];
 extern const char kBackgroundHistogramFirstLayout[];
@@ -44,6 +44,18 @@ extern const char kHistogramBackgroundBeforePaint[];
 extern const char kHistogramFailedProvisionalLoad[];
 
 extern const char kRapporMetricsNameCoarseTiming[];
+extern const char kHistogramFirstMeaningfulPaintStatus[];
+
+extern const char kHistogramFirstNonScrollInputAfterFirstPaint[];
+extern const char kHistogramFirstScrollInputAfterFirstPaint[];
+
+enum FirstMeaningfulPaintStatus {
+  FIRST_MEANINGFUL_PAINT_RECORDED,
+  FIRST_MEANINGFUL_PAINT_BACKGROUNDED,
+  FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_NETWORK_STABLE,
+  FIRST_MEANINGFUL_PAINT_USER_INTERACTION_BEFORE_FMP,
+  FIRST_MEANINGFUL_PAINT_LAST_ENTRY
+};
 
 }  // namespace internal
 
@@ -79,6 +91,9 @@ class CorePageLoadMetricsObserver
   void OnFirstContentfulPaint(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnFirstMeaningfulPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
   void OnParseStart(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
@@ -88,27 +103,30 @@ class CorePageLoadMetricsObserver
   void OnComplete(const page_load_metrics::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnFailedProvisionalLoad(
-      content::NavigationHandle* navigation_handle) override;
+      const page_load_metrics::FailedProvisionalLoadInfo& failed_load_info,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+  void OnUserInput(const blink::WebInputEvent& event) override;
 
  private:
-  // Information related to failed provisional loads.
-  // Populated in OnFailedProvisionalLoad and accessed in OnComplete.
-  struct FailedProvisionalLoadInfo {
-    base::Optional<base::TimeDelta> interval;
-    net::Error error;
-
-    FailedProvisionalLoadInfo();
-    ~FailedProvisionalLoadInfo();
-  };
-
   void RecordTimingHistograms(const page_load_metrics::PageLoadTiming& timing,
                               const page_load_metrics::PageLoadExtraInfo& info);
   void RecordRappor(const page_load_metrics::PageLoadTiming& timing,
                     const page_load_metrics::PageLoadExtraInfo& info);
 
-  FailedProvisionalLoadInfo failed_provisional_load_info_;
   ui::PageTransition transition_;
   bool initiated_by_user_gesture_;
+  bool was_no_store_main_resource_;
+
+  // True if we've received a non-scroll input (touch tap or mouse up)
+  // after first paint has happened.
+  bool received_non_scroll_input_after_first_paint_ = false;
+
+  // True if we've received a scroll input after first paint has happened.
+  bool received_scroll_input_after_first_paint_ = false;
+
+  base::TimeTicks navigation_start_;
+  base::TimeTicks first_user_interaction_after_first_paint_;
+  base::TimeTicks first_paint_;
 
   DISALLOW_COPY_AND_ASSIGN(CorePageLoadMetricsObserver);
 };

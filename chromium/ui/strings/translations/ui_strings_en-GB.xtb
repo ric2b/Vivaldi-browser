@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
-<translation id="1021451612696613363">Sign in to view your notifications</translation>
 <translation id="111910763555783249">Notification settings</translation>
 <translation id="1127811143501539442">{DAYS,plural, =1{1 day ago}other{# days ago}}</translation>
 <translation id="1190609913194133056">Notification Centre</translation>
@@ -23,6 +22,7 @@
 <translation id="2168039046890040389">Page Up</translation>
 <translation id="2190355936436201913">(empty)</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2336922762358079423">Annotate in Google Keep</translation>
 <translation id="2482878487686419369">Notifications</translation>
 <translation id="2497284189126895209">All Files</translation>
 <translation id="2515586267016047495">Alt</translation>
@@ -50,6 +50,7 @@
 <translation id="4320177379694898372">No internet connection</translation>
 <translation id="436869212180315161">Press</translation>
 <translation id="4588090240171750605">Scroll Right</translation>
+<translation id="459417155289402299">Quick Unlock Feature</translation>
 <translation id="4820616160060340806">Command+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 second}other{# seconds}}</translation>
 <translation id="4971687151119236543">Media Previous Track</translation>
@@ -77,7 +78,6 @@
 <translation id="6404817160109697034">{SECONDS,plural, =1{1 sec ago}other{# secs ago}}</translation>
 <translation id="6528179044667508675">Do not disturb</translation>
 <translation id="6620110761915583480">Save File</translation>
-<translation id="6659594942844771486">Tab</translation>
 <translation id="6699343763173986273">Media Next Track</translation>
 <translation id="6786750046913594791">Close folder</translation>
 <translation id="6808150112686056157">Media Stop</translation>
@@ -97,6 +97,7 @@
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 minute left}other{# minutes left}}</translation>
 <translation id="7457942297256758195">Clear All</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="7647488630410863958">Unlock device to view your notifications</translation>
 <translation id="7649070708921625228">Help</translation>
 <translation id="7658239707568436148">Cancel</translation>
 <translation id="7781829728241885113">Yesterday</translation>
@@ -108,6 +109,7 @@
 <translation id="815598010540052116">Scroll Down</translation>
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8210608804940886430">Page Down</translation>
+<translation id="8245914219290430011">Tab</translation>
 <translation id="8328145009876646418">Left Edge</translation>
 <translation id="8331626408530291785">Scroll Up</translation>
 <translation id="8371695176452482769">Speak now</translation>

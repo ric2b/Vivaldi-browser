@@ -1,9 +1,12 @@
 {
     "extensions": [
         {
+            "type": "view",
+            "location": "elements-sidebar",
+            "id": "accessibility.view",
             "title": "Accessibility",
-            "type": "@WebInspector.Widget",
-            "location": "elements-panel",
+            "order": 10,
+            "persistence": "permanent",
             "className": "WebInspector.AccessibilitySidebarView"
         }
     ],
@@ -13,7 +16,8 @@
         "AccessibilityModel.js",
         "AccessibilitySidebarView.js",
         "AccessibilityNodeView.js",
-        "AccessibilityStrings.js"
+        "AccessibilityStrings.js",
+        "ARIAAttributesView.js"
     ],
     "resources": [
         "accessibilityNode.css"

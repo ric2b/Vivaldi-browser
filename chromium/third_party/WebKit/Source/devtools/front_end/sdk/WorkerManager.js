@@ -57,7 +57,7 @@ WebInspector.WorkerManager.prototype = {
         this._enabled = true;
 
         this.target().workerAgent().enable();
-        this.target().resourceTreeModel.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
+        WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
     },
 
     disable: function()
@@ -67,7 +67,7 @@ WebInspector.WorkerManager.prototype = {
         this._enabled = false;
         this._reset();
         this.target().workerAgent().disable();
-        this.target().resourceTreeModel.removeEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
+        WebInspector.targetManager.removeEventListener(WebInspector.TargetManager.Events.MainFrameNavigated, this._mainFrameNavigated, this);
     },
 
     dispose: function()
@@ -101,15 +101,15 @@ WebInspector.WorkerManager.prototype = {
 
         var parsedURL = url.asParsedURL();
         var workerName = parsedURL ? parsedURL.lastPathComponentWithFragment() : "#" + (++this._lastAnonymousTargetId);
-        var target = WebInspector.targetManager.createTarget(workerName, WebInspector.Target.Type.DedicatedWorker, connection, this.target());
+        var target = WebInspector.targetManager.createTarget(workerName, WebInspector.Target.Capability.JS, connection, this.target());
         this._targetsByWorkerId.set(workerId, target);
 
         // Only pause new worker if debugging SW - we are going through the
         // pause on start checkbox.
-        var mainIsServiceWorker = WebInspector.targetManager.mainTarget().isServiceWorker();
+        var mainIsServiceWorker = WebInspector.targetManager.mainTarget().hasWorkerCapability() && !WebInspector.targetManager.mainTarget().hasBrowserCapability();
         if (mainIsServiceWorker && waitingForDebugger)
             target.debuggerAgent().pause();
-        target.runtimeAgent().run();
+        target.runtimeAgent().runIfWaitingForDebugger();
     },
 
     /**
@@ -140,7 +140,9 @@ WebInspector.WorkerManager.prototype = {
      */
     _mainFrameNavigated: function(event)
     {
-        this._reset();
+        if (event.data.target() !== this.target())
+            return;
+        this._reset(); // TODO (dgozman): Probably, unnecessary. Consider removal.
     },
 
     /**

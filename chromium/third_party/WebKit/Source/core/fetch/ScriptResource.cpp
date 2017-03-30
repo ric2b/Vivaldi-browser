@@ -66,7 +66,7 @@ void ScriptResource::didAddClient(ResourceClient* client)
 void ScriptResource::appendData(const char* data, size_t length)
 {
     Resource::appendData(data, length);
-    ResourceClientWalker<ScriptResourceClient> walker(m_clients);
+    ResourceClientWalker<ScriptResourceClient> walker(clients());
     while (ScriptResourceClient* client = walker.next())
         client->notifyAppendData(this);
 }
@@ -76,23 +76,22 @@ void ScriptResource::onMemoryDump(WebMemoryDumpLevelOfDetail levelOfDetail, WebP
     Resource::onMemoryDump(levelOfDetail, memoryDump);
     const String name = getMemoryDumpName() + "/decoded_script";
     auto dump = memoryDump->createMemoryAllocatorDump(name);
-    dump->addScalar("size", "bytes", m_script.currentSizeInBytes());
+    dump->addScalar("size", "bytes", m_script.charactersSizeInBytes());
     memoryDump->addSuballocation(dump->guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
 }
 
-const CompressibleString& ScriptResource::script()
+const String& ScriptResource::script()
 {
-    ASSERT(!isPurgeable());
     ASSERT(isLoaded());
 
-    if (m_script.isNull() && m_data) {
+    if (m_script.isNull() && data()) {
         String script = decodedText();
-        m_data.clear();
+        clearData();
         // We lie a it here and claim that script counts as encoded data (even though it's really decoded data).
         // That's because the MemoryCache thinks that it can clear out decoded data by calling destroyDecodedData(),
         // but we can't destroy script in destroyDecodedData because that's our only copy of the data!
-        setEncodedSize(script.sizeInBytes());
-        m_script = CompressibleString(script.impl());
+        setEncodedSize(script.charactersSizeInBytes());
+        m_script = AtomicString(script);
     }
 
     return m_script;
@@ -100,12 +99,12 @@ const CompressibleString& ScriptResource::script()
 
 void ScriptResource::destroyDecodedDataForFailedRevalidation()
 {
-    m_script = CompressibleString();
+    m_script = AtomicString();
 }
 
 bool ScriptResource::mimeTypeAllowedByNosniff() const
 {
-    return parseContentTypeOptionsHeader(m_response.httpHeaderField(HTTPNames::X_Content_Type_Options)) != ContentTypeOptionsNosniff || MIMETypeRegistry::isSupportedJavaScriptMIMEType(httpContentType());
+    return parseContentTypeOptionsHeader(response().httpHeaderField(HTTPNames::X_Content_Type_Options)) != ContentTypeOptionsNosniff || MIMETypeRegistry::isSupportedJavaScriptMIMEType(httpContentType());
 }
 
 void ScriptResource::setIntegrityDisposition(ScriptIntegrityDisposition disposition)

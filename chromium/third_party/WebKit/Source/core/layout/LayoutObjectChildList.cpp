@@ -30,6 +30,7 @@
 #include "core/layout/LayoutCounter.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutView.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 
 namespace blink {
 
@@ -83,6 +84,8 @@ LayoutObject* LayoutObjectChildList::removeChildNode(LayoutObject* owner, Layout
         if (notifyLayoutObject) {
             LayoutCounter::layoutObjectSubtreeWillBeDetached(oldChild);
             oldChild->willBeRemovedFromTree();
+        } else if (oldChild->isBox() && toLayoutBox(oldChild)->isOrthogonalWritingModeRoot()) {
+            toLayoutBox(oldChild)->unmarkOrthogonalWritingModeRoot();
         }
     }
 
@@ -181,8 +184,9 @@ void LayoutObjectChildList::invalidatePaintOnRemoval(LayoutObject& oldChild)
         return;
     if (oldChild.isBody())
         oldChild.view()->setShouldDoFullPaintInvalidation();
-    oldChild.slowSetPaintingLayerNeedsRepaint();
-    oldChild.invalidatePaintOfPreviousPaintInvalidationRect(oldChild.containerForPaintInvalidation(), PaintInvalidationLayoutObjectRemoval);
+    ObjectPaintInvalidator paintInvalidator(oldChild);
+    paintInvalidator.slowSetPaintingLayerNeedsRepaint();
+    paintInvalidator.invalidatePaintOfPreviousPaintInvalidationRect(oldChild.containerForPaintInvalidation(), PaintInvalidationLayoutObjectRemoval);
 }
 
 } // namespace blink

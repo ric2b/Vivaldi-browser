@@ -79,7 +79,7 @@ void PopupTimersController::CancelAll() {
 }
 
 void PopupTimersController::TimerFinished(const std::string& id) {
-  if (!ContainsKey(popup_timers_, id))
+  if (!base::ContainsKey(popup_timers_, id))
     return;
 
   CancelTimer(id);
@@ -96,7 +96,7 @@ void PopupTimersController::OnNotificationUpdated(const std::string& id) {
   NotificationList::PopupNotifications popup_notifications =
       message_center_->GetPopupNotifications();
 
-  if (!popup_notifications.size()) {
+  if (popup_notifications.empty()) {
     CancelAll();
     return;
   }

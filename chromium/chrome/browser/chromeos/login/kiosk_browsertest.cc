@@ -360,7 +360,8 @@ class KioskFakeDiskMountManager : public file_manager::FakeDiskMountManager {
 
   void MountUsbStick() {
     DCHECK(!usb_mount_path_.empty());
-    MountPath(usb_mount_path_, "", "", chromeos::MOUNT_TYPE_DEVICE);
+    MountPath(usb_mount_path_, "", "", chromeos::MOUNT_TYPE_DEVICE,
+              chromeos::MOUNT_ACCESS_MODE_READ_ONLY);
   }
 
   void UnMountUsbStick() {
@@ -988,15 +989,7 @@ IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppWithNetworkConfigAccelerator) {
   WaitForAppLaunchSuccess();
 }
 
-#if defined(OS_CHROMEOS)
-#define MAYBE_LaunchAppNetworkDownConfigureNotAllowed \
-  DISABLED_LaunchAppNetworkDownConfigureNotAllowed
-#else
-#define MAYBE_LaunchAppNetworkDownConfigureNotAllowed \
-  LaunchAppNetworkDownConfigureNotAllowed
-#endif
-IN_PROC_BROWSER_TEST_F(KioskTest,
-                       MAYBE_LaunchAppNetworkDownConfigureNotAllowed) {
+IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppNetworkDownConfigureNotAllowed) {
   // Mock network could not be configured.
   ScopedCanConfigureNetwork can_configure_network(false, true);
 
@@ -1037,8 +1030,8 @@ IN_PROC_BROWSER_TEST_F(KioskTest, DISABLED_LaunchAppNetworkPortal) {
 IN_PROC_BROWSER_TEST_F(KioskTest, LaunchAppUserCancel) {
   // Make fake_cws_ return empty update response.
   set_test_app_version("");
-  StartAppLaunchFromLoginScreen(SimulateNetworkOfflineClosure());
   OobeScreenWaiter splash_waiter(OobeScreen::SCREEN_APP_LAUNCH_SPLASH);
+  StartAppLaunchFromLoginScreen(SimulateNetworkOfflineClosure());
   splash_waiter.Wait();
 
   settings_helper_.SetBoolean(
@@ -2297,12 +2290,7 @@ IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, EnterpriseKioskApp) {
   content::RunAllPendingInMessageLoop();
 }
 
-#if defined(OS_CHROMEOS)
-#define MAYBE_PrivateStore DISABLED_PrivateStore
-#else
-#define MAYBE_PrivateStore PrivateStore
-#endif
-IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, MAYBE_PrivateStore) {
+IN_PROC_BROWSER_TEST_F(KioskEnterpriseTest, PrivateStore) {
   set_test_app_id(kTestEnterpriseKioskApp);
 
   const char kPrivateStoreUpdate[] = "/private_store_update";

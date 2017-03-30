@@ -206,14 +206,14 @@ class MockDragMouseTarget : public MockMoveGestureTarget {
     ASSERT_TRUE(WebInputEvent::isMouseEventType(event.type));
     const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
     if (!started_) {
-      EXPECT_EQ(mouse_event.button, WebMouseEvent::ButtonLeft);
+      EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::Left);
       EXPECT_EQ(mouse_event.clickCount, 1);
       EXPECT_EQ(mouse_event.type, WebInputEvent::MouseDown);
       start_.SetPoint(mouse_event.x, mouse_event.y);
       last_mouse_point_ = start_;
       started_ = true;
     } else {
-      EXPECT_EQ(mouse_event.button, WebMouseEvent::ButtonLeft);
+      EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::Left);
       ASSERT_NE(mouse_event.type, WebInputEvent::MouseDown);
 
       gfx::PointF mouse_point(mouse_event.x, mouse_event.y);
@@ -450,7 +450,7 @@ class MockSyntheticTapMouseTarget : public MockSyntheticTapGestureTarget {
     switch (state_) {
       case NOT_STARTED:
         EXPECT_EQ(mouse_event.type, WebInputEvent::MouseDown);
-        EXPECT_EQ(mouse_event.button, WebMouseEvent::ButtonLeft);
+        EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::Left);
         EXPECT_EQ(mouse_event.clickCount, 1);
         position_ = gfx::PointF(mouse_event.x, mouse_event.y);
         start_time_ = base::TimeDelta::FromMilliseconds(
@@ -459,7 +459,7 @@ class MockSyntheticTapMouseTarget : public MockSyntheticTapGestureTarget {
         break;
       case STARTED:
         EXPECT_EQ(mouse_event.type, WebInputEvent::MouseUp);
-        EXPECT_EQ(mouse_event.button, WebMouseEvent::ButtonLeft);
+        EXPECT_EQ(mouse_event.button, WebMouseEvent::Button::Left);
         EXPECT_EQ(mouse_event.clickCount, 1);
         EXPECT_EQ(position_, gfx::PointF(mouse_event.x, mouse_event.y));
         stop_time_ = base::TimeDelta::FromMilliseconds(
@@ -1470,68 +1470,6 @@ TEST_F(SyntheticGestureControllerTest, TapGestureMouse) {
   EXPECT_EQ(tap_target->GetDuration().InMilliseconds(), params.duration_ms);
   EXPECT_GE(GetTotalTime(),
             base::TimeDelta::FromMilliseconds(params.duration_ms));
-}
-
-TEST_F(SyntheticGestureControllerTest, PointerTouchAction) {
-  CreateControllerAndTarget<MockSyntheticPointerTouchActionTarget>();
-
-  SyntheticPointerActionParams params = SyntheticPointerActionParams(
-      SyntheticPointerActionParams::PointerActionType::PRESS);
-  params.gesture_source_type = SyntheticGestureParams::TOUCH_INPUT;
-  params.set_index(0);
-  params.set_position(gfx::PointF(54, 89));
-  SyntheticTouchPointer synthetic_pointer;
-
-  std::unique_ptr<SyntheticPointerAction> gesture(
-      new SyntheticPointerAction(params, &synthetic_pointer));
-  QueueSyntheticGesture(std::move(gesture));
-  FlushInputUntilComplete();
-
-  MockSyntheticPointerTouchActionTarget* pointer_touch_target =
-      static_cast<MockSyntheticPointerTouchActionTarget*>(target_);
-  EXPECT_EQ(pointer_touch_target->type(), WebInputEvent::TouchStart);
-  EXPECT_EQ(pointer_touch_target->positions(0), params.position());
-  EXPECT_EQ(pointer_touch_target->states(0), WebTouchPoint::StatePressed);
-  ASSERT_EQ(pointer_touch_target->touch_length(), 1U);
-
-  params.set_index(1);
-  params.set_position(gfx::PointF(79, 132));
-  gesture.reset(new SyntheticPointerAction(params, &synthetic_pointer));
-  QueueSyntheticGesture(std::move(gesture));
-  FlushInputUntilComplete();
-
-  pointer_touch_target =
-      static_cast<MockSyntheticPointerTouchActionTarget*>(target_);
-  EXPECT_EQ(pointer_touch_target->type(), WebInputEvent::TouchStart);
-  EXPECT_EQ(pointer_touch_target->indexes(1), params.index());
-  EXPECT_EQ(pointer_touch_target->positions(1), params.position());
-  EXPECT_EQ(pointer_touch_target->states(1), WebTouchPoint::StatePressed);
-  ASSERT_EQ(pointer_touch_target->touch_length(), 2U);
-
-  params.set_pointer_action_type(
-      SyntheticPointerActionParams::PointerActionType::MOVE);
-  params.set_position(gfx::PointF(133, 156));
-  gesture.reset(new SyntheticPointerAction(params, &synthetic_pointer));
-  QueueSyntheticGesture(std::move(gesture));
-  FlushInputUntilComplete();
-
-  pointer_touch_target =
-      static_cast<MockSyntheticPointerTouchActionTarget*>(target_);
-  EXPECT_EQ(pointer_touch_target->type(), WebInputEvent::TouchMove);
-  EXPECT_EQ(pointer_touch_target->positions(1), params.position());
-  EXPECT_EQ(pointer_touch_target->states(1), WebTouchPoint::StateMoved);
-  ASSERT_EQ(pointer_touch_target->touch_length(), 2U);
-
-  params.set_pointer_action_type(
-      SyntheticPointerActionParams::PointerActionType::RELEASE);
-  gesture.reset(new SyntheticPointerAction(params, &synthetic_pointer));
-  QueueSyntheticGesture(std::move(gesture));
-  FlushInputUntilComplete();
-
-  pointer_touch_target =
-      static_cast<MockSyntheticPointerTouchActionTarget*>(target_);
-  EXPECT_EQ(pointer_touch_target->type(), WebInputEvent::TouchEnd);
-  EXPECT_EQ(pointer_touch_target->states(1), WebTouchPoint::StateReleased);
 }
 
 }  // namespace

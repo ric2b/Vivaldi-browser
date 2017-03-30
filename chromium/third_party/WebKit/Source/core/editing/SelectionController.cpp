@@ -44,6 +44,7 @@
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "wtf/AutoReset.h"
 
 namespace blink {
 SelectionController* SelectionController::create(LocalFrame& frame)
@@ -84,12 +85,8 @@ DispatchEventResult dispatchSelectStart(Node* node)
 
 VisibleSelectionInFlatTree expandSelectionToRespectUserSelectAll(Node* targetNode, const VisibleSelectionInFlatTree& selection)
 {
-    Node* rootUserSelectAll = EditingInFlatTreeStrategy::rootUserSelectAllForNode(targetNode);
+    Node* const rootUserSelectAll = EditingInFlatTreeStrategy::rootUserSelectAllForNode(targetNode);
     if (!rootUserSelectAll)
-        return selection;
-    if (rootUserSelectAll->isHTMLElement() && toHTMLElement(rootUserSelectAll)->isTextFormControl())
-        return selection;
-    if (rootUserSelectAll->layoutObject()->style()->userModify() != READ_ONLY)
         return selection;
 
     VisibleSelectionInFlatTree newSelection(selection);
@@ -237,8 +234,9 @@ void SelectionController::updateSelectionForMouseDrag(const HitTestResult& hitTe
 
     if (RuntimeEnabledFeatures::userSelectAllEnabled()) {
         // TODO(yosin) Should we use |Strategy::rootUserSelectAllForNode()|?
-        Node* rootUserSelectAllForMousePressNode = EditingInFlatTreeStrategy::rootUserSelectAllForNode(mousePressNode);
-        if (rootUserSelectAllForMousePressNode && rootUserSelectAllForMousePressNode == EditingInFlatTreeStrategy::rootUserSelectAllForNode(target)) {
+        Node* const rootUserSelectAllForMousePressNode = EditingInFlatTreeStrategy::rootUserSelectAllForNode(mousePressNode);
+        Node* const rootUserSelectAllForTarget = EditingInFlatTreeStrategy::rootUserSelectAllForNode(target);
+        if (rootUserSelectAllForMousePressNode && rootUserSelectAllForMousePressNode == rootUserSelectAllForTarget) {
             newSelection.setBase(mostBackwardCaretPosition(PositionInFlatTree::beforeNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
             newSelection.setExtent(mostForwardCaretPosition(PositionInFlatTree::afterNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
         } else {
@@ -250,7 +248,6 @@ void SelectionController::updateSelectionForMouseDrag(const HitTestResult& hitTe
                     newSelection.setBase(mostForwardCaretPosition(PositionInFlatTree::afterNode(rootUserSelectAllForMousePressNode), CanCrossEditingBoundary));
             }
 
-            Node* rootUserSelectAllForTarget = EditingInFlatTreeStrategy::rootUserSelectAllForNode(target);
             if (rootUserSelectAllForTarget && mousePressNode->layoutObject() && toPositionInFlatTree(target->layoutObject()->positionForPoint(hitTestResult.localPoint()).position()).compareTo(toPositionInFlatTree(mousePressNode->layoutObject()->positionForPoint(dragStartPos).position())) < 0)
                 newSelection.setExtent(mostBackwardCaretPosition(PositionInFlatTree::beforeNode(rootUserSelectAllForTarget), CanCrossEditingBoundary));
             else if (rootUserSelectAllForTarget && mousePressNode->layoutObject())
@@ -322,7 +319,7 @@ void SelectionController::selectClosestWordFromHitTestResult(const HitTestResult
         // If node doesn't have text except space, tab or line break, do not
         // select that 'empty' area.
         EphemeralRangeInFlatTree range(newSelection.start(), newSelection.end());
-        const String& str = plainText(range, innerNode->hasEditableStyle() ? TextIteratorEmitsObjectReplacementCharacter : TextIteratorDefaultBehavior);
+        const String& str = plainText(range, hasEditableStyle(*innerNode) ? TextIteratorEmitsObjectReplacementCharacter : TextIteratorDefaultBehavior);
         if (str.isEmpty() || str.simplifyWhiteSpace().containsOnlyWhitespace())
             return;
 
@@ -411,7 +408,7 @@ bool SelectionController::handleMousePressEventDoubleClick(const MouseEventWithH
     if (!m_mouseDownAllowsMultiClick)
         return handleMousePressEventSingleClick(event);
 
-    if (event.event().button() != LeftButton)
+    if (event.event().pointerProperties().button != WebPointerProperties::Button::Left)
         return false;
 
     if (selection().isRange()) {
@@ -439,7 +436,7 @@ bool SelectionController::handleMousePressEventTripleClick(const MouseEventWithH
     if (!m_mouseDownAllowsMultiClick)
         return handleMousePressEventSingleClick(event);
 
-    if (event.event().button() != LeftButton)
+    if (event.event().pointerProperties().button != WebPointerProperties::Button::Left)
         return false;
 
     Node* innerNode = event.innerNode();
@@ -517,11 +514,11 @@ bool SelectionController::handleMouseReleaseEvent(const MouseEventWithHitTestRes
     if (m_mouseDownWasSingleClickInSelection && m_selectionState != SelectionState::ExtendedSelection
         && dragStartPos == event.event().position()
         && selection().isRange()
-        && event.event().button() != RightButton) {
+        && event.event().pointerProperties().button != WebPointerProperties::Button::Right) {
         VisibleSelectionInFlatTree newSelection;
         Node* node = event.innerNode();
         bool caretBrowsing = m_frame->settings() && m_frame->settings()->caretBrowsingEnabled();
-        if (node && node->layoutObject() && (caretBrowsing || node->hasEditableStyle())) {
+        if (node && node->layoutObject() && (caretBrowsing || hasEditableStyle(*node))) {
             const VisiblePositionInFlatTree pos = visiblePositionOfHitTestResult(event.hitTestResult());
             newSelection = VisibleSelectionInFlatTree(pos);
         }
@@ -535,7 +532,7 @@ bool SelectionController::handleMouseReleaseEvent(const MouseEventWithHitTestRes
 
     selection().selectFrameElementInParentIfFullySelected();
 
-    if (event.event().button() == MiddleButton && !event.isOverLink()) {
+    if (event.event().pointerProperties().button == WebPointerProperties::Button::Middle && !event.isOverLink()) {
         // Ignore handled, since we want to paste to where the caret was placed anyway.
         handled = handlePasteGlobalSelection(event.event()) || handled;
     }
@@ -582,7 +579,10 @@ bool SelectionController::handleGestureLongPress(const PlatformGestureEvent& ges
         return false;
 
     Node* innerNode = hitTestResult.innerNode();
-    bool innerNodeIsSelectable = innerNode && (innerNode->isContentEditable() || innerNode->isTextNode() || innerNode->canStartSelection());
+    if (!innerNode)
+        return false;
+    innerNode->document().updateStyleAndLayoutTree();
+    bool innerNodeIsSelectable = innerNode && (hasEditableStyle(*innerNode) || innerNode->canStartSelection());
     if (!innerNodeIsSelectable)
         return false;
 
@@ -608,7 +608,7 @@ void SelectionController::sendContextMenuEvent(const MouseEventWithHitTestResult
         return;
 
     // Context menu events are always allowed to perform a selection.
-    TemporaryChange<bool> mouseDownMayStartSelectChange(m_mouseDownMayStartSelect, true);
+    AutoReset<bool> mouseDownMayStartSelectChange(&m_mouseDownMayStartSelect, true);
 
     if (mev.hitTestResult().isMisspelled())
         return selectClosestMisspellingFromMouseEvent(mev);

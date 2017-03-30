@@ -156,8 +156,8 @@ class BrowserView : public BrowserWindow,
   // window.
   gfx::Rect GetFindBarBoundingBox() const;
 
-  // Returns the preferred height of the TabStrip. Used to position the OTR
-  // avatar icon.
+  // Returns the preferred height of the TabStrip. Used to position the
+  // incognito avatar icon.
   int GetTabStripHeight() const;
 
   // Takes some view's origin (relative to this BrowserView) and offsets it such
@@ -198,15 +198,19 @@ class BrowserView : public BrowserWindow,
 
   // Returns true if the profile associated with this Browser window is
   // incognito.
-  bool IsOffTheRecord() const;
+  bool IsIncognito() const;
 
   // Returns true if the profile associated with this Browser window is
   // a guest session.
   bool IsGuestSession() const;
 
   // Returns true if the profile associated with this Browser window is
-  // not off the record or a guest session.
+  // not incognito or a guest session.
   bool IsRegularOrGuestSession() const;
+
+  // Returns whether or not a client edge (the border around the web content)
+  // should be laid out and drawn.
+  bool HasClientEdge() const;
 
   // Provides the containing frame with the accelerator for the specified
   // command id. This can be used to provide menu item shortcut hints etc.
@@ -371,6 +375,7 @@ class BrowserView : public BrowserWindow,
       const base::Callback<void(ImeWarningBubblePermissionStatus status)>&
           callback) override;
   std::string GetWorkspace() const override;
+  bool IsVisibleOnAllWorkspaces() const override;
 
   BookmarkBarView* GetBookmarkBarView() const;
   LocationBarView* GetLocationBarView() const;
@@ -389,7 +394,7 @@ class BrowserView : public BrowserWindow,
 
   // Overridden from ui::AcceleratorProvider:
   bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override;
+                                  ui::Accelerator* accelerator) const override;
 
   // Overridden from views::WidgetDelegate:
   bool CanResize() const override;

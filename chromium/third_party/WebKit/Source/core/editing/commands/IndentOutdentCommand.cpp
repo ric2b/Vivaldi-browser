@@ -136,9 +136,14 @@ void IndentOutdentCommand::indentIntoBlockquote(const Position& start, const Pos
         // Create a new blockquote and insert it as a child of the root editable element. We accomplish
         // this by splitting all parents of the current paragraph up to that point.
         targetBlockquote = createBlockElement();
-        if (outerBlock == start.computeContainerNode())
-            insertNodeAt(targetBlockquote, start, editingState);
-        else
+        if (outerBlock == start.computeContainerNode()) {
+            // When we apply indent to an empty <blockquote>, we should call insertNodeAfter().
+            // See http://crbug.com/625802 for more details.
+            if (outerBlock->hasTagName(blockquoteTag))
+                insertNodeAfter(targetBlockquote, outerBlock, editingState);
+            else
+                insertNodeAt(targetBlockquote, start, editingState);
+        } else
             insertNodeBefore(targetBlockquote, outerBlock, editingState);
         if (editingState->isAborted())
             return;
@@ -157,7 +162,7 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState)
     VisiblePosition visibleEndOfParagraph = endOfParagraph(visibleStartOfParagraph);
 
     HTMLElement* enclosingElement = toHTMLElement(enclosingNodeOfType(visibleStartOfParagraph.deepEquivalent(), &isHTMLListOrBlockquoteElement));
-    if (!enclosingElement || !enclosingElement->parentNode()->hasEditableStyle()) // We can't outdent if there is no place to go!
+    if (!enclosingElement || !hasEditableStyle(*enclosingElement->parentNode())) // We can't outdent if there is no place to go!
         return;
 
     // Use InsertListCommand to remove the selection from the list
@@ -190,7 +195,7 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState)
             if (Element* splitPointParent = splitPoint->parentElement()) {
                 if (splitPointParent->hasTagName(blockquoteTag)
                     && !splitPoint->hasTagName(blockquoteTag)
-                    && splitPointParent->parentNode()->hasEditableStyle()) // We can't outdent if there is no place to go!
+                    && hasEditableStyle(*splitPointParent->parentNode())) // We can't outdent if there is no place to go!
                     splitElement(splitPointParent, splitPoint);
             }
         }
@@ -256,10 +261,10 @@ void IndentOutdentCommand::outdentRegion(const VisiblePosition& startOfSelection
         // outdentParagraph could move more than one paragraph if the paragraph
         // is in a list item. As a result, endAfterSelection and endOfNextParagraph
         // could refer to positions no longer in the document.
-        if (endAfterSelection.isNotNull() && !endAfterSelection.deepEquivalent().inShadowIncludingDocument())
+        if (endAfterSelection.isNotNull() && !endAfterSelection.deepEquivalent().isConnected())
             break;
 
-        if (endOfNextParagraph.isNotNull() && !endOfNextParagraph.deepEquivalent().inShadowIncludingDocument()) {
+        if (endOfNextParagraph.isNotNull() && !endOfNextParagraph.deepEquivalent().isConnected()) {
             endOfCurrentParagraph = createVisiblePosition(endingSelection().end());
             endOfNextParagraph = endOfParagraph(nextPositionOf(endOfCurrentParagraph));
         }
@@ -284,6 +289,11 @@ void IndentOutdentCommand::formatRange(const Position& start, const Position& en
         blockquoteForNextIndent = nullptr;
     else
         indentIntoBlockquote(start, end, blockquoteForNextIndent, editingState);
+}
+
+InputEvent::InputType IndentOutdentCommand::inputType() const
+{
+    return m_typeOfAction == Indent ? InputEvent::InputType::Indent : InputEvent::InputType::Outdent;
 }
 
 } // namespace blink

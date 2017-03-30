@@ -14,11 +14,11 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/log/net_log.h"
-#include "net/quic/crypto/quic_crypto_server_config.h"
-#include "net/quic/quic_chromium_alarm_factory.h"
-#include "net/quic/quic_chromium_connection_helper.h"
-#include "net/quic/quic_clock.h"
-#include "net/quic/quic_config.h"
+#include "net/quic/chromium/quic_chromium_alarm_factory.h"
+#include "net/quic/chromium/quic_chromium_connection_helper.h"
+#include "net/quic/core/crypto/quic_crypto_server_config.h"
+#include "net/quic/core/quic_clock.h"
+#include "net/quic/core/quic_config.h"
 
 namespace net {
 
@@ -33,7 +33,7 @@ class QuicSimpleServerPeer;
 
 class QuicSimpleServer {
  public:
-  QuicSimpleServer(ProofSource* proof_source,
+  QuicSimpleServer(std::unique_ptr<ProofSource> proof_source,
                    const QuicConfig& config,
                    const QuicVersionVector& supported_versions);
 
@@ -65,6 +65,8 @@ class QuicSimpleServer {
   // Initialize the internal state of the server.
   void Initialize();
 
+  QuicVersionManager version_manager_;
+
   // Accepts data from the framer and demuxes clients to sessions.
   std::unique_ptr<QuicDispatcher> dispatcher_;
 
@@ -85,12 +87,6 @@ class QuicSimpleServer {
   QuicConfig config_;
   // crypto_config_ contains crypto parameters for the handshake.
   QuicCryptoServerConfig crypto_config_;
-
-  // This vector contains QUIC versions which we currently support.
-  // This should be ordered such that the highest supported version is the first
-  // element, with subsequent elements in descending order (versions can be
-  // skipped as necessary).
-  QuicVersionVector supported_versions_;
 
   // The address that the server listens on.
   IPEndPoint server_address_;

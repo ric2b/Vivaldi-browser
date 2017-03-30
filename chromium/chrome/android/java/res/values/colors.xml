@@ -9,7 +9,6 @@
     <color name="default_primary_color">#f2f2f2</color>
     <color name="light_normal_color">#5A5A5A</color>
     <color name="light_active_color">#4285F4</color>
-    <color name="input_underline_color">#e5e5e5</color>
     <color name="input_underline_error_color">#d32f2f</color>
     <color name="explanation_text_color">#909090</color>
     <color name="text_highlight_color">#C6DAFC</color>
@@ -23,6 +22,7 @@
     <color name="google_grey_300">#e0e0e0</color>
     <color name="google_grey_600">#757575</color>
     <color name="toolbar_shadow_color">#1d000000</color>
+    <color name="toolbar_light_tint">#A3000000</color>
 
     <!-- Infobar colors -->
     <color name="infobar_accent_blue">#4285f4</color>
@@ -75,10 +75,8 @@
     <color name="data_reduction_chart_background_color">#FAFAFA</color>
 
     <!-- Compositor Tab Title Colors -->
-    <color name="compositor_tab_title_bar_text">#555555</color>
+    <color name="compositor_tab_title_bar_text">#A3000000</color>
     <color name="compositor_tab_title_bar_text_incognito">#FFFFFFFF</color>
-    <color name="compositor_tab_title_bar_shadow">#AAFFFFFF</color>
-    <color name="compositor_tab_title_bar_shadow_incognito">#88000000</color>
 
     <!-- First Run Experience Colors -->
     <color name="fre_text_color">#000000</color>
@@ -89,7 +87,6 @@
     <color name="signin_head_background">#fff</color>
     <color name="signin_body_background">#fafafa</color>
     <color name="signin_border_line_color">#000</color>
-    <color name="signin_disabled_button_text_color">#42000000</color>
 
     <!-- Sad Tab colors -->
     <color name="sad_tab_header_text_color">#333333</color>
@@ -106,7 +103,6 @@
     <color name="ntp_material_design_bg">#f2f2f2</color>
     <color name="snippets_thumnail_placeholder_bg">#f2f2f2</color>
     <color name="snippets_thumnail_placeholder_fg">#757575</color>
-    <color name="snippets_background_color">#fff</color>
     <color name="snippets_publisher_name_color">#646464</color>
     <color name="snippets_text_color">#646464</color>
     <color name="snippets_list_header_text_color">#646464</color>
@@ -169,7 +165,6 @@
     <color name="bookmark_detail_text">#212121</color>
     <color name="bookmark_detail_section">#7C7B79</color>
     <color name="bookmark_drawer_selected_background_color">#F0F0F0</color>
-    <color name="bookmark_list_item_highlight_color">#804281f4</color>
 
     <!-- Favicon colors -->
     <color name="default_favicon_background_color">#ff787878</color>
@@ -196,5 +191,8 @@
     <color name="payments_section_edit_background">#f5f5f5</color>
     <color name="payments_section_chevron">#b2b2b2</color>
     <color name="payments_section_separator">#e0e0e0</color>
+
+    <!-- Other colors -->
+    <color name="selectable_list_item_highlight_color">#804281f4</color>
 
 </resources>

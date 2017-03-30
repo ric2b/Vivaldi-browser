@@ -1045,14 +1045,15 @@ IPC_MESSAGE_ROUTED1(PpapiHostMsg_PPBCore_ReleaseResource,
                     ppapi::HostResource)
 
 // PPB_Graphics3D.
-IPC_SYNC_MESSAGE_ROUTED3_4(PpapiHostMsg_PPBGraphics3D_Create,
-                           PP_Instance /* instance */,
-                           ppapi::HostResource /* share_context */,
-                           std::vector<int32_t> /* attrib_list */,
-                           ppapi::HostResource /* result */,
-                           gpu::Capabilities /* capabilities */,
-                           ppapi::proxy::SerializedHandle /* shared_state */,
-                           gpu::CommandBufferId /* command_buffer_id */)
+IPC_SYNC_MESSAGE_ROUTED3_4(
+    PpapiHostMsg_PPBGraphics3D_Create,
+    PP_Instance /* instance */,
+    ppapi::HostResource /* share_context */,
+    gpu::gles2::ContextCreationAttribHelper /* attrib_helper */,
+    ppapi::HostResource /* result */,
+    gpu::Capabilities /* capabilities */,
+    ppapi::proxy::SerializedHandle /* shared_state */,
+    gpu::CommandBufferId /* command_buffer_id */)
 IPC_SYNC_MESSAGE_ROUTED2_0(PpapiHostMsg_PPBGraphics3D_SetGetBuffer,
                            ppapi::HostResource /* context */,
                            int32_t /* transfer_buffer_id */)
@@ -1086,9 +1087,10 @@ IPC_SYNC_MESSAGE_ROUTED2_0(PpapiHostMsg_PPBGraphics3D_DestroyTransferBuffer,
 // after this message is sent.
 IPC_MESSAGE_ROUTED1(PpapiHostMsg_PPBGraphics3D_TakeFrontBuffer,
                     ppapi::HostResource /* graphics_3d */)
-IPC_MESSAGE_ROUTED2(PpapiHostMsg_PPBGraphics3D_SwapBuffers,
+IPC_MESSAGE_ROUTED3(PpapiHostMsg_PPBGraphics3D_SwapBuffers,
                     ppapi::HostResource /* graphics_3d */,
-                    gpu::SyncToken /* sync_token */)
+                    gpu::SyncToken /* sync_token */,
+                    gfx::Size /* size */)
 IPC_MESSAGE_ROUTED1(PpapiHostMsg_PPBGraphics3D_EnsureWorkVisible,
                     ppapi::HostResource /* context */)
 
@@ -2027,6 +2029,33 @@ IPC_MESSAGE_CONTROL3(PpapiPluginMsg_VideoSource_GetFrameReply,
                      PP_ImageDataDesc /* image_data_desc */,
                      PP_TimeTicks /* timestamp */)
 IPC_MESSAGE_CONTROL0(PpapiHostMsg_VideoSource_Close)
+
+// VpnProvider ----------------------------------------------------------------
+IPC_MESSAGE_CONTROL0(PpapiHostMsg_VpnProvider_Create)
+
+// VpnProvider plugin -> host -> plugin
+IPC_MESSAGE_CONTROL2(PpapiHostMsg_VpnProvider_Bind,
+                     std::string /* configuration_id */,
+                     std::string /* configuration_name */)
+IPC_MESSAGE_CONTROL3(PpapiPluginMsg_VpnProvider_BindReply,
+                     uint32_t /* queue_size */,
+                     uint32_t /* max_packet_size */,
+                     int32_t /* status */)
+IPC_MESSAGE_CONTROL2(PpapiHostMsg_VpnProvider_SendPacket,
+                     uint32_t /* packet_size */,
+                     uint32_t /* id */)
+IPC_MESSAGE_CONTROL1(PpapiPluginMsg_VpnProvider_SendPacketReply,
+                     uint32_t /* id */)
+
+// VpnProvider host -> plugin
+IPC_MESSAGE_CONTROL0(PpapiPluginMsg_VpnProvider_OnUnbind)
+
+// VpnProvider host -> plugin -> host
+IPC_MESSAGE_CONTROL2(PpapiPluginMsg_VpnProvider_OnPacketReceived,
+                     uint32_t /* packet_size */,
+                     uint32_t /* id */)
+IPC_MESSAGE_CONTROL1(PpapiHostMsg_VpnProvider_OnPacketReceivedReply,
+                     uint32_t /* id */)
 
 // WebSocket -------------------------------------------------------------------
 

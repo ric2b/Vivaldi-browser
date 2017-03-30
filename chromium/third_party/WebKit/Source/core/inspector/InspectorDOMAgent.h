@@ -37,7 +37,6 @@
 #include "core/inspector/protocol/DOM.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/geometry/FloatQuad.h"
-#include "platform/inspector_protocol/Values.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
@@ -96,7 +95,7 @@ public:
     static bool getPseudoElementType(PseudoId, String*);
     static ShadowRoot* userAgentShadowRoot(Node*);
 
-    InspectorDOMAgent(v8::Isolate*, InspectedFrames*, V8InspectorSession*, Client*);
+    InspectorDOMAgent(v8::Isolate*, InspectedFrames*, v8_inspector::V8InspectorSession*, Client*);
     ~InspectorDOMAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -133,7 +132,7 @@ public:
     void pushNodeByPathToFrontend(ErrorString*, const String& path, int* outNodeId) override;
     void pushNodesByBackendIdsToFrontend(ErrorString*, std::unique_ptr<protocol::Array<int>> backendNodeIds, std::unique_ptr<protocol::Array<int>>* nodeIds) override;
     void setInspectedNode(ErrorString*, int nodeId) override;
-    void resolveNode(ErrorString*, int nodeId, const Maybe<String>& objectGroup, std::unique_ptr<protocol::Runtime::RemoteObject>*) override;
+    void resolveNode(ErrorString*, int nodeId, const Maybe<String>& objectGroup, std::unique_ptr<protocol::Runtime::API::RemoteObject>*) override;
     void getAttributes(ErrorString*, int nodeId, std::unique_ptr<protocol::Array<String>>* attributes) override;
     void copyTo(ErrorString*, int nodeId, int targetNodeId, const Maybe<int>& insertBeforeNodeId, int* outNodeId) override;
     void moveTo(ErrorString*, int nodeId, int targetNodeId, const Maybe<int>& insertBeforeNodeId, int* outNodeId) override;
@@ -173,10 +172,11 @@ public:
     void setDOMListener(DOMListener*);
     void inspect(Node*);
     void nodeHighlightedInOverlay(Node*);
+    int pushNodePathToFrontend(Node*);
 
     static String documentURLString(Document*);
 
-    std::unique_ptr<protocol::Runtime::RemoteObject> resolveNode(Node*, const String& objectGroup);
+    std::unique_ptr<protocol::Runtime::API::RemoteObject> resolveNode(Node*, const String& objectGroup);
 
     InspectorHistory* history() { return m_history.get(); }
 
@@ -210,7 +210,6 @@ private:
     Element* assertEditableElement(ErrorString*, int nodeId);
 
     int pushNodePathToFrontend(Node*, NodeToIdMap* nodeMap);
-    int pushNodePathToFrontend(Node*);
     void pushChildNodesToFrontend(int nodeId, int depth = 1);
 
     void invalidateFrameOwnerElement(LocalFrame*);
@@ -234,7 +233,7 @@ private:
 
     v8::Isolate* m_isolate;
     Member<InspectedFrames> m_inspectedFrames;
-    V8InspectorSession* m_v8Session;
+    v8_inspector::V8InspectorSession* m_v8Session;
     Client* m_client;
     Member<DOMListener> m_domListener;
     Member<NodeToIdMap> m_documentNodeToIdMap;

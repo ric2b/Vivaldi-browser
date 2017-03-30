@@ -7,23 +7,23 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/containers/scoped_ptr_hash_map.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_request.h"
+#include "chrome/browser/permissions/permission_request.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/permission_type.h"
-#include "url/gurl.h"
 
 #include <map>
 
 #if defined(OS_ANDROID)
 class PermissionQueueController;
 #endif
+class GURL;
+class PermissionDecisionAutoBlocker;
 class PermissionRequestID;
 class Profile;
 
@@ -35,7 +35,7 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 
 // This base class contains common operations for granting permissions.
 // It offers the following functionality:
-//   - Creates a bubble or infobar when a permission is needed
+//   - Creates a permission request when needed.
 //   - If accepted/denied the permission is saved in content settings for
 //     future uses (for the domain that requested it).
 //   - If dismissed the permission is not saved but it's considered denied for
@@ -48,8 +48,7 @@ using BrowserPermissionCallback = base::Callback<void(ContentSetting)>;
 //     new permission.
 //   - Inherit from PermissionInfobarDelegate and implement
 //     |GetMessageText|
-//   - Edit the PermissionBubbleRequestImpl methods to add the new text for
-//     the bubble.
+//   - Edit the PermissionRequestImpl methods to add the new text.
 //   - Hit several asserts for the missing plumbing and fix them :)
 // After this you can override several other methods to customize behavior,
 // in particular it is advised to override UpdateTabContext in order to manage
@@ -81,6 +80,7 @@ class PermissionContextBase : public KeyedService {
   virtual void RequestPermission(content::WebContents* web_contents,
                                  const PermissionRequestID& id,
                                  const GURL& requesting_frame,
+                                 bool user_gesture,
                                  const BrowserPermissionCallback& callback);
 
   // Returns whether the permission has been granted, denied...
@@ -110,12 +110,14 @@ class PermissionContextBase : public KeyedService {
                                 const PermissionRequestID& id,
                                 const GURL& requesting_origin,
                                 const GURL& embedding_origin,
+                                bool user_gesture,
                                 const BrowserPermissionCallback& callback);
 
   // Called when permission is granted without interactively asking the user.
   void PermissionDecided(const PermissionRequestID& id,
                          const GURL& requesting_origin,
                          const GURL& embedding_origin,
+                         bool user_gesture,
                          const BrowserPermissionCallback& callback,
                          bool persist,
                          ContentSetting content_setting);
@@ -124,6 +126,7 @@ class PermissionContextBase : public KeyedService {
         const PermissionRequestID& id,
         const GURL& requesting_origin,
         const GURL& embedding_origin,
+        bool user_gesture,
         const BrowserPermissionCallback& callback,
         bool allowed,
         const std::string &user_input
@@ -166,18 +169,21 @@ class PermissionContextBase : public KeyedService {
   }
 
  private:
-  // Called when a bubble is no longer used so it can be cleaned up.
-  void CleanUpBubble(const PermissionRequestID& id);
+  friend class PermissionContextBaseTests;
+
+  // Called when a request is no longer used so it can be cleaned up.
+  void CleanUpRequest(const PermissionRequestID& id);
   int RemoveBridgeID(int bridge_id);
 
   Profile* profile_;
+  std::unique_ptr<PermissionDecisionAutoBlocker> decision_auto_blocker_;
   const content::PermissionType permission_type_;
   const ContentSettingsType content_settings_type_;
 #if defined(OS_ANDROID)
   std::unique_ptr<PermissionQueueController> permission_queue_controller_;
 #endif
-  base::ScopedPtrHashMap<std::string, std::unique_ptr<PermissionBubbleRequest>>
-      pending_bubbles_;
+  base::ScopedPtrHashMap<std::string, std::unique_ptr<PermissionRequest>>
+      pending_requests_;
 
   std::map<int, int> bridge_id_to_request_id_map_;
 

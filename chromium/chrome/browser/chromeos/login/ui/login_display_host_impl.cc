@@ -7,10 +7,11 @@
 #include <utility>
 #include <vector>
 
-#include "ash/audio/sounds.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wallpaper/wallpaper_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_controller.h"
-#include "ash/desktop_background/user_wallpaper_delegate.h"
+#include "ash/public/interfaces/container.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -87,6 +88,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "media/audio/sounds/sounds_manager.h"
+#include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
@@ -106,11 +108,6 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "ash/public/interfaces/container.mojom.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#endif
 
 namespace {
 
@@ -299,12 +296,10 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& background_bounds)
     is_observing_keyboard_ = true;
   }
 
-  if (!chrome::IsRunningInMash()) {
-    ash::Shell::GetInstance()->delegate()->AddVirtualKeyboardStateObserver(
-        this);
-  } else {
+  if (!chrome::IsRunningInMash())
+    ash::WmShell::Get()->AddShellObserver(this);
+  else
     NOTIMPLEMENTED();
-  }
   display::Screen::GetScreen()->AddObserver(this);
 
   // We need to listen to CLOSE_ALL_BROWSERS_REQUEST but not APP_TERMINATING
@@ -420,12 +415,10 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
     is_observing_keyboard_ = false;
   }
 
-  if (!chrome::IsRunningInMash()) {
-    ash::Shell::GetInstance()->delegate()->RemoveVirtualKeyboardStateObserver(
-        this);
-  } else {
+  if (!chrome::IsRunningInMash())
+    ash::WmShell::Get()->RemoveShellObserver(this);
+  else
     NOTIMPLEMENTED();
-  }
   display::Screen::GetScreen()->RemoveObserver(this);
 
   if (login_view_ && login_window_)
@@ -455,7 +448,7 @@ LoginDisplayHostImpl::~LoginDisplayHostImpl() {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, LoginDisplayHost implementation:
+// LoginDisplayHostImpl, LoginDisplayHost:
 
 LoginDisplay* LoginDisplayHostImpl::CreateLoginDisplay(
     LoginDisplay::Delegate* delegate) {
@@ -815,7 +808,7 @@ OobeUI* LoginDisplayHostImpl::GetOobeUI() const {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, content:NotificationObserver implementation:
+// LoginDisplayHostImpl, content:NotificationObserver:
 
 void LoginDisplayHostImpl::Observe(
     int type,
@@ -868,8 +861,8 @@ void LoginDisplayHostImpl::Observe(
     VLOG(1) << "Login WebUI >> wp animation done";
     is_wallpaper_loaded_ = true;
     if (!chrome::IsRunningInMash()) {
-      ash::Shell::GetInstance()
-          ->user_wallpaper_delegate()
+      ash::WmShell::Get()
+          ->wallpaper_delegate()
           ->OnWallpaperBootAnimationFinished();
     } else {
       NOTIMPLEMENTED();
@@ -891,7 +884,7 @@ void LoginDisplayHostImpl::Observe(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, WebContentsObserver implementation:
+// LoginDisplayHostImpl, WebContentsObserver:
 
 void LoginDisplayHostImpl::RenderProcessGone(base::TerminationStatus status) {
   // Do not try to restore on shutdown
@@ -912,24 +905,21 @@ void LoginDisplayHostImpl::RenderProcessGone(base::TerminationStatus status) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chromeos::SessionManagerClient::Observer
-// implementation:
+// LoginDisplayHostImpl, chromeos::SessionManagerClient::Observer:
 
 void LoginDisplayHostImpl::EmitLoginPromptVisibleCalled() {
   OnLoginPromptVisible();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chromeos::CrasAudioHandler::AudioObserver
-// implementation:
+// LoginDisplayHostImpl, chromeos::CrasAudioHandler::AudioObserver:
 
 void LoginDisplayHostImpl::OnActiveOutputNodeChanged() {
   TryToPlayStartupSound();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, ash::KeyboardStateObserver:
-// implementation:
+// LoginDisplayHostImpl, ash::ShellObserver:
 
 void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(bool activated) {
   if (keyboard::KeyboardController::GetInstance()) {
@@ -947,7 +937,6 @@ void LoginDisplayHostImpl::OnVirtualKeyboardStateChanged(bool activated) {
 
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, keyboard::KeyboardControllerObserver:
-// implementation:
 
 void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
     const gfx::Rect& new_bounds) {
@@ -963,7 +952,7 @@ void LoginDisplayHostImpl::OnKeyboardBoundsChanging(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, display::DisplayObserver implementation:
+// LoginDisplayHostImpl, display::DisplayObserver:
 
 void LoginDisplayHostImpl::OnDisplayAdded(const display::Display& new_display) {
 }
@@ -989,7 +978,7 @@ void LoginDisplayHostImpl::OnDisplayMetricsChanged(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, views::WidgetRemovalsObserver implementation:
+// LoginDisplayHostImpl, views::WidgetRemovalsObserver:
 void LoginDisplayHostImpl::OnWillRemoveView(views::Widget* widget,
                                             views::View* view) {
   if (view != static_cast<views::View*>(login_view_))
@@ -999,8 +988,7 @@ void LoginDisplayHostImpl::OnWillRemoveView(views::Widget* widget,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// LoginDisplayHostImpl, chrome::MultiUserWindowManager::Observer
-// implementation:
+// LoginDisplayHostImpl, chrome::MultiUserWindowManager::Observer:
 void LoginDisplayHostImpl::OnUserSwitchAnimationFinished() {
   ShutdownDisplayHost(false);
 }
@@ -1150,13 +1138,9 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
         ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                  ash::kShellWindowId_LockScreenContainer);
   } else {
-#if defined(MOJO_SHELL_CLIENT)
     params.mus_properties[ash::mojom::kWindowContainer_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(
             static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
-#else
-    NOTREACHED();
-#endif
   }
   login_window_ = new views::Widget;
   params.delegate = new LoginWidgetDelegate(login_window_);
@@ -1229,13 +1213,15 @@ void LoginDisplayHostImpl::TryToPlayStartupSound() {
   }
 
   if (!startup_sound_honors_spoken_feedback_ &&
-      !ash::PlaySystemSoundAlways(SOUND_STARTUP)) {
+      !AccessibilityManager::Get()->PlayEarcon(SOUND_STARTUP,
+                                               PlaySoundOption::ALWAYS)) {
     EnableSystemSoundsForAccessibility();
     return;
   }
 
   if (startup_sound_honors_spoken_feedback_ &&
-      !ash::PlaySystemSoundIfSpokenFeedback(SOUND_STARTUP)) {
+      !AccessibilityManager::Get()->PlayEarcon(
+          SOUND_STARTUP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED)) {
     EnableSystemSoundsForAccessibility();
     return;
   }

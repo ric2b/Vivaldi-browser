@@ -10,15 +10,18 @@
 #include "base/macros.h"
 #include "base/test/histogram_tester.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
-#include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
+#include "content/common/resize_params.h"
 #include "content/public/test/mock_render_thread.h"
+#include "content/renderer/devtools/render_widget_screen_metrics_emulator.h"
 #include "content/test/fake_compositor_dependencies.h"
 #include "content/test/mock_render_process.h"
 #include "ipc/ipc_test_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/web/WebDeviceEmulationParams.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/rect.h"
 
 using testing::_;
@@ -35,7 +38,7 @@ enum {
   PASSIVE_LISTENER_UMA_ENUM_SUPPRESSED,
   PASSIVE_LISTENER_UMA_ENUM_CANCELABLE,
   PASSIVE_LISTENER_UMA_ENUM_CANCELABLE_AND_CANCELED,
-  PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING,
+  PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING,
   PASSIVE_LISTENER_UMA_ENUM_COUNT
 };
 
@@ -69,7 +72,7 @@ class InteractiveRenderWidget : public RenderWidget {
   void SendInputEvent(const blink::WebInputEvent& event) {
     OnHandleInputEvent(
         &event, ui::LatencyInfo(),
-        WebInputEventTraits::ShouldBlockEventStream(event)
+        ui::WebInputEventTraits::ShouldBlockEventStream(event)
             ? InputEventDispatchType::DISPATCH_TYPE_BLOCKING
             : InputEventDispatchType::DISPATCH_TYPE_NON_BLOCKING);
   }
@@ -270,7 +273,7 @@ TEST_F(RenderWidgetUnittest, FlingOverscroll) {
   ASSERT_EQ(InputHostMsg_DidOverscroll::ID, message->type());
   InputHostMsg_DidOverscroll::Param params;
   InputHostMsg_DidOverscroll::Read(message, &params);
-  const DidOverscrollParams& overscroll = std::get<0>(params);
+  const ui::DidOverscrollParams& overscroll = std::get<0>(params);
   EXPECT_EQ(gfx::Vector2dF(10, 5), overscroll.latest_overscroll_delta);
   EXPECT_EQ(gfx::Vector2dF(5, 5), overscroll.accumulated_overscroll);
   EXPECT_EQ(gfx::PointF(1, 1), overscroll.causal_event_viewport_point);
@@ -281,9 +284,10 @@ TEST_F(RenderWidgetUnittest, FlingOverscroll) {
 TEST_F(RenderWidgetUnittest, RenderWidgetInputEventUmaMetrics) {
   SyntheticWebTouchEvent touch;
   touch.PressPoint(10, 10);
+  touch.touchStartOrFirstTouchMove = true;
 
   EXPECT_CALL(*widget()->mock_webwidget(), handleInputEvent(_))
-      .Times(4)
+      .Times(5)
       .WillRepeatedly(
           ::testing::Return(blink::WebInputEventResult::NotHandled));
 
@@ -304,11 +308,20 @@ TEST_F(RenderWidgetUnittest, RenderWidgetInputEventUmaMetrics) {
                                        PASSIVE_LISTENER_UMA_ENUM_PASSIVE, 1);
 
   touch.dispatchType =
-      blink::WebInputEvent::DispatchType::ListenersForcedNonBlockingPassive;
+      blink::WebInputEvent::DispatchType::ListenersForcedNonBlockingDueToFling;
   widget()->SendInputEvent(touch);
   histogram_tester().ExpectBucketCount(
       EVENT_LISTENER_RESULT_HISTOGRAM,
-      PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING, 1);
+      PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING, 1);
+
+  touch.MovePoint(0, 10, 10);
+  touch.touchStartOrFirstTouchMove = true;
+  touch.dispatchType =
+      blink::WebInputEvent::DispatchType::ListenersForcedNonBlockingDueToFling;
+  widget()->SendInputEvent(touch);
+  histogram_tester().ExpectBucketCount(
+      EVENT_LISTENER_RESULT_HISTOGRAM,
+      PASSIVE_LISTENER_UMA_ENUM_FORCED_NON_BLOCKING_DUE_TO_FLING, 2);
 
   EXPECT_CALL(*widget()->mock_webwidget(), handleInputEvent(_))
       .WillOnce(
@@ -328,24 +341,157 @@ TEST_F(RenderWidgetUnittest, RenderWidgetInputEventUmaMetrics) {
       PASSIVE_LISTENER_UMA_ENUM_CANCELABLE_AND_CANCELED, 1);
 }
 
-TEST_F(RenderWidgetUnittest, TouchStartDuringOrOutsideFlingUmaMetrics) {
+TEST_F(RenderWidgetUnittest, TouchDuringOrOutsideFlingUmaMetrics) {
   EXPECT_CALL(*widget()->mock_webwidget(), handleInputEvent(_))
-      .Times(2)
+      .Times(3)
       .WillRepeatedly(
           ::testing::Return(blink::WebInputEventResult::NotHandled));
 
   SyntheticWebTouchEvent touch;
   touch.PressPoint(10, 10);
   touch.dispatchType = blink::WebInputEvent::DispatchType::Blocking;
-  touch.dispatchedDuringFling = true;
-  widget()->SendInputEvent(touch);
-  histogram_tester().ExpectTotalCount(
-      "Event.Touch.TouchStartLatencyDuringFling", 1);
-
   touch.dispatchedDuringFling = false;
+  touch.touchStartOrFirstTouchMove = true;
   widget()->SendInputEvent(touch);
-  histogram_tester().ExpectTotalCount(
-      "Event.Touch.TouchStartLatencyOutsideFling", 1);
+  histogram_tester().ExpectTotalCount("Event.Touch.TouchLatencyOutsideFling",
+                                      1);
+
+  touch.MovePoint(0, 10, 10);
+  touch.touchStartOrFirstTouchMove = true;
+  widget()->SendInputEvent(touch);
+  histogram_tester().ExpectTotalCount("Event.Touch.TouchLatencyOutsideFling",
+                                      2);
+
+  touch.MovePoint(0, 30, 30);
+  touch.touchStartOrFirstTouchMove = false;
+  widget()->SendInputEvent(touch);
+  histogram_tester().ExpectTotalCount("Event.Touch.TouchLatencyOutsideFling",
+                                      2);
+}
+
+class PopupRenderWidget : public RenderWidget {
+ public:
+  explicit PopupRenderWidget(CompositorDependencies* compositor_deps)
+      : RenderWidget(compositor_deps,
+                     blink::WebPopupTypePage,
+                     blink::WebScreenInfo(),
+                     false,
+                     false,
+                     false) {
+    webwidget_ = &mock_webwidget_;
+    // A RenderWidget is not fully initialized until it has a routing ID.
+    SetRoutingID(1);
+    did_show_ = true;
+  }
+
+  IPC::TestSink* sink() { return &sink_; }
+
+  MockWebWidget* mock_webwidget() { return &mock_webwidget_; }
+
+  void SetScreenMetricsEmulationParameters(
+      bool,
+      const blink::WebDeviceEmulationParams&) override {}
+
+ protected:
+  ~PopupRenderWidget() override { webwidget_ = nullptr; }
+
+  bool Send(IPC::Message* msg) override {
+    sink_.OnMessageReceived(*msg);
+    delete msg;
+    return true;
+  }
+
+ private:
+  IPC::TestSink sink_;
+  MockWebWidget mock_webwidget_;
+
+  DISALLOW_COPY_AND_ASSIGN(PopupRenderWidget);
+};
+
+class RenderWidgetPopupUnittest : public testing::Test {
+ public:
+  RenderWidgetPopupUnittest()
+      : widget_(new PopupRenderWidget(&compositor_deps_)) {}
+  ~RenderWidgetPopupUnittest() override {}
+
+  PopupRenderWidget* widget() const { return widget_.get(); }
+  FakeCompositorDependencies compositor_deps_;
+
+ private:
+  MockRenderProcess render_process_;
+  MockRenderThread render_thread_;
+  scoped_refptr<PopupRenderWidget> widget_;
+
+  DISALLOW_COPY_AND_ASSIGN(RenderWidgetPopupUnittest);
+};
+
+TEST_F(RenderWidgetPopupUnittest, EmulatingPopupRect) {
+  blink::WebRect popup_screen_rect(200, 250, 100, 400);
+  widget()->setWindowRect(popup_screen_rect);
+
+  // The view and window rect on a popup type RenderWidget should be
+  // immediately set, without requiring an ACK.
+  EXPECT_EQ(popup_screen_rect.x, widget()->windowRect().x);
+  EXPECT_EQ(popup_screen_rect.y, widget()->windowRect().y);
+
+  EXPECT_EQ(popup_screen_rect.x, widget()->viewRect().x);
+  EXPECT_EQ(popup_screen_rect.y, widget()->viewRect().y);
+
+  gfx::Rect emulated_window_rect(0, 0, 980, 1200);
+
+  blink::WebDeviceEmulationParams emulation_params;
+  emulation_params.screenPosition = blink::WebDeviceEmulationParams::Mobile;
+  emulation_params.viewSize = emulated_window_rect.size();
+  emulation_params.viewPosition = blink::WebPoint(150, 160);
+  emulation_params.fitToView = true;
+
+  gfx::Rect parent_window_rect = gfx::Rect(0, 0, 800, 600);
+
+  ResizeParams resize_params;
+  resize_params.new_size = parent_window_rect.size();
+
+  scoped_refptr<PopupRenderWidget> parent_widget(
+      new PopupRenderWidget(&compositor_deps_));
+  RenderWidgetScreenMetricsEmulator emulator(
+      parent_widget.get(), emulation_params, resize_params, parent_window_rect,
+      parent_window_rect);
+  emulator.Apply();
+
+  widget()->SetPopupOriginAdjustmentsForEmulation(&emulator);
+
+  // Emulation-applied scale factor to fit the emulated device in the window.
+  float scale =
+      (float)parent_window_rect.height() / emulated_window_rect.height();
+
+  // Used to center the emulated device in the window.
+  gfx::Point offset(
+      (parent_window_rect.width() - emulated_window_rect.width() * scale) / 2,
+      (parent_window_rect.height() - emulated_window_rect.height() * scale) /
+          2);
+
+  // Position of the popup as seen by the emulated widget.
+  gfx::Point emulated_position(emulation_params.viewPosition.x +
+                                   (popup_screen_rect.x - offset.x()) / scale,
+                               emulation_params.viewPosition.y +
+                                   (popup_screen_rect.y - offset.y()) / scale);
+
+  // Both the window and view rects as read from the accessors should have the
+  // emulation parameters applied.
+  EXPECT_EQ(emulated_position.x(), widget()->windowRect().x);
+  EXPECT_EQ(emulated_position.y(), widget()->windowRect().y);
+  EXPECT_EQ(emulated_position.x(), widget()->viewRect().x);
+  EXPECT_EQ(emulated_position.y(), widget()->viewRect().y);
+
+  // Setting a new window rect while emulated should remove the emulation
+  // transformation from the given rect so that getting the rect, which applies
+  // the transformation to the raw rect, should result in the same value.
+  blink::WebRect popup_emulated_rect(130, 170, 100, 400);
+  widget()->setWindowRect(popup_emulated_rect);
+
+  EXPECT_EQ(popup_emulated_rect.x, widget()->windowRect().x);
+  EXPECT_EQ(popup_emulated_rect.y, widget()->windowRect().y);
+  EXPECT_EQ(popup_emulated_rect.x, widget()->viewRect().x);
+  EXPECT_EQ(popup_emulated_rect.y, widget()->viewRect().y);
 }
 
 }  // namespace content

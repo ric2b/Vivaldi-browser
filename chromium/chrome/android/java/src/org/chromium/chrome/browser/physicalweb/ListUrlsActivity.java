@@ -9,7 +9,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.graphics.Bitmap;
 import android.graphics.PorterDuff;
 import android.graphics.drawable.AnimationDrawable;
@@ -32,11 +31,13 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.widget.FadingShadow;
 import org.chromium.chrome.browser.widget.FadingShadowView;
+import org.chromium.components.location.LocationUtils;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * This activity displays a list of nearby URLs as stored in the {@link UrlManager}.
@@ -60,8 +61,9 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     private static final int DURATION_SLIDE_UP_MS = 250;
     private static final int DURATION_SLIDE_DOWN_MS = 250;
 
+    private final List<PwsResult> mPwsResults = new ArrayList<>();
+
     private Context mContext;
-    private SharedPreferences mSharedPrefs;
     private NearbyUrlsAdapter mAdapter;
     private PwsClient mPwsClient;
     private ListView mListView;
@@ -72,7 +74,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     private boolean mIsInitialDisplayRecorded;
     private boolean mIsRefreshing;
     private boolean mIsRefreshUserInitiated;
-    private PhysicalWebBleClient mPhysicalWebBleClient;
+    private NearbyForegroundSubscription mNearbyForegroundSubscription;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -122,8 +124,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         mIsInitialDisplayRecorded = false;
         mIsRefreshing = false;
         mIsRefreshUserInitiated = false;
-        mPhysicalWebBleClient =
-            PhysicalWebBleClient.getInstance((ChromeApplication) getApplicationContext());
+        mNearbyForegroundSubscription = new NearbyForegroundSubscription(this);
     }
 
     @Override
@@ -158,24 +159,22 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         return super.onOptionsItemSelected(item);
     }
 
-    private void foregroundSubscribe() {
-        mPhysicalWebBleClient.foregroundSubscribe(this);
-    }
-
-    private void foregroundUnsubscribe() {
-        mPhysicalWebBleClient.foregroundUnsubscribe();
-    }
-
     @Override
     protected void onStart() {
         super.onStart();
-        UrlManager.getInstance(this).addObserver(this);
+        UrlManager.getInstance().addObserver(this);
+        // Only connect so that we can subscribe to Nearby if we have the location permission.
+        LocationUtils locationUtils = LocationUtils.getInstance();
+        if (locationUtils.hasAndroidLocationPermission()
+                && locationUtils.isSystemLocationSettingEnabled()) {
+            mNearbyForegroundSubscription.connect();
+        }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        foregroundSubscribe();
+        mNearbyForegroundSubscription.subscribe();
         startRefresh(false, false);
 
         int bottomBarDisplayCount = getBottomBarDisplayCount();
@@ -187,7 +186,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
 
     @Override
     protected void onPause() {
-        foregroundUnsubscribe();
+        mNearbyForegroundSubscription.unsubscribe();
         super.onPause();
     }
 
@@ -198,7 +197,8 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
 
     @Override
     protected void onStop() {
-        UrlManager.getInstance(this).removeObserver(this);
+        UrlManager.getInstance().removeObserver(this);
+        mNearbyForegroundSubscription.disconnect();
         super.onStop();
     }
 
@@ -214,16 +214,14 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
                     PhysicalWebUma.onForegroundPwsResolution(ListUrlsActivity.this, duration);
                 }
 
-                // filter out duplicate site URLs.
+                // filter out duplicate groups.
                 for (PwsResult pwsResult : pwsResults) {
-                    String siteUrl = pwsResult.siteUrl;
-                    String iconUrl = pwsResult.iconUrl;
-
-                    if (siteUrl != null && !mAdapter.hasSiteUrl(siteUrl)) {
+                    mPwsResults.add(pwsResult);
+                    if (!mAdapter.hasGroupId(pwsResult.groupId)) {
                         mAdapter.add(pwsResult);
 
-                        if (iconUrl != null && !mAdapter.hasIcon(iconUrl)) {
-                            fetchIcon(iconUrl);
+                        if (pwsResult.iconUrl != null && !mAdapter.hasIcon(pwsResult.iconUrl)) {
+                            fetchIcon(pwsResult.iconUrl);
                         }
                     }
                 }
@@ -242,8 +240,22 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     @Override
     public void onItemClick(AdapterView<?> adapterView, View view, int position, long id) {
         PhysicalWebUma.onUrlSelected(this);
-        PwsResult pwsResult = mAdapter.getItem(position);
-        Intent intent = createNavigateToUrlIntent(pwsResult);
+        PwsResult minPwsResult = mAdapter.getItem(position);
+        String groupId = minPwsResult.groupId;
+
+        // Make sure the PwsResult corresponds to the closest UrlDevice in the group.
+        double minDistance = Double.MAX_VALUE;
+        for (PwsResult pwsResult : mPwsResults) {
+            if (pwsResult.groupId.equals(groupId)) {
+                double distance = UrlManager.getInstance()
+                        .getUrlInfoByUrl(pwsResult.requestUrl).getDistance();
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    minPwsResult = pwsResult;
+                }
+            }
+        }
+        Intent intent = createNavigateToUrlIntent(minPwsResult);
         mContext.startActivity(intent);
     }
 
@@ -267,13 +279,13 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
         // Clear the list adapter to trigger the empty list display.
         mAdapter.clear();
 
-        Collection<UrlInfo> urls = UrlManager.getInstance(this).getUrls(true);
+        Collection<UrlInfo> urls = UrlManager.getInstance().getUrls(true);
 
         // Check the Physical Web preference to ensure we do not resolve URLs when Physical Web is
         // off or onboarding. Normally the user will not reach this activity unless the preference
         // is explicitly enabled, but there is a button on the diagnostics page that launches into
         // the activity without checking the preference state.
-        if (urls.isEmpty() || !PhysicalWeb.isPhysicalWebPreferenceEnabled(this)) {
+        if (urls.isEmpty() || !PhysicalWeb.isPhysicalWebPreferenceEnabled()) {
             finishRefresh();
         } else {
             // Show the swipe-to-refresh busy indicator for refreshes initiated by a swipe.
@@ -291,6 +303,7 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
                     (AnimationDrawable) mScanningImageView.getDrawable();
             animationDrawable.start();
 
+            mPwsResults.clear();
             resolve(urls, isUserInitiated);
         }
     }
@@ -352,27 +365,24 @@ public class ListUrlsActivity extends AppCompatActivity implements AdapterView.O
     }
 
     private void initSharedPreferences() {
-        mSharedPrefs = ContextUtils.getAppSharedPreferences();
-        int prefsVersion = mSharedPrefs.getInt(PREFS_VERSION_KEY, 0);
-
-        if (prefsVersion == PREFS_VERSION) {
+        if (ContextUtils.getAppSharedPreferences().getInt(PREFS_VERSION_KEY, 0) == PREFS_VERSION) {
             return;
         }
 
         // Stored preferences are old, upgrade to the current version.
-        SharedPreferences.Editor editor = mSharedPrefs.edit();
-        editor.putInt(PREFS_VERSION_KEY, PREFS_VERSION);
-        editor.apply();
+        ContextUtils.getAppSharedPreferences().edit()
+                .putInt(PREFS_VERSION_KEY, PREFS_VERSION)
+                .apply();
     }
 
     private int getBottomBarDisplayCount() {
-        return mSharedPrefs.getInt(PREFS_BOTTOM_BAR_KEY, 0);
+        return ContextUtils.getAppSharedPreferences().getInt(PREFS_BOTTOM_BAR_KEY, 0);
     }
 
     private void setBottomBarDisplayCount(int count) {
-        SharedPreferences.Editor editor = mSharedPrefs.edit();
-        editor.putInt(PREFS_BOTTOM_BAR_KEY, count);
-        editor.apply();
+        ContextUtils.getAppSharedPreferences().edit()
+                .putInt(PREFS_BOTTOM_BAR_KEY, count)
+                .apply();
     }
 
     private static Intent createNavigateToUrlIntent(PwsResult pwsResult) {

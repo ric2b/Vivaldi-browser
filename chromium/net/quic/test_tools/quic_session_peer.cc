@@ -5,8 +5,8 @@
 #include "net/quic/test_tools/quic_session_peer.h"
 
 #include "base/stl_util.h"
-#include "net/quic/quic_session.h"
-#include "net/quic/reliable_quic_stream.h"
+#include "net/quic/core/quic_session.h"
+#include "net/quic/core/reliable_quic_stream.h"
 
 using std::map;
 
@@ -61,7 +61,8 @@ QuicSessionPeer::GetLocallyClosedStreamsHighestOffset(QuicSession* session) {
 }
 
 // static
-QuicSession::StreamMap& QuicSessionPeer::static_streams(QuicSession* session) {
+QuicSession::StaticStreamMap& QuicSessionPeer::static_streams(
+    QuicSession* session) {
   return session->static_streams();
 }
 
@@ -86,13 +87,13 @@ bool QuicSessionPeer::IsStreamClosed(QuicSession* session, QuicStreamId id) {
 // static
 bool QuicSessionPeer::IsStreamCreated(QuicSession* session, QuicStreamId id) {
   DCHECK_NE(0u, id);
-  return ContainsKey(session->dynamic_streams(), id);
+  return base::ContainsKey(session->dynamic_streams(), id);
 }
 
 // static
 bool QuicSessionPeer::IsStreamAvailable(QuicSession* session, QuicStreamId id) {
   DCHECK_NE(0u, id);
-  return ContainsKey(session->available_streams_, id);
+  return base::ContainsKey(session->available_streams_, id);
 }
 
 // static

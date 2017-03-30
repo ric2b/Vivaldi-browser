@@ -203,14 +203,11 @@ void SocketExtensionWithDnsLookupFunction::StartDnsLookup(
       HostResolverWrapper::GetInstance()->GetHostResolver(resource_context_);
   DCHECK(host_resolver);
 
-  // RequestHandle is not needed because we never need to cancel requests.
-  net::HostResolver::RequestHandle request_handle;
-
   net::HostResolver::RequestInfo request_info(host_port_pair);
   int resolve_result = host_resolver->Resolve(
       request_info, net::DEFAULT_PRIORITY, &addresses_,
       base::Bind(&SocketExtensionWithDnsLookupFunction::OnDnsLookup, this),
-      &request_handle, net::BoundNetLog());
+      &request_, net::BoundNetLog());
 
   if (resolve_result != net::ERR_IO_PENDING)
     OnDnsLookup(resolve_result);
@@ -446,9 +443,9 @@ void SocketListenFunction::AsyncWorkStart() {
     return;
   }
 
-  int result = socket->Listen(
-      params_->address, params_->port,
-      params_->backlog.get() ? *params_->backlog.get() : 5, &error_);
+  int result =
+      socket->Listen(params_->address, params_->port,
+                     params_->backlog.get() ? *params_->backlog : 5, &error_);
   SetResult(base::MakeUnique<base::FundamentalValue>(result));
   if (result != net::OK) {
     AsyncWorkCompleted();
@@ -511,7 +508,7 @@ void SocketReadFunction::AsyncWorkStart() {
     return;
   }
 
-  socket->Read(params_->buffer_size.get() ? *params_->buffer_size.get() : 4096,
+  socket->Read(params_->buffer_size.get() ? *params_->buffer_size : 4096,
                base::Bind(&SocketReadFunction::OnCompleted, this));
 }
 

@@ -8,6 +8,8 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 
@@ -26,6 +28,16 @@ class OSCrypt {
   // In any other case, we default to auto-detecting the store.
   // This should not be changed after OSCrypt has been used.
   static void SetStore(const std::string& store_type);
+
+  // Some password stores may prompt the user for permission and show the
+  // application name.
+  static void SetProductName(const std::string& product_name);
+
+  // The gnome-keyring implementation requires calls from the main thread.
+  // TODO(crbug/466975): Libsecret and KWallet don't need this. We can remove
+  // this when we stop supporting keyring.
+  static void SetMainThreadRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner);
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
   // Encrypt a string16. The output (second argument) is really an array of
@@ -76,7 +88,8 @@ class OSCrypt {
 // |get_key_storage_mock| provides the desired |KeyStorage| implementation.
 // If the provider returns |nullptr|, a hardcoded password will be used.
 // |get_password_v11_mock| provides a password to derive the encryption key from
-// If both parameters are |nullptr|, the real implementation is restored.
+// If one parameter is |nullptr|, the function will be not be replaced.
+// If all parameters are |nullptr|, the real implementation is restored.
 void UseMockKeyStorageForTesting(KeyStorageLinux* (*get_key_storage_mock)(),
                                  std::string* (*get_password_v11_mock)());
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(UNIT_TEST)

@@ -83,8 +83,9 @@
             "tags": "device"
         },
         {
-            "type": "settings-view",
-            "name": "devices",
+            "type": "view",
+            "location": "settings-view",
+            "id": "devices",
             "title": "Devices",
             "order": "30",
             "className": "WebInspector.DevicesSettingsTab",
@@ -100,14 +101,9 @@
             "className": "WebInspector.SensorsView.ShowActionDelegate"
         },
         {
-            "type": "context-menu-item",
-            "location": "mainMenu/tools/open",
-            "order": 100,
-            "actionId": "emulation.show-sensors"
-        },
-        {
-            "type": "drawer-view",
-            "name": "sensors",
+            "type": "view",
+            "location": "drawer-view",
+            "id": "sensors",
             "title": "Sensors",
             "persistence": "closeable",
             "order": 100,
@@ -140,6 +136,7 @@
         "devicesSettingsTab.css",
         "deviceModeToolbar.css",
         "deviceModeView.css",
+        "inspectedPagePlaceholder.css",
         "mediaQueryInspector.css",
         "sensors.css"
     ]

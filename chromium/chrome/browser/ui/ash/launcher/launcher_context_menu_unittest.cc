@@ -8,7 +8,6 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -39,7 +38,7 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
     arc_test_.SetUp(profile_.get());
     ash::test::AshTestBase::SetUp();
     controller_.reset(new ChromeLauncherControllerImpl(
-        profile(), ash::Shell::GetInstance()->shelf_model()));
+        profile(), ash::WmShell::Get()->shelf_model()));
     controller_->Init();
   }
 
@@ -58,7 +57,7 @@ class LauncherContextMenuTest : public ash::test::AshTestBase {
   LauncherContextMenu* CreateLauncherContextMenu(
       ash::ShelfItemType shelf_item_type) {
     ash::ShelfItem item;
-    item.id = 1;  // dummy id
+    item.id = 123;  // dummy id
     item.type = shelf_item_type;
     return LauncherContextMenu::Create(controller_.get(), &item, GetWmShelf());
   }

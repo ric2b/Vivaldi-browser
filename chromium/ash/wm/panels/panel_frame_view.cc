@@ -4,11 +4,13 @@
 
 #include "ash/wm/panels/panel_frame_view.h"
 
+#include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "ash/common/frame/default_header_painter.h"
+#include "ash/common/frame/frame_border_hit_test.h"
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
-#include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/default_header_painter.h"
-#include "ash/frame/frame_border_hit_test_controller.h"
+#include "ash/common/wm_window.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -23,11 +25,9 @@ namespace ash {
 const char PanelFrameView::kViewClassName[] = "PanelFrameView";
 
 PanelFrameView::PanelFrameView(views::Widget* frame, FrameType frame_type)
-    : frame_(frame),
-      caption_button_container_(NULL),
-      window_icon_(NULL),
-      frame_border_hit_test_controller_(
-          new FrameBorderHitTestController(frame_)) {
+    : frame_(frame), caption_button_container_(nullptr), window_icon_(nullptr) {
+  WmLookup::Get()->GetWindowForWidget(frame)->InstallResizeHandleWindowTargeter(
+      nullptr);
   DCHECK(!frame_->widget_delegate()->CanMaximize());
   if (frame_type != FRAME_NONE)
     InitHeaderPainter();
@@ -126,8 +126,7 @@ gfx::Rect PanelFrameView::GetWindowBoundsForClientBounds(
 int PanelFrameView::NonClientHitTest(const gfx::Point& point) {
   if (!header_painter_)
     return HTNOWHERE;
-  return FrameBorderHitTestController::NonClientHitTest(
-      this, caption_button_container_, point);
+  return FrameBorderNonClientHitTest(this, caption_button_container_, point);
 }
 
 void PanelFrameView::OnPaint(gfx::Canvas* canvas) {

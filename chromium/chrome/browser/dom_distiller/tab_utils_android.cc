@@ -17,6 +17,9 @@
 #include "jni/DomDistillerTabUtils_jni.h"
 #include "url/gurl.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace android {
 
 void DistillCurrentPageAndView(JNIEnv* env,
@@ -63,6 +66,13 @@ jboolean IsDistillerHeuristicsEnabled(JNIEnv* env,
                                     const JavaParamRef<jclass>& clazz) {
   return dom_distiller::GetDistillerHeuristicsType()
       != dom_distiller::DistillerHeuristicsType::NONE;
+}
+
+// Returns true if distiller is reporting every page as distillable.
+jboolean IsHeuristicAlwaysTrue(JNIEnv* env,
+                               const JavaParamRef<jclass>& clazz) {
+  return dom_distiller::GetDistillerHeuristicsType()
+      == dom_distiller::DistillerHeuristicsType::ALWAYS_TRUE;
 }
 
 }  // namespace android

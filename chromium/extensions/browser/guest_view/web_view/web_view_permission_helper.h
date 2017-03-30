@@ -86,6 +86,7 @@ class WebViewPermissionHelper
   // Requests Geolocation Permission from the embedder.
   virtual void RequestGeolocationPermission(int bridge_id,
                                     const GURL& requesting_frame,
+                                    bool user_gesture,
                                     const base::Callback<void(bool)>& callback);
   virtual void CancelGeolocationPermissionRequest(int bridge_id);
 

@@ -207,8 +207,8 @@ DownloadRequestCore::DownloadRequestCore(net::URLRequest* request,
   power_save_blocker_.reset(new device::PowerSaveBlocker(
       device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
       device::PowerSaveBlocker::kReasonOther, "Download in progress",
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
   DownloadRequestData* request_data = DownloadRequestData::Get(request_);
   if (request_data) {
     save_info_ = request_data->TakeSaveInfo();
@@ -251,7 +251,7 @@ bool DownloadRequestCore::OnResponseStarted(
     const std::string &override_mime_type, bool open_when_done,
     bool ask_for_target) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  DVLOG(20) << __FUNCTION__ << "()" << DebugString();
+  DVLOG(20) << __func__ << "() " << DebugString();
   download_start_time_ = base::TimeTicks::Now();
 
   DownloadInterruptReason result =
@@ -295,10 +295,9 @@ bool DownloadRequestCore::OnResponseStarted(
 
   // Create the ByteStream for sending data to the download sink.
   std::unique_ptr<ByteStreamReader> stream_reader;
-  CreateByteStream(
-      base::ThreadTaskRunnerHandle::Get(),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
-      kDownloadByteStreamSize, &stream_writer_, &stream_reader);
+  CreateByteStream(base::ThreadTaskRunnerHandle::Get(),
+                   BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
+                   kDownloadByteStreamSize, &stream_writer_, &stream_reader);
   stream_writer_->RegisterCallback(
       base::Bind(&DownloadRequestCore::ResumeRequest, AsWeakPtr()));
 
@@ -348,7 +347,7 @@ bool DownloadRequestCore::OnResponseStarted(
 }
 
 bool DownloadRequestCore::OnRequestRedirected() {
-  DVLOG(20) << __FUNCTION__ << "() " << DebugString();
+  DVLOG(20) << __func__ << "() " << DebugString();
   if (is_partial_request_) {
     // A redirect while attempting a partial resumption indicates a potential
     // middle box. Trigger another interruption so that the DownloadItem can
@@ -416,7 +415,7 @@ bool DownloadRequestCore::OnReadCompleted(int bytes_read, bool* defer) {
 }
 
 void DownloadRequestCore::OnWillAbort(DownloadInterruptReason reason) {
-  DVLOG(20) << __FUNCTION__ << "() reason=" << reason << " " << DebugString();
+  DVLOG(20) << __func__ << "() reason=" << reason << " " << DebugString();
   DCHECK(!started_);
   abort_reason_ = reason;
 }
@@ -425,7 +424,7 @@ void DownloadRequestCore::OnResponseCompleted(
     const net::URLRequestStatus& status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   int response_code = status.is_success() ? request()->GetResponseCode() : 0;
-  DVLOG(20) << __FUNCTION__ << "()" << DebugString()
+  DVLOG(20) << __func__ << "() " << DebugString()
             << " status.status() = " << status.status()
             << " status.error() = " << status.error()
             << " response_code = " << response_code;

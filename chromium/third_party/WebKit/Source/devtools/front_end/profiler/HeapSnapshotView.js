@@ -32,13 +32,13 @@
  * @constructor
  * @implements {WebInspector.ProfileType.DataDisplayDelegate}
  * @implements {WebInspector.Searchable}
- * @extends {WebInspector.VBox}
+ * @extends {WebInspector.SimpleView}
  * @param {!WebInspector.ProfileType.DataDisplayDelegate} dataDisplayDelegate
  * @param {!WebInspector.HeapProfileHeader} profile
  */
 WebInspector.HeapSnapshotView = function(dataDisplayDelegate, profile)
 {
-    WebInspector.VBox.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("Heap Snapshot"));
 
     this.element.classList.add("heap-snapshot-view");
 
@@ -523,9 +523,10 @@ WebInspector.HeapSnapshotView.prototype = {
     },
 
     /**
+     * @override
      * @return {!Array.<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         var result = [this._perspectiveSelect, this._classNameFilter];
         if (this._profile.profileType() !== WebInspector.ProfileTypeRegistry.instance.trackingHeapSnapshotProfileType)
@@ -838,14 +839,14 @@ WebInspector.HeapSnapshotView.prototype = {
             if (dataGrid === this._diffDataGrid) {
                 if (!this._baseProfile)
                     this._baseProfile = this._profiles()[this._baseSelect.selectedIndex()];
-                this._baseProfile._loadPromise.then(didLoadBaseSnaphot.bind(this));
+                this._baseProfile._loadPromise.then(didLoadBaseSnapshot.bind(this));
             }
         }
 
         /**
          * @this {WebInspector.HeapSnapshotView}
          */
-        function didLoadBaseSnaphot(baseSnapshotProxy)
+        function didLoadBaseSnapshot(baseSnapshotProxy)
         {
             if (this._diffDataGrid.baseSnapshot !== baseSnapshotProxy)
                 this._diffDataGrid.setBaseDataSource(baseSnapshotProxy);
@@ -1010,7 +1011,7 @@ WebInspector.HeapSnapshotView.prototype = {
             this._trackingOverviewGrid.dispose();
     },
 
-    __proto__: WebInspector.VBox.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }
 
 /**
@@ -2209,7 +2210,7 @@ WebInspector.HeapSnapshotStatisticsView.prototype = {
 WebInspector.HeapAllocationStackView = function(target)
 {
     WebInspector.Widget.call(this);
-    this._target = target;;
+    this._target = target;
     this._linkifier = new WebInspector.Linkifier();
 }
 

@@ -33,10 +33,10 @@
 
 #include "public/platform/WebCString.h"
 #include "public/platform/WebCommon.h"
-#include "public/platform/WebPrivateOwnPtr.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
+#include <memory>
 
 namespace blink {
 
@@ -45,7 +45,6 @@ class WebHTTPHeaderVisitor;
 class WebHTTPLoadInfo;
 class WebURL;
 class WebURLLoadTiming;
-class WebURLResponsePrivate;
 
 class WebURLResponse {
 public:
@@ -101,18 +100,12 @@ public:
             const WebString& cipher,
             const WebString& mac,
             int certId,
-            size_t numUnknownScts,
-            size_t numInvalidScts,
-            size_t numValidScts,
             const SignedCertificateTimestampList& sctList)
             : protocol(protocol)
             , keyExchange(keyExchange)
             , cipher(cipher)
             , mac(mac)
             , certId(certId)
-            , numUnknownScts(numUnknownScts)
-            , numInvalidScts(numInvalidScts)
-            , numValidScts(numValidScts)
             , sctList(sctList)
         {
         }
@@ -124,9 +117,6 @@ public:
         // have a separate MAC value (i.e. if the cipher suite is AEAD).
         WebString mac;
         int certId;
-        size_t numUnknownScts;
-        size_t numInvalidScts;
-        size_t numValidScts;
         SignedCertificateTimestampList sctList;
     };
 
@@ -135,25 +125,12 @@ public:
         virtual ~ExtraData() { }
     };
 
-    ~WebURLResponse() { reset(); }
+    BLINK_PLATFORM_EXPORT ~WebURLResponse();
 
-    WebURLResponse() : m_private(0) { }
-    WebURLResponse(const WebURLResponse& r) : m_private(0) { assign(r); }
-    WebURLResponse& operator=(const WebURLResponse& r)
-    {
-        assign(r);
-        return *this;
-    }
-
-    explicit WebURLResponse(const WebURL& url) : m_private(0)
-    {
-        initialize();
-        setURL(url);
-    }
-
-    BLINK_PLATFORM_EXPORT void initialize();
-    BLINK_PLATFORM_EXPORT void reset();
-    BLINK_PLATFORM_EXPORT void assign(const WebURLResponse&);
+    BLINK_PLATFORM_EXPORT WebURLResponse();
+    BLINK_PLATFORM_EXPORT WebURLResponse(const WebURLResponse&);
+    BLINK_PLATFORM_EXPORT explicit WebURLResponse(const WebURL&);
+    BLINK_PLATFORM_EXPORT WebURLResponse& operator=(const WebURLResponse&);
 
     BLINK_PLATFORM_EXPORT bool isNull() const;
 
@@ -254,6 +231,10 @@ public:
     BLINK_PLATFORM_EXPORT bool wasFetchedViaServiceWorker() const;
     BLINK_PLATFORM_EXPORT void setWasFetchedViaServiceWorker(bool);
 
+    // Flag whether this request was loaded using a foreign fetch service worker.
+    BLINK_PLATFORM_EXPORT bool wasFetchedViaForeignFetch() const;
+    BLINK_PLATFORM_EXPORT void setWasFetchedViaForeignFetch(bool);
+
     // Flag whether the fallback request with skip service worker flag was
     // required.
     BLINK_PLATFORM_EXPORT bool wasFallbackRequiredByServiceWorker() const;
@@ -295,6 +276,14 @@ public:
     BLINK_PLATFORM_EXPORT unsigned short remotePort() const;
     BLINK_PLATFORM_EXPORT void setRemotePort(unsigned short);
 
+    // Original size of the response body before decompression.
+    BLINK_PLATFORM_EXPORT long long encodedBodyLength() const;
+    BLINK_PLATFORM_EXPORT void addToEncodedBodyLength(long long);
+
+    // Size of the response body after removing any content encoding.
+    BLINK_PLATFORM_EXPORT long long decodedBodyLength() const;
+    BLINK_PLATFORM_EXPORT void addToDecodedBodyLength(long long);
+
     // Extra data associated with the underlying resource response. Resource
     // responses can be copied. If non-null, each copy of a resource response
     // holds a pointer to the extra data, and the extra data pointer will be
@@ -304,11 +293,23 @@ public:
     BLINK_PLATFORM_EXPORT ExtraData* getExtraData() const;
     BLINK_PLATFORM_EXPORT void setExtraData(ExtraData*);
 
+#if INSIDE_BLINK
 protected:
-    BLINK_PLATFORM_EXPORT void assign(WebURLResponsePrivate*);
+    // Permit subclasses to set arbitrary ResourceResponse pointer as
+    // |m_resourceResponse|. |m_ownedResourceResponse| is not set in this case.
+    BLINK_PLATFORM_EXPORT explicit WebURLResponse(ResourceResponse&);
+#endif
 
 private:
-    WebURLResponsePrivate* m_private;
+    struct ResourceResponseContainer;
+
+    // If this instance owns a ResourceResponse then |m_ownedResourceResponse|
+    // is non-null and |m_resourceResponse| points to the ResourceResponse
+    // instance it contains.
+    std::unique_ptr<ResourceResponseContainer> m_ownedResourceResponse;
+
+    // Should never be null.
+    ResourceResponse* m_resourceResponse;
 };
 
 } // namespace blink

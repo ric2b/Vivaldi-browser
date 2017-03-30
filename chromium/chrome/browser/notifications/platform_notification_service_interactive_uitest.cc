@@ -17,9 +17,9 @@
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -87,7 +87,7 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
 
  private:
   std::string RequestAndRespondToPermission(
-      PermissionBubbleManager::AutoResponseType bubble_response);
+      PermissionRequestManager::AutoResponseType bubble_response);
 
   content::WebContents* GetActiveWebContents(Browser* browser) {
     return browser->tab_strip_model()->GetActiveWebContents();
@@ -175,10 +175,10 @@ GURL PlatformNotificationServiceBrowserTest::TestPageUrl() const {
 
 std::string
 PlatformNotificationServiceBrowserTest::RequestAndRespondToPermission(
-    PermissionBubbleManager::AutoResponseType bubble_response) {
+    PermissionRequestManager::AutoResponseType bubble_response) {
   std::string result;
   content::WebContents* web_contents = GetActiveWebContents(browser());
-  PermissionBubbleManager::FromWebContents(web_contents)
+  PermissionRequestManager::FromWebContents(web_contents)
       ->set_auto_response_for_test(bubble_response);
   EXPECT_TRUE(RunScript("RequestPermission();", &result));
   return result;
@@ -186,13 +186,13 @@ PlatformNotificationServiceBrowserTest::RequestAndRespondToPermission(
 
 bool PlatformNotificationServiceBrowserTest::RequestAndAcceptPermission() {
   std::string result =
-      RequestAndRespondToPermission(PermissionBubbleManager::ACCEPT_ALL);
+      RequestAndRespondToPermission(PermissionRequestManager::ACCEPT_ALL);
   return "granted" == result;
 }
 
 bool PlatformNotificationServiceBrowserTest::RequestAndDenyPermission() {
   std::string result =
-      RequestAndRespondToPermission(PermissionBubbleManager::DENY_ALL);
+      RequestAndRespondToPermission(PermissionRequestManager::DENY_ALL);
   return "denied" == result;
 }
 
@@ -267,6 +267,7 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_EQ("Some title", base::UTF16ToUTF8(default_notification.title()));
   EXPECT_EQ("", base::UTF16ToUTF8(default_notification.message()));
   EXPECT_EQ("", default_notification.tag());
+  EXPECT_TRUE(default_notification.image().IsEmpty());
   EXPECT_TRUE(default_notification.icon().IsEmpty());
   EXPECT_TRUE(default_notification.small_image().IsEmpty());
   EXPECT_FALSE(default_notification.renotify());
@@ -294,6 +295,9 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_EQ("Title", base::UTF16ToUTF8(all_options_notification.title()));
   EXPECT_EQ("Contents", base::UTF16ToUTF8(all_options_notification.message()));
   EXPECT_EQ("replace-id", all_options_notification.tag());
+  EXPECT_FALSE(all_options_notification.image().IsEmpty());
+  EXPECT_EQ(kIconWidth, all_options_notification.image().Width());
+  EXPECT_EQ(kIconHeight, all_options_notification.image().Height());
   EXPECT_FALSE(all_options_notification.icon().IsEmpty());
   EXPECT_EQ(kIconWidth, all_options_notification.icon().Width());
   EXPECT_EQ(kIconHeight, all_options_notification.icon().Height());
@@ -407,6 +411,19 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_TRUE(notification.context_message().empty());
   EXPECT_EQ("https://" + host_port.ToString() + "/",
             notification.origin_url().spec());
+}
+
+IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
+                       PersistentNotificationServiceWorkerScope) {
+  RequestAndAcceptPermission();
+
+  // Creates a simple notification.
+  std::string script_result;
+  ASSERT_TRUE(RunScript("DisplayPersistentNotification()", &script_result));
+
+  const Notification& notification = ui_manager()->GetNotificationAt(0);
+
+  EXPECT_EQ(TestPageUrl().spec(), notification.service_worker_scope().spec());
 }
 
 // TODO(felt): This DCHECKs when bubbles are enabled, when the file_url is

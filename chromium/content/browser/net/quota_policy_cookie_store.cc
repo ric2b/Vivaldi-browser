@@ -98,7 +98,7 @@ void QuotaPolicyCookieStore::Flush(const base::Closure& callback) {
 void QuotaPolicyCookieStore::OnLoad(
     const LoadedCallback& loaded_callback,
     const std::vector<net::CanonicalCookie*>& cookies) {
-  for (const auto& cookie : cookies) {
+  for (auto* cookie : cookies) {
     net::SQLitePersistentCookieStore::CookieOrigin origin(
         cookie->Domain(), cookie->IsSecure());
     ++cookies_per_origin_[origin];
@@ -149,7 +149,7 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
 
     if (!client_task_runner.get()) {
       client_task_runner =
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
     }
 
     if (!background_task_runner.get()) {

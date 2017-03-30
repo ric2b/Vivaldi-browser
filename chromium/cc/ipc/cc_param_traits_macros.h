@@ -25,6 +25,7 @@
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "ui/events/ipc/latency_info_param_traits.h"
+#include "ui/gfx/ipc/color/gfx_param_traits.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
 #include "ui/gfx/ipc/skia/gfx_skia_param_traits.h"
 
@@ -47,7 +48,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::RenderPassId)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::SurfaceSequence)
-  IPC_STRUCT_TRAITS_MEMBER(id_namespace)
+  IPC_STRUCT_TRAITS_MEMBER(client_id)
   IPC_STRUCT_TRAITS_MEMBER(sequence)
 IPC_STRUCT_TRAITS_END()
 
@@ -73,6 +74,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::RenderPassDrawQuad)
   IPC_STRUCT_TRAITS_MEMBER(mask_texture_size)
   IPC_STRUCT_TRAITS_MEMBER(filters)
   IPC_STRUCT_TRAITS_MEMBER(filters_scale)
+  IPC_STRUCT_TRAITS_MEMBER(filters_origin)
   IPC_STRUCT_TRAITS_MEMBER(background_filters)
 IPC_STRUCT_TRAITS_END()
 
@@ -117,17 +119,6 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TileDrawQuad)
   IPC_STRUCT_TRAITS_MEMBER(nearest_neighbor)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::YUVVideoDrawQuad)
-  IPC_STRUCT_TRAITS_PARENT(cc::DrawQuad)
-  IPC_STRUCT_TRAITS_MEMBER(ya_tex_coord_rect)
-  IPC_STRUCT_TRAITS_MEMBER(uv_tex_coord_rect)
-  IPC_STRUCT_TRAITS_MEMBER(ya_tex_size)
-  IPC_STRUCT_TRAITS_MEMBER(uv_tex_size)
-  IPC_STRUCT_TRAITS_MEMBER(color_space)
-  IPC_STRUCT_TRAITS_MEMBER(resource_offset)
-  IPC_STRUCT_TRAITS_MEMBER(resource_multiplier)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(cc::SharedQuadState)
   IPC_STRUCT_TRAITS_MEMBER(quad_to_target_transform)
   IPC_STRUCT_TRAITS_MEMBER(quad_layer_bounds)
@@ -148,6 +139,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TransferableResource)
   IPC_STRUCT_TRAITS_MEMBER(read_lock_fences_enabled)
   IPC_STRUCT_TRAITS_MEMBER(is_software)
   IPC_STRUCT_TRAITS_MEMBER(is_overlay_candidate)
+  IPC_STRUCT_TRAITS_MEMBER(color_space)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::ReturnedResource)
@@ -184,8 +176,14 @@ IPC_STRUCT_TRAITS_BEGIN(cc::CompositorFrameMetadata)
   IPC_STRUCT_TRAITS_MEMBER(max_page_scale_factor)
   IPC_STRUCT_TRAITS_MEMBER(root_overflow_x_hidden)
   IPC_STRUCT_TRAITS_MEMBER(root_overflow_y_hidden)
-  IPC_STRUCT_TRAITS_MEMBER(location_bar_offset)
-  IPC_STRUCT_TRAITS_MEMBER(location_bar_content_translation)
+  IPC_STRUCT_TRAITS_MEMBER(root_overflow_y_hidden)
+  IPC_STRUCT_TRAITS_MEMBER(may_contain_video)
+  IPC_STRUCT_TRAITS_MEMBER(
+      is_resourceless_software_draw_with_scroll_or_animation)
+  IPC_STRUCT_TRAITS_MEMBER(top_controls_height)
+  IPC_STRUCT_TRAITS_MEMBER(top_controls_shown_ratio)
+  IPC_STRUCT_TRAITS_MEMBER(bottom_controls_height)
+  IPC_STRUCT_TRAITS_MEMBER(bottom_controls_shown_ratio)
   IPC_STRUCT_TRAITS_MEMBER(root_background_color)
   IPC_STRUCT_TRAITS_MEMBER(selection)
   IPC_STRUCT_TRAITS_MEMBER(latency_info)

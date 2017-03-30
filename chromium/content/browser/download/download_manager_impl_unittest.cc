@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
@@ -177,7 +178,6 @@ class MockDownloadItemImpl : public DownloadItemImpl {
   MOCK_CONST_METHOD0(HasUserGesture, bool());
   MOCK_CONST_METHOD0(GetTransitionType, ui::PageTransition());
   MOCK_CONST_METHOD0(IsTemporary, bool());
-  MOCK_METHOD1(SetIsTemporary, void(bool));
   MOCK_METHOD1(SetOpened, void(bool));
   MOCK_CONST_METHOD0(GetOpened, bool());
   MOCK_CONST_METHOD0(GetLastModifiedTime, const std::string&());
@@ -542,10 +542,8 @@ class DownloadManagerTest : public testing::Test {
 
     download_manager_->Shutdown();
     download_manager_.reset();
-    message_loop_.RunUntilIdle();
-    ASSERT_EQ(NULL, mock_download_item_factory_.get());
-    ASSERT_EQ(NULL, mock_download_file_factory_.get());
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
+    ASSERT_FALSE(mock_download_item_factory_);
     mock_download_manager_delegate_.reset();
     mock_browser_context_.reset();
     download_urls_.clear();

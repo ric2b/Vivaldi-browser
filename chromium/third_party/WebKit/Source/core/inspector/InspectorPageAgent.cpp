@@ -62,8 +62,6 @@
 #include "platform/MIMETypeRegistry.h"
 #include "platform/PlatformResourceLoader.h"
 #include "platform/UserGestureIndicator.h"
-#include "platform/inspector_protocol/Values.h"
-#include "platform/v8_inspector/public/V8ContentSearchUtil.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/CurrentTime.h"
@@ -81,6 +79,8 @@ static const char pageAgentScriptsToEvaluateOnLoad[] = "pageAgentScriptsToEvalua
 static const char screencastEnabled[] = "screencastEnabled";
 static const char autoAttachToCreatedPages[] = "autoAttachToCreatedPages";
 static const char blockedEventsWarningThreshold[] = "blockedEventsWarningThreshold";
+static const char overlaySuspended[] = "overlaySuspended";
+static const char overlayMessage[] = "overlayMessage";
 }
 
 namespace {
@@ -126,17 +126,6 @@ static bool prepareResourceBuffer(Resource* cachedResource, bool* hasZeroSize)
     if (!cachedResource->encodedSize()) {
         *hasZeroSize = true;
         return true;
-    }
-
-    if (cachedResource->isPurgeable()) {
-        // If the resource is purgeable then make it unpurgeable to get
-        // get its data. This might fail, in which case we return an
-        // empty String.
-        // FIXME: should we do something else in the case of a purged
-        // resource that informs the user why there is no data in the
-        // inspector?
-        if (!cachedResource->lock())
-            return false;
     }
 
     *hasZeroSize = false;
@@ -231,7 +220,7 @@ bool InspectorPageAgent::cachedResourceContent(Resource* cachedResource, String*
         maybeEncodeTextContent(toCSSStyleSheetResource(cachedResource)->sheetText(), cachedResource->resourceBuffer(), result, base64Encoded);
         return true;
     case Resource::Script:
-        maybeEncodeTextContent(cachedResource->resourceBuffer() ? toScriptResource(cachedResource)->decodedText() : toScriptResource(cachedResource)->script().toString(), cachedResource->resourceBuffer(), result, base64Encoded);
+        maybeEncodeTextContent(cachedResource->resourceBuffer() ? toScriptResource(cachedResource)->decodedText() : toScriptResource(cachedResource)->script(), cachedResource->resourceBuffer(), result, base64Encoded);
         return true;
     default:
         String textEncodingName = cachedResource->response().textEncodingName();
@@ -241,7 +230,7 @@ bool InspectorPageAgent::cachedResourceContent(Resource* cachedResource, String*
     }
 }
 
-InspectorPageAgent* InspectorPageAgent::create(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, V8InspectorSession* v8Session)
+InspectorPageAgent* InspectorPageAgent::create(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, v8_inspector::V8InspectorSession* v8Session)
 {
     return new InspectorPageAgent(inspectedFrames, client, resourceContentLoader, v8Session);
 }
@@ -332,7 +321,7 @@ String InspectorPageAgent::cachedResourceTypeJson(const Resource& cachedResource
     return resourceTypeJson(cachedResourceType(cachedResource));
 }
 
-InspectorPageAgent::InspectorPageAgent(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, V8InspectorSession* v8Session)
+InspectorPageAgent::InspectorPageAgent(InspectedFrames* inspectedFrames, Client* client, InspectorResourceContentLoader* resourceContentLoader, v8_inspector::V8InspectorSession* v8Session)
     : m_inspectedFrames(inspectedFrames)
     , m_v8Session(v8Session)
     , m_client(client)
@@ -349,7 +338,12 @@ void InspectorPageAgent::restore()
     ErrorString error;
     if (m_state->booleanProperty(PageAgentState::pageAgentEnabled, false))
         enable(&error);
-    setBlockedEventsWarningThreshold(&error, m_state->numberProperty(PageAgentState::blockedEventsWarningThreshold, 0.0));
+    setBlockedEventsWarningThreshold(&error, m_state->doubleProperty(PageAgentState::blockedEventsWarningThreshold, 0.0));
+    if (m_client) {
+        String16 overlayMessage;
+        m_state->getString(PageAgentState::overlayMessage, &overlayMessage);
+        m_client->configureOverlay(m_state->booleanProperty(PageAgentState::overlaySuspended, false), overlayMessage.isEmpty() ? String() : String(overlayMessage));
+    }
 }
 
 void InspectorPageAgent::enable(ErrorString*)
@@ -370,6 +364,7 @@ void InspectorPageAgent::disable(ErrorString*)
     m_inspectorResourceContentLoader->cancel(m_resourceContentLoaderClientId);
 
     stopScreencast(0);
+    configureOverlay(nullptr, false, String());
 
     finishReload();
 }
@@ -493,7 +488,7 @@ void InspectorPageAgent::getResourceContentAfterResourcesContentLoaded(const Str
         callback->sendFailure("No resource with given URL found");
 }
 
-void InspectorPageAgent::getResourceContent(ErrorString* errorString, const String& frameId, const String& url, std::unique_ptr<GetResourceContentCallback> callback)
+void InspectorPageAgent::getResourceContent(const String& frameId, const String& url, std::unique_ptr<GetResourceContentCallback> callback)
 {
     if (!m_enabled) {
         callback->sendFailure("Agent is not enabled.");
@@ -516,12 +511,10 @@ void InspectorPageAgent::searchContentAfterResourcesContentLoaded(const String& 
         return;
     }
 
-    std::unique_ptr<protocol::Array<protocol::Debugger::SearchMatch>> results;
-    results = V8ContentSearchUtil::searchInTextByLines(m_v8Session, content, query, caseSensitive, isRegex);
-    callback->sendSuccess(std::move(results));
+    callback->sendSuccess(m_v8Session->searchInTextByLines(content, query, caseSensitive, isRegex));
 }
 
-void InspectorPageAgent::searchInResource(ErrorString*, const String& frameId, const String& url, const String& query, const Maybe<bool>& optionalCaseSensitive, const Maybe<bool>& optionalIsRegex, std::unique_ptr<SearchInResourceCallback> callback)
+void InspectorPageAgent::searchInResource(const String& frameId, const String& url, const String& query, const Maybe<bool>& optionalCaseSensitive, const Maybe<bool>& optionalIsRegex, std::unique_ptr<SearchInResourceCallback> callback)
 {
     if (!m_enabled) {
         callback->sendFailure("Agent is not enabled.");
@@ -742,15 +735,17 @@ void InspectorPageAgent::stopScreencast(ErrorString*)
     m_state->setBoolean(PageAgentState::screencastEnabled, false);
 }
 
-void InspectorPageAgent::setOverlayMessage(ErrorString*, const Maybe<String>& message)
+void InspectorPageAgent::configureOverlay(ErrorString*, const Maybe<bool>& suspended, const Maybe<String>& message)
 {
+    m_state->setBoolean(PageAgentState::overlaySuspended, suspended.fromMaybe(false));
+    m_state->setString(PageAgentState::overlaySuspended, message.fromMaybe(String()));
     if (m_client)
-        m_client->setPausedInDebuggerMessage(message.fromMaybe(String()));
+        m_client->configureOverlay(suspended.fromMaybe(false), message.fromMaybe(String()));
 }
 
 void InspectorPageAgent::setBlockedEventsWarningThreshold(ErrorString*, double threshold)
 {
-    m_state->setNumber(PageAgentState::blockedEventsWarningThreshold, threshold);
+    m_state->setDouble(PageAgentState::blockedEventsWarningThreshold, threshold);
     FrameHost* host = m_inspectedFrames->root()->host();
     if (!host)
         return;

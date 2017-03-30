@@ -124,40 +124,44 @@ Element* FormatBlockCommand::elementForFormatBlockCommand(Range* range)
     if (!commonAncestor)
         return 0;
 
-    Element* rootEditableElement = range->startContainer()->rootEditableElement();
-    if (!rootEditableElement || commonAncestor->contains(rootEditableElement))
+    Element* element = rootEditableElement(*range->startContainer());
+    if (!element || commonAncestor->contains(element))
         return 0;
 
     return commonAncestor->isElementNode() ? toElement(commonAncestor) : 0;
 }
 
+InputEvent::InputType FormatBlockCommand::inputType() const
+{
+    return InputEvent::InputType::FormatBlock;
+}
+
 bool isElementForFormatBlock(const QualifiedName& tagName)
 {
-    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, blockTags, ());
-    if (blockTags.isEmpty()) {
-        blockTags.add(addressTag);
-        blockTags.add(articleTag);
-        blockTags.add(asideTag);
-        blockTags.add(blockquoteTag);
-        blockTags.add(ddTag);
-        blockTags.add(divTag);
-        blockTags.add(dlTag);
-        blockTags.add(dtTag);
-        blockTags.add(footerTag);
-        blockTags.add(h1Tag);
-        blockTags.add(h2Tag);
-        blockTags.add(h3Tag);
-        blockTags.add(h4Tag);
-        blockTags.add(h5Tag);
-        blockTags.add(h6Tag);
-        blockTags.add(headerTag);
-        blockTags.add(hgroupTag);
-        blockTags.add(mainTag);
-        blockTags.add(navTag);
-        blockTags.add(pTag);
-        blockTags.add(preTag);
-        blockTags.add(sectionTag);
-    }
+    DEFINE_STATIC_LOCAL(HashSet<QualifiedName>, blockTags, ({
+        addressTag,
+        articleTag,
+        asideTag,
+        blockquoteTag,
+        ddTag,
+        divTag,
+        dlTag,
+        dtTag,
+        footerTag,
+        h1Tag,
+        h2Tag,
+        h3Tag,
+        h4Tag,
+        h5Tag,
+        h6Tag,
+        headerTag,
+        hgroupTag,
+        mainTag,
+        navTag,
+        pTag,
+        preTag,
+        sectionTag,
+    }));
     return blockTags.contains(tagName);
 }
 
@@ -166,14 +170,14 @@ Node* enclosingBlockToSplitTreeTo(Node* startNode)
     DCHECK(startNode);
     Node* lastBlock = startNode;
     for (Node& runner : NodeTraversal::inclusiveAncestorsOf(*startNode)) {
-        if (!runner.hasEditableStyle())
+        if (!hasEditableStyle(runner))
             return lastBlock;
-        if (isTableCell(&runner) || isHTMLBodyElement(&runner) || !runner.parentNode() || !runner.parentNode()->hasEditableStyle() || isElementForFormatBlock(&runner))
+        if (isTableCell(&runner) || isHTMLBodyElement(&runner) || !runner.parentNode() || !hasEditableStyle(*runner.parentNode()) || isElementForFormatBlock(&runner))
             return &runner;
         if (isEnclosingBlock(&runner))
             lastBlock = &runner;
         if (isHTMLListElement(&runner))
-            return runner.parentNode()->hasEditableStyle() ? runner.parentNode() : &runner;
+            return hasEditableStyle(*runner.parentNode()) ? runner.parentNode() : &runner;
     }
     return lastBlock;
 }

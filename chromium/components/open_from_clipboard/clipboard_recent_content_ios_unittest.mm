@@ -4,6 +4,7 @@
 
 #include "components/open_from_clipboard/clipboard_recent_content_ios.h"
 
+#import <CoreGraphics/CoreGraphics.h>
 #import <UIKit/UIKit.h>
 
 #include <memory>
@@ -12,6 +13,20 @@
 #include "testing/platform_test.h"
 
 namespace {
+
+UIImage* TestUIImage() {
+  CGRect frame = CGRectMake(0, 0, 1.0, 1.0);
+  UIGraphicsBeginImageContext(frame.size);
+
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  CGContextSetFillColorWithColor(context, [UIColor redColor].CGColor);
+  CGContextFillRect(context, frame);
+
+  UIImage* image = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  return image;
+}
 
 void SetPasteboardImage(UIImage* image) {
   [[UIPasteboard generalPasteboard] setImage:image];
@@ -24,10 +39,27 @@ void SetPasteboardContent(const char* data) {
 }
 const char kUnrecognizedURL[] = "ftp://foo/";
 const char kRecognizedURL[] = "http://bar/";
+const char kRecognizedURL2[] = "http://bar/2";
 const char kAppSpecificURL[] = "test://qux/";
 const char kAppSpecificScheme[] = "test";
 NSTimeInterval kSevenHours = 60 * 60 * 7;
 }  // namespace
+
+class ClipboardRecentContentIOSWithFakeUptime
+    : public ClipboardRecentContentIOS {
+ public:
+  ClipboardRecentContentIOSWithFakeUptime(const std::string& application_scheme,
+                                          NSUserDefaults* group_user_defaults)
+      : ClipboardRecentContentIOS(application_scheme, group_user_defaults) {}
+  // Sets the uptime.
+  void SetUptime(base::TimeDelta uptime) { uptime_ = uptime; }
+
+ protected:
+  base::TimeDelta Uptime() const override { return uptime_; }
+
+ private:
+  base::TimeDelta uptime_;
+};
 
 class ClipboardRecentContentIOSTest : public ::testing::Test {
  protected:
@@ -44,8 +76,9 @@ class ClipboardRecentContentIOSTest : public ::testing::Test {
 
   void ResetClipboardRecentContent(const std::string& application_scheme,
                                    base::TimeDelta time_delta) {
-    clipboard_content_.reset(
-        new ClipboardRecentContentIOS(application_scheme, time_delta));
+    clipboard_content_.reset(new ClipboardRecentContentIOSWithFakeUptime(
+        application_scheme, [NSUserDefaults standardUserDefaults]));
+    clipboard_content_->SetUptime(time_delta);
   }
 
   void SetStoredPasteboardChangeDate(NSDate* changeDate) {
@@ -59,7 +92,7 @@ class ClipboardRecentContentIOSTest : public ::testing::Test {
   }
 
  protected:
-  std::unique_ptr<ClipboardRecentContentIOS> clipboard_content_;
+  std::unique_ptr<ClipboardRecentContentIOSWithFakeUptime> clipboard_content_;
 };
 
 TEST_F(ClipboardRecentContentIOSTest, SchemeFiltering) {
@@ -138,7 +171,7 @@ TEST_F(ClipboardRecentContentIOSTest, SupressedPasteboard) {
 
   // Check that if the pasteboard changes, the new content is not
   // supressed anymore.
-  SetPasteboardContent(kRecognizedURL);
+  SetPasteboardContent(kRecognizedURL2);
   EXPECT_TRUE(clipboard_content_->GetRecentURLFromClipboard(&gurl));
 }
 
@@ -154,7 +187,7 @@ TEST_F(ClipboardRecentContentIOSTest, AddingNonStringRemovesCachedString) {
 
   // Overwrite pasteboard with an image.
   base::scoped_nsobject<UIImage> image([[UIImage alloc] init]);
-  SetPasteboardImage(image);
+  SetPasteboardImage(TestUIImage());
 
   // Pasteboard should appear empty.
   EXPECT_FALSE(clipboard_content_->GetRecentURLFromClipboard(&gurl));

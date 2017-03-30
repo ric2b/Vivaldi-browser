@@ -26,9 +26,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/UseCounter.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioBufferSourceNode.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/FloatConversion.h"
 #include "platform/audio/AudioUtilities.h"
 #include "wtf/MathExtras.h"
@@ -154,11 +154,11 @@ bool AudioBufferSourceHandler::renderSilenceAndFinishIfNotLooping(AudioBus*, uns
 
 bool AudioBufferSourceHandler::renderFromBuffer(AudioBus* bus, unsigned destinationFrameOffset, size_t numberOfFrames)
 {
-    ASSERT(context()->isAudioThread());
+    DCHECK(context()->isAudioThread());
 
     // Basic sanity checking
-    ASSERT(bus);
-    ASSERT(buffer());
+    DCHECK(bus);
+    DCHECK(buffer());
     if (!bus || !buffer())
         return false;
 
@@ -166,20 +166,21 @@ bool AudioBufferSourceHandler::renderFromBuffer(AudioBus* bus, unsigned destinat
     unsigned busNumberOfChannels = bus->numberOfChannels();
 
     bool channelCountGood = numberOfChannels && numberOfChannels == busNumberOfChannels;
-    ASSERT(channelCountGood);
+    DCHECK(channelCountGood);
     if (!channelCountGood)
         return false;
 
     // Sanity check destinationFrameOffset, numberOfFrames.
     size_t destinationLength = bus->length();
 
-    bool isLengthGood = destinationLength <= 4096 && numberOfFrames <= 4096;
-    ASSERT(isLengthGood);
+    bool isLengthGood = destinationLength <= AudioUtilities::kRenderQuantumFrames
+        && numberOfFrames <= AudioUtilities::kRenderQuantumFrames;
+    DCHECK(isLengthGood);
     if (!isLengthGood)
         return false;
 
     bool isOffsetGood = destinationFrameOffset <= destinationLength && destinationFrameOffset + numberOfFrames <= destinationLength;
-    ASSERT(isOffsetGood);
+    DCHECK(isOffsetGood);
     if (!isOffsetGood)
         return false;
 
@@ -243,9 +244,9 @@ bool AudioBufferSourceHandler::renderFromBuffer(AudioBus* bus, unsigned destinat
     const float** sourceChannels = m_sourceChannels.get();
     float** destinationChannels = m_destinationChannels.get();
 
-    ASSERT(virtualReadIndex >= 0);
-    ASSERT(virtualDeltaFrames >= 0);
-    ASSERT(virtualEndFrame >= 0);
+    DCHECK_GE(virtualReadIndex, 0);
+    DCHECK_GE(virtualDeltaFrames, 0);
+    DCHECK_GE(virtualEndFrame, 0);
 
     // Optimize for the very common case of playing back with computedPlaybackRate == 1.
     // We can avoid the linear interpolation.
@@ -267,9 +268,9 @@ bool AudioBufferSourceHandler::renderFromBuffer(AudioBus* bus, unsigned destinat
             readIndex += framesThisTime;
             framesToProcess -= framesThisTime;
 
-            // It can happen that framesThisTime is 0. Assert that we will actually exit the loop in
+            // It can happen that framesThisTime is 0. DCHECK that we will actually exit the loop in
             // this case.  framesThisTime is 0 only if readIndex >= endFrame;
-            ASSERT(framesThisTime ? true : readIndex >= endFrame);
+            DCHECK(framesThisTime ? true : readIndex >= endFrame);
 
             // Wrap-around.
             if (readIndex >= endFrame) {
@@ -334,7 +335,7 @@ bool AudioBufferSourceHandler::renderFromBuffer(AudioBus* bus, unsigned destinat
 
 void AudioBufferSourceHandler::setBuffer(AudioBuffer* buffer, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (m_buffer) {
         exceptionState.throwDOMException(
@@ -344,7 +345,7 @@ void AudioBufferSourceHandler::setBuffer(AudioBuffer* buffer, ExceptionState& ex
     }
 
     // The context must be locked since changing the buffer can re-configure the number of channels that are output.
-    AbstractAudioContext::AutoLocker contextLocker(context());
+    BaseAudioContext::AutoLocker contextLocker(context());
 
     // This synchronizes with process().
     MutexLocker processLocker(m_processLock);
@@ -355,7 +356,7 @@ void AudioBufferSourceHandler::setBuffer(AudioBuffer* buffer, ExceptionState& ex
 
         // This should not be possible since AudioBuffers can't be created with too many channels
         // either.
-        if (numberOfChannels > AbstractAudioContext::maxNumberOfChannels()) {
+        if (numberOfChannels > BaseAudioContext::maxNumberOfChannels()) {
             exceptionState.throwDOMException(
                 NotSupportedError,
                 ExceptionMessages::indexOutsideRange(
@@ -363,7 +364,7 @@ void AudioBufferSourceHandler::setBuffer(AudioBuffer* buffer, ExceptionState& ex
                     numberOfChannels,
                     1u,
                     ExceptionMessages::InclusiveBound,
-                    AbstractAudioContext::maxNumberOfChannels(),
+                    BaseAudioContext::maxNumberOfChannels(),
                     ExceptionMessages::InclusiveBound));
             return;
         }
@@ -393,7 +394,7 @@ unsigned AudioBufferSourceHandler::numberOfChannels()
 
 void AudioBufferSourceHandler::clampGrainParameters(const AudioBuffer* buffer)
 {
-    ASSERT(buffer);
+    DCHECK(buffer);
 
     // We have a buffer so we can clip the offset and duration to lie within the buffer.
     double bufferDuration = buffer->duration();
@@ -440,7 +441,7 @@ void AudioBufferSourceHandler::start(double when, double grainOffset, double gra
 
 void AudioBufferSourceHandler::startSource(double when, double grainOffset, double grainDuration, bool isDurationGiven, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     context()->recordUserGestureState();
 
@@ -508,9 +509,9 @@ void AudioBufferSourceHandler::startSource(double when, double grainOffset, doub
 
 double AudioBufferSourceHandler::computePlaybackRate()
 {
-    // Incorporate buffer's sample-rate versus AbstractAudioContext's sample-rate.
+    // Incorporate buffer's sample-rate versus BaseAudioContext's sample-rate.
     // Normally it's not an issue because buffers are loaded at the
-    // AbstractAudioContext's sample-rate, but we can handle it in any case.
+    // BaseAudioContext's sample-rate, but we can handle it in any case.
     double sampleRateFactor = 1.0;
     if (buffer()) {
         // Use doubles to compute this to full accuracy.
@@ -531,7 +532,7 @@ double AudioBufferSourceHandler::computePlaybackRate()
     finalPlaybackRate = clampTo(finalPlaybackRate, 0.0, MaxRate);
 
     bool isPlaybackRateValid = !std::isnan(finalPlaybackRate) && !std::isinf(finalPlaybackRate);
-    ASSERT(isPlaybackRateValid);
+    DCHECK(isPlaybackRateValid);
 
     if (!isPlaybackRateValid)
         finalPlaybackRate = 1.0;
@@ -584,7 +585,7 @@ void AudioBufferSourceHandler::handleStoppableSourceNode()
 }
 
 // ----------------------------------------------------------------
-AudioBufferSourceNode::AudioBufferSourceNode(AbstractAudioContext& context)
+AudioBufferSourceNode::AudioBufferSourceNode(BaseAudioContext& context)
     : AudioScheduledSourceNode(context)
     , m_playbackRate(AudioParam::create(context, ParamTypeAudioBufferSourcePlaybackRate, 1.0))
     , m_detune(AudioParam::create(context, ParamTypeAudioBufferSourceDetune, 0.0))
@@ -596,7 +597,7 @@ AudioBufferSourceNode::AudioBufferSourceNode(AbstractAudioContext& context)
         m_detune->handler()));
 }
 
-AudioBufferSourceNode* AudioBufferSourceNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+AudioBufferSourceNode* AudioBufferSourceNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 

@@ -107,6 +107,15 @@ class BuildSettings {
     check_for_bad_items_ = c;
   }
 
+  // <Vivaldi>
+  bool RegisterPathMap(const std::string &prefix,
+                       const std::string &map_to_path);
+  static std::string RemapSourcePathToActual(const std::string &path);
+  static std::string RemapActualToSourcePath(const std::string &path);
+  const std::vector<Item *> &global_pools() const {return global_pools_;}
+  void add_global_pool(Item *item) {global_pools_.push_back(item);}
+  // </Vivaldi>
+
  private:
   base::FilePath root_path_;
   std::string root_path_utf8_;
@@ -123,6 +132,16 @@ class BuildSettings {
   std::unique_ptr<std::set<SourceFile>> exec_script_whitelist_;
 
   bool check_for_bad_items_;
+
+  // <Vivaldi>
+  struct path_mapper {
+  	std::string prefix; // "//foo/" always coded as "foo"
+  	std::string actual_path; // relative to root_path_, empty means root_path_
+  };
+
+  static std::vector<path_mapper> path_map_;
+  std::vector<Item *> global_pools_;
+  // </Vivaldi>
 
   BuildSettings& operator=(const BuildSettings& other);  // Disallow.
 };

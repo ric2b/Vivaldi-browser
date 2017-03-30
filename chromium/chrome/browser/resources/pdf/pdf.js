@@ -58,12 +58,13 @@ function onNavigateInCurrentTab(isInTab, isSourceFileUrl, url) {
 /**
  * Called when navigation happens in the new tab.
  * @param {string} url The url to be opened in the new tab.
+ * @param {boolean} active Indicates if the new tab should be the active tab.
  */
-function onNavigateInNewTab(url) {
+function onNavigateInNewTab(url, active) {
   // Prefer the tabs API because it guarantees we can just open a new tab.
   // window.open doesn't have this guarantee.
   if (chrome.tabs)
-    chrome.tabs.create({url: url});
+    chrome.tabs.create({url: url, active: active});
   else
     window.open(url);
 }
@@ -130,8 +131,8 @@ function PDFViewer(browserApi) {
 
   this.delayedScriptingMessages_ = [];
 
-  this.isPrintPreview_ = this.originalUrl_.indexOf(
-                             'chrome://print') == 0;
+  this.isPrintPreview_ = this.originalUrl_.indexOf('chrome://print') == 0;
+
   // Parse open pdf parameters.
   this.paramsParser_ =
       new OpenPDFParamsParser(this.getNamedDestination_.bind(this));
@@ -187,8 +188,7 @@ function PDFViewer(browserApi) {
   window.addEventListener('message', this.handleScriptingMessage.bind(this),
                           false);
 
-  this.plugin_.setAttribute('src',
-                            this.originalUrl_);
+  this.plugin_.setAttribute('src', this.originalUrl_);
   this.plugin_.setAttribute('stream-url',
                             this.browserApi_.getStreamInfo().streamUrl);
   var headers = '';
@@ -229,8 +229,7 @@ function PDFViewer(browserApi) {
     this.plugin_.addEventListener('mouseup',
         this.toolbar_.hideDropdowns.bind(this.toolbar_));
 
-    this.toolbar_.docTitle =
-        getFilenameFromURL(this.originalUrl_);
+    this.toolbar_.docTitle = getFilenameFromURL(this.originalUrl_);
   }
 
   document.body.addEventListener('change-page', function(e) {
@@ -238,7 +237,10 @@ function PDFViewer(browserApi) {
   }.bind(this));
 
   document.body.addEventListener('navigate', function(e) {
-    this.navigator_.navigate(e.detail.uri, e.detail.newtab);
+    var disposition =
+        e.detail.newtab ? Navigator.WindowOpenDisposition.NEW_BACKGROUND_TAB :
+                          Navigator.WindowOpenDisposition.CURRENT_TAB;
+    this.navigator_.navigate(e.detail.uri, disposition);
   }.bind(this));
 
   this.toolbarManager_ =
@@ -257,8 +259,7 @@ function PDFViewer(browserApi) {
   document.addEventListener('mouseout', this.handleMouseEvent_.bind(this));
 
   var isInTab = this.browserApi_.getStreamInfo().tabId != -1;
-  var isSourceFileUrl =
-      this.originalUrl_.indexOf('file://') == 0;
+  var isSourceFileUrl = this.originalUrl_.indexOf('file://') == 0;
   this.navigator_ = new Navigator(this.originalUrl_,
                                   this.viewport_, this.paramsParser_,
                                   onNavigateInCurrentTab.bind(undefined,
@@ -557,9 +558,13 @@ PDFViewer.prototype = {
    * @param {Object} strings Dictionary of translated strings
    */
   handleStrings_: function(strings) {
-    window.loadTimeData.data = strings;
-    i18nTemplate.process(document, loadTimeData);
-    this.zoomToolbar_.updateTooltips();
+    document.documentElement.dir = strings.textdirection;
+    document.documentElement.lang = strings.language;
+
+    $('toolbar').strings = strings;
+    $('zoom-toolbar').strings = strings;
+    $('password-screen').strings = strings;
+    $('error-screen').strings = strings;
   },
 
   /**
@@ -623,10 +628,13 @@ PDFViewer.prototype = {
         break;
       case 'navigate':
         // If in print preview, always open a new tab.
-        if (this.isPrintPreview_)
-          this.navigator_.navigate(message.data.url, true);
-        else
-          this.navigator_.navigate(message.data.url, message.data.newTab);
+        if (this.isPrintPreview_) {
+          this.navigator_.navigate(
+              message.data.url,
+              Navigator.WindowOpenDisposition.NEW_BACKGROUND_TAB);
+        } else {
+          this.navigator_.navigate(message.data.url, message.data.disposition);
+        }
         break;
       case 'setScrollPosition':
         var position = this.viewport_.position;
@@ -643,8 +651,7 @@ PDFViewer.prototype = {
         if (message.data.title) {
           document.title = message.data.title;
         } else {
-          document.title =
-              getFilenameFromURL(this.originalUrl_);
+          document.title = getFilenameFromURL(this.originalUrl_);
         }
         this.bookmarks_ = message.data.bookmarks;
         if (this.toolbar_) {
@@ -656,8 +663,7 @@ PDFViewer.prototype = {
         this.viewportScroller_.setEnableScrolling(message.data.isSelecting);
         break;
       case 'getNamedDestinationReply':
-        this.paramsParser_.onNamedDestinationReceived(
-            message.data.pageNumber);
+        this.paramsParser_.onNamedDestinationReceived(message.data.pageNumber);
         break;
       case 'formFocusChange':
         this.isFormFieldFocused_ = message.data.focused;

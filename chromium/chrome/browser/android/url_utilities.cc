@@ -7,18 +7,42 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "components/google/core/browser/google_util.h"
-#include "components/url_formatter/elide_url.h"
-#include "components/url_formatter/url_fixer.h"
 #include "jni/UrlUtilities_jni.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace {
 
-GURL ConvertJavaStringToGURL(JNIEnv*env, jstring url) {
+static const char* const g_supported_schemes[] = { "about", "data", "file",
+    "http", "https", "inline", "javascript", nullptr };
+
+static const char* const g_downloadable_schemes[] = {
+    "data", "blob", "file", "filesystem", "http", "https", nullptr };
+
+static const char* const g_fallback_valid_schemes[] = {
+    "http", "https", nullptr };
+
+GURL ConvertJavaStringToGURL(JNIEnv* env, jstring url) {
   return url ? GURL(ConvertJavaStringToUTF8(env, url)) : GURL();
+}
+
+bool CheckSchemeBelongsToList(
+    JNIEnv* env,
+    const JavaParamRef<jstring>& url,
+    const char* const* scheme_list) {
+  GURL gurl = ConvertJavaStringToGURL(env, url);
+  if (gurl.is_valid()) {
+    for (size_t i = 0; scheme_list[i]; i++) {
+      if (gurl.scheme() == scheme_list[i]) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 net::registry_controlled_domains::PrivateRegistryFilter GetRegistryFilter(
@@ -82,25 +106,6 @@ static jboolean IsGoogleSearchUrl(JNIEnv* env,
   return google_util::IsGoogleSearchUrl(gurl);
 }
 
-static ScopedJavaLocalRef<jstring> FormatUrlForSecurityDisplay(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
-    const JavaParamRef<jstring>& url) {
-  return base::android::ConvertUTF16ToJavaString(
-      env, url_formatter::FormatUrlForSecurityDisplay(
-               ConvertJavaStringToGURL(env, url)));
-}
-
-static ScopedJavaLocalRef<jstring> FormatUrlForSecurityDisplayOmitScheme(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
-    const JavaParamRef<jstring>& url) {
-  return base::android::ConvertUTF16ToJavaString(
-      env, url_formatter::FormatUrlForSecurityDisplay(
-               ConvertJavaStringToGURL(env, url),
-               url_formatter::SchemeDisplay::OMIT_HTTP_AND_HTTPS));
-}
-
 static jboolean IsGoogleHomePageUrl(JNIEnv* env,
                                     const JavaParamRef<jclass>& clazz,
                                     const JavaParamRef<jstring>& url) {
@@ -108,23 +113,6 @@ static jboolean IsGoogleHomePageUrl(JNIEnv* env,
   if (gurl.is_empty())
     return false;
   return google_util::IsGoogleHomePageUrl(gurl);
-}
-
-static ScopedJavaLocalRef<jstring> FixupUrl(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
-    const JavaParamRef<jstring>& url,
-    const JavaParamRef<jstring>& optional_desired_tld) {
-  DCHECK(url);
-  GURL fixed_url = url_formatter::FixupURL(
-      base::android::ConvertJavaStringToUTF8(env, url),
-      optional_desired_tld
-          ? base::android::ConvertJavaStringToUTF8(env, optional_desired_tld)
-          : std::string());
-
-  return fixed_url.is_valid()
-             ? base::android::ConvertUTF8ToJavaString(env, fixed_url.spec())
-             : ScopedJavaLocalRef<jstring>();
 }
 
 static jboolean UrlsMatchIgnoringFragments(JNIEnv* env,
@@ -156,6 +144,26 @@ static jboolean UrlsFragmentsDiffer(JNIEnv* env,
     return true;
   return gurl.ref() != gurl2.ref();
 }
+
+static jboolean IsAcceptedScheme(JNIEnv* env,
+                                 const JavaParamRef<jclass>& clazz,
+                                 const JavaParamRef<jstring>& url) {
+  return CheckSchemeBelongsToList(env, url, g_supported_schemes);
+}
+
+static jboolean IsValidForIntentFallbackNavigation(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& url) {
+  return CheckSchemeBelongsToList(env, url, g_fallback_valid_schemes);
+}
+
+static jboolean IsDownloadable(JNIEnv* env,
+                               const JavaParamRef<jclass>& clazz,
+                               const JavaParamRef<jstring>& url) {
+  return CheckSchemeBelongsToList(env, url, g_downloadable_schemes);
+}
+
 
 // Register native methods
 bool RegisterUrlUtilities(JNIEnv* env) {

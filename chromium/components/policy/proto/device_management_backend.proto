@@ -8,6 +8,17 @@ option optimize_for = LITE_RUNTIME;
 
 package enterprise_management;
 
+// Data along with a cryptographic signature verifying their authenticity.
+message SignedData {
+  // The data to be signed.
+  optional bytes data = 1;
+  // The signature of the data field.
+  optional bytes signature = 2;
+  // How many bytes were added to the end of original data before signature
+  // (e.g. a nonce to avoid proxy attacks of the signing service).
+  optional int32 extra_data_bytes = 3;
+}
+
 // Request from device to server to register device.
 message DeviceRegisterRequest {
   // Reregister device without erasing server state.  It can be used
@@ -79,6 +90,11 @@ message DeviceRegisterRequest {
     FLAVOR_ENROLLMENT_RECOVERY = 6;
     // User policy registration for a logged-in user.
     FLAVOR_USER_REGISTRATION = 7;
+    // Attestation-based with the option to use a different authentication
+    // mechanism.
+    FLAVOR_ENROLLMENT_ATTESTATION = 8;
+    // Attestation-based enrollment.
+    FLAVOR_ENROLLMENT_ATTESTATION_FORCED = 9;
   };
 
   // Indicates the registration flavor. This is passed to the server FYI when
@@ -377,16 +393,16 @@ message PolicyData {
   // The unique directory api ID of the device which was generated on the
   // server-side.
   optional string directory_api_id = 22;
-  
+
   // List of device affiliation IDs. If exists overlap between user
   // affiliation IDs and device affiliation IDs, we consider that the user is
   // affiliated on the device. Otherwise the user is not affiliated on the
-  // device. Should be fetched with device policy. Ignored if fetched with 
+  // device. Should be fetched with device policy. Ignored if fetched with
   // other polices.
   repeated string device_affiliation_ids = 23;
-  
+
   // List of user affiliation IDs. The list is used to define if current user
-  // is affiliated on the device. See device_affiliation_ids for details. 
+  // is affiliated on the device. See device_affiliation_ids for details.
   // Should be fetched with user policy. Ignored if fetched with other polices.
   repeated string user_affiliation_ids = 24;
 }
@@ -745,6 +761,36 @@ message DeviceStatusReportRequest {
 
   // CPU temp information.
   repeated CPUTempInfo cpu_temp_info = 16;
+
+  // This field is set only when an OS update is needed because of the required
+  // platform version of an updated kiosk app is different from the current
+  // OS version.
+  optional OsUpdateStatus os_update_status = 17;
+
+  // Set only when there is an auto launched with zero delay kiosk app
+  // and it is currently running. Otherwise, this field is empty.
+  optional AppStatus running_kiosk_app = 18;
+}
+
+message OsUpdateStatus {
+  enum UpdateStatus {
+    OS_UP_TO_DATE = 0;
+    OS_IMAGE_DOWNLOAD_NOT_STARTED = 1;
+    OS_IMAGE_DOWNLOAD_IN_PROGRESS = 2;
+    OS_UPDATE_NEED_REBOOT = 3;
+  }
+
+  optional UpdateStatus update_status = 1;
+
+  // New platform version of the os image being downloaded and applied. It
+  // is only set when update status is OS_IMAGE_DOWNLOAD_IN_PROGRESS or
+  // OS_UPDATE_NEED_REBOOT. Note this could be a dummy "0.0.0.0" for
+  // OS_UPDATE_NEED_REBOOT status for some edge cases, e.g. update engine is
+  // restarted without a reboot.
+  optional string new_platform_version = 2;
+
+  // New required platform version from the pending updated kiosk app.
+  optional string new_required_platform_version = 3;
 }
 
 // Provides status information for an installed app/extension.
@@ -760,6 +806,9 @@ message AppStatus {
 
   // If true, the application is currently in a self-reported error state.
   optional bool error = 4;
+
+  // App required Chrome version, specified in app’s manifest file.
+  optional string required_platform_version = 5;
 }
 
 // Report session (a user on one device) level status.
@@ -1041,6 +1090,37 @@ message CheckAndroidManagementRequest {}
 // SC_CONFLICT HTTP code is returned if DPC enforcement is required.
 message CheckAndroidManagementResponse {}
 
+// Request to register a new device (authenticated by enterprise enrollment
+// certificate).
+// The response message will be the DeviceRegisterReponse.
+message CertificateBasedDeviceRegisterRequest {
+  // Signed request to register with a certificate. The signed_request.data
+  // field contains a CertificateBasedDeviceRegistrationData with a nonce
+  // (as added by the Chrome OS cryptohome client) appended. The
+  // signed_request.signature field is a signature of the data field signed
+  // with the enrollment certificate's private key.
+  optional SignedData signed_request = 1;
+}
+
+message CertificateBasedDeviceRegistrationData {
+  enum CertificateType {
+    UNKNOWN = 0;
+    ENTERPRISE_ENROLLMENT_CERTIFICATE = 1;
+  }
+
+  optional CertificateType certificate_type = 1;
+  // device certificate in X.509 format.
+  // We use CertificateFactory.generateCertificate() call and
+  // the certificate provided must be DER-encoded and may be supplied in binary
+  // or printable (Base64) encoding. If the certificate is provided in Base64
+  // encoding, it must be bounded at the beginning by
+  // -----BEGIN CERTIFICATE-----, and must be bounded at the end by
+  // -----END CERTIFICATE-----.
+  optional bytes device_certificate = 2;
+  // regular device registration request
+  optional DeviceRegisterRequest device_register_request = 3;
+}
+
 // Request from the DMAgent on the device to the DMServer.  This is
 // container for all requests from device to server.  The overall HTTP
 // request MUST be in the following format:
@@ -1065,6 +1145,7 @@ message CheckAndroidManagementResponse {}
 //     * attribute_update
 //     * gcm_id_update
 //     * check_android_management
+//     * certificate_based_register
 //
 //   * devicetype: MUST BE "1" for Android or "2" for Chrome OS.
 //   * apptype: MUST BE Android or Chrome.
@@ -1078,9 +1159,10 @@ message CheckAndroidManagementResponse {}
 //     and gcm id update requests
 //      Authorization: GoogleDMToken token=<dm token from register>
 //
-//   * The Authorization header isn't used for enterprise_check
-//     request, nor for register requests using OAuth. In the latter case,
-//     the OAuth token is passed in the "oauth" parameter.
+//   * The Authorization header isn't used for enterprise_check or for
+//     certificate_based_register requests, nor for register requests
+//     using OAuth. In the latter case, the OAuth token is passed in the
+//     "oauth" parameter.
 //
 // DeviceManagementRequest should only contain one request which matches the
 // HTTP query parameter - request, as listed below. Other requests within the
@@ -1100,6 +1182,7 @@ message CheckAndroidManagementResponse {}
 //   attribute_update: device_attribute_update_request
 //   gcm_id_update: gcm_id_update_request
 //   check_android_management: check_android_management_request
+//   certificate_based_register: cert_based_register_request
 //
 message DeviceManagementRequest {
   // Register request.
@@ -1152,6 +1235,11 @@ message DeviceManagementRequest {
 
   // Check if user is a managed Android-for-Work user with DPC enforcement.
   optional CheckAndroidManagementRequest check_android_management_request = 17;
+
+  // Request to register with a registration certificate.
+  optional CertificateBasedDeviceRegisterRequest
+      cert_based_register_request = 18;
+
 }
 
 // Response from server to device.

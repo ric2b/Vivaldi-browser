@@ -20,6 +20,7 @@ class MediaSessionBrowserTest;
 
 namespace content {
 
+class AudioFocusManagerTest;
 class MediaSessionDelegate;
 class MediaSessionObserver;
 class MediaSessionStateObserver;
@@ -62,9 +63,7 @@ class MediaSession : public WebContentsObserver,
 
   ~MediaSession() override;
 
-  void setMetadata(const MediaMetadata& metadata) {
-    metadata_ = metadata;
-  }
+  void SetMetadata(const MediaMetadata& metadata);
   const MediaMetadata& metadata() const { return metadata_; }
 
   // Adds the given player to the current media session. Returns whether the
@@ -127,6 +126,7 @@ class MediaSession : public WebContentsObserver,
   friend class content::WebContentsUserData<MediaSession>;
   friend class ::MediaSessionBrowserTest;
   friend class content::MediaSessionVisibilityBrowserTest;
+  friend class content::AudioFocusManagerTest;
   friend class content::MediaSessionStateObserver;
 
   CONTENT_EXPORT void SetDelegateForTests(

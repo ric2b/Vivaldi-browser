@@ -42,8 +42,8 @@ IntRect::IntRect(const FloatRect& r)
 }
 
 IntRect::IntRect(const LayoutRect& r)
-    : m_location(r.x(), r.y())
-    , m_size(r.width(), r.height())
+    : m_location(r.x().toInt(), r.y().toInt())
+    , m_size(r.width().toInt(), r.height().toInt())
 {
 }
 
@@ -187,17 +187,11 @@ IntRect unionRectEvenIfEmpty(const Vector<IntRect>& rects)
     return result;
 }
 
-#ifndef NDEBUG
-    // Prints the rect to the screen.
-void IntRect::show() const
-{
-    LayoutRect(*this).show();
-}
-
 String IntRect::toString() const
 {
-    return String::format("%s %s", location().toString().ascii().data(), size().toString().ascii().data());
+    return String::format("%s %s",
+        location().toString().ascii().data(),
+        size().toString().ascii().data());
 }
-#endif
 
 } // namespace blink

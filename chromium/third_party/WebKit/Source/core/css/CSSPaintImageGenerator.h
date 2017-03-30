@@ -39,10 +39,11 @@ public:
 
     // Invokes the CSS Paint API 'paint' callback. May return a nullptr
     // representing an invalid image if an error occurred.
-    virtual PassRefPtr<Image> paint(const LayoutObject&, const IntSize&) = 0;
+    virtual PassRefPtr<Image> paint(const LayoutObject&, const IntSize&, float zoom) = 0;
 
     virtual const Vector<CSSPropertyID>& nativeInvalidationProperties() const = 0;
     virtual const Vector<AtomicString>& customInvalidationProperties() const = 0;
+    virtual bool hasAlpha() const = 0;
 
     DEFINE_INLINE_VIRTUAL_TRACE() { }
 };

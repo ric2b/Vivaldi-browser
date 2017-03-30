@@ -11,6 +11,7 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -130,10 +131,10 @@ class FrameTreeNodeBlameContextTest : public RenderViewHostImplTestHarness {
     int consumption = 0;
     for (int child_num = 1; shape[consumption++] == '('; ++child_num) {
       int child_id = self_id * 10 + child_num;
-      tree()->AddFrame(
-          node, process_id(), child_id, blink::WebTreeScopeType::Document,
-          std::string(), base::StringPrintf("uniqueName%d", child_id),
-          blink::WebSandboxFlags::None, blink::WebFrameOwnerProperties());
+      tree()->AddFrame(node, process_id(), child_id,
+                       blink::WebTreeScopeType::Document, std::string(),
+                       base::StringPrintf("uniqueName%d", child_id),
+                       blink::WebSandboxFlags::None, FrameOwnerProperties());
       FrameTreeNode* child = node->child_at(child_num - 1);
       consumption += CreateSubframes(child, child_id, shape + consumption);
     }
@@ -172,14 +173,14 @@ TEST_F(FrameTreeNodeBlameContextTest, FrameCreation) {
 
   std::set<FrameTreeNode*> creation_traced;
   std::set<FrameTreeNode*> snapshot_traced;
-  for (auto event : events) {
+  for (auto* event : events) {
     ExpectFrameTreeNodeObject(event);
     FrameTreeNode* node =
         tree()->FindByID(strtol(event->id.c_str(), nullptr, 16));
     EXPECT_NE(nullptr, node);
     if (event->HasArg("snapshot")) {
       ExpectFrameTreeNodeSnapshot(event);
-      EXPECT_FALSE(ContainsValue(snapshot_traced, node));
+      EXPECT_FALSE(base::ContainsValue(snapshot_traced, node));
       snapshot_traced.insert(node);
       std::string parent_id = GetParentNodeID(event);
       EXPECT_FALSE(parent_id.empty());
@@ -187,7 +188,7 @@ TEST_F(FrameTreeNodeBlameContextTest, FrameCreation) {
                 tree()->FindByID(strtol(parent_id.c_str(), nullptr, 16)));
     } else {
       EXPECT_EQ(TRACE_EVENT_PHASE_CREATE_OBJECT, event->phase);
-      EXPECT_FALSE(ContainsValue(creation_traced, node));
+      EXPECT_FALSE(base::ContainsValue(creation_traced, node));
       creation_traced.insert(node);
     }
   }
@@ -225,10 +226,10 @@ TEST_F(FrameTreeNodeBlameContextTest, FrameDeletion) {
 
   // The removal of all non-root nodes should be traced.
   EXPECT_EQ(6u, events.size());
-  for (auto event : events) {
+  for (auto* event : events) {
     ExpectFrameTreeNodeObject(event);
     int id = strtol(event->id.c_str(), nullptr, 16);
-    EXPECT_TRUE(ContainsValue(node_ids, id));
+    EXPECT_TRUE(base::ContainsValue(node_ids, id));
     node_ids.erase(id);
   }
 }

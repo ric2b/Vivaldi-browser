@@ -272,11 +272,13 @@ bool WindowProxy::initialize()
     }
     // If Origin Trials have been registered before the V8 context was ready,
     // then inject them into the context now
-    ExecutionContext* executionContext = m_scriptState->getExecutionContext();
-    if (executionContext) {
-        OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext);
-        if (originTrialContext)
-            originTrialContext->initializePendingFeatures();
+    if (m_world->isMainWorld()) {
+        ExecutionContext* executionContext = m_scriptState->getExecutionContext();
+        if (executionContext) {
+            OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext);
+            if (originTrialContext)
+                originTrialContext->initializePendingFeatures();
+        }
     }
     return true;
 }
@@ -425,12 +427,11 @@ void WindowProxy::setSecurityToken(SecurityOrigin* origin)
     // If two tokens are not equal, then we have to call canAccess.
     // Note: we can't use the HTTPOrigin if it was set from the DOM.
     String token;
-    // There are several situations where v8 needs to do a full canAccess check,
+    // There are two situations where v8 needs to do a full canAccess check,
     // so set an empty security token instead:
     // - document.domain was modified
-    // - the frame is showing the initial empty document
     // - the frame is remote
-    bool delaySet = m_frame->isRemoteFrame() || (m_world->isMainWorld() && (origin->domainWasSetInDOM() || toLocalFrame(m_frame)->loader().stateMachine()->isDisplayingInitialEmptyDocument()));
+    bool delaySet = m_frame->isRemoteFrame() || (m_world->isMainWorld() && origin->domainWasSetInDOM());
     if (origin && !delaySet)
         token = origin->toString();
 
@@ -464,10 +465,9 @@ void WindowProxy::setSecurityToken(SecurityOrigin* origin)
         token = frameSecurityToken + token;
     }
 
-    CString utf8Token = token.utf8();
     // NOTE: V8 does identity comparison in fast path, must use a symbol
     // as the security token.
-    context->SetSecurityToken(v8AtomicString(m_isolate, utf8Token.data(), utf8Token.length()));
+    context->SetSecurityToken(v8AtomicString(m_isolate, token));
 }
 
 void WindowProxy::updateDocument()

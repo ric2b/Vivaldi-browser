@@ -8,10 +8,12 @@
 
 #include <string>
 
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/decoder_buffer.h"
 #include "media/base/mac/scoped_audio_queue_ref.h"
 #include "media/filters/blocking_url_protocol.h"
 #include "media/filters/core_audio_demuxer_stream.h"
@@ -71,6 +73,30 @@ CoreAudioDemuxerStream* CoreAudioDemuxer::CreateAudioDemuxerStream() {
       this, input_format_info_, bit_rate_, CoreAudioDemuxerStream::AUDIO);
 }
 
+bool CoreAudioDemuxerStream::enabled() const {
+  return is_enabled_;
+}
+
+void CoreAudioDemuxerStream::set_enabled(bool enabled, base::TimeDelta timestamp) {
+  if (enabled == is_enabled_)
+    return;
+
+  is_enabled_ = enabled;
+  if (!is_enabled_ && !read_cb_.is_null()) {
+    DVLOG(1) << "Read from disabled stream, returning EOS";
+    base::ResetAndReturn(&read_cb_).Run(kOk, DecoderBuffer::CreateEOSBuffer());
+    return;
+  }
+  if (!stream_status_change_cb_.is_null())
+    stream_status_change_cb_.Run(is_enabled_, timestamp);
+}
+
+void CoreAudioDemuxerStream::SetStreamStatusChangeCB(
+    const StreamStatusChangeCB& cb) {
+  DCHECK(!cb.is_null());
+  stream_status_change_cb_ = cb;
+}
+
 void CoreAudioDemuxer::StartWaitingForSeek(base::TimeDelta seek_time) {
 }
 
@@ -125,6 +151,33 @@ int64_t CoreAudioDemuxer::GetMemoryUsage() const {
   return 0;
 }
 
+void CoreAudioDemuxer::OnEnabledAudioTracksChanged(
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime) {
+  bool enabled = false;
+  DemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
+  CHECK(audio_stream);
+  if (track_ids.size() > 0) {
+    enabled = true;
+  }
+  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
+           << " audio stream";
+  audio_stream->set_enabled(enabled, currTime);
+}
+
+void CoreAudioDemuxer::OnSelectedVideoTrackChanged(
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime) {
+  bool enabled = false;
+  DemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
+  CHECK(video_stream);
+  if (track_ids.size() > 0) {
+    enabled = true;
+  }
+  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
+           << " video stream";
+  video_stream->set_enabled(enabled, currTime);
+}
 
 void CoreAudioDemuxer::SetAudioDuration(int64_t duration) {
   host_->SetDuration(base::TimeDelta::FromMilliseconds(duration));

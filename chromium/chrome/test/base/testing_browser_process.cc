@@ -11,6 +11,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_impl.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/printing/print_job_manager.h"
@@ -150,7 +151,7 @@ policy::BrowserPolicyConnector*
     browser_policy_connector_ = platform_part_->CreateBrowserPolicyConnector();
 
     // Note: creating the ChromeBrowserPolicyConnector invokes BrowserThread::
-    // GetMessageLoopProxyForThread(), which initializes a base::LazyInstance of
+    // GetTaskRunnerForThread(), which initializes a base::LazyInstance of
     // BrowserThreadTaskRunners. However, the threads that these task runners
     // would run tasks on are *also* created lazily and might not exist yet.
     // Creating them requires a MessageLoop, which a test can optionally create
@@ -167,7 +168,7 @@ IconManager* TestingBrowserProcess::icon_manager() {
   return nullptr;
 }
 
-GLStringManager* TestingBrowserProcess::gl_string_manager() {
+GpuProfileCache* TestingBrowserProcess::gpu_profile_cache() {
   return nullptr;
 }
 
@@ -219,8 +220,7 @@ TestingBrowserProcess::extension_event_router_forwarder() {
 NotificationUIManager* TestingBrowserProcess::notification_ui_manager() {
 #if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
   if (!notification_ui_manager_.get())
-    notification_ui_manager_.reset(
-        NotificationUIManager::Create(local_state()));
+    notification_ui_manager_.reset(NotificationUIManager::Create());
   return notification_ui_manager_.get();
 #else
   NOTIMPLEMENTED();
@@ -369,7 +369,13 @@ gcm::GCMDriver* TestingBrowserProcess::gcm_driver() {
 }
 
 memory::TabManager* TestingBrowserProcess::GetTabManager() {
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+  if (!tab_manager_.get())
+    tab_manager_.reset(new memory::TabManager());
+  return tab_manager_.get();
+#else
   return nullptr;
+#endif
 }
 
 shell_integration::DefaultWebClientState

@@ -31,7 +31,7 @@
 
 #include "platform/fonts/shaping/HarfBuzzShaper.h"
 
-#include "platform/Logging.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontFallbackIterator.h"
 #include "platform/fonts/GlyphBuffer.h"
@@ -99,12 +99,16 @@ static void normalizeCharacters(const TextRun& run, unsigned length, UChar* dest
         UChar32 character;
         U16_NEXT(source, position, length, character);
         // Don't normalize tabs as they are not treated as spaces for word-end.
-        if (run.normalizeSpace() && Character::isNormalizedCanvasSpaceCharacter(character))
+        if (run.normalizeSpace() && Character::isNormalizedCanvasSpaceCharacter(character)) {
             character = spaceCharacter;
-        else if (Character::treatAsSpace(character) && character != noBreakSpaceCharacter)
+        } else if (Character::treatAsSpace(character) && character != noBreakSpaceCharacter) {
             character = spaceCharacter;
-        else if (Character::treatAsZeroWidthSpaceInComplexScript(character))
+        } else if (!RuntimeEnabledFeatures::renderUnicodeControlCharactersEnabled()
+            && Character::legacyTreatAsZeroWidthSpaceInComplexScript(character)) {
             character = zeroWidthSpaceCharacter;
+        } else if (Character::treatAsZeroWidthSpaceInComplexScript(character)) {
+            character = zeroWidthSpaceCharacter;
+        }
 
         U16_APPEND(destination, *destinationLength, length, character, error);
         ASSERT_UNUSED(error, !error);
@@ -491,7 +495,7 @@ static inline const SimpleFontData* fontDataAdjustedForOrientation(const SimpleF
     return originalFont;
 }
 
-bool HarfBuzzShaper::collectFallbackHintChars(Vector<UChar32>& hint, bool needsList)
+bool HarfBuzzShaper::collectFallbackHintChars(Vector<UChar32>& hint)
 {
     if (!m_holesQueue.size())
         return false;
@@ -509,8 +513,6 @@ bool HarfBuzzShaper::collectFallbackHintChars(Vector<UChar32>& hint, bool needsL
         while (iterator.consume(hintChar)) {
             hint.append(hintChar);
             numCharsAdded++;
-            if (!needsList)
-                break;
             iterator.advance();
         }
     }
@@ -553,9 +555,7 @@ PassRefPtr<ShapeResult> HarfBuzzShaper::shapeResult()
     HarfBuzzScopedPtr<hb_buffer_t> harfBuzzBuffer(hb_buffer_create(), hb_buffer_destroy);
 
     const FontDescription& fontDescription = m_font->getFontDescription();
-    const String& localeString = fontDescription.locale();
-    CString locale = localeString.latin1();
-    const hb_language_t language = hb_language_from_string(locale.data(), locale.length());
+    const hb_language_t language = fontDescription.localeOrDefault().harfbuzzLanguage();
 
     bool needsCapsHandling = fontDescription.variantCaps() != FontDescription::CapsNormal;
     OpenTypeCapsSupport capsSupport;
@@ -596,7 +596,7 @@ PassRefPtr<ShapeResult> HarfBuzzShaper::shapeResult()
                 // for the shaper and check whether any glyphs were found, or
                 // define a new API on the shaper which will give us coverage
                 // information?
-                if (!collectFallbackHintChars(fallbackCharsHint, fallbackIterator->needsHintList())) {
+                if (!collectFallbackHintChars(fallbackCharsHint)) {
                     // Give up shaping since we cannot retrieve a font fallback
                     // font without a hintlist.
                     m_holesQueue.clear();
@@ -644,7 +644,7 @@ PassRefPtr<ShapeResult> HarfBuzzShaper::shapeResult()
 
             CaseMappingHarfBuzzBufferFiller(
                 caseMapIntend,
-                fontDescription.locale(),
+                fontDescription.localeOrDefault(),
                 harfBuzzBuffer.get(),
                 m_normalizedBuffer.get(),
                 m_normalizedBufferLength,

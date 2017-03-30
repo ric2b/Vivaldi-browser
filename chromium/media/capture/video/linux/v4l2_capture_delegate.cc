@@ -157,11 +157,11 @@ std::list<uint32_t> V4L2CaptureDelegate::GetListOfUsableFourCcs(
 }
 
 V4L2CaptureDelegate::V4L2CaptureDelegate(
-    const VideoCaptureDevice::Name& device_name,
+    const VideoCaptureDeviceDescriptor& device_descriptor,
     const scoped_refptr<base::SingleThreadTaskRunner>& v4l2_task_runner,
     int power_line_frequency)
     : v4l2_task_runner_(v4l2_task_runner),
-      device_name_(device_name),
+      device_descriptor_(device_descriptor),
       power_line_frequency_(power_line_frequency),
       is_capturing_(false),
       timeout_count_(0),
@@ -177,7 +177,8 @@ void V4L2CaptureDelegate::AllocateAndStart(
   client_ = std::move(client);
 
   // Need to open camera with O_RDWR after Linux kernel 3.3.
-  device_fd_.reset(HANDLE_EINTR(open(device_name_.id().c_str(), O_RDWR)));
+  device_fd_.reset(
+      HANDLE_EINTR(open(device_descriptor_.device_id.c_str(), O_RDWR)));
   if (!device_fd_.is_valid()) {
     SetErrorState(FROM_HERE, "Failed to open V4L2 device driver file.");
     return;
@@ -393,12 +394,14 @@ void V4L2CaptureDelegate::DoCapture() {
     const scoped_refptr<BufferTracker>& buffer_tracker =
         buffer_tracker_pool_[buffer.index];
 
-    base::TimeDelta timestamp =
-        base::TimeDelta::FromSeconds(buffer.timestamp.tv_sec) +
-        base::TimeDelta::FromMicroseconds(buffer.timestamp.tv_usec);
-    client_->OnIncomingCapturedData(
-        buffer_tracker->start(), buffer_tracker->payload_size(),
-        capture_format_, rotation_, base::TimeTicks::Now(), timestamp);
+    const base::TimeTicks now = base::TimeTicks::Now();
+    if (first_ref_time_.is_null())
+      first_ref_time_ = now;
+    const base::TimeDelta timestamp = now - first_ref_time_;
+
+    client_->OnIncomingCapturedData(buffer_tracker->start(),
+                                    buffer_tracker->payload_size(),
+                                    capture_format_, rotation_, now, timestamp);
 
     if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_QBUF, &buffer)) < 0) {
       SetErrorState(FROM_HERE, "Failed to enqueue capture buffer");

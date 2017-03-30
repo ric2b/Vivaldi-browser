@@ -349,6 +349,7 @@ class PrefWatcher : public KeyedService {
                                renderer_callback);
     pref_change_registrar_.Add(prefs::kWebRTCIPHandlingPolicy,
                                renderer_callback);
+    pref_change_registrar_.Add(prefs::kWebRTCUDPPortRange, renderer_callback);
 #endif
 
 #if !defined(OS_MACOSX)
@@ -402,12 +403,12 @@ class PrefWatcher : public KeyedService {
   }
 
   void UpdateRendererPreferences() {
-    for (const auto& helper : helpers_)
+    for (auto* helper : helpers_)
       helper->UpdateRendererPreferences();
   }
 
   void OnWebPrefChanged(const std::string& pref_name) {
-    for (const auto& helper : helpers_)
+    for (auto* helper : helpers_)
       helper->OnWebPrefChanged(pref_name);
   }
 

@@ -15,12 +15,18 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/renderer/media/renderer_gpu_video_accelerator_factories.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
-#include "third_party/libyuv/include/libyuv/convert.h"
+#include "media/filters/context_3d.h"
+#include "media/renderers/skcanvas_video_renderer.h"
+#include "skia/ext/platform_canvas.h"
+#include "third_party/libyuv/include/libyuv.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/geometry/size.h"
 
 #if BUILDFLAG(RTC_USE_H264)
@@ -39,13 +45,13 @@ extern "C" {
 
 using media::VideoFrame;
 using media::VideoFrameMetadata;
+using video_track_recorder::kVEAEncoderMinResolutionWidth;
+using video_track_recorder::kVEAEncoderMinResolutionHeight;
 
 namespace content {
 
 namespace {
 
-const int kVEAEncoderMinResolutionWidth = 640;
-const int kVEAEncoderMinResolutionHeight = 480;
 const int kVEAEncoderOutputBufferCount = 4;
 
 static struct {
@@ -71,13 +77,15 @@ media::VideoCodecProfile CodecIdToVEAProfile(
 #if defined(OS_CHROMEOS)
   return media::VIDEO_CODEC_PROFILE_UNKNOWN;
 #endif  // defined(OS_CHROMEOS)
-  content::RenderThreadImpl* render_thread_impl =
+  content::RenderThreadImpl* const render_thread_impl =
       content::RenderThreadImpl::current();
-  if (!render_thread_impl)
+  if (!render_thread_impl) {
+    DVLOG(3) << "Couldn't access the render thread";
     return media::VIDEO_CODEC_PROFILE_UNKNOWN;
+  }
 
-  media::GpuVideoAcceleratorFactories* gpu_factories =
-      content::RenderThreadImpl::current()->GetGpuFactories();
+  media::GpuVideoAcceleratorFactories* const gpu_factories =
+      render_thread_impl->GetGpuFactories();
   if (!gpu_factories || !gpu_factories->IsGpuVideoAcceleratorEnabled()) {
     DVLOG(3) << "Couldn't initialize GpuVideoAcceleratorFactories";
     return media::VIDEO_CODEC_PROFILE_UNKNOWN;
@@ -103,8 +111,8 @@ media::VideoCodecProfile CodecIdToVEAProfile(
 // ref-counted to allow the MediaStreamVideoTrack to hold a reference to it (via
 // the callback that MediaStreamVideoSink passes along) and to jump back and
 // forth to an internal encoder thread. Moreover, this class:
-// - is created and destroyed on its parent's thread (usually the main Render
-// thread), |main_task_runner_|.
+// - is created on its parent's thread (usually the main Render thread),
+// that is, |main_task_runner_|.
 // - receives VideoFrames on |origin_task_runner_| and runs OnEncodedVideoCB on
 // that thread as well. This task runner is cached on first frame arrival, and
 // is supposed to be the render IO thread (but this is not enforced);
@@ -134,15 +142,21 @@ class VideoTrackRecorder::Encoder : public base::RefCountedThreadSafe<Encoder> {
   // Start encoding |frame|, returning via |on_encoded_video_callback_|. This
   // call will also trigger a ConfigureEncoderOnEncodingTaskRunner() upon first
   // frame arrival or parameter change, and an EncodeOnEncodingTaskRunner() to
-  // actually encode the frame.
+  // actually encode the frame. If the |frame|'s data is not directly available
+  // (e.g. it's a texture) then RetrieveFrameOnMainThread() is called, and if
+  // even that fails, black frames are sent instead.
   void StartFrameEncode(const scoped_refptr<VideoFrame>& frame,
                         base::TimeTicks capture_timestamp);
+  void RetrieveFrameOnMainThread(const scoped_refptr<VideoFrame>& video_frame,
+                                 base::TimeTicks capture_timestamp);
 
   void SetPaused(bool paused);
 
  protected:
   friend class base::RefCountedThreadSafe<Encoder>;
-  virtual ~Encoder() {}
+  virtual ~Encoder() {
+    main_task_runner_->DeleteSoon(FROM_HERE, video_renderer_.release());
+  }
 
   virtual void EncodeOnEncodingTaskRunner(
       const scoped_refptr<VideoFrame>& frame,
@@ -170,6 +184,11 @@ class VideoTrackRecorder::Encoder : public base::RefCountedThreadSafe<Encoder> {
   // Target bitrate for video encoding. If 0, a standard bitrate is used.
   const int32_t bits_per_second_;
 
+  // Used to retrieve incoming opaque VideoFrames (i.e. VideoFrames backed by
+  // textures). Created on-demand on |main_task_runner_|.
+  std::unique_ptr<media::SkCanvasVideoRenderer> video_renderer_;
+  sk_sp<SkSurface> surface_;
+
   DISALLOW_COPY_AND_ASSIGN(Encoder);
 };
 
@@ -185,14 +204,101 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
 
   if (!(video_frame->format() == media::PIXEL_FORMAT_I420 ||
         video_frame->format() == media::PIXEL_FORMAT_YV12 ||
+        video_frame->format() == media::PIXEL_FORMAT_ARGB ||
         video_frame->format() == media::PIXEL_FORMAT_YV12A)) {
-    NOTREACHED();
+    NOTREACHED() << media::VideoPixelFormatToString(video_frame->format());
     return;
   }
+
+  if (video_frame->HasTextures()) {
+    main_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&Encoder::RetrieveFrameOnMainThread, this,
+                              video_frame, capture_timestamp));
+    return;
+  }
+
   scoped_refptr<media::VideoFrame> frame = video_frame;
   // Drop alpha channel since we do not support it yet.
   if (frame->format() == media::PIXEL_FORMAT_YV12A)
     frame = media::WrapAsI420VideoFrame(video_frame);
+
+  encoding_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this, frame,
+                            capture_timestamp));
+}
+
+void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
+    const scoped_refptr<VideoFrame>& video_frame,
+    base::TimeTicks capture_timestamp) {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+
+  scoped_refptr<media::VideoFrame> frame;
+
+  // |context_provider| is null if the GPU process has crashed or isn't there.
+  ContextProviderCommandBuffer* const context_provider =
+      RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
+  if (!context_provider) {
+    // Send black frames (yuv = {0, 127, 127}).
+    frame = media::VideoFrame::CreateColorFrame(
+        video_frame->visible_rect().size(), 0u, 0x80, 0x80,
+        video_frame->timestamp());
+  } else {
+    // Accelerated decoders produce ARGB/ABGR texture-backed frames (see
+    // https://crbug.com/585242), fetch them using a SkCanvasVideoRenderer.
+    DCHECK(video_frame->HasTextures());
+    DCHECK_EQ(media::PIXEL_FORMAT_ARGB, video_frame->format());
+
+    frame = media::VideoFrame::CreateFrame(
+        media::PIXEL_FORMAT_I420, video_frame->coded_size(),
+        video_frame->visible_rect(), video_frame->natural_size(),
+        video_frame->timestamp());
+
+    const SkImageInfo info = SkImageInfo::MakeN32(
+        frame->visible_rect().width(), frame->visible_rect().height(),
+        kOpaque_SkAlphaType);
+
+    // Create |surface_| if it doesn't exist or incoming resolution has changed.
+    if (!surface_ || surface_->width() != info.width() ||
+        surface_->height() != info.height()) {
+      surface_ = SkSurface::MakeRaster(info);
+    }
+    if (!video_renderer_)
+      video_renderer_.reset(new media::SkCanvasVideoRenderer);
+
+    DCHECK(context_provider->ContextGL());
+    video_renderer_->Copy(video_frame.get(), surface_->getCanvas(),
+                          media::Context3D(context_provider->ContextGL(),
+                                           context_provider->GrContext()));
+
+    SkPixmap pixmap;
+    if (!skia::GetWritablePixels(surface_->getCanvas(), &pixmap)) {
+      DLOG(ERROR) << "Error trying to map SkSurface's pixels";
+      return;
+    }
+    // TODO(mcasas): Use the incoming frame's rotation when
+    // https://bugs.chromium.org/p/webrtc/issues/detail?id=6069 is closed.
+    const libyuv::RotationMode source_rotation = libyuv::kRotate0;
+    const uint32 source_pixel_format =
+        (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
+                                                     : libyuv::FOURCC_ARGB;
+    if (libyuv::ConvertToI420(static_cast<uint8*>(pixmap.writable_addr()),
+                              pixmap.getSafeSize(),
+                              frame->visible_data(media::VideoFrame::kYPlane),
+                              frame->stride(media::VideoFrame::kYPlane),
+                              frame->visible_data(media::VideoFrame::kUPlane),
+                              frame->stride(media::VideoFrame::kUPlane),
+                              frame->visible_data(media::VideoFrame::kVPlane),
+                              frame->stride(media::VideoFrame::kVPlane),
+                              0 /* crop_x */, 0 /* crop_y */,
+                              pixmap.width(), pixmap.height(),
+                              frame->visible_rect().width(),
+                              frame->visible_rect().height(),
+                              source_rotation,
+                              source_pixel_format) != 0) {
+      DLOG(ERROR) << "Error converting frame to I420";
+      return;
+    }
+  }
 
   encoding_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this, frame,
@@ -250,7 +356,8 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
   VEAEncoder(
       const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
       int32_t bits_per_second,
-      media::VideoCodecProfile codec);
+      media::VideoCodecProfile codec,
+      const gfx::Size& size);
 
   // media::VideoEncodeAccelerator::Client implementation.
   void RequireBitstreamBuffers(unsigned int input_count,
@@ -291,8 +398,8 @@ class VEAEncoder final : public VideoTrackRecorder::Encoder,
   // Tracks error status.
   bool error_notified_;
 
-  // Tracks the first frame to encode.
-  std::unique_ptr<VideoFrameAndTimestamp> first_frame_;
+  // Tracks the last frame that we delay the encode.
+  std::unique_ptr<VideoFrameAndTimestamp> last_frame_;
 
   // Size used to initialize encoder.
   gfx::Size input_size_;
@@ -392,7 +499,8 @@ class H264Encoder final : public VideoTrackRecorder::Encoder {
 VEAEncoder::VEAEncoder(
     const VideoTrackRecorder::OnEncodedVideoCB& on_encoded_video_callback,
     int32_t bits_per_second,
-    media::VideoCodecProfile codec)
+    media::VideoCodecProfile codec,
+    const gfx::Size& size)
     : Encoder(on_encoded_video_callback,
               bits_per_second,
               RenderThreadImpl::current()->GetGpuFactories()->GetTaskRunner()),
@@ -400,6 +508,12 @@ VEAEncoder::VEAEncoder(
       codec_(codec),
       error_notified_(false) {
   DCHECK(gpu_factories_);
+  DCHECK_GE(size.width(), kVEAEncoderMinResolutionWidth);
+  DCHECK_GE(size.height(), kVEAEncoderMinResolutionHeight);
+
+  encoding_task_runner_->PostTask(
+      FROM_HERE, base::Bind(&VEAEncoder::ConfigureEncoderOnEncodingTaskRunner,
+                            this, size));
 }
 
 VEAEncoder::~VEAEncoder() {
@@ -411,7 +525,7 @@ VEAEncoder::~VEAEncoder() {
 void VEAEncoder::RequireBitstreamBuffers(unsigned int /*input_count*/,
                                          const gfx::Size& input_coded_size,
                                          size_t output_buffer_size) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   vea_requested_input_size_ = input_coded_size;
@@ -433,7 +547,7 @@ void VEAEncoder::BitstreamBufferReady(int32_t bitstream_buffer_id,
                                       size_t payload_size,
                                       bool keyframe,
                                       base::TimeDelta timestamp) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   base::SharedMemory* output_buffer =
@@ -452,7 +566,7 @@ void VEAEncoder::BitstreamBufferReady(int32_t bitstream_buffer_id,
 }
 
 void VEAEncoder::NotifyError(media::VideoEncodeAccelerator::Error error) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   // TODO(emircan): Notify the owner via a callback.
@@ -460,7 +574,7 @@ void VEAEncoder::NotifyError(media::VideoEncodeAccelerator::Error error) {
 }
 
 void VEAEncoder::UseOutputBitstreamBufferId(int32_t bitstream_buffer_id) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   video_encoder_->UseOutputBitstreamBuffer(media::BitstreamBuffer(
@@ -469,7 +583,7 @@ void VEAEncoder::UseOutputBitstreamBufferId(int32_t bitstream_buffer_id) {
 }
 
 void VEAEncoder::FrameFinished(std::unique_ptr<base::SharedMemory> shm) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
   input_buffers_.push(std::move(shm));
 }
@@ -477,7 +591,7 @@ void VEAEncoder::FrameFinished(std::unique_ptr<base::SharedMemory> shm) {
 void VEAEncoder::EncodeOnEncodingTaskRunner(
     const scoped_refptr<VideoFrame>& frame,
     base::TimeTicks capture_timestamp) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
 
   if (input_size_ != frame->visible_rect().size() && video_encoder_) {
@@ -485,12 +599,8 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(
     video_encoder_.reset();
   }
 
-  if (!video_encoder_) {
+  if (!video_encoder_)
     ConfigureEncoderOnEncodingTaskRunner(frame->visible_rect().size());
-    first_frame_.reset(
-        new std::pair<scoped_refptr<VideoFrame>, base::TimeTicks>(
-            frame, capture_timestamp));
-  }
 
   if (error_notified_) {
     DVLOG(3) << "An error occurred in VEA encoder";
@@ -500,21 +610,27 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(
   // Drop frames if there is no output buffers available.
   if (output_buffers_.empty()) {
     // TODO(emircan): Investigate if resetting encoder would help.
-    DVLOG(3) << "Dropped frame.";
+    DVLOG(3) << "Might drop frame.";
+    last_frame_.reset(
+        new std::pair<scoped_refptr<VideoFrame>, base::TimeTicks>(
+            frame, capture_timestamp));
     return;
   }
 
   // If first frame hasn't been encoded, do it first.
-  if (first_frame_) {
-    std::unique_ptr<VideoFrameAndTimestamp> first_frame(first_frame_.release());
-    EncodeOnEncodingTaskRunner(first_frame->first, first_frame->second);
+  if (last_frame_) {
+    std::unique_ptr<VideoFrameAndTimestamp> last_frame(last_frame_.release());
+    EncodeOnEncodingTaskRunner(last_frame->first, last_frame->second);
   }
 
   // Lower resolutions may fall back to SW encoder in some platforms, i.e. Mac.
   // In that case, the encoder expects more frames before returning result.
   // Therefore, a copy is necessary to release the current frame.
+  // Only STORAGE_SHMEM backed frames can be shared with GPU process, therefore
+  // a copy is required for other storage types.
   scoped_refptr<media::VideoFrame> video_frame = frame;
-  if (vea_requested_input_size_ != input_size_ ||
+  if (video_frame->storage_type() != VideoFrame::STORAGE_SHMEM ||
+      vea_requested_input_size_ != input_size_ ||
       input_size_.width() < kVEAEncoderMinResolutionWidth ||
       input_size_.height() < kVEAEncoderMinResolutionHeight) {
     // Create SharedMemory backed input buffers as necessary. These SharedMemory
@@ -566,7 +682,7 @@ void VEAEncoder::EncodeOnEncodingTaskRunner(
 }
 
 void VEAEncoder::ConfigureEncoderOnEncodingTaskRunner(const gfx::Size& size) {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(encoding_task_runner_->BelongsToCurrentThread());
   DCHECK(gpu_factories_->GetTaskRunner()->BelongsToCurrentThread());
 
@@ -936,21 +1052,81 @@ VideoTrackRecorder::VideoTrackRecorder(
     const blink::WebMediaStreamTrack& track,
     const OnEncodedVideoCB& on_encoded_video_callback,
     int32_t bits_per_second)
-    : track_(track) {
+    : track_(track),
+      paused_before_init_(false),
+      weak_ptr_factory_(this) {
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   DCHECK(!track_.isNull());
   DCHECK(track_.getTrackData());
 
+  initialize_encoder_callback_ = base::Bind(
+      &VideoTrackRecorder::InitializeEncoder, weak_ptr_factory_.GetWeakPtr(),
+      codec, on_encoded_video_callback, bits_per_second);
+
+  // InitializeEncoder() will be called on Render Main thread.
+  MediaStreamVideoSink::ConnectToTrack(
+      track_, media::BindToCurrentLoop(initialize_encoder_callback_), false);
+}
+
+VideoTrackRecorder::~VideoTrackRecorder() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  MediaStreamVideoSink::DisconnectFromTrack();
+  track_.reset();
+}
+
+void VideoTrackRecorder::Pause() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  if (encoder_)
+    encoder_->SetPaused(true);
+  else
+    paused_before_init_ = true;
+}
+
+void VideoTrackRecorder::Resume() {
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+  if (encoder_)
+    encoder_->SetPaused(false);
+  else
+    paused_before_init_ = false;
+}
+
+void VideoTrackRecorder::OnVideoFrameForTesting(
+    const scoped_refptr<media::VideoFrame>& frame,
+    base::TimeTicks timestamp) {
+  DVLOG(3) << __func__;
+
+  if (!encoder_) {
+    DCHECK(!initialize_encoder_callback_.is_null());
+    initialize_encoder_callback_.Run(frame, timestamp);
+  }
+
+  encoder_->StartFrameEncode(frame, timestamp);
+}
+
+void VideoTrackRecorder::InitializeEncoder(
+    CodecId codec,
+    const OnEncodedVideoCB& on_encoded_video_callback,
+    int32_t bits_per_second,
+    const scoped_refptr<media::VideoFrame>& frame,
+    base::TimeTicks capture_time) {
+  DVLOG(3) << __func__ << frame->visible_rect().size().ToString();
+  DCHECK(main_render_thread_checker_.CalledOnValidThread());
+
+  MediaStreamVideoSink::DisconnectFromTrack();
+
+  const gfx::Size& input_size = frame->visible_rect().size();
   const auto& vea_supported_profile = CodecIdToVEAProfile(codec);
-  // TODO(emircan): Prioritize software based encoders in lower resolutions.
-  if (vea_supported_profile != media::VIDEO_CODEC_PROFILE_UNKNOWN) {
+  if (vea_supported_profile != media::VIDEO_CODEC_PROFILE_UNKNOWN &&
+      input_size.width() >= kVEAEncoderMinResolutionWidth &&
+      input_size.height() >= kVEAEncoderMinResolutionHeight) {
     encoder_ = new VEAEncoder(on_encoded_video_callback, bits_per_second,
-                              vea_supported_profile);
+                              vea_supported_profile, input_size);
   } else {
     switch (codec) {
 #if BUILDFLAG(RTC_USE_H264)
       case CodecId::H264:
-        encoder_ = new H264Encoder(on_encoded_video_callback, bits_per_second);
+        encoder_ =
+            new H264Encoder(on_encoded_video_callback, bits_per_second);
         break;
 #endif
       case CodecId::VP8:
@@ -963,35 +1139,14 @@ VideoTrackRecorder::VideoTrackRecorder(
     }
   }
 
+  if (paused_before_init_)
+    encoder_->SetPaused(paused_before_init_);
+
   // StartFrameEncode() will be called on Render IO thread.
   MediaStreamVideoSink::ConnectToTrack(
       track_,
       base::Bind(&VideoTrackRecorder::Encoder::StartFrameEncode, encoder_),
       false);
-}
-
-VideoTrackRecorder::~VideoTrackRecorder() {
-  DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  MediaStreamVideoSink::DisconnectFromTrack();
-  track_.reset();
-}
-
-void VideoTrackRecorder::Pause() {
-  DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  DCHECK(encoder_);
-  encoder_->SetPaused(true);
-}
-
-void VideoTrackRecorder::Resume() {
-  DCHECK(main_render_thread_checker_.CalledOnValidThread());
-  DCHECK(encoder_);
-  encoder_->SetPaused(false);
-}
-
-void VideoTrackRecorder::OnVideoFrameForTesting(
-    const scoped_refptr<media::VideoFrame>& frame,
-    base::TimeTicks timestamp) {
-  encoder_->StartFrameEncode(frame, timestamp);
 }
 
 }  // namespace content

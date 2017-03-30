@@ -7,10 +7,8 @@
 #include "base/memory/shared_memory_handle.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
-#include "content/common/input/did_overscroll_params.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
@@ -25,17 +23,12 @@ namespace content {
 struct SyncCompositorDemandDrawHwParams {
   SyncCompositorDemandDrawHwParams();
   SyncCompositorDemandDrawHwParams(
-      const gfx::Size& surface_size,
-      const gfx::Transform& transform,
-      const gfx::Rect& viewport,
-      const gfx::Rect& clip,
+      const gfx::Size& viewport_size,
       const gfx::Rect& viewport_rect_for_tile_priority,
       const gfx::Transform& transform_for_tile_priority);
   ~SyncCompositorDemandDrawHwParams();
 
-  gfx::Size surface_size;
-  gfx::Transform transform;
-  gfx::Rect viewport;
+  gfx::Size viewport_size;
   gfx::Rect clip;
   gfx::Rect viewport_rect_for_tile_priority;
   gfx::Transform transform_for_tile_priority;
@@ -61,16 +54,22 @@ struct SyncCompositorCommonRendererParams {
   SyncCompositorCommonRendererParams();
   ~SyncCompositorCommonRendererParams();
 
-  unsigned int version;
+  // Allow copy.
+  SyncCompositorCommonRendererParams(
+      const SyncCompositorCommonRendererParams& other);
+  SyncCompositorCommonRendererParams& operator=(
+      const SyncCompositorCommonRendererParams& other);
+
+  unsigned int version = 0u;
   gfx::ScrollOffset total_scroll_offset;
   gfx::ScrollOffset max_scroll_offset;
   gfx::SizeF scrollable_size;
-  float page_scale_factor;
-  float min_page_scale_factor;
-  float max_page_scale_factor;
-  bool need_animate_scroll;
-  uint32_t need_invalidate_count;
-  uint32_t did_activate_pending_tree_count;
+  float page_scale_factor = 0.f;
+  float min_page_scale_factor = 0.f;
+  float max_page_scale_factor = 0.f;
+  bool need_animate_scroll = false;
+  uint32_t need_invalidate_count = 0u;
+  uint32_t did_activate_pending_tree_count = 0u;
 };
 
 }  // namespace content
@@ -84,10 +83,7 @@ struct SyncCompositorCommonRendererParams {
 #define IPC_MESSAGE_START SyncCompositorMsgStart
 
 IPC_STRUCT_TRAITS_BEGIN(content::SyncCompositorDemandDrawHwParams)
-  IPC_STRUCT_TRAITS_MEMBER(surface_size)
-  IPC_STRUCT_TRAITS_MEMBER(transform)
-  IPC_STRUCT_TRAITS_MEMBER(viewport)
-  IPC_STRUCT_TRAITS_MEMBER(clip)
+  IPC_STRUCT_TRAITS_MEMBER(viewport_size)
   IPC_STRUCT_TRAITS_MEMBER(viewport_rect_for_tile_priority)
   IPC_STRUCT_TRAITS_MEMBER(transform_for_tile_priority)
 IPC_STRUCT_TRAITS_END()
@@ -120,8 +116,10 @@ IPC_STRUCT_TRAITS_END()
 // Synchronous IPCs are allowed here to the renderer compositor thread. See
 // design doc https://goo.gl/Tn81FW and crbug.com/526842 for details.
 
-IPC_SYNC_MESSAGE_ROUTED0_1(SyncCompositorMsg_SynchronizeRendererState,
-                           content::SyncCompositorCommonRendererParams)
+IPC_SYNC_MESSAGE_CONTROL1_1(
+    SyncCompositorMsg_SynchronizeRendererState,
+    std::vector<int> /* routing ids*/,
+    std::vector<content::SyncCompositorCommonRendererParams>)
 
 IPC_MESSAGE_ROUTED1(SyncCompositorMsg_ComputeScroll,
                     base::TimeTicks);
@@ -155,7 +153,7 @@ IPC_MESSAGE_ROUTED1(SyncCompositorMsg_SetMemoryPolicy,
 
 IPC_MESSAGE_ROUTED2(SyncCompositorMsg_ReclaimResources,
                     uint32_t /* output_surface_id */,
-                    cc::CompositorFrameAck);
+                    cc::ReturnedResourceArray /* resources */);
 
 IPC_MESSAGE_ROUTED1(SyncCompositorMsg_SetScroll, gfx::ScrollOffset);
 

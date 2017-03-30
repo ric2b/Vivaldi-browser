@@ -16,7 +16,7 @@
 #include "base/strings/string_split.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_export.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 
 namespace gfx {
 class Transform;
@@ -113,8 +113,15 @@ struct AX_EXPORT AXNodeData {
   base::StringPairs html_attributes;
   std::vector<int32_t> child_ids;
 
-  // The object's location relative to its window or frame.
-  gfx::Rect location;
+  // TODO(dmazzoni): replace the following three members with a single
+  // instance of AXRelativeBounds.
+
+  // The id of an ancestor node in the same AXTree that this object's
+  // bounding box is relative to, or -1 if there's no offset container.
+  int offset_container_id;
+
+  // The relative bounding box of this node.
+  gfx::RectF location;
 
   // An additional transform to apply to position this object and its subtree.
   // NOTE: this member is a std::unique_ptr because it's rare and gfx::Transform

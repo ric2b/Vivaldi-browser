@@ -76,8 +76,6 @@
         'app/chrome_watcher_client_win.h',
         'app/chrome_watcher_command_line_win.cc',
         'app/chrome_watcher_command_line_win.h',
-        'app/kasko_client.cc',
-        'app/kasko_client.h',
         'app/main_dll_loader_win.cc',
         'app/main_dll_loader_win.h',
       ],
@@ -315,6 +313,7 @@
               'destination': '<(PRODUCT_DIR)/<(mac_product_name).app/Contents/Versions/<(version_full)',
               'files': [
                 '<(PRODUCT_DIR)/<(mac_product_name) Helper.app',
+                '<(PRODUCT_DIR)/features.json',
               ],
             },
           ],

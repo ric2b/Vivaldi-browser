@@ -20,7 +20,12 @@ group("gpu") {
   }
 }
 
-source_set("gpu_sources") {
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "gpu_sources") {
   # This is an internal content API. Code outside of the content "component"
   # (like content/test and content/shell) should depend on ":gpu" above.
   visibility = [ "//content/*" ]
@@ -31,8 +36,8 @@ source_set("gpu_sources") {
     "gpu_main.cc",
     "gpu_process.cc",
     "gpu_process.h",
-    "gpu_process_control_impl.cc",
-    "gpu_process_control_impl.h",
+    "gpu_service_factory.cc",
+    "gpu_service_factory.h",
     "gpu_watchdog_thread.cc",
     "gpu_watchdog_thread.h",
     "in_process_gpu_thread.cc",
@@ -57,6 +62,7 @@ source_set("gpu_sources") {
     "//ipc",
     "//media/gpu",
     "//media/gpu/ipc/service",
+    "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//skia",
     "//ui/events/ipc",

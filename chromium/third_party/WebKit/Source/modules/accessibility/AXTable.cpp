@@ -29,6 +29,7 @@
 #include "modules/accessibility/AXTable.h"
 
 #include "core/dom/ElementTraversal.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLTableCaptionElement.h"
 #include "core/html/HTMLTableCellElement.h"
@@ -110,7 +111,7 @@ bool AXTable::isDataTable() const
     // When a section of the document is contentEditable, all tables should be
     // treated as data tables, otherwise users may not be able to work with rich
     // text editors that allow creating and editing tables.
-    if (getNode() && getNode()->hasEditableStyle())
+    if (getNode() && hasEditableStyle(*getNode()))
         return true;
 
     // This employs a heuristic to determine if this table should appear.

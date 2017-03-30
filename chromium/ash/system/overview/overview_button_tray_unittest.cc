@@ -2,23 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/system/overview/overview_button_tray.h"
+#include "ash/common/system/overview/overview_button_tray.h"
 
 #include "ash/common/ash_switches.h"
 #include "ash/common/login_status.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/system/status_area_widget.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/common/wm/overview/window_selector_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/rotator/screen_rotation_animator.h"
 #include "ash/shell.h"
-#include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/status_area_widget_test_helper.h"
 #include "ash/test/test_session_state_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/command_line.h"
 #include "base/test/user_action_tester.h"
 #include "base/time/time.h"
@@ -48,6 +48,7 @@ OverviewButtonTray* GetSecondaryTray() {
 
 }  // namespace
 
+// TODO(jamescook): Migrate to //ash/common/system. http://crbug.com/620955
 class OverviewButtonTrayTest : public test::AshTestBase {
  public:
   OverviewButtonTrayTest() {}
@@ -87,14 +88,12 @@ TEST_F(OverviewButtonTrayTest, BasicConstruction) {
 // By default the system should not have MaximizeMode enabled.
 TEST_F(OverviewButtonTrayTest, MaximizeModeObserverOnMaximizeModeToggled) {
   ASSERT_FALSE(GetTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
   EXPECT_TRUE(GetTray()->visible());
 
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
   EXPECT_FALSE(GetTray()->visible());
 }
 
@@ -149,14 +148,12 @@ TEST_F(OverviewButtonTrayTest, DisplaysOnBothDisplays) {
   UpdateDisplay("400x400,200x200");
   EXPECT_FALSE(GetTray()->visible());
   EXPECT_FALSE(GetSecondaryTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
   EXPECT_TRUE(GetTray()->visible());
   EXPECT_TRUE(GetSecondaryTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
 }
 
 // Tests if Maximize Mode is enabled before a secondary display is attached
@@ -165,22 +162,19 @@ TEST_F(OverviewButtonTrayTest, SecondaryTrayCreatedVisible) {
   if (!SupportsMultipleDisplays())
     return;
 
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
   UpdateDisplay("400x400,200x200");
   EXPECT_TRUE(GetSecondaryTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
 }
 
 // Tests that the tray loses visibility when a user logs out, and that it
 // regains visibility when a user logs back in.
 TEST_F(OverviewButtonTrayTest, VisibilityChangesForLoginStatus) {
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
   SetUserLoggedIn(false);
   Shell::GetInstance()->UpdateAfterLoginStatusChange(
       LoginStatus::NOT_LOGGED_IN);
@@ -195,9 +189,8 @@ TEST_F(OverviewButtonTrayTest, VisibilityChangesForLoginStatus) {
   SetUserAddingScreenRunning(false);
   NotifySessionStateChanged();
   EXPECT_TRUE(GetTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
 }
 
 // Tests that the tray only renders as active while selection is ongoing. Any
@@ -229,9 +222,8 @@ TEST_F(OverviewButtonTrayTest, ActiveStateOnlyDuringOverviewMode) {
 #define MAYBE_HideAnimationAlwaysCompletes HideAnimationAlwaysCompletes
 #endif
 TEST_F(OverviewButtonTrayTest, MAYBE_HideAnimationAlwaysCompletes) {
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
 
   // Long duration for hide animation, to allow it to be interrupted.
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> hide_duration(
@@ -266,13 +258,11 @@ TEST_F(OverviewButtonTrayTest, VisibilityChangesForSystemModalWindow) {
   ParentWindowInPrimaryRootWindow(window.get());
 
   ASSERT_TRUE(WmShell::Get()->IsSystemModalWindowOpen());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      true);
   EXPECT_TRUE(GetTray()->visible());
-  Shell::GetInstance()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  WmShell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
+      false);
   EXPECT_FALSE(GetTray()->visible());
 }
 

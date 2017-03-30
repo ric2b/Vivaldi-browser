@@ -191,6 +191,8 @@ int AutocompleteMatch::TypeToIcon(Type type) {
       IDR_OMNIBOX_CALCULATOR,     // CALCULATOR
       IDR_OMNIBOX_HTTP,           // CLIPBOARD
       IDR_OMNIBOX_SEARCH,         // VOICE_SEARCH
+      IDR_OMNIBOX_HTTP,           // PHYSICAL_WEB
+      IDR_OMNIBOX_HTTP,           // PHYSICAL_WEB_OVERFLOW
       IDR_OMNIBOX_HTTP,           // BOOKMARK_NICK
       IDR_OMNIBOX_HTTP,           // BOOKMARK_DESCRIPTION
   };
@@ -217,6 +219,8 @@ int AutocompleteMatch::TypeToIcon(Type type) {
       IDR_OMNIBOX_CALCULATOR,     // CALCULATOR
       IDR_OMNIBOX_HTTP,           // CLIPBOARD
       IDR_OMNIBOX_SEARCH,         // VOICE_SEARCH
+      IDR_OMNIBOX_HTTP,           // PHYSICAL_WEB
+      IDR_OMNIBOX_HTTP,           // PHYSICAL_WEB_OVERFLOW
       IDR_OMNIBOX_HTTP,           // BOOKMARK_NICK
       IDR_OMNIBOX_HTTP,           // BOOKMARK_DESCRIPTION
   };
@@ -251,6 +255,8 @@ gfx::VectorIconId AutocompleteMatch::TypeToVectorIcon(Type type) {
       gfx::VectorIconId::OMNIBOX_CALCULATOR,     // CALCULATOR
       gfx::VectorIconId::OMNIBOX_HTTP,           // CLIPBOARD
       gfx::VectorIconId::OMNIBOX_SEARCH,         // VOICE_SEARCH
+      gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB
+      gfx::VectorIconId::OMNIBOX_HTTP,           // PHYSICAL_WEB_OVERFLOW
       gfx::VectorIconId::OMNIBOX_HTTP,           // BOOKMARK_NICK
       gfx::VectorIconId::OMNIBOX_HTTP,           // BOOKMARK_DESCRIPTION
   };

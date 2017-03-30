@@ -69,9 +69,16 @@ class BrowserList {
   static void AddObserver(chrome::BrowserListObserver* observer);
   static void RemoveObserver(chrome::BrowserListObserver* observer);
 
+  // Moves all the browsers that show on workspace |new_workspace| to the end of
+  // the browser list (i.e. the browsers that were "activated" most recently).
+  static void MoveBrowsersInWorkspaceToFront(const std::string& new_workspace);
+
   // Called by Browser objects when their window is activated (focused).  This
   // allows us to determine what the last active Browser was on each desktop.
   static void SetLastActive(Browser* browser);
+
+  // Notifies the observers when the current active browser becomes not active.
+  static void NotifyBrowserNoLongerActive(Browser* browser);
 
   // Closes all browsers for |profile| across all desktops.
   // TODO(mlerman): Move the Profile Deletion flow to use the overloaded
@@ -88,11 +95,11 @@ class BrowserList {
 
   // Returns true if at least one incognito session is active across all
   // desktops.
-  static bool IsOffTheRecordSessionActive();
+  static bool IsIncognitoSessionActive();
 
   // Returns true if at least one incognito session is active for |profile|
   // across all desktops.
-  static bool IsOffTheRecordSessionActiveForProfile(Profile* profile);
+  static bool IsIncognitoSessionActiveForProfile(Profile* profile);
 
  private:
   BrowserList();

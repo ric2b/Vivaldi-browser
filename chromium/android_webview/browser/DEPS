@@ -15,12 +15,13 @@ include_rules = [
   "+components/cdm/browser",
   "+components/crash/content/browser",
   "+components/navigation_interception",
-  "+components/network_session_configurator/switches.h",
   "+components/policy/core/browser",
   "+components/policy/core/common",
   "+components/pref_registry",
   "+components/printing/browser",
   "+components/printing/common",
+  "+components/spellcheck/browser",
+  "+components/spellcheck/common",
   "+components/url_formatter",
   "+components/user_prefs",
   "+components/visitedlink/browser",
@@ -29,15 +30,19 @@ include_rules = [
   "+content/public/browser",
   "+content/public/test",
 
+  "+device/geolocation",
+
   # Explicitly disallow using SyncMessageFilter to prevent browser from
   # sending synchronous IPC messages on non-UI threads.
   "-ipc/ipc_sync_message_filter.h",
 
   "+media/base/android",
 
-  "+policy/policy_constants.h",
+  "+components/policy/policy_constants.h",
 
   "+printing",
+
+  "+services/shell/public/cpp",
 
   "+ui/gfx",
   "+ui/gl",

@@ -16,7 +16,6 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/command_updater.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/browser/ui/view_ids.h"
@@ -30,7 +29,6 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "components/search/search.h"
 #include "components/toolbar/toolbar_model.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
@@ -62,10 +60,6 @@
 
 #if defined(OS_WIN)
 #include "chrome/browser/browser_process.h"
-#endif
-
-#if defined(ENABLE_EXTENSIONS)
-#include "chrome/browser/ui/extensions/settings_api_bubble_helpers.h"
 #endif
 
 using bookmarks::BookmarkNodeData;
@@ -590,10 +584,6 @@ void OmniboxViewViews::ShowImeIfNeeded() {
 }
 
 void OmniboxViewViews::OnMatchOpened(AutocompleteMatch::Type match_type) {
-#if defined(ENABLE_EXTENSIONS)
-  extensions::MaybeShowExtensionControlledSearchNotification(
-      profile_, location_bar_view_->GetWebContents(), match_type);
-#endif
 }
 
 int OmniboxViewViews::GetOmniboxTextLength() const {
@@ -707,16 +697,12 @@ bool OmniboxViewViews::OnMouseDragged(const ui::MouseEvent& event) {
 
 void OmniboxViewViews::OnMouseReleased(const ui::MouseEvent& event) {
   views::Textfield::OnMouseReleased(event);
-  if (event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton()) {
-    // When the user has clicked and released to give us focus, select all
-    // unless we're omitting the URL (in which case refining an existing query
-    // is common enough that we do click-to-place-cursor).
-    if (select_all_on_mouse_release_ &&
-        !controller()->GetToolbarModel()->WouldReplaceURL()) {
-      // Select all in the reverse direction so as not to scroll the caret
-      // into view and shift the contents jarringly.
-      SelectAll(true);
-    }
+  // When the user has clicked and released to give us focus, select all.
+  if ((event.IsOnlyLeftMouseButton() || event.IsOnlyRightMouseButton()) &&
+      select_all_on_mouse_release_) {
+    // Select all in the reverse direction so as not to scroll the caret
+    // into view and shift the contents jarringly.
+    SelectAll(true);
   }
   select_all_on_mouse_release_ = false;
 }
@@ -894,8 +880,9 @@ bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
     return !read_only() && !GetClipboardText().empty();
   if (command_id == IDS_PASTE_AND_GO)
     return !read_only() && model()->CanPasteAndGo(GetClipboardText());
+  // TODO(treib): Completely remove IDS_SHOW_URL. crbug.com/627747
   if (command_id == IDS_SHOW_URL)
-    return controller()->GetToolbarModel()->WouldReplaceURL();
+    return false;
   return Textfield::IsCommandIdEnabled(command_id) ||
          location_bar_view_->command_updater()->IsCommandEnabled(command_id);
 }
@@ -1103,14 +1090,6 @@ void OmniboxViewViews::UpdateContextMenu(ui::SimpleMenuModel* menu_contents) {
       paste_position + 1, IDS_PASTE_AND_GO, IDS_PASTE_AND_GO);
 
   menu_contents->AddSeparator(ui::NORMAL_SEPARATOR);
-
-  if (search::IsQueryExtractionEnabled()) {
-    int select_all_position = menu_contents->GetIndexOfCommandId(
-        IDS_APP_SELECT_ALL);
-    DCHECK_GE(select_all_position, 0);
-    menu_contents->InsertItemWithStringIdAt(
-        select_all_position + 1, IDS_SHOW_URL, IDS_SHOW_URL);
-  }
 
   // Minor note: We use IDC_ for command id here while the underlying textfield
   // is using IDS_ for all its command ids. This is because views cannot depend

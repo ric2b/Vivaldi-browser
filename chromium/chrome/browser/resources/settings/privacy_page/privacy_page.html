@@ -1,36 +1,58 @@
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_vars_css.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
 <link rel="import" href="/controls/settings_checkbox.html">
-<link rel="import" href="/settings_main/settings_main_rendered.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
 <link rel="import" href="/site_settings/all_sites.html">
 <link rel="import" href="/site_settings/constants.html">
 <link rel="import" href="/site_settings/media_picker.html">
+<link rel="import" href="/site_settings/protocol_handlers.html">
+<link rel="import" href="/site_settings/usb_devices.html">
+<link rel="import" href="/site_settings/site_data.html">
 <link rel="import" href="/site_settings_page/site_settings_page.html">
 
 <if expr="use_nss_certs">
 <link rel="import" href="/certificate_manager_page/certificate_manager_page.html">
 </if>
-<if expr="is_win or is_macosx">
 <link rel="import" href="/privacy_page/privacy_page_browser_proxy.html">
-</if>
 
 <dom-module id="settings-privacy-page">
   <template>
-    <style include="settings-shared"></style>
+    <style include="settings-shared">
+      /* TODO(dbeam): this is similar to a 1 line checkbox. Worth somehow
+       * combining? */
+      #metricsReporting {
+        align-items: center;
+        display: flex;
+        min-height: var(--settings-row-min-height);
+      }
+
+      #metricsReportingCheckbox {
+        display: inline-block;
+      }
+
+      #metricsReporting paper-tooltip {
+        --paper-tooltip: var(--cr-policy-tooltip);
+      }
+
+      #indicator {
+        -webkit-margin-start: var(--checkbox-spacing);
+      }
+    </style>
     <template is="dom-if" if="[[showClearBrowsingDataDialog_]]" restamp>
       <settings-clear-browsing-data-dialog prefs="{{prefs}}"
-          on-iron-overlay-closed="onIronOverlayClosed_">
+          on-close="onDialogClosed_">
       </settings-clear-browsing-data-dialog>
     </template>
-    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
-        section="privacy">
-      <neon-animatable id="main">
+    <settings-animated-pages id="pages" section="privacy">
+      <neon-animatable route-path="default">
         <div class="settings-box block first">
           <p class="privacy-explanation">
             $i18nRaw{improveBrowsingExperience}
@@ -41,11 +63,13 @@
           </settings-checkbox>
           <settings-checkbox
               pref="{{prefs.search.suggest_enabled}}"
-              label="$i18n{searchSuggestPref}">
+              label="$i18n{searchSuggestPref}"
+              hidden="[[!pageVisibility.searchPrediction]]">
           </settings-checkbox>
           <settings-checkbox
               pref="{{prefs.net.network_prediction_options}}"
-              label="$i18n{networkPredictionEnabled}">
+              label="$i18n{networkPredictionEnabled}"
+              hidden="[[!pageVisibility.networkPrediction]]">
           </settings-checkbox>
           <settings-checkbox
               pref="{{prefs.safebrowsing.extended_reporting_enabled}}"
@@ -60,13 +84,29 @@
               label="$i18n{spellingPref}">
           </settings-checkbox>
 <if expr="chromeos">
-        <settings-checkbox
+          <settings-checkbox
               pref="{{prefs.cros.metrics.reportingEnabled}}"
               label="$i18n{enableLogging}">
           </settings-checkbox>
-</if>
-          <!-- TODO(jlklein): Add non-chromeos metrics box. -->
-</if>
+</if><!-- chromeos -->
+<if expr="not chromeos">
+          <div id="metricsReporting">
+            <paper-checkbox id="metricsReportingCheckbox"
+                on-tap="onMetricsReportingCheckboxTap_"
+                checked="[[metricsReporting_.enabled]]"
+                disabled="[[metricsReporting_.managed]]">
+              $i18n{enableLogging}
+            </paper-checkbox>
+            <template is="dom-if" if="[[metricsReporting_.managed]]" restamp>
+              <iron-icon id="indicator" tabindex=0 icon="cr:domain"></iron-icon>
+              <paper-tooltip for="indicator" position="top"
+                  fit-to-visible-bounds>
+                $i18n{controlledSettingPolicy}
+              </paper-tooltip>
+            </template>
+          </div>
+</if><!-- not chromeos -->
+</if><!-- _google_chrome -->
           <settings-checkbox pref="{{prefs.enable_do_not_track}}"
               label="$i18n{doNotTrack}">
           </settings-checkbox>
@@ -82,85 +122,81 @@
 </if>
         </div>
 <if expr="use_nss_certs or is_win or is_macosx">
-        <div id="manageCertificates" class="settings-box two-line" actionable
-            on-tap="onManageCertificatesTap_">
-          <div class="start">
-            <div>$i18n{manageCertificates}</div>
-            <div class="secondary">$i18n{manageCertificatesDescription}</div>
-          </div>
+        <div id="manageCertificates" class="settings-box two-line single-column"
+            actionable on-tap="onManageCertificatesTap_">
+          <div>$i18n{manageCertificates}</div>
+          <div class="secondary">$i18n{manageCertificatesDescription}</div>
         </div>
 </if>
-        <div class="settings-box two-line" on-tap="onSiteSettingsTap_"
-            actionable>
-          <div class="start">
-            <div>$i18n{siteSettings}</div>
-            <div class="secondary">$i18n{siteSettingsDescription}</div>
-          </div>
+        <div id="site-settings-subpage-trigger"
+            class="settings-box two-line single-column" actionable
+            on-tap="onSiteSettingsTap_">
+          <div>$i18n{siteSettings}</div>
+          <div class="secondary">$i18n{siteSettingsDescription}</div>
         </div>
         <div class="settings-box">
-          <paper-button on-tap="onClearBrowsingDataTap_" class="primary-button">
+          <paper-button id="clearBrowsingData"
+              on-tap="onClearBrowsingDataTap_" class="primary-button">
             $i18n{clearBrowsingData}
           </paper-button>
         </div>
       </neon-animatable>
 <if expr="use_nss_certs">
-      <template is="dom-if" name="manage-certificates">
-        <settings-subpage page-title="$i18n{manageCertificates}">
+      <template is="dom-if" route-path="/certificates">
+        <settings-subpage
+            associated-control="[[$$('#manageCertificates')]]"
+            page-title="$i18n{manageCertificates}">
           <settings-certificate-manager-page>
           </settings-certificate-manager-page>
         </settings-subpage>
       </template>
 </if>
-      <template is="dom-if" name="site-settings">
-        <settings-subpage id="site-settings"
+      <template is="dom-if" route-path="/siteSettings">
+        <settings-subpage
+            associated-control="[[$$('#site-settings-subpage-trigger')]]"
+            id="site-settings"
             page-title="$i18n{siteSettings}">
-          <settings-site-settings-page current-route="{{currentRoute}}"
-              category-selected="{{categorySelected}}">
+          <settings-site-settings-page category-selected="{{categorySelected}}">
           </settings-site-settings-page>
         </settings-subpage>
       </template>
 
-      <template is="dom-if" name="all-sites">
+      <template is="dom-if" route-path="/siteSettings/all" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryAllSites}">
-          <all-sites
-              selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}">
-          </all-sites>
+          <all-sites selected-site="{{selectedSite}}"></all-sites>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-automatic-downloads">
+      <template is="dom-if" route-path="/siteSettings/automaticDownloads" no-search>
+          no-search>
         <settings-subpage page-title="$i18n{siteSettingsAutomaticDownloads}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-background-sync">
+      <template is="dom-if" route-path="/siteSettings/backgroundSync" no-search>
+          no-search>
         <settings-subpage page-title="$i18n{siteSettingsBackgroundSync}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.BACKGROUND_SYNC}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-camera">
+      <template is="dom-if" route-path="/siteSettings/camera" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryCamera}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.CAMERA}}">
             <media-picker type="camera" class="media-picker"></media-picker>
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-cookies">
+      <template is="dom-if" route-path="/siteSettings/cookies" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryCookies}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.COOKIES}}">
             <div class="settings-box cookie-controls">
               <settings-checkbox class="start"
@@ -169,108 +205,95 @@
                   pref="{{prefs.profile.block_third_party_cookies}}">
               </settings-checkbox>
             </div>
+            <site-data class="site-data"></site-data>
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-fullscreen">
-        <settings-subpage
-            page-title="$i18n{siteSettingsCategoryFullscreen}">
-          <site-settings-category
-              selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
-              category="{{ContentSettingsTypes.FULLSCREEN}}">
-          </site-settings-category>
-        </settings-subpage>
-      </template>
-      <template is="dom-if" name="site-settings-category-images">
+      <template is="dom-if" route-path="/siteSettings/images" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryImages}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.IMAGES}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-location">
+      <template is="dom-if" route-path="/siteSettings/location" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryLocation}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.GEOLOCATION}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-javascript">
-        <settings-subpage
-            page-title="$i18n{siteSettingsCategoryJavascript}">
+      <template is="dom-if" route-path="/siteSettings/handlers" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCategoryHandlers}">
+          <protocol-handlers></protocol-handlers>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/siteSettings/javascript" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCategoryJavascript}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.JAVASCRIPT}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-keygen">
+      <template is="dom-if" route-path="/siteSettings/keygen" no-search>
         <settings-subpage page-title="$i18n{siteSettingsKeygen}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.KEYGEN}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-microphone">
-        <settings-subpage
-            page-title="$i18n{siteSettingsCategoryMicrophone}">
+      <template is="dom-if" route-path="/siteSettings/microphone" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCategoryMicrophone}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.MIC}}">
             <media-picker type="mic" class="media-picker"></media-picker>
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-notifications">
-        <settings-subpage
-            page-title="$i18n{siteSettingsCategoryNotifications}">
+      <template is="dom-if" route-path="/siteSettings/notifications" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsCategoryNotifications}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.NOTIFICATIONS}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-plugins">
+      <template is="dom-if" route-path="/siteSettings/plugins" no-search>
         <settings-subpage page-title="$i18n{siteSettingsPlugins}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.PLUGINS}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-popups">
+      <template is="dom-if" route-path="/siteSettings/popups" no-search>
         <settings-subpage page-title="$i18n{siteSettingsCategoryPopups}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.POPUPS}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="site-settings-category-unsandboxed-plugins">
+      <template is="dom-if" route-path="/siteSettings/unsandboxedPlugins" no-search>
         <settings-subpage page-title="$i18n{siteSettingsUnsandboxedPlugins}">
           <site-settings-category
               selected-site="{{selectedSite}}"
-              current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}">
           </site-settings-category>
         </settings-subpage>
       </template>
-
-      <template is="dom-if" name="site-details">
-        <settings-subpage
-            page-title="$i18n{siteSettingsSiteDetailsPageTitle}">
+      <template is="dom-if" route-path="/siteSettings/usbDevices" no-search>
+        <settings-subpage page-title="$i18n{siteSettingsUsbDevices}">
+          <usb-devices></usb-devices>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" route-path="/siteSettings/siteDetails" no-search>
+        <settings-subpage page-title="[[selectedSite.originForDisplay]]">
           <site-details site="[[selectedSite]]"></site-details>
         </settings-subpage>
       </template>

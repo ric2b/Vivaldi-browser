@@ -11,6 +11,7 @@ from telemetry import benchmark
 
 @benchmark.Enabled('has tabs')
 @benchmark.Disabled('android')  # http://crbug.com/460084
+@benchmark.Disabled('mac-reference')  # http://crbug.com/634378
 class TabSwitchingTop10(perf_benchmark.PerfBenchmark):
   """This test records the MPArch.RWH_TabSwitchPaintDuration histogram.
 
@@ -49,6 +50,7 @@ class TabSwitchingTypical25(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Disabled('android')  # http://crbug.com/460084
+@benchmark.Disabled('mac-reference')  # http://crbug.com/634360
 @benchmark.Enabled('has tabs')
 class TabSwitchingFiveBlankTabs(perf_benchmark.PerfBenchmark):
   """This test records the MPArch.RWH_TabSwitchPaintDuration histogram.
@@ -68,8 +70,8 @@ class TabSwitchingFiveBlankTabs(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Enabled('has tabs')
-# http://crbug.com/460084, http://crbug.com/488067
-@benchmark.Disabled('android', 'linux')
+# http://crbug.com/460084, http://crbug.com/488067, http://crbug.com/634347
+@benchmark.Disabled('android', 'linux', 'mac-reference')
 class TabSwitchingToughEnergyCases(perf_benchmark.PerfBenchmark):
   """This test records the MPArch.RWH_TabSwitchPaintDuration histogram.
 

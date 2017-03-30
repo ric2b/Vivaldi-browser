@@ -88,6 +88,7 @@ class TabLayer : public Layer {
                      bool show_toolbar,
                      int default_theme_color,
                      int toolbar_background_color,
+                     int close_button_color,
                      bool anonymize_toolbar,
                      int toolbar_textbox_resource_id,
                      int toolbar_textbox_background_color,
@@ -118,8 +119,6 @@ class TabLayer : public Layer {
   void SetTitle(DecorationTitle* title);
 
   const bool incognito_;
-  bool toolbar_background_color_;
-  bool tab_switcher_themes_enabled_;
   ui::ResourceManager* resource_manager_;
   LayerTitleCache* layer_title_cache_;
 

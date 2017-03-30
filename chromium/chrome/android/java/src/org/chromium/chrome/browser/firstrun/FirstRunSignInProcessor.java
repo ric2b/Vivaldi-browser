@@ -16,6 +16,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.ChromeSwitches;
+import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.IntentHandler.ExternalAppId;
 import org.chromium.chrome.browser.preferences.PreferencesLauncher;
 import org.chromium.chrome.browser.signin.AccountManagementFragment;
 import org.chromium.chrome.browser.signin.SigninManager;
@@ -57,7 +59,7 @@ public final class FirstRunSignInProcessor {
         signinManager.onFirstRunCheckDone();
 
         boolean firstRunFlowComplete = FirstRunStatus.getFirstRunFlowComplete(activity);
-        // We skip signin and the FRE only if
+        // We skip signin and the FRE if
         // - FRE is disabled, or
         // - FRE hasn't been completed, but the user has already seen the ToS in the Setup Wizard.
         if (CommandLine.getInstance().hasSwitch(ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE)
@@ -65,9 +67,18 @@ public final class FirstRunSignInProcessor {
                 || (!firstRunFlowComplete && ToSAckedReceiver.checkAnyUserHasSeenToS(activity))) {
             return;
         }
-        // Otherwise, force trigger the FRE.
+
+        // Force trigger the FRE if the Lightweight FRE is disabled or Chrome is started via Chrome
+        // icon or via intent from GSA. Otherwise, skip signin.
         if (!firstRunFlowComplete) {
-            requestToFireIntentAndFinish(activity);
+            if (!CommandLine.getInstance().hasSwitch(
+                        ChromeSwitches.ENABLE_LIGHTWEIGHT_FIRST_RUN_EXPERIENCE)
+                    || TextUtils.equals(activity.getIntent().getAction(), Intent.ACTION_MAIN)
+                    || IntentHandler.determineExternalIntentSource(
+                               activity.getPackageName(), activity.getIntent())
+                            == ExternalAppId.GSA) {
+                requestToFireIntentAndFinish(activity);
+            }
             return;
         }
 

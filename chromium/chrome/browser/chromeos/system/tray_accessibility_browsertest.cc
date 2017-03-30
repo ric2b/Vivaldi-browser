@@ -4,10 +4,10 @@
 
 #include "ash/common/accessibility_types.h"
 #include "ash/common/login_status.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray_accessibility.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "base/callback.h"
@@ -32,10 +32,10 @@
 #include "components/policy/core/common/mock_configuration_policy_provider.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/test/test_utils.h"
-#include "policy/policy_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
@@ -105,8 +105,7 @@ class TrayAccessibilityTest
       policy_map.Set(policy::key::kShowAccessibilityOptionsInSystemTrayMenu,
                      policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                      policy::POLICY_SOURCE_CLOUD,
-                     base::WrapUnique(new base::FundamentalValue(value)),
-                     nullptr);
+                     base::MakeUnique<base::FundamentalValue>(value), nullptr);
       provider_.UpdateChromePolicy(policy_map);
       base::RunLoop().RunUntilIdle();
     } else {

@@ -62,18 +62,16 @@ WebInspector.UISourceCode = function(project, url, contentType)
     this._messages = [];
 }
 
-/**
- * @enum {string}
- */
+/** @enum {symbol} */
 WebInspector.UISourceCode.Events = {
-    WorkingCopyChanged: "WorkingCopyChanged",
-    WorkingCopyCommitted: "WorkingCopyCommitted",
-    TitleChanged: "TitleChanged",
-    SourceMappingChanged: "SourceMappingChanged",
-    MessageAdded: "MessageAdded",
-    MessageRemoved: "MessageRemoved",
-    LineDecorationAdded: "LineDecorationAdded",
-    LineDecorationRemoved: "LineDecorationRemoved"
+    WorkingCopyChanged: Symbol("WorkingCopyChanged"),
+    WorkingCopyCommitted: Symbol("WorkingCopyCommitted"),
+    TitleChanged: Symbol("TitleChanged"),
+    SourceMappingChanged: Symbol("SourceMappingChanged"),
+    MessageAdded: Symbol("MessageAdded"),
+    MessageRemoved: Symbol("MessageRemoved"),
+    LineDecorationAdded: Symbol("LineDecorationAdded"),
+    LineDecorationRemoved: Symbol("LineDecorationRemoved")
 }
 
 WebInspector.UISourceCode.prototype = {
@@ -189,14 +187,14 @@ WebInspector.UISourceCode.prototype = {
      */
     _updateName: function(name, url, contentType)
     {
-        var oldURД = this.url();
+        var oldURL = this.url();
         this._url = this._url.substring(0, this._url.length - this._name.length) + name;
         this._name = name;
         if (url)
             this._url = url;
         if (contentType)
             this._contentType = contentType;
-        this.dispatchEventToListeners(WebInspector.UISourceCode.Events.TitleChanged, oldURД);
+        this.dispatchEventToListeners(WebInspector.UISourceCode.Events.TitleChanged, oldURL);
     },
 
     /**

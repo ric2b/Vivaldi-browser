@@ -17,6 +17,7 @@ namespace app.runtime {
 
   // Enumeration of app launch sources.
   enum LaunchSource {
+    untracked,
     app_launcher,
     new_tab_page,
     reload,
@@ -36,6 +37,30 @@ namespace app.runtime {
     chrome_internal,
     test,
     installed_notification
+  };
+
+  // An app can be launched with a specific action in mind, for example, to
+  // create a new note. The type of action the app was launched
+  // with is available inside of the |actionData| field from the LaunchData
+  // instance.
+  enum ActionType {
+    // The user wants to quickly take a new note.
+    new_note
+  };
+
+  // Status of the play store.
+  [nodoc] enum PlayStoreStatus {
+    // Indicates that the play store is enabled. It also implies available.
+    enabled,
+    // Indicates that the play store is available but not enabled.
+    available,
+    // Indicates that the play store status is unknown.
+    unknown
+  };
+
+  // Optional data that includes action-specific launch information.
+  dictionary ActionData {
+    ActionType actionType;
   };
 
   // Optional data for the launch. Either <code>items</code>, or
@@ -71,6 +96,14 @@ namespace app.runtime {
 
     // Where the app is launched from.
     LaunchSource? source;
+
+    // Contains data that specifies the <code>ActionType</code> this app was
+    // launched with. This is null if the app was not launched with a specific
+    // action intent.
+    ActionData? actionData;
+
+    // Internal fields used to indicate ARC++ status on the device.
+    [nodoc] PlayStoreStatus? playStoreStatus;
   };
 
   // This object specifies details and operations to perform on the embedding

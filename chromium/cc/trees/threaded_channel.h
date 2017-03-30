@@ -96,20 +96,20 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
   void SetNeedsCommitOnImpl() override;
   void BeginMainFrameAbortedOnImpl(
       CommitEarlyOutReason reason,
-      base::TimeTicks main_thread_start_time) override;
+      base::TimeTicks main_thread_start_time,
+      std::vector<std::unique_ptr<SwapPromise>> swap_promises) override;
   void SetNeedsRedrawOnImpl(const gfx::Rect& damage_rect) override;
   void SetVisibleOnImpl(bool visible) override;
 
   // Blocking calls to ProxyImpl
-  void FinishAllRenderingOnImpl(CompletionEvent* completion) override;
   void ReleaseOutputSurfaceOnImpl(CompletionEvent* completion) override;
   void MainFrameWillHappenOnImplForTesting(
       CompletionEvent* completion,
       bool* main_frame_will_happen) override;
-  void StartCommitOnImpl(CompletionEvent* completion,
-                         LayerTreeHost* layer_tree_host,
-                         base::TimeTicks main_thread_start_time,
-                         bool hold_commit_for_activation) override;
+  void NotifyReadyToCommitOnImpl(CompletionEvent* completion,
+                                 LayerTreeHost* layer_tree_host,
+                                 base::TimeTicks main_thread_start_time,
+                                 bool hold_commit_for_activation) override;
   void SynchronouslyInitializeImpl(
       LayerTreeHost* layer_tree_host,
       std::unique_ptr<BeginFrameSource> external_begin_frame_source) override;
@@ -117,16 +117,12 @@ class CC_EXPORT ThreadedChannel : public ChannelMain, public ChannelImpl {
 
   // ChannelImpl Implementation
   void DidCompleteSwapBuffers() override;
-  void SetRendererCapabilitiesMainCopy(
-      const RendererCapabilities& capabilities) override;
   void BeginMainFrameNotExpectedSoon() override;
   void DidCommitAndDrawFrame() override;
   void SetAnimationEvents(std::unique_ptr<AnimationEvents> events) override;
   void DidLoseOutputSurface() override;
   void RequestNewOutputSurface() override;
-  void DidInitializeOutputSurface(
-      bool success,
-      const RendererCapabilities& capabilities) override;
+  void DidInitializeOutputSurface(bool success) override;
   void DidCompletePageScaleAnimation() override;
   void BeginMainFrame(std::unique_ptr<BeginMainFrameAndCommitState>
                           begin_main_frame_state) override;

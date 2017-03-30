@@ -15,6 +15,10 @@
 
 class GURL;
 
+namespace net {
+class HttpResponseHeaders;
+}  // namespace net
+
 namespace content {
 class NavigationData;
 class NavigationThrottle;
@@ -86,6 +90,9 @@ class CONTENT_EXPORT NavigationHandle {
   // browser process. Corresponds to Navigation Timing API.
   virtual const base::TimeTicks& NavigationStart() = 0;
 
+  // Whether or not the navigation was started within a context menu.
+  virtual bool WasStartedFromContextMenu() const = 0;
+
   // Parameters available at network request start time ------------------------
   //
   // The following parameters are only available when the network request is
@@ -150,6 +157,12 @@ class CONTENT_EXPORT NavigationHandle {
   // Whether the navigation resulted in an error page.
   virtual bool IsErrorPage() = 0;
 
+  // Returns the response headers for the request or nullptr if there are none.
+  // This should only be accessed after a redirect was encountered or after the
+  // navigation is ready to commit. The headers returned should not be modified,
+  // as modifications will not be reflected in the network stack.
+  virtual const net::HttpResponseHeaders* GetResponseHeaders() = 0;
+
   // Resumes a navigation that was previously deferred by a NavigationThrottle.
   virtual void Resume() = 0;
 
@@ -191,6 +204,10 @@ class CONTENT_EXPORT NavigationHandle {
                                     bool new_method_is_post,
                                     const GURL& new_referrer_url,
                                     bool new_is_external_protocol) = 0;
+
+  // Simulates the reception of the network response.
+  virtual NavigationThrottle::ThrottleCheckResult
+  CallWillProcessResponseForTesting(RenderFrameHost* render_frame_host) = 0;
 
   // The NavigationData that the embedder returned from
   // ResourceDispatcherHostDelegate::GetNavigationData during commit. This will

@@ -110,6 +110,17 @@ const char kReportDeviceHardwareStatus[] =
 const char kReportDeviceSessionStatus[] =
     "cros.device_status.report_session_status";
 
+// Determines whether the device reports os update status (update status,
+// new platform version and new required platform version of the auto
+// launched kiosk app).
+const char kReportOsUpdateStatus[] =
+    "cros.device_status.report_os_update_status";
+
+// Determines whether the device reports the current running kiosk app (
+// its app ID, version and required platform version).
+const char kReportRunningKioskApp[] =
+    "cros.device_status.report_running_kiosk_app";
+
 // How frequently device status reports are uploaded, in milliseconds.
 const char kReportUploadFrequency[] =
     "cros.device_status.report_upload_frequency";
@@ -203,5 +214,8 @@ const char kDeviceQuirksDownloadEnabled[] =
 // during SAML logins.
 const char kLoginVideoCaptureAllowedUrls[] =
     "cros.device.login_video_capture_allowed_urls";
+
+// A list pref storing the apps to install on the login page.
+const char kLoginApps[] = "cros.device.login_apps";
 
 }  // namespace chromeos

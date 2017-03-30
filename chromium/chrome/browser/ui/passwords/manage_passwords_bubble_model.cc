@@ -41,11 +41,8 @@ Profile* GetProfileFromWebContents(content::WebContents* web_contents) {
   return Profile::FromBrowserContext(web_contents->GetBrowserContext());
 }
 
-void CleanStatisticsForSite(content::WebContents* web_contents,
-                            const GURL& origin) {
-  DCHECK(web_contents);
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+void CleanStatisticsForSite(Profile* profile, const GURL& origin) {
+  DCHECK(profile);
   password_manager::PasswordStore* password_store =
       PasswordStoreFactory::GetForProfile(profile,
                                           ServiceAccessType::IMPLICIT_ACCESS)
@@ -53,14 +50,14 @@ void CleanStatisticsForSite(content::WebContents* web_contents,
   password_store->RemoveSiteStats(origin.GetOrigin());
 }
 
-ScopedVector<const autofill::PasswordForm> DeepCopyForms(
-    const std::vector<const autofill::PasswordForm*>& forms) {
-  ScopedVector<const autofill::PasswordForm> result;
+std::vector<autofill::PasswordForm> DeepCopyForms(
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& forms) {
+  std::vector<autofill::PasswordForm> result;
   result.reserve(forms.size());
   std::transform(forms.begin(), forms.end(), std::back_inserter(result),
-                 [](const autofill::PasswordForm* form) {
-    return new autofill::PasswordForm(*form);
-  });
+                 [](const std::unique_ptr<autofill::PasswordForm>& form) {
+                   return *form;
+                 });
   return result;
 }
 
@@ -173,7 +170,7 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
             password_manager::metrics_util::CHROME_SIGNIN_OK ||
         sign_in_promo_dismissal_reason_ ==
             password_manager::metrics_util::CHROME_SIGNIN_CANCEL) {
-      DCHECK(model->web_contents());
+      DCHECK(model->delegate_);
       int show_count = model->GetProfile()->GetPrefs()->GetInteger(
           password_manager::prefs::kNumberSignInPasswordPromoShown);
       UMA_HISTOGRAM_COUNTS_100("PasswordManager.SignInPromoCountTilClick",
@@ -192,13 +189,9 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
         metrics_util::NO_UPDATE_SUBMISSION) {
       update_password_submission_event_ =
           model->GetUpdateDismissalReason(NO_INTERACTION);
-      PasswordsModelDelegate* delegate =
-          model->web_contents()
-              ? PasswordsModelDelegateFromWebContents(model->web_contents())
-              : nullptr;
-      if (delegate &&
+      if (model->delegate_ &&
           model->state() == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE)
-        delegate->OnNoInteractionOnUpdate();
+        model->delegate_->OnNoInteractionOnUpdate();
     }
 
     if (update_password_submission_event_ != metrics_util::NO_UPDATE_SUBMISSION)
@@ -207,40 +200,43 @@ void ManagePasswordsBubbleModel::InteractionKeeper::ReportInteractions(
 }
 
 ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
-    content::WebContents* web_contents,
+    base::WeakPtr<PasswordsModelDelegate> delegate,
     DisplayReason display_reason)
-    : content::WebContentsObserver(web_contents),
-      password_overridden_(false) {
-  PasswordsModelDelegate* delegate =
-      PasswordsModelDelegateFromWebContents(web_contents);
-
-  origin_ = delegate->GetOrigin();
-  state_ = delegate->GetState();
+    : password_overridden_(false),
+      delegate_(std::move(delegate)) {
+  origin_ = delegate_->GetOrigin();
+  state_ = delegate_->GetState();
+  password_manager::InteractionsStats interaction_stats;
   if (state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
       state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
-    pending_password_ = delegate->GetPendingPassword();
-    local_credentials_ = DeepCopyForms(delegate->GetCurrentForms());
-  } else if (state_ == password_manager::ui::CONFIRMATION_STATE) {
-    // We don't need anything.
-  } else if (state_ == password_manager::ui::AUTO_SIGNIN_STATE) {
-    pending_password_ = delegate->GetPendingPassword();
-  } else {
-    local_credentials_ = DeepCopyForms(delegate->GetCurrentForms());
-  }
-
-  if (state_ == password_manager::ui::PENDING_PASSWORD_STATE ||
-      state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
+    pending_password_ = delegate_->GetPendingPassword();
+    if (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
+      local_credentials_ = DeepCopyForms(delegate_->GetCurrentForms());
+      password_overridden_ = delegate_->IsPasswordOverridden();
+    } else {
+      interaction_stats.origin_domain = origin_.GetOrigin();
+      interaction_stats.username_value = pending_password_.username_value;
+      const password_manager::InteractionsStats* stats =
+          delegate_->GetCurrentInteractionStats();
+      if (stats) {
+        DCHECK_EQ(interaction_stats.username_value, stats->username_value);
+        DCHECK_EQ(interaction_stats.origin_domain, stats->origin_domain);
+        interaction_stats.dismissal_count = stats->dismissal_count;
+      }
+    }
     UpdatePendingStateTitle();
   } else if (state_ == password_manager::ui::CONFIRMATION_STATE) {
     title_ =
         l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TITLE);
   } else if (state_ == password_manager::ui::AUTO_SIGNIN_STATE) {
-    // There is no title.
+    pending_password_ = delegate_->GetPendingPassword();
   } else if (state_ == password_manager::ui::MANAGE_STATE) {
+    local_credentials_ = DeepCopyForms(delegate_->GetCurrentForms());
     UpdateManageStateTitle();
+    manage_link_ =
+        l10n_util::GetStringUTF16(IDS_OPTIONS_PASSWORDS_MANAGE_PASSWORDS_LINK);
   }
 
-  password_manager::InteractionsStats interaction_stats;
   if (state_ == password_manager::ui::CONFIRMATION_STATE) {
     base::string16 save_confirmation_link =
         l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_LINK);
@@ -260,22 +256,7 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
             confirmation_text_id, save_confirmation_link, &offset);
     save_confirmation_link_range_ =
         gfx::Range(offset, offset + save_confirmation_link.length());
-  } else if (state_ == password_manager::ui::PENDING_PASSWORD_STATE) {
-    interaction_stats.origin_domain = origin_.GetOrigin();
-    interaction_stats.username_value = pending_password_.username_value;
-    password_manager::InteractionsStats* stats =
-        delegate->GetCurrentInteractionStats();
-    if (stats) {
-      DCHECK_EQ(interaction_stats.username_value, stats->username_value);
-      DCHECK_EQ(interaction_stats.origin_domain, stats->origin_domain);
-      interaction_stats.dismissal_count = stats->dismissal_count;
-    }
-  } else if (state_ == password_manager::ui::PENDING_PASSWORD_UPDATE_STATE) {
-    password_overridden_ = delegate->IsPasswordOverridden();
   }
-
-  manage_link_ =
-      l10n_util::GetStringUTF16(IDS_OPTIONS_PASSWORDS_MANAGE_PASSWORDS_LINK);
 
   password_manager::metrics_util::UIDisplayDisposition display_disposition =
       metrics_util::AUTOMATIC_WITH_PASSWORD_PENDING;
@@ -327,17 +308,13 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
   interaction_keeper_.reset(new InteractionKeeper(std::move(interaction_stats),
                                                   display_disposition));
 
-  delegate->OnBubbleShown();
+  delegate_->OnBubbleShown();
 }
 
 ManagePasswordsBubbleModel::~ManagePasswordsBubbleModel() {
   interaction_keeper_->ReportInteractions(this);
-  // web_contents() is nullptr if the tab is closing.
-  PasswordsModelDelegate* delegate =
-      web_contents() ? PasswordsModelDelegateFromWebContents(web_contents())
-                     : nullptr;
-  if (delegate)
-    delegate->OnBubbleHidden();
+  if (delegate_)
+    delegate_->OnBubbleHidden();
 }
 
 void ManagePasswordsBubbleModel::OnNeverForThisSiteClicked() {
@@ -345,8 +322,8 @@ void ManagePasswordsBubbleModel::OnNeverForThisSiteClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_NEVER);
   interaction_keeper_->set_update_password_submission_event(
       GetUpdateDismissalReason(NOPE_CLICKED));
-  CleanStatisticsForSite(web_contents(), origin_);
-  PasswordsModelDelegateFromWebContents(web_contents())->NeverSavePassword();
+  CleanStatisticsForSite(GetProfile(), origin_);
+  delegate_->NeverSavePassword();
 }
 
 void ManagePasswordsBubbleModel::OnSaveClicked() {
@@ -354,22 +331,21 @@ void ManagePasswordsBubbleModel::OnSaveClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_SAVE);
   interaction_keeper_->set_update_password_submission_event(
       GetUpdateDismissalReason(UPDATE_CLICKED));
-  CleanStatisticsForSite(web_contents(), origin_);
-  PasswordsModelDelegateFromWebContents(web_contents())->SavePassword();
+  CleanStatisticsForSite(GetProfile(), origin_);
+  delegate_->SavePassword();
 }
 
 void ManagePasswordsBubbleModel::OnNopeUpdateClicked() {
   interaction_keeper_->set_update_password_submission_event(
       GetUpdateDismissalReason(NOPE_CLICKED));
-  PasswordsModelDelegateFromWebContents(web_contents())->OnNopeUpdateClicked();
+  delegate_->OnNopeUpdateClicked();
 }
 
 void ManagePasswordsBubbleModel::OnUpdateClicked(
     const autofill::PasswordForm& password_form) {
   interaction_keeper_->set_update_password_submission_event(
       GetUpdateDismissalReason(UPDATE_CLICKED));
-  PasswordsModelDelegateFromWebContents(web_contents())->UpdatePassword(
-      password_form);
+  delegate_->UpdatePassword(password_form);
 }
 
 void ManagePasswordsBubbleModel::OnDoneClicked() {
@@ -386,18 +362,15 @@ void ManagePasswordsBubbleModel::OnManageLinkClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_MANAGE);
   if (GetSmartLockBrandingState(GetProfile()) ==
       password_bubble_experiment::SmartLockBranding::FULL) {
-    PasswordsModelDelegateFromWebContents(web_contents())
-        ->NavigateToExternalPasswordManager();
+    delegate_->NavigateToExternalPasswordManager();
   } else {
-    PasswordsModelDelegateFromWebContents(web_contents())
-        ->NavigateToPasswordManagerSettingsPage();
+    delegate_->NavigateToPasswordManagerSettingsPage();
   }
 }
 
 void ManagePasswordsBubbleModel::OnBrandLinkClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_BRAND_NAME);
-  PasswordsModelDelegateFromWebContents(web_contents())
-      ->NavigateToSmartLockHelpPage();
+  delegate_->NavigateToSmartLockHelpPage();
 }
 
 void ManagePasswordsBubbleModel::OnAutoSignInToastTimeout() {
@@ -426,8 +399,7 @@ void ManagePasswordsBubbleModel::OnSignInToChromeClicked() {
       metrics_util::CHROME_SIGNIN_OK);
   GetProfile()->GetPrefs()->SetBoolean(
       password_manager::prefs::kWasSignInPasswordPromoClicked, true);
-  PasswordsModelDelegateFromWebContents(web_contents())
-      ->NavigateToChromeSignIn();
+  delegate_->NavigateToChromeSignIn();
 }
 
 void ManagePasswordsBubbleModel::OnSkipSignInClicked() {
@@ -438,7 +410,11 @@ void ManagePasswordsBubbleModel::OnSkipSignInClicked() {
 }
 
 Profile* ManagePasswordsBubbleModel::GetProfile() const {
-  return GetProfileFromWebContents(web_contents());
+  return GetProfileFromWebContents(GetWebContents());
+}
+
+content::WebContents* ManagePasswordsBubbleModel::GetWebContents() const {
+  return delegate_ ? delegate_->GetWebContents() : nullptr;
 }
 
 bool ManagePasswordsBubbleModel::ShouldShowMultipleAccountUpdateUI() const {
@@ -491,14 +467,14 @@ void ManagePasswordsBubbleModel::UpdatePendingStateTitle() {
                  ? PasswordTittleType::SAVE_PASSWORD
                  : PasswordTittleType::SAVE_ACCOUNT);
   GetSavePasswordDialogTitleTextAndLinkRange(
-      web_contents()->GetVisibleURL(), origin_,
+      GetWebContents()->GetVisibleURL(), origin_,
       GetSmartLockBrandingState(GetProfile()) !=
           password_bubble_experiment::SmartLockBranding::NONE,
       type, &title_, &title_brand_link_range_);
 }
 
 void ManagePasswordsBubbleModel::UpdateManageStateTitle() {
-  GetManagePasswordsDialogTitleText(web_contents()->GetVisibleURL(), origin_,
+  GetManagePasswordsDialogTitleText(GetWebContents()->GetVisibleURL(), origin_,
                                     &title_);
 }
 

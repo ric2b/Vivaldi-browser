@@ -18,6 +18,7 @@
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 #include "ui/base/win/atl_module.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 //
 // Macros to use at the top of any AXPlatformNodeWin function that implements
@@ -257,7 +258,7 @@ HRESULT AXPlatformNodeWin::accDoDefaultAction(VARIANT var_id) {
 STDMETHODIMP AXPlatformNodeWin::accLocation(
     LONG* x_left, LONG* y_top, LONG* width, LONG* height, VARIANT var_id) {
   COM_OBJECT_VALIDATE_VAR_ID_4_ARGS(var_id, x_left, y_top, width, height);
-  gfx::Rect bounds = GetData().location;
+  gfx::Rect bounds = gfx::ToEnclosingRect(GetData().location);
   bounds += delegate_->GetGlobalCoordinateOffset();
   *x_left = bounds.x();
   *y_top  = bounds.y();
@@ -1145,7 +1146,8 @@ LONG AXPlatformNodeWin::FindBoundary(
   ui::TextBoundaryType boundary = IA2TextBoundaryToTextBoundary(ia2_boundary);
   std::vector<int32_t> line_breaks;
   return static_cast<LONG>(ui::FindAccessibleTextBoundary(
-      text, line_breaks, boundary, start_offset, direction));
+      text, line_breaks, boundary, start_offset, direction,
+      AX_TEXT_AFFINITY_DOWNSTREAM));
 }
 
 }  // namespace ui

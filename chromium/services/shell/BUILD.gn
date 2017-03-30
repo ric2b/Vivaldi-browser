@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/mojo_application_manifest.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
@@ -26,8 +26,8 @@ source_set("shell") {
     "connect_util.h",
     "native_runner.h",
     "native_runner_delegate.h",
-    "shell.cc",
-    "shell.h",
+    "service_manager.cc",
+    "service_manager.h",
     "switches.cc",
     "switches.h",
   ]
@@ -52,7 +52,7 @@ source_set("shell") {
   ]
 }
 
-mojo_application_manifest("manifest") {
-  application_name = "shell"
+service_manifest("manifest") {
+  name = "shell"
   source = "manifest.json"
 }

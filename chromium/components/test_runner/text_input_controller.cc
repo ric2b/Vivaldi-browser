@@ -5,7 +5,7 @@
 #include "components/test_runner/text_input_controller.h"
 
 #include "base/macros.h"
-#include "components/test_runner/web_test_proxy.h"
+#include "components/test_runner/web_view_test_proxy.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -148,8 +148,10 @@ void TextInputControllerBindings::SetComposition(const std::string& text) {
 
 // TextInputController ---------------------------------------------------------
 
-TextInputController::TextInputController(WebTestProxyBase* web_test_proxy_base)
-    : web_test_proxy_base_(web_test_proxy_base), weak_factory_(this) {}
+TextInputController::TextInputController(
+    WebViewTestProxyBase* web_view_test_proxy_base)
+    : web_view_test_proxy_base_(web_view_test_proxy_base),
+      weak_factory_(this) {}
 
 TextInputController::~TextInputController() {}
 
@@ -166,8 +168,14 @@ void TextInputController::UnmarkText() {
 }
 
 void TextInputController::DoCommand(const std::string& text) {
-  if (view()->mainFrame())
-    view()->mainFrame()->executeCommand(blink::WebString::fromUTF8(text));
+  if (view()->mainFrame()) {
+    if (!view()->mainFrame()->toWebLocalFrame()) {
+      CHECK(false) << "This function cannot be called if the main frame is not"
+                      "a local frame.";
+    }
+    view()->mainFrame()->toWebLocalFrame()->executeCommand(
+        blink::WebString::fromUTF8(text));
+  }
 }
 
 void TextInputController::SetMarkedText(const std::string& text,
@@ -199,14 +207,27 @@ void TextInputController::SetMarkedText(const std::string& text,
 }
 
 bool TextInputController::HasMarkedText() {
-  return view()->mainFrame() && view()->mainFrame()->hasMarkedText();
+  if (!view()->mainFrame())
+    return false;
+
+  if (!view()->mainFrame()->toWebLocalFrame()) {
+    CHECK(false) << "This function cannot be called if the main frame is not"
+                    "a local frame.";
+  }
+
+  return view()->mainFrame()->toWebLocalFrame()->hasMarkedText();
 }
 
 std::vector<int> TextInputController::MarkedRange() {
   if (!view()->mainFrame())
     return std::vector<int>();
 
-  blink::WebRange range = view()->mainFrame()->markedRange();
+  if (!view()->mainFrame()->toWebLocalFrame()) {
+    CHECK(false) << "This function cannot be called if the main frame is not"
+                    "a local frame.";
+  }
+
+  blink::WebRange range = view()->mainFrame()->toWebLocalFrame()->markedRange();
   std::vector<int> int_array(2);
   int_array[0] = range.startOffset();
   int_array[1] = range.endOffset();
@@ -218,7 +239,13 @@ std::vector<int> TextInputController::SelectedRange() {
   if (!view()->mainFrame())
     return std::vector<int>();
 
-  blink::WebRange range = view()->mainFrame()->selectionRange();
+  if (!view()->mainFrame()->toWebLocalFrame()) {
+    CHECK(false) << "This function cannot be called if the main frame is not"
+                    "a local frame.";
+  }
+
+  blink::WebRange range =
+      view()->mainFrame()->toWebLocalFrame()->selectionRange();
   if (range.isNull())
     return std::vector<int>();
   std::vector<int> int_array(2);
@@ -254,21 +281,24 @@ void TextInputController::SetComposition(const std::string& text) {
   key_down.type = blink::WebInputEvent::RawKeyDown;
   key_down.modifiers = 0;
   key_down.windowsKeyCode = 0xE5;  // VKEY_PROCESSKEY
-  key_down.setKeyIdentifierFromWindowsKeyCode();
   view()->handleInputEvent(key_down);
 
+  // The value returned by std::string::length() may not correspond to the
+  // actual number of encoded characters in sequences of multi-byte or
+  // variable-length characters.
+  blink::WebString newText = blink::WebString::fromUTF8(text);
+  size_t textLength = newText.length();
+
   std::vector<blink::WebCompositionUnderline> underlines;
-  underlines.push_back(blink::WebCompositionUnderline(0, text.length(),
-                                                      SK_ColorBLACK, false,
-                                                      SK_ColorTRANSPARENT));
+  underlines.push_back(blink::WebCompositionUnderline(
+      0, textLength, SK_ColorBLACK, false, SK_ColorTRANSPARENT));
   view()->setComposition(
-      blink::WebString::fromUTF8(text),
-      blink::WebVector<blink::WebCompositionUnderline>(underlines),
-      text.length(), text.length());
+      newText, blink::WebVector<blink::WebCompositionUnderline>(underlines),
+      textLength, textLength);
 }
 
 blink::WebView* TextInputController::view() {
-  return web_test_proxy_base_->web_view();
+  return web_view_test_proxy_base_->web_view();
 }
 
 }  // namespace test_runner

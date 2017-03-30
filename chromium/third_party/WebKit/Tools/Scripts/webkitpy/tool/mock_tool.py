@@ -28,42 +28,11 @@
 
 from webkitpy.common.host_mock import MockHost
 
-# FIXME: Old-style "Ports" need to die and be replaced by modern layout_tests.port which needs to move to common.
-from webkitpy.common.config.ports_mock import MockPort
 
-
-# FIXME: We should just replace this with optparse.Values(default=kwargs)
-class MockOptions(object):
-    """Mock implementation of optparse.Values."""
-
-    def __init__(self, **kwargs):
-        # The caller can set option values using keyword arguments. We don't
-        # set any values by default because we don't know how this
-        # object will be used. Generally speaking unit tests should
-        # subclass this or provider wrapper functions that set a common
-        # set of options.
-        self.update(**kwargs)
-
-    def update(self, **kwargs):
-        self.__dict__.update(**kwargs)
-        return self
-
-    def ensure_value(self, key, value):
-        if getattr(self, key, None) is None:
-            self.__dict__[key] = value
-        return self.__dict__[key]
-
-
-# FIXME: This should be renamed MockWebKitPatch.
-class MockTool(MockHost):
+class MockWebKitPatch(MockHost):
 
     def __init__(self, *args, **kwargs):
         MockHost.__init__(self, *args, **kwargs)
-
-        self._deprecated_port = MockPort()
-
-    def deprecated_port(self):
-        return self._deprecated_port
 
     def path(self):
         return "echo"

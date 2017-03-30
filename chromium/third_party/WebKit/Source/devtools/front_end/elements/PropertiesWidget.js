@@ -40,14 +40,8 @@ WebInspector.PropertiesWidget = function()
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.CharacterDataModified, this._onNodeChange, this);
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.ChildNodeCountUpdated, this._onNodeChange, this);
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._setNode, this);
-}
-
-/**
- * @return {!WebInspector.ElementsSidebarViewWrapperPane}
- */
-WebInspector.PropertiesWidget.createSidebarWrapper = function()
-{
-    return new WebInspector.ElementsSidebarViewWrapperPane(WebInspector.UIString("Properties"), new WebInspector.PropertiesWidget());
+    this._node = WebInspector.context.flavor(WebInspector.DOMNode);
+    this.update();
 }
 
 WebInspector.PropertiesWidget._objectGroupName = "properties-sidebar-pane";

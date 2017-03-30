@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_restrictions.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/public/browser/render_process_host.h"
@@ -112,7 +113,8 @@ class MHTMLGenerationTest : public ContentBrowserTest {
     base::RunLoop run_loop;
 
     shell()->web_contents()->GenerateMHTML(
-        params, base::Bind(&MHTMLGenerationTest::MHTMLGenerated, this,
+        params, base::Bind(&MHTMLGenerationTest::MHTMLGenerated,
+                           base::Unretained(this),
                            run_loop.QuitClosure()));
 
     // Block until the MHTML is generated.
@@ -122,6 +124,7 @@ class MHTMLGenerationTest : public ContentBrowserTest {
   }
 
   int64_t ReadFileSizeFromDisk(base::FilePath path) {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_to_test_file_size;
     int64_t file_size;
     if (!base::GetFileSize(path, &file_size)) return -1;
     return file_size;
@@ -220,10 +223,13 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTML) {
   EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
-  std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  EXPECT_THAT(mhtml,
-              HasSubstr("Content-Transfer-Encoding: quoted-printable"));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    std::string mhtml;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+    EXPECT_THAT(mhtml,
+                HasSubstr("Content-Transfer-Encoding: quoted-printable"));
+  }
 }
 
 class GenerateMHTMLAndExitRendererMessageFilter : public BrowserMessageFilter {
@@ -364,11 +370,14 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateNonBinaryMHTMLWithImage) {
   EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
-  std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: base64"));
-  EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: binary")));
-  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    std::string mhtml;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+    EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: base64"));
+    EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: binary")));
+    EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+  }
 }
 
 // Tests that MHTML generated using the binary encoding contains the 'binary'
@@ -387,11 +396,14 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateBinaryMHTMLWithImage) {
   EXPECT_GT(file_size(), 0);  // Verify the size reported by the callback.
   EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 
-  std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
-  EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: binary"));
-  EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: base64")));
-  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    std::string mhtml;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+    EXPECT_THAT(mhtml, HasSubstr("Content-Transfer-Encoding: binary"));
+    EXPECT_THAT(mhtml, Not(HasSubstr("Content-Transfer-Encoding: base64")));
+    EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*blank.jpg"));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
@@ -407,7 +419,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
   ASSERT_FALSE(HasFailure());
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
 
   // Make sure the contents of the body are present.
   EXPECT_THAT(mhtml, HasSubstr("test body"));
@@ -432,7 +447,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
   EXPECT_EQ(-1, file_size());
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
 
   // Make sure the contents are missing.
   EXPECT_THAT(mhtml, Not(HasSubstr("test body")));
@@ -455,7 +473,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
   EXPECT_LT(0, file_size());
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
 
   EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
   // Make sure that no-store subresources exist in this mode.
@@ -479,7 +500,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreSubFrame) {
   EXPECT_LT(0, file_size());
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
 
   EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
   // Make sure the contents are missing.
@@ -519,7 +543,10 @@ IN_PROC_BROWSER_TEST_F(
       2 /* expected number of frames */, expectations, forbidden);
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
+  }
 }
 
 IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
@@ -543,7 +570,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
       2 /* expected number of frames */, expectations, forbidden);
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
+  }
 }
 
 // Test suite that allows testing --site-per-process against cross-site frames.
@@ -583,7 +613,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationSitePerProcessTest, GenerateMHTML) {
   ASSERT_FALSE(HasFailure());
 
   std::string mhtml;
-  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_content_verification;
+    ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+  }
 
   // Make sure the contents of both frames are present.
   EXPECT_THAT(mhtml, HasSubstr("This page has one cross-site iframe"));

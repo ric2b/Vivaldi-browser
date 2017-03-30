@@ -1,0 +1,426 @@
+_disabled_targets = [
+  # chromium/all.gyp
+  ":All_syzygy",
+
+  #app_list.gyp
+  ":app_list_demo",
+
+  #":app_list_unittests_run",
+  # ash.gyp
+  ":ash_shell_lib",
+  ":ash_shell_lib_with_content",
+  ":ash_shell_with_content",
+
+  # base.gyp
+  ":build_utf8_validator_tables",
+  ":check_example",
+  ":pe_image_test",
+
+  # blacklist.gypi
+  ":blacklist_test_main_dll",
+  ":generate_barcode_video",
+  ":generate_timecode_audio",
+  ":tap_proxy",
+  ":cast_h264_vt_encoder_unittests",
+
+  #chrome_installer.gypi
+  ":chromedriver",
+  ":chromedriver_webview_shell_apk",
+  ":telemetry_chrome_test",
+
+  #":angle_unittests_run",
+  #":gl_tests_run",
+  #":tab_capture_end2end_tests_run",
+  #":telemetry_gpu_test_run",
+  #":gles2_conform_test_run",
+  #":angle_end2end_tests_run",
+  ":service_discovery_sniffer",
+
+  #components_tests.gyp
+  ":components_junit_tests",
+
+  #content_shell.gypi
+  ":content_shell_crash_service",
+  ":content_shell_syzyasan",
+
+  #courgette.gyp
+  ":courgette_minimal_tool",
+
+  #deqp
+  ":angle_deqp_libtester",
+
+  #dll_hash.gypi
+  ":dll_hash_main",
+
+  #gcm.gyp
+  ":mcs_probe",
+
+  #gin.gyp
+  ":gin_shell",
+  ":gin_test",
+
+  #net.gyp
+  ":net_perftests",
+  ":dump_cache",
+  ":crash_cache",
+  ":crl_set_dump",
+  ":dns_fuzz_stub",
+  ":gdig",
+  ":get_server_time",
+  ":hpack_example_generator",
+  ":hpack_fuzz_mutator",
+  ":hpack_fuzz_wrapper",
+  ":net_watcher",
+  ":run_testserver",
+  ":quic_client",
+  ":quic_server",
+  ":stress_cache",
+  "//net/:tld_cleanup",
+  ":flip_in_mem_edsm_server_unittests",
+  ":flip_in_mem_edsm_server",
+  ":epoll_quic_client",
+  ":epoll_quic_server",
+  ":disk_cache_memory_test",
+
+  #ppapi_tests.gypi
+  #":ppapi_perftests",
+  #":mouse_cursor",
+  #":mouse_lock",
+  #":mouse_lock",
+  #":gamepad",
+  #":c_stub",
+  #":cc_stub",
+  #":crxfs",
+  #":audio",
+  #":audio_input",
+  #":file_chooser",
+  #":graphics_2d",
+  #":ime",
+  #":paint_manager",
+  #":input",
+  #":post_message",
+  #":scaling",
+  #":scroll",
+  #":simple_font",
+  #":threading",
+  #":url_loader",
+  #":url_loader_file",
+  #":gles2",
+  #":video_decode",
+  #":video_decode_dev",
+  #":video_encode",
+  #":vc",
+  #":video_effects",
+  #":enumerate_devices",
+  #":flash_topmost",
+  #":printing",
+  #":media_stream_audio",
+  #":media_stream_video",
+  #":gles2_spinning_cube",
+  #":compositor",
+
+  #rlz.gyp
+  ":rlz_id",
+
+  #sandbox_win.gypi
+  ":pocdll",
+
+  #session_manager.gypi
+  "//components/session_manager/core:core",
+
+  #skia.gyp
+  ":image_operations_bench",
+  ":filter_fuzz_stub",
+
+  #sync_tests.gypi
+  ":run_sync_testserver",
+
+  #ui_touch_selection.gyp
+  #":ui_touch_selection_unittests_run",
+  #views_content_client.gyp
+  ":views_content_client",
+
+  #wifi.gypi
+  ":wifi_test",
+  "//mojo:mojo",
+
+  # "//extensions/shell",
+  "//chrome/installer/mini_installer:mini_installer_syzygy",
+  "//chrome/tools/build/win/syzygy:chrome_dll_syzygy",
+  "//chrome/tools/build/win/syzygy:chrome_child_dll_syzygy",
+  "//remoting:remoting_all",
+  "//remoting:test_support",
+
+  # "//ui/views/examples:views_examples_lib",
+  # "//ui/views/examples:views_examples_with_content_lib",
+  "//rlz/rlz:rlz",
+  "//media/cast:testing_tools",
+  ":telemetry_gpu_integration_test",
+  ":telemetry_gpu_integration_test_run",
+  ":telemetry_gpu_test",
+  ":telemetry_gpu_test_run",
+  ":telemetry_unittests_run",
+  ":telemetry_unittests",
+  "//mojo/edk/js:tests",
+  "//ui/views/examples:views_examples_with_content_exe",
+  "//ui/views/examples:views_examples_exe",
+
+  #  "//ui/views/examples:copy_content_resources",
+  #  "//extensions/shell:resources",
+  #  "//extensions/shell:app_shell_lib", # disabling this crashes GN
+  "//extensions/shell:app_shell_framework",
+  "//ui/aura:demo",
+  "//media/mojo/clients:clients",
+  "//extensions/shell:app_shell",
+  "//gpu:gles2_conform_support",
+  "//tools/battor_agent:battor_agent",
+  "//services/shell/tests/lifecycle:lifecycle_unittest_exe",
+  "//services/shell/tests/shell:shell_unittest_driver",
+  "//services/shell/tests/shell:shell_unittest_target ",
+  "//v8:v8_hello_world",
+  "//v8:v8_parser_shell",
+  "//v8:v8_sample_process",
+  "//v8:v8_simple_json_fuzzer",
+  "//v8:v8_simple_parser_fuzzer",
+  "//v8:v8_simple_regexp_fuzzer",
+  "//v8:v8_simple_wasm_asmjs_fuzzer",
+  "//v8:v8_simple_wasm_fuzzer",
+  ":boringssl_aead_test",
+  ":boringssl_aes_test",
+  ":boringssl_asn1_test",
+  ":boringssl_base64_test",
+  ":boringssl_bio_test",
+  ":boringssl_bn_test",
+  ":boringssl_bytestring_test",
+  ":boringssl_chacha_test",
+  ":boringssl_cipher_test",
+  ":boringssl_cmac_test",
+  ":boringssl_constant_time_test",
+  ":boringssl_dh_test",
+  ":boringssl_digest_test",
+  ":boringssl_dsa_test",
+  ":boringssl_ec_test",
+  ":boringssl_ecdsa_test",
+  ":boringssl_ed25519_test",
+  ":boringssl_err_test",
+  ":boringssl_evp_extra_test",
+  ":boringssl_evp_test",
+  ":boringssl_example_mul",
+  ":boringssl_gcm_test",
+  ":boringssl_hkdf_test",
+  ":boringssl_hmac_test",
+  ":boringssl_lhash_test",
+  ":boringssl_newhope_statistical_test",
+  ":boringssl_newhope_test",
+  ":boringssl_newhope_vectors_test",
+  ":boringssl_obj_test",
+  ":boringssl_pbkdf_test",
+  ":boringssl_pkcs12_test",
+  ":boringssl_pkcs7_test",
+  ":boringssl_pkcs8_test",
+  ":boringssl_poly1305_test",
+  ":boringssl_pqueue_test",
+  ":boringssl_refcount_test",
+  ":boringssl_rsa_test",
+  ":boringssl_spake25519_test",
+  ":boringssl_ssl_test",
+  ":boringssl_tab_test",
+  ":boringssl_thread_test",
+  ":boringssl_v3name_test",
+  ":boringssl_x25519_test",
+  ":boringssl_x509_test",
+  "//chrome/installer/test:alternate_version_generator",
+  "//ui/base:ui_unittests_framework",
+  "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+  "//tools/perf/chrome_telemetry_build:copy_cdb_to_output",
+  "//chrome/test:telemetry_perf_unittests",
+  "//chrome/test:telemetry_perf_unittests_run",
+  "//tools/perf:perf",
+  "//content/test:content_site_isolation_browsertests",
+  "//content/test:content_site_isolation_browsertests_run",
+]
+
+_disabled_templates = [
+  # accessibility.gyp
+  ":accessibility_unittests",
+
+  #":accessibility_unittests_run",
+  ":base_perftests",
+  ":base_i18n_perftests",
+
+  # cast_testing.gypi
+  ":cast_benchmarks",
+
+  # cc_tests.gyp
+  ":cc_perftests",
+
+  #chrome_elf.gyp
+  ":chrome_elf_unittests",
+  ":installer_util_unittests",
+  ":setup_unittests",
+  ":gcapi_test",
+
+  #chrome_tests.gypi
+  ":chromedriver_tests",
+  ":performance_browser_tests",
+  ":sync_performance_tests",
+  ":load_library_perf_tests",
+
+  #chrome_test_unit.gypi
+  ":chrome_app_unittests",
+  ":components_perftests",
+  ":components_browsertests",
+
+  #":components_browsertests_run",
+  ":components_perftests",
+  ":components_browsertests",
+
+  #":components_browsertests_run",
+  #events.gyp
+  ":events_unittests",
+
+  #":events_unittests_run",
+  ":gcm_unit_tests",
+
+  #":gcm_unit_tests_run",
+  #gpu.gyp
+  ":gin_unittests",
+  ":gpu_perftests",
+  ":gl_tests",
+  ":angle_end2end_tests",
+  ":angle_perftests",
+  ":angle_unittests",
+
+  #ipc.gyp
+  ":ipc_perftests",
+
+  #keyboard.gyp
+  ":keyboard_unittests",
+
+  #media.gyp
+  ":audio_unittests",
+  ":ffmpeg_regression_tests",
+  ":media_perftests",
+
+  #message_center.gyp
+  #":message_center_unittests_run",
+  #midi.gyp
+  ":midi_unittests",
+
+  #":midi_unittests_run",
+  #mojo_base.gyp
+  ":mojo_public_application_unittests",
+  ":mojo_common_unittests",
+
+  #":mojo_common_unittests_run",
+  ":rlz_unittests",
+
+  #snapshot.gyp
+  ":snapshot_unittests",
+
+  #snapshot.gyp
+  ":snapshot_unittests",
+
+  #wm.gyp
+  ":wm_unittests",
+
+  #":wm_unittests_run",
+  "//extensions:extensions_unittests",
+  "//extensions:extensions_browsertests",
+  "//chrome/installer/test:upgrade_test",
+  "//remoting:remoting_unittests",
+  ":courgette_fuzz",
+  ":js_integration_tests",
+  ":js_unittests",
+  ":sandbox_poc",
+  "//ui/app_list/presenter:app_list_presenter_unittests",
+  "//extensions/shell:app_shell_unittests",
+
+  #"//extensions/shell:version_header",
+  "//ui/views/mus:views_mus_interactive_ui_tests",
+  "//ui/views/mus:views_mus_unittests",
+  "//mojo/converters/blink:blink_converters_unittests",
+  "//cc/blink:cc_blink_unittests",
+  "//third_party/WebKit/Source/platform:blink_heap_unittests",
+  "//third_party/WebKit/Source/platform:blink_platform_unittests",
+  "//third_party/WebKit/Source/web:webkit_unit_tests",
+  "//third_party/WebKit/Source/wtf:wtf_unittests",
+  "//components/display_compositor:display_compositor_benchmark",
+  "//components/display_compositor:display_compositor_gl_tests",
+  "//media/capture:capture_unittests",
+  "//components/mus/gpu:mus_gpu_unittests",
+  "//components/mus/clipboard:mus_clipboard_unittests",
+  "//components/mus/common:mus_common_unittests",
+  "//components/mus/ws:mus_ws_unittests",
+  "//components/mus/public/cpp/tests:mus_public_unittests",
+  "//media/gpu:video_decode_accelerator_unittest",
+  "//media/gpu:video_encode_accelerator_unittest",
+  "//skia:skia_unittests",
+  "//ui/shell_dialogs:shell_dialogs_unittests",
+  "//ui/touch_selection:ui_touch_selection_unittests",
+  "//media/blink:media_blink_unittests",
+  "//media/mojo:media_mojo_unittests",
+  "//media/mojo/services:media_mojo_shell_unittests",
+  "//media/mojo/services:media_pipeline_integration_unittests",
+  "//content/test:content_perftests",
+  "//components/proximity_auth:proximity_auth_unittests",
+  "//gpu/ipc/service:gpu_ipc_service_unittests",
+  "//gpu:command_buffer_gles2_tests",
+  "//third_party/libaddressinput:libaddressinput_unittests",
+  "//url/ipc:url_ipc_unittests",
+  "//ui/native_theme:native_theme_unittests",
+  "//ui/gl:gl_unittests",
+  "//ui/display:display_unittests",
+  "//ui/base:ui_base_unittests",
+  "//tools/battor_agent:battor_agent_unittests",
+  "//components/filesystem:filesystem_service_unittests",
+  "//gpu/gles2_conform_support:gles2_conform_test",
+  "//components/leveldb:leveldb_service_unittests",
+  "//third_party/leveldatabase:env_chromium_unittests",
+  "//third_party/leveldatabase:leveldb_arena_test",
+  "//third_party/leveldatabase:leveldb_bloom_test",
+  "//third_party/leveldatabase:leveldb_cache_test",
+  "//third_party/leveldatabase:leveldb_corruption_test",
+  "//third_party/leveldatabase:leveldb_crc32c_test",
+  "//third_party/leveldatabase:leveldb_db_bench",
+  "//third_party/leveldatabase:leveldb_db_test",
+  "//third_party/leveldatabase:leveldb_dbformat_test",
+  "//third_party/leveldatabase:leveldb_env_test",
+  "//third_party/leveldatabase:leveldb_filename_test",
+  "//third_party/leveldatabase:leveldb_filter_block_test",
+  "//third_party/leveldatabase:leveldb_log_test",
+  "//third_party/leveldatabase:leveldb_skiplist_test",
+  "//third_party/leveldatabase:leveldb_table_test",
+  "//third_party/leveldatabase:leveldb_version_edit_test",
+  "//third_party/leveldatabase:leveldb_write_batch_test",
+  "//third_party/libphonenumber:libphonenumber_unittests",
+  "//mojo/edk/test:mojo_public_system_perftests",
+  "//services/shell/runner/host:mojo_runner_host_unittests",
+  "//mojo/common:mojo_common_perftests",
+  "//mojo/edk/system:mojo_message_pipe_perftests",
+  "//mojo/edk/test:mojo_public_bindings_perftests",
+  "//mojo/edk/test:mojo_public_system_unittests",
+  "//mojo/edk/system:mojo_system_unittests",
+  "//mojo/edk/test:mojo_public_bindings_unittests",
+  "//chrome/install_static:install_static_unittests",
+  "//chrome/installer/setup:setup_unittests",
+  "//chrome_elf:chrome_elf_unittests",
+  "//chrome/chrome_wathcher:system_load_estimator_unittests",
+  "//third_party/pdfium:pdfium_unittests",
+  "//third_party/pdfium:pdfium_embeddertests",
+  "//third_party/boringssl:boringssl_tests",
+  "//third_party/boringssl:boringssl_unittests",
+  "//chrome/installer/linux:trunk",
+]
+
+foreach(_target, _disabled_targets) {
+  post_process_target(_target) {
+    disabled = true
+  }
+}
+
+foreach(_target, _disabled_templates) {
+  post_process_template(_target) {
+    disabled = true
+  }
+}

@@ -75,11 +75,7 @@ void ChromeBookmarkReader::AddBookmark(
   base::string16 nickname;
   base::string16 description;
   base::string16 on_personal_bar_s;
-  base::string16 in_panel_s;
   bool on_personal_bar = false;
-  bool in_panel = false;
-  int personal_bar_pos = 0;
-  int panel_pos = 0;
 
   double created_time = 0;
   double visited_time = 0;

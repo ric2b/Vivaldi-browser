@@ -9,10 +9,11 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "media/base/media_log.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
-#include "media/blink/buffered_data_source.h"
+#include "media/blink/buffered_data_source_host_impl.h"
 #include "media/blink/mock_webframeclient.h"
 #include "media/blink/mock_weburlloader.h"
 #include "media/blink/multibuffer_data_source.h"
@@ -316,14 +317,18 @@ class MultibufferDataSourceTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
   }
 
-  void ReceiveData(int size) {
+  void ReceiveDataLow(int size) {
     EXPECT_TRUE(url_loader());
     if (!url_loader())
       return;
     std::unique_ptr<char[]> data(new char[size]);
     memset(data.get(), 0xA5, size);  // Arbitrary non-zero value.
 
-    data_provider()->didReceiveData(url_loader(), data.get(), size, size);
+    data_provider()->didReceiveData(url_loader(), data.get(), size, size, size);
+  }
+
+  void ReceiveData(int size) {
+    ReceiveDataLow(size);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -1097,7 +1102,7 @@ TEST_F(MultibufferDataSourceTest, LocalResource_DeferStrategy) {
   CheckCapacityDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1115,7 +1120,7 @@ TEST_F(MultibufferDataSourceTest, LocalResource_PreloadMetadata_DeferStrategy) {
   CheckCapacityDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1133,7 +1138,7 @@ TEST_F(MultibufferDataSourceTest, ExternalResource_Reponse200_DeferStrategy) {
   CheckCapacityDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1153,7 +1158,7 @@ TEST_F(MultibufferDataSourceTest,
   CheckCapacityDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1171,17 +1176,17 @@ TEST_F(MultibufferDataSourceTest, ExternalResource_Reponse206_DeferStrategy) {
   CheckCapacityDefer();
   set_might_be_reused_from_cache_in_future(true);
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckNeverDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_NORMAL);
+      MultibufferDataSource::BUFFERING_STRATEGY_NORMAL);
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
 
   set_might_be_reused_from_cache_in_future(false);
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1202,16 +1207,16 @@ TEST_F(MultibufferDataSourceTest,
 
   set_might_be_reused_from_cache_in_future(true);
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckNeverDefer();
 
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_NORMAL);
+      MultibufferDataSource::BUFFERING_STRATEGY_NORMAL);
   data_source_->MediaIsPlaying();
   CheckCapacityDefer();
   set_might_be_reused_from_cache_in_future(false);
   data_source_->SetBufferingStrategy(
-      BufferedDataSourceInterface::BUFFERING_STRATEGY_AGGRESSIVE);
+      MultibufferDataSource::BUFFERING_STRATEGY_AGGRESSIVE);
   CheckCapacityDefer();
 
   Stop();
@@ -1257,9 +1262,39 @@ TEST_F(MultibufferDataSourceTest,
   EXPECT_FALSE(active_loader_allownull());
 }
 
+// This test tries to trigger an edge case where the read callback
+// never happens because the reader is deleted before that happens.
+TEST_F(MultibufferDataSourceTest,
+       ExternalResource_Response206_CancelAfterDefer2) {
+  set_preload(MultibufferDataSource::METADATA);
+  InitializeWith206Response();
+
+  EXPECT_EQ(MultibufferDataSource::METADATA, preload());
+  EXPECT_FALSE(is_local_source());
+
+  EXPECT_TRUE(data_source_->range_supported());
+  CheckReadThenDefer();
+
+  ReadAt(kDataSize);
+
+  data_source_->OnBufferingHaveEnough(false);
+  ASSERT_TRUE(active_loader());
+
+  EXPECT_CALL(*this, ReadCallback(kDataSize));
+  EXPECT_CALL(host_, AddBufferedByteRange(kDataSize, kDataSize + 2000));
+
+  ReceiveDataLow(2000);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2 + 2000));
+  ReceiveDataLow(kDataSize);
+
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(active_loader_allownull());
+}
+
 TEST_F(MultibufferDataSourceTest,
        ExternalResource_Response206_CancelAfterPlay) {
-  set_preload(BufferedDataSource::METADATA);
+  set_preload(MultibufferDataSource::METADATA);
   InitializeWith206Response();
 
   EXPECT_EQ(MultibufferDataSource::METADATA, preload());
@@ -1353,7 +1388,7 @@ TEST_F(MultibufferDataSourceTest, Http_RetryThenRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
   Respond(response_generator_->Generate206(kDataSize));
   ReceiveData(kDataSize);
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 3));
@@ -1369,7 +1404,7 @@ TEST_F(MultibufferDataSourceTest, Http_NotStreamingAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
 
   EXPECT_CALL(host_, SetTotalBytes(response_generator_->content_length()));
   Respond(response_generator_->Generate206(0));
@@ -1391,7 +1426,7 @@ TEST_F(MultibufferDataSourceTest, Http_RangeNotSatisfiableAfterRedirect) {
   blink::WebURLRequest request((GURL(kHttpDifferentPathUrl)));
   blink::WebURLResponse response((GURL(kHttpUrl)));
   response.setHTTPStatusCode(307);
-  data_provider()->willFollowRedirect(url_loader(), request, response);
+  data_provider()->willFollowRedirect(url_loader(), request, response, 0);
 
   EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize));
   Respond(response_generator_->GenerateResponse(416));
@@ -1422,6 +1457,28 @@ TEST_F(MultibufferDataSourceTest, LengthKnownAtEOF) {
   // Done loading, now we should know the length.
   EXPECT_TRUE(data_source_->GetSize(&len));
   EXPECT_EQ(kDataSize, len);
+  Stop();
+}
+
+TEST_F(MultibufferDataSourceTest, FileSizeLessThanBlockSize) {
+  Initialize(kHttpUrl, true);
+  GURL gurl(kHttpUrl);
+  blink::WebURLResponse response(gurl);
+  response.setHTTPStatusCode(200);
+  response.setHTTPHeaderField(
+      WebString::fromUTF8("Content-Length"),
+      WebString::fromUTF8(base::Int64ToString(kDataSize / 2)));
+  response.setExpectedContentLength(kDataSize / 2);
+  Respond(response);
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize / 2));
+  EXPECT_CALL(host_, SetTotalBytes(kDataSize / 2));
+  EXPECT_CALL(host_, AddBufferedByteRange(0, kDataSize * 2));
+  ReceiveData(kDataSize / 2);
+  FinishLoading();
+
+  int64_t len = 0;
+  EXPECT_TRUE(data_source_->GetSize(&len));
+  EXPECT_EQ(kDataSize / 2, len);
   Stop();
 }
 

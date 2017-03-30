@@ -16,6 +16,14 @@ static const GLenum valid_attachment_table[] = {
 };
 
 static const GLenum valid_attachment_table_es3[] = {
+    GL_DEPTH_STENCIL_ATTACHMENT,
+};
+
+static const GLenum valid_attachment_query_table[] = {
+    GL_COLOR_ATTACHMENT0, GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT,
+};
+
+static const GLenum valid_attachment_query_table_es3[] = {
     GL_DEPTH_STENCIL_ATTACHMENT, GL_COLOR_EXT, GL_DEPTH_EXT, GL_STENCIL_EXT,
 };
 
@@ -230,14 +238,14 @@ bool Validators::FaceTypeValidator::IsValid(const GLenum value) const {
   return false;
 };
 
-static const GLenum valid_frame_buffer_parameter_table[] = {
+static const GLenum valid_framebuffer_parameter_table[] = {
     GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
     GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME,
     GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LEVEL,
     GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_CUBE_MAP_FACE,
 };
 
-static const GLenum valid_frame_buffer_parameter_table_es3[] = {
+static const GLenum valid_framebuffer_parameter_table_es3[] = {
     GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE,
     GL_FRAMEBUFFER_ATTACHMENT_GREEN_SIZE,
     GL_FRAMEBUFFER_ATTACHMENT_BLUE_SIZE,
@@ -249,11 +257,11 @@ static const GLenum valid_frame_buffer_parameter_table_es3[] = {
     GL_FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER,
 };
 
-static const GLenum valid_frame_buffer_target_table[] = {
+static const GLenum valid_framebuffer_target_table[] = {
     GL_FRAMEBUFFER,
 };
 
-static const GLenum valid_frame_buffer_target_table_es3[] = {
+static const GLenum valid_framebuffer_target_table_es3[] = {
     GL_DRAW_FRAMEBUFFER, GL_READ_FRAMEBUFFER,
 };
 
@@ -1369,6 +1377,8 @@ static const GLenum valid_vertex_pointer_table[] = {
 
 Validators::Validators()
     : attachment(valid_attachment_table, arraysize(valid_attachment_table)),
+      attachment_query(valid_attachment_query_table,
+                       arraysize(valid_attachment_query_table)),
       bufferfi(valid_bufferfi_table, arraysize(valid_bufferfi_table)),
       bufferuiv(valid_bufferuiv_table, arraysize(valid_bufferuiv_table)),
       capability(valid_capability_table, arraysize(valid_capability_table)),
@@ -1379,10 +1389,10 @@ Validators::Validators()
       dst_blend_factor(valid_dst_blend_factor_table,
                        arraysize(valid_dst_blend_factor_table)),
       equation(valid_equation_table, arraysize(valid_equation_table)),
-      frame_buffer_parameter(valid_frame_buffer_parameter_table,
-                             arraysize(valid_frame_buffer_parameter_table)),
-      frame_buffer_target(valid_frame_buffer_target_table,
-                          arraysize(valid_frame_buffer_target_table)),
+      framebuffer_parameter(valid_framebuffer_parameter_table,
+                            arraysize(valid_framebuffer_parameter_table)),
+      framebuffer_target(valid_framebuffer_target_table,
+                         arraysize(valid_framebuffer_target_table)),
       g_l_state(valid_g_l_state_table, arraysize(valid_g_l_state_table)),
       get_tex_param_target(valid_get_tex_param_target_table,
                            arraysize(valid_get_tex_param_target_table)),
@@ -1450,6 +1460,8 @@ Validators::Validators()
 void Validators::UpdateValuesES3() {
   attachment.AddValues(valid_attachment_table_es3,
                        arraysize(valid_attachment_table_es3));
+  attachment_query.AddValues(valid_attachment_query_table_es3,
+                             arraysize(valid_attachment_query_table_es3));
   buffer_parameter.SetIsES3(true);
   buffer_target.SetIsES3(true);
   buffer_usage.SetIsES3(true);
@@ -1462,11 +1474,11 @@ void Validators::UpdateValuesES3() {
                              arraysize(valid_dst_blend_factor_table_es3));
   equation.AddValues(valid_equation_table_es3,
                      arraysize(valid_equation_table_es3));
-  frame_buffer_parameter.AddValues(
-      valid_frame_buffer_parameter_table_es3,
-      arraysize(valid_frame_buffer_parameter_table_es3));
-  frame_buffer_target.AddValues(valid_frame_buffer_target_table_es3,
-                                arraysize(valid_frame_buffer_target_table_es3));
+  framebuffer_parameter.AddValues(
+      valid_framebuffer_parameter_table_es3,
+      arraysize(valid_framebuffer_parameter_table_es3));
+  framebuffer_target.AddValues(valid_framebuffer_target_table_es3,
+                               arraysize(valid_framebuffer_target_table_es3));
   g_l_state.AddValues(valid_g_l_state_table_es3,
                       arraysize(valid_g_l_state_table_es3));
   get_tex_param_target.AddValues(

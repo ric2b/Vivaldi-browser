@@ -31,12 +31,15 @@ SSLHostStateDelegate::CertJudgment MockSSLHostStateDelegate::QueryPolicy(
   return SSLHostStateDelegate::ALLOWED;
 }
 
-void MockSSLHostStateDelegate::HostRanInsecureContent(const std::string& host,
-                                                      int pid) {}
+void MockSSLHostStateDelegate::HostRanInsecureContent(
+    const std::string& host,
+    int child_id,
+    InsecureContentType content_type) {}
 
 bool MockSSLHostStateDelegate::DidHostRunInsecureContent(
     const std::string& host,
-    int pid) const {
+    int child_id,
+    InsecureContentType content_type) const {
   return false;
 }
 

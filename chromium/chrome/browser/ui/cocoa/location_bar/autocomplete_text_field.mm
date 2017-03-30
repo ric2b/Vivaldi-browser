@@ -159,8 +159,7 @@ const CGFloat kAnimationDuration = 0.2;
     if (editor) {
       NSEvent* currentEvent = [NSApp currentEvent];
       if ([currentEvent type] == NSLeftMouseUp &&
-          ![editor selectedRange].length &&
-          (!observer_ || observer_->ShouldSelectAllOnMouseDown())) {
+          ![editor selectedRange].length) {
         [editor selectAll:nil];
       }
     }
@@ -466,7 +465,8 @@ const CGFloat kAnimationDuration = 0.2;
   BOOL doAccept = [super becomeFirstResponder];
   if (doAccept) {
     [[BrowserWindowController browserWindowControllerForView:self]
-        lockBarVisibilityForOwner:self withAnimation:YES delay:NO];
+        lockBarVisibilityForOwner:self
+                    withAnimation:YES];
 
     // Tells the observer that we get the focus.
     // But we can't call observer_->OnKillFocus() in resignFirstResponder:,
@@ -483,7 +483,8 @@ const CGFloat kAnimationDuration = 0.2;
   BOOL doResign = [super resignFirstResponder];
   if (doResign) {
     [[BrowserWindowController browserWindowControllerForView:self]
-        releaseBarVisibilityForOwner:self withAnimation:YES delay:YES];
+        releaseBarVisibilityForOwner:self
+                       withAnimation:YES];
   }
   return doResign;
 }

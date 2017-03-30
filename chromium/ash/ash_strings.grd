@@ -5,7 +5,7 @@ This file contains the strings for ash.
 -->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="grit/ash_strings.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -68,59 +68,59 @@ This file contains the strings for ash.
     <output filename="ash_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
   </outputs>
   <translations>
-    <file path="strings/ash_strings_am.xtb" lang="am" />
-    <file path="strings/ash_strings_ar.xtb" lang="ar" />
-    <file path="strings/ash_strings_bg.xtb" lang="bg" />
-    <file path="strings/ash_strings_bn.xtb" lang="bn" />
-    <file path="strings/ash_strings_ca.xtb" lang="ca" />
-    <file path="strings/ash_strings_cs.xtb" lang="cs" />
-    <file path="strings/ash_strings_da.xtb" lang="da" />
-    <file path="strings/ash_strings_de.xtb" lang="de" />
-    <file path="strings/ash_strings_el.xtb" lang="el" />
-    <file path="strings/ash_strings_en-GB.xtb" lang="en-GB" />
-    <file path="strings/ash_strings_es.xtb" lang="es" />
-    <file path="strings/ash_strings_es-419.xtb" lang="es-419" />
-    <file path="strings/ash_strings_et.xtb" lang="et" />
-    <file path="strings/ash_strings_fa.xtb" lang="fa" />
-    <file path="strings/ash_strings_fi.xtb" lang="fi" />
-    <file path="strings/ash_strings_fil.xtb" lang="fil" />
-    <file path="strings/ash_strings_fr.xtb" lang="fr" />
-    <file path="strings/ash_strings_gu.xtb" lang="gu" />
-    <file path="strings/ash_strings_hi.xtb" lang="hi" />
-    <file path="strings/ash_strings_hr.xtb" lang="hr" />
-    <file path="strings/ash_strings_hu.xtb" lang="hu" />
-    <file path="strings/ash_strings_id.xtb" lang="id" />
-    <file path="strings/ash_strings_it.xtb" lang="it" />
+    <file path="common/strings/ash_strings_am.xtb" lang="am" />
+    <file path="common/strings/ash_strings_ar.xtb" lang="ar" />
+    <file path="common/strings/ash_strings_bg.xtb" lang="bg" />
+    <file path="common/strings/ash_strings_bn.xtb" lang="bn" />
+    <file path="common/strings/ash_strings_ca.xtb" lang="ca" />
+    <file path="common/strings/ash_strings_cs.xtb" lang="cs" />
+    <file path="common/strings/ash_strings_da.xtb" lang="da" />
+    <file path="common/strings/ash_strings_de.xtb" lang="de" />
+    <file path="common/strings/ash_strings_el.xtb" lang="el" />
+    <file path="common/strings/ash_strings_en-GB.xtb" lang="en-GB" />
+    <file path="common/strings/ash_strings_es.xtb" lang="es" />
+    <file path="common/strings/ash_strings_es-419.xtb" lang="es-419" />
+    <file path="common/strings/ash_strings_et.xtb" lang="et" />
+    <file path="common/strings/ash_strings_fa.xtb" lang="fa" />
+    <file path="common/strings/ash_strings_fi.xtb" lang="fi" />
+    <file path="common/strings/ash_strings_fil.xtb" lang="fil" />
+    <file path="common/strings/ash_strings_fr.xtb" lang="fr" />
+    <file path="common/strings/ash_strings_gu.xtb" lang="gu" />
+    <file path="common/strings/ash_strings_hi.xtb" lang="hi" />
+    <file path="common/strings/ash_strings_hr.xtb" lang="hr" />
+    <file path="common/strings/ash_strings_hu.xtb" lang="hu" />
+    <file path="common/strings/ash_strings_id.xtb" lang="id" />
+    <file path="common/strings/ash_strings_it.xtb" lang="it" />
     <!-- The translation console uses 'iw' for Hebrew, but we use 'he'. -->
-    <file path="strings/ash_strings_iw.xtb" lang="he" />
-    <file path="strings/ash_strings_ja.xtb" lang="ja" />
-    <file path="strings/ash_strings_kn.xtb" lang="kn" />
-    <file path="strings/ash_strings_ko.xtb" lang="ko" />
-    <file path="strings/ash_strings_lt.xtb" lang="lt" />
-    <file path="strings/ash_strings_lv.xtb" lang="lv" />
-    <file path="strings/ash_strings_ml.xtb" lang="ml" />
-    <file path="strings/ash_strings_mr.xtb" lang="mr" />
-    <file path="strings/ash_strings_ms.xtb" lang="ms" />
-    <file path="strings/ash_strings_nl.xtb" lang="nl" />
-    <file path="strings/ash_strings_no.xtb" lang="no" />
-    <file path="strings/ash_strings_pl.xtb" lang="pl" />
-    <file path="strings/ash_strings_pt-BR.xtb" lang="pt-BR" />
-    <file path="strings/ash_strings_pt-PT.xtb" lang="pt-PT" />
-    <file path="strings/ash_strings_ro.xtb" lang="ro" />
-    <file path="strings/ash_strings_ru.xtb" lang="ru" />
-    <file path="strings/ash_strings_sk.xtb" lang="sk" />
-    <file path="strings/ash_strings_sl.xtb" lang="sl" />
-    <file path="strings/ash_strings_sr.xtb" lang="sr" />
-    <file path="strings/ash_strings_sv.xtb" lang="sv" />
-    <file path="strings/ash_strings_sw.xtb" lang="sw" />
-    <file path="strings/ash_strings_ta.xtb" lang="ta" />
-    <file path="strings/ash_strings_te.xtb" lang="te" />
-    <file path="strings/ash_strings_th.xtb" lang="th" />
-    <file path="strings/ash_strings_tr.xtb" lang="tr" />
-    <file path="strings/ash_strings_uk.xtb" lang="uk" />
-    <file path="strings/ash_strings_vi.xtb" lang="vi" />
-    <file path="strings/ash_strings_zh-CN.xtb" lang="zh-CN" />
-    <file path="strings/ash_strings_zh-TW.xtb" lang="zh-TW" />
+    <file path="common/strings/ash_strings_iw.xtb" lang="he" />
+    <file path="common/strings/ash_strings_ja.xtb" lang="ja" />
+    <file path="common/strings/ash_strings_kn.xtb" lang="kn" />
+    <file path="common/strings/ash_strings_ko.xtb" lang="ko" />
+    <file path="common/strings/ash_strings_lt.xtb" lang="lt" />
+    <file path="common/strings/ash_strings_lv.xtb" lang="lv" />
+    <file path="common/strings/ash_strings_ml.xtb" lang="ml" />
+    <file path="common/strings/ash_strings_mr.xtb" lang="mr" />
+    <file path="common/strings/ash_strings_ms.xtb" lang="ms" />
+    <file path="common/strings/ash_strings_nl.xtb" lang="nl" />
+    <file path="common/strings/ash_strings_no.xtb" lang="no" />
+    <file path="common/strings/ash_strings_pl.xtb" lang="pl" />
+    <file path="common/strings/ash_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="common/strings/ash_strings_pt-PT.xtb" lang="pt-PT" />
+    <file path="common/strings/ash_strings_ro.xtb" lang="ro" />
+    <file path="common/strings/ash_strings_ru.xtb" lang="ru" />
+    <file path="common/strings/ash_strings_sk.xtb" lang="sk" />
+    <file path="common/strings/ash_strings_sl.xtb" lang="sl" />
+    <file path="common/strings/ash_strings_sr.xtb" lang="sr" />
+    <file path="common/strings/ash_strings_sv.xtb" lang="sv" />
+    <file path="common/strings/ash_strings_sw.xtb" lang="sw" />
+    <file path="common/strings/ash_strings_ta.xtb" lang="ta" />
+    <file path="common/strings/ash_strings_te.xtb" lang="te" />
+    <file path="common/strings/ash_strings_th.xtb" lang="th" />
+    <file path="common/strings/ash_strings_tr.xtb" lang="tr" />
+    <file path="common/strings/ash_strings_uk.xtb" lang="uk" />
+    <file path="common/strings/ash_strings_vi.xtb" lang="vi" />
+    <file path="common/strings/ash_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="common/strings/ash_strings_zh-TW.xtb" lang="zh-TW" />
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
@@ -128,6 +128,7 @@ This file contains the strings for ash.
       change nontranslateable parts of the messages into placeholders (using the
       <ph> element).  You can also use the 'grit add' tool to help you identify
       nontranslateable parts and create placeholders for them. -->
+
       <!-- TODO(zork): Only include these in Aura builds -->
       <message name="IDS_ASH_SHELF_APP_LIST_TITLE" desc="The title used for the Ash App List in the Shelf">
         Apps
@@ -283,6 +284,9 @@ Press Ctrl+Alt+Z to disable.
       <message name="IDS_ASH_STATUS_TRAY_VOLUME" desc="The accessible text for the volume slider.">
         Volume
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_VOLUME_MUTE" desc="The accessible text for the volume mute button.">
+        Mute
+      </message>
 
       <message name="IDS_ASH_STATUS_TRAY_UNKNOWN_DISPLAY_NAME" desc="Label shown in tray for a display whose name is unknown.">
         Unknown Display
@@ -361,6 +365,28 @@ Press Ctrl+Alt+Z to disable.
 
       <message name="IDS_ASH_STATUS_TRAY_PREVIOUS_MENU" desc="The accessible text for header entries for detailed versions of status tray items.">
         Previous menu
+      </message>
+
+      <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_ACTION" desc="Title of the capture region action in the stylus tools (a pop-up panel next to the status tray). This causes a partial screenshot to be taken (the user selects an area of the screen to take a screenshot of).">
+        Capture region
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_TOAST" desc="Message content on the toast that appears when the user activates the capture region action in the stylus tools.">
+        Use the stylus to select a region
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_SCREEN_ACTION" desc="Title of the capture screen action in the stylus tools (a pop-up panel next to the status tray). Clicking this button takes a screenshot of the entire screen.">
+        Capture screen
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_CREATE_NOTE_ACTION" desc="Title of the capture screen action in the stylus tools (a pop-up panel next to the status tray). Clicking this opens up an application that the user can quickly jot a note down in.">
+        New note
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_LASER_POINTER_MODE" desc="Title of the laser pointer in the palette (a pop-up panel next to the status tray). Clicking this turns the mouse into a laser pointer. Additionally, the palette tray is closed.">
+        Laser pointer mode
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_MAGNIFIER_MODE" desc="Title of the magnification mode in the stylus tools. Clicking this button opens up a magnifier. The magnifier remains active until the user turns it off by tapping the same button again.">
+        Magnifying glass mode
+      </message>
+      <message name="IDS_ASH_STYLUS_TOOLS_TITLE" desc="The title of the stylus tools dialog in the ash shelf.">
+        Stylus tools
       </message>
 
       <message name="IDS_ASH_TOAST_DISMISS_BUTTON" desc="The text button shown in toasts to close the toast immediately without waiting timeout.">

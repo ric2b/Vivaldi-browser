@@ -141,6 +141,11 @@ public class BluetoothChooserDialog
                 new SpanInfo("<link>", "</link>",
                         new BluetoothClickableSpan(LinkType.EXPLAIN_BLUETOOTH, mActivity)));
 
+        SpannableString statusActive = SpanApplier.applySpans(
+                mActivity.getString(R.string.bluetooth_not_seeing_it),
+                new SpanInfo("<link>", "</link>",
+                        new BluetoothClickableSpan(LinkType.EXPLAIN_BLUETOOTH, mActivity)));
+
         SpannableString statusIdleSomeFound = SpanApplier.applySpans(
                 mActivity.getString(R.string.bluetooth_not_seeing_it_idle_some_found),
                 new SpanInfo("<link1>", "</link1>",
@@ -149,7 +154,7 @@ public class BluetoothChooserDialog
                         new BluetoothClickableSpan(LinkType.RESTART_SEARCH, mActivity)));
 
         ItemChooserDialog.ItemChooserLabels labels =
-                new ItemChooserDialog.ItemChooserLabels(title, searching, noneFound,
+                new ItemChooserDialog.ItemChooserLabels(title, searching, noneFound, statusActive,
                         statusIdleNoneFound, statusIdleSomeFound, positiveButton);
         mItemChooserDialog = new ItemChooserDialog(mActivity, this, labels);
 
@@ -195,10 +200,9 @@ public class BluetoothChooserDialog
 
     // Returns true if Location Services is on and Chrome has permission to see the user's location.
     private boolean checkLocationServicesAndPermission() {
-        final boolean havePermission =
-                LocationUtils.getInstance().hasAndroidLocationPermission(mActivity);
+        final boolean havePermission = LocationUtils.getInstance().hasAndroidLocationPermission();
         final boolean locationServicesOn =
-                LocationUtils.getInstance().isSystemLocationSettingEnabled(mActivity);
+                LocationUtils.getInstance().isSystemLocationSettingEnabled();
 
         if (!havePermission
                 && !mWindowAndroid.canRequestPermission(
@@ -318,8 +322,7 @@ public class BluetoothChooserDialog
     @CalledByNative
     private static BluetoothChooserDialog create(WindowAndroid windowAndroid, String origin,
             int securityLevel, long nativeBluetoothChooserDialogPtr) {
-        if (!LocationUtils.getInstance().hasAndroidLocationPermission(
-                    windowAndroid.getActivity().get())
+        if (!LocationUtils.getInstance().hasAndroidLocationPermission()
                 && !windowAndroid.canRequestPermission(
                            Manifest.permission.ACCESS_COARSE_LOCATION)) {
             // If we can't even ask for enough permission to scan for Bluetooth devices, don't open
@@ -334,8 +337,8 @@ public class BluetoothChooserDialog
 
     @VisibleForTesting
     @CalledByNative
-    void addDevice(String deviceId, String deviceName) {
-        mItemChooserDialog.addItemToList(
+    void addOrUpdateDevice(String deviceId, String deviceName) {
+        mItemChooserDialog.addOrUpdateItem(
                 new ItemChooserDialog.ItemChooserRow(deviceId, deviceName));
     }
 

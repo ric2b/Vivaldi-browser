@@ -1,0 +1,139 @@
+import("//vivaldi/vivaldi_init_settings.gni")
+
+assert(is_vivaldi)
+
+import("//build/config/compiler/compiler.gni")
+import("//build/config/features.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/ui.gni")
+import("//build_overrides/v8.gni")
+import("//media/media_options.gni")
+import("//third_party/openh264/openh264_args.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
+
+import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/compile_updates.gni")
+import("//vivaldi/gn/source_updates.gni")
+
+import("//vivaldi/gn/disabled_targets.gni")
+
+import("//vivaldi/gn/product_updates.gni")
+import("//vivaldi/gn/deps_updates.gni")
+
+group("All") {
+  testonly = true
+
+  deps = [
+    ":standalone",
+    ":vivaldi",
+    "//base:base_unittests",
+    "//cc:cc_unittests",
+    "//chrome/test:browser_tests",
+    "//chrome/test:interactive_ui_tests",
+    "//chrome/test:sync_integration_tests",
+    "//chrome/test:unit_tests",
+    "//chrome/test/chromedriver:chromedriver_unittests",
+    "//components:components_unittests",
+    "//content/shell:content_shell",
+    "//content/test:content_browsertests",
+    "//content/test:content_unittests",
+    "//crypto:crypto_unittests",
+    "//device:device_unittests",
+    "//google_apis:google_apis_unittests",
+
+    #"//gpu/gles2_conform_support:gles2_conform_test",
+    "//gpu:gpu_unittests",
+    "//ipc:ipc_tests",
+
+    #"//gpu/ipc/service:gpu_ipc_service_unittests",
+    "//jingle:jingle_unittests",
+    "//media:media_unittests",
+    "//media/cast:cast_unittests",
+    "//net:net_unittests",
+    "//ppapi:ppapi_unittests",
+    "//sql:sql_unittests",
+    "//third_party/cacheinvalidation:cacheinvalidation_unittests",
+    "//ui/gfx:gfx_unittests",
+    "//url:url_unittests",
+  ]
+  if (is_win) {
+    deps += [
+      "//chrome/installer/mini_installer",
+      "//courgette:courgette",
+      "//courgette:courgette_unittests",
+      "//sandbox/win:sbox_integration_tests",
+      "//sandbox/win:sbox_unittests",
+      "//sandbox/win:sbox_validation_tests",
+    ]
+  } else if (!is_linux || !is_component_build) {
+    deps += [ "//chrome/installer" ]
+  }
+  if (is_mac) {
+    deps += [
+      "//third_party/ocmock",
+      "//ui/app_list:app_list_unittests",
+      "//ui/message_center:message_center_unittests",
+      "//vivaldi/installer/mac",
+    ]
+  }
+  if (is_linux) {
+    deps += [
+      "//courgette:courgette_unittests",
+      "//sandbox/linux:chrome_sandbox",
+      "//sandbox/linux:sandbox_linux_unittests",
+    ]
+    if (use_dbus) {
+      deps += [
+        "//dbus:dbus_test_server",
+        "//dbus:dbus_unittests",
+      ]
+    }
+    if (!is_component_build) {
+      deps += [ "//chrome/installer/linux:linux_packages_all" ]
+    }
+    if (enable_ipc_fuzzer) {
+      deps += [ "//tools/ipc_fuzzer:ipc_fuzzer_all" ]
+    }
+    if (use_dbus) {
+      deps += [ "//dbus" ]
+    }
+  }
+  if (use_aura) {
+    deps += [
+      "//ash:ash_unittests",
+      "//ui/aura:aura_unittests",
+      "//ui/compositor:compositor_unittests",
+    ]
+    if (!is_chromecast) {
+      deps += [ "//ui/views:views_unittests" ]
+    }
+  }
+  if (enable_basic_printing && enable_print_preview) {
+    deps += [ "//printing:printing_unittests" ]
+  }
+  if (is_win) {
+    deps += ["//vivaldi/testing:testing"]
+  }
+}
+
+group("vivaldi") {
+  if (is_win) {
+    output_name = "vivaldi.exe"
+  }
+  deps = [
+    "//chrome:chrome",
+  ]
+  if (is_mac || is_win) {
+    deps += [ "//third_party/crashpad/crashpad/handler:crashpad_handler" ]
+  }
+}
+
+copy("standalone") {
+  sources = [
+    "testdata/stp.viv",
+  ]
+  outputs = [
+    "$root_build_dir/stp.viv",
+  ]
+}

@@ -28,6 +28,11 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/test/material_design_controller_test_api.h"
 
+#if defined(OS_ANDROID)
+#include "content/browser/renderer_host/context_provider_factory_impl_android.h"
+#include "content/test/mock_gpu_channel_establish_factory.h"
+#endif
+
 #if defined(OS_WIN)
 #include "ui/base/win/scoped_ole_initializer.h"
 #endif
@@ -198,6 +203,11 @@ void RenderViewHostTestHarness::SetUp() {
 #if !defined(OS_ANDROID)
   ImageTransportFactory::InitializeForUnitTests(
       base::WrapUnique(new NoTransportImageTransportFactory));
+#else
+  gpu_channel_factory_ = base::MakeUnique<MockGpuChannelEstablishFactory>();
+  ContextProviderFactoryImpl::Initialize(gpu_channel_factory_.get());
+  ui::ContextProviderFactory::SetInstance(
+      ContextProviderFactoryImpl::GetInstance());
 #endif
 #if defined(USE_AURA)
   ui::ContextFactory* context_factory =
@@ -263,6 +273,10 @@ void RenderViewHostTestHarness::TearDown() {
     // RenderWidgetHostView holds on to a reference to SurfaceManager, so it
     // must be shut down before the ImageTransportFactory.
     ImageTransportFactory::Terminate();
+#else
+  ui::ContextProviderFactory::SetInstance(nullptr);
+  ContextProviderFactoryImpl::Terminate();
+  gpu_channel_factory_.reset();
 #endif
 }
 

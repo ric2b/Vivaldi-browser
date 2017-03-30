@@ -17,7 +17,6 @@
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
-#include "chrome/browser/push_messaging/push_messaging_permission_context.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
 #include "chrome/browser/services/gcm/fake_gcm_profile_service.h"
@@ -90,8 +89,6 @@ class PushMessagingServiceTest : public ::testing::Test {
         HostContentSettingsMapFactory::GetForProfile(&profile_);
     host_content_settings_map->SetDefaultContentSetting(
         CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
-    host_content_settings_map->SetDefaultContentSetting(
-        CONTENT_SETTINGS_TYPE_PUSH_MESSAGING, CONTENT_SETTING_ALLOW);
 
     // Override the GCM Profile service so that we can send fake messages.
     gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactory(

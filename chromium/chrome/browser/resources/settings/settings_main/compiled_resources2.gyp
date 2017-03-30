@@ -4,20 +4,17 @@
 {
   'targets': [
     {
-      'target_name': 'settings_main_rendered',
-      'dependencies': [
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
-      ],
-      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
-    },
-    {
       'target_name': 'settings_main',
       'dependencies': [
-        'settings_main_rendered',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:promise_resolver',
+        '../compiled_resources2.gyp:route',
+        '../compiled_resources2.gyp:search_settings',
+        '../about_page/compiled_resources2.gyp:about_page',
+        '../advanced_page/compiled_resources2.gyp:advanced_page',
+        '../basic_page/compiled_resources2.gyp:basic_page',
         '../settings_page/compiled_resources2.gyp:main_page_behavior',
-        '../settings_page/compiled_resources2.gyp:settings_router',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '../settings_page/compiled_resources2.gyp:settings_page_visibility',
+        '../settings_ui/compiled_resources2.gyp:settings_ui_types',
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

@@ -6,6 +6,7 @@
 
 #include "base/run_loop.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/safe_browsing_db/util.h"
@@ -78,7 +79,7 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
   }
 
   void AddToWhitelist(SafeBrowsingUIManager::UnsafeResource resource) {
-    ui_manager_->AddToWhitelist(resource);
+    ui_manager_->AddToWhitelistUrlSet(resource, false);
   }
 
   SafeBrowsingUIManager::UnsafeResource MakeUnsafeResource(
@@ -87,9 +88,10 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
     SafeBrowsingUIManager::UnsafeResource resource;
     resource.url = GURL(url);
     resource.is_subresource = is_subresource;
-    resource.render_process_host_id =
-        web_contents()->GetRenderProcessHost()->GetID();
-    resource.render_frame_id = web_contents()->GetMainFrame()->GetRoutingID();
+    resource.web_contents_getter =
+        SafeBrowsingUIManager::UnsafeResource::GetWebContentsGetter(
+            web_contents()->GetRenderProcessHost()->GetID(),
+            web_contents()->GetMainFrame()->GetRoutingID());
     resource.threat_type = SB_THREAT_TYPE_URL_MALWARE;
     return resource;
   }
@@ -205,7 +207,7 @@ TEST_F(SafeBrowsingUIManagerTest, UICallbackProceed) {
       base::Bind(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
                  base::Unretained(&waiter));
   resource.callback_thread =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
   std::vector<SafeBrowsingUIManager::UnsafeResource> resources;
   resources.push_back(resource);
   SimulateBlockingPageDone(resources, true);
@@ -223,7 +225,7 @@ TEST_F(SafeBrowsingUIManagerTest, UICallbackDontProceed) {
       base::Bind(&SafeBrowsingCallbackWaiter::OnBlockingPageDone,
                  base::Unretained(&waiter));
   resource.callback_thread =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
   std::vector<SafeBrowsingUIManager::UnsafeResource> resources;
   resources.push_back(resource);
   SimulateBlockingPageDone(resources, false);
@@ -241,7 +243,7 @@ TEST_F(SafeBrowsingUIManagerTest, IOCallbackProceed) {
       base::Bind(&SafeBrowsingCallbackWaiter::OnBlockingPageDoneOnIO,
                  base::Unretained(&waiter));
   resource.callback_thread =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   std::vector<SafeBrowsingUIManager::UnsafeResource> resources;
   resources.push_back(resource);
   SimulateBlockingPageDone(resources, true);
@@ -259,7 +261,7 @@ TEST_F(SafeBrowsingUIManagerTest, IOCallbackDontProceed) {
       base::Bind(&SafeBrowsingCallbackWaiter::OnBlockingPageDoneOnIO,
                  base::Unretained(&waiter));
   resource.callback_thread =
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   std::vector<SafeBrowsingUIManager::UnsafeResource> resources;
   resources.push_back(resource);
   SimulateBlockingPageDone(resources, false);

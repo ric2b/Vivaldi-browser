@@ -10,12 +10,12 @@
       'type': 'static_library',
       'dependencies': [
         '../base/base.gyp:base',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../ui/gfx/gfx.gyp:gfx',
         'bookmarks_browser',
         'favicon_core',
         'history_core_browser',
-        'sync_driver',
+        'sync.gyp:sync',
         'undo_component',
       ],
       'include_dirs': [

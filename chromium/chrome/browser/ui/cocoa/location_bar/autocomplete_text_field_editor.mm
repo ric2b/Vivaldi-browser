@@ -168,12 +168,6 @@ BOOL ThePasteboardIsTooDamnBig() {
   [self delete:nil];
 }
 
-- (void)showURL:(id)sender {
-  AutocompleteTextFieldObserver* observer = [self observer];
-  DCHECK(observer);
-  observer->ShowURL();
-}
-
 // This class assumes that the delegate is an AutocompleteTextField.
 // Enforce that assumption.
 - (AutocompleteTextField*)delegate {
@@ -308,16 +302,6 @@ BOOL ThePasteboardIsTooDamnBig() {
 
     [menu addItem:[NSMenuItem separatorItem]];
 
-    // Display a "Show URL" option if search term replacement is active.
-    if (observer->ShouldEnableShowURL()) {
-      NSString* showURLLabel =
-          l10n_util::GetNSStringWithFixup(IDS_SHOW_URL_MAC);
-      DCHECK([showURLLabel length]);
-      [menu addItemWithTitle:showURLLabel
-                      action:@selector(showURL:)
-               keyEquivalent:@""];
-    }
-
     NSString* searchEngineLabel =
         l10n_util::GetNSStringWithFixup(IDS_EDIT_SEARCH_ENGINES);
     DCHECK([searchEngineLabel length]);
@@ -340,7 +324,8 @@ BOOL ThePasteboardIsTooDamnBig() {
     // responder dance between the field and the field editor is a little
     // weird.)
     [[BrowserWindowController browserWindowControllerForView:field]
-        lockBarVisibilityForOwner:field withAnimation:YES delay:NO];
+        lockBarVisibilityForOwner:field
+                    withAnimation:YES];
   }
   return doAccept;
 }
@@ -353,7 +338,8 @@ BOOL ThePasteboardIsTooDamnBig() {
   if (doResign && field) {
     // Give the text field ownership of the visibility lock.
     [[BrowserWindowController browserWindowControllerForView:field]
-        releaseBarVisibilityForOwner:field withAnimation:YES delay:YES];
+        releaseBarVisibilityForOwner:field
+                       withAnimation:YES];
 
     AutocompleteTextFieldObserver* observer = [self observer];
     if (observer)
@@ -585,11 +571,6 @@ BOOL ThePasteboardIsTooDamnBig() {
     AutocompleteTextFieldObserver* observer = [self observer];
     DCHECK(observer);
     return observer->CanPasteAndGo();
-  }
-  if ([item action] == @selector(showURL:)) {
-    AutocompleteTextFieldObserver* observer = [self observer];
-    DCHECK(observer);
-    return observer->ShouldEnableShowURL();
   }
   return [super validateMenuItem:item];
 }

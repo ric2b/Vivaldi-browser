@@ -32,7 +32,8 @@ NavigationHandle::CreateNavigationHandleForTesting(
           true,   // is_renderer_initiated
           false,  // is_synchronous
           false,  // is_srcdoc
-          base::TimeTicks::Now(), 0);
+          base::TimeTicks::Now(), 0,
+          false);  // started_from_context_menu
   return std::unique_ptr<NavigationHandle>(std::move(handle_impl));
 }
 

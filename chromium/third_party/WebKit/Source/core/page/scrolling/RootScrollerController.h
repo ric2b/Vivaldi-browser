@@ -12,8 +12,8 @@ namespace blink {
 
 class Document;
 class Element;
-class OverscrollController;
-class TopControls;
+class GraphicsLayer;
+class ScrollStateCallback;
 class ViewportScrollCallback;
 
 // Manages the root scroller associated with a given document. The root scroller
@@ -38,23 +38,14 @@ class ViewportScrollCallback;
 class CORE_EXPORT RootScrollerController
     : public GarbageCollected<RootScrollerController> {
 public:
-    // Creates a RootScrollerController for the given document. An optional
-    // ViewportScrollCallback can be provided. If it is, RootScrollerController
-    // will ensure that the effectiveRootScroller element always has this set as
-    // the apply scroll callback.
-    static RootScrollerController* create(
-        Document& document,
-        ViewportScrollCallback* applyScrollCallback)
+    // Creates a RootScrollerController for the given document. You should use
+    // setViewportScrollCallback to provide this class with a scroll callback
+    // that RootScrollerController will keep applied to the current RootScroller
+    // so that special actions can occur on scrolling.
+    static RootScrollerController* create(Document& document)
     {
-        return new RootScrollerController(document, applyScrollCallback);
+        return new RootScrollerController(document);
     }
-
-    // Creates an apply scroll callback that handles viewport actions like
-    // TopControls movement and Overscroll. The TopControls and
-    // OverscrollController are given to the ViewportScrollCallback but are not
-    // owned or kept alive by it.
-    static ViewportScrollCallback* createViewportApplyScroll(
-        TopControls*, OverscrollController*);
 
     DECLARE_TRACE();
 
@@ -81,29 +72,50 @@ public:
     // replaced by the defualt root scroller.
     void didUpdateLayout();
 
-    // TODO(bokan): Temporarily exposed to allow ScrollCustomization to
+    // This class needs to be informed of changes to compositing so that it can
+    // update the compositor when the effective root scroller changes.
+    void didUpdateCompositing();
+
+    // This class needs to be informed when the document has been attached to a
+    // FrameView so that we can initialize the viewport scroll callback.
+    void didAttachDocument();
+
+    GraphicsLayer* rootScrollerLayer();
+
+    // TODO(bokan): Temporarily needed to allow ScrollCustomization to
     // differentiate between real custom callback and the built-in viewport
     // apply scroll.
-    const ViewportScrollCallback* viewportScrollCallback()
-    {
-        return m_viewportApplyScroll;
-    }
+    bool isViewportScrollCallback(const ScrollStateCallback*) const;
 
 private:
-    RootScrollerController(Document&, ViewportScrollCallback*);
+    RootScrollerController(Document&);
 
     Element* defaultEffectiveRootScroller();
 
     // Ensures the effective root scroller is currently valid and replaces it
     // with the default if not.
     void updateEffectiveRootScroller();
-    void moveViewportApplyScroll(Element* target);
+
+    // Called only from the top Document's RootScrollerController. Ensures that
+    // the element that should be used as the root scroller on the page has the
+    // m_viewportApplyScroll callback set on it.
+    void setViewportApplyScrollOnRootScroller();
 
     WeakMember<Document> m_document;
     Member<ViewportScrollCallback> m_viewportApplyScroll;
 
     WeakMember<Element> m_rootScroller;
+
+    // The element currently being used as the root scroller. If
+    // m_viewportApplyScroll has been set, this element is guaranteed to have it
+    // set as its applyScroll callback. This can be nullptr during
+    // initialization and will not be set until m_viewportApplyScroll is
+    // provided.
     WeakMember<Element> m_effectiveRootScroller;
+
+    // Tracks which element currently has the m_viewportApplyScroll set to it.
+    // This will only ever be set on the top Document's RootScrollerController.
+    WeakMember<Element> m_currentViewportApplyScrollHost;
 };
 
 } // namespace blink

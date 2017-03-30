@@ -8,6 +8,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -16,10 +17,12 @@
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/ntp_snippets/ntp_snippet.h"
+#include "components/ntp_snippets/request_throttler.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 
+class PrefService;
 class SigninManagerBase;
 
 namespace base {
@@ -44,7 +47,19 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
   using ParseJSONCallback = base::Callback<
       void(const std::string&, const SuccessCallback&, const ErrorCallback&)>;
 
-  using OptionalSnippets = base::Optional<NTPSnippet::PtrVector>;
+  struct FetchedCategory {
+    Category category;
+    base::string16 localized_title;  // Ignored for non-server categories.
+    NTPSnippet::PtrVector snippets;
+
+    FetchedCategory(Category c);
+    FetchedCategory(FetchedCategory&&);             // = default, in .cc
+    ~FetchedCategory();                             // = default, in .cc
+    FetchedCategory& operator=(FetchedCategory&&);  // = default, in .cc
+  };
+  using FetchedCategoriesVector = std::vector<FetchedCategory>;
+  using OptionalSnippets = base::Optional<FetchedCategoriesVector>;
+
   // |snippets| contains parsed snippets if a fetch succeeded. If problems
   // occur, |snippets| contains no value (no actual vector in base::Optional).
   // Error details can be retrieved using last_status().
@@ -62,6 +77,8 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
     JSON_PARSE_ERROR,
     INVALID_SNIPPET_CONTENT_ERROR,
     OAUTH_TOKEN_ERROR,
+    INTERACTIVE_QUOTA_ERROR,
+    NON_INTERACTIVE_QUOTA_ERROR,
     RESULT_MAX
   };
 
@@ -76,6 +93,8 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
       SigninManagerBase* signin_manager,
       OAuth2TokenService* oauth2_token_service,
       scoped_refptr<net::URLRequestContextGetter> url_request_context_getter,
+      PrefService* pref_service,
+      CategoryFactory* category_factory,
       const ParseJSONCallback& parse_json_callback,
       bool is_stable_channel);
   ~NTPSnippetsFetcher() override;
@@ -85,14 +104,23 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
   void SetCallback(const SnippetsAvailableCallback& callback);
 
   // Fetches snippets from the server. |hosts| restricts the results to a set of
-  // hosts, e.g. "www.google.com". An empty host set produces an error.
+  // hosts, e.g. "www.google.com". If host restrictions are enabled, an empty
+  // host set produces an error without issuing a fetch.
+  //
+  // |excluded_ids| will be reported to the server; the server should not return
+  // suggestions with those IDs.
   //
   // If an ongoing fetch exists, it will be cancelled and a new one started,
   // without triggering an additional callback (i.e. not noticeable by
   // subscriber of SetCallback()).
+  //
+  // Fetches snippets only if the daily quota not exceeded, unless
+  // |interactive_request| is set to true (use only for user-initiated fetches).
   void FetchSnippetsFromHosts(const std::set<std::string>& hosts,
                               const std::string& language_code,
-                              int count);
+                              const std::set<std::string>& excluded_ids,
+                              int count,
+                              bool interactive_request);
 
   // Debug string representing the status/result of the last fetch attempt.
   const std::string& last_status() const { return last_status_; }
@@ -104,6 +132,9 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
 
   // Returns the personalization setting of the fetcher.
   Personalization personalization() const { return personalization_; }
+
+  // Returns the URL endpoint used by the fetcher.
+  GURL fetch_url() const { return fetch_url_; }
 
   // Does the fetcher use host restrictions?
   bool UsesHostRestrictions() const;
@@ -122,6 +153,7 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
  private:
   FRIEND_TEST_ALL_PREFIXES(NTPSnippetsFetcherTest, BuildRequestAuthenticated);
   FRIEND_TEST_ALL_PREFIXES(NTPSnippetsFetcherTest, BuildRequestUnauthenticated);
+  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsFetcherTest, BuildRequestExcludedIds);
 
   enum FetchAPI {
     CHROME_READER_API,
@@ -134,7 +166,9 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
     bool only_return_personalized_results;
     std::string user_locale;
     std::set<std::string> host_restricts;
+    std::set<std::string> excluded_ids;
     int count_to_fetch;
+    bool interactive_request;
 
     RequestParams();
     ~RequestParams();
@@ -163,6 +197,8 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
   // URLFetcherDelegate implementation.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
 
+  bool JsonToSnippets(const base::Value& parsed,
+                      FetchedCategoriesVector* categories);
   void OnJsonParsed(std::unique_ptr<base::Value> parsed);
   void OnJsonError(const std::string& error);
   void FetchFinished(OptionalSnippets snippets,
@@ -178,6 +214,7 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
   // Holds the URL request context.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
+  CategoryFactory* const category_factory_;
   const ParseJSONCallback parse_json_callback_;
   base::TimeTicks fetch_start_time_;
   std::string last_status_;
@@ -185,6 +222,9 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
 
   // Hosts to restrict the snippets to.
   std::set<std::string> hosts_;
+
+  // Snippets to exclude from the results.
+  std::set<std::string> excluded_ids_;
 
   // Count of snippets to fetch.
   int count_to_fetch_;
@@ -211,8 +251,17 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
   // Should we apply host restriction? It is loaded from variation parameters.
   bool use_host_restriction_;
 
+  // Is the request user initiated?
+  bool interactive_request_;
+
   // Allow for an injectable tick clock for testing.
   std::unique_ptr<base::TickClock> tick_clock_;
+
+  // Request throttler for limiting requests.
+  RequestThrottler request_throttler_;
+
+  // When a token request gets canceled, we want to retry once.
+  bool oauth_token_retried_;
 
   base::WeakPtrFactory<NTPSnippetsFetcher> weak_ptr_factory_;
 

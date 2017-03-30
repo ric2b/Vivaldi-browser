@@ -40,6 +40,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/network/ResourceError.h"
+#include "platform/weborigin/Referrer.h"
 #include "wtf/Forward.h"
 #include "wtf/WeakPtr.h"
 #include "wtf/text/WTFString.h"
@@ -54,10 +55,10 @@ class SecurityOrigin;
 class ThreadableLoaderClient;
 
 class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, private RawResourceClient {
-    USING_FAST_MALLOC(DocumentThreadableLoader);
+    USING_GARBAGE_COLLECTED_MIXIN(DocumentThreadableLoader);
     public:
         static void loadResourceSynchronously(Document&, const ResourceRequest&, ThreadableLoaderClient&, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
-        static std::unique_ptr<DocumentThreadableLoader> create(Document&, ThreadableLoaderClient*, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
+        static DocumentThreadableLoader* create(Document&, ThreadableLoaderClient*, const ThreadableLoaderOptions&, const ResourceLoaderOptions&);
         ~DocumentThreadableLoader() override;
 
         void start(const ResourceRequest&) override;
@@ -67,6 +68,8 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, priv
         // |this| may be dead after calling this method in async mode.
         void cancel() override;
         void setDefersLoading(bool);
+
+        DECLARE_TRACE();
 
     private:
         enum BlockingBehavior {
@@ -113,7 +116,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, priv
         void handleSuccessfulFinish(unsigned long identifier, double finishTime);
 
         // |this| may be dead after calling this method.
-        void didTimeout(Timer<DocumentThreadableLoader>*);
+        void didTimeout(TimerBase*);
         // Calls the appropriate loading method according to policy and data
         // about origin. Only for handling the initial load (including fallback
         // after consulting ServiceWorker).
@@ -148,11 +151,12 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, priv
         // returns allowCredentials value of m_resourceLoaderOptions.
         StoredCredentials effectiveAllowCredentials() const;
 
-        // TODO(oilpan): DocumentThreadableLoader used to be a ResourceOwner,
-        // but ResourceOwner was moved onto the oilpan heap before
-        // DocumentThreadableLoader was ready. When DocumentThreadableLoader
-        // moves onto the oilpan heap, make it a ResourceOwner again and remove
-        // this re-implementation of ResourceOwner.
+        // TODO(hiroshige): After crbug.com/633696 is fixed,
+        // - Remove RawResourceClientStateChecker logic,
+        // - Make DocumentThreadableLoader to be a ResourceOwner and remove
+        //   this re-implementation of ResourceOwner, and
+        // - Consider re-applying RawResourceClientStateChecker in a more
+        //   general fashion (crbug.com/640291).
         RawResource* resource() const { return m_resource.get(); }
         void clearResource() { setResource(nullptr); }
         void setResource(RawResource* newResource)
@@ -160,22 +164,25 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, priv
             if (newResource == m_resource)
                 return;
 
-            if (RawResource* oldResource = m_resource.release())
+            if (RawResource* oldResource = m_resource.release()) {
+                m_checker.willRemoveClient();
                 oldResource->removeClient(this);
+            }
 
             if (newResource) {
                 m_resource = newResource;
+                m_checker.willAddClient();
                 m_resource->addClient(this);
             }
         }
-        Persistent<RawResource> m_resource;
+        Member<RawResource> m_resource;
         // End of ResourceOwner re-implementation, see above.
 
-        SecurityOrigin* getSecurityOrigin() const;
+        const SecurityOrigin* getSecurityOrigin() const;
         Document& document() const;
 
         ThreadableLoaderClient* m_client;
-        WeakPersistent<Document> m_document;
+        Member<Document> m_document;
 
         const ThreadableLoaderOptions m_options;
         // Some items may be overridden by m_forceDoNotAllowStoredCredentials
@@ -224,6 +231,13 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader, priv
 
         WebURLRequest::FetchRedirectMode m_redirectMode;
 
+        // Holds the referrer after a redirect response was
+        // received. This referrer is used to populate the HTTP Referer
+        // header when following the redirect.
+        bool m_didRedirect;
+        Referrer m_referrerAfterRedirect;
+
+        RawResourceClientStateChecker m_checker;
         WeakPtrFactory<DocumentThreadableLoader> m_weakFactory;
     };
 

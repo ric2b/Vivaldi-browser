@@ -59,7 +59,7 @@ bool RawSignDigestWithPrivateKey(jobject private_key_ref,
   // Invoke platform API
   ScopedJavaLocalRef<jbyteArray> signature_ref =
       Java_AndroidKeyStore_rawSignDigestWithPrivateKey(env, private_key_ref,
-                                                       digest_ref.obj());
+                                                       digest_ref);
   if (HasException(env) || signature_ref.is_null())
     return false;
 
@@ -95,10 +95,6 @@ ScopedJavaLocalRef<jobject> GetOpenSSLEngineForPrivateKey(
   ScopedJavaLocalRef<jobject> engine =
       Java_AndroidKeyStore_getOpenSSLEngineForPrivateKey(env, private_key_ref);
   return engine;
-}
-
-bool RegisterKeyStore(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

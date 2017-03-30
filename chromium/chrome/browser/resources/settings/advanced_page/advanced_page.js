@@ -10,31 +10,13 @@
 Polymer({
   is: 'settings-advanced-page',
 
-  behaviors: [SettingsPageVisibility, RoutableBehavior],
+  behaviors: [SettingsPageVisibility, MainPageBehavior],
 
   properties: {
-    /**
-     * Preferences state.
-     */
+    /** Preferences state. */
     prefs: {
       type: Object,
       notify: true,
     },
-
-    /**
-     * The current active route.
-     * @type {SettingsRoute}
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
   },
-
-  /**
-   * @type {string} Selector to get the sections.
-   * TODO(michaelpg): replace duplicate docs with @override once b/24294625
-   * is fixed.
-   */
-  sectionSelector: 'settings-section',
 });

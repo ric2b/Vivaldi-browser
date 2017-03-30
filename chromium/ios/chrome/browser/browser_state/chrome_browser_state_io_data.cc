@@ -32,7 +32,7 @@
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync_driver/pref_names.h"
+#include "components/sync/driver/pref_names.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
@@ -268,7 +268,7 @@ net::URLRequestContext* ChromeBrowserStateIOData::GetIsolatedAppRequestContext(
     const base::FilePath& partition_path) const {
   DCHECK(initialized_);
   AppRequestContext* context = nullptr;
-  if (ContainsKey(app_request_context_map_, partition_path)) {
+  if (base::ContainsKey(app_request_context_map_, partition_path)) {
     context = app_request_context_map_[partition_path];
   } else {
     context = AcquireIsolatedAppRequestContext(main_context);
@@ -281,7 +281,7 @@ net::URLRequestContext* ChromeBrowserStateIOData::GetIsolatedAppRequestContext(
 void ChromeBrowserStateIOData::SetCookieStoreForPartitionPath(
     std::unique_ptr<net::CookieStore> cookie_store,
     const base::FilePath& partition_path) {
-  DCHECK(ContainsKey(app_request_context_map_, partition_path));
+  DCHECK(base::ContainsKey(app_request_context_map_, partition_path));
   app_request_context_map_[partition_path]->SetCookieStore(
       std::move(cookie_store));
 }
@@ -401,18 +401,18 @@ ChromeBrowserStateIOData::SetUpJobFactoryDefaults(
   // ChromeBrowserStateIOData::IsHandledProtocol().
   bool set_protocol = job_factory->SetProtocolHandler(
       url::kFileScheme,
-      base::WrapUnique(new net::FileProtocolHandler(
+      base::MakeUnique<net::FileProtocolHandler>(
           web::WebThread::GetBlockingPool()->GetTaskRunnerWithShutdownBehavior(
-              base::SequencedWorkerPool::SKIP_ON_SHUTDOWN))));
+              base::SequencedWorkerPool::SKIP_ON_SHUTDOWN)));
   DCHECK(set_protocol);
 
   set_protocol = job_factory->SetProtocolHandler(
-      url::kDataScheme, base::WrapUnique(new net::DataProtocolHandler()));
+      url::kDataScheme, base::MakeUnique<net::DataProtocolHandler>());
   DCHECK(set_protocol);
 
   job_factory->SetProtocolHandler(
       url::kAboutScheme,
-      base::WrapUnique(new about_handler::AboutProtocolHandler()));
+      base::MakeUnique<about_handler::AboutProtocolHandler>());
 
   // Set up interceptors in the reverse order.
   std::unique_ptr<net::URLRequestJobFactory> top_job_factory =

@@ -28,12 +28,14 @@
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/api/web_request/web_request_api_helpers.h"
+#include "extensions/browser/bad_message.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_registry.h"
@@ -124,6 +126,75 @@ RenderProcessHostPrivilege GetProcessPrivilege(
   }
 
   return PRIV_EXTENSION;
+}
+
+// Determines whether the extension |origin| passed in can be committed by
+// the process identified by |child_id| and returns true or false
+// accordingly. Please refer to the implementation for more information.
+bool IsIllegalOrigin(content::ResourceContext* resource_context,
+                     int child_id,
+                     const GURL& origin) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  // Consider non-extension URLs safe; they will be checked elsewhere.
+  if (!origin.SchemeIs(kExtensionScheme))
+    return false;
+
+  // If there is no extension installed for the URL, it couldn't have committed.
+  // (If the extension was recently uninstalled, the tab would have closed.)
+  ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
+  InfoMap* extension_info_map = io_data->GetExtensionInfoMap();
+  const Extension* extension =
+      extension_info_map->extensions().GetExtensionOrAppByURL(origin);
+  if (!extension)
+    return true;
+
+  // Check for platform app origins.  These can only be committed by the app
+  // itself, or by one if its guests if there are accessible_resources.
+  const ProcessMap& process_map = extension_info_map->process_map();
+  if (extension->is_platform_app() &&
+      !process_map.Contains(extension->id(), child_id)) {
+    // This is a platform app origin not in the app's own process.  If there
+    // are no accessible resources, this is illegal.
+    if (!extension->GetManifestData(manifest_keys::kWebviewAccessibleResources))
+      return true;
+
+    // If there are accessible resources, the origin is only legal if the
+    // given process is a guest of the app.
+    std::string owner_extension_id;
+    int owner_process_id;
+    WebViewRendererState::GetInstance()->GetOwnerInfo(
+        child_id, &owner_process_id, &owner_extension_id);
+    const Extension* owner_extension =
+        extension_info_map->extensions().GetByID(owner_extension_id);
+    return !owner_extension || owner_extension != extension;
+  }
+
+  // With only the origin and not the full URL, we don't have enough
+  // information to validate hosted apps or web_accessible_resources in normal
+  // extensions. Assume they're legal.
+  return false;
+}
+
+// This callback is registered on the ResourceDispatcherHost for the chrome
+// extension Origin scheme. We determine whether the extension origin is
+// valid. Please see the IsIllegalOrigin() function.
+void OnHttpHeaderReceived(const std::string& header,
+                          const std::string& value,
+                          int child_id,
+                          content::ResourceContext* resource_context,
+                          content::OnHeaderProcessedCallback callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
+  GURL origin(value);
+  DCHECK(origin.SchemeIs(extensions::kExtensionScheme));
+
+  if (IsIllegalOrigin(resource_context, child_id, origin)) {
+    // TODO(ananta): Find a way to specify the right error code here.
+    callback.Run(false, 0);
+  } else {
+    callback.Run(true, 0);
+  }
 }
 
 }  // namespace
@@ -273,52 +344,6 @@ bool ChromeContentBrowserClientExtensionsPart::CanCommitURL(
   return true;
 }
 
-bool ChromeContentBrowserClientExtensionsPart::IsIllegalOrigin(
-    content::ResourceContext* resource_context,
-    int child_process_id,
-    const GURL& origin) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  // Consider non-extension URLs safe; they will be checked elsewhere.
-  if (!origin.SchemeIs(kExtensionScheme))
-    return false;
-
-  // If there is no extension installed for the URL, it couldn't have committed.
-  // (If the extension was recently uninstalled, the tab would have closed.)
-  ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
-  InfoMap* extension_info_map = io_data->GetExtensionInfoMap();
-  const Extension* extension =
-      extension_info_map->extensions().GetExtensionOrAppByURL(origin);
-  if (!extension)
-    return true;
-
-  // Check for platform app origins.  These can only be committed by the app
-  // itself, or by one if its guests if there are accessible_resources.
-  const ProcessMap& process_map = extension_info_map->process_map();
-  if (extension->is_platform_app() &&
-      !process_map.Contains(extension->id(), child_process_id)) {
-    // This is a platform app origin not in the app's own process.  If there are
-    // no accessible resources, this is illegal.
-    if (!extension->GetManifestData(manifest_keys::kWebviewAccessibleResources))
-      return true;
-
-    // If there are accessible resources, the origin is only legal if the given
-    // process is a guest of the app.
-    std::string owner_extension_id;
-    int owner_process_id;
-    WebViewRendererState::GetInstance()->GetOwnerInfo(
-        child_process_id, &owner_process_id, &owner_extension_id);
-    const Extension* owner_extension =
-        extension_info_map->extensions().GetByID(owner_extension_id);
-    return !owner_extension || owner_extension != extension;
-  }
-
-  // With only the origin and not the full URL, we don't have enough information
-  // to validate hosted apps or web_accessible_resources in normal extensions.
-  // Assume they're legal.
-  return false;
-}
-
 // static
 bool ChromeContentBrowserClientExtensionsPart::IsSuitableHost(
     Profile* profile,
@@ -395,39 +420,40 @@ bool ChromeContentBrowserClientExtensionsPart::
     return false;
 
   // We must use a new BrowsingInstance (forcing a process swap and disabling
-  // scripting by existing tabs) if one of the URLs is an extension and the
-  // other is not the exact same extension.
+  // scripting by existing tabs) if one of the URLs corresponds to the Chrome
+  // Web Store hosted app, and the other does not.
   //
-  // We ignore hosted apps here so that other tabs in their BrowsingInstance can
-  // use postMessage with them.  (The exception is the Chrome Web Store, which
-  // is a hosted app that requires its own BrowsingInstance.)  Navigations
-  // to/from a hosted app will still trigger a SiteInstance swap in
-  // RenderFrameHostManager.
+  // We don't force a BrowsingInstance swap in other cases (i.e., when opening
+  // a popup from one extension to a different extension, or to a non-extension
+  // URL) to preserve script connections and allow use cases like postMessage
+  // via window.opener. Those cases would still force a SiteInstance swap in
+  // RenderFrameHostManager.  This behavior is similar to how extension
+  // subframes on a web main frame are also placed in the same BrowsingInstance
+  // (by the content/ part of ShouldSwapBrowsingInstancesForNavigation); this
+  // check is just doing the same for top-level frames.  See
+  // https://crbug.com/590068.
   const Extension* current_extension =
       registry->enabled_extensions().GetExtensionOrAppByURL(current_url);
-  if (current_extension && current_extension->is_hosted_app() &&
-      current_extension->id() != kWebStoreAppId)
-    current_extension = NULL;
+  bool is_current_url_for_web_store =
+      current_extension && current_extension->id() == kWebStoreAppId;
 
   const Extension* new_extension =
       registry->enabled_extensions().GetExtensionOrAppByURL(new_url);
-  if (new_extension && new_extension->is_hosted_app() &&
-      new_extension->id() != kWebStoreAppId)
-    new_extension = NULL;
+  bool is_new_url_for_web_store =
+      new_extension && new_extension->id() == kWebStoreAppId;
 
-  // First do a process check.  We should force a BrowsingInstance swap if the
-  // current process doesn't know about new_extension, even if current_extension
-  // is somehow the same as new_extension.
+  // First do a process check.  We should force a BrowsingInstance swap if we
+  // are going to Chrome Web Store, but the current process doesn't know about
+  // CWS, even if current_extension somehow corresponds to CWS.
   ProcessMap* process_map = ProcessMap::Get(site_instance->GetBrowserContext());
-  if (new_extension &&
-      site_instance->HasProcess() &&
-      !process_map->Contains(
-          new_extension->id(), site_instance->GetProcess()->GetID()))
+  if (is_new_url_for_web_store && site_instance->HasProcess() &&
+      !process_map->Contains(new_extension->id(),
+                             site_instance->GetProcess()->GetID()))
     return true;
 
-  // Otherwise, swap BrowsingInstances if current_extension and new_extension
-  // differ.
-  return current_extension != new_extension;
+  // Otherwise, swap BrowsingInstances when transitioning to/from Chrome Web
+  // Store.
+  return is_current_url_for_web_store != is_new_url_for_web_store;
 }
 
 // static
@@ -662,6 +688,11 @@ void ChromeContentBrowserClientExtensionsPart::
       command_line->AppendSwitch(switches::kEnableMojoSerialService);
     }
   }
+}
+
+void ChromeContentBrowserClientExtensionsPart::ResourceDispatcherHostCreated() {
+  content::ResourceDispatcherHost::Get()->RegisterInterceptor(
+      "Origin", kExtensionScheme, base::Bind(&OnHttpHeaderReceived));
 }
 
 }  // namespace extensions

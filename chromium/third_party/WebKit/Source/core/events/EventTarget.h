@@ -39,8 +39,10 @@
 #include "core/EventNames.h"
 #include "core/EventTargetNames.h"
 #include "core/EventTypeNames.h"
+#include "core/events/AddEventListenerOptionsResolved.h"
 #include "core/events/EventDispatchResult.h"
 #include "core/events/EventListenerMap.h"
+#include "core/frame/UseCounter.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/AtomicString.h"
@@ -117,7 +119,7 @@ public:
 
     bool addEventListener(const AtomicString& eventType, EventListener*, bool useCapture = false);
     bool addEventListener(const AtomicString& eventType, EventListener*, const AddEventListenerOptionsOrBoolean&);
-    bool addEventListener(const AtomicString& eventType, EventListener*, AddEventListenerOptions&);
+    bool addEventListener(const AtomicString& eventType, EventListener*, AddEventListenerOptionsResolved&);
 
     bool removeEventListener(const AtomicString& eventType, const EventListener*, bool useCapture = false);
     bool removeEventListener(const AtomicString& eventType, const EventListener*, const EventListenerOptionsOrBoolean&);
@@ -155,7 +157,7 @@ public:
 protected:
     EventTarget();
 
-    virtual bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptions&);
+    virtual bool addEventListenerInternal(const AtomicString& eventType, EventListener*, const AddEventListenerOptionsResolved&);
     virtual bool removeEventListenerInternal(const AtomicString& eventType, const EventListener*, const EventListenerOptions&);
 
     // Called when an event listener has been successfully added.
@@ -173,7 +175,11 @@ protected:
 
 private:
     LocalDOMWindow* executingWindow();
-    void setDefaultAddEventListenerOptions(const AtomicString& eventType, AddEventListenerOptions&);
+    void setDefaultAddEventListenerOptions(const AtomicString& eventType, AddEventListenerOptionsResolved&);
+
+    // UseCounts the event if it has the specified type. Returns true iff the event type matches.
+    bool checkTypeThenUseCount(const Event*, const AtomicString&, const UseCounter::Feature);
+
     bool fireEventListeners(Event*, EventTargetData*, EventListenerVector&);
     void countLegacyEvents(const AtomicString& legacyTypeName, EventListenerVector*, EventListenerVector*);
 
@@ -222,14 +228,14 @@ private:
     static EventListener* on##attribute(EventTarget& eventTarget) { \
         if (Node* node = eventTarget.toNode()) \
             return node->document().getWindowAttributeEventListener(EventTypeNames::attribute); \
-        ASSERT(eventTarget.toLocalDOMWindow()); \
+        DCHECK(eventTarget.toLocalDOMWindow()); \
         return eventTarget.getAttributeEventListener(EventTypeNames::attribute); \
     } \
     static void setOn##attribute(EventTarget& eventTarget, EventListener* listener) { \
         if (Node* node = eventTarget.toNode()) \
             node->document().setWindowAttributeEventListener(EventTypeNames::attribute, listener); \
         else { \
-            ASSERT(eventTarget.toLocalDOMWindow()); \
+            DCHECK(eventTarget.toLocalDOMWindow()); \
             eventTarget.setAttributeEventListener(EventTypeNames::attribute, listener); \
         } \
     }

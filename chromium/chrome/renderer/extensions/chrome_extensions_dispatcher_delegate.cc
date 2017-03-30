@@ -12,8 +12,6 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
-#include "chrome/common/extensions/features/feature_channel.h"
-#include "chrome/common/extensions/features/feature_util.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/renderer_resources.h"
 #include "chrome/renderer/extensions/app_bindings.h"
@@ -34,6 +32,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/feature_switch.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/permissions/manifest_permission_set.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -63,6 +62,20 @@ ChromeExtensionsDispatcherDelegate::~ChromeExtensionsDispatcherDelegate() {
 void ChromeExtensionsDispatcherDelegate::InitOriginPermissions(
     const extensions::Extension* extension,
     bool is_extension_active) {
+  // Allow component extensions to access chrome://theme/.
+  //
+  // We don't want to grant these permissions to inactive component extensions,
+  // to avoid granting them in "unblessed" (non-extension) processes.  If a
+  // component extension somehow starts as inactive and becomes active later,
+  // we'll re-init the origin permissions, so there's no danger in being
+  // conservative.
+  if (extensions::Manifest::IsComponentLocation(extension->location()) &&
+      is_extension_active) {
+    blink::WebSecurityPolicy::addOriginAccessWhitelistEntry(
+        extension->url(), blink::WebString::fromUTF8(content::kChromeUIScheme),
+        blink::WebString::fromUTF8(chrome::kChromeUIThemeHost), false);
+  }
+
   // TODO(jstritar): We should try to remove this special case. Also, these
   // whitelist entries need to be updated when the kManagement permission
   // changes.
@@ -279,13 +292,4 @@ void ChromeExtensionsDispatcherDelegate::OnActiveExtensionsUpdated(
           ::switches::kSingleProcess))
     return;
   crash_keys::SetActiveExtensions(extension_ids);
-}
-
-void ChromeExtensionsDispatcherDelegate::SetChannel(int channel) {
-  extensions::SetCurrentChannel(static_cast<version_info::Channel>(channel));
-  if (extensions::feature_util::ExtensionServiceWorkersEnabled()) {
-    // chrome-extension: resources should be allowed to register ServiceWorkers.
-    blink::WebSecurityPolicy::registerURLSchemeAsAllowingServiceWorkers(
-        blink::WebString::fromUTF8(extensions::kExtensionScheme));
-  }
 }

@@ -5,27 +5,22 @@
 #include "blimp/net/tcp_engine_transport.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "blimp/net/stream_socket_connection.h"
+#include "blimp/net/message_port.h"
 #include "net/socket/stream_socket.h"
 #include "net/socket/tcp_server_socket.h"
 
 namespace blimp {
 
 TCPEngineTransport::TCPEngineTransport(const net::IPEndPoint& address,
-                                       BlimpConnectionStatistics* statistics,
                                        net::NetLog* net_log)
-    : address_(address),
-      blimp_connection_statistics_(statistics),
-      net_log_(net_log) {
-  DCHECK(blimp_connection_statistics_);
-}
+    : address_(address), net_log_(net_log) {}
 
 TCPEngineTransport::~TCPEngineTransport() {}
 
@@ -55,7 +50,6 @@ void TCPEngineTransport::Connect(const net::CompletionCallback& callback) {
   }
 
   if (result != net::OK) {
-    // TODO(haibinlu): investigate when we can keep using this server socket.
     server_socket_.reset();
   }
 
@@ -63,11 +57,11 @@ void TCPEngineTransport::Connect(const net::CompletionCallback& callback) {
                                                 base::Bind(callback, result));
 }
 
-std::unique_ptr<BlimpConnection> TCPEngineTransport::TakeConnection() {
+std::unique_ptr<MessagePort> TCPEngineTransport::TakeMessagePort() {
   DCHECK(connect_callback_.is_null());
   DCHECK(accepted_socket_);
-  return base::WrapUnique(new StreamSocketConnection(
-      std::move(accepted_socket_), blimp_connection_statistics_));
+  return MessagePort::CreateForStreamSocketWithCompression(
+      std::move(accepted_socket_));
 }
 
 const char* TCPEngineTransport::GetName() const {

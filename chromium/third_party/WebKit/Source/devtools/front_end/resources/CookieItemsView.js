@@ -29,11 +29,11 @@
 
 /**
  * @constructor
- * @extends {WebInspector.VBox}
+ * @extends {WebInspector.SimpleView}
  */
 WebInspector.CookieItemsView = function(treeElement, cookieDomain)
 {
-    WebInspector.VBox.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("Cookies"));
 
     this.element.classList.add("storage-view");
 
@@ -59,9 +59,10 @@ WebInspector.CookieItemsView = function(treeElement, cookieDomain)
 
 WebInspector.CookieItemsView.prototype = {
     /**
+     * @override
      * @return {!Array.<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         return [this._refreshButton, this._clearButton, this._deleteButton];
     },
@@ -186,5 +187,5 @@ WebInspector.CookieItemsView.prototype = {
         }
     },
 
-    __proto__: WebInspector.VBox.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }

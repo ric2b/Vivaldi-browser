@@ -27,17 +27,21 @@
 // settable_from_internals specifies whether a feature can be set from internals.runtimeFlags, with the default
 // being false.
 
-AppBanner status=stable
+Accelerated2dCanvas status=stable, settable_from_internals=True
 AlwaysUseComplexText status=stable
-ApplicationCache status=stable
 AudioOutputDevices status=stable
 AudioVideoTracks status=experimental
+Auxclick status=experimental
 BackgroundSync status=stable
 BackspaceDefaultHandler status=test
-BroadcastChannel status=experimental
-CacheIgnoreSearchOption status=experimental
+BroadcastChannel status=stable
+Budget status=test
+Canvas2dFixedRenderingMode status=test
+EnableCanvas2dDynamicRenderingModeSwitching status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
+CompositeOpaqueScrollers
+ColorCorrectRendering settable_from_internals=True
 CompositedSelectionUpdate
 CompositorWorker status=experimental
 ContextMenu status=test
@@ -68,15 +72,14 @@ CSSTypedOM status=experimental
 CSSVariables status=stable
 CSSViewport status=experimental
 CSSScrollSnapPoints status=test
-CustomElementsV1 status=test
+CustomElementsV1 status=stable
 CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DecodeToYUV status=experimental
 DeviceLight status=experimental
-DisableBlockingMethodsDuringMicrotasks status=experimental
 DisplayList2dCanvas status=stable
 DocumentWriteEvaluator
-DOMConvenienceAPI status=experimental
+DOMConvenienceAPI status=stable
 DurableStorage status=experimental, origin_trial_feature_name=DurableStorage
 FontCacheScaling status=test
 ForceDisplayList2dCanvas
@@ -88,43 +91,37 @@ ExperimentalCanvasFeatures status=test
 ExperimentalContentSecurityPolicyFeatures status=experimental
 ExperimentalV8Extras status=experimental
 FastMobileScrolling
+FeaturePolicy status=experimental
 FileAPIBlobClose status=experimental
 FileSystem status=stable
-ForeignFetch status=experimental
-FormDataNewMethods status=stable
+ForeignFetch status=experimental, origin_trial_feature_name=ForeignFetch
 FullscreenUnprefixed status=test
 FrameTimingSupport status=experimental
 GeometryInterfaces status=test
-GetUserMedia depends_on=MediaDevices, status=stable
+GetUserMedia status=stable
 GlobalCacheStorage status=stable
-HiResEventTimeStamp status=stable
 IDBObserver status=experimental
 ImageCapture status=experimental
-ImageColorProfiles
 ImageOrientation status=test
-ImageRenderingPixelated status=stable
 IndexedDBExperimental status=experimental
 InertTopControls status=experimental
-InputDeviceCapabilities status=stable
 InputEvent status=experimental
 InputModeAttribute status=experimental
 InputMultipleFieldsUI status=stable
 InstalledApp status=experimental
 IntersectionObserver status=stable
 LangAttributeAwareFormControlUI
-LinkPreconnect status=stable
-LinkPreload status=stable
-LinkHeader status=stable
-LinkServiceWorker status=experimental
+LayoutNG
+LinkServiceWorker status=experimental, origin_trial_feature_name=ForeignFetch
+LongTaskObserver status=test
 FractionalScrollOffsets
+LoadingWithMojo
 MediaCapture
 MediaCaptureFromCanvas status=stable
 MediaCaptureFromVideo status=experimental
 MediaConstraints status=stable
-MediaDevices status=stable
 MediaDocumentDownloadButton
 MediaGetSettings status=test
-MediaRecorder status=stable
 MediaSession
 MediaSourceExperimental status=experimental
 MediaSourceNewAbortAndDuration status=experimental
@@ -139,6 +136,7 @@ NetInfoDownlinkMax status=stable
 NewMediaPlaybackUi
 NotificationConstructor status=stable
 NotificationBadge status=stable
+NotificationImage status=experimental
 NotificationInlineReplies status=experimental
 Notifications status=stable
 OnDeviceChange status=experimental
@@ -152,9 +150,11 @@ OriginTrialsSampleAPI origin_trial_feature_name=Frobulate
 // For simulating Android's overlay fullscreen video in layout tests on Linux.
 ForceOverlayFullscreenVideo
 OverlayScrollbars
+HideScrollbars settable_from_internals=True
 PagePopup status=stable
 PaintOptimizations status=stable
-PassiveEventListeners status=stable
+PassiveDocumentEventListeners status=experimental
+PassiveEventListenersDueToFling status=experimental
 PassPaintVisualRectToCompositor
 PathOpsSVGClipping status=stable
 PaymentRequest status=experimental
@@ -173,13 +173,14 @@ PushMessaging status=stable
 QuotaPromise status=experimental
 ReducedReferrerGranularity
 ReferrerPolicyHeader status=experimental
+ReloadwithoutSubResourceCacheRevalidation
 RemotePlayback status=experimental
 RenderingPipelineThrottling status=stable
+RenderUnicodeControlCharacters status=experimental
 RequestIdleCallback status=stable
-ResponseConstructedWithReadableStream status=stable
-ResponseBodyWithV8ExtraStream status=stable
+ResizeObserver status=experimental
+RTCPeerConnectionNewGetStats status=test
 SandboxBlocksModals status=stable
-ScreenOrientation status=stable
 ScriptedSpeech status=stable
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 ScrollAnchoring settable_from_internals=True
@@ -209,8 +210,11 @@ StyleMatchedPropertiesCache status=stable
 // be shipped would be enabled. Instead, remove the flag from the shipping
 // interface.
 ExperimentalStream status=experimental
+SpeculativeLaunchServiceWorker
 StorageEstimate status=experimental
 Suborigins status=test
+TimerThrottlingForBackgroundTabs status=stable
+TimerThrottlingForHiddenFrames status=stable
 // Many websites disable mouse support when touch APIs are available.  We'd
 // like to enable this always but can't until more websites fix this bug.
 // Chromium sets this conditionally (eg. based on the presence of a
@@ -226,7 +230,7 @@ WebAnimationsSVG status=experimental
 WebBluetooth origin_trial_feature_name=WebBluetooth
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
-WebUSB status=experimental
+WebUSB status=experimental, origin_trial_feature_name=WebUSB
 WebVR
 WebVTTRegions status=experimental
 V8IdleTasks
@@ -241,7 +245,9 @@ WakeLock status=experimental
 WebFontsInterventionV2With2G
 WebFontsInterventionV2WithSlow2G
 WebFontsInterventionTrigger
+WebShare status=experimental
 Worklet status=experimental
 WeakMemoryCache
 DoNotUnlockSharedBuffer
 ParseHTMLOnMainThread status=test
+SendBeaconThrowForBlobWithNonSimpleType status=experimental

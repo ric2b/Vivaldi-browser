@@ -30,9 +30,6 @@ public:
 
     virtual WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebRemoteFrameClient*, WebFrame* opener) = 0;
 
-    // Transfer initial drawing parameters from a local frame.
-    virtual void initializeFromFrame(WebLocalFrame*) const = 0;
-
     // Set security origin replicated from another process.
     virtual void setReplicatedOrigin(const WebSecurityOrigin&) const = 0;
 
@@ -68,7 +65,7 @@ public:
     // corresponds to the HTMLFrameOwnerElement to be fullscreened. Calling
     // this prepares FullscreenController to enter fullscreen for that frame
     // owner.
-    virtual void willEnterFullScreen() = 0;
+    virtual void willEnterFullscreen() = 0;
 
     // Temporary method to allow embedders to get the script context of a
     // remote frame. This should only be used by legacy code that has not yet

@@ -64,6 +64,7 @@ enum class WebCachePolicy;
 struct FrameLoadRequest;
 
 CORE_EXPORT bool isBackForwardLoadType(FrameLoadType);
+CORE_EXPORT bool isReloadLoadType(FrameLoadType);
 
 class CORE_EXPORT FrameLoader final {
     WTF_MAKE_NONCOPYABLE(FrameLoader);
@@ -157,6 +158,8 @@ public:
 
     void receivedMainResourceRedirect(const KURL& newURL);
 
+    void clearProvisionalHistoryItem();
+
     // This prepares the FrameLoader for the next commit. It will dispatch
     // unload events, abort XHR requests and detach the document. Returns true
     // if the frame is ready to receive the next commit, or false otherwise.
@@ -192,8 +195,8 @@ public:
     static void setReferrerForFrameRequest(FrameLoadRequest&);
 
 private:
-    void checkTimerFired(Timer<FrameLoader>*);
-    void didAccessInitialDocumentTimerFired(Timer<FrameLoader>*);
+    void checkTimerFired(TimerBase*);
+    void didAccessInitialDocumentTimerFired(TimerBase*);
 
     bool prepareRequestForThisFrame(FrameLoadRequest&);
     FrameLoadType determineFrameLoadType(const FrameLoadRequest&);
@@ -210,7 +213,7 @@ private:
         Fragment,
         HistoryApi
     };
-    void setHistoryItemStateForCommit(HistoryCommitType, HistoryNavigationType);
+    void setHistoryItemStateForCommit(FrameLoadType, HistoryCommitType, HistoryNavigationType);
 
     void loadInSameDocument(const KURL&, PassRefPtr<SerializedScriptValue> stateObject, FrameLoadType, HistoryLoadType, ClientRedirectPolicy, Document*);
 
@@ -274,7 +277,7 @@ private:
 
     bool m_inStopAllLoaders;
 
-    Timer<FrameLoader> m_checkTimer;
+    TaskRunnerTimer<FrameLoader> m_checkTimer;
 
     bool m_didAccessInitialDocument;
 

@@ -25,6 +25,9 @@
 
 #include "platform/graphics/Canvas2DLayerBridge.h"
 
+#include "base/memory/ptr_util.h"
+#include "cc/resources/single_release_callback.h"
+#include "cc/resources/texture_mailbox.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -57,13 +60,13 @@ enum {
 
 namespace blink {
 
-static PassRefPtr<SkSurface> createSkSurface(GrContext* gr, const IntSize& size, int msaaSampleCount, OpacityMode opacityMode, bool* surfaceIsAccelerated)
+static PassRefPtr<SkSurface> createSkSurface(GrContext* gr, const IntSize& size, int msaaSampleCount, OpacityMode opacityMode, sk_sp<SkColorSpace> colorSpace, bool* surfaceIsAccelerated)
 {
     if (gr)
         gr->resetContext();
 
     SkAlphaType alphaType = (Opaque == opacityMode) ? kOpaque_SkAlphaType : kPremul_SkAlphaType;
-    SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType);
+    SkImageInfo info = SkImageInfo::MakeN32(size.width(), size.height(), alphaType, colorSpace);
     SkSurfaceProps disableLCDProps(0, kUnknown_SkPixelGeometry);
     sk_sp<SkSurface> surface;
 
@@ -87,18 +90,7 @@ static PassRefPtr<SkSurface> createSkSurface(GrContext* gr, const IntSize& size,
     return fromSkSp(surface);
 }
 
-PassRefPtr<Canvas2DLayerBridge> Canvas2DLayerBridge::create(const IntSize& size, int msaaSampleCount, OpacityMode opacityMode, AccelerationMode accelerationMode)
-{
-    TRACE_EVENT_INSTANT0("test_gpu", "Canvas2DLayerBridgeCreation", TRACE_EVENT_SCOPE_GLOBAL);
-    std::unique_ptr<WebGraphicsContext3DProvider> contextProvider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
-    if (!contextProvider)
-        return nullptr;
-    RefPtr<Canvas2DLayerBridge> layerBridge;
-    layerBridge = adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), size, msaaSampleCount, opacityMode, accelerationMode));
-    return layerBridge.release();
-}
-
-Canvas2DLayerBridge::Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, int msaaSampleCount, OpacityMode opacityMode, AccelerationMode accelerationMode)
+Canvas2DLayerBridge::Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DProvider> contextProvider, const IntSize& size, int msaaSampleCount, OpacityMode opacityMode, AccelerationMode accelerationMode, sk_sp<SkColorSpace> colorSpace)
     : m_contextProvider(std::move(contextProvider))
     , m_logger(wrapUnique(new Logger))
     , m_weakPtrFactory(this)
@@ -118,8 +110,10 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DPro
     , m_accelerationMode(accelerationMode)
     , m_opacityMode(opacityMode)
     , m_size(size)
+    , m_colorSpace(colorSpace)
 {
     DCHECK(m_contextProvider);
+    DCHECK(!m_contextProvider->isSoftwareRendering());
     // Used by browser tests to detect the use of a Canvas2DLayerBridge.
     TRACE_EVENT_INSTANT0("test_gpu", "Canvas2DLayerBridgeCreation", TRACE_EVENT_SCOPE_GLOBAL);
     startRecording();
@@ -171,6 +165,8 @@ bool Canvas2DLayerBridge::shouldAccelerate(AccelerationHint hint) const
 
 bool Canvas2DLayerBridge::isAccelerated() const
 {
+    if (m_accelerationMode == DisableAcceleration)
+        return false;
     if (isHibernating())
         return false;
     if (m_softwareRenderingWhileHidden)
@@ -192,7 +188,7 @@ GLenum Canvas2DLayerBridge::getGLFilter()
 }
 
 #if USE_IOSURFACE_FOR_2D_CANVAS
-bool Canvas2DLayerBridge::prepareIOSurfaceMailboxFromImage(SkImage* image, WebExternalTextureMailbox* outMailbox)
+bool Canvas2DLayerBridge::prepareIOSurfaceMailboxFromImage(SkImage* image, cc::TextureMailbox* outMailbox)
 {
     // Need to flush skia's internal queue because texture is about to be accessed directly
     GrContext* grContext = m_contextProvider->grContext();
@@ -210,19 +206,21 @@ bool Canvas2DLayerBridge::prepareIOSurfaceMailboxFromImage(SkImage* image, WebEx
     gl->CopySubTextureCHROMIUM(imageTexture, imageInfo.m_textureId, 0, 0, 0, 0, m_size.width(), m_size.height(), GL_FALSE, GL_FALSE, GL_FALSE);
 
     MailboxInfo& info = m_mailboxes.first();
-    info.m_mailbox.textureTarget = GC3D_TEXTURE_RECTANGLE_ARB;
-    gl->GenMailboxCHROMIUM(info.m_mailbox.name);
-    gl->ProduceTextureDirectCHROMIUM(imageInfo.m_textureId, info.m_mailbox.textureTarget, info.m_mailbox.name);
-    info.m_mailbox.allowOverlay = true;
+    uint32_t textureTarget = GC3D_TEXTURE_RECTANGLE_ARB;
+    gpu::Mailbox mailbox;
+    gl->GenMailboxCHROMIUM(mailbox.name);
+    gl->ProduceTextureDirectCHROMIUM(imageInfo.m_textureId, textureTarget, mailbox.name);
 
     const GLuint64 fenceSync = gl->InsertFenceSyncCHROMIUM();
     gl->Flush();
-    gl->GenSyncTokenCHROMIUM(fenceSync, info.m_mailbox.syncToken);
-    info.m_mailbox.validSyncToken = true;
-    info.m_mailbox.gpuMemoryBufferId = imageInfo.m_gpuMemoryBufferId;
+    gpu::SyncToken syncToken;
+    gl->GenSyncTokenCHROMIUM(fenceSync, syncToken.GetData());
 
     info.m_imageInfo = imageInfo;
-    *outMailbox = info.m_mailbox;
+    bool isOverlayCandidate = true;
+    bool secureOutputOnly = false;
+    info.m_mailbox = mailbox;
+    *outMailbox = cc::TextureMailbox(mailbox, syncToken, textureTarget, gfx::Size(m_size.width(), m_size.height()), isOverlayCandidate, secureOutputOnly);
 
     gl->BindTexture(GC3D_TEXTURE_RECTANGLE_ARB, 0);
 
@@ -259,11 +257,7 @@ Canvas2DLayerBridge::ImageInfo Canvas2DLayerBridge::createIOSurfaceBackedTexture
     gl->TexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     gl->BindTexImage2DCHROMIUM(target, imageId);
 
-    GLint gpuMemoryBufferId = -1;
-    gl->GetImageivCHROMIUM(imageId, GC3D_GPU_MEMORY_BUFFER_ID, &gpuMemoryBufferId);
-    DCHECK_NE(-1, gpuMemoryBufferId);
-
-    return Canvas2DLayerBridge::ImageInfo(imageId, textureId, gpuMemoryBufferId);
+    return Canvas2DLayerBridge::ImageInfo(imageId, textureId);
 }
 
 void Canvas2DLayerBridge::deleteCHROMIUMImage(ImageInfo info)
@@ -298,12 +292,11 @@ void Canvas2DLayerBridge::createMailboxInfo()
     m_mailboxes.prepend(tmp);
 }
 
-bool Canvas2DLayerBridge::prepareMailboxFromImage(PassRefPtr<SkImage> image, WebExternalTextureMailbox* outMailbox)
+bool Canvas2DLayerBridge::prepareMailboxFromImage(PassRefPtr<SkImage> image,
+    cc::TextureMailbox* outMailbox)
 {
     createMailboxInfo();
     MailboxInfo& mailboxInfo = m_mailboxes.first();
-    mailboxInfo.m_mailbox.nearestNeighbor = getGLFilter() == GL_NEAREST;
-    mailboxInfo.m_mailbox.textureSize = WebSize(m_size.width(), m_size.height());
 
     GrContext* grContext = m_contextProvider->grContext();
     if (!grContext) {
@@ -332,7 +325,6 @@ bool Canvas2DLayerBridge::prepareMailboxFromImage(PassRefPtr<SkImage> image, Web
     // the state cached in skia so that the deferred copy on write
     // in SkSurface_Gpu does not make any false assumptions.
     mailboxInfo.m_image->getTexture()->textureParamsModified();
-    mailboxInfo.m_mailbox.textureTarget = GL_TEXTURE_2D;
 
     gpu::gles2::GLES2Interface* gl = contextGL();
     if (!gl)
@@ -345,17 +337,11 @@ bool Canvas2DLayerBridge::prepareMailboxFromImage(PassRefPtr<SkImage> image, Web
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Re-use the texture's existing mailbox, if there is one.
-    if (mailboxInfo.m_image->getTexture()->getCustomData()) {
-        DCHECK(mailboxInfo.m_image->getTexture()->getCustomData()->size() == sizeof(mailboxInfo.m_mailbox.name));
-        memcpy(&mailboxInfo.m_mailbox.name[0], mailboxInfo.m_image->getTexture()->getCustomData()->data(), sizeof(mailboxInfo.m_mailbox.name));
-    } else {
-        gl->GenMailboxCHROMIUM(mailboxInfo.m_mailbox.name);
-        RefPtr<SkData> mailboxNameData = adoptRef(SkData::NewWithCopy(&mailboxInfo.m_mailbox.name[0], sizeof(mailboxInfo.m_mailbox.name)));
-        mailboxInfo.m_image->getTexture()->setCustomData(mailboxNameData.get());
-        gl->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailboxInfo.m_mailbox.name);
-    }
+    gpu::Mailbox mailbox;
+    gl->GenMailboxCHROMIUM(mailbox.name);
+    gl->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
 
+    gpu::SyncToken syncToken;
     if (isHidden()) {
         // With hidden canvases, we release the SkImage immediately because
         // there is no need for animations to be double buffered.
@@ -365,15 +351,15 @@ bool Canvas2DLayerBridge::prepareMailboxFromImage(PassRefPtr<SkImage> image, Web
         // but currently the canvas will flicker if we don't flush here.
         const GLuint64 fenceSync = gl->InsertFenceSyncCHROMIUM();
         gl->Flush();
-        gl->GenSyncTokenCHROMIUM(fenceSync, mailboxInfo.m_mailbox.syncToken);
-        mailboxInfo.m_mailbox.validSyncToken = true;
+        gl->GenSyncTokenCHROMIUM(fenceSync, syncToken.GetData());
     }
+    mailboxInfo.m_mailbox = mailbox;
+    *outMailbox = cc::TextureMailbox(mailbox, syncToken, GL_TEXTURE_2D);
+
     gl->BindTexture(GL_TEXTURE_2D, 0);
     // Because we are changing the texture binding without going through skia,
     // we must dirty the context.
     grContext->resetContext(kTextureBinding_GrGLBackendState);
-
-    *outMailbox = mailboxInfo.m_mailbox;
     return true;
 }
 
@@ -469,18 +455,18 @@ SkSurface* Canvas2DLayerBridge::getOrCreateSurface(AccelerationHint hint)
     if (m_surface)
         return m_surface.get();
 
-    if (m_layer && !isHibernating() && hint == PreferAcceleration) {
+    if (m_layer && !isHibernating() && hint == PreferAcceleration && m_accelerationMode != DisableAcceleration) {
         return nullptr; // re-creation will happen through restore()
     }
 
     bool wantAcceleration = shouldAccelerate(hint);
-    bool surfaceIsAccelerated;
     if (CANVAS2D_BACKGROUND_RENDER_SWITCH_TO_CPU && isHidden() && wantAcceleration) {
         wantAcceleration = false;
         m_softwareRenderingWhileHidden = true;
     }
 
-    m_surface = createSkSurface(wantAcceleration ? m_contextProvider->grContext() : nullptr, m_size, m_msaaSampleCount, m_opacityMode, &surfaceIsAccelerated);
+    bool surfaceIsAccelerated;
+    m_surface = createSkSurface(wantAcceleration ? m_contextProvider->grContext() : nullptr, m_size, m_msaaSampleCount, m_opacityMode, m_colorSpace, &surfaceIsAccelerated);
 
     if (!m_surface)
         reportSurfaceCreationFailure();
@@ -580,7 +566,7 @@ void Canvas2DLayerBridge::beginDestruction()
 
     unregisterTaskObserver();
 
-    if (m_layer) {
+    if (m_layer && m_accelerationMode != DisableAcceleration) {
         GraphicsLayer::unregisterContentsLayer(m_layer->layer());
         m_layer->clearTexture();
         // Orphaning the layer is required to trigger the recration of a new layer
@@ -709,7 +695,7 @@ gpu::gles2::GLES2Interface* Canvas2DLayerBridge::contextGL()
 {
     // Check on m_layer is necessary because contextGL() may be called during
     // the destruction of m_layer
-    if (m_layer && !m_destructionInProgress) {
+    if (m_layer && m_accelerationMode != DisableAcceleration && !m_destructionInProgress) {
         // Call checkSurfaceValid to ensure rate limiter is disabled if context is lost.
         if (!checkSurfaceValid())
             return nullptr;
@@ -724,7 +710,7 @@ bool Canvas2DLayerBridge::checkSurfaceValid()
         return false;
     if (isHibernating())
         return true;
-    if (!m_layer)
+    if (!m_layer || m_accelerationMode == DisableAcceleration)
         return true;
     if (!m_surface)
         return false;
@@ -757,7 +743,7 @@ bool Canvas2DLayerBridge::restoreSurface()
     if (sharedGL && sharedGL->GetGraphicsResetStatusKHR() == GL_NO_ERROR) {
         GrContext* grCtx = m_contextProvider->grContext();
         bool surfaceIsAccelerated;
-        RefPtr<SkSurface> surface(createSkSurface(grCtx, m_size, m_msaaSampleCount, m_opacityMode, &surfaceIsAccelerated));
+        RefPtr<SkSurface> surface(createSkSurface(grCtx, m_size, m_msaaSampleCount, m_opacityMode, m_colorSpace, &surfaceIsAccelerated));
 
         if (!m_surface)
             reportSurfaceCreationFailure();
@@ -776,7 +762,34 @@ bool Canvas2DLayerBridge::restoreSurface()
     return m_surface.get();
 }
 
-bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, WebExternalBitmap* bitmap)
+static gfx::ColorSpace SkColorSpaceToColorSpace(const SkColorSpace* skColorSpace)
+{
+    // TODO(crbug.com/634102): Eliminate this clumsy conversion by unifying
+    // SkColorSpace and gfx::ColorSpace.
+    if (!skColorSpace)
+        return gfx::ColorSpace();
+
+    gfx::ColorSpace::TransferID transferID = gfx::ColorSpace::TransferID::UNSPECIFIED;
+    switch (skColorSpace->gammaNamed()) {
+    case SkColorSpace::kSRGB_GammaNamed:
+        transferID = gfx::ColorSpace::TransferID::IEC61966_2_1;
+        break;
+    case SkColorSpace::kLinear_GammaNamed:
+        transferID = gfx::ColorSpace::TransferID::LINEAR;
+        break;
+    default:
+        // TODO(crbug.com/634102): Not all curve type are supported
+        DCHECK(false);
+    }
+
+    // TODO(crbug.com/634102): No primary conversions are performed.
+    // Rec-709 is assumed.
+    return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT709, transferID, gfx::ColorSpace::MatrixID::RGB, gfx::ColorSpace::RangeID::FULL);
+}
+
+bool Canvas2DLayerBridge::PrepareTextureMailbox(
+    cc::TextureMailbox* outMailbox,
+    std::unique_ptr<cc::SingleReleaseCallback>* outReleaseCallback)
 {
     if (m_destructionInProgress) {
         // It can be hit in the following sequence.
@@ -793,15 +806,11 @@ bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, 
     if ((isHibernating() || m_softwareRenderingWhileHidden) && isHidden())
         return false;
 
-    if (bitmap) {
-        // Using accelerated 2d canvas with software renderer, which
-        // should only happen in tests that use fake graphics contexts
-        // or in Android WebView in software mode. In this case, we do
-        // not care about producing any results for this canvas.
-        skipQueuedDrawCommands();
-        m_lastImageId = 0;
+    // If the context is lost, we don't know if we should be producing GPU or
+    // software frames, until we get a new context, since the compositor will
+    // be trying to get a new context and may change modes.
+    if (m_contextProvider->contextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR)
         return false;
-    }
 
     RefPtr<SkImage> image = newImageSnapshot(PreferAcceleration, SnapshotReasonUnknown);
     if (!image || !image->getTexture())
@@ -814,10 +823,23 @@ bool Canvas2DLayerBridge::prepareMailbox(WebExternalTextureMailbox* outMailbox, 
     m_lastImageId = image->uniqueID();
     m_lastFilter = filter;
 
-    return prepareMailboxFromImage(image.release(), outMailbox);
+    if (!prepareMailboxFromImage(image.release(), outMailbox))
+        return false;
+    outMailbox->set_nearest_neighbor(getGLFilter() == GL_NEAREST);
+    gfx::ColorSpace colorSpace = SkColorSpaceToColorSpace(m_colorSpace.get());
+    outMailbox->set_color_space(colorSpace);
+
+    auto func = WTF::bind(&Canvas2DLayerBridge::mailboxReleased,
+        m_weakPtrFactory.createWeakPtr(),
+        outMailbox->mailbox());
+    *outReleaseCallback = cc::SingleReleaseCallback::Create(
+        convertToBaseCallback(std::move(func)));
+    return true;
 }
 
-void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailbox, bool lostResource)
+void Canvas2DLayerBridge::mailboxReleased(const gpu::Mailbox& mailbox,
+    const gpu::SyncToken& syncToken,
+    bool lostResource)
 {
     DCHECK(isAccelerated() || isHibernating());
     bool contextLost = !isHibernating() && (!m_surface || m_contextProvider->contextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR);
@@ -830,9 +852,8 @@ void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailb
 
     while (true) {
         --releasedMailboxInfo;
-        if (nameEquals(releasedMailboxInfo->m_mailbox, mailbox)) {
+        if (releasedMailboxInfo->m_mailbox == mailbox)
             break;
-        }
         DCHECK(releasedMailboxInfo != firstMailbox);
     }
 
@@ -842,8 +863,8 @@ void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailb
 #if USE_IOSURFACE_FOR_2D_CANVAS
             DCHECK(releasedMailboxInfo->m_imageInfo.empty());
 #endif // USE_IOSURFACE_FOR_2D_CANVAS
-            if (mailbox.validSyncToken) {
-                contextGL()->WaitSyncTokenCHROMIUM(mailbox.syncToken);
+            if (syncToken.HasData()) {
+                contextGL()->WaitSyncTokenCHROMIUM(syncToken.GetConstData());
             }
             GrTexture* texture = releasedMailboxInfo->m_image->getTexture();
             if (texture) {
@@ -851,6 +872,10 @@ void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailb
                     texture->abandon();
                 } else {
                     texture->textureParamsModified();
+                    // Break the mailbox association to avoid leaking mailboxes every time skia recycles a texture.
+                    gpu::gles2::GLES2Interface* gl = contextGL();
+                    if (gl)
+                        gl->ProduceTextureDirectCHROMIUM(0, GL_TEXTURE_2D, releasedMailboxInfo->m_mailbox.name);
                 }
             }
         }
@@ -875,6 +900,9 @@ void Canvas2DLayerBridge::mailboxReleased(const WebExternalTextureMailbox& mailb
     // 2) Release the SkImage, which will return the texture to skia's scratch
     //    texture pool.
     m_mailboxes.remove(releasedMailboxInfo);
+
+    if (m_mailboxes.isEmpty() && m_accelerationMode == DisableAcceleration)
+        m_layer.reset();
 }
 
 WebLayer* Canvas2DLayerBridge::layer() const
@@ -908,7 +936,7 @@ void Canvas2DLayerBridge::prepareSurfaceForPaintingIfNeeded()
 void Canvas2DLayerBridge::finalizeFrame(const FloatRect &dirtyRect)
 {
     DCHECK(!m_destructionInProgress);
-    if (m_layer)
+    if (m_layer && m_accelerationMode != DisableAcceleration)
         m_layer->layer()->invalidateRect(enclosingIntRect(dirtyRect));
     if (m_rateLimiter)
         m_rateLimiter->reset();
@@ -970,14 +998,10 @@ void Canvas2DLayerBridge::willOverwriteCanvas()
 }
 
 #if USE_IOSURFACE_FOR_2D_CANVAS
-Canvas2DLayerBridge::ImageInfo::ImageInfo(GLuint imageId, GLuint textureId, GLint gpuMemoryBufferId)
-    : m_imageId(imageId)
-    , m_textureId(textureId)
-    , m_gpuMemoryBufferId(gpuMemoryBufferId)
+Canvas2DLayerBridge::ImageInfo::ImageInfo(GLuint imageId, GLuint textureId) : m_imageId(imageId), m_textureId(textureId)
 {
     DCHECK(imageId);
     DCHECK(textureId);
-    DCHECK_NE(-1, gpuMemoryBufferId);
 }
 
 bool Canvas2DLayerBridge::ImageInfo::empty()
@@ -986,15 +1010,8 @@ bool Canvas2DLayerBridge::ImageInfo::empty()
 }
 #endif // USE_IOSURFACE_FOR_2D_CANVAS
 
-Canvas2DLayerBridge::MailboxInfo::MailboxInfo(const MailboxInfo& other)
-{
-    memcpy(&m_mailbox, &other.m_mailbox, sizeof(m_mailbox));
-    m_image = other.m_image;
-    m_parentLayerBridge = other.m_parentLayerBridge;
-#if USE_IOSURFACE_FOR_2D_CANVAS
-    m_imageInfo = other.m_imageInfo;
-#endif // USE_IOSURFACE_FOR_2D_CANVAS
-}
+Canvas2DLayerBridge::MailboxInfo::MailboxInfo() = default;
+Canvas2DLayerBridge::MailboxInfo::MailboxInfo(const MailboxInfo& other) = default;
 
 void Canvas2DLayerBridge::Logger::reportHibernationEvent(HibernationEvent event)
 {

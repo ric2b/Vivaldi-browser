@@ -30,6 +30,7 @@
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTableCol.h"
 #include "core/layout/SubtreeLayoutScope.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/TableCellPainter.h"
 #include "core/style/CollapsedBorderValue.h"
 #include "platform/geometry/FloatQuad.h"
@@ -66,6 +67,26 @@ void LayoutTableCell::willBeRemovedFromTree()
     LayoutBlockFlow::willBeRemovedFromTree();
 
     section()->setNeedsCellRecalc();
+
+    // When borders collapse, removing a cell can affect the the width of neighboring cells.
+    if (!parent())
+        return;
+    LayoutTable* enclosingTable = table();
+    DCHECK(enclosingTable);
+    if (!enclosingTable->collapseBorders())
+        return;
+    if (previousCell()) {
+        // TODO(dgrogan): Should this be setChildNeedsLayout or setNeedsLayout?
+        // remove-cell-with-border-box.html only passes with setNeedsLayout but other places
+        // use setChildNeedsLayout.
+        previousCell()->setNeedsLayout(LayoutInvalidationReason::TableChanged);
+        previousCell()->setPreferredLogicalWidthsDirty();
+    }
+    if (nextCell()) {
+        // TODO(dgrogan): Same as above re: setChildNeedsLayout vs setNeedsLayout.
+        nextCell()->setNeedsLayout(LayoutInvalidationReason::TableChanged);
+        nextCell()->setPreferredLogicalWidthsDirty();
+    }
 }
 
 unsigned LayoutTableCell::parseColSpanFromDOM() const
@@ -360,15 +381,6 @@ LayoutRect LayoutTableCell::localOverflowRectForPaintInvalidation() const
     return LayoutRect(-location.x(), -location.y(), location.x() + std::max(size().width() + right, selfVisualOverflowRect.maxX()), location.y() + std::max(size().height() + bottom, selfVisualOverflowRect.maxY()));
 }
 
-bool LayoutTableCell::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& r, VisualRectFlags visualRectFlags) const
-{
-    if (ancestor == this)
-        return true;
-    if (parent())
-        r.moveBy(-parentBox()->location()); // Rows are in the same coordinate space, so don't add their offset in.
-    return LayoutBlockFlow::mapToVisualRectInAncestorSpace(ancestor, r, visualRectFlags);
-}
-
 int LayoutTableCell::cellBaselinePosition() const
 {
     // <http://www.w3.org/TR/2007/CR-CSS21-20070719/tables.html#height-layout>: The baseline of a cell is the baseline of
@@ -377,7 +389,7 @@ int LayoutTableCell::cellBaselinePosition() const
     int firstLineBaseline = firstLineBoxBaseline();
     if (firstLineBaseline != -1)
         return firstLineBaseline;
-    return borderBefore() + paddingBefore() + contentLogicalHeight();
+    return (borderBefore() + paddingBefore() + contentLogicalHeight()).toInt();
 }
 
 void LayoutTableCell::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)
@@ -396,10 +408,25 @@ void LayoutTableCell::styleDidChange(StyleDifference diff, const ComputedStyle* 
         clearIntrinsicPadding();
 
     // If border was changed, notify table.
-    if (parent()) {
-        LayoutTable* table = this->table();
-        if (table && !table->selfNeedsLayout() && !table->normalChildNeedsLayout()&& oldStyle && oldStyle->border() != style()->border())
-            table->invalidateCollapsedBorders();
+    if (!parent())
+        return;
+    LayoutTable* table = this->table();
+    if (!table)
+        return;
+    if (!table->selfNeedsLayout() && !table->normalChildNeedsLayout()&& oldStyle && oldStyle->border() != style()->border())
+        table->invalidateCollapsedBorders();
+
+    if (LayoutTableBoxComponent::doCellsHaveDirtyWidth(*this, *table, diff, *oldStyle)) {
+        if (previousCell()) {
+            // TODO(dgrogan) Add a layout test showing that setChildNeedsLayout is needed instead of setNeedsLayout.
+            previousCell()->setChildNeedsLayout();
+            previousCell()->setPreferredLogicalWidthsDirty(MarkOnlyThis);
+        }
+        if (nextCell()) {
+            // TODO(dgrogan) Add a layout test showing that setChildNeedsLayout is needed instead of setNeedsLayout.
+            nextCell()->setChildNeedsLayout();
+            nextCell()->setPreferredLogicalWidthsDirty(MarkOnlyThis);
+        }
     }
 }
 
@@ -938,7 +965,7 @@ void LayoutTableCell::collectBorderValues(LayoutTable::CollapsedBorderValues& bo
     // If collapsed borders changed, invalidate the cell's display item client on the table's backing.
     // TODO(crbug.com/451090#c5): Need a way to invalidate/repaint the borders only.
     if (changed)
-        table()->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*this, PaintInvalidationStyleChange);
+        ObjectPaintInvalidator(*table()).slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*this, PaintInvalidationStyleChange);
 
     addBorderStyle(borderValues, newValues.startBorder);
     addBorderStyle(borderValues, newValues.endBorder);
@@ -985,8 +1012,8 @@ void LayoutTableCell::scrollbarsChanged(bool horizontalScrollbarChanged, bool ve
         totalHeight -= scrollbarHeight;
         LayoutUnit newBeforePadding = (totalHeight - heightWithoutIntrinsicPadding) / 2;
         LayoutUnit newAfterPadding = totalHeight - heightWithoutIntrinsicPadding - newBeforePadding;
-        setIntrinsicPaddingBefore(newBeforePadding);
-        setIntrinsicPaddingAfter(newAfterPadding);
+        setIntrinsicPaddingBefore(newBeforePadding.toInt());
+        setIntrinsicPaddingAfter(newAfterPadding.toInt());
     } else {
         setIntrinsicPaddingAfter(intrinsicPaddingAfter() - scrollbarHeight);
     }

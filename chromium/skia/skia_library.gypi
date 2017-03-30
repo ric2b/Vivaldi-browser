@@ -29,9 +29,8 @@
 
     '../third_party/skia/src/ports/SkFontConfigInterface_direct.cpp',
     '../third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp',
-
-    '../third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp',
-    '../third_party/skia/src/ports/SkFontHost_fontconfig.cpp',
+    '../third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp',
+    '../third_party/skia/src/ports/SkFontMgr_FontConfigInterface_factory.cpp',
 
     '../third_party/skia/src/fonts/SkFontMgr_indirect.cpp',
     '../third_party/skia/src/fonts/SkRemotableFontMgr.cpp',
@@ -69,7 +68,6 @@
   '../third_party/skia/src/utils/SkInterpolator.cpp',
   '../third_party/skia/src/utils/SkLayer.cpp',
   '../third_party/skia/src/utils/SkMeshUtils.cpp',
-  '../third_party/skia/src/utils/SkNinePatch.cpp',
   '../third_party/skia/src/utils/SkOSFile.cpp',
   '../third_party/skia/src/utils/SkParsePath.cpp',
 
@@ -176,8 +174,8 @@
       'sources!': [
         '../third_party/skia/src/ports/SkFontConfigInterface_direct.cpp',
         '../third_party/skia/src/ports/SkFontConfigInterface_direct_factory.cpp',
-        '../third_party/skia/src/ports/SkFontHost_fontconfig.cpp',
-        '../third_party/skia/src/fonts/SkFontMgr_fontconfig.cpp',
+        '../third_party/skia/src/ports/SkFontMgr_FontConfigInterface.cpp',
+        '../third_party/skia/src/ports/SkFontMgr_FontConfigInterface_factory.cpp',
       ],
     }],
     [ 'OS=="win" or OS=="mac" or OS=="ios"', {

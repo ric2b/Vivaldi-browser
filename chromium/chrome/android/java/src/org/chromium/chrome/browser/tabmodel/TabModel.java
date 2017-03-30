@@ -34,7 +34,10 @@ public interface TabModel extends TabList {
          */
         FROM_CHROME_UI,
 
-        /** Opened during the restoration process on startup. */
+        /**
+         * Opened during the restoration process on startup or when merging two instances of
+         * Chrome in Android N+ multi-instance mode.
+         */
         FROM_RESTORE,
 
         /**
@@ -146,6 +149,12 @@ public interface TabModel extends TabList {
      * @param tabId The id of the {@link Tab} to undo.
      */
     public void cancelTabClosure(int tabId);
+
+    /**
+     * Opens the most recently closed tab, bringing the tab back into its original tab model or
+     * this model if the original model no longer exists.
+     */
+    public void openMostRecentlyClosedTab();
 
     /**
      * @return The complete {@link TabList} this {@link TabModel} represents.  Note that this may

@@ -6,7 +6,6 @@ package org.chromium.chrome.browser;
 
 import android.Manifest;
 import android.app.Dialog;
-import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
@@ -215,8 +214,8 @@ public class BluetoothChooserDialogTest extends ChromeActivityTestCaseBase<Chrom
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                mChooserDialog.addDevice("id-1", "Name 1");
-                mChooserDialog.addDevice("id-2", "Name 2");
+                mChooserDialog.addOrUpdateDevice("id-1", "Name 1");
+                mChooserDialog.addOrUpdateDevice("id-2", "Name 2");
             }
         });
 
@@ -224,8 +223,7 @@ public class BluetoothChooserDialogTest extends ChromeActivityTestCaseBase<Chrom
         // the progress spinner should disappear, the Commit button should still
         // be disabled (since nothing's selected), and the list view should
         // show.
-        assertEquals(removeLinkTags(getActivity().getString(
-                R.string.bluetooth_not_seeing_it_idle_some_found)),
+        assertEquals(removeLinkTags(getActivity().getString(R.string.bluetooth_not_seeing_it)),
                 statusView.getText().toString());
         assertFalse(button.isEnabled());
         assertEquals(View.VISIBLE, items.getVisibility());
@@ -394,14 +392,14 @@ public class BluetoothChooserDialogTest extends ChromeActivityTestCaseBase<Chrom
         public boolean mLocationGranted = false;
 
         @Override
-        public boolean hasAndroidLocationPermission(Context context) {
+        public boolean hasAndroidLocationPermission() {
             return mLocationGranted;
         }
 
         public boolean mSystemLocationSettingsEnabled = true;
 
         @Override
-        public boolean isSystemLocationSettingEnabled(Context context) {
+        public boolean isSystemLocationSettingEnabled() {
             return mSystemLocationSettingsEnabled;
         }
     }

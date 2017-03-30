@@ -8,7 +8,6 @@
 #include "base/guid.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
 #include "media/base/cdm_factory.h"
@@ -51,7 +50,7 @@ bool ContentBrowserClient::ShouldUseProcessPerSite(
 
 bool ContentBrowserClient::DoesSiteRequireDedicatedProcess(
     BrowserContext* browser_context,
-    const GURL& effective_url) {
+    const GURL& effective_site_url) {
   return false;
 }
 
@@ -71,12 +70,6 @@ bool ContentBrowserClient::IsHandledURL(const GURL& url) {
 bool ContentBrowserClient::CanCommitURL(RenderProcessHost* process_host,
                                         const GURL& site_url) {
   return true;
-}
-
-bool ContentBrowserClient::IsIllegalOrigin(ResourceContext* resource_context,
-                                           int child_process_id,
-                                           const GURL& origin) {
-  return false;
 }
 
 bool ContentBrowserClient::ShouldAllowOpenURL(SiteInstance* site_instance,
@@ -286,6 +279,7 @@ bool ContentBrowserClient::CanCreateWindow(
     WindowContainerType container_type,
     const GURL& target_url,
     const Referrer& referrer,
+    const std::string& frame_name,
     WindowOpenDisposition disposition,
     const blink::WebWindowFeatures& features,
     bool user_gesture,
@@ -308,15 +302,6 @@ net::NetLog* ContentBrowserClient::GetNetLog() {
   return nullptr;
 }
 
-GeolocationDelegate* ContentBrowserClient::CreateGeolocationDelegate() {
-  // We don't need to override anything, the default implementation is good.
-  return nullptr;
-}
-
-bool ContentBrowserClient::IsFastShutdownPossible() {
-  return true;
-}
-
 base::FilePath ContentBrowserClient::GetDefaultDownloadDirectory() {
   return base::FilePath();
 }
@@ -331,6 +316,11 @@ base::FilePath ContentBrowserClient::GetShaderDiskCacheDirectory() {
 
 BrowserPpapiHost*
     ContentBrowserClient::GetExternalBrowserPpapiHost(int plugin_process_id) {
+  return nullptr;
+}
+
+gpu::GpuChannelEstablishFactory*
+ContentBrowserClient::GetGpuChannelEstablishFactory() {
   return nullptr;
 }
 

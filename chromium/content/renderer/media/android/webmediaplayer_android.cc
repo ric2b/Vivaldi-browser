@@ -65,10 +65,9 @@
 #include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPaint.h"
 #include "third_party/skia/include/core/SkTypeface.h"
-#include "third_party/skia/include/gpu/GrContext.h"
-#include "third_party/skia/include/gpu/SkGrPixelRef.h"
 #include "ui/gfx/image/image.h"
 
 static const uint32_t kGLTextureExternalOES = 0x8D65;
@@ -107,40 +106,6 @@ void OnReleaseTexture(
   gl->DeleteTextures(1, &texture_id);
   // Flush to ensure that the stream texture gets deleted in a timely fashion.
   gl->ShallowFlushCHROMIUM();
-}
-
-bool IsSkBitmapProperlySizedTexture(const SkBitmap* bitmap,
-                                    const gfx::Size& size) {
-  return bitmap->getTexture() && bitmap->width() == size.width() &&
-         bitmap->height() == size.height();
-}
-
-bool AllocateSkBitmapTexture(GrContext* gr,
-                             SkBitmap* bitmap,
-                             const gfx::Size& size) {
-  DCHECK(gr);
-  GrTextureDesc desc;
-  // Use kRGBA_8888_GrPixelConfig, not kSkia8888_GrPixelConfig, to avoid
-  // RGBA to BGRA conversion.
-  desc.fConfig = kRGBA_8888_GrPixelConfig;
-  // kRenderTarget_GrTextureFlagBit avoids a copy before readback in skia.
-  desc.fFlags = kRenderTarget_GrSurfaceFlag;
-  desc.fSampleCnt = 0;
-  desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-  desc.fWidth = size.width();
-  desc.fHeight = size.height();
-  sk_sp<GrTexture> texture(gr->textureProvider()->refScratchTexture(
-        desc, GrTextureProvider::kExact_ScratchTexMatch));
-  if (!texture.get())
-    return false;
-
-  SkImageInfo info = SkImageInfo::MakeN32Premul(desc.fWidth, desc.fHeight);
-  SkGrPixelRef* pixel_ref = new SkGrPixelRef(info, texture.get());
-  if (!pixel_ref)
-    return false;
-  bitmap->setInfo(info);
-  bitmap->setPixelRef(pixel_ref)->unref();
-  return true;
 }
 
 class SyncTokenClientImpl : public media::VideoFrame::SyncTokenClient {
@@ -409,11 +374,16 @@ bool WebMediaPlayerAndroid::IsLocalResource() {
 void WebMediaPlayerAndroid::play() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
 
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableMediaSuspend) &&
-      hasVideo() && player_manager_->render_frame()->IsHidden()) {
-    is_play_pending_ = true;
-    return;
+  if (hasVideo() && player_manager_->render_frame()->IsHidden()) {
+    bool can_video_play_in_background =
+        base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kDisableMediaSuspend) ||
+        (IsBackgroundVideoCandidate() &&
+            delegate_ && delegate_->IsPlayingBackgroundVideo());
+    if (!can_video_play_in_background) {
+      is_play_pending_ = true;
+      return;
+    }
   }
   is_play_pending_ = false;
 
@@ -576,7 +546,7 @@ bool WebMediaPlayerAndroid::seeking() const {
 
 double WebMediaPlayerAndroid::duration() const {
   DCHECK(main_thread_checker_.CalledOnValidThread());
-  if (duration_ == media::kInfiniteDuration())
+  if (duration_ == media::kInfiniteDuration)
     return std::numeric_limits<double>::infinity();
 
   return duration_.InSecondsF();
@@ -659,31 +629,40 @@ void WebMediaPlayerAndroid::paint(blink::WebCanvas* canvas,
     return;
   gpu::gles2::GLES2Interface* gl = provider->contextGL();
 
-  // Copy video texture into a RGBA texture based bitmap first as video texture
-  // on Android is GL_TEXTURE_EXTERNAL_OES which is not supported by Skia yet.
-  // The bitmap's size needs to be the same as the video and use naturalSize()
-  // here. Check if we could reuse existing texture based bitmap.
-  // Otherwise, release existing texture based bitmap and allocate
-  // a new one based on video size.
-  if (!IsSkBitmapProperlySizedTexture(&bitmap_, naturalSize())) {
-    if (!AllocateSkBitmapTexture(provider->grContext(), &bitmap_,
-                                 naturalSize())) {
-      return;
-    }
+  scoped_refptr<VideoFrame> video_frame;
+  {
+    base::AutoLock auto_lock(current_frame_lock_);
+    video_frame = current_frame_;
   }
 
-  unsigned textureId = skia::GrBackendObjectToGrGLTextureInfo(
-                           (bitmap_.getTexture())->getTextureHandle())
-                           ->fID;
-  if (!copyVideoTextureToPlatformTexture(gl, textureId, GL_RGBA,
-                                         GL_UNSIGNED_BYTE, true, false)) {
+  if (!video_frame.get() || !video_frame->HasTextures())
     return;
-  }
+  DCHECK_EQ(1u, media::VideoFrame::NumPlanes(video_frame->format()));
+  const gpu::MailboxHolder& mailbox_holder = video_frame->mailbox_holder(0);
 
-  // Ensure SkBitmap to make the latest change by external source visible.
-  bitmap_.notifyPixelsChanged();
+  gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
 
-  // Draw the texture based bitmap onto the Canvas. If the canvas is
+  uint32_t src_texture = gl->CreateAndConsumeTextureCHROMIUM(
+      mailbox_holder.texture_target, mailbox_holder.mailbox.name);
+
+  GrGLTextureInfo texture_info;
+  texture_info.fID = src_texture;
+  texture_info.fTarget = mailbox_holder.texture_target;
+
+  GrBackendTextureDesc desc;
+  desc.fWidth = naturalSize().width;
+  desc.fHeight = naturalSize().height;
+  desc.fOrigin = kTopLeft_GrSurfaceOrigin;
+  desc.fConfig = kRGBA_8888_GrPixelConfig;
+  desc.fSampleCnt = 0;
+  desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
+
+  sk_sp<SkImage> image(SkImage::MakeFromTexture(provider->grContext(), desc,
+                                                kOpaque_SkAlphaType));
+  if (!image)
+    return;
+
+  // Draw the texture based image onto the Canvas. If the canvas is
   // hardware based, this will do a GPU-GPU texture copy.
   // If the canvas is software based, the texture based bitmap will be
   // readbacked to system memory then draw onto the canvas.
@@ -694,8 +673,16 @@ void WebMediaPlayerAndroid::paint(blink::WebCanvas* canvas,
   paint.setXfermodeMode(mode);
   // It is not necessary to pass the dest into the drawBitmap call since all
   // the context have been set up before calling paintCurrentFrameInContext.
-  canvas->drawBitmapRect(bitmap_, dest, &paint);
+  canvas->drawImageRect(image, dest, &paint);
+
+  // Ensure the Skia draw of the GL texture is flushed to GL, delete the
+  // mailboxed texture from this context, and then signal that we're done with
+  // the video frame.
   canvas->flush();
+  gl->DeleteTextures(1, &src_texture);
+  gl->Flush();
+  SyncTokenClientImpl client(gl);
+  video_frame->UpdateReleaseSyncToken(&client);
 }
 
 bool WebMediaPlayerAndroid::copyVideoTextureToPlatformTexture(
@@ -822,7 +809,7 @@ void WebMediaPlayerAndroid::OnMediaMetadataChanged(
   // For HLS streams, the reported duration may be zero for infinite streams.
   // See http://crbug.com/501213.
   if (duration.is_zero() && IsHLSStream())
-    duration = media::kInfiniteDuration();
+    duration = media::kInfiniteDuration;
 
   // Update duration, if necessary, prior to ready state updates that may
   // cause duration() query.
@@ -1269,10 +1256,8 @@ void WebMediaPlayerAndroid::SetVideoFrameProviderClient(
 
   // Set the callback target when a frame is produced. Need to do this before
   // StopUsingProvider to ensure we really stop using the client.
-  if (stream_texture_proxy_) {
-    stream_texture_proxy_->BindToLoop(stream_id_, client,
-                                      compositor_task_runner_);
-  }
+  if (stream_texture_proxy_)
+    UpdateStreamTextureProxyCallback(client);
 
   if (video_frame_provider_client_ && video_frame_provider_client_ != client)
     video_frame_provider_client_->StopUsingProvider();
@@ -1328,6 +1313,25 @@ void WebMediaPlayerAndroid::RemoveSurfaceTextureAndProxy() {
                           (hasVideo() || IsHLSStream());
 }
 
+void WebMediaPlayerAndroid::UpdateStreamTextureProxyCallback(
+    cc::VideoFrameProvider::Client* client) {
+  base::Closure frame_received_cb;
+
+  if (client) {
+    // Unretained is safe here because:
+    // - |client| is valid until we receive a call to
+    // SetVideoFrameProviderClient(nullptr).
+    // - SetVideoFrameProviderClient(nullptr) clears proxy's callback
+    // guaranteeing it will no longer be run.
+    frame_received_cb =
+        base::Bind(&cc::VideoFrameProvider::Client::DidReceiveFrame,
+                   base::Unretained(client));
+  }
+
+  stream_texture_proxy_->BindToTaskRunner(stream_id_, frame_received_cb,
+                                          compositor_task_runner_);
+}
+
 void WebMediaPlayerAndroid::TryCreateStreamTextureProxyIfNeeded() {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   // Already created.
@@ -1346,10 +1350,8 @@ void WebMediaPlayerAndroid::TryCreateStreamTextureProxyIfNeeded() {
   if (stream_texture_proxy_) {
     DoCreateStreamTexture();
     ReallocateVideoFrame();
-    if (video_frame_provider_client_) {
-      stream_texture_proxy_->BindToLoop(
-          stream_id_, video_frame_provider_client_, compositor_task_runner_);
-    }
+    if (video_frame_provider_client_)
+      UpdateStreamTextureProxyCallback(video_frame_provider_client_);
   }
 }
 
@@ -1514,6 +1516,13 @@ void WebMediaPlayerAndroid::OnWaitingForDecryptionKey() {
 }
 
 void WebMediaPlayerAndroid::OnHidden() {
+  // Pause audible video preserving its session.
+  if (hasVideo() && IsBackgroundVideoCandidate() && !paused()) {
+    Pause(false);
+    is_play_pending_ = true;
+    return;
+  }
+
   OnSuspendRequested(false);
 }
 
@@ -1531,8 +1540,10 @@ void WebMediaPlayerAndroid::OnSuspendRequested(bool must_suspend) {
 
   // If we're idle or playing video, pause and release resources; audio only
   // players are allowed to continue unless indicated otherwise by the call.
-  if (must_suspend || (paused() && playback_completed_) || hasVideo())
+  if (must_suspend || (paused() && playback_completed_) ||
+      (hasVideo() && !IsBackgroundVideoCandidate())) {
     SuspendAndReleaseResources();
+  }
 }
 
 void WebMediaPlayerAndroid::OnPlay() {
@@ -1684,6 +1695,18 @@ void WebMediaPlayerAndroid::ReportHLSMetrics() const {
   UMA_HISTOGRAM_ENUMERATION(
       "Media.Android.IsHttpLiveStreamingMediaPredictionResult",
       result, PREDICTION_RESULT_MAX);
+}
+
+bool WebMediaPlayerAndroid::IsBackgroundVideoCandidate() const {
+  DCHECK(hasVideo());
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableMediaSuspend)) {
+    return false;
+  }
+
+  return base::FeatureList::IsEnabled(media::kResumeBackgroundVideo) &&
+      hasAudio() && !isRemote() && delegate_ && delegate_->IsHidden();
 }
 
 }  // namespace content

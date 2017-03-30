@@ -6,11 +6,8 @@
  * @fileoverview Polymer element for displaying a collapsable list of networks.
  */
 
-(function() {
-
 /**
  * Polymer class definition for 'cr-network-list'.
- * TODO(stevenjb): Update with iron-list(?) once implemented in Polymer 1.0.
  */
 Polymer({
   is: 'cr-network-list',
@@ -22,73 +19,93 @@ Polymer({
     maxHeight: {
       type: Number,
       value: 1000,
-      observer: 'maxHeightChanged_'
-    },
-
-    /**
-     * Determines how the list item will be displayed:
-     *  'visible' - displays the network icon (with strength) and name
-     *  'known' - displays the visible info along with a toggle icon for the
-     *      preferred status and a remove button.
-     */
-    listType: {
-      type: String,
-      value: 'visible'
+      observer: 'maxHeightChanged_',
     },
 
     /**
      * The list of network state properties for the items to display.
-     * See <cr-network-list-network-item/> for details.
-     *
      * @type {!Array<!CrOnc.NetworkStateProperties>}
      */
     networks: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
     /**
-     * The list of custom state properties for the items to display.
-     * See <cr-network-list-custom-item/> for details.
-     *
-     * @type {!Array<Object>}
+     * The list of custom items to display after the list of networks.
+     * @type {!Array<!CrNetworkList.CustomItemState>}
      */
     customItems: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
-    /**
-     * True if the list is opened.
-     */
-    opened: {
-      type: Boolean,
-      value: true
-    },
-
-    /**
-     * Shows all buttons from the list items.
-     */
+    /** True if action buttons should be shown for the itmes. */
     showButtons: {
       type: Boolean,
       value: false,
+      reflectToAttribute: true,
     },
+
+    /** Whether to show separators between all items. */
+    showSeparators: {
+      type: Boolean,
+      value: false,
+      reflectToAttribute: true,
+    },
+
+    /**
+     * Reflects the iron-list selecteditem property.
+     * @type {!CrNetworkList.CrNetworkListItemType}
+     */
+    selectedItem: {
+      type: Object,
+      observer: 'selectedItemChanged_',
+    }
   },
 
-  /**
-   * Polymer maxHeight changed method.
-   */
+  behaviors: [CrScrollableBehavior],
+
+  /** @private */
   maxHeightChanged_: function() {
     this.$.container.style.maxHeight = this.maxHeight + 'px';
   },
 
   /**
-   * Event triggered when a list item is tapped.
-   * @param {!{model: {item: !CrOnc.NetworkStateProperties}}} event
+   * Returns a combined list of networks and custom items.
+   * @return {!Array<!CrNetworkList.CrNetworkListItemType>}
    * @private
    */
-  onTap_: function(event) {
-    this.fire('selected', event.model.item);
+  getItems_: function() {
+    let customItems = this.customItems.slice();
+    // Flag the first custom item with isFirstCustomItem = true.
+    if (!this.showSeparators && customItems.length > 0)
+      customItems[0].isFirstCustomItem = true;
+    return this.networks.concat(customItems);
+  },
+
+  /**
+   * Use iron-list selection (which is not the same as focus) to trigger
+   * tap (requires selection-enabled) or keyboard selection.
+   * @private
+   */
+  selectedItemChanged_: function() {
+    if (this.selectedItem)
+      this.onItemAction_(this.selectedItem);
+  },
+
+  /**
+   * @param {!CrNetworkList.CrNetworkListItemType} item
+   * @private
+   */
+  onItemAction_: function(item) {
+    if (item.hasOwnProperty('customItemName'))
+      this.fire('custom-item-selected', item);
+    else
+      this.fire('selected', item);
   },
 });
-})();

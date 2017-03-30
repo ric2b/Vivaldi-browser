@@ -274,19 +274,15 @@ public:
         NOTREACHED();
         sizingState = ColumnSizingFirstIteration;
     }
-    bool isValidTransitionForDirection(GridTrackSizingDirection direction)
+    bool isValidTransition(GridTrackSizingDirection direction) const
     {
         switch (sizingState) {
         case ColumnSizingFirstIteration:
-            return direction == ForColumns ? true : false;
-        case RowSizingFirstIteration:
-            return direction == ForRows ? true : false;
         case ColumnSizingSecondIteration:
-            if (direction == ForRows)
-                sizingState = RowSizingFirstIteration;
-            return true;
+            return direction == ForColumns;
+        case RowSizingFirstIteration:
         case RowSizingSecondIteration:
-            return direction == ForRows ? true : false;
+            return direction == ForRows;
         }
         NOTREACHED();
         return false;
@@ -387,15 +383,15 @@ LayoutUnit LayoutGrid::computeTrackBasedLogicalHeight(const GridSizingData& sizi
     for (const auto& row : sizingData.rowTracks)
         logicalHeight += row.baseSize();
 
-    logicalHeight += guttersSize(ForRows, sizingData.rowTracks.size());
+    logicalHeight += guttersSize(ForRows, 0, sizingData.rowTracks.size());
 
     return logicalHeight;
 }
 
 void LayoutGrid::computeTrackSizesForDirection(GridTrackSizingDirection direction, GridSizingData& sizingData, LayoutUnit freeSpace)
 {
-    DCHECK(sizingData.isValidTransitionForDirection(direction));
-    sizingData.freeSpaceForDirection(direction) = freeSpace - guttersSize(direction, direction == ForRows ? gridRowCount() : gridColumnCount());
+    DCHECK(sizingData.isValidTransition(direction));
+    sizingData.freeSpaceForDirection(direction) = freeSpace - guttersSize(direction, 0, direction == ForRows ? gridRowCount() : gridColumnCount());
     sizingData.sizingOperation = TrackSizing;
 
     LayoutUnit baseSizes, growthLimits;
@@ -443,7 +439,11 @@ void LayoutGrid::layoutBlock(bool relayoutChildren)
 
         TextAutosizer::LayoutScope textAutosizerLayoutScope(this, &layoutScope);
 
-        placeItemsOnGrid();
+        // TODO(svillar): we won't need to do this once the intrinsic width computation is isolated
+        // from the LayoutGrid object state (it should not touch any attribute) (see crbug.com/627812)
+        if (m_autoRepeatColumns && m_autoRepeatColumns != computeAutoRepeatTracksCount(ForColumns, TrackSizing))
+            dirtyGrid();
+        placeItemsOnGrid(TrackSizing);
 
         GridSizingData sizingData(gridColumnCount(), gridRowCount());
 
@@ -500,25 +500,88 @@ void LayoutGrid::layoutBlock(bool relayoutChildren)
     clearNeedsLayout();
 }
 
-LayoutUnit LayoutGrid::guttersSize(GridTrackSizingDirection direction, size_t span) const
+bool LayoutGrid::hasAutoRepeatEmptyTracks(GridTrackSizingDirection direction) const
+{
+    return direction == ForColumns ? !!m_autoRepeatEmptyColumns : !!m_autoRepeatEmptyRows;
+}
+
+bool LayoutGrid::isEmptyAutoRepeatTrack(GridTrackSizingDirection direction, size_t line) const
+{
+    DCHECK(hasAutoRepeatEmptyTracks(direction));
+    return direction == ForColumns ? m_autoRepeatEmptyColumns->contains(line) : m_autoRepeatEmptyRows->contains(line);
+}
+
+LayoutUnit LayoutGrid::gridGapForDirection(GridTrackSizingDirection direction) const
+{
+    return valueForLength(direction == ForColumns ? styleRef().gridColumnGap() : styleRef().gridRowGap(), LayoutUnit());
+}
+
+LayoutUnit LayoutGrid::guttersSize(GridTrackSizingDirection direction, size_t startLine, size_t span) const
 {
     if (span <= 1)
         return LayoutUnit();
 
-    const Length& trackGap = direction == ForColumns ? styleRef().gridColumnGap() : styleRef().gridRowGap();
-    return valueForLength(trackGap, LayoutUnit()) * (span - 1);
+    bool isRowAxis = direction == ForColumns;
+    LayoutUnit gap = gridGapForDirection(direction);
+
+    // Fast path, no collapsing tracks.
+    if (!hasAutoRepeatEmptyTracks(direction))
+        return gap * (span - 1);
+
+    // If there are collapsing tracks we need to be sure that gutters are properly collapsed. Apart
+    // from that, if we have a collapsed track in the edges of the span we're considering, we need
+    // to move forward (or backwards) in order to know whether the collapsed tracks reach the end of
+    // the grid (so the gap becomes 0) or there is a non empty track before that.
+
+    LayoutUnit gapAccumulator;
+    size_t endLine = startLine + span;
+
+    for (size_t line = startLine; line < endLine - 1; ++line) {
+        if (!isEmptyAutoRepeatTrack(direction, line))
+            gapAccumulator += gap;
+    }
+
+    // If the startLine is the start line of a collapsed track we need to go backwards till we reach
+    // a non collapsed track. If we find a non collapsed track we need to add that gap.
+    if (startLine && isEmptyAutoRepeatTrack(direction, startLine)) {
+        size_t nonEmptyTracksBeforeStartLine = startLine;
+        auto begin = isRowAxis ? m_autoRepeatEmptyColumns->begin() : m_autoRepeatEmptyRows->begin();
+        for (auto it = begin; *it != startLine; ++it) {
+            DCHECK(nonEmptyTracksBeforeStartLine);
+            --nonEmptyTracksBeforeStartLine;
+        }
+        if (nonEmptyTracksBeforeStartLine)
+            gapAccumulator += gap;
+    }
+
+    // If the endLine is the end line of a collapsed track we need to go forward till we reach a non
+    // collapsed track. If we find a non collapsed track we need to add that gap.
+    if (isEmptyAutoRepeatTrack(direction, endLine - 1)) {
+        size_t nonEmptyTracksAfterEndLine = (isRowAxis ? gridColumnCount() : gridRowCount()) - endLine;
+        auto currentEmptyTrack = isRowAxis ? m_autoRepeatEmptyColumns->find(endLine - 1) : m_autoRepeatEmptyRows->find(endLine - 1);
+        auto endEmptyTrack = isRowAxis ? m_autoRepeatEmptyColumns->end() : m_autoRepeatEmptyRows->end();
+        // HashSet iterators do not implement operator- so we have to manually iterate to know the number of remaining empty tracks.
+        for (auto it = ++currentEmptyTrack; it != endEmptyTrack; ++it) {
+            DCHECK(nonEmptyTracksAfterEndLine);
+            --nonEmptyTracksAfterEndLine;
+        }
+        if (nonEmptyTracksAfterEndLine)
+            gapAccumulator += gap;
+    }
+
+    return gapAccumulator;
 }
 
 void LayoutGrid::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const
 {
-    const_cast<LayoutGrid*>(this)->placeItemsOnGrid();
+    const_cast<LayoutGrid*>(this)->placeItemsOnGrid(IntrinsicSizeComputation);
 
     GridSizingData sizingData(gridColumnCount(), gridRowCount());
     sizingData.freeSpaceForDirection(ForColumns) = LayoutUnit();
     sizingData.sizingOperation = IntrinsicSizeComputation;
-    const_cast<LayoutGrid*>(this)->computeUsedBreadthOfGridTracks(ForColumns, sizingData, minLogicalWidth, maxLogicalWidth);
+    computeUsedBreadthOfGridTracks(ForColumns, sizingData, minLogicalWidth, maxLogicalWidth);
 
-    LayoutUnit totalGuttersSize = guttersSize(ForColumns, sizingData.columnTracks.size());
+    LayoutUnit totalGuttersSize = guttersSize(ForColumns, 0, sizingData.columnTracks.size());
     minLogicalWidth += totalGuttersSize;
     maxLogicalWidth += totalGuttersSize;
 
@@ -534,7 +597,7 @@ void LayoutGrid::computeIntrinsicLogicalHeight(GridSizingData& sizingData)
     sizingData.sizingOperation = IntrinsicSizeComputation;
     computeUsedBreadthOfGridTracks(ForRows, sizingData, m_minContentHeight, m_maxContentHeight);
 
-    LayoutUnit totalGuttersSize = guttersSize(ForRows, gridRowCount());
+    LayoutUnit totalGuttersSize = guttersSize(ForRows, 0, gridRowCount());
     m_minContentHeight += totalGuttersSize;
     m_maxContentHeight += totalGuttersSize;
 
@@ -567,7 +630,7 @@ static inline double normalizedFlexFraction(const GridTrack& track, double flexF
     return track.baseSize() / std::max<double>(1, flexFactor);
 }
 
-void LayoutGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection direction, GridSizingData& sizingData, LayoutUnit& baseSizesWithoutMaximization, LayoutUnit& growthLimitsWithoutMaximization)
+void LayoutGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection direction, GridSizingData& sizingData, LayoutUnit& baseSizesWithoutMaximization, LayoutUnit& growthLimitsWithoutMaximization) const
 {
     LayoutUnit& freeSpace = sizingData.freeSpaceForDirection(direction);
     const LayoutUnit initialFreeSpace = freeSpace;
@@ -579,7 +642,7 @@ void LayoutGrid::computeUsedBreadthOfGridTracks(GridTrackSizingDirection directi
     // Grid gutters were removed from freeSpace by the caller, but we must use them to compute relative (i.e. percentages) sizes.
     bool hasDefiniteFreeSpace = sizingData.sizingOperation == TrackSizing;
     if (hasDefiniteFreeSpace)
-        maxSize += guttersSize(direction, direction == ForRows ? gridRowCount() : gridColumnCount());
+        maxSize += guttersSize(direction, 0, direction == ForRows ? gridRowCount() : gridColumnCount());
 
     // 1. Initialize per Grid track variables.
     for (size_t i = 0; i < tracks.size(); ++i) {
@@ -781,34 +844,45 @@ const GridTrackSize& LayoutGrid::rawGridTrackSize(GridTrackSizingDirection direc
     bool isRowAxis = direction == ForColumns;
     const Vector<GridTrackSize>& trackStyles = isRowAxis ? styleRef().gridTemplateColumns() : styleRef().gridTemplateRows();
     const Vector<GridTrackSize>& autoRepeatTrackStyles = isRowAxis ? styleRef().gridAutoRepeatColumns() : styleRef().gridAutoRepeatRows();
-    const GridTrackSize& autoTrackSize = isRowAxis ? styleRef().gridAutoColumns() : styleRef().gridAutoRows();
+    const Vector<GridTrackSize>& autoTrackStyles = isRowAxis ? styleRef().gridAutoColumns() : styleRef().gridAutoRows();
     size_t insertionPoint = isRowAxis ? styleRef().gridAutoRepeatColumnsInsertionPoint() : styleRef().gridAutoRepeatRowsInsertionPoint();
-    size_t repetitions = autoRepeatCountForDirection(direction);
+    size_t autoRepeatTracksCount = autoRepeatCountForDirection(direction);
 
     // We should not use GridPositionsResolver::explicitGridXXXCount() for this because the
     // explicit grid might be larger than the number of tracks in grid-template-rows|columns (if
     // grid-template-areas is specified for example).
-    size_t explicitTracksCount = trackStyles.size() + repetitions;
+    size_t explicitTracksCount = trackStyles.size() + autoRepeatTracksCount;
 
     int untranslatedIndexAsInt = translatedIndex + (isRowAxis ? m_smallestColumnStart : m_smallestRowStart);
-    if (untranslatedIndexAsInt < 0)
-        return autoTrackSize;
+    size_t autoTrackStylesSize = autoTrackStyles.size();
+    if (untranslatedIndexAsInt < 0) {
+        int index = untranslatedIndexAsInt % static_cast<int>(autoTrackStylesSize);
+        // We need to traspose the index because the first negative implicit line will get the last defined auto track and so on.
+        index += index ? autoTrackStylesSize : 0;
+        return autoTrackStyles[index];
+    }
 
     size_t untranslatedIndex = static_cast<size_t>(untranslatedIndexAsInt);
     if (untranslatedIndex >= explicitTracksCount)
-        return autoTrackSize;
+        return autoTrackStyles[(untranslatedIndex - explicitTracksCount) % autoTrackStylesSize];
 
-    if (LIKELY(!repetitions) || untranslatedIndex < insertionPoint)
+    if (LIKELY(!autoRepeatTracksCount) || untranslatedIndex < insertionPoint)
         return trackStyles[untranslatedIndex];
 
-    if (untranslatedIndex < (insertionPoint + repetitions))
-        return autoRepeatTrackStyles[0];
+    if (untranslatedIndex < (insertionPoint + autoRepeatTracksCount)) {
+        size_t autoRepeatLocalIndex = untranslatedIndexAsInt - insertionPoint;
+        return autoRepeatTrackStyles[autoRepeatLocalIndex % autoRepeatTrackStyles.size()];
+    }
 
-    return trackStyles[untranslatedIndex - repetitions];
+    return trackStyles[untranslatedIndex - autoRepeatTracksCount];
 }
 
 GridTrackSize LayoutGrid::gridTrackSize(GridTrackSizingDirection direction, size_t translatedIndex, SizingOperation sizingOperation) const
 {
+    // Collapse empty auto repeat tracks if auto-fit.
+    if (hasAutoRepeatEmptyTracks(direction) && isEmptyAutoRepeatTrack(direction, translatedIndex))
+        return { Length(Fixed), Length(Fixed) };
+
     const GridTrackSize& trackSize = rawGridTrackSize(direction, translatedIndex);
 
     GridLength minTrackBreadth = trackSize.minTrackBreadth();
@@ -840,7 +914,7 @@ bool LayoutGrid::isOrthogonalChild(const LayoutBox& child) const
     return child.isHorizontalWritingMode() != isHorizontalWritingMode();
 }
 
-LayoutUnit LayoutGrid::logicalHeightForChild(LayoutBox& child, GridSizingData& sizingData)
+LayoutUnit LayoutGrid::logicalHeightForChild(LayoutBox& child, GridSizingData& sizingData) const
 {
     GridTrackSizingDirection childBlockDirection = flowAwareDirectionForChild(child, ForRows);
     SubtreeLayoutScope layoutScope(child);
@@ -864,7 +938,7 @@ GridTrackSizingDirection LayoutGrid::flowAwareDirectionForChild(const LayoutBox&
     return !isOrthogonalChild(child) ? direction : (direction == ForColumns ? ForRows : ForColumns);
 }
 
-LayoutUnit LayoutGrid::minSizeForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData)
+LayoutUnit LayoutGrid::minSizeForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     GridTrackSizingDirection childInlineDirection = flowAwareDirectionForChild(child, ForColumns);
     bool isRowAxis = direction == childInlineDirection;
@@ -885,7 +959,7 @@ LayoutUnit LayoutGrid::minSizeForChild(LayoutBox& child, GridTrackSizingDirectio
     return child.computeLogicalHeightUsing(MinSize, childMinSize, child.intrinsicLogicalHeight()) + child.marginLogicalHeight() + child.scrollbarLogicalHeight();
 }
 
-bool LayoutGrid::updateOverrideContainingBlockContentSizeForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData)
+bool LayoutGrid::updateOverrideContainingBlockContentSizeForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     LayoutUnit overrideSize = gridAreaBreadthForChild(child, direction, sizingData);
     if (hasOverrideContainingBlockContentSizeForChild(child, direction) && overrideContainingBlockContentSizeForChild(child, direction) == overrideSize)
@@ -895,7 +969,7 @@ bool LayoutGrid::updateOverrideContainingBlockContentSizeForChild(LayoutBox& chi
     return true;
 }
 
-LayoutUnit LayoutGrid::minContentForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData)
+LayoutUnit LayoutGrid::minContentForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     GridTrackSizingDirection childInlineDirection = flowAwareDirectionForChild(child, ForColumns);
     if (direction == childInlineDirection) {
@@ -924,7 +998,7 @@ LayoutUnit LayoutGrid::minContentForChild(LayoutBox& child, GridTrackSizingDirec
     return logicalHeightForChild(child, sizingData);
 }
 
-LayoutUnit LayoutGrid::maxContentForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData)
+LayoutUnit LayoutGrid::maxContentForChild(LayoutBox& child, GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     GridTrackSizingDirection childInlineDirection = flowAwareDirectionForChild(child, ForColumns);
     if (direction == childInlineDirection) {
@@ -986,7 +1060,7 @@ bool LayoutGrid::spanningItemCrossesFlexibleSizedTracks(const GridSpan& span, Gr
     return false;
 }
 
-void LayoutGrid::resolveContentBasedTrackSizingFunctions(GridTrackSizingDirection direction, GridSizingData& sizingData)
+void LayoutGrid::resolveContentBasedTrackSizingFunctions(GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     sizingData.itemsSortedByIncreasingSpan.shrink(0);
     if (!m_gridItemArea.isEmpty()) {
@@ -1027,7 +1101,7 @@ void LayoutGrid::resolveContentBasedTrackSizingFunctions(GridTrackSizingDirectio
     }
 }
 
-void LayoutGrid::resolveContentBasedTrackSizingFunctionsForNonSpanningItems(GridTrackSizingDirection direction, const GridSpan& span, LayoutBox& gridItem, GridTrack& track, GridSizingData& sizingData)
+void LayoutGrid::resolveContentBasedTrackSizingFunctionsForNonSpanningItems(GridTrackSizingDirection direction, const GridSpan& span, LayoutBox& gridItem, GridTrack& track, GridSizingData& sizingData) const
 {
     const size_t trackPosition = span.startLine();
     GridTrackSize trackSize = gridTrackSize(direction, trackPosition, sizingData.sizingOperation);
@@ -1150,7 +1224,7 @@ static void updateTrackSizeForTrackSizeComputationPhase(TrackSizeComputationPhas
     ASSERT_NOT_REACHED();
 }
 
-LayoutUnit LayoutGrid::currentItemSizeForTrackSizeComputationPhase(TrackSizeComputationPhase phase, LayoutBox& gridItem, GridTrackSizingDirection direction, GridSizingData& sizingData)
+LayoutUnit LayoutGrid::currentItemSizeForTrackSizeComputationPhase(TrackSizeComputationPhase phase, LayoutBox& gridItem, GridTrackSizingDirection direction, GridSizingData& sizingData) const
 {
     switch (phase) {
     case ResolveIntrinsicMinimums:
@@ -1171,7 +1245,7 @@ LayoutUnit LayoutGrid::currentItemSizeForTrackSizeComputationPhase(TrackSizeComp
 }
 
 template <TrackSizeComputationPhase phase>
-void LayoutGrid::resolveContentBasedTrackSizingFunctionsForItems(GridTrackSizingDirection direction, GridSizingData& sizingData, const GridItemsSpanGroupRange& gridItemsWithSpan)
+void LayoutGrid::resolveContentBasedTrackSizingFunctionsForItems(GridTrackSizingDirection direction, GridSizingData& sizingData, const GridItemsSpanGroupRange& gridItemsWithSpan) const
 {
     Vector<GridTrack>& tracks = (direction == ForColumns) ? sizingData.columnTracks : sizingData.rowTracks;
     for (const auto& trackIndex : sizingData.contentSizedTracksIndex) {
@@ -1203,7 +1277,7 @@ void LayoutGrid::resolveContentBasedTrackSizingFunctionsForItems(GridTrackSizing
         if (sizingData.filteredTracks.isEmpty())
             continue;
 
-        spanningTracksSize += guttersSize(direction, itemSpan.integerSpan());
+        spanningTracksSize += guttersSize(direction, itemSpan.startLine(), itemSpan.integerSpan());
 
         LayoutUnit extraSpace = currentItemSizeForTrackSizeComputationPhase(phase, gridItemWithSpan.gridItem(), direction, sizingData) - spanningTracksSize;
         extraSpace = extraSpace.clampNegativeToZero();
@@ -1232,7 +1306,7 @@ static bool sortByGridTrackGrowthPotential(const GridTrack* track1, const GridTr
 }
 
 template <TrackSizeComputationPhase phase>
-void LayoutGrid::distributeSpaceToTracks(Vector<GridTrack*>& tracks, const Vector<GridTrack*>* growBeyondGrowthLimitsTracks, GridSizingData& sizingData, LayoutUnit& availableLogicalSpace)
+void LayoutGrid::distributeSpaceToTracks(Vector<GridTrack*>& tracks, const Vector<GridTrack*>* growBeyondGrowthLimitsTracks, GridSizingData& sizingData, LayoutUnit& availableLogicalSpace) const
 {
     ASSERT(availableLogicalSpace >= 0);
 
@@ -1309,31 +1383,27 @@ void LayoutGrid::insertItemIntoGrid(LayoutBox& child, const GridArea& area)
     }
 }
 
-size_t LayoutGrid::computeAutoRepeatTracksCount(GridTrackSizingDirection direction) const
+size_t LayoutGrid::computeAutoRepeatTracksCount(GridTrackSizingDirection direction, SizingOperation sizingOperation) const
 {
     bool isRowAxis = direction == ForColumns;
     const auto& autoRepeatTracks = isRowAxis ? styleRef().gridAutoRepeatColumns() : styleRef().gridAutoRepeatRows();
+    size_t autoRepeatTrackListLength = autoRepeatTracks.size();
 
-    if (!autoRepeatTracks.size())
+    if (!autoRepeatTrackListLength)
         return 0;
 
-    DCHECK_EQ(autoRepeatTracks.size(), static_cast<size_t>(1));
-    auto autoTrackSize = autoRepeatTracks.at(0);
-    DCHECK(autoTrackSize.minTrackBreadth().isLength());
-    DCHECK(!autoTrackSize.minTrackBreadth().isFlex());
-
-    LayoutUnit availableSize = isRowAxis ? availableLogicalWidth() : computeContentLogicalHeight(MainOrPreferredSize, styleRef().logicalHeight(), LayoutUnit(-1));
-    if (availableSize == -1) {
-        const Length& maxLength = isRowAxis ? styleRef().logicalMaxWidth() : styleRef().logicalMaxHeight();
-        if (!maxLength.isMaxSizeNone()) {
-            availableSize = isRowAxis
-                ? computeLogicalWidthUsing(MaxSize, maxLength, containingBlockLogicalWidthForContent(), containingBlock())
-                : computeContentLogicalHeight(MaxSize, maxLength, LayoutUnit(-1));
-        }
+    LayoutUnit availableSize;
+    if (isRowAxis) {
+        availableSize = sizingOperation == IntrinsicSizeComputation ? LayoutUnit(-1) : availableLogicalWidth();
     } else {
-        availableSize = isRowAxis
-            ? constrainLogicalWidthByMinMax(availableSize, availableLogicalWidth(), containingBlock())
-            : constrainLogicalHeightByMinMax(availableSize, LayoutUnit(-1));
+        availableSize = computeContentLogicalHeight(MainOrPreferredSize, styleRef().logicalHeight(), LayoutUnit(-1));
+        if (availableSize == -1) {
+            const Length& maxLength = styleRef().logicalMaxHeight();
+            if (!maxLength.isMaxSizeNone())
+                availableSize = computeContentLogicalHeight(MaxSize, maxLength, LayoutUnit(-1));
+        } else {
+            availableSize = constrainLogicalHeightByMinMax(availableSize, LayoutUnit(-1));
+        }
     }
 
     bool needsToFulfillMinimumSize = false;
@@ -1341,21 +1411,27 @@ size_t LayoutGrid::computeAutoRepeatTracksCount(GridTrackSizingDirection directi
     if (indefiniteMainAndMaxSizes) {
         const Length& minSize = isRowAxis ? styleRef().logicalMinWidth() : styleRef().logicalMinHeight();
         if (!minSize.isSpecified())
-            return 1;
+            return autoRepeatTrackListLength;
 
         LayoutUnit containingBlockAvailableSize = isRowAxis ? containingBlockLogicalWidthForContent() : containingBlockLogicalHeightForContent(ExcludeMarginBorderPadding);
         availableSize = valueForLength(minSize, containingBlockAvailableSize);
         needsToFulfillMinimumSize = true;
     }
 
-    bool hasDefiniteMaxTrackSizingFunction = autoTrackSize.maxTrackBreadth().isLength() && !autoTrackSize.maxTrackBreadth().isContentSized();
-    const Length trackLength = hasDefiniteMaxTrackSizingFunction ? autoTrackSize.maxTrackBreadth().length() : autoTrackSize.minTrackBreadth().length();
+    LayoutUnit autoRepeatTracksSize;
+    for (auto autoTrackSize : autoRepeatTracks) {
+        DCHECK(autoTrackSize.minTrackBreadth().isLength());
+        DCHECK(!autoTrackSize.minTrackBreadth().isFlex());
+        bool hasDefiniteMaxTrackSizingFunction = autoTrackSize.maxTrackBreadth().isLength() && !autoTrackSize.maxTrackBreadth().isContentSized();
+        auto trackLength = hasDefiniteMaxTrackSizingFunction ? autoTrackSize.maxTrackBreadth().length() : autoTrackSize.minTrackBreadth().length();
+        autoRepeatTracksSize += valueForLength(trackLength, availableSize);
+    }
     // For the purpose of finding the number of auto-repeated tracks, the UA must floor the track size to a UA-specified
     // value to avoid division by zero. It is suggested that this floor be 1px.
-    LayoutUnit autoRepeatTrackSize = std::max<LayoutUnit>(LayoutUnit(1), valueForLength(trackLength, availableSize));
+    autoRepeatTracksSize = std::max<LayoutUnit>(LayoutUnit(1), autoRepeatTracksSize);
 
     // There will be always at least 1 auto-repeat track, so take it already into account when computing the total track size.
-    LayoutUnit tracksSize = autoRepeatTrackSize;
+    LayoutUnit tracksSize = autoRepeatTracksSize;
     const Vector<GridTrackSize>& trackSizes = isRowAxis ? styleRef().gridTemplateColumns() : styleRef().gridTemplateRows();
 
     for (const auto& track : trackSizes) {
@@ -1366,14 +1442,14 @@ size_t LayoutGrid::computeAutoRepeatTracksCount(GridTrackSizingDirection directi
 
     // Add gutters as if there where only 1 auto repeat track. Gaps between auto repeat tracks will be added later when
     // computing the repetitions.
-    LayoutUnit gapSize = guttersSize(direction, 2);
+    LayoutUnit gapSize = gridGapForDirection(direction);
     tracksSize += gapSize * trackSizes.size();
 
     LayoutUnit freeSpace = availableSize - tracksSize;
     if (freeSpace <= 0)
-        return 1;
+        return autoRepeatTrackListLength;
 
-    size_t repetitions = 1 + (freeSpace / (autoRepeatTrackSize + gapSize)).toInt();
+    size_t repetitions = 1 + (freeSpace / (autoRepeatTracksSize + gapSize)).toInt();
 
     // Provided the grid container does not have a definite size or max-size in the relevant axis,
     // if the min size is definite then the number of repetitions is the largest possible positive
@@ -1381,18 +1457,52 @@ size_t LayoutGrid::computeAutoRepeatTracksCount(GridTrackSizingDirection directi
     if (needsToFulfillMinimumSize)
         ++repetitions;
 
-    return repetitions;
+    return repetitions * autoRepeatTrackListLength;
 }
 
-void LayoutGrid::placeItemsOnGrid()
+
+std::unique_ptr<LayoutGrid::OrderedTrackIndexSet> LayoutGrid::computeEmptyTracksForAutoRepeat(GridTrackSizingDirection direction) const
+{
+    bool isRowAxis = direction == ForColumns;
+    if ((isRowAxis && styleRef().gridAutoRepeatColumnsType() != AutoFit)
+        || (!isRowAxis && styleRef().gridAutoRepeatRowsType() != AutoFit))
+        return nullptr;
+
+    std::unique_ptr<OrderedTrackIndexSet> emptyTrackIndexes;
+    size_t insertionPoint = isRowAxis ? styleRef().gridAutoRepeatColumnsInsertionPoint() : styleRef().gridAutoRepeatRowsInsertionPoint();
+    size_t firstAutoRepeatTrack = insertionPoint + std::abs(isRowAxis ? m_smallestColumnStart : m_smallestRowStart);
+    size_t lastAutoRepeatTrack = firstAutoRepeatTrack + autoRepeatCountForDirection(direction);
+
+    if (m_gridItemArea.isEmpty()) {
+        emptyTrackIndexes = wrapUnique(new OrderedTrackIndexSet);
+        for (size_t trackIndex = firstAutoRepeatTrack; trackIndex < lastAutoRepeatTrack; ++trackIndex)
+            emptyTrackIndexes->add(trackIndex);
+    } else {
+        for (size_t trackIndex = firstAutoRepeatTrack; trackIndex < lastAutoRepeatTrack; ++trackIndex) {
+            GridIterator iterator(m_grid, direction, trackIndex);
+            if (!iterator.nextGridItem()) {
+                if (!emptyTrackIndexes)
+                    emptyTrackIndexes = wrapUnique(new OrderedTrackIndexSet);
+                emptyTrackIndexes->add(trackIndex);
+            }
+        }
+    }
+    return emptyTrackIndexes;
+}
+
+void LayoutGrid::placeItemsOnGrid(SizingOperation sizingOperation)
 {
     if (!m_gridIsDirty)
         return;
 
-    ASSERT(m_gridItemArea.isEmpty());
+    DCHECK(m_gridItemArea.isEmpty());
+    DCHECK(m_gridItemsIndexesMap.isEmpty());
 
-    m_autoRepeatColumns = computeAutoRepeatTracksCount(ForColumns);
-    m_autoRepeatRows = computeAutoRepeatTracksCount(ForRows);
+    if (sizingOperation == IntrinsicSizeComputation)
+        m_autoRepeatColumns = styleRef().gridAutoRepeatColumns().size();
+    else
+        m_autoRepeatColumns = computeAutoRepeatTracksCount(ForColumns, sizingOperation);
+    m_autoRepeatRows = computeAutoRepeatTracksCount(ForRows, sizingOperation);
 
     populateExplicitGridAndOrderIterator();
 
@@ -1433,6 +1543,10 @@ void LayoutGrid::placeItemsOnGrid()
     placeAutoMajorAxisItemsOnGrid(autoMajorAxisAutoGridItems);
 
     m_grid.shrinkToFit();
+
+    // Compute collapsable tracks for auto-fit.
+    m_autoRepeatEmptyColumns = computeEmptyTracksForAutoRepeat(ForColumns);
+    m_autoRepeatEmptyRows = computeEmptyTracksForAutoRepeat(ForRows);
 
 #if ENABLE(ASSERT)
     for (LayoutBox* child = m_orderIterator.first(); child; child = m_orderIterator.next()) {
@@ -1631,10 +1745,53 @@ void LayoutGrid::dirtyGrid()
     m_gridItemArea.clear();
     m_gridItemsOverflowingGridArea.resize(0);
     m_gridItemsIndexesMap.clear();
+    m_autoRepeatColumns = 0;
+    m_autoRepeatRows = 0;
     m_gridIsDirty = true;
+    m_autoRepeatEmptyColumns = nullptr;
+    m_autoRepeatEmptyRows = nullptr;
 }
 
-static const StyleContentAlignmentData& normalValueBehavior()
+Vector<LayoutUnit> LayoutGrid::trackSizesForComputedStyle(GridTrackSizingDirection direction) const
+{
+    bool isRowAxis = direction == ForColumns;
+    auto& positions = isRowAxis ? m_columnPositions : m_rowPositions;
+    size_t numPositions = positions.size();
+    LayoutUnit offsetBetweenTracks = isRowAxis ? m_offsetBetweenColumns : m_offsetBetweenRows;
+
+    Vector<LayoutUnit> tracks;
+    if (numPositions < 2)
+        return tracks;
+
+    bool hasCollapsedTracks = hasAutoRepeatEmptyTracks(direction);
+    LayoutUnit gap = !hasCollapsedTracks ? gridGapForDirection(direction) : LayoutUnit();
+    tracks.reserveCapacity(numPositions - 1);
+    for (size_t i = 0; i < numPositions - 2; ++i)
+        tracks.append(positions[i + 1] - positions[i] - offsetBetweenTracks - gap);
+    tracks.append(positions[numPositions - 1] - positions[numPositions - 2]);
+
+    if (!hasCollapsedTracks)
+        return tracks;
+
+    size_t remainingEmptyTracks = isRowAxis ? m_autoRepeatEmptyColumns->size() : m_autoRepeatEmptyRows->size();
+    size_t lastLine = tracks.size();
+    gap = gridGapForDirection(direction);
+    for (size_t i = 1; i < lastLine; ++i) {
+        if (isEmptyAutoRepeatTrack(direction, i - 1)) {
+            --remainingEmptyTracks;
+        } else {
+            // Remove the gap between consecutive non empty tracks. Remove it also just once for an
+            // arbitrary number of empty tracks between two non empty ones.
+            bool allRemainingTracksAreEmpty = remainingEmptyTracks == (lastLine - i);
+            if (!allRemainingTracksAreEmpty || !isEmptyAutoRepeatTrack(direction, i))
+                tracks[i - 1] -= gap;
+        }
+    }
+
+    return tracks;
+}
+
+static const StyleContentAlignmentData& contentAlignmentNormalBehavior()
 {
     static const StyleContentAlignmentData normalBehavior = {ContentPositionNormal, ContentDistributionStretch};
     return normalBehavior;
@@ -1644,8 +1801,8 @@ void LayoutGrid::applyStretchAlignmentToTracksIfNeeded(GridTrackSizingDirection 
 {
     LayoutUnit& availableSpace = sizingData.freeSpaceForDirection(direction);
     if (availableSpace <= 0
-        || (direction == ForColumns && styleRef().resolvedJustifyContentDistribution(normalValueBehavior()) != ContentDistributionStretch)
-        || (direction == ForRows && styleRef().resolvedAlignContentDistribution(normalValueBehavior()) != ContentDistributionStretch))
+        || (direction == ForColumns && styleRef().resolvedJustifyContentDistribution(contentAlignmentNormalBehavior()) != ContentDistributionStretch)
+        || (direction == ForRows && styleRef().resolvedAlignContentDistribution(contentAlignmentNormalBehavior()) != ContentDistributionStretch))
         return;
 
     // Spec defines auto-sized tracks as the ones with an 'auto' max-sizing function.
@@ -1691,7 +1848,7 @@ void LayoutGrid::layoutGridItems(GridSizingData& sizingData)
         LayoutUnit overrideContainingBlockContentLogicalHeight = gridAreaBreadthForChildIncludingAlignmentOffsets(*child, ForRows, sizingData);
 
         SubtreeLayoutScope layoutScope(*child);
-        if (oldOverrideContainingBlockContentLogicalWidth != overrideContainingBlockContentLogicalWidth || (oldOverrideContainingBlockContentLogicalHeight != overrideContainingBlockContentLogicalHeight && (child->hasRelativeLogicalHeight() || isOrthogonalChild(*child))))
+        if (oldOverrideContainingBlockContentLogicalWidth != overrideContainingBlockContentLogicalWidth || (oldOverrideContainingBlockContentLogicalHeight != overrideContainingBlockContentLogicalHeight && child->hasRelativeLogicalHeight()))
             layoutScope.setNeedsLayout(child, LayoutInvalidationReason::GridChanged);
 
         child->setOverrideContainingBlockContentLogicalWidth(overrideContainingBlockContentLogicalWidth);
@@ -1715,10 +1872,12 @@ void LayoutGrid::layoutGridItems(GridSizingData& sizingData)
 #endif
         child->setLogicalLocation(findChildLogicalPosition(*child, sizingData));
 
-        // Keep track of children overflowing their grid area as we might need to paint them even if the grid-area is
-        // not visible
-        if (child->logicalHeight() > overrideContainingBlockContentLogicalHeight
-            || child->logicalWidth() > overrideContainingBlockContentLogicalWidth)
+        // Keep track of children overflowing their grid area as we might need to paint them even if the grid-area is not visible.
+        // Using physical dimensions for simplicity, so we can forget about orthogonalty.
+        // TODO (lajava): Child's margins should account when evaluating whether it overflows its grid area (http://crbug.com/628155).
+        LayoutUnit childGridAreaHeight = isHorizontalWritingMode() ? overrideContainingBlockContentLogicalHeight : overrideContainingBlockContentLogicalWidth;
+        LayoutUnit childGridAreaWidth = isHorizontalWritingMode() ? overrideContainingBlockContentLogicalWidth : overrideContainingBlockContentLogicalHeight;
+        if (child->size().height() > childGridAreaHeight || child->size().width() > childGridAreaWidth)
             m_gridItemsOverflowingGridArea.append(child);
     }
 }
@@ -1822,12 +1981,12 @@ void LayoutGrid::offsetAndBreadthForPositionedChild(const LayoutBox& child, Grid
 
         // These vectors store line positions including gaps, but we shouldn't consider them for the edges of the grid.
         if (endLine > 0 && endLine < lastLine) {
-            end -= guttersSize(direction, 2);
+            end -= guttersSize(direction, endLine - 1, 2);
             end -= isForColumns ? m_offsetBetweenColumns : m_offsetBetweenRows;
         }
     }
 
-    breadth = end - start;
+    breadth = std::max(end - start, LayoutUnit());
     offset = start;
 
     if (isForColumns && !styleRef().isLeftToRightDirection() && !child.styleRef().hasStaticInlinePosition(child.isHorizontalWritingMode())) {
@@ -1839,7 +1998,7 @@ void LayoutGrid::offsetAndBreadthForPositionedChild(const LayoutBox& child, Grid
             offset = translateRTLCoordinate(m_columnPositions[endLine]) - borderLogicalLeft();
 
             if (endLine > 0 && endLine < lastLine) {
-                offset += guttersSize(direction, 2);
+                offset += guttersSize(direction, endLine - 1, 2);
                 offset += isForColumns ? m_offsetBetweenColumns : m_offsetBetweenRows;
             }
         }
@@ -1874,7 +2033,7 @@ LayoutUnit LayoutGrid::assumedRowsSizeForOrthogonalChild(const LayoutBox& child,
             gridAreaSize += valueForLength(maxTrackSize.length(), containingBlockAvailableSize);
     }
 
-    gridAreaSize += guttersSize(ForRows, span.integerSpan());
+    gridAreaSize += guttersSize(ForRows, span.startLine(), span.integerSpan());
 
     return gridAreaIsIndefinite ? std::max(child.maxPreferredLogicalWidth(), gridAreaSize) : gridAreaSize;
 }
@@ -1893,7 +2052,7 @@ LayoutUnit LayoutGrid::gridAreaBreadthForChild(const LayoutBox& child, GridTrack
     for (const auto& trackPosition : span)
         gridAreaBreadth += tracks[trackPosition].baseSize();
 
-    gridAreaBreadth += guttersSize(direction, span.integerSpan());
+    gridAreaBreadth += guttersSize(direction, span.startLine(), span.integerSpan());
 
     return gridAreaBreadth;
 }
@@ -1926,24 +2085,48 @@ void LayoutGrid::populateGridPositionsForDirection(GridSizingData& sizingData, G
     size_t numberOfLines = numberOfTracks + 1;
     size_t lastLine = numberOfLines - 1;
     ContentAlignmentData offset = computeContentPositionAndDistributionOffset(direction, sizingData.freeSpaceForDirection(direction), numberOfTracks);
-    LayoutUnit trackGap = guttersSize(direction, 2);
     auto& positions = isRowAxis ? m_columnPositions : m_rowPositions;
     positions.resize(numberOfLines);
     auto borderAndPadding = isRowAxis ? borderAndPaddingLogicalLeft() : borderAndPaddingBefore();
     positions[0] = borderAndPadding + offset.positionOffset;
     if (numberOfLines > 1) {
+        // If we have collapsed tracks we just ignore gaps here and add them later as we might not
+        // compute the gap between two consecutive tracks without examining the surrounding ones.
+        bool hasCollapsedTracks = hasAutoRepeatEmptyTracks(direction);
+        LayoutUnit gap = !hasCollapsedTracks ? gridGapForDirection(direction) : LayoutUnit();
         size_t nextToLastLine = numberOfLines - 2;
         for (size_t i = 0; i < nextToLastLine; ++i)
-            positions[i + 1] = positions[i] + offset.distributionOffset + tracks[i].baseSize() + trackGap;
+            positions[i + 1] = positions[i] + offset.distributionOffset + tracks[i].baseSize() + gap;
         positions[lastLine] = positions[nextToLastLine] + tracks[nextToLastLine].baseSize();
+
+        // Adjust collapsed gaps. Collapsed tracks cause the surrounding gutters to collapse (they
+        // coincide exactly) except on the edges of the grid where they become 0.
+        if (hasCollapsedTracks) {
+            gap = gridGapForDirection(direction);
+            size_t remainingEmptyTracks = isRowAxis ? m_autoRepeatEmptyColumns->size() : m_autoRepeatEmptyRows->size();
+            LayoutUnit gapAccumulator;
+            for (size_t i = 1; i < lastLine; ++i) {
+                if (isEmptyAutoRepeatTrack(direction, i - 1)) {
+                    --remainingEmptyTracks;
+                } else {
+                    // Add gap between consecutive non empty tracks. Add it also just once for an
+                    // arbitrary number of empty tracks between two non empty ones.
+                    bool allRemainingTracksAreEmpty = remainingEmptyTracks == (lastLine - i);
+                    if (!allRemainingTracksAreEmpty || !isEmptyAutoRepeatTrack(direction, i))
+                        gapAccumulator += gap;
+                }
+                positions[i] += gapAccumulator;
+            }
+            positions[lastLine] += gapAccumulator;
+        }
     }
     auto& offsetBetweenTracks = isRowAxis ? m_offsetBetweenColumns : m_offsetBetweenRows;
     offsetBetweenTracks = offset.distributionOffset;
 }
 
-static LayoutUnit computeOverflowAlignmentOffset(OverflowAlignment overflow, LayoutUnit trackBreadth, LayoutUnit childBreadth)
+static LayoutUnit computeOverflowAlignmentOffset(OverflowAlignment overflow, LayoutUnit trackSize, LayoutUnit childSize)
 {
-    LayoutUnit offset = trackBreadth - childBreadth;
+    LayoutUnit offset = trackSize - childSize;
     switch (overflow) {
     case OverflowAlignmentSafe:
         // If overflow is 'safe', we have to make sure we don't overflow the 'start'
@@ -1992,6 +2175,24 @@ LayoutUnit LayoutGrid::availableAlignmentSpaceForChildBeforeStretching(LayoutUni
     return gridAreaBreadthForChild - (child.needsLayout() ? computeMarginLogicalSizeForChild(BlockDirection, child) : marginLogicalHeightForChild(child));
 }
 
+StyleSelfAlignmentData LayoutGrid::alignSelfForChild(const LayoutBox& child) const
+{
+    if (!child.isAnonymous())
+        return child.styleRef().resolvedAlignSelf(selfAlignmentNormalBehavior());
+    // All the 'auto' values has been solved by the StyleAdjuster, but it's possible that
+    // some grid items generate Anonymous boxes, which need to be solved during layout.
+    return child.styleRef().resolvedAlignSelf(selfAlignmentNormalBehavior(), style());
+}
+
+StyleSelfAlignmentData LayoutGrid::justifySelfForChild(const LayoutBox& child) const
+{
+    if (!child.isAnonymous())
+        return child.styleRef().resolvedJustifySelf(ItemPositionStretch);
+    // All the 'auto' values has been solved by the StyleAdjuster, but it's possible that
+    // some grid items generate Anonymous boxes, which need to be solved during layout.
+    return child.styleRef().resolvedJustifySelf(selfAlignmentNormalBehavior(), style());
+}
+
 // FIXME: This logic is shared by LayoutFlexibleBox, so it should be moved to LayoutBox.
 void LayoutGrid::applyStretchAlignmentToChildIfNeeded(LayoutBox& child)
 {
@@ -1999,22 +2200,17 @@ void LayoutGrid::applyStretchAlignmentToChildIfNeeded(LayoutBox& child)
     // not, evaluating the conditions which might have changed since the old values were set.
     child.clearOverrideLogicalContentHeight();
 
-    auto& childStyle = child.styleRef();
-    bool isHorizontalMode = isHorizontalWritingMode();
-    bool hasAutoSizeInColumnAxis = isHorizontalMode ? childStyle.height().isAuto() : childStyle.width().isAuto();
-    bool allowedToStretchChildAlongColumnAxis = hasAutoSizeInColumnAxis && !childStyle.marginBeforeUsing(style()).isAuto() && !childStyle.marginAfterUsing(style()).isAuto();
-    if (allowedToStretchChildAlongColumnAxis && ComputedStyle::resolveAlignment(styleRef(), childStyle, ItemPositionStretch) == ItemPositionStretch) {
-        // TODO (lajava): If the child has orthogonal flow, then it already has an override height set, so use it.
-        // TODO (lajava): grid track sizing and positioning do not support orthogonal modes yet.
-        if (child.isHorizontalWritingMode() == isHorizontalMode) {
-            LayoutUnit stretchedLogicalHeight = availableAlignmentSpaceForChildBeforeStretching(child.overrideContainingBlockContentLogicalHeight(), child);
-            LayoutUnit desiredLogicalHeight = child.constrainLogicalHeightByMinMax(stretchedLogicalHeight, LayoutUnit(-1));
-            child.setOverrideLogicalContentHeight(desiredLogicalHeight - child.borderAndPaddingLogicalHeight());
-            if (desiredLogicalHeight != child.logicalHeight()) {
-                // TODO (lajava): Can avoid laying out here in some cases. See https://webkit.org/b/87905.
-                child.setLogicalHeight(LayoutUnit());
-                child.setNeedsLayout(LayoutInvalidationReason::GridChanged);
-            }
+    GridTrackSizingDirection childBlockDirection = flowAwareDirectionForChild(child, ForRows);
+    bool blockFlowIsColumnAxis = childBlockDirection == ForRows;
+    bool allowedToStretchChildBlockSize = blockFlowIsColumnAxis ? allowedToStretchChildAlongColumnAxis(child) : allowedToStretchChildAlongRowAxis(child);
+    if (allowedToStretchChildBlockSize) {
+        LayoutUnit stretchedLogicalHeight = availableAlignmentSpaceForChildBeforeStretching(overrideContainingBlockContentSizeForChild(child, childBlockDirection), child);
+        LayoutUnit desiredLogicalHeight = child.constrainLogicalHeightByMinMax(stretchedLogicalHeight, LayoutUnit(-1));
+        child.setOverrideLogicalContentHeight(desiredLogicalHeight - child.borderAndPaddingLogicalHeight());
+        if (desiredLogicalHeight != child.logicalHeight()) {
+            // TODO (lajava): Can avoid laying out here in some cases. See https://webkit.org/b/87905.
+            child.setLogicalHeight(LayoutUnit());
+            child.setNeedsLayout(LayoutInvalidationReason::GridChanged);
         }
     }
 }
@@ -2023,16 +2219,16 @@ void LayoutGrid::applyStretchAlignmentToChildIfNeeded(LayoutBox& child)
 bool LayoutGrid::hasAutoMarginsInColumnAxis(const LayoutBox& child) const
 {
     if (isHorizontalWritingMode())
-        return child.style()->marginTop().isAuto() || child.style()->marginBottom().isAuto();
-    return child.style()->marginLeft().isAuto() || child.style()->marginRight().isAuto();
+        return child.styleRef().marginTop().isAuto() || child.styleRef().marginBottom().isAuto();
+    return child.styleRef().marginLeft().isAuto() || child.styleRef().marginRight().isAuto();
 }
 
 // TODO(lajava): This logic is shared by LayoutFlexibleBox, so it should be moved to LayoutBox.
 bool LayoutGrid::hasAutoMarginsInRowAxis(const LayoutBox& child) const
 {
     if (isHorizontalWritingMode())
-        return child.style()->marginLeft().isAuto() || child.style()->marginRight().isAuto();
-    return child.style()->marginTop().isAuto() || child.style()->marginBottom().isAuto();
+        return child.styleRef().marginLeft().isAuto() || child.styleRef().marginRight().isAuto();
+    return child.styleRef().marginTop().isAuto() || child.styleRef().marginBottom().isAuto();
 }
 
 // TODO(lajava): This logic is shared by LayoutFlexibleBox, so it should be moved to LayoutBox.
@@ -2080,34 +2276,51 @@ void LayoutGrid::updateAutoMarginsInColumnAxisIfNeeded(LayoutBox& child)
 GridAxisPosition LayoutGrid::columnAxisPositionForChild(const LayoutBox& child) const
 {
     bool hasSameWritingMode = child.styleRef().getWritingMode() == styleRef().getWritingMode();
+    bool childIsLTR = child.styleRef().isLeftToRightDirection();
 
-    switch (ComputedStyle::resolveAlignment(styleRef(), child.styleRef(), ItemPositionStretch)) {
+    switch (alignSelfForChild(child).position()) {
     case ItemPositionSelfStart:
-        // If orthogonal writing-modes, this computes to 'start'.
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
-        // self-start is based on the child's block axis direction. That's why we need to check against the grid container's block flow.
-        return (isOrthogonalChild(child) || hasSameWritingMode) ? GridAxisStart : GridAxisEnd;
+        // TODO (lajava): Should we implement this logic in a generic utility function ?
+        // Aligns the alignment subject to be flush with the edge of the alignment container
+        // corresponding to the alignment subject's 'start' side in the column axis.
+        if (isOrthogonalChild(child)) {
+            // If orthogonal writing-modes, self-start will be based on the child's inline-axis
+            // direction (inline-start), because it's the one parallel to the column axis.
+            if (styleRef().isFlippedBlocksWritingMode())
+                return childIsLTR ? GridAxisEnd : GridAxisStart;
+            return childIsLTR ? GridAxisStart : GridAxisEnd;
+        }
+        // self-start is based on the child's block-flow direction. That's why we need to check against the grid container's block-flow direction.
+        return hasSameWritingMode ? GridAxisStart : GridAxisEnd;
     case ItemPositionSelfEnd:
-        // If orthogonal writing-modes, this computes to 'end'.
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
-        // self-end is based on the child's block axis direction. That's why we need to check against the grid container's block flow.
-        return (isOrthogonalChild(child) || hasSameWritingMode) ? GridAxisEnd : GridAxisStart;
+        // TODO (lajava): Should we implement this logic in a generic utility function ?
+        // Aligns the alignment subject to be flush with the edge of the alignment container
+        // corresponding to the alignment subject's 'end' side in the column axis.
+        if (isOrthogonalChild(child)) {
+            // If orthogonal writing-modes, self-end will be based on the child's inline-axis
+            // direction, (inline-end) because it's the one parallel to the column axis.
+            if (styleRef().isFlippedBlocksWritingMode())
+                return childIsLTR ? GridAxisStart : GridAxisEnd;
+            return childIsLTR ? GridAxisEnd : GridAxisStart;
+        }
+        // self-end is based on the child's block-flow direction. That's why we need to check against the grid container's block-flow direction.
+        return hasSameWritingMode ? GridAxisEnd : GridAxisStart;
     case ItemPositionLeft:
-        // The alignment axis (column axis) and the inline axis are parallell in
-        // orthogonal writing mode. Otherwise this this is equivalent to 'start'.
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
+        // Aligns the alignment subject to be flush with the alignment container's 'line-left' edge.
+        // The alignment axis (column axis) is always orthogonal to the inline axis, hence this value behaves as 'start'.
         return GridAxisStart;
     case ItemPositionRight:
-        // The alignment axis (column axis) and the inline axis are parallell in
-        // orthogonal writing mode. Otherwise this this is equivalent to 'start'.
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
-        return isOrthogonalChild(child) ? GridAxisEnd : GridAxisStart;
+        // Aligns the alignment subject to be flush with the alignment container's 'line-right' edge.
+        // The alignment axis (column axis) is always orthogonal to the inline axis, hence this value behaves as 'start'.
+        return GridAxisStart;
     case ItemPositionCenter:
         return GridAxisCenter;
     case ItemPositionFlexStart: // Only used in flex layout, otherwise equivalent to 'start'.
+        // Aligns the alignment subject to be flush with the alignment container's 'start' edge (block-start) in the column axis.
     case ItemPositionStart:
         return GridAxisStart;
     case ItemPositionFlexEnd: // Only used in flex layout, otherwise equivalent to 'end'.
+        // Aligns the alignment subject to be flush with the alignment container's 'end' edge (block-end) in the column axis.
     case ItemPositionEnd:
         return GridAxisEnd;
     case ItemPositionStretch:
@@ -2118,6 +2331,7 @@ GridAxisPosition LayoutGrid::columnAxisPositionForChild(const LayoutBox& child) 
         // crbug.com/234191
         return GridAxisStart;
     case ItemPositionAuto:
+    case ItemPositionNormal:
         break;
     }
 
@@ -2128,28 +2342,51 @@ GridAxisPosition LayoutGrid::columnAxisPositionForChild(const LayoutBox& child) 
 GridAxisPosition LayoutGrid::rowAxisPositionForChild(const LayoutBox& child) const
 {
     bool hasSameDirection = child.styleRef().direction() == styleRef().direction();
-    bool isLTR = styleRef().isLeftToRightDirection();
+    bool gridIsLTR = styleRef().isLeftToRightDirection();
 
-    switch (ComputedStyle::resolveJustification(styleRef(), child.styleRef(), ItemPositionStretch)) {
+    switch (justifySelfForChild(child).position()) {
     case ItemPositionSelfStart:
-        // For orthogonal writing-modes, this computes to 'start'
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
-        // self-start is based on the child's direction. That's why we need to check against the grid container's direction.
-        return (isOrthogonalChild(child) || hasSameDirection) ? GridAxisStart : GridAxisEnd;
+        // TODO (lajava): Should we implement this logic in a generic utility function ?
+        // Aligns the alignment subject to be flush with the edge of the alignment container
+        // corresponding to the alignment subject's 'start' side in the row axis.
+        if (isOrthogonalChild(child)) {
+            // If orthogonal writing-modes, self-start will be based on the child's block-axis
+            // direction, because it's the one parallel to the row axis.
+            if (child.styleRef().isFlippedBlocksWritingMode())
+                return gridIsLTR ? GridAxisEnd : GridAxisStart;
+            return gridIsLTR ? GridAxisStart : GridAxisEnd;
+        }
+        // self-start is based on the child's inline-flow direction. That's why we need to check against the grid container's direction.
+        return hasSameDirection ? GridAxisStart : GridAxisEnd;
     case ItemPositionSelfEnd:
-        // For orthogonal writing-modes, this computes to 'start'
-        // FIXME: grid track sizing and positioning do not support orthogonal modes yet.
-        return (isOrthogonalChild(child) || hasSameDirection) ? GridAxisEnd : GridAxisStart;
+        // TODO (lajava): Should we implement this logic in a generic utility function ?
+        // Aligns the alignment subject to be flush with the edge of the alignment container
+        // corresponding to the alignment subject's 'end' side in the row axis.
+        if (isOrthogonalChild(child)) {
+            // If orthogonal writing-modes, self-end will be based on the child's block-axis
+            // direction, because it's the one parallel to the row axis.
+            if (child.styleRef().isFlippedBlocksWritingMode())
+                return gridIsLTR ? GridAxisStart : GridAxisEnd;
+            return gridIsLTR ? GridAxisEnd : GridAxisStart;
+        }
+        // self-end is based on the child's inline-flow direction. That's why we need to check against the grid container's direction.
+        return hasSameDirection ? GridAxisEnd : GridAxisStart;
     case ItemPositionLeft:
-        return isLTR ? GridAxisStart : GridAxisEnd;
+        // Aligns the alignment subject to be flush with the alignment container's 'line-left' edge.
+        // We want the physical 'left' side, so we have to take account, container's inline-flow direction.
+        return gridIsLTR ? GridAxisStart : GridAxisEnd;
     case ItemPositionRight:
-        return isLTR ? GridAxisEnd : GridAxisStart;
+        // Aligns the alignment subject to be flush with the alignment container's 'line-right' edge.
+        // We want the physical 'right' side, so we have to take account, container's inline-flow direction.
+        return gridIsLTR ? GridAxisEnd : GridAxisStart;
     case ItemPositionCenter:
         return GridAxisCenter;
     case ItemPositionFlexStart: // Only used in flex layout, otherwise equivalent to 'start'.
+        // Aligns the alignment subject to be flush with the alignment container's 'start' edge (inline-start) in the row axis.
     case ItemPositionStart:
         return GridAxisStart;
     case ItemPositionFlexEnd: // Only used in flex layout, otherwise equivalent to 'end'.
+        // Aligns the alignment subject to be flush with the alignment container's 'end' edge (inline-end) in the row axis.
     case ItemPositionEnd:
         return GridAxisEnd;
     case ItemPositionStretch:
@@ -2160,6 +2397,7 @@ GridAxisPosition LayoutGrid::rowAxisPositionForChild(const LayoutBox& child) con
         // crbug.com/234191
         return GridAxisStart;
     case ItemPositionAuto:
+    case ItemPositionNormal:
         break;
     }
 
@@ -2186,14 +2424,14 @@ LayoutUnit LayoutGrid::columnAxisOffsetForChild(const LayoutBox& child, GridSizi
         // m_rowPositions include distribution offset (because of content alignment) and gutters
         // so we need to subtract them to get the actual end position for a given row
         // (this does not have to be done for the last track as there are no more m_columnPositions after it).
-        LayoutUnit trackGap = guttersSize(ForRows, 2);
+        LayoutUnit trackGap = gridGapForDirection(ForRows);
         if (childEndLine < m_rowPositions.size() - 1) {
             endOfRow -= trackGap;
             endOfRow -= m_offsetBetweenRows;
         }
-        LayoutUnit childBreadth = child.logicalHeight() + child.marginLogicalHeight();
-        OverflowAlignment overflow = child.styleRef().resolvedAlignment(styleRef(), ItemPositionStretch).overflow();
-        LayoutUnit offsetFromStartPosition = computeOverflowAlignmentOffset(overflow, endOfRow - startOfRow, childBreadth);
+        LayoutUnit columnAxisChildSize = isOrthogonalChild(child) ? child.logicalWidth() + child.marginLogicalWidth() : child.logicalHeight() + child.marginLogicalHeight();
+        OverflowAlignment overflow = alignSelfForChild(child).overflow();
+        LayoutUnit offsetFromStartPosition = computeOverflowAlignmentOffset(overflow, endOfRow - startOfRow, columnAxisChildSize);
         return startPosition + (axisPosition == GridAxisEnd ? offsetFromStartPosition : offsetFromStartPosition / 2);
     }
     }
@@ -2221,13 +2459,14 @@ LayoutUnit LayoutGrid::rowAxisOffsetForChild(const LayoutBox& child, GridSizingD
         // m_columnPositions include distribution offset (because of content alignment) and gutters
         // so we need to subtract them to get the actual end position for a given column
         // (this does not have to be done for the last track as there are no more m_columnPositions after it).
-        LayoutUnit trackGap = guttersSize(ForColumns, 2);
+        LayoutUnit trackGap = gridGapForDirection(ForColumns);
         if (childEndLine < m_columnPositions.size() - 1) {
             endOfColumn -= trackGap;
             endOfColumn -= m_offsetBetweenColumns;
         }
-        LayoutUnit childBreadth = child.logicalWidth() + child.marginLogicalWidth();
-        LayoutUnit offsetFromStartPosition = computeOverflowAlignmentOffset(child.styleRef().justifySelfOverflowAlignment(), endOfColumn - startOfColumn, childBreadth);
+        LayoutUnit rowAxisChildSize = isOrthogonalChild(child) ? child.logicalHeight() + child.marginLogicalHeight() : child.logicalWidth() + child.marginLogicalWidth();
+        OverflowAlignment overflow = justifySelfForChild(child).overflow();
+        LayoutUnit offsetFromStartPosition = computeOverflowAlignmentOffset(overflow, endOfColumn - startOfColumn, rowAxisChildSize);
         return startPosition + (axisPosition == GridAxisEnd ? offsetFromStartPosition : offsetFromStartPosition / 2);
     }
     }
@@ -2289,8 +2528,8 @@ static ContentAlignmentData contentDistributionOffset(const LayoutUnit& availabl
 ContentAlignmentData LayoutGrid::computeContentPositionAndDistributionOffset(GridTrackSizingDirection direction, const LayoutUnit& availableFreeSpace, unsigned numberOfGridTracks) const
 {
     bool isRowAxis = direction == ForColumns;
-    ContentPosition position = isRowAxis ? styleRef().resolvedJustifyContentPosition(normalValueBehavior()) : styleRef().resolvedAlignContentPosition(normalValueBehavior());
-    ContentDistributionType distribution = isRowAxis ? styleRef().resolvedJustifyContentDistribution(normalValueBehavior()) : styleRef().resolvedAlignContentDistribution(normalValueBehavior());
+    ContentPosition position = isRowAxis ? styleRef().resolvedJustifyContentPosition(contentAlignmentNormalBehavior()) : styleRef().resolvedAlignContentPosition(contentAlignmentNormalBehavior());
+    ContentDistributionType distribution = isRowAxis ? styleRef().resolvedJustifyContentDistribution(contentAlignmentNormalBehavior()) : styleRef().resolvedAlignContentDistribution(contentAlignmentNormalBehavior());
     // If <content-distribution> value can't be applied, 'position' will become the associated
     // <content-position> fallback value.
     ContentAlignmentData contentAlignment = contentDistributionOffset(availableFreeSpace, position, distribution, numberOfGridTracks);
@@ -2353,7 +2592,7 @@ LayoutPoint LayoutGrid::findChildLogicalPosition(const LayoutBox& child, GridSiz
     // We stored m_columnPosition's data ignoring the direction, hence we might need now
     // to translate positions from RTL to LTR, as it's more convenient for painting.
     if (!style()->isLeftToRightDirection())
-        rowAxisOffset = translateRTLCoordinate(rowAxisOffset) - child.logicalWidth();
+        rowAxisOffset = translateRTLCoordinate(rowAxisOffset) - (isOrthogonalChild(child) ? child.logicalHeight()  : child.logicalWidth());
 
     // "In the positioning phase [...] calculations are performed according to the writing mode
     // of the containing block of the box establishing the orthogonal flow." However, the

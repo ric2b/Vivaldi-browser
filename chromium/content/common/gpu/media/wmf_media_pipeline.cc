@@ -1441,14 +1441,14 @@ base::TimeDelta WMFMediaPipeline::GetDuration() {
   if (FAILED(hr)) {
     DLOG_IF(WARNING, !data_source_->IsStreaming())
         << "Failed to obtain media duration.";
-    return media::kInfiniteDuration();
+    return media::kInfiniteDuration;
   }
 
   int64_t duration_int64 = 0;
   hr = var.ToInt64(&duration_int64);
   if (FAILED(hr)) {
     DLOG(ERROR) << "Failed to obtain media duration.";
-    return media::kInfiniteDuration();
+    return media::kInfiniteDuration;
   }
   // Have to divide duration64 by ten to convert from
   // hundreds of nanoseconds (WMF style) to microseconds.

@@ -56,7 +56,6 @@ void CdmSessionAdapter::CreateCdm(
       key_system, security_origin, cdm_config,
       base::Bind(&CdmSessionAdapter::OnSessionMessage, weak_this),
       base::Bind(&CdmSessionAdapter::OnSessionClosed, weak_this),
-      base::Bind(&CdmSessionAdapter::OnLegacySessionError, weak_this),
       base::Bind(&CdmSessionAdapter::OnSessionKeysChange, weak_this),
       base::Bind(&CdmSessionAdapter::OnSessionExpirationUpdate, weak_this),
       base::Bind(&CdmSessionAdapter::OnCdmCreated, this, key_system,
@@ -77,7 +76,7 @@ bool CdmSessionAdapter::RegisterSession(
     const std::string& session_id,
     base::WeakPtr<WebContentDecryptionModuleSessionImpl> session) {
   // If this session ID is already registered, don't register it again.
-  if (ContainsKey(sessions_, session_id))
+  if (base::ContainsKey(sessions_, session_id))
     return false;
 
   sessions_[session_id] = session;
@@ -85,7 +84,7 @@ bool CdmSessionAdapter::RegisterSession(
 }
 
 void CdmSessionAdapter::UnregisterSession(const std::string& session_id) {
-  DCHECK(ContainsKey(sessions_, session_id));
+  DCHECK(base::ContainsKey(sessions_, session_id));
   sessions_.erase(session_id);
 }
 
@@ -141,7 +140,7 @@ void CdmSessionAdapter::OnCdmCreated(const std::string& key_system,
                                      base::TimeTicks start_time,
                                      const scoped_refptr<MediaKeys>& cdm,
                                      const std::string& error_message) {
-  DVLOG(2) << __FUNCTION__ << ": "
+  DVLOG(2) << __func__ << ": "
            << (cdm ? "success" : "failure (" + error_message + ")");
   DCHECK(!cdm_);
 
@@ -171,13 +170,11 @@ void CdmSessionAdapter::OnCdmCreated(const std::string& key_system,
   cdm_created_result_.reset();
 }
 
-void CdmSessionAdapter::OnSessionMessage(
-    const std::string& session_id,
-    MediaKeys::MessageType message_type,
-    const std::vector<uint8_t>& message,
-    const GURL& /* legacy_destination_url */) {
+void CdmSessionAdapter::OnSessionMessage(const std::string& session_id,
+                                         MediaKeys::MessageType message_type,
+                                         const std::vector<uint8_t>& message) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
-  DLOG_IF(WARNING, !session) << __FUNCTION__ << " for unknown session "
+  DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
   if (session)
     session->OnSessionMessage(message_type, message);
@@ -187,7 +184,7 @@ void CdmSessionAdapter::OnSessionKeysChange(const std::string& session_id,
                                             bool has_additional_usable_key,
                                             CdmKeysInfo keys_info) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
-  DLOG_IF(WARNING, !session) << __FUNCTION__ << " for unknown session "
+  DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
   if (session)
     session->OnSessionKeysChange(has_additional_usable_key,
@@ -198,7 +195,7 @@ void CdmSessionAdapter::OnSessionExpirationUpdate(
     const std::string& session_id,
     const base::Time& new_expiry_time) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
-  DLOG_IF(WARNING, !session) << __FUNCTION__ << " for unknown session "
+  DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
   if (session)
     session->OnSessionExpirationUpdate(new_expiry_time);
@@ -206,19 +203,10 @@ void CdmSessionAdapter::OnSessionExpirationUpdate(
 
 void CdmSessionAdapter::OnSessionClosed(const std::string& session_id) {
   WebContentDecryptionModuleSessionImpl* session = GetSession(session_id);
-  DLOG_IF(WARNING, !session) << __FUNCTION__ << " for unknown session "
+  DLOG_IF(WARNING, !session) << __func__ << " for unknown session "
                              << session_id;
   if (session)
     session->OnSessionClosed();
-}
-
-void CdmSessionAdapter::OnLegacySessionError(
-    const std::string& session_id,
-    MediaKeys::Exception exception_code,
-    uint32_t system_code,
-    const std::string& error_message) {
-  // Error events not used by unprefixed EME.
-  // TODO(jrummell): Remove when prefixed EME removed. https://crbug.com/249976
 }
 
 WebContentDecryptionModuleSessionImpl* CdmSessionAdapter::GetSession(

@@ -63,14 +63,6 @@ WebInspector.IDBDatabaseView = function(database)
 
 WebInspector.IDBDatabaseView.prototype = {
     /**
-     * @return {!Array.<!WebInspector.ToolbarItem>}
-     */
-    toolbarItems: function()
-    {
-        return [];
-    },
-
-    /**
      * @param {string} name
      * @param {string} value
      */
@@ -105,7 +97,7 @@ WebInspector.IDBDatabaseView.prototype = {
 
 /**
  * @constructor
- * @extends {WebInspector.VBox}
+ * @extends {WebInspector.SimpleView}
  * @param {!WebInspector.IndexedDBModel} model
  * @param {!WebInspector.IndexedDBModel.DatabaseId} databaseId
  * @param {!WebInspector.IndexedDBModel.ObjectStore} objectStore
@@ -113,7 +105,7 @@ WebInspector.IDBDatabaseView.prototype = {
  */
 WebInspector.IDBDataView = function(model, databaseId, objectStore, index)
 {
-    WebInspector.VBox.call(this);
+    WebInspector.SimpleView.call(this, WebInspector.UIString("IDB"));
     this.registerRequiredCSS("resources/indexedDBViews.css");
 
     this._model = model;
@@ -342,9 +334,10 @@ WebInspector.IDBDataView.prototype = {
     },
 
     /**
+     * @override
      * @return {!Array.<!WebInspector.ToolbarItem>}
      */
-    toolbarItems: function()
+    syncToolbarItems: function()
     {
         return [this._refreshButton, this._clearButton];
     },
@@ -355,7 +348,7 @@ WebInspector.IDBDataView.prototype = {
         this._entries = [];
     },
 
-    __proto__: WebInspector.VBox.prototype
+    __proto__: WebInspector.SimpleView.prototype
 }
 
 /**
@@ -384,7 +377,7 @@ WebInspector.IDBDataGridNode.prototype = {
         case "key":
         case "primaryKey":
             cell.removeChildren();
-            var objectElement = WebInspector.ObjectPropertiesSection.defaultObjectPresentation(value, true);
+            var objectElement = WebInspector.ObjectPropertiesSection.defaultObjectPresentation(value, undefined, true);
             cell.appendChild(objectElement);
             break;
         default:

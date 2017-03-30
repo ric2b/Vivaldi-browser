@@ -19,6 +19,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
+#include "content/common/frame_owner_properties.h"
 #include "content/public/browser/browser_thread.h"
 #include "ipc/ipc_message.h"
 
@@ -194,10 +195,10 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
 
   render_frame_proxy_created_ = true;
 
-  // For subframes, initialize the proxy's WebFrameOwnerProperties only if they
+  // For subframes, initialize the proxy's FrameOwnerProperties only if they
   // differ from default values.
-  bool should_send_properties = frame_tree_node_->frame_owner_properties() !=
-                                blink::WebFrameOwnerProperties();
+  bool should_send_properties =
+      frame_tree_node_->frame_owner_properties() != FrameOwnerProperties();
   if (frame_tree_node_->parent() && should_send_properties) {
     Send(new FrameMsg_SetFrameOwnerProperties(
         routing_id_, frame_tree_node_->frame_owner_properties()));
@@ -370,8 +371,8 @@ void RenderFrameProxyHost::OnAdvanceFocus(blink::WebFocusType type,
 }
 
 void RenderFrameProxyHost::OnFrameFocused() {
-  frame_tree_node_->frame_tree()->SetFocusedFrame(frame_tree_node_,
-                                                  GetSiteInstance());
+  frame_tree_node_->current_frame_host()->delegate()->SetFocusedFrame(
+      frame_tree_node_, GetSiteInstance());
 }
 
 }  // namespace content

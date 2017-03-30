@@ -6,12 +6,12 @@
 
 #include "base/mac/scoped_nsobject.h"
 #import "chrome/browser/ui/cocoa/base_bubble_controller.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_view.h"
+#include "chrome/browser/ui/website_settings/permission_prompt.h"
 #include "ui/base/models/simple_menu_model.h"
 
 @class MenuController;
 class PermissionBubbleCocoa;
-class PermissionBubbleRequest;
+class PermissionRequest;
 
 @interface PermissionBubbleController :
     BaseBubbleController<NSTextViewDelegate> {
@@ -21,7 +21,7 @@ class PermissionBubbleRequest;
   base::scoped_nsobject<NSMutableArray> checkboxes_;
 
   // Delegate to be informed of user actions.
-  PermissionBubbleView::Delegate* delegate_;  // Weak.
+  PermissionPrompt::Delegate* delegate_;  // Weak.
 
   // Used to determine the correct anchor location and parent window.
   Browser* browser_;  // Weak.
@@ -44,8 +44,8 @@ class PermissionBubbleRequest;
 
 // Makes the bubble visible. The bubble will be popuplated with text retrieved
 // from |requests|. |delegate| will receive callbacks for user actions.
-- (void)showWithDelegate:(PermissionBubbleView::Delegate*)delegate
-             forRequests:(const std::vector<PermissionBubbleRequest*>&)requests
+- (void)showWithDelegate:(PermissionPrompt::Delegate*)delegate
+             forRequests:(const std::vector<PermissionRequest*>&)requests
             acceptStates:(const std::vector<bool>&)acceptStates;
 
 // Will reposition the bubble based in case the anchor or parent should change.

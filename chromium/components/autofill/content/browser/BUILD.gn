@@ -17,15 +17,15 @@ static_library("browser") {
 
   public_deps = [
     ":risk_proto",
+    "//components/autofill/content/common",
+    "//components/autofill/content/public/interfaces",
+    "//components/autofill/core/browser",
+    "//components/autofill/core/common",
     "//skia",
   ]
   deps = [
     "//base",
     "//base:i18n",
-    "//components/autofill/content/common",
-    "//components/autofill/content/public/interfaces",
-    "//components/autofill/core/browser",
-    "//components/autofill/core/common",
     "//components/os_crypt",
     "//components/prefs",
     "//components/resources",
@@ -34,9 +34,11 @@ static_library("browser") {
     "//components/webdata/common",
     "//content/public/browser",
     "//content/public/common",
+    "//device/geolocation:device_geolocation",
     "//google_apis",
     "//gpu/config",
     "//ipc",
+    "//mojo/common:common_base",
     "//net",
     "//services/shell/public/cpp",
     "//sql",
@@ -77,8 +79,10 @@ source_set("unit_tests") {
     "//google_apis",
     "//google_apis:test_support",
     "//ipc:test_support",
+    "//mojo/common:common_base",
     "//net",
     "//net:test_support",
+    "//services/shell/public/cpp",
     "//testing/gmock",
     "//testing/gtest",
   ]

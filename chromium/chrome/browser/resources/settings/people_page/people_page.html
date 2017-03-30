@@ -1,4 +1,6 @@
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/html/icon.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
@@ -9,6 +11,7 @@
 <link rel="import" href="/people_page/sync_page.html">
 <link rel="import" href="/people_page/profile_info_browser_proxy.html">
 <link rel="import" href="/people_page/sync_browser_proxy.html">
+<link rel="import" href="/route.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_page/settings_subpage.html">
 <link rel="import" href="/settings_shared_css.html">
@@ -17,7 +20,8 @@
 <link rel="import" href="/people_page/change_picture.html">
 <link rel="import" href="/people_page/easy_unlock_browser_proxy.html">
 <link rel="import" href="/people_page/easy_unlock_turn_off_dialog.html">
-<link rel="import" href="/people_page/quick_unlock_authenticate.html">
+<link rel="import" href="/people_page/lock_screen.html">
+<link rel="import" href="/people_page/lock_state_behavior.html">
 <link rel="import" href="/people_page/users_page.html">
 </if>
 <if expr="not chromeos">
@@ -33,16 +37,13 @@
       }
 
       #profile-icon {
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
         border-radius: 20px;
+        flex-shrink: 0;
         height: 40px;
-        object-fit: cover;
-        vertical-align: middle;
         width: 40px;
-      }
-
-      #profile-icon:hover,
-      #activity-controls:hover {
-        cursor: pointer;
       }
 
       #managed-by-domain-name {
@@ -69,13 +70,17 @@
         height: var(--iron-icon-height);
         width: var(--iron-icon-width);
       }
+
+      paper-checkbox {
+        margin: 16px 0 2px;
+      }
     </style>
-    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
-        section="people">
-      <neon-animatable id="main">
-        <div class="settings-box first two-line">
-          <img id="profile-icon" src="[[profileIconUrl_]]"
-              on-tap="onPictureTap_" actionable>
+    <settings-animated-pages id="pages" section="people">
+      <neon-animatable route-path="default">
+        <div id="picture-subpage-trigger" class="settings-box first two-line">
+          <div id="profile-icon" on-tap="onPictureTap_" actionable
+              style="background-image: [[getIconImageset_(profileIconUrl_)]]">
+          </div>
           <div class="middle">
 <if expr="not chromeos">
             <span id="profile-name" on-tap="onProfileNameTap_" actionable>
@@ -127,7 +132,8 @@
 
         <template is="dom-if"
             if="[[isAdvancedSyncSettingsVisible_(syncStatus)]]">
-          <div class="settings-box two-line" on-tap="onSyncTap_" actionable>
+          <div class="settings-box two-line" on-tap="onSyncTap_"
+              id="customize-sync" actionable$="[[!syncStatus.managed]]">
             <div class="icon-container">
               <iron-icon id="sync-icon" icon$="[[getSyncIcon_(syncStatus)]]">
               </iron-icon>
@@ -146,7 +152,8 @@
         </template>
 
         <div class="settings-box two-line" id="activity-controls"
-            on-tap="onActivityControlsTap_" actionable>
+            on-tap="onActivityControlsTap_" actionable
+            hidden="[[!syncStatus.signedIn]]">
           <div class="icon-container">
             <div id="googleg-logo"></div>
           </div>
@@ -157,19 +164,24 @@
         </div>
 
 <if expr="chromeos">
-        <div class="settings-box">
-          <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
-              label="$i18n{enableScreenlock}">
-          </settings-checkbox>
-        </div>
+        <template is="dom-if" if="[[!quickUnlockEnabled_]]">
+          <div class="settings-box single-column">
+            <settings-checkbox pref="{{prefs.settings.enable_screen_lock}}"
+                label="$i18n{enableScreenlock}">
+            </settings-checkbox>
+          </div>
+        </template>
 
-        <!-- TODO(jdufault): Disable navigating to /quickUnlock/* if pin is
-          disabled. -->
-        <template is="dom-if" if=[[quickUnlockAllowed_]]>
-          <div class="settings-box">
-            <paper-button on-tap="onQuickUnlockTap_" class="primary-button">
-              $i18n{quickUnlockTitle}
-            </paper-button>
+        <template is="dom-if" if="[[quickUnlockEnabled_]]">
+          <div class="settings-box two-line" actionable
+               on-tap="onConfigureLockTap_">
+            <div class="middle">
+              <div>$i18n{lockScreenTitle}</div>
+              <div class="secondary">
+                [[getPasswordState_(hasPin,
+                                    prefs.settings.enable_screen_lock.value)]]
+              </div>
+            </div>
           </div>
         </template>
 
@@ -216,7 +228,7 @@
         </template>
 </if>
 
-        <div class="settings-box">
+        <div id="manage-other-people-subpage-trigger" class="settings-box">
           <paper-button class="primary-button" on-tap="onManageOtherPeople_">
             $i18n{manageOtherPeople}
           </paper-button>
@@ -231,36 +243,45 @@
           </div>
         </template>
       </neon-animatable>
-      <template is="dom-if" name="sync">
-        <settings-subpage page-title="$i18n{syncPageTitle}">
-          <settings-sync-page current-route="[[currentRoute]]">
-          </settings-sync-page>
+      <template is="dom-if" route-path="/syncSetup"
+          no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
+        <settings-subpage
+            associated-control="[[$$('#customize-sync')]]"
+            page-title="$i18n{syncPageTitle}"
+            no-search$="[[!isAdvancedSyncSettingsVisible_(syncStatus)]]">
+          <settings-sync-page></settings-sync-page>
         </settings-subpage>
       </template>
 <if expr="chromeos">
-      <template is="dom-if" name="quick-unlock-authenticate">
-        <settings-subpage page-title="$i18n{quickUnlockTitle}">
-          <settings-quick-unlock-authenticate
-            account-password="{{quickUnlockAccountPassword}}"
-            current-route="{{currentRoute}}"
-            profile-name="[[profileName_]]">
-          </settings-quick-unlock-authenticate>
-        </settings-subpage>
+      <template is="dom-if" if="[[quickUnlockEnabled_]]">
+        <template is="dom-if" route-path="/lockScreen" no-search>
+          <settings-subpage page-title="$i18n{lockScreenTitle}">
+            <settings-lock-screen
+              prefs="{{prefs}}">
+            </settings-lock-screen>
+          </settings-subpage>
+        </template>
       </template>
-      <template is="dom-if" name="users">
-        <settings-subpage page-title="$i18n{usersPageTitle}">
+      <template is="dom-if" route-path="/accounts">
+        <settings-subpage
+            associated-control="[[$$('#manage-other-people-subpage-trigger')]]"
+            page-title="$i18n{usersPageTitle}">
           <settings-users-page prefs="{{prefs}}"></settings-users-page>
         </settings-subpage>
       </template>
-      <template is="dom-if" name="changePicture">
-        <settings-subpage page-title="$i18n{changePictureTitle}">
+      <template is="dom-if" route-path="/changePicture">
+        <settings-subpage
+          associated-control="[[$$('#picture-subpage-trigger')]]"
+          page-title="$i18n{changePictureTitle}">
           <settings-change-picture></settings-change-picture>
         </settings-subpage>
       </template>
 </if>
 <if expr="not chromeos">
-      <template is="dom-if" name="manageProfile">
-        <settings-subpage page-title="$i18n{editPerson}">
+      <template is="dom-if" route-path="/manageProfile">
+        <settings-subpage
+            associated-control="[[$$('#picture-subpage-trigger')]]"
+            page-title="$i18n{editPerson}">
           <settings-manage-profile profile-icon-url="[[profileIconUrl_]]"
               profile-name="[[profileName_]]">
           </settings-manage-profile>
@@ -269,7 +290,7 @@
 </if>
     </settings-animated-pages>
 
-    <cr-dialog id="disconnectDialog">
+    <dialog is="cr-dialog" id="disconnectDialog">
       <div class="title">$i18n{syncDisconnectTitle}</div>
       <div class="body">
         <div inner-h-t-m-l="[[getDisconnectExplanationHtml_(syncStatus.domain)]]">
@@ -281,7 +302,9 @@
   </if>
       </div>
       <div class="button-container">
-        <paper-button on-tap="onDisconnectCancel_">$i18n{cancel}</paper-button>
+        <paper-button on-tap="onDisconnectCancel_" class="cancel-button">
+          $i18n{cancel}
+        </paper-button>
         <paper-button id="disconnectConfirm" class="action-button"
             hidden=[[syncStatus.domain]] on-tap="onDisconnectConfirm_">
           $i18n{syncDisconnect}
@@ -291,7 +314,7 @@
           $i18n{syncDisconnectConfirm}
         </paper-button>
       </div>
-    </cr-dialog>
+    </dialog>
 
 <if expr="chromeos">
     <template is="dom-if" if="[[easyUnlockEnabled_]]">

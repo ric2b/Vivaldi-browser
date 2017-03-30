@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/shared_user_script_master.h"
 
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/manifest_handlers/content_scripts_handler.h"
@@ -34,24 +35,28 @@ void SharedUserScriptMaster::OnExtensionUnloaded(
     content::BrowserContext* browser_context,
     const Extension* extension,
     UnloadedExtensionInfo::Reason reason) {
-  loader_.RemoveScripts(GetScriptsMetadata(extension));
+  const UserScriptList& script_list =
+      ContentScriptsInfo::GetContentScripts(extension);
+  std::set<UserScriptIDPair> scripts_to_remove;
+  for (const std::unique_ptr<UserScript>& script : script_list)
+    scripts_to_remove.insert(UserScriptIDPair(script->id(), script->host_id()));
+  loader_.RemoveScripts(scripts_to_remove);
 }
 
-const std::set<UserScript> SharedUserScriptMaster::GetScriptsMetadata(
+std::unique_ptr<UserScriptList> SharedUserScriptMaster::GetScriptsMetadata(
     const Extension* extension) {
   bool incognito_enabled = util::IsIncognitoEnabled(extension->id(), profile_);
   const UserScriptList& script_list =
       ContentScriptsInfo::GetContentScripts(extension);
-  std::set<UserScript> script_set;
-  for (UserScriptList::const_iterator it = script_list.begin();
-       it != script_list.end();
-       ++it) {
-    UserScript script = *it;
-    script.set_incognito_enabled(incognito_enabled);
-    script_set.insert(script);
+  std::unique_ptr<UserScriptList> script_vector(new UserScriptList());
+  script_vector->reserve(script_list.size());
+  for (const std::unique_ptr<UserScript>& script : script_list) {
+    std::unique_ptr<UserScript> script_copy =
+        UserScript::CopyMetadataFrom(*script);
+    script_copy->set_incognito_enabled(incognito_enabled);
+    script_vector->push_back(std::move(script_copy));
   }
-
-  return script_set;
+  return script_vector;
 }
 
 }  // namespace extensions

@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_DOCUMENT_WRITE_PAGE_LOAD_METRICS_OBSERVER_H_
 
 #include "base/macros.h"
-#include "components/page_load_metrics/browser/page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 
 namespace internal {
 
@@ -33,6 +33,10 @@ class DocumentWritePageLoadMetricsObserver
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
 
+  void OnFirstMeaningfulPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& extra_info) override;
+
   void OnParseStop(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& extra_info) override;
@@ -50,6 +54,10 @@ class DocumentWritePageLoadMetricsObserver
       const page_load_metrics::PageLoadExtraInfo& info);
 
   void LogDocumentWriteEvaluatorFirstContentfulPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info);
+
+  void LogDocumentWriteEvaluatorFirstMeaningfulPaint(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info);
 

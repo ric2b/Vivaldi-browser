@@ -23,6 +23,8 @@ NinjaCopyTargetWriter::~NinjaCopyTargetWriter() {
 }
 
 void NinjaCopyTargetWriter::Run() {
+  if (target_->is_disabled())
+    return;
   const Tool* copy_tool = target_->toolchain()->GetTool(Toolchain::TYPE_COPY);
   if (!copy_tool) {
     g_scheduler->FailWithError(Err(

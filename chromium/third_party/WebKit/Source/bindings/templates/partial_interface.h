@@ -1,3 +1,5 @@
+{% filter format_blink_cpp_source_code %}
+
 {% include 'copyright_block.txt' %}
 #ifndef {{v8_class_or_partial}}_h
 #define {{v8_class_or_partial}}_h
@@ -28,11 +30,16 @@ public:
     {% endfor %}
     {# Custom internal fields #}
     static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object>, v8::Local<v8::Function>, v8::Local<v8::FunctionTemplate>);
-    {% for origin_trial_feature_name in origin_trial_feature_names %}{{newline}}
-    static void install{{origin_trial_feature_name}}(ScriptState*, v8::Local<v8::Object> instance);
+    {% for origin_trial_feature in origin_trial_features %}{{newline}}
+    static void install{{origin_trial_feature.name}}(ScriptState*, v8::Local<v8::Object> instance);
+    {% if not origin_trial_feature.needs_instance %}
+    static void install{{origin_trial_feature.name}}(ScriptState*);
+    {% endif %}
     {% endfor %}
 private:
     static void install{{v8_class}}Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
 };
 }
 #endif // {{v8_class_or_partial}}_h
+
+{% endfilter %}{# format_blink_cpp_source_code #}

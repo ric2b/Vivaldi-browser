@@ -17,7 +17,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
-#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -27,7 +26,6 @@
 #include "content/public/common/web_preferences.h"
 #include "content/public/test/test_mojo_app.h"
 #include "content/shell/browser/shell.h"
-#include "content/shell/browser/shell_access_token_store.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
@@ -119,22 +117,6 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
 }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 
-// A provider of services for Geolocation.
-class ShellGeolocationDelegate : public content::GeolocationDelegate {
- public:
-  explicit ShellGeolocationDelegate(ShellBrowserContext* context)
-      : context_(context) {}
-
-  AccessTokenStore* CreateAccessTokenStore() final {
-    return new ShellAccessTokenStore(context_);
-  }
-
- private:
-  ShellBrowserContext* context_;
-
-  DISALLOW_COPY_AND_ASSIGN(ShellGeolocationDelegate);
-};
-
 }  // namespace
 
 ShellContentBrowserClient* ShellContentBrowserClient::Get() {
@@ -163,15 +145,22 @@ BrowserMainParts* ShellContentBrowserClient::CreateBrowserMainParts(
 
 bool ShellContentBrowserClient::DoesSiteRequireDedicatedProcess(
     BrowserContext* browser_context,
-    const GURL& effective_url) {
+    const GURL& effective_site_url) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   DCHECK(command_line->HasSwitch(switches::kIsolateSitesForTesting));
   std::string pattern =
       command_line->GetSwitchValueASCII(switches::kIsolateSitesForTesting);
-  // Practically |origin| is the same as |effective_url.spec()|, except Origin
-  // serialization strips the trailing "/", which makes for cleaner patterns.
-  std::string origin = url::Origin(effective_url).Serialize();
-  return base::MatchPattern(origin, pattern);
+  url::Origin origin(effective_site_url);
+
+  // Schemes like blob or filesystem, which have an embedded origin, should
+  // already have been canonicalized to the origin site.
+  CHECK_EQ(origin.scheme(), effective_site_url.scheme())
+      << "a site url should have the same scheme as its origin.";
+
+  // Practically |origin.Serialize()| is the same as
+  // |effective_site_url.spec()|, except Origin serialization strips the
+  // trailing "/", which makes for cleaner wildcard patterns.
+  return base::MatchPattern(origin.Serialize(), pattern);
 }
 
 bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
@@ -256,11 +245,7 @@ std::string ShellContentBrowserClient::GetDefaultDownloadName() {
 
 WebContentsViewDelegate* ShellContentBrowserClient::GetWebContentsViewDelegate(
     WebContents* web_contents) {
-#if !defined(USE_AURA)
   return CreateShellWebContentsViewDelegate(web_contents);
-#else
-  return NULL;
-#endif
 }
 
 QuotaPermissionContext*
@@ -368,10 +353,6 @@ ShellBrowserContext* ShellContentBrowserClient::browser_context() {
 ShellBrowserContext*
     ShellContentBrowserClient::off_the_record_browser_context() {
   return shell_browser_main_parts_->off_the_record_browser_context();
-}
-
-GeolocationDelegate* ShellContentBrowserClient::CreateGeolocationDelegate() {
-  return new ShellGeolocationDelegate(browser_context());
 }
 
 }  // namespace content

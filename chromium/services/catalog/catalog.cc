@@ -18,7 +18,7 @@
 #include "services/catalog/instance.h"
 #include "services/catalog/reader.h"
 #include "services/shell/public/cpp/connection.h"
-#include "services/shell/public/cpp/shell_connection.h"
+#include "services/shell/public/cpp/service_context.h"
 
 namespace catalog {
 namespace {
@@ -61,7 +61,7 @@ base::FilePath GetPathForApplicationName(const std::string& application_name) {
   base::FilePath base_path;
   PathService::Get(base::DIR_EXE, &base_path);
   // TODO(beng): this won't handle user-specific components.
-  return base_path.AppendASCII(kMojoApplicationsDirName).AppendASCII(path).
+  return base_path.AppendASCII(kPackagesDirName).AppendASCII(path).
       AppendASCII("resources");
 }
 
@@ -85,52 +85,51 @@ Catalog::Catalog(base::SingleThreadTaskRunner* task_runner,
 
 Catalog::~Catalog() {}
 
-shell::mojom::ShellClientPtr Catalog::TakeShellClient() {
-  return std::move(shell_client_);
+shell::mojom::ServicePtr Catalog::TakeService() {
+  return std::move(service_);
 }
 
 Catalog::Catalog(std::unique_ptr<Store> store)
     : store_(std::move(store)), weak_factory_(this) {
-  shell::mojom::ShellClientRequest request = GetProxy(&shell_client_);
-  shell_connection_.reset(new shell::ShellConnection(this, std::move(request)));
+  shell::mojom::ServiceRequest request = GetProxy(&service_);
+  shell_connection_.reset(new shell::ServiceContext(this, std::move(request)));
 }
 
 void Catalog::ScanSystemPackageDir() {
   base::FilePath system_package_dir;
   PathService::Get(base::DIR_MODULE, &system_package_dir);
-  system_package_dir = system_package_dir.AppendASCII(kMojoApplicationsDirName);
+  system_package_dir = system_package_dir.AppendASCII(kPackagesDirName);
   system_reader_->Read(system_package_dir, &system_cache_,
                        base::Bind(&Catalog::SystemPackageDirScanned,
                                   weak_factory_.GetWeakPtr()));
 }
 
-bool Catalog::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mojom::Catalog>(this);
-  connection->AddInterface<filesystem::mojom::Directory>(this);
-  connection->AddInterface<shell::mojom::ShellResolver>(this);
+bool Catalog::OnConnect(const shell::Identity& remote_identity,
+                        shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mojom::Catalog>(this);
+  registry->AddInterface<filesystem::mojom::Directory>(this);
+  registry->AddInterface<shell::mojom::Resolver>(this);
   return true;
 }
 
-void Catalog::Create(shell::Connection* connection,
-                     shell::mojom::ShellResolverRequest request) {
-  Instance* instance =
-      GetInstanceForUserId(connection->GetRemoteIdentity().user_id());
-  instance->BindShellResolver(std::move(request));
+void Catalog::Create(const shell::Identity& remote_identity,
+                     shell::mojom::ResolverRequest request) {
+  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
+  instance->BindResolver(std::move(request));
 }
 
-void Catalog::Create(shell::Connection* connection,
+void Catalog::Create(const shell::Identity& remote_identity,
                      mojom::CatalogRequest request) {
-  Instance* instance =
-      GetInstanceForUserId(connection->GetRemoteIdentity().user_id());
+  Instance* instance = GetInstanceForUserId(remote_identity.user_id());
   instance->BindCatalog(std::move(request));
 }
 
-void Catalog::Create(shell::Connection* connection,
+void Catalog::Create(const shell::Identity& remote_identity,
                      filesystem::mojom::DirectoryRequest request) {
   if (!lock_table_)
     lock_table_ = new filesystem::LockTable;
   base::FilePath resources_path =
-      GetPathForApplicationName(connection->GetRemoteIdentity().name());
+      GetPathForApplicationName(remote_identity.name());
   new filesystem::DirectoryImpl(std::move(request), resources_path,
                                 scoped_refptr<filesystem::SharedTempDir>(),
                                 lock_table_);

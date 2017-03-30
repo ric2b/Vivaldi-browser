@@ -27,7 +27,7 @@ void TableRowPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paint
     PaintInfo paintInfoForCells = paintInfo.forDescendants();
     if (shouldPaintSelfBlockBackground(paintInfo.phase)) {
         paintBoxShadow(paintInfo, paintOffset, Normal);
-        if (m_layoutTableRow.hasBackground()) {
+        if (m_layoutTableRow.styleRef().hasBackground()) {
             // Paint row background of behind the cells.
             for (LayoutTableCell* cell = m_layoutTableRow.firstCell(); cell; cell = cell->nextCell())
                 TableCellPainter(*cell).paintContainerBackgroundBehindCell(paintInfoForCells, paintOffset, m_layoutTableRow, DisplayItem::TableCellBackgroundFromRow);
@@ -62,14 +62,14 @@ void TableRowPainter::paintBoxShadow(const PaintInfo& paintInfo, const LayoutPoi
         return;
 
     LayoutPoint adjustedPaintOffset = paintOffset + m_layoutTableRow.location();
-    LayoutRect bounds = BoxPainter(m_layoutTableRow).boundsForDrawingRecorder(adjustedPaintOffset);
+    LayoutRect bounds = BoxPainter(m_layoutTableRow).boundsForDrawingRecorder(paintInfo, adjustedPaintOffset);
     LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableRow, type, bounds);
     BoxPainter::paintBoxShadow(paintInfo, LayoutRect(adjustedPaintOffset, m_layoutTableRow.size()), m_layoutTableRow.styleRef(), shadowStyle);
 }
 
 void TableRowPainter::paintBackgroundBehindCell(const LayoutTableCell& cell, const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    DCHECK(m_layoutTableRow.hasBackground() && !m_layoutTableRow.hasSelfPaintingLayer());
+    DCHECK(m_layoutTableRow.styleRef().hasBackground() && !m_layoutTableRow.hasSelfPaintingLayer());
     LayoutPoint cellPoint = m_layoutTableRow.section()->flipForWritingModeForChild(&cell, paintOffset);
     TableCellPainter(cell).paintContainerBackgroundBehindCell(paintInfo, cellPoint, m_layoutTableRow, DisplayItem::TableCellBackgroundFromRow);
 }

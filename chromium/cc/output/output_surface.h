@@ -17,9 +17,9 @@
 #include "cc/output/overlay_candidate_validator.h"
 #include "cc/output/software_output_device.h"
 #include "cc/output/vulkan_context_provider.h"
+#include "cc/resources/returned_resource.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-
-namespace base { class SingleThreadTaskRunner; }
+#include "ui/gfx/color_space.h"
 
 namespace ui {
 class LatencyInfo;
@@ -35,7 +35,6 @@ class Transform;
 namespace cc {
 
 class CompositorFrame;
-class CompositorFrameAck;
 struct ManagedMemoryPolicy;
 class OutputSurfaceClient;
 
@@ -130,6 +129,9 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
                        bool alpha);
   gfx::Size SurfaceSize() const { return surface_size_; }
   float device_scale_factor() const { return device_scale_factor_; }
+  const gfx::ColorSpace& device_color_space() const {
+    return device_color_space_;
+  }
 
   // If supported, this causes a ReclaimResources for all resources that are
   // currently in use.
@@ -143,8 +145,7 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   // The implementation may destroy or steal the contents of the CompositorFrame
   // passed in (though it will not take ownership of the CompositorFrame
   // itself). For successful swaps, the implementation must call
-  // OutputSurfaceClient::DidSwapBuffers() and eventually
-  // DidSwapBuffersComplete().
+  // DidSwapBuffersComplete() (via OnSwapBuffersComplete()) eventually.
   virtual void SwapBuffers(CompositorFrame frame) = 0;
   virtual void OnSwapBuffersComplete();
 
@@ -174,10 +175,6 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   // there's new content.
   virtual void Invalidate() {}
 
-  // Updates the worker context provider's visibility, freeing GPU resources if
-  // appropriate.
-  virtual void SetWorkerContextShouldAggressivelyFreeResources(bool is_visible);
-
   // If this returns true, then the surface will not attempt to draw.
   virtual bool SurfaceIsSuspendForRecycle() const;
 
@@ -197,11 +194,13 @@ class CC_EXPORT OutputSurface : public base::trace_event::MemoryDumpProvider {
   std::unique_ptr<SoftwareOutputDevice> software_device_;
   gfx::Size surface_size_;
   float device_scale_factor_ = -1;
+  gfx::ColorSpace device_color_space_;
   bool has_alpha_ = true;
+  gfx::ColorSpace color_space_;
   base::ThreadChecker client_thread_checker_;
 
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect);
-  void ReclaimResources(const CompositorFrameAck* ack);
+  void ReclaimResources(const ReturnedResourceArray& resources);
   void SetExternalStencilTest(bool enabled);
   void DetachFromClientInternal();
 

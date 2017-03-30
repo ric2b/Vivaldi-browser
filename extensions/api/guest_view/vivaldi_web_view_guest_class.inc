@@ -37,7 +37,6 @@
                              const gfx::Rect &anchor_in_root_view) override;
 
 
-
   // Vivaldi customs below
   bool IsVivaldiWebPanel();
 
@@ -61,6 +60,17 @@
   // Creates the |ExtensionHost|
   void CreateExtensionHost(const std::string& extension_id);
 
+  // contentblocking handling
+  void OnContentBlocked(ContentSettingsType settings_type,
+                        const base::string16 &details);
+  void AllowRunningInsecureContent();
+
+  // Note(andre@vivaldi.com):
+  // This is used for pages opened from extensions. The delegate is not set
+  // and therefore navigation is not possible. We use this to navigate after
+  // attaching is done.
+  std::unique_ptr<std::string> delayed_open_url_;
+
  private:
   void VisibleSSLStateChanged(const content::WebContents* source) override;
 
@@ -75,8 +85,6 @@
   void AddGuestToTabStripModel(WebViewGuest* guest,
                                int windowId,
                                bool activePage = true);
-
-  void SetWebContentsWasInitiallyGuest(bool born_guest);
 
   content::WebContents::CreateParams GetWebContentsCreateParams(
     content::BrowserContext* context, const GURL site);
@@ -125,17 +133,9 @@
   bool is_fullscreen_;
   int window_state_prior_to_fullscreen_;
 
-  bool webcontents_was_created_as_guest_;
-
   base::WeakPtr<ValidationMessageBubble> validation_message_bubble_;
 
   std::unique_ptr<ExtensionHostForWebContents> extension_host_;
-
-  // Note(andre@vivaldi.com):
-  // This is used for pages opened from extensions. The delegate is not set
-  // and therefore navigation is not possible. We use this to navigate after
-  // attaching is done.
-  std::unique_ptr<std::string> delayed_open_url_;
 
 private:
 

@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/surfaces/surface_sequence.h"
 #include "cc/trees/layer_tree_host_client.h"
@@ -51,6 +52,7 @@ class TaskGraphRunner;
 
 namespace gfx {
 class Rect;
+class ScrollOffset;
 class Size;
 }
 
@@ -67,6 +69,10 @@ class LatencyInfo;
 class Layer;
 class Reflector;
 class Texture;
+
+#if defined(USE_AURA)
+class Window;
+#endif
 
 const int kCompositorLockTimeoutMs = 67;
 
@@ -128,12 +134,16 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Gets the task graph runner.
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
-  // Creates a Surface ID allocator with a new namespace.
-  virtual std::unique_ptr<cc::SurfaceIdAllocator>
-  CreateSurfaceIdAllocator() = 0;
+  // Allocate a new client ID for the display compositor.
+  virtual uint32_t AllocateSurfaceClientId() = 0;
 
   // Gets the surface manager.
   virtual cc::SurfaceManager* GetSurfaceManager() = 0;
+
+  // Inform the display corresponding to this compositor if it is visible. When
+  // false it does not need to produce any frames. Visibility is reset for each
+  // call to CreateOutputSurface.
+  virtual void SetDisplayVisible(ui::Compositor* compositor, bool visible) = 0;
 
   // Resize the display corresponding to this compositor to a particular size.
   virtual void ResizeDisplay(ui::Compositor* compositor,
@@ -145,6 +155,11 @@ class COMPOSITOR_EXPORT ContextFactory {
 
   virtual void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                              base::TimeDelta interval) = 0;
+  // Mac path for transporting vsync parameters to the display.  Other platforms
+  // update it via the BrowserCompositorOutputSurface directly.
+  virtual void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                         base::TimeTicks timebase,
+                                         base::TimeDelta interval) = 0;
 
   virtual void SetOutputIsSecure(Compositor* compositor, bool secure) = 0;
 
@@ -194,6 +209,12 @@ class COMPOSITOR_EXPORT Compositor
 
   ui::ContextFactory* context_factory() { return context_factory_; }
 
+  void AddSurfaceClient(uint32_t client_id);
+  void RemoveSurfaceClient(uint32_t client_id);
+  const std::unordered_map<uint32_t, uint32_t>& SurfaceClientsForTesting() {
+    return surface_clients_;
+  }
+
   void SetOutputSurface(std::unique_ptr<cc::OutputSurface> surface);
 
   // Schedules a redraw of the layer tree associated with this compositor.
@@ -228,9 +249,6 @@ class COMPOSITOR_EXPORT Compositor
   // from changes to layer properties.
   void ScheduleRedrawRect(const gfx::Rect& damage_rect);
 
-  // Finishes all outstanding rendering and disables swapping on this surface.
-  void FinishAllRendering();
-
   // Finishes all outstanding rendering and disables swapping on this surface
   // until it is resized.
   void DisableSwapUntilResize();
@@ -256,6 +274,11 @@ class COMPOSITOR_EXPORT Compositor
   // Gets the visibility of the underlying compositor.
   bool IsVisible();
 
+  // Gets or sets the scroll offset for the given layer in step with the
+  // cc::InputHandler. Returns true if the layer is active on the impl side.
+  bool GetScrollOffsetForLayer(int layer_id, gfx::ScrollOffset* offset) const;
+  bool ScrollLayerTo(int layer_id, const gfx::ScrollOffset& offset);
+
   // The "authoritative" vsync interval, if provided, will override interval
   // reported from 3D context. This is typically the value reported by a more
   // reliable source, e.g, the platform display configuration.
@@ -264,6 +287,12 @@ class COMPOSITOR_EXPORT Compositor
   // context.
   void SetAuthoritativeVSyncInterval(const base::TimeDelta& interval);
 
+  // Most platforms set their vsync info via BrowerCompositorOutputSurface's
+  // OnUpdateVSyncParametersFromGpu, but Mac routes vsync info via the
+  // browser compositor instead through this path.
+  void SetDisplayVSyncParameters(base::TimeTicks timebase,
+                                 base::TimeDelta interval);
+
   // Sets the widget for the compositor to render into.
   void SetAcceleratedWidget(gfx::AcceleratedWidget widget);
   // Releases the widget previously set through SetAcceleratedWidget().
@@ -271,6 +300,12 @@ class COMPOSITOR_EXPORT Compositor
   // The compositor must be set to invisible when taking away a widget.
   gfx::AcceleratedWidget ReleaseAcceleratedWidget();
   gfx::AcceleratedWidget widget() const;
+
+#if defined(USE_AURA)
+  // Sets the window for the compositor to render into on mus+ash.
+  void SetWindow(ui::Window* window);
+  ui::Window* window() const;
+#endif
 
   // Returns the vsync manager for this compositor.
   scoped_refptr<CompositorVSyncManager> vsync_manager() const;
@@ -375,6 +410,10 @@ class COMPOSITOR_EXPORT Compositor
   base::ObserverList<CompositorAnimationObserver> animation_observer_list_;
 
   gfx::AcceleratedWidget widget_;
+#if defined(USE_AURA)
+  ui::Window* window_;
+#endif
+  std::unordered_map<uint32_t, uint32_t> surface_clients_;
   bool widget_valid_;
   bool output_surface_requested_;
   std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;

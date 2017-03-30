@@ -4,7 +4,7 @@
 
 import("//build/config/features.gni")
 
-source_set("language_detection") {
+static_library("language_detection") {
   sources = [
     "language_detection_util.cc",
     "language_detection_util.h",
@@ -13,7 +13,7 @@ source_set("language_detection") {
   deps = [
     "//base",
     "//components/translate/core/common",
-    "//third_party/cld_2",
+    "//third_party/cld",
     "//url",
   ]
 }

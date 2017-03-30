@@ -5,7 +5,7 @@ Chrome supports. If you update this file, be sure also to update
 chromium_strings.grd. -->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="grit/google_chrome_strings.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -135,6 +135,11 @@ chromium_strings.grd. -->
   </translations>
   <release seq="1" allow_pseudo="false">
     <messages fallback_to_english="true">
+      <!-- Settings specific strings -->
+      <if expr="not is_android and not is_ios">
+        <part file="settings_google_chrome_strings.grdp" />
+      </if>
+
       <message name="IDS_PROFILES_DISCONNECT_MANAGED_PROFILE_TEXT" desc="Message explaining to the user what will happen if they disconnect the managed profile.">
         Disconnecting <ph name="USERNAME">$1<ex>someone@example.com</ex></ph> will clear your history, bookmarks, settings, and other Chrome data stored on this device. Data stored in your Google Account will not be cleared and can be managed on <ph name="GOOGLE_DASHBOARD_LINK">&lt;a target="_blank" href="$2"&gt;</ph>Google Dashboard<ph name="END_GOOGLE_DASHBOARD_LINK">&lt;/a&gt;</ph>.
       </message>
@@ -367,7 +372,7 @@ Google Chrome cannot read and write to its data directory:
       </message>
       <if expr="chromeos">
         <message name="IDS_EULA_CHECKBOX_ENABLE_LOGGING" desc="The label of the checkbox to enable/disable crash and user metrics logging on EULA screen.">
-          Optional: Help make Chrome OS better by automatically sending usage statistics and crash reports to Google.
+          Optional: Help make Chrome OS better by automatically sending diagnostic and usage data to Google.
         </message>
       </if>
       <message name="IDS_PROFILE_TOO_NEW_ERROR" desc="Error displayed on startup when the profile is from a newer version of the product and can not be read">
@@ -451,6 +456,9 @@ Google Chrome is unable to recover your settings.
         </message>
         <message name="IDS_INSTALL_MULTI_INSTALLATION_EXISTS" desc="Error during install if a multi-install Google Chrome is present, thereby preventing the installation of a single-install Google Chrome.">
           A conflicting installation of Google Chrome was found on the system. Please uninstall it and try again.
+        </message>
+        <message name="IDS_INSTALL_EXISTING_VERSION_LAUNCHED" desc="A message shown to users who try to install Chrome in their user profile directory when their computer already has Chrome installed for all users. In this case, the installer silently launches the existing version of Chrome for all users rather than installing a second version of Chrome.">
+          Google Chrome is already installed for all users on your computer.
         </message>
       </if>
       <!-- Options Dialog -->
@@ -1087,6 +1095,27 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         No Thanks
       </message>
 
+      <!-- Update Recommended dialog -->
+      <if expr="not chromeos">
+        <message name="IDS_UPDATE_RECOMMENDED_DIALOG_TITLE" desc="The window title for the Update Recommended dialog.">
+          Relaunch Chrome
+        </message>
+        <message name="IDS_UPDATE_RECOMMENDED" desc="The main text of the Update Recommended dialog.">
+          Chrome is out of date because it hasn't been relaunched in a while. An update is available and will be applied as soon as you relaunch.
+        </message>
+        <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button in the Update Recommended dialog which updates and relaunches Chrome.">
+          Relaunch
+        </message>
+      </if>
+      <if expr="chromeos">
+        <message name="IDS_UPDATE_RECOMMENDED" desc="The main text of the Update Recommended dialog.">
+          Chrome OS needs to be restarted to apply the update.
+        </message>
+        <message name="IDS_RELAUNCH_AND_UPDATE" desc="The button in the Update Recommended dialog which updates and restarts Chrome OS.">
+          Restart
+        </message>
+      </if>
+
       <!-- Update bubble -->
       <message name="IDS_REINSTALL_APP" desc="Text for the button the user clicks to reinstall the app.">
         Reinstall Chrome
@@ -1109,6 +1138,17 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
       </message>
       <message name="IDS_UPGRADE_BUBBLE_REENABLE_TEXT" desc="Text for the upgrade bubble view full description.">
         Chrome could not update itself to the latest version, so you are missing out on awesome new features and security fixes. You need to update Chrome.
+      </message>
+
+      <!-- User menu errors -->
+      <message name="IDS_SYNC_ERROR_USER_MENU_SUPERVISED_SIGNIN_MESSAGE" desc="Message of the out-of-date signin token error for supervised users in the header of desktop user menu.">
+        Your manager must remove and add you back to Chrome.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_MESSAGE" desc="Message of the out-of-date Chrome client error in the header of desktop user menu.">
+        Chrome is out of date.
+      </message>
+      <message name="IDS_SYNC_ERROR_USER_MENU_UPGRADE_BUTTON" desc="Button in the header of desktop user menu that prompts the user to update Chrome to fix the out-of-date Chrome client error.">
+        Update Chrome
       </message>
 
       <!-- Upgrade recovery bubble -->

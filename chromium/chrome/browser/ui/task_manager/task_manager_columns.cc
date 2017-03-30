@@ -9,7 +9,7 @@
 #include "build/build_config.h"
 #include "chrome/grit/generated_resources.h"
 
-namespace task_management {
+namespace task_manager {
 
 namespace {
 
@@ -71,13 +71,8 @@ const TableColumnData kColumns[] = {
   { IDS_TASK_MANAGER_JAVASCRIPT_MEMORY_ALLOCATED_COLUMN, ui::TableColumn::RIGHT,
     -1, 0, arraysize("2000.0K (2000.0 live)") * kCharWidth, -1, true, false,
     false },
-
-#if defined(OS_MACOSX) || defined(OS_LINUX)
-  // TODO(port): Port the idle wakeups per second to platforms other than Linux
-  // and MacOS (http://crbug.com/120488).
   { IDS_TASK_MANAGER_IDLE_WAKEUPS_COLUMN, ui::TableColumn::RIGHT, -1, 0,
     arraysize("idlewakeups") * kCharWidth, -1, true, false, false },
-#endif  // defined(OS_MACOSX) || defined(OS_LINUX)
 
 #if defined(OS_LINUX)
   { IDS_TASK_MANAGER_OPEN_FD_COUNT_COLUMN, ui::TableColumn::RIGHT, -1, 0,
@@ -98,7 +93,7 @@ const char kSortIsAscendingKey[] = "sort_is_ascending";
 // ID symbol (i.e. for the ID IDS_TASK_MANAGER_TASK_COLUMN, we use the literal
 // string "IDS_TASK_MANAGER_TASK_COLUMN". The following macros help us
 // efficiently get the literal ID for the integer value.
-#define COLUMNS_LITS(def) \
+#define COLUMNS_LIST(def) \
   def(IDS_TASK_MANAGER_TASK_COLUMN) \
   def(IDS_TASK_MANAGER_PROFILE_NAME_COLUMN) \
   def(IDS_TASK_MANAGER_PHYSICAL_MEM_COLUMN) \
@@ -127,12 +122,11 @@ const char kSortIsAscendingKey[] = "sort_is_ascending";
 
 std::string GetColumnIdAsString(int column_id) {
   switch (column_id) {
-    COLUMNS_LITS(COLUMN_ID_AS_STRING)
+    COLUMNS_LIST(COLUMN_ID_AS_STRING)
     default:
       NOTREACHED();
       return std::string();
   }
 }
 
-
-}  // namespace task_management
+}  // namespace task_manager

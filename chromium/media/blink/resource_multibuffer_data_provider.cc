@@ -14,6 +14,7 @@
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/blink/active_loader.h"
 #include "media/blink/cache_util.h"
@@ -70,9 +71,12 @@ void ResourceMultiBufferDataProvider::Start() {
   // TODO(mkwst): Split this into video/audio.
   request.setRequestContext(WebURLRequest::RequestContextVideo);
 
-  DVLOG(1) << __FUNCTION__ << " @ " << byte_pos();
-  if (url_data_->length() > 0) {
-    DCHECK_LT(byte_pos(), url_data_->length()) << " " << url_data_->url();
+  DVLOG(1) << __func__ << " @ " << byte_pos();
+  if (url_data_->length() > 0 && byte_pos() >= url_data_->length()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&ResourceMultiBufferDataProvider::Terminate,
+                              weak_factory_.GetWeakPtr()));
+    return;
   }
 
   request.setHTTPHeaderField(
@@ -162,7 +166,8 @@ void ResourceMultiBufferDataProvider::SetDeferred(bool deferred) {
 void ResourceMultiBufferDataProvider::willFollowRedirect(
     WebURLLoader* loader,
     WebURLRequest& newRequest,
-    const WebURLResponse& redirectResponse) {
+    const WebURLResponse& redirectResponse,
+    int64_t encodedDataLength) {
   redirects_to_ = newRequest.url();
   url_data_->set_valid_until(base::Time::Now() +
                              GetCacheValidUntil(redirectResponse));
@@ -348,7 +353,8 @@ void ResourceMultiBufferDataProvider::didReceiveResponse(
 void ResourceMultiBufferDataProvider::didReceiveData(WebURLLoader* loader,
                                                      const char* data,
                                                      int data_length,
-                                                     int encoded_data_length) {
+                                                     int encoded_data_length,
+                                                     int encoded_body_length) {
   DVLOG(1) << "didReceiveData: " << data_length << " bytes";
   DCHECK(!Available());
   DCHECK(active_loader_);
@@ -402,8 +408,6 @@ void ResourceMultiBufferDataProvider::didFinishLoading(
 
   // If we didn't know the |instance_size_| we do now.
   int64_t size = byte_pos();
-  if (!fifo_.empty())
-    size += fifo_.back()->data_size();
 
   // This request reports something smaller than what we've seen in the past,
   // Maybe it's transient error?
@@ -461,11 +465,13 @@ bool ResourceMultiBufferDataProvider::ParseContentRange(
     int64_t* first_byte_position,
     int64_t* last_byte_position,
     int64_t* instance_size) {
-  const std::string kUpThroughBytesUnit = "bytes ";
-  if (content_range_str.find(kUpThroughBytesUnit) != 0)
+  const char kUpThroughBytesUnit[] = "bytes ";
+  if (!base::StartsWith(content_range_str, kUpThroughBytesUnit,
+                        base::CompareCase::SENSITIVE)) {
     return false;
+  }
   std::string range_spec =
-      content_range_str.substr(kUpThroughBytesUnit.length());
+      content_range_str.substr(sizeof(kUpThroughBytesUnit) - 1);
   size_t dash_offset = range_spec.find("-");
   size_t slash_offset = range_spec.find("/");
 
@@ -496,6 +502,11 @@ bool ResourceMultiBufferDataProvider::ParseContentRange(
   }
 
   return true;
+}
+
+void ResourceMultiBufferDataProvider::Terminate() {
+  fifo_.push_back(DataBuffer::CreateEOSBuffer());
+  url_data_->multibuffer()->OnDataProviderEvent(this);
 }
 
 int64_t ResourceMultiBufferDataProvider::byte_pos() const {

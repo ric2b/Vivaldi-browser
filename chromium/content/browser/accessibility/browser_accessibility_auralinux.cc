@@ -144,7 +144,7 @@ static AtkObject* browser_accessibility_accessible_at_point(
     return NULL;
 
   gfx::Point point(x, y);
-  if (!obj->GetGlobalBoundsRect().Contains(point))
+  if (!obj->GetScreenBoundsRect().Contains(point))
     return NULL;
 
   BrowserAccessibility* result = obj->BrowserAccessibilityForPoint(point);
@@ -170,7 +170,7 @@ static void browser_accessibility_get_extents(AtkComponent* atk_component,
   if (!obj)
     return;
 
-  gfx::Rect bounds = obj->GetGlobalBoundsRect();
+  gfx::Rect bounds = obj->GetScreenBoundsRect();
   if (x)
     *x = bounds.x();
   if (y)
@@ -300,7 +300,7 @@ void GetImagePositionSize(BrowserAccessibilityAuraLinux* obj,
                           gint* y,
                           gint* width,
                           gint* height) {
-  gfx::Rect img_pos_size = obj->GetGlobalBoundsRect();
+  gfx::Rect img_pos_size = obj->GetScreenBoundsRect();
 
   if (x)
     *x = img_pos_size.x();
@@ -552,7 +552,7 @@ static AtkStateSet* browser_accessibility_ref_state_set(AtkObject* atk_object) {
     atk_state_set_add_state(state_set, ATK_STATE_FOCUSABLE);
   if (obj->manager()->GetFocus() == obj)
     atk_state_set_add_state(state_set, ATK_STATE_FOCUSED);
-  if (state & (1 << ui::AX_STATE_ENABLED))
+  if (!(state & (1 << ui::AX_STATE_DISABLED)))
     atk_state_set_add_state(state_set, ATK_STATE_ENABLED);
 
   return state_set;

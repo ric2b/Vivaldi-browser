@@ -14,6 +14,8 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "jni/JsonSanitizer_jni.h"
 
+using base::android::JavaParamRef;
+
 namespace safe_json {
 
 namespace {
@@ -71,7 +73,7 @@ void JsonSanitizerAndroid::Sanitize(const std::string& unsafe_json) {
 
   // This will synchronously call either OnSuccess() or OnError().
   Java_JsonSanitizer_sanitize(env, reinterpret_cast<jlong>(this),
-                              unsafe_json_java.obj());
+                              unsafe_json_java);
 }
 
 void JsonSanitizerAndroid::OnSuccess(const std::string& json) {

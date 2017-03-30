@@ -64,6 +64,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::enableOriginTrials(
       base::FeatureList::IsEnabled(features::kOriginTrials));
 
+  WebRuntimeFeatures::enableFeaturePolicy(
+      base::FeatureList::IsEnabled(features::kFeaturePolicy));
+
   if (command_line.HasSwitch(switches::kEnableWebBluetooth))
     WebRuntimeFeatures::enableWebBluetooth(true);
 
@@ -106,6 +109,10 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kForceDisplayList2dCanvas))
     WebRuntimeFeatures::forceDisplayList2dCanvas(true);
 
+  if (command_line.HasSwitch(
+      switches::kEnableCanvas2dDynamicRenderingModeSwitching))
+    WebRuntimeFeatures::enableCanvas2dDynamicRenderingModeSwitching(true);
+
   if (command_line.HasSwitch(switches::kEnableWebGLDraftExtensions))
     WebRuntimeFeatures::enableWebGLDraftExtensions(true);
 
@@ -146,6 +153,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (ui::IsOverlayScrollbarEnabled())
     WebRuntimeFeatures::enableOverlayScrollbars(true);
+  if (ui::ShouldHideScrollbars())
+    WebRuntimeFeatures::enableHideScrollbars(true);
 
   if (command_line.HasSwitch(switches::kEnablePreciseMemoryInfo))
     WebRuntimeFeatures::enablePreciseMemoryInfo(true);
@@ -223,6 +232,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kNewMediaPlaybackUi))
     WebRuntimeFeatures::enableNewMediaPlaybackUi(true);
 
+  if (base::FeatureList::IsEnabled(
+          features::kNonValidatingReloadOnNormalReload)) {
+    WebRuntimeFeatures::enableReloadwithoutSubResourceCacheRevalidation(true);
+  }
+
   if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
     WebRuntimeFeatures::enableDocumentWriteEvaluator(true);
 
@@ -230,7 +244,13 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
 
   if (base::FeatureList::IsEnabled(features::kPointerEvents))
-    WebRuntimeFeatures::enableFeatureFromString("PointerEvent", true);
+    WebRuntimeFeatures::enablePointerEvent(true);
+
+  if (base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners))
+    WebRuntimeFeatures::enablePassiveDocumentEventListeners(true);
+
+  if (base::FeatureList::IsEnabled(features::kPassiveEventListenersDueToFling))
+    WebRuntimeFeatures::enablePassiveEventListenersDueToFling(true);
 
   WebRuntimeFeatures::enableFeatureFromString(
       "FontCacheScaling",
@@ -242,13 +262,26 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kParseHTMLOnMainThread))
     WebRuntimeFeatures::enableFeatureFromString("ParseHTMLOnMainThread", true);
 
+  if (command_line.HasSwitch(switches::kDisableBackgroundTimerThrottling))
+    WebRuntimeFeatures::enableTimerThrottlingForBackgroundTabs(false);
+
   WebRuntimeFeatures::enableRenderingPipelineThrottling(
     base::FeatureList::IsEnabled(features::kRenderingPipelineThrottling));
+
+  WebRuntimeFeatures::enableTimerThrottlingForHiddenFrames(
+      base::FeatureList::IsEnabled(features::kTimerThrottlingForHiddenFrames));
+
+  if (base::FeatureList::IsEnabled(
+          features::kSendBeaconThrowForBlobWithNonSimpleType))
+    WebRuntimeFeatures::enableSendBeaconThrowForBlobWithNonSimpleType(true);
 
 #if defined(OS_ANDROID)
   WebRuntimeFeatures::enablePaymentRequest(
       base::FeatureList::IsEnabled(features::kWebPayments));
 #endif
+
+  if (base::FeatureList::IsEnabled(features::kSpeculativeLaunchServiceWorker))
+    WebRuntimeFeatures::enableSpeculativeLaunchServiceWorker(true);
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

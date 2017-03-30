@@ -157,7 +157,7 @@ def DoMain(argv):
       inputs.extend(GritSourceFiles())
     inputs = [f.replace('\\', '/') for f in inputs]
 
-    if len(args) == 1:
+    if len(args) == 1 and not options.exclude_grit_source:
       # Include grd file as second input (works around gyp expecting it).
       inputs.insert(1, args[0])
     if options.whitelist_files:

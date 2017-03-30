@@ -94,6 +94,9 @@ PassRefPtr<ComputedStyle> EditingViewPortElement::customStyleForLayoutObject()
     style->setUserModify(READ_ONLY);
     style->setUnique();
 
+    if (const ComputedStyle* parentStyle = parentComputedStyle())
+        StyleAdjuster::adjustStyleForAlignment(*style, *parentStyle);
+
     return style.release();
 }
 
@@ -144,8 +147,10 @@ PassRefPtr<ComputedStyle> TextControlInnerEditorElement::customStyleForLayoutObj
     LayoutTextControlItem textControlLayoutItem = LayoutTextControlItem(toLayoutTextControl(parentLayoutObject));
     RefPtr<ComputedStyle> innerEditorStyle = textControlLayoutItem.createInnerEditorStyle(textControlLayoutItem.styleRef());
     // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
-    // to apply only editing-related.
+    // to apply only editing-related and alignment-related.
     StyleAdjuster::adjustStyleForEditing(*innerEditorStyle);
+    if (const ComputedStyle* parentStyle = parentComputedStyle())
+        StyleAdjuster::adjustStyleForAlignment(*innerEditorStyle, *parentStyle);
     return innerEditorStyle.release();
 }
 
@@ -165,13 +170,13 @@ SearchFieldCancelButtonElement* SearchFieldCancelButtonElement::create(Document&
     return element;
 }
 
-void SearchFieldCancelButtonElement::detach(const AttachContext& context)
+void SearchFieldCancelButtonElement::detachLayoutTree(const AttachContext& context)
 {
     if (m_capturing) {
         if (LocalFrame* frame = document().frame())
             frame->eventHandler().setCapturingMouseEventsNode(nullptr);
     }
-    HTMLDivElement::detach(context);
+    HTMLDivElement::detachLayoutTree(context);
 }
 
 
@@ -186,7 +191,7 @@ void SearchFieldCancelButtonElement::defaultEventHandler(Event* event)
     }
 
 
-    if (event->type() == EventTypeNames::click && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton) {
+    if (event->type() == EventTypeNames::click && event->isMouseEvent() && toMouseEvent(event)->button() == static_cast<short>(WebPointerProperties::Button::Left)) {
         input->setValueForUser("");
         input->setAutofilled(false);
         input->onSearch();

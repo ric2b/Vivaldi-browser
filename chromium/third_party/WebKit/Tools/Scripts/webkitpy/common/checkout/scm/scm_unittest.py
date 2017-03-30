@@ -31,7 +31,7 @@
 import unittest
 
 from webkitpy.common.system.executive import Executive, ScriptError
-from webkitpy.common.system.executive_mock import MockExecutive
+from webkitpy.common.system.executive_mock import MockExecutive, MockExecutive2
 from webkitpy.common.system.filesystem import FileSystem
 from webkitpy.common.system.filesystem_mock import MockFileSystem
 from webkitpy.common.checkout.scm.detection import detect_scm_system

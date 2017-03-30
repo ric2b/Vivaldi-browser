@@ -11,12 +11,14 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/extensions/window_controller_list.h"
+#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
@@ -47,8 +49,6 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "url/gurl.h"
 
-#include "chrome/browser/browser_process.h"
-#include "chrome/browser/memory/tab_manager.h"
 #include "content/browser/site_instance_impl.h"
 
 using content::NavigationEntry;
@@ -414,13 +414,16 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   tab_object->highlighted = tab_strip && tab_strip->IsTabSelected(tab_index);
   tab_object->pinned = tab_strip && tab_strip->IsTabPinned(tab_index);
   tab_object->audible.reset(new bool(contents->WasRecentlyAudible()));
+  tab_object->discarded =
+      g_browser_process->GetTabManager()->IsTabDiscarded(contents);
+  tab_object->auto_discardable =
+      g_browser_process->GetTabManager()->IsTabAutoDiscardable(contents);
   tab_object->muted_info = CreateMutedInfo(contents);
   tab_object->incognito = contents->GetBrowserContext()->IsOffTheRecord();
   tab_object->width.reset(
       new int(contents->GetContainerBounds().size().width()));
   tab_object->height.reset(
       new int(contents->GetContainerBounds().size().height()));
-  tab_object->discarded = IsDiscarded(contents);
 
   tab_object->url.reset(new std::string(contents->GetURL().spec()));
   tab_object->title.reset(
@@ -486,7 +489,7 @@ void ExtensionTabUtil::ScrubTabForExtension(const Extension* extension,
   } else {
     api_permission =
         extension->permissions_data()->HasAPIPermission(APIPermission::kTab);
-    url = *tab->url.get();
+    url = *tab->url;
   }
   bool host_permission = extension->permissions_data()
                              ->active_permissions()
@@ -589,6 +592,7 @@ bool ExtensionTabUtil::IsKillURL(const GURL& url) {
       chrome::kChromeUIQuitHost,
       chrome::kChromeUIRestartHost,
       content::kChromeUIBrowserCrashHost,
+      content::kChromeUIMemoryExhaustHost,
   };
 
   // Check a fixed-up URL, to normalize the scheme and parse hosts correctly.

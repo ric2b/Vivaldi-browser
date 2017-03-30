@@ -45,17 +45,21 @@ protected:
         return graphicsLayer->m_previousInterestRect;
     }
 
+    bool canPaintBackgroundOntoScrollingContentsLayer(const char* elementId)
+    {
+        CompositedLayerMapping* mapping = toLayoutBlock(getLayoutObjectByElementId(elementId))->layer()->compositedLayerMapping();
+        return mapping->canPaintBackgroundOntoScrollingContentsLayer();
+    }
+
 private:
     void SetUp() override
     {
         RenderingTest::SetUp();
         enableCompositing();
-        GraphicsLayer::setDrawDebugRedFillForTesting(false);
     }
 
     void TearDown() override
     {
-        GraphicsLayer::setDrawDebugRedFillForTesting(true);
         RenderingTest::TearDown();
     }
 };
@@ -506,11 +510,13 @@ TEST_F(CompositedLayerMappingTest, InterestRectShouldNotChangeOnPaintInvalidatio
 TEST_F(CompositedLayerMappingTest, InterestRectOfSquashingLayerWithNegativeOverflow)
 {
     setBodyInnerHTML(
-        "<style>body { margin: 0 }</style>"
+        "<style>body { margin: 0; font-size: 16px; }</style>"
         "<div style='position: absolute; top: -500px; width: 200px; height: 700px; will-change: transform'></div>"
-        "<div id='squashed' style='position: absolute; top: 190px'>"
-        "  <div style='width: 100px; height: 100px; text-indent: -10000px'>text</div>"
+        "<div id='squashed' style='position: absolute; top: 190px;'>"
+        "  <div id='inside' style='width: 100px; height: 100px; text-indent: -10000px'>text</div>"
         "</div>");
+
+    EXPECT_EQ(document().getElementById("inside")->layoutBox()->visualOverflowRect().size().height(), 100);
 
     CompositedLayerMapping* groupedMapping = document().getElementById("squashed")->layoutBox()->layer()->groupedMapping();
     // The squashing layer is at (-10000, 190, 10100, 100) in viewport coordinates.
@@ -624,6 +630,52 @@ TEST_F(CompositedLayerMappingTest, ScrollingContentsAndForegroundLayerPaintingPh
     ASSERT_TRUE(mapping->scrollingContentsLayer());
     EXPECT_EQ(static_cast<GraphicsLayerPaintingPhase>(GraphicsLayerPaintOverflowContents | GraphicsLayerPaintCompositedScroll | GraphicsLayerPaintForeground), mapping->scrollingContentsLayer()->paintingPhase());
     EXPECT_FALSE(mapping->foregroundLayer());
+}
+
+TEST_F(CompositedLayerMappingTest, ShouldPaintBackgroundOntoScrollingContentsLayer)
+{
+    document().frame()->settings()->setPreferCompositingToLCDTextEnabled(true);
+    setBodyInnerHTML(
+        "<style>.scroller { overflow: scroll; will-change: transform; width: 300px; height: 300px;} .spacer { height: 1000px; }</style>"
+        "<div id='scroller1' class='scroller' style='background: white local;'>"
+        "    <div id='negative-composited-child' style='background-color: red; width: 1px; height: 1px; position: absolute; backface-visibility: hidden; z-index: -1'></div>"
+        "    <div class='spacer'></div>"
+        "</div>"
+        "<div id='scroller2' class='scroller' style='background: white content-box; padding: 10px;'>"
+        "    <div class='spacer'></div>"
+        "</div>"
+        "<div id='scroller3' class='scroller' style='background: white local content-box; padding: 10px;'>"
+        "    <div class='spacer'></div>"
+        "</div>"
+        );
+
+    // First scroller cannot paint background into scrolling contents layer because it has a negative z-index child.
+    EXPECT_FALSE(canPaintBackgroundOntoScrollingContentsLayer("scroller1"));
+
+    // Second scroller cannot paint background into scrolling contents layer because it has a content-box clip without local attachment.
+    EXPECT_FALSE(canPaintBackgroundOntoScrollingContentsLayer("scroller2"));
+
+    // Third scroller can paint background into scrolling contents layer.
+    EXPECT_TRUE(canPaintBackgroundOntoScrollingContentsLayer("scroller3"));
+}
+
+TEST_F(CompositedLayerMappingTest, BackgroundPaintedIntoGraphicsLayerIfNotCompositedScrolling)
+{
+    document().frame()->settings()->setPreferCompositingToLCDTextEnabled(true);
+    setBodyInnerHTML(
+        "<div id='container' style='overflow: scroll; width: 300px; height: 300px; border-radius: 5px; background: white local; will-change: transform;'>"
+        "    <div style='background-color: blue; width: 2000px; height: 2000px;'></div>"
+        "</div>");
+
+    PaintLayer* layer = toLayoutBlock(getLayoutObjectByElementId("container"))->layer();
+    EXPECT_TRUE(canPaintBackgroundOntoScrollingContentsLayer("container"));
+
+    // We currently don't use composited scrolling when the container has a border-radius
+    // so even though we can paint the background onto the scrolling contents layer we
+    // don't have a scrolling contents layer to paint into in this case.
+    CompositedLayerMapping* mapping = layer->compositedLayerMapping();
+    EXPECT_FALSE(mapping->hasScrollingLayer());
+    EXPECT_FALSE(mapping->backgroundPaintsOntoScrollingContentsLayer());
 }
 
 } // namespace blink

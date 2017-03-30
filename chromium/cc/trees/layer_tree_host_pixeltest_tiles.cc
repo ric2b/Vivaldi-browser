@@ -68,7 +68,7 @@ class LayerTreeHostTilesPixelTest : public LayerTreePixelTest {
 
   void DoReadback() {
     Layer* target =
-        readback_target_ ? readback_target_ : layer_tree_host()->root_layer();
+        readback_target_ ? readback_target_ : layer_tree()->root_layer();
     target->RequestCopyOfOutput(CreateCopyOutputRequest());
   }
 
@@ -113,7 +113,7 @@ class BlueYellowClient : public ContentLayerClient {
     DisplayItemListSettings settings;
     settings.use_cached_picture = false;
     scoped_refptr<DisplayItemList> display_list =
-        DisplayItemList::Create(PaintableRegion(), settings);
+        DisplayItemList::Create(settings);
 
     SkPictureRecorder recorder;
     sk_sp<SkCanvas> canvas =
@@ -132,7 +132,7 @@ class BlueYellowClient : public ContentLayerClient {
     paint.setColor(SK_ColorYELLOW);
     canvas->drawRect(gfx::RectToSkRect(yellow_rect), paint);
 
-    display_list->CreateAndAppendItem<DrawingDisplayItem>(
+    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
         PaintableRegion(), recorder.finishRecordingAsPicture());
     display_list->Finalize();
     return display_list;

@@ -15,7 +15,7 @@ def __hash_file(filename):
 
   return digest.hexdigest()
 
-def conditional_refresh_file(filename, new_content):
+def conditional_refresh_file(filename, new_content, stamp_file=None):
 
   if os.access(filename, os.F_OK):
     old_digest = __hash_file(filename)
@@ -23,11 +23,19 @@ def conditional_refresh_file(filename, new_content):
     new_digest =hashlib.sha256(new_content)
 
     if old_digest == new_digest.hexdigest():
+      # No need to update target file
+      if stamp_file and not os.access(stamp_file, os.F_OK):
+        # But the stamp file needs to be created
+        with open(stamp_file, "w") as _stamptouch:
+          pass # just opening files will update date
       return
 
   with open(filename,"w") as newfile:
     newfile.write(new_content)
 
+  if stamp_file:
+    with open(stamp_file, "w") as _stamptouch:
+      pass # just opening files will update date
 
 def conditional_copy(source_filename, dest_filename, hash_check=False):
 

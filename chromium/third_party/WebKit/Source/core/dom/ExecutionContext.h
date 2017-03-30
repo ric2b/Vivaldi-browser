@@ -38,6 +38,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
+#include "public/platform/WebTraceLocation.h"
 #include "wtf/Deque.h"
 #include "wtf/Noncopyable.h"
 #include <memory>
@@ -77,7 +78,9 @@ public:
     virtual bool isSharedWorkerGlobalScope() const { return false; }
     virtual bool isServiceWorkerGlobalScope() const { return false; }
     virtual bool isCompositorWorkerGlobalScope() const { return false; }
+    virtual bool isAnimationWorkletGlobalScope() const { return false; }
     virtual bool isPaintWorkletGlobalScope() const { return false; }
+    virtual bool isThreadedWorkletGlobalScope() const { return false; }
     virtual bool isJSExecutionForbidden() const { return false; }
 
     virtual bool isContextThread() const { return true; }
@@ -87,7 +90,7 @@ public:
     const KURL& url() const;
     KURL completeURL(const String& url) const;
     virtual void disableEval(const String& errorMessage) = 0;
-    virtual LocalDOMWindow* executingWindow() { return 0; }
+    virtual LocalDOMWindow* executingWindow() const { return 0; }
     virtual String userAgent() const = 0;
     virtual void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String& taskNameForInstrumentation = emptyString()) = 0; // Executes the task on context's thread asynchronously.
 
@@ -97,17 +100,15 @@ public:
     // not be used after the ExecutionContext is destroyed.
     virtual DOMTimerCoordinator* timers() = 0;
 
-    virtual void reportBlockedScriptExecutionToInspector(const String& directiveText) = 0;
-
     virtual SecurityContext& securityContext() = 0;
     KURL contextURL() const { return virtualURL(); }
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
 
     bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);
-    void reportException(ErrorEvent*, AccessControlStatus);
+    void dispatchErrorEvent(ErrorEvent*, AccessControlStatus);
 
     virtual void addConsoleMessage(ConsoleMessage*) = 0;
-    virtual void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) = 0;
+    virtual void exceptionThrown(ErrorEvent*) = 0;
 
     PublicURLManager& publicURLManager();
 
@@ -165,14 +166,13 @@ protected:
     virtual KURL virtualCompleteURL(const String&) const = 0;
 
 private:
-    bool dispatchErrorEvent(ErrorEvent*, AccessControlStatus);
+    bool dispatchErrorEventInternal(ErrorEvent*, AccessControlStatus);
     void runSuspendableTasks();
 
     unsigned m_circularSequentialID;
 
     bool m_inDispatchErrorEvent;
-    class PendingException;
-    std::unique_ptr<Vector<std::unique_ptr<PendingException>>> m_pendingExceptions;
+    HeapVector<Member<ErrorEvent>> m_pendingExceptions;
 
     bool m_activeDOMObjectsAreSuspended;
     bool m_activeDOMObjectsAreStopped;

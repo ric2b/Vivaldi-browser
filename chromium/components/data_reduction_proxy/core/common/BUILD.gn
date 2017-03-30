@@ -7,7 +7,7 @@ import("//chrome/version.gni")
 # Variables:
 #   deps: Extra dependencies.
 template("common_tmpl") {
-  source_set(target_name) {
+  static_library(target_name) {
     sources = [
       "data_reduction_proxy_bypass_action_list.h",
       "data_reduction_proxy_bypass_type_list.h",
@@ -19,6 +19,7 @@ template("common_tmpl") {
       "data_reduction_proxy_event_store.h",
       "data_reduction_proxy_headers.cc",
       "data_reduction_proxy_headers.h",
+      "data_reduction_proxy_page_load_timing.cc",
       "data_reduction_proxy_page_load_timing.h",
       "data_reduction_proxy_params.cc",
       "data_reduction_proxy_params.h",
@@ -28,6 +29,8 @@ template("common_tmpl") {
       "data_reduction_proxy_switches.h",
       "data_reduction_proxy_util.cc",
       "data_reduction_proxy_util.h",
+      "data_saver_status.h",
+      "data_savings_recorder.h",
       "lofi_decider.h",
       "lofi_ui_service.h",
     ]
@@ -57,7 +60,7 @@ common_tmpl("common") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "data_reduction_proxy_event_storage_delegate_test_utils.cc",

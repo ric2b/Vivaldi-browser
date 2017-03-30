@@ -39,6 +39,7 @@
 #include "core/editing/Editor.h"
 #include "core/events/Event.h"
 #include "core/events/EventUtil.h"
+#include "core/events/PointerEvent.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
@@ -46,6 +47,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "platform/Histogram.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Threading.h"
@@ -57,6 +59,21 @@ using namespace WTF;
 namespace blink {
 namespace {
 
+enum PassiveForcedListenerResultType {
+    PreventDefaultNotCalled,
+    DocumentLevelTouchPreventDefaultCalled,
+    PassiveForcedListenerResultTypeMax
+};
+
+Event::PassiveMode eventPassiveMode(const RegisteredEventListener& eventListener)
+{
+    if (!eventListener.passive())
+        return Event::PassiveMode::NotPassive;
+    if (eventListener.passiveForcedForDocumentTarget())
+        return Event::PassiveMode::PassiveForcedDocumentLevel;
+    return Event::PassiveMode::Passive;
+}
+
 Settings* windowSettings(LocalDOMWindow* executingWindow)
 {
     if (executingWindow) {
@@ -67,10 +84,15 @@ Settings* windowSettings(LocalDOMWindow* executingWindow)
     return nullptr;
 }
 
-bool isScrollBlockingEvent(const AtomicString& eventType)
+bool isTouchScrollBlockingEvent(const AtomicString& eventType)
 {
     return eventType == EventTypeNames::touchstart
-        || eventType == EventTypeNames::touchmove
+        || eventType == EventTypeNames::touchmove;
+}
+
+bool isScrollBlockingEvent(const AtomicString& eventType)
+{
+    return isTouchScrollBlockingEvent(eventType)
         || eventType == EventTypeNames::mousewheel
         || eventType == EventTypeNames::wheel;
 }
@@ -105,7 +127,7 @@ void reportBlockedEvent(ExecutionContext* context, const Event* event, Registere
 
     String messageText = String::format(
         "Handling of '%s' input event was delayed for %ld ms due to main thread being busy. "
-        "Consider marking event handler as 'passive' to make the page more responive.",
+        "Consider marking event handler as 'passive' to make the page more responsive.",
         event->type().getString().utf8().data(), lround(delayedSeconds * 1000));
 
     v8::Local<v8::Function> function = eventListenerEffectiveFunction(v8Listener->isolate(), handler);
@@ -185,7 +207,7 @@ inline LocalDOMWindow* EventTarget::executingWindow()
     return nullptr;
 }
 
-void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventType, AddEventListenerOptions& options)
+void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventType, AddEventListenerOptionsResolved& options)
 {
     if (!isScrollBlockingEvent(eventType)) {
         if (!options.hasPassive())
@@ -196,6 +218,22 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
     if (LocalDOMWindow* executingWindow = this->executingWindow()) {
         if (options.hasPassive()) {
             UseCounter::count(executingWindow->document(), options.passive() ? UseCounter::AddEventListenerPassiveTrue : UseCounter::AddEventListenerPassiveFalse);
+        }
+    }
+
+    if (RuntimeEnabledFeatures::passiveDocumentEventListenersEnabled() && isTouchScrollBlockingEvent(eventType)) {
+        if (!options.hasPassive()) {
+            if (Node* node = toNode()) {
+                if (node->isDocumentNode() || node->document().documentElement() == node || node->document().body() == node) {
+                    options.setPassive(true);
+                    options.setPassiveForcedForDocumentTarget(true);
+                    return;
+                }
+            } else if (toLocalDOMWindow()) {
+                options.setPassive(true);
+                options.setPassiveForcedForDocumentTarget(true);
+                return;
+            }
         }
     }
 
@@ -212,17 +250,6 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
         case PassiveListenerDefault::ForceAllTrue:
             options.setPassive(true);
             break;
-        case PassiveListenerDefault::DocumentTrue:
-            if (!options.hasPassive()) {
-                if (Node* node = toNode()) {
-                    if (node->isDocumentNode() || node->document().documentElement() == node || node->document().body() == node) {
-                        options.setPassive(true);
-                    }
-                } else if (toLocalDOMWindow()) {
-                    options.setPassive(true);
-                }
-            }
-            break;
         }
     } else {
         if (!options.hasPassive())
@@ -232,7 +259,7 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
 
 bool EventTarget::addEventListener(const AtomicString& eventType, EventListener* listener, bool useCapture)
 {
-    AddEventListenerOptions options;
+    AddEventListenerOptionsResolved options;
     options.setCapture(useCapture);
     setDefaultAddEventListenerOptions(eventType, options);
     return addEventListenerInternal(eventType, listener, options);
@@ -243,19 +270,19 @@ bool EventTarget::addEventListener(const AtomicString& eventType, EventListener*
     if (optionsUnion.isBoolean())
         return addEventListener(eventType, listener, optionsUnion.getAsBoolean());
     if (optionsUnion.isAddEventListenerOptions()) {
-        AddEventListenerOptions options = optionsUnion.getAsAddEventListenerOptions();
+        AddEventListenerOptionsResolved options = optionsUnion.getAsAddEventListenerOptions();
         return addEventListener(eventType, listener, options);
     }
     return addEventListener(eventType, listener);
 }
 
-bool EventTarget::addEventListener(const AtomicString& eventType, EventListener* listener, AddEventListenerOptions& options)
+bool EventTarget::addEventListener(const AtomicString& eventType, EventListener* listener, AddEventListenerOptionsResolved& options)
 {
     setDefaultAddEventListenerOptions(eventType, options);
     return addEventListenerInternal(eventType, listener, options);
 }
 
-bool EventTarget::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptions& options)
+bool EventTarget::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptionsResolved& options)
 {
     if (!listener)
         return false;
@@ -277,9 +304,17 @@ bool EventTarget::addEventListenerInternal(const AtomicString& eventType, EventL
 
 void EventTarget::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
 {
-    if (EventUtil::isPointerEventType(eventType)) {
+    if (eventType == EventTypeNames::auxclick) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow()) {
+            UseCounter::count(executingWindow->document(), UseCounter::AuxclickAddListenerCount);
+        }
+    } else if (EventUtil::isPointerEventType(eventType)) {
         if (LocalDOMWindow* executingWindow = this->executingWindow()) {
             UseCounter::count(executingWindow->document(), UseCounter::PointerEventAddListenerCount);
+        }
+    } else if (eventType == EventTypeNames::slotchange) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow()) {
+            UseCounter::count(executingWindow->document(), UseCounter::SlotChangeEventAddListener);
         }
     }
 }
@@ -411,7 +446,7 @@ DispatchEventResult EventTarget::dispatchEventInternal(Event* event)
 {
     event->setTarget(this);
     event->setCurrentTarget(this);
-    event->setEventPhase(Event::AT_TARGET);
+    event->setEventPhase(Event::kAtTarget);
     DispatchEventResult dispatchResult = fireEventListeners(event);
     event->setEventPhase(0);
     return dispatchResult;
@@ -484,7 +519,9 @@ void EventTarget::countLegacyEvents(const AtomicString& legacyTypeName, EventLis
 
 DispatchEventResult EventTarget::fireEventListeners(Event* event)
 {
-    ASSERT(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#if DCHECK_IS_ON()
+    DCHECK(!EventDispatchForbiddenScope::isEventDispatchForbidden());
+#endif
     DCHECK(event);
     DCHECK(event->wasInitialized());
 
@@ -523,6 +560,17 @@ DispatchEventResult EventTarget::fireEventListeners(Event* event)
     return dispatchEventResult(*event);
 }
 
+bool EventTarget::checkTypeThenUseCount(
+    const Event* event, const AtomicString& eventTypeToCount, const UseCounter::Feature feature)
+{
+    if (event->type() == eventTypeToCount) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow())
+            UseCounter::count(executingWindow->document(), feature);
+        return true;
+    }
+    return false;
+}
+
 bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventListenerVector& entry)
 {
     // Fire all listeners registered for this event. Don't fire listeners removed
@@ -531,24 +579,24 @@ bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
     // index |size|, so iterating up to (but not including) |size| naturally excludes
     // new event listeners.
 
-    if (event->type() == EventTypeNames::beforeunload) {
+    if (checkTypeThenUseCount(event, EventTypeNames::beforeunload, UseCounter::DocumentBeforeUnloadFired)) {
         if (LocalDOMWindow* executingWindow = this->executingWindow()) {
-            if (executingWindow->top())
+            if (executingWindow != executingWindow->top())
                 UseCounter::count(executingWindow->document(), UseCounter::SubFrameBeforeUnloadFired);
-            UseCounter::count(executingWindow->document(), UseCounter::DocumentBeforeUnloadFired);
         }
-    } else if (event->type() == EventTypeNames::unload) {
-        if (LocalDOMWindow* executingWindow = this->executingWindow())
-            UseCounter::count(executingWindow->document(), UseCounter::DocumentUnloadFired);
-    } else if (event->type() == EventTypeNames::DOMFocusIn || event->type() == EventTypeNames::DOMFocusOut) {
-        if (LocalDOMWindow* executingWindow = this->executingWindow())
-            UseCounter::count(executingWindow->document(), UseCounter::DOMFocusInOutEvent);
-    } else if (event->type() == EventTypeNames::focusin || event->type() == EventTypeNames::focusout) {
-        if (LocalDOMWindow* executingWindow = this->executingWindow())
-            UseCounter::count(executingWindow->document(), UseCounter::FocusInOutEvent);
-    } else if (event->type() == EventTypeNames::textInput) {
-        if (LocalDOMWindow* executingWindow = this->executingWindow())
-            UseCounter::count(executingWindow->document(), UseCounter::TextInputFired);
+    } else if (checkTypeThenUseCount(event, EventTypeNames::unload, UseCounter::DocumentUnloadFired)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::DOMFocusIn, UseCounter::DOMFocusInOutEvent)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::DOMFocusOut, UseCounter::DOMFocusInOutEvent)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::focusin, UseCounter::FocusInOutEvent)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::focusout, UseCounter::FocusInOutEvent)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::textInput, UseCounter::TextInputFired)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::touchstart, UseCounter::TouchStartFired)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::mousedown, UseCounter::MouseDownFired)) {
+    } else if (checkTypeThenUseCount(event, EventTypeNames::pointerdown, UseCounter::PointerDownFired)) {
+        if (LocalDOMWindow* executingWindow = this->executingWindow()) {
+            if (event->isPointerEvent() && static_cast<PointerEvent*>(event)->pointerType() == "touch")
+                UseCounter::count(executingWindow->document(), UseCounter::PointerDownFiredForTouch);
+        }
     }
 
     ExecutionContext* context = getExecutionContext();
@@ -578,9 +626,9 @@ bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
         // EventTarget::removeEventListener.
         ++i;
 
-        if (event->eventPhase() == Event::CAPTURING_PHASE && !registeredListener.capture())
+        if (event->eventPhase() == Event::kCapturingPhase && !registeredListener.capture())
             continue;
-        if (event->eventPhase() == Event::BUBBLING_PHASE && registeredListener.capture())
+        if (event->eventPhase() == Event::kBubblingPhase && registeredListener.capture())
             continue;
 
         // If stopImmediatePropagation has been called, we just break out immediately, without
@@ -588,7 +636,8 @@ bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
         if (event->immediatePropagationStopped())
             break;
 
-        event->setHandlingPassive(registeredListener.passive());
+        event->setHandlingPassive(eventPassiveMode(registeredListener));
+        bool passiveForced = registeredListener.passiveForcedForDocumentTarget();
 
         InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(context, this, event);
 
@@ -606,9 +655,18 @@ bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
             reportBlockedEvent(context, event, &entry[i - 1], now - event->platformTimeStamp());
         }
 
-        event->setHandlingPassive(false);
+        if (passiveForced) {
+            DEFINE_STATIC_LOCAL(EnumerationHistogram, passiveForcedHistogram, ("Event.PassiveForcedEventDispatchCancelled", PassiveForcedListenerResultTypeMax));
+            PassiveForcedListenerResultType breakageType = PreventDefaultNotCalled;
+            if (event->preventDefaultCalledDuringPassive())
+                breakageType = DocumentLevelTouchPreventDefaultCalled;
 
-        RELEASE_ASSERT(i <= size);
+            passiveForcedHistogram.count(breakageType);
+        }
+
+        event->setHandlingPassive(Event::PassiveMode::NotPassive);
+
+        CHECK_LE(i, size);
     }
     d->firingEventIterators->removeLast();
     return firedListener;

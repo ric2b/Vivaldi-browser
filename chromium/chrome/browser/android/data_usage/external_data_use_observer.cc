@@ -4,6 +4,8 @@
 
 #include "chrome/browser/android/data_usage/external_data_use_observer.h"
 
+#include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/metrics/field_trial.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
@@ -51,11 +53,27 @@ ExternalDataUseObserver::ExternalDataUseObserver(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner)
     : data_use_aggregator_(data_use_aggregator),
       external_data_use_observer_bridge_(new ExternalDataUseObserverBridge()),
-      data_use_tab_model_(new DataUseTabModel()),
-      external_data_use_reporter_(
-          new ExternalDataUseReporter(kExternalDataUseObserverFieldTrial,
-                                      data_use_tab_model_,
-                                      external_data_use_observer_bridge_)),
+      // It is okay to use  base::Unretained for the callbacks, since
+      // |external_data_use_observer_bridge_| is owned by |this|, and is
+      // destroyed on UI thread after |this| and |data_use_tab_model_| are
+      // destroyed.
+      data_use_tab_model_(new DataUseTabModel(
+          base::Bind(&ExternalDataUseObserverBridge::FetchMatchingRules,
+                     base::Unretained(external_data_use_observer_bridge_)),
+          base::Bind(
+              &ExternalDataUseObserverBridge::ShouldRegisterAsDataUseObserver,
+              base::Unretained(external_data_use_observer_bridge_)))),
+      // It is okay to use  base::Unretained for the callbacks, since
+      // |external_data_use_observer_bridge_| and |data_use_tab_model_| are
+      // owned by |this|, and are destroyed on UI thread after |this| and
+      // |external_data_use_reporter_| are destroyed.
+      external_data_use_reporter_(new ExternalDataUseReporter(
+          kExternalDataUseObserverFieldTrial,
+          base::Bind(&DataUseTabModel::GetTrackingInfoForTabAtTime,
+                     base::Unretained(data_use_tab_model_)),
+          base::Bind(&ExternalDataUseObserverBridge::ReportDataUse,
+                     base::Unretained(external_data_use_observer_bridge_)))),
+      io_task_runner_(io_task_runner),
       ui_task_runner_(ui_task_runner),
       last_matching_rules_fetch_time_(base::TimeTicks::Now()),
       fetch_matching_rules_duration_(
@@ -64,7 +82,7 @@ ExternalDataUseObserver::ExternalDataUseObserver(
       weak_factory_(this) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
   DCHECK(data_use_aggregator_);
-  DCHECK(io_task_runner);
+  DCHECK(io_task_runner_);
   DCHECK(ui_task_runner_);
 
   // Initialize the ExternalDataUseReporter object. It is okay to use
@@ -74,11 +92,6 @@ ExternalDataUseObserver::ExternalDataUseObserver(
       FROM_HERE, base::Bind(&ExternalDataUseReporter::InitOnUIThread,
                             base::Unretained(external_data_use_reporter_)));
 
-  ui_task_runner_->PostTask(FROM_HERE,
-                            base::Bind(&DataUseTabModel::InitOnUIThread,
-                                       base::Unretained(data_use_tab_model_),
-                                       external_data_use_observer_bridge_));
-
   // Initialize the ExternalDataUseObserverBridge object. It is okay to use
   // base::Unretained here since |external_data_use_observer_bridge_| is owned
   // by |this|, and is destroyed on UI thread when |this| is destroyed.
@@ -86,7 +99,7 @@ ExternalDataUseObserver::ExternalDataUseObserver(
       FROM_HERE,
       base::Bind(&ExternalDataUseObserverBridge::Init,
                  base::Unretained(external_data_use_observer_bridge_),
-                 io_task_runner, GetWeakPtr(), data_use_tab_model_));
+                 io_task_runner_, GetWeakPtr(), data_use_tab_model_));
 }
 
 ExternalDataUseObserver::~ExternalDataUseObserver() {
@@ -120,6 +133,22 @@ void ExternalDataUseObserver::OnDataUse(const data_usage::DataUse& data_use) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(registered_as_data_use_observer_);
 
+  if (!data_use_list_) {
+    data_use_list_.reset(new std::deque<const data_usage::DataUse>());
+    // Post a task to the same IO thread, that will get invoked when some of the
+    // data use objects are batched.
+    io_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&ExternalDataUseObserver::OnDataUseBatchComplete,
+                              GetWeakPtr()));
+  }
+
+  data_use_list_->push_back(data_use);
+}
+
+void ExternalDataUseObserver::OnDataUseBatchComplete() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(data_use_list_);
+
   const base::TimeTicks now_ticks = base::TimeTicks::Now();
 
   // If the time when the matching rules were last fetched is more than
@@ -132,9 +161,10 @@ void ExternalDataUseObserver::OnDataUse(const data_usage::DataUse& data_use) {
   // It is okay to use base::Unretained here since |external_data_use_reporter_|
   // is owned by |this|, and is destroyed on UI thread when |this| is destroyed.
   ui_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&ExternalDataUseReporter::OnDataUse,
-                 base::Unretained(external_data_use_reporter_), data_use));
+      FROM_HERE, base::Bind(&ExternalDataUseReporter::OnDataUse,
+                            base::Unretained(external_data_use_reporter_),
+                            base::Passed(&data_use_list_)));
+  DCHECK(!data_use_list_);
 }
 
 void ExternalDataUseObserver::OnReportDataUseDone(bool success) {

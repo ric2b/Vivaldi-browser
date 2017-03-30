@@ -35,6 +35,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
+#include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
@@ -171,12 +172,12 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
     if (!editableRoot->getAttributeEventListener(EventTypeNames::webkitBeforeTextInserted)
         // FIXME: Remove these checks once textareas and textfields actually register an event handler.
         && !(shadowAncestorElement && shadowAncestorElement->layoutObject() && shadowAncestorElement->layoutObject()->isTextControl())
-        && editableRoot->layoutObjectIsRichlyEditable()) {
+        && hasRichlyEditableStyle(*editableRoot)) {
         removeInterchangeNodes(m_fragment.get());
         return;
     }
 
-    if (!editableRoot->layoutObjectIsRichlyEditable()) {
+    if (!hasRichlyEditableStyle(*editableRoot)) {
         bool isPlainText = true;
         for (Node& node : NodeTraversal::childrenOf(*m_fragment)) {
             if (isInterchangeHTMLBRElement(&node) && &node == m_fragment->lastChild())
@@ -216,7 +217,7 @@ ReplacementFragment::ReplacementFragment(Document* document, DocumentFragment* f
     // Give the root a chance to change the text.
     BeforeTextInsertedEvent* evt = BeforeTextInsertedEvent::create(text);
     editableRoot->dispatchEvent(evt);
-    if (text != evt->text() || !editableRoot->layoutObjectIsRichlyEditable()) {
+    if (text != evt->text() || !hasRichlyEditableStyle(*editableRoot)) {
         restoreAndRemoveTestRenderingNodesToFragment(holder);
 
         m_fragment = createFragmentFromText(selection.toNormalizedEphemeralRange(), evt->text());
@@ -398,7 +399,7 @@ inline void ReplaceSelectionCommand::InsertedNodes::didReplaceNode(Node& node, N
         m_lastNodeInserted = &newNode;
 }
 
-ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFragment* fragment, CommandOptions options, EditAction editAction)
+ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFragment* fragment, CommandOptions options, InputEvent::InputType inputType)
     : CompositeEditCommand(document)
     , m_selectReplacement(options & SelectReplacement)
     , m_smartReplace(options & SmartReplace)
@@ -406,7 +407,7 @@ ReplaceSelectionCommand::ReplaceSelectionCommand(Document& document, DocumentFra
     , m_documentFragment(fragment)
     , m_preventNesting(options & PreventNesting)
     , m_movingParagraph(options & MovingParagraph)
-    , m_editAction(editAction)
+    , m_inputType(inputType)
     , m_sanitizeFragment(options & SanitizeFragment)
     , m_shouldMergeEnd(false)
 {
@@ -580,7 +581,7 @@ void ReplaceSelectionCommand::removeRedundantStylesAndKeepStyleSpanInline(Insert
             continue;
         }
 
-        if (element->parentNode() && element->parentNode()->layoutObjectIsRichlyEditable())
+        if (element->parentNode() && hasRichlyEditableStyle(*element->parentNode()))
             removeElementAttribute(element, contenteditableAttr);
 
         // WebKit used to not add display: inline and float: none on copy.
@@ -612,57 +613,56 @@ void ReplaceSelectionCommand::removeRedundantStylesAndKeepStyleSpanInline(Insert
 static bool isProhibitedParagraphChild(const AtomicString& name)
 {
     // https://dvcs.w3.org/hg/editing/raw-file/57abe6d3cb60/editing.html#prohibited-paragraph-child
-    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, elements, ());
-    if (elements.isEmpty()) {
-        elements.add(addressTag.localName());
-        elements.add(articleTag.localName());
-        elements.add(asideTag.localName());
-        elements.add(blockquoteTag.localName());
-        elements.add(captionTag.localName());
-        elements.add(centerTag.localName());
-        elements.add(colTag.localName());
-        elements.add(colgroupTag.localName());
-        elements.add(ddTag.localName());
-        elements.add(detailsTag.localName());
-        elements.add(dirTag.localName());
-        elements.add(divTag.localName());
-        elements.add(dlTag.localName());
-        elements.add(dtTag.localName());
-        elements.add(fieldsetTag.localName());
-        elements.add(figcaptionTag.localName());
-        elements.add(figureTag.localName());
-        elements.add(footerTag.localName());
-        elements.add(formTag.localName());
-        elements.add(h1Tag.localName());
-        elements.add(h2Tag.localName());
-        elements.add(h3Tag.localName());
-        elements.add(h4Tag.localName());
-        elements.add(h5Tag.localName());
-        elements.add(h6Tag.localName());
-        elements.add(headerTag.localName());
-        elements.add(hgroupTag.localName());
-        elements.add(hrTag.localName());
-        elements.add(liTag.localName());
-        elements.add(listingTag.localName());
-        elements.add(mainTag.localName()); // Missing in the specification.
-        elements.add(menuTag.localName());
-        elements.add(navTag.localName());
-        elements.add(olTag.localName());
-        elements.add(pTag.localName());
-        elements.add(plaintextTag.localName());
-        elements.add(preTag.localName());
-        elements.add(sectionTag.localName());
-        elements.add(summaryTag.localName());
-        elements.add(tableTag.localName());
-        elements.add(tbodyTag.localName());
-        elements.add(tdTag.localName());
-        elements.add(tfootTag.localName());
-        elements.add(thTag.localName());
-        elements.add(theadTag.localName());
-        elements.add(trTag.localName());
-        elements.add(ulTag.localName());
-        elements.add(xmpTag.localName());
-    }
+    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, elements, ({
+        addressTag.localName(),
+        articleTag.localName(),
+        asideTag.localName(),
+        blockquoteTag.localName(),
+        captionTag.localName(),
+        centerTag.localName(),
+        colTag.localName(),
+        colgroupTag.localName(),
+        ddTag.localName(),
+        detailsTag.localName(),
+        dirTag.localName(),
+        divTag.localName(),
+        dlTag.localName(),
+        dtTag.localName(),
+        fieldsetTag.localName(),
+        figcaptionTag.localName(),
+        figureTag.localName(),
+        footerTag.localName(),
+        formTag.localName(),
+        h1Tag.localName(),
+        h2Tag.localName(),
+        h3Tag.localName(),
+        h4Tag.localName(),
+        h5Tag.localName(),
+        h6Tag.localName(),
+        headerTag.localName(),
+        hgroupTag.localName(),
+        hrTag.localName(),
+        liTag.localName(),
+        listingTag.localName(),
+        mainTag.localName(), // Missing in the specification.
+        menuTag.localName(),
+        navTag.localName(),
+        olTag.localName(),
+        pTag.localName(),
+        plaintextTag.localName(),
+        preTag.localName(),
+        sectionTag.localName(),
+        summaryTag.localName(),
+        tableTag.localName(),
+        tbodyTag.localName(),
+        tdTag.localName(),
+        tfootTag.localName(),
+        thTag.localName(),
+        theadTag.localName(),
+        trTag.localName(),
+        ulTag.localName(),
+        xmpTag.localName(),
+    }));
     return elements.contains(name);
 }
 
@@ -677,7 +677,7 @@ void ReplaceSelectionCommand::makeInsertedContentRoundTrippableWithHTMLTreeBuild
             continue;
         // moveElementOutOfAncestor() in a previous iteration might have failed,
         // and |node| might have been detached from the document tree.
-        if (!node->inShadowIncludingDocument())
+        if (!node->isConnected())
             continue;
 
         HTMLElement& element = toHTMLElement(*node);
@@ -701,7 +701,7 @@ void ReplaceSelectionCommand::makeInsertedContentRoundTrippableWithHTMLTreeBuild
 
 void ReplaceSelectionCommand::moveElementOutOfAncestor(Element* element, Element* ancestor, EditingState* editingState)
 {
-    if (!ancestor->parentNode()->hasEditableStyle())
+    if (!hasEditableStyle(*ancestor->parentNode()))
         return;
 
     VisiblePosition positionAtEndOfNode = createVisiblePosition(lastPositionInOrAfterNode(element));
@@ -784,7 +784,6 @@ static void removeHeadContents(ReplacementFragment& fragment)
         if (isHTMLBaseElement(*node)
             || isHTMLLinkElement(*node)
             || isHTMLMetaElement(*node)
-            || isHTMLStyleElement(*node)
             || isHTMLTitleElement(*node)) {
             next = NodeTraversal::nextSkippingChildren(*node);
             fragment.removeNode(node);
@@ -792,6 +791,23 @@ static void removeHeadContents(ReplacementFragment& fragment)
             next = NodeTraversal::next(*node);
         }
     }
+}
+
+static bool followBlockElementStyle(const Node* node)
+{
+    if (!node->isHTMLElement())
+        return false;
+
+    const HTMLElement& element = toHTMLElement(*node);
+    return isListItem(node)
+        || isTableCell(node)
+        || element.hasTagName(preTag)
+        || element.hasTagName(h1Tag)
+        || element.hasTagName(h2Tag)
+        || element.hasTagName(h3Tag)
+        || element.hasTagName(h4Tag)
+        || element.hasTagName(h5Tag)
+        || element.hasTagName(h6Tag);
 }
 
 // Remove style spans before insertion if they are unnecessary.  It's faster because we'll
@@ -807,10 +823,20 @@ static bool handleStyleSpansBeforeInsertion(ReplacementFragment& fragment, const
     if (isMailPasteAsQuotationHTMLBlockQuoteElement(topNode) || enclosingNodeOfType(firstPositionInOrBeforeNode(topNode), isMailHTMLBlockquoteElement, CanCrossEditingBoundary))
         return false;
 
-    // Remove style spans to follow the styles of list item when |fragment| becomes a list item.
-    // See bug http://crbug.com/335955.
+    // Remove style spans to follow the styles of parent block element when |fragment| becomes a part of it.
+    // See bugs http://crbug.com/226941 and http://crbug.com/335955.
     HTMLSpanElement* wrappingStyleSpan = toHTMLSpanElement(topNode);
-    if (isListItem(enclosingBlock(insertionPos.anchorNode()))) {
+    const Node* node = insertionPos.anchorNode();
+    // |node| can be an inline element like <br> under <li>
+    // e.g.) editing/execCommand/switch-list-type.html
+    //       editing/deleting/backspace-merge-into-block.html
+    if (isInline(node)) {
+        node = enclosingBlock(insertionPos.anchorNode());
+        if (!node)
+            return false;
+    }
+
+    if (followBlockElementStyle(node)) {
         fragment.removeNodePreservingChildren(wrappingStyleSpan);
         return true;
     }
@@ -1201,7 +1227,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
 
     Element* blockStart = enclosingBlock(insertionPos.anchorNode());
     if ((isHTMLListElement(refNode) || (isLegacyAppleHTMLSpanElement(refNode) && isHTMLListElement(refNode->firstChild())))
-        && blockStart && blockStart->layoutObject()->isListItem() && blockStart->parentNode()->hasEditableStyle()) {
+        && blockStart && blockStart->layoutObject()->isListItem() && hasEditableStyle(*blockStart->parentNode())) {
         refNode = insertAsListItems(toHTMLElement(refNode), blockStart, insertionPos, insertedNodes, editingState);
         if (editingState->isAborted())
             return;
@@ -1213,7 +1239,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
     }
 
     // Mutation events (bug 22634) may have already removed the inserted content
-    if (!refNode->inShadowIncludingDocument())
+    if (!refNode->isConnected())
         return;
 
     bool plainTextFragment = isPlainTextMarkup(refNode);
@@ -1227,7 +1253,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
         insertedNodes.respondToNodeInsertion(*node);
 
         // Mutation events (bug 22634) may have already removed the inserted content
-        if (!node->inShadowIncludingDocument())
+        if (!node->isConnected())
             return;
 
         refNode = node;
@@ -1246,12 +1272,12 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
     }
 
     // Mutation events (bug 20161) may have already removed the inserted content
-    if (!insertedNodes.firstNodeInserted() || !insertedNodes.firstNodeInserted()->inShadowIncludingDocument())
+    if (!insertedNodes.firstNodeInserted() || !insertedNodes.firstNodeInserted()->isConnected())
         return;
 
     // Scripts specified in javascript protocol may remove |enclosingBlockOfInsertionPos|
     // during insertion, e.g. <iframe src="javascript:...">
-    if (enclosingBlockOfInsertionPos && !enclosingBlockOfInsertionPos->inShadowIncludingDocument())
+    if (enclosingBlockOfInsertionPos && !enclosingBlockOfInsertionPos->isConnected())
         enclosingBlockOfInsertionPos = nullptr;
 
     VisiblePosition startOfInsertedContent = createVisiblePosition(firstPositionInOrBeforeNode(insertedNodes.firstNodeInserted()));
@@ -1286,7 +1312,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
     if (editingState->isAborted())
         return;
 
-    if (m_sanitizeFragment) {
+    if (m_sanitizeFragment && insertedNodes.firstNodeInserted()) {
         applyCommandToComposite(SimplifyMarkupCommand::create(document(), insertedNodes.firstNodeInserted(), insertedNodes.pastLastLeaf()), editingState);
         if (editingState->isAborted())
             return;
@@ -1326,7 +1352,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
             if (editingState->isAborted())
                 return;
             // Mutation events (bug 22634) triggered by inserting the <br> might have removed the content we're about to move
-            if (!startOfParagraphToMove.deepEquivalent().inShadowIncludingDocument())
+            if (!startOfParagraphToMove.deepEquivalent().isConnected())
                 return;
         }
 
@@ -1406,7 +1432,7 @@ void ReplaceSelectionCommand::doApply(EditingState* editingState)
 
 bool ReplaceSelectionCommand::shouldRemoveEndBR(HTMLBRElement* endBR, const VisiblePosition& originalVisPosBeforeEndBR)
 {
-    if (!endBR || !endBR->inShadowIncludingDocument())
+    if (!endBR || !endBR->isConnected())
         return false;
 
     VisiblePosition visiblePos = VisiblePosition::beforeNode(endBR);
@@ -1610,9 +1636,12 @@ void ReplaceSelectionCommand::mergeTextNodesAroundPosition(Position& position, P
     }
 }
 
-EditAction ReplaceSelectionCommand::editingAction() const
+InputEvent::InputType ReplaceSelectionCommand::inputType() const
 {
-    return m_editAction;
+    // |ReplaceSelectionCommand| could be used with Paste, Drag&Drop, InsertFragment and |TypingCommand|.
+    // 1. Paste, Drag&Drop, InsertFragment should rely on correct |m_inputType|.
+    // 2. |TypingCommand| will supply the |inputType()|, so |m_inputType| could default to |InputType::None|.
+    return m_inputType;
 }
 
 // If the user is inserting a list into an existing list, instead of nesting the list,

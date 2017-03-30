@@ -12,11 +12,14 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "media/base/android/media_codec_direction.h"
 #include "media/base/media_export.h"
 
 class GURL;
 
 namespace media {
+
+class MediaCodecBridge;
 
 // Helper macro to skip the test if MediaCodecBridge isn't available.
 #define SKIP_TEST_IF_MEDIA_CODEC_BRIDGE_IS_NOT_AVAILABLE()        \
@@ -35,12 +38,6 @@ namespace media {
       return;                                                     \
     }                                                             \
   } while (0)
-
-// Codec direction. Keep this in sync with MediaCodecUtil.java.
-enum MediaCodecDirection {
-  MEDIA_CODEC_DECODER,
-  MEDIA_CODEC_ENCODER,
-};
 
 class MEDIA_EXPORT MediaCodecUtil {
  public:
@@ -73,8 +70,6 @@ class MEDIA_EXPORT MediaCodecUtil {
   // Test whether the path of a URL ends with ".m3u8".
   static bool IsHLSPath(const GURL& url);
 
-  static bool RegisterMediaCodecUtil(JNIEnv* env);
-
   // Indicates if the vp8 decoder or encoder is available on this device.
   static bool IsVp8DecoderAvailable();
   static bool IsVp8EncoderAvailable();
@@ -84,6 +79,12 @@ class MEDIA_EXPORT MediaCodecUtil {
 
   // Indicates if SurfaceView and MediaCodec work well together on this device.
   static bool IsSurfaceViewOutputSupported();
+
+  // Indicates if the decoder is known to fail when flushed. (b/8125974,
+  // b/8347958)
+  // When true, the client should work around the issue by releasing the
+  // decoder and instantiating a new one rather than flushing the current one.
+  static bool CodecNeedsFlushWorkaround(MediaCodecBridge* codec);
 };
 
 }  // namespace media

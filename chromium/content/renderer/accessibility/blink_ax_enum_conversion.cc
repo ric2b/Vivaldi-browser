@@ -64,8 +64,8 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
   if (o.isEditable())
     state |= (1 << ui::AX_STATE_EDITABLE);
 
-  if (o.isEnabled())
-    state |= (1 << ui::AX_STATE_ENABLED);
+  if (!o.isEnabled())
+    state |= (1 << ui::AX_STATE_DISABLED);
 
   if (o.isSelected())
     state |= (1 << ui::AX_STATE_SELECTED);
@@ -549,6 +549,17 @@ ui::AXDescriptionFrom AXDescriptionFromFromBlink(
   }
   NOTREACHED();
   return ui::AX_DESCRIPTION_FROM_NONE;
+}
+
+ui::AXTextAffinity AXTextAffinityFromBlink(blink::WebAXTextAffinity affinity) {
+  switch (affinity) {
+    case blink::WebAXTextAffinityUpstream:
+      return ui::AX_TEXT_AFFINITY_UPSTREAM;
+    case blink::WebAXTextAffinityDownstream:
+      return ui::AX_TEXT_AFFINITY_DOWNSTREAM;
+  }
+  NOTREACHED();
+  return ui::AX_TEXT_AFFINITY_DOWNSTREAM;
 }
 
 }  // namespace content.

@@ -7,7 +7,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
-#include "components/page_load_metrics/browser/page_load_metrics_util.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 
 namespace {
 const char kExampleUrl[] = "http://www.example.com/";
@@ -20,7 +20,6 @@ class FromGWSPageLoadMetricsObserverTest
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
     FromGWSPageLoadMetricsObserver* observer =
         new FromGWSPageLoadMetricsObserver();
-    logger_ = observer->GetLogger();
     tracker->AddObserver(base::WrapUnique(observer));
   }
 
@@ -33,30 +32,20 @@ class FromGWSPageLoadMetricsObserverTest
   void SimulateTimingWithFirstPaint() {
     page_load_metrics::PageLoadTiming timing;
     timing.navigation_start = base::Time::FromDoubleT(1);
-    // Use 0 and invoke OnFirstPaint here as a hack for current time_to_abort
-    // in cases in release env are always 0
-    // TODO(bmcquade): replace it by 1
     timing.first_paint = base::TimeDelta::FromMilliseconds(0);
     PopulateRequiredTimingFields(&timing);
     SimulateTimingUpdate(timing);
-    // TODO(bmcquade): remove SetFirstPaintTriggered as part of fixing
-    // crbug.com/616901
-    logger_->SetFirstPaintTriggered(true);
   }
 
   void SimulateMouseEvent() {
     blink::WebMouseEvent mouse_event;
     mouse_event.type = blink::WebInputEvent::MouseDown;
-    mouse_event.button = blink::WebMouseEvent::ButtonLeft;
+    mouse_event.button = blink::WebMouseEvent::Button::Left;
     mouse_event.x = 7;
     mouse_event.y = 7;
     mouse_event.clickCount = 1;
     SimulateInputEvent(mouse_event);
   }
-
- protected:
-  // TODO(bmcquade): remove once crbug.com/616901 is addressed
-  FromGWSPageLoadMetricsLogger* logger_;
 };
 
 class FromGWSPageLoadMetricsLoggerTest : public testing::Test {};
@@ -155,53 +144,58 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl1) {
   NavigateAndCommit(GURL("http://www.final.com"));
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFromGWSParseStart, 1);
-  histogram_tester().ExpectBucketCount(internal::kHistogramFromGWSParseStart,
-                                       timing.parse_start.InMilliseconds(), 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramFromGWSParseStart,
+      timing.parse_start.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFromGWSFirstPaint, 1);
-  histogram_tester().ExpectBucketCount(internal::kHistogramFromGWSFirstPaint,
-                                       timing.first_paint.InMilliseconds(), 1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramFromGWSFirstPaint,
+      timing.first_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstContentfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstContentfulPaint,
-      timing.first_contentful_paint.InMilliseconds(), 1);
+      timing.first_contentful_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSParseStartToFirstContentfulPaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSParseStartToFirstContentfulPaint,
-      (timing.first_contentful_paint - timing.parse_start).InMilliseconds(), 1);
+      (timing.first_contentful_paint.value() - timing.parse_start.value())
+          .InMilliseconds(),
+      1);
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFromGWSFirstTextPaint,
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSFirstImagePaint, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstImagePaint,
-      timing.first_image_paint.InMilliseconds(), 1);
+      timing.first_image_paint.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFromGWSParseDuration,
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSParseDuration,
-      (timing.parse_stop - timing.parse_start).InMilliseconds(), 1);
+      (timing.parse_stop.value() - timing.parse_start.value()).InMilliseconds(),
+      1);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramFromGWSDomContentLoaded, 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSDomContentLoaded,
-      timing.dom_content_loaded_event_start.InMilliseconds(), 1);
+      timing.dom_content_loaded_event_start.value().InMilliseconds(), 1);
 
   histogram_tester().ExpectTotalCount(internal::kHistogramFromGWSLoad, 1);
-  histogram_tester().ExpectBucketCount(internal::kHistogramFromGWSLoad,
-                                       timing.load_event_start.InMilliseconds(),
-                                       1);
+  histogram_tester().ExpectBucketCount(
+      internal::kHistogramFromGWSLoad,
+      timing.load_event_start.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl2) {
@@ -220,7 +214,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl2) {
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl3) {
@@ -239,7 +233,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl3) {
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl4) {
@@ -258,7 +252,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchPreviousCommittedUrl4) {
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchToNonSearchToOtherPage) {
@@ -283,7 +277,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchToNonSearchToOtherPage) {
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, SearchToNonSearchToSearch) {
@@ -308,7 +302,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, SearchToNonSearchToSearch) {
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -340,10 +334,10 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
                                       2);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing3.first_text_paint.InMilliseconds(), 1);
+      timing3.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -376,7 +370,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -397,7 +391,7 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
                                       1);
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFromGWSFirstTextPaint,
-      timing.first_text_paint.InMilliseconds(), 1);
+      timing.first_text_paint.value().InMilliseconds(), 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest,
@@ -436,27 +430,27 @@ TEST_F(FromGWSPageLoadMetricsObserverTest,
 
   // If the system clock is low resolution PageLoadTracker's background_time_
   // may be < timing.first_text_paint.
-  if (page_load_metrics::WasStartedInForegroundEventInForeground(
+  if (page_load_metrics::WasStartedInForegroundOptionalEventInForeground(
           timing.first_text_paint, info)) {
     histogram_tester().ExpectTotalCount(
         internal::kHistogramFromGWSFirstTextPaint, 1);
     histogram_tester().ExpectBucketCount(
         internal::kHistogramFromGWSFirstTextPaint,
-        timing.first_text_paint.InMilliseconds(), 1);
+        timing.first_text_paint.value().InMilliseconds(), 1);
   } else {
     histogram_tester().ExpectTotalCount(
         internal::kHistogramFromGWSFirstTextPaint, 0);
   }
 }
 
-TEST_F(FromGWSPageLoadMetricsObserverTest, UnknownNavigationBeforeCommit) {
+TEST_F(FromGWSPageLoadMetricsObserverTest, NewNavigationBeforeCommit) {
   NavigateAndCommit(GURL(kGoogleSearchResultsUrl));
   StartNavigation(GURL("http://example.test"));
 
   // Simulate the user performing another navigation before commit.
-  StartNavigation(GURL("https://www.example.com"));
+  NavigateAndCommit(GURL("https://www.example.com"));
   histogram_tester().ExpectTotalCount(
-      internal::kHistogramFromGWSAbortUnknownNavigationBeforeCommit, 1);
+      internal::kHistogramFromGWSAbortNewNavigationBeforeCommit, 1);
 }
 
 TEST_F(FromGWSPageLoadMetricsObserverTest, NewNavigationBeforePaint) {
@@ -680,6 +674,25 @@ TEST_F(FromGWSPageLoadMetricsObserverTest, CloseAfterInteraction) {
       internal::kHistogramFromGWSAbortCloseBeforeInteraction, 0);
 }
 
+TEST_F(FromGWSPageLoadMetricsObserverTest, CommittedIntent) {
+  NavigateAndCommit(GURL(kGoogleSearchResultsUrl));
+  NavigateAndCommit(GURL("intent://en.m.wikipedia.org/wiki/Test"));
+  SimulateTimingWithFirstPaint();
+  // Simulate closing the tab.
+  DeleteContents();
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramFromGWSAbortCloseBeforeInteraction, 0);
+}
+
+TEST_F(FromGWSPageLoadMetricsObserverTest, ProvisionalIntent) {
+  NavigateAndCommit(GURL(kGoogleSearchResultsUrl));
+  StartNavigation(GURL("intent://en.m.wikipedia.org/wiki/Test"));
+  // Simulate closing the tab.
+  DeleteContents();
+  histogram_tester().ExpectTotalCount(
+      internal::kHistogramFromGWSAbortCloseBeforeCommit, 0);
+}
+
 TEST_F(FromGWSPageLoadMetricsLoggerTest, IsGoogleSearchHostname) {
   struct {
     bool expected_result;
@@ -836,49 +849,35 @@ TEST_F(FromGWSPageLoadMetricsLoggerTest, QueryContainsComponentPrefix) {
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, Basic) {
   FromGWSPageLoadMetricsLogger logger;
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
+  ASSERT_FALSE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, NoPreviousPage) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL());
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
+  ASSERT_FALSE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, NavigationNotInitiatedViaLink) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.set_navigation_initiated_via_link(false);
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
-}
-
-TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalNonHttpOrHttpsScheme) {
-  FromGWSPageLoadMetricsLogger logger;
-  logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
-  logger.SetProvisionalUrl(GURL("intent://foo"));
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL::EmptyGURL()));
+  ASSERT_FALSE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalFromGWS) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.SetProvisionalUrl(GURL(kGoogleSearchResultsUrl));
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL::EmptyGURL()));
+  ASSERT_FALSE(logger.ShouldLogFailedProvisionalLoadMetrics());
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalNotFromGWS) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.SetProvisionalUrl(GURL(kExampleUrl));
-  ASSERT_TRUE(logger.ShouldLogMetrics(GURL::EmptyGURL()));
-}
-
-TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalIntent) {
-  FromGWSPageLoadMetricsLogger logger;
-  logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
-  logger.SetProvisionalUrl(GURL("intent://en.m.wikipedia.org/wiki/Test"));
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL::EmptyGURL()));
+  ASSERT_TRUE(logger.ShouldLogFailedProvisionalLoadMetrics());
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalIgnoredAfterCommit1) {
@@ -886,7 +885,8 @@ TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalIgnoredAfterCommit1) {
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.SetProvisionalUrl(GURL(kExampleUrl));
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL(kGoogleSearchResultsUrl)));
+  ASSERT_FALSE(
+      logger.ShouldLogPostCommitMetrics(GURL(kGoogleSearchResultsUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalIgnoredAfterCommit2) {
@@ -894,21 +894,22 @@ TEST_F(FromGWSPageLoadMetricsLoggerTest, ProvisionalIgnoredAfterCommit2) {
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.SetProvisionalUrl(GURL(kGoogleSearchResultsUrl));
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_TRUE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
+  ASSERT_TRUE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, NavigationFromSearch) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_TRUE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
+  ASSERT_TRUE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, NavigationToSearchHostname) {
   FromGWSPageLoadMetricsLogger logger;
   logger.SetPreviouslyCommittedUrl(GURL(kGoogleSearchResultsUrl));
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_FALSE(logger.ShouldLogMetrics(GURL("https://www.google.com/about/")));
+  ASSERT_FALSE(
+      logger.ShouldLogPostCommitMetrics(GURL("https://www.google.com/about/")));
 }
 
 TEST_F(FromGWSPageLoadMetricsLoggerTest, NavigationFromSearchRedirector) {
@@ -916,5 +917,5 @@ TEST_F(FromGWSPageLoadMetricsLoggerTest, NavigationFromSearchRedirector) {
   logger.SetPreviouslyCommittedUrl(
       GURL("https://www.google.com/url?source=web"));
   logger.set_navigation_initiated_via_link(true);
-  ASSERT_TRUE(logger.ShouldLogMetrics(GURL(kExampleUrl)));
+  ASSERT_TRUE(logger.ShouldLogPostCommitMetrics(GURL(kExampleUrl)));
 }

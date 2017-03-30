@@ -90,9 +90,10 @@ public:
     void setServeOnlyCachedResources(bool);
 
     FetchContext& context() const { return m_context ? *m_context.get() : FetchContext::nullInstance(); }
-    void clearContext() { m_context.clear(); }
+    void clearContext();
 
     int requestCount() const;
+    bool hasPendingRequest() const;
 
     enum ClearPreloadsPolicy { ClearAllPreloads, ClearSpeculativeMarkupPreloads };
 
@@ -109,28 +110,20 @@ public:
     void stopFetching();
     bool isFetching() const;
 
-    bool willFollowRedirect(Resource*, ResourceRequest&, const ResourceResponse&);
+    bool willFollowRedirect(Resource*, ResourceRequest&, const ResourceResponse&, int64_t encodedDataLength);
     enum DidFinishLoadingReason {
         DidFinishLoading,
         DidFinishFirstPartInMultipart
     };
     void didFinishLoading(Resource*, double finishTime, int64_t encodedDataLength, DidFinishLoadingReason);
     void didFailLoading(Resource*, const ResourceError&);
-    void didReceiveResponse(Resource*, const ResourceResponse&);
+    void didReceiveResponse(Resource*, const ResourceResponse&, WebDataConsumerHandle*);
     void didReceiveData(const Resource*, const char* data, int dataLength, int encodedDataLength);
     void didDownloadData(const Resource*, int dataLength, int encodedDataLength);
     bool defersLoading() const;
-
-    enum AccessControlLoggingDecision {
-        ShouldLogAccessControlErrors,
-        ShouldNotLogAccessControlErrors
-    };
-    bool canAccessResource(Resource*, SecurityOrigin*, const KURL&, AccessControlLoggingDecision) const;
     bool isControlledByServiceWorker() const;
 
     void acceptDataFromThreadedReceiver(unsigned long identifier, const char* data, int dataLength, int encodedDataLength);
-
-    ResourceLoadPriority loadPriority(Resource::Type, const FetchRequest&, ResourcePriority::VisibilityStatus = ResourcePriority::NotVisible);
 
     enum ResourceLoadStartType {
         ResourceLoadingFromNetwork,
@@ -159,6 +152,7 @@ private:
     void initializeRevalidation(ResourceRequest&, Resource*);
     Resource* createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
     void storeResourceTimingInitiatorInformation(Resource*);
+    ResourceLoadPriority computeLoadPriority(Resource::Type, const FetchRequest&, ResourcePriority::VisibilityStatus);
 
     Resource* resourceForStaticData(const FetchRequest&, const ResourceFactory&, const SubstituteData&);
 
@@ -172,11 +166,12 @@ private:
 
     void initializeResourceRequest(ResourceRequest&, Resource::Type, FetchRequest::DeferOption);
     void willSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse&, const ResourceLoaderOptions&);
+    bool canAccessResponse(Resource*, const ResourceResponse&) const;
 
     bool resourceNeedsLoad(Resource*, const FetchRequest&, RevalidationPolicy);
     bool shouldDeferImageLoad(const KURL&) const;
 
-    void resourceTimingReportTimerFired(Timer<ResourceFetcher>*);
+    void resourceTimingReportTimerFired(TimerBase*);
 
     void reloadImagesIfNotDeferred();
 

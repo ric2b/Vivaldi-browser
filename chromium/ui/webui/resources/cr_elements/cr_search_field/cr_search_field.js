@@ -4,5 +4,26 @@
 
 var SearchField = Polymer({
   is: 'cr-search-field',
-  behaviors: [CrSearchFieldBehavior]
+
+  behaviors: [CrSearchFieldBehavior],
+
+  properties: {
+    value_: String,
+  },
+
+  /** @return {!HTMLInputElement} */
+  getSearchInput: function() {
+    return this.$.searchInput;
+  },
+
+  /** @private */
+  clearSearch_: function() {
+    this.setValue('');
+    this.getSearchInput().focus();
+  },
+
+  /** @private */
+  toggleShowingSearch_: function() {
+    this.showingSearch = !this.showingSearch;
+  },
 });

@@ -1,0 +1,119 @@
+import("//vivaldi/gn/config/features.gni")
+import("//build/config/locales.gni")
+
+declare_args() {
+  generate_untranslated = false
+}
+
+gritinfo_cmd = "//tools/grit/grit_info.py"
+_grit_cmd = "//tools/grit/grit.py"
+_default_grit_resource_ids = "//tools/gritsettings/resource_ids"
+_list_lang_cmd = "//vivaldi/app/list_lang_xmb_files.py"
+if (!defined(locales)) {
+  locales = []
+}
+
+template("vivaldi_extract_untranslated") {
+  assert(defined(invoker.source))
+  forward_variables_from(invoker,
+                         [
+                           "source",
+                           "original_source",
+                           "grit_defines",
+                           "grit_additional_defines",
+                           "deps",
+                           "stampfile",
+                         ])
+  if (!defined(stampfile)) {
+    if (defined(invoker.grit_resource_ids)) {
+      grit_resource_ids = invoker.grit_resource_ids
+    } else {
+      grit_resource_ids = _default_grit_resource_ids
+    }
+  }
+  if (!defined(grit_additional_defines)) {
+    grit_additional_defines = []
+  }
+  if (!defined(original_source)) {
+    original_source = source
+  }
+
+  deps_list = []
+  _untranslated_target_prefix = "$root_build_dir/translations/$target_name"
+  _untranslated_target = _untranslated_target_prefix + ".xmb"
+  _allstrings_target = _untranslated_target_prefix + "_all.xmb"
+
+  grd_inputs = []
+  if (!defined(stampfile)) {
+    # The stampfile is used for the merged resource files,
+    # and touched when the generated translation files are updated
+    # For normal configurations, extract the list of xtb files
+    foreach(file, exec_script(gritinfo_cmd,
+                      grit_defines + grit_additional_defines + [
+                            "--inputs",
+                            rebase_path(source, root_build_dir),
+                            "-f",
+                            rebase_path(grit_resource_ids, root_build_dir),
+                          ],
+                      "list lines")) {
+      if (get_path_info(file, "extension") == "xtb") {
+        grd_inputs += ["$root_build_dir/$file"]
+      }
+    }
+  }
+
+  name = "list_untranslated_strings_$target_name"
+  deps_list += [ ":" + name ]
+  action(name) {
+    script = _grit_cmd
+    inputs = [
+                source,
+                original_source,
+              ] + grd_inputs
+    if (defined(stampfile)) {
+      inputs += [ stampfile ]
+    }
+    outputs = []
+    foreach(
+        file,
+        exec_script(
+            _list_lang_cmd,
+            [ _untranslated_target_prefix ] + locales + vivaldi_pending_locales,
+            "list lines")) {
+      outputs += [ "$root_build_dir/$file" ]
+    }
+
+    args = [
+             "-i",
+             rebase_path(source, root_build_dir),
+             "xmb",
+             "-L",
+           ] + grit_defines + grit_additional_defines +
+           rebase_path([ _untranslated_target ], root_build_dir) + locales +
+           vivaldi_pending_locales
+  }
+
+  name = "list_all_string_$target_name"
+  deps_list += [ ":" + name ]
+  action(name) {
+    script = _grit_cmd
+    inputs = grd_inputs
+    if (defined(stampfile)) {
+      inputs += [ stampfile ]
+    }
+    outputs = [
+      _allstrings_target,
+    ]
+
+    args = [
+             "-i",
+             rebase_path(source, root_build_dir),
+             "xmb",
+           ] + grit_defines + grit_additional_defines +
+           rebase_path([ _allstrings_target ], root_build_dir)
+  }
+  group(target_name) {
+    deps = []
+    deps = deps_list
+  }
+}

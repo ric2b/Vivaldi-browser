@@ -6,11 +6,11 @@
 #define BroadcastChannel_h
 
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "components/webmessaging/public/interfaces/broadcast_channel.mojom-blink.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/events/EventTarget.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "third_party/WebKit/public/platform/modules/broadcastchannel/broadcast_channel.mojom-blink.h"
 
 namespace blink {
 
@@ -18,7 +18,7 @@ class BroadcastChannel final
     : public EventTargetWithInlineData
     , public ActiveScriptWrappable
     , public ContextLifecycleObserver
-    , public webmessaging::mojom::blink::BroadcastChannelClient {
+    , public mojom::blink::BroadcastChannelClient {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(BroadcastChannel);
     USING_PRE_FINALIZER(BroadcastChannel, dispose);
@@ -38,7 +38,7 @@ public:
     const AtomicString& interfaceName() const override;
     ExecutionContext* getExecutionContext() const override { return ContextLifecycleObserver::getExecutionContext(); }
 
-    // ActiveScriptWrappable:
+    // ScriptWrappable:
     bool hasPendingActivity() const override;
 
     // ContextLifecycleObserver:
@@ -49,8 +49,8 @@ public:
 private:
     BroadcastChannel(ExecutionContext*, const String& name);
 
-    // webmessaging::mojom::blink::BroadcastChannelClient:
-    void OnMessage(const String& message) override;
+    // mojom::blink::BroadcastChannelClient:
+    void OnMessage(mojo::WTFArray<uint8_t> message) override;
 
     // Called when the mojo binding disconnects.
     void onError();
@@ -58,8 +58,8 @@ private:
     RefPtr<SecurityOrigin> m_origin;
     String m_name;
 
-    mojo::AssociatedBinding<webmessaging::mojom::blink::BroadcastChannelClient> m_binding;
-    webmessaging::mojom::blink::BroadcastChannelClientAssociatedPtr m_remoteClient;
+    mojo::AssociatedBinding<mojom::blink::BroadcastChannelClient> m_binding;
+    mojom::blink::BroadcastChannelClientAssociatedPtr m_remoteClient;
 };
 
 } // namespace blink

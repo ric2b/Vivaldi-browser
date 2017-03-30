@@ -358,7 +358,7 @@ void CommandLine::AppendSwitchNative(const std::string& switch_string,
     combined_switch_string = kSwitchPrefixes[0] + combined_switch_string;
   if (!value.empty())
     combined_switch_string += kSwitchValueSeparator + value;
-#if defined(OS_WIN)
+#if defined(OS_WIN) && defined(VIVALDI_BUILD)
   if (switch_key.compare("--commpressed-args") == 0) {
     std::string zstring;
     std::string cstring;

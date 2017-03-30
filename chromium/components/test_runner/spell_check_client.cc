@@ -33,42 +33,24 @@ void SpellCheckClient::SetDelegate(WebTestDelegate* delegate) {
   delegate_ = delegate;
 }
 
+void SpellCheckClient::SetEnabled(bool enabled) {
+  enabled_ = enabled;
+}
+
 // blink::WebSpellCheckClient
 void SpellCheckClient::spellCheck(
     const blink::WebString& text,
     int& misspelled_offset,
     int& misspelled_length,
     blink::WebVector<blink::WebString>* optional_suggestions) {
+  if (!enabled_) {
+    misspelled_offset = 0;
+    misspelled_length = 0;
+    return;
+  }
+
   // Check the spelling of the given text.
   spell_check_.SpellCheckWord(text, &misspelled_offset, &misspelled_length);
-}
-
-void SpellCheckClient::checkTextOfParagraph(
-    const blink::WebString& text,
-    blink::WebTextCheckingTypeMask mask,
-    blink::WebVector<blink::WebTextCheckingResult>* web_results) {
-  std::vector<blink::WebTextCheckingResult> results;
-  if (mask & blink::WebTextCheckingTypeSpelling) {
-    size_t offset = 0;
-    base::string16 data = text;
-    while (offset < data.length()) {
-      int misspelled_position = 0;
-      int misspelled_length = 0;
-      spell_check_.SpellCheckWord(
-          data.substr(offset), &misspelled_position, &misspelled_length);
-      if (!misspelled_length)
-        break;
-      blink::WebTextCheckingResult result;
-      result.decoration = blink::WebTextDecorationTypeSpelling;
-      result.location = offset + misspelled_position;
-      result.length = misspelled_length;
-      results.push_back(result);
-      offset += misspelled_position + misspelled_length;
-    }
-  }
-  if (mask & blink::WebTextCheckingTypeGrammar)
-    MockGrammarCheck::CheckGrammarOfString(text, &results);
-  web_results->assign(results);
 }
 
 void SpellCheckClient::requestCheckingOfText(
@@ -76,7 +58,7 @@ void SpellCheckClient::requestCheckingOfText(
     const blink::WebVector<uint32_t>& markers,
     const blink::WebVector<unsigned>& marker_offsets,
     blink::WebTextCheckingCompletion* completion) {
-  if (text.isEmpty()) {
+  if (!enabled_ || text.isEmpty()) {
     if (completion)
       completion->didCancelCheckingText();
     return;
@@ -94,6 +76,13 @@ void SpellCheckClient::requestCheckingOfText(
         new WebCallbackTask(base::Bind(&SpellCheckClient::FinishLastTextCheck,
                                        weak_factory_.GetWeakPtr())),
         0);
+}
+
+void SpellCheckClient::cancelAllPendingRequests() {
+  if (!last_requested_text_checking_completion_)
+    return;
+  last_requested_text_checking_completion_->didCancelCheckingText();
+  last_requested_text_checking_completion_ = nullptr;
 }
 
 void SpellCheckClient::FinishLastTextCheck() {

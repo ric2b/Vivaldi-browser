@@ -19,8 +19,8 @@
 #include "chrome/browser/sync/profile_sync_test_util.h"
 #include "components/browser_sync/browser/profile_sync_service_mock.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/device_info.h"
-#include "components/sync_driver/device_info_tracker.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/device_info/device_info_tracker.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "extensions/common/extension.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -110,7 +110,7 @@ TEST(SignedInDevicesAPITest, GetSignedInDevices) {
   device_tracker.Add(&device_info2);
 
   ScopedVector<DeviceInfo> output1 = GetAllSignedInDevices(
-      extension_test.get()->id(), &device_tracker, extension_prefs.prefs());
+      extension_test->id(), &device_tracker, extension_prefs.prefs());
 
   std::string public_id1 = output1[0]->public_id();
   std::string public_id2 = output1[1]->public_id();
@@ -131,7 +131,7 @@ TEST(SignedInDevicesAPITest, GetSignedInDevices) {
   device_tracker.Add(&device_info3);
 
   ScopedVector<DeviceInfo> output2 = GetAllSignedInDevices(
-      extension_test.get()->id(), &device_tracker, extension_prefs.prefs());
+      extension_test->id(), &device_tracker, extension_prefs.prefs());
 
   EXPECT_EQ(output2[0]->public_id(), public_id1);
   EXPECT_EQ(output2[1]->public_id(), public_id2);

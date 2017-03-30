@@ -9,6 +9,7 @@
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
@@ -152,10 +153,10 @@ ServiceWorkerRegisterJob::Internal::Internal() {}
 ServiceWorkerRegisterJob::Internal::~Internal() {}
 
 void ServiceWorkerRegisterJob::set_registration(
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   DCHECK(phase_ == START || phase_ == REGISTER) << phase_;
   DCHECK(!internal_.registration.get());
-  internal_.registration = registration;
+  internal_.registration = std::move(registration);
 }
 
 ServiceWorkerRegistration* ServiceWorkerRegisterJob::registration() {
@@ -209,7 +210,7 @@ void ServiceWorkerRegisterJob::SetPhase(Phase phase) {
 // Throughout this file, comments in quotes are excerpts from the spec.
 void ServiceWorkerRegisterJob::ContinueWithRegistration(
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& existing_registration) {
+    scoped_refptr<ServiceWorkerRegistration> existing_registration) {
   DCHECK_EQ(REGISTRATION_JOB, job_type_);
   if (status != SERVICE_WORKER_ERROR_NOT_FOUND && status != SERVICE_WORKER_OK) {
     Complete(status);
@@ -248,7 +249,7 @@ void ServiceWorkerRegisterJob::ContinueWithRegistration(
 
 void ServiceWorkerRegisterJob::ContinueWithUpdate(
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& existing_registration) {
+    scoped_refptr<ServiceWorkerRegistration> existing_registration) {
   DCHECK_EQ(UPDATE_JOB, job_type_);
   if (status != SERVICE_WORKER_OK) {
     Complete(status);
@@ -294,7 +295,7 @@ void ServiceWorkerRegisterJob::RegisterAndContinue() {
 }
 
 void ServiceWorkerRegisterJob::ContinueWithUninstallingRegistration(
-    const scoped_refptr<ServiceWorkerRegistration>& existing_registration,
+    scoped_refptr<ServiceWorkerRegistration> existing_registration,
     ServiceWorkerStatusCode status) {
   if (status != SERVICE_WORKER_OK) {
     Complete(status);
@@ -306,7 +307,7 @@ void ServiceWorkerRegisterJob::ContinueWithUninstallingRegistration(
 }
 
 void ServiceWorkerRegisterJob::ContinueWithRegistrationForSameScriptUrl(
-    const scoped_refptr<ServiceWorkerRegistration>& existing_registration,
+    scoped_refptr<ServiceWorkerRegistration> existing_registration,
     ServiceWorkerStatusCode status) {
   if (status != SERVICE_WORKER_OK) {
     Complete(status);
@@ -441,9 +442,11 @@ void ServiceWorkerRegisterJob::DispatchInstallEvent() {
 void ServiceWorkerRegisterJob::OnInstallFinished(
     int request_id,
     blink::WebServiceWorkerEventResult result,
-    bool has_fetch_handler) {
+    bool has_fetch_handler,
+    base::Time dispatch_event_time) {
   new_version()->FinishRequest(
-      request_id, result == blink::WebServiceWorkerEventResultCompleted);
+      request_id, result == blink::WebServiceWorkerEventResultCompleted,
+      dispatch_event_time);
 
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_FAILED;
   switch (result) {
@@ -463,10 +466,16 @@ void ServiceWorkerRegisterJob::OnInstallFinished(
   }
 
   ServiceWorkerMetrics::RecordInstallEventStatus(status);
+  ServiceWorkerMetrics::RecordForeignFetchRegistrationCount(
+      new_version()->foreign_fetch_scopes().size(),
+      new_version()->foreign_fetch_origins().size());
 
   SetPhase(STORE);
   DCHECK(!registration()->last_update_check().is_null());
-  new_version()->set_has_fetch_handler(has_fetch_handler);
+  new_version()->set_fetch_handler_existence(
+      has_fetch_handler
+          ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
+          : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST);
   context_->storage()->StoreRegistration(
       registration(),
       new_version(),

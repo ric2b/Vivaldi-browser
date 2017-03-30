@@ -30,6 +30,10 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
   AwContentBrowserClient(JniDependencyFactory* native_factory);
   ~AwContentBrowserClient() override;
 
+  // Allows AwBrowserMainParts to initialize a BrowserContext at the right
+  // moment during startup. AwContentBrowserClient owns the result.
+  AwBrowserContext* InitBrowserContext();
+
   // Overriden methods from ContentBrowserClient.
   void AddCertificate(net::CertificateMimeType cert_type,
                       const void* cert_data,
@@ -85,8 +89,8 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       bool overridable,
       bool strict_enforcement,
       bool expired_previous_decision,
-      const base::Callback<void(bool)>& callback,
-      content::CertificateRequestResultType* result) override;
+      const base::Callback<void(content::CertificateRequestResultType)>&
+          callback) override;
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
@@ -97,6 +101,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                        WindowContainerType container_type,
                        const GURL& target_url,
                        const content::Referrer& referrer,
+                       const std::string& frame_name,
                        WindowOpenDisposition disposition,
                        const blink::WebWindowFeatures& features,
                        bool user_gesture,
@@ -108,8 +113,6 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
                        bool* no_javascript_access) override;
   void ResourceDispatcherHostCreated() override;
   net::NetLog* GetNetLog() override;
-  content::GeolocationDelegate* CreateGeolocationDelegate() override;
-  bool IsFastShutdownPossible() override;
   void ClearCache(content::RenderFrameHost* rfh) override;
   void ClearCookies(content::RenderFrameHost* rfh) override;
   base::FilePath GetDefaultDownloadDirectory() override;
@@ -122,6 +125,7 @@ class AwContentBrowserClient : public content::ContentBrowserClient {
       const content::SocketPermissionRequest* params) override;
   bool IsPepperVpnProviderAPIAllowed(content::BrowserContext* browser_context,
                                      const GURL& url) override;
+  content::TracingDelegate* GetTracingDelegate() override;
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
       int child_process_id,

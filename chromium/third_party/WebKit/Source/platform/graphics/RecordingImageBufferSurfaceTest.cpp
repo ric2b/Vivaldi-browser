@@ -38,6 +38,7 @@ public:
     // ImageBufferClient implementation
     void notifySurfaceInvalid() override { }
     bool isDirty() override { return m_isDirty; }
+    void didDisableAcceleration() override { }
     void didFinalizeFrame() override
     {
         if (m_isDirty) {
@@ -48,7 +49,7 @@ public:
     }
 
     // TaskObserver implementation
-    void willProcessTask() override { ASSERT_NOT_REACHED(); }
+    void willProcessTask() override { NOTREACHED(); }
     void didProcessTask() override
     {
         ASSERT_TRUE(m_isDirty);
@@ -78,10 +79,10 @@ class MockSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
 public:
     MockSurfaceFactory() : m_createSurfaceCount(0) { }
 
-    virtual std::unique_ptr<ImageBufferSurface> createSurface(const IntSize& size, OpacityMode opacityMode)
+    virtual std::unique_ptr<ImageBufferSurface> createSurface(const IntSize& size, OpacityMode opacityMode, sk_sp<SkColorSpace> colorSpace)
     {
         m_createSurfaceCount++;
-        return wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode));
+        return wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode, InitializeImagePixels, std::move(colorSpace)));
     }
 
     virtual ~MockSurfaceFactory() { }
@@ -98,7 +99,7 @@ protected:
     {
         std::unique_ptr<MockSurfaceFactory> surfaceFactory = wrapUnique(new MockSurfaceFactory());
         m_surfaceFactory = surfaceFactory.get();
-        std::unique_ptr<RecordingImageBufferSurface> testSurface = wrapUnique(new RecordingImageBufferSurface(IntSize(10, 10), std::move(surfaceFactory)));
+        std::unique_ptr<RecordingImageBufferSurface> testSurface = wrapUnique(new RecordingImageBufferSurface(IntSize(10, 10), std::move(surfaceFactory), NonOpaque, nullptr));
         m_testSurface = testSurface.get();
         // We create an ImageBuffer in order for the testSurface to be
         // properly initialized with a GraphicsContext
@@ -255,24 +256,36 @@ private:
             m_task = task;
         }
 
-        void postDelayedTask(const WebTraceLocation&, Task*, double delayMs) override { ASSERT_NOT_REACHED(); };
+        void postDelayedTask(const WebTraceLocation&, Task*, double delayMs) override { NOTREACHED(); };
 
-        WebTaskRunner* clone() override
+        bool runsTasksOnCurrentThread() override
         {
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
+            return true;
+        }
+
+        std::unique_ptr<WebTaskRunner> clone() override
+        {
+            NOTREACHED();
             return nullptr;
         }
 
         double virtualTimeSeconds() const override
         {
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             return 0.0;
         }
 
         double monotonicallyIncreasingVirtualTimeSeconds() const override
         {
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             return 0.0;
+        }
+
+        base::SingleThreadTaskRunner* taskRunner() override
+        {
+            NOTREACHED();
+            return nullptr;
         }
 
         Task* m_task;
@@ -296,7 +309,7 @@ private:
 
         PlatformThreadId threadId() const override
         {
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             return 0;
         }
 
@@ -314,7 +327,7 @@ private:
 
         WebScheduler* scheduler() const override
         {
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             return nullptr;
         }
 

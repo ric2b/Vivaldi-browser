@@ -217,13 +217,6 @@ bool FindBadConstructsConsumer::VisitVarDecl(clang::VarDecl* var_decl) {
 
 void FindBadConstructsConsumer::CheckChromeClass(SourceLocation record_location,
                                                  CXXRecordDecl* record) {
-  // By default, the clang checker doesn't check some types (templates, etc).
-  // That was only a mistake; once Chromium code passes these checks, we should
-  // remove the "check-templates" option and remove this code.
-  // See crbug.com/441916
-  if (!options_.check_templates && IsPodOrTemplateType(*record))
-    return;
-
   bool implementation_file = InImplementationFile(record_location);
 
   if (!implementation_file) {
@@ -368,7 +361,7 @@ void FindBadConstructsConsumer::CheckCtorDtorWeight(
         // The current check is buggy. An implicit copy constructor does not
         // have an inline body, so this check never fires for classes with a
         // user-declared out-of-line constructor.
-        if (it->hasInlineBody() && options_.check_implicit_copy_ctors) {
+        if (it->hasInlineBody()) {
           if (it->isCopyConstructor() &&
               !record->hasUserDeclaredCopyConstructor()) {
             // In general, implicit constructors are generated on demand.  But

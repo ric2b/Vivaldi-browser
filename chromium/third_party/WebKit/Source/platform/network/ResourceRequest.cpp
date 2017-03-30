@@ -40,6 +40,21 @@ namespace blink {
 
 double ResourceRequest::s_defaultTimeoutInterval = INT_MAX;
 
+ResourceRequest::ResourceRequest()
+{
+    initialize(KURL());
+}
+
+ResourceRequest::ResourceRequest(const String& urlString)
+{
+    initialize(KURL(ParsedURLString, urlString));
+}
+
+ResourceRequest::ResourceRequest(const KURL& url)
+{
+    initialize(url);
+}
+
 ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     : ResourceRequest()
 {
@@ -79,6 +94,10 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     m_inputPerfMetricReportPolicy = data->m_inputPerfMetricReportPolicy;
     m_redirectStatus = data->m_redirectStatus;
 }
+
+ResourceRequest::ResourceRequest(const ResourceRequest&) = default;
+
+ResourceRequest& ResourceRequest::operator=(const ResourceRequest&) = default;
 
 std::unique_ptr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
 {
@@ -234,7 +253,7 @@ void ResourceRequest::clearHTTPReferrer()
     m_didSetHTTPReferrer = false;
 }
 
-void ResourceRequest::setHTTPOrigin(PassRefPtr<SecurityOrigin> origin)
+void ResourceRequest::setHTTPOrigin(const SecurityOrigin* origin)
 {
     setHTTPHeaderField(HTTPNames::Origin, origin->toAtomicString());
     if (origin->hasSuborigin())
@@ -247,7 +266,7 @@ void ResourceRequest::clearHTTPOrigin()
     m_httpHeaderFields.remove(HTTPNames::Suborigin);
 }
 
-void ResourceRequest::addHTTPOriginIfNeeded(PassRefPtr<SecurityOrigin> origin)
+void ResourceRequest::addHTTPOriginIfNeeded(const SecurityOrigin* origin)
 {
     if (!httpOrigin().isEmpty())
         return; // Request already has an Origin header.
@@ -268,7 +287,7 @@ void ResourceRequest::addHTTPOriginIfNeeded(PassRefPtr<SecurityOrigin> origin)
     if (originString.isEmpty()) {
         // If we don't know what origin header to attach, we attach the value
         // for an empty origin.
-        setHTTPOrigin(SecurityOrigin::createUnique());
+        setHTTPOrigin(SecurityOrigin::createUnique().get());
         return;
     }
     setHTTPOrigin(origin);

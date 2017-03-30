@@ -107,7 +107,6 @@ WebPreferences::WebPreferences()
       privileged_webgl_extensions_enabled(false),
       webgl_errors_to_console_enabled(true),
       mock_scrollbars_enabled(false),
-      unified_textchecker_enabled(false),
       accelerated_2d_canvas_enabled(false),
       minimum_accelerated_2d_canvas_size(257 * 256),
       disable_2d_canvas_copy_on_write(false),
@@ -139,7 +138,6 @@ WebPreferences::WebPreferences()
       available_hover_types(0),
       primary_hover_type(ui::HOVER_TYPE_NONE),
       sync_xhr_in_documents_enabled(true),
-      image_color_profiles_enabled(false),
       should_respect_image_orientation(false),
       number_of_cpu_cores(1),
 #if defined(OS_MACOSX)

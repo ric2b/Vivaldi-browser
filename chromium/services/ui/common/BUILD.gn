@@ -1,0 +1,83 @@
+# Copyright 2015 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//services/shell/public/service_manifest.gni")
+import("//testing/test.gni")
+
+source_set("mus_common") {
+  sources = [
+    "event_matcher_util.cc",
+    "event_matcher_util.h",
+    "generic_shared_memory_id_generator.cc",
+    "generic_shared_memory_id_generator.h",
+    "gpu_type_converters.cc",
+    "gpu_type_converters.h",
+    "switches.cc",
+    "switches.h",
+    "transient_window_utils.h",
+    "types.h",
+    "util.h",
+  ]
+
+  deps = [
+    "//gpu/command_buffer/client",
+    "//gpu/config",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common:command_buffer_traits",
+    "//ipc:ipc",
+    "//services/shell/public/cpp",
+    "//ui/events:events",
+    "//ui/gfx/ipc/geometry",
+  ]
+
+  public_deps = [
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
+    "//services/ui/public/interfaces",
+    "//ui/base",
+  ]
+}
+
+source_set("run_all_shelltests") {
+  testonly = true
+
+  sources = [
+    "run_all_shelltests.cc",
+  ]
+
+  deps = [
+    "//base/test:test_support",
+    "//mojo/edk/system",
+    "//services/shell/background:main",
+  ]
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
+  }
+}
+
+test("mus_common_unittests") {
+  sources = [
+    "gpu_type_converters_unittest.cc",
+  ]
+  public_deps = [
+    ":mus_common",
+  ]
+  deps = [
+    ":run_all_shelltests",
+    "//base",
+    "//base/test:test_config",
+    "//ipc:ipc",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+    "//ui/gfx:test_support",
+    "//ui/gfx/ipc",
+  ]
+}
+
+service_manifest("mus_common_unittests_app_manifest") {
+  name = "mus_common_unittests_app"
+  source = "mus_common_unittests_app_manifest.json"
+}

@@ -57,7 +57,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   bool IsItemForCommandIdDynamic(int command_id) const override;
   base::string16 GetLabelForCommandId(int command_id) const override;
   bool GetAcceleratorForCommandId(int command_id,
-      ui::Accelerator* accelerator) override;
+      ui::Accelerator* accelerator) const override;
   bool GetIconForCommandId(int command_id, gfx::Image* icon) const override;
   void CommandIdHighlighted(int command_id) override;
   void ExecuteCommand(int command_id, int event_flags) override;

@@ -105,7 +105,7 @@ static String getTagName(Node* n)
 {
     if (n->isDocumentNode())
         return "";
-    if (n->getNodeType() == Node::COMMENT_NODE)
+    if (n->getNodeType() == Node::kCommentNode)
         return "COMMENT";
     return n->nodeName();
 }
@@ -455,8 +455,8 @@ static void writeTextRun(TextStream& ts, const LayoutText& o, const InlineTextBo
 {
     // FIXME: For now use an "enclosingIntRect" model for x, y and logicalWidth, although this makes it harder
     // to detect any changes caused by the conversion to floating point. :(
-    int x = run.x();
-    int y = run.y();
+    int x = run.x().toInt();
+    int y = run.y().toInt();
     int logicalWidth = (run.left() + run.logicalWidth()).ceil() - x;
 
     // FIXME: Table cell adjustment is temporary until results can be updated.
@@ -580,7 +580,7 @@ static void write(TextStream& ts, PaintLayer& layer,
 
     writeIndent(ts, indent);
 
-    if (layer.layoutObject()->style()->visibility() == HIDDEN)
+    if (layer.layoutObject()->style()->visibility() == EVisibility::Hidden)
         ts << "hidden ";
 
     ts << "layer ";

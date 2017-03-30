@@ -20,6 +20,7 @@
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
 #include "net/log/net_log.h"
+#include "net/socket/next_proto.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/spdy/spdy_buffer.h"
 #include "net/spdy/spdy_framer.h"
@@ -291,10 +292,9 @@ class NET_EXPORT_PRIVATE SpdyStream {
   base::Time GetRequestTime() const;
   void SetRequestTime(base::Time t);
 
-  // Called at most once by the SpdySession when the initial response
-  // headers have been received for this stream, i.e., a SYN_REPLY (or
-  // SYN_STREAM for push streams) frame has been received. Returns a status
-  // code; if it is an error, the stream was closed by this function.
+  // Called at most once by the SpdySession when the initial response headers
+  // have been received for this stream. Returns a status code; if it is an
+  // error, the stream was closed by this function.
   int OnInitialResponseHeadersReceived(const SpdyHeaderBlock& response_headers,
                                        base::Time response_time,
                                        base::TimeTicks recv_first_byte_time);
@@ -308,7 +308,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
 
   // Called by the SpdySession when a frame carrying request headers opening a
   // push stream is received. Stream transits to STATE_RESERVED_REMOTE state.
-  void OnPushPromiseHeadersReceived(const SpdyHeaderBlock& headers);
+  void OnPushPromiseHeadersReceived(SpdyHeaderBlock headers);
 
   // Called by the SpdySession when response data has been received
   // for this stream.  This callback may be called multiple times as
@@ -333,7 +333,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // of the HEADERS or PUSH_PROMISE frame and subsequent CONTINUATION frames.
   void OnFrameWriteComplete(SpdyFrameType frame_type, size_t frame_size);
 
-  // SYN_STREAM-specific write handler invoked by OnFrameWriteComplete().
+  // HEADERS-specific write handler invoked by OnFrameWriteComplete().
   int OnRequestHeadersSent();
 
   // DATA-specific write handler invoked by OnFrameWriteComplete().
@@ -373,7 +373,7 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // bidirectional streams; for request/response streams, it must be
   // MORE_DATA_TO_SEND if the request has data to upload, or
   // NO_MORE_DATA_TO_SEND if not.
-  int SendRequestHeaders(std::unique_ptr<SpdyHeaderBlock> request_headers,
+  int SendRequestHeaders(SpdyHeaderBlock request_headers,
                          SpdySendStatus send_status);
 
   // Sends a DATA frame. The delegate will be notified via
@@ -384,9 +384,14 @@ class NET_EXPORT_PRIVATE SpdyStream {
   void SendData(IOBuffer* data, int length, SpdySendStatus send_status);
 
   // Fills SSL info in |ssl_info| and returns true when SSL is in use.
-  bool GetSSLInfo(SSLInfo* ssl_info,
-                  bool* was_npn_negotiated,
-                  NextProto* protocol_negotiated);
+  bool GetSSLInfo(SSLInfo* ssl_info) const;
+
+  // Returns true if ALPN was negotiated for the underlying socket.
+  // TODO(bnc): Rename to WasAlpnNegotiated().
+  bool WasNpnNegotiated() const;
+
+  // Returns the protocol negotiated via ALPN for the underlying socket.
+  NextProto GetNegotiatedProtocol() const;
 
   // If the stream is stalled on sending data, but the session is not
   // stalled on sending data and |send_window_size_| is positive, then
@@ -417,10 +422,6 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // yet.
   bool IsReservedRemote() const;
 
-  // Returns the protocol used by this stream. Always between
-  // kProtoSPDYMinimumVersion and kProtoSPDYMaximumVersion.
-  NextProto GetProtocol() const;
-
   int response_status() const { return response_status_; }
 
   void AddRawReceivedBytes(size_t received_bytes);
@@ -433,29 +434,16 @@ class NET_EXPORT_PRIVATE SpdyStream {
 
   // Get the URL from the appropriate stream headers, or the empty
   // GURL() if it is unknown.
-  //
-  // TODO(akalin): Figure out if we really need this function,
-  // i.e. can we just use the URL this stream was created with and/or
-  // one we receive headers validate that the URL from them is the
-  // same.
-  GURL GetUrlFromHeaders() const;
-
-  // Returns whether the URL for this stream is known.
-  //
-  // TODO(akalin): Remove this, as it's only used in tests.
-  bool HasUrlFromHeaders() const;
-
-  SpdyMajorVersion GetProtocolVersion() const;
+  const GURL& GetUrlFromHeaders() const { return url_from_header_block_; }
 
  private:
-  class SynStreamBufferProducer;
-  class HeaderBufferProducer;
+  class HeadersBufferProducer;
 
   // SpdyStream states and transitions are modeled
   // on the HTTP/2 stream state machine. All states and transitions
   // are modeled, with the exceptions of RESERVED_LOCAL (the client
   // cannot initate push streams), and the transition to OPEN due to
-  // a remote SYN_STREAM (the client can only initate streams).
+  // a remote HEADERS (the client can only initate streams).
   enum State {
     STATE_IDLE,
     STATE_OPEN,
@@ -479,14 +467,9 @@ class NET_EXPORT_PRIVATE SpdyStream {
   // to have occurred, driving the state machine forward.
   void PushedStreamReplay();
 
-  // Produces the SYN_STREAM frame for the stream. The stream must
+  // Produces the HEADERS frame for the stream. The stream must
   // already be activated.
-  std::unique_ptr<SpdySerializedFrame> ProduceSynStreamFrame();
-
-  // Produce the initial HEADER frame for the stream with the given
-  // block. The stream must already be activated.
-  std::unique_ptr<SpdySerializedFrame> ProduceHeaderFrame(
-      std::unique_ptr<SpdyHeaderBlock> header_block);
+  std::unique_ptr<SpdySerializedFrame> ProduceHeadersFrame();
 
   // Queues the send for next frame of the remaining data in
   // |pending_send_data_|. Must be called only when
@@ -533,10 +516,11 @@ class NET_EXPORT_PRIVATE SpdyStream {
   SpdyStream::Delegate* delegate_;
 
   // The headers for the request to send.
-  //
-  // TODO(akalin): Hang onto this only until we send it. This
-  // necessitates stashing the URL separately.
-  std::unique_ptr<SpdyHeaderBlock> request_headers_;
+  bool request_headers_valid_;
+  SpdyHeaderBlock request_headers_;
+
+  // The URL from the request headers.
+  GURL url_from_header_block_;
 
   // Data waiting to be sent, and the close state of the local endpoint
   // after the data is fully written.

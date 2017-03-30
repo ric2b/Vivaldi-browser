@@ -173,7 +173,7 @@ void DomainReliabilityMonitor::AddBakedInConfigs() {
 
   std::vector<DomainReliabilityConfig*> google_configs;
   GetAllGoogleConfigs(&google_configs);
-  for (auto google_config : google_configs)
+  for (auto* google_config : google_configs)
     context_manager_.AddContextForConfig(base::WrapUnique(google_config));
 }
 
@@ -217,15 +217,16 @@ void DomainReliabilityMonitor::OnNetworkChanged(
 }
 
 void DomainReliabilityMonitor::ClearBrowsingData(
-   DomainReliabilityClearMode mode) {
+   DomainReliabilityClearMode mode,
+   const base::Callback<bool(const GURL&)>& origin_filter) {
   DCHECK(OnNetworkThread());
 
   switch (mode) {
     case CLEAR_BEACONS:
-      context_manager_.ClearBeaconsInAllContexts();
+      context_manager_.ClearBeacons(origin_filter);
       break;
     case CLEAR_CONTEXTS:
-      context_manager_.RemoveAllContexts();
+      context_manager_.RemoveContexts(origin_filter);
       break;
     case MAX_CLEAR_MODE:
       NOTREACHED();

@@ -19,7 +19,7 @@
 #include "components/precache/core/precache_switches.h"
 #include "components/precache/core/proto/unfinished_work.pb.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync_driver/sync_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/variations/metrics_util.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/browser_context.h"
@@ -123,6 +123,11 @@ void PrecacheManager::StartPrecaching(
   precache_completion_callback_ = precache_completion_callback;
 
   is_precaching_ = true;
+  BrowserThread::PostTask(
+      BrowserThread::DB, FROM_HERE,
+      base::Bind(&PrecacheDatabase::SetLastPrecacheTimestamp,
+                 base::Unretained(precache_database_.get()),
+                 base::Time::Now()));
   BrowserThread::PostTaskAndReplyWithResult(
       BrowserThread::DB,
       FROM_HERE,
@@ -137,8 +142,7 @@ void PrecacheManager::OnGetUnfinishedWorkDone(
       base::Time::Now() - base::Time::FromInternalValue(
       unfinished_work->start_time()) > base::TimeDelta::FromHours(6)) {
     PrecacheFetcher::RecordCompletionStatistics(
-        *unfinished_work,
-        unfinished_work->manifest_size(),
+        *unfinished_work, unfinished_work->top_host_size(),
         unfinished_work->resource_size());
     unfinished_work.reset(new PrecacheUnfinishedWork());
     unfinished_work->set_start_time(base::Time::Now().ToInternalValue());
@@ -246,12 +250,14 @@ void PrecacheManager::RecordStatsForFetch(const GURL& url,
     return;
 
   history_service_->HostRankIfAvailable(
-      referrer, base::Bind(&PrecacheManager::RecordStatsForFetchInternal,
-                           AsWeakPtr(), url, latency, fetch_time, info, size));
+      referrer,
+      base::Bind(&PrecacheManager::RecordStatsForFetchInternal, AsWeakPtr(),
+                 url, referrer.host(), latency, fetch_time, info, size));
 }
 
 void PrecacheManager::RecordStatsForFetchInternal(
     const GURL& url,
+    const std::string& referrer_host,
     const base::TimeDelta& latency,
     const base::Time& fetch_time,
     const net::HttpResponseInfo& info,
@@ -265,9 +271,8 @@ void PrecacheManager::RecordStatsForFetchInternal(
     // by precaching.
     BrowserThread::PostTask(
         BrowserThread::DB, FROM_HERE,
-        base::Bind(&PrecacheDatabase::RecordURLPrefetch,
-                   base::Unretained(precache_database_.get()), url, latency,
-                   fetch_time, info, size));
+        base::Bind(&PrecacheDatabase::RecordURLPrefetchMetrics,
+                   base::Unretained(precache_database_.get()), info, latency));
   } else {
     bool is_connection_cellular =
         net::NetworkChangeNotifier::IsConnectionCellular(
@@ -338,6 +343,9 @@ void PrecacheManager::InitializeAndStartFetcher() {
       std::move(unfinished_work_),
       metrics::HashName(
           base::FieldTrialList::FindFullName(kPrecacheFieldTrialName)),
+      precache_database_->GetWeakPtr(),
+      content::BrowserThread::GetTaskRunnerForThread(
+          content::BrowserThread::DB),
       this));
   precache_fetcher_->Start();
 }

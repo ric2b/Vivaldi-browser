@@ -51,8 +51,7 @@ class ChromeMetricsServiceClient
 
   // Factory function.
   static std::unique_ptr<ChromeMetricsServiceClient> Create(
-      metrics::MetricsStateManager* state_manager,
-      PrefService* local_state);
+      metrics::MetricsStateManager* state_manager);
 
   // Registers local state prefs used by this class.
   static void RegisterPrefs(PrefRegistrySimple* registry);
@@ -60,7 +59,6 @@ class ChromeMetricsServiceClient
   // metrics::MetricsServiceClient:
   metrics::MetricsService* GetMetricsService() override;
   void SetMetricsClientId(const std::string& client_id) override;
-  void OnRecordingDisabled() override;
   bool IsOffTheRecordSessionActive() override;
   int32_t GetProduct() override;
   std::string GetApplicationLocale() override;
@@ -130,6 +128,7 @@ class ChromeMetricsServiceClient
   // Callbacks for various stages of final log info collection. Do not call
   // these directly.
   void CollectFinalHistograms();
+  void MergeHistogramDeltas();
   void OnMemoryDetailCollectionDone();
   void OnHistogramSynchronizationDone();
 

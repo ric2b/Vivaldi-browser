@@ -34,6 +34,7 @@
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/WorkerThreadDebugger.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/SharedWorkerThread.h"
 #include "core/workers/WorkerClients.h"
@@ -56,6 +57,7 @@ SharedWorkerGlobalScope* SharedWorkerGlobalScope::create(const String& name, Sha
     // passed along to the created 'context'.
     SharedWorkerGlobalScope* context = new SharedWorkerGlobalScope(name, startupData->m_scriptURL, startupData->m_userAgent, thread, std::move(startupData->m_starterOriginPrivilegeData), startupData->m_workerClients.release());
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
+    context->setWorkerSettings(std::move(startupData->m_workerSettings));
     if (!startupData->m_referrerPolicy.isNull())
         context->parseAndSetReferrerPolicy(startupData->m_referrerPolicy);
     context->setAddressSpace(startupData->m_addressSpace);
@@ -83,11 +85,11 @@ SharedWorkerThread* SharedWorkerGlobalScope::thread()
     return static_cast<SharedWorkerThread*>(Base::thread());
 }
 
-void SharedWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+void SharedWorkerGlobalScope::exceptionThrown(ErrorEvent* event)
 {
-    WorkerGlobalScope::logExceptionToConsole(errorMessage, location->clone());
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
-    addMessageToWorkerConsole(consoleMessage);
+    WorkerGlobalScope::exceptionThrown(event);
+    if (WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(thread()->isolate()))
+        debugger->exceptionThrown(event);
 }
 
 DEFINE_TRACE(SharedWorkerGlobalScope)

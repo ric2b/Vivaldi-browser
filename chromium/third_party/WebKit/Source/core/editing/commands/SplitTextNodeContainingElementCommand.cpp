@@ -27,6 +27,7 @@
 
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/layout/LayoutObject.h"
 #include "wtf/Assertions.h"
 
@@ -47,7 +48,7 @@ void SplitTextNodeContainingElementCommand::doApply(EditingState*)
     splitTextNode(m_text.get(), m_offset);
 
     Element* parent = m_text->parentElement();
-    if (!parent || !parent->parentElement() || !parent->parentElement()->hasEditableStyle())
+    if (!parent || !parent->parentElement() || !hasEditableStyle(*parent->parentElement()))
         return;
 
     LayoutObject* parentLayoutObject = parent->layoutObject();

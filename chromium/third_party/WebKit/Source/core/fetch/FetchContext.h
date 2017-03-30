@@ -71,7 +71,6 @@ public:
     virtual void countClientHintsViewportWidth() { }
 
     virtual void addAdditionalRequestHeaders(ResourceRequest&, FetchResourceType);
-    virtual void setFirstPartyForCookies(ResourceRequest&);
     virtual CachePolicy getCachePolicy() const;
     virtual WebCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type, FetchRequest::DeferOption) const;
 
@@ -104,9 +103,10 @@ public:
     virtual void sendImagePing(const KURL&);
     virtual void addConsoleMessage(const String&) const;
     virtual SecurityOrigin* getSecurityOrigin() const { return nullptr; }
-    virtual void upgradeInsecureRequest(FetchRequest&);
+    virtual void upgradeInsecureRequest(ResourceRequest&);
     virtual void addClientHintsIfNecessary(FetchRequest&);
     virtual void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&);
+    virtual void populateRequestData(ResourceRequest&);
 
     virtual MHTMLArchive* archive() const { return nullptr; }
 

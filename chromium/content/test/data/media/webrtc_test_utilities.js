@@ -26,6 +26,7 @@ function setAllEventsOccuredHandler(handler) {
 
 // Tells the C++ code we succeeded, which will generally exit the test.
 function reportTestSuccess() {
+  console.log('Test Success');
   window.domAutomationController.send('OK');
 }
 
@@ -38,6 +39,16 @@ function sendValueToTest(value) {
 function failTest(reason) {
   var error = new Error(reason);
   window.domAutomationController.send(error.stack);
+}
+
+// Called if getUserMedia fails.
+function printGetUserMediaError(error) {
+  var message = 'getUserMedia request unexpectedly failed:';
+  if (error.constraintName)
+    message += ' could not satisfy constraint ' + error.constraintName;
+  else
+    message += ' devices not working/user denied access.';
+  failTest(message);
 }
 
 function detectVideoPlaying(videoElementName, callback) {

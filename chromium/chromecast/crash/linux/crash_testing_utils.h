@@ -6,8 +6,9 @@
 #define CHROMECAST_CRASH_LINUX_CRASH_TESTING_UTILS_H_
 
 #include <memory>
+#include <vector>
 
-#include "base/memory/scoped_vector.h"
+#include "base/time/time.h"
 
 namespace chromecast {
 
@@ -21,7 +22,7 @@ std::unique_ptr<DumpInfo> CreateDumpInfo(const std::string& json_string);
 // Populates |dumps| with all the DumpInfo entries serialized in the lockfile at
 // |lockfile_path|. Returns true on success, false on error.
 bool FetchDumps(const std::string& lockfile_path,
-                ScopedVector<DumpInfo>* dumps);
+                std::vector<std::unique_ptr<DumpInfo>>* dumps);
 
 // Clear all dumps in the lockfile at |lockfile_path|.
 // Returns true on success, false on error.
@@ -42,7 +43,8 @@ bool AppendLockFile(const std::string& lockfile_path,
 
 // Set the ratelimit period start in the metadata file at |metadata_path| to
 // |start|. Returns true on success, false on error.
-bool SetRatelimitPeriodStart(const std::string& metadata_path, time_t start);
+bool SetRatelimitPeriodStart(const std::string& metadata_path,
+                             const base::Time& start);
 
 }  // namespace chromecast
 

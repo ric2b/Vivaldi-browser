@@ -56,7 +56,6 @@ void MaybeShowExtensionControlledHomeNotification(Browser* browser) {
 }
 
 void MaybeShowExtensionControlledSearchNotification(
-    Profile* profile,
     content::WebContents* web_contents,
     AutocompleteMatch::Type match_type) {
 #if !defined(OS_WIN) && !defined(OS_MACOSX)
@@ -66,7 +65,8 @@ void MaybeShowExtensionControlledSearchNotification(
   if (AutocompleteMatch::IsSearchType(match_type) &&
       match_type != AutocompleteMatchType::SEARCH_OTHER_ENGINE) {
     Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-    ShowSettingsApiBubble(BUBBLE_TYPE_SEARCH_ENGINE, browser);
+    if (browser)
+      ShowSettingsApiBubble(BUBBLE_TYPE_SEARCH_ENGINE, browser);
   }
 }
 

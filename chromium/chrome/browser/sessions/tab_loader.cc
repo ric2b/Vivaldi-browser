@@ -26,6 +26,11 @@
 #include "content/public/browser/web_contents.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/browser_process.h"
+#include "components/prefs/pref_service.h"
+#include "prefs/vivaldi_pref_names.h"
 
 using content::NavigationController;
 using content::RenderWidgetHost;
@@ -71,6 +76,14 @@ void TabLoader::SetTabLoadingEnabled(bool enable_tab_loading) {
 // static
 void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
                             const base::TimeTicks& restore_started) {
+  if (vivaldi::IsVivaldiRunning()) {
+    Profile* current_profile =
+      g_browser_process->profile_manager()->GetLastUsedProfileAllowedByPolicy();
+    PrefService* prefs = current_profile->GetPrefs();
+    if (prefs->GetBoolean(vivaldiprefs::kDeferredTabLoadingAfterRestore))
+      return;
+  }
+
   if (!shared_tab_loader_)
     shared_tab_loader_ = new TabLoader(restore_started);
 

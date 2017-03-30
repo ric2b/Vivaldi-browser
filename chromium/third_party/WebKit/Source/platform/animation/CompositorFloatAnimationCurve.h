@@ -10,6 +10,7 @@
 #include "platform/animation/CompositorFloatKeyframe.h"
 #include "platform/animation/TimingFunction.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/PassRefPtr.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
 #include <memory>
@@ -19,7 +20,7 @@ class KeyframedFloatAnimationCurve;
 }
 
 namespace blink {
-struct CompositorFloatKeyframe;
+class CompositorFloatKeyframe;
 }
 
 namespace blink {
@@ -35,31 +36,20 @@ public:
 
     ~CompositorFloatAnimationCurve() override;
 
-    static std::unique_ptr<CompositorFloatAnimationCurve> CreateForTesting(std::unique_ptr<cc::KeyframedFloatAnimationCurve>);
-    Vector<CompositorFloatKeyframe> keyframesForTesting() const;
-
-    // TODO(loyso): Erase these methods once blink/cc timing functions unified.
-    CubicBezierTimingFunction::EaseType getCurveEaseTypeForTesting() const;
-    bool curveHasLinearTimingFunctionForTesting() const;
-    CubicBezierTimingFunction::EaseType getKeyframeEaseTypeForTesting(unsigned long index) const;
-    bool keyframeHasLinearTimingFunctionForTesting(unsigned long index) const;
-
-    void addLinearKeyframe(const CompositorFloatKeyframe&);
-    void addCubicBezierKeyframe(const CompositorFloatKeyframe&, CubicBezierTimingFunction::EaseType);
-    // Adds the keyframe with a custom, bezier timing function. Note, it is
-    // assumed that x0 = y0 , and x3 = y3 = 1.
-    void addCubicBezierKeyframe(const CompositorFloatKeyframe&, double x1, double y1, double x2, double y2);
-    void addStepsKeyframe(const CompositorFloatKeyframe&, int steps, StepsTimingFunction::StepPosition);
-
-    void setLinearTimingFunction();
-    void setCubicBezierTimingFunction(CubicBezierTimingFunction::EaseType);
-    void setCubicBezierTimingFunction(double x1, double y1, double x2, double y2);
-    void setStepsTimingFunction(int numberOfSteps, StepsTimingFunction::StepPosition);
-
+    void addKeyframe(const CompositorFloatKeyframe&);
+    void setTimingFunction(const TimingFunction&);
+    void setScaledDuration(double);
     float getValue(double time) const;
 
     // CompositorAnimationCurve implementation.
     std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;
+
+    static std::unique_ptr<CompositorFloatAnimationCurve> createForTesting(std::unique_ptr<cc::KeyframedFloatAnimationCurve>);
+
+    using Keyframes = Vector<std::unique_ptr<CompositorFloatKeyframe>>;
+    Keyframes keyframesForTesting() const;
+
+    PassRefPtr<TimingFunction> getTimingFunctionForTesting() const;
 
 private:
     CompositorFloatAnimationCurve();

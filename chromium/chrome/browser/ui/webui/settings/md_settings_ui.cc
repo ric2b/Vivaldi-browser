@@ -17,11 +17,14 @@
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
+#include "chrome/browser/ui/webui/settings/metrics_reporting_handler.h"
 #include "chrome/browser/ui/webui/settings/people_handler.h"
 #include "chrome/browser/ui/webui/settings/profile_info_handler.h"
+#include "chrome/browser/ui/webui/settings/protocol_handlers_handler.h"
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
+#include "chrome/browser/ui/webui/settings/settings_cookies_view_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_media_devices_selection_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
@@ -34,9 +37,15 @@
 #include "grit/settings_resources_map.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/system/chromeos/palette/palette_utils.h"
+#include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
+#include "chrome/browser/ui/webui/settings/chromeos/accessibility_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/change_picture_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/cups_printers_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/device_keyboard_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/device_pointer_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/easy_unlock_settings_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/internet_handler.h"
 #else  // !defined(OS_CHROMEOS)
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
@@ -65,10 +74,15 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
 
   AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
   AddSettingsPageUIHandler(new BrowserLifetimeHandler());
+  AddSettingsPageUIHandler(new CookiesViewHandler());
   AddSettingsPageUIHandler(new DownloadsHandler());
   AddSettingsPageUIHandler(new FontHandler(web_ui));
+  AddSettingsPageUIHandler(new ProtocolHandlersHandler());
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
   AddSettingsPageUIHandler(new MediaDevicesSelectionHandler(profile));
+#if defined(GOOGLE_CHROME_BUILD) && !defined(OS_CHROMEOS)
+  AddSettingsPageUIHandler(new MetricsReportingHandler());
+#endif
   AddSettingsPageUIHandler(new PeopleHandler(profile));
   AddSettingsPageUIHandler(new ProfileInfoHandler(profile));
   AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
@@ -76,8 +90,13 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
   AddSettingsPageUIHandler(new StartupPagesHandler(web_ui));
 
 #if defined(OS_CHROMEOS)
+  AddSettingsPageUIHandler(new chromeos::settings::AccessibilityHandler(
+      web_ui));
   AddSettingsPageUIHandler(new chromeos::settings::ChangePictureHandler());
+  AddSettingsPageUIHandler(new chromeos::settings::CupsPrintersHandler(web_ui));
   AddSettingsPageUIHandler(new chromeos::settings::KeyboardHandler(web_ui));
+  AddSettingsPageUIHandler(new chromeos::settings::PointerHandler());
+  AddSettingsPageUIHandler(new chromeos::settings::InternetHandler());
 #else
   AddSettingsPageUIHandler(new DefaultBrowserHandler(web_ui));
   AddSettingsPageUIHandler(new ManageProfileHandler(profile));
@@ -98,6 +117,10 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
                                                             profile);
   if (easy_unlock_handler)
     AddSettingsPageUIHandler(easy_unlock_handler);
+
+  html_source->AddBoolean("stylusAllowed", ash::IsPaletteFeatureEnabled());
+  html_source->AddBoolean("quickUnlockEnabled",
+                          chromeos::IsQuickUnlockEnabled());
 #endif
 
   AddSettingsPageUIHandler(AboutHandler::Create(html_source, profile));

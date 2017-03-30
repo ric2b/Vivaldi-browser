@@ -35,7 +35,6 @@
 #include "third_party/WebKit/public/platform/WebSetSinkIdCallbacks.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace base {
@@ -286,6 +285,13 @@ class WebMediaPlayerAndroid
   bool IsKeySystemSupported(const std::string& key_system);
   bool IsLocalResource();
 
+  // Called whenever we create a new StreamTextureProxy and had a VFP::Client,
+  // or when we get a new VFP::Client and had a StreamTextureProxy.
+  // Sets |stream_texture_proxy_|'s OnFrameAvailable() to call |client|'s
+  // DidReceiveFrame().
+  // Passing nullptr to this method will clear the previous callback.
+  void UpdateStreamTextureProxyCallback(cc::VideoFrameProvider::Client* client);
+
   // Called when |cdm_context| is ready.
   void OnCdmContextReady(media::CdmContext* cdm_context);
 
@@ -317,6 +323,9 @@ class WebMediaPlayerAndroid
   // Called after |defer_load_cb_| has decided to allow the load. If
   // |defer_load_cb_| is null this is called immediately.
   void DoLoad(LoadType load_type, const blink::WebURL& url, CORSMode cors_mode);
+
+  // Returns if this video can be resumed in the background.
+  bool IsBackgroundVideoCandidate() const;
 
   blink::WebFrame* const frame_;
 
@@ -479,8 +488,6 @@ class WebMediaPlayerAndroid
   // systems, a browser side CDM will be used and we set CDM by calling
   // player_manager_->SetCdm() directly.
   MediaSourceDelegate::CdmReadyCB cdm_ready_cb_;
-
-  SkBitmap bitmap_;
 
   // Whether stored credentials are allowed to be passed to the server.
   bool allow_stored_credentials_;

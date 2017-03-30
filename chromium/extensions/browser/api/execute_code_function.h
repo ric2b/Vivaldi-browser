@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_API_EXECUTE_CODE_FUNCTION_H_
 #define EXTENSIONS_BROWSER_API_EXECUTE_CODE_FUNCTION_H_
 
+#include "base/macros.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/script_executor.h"
 #include "extensions/common/api/extension_types.h"
@@ -42,12 +43,10 @@ class ExecuteCodeFunction : public AsyncExtensionFunction {
   // Called when contents from the loaded file have been localized.
   void DidLoadAndLocalizeFile(const std::string& file,
                               bool success,
-                              const std::string& data);
+                              std::unique_ptr<std::string> data);
 
   const HostID& host_id() const { return host_id_; }
-  void set_host_id(HostID host_id) {
-    host_id_ = host_id;
-  }
+  void set_host_id(const HostID& host_id) { host_id_ = host_id; }
 
   // The injection details.
   std::unique_ptr<api::extension_types::InjectDetails> details_;
@@ -55,12 +54,12 @@ class ExecuteCodeFunction : public AsyncExtensionFunction {
  private:
   // Called when contents from the file whose path is specified in JSON
   // arguments has been loaded.
-  void DidLoadFile(bool success, const std::string& data);
+  void DidLoadFile(bool success, std::unique_ptr<std::string> data);
 
   // Runs on FILE thread. Loads message bundles for the extension and
   // localizes the CSS data. Calls back DidLoadAndLocalizeFile on the UI thread.
   void GetFileURLAndLocalizeCSS(ScriptExecutor::ScriptType script_type,
-                                const std::string& data,
+                                std::unique_ptr<std::string> data,
                                 const std::string& extension_id,
                                 const base::FilePath& extension_path,
                                 const std::string& extension_default_locale);
@@ -78,6 +77,8 @@ class ExecuteCodeFunction : public AsyncExtensionFunction {
 
   // The ID of the injection host.
   HostID host_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(ExecuteCodeFunction);
 };
 
 }  // namespace extensions

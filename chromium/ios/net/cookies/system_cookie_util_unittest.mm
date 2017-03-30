@@ -26,8 +26,8 @@ const char kCookieValueInvalidUtf8[] = "\x81r\xe4\xbd\xa0\xe5\xa5\xbd";
 
 void CheckSystemCookie(const base::Time& expires, bool secure, bool httponly) {
   // Generate a canonical cookie.
-  net::CanonicalCookie canonical_cookie = net::CanonicalCookie(
-      GURL(), kCookieName, kCookieValue, kCookieDomain, kCookiePath,
+  net::CanonicalCookie canonical_cookie = *net::CanonicalCookie::Create(
+      kCookieName, kCookieValue, kCookieDomain, kCookiePath,
       base::Time(),  // creation
       expires,
       base::Time(),  // last_access
@@ -74,7 +74,6 @@ TEST(CookieUtil, CanonicalCookieFromSystemCookie) {
   ASSERT_TRUE(system_cookie);
   net::CanonicalCookie chrome_cookie =
       CanonicalCookieFromSystemCookie(system_cookie, creation_time);
-  EXPECT_TRUE(chrome_cookie.Source().is_empty());
   EXPECT_EQ("a", chrome_cookie.Name());
   EXPECT_EQ("b", chrome_cookie.Value());
   EXPECT_EQ("foo", chrome_cookie.Domain());
@@ -117,8 +116,8 @@ TEST(CookieUtil, SystemCookieFromCanonicalCookie) {
 
 TEST(CookieUtil, SystemCookieFromBadCanonicalCookie) {
   // Generate a bad canonical cookie (value is invalid utf8).
-  net::CanonicalCookie bad_canonical_cookie = net::CanonicalCookie(
-      GURL(), kCookieName, kCookieValueInvalidUtf8, kCookieDomain, kCookiePath,
+  net::CanonicalCookie bad_canonical_cookie = *net::CanonicalCookie::Create(
+      kCookieName, kCookieValueInvalidUtf8, kCookieDomain, kCookiePath,
       base::Time(),  // creation
       base::Time(),  // expires
       base::Time(),  // last_access

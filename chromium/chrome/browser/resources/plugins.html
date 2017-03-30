@@ -58,32 +58,6 @@
         <tr jsvalues=
             ".className:isPluginEnabled($this) ? 'plugin-enabled' : 'plugin-disabled'">
         <td valign="top">
-
-          <div class="plugin-actions" guest-visibility="disabled">
-            <span>
-              <a
-                class="disable-group-link"
-                jsvalues=".path:name"
-                jsdisplay="enabledMode == 'enabledByUser'"
-                href="#"
-                i18n-content="disable"
-                >DISABLE</a>
-              <a
-                class="enable-group-link"
-                jsvalues=".path:name"
-                jsdisplay="enabledMode == 'disabledByUser'"
-                href="#"
-                i18n-content="enable"
-                >ENABLE</a>
-            </span>
-            <input
-                class="always-allow" type="checkbox"
-                jsvalues=
-                    ".identifier:id; id:id + '-always-allowed'; .checked:always_allowed; disabled:isPluginTrusted($this) || !isPluginEnabled($this)">
-            <label jsvalues="for:id + '-always-allowed'"
-                i18n-content="alwaysAllowed"></label>
-          </div>
-
           <div class="plugin-text">
             <div>
               <span class="plugin-name" dir="ltr"
@@ -108,8 +82,6 @@
               <div jsdisplay="shouldDisplayPluginDescription($this)">
                 <span dir="ltr" jsvalues=".innerHTML:description">
               </div>
-
-
             </div>
             <div jsselect="plugin_files" class="plugin-details">
               <div class="show-in-tmi-mode plugin-file">
@@ -198,6 +170,30 @@
                 </div>
               </div>
             </div>
+          </div>
+          <div class="plugin-actions" guest-visibility="disabled">
+            <span>
+              <a
+                class="disable-group-link"
+                jsvalues=".path:name"
+                jsdisplay="enabled_mode == 'enabledByUser'"
+                href="#"
+                i18n-content="disable"
+                >DISABLE</a>
+              <a
+                class="enable-group-link"
+                jsvalues=".path:name"
+                jsdisplay="enabled_mode == 'disabledByUser'"
+                href="#"
+                i18n-content="enable"
+                >ENABLE</a>
+            </span>
+            <input
+                class="always-allow" type="checkbox"
+                jsvalues=
+                    ".identifier:id; id:id + '-always-allowed'; .checked:always_allowed; disabled:isPluginTrusted($this) || !isPluginEnabled($this) || isPluginPolicyClickToPlay($this)">
+            <label jsvalues="for:id + '-always-allowed'"
+                i18n-content="alwaysAllowed"></label>
           </div>
         </td>
         </tr>

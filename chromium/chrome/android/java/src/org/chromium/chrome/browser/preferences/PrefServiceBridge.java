@@ -90,9 +90,12 @@ public final class PrefServiceBridge {
          * @param domains Important registerable domains.
          * @param exampleOrigins Example origins for each domain. These can be used to retrieve
          *                       favicons.
+         * @param importantReasons Bitfield of reasons why this domain was selected. Pass this back
+         *                         to clearBrowinsgData so we can record metrics.
          */
         @CalledByNative("ImportantSitesCallback")
-        void onImportantRegisterableDomainsReady(String[] domains, String[] exampleOrigins);
+        void onImportantRegisterableDomainsReady(
+                String[] domains, String[] exampleOrigins, int[] importantReasons);
     }
 
     /**
@@ -406,13 +409,6 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * Sets the preference that controls automatic detection of character encoding.
-     */
-    public void setAutoDetectEncodingEnabled(boolean enabled) {
-        nativeSetAutoDetectEncodingEnabled(enabled);
-    }
-
-    /**
      * Sets the preference that signals when the user has accepted the EULA.
      */
     public void setEulaAccepted() {
@@ -601,27 +597,11 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * @return whether there is a user set value for kNetworkPredictionEnabled.  This should only be
-     * used for preference migration. See http://crbug.com/334602
-     */
-    public boolean obsoleteNetworkPredictionEnabledHasUserSetting() {
-        return nativeObsoleteNetworkPredictionEnabledHasUserSetting();
-    }
-
-    /**
      * @return whether there is a user set value for kNetworkPredictionOptions.  This should only be
      * used for preference migration. See http://crbug.com/334602
      */
     public boolean obsoleteNetworkPredictionOptionsHasUserSetting() {
         return nativeObsoleteNetworkPredictionOptionsHasUserSetting();
-    }
-
-    /**
-     * @return the user set value for kNetworkPredictionEnabled. This should only be used for
-     * preference migration. See http://crbug.com/334602
-     */
-    public boolean obsoleteGetNetworkPredictionEnabledUserPrefValue() {
-        return nativeObsoleteGetNetworkPredictionEnabledUserPrefValue();
     }
 
     /**
@@ -704,13 +684,6 @@ public final class PrefServiceBridge {
     }
 
     /**
-     * @return true if automatic detection of character encoding is enabled, false otherwise.
-     */
-    public boolean isAutoDetectEncodingEnabled() {
-        return nativeGetAutoDetectEncodingEnabled();
-    }
-
-    /**
      * Sets whether the web service to resolve navigation error should be enabled.
      */
     public void setResolveNavigationErrorEnabled(boolean enabled) {
@@ -720,7 +693,7 @@ public final class PrefServiceBridge {
     /**
      * Checks the state of deletion preference for a certain browsing data type.
      * @param dataType The requested browsing data type (from the shared enum
-     *      {@link org.chromium.chrome.browser.BrowsingDataType}).
+     *      {@link org.chromium.chrome.browser.browsing_data.BrowsingDataType}).
      * @return The state of the corresponding deletion preference.
      */
     public boolean getBrowsingDataDeletionPreference(int dataType) {
@@ -730,7 +703,7 @@ public final class PrefServiceBridge {
     /**
      * Sets the state of deletion preference for a certain browsing data type.
      * @param dataType The requested browsing data type (from the shared enum
-     *      {@link org.chromium.chrome.browser.BrowsingDataType}).
+     *      {@link org.chromium.chrome.browser.browsing_data.BrowsingDataType}).
      * @param value The state to be set.
      */
     public void setBrowsingDataDeletionPreference(int dataType, boolean value) {
@@ -740,7 +713,7 @@ public final class PrefServiceBridge {
     /**
      * Gets the time period for which browsing data will be deleted.
      * @return The currently selected browsing data deletion time period (from the shared enum
-     *      {@link org.chromium.chrome.browser.TimePeriod}).
+     *      {@link org.chromium.chrome.browser.browsing_data.TimePeriod}).
      */
     public int getBrowsingDataDeletionTimePeriod() {
         return nativeGetBrowsingDataDeletionTimePeriod();
@@ -749,7 +722,7 @@ public final class PrefServiceBridge {
     /**
      * Sets the time period for which browsing data will be deleted.
      * @param timePeriod The selected browsing data deletion time period (from the shared enum
-     *      {@link org.chromium.chrome.browser.TimePeriod}).
+     *      {@link org.chromium.chrome.browser.browsing_data.TimePeriod}).
      */
     public void setBrowsingDataDeletionTimePeriod(int timePeriod) {
         nativeSetBrowsingDataDeletionTimePeriod(timePeriod);
@@ -762,13 +735,14 @@ public final class PrefServiceBridge {
      * ill-advised while browsing data is being cleared.
      * @param listener A listener to call back when the clearing is finished.
      * @param dataTypes An array of browsing data types to delete, represented as values from
-     *      the shared enum {@link org.chromium.chrome.browser.BrowsingDataType}.
+     *      the shared enum {@link org.chromium.chrome.browser.browsing_data.BrowsingDataType}.
      * @param timePeriod The time period for which to delete the data, represented as a value from
-     *      the shared enum {@link org.chromium.chrome.browser.TimePeriod}.
+     *      the shared enum {@link org.chromium.chrome.browser.browsing_data.TimePeriod}.
      */
     public void clearBrowsingData(
             OnClearBrowsingDataListener listener, int[] dataTypes, int timePeriod) {
-        clearBrowsingDataExcludingDomains(listener, dataTypes, timePeriod, new String[0]);
+        clearBrowsingDataExcludingDomains(listener, dataTypes, timePeriod, new String[0],
+                new int[0], new String[0], new int[0]);
     }
 
     /**
@@ -778,16 +752,22 @@ public final class PrefServiceBridge {
      * yet, and more data than expected could be deleted. See crbug.com/113621.
      * @param listener A listener to call back when the clearing is finished.
      * @param dataTypes An array of browsing data types to delete, represented as values from
-     *      the shared enum {@link org.chromium.chrome.browser.BrowsingDataType}.
+     *      the shared enum {@link org.chromium.chrome.browser.browsing_data.BrowsingDataType}.
      * @param timePeriod The time period for which to delete the data, represented as a value from
-     *      the shared enum {@link org.chromium.chrome.browser.TimePeriod}.
+     *      the shared enum {@link org.chromium.chrome.browser.browsing_data.TimePeriod}.
      * @param blacklistDomains A list of registerable domains that we don't clear data for.
+     * @param blacklistedDomainReasons A list of the reason metadata for the blacklisted domains.
+     * @param ignoredDomains A list of ignored domains that the user chose to not blacklist. We use
+     *                       these to remove important site entries if the user ignores them enough.
+     * @param ignoredDomainReasons A list of reason metadata for the ignored domains.
      */
     public void clearBrowsingDataExcludingDomains(OnClearBrowsingDataListener listener,
-            int[] dataTypes, int timePeriod, String[] blacklistDomains) {
+            int[] dataTypes, int timePeriod, String[] blacklistDomains,
+            int[] blacklistedDomainReasons, String[] ignoredDomains, int[] ignoredDomainReasons) {
         assert mClearBrowsingDataListener == null;
         mClearBrowsingDataListener = listener;
-        nativeClearBrowsingData(dataTypes, timePeriod, blacklistDomains);
+        nativeClearBrowsingData(dataTypes, timePeriod, blacklistDomains, blacklistedDomainReasons,
+                ignoredDomains, ignoredDomainReasons);
     }
 
     /*
@@ -1144,7 +1124,6 @@ public final class PrefServiceBridge {
     private native boolean nativeGetFullscreenManaged();
     private native boolean nativeGetTranslateEnabled();
     private native boolean nativeGetTranslateManaged();
-    private native boolean nativeGetAutoDetectEncodingEnabled();
     private native boolean nativeGetResolveNavigationErrorEnabled();
     private native boolean nativeGetResolveNavigationErrorManaged();
     private native boolean nativeGetProtectedMediaIdentifierEnabled();
@@ -1155,15 +1134,15 @@ public final class PrefServiceBridge {
     private native boolean nativeGetPrintingManaged();
     private native boolean nativeGetSupervisedUserSafeSitesEnabled();
     private native void nativeSetTranslateEnabled(boolean enabled);
-    private native void nativeSetAutoDetectEncodingEnabled(boolean enabled);
     private native void nativeResetTranslateDefaults();
     private native void nativeMigrateJavascriptPreference();
     private native boolean nativeGetBrowsingDataDeletionPreference(int dataType);
     private native void nativeSetBrowsingDataDeletionPreference(int dataType, boolean value);
     private native int nativeGetBrowsingDataDeletionTimePeriod();
     private native void nativeSetBrowsingDataDeletionTimePeriod(int timePeriod);
-    private native void nativeClearBrowsingData(
-            int[] dataTypes, int timePeriod, String[] blacklistDomains);
+    private native void nativeClearBrowsingData(int[] dataTypes, int timePeriod,
+            String[] blacklistDomains, int[] blacklistedDomainReasons, String[] ignoredDomains,
+            int[] ignoredDomainReasons);
     private native void nativeRequestInfoAboutOtherFormsOfBrowsingHistory(
             OtherFormsOfBrowsingHistoryListener listener);
     private native boolean nativeCanDeleteBrowsingHistory();
@@ -1203,9 +1182,7 @@ public final class PrefServiceBridge {
     private native void nativeSetSafeBrowsingEnabled(boolean enabled);
     private native boolean nativeGetSafeBrowsingManaged();
     private native boolean nativeGetNetworkPredictionManaged();
-    private native boolean nativeObsoleteNetworkPredictionEnabledHasUserSetting();
     private native boolean nativeObsoleteNetworkPredictionOptionsHasUserSetting();
-    private native boolean nativeObsoleteGetNetworkPredictionEnabledUserPrefValue();
     private native boolean nativeGetNetworkPredictionEnabled();
     private native void nativeSetNetworkPredictionEnabled(boolean enabled);
     private native void nativeSetResolveNavigationErrorEnabled(boolean enabled);

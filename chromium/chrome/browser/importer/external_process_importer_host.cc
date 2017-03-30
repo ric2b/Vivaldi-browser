@@ -13,6 +13,7 @@
 #include "chrome/browser/importer/importer_lock_dialog.h"
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/importer/in_process_importer_bridge.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/search_engines/template_url_service.h"
@@ -111,6 +112,13 @@ void ExternalProcessImporterHost::NotifyImportItemEnded(
     observer_->ImportItemEnded(item);
 }
 
+void ExternalProcessImporterHost::NotifyImportItemFailed(
+    importer::ImportItem item,
+    const std::string& error) {
+  if (observer_)
+    observer_->ImportItemFailed(item, error);
+}
+
 void ExternalProcessImporterHost::NotifyImportEnded() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   firefox_lock_.reset();
@@ -124,7 +132,7 @@ void ExternalProcessImporterHost::NotifyImportEnded() {
 ExternalProcessImporterHost::~ExternalProcessImporterHost() {
   if (installed_bookmark_observer_) {
     DCHECK(profile_);
-    BookmarkModelFactory::GetForProfile(profile_)->RemoveObserver(this);
+    BookmarkModelFactory::GetForBrowserContext(profile_)->RemoveObserver(this);
   }
 }
 
@@ -181,7 +189,8 @@ void ExternalProcessImporterHost::ShowWarningDialog() {
 void ExternalProcessImporterHost::ShowChromeWarningDialog() {
   base::string16 importerLockString;
 
-  if (source_profile_.importer_type == importer::TYPE_CHROME) {
+  if (source_profile_.importer_type == importer::TYPE_CHROME ||
+      source_profile_.importer_type == importer::TYPE_CHROMIUM) {
     importerLockString =
         l10n_util::GetStringUTF16(IDS_CHROME_IMPORTER_LOCK_TEXT);
   } else if (source_profile_.importer_type == importer::TYPE_OPERA_OPIUM ||
@@ -291,7 +300,7 @@ void ExternalProcessImporterHost::CheckForLoadedModels(uint16_t items) {
   // BookmarkModel should be loaded before adding IE favorites. So we observe
   // the BookmarkModel if needed, and start the task after it has been loaded.
   if ((items & importer::FAVORITES) && !writer_->BookmarkModelIsLoaded()) {
-    BookmarkModelFactory::GetForProfile(profile_)->AddObserver(this);
+    BookmarkModelFactory::GetForBrowserContext(profile_)->AddObserver(this);
     waiting_for_bookmarkbar_model_ = true;
     installed_bookmark_observer_ = true;
   }

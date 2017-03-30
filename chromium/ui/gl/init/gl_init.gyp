@@ -35,8 +35,6 @@
         'gl_factory_win.cc',
         'gl_factory_x11.cc',
         'gl_init_export.h',
-        'gl_surface_ozone.cc',
-        'gl_surface_ozone.h',
       ],
       'conditions': [
         ['OS=="mac"', {
@@ -46,8 +44,31 @@
             ],
           },
         }],
+        ['OS=="win"', {
+          'msvs_settings': {
+            'VCLinkerTool': {
+              'DelayLoadDLLs': [
+                'dwmapi.dll',
+              ],
+              'AdditionalDependencies': [
+                'dwmapi.lib',
+              ],
+            },
+          },
+          'link_settings': {
+            'libraries': [
+              '-ldwmapi.lib',
+            ],
+          },
+        }],
+        ['use_x11 == 1', {
+          'dependencies': [
+            '../../gfx/x/gfx_x11.gyp:gfx_x11',
+          ],
+        }],
         ['use_ozone==1', {
           'dependencies': [
+            '../../ozone/gl/ozone_gl.gyp:ozone_gl',
             '../../ozone/ozone.gyp:ozone',
             '../../ozone/ozone.gyp:ozone_base',
           ],

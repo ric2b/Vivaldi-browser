@@ -13,10 +13,13 @@
 #include "base/atomicops.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/process/process_handle.h"
 #include "base/threading/thread_checker.h"
 #include "ipc/ipc.mojom.h"
+#include "ipc/ipc_export.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/core.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
@@ -41,27 +44,16 @@ class AsyncHandleWaiter;
 // be called on any thread. All |Delegate| functions will be called on the IO
 // thread.
 //
-class MessagePipeReader : public mojom::Channel {
+class IPC_EXPORT MessagePipeReader : public NON_EXPORTED_BASE(mojom::Channel) {
  public:
   class Delegate {
    public:
+    virtual void OnPeerPidReceived() = 0;
     virtual void OnMessageReceived(const Message& message) = 0;
     virtual void OnPipeError() = 0;
-  };
-
-  // Delay the object deletion using the current message loop.
-  // This is intended to used by MessagePipeReader owners.
-  class DelayedDeleter {
-   public:
-    typedef std::default_delete<MessagePipeReader> DefaultType;
-
-    static void DeleteNow(MessagePipeReader* ptr) { delete ptr; }
-
-    DelayedDeleter() {}
-    explicit DelayedDeleter(const DefaultType&) {}
-    DelayedDeleter& operator=(const DefaultType&) { return *this; }
-
-    void operator()(MessagePipeReader* ptr) const;
+    virtual void OnAssociatedInterfaceRequest(
+        const std::string& name,
+        mojo::ScopedInterfaceEndpointHandle handle) = 0;
   };
 
   // Builds a reader that reads messages from |receive_handle| and lets
@@ -77,7 +69,6 @@ class MessagePipeReader : public mojom::Channel {
   MessagePipeReader(mojo::MessagePipeHandle pipe,
                     mojom::ChannelAssociatedPtr sender,
                     mojo::AssociatedInterfaceRequest<mojom::Channel> receiver,
-                    base::ProcessId peer_pid,
                     Delegate* delegate);
   ~MessagePipeReader() override;
 
@@ -91,6 +82,10 @@ class MessagePipeReader : public mojom::Channel {
   // thread.
   bool Send(std::unique_ptr<Message> message);
 
+  // Requests an associated interface from the other end of the pipe.
+  void GetRemoteInterface(const std::string& name,
+                          mojo::ScopedInterfaceEndpointHandle handle);
+
   base::ProcessId GetPeerPid() const { return peer_pid_; }
 
  protected:
@@ -99,12 +94,17 @@ class MessagePipeReader : public mojom::Channel {
 
  private:
   // mojom::Channel:
-  void Receive(mojo::Array<uint8_t> data,
-               mojo::Array<mojom::SerializedHandlePtr> handles) override;
+  void SetPeerPid(int32_t peer_pid) override;
+  void Receive(
+      const std::vector<uint8_t>& data,
+      base::Optional<std::vector<mojom::SerializedHandlePtr>> handles) override;
+  void GetAssociatedInterface(
+      const std::string& name,
+      mojom::GenericInterfaceAssociatedRequest request) override;
 
   // |delegate_| is null once the message pipe is closed.
   Delegate* delegate_;
-  base::ProcessId peer_pid_;
+  base::ProcessId peer_pid_ = base::kNullProcessId;
   mojom::ChannelAssociatedPtr sender_;
   mojo::AssociatedBinding<mojom::Channel> binding_;
 

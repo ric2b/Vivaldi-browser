@@ -18,17 +18,6 @@
 // Designated initializer. Initializes the object with the |receiver|.
 - (id)initWithReceiver:(CRWJSInjectionReceiver*)receiver;
 
-// The array of |CRWJSInjectionManager| this class depends on. Default to be
-// empty array. Note circular dependency is not allowed, which will cause stack
-// overflow in dependency related computation such as -allDependencies.
-- (NSArray*)directDependencies;
-
-// Returns a list of all the CRWJSInjectionManagers required by this manager,
-// that is, this manager and the managers it directly or indirectly depends on.
-// The list is ordered in such a way that any CRWJSInjectionManager in the list
-// only depends on those appear before it in the list.
-- (NSArray*)allDependencies;
-
 // Returns whether JavaScript has already been injected into the receiver.
 - (BOOL)hasBeenInjected;
 
@@ -36,15 +25,17 @@
 // missing. It also injects the dependencies' JavaScript if they are missing.
 - (void)inject;
 
-// Evaluates the provided JavaScript expression, slightly deferred. Designed for
-// scripts where the chance of crwebinvoke:// being triggered indirectly is
-// high, and that aren't required to return a value.
-- (void)deferredEvaluate:(NSString*)script;
-
 // Evaluate the provided JavaScript asynchronously calling completionHandler
 // after execution. The |completionHandler| can be nil.
+// DEPRECATED. TODO(crbug.com/595761): Remove this API.
 - (void)evaluate:(NSString*)script
     stringResultHandler:(web::JavaScriptCompletion)completionHandler;
+
+// Executes the supplied JavaScript asynchronously. Calls |completionHandler|
+// with results of the execution (which may be nil) or an NSError if there is an
+// error. The |completionHandler| can be nil.
+- (void)executeJavaScript:(NSString*)script
+        completionHandler:(web::JavaScriptResultBlock)completionHandler;
 
 @end
 
@@ -58,12 +49,6 @@
 // Subclasses must override this method to return the path to the JavaScript
 // that needs to be injected.
 - (NSString*)scriptPath;
-
-// The JavaScript function that returns the JavaScript constant of undefined
-// if the JavaScript has not been injected. Default to be nil. Subclasses
-// should override this if their script should only be injected into a page
-// once.
-- (NSString*)presenceBeacon;
 
 // Returns the content that should be injected. This is called every time
 // injection content is needed; by default is uses a cached copy of
@@ -79,9 +64,6 @@
 // The return value from this method will be cached; if dynamic script content
 // is necessary, override injectionContent instead.
 - (NSString*)staticInjectionContent;
-
-// Injects dependencies if they are missing.
-- (void)injectDependenciesIfMissing;
 
 @end
 

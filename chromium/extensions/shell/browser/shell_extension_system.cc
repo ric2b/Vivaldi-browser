@@ -24,6 +24,7 @@
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/service_worker_manager.h"
 #include "extensions/browser/value_store/value_store_factory_impl.h"
+#include "extensions/common/api/app_runtime.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/file_util.h"
 
@@ -76,7 +77,7 @@ const Extension* ShellExtensionSystem::LoadApp(const base::FilePath& app_dir) {
           weak_factory_.GetWeakPtr(), extension));
 
   content::NotificationService::current()->Notify(
-      extensions::NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
+      NOTIFICATION_EXTENSION_LOADED_DEPRECATED,
       content::Source<BrowserContext>(browser_context_),
       content::Details<const Extension>(extension.get()));
 
@@ -87,7 +88,7 @@ void ShellExtensionSystem::Init() {
   // Inform the rest of the extensions system to start.
   ready_.Signal();
   content::NotificationService::current()->Notify(
-      extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
+      NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
       content::Source<BrowserContext>(browser_context_),
       content::NotificationService::NoDetails());
 }
@@ -100,8 +101,8 @@ void ShellExtensionSystem::LaunchApp(const ExtensionId& extension_id) {
   const Extension* extension = ExtensionRegistry::Get(browser_context_)
                                    ->enabled_extensions()
                                    .GetByID(extension_id);
-  AppRuntimeEventRouter::DispatchOnLaunchedEvent(
-      browser_context_, extension, extensions::SOURCE_UNTRACKED);
+  AppRuntimeEventRouter::DispatchOnLaunchedEvent(browser_context_, extension,
+                                                 SOURCE_UNTRACKED, nullptr);
 }
 
 void ShellExtensionSystem::Shutdown() {
@@ -186,7 +187,7 @@ ContentVerifier* ShellExtensionSystem::content_verifier() {
 
 std::unique_ptr<ExtensionSet> ShellExtensionSystem::GetDependentExtensions(
     const Extension* extension) {
-  return base::WrapUnique(new ExtensionSet());
+  return base::MakeUnique<ExtensionSet>();
 }
 
 void ShellExtensionSystem::InstallUpdate(const std::string& extension_id,

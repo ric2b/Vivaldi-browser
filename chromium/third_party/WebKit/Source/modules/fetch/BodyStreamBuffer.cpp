@@ -14,10 +14,10 @@
 #include "core/streams/ReadableStreamOperations.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/fetch/Body.h"
+#include "modules/fetch/BytesConsumerForDataConsumerHandle.h"
 #include "modules/fetch/DataConsumerHandleUtil.h"
 #include "modules/fetch/DataConsumerTee.h"
 #include "modules/fetch/ReadableStreamDataConsumerHandle.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
 #include <memory>
@@ -102,37 +102,32 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, std::unique_ptr<Fet
     : UnderlyingSourceBase(scriptState)
     , m_scriptState(scriptState)
     , m_handle(std::move(handle))
-    , m_reader(m_handle->obtainReader(this))
+    , m_reader(m_handle->obtainFetchDataReader(this))
     , m_madeFromReadableStream(false)
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        if (isTerminating(scriptState)) {
-            m_reader = nullptr;
-            m_handle = nullptr;
-            return;
-        }
-        v8::Local<v8::Value> bodyValue = toV8(this, scriptState);
-        if (bodyValue.IsEmpty()) {
-            DCHECK(isTerminating(scriptState));
-            m_reader = nullptr;
-            m_handle = nullptr;
-            return;
-        }
-        ASSERT(bodyValue->IsObject());
-        v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
-
-        ScriptValue readableStream = ReadableStreamOperations::createReadableStream(
-            scriptState, this, ReadableStreamOperations::createCountQueuingStrategy(scriptState, 0));
-        if (isTerminating(scriptState)) {
-            m_reader = nullptr;
-            m_handle = nullptr;
-            return;
-        }
-        V8HiddenValue::setHiddenValue(scriptState, body, V8HiddenValue::internalBodyStream(scriptState->isolate()), readableStream.v8Value());
-    } else {
-        m_stream = new ReadableByteStream(this, new ReadableByteStream::StrictStrategy);
-        m_stream->didSourceStart();
+    if (isTerminating(scriptState)) {
+        m_reader = nullptr;
+        m_handle = nullptr;
+        return;
     }
+    v8::Local<v8::Value> bodyValue = toV8(this, scriptState);
+    if (bodyValue.IsEmpty()) {
+        DCHECK(isTerminating(scriptState));
+        m_reader = nullptr;
+        m_handle = nullptr;
+        return;
+    }
+    DCHECK(bodyValue->IsObject());
+    v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
+
+    ScriptValue readableStream = ReadableStreamOperations::createReadableStream(
+        scriptState, this, ReadableStreamOperations::createCountQueuingStrategy(scriptState, 0));
+    if (isTerminating(scriptState)) {
+        m_reader = nullptr;
+        m_handle = nullptr;
+        return;
+    }
+    V8HiddenValue::setHiddenValue(scriptState, body, V8HiddenValue::internalBodyStream(scriptState->isolate()), readableStream.v8Value());
 }
 
 BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
@@ -140,7 +135,6 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
     , m_scriptState(scriptState)
     , m_madeFromReadableStream(true)
 {
-    DCHECK(RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled());
     DCHECK(ReadableStreamOperations::isReadableStream(scriptState, stream));
     if (isTerminating(scriptState))
         return;
@@ -158,19 +152,16 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
 ScriptValue BodyStreamBuffer::stream()
 {
     ScriptState::Scope scope(m_scriptState.get());
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        if (isTerminating(m_scriptState.get()))
-            return ScriptValue();
-        v8::Local<v8::Value> bodyValue = toV8(this, m_scriptState.get());
-        if (bodyValue.IsEmpty()) {
-            DCHECK(isTerminating(m_scriptState.get()));
-            return ScriptValue();
-        }
-        ASSERT(bodyValue->IsObject());
-        v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
-        return ScriptValue(m_scriptState.get(), V8HiddenValue::getHiddenValue(m_scriptState.get(), body, V8HiddenValue::internalBodyStream(m_scriptState->isolate())));
+    if (isTerminating(m_scriptState.get()))
+        return ScriptValue();
+    v8::Local<v8::Value> bodyValue = toV8(this, m_scriptState.get());
+    if (bodyValue.IsEmpty()) {
+        DCHECK(isTerminating(m_scriptState.get()));
+        return ScriptValue();
     }
-    return ScriptValue(m_scriptState.get(), toV8(m_stream, m_scriptState.get()));
+    DCHECK(bodyValue->IsObject());
+    v8::Local<v8::Object> body = bodyValue.As<v8::Object>();
+    return ScriptValue(m_scriptState.get(), V8HiddenValue::getHiddenValue(m_scriptState.get(), body, V8HiddenValue::internalBodyStream(m_scriptState->isolate())));
 }
 
 PassRefPtr<BlobDataHandle> BodyStreamBuffer::drainAsBlobDataHandle(FetchDataConsumerHandle::Reader::BlobSizePolicy policy)
@@ -215,7 +206,7 @@ void BodyStreamBuffer::startLoading(FetchDataLoader* loader, FetchDataLoader::Cl
     ASSERT(m_scriptState->contextIsValid());
     std::unique_ptr<FetchDataConsumerHandle> handle = releaseHandle();
     m_loader = loader;
-    loader->start(handle.get(), new LoaderClient(m_scriptState->getExecutionContext(), this, client));
+    loader->start(new BytesConsumerForDataConsumerHandle(std::move(handle)), new LoaderClient(m_scriptState->getExecutionContext(), this, client));
 }
 
 void BodyStreamBuffer::tee(BodyStreamBuffer** branch1, BodyStreamBuffer** branch2)
@@ -239,24 +230,11 @@ void BodyStreamBuffer::tee(BodyStreamBuffer** branch1, BodyStreamBuffer** branch
     *branch2 = new BodyStreamBuffer(m_scriptState.get(), std::move(handle2));
 }
 
-void BodyStreamBuffer::pullSource()
-{
-    ASSERT(!m_streamNeedsMore);
-    m_streamNeedsMore = true;
-    processData();
-}
-
-ScriptPromise BodyStreamBuffer::cancelSource(ScriptState* scriptState, ScriptValue)
-{
-    ASSERT(scriptState == m_scriptState.get());
-    close();
-    return ScriptPromise::castUndefined(scriptState);
-}
-
 ScriptPromise BodyStreamBuffer::pull(ScriptState* scriptState)
 {
-    ASSERT(!m_streamNeedsMore);
     ASSERT(scriptState == m_scriptState.get());
+    if (m_streamNeedsMore)
+        return ScriptPromise::castUndefined(scriptState);
     m_streamNeedsMore = true;
     processData();
     return ScriptPromise::castUndefined(scriptState);
@@ -300,10 +278,7 @@ bool BodyStreamBuffer::hasPendingActivity() const
 {
     if (m_loader)
         return true;
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled())
-        return UnderlyingSourceBase::hasPendingActivity();
-
-    return m_stream->stateInternal() == ReadableStream::Readable && m_stream->isLocked();
+    return UnderlyingSourceBase::hasPendingActivity();
 }
 
 void BodyStreamBuffer::stop()
@@ -315,47 +290,32 @@ void BodyStreamBuffer::stop()
 
 bool BodyStreamBuffer::isStreamReadable()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        return ReadableStreamOperations::isReadable(m_scriptState.get(), stream());
-    }
-    return m_stream->stateInternal() == ReadableStream::Readable;
+    ScriptState::Scope scope(m_scriptState.get());
+    return ReadableStreamOperations::isReadable(m_scriptState.get(), stream());
 }
 
 bool BodyStreamBuffer::isStreamClosed()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        return ReadableStreamOperations::isClosed(m_scriptState.get(), stream());
-    }
-    return m_stream->stateInternal() == ReadableStream::Closed;
+    ScriptState::Scope scope(m_scriptState.get());
+    return ReadableStreamOperations::isClosed(m_scriptState.get(), stream());
 }
 
 bool BodyStreamBuffer::isStreamErrored()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        return ReadableStreamOperations::isErrored(m_scriptState.get(), stream());
-    }
-    return m_stream->stateInternal() == ReadableStream::Errored;
+    ScriptState::Scope scope(m_scriptState.get());
+    return ReadableStreamOperations::isErrored(m_scriptState.get(), stream());
 }
 
 bool BodyStreamBuffer::isStreamLocked()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        return ReadableStreamOperations::isLocked(m_scriptState.get(), stream());
-    }
-    return m_stream->isLocked();
+    ScriptState::Scope scope(m_scriptState.get());
+    return ReadableStreamOperations::isLocked(m_scriptState.get(), stream());
 }
 
 bool BodyStreamBuffer::isStreamDisturbed()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        return ReadableStreamOperations::isDisturbed(m_scriptState.get(), stream());
-    }
-    return m_stream->isDisturbed();
+    ScriptState::Scope scope(m_scriptState.get());
+    return ReadableStreamOperations::isDisturbed(m_scriptState.get(), stream());
 }
 
 void BodyStreamBuffer::closeAndLockAndDisturb()
@@ -366,34 +326,22 @@ void BodyStreamBuffer::closeAndLockAndDisturb()
         close();
     }
 
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(m_scriptState.get());
-        NonThrowableExceptionState exceptionState;
-        ScriptValue reader = ReadableStreamOperations::getReader(m_scriptState.get(), stream(), exceptionState);
-        ReadableStreamOperations::defaultReaderRead(m_scriptState.get(), reader);
-    } else {
-        NonThrowableExceptionState exceptionState;
-        m_stream->getBytesReader(m_scriptState->getExecutionContext(), exceptionState);
-        m_stream->setIsDisturbed();
-    }
+    ScriptState::Scope scope(m_scriptState.get());
+    NonThrowableExceptionState exceptionState;
+    ScriptValue reader = ReadableStreamOperations::getReader(m_scriptState.get(), stream(), exceptionState);
+    ReadableStreamOperations::defaultReaderRead(m_scriptState.get(), reader);
 }
 
 void BodyStreamBuffer::close()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled())
-        controller()->close();
-    else
-        m_stream->close();
+    controller()->close();
     m_reader = nullptr;
     m_handle = nullptr;
 }
 
 void BodyStreamBuffer::error()
 {
-    if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled())
-        controller()->error(DOMException::create(NetworkError, "network error"));
-    else
-        m_stream->error(DOMException::create(NetworkError, "network error"));
+    controller()->error(DOMException::create(NetworkError, "network error"));
     m_reader = nullptr;
     m_handle = nullptr;
 }
@@ -408,13 +356,15 @@ void BodyStreamBuffer::processData()
         switch (result) {
         case WebDataConsumerHandle::Ok: {
             DOMUint8Array* array = DOMUint8Array::create(static_cast<const unsigned char*>(buffer), available);
-            if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-                controller()->enqueue(array);
-                m_streamNeedsMore = controller()->desiredSize() > 0;
-            } else {
-                m_streamNeedsMore = m_stream->enqueue(array);
-            }
             m_reader->endRead(available);
+            // Clear m_streamNeedsMore in order to detect a pull call.
+            m_streamNeedsMore = false;
+            controller()->enqueue(array);
+            // If m_streamNeedsMore is true, it means that pull is called and
+            // the stream needs more data even if the desired size is not
+            // positive.
+            if (!m_streamNeedsMore)
+                m_streamNeedsMore = controller()->desiredSize() > 0;
             break;
         }
         case WebDataConsumerHandle::Done:

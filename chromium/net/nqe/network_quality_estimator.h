@@ -10,7 +10,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <tuple>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
@@ -23,10 +22,13 @@
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/nqe/cached_network_quality.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/nqe/external_estimate_provider.h"
+#include "net/nqe/network_id.h"
 #include "net/nqe/network_quality.h"
 #include "net/nqe/network_quality_observation.h"
 #include "net/nqe/network_quality_observation_source.h"
+#include "net/nqe/network_quality_store.h"
 #include "net/nqe/observation_buffer.h"
 #include "net/socket/socket_performance_watcher_factory.h"
 
@@ -52,32 +54,12 @@ class URLRequest;
 // A single instance of NQE can be attached to multiple URLRequestContexts,
 // thereby increasing the single NQE instance's accuracy by providing more
 // observed traffic characteristics.
-class NET_EXPORT_PRIVATE NetworkQualityEstimator
+class NET_EXPORT NetworkQualityEstimator
     : public NetworkChangeNotifier::ConnectionTypeObserver,
       public ExternalEstimateProvider::UpdatedEstimateDelegate {
  public:
-  // EffectiveConnectionType is the connection type whose typical performance is
-  // most similar to the measured performance of the network in use. In many
-  // cases, the "effective" connection type and the actual type of connection in
-  // use are the same, but often a network connection performs significantly
-  // different, usually worse, from its expected capabilities.
-  // EffectiveConnectionType of a network is independent of if the current
-  // connection is metered or not. For example, an unmetered slow connection may
-  // have EFFECTIVE_CONNECTION_TYPE_SLOW_2G as its effective connection type.
-  enum EffectiveConnectionType {
-    // The connection types should be in increasing order of quality.
-    EFFECTIVE_CONNECTION_TYPE_UNKNOWN = 0,
-    EFFECTIVE_CONNECTION_TYPE_OFFLINE,
-    EFFECTIVE_CONNECTION_TYPE_SLOW_2G,
-    EFFECTIVE_CONNECTION_TYPE_2G,
-    EFFECTIVE_CONNECTION_TYPE_3G,
-    EFFECTIVE_CONNECTION_TYPE_4G,
-    EFFECTIVE_CONNECTION_TYPE_BROADBAND,
-    EFFECTIVE_CONNECTION_TYPE_LAST,
-  };
-
   // Observes changes in effective connection type.
-  class NET_EXPORT_PRIVATE EffectiveConnectionTypeObserver {
+  class NET_EXPORT EffectiveConnectionTypeObserver {
    public:
     // Notifies the observer of a change in the effective connection type.
     // NetworkQualityEstimator computes the effective connection type once in
@@ -219,14 +201,6 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
 
   SocketPerformanceWatcherFactory* GetSocketPerformanceWatcherFactory();
 
-  // Returns a string equivalent to |type|.
-  static const char* GetNameForEffectiveConnectionType(
-      EffectiveConnectionType type);
-
-  // Returns an EffectiveConnectionType equivalent to |connection_type_name|.
-  static EffectiveConnectionType GetEffectiveConnectionTypeForName(
-      const std::string& connection_type_name);
-
   // |use_localhost_requests| should only be true when testing against local
   // HTTP server and allows the requests to local host to be used for network
   // quality estimation.
@@ -237,47 +211,12 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // network quality estimation.
   void SetUseSmallResponsesForTesting(bool use_small_responses);
 
+  // Reports |effective_connection_type| to all
+  // EffectiveConnectionTypeObservers.
+  void ReportEffectiveConnectionTypeForTesting(
+      EffectiveConnectionType effective_connection_type);
+
  protected:
-  // NetworkID is used to uniquely identify a network.
-  // For the purpose of network quality estimation and caching, a network is
-  // uniquely identified by a combination of |type| and
-  // |id|. This approach is unable to distinguish networks with
-  // same name (e.g., different Wi-Fi networks with same SSID).
-  // This is a protected member to expose it to tests.
-  struct NET_EXPORT_PRIVATE NetworkID {
-    NetworkID(NetworkChangeNotifier::ConnectionType type, const std::string& id)
-        : type(type), id(id) {}
-    NetworkID(const NetworkID& other) : type(other.type), id(other.id) {}
-    ~NetworkID() {}
-
-    NetworkID& operator=(const NetworkID& other) {
-      type = other.type;
-      id = other.id;
-      return *this;
-    }
-
-    // Overloaded because NetworkID is used as key in a map.
-    bool operator<(const NetworkID& other) const {
-      return std::tie(type, id) < std::tie(other.type, other.id);
-    }
-
-    // Connection type of the network.
-    NetworkChangeNotifier::ConnectionType type;
-
-    // Name of this network. This is set to:
-    // - Wi-Fi SSID if the device is connected to a Wi-Fi access point and the
-    //   SSID name is available, or
-    // - MCC/MNC code of the cellular carrier if the device is connected to a
-    //   cellular network, or
-    // - "Ethernet" in case the device is connected to ethernet.
-    // - An empty string in all other cases or if the network name is not
-    //   exposed by platform APIs.
-    std::string id;
-  };
-
-  // Returns true if the cached network quality estimate was successfully read.
-  bool ReadCachedNetworkQualityEstimate();
-
   // NetworkChangeNotifier::ConnectionTypeObserver implementation:
   void OnConnectionTypeChanged(
       NetworkChangeNotifier::ConnectionType type) override;
@@ -292,17 +231,20 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // at the HTTP layer measures the time from when the request was sent (this
   // happens after the connection is established) to the time when the response
   // headers were received.
+  // TODO(tbansal): Change it to return HTTP RTT as base::TimeDelta.
   virtual bool GetHttpRTTEstimate(base::TimeDelta* rtt) const
       WARN_UNUSED_RESULT;
 
   // Returns true if the RTT is available and sets |rtt| to the RTT estimated at
   // the transport layer. |rtt| should not be null. Virtualized for testing.
+  // TODO(tbansal): Change it to return transport RTT as base::TimeDelta.
   virtual bool GetTransportRTTEstimate(base::TimeDelta* rtt) const
       WARN_UNUSED_RESULT;
 
   // Returns true if downlink throughput is available and sets |kbps| to
   // estimated downlink throughput (in kilobits per second).
   // Virtualized for testing. |kbps| should not be null.
+  // TODO(tbansal): Change it to return throughput as int32.
   virtual bool GetDownlinkThroughputKbpsEstimate(int32_t* kbps) const;
 
   // Returns true if median RTT at the HTTP layer is available and sets |rtt|
@@ -311,6 +253,7 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // layer measures the time from when the request was sent (this happens after
   // the connection is established) to the time when the response headers were
   // received.
+  // TODO(tbansal): Change it to return HTTP RTT as base::TimeDelta.
   virtual bool GetRecentHttpRTTMedian(const base::TimeTicks& start_time,
                                       base::TimeDelta* rtt) const
       WARN_UNUSED_RESULT;
@@ -318,6 +261,7 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // Returns true if the median RTT at the transport layer is available and sets
   // |rtt| to the median of transport layer RTT observations since
   // |start_time|. |rtt| should not be null. Virtualized for testing.
+  // TODO(tbansal): Change it to return transport RTT as base::TimeDelta.
   virtual bool GetRecentTransportRTTMedian(const base::TimeTicks& start_time,
                                            base::TimeDelta* rtt) const
       WARN_UNUSED_RESULT;
@@ -326,6 +270,7 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // to the median of downstream throughput (in kilobits per second)
   // observations since |start_time|. Virtualized for testing. |kbps|
   // should not be null. Virtualized for testing.
+  // TODO(tbansal): Change it to return throughput as int32.
   virtual bool GetRecentMedianDownlinkThroughputKbps(
       const base::TimeTicks& start_time,
       int32_t* kbps) const WARN_UNUSED_RESULT;
@@ -338,7 +283,12 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // Overrides the tick clock used by |this| for testing.
   void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
 
+  // Returns a random double in the range [0.0, 1.0). Virtualized for testing.
+  virtual double RandDouble() const;
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
+                           AdaptiveRecomputationEffectiveConnectionType);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, StoreObservations);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, TestAddObservation);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, ObtainOperatingParams);
@@ -346,12 +296,11 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
                            ObtainAlgorithmToUseFromParams);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, HalfLifeParam);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, ComputedPercentiles);
-  FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, TestCaching);
-  FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
-                           TestLRUCacheMaximumSize);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest, TestGetMetricsSince);
   FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
                            TestExternalEstimateProviderMergeEstimates);
+  FRIEND_TEST_ALL_PREFIXES(NetworkQualityEstimatorTest,
+                           UnknownEffectiveConnectionType);
 
   // Value of round trip time observations is in base::TimeDelta.
   typedef nqe::internal::Observation<base::TimeDelta> RttObservation;
@@ -362,20 +311,31 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   typedef nqe::internal::Observation<int32_t> ThroughputObservation;
   typedef nqe::internal::ObservationBuffer<int32_t> ThroughputObservationBuffer;
 
-  // This does not use a unordered_map or hash_map for code simplicity (key just
-  // implements operator<, rather than hash and equality) and because the map is
-  // tiny.
-  typedef std::map<NetworkID, nqe::internal::CachedNetworkQuality>
-      CachedNetworkQualities;
-
   // Algorithms supported by network quality estimator for computing effective
   // connection type.
   enum class EffectiveConnectionTypeAlgorithm {
     HTTP_RTT_AND_DOWNSTREAM_THROUGHOUT = 0,
+    TRANSPORT_RTT_OR_DOWNSTREAM_THROUGHOUT,
     EFFECTIVE_CONNECTION_TYPE_ALGORITHM_LAST
   };
 
+  // Defines how a metric (e.g, transport RTT) should be used when computing
+  // the effective connection type.
+  enum class MetricUsage {
+    // The metric should not be used when computing the effective connection
+    // type.
+    DO_NOT_USE = 0,
+    // If the metric is available, then it should be used when computing the
+    // effective connection type.
+    USE_IF_AVAILABLE,
+    // The metric is required when computing the effective connection type.
+    // If the value of the metric is unavailable, effective connection type
+    // should be set to |EFFECTIVE_CONNECTION_TYPE_UNKNOWN|.
+    MUST_BE_USED,
+  };
+
   // Map from algorithm names to EffectiveConnectionTypeAlgorithm.
+  // TODO(tbansal): Consider using an autogenerated enum using macros.
   const std::map<std::string, EffectiveConnectionTypeAlgorithm>
       algorithm_name_to_enum_;
 
@@ -393,17 +353,20 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // kilobits per second) values.
   static const int kMinimumThroughputVariationParameterKbps = 1;
 
-  // Maximum size of the cache that holds network quality estimates.
-  // Smaller size may reduce the cache hit rate due to frequent evictions.
-  // Larger size may affect performance.
-  static const size_t kMaximumNetworkQualityCacheSize = 10;
-
   // Returns the RTT value to be used when the valid RTT is unavailable. Readers
   // should discard RTT if it is set to the value returned by |InvalidRTT()|.
   static const base::TimeDelta InvalidRTT();
 
+  // Queries external estimate provider for network quality. When the network
+  // quality is available, OnUpdatedEstimateAvailable() is called.
+  void MaybeQueryExternalEstimateProvider() const;
+
   // Records UMA when there is a change in connection type.
   void RecordMetricsOnConnectionTypeChanged() const;
+
+  // Records UMA on whether the NetworkID was available or not. Called right
+  // after a network change event.
+  void RecordNetworkIDAvailability() const;
 
   // Records UMA on main frame requests.
   void RecordMetricsOnMainFrameRequest() const;
@@ -452,10 +415,7 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
 
   // Returns the current network ID checking by calling the platform APIs.
   // Virtualized for testing.
-  virtual NetworkID GetCurrentNetworkID() const;
-
-  // Writes the estimated quality of the current network to the cache.
-  void CacheNetworkQualityEstimate();
+  virtual nqe::internal::NetworkID GetCurrentNetworkID() const;
 
   void NotifyObserversOfRTT(const RttObservation& observation);
 
@@ -477,13 +437,21 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // main frame request is observed.
   void RecordAccuracyAfterMainFrame(base::TimeDelta measuring_duration) const;
 
+  // Obtains the current cellular signal strength value and updates
+  // |min_signal_strength_since_connection_change_| and
+  // |max_signal_strength_since_connection_change_|.
+  void UpdateSignalStrength();
+
   // Returns the effective type of the current connection based on only the
-  // samples observed after |start_time|. Uses HTTP RTT and downstream
-  // throughput to compute the effective connection type, and requires both of
-  // them to have a valid value.
-  EffectiveConnectionType
-  GetRecentEffectiveConnectionTypeHttpRTTAndDownstreamThroughput(
-      const base::TimeTicks& start_time) const;
+  // samples observed after |start_time|. May use HTTP RTT, transport RTT and
+  // downstream throughput to compute the effective connection type based on
+  // |http_rtt_metric|, |transport_rtt_metric| and
+  // |downstream_throughput_kbps_metric|, respectively.
+  EffectiveConnectionType GetRecentEffectiveConnectionTypeUsingMetrics(
+      const base::TimeTicks& start_time,
+      MetricUsage http_rtt_metric,
+      MetricUsage transport_rtt_metric,
+      MetricUsage downstream_throughput_kbps_metric) const;
 
   // Values of external estimate provider status. This enum must remain
   // synchronized with the enum of the same name in
@@ -502,6 +470,18 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // Records the metrics related to external estimate provider.
   void RecordExternalEstimateProviderMetrics(
       NQEExternalEstimateProviderStatus status) const;
+
+  // Returns true if the cached network quality estimate was successfully read.
+  bool ReadCachedNetworkQualityEstimate();
+
+  // Records a correlation metric that can be used for computing the correlation
+  // between HTTP-layer RTT, transport-layer RTT, throughput and the time
+  // taken to complete |request|.
+  void RecordCorrelationMetric(const URLRequest& request) const;
+
+  // Returns true if transport RTT should be used for computing the effective
+  // connection type.
+  bool UseTransportRTT() const;
 
   // Determines if the requests to local host can be used in estimating the
   // network quality. Set to true only for tests.
@@ -524,13 +504,6 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // Tick clock used by the network quality estimator.
   std::unique_ptr<base::TickClock> tick_clock_;
 
-  // Minimum duration between two consecutive computations of effective
-  // connection type. Set to non-zero value as a performance optimization.
-  const base::TimeDelta effective_connection_type_recomputation_interval_;
-
-  // Time when the effective connection type was last computed.
-  base::TimeTicks last_effective_connection_type_computation_;
-
   // Intervals after the main frame request arrives at which accuracy of network
   // quality prediction is recorded.
   std::vector<base::TimeDelta> accuracy_recording_intervals_;
@@ -539,7 +512,7 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   base::TimeTicks last_connection_change_;
 
   // ID of the current network.
-  NetworkID current_network_id_;
+  nqe::internal::NetworkID current_network_id_;
 
   // Peak network quality (fastest round-trip-time (RTT) and highest
   // downstream throughput) measured since last connectivity change. RTT is
@@ -548,9 +521,6 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // 1) Multiple URLRequests can occur concurrently.
   // 2) Includes server processing time.
   nqe::internal::NetworkQuality peak_network_quality_;
-
-  // Cache that stores quality of previously seen networks.
-  CachedNetworkQualities cached_network_qualities_;
 
   // Buffer that holds throughput observations (in kilobits per second) sorted
   // by timestamp.
@@ -565,12 +535,18 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   nqe::internal::NetworkQuality
       default_observations_[NetworkChangeNotifier::CONNECTION_LAST + 1];
 
+  // Default thresholds for different effective connection types. The default
+  // values are used if the thresholds are unavailable from the variation
+  // params.
+  nqe::internal::NetworkQuality default_effective_connection_type_thresholds_
+      [EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_LAST];
+
   // Thresholds for different effective connection types obtained from field
   // trial variation params. These thresholds encode how different connection
   // types behave in general. In future, complex encodings (e.g., curve
   // fitting) may be used.
-  nqe::internal::NetworkQuality
-      connection_thresholds_[EFFECTIVE_CONNECTION_TYPE_LAST];
+  nqe::internal::NetworkQuality connection_thresholds_
+      [EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_LAST];
 
   // Latest time when the headers for a main frame request were received.
   base::TimeTicks last_main_frame_request_;
@@ -579,6 +555,10 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // request were received.
   nqe::internal::NetworkQuality estimated_quality_at_last_main_frame_;
   EffectiveConnectionType effective_connection_type_at_last_main_frame_;
+
+  // Estimated network quality obtained from external estimate provider when the
+  // external estimate provider was last queried.
+  nqe::internal::NetworkQuality external_estimate_provider_quality_;
 
   // ExternalEstimateProvider that provides network quality using operating
   // system APIs. May be NULL.
@@ -600,11 +580,38 @@ class NET_EXPORT_PRIVATE NetworkQualityEstimator
   // estimating the throughput.
   std::unique_ptr<nqe::internal::ThroughputAnalyzer> throughput_analyzer_;
 
+  // Minimum duration between two consecutive computations of effective
+  // connection type. Set to non-zero value as a performance optimization.
+  const base::TimeDelta effective_connection_type_recomputation_interval_;
+
+  // Time when the effective connection type was last computed.
+  base::TimeTicks last_effective_connection_type_computation_;
+
+  // Number of RTT and bandwidth samples available when effective connection
+  // type was last recomputed.
+  size_t rtt_observations_size_at_last_ect_computation_;
+  size_t throughput_observations_size_at_last_ect_computation_;
+
   // Current effective connection type. It is updated on connection change
   // events. It is also updated every time there is network traffic (provided
   // the last computation was more than
   // |effective_connection_type_recomputation_interval_| ago).
   EffectiveConnectionType effective_connection_type_;
+
+  // Minimum and Maximum signal strength (in dbM) observed since last connection
+  // change. Updated on connection change and main frame requests.
+  int32_t min_signal_strength_since_connection_change_;
+  int32_t max_signal_strength_since_connection_change_;
+
+  // It is costlier to add values to a sparse histogram. So, the correlation UMA
+  // is recorded with |correlation_uma_logging_probability_| since recording it
+  // in a sparse histogram for each request is unnecessary and cost-prohibitive.
+  // e.g., if it is 0.0, then the UMA will never be recorded. On the other hand,
+  // if it is 1.0, then it will be recorded for all valid HTTP requests.
+  const double correlation_uma_logging_probability_;
+
+  // Stores the qualities of different networks.
+  nqe::internal::NetworkQualityStore network_quality_store_;
 
   base::ThreadChecker thread_checker_;
 

@@ -20,12 +20,8 @@
 #include "cc/resources/scoped_resource.h"
 
 namespace cc {
-namespace {
-
-// Delay before a resource is considered expired.
-const int kResourceExpirationDelayMs = 1000;
-
-}  // namespace
+base::TimeDelta ResourcePool::kDefaultExpirationDelay =
+    base::TimeDelta::FromSeconds(1);
 
 void ResourcePool::PoolResource::OnMemoryDump(
     base::trace_event::ProcessMemoryDump* pmd,
@@ -60,7 +56,8 @@ void ResourcePool::PoolResource::OnMemoryDump(
 
 ResourcePool::ResourcePool(ResourceProvider* resource_provider,
                            base::SingleThreadTaskRunner* task_runner,
-                           bool use_gpu_memory_buffers)
+                           bool use_gpu_memory_buffers,
+                           const base::TimeDelta& expiration_delay)
     : resource_provider_(resource_provider),
       use_gpu_memory_buffers_(use_gpu_memory_buffers),
       max_memory_usage_bytes_(0),
@@ -70,8 +67,7 @@ ResourcePool::ResourcePool(ResourceProvider* resource_provider,
       total_resource_count_(0),
       task_runner_(task_runner),
       evict_expired_resources_pending_(false),
-      resource_expiration_delay_(
-          base::TimeDelta::FromMilliseconds(kResourceExpirationDelayMs)),
+      resource_expiration_delay_(expiration_delay),
       weak_ptr_factory_(this) {
   base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
       this, "cc::ResourcePool", task_runner_.get());
@@ -94,8 +90,9 @@ ResourcePool::~ResourcePool() {
   DCHECK_EQ(0u, total_resource_count_);
 }
 
-Resource* ResourcePool::AcquireResource(const gfx::Size& size,
-                                        ResourceFormat format) {
+Resource* ResourcePool::ReuseResource(const gfx::Size& size,
+                                      ResourceFormat format,
+                                      const gfx::ColorSpace& color_space) {
   // Finding resources in |unused_resources_| from MRU to LRU direction, touches
   // LRU resources only if needed, which increases possibility of expiring more
   // LRU resources within kResourceExpirationDelayMs.
@@ -108,6 +105,8 @@ Resource* ResourcePool::AcquireResource(const gfx::Size& size,
       continue;
     if (resource->size() != size)
       continue;
+    if (resource->color_space() != color_space)
+      continue;
 
     // Transfer resource to |in_use_resources_|.
     in_use_resources_[resource->id()] = std::move(*it);
@@ -116,15 +115,21 @@ Resource* ResourcePool::AcquireResource(const gfx::Size& size,
         resource->size(), resource->format());
     return resource;
   }
+  return nullptr;
+}
 
+Resource* ResourcePool::CreateResource(const gfx::Size& size,
+                                       ResourceFormat format,
+                                       const gfx::ColorSpace& color_space) {
   std::unique_ptr<PoolResource> pool_resource =
       PoolResource::Create(resource_provider_);
 
   if (use_gpu_memory_buffers_) {
-    pool_resource->AllocateWithGpuMemoryBuffer(size, format);
+    pool_resource->AllocateWithGpuMemoryBuffer(size, format, usage_,
+                                               color_space);
   } else {
     pool_resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                            format);
+                            format, color_space);
   }
 
   DCHECK(ResourceUtil::VerifySizeInBytes<size_t>(pool_resource->size(),
@@ -133,36 +138,109 @@ Resource* ResourcePool::AcquireResource(const gfx::Size& size,
       pool_resource->size(), pool_resource->format());
   ++total_resource_count_;
 
+  // Clear the invalidated rect and content ID, as we are about to raster new
+  // content. These will be re-set when rasterization completes successfully.
+  pool_resource->set_invalidated_rect(gfx::Rect());
+  pool_resource->set_content_id(0);
+
   Resource* resource = pool_resource.get();
   in_use_resources_[resource->id()] = std::move(pool_resource);
   in_use_memory_usage_bytes_ += ResourceUtil::UncheckedSizeInBytes<size_t>(
       resource->size(), resource->format());
+
   return resource;
 }
 
-Resource* ResourcePool::TryAcquireResourceWithContentId(uint64_t content_id) {
-  DCHECK(content_id);
+Resource* ResourcePool::AcquireResource(const gfx::Size& size,
+                                        ResourceFormat format,
+                                        const gfx::ColorSpace& color_space) {
+  Resource* reused_resource = ReuseResource(size, format, color_space);
+  if (reused_resource)
+    return reused_resource;
 
-  auto it = std::find_if(
-      unused_resources_.begin(), unused_resources_.end(),
-      [content_id](const std::unique_ptr<PoolResource>& pool_resource) {
-        return pool_resource->content_id() == content_id;
-      });
-  if (it == unused_resources_.end())
-    return nullptr;
-
-  Resource* resource = it->get();
-  DCHECK(resource_provider_->CanLockForWrite(resource->id()));
-
-  // Transfer resource to |in_use_resources_|.
-  in_use_resources_[resource->id()] = std::move(*it);
-  unused_resources_.erase(it);
-  in_use_memory_usage_bytes_ += ResourceUtil::UncheckedSizeInBytes<size_t>(
-      resource->size(), resource->format());
-  return resource;
+  return CreateResource(size, format, color_space);
 }
 
-void ResourcePool::ReleaseResource(Resource* resource, uint64_t content_id) {
+// Iterate over all three resource lists (unused, in-use, and busy), updating
+// the invalidation and content IDs to allow for future partial raster. The
+// first unused resource found (if any) will be returned and used for partial
+// raster directly.
+//
+// Note that this may cause us to have multiple resources with the same content
+// ID. This is not a correctness risk, as all these resources will have valid
+// invalidations can can be used safely. Note that we could improve raster
+// performance at the cost of search time if we found the resource with the
+// smallest invalidation ID to raster in to.
+Resource* ResourcePool::TryAcquireResourceForPartialRaster(
+    uint64_t new_content_id,
+    const gfx::Rect& new_invalidated_rect,
+    uint64_t previous_content_id,
+    gfx::Rect* total_invalidated_rect) {
+  DCHECK(new_content_id);
+  DCHECK(previous_content_id);
+  *total_invalidated_rect = gfx::Rect();
+
+  ResourceDeque::iterator resource_to_return = unused_resources_.end();
+  int minimum_area = 0;
+
+  // First update all unused resources. While updating, track the resource with
+  // the smallest invalidation. That resource will be returned to the caller.
+  for (auto it = unused_resources_.begin(); it != unused_resources_.end();
+       ++it) {
+    PoolResource* resource = it->get();
+    if (resource->content_id() == previous_content_id) {
+      UpdateResourceContentIdAndInvalidation(resource, new_content_id,
+                                             new_invalidated_rect);
+
+      // Return the resource with the smallest invalidation.
+      int area = resource->invalidated_rect().size().GetArea();
+      if (resource_to_return == unused_resources_.end() ||
+          area < minimum_area) {
+        resource_to_return = it;
+        minimum_area = area;
+      }
+    }
+  }
+
+  // Next, update all busy and in_use resources.
+  for (const auto& resource : busy_resources_) {
+    if (resource->content_id() == previous_content_id) {
+      UpdateResourceContentIdAndInvalidation(resource.get(), new_content_id,
+                                             new_invalidated_rect);
+    }
+  }
+  for (const auto& resource_pair : in_use_resources_) {
+    PoolResource* resource = resource_pair.second.get();
+    if (resource->content_id() == previous_content_id) {
+      UpdateResourceContentIdAndInvalidation(resource, new_content_id,
+                                             new_invalidated_rect);
+    }
+  }
+
+  // If we found an unused resource to return earlier, move it to
+  // |in_use_resources_| and return it.
+  if (resource_to_return != unused_resources_.end()) {
+    PoolResource* resource = resource_to_return->get();
+    DCHECK(resource_provider_->CanLockForWrite(resource->id()));
+
+    // Transfer resource to |in_use_resources_|.
+    in_use_resources_[resource->id()] = std::move(*resource_to_return);
+    unused_resources_.erase(resource_to_return);
+    in_use_memory_usage_bytes_ += ResourceUtil::UncheckedSizeInBytes<size_t>(
+        resource->size(), resource->format());
+    *total_invalidated_rect = resource->invalidated_rect();
+
+    // Clear the invalidated rect and content ID on the resource being retunred.
+    // These will be updated when raster completes successfully.
+    resource->set_invalidated_rect(gfx::Rect());
+    resource->set_content_id(0);
+    return resource;
+  }
+
+  return nullptr;
+}
+
+void ResourcePool::ReleaseResource(Resource* resource) {
   // Ensure that the provided resource is valid.
   // TODO(ericrk): Remove this once we've investigated further.
   // crbug.com/598286.
@@ -202,7 +280,6 @@ void ResourcePool::ReleaseResource(Resource* resource, uint64_t content_id) {
   CHECK(it->second.get());
 
   PoolResource* pool_resource = it->second.get();
-  pool_resource->set_content_id(content_id);
   pool_resource->set_last_usage(base::TimeTicks::Now());
 
   // Transfer resource to |busy_resources_|.
@@ -214,6 +291,14 @@ void ResourcePool::ReleaseResource(Resource* resource, uint64_t content_id) {
   // Now that we have evictable resources, schedule an eviction call for this
   // resource if necessary.
   ScheduleEvictExpiredResourcesIn(resource_expiration_delay_);
+}
+
+void ResourcePool::OnContentReplaced(ResourceId resource_id,
+                                     uint64_t content_id) {
+  auto found = in_use_resources_.find(resource_id);
+  DCHECK(found != in_use_resources_.end());
+  found->second->set_content_id(content_id);
+  found->second->set_invalidated_rect(gfx::Rect());
 }
 
 void ResourcePool::SetResourceUsageLimits(size_t max_memory_usage_bytes,
@@ -253,6 +338,18 @@ void ResourcePool::DeleteResource(std::unique_ptr<PoolResource> resource) {
       resource->size(), resource->format());
   total_memory_usage_bytes_ -= resource_bytes;
   --total_resource_count_;
+}
+
+void ResourcePool::UpdateResourceContentIdAndInvalidation(
+    PoolResource* resource,
+    uint64_t new_content_id,
+    const gfx::Rect& new_invalidated_rect) {
+  gfx::Rect updated_invalidated_rect = new_invalidated_rect;
+  if (!resource->invalidated_rect().IsEmpty())
+    updated_invalidated_rect.Union(resource->invalidated_rect());
+
+  resource->set_content_id(new_content_id);
+  resource->set_invalidated_rect(updated_invalidated_rect);
 }
 
 void ResourcePool::CheckBusyResources() {

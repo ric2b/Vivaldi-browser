@@ -9,6 +9,7 @@
 // handle. Call sites must check IsEmpty() before using return value.
 
 #include "bindings/core/v8/DOMDataStore.h"
+#include "bindings/core/v8/IDLDictionaryBase.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
@@ -36,7 +37,9 @@ inline v8::Local<v8::Value> toV8(ScriptWrappable* impl, v8::Local<v8::Object> cr
     if (!wrapper.IsEmpty())
         return wrapper;
 
-    return impl->wrap(isolate, creationContext);
+    wrapper = impl->wrap(isolate, creationContext);
+    DCHECK(!wrapper.IsEmpty());
+    return wrapper;
 }
 
 inline v8::Local<v8::Value> toV8(Node* impl, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)
@@ -47,7 +50,9 @@ inline v8::Local<v8::Value> toV8(Node* impl, v8::Local<v8::Object> creationConte
     if (!wrapper.IsEmpty())
         return wrapper;
 
-    return ScriptWrappable::fromNode(impl)->wrap(isolate, creationContext);
+    wrapper = ScriptWrappable::fromNode(impl)->wrap(isolate, creationContext);
+    DCHECK(!wrapper.IsEmpty());
+    return wrapper;
 }
 
 // Special versions for DOMWindow, WorkerOrWorkletGlobalScope and EventTarget
@@ -191,6 +196,11 @@ inline v8::Local<v8::Value> toV8(const Dictionary& value, v8::Local<v8::Object> 
 {
     RELEASE_NOTREACHED();
     return v8::Local<v8::Value>();
+}
+
+inline v8::Local<v8::Value> toV8(const IDLDictionaryBase& value, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)
+{
+    return value.toV8Impl(creationContext, isolate);
 }
 
 // Array

@@ -8,6 +8,7 @@
 #include "chrome/browser/chromeos/login/ui/captive_portal_view.h"
 #include "chrome/browser/chromeos/login/ui/proxy_settings_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "components/constrained_window/constrained_window_views.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
@@ -74,14 +75,14 @@ void CaptivePortalWindowProxy::Show() {
   InitCaptivePortalView();
 
   CaptivePortalView* portal = captive_portal_view_.release();
-  auto manager =
+  auto* manager =
       web_modal::WebContentsModalDialogManager::FromWebContents(web_contents_);
   widget_ = CreateWindowAsFramelessChild(
       portal,
       manager->delegate()->GetWebContentsModalDialogHost()->GetHostView());
   portal->Init();
   widget_->AddObserver(this);
-  manager->ShowModalDialog(widget_->GetNativeView());
+  constrained_window::ShowModalDialog(widget_->GetNativeView(), web_contents_);
 }
 
 void CaptivePortalWindowProxy::Close() {

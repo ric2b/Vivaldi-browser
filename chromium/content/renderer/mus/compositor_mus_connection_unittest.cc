@@ -10,8 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
-#include "components/mus/public/cpp/tests/test_window.h"
-#include "content/common/input/did_overscroll_params.h"
 #include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/test/mock_render_thread.h"
@@ -21,15 +19,17 @@
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #include "content/renderer/render_widget.h"
 #include "content/test/fake_compositor_dependencies.h"
-#include "content/test/fake_renderer_scheduler.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/ui/public/cpp/tests/test_window.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/scheduler/test/fake_renderer_scheduler.h"
+#include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/mojo/event.mojom.h"
 #include "ui/events/mojo/event_constants.mojom.h"
 #include "ui/events/mojo/keyboard_codes.mojom.h"
 
-using mus::mojom::EventResult;
+using ui::mojom::EventResult;
 
 namespace {
 
@@ -66,7 +66,7 @@ class TestInputHandlerManager : public content::InputHandlerManager {
   TestInputHandlerManager(
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       content::InputHandlerManagerClient* client,
-      scheduler::RendererScheduler* renderer_scheduler)
+      blink::scheduler::RendererScheduler* renderer_scheduler)
       : InputHandlerManager(task_runner, client, nullptr, renderer_scheduler),
         override_result_(false),
         result_(content::InputEventAckState::INPUT_EVENT_ACK_STATE_UNKNOWN) {}
@@ -126,9 +126,14 @@ class TestInputHandlerManagerClient
   void RegisterRoutingID(int routing_id) override {}
   void UnregisterRoutingID(int routing_id) override {}
   void DidOverscroll(int routing_id,
-                     const content::DidOverscrollParams& params) override {}
+                     const ui::DidOverscrollParams& params) override {}
   void DidStartFlinging(int routing_id) override {}
   void DidStopFlinging(int routing_id) override {}
+  void DispatchNonBlockingEventToMainThread(
+      int routing_id,
+      ui::ScopedWebInputEvent event,
+      const ui::LatencyInfo& latency_info) override {}
+
   void NotifyInputEventHandled(
       int routing_id,
       blink::WebInputEvent::Type type,
@@ -220,7 +225,7 @@ class CompositorMusConnectionTest : public testing::Test {
 
   // Calls CompositorMusConnection::OnWindowInputEvent.
   void OnWindowInputEvent(
-      mus::Window* window,
+      ui::Window* window,
       const ui::Event& event,
       std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback);
 
@@ -248,10 +253,10 @@ class CompositorMusConnectionTest : public testing::Test {
   // Mocks/Fakes of the testing environment.
   TestInputHandlerManagerClient input_handler_manager_client_;
   FakeCompositorDependencies compositor_dependencies_;
-  FakeRendererScheduler renderer_scheduler_;
+  blink::scheduler::FakeRendererScheduler renderer_scheduler_;
   MockRenderThread render_thread_;
   scoped_refptr<TestRenderWidget> render_widget_;
-  mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request_;
+  mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request_;
 
   // Not owned, RenderWidgetMusConnection tracks in static state. Cleared during
   // TearDown.
@@ -277,7 +282,7 @@ std::unique_ptr<ui::Event> CompositorMusConnectionTest::GenerateKeyEvent() {
 }
 
 void CompositorMusConnectionTest::OnWindowInputEvent(
-    mus::Window* window,
+    ui::Window* window,
     const ui::Event& event,
     std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback) {
   compositor_connection_->OnWindowInputEvent(window, event, ack_callback);
@@ -336,7 +341,7 @@ TEST_F(CompositorMusConnectionTest, NotConsumed) {
   input_handler->set_state(
       InputEventAckState::INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   std::unique_ptr<ui::Event> event(GenerateKeyEvent());
   scoped_refptr<TestCallback> test_callback(new TestCallback);
   std::unique_ptr<base::Callback<void(EventResult)>> ack_callback(
@@ -363,7 +368,7 @@ TEST_F(CompositorMusConnectionTest, Consumed) {
   input_handler->set_delegate(connection());
   input_handler->set_state(InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
 
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   std::unique_ptr<ui::Event> event(GenerateKeyEvent());
   scoped_refptr<TestCallback> test_callback(new TestCallback);
   std::unique_ptr<base::Callback<void(EventResult)>> ack_callback(
@@ -385,7 +390,7 @@ TEST_F(CompositorMusConnectionTest, Consumed) {
 // Tests that when the RenderWidgetInputHandler does not ack before a new event
 // arrives, that only the most recent ack is fired.
 TEST_F(CompositorMusConnectionTest, LostAck) {
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   std::unique_ptr<ui::Event> event1(GenerateKeyEvent());
   scoped_refptr<TestCallback> test_callback1(new TestCallback);
   std::unique_ptr<base::Callback<void(EventResult)>> ack_callback1(
@@ -424,7 +429,7 @@ TEST_F(CompositorMusConnectionTest, LostAck) {
 TEST_F(CompositorMusConnectionTest, InputHandlerConsumes) {
   input_handler_manager()->SetHandleInputEventResult(
       InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   std::unique_ptr<ui::Event> event(GenerateKeyEvent());
   scoped_refptr<TestCallback> test_callback(new TestCallback);
   std::unique_ptr<base::Callback<void(EventResult)>> ack_callback(
@@ -441,9 +446,9 @@ TEST_F(CompositorMusConnectionTest, InputHandlerConsumes) {
 // Tests that when the renderer will not ack an event, that
 // CompositorMusConnection does not consume the ack, nor calls it.
 TEST_F(CompositorMusConnectionTest, RendererWillNotSendAck) {
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   ui::PointerEvent event(
-      ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_NONE, 0,
+      ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_NONE, 0, 0,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE),
       ui::EventTimeForNow());
 
@@ -466,9 +471,9 @@ TEST_F(CompositorMusConnectionTest, TouchEventConsumed) {
   input_handler->set_delegate(connection());
   input_handler->set_state(InputEventAckState::INPUT_EVENT_ACK_STATE_CONSUMED);
 
-  mus::TestWindow test_window;
+  ui::TestWindow test_window;
   ui::PointerEvent event(
-      ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_NONE, 0,
+      ui::ET_POINTER_DOWN, gfx::Point(), gfx::Point(), ui::EF_NONE, 0, 0,
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH),
       ui::EventTimeForNow());
 

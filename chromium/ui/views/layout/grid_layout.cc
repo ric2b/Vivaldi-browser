@@ -374,7 +374,7 @@ ColumnSet::ColumnSet(int id) : id_(id) {
 }
 
 ColumnSet::~ColumnSet() {
-  STLDeleteElements(&columns_);
+  base::STLDeleteElements(&columns_);
 }
 
 void ColumnSet::AddPaddingColumn(float resize_percent, int width) {
@@ -662,9 +662,9 @@ GridLayout::GridLayout(View* host)
 }
 
 GridLayout::~GridLayout() {
-  STLDeleteElements(&column_sets_);
-  STLDeleteElements(&view_states_);
-  STLDeleteElements(&rows_);
+  base::STLDeleteElements(&column_sets_);
+  base::STLDeleteElements(&view_states_);
+  base::STLDeleteElements(&rows_);
 }
 
 // static
@@ -937,8 +937,8 @@ void GridLayout::SizeRowsAndColumns(bool layout, int width, int height,
   LayoutElement::CalculateLocationsFromSize(&rows_);
 
   // We now know the preferred height, set it here.
-  pref->set_height(rows_[rows_.size() - 1]->Location() +
-      rows_[rows_.size() - 1]->Size() + insets_.height());
+  pref->set_height(rows_.back()->Location() + rows_.back()->Size() +
+                   insets_.height());
 
   if (layout && height != pref->height()) {
     // We're doing a layout, and the height differs from the preferred height,

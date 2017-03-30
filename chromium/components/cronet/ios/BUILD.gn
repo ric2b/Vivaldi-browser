@@ -4,6 +4,8 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/ios/rules.gni")
+import("//build/config/mac/symbols.gni")
+import("//build/mac/tweak_info_plist.gni")
 import("//build/util/version.gni")
 import("//chrome/version.gni")
 import("//testing/test.gni")
@@ -38,6 +40,8 @@ source_set("cronet_sources") {
   sources = [
     "../histogram_manager.cc",
     "../histogram_manager.h",
+    "../stale_host_resolver.cc",
+    "../stale_host_resolver.h",
     "../url_request_context_config.cc",
     "../url_request_context_config.h",
     "cronet_bidirectional_stream.cc",
@@ -53,16 +57,21 @@ source_set("cronet_sources") {
   }
 }
 
+# Tweak |info_plist| with current version and revision.
+tweak_info_plist("tweak_cronet_plist") {
+  info_plist = "Info.plist"
+  args = []
+}
+
 ios_framework_bundle("cronet_framework") {
   output_name = "Cronet"
+  info_plist_target = ":tweak_cronet_plist"
 
   deps = [
     ":cronet_sources",
     "//base",
     "//net:net",
   ]
-
-  info_plist = "Info.plist"
 
   libs = [ "UIKit.Framework" ]
 
@@ -75,6 +84,9 @@ ios_framework_bundle("cronet_framework") {
     "Cronet.h",
     "Cronet.mm",
   ]
+
+  configs -= [ "//build/config/compiler:default_symbols" ]
+  configs += [ "//build/config/compiler:symbols" ]
 }
 
 bundle_data("cronet_test_bundle_data") {
@@ -116,6 +128,7 @@ test("cronet_unittests") {
   sources = [
     "//components/cronet/histogram_manager_unittest.cc",
     "//components/cronet/run_all_unittests.cc",
+    "//components/cronet/stale_host_resolver_unittest.cc",
     "//components/cronet/url_request_context_config_unittest.cc",
   ]
 
@@ -129,42 +142,48 @@ test("cronet_unittests") {
   ]
 }
 
-_package_dir = "$root_out_dir/cronet"
+if (additional_toolchains == [] || current_toolchain == default_toolchain) {
+  _package_dir = "$root_out_dir/cronet"
 
-action("generate_license") {
-  _license_path = "$_package_dir/LICENSE"
+  action("generate_license") {
+    _license_path = "$_package_dir/LICENSE"
 
-  script = "//components/cronet/tools/cronet_licenses.py"
-  outputs = [
-    _license_path,
-  ]
-  args = [
-    "license",
-    rebase_path(_license_path, root_build_dir),
-    "--gn",
-  ]
-}
+    script = "//components/cronet/tools/cronet_licenses.py"
+    inputs = [
+      "//build/util/LASTCHANGE",
+      "//buildtools/$host_os/gn",
+    ]
+    outputs = [
+      _license_path,
+    ]
+    args = [
+      "license",
+      rebase_path(_license_path, root_build_dir),
+      "--gn",
+      "--gn-path",
+      rebase_path("//buildtools/$host_os/gn", root_build_dir),
+    ]
+  }
 
-copy("cronet_package_copy") {
-  sources = [
-    "$root_out_dir/Cronet.framework",
-    "//AUTHORS",
-    "//chrome/VERSION",
-    "//components/cronet/ios/Cronet.h",
-    "//components/cronet/ios/cronet_c_for_grpc.h",
-  ]
-  outputs = [
-    "$_package_dir/{{source_file_part}}",
-  ]
+  copy("cronet_package_copy") {
+    sources = [
+      "$root_out_dir/Cronet.framework",
+      "//AUTHORS",
+      "//chrome/VERSION",
+    ]
+    outputs = [
+      "$_package_dir/{{source_file_part}}",
+    ]
 
-  deps = [
-    ":cronet_framework",
-  ]
-}
+    deps = [
+      ":cronet_framework",
+    ]
+  }
 
-group("cronet_package") {
-  deps = [
-    ":cronet_package_copy",
-    ":generate_license",
-  ]
+  group("cronet_package") {
+    deps = [
+      ":cronet_package_copy",
+      ":generate_license",
+    ]
+  }
 }

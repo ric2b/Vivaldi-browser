@@ -284,6 +284,7 @@ class CONTENT_EXPORT NavigationControllerImpl
   void RendererDidNavigateToNewPage(
       RenderFrameHostImpl* rfh,
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+      bool is_in_page,
       bool replace_entry);
   void RendererDidNavigateToExistingPage(
       RenderFrameHostImpl* rfh,
@@ -294,6 +295,7 @@ class CONTENT_EXPORT NavigationControllerImpl
   void RendererDidNavigateNewSubframe(
       RenderFrameHostImpl* rfh,
       const FrameHostMsg_DidCommitProvisionalLoad_Params& params,
+      bool is_in_page,
       bool replace_entry);
   bool RendererDidNavigateAutoSubframe(
       RenderFrameHostImpl* rfh,
@@ -344,10 +346,6 @@ class CONTENT_EXPORT NavigationControllerImpl
   // RenderView.  Callers must ensure that |CanPruneAllButLastCommitted| returns
   // true before calling this.
   void PruneAllButLastCommittedInternal();
-
-  // Returns true if the navigation is likley to be automatic rather than
-  // user-initiated.
-  bool IsLikelyAutoNavigation(base::TimeTicks now);
 
   // Inserts up to |max_index| entries from |source| into this. This does NOT
   // adjust any of the members that reference entries_

@@ -19,10 +19,13 @@
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/arc/arc_bridge_host_impl.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
 namespace arc {
+
+extern ArcBridgeService* g_arc_bridge_service;
 
 namespace {
 constexpr int64_t kReconnectDelayInSeconds = 5;
@@ -31,13 +34,17 @@ constexpr int64_t kReconnectDelayInSeconds = 5;
 ArcBridgeServiceImpl::ArcBridgeServiceImpl(
     std::unique_ptr<ArcBridgeBootstrap> bootstrap)
     : bootstrap_(std::move(bootstrap)),
-      binding_(this),
       session_started_(false),
       weak_factory_(this) {
+  DCHECK(!g_arc_bridge_service);
+  g_arc_bridge_service = this;
   bootstrap_->set_delegate(this);
 }
 
-ArcBridgeServiceImpl::~ArcBridgeServiceImpl() {}
+ArcBridgeServiceImpl::~ArcBridgeServiceImpl() {
+  DCHECK(g_arc_bridge_service == this);
+  g_arc_bridge_service = nullptr;
+}
 
 void ArcBridgeServiceImpl::HandleStartup() {
   DCHECK(CalledOnValidThread());
@@ -65,17 +72,16 @@ void ArcBridgeServiceImpl::PrerequisitesChanged() {
   DCHECK(CalledOnValidThread());
   VLOG(1) << "Prerequisites changed. "
           << "state=" << static_cast<uint32_t>(state())
-          << ", available=" << available()
           << ", session_started=" << session_started_;
   if (state() == State::STOPPED) {
-    if (!available() || !session_started_)
+    if (!session_started_)
       return;
     VLOG(0) << "Prerequisites met, starting ARC";
     SetStopReason(StopReason::SHUTDOWN);
     SetState(State::CONNECTING);
     bootstrap_->Start();
   } else {
-    if (available() && session_started_)
+    if (session_started_)
       return;
     VLOG(0) << "Prerequisites stopped being met, stopping ARC";
     StopInstance();
@@ -91,22 +97,11 @@ void ArcBridgeServiceImpl::StopInstance() {
 
   VLOG(1) << "Stopping ARC";
   SetState(State::STOPPING);
-  instance_ptr_.reset();
-  if (binding_.is_bound())
-    binding_.Close();
+  arc_bridge_host_.reset();
   bootstrap_->Stop();
 
   // We were explicitly asked to stop, so do not reconnect.
   reconnect_ = false;
-}
-
-void ArcBridgeServiceImpl::SetDetectedAvailability(bool arc_available) {
-  DCHECK(CalledOnValidThread());
-  if (available() == arc_available)
-    return;
-  VLOG(1) << "ARC available: " << arc_available;
-  SetAvailable(arc_available);
-  PrerequisitesChanged();
 }
 
 void ArcBridgeServiceImpl::OnConnectionEstablished(
@@ -117,11 +112,7 @@ void ArcBridgeServiceImpl::OnConnectionEstablished(
     return;
   }
 
-  instance_ptr_ = std::move(instance);
-  instance_ptr_.set_connection_error_handler(base::Bind(
-      &ArcBridgeServiceImpl::OnChannelClosed, weak_factory_.GetWeakPtr()));
-
-  instance_ptr_->Init(binding_.CreateInterfacePtrAndBind());
+  arc_bridge_host_.reset(new ArcBridgeHostImpl(std::move(instance)));
 
   // The container can be considered to have been successfully launched, so
   // restart if the connection goes down without being requested.
@@ -132,9 +123,11 @@ void ArcBridgeServiceImpl::OnConnectionEstablished(
 
 void ArcBridgeServiceImpl::OnStopped(StopReason stop_reason) {
   DCHECK(CalledOnValidThread());
+  arc_bridge_host_.reset();
   SetStopReason(stop_reason);
   SetState(State::STOPPED);
   VLOG(0) << "ARC stopped";
+
   if (reconnect_) {
     // There was a previous invocation and it crashed for some reason. Try
     // starting the container again.
@@ -153,19 +146,6 @@ void ArcBridgeServiceImpl::OnStopped(StopReason stop_reason) {
       PrerequisitesChanged();
     }
   }
-}
-
-void ArcBridgeServiceImpl::OnChannelClosed() {
-  DCHECK(CalledOnValidThread());
-  if (state() == State::STOPPED || state() == State::STOPPING) {
-    // This will happen when the instance is shut down. Ignore that case.
-    return;
-  }
-  VLOG(1) << "Mojo connection lost";
-  instance_ptr_.reset();
-  if (binding_.is_bound())
-    binding_.Close();
-  CloseAllChannels();
 }
 
 }  // namespace arc

@@ -43,6 +43,8 @@ cr.define('extensions', function() {
   var Manager = Polymer({
     is: 'extensions-manager',
 
+    behaviors: [I18nBehavior],
+
     properties: {
       /** @type {extensions.Sidebar} */
       sidebar: Object,
@@ -73,10 +75,6 @@ cr.define('extensions', function() {
       },
     },
 
-    behaviors: [
-      I18nBehavior,
-    ],
-
     listeners: {
       'items-list.extension-item-show-details': 'showItemDetails_',
     },
@@ -92,6 +90,14 @@ cr.define('extensions', function() {
       this.listHelper_ = new ListHelper(this);
       this.sidebar.setListDelegate(this.listHelper_);
       this.readyPromiseResolver.resolve();
+    },
+
+    get keyboardShortcuts() {
+      return this.$['keyboard-shortcuts'];
+    },
+
+    get packDialog() {
+      return this.$['pack-dialog'];
     },
 
     /**
@@ -275,7 +281,7 @@ cr.define('extensions', function() {
           break;
       }
 
-      this.manager_.$['items-list'].set('items', assert(items));
+      this.manager_.$/* hack */ ['items-list'].set('items', assert(items));
       this.manager_.changePage(Page.ITEM_LIST);
     },
 
@@ -286,7 +292,7 @@ cr.define('extensions', function() {
 
     /** @override */
     showPackDialog: function() {
-      this.manager_.$['pack-dialog'].show();
+      this.manager_.packDialog.show();
     }
   };
 

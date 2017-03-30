@@ -197,7 +197,7 @@ void ScrollbarTheme::paintScrollCorner(GraphicsContext& context, const DisplayIt
 
 bool ScrollbarTheme::shouldCenterOnThumb(const ScrollbarThemeClient& scrollbar, const PlatformMouseEvent& evt)
 {
-    return Platform::current()->scrollbarBehavior()->shouldCenterOnThumb(static_cast<WebScrollbarBehavior::Button>(evt.button()), evt.shiftKey(), evt.altKey());
+    return Platform::current()->scrollbarBehavior()->shouldCenterOnThumb(evt.pointerProperties().button, evt.shiftKey(), evt.altKey());
 }
 
 bool ScrollbarTheme::shouldSnapBackToDragOrigin(const ScrollbarThemeClient& scrollbar, const PlatformMouseEvent& evt)
@@ -295,6 +295,10 @@ void ScrollbarTheme::splitTrack(const ScrollbarThemeClient& scrollbar, const Int
 
 ScrollbarTheme& ScrollbarTheme::theme()
 {
+    if (RuntimeEnabledFeatures::hideScrollbarsEnabled()) {
+        DEFINE_STATIC_LOCAL(ScrollbarThemeOverlayMock, hiddenMockTheme, (ScrollbarThemeOverlayMock::HideScrollbars));
+        return hiddenMockTheme;
+    }
     if (ScrollbarTheme::mockScrollbarsEnabled()) {
         if (RuntimeEnabledFeatures::overlayScrollbarsEnabled()) {
             DEFINE_STATIC_LOCAL(ScrollbarThemeOverlayMock, overlayMockTheme, ());

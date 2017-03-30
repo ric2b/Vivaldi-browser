@@ -23,6 +23,7 @@ from grit import util
 PRINT_NONE = None
 PRINT_ALL = "ALL"
 WRITE_GRD_FILES = "write grdfiles"
+SETUP_RESOURCES = "setup resources"
 PRINT_MAIN_SOURCES= "list main sources"
 PRINT_SECONDARY_SOURCES = "list secondary sources"
 PRINT_MAIN_RESOURCES= "list main resources"
@@ -157,13 +158,15 @@ class GritFile(dict):
       cur_node.mixed_content = []
 
   def Load(self, filename, params = {},
-           output_file_name=None, extra_languages=None):
+           output_file_name=None, extra_languages=None,
+           load_translations = True):
     self.filename_base = os.path.splitext(
            output_file_name or os.path.basename(filename))[0]
     self.orig_filename_base= os.path.splitext(os.path.basename(filename))[0]
     self.filedir = os.path.dirname(filename)
     self.resources = self.__load_resource(filename,
-            params,extra_languages=extra_languages)
+            params,extra_languages=extra_languages,
+            load_translations = load_translations)
     #self.all_source_files.add(filename)
     file_list = ScanDir(self.filedir)
     for x in file_list:
@@ -182,10 +185,10 @@ class GritFile(dict):
       new_top.attrs = dict(old_top.attrs)
 
       for old_node in iter_gritnode(old_top, io.OutputNode):
-        if (self.orig_filename_base != self.filename_base and
-            old_node.attrs.get("type", None) == "data_package"):
-          old_node.attrs["filename"] = old_node.attrs["filename"].replace(
-                      self.orig_filename_base+"_", self.filename_base+"_")
+        #if (self.orig_filename_base != self.filename_base and
+        #    old_node.attrs.get("type", None) == "data_package"):
+        #  old_node.attrs["filename"] = old_node.attrs["filename"].replace(
+        #              self.orig_filename_base+"_", self.filename_base+"_")
         #if self.orig_filename_base == "components_google_chrome_strings":
         #  print >>sys.stderr, old_node.attrs["filename"]
 
@@ -293,7 +296,8 @@ class GritFile(dict):
 
         self["structure-entries"][new_node.attrs["name"]] = (_seq, new_node)
 
-  def __load_resource(self, filename, params = {}, extra_languages=None):
+  def __load_resource(self, filename, params = {}, extra_languages=None,
+                      load_translations = True):
     global sequence_number
     resources = grd_reader.Parse(filename, **params)
 
@@ -302,7 +306,8 @@ class GritFile(dict):
       extra_languages.parent = resources
 
     resources.SetOutputLanguage('en')
-    resources.RunGatherers()
+    if load_translations:
+      resources.RunGatherers()
 
     active_resources = {"internals":{}}
     for node in resources.ActiveDescendants():
@@ -334,7 +339,9 @@ class GritFile(dict):
           continue
         node.mixed_content[index] = matcher.sub(replace_with, part)
         #if matcher.search(part):
-        #  print >>sys.stderr, "Replaced", name, "string |", part.encode("utf8"), "| with |", node.mixed_content[index].encode("utf8") , "|"
+        #  print >>sys.stderr, "Replaced", name, "string |",\
+        #         part.encode("utf8"), "| with |",\
+        #         node.mixed_content[index].encode("utf8") , "|"
       for part in node.children:
         if isinstance(part, (str, unicode)) and matcher.search(part):
           raise Exception("Child of "+name+" still had Google string")
@@ -352,7 +359,9 @@ class GritFile(dict):
               continue
             parts[index] = matcher.sub(replace_with, part)
             #if matcher.search(part):
-            #  print >>sys.stderr, "Replaced", name, " translate |", part.encode("utf8"), "| with |", parts[index].encode("utf8"), "|"
+            #  print >>sys.stderr, "Replaced", name, " translate |",\
+            #        part.encode("utf8"), "| with |",\
+            #        parts[index].encode("utf8"), "|"
           for part in tmessage.GetContent():
             if isinstance(part, (str, unicode)) and matcher.search(part):
               raise Exception("Translation of "+name+" still had Google string")
@@ -383,7 +392,8 @@ class GritFile(dict):
       prnt = cur_node.parent or top_node
       _deleted= False
       #if name == "IDS_TERMS_HTML":
-      #  print >>sys.stderr, "searching for IDS_TERMS_HTML. Number of items", len(prnt.children)
+      #  print >>sys.stderr, "searching for IDS_TERMS_HTML. Number of items",\
+      #        len(prnt.children)
       try:
         for idx in reversed(range(0, len(prnt.children))):
           if prnt.children[idx].attrs.get("name", None) == name:
@@ -394,7 +404,8 @@ class GritFile(dict):
             del prnt.mixed_content[idx]
             _deleted = True
       except:
-        print >>sys.stderr, "deleting", name, "item", idx, "from", prnt.attrs, "failed"
+        print >>sys.stderr, "deleting", name, "item", idx, "from", prnt.attrs,\
+              "failed"
         raise
 
       if not _deleted:
@@ -413,7 +424,7 @@ class GritFile(dict):
     top_node.AddChild(new_node)
     new_node.parent = top_node
 
-  def Update(self, other):
+  def Update(self, other, load_translations = True):
     self.active_other_files.update(other.active_source_files)
     if "outputs" in other and "outputs" not in self:
       self["outputs"] = other["outputs"]
@@ -438,7 +449,8 @@ class GritFile(dict):
         self.__replace_node(seq_node[1],
                             self["includes"])
       if name in self.get("include-files", {}):
-        self["include-files"][name] = (self["include-files"][name][0], seq_node[1])
+        self["include-files"][name] = (self["include-files"][name][0],
+                                       seq_node[1])
       else:
         self.setdefault("include-files", {})[name] = seq_node
 
@@ -453,7 +465,8 @@ class GritFile(dict):
                             self["messages"])
 
       if name in self.get("message-entries", {}):
-        self["message-entries"][name] = (self["message-entries"][name][0], seq_node[1])
+        self["message-entries"][name] = (self["message-entries"][name][0],
+                                         seq_node[1])
       else:
         self.setdefault("message-entries", {})[name] = seq_node
 
@@ -467,11 +480,12 @@ class GritFile(dict):
         self.__replace_node(seq_node[1],
                             self["structures"])
       if name in self["structure-entries"]:
-        self["structure-entries"][name] = (self["structure-entries"][name][0], seq_node[1])
+        self["structure-entries"][name] = (self["structure-entries"][name][0],
+                                           seq_node[1])
       else:
         self["structure-entries"][name] = seq_node
 
-    translations = self.Translations()
+    translations = self.Translations() if load_translations  else None
     translations_node = None
     for lang, translation in sorted((translations or {}).iteritems()):
       if not translation or lang == "en" or lang == "x-P-pseudo":
@@ -650,19 +664,23 @@ class GritFile(dict):
 
 def merge_resource(origin_file, overlay_file, target_location, params = {},
                    action=PRINT_NONE, json_file=None, root_dir=None,
-                   translation_dir="resources", output_file_name=None):
+                   translation_dir="resources", output_file_name=None,
+                   translation_stamp=None):
   mergeresource = GritFile(translation_dir=translation_dir)
-  mergeresource.Load(overlay_file, params, output_file_name=output_file_name)
+  mergeresource.Load(overlay_file, params, output_file_name=output_file_name,
+                     load_translations = (action != SETUP_RESOURCES))
 
   extra_translations = mergeresource.GetTranslationsCopy()
 
   mainresource = GritFile(translation_dir=translation_dir, keep_sequence=True)
   mainresource.Load(origin_file, params, output_file_name=output_file_name,
-                    extra_languages=extra_translations)
+                    extra_languages=extra_translations,
+                    load_translations = (action != SETUP_RESOURCES))
   if action in [WRITE_GRD_FILES, PRINT_ALL]:
     mainresource.ReplaceGoogle(exceptions=REPLACE_GOOGLE_EXCEPTIONS)
 
-  mainresource.Update(mergeresource)
+  mainresource.Update(mergeresource,
+                     load_translations = (action != SETUP_RESOURCES))
 
   new_resource = mainresource.GritNode()
 
@@ -674,48 +692,52 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
   except:
     pass # Just ignore the errors here. Most likely the dir exists,
          # otherwise next step will fail instead
-  translations = mainresource.Translations()
-  for lang, translation in translations.iteritems():
-    if lang == "en" or lang == "x-P-pseudo":
-      continue # found in the grd file
+  if action in [WRITE_GRD_FILES, PRINT_ALL]:
+    translations = mainresource.Translations()
+    for lang, translation in translations.iteritems():
+      if lang == "en" or lang == "x-P-pseudo":
+        continue # found in the grd file
+      if action == PRINT_ALL:
+        print
+        print "Writing generated language file",\
+               mainresource.GetLanguageFileName(lang)
+        print "*"*40
+      xtb_filename = os.path.join(target_location,
+                                  mainresource.GetLanguageFileName(lang))
+      xtbfile = cStringIO.StringIO()
+      xtbfile.write("""<?xml version="1.0" encoding="utf-8" ?>\n"""
+                    """<!DOCTYPE translationbundle>\n"""
+                    """<translationbundle lang="%s">""" % lang)
+      for msgid, text in sorted(translation.iteritems()):
+        try:
+          xtbfile.write((u"""<translation id="%s">%s</translation>\n""" %
+                          (msgid, text)).encode("utf8"))
+        except:
+          print >>sys.stderr, repr(msgid), "|", repr(text), "|",\
+                repr(text.encode("utf8"))
+          raise
+      xtbfile.write("</translationbundle>\n")
+      refresh_file.conditional_refresh_file(xtb_filename, xtbfile.getvalue(),
+                                            translation_stamp)
+      xtbfile.close()
+
+
     if action == PRINT_ALL:
       print
-      print "Writing generated language file", mainresource.GetLanguageFileName(lang)
+      print "Writing generated file", resource_target_file
       print "*"*40
-    xtb_filename = os.path.join(target_location,
-                                mainresource.GetLanguageFileName(lang))
-    xtbfile = cStringIO.StringIO()
-    xtbfile.write("""<?xml version="1.0" encoding="utf-8" ?>\n"""
-                  """<!DOCTYPE translationbundle>\n"""
-                  """<translationbundle lang="%s">""" % lang)
-    for msgid, text in sorted(translation.iteritems()):
-      try:
-        xtbfile.write((u"""<translation id="%s">%s</translation>\n""" %
-                        (msgid, text)).encode("utf8"))
-      except:
-        print >>sys.stderr, repr(msgid), "|", repr(text), "|", repr(text.encode("utf8"))
-        raise
-    xtbfile.write("</translationbundle>\n")
-    refresh_file.conditional_refresh_file(xtb_filename, xtbfile.getvalue())
-    xtbfile.close()
+    content = new_resource.FormatXml("  ", False)
+    grd_filename = os.path.join(target_location, resource_target_file)
+    grdfile = cStringIO.StringIO()
+    grdfile.write("""<?xml version="1.0" encoding="utf-8"?>\n""")
+    grdfile.write(content.encode("utf8"))
+    refresh_file.conditional_refresh_file(grd_filename, grdfile.getvalue())
+    grdfile.close()
 
-
-  if action == PRINT_ALL:
-    print
-    print "Writing generated file", resource_target_file
-    print "*"*40
-  content = new_resource.FormatXml("  ", False)
-  grd_filename = os.path.join(target_location, resource_target_file)
-  grdfile = cStringIO.StringIO()
-  grdfile.write("""<?xml version="1.0" encoding="utf-8"?>\n""")
-  grdfile.write(content.encode("utf8"))
-  refresh_file.conditional_refresh_file(grd_filename, grdfile.getvalue())
-  grdfile.close()
-
-  special_update_sources = []
-  special_update_targets = []
-  special_copy_sources = []
-  special_copy_targets = []
+    special_update_sources = []
+    special_update_targets = []
+    special_copy_sources = []
+    special_copy_targets = []
   if json_file and root_dir:
     import update_file
 
@@ -749,41 +771,42 @@ def merge_resource(origin_file, overlay_file, target_location, params = {},
     PRINT_SPECIAL_UPDATE_TARGETS: special_update_targets+special_copy_targets,
   }
 
-  source_dir = os.path.dirname(origin_file)
-  # initial copy, to please HTML flattening by grit
-  for x in sources[PRINT_MAIN_RESOURCES]:
-    try:
+  if action != SETUP_RESOURCES:
+    source_dir = os.path.dirname(origin_file)
+    # initial copy, to please HTML flattening by grit
+    for x in sources[PRINT_MAIN_RESOURCES]:
       try:
-        os.makedirs(os.path.join(target_location, os.path.dirname(x)))
+        try:
+          os.makedirs(os.path.join(target_location, os.path.dirname(x)))
+        except:
+          pass
+        refresh_file.conditional_copy(os.path.join(source_dir,x),
+                                      os.path.join(target_location, x))
+        #print >>sys.stderr, "Copied", x, "to", target_location
+      except shutil.Error:
+        continue # ignore, same file
       except:
+        print >>sys.stderr, "Copying", x, "failed"
+        raise
         pass
-      refresh_file.conditional_copy(os.path.join(source_dir,x),
-                                    os.path.join(target_location, x))
-      #print >>sys.stderr, "Copied", x, "to", target_location
-    except shutil.Error:
-      continue # ignore, same file
-    except:
-      print >>sys.stderr, "Copying", x, "failed"
-      raise
-      pass
 
-  source_dir = os.path.dirname(overlay_file)
-  # initial copy, to please HTML flattening by grit
-  for x in sources[PRINT_SECONDARY_RESOURCES]:
-    try:
+    source_dir = os.path.dirname(overlay_file)
+    # initial copy, to please HTML flattening by grit
+    for x in sources[PRINT_SECONDARY_RESOURCES]:
       try:
-        os.makedirs(os.path.join(target_location, os.path.dirname(x)))
+        try:
+          os.makedirs(os.path.join(target_location, os.path.dirname(x)))
+        except:
+          pass
+        refresh_file.conditional_copy(os.path.join(source_dir,x),
+                                      os.path.join(target_location, x))
+        #print >>sys.stderr, "Copied", x, "to", target_location
+      except shutil.Error:
+        continue # ignore, same file
       except:
+        print >>sys.stderr, "Copying", x, "failed"
+        raise
         pass
-      refresh_file.conditional_copy(os.path.join(source_dir,x),
-                                    os.path.join(target_location, x))
-      #print >>sys.stderr, "Copied", x, "to", target_location
-    except shutil.Error:
-      continue # ignore, same file
-    except:
-      print >>sys.stderr, "Copying", x, "failed"
-      raise
-      pass
 
   json.dump(sources, open(os.path.join(target_location,
                                       "target_info.json"), "w"))
@@ -843,6 +866,8 @@ def DoMain(argv):
   action = argparser.add_mutually_exclusive_group(required=True)
   action.add_argument("--build", action="store_const", dest="action",
                       const=WRITE_GRD_FILES)
+  action.add_argument("--setup", action="store_const", dest="action",
+                      const=SETUP_RESOURCES)
   action.add_argument("--list-main-sources", action="store_const",
                       dest="action", const=PRINT_MAIN_SOURCES)
   action.add_argument("--list-secondary-sources", action="store_const",
@@ -870,6 +895,7 @@ def DoMain(argv):
   argparser.add_argument("--root", default=None)
   argparser.add_argument("--updatejson", default=None)
   argparser.add_argument("--translation", default=None)
+  argparser.add_argument("--translation-stamp", default=None)
   argparser.add_argument("--output-file-name", default=None)
 
   argparser.add_argument("main_resource")
@@ -898,7 +924,7 @@ def DoMain(argv):
     first_ids_file=None, #options.idsfile,
   )
 
-  if options.action in [WRITE_GRD_FILES, PRINT_ALL]:
+  if options.action in [WRITE_GRD_FILES, PRINT_ALL, SETUP_RESOURCES]:
     output = merge_resource(options.main_resource, options.secondary_resource,
                  options.target_dir,
                  action = options.action,
@@ -906,7 +932,8 @@ def DoMain(argv):
                  json_file = options.updatejson,
                  root_dir = options.root,
                  translation_dir=options.translation,
-                 output_file_name=options.output_file_name)
+                 output_file_name=options.output_file_name,
+                 translation_stamp=options.translation_stamp)
   else:
     output = perform_list_actions(options.action, options.target_dir,
                          os.path.dirname(options.main_resource),
@@ -914,6 +941,8 @@ def DoMain(argv):
   return "\n".join(output) if output else ""
 
 if __name__ == '__main__':
+    #import cProfile
+    #cProfile.run("""output = DoMain(sys.argv[1:])""")
     output = DoMain(sys.argv[1:])
     if output:
       print output

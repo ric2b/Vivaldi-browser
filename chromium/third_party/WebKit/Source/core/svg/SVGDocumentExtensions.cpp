@@ -26,7 +26,7 @@
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/svg/SVGSVGElement.h"
 #include "core/svg/animation/SMILTimeContainer.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 #include "wtf/text/AtomicString.h"
 
 namespace blink {
@@ -123,7 +123,7 @@ void SVGDocumentExtensions::startAnimations()
     for (const auto& container : timeContainers) {
         SMILTimeContainer* timeContainer = container->timeContainer();
         if (!timeContainer->isStarted())
-            timeContainer->begin();
+            timeContainer->start();
     }
 }
 
@@ -157,7 +157,7 @@ void SVGDocumentExtensions::reportError(const String& message)
 void SVGDocumentExtensions::addPendingResource(const AtomicString& id, Element* element)
 {
     ASSERT(element);
-    ASSERT(element->inShadowIncludingDocument());
+    ASSERT(element->isConnected());
 
     if (id.isEmpty())
         return;
@@ -319,7 +319,7 @@ void SVGDocumentExtensions::invalidateSVGRootsWithRelativeLengthDescendents(Subt
 {
     ASSERT(!m_inRelativeLengthSVGRootsInvalidation);
 #if ENABLE(ASSERT)
-    TemporaryChange<bool> inRelativeLengthSVGRootsChange(m_inRelativeLengthSVGRootsInvalidation, true);
+    AutoReset<bool> inRelativeLengthSVGRootsChange(&m_inRelativeLengthSVGRootsInvalidation, true);
 #endif
 
     for (SVGSVGElement* element : m_relativeLengthSVGRoots)

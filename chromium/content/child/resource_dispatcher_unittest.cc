@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/shared_memory.h"
@@ -30,6 +31,7 @@
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/resource_response.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -88,7 +90,7 @@ class TestRequestPeer : public RequestPeer {
     EXPECT_TRUE(context_->received_response);
     EXPECT_FALSE(context_->complete);
     context_->data.append(data->payload(), data->length());
-    context_->total_encoded_data_length += data->encoded_length();
+    context_->total_encoded_data_length += data->encoded_data_length();
   }
 
   void OnCompletedRequest(int error_code,
@@ -145,8 +147,8 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
   }
 
   ~ResourceDispatcherTest() override {
-    STLDeleteContainerPairSecondPointers(shared_memory_map_.begin(),
-                                         shared_memory_map_.end());
+    base::STLDeleteContainerPairSecondPointers(shared_memory_map_.begin(),
+                                               shared_memory_map_.end());
     dispatcher_.reset();
     base::RunLoop().RunUntilIdle();
   }
@@ -275,14 +277,22 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
     memcpy(shared_memory_map_[request_id]->memory(), data.c_str(),
            data.length());
 
-    EXPECT_TRUE(dispatcher_->OnMessageReceived(
-        ResourceMsg_DataReceived(request_id, 0, data.length(), data.length())));
+    EXPECT_TRUE(dispatcher_->OnMessageReceived(ResourceMsg_DataReceived(
+        request_id, 0, data.length(), data.length(), data.length())));
   }
 
-  void NotifyDataDownloaded(int request_id, int decoded_length,
-                            int encoded_length) {
+  void NotifyInlinedDataChunkReceived(int request_id,
+                                      const std::vector<char>& data) {
+    auto size = data.size();
+    EXPECT_TRUE(dispatcher_->OnMessageReceived(
+        ResourceMsg_InlinedDataChunkReceived(request_id, data, size, size)));
+  }
+
+  void NotifyDataDownloaded(int request_id,
+                            int decoded_length,
+                            int encoded_data_length) {
     EXPECT_TRUE(dispatcher_->OnMessageReceived(ResourceMsg_DataDownloaded(
-        request_id, decoded_length, encoded_length)));
+        request_id, decoded_length, encoded_data_length)));
   }
 
   void NotifyRequestComplete(int request_id, size_t total_size) {
@@ -321,8 +331,9 @@ class ResourceDispatcherTest : public testing::Test, public IPC::Sender {
                  TestRequestPeer::Context* peer_context) {
     std::unique_ptr<TestRequestPeer> peer(
         new TestRequestPeer(dispatcher(), peer_context));
-    int request_id =
-        dispatcher()->StartAsync(request_info, request_body, std::move(peer));
+    int request_id = dispatcher()->StartAsync(
+        request_info, request_body, std::move(peer),
+        blink::WebURLRequest::LoadingIPCType::ChromeIPC, nullptr);
     peer_context->request_id = request_id;
     return request_id;
   }
@@ -361,6 +372,35 @@ TEST_F(ResourceDispatcherTest, RoundTrip) {
 
   NotifyDataReceived(id, kTestPageContents + kFirstReceiveSize);
   ConsumeDataReceived_ACK(id);
+  EXPECT_EQ(0u, queued_messages());
+
+  NotifyRequestComplete(id, strlen(kTestPageContents));
+  EXPECT_EQ(kTestPageContents, peer_context.data);
+  EXPECT_TRUE(peer_context.complete);
+  EXPECT_EQ(0u, queued_messages());
+}
+
+// A simple request with an inline data response.
+TEST_F(ResourceDispatcherTest, ResponseWithInlinedData) {
+  auto feature_list = base::MakeUnique<base::FeatureList>();
+  feature_list->InitializeFromCommandLine(
+      features::kOptimizeLoadingIPCForSmallResources.name, std::string());
+  base::FeatureList::ClearInstanceForTesting();
+  base::FeatureList::SetInstance(std::move(feature_list));
+  std::unique_ptr<RequestInfo> request_info(CreateRequestInfo(false));
+  TestRequestPeer::Context peer_context;
+  StartAsync(*request_info.get(), NULL, &peer_context);
+
+  int id = ConsumeRequestResource();
+  EXPECT_EQ(0u, queued_messages());
+
+  NotifyReceivedResponse(id);
+  EXPECT_EQ(0u, queued_messages());
+  EXPECT_TRUE(peer_context.received_response);
+
+  std::vector<char> data(kTestPageContents,
+                         kTestPageContents + strlen(kTestPageContents));
+  NotifyInlinedDataChunkReceived(id, data);
   EXPECT_EQ(0u, queued_messages());
 
   NotifyRequestComplete(id, strlen(kTestPageContents));
@@ -479,7 +519,7 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
       std::unique_ptr<RequestPeer> current_peer,
       const std::string& mime_type,
       const GURL& url) override {
-    return base::WrapUnique(new WrapperPeer(std::move(current_peer)));
+    return base::MakeUnique<WrapperPeer>(std::move(current_peer));
   }
 
   class WrapperPeer : public RequestPeer {
@@ -512,8 +552,8 @@ class TestResourceDispatcherDelegate : public ResourceDispatcherDelegate {
                             int64_t total_transfer_size) override {
       original_peer_->OnReceivedResponse(response_info_);
       if (!data_.empty()) {
-        original_peer_->OnReceivedData(base::WrapUnique(
-            new FixedReceivedData(data_.data(), data_.size(), -1)));
+        original_peer_->OnReceivedData(base::MakeUnique<FixedReceivedData>(
+            data_.data(), data_.size(), -1, data_.size()));
       }
       original_peer_->OnCompletedRequest(error_code, was_ignored_by_handler,
                                          stale_copy_in_cache, security_info,
@@ -785,15 +825,15 @@ TEST_F(ResourceDispatcherTest, DownloadToFile) {
   EXPECT_TRUE(peer_context.received_response);
 
   int expected_total_downloaded_length = 0;
-  int expected_total_encoded_length = 0;
+  int expected_total_encoded_data_length = 0;
   for (int i = 0; i < 10; ++i) {
     NotifyDataDownloaded(id, kDownloadedIncrement, kEncodedIncrement);
     ConsumeDataDownloaded_ACK(id);
     expected_total_downloaded_length += kDownloadedIncrement;
-    expected_total_encoded_length += kEncodedIncrement;
+    expected_total_encoded_data_length += kEncodedIncrement;
     EXPECT_EQ(expected_total_downloaded_length,
               peer_context.total_downloaded_data_length);
-    EXPECT_EQ(expected_total_encoded_length,
+    EXPECT_EQ(expected_total_encoded_data_length,
               peer_context.total_encoded_data_length);
   }
 
@@ -807,7 +847,7 @@ TEST_F(ResourceDispatcherTest, DownloadToFile) {
   EXPECT_EQ(0u, queued_messages());
   EXPECT_EQ(expected_total_downloaded_length,
             peer_context.total_downloaded_data_length);
-  EXPECT_EQ(expected_total_encoded_length,
+  EXPECT_EQ(expected_total_encoded_data_length,
             peer_context.total_encoded_data_length);
 }
 

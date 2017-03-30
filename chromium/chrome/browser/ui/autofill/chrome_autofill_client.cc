@@ -14,11 +14,12 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/risk_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/autofill_popup_controller_impl.h"
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
@@ -42,6 +43,8 @@
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
+#include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/browser/signin_metrics.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -56,9 +59,15 @@
 #endif
 
 #if defined(OS_ANDROID)
+#include "base/android/context_utils.h"
+#include "chrome/browser/android/signin/signin_promo_util_android.h"
+#include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/ui/android/infobars/autofill_credit_card_filling_infobar.h"
+#include "components/autofill/core/browser/autofill_credit_card_filling_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/autofill_save_card_infobar_mobile.h"
 #include "components/infobars/core/infobar.h"
+#include "content/public/browser/android/content_view_core.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -206,6 +215,22 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
   autofill::SaveCardBubbleControllerImpl* controller =
       autofill::SaveCardBubbleControllerImpl::FromWebContents(web_contents());
   controller->ShowBubbleForUpload(card, std::move(legal_message), callback);
+#endif
+}
+
+void ChromeAutofillClient::ConfirmCreditCardFillAssist(
+    const CreditCard& card,
+    const base::Closure& callback) {
+#if defined(OS_ANDROID)
+  auto infobar_delegate =
+      base::MakeUnique<AutofillCreditCardFillingInfoBarDelegateMobile>(
+          card, callback);
+  auto* raw_delegate = infobar_delegate.get();
+  if (InfoBarService::FromWebContents(web_contents())->AddInfoBar(
+          base::MakeUnique<AutofillCreditCardFillingInfoBar>(
+              std::move(infobar_delegate)))) {
+    raw_delegate->set_was_shown();
+  }
 #endif
 }
 
@@ -361,6 +386,33 @@ bool ChromeAutofillClient::IsContextSecure(const GURL& form_origin) {
   return ssl_status.security_style == content::SECURITY_STYLE_AUTHENTICATED &&
          !(ssl_status.content_status &
            content::SSLStatus::RAN_INSECURE_CONTENT);
+}
+
+bool ChromeAutofillClient::ShouldShowSigninPromo() {
+#if !defined(OS_ANDROID)
+  // Determine if we are in a valid context (on desktop platforms, we could be
+  // in an app window with no Browser).
+  if (!chrome::FindBrowserWithWebContents(web_contents()))
+    return false;
+#endif
+
+  return signin::ShouldShowPromo(
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext()));
+}
+
+void ChromeAutofillClient::StartSigninFlow() {
+#if defined(OS_ANDROID)
+  chrome::android::SigninPromoUtilAndroid::StartAccountSigninActivityForPromo(
+      content::ContentViewCore::FromWebContents(web_contents()),
+      signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
+#else
+  chrome::FindBrowserWithWebContents(web_contents())
+      ->window()
+      ->ShowAvatarBubbleFromAvatarButton(
+          BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
+          signin::ManageAccountsParams(),
+          signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
+#endif
 }
 
 }  // namespace autofill

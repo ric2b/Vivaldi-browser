@@ -24,6 +24,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_test.h"
 #include "components/arc/test/fake_app_instance.h"
 #include "components/arc/test/fake_arc_bridge_service.h"
@@ -149,18 +150,23 @@ class AppContextMenuTest : public AppListTestBase {
     bool is_checked;
   };
 
+  void ValidateItemState(const ui::MenuModel* menu_model,
+                         int index,
+                         const MenuState& state) {
+    EXPECT_EQ(state.command_id, menu_model->GetCommandIdAt(index));
+    if (state.command_id == -1)
+      return;   // Don't check separator.
+    EXPECT_EQ(state.is_enabled, menu_model->IsEnabledAt(index));
+    EXPECT_EQ(state.is_checked, menu_model->IsItemCheckedAt(index));
+  }
+
   void ValidateMenuState(const ui::MenuModel* menu_model,
                          const std::vector<MenuState>& states) {
     ASSERT_NE(nullptr, menu_model);
     size_t state_index = 0;
     for (int i = 0; i < menu_model->GetItemCount(); ++i) {
       ASSERT_LT(state_index, states.size());
-      const MenuState& state = states[state_index++];
-      EXPECT_EQ(state.command_id, menu_model->GetCommandIdAt(i));
-      if (state.command_id == -1)
-        continue;   // Don't check separator.
-      EXPECT_EQ(state.is_enabled, menu_model->IsEnabledAt(i));
-      EXPECT_EQ(state.is_checked, menu_model->IsItemCheckedAt(i));
+      ValidateItemState(menu_model, i, states[state_index++]);
     }
     EXPECT_EQ(state_index, states.size());
   }
@@ -177,10 +183,10 @@ class AppContextMenuTest : public AppListTestBase {
     return profile_.get();
   }
 
-  void AddSeparator(std::vector<MenuState>& states) {
-    if (states.empty() || states.back().command_id == -1)
+  void AddSeparator(std::vector<MenuState>* states) {
+    if (states->empty() || states->back().command_id == -1)
       return;
-    states.push_back(MenuState());
+    states->push_back(MenuState());
   }
 
   void TestExtensionApp(const std::string& app_id,
@@ -206,7 +212,7 @@ class AppContextMenuTest : public AppListTestBase {
     if (!platform_app)
       states.push_back(MenuState(app_list::AppContextMenu::LAUNCH_NEW));
     if (pinnable != AppListControllerDelegate::NO_PIN) {
-      AddSeparator(states);
+      AddSeparator(&states);
       states.push_back(MenuState(
           app_list::AppContextMenu::TOGGLE_PIN,
           pinnable != AppListControllerDelegate::PIN_FIXED,
@@ -214,25 +220,17 @@ class AppContextMenuTest : public AppListTestBase {
     }
     if (can_create_shortcuts)
       states.push_back(MenuState(app_list::AppContextMenu::CREATE_SHORTCUTS));
-    AddSeparator(states);
+    AddSeparator(&states);
 
     if (!platform_app) {
       if (extensions::util::CanHostedAppsOpenInWindows() &&
           extensions::util::IsNewBookmarkAppsEnabled()) {
-        // MACOS has different logic for this case.
-        // See chrome/browser/extensions/launch_util.cc for more details.
-        bool checked = launch_type == extensions::LAUNCH_TYPE_WINDOW;
-#if !defined(OS_MACOSX)
-        checked |= launch_type == extensions::LAUNCH_TYPE_FULLSCREEN;
-#endif
+        bool checked = launch_type == extensions::LAUNCH_TYPE_WINDOW ||
+            launch_type == extensions::LAUNCH_TYPE_FULLSCREEN;
         states.push_back(MenuState(
             app_list::AppContextMenu::USE_LAUNCH_TYPE_WINDOW, true, checked));
       } else if (!extensions::util::IsNewBookmarkAppsEnabled()) {
         bool regular_checked = launch_type == extensions::LAUNCH_TYPE_REGULAR;
-#if defined(OS_MACOSX)
-        regular_checked |= (!extensions::util::CanHostedAppsOpenInWindows() &&
-            launch_type == extensions::LAUNCH_TYPE_WINDOW);
-#endif
         states.push_back(MenuState(
             app_list::AppContextMenu::USE_LAUNCH_TYPE_REGULAR,
             true,
@@ -252,7 +250,7 @@ class AppContextMenuTest : public AppListTestBase {
             true,
             launch_type == extensions::LAUNCH_TYPE_FULLSCREEN));
       }
-      AddSeparator(states);
+      AddSeparator(&states);
       states.push_back(MenuState(app_list::AppContextMenu::OPTIONS,
                                  false,
                                  false));
@@ -356,7 +354,7 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   ArcAppTest arc_test;
   arc_test.SetUp(profile());
 
-  const arc::mojom::AppInfo& app_info = arc_test.fake_apps()[0];
+  const arc::mojom::AppInfo& app_info = arc_test.fake_apps()[1];
   const std::string app_id = ArcAppTest::GetAppId(app_info);
   controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
 
@@ -368,17 +366,14 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   ui::MenuModel* menu = item.GetContextMenuModel();
   ASSERT_NE(nullptr, menu);
 
-  ASSERT_EQ(4, menu->GetItemCount());
-  EXPECT_EQ(app_list::AppContextMenu::LAUNCH_NEW, menu->GetCommandIdAt(0));
-  EXPECT_TRUE(menu->IsEnabledAt(0));
-  EXPECT_FALSE(menu->IsItemCheckedAt(0));
-  EXPECT_EQ(-1, menu->GetCommandIdAt(1));  // separator
-  EXPECT_EQ(app_list::AppContextMenu::TOGGLE_PIN, menu->GetCommandIdAt(2));
-  EXPECT_TRUE(menu->IsEnabledAt(2));
-  EXPECT_FALSE(menu->IsItemCheckedAt(2));
-  EXPECT_EQ(app_list::AppContextMenu::SHOW_APP_INFO, menu->GetCommandIdAt(3));
-  EXPECT_TRUE(menu->IsEnabledAt(3));
-  EXPECT_FALSE(menu->IsItemCheckedAt(3));
+  ASSERT_EQ(6, menu->GetItemCount());
+  ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::LAUNCH_NEW));
+  ValidateItemState(menu, 1, MenuState());  // separator
+  ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+  ValidateItemState(menu, 3, MenuState());  // separator
+  ValidateItemState(menu, 4, MenuState(app_list::AppContextMenu::UNINSTALL));
+  ValidateItemState(
+      menu, 5, MenuState(app_list::AppContextMenu::SHOW_APP_INFO));
 
   // Test activate request.
   EXPECT_EQ(0u, arc_test.app_instance()->launch_requests().size());
@@ -394,31 +389,82 @@ TEST_F(AppContextMenuTest, ArcMenu) {
   // It is not expected that menu model is unchanged on GetContextMenuModel. Arc
   // app menu requires model to be recalculated.
   menu = item.GetContextMenuModel();
-  ASSERT_EQ(2, menu->GetItemCount());
-  EXPECT_EQ(app_list::AppContextMenu::TOGGLE_PIN, menu->GetCommandIdAt(0));
-  EXPECT_TRUE(menu->IsEnabledAt(0));
-  EXPECT_FALSE(menu->IsItemCheckedAt(0));
-  EXPECT_EQ(app_list::AppContextMenu::SHOW_APP_INFO, menu->GetCommandIdAt(1));
-  EXPECT_TRUE(menu->IsEnabledAt(1));
-  EXPECT_FALSE(menu->IsItemCheckedAt(1));
+  ASSERT_EQ(4, menu->GetItemCount());
+  ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+  ValidateItemState(menu, 1, MenuState());  // separator
+  ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::UNINSTALL));
+  ValidateItemState(
+      menu, 3, MenuState(app_list::AppContextMenu::SHOW_APP_INFO));
 
+  // This makes all apps non-ready.
+  controller()->SetAppOpen(app_id, false);
+  arc::InstanceHolder<arc::mojom::AppInstance>::Observer* instance_observer =
+      arc_test.arc_app_list_prefs();
+  instance_observer->OnInstanceClosed();
+
+  menu = item.GetContextMenuModel();
+  ASSERT_EQ(6, menu->GetItemCount());
+  ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::LAUNCH_NEW));
+  ValidateItemState(menu, 1, MenuState());  // separator
+  ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+  ValidateItemState(menu, 3, MenuState());  // separator
+  ValidateItemState(
+      menu, 4, MenuState(app_list::AppContextMenu::UNINSTALL, false, false));
+  ValidateItemState(
+      menu, 5,
+      MenuState(app_list::AppContextMenu::SHOW_APP_INFO, false, false));
+
+  // Uninstall all apps.
   arc_test.app_instance()->RefreshAppList();
   arc_test.app_instance()->SendRefreshAppList(
       std::vector<arc::mojom::AppInfo>());
   controller()->SetAppOpen(app_id, false);
 
+  // No app available case.
   menu = item.GetContextMenuModel();
-  ASSERT_EQ(4, menu->GetItemCount());
-  EXPECT_EQ(app_list::AppContextMenu::LAUNCH_NEW, menu->GetCommandIdAt(0));
-  EXPECT_TRUE(menu->IsEnabledAt(0));
-  EXPECT_FALSE(menu->IsItemCheckedAt(0));
-  EXPECT_EQ(-1, menu->GetCommandIdAt(1));  // separator
-  EXPECT_EQ(app_list::AppContextMenu::TOGGLE_PIN, menu->GetCommandIdAt(2));
-  EXPECT_TRUE(menu->IsEnabledAt(2));
-  EXPECT_FALSE(menu->IsItemCheckedAt(2));
-  EXPECT_EQ(app_list::AppContextMenu::SHOW_APP_INFO, menu->GetCommandIdAt(3));
-  EXPECT_TRUE(menu->IsEnabledAt(3));
-  EXPECT_FALSE(menu->IsItemCheckedAt(3));
+  EXPECT_EQ(0, menu->GetItemCount());
+}
+
+
+TEST_F(AppContextMenuTest, ArcMenuShortcut) {
+  ArcAppTest arc_test;
+  arc_test.SetUp(profile());
+
+  const arc::mojom::ShortcutInfo& shortcut_info = arc_test.fake_shortcuts()[0];
+  const std::string app_id = ArcAppTest::GetAppId(shortcut_info);
+  controller()->SetAppPinnable(app_id, AppListControllerDelegate::PIN_EDITABLE);
+
+  arc_test.app_instance()->SendInstallShortcuts(arc_test.fake_shortcuts());
+
+  ArcAppItem item(profile(), nullptr, app_id, std::string());
+
+  ui::MenuModel* menu = item.GetContextMenuModel();
+  ASSERT_NE(nullptr, menu);
+
+  ASSERT_EQ(6, menu->GetItemCount());
+  ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::LAUNCH_NEW));
+  ValidateItemState(menu, 1, MenuState());  // separator
+  ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+  ValidateItemState(menu, 3, MenuState());  // separator
+  ValidateItemState(menu, 4, MenuState(app_list::AppContextMenu::UNINSTALL));
+  ValidateItemState(
+      menu, 5, MenuState(app_list::AppContextMenu::SHOW_APP_INFO));
+
+  // This makes all apps non-ready. Shortcut is still uninstall-able.
+  arc::InstanceHolder<arc::mojom::AppInstance>::Observer* instance_observer =
+      arc_test.arc_app_list_prefs();
+  instance_observer->OnInstanceClosed();
+
+  menu = item.GetContextMenuModel();
+  ASSERT_EQ(6, menu->GetItemCount());
+  ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::LAUNCH_NEW));
+  ValidateItemState(menu, 1, MenuState());  // separator
+  ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+  ValidateItemState(menu, 3, MenuState());  // separator
+  ValidateItemState(menu, 4, MenuState(app_list::AppContextMenu::UNINSTALL));
+  ValidateItemState(
+      menu, 5,
+      MenuState(app_list::AppContextMenu::SHOW_APP_INFO, false, false));
 }
 
 TEST_F(AppContextMenuTest, ArcMenuStickyItem) {
@@ -438,46 +484,14 @@ TEST_F(AppContextMenuTest, ArcMenuStickyItem) {
     ui::MenuModel* menu = item.GetContextMenuModel();
     ASSERT_NE(nullptr, menu);
 
-    ASSERT_EQ(4, menu->GetItemCount());
-    EXPECT_EQ(app_list::AppContextMenu::LAUNCH_NEW, menu->GetCommandIdAt(0));
-    EXPECT_TRUE(menu->IsEnabledAt(0));
-    EXPECT_FALSE(menu->IsItemCheckedAt(0));
-    EXPECT_EQ(-1, menu->GetCommandIdAt(1));  // separator
-    EXPECT_EQ(app_list::AppContextMenu::TOGGLE_PIN, menu->GetCommandIdAt(2));
-    EXPECT_TRUE(menu->IsEnabledAt(2));
-    EXPECT_FALSE(menu->IsItemCheckedAt(2));
-    EXPECT_EQ(app_list::AppContextMenu::SHOW_APP_INFO, menu->GetCommandIdAt(3));
-    EXPECT_TRUE(menu->IsEnabledAt(3));
-    EXPECT_FALSE(menu->IsItemCheckedAt(3));
-
-    // No "uninstall" entry.
-  }
-
-  {
-    // Verify normal app menu
-    const arc::mojom::AppInfo& app_info = arc_test.fake_apps()[1];
-    const std::string app_id = ArcAppTest::GetAppId(app_info);
-    controller()->SetAppPinnable(app_id,
-                                 AppListControllerDelegate::PIN_EDITABLE);
-    ArcAppItem item(profile(), nullptr, app_id, std::string());
-    ui::MenuModel* menu = item.GetContextMenuModel();
-    ASSERT_NE(nullptr, menu);
-
-    ASSERT_EQ(6, menu->GetItemCount());
-    EXPECT_EQ(app_list::AppContextMenu::LAUNCH_NEW, menu->GetCommandIdAt(0));
-    EXPECT_TRUE(menu->IsEnabledAt(0));
-    EXPECT_FALSE(menu->IsItemCheckedAt(0));
-    EXPECT_EQ(-1, menu->GetCommandIdAt(1));  // separator
-    EXPECT_EQ(app_list::AppContextMenu::TOGGLE_PIN, menu->GetCommandIdAt(2));
-    EXPECT_TRUE(menu->IsEnabledAt(2));
-    EXPECT_FALSE(menu->IsItemCheckedAt(2));
-    EXPECT_EQ(-1, menu->GetCommandIdAt(3));  // separator
-    EXPECT_EQ(app_list::AppContextMenu::UNINSTALL, menu->GetCommandIdAt(4));
-    EXPECT_TRUE(menu->IsEnabledAt(4));
-    EXPECT_FALSE(menu->IsItemCheckedAt(4));
-    EXPECT_EQ(app_list::AppContextMenu::SHOW_APP_INFO, menu->GetCommandIdAt(5));
-    EXPECT_TRUE(menu->IsEnabledAt(5));
-    EXPECT_FALSE(menu->IsItemCheckedAt(5));
+    ASSERT_EQ(5, menu->GetItemCount());
+    ValidateItemState(menu, 0, MenuState(app_list::AppContextMenu::LAUNCH_NEW));
+    ValidateItemState(menu, 1, MenuState());  // separator
+    ValidateItemState(menu, 2, MenuState(app_list::AppContextMenu::TOGGLE_PIN));
+    ValidateItemState(menu, 3, MenuState());  // separator
+    ValidateItemState(
+        menu, 4, MenuState(app_list::AppContextMenu::SHOW_APP_INFO));
   }
 }
+
 #endif

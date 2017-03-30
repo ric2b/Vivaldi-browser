@@ -11,8 +11,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "chrome/common/instant_types.h"
-#include "chrome/common/ntp_logging_events.h"
+#include "chrome/common/search/instant_types.h"
+#include "chrome/common/search/ntp_logging_events.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/window_open_disposition.h"
@@ -56,12 +56,14 @@ class SearchIPCRouter : public content::WebContentsObserver {
                             base::TimeDelta time) = 0;
 
     // Called to log an impression from a given provider on the New Tab Page.
-    virtual void OnLogMostVisitedImpression(int position,
-                                            const base::string16& provider) = 0;
+    virtual void OnLogMostVisitedImpression(
+        int position,
+        NTPLoggingTileSource tile_source) = 0;
 
     // Called to log a navigation from a given provider on the New Tab Page.
-    virtual void OnLogMostVisitedNavigation(int position,
-                                            const base::string16& provider) = 0;
+    virtual void OnLogMostVisitedNavigation(
+        int position,
+        NTPLoggingTileSource tile_source) = 0;
 
     // Called when the page wants to paste the |text| (or the clipboard contents
     // if the |text| is empty) into the omnibox.
@@ -98,8 +100,6 @@ class SearchIPCRouter : public content::WebContentsObserver {
     virtual bool ShouldProcessPasteIntoOmnibox(bool is_active_tab) = 0;
     virtual bool ShouldProcessChromeIdentityCheck() = 0;
     virtual bool ShouldProcessHistorySyncCheck() = 0;
-    virtual bool ShouldSendSetPromoInformation() = 0;
-    virtual bool ShouldSendSetDisplayInstantResults() = 0;
     virtual bool ShouldSendSetSuggestionToPrefetch() = 0;
     virtual bool ShouldSendSetInputInProgress(bool is_active_tab) = 0;
     virtual bool ShouldSendOmniboxFocusChanged() = 0;
@@ -127,12 +127,6 @@ class SearchIPCRouter : public content::WebContentsObserver {
 
   // Tells the renderer whether the user syncs history.
   void SendHistorySyncCheckResult(bool sync_history);
-
-  // Tells the renderer information it needs to display promos.
-  void SetPromoInformation(bool is_app_launcher_enabled);
-
-  // Tells the renderer whether to display the Instant results.
-  void SetDisplayInstantResults();
 
   // Tells the page the suggestion to be prefetched if any.
   void SetSuggestionToPrefetch(const InstantSuggestion& suggestion);
@@ -171,8 +165,6 @@ class SearchIPCRouter : public content::WebContentsObserver {
                            PageURLDoesntBelongToInstantRenderer);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
                            IgnoreMessageIfThePageIsNotActive);
-  FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest,
-                           DoNotSendSetDisplayInstantResultsMsg);
   FRIEND_TEST_ALL_PREFIXES(SearchIPCRouterTest, HandleTabChangedEvents);
 
   // Overridden from contents::WebContentsObserver:
@@ -188,10 +180,10 @@ class SearchIPCRouter : public content::WebContentsObserver {
                   base::TimeDelta time) const;
   void OnLogMostVisitedImpression(int page_seq_no,
                                   int position,
-                                  const base::string16& provider) const;
+                                  NTPLoggingTileSource tile_source) const;
   void OnLogMostVisitedNavigation(int page_seq_no,
                                   int position,
-                                  const base::string16& provider) const;
+                                  NTPLoggingTileSource tile_source) const;
   void OnPasteAndOpenDropDown(int page_seq_no,
                               const base::string16& text) const;
   void OnChromeIdentityCheck(int page_seq_no,

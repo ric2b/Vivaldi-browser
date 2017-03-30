@@ -17,7 +17,7 @@
 #include "net/http/http_stream_factory_impl_request.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
-#include "net/quic/quic_server_id.h"
+#include "net/quic/core/quic_server_id.h"
 #include "net/spdy/bidirectional_stream_spdy_impl.h"
 #include "net/spdy/spdy_http_stream.h"
 #include "url/gurl.h"
@@ -172,7 +172,7 @@ void HttpStreamFactoryImpl::OnNewSpdySessionReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
     bool was_npn_negotiated,
-    NextProto protocol_negotiated,
+    NextProto negotiated_protocol,
     bool using_spdy,
     const BoundNetLog& net_log) {
   while (true) {
@@ -186,10 +186,10 @@ void HttpStreamFactoryImpl::OnNewSpdySessionReady(
     // TODO(willchan): If it's important, switch RequestSet out for a FIFO
     // queue (Order by priority first, then FIFO within same priority). Unclear
     // that it matters here.
-    if (!ContainsKey(spdy_session_request_map_, spdy_session_key))
+    if (!base::ContainsKey(spdy_session_request_map_, spdy_session_key))
       break;
     Request* request = *spdy_session_request_map_[spdy_session_key].begin();
-    request->Complete(was_npn_negotiated, protocol_negotiated, using_spdy);
+    request->Complete(was_npn_negotiated, negotiated_protocol, using_spdy);
     if (for_websockets_) {
       // TODO(ricea): Restore this code path when WebSocket over SPDY
       // implementation is ready.

@@ -4,8 +4,10 @@
 
 #include "ash/common/system/chromeos/network/tray_sms.h"
 
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/metrics/user_metrics_action.h"
 #include "ash/common/system/tray/fixed_sized_scroll_view.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_bubble.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_details_view.h"
@@ -14,7 +16,6 @@
 #include "ash/common/system/tray/tray_notification_view.h"
 #include "ash/common/system/tray/view_click_listener.h"
 #include "ash/common/wm_shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/network/network_event_log.h"
@@ -23,6 +24,8 @@
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -58,8 +61,13 @@ namespace ash {
 class TraySms::SmsDefaultView : public TrayItemMore {
  public:
   explicit SmsDefaultView(TraySms* owner) : TrayItemMore(owner, true) {
-    SetImage(ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-        IDR_AURA_UBER_TRAY_SMS));
+    if (MaterialDesignController::UseMaterialDesignSystemIcons()) {
+      SetImage(gfx::CreateVectorIcon(gfx::VectorIconId::SYSTEM_MENU_SMS,
+                                     kMenuIconSize, kMenuIconColor));
+    } else {
+      SetImage(*ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+          IDR_AURA_UBER_TRAY_SMS));
+    }
     Update();
   }
 
@@ -402,7 +410,7 @@ void TraySms::Update(bool notify) {
     if (default_)
       default_->SetVisible(false);
     if (detailed_)
-      HideDetailedView();
+      HideDetailedView(true /* animate */);
     HideNotificationView();
   } else {
     if (default_) {

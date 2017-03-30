@@ -99,7 +99,7 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
   virtual gfx::Rect GetAnchorRect() const;
 
   // Allows delegates to provide custom parameters before widget initialization.
-  // For example, mus needs to set a custom mus::Window* parent.
+  // For example, mus needs to set a custom ui::Window* parent.
   virtual void OnBeforeBubbleWidgetInit(Widget::InitParams* params,
                                         Widget* widget) const;
 
@@ -112,6 +112,9 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public DialogDelegateView,
 
   // Sets the bubble arrow paint type.
   void SetArrowPaintType(BubbleBorder::ArrowPaintType paint_type);
+
+  // Sets the bubble border interior thickness.
+  void SetBorderInteriorThickness(int thickness);
 
   // Call this method when the anchor bounds have changed to reposition the
   // bubble. The bubble is automatically repositioned when the anchor view

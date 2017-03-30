@@ -10,8 +10,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
@@ -19,8 +21,16 @@
 #include "extensions/common/message_bundle.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/v8_helpers.h"
+#include "third_party/cld/cld_version.h"
+
+#if BUILDFLAG(CLD_VERSION) == 2
 #include "third_party/cld_2/src/public/compact_lang_det.h"
 #include "third_party/cld_2/src/public/encodings.h"
+#elif BUILDFLAG(CLD_VERSION) == 3
+#include "third_party/cld_3/src/src/nnet_language_identifier.h"
+#else
+# error "CLD_VERSION must be 2 or 3"
+#endif
 
 namespace extensions {
 
@@ -28,7 +38,7 @@ using namespace v8_helpers;
 
 namespace {
 
-// Max number of languages detected by CLD2.
+// Max number of languages to detect.
 const int kCldNumLangs = 3;
 
 struct DetectedLanguage {
@@ -50,6 +60,7 @@ struct DetectedLanguage {
 // LanguageDetectionResult object that holds detected langugae reliability and
 // array of DetectedLanguage
 struct LanguageDetectionResult {
+  LanguageDetectionResult() {}
   explicit LanguageDetectionResult(bool is_reliable)
       : is_reliable(is_reliable) {}
   ~LanguageDetectionResult() {}
@@ -95,6 +106,7 @@ v8::Local<v8::Value> LanguageDetectionResult::ToValue(ScriptContext* context) {
   return handle_scope.Escape(result);
 }
 
+#if BUILDFLAG(CLD_VERSION) == 2
 void InitDetectedLanguages(
     CLD2::Language* languages,
     int* percents,
@@ -113,9 +125,58 @@ void InitDetectedLanguages(
           CLD2::LanguageCode(static_cast<CLD2::Language>(languages[i]));
     }
     detected_languages->push_back(
-        base::WrapUnique(new DetectedLanguage(language_code, percents[i])));
+        base::MakeUnique<DetectedLanguage>(language_code, percents[i]));
   }
 }
+
+#elif BUILDFLAG(CLD_VERSION) == 3
+void InitDetectedLanguages(
+    const std::vector<chrome_lang_id::NNetLanguageIdentifier::Result>&
+        lang_results,
+    LanguageDetectionResult* result) {
+  std::vector<std::unique_ptr<DetectedLanguage>>* detected_languages =
+      &result->languages;
+  DCHECK(detected_languages->empty());
+  bool* is_reliable = &result->is_reliable;
+
+  // is_reliable is set to "true", so that the reliability can be calculated by
+  // &&'ing the reliability of each predicted language.
+  *is_reliable = true;
+  for (size_t i = 0; i < lang_results.size(); ++i) {
+    const chrome_lang_id::NNetLanguageIdentifier::Result& lang_result =
+        lang_results.at(i);
+    const std::string& language_code = lang_result.language;
+
+    // If a language is kUnknown, then the remaining ones are also kUnknown.
+    if (language_code == chrome_lang_id::NNetLanguageIdentifier::kUnknown) {
+      break;
+    }
+
+    // The list of languages supported by CLD3 is saved in kLanguageNames
+    // in the following file:
+    // //src/third_party/cld_3/src/src/task_context_params.cc
+    // Among the entries in this list are transliterated languages
+    // (called xx-Latn) which don't belong to the spec ISO639-1 used by
+    // the previous model, CLD2. Thus, to maintain backwards compatibility,
+    // xx-Latn predictions are ignored for now.
+    if (base::EndsWith(language_code, "-Latn",
+                       base::CompareCase::INSENSITIVE_ASCII)) {
+      continue;
+    }
+
+    *is_reliable = *is_reliable && lang_result.is_reliable;
+    const int percent = static_cast<int>(100 * lang_result.proportion);
+    detected_languages->push_back(
+        base::MakeUnique<DetectedLanguage>(language_code, percent));
+  }
+
+  if (detected_languages->empty()) {
+    *is_reliable = false;
+  }
+}
+#else
+# error "CLD_VERSION must be 2 or 3"
+#endif
 
 }  // namespace
 
@@ -156,8 +217,11 @@ void I18NCustomBindings::GetL10nMessage(
 
     L10nMessagesMap messages;
     // A sync call to load message catalogs for current extension.
-    render_frame->Send(
-        new ExtensionHostMsg_GetMessageBundle(extension_id, &messages));
+    {
+      SCOPED_UMA_HISTOGRAM_TIMER("Extensions.SyncGetMessageBundle");
+      render_frame->Send(
+          new ExtensionHostMsg_GetMessageBundle(extension_id, &messages));
+    }
 
     // Save messages we got.
     ExtensionToL10nMessagesMap& l10n_messages_map =
@@ -205,6 +269,7 @@ void I18NCustomBindings::DetectTextLanguage(
   CHECK(args[0]->IsString());
 
   std::string text = *v8::String::Utf8Value(args[0]);
+#if BUILDFLAG(CLD_VERSION) == 2
   CLD2::CLDHints cldhints = {nullptr, "", CLD2::UNKNOWN_ENCODING,
                              CLD2::UNKNOWN_LANGUAGE};
 
@@ -240,8 +305,22 @@ void I18NCustomBindings::DetectTextLanguage(
   LanguageDetectionResult result(is_reliable);
   // populate LanguageDetectionResult with languages and percents
   InitDetectedLanguages(languages, percents, &result.languages);
-
   args.GetReturnValue().Set(result.ToValue(context()));
+
+#elif BUILDFLAG(CLD_VERSION) == 3
+  chrome_lang_id::NNetLanguageIdentifier nnet_lang_id(/*min_num_bytes=*/0,
+                                                      /*max_num_bytes=*/512);
+  const std::vector<chrome_lang_id::NNetLanguageIdentifier::Result>
+      lang_results = nnet_lang_id.FindTopNMostFreqLangs(text, kCldNumLangs);
+  LanguageDetectionResult result;
+
+  // Populate LanguageDetectionResult with prediction reliability, languages,
+  // and the corresponding percentages.
+  InitDetectedLanguages(lang_results, &result);
+  args.GetReturnValue().Set(result.ToValue(context()));
+#else
+# error "CLD_VERSION must be 2 or 3"
+#endif
 }
 
 }  // namespace extensions

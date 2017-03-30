@@ -33,10 +33,15 @@
 #include "platform/graphics/ImageBuffer.h"
 
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/common/mailbox.h"
+#include "gpu/command_buffer/common/sync_token.h"
 #include "platform/MIMETypeRegistry.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/IntRect.h"
+#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBufferClient.h"
+#include "platform/graphics/RecordingImageBufferSurface.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
@@ -46,7 +51,6 @@
 #include "platform/image-encoders/PNGImageEncoder.h"
 #include "platform/image-encoders/WEBPImageEncoder.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebExternalTextureMailbox.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/core/SkPicture.h"
@@ -70,16 +74,17 @@ std::unique_ptr<ImageBuffer> ImageBuffer::create(std::unique_ptr<ImageBufferSurf
     return wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
-std::unique_ptr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opacityMode, ImageInitializationMode initializationMode)
+std::unique_ptr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opacityMode, ImageInitializationMode initializationMode, sk_sp<SkColorSpace> colorSpace)
 {
-    std::unique_ptr<ImageBufferSurface> surface(wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode)));
+    std::unique_ptr<ImageBufferSurface> surface(wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode, std::move(colorSpace))));
     if (!surface->isValid())
         return nullptr;
     return wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
 ImageBuffer::ImageBuffer(std::unique_ptr<ImageBufferSurface> surface)
-    : m_snapshotState(InitialSnapshotState)
+    : m_weakPtrFactory(this)
+    , m_snapshotState(InitialSnapshotState)
     , m_surface(std::move(surface))
     , m_client(0)
     , m_gpuMemoryUsage(0)
@@ -98,6 +103,19 @@ ImageBuffer::~ImageBuffer()
         s_globalAcceleratedImageBufferCount--;
     }
     ImageBuffer::s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
+}
+
+bool ImageBuffer::canCreateImageBuffer(const IntSize& size)
+{
+    if (size.isEmpty())
+        return false;
+    CheckedNumeric<int> area = size.width();
+    area *= size.height();
+    if (!area.IsValid() || area.ValueOrDie() > kMaxCanvasArea)
+        return false;
+    if (size.width() > kMaxSkiaDim || size.height() > kMaxSkiaDim)
+        return false;
+    return true;
 }
 
 SkCanvas* ImageBuffer::canvas() const
@@ -123,6 +141,17 @@ bool ImageBuffer::isSurfaceValid() const
 bool ImageBuffer::isDirty()
 {
     return m_client ? m_client->isDirty() : false;
+}
+
+void ImageBuffer::didDisableAcceleration() const
+{
+    DCHECK(m_gpuMemoryUsage);
+    DCHECK_GT(s_globalAcceleratedImageBufferCount, 0u);
+    if (m_client)
+        m_client->didDisableAcceleration();
+    s_globalAcceleratedImageBufferCount--;
+    s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
+    m_gpuMemoryUsage = 0;
 }
 
 void ImageBuffer::didFinalizeFrame()
@@ -211,20 +240,20 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint t
         return false;
     gpu::gles2::GLES2Interface* sharedGL = provider->contextGL();
 
-    std::unique_ptr<WebExternalTextureMailbox> mailbox = wrapUnique(new WebExternalTextureMailbox);
-    mailbox->textureSize = WebSize(textureImage->width(), textureImage->height());
+    gpu::Mailbox mailbox;
+    IntSize textureSize(textureImage->width(), textureImage->height());
 
     // Contexts may be in a different share group. We must transfer the texture through a mailbox first
-    sharedGL->GenMailboxCHROMIUM(mailbox->name);
-    sharedGL->ProduceTextureDirectCHROMIUM(textureInfo->fID, textureInfo->fTarget, mailbox->name);
+    sharedGL->GenMailboxCHROMIUM(mailbox.name);
+    sharedGL->ProduceTextureDirectCHROMIUM(textureInfo->fID, textureInfo->fTarget, mailbox.name);
     const GLuint64 sharedFenceSync = sharedGL->InsertFenceSyncCHROMIUM();
     sharedGL->Flush();
 
-    sharedGL->GenSyncTokenCHROMIUM(sharedFenceSync, mailbox->syncToken);
-    mailbox->validSyncToken = true;
-    gl->WaitSyncTokenCHROMIUM(mailbox->syncToken);
+    gpu::SyncToken produceSyncToken;
+    sharedGL->GenSyncTokenCHROMIUM(sharedFenceSync, produceSyncToken.GetData());
+    gl->WaitSyncTokenCHROMIUM(produceSyncToken.GetConstData());
 
-    GLuint sourceTexture = gl->CreateAndConsumeTextureCHROMIUM(textureInfo->fTarget, mailbox->name);
+    GLuint sourceTexture = gl->CreateAndConsumeTextureCHROMIUM(textureInfo->fTarget, mailbox.name);
 
     // The canvas is stored in a premultiplied format, so unpremultiply if necessary.
     // The canvas is stored in an inverted position, so the flip semantics are reversed.
@@ -236,9 +265,12 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint t
 
     gl->Flush();
 
-    GLbyte syncToken[24];
-    gl->GenSyncTokenCHROMIUM(contextFenceSync, syncToken);
-    sharedGL->WaitSyncTokenCHROMIUM(syncToken);
+    gpu::SyncToken copySyncToken;
+    gl->GenSyncTokenCHROMIUM(contextFenceSync, copySyncToken.GetData());
+    sharedGL->WaitSyncTokenCHROMIUM(copySyncToken.GetConstData());
+    // This disassociates the texture from the mailbox to avoid leaking the
+    // mapping between the two.
+    sharedGL->ProduceTextureDirectCHROMIUM(0, textureInfo->fTarget, mailbox.name);
 
     // Undo grContext texture binding changes introduced in this function
     provider->grContext()->resetContext(kTextureBinding_GrGLBackendState);
@@ -307,6 +339,10 @@ bool ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect, WTF::Ar
     }
 
     DCHECK(canvas());
+
+    if (ExpensiveCanvasHeuristicParameters::GetImageDataForcesNoAcceleration && !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled())
+        const_cast<ImageBuffer*>(this)->disableAcceleration();
+
     RefPtr<SkImage> snapshot = m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonGetImageData);
     if (!snapshot)
         return false;
@@ -385,6 +421,36 @@ void ImageBuffer::updateGPUMemoryUsage() const
         s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
         m_gpuMemoryUsage = 0;
     }
+}
+
+class UnacceleratedSurfaceFactory : public RecordingImageBufferFallbackSurfaceFactory {
+public:
+    virtual std::unique_ptr<ImageBufferSurface> createSurface(const IntSize& size, OpacityMode opacityMode, sk_sp<SkColorSpace> colorSpace)
+    {
+        return wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode, InitializeImagePixels, colorSpace));
+    }
+
+    virtual ~UnacceleratedSurfaceFactory() { }
+};
+
+void ImageBuffer::disableAcceleration()
+{
+    if (!isAccelerated())
+        return;
+
+    // Get current frame.
+    SkImage* image = m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonPaint).get();
+
+    // Create and configure a recording (unaccelerated) surface.
+    std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> surfaceFactory = wrapUnique(new UnacceleratedSurfaceFactory());
+    std::unique_ptr<ImageBufferSurface> surface = wrapUnique(new RecordingImageBufferSurface(m_surface->size(), std::move(surfaceFactory), m_surface->getOpacityMode(), m_surface->colorSpace()));
+    surface->canvas()->drawImage(image, 0, 0);
+    surface->setImageBuffer(this);
+
+    // Replace the current surface with the new surface.
+    m_surface = std::move(surface);
+
+    didDisableAcceleration();
 }
 
 bool ImageDataBuffer::encodeImage(const String& mimeType, const double& quality, Vector<unsigned char>* encodedImage) const

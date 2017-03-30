@@ -56,6 +56,7 @@ public:
 
     float value(const SVGLengthContext&) const;
     void setValue(float, const SVGLengthContext&);
+    void setValueAsNumber(float);
 
     float valueInSpecifiedUnits() const { return m_value->getFloatValue(); }
     void setValueInSpecifiedUnits(float value)
@@ -63,7 +64,7 @@ public:
         m_value = CSSPrimitiveValue::create(value, m_value->typeWithCalcResolved());
     }
 
-    CSSPrimitiveValue* asCSSPrimitiveValue() const { return m_value.get(); }
+    const CSSPrimitiveValue* asCSSPrimitiveValue() const { return m_value.get(); }
 
     // Resolves LengthTypePercentage into a normalized floating point number (full value is 1.0).
     float valueAsPercentage() const;
@@ -82,6 +83,7 @@ public:
 
     // Helper functions
     inline bool isRelative() const { return CSSPrimitiveValue::isRelativeUnit(m_value->typeWithCalcResolved()); }
+    inline bool isCalculated() const { return m_value->isCalculated(); }
 
     bool isZero() const
     {
@@ -102,7 +104,7 @@ private:
     SVGLength(SVGLengthMode);
     SVGLength(const SVGLength&);
 
-    Member<CSSPrimitiveValue> m_value;
+    Member<const CSSPrimitiveValue> m_value;
     unsigned m_unitMode : 2;
 };
 

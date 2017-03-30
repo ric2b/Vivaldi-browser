@@ -51,7 +51,7 @@ public:
     ~AssociatedURLLoader();
 
     // WebURLLoader methods:
-    void loadSynchronously(const WebURLRequest&, WebURLResponse&, WebURLError&, WebData&) override;
+    void loadSynchronously(const WebURLRequest&, WebURLResponse&, WebURLError&, WebData&, int64_t& encodedDataLength) override;
     void loadAsynchronously(const WebURLRequest&, WebURLLoaderClient*) override;
     void cancel() override;
     void setDefersLoading(bool) override;
@@ -84,7 +84,7 @@ private:
     // An adapter which converts the DocumentThreadableLoaderClient method
     // calls into the WebURLLoaderClient method calls.
     std::unique_ptr<ClientAdapter> m_clientAdapter;
-    std::unique_ptr<DocumentThreadableLoader> m_loader;
+    Persistent<DocumentThreadableLoader> m_loader;
 
     // A ContextLifecycleObserver for cancelling |m_loader| when the Document
     // is detached.

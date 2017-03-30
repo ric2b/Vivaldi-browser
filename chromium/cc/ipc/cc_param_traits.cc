@@ -332,7 +332,7 @@ void ParamTraits<cc::RenderPass>::Write(base::Pickle* m, const param_type& p) {
       p.shared_quad_state_list.begin();
   cc::SharedQuadStateList::ConstIterator last_shared_quad_state_iter =
       p.shared_quad_state_list.end();
-  for (const auto& quad : p.quad_list) {
+  for (auto* quad : p.quad_list) {
     DCHECK(quad->rect.Contains(quad->visible_rect))
         << quad->material << " rect: " << quad->rect.ToString()
         << " visible_rect: " << quad->visible_rect.ToString();
@@ -524,13 +524,13 @@ void ParamTraits<cc::RenderPass>::Log(const param_type& p, std::string* l) {
   l->append(", ");
 
   l->append("[");
-  for (const auto& shared_quad_state : p.shared_quad_state_list) {
+  for (auto* shared_quad_state : p.shared_quad_state_list) {
     if (shared_quad_state != p.shared_quad_state_list.front())
       l->append(", ");
     LogParam(*shared_quad_state, l);
   }
   l->append("], [");
-  for (const auto& quad : p.quad_list) {
+  for (auto* quad : p.quad_list) {
     if (quad != p.quad_list.front())
       l->append(", ");
     switch (quad->material) {
@@ -570,13 +570,13 @@ void ParamTraits<cc::RenderPass>::Log(const param_type& p, std::string* l) {
 
 void ParamTraits<cc::SurfaceId>::GetSize(base::PickleSizer* s,
                                          const param_type& p) {
-  GetParamSize(s, p.id_namespace());
+  GetParamSize(s, p.client_id());
   GetParamSize(s, p.local_id());
   GetParamSize(s, p.nonce());
 }
 
 void ParamTraits<cc::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
-  WriteParam(m, p.id_namespace());
+  WriteParam(m, p.client_id());
   WriteParam(m, p.local_id());
   WriteParam(m, p.nonce());
 }
@@ -584,8 +584,8 @@ void ParamTraits<cc::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
 bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
                                       base::PickleIterator* iter,
                                       param_type* p) {
-  uint32_t id_namespace;
-  if (!ReadParam(m, iter, &id_namespace))
+  uint32_t client_id;
+  if (!ReadParam(m, iter, &client_id))
     return false;
 
   uint32_t local_id;
@@ -596,13 +596,13 @@ bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
   if (!ReadParam(m, iter, &nonce))
     return false;
 
-  *p = cc::SurfaceId(id_namespace, local_id, nonce);
+  *p = cc::SurfaceId(client_id, local_id, nonce);
   return true;
 }
 
 void ParamTraits<cc::SurfaceId>::Log(const param_type& p, std::string* l) {
   l->append("SurfaceId(");
-  LogParam(p.id_namespace(), l);
+  LogParam(p.client_id(), l);
   l->append(", ");
   LogParam(p.local_id(), l);
   l->append(", ");
@@ -670,51 +670,6 @@ void ParamTraits<cc::CompositorFrame>::Log(const param_type& p,
   if (p.delegated_frame_data)
     LogParam(*p.delegated_frame_data, l);
   else if (p.gl_frame_data)
-    LogParam(*p.gl_frame_data, l);
-  l->append(")");
-}
-
-void ParamTraits<cc::CompositorFrameAck>::Write(base::Pickle* m,
-                                                const param_type& p) {
-  WriteParam(m, p.resources);
-  if (p.gl_frame_data) {
-    WriteParam(m, static_cast<int>(GL_FRAME));
-    WriteParam(m, *p.gl_frame_data);
-  } else {
-    WriteParam(m, static_cast<int>(NO_FRAME));
-  }
-}
-
-bool ParamTraits<cc::CompositorFrameAck>::Read(const base::Pickle* m,
-                                               base::PickleIterator* iter,
-                                               param_type* p) {
-  if (!ReadParam(m, iter, &p->resources))
-    return false;
-
-  int compositor_frame_type;
-  if (!ReadParam(m, iter, &compositor_frame_type))
-    return false;
-
-  switch (compositor_frame_type) {
-    case NO_FRAME:
-      break;
-    case GL_FRAME:
-      p->gl_frame_data.reset(new cc::GLFrameData());
-      if (!ReadParam(m, iter, p->gl_frame_data.get()))
-        return false;
-      break;
-    default:
-      return false;
-  }
-  return true;
-}
-
-void ParamTraits<cc::CompositorFrameAck>::Log(const param_type& p,
-                                              std::string* l) {
-  l->append("CompositorFrameAck(");
-  LogParam(p.resources, l);
-  l->append(", ");
-  if (p.gl_frame_data)
     LogParam(*p.gl_frame_data, l);
   l->append(")");
 }
@@ -919,6 +874,76 @@ void ParamTraits<cc::TextureDrawQuad::OverlayResources>::Log(
     if (i < (cc::DrawQuad::Resources::kMaxResourceIdCount - 1))
       l->append(", ");
   }
+  l->append("])");
+}
+
+void ParamTraits<cc::YUVVideoDrawQuad>::GetSize(base::PickleSizer* s,
+                                                const param_type& p) {
+  ParamTraits<cc::DrawQuad>::GetSize(s, p);
+  GetParamSize(s, p.ya_tex_coord_rect);
+  GetParamSize(s, p.uv_tex_coord_rect);
+  GetParamSize(s, p.ya_tex_size);
+  GetParamSize(s, p.uv_tex_size);
+  GetParamSize(s, p.color_space);
+  GetParamSize(s, p.video_color_space);
+  GetParamSize(s, p.resource_offset);
+  GetParamSize(s, p.resource_multiplier);
+  GetParamSize(s, p.bits_per_channel);
+}
+
+void ParamTraits<cc::YUVVideoDrawQuad>::Write(base::Pickle* m,
+                                              const param_type& p) {
+  ParamTraits<cc::DrawQuad>::Write(m, p);
+  WriteParam(m, p.ya_tex_coord_rect);
+  WriteParam(m, p.uv_tex_coord_rect);
+  WriteParam(m, p.ya_tex_size);
+  WriteParam(m, p.uv_tex_size);
+  WriteParam(m, p.color_space);
+  WriteParam(m, p.video_color_space);
+  WriteParam(m, p.resource_offset);
+  WriteParam(m, p.resource_multiplier);
+  WriteParam(m, p.bits_per_channel);
+}
+
+bool ParamTraits<cc::YUVVideoDrawQuad>::Read(const base::Pickle* m,
+                                             base::PickleIterator* iter,
+                                             param_type* p) {
+  return ParamTraits<cc::DrawQuad>::Read(m, iter, p) &&
+         ReadParam(m, iter, &p->ya_tex_coord_rect) &&
+         ReadParam(m, iter, &p->uv_tex_coord_rect) &&
+         ReadParam(m, iter, &p->ya_tex_size) &&
+         ReadParam(m, iter, &p->uv_tex_size) &&
+         ReadParam(m, iter, &p->color_space) &&
+         ReadParam(m, iter, &p->video_color_space) &&
+         ReadParam(m, iter, &p->resource_offset) &&
+         ReadParam(m, iter, &p->resource_multiplier) &&
+         ReadParam(m, iter, &p->bits_per_channel) &&
+         p->bits_per_channel >= cc::YUVVideoDrawQuad::kMinBitsPerChannel &&
+         p->bits_per_channel <= cc::YUVVideoDrawQuad::kMaxBitsPerChannel;
+}
+
+void ParamTraits<cc::YUVVideoDrawQuad>::Log(const param_type& p,
+                                            std::string* l) {
+  l->append("(");
+  ParamTraits<cc::DrawQuad>::Log(p, l);
+  l->append(", ");
+  LogParam(p.ya_tex_coord_rect, l);
+  l->append(", ");
+  LogParam(p.uv_tex_coord_rect, l);
+  l->append(", ");
+  LogParam(p.ya_tex_size, l);
+  l->append(", ");
+  LogParam(p.uv_tex_size, l);
+  l->append(", ");
+  LogParam(p.color_space, l);
+  l->append(", ");
+  LogParam(p.video_color_space, l);
+  l->append(", ");
+  LogParam(p.resource_offset, l);
+  l->append(", ");
+  LogParam(p.resource_multiplier, l);
+  l->append(", ");
+  LogParam(p.bits_per_channel, l);
   l->append("])");
 }
 

@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="iw">
-<translation id="1008557486741366299">לא עכשיו</translation>
 <translation id="1047726139967079566">הוסף דף זה לסימניות...</translation>
 <translation id="1172898394251786223">השדה הבא</translation>
 <translation id="2320166752086256636">הסתר מקלדת</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">עדכן</translation>
 <translation id="4875622588773761625">האם תרצה ש-<ph name="PASSWORD_MANAGER_BRAND" /> יעדכן את הסיסמה שלך בשביל האתר הזה?</translation>
 <translation id="5317780077021120954">שמור</translation>
+<translation id="6039694632319341016">האם אתה רוצה ש-<ph name="PASSWORD_MANAGER_BRAND" /> יעדכן את הסיסמה שלך למשתמש <ph name="USERNAME" /> באתר זה?</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6149061208933997199">השתמש בסיסמה</translation>
 <translation id="6196207969502475924">חיפוש קולי</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">טקסט נקי</translation>
 <translation id="6456425917241817154">‏סיסמה שנוצרה על ידי Chrome</translation>
 <translation id="6535543971741225613">‏האתר שאליו אתה מנסה להיכנס מתנהג בצורה משונה, ו-‏Chrome אינו יכול לוודא כי כתובת האתר שלו נכונה. מטעמי אבטחה, מומלץ שלא תמשיך, ואולי כדאי שתנסה שוב מחר או שתעבור לאתר אחר.</translation>
-<translation id="6647073004883890710">האם אתה רוצה ש-<ph name="PASSWORD_MANAGER_BRAND" /> יעדכן את הסיסמה של <ph name="USERNAME" /> באתר הזה?</translation>
 <translation id="7222245588540287464">האם מופעל חיפוש קולי לפי הקשר</translation>
-<translation id="7378627244592794276">לא</translation>
 <translation id="7456847797759667638">פתח מיקום...</translation>
 <translation id="7481312909269577407">קדימה</translation>
 <translation id="7484580869648358686">אזהרה: משהו כאן לא בסדר!</translation>

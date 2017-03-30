@@ -33,13 +33,13 @@
 #include "components/search_engines/template_url_service_client.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/search_engines/util.h"
+#include "components/sync/api/sync_change.h"
+#include "components/sync/api/sync_error_factory.h"
+#include "components/sync/protocol/search_engine_specifics.pb.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/url_formatter/url_formatter.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
-#include "sync/api/sync_change.h"
-#include "sync/api/sync_error_factory.h"
-#include "sync/protocol/search_engine_specifics.pb.h"
-#include "sync/protocol/sync.pb.h"
 #include "url/gurl.h"
 
 typedef SearchHostToURLsMap::TemplateURLSet TemplateURLSet;
@@ -277,15 +277,20 @@ TemplateURLService::TemplateURLService(const Initializer* initializers,
 TemplateURLService::~TemplateURLService() {
   // |web_data_service_| should be deleted during Shutdown().
   DCHECK(!web_data_service_.get());
-  STLDeleteElements(&template_urls_);
+  base::STLDeleteElements(&template_urls_);
 }
 
 // static
 void TemplateURLService::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  uint32_t flags = PrefRegistry::NO_REGISTRATION_FLAGS;
+#else
+  uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
+#endif
   registry->RegisterStringPref(prefs::kSyncedDefaultSearchProviderGUID,
                                std::string(),
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+                               flags);
   registry->RegisterBooleanPref(prefs::kDefaultSearchProviderEnabled, true);
   registry->RegisterStringPref(prefs::kDefaultSearchProviderName,
                                std::string());

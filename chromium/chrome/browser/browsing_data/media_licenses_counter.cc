@@ -9,7 +9,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner_util.h"
-#include "chrome/common/pref_names.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "storage/browser/fileapi/file_system_context.h"
@@ -50,20 +51,21 @@ const std::string& MediaLicensesCounter::MediaLicenseResult::GetOneOrigin()
   return one_origin_;
 }
 
-MediaLicensesCounter::MediaLicensesCounter()
-    : pref_name_(prefs::kDeleteMediaLicenses), weak_ptr_factory_(this) {}
+MediaLicensesCounter::MediaLicensesCounter(Profile* profile)
+    : profile_(profile),
+      weak_ptr_factory_(this) {}
 
 MediaLicensesCounter::~MediaLicensesCounter() {}
 
-const std::string& MediaLicensesCounter::GetPrefName() const {
-  return pref_name_;
+const char* MediaLicensesCounter::GetPrefName() const {
+  return browsing_data::prefs::kDeleteMediaLicenses;
 }
 
 void MediaLicensesCounter::Count() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   scoped_refptr<storage::FileSystemContext> filesystem_context =
       make_scoped_refptr(
-          content::BrowserContext::GetDefaultStoragePartition(GetProfile())
+          content::BrowserContext::GetDefaultStoragePartition(profile_)
               ->GetFileSystemContext());
   base::PostTaskAndReplyWithResult(
       filesystem_context->default_file_task_runner(), FROM_HERE,

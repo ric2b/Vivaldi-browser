@@ -55,7 +55,7 @@
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/filters/h264_parser.h"
 #include "media/gpu/fake_video_decode_accelerator.h"
-#include "media/gpu/gpu_video_decode_accelerator_factory_impl.h"
+#include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/rendering_helper.h"
 #include "media/gpu/video_accelerator_unittest_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -371,8 +371,9 @@ gfx::GpuMemoryBufferHandle TextureRef::ExportGpuMemoryBufferHandle() const {
   handle.type = gfx::OZONE_NATIVE_PIXMAP;
   handle.native_pixmap_handle.fds.emplace_back(
       base::FileDescriptor(duped_fd, true));
-  handle.native_pixmap_handle.strides_and_offsets.emplace_back(
-      pixmap_->GetDmaBufPitch(0), pixmap_->GetDmaBufOffset(0));
+  handle.native_pixmap_handle.planes.emplace_back(
+      pixmap_->GetDmaBufPitch(0), pixmap_->GetDmaBufOffset(0),
+      pixmap_->GetDmaBufModifier(0));
 #endif
   return handle;
 }
@@ -485,7 +486,7 @@ class GLRenderingVDAClient
   base::WeakPtr<VideoDecodeAccelerator> weak_vda_;
   std::unique_ptr<base::WeakPtrFactory<VideoDecodeAccelerator>>
       weak_vda_ptr_factory_;
-  std::unique_ptr<GpuVideoDecodeAcceleratorFactoryImpl> vda_factory_;
+  std::unique_ptr<GpuVideoDecodeAcceleratorFactory> vda_factory_;
   int remaining_play_throughs_;
   int reset_after_frame_num_;
   int delete_decoder_state_;
@@ -613,7 +614,7 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
     LOG_ASSERT(decoder_->Initialize(profile_, this));
   } else {
     if (!vda_factory_) {
-      vda_factory_ = GpuVideoDecodeAcceleratorFactoryImpl::Create(
+      vda_factory_ = GpuVideoDecodeAcceleratorFactory::Create(
           base::Bind(&RenderingHelper::GetGLContext,
                      base::Unretained(rendering_helper_)),
           base::Bind(&DoNothingReturnTrue), base::Bind(&DummyBindImage));
@@ -900,7 +901,7 @@ void GLRenderingVDAClient::DeleteDecoder() {
     return;
   weak_vda_ptr_factory_->InvalidateWeakPtrs();
   decoder_.reset();
-  STLClearObject(&encoded_data_);
+  base::STLClearObject(&encoded_data_);
   active_textures_.clear();
 
   // Cascade through the rest of the states to simplify test code below.
@@ -1117,8 +1118,9 @@ void VideoDecodeAcceleratorTest::SetUp() {
 
 void VideoDecodeAcceleratorTest::TearDown() {
   g_env->GetRenderingTaskRunner()->PostTask(
-      FROM_HERE, base::Bind(&STLDeleteElements<std::vector<TestVideoFile*>>,
-                            &test_video_files_));
+      FROM_HERE,
+      base::Bind(&base::STLDeleteElements<std::vector<TestVideoFile*>>,
+                 &test_video_files_));
 
   base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                            base::WaitableEvent::InitialState::NOT_SIGNALED);
@@ -1486,11 +1488,11 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
 
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&STLDeleteElements<std::vector<GLRenderingVDAClient*>>,
+      base::Bind(&base::STLDeleteElements<std::vector<GLRenderingVDAClient*>>,
                  &clients));
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE,
-      base::Bind(&STLDeleteElements<
+      base::Bind(&base::STLDeleteElements<
                      std::vector<ClientStateNotification<ClientState>*>>,
                  &notes));
   WaitUntilIdle();

@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -141,11 +142,7 @@ class PersonalDataManagerTest : public testing::Test {
 
     // There are no field trials enabled by default.
     field_trial_list_.reset();
-
-    // There are no features enabled by default.
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    base::FeatureList::SetInstance(std::move(feature_list));
+    scoped_feature_list_.reset();
 
     // Reset the deduping pref to its default value.
     personal_data_->pref_service_->SetInteger(
@@ -199,11 +196,8 @@ class PersonalDataManagerTest : public testing::Test {
   }
 
   void EnableAutofillProfileCleanup() {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(kAutofillProfileCleanup.name,
-                                            std::string());
-    base::FeatureList::SetInstance(std::move(feature_list));
+    scoped_feature_list_.reset(new base::test::ScopedFeatureList);
+    scoped_feature_list_->InitAndEnableFeature(kAutofillProfileCleanup);
     personal_data_->is_autofill_profile_dedupe_pending_ = true;
   }
 
@@ -342,7 +336,7 @@ class PersonalDataManagerTest : public testing::Test {
     // Verify that the web database has been updated and the notification sent.
     EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
         .WillOnce(QuitMainMessageLoop());
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
     CreditCard expected(base::GenerateGUID(), "https://www.example.com");
     test::SetCreditCardInfo(&expected, exp_name, exp_cc_num, exp_cc_month,
@@ -368,6 +362,7 @@ class PersonalDataManagerTest : public testing::Test {
 
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
   scoped_refptr<base::FieldTrial> field_trial_;
+  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
 };
 
 TEST_F(PersonalDataManagerTest, AddProfile) {
@@ -2050,6 +2045,136 @@ TEST_F(PersonalDataManagerTest,
   const std::vector<AutofillProfile*>& results2 = personal_data_->GetProfiles();
   ASSERT_EQ(1U, results2.size());
   EXPECT_EQ(0, profile.Compare(*results2[0]));
+}
+
+// Tests that no profile is inferred if the country is not recognized.
+TEST_F(PersonalDataManagerTest, ImportAddressProfiles_UnrecognizedCountry) {
+  FormData form;
+  FormFieldData field;
+  test::CreateTestFormField("First name:", "first_name", "George", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Last name:", "last_name", "Washington", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "theprez@gmail.com", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Address:", "address1", "21 Laussat St", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "California", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Country:", "country", "Notacountry", "text",
+                            &field);
+  form.fields.push_back(field);
+
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  EXPECT_FALSE(ImportAddressProfiles(form_structure));
+
+  // Since no refresh is expected, reload the data from the database to make
+  // sure no changes were written out.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
+  ASSERT_EQ(0U, profiles.size());
+  const std::vector<CreditCard*>& cards = personal_data_->GetCreditCards();
+  ASSERT_EQ(0U, cards.size());
+}
+
+// Tests that a profile is created for countries with composed names.
+TEST_F(PersonalDataManagerTest,
+       ImportAddressProfiles_CompleteComposedCountryName) {
+  FormData form;
+  FormFieldData field;
+  test::CreateTestFormField("First name:", "first_name", "George", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Last name:", "last_name", "Washington", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "theprez@gmail.com", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Address:", "address1", "21 Laussat St", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "California", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Country:", "country", "Myanmar [Burma]", "text",
+                            &field);
+  form.fields.push_back(field);
+
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  EXPECT_TRUE(ImportAddressProfiles(form_structure));
+
+  // Verify that the web database has been updated and the notification sent.
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
+      .WillOnce(QuitMainMessageLoop());
+  base::RunLoop().Run();
+
+  AutofillProfile expected(base::GenerateGUID(), "https://www.example.com");
+  test::SetProfileInfo(&expected, "George", nullptr, "Washington",
+                       "theprez@gmail.com", nullptr, "21 Laussat St", nullptr,
+                       "San Francisco", "California", "94102", "MM", nullptr);
+  const std::vector<AutofillProfile*>& results = personal_data_->GetProfiles();
+  ASSERT_EQ(1U, results.size());
+  EXPECT_EQ(0, expected.Compare(*results[0]));
+}
+
+// TODO(crbug.com/634131): Create profiles if part of a standalone part of a
+// composed country name is present.
+// Tests that a profile is created if a standalone part of a composed country
+// name is present.
+TEST_F(PersonalDataManagerTest,
+       ImportAddressProfiles_IncompleteComposedCountryName) {
+  FormData form;
+  FormFieldData field;
+  test::CreateTestFormField("First name:", "first_name", "George", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Last name:", "last_name", "Washington", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "theprez@gmail.com", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Address:", "address1", "21 Laussat St", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "California", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Country:", "country",
+                            "Myanmar",  // Missing the [Burma] part
+                            "text", &field);
+  form.fields.push_back(field);
+
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  EXPECT_FALSE(ImportAddressProfiles(form_structure));
+
+  // Since no refresh is expected, reload the data from the database to make
+  // sure no changes were written out.
+  ResetPersonalDataManager(USER_MODE_NORMAL);
+
+  const std::vector<AutofillProfile*>& profiles = personal_data_->GetProfiles();
+  ASSERT_EQ(0U, profiles.size());
+  const std::vector<CreditCard*>& cards = personal_data_->GetCreditCards();
+  ASSERT_EQ(0U, cards.size());
 }
 
 // ImportCreditCard tests.
@@ -4390,8 +4515,8 @@ TEST_F(PersonalDataManagerTest, SaveImportedProfile) {
                   saved_profiles.front()->GetRawInfo(changed_field.field_type));
       }
       // Verify that the merged profile's use count, use date and modification
-      // date were updated.
-      EXPECT_EQ(2U, saved_profiles.front()->use_count());
+      // date were properly updated.
+      EXPECT_EQ(1U, saved_profiles.front()->use_count());
       EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
                 base::Time::Now() - saved_profiles.front()->use_date());
       EXPECT_GT(
@@ -4473,8 +4598,8 @@ TEST_F(PersonalDataManagerTest, MergeProfile_UsageStats) {
 
   // The new profile should be merged into the existing profile.
   EXPECT_EQ(profile.guid(), guid);
-  // The use count should have been incremented by one.
-  EXPECT_EQ(5U, profile.use_count());
+  // The use count should have be max(4, 1) => 4.
+  EXPECT_EQ(4U, profile.use_count());
   // The use date and modification dates should have been set to less than 500
   // milliseconds ago.
   EXPECT_GT(base::TimeDelta::FromMilliseconds(500),
@@ -4644,10 +4769,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MergedProfileValues) {
   // The specified country from the imported profile shoudl be kept (no loss of
   // information).
   EXPECT_EQ(UTF8ToUTF16("US"), profiles[0]->GetRawInfo(ADDRESS_HOME_COUNTRY));
-  // The use count that results from the merge should be the sum of the two
-  // saved profiles plus 1 (imported profile count).
-  EXPECT_EQ(profile1.use_count() + profile2.use_count() + profile3.use_count(),
-            profiles[0]->use_count());
+  // The use count that results from the merge should be the max of all the
+  // profiles use counts.
+  EXPECT_EQ(10U, profiles[0]->use_count());
   // The use date that results from the merge should be the one from the
   // profile1 since it was the most recently used profile.
   EXPECT_LT(profile1.use_date() - base::TimeDelta::FromSeconds(10),
@@ -5057,7 +5181,7 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   personal_data_->AddProfile(Barney);
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Make sure the 7 profiles were saved;
   EXPECT_EQ(7U, personal_data_->GetProfiles().size());
@@ -5074,7 +5198,7 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Get the profiles, sorted by frecency to have a deterministic order.
   std::vector<AutofillProfile*> profiles =
@@ -5111,10 +5235,9 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_MultipleDedupes) {
   EXPECT_EQ(UTF8ToUTF16("Fox"), profiles[0]->GetRawInfo(COMPANY_NAME));
   // The country from |Homer1| profile should be kept (no loss of information).
   EXPECT_EQ(UTF8ToUTF16("US"), profiles[0]->GetRawInfo(ADDRESS_HOME_COUNTRY));
-  // The use count that results from the merge should be the sum of Homer 1, 2
+  // The use count that results from the merge should be the max of Homer 1, 2
   // and 3's respective use counts.
-  EXPECT_EQ(Homer1.use_count() + Homer2.use_count() + Homer3.use_count(),
-            profiles[0]->use_count());
+  EXPECT_EQ(10U, profiles[0]->use_count());
   // The use date that results from the merge should be the one from the
   // |Homer1| since it was the most recently used profile.
   EXPECT_LT(Homer1.use_date() - base::TimeDelta::FromSeconds(5),
@@ -5147,7 +5270,7 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_FeatureDisabled) {
 
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Make sure both profiles were saved.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
@@ -5178,7 +5301,7 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
   personal_data_->AddProfile(profile2);
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());
 
@@ -5190,7 +5313,7 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
   EXPECT_TRUE(personal_data_->ApplyDedupingRoutine());
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   std::vector<AutofillProfile*> profiles = personal_data_->GetProfiles();
 
@@ -5204,14 +5327,12 @@ TEST_F(PersonalDataManagerTest, ApplyDedupingRoutine_OncePerVersion) {
                        "", "Springfield", "IL", "91601", "", "");
 
   // Disable the profile cleanup before adding |profile3|.
-  base::FeatureList::ClearInstanceForTesting();
-  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  base::FeatureList::SetInstance(std::move(feature_list));
+  scoped_feature_list_.reset();
 
   personal_data_->AddProfile(profile3);
   EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
       .WillOnce(QuitMainMessageLoop());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Make sure |profile3| was saved.
   EXPECT_EQ(2U, personal_data_->GetProfiles().size());

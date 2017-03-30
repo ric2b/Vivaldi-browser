@@ -5,8 +5,9 @@
 #ifndef SERVICES_NAVIGATION_VIEW_IMPL_H_
 #define SERVICES_NAVIGATION_VIEW_IMPL_H_
 
+#include <memory>
+
 #include "base/macros.h"
-#include "components/mus/public/cpp/window_tree_client_delegate.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -14,8 +15,9 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/shell/public/cpp/shell_connection_ref.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_context_ref.h"
+#include "services/ui/public/cpp/window_tree_client_delegate.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -29,14 +31,14 @@ namespace navigation {
 class ViewImpl : public mojom::View,
                  public content::WebContentsDelegate,
                  public content::NotificationObserver,
-                 public mus::WindowTreeClientDelegate,
+                 public ui::WindowTreeClientDelegate,
                  public views::WidgetDelegate {
  public:
-  ViewImpl(shell::Connector* connector,
+  ViewImpl(std::unique_ptr<shell::Connector> connector,
            const std::string& client_user_id,
            mojom::ViewClientPtr client,
            mojom::ViewRequest request,
-           std::unique_ptr<shell::ShellConnectionRef> ref);
+           std::unique_ptr<shell::ServiceContextRef> ref);
   ~ViewImpl() override;
 
  private:
@@ -47,8 +49,7 @@ class ViewImpl : public mojom::View,
   void NavigateToOffset(int offset) override;
   void Reload(bool skip_cache) override;
   void Stop() override;
-  void GetWindowTreeClient(
-      mus::mojom::WindowTreeClientRequest request) override;
+  void GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) override;
   void ShowInterstitial(const mojo::String& html) override;
   void HideInterstitial() override;
   void SetResizerSize(const gfx::Size& size) override;
@@ -78,20 +79,21 @@ class ViewImpl : public mojom::View,
                const content::NotificationSource& source,
                const content::NotificationDetails& details) override;
 
-  // mus::WindowTreeClientDelegate:
-  void OnEmbed(mus::Window* root) override;
-  void OnWindowTreeClientDestroyed(mus::WindowTreeClient* client) override;
-  void OnEventObserved(const ui::Event& event, mus::Window* target) override;
+  // ui::WindowTreeClientDelegate:
+  void OnEmbed(ui::Window* root) override;
+  void OnDidDestroyClient(ui::WindowTreeClient* client) override;
+  void OnPointerEventObserved(const ui::PointerEvent& event,
+                              ui::Window* target) override;
 
   // views::WidgetDelegate:
   views::View* GetContentsView() override;
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
 
-  shell::Connector* connector_;
+  std::unique_ptr<shell::Connector> connector_;
   mojo::StrongBinding<mojom::View> binding_;
   mojom::ViewClientPtr client_;
-  std::unique_ptr<shell::ShellConnectionRef> ref_;
+  std::unique_ptr<shell::ServiceContextRef> ref_;
 
   views::WebView* web_view_;
 

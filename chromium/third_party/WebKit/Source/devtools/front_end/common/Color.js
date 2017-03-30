@@ -54,6 +54,9 @@ WebInspector.Color = function(rgba, format, originalText)
     }
 }
 
+/** @type {!RegExp} */
+WebInspector.Color.Regex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|\b[a-zA-Z]+\b(?!-))/g;
+
 /**
  * @enum {string}
  */
@@ -327,11 +330,11 @@ WebInspector.Color.prototype = {
         case WebInspector.Color.Format.HEX:
             if (this.hasAlpha())
                 return null;
-            return String.sprintf("#%s%s%s", toHexValue(this._rgba[0]), toHexValue(this._rgba[1]), toHexValue(this._rgba[2])).toLowerCase();;
+            return String.sprintf("#%s%s%s", toHexValue(this._rgba[0]), toHexValue(this._rgba[1]), toHexValue(this._rgba[2])).toLowerCase();
         case WebInspector.Color.Format.ShortHEX:
             if (!this.canBeShortHex())
                 return null;
-            return String.sprintf("#%s%s%s", toShortHexValue(this._rgba[0]), toShortHexValue(this._rgba[1]), toShortHexValue(this._rgba[2])).toLowerCase();;
+            return String.sprintf("#%s%s%s", toShortHexValue(this._rgba[0]), toShortHexValue(this._rgba[1]), toShortHexValue(this._rgba[2])).toLowerCase();
         case WebInspector.Color.Format.Nickname:
             return this.nickname();
         }

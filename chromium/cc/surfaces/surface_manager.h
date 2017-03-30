@@ -33,12 +33,12 @@ class CC_SURFACES_EXPORT SurfaceManager {
   ~SurfaceManager();
 
   void RegisterSurface(Surface* surface);
-  void DeregisterSurface(SurfaceId surface_id);
+  void DeregisterSurface(const SurfaceId& surface_id);
 
   // Destroy the Surface once a set of sequence numbers has been satisfied.
   void Destroy(std::unique_ptr<Surface> surface);
 
-  Surface* GetSurfaceForId(SurfaceId surface_id);
+  Surface* GetSurfaceForId(const SurfaceId& surface_id);
 
   void AddObserver(SurfaceDamageObserver* obs) {
     observer_list_.AddObserver(obs);
@@ -48,18 +48,17 @@ class CC_SURFACES_EXPORT SurfaceManager {
     observer_list_.RemoveObserver(obs);
   }
 
-  bool SurfaceModified(SurfaceId surface_id);
+  bool SurfaceModified(const SurfaceId& surface_id);
 
   // A frame for a surface satisfies a set of sequence numbers in a particular
   // id namespace.
-  void DidSatisfySequences(uint32_t id_namespace,
-                           std::vector<uint32_t>* sequence);
+  void DidSatisfySequences(uint32_t client_id, std::vector<uint32_t>* sequence);
 
-  void RegisterSurfaceIdNamespace(uint32_t id_namespace);
+  void RegisterSurfaceClientId(uint32_t client_id);
 
   // Invalidate a namespace that might still have associated sequences,
   // possibly because a renderer process has crashed.
-  void InvalidateSurfaceIdNamespace(uint32_t id_namespace);
+  void InvalidateSurfaceClientId(uint32_t client_id);
 
   // SurfaceFactoryClient, hierarchy, and BeginFrameSource can be registered
   // and unregistered in any order with respect to each other.
@@ -74,15 +73,14 @@ class CC_SURFACES_EXPORT SurfaceManager {
   // Caller guarantees the client is alive between register/unregister.
   // Reregistering the same namespace when a previous client is active is not
   // valid.
-  void RegisterSurfaceFactoryClient(uint32_t id_namespace,
+  void RegisterSurfaceFactoryClient(uint32_t client_id,
                                     SurfaceFactoryClient* client);
-  void UnregisterSurfaceFactoryClient(uint32_t id_namespace);
+  void UnregisterSurfaceFactoryClient(uint32_t client_id);
 
   // Associates a |source| with a particular namespace.  That namespace and
   // any children of that namespace with valid clients can potentially use
   // that |source|.
-  void RegisterBeginFrameSource(BeginFrameSource* source,
-                                uint32_t id_namespace);
+  void RegisterBeginFrameSource(BeginFrameSource* source, uint32_t client_id);
   void UnregisterBeginFrameSource(BeginFrameSource* source);
 
   // Register a relationship between two namespaces.  This relationship means
@@ -95,9 +93,9 @@ class CC_SURFACES_EXPORT SurfaceManager {
                                            uint32_t child_namespace);
 
  private:
-  void RecursivelyAttachBeginFrameSource(uint32_t id_namespace,
+  void RecursivelyAttachBeginFrameSource(uint32_t client_id,
                                          BeginFrameSource* source);
-  void RecursivelyDetachBeginFrameSource(uint32_t id_namespace,
+  void RecursivelyDetachBeginFrameSource(uint32_t client_id,
                                          BeginFrameSource* source);
   // Returns true if |child namespace| is or has |search_namespace| as a child.
   bool ChildContains(uint32_t child_namespace, uint32_t search_namespace) const;
@@ -121,7 +119,7 @@ class CC_SURFACES_EXPORT SurfaceManager {
   // Set of valid surface ID namespaces. When a namespace is removed from
   // this set, any remaining sequences with that namespace are considered
   // satisfied.
-  std::unordered_set<uint32_t> valid_surface_id_namespaces_;
+  std::unordered_set<uint32_t> valid_surface_client_ids_;
 
   // Begin frame source routing. Both BeginFrameSource and SurfaceFactoryClient
   // pointers guaranteed alive by callers until unregistered.
@@ -129,7 +127,7 @@ class CC_SURFACES_EXPORT SurfaceManager {
     ClientSourceMapping();
     ClientSourceMapping(const ClientSourceMapping& other);
     ~ClientSourceMapping();
-    bool is_empty() const { return !client && !children.size(); }
+    bool is_empty() const { return !client && children.empty(); }
     // The client that's responsible for creating this namespace.  Never null.
     SurfaceFactoryClient* client;
     // The currently assigned begin frame source for this client.

@@ -99,6 +99,8 @@ class TestRunner : public WebTestRunner {
   void SetFocus(blink::WebView* web_view, bool focus) override;
 
   // Methods used by WebViewTestClient and WebFrameTestClient.
+  void OnNavigationBegin(blink::WebFrame* frame);
+  void OnNavigationEnd() { will_navigate_ = false; }
   void OnAnimationScheduled(blink::WebWidget* widget);
   void OnAnimationBegun(blink::WebWidget* widget);
   std::string GetAcceptLanguages() const;
@@ -154,7 +156,6 @@ class TestRunner : public WebTestRunner {
   bool policyDelegateEnabled() const;
   bool policyDelegateIsPermissive() const;
   bool policyDelegateShouldNotifyDone() const;
-  bool shouldDumpResourcePriorities() const;
   void setToolTipText(const blink::WebString&);
   void setDragImage(const blink::WebImage& drag_image);
   bool shouldDumpNavigationPolicy() const;
@@ -442,11 +443,6 @@ class TestRunner : public WebTestRunner {
   // Causes WillSendRequest to clear certain headers.
   void SetWillSendRequestClearHeader(const std::string& header);
 
-  // This function sets a flag that tells the test_shell to dump a descriptive
-  // line for each resource load's priority and any time that priority
-  // changes. It takes no arguments, and ignores any that may be present.
-  void DumpResourceRequestPriorities();
-
   // Sets a flag to enable the mock theme.
   void SetUseMockTheme(bool use);
 
@@ -459,7 +455,7 @@ class TestRunner : public WebTestRunner {
   // results will be the drag image instead of a snapshot of the page.
   void DumpDragImage();
 
-  // Sets a flag that tells the WebTestProxy to dump the default navigation
+  // Sets a flag that tells the WebViewTestProxy to dump the default navigation
   // policy passed to the decidePolicyForNavigation callback.
   void DumpNavigationPolicy();
 
@@ -467,8 +463,11 @@ class TestRunner : public WebTestRunner {
   // to test output.
   void SetDumpConsoleMessages(bool value);
 
+  // Controls whether the mock spell checker is enabled.
+  void SetMockSpellCheckerEnabled(bool enabled);
+
   ///////////////////////////////////////////////////////////////////////////
-  // Methods interacting with the WebTestProxy
+  // Methods interacting with the WebViewTestProxy
 
   ///////////////////////////////////////////////////////////////////////////
   // Methods forwarding to the WebTestDelegate
@@ -493,8 +492,10 @@ class TestRunner : public WebTestRunner {
   // Sets the default quota for all origins
   void SetDatabaseQuota(int quota);
 
-  // Changes the cookie policy from the default to allow all cookies.
-  void SetAlwaysAcceptCookies(bool accept);
+  // Sets the cookie policy to:
+  // - allow all cookies when |block| is false
+  // - block only third-party cookies when |block| is true
+  void SetBlockThirdPartyCookies(bool block);
 
   // Converts a URL starting with file:///tmp/ to the local mapping.
   std::string PathToLocalResource(const std::string& path);
@@ -611,6 +612,12 @@ class TestRunner : public WebTestRunner {
   std::unique_ptr<MockContentSettingsClient> mock_content_settings_client_;
 
   bool use_mock_theme_;
+
+  // This is true in the period between the start of a navigation and when the
+  // provisional load for that navigation is started. Note that when
+  // browser-side navigation is enabled there is an arbitrary gap between these
+  // two events.
+  bool will_navigate_;
 
   std::unique_ptr<MockCredentialManagerClient> credential_manager_client_;
   std::unique_ptr<MockScreenOrientationClient> mock_screen_orientation_client_;

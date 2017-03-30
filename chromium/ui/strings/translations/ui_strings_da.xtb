@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
-<translation id="1021451612696613363">Log ind for at se dine underretninger</translation>
 <translation id="111910763555783249">Indstillinger for underretninger</translation>
 <translation id="1127811143501539442">{DAYS,plural, =1{for 1 dag siden}one{for # dage siden}other{for # dage siden}}</translation>
 <translation id="1190609913194133056">Underretningcenter</translation>
@@ -23,6 +22,7 @@
 <translation id="2168039046890040389">Side op</translation>
 <translation id="2190355936436201913">(tom)</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/sek.</translation>
+<translation id="2336922762358079423">Annoter i Google Keep</translation>
 <translation id="2482878487686419369">Underretninger</translation>
 <translation id="2497284189126895209">Alle filer</translation>
 <translation id="2515586267016047495">Alt</translation>
@@ -50,6 +50,7 @@
 <translation id="4320177379694898372">Ingen internetforbindelse</translation>
 <translation id="436869212180315161">Tryk</translation>
 <translation id="4588090240171750605">Scroll til højre</translation>
+<translation id="459417155289402299">Quick Unlock-funktion</translation>
 <translation id="4820616160060340806">Kommando+<ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekund}one{# sekunder}other{# sekunder}}</translation>
 <translation id="4971687151119236543">Medie: Forrige nummer</translation>
@@ -77,7 +78,6 @@
 <translation id="6404817160109697034">{SECONDS,plural, =1{for 1 sek. siden}one{for # sek. siden}other{for # sek. siden}}</translation>
 <translation id="6528179044667508675">Vil ikke forstyrres</translation>
 <translation id="6620110761915583480">Gem fil</translation>
-<translation id="6659594942844771486">Fane</translation>
 <translation id="6699343763173986273">Medie: Næste nummer</translation>
 <translation id="6786750046913594791">Luk mappe</translation>
 <translation id="6808150112686056157">Medie: Stop</translation>
@@ -97,6 +97,7 @@
 <translation id="7410957453383678442">{MINUTES,plural, =1{1 minut tilbage}one{# minutter tilbage}other{# minutter tilbage}}</translation>
 <translation id="7457942297256758195">Ryd alle</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="7647488630410863958">Lås enheden op for at se dine underretninger</translation>
 <translation id="7649070708921625228">Hjælp</translation>
 <translation id="7658239707568436148">Annuller</translation>
 <translation id="7781829728241885113">I går</translation>
@@ -108,6 +109,7 @@
 <translation id="815598010540052116">Scroll Down</translation>
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8210608804940886430">Side ned</translation>
+<translation id="8245914219290430011">Tabulatortast</translation>
 <translation id="8328145009876646418">Venstre kant</translation>
 <translation id="8331626408530291785">Scroll Up</translation>
 <translation id="8371695176452482769">Indtal nu</translation>

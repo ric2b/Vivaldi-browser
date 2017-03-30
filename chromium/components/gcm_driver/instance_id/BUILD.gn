@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 # GYP version: components/gcm_driver.gypi:instance_id_driver
-source_set("instance_id") {
+static_library("instance_id") {
   sources = [
     "android/component_jni_registrar.cc",
     "android/component_jni_registrar.h",
@@ -17,10 +17,8 @@ source_set("instance_id") {
 
   deps = [
     "//base",
-    "//components/gcm_driver",
     "//crypto",
   ]
-  allow_circular_includes_from = [ "//components/gcm_driver" ]
 
   if (is_android) {
     sources -= [
@@ -36,7 +34,7 @@ source_set("instance_id") {
 }
 
 # GYP version: components/gcm_driver.gypi:instance_id_test_support
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "fake_gcm_driver_for_instance_id.cc",
@@ -70,6 +68,7 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//google_apis/gcm",
+    "//net:test_support",
     "//testing/gtest",
   ]
 }

@@ -5,7 +5,6 @@
 #include "services/navigation/view_impl.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -16,6 +15,8 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
+#include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/mus/native_widget_mus.h"
 #include "ui/views/widget/widget.h"
@@ -56,12 +57,12 @@ mojom::NavigationEntryPtr EntryPtrFromNavEntry(
 
 }  // namespace
 
-ViewImpl::ViewImpl(shell::Connector* connector,
+ViewImpl::ViewImpl(std::unique_ptr<shell::Connector> connector,
                    const std::string& client_user_id,
                    mojom::ViewClientPtr client,
                    mojom::ViewRequest request,
-                   std::unique_ptr<shell::ShellConnectionRef> ref)
-    : connector_(connector),
+                   std::unique_ptr<shell::ServiceContextRef> ref)
+    : connector_(std::move(connector)),
       binding_(this, std::move(request)),
       client_(std::move(client)),
       ref_(std::move(ref)),
@@ -110,9 +111,8 @@ void ViewImpl::Stop() {
   web_view_->GetWebContents()->Stop();
 }
 
-void ViewImpl::GetWindowTreeClient(
-    mus::mojom::WindowTreeClientRequest request) {
-  new mus::WindowTreeClient(this, nullptr, std::move(request));
+void ViewImpl::GetWindowTreeClient(ui::mojom::WindowTreeClientRequest request) {
+  new ui::WindowTreeClient(this, nullptr, std::move(request));
 }
 
 void ViewImpl::ShowInterstitial(const mojo::String& html) {
@@ -149,8 +149,9 @@ void ViewImpl::AddNewContents(content::WebContents* source,
   const std::string new_user_id =
       content::BrowserContext::GetShellUserIdFor(
           new_contents->GetBrowserContext());
-  ViewImpl* impl = new ViewImpl(connector_, new_user_id, std::move(client),
-                                std::move(view_request), ref_->Clone());
+  ViewImpl* impl = new ViewImpl(
+      connector_->Clone(), new_user_id, std::move(client),
+      std::move(view_request), ref_->Clone());
   // TODO(beng): This is a bit crappy. should be able to create the ViewImpl
   //             with |new_contents| instead.
   impl->web_view_->SetWebContents(new_contents);
@@ -265,7 +266,7 @@ void ViewImpl::Observe(int type,
   }
 }
 
-void ViewImpl::OnEmbed(mus::Window* root) {
+void ViewImpl::OnEmbed(ui::Window* root) {
   DCHECK(!widget_.get());
   widget_.reset(new views::Widget);
   views::Widget::InitParams params(
@@ -273,13 +274,14 @@ void ViewImpl::OnEmbed(mus::Window* root) {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.delegate = this;
   params.native_widget = new views::NativeWidgetMus(
-      widget_.get(), connector_, root, mus::mojom::SurfaceType::DEFAULT);
+      widget_.get(), root, ui::mojom::SurfaceType::DEFAULT);
   widget_->Init(params);
   widget_->Show();
 }
 
-void ViewImpl::OnWindowTreeClientDestroyed(mus::WindowTreeClient* client) {}
-void ViewImpl::OnEventObserved(const ui::Event& event, mus::Window* target) {}
+void ViewImpl::OnDidDestroyClient(ui::WindowTreeClient* client) {}
+void ViewImpl::OnPointerEventObserved(const ui::PointerEvent& event,
+                                      ui::Window* target) {}
 
 views::View* ViewImpl::GetContentsView() {
   return web_view_;

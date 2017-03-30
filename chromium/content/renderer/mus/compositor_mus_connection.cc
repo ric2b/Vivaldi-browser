@@ -5,14 +5,15 @@
 #include "content/renderer/mus/compositor_mus_connection.h"
 
 #include "base/single_thread_task_runner.h"
-#include "content/common/input/web_input_event_traits.h"
 #include "content/renderer/input/input_handler_manager.h"
 #include "content/renderer/mus/render_widget_mus_connection.h"
 #include "mojo/converters/blink/blink_input_events_type_converters.h"
+#include "ui/events/blink/did_overscroll_params.h"
+#include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/latency_info.h"
 #include "ui/events/mojo/event.mojom.h"
 
-using mus::mojom::EventResult;
+using ui::mojom::EventResult;
 
 namespace {
 
@@ -26,7 +27,7 @@ CompositorMusConnection::CompositorMusConnection(
     int routing_id,
     const scoped_refptr<base::SingleThreadTaskRunner>& main_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& compositor_task_runner,
-    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request,
+    mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request,
     InputHandlerManager* input_handler_manager)
     : routing_id_(routing_id),
       root_(nullptr),
@@ -41,7 +42,7 @@ CompositorMusConnection::CompositorMusConnection(
 }
 
 void CompositorMusConnection::AttachSurfaceOnMainThread(
-    std::unique_ptr<mus::WindowSurfaceBinding> surface_binding) {
+    std::unique_ptr<ui::WindowSurfaceBinding> surface_binding) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   compositor_task_runner_->PostTask(
       FROM_HERE,
@@ -52,19 +53,19 @@ void CompositorMusConnection::AttachSurfaceOnMainThread(
 CompositorMusConnection::~CompositorMusConnection() {}
 
 void CompositorMusConnection::AttachSurfaceOnCompositorThread(
-    std::unique_ptr<mus::WindowSurfaceBinding> surface_binding) {
+    std::unique_ptr<ui::WindowSurfaceBinding> surface_binding) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   window_surface_binding_ = std::move(surface_binding);
   if (root_) {
-    root_->AttachSurface(mus::mojom::SurfaceType::DEFAULT,
+    root_->AttachSurface(ui::mojom::SurfaceType::DEFAULT,
                          std::move(window_surface_binding_));
   }
 }
 
 void CompositorMusConnection::CreateWindowTreeClientOnCompositorThread(
-    mojo::InterfaceRequest<mus::mojom::WindowTreeClient> request) {
+    mojo::InterfaceRequest<ui::mojom::WindowTreeClient> request) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  new mus::WindowTreeClient(this, nullptr, std::move(request));
+  new ui::WindowTreeClient(this, nullptr, std::move(request));
 }
 
 void CompositorMusConnection::OnConnectionLostOnMainThread() {
@@ -96,31 +97,31 @@ void CompositorMusConnection::OnWindowInputEventAckOnMainThread(
   compositor_task_runner_->PostTask(FROM_HERE, base::Bind(ack, result));
 }
 
-void CompositorMusConnection::OnWindowTreeClientDestroyed(
-    mus::WindowTreeClient* client) {
+void CompositorMusConnection::OnDidDestroyClient(ui::WindowTreeClient* client) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   main_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&CompositorMusConnection::OnConnectionLostOnMainThread, this));
 }
 
-void CompositorMusConnection::OnEmbed(mus::Window* root) {
+void CompositorMusConnection::OnEmbed(ui::Window* root) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   root_ = root;
   root_->set_input_event_handler(this);
   if (window_surface_binding_) {
-    root->AttachSurface(mus::mojom::SurfaceType::DEFAULT,
+    root->AttachSurface(ui::mojom::SurfaceType::DEFAULT,
                         std::move(window_surface_binding_));
   }
 }
 
-void CompositorMusConnection::OnEventObserved(const ui::Event& event,
-                                              mus::Window* target) {
-  // Compositor does not use SetEventObserver().
+void CompositorMusConnection::OnPointerEventObserved(
+    const ui::PointerEvent& event,
+    ui::Window* target) {
+  // Compositor does not use StartPointerWatcher().
 }
 
 void CompositorMusConnection::OnWindowInputEvent(
-    mus::Window* window,
+    ui::Window* window,
     const ui::Event& event,
     std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
@@ -137,7 +138,8 @@ void CompositorMusConnection::OnWindowInputEvent(
     return;
   base::Callback<void(EventResult)> ack =
       base::Bind(&::DoNothingWithEventResult);
-  const bool send_ack = WebInputEventTraits::ShouldBlockEventStream(*web_event);
+  const bool send_ack =
+      ui::WebInputEventTraits::ShouldBlockEventStream(*web_event);
   if (send_ack) {
     // Ultimately, this ACK needs to go back to the Mus client lib which is not
     // thread-safe and lives on the compositor thread. For ACKs that are passed

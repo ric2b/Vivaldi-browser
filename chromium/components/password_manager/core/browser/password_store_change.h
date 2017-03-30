@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_CHANGE_H__
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_PASSWORD_STORE_CHANGE_H__
 
+#include <ostream>
 #include <vector>
 
 #include "components/autofill/core/common/password_form.h"
@@ -38,7 +39,6 @@ class PasswordStoreChange {
            form().password_value == other.form().password_value &&
            form().new_password_element == other.form().new_password_element &&
            form().new_password_value == other.form().new_password_value &&
-           form().ssl_valid == other.form().ssl_valid &&
            form().preferred == other.form().preferred &&
            form().date_created == other.form().date_created &&
            form().blacklisted_by_user == other.form().blacklisted_by_user;

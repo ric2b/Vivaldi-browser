@@ -21,6 +21,7 @@
 #include "cc/base/switches.h"
 #include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
+#include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/config/gpu_feature_type.h"
@@ -58,14 +59,18 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
   GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
+  gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
+
+  bool accelerated_vpx_disabled =
+      command_line.HasSwitch(switches::kDisableAcceleratedVideoDecode);
+#if defined(OS_WIN)
+  accelerated_vpx_disabled |= !gpu_preferences.enable_accelerated_vpx_decode;
+#endif
 
   const GpuFeatureInfo kGpuFeatureInfo[] = {
     {"2d_canvas",
      manager->IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS),
-     command_line.HasSwitch(switches::kDisableAccelerated2dCanvas) ||
-         !GpuDataManagerImpl::GetInstance()
-              ->GetGPUInfo()
-              .SupportsAccelerated2dCanvas(),
+     command_line.HasSwitch(switches::kDisableAccelerated2dCanvas),
      "Accelerated 2D canvas is unavailable: either disabled via blacklist or"
      " the command line.",
      true},
@@ -137,6 +142,14 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
      "Native GpuMemoryBuffers have been disabled, either via about:flags"
      " or command line.",
      true},
+    {"vpx_decode", manager->IsFeatureBlacklisted(
+                       gpu::GPU_FEATURE_TYPE_ACCELERATED_VPX_DECODE) ||
+                       manager->IsFeatureBlacklisted(
+                           gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE),
+     accelerated_vpx_disabled,
+     "Accelerated VPx video decode has been disabled, either via blacklist"
+     " or the command line.",
+     true},
   };
   DCHECK(index < arraysize(kGpuFeatureInfo));
   *eof = (index == arraysize(kGpuFeatureInfo) - 1);
@@ -148,9 +161,11 @@ const GpuFeatureInfo GetGpuFeatureInfo(size_t index, bool* eof) {
 int NumberOfRendererRasterThreads() {
   int num_processors = base::SysInfo::NumberOfProcessors();
 
-#if defined(OS_ANDROID)
-  // Android may report 6 to 8 CPUs for big.LITTLE configurations.
-  // Limit the number of raster threads based on maximum of 4 big cores.
+#if defined(OS_ANDROID) || \
+    (defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY))
+  // Android and ChromeOS ARM devices may report 6 to 8 CPUs for big.LITTLE
+  // configurations. Limit the number of raster threads based on maximum of
+  // 4 big cores.
   num_processors = std::min(num_processors, 4);
 #endif
 
@@ -190,10 +205,6 @@ bool IsZeroCopyUploadEnabled() {
 }
 
 bool IsPartialRasterEnabled() {
-  // Zero copy currently doesn't take advantage of partial raster.
-  if (IsZeroCopyUploadEnabled())
-    return false;
-
   const auto& command_line = *base::CommandLine::ForCurrentProcess();
   return !command_line.HasSwitch(switches::kDisablePartialRaster);
 }
@@ -299,7 +310,7 @@ bool IsMainFrameBeforeActivationEnabled() {
   if (command_line.HasSwitch(cc::switches::kEnableMainFrameBeforeActivation))
     return true;
 
-  return base::FeatureList::IsEnabled(features::kMainFrameBeforeActivation);
+  return true;
 }
 
 base::DictionaryValue* GetFeatureStatus() {

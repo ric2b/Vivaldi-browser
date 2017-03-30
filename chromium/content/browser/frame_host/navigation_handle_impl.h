@@ -18,6 +18,7 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/common/request_context_type.h"
 #include "url/gurl.h"
 
 struct FrameHostMsg_DidCommitProvisionalLoad_Params;
@@ -26,7 +27,6 @@ namespace content {
 
 class NavigatorDelegate;
 class ResourceRequestBodyImpl;
-struct NavigationRequestInfo;
 
 // This class keeps track of a single navigation. It is created upon receipt of
 // a DidStartProvisionalLoad IPC in a RenderFrameHost. The RenderFrameHost owns
@@ -74,7 +74,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool is_synchronous,
       bool is_srcdoc,
       const base::TimeTicks& navigation_start,
-      int pending_nav_entry_id);
+      int pending_nav_entry_id,
+      bool started_from_context_menu);
   ~NavigationHandleImpl() override;
 
   // NavigationHandle implementation:
@@ -98,6 +99,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   bool IsSamePage() override;
   bool HasCommitted() override;
   bool IsErrorPage() override;
+  const net::HttpResponseHeaders* GetResponseHeaders() override;
   void Resume() override;
   void CancelDeferredNavigation(
       NavigationThrottle::ThrottleCheckResult result) override;
@@ -114,15 +116,15 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool new_method_is_post,
       const GURL& new_referrer_url,
       bool new_is_external_protocol) override;
+  NavigationThrottle::ThrottleCheckResult CallWillProcessResponseForTesting(
+      RenderFrameHost* render_frame_host) override;
+  bool WasStartedFromContextMenu() const override;
+
   NavigationData* GetNavigationData() override;
 
   NavigatorDelegate* GetDelegate() const;
 
-  // Returns the response headers for the request or nullptr if there are none.
-  // This should only be accessed after a redirect was encountered or after the
-  // navigation is ready to commit. The headers returned should not be modified,
-  // as modifications will not be reflected in the network stack.
-  const net::HttpResponseHeaders* GetResponseHeaders();
+  RequestContextType GetRequestContextType() const;
 
   // Get the unique id from the NavigationEntry associated with this
   // NavigationHandle. Note that a synchronous, renderer-initiated navigation
@@ -176,6 +178,7 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
       bool has_user_gesture,
       ui::PageTransition transition,
       bool is_external_protocol,
+      RequestContextType request_context_type,
       const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest will be redirected in the network stack.
@@ -248,7 +251,8 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
                        bool is_synchronous,
                        bool is_srcdoc,
                        const base::TimeTicks& navigation_start,
-                       int pending_nav_entry_id);
+                       int pending_nav_entry_id,
+                       bool started_from_context_menu);
 
   NavigationThrottle::ThrottleCheckResult CheckWillStartRequest();
   NavigationThrottle::ThrottleCheckResult CheckWillRedirectRequest();
@@ -260,6 +264,9 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // Used in tests.
   State state() const { return state_; }
+
+  // Populates |throttles_| with the throttles for this navigation.
+  void RegisterNavigationThrottles();
 
   // See NavigationHandle for a description of those member variables.
   GURL url_;
@@ -306,11 +313,17 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The unique id of the corresponding NavigationEntry.
   int pending_nav_entry_id_;
 
+  // The fetch request context type.
+  RequestContextType request_context_type_;
+
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;
 
   // Embedder data tied to this navigation.
   std::unique_ptr<NavigationData> navigation_data_;
+
+  // False by default unless the navigation started within a context menu.
+  bool started_from_context_menu_;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationHandleImpl);
 };

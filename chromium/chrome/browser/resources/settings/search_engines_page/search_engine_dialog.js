@@ -57,7 +57,7 @@ Polymer({
       this.actionButtonText_ = loadTimeData.getString('save');
 
       // If editing an existing search engine, pre-populate the input fields.
-      this.searchEngine_ = this.model.displayName;
+      this.searchEngine_ = this.model.name;
       this.keyword_ = this.model.keyword;
       this.queryUrl_ = this.model.url;
     } else {
@@ -66,7 +66,7 @@ Polymer({
       this.actionButtonText_ = loadTimeData.getString('add');
     }
 
-    this.addEventListener('iron-overlay-canceled', function() {
+    this.addEventListener('cancel', function() {
       this.browserProxy_.searchEngineEditCancelled();
     }.bind(this));
   },
@@ -76,7 +76,7 @@ Polymer({
     this.updateActionButtonState_();
     this.browserProxy_.searchEngineEditStarted(
         this.model ? this.model.modelIndex : this.DEFAULT_MODEL_INDEX);
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   },
 
   /** @private */

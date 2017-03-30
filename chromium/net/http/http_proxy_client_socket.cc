@@ -34,7 +34,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
     HttpAuthController* http_auth_controller,
     bool tunnel,
     bool using_spdy,
-    NextProto protocol_negotiated,
+    NextProto negotiated_protocol,
     ProxyDelegate* proxy_delegate,
     bool is_https_proxy)
     : io_callback_(base::Bind(&HttpProxyClientSocket::OnIOComplete,
@@ -45,7 +45,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
       auth_(http_auth_controller),
       tunnel_(tunnel),
       using_spdy_(using_spdy),
-      protocol_negotiated_(protocol_negotiated),
+      negotiated_protocol_(negotiated_protocol),
       is_https_proxy_(is_https_proxy),
       redirect_has_load_timing_info_(false),
       proxy_server_(proxy_server),
@@ -89,8 +89,8 @@ bool HttpProxyClientSocket::IsUsingSpdy() const {
   return using_spdy_;
 }
 
-NextProto HttpProxyClientSocket::GetProtocolNegotiated() const {
-  return protocol_negotiated_;
+NextProto HttpProxyClientSocket::GetProxyNegotiatedProtocol() const {
+  return negotiated_protocol_;
 }
 
 const HttpResponseInfo* HttpProxyClientSocket::GetConnectResponseInfo() const {
@@ -511,7 +511,6 @@ int HttpProxyClientSocket::DoReadHeadersComplete(int result) {
 
 int HttpProxyClientSocket::DoDrainBody() {
   DCHECK(drain_buf_.get());
-  DCHECK(transport_->is_initialized());
   next_state_ = STATE_DRAIN_BODY_COMPLETE;
   return http_stream_parser_->ReadResponseBody(
       drain_buf_.get(), kDrainBodyBufferSize, io_callback_);

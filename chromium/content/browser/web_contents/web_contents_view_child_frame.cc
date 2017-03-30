@@ -47,6 +47,18 @@ gfx::NativeWindow WebContentsViewChildFrame::GetTopLevelNativeWindow() const {
   return GetOuterView()->GetTopLevelNativeWindow();
 }
 
+void WebContentsViewChildFrame::GetScreenInfo(
+    blink::WebScreenInfo* web_screen_info) const {
+  // TODO(wjmaclean): falling back to the default screen info is not what used
+  // to happen in RenderWidgetHostViewChildFrame, but it seems like the right
+  // thing to do. We should keep an eye on this in case the else-clause below
+  // causes problems.
+  if (web_contents_->GetOuterWebContents())
+    GetOuterView()->GetScreenInfo(web_screen_info);
+  else
+    WebContentsView::GetDefaultScreenInfo(web_screen_info);
+}
+
 void WebContentsViewChildFrame::GetContainerBounds(gfx::Rect* out) const {
   RenderWidgetHostView* view = web_contents_->GetRenderWidgetHostView();
   if (view)
@@ -141,7 +153,8 @@ void WebContentsViewChildFrame::GotFocus() {
 }
 
 void WebContentsViewChildFrame::TakeFocus(bool reverse) {
-  NOTREACHED();
+  // TODO(avallee): http://crbug.com/610819 Advance focus to next element in
+  // outer WebContents.
 }
 
 void WebContentsViewChildFrame::ShowContextMenu(

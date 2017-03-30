@@ -52,7 +52,6 @@
 #include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/svg/SVGStyleElement.h"
-#include "platform/v8_inspector/public/V8ContentSearchUtil.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/TextPosition.h"
@@ -70,6 +69,68 @@ using namespace blink;
 static CSSParserContext parserContextForDocument(Document *document)
 {
     return document ? CSSParserContext(*document, nullptr) : strictCSSParserContext();
+}
+
+String findMagicComment(const String& content, const String& name)
+{
+    DCHECK(name.find("=") == kNotFound);
+
+    unsigned length = content.length();
+    unsigned nameLength = name.length();
+    const bool multiline = true;
+
+    size_t pos = length;
+    size_t equalSignPos = 0;
+    size_t closingCommentPos = 0;
+    while (true) {
+        pos = content.reverseFind(name, pos);
+        if (pos == kNotFound)
+            return emptyString();
+
+        // Check for a /\/[\/*][@#][ \t]/ regexp (length of 4) before found name.
+        if (pos < 4)
+            return emptyString();
+        pos -= 4;
+        if (content[pos] != '/')
+            continue;
+        if ((content[pos + 1] != '/' || multiline)
+            && (content[pos + 1] != '*' || !multiline))
+            continue;
+        if (content[pos + 2] != '#' && content[pos + 2] != '@')
+            continue;
+        if (content[pos + 3] != ' ' && content[pos + 3] != '\t')
+            continue;
+        equalSignPos = pos + 4 + nameLength;
+        if (equalSignPos < length && content[equalSignPos] != '=')
+            continue;
+        if (multiline) {
+            closingCommentPos = content.find("*/", equalSignPos + 1);
+            if (closingCommentPos == kNotFound)
+                return emptyString();
+        }
+
+        break;
+    }
+
+    DCHECK(equalSignPos);
+    DCHECK(!multiline || closingCommentPos);
+    size_t urlPos = equalSignPos + 1;
+    String match = multiline
+        ? content.substring(urlPos, closingCommentPos - urlPos)
+        : content.substring(urlPos);
+
+    size_t newLine = match.find("\n");
+    if (newLine != kNotFound)
+        match = match.substring(0, newLine);
+    match = match.stripWhiteSpace();
+
+    String disallowedChars("\"' \t");
+    for (unsigned i = 0; i < match.length(); ++i) {
+        if (disallowedChars.find(match[i]) != kNotFound)
+            return emptyString();
+    }
+
+    return match;
 }
 
 class StyleSheetHandler final : public CSSParserObserver {
@@ -489,13 +550,13 @@ CSSRuleList* asCSSRuleList(CSSRule* rule)
     if (!rule)
         return nullptr;
 
-    if (rule->type() == CSSRule::MEDIA_RULE)
+    if (rule->type() == CSSRule::kMediaRule)
         return toCSSMediaRule(rule)->cssRules();
 
-    if (rule->type() == CSSRule::SUPPORTS_RULE)
+    if (rule->type() == CSSRule::kSupportsRule)
         return toCSSSupportsRule(rule)->cssRules();
 
-    if (rule->type() == CSSRule::KEYFRAMES_RULE)
+    if (rule->type() == CSSRule::kKeyframesRule)
         return toCSSKeyframesRule(rule)->cssRules();
 
     return nullptr;
@@ -512,18 +573,18 @@ void collectFlatRules(RuleList ruleList, CSSRuleVector* result)
 
         // The result->append()'ed types should be exactly the same as in flattenSourceData().
         switch (rule->type()) {
-        case CSSRule::STYLE_RULE:
-        case CSSRule::IMPORT_RULE:
-        case CSSRule::CHARSET_RULE:
-        case CSSRule::PAGE_RULE:
-        case CSSRule::FONT_FACE_RULE:
-        case CSSRule::VIEWPORT_RULE:
-        case CSSRule::KEYFRAME_RULE:
+        case CSSRule::kStyleRule:
+        case CSSRule::kImportRule:
+        case CSSRule::kCharsetRule:
+        case CSSRule::kPageRule:
+        case CSSRule::kFontFaceRule:
+        case CSSRule::kViewportRule:
+        case CSSRule::kKeyframeRule:
             result->append(rule);
             break;
-        case CSSRule::MEDIA_RULE:
-        case CSSRule::SUPPORTS_RULE:
-        case CSSRule::KEYFRAMES_RULE:
+        case CSSRule::kMediaRule:
+        case CSSRule::kSupportsRule:
+        case CSSRule::kKeyframesRule:
             result->append(rule);
             collectFlatRules(asCSSRuleList(rule), result);
             break;
@@ -633,7 +694,7 @@ void diff(const Vector<String>& listA, const Vector<String>& listB, IndexMap* aT
 
 String canonicalCSSText(CSSRule* rule)
 {
-    if (rule->type() != CSSRule::STYLE_RULE)
+    if (rule->type() != CSSRule::kStyleRule)
         return rule->cssText();
     CSSStyleRule* styleRule = toCSSStyleRule(rule);
 
@@ -646,20 +707,20 @@ String canonicalCSSText(CSSRule* rule)
 
     StringBuilder builder;
     builder.append(styleRule->selectorText());
-    builder.append("{");
+    builder.append('{');
     for (unsigned i = 0; i < propertyNames.size(); ++i) {
         String name = propertyNames.at(i);
-        builder.append(" ");
+        builder.append(' ');
         builder.append(name);
-        builder.append(":");
+        builder.append(':');
         builder.append(style->getPropertyValue(name));
         if (!style->getPropertyPriority(name).isEmpty()) {
-            builder.append(" ");
+            builder.append(' ');
             builder.append(style->getPropertyPriority(name));
         }
-        builder.append(";");
+        builder.append(';');
     }
-    builder.append("}");
+    builder.append('}');
 
     return builder.toString();
 }
@@ -721,22 +782,6 @@ std::unique_ptr<protocol::CSS::CSSStyle> InspectorStyle::buildObjectForStyle()
             const SourceRange& bodyRange = m_sourceData->ruleBodyRange;
             result->setCssText(sheetText.substring(bodyRange.start, bodyRange.end - bodyRange.start));
         }
-    }
-
-    return result;
-}
-
-std::unique_ptr<protocol::Array<protocol::CSS::CSSComputedStyleProperty>> InspectorStyle::buildArrayForComputedStyle()
-{
-    std::unique_ptr<protocol::Array<protocol::CSS::CSSComputedStyleProperty>> result = protocol::Array<protocol::CSS::CSSComputedStyleProperty>::create();
-    Vector<CSSPropertySourceData> properties;
-    populateAllProperties(properties);
-
-    for (auto& property : properties) {
-        std::unique_ptr<protocol::CSS::CSSComputedStyleProperty> entry = protocol::CSS::CSSComputedStyleProperty::create()
-            .setName(property.name)
-            .setValue(property.value).build();
-        result->addItem(std::move(entry));
     }
 
     return result;
@@ -999,7 +1044,7 @@ CSSStyleRule* InspectorStyleSheet::setRuleSelector(const SourceRange& range, con
     }
 
     CSSRule* rule = ruleForSourceData(sourceData);
-    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::STYLE_RULE) {
+    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::kStyleRule) {
         exceptionState.throwDOMException(NotFoundError, "Source range didn't match existing style source range");
         return nullptr;
     }
@@ -1027,7 +1072,7 @@ CSSKeyframeRule* InspectorStyleSheet::setKeyframeKey(const SourceRange& range, c
     }
 
     CSSRule* rule = ruleForSourceData(sourceData);
-    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::KEYFRAME_RULE) {
+    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::kKeyframeRule) {
         exceptionState.throwDOMException(NotFoundError, "Source range didn't match existing style source range");
         return nullptr;
     }
@@ -1055,15 +1100,15 @@ CSSRule* InspectorStyleSheet::setStyleText(const SourceRange& range, const Strin
     }
 
     CSSRule* rule = ruleForSourceData(sourceData);
-    if (!rule || !rule->parentStyleSheet() || (rule->type() != CSSRule::STYLE_RULE && rule->type() != CSSRule::KEYFRAME_RULE)) {
+    if (!rule || !rule->parentStyleSheet() || (rule->type() != CSSRule::kStyleRule && rule->type() != CSSRule::kKeyframeRule)) {
         exceptionState.throwDOMException(NotFoundError, "Source range didn't match existing style source range");
         return nullptr;
     }
 
     CSSStyleDeclaration* style = nullptr;
-    if (rule->type() == CSSRule::STYLE_RULE)
+    if (rule->type() == CSSRule::kStyleRule)
         style = toCSSStyleRule(rule)->style();
-    else if (rule->type() == CSSRule::KEYFRAME_RULE)
+    else if (rule->type() == CSSRule::kKeyframeRule)
         style = toCSSKeyframeRule(rule)->style();
     style->setCSSText(text, exceptionState);
 
@@ -1087,7 +1132,7 @@ CSSMediaRule* InspectorStyleSheet::setMediaRuleText(const SourceRange& range, co
     }
 
     CSSRule* rule = ruleForSourceData(sourceData);
-    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::MEDIA_RULE) {
+    if (!rule || !rule->parentStyleSheet() || rule->type() != CSSRule::kMediaRule) {
         exceptionState.throwDOMException(NotFoundError, "Source range didn't match existing style source range");
         return nullptr;
     }
@@ -1177,7 +1222,7 @@ CSSStyleRule* InspectorStyleSheet::insertCSSOMRuleBySourceRange(const SourceRang
         return insertCSSOMRuleInStyleSheet(insertBeforeRule, ruleText, exceptionState);
 
     CSSRule* rule = ruleForSourceData(containingRuleSourceData);
-    if (!rule || rule->type() != CSSRule::MEDIA_RULE) {
+    if (!rule || rule->type() != CSSRule::kMediaRule) {
         exceptionState.throwDOMException(NotFoundError, "Cannot insert rule in non-media rule.");
         return nullptr;
     }
@@ -1247,7 +1292,7 @@ bool InspectorStyleSheet::deleteRule(const SourceRange& range, ExceptionState& e
     }
     CSSRule* parentRule = rule->parentRule();
     if (parentRule) {
-        if (parentRule->type() != CSSRule::MEDIA_RULE) {
+        if (parentRule->type() != CSSRule::kMediaRule) {
             exceptionState.throwDOMException(NotFoundError, "Cannot remove rule from non-media rule.");
             return false;
         }
@@ -1482,8 +1527,7 @@ String InspectorStyleSheet::sourceURL()
     String styleSheetText;
     bool success = getText(&styleSheetText);
     if (success) {
-        bool deprecated = false;
-        String commentValue = V8ContentSearchUtil::findSourceURL(styleSheetText, true, &deprecated);
+        String commentValue = findMagicComment(styleSheetText, "sourceURL");
         if (!commentValue.isEmpty()) {
             m_sourceURL = commentValue;
             return commentValue;
@@ -1534,8 +1578,7 @@ String InspectorStyleSheet::sourceMapURL()
     String styleSheetText;
     bool success = getText(&styleSheetText);
     if (success) {
-        bool deprecated = false;
-        String commentValue = V8ContentSearchUtil::findSourceMapURL(styleSheetText, true, &deprecated);
+        String commentValue = findMagicComment(styleSheetText, "sourceMappingURL");
         if (!commentValue.isEmpty())
             return commentValue;
     }

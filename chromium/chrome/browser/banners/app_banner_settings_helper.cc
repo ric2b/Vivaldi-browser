@@ -15,10 +15,11 @@
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "chrome/browser/banners/app_banner_data_fetcher.h"
+#include "chrome/browser/banners/app_banner_manager.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -53,6 +54,12 @@ const unsigned int kDefaultIndirectNavigationEngagement = 1;
 
 // Default number of navigations required to trigger the banner.
 const unsigned int kDefaultTotalEngagementToTrigger = 2;
+
+// The number of days in the past that a site should be launched from homescreen
+// to be considered recent.
+// TODO(dominickn): work out how to unify this with
+// WebappDataStorage.wasLaunchedRecently.
+const unsigned int kRecentLastLaunchInDays = 10;
 
 // Dictionary keys to use for the events.
 const char* kBannerEventKeys[] = {
@@ -212,10 +219,9 @@ void AppBannerSettingsHelper::RecordBannerInstallEvent(
   banners::TrackInstallEvent(banners::INSTALL_EVENT_WEB_APP_INSTALLED);
 
   AppBannerSettingsHelper::RecordBannerEvent(
-      web_contents, web_contents->GetURL(),
-      package_name_or_start_url,
+      web_contents, web_contents->GetURL(), package_name_or_start_url,
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
-      banners::AppBannerDataFetcher::GetCurrentTime());
+      banners::AppBannerManager::GetCurrentTime());
 
   rappor::SampleDomainAndRegistryFromGURL(
       g_browser_process->rappor_service(),
@@ -231,10 +237,9 @@ void AppBannerSettingsHelper::RecordBannerDismissEvent(
   banners::TrackDismissEvent(banners::DISMISS_EVENT_CLOSE_BUTTON);
 
   AppBannerSettingsHelper::RecordBannerEvent(
-      web_contents, web_contents->GetURL(),
-      package_name_or_start_url,
+      web_contents, web_contents->GetURL(), package_name_or_start_url,
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_BLOCK,
-      banners::AppBannerDataFetcher::GetCurrentTime());
+      banners::AppBannerManager::GetCurrentTime());
 
   rappor::SampleDomainAndRegistryFromGURL(
       g_browser_process->rappor_service(),
@@ -370,7 +375,7 @@ void AppBannerSettingsHelper::RecordBannerCouldShowEvent(
       std::move(origin_dict));
 }
 
-bool AppBannerSettingsHelper::ShouldShowBanner(
+InstallableStatusCode AppBannerSettingsHelper::ShouldShowBanner(
     content::WebContents* web_contents,
     const GURL& origin_url,
     const std::string& package_name_or_start_url,
@@ -378,12 +383,12 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
   // Ignore all checks if the flag to do so is set.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kBypassAppBannerEngagementChecks)) {
-    return true;
+    return NO_ERROR_DETECTED;
   }
 
   // Never show a banner when the package name or URL is empty.
   if (package_name_or_start_url.empty())
-    return false;
+    return PACKAGE_NAME_OR_START_URL_EMPTY;
 
   // Don't show if it has been added to the homescreen.
   base::Time added_time =
@@ -391,7 +396,7 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
                            APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN);
   if (!added_time.is_null()) {
     banners::TrackDisplayEvent(banners::DISPLAY_EVENT_INSTALLED_PREVIOUSLY);
-    return false;
+    return ALREADY_INSTALLED;
   }
 
   base::Time blocked_time =
@@ -403,7 +408,7 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
   if (time - blocked_time <
       base::TimeDelta::FromDays(kMinimumBannerBlockedToBannerShown)) {
     banners::TrackDisplayEvent(banners::DISPLAY_EVENT_BLOCKED_PREVIOUSLY);
-    return false;
+    return PREVIOUSLY_BLOCKED;
   }
 
   base::Time shown_time =
@@ -412,7 +417,7 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
   if (time - shown_time <
       base::TimeDelta::FromDays(kMinimumDaysBetweenBannerShows)) {
     banners::TrackDisplayEvent(banners::DISPLAY_EVENT_IGNORED_PREVIOUSLY);
-    return false;
+    return PREVIOUSLY_IGNORED;
   }
 
   // If we have gotten this far and want to use site engagement, the banner flow
@@ -423,7 +428,7 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
   // in this method when app banners have fully migrated to using site
   // engagement as a trigger condition. See crbug.com/616322.
   if (ShouldUseSiteEngagementScore())
-    return true;
+    return NO_ERROR_DETECTED;
 
   double total_engagement = 0;
   std::vector<BannerEvent> could_show_events = GetCouldShowBannerEvents(
@@ -434,10 +439,10 @@ bool AppBannerSettingsHelper::ShouldShowBanner(
 
   if (!HasSufficientEngagement(total_engagement)) {
     banners::TrackDisplayEvent(banners::DISPLAY_EVENT_NOT_VISITED_ENOUGH);
-    return false;
+    return INSUFFICIENT_ENGAGEMENT;
   }
 
-  return true;
+  return NO_ERROR_DETECTED;
 }
 
 std::vector<AppBannerSettingsHelper::BannerEvent>
@@ -535,6 +540,47 @@ void AppBannerSettingsHelper::RecordMinutesFromFirstVisitToShow(
     minutes = (time - could_show_events[0].time).InMinutes();
 
   banners::TrackMinutesFromFirstVisitToBannerShown(minutes);
+}
+
+bool AppBannerSettingsHelper::WasLaunchedRecently(
+    content::WebContents* web_contents,
+    const GURL& origin_url,
+    base::Time now) {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  HostContentSettingsMap* settings =
+      HostContentSettingsMapFactory::GetForProfile(profile);
+  std::unique_ptr<base::DictionaryValue> origin_dict =
+      GetOriginDict(settings, origin_url);
+
+  if (!origin_dict)
+    return false;
+
+  // Iterate over everything in the content setting, which should be a set of
+  // dictionaries per app path. If we find one that has been added to
+  // homescreen recently, return true.
+  for (base::DictionaryValue::Iterator it(*origin_dict); !it.IsAtEnd();
+       it.Advance()) {
+    if (it.value().IsType(base::Value::TYPE_DICTIONARY)) {
+      const base::DictionaryValue* value;
+      it.value().GetAsDictionary(&value);
+
+      std::string event_key(
+          kBannerEventKeys[APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN]);
+      double internal_time;
+      if (!value->GetDouble(event_key, &internal_time))
+        continue;
+
+      base::Time added_time = base::Time::FromInternalValue(internal_time);
+
+      if ((now - added_time) <=
+          base::TimeDelta::FromDays(kRecentLastLaunchInDays)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 void AppBannerSettingsHelper::SetEngagementWeights(double direct_engagement,

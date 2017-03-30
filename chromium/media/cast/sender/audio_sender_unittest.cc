@@ -42,7 +42,7 @@ class TransportClient : public CastTransport::Client {
   TransportClient() {}
 
   void OnStatusChanged(CastTransportStatus status) final {
-    EXPECT_EQ(TRANSPORT_AUDIO_INITIALIZED, status);
+    EXPECT_EQ(TRANSPORT_STREAM_INITIALIZED, status);
   };
   void OnLoggingEventsReceived(
       std::unique_ptr<std::vector<FrameEvent>> frame_events,
@@ -103,16 +103,15 @@ class AudioSenderTest : public ::testing::Test {
                             task_runner_, task_runner_, task_runner_);
     audio_config_.codec = CODEC_AUDIO_OPUS;
     audio_config_.use_external_encoder = false;
-    audio_config_.frequency = kDefaultAudioSamplingRate;
+    audio_config_.rtp_timebase = kDefaultAudioSamplingRate;
     audio_config_.channels = 2;
-    audio_config_.bitrate = kDefaultAudioEncoderBitrate;
-    audio_config_.rtp_payload_type = 127;
+    audio_config_.max_bitrate = kDefaultAudioEncoderBitrate;
+    audio_config_.rtp_payload_type = RtpPayloadType::AUDIO_OPUS;
 
     transport_ = new TestPacketSender();
-    transport_sender_.reset(
-        new CastTransportImpl(testing_clock_, base::TimeDelta(),
-                              base::WrapUnique(new TransportClient()),
-                              base::WrapUnique(transport_), task_runner_));
+    transport_sender_.reset(new CastTransportImpl(
+        testing_clock_, base::TimeDelta(), base::MakeUnique<TransportClient>(),
+        base::WrapUnique(transport_), task_runner_));
     OperationalStatus operational_status = STATUS_UNINITIALIZED;
     audio_sender_.reset(new AudioSender(
         cast_environment_,
@@ -131,13 +130,13 @@ class AudioSenderTest : public ::testing::Test {
   scoped_refptr<FakeSingleThreadTaskRunner> task_runner_;
   std::unique_ptr<AudioSender> audio_sender_;
   scoped_refptr<CastEnvironment> cast_environment_;
-  AudioSenderConfig audio_config_;
+  FrameSenderConfig audio_config_;
 };
 
 TEST_F(AudioSenderTest, Encode20ms) {
   const base::TimeDelta kDuration = base::TimeDelta::FromMilliseconds(20);
   std::unique_ptr<AudioBus> bus(
-      TestAudioBusFactory(audio_config_.channels, audio_config_.frequency,
+      TestAudioBusFactory(audio_config_.channels, audio_config_.rtp_timebase,
                           TestAudioBusFactory::kMiddleANoteFreq, 0.5f)
           .NextAudioBus(kDuration));
 
@@ -150,7 +149,7 @@ TEST_F(AudioSenderTest, Encode20ms) {
 TEST_F(AudioSenderTest, RtcpTimer) {
   const base::TimeDelta kDuration = base::TimeDelta::FromMilliseconds(20);
   std::unique_ptr<AudioBus> bus(
-      TestAudioBusFactory(audio_config_.channels, audio_config_.frequency,
+      TestAudioBusFactory(audio_config_.channels, audio_config_.rtp_timebase,
                           TestAudioBusFactory::kMiddleANoteFreq, 0.5f)
           .NextAudioBus(kDuration));
 

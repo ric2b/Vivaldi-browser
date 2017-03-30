@@ -234,6 +234,12 @@ bool BubbleBorder::GetArrowPath(const gfx::Rect& view_bounds,
   return true;
 }
 
+void BubbleBorder::SetBorderInteriorThickness(int border_interior_thickness) {
+  images_->border_interior_thickness = border_interior_thickness;
+  if (!has_arrow(arrow_) || arrow_paint_type_ != PAINT_NORMAL)
+    images_->border_thickness = border_interior_thickness;
+}
+
 void BubbleBorder::Paint(const views::View& view, gfx::Canvas* canvas) {
   gfx::Rect bounds(view.GetContentsBounds());
   bounds.Inset(-GetBorderThickness(), -GetBorderThickness());
@@ -250,8 +256,7 @@ void BubbleBorder::Paint(const views::View& view, gfx::Canvas* canvas) {
 
   // Clip the arrow bounds out to avoid painting the overlapping edge area.
   canvas->Save();
-  SkRect arrow_rect(gfx::RectToSkRect(arrow_bounds));
-  canvas->sk_canvas()->clipRect(arrow_rect, SkRegion::kDifference_Op);
+  canvas->ClipRect(arrow_bounds, SkRegion::kDifference_Op);
   Painter::PaintPainterAt(canvas, images_->border_painter.get(), bounds);
   canvas->Restore();
 

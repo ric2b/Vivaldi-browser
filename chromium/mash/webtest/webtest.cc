@@ -11,15 +11,15 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "mash/public/interfaces/launchable.mojom.h"
-#include "mojo/public/c/system/main.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/tracing/public/cpp/provider.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_throbber.h"
@@ -88,11 +88,11 @@ class UI : public views::WidgetDelegateView,
   void ViewHierarchyChanged(
       const views::View::ViewHierarchyChangedDetails& details) override {
     if (details.is_add && GetWidget() && !content_area_) {
-      mus::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
+      ui::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
       content_area_ = window->window_tree()->NewWindow(nullptr);
       window->AddChild(content_area_);
 
-      mus::mojom::WindowTreeClientPtr client;
+      ui::mojom::WindowTreeClientPtr client;
       view_->GetWindowTreeClient(GetProxy(&client));
       content_area_->Embed(std::move(client));
     }
@@ -134,7 +134,7 @@ class UI : public views::WidgetDelegateView,
   void NavigationListPruned(bool from_front, int count) override {}
 
   Webtest* webtest_;
-  mus::Window* content_area_ = nullptr;
+  ui::Window* content_area_ = nullptr;
   navigation::mojom::ViewPtr view_;
   mojo::Binding<navigation::mojom::ViewClient> view_client_binding_;
   base::string16 current_title_;
@@ -157,19 +157,18 @@ void Webtest::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void Webtest::Initialize(shell::Connector* connector,
-                         const shell::Identity& identity,
-                         uint32_t id) {
-  connector_ = connector;
-  tracing_.Initialize(connector, identity.name());
+void Webtest::OnStart(const shell::Identity& identity) {
+  tracing_.Initialize(connector(), identity.name());
 
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
+  aura_init_.reset(
+      new views::AuraInit(connector(), "views_mus_resources.pak"));
   window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector, identity);
+      views::WindowManagerConnection::Create(connector(), identity);
 }
 
-bool Webtest::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mojom::Launchable>(this);
+bool Webtest::OnConnect(const shell::Identity& remote_identity,
+                        shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mojom::Launchable>(this);
   return true;
 }
 
@@ -182,7 +181,7 @@ void Webtest::Launch(uint32_t what, mojom::LaunchMode how) {
   }
 
   navigation::mojom::ViewFactoryPtr view_factory;
-  connector_->ConnectToInterface("exe:navigation", &view_factory);
+  connector()->ConnectToInterface("exe:navigation", &view_factory);
   navigation::mojom::ViewPtr view;
   navigation::mojom::ViewClientPtr view_client;
   navigation::mojom::ViewClientRequest view_client_request =
@@ -196,7 +195,7 @@ void Webtest::Launch(uint32_t what, mojom::LaunchMode how) {
   AddWindow(window);
 }
 
-void Webtest::Create(shell::Connection* connection,
+void Webtest::Create(const shell::Identity& remote_identity,
                      mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

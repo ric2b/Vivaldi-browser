@@ -28,7 +28,7 @@
 #include "core/dom/StyleEngine.h"
 
 #include "core/HTMLNames.h"
-#include "core/animation/AnimationTimeline.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSStyleSheet.h"
@@ -147,7 +147,7 @@ void StyleEngine::removePendingSheet(Node* styleSheetCandidateNode, const StyleE
 {
     DCHECK(styleSheetCandidateNode);
     TreeScope* treeScope = isStyleElement(*styleSheetCandidateNode) ? &styleSheetCandidateNode->treeScope() : m_document.get();
-    if (styleSheetCandidateNode->inShadowIncludingDocument())
+    if (styleSheetCandidateNode->isConnected())
         markTreeScopeDirty(*treeScope);
 
     if (context.addedPendingSheetBeforeBody()) {
@@ -176,7 +176,7 @@ void StyleEngine::setNeedsActiveStyleUpdate(StyleSheet* sheet, StyleResolverUpda
 
     if (sheet && document().isActive()) {
         Node* node = sheet->ownerNode();
-        if (node && node->inShadowIncludingDocument()) {
+        if (node && node->isConnected()) {
             TreeScope& treeScope = isStyleElement(*node) ? node->treeScope() : *m_document;
             DCHECK(isStyleElement(*node) || node->treeScope() == m_document);
             markTreeScopeDirty(treeScope);
@@ -188,12 +188,11 @@ void StyleEngine::setNeedsActiveStyleUpdate(StyleSheet* sheet, StyleResolverUpda
 
 void StyleEngine::addStyleSheetCandidateNode(Node* node)
 {
-    if (!node->inShadowIncludingDocument() || document().isDetached())
+    if (!node->isConnected() || document().isDetached())
         return;
 
-    TreeScope& treeScope = isStyleElement(*node) ? node->treeScope() : *m_document;
-    DCHECK(isStyleElement(*node) || treeScope == m_document);
     DCHECK(!isXSLStyleSheet(*node));
+    TreeScope& treeScope = node->treeScope();
     TreeScopeStyleSheetCollection* collection = ensureStyleSheetCollectionFor(treeScope);
     DCHECK(collection);
     collection->addStyleSheetCandidateNode(node);
@@ -225,7 +224,7 @@ void StyleEngine::removeStyleSheetCandidateNode(Node* node, TreeScope& treeScope
 
 void StyleEngine::modifiedStyleSheetCandidateNode(Node* node)
 {
-    if (!node->inShadowIncludingDocument())
+    if (!node->isConnected())
         return;
 
     TreeScope& treeScope = isStyleElement(*node) ? node->treeScope() : *m_document;
@@ -512,25 +511,28 @@ CSSStyleSheet* StyleEngine::createSheet(Element* e, const String& text, TextPosi
 
     AtomicString textContent(text);
 
-    HeapHashMap<AtomicString, Member<StyleSheetContents>>::AddResult result = m_textToSheetCache.add(textContent, nullptr);
-    if (result.isNewEntry || !result.storedValue->value) {
+    auto result = m_textToSheetCache.add(textContent, nullptr);
+    StyleSheetContents* contents = result.storedValue->value;
+    if (result.isNewEntry || !contents || !contents->isCacheableForStyleElement()) {
+        result.storedValue->value = nullptr;
         styleSheet = StyleEngine::parseSheet(e, text, startPosition);
-        if (result.isNewEntry && styleSheet->contents()->isCacheableForStyleElement()) {
+        if (styleSheet->contents()->isCacheableForStyleElement()) {
             result.storedValue->value = styleSheet->contents();
             m_sheetToTextCache.add(styleSheet->contents(), textContent);
         }
     } else {
-        StyleSheetContents* contents = result.storedValue->value;
         DCHECK(contents);
         DCHECK(contents->isCacheableForStyleElement());
-        DCHECK_EQ(contents->singleOwnerDocument(), e->document());
+        DCHECK(contents->hasSingleOwnerDocument());
+        contents->setIsUsedFromTextCache();
         styleSheet = CSSStyleSheet::createInline(contents, e, startPosition);
     }
 
     DCHECK(styleSheet);
-    styleSheet->setTitle(e->title());
-    if (!e->isInShadowTree())
-        setPreferredStylesheetSetNameIfNotSet(e->title());
+    if (!e->isInShadowTree()) {
+        styleSheet->setTitle(e->title());
+        setPreferredStylesheetSetNameIfNotSet(e->title(), DontUpdateActiveSheets);
+    }
     return styleSheet;
 }
 
@@ -540,16 +542,6 @@ CSSStyleSheet* StyleEngine::parseSheet(Element* e, const String& text, TextPosit
     styleSheet = CSSStyleSheet::createInline(e, KURL(), startPosition, e->document().characterSet());
     styleSheet->contents()->parseStringAtPosition(text, startPosition);
     return styleSheet;
-}
-
-void StyleEngine::removeSheet(StyleSheetContents* contents)
-{
-    HeapHashMap<Member<StyleSheetContents>, AtomicString>::iterator it = m_sheetToTextCache.find(contents);
-    if (it == m_sheetToTextCache.end())
-        return;
-
-    m_textToSheetCache.remove(it->value);
-    m_sheetToTextCache.remove(contents);
 }
 
 void StyleEngine::collectScopedStyleFeaturesTo(RuleFeatureSet& features) const
@@ -576,6 +568,7 @@ void StyleEngine::fontsNeedUpdate(CSSFontSelector*)
     if (m_resolver)
         m_resolver->invalidateMatchedPropertiesCache();
     document().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Fonts));
+    InspectorInstrumentation::fontsUpdated(m_document);
 }
 
 void StyleEngine::setFontSelector(CSSFontSelector* fontSelector)
@@ -614,7 +607,7 @@ void StyleEngine::classChangedForElement(const SpaceSplitString& changedClasses,
     RuleFeatureSet& ruleFeatureSet = ensureResolver().ensureUpdatedRuleFeatureSet();
     for (unsigned i = 0; i < changedSize; ++i)
         ruleFeatureSet.collectInvalidationSetsForClass(invalidationLists, element, changedClasses[i]);
-    m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, element);
 }
 
 void StyleEngine::classChangedForElement(const SpaceSplitString& oldClasses, const SpaceSplitString& newClasses, Element& element)
@@ -657,7 +650,7 @@ void StyleEngine::classChangedForElement(const SpaceSplitString& oldClasses, con
         ruleFeatureSet.collectInvalidationSetsForClass(invalidationLists, element, oldClasses[i]);
     }
 
-    m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, element);
 }
 
 void StyleEngine::attributeChangedForElement(const QualifiedName& attributeName, Element& element)
@@ -667,7 +660,7 @@ void StyleEngine::attributeChangedForElement(const QualifiedName& attributeName,
 
     InvalidationLists invalidationLists;
     ensureResolver().ensureUpdatedRuleFeatureSet().collectInvalidationSetsForAttribute(invalidationLists, element, attributeName);
-    m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, element);
 }
 
 void StyleEngine::idChangedForElement(const AtomicString& oldId, const AtomicString& newId, Element& element)
@@ -681,7 +674,7 @@ void StyleEngine::idChangedForElement(const AtomicString& oldId, const AtomicStr
         ruleFeatureSet.collectInvalidationSetsForId(invalidationLists, element, oldId);
     if (!newId.isEmpty())
         ruleFeatureSet.collectInvalidationSetsForId(invalidationLists, element, newId);
-    m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, element);
 }
 
 void StyleEngine::pseudoStateChangedForElement(CSSSelector::PseudoType pseudoType, Element& element)
@@ -691,28 +684,30 @@ void StyleEngine::pseudoStateChangedForElement(CSSSelector::PseudoType pseudoTyp
 
     InvalidationLists invalidationLists;
     ensureResolver().ensureUpdatedRuleFeatureSet().collectInvalidationSetsForPseudoClass(invalidationLists, element, pseudoType);
-    m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, element);
 }
 
-void StyleEngine::scheduleSiblingInvalidationsForElement(Element& element, ContainerNode& schedulingParent)
+void StyleEngine::scheduleSiblingInvalidationsForElement(Element& element, ContainerNode& schedulingParent, unsigned minDirectAdjacent)
 {
+    DCHECK(minDirectAdjacent);
+
     InvalidationLists invalidationLists;
 
     RuleFeatureSet& ruleFeatureSet = ensureResolver().ensureUpdatedRuleFeatureSet();
 
     if (element.hasID())
-        ruleFeatureSet.collectSiblingInvalidationSetForId(invalidationLists, element, element.idForStyleResolution());
+        ruleFeatureSet.collectSiblingInvalidationSetForId(invalidationLists, element, element.idForStyleResolution(), minDirectAdjacent);
 
     if (element.hasClass()) {
         const SpaceSplitString& classNames = element.classNames();
         for (size_t i = 0; i < classNames.size(); i++)
-            ruleFeatureSet.collectSiblingInvalidationSetForClass(invalidationLists, element, classNames[i]);
+            ruleFeatureSet.collectSiblingInvalidationSetForClass(invalidationLists, element, classNames[i], minDirectAdjacent);
     }
 
     for (const Attribute& attribute : element.attributes())
-        ruleFeatureSet.collectSiblingInvalidationSetForAttribute(invalidationLists, element, attribute.name());
+        ruleFeatureSet.collectSiblingInvalidationSetForAttribute(invalidationLists, element, attribute.name(), minDirectAdjacent);
 
-    ruleFeatureSet.collectUniversalSiblingInvalidationSet(invalidationLists);
+    ruleFeatureSet.collectUniversalSiblingInvalidationSet(invalidationLists, minDirectAdjacent);
 
     m_styleInvalidator.scheduleSiblingInvalidationsAsDescendants(invalidationLists, schedulingParent);
 }
@@ -725,10 +720,10 @@ void StyleEngine::scheduleInvalidationsForInsertedSibling(Element* beforeElement
     if (!schedulingParent)
         return;
 
-    scheduleSiblingInvalidationsForElement(insertedElement, *schedulingParent);
+    scheduleSiblingInvalidationsForElement(insertedElement, *schedulingParent, 1);
 
-    for (unsigned i = 0; beforeElement && i < affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
-        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent);
+    for (unsigned i = 1; beforeElement && i <= affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
+        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent, i);
 }
 
 void StyleEngine::scheduleInvalidationsForRemovedSibling(Element* beforeElement, Element& removedElement, Element& afterElement)
@@ -739,10 +734,17 @@ void StyleEngine::scheduleInvalidationsForRemovedSibling(Element* beforeElement,
     if (!schedulingParent)
         return;
 
-    scheduleSiblingInvalidationsForElement(removedElement, *schedulingParent);
+    scheduleSiblingInvalidationsForElement(removedElement, *schedulingParent, 1);
 
-    for (unsigned i = 1; beforeElement && i < affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
-        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent);
+    for (unsigned i = 1; beforeElement && i <= affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
+        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent, i);
+}
+
+void StyleEngine::scheduleNthPseudoInvalidations(ContainerNode& nthParent)
+{
+    InvalidationLists invalidationLists;
+    ensureResolver().ensureUpdatedRuleFeatureSet().collectNthInvalidationSet(invalidationLists);
+    m_styleInvalidator.scheduleInvalidationSetsForNode(invalidationLists, nthParent);
 }
 
 void StyleEngine::setStatsEnabled(bool enabled)
@@ -757,7 +759,7 @@ void StyleEngine::setStatsEnabled(bool enabled)
         m_styleResolverStats->reset();
 }
 
-void StyleEngine::setPreferredStylesheetSetNameIfNotSet(const String& name)
+void StyleEngine::setPreferredStylesheetSetNameIfNotSet(const String& name, ActiveSheetsUpdate activeSheetsUpdate)
 {
     if (!m_preferredStylesheetSetName.isEmpty())
         return;
@@ -766,10 +768,16 @@ void StyleEngine::setPreferredStylesheetSetNameIfNotSet(const String& name)
     // has been previously set by through Document.selectedStylesheetSet. Our
     // current implementation ignores the effect of Document.selectedStylesheetSet
     // and either only collects persistent style, or additionally preferred
-    // style when present. We are currently not marking the document scope dirty
-    // because preferred style is updated during active stylesheet update which
-    // would make this method re-entrant. Will need to change for async update.
+    // style when present.
     m_selectedStylesheetSetName = name;
+
+    // TODO(rune@opera.com): For async stylesheet update, we should always mark
+    // the TreeScope dirty here, and the synchronous active stylesheet update
+    // (resolverChanged) should go away.
+    if (activeSheetsUpdate == UpdateActiveSheets) {
+        markDocumentDirty();
+        resolverChanged(AnalyzedStyleUpdate);
+    }
 }
 
 void StyleEngine::setSelectedStylesheetSetName(const String& name)
@@ -784,9 +792,7 @@ void StyleEngine::setSelectedStylesheetSetName(const String& name)
 
 void StyleEngine::setHttpDefaultStyle(const String& content)
 {
-    setPreferredStylesheetSetNameIfNotSet(content);
-    markDocumentDirty();
-    resolverChanged(FullStyleUpdate);
+    setPreferredStylesheetSetNameIfNotSet(content, UpdateActiveSheets);
 }
 
 void StyleEngine::ensureFullscreenUAStyle()

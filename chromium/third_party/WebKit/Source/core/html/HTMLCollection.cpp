@@ -75,7 +75,7 @@ static bool shouldTypeOnlyIncludeDirectChildren(CollectionType type)
     case LabelsNodeListType:
         break;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -113,7 +113,7 @@ static NodeListRootType rootTypeFromCollectionType(CollectionType type)
     case LabelsNodeListType:
         break;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return NodeListRootType::Node;
 }
 
@@ -158,7 +158,7 @@ static NodeListInvalidationType invalidationTypeExcludingIdAndNameAttributes(Col
     case LabelsNodeListType:
         break;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return DoNotInvalidateOnAttributeChanges;
 }
 
@@ -239,7 +239,7 @@ static inline bool isMatchingHTMLElement(const HTMLCollection& htmlCollection, c
     case RadioNodeListType:
     case RadioImgNodeListType:
     case LabelsNodeListType:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
     return false;
 }
@@ -293,17 +293,18 @@ static inline IsMatch<HTMLCollectionType> makeIsMatch(const HTMLCollectionType& 
 
 Element* HTMLCollection::virtualItemAfter(Element*) const
 {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 
+// https://html.spec.whatwg.org/multipage/infrastructure.html#all-named-elements
+// The document.all collection returns only certain types of elements by name,
+// although it returns any type of element by id.
 static inline bool nameShouldBeVisibleInDocumentAll(const HTMLElement& element)
 {
-    // http://www.whatwg.org/specs/web-apps/current-work/multipage/common-dom-interfaces.html#dom-htmlallcollection-nameditem:
-    // The document.all collection returns only certain types of elements by name,
-    // although it returns any type of element by id.
     return element.hasTagName(aTag)
-        || element.hasTagName(areaTag)
+        || element.hasTagName(appletTag)
+        || element.hasTagName(buttonTag)
         || element.hasTagName(embedTag)
         || element.hasTagName(formTag)
         || element.hasTagName(frameTag)
@@ -311,8 +312,11 @@ static inline bool nameShouldBeVisibleInDocumentAll(const HTMLElement& element)
         || element.hasTagName(iframeTag)
         || element.hasTagName(imgTag)
         || element.hasTagName(inputTag)
+        || element.hasTagName(mapTag)
+        || element.hasTagName(metaTag)
         || element.hasTagName(objectTag)
-        || element.hasTagName(selectTag);
+        || element.hasTagName(selectTag)
+        || element.hasTagName(textareaTag);
 }
 
 Element* HTMLCollection::traverseToFirst() const
@@ -333,7 +337,7 @@ Element* HTMLCollection::traverseToFirst() const
 
 Element* HTMLCollection::traverseToLast() const
 {
-    ASSERT(canTraverseBackward());
+    DCHECK(canTraverseBackward());
     if (shouldOnlyIncludeDirectChildren())
         return ElementTraversal::lastChild(rootNode(), makeIsMatch(*this));
     return ElementTraversal::lastWithin(rootNode(), makeIsMatch(*this));
@@ -341,7 +345,7 @@ Element* HTMLCollection::traverseToLast() const
 
 Element* HTMLCollection::traverseForwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset) const
 {
-    ASSERT(currentOffset < offset);
+    DCHECK_LT(currentOffset, offset);
     switch (type()) {
     case HTMLTagCollectionType:
         return traverseMatchingElementsForwardToOffset(currentElement, &rootNode(), offset, currentOffset, makeIsMatch(toHTMLTagCollection(*this)));
@@ -369,8 +373,8 @@ Element* HTMLCollection::traverseForwardToOffset(unsigned offset, Element& curre
 
 Element* HTMLCollection::traverseBackwardToOffset(unsigned offset, Element& currentElement, unsigned& currentOffset) const
 {
-    ASSERT(currentOffset > offset);
-    ASSERT(canTraverseBackward());
+    DCHECK_GT(currentOffset, offset);
+    DCHECK(canTraverseBackward());
     if (shouldOnlyIncludeDirectChildren()) {
         IsMatch<HTMLCollection> isMatch(*this);
         for (Element* previous = ElementTraversal::previousSibling(currentElement, isMatch); previous; previous = ElementTraversal::previousSibling(*previous, isMatch)) {
@@ -468,7 +472,7 @@ void HTMLCollection::updateIdNameCache() const
 
 void HTMLCollection::namedItems(const AtomicString& name, HeapVector<Member<Element>>& result) const
 {
-    ASSERT(result.isEmpty());
+    DCHECK(result.isEmpty());
     if (name.isEmpty())
         return;
 

@@ -2,15 +2,20 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/config/win/visual_studio_version.gni")
-import("//build_overrides/v8.gni")
 import("//chrome/test/mini_installer/mini_installer_test.gni")
 import("//chrome/version.gni")
 import("//third_party/icu/config.gni")
 import("//ui/base/ui_features.gni")
+import("//v8/gni/v8.gni")
+
+if (is_vivaldi) {
+  import("//vivaldi/gn/config/version.gni")
+}
 
 config("mini_installer_compiler_flags") {
   # Disable buffer security checking.
@@ -53,7 +58,7 @@ source_set("lib") {
 
 process_version("version") {
   template_file = "mini_installer_exe_version.rc.version"
-  output = "$target_gen_dir/mini_installer_version.rc"
+  output = "$root_out_dir/mini_installer_exe_version.rc"
 }
 
 source_set("unit_tests") {
@@ -233,6 +238,7 @@ template("generate_mini_installer") {
     configs += [
       ":mini_installer_compiler_flags",
       "//build/config/compiler:optimize_no_wpo",
+      "//build/config/sanitizers:link_executable",
       "//build/config/win:sdk_link",
       "//build/config/win:windowed",
     ]
@@ -262,7 +268,7 @@ generate_mini_installer("mini_installer") {
   chrome_dll_target = "//chrome:main_dll"
 }
 
-if (syzygy_optimize) {
+if (syzygy_optimize || is_syzyasan) {
   generate_mini_installer("mini_installer_syzygy") {
     out_dir = "$root_out_dir/syzygy/"
     chrome_dll_file = "$root_out_dir/syzygy/chrome.dll"

@@ -159,8 +159,9 @@ bool LayoutView::hitTestNoLifecycleUpdate(HitTestResult& result)
 void LayoutView::clearHitTestCache()
 {
     m_hitTestCache->clear();
-    if (LayoutPart* frameLayoutObject = frame()->ownerLayoutObject())
-        frameLayoutObject->view()->clearHitTestCache();
+    LayoutPartItem frameLayoutItem = frame()->ownerLayoutItem();
+    if (!frameLayoutItem.isNull())
+        frameLayoutItem.view().clearHitTestCache();
 }
 
 void LayoutView::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit, LogicalExtentComputedValues& computedValues) const
@@ -375,28 +376,20 @@ void LayoutView::mapAncestorToLocal(const LayoutBoxModelObject* ancestor, Transf
     if (this == ancestor)
         return;
 
-    if (mode & IsFixed && m_frameView)
-        transformState.move(m_frameView->scrollOffset());
-
-    if (mode & UseTransforms && shouldUseTransformFromContainer(0)) {
-        TransformationMatrix t;
-        getTransformFromContainer(0, LayoutSize(), t);
-        transformState.applyTransform(t);
-    }
-
     if (mode & TraverseDocumentBoundaries) {
         if (LayoutPart* parentDocLayoutObject = frame()->ownerLayoutObject()) {
             // A LayoutView is a containing block for fixed-position elements, so don't carry this state across frames.
-            mode &= ~IsFixed;
+            parentDocLayoutObject->mapAncestorToLocal(ancestor, transformState, mode & ~IsFixed);
 
-            transformState.move(-frame()->view()->scrollOffset());
             transformState.move(parentDocLayoutObject->contentBoxOffset());
-
-            parentDocLayoutObject->mapAncestorToLocal(ancestor, transformState, mode);
+            transformState.move(-frame()->view()->scrollOffset());
         }
     } else {
         ASSERT(!ancestor);
     }
+
+    if (mode & IsFixed)
+        transformState.move(frame()->view()->scrollOffset());
 }
 
 void LayoutView::computeSelfHitTestRects(Vector<LayoutRect>& rects, const LayoutPoint&) const
@@ -448,9 +441,6 @@ bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ance
 
 bool LayoutView::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, MapCoordinatesFlags mode, VisualRectFlags visualRectFlags) const
 {
-    // Convert the rect into the physical coordinates space of this LayoutView.
-    flipForWritingMode(rect);
-
     if (mode & IsFixed)
         adjustOffsetForFixedPosition(rect);
 
@@ -584,13 +574,6 @@ void LayoutView::invalidatePaintForSelection()
             continue;
 
         o->setShouldInvalidateSelection();
-
-        // Blocks are responsible for painting line gaps and margin gaps. They must be examined as well.
-        for (LayoutBlock* block = o->containingBlock(); block && !block->isLayoutView(); block = block->containingBlock()) {
-            if (!processedBlocks.add(block).isNewEntry)
-                break;
-            block->setShouldInvalidateSelection();
-        }
     }
 }
 
@@ -851,7 +834,7 @@ LayoutRect LayoutView::backgroundRect(LayoutBox* backgroundLayoutObject) const
 IntSize LayoutView::layoutSize(IncludeScrollbarsInRect scrollbarInclusion) const
 {
     if (shouldUsePrintingLayout())
-        return IntSize(size().width(), pageLogicalHeight());
+        return IntSize(size().width().toInt(), pageLogicalHeight().toInt());
 
     if (!m_frameView)
         return IntSize();
@@ -925,7 +908,7 @@ void LayoutView::setIsInWindow(bool isInWindow)
     if (m_compositor)
         m_compositor->setIsInWindow(isInWindow);
 #if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-    // We don't invalidate layers during document detach(), so must clear the should-keep-alive
+    // We don't invalidate layers during Document::detachLayoutTree(), so must clear the should-keep-alive
     // DisplayItemClients which may be deleted before the layers being subsequence owners.
     if (!isInWindow && layer())
         layer()->endShouldKeepAliveAllClientsRecursive();

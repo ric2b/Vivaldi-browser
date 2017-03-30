@@ -24,8 +24,8 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/sync/api/string_ordinal.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "sync/api/string_ordinal.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -35,9 +35,9 @@ namespace launcher {
 namespace {
 
 // App ID of default pinned apps.
-const char* kDefaultPinnedApps[] = {extension_misc::kGmailAppId,
-                                    extension_misc::kGoogleDocAppId,
-                                    extension_misc::kYoutubeAppId};
+const char* kDefaultPinnedApps[] = {
+    extension_misc::kGmailAppId, extension_misc::kGoogleDocAppId,
+    extension_misc::kYoutubeAppId, ArcSupportHost::kHostAppId};
 
 base::ListValue* CreateDefaultPinnedAppsList() {
   std::unique_ptr<base::ListValue> apps(new base::ListValue);
@@ -636,6 +636,17 @@ std::vector<std::string> GetPinnedAppsFromPrefs(
     app_service->SetPinPosition(extension_misc::kChromeAppId, front_position);
   }
 
+  if (helper->IsValidIDForCurrentUser(ArcSupportHost::kHostAppId)) {
+    if (!app_service->GetSyncItem(ArcSupportHost::kHostAppId)) {
+      const syncer::StringOrdinal arc_host_position =
+          GetLastPinPosition(helper->profile());
+      pin_infos.insert(pin_infos.begin(),
+                       PinInfo(ArcSupportHost::kHostAppId, arc_host_position));
+      app_service->SetPinPosition(ArcSupportHost::kHostAppId,
+                                  arc_host_position);
+    }
+  }
+
   // Convert to string array.
   std::vector<std::string> pins(pin_infos.size());
   for (size_t i = 0; i < pin_infos.size(); ++i)
@@ -655,12 +666,10 @@ void RemovePinPosition(Profile* profile, const std::string& app_id) {
 void SetPinPosition(Profile* profile,
                     const std::string& app_id,
                     const std::string& app_id_before,
-                    const std::string& app_id_after) {
+                    const std::vector<std::string>& app_ids_after) {
   DCHECK(profile);
   DCHECK(!app_id.empty());
   DCHECK_NE(app_id, app_id_before);
-  DCHECK_NE(app_id, app_id_after);
-  DCHECK(app_id_before.empty() || app_id_before != app_id_after);
 
   app_list::AppListSyncableService* app_service =
       app_list::AppListSyncableServiceFactory::GetForProfile(profile);
@@ -671,9 +680,21 @@ void SetPinPosition(Profile* profile,
   syncer::StringOrdinal position_before =
       app_id_before.empty() ? syncer::StringOrdinal()
                             : app_service->GetPinPosition(app_id_before);
-  syncer::StringOrdinal position_after =
-      app_id_after.empty() ? syncer::StringOrdinal()
-                           : app_service->GetPinPosition(app_id_after);
+  syncer::StringOrdinal position_after;
+  for (const auto& app_id_after : app_ids_after) {
+    DCHECK_NE(app_id_after, app_id);
+    DCHECK_NE(app_id_after, app_id_before);
+    syncer::StringOrdinal position = app_service->GetPinPosition(app_id_after);
+    DCHECK(position.IsValid());
+    if (!position.IsValid()) {
+      LOG(ERROR) << "Sync pin position was not found for " << app_id_after;
+      continue;
+    }
+    if (!position_before.IsValid() || !position.Equals(position_before)) {
+      position_after = position;
+      break;
+    }
+  }
 
   syncer::StringOrdinal pin_position;
   if (position_before.IsValid() && position_after.IsValid())

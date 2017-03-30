@@ -75,13 +75,14 @@ class PLATFORM_EXPORT ImageBuffer {
     WTF_MAKE_NONCOPYABLE(ImageBuffer);
     USING_FAST_MALLOC(ImageBuffer);
 public:
-    static std::unique_ptr<ImageBuffer> create(const IntSize&, OpacityMode = NonOpaque, ImageInitializationMode = InitializeImagePixels);
+    static std::unique_ptr<ImageBuffer> create(const IntSize&, OpacityMode = NonOpaque, ImageInitializationMode = InitializeImagePixels, sk_sp<SkColorSpace> = nullptr);
     static std::unique_ptr<ImageBuffer> create(std::unique_ptr<ImageBufferSurface>);
 
     virtual ~ImageBuffer();
 
     void setClient(ImageBufferClient* client) { m_client = client; }
 
+    static bool canCreateImageBuffer(const IntSize&);
     const IntSize& size() const { return m_surface->size(); }
     bool isAccelerated() const { return m_surface->isAccelerated(); }
     bool isRecording() const { return m_surface->isRecording(); }
@@ -92,6 +93,7 @@ public:
     bool restoreSurface() const;
     void didDraw(const FloatRect&) const;
     bool wasDrawnToAfterSnapshot() const { return m_snapshotState == DrawnToAfterSnapshot; }
+    void didDisableAcceleration() const;
 
     void setFilterQuality(SkFilterQuality filterQuality) { m_surface->setFilterQuality(filterQuality); }
     void setIsHidden(bool hidden) { m_surface->setIsHidden(hidden); }
@@ -144,6 +146,10 @@ public:
     static intptr_t getGlobalGPUMemoryUsage() { return s_globalGPUMemoryUsage; }
     static unsigned getGlobalAcceleratedImageBufferCount() { return s_globalAcceleratedImageBufferCount; }
     intptr_t getGPUMemoryUsage() { return m_gpuMemoryUsage; }
+
+    void disableAcceleration();
+
+    WeakPtrFactory<ImageBuffer> m_weakPtrFactory;
 
 protected:
     ImageBuffer(std::unique_ptr<ImageBufferSurface>);

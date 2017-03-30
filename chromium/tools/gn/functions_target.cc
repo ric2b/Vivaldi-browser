@@ -13,6 +13,8 @@
 #include "tools/gn/value.h"
 #include "tools/gn/variables.h"
 
+#include "tools/gn/build_settings.h"
+
 #define DEPENDENT_CONFIG_VARS \
     "  Dependent configs: all_dependent_configs, public_configs\n"
 #define DEPS_VARS \
@@ -43,8 +45,15 @@ Value ExecuteGenericTarget(const char* target_type,
                             args, &block_scope, err))
     return Value();
 
+  // <Vivaldi>
+  if (!PrePostProcessTheTarget(false, &block_scope, function, args, block, err))
+    return Value();
+  // </Vivaldi>
+
   block->Execute(&block_scope, err);
   if (err->has_error())
+    return Value();
+  if (!PrePostProcessTheTarget(true, &block_scope, function, args, block, err))
     return Value();
 
   TargetGenerator::GenerateTarget(&block_scope, function, args,
@@ -91,8 +100,8 @@ const char kAction_Help[] =
     "action: Declare a target that runs a script a single time.\n"
     "\n"
     "  This target type allows you to run a script a single time to produce\n"
-    "  or more output files. If you want to run a script once for each of a\n"
-    "  set of input files, see \"gn help action_foreach\".\n"
+    "  one or more output files. If you want to run a script once for each of\n"
+    "  a set of input files, see \"gn help action_foreach\".\n"
     "\n"
     "Inputs\n"
     "\n"
@@ -279,7 +288,7 @@ const char kBundleData_Help[] =
     "  }\n"
     "\n"
     "  bundle_data(\"base_unittests_bundle_data]\") {\n"
-    "    sources = [ \"test/data\" ]\n"
+    "    sources = [ \"test/data\" ]\n"
     "    outputs = [\n"
     "      \"{{bundle_resources_dir}}/{{source_root_relative_dir}}/\" +\n"
     "          \"{{source_file_part}}\"\n"
@@ -353,8 +362,8 @@ const char kCreateBundle_Help[] =
     "Variables\n"
     "\n"
     "  bundle_root_dir*, bundle_resources_dir*, bundle_executable_dir*,\n"
-    "  bundle_plugins_dir*, deps, data_deps, public_deps, visibility,\n"
-    "  product_type, code_signing_args, code_signing_script,\n"
+    "  bundle_plugins_dir*, bundle_deps_filter, deps, data_deps, public_deps,\n"
+    "  visibility, product_type, code_signing_args, code_signing_script,\n"
     "  code_signing_sources, code_signing_outputs\n"
     "  * = required\n"
     "\n"
@@ -773,11 +782,286 @@ Value RunTarget(Scope* scope,
   // Run a template if it is one.
   const Template* templ = scope->GetTemplate(target_type);
   if (templ)
-    return templ->Invoke(scope, function, sub_args, block, err);
+    return templ->Invoke(scope, function, target_type, sub_args, block, err);
 
   // Otherwise, assume the target is a built-in target type.
   return ExecuteGenericTarget(target_type.c_str(), scope, function, sub_args,
                               block, err);
 }
+
+// <Vivaldi>
+// target ---------------------------------------------------------------------
+
+const char kPreProcessTarget[] = "pre_process_target";
+const char kPreProcessTarget_HelpShort[] =
+    "pre_process_target: Add code to be run before setting up a target.";
+const char kPreProcessTarget_Help[] =
+    "pre_process_target: Add code to be run before setting up a target.";
+
+Value RunPreProcessTarget(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTarget(false, scope, function, args, block, err);
+}
+
+const char kPostProcessTarget[] = "post_process_target";
+const char kPostProcessTarget_HelpShort[] =
+    "post_process_target: Add code to be run after setting up a target.";
+const char kPostProcessTarget_Help[] =
+    "post_process_target: Add code to be run after setting up a target.";
+
+Value RunPostProcessTarget(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTarget(true, scope, function, args, block, err);
+}
+
+const char kPreProcessAction[] = "pre_process_action";
+const char kPreProcessAction_HelpShort[] =
+    "pre_process_action: Add code to be run before setting up an action.";
+const char kPreProcessAction_Help[] =
+    "pre_process_action: Add code to be run before setting up an action.";
+
+Value RunPreProcessAction(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTarget(false, scope, function, args, block, err);
+}
+
+const char kPostProcessAction[] = "post_process_action";
+const char kPostProcessAction_HelpShort[] =
+    "post_process_action: Add code to be run after setting up an action.";
+const char kPostProcessAction_Help[] =
+    "post_process_action: Add code to be run after setting up an action.";
+
+Value RunPostProcessAction(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTarget(true, scope, function, args, block, err);
+}
+
+const char kPreProcessTemplate[] = "pre_process_template";
+const char kPreProcessTemplate_HelpShort[] =
+    "pre_process_template: Add code to be run before setting up an template.";
+const char kPreProcessTemplate_Help[] =
+    "pre_process_template: Add code to be run before setting up an template.";
+
+
+Value RunPreProcessTemplate(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTemplate(false, scope, function, args, block, err);
+}
+
+const char kPostProcessTemplate[] = "post_process_template";
+const char kPostProcessTemplate_HelpShort[] =
+    "post_process_template: Add code to be run after setting up an template.";
+const char kPostProcessTemplate_Help[] =
+    "post_process_template: Add code to be run after setting up an template.";
+
+Value RunPostProcessTemplate(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  return RunPrePostProcessTemplate(true, scope, function, args, block, err);
+}
+
+bool GetTargetName(Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                std::string &ret_name,
+                Err* err) {
+  if (args.size() != 1) {
+    *err = Err(function, "Expected one argument.",
+              "Try \"gn help post_process_target\".");
+    return false;
+  }
+
+  // The argument must be a string (the target name).
+  if (!args[0].VerifyTypeIs(Value::STRING, err))
+    return false;
+
+  const std::string &target_name = args[0].string_value();
+  if ((target_name[0] != ':' && target_name[0] != '/') ||
+      (target_name[1] == '/' && target_name[1] != '/' )) {
+    *err = Err(function, "Expected a valid target like \"//foo:bar\" or"
+                         "\":bar\", got \""+ target_name + "\".",
+                         "Try \"gn help post_process_target\".");
+    return false;
+  }
+
+  size_t target_ind = target_name.find_first_of(':');
+  std::string source_name;
+
+  // Need a valid target in string
+  if (target_ind == target_name.length()) {
+    *err = Err(function, "Expected a valid target like  \"//foo\","
+                         " \"//foo:bar\" or \":bar\", got \""+
+                         target_name + "\".",
+                         "Try \"gn help post_process_target\".");
+    return false;
+  }
+  if(target_ind != std::string::npos && target_ind >0) {
+    SourceDir dir(target_name.substr(0,target_ind));
+
+    const Label& toolchain_label = ToolchainLabelForScope(scope);
+    Label label(dir, target_name.substr(target_ind+1),
+                toolchain_label.dir(), toolchain_label.name());
+
+    source_name = label.GetUserVisibleName(false);
+  } else {
+    source_name = target_name;
+  }
+
+  ret_name = source_name;
+  return true;
+}
+
+Value RunPrePostProcessTarget(bool post_process,
+                Scope* scope,
+                const FunctionCallNode* function,
+                const std::vector<Value>& args,
+                BlockNode* block,
+                Err* err) {
+  std::string source_name;
+  if(!GetTargetName(scope, function, args, source_name, err))
+    return Value();
+
+  Scope::ProcessParseMap &map = (post_process ?
+          scope->GetTargetPreProcessing() :
+          scope->GetTargetPostProcessing());
+  map[source_name].push_back(std::make_pair(function->block(),
+                             scope->MakeClosure()));
+
+  return Value();
+}
+
+Value RunPrePostProcessTemplate(bool post_process,
+    Scope* scope,
+    const FunctionCallNode* function,
+    const std::vector<Value>& args,
+    BlockNode* block,
+    Err* err) {
+  std::string source_name;
+  if(!GetTargetName(scope, function, args, source_name, err))
+    return Value();
+
+  Scope::ProcessParseMap &map = (post_process ?
+          scope->GetTemplatePreProcessing() :
+          scope->GetTemplatePostProcessing());
+  map[source_name].push_back(std::make_pair(function->block(),
+                             scope->MakeClosure()));
+
+  return Value();
+}
+
+bool PrePostProcessCode(Scope::ProcessParseMap &map,
+    Scope* scope,
+    const FunctionCallNode* function,
+    const std::vector<Value>& args,
+    BlockNode* block,
+    Err* err,
+    Scope *function_scope=NULL) {
+  if (args.size() != 1) {
+    *err = Err(function, "Expected one argument.",
+               "Try \"gn help post_process_target\".");
+    return false;
+  }
+  const std::string& target_name = args[0].string_value();
+  if (!function_scope)
+    function_scope = scope;
+
+  auto it = map.find(":" + target_name);
+  if (it == map.end())
+    it = map.find(function_scope->GetSourceDir().value());
+  if (it != map.end()) {
+    for (auto &&item: it->second) {
+      Scope extra_scope(scope);
+      item.second->NonRecursiveMergeTo(&extra_scope, Scope::MergeOptions(),
+              function, "PrePostProcess start import", err);
+      if (err->has_error())
+        return false;
+      Scope block_scope(&extra_scope);
+
+      item.first->Execute(&block_scope, err);
+      if (err->has_error())
+        return false;
+      Scope::MergeOptions clobber_scope;
+      clobber_scope.clobber_existing = true;
+      block_scope.NonRecursiveMergeTo(scope, clobber_scope, function,
+              "PrePostProcess final integration", err);
+      if (err->has_error())
+        return false;
+    }
+  }
+
+  const Label& toolchain_label = ToolchainLabelForScope(function_scope);
+  Label label(function_scope->GetSourceDir(), args[0].string_value(),
+              toolchain_label.dir(), toolchain_label.name());
+  it = map.find(label.GetUserVisibleName(false));
+  if (it != map.end()) {
+    for (auto &&item: it->second) {
+      Scope extra_scope(scope);
+      item.second->NonRecursiveMergeTo(&extra_scope, Scope::MergeOptions(),
+              function, "PrePostProcess start import", err);
+      if (err->has_error())
+        return false;
+      Scope block_scope(&extra_scope);
+
+      item.first->Execute(&block_scope, err);
+      if (err->has_error())
+        return false;
+      Scope::MergeOptions clobber_scope;
+      clobber_scope.clobber_existing = true;
+
+      block_scope.NonRecursiveMergeTo(scope, clobber_scope, function,
+              "PrePostProcess final integration", err);
+      if (err->has_error())
+        return false;
+    }
+  }
+
+  return true;
+}
+
+bool PrePostProcessTheTarget(bool post_process,
+    Scope* scope,
+    const FunctionCallNode* function,
+    const std::vector<Value>& args,
+    BlockNode* block,
+    Err* err) {
+  Scope::ProcessParseMap &map = (post_process ?
+          scope->GetTargetPreProcessing() :
+          scope->GetTargetPostProcessing());
+
+  return PrePostProcessCode(map, scope, function, args, block, err);
+}
+
+bool PrePostProcessTheTemplate(bool post_process,
+    Scope* scope,
+    const FunctionCallNode* function,
+    const std::vector<Value>& args,
+    BlockNode* block,
+    Err* err,
+    Scope *function_scope) {
+  Scope::ProcessParseMap &map = (post_process ?
+          scope->GetTemplatePreProcessing() :
+          scope->GetTemplatePostProcessing());
+
+  return PrePostProcessCode(map, scope, function, args, block, err,
+          function_scope);
+}
+// <Vivaldi>
 
 }  // namespace functions

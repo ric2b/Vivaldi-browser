@@ -74,6 +74,7 @@ android_assets("android_webview_apk_assets") {
     "shell/assets/full_screen_video.js",
     "shell/assets/full_screen_video_inside_div_test.html",
     "shell/assets/full_screen_video_test.html",
+    "shell/assets/full_screen_video_test_not_preloaded.html",
     "shell/assets/multiple_videos_test.html",
     "shell/assets/platform-media-codec-test.html",
     "shell/assets/video.3gp",
@@ -112,6 +113,8 @@ instrumentation_test_apk("android_webview_test_apk") {
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
+    "//device/geolocation:geolocation_java",
+    "//device/geolocation:geolocation_java_test_support",
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//third_party/android_tools:legacy_http_javalib",
@@ -122,6 +125,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/AndroidScrollIntegrationTest.java",
     "../javatests/src/org/chromium/android_webview/test/AndroidViewIntegrationTest.java",
     "../javatests/src/org/chromium/android_webview/test/ArchiveTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwContentsAnchorViewTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientAutoLoginTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientCallbackHelperTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientFaviconTest.java",
@@ -130,6 +134,7 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientGetVideoLoadingProgressViewTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientOnFormResubmissionTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientOnScaleChangedTest.java",
+    "../javatests/src/org/chromium/android_webview/test/AwContentsClientOnUnhandledKeyEventTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientShouldInterceptRequestTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientShouldOverrideUrlLoadingTest.java",
     "../javatests/src/org/chromium/android_webview/test/AwContentsClientVisitedHistoryTest.java",
@@ -202,7 +207,9 @@ instrumentation_test_apk("android_webview_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/util/VideoTestUtil.java",
     "../javatests/src/org/chromium/android_webview/test/util/VideoTestWebServer.java",
   ]
-  isolate_file = "../android_webview_test_data.isolate"
+  data = [
+    "data/",
+  ]
   additional_apks = [ "//net/android:net_test_support_apk" ]
 }
 
@@ -226,6 +233,7 @@ test("android_webview_unittests") {
 
   sources = [
     "../browser/aw_form_database_service_unittest.cc",
+    "../browser/aw_permission_manager_unittest.cc",
     "../browser/aw_static_cookie_policy_unittest.cc",
     "../browser/browser_view_renderer_unittest.cc",
     "../browser/net/android_stream_reader_url_request_job_unittest.cc",

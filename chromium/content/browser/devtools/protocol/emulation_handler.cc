@@ -9,17 +9,20 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/geolocation/geolocation_service_context.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/url_constants.h"
+#include "device/geolocation/geolocation_service_context.h"
+#include "device/geolocation/geoposition.h"
 
 namespace content {
 namespace devtools {
 namespace emulation {
 
 using Response = DevToolsProtocolClient::Response;
+using GeolocationServiceContext = device::GeolocationServiceContext;
+using Geoposition = device::Geoposition;
 
 namespace {
 
@@ -239,6 +242,20 @@ Response EmulationHandler::ClearDeviceMetricsOverride() {
 
   device_emulation_enabled_ = false;
   UpdateDeviceEmulationState();
+  return Response::OK();
+}
+
+Response EmulationHandler::SetVisibleSize(int width, int height) {
+  if (width < 0 || height < 0)
+    return Response::InvalidParams("Width and height must be non-negative");
+
+  // Set size of frame by resizing RWHV if available.
+  RenderWidgetHostImpl* widget_host =
+      host_ ? host_->GetRenderWidgetHost() : nullptr;
+  if (!widget_host)
+    return Response::ServerError("Target does not support setVisibleSize");
+
+  widget_host->GetView()->SetSize(gfx::Size(width, height));
   return Response::OK();
 }
 

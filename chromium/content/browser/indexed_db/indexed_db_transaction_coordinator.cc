@@ -13,8 +13,8 @@ namespace content {
 IndexedDBTransactionCoordinator::IndexedDBTransactionCoordinator() {}
 
 IndexedDBTransactionCoordinator::~IndexedDBTransactionCoordinator() {
-  DCHECK(!queued_transactions_.size());
-  DCHECK(!started_transactions_.size());
+  DCHECK(queued_transactions_.empty());
+  DCHECK(started_transactions_.empty());
 }
 
 void IndexedDBTransactionCoordinator::DidCreateTransaction(
@@ -96,7 +96,7 @@ void IndexedDBTransactionCoordinator::ProcessQueuedTransactions() {
     }
   }
 
-  TransactionSet::const_iterator it = queued_transactions_.begin();
+  auto it = queued_transactions_.begin();
   while (it != queued_transactions_.end()) {
     scoped_refptr<IndexedDBTransaction> transaction = *it;
     ++it;

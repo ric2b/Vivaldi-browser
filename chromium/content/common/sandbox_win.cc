@@ -31,6 +31,7 @@
 #include "base/win/windows_version.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_init.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
@@ -371,6 +372,12 @@ sandbox::ResultCode AddGenericPolicy(sandbox::TargetPolicy* policy) {
   return sandbox::SBOX_ALL_OK;
 }
 
+void LogLaunchWarning(sandbox::ResultCode last_warning, DWORD last_error) {
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Process.Sandbox.Launch.WarningResultCode",
+                              last_warning);
+  UMA_HISTOGRAM_SPARSE_SLOWLY("Process.Sandbox.Launch.Warning", last_error);
+}
+
 sandbox::ResultCode AddPolicyForSandboxedProcess(
     sandbox::TargetPolicy* policy) {
   sandbox::ResultCode result = sandbox::SBOX_ALL_OK;
@@ -410,7 +417,9 @@ sandbox::ResultCode AddPolicyForSandboxedProcess(
 
   result = policy->SetAlternateDesktop(true);
   if (result != sandbox::SBOX_ALL_OK) {
-    // Ignore the result of setting the alternate desktop.
+    // We ignore the result of setting the alternate desktop, however log
+    // a launch warning.
+    LogLaunchWarning(result, ::GetLastError());
     DLOG(WARNING) << "Failed to apply desktop security to the renderer";
     result = sandbox::SBOX_ALL_OK;
   }
@@ -716,8 +725,10 @@ sandbox::ResultCode StartSandboxedProcess(
       sandbox::MITIGATION_IMAGE_LOAD_NO_REMOTE |
       sandbox::MITIGATION_IMAGE_LOAD_NO_LOW_LABEL;
 
-  sandbox::ResultCode result = sandbox::SBOX_ERROR_GENERIC;
+  if (base::FeatureList::IsEnabled(features::kWinSboxDisableExtensionPoints))
+    mitigations |= sandbox::MITIGATION_EXTENSION_POINT_DISABLE;
 
+  sandbox::ResultCode result = sandbox::SBOX_ERROR_GENERIC;
   result = policy->SetProcessMitigations(mitigations);
 
   if (result != sandbox::SBOX_ALL_OK)
@@ -785,12 +796,10 @@ sandbox::ResultCode StartSandboxedProcess(
     }
   }
 
-#if !defined(OFFICIAL_BUILD)
   // If stdout/stderr point to a Windows console, these calls will
   // have no effect. These calls can fail with SBOX_ERROR_BAD_PARAMS.
   policy->SetStdoutHandle(GetStdHandle(STD_OUTPUT_HANDLE));
   policy->SetStderrHandle(GetStdHandle(STD_ERROR_HANDLE));
-#endif
 
   if (!delegate->PreSpawnTarget(policy))
     return sandbox::SBOX_ERROR_DELEGATE_PRE_SPAWN;
@@ -820,9 +829,7 @@ sandbox::ResultCode StartSandboxedProcess(
   }
 
   if (sandbox::SBOX_ALL_OK != last_warning) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Process.Sandbox.Launch.WarningResultCode",
-                                last_warning);
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Process.Sandbox.Launch.Warning", last_error);
+    LogLaunchWarning(last_warning, last_error);
   }
 
   delegate->PostSpawnTarget(target.process_handle());

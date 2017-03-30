@@ -1,9 +1,7 @@
 include_rules = [
   "+components/bubble",
-  "+components/chooser_controller",
   "+components/favicon/core",
   "+components/flags_ui",
-  "+components/page_load_metrics/browser",
   "+components/toolbar",
   "+components/url_formatter",
   "+components/version_ui",

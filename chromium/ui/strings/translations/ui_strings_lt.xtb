@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="lt">
-<translation id="1021451612696613363">Prisijunkite, kad peržiūrėtumėte pranešimus</translation>
 <translation id="111910763555783249">Pranešimų nustatymai</translation>
 <translation id="1127811143501539442">{DAYS,plural, =1{Prieš 1 dieną}one{Prieš # dieną}few{Prieš # dienas}many{Prieš # dienos}other{Prieš # dienų}}</translation>
 <translation id="1190609913194133056">Pranešimų centras</translation>
@@ -23,6 +22,7 @@
 <translation id="2168039046890040389">Puslapį į viršų</translation>
 <translation id="2190355936436201913">(tuščias)</translation>
 <translation id="2297836609126180313"><ph name="QUANTITY" /> TB/s</translation>
+<translation id="2336922762358079423">Komentuoti programoje „Google Keep“</translation>
 <translation id="2482878487686419369">Pranešimai</translation>
 <translation id="2497284189126895209">Visi failai</translation>
 <translation id="2515586267016047495">Alt</translation>
@@ -50,6 +50,7 @@
 <translation id="4320177379694898372">Nėra interneto ryšio</translation>
 <translation id="436869212180315161">Spustelėti</translation>
 <translation id="4588090240171750605">Slinkti į dešinę</translation>
+<translation id="459417155289402299">Sparčiojo atrakinimo funkcija</translation>
 <translation id="4820616160060340806">„Command“ + „<ph name="KEY_COMBO_NAME" />“</translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 sekundė}one{# sekundė}few{# sekundės}many{# sekundės}other{# sekundžių}}</translation>
 <translation id="4971687151119236543">Ankstesnis medijos takelis</translation>
@@ -77,7 +78,6 @@
 <translation id="6404817160109697034">{SECONDS,plural, =1{Prieš 1 sek.}one{Prieš # sek.}few{Prieš # sek.}many{Prieš # sek.}other{Prieš # sek.}}</translation>
 <translation id="6528179044667508675">Netrukdyti</translation>
 <translation id="6620110761915583480">Išsaugoti failą</translation>
-<translation id="6659594942844771486">Skirtukas</translation>
 <translation id="6699343763173986273">Kitas medijos takelis</translation>
 <translation id="6786750046913594791">Uždaryti aplanką</translation>
 <translation id="6808150112686056157">Sustabdyti mediją</translation>
@@ -97,6 +97,7 @@
 <translation id="7410957453383678442">{MINUTES,plural, =1{Liko 1 minutė}one{Liko # minutė}few{Liko # minutės}many{Liko # minutės}other{Liko # minučių}}</translation>
 <translation id="7457942297256758195">Išvalyti viską</translation>
 <translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
+<translation id="7647488630410863958">Atrakinkite įrenginį, kad galėtumėte peržiūrėti pranešimus</translation>
 <translation id="7649070708921625228">Žinynas</translation>
 <translation id="7658239707568436148">Atšaukti</translation>
 <translation id="7781829728241885113">Vakar</translation>
@@ -108,6 +109,7 @@
 <translation id="815598010540052116">Slinkti žemyn</translation>
 <translation id="8179976553408161302">Įvesti</translation>
 <translation id="8210608804940886430">Puslapį žemyn</translation>
+<translation id="8245914219290430011">Skirtukas</translation>
 <translation id="8328145009876646418">Kairysis kraštas</translation>
 <translation id="8331626408530291785">Slinkti į viršų</translation>
 <translation id="8371695176452482769">Kalbėti dabar</translation>

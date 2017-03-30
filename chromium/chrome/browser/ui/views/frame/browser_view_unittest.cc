@@ -16,7 +16,6 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/url_constants.h"
-#include "ui/views/controls/single_split_view.h"
 #include "ui/views/controls/webview/webview.h"
 
 namespace {
@@ -45,7 +44,7 @@ TEST_F(BrowserViewTest, BrowserView) {
 
   // Test initial state.
   EXPECT_TRUE(browser_view()->IsTabStripVisible());
-  EXPECT_FALSE(browser_view()->IsOffTheRecord());
+  EXPECT_FALSE(browser_view()->IsIncognito());
   EXPECT_FALSE(browser_view()->IsGuestSession());
   EXPECT_TRUE(browser_view()->IsBrowserTypeNormal());
   EXPECT_FALSE(browser_view()->IsFullscreen());

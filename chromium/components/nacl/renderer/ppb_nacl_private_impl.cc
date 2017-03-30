@@ -92,8 +92,8 @@ bool InitializePnaclResourceHost() {
   if (!render_thread)
     return false;
   if (!g_pnacl_resource_host.Get().get()) {
-    g_pnacl_resource_host.Get() = new PnaclTranslationResourceHost(
-        render_thread->GetIOMessageLoopProxy());
+    g_pnacl_resource_host.Get() =
+        new PnaclTranslationResourceHost(render_thread->GetIOTaskRunner());
     render_thread->AddFilter(g_pnacl_resource_host.Get().get());
   }
   return true;
@@ -348,7 +348,6 @@ blink::WebURLLoader* CreateWebURLLoader(const blink::WebDocument& document,
 blink::WebURLRequest CreateWebURLRequest(const blink::WebDocument& document,
                                          const GURL& gurl) {
   blink::WebURLRequest request;
-  request.initialize();
   request.setURL(gurl);
   request.setFirstPartyForCookies(document.firstPartyForCookies());
   return request;
@@ -530,12 +529,9 @@ void PPBNaClPrivate::LaunchSelLdr(
       // Return an IPC channel which allows communicating with a PNaCl
       // translator process.
       *translator_channel = IPC::SyncChannel::Create(
-          instance_info.channel_handle,
-          IPC::Channel::MODE_CLIENT,
-          new NoOpListener,
-          content::RenderThread::Get()->GetIOMessageLoopProxy(),
-          true,
-          content::RenderThread::Get()->GetShutdownEvent());
+          instance_info.channel_handle, IPC::Channel::MODE_CLIENT,
+          new NoOpListener, content::RenderThread::Get()->GetIOTaskRunner(),
+          true, content::RenderThread::Get()->GetShutdownEvent());
     } else {
       // Save the channel handle for when StartPpapiProxy() is called.
       NaClPluginInstance* nacl_plugin_instance =
@@ -1472,7 +1468,8 @@ void DownloadFile(PP_Instance instance,
 
   // Handle special PNaCl support files which are installed on the user's
   // machine.
-  if (url.find(kPNaClTranslatorBaseUrl, 0) == 0) {
+  if (base::StartsWith(url, kPNaClTranslatorBaseUrl,
+                       base::CompareCase::SENSITIVE)) {
     PP_NaClFileInfo file_info = kInvalidNaClFileInfo;
     PP_FileHandle handle = GetReadonlyPnaclFd(url.c_str(),
                                               false /* is_executable */,
@@ -1676,7 +1673,8 @@ class PexeDownloader : public blink::WebURLLoaderClient {
   void didReceiveData(blink::WebURLLoader* loader,
                       const char* data,
                       int data_length,
-                      int encoded_data_length) override {
+                      int encoded_data_length,
+                      int encoded_body_length) override {
     if (content::PepperPluginInstance::Get(instance_)) {
       // Stream the data we received to the stream callback.
       stream_handler_->DidStreamData(stream_handler_user_data_,

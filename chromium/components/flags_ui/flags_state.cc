@@ -197,29 +197,33 @@ base::Value* CreateOptionsData(const FeatureEntry& entry,
 // been created (e.g. via command-line switches that take precedence over
 // about:flags). In the trial, the function creates a new constant group called
 // |kTrialGroupAboutFlags|.
-void RegisterFeatureVariationParameters(
+base::FieldTrial* RegisterFeatureVariationParameters(
     const std::string& feature_trial_name,
-    const FeatureEntry::FeatureVariation& feature_variation) {
+    const FeatureEntry::FeatureVariation* feature_variation) {
   std::map<std::string, std::string> params;
-  for (int i = 0; i < feature_variation.num_params; ++i) {
-    params[feature_variation.params[i].param_name] =
-        feature_variation.params[i].param_value;
+  if (feature_variation) {
+    // Copy the parameters for non-null variations.
+    for (int i = 0; i < feature_variation->num_params; ++i) {
+      params[feature_variation->params[i].param_name] =
+          feature_variation->params[i].param_value;
+    }
   }
 
   bool success = variations::AssociateVariationParams(
       feature_trial_name, internal::kTrialGroupAboutFlags, params);
-  if (success) {
-    // Successful association also means that no group is created and selected
-    // for the trial, yet. Thus, create the trial to select the group. This way,
-    // the parameters cannot get overwritten in later phases (such as from the
-    // server).
-    base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
-        feature_trial_name, internal::kTrialGroupAboutFlags);
-    if (!trial) {
-      DLOG(WARNING) << "Could not create the trial " << feature_trial_name
-                    << " with group " << internal::kTrialGroupAboutFlags;
-    }
+  if (!success)
+    return nullptr;
+  // Successful association also means that no group is created and selected
+  // for the trial, yet. Thus, create the trial to select the group. This way,
+  // the parameters cannot get overwritten in later phases (such as from the
+  // server).
+  base::FieldTrial* trial = base::FieldTrialList::CreateFieldTrial(
+      feature_trial_name, internal::kTrialGroupAboutFlags);
+  if (!trial) {
+    DLOG(WARNING) << "Could not create the trial " << feature_trial_name
+                  << " with group " << internal::kTrialGroupAboutFlags;
   }
+  return trial;
 }
 
 }  // namespace
@@ -400,7 +404,7 @@ void FlagsState::RemoveFlagsSwitches(
     // For any featrue name in |features| that is not in |switch_added_values| -
     // i.e. it wasn't added by about_flags code, add it to |remaining_features|.
     for (const std::string& feature : features) {
-      if (!ContainsKey(switch_added_values, feature))
+      if (!base::ContainsKey(switch_added_values, feature))
         remaining_features.push_back(feature);
     }
 
@@ -432,10 +436,12 @@ void FlagsState::Reset() {
   appended_switches_.clear();
 }
 
-void FlagsState::RegisterAllFeatureVariationParameters(
-    FlagsStorage* flags_storage) {
+std::vector<std::string> FlagsState::RegisterAllFeatureVariationParameters(
+    FlagsStorage* flags_storage,
+    base::FeatureList* feature_list) {
   std::set<std::string> enabled_entries;
   GetSanitizedEnabledFlagsForCurrentPlatform(flags_storage, &enabled_entries);
+  std::vector<std::string> variation_ids;
 
   for (size_t i = 0; i < num_feature_entries_; ++i) {
     const FeatureEntry& e = feature_entries_[i];
@@ -443,25 +449,26 @@ void FlagsState::RegisterAllFeatureVariationParameters(
       for (int j = 0; j < e.num_options; ++j) {
         const FeatureEntry::FeatureVariation* variation =
             e.VariationForOption(j);
-        if (variation != nullptr && enabled_entries.count(e.NameForOption(j))) {
+        if (e.StateForOption(j) == FeatureEntry::FeatureState::ENABLED &&
+            enabled_entries.count(e.NameForOption(j))) {
           // If the option is selected by the user & has variation, register it.
-          RegisterFeatureVariationParameters(e.feature_trial_name, *variation);
-          // TODO(jkrcal) The code does not associate the feature with the field
-          // trial |e.feature_trial_name|. The reason is that features
-          // overridden in chrome://flags are translated to command-line flags
-          // and thus treated earlier in the initialization. The fix requires
-          // larger changes. As a result:
-          //  - the API calls to variations::GetVariationParamValueByFeature and
-          //    to variations::GetVariationParamsByFeature do not work; and
-          //  - the API call to base::FeatureList::IsEnabled does not mark the
-          //    field trial as active (and the trial does not appear in UMA).
-          // If the code calls variations::GetVariationParamValue or
-          // variations::GetVariationParams providing the trial name, everything
-          // should work fine.
+          base::FieldTrial* field_trial = RegisterFeatureVariationParameters(
+              e.feature_trial_name, variation);
+
+          if (!field_trial)
+            continue;
+          feature_list->RegisterFieldTrialOverride(
+              e.feature->name,
+              base::FeatureList::OverrideState::OVERRIDE_ENABLE_FEATURE,
+              field_trial);
+
+          if (variation && variation->variation_id)
+            variation_ids.push_back(variation->variation_id);
         }
       }
     }
   }
+  return variation_ids;
 }
 
 void FlagsState::GetFlagFeatureEntries(
@@ -585,7 +592,7 @@ void FlagsState::AddSwitchMapping(
     const std::string& switch_name,
     const std::string& switch_value,
     std::map<std::string, SwitchEntry>* name_to_switch_map) {
-  DCHECK(!ContainsKey(*name_to_switch_map, key));
+  DCHECK(!base::ContainsKey(*name_to_switch_map, key));
 
   SwitchEntry* entry = &(*name_to_switch_map)[key];
   entry->switch_name = switch_name;
@@ -597,7 +604,7 @@ void FlagsState::AddFeatureMapping(
     const std::string& feature_name,
     bool feature_state,
     std::map<std::string, SwitchEntry>* name_to_switch_map) {
-  DCHECK(!ContainsKey(*name_to_switch_map, key));
+  DCHECK(!base::ContainsKey(*name_to_switch_map, key));
 
   SwitchEntry* entry = &(*name_to_switch_map)[key];
   entry->feature_name = feature_name;
@@ -658,11 +665,11 @@ void FlagsState::MergeFeatureCommandLineSwitch(
   std::vector<std::string> features =
       base::FeatureList::SplitFeatureListString(original_switch_value);
   // Only add features that don't already exist in the lists.
-  // Note: The ContainsValue() call results in O(n^2) performance, but in
+  // Note: The base::ContainsValue() call results in O(n^2) performance, but in
   // practice n should be very small.
   for (const auto& entry : feature_switches) {
     if (entry.second == feature_state &&
-        !ContainsValue(features, entry.first)) {
+        !base::ContainsValue(features, entry.first)) {
       features.push_back(entry.first);
       appended_switches_[switch_name].insert(entry.first);
     }

@@ -19,6 +19,8 @@ NinjaGroupTargetWriter::~NinjaGroupTargetWriter() {
 }
 
 void NinjaGroupTargetWriter::Run() {
+  if (target_->is_disabled())
+    return;
   // A group rule just generates a stamp file with dependencies on each of
   // the deps and data_deps in the group.
   std::vector<OutputFile> output_files;
@@ -27,8 +29,11 @@ void NinjaGroupTargetWriter::Run() {
 
   std::vector<OutputFile> data_output_files;
   const LabelTargetVector& data_deps = target_->data_deps();
-  for (const auto& pair : data_deps)
+  for (const auto& pair : data_deps) {
+    if (pair.ptr->is_disabled())
+      continue;
     data_output_files.push_back(pair.ptr->dependency_output_file());
+  }
 
   WriteStampForTarget(output_files, data_output_files);
 }

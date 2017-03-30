@@ -9,15 +9,13 @@
 
 namespace blink {
 
-#ifndef NDEBUG
 TEST(IntRectTest, ToString)
 {
     IntRect emptyRect = IntRect();
-    EXPECT_EQ(String("0,0 0x0"), emptyRect.toString());
+    EXPECT_EQ("0,0 0x0", emptyRect.toString());
 
     IntRect rect(1, 2, 3, 4);
-    EXPECT_EQ(String("1,2 3x4"), rect.toString());
+    EXPECT_EQ("1,2 3x4", rect.toString());
 }
-#endif
 
 } // namespace blink

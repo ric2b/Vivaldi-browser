@@ -23,6 +23,8 @@ _EXCLUDED_PATHS = (
     r".+[\\\/]pnacl_shim\.c$",
     r"^gpu[\\\/]config[\\\/].*_list_json\.cc$",
     r"^chrome[\\\/]browser[\\\/]resources[\\\/]pdf[\\\/]index.js",
+    r".*vulcanized.html$",
+    r".*crisper.js$",
 )
 
 
@@ -179,18 +181,26 @@ _BANNED_CPP_FUNCTIONS = (
         r"^components[\\\/]crash[\\\/]app[\\\/]breakpad_mac\.mm$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]layout_test[\\\/]" +
             r"test_info_extractor\.cc$",
+        r"^content[\\\/].*browser(|_)test[a-zA-Z_]*\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_browser_main\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_message_filter\.cc$",
+        r"^content[\\\/]test[\\\/]ppapi[\\\/]ppapi_test\.cc$",
         r"^mojo[\\\/]edk[\\\/]embedder[\\\/]" +
             r"simple_platform_shared_buffer_posix\.cc$",
         r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
+        r"^net[\\\/]cert[\\\/]test_root_certs\.cc$",
+        r"^net[\\\/]test[\\\/]embedded_test_server[\\\/]" +
+            r"embedded_test_server\.cc$",
+        r"^net[\\\/]test[\\\/]spawned_test_server[\\\/]local_test_server\.cc$",
+        r"^net[\\\/]test[\\\/]test_data_directory\.cc$",
         r"^net[\\\/]url_request[\\\/]test_url_fetcher_factory\.cc$",
-        r"^remoting[\\\/]host[\\\/]security_key[\\\/]"
-            "gnubby_auth_handler_linux\.cc$",
-        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
-            "drm_display_host_manager\.cc$",
         r"^ui[\\\/]base[\\\/]material_design[\\\/]"
             "material_design_controller\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_mac\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_win\.cc$",
+        r"^ui[\\\/]gl[\\\/]init[\\\/]gl_initializer_x11\.cc$",
+        r"^ui[\\\/]ozone[\\\/]platform[\\\/]drm[\\\/]host[\\\/]"
+            "drm_display_host_manager\.cc$",
       ),
     ),
     (
@@ -275,18 +285,6 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
-      '\<MessageLoopProxy\>',
-      (
-        'MessageLoopProxy is deprecated. ',
-        'Please use SingleThreadTaskRunner or ThreadTaskRunnerHandle instead.'
-      ),
-      True,
-      (
-        # Internal message_loop related code may still use it.
-        r'^base[\\\/]message_loop[\\\/].*',
-      ),
-    ),
-    (
       '#pragma comment(lib,',
       (
         'Specify libraries to link with in build files and not in the source.',
@@ -315,6 +313,7 @@ _VALID_OS_MACROS = (
     'OS_NACL',
     'OS_NACL_NONSFI',
     'OS_NACL_SFI',
+    'OS_NETBSD',
     'OS_OPENBSD',
     'OS_POSIX',
     'OS_QNX',
@@ -522,7 +521,9 @@ def _CheckNoNewWStrings(input_api, output_api):
   for f in input_api.AffectedFiles():
     if (not f.LocalPath().endswith(('.cc', '.h')) or
         f.LocalPath().endswith(('test.cc', '_win.cc', '_win.h')) or
-        '/win/' in f.LocalPath()):
+        '/win/' in f.LocalPath() or
+        'chrome_elf' in f.LocalPath() or
+        'install_static' in f.LocalPath()):
       continue
 
     allowWString = False
@@ -1097,13 +1098,13 @@ def _CheckAddedDepsHaveTargetApprovals(input_api, output_api):
 
   if unapproved_dependencies:
     output_list = [
-      output('Missing LGTM from OWNERS of dependencies added to DEPS:\n    %s' %
-             '\n    '.join(sorted(unapproved_dependencies)))]
-    if not input_api.is_committing:
-      suggested_owners = owners_db.reviewers_for(missing_files, owner_email)
-      output_list.append(output(
-          'Suggested missing target path OWNERS:\n    %s' %
-          '\n    '.join(suggested_owners or [])))
+      output('You need LGTM from owners of depends-on paths in DEPS that were '
+             'modified in this CL:\n    %s' %
+                 '\n    '.join(sorted(unapproved_dependencies)))]
+    suggested_owners = owners_db.reviewers_for(missing_files, owner_email)
+    output_list.append(output(
+        'Suggested missing target path OWNERS:\n    %s' %
+            '\n    '.join(suggested_owners or [])))
     return output_list
 
   return []
@@ -1494,11 +1495,41 @@ def _CheckIpcOwners(input_api, output_api):
 
   results = []
   if errors:
-    results.append(output_api.PresubmitError(
+    if input_api.is_committing:
+      output = output_api.PresubmitError
+    else:
+      output = output_api.PresubmitPromptWarning
+    results.append(output(
         'Found changes to IPC files without a security OWNER!',
         long_text='\n\n'.join(errors)))
 
   return results
+
+
+def _CheckMojoUsesNewWrapperTypes(input_api, output_api):
+  """Checks to make sure that all newly added mojom targets map array/map/string
+     to STL (for chromium) or WTF (for blink) types.
+     TODO(yzshen): remove this check once crbug.com/624136 is completed.
+  """
+  files = []
+  pattern = input_api.re.compile(r'use_new_wrapper_types.*false',
+                                 input_api.re.MULTILINE)
+
+  for f in input_api.AffectedFiles():
+    if not f.LocalPath().endswith(('.gyp', '.gypi', 'gn', 'gni')):
+      continue
+
+    for _, line in f.ChangedContents():
+      if pattern.search(line):
+        files.append(f)
+        break
+
+  if len(files):
+    return [output_api.PresubmitError(
+        'Do not introduce new mojom targets with use_new_wrapper_types set to '
+        'false. The mode is deprecated and will be removed soon.',
+        files)]
+  return []
 
 
 def _CheckAndroidToastUsage(input_api, output_api):
@@ -1965,6 +1996,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckPydepsNeedsUpdating(input_api, output_api))
   results.extend(_CheckJavaStyle(input_api, output_api))
   results.extend(_CheckIpcOwners(input_api, output_api))
+  results.extend(_CheckMojoUsesNewWrapperTypes(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -2168,6 +2200,20 @@ def _CheckForWindowsLineEndings(input_api, output_api):
   return []
 
 
+def _CheckSyslogUseWarning(input_api, output_api, source_file_filter=None,
+                           lint_filters=None, verbose_level=None):
+  """Checks that all source files use SYSLOG properly."""
+  syslog_files = []
+  for f in input_api.AffectedSourceFiles(source_file_filter):
+    if 'SYSLOG' in input_api.ReadFile(f, 'rb'):
+      syslog_files.append(f.LocalPath())
+  if syslog_files:
+    return [output_api.PresubmitPromptWarning(
+        'Please make sure there are no privacy sensitive bits of data in SYSLOG'
+        ' calls.\nFiles to check:\n', items=syslog_files)]
+  return []
+
+
 def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
@@ -2176,6 +2222,7 @@ def CheckChangeOnUpload(input_api, output_api):
       input_api.canned_checks.CheckGNFormatted(input_api, output_api))
   results.extend(_CheckUmaHistogramChanges(input_api, output_api))
   results.extend(_AndroidSpecificOnUploadChecks(input_api, output_api))
+  results.extend(_CheckSyslogUseWarning(input_api, output_api))
   return results
 
 
@@ -2187,19 +2234,19 @@ def GetTryServerMasterForBot(bot):
   """
   # Potentially ambiguous bot names are listed explicitly.
   master_map = {
-      'chromium_presubmit': 'tryserver.chromium.linux',
-      'tools_build_presubmit': 'tryserver.chromium.linux',
+      'chromium_presubmit': 'master.tryserver.chromium.linux',
+      'tools_build_presubmit': 'master.tryserver.chromium.linux',
   }
   master = master_map.get(bot)
   if not master:
     if 'android' in bot:
-      master = 'tryserver.chromium.android'
+      master = 'master.tryserver.chromium.android'
     elif 'linux' in bot or 'presubmit' in bot:
-      master = 'tryserver.chromium.linux'
+      master = 'master.tryserver.chromium.linux'
     elif 'win' in bot:
-      master = 'tryserver.chromium.win'
+      master = 'master.tryserver.chromium.win'
     elif 'mac' in bot or 'ios' in bot:
-      master = 'tryserver.chromium.mac'
+      master = 'master.tryserver.chromium.mac'
   return master
 
 

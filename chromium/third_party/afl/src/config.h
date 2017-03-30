@@ -19,6 +19,10 @@
 
 #include "types.h"
 
+/* Version string: */
+
+#define VERSION             "2.31b"
+
 /******************************************************
  *                                                    *
  *  Settings that may be of interest to power users:  *
@@ -57,12 +61,8 @@
 /* Number of calibration cycles per every new test case (and for test
    cases that show variable behavior): */
 
-#define CAL_CYCLES          10
+#define CAL_CYCLES          8
 #define CAL_CYCLES_LONG     40
-
-/* The same, but when AFL_NO_VAR_CHECK is set in the environment: */
-
-#define CAL_CYCLES_NO_VAR   4
 
 /* Number of subsequent hangs before abandoning an input file: */
 
@@ -75,7 +75,8 @@
 
 /* Baseline number of random tweaks during a single 'havoc' stage: */
 
-#define HAVOC_CYCLES        5000
+#define HAVOC_CYCLES        256
+#define HAVOC_CYCLES_INIT   1024
 
 /* Maximum multiplier for the above (should be a power of two, beware
    of 32-bit int overflows): */
@@ -84,7 +85,7 @@
 
 /* Absolute minimum number of havoc cycles (after all adjustments): */
 
-#define HAVOC_MIN           10
+#define HAVOC_MIN           16
 
 /* Maximum stacking for havoc-stage tweaks. The actual value is calculated
    like this: 
@@ -114,11 +115,11 @@
 
 /* Splicing cycle count: */
 
-#define SPLICE_CYCLES       20
+#define SPLICE_CYCLES       16
 
 /* Nominal per-splice havoc cycle length: */
 
-#define SPLICE_HAVOC        500
+#define SPLICE_HAVOC        32
 
 /* Maximum offset for integer addition / subtraction stages: */
 

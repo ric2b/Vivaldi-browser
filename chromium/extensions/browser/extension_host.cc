@@ -45,11 +45,12 @@
 #include "app/vivaldi_apptools.h"
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/api/extensions_api_client.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
@@ -89,7 +90,6 @@ ExtensionHost::ExtensionHost(const Extension* extension,
   // recreating.
   if (vivaldi::IsVivaldiRunning() &&
       extension_host_type_ == VIEW_TYPE_EXTENSION_BACKGROUND_PAGE) {
-
     auto guest_view_manager =
         guest_view::GuestViewManager::FromBrowserContext(browser_context_);
     if (!guest_view_manager) {
@@ -102,17 +102,16 @@ ExtensionHost::ExtensionHost(const Extension* extension,
     if (guest_view_manager) {
       WebContents::CreateParams guest_create_params =
           WebContents::CreateParams(browser_context_);
-      guest_create_params.initially_hidden = true;
 
       guest_owner_contents_.reset(WebContents::Create(guest_create_params));
       content::WebContents* guest_content =
           guest_view_manager->CreateGuestWithWebContentsParams(
               WebViewGuest::Type, guest_owner_contents_.get(),
               guest_create_params);
-      task_management::WebContentsTags::ClearTag(guest_content);
-
-      create_params.guest_delegate =
-          WebViewGuest::FromWebContents(guest_content);
+      // We don't need to clutter the taskmanager with this.
+      task_manager::WebContentsTags::ClearTag(guest_content);
+      auto guest = WebViewGuest::FromWebContents(guest_content);
+      create_params.guest_delegate = guest;
     }
   }
 
@@ -505,8 +504,6 @@ void ExtensionHost::AddNewContents(WebContents* source,
             new_contents->GetBrowserContext()) {
       WebContentsDelegate* delegate = associated_contents->GetDelegate();
       if (delegate) {
-        // Make sure we do not interfere with script loading.
-        new_contents->delayed_open_url().reset();
         delegate->AddNewContents(
             associated_contents, new_contents, disposition, initial_rect,
             user_gesture, was_blocked);
@@ -535,6 +532,14 @@ void ExtensionHost::RenderViewReady() {
       extensions::NOTIFICATION_EXTENSION_HOST_CREATED,
       content::Source<BrowserContext>(browser_context_),
       content::Details<ExtensionHost>(this));
+  if (vivaldi::IsVivaldiRunning()) {
+    // This is needed when running as Vivaldi since a BrowserPluginGuest is not
+    // visible, and hence the content is throttled causing timers to be stalled
+    // etc., until it is attached.
+    content::WebContentsImpl* contentsimpl =
+        static_cast<content::WebContentsImpl*>(host_contents_.get());
+    contentsimpl->WasShown();
+  }
 }
 
 void ExtensionHost::RequestMediaAccessPermission(

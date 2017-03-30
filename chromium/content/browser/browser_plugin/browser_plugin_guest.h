@@ -437,12 +437,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // maintains a JavaScript reference to its opener.
   bool has_render_view_;
 
-  // Note(andre@vivaldi.com):
-  // If BrowserPluginGuest::Init specified |has_render_view| true use this. This
-  // will never happen for webviews that share WebContents with a tabstrip.
-  // This fixes setting visibility hidden on <webviews>
-  bool got_renderview_on_init_;
-
   // Last seen size of guest contents (by SwapCompositorFrame).
   gfx::Size last_seen_view_size_;
 
@@ -476,6 +470,10 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   BrowserPluginGuestDelegate* delegate_;
 
   int guest_routing_id_;
+
+  // Vivaldi specific; we need to limit focus messages sent to one per change
+  // per RenderWidgetHost.
+  std::pair<RenderWidgetHost*, bool> focus_state_;
 
   // Weak pointer used to ask GeolocationPermissionContext about geolocation
   // permission.

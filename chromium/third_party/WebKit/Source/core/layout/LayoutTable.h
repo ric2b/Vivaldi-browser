@@ -299,8 +299,8 @@ public:
     LayoutUnit paddingRight() const override;
 
     // Override paddingStart/End to return pixel values to match behavor of LayoutTableCell.
-    LayoutUnit paddingEnd() const override { return LayoutUnit(static_cast<int>(LayoutBlock::paddingEnd())); }
-    LayoutUnit paddingStart() const override { return LayoutUnit(static_cast<int>(LayoutBlock::paddingStart())); }
+    LayoutUnit paddingEnd() const override { return LayoutUnit(LayoutBlock::paddingEnd().toInt()); }
+    LayoutUnit paddingStart() const override { return LayoutUnit(LayoutBlock::paddingStart().toInt()); }
 
     LayoutUnit bordersPaddingAndSpacingInRowDirection() const
     {
@@ -402,8 +402,9 @@ protected:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
     void simplifiedNormalFlowLayout() override;
     bool recalcChildOverflowAfterStyleChange() override;
+    void ensureIsReadyForPaintInvalidation() override;
     PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidationState&) override;
-    void invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState&) override;
+    PaintInvalidationReason invalidatePaintIfNeeded(const PaintInvalidatorContext&) const override;
 
 private:
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectTable || LayoutBlock::isOfType(type); }

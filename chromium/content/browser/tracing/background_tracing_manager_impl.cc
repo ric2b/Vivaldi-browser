@@ -16,6 +16,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/tracing/background_tracing_rule.h"
+#include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/tracing_delegate.h"
@@ -51,7 +52,7 @@ void RecordBackgroundTracingMetric(BackgroundTracingMetrics metric) {
 
 // Tracing enabled callback for BENCHMARK_MEMORY_LIGHT category preset.
 void BenchmarkMemoryLight_TracingEnabledCallback() {
-  auto dump_manager = base::trace_event::MemoryDumpManager::GetInstance();
+  auto* dump_manager = base::trace_event::MemoryDumpManager::GetInstance();
   dump_manager->RequestGlobalDump(
       base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
       base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND);
@@ -178,7 +179,7 @@ bool BackgroundTracingManagerImpl::SetActiveScenario(
 
   if (config_) {
     DCHECK(!config_.get()->rules().empty());
-    for (auto& rule : config_.get()->rules())
+    for (auto* rule : config_.get()->rules())
       static_cast<BackgroundTracingRule*>(rule)->Install();
 
     if (!config_->enable_blink_features().empty()) {
@@ -242,7 +243,7 @@ BackgroundTracingManagerImpl::GetRuleAbleToTriggerTracing(
   }
 
   std::string trigger_name = GetTriggerNameFromHandle(handle);
-  for (const auto& rule : config_.get()->rules()) {
+  for (auto* rule : config_.get()->rules()) {
     if (static_cast<BackgroundTracingRule*>(rule)
             ->ShouldTriggerNamedEvent(trigger_name))
       return static_cast<BackgroundTracingRule*>(rule);
@@ -261,7 +262,7 @@ void BackgroundTracingManagerImpl::OnHistogramTrigger(
     return;
   }
 
-  for (const auto& rule : config_->rules()) {
+  for (auto* rule : config_->rules()) {
     if (rule->ShouldTriggerNamedEvent(histogram_name))
       OnRuleTriggered(rule, StartedFinalizingCallback());
   }
@@ -328,9 +329,16 @@ void BackgroundTracingManagerImpl::OnRuleTriggered(
       StartTracing(triggered_rule->category_preset(),
                    base::trace_event::RECORD_UNTIL_FULL);
     } else {
-      // Reactive configs that trigger again while tracing should just
+      // Some reactive configs that trigger again while tracing should just
       // end right away (to not capture multiple navigations, for example).
-      trace_delay = -1;
+      // For others we just want to ignore the repeated trigger.
+      if (triggered_rule->stop_tracing_on_repeated_reactive()) {
+        trace_delay = -1;
+      } else {
+        if (!callback.is_null())
+          callback.Run(false);
+        return;
+      }
     }
   } else {
     // In preemptive mode, a trigger starts finalizing a trace if one is
@@ -478,8 +486,7 @@ void BackgroundTracingManagerImpl::OnFinalizeComplete() {
   RecordBackgroundTracingMetric(FINALIZATION_COMPLETE);
 }
 
-void BackgroundTracingManagerImpl::AddCustomMetadata(
-    TracingControllerImpl::TraceDataSink* trace_data_sink) {
+void BackgroundTracingManagerImpl::AddCustomMetadata() {
   base::DictionaryValue metadata_dict;
 
   std::unique_ptr<base::DictionaryValue> config_dict(
@@ -489,7 +496,7 @@ void BackgroundTracingManagerImpl::AddCustomMetadata(
   if (last_triggered_rule_)
     metadata_dict.Set("last_triggered_rule", std::move(last_triggered_rule_));
 
-  trace_data_sink->AddMetadata(metadata_dict);
+  TracingController::GetInstance()->AddMetadata(metadata_dict);
 }
 
 void BackgroundTracingManagerImpl::BeginFinalizing(
@@ -506,12 +513,12 @@ void BackgroundTracingManagerImpl::BeginFinalizing(
 
   scoped_refptr<TracingControllerImpl::TraceDataSink> trace_data_sink;
   if (is_allowed_finalization) {
-    trace_data_sink = content::TracingController::CreateCompressedStringSink(
-        content::TracingController::CreateCallbackEndpoint(
+    trace_data_sink = TracingControllerImpl::CreateCompressedStringSink(
+        TracingControllerImpl::CreateCallbackEndpoint(
             base::Bind(&BackgroundTracingManagerImpl::OnFinalizeStarted,
                        base::Unretained(this))));
     RecordBackgroundTracingMetric(FINALIZATION_ALLOWED);
-    AddCustomMetadata(trace_data_sink.get());
+    AddCustomMetadata();
   } else {
     RecordBackgroundTracingMetric(FINALIZATION_DISALLOWED);
   }

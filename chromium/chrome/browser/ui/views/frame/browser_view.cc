@@ -31,6 +31,7 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/native_window_notification_source.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -84,7 +85,6 @@
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/new_back_shortcut_bubble.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
-#include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
 #include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
@@ -97,9 +97,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/browser/ui/views/translate/translate_bubble_view.h"
 #include "chrome/browser/ui/views/update_recommended_message_box.h"
-#include "chrome/browser/ui/views/website_settings/permissions_bubble_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
@@ -155,6 +153,10 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
+#if !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
+#endif
+
 #if defined(USE_ASH)
 #include "chrome/browser/ui/ash/ash_util.h"
 #endif
@@ -166,6 +168,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "base/win/windows_version.h"
 #include "chrome/browser/win/jumplist.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/native_theme/native_theme_dark_win.h"
@@ -235,15 +238,9 @@ void PaintDetachedBookmarkBar(gfx::Canvas* canvas,
   SkColor separator_color =
       tp->GetColor(ThemeProperties::COLOR_DETACHED_BOOKMARK_BAR_SEPARATOR);
 
-  if (ui::MaterialDesignController::IsModeMaterial()) {
-    BrowserView::Paint1pxHorizontalLine(
-        canvas, separator_color,
-        gfx::Rect(0, 0, view->width(),
-                  views::NonClientFrameView::kClientEdgeThickness),
-        true);
-  } else {
+  // In material mode the toolbar bottom stroke serves as our top stroke.
+  if (!ui::MaterialDesignController::IsModeMaterial())
     PaintHorizontalBorder(canvas, view, true, separator_color);
-  }
 
   // For the bottom separator, increase the luminance. Either double it or halve
   // the distance to 1.0, whichever is less of a difference.
@@ -550,7 +547,8 @@ void BrowserView::Paint1pxHorizontalLine(gfx::Canvas* canvas,
 }
 
 void BrowserView::InitStatusBubble() {
-  status_bubble_.reset(new StatusBubbleViews(contents_web_view_));
+  status_bubble_.reset(
+      new StatusBubbleViews(contents_web_view_, HasClientEdge()));
   contents_web_view_->SetStatusBubble(status_bubble_.get());
 }
 
@@ -602,7 +600,7 @@ bool BrowserView::IsTabStripVisible() const {
   return tabstrip_ != nullptr;
 }
 
-bool BrowserView::IsOffTheRecord() const {
+bool BrowserView::IsIncognito() const {
   return browser_->profile()->IsOffTheRecord();
 }
 
@@ -612,6 +610,15 @@ bool BrowserView::IsGuestSession() const {
 
 bool BrowserView::IsRegularOrGuestSession() const {
   return profiles::IsRegularOrGuestSession(browser_.get());
+}
+
+bool BrowserView::HasClientEdge() const {
+#if defined(OS_WIN)
+  return base::win::GetVersion() < base::win::VERSION_WIN10 ||
+         !frame_->ShouldUseNativeFrame();
+#else
+  return true;
+#endif
 }
 
 bool BrowserView::GetAccelerator(int cmd_id,
@@ -846,11 +853,11 @@ void BrowserView::OnActiveTabChanged(content::WebContents* old_contents,
   infobar_container_->ChangeInfoBarManager(
       InfoBarService::FromWebContents(new_contents));
 
-  if (old_contents && PermissionBubbleManager::FromWebContents(old_contents))
-    PermissionBubbleManager::FromWebContents(old_contents)->HideBubble();
+  if (old_contents && PermissionRequestManager::FromWebContents(old_contents))
+    PermissionRequestManager::FromWebContents(old_contents)->HideBubble();
 
-  if (new_contents && PermissionBubbleManager::FromWebContents(new_contents)) {
-    PermissionBubbleManager::FromWebContents(new_contents)
+  if (new_contents && PermissionRequestManager::FromWebContents(new_contents)) {
+    PermissionRequestManager::FromWebContents(new_contents)
         ->DisplayPendingRequests();
   }
 
@@ -1564,8 +1571,8 @@ void BrowserView::TabInsertedAt(WebContents* contents,
 }
 
 void BrowserView::TabDetachedAt(WebContents* contents, int index) {
-  if (PermissionBubbleManager::FromWebContents(contents))
-    PermissionBubbleManager::FromWebContents(contents)->HideBubble();
+  if (PermissionRequestManager::FromWebContents(contents))
+    PermissionRequestManager::FromWebContents(contents)->HideBubble();
 
   // We use index here rather than comparing |contents| because by this time
   // the model has already removed |contents| from its list, so
@@ -1582,8 +1589,8 @@ void BrowserView::TabDetachedAt(WebContents* contents, int index) {
 }
 
 void BrowserView::TabDeactivated(WebContents* contents) {
-  if (PermissionBubbleManager::FromWebContents(contents))
-    PermissionBubbleManager::FromWebContents(contents)->HideBubble();
+  if (PermissionRequestManager::FromWebContents(contents))
+    PermissionRequestManager::FromWebContents(contents)->HideBubble();
 
   // We do not store the focus when closing the tab to work-around bug 4633.
   // Some reports seem to show that the focus manager and/or focused view can
@@ -1610,8 +1617,9 @@ void BrowserView::CloseAllTabsCanceled() {
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserView, ui::AcceleratorProvider implementation:
 
-bool BrowserView::GetAcceleratorForCommandId(int command_id,
-                                             ui::Accelerator* accelerator) {
+bool BrowserView::GetAcceleratorForCommandId(
+    int command_id,
+    ui::Accelerator* accelerator) const {
   // Let's let the ToolbarView own the canonical implementation of this method.
   return toolbar_->GetAcceleratorForCommandId(command_id, accelerator);
 }
@@ -1661,7 +1669,7 @@ base::string16 BrowserView::GetWindowTitle() const {
 
 base::string16 BrowserView::GetAccessibleWindowTitle() const {
   const bool include_app_name = false;
-  if (IsOffTheRecord()) {
+  if (IsIncognito()) {
     return l10n_util::GetStringFUTF16(
         IDS_ACCESSIBLE_INCOGNITO_WINDOW_TITLE_FORMAT,
         browser_->GetWindowTitleForCurrentTab(include_app_name));
@@ -1816,6 +1824,8 @@ void BrowserView::OnWidgetActivationChanged(views::Widget* widget,
                                             bool active) {
   if (active)
     BrowserList::SetLastActive(browser_.get());
+  else
+    BrowserList::NotifyBrowserNoLongerActive(browser_.get());
 
   if (!extension_keybinding_registry_ &&
       GetFocusManager()) {  // focus manager can be null in tests.
@@ -1975,8 +1985,8 @@ void BrowserView::GetAccessibleState(ui::AXViewState* state) {
 void BrowserView::OnThemeChanged() {
   if (!IsRegularOrGuestSession() &&
       ui::MaterialDesignController::IsModeMaterial()) {
-    // When the theme changes, the native theme may also change (in OTR, the
-    // usage of dark or normal hinges on the browser theme), so we have to
+    // When the theme changes, the native theme may also change (in incognito,
+    // the usage of dark or normal hinges on the browser theme), so we have to
     // propagate both kinds of change.
     base::AutoReset<bool> reset(&handling_theme_changed_, true);
 #if defined(OS_WIN)
@@ -2361,8 +2371,8 @@ void BrowserView::ProcessFullscreen(bool fullscreen,
   ToolbarSizeChanged(false);
 
   WebContents* contents = browser_->tab_strip_model()->GetActiveWebContents();
-  if (contents && PermissionBubbleManager::FromWebContents(contents))
-    PermissionBubbleManager::FromWebContents(contents)->UpdateAnchorPosition();
+  if (contents && PermissionRequestManager::FromWebContents(contents))
+    PermissionRequestManager::FromWebContents(contents)->UpdateAnchorPosition();
 }
 
 bool BrowserView::ShouldUseImmersiveFullscreenForUrl(const GURL& url) const {
@@ -2545,6 +2555,10 @@ void BrowserView::ShowImeWarningBubble(
 
 std::string BrowserView::GetWorkspace() const {
   return frame_->GetWorkspace();
+}
+
+bool BrowserView::IsVisibleOnAllWorkspaces() const {
+  return frame_->IsVisibleOnAllWorkspaces();
 }
 
 bool BrowserView::DoCutCopyPasteForWebContents(

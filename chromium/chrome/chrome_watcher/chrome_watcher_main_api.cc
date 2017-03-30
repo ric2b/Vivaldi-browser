@@ -6,7 +6,7 @@
 #include "base/strings/string_number_conversions.h"
 
 const base::FilePath::CharType kChromeWatcherDll[] =
-    FILE_PATH_LITERAL("chrome_watcher.dll");
+    FILE_PATH_LITERAL("vivaldi_watcher.dll");
 const char kChromeWatcherDLLEntrypoint[] = "WatcherMain";
 const base::FilePath::CharType kPermanentlyFailedReportsSubdir[] =
     L"Crash Reports Fallback";

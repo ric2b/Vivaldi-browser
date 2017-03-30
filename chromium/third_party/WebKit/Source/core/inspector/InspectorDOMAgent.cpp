@@ -51,8 +51,6 @@
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/serializers/Serialization.h"
-#include "core/fileapi/File.h"
-#include "core/fileapi/FileList.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -76,7 +74,6 @@
 #include "platform/PlatformGestureEvent.h"
 #include "platform/PlatformMouseEvent.h"
 #include "platform/PlatformTouchEvent.h"
-#include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
@@ -133,7 +130,7 @@ v8::Local<v8::Value> nodeV8Value(v8::Local<v8::Context> context, Node* node)
 {
     v8::Isolate* isolate = context->GetIsolate();
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "nodeV8Value", "InjectedScriptHost", context->Global(), isolate);
-    if (!node || !BindingSecurity::shouldAllowAccessTo(isolate, currentDOMWindow(isolate), node, exceptionState))
+    if (!node || !BindingSecurity::shouldAllowAccessTo(currentDOMWindow(isolate), node, exceptionState))
         return v8::Null(isolate);
     return toV8(node, context->Global(), isolate);
 }
@@ -145,7 +142,7 @@ public:
     explicit InspectorRevalidateDOMTask(InspectorDOMAgent*);
     void scheduleStyleAttrRevalidationFor(Element*);
     void reset() { m_timer.stop(); }
-    void onTimer(Timer<InspectorRevalidateDOMTask>*);
+    void onTimer(TimerBase*);
     DECLARE_TRACE();
 
 private:
@@ -167,7 +164,7 @@ void InspectorRevalidateDOMTask::scheduleStyleAttrRevalidationFor(Element* eleme
         m_timer.startOneShot(0, BLINK_FROM_HERE);
 }
 
-void InspectorRevalidateDOMTask::onTimer(Timer<InspectorRevalidateDOMTask>*)
+void InspectorRevalidateDOMTask::onTimer(TimerBase*)
 {
     // The timer is stopped on m_domAgent destruction, so this method will never be called after m_domAgent has been destroyed.
     HeapVector<Member<Element>> elements;
@@ -243,7 +240,7 @@ bool InspectorDOMAgent::getPseudoElementType(PseudoId pseudoId, protocol::DOM::P
     }
 }
 
-InspectorDOMAgent::InspectorDOMAgent(v8::Isolate* isolate, InspectedFrames* inspectedFrames, V8InspectorSession* v8Session, Client* client)
+InspectorDOMAgent::InspectorDOMAgent(v8::Isolate* isolate, InspectedFrames* inspectedFrames, v8_inspector::V8InspectorSession* v8Session, Client* client)
     : m_isolate(isolate)
     , m_inspectedFrames(inspectedFrames)
     , m_v8Session(v8Session)
@@ -860,7 +857,7 @@ void InspectorDOMAgent::setNodeValue(ErrorString* errorString, int nodeId, const
     if (!node)
         return;
 
-    if (node->getNodeType() != Node::TEXT_NODE) {
+    if (node->getNodeType() != Node::kTextNode) {
         *errorString = "Can only set value of text nodes";
         return;
     }
@@ -944,15 +941,15 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
         // Manual plain text search.
         for (; node; node = nextNodeWithShadowDOMInMind(*node, documentElement, includeUserAgentShadowDOM)) {
             switch (node->getNodeType()) {
-            case Node::TEXT_NODE:
-            case Node::COMMENT_NODE:
-            case Node::CDATA_SECTION_NODE: {
+            case Node::kTextNode:
+            case Node::kCommentNode:
+            case Node::kCdataSectionNode: {
                 String text = node->nodeValue();
                 if (text.findIgnoringCase(whitespaceTrimmedQuery) != kNotFound)
                     resultCollector.add(node);
                 break;
             }
-            case Node::ELEMENT_NODE: {
+            case Node::kElementNode: {
                 if ((!startTagFound && !endTagFound && (node->nodeName().findIgnoringCase(tagNameQuery) != kNotFound))
                     || (startTagFound && endTagFound && equalIgnoringCase(node->nodeName(), tagNameQuery))
                     || (startTagFound && !endTagFound && node->nodeName().startsWith(tagNameQuery, TextCaseInsensitive))
@@ -988,7 +985,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
         for (Document* document : docs) {
             ASSERT(document);
             TrackExceptionState exceptionState;
-            XPathResult* result = DocumentXPathEvaluator::evaluate(*document, whitespaceTrimmedQuery, document, nullptr, XPathResult::ORDERED_NODE_SNAPSHOT_TYPE, ScriptValue(), exceptionState);
+            XPathResult* result = DocumentXPathEvaluator::evaluate(*document, whitespaceTrimmedQuery, document, nullptr, XPathResult::kOrderedNodeSnapshotType, ScriptValue(), exceptionState);
             if (exceptionState.hadException() || !result)
                 continue;
 
@@ -998,7 +995,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
                 if (exceptionState.hadException())
                     break;
 
-                if (node->getNodeType() == Node::ATTRIBUTE_NODE)
+                if (node->getNodeType() == Node::kAttributeNode)
                     node = toAttr(node)->ownerElement();
                 resultCollector.add(node);
             }
@@ -1166,11 +1163,11 @@ void InspectorDOMAgent::innerHighlightQuad(std::unique_ptr<FloatQuad> quad, cons
 Node* InspectorDOMAgent::nodeForRemoteId(ErrorString* errorString, const String& objectId)
 {
     v8::HandleScope handles(m_isolate);
-    v8::Local<v8::Value> value = m_v8Session->findObject(errorString, objectId);
-    if (value.IsEmpty()) {
-        *errorString = "Node for given objectId not found";
+    v8::Local<v8::Value> value;
+    v8::Local<v8::Context> context;
+    String16 objectGroup;
+    if (!m_v8Session->unwrapObject(errorString, objectId, &value, &context, &objectGroup))
         return nullptr;
-    }
     if (!V8Node::hasInstance(value, m_isolate)) {
         *errorString = "Object id doesn't reference a Node";
         return nullptr;
@@ -1332,10 +1329,10 @@ void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, 
         return;
     }
 
-    FileList* fileList = FileList::create();
+    Vector<String> paths;
     for (size_t index = 0; index < files->length(); ++index)
-        fileList->append(File::create(files->get(index)));
-    toHTMLInputElement(node)->setFiles(fileList);
+        paths.append(files->get(index));
+    toHTMLInputElement(node)->setFilesFromPaths(paths);
 }
 
 void InspectorDOMAgent::getBoxModel(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::DOM::BoxModel>* model)
@@ -1357,7 +1354,7 @@ void InspectorDOMAgent::getNodeForLocation(ErrorString* errorString, int x, int 
     HitTestResult result(request, IntPoint(x, y));
     m_document->frame()->contentLayoutItem().hitTest(result);
     Node* node = result.innerPossiblyPseudoNode();
-    while (node && node->getNodeType() == Node::TEXT_NODE)
+    while (node && node->getNodeType() == Node::kTextNode)
         node = node->parentNode();
     if (!node) {
         *errorString = "No node found at given location";
@@ -1366,7 +1363,7 @@ void InspectorDOMAgent::getNodeForLocation(ErrorString* errorString, int x, int 
     *nodeId = pushNodePathToFrontend(node);
 }
 
-void InspectorDOMAgent::resolveNode(ErrorString* errorString, int nodeId, const Maybe<String>& objectGroup, std::unique_ptr<protocol::Runtime::RemoteObject>* result)
+void InspectorDOMAgent::resolveNode(ErrorString* errorString, int nodeId, const Maybe<String>& objectGroup, std::unique_ptr<protocol::Runtime::API::RemoteObject>* result)
 {
     String objectGroupName = objectGroup.fromMaybe("");
     Node* node = nodeForId(nodeId);
@@ -1432,17 +1429,17 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node*
     String nodeValue;
 
     switch (node->getNodeType()) {
-    case Node::TEXT_NODE:
-    case Node::COMMENT_NODE:
-    case Node::CDATA_SECTION_NODE:
+    case Node::kTextNode:
+    case Node::kCommentNode:
+    case Node::kCdataSectionNode:
         nodeValue = node->nodeValue();
         if (nodeValue.length() > maxTextSize)
             nodeValue = nodeValue.left(maxTextSize) + ellipsisUChar;
         break;
-    case Node::ATTRIBUTE_NODE:
+    case Node::kAttributeNode:
         localName = toAttr(node)->localName();
         break;
-    case Node::ELEMENT_NODE:
+    case Node::kElementNode:
         localName = toElement(node)->localName();
         break;
     default:
@@ -1565,7 +1562,7 @@ std::unique_ptr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildAr
     if (depth == 0) {
         // Special-case the only text child - pretend that container's children have been requested.
         Node* firstChild = container->firstChild();
-        if (firstChild && firstChild->getNodeType() == Node::TEXT_NODE && !firstChild->nextSibling()) {
+        if (firstChild && firstChild->getNodeType() == Node::kTextNode && !firstChild->nextSibling()) {
             children->addItem(buildObjectForNode(firstChild, 0, nodesMap));
             m_childrenRequested.add(bind(container, nodesMap));
         }
@@ -1662,7 +1659,7 @@ Node* InspectorDOMAgent::innerParentNode(Node* node)
 bool InspectorDOMAgent::isWhitespace(Node* node)
 {
     //TODO: pull ignoreWhitespace setting from the frontend and use here.
-    return node && node->getNodeType() == Node::TEXT_NODE && node->nodeValue().stripWhiteSpace().length() == 0;
+    return node && node->getNodeType() == Node::kTextNode && node->nodeValue().stripWhiteSpace().length() == 0;
 }
 
 void InspectorDOMAgent::domContentLoadedEventFired(LocalFrame* frame)
@@ -1996,7 +1993,7 @@ void InspectorDOMAgent::pushNodesByBackendIdsToFrontend(ErrorString* errorString
     }
 }
 
-class InspectableNode final : public V8InspectorSession::Inspectable {
+class InspectableNode final : public v8_inspector::V8InspectorSession::Inspectable {
 public:
     explicit InspectableNode(Node* node) : m_nodeId(DOMNodeIds::idForNode(node)) { }
 
@@ -2043,7 +2040,7 @@ void InspectorDOMAgent::getHighlightObjectForTest(ErrorString* errorString, int 
     *result = highlight.asProtocolValue();
 }
 
-std::unique_ptr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String& objectGroup)
+std::unique_ptr<protocol::Runtime::API::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String& objectGroup)
 {
     Document* document = node->isDocumentNode() ? &node->document() : node->ownerDocument();
     LocalFrame* frame = document ? document->frame() : nullptr;

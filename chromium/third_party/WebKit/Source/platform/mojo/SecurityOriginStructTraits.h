@@ -12,7 +12,7 @@
 namespace mojo {
 
 template <>
-struct StructTraits<url::mojom::blink::Origin, RefPtr<::blink::SecurityOrigin>> {
+struct StructTraits<url::mojom::blink::Origin::DataView, RefPtr<::blink::SecurityOrigin>> {
     static WTF::String scheme(const RefPtr<::blink::SecurityOrigin>& origin)
     {
         return origin->protocol();
@@ -23,13 +23,13 @@ struct StructTraits<url::mojom::blink::Origin, RefPtr<::blink::SecurityOrigin>> 
     }
     static uint16_t port(const RefPtr<::blink::SecurityOrigin>& origin)
     {
-        return origin->port();
+        return origin->effectivePort();
     }
     static bool unique(const RefPtr<::blink::SecurityOrigin>& origin)
     {
         return origin->isUnique();
     }
-    static bool Read(url::mojom::blink::OriginDataView data, RefPtr<::blink::SecurityOrigin>* out)
+    static bool Read(url::mojom::blink::Origin::DataView data, RefPtr<::blink::SecurityOrigin>* out)
     {
         if (data.unique()) {
             *out = ::blink::SecurityOrigin::createUnique();

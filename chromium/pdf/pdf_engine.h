@@ -27,6 +27,13 @@
 #include "ppapi/cpp/size.h"
 #include "ppapi/cpp/url_loader.h"
 #include "ppapi/cpp/var_array.h"
+#include "ui/base/window_open_disposition.h"
+
+#if defined(OS_WIN)
+typedef void (*PDFEnsureTypefaceCharactersAccessible)(const LOGFONT* font,
+                                                      const wchar_t* text,
+                                                      size_t text_length);
+#endif
 
 namespace pp {
 class InputEvent;
@@ -36,12 +43,6 @@ class VarDictionary;
 namespace chrome_pdf {
 
 class Stream;
-
-#if defined(OS_MACOSX)
-const uint32_t kDefaultKeyModifier = PP_INPUTEVENT_MODIFIER_METAKEY;
-#else  // !OS_MACOSX
-const uint32_t kDefaultKeyModifier = PP_INPUTEVENT_MODIFIER_CONTROLKEY;
-#endif  // OS_MACOSX
 
 // Do one time initialization of the SDK.
 bool InitializeSDK();
@@ -76,11 +77,12 @@ class PDFEngine {
     virtual void ScrollToX(int position) = 0;
     virtual void ScrollToY(int position) = 0;
 
-    // Scroll to the specified page.
+    // Scroll to zero-based |page|.
     virtual void ScrollToPage(int page) = 0;
 
     // Navigate to the given url.
-    virtual void NavigateTo(const std::string& url, bool open_in_new_tab) = 0;
+    virtual void NavigateTo(const std::string& url,
+                            WindowOpenDisposition disposition) = 0;
 
     // Updates the cursor.
     virtual void UpdateCursor(PP_CursorType_Dev cursor) = 0;
@@ -286,11 +288,12 @@ class PDFEngine {
   // document at page |index|.
   virtual void AppendPage(PDFEngine* engine, int index) = 0;
 
-  // Allow client to query and reset scroll positions in document coordinates.
-  // Note that this is meant for cases where the device scale factor changes,
-  // and not for general scrolling - the engine will not repaint due to this.
-  virtual pp::Point GetScrollPosition() = 0;
+#if defined(PDF_ENABLE_XFA)
+  // Allow client to set scroll positions in document coordinates. Note that
+  // this is meant for cases where the device scale factor changes, and not for
+  // general scrolling - the engine will not repaint due to this.
   virtual void SetScrollPosition(const pp::Point& position) = 0;
+#endif
 
   virtual bool IsProgressiveLoad() = 0;
 
@@ -308,12 +311,9 @@ class PDFEngineExports {
                       bool stretch_to_bounds,
                       bool keep_aspect_ratio,
                       bool center_in_bounds,
-                      bool autorotate)
-        : dpi_x(dpi_x), dpi_y(dpi_y), bounds(bounds),
-        fit_to_bounds(fit_to_bounds), stretch_to_bounds(stretch_to_bounds),
-        keep_aspect_ratio(keep_aspect_ratio),
-        center_in_bounds(center_in_bounds), autorotate(autorotate) {
-    }
+                      bool autorotate);
+    RenderingSettings(const RenderingSettings& that);
+
     int dpi_x;
     int dpi_y;
     pp::Rect bounds;
@@ -335,7 +335,13 @@ class PDFEngineExports {
                                  int page_number,
                                  const RenderingSettings& settings,
                                  HDC dc) = 0;
-#endif  // OS_WIN
+
+  virtual void SetPDFEnsureTypefaceCharactersAccessible(
+      PDFEnsureTypefaceCharactersAccessible func) = 0;
+
+  virtual void SetPDFUseGDIPrinting(bool enable) = 0;
+#endif  // defined(OS_WIN)
+
   // See the definition of RenderPDFPageToBitmap in pdf.cc for details.
   virtual bool RenderPDFPageToBitmap(const void* pdf_buffer,
                                      int pdf_buffer_size,

@@ -76,11 +76,11 @@ public:
 
     // These exact numeric values are important because JS expects them.
     enum State {
-        UNSENT = 0,
-        OPENED = 1,
-        HEADERS_RECEIVED = 2,
-        LOADING = 3,
-        DONE = 4
+        kUnsent = 0,
+        kOpened = 1,
+        kHeadersReceived = 2,
+        kLoading = 3,
+        kDone = 4
     };
 
     enum ResponseTypeCode {
@@ -100,7 +100,7 @@ public:
     void resume() override;
     void stop() override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // XMLHttpRequestEventTarget
@@ -147,6 +147,7 @@ public:
     // progress event throttle.
     EAGERLY_FINALIZE();
     DECLARE_VIRTUAL_TRACE();
+    DECLARE_TRACE_WRAPPERS();
 
 private:
     class BlobLoader;
@@ -222,10 +223,6 @@ private:
     // Clears variables used only while the resource is being loaded.
     void clearVariablesForLoading();
     // Returns false iff reentry happened and a new load is started.
-    //
-    // This method may invoke V8 GC with m_loader unset. If you touch the
-    // XMLHttpRequest instance after internalAbort() call, you must hold a
-    // refcount on it to prevent it from destroyed.
     bool internalAbort();
     // Clears variables holding response header and body data.
     void clearResponse();
@@ -264,7 +261,7 @@ private:
     Member<Blob> m_responseBlob;
     Member<Stream> m_responseLegacyStream;
 
-    std::unique_ptr<ThreadableLoader> m_loader;
+    Member<ThreadableLoader> m_loader;
     State m_state;
 
     ResourceResponse m_response;
@@ -318,6 +315,8 @@ private:
     bool m_downloadingToFile;
     bool m_responseTextOverflow;
 };
+
+std::ostream& operator<<(std::ostream&, const XMLHttpRequest*);
 
 } // namespace blink
 

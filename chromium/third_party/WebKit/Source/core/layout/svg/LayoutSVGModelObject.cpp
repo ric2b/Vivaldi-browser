@@ -36,6 +36,7 @@
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResourcesCache.h"
 #include "core/paint/PaintLayer.h"
+#include "core/paint/SVGModelObjectPaintInvalidator.h"
 #include "core/svg/SVGGraphicsElement.h"
 
 namespace blink {
@@ -50,9 +51,9 @@ bool LayoutSVGModelObject::isChildAllowed(LayoutObject* child, const ComputedSty
     return child->isSVG() && !(child->isSVGInline() || child->isSVGInlineText() || child->isSVGGradientStop());
 }
 
-void LayoutSVGModelObject::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags) const
+void LayoutSVGModelObject::mapLocalToAncestor(const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags flags) const
 {
-    SVGLayoutSupport::mapLocalToAncestor(this, ancestor, transformState);
+    SVGLayoutSupport::mapLocalToAncestor(this, ancestor, transformState, flags);
 }
 
 LayoutRect LayoutSVGModelObject::absoluteClippedOverflowRect() const
@@ -88,18 +89,9 @@ void LayoutSVGModelObject::willBeDestroyed()
     LayoutObject::willBeDestroyed();
 }
 
-PaintInvalidationReason LayoutSVGModelObject::getPaintInvalidationReason(const PaintInvalidationState& paintInvalidationState,
-    const LayoutRect& oldBounds, const LayoutPoint& oldLocation, const LayoutRect& newBounds, const LayoutPoint& newLocation) const
+PaintInvalidationReason LayoutSVGModelObject::invalidatePaintIfNeeded(const PaintInvalidatorContext& context) const
 {
-    PaintInvalidationReason invalidationReason = LayoutObject::getPaintInvalidationReason(paintInvalidationState, oldBounds, oldLocation, newBounds, newLocation);
-
-    // Disable incremental invalidation for SVG objects to prevent under-
-    // invalidation. Unlike boxes, it is non-trivial (and rare) for SVG objects
-    // to be able to be incrementally invalidated (e.g., on height changes).
-    if (invalidationReason == PaintInvalidationIncremental)
-        return PaintInvalidationFull;
-
-    return invalidationReason;
+    return SVGModelObjectPaintInvalidator(*this, context).invalidatePaintIfNeeded();
 }
 
 void LayoutSVGModelObject::computeLayerHitTestRects(LayerHitTestRects& rects) const

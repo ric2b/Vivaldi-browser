@@ -71,6 +71,7 @@ void PushMessagingDispatcher::DidGetManifest(
     blink::WebServiceWorkerRegistration* service_worker_registration,
     const blink::WebPushSubscriptionOptions& options,
     blink::WebPushSubscriptionCallbacks* callbacks,
+    const GURL& manifest_url,
     const Manifest& manifest,
     const ManifestDebugInfo&) {
   // Get the sender_info from the manifest since it wasn't provided by
@@ -114,14 +115,16 @@ void PushMessagingDispatcher::DoSubscribe(
 void PushMessagingDispatcher::OnSubscribeFromDocumentSuccess(
     int32_t request_id,
     const GURL& endpoint,
+    const PushSubscriptionOptions& options,
     const std::vector<uint8_t>& p256dh,
     const std::vector<uint8_t>& auth) {
   blink::WebPushSubscriptionCallbacks* callbacks =
       subscription_callbacks_.Lookup(request_id);
   DCHECK(callbacks);
 
-  callbacks->onSuccess(
-      base::WrapUnique(new blink::WebPushSubscription(endpoint, p256dh, auth)));
+  callbacks->onSuccess(base::WrapUnique(new blink::WebPushSubscription(
+      endpoint, options.user_visible_only,
+      blink::WebString::fromLatin1(options.sender_info), p256dh, auth)));
 
   subscription_callbacks_.Remove(request_id);
 }
@@ -135,7 +138,7 @@ void PushMessagingDispatcher::OnSubscribeFromDocumentError(
 
   blink::WebPushError::ErrorType error_type =
       status == PUSH_REGISTRATION_STATUS_PERMISSION_DENIED
-          ? blink::WebPushError::ErrorTypePermissionDenied
+          ? blink::WebPushError::ErrorTypeNotAllowed
           : blink::WebPushError::ErrorTypeAbort;
 
   callbacks->onError(blink::WebPushError(

@@ -36,12 +36,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/ui/bluetooth/chrome_extension_bluetooth_chooser.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/extensions/features/feature_channel.h"
 #include "chrome/common/pref_names.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/update_client/update_client.h"
@@ -54,6 +53,7 @@
 #include "extensions/browser/mojo/service_registration.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/url_request_util.h"
+#include "extensions/common/features/feature_channel.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -325,7 +325,7 @@ bool ChromeExtensionsBrowserClient::IsMinBrowserVersionSupported(
     const std::string& min_version) {
   base::Version browser_version =
       base::Version(version_info::GetVersionNumber());
-  Version browser_min_version(min_version);
+  base::Version browser_min_version(min_version);
   if (browser_version.IsValid() && browser_min_version.IsValid() &&
       browser_min_version.CompareTo(browser_version) > 0) {
     return false;
@@ -350,7 +350,7 @@ void ChromeExtensionsBrowserClient::CleanUpWebView(
     int embedder_process_id,
     int view_instance_id) {
   // Clean up context menus for the WebView.
-  auto menu_manager =
+  auto* menu_manager =
       MenuManager::Get(Profile::FromBrowserContext(browser_context));
   menu_manager->RemoveAllContextItems(
       MenuItem::ExtensionKey("", embedder_process_id, view_instance_id));
@@ -367,8 +367,8 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
     case VIEW_TYPE_EXTENSION_POPUP:
     case VIEW_TYPE_LAUNCHER_PAGE:
       // These are the only types that are tracked by the ExtensionTag.
-      task_management::WebContentsTags::CreateForExtension(web_contents,
-                                                           view_type);
+      task_manager::WebContentsTags::CreateForExtension(web_contents,
+                                                        view_type);
       return;
 
     case VIEW_TYPE_BACKGROUND_CONTENTS:
@@ -376,10 +376,10 @@ void ChromeExtensionsBrowserClient::AttachExtensionTaskManagerTag(
     case VIEW_TYPE_PANEL:
     case VIEW_TYPE_TAB_CONTENTS:
       // Those types are tracked by other tags:
-      // BACKGROUND_CONTENTS --> task_management::BackgroundContentsTag.
+      // BACKGROUND_CONTENTS --> task_manager::BackgroundContentsTag.
       // GUEST --> extensions::ChromeGuestViewManagerDelegate.
-      // PANEL --> task_management::PanelTag.
-      // TAB_CONTENTS --> task_management::TabContentsTag.
+      // PANEL --> task_manager::PanelTag.
+      // TAB_CONTENTS --> task_manager::TabContentsTag.
       // These tags are created and attached to the web_contents in other
       // locations, and they must be ignored here.
       return;

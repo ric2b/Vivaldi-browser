@@ -13,6 +13,7 @@
 #include "modules/canvas2d/CanvasPathMethods.h"
 #include "modules/canvas2d/CanvasRenderingContext2DState.h"
 #include "modules/canvas2d/CanvasStyle.h"
+#include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
 namespace blink {
@@ -162,30 +163,50 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
-    struct UsageCounters {
-        int numDrawCalls[7]; // use DrawCallType enum as index
-        int numNonConvexFillPathCalls;
-        int numGradients;
-        int numPatterns;
-        int numDrawWithComplexClips;
-        int numBlurredShadows;
-        int numFilters;
-        int numGetImageDataCalls;
-        int numPutImageDataCalls;
-        int numClearRectCalls;
-        int numDrawFocusCalls;
-
-        UsageCounters();
-    };
-
     enum DrawCallType {
         StrokePath = 0,
         FillPath,
-        DrawImage,
+        DrawVectorImage,
+        DrawBitmapImage,
         FillText,
         StrokeText,
         FillRect,
-        StrokeRect
+        StrokeRect,
+        DrawCallTypeCount // used to specify the size of storage arrays
+    };
+
+    enum PathFillType {
+        ColorFillType,
+        LinearGradientFillType,
+        RadialGradientFillType,
+        PatternFillType,
+        PathFillTypeCount // used to specify the size of storage arrays
+    };
+
+    struct UsageCounters {
+        int numDrawCalls[DrawCallTypeCount]; // use DrawCallType enum as index
+        float boundingBoxPerimeterDrawCalls[DrawCallTypeCount];
+        float boundingBoxAreaDrawCalls[DrawCallTypeCount];
+        float boundingBoxAreaFillType[PathFillTypeCount];
+        int numNonConvexFillPathCalls;
+        float nonConvexFillPathArea;
+        int numRadialGradients;
+        int numLinearGradients;
+        int numPatterns;
+        int numDrawWithComplexClips;
+        int numBlurredShadows;
+        float boundingBoxAreaTimesShadowBlurSquared;
+        float boundingBoxPerimeterTimesShadowBlurSquared;
+        int numFilters;
+        int numGetImageDataCalls;
+        float areaGetImageDataCalls;
+        int numPutImageDataCalls;
+        float areaPutImageDataCalls;
+        int numClearRectCalls;
+        int numDrawFocusCalls;
+        int numFramesSinceReset;
+
+        UsageCounters();
     };
 
     const UsageCounters& getUsage();
@@ -214,10 +235,12 @@ protected:
     HeapVector<Member<CanvasRenderingContext2DState>> m_stateStack;
     AntiAliasingMode m_clipAntialiasing;
 
-    void trackDrawCall(DrawCallType, Path2D* path2d = nullptr);
+    void trackDrawCall(DrawCallType, Path2D* path2d = nullptr, int width = 0, int height = 0);
 
     mutable UsageCounters m_usageCounters;
 
+
+    float estimateRenderingCost(ExpensiveCanvasHeuristicParameters::RenderingModeCostIndex) const;
 private:
     void realizeSaves();
 

@@ -107,6 +107,10 @@ extern const char kMimeTypePng[];
 // The extension id of the Web Store component application.
 extern const char kWebStoreAppId[];
 
+// The key used for signing some pieces of data from the webstore.
+extern const uint8_t kWebstoreSignaturesPublicKey[];
+extern const int kWebstoreSignaturesPublicKeySize;
+
 // Enumeration of possible app launch sources.
 // Note the enumeration is used in UMA histogram so entries
 // should not be re-ordered or removed.
@@ -169,6 +173,9 @@ enum LaunchContainer {
 }  // namespace extensions
 
 namespace extension_misc {
+
+// Matches chrome.tabs.TAB_ID_NONE.
+const int kUnknownTabId = -1;
 
 // Matches chrome.windows.WINDOW_ID_NONE.
 const int kUnknownWindowId = -1;

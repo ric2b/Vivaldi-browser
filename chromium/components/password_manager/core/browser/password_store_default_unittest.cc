@@ -39,11 +39,12 @@ namespace {
 class MockPasswordStoreConsumer : public PasswordStoreConsumer {
  public:
   MOCK_METHOD1(OnGetPasswordStoreResultsConstRef,
-               void(const std::vector<PasswordForm*>&));
+               void(const std::vector<std::unique_ptr<PasswordForm>>&));
 
   // GMock cannot mock methods with move-only args.
-  void OnGetPasswordStoreResults(ScopedVector<PasswordForm> results) override {
-    OnGetPasswordStoreResultsConstRef(results.get());
+  void OnGetPasswordStoreResults(
+      std::vector<std::unique_ptr<PasswordForm>> results) override {
+    OnGetPasswordStoreResultsConstRef(results);
   }
 };
 
@@ -61,20 +62,17 @@ class BadLoginDatabase : public LoginDatabase {
 };
 
 PasswordFormData CreateTestPasswordFormData() {
-  PasswordFormData data = {
-    PasswordForm::SCHEME_HTML,
-    "http://bar.example.com",
-    "http://bar.example.com/origin",
-    "http://bar.example.com/action",
-    L"submit_element",
-    L"username_element",
-    L"password_element",
-    L"username_value",
-    L"password_value",
-    true,
-    false,
-    1
-  };
+  PasswordFormData data = {PasswordForm::SCHEME_HTML,
+                           "http://bar.example.com",
+                           "http://bar.example.com/origin",
+                           "http://bar.example.com/action",
+                           L"submit_element",
+                           L"username_element",
+                           L"password_element",
+                           L"username_value",
+                           L"password_value",
+                           true,
+                           1};
   return data;
 }
 
@@ -109,7 +107,7 @@ class PasswordStoreDefaultTestDelegate {
 PasswordStoreDefaultTestDelegate::PasswordStoreDefaultTestDelegate() {
   SetupTempDir();
   store_ = CreateInitializedStore(
-      base::WrapUnique(new LoginDatabase(test_login_db_file_path())));
+      base::MakeUnique<LoginDatabase>(test_login_db_file_path()));
 }
 
 PasswordStoreDefaultTestDelegate::PasswordStoreDefaultTestDelegate(
@@ -159,7 +157,7 @@ INSTANTIATE_TYPED_TEST_CASE_P(Default,
                               PasswordStoreDefaultTestDelegate);
 
 ACTION(STLDeleteElements0) {
-  STLDeleteContainerPointers(arg0.begin(), arg0.end());
+  base::STLDeleteContainerPointers(arg0.begin(), arg0.end());
 }
 
 TEST(PasswordStoreDefaultTest, NonASCIIData) {
@@ -168,20 +166,13 @@ TEST(PasswordStoreDefaultTest, NonASCIIData) {
 
   // Some non-ASCII password form data.
   static const PasswordFormData form_data[] = {
-    { PasswordForm::SCHEME_HTML,
-      "http://foo.example.com",
-      "http://foo.example.com/origin",
-      "http://foo.example.com/action",
-      L"มีสีสัน",
-      L"お元気ですか?",
-      L"盆栽",
-      L"أحب كرة",
-      L"£éä국수çà",
-      true, false, 1 },
+      {PasswordForm::SCHEME_HTML, "http://foo.example.com",
+       "http://foo.example.com/origin", "http://foo.example.com/action",
+       L"มีสีสัน", L"お元気ですか?", L"盆栽", L"أحب كرة", L"£éä국수çà", true, 1},
   };
 
   // Build the expected forms vector and add the forms to the store.
-  ScopedVector<PasswordForm> expected_forms;
+  std::vector<std::unique_ptr<PasswordForm>> expected_forms;
   for (unsigned int i = 0; i < arraysize(form_data); ++i) {
     expected_forms.push_back(
         CreatePasswordFormFromDataForTesting(form_data[i]));
@@ -193,9 +184,10 @@ TEST(PasswordStoreDefaultTest, NonASCIIData) {
   MockPasswordStoreConsumer consumer;
 
   // We expect to get the same data back, even though it's not all ASCII.
-  EXPECT_CALL(consumer, OnGetPasswordStoreResultsConstRef(
-                            password_manager::UnorderedPasswordFormElementsAre(
-                                expected_forms.get())));
+  EXPECT_CALL(
+      consumer,
+      OnGetPasswordStoreResultsConstRef(
+          password_manager::UnorderedPasswordFormElementsAre(&expected_forms)));
   store->GetAutofillableLogins(&consumer);
 
   base::RunLoop().RunUntilIdle();
@@ -212,7 +204,7 @@ TEST(PasswordStoreDefaultTest, Notifications) {
   store->AddObserver(&observer);
 
   const PasswordStoreChange expected_add_changes[] = {
-    PasswordStoreChange(PasswordStoreChange::ADD, *form),
+      PasswordStoreChange(PasswordStoreChange::ADD, *form),
   };
 
   EXPECT_CALL(observer,
@@ -226,7 +218,7 @@ TEST(PasswordStoreDefaultTest, Notifications) {
   form->password_value = base::ASCIIToUTF16("a different password");
 
   const PasswordStoreChange expected_update_changes[] = {
-    PasswordStoreChange(PasswordStoreChange::UPDATE, *form),
+      PasswordStoreChange(PasswordStoreChange::UPDATE, *form),
   };
 
   EXPECT_CALL(observer,
@@ -237,7 +229,7 @@ TEST(PasswordStoreDefaultTest, Notifications) {
   base::RunLoop().RunUntilIdle();
 
   const PasswordStoreChange expected_delete_changes[] = {
-    PasswordStoreChange(PasswordStoreChange::REMOVE, *form),
+      PasswordStoreChange(PasswordStoreChange::REMOVE, *form),
   };
 
   EXPECT_CALL(observer,
@@ -278,7 +270,7 @@ TEST(PasswordStoreDefaultTest, OperationsOnABadDatabaseSilentlyFail) {
   // Get all logins; autofillable logins; blacklisted logins.
   testing::StrictMock<MockPasswordStoreConsumer> mock_consumer;
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));
-  bad_store->GetLogins(*form, &mock_consumer);
+  bad_store->GetLogins(PasswordStore::FormDigest(*form), &mock_consumer);
   base::RunLoop().RunUntilIdle();
   testing::Mock::VerifyAndClearExpectations(&mock_consumer);
   EXPECT_CALL(mock_consumer, OnGetPasswordStoreResultsConstRef(IsEmpty()));

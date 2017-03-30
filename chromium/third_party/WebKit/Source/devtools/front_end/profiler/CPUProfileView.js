@@ -89,8 +89,8 @@ WebInspector.CPUProfileType = function()
     this._anonymousConsoleProfileIdToTitle = {};
 
     WebInspector.CPUProfileType.instance = this;
-    WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.EventTypes.ConsoleProfileStarted, this._consoleProfileStarted, this);
-    WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.EventTypes.ConsoleProfileFinished, this._consoleProfileFinished, this);
+    WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.Events.ConsoleProfileStarted, this._consoleProfileStarted, this);
+    WebInspector.targetManager.addModelListener(WebInspector.CPUProfilerModel, WebInspector.CPUProfilerModel.Events.ConsoleProfileFinished, this._consoleProfileFinished, this);
 }
 
 WebInspector.CPUProfileType.TypeId = "CPU";
@@ -164,7 +164,7 @@ WebInspector.CPUProfileType.prototype = {
     _consoleProfileFinished: function(event)
     {
         var data = /** @type {!WebInspector.CPUProfilerModel.EventData} */ (event.data);
-        var cpuProfile = /** @type {!ProfilerAgent.CPUProfile} */ (data.cpuProfile);
+        var cpuProfile = /** @type {!ProfilerAgent.Profile} */ (data.cpuProfile);
         var resolvedTitle = data.title;
         if (typeof resolvedTitle === "undefined") {
             resolvedTitle = this._anonymousConsoleProfileIdToTitle[data.id];
@@ -229,7 +229,7 @@ WebInspector.CPUProfileType.prototype = {
         var recordedProfile;
 
         /**
-         * @param {?ProfilerAgent.CPUProfile} profile
+         * @param {?ProfilerAgent.Profile} profile
          * @this {WebInspector.CPUProfileType}
          */
         function didStopProfiling(profile)
@@ -301,7 +301,7 @@ WebInspector.CPUProfileHeader.prototype = {
     },
 
     /**
-     * @return {!ProfilerAgent.CPUProfile}
+     * @return {!ProfilerAgent.Profile}
      */
     protocolProfile: function()
     {
@@ -345,12 +345,11 @@ WebInspector.CPUProfileView.NodeFormatter.prototype = {
     /**
      * @override
      * @param  {!WebInspector.ProfileDataGridNode} node
-     * @return {!Element}
+     * @return {?Element}
      */
     linkifyNode: function(node)
     {
-        var callFrame = node.profileNode.frame;
-        return this._profileView.linkifier().linkifyConsoleCallFrame(this._profileView.target(), callFrame, "profile-node-file");
+        return this._profileView.linkifier().maybeLinkifyConsoleCallFrame(this._profileView.target(), node.profileNode.callFrame, "profile-node-file");
     }
 }
 
@@ -379,7 +378,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
          * @param {number} duration
          * @param {number} startTime
          * @param {number} selfTime
-         * @param {!ProfilerAgent.CPUProfileNode} node
+         * @param {!WebInspector.CPUProfileNode} node
          */
         function ChartEntry(depth, duration, startTime, selfTime, node)
         {
@@ -403,6 +402,13 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
             // The entry itself will be put there in onCloseFrame.
             entries.push(null);
         }
+        /**
+         * @param {number} depth
+         * @param {!WebInspector.CPUProfileNode} node
+         * @param {number} startTime
+         * @param {number} totalTime
+         * @param {number} selfTime
+         */
         function onCloseFrame(depth, node, startTime, totalTime, selfTime)
         {
             var index = stack.pop();
@@ -411,7 +417,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
         }
         this._cpuProfile.forEachFrame(onOpenFrame, onCloseFrame);
 
-        /** @type {!Array.<!ProfilerAgent.CPUProfileNode>} */
+        /** @type {!Array<!WebInspector.CPUProfileNode>} */
         var entryNodes = new Array(entries.length);
         var entryLevels = new Uint8Array(entries.length);
         var entryTotalTimes = new Float32Array(entries.length);
@@ -432,7 +438,7 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
 
         this._timelineData = new WebInspector.FlameChart.TimelineData(entryLevels, entryTotalTimes, entryStartTimes, null);
 
-        /** @type {!Array.<!ProfilerAgent.CPUProfileNode>} */
+        /** @type {!Array<!WebInspector.CPUProfileNode>} */
         this._entryNodes = entryNodes;
         this._entrySelfTimes = entrySelfTimes;
 
@@ -478,14 +484,14 @@ WebInspector.CPUFlameChartDataProvider.prototype = {
         var totalTime = millisecondsToString(timelineData.entryTotalTimes[entryIndex]);
         pushEntryInfoRow(WebInspector.UIString("Self time"), selfTime);
         pushEntryInfoRow(WebInspector.UIString("Total time"), totalTime);
-        var callFrame = /** @type {!RuntimeAgent.CallFrame} */ (node);
         var linkifier = new WebInspector.Linkifier();
-        var text = linkifier.linkifyConsoleCallFrame(this._target, callFrame).textContent;
+        var link = linkifier.maybeLinkifyConsoleCallFrame(this._target, node.callFrame);
+        if (link)
+            pushEntryInfoRow(WebInspector.UIString("URL"), link.textContent);
         linkifier.dispose();
-        pushEntryInfoRow(WebInspector.UIString("URL"), text);
-        pushEntryInfoRow(WebInspector.UIString("Aggregated self time"), Number.secondsToString(node.selfTime / 1000, true));
-        pushEntryInfoRow(WebInspector.UIString("Aggregated total time"), Number.secondsToString(node.totalTime / 1000, true));
-        if (node.deoptReason && node.deoptReason !== "no reason")
+        pushEntryInfoRow(WebInspector.UIString("Aggregated self time"), Number.secondsToString(node.self / 1000, true));
+        pushEntryInfoRow(WebInspector.UIString("Aggregated total time"), Number.secondsToString(node.total / 1000, true));
+        if (node.deoptReason)
             pushEntryInfoRow(WebInspector.UIString("Not optimized"), node.deoptReason);
 
         return entryInfo;

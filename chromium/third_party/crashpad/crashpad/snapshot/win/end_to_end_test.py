@@ -99,7 +99,7 @@ def GetDumpFromProgram(out_dir, pipe_name, executable_name, *args):
 
     if pipe_name is not None:
       handler = subprocess.Popen([
-          os.path.join(out_dir, 'crashpad_handler.exe'),
+          os.path.join(out_dir, 'crashpad_handler.com'),
           '--pipe-name=' + pipe_name,
           '--database=' + test_database
       ])
@@ -116,7 +116,7 @@ def GetDumpFromProgram(out_dir, pipe_name, executable_name, *args):
                       list(args))
     else:
       subprocess.call([os.path.join(out_dir, executable_name),
-                       os.path.join(out_dir, 'crashpad_handler.exe'),
+                       os.path.join(out_dir, 'crashpad_handler.com'),
                        test_database] + list(args))
 
     out = subprocess.check_output([
@@ -199,16 +199,19 @@ def RunTests(cdb_path,
   out = CdbRun(cdb_path, dump_path, '.ecxr')
   out.Check('This dump file has an exception of interest stored in it',
             'captured exception')
-  out.Check(
-      'crashy_program!crashpad::`anonymous namespace\'::SomeCrashyFunction',
-      'exception at correct location')
+
+  # When SomeCrashyFunction is inlined, cdb doesn't demangle its namespace as
+  # "`anonymous namespace'" and instead gives the decorated form.
+  out.Check('crashy_program!crashpad::(`anonymous namespace\'|\?A0x[0-9a-f]+)::'
+                'SomeCrashyFunction',
+            'exception at correct location')
 
   out = CdbRun(cdb_path, start_handler_dump_path, '.ecxr')
   out.Check('This dump file has an exception of interest stored in it',
             'captured exception (using StartHandler())')
-  out.Check(
-      'crashy_program!crashpad::`anonymous namespace\'::SomeCrashyFunction',
-      'exception at correct location (using StartHandler())')
+  out.Check('crashy_program!crashpad::(`anonymous namespace\'|\?A0x[0-9a-f]+)::'
+                'SomeCrashyFunction',
+            'exception at correct location (using StartHandler())')
 
   out = CdbRun(cdb_path, dump_path, '!peb')
   out.Check(r'PEB at', 'found the PEB')

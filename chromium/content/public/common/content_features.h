@@ -22,8 +22,8 @@ CONTENT_EXPORT extern const base::Feature kCredentialManagementAPI;
 CONTENT_EXPORT extern const base::Feature kDefaultEnableGpuRasterization;
 CONTENT_EXPORT extern const base::Feature kDoNotUnlockSharedBuffer;
 CONTENT_EXPORT extern const base::Feature kDocumentWriteEvaluator;
+CONTENT_EXPORT extern const base::Feature kFeaturePolicy;
 CONTENT_EXPORT extern const base::Feature kFontCacheScaling;
-CONTENT_EXPORT extern const base::Feature kMainFrameBeforeActivation;
 CONTENT_EXPORT extern const base::Feature kMediaDocumentDownloadButton;
 CONTENT_EXPORT extern const base::Feature kNewMediaPlaybackUi;
 CONTENT_EXPORT extern const base::Feature kNonValidatingReloadOnNormalReload;
@@ -32,15 +32,24 @@ CONTENT_EXPORT extern const base::Feature kOptimizeLoadingIPCForSmallResources;
 CONTENT_EXPORT extern const base::Feature kOriginTrials;
 CONTENT_EXPORT extern const base::Feature kPaintOptimizations;
 CONTENT_EXPORT extern const base::Feature kParseHTMLOnMainThread;
+CONTENT_EXPORT extern const base::Feature kPassiveDocumentEventListeners;
+CONTENT_EXPORT extern const base::Feature kPassiveEventListenersDueToFling;
+CONTENT_EXPORT extern const base::Feature kPepper3DImageChromium;
 CONTENT_EXPORT extern const base::Feature kPointerEvents;
 CONTENT_EXPORT extern const base::Feature kRenderingPipelineThrottling;
 CONTENT_EXPORT extern const base::Feature kScrollAnchoring;
+CONTENT_EXPORT extern const base::Feature kSpeculativeLaunchServiceWorker;
 CONTENT_EXPORT extern const base::Feature kStaleWhileRevalidate;
+CONTENT_EXPORT extern const base::Feature kTimerThrottlingForHiddenFrames;
 CONTENT_EXPORT extern const base::Feature kTokenBinding;
+CONTENT_EXPORT extern const base::Feature kTouchpadAndWheelScrollLatching;
 CONTENT_EXPORT extern const base::Feature kWeakMemoryCache;
 CONTENT_EXPORT extern const base::Feature kWebGLImageChromium;
 CONTENT_EXPORT extern const base::Feature kWebRtcEcdsaDefault;
+CONTENT_EXPORT extern const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames;
 CONTENT_EXPORT extern const base::Feature kWebUsb;
+CONTENT_EXPORT
+extern const base::Feature kSendBeaconThrowForBlobWithNonSimpleType;
 
 #if defined(OS_ANDROID)
 CONTENT_EXPORT extern const base::Feature kAutoplayMutedVideos;

@@ -69,11 +69,9 @@ void LogHostedAppUnlimitedStorageUsage(
     // cannot ask for any more temporary storage, according to
     // https://developers.google.com/chrome/whitepapers/storage.
     BrowserThread::PostAfterStartupTask(
-        FROM_HERE,
-        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO),
+        FROM_HERE, BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
         base::Bind(&storage::QuotaManager::GetUsageAndQuotaForWebApps,
-                   partition->GetQuotaManager(),
-                   launch_url,
+                   partition->GetQuotaManager(), launch_url,
                    storage::kStorageTypePersistent,
                    base::Bind(&ReportQuotaUsage)));
   }
@@ -306,7 +304,7 @@ void ExtensionSpecialStoragePolicy::NotifyCleared() {
 ExtensionSpecialStoragePolicy::SpecialCollection::SpecialCollection() {}
 
 ExtensionSpecialStoragePolicy::SpecialCollection::~SpecialCollection() {
-  STLDeleteValues(&cached_results_);
+  base::STLDeleteValues(&cached_results_);
 }
 
 bool ExtensionSpecialStoragePolicy::SpecialCollection::Contains(
@@ -316,7 +314,7 @@ bool ExtensionSpecialStoragePolicy::SpecialCollection::Contains(
 
 bool ExtensionSpecialStoragePolicy::SpecialCollection::GrantsCapabilitiesTo(
     const GURL& origin) {
-  for (scoped_refptr<const Extension> extension : extensions_) {
+  for (const auto& extension : extensions_) {
     if (extensions::ContentCapabilitiesInfo::Get(extension.get())
             .url_patterns.MatchesURL(origin)) {
       return true;
@@ -365,5 +363,5 @@ void ExtensionSpecialStoragePolicy::SpecialCollection::Clear() {
 }
 
 void ExtensionSpecialStoragePolicy::SpecialCollection::ClearCache() {
-  STLDeleteValues(&cached_results_);
+  base::STLDeleteValues(&cached_results_);
 }

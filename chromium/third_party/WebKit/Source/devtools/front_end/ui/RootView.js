@@ -11,6 +11,7 @@ WebInspector.RootView = function()
     WebInspector.VBox.call(this);
     this.markAsRoot();
     this.element.classList.add("root-view");
+    this.registerRequiredCSS("ui/rootView.css");
     this.element.setAttribute("spellcheck", false);
 }
 
@@ -23,7 +24,7 @@ WebInspector.RootView.prototype = {
         document.defaultView.addEventListener("resize", this.doResize.bind(this), false);
         this._window = document.defaultView;
         this.doResize();
-        this.show(document.body);
+        this.show(/** @type {!Element} */ (document.body));
     },
 
     doResize: function()

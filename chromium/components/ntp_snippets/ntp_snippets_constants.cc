@@ -12,4 +12,13 @@ const char kStudyName[] = "NTPSnippets";
 const base::FilePath::CharType kDatabaseFolder[] =
     FILE_PATH_LITERAL("NTPSnippets");
 
+const char kChromeReaderServer[] =
+    "https://chromereader-pa.googleapis.com/v1/fetch";
+const char kContentSuggestionsServer[] =
+    "https://chromecontentsuggestions-pa.googleapis.com/v1/suggestions/fetch";
+const char kContentSuggestionsDevServer[] =
+    "https://dev-chromecontentsuggestions-pa.googleapis.com/v1/suggestions/fetch";
+const char kContentSuggestionsAlphaServer[] =
+    "https://alpha-chromecontentsuggestions-pa.sandbox.googleapis.com/v1/suggestions/fetch";
+
 }  // namespace ntp_snippets

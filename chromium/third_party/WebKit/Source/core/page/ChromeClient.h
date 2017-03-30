@@ -85,8 +85,8 @@ public:
 
     // The specified rectangle is adjusted for the minimum window size and the
     // screen, then setWindowRect with the adjusted rectangle is called.
-    void setWindowRectWithAdjustment(const IntRect&);
-    virtual IntRect windowRect() = 0;
+    void setWindowRectWithAdjustment(const IntRect&, LocalFrame&);
+    virtual IntRect rootWindowRect() = 0;
 
     virtual IntRect pageRect() = 0;
 
@@ -211,8 +211,8 @@ public:
     virtual void enterFullScreenForElement(Element*) { }
     virtual void exitFullScreenForElement(Element*) { }
 
-    virtual void clearCompositedSelection() { }
-    virtual void updateCompositedSelection(const CompositedSelection&) { }
+    virtual void clearCompositedSelection(LocalFrame*) { }
+    virtual void updateCompositedSelection(LocalFrame*, const CompositedSelection&) { }
 
     virtual void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) = 0;
     virtual WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const = 0;
@@ -246,7 +246,7 @@ public:
 
     virtual bool isChromeClientImpl() const { return false; }
 
-    virtual void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) { }
+    virtual void didAssociateFormControlsAfterLoad(LocalFrame*) { }
     virtual void didChangeValueInTextField(HTMLFormControlElement&) { }
     virtual void didEndEditingOnTextField(HTMLInputElement&) { }
     virtual void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) { }
@@ -284,11 +284,13 @@ public:
     // Returns the time of the beginning of the last beginFrame, in seconds, if any, and 0.0 otherwise.
     virtual double lastFrameTimeMonotonic() const { return 0.0; }
 
+    virtual void installSupplements(LocalFrame&) { }
+
 protected:
     ~ChromeClient() override { }
 
     virtual void showMouseOverURL(const HitTestResult&) = 0;
-    virtual void setWindowRect(const IntRect&) = 0;
+    virtual void setWindowRect(const IntRect&, LocalFrame&) = 0;
     virtual bool openBeforeUnloadConfirmPanelDelegate(LocalFrame*, bool isReload) = 0;
     virtual bool openJavaScriptAlertDelegate(LocalFrame*, const String&) = 0;
     virtual bool openJavaScriptConfirmDelegate(LocalFrame*, const String&) = 0;

@@ -34,7 +34,6 @@
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
-#include "platform/text/LocaleToScriptMapping.h"
 #include "third_party/skia/include/core/SkTypeface.h"
 #include "third_party/skia/include/ports/SkFontMgr.h"
 
@@ -52,10 +51,26 @@ PassRefPtr<SimpleFontData> FontCache::fallbackFontForCharacter(const FontDescrip
 // static
 AtomicString FontCache::getGenericFamilyNameForScript(const AtomicString& familyName, const FontDescription& fontDescription)
 {
-    // This is a hack to use the preferred font for CJK scripts.
-    // FIXME: Use new Skia API once Android system supports per-family and per-script fallback fonts.
-    UChar32 examplerChar;
-    switch (fontDescription.script()) {
+    // If monospace, do not apply CJK hack to find i18n fonts, because
+    // i18n fonts are likely not monospace. Monospace is mostly used
+    // for code, but when i18n characters appear in monospace, system
+    // fallback can still render the characters.
+    if (familyName == FontFamilyNames::webkit_monospace)
+        return familyName;
+
+  // The CJK hack below should be removed, at latest when we have
+  // serif and sans-serif versions of CJK fonts. Until then, limit it
+  // to only when the content locale is available. crbug.com/652146
+  const LayoutLocale* contentLocale = fontDescription.locale();
+  if (!contentLocale)
+    return familyName;
+
+  // This is a hack to use the preferred font for CJK scripts.
+  // TODO(kojii): This logic disregards either generic family name
+  // or locale. We need an API that honors both to find appropriate
+  // fonts. crbug.com/642340
+  UChar32 examplerChar;
+  switch (contentLocale->script()) {
     case USCRIPT_SIMPLIFIED_HAN:
     case USCRIPT_TRADITIONAL_HAN:
     case USCRIPT_KATAKANA_OR_HIRAGANA:

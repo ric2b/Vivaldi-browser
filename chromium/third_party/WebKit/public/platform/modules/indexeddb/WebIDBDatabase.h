@@ -30,6 +30,7 @@
 #include "public/platform/WebCommon.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 #include "public/platform/modules/indexeddb/WebIDBMetadata.h"
+#include "public/platform/modules/indexeddb/WebIDBObserver.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 
 namespace blink {
@@ -40,6 +41,7 @@ class WebIDBDatabaseCallbacks;
 class WebIDBKey;
 class WebIDBKeyPath;
 class WebIDBKeyRange;
+class WebIDBObserver;
 
 class WebIDBDatabase {
 public:
@@ -61,6 +63,8 @@ public:
 
     typedef WebVector<WebIDBKey> WebIndexKeys;
 
+    virtual int32_t addObserver(std::unique_ptr<WebIDBObserver>, long long transactionId) = 0;
+    virtual void removeObservers(const WebVector<int32_t>& observerIdsToRemove) = 0;
     virtual void get(long long transactionId, long long objectStoreId, long long indexId, const WebIDBKeyRange&, bool keyOnly, WebIDBCallbacks*) = 0;
     virtual void getAll(long long transactionId, long long objectStoreId, long long indexId, const WebIDBKeyRange&, long long maxCount, bool keyOnly, WebIDBCallbacks*) = 0;
     virtual void put(long long transactionId, long long objectStoreId, const WebData& value, const WebVector<WebBlobInfo>&, const WebIDBKey&, WebIDBPutMode, WebIDBCallbacks*, const WebVector<long long>& indexIds, const WebVector<WebIndexKeys>&) = 0;

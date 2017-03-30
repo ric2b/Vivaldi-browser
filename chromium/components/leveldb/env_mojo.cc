@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/leveldatabase/chromium_logger.h"
 #include "third_party/leveldatabase/src/include/leveldb/status.h"
@@ -137,10 +138,12 @@ class MojoWritableFile : public leveldb::WritableFile {
         dir_(dir),
         thread_(thread) {
     base::FilePath path = base::FilePath::FromUTF8Unsafe(fname);
-    if (path.BaseName().AsUTF8Unsafe().find("MANIFEST") == 0)
+    if (base::StartsWith(path.BaseName().AsUTF8Unsafe(), "MANIFEST",
+                         base::CompareCase::SENSITIVE)) {
       file_type_ = kManifest;
-    else if (path.MatchesExtension(table_extension))
+    } else if (path.MatchesExtension(table_extension)) {
       file_type_ = kTable;
+    }
     parent_dir_ =
         base::FilePath::FromUTF8Unsafe(fname).DirName().AsUTF8Unsafe();
   }
@@ -365,15 +368,15 @@ Status MojoEnv::GetTestDirectory(std::string* path) {
 
 Status MojoEnv::NewLogger(const std::string& fname, Logger** result) {
   TRACE_EVENT1("leveldb", "MojoEnv::NewLogger", "fname", fname);
-  std::unique_ptr<base::File> f(new base::File(thread_->OpenFileHandle(
+  base::File f(thread_->OpenFileHandle(
       dir_, mojo::String::From(fname),
-      filesystem::mojom::kCreateAlways | filesystem::mojom::kFlagWrite)));
-  if (!f->IsValid()) {
+      filesystem::mojom::kCreateAlways | filesystem::mojom::kFlagWrite));
+  if (!f.IsValid()) {
     *result = NULL;
     return MakeIOError(fname, "Unable to create log file",
-                       leveldb_env::kNewLogger, f->error_details());
+                       leveldb_env::kNewLogger, f.error_details());
   } else {
-    *result = new leveldb::ChromiumLogger(f.release());
+    *result = new leveldb::ChromiumLogger(std::move(f));
     return Status::OK();
   }
 }

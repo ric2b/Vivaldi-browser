@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/persistent_histogram_allocator.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -242,16 +243,12 @@ void DumpHistograms(const WebPerformance& performance,
   Time request = document_state->request_time();
 
   Time navigation_start = Time::FromDoubleT(performance.navigationStart());
-  Time redirect_start = Time::FromDoubleT(performance.redirectStart());
-  Time redirect_end = Time::FromDoubleT(performance.redirectEnd());
-  Time fetch_start = Time::FromDoubleT(performance.fetchStart());
   Time domain_lookup_start = Time::FromDoubleT(performance.domainLookupStart());
   Time domain_lookup_end = Time::FromDoubleT(performance.domainLookupEnd());
   Time connect_start = Time::FromDoubleT(performance.connectStart());
   Time connect_end = Time::FromDoubleT(performance.connectEnd());
   Time request_start = Time::FromDoubleT(performance.requestStart());
   Time response_start = Time::FromDoubleT(performance.responseStart());
-  Time response_end = Time::FromDoubleT(performance.responseEnd());
   Time dom_loading = Time::FromDoubleT(performance.domLoading());
   Time dom_interactive = Time::FromDoubleT(performance.domInteractive());
   Time dom_content_loaded_start =
@@ -285,57 +282,15 @@ void DumpHistograms(const WebPerformance& performance,
     return;
   document_state->set_web_timing_histograms_recorded(true);
 
-  if (!redirect_start.is_null() && !redirect_end.is_null()) {
-    PLT_HISTOGRAM_DRP("PLT.NT_Redirect",
-                      redirect_end - redirect_start,
-                      data_reduction_proxy_was_used,
-                      scheme_type);
-    PLT_HISTOGRAM_DRP(
-        "PLT.NT_DelayBeforeFetchRedirect",
-        (fetch_start - navigation_start) - (redirect_end - redirect_start),
-        data_reduction_proxy_was_used,
-        scheme_type);
-  } else {
-    PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeFetch",
-                      fetch_start - navigation_start,
-                      data_reduction_proxy_was_used,
-                      scheme_type);
-  }
-  PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeDomainLookup",
-                    domain_lookup_start - fetch_start,
-                    data_reduction_proxy_was_used,
-                    scheme_type);
   PLT_HISTOGRAM_DRP("PLT.NT_DomainLookup",
                     domain_lookup_end - domain_lookup_start,
-                    data_reduction_proxy_was_used,
-                    scheme_type);
-  PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeConnect",
-                    connect_start - domain_lookup_end,
                     data_reduction_proxy_was_used,
                     scheme_type);
   PLT_HISTOGRAM_DRP("PLT.NT_Connect",
                     connect_end - connect_start,
                     data_reduction_proxy_was_used,
                     scheme_type);
-  PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeRequest",
-                    request_start - connect_end,
-                    data_reduction_proxy_was_used,
-                    scheme_type);
-  PLT_HISTOGRAM_DRP("PLT.NT_Request",
-                    response_start - request_start,
-                    data_reduction_proxy_was_used,
-                    scheme_type);
-  PLT_HISTOGRAM_DRP("PLT.NT_Response",
-                    response_end - response_start,
-                    data_reduction_proxy_was_used,
-                    scheme_type);
 
-  if (!dom_loading.is_null()) {
-    PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeDomLoading",
-                      dom_loading - response_start,
-                      data_reduction_proxy_was_used,
-                      scheme_type);
-  }
   if (!dom_interactive.is_null() && !dom_loading.is_null()) {
     PLT_HISTOGRAM_DRP("PLT.NT_DomLoading",
                       dom_interactive - dom_loading,
@@ -352,12 +307,6 @@ void DumpHistograms(const WebPerformance& performance,
       !dom_content_loaded_end.is_null() ) {
     PLT_HISTOGRAM_DRP("PLT.NT_DomContentLoaded",
                       dom_content_loaded_end - dom_content_loaded_start,
-                      data_reduction_proxy_was_used,
-                      scheme_type);
-  }
-  if (!dom_content_loaded_end.is_null() && !load_event_start.is_null()) {
-    PLT_HISTOGRAM_DRP("PLT.NT_DelayBeforeLoadEvent",
-                      load_event_start - dom_content_loaded_end,
                       data_reduction_proxy_was_used,
                       scheme_type);
   }
@@ -928,16 +877,15 @@ void PageLoadHistograms::Dump(WebFrame* frame) {
   // Log the PLT to the info log.
   LogPageLoadTime(document_state, frame->dataSource());
 
-  // Since there are currently no guarantees that renderer histograms will be
-  // sent to the browser, we initiate a PostTask here to be sure that we send
-  // the histograms we generated.  Without this call, pages that don't have an
-  // on-close-handler might generate data that is lost when the renderer is
-  // shutdown abruptly (perchance because the user closed the tab).
-  // TODO(jar) BUG=33233: This needs to be moved to a PostDelayedTask, and it
-  // should post when the onload is complete, so that it doesn't interfere with
-  // the next load.
-  content::RenderThread::Get()->UpdateHistograms(
-      content::kHistogramSynchronizerReservedSequenceNumber);
+  // If persistent histograms are not enabled, initiate a PostTask here to be
+  // sure that we send the histograms generated. Without this call, pages
+  // that don't have an on-close-handler might generate data that is lost if
+  // the renderer is shutdown abruptly (e.g. the user closed the tab).
+  // TODO(bcwhite): Remove completely when persistence is on-by-default.
+  if (!base::GlobalHistogramAllocator::Get()) {
+    content::RenderThread::Get()->UpdateHistograms(
+        content::kHistogramSynchronizerReservedSequenceNumber);
+  }
 }
 
 void PageLoadHistograms::FrameWillClose(WebFrame* frame) {

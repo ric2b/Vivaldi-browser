@@ -164,6 +164,9 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
   malloc_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                          base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                          heap_statistics.malloced_memory());
+  malloc_dump->AddScalar("peak_size",
+                         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                         heap_statistics.peak_malloced_memory());
   const char* system_allocator_name =
       base::trace_event::MemoryDumpManager::GetInstance()
           ->system_allocator_pool_name();
@@ -176,6 +179,9 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
   // dump stable, whether code stats are enabled or not.
   auto* heap_spaces_dump =
       process_memory_dump->CreateAllocatorDump(space_name_prefix);
+
+  // Dump statistics related to code and bytecode if requested.
+  DumpCodeStatistics(heap_spaces_dump, isolate_holder_);
 
   // Dump object statistics only for detailed dumps.
   if (args.level_of_detail !=
@@ -227,9 +233,6 @@ void V8IsolateMemoryDumpProvider::DumpHeapStatistics(
         process_memory_dump->CreateAllocatorDump(object_name_prefix)->guid(),
         heap_spaces_dump->guid());
   }
-
-  // Dump statistics related to code and bytecode if requested.
-  DumpCodeStatistics(heap_spaces_dump, isolate_holder_);
 }
 
 }  // namespace gin

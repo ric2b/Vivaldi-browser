@@ -1,3 +1,5 @@
+{% filter format_blink_cpp_source_code %}
+
 {% include 'copyright_block.txt' %}
 #include "{{v8_class}}.h"
 
@@ -38,24 +40,14 @@ DEFINE_TRACE({{v8_class}})
     ScriptState::Scope scope(m_scriptState.get());
     {% if method.call_with_this_handle %}
     v8::Local<v8::Value> thisHandle = thisValue.v8Value();
-    if (thisHandle.IsEmpty()) {
-        if (!isScriptControllerTerminating())
-            CRASH();
-        {{return_default}};
-    }
     {% endif %}
     {% for argument in method.arguments %}
     v8::Local<v8::Value> {{argument.handle}} = {{argument.cpp_value_to_v8_value}};
-    if ({{argument.handle}}.IsEmpty()) {
-        if (!isScriptControllerTerminating())
-            CRASH();
-        {{return_default}};
-    }
     {% endfor %}
     {% if method.arguments %}
     v8::Local<v8::Value> argv[] = { {{method.arguments | join(', ', 'handle')}} };
     {% else %}
-    {# Empty array initializers are illegal, and don't compile in MSVC. #}
+    {# Empty array initializers are illegal, and don\'t compile in MSVC. #}
     v8::Local<v8::Value> *argv = 0;
     {% endif %}
 
@@ -63,12 +55,14 @@ DEFINE_TRACE({{v8_class}})
     {% if method.idl_type == 'boolean' %}
     v8::TryCatch exceptionCatcher(m_scriptState->isolate());
     exceptionCatcher.SetVerbose(true);
-    ScriptController::callFunction(m_scriptState->getExecutionContext(), m_callback.newLocal(m_scriptState->isolate()), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
+    V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
     return !exceptionCatcher.HasCaught();
     {% else %}{# void #}
-    ScriptController::callFunction(m_scriptState->getExecutionContext(), m_callback.newLocal(m_scriptState->isolate()), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
+    V8ScriptRunner::callFunction(m_callback.newLocal(m_scriptState->isolate()), m_scriptState->getExecutionContext(), {{this_handle_parameter}}{{method.arguments | length}}, argv, m_scriptState->isolate());
     {% endif %}
 }
 
 {% endfor %}
 } // namespace blink
+
+{% endfilter %}{# format_blink_cpp_source_code #}

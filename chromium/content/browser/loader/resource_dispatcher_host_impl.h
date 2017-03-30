@@ -31,11 +31,13 @@
 #include "content/browser/loader/resource_loader_delegate.h"
 #include "content/browser/loader/resource_scheduler.h"
 #include "content/common/content_export.h"
+#include "content/common/url_loader.mojom.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/resource_dispatcher_host.h"
-#include "content/public/browser/web_contents_observer.h"
+#include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
 #include "ipc/ipc_message.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/request_priority.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/url_request/url_request.h"
@@ -58,7 +60,6 @@ namespace content {
 class AppCacheService;
 class AsyncRevalidationManager;
 class CertStore;
-class FrameTree;
 class LoaderDelegate;
 class NavigationURLLoaderImplCore;
 class RenderFrameHostImpl;
@@ -67,7 +68,6 @@ class ResourceDispatcherHostDelegate;
 class ResourceMessageDelegate;
 class ResourceMessageFilter;
 class ResourceRequestInfoImpl;
-class SaveFileManager;
 class ServiceWorkerNavigationHandleCore;
 struct CommonNavigationParams;
 struct DownloadSaveInfo;
@@ -75,21 +75,9 @@ struct NavigationRequestInfo;
 struct Referrer;
 struct ResourceRequest;
 
-// This class is responsible for notifying the IO thread (specifically, the
-// ResourceDispatcherHostImpl) of frame events. It has an interace for callers
-// to use and also sends notifications on WebContentsObserver events. All
-// methods (static or class) will be called from the UI thread and post to the
-// IO thread.
-// TODO(csharrison): Add methods tracking visibility and audio changes, to
-// propogate to the ResourceScheduler.
-class LoaderIOThreadNotifier : public WebContentsObserver {
- public:
-  explicit LoaderIOThreadNotifier(WebContents* web_contents);
-  ~LoaderIOThreadNotifier() override;
-
-  // content::WebContentsObserver:
-  void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
-};
+namespace mojom {
+class URLLoader;
+}  // namespace mojom
 
 class CONTENT_EXPORT ResourceDispatcherHostImpl
     : public ResourceDispatcherHost,
@@ -124,6 +112,9 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void SetDelegate(ResourceDispatcherHostDelegate* delegate) override;
   void SetAllowCrossOriginAuthPrompt(bool value) override;
   void ClearLoginDelegateForRequest(net::URLRequest* request) override;
+  void RegisterInterceptor(const std::string& http_header,
+                           const std::string& starts_with,
+                           const InterceptorCallback& interceptor) override;
 
   // Puts the resource dispatcher host in an inactive state (unable to begin
   // new requests).  Cancels all pending requests.
@@ -195,10 +186,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // The average private bytes increase of the browser for each new pending
   // request. Experimentally obtained.
   static const int kAvgBytesPerOutstandingRequest = 4400;
-
-  SaveFileManager* save_file_manager() const {
-    return save_file_manager_.get();
-  }
 
   // Called when a RenderViewHost is created.
   void OnRenderViewHostCreated(int child_id,
@@ -299,6 +286,10 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
                               const NavigationRequestInfo& info,
                               NavigationURLLoaderImplCore* loader);
 
+  int num_in_flight_requests_for_testing() const {
+    return num_in_flight_requests_;
+  }
+
   // Turns on stale-while-revalidate support, regardless of command-line flags
   // or experiment status. For unit tests only.
   void EnableStaleWhileRevalidateForTesting();
@@ -307,8 +298,18 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // transferred. The LoaderDelegate should be interacted with on the IO thread.
   void SetLoaderDelegate(LoaderDelegate* loader_delegate);
 
+  void OnRenderFrameDeleted(const GlobalFrameRoutingId& global_routing_id);
+
+  // Called when loading a request with mojo.
+  void OnRequestResourceWithMojo(
+      int routing_id,
+      int request_id,
+      const ResourceRequest& request,
+      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client,
+      ResourceMessageFilter* filter);
+
  private:
-  friend class LoaderIOThreadNotifier;
   friend class ResourceDispatcherHostTest;
 
   FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest,
@@ -341,13 +342,31 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Map from ProcessID+RouteID pair to the "most interesting" LoadState.
   typedef std::map<GlobalRoutingID, LoadInfo> LoadInfoMap;
 
+  // Information about a HTTP header interceptor.
+  struct HeaderInterceptorInfo {
+    // Structure is sufficiently complicated to require the constructor
+    // destructor definitions in the cc file.
+    HeaderInterceptorInfo();
+    ~HeaderInterceptorInfo();
+    HeaderInterceptorInfo(const HeaderInterceptorInfo& other);
+
+    // Used to prefix match the value of the http header.
+    std::string starts_with;
+    // The interceptor.
+    InterceptorCallback interceptor;
+  };
+
+  // Map from HTTP header to its information HeaderInterceptorInfo.
+  typedef std::map<std::string, HeaderInterceptorInfo> HeaderInterceptorMap;
+
   // ResourceLoaderDelegate implementation:
   ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       ResourceLoader* loader,
       net::AuthChallengeInfo* auth_info) override;
   bool HandleExternalProtocol(ResourceLoader* loader, const GURL& url) override;
   void DidStartRequest(ResourceLoader* loader) override;
-  void DidReceiveRedirect(ResourceLoader* loader, const GURL& new_url) override;
+  void DidReceiveRedirect(ResourceLoader* loader, const GURL& new_url,
+                          ResourceResponse* response) override;
   void DidReceiveResponse(ResourceLoader* loader) override;
   void DidFinishLoading(ResourceLoader* loader) override;
   std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
@@ -358,8 +377,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // A shutdown helper that runs on the IO thread.
   void OnShutdown();
-
-  void OnRenderFrameDeleted(const GlobalFrameRoutingId& global_routing_id);
 
   // Helper function for regular and download requests.
   void BeginRequestInternal(std::unique_ptr<net::URLRequest> request,
@@ -453,6 +470,14 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void OnRequestResource(int routing_id,
                          int request_id,
                          const ResourceRequest& request_data);
+
+  void OnRequestResourceInternal(
+      int routing_id,
+      int request_id,
+      const ResourceRequest& request_data,
+      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client);
+
   void OnSyncLoad(int request_id,
                   const ResourceRequest& request_data,
                   IPC::Message* sync_result);
@@ -470,7 +495,29 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void BeginRequest(int request_id,
                     const ResourceRequest& request_data,
                     IPC::Message* sync_result,  // only valid for sync
-                    int route_id);              // only valid for async
+                    int route_id,               // only valid for async
+                    mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
+                    mojom::URLLoaderClientPtr url_loader_client);
+
+  // There are requests which need decisions to be made like the following:
+  // Whether the presence of certain HTTP headers like the Origin header are
+  // valid, etc. These requests may need to be aborted based on these
+  // decisions which could be time consuming. We allow for these decisions
+  // to be made asynchronously. The request proceeds when we hear back from
+  // the interceptors about whether to continue or not.
+  // The |continue_request| parameter in the function indicates whether the
+  // request should be continued or aborted. The |error_code| parameter is set
+  // if |continue_request| is false.
+  void ContinuePendingBeginRequest(
+      int request_id,
+      const ResourceRequest& request_data,
+      IPC::Message* sync_result,  // only valid for sync
+      int route_id,
+      const net::HttpRequestHeaders& headers,
+      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client,
+      bool continue_request,
+      int error_code);
 
   // Creates a ResourceHandler to be used by BeginRequest() for normal resource
   // loading.
@@ -481,7 +528,9 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       int route_id,
       int process_type,
       int child_id,
-      ResourceContext* resource_context);
+      ResourceContext* resource_context,
+      mojo::InterfaceRequest<mojom::URLLoader> mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client);
 
   // Wraps |handler| in the standard resource handlers for normal resource
   // loading and navigation requests. This adds MimeTypeResourceHandler and
@@ -490,6 +539,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       net::URLRequest* request,
       ResourceType resource_type,
       ResourceContext* resource_context,
+      RequestContextType fetch_request_context_type,
       AppCacheService* appcache_service,
       int child_id,
       int route_id,
@@ -554,6 +604,17 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   CertStore* GetCertStore();
 
+  // Consults the RendererSecurity policy to determine whether the
+  // ResourceDispatcherHostImpl should service this request.  A request might
+  // be disallowed if the renderer is not authorized to retrieve the request
+  // URL or if the renderer is attempting to upload an unauthorized file.
+  bool ShouldServiceRequest(int process_type,
+                            int child_id,
+                            const ResourceRequest& request_data,
+                            const net::HttpRequestHeaders& headers,
+                            ResourceMessageFilter* filter,
+                            ResourceContext* resource_context);
+
   LoaderMap pending_loaders_;
 
   // Collection of temp files downloaded for child processes via
@@ -568,9 +629,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // A timer that periodically calls UpdateLoadInfo while pending_loaders_ is
   // not empty and at least one RenderViewHost is loading.
   std::unique_ptr<base::RepeatingTimer> update_load_states_timer_;
-
-  // We own the save file manager.
-  scoped_refptr<SaveFileManager> save_file_manager_;
 
   // Request ID for browser initiated requests. request_ids generated by
   // child processes are counted up from 0, while browser created requests
@@ -647,6 +705,9 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Allows tests to use a mock CertStore. If set, the CertStore must
   // outlive this ResourceDispatcherHostImpl.
   CertStore* cert_store_for_testing_;
+
+  // Used to invoke an interceptor for the HTTP header.
+  HeaderInterceptorMap http_header_interceptor_map_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceDispatcherHostImpl);
 };

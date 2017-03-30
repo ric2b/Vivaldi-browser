@@ -29,17 +29,15 @@
 #include "media/cast/net/cast_transport.h"
 #include "media/cast/net/cast_transport_config.h"
 
-using media::cast::AudioSenderConfig;
 using media::cast::CastEnvironment;
 using media::cast::CastSender;
-using media::cast::VideoSenderConfig;
+using media::cast::FrameSenderConfig;
 
 static base::LazyInstance<CastThreads> g_cast_threads =
     LAZY_INSTANCE_INITIALIZER;
 
 CastSessionDelegateBase::CastSessionDelegateBase()
-    : io_task_runner_(
-          content::RenderThread::Get()->GetIOMessageLoopProxy()),
+    : io_task_runner_(content::RenderThread::Get()->GetIOTaskRunner()),
       weak_factory_(this) {
   DCHECK(io_task_runner_.get());
 #if defined(OS_WIN)
@@ -71,8 +69,8 @@ void CastSessionDelegateBase::StartUDP(
   cast_environment_ = new CastEnvironment(
       std::unique_ptr<base::TickClock>(new base::DefaultTickClock()),
       base::ThreadTaskRunnerHandle::Get(),
-      g_cast_threads.Get().GetAudioEncodeMessageLoopProxy(),
-      g_cast_threads.Get().GetVideoEncodeMessageLoopProxy());
+      g_cast_threads.Get().GetAudioEncodeTaskRunner(),
+      g_cast_threads.Get().GetVideoEncodeTaskRunner());
 
   // Rationale for using unretained: The callback cannot be called after the
   // destruction of CastTransportIPC, and they both share the same thread.
@@ -93,10 +91,8 @@ void CastSessionDelegateBase::StatusNotificationCB(
   std::string error_message;
 
   switch (status) {
-    case media::cast::TRANSPORT_AUDIO_UNINITIALIZED:
-    case media::cast::TRANSPORT_VIDEO_UNINITIALIZED:
-    case media::cast::TRANSPORT_AUDIO_INITIALIZED:
-    case media::cast::TRANSPORT_VIDEO_INITIALIZED:
+    case media::cast::TRANSPORT_STREAM_UNINITIALIZED:
+    case media::cast::TRANSPORT_STREAM_INITIALIZED:
       return; // Not errors, do nothing.
     case media::cast::TRANSPORT_INVALID_CRYPTO_CONFIG:
       error_callback.Run("Invalid encrypt/decrypt configuration.");
@@ -117,7 +113,7 @@ CastSessionDelegate::~CastSessionDelegate() {
 }
 
 void CastSessionDelegate::StartAudio(
-    const AudioSenderConfig& config,
+    const FrameSenderConfig& config,
     const AudioFrameInputAvailableCallback& callback,
     const ErrorCallback& error_callback) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
@@ -135,7 +131,7 @@ void CastSessionDelegate::StartAudio(
 }
 
 void CastSessionDelegate::StartVideo(
-    const VideoSenderConfig& config,
+    const FrameSenderConfig& config,
     const VideoFrameInputAvailableCallback& callback,
     const ErrorCallback& error_callback,
     const media::cast::CreateVideoEncodeAcceleratorCallback& create_vea_cb,
@@ -190,14 +186,14 @@ void CastSessionDelegate::GetEventLogsAndReset(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   if (!event_subscribers_.get()) {
-    callback.Run(base::WrapUnique(new base::BinaryValue));
+    callback.Run(base::MakeUnique<base::BinaryValue>());
     return;
   }
 
   media::cast::EncodingEventSubscriber* subscriber =
       event_subscribers_->GetEncodingEventSubscriber(is_audio);
   if (!subscriber) {
-    callback.Run(base::WrapUnique(new base::BinaryValue));
+    callback.Run(base::MakeUnique<base::BinaryValue>());
     return;
   }
 
@@ -228,7 +224,7 @@ void CastSessionDelegate::GetEventLogsAndReset(
 
   if (!success) {
     DVLOG(2) << "Failed to serialize event log.";
-    callback.Run(base::WrapUnique(new base::BinaryValue));
+    callback.Run(base::MakeUnique<base::BinaryValue>());
     return;
   }
 
@@ -244,14 +240,14 @@ void CastSessionDelegate::GetStatsAndReset(bool is_audio,
   DCHECK(io_task_runner_->BelongsToCurrentThread());
 
   if (!event_subscribers_.get()) {
-    callback.Run(base::WrapUnique(new base::DictionaryValue));
+    callback.Run(base::MakeUnique<base::DictionaryValue>());
     return;
   }
 
   media::cast::StatsEventSubscriber* subscriber =
       event_subscribers_->GetStatsEventSubscriber(is_audio);
   if (!subscriber) {
-    callback.Run(base::WrapUnique(new base::DictionaryValue));
+    callback.Run(base::MakeUnique<base::DictionaryValue>());
     return;
   }
 

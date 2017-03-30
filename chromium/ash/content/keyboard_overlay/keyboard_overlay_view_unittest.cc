@@ -6,11 +6,9 @@
 
 #include <algorithm>
 
-#include "ash/accelerators/accelerator_table.h"
+#include "ash/common/accelerators/accelerator_table.h"
 #include "ash/content/keyboard_overlay/keyboard_overlay_delegate.h"
 #include "ash/content/shell_content_state.h"
-#include "ash/shell.h"
-#include "ash/shell_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/web_dialogs/test/test_web_contents_handler.h"
 #include "ui/web_dialogs/test/test_web_dialog_delegate.h"

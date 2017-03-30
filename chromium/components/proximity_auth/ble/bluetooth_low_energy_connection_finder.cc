@@ -172,17 +172,15 @@ bool BluetoothLowEnergyConnectionFinder::IsRightDevice(
 
 bool BluetoothLowEnergyConnectionFinder::HasService(
     BluetoothDevice* remote_device) {
-  if (remote_device) {
-    PA_LOG(INFO) << "Device " << remote_device->GetAddress() << " has "
-                 << remote_device->GetUUIDs().size() << " services.";
-    std::vector<device::BluetoothUUID> uuids = remote_device->GetUUIDs();
-    for (const auto& service_uuid : uuids) {
-      if (remote_service_uuid_ == service_uuid) {
-        return true;
-      }
-    }
+  if (!remote_device) {
+    return false;
   }
-  return false;
+
+  BluetoothDevice::UUIDSet uuids = remote_device->GetUUIDs();
+
+  PA_LOG(INFO) << "Device " << remote_device->GetAddress() << " has "
+               << uuids.size() << " services.";
+  return base::ContainsKey(uuids, remote_service_uuid_);
 }
 
 void BluetoothLowEnergyConnectionFinder::OnAdapterInitialized(
@@ -197,7 +195,7 @@ void BluetoothLowEnergyConnectionFinder::OnAdapterInitialized(
   if (finder_strategy_ == FIND_PAIRED_DEVICE) {
     PA_LOG(INFO) << "Looking for paired device: "
                  << remote_device_.bluetooth_address;
-    for (auto& device : adapter_->GetDevices()) {
+    for (const auto* device : adapter_->GetDevices()) {
       if (device->IsPaired())
         PA_LOG(INFO) << device->GetAddress() << " is paired";
     }
@@ -306,7 +304,7 @@ BluetoothDevice* BluetoothLowEnergyConnectionFinder::GetDevice(
   // This is a bug in the way device::BluetoothAdapter is storing the devices
   // (see crbug.com/497841).
   std::vector<BluetoothDevice*> devices = adapter_->GetDevices();
-  for (const auto& device : devices) {
+  for (auto* device : devices) {
     if (device->GetAddress() == device_address)
       return device;
   }

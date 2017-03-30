@@ -8,6 +8,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
+import("//components/os_crypt/features.gni")
 import("//media/media_options.gni")
 import("//third_party/protobuf/proto_library.gni")
 
@@ -17,16 +18,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 } else {
   import("//tools/grit/grit_rule.gni")
-}
-if (is_desktop_linux) {
-  import("//build/config/linux/pkg_config.gni")
-}
-
-declare_args() {
-  # 'Ok Google' hotwording is disabled by default. Set to true to enable. (This
-  # will download a closed-source NaCl module at startup.) Chrome-branded
-  # ChromeOS builds have this enabled by default.
-  enable_hotwording = is_chrome_branded && is_chromeos
 }
 
 additional_modules_list_file =
@@ -53,28 +44,6 @@ if (is_win) {
       "/DELAYLOAD:ndfapi.dll",
       "/DELAYLOAD:pdh.dll",  # The task manager is rarely used.
     ]
-  }
-}
-
-if (is_desktop_linux) {
-  # Gnome-keyring is normally dynamically loaded. The gnome_keyring config
-  # will set this up.
-  pkg_config("gnome_keyring") {
-    packages = [ "gnome-keyring-1" ]
-    defines = [
-      "USE_GNOME_KEYRING",
-      "DLOPEN_GNOME_KEYRING",
-    ]
-    ignore_libs = true
-  }
-
-  # If you want to link gnome-keyring directly (use only for unit tests)
-  # ADDITIONALLY add this config on top of ":gnome_keyring". pkg-config is a
-  # bit slow, so prefer not to run it again. In practice, gnome-keyring's libs
-  # are just itself and common gnome ones we link already, so we can get away
-  # with additionally just coding the library name here.
-  config("gnome_keyring_direct") {
-    libs = [ "gnome-keyring" ]
   }
 }
 
@@ -105,9 +74,9 @@ split_static_library("browser") {
   # non-iOS deps below.
   public_deps = [
     "//components/autofill/core/browser",
+    "//components/sync",
     "//content/public/browser",
     "//sql",
-    "//sync",
   ]
   deps = [
     "//chrome:extra_resources",
@@ -115,6 +84,7 @@ split_static_library("browser") {
     "//chrome:strings",
     "//chrome/app/resources:platform_locale_settings",
     "//chrome/app/theme:theme_resources",
+    "//chrome/browser/budget_service:budget_proto",
     "//chrome/browser/metrics/variations:chrome_ui_string_overrider_factory",
     "//chrome/browser/net:probe_message_proto",
     "//chrome/browser/ui",
@@ -143,7 +113,6 @@ split_static_library("browser") {
     "//components/favicon_base",
     "//components/flags_ui",
     "//components/gcm_driver",
-    "//components/gcm_driver/instance_id",
     "//components/google/core/browser",
     "//components/guest_view/browser",
     "//components/handoff",
@@ -166,13 +135,15 @@ split_static_library("browser") {
     "//components/ntp_tiles",
     "//components/offline_pages",
     "//components/offline_pages/background:background_offliner",
+    "//components/offline_pages/downloads:offline_pages_ui_adapter",
+    "//components/offline_pages/request_header:request_header",
     "//components/omnibox/browser",
     "//components/os_crypt",
     "//components/packed_ct_ev_whitelist",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
-    "//components/policy",
-    "//components/policy:policy_component",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
     "//components/policy/proto",
     "//components/proxy_config",
     "//components/query_parser",
@@ -195,8 +166,8 @@ split_static_library("browser") {
     "//components/subresource_filter/core/browser",
     "//components/suggestions",
     "//components/supervised_user_error_page",
+    "//components/sync",
     "//components/sync_bookmarks",
-    "//components/sync_driver",
     "//components/sync_sessions",
     "//components/tracing:startup_tracing",
     "//components/translate/core/browser",
@@ -224,7 +195,6 @@ split_static_library("browser") {
     "//gpu/config",
     "//skia",
     "//sql",
-    "//sync",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
     "//third_party/libjingle",
@@ -239,6 +209,7 @@ split_static_library("browser") {
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gl:gl_features",
     "//ui/message_center",
     "//ui/resources",
     "//ui/shell_dialogs",
@@ -248,6 +219,10 @@ split_static_library("browser") {
 
   sources +=
       rebase_path(gypi_values.chrome_browser_undo_sources, ".", "//chrome")
+
+  if (is_chromeos && use_cras) {
+    defines += [ "USE_CRAS" ]
+  }
 
   if (!is_ios) {
     sources +=
@@ -338,6 +313,7 @@ split_static_library("browser") {
     }
 
     deps += [
+      ":resource_prefetch_predictor_proto",
       "//cc",
       "//chrome/app/theme:theme_resources",
       "//chrome/browser/devtools",
@@ -348,7 +324,8 @@ split_static_library("browser") {
       "//components/about_handler",
       "//components/app_modal",
       "//components/autofill/content/browser",
-      "//components/browsing_data",
+      "//components/browsing_data/content",
+      "//components/browsing_data/core",
       "//components/contextual_search:browser",
       "//components/data_reduction_proxy/content/browser",
       "//components/data_use_measurement/content",
@@ -364,6 +341,7 @@ split_static_library("browser") {
       "//components/network_hints/common",
       "//components/password_manager/content/browser",
       "//components/password_manager/sync/browser",
+      "//components/previews",
       "//components/profile_metrics",
       "//components/proxy_config",
       "//components/resources",
@@ -380,7 +358,6 @@ split_static_library("browser") {
       "//components/visitedlink/browser",
       "//components/visitedlink/common",
       "//components/web_cache/browser",
-      "//components/webusb",
       "//content/app/resources",
       "//device/core",
       "//device/usb/mojo",
@@ -457,10 +434,12 @@ split_static_library("browser") {
   }
   if (enable_extensions) {
     public_deps += [ "//chrome/browser/extensions" ]
+    allow_circular_includes_from += [ "//chrome/browser/extensions" ]
     deps += [
       "//chrome/browser/sync_file_system/drive_backend:sync_file_system_drive_proto",
       "//chrome/common/extensions/api",
       "//chrome/common/extensions/api:api_registration",
+      "//chrome/common/extensions/api:extensions_features",
       "//components/drive:drive",
       "//components/proximity_auth/ble",
       "//components/proximity_auth/cryptauth",
@@ -489,18 +468,16 @@ split_static_library("browser") {
                       ".",
                       "//chrome")
     }
-
-    if (is_mac && !mac_views_browser) {
-      sources +=
-          rebase_path(gypi_values.chrome_browser_old_task_manager_cocoa_sources,
-                      ".",
-                      "//chrome")
-    }
   }
   if (enable_spellcheck) {
     sources += rebase_path(gypi_values.chrome_browser_spellchecker_sources,
                            ".",
                            "//chrome")
+    deps += [
+      "//components/spellcheck/browser",
+      "//components/spellcheck/common:common",
+    ]
+
     if (!is_android) {
       deps += [ "//third_party/hunspell" ]
     }
@@ -585,18 +562,23 @@ split_static_library("browser") {
     sources += [
       "metrics/leak_detector/leak_detector_controller.cc",
       "metrics/leak_detector/leak_detector_controller.h",
+      "metrics/leak_detector/leak_detector_remote_controller.cc",
+      "metrics/leak_detector/leak_detector_remote_controller.h",
     ]
-    public_deps += [ "//components/metrics:leak_detector" ]
+    public_deps += [
+      "//components/metrics/leak_detector:interfaces",
+      "//components/metrics/leak_detector:leak_detector",
+    ]
   }
 
   if (use_cups) {
     configs += [ "//printing:cups" ]
   }
-  if (is_desktop_linux) {
+  if (use_gnome_keyring) {
     sources += rebase_path(gypi_values.chrome_browser_gnome_keyring_sources,
                            ".",
                            "//chrome")
-    configs += [ ":gnome_keyring" ]
+    configs += [ "//components/os_crypt:gnome_keyring" ]
   }
   if (is_desktop_linux) {
     sources += rebase_path(gypi_values.chrome_browser_libsecret_sources,
@@ -618,14 +600,13 @@ split_static_library("browser") {
       "ui/views/frame/browser_non_client_frame_view_mus.h",
     ]
     deps += [
-      "//components/mus/public/cpp",
-      "//components/mus/public/cpp/input_devices",
       "//content/public/common",
+      "//services/ui/public/cpp",
+      "//services/ui/public/cpp/input_devices",
       "//ui/aura",
       "//ui/compositor",
       "//ui/views/mus",
     ]
-    defines += [ "MOJO_SHELL_CLIENT" ]
   }
   if (ui_compositor_image_transport) {
     deps += [ "//ui/gl" ]
@@ -634,6 +615,7 @@ split_static_library("browser") {
   if (use_ash) {
     sources +=
         rebase_path(gypi_values.chrome_browser_ash_sources, ".", "//chrome")
+    deps += [ "//ash" ]
   }
 
   if (use_x11) {
@@ -770,13 +752,15 @@ split_static_library("browser") {
       ":client_discourse_context_proto",
       ":delta_file_proto",
       ":jni_headers",
+      "//blimp/client/public",
+      "//chrome/browser/android/webapk:proto",
       "//components/data_usage/android",
       "//components/precache/content",
       "//components/precache/core",
       "//components/resources:components_resources",
-      "//components/service_tab_launcher",
       "//components/toolbar",
       "//components/web_contents_delegate_android",
+      "//third_party/smhasher:murmurhash2",
     ]
   }
 
@@ -835,8 +819,7 @@ split_static_library("browser") {
       "//chrome/chrome_watcher:client",
       "//chrome/common:metrics_constants_util_win",
       "//chrome/common:version_header",
-      "//chrome/installer/util:strings",
-      "//chrome_elf",
+      "//chrome_elf:blacklist",
       "//chrome_elf:constants",
       "//chrome_elf:dll_hash",
       "//components/browser_watcher",
@@ -992,7 +975,7 @@ if (android_java_ui) {
 }
 
 if (is_win) {
-  source_set("chrome_process_finder") {
+  static_library("chrome_process_finder") {
     sources = [
       "win/chrome_process_finder.cc",
       "win/chrome_process_finder.h",
@@ -1004,6 +987,14 @@ if (is_win) {
     if (enable_configuration_policy) {
       deps += [ "//chrome/browser/policy:path_parser" ]
     }
+  }
+}
+
+if (!is_ios) {
+  proto_library("resource_prefetch_predictor_proto") {
+    sources = [
+      "predictors/resource_prefetch_predictor.proto",
+    ]
   }
 }
 
@@ -1035,7 +1026,9 @@ grit("resources") {
     "//chrome/browser/ui/webui/engagement:mojo_bindings__generator",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings__generator",
     "//chrome/browser/ui/webui/plugins:mojo_bindings__generator",
+    "//chrome/browser/ui/webui/usb_internals:mojo_bindings__generator",
     "//url/mojo:url_mojom_gurl__generator",
+    "//url/mojo:url_mojom_origin__generator",
   ]
 }
 
@@ -1091,6 +1084,8 @@ static_library("test_support") {
     "browsing_data/mock_browsing_data_quota_helper.h",
     "browsing_data/mock_browsing_data_service_worker_helper.cc",
     "browsing_data/mock_browsing_data_service_worker_helper.h",
+    "chooser_controller/mock_chooser_controller.cc",
+    "chooser_controller/mock_chooser_controller.h",
     "download/download_test_file_activity_observer.cc",
     "download/download_test_file_activity_observer.h",
     "download/test_download_shelf.cc",
@@ -1105,6 +1100,8 @@ static_library("test_support") {
     "notifications/notification_test_util.h",
     "notifications/stub_notification_platform_bridge.cc",
     "notifications/stub_notification_platform_bridge.h",
+    "permissions/mock_permission_request.cc",
+    "permissions/mock_permission_request.h",
     "profile_resetter/profile_resetter_test_base.cc",
     "profile_resetter/profile_resetter_test_base.h",
     "search_engines/template_url_service_factory_test_util.cc",
@@ -1147,9 +1144,9 @@ static_library("test_support") {
     "//components/prefs:test_support",
     "//components/search_engines:test_support",
     "//components/subresource_filter/core/browser:test_support",
+    "//components/subresource_filter/core/common:test_support",
     "//components/syncable_prefs:test_support",
     "//components/user_prefs/tracked:user_prefs_tracked_test_support",
-    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//net:test_support",
     "//skia",
@@ -1175,6 +1172,15 @@ static_library("test_support") {
       "sessions/session_restore_test_helper.h",
       "sessions/session_service_test_helper.cc",
       "sessions/session_service_test_helper.h",
+    ]
+  }
+
+  if (is_android || is_ios) {
+    sources -= [
+      "chooser_controller/mock_chooser_controller.cc",
+      "chooser_controller/mock_chooser_controller.h",
+      "permissions/mock_permission_request.cc",
+      "permissions/mock_permission_request.h",
     ]
   }
 
@@ -1224,8 +1230,6 @@ static_library("test_support") {
       "chromeos/policy/cloud_external_data_manager_base_test_util.h",
       "chromeos/policy/device_policy_builder.cc",
       "chromeos/policy/device_policy_builder.h",
-      "chromeos/policy/fake_consumer_management_service.cc",
-      "chromeos/policy/fake_consumer_management_service.h",
       "chromeos/policy/fake_device_cloud_policy_initializer.cc",
       "chromeos/policy/fake_device_cloud_policy_initializer.h",
       "chromeos/policy/fake_device_cloud_policy_manager.cc",
@@ -1234,8 +1238,6 @@ static_library("test_support") {
       "chromeos/policy/stub_enterprise_install_attributes.h",
       "chromeos/settings/device_settings_test_helper.cc",
       "chromeos/settings/device_settings_test_helper.h",
-      "chromeos/system/fake_input_device_settings.cc",
-      "chromeos/system/fake_input_device_settings.h",
     ]
     configs += [ "//build/config/linux/dbus" ]
     deps += [ "//chromeos:test_support" ]
@@ -1246,10 +1248,7 @@ static_library("test_support") {
       "policy/test/local_policy_test_server.cc",
       "policy/test/local_policy_test_server.h",
     ]
-    public_deps += [
-      "//components/policy:policy_component_test_support",
-      "//components/policy:test_support",
-    ]
+    public_deps += [ "//components/policy/core/browser:test_support" ]
   }
 
   if (safe_browsing_mode == 1) {
@@ -1317,7 +1316,7 @@ static_library("test_support") {
 }
 
 # In GYP this is part of test_support_ui.
-source_set("test_support_ui") {
+static_library("test_support_ui") {
   testonly = true
 
   # Always include this via the main test support UI target.
@@ -1338,13 +1337,14 @@ source_set("test_support_ui") {
     "//components/metrics:test_support",
     "//components/password_manager/content/public/interfaces",
     "//components/password_manager/core/browser:test_support",
+    "//components/translate/content/common",
     "//skia",
     "//testing/gtest",
   ]
 }
 
 if (enable_rlz_support) {
-  source_set("rlz") {
+  static_library("rlz") {
     sources =
         rebase_path(gypi_values.chrome_browser_rlz_sources, ".", "//chrome")
     deps = [
@@ -1360,7 +1360,7 @@ if (enable_rlz_support) {
 if (enable_pepper_cdms) {
   # These constants are separated so that test binaries can use them without
   # linking all of the test support.
-  source_set("pepper_cdm_test_constants") {
+  static_library("pepper_cdm_test_constants") {
     testonly = true
     visibility = [ "//chrome/*" ]
     sources = [

@@ -73,6 +73,7 @@ AudioOutputDevice::AudioOutputDevice(
       stopping_hack_(false),
       did_receive_auth_(base::WaitableEvent::ResetPolicy::MANUAL,
                         base::WaitableEvent::InitialState::NOT_SIGNALED),
+      output_params_(AudioParameters::UnavailableDeviceParams()),
       device_status_(OUTPUT_DEVICE_STATUS_ERROR_INTERNAL),
       auth_timeout_(authorization_timeout) {
   CHECK(ipc_);
@@ -481,7 +482,7 @@ void AudioOutputDevice::AudioThreadCallback::Process(uint32_t pending_data) {
   uint32_t frames_skipped = buffer->params.frames_skipped;
   buffer->params.frames_skipped = 0;
 
-  DVLOG(4) << __FUNCTION__ << " pending_data:" << pending_data
+  DVLOG(4) << __func__ << " pending_data:" << pending_data
            << " frames_delayed(pre-round):" << frames_delayed
            << " frames_skipped:" << frames_skipped;
 

@@ -5,10 +5,12 @@
 #include "content/browser/renderer_host/p2p/socket_host_udp.h"
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/p2p/socket_host_throttler.h"
@@ -90,21 +92,26 @@ P2PSocketHostUdp::PendingPacket::PendingPacket(const PendingPacket& other) =
 P2PSocketHostUdp::PendingPacket::~PendingPacket() {
 }
 
-P2PSocketHostUdp::P2PSocketHostUdp(IPC::Sender* message_sender,
-                                   int socket_id,
-                                   P2PMessageThrottler* throttler)
+P2PSocketHostUdp::P2PSocketHostUdp(
+    IPC::Sender* message_sender,
+    int socket_id,
+    P2PMessageThrottler* throttler,
+    const DatagramServerSocketFactory& socket_factory)
     : P2PSocketHost(message_sender, socket_id, P2PSocketHost::UDP),
+      socket_(socket_factory.Run()),
       send_pending_(false),
       last_dscp_(net::DSCP_CS0),
       throttler_(throttler),
-      send_buffer_size_(0) {
-  net::UDPServerSocket* socket = new net::UDPServerSocket(
-      GetContentClient()->browser()->GetNetLog(), net::NetLog::Source());
-#if defined(OS_WIN)
-  socket->UseNonBlockingIO();
-#endif
-  socket_.reset(socket);
-}
+      send_buffer_size_(0),
+      socket_factory_(socket_factory) {}
+
+P2PSocketHostUdp::P2PSocketHostUdp(IPC::Sender* message_sender,
+                                   int socket_id,
+                                   P2PMessageThrottler* throttler)
+    : P2PSocketHostUdp(message_sender,
+                       socket_id,
+                       throttler,
+                       base::Bind(&P2PSocketHostUdp::DefaultSocketFactory)) {}
 
 P2PSocketHostUdp::~P2PSocketHostUdp() {
   if (state_ == STATE_OPEN) {
@@ -131,12 +138,32 @@ void P2PSocketHostUdp::SetSendBufferSize() {
 }
 
 bool P2PSocketHostUdp::Init(const net::IPEndPoint& local_address,
+                            uint16_t min_port,
+                            uint16_t max_port,
                             const P2PHostAndIPEndPoint& remote_address) {
   DCHECK_EQ(state_, STATE_UNINITIALIZED);
+  DCHECK((min_port == 0 && max_port == 0) || min_port > 0);
+  DCHECK_LE(min_port, max_port);
 
-  int result = socket_->Listen(local_address);
+  int result = -1;
+  if (min_port == 0) {
+    result = socket_->Listen(local_address);
+  } else if (local_address.port() == 0) {
+    for (unsigned port = min_port; port <= max_port && result < 0; ++port) {
+      result = socket_->Listen(net::IPEndPoint(local_address.address(), port));
+      if (result < 0 && port != max_port)
+        socket_ = socket_factory_.Run();
+    }
+  } else if (local_address.port() >= min_port &&
+             local_address.port() <= max_port) {
+    result = socket_->Listen(local_address);
+  }
   if (result < 0) {
-    LOG(ERROR) << "bind() to " << local_address.ToString()
+    LOG(ERROR) << "bind() to " << local_address.address().ToString()
+               << (min_port == 0
+                       ? base::StringPrintf(":%d", local_address.port())
+                       : base::StringPrintf(", port range [%d-%d]", min_port,
+                                            max_port))
                << " failed: " << result;
     OnError();
     return false;
@@ -209,7 +236,7 @@ void P2PSocketHostUdp::HandleReadResult(int result) {
   if (result > 0) {
     std::vector<char> data(recv_buffer_->data(), recv_buffer_->data() + result);
 
-    if (!ContainsKey(connected_peers_, recv_address_)) {
+    if (!base::ContainsKey(connected_peers_, recv_address_)) {
       P2PSocketHost::StunMessageType type;
       bool stun = GetStunPacketType(&*data.begin(), data.size(), &type);
       if ((stun && IsRequestOrResponse(type))) {
@@ -243,23 +270,6 @@ void P2PSocketHostUdp::Send(const net::IPEndPoint& to,
     return;
   }
 
-  if (!ContainsKey(connected_peers_, to)) {
-    P2PSocketHost::StunMessageType type = P2PSocketHost::StunMessageType();
-    bool stun = GetStunPacketType(&*data.begin(), data.size(), &type);
-    if (!stun || type == STUN_DATA_INDICATION) {
-      LOG(ERROR) << "Page tried to send a data packet to " << to.ToString()
-                 << " before STUN binding is finished.";
-      OnError();
-      return;
-    }
-
-    if (throttler_->DropNextPacket(data.size())) {
-      VLOG(0) << "STUN message is dropped due to high volume.";
-      // Do not reset socket.
-      return;
-    }
-  }
-
   IncrementTotalSentPackets();
 
   if (send_pending_) {
@@ -267,13 +277,42 @@ void P2PSocketHostUdp::Send(const net::IPEndPoint& to,
     IncrementDelayedBytes(data.size());
     IncrementDelayedPackets();
   } else {
-    // TODO(mallinath: Remove unnecessary memcpy in this case.
     PendingPacket packet(to, data, options, packet_id);
     DoSend(packet);
   }
 }
 
 void P2PSocketHostUdp::DoSend(const PendingPacket& packet) {
+  base::TimeTicks send_time = base::TimeTicks::Now();
+
+  // The peer is considered not connected until the first incoming STUN
+  // request/response. In that state the renderer is allowed to send only STUN
+  // messages to that peer and they are throttled using the |throttler_|. This
+  // has to be done here instead of Send() to ensure P2PMsg_OnSendComplete
+  // messages are sent in correct order.
+  if (!base::ContainsKey(connected_peers_, packet.to)) {
+    P2PSocketHost::StunMessageType type = P2PSocketHost::StunMessageType();
+    bool stun = GetStunPacketType(packet.data->data(), packet.size, &type);
+    if (!stun || type == STUN_DATA_INDICATION) {
+      LOG(ERROR) << "Page tried to send a data packet to "
+                 << packet.to.ToString() << " before STUN binding is finished.";
+      OnError();
+      return;
+    }
+
+    if (throttler_->DropNextPacket(packet.size)) {
+      VLOG(0) << "Throttling outgoing STUN message.";
+      // The renderer expects P2PMsg_OnSendComplete for all packets it generates
+      // and in the same order it generates them, so we need to respond even
+      // when the packet is dropped.
+      message_sender_->Send(new P2PMsg_OnSendComplete(
+          id_, P2PSendPacketMetrics(packet.id, packet.packet_options.packet_id,
+                                    send_time)));
+      // Do not reset the socket.
+      return;
+    }
+  }
+
   TRACE_EVENT_ASYNC_STEP_INTO1("p2p", "Send", packet.id, "UdpAsyncSendTo",
                                "size", packet.size);
   // Don't try to set DSCP in following conditions,
@@ -295,7 +334,6 @@ void P2PSocketHostUdp::DoSend(const PendingPacket& packet) {
     }
   }
 
-  base::TimeTicks send_time = base::TimeTicks::Now();
   cricket::ApplyPacketOptions(reinterpret_cast<uint8_t*>(packet.data->data()),
                               packet.size,
                               packet.packet_options.packet_time_params,
@@ -339,8 +377,8 @@ void P2PSocketHostUdp::OnSend(uint64_t packet_id,
   // Send next packets if we have them waiting in the buffer.
   while (state_ == STATE_OPEN && !send_queue_.empty() && !send_pending_) {
     PendingPacket packet = send_queue_.front();
-    DoSend(packet);
     send_queue_.pop_front();
+    DoSend(packet);
     DecrementDelayedBytes(packet.size);
   }
 }
@@ -352,6 +390,8 @@ void P2PSocketHostUdp::HandleSendResult(uint64_t packet_id,
   TRACE_EVENT_ASYNC_END1("p2p", "Send", packet_id,
                          "result", result);
   if (result < 0) {
+    ReportSocketError(result, "WebRTC.ICE.UdpSocketWriteErrorCode");
+
     if (!IsTransientError(result)) {
       LOG(ERROR) << "Error when sending data in UDP socket: " << result;
       OnError();
@@ -372,11 +412,12 @@ void P2PSocketHostUdp::HandleSendResult(uint64_t packet_id,
       P2PSendPacketMetrics(packet_id, transport_sequence_number, send_time)));
 }
 
-P2PSocketHost* P2PSocketHostUdp::AcceptIncomingTcpConnection(
-    const net::IPEndPoint& remote_address, int id) {
+std::unique_ptr<P2PSocketHost> P2PSocketHostUdp::AcceptIncomingTcpConnection(
+    const net::IPEndPoint& remote_address,
+    int id) {
   NOTREACHED();
   OnError();
-  return NULL;
+  return nullptr;
 }
 
 bool P2PSocketHostUdp::SetOption(P2PSocketOption option, int value) {
@@ -398,6 +439,18 @@ bool P2PSocketHostUdp::SetOption(P2PSocketOption option, int value) {
       NOTREACHED();
       return false;
   }
+}
+
+// static
+std::unique_ptr<net::DatagramServerSocket>
+P2PSocketHostUdp::DefaultSocketFactory() {
+  net::UDPServerSocket* socket = new net::UDPServerSocket(
+      GetContentClient()->browser()->GetNetLog(), net::NetLog::Source());
+#if defined(OS_WIN)
+  socket->UseNonBlockingIO();
+#endif
+
+  return base::WrapUnique(socket);
 }
 
 }  // namespace content

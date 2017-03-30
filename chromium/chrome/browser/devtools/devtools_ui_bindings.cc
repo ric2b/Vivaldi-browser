@@ -42,13 +42,14 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/zoom/page_zoom.h"
+#include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/devtools_external_agent_proxy.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
-#include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
@@ -56,6 +57,7 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "ipc/ipc_channel.h"
 #include "net/base/io_buffer.h"
@@ -536,9 +538,8 @@ void DevToolsUIBindings::InspectedURLChanged(const std::string& url) {
   content::NavigationController& controller = web_contents()->GetController();
   content::NavigationEntry* entry = controller.GetActiveEntry();
   // DevTools UI is not localized.
-  entry->SetTitle(
-      base::UTF8ToUTF16(base::StringPrintf(kTitleFormat, url.c_str())));
-  web_contents()->NotifyNavigationStateChanged(content::INVALIDATE_TYPE_TITLE);
+  web_contents()->UpdateTitleForEntry(
+      entry, base::UTF8ToUTF16(base::StringPrintf(kTitleFormat, url.c_str())));
 }
 
 void DevToolsUIBindings::LoadNetworkResource(const DispatchCallback& callback,
@@ -1021,6 +1022,15 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
                                 extensions::APIPermission::kExperimental)));
     results.Append(std::move(extension_info));
   }
+  if (!results.empty()) {
+    // At least one devtools extension exists; it will need to run in the
+    // devtools process. Grant it permission to load documents with
+    // chrome-extension:// origins.
+    content::ChildProcessSecurityPolicy::GetInstance()->GrantScheme(
+        web_contents_->GetMainFrame()->GetProcess()->GetID(),
+        extensions::kExtensionScheme);
+  }
+
   CallClientFunction("DevToolsAPI.addExtensions",
                      &results, NULL, NULL);
 }

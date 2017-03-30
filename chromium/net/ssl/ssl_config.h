@@ -26,6 +26,7 @@ enum {
   SSL_PROTOCOL_VERSION_TLS1 = 0x0301,
   SSL_PROTOCOL_VERSION_TLS1_1 = 0x0302,
   SSL_PROTOCOL_VERSION_TLS1_2 = 0x0303,
+  SSL_PROTOCOL_VERSION_TLS1_3 = 0x0304,
 };
 
 enum TokenBindingParam {
@@ -80,6 +81,10 @@ struct NET_EXPORT SSLConfig {
   // equivalent to also setting rev_checking_enabled, but only when the
   // certificate chain chains to a local (non-public) trust anchor.
   bool rev_checking_required_local_anchors;
+
+  // sha1_local_anchors_enabled is true if SHA-1 signed certificates issued by a
+  // local (non-public) trust anchor should be allowed.
+  bool sha1_local_anchors_enabled;
 
   // The minimum and maximum protocol versions that are enabled.
   // (Use the SSL_PROTOCOL_VERSION_xxx enumerators defined above.)

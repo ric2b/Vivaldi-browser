@@ -44,6 +44,10 @@ class ExternalDataUseObserver;
 }
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
+namespace base {
+class CommandLine;
+}
+
 namespace certificate_transparency {
 class TreeStateTracker;
 }
@@ -81,7 +85,6 @@ class ProxyConfigService;
 class ProxyService;
 class SSLConfigService;
 class TransportSecurityState;
-class URLRequestBackoffManager;
 class URLRequestContext;
 class URLRequestContextGetter;
 class URLRequestJobFactory;
@@ -158,7 +161,6 @@ class IOThread : public content::BrowserThreadDelegate {
         proxy_script_fetcher_ftp_transaction_factory;
     std::unique_ptr<net::URLRequestJobFactory>
         proxy_script_fetcher_url_request_job_factory;
-    std::unique_ptr<net::URLRequestBackoffManager> url_request_backoff_manager;
     std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences;
     // TODO(willchan): Remove proxy script fetcher context since it's not
     // necessary now that I got rid of refcounting URLRequestContexts.
@@ -298,6 +300,13 @@ class IOThread : public content::BrowserThreadDelegate {
       const net::HttpNetworkSession::Params& params,
       net::NetLog* net_log);
 
+  // Parse command line flags and use components/network_session_configurator to
+  // configure |params|.
+  static void ConfigureParamsFromFieldTrialsAndCommandLine(
+      const base::CommandLine& command_line,
+      bool is_quic_allowed_by_policy,
+      net::HttpNetworkSession::Params* params);
+
   // TODO(willchan): Remove proxy script fetcher context since it's not
   // necessary now that I got rid of refcounting URLRequestContexts.
   // See IOThread::Globals for details.
@@ -373,9 +382,6 @@ class IOThread : public content::BrowserThreadDelegate {
 
   scoped_refptr<net::URLRequestContextGetter>
       system_url_request_context_getter_;
-
-  // True if SPDY is allowed by policy.
-  bool is_spdy_allowed_by_policy_;
 
   // True if QUIC is allowed by policy.
   bool is_quic_allowed_by_policy_;

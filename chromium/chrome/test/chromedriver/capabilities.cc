@@ -20,6 +20,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/test/chromedriver/chrome/mobile_device.h"
+#include "chrome/test/chromedriver/chrome/page_load_strategy.h"
 #include "chrome/test/chromedriver/chrome/status.h"
 #include "chrome/test/chromedriver/logging.h"
 
@@ -177,6 +178,16 @@ Status ParseMobileEmulation(const base::Value& option,
   }
 
   return Status(kOk);
+}
+
+Status ParsePageLoadStrategy(const base::Value& option,
+                             Capabilities* capabilities) {
+  if (!option.GetAsString(&capabilities->page_load_strategy))
+    return Status(kUnknownError, "must be a string");
+  if (capabilities->page_load_strategy == PageLoadStrategy::kNormal ||
+      capabilities->page_load_strategy == PageLoadStrategy::kNone)
+    return Status(kOk);
+  return Status(kUnknownError, "page load strategy unsupported");
 }
 
 Status ParseSwitches(const base::Value& option,
@@ -415,6 +426,9 @@ Status ParseChromeOptions(
 
   parser_map["perfLoggingPrefs"] = base::Bind(&ParsePerfLoggingPrefs);
   parser_map["windowTypes"] = base::Bind(&ParseWindowTypes);
+  // Compliance is read when session is initialized and correct response is
+  // sent if not parsed correctly.
+  parser_map["w3c"] = base::Bind(&IgnoreCapability);
 
   if (is_android) {
     parser_map["androidActivity"] =
@@ -586,7 +600,9 @@ PerfLoggingPrefs::~PerfLoggingPrefs() {}
 Capabilities::Capabilities()
     : android_use_running_app(false),
       detach(false),
-      force_devtools_screenshot(false) {}
+      force_devtools_screenshot(false),
+      page_load_strategy(PageLoadStrategy::kNormal),
+      network_emulation_enabled(false) {}
 
 Capabilities::~Capabilities() {}
 
@@ -603,6 +619,13 @@ Status Capabilities::Parse(const base::DictionaryValue& desired_caps) {
   parser_map["chromeOptions"] = base::Bind(&ParseChromeOptions);
   parser_map["loggingPrefs"] = base::Bind(&ParseLoggingPrefs);
   parser_map["proxy"] = base::Bind(&ParseProxy);
+  parser_map["pageLoadStrategy"] = base::Bind(&ParsePageLoadStrategy);
+  // Network emulation requires device mode, which is only enabled when
+  // mobile emulation is on.
+  if (desired_caps.GetDictionary("chromeOptions.mobileEmulation", nullptr)) {
+    parser_map["networkConnectionEnabled"] =
+        base::Bind(&ParseBoolean, &network_emulation_enabled);
+  }
   for (std::map<std::string, Parser>::iterator it = parser_map.begin();
        it != parser_map.end(); ++it) {
     const base::Value* capability = NULL;

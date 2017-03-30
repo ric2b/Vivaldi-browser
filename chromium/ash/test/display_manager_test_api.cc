@@ -9,7 +9,6 @@
 
 #include "ash/common/ash_switches.h"
 #include "ash/common/display/display_info.h"
-#include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
 #include "ash/display/extended_mouse_warp_controller.h"
@@ -110,7 +109,7 @@ void DisplayManagerTestApi::UpdateDisplay(const std::string& display_specs) {
   }
 
   display_manager_->OnNativeDisplaysChanged(display_info_list);
-  display_manager_->UpdateInternalDisplayModeListForTest();
+  display_manager_->UpdateInternalManagedDisplayModeListForTest();
   display_manager_->RunPendingTasksForTest();
 }
 
@@ -122,7 +121,7 @@ int64_t DisplayManagerTestApi::SetFirstDisplayAsInternalDisplay() {
 
 void DisplayManagerTestApi::SetInternalDisplayId(int64_t id) {
   display::Display::SetInternalDisplayId(id);
-  display_manager_->UpdateInternalDisplayModeListForTest();
+  display_manager_->UpdateInternalManagedDisplayModeListForTest();
 }
 
 void DisplayManagerTestApi::DisableChangeDisplayUponHostResize() {
@@ -155,8 +154,9 @@ ScopedSetInternalDisplayId::~ScopedSetInternalDisplayId() {
 bool SetDisplayResolution(int64_t display_id, const gfx::Size& resolution) {
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
   const DisplayInfo& info = display_manager->GetDisplayInfo(display_id);
-  DisplayMode mode;
-  if (!GetDisplayModeForResolution(info, resolution, &mode))
+  scoped_refptr<ManagedDisplayMode> mode =
+      GetDisplayModeForResolution(info, resolution);
+  if (!mode)
     return false;
   return display_manager->SetDisplayMode(display_id, mode);
 }

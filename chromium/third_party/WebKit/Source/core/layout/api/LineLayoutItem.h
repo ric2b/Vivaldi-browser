@@ -7,6 +7,8 @@
 
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
+#include "core/layout/LayoutText.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 
 #include "platform/LayoutUnit.h"
 #include "wtf/Allocator.h"
@@ -47,8 +49,7 @@ public:
 
     LineLayoutItem() : m_layoutObject(0) { }
 
-    typedef LayoutObject* LineLayoutItem::*UnspecifiedBoolType;
-    operator UnspecifiedBoolType() const { return m_layoutObject ? &LineLayoutItem::m_layoutObject : nullptr; }
+    explicit operator bool() const { return m_layoutObject; }
 
     bool isEqual(const LayoutObject* layoutObject) const
     {
@@ -317,6 +318,11 @@ public:
         return m_layoutObject->isText();
     }
 
+    bool isEmptyText() const
+    {
+        return isText() && toLayoutText(m_layoutObject)->text().isEmpty();
+    }
+
     bool hasLayer() const
     {
         return m_layoutObject->hasLayer();
@@ -437,7 +443,7 @@ public:
 
     void slowSetPaintingLayerNeedsRepaint()
     {
-        m_layoutObject->slowSetPaintingLayerNeedsRepaint();
+        ObjectPaintInvalidator(*m_layoutObject).slowSetPaintingLayerNeedsRepaint();
     }
 
     struct LineLayoutItemHash {

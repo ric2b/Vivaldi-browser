@@ -3,10 +3,15 @@
 // found in the LICENSE file.
 
 #include <tuple>
+#include <windows.h>
+#include <versionhelpers.h>  // windows.h must be before.
 
 #include "base/test/test_reg_util_win.h"
 #include "base/win/registry.h"
 #include "chrome/install_static/install_util.h"
+#include "chrome_elf/chrome_elf_constants.h"
+#include "chrome_elf/chrome_elf_security.h"
+#include "chrome_elf/nt_registry/nt_registry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -23,6 +28,70 @@ const wchar_t kChromeUserExePath[] =
     L"C:\\Users\\user\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe";
 const wchar_t kChromiumExePath[] =
     L"C:\\Users\\user\\AppData\\Local\\Chromium\\Application\\chrome.exe";
+
+bool SetSecurityFinchFlag(bool creation) {
+  bool success = true;
+  base::win::RegKey security_key(HKEY_CURRENT_USER, L"", KEY_ALL_ACCESS);
+
+  if (creation) {
+    if (ERROR_SUCCESS !=
+        security_key.CreateKey(elf_sec::kRegSecurityFinchPath, KEY_QUERY_VALUE))
+      success = false;
+  } else {
+    if (ERROR_SUCCESS != security_key.DeleteKey(elf_sec::kRegSecurityFinchPath))
+      success = false;
+  }
+
+  security_key.Close();
+  return success;
+}
+
+bool IsSecuritySet() {
+  typedef decltype(GetProcessMitigationPolicy)* GetProcessMitigationPolicyFunc;
+
+  // Check the settings from EarlyBrowserSecurity().
+  if (::IsWindows8OrGreater()) {
+    GetProcessMitigationPolicyFunc get_process_mitigation_policy =
+        reinterpret_cast<GetProcessMitigationPolicyFunc>(::GetProcAddress(
+            ::GetModuleHandleW(L"kernel32.dll"), "GetProcessMitigationPolicy"));
+    if (!get_process_mitigation_policy)
+      return false;
+
+    // Check that extension points are disabled.
+    // (Legacy hooking.)
+    PROCESS_MITIGATION_EXTENSION_POINT_DISABLE_POLICY policy = {};
+    if (!get_process_mitigation_policy(::GetCurrentProcess(),
+                                       ProcessExtensionPointDisablePolicy,
+                                       &policy, sizeof(policy)))
+      return false;
+
+    return policy.DisableExtensionPoints;
+  }
+
+  return true;
+}
+
+void RegRedirect(nt::ROOT_KEY key,
+                 registry_util::RegistryOverrideManager* rom) {
+  ASSERT_NE(key, nt::AUTO);
+  base::string16 temp;
+
+  if (key == nt::HKCU) {
+    rom->OverrideRegistry(HKEY_CURRENT_USER, &temp);
+    ASSERT_TRUE(nt::SetTestingOverride(nt::HKCU, temp));
+  } else {
+    rom->OverrideRegistry(HKEY_LOCAL_MACHINE, &temp);
+    ASSERT_TRUE(nt::SetTestingOverride(nt::HKLM, temp));
+  }
+}
+
+void CancelRegRedirect(nt::ROOT_KEY key) {
+  ASSERT_NE(key, nt::AUTO);
+  if (key == nt::HKCU)
+    ASSERT_TRUE(nt::SetTestingOverride(nt::HKCU, base::string16()));
+  else
+    ASSERT_TRUE(nt::SetTestingOverride(nt::HKLM, base::string16()));
+}
 
 TEST(ChromeElfUtilTest, CanaryTest) {
   EXPECT_TRUE(IsSxSChrome(kCanaryExePath));
@@ -41,18 +110,40 @@ TEST(ChromeElfUtilTest, BrowserProcessTest) {
   EXPECT_FALSE(IsNonBrowserProcess());
 }
 
+TEST(ChromeElfUtilTest, BrowserProcessSecurityTest) {
+  if (!::IsWindows8OrGreater())
+    return;
+
+  // Set up registry override for this test.
+  registry_util::RegistryOverrideManager override_manager;
+  RegRedirect(nt::HKCU, &override_manager);
+
+  // First, ensure that the emergency-off finch signal works.
+  EXPECT_TRUE(SetSecurityFinchFlag(true));
+  EarlyBrowserSecurity();
+  EXPECT_FALSE(IsSecuritySet());
+  EXPECT_TRUE(SetSecurityFinchFlag(false));
+
+  // Second, test that the process mitigation is set when no finch signal.
+  EarlyBrowserSecurity();
+  EXPECT_TRUE(IsSecuritySet());
+
+  CancelRegRedirect(nt::HKCU);
+}
+
 // Parameterized test with paramters:
 // 1: product: "canary" or "google"
 // 2: install level: "user" or "system"
 // 3: install mode: "single" or "multi"
-class ChromeElfUtilTest :
-    public testing::TestWithParam<std::tuple<const char*,
-                                             const char*,
-                                             const char*> > {
+class ChromeElfUtilTest
+    : public testing::TestWithParam<
+          std::tuple<const char*, const char*, const char*>> {
  protected:
   void SetUp() override {
-    override_manager_.OverrideRegistry(HKEY_LOCAL_MACHINE);
-    override_manager_.OverrideRegistry(HKEY_CURRENT_USER);
+    // Set up registry override for these tests.
+    RegRedirect(nt::HKLM, &override_manager_);
+    RegRedirect(nt::HKCU, &override_manager_);
+
     const char* app;
     const char* level;
     const char* mode;
@@ -67,13 +158,18 @@ class ChromeElfUtilTest :
       chrome_path_ = kCanaryExePath;
     } else {
       app_guid_ = kAppGuidGoogleChrome;
-      chrome_path_ = (system_level_ ? kChromeSystemExePath :
-                                      kChromeUserExePath);
+      chrome_path_ =
+          (system_level_ ? kChromeSystemExePath : kChromeUserExePath);
     }
     if (multi_install_) {
       SetMultiInstallStateInRegistry(system_level_, true);
       app_guid_ = kAppGuidGoogleBinaries;
     }
+  }
+
+  void TearDown() override {
+    CancelRegRedirect(nt::HKCU);
+    CancelRegRedirect(nt::HKLM);
   }
 
   base::string16 BuildKey(const wchar_t* path, const wchar_t* guid) {
@@ -85,10 +181,13 @@ class ChromeElfUtilTest :
 
   void SetUsageStat(DWORD value, bool state_medium) {
     LONG result = base::win::RegKey(
-        system_level_ ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
-        BuildKey(state_medium ? kRegPathClientStateMedium : kRegPathClientState,
-                 app_guid_).c_str(),
-        KEY_SET_VALUE).WriteValue(kRegValueUsageStats, value);
+                      system_level_ ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
+                      BuildKey(state_medium ? kRegPathClientStateMedium
+                                            : kRegPathClientState,
+                               app_guid_)
+                          .c_str(),
+                      KEY_SET_VALUE)
+                      .WriteValue(kRegValueUsageStats, value);
     ASSERT_EQ(ERROR_SUCCESS, result);
   }
 
@@ -108,10 +207,11 @@ class ChromeElfUtilTest :
   }
 
   void SetChannelName(const base::string16& channel_name) {
-    LONG result = base::win::RegKey(
-      system_level_ ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
-      BuildKey(kRegPathClientState, app_guid_).c_str(),
-      KEY_SET_VALUE).WriteValue(kRegApField, channel_name.c_str());
+    LONG result =
+        base::win::RegKey(
+            system_level_ ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER,
+            BuildKey(kRegPathClientState, app_guid_).c_str(), KEY_SET_VALUE)
+            .WriteValue(kRegApField, channel_name.c_str());
     ASSERT_EQ(ERROR_SUCCESS, result);
   }
 
@@ -130,195 +230,195 @@ class ChromeElfUtilTest :
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
 
     SetChannelName(L"-full");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
 
     SetChannelName(L"1.1-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
 
     SetChannelName(L"1.1-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
 
     SetChannelName(L"1.1-bar");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
 
     SetChannelName(L"1n1-foobar");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
 
     SetChannelName(L"foo-1.1-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
     SetChannelName(L"2.0-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
 
     SetChannelName(L"2.0-dev");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"dev-m", channel);
+      EXPECT_STREQ(L"dev-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelDev, channel);
+      EXPECT_STREQ(install_static::kChromeChannelDev, channel.c_str());
     }
     SetChannelName(L"2.0-DEV");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"dev-m", channel);
+      EXPECT_STREQ(L"dev-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelDev, channel);
+      EXPECT_STREQ(install_static::kChromeChannelDev, channel.c_str());
     }
     SetChannelName(L"2.0-dev-eloper");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"dev-m", channel);
+      EXPECT_STREQ(L"dev-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelDev, channel);
+      EXPECT_STREQ(install_static::kChromeChannelDev, channel.c_str());
     }
     SetChannelName(L"2.0-doom");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"dev-m", channel);
+      EXPECT_STREQ(L"dev-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelDev, channel);
+      EXPECT_STREQ(install_static::kChromeChannelDev, channel.c_str());
     }
     SetChannelName(L"250-doom");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"dev-m", channel);
+      EXPECT_STREQ(L"dev-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelDev, channel);
+      EXPECT_STREQ(install_static::kChromeChannelDev, channel.c_str());
     }
     SetChannelName(L"bar-2.0-dev");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
     SetChannelName(L"1.0-dev");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
 
     SetChannelName(L"x64-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
     SetChannelName(L"bar-x64-beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
     SetChannelName(L"x64-Beta");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"beta-m", channel);
+      EXPECT_STREQ(L"beta-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelBeta, channel);
+      EXPECT_STREQ(install_static::kChromeChannelBeta, channel.c_str());
     }
 
     SetChannelName(L"x64-stable");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
     SetChannelName(L"baz-x64-stable");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
     SetChannelName(L"x64-Stable");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
 
     SetChannelName(L"fuzzy");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
     SetChannelName(L"foo");
     install_static::GetChromeChannelName(!system_level_, add_modifier,
                                          &channel);
     if (multi_install_ && add_modifier) {
-      EXPECT_EQ(L"-m", channel);
+      EXPECT_STREQ(L"-m", channel.c_str());
     } else {
-      EXPECT_EQ(install_static::kChromeChannelStable, channel);
+      EXPECT_STREQ(install_static::kChromeChannelStable, channel.c_str());
     }
   }
 
@@ -386,15 +486,17 @@ TEST_P(ChromeElfUtilTest, UsageStatsOneInStateMedium) {
 // This test tests the install_static::GetChromeChannelName function and is
 // based on the ChannelInfoTest.Channels in channel_info_unittest.cc
 TEST_P(ChromeElfUtilTest, InstallStaticGetChannelNameTest) {
-  PerformChannelNameTests(true);  // add_modifier
-  PerformChannelNameTests(false); // !add_modifier
+  PerformChannelNameTests(true);   // add_modifier
+  PerformChannelNameTests(false);  // !add_modifier
 }
 
-INSTANTIATE_TEST_CASE_P(Canary, ChromeElfUtilTest,
+INSTANTIATE_TEST_CASE_P(Canary,
+                        ChromeElfUtilTest,
                         testing::Combine(testing::Values("canary"),
                                          testing::Values("user"),
                                          testing::Values("single")));
-INSTANTIATE_TEST_CASE_P(GoogleChrome, ChromeElfUtilTest,
+INSTANTIATE_TEST_CASE_P(GoogleChrome,
+                        ChromeElfUtilTest,
                         testing::Combine(testing::Values("google"),
                                          testing::Values("user", "system"),
                                          testing::Values("single", "multi")));

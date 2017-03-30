@@ -1,6 +1,7 @@
 .CodeMirror {
     line-height: 1.2em !important;
     background-color: transparent !important;
+    color: #222;
 }
 
 .CodeMirror-linewidget {
@@ -71,7 +72,7 @@
     to { background-color: rgb(171, 191, 254); }
 }
 
-.cm-breakpoint .CodeMirror-linenumber {
+.cm-breakpoint .CodeMirror-gutter-wrapper .CodeMirror-linenumber {
     color: white;
     border-width: 1px 4px 1px 1px !important;
     -webkit-border-image: url(Images/breakpoint.png) 1 4 1 1;
@@ -83,8 +84,8 @@
     border-style: solid;
 }
 
-.cm-line-without-source-mapping {
-    background-color: #fafafa;
+.cm-line-without-source-mapping .CodeMirror-linenumber {
+    color: rgba(128, 128, 128, 0.4);
 }
 
 .cm-breakpoint.cm-breakpoint-conditional .CodeMirror-linenumber {
@@ -92,7 +93,7 @@
 }
 
 @media (-webkit-min-device-pixel-ratio: 1.5) {
-.cm-breakpoint .CodeMirror-linenumber {
+.cm-breakpoint .CodeMirror-gutter-wrapper .CodeMirror-linenumber {
     -webkit-border-image: url(Images/breakpoint_2x.png) 2 8 2 2;
 }
 .cm-breakpoint.cm-breakpoint-conditional .CodeMirror-linenumber {
@@ -261,6 +262,8 @@
 .CodeMirror .text-editor-line-decoration-wave {
     position: absolute;
     top: -2px;
+    right: -4px;
+    left: 4px;
     cursor: pointer;
     height: 4px;
 }
@@ -298,11 +301,12 @@
     line-height: 1.2;
     white-space: nowrap;
     display: flex;
+    align-items: center;
+    justify-content: flex-start;
 }
 
-.text-editor-row-message .bubble-repeat-count {
-    margin-right: 1ex;
-    margin-top: -1px;
+.text-editor-row-message .message-repeat-count {
+    margin-right: 0.5em;
 }
 
 .CodeMirror .text-editor-line-decoration-icon {
@@ -351,4 +355,8 @@
 
 .-theme-with-dark-background .CodeMirror .CodeMirror-selected {
     background-color: #454545;
+}
+
+.CodeMirror .auto-complete-text{
+    color: rgb(128,128,128);
 }

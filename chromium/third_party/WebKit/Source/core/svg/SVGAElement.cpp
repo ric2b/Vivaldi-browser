@@ -27,6 +27,7 @@
 #include "core/dom/Attr.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/FrameHost.h"
@@ -155,7 +156,7 @@ short SVGAElement::tabIndex() const
 
 bool SVGAElement::supportsFocus() const
 {
-    if (hasEditableStyle())
+    if (hasEditableStyle(*this))
         return SVGGraphicsElement::supportsFocus();
     // If not a link we should still be able to focus the element if it has tabIndex.
     return isLink() || SVGGraphicsElement::supportsFocus();
@@ -207,7 +208,7 @@ bool SVGAElement::canStartSelection() const
 {
     if (!isLink())
         return SVGElement::canStartSelection();
-    return hasEditableStyle();
+    return hasEditableStyle(*this);
 }
 
 bool SVGAElement::willRespondToMouseClickEvents()

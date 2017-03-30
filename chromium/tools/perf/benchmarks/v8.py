@@ -23,9 +23,11 @@ from telemetry.web_perf import timeline_based_measurement
 def CreateV8TimelineBasedMeasurementOptions():
   category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter()
   category_filter.AddIncludedCategory('v8')
+  category_filter.AddIncludedCategory('*')
   category_filter.AddIncludedCategory('blink.console')
+  category_filter.AddDisabledByDefault('disabled-by-default-v8.compile')
   options = timeline_based_measurement.Options(category_filter)
-  options.SetTimelineBasedMetric('executionMetric')
+  options.SetTimelineBasedMetrics(['executionMetric'])
   return options
 
 
@@ -104,7 +106,7 @@ class _InfiniteScrollBenchmark(perf_benchmark.PerfBenchmark):
     options = timeline_based_measurement.Options(category_filter)
     # TODO(ulan): Add frame time discrepancy once it is ported to TBMv2,
     # see crbug.com/606841.
-    options.SetTimelineBasedMetric('v8AndMemoryMetrics')
+    options.SetTimelineBasedMetrics(['v8AndMemoryMetrics'])
     return options
 
   @classmethod
@@ -150,7 +152,8 @@ class V8TodoMVCIgnition(V8TodoMVC):
 
 # Disabled on reference builds because they don't support the new
 # Tracing.requestMemoryDump DevTools API. See http://crbug.com/540022.
-@benchmark.Disabled('reference')
+# Windows: crbug.com/638724
+@benchmark.Disabled('win', 'reference')
 class V8InfiniteScroll(_InfiniteScrollBenchmark):
   """Measures V8 GC metrics and memory usage while scrolling the top web pages.
   http://www.chromium.org/developers/design-documents/rendering-benchmarks"""
@@ -159,12 +162,13 @@ class V8InfiniteScroll(_InfiniteScrollBenchmark):
 
   @classmethod
   def Name(cls):
-    return 'v8.infinite_scroll'
+    return 'v8.infinite_scroll_tbmv2'
 
 
 # Disabled on reference builds because they don't support the new
 # Tracing.requestMemoryDump DevTools API. See http://crbug.com/540022.
-@benchmark.Disabled('reference')  # crbug.com/579546
+# Windows: crbug.com/638724
+@benchmark.Disabled('win', 'reference')  # crbug.com/579546
 class V8InfiniteScrollIgnition(V8InfiniteScroll):
   """Measures V8 GC metrics using Ignition."""
 
@@ -174,7 +178,7 @@ class V8InfiniteScrollIgnition(V8InfiniteScroll):
 
   @classmethod
   def Name(cls):
-    return 'v8.infinite_scroll-ignition'
+    return 'v8.infinite_scroll-ignition_tbmv2'
 
 
 @benchmark.Enabled('android')
@@ -187,7 +191,7 @@ class V8MobileInfiniteScroll(_InfiniteScrollBenchmark):
 
   @classmethod
   def Name(cls):
-    return 'v8.mobile_infinite_scroll'
+    return 'v8.mobile_infinite_scroll_tbmv2'
 
   @classmethod
   def ShouldDisable(cls, possible_browser):  # http://crbug.com/597656
@@ -213,7 +217,7 @@ class _V8MemoryAndCodeSizeBenchmark(perf_benchmark.PerfBenchmark):
     memory_dump_config = chrome_trace_config.MemoryDumpConfig()
     memory_dump_config.AddTrigger('light', 20)
     options.config.chrome_trace_config.SetMemoryDumpConfig(memory_dump_config)
-    options.SetTimelineBasedMetric('memoryMetric')
+    options.SetTimelineBasedMetrics(['memoryMetric'])
     return options
 
   page_set = page_sets.Top10MobileMemoryPageSet
@@ -238,10 +242,7 @@ class _V8MemoryAndCodeSizeBenchmark(perf_benchmark.PerfBenchmark):
     return not cls._IGNORED_V8_STATS_RE.search(value.name)
 
 
-@benchmark.Disabled('reference')
-# TODO(crbug.com/617814): Temporarily disable this benchmark for mac. Scrolling
-# does not work on for google.com web page. Remove this once it is fixed.
-@benchmark.Disabled('mac')
+@benchmark.Enabled('android')
 class V8MobileCodeSizeIgnition(_V8MemoryAndCodeSizeBenchmark):
   """Measures V8 heap and code size with ignition enabled on mobile web pages.
 
@@ -252,20 +253,31 @@ class V8MobileCodeSizeIgnition(_V8MemoryAndCodeSizeBenchmark):
     super(V8MobileCodeSizeIgnition, self).SetExtraBrowserOptions(options)
     v8_helper.EnableIgnition(options)
 
+  # crbug.com/639007
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
   @classmethod
   def Name(cls):
     return 'top_10_mobile_memory_ignition'
 
 
-@benchmark.Disabled('reference')
-# TODO(crbug.com/617914): Temporarily disable this benchmark for mac. Scrolling
-# does not work on for google.com web page. Remove this once it is fixed.
-@benchmark.Disabled('mac')
+@benchmark.Enabled('android')
 class V8MobileCodeSize(_V8MemoryAndCodeSizeBenchmark):
   """Measures V8 heap and code size on mobile web pages.
 
   http://www.chromium.org/developers/design-documents/rendering-benchmarks
   """
+
+  # crbug.com/639007
+  @classmethod
+  def ShouldDisable(cls, possible_browser):
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
 
   @classmethod
   def Name(cls):

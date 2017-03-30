@@ -26,11 +26,28 @@
 
 using device::BluetoothUUID;
 
+namespace {
+
+// Anything worse than or equal to this will show 0 bars.
+const int kMinRSSI = -100;
+// Anything better than or equal to this will show the maximum bars.
+const int kMaxRSSI = -55;
+// Number of RSSI levels used in the signal strength image.
+const int kNumSignalStrengthLevels = 5;
+
+}  // namespace
+
 namespace content {
+
+bool BluetoothDeviceChooserController::use_test_scan_duration_ = false;
 
 namespace {
 constexpr size_t kMaxLengthForDeviceName =
     29;  // max length of device name in filter.
+
+// The duration of a Bluetooth Scan in seconds.
+constexpr int kScanDuration = 10;
+constexpr int kTestScanDuration = 0;
 
 void LogRequestDeviceOptions(
     const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options) {
@@ -65,6 +82,8 @@ bool IsEmptyOrInvalidFilter(
   // kMaxLengthForDeviceName.
   if (!filter->name.is_null() && filter->name.size() > kMaxLengthForDeviceName)
     return true;
+  if (!filter->name_prefix.is_null() && filter->name_prefix.size() == 0)
+    return true;
   if (!filter->name_prefix.is_null() &&
       filter->name_prefix.size() > kMaxLengthForDeviceName)
     return true;
@@ -82,27 +101,25 @@ bool HasEmptyOrInvalidFilter(
 
 bool MatchesFilter(const device::BluetoothDevice& device,
                    const blink::mojom::WebBluetoothScanFilterPtr& filter) {
-  DCHECK(!IsEmptyOrInvalidFilter(filter));
-
-  // TODO(615720): Use the upcoming GetName (was GetDeviceName).
-  const std::string device_name = base::UTF16ToUTF8(device.GetNameForDisplay());
-
-  if (!filter->name.is_null() && (device_name != filter->name)) {
-    return false;
+  if (!filter->name.is_null()) {
+    if (!device.GetName())
+      return false;
+    if (filter->name != device.GetName().value())
+      return false;
   }
 
-  if (!filter->name_prefix.is_null() &&
-      (!base::StartsWith(device_name, filter->name_prefix.get(),
-                         base::CompareCase::SENSITIVE))) {
-    return false;
+  if (!filter->name_prefix.is_null() && filter->name_prefix.size()) {
+    if (!device.GetName())
+      return false;
+    if (!base::StartsWith(device.GetName().value(), filter->name_prefix.get(),
+                          base::CompareCase::SENSITIVE))
+      return false;
   }
 
   if (!filter->services.is_null()) {
-    const auto& device_uuid_list = device.GetUUIDs();
-    const std::unordered_set<BluetoothUUID, device::BluetoothUUIDHash>
-        device_uuids(device_uuid_list.begin(), device_uuid_list.end());
+    const device::BluetoothDevice::UUIDSet& device_uuids = device.GetUUIDs();
     for (const base::Optional<BluetoothUUID>& service : filter->services) {
-      if (!ContainsKey(device_uuids, service.value())) {
+      if (!base::ContainsKey(device_uuids, service.value())) {
         return false;
       }
     }
@@ -181,8 +198,7 @@ UMARequestDeviceOutcome OutcomeFromChooserEvent(BluetoothChooser::Event event) {
 BluetoothDeviceChooserController::BluetoothDeviceChooserController(
     WebBluetoothServiceImpl* web_bluetooth_service,
     RenderFrameHost* render_frame_host,
-    device::BluetoothAdapter* adapter,
-    base::TimeDelta scan_duration)
+    device::BluetoothAdapter* adapter)
     : adapter_(adapter),
       web_bluetooth_service_(web_bluetooth_service),
       render_frame_host_(render_frame_host),
@@ -191,7 +207,8 @@ BluetoothDeviceChooserController::BluetoothDeviceChooserController(
           FROM_HERE,
           // TODO(jyasskin): Add a way for tests to control the dialog
           // directly, and change this to a reasonable discovery timeout.
-          scan_duration,
+          base::TimeDelta::FromSeconds(
+              use_test_scan_duration_ ? kTestScanDuration : kScanDuration),
           base::Bind(&BluetoothDeviceChooserController::StopDeviceDiscovery,
                      // base::Timer guarantees it won't call back after its
                      // destructor starts.
@@ -304,6 +321,7 @@ void BluetoothDeviceChooserController::GetDevice(
   if (!chooser_.get()) {
     PostErrorCallback(
         blink::mojom::WebBluetoothError::WEB_BLUETOOTH_NOT_SUPPORTED);
+    return;
   }
 
   if (!chooser_->CanAskForScanningPermission()) {
@@ -313,7 +331,7 @@ void BluetoothDeviceChooserController::GetDevice(
     return;
   }
 
-  PopulateFoundDevices();
+  PopulateConnectedDevices();
   if (!chooser_.get()) {
     // If the dialog's closing, no need to do any of the rest of this.
     return;
@@ -331,8 +349,13 @@ void BluetoothDeviceChooserController::GetDevice(
 void BluetoothDeviceChooserController::AddFilteredDevice(
     const device::BluetoothDevice& device) {
   if (chooser_.get() && MatchesFilters(device, options_->filters)) {
-    VLOG(1) << "Adding device to chooser: " << device.GetAddress();
-    chooser_->AddDevice(device.GetAddress(), device.GetNameForDisplay());
+    base::Optional<int8_t> rssi = device.GetInquiryRSSI();
+    chooser_->AddOrUpdateDevice(
+        device.GetAddress(), !!device.GetName() /* should_update_name */,
+        device.GetNameForDisplay(),
+        // TODO(http://crbug.com/543466): Show connection and paired status.
+        false /* is_gatt_connected */, false /* is_paired */,
+        rssi ? CalculateSignalStrengthLevel(rssi.value()) : -1);
   }
 }
 
@@ -356,11 +379,28 @@ void BluetoothDeviceChooserController::AdapterPoweredChanged(bool powered) {
   }
 }
 
-void BluetoothDeviceChooserController::PopulateFoundDevices() {
-  VLOG(1) << "Populating " << adapter_->GetDevices().size()
-          << " devices in chooser.";
+int BluetoothDeviceChooserController::CalculateSignalStrengthLevel(
+    int8_t rssi) {
+  if (rssi <= kMinRSSI)
+    return 0;
+
+  if (rssi >= kMaxRSSI)
+    return kNumSignalStrengthLevels - 1;
+
+  double input_range = kMaxRSSI - kMinRSSI;
+  double output_range = kNumSignalStrengthLevels - 1;
+  return static_cast<int>((rssi - kMinRSSI) * output_range / input_range);
+}
+
+void BluetoothDeviceChooserController::SetTestScanDurationForTesting() {
+  BluetoothDeviceChooserController::use_test_scan_duration_ = true;
+}
+
+void BluetoothDeviceChooserController::PopulateConnectedDevices() {
   for (const device::BluetoothDevice* device : adapter_->GetDevices()) {
-    AddFilteredDevice(*device);
+    if (device->IsGattConnected()) {
+      AddFilteredDevice(*device);
+    }
   }
 }
 
@@ -420,7 +460,7 @@ void BluetoothDeviceChooserController::OnBluetoothChooserEvent(
 
   switch (event) {
     case BluetoothChooser::Event::RESCAN:
-      PopulateFoundDevices();
+      PopulateConnectedDevices();
       DCHECK(chooser_);
       StartDeviceDiscovery();
       // No need to close the chooser so we return.

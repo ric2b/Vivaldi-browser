@@ -130,35 +130,18 @@ bool CSSVariableResolver::resolveTokenRange(CSSParserTokenRange range,
     return success;
 }
 
-CSSValue* CSSVariableResolver::resolveVariableReferences(StyleVariableData* styleVariableData, CSSPropertyID id, const CSSVariableReferenceValue& value)
+const CSSValue* CSSVariableResolver::resolveVariableReferences(const StyleResolverState& state, CSSPropertyID id, const CSSVariableReferenceValue& value)
 {
     ASSERT(!isShorthandProperty(id));
 
-    CSSVariableResolver resolver(styleVariableData);
+    CSSVariableResolver resolver(state.style()->variables());
     Vector<CSSParserToken> tokens;
     if (!resolver.resolveTokenRange(value.variableDataValue()->tokens(), tokens))
         return CSSUnsetValue::create();
-    CSSValue* result = CSSPropertyParser::parseSingleValue(id, tokens, strictCSSParserContext());
+    const CSSValue* result = CSSPropertyParser::parseSingleValue(id, tokens, strictCSSParserContext());
     if (!result)
         return CSSUnsetValue::create();
     return result;
-}
-
-const CSSValue* CSSVariableResolver::resolveVariableReferences(StyleResolverState& state, CSSPropertyID id, const CSSVariableReferenceValue& value)
-{
-    // Non-shorthand variable references follow this path.
-    CSSVariableResolver resolver(state.style()->variables());
-
-    Vector<CSSParserToken> tokens;
-    if (resolver.resolveTokenRange(value.variableDataValue()->tokens(), tokens)) {
-        CSSParserContext context(HTMLStandardMode, nullptr);
-
-        CSSValue* value = CSSPropertyParser::parseSingleValue(id, CSSParserTokenRange(tokens), context);
-        if (value)
-            return value;
-    }
-
-    return CSSUnsetValue::create();
 }
 
 const CSSValue* CSSVariableResolver::resolvePendingSubstitutions(StyleResolverState& state, CSSPropertyID id, const CSSPendingSubstitutionValue& pendingValue)

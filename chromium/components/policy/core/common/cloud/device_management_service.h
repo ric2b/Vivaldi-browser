@@ -22,8 +22,8 @@
 #include "base/threading/thread_checker.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/policy_export.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "net/url_request/url_fetcher_delegate.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 
 namespace net {
@@ -55,6 +55,7 @@ class POLICY_EXPORT DeviceManagementRequestJob {
     TYPE_ATTRIBUTE_UPDATE,
     TYPE_GCM_ID_UPDATE,
     TYPE_ANDROID_MANAGEMENT_CHECK,
+    TYPE_CERT_BASED_REGISTRATION,
   };
 
   typedef base::Callback<

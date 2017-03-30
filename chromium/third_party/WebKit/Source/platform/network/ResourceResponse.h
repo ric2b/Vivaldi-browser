@@ -102,9 +102,6 @@ public:
         DISALLOW_NEW();
         SecurityDetails()
             : certID(0)
-            , numUnknownSCTs(0)
-            , numInvalidSCTs(0)
-            , numValidSCTs(0)
         {
         }
         // All strings are human-readable values.
@@ -115,9 +112,6 @@ public:
         // have a separate MAC value (i.e. if the cipher suite is AEAD).
         String mac;
         int certID;
-        size_t numUnknownSCTs;
-        size_t numInvalidSCTs;
-        size_t numValidSCTs;
         SignedCertificateTimestampList sctList;
     };
 
@@ -133,6 +127,8 @@ public:
 
     ResourceResponse();
     ResourceResponse(const KURL&, const AtomicString& mimeType, long long expectedLength, const AtomicString& textEncodingName, const String& filename);
+    ResourceResponse(const ResourceResponse&);
+    ResourceResponse& operator=(const ResourceResponse&);
 
     bool isNull() const { return m_isNull; }
     bool isHTTP() const;
@@ -216,7 +212,7 @@ public:
     void setSecurityStyle(SecurityStyle securityStyle) { m_securityStyle = securityStyle; }
 
     const SecurityDetails* getSecurityDetails() const { return &m_securityDetails; }
-    void setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts, const SignedCertificateTimestampList& sctList);
+    void setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, const SignedCertificateTimestampList& sctList);
 
     long long appCacheID() const { return m_appCacheID; }
     void setAppCacheID(long long id) { m_appCacheID = id; }
@@ -244,6 +240,9 @@ public:
 
     bool wasFetchedViaServiceWorker() const { return m_wasFetchedViaServiceWorker; }
     void setWasFetchedViaServiceWorker(bool value) { m_wasFetchedViaServiceWorker = value; }
+
+    bool wasFetchedViaForeignFetch() const { return m_wasFetchedViaForeignFetch; }
+    void setWasFetchedViaForeignFetch(bool value) { m_wasFetchedViaForeignFetch = value; }
 
     bool wasFallbackRequiredByServiceWorker() const { return m_wasFallbackRequiredByServiceWorker; }
     void setWasFallbackRequiredByServiceWorker(bool value) { m_wasFallbackRequiredByServiceWorker = value; }
@@ -279,6 +278,12 @@ public:
     unsigned short remotePort() const { return m_remotePort; }
     void setRemotePort(unsigned short value) { m_remotePort = value; }
 
+    long long encodedBodyLength() const { return m_encodedBodyLength; }
+    void addToEncodedBodyLength(int value);
+
+    long long decodedBodyLength() const { return m_decodedBodyLength; }
+    void addToDecodedBodyLength(int value);
+
     const String& downloadedFilePath() const { return m_downloadedFilePath; }
     void setDownloadedFilePath(const String&);
 
@@ -286,7 +291,6 @@ public:
     ExtraData* getExtraData() const { return m_extraData.get(); }
     void setExtraData(PassRefPtr<ExtraData> extraData) { m_extraData = extraData; }
 
-    // The ResourceResponse subclass may "shadow" this method to provide platform-specific memory usage information
     unsigned memoryUsage() const
     {
         // average size, mostly due to URL and Header Map strings
@@ -377,6 +381,9 @@ private:
     // Was the resource fetched over a ServiceWorker.
     bool m_wasFetchedViaServiceWorker;
 
+    // Was the resource fetched using a foreign fetch service worker.
+    bool m_wasFetchedViaForeignFetch;
+
     // Was the fallback request with skip service worker flag required.
     bool m_wasFallbackRequiredByServiceWorker;
 
@@ -404,6 +411,13 @@ private:
 
     // Remote port number of the socket which fetched this resource.
     unsigned short m_remotePort;
+
+    // Size of the response body in bytes prior to decompression.
+    long long m_encodedBodyLength;
+
+    // Sizes of the response body in bytes after any content-encoding is
+    // removed.
+    long long m_decodedBodyLength;
 
     // The downloaded file path if the load streamed to a file.
     String m_downloadedFilePath;
@@ -446,6 +460,7 @@ public:
     bool m_wasAlternateProtocolAvailable;
     bool m_wasFetchedViaProxy;
     bool m_wasFetchedViaServiceWorker;
+    bool m_wasFetchedViaForeignFetch;
     bool m_wasFallbackRequiredByServiceWorker;
     WebServiceWorkerResponseType m_serviceWorkerResponseType;
     KURL m_originalURLViaServiceWorker;
@@ -453,6 +468,8 @@ public:
     int64_t m_responseTime;
     String m_remoteIPAddress;
     unsigned short m_remotePort;
+    long long m_encodedBodyLength;
+    long long m_decodedBodyLength;
     String m_downloadedFilePath;
     RefPtr<BlobDataHandle> m_downloadedFileHandle;
 };

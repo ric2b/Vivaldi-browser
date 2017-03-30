@@ -34,30 +34,32 @@ class SecurityStateModel {
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.security_state
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: ConnectionSecurityLevel
   enum SecurityLevel {
-    // HTTP/no URL/HTTPS but with insecure passive content on the page
+    // HTTP/no URL/HTTPS but with insecure passive content on the page.
     NONE,
 
-    // HTTPS with valid EV cert
+    // HTTPS with valid EV cert.
     EV_SECURE,
 
-    // HTTPS (non-EV) with valid cert
+    // HTTPS (non-EV) with valid cert.
     SECURE,
 
-    // HTTPS, but with an outdated protocol version
+    // HTTPS, but with an outdated protocol version.
     SECURITY_WARNING,
 
     // HTTPS, but the certificate verification chain is anchored on a
-    // certificate that was installed by the system administrator
+    // certificate that was installed by the system administrator.
     SECURITY_POLICY_WARNING,
 
-    // Attempted HTTPS and failed, page not authenticated, or HTTPS with
-    // insecure active content on the page
+    // Attempted HTTPS and failed, page not authenticated, HTTPS with
+    // insecure active content on the page, malware, phishing, or any other
+    // serious security issue.
     SECURITY_ERROR,
   };
 
   // Describes how the SHA1 deprecation policy applies to an HTTPS
   // connection.
   enum SHA1DeprecationStatus {
+    UNKNOWN_SHA1,
     // No SHA1 deprecation policy applies.
     NO_DEPRECATED_SHA1,
     // The connection used a certificate with a SHA1 signature in the
@@ -70,16 +72,16 @@ class SecurityStateModel {
     DEPRECATED_SHA1_MAJOR,
   };
 
-  // Describes the type of mixed content (if any) that a site
-  // displayed/ran.
-  enum MixedContentStatus {
-    NO_MIXED_CONTENT,
-    // The site displayed insecure resources (passive mixed content).
-    DISPLAYED_MIXED_CONTENT,
-    // The site ran insecure code (active mixed content).
-    RAN_MIXED_CONTENT,
-    // The site both ran and displayed insecure resources.
-    RAN_AND_DISPLAYED_MIXED_CONTENT,
+  // The ContentStatus enum is used to describe content on the page that
+  // has significantly different security properties than the main page
+  // load. Content can be passive content that is displayed (such as
+  // images) or active content that is run (such as scripts or iframes).
+  enum ContentStatus {
+    CONTENT_STATUS_UNKNOWN,
+    CONTENT_STATUS_NONE,
+    CONTENT_STATUS_DISPLAYED,
+    CONTENT_STATUS_RAN,
+    CONTENT_STATUS_DISPLAYED_AND_RAN,
   };
 
   // Describes the security status of a page or request. This is the
@@ -88,8 +90,16 @@ class SecurityStateModel {
     SecurityInfo();
     ~SecurityInfo();
     SecurityLevel security_level;
+    // True if the page fails the browser's malware or phishing checks.
+    bool fails_malware_check;
     SHA1DeprecationStatus sha1_deprecation_status;
-    MixedContentStatus mixed_content_status;
+    // |mixed_content_status| describes the presence of content that was
+    // loaded over a nonsecure (HTTP) connection.
+    ContentStatus mixed_content_status;
+    // |content_with_cert_errors_status| describes the presence of
+    // content that was loaded over an HTTPS connection with
+    // certificate errors.
+    ContentStatus content_with_cert_errors_status;
     // The verification statuses of the signed certificate timestamps
     // for the connection.
     std::vector<net::ct::SCTVerifyStatus> sct_verify_statuses;
@@ -104,9 +114,10 @@ class SecurityStateModel {
     // Information about the SSL connection, such as protocol and
     // ciphersuite. See ssl_connection_flags.h in net.
     int connection_status;
-    // True if the protocol version and ciphersuite for the connection
-    // are considered secure.
-    bool is_secure_protocol_and_ciphersuite;
+    // A mask that indicates which of the protocol version,
+    // key exchange, or cipher for the connection is considered
+    // obsolete. See net::ObsoleteSSLMask for specific mask values.
+    int obsolete_ssl_status;
 
     // True if pinning was bypassed due to a local trust anchor.
     bool pkp_bypassed;
@@ -119,11 +130,16 @@ class SecurityStateModel {
     VisibleSecurityState();
     ~VisibleSecurityState();
     bool operator==(const VisibleSecurityState& other) const;
-    bool initialized;
     GURL url;
     // The baseline SecurityLevel describing the page or request before
     // any SecurityStateModel policies have been applied.
     SecurityLevel initial_security_level;
+    // True if the page fails the browser's malware or phishing checks.
+    bool fails_malware_check;
+
+    // CONNECTION SECURITY FIELDS
+    // Whether the connection security fields are initialized.
+    bool connection_info_initialized;
     // The following fields contain information about the connection
     // used to load the page or request.
     int cert_id;
@@ -137,6 +153,10 @@ class SecurityStateModel {
     bool displayed_mixed_content;
     // True if the page ran active mixed content.
     bool ran_mixed_content;
+    // True if the page displayed passive subresources with certificate errors.
+    bool displayed_content_with_cert_errors;
+    // True if the page ran active subresources with certificate errors.
+    bool ran_content_with_cert_errors;
     // True if PKP was bypassed due to a local trust anchor.
     bool pkp_bypassed;
   };

@@ -17,16 +17,14 @@ class Size;
 }
 
 namespace blimp {
-class BlimpConnectionStatistics;
-
 namespace client {
-
+class BrowserCompositor;
 class RenderWidgetFeature;
 
 // The native component of org.chromium.blimp.BlimpView.  This builds and
 // maintains a BlimpCompositorAndroid and handles notifying the compositor of
 // SurfaceView surface changes (size, creation, destruction, etc.).
-class BlimpView : public BlimpCompositorManagerClient {
+class BlimpView {
  public:
   static bool RegisterJni(JNIEnv* env);
 
@@ -40,13 +38,16 @@ class BlimpView : public BlimpCompositorManagerClient {
             const gfx::Size& real_size,
             const gfx::Size& size,
             float dp_to_px,
-            RenderWidgetFeature* render_widget_feature,
-            BlimpConnectionStatistics* blimp_connection_statistics);
+            RenderWidgetFeature* render_widget_feature);
 
   // Methods called from Java via JNI.
   void Destroy(JNIEnv* env, const base::android::JavaParamRef<jobject>& jobj);
-  void SetNeedsComposite(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& jobj);
+  void OnContentAreaSizeChanged(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint width,
+      jint height,
+      jfloat dpToPx);
   void OnSurfaceChanged(JNIEnv* env,
                         const base::android::JavaParamRef<jobject>& jobj,
                         jint format,
@@ -57,9 +58,6 @@ class BlimpView : public BlimpCompositorManagerClient {
                         const base::android::JavaParamRef<jobject>& jobj);
   void OnSurfaceDestroyed(JNIEnv* env,
                           const base::android::JavaParamRef<jobject>& jobj);
-  void SetVisibility(JNIEnv* env,
-                     const base::android::JavaParamRef<jobject>& jobj,
-                     jboolean visible);
   jboolean OnTouchEvent(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -93,16 +91,16 @@ class BlimpView : public BlimpCompositorManagerClient {
  private:
   virtual ~BlimpView();
 
-  void ReleaseAcceleratedWidget();
+  void OnSwapBuffersCompleted();
 
-  // BlimpCompositorManagerClient implementation.
-  void OnSwapBuffersCompleted() override;
-  void DidCommitAndDrawFrame() override;
+  void SetSurface(jobject surface);
 
   // Reference to the Java object which owns this class.
   base::android::ScopedJavaGlobalRef<jobject> java_obj_;
 
   const float device_scale_factor_;
+
+  std::unique_ptr<BrowserCompositor> compositor_;
 
   std::unique_ptr<BlimpCompositorManagerAndroid> compositor_manager_;
 
@@ -112,7 +110,7 @@ class BlimpView : public BlimpCompositorManagerClient {
 
   gfx::AcceleratedWidget window_;
 
-  BlimpConnectionStatistics* blimp_connection_statistics_;
+  base::WeakPtrFactory<BlimpView> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BlimpView);
 };

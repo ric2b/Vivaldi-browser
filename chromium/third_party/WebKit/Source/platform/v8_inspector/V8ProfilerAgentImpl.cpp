@@ -5,7 +5,7 @@
 #include "platform/v8_inspector/V8ProfilerAgentImpl.h"
 
 #include "platform/v8_inspector/Atomics.h"
-#include "platform/v8_inspector/V8DebuggerImpl.h"
+#include "platform/v8_inspector/V8InspectorImpl.h"
 #include "platform/v8_inspector/V8InspectorSessionImpl.h"
 #include "platform/v8_inspector/V8StackTraceImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
@@ -13,7 +13,10 @@
 
 #include <vector>
 
-namespace blink {
+#define ENSURE_V8_VERSION(major, minor) \
+    (V8_MAJOR_VERSION * 1000 + V8_MINOR_VERSION >= (major) * 1000 + (minor))
+
+namespace v8_inspector {
 
 namespace ProfilerAgentState {
 static const char samplingInterval[] = "samplingInterval";
@@ -25,11 +28,10 @@ namespace {
 
 std::unique_ptr<protocol::Array<protocol::Profiler::PositionTickInfo>> buildInspectorObjectForPositionTicks(const v8::CpuProfileNode* node)
 {
-    std::unique_ptr<protocol::Array<protocol::Profiler::PositionTickInfo>> array = protocol::Array<protocol::Profiler::PositionTickInfo>::create();
     unsigned lineCount = node->GetHitLineCount();
     if (!lineCount)
-        return array;
-
+        return nullptr;
+    auto array = protocol::Array<protocol::Profiler::PositionTickInfo>::create();
     std::vector<v8::CpuProfileNode::LineTick> entries(lineCount);
     if (node->GetLineTicks(&entries[0], lineCount)) {
         for (unsigned i = 0; i < lineCount; i++) {
@@ -39,71 +41,89 @@ std::unique_ptr<protocol::Array<protocol::Profiler::PositionTickInfo>> buildInsp
             array->addItem(std::move(line));
         }
     }
-
     return array;
 }
 
-std::unique_ptr<protocol::Profiler::CPUProfileNode> buildInspectorObjectFor(v8::Isolate* isolate, const v8::CpuProfileNode* node)
+std::unique_ptr<protocol::Profiler::ProfileNode> buildInspectorObjectFor(v8::Isolate* isolate, const v8::CpuProfileNode* node)
 {
     v8::HandleScope handleScope(isolate);
+    auto callFrame = protocol::Runtime::CallFrame::create()
+        .setFunctionName(toProtocolString(node->GetFunctionName()))
+        .setScriptId(String16::fromInteger(node->GetScriptId()))
+        .setUrl(toProtocolString(node->GetScriptResourceName()))
+        .setLineNumber(node->GetLineNumber() - 1)
+        .setColumnNumber(node->GetColumnNumber() - 1)
+        .build();
+    auto result = protocol::Profiler::ProfileNode::create()
+        .setCallFrame(std::move(callFrame))
+        .setHitCount(node->GetHitCount())
+        .setId(node->GetNodeId()).build();
 
-    std::unique_ptr<protocol::Array<protocol::Profiler::CPUProfileNode>> children = protocol::Array<protocol::Profiler::CPUProfileNode>::create();
     const int childrenCount = node->GetChildrenCount();
-    for (int i = 0; i < childrenCount; i++) {
-        const v8::CpuProfileNode* child = node->GetChild(i);
-        children->addItem(buildInspectorObjectFor(isolate, child));
+    if (childrenCount) {
+        auto children = protocol::Array<int>::create();
+        for (int i = 0; i < childrenCount; i++)
+            children->addItem(node->GetChild(i)->GetNodeId());
+        result->setChildren(std::move(children));
     }
 
-    std::unique_ptr<protocol::Array<protocol::Profiler::PositionTickInfo>> positionTicks = buildInspectorObjectForPositionTicks(node);
+    const char* deoptReason = node->GetBailoutReason();
+    if (deoptReason && deoptReason[0] && strcmp(deoptReason, "no reason"))
+        result->setDeoptReason(deoptReason);
 
-    std::unique_ptr<protocol::Profiler::CPUProfileNode> result = protocol::Profiler::CPUProfileNode::create()
-        .setFunctionName(toProtocolString(node->GetFunctionName()))
-        .setScriptId(String16::number(node->GetScriptId()))
-        .setUrl(toProtocolString(node->GetScriptResourceName()))
-        .setLineNumber(node->GetLineNumber())
-        .setColumnNumber(node->GetColumnNumber())
-        .setHitCount(node->GetHitCount())
-        .setCallUID(node->GetCallUid())
-        .setChildren(std::move(children))
-        .setPositionTicks(std::move(positionTicks))
-        .setDeoptReason(node->GetBailoutReason())
-        .setId(node->GetNodeId()).build();
+    auto positionTicks = buildInspectorObjectForPositionTicks(node);
+    if (positionTicks)
+        result->setPositionTicks(std::move(positionTicks));
+
     return result;
 }
 
 std::unique_ptr<protocol::Array<int>> buildInspectorObjectForSamples(v8::CpuProfile* v8profile)
 {
-    std::unique_ptr<protocol::Array<int>> array = protocol::Array<int>::create();
+    auto array = protocol::Array<int>::create();
     int count = v8profile->GetSamplesCount();
     for (int i = 0; i < count; i++)
         array->addItem(v8profile->GetSample(i)->GetNodeId());
     return array;
 }
 
-std::unique_ptr<protocol::Array<double>> buildInspectorObjectForTimestamps(v8::CpuProfile* v8profile)
+std::unique_ptr<protocol::Array<int>> buildInspectorObjectForTimestamps(v8::CpuProfile* v8profile)
 {
-    std::unique_ptr<protocol::Array<double>> array = protocol::Array<double>::create();
+    auto array = protocol::Array<int>::create();
     int count = v8profile->GetSamplesCount();
-    for (int i = 0; i < count; i++)
-        array->addItem(v8profile->GetSampleTimestamp(i));
+    uint64_t lastTime = v8profile->GetStartTime();
+    for (int i = 0; i < count; i++) {
+        uint64_t ts = v8profile->GetSampleTimestamp(i);
+        array->addItem(static_cast<int>(ts - lastTime));
+        lastTime = ts;
+    }
     return array;
 }
 
-std::unique_ptr<protocol::Profiler::CPUProfile> createCPUProfile(v8::Isolate* isolate, v8::CpuProfile* v8profile)
+void flattenNodesTree(v8::Isolate* isolate, const v8::CpuProfileNode* node, protocol::Array<protocol::Profiler::ProfileNode>* list)
 {
-    std::unique_ptr<protocol::Profiler::CPUProfile> profile = protocol::Profiler::CPUProfile::create()
-        .setHead(buildInspectorObjectFor(isolate, v8profile->GetTopDownRoot()))
-        .setStartTime(static_cast<double>(v8profile->GetStartTime()) / 1000000)
-        .setEndTime(static_cast<double>(v8profile->GetEndTime()) / 1000000).build();
-    profile->setSamples(buildInspectorObjectForSamples(v8profile));
-    profile->setTimestamps(buildInspectorObjectForTimestamps(v8profile));
-    return profile;
+    list->addItem(buildInspectorObjectFor(isolate, node));
+    const int childrenCount = node->GetChildrenCount();
+    for (int i = 0; i < childrenCount; i++)
+        flattenNodesTree(isolate, node->GetChild(i), list);
 }
 
-std::unique_ptr<protocol::Debugger::Location> currentDebugLocation(V8DebuggerImpl* debugger)
+std::unique_ptr<protocol::Profiler::Profile> createCPUProfile(v8::Isolate* isolate, v8::CpuProfile* v8profile)
 {
-    std::unique_ptr<V8StackTrace> callStack = debugger->captureStackTrace(1);
-    std::unique_ptr<protocol::Debugger::Location> location = protocol::Debugger::Location::create()
+    auto nodes = protocol::Array<protocol::Profiler::ProfileNode>::create();
+    flattenNodesTree(isolate, v8profile->GetTopDownRoot(), nodes.get());
+    return protocol::Profiler::Profile::create()
+        .setNodes(std::move(nodes))
+        .setStartTime(static_cast<double>(v8profile->GetStartTime()))
+        .setEndTime(static_cast<double>(v8profile->GetEndTime()))
+        .setSamples(buildInspectorObjectForSamples(v8profile))
+        .setTimeDeltas(buildInspectorObjectForTimestamps(v8profile)).build();
+}
+
+std::unique_ptr<protocol::Debugger::Location> currentDebugLocation(V8InspectorImpl* inspector)
+{
+    std::unique_ptr<V8StackTrace> callStack = inspector->captureStackTrace(1);
+    auto location = protocol::Debugger::Location::create()
         .setScriptId(callStack->topScriptId())
         .setLineNumber(callStack->topLineNumber()).build();
     location->setColumnNumber(callStack->topColumnNumber());
@@ -125,7 +145,8 @@ public:
 
 V8ProfilerAgentImpl::V8ProfilerAgentImpl(V8InspectorSessionImpl* session, protocol::FrontendChannel* frontendChannel, protocol::DictionaryValue* state)
     : m_session(session)
-    , m_isolate(m_session->debugger()->isolate())
+    , m_isolate(m_session->inspector()->isolate())
+    , m_profiler(nullptr)
     , m_state(state)
     , m_frontend(frontendChannel)
     , m_enabled(false)
@@ -135,6 +156,10 @@ V8ProfilerAgentImpl::V8ProfilerAgentImpl(V8InspectorSessionImpl* session, protoc
 
 V8ProfilerAgentImpl::~V8ProfilerAgentImpl()
 {
+#if ENSURE_V8_VERSION(5, 4)
+    if (m_profiler)
+        m_profiler->Dispose();
+#endif
 }
 
 void V8ProfilerAgentImpl::consoleProfile(const String16& title)
@@ -144,7 +169,7 @@ void V8ProfilerAgentImpl::consoleProfile(const String16& title)
     String16 id = nextProfileId();
     m_startedProfiles.push_back(ProfileDescriptor(id, title));
     startProfiling(id);
-    m_frontend.consoleProfileStarted(id, currentDebugLocation(m_session->debugger()), title);
+    m_frontend.consoleProfileStarted(id, currentDebugLocation(m_session->inspector()), title);
 }
 
 void V8ProfilerAgentImpl::consoleProfileEnd(const String16& title)
@@ -172,10 +197,10 @@ void V8ProfilerAgentImpl::consoleProfileEnd(const String16& title)
         if (id.isEmpty())
             return;
     }
-    std::unique_ptr<protocol::Profiler::CPUProfile> profile = stopProfiling(id, true);
+    std::unique_ptr<protocol::Profiler::Profile> profile = stopProfiling(id, true);
     if (!profile)
         return;
-    std::unique_ptr<protocol::Debugger::Location> location = currentDebugLocation(m_session->debugger());
+    std::unique_ptr<protocol::Debugger::Location> location = currentDebugLocation(m_session->inspector());
     m_frontend.consoleProfileFinished(id, std::move(location), std::move(profile), resolvedTitle);
 }
 
@@ -184,19 +209,25 @@ void V8ProfilerAgentImpl::enable(ErrorString*)
     if (m_enabled)
         return;
     m_enabled = true;
+#if ENSURE_V8_VERSION(5, 4)
+    DCHECK(!m_profiler);
+    m_profiler = v8::CpuProfiler::New(m_isolate);
+#endif
     m_state->setBoolean(ProfilerAgentState::profilerEnabled, true);
-    m_session->changeInstrumentationCounter(+1);
 }
 
 void V8ProfilerAgentImpl::disable(ErrorString* errorString)
 {
     if (!m_enabled)
         return;
-    m_session->changeInstrumentationCounter(-1);
     for (size_t i = m_startedProfiles.size(); i > 0; --i)
         stopProfiling(m_startedProfiles[i - 1].m_id, false);
     m_startedProfiles.clear();
     stop(nullptr, nullptr);
+#if ENSURE_V8_VERSION(5, 4)
+    m_profiler->Dispose();
+    m_profiler = nullptr;
+#endif
     m_enabled = false;
     m_state->setBoolean(ProfilerAgentState::profilerEnabled, false);
 }
@@ -207,8 +238,8 @@ void V8ProfilerAgentImpl::setSamplingInterval(ErrorString* error, int interval)
         *error = "Cannot change sampling interval when profiling.";
         return;
     }
-    m_state->setNumber(ProfilerAgentState::samplingInterval, interval);
-    m_isolate->GetCpuProfiler()->SetSamplingInterval(interval);
+    m_state->setInteger(ProfilerAgentState::samplingInterval, interval);
+    profiler()->SetSamplingInterval(interval);
 }
 
 void V8ProfilerAgentImpl::restore()
@@ -217,11 +248,14 @@ void V8ProfilerAgentImpl::restore()
     if (!m_state->booleanProperty(ProfilerAgentState::profilerEnabled, false))
         return;
     m_enabled = true;
-    m_session->changeInstrumentationCounter(+1);
+#if ENSURE_V8_VERSION(5, 4)
+    DCHECK(!m_profiler);
+    m_profiler = v8::CpuProfiler::New(m_isolate);
+#endif
     int interval = 0;
-    m_state->getNumber(ProfilerAgentState::samplingInterval, &interval);
+    m_state->getInteger(ProfilerAgentState::samplingInterval, &interval);
     if (interval)
-        m_isolate->GetCpuProfiler()->SetSamplingInterval(interval);
+        profiler()->SetSamplingInterval(interval);
     if (m_state->booleanProperty(ProfilerAgentState::userInitiatedProfiling, false)) {
         ErrorString error;
         start(&error);
@@ -240,10 +274,9 @@ void V8ProfilerAgentImpl::start(ErrorString* error)
     m_frontendInitiatedProfileId = nextProfileId();
     startProfiling(m_frontendInitiatedProfileId);
     m_state->setBoolean(ProfilerAgentState::userInitiatedProfiling, true);
-    m_session->client()->profilingStarted();
 }
 
-void V8ProfilerAgentImpl::stop(ErrorString* errorString, std::unique_ptr<protocol::Profiler::CPUProfile>* profile)
+void V8ProfilerAgentImpl::stop(ErrorString* errorString, std::unique_ptr<protocol::Profiler::Profile>* profile)
 {
     if (!m_recordingCPUProfile) {
         if (errorString)
@@ -251,7 +284,7 @@ void V8ProfilerAgentImpl::stop(ErrorString* errorString, std::unique_ptr<protoco
         return;
     }
     m_recordingCPUProfile = false;
-    std::unique_ptr<protocol::Profiler::CPUProfile> cpuProfile = stopProfiling(m_frontendInitiatedProfileId, !!profile);
+    std::unique_ptr<protocol::Profiler::Profile> cpuProfile = stopProfiling(m_frontendInitiatedProfileId, !!profile);
     if (profile) {
         *profile = std::move(cpuProfile);
         if (!profile->get() && errorString)
@@ -259,27 +292,26 @@ void V8ProfilerAgentImpl::stop(ErrorString* errorString, std::unique_ptr<protoco
     }
     m_frontendInitiatedProfileId = String16();
     m_state->setBoolean(ProfilerAgentState::userInitiatedProfiling, false);
-    m_session->client()->profilingStopped();
 }
 
 String16 V8ProfilerAgentImpl::nextProfileId()
 {
-    return String16::number(atomicIncrement(&s_lastProfileId));
+    return String16::fromInteger(atomicIncrement(&s_lastProfileId));
 }
 
 void V8ProfilerAgentImpl::startProfiling(const String16& title)
 {
     v8::HandleScope handleScope(m_isolate);
-    m_isolate->GetCpuProfiler()->StartProfiling(toV8String(m_isolate, title), true);
+    profiler()->StartProfiling(toV8String(m_isolate, title), true);
 }
 
-std::unique_ptr<protocol::Profiler::CPUProfile> V8ProfilerAgentImpl::stopProfiling(const String16& title, bool serialize)
+std::unique_ptr<protocol::Profiler::Profile> V8ProfilerAgentImpl::stopProfiling(const String16& title, bool serialize)
 {
     v8::HandleScope handleScope(m_isolate);
-    v8::CpuProfile* profile = m_isolate->GetCpuProfiler()->StopProfiling(toV8String(m_isolate, title));
+    v8::CpuProfile* profile = profiler()->StopProfiling(toV8String(m_isolate, title));
     if (!profile)
         return nullptr;
-    std::unique_ptr<protocol::Profiler::CPUProfile> result;
+    std::unique_ptr<protocol::Profiler::Profile> result;
     if (serialize)
         result = createCPUProfile(m_isolate, profile);
     profile->Delete();
@@ -291,4 +323,13 @@ bool V8ProfilerAgentImpl::isRecording() const
     return m_recordingCPUProfile || !m_startedProfiles.empty();
 }
 
-} // namespace blink
+v8::CpuProfiler* V8ProfilerAgentImpl::profiler()
+{
+#if ENSURE_V8_VERSION(5, 4)
+    return m_profiler;
+#else
+    return m_isolate->GetCpuProfiler();
+#endif
+}
+
+} // namespace v8_inspector

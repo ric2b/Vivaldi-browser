@@ -19,7 +19,7 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "importer/chromium_profile_importer.h"
@@ -48,28 +48,32 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     }
   }
   switch (importerType) {
-  case importer::TYPE_CHROME:
-    profile_path = app_data_path.AppendASCII("Google\\Chrome\\User Data");
-    break;
-  case importer::TYPE_YANDEX:
-    profile_path =
-        app_data_path.AppendASCII("Yandex\\YandexBrowser\\User Data");
-    break;
-  case importer::TYPE_OPERA_OPIUM:
-    profile_path = app_data_path.AppendASCII("Opera Software\\Opera Stable");
-    break;
-  case importer::TYPE_OPERA_OPIUM_BETA:
-    profile_path = app_data_path.AppendASCII("Opera Software\\Opera Beta");
-    break;
-  case importer::TYPE_OPERA_OPIUM_DEV:
-    profile_path = app_data_path.AppendASCII("Opera Software\\Opera Developer");
-    break;
-  case importer::TYPE_VIVALDI:
-    profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
-    break;
-  default:
-    profile_path = app_data_path.AppendASCII("not-supported");
-    break;
+    case importer::TYPE_CHROME:
+      profile_path = app_data_path.AppendASCII("Google\\Chrome\\User Data");
+      break;
+    case importer::TYPE_CHROMIUM:
+      profile_path = app_data_path.AppendASCII("Chromium\\User Data");
+      break;
+    case importer::TYPE_YANDEX:
+      profile_path =
+          app_data_path.AppendASCII("Yandex\\YandexBrowser\\User Data");
+      break;
+    case importer::TYPE_OPERA_OPIUM:
+      profile_path = app_data_path.AppendASCII("Opera Software\\Opera Stable");
+      break;
+    case importer::TYPE_OPERA_OPIUM_BETA:
+      profile_path = app_data_path.AppendASCII("Opera Software\\Opera Beta");
+      break;
+    case importer::TYPE_OPERA_OPIUM_DEV:
+      profile_path =
+          app_data_path.AppendASCII("Opera Software\\Opera Developer");
+      break;
+    case importer::TYPE_VIVALDI:
+      profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
+      break;
+    default:
+      profile_path = app_data_path.AppendASCII("not-supported");
+      break;
   }
   return profile_path;
 }

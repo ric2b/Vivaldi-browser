@@ -3,20 +3,21 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/browsing_data/cache_counter.h"
-#include "chrome/common/pref_names.h"
-#include "components/browsing_data/storage_partition_http_cache_data_remover.h"
+#include "chrome/browser/profiles/profile.h"
+#include "components/browsing_data/content/storage_partition_http_cache_data_remover.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "net/base/net_errors.h"
 
-CacheCounter::CacheCounter() : pref_name_(prefs::kDeleteCache),
-                               pending_(false),
-                               weak_ptr_factory_(this) {
-}
+CacheCounter::CacheCounter(Profile* profile)
+    : profile_(profile),
+      pending_(false),
+      weak_ptr_factory_(this) {}
 
 CacheCounter::~CacheCounter() {
 }
 
-const std::string& CacheCounter::GetPrefName() const {
-  return pref_name_;
+const char* CacheCounter::GetPrefName() const {
+  return browsing_data::prefs::kDeleteCache;
 }
 
 void CacheCounter::Count() {
@@ -26,11 +27,10 @@ void CacheCounter::Count() {
   // the unbounded time interval. It is up to the UI to interpret the results
   // for finite time intervals as upper estimates.
   browsing_data::StoragePartitionHttpCacheDataRemover::CreateForRange(
-      content::BrowserContext::GetDefaultStoragePartition(GetProfile()),
-      base::Time(),
-      base::Time::Max())->Count(
-          base::Bind(&CacheCounter::OnCacheSizeCalculated,
-                     weak_ptr_factory_.GetWeakPtr()));
+      content::BrowserContext::GetDefaultStoragePartition(profile_),
+      base::Time(), base::Time::Max())
+      ->Count(base::Bind(&CacheCounter::OnCacheSizeCalculated,
+                         weak_ptr_factory_.GetWeakPtr()));
   pending_ = true;
 }
 

@@ -175,6 +175,12 @@ class BASE_EXPORT PlatformThread {
   // PlatformThreadHandle.
   static bool CreateNonJoinable(size_t stack_size, Delegate* delegate);
 
+  // CreateNonJoinableWithPriority() does the same thing as CreateNonJoinable()
+  // except the priority of the thread is set based on |priority|.
+  static bool CreateNonJoinableWithPriority(size_t stack_size,
+                                            Delegate* delegate,
+                                            ThreadPriority priority);
+
   // Joins with a thread created via the Create function.  This function blocks
   // the caller until the designated thread exits.  This will invalidate
   // |thread_handle|.
@@ -183,6 +189,10 @@ class BASE_EXPORT PlatformThread {
   // Detaches and releases the thread handle. The thread is no longer joinable
   // and |thread_handle| is invalidated after this call.
   static void Detach(PlatformThreadHandle thread_handle);
+
+  // Returns true if SetCurrentThreadPriority() can be used to increase the
+  // priority of the current thread.
+  static bool CanIncreaseCurrentThreadPriority();
 
   // Toggles the current thread's priority at runtime. A thread may not be able
   // to raise its priority back up after lowering it if the process does not
@@ -194,6 +204,20 @@ class BASE_EXPORT PlatformThread {
   static void SetCurrentThreadPriority(ThreadPriority priority);
 
   static ThreadPriority GetCurrentThreadPriority();
+
+#if defined(OS_LINUX)
+  // Toggles a specific thread's priority at runtime. This can be used to
+  // change the priority of a thread in a different process and will fail
+  // if the calling process does not have proper permissions. The
+  // SetCurrentThreadPriority() function above is preferred in favor of
+  // security but on platforms where sandboxed processes are not allowed to
+  // change priority this function exists to allow a non-sandboxed process
+  // to change the priority of sandboxed threads for improved performance.
+  // Warning: Don't use this for a main thread because that will change the
+  // whole thread group's (i.e. process) priority.
+  static void SetThreadPriority(PlatformThreadId thread_id,
+                                ThreadPriority priority);
+#endif
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PlatformThread);

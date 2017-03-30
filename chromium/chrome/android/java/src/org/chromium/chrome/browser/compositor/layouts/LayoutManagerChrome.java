@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector.CloseAllTabsDelegat
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.browser.widget.OverviewListLayout;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
@@ -100,7 +99,9 @@ public class LayoutManagerChrome
         @Override
         public void didAddTab(Tab tab, TabLaunchType launchType) {
             int tabId = tab.getId();
-            if (launchType != TabLaunchType.FROM_RESTORE) {
+            if (launchType == TabLaunchType.FROM_RESTORE) {
+                getActiveLayout().onTabRestored(time(), tabId);
+            } else {
                 boolean incognito = tab.isIncognito();
                 boolean willBeSelected = launchType != TabLaunchType.FROM_LONGPRESS_BACKGROUND
                         || (!getTabModelSelector().isIncognitoSelected() && incognito);
@@ -688,8 +689,7 @@ public class LayoutManagerChrome
         public boolean isSwipeEnabled(ScrollDirection direction) {
             FullscreenManager manager = mHost.getFullscreenManager();
             if (getActiveLayout() != mStaticLayout
-                    || !DeviceClassManager.enableToolbarSwipe(
-                               FeatureUtilities.isDocumentMode(mHost.getContext()))
+                    || !DeviceClassManager.enableToolbarSwipe()
                     || (manager != null && manager.getPersistentFullscreenMode())) {
                 return false;
             }

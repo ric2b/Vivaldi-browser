@@ -300,7 +300,10 @@ class Port(object):
         return [self._filesystem.join(path, suite.name) for path in self.default_baseline_search_path()]
 
     def baseline_search_path(self):
-        return self.get_option('additional_platform_directory', []) + self._compare_baseline() + self.default_baseline_search_path()
+        return (self.get_option('additional_platform_directory', []) +
+                self._flag_specific_baseline_search_path() +
+                self._compare_baseline() +
+                self.default_baseline_search_path())
 
     def default_baseline_search_path(self):
         """Return a list of absolute paths to directories to search under for
@@ -330,10 +333,10 @@ class Port(object):
         """
         if not self._filesystem.exists(path_to_file):
             if more_logging:
-                _log.error('Unable to find %s' % file_description)
-                _log.error('    at %s' % path_to_file)
+                _log.error('Unable to find %s', file_description)
+                _log.error('    at %s', path_to_file)
                 if override_step:
-                    _log.error('    %s' % override_step)
+                    _log.error('    %s', override_step)
                     _log.error('')
             return False
         return True
@@ -373,7 +376,7 @@ class Port(object):
     def _check_driver(self):
         driver_path = self._path_to_driver()
         if not self._filesystem.exists(driver_path):
-            _log.error("%s was not found at %s" % (self.driver_name(), driver_path))
+            _log.error("%s was not found at %s", self.driver_name(), driver_path)
             return False
         return True
 
@@ -415,7 +418,7 @@ class Port(object):
         """Checks whether image_diff binary exists."""
         image_diff_path = self._path_to_image_diff()
         if not self._filesystem.exists(image_diff_path):
-            _log.error("image_diff was not found at %s" % image_diff_path)
+            _log.error("image_diff was not found at %s", image_diff_path)
             return False
         return True
 
@@ -432,7 +435,7 @@ class Port(object):
 
         if not self._filesystem.exists(self._pretty_patch_path):
             if more_logging:
-                _log.warning("Unable to find %s; can't generate pretty patches." % self._pretty_patch_path)
+                _log.warning("Unable to find %s; can't generate pretty patches.", self._pretty_patch_path)
                 _log.warning('')
             return False
 
@@ -722,7 +725,7 @@ class Port(object):
             split_line = line.split()
             if len(split_line) == 4:
                 # FIXME: Probably one of mozilla's extensions in the reftest.list format. Do we need to support this?
-                _log.warning("unsupported reftest.list line '%s' in %s" % (line, reftest_list_path))
+                _log.warning("unsupported reftest.list line '%s' in %s", line, reftest_list_path)
                 continue
             if len(split_line) < 3:
                 continue
@@ -938,9 +941,9 @@ class Port(object):
         for search_path in skipped_file_paths:
             filename = self._filesystem.join(self._webkit_baseline_path(search_path), "Skipped")
             if not self._filesystem.exists(filename):
-                _log.debug("Skipped does not exist: %s" % filename)
+                _log.debug("Skipped does not exist: %s", filename)
                 continue
-            _log.debug("Using Skipped file: %s" % filename)
+            _log.debug("Using Skipped file: %s", filename)
             skipped_file_contents = self._filesystem.read_text_file(filename)
             tests_to_skip.extend(self._tests_from_skipped_file_contents(skipped_file_contents))
         return tests_to_skip
@@ -1050,18 +1053,8 @@ class Port(object):
             self._image_differ.stop()
             self._image_differ = None
 
-    # FIXME: os.environ access should be moved to onto a common/system class to be more easily mockable.
-    def _value_or_default_from_environ(self, name, default=None):
-        if name in os.environ:
-            return os.environ[name]
-        return default
-
-    def _copy_value_from_environ_if_set(self, clean_env, name):
-        if name in os.environ:
-            clean_env[name] = os.environ[name]
-
     def setup_environ_for_server(self):
-        # We intentionally copy only a subset of os.environ when
+        # We intentionally copy only a subset of the environment when
         # launching subprocesses to ensure consistent test results.
         clean_env = {
             'LOCAL_RESOURCE_ROOT': self.layout_tests_dir(),  # FIXME: Is this used?
@@ -1088,7 +1081,7 @@ class Port(object):
                 'DBUS_SESSION_BUS_ADDRESS',
                 'XDG_DATA_DIRS',
             ]
-            clean_env['DISPLAY'] = self._value_or_default_from_environ('DISPLAY', ':1')
+            clean_env['DISPLAY'] = self.host.environ.get('DISPLAY', ':1')
         if self.host.platform.is_mac():
             clean_env['DYLD_LIBRARY_PATH'] = self._build_path()
             variables_to_copy += [
@@ -1107,7 +1100,8 @@ class Port(object):
             ]
 
         for variable in variables_to_copy:
-            self._copy_value_from_environ_if_set(clean_env, variable)
+            if variable in self.host.environ:
+                clean_env[variable] = self.host.environ[variable]
 
         for string_variable in self.get_option('additional_env_var', []):
             [name, value] = string_variable.split('=', 1)
@@ -1130,7 +1124,7 @@ class Port(object):
         method."""
         helper_path = self._path_to_helper()
         if helper_path:
-            _log.debug("Starting layout helper %s" % helper_path)
+            _log.debug("Starting layout helper %s", helper_path)
             # Note: Not thread safe: http://bugs.python.org/issue2320
             self._helper = self._executive.popen([helper_path],
                                                  stdin=self._executive.PIPE, stdout=self._executive.PIPE, stderr=None)
@@ -1274,6 +1268,11 @@ class Port(object):
         return [self._filesystem.join(self.layout_tests_dir(), 'FlagExpectations', flag.lstrip('-'))
                 for flag in self.get_option('additional_driver_flag', [])]
 
+    def _flag_specific_baseline_search_path(self):
+        # TODO(skobes): Baselines specific to both flag and platform?
+        return [self._filesystem.join(self.layout_tests_dir(), 'flag-specific', flag.lstrip('-'))
+                for flag in self.get_option('additional_driver_flag', [])]
+
     def expectations_dict(self):
         """Returns an OrderedDict of name -> expectations strings.
         The names are expected to be (but not required to be) paths in the filesystem.
@@ -1292,10 +1291,10 @@ class Port(object):
         for path in self.get_option('additional_expectations', []):
             expanded_path = self._filesystem.expanduser(path)
             if self._filesystem.exists(expanded_path):
-                _log.debug("reading additional_expectations from path '%s'" % path)
+                _log.debug("reading additional_expectations from path '%s'", path)
                 expectations[path] = self._filesystem.read_text_file(expanded_path)
             else:
-                _log.warning("additional_expectations path '%s' does not exist" % path)
+                _log.warning("additional_expectations path '%s' does not exist", path)
         return expectations
 
     def bot_expectations(self):
@@ -1317,7 +1316,7 @@ class Port(object):
             return expectations.flakes_by_path(ignore_mode == 'very-flaky')
         if ignore_mode == 'unexpected':
             return expectations.unexpected_results_by_path()
-        _log.warning("Unexpected ignore mode: '%s'." % ignore_mode)
+        _log.warning("Unexpected ignore mode: '%s'.", ignore_mode)
         return {}
 
     def expectations_files(self):
@@ -1394,7 +1393,7 @@ class Port(object):
                 return ""
             raise
         except ScriptError as e:
-            _log.error("Failed to run wdiff: %s" % e)
+            _log.error("Failed to run wdiff: %s", e)
             self._wdiff_available = False
             return self._wdiff_error_html
 
@@ -1415,13 +1414,13 @@ class Port(object):
         except OSError as e:
             # If the system is missing ruby log the error and stop trying.
             self._pretty_patch_available = False
-            _log.error("Failed to run PrettyPatch (%s): %s" % (command, e))
+            _log.error("Failed to run PrettyPatch (%s): %s", command, e)
             return self._pretty_patch_error_html
         except ScriptError as e:
             # If ruby failed to run for some reason, log the command
             # output and stop trying.
             self._pretty_patch_available = False
-            _log.error("Failed to run PrettyPatch (%s):\n%s" % (command, e.message_with_output()))
+            _log.error("Failed to run PrettyPatch (%s):\n%s", command, e.message_with_output())
             return self._pretty_patch_error_html
 
     def default_configuration(self):
@@ -1446,7 +1445,7 @@ class Port(object):
         contents will be used instead.
 
         This is needed only by ports that use the apache_http_server module."""
-        config_file_from_env = os.environ.get('WEBKIT_HTTP_SERVER_CONF_PATH')
+        config_file_from_env = self.host.environ.get('WEBKIT_HTTP_SERVER_CONF_PATH')
         if config_file_from_env:
             if not self._filesystem.exists(config_file_from_env):
                 raise IOError('%s was not found on the system' % config_file_from_env)
@@ -1536,7 +1535,7 @@ class Port(object):
             llvm_symbolizer_path = self.path_from_chromium_base(
                 'third_party', 'llvm-build', 'Release+Asserts', 'bin', 'llvm-symbolizer')
             if self._filesystem.exists(llvm_symbolizer_path):
-                env = os.environ.copy()
+                env = self.host.environ.copy()
                 env['LLVM_SYMBOLIZER_PATH'] = llvm_symbolizer_path
             else:
                 env = None
@@ -1677,7 +1676,7 @@ class Port(object):
             try:
                 symbols += self._executive.run_command(['nm', path_to_module], error_handler=self._executive.ignore_error)
             except OSError as e:
-                _log.warn("Failed to run nm: %s.  Can't determine supported features correctly." % e)
+                _log.warning("Failed to run nm: %s.  Can't determine supported features correctly.", e)
         return symbols
 
     # Ports which use compile-time feature detection should define this method and return

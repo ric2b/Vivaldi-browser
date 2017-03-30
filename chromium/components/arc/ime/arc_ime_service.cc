@@ -4,12 +4,13 @@
 
 #include "components/arc/ime/arc_ime_service.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
-#include "ui/aura/client/focus_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
@@ -41,7 +42,8 @@ ArcImeService::ArcImeService(ArcBridgeService* bridge_service)
       ime_type_(ui::TEXT_INPUT_TYPE_NONE),
       has_composition_text_(false),
       keyboard_controller_(nullptr),
-      test_input_method_(nullptr) {
+      test_input_method_(nullptr),
+      is_focus_observer_installed_(false) {
   aura::Env* env = aura::Env::GetInstanceDontCreate();
   if (env)
     env->AddObserver(this);
@@ -52,10 +54,8 @@ ArcImeService::~ArcImeService() {
   if (input_method)
     input_method->DetachTextInputClient(this);
 
-  for (aura::Window* window : arc_windows_.windows())
-    window->RemoveObserver(this);
-  for (aura::Window* root : observing_root_windows_.windows())
-    aura::client::GetFocusClient(root)->RemoveObserver(this);
+  if (is_focus_observer_installed_ && exo::WMHelper::GetInstance())
+    exo::WMHelper::GetInstance()->RemoveFocusObserver(this);
   aura::Env* env = aura::Env::GetInstanceDontCreate();
   if (env)
     env->RemoveObserver(this);
@@ -90,8 +90,10 @@ ui::InputMethod* ArcImeService::GetInputMethod() {
 
 void ArcImeService::OnWindowInitialized(aura::Window* new_window) {
   if (IsArcWindow(new_window)) {
-    arc_windows_.Add(new_window);
-    new_window->AddObserver(this);
+    if (!is_focus_observer_installed_) {
+      exo::WMHelper::GetInstance()->AddFocusObserver(this);
+      is_focus_observer_installed_ = true;
+    }
   }
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
@@ -102,17 +104,8 @@ void ArcImeService::OnWindowInitialized(aura::Window* new_window) {
   }
 }
 
-void ArcImeService::OnWindowAddedToRootWindow(aura::Window* window) {
-  aura::Window* root = window->GetRootWindow();
-  aura::client::FocusClient* focus_client = aura::client::GetFocusClient(root);
-  if (focus_client && !observing_root_windows_.Contains(root)) {
-    focus_client->AddObserver(this);
-    observing_root_windows_.Add(root);
-  }
-}
-
 ////////////////////////////////////////////////////////////////////////////////
-// Overridden from aura::client::FocusChangeObserver:
+// Overridden from exo::WMHelper::FocusChangeObserver:
 
 void ArcImeService::OnWindowFocused(aura::Window* gained_focus,
                                    aura::Window* lost_focus) {
@@ -147,15 +140,8 @@ void ArcImeService::OnTextInputTypeChanged(ui::TextInputType type) {
   ime_type_ = type;
 
   ui::InputMethod* const input_method = GetInputMethod();
-  if (input_method) {
+  if (input_method)
     input_method->OnTextInputTypeChanged(this);
-    // TODO(crbug.com/581282): Remove this piggyback call when
-    // ImeInstance::ShowImeIfNeeded is wired to ARC.
-    if (input_method->GetTextInputClient() == this &&
-        ime_type_ != ui::TEXT_INPUT_TYPE_NONE) {
-      input_method->ShowImeIfNeeded();
-    }
-  }
 }
 
 void ArcImeService::OnCursorRectChanged(const gfx::Rect& rect) {

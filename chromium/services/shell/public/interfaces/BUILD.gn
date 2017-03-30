@@ -10,10 +10,10 @@ mojom("interfaces") {
     "capabilities.mojom",
     "connector.mojom",
     "interface_provider.mojom",
-    "shell.mojom",
-    "shell_client.mojom",
-    "shell_client_factory.mojom",
-    "shell_resolver.mojom",
+    "resolver.mojom",
+    "service.mojom",
+    "service_factory.mojom",
+    "service_manager.mojom",
   ]
 
   public_deps = [

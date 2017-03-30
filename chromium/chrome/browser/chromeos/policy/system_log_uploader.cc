@@ -46,7 +46,7 @@ std::unique_ptr<policy::SystemLogUploader::SystemLogs> ReadFiles() {
   std::unique_ptr<policy::SystemLogUploader::SystemLogs> system_logs(
       new policy::SystemLogUploader::SystemLogs());
   feedback::AnonymizerTool anonymizer;
-  for (auto const file_path : kSystemLogFileNames) {
+  for (auto* file_path : kSystemLogFileNames) {
     if (!base::PathExists(base::FilePath(file_path)))
       continue;
     std::string data = std::string();
@@ -267,7 +267,7 @@ void SystemLogUploader::UploadSystemLogs(
   for (const auto& syslog_entry : *system_logs) {
     std::map<std::string, std::string> header_fields;
     std::unique_ptr<std::string> data =
-        base::WrapUnique(new std::string(syslog_entry.second));
+        base::MakeUnique<std::string>(syslog_entry.second);
     header_fields.insert(std::make_pair(kFileTypeHeaderName, kFileTypeLogFile));
     header_fields.insert(std::make_pair(net::HttpRequestHeaders::kContentType,
                                         kContentTypePlainText));

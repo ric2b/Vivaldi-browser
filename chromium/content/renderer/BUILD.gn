@@ -9,7 +9,12 @@ import("//media/media_options.gni")
 import("//third_party/webrtc/build/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
-source_set("renderer") {
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "renderer") {
   # Only the public target should depend on this. All other targets (even
   # internal content ones) should depend on the public one.
   visibility = [
@@ -24,7 +29,6 @@ source_set("renderer") {
   configs += [
     "//content:content_implementation",
     "//build/config/compiler:no_size_t_to_int_warning",
-    "//content/public/common:mojo_shell_client",
   ]
   defines = []
 
@@ -37,7 +41,7 @@ source_set("renderer") {
     "//cc/proto",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
-    "//components/scheduler:scheduler",
+    "//components/memory_coordinator/child",
     "//components/url_formatter",
     "//content:resources",
     "//content/child",
@@ -76,7 +80,6 @@ source_set("renderer") {
     "//storage/common",
     "//third_party/WebKit/public:blink",
     "//third_party/WebKit/public:mojo_bindings",
-    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/boringssl",
     "//third_party/icu",
     "//third_party/libjingle",
@@ -100,7 +103,7 @@ source_set("renderer") {
   if (use_aura) {
     public_deps += [ "//content/renderer/mus" ]
     allow_circular_includes_from += [ "//content/renderer/mus" ]
-    deps += [ "//components/mus/common:mus_common" ]
+    deps += [ "//services/ui/public/cpp" ]
   }
 
   if (use_external_popup_menu) {
@@ -139,6 +142,13 @@ source_set("renderer") {
     ]
   }
 
+  if (system_proprietary_codecs) {
+    sources += [
+      "media/ipc_media_pipeline_host_impl.cc",
+      "media/ipc_media_pipeline_host_impl.h",
+    ]
+  }
+
   # TODO(jrg): remove the OS=="android" section?
   # http://crbug.com/113172
   # Understand better how media_stream_ is tied into Chromium.
@@ -167,13 +177,17 @@ source_set("renderer") {
     deps += [
       "//crypto",
       "//third_party/libjingle:libjingle_webrtc",
-      "//third_party/libjingle:libstunprober",
       "//third_party/libvpx",
+      "//third_party/webrtc/api:libjingle_peerconnection",
       "//third_party/webrtc/base:rtc_base",
       "//third_party/webrtc/common_video",
+      "//third_party/webrtc/media:rtc_media",
       "//third_party/webrtc/modules/audio_device",
       "//third_party/webrtc/modules/audio_processing",
       "//third_party/webrtc/modules/video_coding:webrtc_h264",
+      "//third_party/webrtc/p2p:libstunprober",
+      "//third_party/webrtc/p2p:rtc_p2p",
+      "//third_party/webrtc/pc:rtc_pc",
       "//third_party/webrtc/system_wrappers",
     ]
     if (rtc_use_h264) {

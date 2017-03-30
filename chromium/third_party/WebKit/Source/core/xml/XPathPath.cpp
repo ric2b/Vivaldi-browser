@@ -111,8 +111,8 @@ Value LocationPath::evaluate(EvaluationContext& evaluationContext) const
     // This is for compatibility with Firefox, and also seems like a more
     // logical treatment of where you would expect the "root" to be.
     Node* context = evaluationContext.node.get();
-    if (m_absolute && context->getNodeType() != Node::DOCUMENT_NODE)  {
-        if (context->inShadowIncludingDocument())
+    if (m_absolute && context->getNodeType() != Node::kDocumentNode)  {
+        if (context->isConnected())
             context = context->ownerDocument();
         else
             context = &NodeTraversal::highestAncestorOrSelf(*context);

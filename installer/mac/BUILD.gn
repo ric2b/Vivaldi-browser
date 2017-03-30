@@ -1,0 +1,110 @@
+import("//vivaldi/gn/config/version.gni")
+import("//vivaldi/gn/command_action.gni")
+
+assert(is_mac)
+
+build_app_dmg_script_path = "//chrome/tools/build/mac/build_app_dmg"
+pkg_dmg_script_path = "//chrome/installer/mac/pkg-dmg"
+mac_signing_key = getenv("VIVALDI_SIGNING_KEY")
+mac_signing_id = getenv("VIVALDI_SIGNING_ID")
+
+dmg_name = "Vivaldi.$vivaldi_version_full.dmg"
+
+perform_signing = mac_signing_key != "" && mac_signing_id != ""
+if (mac_signing_id != "") {
+  # Dummy use to avoid unused variable errors
+}
+
+signing_deps = []
+if (perform_signing) {
+  signing_deps += [ ":sign_mac" ]
+  mac_product_name = "Vivaldi"
+  mac_packaging_dir = "$root_build_dir/$mac_product_name Packaging"
+
+  # <(PRODUCT_DIR) expands to $(BUILT_PRODUCTS_DIR), which doesn't
+  # work properly in a shell script, where ${BUILT_PRODUCTS_DIR} is
+  # needed.
+  #mac_packaging_sh_dir = "\${BUILT_PRODUCTS_DIR}/$mac_product_name Packaging"
+  mac_app_name = "$root_build_dir/$mac_product_name.app"
+  mac_signed_inner_framework = "$root_build_dir/$mac_product_name.app/Contents/Versions/$vivaldi_version_full/$mac_product_name Framework.framework/$mac_product_name Framework"
+}
+
+group("mac") {
+  deps = [ ":build_dmg" ] + signing_deps
+}
+
+command_bash("build_dmg") {
+  command = build_app_dmg_script_path
+  deps = []
+  if (!perform_signing) {
+    deps += [
+              "//chrome/installer/mac",
+              "//vivaldi:vivaldi",
+            ]
+  }
+  deps += signing_deps
+
+  inputs = [
+    command,
+    pkg_dmg_script_path,
+  ]
+
+  outputs = [
+    "$root_build_dir/$dmg_name",
+  ]
+
+  args = [
+    "vivaldi",
+    vivaldi_version_full,
+  ]
+}
+
+if (perform_signing) {
+  group("sign_mac") {
+    deps = [
+      ":sign_inner_bundle",
+      ":sign_package",
+    ]
+  }
+  command_bash("sign_inner_bundle") {
+    if (!perform_signing) {
+      deps = [
+        "//chrome/installer/mac",
+      ]
+    }
+    command = "$mac_packaging_dir/sign_versioned_dir.sh"
+    inputs = [
+      #command,
+    ]
+    outputs = [
+      "$root_gen_dir/signed_version.done",
+      mac_signed_inner_framework,
+    ]
+    args = [
+      rebase_path(mac_app_name, root_build_dir),
+      mac_signing_key,
+      mac_signing_id,
+    ]
+  }
+  command_bash("sign_package") {
+    deps = [
+      ":sign_inner_bundle",
+    ]
+    if (!perform_signing) {
+      deps += [ "//chrome/installer/mac" ]
+    }
+    command = "$mac_packaging_dir/sign_app.sh"
+    inputs = [
+      #command,
+      mac_signed_inner_framework,
+    ]
+    outputs = [
+      "$root_gen_dir/signed_package.done",
+    ]
+    args = [
+      rebase_path(mac_app_name, root_build_dir),
+      mac_signing_key,
+      mac_signing_id,
+    ]
+  }
+}

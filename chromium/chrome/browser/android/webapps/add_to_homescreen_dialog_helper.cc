@@ -4,8 +4,6 @@
 
 #include "chrome/browser/android/webapps/add_to_homescreen_dialog_helper.h"
 
-#include <jni.h>
-
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/guid.h"
@@ -16,13 +14,11 @@
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/manifest.h"
 #include "jni/AddToHomescreenDialogHelper_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
-#include "ui/gfx/color_analysis.h"
-#include "url/gurl.h"
 
-using content::Manifest;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 jlong Initialize(JNIEnv* env,
                  const JavaParamRef<jobject>& obj,
@@ -32,6 +28,12 @@ jlong Initialize(JNIEnv* env,
   AddToHomescreenDialogHelper* add_to_homescreen_helper =
       new AddToHomescreenDialogHelper(env, obj, web_contents);
   return reinterpret_cast<intptr_t>(add_to_homescreen_helper);
+}
+
+// static
+bool AddToHomescreenDialogHelper::RegisterAddToHomescreenDialogHelper(
+      JNIEnv* env) {
+  return RegisterNativesImpl(env);
 }
 
 AddToHomescreenDialogHelper::AddToHomescreenDialogHelper(
@@ -48,48 +50,9 @@ AddToHomescreenDialogHelper::AddToHomescreenDialogHelper(
   java_ref_.Reset(env, obj);
 }
 
-AddToHomescreenDialogHelper::~AddToHomescreenDialogHelper() {
-  data_fetcher_->set_weak_observer(nullptr);
-  data_fetcher_ = nullptr;
-}
-
-void AddToHomescreenDialogHelper::OnUserTitleAvailable(
-    const base::string16& user_title) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> j_user_title =
-      base::android::ConvertUTF16ToJavaString(env, user_title);
-  Java_AddToHomescreenDialogHelper_onUserTitleAvailable(env,
-                                                  java_ref_.obj(),
-                                                  j_user_title.obj());
-}
-
-void AddToHomescreenDialogHelper::OnDataAvailable(const ShortcutInfo& info,
-                                                  const SkBitmap& icon) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> java_bitmap;
-  if (icon.getSize())
-    java_bitmap = gfx::ConvertToJavaBitmap(&icon);
-
-  Java_AddToHomescreenDialogHelper_onIconAvailable(env,
-                                             java_ref_.obj(),
-                                             java_bitmap.obj());
-
-  if (add_shortcut_pending_)
-    AddShortcut(info, icon);
-}
-
 void AddToHomescreenDialogHelper::Destroy(JNIEnv* env,
                                           const JavaParamRef<jobject>& obj) {
   delete this;
-}
-
-SkBitmap AddToHomescreenDialogHelper::FinalizeLauncherIcon(
-      const SkBitmap& bitmap,
-      const GURL& url,
-      bool* is_generated) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-
-  return ShortcutHelper::FinalizeLauncherIcon(bitmap, url, is_generated);
 }
 
 void AddToHomescreenDialogHelper::AddShortcut(
@@ -110,6 +73,11 @@ void AddToHomescreenDialogHelper::AddShortcut(
   }
 }
 
+AddToHomescreenDialogHelper::~AddToHomescreenDialogHelper() {
+  data_fetcher_->set_weak_observer(nullptr);
+  data_fetcher_ = nullptr;
+}
+
 void AddToHomescreenDialogHelper::AddShortcut(const ShortcutInfo& info,
                                               const SkBitmap& icon) {
   DCHECK(add_shortcut_pending_);
@@ -117,19 +85,16 @@ void AddToHomescreenDialogHelper::AddShortcut(const ShortcutInfo& info,
     return;
   add_shortcut_pending_ = false;
 
+  content::WebContents* web_contents = data_fetcher_->web_contents();
+  if (!web_contents)
+    return;
+
   RecordAddToHomescreen();
 
   const std::string& uid = base::GenerateGUID();
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&ShortcutHelper::AddShortcutInBackgroundWithSkBitmap, info,
-                 uid, icon,
-                 data_fetcher_->FetchSplashScreenImageCallback(uid)));
-}
-
-bool AddToHomescreenDialogHelper::RegisterAddToHomescreenDialogHelper(
-      JNIEnv* env) {
-  return RegisterNativesImpl(env);
+  ShortcutHelper::AddToLauncherWithSkBitmap(
+      web_contents->GetBrowserContext(), info, uid, icon,
+      data_fetcher_->FetchSplashScreenImageCallback(uid));
 }
 
 void AddToHomescreenDialogHelper::RecordAddToHomescreen() {
@@ -144,4 +109,36 @@ void AddToHomescreenDialogHelper::RecordAddToHomescreen() {
       data_fetcher_->shortcut_info().url.spec(),
       AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
       base::Time::Now());
+}
+
+void AddToHomescreenDialogHelper::OnUserTitleAvailable(
+    const base::string16& user_title) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jstring> j_user_title =
+      base::android::ConvertUTF16ToJavaString(env, user_title);
+  Java_AddToHomescreenDialogHelper_onUserTitleAvailable(env, java_ref_,
+                                                        j_user_title);
+}
+
+void AddToHomescreenDialogHelper::OnDataAvailable(const ShortcutInfo& info,
+                                                  const SkBitmap& icon) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> java_bitmap;
+  if (icon.getSize())
+    java_bitmap = gfx::ConvertToJavaBitmap(&icon);
+
+  Java_AddToHomescreenDialogHelper_onIconAvailable(env, java_ref_, java_bitmap);
+
+  if (add_shortcut_pending_)
+    AddShortcut(info, icon);
+}
+
+SkBitmap AddToHomescreenDialogHelper::FinalizeLauncherIconInBackground(
+    const SkBitmap& bitmap,
+    const GURL& url,
+    bool* is_generated) {
+  DCHECK(content::BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
+
+  return ShortcutHelper::FinalizeLauncherIconInBackground(bitmap, url,
+                                                          is_generated);
 }

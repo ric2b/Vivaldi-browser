@@ -44,6 +44,7 @@
             '../components/components.gyp:policy',
             '../components/components.gyp:policy_component_common',
             '../crypto/crypto.gyp:crypto',
+            '../device/power_save_blocker/power_save_blocker.gyp:device_power_save_blocker',
             '../google_apis/google_apis.gyp:google_apis',
             '../ipc/ipc.gyp:ipc',
             '../ui/events/events.gyp:dom_keycode_converter',
@@ -473,8 +474,9 @@
               },
               'xcode_settings': {
                 'INFOPLIST_FILE': 'host/remoting_me2me_host-Info.plist',
-                'INFOPLIST_PREPROCESS': 'YES',
-                'INFOPLIST_PREPROCESSOR_DEFINITIONS': 'VERSION_FULL="<(version_full)" VERSION_SHORT="<(version_short)" BUNDLE_ID="<(host_bundle_id)"',
+                'VERSION_FULL': '<(version_full)',
+                'VERSION_SHORT': '<(version_short)',
+                'BUNDLE_ID': '<(host_bundle_id)',
               },
               'mac_bundle_resources': [
                 '<(PRODUCT_DIR)/icudtl.dat',
@@ -558,8 +560,9 @@
               },
               'xcode_settings': {
                 'INFOPLIST_FILE': 'host/setup/native_messaging_host-Info.plist',
-                'INFOPLIST_PREPROCESS': 'YES',
-                'INFOPLIST_PREPROCESSOR_DEFINITIONS': 'VERSION_FULL="<(version_full)" VERSION_SHORT="<(version_short)" BUNDLE_ID="<(host_bundle_id)"',
+                'VERSION_FULL': '<(version_full)',
+                'VERSION_SHORT': '<(version_short)',
+                'BUNDLE_ID': '<(host_bundle_id)',
               },
               'mac_bundle_resources': [
                 'host/setup/native_messaging_host-Info.plist',
@@ -671,8 +674,9 @@
                   },
                   'xcode_settings': {
                     'INFOPLIST_FILE': 'host/it2me/remote_assistance_host-Info.plist',
-                    'INFOPLIST_PREPROCESS': 'YES',
-                    'INFOPLIST_PREPROCESSOR_DEFINITIONS': 'VERSION_FULL="<(version_full)" VERSION_SHORT="<(version_short)" BUNDLE_ID="<(host_bundle_id)"',
+                    'VERSION_FULL': '<(version_full)',
+                    'VERSION_SHORT': '<(version_short)',
+                    'BUNDLE_ID': '<(host_bundle_id)',
                   },
                   'mac_bundle_resources': [
                     '<(PRODUCT_DIR)/icudtl.dat',

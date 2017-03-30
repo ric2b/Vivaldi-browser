@@ -1,0 +1,24 @@
+source_set("notes") {
+  sources = [
+    "notes_attachment.cpp",
+    "notes_attachment.h",
+    "notes_factory.cpp",
+    "notes_factory.h",
+    "notes_model.cpp",
+    "notes_model.h",
+    "notes_model_loaded_observer.cpp",
+    "notes_model_loaded_observer.h",
+    "notes_model_observer.h",
+    "notes_storage.cpp",
+    "notes_storage.h",
+    "notes_submenu_observer.cc",
+    "notes_submenu_observer.h",
+    "notesnode.cpp",
+    "notesnode.h",
+  ]
+  deps = [
+    "//skia",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+}

@@ -38,7 +38,8 @@
 #endif
 
 #if defined(OS_WIN)
-#include "chrome/utility/shell_handler_win.h"
+#include "chrome/utility/ipc_shell_handler_win.h"
+#include "chrome/utility/shell_handler_impl_win.h"
 #endif
 
 #if defined(ENABLE_EXTENSIONS)
@@ -101,7 +102,7 @@ void CreateResourceUsageReporter(
     mojo::InterfaceRequest<mojom::ResourceUsageReporter> request) {
   new ResourceUsageReporterImpl(std::move(request));
 }
-#endif  // OS_ANDROID
+#endif  // !defined(OS_ANDROID)
 
 void CreateImageDecoder(mojo::InterfaceRequest<mojom::ImageDecoder> request) {
   content::UtilityThread::Get()->EnsureBlinkInitialized();
@@ -127,7 +128,7 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 #endif
 
 #if defined(OS_WIN)
-  handlers_.push_back(new ShellHandler());
+  handlers_.push_back(new IPCShellHandler());
 #endif
 }
 
@@ -151,8 +152,10 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
 
 bool ChromeContentUtilityClient::OnMessageReceived(
     const IPC::Message& message) {
-  if (filter_messages_ && !ContainsKey(message_id_whitelist_, message.type()))
+  if (filter_messages_ &&
+      !base::ContainsKey(message_id_whitelist_, message.type())) {
     return false;
+  }
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ChromeContentUtilityClient, message)
@@ -177,7 +180,7 @@ bool ChromeContentUtilityClient::OnMessageReceived(
   if (handled)
     return true;
 
-  for (const auto& handler : handlers_) {
+  for (auto* handler : handlers_) {
     // At least one of the utility process handlers adds a new handler to
     // |handlers_| when it handles a message. This causes any iterator over
     // |handlers_| to become invalid. Therefore, it is necessary to break the
@@ -209,6 +212,9 @@ void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
   registry->AddInterface(base::Bind(&CreateImageDecoder));
   registry->AddInterface(
       base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
+#if defined(OS_WIN)
+  registry->AddInterface(base::Bind(&ShellHandlerImpl::Create));
+#endif
 }
 
 void ChromeContentUtilityClient::AddHandler(
@@ -262,9 +268,9 @@ void ChromeContentUtilityClient::OnPatchFileBsdiff(
   if (input_file.empty() || patch_file.empty() || output_file.empty()) {
     Send(new ChromeUtilityHostMsg_PatchFile_Finished(-1));
   } else {
-    const int patch_status = courgette::ApplyBinaryPatch(input_file,
-                                                         patch_file,
-                                                         output_file);
+    const int patch_status = bsdiff::ApplyBinaryPatch(input_file,
+                                                      patch_file,
+                                                      output_file);
     Send(new ChromeUtilityHostMsg_PatchFile_Finished(patch_status));
   }
   ReleaseProcessIfNeeded();

@@ -4,17 +4,8 @@
 
 // This features file defines permissions for extension APIs implemented
 // under src/chrome.
-// See extensions/common/features/* to understand this file, in particular
-// feature.h, simple_feature.h, and base_feature_provider.h.
-
-// To add a new whitelisted ID, SHA-1 it and force it to uppercase. In Bash:
-//
-// $ echo -n "aaaabbbbccccddddeeeeffffgggghhhh" | \
-// sha1sum | tr '[:lower:]' '[:upper:]'
-// 9A0417016F345C934A1A88F55CA17C05014EEEBA  -
-//
-// Google employees: please update http://go/chrome-api-whitelist to map
-// hashes back to ids.
+// See chrome/common/extensions/api/_features.md to understand this file, as
+// well as feature.h, simple_feature.h, and base_feature_provider.h.
 
 // If you add a new platform_app permission please update the "stubs_app" test:
 // chrome/test/data/extensions/api_test/stubs_app/manifest.json
@@ -48,23 +39,6 @@
       "5107DE9024C329EEA9C9A72D94C16723790C6422"   // Apps Developer Tool Dev.
     ]
   },
-  "audioModem": [
-    {
-      "channel": "dev",
-      "extension_types": ["extension", "platform_app"]
-    },
-    {
-      "channel": "stable",
-      "extension_types": ["extension", "platform_app"],
-      "whitelist": [
-        "05EBA3051DFCA6AF17070AEE5FE8C66322FF4738",  // http://crbug.com/431978
-        "11B478CEC461C766A2DC1E5BEEB7970AE06DC9C2",  // http://crbug.com/458218
-        "0EFB879311E9EFBB7C45251F89EC655711B1F6ED",  // http://crbug.com/458218
-        "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/458218
-        "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89"   // http://crbug.com/458218
-      ]
-    }
-  ],
   "autofillPrivate": {
     "channel": "trunk",
     "extension_types": ["extension", "platform_app"],
@@ -170,7 +144,11 @@
       "B620CF4203315F9F2E046EDED22C7571A935958D",  // http://crbug.com/510270
       "B206D8716769728278D2D300349C6CB7D7DE2EF9",  // http://crbug.com/510270
       "A3E3DE9E9F16B41D4A2FAD106BD6CA76B94A0C94",  // http://crbug.com/590259
-      "C2ABD68C33A5B485971C9638B80D6A2E9CBA78C4"   // http://crbug.com/590259
+      "C2ABD68C33A5B485971C9638B80D6A2E9CBA78C4",  // http://crbug.com/590259
+      "8EBDF73405D0B84CEABB8C7513C9B9FA9F1DC2CE",  // http://crbug.com/644446
+      "72445193EB86716465275D4E2E84DACF47558FCF",  // http://crbug.com/644446
+      "51E46A03961884A4BA74CE7CA30A75CC6F360D74",  // http://crbug.com/644446
+      "6844C0E4DF3034BD3ED04E7BD957C7DE0EA83443"   // Browser Test id.
     ]
   },
   "clipboardRead": {
@@ -234,42 +212,6 @@
         "mpognobbkildjkofajifpdfhcoklimli"   // Vivaldi
       ]
   }],
-  "copresence": [
-    {
-      "channel": "dev",
-      "extension_types": ["extension", "platform_app"]
-    },
-    {
-      "channel": "stable",
-      "extension_types": ["extension", "platform_app"],
-      "whitelist": [
-        "AFA728615D3A82D4017BDECEE86978543194D198",  // http://crbug.com/387999
-        "0C0426C12F94156F330FFAF346A976BA8878DE78",  // http://crbug.com/387999
-        "1C93BD3CF875F4A73C0B2A163BB8FBDA8B8B3D80",  // http://crbug.com/389230
-        "A3BC37E2148AC4E99BE4B16AF9D42DD1E592BBBE",  // http://crbug.com/389230
-        "E703483CEF33DEC18B4B6DD84B5C776FB9182BDB",  // http://crbug.com/389230
-        "307E96539209F95A1A8740C713E6998A73657D96",  // http://crbug.com/389230
-        "4F25792AF1AA7483936DE29C07806F203C7170A0",  // http://crbug.com/407693
-        "BD8781D757D830FC2E85470A1B6E8A718B7EE0D9",  // http://crbug.com/407693
-        "4AC2B6C63C6480D150DFDA13E4A5956EB1D0DDBB",  // http://crbug.com/407693
-        "81986D4F846CEDDDB962643FA501D1780DD441BB",  // http://crbug.com/407693
-        "FF78670081967CE21DB86A04AD94A0498F01E20A",  // http://crbug.com/409192
-        "05EBA3051DFCA6AF17070AEE5FE8C66322FF4738",  // http://crbug.com/431978
-        "11B478CEC461C766A2DC1E5BEEB7970AE06DC9C2",  // http://crbug.com/458218
-        "0EFB879311E9EFBB7C45251F89EC655711B1F6ED",  // http://crbug.com/458218
-        "9193D3A51E2FE33B496CDA53EA330423166E7F02",  // http://crbug.com/458218
-        "F9119B8B18C7C82B51E7BC6FF816B694F2EC3E89"   // http://crbug.com/458218
-      ]
-    }
-  ],
-  "copresencePrivate": {
-    "channel": "stable",
-    "extension_types": ["extension"],
-    "location": "component",
-    "whitelist": [
-      "AFA728615D3A82D4017BDECEE86978543194D198"  // Whispernet Proxy
-    ]
-  },
   "cryptotokenPrivate": {
     "channel": "stable",
     "extension_types": ["extension"],
@@ -329,7 +271,8 @@
   },
   "downloads": [{
       "channel": "stable",
-      "extension_types": ["extension"]
+      "extension_types": ["extension"],
+      "default_parent": true
     },{
       "channel": "stable",
       "extension_types": ["platform_app"],
@@ -455,7 +398,8 @@
   },
   "fileSystem": [{
     "channel": "stable",
-    "extension_types": ["platform_app"]
+    "extension_types": ["platform_app"],
+    "default_parent": true
   },{
     "channel": "stable",
     "extension_types": ["extension"],
@@ -468,14 +412,14 @@
       "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9"   // http://crbug.com/371562
     ]
   }],
-  "fileSystem.directory": [{
+  "fileSystem.directory": {
     "channel": "stable",
     "extension_types": ["platform_app"]
-  }],
-  "fileSystem.retainEntries": [{
+  },
+  "fileSystem.retainEntries": {
     "channel": "stable",
     "extension_types": ["platform_app"]
-  }],
+  },
   "fileSystem.write": [{
     "channel": "stable",
     "extension_types": ["platform_app"]
@@ -577,8 +521,6 @@
   "input": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app"],
-    // TODO(kalman): Um what does this inply?
-    "inplies_full_url_access": true,
     "platforms": ["chromeos", "win", "linux"]
   },
   "inputMethodPrivate": [{
@@ -603,7 +545,7 @@
   "launcherSearchProvider": {
     "channel": "stable",
     "extension_types": ["extension", "platform_app"],
-    "platform": ["chromeos"],
+    "platforms": ["chromeos"],
     "whitelist": [
       "A948368FC53BE437A55FEB414106E207925482F5"  // File Manager
     ]

@@ -1,0 +1,22 @@
+static_library("ui") {
+  sources = [
+    "dragging/drag_tab_handler.cc",
+    "dragging/drag_tab_handler.h",
+    "views/vivaldi_pin_shortcut.cpp",
+    "views/vivaldi_pin_shortcut.h",
+    "webgui/notes_ui.cpp",
+    "webgui/notes_ui.h",
+    "webgui/vivaldi_web_ui_controller_factory.cpp",
+    "webgui/vivaldi_web_ui_controller_factory.h",
+  ]
+  if (is_mac) {
+    sources += [
+      "dragging/drag_tab_handler_helper_mac.h",
+      "dragging/drag_tab_handler_helper_mac.mm",
+    ]
+  }
+  deps = [
+    "//components/translate/content/browser",
+    "//skia",
+  ]
+}

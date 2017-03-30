@@ -54,6 +54,13 @@ enum DynamicRestyleFlags {
     AffectedByLastChildRules = 1 << 11,
 
     NumberOfDynamicRestyleFlags = 12,
+
+    ChildrenAffectedByStructuralRules = ChildrenAffectedByFirstChildRules
+        | ChildrenAffectedByLastChildRules
+        | ChildrenAffectedByDirectAdjacentRules
+        | ChildrenAffectedByIndirectAdjacentRules
+        | ChildrenAffectedByForwardPositionalRules
+        | ChildrenAffectedByBackwardPositionalRules
 };
 
 enum SubtreeModificationAction {
@@ -83,7 +90,7 @@ public:
 
     unsigned countChildren() const;
 
-    Element* querySelector(const AtomicString& selectors, ExceptionState&);
+    Element* querySelector(const AtomicString& selectors, ExceptionState& = ASSERT_NO_EXCEPTION);
     StaticElementList* querySelectorAll(const AtomicString& selectors, ExceptionState&);
 
     Node* insertBefore(Node* newChild, Node* refChild, ExceptionState& = ASSERT_NO_EXCEPTION);
@@ -109,12 +116,13 @@ public:
 
     void cloneChildNodes(ContainerNode* clone);
 
-    void attach(const AttachContext& = AttachContext()) override;
-    void detach(const AttachContext& = AttachContext()) override;
+    void attachLayoutTree(const AttachContext& = AttachContext()) override;
+    void detachLayoutTree(const AttachContext& = AttachContext()) override;
     LayoutRect boundingBox() const final;
     void setFocus(bool) override;
     void focusStateChanged();
     void setActive(bool = true) override;
+    void setDragged(bool) override;
     void setHovered(bool = true) override;
 
     bool childrenOrSiblingsAffectedByFocus() const { return hasRestyleFlag(ChildrenOrSiblingsAffectedByFocus); }
@@ -158,8 +166,8 @@ public:
     // FIXME: These methods should all be renamed to something better than "check",
     // since it's not clear that they alter the style bits of siblings and children.
     enum SiblingCheckType { FinishedParsingChildren, SiblingElementInserted, SiblingElementRemoved };
-    void checkForSiblingStyleChanges(SiblingCheckType, Node* changedNode, Node* nodeBeforeChange, Node* nodeAfterChange);
-    void recalcChildStyle(StyleRecalcChange);
+    void checkForSiblingStyleChanges(SiblingCheckType, Element* changedElement, Node* nodeBeforeChange, Node* nodeAfterChange);
+    void recalcDescendantStyles(StyleRecalcChange);
 
     bool childrenSupportStyleSharing() const { return !hasRestyleFlags(); }
 

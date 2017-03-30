@@ -1,0 +1,36 @@
+import("//vivaldi/vivaldi_init_settings.gni")
+
+assert(is_vivaldi)
+
+import("//vivaldi/gn/config/stored_version.gni")
+import("//build/config/compiler/compiler.gni")
+import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/compile_updates.gni")
+import("//vivaldi/gn/product_updates.gni")
+
+import("//vivaldi/gn/source_updates.gni")
+
+declare_args() {
+  enable_ipc_fuzzer = true
+}
+
+post_process_template(
+    "//chrome/installer/mini_installer:mini_installer") {
+  sign_executables = true
+}
+post_process_target(
+    "//chrome/installer/mini_installer:mini_installer_archive") {
+  deps = []
+  inputs = []
+}
+
+group("signings") {
+  deps = []
+  if (is_win) {
+    deps += [ "//chrome/installer/mini_installer" ]
+  }
+  if (is_mac) {
+    deps += [ "//vivaldi/installer/mac" ]
+  }
+}

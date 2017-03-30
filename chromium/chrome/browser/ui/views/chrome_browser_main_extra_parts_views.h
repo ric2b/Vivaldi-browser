@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
 
-namespace mus {
+namespace ui {
 class InputDeviceClient;
 }
 
@@ -33,19 +33,18 @@ class ChromeBrowserMainExtraPartsViews : public ChromeBrowserMainExtraParts {
   // Overridden from ChromeBrowserMainExtraParts:
   void ToolkitInitialized() override;
   void PreCreateThreads() override;
-  void PreProfileInit() override;
+  void MojoShellConnectionStarted(
+      content::MojoShellConnection* connection) override;
 
  private:
   std::unique_ptr<views::ViewsDelegate> views_delegate_;
 
 #if defined(USE_AURA)
   std::unique_ptr<wm::WMState> wm_state_;
-#endif
-#if defined(USE_AURA) && defined(MOJO_SHELL_CLIENT)
   std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   // Subscribes to updates about input-devices.
-  std::unique_ptr<mus::InputDeviceClient> input_device_client_;
+  std::unique_ptr<ui::InputDeviceClient> input_device_client_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsViews);

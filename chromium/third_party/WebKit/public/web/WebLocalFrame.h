@@ -5,8 +5,11 @@
 #ifndef WebLocalFrame_h
 #define WebLocalFrame_h
 
+#include "WebCompositionUnderline.h"
 #include "WebFrame.h"
 #include "WebFrameLoadType.h"
+#include "WebHistoryItem.h"
+#include "public/platform/WebCachePolicy.h"
 
 namespace blink {
 
@@ -14,15 +17,18 @@ class WebAutofillClient;
 class WebContentSettingsClient;
 class WebDevToolsAgent;
 class WebDevToolsAgentClient;
+class WebDoubleSize;
 class WebFrameClient;
-class WebNode;
+class WebFrameWidget;
+class WebRange;
 class WebScriptExecutionCallback;
 class WebSuspendableTask;
-class WebWidget;
 enum class WebAppBannerPromptReply;
 enum class WebCachePolicy;
 enum class WebSandboxFlags;
 enum class WebTreeScopeType;
+struct WebFindOptions;
+struct WebFloatRect;
 struct WebPrintPresetOptions;
 
 // Interface for interacting with in process frames. This contains methods that
@@ -66,11 +72,6 @@ public:
 
     // Get the highest-level LocalFrame in this frame's in-process subtree.
     virtual WebLocalFrame* localRoot() = 0;
-
-    // Returns the previous/next local frame in "frame traversal order",
-    // optionally wrapping around.
-    virtual WebLocalFrame* traversePreviousLocal(bool wrap) const = 0;
-    virtual WebLocalFrame* traverseNextLocal(bool wrap) const = 0;
 
     // Navigation Ping --------------------------------------------------------
 
@@ -150,6 +151,30 @@ public:
     virtual bool getPrintPresetOptionsForPlugin(const WebNode&, WebPrintPresetOptions*) = 0;
 
 
+    // CSS3 Paged Media ----------------------------------------------------
+
+    // Returns true if page box (margin boxes and page borders) is visible.
+    virtual bool isPageBoxVisible(int pageIndex) = 0;
+
+    // Returns true if the page style has custom size information.
+    virtual bool hasCustomPageSizeStyle(int pageIndex) = 0;
+
+    // Returns the preferred page size and margins in pixels, assuming 96
+    // pixels per inch. pageSize, marginTop, marginRight, marginBottom,
+    // marginLeft must be initialized to the default values that are used if
+    // auto is specified.
+    virtual void pageSizeAndMarginsInPixels(int pageIndex,
+        WebDoubleSize& pageSize,
+        int& marginTop,
+        int& marginRight,
+        int& marginBottom,
+        int& marginLeft) = 0;
+
+    // Returns the value for a page property that is only defined when printing.
+    // printBegin must have been called before this method.
+    virtual WebString pageProperty(const WebString& propertyName, int pageIndex) = 0;
+
+
     // Scripting --------------------------------------------------------------
     // Executes script in the context of the current page and returns the value
     // that the script evaluated to with callback. Script execution can be
@@ -172,8 +197,64 @@ public:
     // extension debugging.
     virtual void setIsolatedWorldHumanReadableName(int worldID, const WebString&) = 0;
 
+    // Editing -------------------------------------------------------------
 
-    // Selection --------------------------------------------------------------
+    virtual void insertText(const WebString& text) = 0;
+
+    virtual void setMarkedText(const WebString& text, unsigned location, unsigned length) = 0;
+    virtual void unmarkText() = 0;
+    virtual bool hasMarkedText() const = 0;
+
+    virtual WebRange markedRange() const = 0;
+
+    // Returns the text range rectangle in the viepwort coordinate space.
+    virtual bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const = 0;
+
+    // Returns the index of a character in the Frame's text stream at the given
+    // point. The point is in the viewport coordinate space. Will return
+    // WTF::notFound if the point is invalid.
+    virtual size_t characterIndexForPoint(const WebPoint&) const = 0;
+
+    // Supports commands like Undo, Redo, Cut, Copy, Paste, SelectAll,
+    // Unselect, etc. See EditorCommand.cpp for the full list of supported
+    // commands.
+    virtual bool executeCommand(const WebString&) = 0;
+    virtual bool executeCommand(const WebString&, const WebString& value) = 0;
+    virtual bool isCommandEnabled(const WebString&) const = 0;
+
+    // Selection -----------------------------------------------------------
+
+    virtual bool hasSelection() const = 0;
+
+    virtual WebRange selectionRange() const = 0;
+
+    virtual WebString selectionAsText() const = 0;
+    virtual WebString selectionAsMarkup() const = 0;
+
+    // Expands the selection to a word around the caret and returns
+    // true. Does nothing and returns false if there is no caret or
+    // there is ranged selection.
+    virtual bool selectWordAroundCaret() = 0;
+
+    // DEPRECATED: Use moveRangeSelection.
+    virtual void selectRange(const WebPoint& base, const WebPoint& extent) = 0;
+
+    virtual void selectRange(const WebRange&) = 0;
+    virtual WebString rangeAsText(const WebRange&) = 0;
+
+    // Move the current selection to the provided viewport point/points. If the
+    // current selection is editable, the new selection will be restricted to
+    // the root editable element.
+    // |TextGranularity| represents character wrapping granularity. If
+    // WordGranularity is set, WebFrame extends selection to wrap word.
+    virtual void moveRangeSelection(const WebPoint& base, const WebPoint& extent, WebFrame::TextGranularity = CharacterGranularity) = 0;
+    virtual void moveCaretSelection(const WebPoint&) = 0;
+
+    virtual bool setEditableSelectionOffsets(int start, int end) = 0;
+    virtual bool setCompositionFromExistingText(int compositionStart, int compositionEnd, const WebVector<WebCompositionUnderline>& underlines) = 0;
+    virtual void extendSelectionAndDelete(int before, int after) = 0;
+
+    virtual void setCaretVisible(bool) = 0;
 
     // Moves the selection extent point. This function does not allow the
     // selection to collapse. If the new extent is set to the same position as
@@ -184,6 +265,10 @@ public:
 
     // Spell-checking support -------------------------------------------------
     virtual void replaceMisspelledRange(const WebString&) = 0;
+    virtual void enableSpellChecking(bool) = 0;
+    virtual bool isSpellCheckingEnabled() const = 0;
+    virtual void requestTextChecking(const WebElement&) = 0;
+    virtual void removeSpellingMarkers() = 0;
 
     // Content Settings -------------------------------------------------------
 
@@ -235,6 +320,12 @@ public:
         StopFindActionActivateSelection
     };
 
+    // Begins a find request, which includes finding the next find match (using
+    // find()) and scoping the frame for find matches if needed.
+    virtual void requestFind(int identifier,
+        const WebString& searchText,
+        const WebFindOptions&) = 0;
+
     // Searches a frame for a given string.
     //
     // If a match is found, this function will select it (scrolling down to
@@ -249,67 +340,39 @@ public:
         const WebString& searchText,
         const WebFindOptions&,
         bool wrapWithinFrame,
-        WebRect* selectionRect,
         bool* activeNow = nullptr) = 0;
 
-    // Notifies the frame that we are no longer interested in searching.
-    // This will abort any asynchronous scoping effort already under way
-    // (see the function scopeStringMatches for details) and erase all
+    // Notifies the frame that we are no longer interested in searching.  This
+    // will abort any asynchronous scoping effort already under way (see the
+    // function TextFinder::scopeStringMatches for details) and erase all
     // tick-marks and highlighting from the previous search.  It will also
     // follow the specified StopFindAction.
     virtual void stopFinding(StopFindAction) = 0;
 
-    // Counts how many times a particular string occurs within the frame.
-    // It also retrieves the location of the string and updates a vector in
-    // the frame so that tick-marks and highlighting can be drawn.  This
-    // function does its work asynchronously, by running for a certain
-    // time-slice and then scheduling itself (co-operative multitasking) to
-    // be invoked later (repeating the process until all matches have been
-    // found).  This allows multiple frames to be searched at the same time
-    // and provides a way to cancel at any time (see
-    // cancelPendingScopingEffort).  The parameter searchText specifies
-    // what to look for and |reset| signals whether this is a brand new
-    // request or a continuation of the last scoping effort.
-    virtual void scopeStringMatches(int identifier,
-        const WebString& searchText,
-        const WebFindOptions&,
-        bool reset) = 0;
-
-    // Cancels any outstanding requests for scoping string matches on a frame.
-    virtual void cancelPendingScopingEffort() = 0;
-
-    // This function is called on the main frame during the scoping effort
-    // to keep a running tally of the accumulated total match-count for all
-    // frames.  After updating the count it will notify the WebViewClient
-    // about the new count.
+    // This function is called during the scoping effort to keep a running tally
+    // of the accumulated total match-count in the frame.  After updating the
+    // count it will notify the WebViewClient about the new count.
     virtual void increaseMatchCount(int count, int identifier) = 0;
 
-    // This function is called on the main frame to reset the total number
-    // of matches found during the scoping effort.
-    virtual void resetMatchCount() = 0;
-
     // Returns a counter that is incremented when the find-in-page markers are
-    // changed on any frame. Switching the active marker doesn't change the
-    // current version. Should be called only on the main frame.
+    // changed on the frame. Switching the active marker doesn't change the
+    // current version.
     virtual int findMatchMarkersVersion() const = 0;
 
     // Returns the bounding box of the active find-in-page match marker or an
     // empty rect if no such marker exists. The rect is returned in find-in-page
-    // coordinates whatever frame the active marker is.
-    // Should be called only on the main frame.
+    // coordinates.
     virtual WebFloatRect activeFindMatchRect() = 0;
 
     // Swaps the contents of the provided vector with the bounding boxes of the
-    // find-in-page match markers from all frames. The bounding boxes are
-    // returned in find-in-page coordinates. This method should be called only
-    // on the main frame.
+    // find-in-page match markers from the frame. The bounding boxes are
+    // returned in find-in-page coordinates.
     virtual void findMatchRects(WebVector<WebFloatRect>&) = 0;
 
     // Selects the find-in-page match closest to the provided point in
     // find-in-page coordinates. Returns the ordinal of such match or -1 if none
     // could be found. If not null, selectionRect is set to the bounding box of
-    // the selected match in window coordinates.  This method should be called
-    // only on the main frame.
+    // the selected match in window coordinates.
     virtual int selectNearestFindMatch(const WebFloatPoint&,
         WebRect* selectionRect)
         = 0;
@@ -333,7 +396,7 @@ public:
 
     // Returns the WebFrameWidget associated with this frame if there is one or
     // nullptr otherwise.
-    virtual WebWidget* frameWidget() const = 0;
+    virtual WebFrameWidget* frameWidget() const = 0;
 
     // Copy to the clipboard the image located at a particular point in visual
     // viewport coordinates.
@@ -342,6 +405,10 @@ public:
     // Save as the image located at a particular point in visual viewport
     // coordinates.
     virtual void saveImageAt(const WebPoint&) = 0;
+
+    // TEMP: Usage count for chrome.loadtimes deprecation.
+    // This will be removed following the deprecation.
+    virtual void usageCountChromeLoadTimes(const WebString& metric) = 0;
 
 protected:
     explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) { }

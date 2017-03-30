@@ -56,6 +56,10 @@ public:
 
     String contentEditable() const;
     void setContentEditable(const String&, ExceptionState&);
+    // For HTMLElement.prototype.isContentEditable. This matches to neither
+    // blink::isContentEditable() nor blink::isContentRichlyEditable().  Do not
+    // use this function in Blink.
+    bool isContentEditableForBinding() const;
 
     virtual bool draggable() const;
     void setDraggable(bool);
@@ -158,7 +162,7 @@ template <> inline bool isElementOfType<const HTMLElement>(const HTMLElement&) {
 inline HTMLElement::HTMLElement(const QualifiedName& tagName, Document& document, ConstructionType type = CreateHTMLElement)
     : Element(tagName, &document, type)
 {
-    ASSERT(!tagName.localName().isNull());
+    DCHECK(!tagName.localName().isNull());
 }
 
 inline bool Node::hasTagName(const HTMLQualifiedName& name) const
@@ -185,8 +189,6 @@ private:
     inline bool is##thisType(const Node& node) { return node.isHTMLElement() ? is##thisType(toHTMLElement(node)) : false; } \
     inline bool is##thisType(const Node* node) { return node && is##thisType(*node); } \
     inline bool is##thisType(const Element* element) { return element && is##thisType(*element); } \
-    template<typename T> inline bool is##thisType(const PassRefPtr<T>& node) { return is##thisType(node.get()); } \
-    template<typename T> inline bool is##thisType(const RefPtr<T>& node) { return is##thisType(node.get()); } \
     template <> inline bool isElementOfType<const thisType>(const HTMLElement& element) { return is##thisType(element); } \
     DEFINE_ELEMENT_TYPE_CASTS_WITH_FUNCTION(thisType)
 

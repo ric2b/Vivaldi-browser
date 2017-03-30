@@ -7,6 +7,7 @@
 #include "base/android/context_utils.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/path_service.h"
@@ -36,6 +37,7 @@
 #include "url/gurl.h"
 
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace content {
@@ -102,13 +104,13 @@ static void PostMediaMetadataCallbackTask(
     const media::MediaResourceGetter::ExtractMediaMetadataCB& callback,
     JNIEnv* env, ScopedJavaLocalRef<jobject>& j_metadata) {
   BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(callback, base::TimeDelta::FromMilliseconds(
-                       Java_MediaMetadata_getDurationInMilliseconds(
-                           env, j_metadata.obj())),
-                   Java_MediaMetadata_getWidth(env, j_metadata.obj()),
-                   Java_MediaMetadata_getHeight(env, j_metadata.obj()),
-                   Java_MediaMetadata_isSuccess(env, j_metadata.obj())));
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(callback, base::TimeDelta::FromMilliseconds(
+                               Java_MediaMetadata_getDurationInMilliseconds(
+                                   env, j_metadata)),
+                 Java_MediaMetadata_getWidth(env, j_metadata),
+                 Java_MediaMetadata_getHeight(env, j_metadata),
+                 Java_MediaMetadata_isSuccess(env, j_metadata)));
 }
 
 // Gets the metadata from a media URL. When finished, a task is posted to the UI
@@ -121,15 +123,12 @@ static void GetMediaMetadata(
 
   ScopedJavaLocalRef<jstring> j_url_string = ConvertUTF8ToJavaString(env, url);
   ScopedJavaLocalRef<jstring> j_cookies = ConvertUTF8ToJavaString(env, cookies);
-  jobject j_context = base::android::GetApplicationContext();
+  const JavaRef<jobject>& j_context = base::android::GetApplicationContext();
   ScopedJavaLocalRef<jstring> j_user_agent = ConvertUTF8ToJavaString(
       env, user_agent);
   ScopedJavaLocalRef<jobject> j_metadata =
-      Java_MediaResourceGetter_extractMediaMetadata(env,
-                                                    j_context,
-                                                    j_url_string.obj(),
-                                                    j_cookies.obj(),
-                                                    j_user_agent.obj());
+      Java_MediaResourceGetter_extractMediaMetadata(
+          env, j_context, j_url_string, j_cookies, j_user_agent);
 
   PostMediaMetadataCallbackTask(callback, env, j_metadata);
 }
@@ -379,11 +378,6 @@ void MediaResourceGetterImpl::ExtractMediaMetadata(
   pool->PostWorkerTask(
       FROM_HERE,
       base::Bind(&GetMediaMetadataFromFd, fd, offset, size, callback));
-}
-
-// static
-bool MediaResourceGetterImpl::RegisterMediaResourceGetter(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace content

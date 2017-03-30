@@ -263,9 +263,18 @@ cr.define('site_list', function() {
         browserProxy = new TestSiteSettingsPrefsBrowserProxy();
         settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
         PolymerTest.clearBody();
-        testElement = document.createElement('settings-site-list');
+        testElement = document.createElement('site-list');
         document.body.appendChild(testElement);
       });
+
+      /**
+       * Fetch the non-hidden menu items from the list.
+       * @param {!HTMLElement} parentElement
+       */
+      function getMenuItems(listContainer) {
+        return listContainer.children[0].querySelectorAll(
+            'paper-menu-button paper-item:not([hidden])');
+      }
 
       /**
        * Asserts the menu looks as expected.
@@ -274,9 +283,7 @@ cr.define('site_list', function() {
        *     in.
        */
       function assertMenu(items, parentElement) {
-        var listItem = parentElement.$.listContainer.children[0];
-        var menuItems = listItem.querySelectorAll(
-            'paper-menu-button paper-item:not([hidden])');
+        var menuItems = getMenuItems(parentElement.$.listContainer);
         assertEquals(items.length, menuItems.length);
         for (var i = 0; i < items.length; i++)
           assertEquals(items[i], menuItems[i].textContent.trim());
@@ -333,12 +340,11 @@ cr.define('site_list', function() {
               assertFalse(testElement.$.category.hidden);
               browserProxy.resetResolver('getExceptionList');
               testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList').then(
-                  function(contentType) {
-                    assertFalse(testElement.$.category.hidden);
-                    assertEquals('Exceptions - 0',
-                        testElement.$.header.innerText.trim());
-                  });
+              return browserProxy.whenCalled('getExceptionList');
+            }).then(function(contentType) {
+              assertFalse(testElement.$.category.hidden);
+              assertEquals('Exceptions - 0',
+                  testElement.$.header.innerText.trim());
             });
       });
 
@@ -356,7 +362,7 @@ cr.define('site_list', function() {
               assertEquals(
                   settings.PermissionValues.ALLOW, testElement.categorySubtype);
               Polymer.dom.flush();  // Populates action menu.
-              assertMenu(['Block', 'Reset to ask'], testElement);
+              assertMenu(['Block', 'Remove'], testElement);
               assertEquals('Allow - 2', testElement.$.header.innerText.trim());
 
               // Site list should show, no matter what category default is set
@@ -364,12 +370,11 @@ cr.define('site_list', function() {
               assertFalse(testElement.$.category.hidden);
               browserProxy.resetResolver('getExceptionList');
               testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList').then(
-                  function(contentType) {
-                    assertFalse(testElement.$.category.hidden);
-                    assertEquals('Exceptions - 2',
-                        testElement.$.header.innerText.trim());
-                  });
+              return browserProxy.whenCalled('getExceptionList');
+            }).then(function(contentType) {
+              assertFalse(testElement.$.category.hidden);
+              assertEquals('Exceptions - 2',
+                  testElement.$.header.innerText.trim());
             });
       });
 
@@ -388,17 +393,16 @@ cr.define('site_list', function() {
               assertEquals(
                   settings.PermissionValues.BLOCK, testElement.categorySubtype);
               Polymer.dom.flush();  // Populates action menu.
-              assertMenu(['Allow', 'Reset to ask'], testElement);
+              assertMenu(['Allow', 'Remove'], testElement);
               assertEquals('Block - 2', testElement.$.header.innerText.trim());
 
               // Site list should only show when category default is enabled.
               assertFalse(testElement.$.category.hidden);
               browserProxy.resetResolver('getExceptionList');
               testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList').then(
-                  function(contentType) {
-                    assertTrue(testElement.$.category.hidden);
-                  });
+              return browserProxy.whenCalled('getExceptionList');
+            }).then(function(contentType) {
+              assertTrue(testElement.$.category.hidden);
             });
       });
 
@@ -417,7 +421,7 @@ cr.define('site_list', function() {
               assertEquals(settings.PermissionValues.SESSION_ONLY,
                   testElement.categorySubtype);
               Polymer.dom.flush();  // Populates action menu.
-              assertMenu(['Allow', 'Block', 'Reset to ask'], testElement);
+              assertMenu(['Allow', 'Block', 'Remove'], testElement);
               assertEquals('Clear on exit - 1',
                   testElement.$.header.innerText.trim());
 
@@ -426,12 +430,10 @@ cr.define('site_list', function() {
               assertFalse(testElement.$.category.hidden);
               browserProxy.resetResolver('getExceptionList');
               testElement.categoryEnabled = false;
-              return browserProxy.whenCalled('getExceptionList').then(
-                  function(contentType) {
-                    assertFalse(testElement.$.category.hidden);
-                    assertEquals('Clear on exit - 1',
-                        testElement.$.header.innerText);
-                  });
+              return browserProxy.whenCalled('getExceptionList');
+            }).then(function(contentType) {
+              assertFalse(testElement.$.category.hidden);
+              assertEquals('Clear on exit - 1', testElement.$.header.innerText);
             });
       });
 
@@ -645,6 +647,20 @@ cr.define('site_list', function() {
             function(contentType) {
               // No further checks needed. If this fails, it will hang the test.
             });
+      });
+
+      test('Select menu item', function() {
+        // Test for error: "Cannot read property 'origin' of undefined".
+        setupCategory(settings.ContentSettingsTypes.GEOLOCATION,
+            settings.PermissionValues.ALLOW, prefs);
+        return browserProxy.whenCalled('getExceptionList').then(function(
+            contentType) {
+          Polymer.dom.flush();
+          var menuItems = getMenuItems(testElement.$.listContainer);
+          assertTrue(!!menuItems);
+          MockInteractions.tap(menuItems[0]);
+          return browserProxy.whenCalled('setCategoryPermissionForOrigin');
+        });
       });
     });
   }

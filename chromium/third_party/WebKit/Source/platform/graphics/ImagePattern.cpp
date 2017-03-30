@@ -22,15 +22,24 @@ ImagePattern::ImagePattern(PassRefPtr<Image> image, RepeatMode repeatMode)
     : Pattern(repeatMode)
     , m_tileImage(toSkSp(image->imageForCurrentFrame()))
 {
+    m_previousLocalMatrix.setIdentity();
     if (m_tileImage) {
         // TODO(fmalita): mechanism to extract the actual SkImageInfo from an SkImage?
-        const SkImageInfo info =
-            SkImageInfo::MakeN32Premul(m_tileImage->width(), m_tileImage->height());
+        const SkImageInfo info = SkImageInfo::MakeN32Premul(
+            m_tileImage->width() + (isRepeatX() ? 0 : 2),
+            m_tileImage->height() + (isRepeatY() ? 0 : 2));
         adjustExternalMemoryAllocated(info.getSafeSize(info.minRowBytes()));
     }
 }
 
-sk_sp<SkShader> ImagePattern::createShader(const SkMatrix& localMatrix) const
+bool ImagePattern::isLocalMatrixChanged(const SkMatrix& localMatrix) const
+{
+    if (isRepeatXY())
+        return Pattern::isLocalMatrixChanged(localMatrix);
+    return localMatrix != m_previousLocalMatrix;
+}
+
+sk_sp<SkShader> ImagePattern::createShader(const SkMatrix& localMatrix)
 {
     if (!m_tileImage)
         return SkShader::MakeColorShader(SK_ColorTRANSPARENT);
@@ -49,23 +58,26 @@ sk_sp<SkShader> ImagePattern::createShader(const SkMatrix& localMatrix) const
         ? SkShader::kRepeat_TileMode : SkShader::kClamp_TileMode;
     SkShader::TileMode tileModeY = isRepeatY()
         ? SkShader::kRepeat_TileMode : SkShader::kClamp_TileMode;
-    int expandW = isRepeatX() ? 0 : 1;
-    int expandH = isRepeatY() ? 0 : 1;
+    int borderPixelX = isRepeatX() ? 0 : 1;
+    int borderPixelY = isRepeatY() ? 0 : 1;
 
-    // Create a transparent image 1 pixel wider and/or taller than the
-    // original, then copy the orignal into it.
+    // Create a transparent image 2 pixels wider and/or taller than the
+    // original, then copy the orignal into the middle of it.
     // FIXME: Is there a better way to pad (not scale) an image in skia?
     sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
-        m_tileImage->width() + expandW, m_tileImage->height() + expandH);
+        m_tileImage->width() + 2 * borderPixelX, m_tileImage->height() + 2 * borderPixelY);
     if (!surface)
         return SkShader::MakeColorShader(SK_ColorTRANSPARENT);
 
-    surface->getCanvas()->clear(SK_ColorTRANSPARENT);
     SkPaint paint;
     paint.setXfermodeMode(SkXfermode::kSrc_Mode);
-    surface->getCanvas()->drawImage(m_tileImage, 0, 0, &paint);
+    surface->getCanvas()->drawImage(m_tileImage, borderPixelX, borderPixelY, &paint);
 
-    return surface->makeImageSnapshot()->makeShader(tileModeX, tileModeY, &localMatrix);
+    m_previousLocalMatrix = localMatrix;
+    SkMatrix adjustedMatrix(localMatrix);
+    adjustedMatrix.postTranslate(-borderPixelX, -borderPixelY);
+
+    return surface->makeImageSnapshot()->makeShader(tileModeX, tileModeY, &adjustedMatrix);
 }
 
 bool ImagePattern::isTextureBacked() const

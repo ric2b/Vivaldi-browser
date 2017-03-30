@@ -642,14 +642,14 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRange) {
   static_text.id = 2;
   static_text.SetName("Hello, world.");
   static_text.role = ui::AX_ROLE_STATIC_TEXT;
-  static_text.location = gfx::Rect(100, 100, 29, 18);
+  static_text.location = gfx::RectF(100, 100, 29, 18);
   root.child_ids.push_back(2);
 
   ui::AXNodeData inline_text1;
   inline_text1.id = 3;
   inline_text1.SetName("Hello, ");
   inline_text1.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text1.location = gfx::Rect(100, 100, 29, 9);
+  inline_text1.location = gfx::RectF(100, 100, 29, 9);
   inline_text1.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets1;
@@ -668,7 +668,7 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRange) {
   inline_text2.id = 4;
   inline_text2.SetName("world.");
   inline_text2.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text2.location = gfx::Rect(100, 109, 28, 9);
+  inline_text2.location = gfx::RectF(100, 109, 28, 9);
   inline_text2.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets2;
@@ -694,28 +694,128 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRange) {
   ASSERT_NE(nullptr, static_text_accessible);
 
   EXPECT_EQ(gfx::Rect(100, 100, 6, 9).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 1).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 1).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 26, 9).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 5).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 5).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 109, 5, 9).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(7, 1).ToString());
+            static_text_accessible->GetPageBoundsForRange(7, 1).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 109, 25, 9).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(7, 5).ToString());
+            static_text_accessible->GetPageBoundsForRange(7, 5).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 29, 18).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(5, 3).ToString());
+            static_text_accessible->GetPageBoundsForRange(5, 3).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 29, 18).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 13).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 13).ToString());
 
   // Note that each child in the parent element is represented by a single
   // embedded object character and not by its text.
   // TODO(nektar): Investigate failure on Linux.
   EXPECT_EQ(gfx::Rect(100, 100, 29, 18).ToString(),
-            root_accessible->GetLocalBoundsForRange(0, 13).ToString());
+            root_accessible->GetPageBoundsForRange(0, 13).ToString());
+}
+
+TEST(BrowserAccessibilityManagerTest, BoundsForRangeMultiElement) {
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ui::AX_ROLE_ROOT_WEB_AREA;
+
+  ui::AXNodeData static_text;
+  static_text.id = 2;
+  static_text.SetName("ABC");
+  static_text.role = ui::AX_ROLE_STATIC_TEXT;
+  static_text.location = gfx::RectF(0, 20, 33, 9);
+  root.child_ids.push_back(2);
+
+  ui::AXNodeData inline_text1;
+  inline_text1.id = 3;
+  inline_text1.SetName("ABC");
+  inline_text1.role = ui::AX_ROLE_INLINE_TEXT_BOX;
+  inline_text1.location = gfx::RectF(0, 20, 33, 9);
+  inline_text1.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
+                               ui::AX_TEXT_DIRECTION_LTR);
+  std::vector<int32_t> character_offsets { 10, 21, 33 };
+  inline_text1.AddIntListAttribute(
+      ui::AX_ATTR_CHARACTER_OFFSETS, character_offsets);
+  static_text.child_ids.push_back(3);
+
+  ui::AXNodeData static_text2;
+  static_text2.id = 4;
+  static_text2.SetName("ABC");
+  static_text2.role = ui::AX_ROLE_STATIC_TEXT;
+  static_text2.location = gfx::RectF(10, 40, 33, 9);
+  root.child_ids.push_back(4);
+
+  ui::AXNodeData inline_text2;
+  inline_text2.id = 5;
+  inline_text2.SetName("ABC");
+  inline_text2.role = ui::AX_ROLE_INLINE_TEXT_BOX;
+  inline_text2.location = gfx::RectF(10, 40, 33, 9);
+  inline_text2.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
+                               ui::AX_TEXT_DIRECTION_LTR);
+  inline_text2.AddIntListAttribute(
+      ui::AX_ATTR_CHARACTER_OFFSETS, character_offsets);
+  static_text2.child_ids.push_back(5);
+
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(
+              root, static_text, inline_text1, static_text2, inline_text2),
+          nullptr, new CountedBrowserAccessibilityFactory()));
+
+  BrowserAccessibility* root_accessible = manager->GetRoot();
+  ASSERT_NE(nullptr, root_accessible);
+  BrowserAccessibility* static_text_accessible =
+      root_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, static_text_accessible);
+  BrowserAccessibility* static_text_accessible2 =
+      root_accessible->PlatformGetChild(1);
+  ASSERT_NE(nullptr, static_text_accessible);
+
+  // The first line.
+  EXPECT_EQ(gfx::Rect(0, 20, 33, 9).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible, 0,
+                *static_text_accessible, 3).ToString());
+
+  // Part of the first line.
+  EXPECT_EQ(gfx::Rect(0, 20, 21, 9).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible, 0,
+                *static_text_accessible, 2).ToString());
+
+  // Part of the first line.
+  EXPECT_EQ(gfx::Rect(10, 20, 23, 9).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible, 1,
+                *static_text_accessible, 3).ToString());
+
+  // The second line.
+  EXPECT_EQ(gfx::Rect(10, 40, 33, 9).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible2, 0,
+                *static_text_accessible2, 3).ToString());
+
+  // All of both lines.
+  EXPECT_EQ(gfx::Rect(0, 20, 43, 29).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible, 0,
+                *static_text_accessible2, 3).ToString());
+
+  // Part of both lines.
+  EXPECT_EQ(gfx::Rect(10, 20, 23, 29).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible, 2,
+                *static_text_accessible2, 1).ToString());
+
+  // Part of both lines in reverse order.
+  EXPECT_EQ(gfx::Rect(10, 20, 23, 29).ToString(),
+            manager->GetPageBoundsForRange(
+                *static_text_accessible2, 1,
+                *static_text_accessible, 2).ToString());
 }
 
 TEST(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
@@ -724,7 +824,7 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
   // words, on-screen it would look like "123cba". This is possible to
   // achieve if the source string had unicode control characters
   // to switch directions. This test doesn't worry about how, though - it just
-  // tests that if something like that were to occur, GetLocalBoundsForRange
+  // tests that if something like that were to occur, GetPageBoundsForRange
   // returns the correct bounds for different ranges.
 
   ui::AXNodeData root;
@@ -735,14 +835,14 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
   static_text.id = 2;
   static_text.SetName("123abc");
   static_text.role = ui::AX_ROLE_STATIC_TEXT;
-  static_text.location = gfx::Rect(100, 100, 60, 20);
+  static_text.location = gfx::RectF(100, 100, 60, 20);
   root.child_ids.push_back(2);
 
   ui::AXNodeData inline_text1;
   inline_text1.id = 3;
   inline_text1.SetName("123");
   inline_text1.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text1.location = gfx::Rect(100, 100, 30, 20);
+  inline_text1.location = gfx::RectF(100, 100, 30, 20);
   inline_text1.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets1;
@@ -757,7 +857,7 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
   inline_text2.id = 4;
   inline_text2.SetName("abc");
   inline_text2.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text2.location = gfx::Rect(130, 100, 30, 20);
+  inline_text2.location = gfx::RectF(130, 100, 30, 20);
   inline_text2.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_RTL);
   std::vector<int32_t> character_offsets2;
@@ -780,24 +880,24 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeBiDi) {
   ASSERT_NE(nullptr, static_text_accessible);
 
   EXPECT_EQ(gfx::Rect(100, 100, 60, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 6).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 6).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 10, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 1).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 1).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 30, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(0, 3).ToString());
+            static_text_accessible->GetPageBoundsForRange(0, 3).ToString());
 
   EXPECT_EQ(gfx::Rect(150, 100, 10, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(3, 1).ToString());
+            static_text_accessible->GetPageBoundsForRange(3, 1).ToString());
 
   EXPECT_EQ(gfx::Rect(130, 100, 30, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(3, 3).ToString());
+            static_text_accessible->GetPageBoundsForRange(3, 3).ToString());
 
   // This range is only two characters, but because of the direction switch
   // the bounds are as wide as four characters.
   EXPECT_EQ(gfx::Rect(120, 100, 40, 20).ToString(),
-            static_text_accessible->GetLocalBoundsForRange(2, 2).ToString());
+            static_text_accessible->GetPageBoundsForRange(2, 2).ToString());
 }
 
 TEST(BrowserAccessibilityManagerTest, BoundsForRangeScrolledWindow) {
@@ -811,14 +911,14 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeScrolledWindow) {
   static_text.id = 2;
   static_text.SetName("ABC");
   static_text.role = ui::AX_ROLE_STATIC_TEXT;
-  static_text.location = gfx::Rect(100, 100, 16, 9);
+  static_text.location = gfx::RectF(100, 100, 16, 9);
   root.child_ids.push_back(2);
 
   ui::AXNodeData inline_text;
   inline_text.id = 3;
   inline_text.SetName("ABC");
   inline_text.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text.location = gfx::Rect(100, 100, 16, 9);
+  inline_text.location = gfx::RectF(100, 100, 16, 9);
   inline_text.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                               ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets1;
@@ -842,10 +942,10 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeScrolledWindow) {
 
   if (manager->UseRootScrollOffsetsWhenComputingBounds()) {
     EXPECT_EQ(gfx::Rect(75, 50, 16, 9).ToString(),
-              static_text_accessible->GetLocalBoundsForRange(0, 3).ToString());
+              static_text_accessible->GetPageBoundsForRange(0, 3).ToString());
   } else {
     EXPECT_EQ(gfx::Rect(100, 100, 16, 9).ToString(),
-              static_text_accessible->GetLocalBoundsForRange(0, 3).ToString());
+              static_text_accessible->GetPageBoundsForRange(0, 3).ToString());
   }
 }
 
@@ -858,7 +958,7 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeOnParentElement) {
   ui::AXNodeData div;
   div.id = 2;
   div.role = ui::AX_ROLE_DIV;
-  div.location = gfx::Rect(100, 100, 100, 20);
+  div.location = gfx::RectF(100, 100, 100, 20);
   div.child_ids.push_back(3);
   div.child_ids.push_back(4);
   div.child_ids.push_back(5);
@@ -867,27 +967,27 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeOnParentElement) {
   static_text1.id = 3;
   static_text1.SetName("AB");
   static_text1.role = ui::AX_ROLE_STATIC_TEXT;
-  static_text1.location = gfx::Rect(100, 100, 40, 20);
+  static_text1.location = gfx::RectF(100, 100, 40, 20);
   static_text1.child_ids.push_back(6);
 
   ui::AXNodeData img;
   img.id = 4;
   img.SetName("Test image");
   img.role = ui::AX_ROLE_IMAGE;
-  img.location = gfx::Rect(140, 100, 20, 20);
+  img.location = gfx::RectF(140, 100, 20, 20);
 
   ui::AXNodeData static_text2;
   static_text2.id = 5;
   static_text2.SetName("CD");
   static_text2.role = ui::AX_ROLE_STATIC_TEXT;
-  static_text2.location = gfx::Rect(160, 100, 40, 20);
+  static_text2.location = gfx::RectF(160, 100, 40, 20);
   static_text2.child_ids.push_back(7);
 
   ui::AXNodeData inline_text1;
   inline_text1.id = 6;
   inline_text1.SetName("AB");
   inline_text1.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text1.location = gfx::Rect(100, 100, 40, 20);
+  inline_text1.location = gfx::RectF(100, 100, 40, 20);
   inline_text1.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets1;
@@ -900,7 +1000,7 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeOnParentElement) {
   inline_text2.id = 7;
   inline_text2.SetName("CD");
   inline_text2.role = ui::AX_ROLE_INLINE_TEXT_BOX;
-  inline_text2.location = gfx::Rect(160, 100, 40, 20);
+  inline_text2.location = gfx::RectF(160, 100, 40, 20);
   inline_text2.AddIntAttribute(ui::AX_ATTR_TEXT_DIRECTION,
                                ui::AX_TEXT_DIRECTION_LTR);
   std::vector<int32_t> character_offsets2;
@@ -920,22 +1020,22 @@ TEST(BrowserAccessibilityManagerTest, BoundsForRangeOnParentElement) {
   ASSERT_NE(nullptr, div_accessible);
 
   EXPECT_EQ(gfx::Rect(100, 100, 20, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(0, 1).ToString());
+            div_accessible->GetPageBoundsForRange(0, 1).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 40, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(0, 2).ToString());
+            div_accessible->GetPageBoundsForRange(0, 2).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 80, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(0, 4).ToString());
+            div_accessible->GetPageBoundsForRange(0, 4).ToString());
 
   EXPECT_EQ(gfx::Rect(120, 100, 60, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(1, 3).ToString());
+            div_accessible->GetPageBoundsForRange(1, 3).ToString());
 
   EXPECT_EQ(gfx::Rect(120, 100, 80, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(1, 4).ToString());
+            div_accessible->GetPageBoundsForRange(1, 4).ToString());
 
   EXPECT_EQ(gfx::Rect(100, 100, 100, 20).ToString(),
-            div_accessible->GetLocalBoundsForRange(0, 5).ToString());
+            div_accessible->GetPageBoundsForRange(0, 5).ToString());
 }
 
 TEST(BrowserAccessibilityManagerTest, TestNextPreviousInTreeOrder) {
@@ -990,6 +1090,38 @@ TEST(BrowserAccessibilityManagerTest, TestNextPreviousInTreeOrder) {
   EXPECT_EQ(node3_accessible, manager->PreviousInTreeOrder(node4_accessible));
   EXPECT_EQ(node2_accessible, manager->PreviousInTreeOrder(node3_accessible));
   EXPECT_EQ(root_accessible, manager->PreviousInTreeOrder(node2_accessible));
+
+  EXPECT_EQ(ui::AX_TREE_ORDER_EQUAL,
+            BrowserAccessibilityManager::CompareNodes(
+                *root_accessible, *root_accessible));
+
+  EXPECT_EQ(ui::AX_TREE_ORDER_BEFORE,
+            BrowserAccessibilityManager::CompareNodes(
+                *node2_accessible, *node3_accessible));
+  EXPECT_EQ(ui::AX_TREE_ORDER_AFTER,
+            BrowserAccessibilityManager::CompareNodes(
+                *node3_accessible, *node2_accessible));
+
+  EXPECT_EQ(ui::AX_TREE_ORDER_BEFORE,
+            BrowserAccessibilityManager::CompareNodes(
+                *node2_accessible, *node4_accessible));
+  EXPECT_EQ(ui::AX_TREE_ORDER_AFTER,
+            BrowserAccessibilityManager::CompareNodes(
+                *node4_accessible, *node2_accessible));
+
+  EXPECT_EQ(ui::AX_TREE_ORDER_BEFORE,
+            BrowserAccessibilityManager::CompareNodes(
+                *node3_accessible, *node4_accessible));
+  EXPECT_EQ(ui::AX_TREE_ORDER_AFTER,
+            BrowserAccessibilityManager::CompareNodes(
+                *node4_accessible, *node3_accessible));
+
+  EXPECT_EQ(ui::AX_TREE_ORDER_BEFORE,
+            BrowserAccessibilityManager::CompareNodes(
+                *root_accessible, *node2_accessible));
+  EXPECT_EQ(ui::AX_TREE_ORDER_AFTER,
+            BrowserAccessibilityManager::CompareNodes(
+                *node2_accessible, *root_accessible));
 }
 
 TEST(BrowserAccessibilityManagerTest, TestNextPreviousTextOnlyObject) {
@@ -1492,6 +1624,53 @@ TEST(BrowserAccessibilityManagerTest, DeletingFocusedNodeDoesNotCrash2) {
   // that this doesn't crash.
   ASSERT_EQ(3, manager->GetRoot()->GetId());
   ASSERT_EQ(3, manager->GetFocus()->GetId());
+}
+
+TEST(BrowserAccessibilityManagerTest, LineStartBoundary) {
+  ui::AXNodeData root;
+  root.id = 1;
+  root.role = ui::AX_ROLE_ROOT_WEB_AREA;
+
+  ui::AXNodeData static_text;
+  static_text.id = 2;
+  static_text.SetName("1-2-3-4");
+  static_text.role = ui::AX_ROLE_STATIC_TEXT;
+  root.child_ids.push_back(2);
+
+  ui::AXNodeData inline_text1;
+  inline_text1.id = 3;
+  inline_text1.SetName("1-2-");
+  inline_text1.role = ui::AX_ROLE_INLINE_TEXT_BOX;
+  static_text.child_ids.push_back(3);
+
+  ui::AXNodeData inline_text2;
+  inline_text2.id = 4;
+  inline_text2.SetName("3-4");
+  inline_text2.role = ui::AX_ROLE_INLINE_TEXT_BOX;
+  static_text.child_ids.push_back(4);
+
+  std::unique_ptr<BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManager::Create(
+          MakeAXTreeUpdate(root, static_text, inline_text1, inline_text2),
+          nullptr, new CountedBrowserAccessibilityFactory()));
+
+  BrowserAccessibility* root_accessible = manager->GetRoot();
+  ASSERT_NE(nullptr, root_accessible);
+  BrowserAccessibility* static_text_accessible =
+      root_accessible->PlatformGetChild(0);
+  ASSERT_NE(nullptr, static_text_accessible);
+
+  // If the affinity is downstream, check that we get the second line.
+  ASSERT_EQ(4, static_text_accessible->GetLineStartBoundary(
+      4, ui::BACKWARDS_DIRECTION, ui::AX_TEXT_AFFINITY_DOWNSTREAM));
+  ASSERT_EQ(7, static_text_accessible->GetLineStartBoundary(
+      4, ui::FORWARDS_DIRECTION, ui::AX_TEXT_AFFINITY_DOWNSTREAM));
+
+  // If the affinity is upstream, check that we get the second line.
+  ASSERT_EQ(0, static_text_accessible->GetLineStartBoundary(
+      4, ui::BACKWARDS_DIRECTION, ui::AX_TEXT_AFFINITY_UPSTREAM));
+  ASSERT_EQ(4, static_text_accessible->GetLineStartBoundary(
+      4, ui::FORWARDS_DIRECTION, ui::AX_TEXT_AFFINITY_UPSTREAM));
 }
 
 }  // namespace content

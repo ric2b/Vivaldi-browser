@@ -30,7 +30,6 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
-#include "chrome/installer/setup/app_launcher_installer.h"
 #include "chrome/installer/setup/install.h"
 #include "chrome/installer/setup/install_worker.h"
 #include "chrome/installer/setup/setup_constants.h"
@@ -166,8 +165,8 @@ void ProcessChromeWorkItems(const InstallerState& installer_state,
       "Cleanup OS upgrade command and deprecated per-user registrations");
   work_item_list->set_best_effort(true);
   work_item_list->set_rollback_enabled(false);
-  AddOsUpgradeWorkItems(installer_state, base::FilePath(), Version(), product,
-                        work_item_list.get());
+  AddOsUpgradeWorkItems(installer_state, base::FilePath(), base::Version(),
+                        product, work_item_list.get());
   // Perform a best-effort cleanup of per-user keys. On system-level installs
   // this will only cleanup keys for the user running the uninstall but it was
   // considered that this was good enough (better than triggering Active Setup
@@ -724,7 +723,7 @@ void RemoveFiletypeRegistration(const InstallerState& installer_state,
 bool DeleteUserRegistryKeys(const std::vector<const base::string16*>* key_paths,
                             const wchar_t* user_sid,
                             base::win::RegKey* key) {
-  for (const auto& key_path : *key_paths) {
+  for (const auto* key_path : *key_paths) {
     LONG result = key->DeleteKey(key_path->c_str());
     if (result == ERROR_SUCCESS) {
       VLOG(1) << "Deleted " << user_sid << "\\" << *key_path;
@@ -798,8 +797,17 @@ void RemoveBlacklistState() {
   InstallUtil::DeleteRegistryKey(HKEY_CURRENT_USER,
                                  blacklist::kRegistryBeaconPath,
                                  0);  // wow64_access
+// The following key is no longer used (https://crbug.com/631771).
+// This cleanup is being left in for a time though.
+#if defined(GOOGLE_CHROME_BUILD)
+  const wchar_t kRegistryFinchListPath[] =
+      L"SOFTWARE\\Google\\Chrome\\BLFinchList";
+#else
+  const wchar_t kRegistryFinchListPath[] =
+      L"SOFTWARE\\Chromium\\BLFinchList";
+#endif
   InstallUtil::DeleteRegistryKey(HKEY_CURRENT_USER,
-                                 blacklist::kRegistryFinchListPath,
+                                 kRegistryFinchListPath,
                                  0);  // wow64_access
 }
 
@@ -1155,11 +1163,6 @@ InstallStatus UninstallProduct(const InstallationState& original_state,
     // installs.
     DeleteChromeRegistrationKeys(installer_state, browser_dist,
                                  HKEY_CURRENT_USER, suffix, &ret);
-
-#if defined(GOOGLE_CHROME_BUILD)
-    if (!InstallUtil::IsChromeSxSProcess())
-      RemoveAppLauncherVersionKey(reg_root);
-#endif  // GOOGLE_CHROME_BUILD
 
     // If the user's Chrome is registered with a suffix: it is possible that old
     // unsuffixed registrations were left in HKCU (e.g. if this install was

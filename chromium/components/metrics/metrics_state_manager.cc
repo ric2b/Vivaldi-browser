@@ -83,10 +83,15 @@ bool MetricsStateManager::IsMetricsReportingEnabled() {
 }
 
 void MetricsStateManager::ForceClientIdCreation() {
-  if (!client_id_.empty())
-    return;
+  {
+    std::string client_id_from_prefs =
+        local_state_->GetString(prefs::kMetricsClientID);
+    // If client id in prefs matches the cached copy, return early.
+    if (!client_id_from_prefs.empty() && client_id_from_prefs == client_id_)
+      return;
+    client_id_.swap(client_id_from_prefs);
+  }
 
-  client_id_ = local_state_->GetString(prefs::kMetricsClientID);
   if (!client_id_.empty()) {
     // It is technically sufficient to only save a backup of the client id when
     // it is initially generated below, but since the backup was only introduced
@@ -257,7 +262,11 @@ MetricsStateManager::LoadClientInfoAndMaybeMigrate() {
 
   // The GUID retrieved (and possibly fixed above) should be valid unless
   // retrieval failed.
-  DCHECK(!client_info || base::IsValidGUID(client_info->client_id));
+  // DCHECK(!client_info || base::IsValidGUID(client_info->client_id));
+  // Temporary hack for http://crbug.com/635255.
+  // TODO(asvitkine): address this the right way.
+  if (client_info && !base::IsValidGUID(client_info->client_id))
+    return nullptr;
 
   return client_info;
 }

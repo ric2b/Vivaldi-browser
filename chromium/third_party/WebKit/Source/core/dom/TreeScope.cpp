@@ -196,9 +196,24 @@ HTMLMapElement* TreeScope::getImageMap(const String& url) const
         return nullptr;
     size_t hashPos = url.find('#');
     String name = hashPos == kNotFound ? url : url.substring(hashPos + 1);
-    if (rootNode().document().isHTMLDocument())
-        return toHTMLMapElement(m_imageMapsByName->getElementByLowercasedMapName(AtomicString(name.lower()), this));
-    return toHTMLMapElement(m_imageMapsByName->getElementByMapName(AtomicString(name), this));
+    HTMLMapElement* map = toHTMLMapElement(rootNode().document().isHTMLDocument()
+        ? m_imageMapsByName->getElementByLowercasedMapName(AtomicString(name.lower()), this)
+        : m_imageMapsByName->getElementByMapName(AtomicString(name), this));
+    if (!map || !rootNode().document().isHTMLDocument())
+        return map;
+    const AtomicString& nameValue = map->fastGetAttribute(nameAttr);
+    if (nameValue.isNull())
+        return map;
+    String strippedName = nameValue;
+    if (strippedName.startsWith('#'))
+        strippedName = strippedName.substring(1);
+    if (strippedName == name)
+        UseCounter::count(rootNode().document(), UseCounter::MapNameMatchingStrict);
+    else if (equalIgnoringASCIICase(strippedName, name))
+        UseCounter::count(rootNode().document(), UseCounter::MapNameMatchingASCIICaseless);
+    else
+        UseCounter::count(rootNode().document(), UseCounter::MapNameMatchingUnicodeLower);
+    return map;
 }
 
 static bool pointWithScrollAndZoomIfPossible(const Document& document, IntPoint& point)
@@ -391,16 +406,14 @@ Element* TreeScope::adjustedFocusedElement() const
     return nullptr;
 }
 
-Element* TreeScope::adjustedPointerLockElement(const Element& target) const
+Element* TreeScope::adjustedElement(const Element& target) const
 {
     const Element* adjustedTarget = &target;
-    // Unless the target is in the same TreeScope as |scope|, traverse up shadow trees to
-    // find a shadow host that is in the same TreeScope as |scope|.
     for (const Element* ancestor = &target; ancestor; ancestor = ancestor->shadowHost()) {
-        // Exception is that if the host has V0 or UA shadow, skip the adjustment because
-        // .pointerLockElement is not available for non-V1 shadows.
-        // TODO(kochi): Once V0 code is removed, use the same logic as .activeElement for
-        // Shadow DOM V1.
+        // This adjustment is done only for V1 shadows, and is skipped for V0 or UA shadows,
+        // because .pointerLockElement and .(webkit)fullscreenElement is not available for
+        // non-V1 shadow roots.
+        // TODO(kochi): Once V0 code is removed, use the same logic as .activeElement for V1.
         if (ancestor->shadowRootIfV1())
             adjustedTarget = ancestor;
         if (this == ancestor->treeScope())
@@ -408,10 +421,11 @@ Element* TreeScope::adjustedPointerLockElement(const Element& target) const
     }
     return nullptr;
 }
+
 unsigned short TreeScope::comparePosition(const TreeScope& otherScope) const
 {
     if (otherScope == this)
-        return Node::DOCUMENT_POSITION_EQUIVALENT;
+        return Node::kDocumentPositionEquivalent;
 
     HeapVector<Member<const TreeScope>, 16> chain1;
     HeapVector<Member<const TreeScope>, 16> chain2;
@@ -424,7 +438,7 @@ unsigned short TreeScope::comparePosition(const TreeScope& otherScope) const
     unsigned index1 = chain1.size();
     unsigned index2 = chain2.size();
     if (chain1[index1 - 1] != chain2[index2 - 1])
-        return Node::DOCUMENT_POSITION_DISCONNECTED | Node::DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
+        return Node::kDocumentPositionDisconnected | Node::kDocumentPositionImplementationSpecific;
 
     for (unsigned i = std::min(index1, index2); i; --i) {
         const TreeScope* child1 = chain1[--index1];
@@ -437,18 +451,18 @@ unsigned short TreeScope::comparePosition(const TreeScope& otherScope) const
 
             for (const ShadowRoot* child = toShadowRoot(child2->rootNode()).olderShadowRoot(); child; child = child->olderShadowRoot()) {
                 if (child == child1)
-                    return Node::DOCUMENT_POSITION_FOLLOWING;
+                    return Node::kDocumentPositionFollowing;
             }
 
-            return Node::DOCUMENT_POSITION_PRECEDING;
+            return Node::kDocumentPositionPreceding;
         }
     }
 
     // There was no difference between the two parent chains, i.e., one was a subset of the other. The shorter
     // chain is the ancestor.
     return index1 < index2 ?
-        Node::DOCUMENT_POSITION_FOLLOWING | Node::DOCUMENT_POSITION_CONTAINED_BY :
-        Node::DOCUMENT_POSITION_PRECEDING | Node::DOCUMENT_POSITION_CONTAINS;
+        Node::kDocumentPositionFollowing | Node::kDocumentPositionContainedBy :
+        Node::kDocumentPositionPreceding | Node::kDocumentPositionContains;
 }
 
 const TreeScope* TreeScope::commonAncestorTreeScope(const TreeScope& other) const

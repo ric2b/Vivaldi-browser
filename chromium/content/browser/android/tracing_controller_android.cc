@@ -12,6 +12,9 @@
 #include "content/public/browser/tracing_controller.h"
 #include "jni/TracingControllerAndroid_jni.h"
 
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
+
 namespace content {
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -77,7 +80,7 @@ void TracingControllerAndroid::OnTracingStopped() {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> obj = weak_java_object_.get(env);
   if (obj.obj())
-    Java_TracingControllerAndroid_onTracingStopped(env, obj.obj());
+    Java_TracingControllerAndroid_onTracingStopped(env, obj);
 }
 
 bool TracingControllerAndroid::GetKnownCategoryGroupsAsync(

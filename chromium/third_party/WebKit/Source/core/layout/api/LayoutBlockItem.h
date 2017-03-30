@@ -28,14 +28,14 @@ public:
 
     LayoutBlockItem() { }
 
-    void invalidatePaintRectangle(const LayoutRect& layoutRect) const
-    {
-        toBlock()->invalidatePaintRectangle(layoutRect);
-    }
-
     bool recalcOverflowAfterStyleChange()
     {
         return toBlock()->recalcOverflowAfterStyleChange();
+    }
+
+    LayoutItem firstChild() const
+    {
+        return LayoutItem(toBlock()->firstChild());
     }
 
 private:

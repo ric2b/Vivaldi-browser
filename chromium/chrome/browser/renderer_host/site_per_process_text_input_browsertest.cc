@@ -5,12 +5,15 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -18,14 +21,22 @@
 #include "content/public/test/text_input_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/ime/composition_underline.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "url/gurl.h"
 
-// TODO(ekaramad): The following tests are only active on aura platforms. After
-// fixing crbug.com/578168 for all platforms, the following tests should be
-// activated for other platforms, e.g., Mac and Android (crbug.com/602723).
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#include "ui/base/ime/linux/text_edit_command_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
+#endif
+
+// TODO(ekaramad): The following tests should be active on all platforms. After
+// fixing https://crbug.com/578168, this test file should be built for android
+// as well and most of the following tests should be enabled for all platforms
+//(https://crbug.com/602723).
 
 ///////////////////////////////////////////////////////////////////////////////
 // TextInputManager and IME Tests
@@ -98,8 +109,7 @@ class TextInputManagerValueObserver : public TextInputManagerObserverBase {
   }
 
  private:
-  void VerifyValue(content::TextInputManagerTester* text_input_manager_tester) {
-    ASSERT_EQ(tester(), text_input_manager_tester);
+  void VerifyValue() {
     std::string value;
     if (tester()->GetTextInputValue(&value) && expected_value_ == value)
       OnSuccess();
@@ -122,8 +132,7 @@ class TextInputManagerTypeObserver : public TextInputManagerObserverBase {
   }
 
  private:
-  void VerifyType(content::TextInputManagerTester* text_input_manager_tester) {
-    ASSERT_EQ(tester(), text_input_manager_tester);
+  void VerifyType() {
     ui::TextInputType type =
         tester()->GetTextInputType(&type) ? type : ui::TEXT_INPUT_TYPE_NONE;
     if (expected_type_ == type)
@@ -145,9 +154,7 @@ class TextInputManagerChangeObserver : public TextInputManagerObserverBase {
   }
 
  private:
-  void VerifyChange(
-      content::TextInputManagerTester* text_input_manager_tester) {
-    ASSERT_EQ(tester(), text_input_manager_tester);
+  void VerifyChange() {
     if (tester()->IsTextInputStateChanged())
       OnSuccess();
   }
@@ -170,7 +177,7 @@ class ViewTextInputTypeObserver : public TextInputManagerObserverBase {
   }
 
  private:
-  void VerifyType(content::TextInputManagerTester* tester) {
+  void VerifyType() {
     ui::TextInputType type;
     if (!content::GetTextInputTypeForView(web_contents_, view_, &type))
       return;
@@ -183,6 +190,115 @@ class ViewTextInputTypeObserver : public TextInputManagerObserverBase {
   const ui::TextInputType expected_type_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewTextInputTypeObserver);
+};
+
+// This class observes the |expected_view| for the first change in its
+// selection bounds.
+class ViewSelectionBoundsChangedObserver : public TextInputManagerObserverBase {
+ public:
+  ViewSelectionBoundsChangedObserver(
+      content::WebContents* web_contents,
+      content::RenderWidgetHostView* expected_view)
+      : TextInputManagerObserverBase(web_contents),
+        expected_view_(expected_view) {
+    tester()->SetOnSelectionBoundsChangedCallback(
+        base::Bind(&ViewSelectionBoundsChangedObserver::VerifyChange,
+                   base::Unretained(this)));
+  }
+
+ private:
+  void VerifyChange() {
+    if (expected_view_ == tester()->GetUpdatedView())
+      OnSuccess();
+  }
+
+  const content::RenderWidgetHostView* const expected_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewSelectionBoundsChangedObserver);
+};
+
+// This class observes the |expected_view| for the first change in its
+// composition range information.
+class ViewCompositionRangeChangedObserver
+    : public TextInputManagerObserverBase {
+ public:
+  ViewCompositionRangeChangedObserver(
+      content::WebContents* web_contents,
+      content::RenderWidgetHostView* expected_view)
+      : TextInputManagerObserverBase(web_contents),
+        expected_view_(expected_view) {
+    tester()->SetOnImeCompositionRangeChangedCallback(
+        base::Bind(&ViewCompositionRangeChangedObserver::VerifyChange,
+                   base::Unretained(this)));
+  }
+
+ private:
+  void VerifyChange() {
+    if (expected_view_ == tester()->GetUpdatedView())
+      OnSuccess();
+  }
+
+  const content::RenderWidgetHostView* const expected_view_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewCompositionRangeChangedObserver);
+};
+
+// This class observes the |expected_view| for a change in the text selection.
+class ViewTextSelectionObserver : public TextInputManagerObserverBase {
+ public:
+  ViewTextSelectionObserver(content::WebContents* web_contents,
+                            content::RenderWidgetHostView* expected_view,
+                            size_t expected_length)
+      : TextInputManagerObserverBase(web_contents),
+        expected_view_(expected_view),
+        expected_length_(expected_length) {
+    tester()->SetOnTextSelectionChangedCallback(base::Bind(
+        &ViewTextSelectionObserver::VerifyChange, base::Unretained(this)));
+  }
+
+ private:
+  void VerifyChange() {
+    if (expected_view_ == tester()->GetUpdatedView()) {
+      size_t length;
+      EXPECT_TRUE(tester()->GetCurrentTextSelectionLength(&length));
+      if (length == expected_length_)
+        OnSuccess();
+    }
+  }
+
+  const content::RenderWidgetHostView* const expected_view_;
+  const size_t expected_length_;
+
+  DISALLOW_COPY_AND_ASSIGN(ViewTextSelectionObserver);
+};
+
+// This class monitors all the changes in TextInputState and keeps a record of
+// the active views. There is no waiting and the recording process is
+// continuous.
+class RecordActiveViewsObserver {
+ public:
+  explicit RecordActiveViewsObserver(content::WebContents* web_contents)
+      : tester_(new content::TextInputManagerTester(web_contents)) {
+    tester_->SetUpdateTextInputStateCalledCallback(base::Bind(
+        &RecordActiveViewsObserver::RecordActiveView, base::Unretained(this)));
+  }
+
+  const std::vector<const content::RenderWidgetHostView*>* active_views()
+      const {
+    return &active_views_;
+  }
+
+ private:
+  void RecordActiveView() {
+    if (!tester_->IsTextInputStateChanged())
+      return;
+    active_views_.push_back(tester_->GetActiveView());
+  }
+
+  std::unique_ptr<content::TextInputManagerTester> tester_;
+  std::vector<const content::RenderWidgetHostView*> active_views_;
+
+  DISALLOW_COPY_AND_ASSIGN(RecordActiveViewsObserver);
 };
 
 }  // namespace
@@ -456,9 +572,193 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   reset_state_observer.Wait();
 }
 
+// This test creates a page with multiple child frames and adds an <input> to
+// each frame. Then, sequentially, each <input> is focused by sending a tab key.
+// Then, after |TextInputState.type| for a view is changed to text, the test
+// sends a set composition IPC to the active widget and waits until the widget
+// updates its composition range.
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       TrackCompositionRangeForAllFrames) {
+  CreateIframePage("a(b,c(a,b),d)");
+  std::vector<content::RenderFrameHost*> frames{
+      GetFrame(IndexVector{}),     GetFrame(IndexVector{0}),
+      GetFrame(IndexVector{1}),    GetFrame(IndexVector{1, 0}),
+      GetFrame(IndexVector{1, 1}), GetFrame(IndexVector{2})};
+  std::vector<content::RenderWidgetHostView*> views;
+  for (auto* frame : frames)
+    views.push_back(frame->GetView());
+  for (size_t i = 0; i < frames.size(); ++i)
+    AddInputFieldToFrame(frames[i], "text", "text", true);
+
+  content::WebContents* web_contents = active_contents();
+
+  auto send_tab_set_composition_wait_for_bounds_change = [&web_contents](
+      content::RenderWidgetHostView* view) {
+    ViewTextInputTypeObserver type_observer(web_contents, view,
+                                            ui::TEXT_INPUT_TYPE_TEXT);
+    SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, false, false, false);
+    type_observer.Wait();
+
+    ViewCompositionRangeChangedObserver range_observer(web_contents, view);
+    EXPECT_TRUE(content::RequestCompositionInfoFromActiveWidget(web_contents));
+    range_observer.Wait();
+  };
+
+  for (auto* view : views)
+    send_tab_set_composition_wait_for_bounds_change(view);
+}
+
+// This test creates a page with multiple child frames and adds an <input> to
+// each frame. Then, sequentially, each <input> is focused by sending a tab key.
+// Then, after |TextInputState.type| for a view is changed to text, another key
+// is pressed (a character) and then the test verifies that TextInputManager
+// receives the corresponding update on the change in selection bounds on the
+// browser side.
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       TrackSelectionBoundsForAllFrames) {
+  CreateIframePage("a(b,c(a,b),d)");
+  std::vector<content::RenderFrameHost*> frames{
+      GetFrame(IndexVector{}),     GetFrame(IndexVector{0}),
+      GetFrame(IndexVector{1}),    GetFrame(IndexVector{1, 0}),
+      GetFrame(IndexVector{1, 1}), GetFrame(IndexVector{2})};
+  std::vector<content::RenderWidgetHostView*> views;
+  for (auto* frame : frames)
+    views.push_back(frame->GetView());
+  for (size_t i = 0; i < frames.size(); ++i)
+    AddInputFieldToFrame(frames[i], "text", "", true);
+
+  content::WebContents* web_contents = active_contents();
+
+  auto send_tab_insert_text_wait_for_bounds_change = [&web_contents](
+      content::RenderWidgetHostView* view) {
+    ViewTextInputTypeObserver type_observer(web_contents, view,
+                                            ui::TEXT_INPUT_TYPE_TEXT);
+    SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, false, false, false);
+    type_observer.Wait();
+    ViewSelectionBoundsChangedObserver bounds_observer(web_contents, view);
+    SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('E'),
+                     ui::DomCode::US_E, ui::VKEY_E, false, false, false, false);
+    bounds_observer.Wait();
+  };
+
+  for (auto* view : views)
+    send_tab_insert_text_wait_for_bounds_change(view);
+}
+
+// This test creates a page with multiple child frames and adds an <input> to
+// each frame. Then, sequentially, each <input> is focused by sending a tab key.
+// After focusing each input, a sequence of key presses (character 'E') are sent
+// to the focused widget. The test then verifies that the selection length
+// equals the length of the sequence of 'E's.
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       TrackTextSelectionForAllFrames) {
+  CreateIframePage("a(b,c(a,b),d)");
+  std::vector<content::RenderFrameHost*> frames{
+      GetFrame(IndexVector{}),     GetFrame(IndexVector{0}),
+      GetFrame(IndexVector{1}),    GetFrame(IndexVector{1, 0}),
+      GetFrame(IndexVector{1, 1}), GetFrame(IndexVector{2})};
+  std::vector<std::string> values{"main", "b", "c", "ca", "cb", "d"};
+  std::vector<content::RenderWidgetHostView*> views;
+  for (auto* frame : frames)
+    views.push_back(frame->GetView());
+  for (size_t i = 0; i < frames.size(); ++i)
+    AddInputFieldToFrame(frames[i], "text", values[i], true);
+
+  content::WebContents* web_contents = active_contents();
+
+  auto send_tab_and_wait_for_value = [&web_contents](const std::string& value) {
+    TextInputManagerValueObserver observer(web_contents, value);
+    SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                     ui::VKEY_TAB, false, false, false, false);
+    observer.Wait();
+  };
+
+  auto send_keys_select_all_wait_for_selection_change = [&web_contents](
+      content::RenderWidgetHostView* view, size_t count) {
+    ViewTextSelectionObserver observer(web_contents, view, count);
+    for (size_t i = 0; i < count; ++i) {
+      SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('E'),
+                       ui::DomCode::US_E, ui::VKEY_E, false, false, false,
+                       false);
+    }
+    observer.Wait();
+  };
+
+  size_t count = 2;
+  for (size_t i = 0; i < views.size(); ++i) {
+    // First focus the <input>.
+    send_tab_and_wait_for_value(values[i]);
+
+    // Send a sequence of |count| 'E' keys and wait until the view receives a
+    // selection change update for a text of the corresponding size, |count|.
+    send_keys_select_all_wait_for_selection_change(views[i], count++);
+  }
+}
+
+// The following test verifies that when the active widget changes value, it is
+// always from nullptr to non-null or vice versa.
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       ResetTextInputStateOnActiveWidgetChange) {
+  CreateIframePage("a(b,c(a,b),d)");
+  std::vector<content::RenderFrameHost*> frames{
+      GetFrame(IndexVector{}),     GetFrame(IndexVector{0}),
+      GetFrame(IndexVector{1}),    GetFrame(IndexVector{1, 0}),
+      GetFrame(IndexVector{1, 1}), GetFrame(IndexVector{2})};
+  std::vector<content::RenderWidgetHostView*> views;
+  for (auto frame : frames)
+    views.push_back(frame->GetView());
+  std::vector<std::string> values{"a", "ab", "ac", "aca", "acb", "acd"};
+  for (size_t i = 0; i < frames.size(); ++i)
+    AddInputFieldToFrame(frames[i], "text", values[i], true);
+
+  content::WebContents* web_contents = active_contents();
+
+  auto send_tab_and_wait_for_value =
+      [&web_contents](const std::string& expected_value) {
+        TextInputManagerValueObserver observer(web_contents, expected_value);
+        SimulateKeyPress(web_contents, ui::DomKey::TAB, ui::DomCode::TAB,
+                         ui::VKEY_TAB, false, false, false, false);
+        observer.Wait();
+      };
+
+  // Record all active view changes.
+  RecordActiveViewsObserver recorder(web_contents);
+  for (auto value : values)
+    send_tab_and_wait_for_value(value);
+
+  // We have covered a total of 6 views, so there should at least be 11 entries
+  // recorded (at least one null between two views).
+  size_t record_count = recorder.active_views()->size();
+  EXPECT_GT(record_count, 10U);
+
+  // Verify we do not have subsequent nullptr or non-nullptrs.
+  for (size_t i = 0; i < record_count - 1U; ++i) {
+    const content::RenderWidgetHostView* current =
+        recorder.active_views()->at(i);
+    const content::RenderWidgetHostView* next =
+        recorder.active_views()->at(i + 1U);
+    EXPECT_TRUE((current != nullptr && next == nullptr) ||
+                (current == nullptr && next != nullptr));
+  }
+}
+
 // TODO(ekaramad): The following tests are specifically written for Aura and are
 // based on InputMethodObserver. Write similar tests for Mac/Android/Mus
 // (crbug.com/602723).
+
+#if defined(USE_AURA)
+// -----------------------------------------------------------------------------
+// Input Method Observer Tests
+//
+// The following tests will make use of the InputMethodObserver to verify that
+// OOPIF pages interact properly with the InputMethod through the tab's view.
+
+// TODO(ekaramad): We only have coverage for some aura tests as the whole idea
+// of ui::TextInputClient/ui::InputMethod/ui::InputMethodObserver seems to be
+// only fit to aura (specifically, OS_CHROMEOS). Can we add more tests here for
+// aura as well as other platforms (https://crbug.com/602723)?
 
 // Observes current input method for state changes.
 class InputMethodObserverBase {
@@ -512,13 +812,13 @@ class InputMethodObserverForShowIme : public InputMethodObserverBase {
   DISALLOW_COPY_AND_ASSIGN(InputMethodObserverForShowIme);
 };
 
+// TODO(ekaramad): This test is actually a unit test and should be moved to
+// somewhere more relevant (https://crbug.com/602723).
 // This test verifies that the IME for Aura is shown if and only if the current
 // client's |TextInputState.type| is not ui::TEXT_INPUT_TYPE_NONE and the flag
 // |TextInputState.show_ime_if_needed| is true. This should happen even when
 // the TextInputState has not changed (according to the platform), e.g., in
 // aura when receiving two consecutive updates with same |TextInputState.type|.
-// TODO(ekaramad): This test is actually a unit test not necessarily an OOPIF
-// test. We should move it to somewhere more relevant.
 IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
                        CorrectlyShowImeIfNeeded) {
   // We only need the <iframe> page to create RWHV.
@@ -565,3 +865,86 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
   sender.SetType(ui::TEXT_INPUT_TYPE_NONE);
   EXPECT_FALSE(send_and_check_show_ime());
 }
+#endif  // USE_AURA
+
+// Ensure that a cross-process subframe can utilize keyboard edit commands.
+// See https://crbug.com/640706.  This test is Linux-specific, as it relies on
+// overriding TextEditKeyBindingsDelegateAuraLinux, which only exists on Linux.
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(SitePerProcessTextInputManagerTest,
+                       SubframeKeyboardEditCommands) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/frame_tree/page_with_one_frame.html"));
+  ui_test_utils::NavigateToURL(browser(), main_url);
+  content::WebContents* web_contents = active_contents();
+
+  GURL frame_url(
+      embedded_test_server()->GetURL("b.com", "/page_with_input_field.html"));
+  EXPECT_TRUE(NavigateIframeToURL(web_contents, "child0", frame_url));
+
+  // Focus the subframe and then its input field.  The return value
+  // "input-focus" will be sent once the input field's focus event fires.
+  content::RenderFrameHost* child =
+      ChildFrameAt(web_contents->GetMainFrame(), 0);
+  std::string result;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      child, "window.focus(); focusInputField();", &result));
+  EXPECT_EQ("input-focus", result);
+  EXPECT_EQ(child, web_contents->GetFocusedFrame());
+
+  // Generate a couple of keystrokes, which will be routed to the subframe.
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('1'),
+                   ui::DomCode::DIGIT1, ui::VKEY_1, false, false, false, false);
+  SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('2'),
+                   ui::DomCode::DIGIT2, ui::VKEY_2, false, false, false, false);
+
+  // Verify that the input field in the subframe received the keystrokes.
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      child, "window.domAutomationController.send(getInputFieldText());",
+      &result));
+  EXPECT_EQ("12", result);
+
+  // Define and install a test delegate that translates any keystroke to a
+  // command to delete all text from current cursor position to the beginning
+  // of the line.
+  class TextDeleteDelegate : public ui::TextEditKeyBindingsDelegateAuraLinux {
+   public:
+    TextDeleteDelegate() {}
+    ~TextDeleteDelegate() override {}
+
+    bool MatchEvent(
+        const ui::Event& event,
+        std::vector<ui::TextEditCommandAuraLinux>* commands) override {
+      if (commands) {
+        commands->emplace_back(ui::TextEditCommand::DELETE_TO_BEGINNING_OF_LINE,
+                               "");
+      }
+      return true;
+    }
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(TextDeleteDelegate);
+  };
+
+  TextDeleteDelegate delegate;
+  ui::TextEditKeyBindingsDelegateAuraLinux* old_delegate =
+      ui::GetTextEditKeyBindingsDelegate();
+  ui::SetTextEditKeyBindingsDelegate(&delegate);
+
+  // Press ctrl-alt-shift-D.  The test's delegate will pretend that this
+  // corresponds to the command to delete everyting to the beginning of the
+  // line.  Note the use of SendKeyPressSync instead of SimulateKeyPress, as
+  // the latter doesn't go through
+  // RenderWidgetHostViewAura::ForwardKeyboardEvent, which contains the edit
+  // commands logic that's tested here.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_D,
+                                              true, true, true, false));
+  ui::SetTextEditKeyBindingsDelegate(old_delegate);
+
+  // Verify that the input field in the subframe is erased.
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      child, "window.domAutomationController.send(getInputFieldText());",
+      &result));
+  EXPECT_EQ("", result);
+}
+#endif

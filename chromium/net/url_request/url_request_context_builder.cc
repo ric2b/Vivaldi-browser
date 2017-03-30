@@ -35,13 +35,12 @@
 #include "net/http/http_server_properties_manager.h"
 #include "net/http/transport_security_persister.h"
 #include "net/http/transport_security_state.h"
-#include "net/quic/quic_stream_factory.h"
+#include "net/quic/chromium/quic_stream_factory.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_config_service_defaults.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
-#include "net/url_request/url_request_backoff_manager.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_storage.h"
 #include "net/url_request/url_request_intercepting_job_factory.h"
@@ -185,7 +184,6 @@ URLRequestContextBuilder::HttpNetworkSessionParams::HttpNetworkSessionParams()
       host_mapping_rules(NULL),
       testing_fixed_http_port(0),
       testing_fixed_https_port(0),
-      enable_spdy31(false),
       enable_http2(true),
       enable_quic(false),
       quic_max_server_configs_stored_in_properties(0),
@@ -197,7 +195,8 @@ URLRequestContextBuilder::HttpNetworkSessionParams::HttpNetworkSessionParams()
       quic_close_sessions_on_ip_change(false),
       quic_migrate_sessions_on_network_change(false),
       quic_migrate_sessions_early(false),
-      quic_disable_bidirectional_streams(false) {}
+      quic_disable_bidirectional_streams(false),
+      quic_race_cert_verification(false) {}
 
 URLRequestContextBuilder::HttpNetworkSessionParams::~HttpNetworkSessionParams()
 {}
@@ -212,7 +211,6 @@ URLRequestContextBuilder::URLRequestContextBuilder()
 #endif
       http_cache_enabled_(true),
       throttling_enabled_(false),
-      backoff_enabled_(false),
       sdch_enabled_(false),
       cookie_store_set_by_client_(false),
       net_log_(nullptr),
@@ -249,7 +247,6 @@ void URLRequestContextBuilder::DisableHttpCache() {
 
 void URLRequestContextBuilder::SetSpdyAndQuicEnabled(bool spdy_enabled,
                                                      bool quic_enabled) {
-  http_network_session_params_.enable_spdy31 = spdy_enabled;
   http_network_session_params_.enable_http2 = spdy_enabled;
   http_network_session_params_.enable_quic = quic_enabled;
 }
@@ -412,11 +409,6 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
         base::WrapUnique(new URLRequestThrottlerManager()));
   }
 
-  if (backoff_enabled_) {
-    storage->set_backoff_manager(
-        base::WrapUnique(new URLRequestBackoffManager()));
-  }
-
   HttpNetworkSession::Params network_session_params;
   SetHttpNetworkSessionComponents(context.get(), &network_session_params);
 
@@ -428,8 +420,6 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_.testing_fixed_http_port;
   network_session_params.testing_fixed_https_port =
       http_network_session_params_.testing_fixed_https_port;
-  network_session_params.enable_spdy31 =
-      http_network_session_params_.enable_spdy31;
   network_session_params.enable_http2 =
       http_network_session_params_.enable_http2;
   network_session_params.enable_quic = http_network_session_params_.enable_quic;
@@ -459,6 +449,8 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_.quic_migrate_sessions_early;
   network_session_params.quic_disable_bidirectional_streams =
       http_network_session_params_.quic_disable_bidirectional_streams;
+  network_session_params.quic_race_cert_verification =
+      http_network_session_params_.quic_race_cert_verification;
   if (proxy_delegate_) {
     network_session_params.proxy_delegate = proxy_delegate_.get();
     storage->set_proxy_delegate(std::move(proxy_delegate_));

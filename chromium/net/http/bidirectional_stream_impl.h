@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -133,10 +134,6 @@ class NET_EXPORT_PRIVATE BidirectionalStreamImpl {
   virtual void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
                          const std::vector<int>& lengths,
                          bool end_stream) = 0;
-
-  // Cancels the stream. No Delegate method will be called. Any pending
-  // operations may or may not succeed.
-  virtual void Cancel() = 0;
 
   // Returns the protocol used by this stream. If stream has not been
   // established, return kProtoUnknown.

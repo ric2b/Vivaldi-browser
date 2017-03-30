@@ -43,12 +43,10 @@
     MediaStreamTrack getTrackById(DOMString trackId);
     [CallWith=ExecutionContext] MediaStream clone();
 
-    readonly attribute boolean active;
+    [Measure] readonly attribute boolean active;
 
     attribute EventHandler onactive;
     attribute EventHandler oninactive;
-    //  DEPRECATED
-    attribute EventHandler onended;
 
     attribute EventHandler onaddtrack;
     attribute EventHandler onremovetrack;

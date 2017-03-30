@@ -5,6 +5,7 @@
 #include "cc/output/ca_layer_overlay.h"
 
 #include "base/metrics/histogram.h"
+#include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/stream_video_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
@@ -35,8 +36,54 @@ enum CALayerResult {
   CA_LAYER_FAILED_RENDER_PASS,
   CA_LAYER_FAILED_SURFACE_CONTENT,
   CA_LAYER_FAILED_YUV_VIDEO_CONTENT,
+  CA_LAYER_FAILED_DIFFERENT_CLIP_SETTINGS,
+  CA_LAYER_FAILED_DIFFERENT_VERTEX_OPACITIES,
+  CA_LAYER_FAILED_RENDER_PASS_FILTER_SCALE,
+  CA_LAYER_FAILED_RENDER_PASS_BACKGROUND_FILTERS,
+  CA_LAYER_FAILED_RENDER_PASS_MASK,
+  CA_LAYER_FAILED_RENDER_PASS_FILTER_OPERATION,
+  CA_LAYER_FAILED_RENDER_PASS_SORTING_CONTEXT_ID,
   CA_LAYER_FAILED_COUNT,
 };
+
+bool FilterOperationSupported(const FilterOperation& operation) {
+  switch (operation.type()) {
+    case FilterOperation::GRAYSCALE:
+    case FilterOperation::SEPIA:
+    case FilterOperation::SATURATE:
+    case FilterOperation::HUE_ROTATE:
+    case FilterOperation::INVERT:
+    case FilterOperation::BRIGHTNESS:
+    case FilterOperation::CONTRAST:
+    case FilterOperation::OPACITY:
+    case FilterOperation::BLUR:
+    case FilterOperation::DROP_SHADOW:
+      return true;
+    default:
+      return false;
+  }
+}
+
+CALayerResult FromRenderPassQuad(ResourceProvider* resource_provider,
+                                 const RenderPassDrawQuad* quad,
+                                 CALayerOverlay* ca_layer_overlay) {
+  if (quad->background_filters.size() != 0)
+    return CA_LAYER_FAILED_RENDER_PASS_BACKGROUND_FILTERS;
+
+  if (quad->shared_quad_state->sorting_context_id != 0)
+    return CA_LAYER_FAILED_RENDER_PASS_SORTING_CONTEXT_ID;
+
+  for (const FilterOperation& operation : quad->filters.operations()) {
+    bool success = FilterOperationSupported(operation);
+    if (!success)
+      return CA_LAYER_FAILED_RENDER_PASS_FILTER_OPERATION;
+  }
+
+  ca_layer_overlay->rpdq = quad;
+  ca_layer_overlay->contents_rect = gfx::RectF(0, 0, 1, 1);
+
+  return CA_LAYER_SUCCESS;
+}
 
 CALayerResult FromStreamVideoQuad(ResourceProvider* resource_provider,
                                   const StreamVideoDrawQuad* quad,
@@ -76,9 +123,9 @@ CALayerResult FromTextureQuad(ResourceProvider* resource_provider,
     // transformation that flips the contents of the layer without changing its
     // frame is the composition of a vertical flip about the anchor point, and a
     // translation by the height of the layer.
-    ca_layer_overlay->transform.preTranslate(
+    ca_layer_overlay->shared_state->transform.preTranslate(
         0, ca_layer_overlay->bounds_rect.height(), 0);
-    ca_layer_overlay->transform.preScale(1, -1, 1);
+    ca_layer_overlay->shared_state->transform.preScale(1, -1, 1);
   }
   ca_layer_overlay->contents_resource_id = resource_id;
   ca_layer_overlay->contents_rect =
@@ -86,9 +133,9 @@ CALayerResult FromTextureQuad(ResourceProvider* resource_provider,
   ca_layer_overlay->background_color = quad->background_color;
   for (int i = 1; i < 4; ++i) {
     if (quad->vertex_opacity[i] != quad->vertex_opacity[0])
-      return CA_LAYER_FAILED_UNKNOWN;
+      return CA_LAYER_FAILED_DIFFERENT_VERTEX_OPACITIES;
   }
-  ca_layer_overlay->opacity *= quad->vertex_opacity[0];
+  ca_layer_overlay->shared_state->opacity *= quad->vertex_opacity[0];
   ca_layer_overlay->filter = quad->nearest_neighbor ? GL_NEAREST : GL_LINEAR;
   return CA_LAYER_SUCCESS;
 }
@@ -106,73 +153,91 @@ CALayerResult FromTileQuad(ResourceProvider* resource_provider,
   return CA_LAYER_SUCCESS;
 }
 
-CALayerResult FromDrawQuad(ResourceProvider* resource_provider,
-                           const gfx::RectF& display_rect,
-                           const DrawQuad* quad,
-                           CALayerOverlay* ca_layer_overlay,
-                           bool* skip) {
-  if (quad->shared_quad_state->blend_mode != SkXfermode::kSrcOver_Mode)
-    return CA_LAYER_FAILED_QUAD_BLEND_MODE;
+class CALayerOverlayProcessor {
+ public:
+  CALayerResult FromDrawQuad(ResourceProvider* resource_provider,
+                             const gfx::RectF& display_rect,
+                             const DrawQuad* quad,
+                             CALayerOverlay* ca_layer_overlay,
+                             bool* skip) {
+    if (quad->shared_quad_state->blend_mode != SkXfermode::kSrcOver_Mode)
+      return CA_LAYER_FAILED_QUAD_BLEND_MODE;
 
-  // Early-out for invisible quads.
-  if (quad->shared_quad_state->opacity == 0.f) {
-    *skip = true;
-    return CA_LAYER_SUCCESS;
+    // Early-out for invisible quads.
+    if (quad->shared_quad_state->opacity == 0.f) {
+      *skip = true;
+      return CA_LAYER_SUCCESS;
+    }
+
+    // Enable edge anti-aliasing only on layer boundaries.
+    ca_layer_overlay->edge_aa_mask = 0;
+    if (quad->IsLeftEdge())
+      ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_LEFT_CHROMIUM;
+    if (quad->IsRightEdge())
+      ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_RIGHT_CHROMIUM;
+    if (quad->IsBottomEdge())
+      ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_BOTTOM_CHROMIUM;
+    if (quad->IsTopEdge())
+      ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_TOP_CHROMIUM;
+
+    if (most_recent_shared_quad_state_ != quad->shared_quad_state) {
+      most_recent_shared_quad_state_ = quad->shared_quad_state;
+      most_recent_overlay_shared_state_ = new CALayerOverlaySharedState;
+      // Set rect clipping and sorting context ID.
+      most_recent_overlay_shared_state_->sorting_context_id =
+          quad->shared_quad_state->sorting_context_id;
+      most_recent_overlay_shared_state_->is_clipped =
+          quad->shared_quad_state->is_clipped;
+      most_recent_overlay_shared_state_->clip_rect =
+          gfx::RectF(quad->shared_quad_state->clip_rect);
+
+      most_recent_overlay_shared_state_->opacity =
+          quad->shared_quad_state->opacity;
+      most_recent_overlay_shared_state_->transform =
+          quad->shared_quad_state->quad_to_target_transform.matrix();
+    }
+    ca_layer_overlay->shared_state = most_recent_overlay_shared_state_;
+
+    ca_layer_overlay->bounds_rect = gfx::RectF(quad->rect);
+
+    switch (quad->material) {
+      case DrawQuad::TEXTURE_CONTENT:
+        return FromTextureQuad(resource_provider,
+                               TextureDrawQuad::MaterialCast(quad),
+                               ca_layer_overlay);
+      case DrawQuad::TILED_CONTENT:
+        return FromTileQuad(resource_provider, TileDrawQuad::MaterialCast(quad),
+                            ca_layer_overlay);
+      case DrawQuad::SOLID_COLOR:
+        return FromSolidColorDrawQuad(SolidColorDrawQuad::MaterialCast(quad),
+                                      ca_layer_overlay, skip);
+      case DrawQuad::STREAM_VIDEO_CONTENT:
+        return FromStreamVideoQuad(resource_provider,
+                                   StreamVideoDrawQuad::MaterialCast(quad),
+                                   ca_layer_overlay);
+      case DrawQuad::DEBUG_BORDER:
+        return CA_LAYER_FAILED_DEBUG_BORDER;
+      case DrawQuad::PICTURE_CONTENT:
+        return CA_LAYER_FAILED_PICTURE_CONTENT;
+      case DrawQuad::RENDER_PASS:
+        return FromRenderPassQuad(resource_provider,
+                                  RenderPassDrawQuad::MaterialCast(quad),
+                                  ca_layer_overlay);
+      case DrawQuad::SURFACE_CONTENT:
+        return CA_LAYER_FAILED_SURFACE_CONTENT;
+      case DrawQuad::YUV_VIDEO_CONTENT:
+        return CA_LAYER_FAILED_YUV_VIDEO_CONTENT;
+      default:
+        break;
+    }
+
+    return CA_LAYER_FAILED_UNKNOWN;
   }
 
-  // Enable edge anti-aliasing only on layer boundaries.
-  ca_layer_overlay->edge_aa_mask = 0;
-  if (quad->IsLeftEdge())
-    ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_LEFT_CHROMIUM;
-  if (quad->IsRightEdge())
-    ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_RIGHT_CHROMIUM;
-  if (quad->IsBottomEdge())
-    ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_BOTTOM_CHROMIUM;
-  if (quad->IsTopEdge())
-    ca_layer_overlay->edge_aa_mask |= GL_CA_LAYER_EDGE_TOP_CHROMIUM;
-
-  // Set rect clipping and sorting context ID.
-  ca_layer_overlay->sorting_context_id =
-      quad->shared_quad_state->sorting_context_id;
-  ca_layer_overlay->is_clipped = quad->shared_quad_state->is_clipped;
-  ca_layer_overlay->clip_rect = gfx::RectF(quad->shared_quad_state->clip_rect);
-
-  ca_layer_overlay->opacity = quad->shared_quad_state->opacity;
-  ca_layer_overlay->bounds_rect = gfx::RectF(quad->rect);
-  ca_layer_overlay->transform =
-      quad->shared_quad_state->quad_to_target_transform.matrix();
-
-  switch (quad->material) {
-    case DrawQuad::TEXTURE_CONTENT:
-      return FromTextureQuad(resource_provider,
-                             TextureDrawQuad::MaterialCast(quad),
-                             ca_layer_overlay);
-    case DrawQuad::TILED_CONTENT:
-      return FromTileQuad(resource_provider, TileDrawQuad::MaterialCast(quad),
-                          ca_layer_overlay);
-    case DrawQuad::SOLID_COLOR:
-      return FromSolidColorDrawQuad(SolidColorDrawQuad::MaterialCast(quad),
-                                    ca_layer_overlay, skip);
-    case DrawQuad::STREAM_VIDEO_CONTENT:
-      return FromStreamVideoQuad(resource_provider,
-                                 StreamVideoDrawQuad::MaterialCast(quad),
-                                 ca_layer_overlay);
-    case DrawQuad::DEBUG_BORDER:
-      return CA_LAYER_FAILED_DEBUG_BORDER;
-    case DrawQuad::PICTURE_CONTENT:
-      return CA_LAYER_FAILED_PICTURE_CONTENT;
-    case DrawQuad::RENDER_PASS:
-      return CA_LAYER_FAILED_RENDER_PASS;
-    case DrawQuad::SURFACE_CONTENT:
-      return CA_LAYER_FAILED_SURFACE_CONTENT;
-    case DrawQuad::YUV_VIDEO_CONTENT:
-      return CA_LAYER_FAILED_YUV_VIDEO_CONTENT;
-    default:
-      break;
-  }
-
-  return CA_LAYER_FAILED_UNKNOWN;
-}
+ private:
+  const SharedQuadState* most_recent_shared_quad_state_ = nullptr;
+  scoped_refptr<CALayerOverlaySharedState> most_recent_overlay_shared_state_;
+};
 
 }  // namespace
 
@@ -189,13 +254,14 @@ bool ProcessForCALayerOverlays(ResourceProvider* resource_provider,
   CALayerResult result = CA_LAYER_SUCCESS;
   ca_layer_overlays->reserve(quad_list.size());
 
+  CALayerOverlayProcessor processor;
   for (auto it = quad_list.BackToFrontBegin(); it != quad_list.BackToFrontEnd();
        ++it) {
     const DrawQuad* quad = *it;
     CALayerOverlay ca_layer;
     bool skip = false;
-    result =
-        FromDrawQuad(resource_provider, display_rect, quad, &ca_layer, &skip);
+    result = processor.FromDrawQuad(resource_provider, display_rect, quad,
+                                    &ca_layer, &skip);
     if (result != CA_LAYER_SUCCESS)
       break;
 
@@ -206,12 +272,14 @@ bool ProcessForCALayerOverlays(ResourceProvider* resource_provider,
     // within one sorting context.
     if (!ca_layer_overlays->empty()) {
       const CALayerOverlay& previous_ca_layer = ca_layer_overlays->back();
-      if (ca_layer.sorting_context_id &&
-          previous_ca_layer.sorting_context_id == ca_layer.sorting_context_id) {
-        if (previous_ca_layer.is_clipped != ca_layer.is_clipped ||
-            previous_ca_layer.clip_rect != ca_layer.clip_rect) {
-          // TODO(ccameron): Add a histogram value for this.
-          result = CA_LAYER_FAILED_UNKNOWN;
+      if (ca_layer.shared_state->sorting_context_id &&
+          previous_ca_layer.shared_state->sorting_context_id ==
+              ca_layer.shared_state->sorting_context_id) {
+        if (previous_ca_layer.shared_state->is_clipped !=
+                ca_layer.shared_state->is_clipped ||
+            previous_ca_layer.shared_state->clip_rect !=
+                ca_layer.shared_state->clip_rect) {
+          result = CA_LAYER_FAILED_DIFFERENT_CLIP_SETTINGS;
           break;
         }
       }

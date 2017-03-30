@@ -56,7 +56,10 @@ class CONTENT_EXPORT NavigatorDelegate {
   // A provisional load in |render_frame_host| failed.
   virtual void DidFailProvisionalLoadWithError(
       RenderFrameHostImpl* render_frame_host,
-      const FrameHostMsg_DidFailProvisionalLoadWithError_Params& params) {}
+      const GURL& validated_url,
+      int error_code,
+      const base::string16& error_description,
+      bool was_ignored_by_handler) {}
 
   // Document load in |render_frame_host| failed.
   virtual void DidFailLoadWithError(
@@ -110,7 +113,7 @@ class CONTENT_EXPORT NavigatorDelegate {
 
   // Returns whether to continue a navigation that needs to transfer to a
   // different process between the load start and commit.
-  virtual bool ShouldTransferNavigation();
+  virtual bool ShouldTransferNavigation(bool is_main_frame_navigation);
 
   // Returns whether URLs for aborted browser-initiated navigations should be
   // preserved in the omnibox.  Defaults to false.

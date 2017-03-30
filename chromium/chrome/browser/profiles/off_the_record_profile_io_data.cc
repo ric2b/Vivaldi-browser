@@ -162,7 +162,7 @@ void OffTheRecordProfileIOData::Handle::LazyInitialize() const {
   io_data_->safe_browsing_enabled()->Init(prefs::kSafeBrowsingEnabled,
       profile_->GetPrefs());
   io_data_->safe_browsing_enabled()->MoveToThread(
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
   io_data_->InitializeOnUIThread(profile_);
 }
 
@@ -221,9 +221,6 @@ void OffTheRecordProfileIOData::InitializeInternal(
   main_context->set_http_auth_handler_factory(
       io_thread_globals->http_auth_handler_factory.get());
   main_context->set_proxy_service(proxy_service());
-
-  main_context->set_backoff_manager(
-      io_thread_globals->url_request_backoff_manager.get());
 
   // For incognito, we use the default non-persistent HttpServerPropertiesImpl.
   set_http_server_properties(std::unique_ptr<net::HttpServerProperties>(
@@ -291,8 +288,6 @@ void OffTheRecordProfileIOData::
   extensions_context->set_cert_transparency_verifier(
       io_thread_globals->cert_transparency_verifier.get());
 
-  extensions_context->set_backoff_manager(
-      io_thread_globals->url_request_backoff_manager.get());
   // All we care about for extensions is the cookie store. For incognito, we
   // use a non-persistent cookie store.
   content::CookieStoreConfig cookie_config;

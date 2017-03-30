@@ -5,6 +5,15 @@
     <structures>
       <structure type="chrome_scaled_image" name="IDR_LOCATION_BAR_HTTP" file="vivaldi/location_bar_http.png" />
       <structure type="chrome_scaled_image" name="IDR_ERROR_NETWORK_GENERIC" file="vivaldi/error_network_generic.png" />
+      <if expr="vivaldi_release_final">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO" file="vivaldi_final/product_icon_128.png" />
+      </if>
+      <if expr="vivaldi_release_snapshot">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO" file="vivaldi_snapshot/product_icon_128.png" />
+      </if>
+      <if expr="vivaldi_release_sopranos">
+        <structure type="chrome_scaled_image" name="IDR_PRODUCT_LOGO" file="vivaldi_sopranos/product_icon_128.png" />
+      </if>
     </structures>
   </release>
 </grit>

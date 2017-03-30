@@ -1,0 +1,73 @@
+# Copyright 2016 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
+import("//testing/test.gni")
+
+service("mus_demo") {
+  sources = [
+    "bitmap_uploader.cc",
+    "bitmap_uploader.h",
+    "main.cc",
+    "mus_demo.cc",
+    "mus_demo.h",
+  ]
+
+  deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
+    "//services/shell/public/cpp",
+    "//services/shell/public/cpp:sources",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp:internal",
+    "//services/ui/public/interfaces",
+    "//skia",
+    "//ui/gfx/geometry",
+  ]
+
+  data_deps = [
+    ":manifest",
+    "//services/ui",
+  ]
+}
+
+service_manifest("manifest") {
+  name = "mus_demo"
+  source = "manifest.json"
+}
+
+service_manifest("test_manifest") {
+  type = "exe"
+  name = "mus_demo_unittests"
+  source = "test_manifest.json"
+}
+
+test("mus_demo_unittests") {
+  testonly = true
+
+  sources = [
+    "mus_demo_unittests.cc",
+  ]
+
+  deps = [
+    ":demo",
+    "//base",
+    "//services/shell/public/cpp",
+    "//services/shell/public/cpp:service_test_support",
+    "//services/ui/common:run_all_shelltests",
+    "//services/ui/public/interfaces",
+    "//testing/gtest",
+  ]
+
+  data_deps = [
+    ":test_manifest",
+  ]
+}
+
+group("demo") {
+  deps = [
+    ":mus_demo",
+  ]
+}

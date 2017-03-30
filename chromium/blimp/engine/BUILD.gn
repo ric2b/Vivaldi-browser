@@ -84,6 +84,7 @@ source_set("app") {
     "//content/public/common",
     "//content/public/renderer",
     "//content/public/utility",
+    "//device/geolocation:device_geolocation",
     "//net",
   ]
 }
@@ -266,6 +267,8 @@ source_set("feature") {
     "feature/engine_settings_feature.h",
     "feature/geolocation/blimp_location_provider.cc",
     "feature/geolocation/blimp_location_provider.h",
+    "feature/geolocation/engine_geolocation_feature.cc",
+    "feature/geolocation/engine_geolocation_feature.h",
   ]
 
   deps = [
@@ -277,6 +280,7 @@ source_set("feature") {
     "//blimp/net",
     "//content/public/browser",
     "//content/public/common",
+    "//device/geolocation:device_geolocation",
     "//net",
     "//ui/base",
     "//ui/base/ime",
@@ -330,6 +334,7 @@ source_set("session") {
     ":app_settings",
     ":app_switches",
     ":app_ui",
+    ":blob_channel_service",
     ":common",
     ":common_user_agent",
     ":feature",
@@ -338,6 +343,7 @@ source_set("session") {
     "//blimp/common/proto",
     "//blimp/net",
     "//content/public/browser",
+    "//device/geolocation:device_geolocation",
     "//net",
     "//ui/aura",
     "//ui/base/ime",
@@ -372,11 +378,15 @@ source_set("test_support") {
   sources = [
     "app/test_content_main_delegate.cc",
     "app/test_content_main_delegate.h",
+    "feature/geolocation/mock_blimp_location_provider_delegate.cc",
+    "feature/geolocation/mock_blimp_location_provider_delegate.h",
   ]
 
   deps = [
     ":app",
+    ":feature",
     "//base",
+    "//testing/gmock",
   ]
 }
 
@@ -399,7 +409,6 @@ source_set("app_unit_tests") {
     ":app_net",
     ":app_settings",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//blimp/common",
     "//blimp/common:test_support",
@@ -427,7 +436,6 @@ source_set("common_unit_tests") {
   deps = [
     ":common",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//components/metrics:metrics",
     "//content/public/browser",
@@ -444,12 +452,14 @@ source_set("feature_unit_tests") {
   sources = [
     "feature/engine_render_widget_feature_unittest.cc",
     "feature/engine_settings_feature_unittest.cc",
+    "feature/geolocation/blimp_location_provider_unittest.cc",
+    "feature/geolocation/engine_geolocation_feature_unittest.cc",
   ]
 
   deps = [
     ":feature",
+    ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//blimp/common",
     "//blimp/common/proto",
@@ -458,6 +468,7 @@ source_set("feature_unit_tests") {
     "//blimp/net:test_support",
     "//content",
     "//content/public/browser",
+    "//device/geolocation:device_geolocation",
     "//net",
     "//net:test_support",
     "//testing/gmock",
@@ -472,11 +483,19 @@ source_set("renderer_unit_tests") {
 
   sources = [
     "renderer/blimp_engine_picture_cache_unittest.cc",
+    "renderer/blob_channel_sender_proxy_unittest.cc",
   ]
 
   deps = [
     ":renderer",
+    "//base",
+    "//blimp/common",
+    "//blimp/common:test_support",
+    "//blimp/engine:blob_channel_mojo_cpp_sources",
+    "//blimp/engine:blob_channel_service",
+    "//blimp/net:test_support",
     "//blimp/test:support",
+    "//mojo/public",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -661,8 +680,10 @@ source_set("browser_tests") {
     "//base",
     "//blimp/client:feature",
     "//blimp/client:session",
-    "//blimp/client:switches",
     "//blimp/client:test_support",
+    "//blimp/client/core:switches",
+    "//blimp/client/core/contents:test_support",
+    "//blimp/client/core/session",
     "//blimp/common",
     "//blimp/engine:app",
     "//blimp/engine:app_config",
@@ -672,14 +693,13 @@ source_set("browser_tests") {
     "//blimp/engine:test_support",
     "//blimp/net",
     "//content/public/app:both",
-    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
 
   data = [
-    "data/",
+    "//blimp/test/data/",
     "$root_out_dir/blimp_engine.pak",
   ]
 }

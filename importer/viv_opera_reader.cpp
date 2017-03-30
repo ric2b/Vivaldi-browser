@@ -20,16 +20,17 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 
 OperaAdrFileReader::OperaAdrFileReader() {}
 
 OperaAdrFileReader::~OperaAdrFileReader() {}
 
-void OperaAdrFileReader::LoadFile(base::FilePath &file) {
-  if (!base::PathExists(file)) return;
-
+bool OperaAdrFileReader::LoadFile(base::FilePath &file) {
+  if (!base::PathExists(file)) {
+    return false;
+  }
   std::string bookmark_data;
   base::ReadFileToString(file, &bookmark_data);
 
@@ -66,4 +67,5 @@ void OperaAdrFileReader::LoadFile(base::FilePath &file) {
   if (entries.size() > 0) {
     HandleEntry(category, entries);
   }
+  return true;
 }

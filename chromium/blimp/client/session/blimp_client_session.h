@@ -10,11 +10,13 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
-#include "blimp/client/feature/compositor/blob_image_serialization_processor.h"
-#include "blimp/client/session/assignment_source.h"
+#include "blimp/client/core/compositor/blob_image_serialization_processor.h"
+#include "blimp/client/core/session/assignment_source.h"
+#include "blimp/client/core/session/network_event_observer.h"
+#include "blimp/client/public/session/assignment.h"
 #include "blimp/common/proto/blimp_message.pb.h"
-#include "blimp/net/blimp_connection_statistics.h"
 #include "blimp/net/blimp_message_processor.h"
 
 namespace net {
@@ -39,15 +41,6 @@ class ImeFeature;
 class RenderWidgetFeature;
 class SettingsFeature;
 class TabControlFeature;
-
-class NetworkEventObserver {
- public:
-  NetworkEventObserver() {}
-  virtual ~NetworkEventObserver() {}
-
-  virtual void OnConnected() = 0;
-  virtual void OnDisconnected(int result) = 0;
-};
 
 // BlimpClientSession represents a single active session of Blimp on the client
 // regardless of whether or not the client application is in the background or
@@ -76,11 +69,9 @@ class BlimpClientSession
   RenderWidgetFeature* GetRenderWidgetFeature() const;
   SettingsFeature* GetSettingsFeature() const;
 
-  BlimpConnectionStatistics* GetBlimpConnectionStatistics() const;
-
   // The AssignmentCallback for when an assignment is ready. This will trigger
   // a connection to the engine.
-  virtual void ConnectWithAssignment(AssignmentSource::Result result,
+  virtual void ConnectWithAssignment(AssignmentRequestResult result,
                                      const Assignment& assignment);
 
  protected:
@@ -88,7 +79,7 @@ class BlimpClientSession
 
   // Notified every time the AssignmentSource returns the result of an attempted
   // assignment request.
-  virtual void OnAssignmentConnectionAttempted(AssignmentSource::Result result,
+  virtual void OnAssignmentConnectionAttempted(AssignmentRequestResult result,
                                                const Assignment& assignment);
 
  private:
@@ -121,10 +112,6 @@ class BlimpClientSession
   // The AssignmentSource is used when the user of BlimpClientSession calls
   // Connect() to get a valid assignment and later connect to the engine.
   std::unique_ptr<AssignmentSource> assignment_source_;
-
-  // Collects details of network, such as number of commits and bytes
-  // transferred over network. Ownership is maintained on the IO thread.
-  BlimpConnectionStatistics* blimp_connection_statistics_;
 
   // Container struct for network components.
   // Must be deleted on the IO thread.

@@ -24,7 +24,8 @@
 
 #include "platform/graphics/Canvas2DLayerBridge.h"
 
-#include "SkSurface.h"
+#include "cc/resources/single_release_callback.h"
+#include "cc/resources/texture_mailbox.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "platform/CrossThreadFunctional.h"
@@ -32,9 +33,9 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
+#include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebExternalBitmap.h"
-#include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
@@ -44,11 +45,11 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
-#include "third_party/skia/include/gpu/GrContext.h"
-#include "third_party/skia/include/gpu/gl/GrGLInterface.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
+
 #include <memory>
 
 using testing::AnyNumber;
@@ -61,40 +62,6 @@ using testing::_;
 namespace blink {
 
 namespace {
-
-class FakeWebGraphicsContext3DProvider : public WebGraphicsContext3DProvider {
-public:
-    FakeWebGraphicsContext3DProvider(gpu::gles2::GLES2Interface* gl)
-        : m_gl(gl)
-    {
-        RefPtr<const GrGLInterface> glInterface = adoptRef(GrGLCreateNullInterface());
-        m_grContext = adoptRef(GrContext::Create(kOpenGL_GrBackend, reinterpret_cast<GrBackendContext>(glInterface.get())));
-    }
-
-    GrContext* grContext() override
-    {
-        return m_grContext.get();
-    }
-
-    gpu::Capabilities getCapabilities()
-    {
-        return gpu::Capabilities();
-    }
-
-    gpu::gles2::GLES2Interface* contextGL() override
-    {
-        return m_gl;
-    }
-
-    bool bindToCurrentThread() override { return false; }
-
-    void setLostContextCallback(WebClosure) override {}
-    void setErrorMessageCallback(WebFunction<void(const char*, int32_t id)>) {}
-
-private:
-    gpu::gles2::GLES2Interface* m_gl;
-    RefPtr<GrContext> m_grContext;
-};
 
 class Canvas2DLayerBridgePtr {
 public:
@@ -128,30 +95,13 @@ private:
     RefPtr<Canvas2DLayerBridge> m_layerBridge;
 };
 
-class NullWebExternalBitmap : public WebExternalBitmap {
-public:
-    WebSize size() override
-    {
-        return WebSize();
-    }
-
-    void setSize(WebSize) override
-    {
-    }
-
-    uint8_t* pixels() override
-    {
-        return nullptr;
-    }
-};
-
 } // anonymous namespace
 
 class Canvas2DLayerBridgeTest : public Test {
 public:
     PassRefPtr<Canvas2DLayerBridge> makeBridge(std::unique_ptr<FakeWebGraphicsContext3DProvider> provider, const IntSize& size, Canvas2DLayerBridge::AccelerationMode accelerationMode)
     {
-        return adoptRef(new Canvas2DLayerBridge(std::move(provider), size, 0, NonOpaque, accelerationMode));
+        return adoptRef(new Canvas2DLayerBridge(std::move(provider), size, 0, NonOpaque, accelerationMode, nullptr));
     }
 
 protected:
@@ -160,7 +110,7 @@ protected:
         FakeGLES2Interface gl;
         std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
 
-        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::DisableAcceleration)));
+        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::DisableAcceleration, nullptr)));
 
         const GrGLTextureInfo* textureInfo = skia::GrBackendObjectToGrGLTextureInfo(bridge->newImageSnapshot(PreferAcceleration, SnapshotReasonUnitTests)->getTextureHandle(true));
         EXPECT_EQ(textureInfo, nullptr);
@@ -173,7 +123,7 @@ protected:
         std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
 
         gl.setIsContextLost(true);
-        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration)));
+        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration, nullptr)));
         EXPECT_TRUE(bridge->checkSurfaceValid());
         EXPECT_FALSE(bridge->isAccelerated());
     }
@@ -184,7 +134,7 @@ protected:
             // No fallback case.
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration)));
+            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration, nullptr)));
             EXPECT_TRUE(bridge->checkSurfaceValid());
             EXPECT_TRUE(bridge->isAccelerated());
             RefPtr<SkImage> snapshot = bridge->newImageSnapshot(PreferAcceleration, SnapshotReasonUnitTests);
@@ -197,7 +147,7 @@ protected:
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
             GrContext* gr = contextProvider->grContext();
-            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration)));
+            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration, nullptr)));
             EXPECT_TRUE(bridge->checkSurfaceValid());
             EXPECT_TRUE(bridge->isAccelerated()); // We don't yet know that allocation will fail
             // This will cause SkSurface_Gpu creation to fail without
@@ -214,7 +164,7 @@ protected:
         FakeGLES2Interface gl;
         std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
 
-        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting)));
+        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting, nullptr)));
         EXPECT_TRUE(bridge->checkSurfaceValid());
         SkPaint paint;
         uint32_t genID = bridge->getOrCreateSurface()->generationID();
@@ -232,47 +182,61 @@ protected:
         bridge->flush();
     }
 
-    void prepareMailboxWithBitmapTest()
+    void prepareMailboxWhenContextIsLost()
     {
         FakeGLES2Interface gl;
         std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting)));
-        bridge->m_lastImageId = 1;
+        Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting, nullptr)));
 
-        NullWebExternalBitmap bitmap;
-        bridge->prepareMailbox(0, &bitmap);
-        EXPECT_EQ(0u, bridge->m_lastImageId);
+        // TODO(junov): The PrepareTextureMailbox() method will fail a DCHECK if we don't
+        // do this before calling it the first time when the context is lost.
+        bridge->prepareSurfaceForPaintingIfNeeded();
+
+        // When the context is lost we are not sure if we should be producing GL frames for the
+        // compositor still or not, so fail to generate frames.
+        gl.setIsContextLost(true);
+
+        cc::TextureMailbox textureMailbox;
+        std::unique_ptr<cc::SingleReleaseCallback> releaseCallback;
+        EXPECT_FALSE(bridge->PrepareTextureMailbox(&textureMailbox, &releaseCallback));
     }
 
     void prepareMailboxAndLoseResourceTest()
     {
-        bool lostResource = true;
-
         // Prepare a mailbox, then report the resource as lost.
         // This test passes by not crashing and not triggering assertions.
         {
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting)));
-            WebExternalTextureMailbox mailbox;
-            bridge->prepareMailbox(&mailbox, 0);
-            bridge->mailboxReleased(mailbox, lostResource);
+            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting, nullptr)));
+
+            cc::TextureMailbox textureMailbox;
+            std::unique_ptr<cc::SingleReleaseCallback> releaseCallback;
+            EXPECT_TRUE(bridge->PrepareTextureMailbox(&textureMailbox, &releaseCallback));
+
+            bool lostResource = true;
+            releaseCallback->Run(gpu::SyncToken(), lostResource);
         }
 
         // Retry with mailbox released while bridge destruction is in progress.
         {
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-            WebExternalTextureMailbox mailbox;
-            Canvas2DLayerBridge* rawBridge;
+
+            cc::TextureMailbox textureMailbox;
+            std::unique_ptr<cc::SingleReleaseCallback> releaseCallback;
+
             {
-                Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting)));
-                bridge->prepareMailbox(&mailbox, 0);
-                rawBridge = bridge.get();
-            } // bridge goes out of scope, but object is kept alive by self references.
+                Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 150), 0, NonOpaque, Canvas2DLayerBridge::ForceAccelerationForTesting, nullptr)));
+                bridge->PrepareTextureMailbox(&textureMailbox, &releaseCallback);
+                // |bridge| goes out of scope and would normally be destroyed, but object is kept alive by self references.
+            }
+
             // Before fixing crbug.com/411864, the following line you cause a memory use after free
             // that sometimes causes a crash in normal builds and crashes consistently with ASAN.
-            rawBridge->mailboxReleased(mailbox, lostResource); // This should self-destruct the bridge.
+            // This should cause the bridge to be destroyed.
+            bool lostResource = true;
+            releaseCallback->Run(gpu::SyncToken(), lostResource);
         }
     }
 
@@ -281,7 +245,7 @@ protected:
         {
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 300), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration)));
+            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 300), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration, nullptr)));
             SkPaint paint;
             bridge->canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), paint);
             RefPtr<SkImage> image = bridge->newImageSnapshot(PreferAcceleration, SnapshotReasonUnitTests);
@@ -292,7 +256,7 @@ protected:
         {
             FakeGLES2Interface gl;
             std::unique_ptr<FakeWebGraphicsContext3DProvider> contextProvider = wrapUnique(new FakeWebGraphicsContext3DProvider(&gl));
-            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 300), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration)));
+            Canvas2DLayerBridgePtr bridge(adoptRef(new Canvas2DLayerBridge(std::move(contextProvider), IntSize(300, 300), 0, NonOpaque, Canvas2DLayerBridge::EnableAcceleration, nullptr)));
             SkPaint paint;
             bridge->canvas()->drawRect(SkRect::MakeXYWH(0, 0, 1, 1), paint);
             RefPtr<SkImage> image = bridge->newImageSnapshot(PreferNoAcceleration, SnapshotReasonUnitTests);
@@ -312,9 +276,9 @@ TEST_F(Canvas2DLayerBridgeTest, NoDrawOnContextLost)
     noDrawOnContextLostTest();
 }
 
-TEST_F(Canvas2DLayerBridgeTest, PrepareMailboxWithBitmap)
+TEST_F(Canvas2DLayerBridgeTest, PrepareMailboxWhenContextIsLost)
 {
-    prepareMailboxWithBitmapTest();
+    prepareMailboxWhenContextIsLost();
 }
 
 TEST_F(Canvas2DLayerBridgeTest, PrepareMailboxAndLoseResource)
@@ -1044,8 +1008,9 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileHibernating)
     ::testing::Mock::VerifyAndClearExpectations(mockLoggerPtr);
 
     // Test prepareMailbox while hibernating
-    WebExternalTextureMailbox mailbox;
-    EXPECT_FALSE(bridge->prepareMailbox(&mailbox, 0));
+    cc::TextureMailbox textureMailbox;
+    std::unique_ptr<cc::SingleReleaseCallback> releaseCallback;
+    EXPECT_FALSE(bridge->PrepareTextureMailbox(&textureMailbox, &releaseCallback));
     EXPECT_TRUE(bridge->checkSurfaceValid());
 
     // Tear down the bridge on the thread so that 'bridge' can go out of scope
@@ -1091,14 +1056,14 @@ TEST_F(Canvas2DLayerBridgeTest, DISABLED_PrepareMailboxWhileBackgroundRendering)
     EXPECT_TRUE(bridge->checkSurfaceValid());
 
     // Test prepareMailbox while background rendering
-    WebExternalTextureMailbox mailbox;
-    EXPECT_FALSE(bridge->prepareMailbox(&mailbox, 0));
+    cc::TextureMailbox textureMailbox;
+    std::unique_ptr<cc::SingleReleaseCallback> releaseCallback;
+    EXPECT_FALSE(bridge->PrepareTextureMailbox(&textureMailbox, &releaseCallback));
     EXPECT_TRUE(bridge->checkSurfaceValid());
 
     // Tear down the bridge on the thread so that 'bridge' can go out of scope
     // without crashing due to thread checks
     postAndWaitDestroyBridgeTask(BLINK_FROM_HERE, testThread.get(), &bridge);
 }
-
 
 } // namespace blink

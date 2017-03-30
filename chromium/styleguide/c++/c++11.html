@@ -29,12 +29,15 @@ allowed in Chromium and contains pointers to more detailed information. The
 Guide applies to Chromium and its subprojects. Subprojects can choose to be
 more restrictive if they need to compile on more toolchains than Chromium.</p>
 
+<p>This page comprises part of the more general
+<a href="https://chromium.googlesource.com/chromium/src/+/master/styleguide/c++/c++.md">Chromium C++ style guide</a>.</p>
+
 <p>You can propose to make a feature available or to ban a
 feature by sending an email to <a
 href="https://groups.google.com/a/chromium.org/forum/#!forum/cxx">cxx@chromium.org</a>.
 Ideally include a short blurb on what the feature is, and why you think it
 should or should not be allowed. Ideally, the list will arrive at some
-consensus and the wiki page will be updated to mention that consensus. If
+consensus and you can request review for a change to this file. If
 there's no consensus, <code>src/styleguide/c++/OWNERS</code> get to decide --
 for divisive features, we expect the decision to be to not use the feature yet
 and possibly discuss it again a few months later, when we have more experience
@@ -69,6 +72,14 @@ with the language.</p>
 <th style='width:240px;'>Description</th>
 <th style='width:240px;'>Documentation Link</th>
 <th style='width:240px;'>Notes and Discussion Thread</th>
+</tr>
+
+<tr>
+<td>__func__ Local Variable</td>
+<td><code>__func__</code></td>
+<td>Provides a local variable containing the name of the enclosing function</td>
+<td><a href="https://msdn.microsoft.com/en-us/library/dn919276.aspx">__func__</a></td>
+<td>Use instead of the non-standard <code>__FUNCTION__</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/ojGfcgSDzHM">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -184,7 +195,7 @@ enum <i>enumname</i> : <i>base-type</i></code></td>
 <td><code>[<i>captures</i>](<i>params</i>) -&gt; <i>ret</i> { <i>body</i> }</code></td>
 <td>Anonymous functions</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/lambda">Lambda functions</a></td>
-<td>Do not bind or store lambdas outside the lifetime of the stack frame they are defined in; use <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
+<td>Do not bind or store capturing lambdas outside the lifetime of the stack frame they are defined in; use captureless lambda with <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -273,6 +284,14 @@ template &lt;typename T&gt;<br/>void Function(T&& t) { ... }</code></td>
 <td>Allows any object of primitive, aggregate or class type to be initialized using brace syntax</td>
 <td><a href="http://www.stroustrup.com/C++11FAQ.html#uniform-init">Uniform initialization syntax and semantics</a></td>
 <td>See the <a href="https://www.chromium.org/developers/coding-style/cpp-dos-and-donts?pli=1#TOC-Variable-initialization">Chromium C++ Dos And Don'ts guidance</a> on when to use this. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/GF96FshwHLw">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Union Class Members</td>
+<td><code>union <i>name</i> {<i>class</i> <i>var</i>}</code></td>
+<td>Allows class type members</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/union">Union declarations</a></td>
+<td>Usage should be rare.</td>
 </tr>
 
 <tr>
@@ -507,14 +526,6 @@ codebase.
 </tr>
 
 <tr>
-<td>Function Local Variable</td>
-<td><code>__func__</code></td>
-<td>Provides a local variable of the name of the enclosing function for logging purposes</td>
-<td><a href="http://www.informit.com/guides/content.aspx?g=cplusplus&amp;seqNum=338">The __func__ Predeclared Identifier is Coming to C++</a></td>
-<td>Reevaluate now that MSVS2015 is available. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/ojGfcgSDzHM">Discussion thread</a></td>
-</tr>
-
-<tr>
 <td>Inherited Constructors</td>
 <td><code>class Derived : Base {<br />
 &nbsp;&nbsp;using Base::Base;<br />
@@ -673,14 +684,6 @@ work in all our compilers yet.</p>
 <td>Allows better versioning of namespaces</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/namespace">Namespaces</a></td>
 <td>Unclear how it will work with components</td>
-</tr>
-
-<tr>
-<td>Union Class Members</td>
-<td><code>union <i>name</i> {<i>class</i> <i>var</i>}</code></td>
-<td>Allows class type members</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/union">Union declarations</a></td>
-<td></td>
 </tr>
 
 <tr>
@@ -863,10 +866,10 @@ work in all our compilers yet.</p>
 </tr>
 
 <tr>
-<td>String to Number Functions</td>
+<td>String-Number Conversion Functions</td>
 <td><code>std::stoi()</code>, <code>std::stol()</code>, <code>std::stoul()</code>, <code>std::stoll</code>, <code>std::stoull()</code>, <code>std::stof()</code>, <code>std::stod()</code>, <code>std::stold()</code>, <code>std::to_string()</code></td>
-<td>Converts strings to numbers</td>
-<td><a href="http://en.cppreference.com/w/cpp/string/basic_string/stol">std::stoi, std::stol, std::stoll</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/stoul">std::stoul, std::stoull</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/stof">std::stof, std::stod, std::stold</a></td>
+<td>Converts strings to/from numbers</td>
+<td><a href="http://en.cppreference.com/w/cpp/string/basic_string/stol">std::stoi, std::stol, std::stoll</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/stoul">std::stoul, std::stoull</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/stof">std::stof, std::stod, std::stold</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/to_string">std::to_string</a></td>
 <td></td>
 </tr>
 

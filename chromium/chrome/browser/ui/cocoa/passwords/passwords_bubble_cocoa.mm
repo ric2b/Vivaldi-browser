@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/cocoa/location_bar/manage_passwords_decoration.h"
 #import "chrome/browser/ui/cocoa/passwords/passwords_bubble_controller.h"
 #include "chrome/browser/ui/passwords/manage_passwords_icon.h"
+#include "chrome/browser/ui/passwords/passwords_model_delegate.h"
 #include "content/public/browser/web_contents.h"
 
 #include "app/vivaldi_apptools.h"
@@ -45,9 +46,9 @@ ManagePasswordsBubbleCocoa::ManagePasswordsBubbleCocoa(
     content::WebContents* webContents,
     ManagePasswordsBubbleModel::DisplayReason displayReason,
     ManagePasswordsIcon* icon)
-    : model_(webContents, displayReason),
+    : model_(PasswordsModelDelegateFromWebContents(webContents),
+             displayReason),
       icon_(icon),
-      closing_(false),
       controller_(nil),
       webContents_(webContents),
       bridge_(nil) {
@@ -97,11 +98,17 @@ void ManagePasswordsBubbleCocoa::Show(bool user_action) {
            object:[controller_ window]];
 }
 
-void ManagePasswordsBubbleCocoa::Close() {
-  if (!closing_) {
-    closing_ = true;
-    [controller_ close];
+void ManagePasswordsBubbleCocoa::Close(bool no_animation) {
+  if (no_animation) {
+    InfoBubbleWindow* window = base::mac::ObjCCastStrict<InfoBubbleWindow>(
+        [controller_ window]);
+    [window setAllowedAnimations:info_bubble::kAnimateNone];
   }
+  [controller_ close];
+}
+
+void ManagePasswordsBubbleCocoa::Close() {
+  Close(false);
 }
 
 void ManagePasswordsBubbleCocoa::OnClose() {
@@ -114,10 +121,7 @@ void ManagePasswordsBubbleCocoa::Show(content::WebContents* webContents,
   if (bubble_) {
     // The bubble is currently shown. It's to be reopened with the new content.
     // Disable closing animation so that it's destroyed immediately.
-    InfoBubbleWindow* window = base::mac::ObjCCastStrict<InfoBubbleWindow>(
-        [bubble_->controller_ window]);
-    [window setAllowedAnimations:info_bubble::kAnimateNone];
-    bubble_->Close();
+    bubble_->Close(true);
   }
   DCHECK(!bubble_);
 

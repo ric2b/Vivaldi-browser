@@ -105,6 +105,16 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         }
     }
 
+    private static void triggerApplicationStateChange(
+            final RegistrationPolicyApplicationStatus policy, final int applicationState) {
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                policy.onApplicationStateChange(applicationState);
+            }
+        });
+    }
+
     /**
      * Mocks out calls to the ConnectivityManager.
      */
@@ -149,7 +159,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
 
         @Override
         protected NetworkCapabilities getNetworkCapabilities(Network network) {
-            int netId = NetworkChangeNotifierAutoDetect.networkToNetId(network);
+            int netId = demungeNetId(NetworkChangeNotifierAutoDetect.networkToNetId(network));
             for (MockNetwork mockNetwork : mMockNetworks) {
                 if (netId == mockNetwork.mNetId) {
                     return mockNetwork.getCapabilities();
@@ -160,7 +170,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
 
         @Override
         protected boolean vpnAccessible(Network network) {
-            int netId = NetworkChangeNotifierAutoDetect.networkToNetId(network);
+            int netId = demungeNetId(NetworkChangeNotifierAutoDetect.networkToNetId(network));
             for (MockNetwork mockNetwork : mMockNetworks) {
                 if (netId == mockNetwork.mNetId) {
                     return mockNetwork.mVpnAccessible;
@@ -181,7 +191,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         // Dummy implementations to avoid NullPointerExceptions in default implementations:
 
         @Override
-        public int getDefaultNetId() {
+        public long getDefaultNetId() {
             return NetId.INVALID;
         }
 
@@ -269,6 +279,16 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         }
     }
 
+    private static int demungeNetId(long netId) {
+        // On Marshmallow, demunge the NetID to undo munging done in Network.getNetworkHandle().
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            netId >>= 32;
+        }
+        // Now that the NetID has been demunged it is a true NetID which means it's only a 16-bit
+        // value (see ConnectivityService.MAX_NET_ID) so it should be safe to cast to int.
+        return (int) netId;
+    }
+
     // Types of network changes. Each is associated with a NetworkChangeNotifierAutoDetect.Observer
     // callback, and NONE is provided to indicate no callback observed.
     private static enum ChangeType { NONE, CONNECT, SOON_TO_DISCONNECT, DISCONNECT, PURGE_LIST }
@@ -284,9 +304,9 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
          * @param changeType the type of change.
          * @param netId the network identifier of the network changing.
          */
-        ChangeInfo(ChangeType changeType, int netId) {
+        ChangeInfo(ChangeType changeType, long netId) {
             mChangeType = changeType;
-            mNetId = netId;
+            mNetId = demungeNetId(netId);
         }
     }
 
@@ -303,25 +323,25 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         public void onMaxBandwidthChanged(double maxBandwidthMbps) {}
 
         @Override
-        public void onNetworkConnect(int netId, int connectionType) {
+        public void onNetworkConnect(long netId, int connectionType) {
             ThreadUtils.assertOnUiThread();
             mChanges.add(new ChangeInfo(ChangeType.CONNECT, netId));
         }
 
         @Override
-        public void onNetworkSoonToDisconnect(int netId) {
+        public void onNetworkSoonToDisconnect(long netId) {
             ThreadUtils.assertOnUiThread();
             mChanges.add(new ChangeInfo(ChangeType.SOON_TO_DISCONNECT, netId));
         }
 
         @Override
-        public void onNetworkDisconnect(int netId) {
+        public void onNetworkDisconnect(long netId) {
             ThreadUtils.assertOnUiThread();
             mChanges.add(new ChangeInfo(ChangeType.DISCONNECT, netId));
         }
 
         @Override
-        public void purgeActiveNetworkList(int[] activeNetIds) {
+        public void purgeActiveNetworkList(long[] activeNetIds) {
             ThreadUtils.assertOnUiThread();
             if (activeNetIds.length == 1) {
                 mChanges.add(new ChangeInfo(ChangeType.PURGE_LIST, activeNetIds[0]));
@@ -462,13 +482,13 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
     public void testNetworkChangeNotifierRegistersForIntents() throws InterruptedException {
         RegistrationPolicyApplicationStatus policy =
                 (RegistrationPolicyApplicationStatus) mReceiver.getRegistrationPolicy();
-        policy.onApplicationStateChange(ApplicationState.HAS_RUNNING_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_RUNNING_ACTIVITIES);
         assertTrue(mReceiver.isReceiverRegisteredForTesting());
 
-        policy.onApplicationStateChange(ApplicationState.HAS_PAUSED_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_PAUSED_ACTIVITIES);
         assertFalse(mReceiver.isReceiverRegisteredForTesting());
 
-        policy.onApplicationStateChange(ApplicationState.HAS_RUNNING_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_RUNNING_ACTIVITIES);
         assertTrue(mReceiver.isReceiverRegisteredForTesting());
     }
 
@@ -606,14 +626,14 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         // Pretend we got moved to the background.
         final RegistrationPolicyApplicationStatus policy =
                 (RegistrationPolicyApplicationStatus) mReceiver.getRegistrationPolicy();
-        policy.onApplicationStateChange(ApplicationState.HAS_PAUSED_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_PAUSED_ACTIVITIES);
         // Change the state.
         mConnectivityDelegate.setActiveNetworkExists(true);
         mConnectivityDelegate.setNetworkType(ConnectivityManager.TYPE_WIFI);
         // The NetworkChangeNotifierAutoDetect doesn't receive any notification while we are in the
         // background, but when we get back to the foreground the state changed should be detected
         // and a notification sent.
-        policy.onApplicationStateChange(ApplicationState.HAS_RUNNING_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_RUNNING_ACTIVITIES);
         assertTrue(observer.hasReceivedNotification());
     }
 
@@ -766,7 +786,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
             }
 
             @Override
-            int getDefaultNetId() {
+            long getDefaultNetId() {
                 return Integer.parseInt(mNetworks[1].toString());
             }
 
@@ -789,9 +809,9 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
         // returns an array of a repeated sequence of: (NetID, ConnectionType).
         // There are 4 entries in the array, two for each network.
         assertEquals(4, ncn.getNetworksAndTypes().length);
-        assertEquals(111, ncn.getNetworksAndTypes()[0]);
+        assertEquals(111, demungeNetId(ncn.getNetworksAndTypes()[0]));
         assertEquals(ConnectionType.CONNECTION_NONE, ncn.getNetworksAndTypes()[1]);
-        assertEquals(333, ncn.getNetworksAndTypes()[2]);
+        assertEquals(333, demungeNetId(ncn.getNetworksAndTypes()[2]));
         assertEquals(ConnectionType.CONNECTION_NONE, ncn.getNetworksAndTypes()[3]);
     }
 
@@ -840,7 +860,7 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
 
         RegistrationPolicyApplicationStatus policy =
                 (RegistrationPolicyApplicationStatus) ncn.getRegistrationPolicy();
-        policy.onApplicationStateChange(ApplicationState.HAS_RUNNING_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_RUNNING_ACTIVITIES);
         assertTrue(ncn.isReceiverRegisteredForTesting());
 
         // Find NetworkChangeNotifierAutoDetect's NetworkCallback, which should have been registered
@@ -865,9 +885,9 @@ public class NetworkChangeNotifierTest extends InstrumentationTestCase {
 
         // Simulate app backgrounding then foregrounding.
         assertTrue(ncn.isReceiverRegisteredForTesting());
-        policy.onApplicationStateChange(ApplicationState.HAS_PAUSED_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_PAUSED_ACTIVITIES);
         assertFalse(ncn.isReceiverRegisteredForTesting());
-        policy.onApplicationStateChange(ApplicationState.HAS_RUNNING_ACTIVITIES);
+        triggerApplicationStateChange(policy, ApplicationState.HAS_RUNNING_ACTIVITIES);
         assertTrue(ncn.isReceiverRegisteredForTesting());
         // Verify network list purged.
         observer.assertLastChange(ChangeType.PURGE_LIST, NetId.INVALID);

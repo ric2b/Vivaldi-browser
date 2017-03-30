@@ -37,6 +37,10 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
     static const SkColor kResultsTableTextMd = SK_ColorBLACK;
     static const SkColor kResultsTableDimmedTextMd =
         SkColorSetRGB(0x64, 0x64, 0x64);
+    // Tooltip
+    static const SkColor kTooltipBackgroundMd =
+        SkColorSetA(SK_ColorBLACK, 0xCC);
+    static const SkColor kTooltipTextColorMd = SkColorSetA(SK_ColorWHITE, 0xDE);
 
     switch (color_id) {
       // Dialogs
@@ -54,6 +58,7 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
         return kMenuHighlightBackgroundColorMd;
       case NativeTheme::kColorId_SelectedMenuItemForegroundColor:
         return kSelectedMenuItemForegroundColorMd;
+
       // Link
       case NativeTheme::kColorId_LinkEnabled:
       case NativeTheme::kColorId_LinkPressed:
@@ -88,9 +93,23 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
       case NativeTheme::kColorId_ResultsTableSelectedUrl:
         return base_theme->GetSystemColor(NativeTheme::kColorId_LinkEnabled);
 
+      // Tooltip
+      case NativeTheme::kColorId_TooltipBackground:
+        return kTooltipBackgroundMd;
+      case NativeTheme::kColorId_TooltipText:
+        return kTooltipTextColorMd;
+
       default:
         break;
     }
+  }
+
+  // Second wave of MD colors (colors that only appear in secondary UI).
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    static const SkColor kPrimaryTextColor = SkColorSetRGB(0x33, 0x33, 0x33);
+
+    if (color_id == NativeTheme::kColorId_LabelEnabledColor)
+      return kPrimaryTextColor;
   }
 
   // Pre-MD colors.
@@ -205,7 +224,7 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
   static const SkColor kResultsTableNegativeSelectedText =
       color_utils::AlphaBlend(kNegativeTextColor,
                               kTextfieldSelectionBackgroundFocused, 0xDD);
-  // Material spinner/throbber:
+  // Material spinner/throbber
   static const SkColor kThrobberSpinningColor = gfx::kGoogleBlue500;
   static const SkColor kThrobberWaitingColor = SkColorSetRGB(0xA6, 0xA6, 0xA6);
   static const SkColor kThrobberLightColor = SkColorSetRGB(0xF4, 0xF8, 0xFD);
@@ -389,6 +408,14 @@ SkColor GetAuraColor(NativeTheme::ColorId color_id,
       return kThrobberWaitingColor;
     case NativeTheme::kColorId_ThrobberLightColor:
       return kThrobberLightColor;
+
+    // Alert icon colors
+    case NativeTheme::kColorId_AlertSeverityLow:
+      return gfx::kGoogleGreen700;
+    case NativeTheme::kColorId_AlertSeverityMedium:
+      return gfx::kGoogleYellow700;
+    case NativeTheme::kColorId_AlertSeverityHigh:
+      return gfx::kGoogleRed700;
 
     case NativeTheme::kColorId_NumColors:
       break;

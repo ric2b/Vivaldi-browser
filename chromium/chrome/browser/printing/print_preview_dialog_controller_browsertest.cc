@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/bind_helpers.h"
+#include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
@@ -16,7 +17,8 @@
 #include "build/build_config.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
-#include "chrome/browser/task_management/mock_web_contents_task_manager.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/task_manager/mock_web_contents_task_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -26,6 +28,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/printing/common/print_messages.h"
+#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -118,6 +121,11 @@ class PrintPreviewDialogDestroyedObserver : public WebContentsObserver {
 void PluginsLoadedCallback(
     const base::Closure& quit_closure,
     const std::vector<content::WebPluginInfo>& /* info */) {
+  quit_closure.Run();
+}
+
+void PluginEnabledCallback(const base::Closure& quit_closure, bool can_enable) {
+  EXPECT_TRUE(can_enable);
   quit_closure.Run();
 }
 
@@ -284,8 +292,14 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   ASSERT_TRUE(GetPdfPluginInfo(&pdf_plugin_info));
 
   // Disable the PDF plugin.
-  PluginPrefs::GetForProfile(browser()->profile())->EnablePluginGroup(
-      false, base::ASCIIToUTF16(ChromeContentClient::kPDFPluginName));
+  {
+    base::RunLoop run_loop;
+    PluginPrefs::GetForProfile(browser()->profile())->EnablePlugin(
+        false,
+        base::FilePath::FromUTF8Unsafe(ChromeContentClient::kPDFPluginPath),
+        base::Bind(&PluginEnabledCallback, run_loop.QuitClosure()));
+    run_loop.Run();
+  }
 
   // Make sure it is actually disabled for webpages.
   ChromePluginServiceFilter* filter = ChromePluginServiceFilter::GetInstance();
@@ -293,7 +307,7 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   EXPECT_FALSE(filter->IsPluginAvailable(
       initiator()->GetRenderProcessHost()->GetID(),
       initiator()->GetMainFrame()->GetRoutingID(),
-      nullptr,
+      browser()->profile()->GetResourceContext(),
       GURL("http://google.com"),
       GURL(),
       &dummy_pdf_plugin_info));
@@ -334,9 +348,8 @@ base::string16 GetExpectedPrefix() {
                                     base::string16());
 }
 
-const std::vector<task_management::WebContentsTag*>& GetTrackedTags() {
-  return task_management::WebContentsTagsManager::GetInstance()->
-      tracked_tags();
+const std::vector<task_manager::WebContentsTag*>& GetTrackedTags() {
+  return task_manager::WebContentsTagsManager::GetInstance()->tracked_tags();
 }
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
@@ -349,12 +362,12 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
 
   // Create a task manager and expect the pre-existing print previews are
   // provided.
-  task_management::MockWebContentsTaskManager task_manager;
+  task_manager::MockWebContentsTaskManager task_manager;
   EXPECT_TRUE(task_manager.tasks().empty());
   task_manager.StartObserving();
   ASSERT_EQ(3U, task_manager.tasks().size());
-  const task_management::Task* pre_existing_task = task_manager.tasks().back();
-  EXPECT_EQ(task_management::Task::RENDERER, pre_existing_task->GetType());
+  const task_manager::Task* pre_existing_task = task_manager.tasks().back();
+  EXPECT_EQ(task_manager::Task::RENDERER, pre_existing_task->GetType());
   const base::string16 pre_existing_title = pre_existing_task->title();
   const base::string16 expected_prefix = GetExpectedPrefix();
   EXPECT_TRUE(base::StartsWith(pre_existing_title,
@@ -373,12 +386,21 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
   PrintPreview();
   EXPECT_EQ(3U, GetTrackedTags().size());
   ASSERT_EQ(3U, task_manager.tasks().size());
-  const task_management::Task* task = task_manager.tasks().back();
-  EXPECT_EQ(task_management::Task::RENDERER, task->GetType());
+  const task_manager::Task* task = task_manager.tasks().back();
+  EXPECT_EQ(task_manager::Task::RENDERER, task->GetType());
   const base::string16 title = task->title();
   EXPECT_TRUE(base::StartsWith(title,
                                expected_prefix,
                                base::CompareCase::INSENSITIVE_ASCII));
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewDialogControllerBrowserTest,
+                       PrintPreviewPdfAccessibility) {
+  content::BrowserAccessibilityState::GetInstance()->EnableAccessibility();
+  ui_test_utils::NavigateToURL(browser(), GURL("data:text/html,HelloWorld"));
+  PrintPreview();
+  WebContents* preview_dialog = GetPrintPreviewDialog();
+  WaitForAccessibilityTreeToContainNodeWithName(preview_dialog, "HelloWorld");
 }
 
 }  // namespace

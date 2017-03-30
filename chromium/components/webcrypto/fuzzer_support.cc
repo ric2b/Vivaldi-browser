@@ -6,25 +6,26 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
-#include "components/test_runner/test_common.h"
+#include "base/numerics/safe_conversions.h"
 #include "components/webcrypto/algorithm_dispatch.h"
 #include "components/webcrypto/crypto_data.h"
 #include "components/webcrypto/status.h"
+#include "third_party/WebKit/public/platform/Platform.h"
 #include "third_party/WebKit/public/platform/WebCryptoAlgorithmParams.h"
+#include "third_party/WebKit/public/web/WebKit.h"
 
 namespace webcrypto {
 
 namespace {
 
 // This mock is used to initialize blink.
-class InitOnce {
+class InitOnce : NON_EXPORTED_BASE(public blink::Platform) {
  public:
   InitOnce() {
-    // EnsureBlinkInitialized() depends on the command line singleton being
-    // initialized.
     base::CommandLine::Init(0, nullptr);
-    test_runner::EnsureBlinkInitialized();
+    blink::Platform::initialize(this);
   }
+  ~InitOnce() override {}
 };
 
 base::LazyInstance<InitOnce>::Leaky g_once = LAZY_INSTANCE_INITIALIZER;
@@ -83,7 +84,53 @@ void ImportEcKeyFromDerFuzzData(const uint8_t* data,
 
   blink::WebCryptoKey key;
   webcrypto::Status status = webcrypto::ImportKey(
-      format, webcrypto::CryptoData(data, size),
+      format, webcrypto::CryptoData(data, base::checked_cast<uint32_t>(size)),
+      CreateEcImportAlgorithm(algorithm_id, curve), true, usages, &key);
+
+  // These errors imply a bad setup of parameters, and means ImportKey() may not
+  // be testing the actual parsing.
+  DCHECK_NE(status.error_details(),
+            Status::ErrorUnsupportedImportKeyFormat().error_details());
+  DCHECK_NE(status.error_details(),
+            Status::ErrorCreateKeyBadUsages().error_details());
+}
+
+void ImportEcKeyFromRawFuzzData(const uint8_t* data, size_t size) {
+  EnsureInitialized();
+
+  // There are 3 possible EC named curves. Consume the first byte to decide on
+  // the curve.
+  uint8_t curve_index = 0;
+  if (size > 0) {
+    curve_index = data[0];
+    data++;
+    size--;
+  }
+
+  blink::WebCryptoNamedCurve curve;
+
+  switch (curve_index % 3) {
+    case 0:
+      curve = blink::WebCryptoNamedCurveP256;
+      break;
+    case 1:
+      curve = blink::WebCryptoNamedCurveP384;
+      break;
+    default:
+      curve = blink::WebCryptoNamedCurveP521;
+      break;
+  }
+
+  // Always use ECDSA as the algorithm. Shouldn't make an difference for import.
+  blink::WebCryptoAlgorithmId algorithm_id = blink::WebCryptoAlgorithmIdEcdsa;
+
+  // Use key usages that are compatible with the chosen algorithm and key type.
+  blink::WebCryptoKeyUsageMask usages = blink::WebCryptoKeyUsageVerify;
+
+  blink::WebCryptoKey key;
+  webcrypto::Status status = webcrypto::ImportKey(
+      blink::WebCryptoKeyFormatRaw,
+      webcrypto::CryptoData(data, base::checked_cast<uint32_t>(size)),
       CreateEcImportAlgorithm(algorithm_id, curve), true, usages, &key);
 
   // These errors imply a bad setup of parameters, and means ImportKey() may not
@@ -116,7 +163,7 @@ void ImportRsaKeyFromDerFuzzData(const uint8_t* data,
 
   blink::WebCryptoKey key;
   webcrypto::Status status = webcrypto::ImportKey(
-      format, webcrypto::CryptoData(data, size),
+      format, webcrypto::CryptoData(data, base::checked_cast<uint32_t>(size)),
       CreateRsaHashedImportAlgorithm(algorithm_id, hash_id), true, usages,
       &key);
 

@@ -62,9 +62,6 @@ public:
     bool ensureCustomFontData();
     FontPlatformData platformDataFromCustomData(float size, bool bold, bool italic, FontOrientation = FontOrientation::Horizontal);
 
-protected:
-    bool isSafeToUnlock() const override;
-
 private:
     class FontResourceFactory : public ResourceFactory {
     public:
@@ -79,8 +76,8 @@ private:
     FontResource(const ResourceRequest&, const ResourceLoaderOptions&);
 
     void checkNotify() override;
-    void fontLoadShortLimitCallback(Timer<FontResource>*);
-    void fontLoadLongLimitCallback(Timer<FontResource>*);
+    void fontLoadShortLimitCallback(TimerBase*);
+    void fontLoadLongLimitCallback(TimerBase*);
 
     enum LoadLimitState { UnderLimit, ShortLimitExceeded, LongLimitExceeded };
 

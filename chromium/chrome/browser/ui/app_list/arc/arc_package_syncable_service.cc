@@ -7,18 +7,14 @@
 #include <unordered_set>
 
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/sync_driver/pref_names.h"
-#include "components/sync_driver/sync_prefs.h"
-#include "components/sync_driver/sync_service.h"
-#include "sync/api/sync_change_processor.h"
-#include "sync/api/sync_data.h"
-#include "sync/api/sync_merge_result.h"
-#include "sync/protocol/sync.pb.h"
+#include "components/sync/api/sync_change_processor.h"
+#include "components/sync/api/sync_data.h"
+#include "components/sync/api/sync_merge_result.h"
+#include "components/sync/protocol/sync.pb.h"
 
 namespace arc {
 
@@ -71,26 +67,6 @@ std::unique_ptr<ArcSyncItem> CreateSyncItemFromPrefs(
   return base::MakeUnique<ArcSyncItem>(
       package_info->package_name, package_info->package_version,
       package_info->last_backup_android_id, package_info->last_backup_time);
-}
-
-bool ValidateEnableArcPackageSyncPref(Profile* profile) {
-  PrefService* pref_service = profile->GetPrefs();
-  // If device is set to sync everything, Arc package should be synced.
-  if (pref_service->GetBoolean(sync_driver::prefs::kSyncKeepEverythingSynced))
-    return true;
-
-  bool apps_sync_enable = pref_service->GetBoolean(
-      sync_driver::SyncPrefs::GetPrefNameForDataType(syncer::APPS));
-  // ArcPackage sync service is controlled by apps checkbox in sync settings.
-  // Update ArcPackage sync setting pref if it is different from apps sync
-  // setting pref.
-  const char* arc_sync_path =
-      sync_driver::SyncPrefs::GetPrefNameForDataType(syncer::ARC_PACKAGE);
-  if (apps_sync_enable != pref_service->GetBoolean(arc_sync_path)) {
-    pref_service->SetBoolean(arc_sync_path, apps_sync_enable);
-  }
-
-  return apps_sync_enable;
 }
 
 }  // namespace
@@ -164,7 +140,7 @@ syncer::SyncMergeResult ArcPackageSyncableService::MergeDataAndStartSyncing(
     std::unique_ptr<ArcSyncItem> sync_item(
         CreateSyncItemFromSyncData(sync_data));
     const std::string& package_name = sync_item->package_name;
-    if (!ContainsKey(local_package_set, package_name)) {
+    if (!base::ContainsKey(local_package_set, package_name)) {
       pending_install_items_[package_name] = std::move(sync_item);
       InstallPackage(pending_install_items_[package_name].get());
     } else {
@@ -176,7 +152,7 @@ syncer::SyncMergeResult ArcPackageSyncableService::MergeDataAndStartSyncing(
   // Creates sync items for local unsynced packages.
   syncer::SyncChangeList change_list;
   for (const auto& local_package_name : local_packages) {
-    if (ContainsKey(sync_items_, local_package_name))
+    if (base::ContainsKey(sync_items_, local_package_name))
       continue;
 
     if (!ShouldSyncPackage(local_package_name))
@@ -248,17 +224,6 @@ syncer::SyncError ArcPackageSyncableService::ProcessSyncChanges(
 bool ArcPackageSyncableService::SyncStarted() {
   if (sync_processor_.get())
     return true;
-
-  sync_driver::SyncService* sync_service =
-      ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(profile_);
-  // ArcPackage sync service is controlled by apps checkbox in sync settings.
-  bool arc_package_sync_should_enable =
-      ValidateEnableArcPackageSyncPref(profile_);
-
-  if (!sync_service || !arc_package_sync_should_enable)
-    return false;
-
-  sync_service->ReenableDatatype(syncer::ARC_PACKAGE);
 
   if (flare_.is_null()) {
     VLOG(2) << this << ": SyncStarted: Flare.";

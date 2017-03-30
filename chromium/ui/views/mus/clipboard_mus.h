@@ -5,7 +5,7 @@
 #ifndef UI_VIEWS_MUS_CLIPBOARD_MUS_H_
 #define UI_VIEWS_MUS_CLIPBOARD_MUS_H_
 
-#include "components/mus/public/interfaces/clipboard.mojom.h"
+#include "services/ui/public/interfaces/clipboard.mojom.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/views/mus/mus_export.h"
 
@@ -70,7 +70,7 @@ class VIEWS_MUS_EXPORT ClipboardMus : public ui::Clipboard {
 
   static mojo::String GetMimeTypeFor(const FormatType& format);
 
-  mus::mojom::ClipboardPtr clipboard_;
+  ui::mojom::ClipboardPtr clipboard_;
 
   // Internal buffer used to accumulate data types. The public interface is
   // WriteObjects(), which then calls our base class DispatchObject() which

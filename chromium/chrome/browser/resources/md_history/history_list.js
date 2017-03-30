@@ -5,14 +5,14 @@
 Polymer({
   is: 'history-list',
 
+  behaviors: [HistoryListBehavior],
+
   properties: {
     // The search term for the current query. Set when the query returns.
     searchedTerm: {
       type: String,
       value: '',
     },
-
-    lastSearchedTerm_: String,
 
     querying: Boolean,
 
@@ -26,51 +26,35 @@ Polymer({
   },
 
   listeners: {
-    'infinite-list.scroll': 'closeMenu_',
-    'tap': 'closeMenu_',
-    'toggle-menu': 'toggleMenu_',
+    'scroll': 'notifyListScroll_',
+    'remove-bookmark-stars': 'removeBookmarkStars_',
+  },
+
+  /** @override */
+  attached: function() {
+    // It is possible (eg, when middle clicking the reload button) for all other
+    // resize events to fire before the list is attached and can be measured.
+    // Adding another resize here ensures it will get sized correctly.
+    /** @type {IronListElement} */(this.$['infinite-list']).notifyResize();
+    this.$['infinite-list'].scrollTarget = this;
+    this.$['scroll-threshold'].scrollTarget = this;
   },
 
   /**
-   * Closes the overflow menu.
+   * Remove bookmark star for history items with matching URLs.
+   * @param {{detail: !string}} e
    * @private
    */
-  closeMenu_: function() {
-    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).closeMenu();
-  },
+  removeBookmarkStars_: function(e) {
+    var url = e.detail;
 
-  /**
-   * Opens the overflow menu unless the menu is already open and the same button
-   * is pressed.
-   * @param {{detail: {item: !HistoryEntry, target: !HTMLElement}}} e
-   * @private
-   */
-  toggleMenu_: function(e) {
-    var target = e.detail.target;
-    /** @type {CrSharedMenuElement} */(this.$.sharedMenu).toggleMenu(
-        target, e.detail.item);
-  },
+    if (this.historyData_ === undefined)
+      return;
 
-  /** @private */
-  onMoreFromSiteTap_: function() {
-    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
-    this.fire('search-domain', {domain: menu.itemData.domain});
-    menu.closeMenu();
-  },
-
-  /** @private */
-  onRemoveFromHistoryTap_: function() {
-    var menu = /** @type {CrSharedMenuElement} */(this.$.sharedMenu);
-    md_history.BrowserService.getInstance()
-        .deleteItems([menu.itemData])
-        .then(function(items) {
-          this.removeDeletedHistory_(items);
-          // This unselect-all is to reset the toolbar when deleting a selected
-          // item. TODO(tsergeant): Make this automatic based on observing list
-          // modifications.
-          this.fire('unselect-all');
-        }.bind(this));
-    menu.closeMenu();
+    for (var i = 0; i < this.historyData_.length; i++) {
+      if (this.historyData_[i].url == url)
+        this.set('historyData_.' + i + '.starred', false);
+    }
   },
 
   /**
@@ -84,18 +68,19 @@ Polymer({
    * Adds the newly updated history results into historyData_. Adds new fields
    * for each result.
    * @param {!Array<!HistoryEntry>} historyResults The new history results.
+   * @param {boolean} incremental Whether the result is from loading more
+   * history, or a new search/list reload.
    */
-  addNewResults: function(historyResults) {
+  addNewResults: function(historyResults, incremental) {
     var results = historyResults.slice();
     /** @type {IronScrollThresholdElement} */(this.$['scroll-threshold'])
         .clearTriggers();
 
-    if (this.lastSearchedTerm_ != this.searchedTerm) {
+    if (!incremental) {
       this.resultLoadingDisabled_ = false;
       if (this.historyData_)
         this.splice('historyData_', 0, this.historyData_.length);
       this.fire('unselect-all');
-      this.lastSearchedTerm_ = this.searchedTerm;
     }
 
     if (this.historyData_) {
@@ -108,73 +93,6 @@ Polymer({
       // initialized correctly.
       this.set('historyData_', results);
     }
-  },
-
-  /**
-   * Cycle through each entry in historyData_ and set all items to be
-   * unselected.
-   * @param {number} overallItemCount The number of checkboxes selected.
-   */
-  unselectAllItems: function(overallItemCount) {
-    if (this.historyData_ === undefined)
-      return;
-
-    for (var i = 0; i < this.historyData_.length; i++) {
-      if (this.historyData_[i].selected) {
-        this.set('historyData_.' + i + '.selected', false);
-        overallItemCount--;
-        if (overallItemCount == 0)
-          break;
-      }
-    }
-  },
-
-  /**
-   * Remove the given |items| from the list. Expected to be called after the
-   * items are removed from the backend.
-   * @param {!Array<!HistoryEntry>} removalList
-   * @private
-   */
-  removeDeletedHistory_: function(removalList) {
-    // This set is only for speed. Note that set inclusion for objects is by
-    // reference, so this relies on the HistoryEntry objects never being copied.
-    var deletedItems = new Set(removalList);
-    var splices = [];
-
-    for (var i = this.historyData_.length - 1; i >= 0; i--) {
-      var item = this.historyData_[i];
-      if (deletedItems.has(item)) {
-        // Removes the selected item from historyData_. Use unshift so
-        // |splices| ends up in index order.
-        splices.unshift({
-          index: i,
-          removed: [item],
-          addedCount: 0,
-          object: this.historyData_,
-          type: 'splice'
-        });
-        this.historyData_.splice(i, 1);
-      }
-    }
-    // notifySplices gives better performance than individually splicing as it
-    // batches all of the updates together.
-    this.notifySplices('historyData_', splices);
-  },
-
-  /**
-   * Performs a request to the backend to delete all selected items. If
-   * successful, removes them from the view.
-   */
-  deleteSelected: function() {
-    var toBeRemoved = this.historyData_.filter(function(item) {
-      return item.selected;
-    });
-    md_history.BrowserService.getInstance()
-        .deleteItems(toBeRemoved)
-        .then(function(items) {
-          this.removeDeletedHistory_(items);
-          this.fire('unselect-all');
-        }.bind(this));
   },
 
   /**
@@ -200,17 +118,6 @@ Polymer({
   needsTimeGap_: function(item, index, length) {
     return md_history.HistoryItem.needsTimeGap(
         this.historyData_, index, this.searchedTerm);
-  },
-
-  hasResults: function(historyDataLength) {
-    return historyDataLength > 0;
-  },
-
-  noResultsMessage_: function(searchedTerm, isLoading) {
-    if (isLoading)
-      return '';
-    var messageId = searchedTerm !== '' ? 'noSearchResults' : 'noResults';
-    return loadTimeData.getString(messageId);
   },
 
   /**
@@ -252,5 +159,21 @@ Polymer({
    */
   isFirstItem_: function(index) {
     return index == 0;
-  }
+  },
+
+  /**
+   * @private
+   */
+  notifyListScroll_: function() {
+    this.fire('history-list-scrolled');
+  },
+
+  /**
+   * @param {number} index
+   * @return {string}
+   * @private
+   */
+  pathForItem_: function(index) {
+    return 'historyData_.' + index;
+  },
 });

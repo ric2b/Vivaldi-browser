@@ -87,7 +87,9 @@ void TextInputClientObserver::OnFirstRectForCharacterRange(gfx::Range range) {
   } else
 #endif
   {
-    blink::WebFrame* frame = webview()->focusedFrame();
+    blink::WebLocalFrame* frame = webview()->focusedFrame();
+    // TODO(yabinh): Null check should not be necessary.
+    // See crbug.com/304341
     if (frame) {
       blink::WebRect web_rect;
       frame->firstRectForCharacterRange(range.start(), range.length(),
@@ -102,7 +104,9 @@ void TextInputClientObserver::OnStringForRange(gfx::Range range) {
 #if defined(OS_MACOSX)
   blink::WebPoint baselinePoint;
   NSAttributedString* string = nil;
-  blink::WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame();
+  blink::WebLocalFrame* frame = webview()->focusedFrame();
+  // TODO(yabinh): Null check should not be necessary.
+  // See crbug.com/304341
   if (frame) {
     string = blink::WebSubstringUtil::attributedSubstringInRange(
         frame, range.start(), range.length(), &baselinePoint);

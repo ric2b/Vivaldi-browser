@@ -304,35 +304,35 @@ gfx::Rect DesktopWindowTreeHostWin::GetWorkAreaBoundsInScreen() const {
   return display::win::ScreenWin::ScreenToDIPRect(GetHWND(), pixel_bounds);
 }
 
-void DesktopWindowTreeHostWin::SetShape(SkRegion* native_region) {
-  if (native_region) {
-    // TODO(wez): This would be a lot simpler if we were passed an SkPath.
-    // See crbug.com/410593.
-    SkRegion* shape = native_region;
-    SkRegion device_region;
-    if (display::win::GetDPIScale() > 1.0) {
-      shape = &device_region;
-      const float& scale = display::win::GetDPIScale();
-      std::vector<SkIRect> rects;
-      for (SkRegion::Iterator it(*native_region); !it.done(); it.next()) {
-        const SkIRect& rect = it.rect();
-        SkRect scaled_rect =
-            SkRect::MakeLTRB(rect.left() * scale, rect.top() * scale,
-                             rect.right() * scale, rect.bottom() * scale);
-        SkIRect rounded_scaled_rect;
-        scaled_rect.roundOut(&rounded_scaled_rect);
-        rects.push_back(rounded_scaled_rect);
-      }
-      if (!rects.empty())
-        device_region.setRects(&rects[0], rects.size());
-    }
-
-    message_handler_->SetRegion(gfx::CreateHRGNFromSkRegion(*shape));
-  } else {
-    message_handler_->SetRegion(NULL);
+void DesktopWindowTreeHostWin::SetShape(
+    std::unique_ptr<SkRegion> native_region) {
+  if (!native_region) {
+    message_handler_->SetRegion(nullptr);
+    return;
   }
 
-  delete native_region;
+  // TODO(wez): This would be a lot simpler if we were passed an SkPath.
+  // See crbug.com/410593.
+  SkRegion* shape = native_region.get();
+  SkRegion device_region;
+  if (display::win::GetDPIScale() > 1.0) {
+    shape = &device_region;
+    const float scale = display::win::GetDPIScale();
+    std::vector<SkIRect> rects;
+    for (SkRegion::Iterator it(*native_region); !it.done(); it.next()) {
+      const SkIRect& rect = it.rect();
+      SkRect scaled_rect =
+          SkRect::MakeLTRB(rect.left() * scale, rect.top() * scale,
+                           rect.right() * scale, rect.bottom() * scale);
+      SkIRect rounded_scaled_rect;
+      scaled_rect.roundOut(&rounded_scaled_rect);
+      rects.push_back(rounded_scaled_rect);
+    }
+    if (!rects.empty())
+      device_region.setRects(&rects[0], rects.size());
+  }
+
+  message_handler_->SetRegion(gfx::CreateHRGNFromSkRegion(*shape));
 }
 
 void DesktopWindowTreeHostWin::Activate() {
@@ -380,7 +380,11 @@ bool DesktopWindowTreeHostWin::IsAlwaysOnTop() const {
 }
 
 void DesktopWindowTreeHostWin::SetVisibleOnAllWorkspaces(bool always_visible) {
-  // Windows does not have the concept of workspaces.
+  // Chrome does not yet support Windows 10 desktops.
+}
+
+bool DesktopWindowTreeHostWin::IsVisibleOnAllWorkspaces() const {
+  return false;
 }
 
 bool DesktopWindowTreeHostWin::SetWindowTitle(const base::string16& title) {
@@ -928,7 +932,7 @@ void DesktopWindowTreeHostWin::HandleWindowSizeChanging() {
     compositor()->DisableSwapUntilResize();
 }
 
-void DesktopWindowTreeHostWin::HandleWindowSizeChanged() {
+void DesktopWindowTreeHostWin::HandleWindowSizeUnchanged() {
   // A resize may not have occurred if the window size happened not to have
   // changed (can occur on Windows 10 when snapping a window to the side of
   // the screen). In that case do a resize to the current size to reenable

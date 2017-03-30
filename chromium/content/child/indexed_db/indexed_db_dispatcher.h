@@ -24,6 +24,7 @@
 #include "third_party/WebKit/public/platform/WebBlobInfo.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBCallbacks.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseCallbacks.h"
+#include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBObserver.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBTypes.h"
 #include "url/origin.h"
 
@@ -34,9 +35,12 @@ struct IndexedDBMsg_CallbacksSuccessIDBCursor_Params;
 struct IndexedDBMsg_CallbacksSuccessArray_Params;
 struct IndexedDBMsg_CallbacksSuccessValue_Params;
 struct IndexedDBMsg_CallbacksUpgradeNeeded_Params;
+struct IndexedDBMsg_Observation;
+struct IndexedDBMsg_ObserverChanges;
 
 namespace blink {
 class WebData;
+struct WebIDBObservation;
 }
 
 namespace content {
@@ -68,11 +72,28 @@ class CONTENT_EXPORT IndexedDBDispatcher : public WorkerThread::Observer {
 
   static blink::WebIDBMetadata ConvertMetadata(
       const IndexedDBDatabaseMetadata& idb_metadata);
+  static std::vector<blink::WebIDBObservation> ConvertObservations(
+      const std::vector<IndexedDBMsg_Observation>& idb_observation);
 
   void OnMessageReceived(const IPC::Message& msg);
 
   // This method is virtual so it can be overridden in unit tests.
   virtual bool Send(IPC::Message* msg);
+
+  int32_t AddIDBObserver(int32_t ipc_database_id,
+                         int64_t transaction_id,
+                         std::unique_ptr<blink::WebIDBObserver> observer);
+
+  //  The observer with ID's in |observer_ids_to_remove| observe the
+  //  |ipc_database_id|.
+  //  We remove our local references to these observer objects, and send an IPC
+  //  to clean up the observers from the backend.
+  void RemoveIDBObserversFromDatabase(
+      int32_t ipc_database_id,
+      const std::vector<int32_t>& observer_ids_to_remove);
+
+  // Removes observers from our local map observers_ . No IPC message generated.
+  void RemoveIDBObservers(const std::set<int32_t>& observer_ids_to_remove);
 
   void RequestIDBFactoryGetDatabaseNames(blink::WebIDBCallbacks* callbacks,
                                          const url::Origin& origin);
@@ -241,6 +262,10 @@ class CONTENT_EXPORT IndexedDBDispatcher : public WorkerThread::Observer {
   void OnComplete(int32_t ipc_thread_id,
                   int32_t ipc_database_id,
                   int64_t transaction_id);
+  void OnDatabaseChanges(int32_t ipc_thread_id,
+                         int32_t ipc_database_id,
+                         const IndexedDBMsg_ObserverChanges&);
+
   void OnForcedClose(int32_t ipc_thread_id, int32_t ipc_database_id);
   void OnVersionChange(int32_t ipc_thread_id,
                        int32_t ipc_database_id,
@@ -264,6 +289,7 @@ class CONTENT_EXPORT IndexedDBDispatcher : public WorkerThread::Observer {
   IDMap<blink::WebIDBCallbacks, IDMapOwnPointer> pending_callbacks_;
   IDMap<blink::WebIDBDatabaseCallbacks, IDMapOwnPointer>
       pending_database_callbacks_;
+  IDMap<blink::WebIDBObserver, IDMapOwnPointer> observers_;
 
   // Maps the ipc_callback_id from an open cursor request to the request's
   // transaction_id. Used to assign the transaction_id to the WebIDBCursorImpl

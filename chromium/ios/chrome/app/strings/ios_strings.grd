@@ -11,7 +11,7 @@ all other OS specific variables will be false.
 -->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="grit/ios_strings.h" type="rc_header">
       <emit emit_type="prepend"></emit>
@@ -168,9 +168,6 @@ all other OS specific variables will be false.
       <message name="IDS_IOS_KEYBOARD_REOPEN_CLOSED_TAB" desc="Title of the keyboard shortcut to reopen a recently closed tab. [Length: 20 em] [iOS only]">
         Reopen Closed Tab
       </message>
-      <message name="IDS_IOS_LOCATION_USAGE_CANCEL" desc="Title for the alert button to cancel sending location for Omnibox queries [Length: 20em] [iOS only]">
-        Not Now
-      </message>
 
       <message name="IDS_IOS_FLAGS_CONTEXTUAL_SEARCH" desc="Title for the flag to enable Contextual Search.">
         Contextual Search
@@ -203,9 +200,6 @@ all other OS specific variables will be false.
       <message name="IDS_IOS_PASSWORD_MANAGER_UPDATE_BUTTON" desc="Label for the 'update' button in the Update Password infobar. This infobar asks if the user wishes to update the saved password for a site to a new password the user has just entered; the button applies the suggested update. [Length: 10em]">
         Update
       </message>
-      <message name="IDS_IOS_PASSWORD_MANAGER_CANCEL_BUTTON" desc="Label for the 'dismiss' button in the Update Password infobar. The UI asks the user if they wish to update their password; the button dismisses the UI without taking the suggested action.">
-        Nope
-      </message>
       <message name="IDS_IOS_PASSWORD_MANAGER_SAVE_PASSWORD_PROMPT_SMART_LOCK_BRANDING" desc="Info bar message to save a password, referring to the Google Smart Lock
 brand. [Length: 70em]">
         Do you want Google Smart Lock to save your password for this site?
@@ -214,7 +208,7 @@ brand. [Length: 70em]">
         Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to update your password for this site?
       </message>
       <message name="IDS_IOS_PASSWORD_MANAGER_UPDATE_PASSWORD_FOR_ACCOUNT" desc="Infobar message to update a password for named account, referring to PASSWORD_MANAGER_BRAND as the  [Length:70em]">
-        Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to update the password for <ph name="USERNAME">$2<ex>don.john.lemon@example.com</ex></ph> for this site?
+        Do you want <ph name="PASSWORD_MANAGER_BRAND">$1<ex>Google Chrome</ex></ph> to update your password for <ph name="USERNAME">$2<ex>don.john.lemon@example.com</ex></ph> for this site?
       </message>
       <message name="IDS_IOS_PASSWORD_MANAGER_SMART_LOCK_FOR_PASSWORDS" desc="The more descriptive brand name of the password manager when the user is signed in. Used in various UI elements, can be in link format.">
         Google Smart Lock for Passwords

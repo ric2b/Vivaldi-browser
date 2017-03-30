@@ -28,8 +28,9 @@ class SatisfySwapPromise : public SwapPromise {
     metadata->satisfies_sequences.push_back(sequence_.sequence);
   }
 
-  void DidNotSwap(DidNotSwapReason reason) override {
+  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
     satisfy_callback_.Run(sequence_);
+    return DidNotSwapAction::BREAK_PROMISE;
   }
   int64_t TraceId() const override { return 0; }
 
@@ -57,7 +58,7 @@ SurfaceLayer::~SurfaceLayer() {
   DCHECK(destroy_sequence_.is_null());
 }
 
-void SurfaceLayer::SetSurfaceId(SurfaceId surface_id,
+void SurfaceLayer::SetSurfaceId(const SurfaceId& surface_id,
                                 float scale,
                                 const gfx::Size& size) {
   SatisfyDestroySequence();

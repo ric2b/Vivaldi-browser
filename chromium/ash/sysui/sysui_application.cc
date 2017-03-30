@@ -9,9 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "ash/common/login_status.h"
 #include "ash/common/material_design/material_design_controller.h"
 #include "ash/common/shell_window_ids.h"
-#include "ash/desktop_background/desktop_background_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/ash_window_tree_host_platform.h"
@@ -25,16 +26,15 @@
 #include "ash/sysui/shelf_delegate_mus.h"
 #include "ash/sysui/shell_delegate_mus.h"
 #include "ash/sysui/stub_context_factory.h"
-#include "ash/sysui/user_wallpaper_delegate_mus.h"
+#include "ash/sysui/wallpaper_delegate_mus.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
 #include "base/threading/sequenced_worker_pool.h"
-#include "components/mus/common/gpu_service.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/interfaces/input_devices/input_device_server.mojom.h"
 #include "services/catalog/public/cpp/resource_loader.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/interfaces/input_devices/input_device_server.mojom.h"
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -60,9 +60,9 @@ namespace sysui {
 
 namespace {
 
-const char kResourceFileStrings[] = "ash_resources_strings.pak";
-const char kResourceFile100[] = "ash_resources_100_percent.pak";
-const char kResourceFile200[] = "ash_resources_200_percent.pak";
+const char kResourceFileStrings[] = "ash_test_strings.pak";
+const char kResourceFile100[] = "ash_test_resources_100_percent.pak";
+const char kResourceFile200[] = "ash_test_resources_200_percent.pak";
 
 // Tries to determine the corresponding mash container from widget init params.
 bool GetContainerForWidget(const views::Widget::InitParams& params,
@@ -205,7 +205,11 @@ class NativeWidgetFactory {
 
 class AshInit {
  public:
-  AshInit() : worker_pool_(new base::SequencedWorkerPool(2, "AshWorkerPool")) {
+  AshInit()
+      : worker_pool_(
+            new base::SequencedWorkerPool(2,
+                                          "AshWorkerPool",
+                                          base::TaskPriority::USER_BLOCKING)) {
     ui::RegisterPathProvider();
   }
 
@@ -234,7 +238,7 @@ class AshInit {
     AshWindowTreeHost::SetFactory(base::Bind(&CreateWindowTreeHostMus));
 
     std::unique_ptr<AppListPresenterMus> app_list_presenter =
-        base::WrapUnique(new AppListPresenterMus(connector));
+        base::MakeUnique<AppListPresenterMus>(connector);
     ash_delegate_ = new ShellDelegateMus(std::move(app_list_presenter));
 
     InitializeComponents();
@@ -267,16 +271,19 @@ class AshInit {
     connector->ConnectToInterface("mojo:catalog", &directory);
     CHECK(loader.OpenFiles(std::move(directory), resource_paths));
 
-    // Load ash resources and en-US strings; not 'common' (Chrome) resources.
-    // TODO(msw): Check ResourceBundle::IsScaleFactorSupported; load 300% etc.
+    // Load ash resources and strings; not 'common' (Chrome) resources.
     ui::ResourceBundle::InitSharedInstanceWithPakFileRegion(
         loader.TakeFile(kResourceFileStrings),
         base::MemoryMappedFile::Region::kWholeFile);
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-    rb.AddDataPackFromFile(loader.TakeFile(kResourceFile100),
-                           ui::SCALE_FACTOR_100P);
-    rb.AddDataPackFromFile(loader.TakeFile(kResourceFile200),
-                           ui::SCALE_FACTOR_200P);
+    if (ui::ResourceBundle::IsScaleFactorSupported(ui::SCALE_FACTOR_100P)) {
+      rb.AddDataPackFromFile(loader.TakeFile(kResourceFile100),
+                             ui::SCALE_FACTOR_100P);
+    }
+    if (ui::ResourceBundle::IsScaleFactorSupported(ui::SCALE_FACTOR_200P)) {
+      rb.AddDataPackFromFile(loader.TakeFile(kResourceFile200),
+                             ui::SCALE_FACTOR_200P);
+    }
   }
 
   void InitializeComponents() {
@@ -306,38 +313,35 @@ SysUIApplication::SysUIApplication() {}
 
 SysUIApplication::~SysUIApplication() {}
 
-void SysUIApplication::Initialize(::shell::Connector* connector,
-                                  const ::shell::Identity& identity,
-                                  uint32_t id) {
-  mus::GpuService::Initialize(connector);
-
+void SysUIApplication::OnStart(const ::shell::Identity& identity) {
   ash_init_.reset(new AshInit());
-  ash_init_->Initialize(connector, identity);
+  ash_init_->Initialize(connector(), identity);
 
-  mus::mojom::InputDeviceServerPtr server;
-  connector->ConnectToInterface("mojo:mus", &server);
+  ui::mojom::InputDeviceServerPtr server;
+  connector()->ConnectToInterface("mojo:ui", &server);
   input_device_client_.Connect(std::move(server));
 }
 
-bool SysUIApplication::AcceptConnection(::shell::Connection* connection) {
-  connection->AddInterface<mash::shelf::mojom::ShelfController>(this);
-  connection->AddInterface<mojom::WallpaperController>(this);
+bool SysUIApplication::OnConnect(const ::shell::Identity& remote_identity,
+                                 ::shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mash::shelf::mojom::ShelfController>(this);
+  registry->AddInterface<mojom::WallpaperController>(this);
   return true;
 }
 
 void SysUIApplication::Create(
-    ::shell::Connection* connection,
+    const ::shell::Identity& remote_identity,
     mash::shelf::mojom::ShelfControllerRequest request) {
   mash::shelf::mojom::ShelfController* shelf_controller =
-      static_cast<ShelfDelegateMus*>(Shell::GetInstance()->GetShelfDelegate());
+      static_cast<ShelfDelegateMus*>(WmShell::Get()->shelf_delegate());
+  DCHECK(shelf_controller);
   shelf_controller_bindings_.AddBinding(shelf_controller, std::move(request));
 }
 
-void SysUIApplication::Create(::shell::Connection* connection,
+void SysUIApplication::Create(const ::shell::Identity& remote_identity,
                               mojom::WallpaperControllerRequest request) {
   mojom::WallpaperController* wallpaper_controller =
-      static_cast<UserWallpaperDelegateMus*>(
-          Shell::GetInstance()->user_wallpaper_delegate());
+      static_cast<WallpaperDelegateMus*>(WmShell::Get()->wallpaper_delegate());
   wallpaper_controller_bindings_.AddBinding(wallpaper_controller,
                                             std::move(request));
 }

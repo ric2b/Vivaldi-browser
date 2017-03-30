@@ -19,8 +19,10 @@
 
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+#include "extensions/api/history/history_private_api.h"
 #include "extensions/api/notes/notes_api.h"
 #include "extensions/api/import_data/import_data_api.h"
+#include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/show_menu/show_menu_api.h"
 #include "extensions/api/settings/settings_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
@@ -46,14 +48,10 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
     command_line->AppendSwitchNoDup(
       translate::switches::kDisableTranslate);
 
-#if defined(OS_WIN)
-    // Note(yngve) VB-20601: Disable DSF Zoom on Windows because it causes
-    // flickering on HiDPI screens
-    if (!command_line->HasSwitch(switches::kEnableUseZoomForDSF))
-      command_line->AppendSwitchASCII(
-        switches::kEnableUseZoomForDSF,
-        "false");
-#endif
+    // NOTE(arnar): Can be removed once ResizeObserver is stable.
+    // https://www.chromestatus.com/feature/5705346022637568
+    command_line->AppendSwitchASCII(
+      switches::kEnableBlinkFeatures, "ResizeObserver");
   }
 
 #if defined(OS_MACOSX)
@@ -76,9 +74,11 @@ void VivaldiBrowserMainExtraParts::
   extensions::TabsPrivateAPI::GetFactoryInstance();
   extensions::ShowMenuAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
+  extensions::VivaldiRuntimeFeaturesFactory::GetInstance();
   extensions::VivaldiSettingsApiNotificationFactory::GetInstance();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::ZoomAPI::GetFactoryInstance();
+  extensions::HistoryPrivateAPI::GetFactoryInstance();
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {

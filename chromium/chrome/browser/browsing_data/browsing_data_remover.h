@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <queue>
 #include <set>
 
 #include "base/callback_forward.h"
@@ -21,6 +22,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
+#include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/keyed_service/core/keyed_service.h"
@@ -38,11 +40,13 @@
 #include "chromeos/dbus/dbus_method_call_status.h"
 #endif
 
+class BrowsingDataFilterBuilder;
+class BrowsingDataFlashLSOHelper;
 class BrowsingDataRemoverFactory;
 class HostContentSettingsMap;
 class IOThread;
-class BrowsingDataFilterBuilder;
 class Profile;
+class WebappRegistry;
 
 namespace chrome_browser_net {
 class Predictor;
@@ -58,35 +62,44 @@ namespace net {
 class URLRequestContextGetter;
 }
 
-#if BUILDFLAG(ANDROID_JAVA_UI)
-class WebappRegistry;
-#endif
-
+////////////////////////////////////////////////////////////////////////////////
 // BrowsingDataRemover is responsible for removing data related to browsing:
 // visits in url database, downloads, cookies ...
+//
+//  USAGE:
+//
+//  0. Instantiation.
+//
+//       BrowsingDataRemover remover =
+//           BrowsingDataRemoverFactory::GetForBrowserContext(profile);
+//
+//  1. No observer.
+//
+//       remover->Remove(Unbounded(), REMOVE_COOKIES, ALL);
+//
+//  2. Using an observer to report when one's own removal task is finished.
+//
+//       class CookiesDeleter : public BrowsingDataRemover::Observer {
+//         CookiesDeleter() { remover->AddObserver(this); }
+//         ~CookiesDeleter() { remover->RemoveObserver(this); }
+//
+//         void DeleteCookies() {
+//           remover->RemoveAndReply(Unbounded(), REMOVE_COOKIES, ALL, this);
+//         }
+//
+//         void OnBrowsingDataRemoverDone() {
+//           LOG(INFO) << "Cookies were deleted.";
+//         }
+//       }
+//
+////////////////////////////////////////////////////////////////////////////////
+
 class BrowsingDataRemover : public KeyedService
 #if defined(ENABLE_PLUGINS)
                             , public PepperFlashSettingsManager::Client
 #endif
 {
  public:
-  // Time period ranges available when doing browsing data removals.
-  // TODO(msramek): As this is now reused on Android, we should move it
-  // to browsing_data_counter_utils.h (and rename appropriately), so that
-  // all fundamental types related to browsing data on all platforms are in
-  // one place.
-  //
-  // A Java counterpart will be generated for this enum.
-  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser
-  enum TimePeriod {
-    LAST_HOUR = 0,
-    LAST_DAY,
-    LAST_WEEK,
-    FOUR_WEEKS,
-    EVERYTHING,
-    TIME_PERIOD_LAST = EVERYTHING
-  };
-
   // Mask used for Remove.
   enum RemoveDataMask {
     REMOVE_APPCACHE = 1 << 0,
@@ -110,10 +123,9 @@ class BrowsingDataRemover : public KeyedService
     // REMOVE_NOCHECKS intentionally does not check if the Profile's prohibited
     // from deleting history or downloads.
     REMOVE_NOCHECKS = 1 << 16,
-    REMOVE_WEBRTC_IDENTITY = 1 << 17,
-    REMOVE_CACHE_STORAGE = 1 << 18,
+    REMOVE_CACHE_STORAGE = 1 << 17,
 #if BUILDFLAG(ANDROID_JAVA_UI)
-    REMOVE_WEBAPP_DATA = 1 << 19,
+    REMOVE_WEBAPP_DATA = 1 << 18,
 #endif
     // The following flag is used only in tests. In normal usage, hosted app
     // data is controlled by the REMOVE_COOKIES flag, applied to the
@@ -131,11 +143,16 @@ class BrowsingDataRemover : public KeyedService
                        REMOVE_CACHE_STORAGE |
                        REMOVE_WEBSQL |
                        REMOVE_CHANNEL_IDS |
-                       REMOVE_SITE_USAGE_DATA |
 #if BUILDFLAG(ANDROID_JAVA_UI)
                        REMOVE_WEBAPP_DATA |
 #endif
-                       REMOVE_WEBRTC_IDENTITY,
+                       REMOVE_SITE_USAGE_DATA,
+
+    // Datatypes that can be deleted partially per URL / origin / domain,
+    // whichever makes sense.
+    FILTERABLE_DATATYPES = REMOVE_SITE_DATA |
+                           REMOVE_CACHE |
+                           REMOVE_DOWNLOADS,
 
     // Includes all the available remove options. Meant to be used by clients
     // that wish to wipe as much data as possible from a Profile, to make it
@@ -162,48 +179,24 @@ class BrowsingDataRemover : public KeyedService
     MAX_CHOICE_VALUE
   };
 
-  // When BrowsingDataRemover successfully removes data, a notification of type
-  // NOTIFICATION_BROWSING_DATA_REMOVED is triggered with a Details object of
-  // this type.
-  struct NotificationDetails {
-    NotificationDetails();
-    NotificationDetails(const NotificationDetails& details);
-    NotificationDetails(base::Time removal_begin,
-                       int removal_mask,
-                       int origin_type_mask);
-    ~NotificationDetails();
-
-    // The beginning of the removal time range.
-    base::Time removal_begin;
-
-    // The removal mask (see the RemoveDataMask enum for details).
-    int removal_mask;
-
-    // The origin type mask (see BrowsingDataHelper::OriginTypeMask for
-    // details).
-    int origin_type_mask;
-  };
-
   struct TimeRange {
     TimeRange(base::Time begin, base::Time end) : begin(begin), end(end) {}
+    bool operator==(const TimeRange& other) const;
 
     base::Time begin;
     base::Time end;
   };
 
-  // Observer is notified when the removal is done. Done means keywords have
-  // been deleted, cache cleared and all other tasks scheduled.
+  // Observer is notified when its own removal task is done.
   class Observer {
    public:
+    // Called when a removal task is finished. Note that every removal task can
+    // only have one observer attached to it, and only that one is called.
     virtual void OnBrowsingDataRemoverDone() = 0;
 
    protected:
     virtual ~Observer() {}
   };
-
-  using Callback = base::Callback<void(const NotificationDetails&)>;
-  using CallbackSubscription = std::unique_ptr<
-      base::CallbackList<void(const NotificationDetails&)>::Subscription>;
 
   // The completion inhibitor can artificially delay completion of the browsing
   // data removal process. It is used during testing to simulate scenarios in
@@ -223,10 +216,7 @@ class BrowsingDataRemover : public KeyedService
 
   static TimeRange Unbounded();
 
-  static TimeRange Period(TimePeriod period);
-
-  // Calculate the begin time for the deletion range specified by |time_period|.
-  static base::Time CalculateBeginDeleteTime(TimePeriod time_period);
+  static TimeRange Period(browsing_data::TimePeriod period);
 
   // Is the BrowsingDataRemover currently in the process of removing data?
   bool is_removing() { return is_removing_; }
@@ -240,30 +230,36 @@ class BrowsingDataRemover : public KeyedService
     completion_inhibitor_ = inhibitor;
   }
 
-  // Add a callback to the list of callbacks to be called during a browsing data
-  // removal event. Returns a subscription object that can be used to
-  // un-register the callback.
-  // TODO(crbug.com/483528): Make this non-static and merge it with the Observer
-  // interface.
-  static CallbackSubscription RegisterOnBrowsingDataRemovedCallback(
-      const Callback& callback);
-
-  // Removes the specified items related to browsing for all origins that match
-  // the provided |origin_type_mask| (see BrowsingDataHelper::OriginTypeMask).
+  // Removes browsing data within the given |time_range|, with datatypes being
+  // specified by |remove_mask| and origin types by |origin_type_mask|.
   void Remove(const TimeRange& time_range,
               int remove_mask,
               int origin_type_mask);
 
-  // Removes the specified items related to browsing for all origins that match
-  // the provided |origin_type_mask| (see BrowsingDataHelper::OriginTypeMask).
-  // The |origin_filter| is used as a final filter for clearing operations.
-  // TODO(dmurph): Support all backends with filter (crbug.com/113621).
-  // DO NOT USE THIS METHOD UNLESS CALLER KNOWS WHAT THEY'RE DOING. NOT ALL
-  // BACKENDS ARE SUPPORTED YET, AND MORE DATA THAN EXPECTED COULD BE DELETED.
-  void RemoveWithFilter(const TimeRange& time_range,
-                        int remove_mask,
-                        int origin_type_mask,
-                        const BrowsingDataFilterBuilder& origin_filter);
+  // A version of the above that in addition informs the |observer| when the
+  // removal task is finished.
+  void RemoveAndReply(const TimeRange& time_range,
+                      int remove_mask,
+                      int origin_type_mask,
+                      Observer* observer);
+
+  // Like Remove(), but in case of URL-keyed only removes data whose URL match
+  // |filter_builder| (e.g. are on certain origin or domain).
+  // RemoveWithFilter() currently only works with FILTERABLE_DATATYPES.
+  void RemoveWithFilter(
+      const TimeRange& time_range,
+      int remove_mask,
+      int origin_type_mask,
+      std::unique_ptr<BrowsingDataFilterBuilder> filter_builder);
+
+  // A version of the above that in addition informs the |observer| when the
+  // removal task is finished.
+  void RemoveWithFilterAndReply(
+      const TimeRange& time_range,
+      int remove_mask,
+      int origin_type_mask,
+      std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+      Observer* observer);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -277,12 +273,42 @@ class BrowsingDataRemover : public KeyedService
       std::unique_ptr<WebappRegistry> webapp_registry);
 #endif
 
+#if defined(ENABLE_PLUGINS)
+  void OverrideFlashLSOHelperForTesting(
+      scoped_refptr<BrowsingDataFlashLSOHelper> flash_lso_helper);
+#endif
+
+  // Parameters of the last call are exposed to be used by tests. Removal and
+  // origin type masks equal to -1 mean that no removal has ever been executed.
+  // TODO(msramek): If other consumers than tests are interested in this,
+  // consider returning them in OnBrowsingDataRemoverDone() callback.
+  const base::Time& GetLastUsedBeginTime();
+  const base::Time& GetLastUsedEndTime();
+  int GetLastUsedRemovalMask();
+  int GetLastUsedOriginTypeMask();
+
+ protected:
+  // Use BrowsingDataRemoverFactory::GetForBrowserContext to get an instance of
+  // this class. The constructor is protected so that the class is mockable.
+  BrowsingDataRemover(content::BrowserContext* browser_context);
+  ~BrowsingDataRemover() override;
+
+  // A common reduction of all public Remove[WithFilter][AndReply] methods.
+  virtual void RemoveInternal(
+      const TimeRange& time_range,
+      int remove_mask,
+      int origin_type_mask,
+      std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+      Observer* observer);
+
  private:
   // The clear API needs to be able to toggle removing_ in order to test that
   // only one BrowsingDataRemover instance can be called at a time.
   FRIEND_TEST_ALL_PREFIXES(ExtensionBrowsingDataTest, OneAtATime);
   // Testing our static method, ClearSettingsForOneTypeWithPredicate.
   FRIEND_TEST_ALL_PREFIXES(BrowsingDataRemoverTest, ClearWithPredicate);
+  // Testing the private RemovalTask.
+  FRIEND_TEST_ALL_PREFIXES(BrowsingDataRemoverTest, MultipleTasks);
 
   // The BrowsingDataRemover tests need to be able to access the implementation
   // of Remove(), as it exposes details that aren't yet available in the public
@@ -294,6 +320,23 @@ class BrowsingDataRemover : public KeyedService
 
   friend class BrowsingDataRemoverFactory;
 
+  // Represents a single removal task. Contains all parameters needed to execute
+  // it and a pointer to the observer that added it.
+  struct RemovalTask {
+    RemovalTask(const TimeRange& time_range,
+                int remove_mask,
+                int origin_type_mask,
+                std::unique_ptr<BrowsingDataFilterBuilder> filter_builder,
+                Observer* observer);
+    ~RemovalTask();
+
+    TimeRange time_range;
+    int remove_mask;
+    int origin_type_mask;
+    std::unique_ptr<BrowsingDataFilterBuilder> filter_builder;
+    Observer* observer;
+  };
+
   // Clears all host-specific settings for one content type that satisfy the
   // given predicate.
   //
@@ -304,11 +347,6 @@ class BrowsingDataRemover : public KeyedService
       const base::Callback<
           bool(const ContentSettingsPattern& primary_pattern,
                const ContentSettingsPattern& secondary_pattern)>& predicate);
-
-  // Use BrowsingDataRemoverFactory::GetForBrowserContext to get an instance of
-  // this class.
-  BrowsingDataRemover(content::BrowserContext* browser_context);
-  ~BrowsingDataRemover() override;
 
   void Shutdown() override;
 
@@ -324,6 +362,14 @@ class BrowsingDataRemover : public KeyedService
   // Called when plugin data has been cleared. Invokes NotifyIfDone.
   void OnWaitableEventSignaled(base::WaitableEvent* waitable_event);
 
+  // Called when the list of |sites| storing Flash LSO cookies is fetched.
+  void OnSitesWithFlashDataFetched(
+      base::Callback<bool(const std::string&)> plugin_filter,
+      const std::vector<std::string>& sites);
+
+  // Indicates that LSO cookies for one website have been deleted.
+  void OnFlashDataDeleted();
+
   // PepperFlashSettingsManager::Client implementation.
   void OnDeauthorizeFlashContentLicensesCompleted(uint32_t request_id,
                                                   bool success) override;
@@ -333,6 +379,10 @@ class BrowsingDataRemover : public KeyedService
   void OnClearPlatformKeys(chromeos::DBusMethodCallStatus call_status,
                            bool result);
 #endif
+
+  // Executes the next removal task. Called after the previous task was finished
+  // or directly from Remove() if the task queue was empty.
+  void RunNextTask();
 
   // Removes the specified items related to browsing for a specific host. If the
   // provided |remove_url| is empty, data is removed for all origins; otherwise,
@@ -344,7 +394,7 @@ class BrowsingDataRemover : public KeyedService
   // TODO(crbug.com/589586): Support all backends w/ origin filter.
   void RemoveImpl(const TimeRange& time_range,
                   int remove_mask,
-                  const BrowsingDataFilterBuilder& origin_filter,
+                  const BrowsingDataFilterBuilder& filter_builder,
                   int origin_type_mask);
 
   // Notifies observers and transitions to the idle state.
@@ -444,8 +494,17 @@ class BrowsingDataRemover : public KeyedService
   // End time to delete to.
   base::Time delete_end_;
 
+  // The removal mask for the current removal operation.
+  int remove_mask_ = 0;
+
+  // From which types of origins should we remove data?
+  int origin_type_mask_ = 0;
+
   // True if Remove has been invoked.
   bool is_removing_;
+
+  // Removal tasks to be processed.
+  std::queue<RemovalTask> task_queue_;
 
   // If non-NULL, the |completion_inhibitor_| is notified each time an instance
   // is about to complete a browsing data removal process, and has the ability
@@ -457,6 +516,9 @@ class BrowsingDataRemover : public KeyedService
   std::unique_ptr<content::PluginDataRemover> plugin_data_remover_;
   base::WaitableEventWatcher watcher_;
 
+  // Used for per-site plugin data deletion.
+  scoped_refptr<BrowsingDataFlashLSOHelper> flash_lso_helper_;
+
   // Used to deauthorize content licenses for Pepper Flash.
   std::unique_ptr<PepperFlashSettingsManager> pepper_flash_settings_manager_;
 #endif
@@ -464,12 +526,16 @@ class BrowsingDataRemover : public KeyedService
   uint32_t deauthorize_flash_content_licenses_request_id_ = 0;
   // True if we're waiting for various data to be deleted.
   // These may only be accessed from UI thread in order to avoid races!
+  bool waiting_for_synchronous_clear_operations_ = false;
   bool waiting_for_clear_autofill_origin_urls_ = false;
   bool waiting_for_clear_cache_ = false;
   bool waiting_for_clear_channel_ids_ = false;
   bool waiting_for_clear_flash_content_licenses_ = false;
   // Non-zero if waiting for cookies to be cleared.
   int waiting_for_clear_cookies_count_ = 0;
+  // Counts the number of plugin data tasks. Should be the number of LSO cookies
+  // to be deleted, or 1 while we're fetching LSO cookies or deleting in bulk.
+  int waiting_for_clear_plugin_data_count_ = 0;
   bool waiting_for_clear_domain_reliability_monitor_ = false;
   bool waiting_for_clear_form_ = false;
   bool waiting_for_clear_history_ = false;
@@ -481,7 +547,6 @@ class BrowsingDataRemover : public KeyedService
   bool waiting_for_clear_passwords_ = false;
   bool waiting_for_clear_passwords_stats_ = false;
   bool waiting_for_clear_platform_keys_ = false;
-  bool waiting_for_clear_plugin_data_ = false;
   bool waiting_for_clear_pnacl_cache_ = false;
 #if BUILDFLAG(ANDROID_JAVA_UI)
   bool waiting_for_clear_precache_history_ = false;
@@ -495,12 +560,7 @@ class BrowsingDataRemover : public KeyedService
 #endif
   bool waiting_for_clear_auto_sign_in_ = false;
 
-  // The removal mask for the current removal operation.
-  int remove_mask_ = 0;
-
-  // From which types of origins should we remove data?
-  int origin_type_mask_ = 0;
-
+  // Observers of the global state and individual tasks.
   base::ObserverList<Observer, true> observer_list_;
 
   // Used if we need to clear history.

@@ -23,11 +23,11 @@
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/web_applications/web_app.h"
-#include "components/mus/public/cpp/window.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_registry.h"
 #include "grit/theme_resources.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -349,7 +349,7 @@ void BrowserNonClientFrameViewMus::UpdateProfileIcons() {
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserNonClientFrameViewMus, private:
 
-mus::Window* BrowserNonClientFrameViewMus::mus_window() {
+ui::Window* BrowserNonClientFrameViewMus::mus_window() {
   return static_cast<BrowserFrameMus*>(frame()->native_widget())->window();
 }
 
@@ -406,8 +406,8 @@ bool BrowserNonClientFrameViewMus::DoesIntersectRect(
 int BrowserNonClientFrameViewMus::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
   const int avatar_right = profile_indicator_icon()
-                               ? (insets.left() + GetOTRAvatarIcon().width())
-                               : 0;
+      ? (insets.left() + GetIncognitoAvatarIcon().width())
+      : 0;
   return avatar_right + insets.right() + frame_values().normal_insets.left();
 }
 
@@ -456,7 +456,7 @@ void BrowserNonClientFrameViewMus::LayoutIncognitoButton() {
   // ChromeOS shows avatar on V1 app.
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
-  gfx::ImageSkia incognito_icon = GetOTRAvatarIcon();
+  gfx::ImageSkia incognito_icon = GetIncognitoAvatarIcon();
   gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
   int avatar_bottom = GetTopInset(false) + browser_view()->GetTabStripHeight() -
                       avatar_insets.bottom();
@@ -543,8 +543,7 @@ void BrowserNonClientFrameViewMus::PaintToolbarBackground(gfx::Canvas* canvas) {
       gfx::Rect tabstrip_bounds(
           GetBoundsForTabStrip(browser_view()->tabstrip()));
       tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
-      canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
-                                    SkRegion::kDifference_Op);
+      canvas->ClipRect(tabstrip_bounds, SkRegion::kDifference_Op);
       separator_rect.set_y(tabstrip_bounds.bottom());
       BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
                                           separator_rect, true);

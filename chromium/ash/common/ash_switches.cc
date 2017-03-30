@@ -54,9 +54,21 @@ const char kAshEnableMagnifierKeyScroller[] =
 // Enables unified desktop mode.
 const char kAshEnableUnifiedDesktop[] = "ash-enable-unified-desktop";
 
+// Enables the palette next to the status area.
+const char kAshEnablePalette[] = "ash-enable-palette";
+
+// Enables experimental ash palette tools.
+const char kAshEnablePaletteExperimentalFeatures[] =
+    "ash-enable-palette-experimental-features";
+
+// Enables the palette on every display, instead of only the internal one.
+const char kAshEnablePaletteOnAllDisplays[] =
+    "ash-enable-palette-on-all-displays";
+
+#endif
+
 // Enables the observation of accelerometer events to enter touch-view mode.
 const char kAshEnableTouchView[] = "enable-touchview";
-#endif
 
 // Enables mirrored screen.
 const char kAshEnableMirroredScreen[] = "ash-enable-mirrored-screen";
@@ -71,16 +83,9 @@ const char kAshEnableStableOverviewOrder[] = "ash-enable-stable-overview-order";
 const char kAshEnableSoftwareMirroring[] = "ash-enable-software-mirroring";
 
 // Enables touch view testing.
-// TODO(skuhne): Remove TOGGLE_TOUCH_VIEW_TESTING accelerator once this
-// flag is removed.
+// TODO(skuhne): Remove DEBUG_TOGGLE_TOUCH_VIEW accelerator once this flag is
+// removed.
 const char kAshEnableTouchViewTesting[] = "ash-enable-touch-view-testing";
-
-// When this flag is set, system sounds will not be played.
-const char kAshDisableSystemSounds[] = "ash-disable-system-sounds";
-
-// When this flag is set, system sounds will be played whether the
-// ChromeVox is enabled or not.
-const char kAshEnableSystemSounds[] = "ash-enable-system-sounds";
 
 // Hides notifications that are irrelevant to Chrome OS device factory testing,
 // such as battery level updates.
@@ -111,12 +116,6 @@ const char kAshMaxWindowsToUseMaskInOverview[] = "ash-max-previews-to-use-mask";
 // allows using alpha shapes to hide the original window header.
 const char kAshMaxWindowsToUseShapeInOverview[] =
     "ash-max-previews-to-use-shape";
-
-// Specifies the layout mode and offsets for the secondary display for
-// testing. The format is "<t|r|b|l>,<offset>" where t=TOP, r=RIGHT,
-// b=BOTTOM and L=LEFT. For example, 'r,-100' means the secondary display
-// is positioned on the right with -100 offset. (above than primary)
-const char kAshSecondaryDisplayLayout[] = "ash-secondary-display-layout";
 
 // Enables the heads-up display for tracking touch points.
 const char kAshTouchHud[] = "ash-touch-hud";

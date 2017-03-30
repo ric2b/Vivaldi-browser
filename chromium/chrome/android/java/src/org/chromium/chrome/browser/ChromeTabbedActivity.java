@@ -4,12 +4,12 @@
 
 package org.chromium.chrome.browser;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
@@ -25,7 +25,9 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
 
+import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.ApplicationStatus;
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.MemoryPressureListener;
@@ -56,7 +58,7 @@ import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
-import org.chromium.chrome.browser.download.DownloadActivity;
+import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.firstrun.FirstRunActivity;
 import org.chromium.chrome.browser.firstrun.FirstRunFlowSequencer;
 import org.chromium.chrome.browser.firstrun.FirstRunSignInProcessor;
@@ -105,6 +107,7 @@ import org.chromium.ui.widget.Toast;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 /**
@@ -164,6 +167,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     public static final String INTENT_EXTRA_TEST_RENDER_PROCESS_LIMIT = "render_process_limit";
 
     /**
+     * Sending an intent with this extra sets the ChromeTabbedActivity to skip the First Run
+     * Experience.
+     */
+    public static final String SKIP_FIRST_RUN_EXPERIENCE = "skip_first_run_experience";
+
+    /**
      * Sending an intent with this action to Chrome will cause it to close all tabs
      * (iff the --enable-test-intents command line flag is set). If a URL is supplied in the
      * intent data, this will be loaded and unaffected by the close all action.
@@ -190,6 +199,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
     private boolean mUIInitialized = false;
 
     private boolean mIsOnFirstRun = false;
+    private Boolean mMergeTabsOnResume;
 
     private Boolean mIsAccessibilityEnabled;
 
@@ -346,6 +356,16 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         super.onResumeWithNative();
         CookiesFetcher.restoreCookies(this);
         StartupMetrics.getInstance().recordHistogram(false);
+
+        if (FeatureUtilities.isTabModelMergingEnabled()) {
+            boolean inMultiWindowMode = MultiWindowUtils.getInstance().isInMultiWindowMode(this);
+            // Merge tabs if the activity is not in multi-window mode and mMergeTabsOnResume is true
+            // or unset because the activity is just starting or was destroyed.
+            if (!inMultiWindowMode && (mMergeTabsOnResume == null || mMergeTabsOnResume)) {
+                maybeMergeTabs();
+            }
+            mMergeTabsOnResume = false;
+        }
     }
 
     @Override
@@ -833,8 +853,7 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 newIntent.putExtra(Browser.EXTRA_APPLICATION_ID, getPackageName());
                 newIntent.putExtra(
                         CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
-                ChromeLauncherActivity.updateHerbIntent(ChromeTabbedActivity.this,
-                        newIntent, Uri.parse(IntentHandler.getUrlFromIntent(newIntent)));
+                ChromeLauncherActivity.updateHerbIntent(ChromeTabbedActivity.this, newIntent);
 
                 // Launch the Activity on top of this task.
                 int updatedFlags = newIntent.getFlags();
@@ -850,15 +869,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 RecordUserAction.record("MobileReceivedExternalIntent");
             }
         }
-    }
-
-    @Override
-    public boolean isStartedUpCorrectly(Intent intent) {
-        if (FeatureUtilities.isDocumentMode(this)) {
-            Log.e(TAG, "Discarding Intent: Starting ChromeTabbedActivity in Document mode");
-            return false;
-        }
-        return true;
     }
 
     @Override
@@ -930,6 +940,14 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 getSnackbarManager());
     }
 
+    @Override
+    protected void initializeToolbar() {
+        super.initializeToolbar();
+        if (DeviceFormFactor.isTablet(getApplicationContext())) {
+            getToolbarManager().setShouldUpdateToolbarPrimaryColor(false);
+        }
+    }
+
     /**
      * Launch the First Run flow to set up Chrome.
      * There are two different pathways that can occur:
@@ -946,10 +964,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             return;
         }
 
-        final boolean isIntentActionMain = getIntent() != null
-                && TextUtils.equals(getIntent().getAction(), Intent.ACTION_MAIN);
-        final Intent freIntent = FirstRunFlowSequencer.checkIfFirstRunIsNecessary(
-                this, isIntentActionMain);
+        if (getIntent() != null && getIntent().getBooleanExtra(SKIP_FIRST_RUN_EXPERIENCE, false)) {
+            return;
+        }
+
+        final Intent freIntent =
+                FirstRunFlowSequencer.checkIfFirstRunIsNecessary(this, getIntent(), false);
         if (freIntent == null) return;
 
         mIsOnFirstRun = true;
@@ -968,18 +988,18 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
     @Override
     protected void onDeferredStartup() {
-        try {
-            TraceEvent.begin("ChromeTabbedActivity.onDeferredStartup");
-            super.onDeferredStartup();
+        super.onDeferredStartup();
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
+            @Override
+            public void run() {
+                ActivityManager am =
+                        (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                RecordHistogram.recordSparseSlowlyHistogram(
+                        "MemoryAndroid.DeviceMemoryClass", am.getMemoryClass());
 
-            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
-            RecordHistogram.recordSparseSlowlyHistogram(
-                    "MemoryAndroid.DeviceMemoryClass", am.getMemoryClass());
-
-            AutocompleteController.nativePrefetchZeroSuggestResults();
-        } finally {
-            TraceEvent.end("ChromeTabbedActivity.onDeferredStartup");
-        }
+                AutocompleteController.nativePrefetchZeroSuggestResults();
+            }
+        });
     }
 
     private void createTabModelSelectorImpl(Bundle savedInstanceState) {
@@ -995,6 +1015,9 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             finish();
             return;
         }
+        setTabCreators(
+                new ChromeTabCreator(this, getWindowAndroid(), false),
+                new ChromeTabCreator(this, getWindowAndroid(), true));
         mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(mTabModelSelectorImpl) {
 
             private boolean mIsFirstPageLoadStart = true;
@@ -1090,7 +1113,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                 getToolbarManager().setUrlBarFocus(true);
             }
         } else if (id == R.id.downloads_menu_id) {
-            DownloadActivity.launch(this);
+            DownloadUtils.showDownloadManager(this, currentTab);
+            RecordUserAction.record("MobileMenuDownloadManager");
+        } else if (id == R.id.open_recently_closed_tab) {
+            TabModel currentModel = mTabModelSelectorImpl.getCurrentModel();
+            if (!currentModel.isIncognito()) currentModel.openMostRecentlyClosedTab();
+            RecordUserAction.record("MobileTabClosedUndoShortCut");
         } else {
             return super.onMenuOrKeyboardAction(id, fromMenu);
         }
@@ -1188,7 +1216,6 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
         // - we decided to close the tab, but it was opened by an external app, so we will go
         //   exit Chrome on top of closing the tab
         final boolean minimizeApp = !shouldCloseTab || currentTab.isCreatedForExternalApp();
-
         if (minimizeApp) {
             if (shouldCloseTab) {
                 recordBackPressedUma("Minimized and closed tab", BACK_PRESSED_MINIMIZED_TAB_CLOSED);
@@ -1230,7 +1257,12 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
             mHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
+                    boolean hasNextTab =
+                            getCurrentTabModel().getNextTabIfClosed(tabToClose.getId()) != null;
                     getCurrentTabModel().closeTab(tabToClose, false, true, false);
+
+                    // If there is no next tab to open, enter overview mode.
+                    if (!hasNextTab) mLayoutManager.showOverview(false);
                 }
             }, CLOSE_TAB_ON_MINIMIZE_DELAY_MS);
         }
@@ -1261,12 +1293,15 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
                     IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, false);
             boolean fromLauncherShortcut = IntentUtils.safeGetBooleanExtra(
                     intent, IntentHandler.EXTRA_INVOKED_FROM_SHORTCUT, false);
-            return getTabCreator(isIncognito).launchUrl(
-                    url,
+            LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+            loadUrlParams.setIntentReceivedTimestamp(mIntentHandlingTimeMs);
+            loadUrlParams.setVerbatimHeaders(headers);
+            return getTabCreator(isIncognito).createNewTab(
+                    loadUrlParams,
                     fromLauncherShortcut ? TabLaunchType.FROM_EXTERNAL_APP
                             : TabLaunchType.FROM_LINK,
-                    intent,
-                    mIntentHandlingTimeMs);
+                    null,
+                    intent);
         } else {
             return getTabCreator(false).launchUrlFromExternalApp(url, referer, headers,
                     externalAppId, forceNewTab, intent, mIntentHandlingTimeMs);
@@ -1459,6 +1494,78 @@ public class ChromeTabbedActivity extends ChromeActivity implements OverviewMode
 
     @Override
     protected void setStatusBarColor(Tab tab, int color) {
+        if (DeviceFormFactor.isTablet(getApplicationContext())) return;
         super.setStatusBarColor(tab, isInOverviewMode() ? Color.BLACK : color);
+    }
+
+    @Override
+    public void onMultiWindowModeChanged(boolean isInMultiWindowMode) {
+        super.onMultiWindowModeChanged(isInMultiWindowMode);
+        if (!FeatureUtilities.isTabModelMergingEnabled()) return;
+        if (!isInMultiWindowMode) {
+            // If the activity is currently resumed when multi-window mode is exited, try to merge
+            // tabs from the other activity instance.
+            if (ApplicationStatus.getStateForActivity(this) == ActivityState.RESUMED) {
+                maybeMergeTabs();
+            } else {
+                mMergeTabsOnResume = true;
+            }
+        }
+    }
+
+    /**
+     * Writes the tab state to disk.
+     */
+    @VisibleForTesting
+    public void saveState() {
+        mTabModelSelectorImpl.saveState();
+    }
+
+    /**
+     * Merges tabs from a second ChromeTabbedActivity instance if necesssary and calls
+     * finishAndRemoveTask() on the other activity.
+     */
+    @TargetApi(Build.VERSION_CODES.M)
+    @VisibleForTesting
+    public void maybeMergeTabs() {
+        if (!FeatureUtilities.isTabModelMergingEnabled()) return;
+
+        Class<?> otherWindowActivityClass =
+                MultiWindowUtils.getInstance().getOpenInOtherWindowActivity(this);
+
+        // 1. Find the other activity's task if it's still running so that it can be removed from
+        //    Android recents.
+        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        List<ActivityManager.AppTask> appTasks = activityManager.getAppTasks();
+        ActivityManager.AppTask otherActivityTask = null;
+        for (ActivityManager.AppTask task : appTasks) {
+            if (task.getTaskInfo() == null || task.getTaskInfo().baseActivity == null) continue;
+            String baseActivity = task.getTaskInfo().baseActivity.getClassName();
+            if (baseActivity.equals(otherWindowActivityClass.getName())) {
+                otherActivityTask = task;
+            }
+        }
+
+        if (otherActivityTask != null) {
+            for (WeakReference<Activity> activityRef : ApplicationStatus.getRunningActivities()) {
+                Activity activity = activityRef.get();
+                if (activity == null) continue;
+                // 2. If the other activity is still running (not destroyed), save its tab list.
+                //    Saving the tab list prevents missing tabs or duplicate tabs if tabs have been
+                //    reparented.
+                // TODO(twellington): saveState() gets called in onStopWithNative() after the merge
+                // starts, causing some duplicate work to be done. Avoid the redundancy.
+                if (activity.getClass().equals(otherWindowActivityClass)) {
+                    ((ChromeTabbedActivity) activity).saveState();
+                    break;
+                }
+            }
+            // 3. Kill the other activity's task to remove it from Android recents.
+            otherActivityTask.finishAndRemoveTask();
+        }
+
+        // 4. Ask TabPersistentStore to merge state.
+        RecordUserAction.record("Android.MergeState.Live");
+        mTabModelSelectorImpl.mergeState();
     }
 }

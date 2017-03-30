@@ -13,7 +13,7 @@ namespace display {
 class Display;
 }
 
-namespace mus {
+namespace ui {
 class Window;
 }
 
@@ -31,17 +31,15 @@ class WmRootWindowControllerMus : public WmRootWindowController {
                             RootWindowController* root_window_controller);
   ~WmRootWindowControllerMus() override;
 
-  static WmRootWindowControllerMus* Get(::mus::Window* window) {
+  static WmRootWindowControllerMus* Get(ui::Window* window) {
     return const_cast<WmRootWindowControllerMus*>(
-        Get(const_cast<const ::mus::Window*>(window)));
+        Get(const_cast<const ui::Window*>(window)));
   }
-  static const WmRootWindowControllerMus* Get(const ::mus::Window* window);
+  static const WmRootWindowControllerMus* Get(const ui::Window* window);
 
   RootWindowController* root_window_controller() {
     return root_window_controller_;
   }
-
-  void NotifyFullscreenStateChange(bool is_fullscreen);
 
   // Screen conversion functions.
   gfx::Point ConvertPointToScreen(const WmWindowMus* source,
@@ -66,6 +64,7 @@ class WmRootWindowControllerMus : public WmRootWindowController {
       int shell_container_id,
       views::Widget::InitParams* init_params) override;
   WmWindow* FindEventTarget(const gfx::Point& location_in_screen) override;
+  gfx::Point GetLastMouseLocationInRoot() override;
   void AddObserver(WmRootWindowControllerObserver* observer) override;
   void RemoveObserver(WmRootWindowControllerObserver* observer) override;
 

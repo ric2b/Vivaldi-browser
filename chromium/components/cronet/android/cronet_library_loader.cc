@@ -32,11 +32,12 @@
 #include "url/url_features.h"
 #include "url/url_util.h"
 
-#if BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
-#include "url/android/url_jni_registrar.h"  // nogncheck
-#else
+#if !BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
 #include "base/i18n/icu_util.h"  // nogncheck
 #endif
+
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace cronet {
 namespace {
@@ -53,9 +54,6 @@ const base::android::RegistrationMethod kCronetRegisteredMethods[] = {
     {"CronetUrlRequestContextAdapter",
      CronetUrlRequestContextAdapterRegisterJni},
     {"NetAndroid", net::android::RegisterJni},
-#if BUILDFLAG(USE_PLATFORM_ICU_ALTERNATIVES)
-    {"UrlAndroid", url::android::RegisterJni},
-#endif
 };
 
 // MessageLoop on the main thread, which is where objects that receive Java

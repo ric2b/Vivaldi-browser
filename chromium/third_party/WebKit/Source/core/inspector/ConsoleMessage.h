@@ -9,10 +9,7 @@
 #include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
-#include "wtf/PassRefPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
-#include <memory>
 
 namespace blink {
 
@@ -20,14 +17,17 @@ class SourceLocation;
 
 class CORE_EXPORT ConsoleMessage final: public GarbageCollectedFinalized<ConsoleMessage> {
 public:
-    // Location should not be null. Zero lineNumber or columnNumber means unknown.
+    // Location must be non-null.
     static ConsoleMessage* create(MessageSource, MessageLevel, const String& message, std::unique_ptr<SourceLocation>);
 
     // Shortcut when location is unknown. Captures current location.
     static ConsoleMessage* create(MessageSource, MessageLevel, const String& message);
 
-    // This method captures current location.
+    // This method captures current location if available.
     static ConsoleMessage* createForRequest(MessageSource, MessageLevel, const String& message, const String& url, unsigned long requestIdentifier);
+
+    // This creates message from WorkerMessageSource.
+    static ConsoleMessage* createFromWorker(MessageLevel, const String& message, std::unique_ptr<SourceLocation>, const String& workerId);
 
     ~ConsoleMessage();
 
@@ -37,6 +37,7 @@ public:
     MessageSource source() const;
     MessageLevel level() const;
     const String& message() const;
+    const String& workerId() const;
 
     DECLARE_TRACE();
 
@@ -49,6 +50,7 @@ private:
     std::unique_ptr<SourceLocation> m_location;
     unsigned long m_requestIdentifier;
     double m_timestamp;
+    String m_workerId;
 };
 
 } // namespace blink

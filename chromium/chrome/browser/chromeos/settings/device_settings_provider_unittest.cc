@@ -22,9 +22,9 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/settings/cros_settings_names.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/user_manager/fake_user_manager.h"
 #include "components/user_manager/user.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -80,6 +80,8 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     proto->set_report_users(enable_reporting);
     proto->set_report_hardware_status(enable_reporting);
     proto->set_report_session_status(enable_reporting);
+    proto->set_report_os_update_status(enable_reporting);
+    proto->set_report_running_kiosk_app(enable_reporting);
     proto->set_device_status_frequency(frequency);
     device_policy_.Build();
     device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
@@ -151,11 +153,13 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
       kReportDeviceNetworkInterfaces,
       kReportDeviceUsers,
       kReportDeviceHardwareStatus,
-      kReportDeviceSessionStatus
+      kReportDeviceSessionStatus,
+      kReportOsUpdateStatus,
+      kReportRunningKioskApp
     };
 
     const base::FundamentalValue expected_enable_value(expected_enable_state);
-    for (const auto& setting : reporting_settings) {
+    for (auto* setting : reporting_settings) {
       EXPECT_TRUE(base::Value::Equals(provider_->Get(setting),
                                       &expected_enable_value))
           << "Value for " << setting << " does not match expected";
@@ -404,25 +408,6 @@ TEST_F(DeviceSettingsProviderTest, LegacyDeviceLocalAccounts) {
   const base::Value* actual_accounts =
       provider_->Get(kAccountsPrefDeviceLocalAccounts);
   EXPECT_TRUE(base::Value::Equals(&expected_accounts, actual_accounts));
-}
-
-TEST_F(DeviceSettingsProviderTest, OwnerIsStillSetWhenDeviceIsConsumerManaged) {
-  owner_key_util_->SetPrivateKey(device_policy_.GetSigningKey());
-  InitOwner(AccountId::FromUserEmail(device_policy_.policy_data().username()),
-            true);
-  device_policy_.policy_data().set_management_mode(
-      em::PolicyData::CONSUMER_MANAGED);
-  device_policy_.policy_data().set_request_token("test request token");
-  device_policy_.Build();
-  device_settings_test_helper_.set_policy_blob(device_policy_.GetBlob());
-  FlushDeviceSettings();
-
-  // Expect that kDeviceOwner is not empty.
-  const base::Value* value = provider_->Get(kDeviceOwner);
-  ASSERT_TRUE(value);
-  std::string string_value;
-  EXPECT_TRUE(value->GetAsString(&string_value));
-  EXPECT_FALSE(string_value.empty());
 }
 
 TEST_F(DeviceSettingsProviderTest, DecodeDeviceState) {

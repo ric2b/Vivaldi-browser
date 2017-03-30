@@ -40,6 +40,11 @@
 #include "content/public/common/webplugininfo.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/android/download/download_controller.h"
+#include "chrome/browser/android/download/download_manager_service.h"
+#endif
+
 #if defined(OS_WIN)
 #include "chrome/browser/ui/pdf/adobe_reader_info_win.h"
 #endif
@@ -320,13 +325,24 @@ void DownloadTargetDeterminer::ReserveVirtualPathDone(
             << " Verified:" << verified;
   DCHECK_EQ(STATE_PROMPT_USER_FOR_DOWNLOAD_PATH, next_state_);
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  // If we cannot reserve the path and the WebContent is already gone, there is
-  // no way to prompt user for an infobar. This could happen when user try to
-  // resume a download after another process has overwritten the same file.
-  // TODO(qinmin): show an error toast to the user. http://crbug.com/581106.
-  if (!verified && !download_->GetWebContents()) {
-    CancelOnFailureAndDeleteSelf();
-    return;
+  if (!verified) {
+    if (path.empty()) {
+      DownloadManagerService::OnDownloadCanceled(
+          download_, DownloadController::CANCEL_REASON_NO_EXTERNAL_STORAGE);
+      CancelOnFailureAndDeleteSelf();
+      return;
+    }
+    if (!download_->GetWebContents()) {
+      // If we cannot reserve the path and the WebContent is already gone, there
+      // is no way to prompt user for an infobar. This could happen after chrome
+      // gets killed, and user tries to resume a download while another app has
+      // created the target file (not the temporary .crdownload file).
+      DownloadManagerService::OnDownloadCanceled(
+          download_,
+          DownloadController::CANCEL_REASON_CANNOT_DETERMINE_DOWNLOAD_TARGET);
+      CancelOnFailureAndDeleteSelf();
+      return;
+    }
   }
 #endif
   should_prompt_ = (should_prompt_ || !verified);
@@ -780,15 +796,12 @@ Profile* DownloadTargetDeterminer::GetProfile() const {
 
 bool DownloadTargetDeterminer::ShouldPromptForDownload(
     const base::FilePath& filename) const {
-  if (is_resumption_) {
 #if BUILDFLAG(ANDROID_JAVA_UI)
-    // In case of file error, prompting user with the overwritten infobar
-    // won't solve the issue. Return false so that resumption will fail again
-    // if user hasn't performed any action to resolve file errors.
-    // TODO(qinmin): show an error toast to warn user that resume cannot
-    // continue due to file errors. http://crbug.com/581106.
+    // Don't prompt user about saving path on Android.
+    // TODO(qinmin): show an error toast to warn user in certain cases.
     return false;
-#else
+#endif
+  if (is_resumption_) {
     // For resumed downloads, if the target disposition or prefs require
     // prompting, the user has already been prompted. Try to respect the user's
     // selection, unless we've discovered that the target path cannot be used
@@ -797,7 +810,6 @@ bool DownloadTargetDeterminer::ShouldPromptForDownload(
     return (reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_ACCESS_DENIED ||
             reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_NO_SPACE ||
             reason == content::DOWNLOAD_INTERRUPT_REASON_FILE_TOO_LARGE);
-#endif
   }
 
   // If the download path is forced, don't prompt.
@@ -887,17 +899,22 @@ DownloadFileType::DangerLevel DownloadTargetDeterminer::GetDangerLevel(
       safe_browsing::FileTypePolicies::GetInstance()->GetFileDangerLevel(
           virtual_path_.BaseName());
 
-  // If the danger level is ALLOW_ON_USER_GESTURE and we have a user gesture AND
-  // there was a recorded visit to the referrer prior to today, then we are
-  // going to downgrade the danger_level to NOT_DANGEROUS. This prevents
-  // spurious prompting for moderately dangerous files that are downloaded from
-  // familiar sites.
-  // TODO(asanka): Check PAGE_TRANSITION_FROM_ADDRESS_BAR bit instead of
-  // comparing all bits with PageTransitionTypeIncludingQualifiersIs().
+  // A danger level of ALLOW_ON_USER_GESTURE is used to label potentially
+  // dangerous file types that have a high frequency of legitimate use. We would
+  // like to avoid prompting for the legitimate cases as much as possible. To
+  // that end, we consider a download to be legitimate if one of the following
+  // is true, and avoid prompting:
+  //
+  // * The user navigated to the download URL via the omnibox (either by typing
+  //   the URL, pasting it, or using search).
+  //
+  // * The navigation that initiated the download has a user gesture associated
+  //   with it AND the user the user is familiar with the referring origin. A
+  //   user is considered familiar with a referring origin if a visit for a page
+  //   from the same origin was recorded on the previous day or earlier.
   if (danger_level == DownloadFileType::ALLOW_ON_USER_GESTURE &&
-      (ui::PageTransitionTypeIncludingQualifiersIs(
-          download_->GetTransitionType(),
-          ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) ||
+      ((download_->GetTransitionType() &
+        ui::PAGE_TRANSITION_FROM_ADDRESS_BAR) != 0 ||
        (download_->HasUserGesture() && visits == VISITED_REFERRER)))
     return DownloadFileType::NOT_DANGEROUS;
   return danger_level;

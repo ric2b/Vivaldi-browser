@@ -50,7 +50,7 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
   // Returns Arc app id. Arc platform host app is mapped to Play Store app.
   static std::string GetArcAppIdFromShelfAppId(const std::string& shelf_app_id);
 
-  // AppWindowLauncherControllre:
+  // AppWindowLauncherController:
   void ActiveUserChanged(const std::string& user_email) override;
   void AdditionalUserAddedToSession(Profile* profile) override;
 
@@ -58,7 +58,7 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
   void OnWindowInitialized(aura::Window* window) override;
 
   // aura::WindowObserver:
-  void OnWindowVisibilityChanging(aura::Window* window, bool visible) override;
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override;
   void OnWindowDestroying(aura::Window* window) override;
 
   // aura::client::ActivationChangeObserver:
@@ -85,21 +85,26 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
 
  private:
   class AppWindow;
+  class AppWindowInfo;
 
-  using TaskIdToAppWindow = std::map<int, std::unique_ptr<AppWindow>>;
-  using TaskIdToShelfAppIdMap = std::map<int, std::string>;
-  using AppControllerMap =
+  using TaskIdToAppWindowInfo = std::map<int, std::unique_ptr<AppWindowInfo>>;
+  using ShelfAppIdToAppControllerMap =
       std::map<std::string, ArcAppWindowLauncherItemController*>;
 
   void StartObserving(Profile* profile);
   void StopObserving(Profile* profile);
 
-  void RegisterApp(AppWindow* app_window);
-  void UnregisterApp(AppWindow* app_window, bool close_controller);
+  void RegisterApp(AppWindowInfo* app_window_info);
+  void UnregisterApp(AppWindowInfo* app_window_info, bool close_controller);
 
+  AppWindowInfo* GetAppWindowInfoForTask(int task_id);
   AppWindow* GetAppWindowForTask(int task_id);
 
-  void MayAttachContollerToWindow(aura::Window* window);
+  void AttachControllerToWindowIfNeeded(aura::Window* window);
+  void AttachControllerToWindowsIfNeeded();
+  ArcAppWindowLauncherItemController* AttachControllerToTask(
+      const std::string& shelf_app_id,
+      int taskId);
 
   void SetOrientationLockForAppWindow(AppWindow* app_window);
 
@@ -110,9 +115,8 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
   // Not owned
   ash::ShelfDelegate* shelf_delegate_;
   int active_task_id_ = -1;
-  TaskIdToAppWindow task_id_to_app_window_;
-  TaskIdToShelfAppIdMap task_id_to_shelf_app_id_;
-  AppControllerMap app_controller_map_;
+  TaskIdToAppWindowInfo task_id_to_app_window_info_;
+  ShelfAppIdToAppControllerMap app_controller_map_;
   std::vector<aura::Window*> observed_windows_;
   Profile* observed_profile_ = nullptr;
   bool observing_shell_ = false;

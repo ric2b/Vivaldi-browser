@@ -10,6 +10,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "ui/display/types/display_snapshot.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -101,9 +102,9 @@ void ScreenManager::AddDisplayController(const scoped_refptr<DrmDevice>& drm,
     return;
   }
 
-  controllers_.push_back(base::WrapUnique(new HardwareDisplayController(
+  controllers_.push_back(base::MakeUnique<HardwareDisplayController>(
       std::unique_ptr<CrtcController>(new CrtcController(drm, crtc, connector)),
-      gfx::Point())));
+      gfx::Point()));
 }
 
 void ScreenManager::RemoveDisplayController(const scoped_refptr<DrmDevice>& drm,
@@ -169,8 +170,8 @@ bool ScreenManager::ActualConfigureDisplayController(
   // mirror mode, subsequent calls configuring the other controllers will
   // restore mirror mode.
   if (controller->IsMirrored()) {
-    controllers_.push_back(base::WrapUnique(new HardwareDisplayController(
-        controller->RemoveCrtc(drm, crtc), controller->origin())));
+    controllers_.push_back(base::MakeUnique<HardwareDisplayController>(
+        controller->RemoveCrtc(drm, crtc), controller->origin()));
     it = controllers_.end() - 1;
     controller = it->get();
   }
@@ -191,8 +192,8 @@ bool ScreenManager::DisableDisplayController(
   if (it != controllers_.end()) {
     HardwareDisplayController* controller = it->get();
     if (controller->IsMirrored()) {
-      controllers_.push_back(base::WrapUnique(new HardwareDisplayController(
-          controller->RemoveCrtc(drm, crtc), controller->origin())));
+      controllers_.push_back(base::MakeUnique<HardwareDisplayController>(
+          controller->RemoveCrtc(drm, crtc), controller->origin()));
       controller = controllers_.back().get();
     }
 
@@ -341,9 +342,10 @@ OverlayPlane ScreenManager::GetModesetBuffer(
       return *primary;
   }
 
+  gfx::BufferFormat format = ui::DisplaySnapshot::PrimaryFormat();
   scoped_refptr<DrmDevice> drm = controller->GetAllocationDrmDevice();
-  scoped_refptr<ScanoutBuffer> buffer = buffer_generator_->Create(
-      drm, gfx::BufferFormat::BGRA_8888, bounds.size());
+  scoped_refptr<ScanoutBuffer> buffer =
+      buffer_generator_->Create(drm, format, bounds.size());
   if (!buffer) {
     LOG(ERROR) << "Failed to create scanout buffer";
     return OverlayPlane(nullptr, 0, gfx::OVERLAY_TRANSFORM_INVALID, gfx::Rect(),

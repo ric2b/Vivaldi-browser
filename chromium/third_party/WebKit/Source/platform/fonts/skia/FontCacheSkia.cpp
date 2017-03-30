@@ -32,7 +32,6 @@
 #include "SkStream.h"
 #include "SkTypeface.h"
 #include "platform/Language.h"
-#include "platform/fonts/AcceptLanguagesResolver.h"
 #include "platform/fonts/AlternateFontFamily.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
@@ -81,19 +80,17 @@ AtomicString FontCache::getFamilyNameForCharacter(SkFontMgr* fm, UChar32 c, cons
     const char* bcp47Locales[kMaxLocales];
     size_t localeCount = 0;
 
-    if (fallbackPriority == FontFallbackPriority::EmojiEmoji) {
+    // Fill in the list of locales in the reverse priority order.
+    // Skia expects the highest array index to be the first priority.
+    const LayoutLocale* contentLocale = fontDescription.locale();
+    if (const LayoutLocale* hanLocale = LayoutLocale::localeForHan(contentLocale))
+        bcp47Locales[localeCount++] = hanLocale->localeForHanForSkFontMgr();
+    bcp47Locales[localeCount++] = LayoutLocale::getDefault().localeForSkFontMgr();
+    if (contentLocale)
+        bcp47Locales[localeCount++] = contentLocale->localeForSkFontMgr();
+    if (fallbackPriority == FontFallbackPriority::EmojiEmoji)
         bcp47Locales[localeCount++] = kAndroidColorEmojiLocale;
-    }
-    if (const char* hanLocale = AcceptLanguagesResolver::preferredHanSkFontMgrLocale())
-        bcp47Locales[localeCount++] = hanLocale;
-    CString defaultLocale = toSkFontMgrLocale(defaultLanguage());
-    bcp47Locales[localeCount++] = defaultLocale.data();
-    CString fontLocale;
-    if (!fontDescription.locale().isEmpty()) {
-        fontLocale = toSkFontMgrLocale(fontDescription.locale());
-        bcp47Locales[localeCount++] = fontLocale.data();
-    }
-    ASSERT_WITH_SECURITY_IMPLICATION(localeCount < kMaxLocales);
+    SECURITY_DCHECK(localeCount <= kMaxLocales);
     RefPtr<SkTypeface> typeface = adoptRef(fm->matchFamilyStyleCharacter(0, SkFontStyle(), bcp47Locales, localeCount, c));
     if (!typeface)
         return emptyAtom;

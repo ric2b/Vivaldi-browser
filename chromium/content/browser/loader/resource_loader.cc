@@ -32,10 +32,12 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/resource_response.h"
+#include "content/public/common/resource_type.h"
 #include "content/public/common/security_style.h"
 #include "net/base/io_buffer.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_response_headers.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_platform_key.h"
@@ -88,8 +90,10 @@ void PopulateResourceResponse(ResourceRequestInfoImpl* info,
     response->head.is_using_lofi = request_info->IsUsingLoFi();
 
   response->head.effective_connection_type =
-      net::NetworkQualityEstimator::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
-  if (info->IsMainFrame()) {
+      net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN;
+
+  if (info->GetResourceType() == RESOURCE_TYPE_MAIN_FRAME) {
+    DCHECK(info->IsMainFrame());
     net::NetworkQualityEstimator* estimator =
         request->context()->network_quality_estimator();
     if (estimator) {
@@ -273,8 +277,6 @@ void ResourceLoader::OnReceivedRedirect(net::URLRequest* unused,
     return;
   }
 
-  delegate_->DidReceiveRedirect(this, redirect_info.new_url);
-
   if (delegate_->HandleExternalProtocol(this, redirect_info.new_url)) {
     // The request is complete so we can remove it.
     CancelAndIgnore();
@@ -283,6 +285,7 @@ void ResourceLoader::OnReceivedRedirect(net::URLRequest* unused,
 
   scoped_refptr<ResourceResponse> response = new ResourceResponse();
   PopulateResourceResponse(info, request_.get(), cert_store_, response.get());
+  delegate_->DidReceiveRedirect(this, redirect_info.new_url, response.get());
   if (!handler_->OnRequestRedirected(redirect_info, response.get(), defer)) {
     Cancel();
   } else if (*defer) {
@@ -335,21 +338,6 @@ void ResourceLoader::OnSSLCertificateError(net::URLRequest* request,
   SSLManager::OnSSLCertificateError(
       weak_ptr_factory_.GetWeakPtr(), info->GetResourceType(), request_->url(),
       info->GetWebContentsGetterForRequest(), ssl_info, fatal);
-}
-
-void ResourceLoader::OnBeforeNetworkStart(net::URLRequest* unused,
-                                          bool* defer) {
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
-               "ResourceLoader::OnBeforeNetworkStart");
-  DCHECK_EQ(request_.get(), unused);
-
-  // Give the handler a chance to delay the URLRequest from using the network.
-  if (!handler_->OnBeforeNetworkStart(request_->url(), defer)) {
-    Cancel();
-    return;
-  } else if (*defer) {
-    deferred_stage_ = DEFERRED_NETWORK_START;
-  }
 }
 
 void ResourceLoader::OnResponseStarted(net::URLRequest* unused) {

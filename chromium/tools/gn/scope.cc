@@ -25,6 +25,11 @@ bool IsPrivateVar(const base::StringPiece& name) {
 
 }  // namespace
 
+Scope::ProcessParseMap Scope::target_pre_process_list;
+Scope::ProcessParseMap Scope::target_post_process_list;
+Scope::ProcessParseMap Scope::template_pre_process_list;
+Scope::ProcessParseMap Scope::template_post_process_list;
+
 // Defaults to all false, which are the things least likely to cause errors.
 Scope::MergeOptions::MergeOptions()
     : clobber_existing(false),
@@ -66,10 +71,20 @@ Scope::Scope(const Scope* parent)
 Scope::~Scope() {
 }
 
+void Scope::DetachFromContaining() {
+  const_containing_ = nullptr;
+  mutable_containing_ = nullptr;
+}
+
+bool Scope::HasValues(SearchNested search_nested) const {
+  DCHECK(search_nested == SEARCH_CURRENT);
+  return !values_.empty();
+}
+
 const Value* Scope::GetValue(const base::StringPiece& ident,
                              bool counts_as_used) {
   // First check for programmatically-provided values.
-  for (const auto& provider : programmatic_providers_) {
+  for (auto* provider : programmatic_providers_) {
     const Value* v = provider->GetProgrammaticValue(ident);
     if (v)
       return v;
@@ -91,6 +106,7 @@ const Value* Scope::GetValue(const base::StringPiece& ident,
 }
 
 Value* Scope::GetMutableValue(const base::StringPiece& ident,
+                              SearchNested search_mode,
                               bool counts_as_used) {
   // Don't do programmatic values, which are not mutable.
   RecordMap::iterator found = values_.find(ident);
@@ -100,25 +116,10 @@ Value* Scope::GetMutableValue(const base::StringPiece& ident,
     return &found->second.value;
   }
 
-  // Search in the parent mutable scope, but not const one.
-  if (mutable_containing_)
-    return mutable_containing_->GetMutableValue(ident, counts_as_used);
-  return nullptr;
-}
-
-Value* Scope::GetValueForcedToCurrentScope(const base::StringPiece& ident,
-                                           const ParseNode* set_node) {
-  RecordMap::iterator found = values_.find(ident);
-  if (found != values_.end())
-    return &found->second.value;  // Already have in the current scope.
-
-  // Search in the parent scope.
-  if (containing()) {
-    const Value* in_containing = containing()->GetValue(ident);
-    if (in_containing) {
-      // Promote to current scope.
-      return SetValue(ident, *in_containing, set_node);
-    }
+  // Search in the parent mutable scope if requested, but not const one.
+  if (search_mode == SEARCH_NESTED && mutable_containing_) {
+    return mutable_containing_->GetMutableValue(
+        ident, Scope::SEARCH_NESTED, counts_as_used);
   }
   return nullptr;
 }
@@ -144,10 +145,10 @@ const Value* Scope::GetValue(const base::StringPiece& ident) const {
 }
 
 Value* Scope::SetValue(const base::StringPiece& ident,
-                       const Value& v,
+                       Value v,
                        const ParseNode* set_node) {
   Record& r = values_[ident];  // Clears any existing value.
-  r.value = v;
+  r.value = std::move(v);
   r.value.set_origin(set_node);
   return &r.value;
 }
@@ -298,18 +299,27 @@ bool Scope::NonRecursiveMergeTo(Scope* dest,
     }
 
     if (!options.clobber_existing) {
-      if (dest->GetTargetDefaults(current_name)) {
-        // TODO(brettw) it would be nice to know the origin of a
-        // set_target_defaults so we can give locations for the colliding target
-        // defaults.
-        std::string desc_string(desc_for_err);
-        *err = Err(node_for_err, "Target defaults collision.",
-            "This " + desc_string + " contains target defaults for\n"
-            "\"" + current_name + "\" which would clobber one for the\n"
-            "same target type in your current scope. It's unfortunate that I'm "
-            "too stupid\nto tell you the location of where the target defaults "
-            "were set. Usually\nthis happens in the BUILDCONFIG.gn file.");
-        return false;
+      const Scope* dest_defaults = dest->GetTargetDefaults(current_name);
+      if (dest_defaults) {
+        if (RecordMapValuesEqual(pair.second->values_,
+                                 dest_defaults->values_)) {
+          // Values of the two defaults are equivalent, just ignore the
+          // collision.
+          continue;
+        } else {
+          // TODO(brettw) it would be nice to know the origin of a
+          // set_target_defaults so we can give locations for the colliding
+          // target defaults.
+          std::string desc_string(desc_for_err);
+          *err = Err(node_for_err, "Target defaults collision.",
+              "This " + desc_string + " contains target defaults for\n"
+              "\"" + current_name + "\" which would clobber one for the\n"
+              "same target type in your current scope. It's unfortunate that "
+              "I'm too stupid\nto tell you the location of where the target "
+              "defaults were set. Usually\nthis happens in the BUILDCONFIG.gn "
+              "file or in a related .gni file.\n");
+          return false;
+        }
       }
     }
 
@@ -404,14 +414,7 @@ std::unique_ptr<Scope> Scope::MakeClosure() const {
 }
 
 Scope* Scope::MakeTargetDefaults(const std::string& target_type) {
-  if (GetTargetDefaults(target_type))
-    return nullptr;
-
   std::unique_ptr<Scope>& dest = target_defaults_[target_type];
-  if (dest) {
-    NOTREACHED();  // Already set.
-    return dest.get();
-  }
   dest = base::WrapUnique(new Scope(settings_));
   return dest.get();
 }
@@ -513,4 +516,18 @@ void Scope::AddProvider(ProgrammaticProvider* p) {
 void Scope::RemoveProvider(ProgrammaticProvider* p) {
   DCHECK(programmatic_providers_.find(p) != programmatic_providers_.end());
   programmatic_providers_.erase(p);
+}
+
+// static
+bool Scope::RecordMapValuesEqual(const RecordMap& a, const RecordMap& b) {
+  if (a.size() != b.size())
+    return false;
+  for (const auto& pair : a) {
+    const auto& found_b = b.find(pair.first);
+    if (found_b == b.end())
+      return false;  // Item in 'a' but not 'b'.
+    if (pair.second.value != found_b->second.value)
+      return false;  // Values for variable in 'a' and 'b' are different.
+  }
+  return true;
 }

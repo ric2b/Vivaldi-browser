@@ -123,7 +123,6 @@ bool BuildCapabilities(const base::DictionaryValue& value,
 Entry::Entry() {}
 Entry::Entry(const std::string& name)
     : name_(name), qualifier_(shell::GetNamePath(name)), display_name_(name) {}
-Entry::Entry(const Entry& other) = default;
 Entry::~Entry() {}
 
 std::unique_ptr<base::DictionaryValue> Entry::Serialize() const {
@@ -231,17 +230,17 @@ std::unique_ptr<Entry> Entry::Deserialize(const base::DictionaryValue& value) {
   }
   entry->set_capabilities(spec);
 
-  if (value.HasKey(Store::kApplicationsKey)) {
-    const base::ListValue* applications = nullptr;
-    value.GetList(Store::kApplicationsKey, &applications);
-    for (size_t i = 0; i < applications->GetSize(); ++i) {
-      const base::DictionaryValue* application = nullptr;
-      applications->GetDictionary(i, &application);
-      std::unique_ptr<Entry> child = Entry::Deserialize(*application);
+  if (value.HasKey(Store::kServicesKey)) {
+    const base::ListValue* services = nullptr;
+    value.GetList(Store::kServicesKey, &services);
+    for (size_t i = 0; i < services->GetSize(); ++i) {
+      const base::DictionaryValue* service = nullptr;
+      services->GetDictionary(i, &service);
+      std::unique_ptr<Entry> child = Entry::Deserialize(*service);
       if (child) {
         child->set_package(entry.get());
         // Caller must assume ownership of these items.
-        entry->applications_.insert(child.release());
+        entry->children_.emplace_back(std::move(child));
       }
     }
   }
@@ -278,8 +277,7 @@ shell::mojom::ResolveResultPtr
   const catalog::Entry& package = input.package() ? *input.package() : input;
   result->resolved_name = package.name();
   result->qualifier = input.qualifier();
-  result->capabilities =
-      shell::mojom::CapabilitySpec::From(input.capabilities());
+  result->capabilities = input.capabilities();
   result->package_path = package.path();
   return result;
 }

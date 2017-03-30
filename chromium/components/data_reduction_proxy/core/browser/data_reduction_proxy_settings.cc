@@ -174,7 +174,8 @@ void DataReductionProxySettings::SetLoFiModeActiveOnMainFrame(
 }
 
 bool DataReductionProxySettings::WasLoFiModeActiveOnMainFrame() const {
-  return lo_fi_mode_active_;
+  return lo_fi_mode_active_ && !params::AreLoFiPreviewsEnabledViaFlags() &&
+         !params::IsIncludedInLoFiPreviewFieldTrial();
 }
 
 bool DataReductionProxySettings::WasLoFiLoadImageRequestedBefore() {
@@ -363,6 +364,10 @@ void DataReductionProxySettings::GetContentLengths(
 
   data_reduction_proxy_service_->compression_stats()->GetContentLengths(
       days, original_content_length, received_content_length, last_update_time);
+}
+
+bool DataReductionProxySettings::IsDataSaverEnabled() const {
+  return IsDataReductionProxyEnabled();
 }
 
 }  // namespace data_reduction_proxy

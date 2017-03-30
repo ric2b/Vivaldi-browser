@@ -8,8 +8,8 @@
 
 #include "base/macros.h"
 #include "base/stl_util.h"
-#include "net/quic/crypto/quic_decrypter.h"
-#include "net/quic/crypto/quic_encrypter.h"
+#include "net/quic/core/crypto/quic_decrypter.h"
+#include "net/quic/core/crypto/quic_encrypter.h"
 
 using base::StringPiece;
 using std::string;
@@ -23,8 +23,8 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
   SimpleFramerVisitor() : error_(QUIC_NO_ERROR) {}
 
   ~SimpleFramerVisitor() override {
-    STLDeleteElements(&stream_frames_);
-    STLDeleteElements(&stream_data_);
+    base::STLDeleteElements(&stream_frames_);
+    base::STLDeleteElements(&stream_data_);
   }
 
   void OnError(QuicFramer* framer) override { error_ = framer->error(); }
@@ -163,7 +163,7 @@ class SimpleFramerVisitor : public QuicFramerVisitorInterface {
 };
 
 SimpleQuicFramer::SimpleQuicFramer()
-    : framer_(QuicSupportedVersions(),
+    : framer_(AllSupportedVersions(),
               QuicTime::Zero(),
               Perspective::IS_SERVER) {}
 

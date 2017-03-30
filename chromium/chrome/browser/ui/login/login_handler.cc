@@ -9,6 +9,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -59,11 +60,26 @@ class LoginHandlerImpl;
 
 namespace {
 
+// Auth prompt types for UMA. Do not reorder or delete entries; only add to the
+// end.
+enum AuthPromptType {
+  AUTH_PROMPT_TYPE_WITH_INTERSTITIAL = 0,
+  AUTH_PROMPT_TYPE_MAIN_FRAME = 1,
+  AUTH_PROMPT_TYPE_SUBRESOURCE_SAME_ORIGIN = 2,
+  AUTH_PROMPT_TYPE_SUBRESOURCE_CROSS_ORIGIN = 3,
+  AUTH_PROMPT_TYPE_ENUM_COUNT = 4
+};
+
 // Helper to remove the ref from an net::URLRequest to the LoginHandler.
 // Should only be called from the IO thread, since it accesses an
 // net::URLRequest.
 void ResetLoginHandlerForRequest(net::URLRequest* request) {
   ResourceDispatcherHost::Get()->ClearLoginDelegateForRequest(request);
+}
+
+void RecordHttpAuthPromptType(AuthPromptType prompt_type) {
+  UMA_HISTOGRAM_ENUMERATION("Net.HttpAuthPromptType", prompt_type,
+                            AUTH_PROMPT_TYPE_ENUM_COUNT);
 }
 
 }  // namespace
@@ -593,10 +609,14 @@ void LoginHandler::LoginDialogCallback(const GURL& request_url,
   // being displayed simultaneously. This is specially important when the proxy
   // is accessed via an open connection while the target server is considered
   // secure.
+  const bool is_cross_origin_request =
+      parent_contents->GetLastCommittedURL().GetOrigin() !=
+      request_url.GetOrigin();
   if (is_main_frame &&
-      (parent_contents->ShowingInterstitialPage() || auth_info->is_proxy ||
-       parent_contents->GetLastCommittedURL().GetOrigin() !=
-           request_url.GetOrigin())) {
+      (is_cross_origin_request || parent_contents->ShowingInterstitialPage() ||
+       auth_info->is_proxy)) {
+    RecordHttpAuthPromptType(AUTH_PROMPT_TYPE_WITH_INTERSTITIAL);
+
     // Show a blank interstitial for main-frame, cross origin requests
     // so that the correct URL is shown in the omnibox.
     base::Closure callback =
@@ -609,7 +629,15 @@ void LoginHandler::LoginDialogCallback(const GURL& request_url,
              parent_contents, auth_info->is_proxy ? GURL() : request_url,
              callback))
             ->GetWeakPtr());
+
   } else {
+    if (is_main_frame) {
+      RecordHttpAuthPromptType(AUTH_PROMPT_TYPE_MAIN_FRAME);
+    } else {
+      RecordHttpAuthPromptType(is_cross_origin_request
+                                   ? AUTH_PROMPT_TYPE_SUBRESOURCE_CROSS_ORIGIN
+                                   : AUTH_PROMPT_TYPE_SUBRESOURCE_SAME_ORIGIN);
+    }
     ShowLoginPrompt(request_url, auth_info, handler);
   }
 }
@@ -628,4 +656,3 @@ LoginHandler* CreateLoginPrompt(net::AuthChallengeInfo* auth_info,
                  is_main_frame));
   return handler;
 }
-

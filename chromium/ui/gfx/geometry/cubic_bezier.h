@@ -32,6 +32,8 @@ class GFX_EXPORT CubicBezier {
     return (3.0 * ay_ * t + 2.0 * by_) * t + cy_;
   }
 
+  static double GetDefaultEpsilon();
+
   // Given an x value, find a parametric value it came from.
   // x must be in [0, 1] range. Doesn't use gradients.
   double SolveCurveX(double x, double epsilon) const;
@@ -54,6 +56,13 @@ class GFX_EXPORT CubicBezier {
   // Returns an approximation of dy/dx at the given x.
   // Clamps x to range [0, 1].
   double SlopeWithEpsilon(double x, double epsilon) const;
+
+  // These getters are used rarely. We reverse compute them from coefficients.
+  // See CubicBezier::InitCoefficients. The speed has been traded for memory.
+  double GetX1() const;
+  double GetY1() const;
+  double GetX2() const;
+  double GetY2() const;
 
   // Gets the bezier's minimum y value in the interval [0, 1].
   double range_min() const { return range_min_; }

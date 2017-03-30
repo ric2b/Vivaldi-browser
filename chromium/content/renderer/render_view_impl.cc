@@ -52,9 +52,9 @@
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
 #include "content/common/site_isolation_policy.h"
-#include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
@@ -63,7 +63,6 @@
 #include "content/public/common/page_importance_signals.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_zoom.h"
-#include "content/public/common/ssl_status.h"
 #include "content/public/common/three_d_api_types.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
@@ -151,6 +150,7 @@
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginAction.h"
 #include "third_party/WebKit/public/web/WebRange.h"
+#include "third_party/WebKit/public/web/WebRenderTheme.h"
 #include "third_party/WebKit/public/web/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/web/WebScriptSource.h"
 #include "third_party/WebKit/public/web/WebSearchableFormData.h"
@@ -159,7 +159,6 @@
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/WebKit/public/web/WebWindowFeatures.h"
-#include "third_party/WebKit/public/web/default/WebRenderTheme.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "third_party/icu/source/common/unicode/uscript.h"
 #include "ui/base/clipboard/clipboard.h"
@@ -203,6 +202,8 @@
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 using blink::WebAXObject;
 using blink::WebApplicationCacheHost;
 using blink::WebApplicationCacheHostClient;
@@ -223,6 +224,7 @@ using blink::WebFrameContentDumper;
 using blink::WebGestureEvent;
 using blink::WebHistoryItem;
 using blink::WebHTTPBody;
+using blink::WebHitTestResult;
 using blink::WebIconURL;
 using blink::WebImage;
 using blink::WebInputElement;
@@ -239,7 +241,6 @@ using blink::WebPeerConnectionHandler;
 using blink::WebPeerConnectionHandlerClient;
 using blink::WebPluginAction;
 using blink::WebPoint;
-using blink::WebRange;
 using blink::WebRect;
 using blink::WebReferrerPolicy;
 using blink::WebScriptSource;
@@ -268,10 +269,6 @@ using blink::WebRuntimeFeatures;
 using base::Time;
 using base::TimeDelta;
 
-#if defined(OS_ANDROID)
-using blink::WebContentDetectionResult;
-using blink::WebHitTestResult;
-#endif
 
 namespace content {
 
@@ -636,6 +633,36 @@ GetV8CacheStrategiesForCacheStorage() {
   }
 }
 
+// This class represents promise which is robust to (will not be broken by)
+// |DidNotSwapReason::SWAP_FAILS| events.
+class AlwaysDrawSwapPromise : public cc::SwapPromise {
+ public:
+  explicit AlwaysDrawSwapPromise(const ui::LatencyInfo& latency_info)
+      : latency_info_(latency_info) {}
+
+  ~AlwaysDrawSwapPromise() override = default;
+
+  void DidActivate() override {}
+
+  void DidSwap(cc::CompositorFrameMetadata* metadata) override {
+    DCHECK(!latency_info_.terminated());
+    metadata->latency_info.push_back(latency_info_);
+  }
+
+  DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override {
+    return reason == DidNotSwapReason::SWAP_FAILS
+               ? DidNotSwapAction::KEEP_ACTIVE
+               : DidNotSwapAction::BREAK_PROMISE;
+  }
+
+  void OnCommit() override {}
+
+  int64_t TraceId() const override { return latency_info_.trace_id(); }
+
+ private:
+  ui::LatencyInfo latency_info_;
+};
+
 }  // namespace
 
 RenderViewImpl::RenderViewImpl(CompositorDependencies* compositor_deps,
@@ -725,7 +752,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
       command_line.HasSwitch(switches::kRootLayerScrolls));
   webview()->setShowFPSCounter(
       command_line.HasSwitch(cc::switches::kShowFPSCounter));
-  webview()->setDeviceColorProfile(params.image_decode_color_profile);
+  webview()->setDeviceColorProfile(params.image_decode_color_space.GetData());
 
   webview()->settings()->setImagesEnabled(
       renderer_preferences_.should_show_images);
@@ -741,6 +768,9 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
   if (switches::IsTouchDragDropEnabled())
     webview()->settings()->setTouchDragDropEnabled(true);
 
+  webview()->settings()->setBrowserSideNavigationEnabled(
+      IsBrowserSideNavigationEnabled());
+
   WebSettings::SelectionStrategyType selection_strategy =
       WebSettings::SelectionStrategyType::Character;
   const std::string selection_strategy_str =
@@ -755,9 +785,7 @@ void RenderViewImpl::Initialize(const ViewMsg_New_Params& params,
   if (!passiveListenersDefault.empty()) {
     WebSettings::PassiveEventListenerDefault passiveDefault =
         WebSettings::PassiveEventListenerDefault::False;
-    if (passiveListenersDefault == "documentonlytrue")
-      passiveDefault = WebSettings::PassiveEventListenerDefault::DocumentTrue;
-    else if (passiveListenersDefault == "true")
+    if (passiveListenersDefault == "true")
       passiveDefault = WebSettings::PassiveEventListenerDefault::True;
     else if (passiveListenersDefault == "forcealltrue")
       passiveDefault = WebSettings::PassiveEventListenerDefault::ForceAllTrue;
@@ -987,7 +1015,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setMockScrollbarsEnabled(prefs.mock_scrollbars_enabled);
 
   // Enable gpu-accelerated 2d canvas if requested on the command line.
-  settings->setAccelerated2dCanvasEnabled(prefs.accelerated_2d_canvas_enabled);
+  WebRuntimeFeatures::enableAccelerated2dCanvas(
+      prefs.accelerated_2d_canvas_enabled);
 
   settings->setMinimumAccelerated2dCanvasSize(
       prefs.minimum_accelerated_2d_canvas_size);
@@ -1007,8 +1036,6 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   // default value if not).
   settings->setAccelerated2dCanvasMSAASampleCount(
       prefs.accelerated_2d_canvas_msaa_sample_count);
-
-  settings->setUnifiedTextCheckerEnabled(prefs.unified_textchecker_enabled);
 
   // Tabs to link is not part of the settings. WebCore calls
   // ChromeClient::tabsToLinks which is part of the glue code.
@@ -1049,8 +1076,8 @@ void RenderView::ApplyWebPreferences(const WebPreferences& prefs,
   settings->setDeviceSupportsMouse(prefs.device_supports_mouse);
   settings->setEnableTouchAdjustment(prefs.touch_adjustment_enabled);
 
-  WebRuntimeFeatures::enableImageColorProfiles(
-      prefs.image_color_profiles_enabled);
+  WebRuntimeFeatures::enableColorCorrectRendering(
+      prefs.color_correct_rendering_enabled);
   settings->setShouldRespectImageOrientation(
       prefs.should_respect_image_orientation);
 
@@ -1248,10 +1275,6 @@ bool RenderViewImpl::DoesRenderWidgetHaveTouchEventHandlersAt(
   return webview()->hasTouchEventHandlersAt(point);
 }
 
-void RenderViewImpl::RenderWidgetDidHandleKeyEvent() {
-  ClearEditCommands();
-}
-
 bool RenderViewImpl::RenderWidgetWillHandleGestureEvent(
     const blink::WebGestureEvent& event) {
   possible_drag_event_info_.event_source =
@@ -1297,8 +1320,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(InputMsg_MoveCaret, OnMoveCaret)
     IPC_MESSAGE_HANDLER(InputMsg_ScrollFocusedEditableNodeIntoRect,
                         OnScrollFocusedEditableNodeIntoRect)
-    IPC_MESSAGE_HANDLER(InputMsg_SetEditCommandsForNextKeyEvent,
-                        OnSetEditCommandsForNextKeyEvent)
     IPC_MESSAGE_HANDLER(ViewMsg_SetPageScale, OnSetPageScale)
     IPC_MESSAGE_HANDLER(ViewMsg_Zoom, OnZoom)
     IPC_MESSAGE_HANDLER(ViewMsg_SetZoomLevelForLoadingURL,
@@ -1335,9 +1356,6 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(ViewMsg_PluginActionAt, OnPluginActionAt)
     IPC_MESSAGE_HANDLER(ViewMsg_SetActive, OnSetActive)
     IPC_MESSAGE_HANDLER(ViewMsg_ShowContextMenu, OnShowContextMenu)
-    // TODO(viettrungluu): Move to a separate message filter.
-    IPC_MESSAGE_HANDLER(ViewMsg_SetHistoryOffsetAndLength,
-                        OnSetHistoryOffsetAndLength)
     IPC_MESSAGE_HANDLER(ViewMsg_ReleaseDisambiguationPopupBitmap,
                         OnReleaseDisambiguationPopupBitmap)
     IPC_MESSAGE_HANDLER(ViewMsg_ForceRedraw, OnForceRedraw)
@@ -1347,8 +1365,11 @@ bool RenderViewImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(PageMsg_UpdateWindowScreenRect,
                         OnUpdateWindowScreenRect)
     IPC_MESSAGE_HANDLER(PageMsg_SetZoomLevel, OnSetZoomLevel)
+    IPC_MESSAGE_HANDLER(PageMsg_SetDeviceScaleFactor, OnSetDeviceScaleFactor);
     IPC_MESSAGE_HANDLER(PageMsg_WasHidden, OnPageWasHidden)
     IPC_MESSAGE_HANDLER(PageMsg_WasShown, OnPageWasShown)
+    IPC_MESSAGE_HANDLER(PageMsg_SetHistoryOffsetAndLength,
+                        OnSetHistoryOffsetAndLength)
 
 #if defined(OS_ANDROID)
     IPC_MESSAGE_HANDLER(ViewMsg_UpdateTopControlsState,
@@ -1430,11 +1451,6 @@ void RenderViewImpl::OnScrollFocusedEditableNodeIntoRect(
     GetWidget()->FocusChangeComplete();
 }
 
-void RenderViewImpl::OnSetEditCommandsForNextKeyEvent(
-    const EditCommands& edit_commands) {
-  edit_commands_ = edit_commands;
-}
-
 void RenderViewImpl::OnSetHistoryOffsetAndLength(int history_offset,
                                                  int history_length) {
   DCHECK_GE(history_offset, -1);
@@ -1489,17 +1505,10 @@ void RenderViewImpl::ApplyWebPreferencesInternal(
   ApplyWebPreferences(prefs, web_view);
 }
 
-void RenderViewImpl::OnForceRedraw(int id) {
-  ui::LatencyInfo latency_info;
-  if (id) {
-    latency_info.AddLatencyNumber(ui::WINDOW_SNAPSHOT_FRAME_NUMBER_COMPONENT,
-                                  0,
-                                  id);
-  }
-  std::unique_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor;
+void RenderViewImpl::OnForceRedraw(const ui::LatencyInfo& latency_info) {
   if (RenderWidgetCompositor* rwc = compositor()) {
-    latency_info_swap_promise_monitor =
-        rwc->CreateLatencyInfoSwapPromiseMonitor(&latency_info);
+    rwc->QueueSwapPromise(
+        base::MakeUnique<AlwaysDrawSwapPromise>(latency_info));
   }
   ScheduleCompositeWithForcedRedraw();
 }
@@ -1678,31 +1687,6 @@ void RenderViewImpl::SetZoomLevel(double zoom_level) {
 
 void RenderViewImpl::didCancelCompositionOnSelectionChange() {
   Send(new InputHostMsg_ImeCancelComposition(GetRoutingID()));
-}
-
-bool RenderViewImpl::handleCurrentKeyboardEvent() {
-  if (edit_commands_.empty())
-    return false;
-
-  WebFrame* frame = webview()->focusedFrame();
-  if (!frame)
-    return false;
-
-  EditCommands::iterator it = edit_commands_.begin();
-  EditCommands::iterator end = edit_commands_.end();
-
-  bool did_execute_command = false;
-  for (; it != end; ++it) {
-    // In gtk and cocoa, it's possible to bind multiple edit commands to one
-    // key (but it's the exception). Once one edit command is not executed, it
-    // seems safest to not execute the rest.
-    if (!frame->executeCommand(WebString::fromUTF8(it->name),
-                               WebString::fromUTF8(it->value)))
-      break;
-    did_execute_command = true;
-  }
-
-  return did_execute_command;
 }
 
 void RenderViewImpl::SetValidationMessageDirection(
@@ -2025,10 +2009,6 @@ void RenderViewImpl::initializeLayerTreeView() {
   }
 }
 
-bool RenderViewImpl::allowsBrokenNullLayerTreeView() const {
-  return RenderWidget::allowsBrokenNullLayerTreeView();
-}
-
 void RenderViewImpl::closeWidgetSoon() {
   RenderWidget::closeWidgetSoon();
 }
@@ -2042,20 +2022,7 @@ void RenderViewImpl::convertWindowToViewport(blink::WebFloatRect* rect) {
 }
 
 void RenderViewImpl::didAutoResize(const blink::WebSize& newSize) {
-  RenderWidget::didAutoResize(newSize);
-}
-
-void RenderViewImpl::didChangeCursor(const blink::WebCursorInfo& info) {
-  RenderWidget::didChangeCursor(info);
-}
-
-void RenderViewImpl::didInvalidateRect(const blink::WebRect& rect) {
-  RenderWidget::didInvalidateRect(rect);
-}
-
-void RenderViewImpl::didMeaningfulLayout(
-    blink::WebMeaningfulLayout layout_type) {
-  RenderWidget::didMeaningfulLayout(layout_type);
+  RenderWidget::DidAutoResize(newSize);
 }
 
 void RenderViewImpl::didOverscroll(
@@ -2075,20 +2042,12 @@ void RenderViewImpl::hasTouchEventHandlers(bool has_handlers) {
   RenderWidget::hasTouchEventHandlers(has_handlers);
 }
 
-blink::WebLayerTreeView* RenderViewImpl::layerTreeView() {
-  return RenderWidget::layerTreeView();
-}
-
 void RenderViewImpl::resetInputMethod() {
   RenderWidget::resetInputMethod();
 }
 
 blink::WebRect RenderViewImpl::rootWindowRect() {
-  return RenderWidget::rootWindowRect();
-}
-
-void RenderViewImpl::scheduleAnimation() {
-  RenderWidget::scheduleAnimation();
+  return RenderWidget::windowRect();
 }
 
 blink::WebScreenInfo RenderViewImpl::screenInfo() {
@@ -2104,10 +2063,6 @@ void RenderViewImpl::setTouchAction(blink::WebTouchAction touchAction) {
   RenderWidget::setTouchAction(touchAction);
 }
 
-void RenderViewImpl::setWindowRect(const blink::WebRect& rect) {
-  RenderWidget::setWindowRect(rect);
-}
-
 void RenderViewImpl::showImeIfNeeded() {
   RenderWidget::showImeIfNeeded();
 }
@@ -2120,12 +2075,12 @@ void RenderViewImpl::showUnhandledTapUIIfNeeded(
                                            pageChanged);
 }
 
-blink::WebRect RenderViewImpl::windowRect() {
-  return RenderWidget::windowRect();
-}
-
 blink::WebRect RenderViewImpl::windowResizerRect() {
   return RenderWidget::windowResizerRect();
+}
+
+blink::WebWidgetClient* RenderViewImpl::widgetClient() {
+  return static_cast<RenderWidget*>(this);
 }
 
 // blink::WebFrameClient -----------------------------------------------------
@@ -2136,23 +2091,11 @@ void RenderViewImpl::Repaint(const gfx::Size& size) {
 
 void RenderViewImpl::SetEditCommandForNextKeyEvent(const std::string& name,
                                                    const std::string& value) {
-  EditCommands edit_commands;
-  edit_commands.push_back(EditCommand(name, value));
-  OnSetEditCommandsForNextKeyEvent(edit_commands);
+  GetWidget()->SetEditCommandForNextKeyEvent(name, value);
 }
 
 void RenderViewImpl::ClearEditCommands() {
-  edit_commands_.clear();
-}
-
-SSLStatus RenderViewImpl::GetSSLStatusOfFrame(blink::WebFrame* frame) const {
-  std::string security_info;
-  if (frame && frame->dataSource())
-    security_info = frame->dataSource()->response().securityInfo();
-
-  SSLStatus result;
-  CHECK(DeserializeSecurityInfo(security_info, &result));
-  return result;
+  GetWidget()->ClearEditCommands();
 }
 
 const std::string& RenderViewImpl::GetAcceptLanguages() const {
@@ -2168,10 +2111,6 @@ gfx::RectF RenderViewImpl::ElementBoundsInWindow(
   blink::WebRect bounding_box_in_window = element.boundsInViewport();
   ConvertViewportToWindowViaWidget(&bounding_box_in_window);
   return gfx::RectF(bounding_box_in_window);
-}
-
-float RenderViewImpl::GetDeviceScaleFactorForTest() const {
-  return device_scale_factor_;
 }
 
 bool RenderViewImpl::HasAddedInputHandler() const {
@@ -2277,14 +2216,6 @@ bool RenderViewImpl::GetContentStateImmediately() const {
   return send_content_state_immediately_;
 }
 
-void RenderViewImpl::DidStartLoading() {
-  main_render_frame_->didStartLoading(true);
-}
-
-void RenderViewImpl::DidStopLoading() {
-  main_render_frame_->didStopLoading();
-}
-
 void RenderViewImpl::OnSetPageScale(float page_scale_factor) {
   if (!webview())
     return;
@@ -2372,7 +2303,6 @@ void RenderViewImpl::OnAllowBindings(int enabled_bindings_flags) {
       !(enabled_bindings_ & BINDINGS_POLICY_WEB_UI)) {
     // WebUIExtensionData deletes itself when we're destroyed.
     new WebUIExtensionData(this);
-
   }
 
   enabled_bindings_ |= enabled_bindings_flags;
@@ -2418,7 +2348,8 @@ void RenderViewImpl::OnDragTargetDrop(const DropData& drop_data,
                                       const gfx::Point& client_point,
                                       const gfx::Point& screen_point,
                                       int key_modifiers) {
-  webview()->dragTargetDrop(DropDataToWebDragData(drop_data), client_point,
+  webview()->dragTargetDrop(DropDataToWebDragData(drop_data),
+                            ConvertWindowPointToViewport(client_point),
                             screen_point, key_modifiers);
 }
 
@@ -2477,6 +2408,7 @@ void RenderViewImpl::OnDisableAutoResize(const gfx::Size& new_size) {
 
   if (!new_size.IsEmpty()) {
     ResizeParams resize_params;
+    resize_params.screen_info = screen_info_;
     resize_params.new_size = new_size;
     resize_params.physical_backing_size = physical_backing_size_;
     resize_params.top_controls_shrink_blink_size =
@@ -2513,11 +2445,11 @@ void RenderViewImpl::OnSetRendererPrefs(
   renderer_preferences_ = renderer_prefs;
 
   UpdateFontRenderingFromRendererPrefs();
+  blink::setCaretBlinkInterval(renderer_prefs.caret_blink_interval);
 
 #if defined(USE_DEFAULT_RENDER_THEME)
   if (renderer_prefs.use_custom_colors) {
     blink::setFocusRingColor(renderer_prefs.focus_ring_color);
-    blink::setCaretBlinkInterval(renderer_prefs.caret_blink_interval);
 
     if (webview()) {
       webview()->setSelectionColors(
@@ -2766,164 +2698,17 @@ void RenderViewImpl::OnSetFocus(bool enable) {
 
 void RenderViewImpl::SetFocus(bool enable) {
   RenderWidget::OnSetFocus(enable);
-
   // Notify all BrowserPlugins of the RenderView's focus state.
   if (BrowserPluginManager::Get())
     BrowserPluginManager::Get()->UpdateFocusState();
 }
 
-void RenderViewImpl::OnImeSetComposition(
-    const base::string16& text,
-    const std::vector<blink::WebCompositionUnderline>& underlines,
-    const gfx::Range& replacement_range,
-    int selection_start,
-    int selection_end) {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin) {
-    focused_pepper_plugin->render_frame()->OnImeSetComposition(
-        text, underlines, selection_start, selection_end);
-    return;
-  }
-#endif  // ENABLE_PLUGINS
-  if (replacement_range.IsValid() && webview()) {
-    // Select the text in |replacement_range|, it will then be replaced by
-    // text added by the call to RenderWidget::OnImeSetComposition().
-    if (WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame()) {
-      WebRange webrange = WebRange::fromDocumentRange(
-          frame, replacement_range.start(), replacement_range.length());
-      if (!webrange.isNull())
-        frame->selectRange(webrange);
-    }
-  }
-  RenderWidget::OnImeSetComposition(text,
-                                    underlines,
-                                    replacement_range,
-                                    selection_start,
-                                    selection_end);
-}
-
-void RenderViewImpl::OnImeConfirmComposition(
-    const base::string16& text,
-    const gfx::Range& replacement_range,
-    bool keep_selection) {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin) {
-    focused_pepper_plugin->render_frame()->OnImeConfirmComposition(
-        text, replacement_range, keep_selection);
-    return;
-  }
-#endif  // ENABLE_PLUGINS
-  if (replacement_range.IsValid() && webview()) {
-    // Select the text in |replacement_range|, it will then be replaced by
-    // text added by the call to RenderWidget::OnImeConfirmComposition().
-    if (WebLocalFrame* frame = webview()->focusedFrame()->toWebLocalFrame()) {
-      WebRange webrange = WebRange::fromDocumentRange(
-          frame, replacement_range.start(), replacement_range.length());
-      if (!webrange.isNull())
-        frame->selectRange(webrange);
-    }
-  }
-  RenderWidget::OnImeConfirmComposition(text,
-                                        replacement_range,
-                                        keep_selection);
-}
-
 void RenderViewImpl::RenderWidgetDidSetColorProfile(
     const std::vector<char>& profile) {
   if (webview()) {
-    bool was_reset = (profile.size() == 1 && profile[0] == '0');
-
-    if (was_reset) {
-      webview()->resetDeviceColorProfileForTesting();
-    } else {
-      WebVector<char> colorProfile = profile;
-      webview()->setDeviceColorProfile(colorProfile);
-    }
+    WebVector<char> colorProfile = profile;
+    webview()->setDeviceColorProfile(colorProfile);
   }
-}
-
-ui::TextInputType RenderViewImpl::GetTextInputType() {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin)
-    return focused_pepper_plugin->text_input_type();
-#endif
-  return RenderWidget::GetTextInputType();
-}
-
-void RenderViewImpl::GetSelectionBounds(gfx::Rect* start, gfx::Rect* end) {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin) {
-    // TODO(kinaba) http://crbug.com/101101
-    // Current Pepper IME API does not handle selection bounds. So we simply
-    // use the caret position as an empty range for now. It will be updated
-    // after Pepper API equips features related to surrounding text retrieval.
-    blink::WebRect caret(focused_pepper_plugin->GetCaretBounds());
-    ConvertViewportToWindowViaWidget(&caret);
-    *start = caret;
-    *end = caret;
-    return;
-  }
-#endif
-  RenderWidget::GetSelectionBounds(start, end);
-}
-
-void RenderViewImpl::GetCompositionCharacterBounds(
-    std::vector<gfx::Rect>* bounds_in_window) {
-  DCHECK(bounds_in_window);
-  bounds_in_window->clear();
-
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin)
-    return;
-#endif
-
-  if (!webview())
-    return;
-  size_t start_offset = 0;
-  size_t character_count = 0;
-  if (!webview()->compositionRange(&start_offset, &character_count))
-    return;
-  if (character_count == 0)
-    return;
-
-  blink::WebFrame* frame = webview()->focusedFrame();
-  if (!frame)
-    return;
-
-  bounds_in_window->reserve(character_count);
-  blink::WebRect webrect;
-  for (size_t i = 0; i < character_count; ++i) {
-    if (!frame->firstRectForCharacterRange(start_offset + i, 1, webrect)) {
-      DLOG(ERROR) << "Could not retrieve character rectangle at " << i;
-      bounds_in_window->clear();
-      return;
-    }
-    ConvertViewportToWindowViaWidget(&webrect);
-    bounds_in_window->push_back(webrect);
-  }
-}
-
-void RenderViewImpl::GetCompositionRange(gfx::Range* range) {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin)
-    return;
-#endif
-  RenderWidget::GetCompositionRange(range);
-}
-
-bool RenderViewImpl::CanComposeInline() {
-#if defined(ENABLE_PLUGINS)
-  PepperPluginInstanceImpl* focused_pepper_plugin = GetFocusedPepperPlugin();
-  if (focused_pepper_plugin)
-    return focused_pepper_plugin->IsPluginAcceptingCompositionEvents();
-#endif
-  return true;
 }
 
 void RenderViewImpl::DidCompletePageScaleAnimation() {
@@ -3008,7 +2793,7 @@ void RenderViewImpl::pageImportanceSignalsChanged() {
   if (!webview() || !main_render_frame_)
     return;
 
-  const auto& web_signals = webview()->pageImportanceSignals();
+  auto* web_signals = webview()->pageImportanceSignals();
 
   PageImportanceSignals signals;
   signals.had_form_interaction = web_signals->hadFormInteraction();
@@ -3017,21 +2802,23 @@ void RenderViewImpl::pageImportanceSignalsChanged() {
       main_render_frame_->GetRoutingID(), signals));
 }
 
+// TODO(dglazkov): Remove this ifdef. The content detection code
+// should not be platform-specific.
+// See http://crbug.com/635214 for details.
 #if defined(OS_ANDROID)
-WebContentDetectionResult RenderViewImpl::detectContentAround(
+WebURL RenderViewImpl::detectContentIntentAt(
     const WebHitTestResult& touch_hit) {
   DCHECK(touch_hit.node().isTextNode());
 
   // Process the position with all the registered content detectors until
   // a match is found. Priority is provided by their relative order.
   for (const auto& detector : content_detectors_) {
-    ContentDetector::Result content = detector->FindTappedContent(touch_hit);
-    if (content.valid) {
-      return WebContentDetectionResult(content.content_boundaries,
-          base::UTF8ToUTF16(content.text), content.intent_url);
+    WebURL intent = detector->FindTappedContent(touch_hit);
+    if (intent.isValid()) {
+      return intent;
     }
   }
-  return WebContentDetectionResult();
+  return WebURL();
 }
 
 void RenderViewImpl::scheduleContentIntent(const WebURL& intent,

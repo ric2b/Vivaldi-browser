@@ -104,7 +104,7 @@ SVGViewSpec* SVGSVGElement::currentView()
 
 float SVGSVGElement::currentScale() const
 {
-    if (!inShadowIncludingDocument() || !isOutermostSVGSVGElement())
+    if (!isConnected() || !isOutermostSVGSVGElement())
         return 1;
 
     return m_currentScale;
@@ -113,7 +113,7 @@ float SVGSVGElement::currentScale() const
 void SVGSVGElement::setCurrentScale(float scale)
 {
     ASSERT(std::isfinite(scale));
-    if (!inShadowIncludingDocument() || !isOutermostSVGSVGElement())
+    if (!isConnected() || !isOutermostSVGSVGElement())
         return;
 
     m_currentScale = scale;
@@ -177,9 +177,6 @@ void SVGSVGElement::parseAttribute(const QualifiedName& name, const AtomicString
             document().setWindowAttributeEventListener(EventTypeNames::resize, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
         } else if (name == HTMLNames::onscrollAttr) {
             document().setWindowAttributeEventListener(EventTypeNames::scroll, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
-        } else if (name == SVGNames::onzoomAttr) {
-            Deprecation::countDeprecation(document(), UseCounter::SVGZoomEvent);
-            document().setWindowAttributeEventListener(EventTypeNames::zoom, createAttributeEventListener(document().frame(), name, value, eventParameterName()));
         } else {
             setListener = false;
         }
@@ -427,7 +424,7 @@ SVGRectTearOff* SVGSVGElement::createSVGRect()
 
 SVGTransformTearOff* SVGSVGElement::createSVGTransform()
 {
-    return SVGTransformTearOff::create(SVGTransform::create(SVG_TRANSFORM_MATRIX), 0, PropertyIsNotAnimVal);
+    return SVGTransformTearOff::create(SVGTransform::create(kSvgTransformMatrix), 0, PropertyIsNotAnimVal);
 }
 
 SVGTransformTearOff* SVGSVGElement::createSVGTransformFromMatrix(SVGMatrixTearOff* matrix)
@@ -503,7 +500,7 @@ LayoutObject* SVGSVGElement::createLayoutObject(const ComputedStyle&)
 
 Node::InsertionNotificationRequest SVGSVGElement::insertedInto(ContainerNode* rootParent)
 {
-    if (rootParent->inShadowIncludingDocument()) {
+    if (rootParent->isConnected()) {
         UseCounter::count(document(), UseCounter::SVGSVGElementInDocument);
         if (rootParent->document().isXMLDocument())
             UseCounter::count(document(), UseCounter::SVGSVGElementInXMLDocument);
@@ -515,7 +512,7 @@ Node::InsertionNotificationRequest SVGSVGElement::insertedInto(ContainerNode* ro
             // but if we miss that train (deferred programmatic element insertion for example) we need
             // to initialize the time container here.
             if (!document().parsing() && !document().processingLoadEvent() && document().loadEventFinished() && !timeContainer()->isStarted())
-                timeContainer()->begin();
+                timeContainer()->start();
         }
     }
     return SVGGraphicsElement::insertedInto(rootParent);
@@ -523,7 +520,7 @@ Node::InsertionNotificationRequest SVGSVGElement::insertedInto(ContainerNode* ro
 
 void SVGSVGElement::removedFrom(ContainerNode* rootParent)
 {
-    if (rootParent->inShadowIncludingDocument()) {
+    if (rootParent->isConnected()) {
         SVGDocumentExtensions& svgExtensions = document().accessSVGExtensions();
         svgExtensions.removeTimeContainer(this);
         svgExtensions.removeSVGRootWithRelativeLengthDescendents(this);
@@ -534,33 +531,28 @@ void SVGSVGElement::removedFrom(ContainerNode* rootParent)
 
 void SVGSVGElement::pauseAnimations()
 {
-    ASSERT(RuntimeEnabledFeatures::smilEnabled());
     if (!m_timeContainer->isPaused())
         m_timeContainer->pause();
 }
 
 void SVGSVGElement::unpauseAnimations()
 {
-    ASSERT(RuntimeEnabledFeatures::smilEnabled());
     if (m_timeContainer->isPaused())
         m_timeContainer->resume();
 }
 
 bool SVGSVGElement::animationsPaused() const
 {
-    ASSERT(RuntimeEnabledFeatures::smilEnabled());
     return m_timeContainer->isPaused();
 }
 
 float SVGSVGElement::getCurrentTime() const
 {
-    ASSERT(RuntimeEnabledFeatures::smilEnabled());
-    return narrowPrecisionToFloat(m_timeContainer->elapsed().value());
+    return narrowPrecisionToFloat(m_timeContainer->elapsed());
 }
 
 void SVGSVGElement::setCurrentTime(float seconds)
 {
-    ASSERT(RuntimeEnabledFeatures::smilEnabled());
     ASSERT(std::isfinite(seconds));
     seconds = max(seconds, 0.0f);
     m_timeContainer->setElapsed(seconds);

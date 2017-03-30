@@ -11,7 +11,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 #include "services/shell/runner/child/test_native_main.h"
 #include "services/shell/runner/init.h"
 #include "services/shell/tests/connect/connect_test.mojom.h"
@@ -22,7 +22,7 @@ using shell::test::mojom::ClientProcessTestRequest;
 
 namespace {
 
-class Driver : public shell::ShellClient,
+class Driver : public shell::Service,
                public shell::InterfaceFactory<ClientProcessTest>,
                public ClientProcessTest {
  public:
@@ -30,24 +30,20 @@ class Driver : public shell::ShellClient,
   ~Driver() override {}
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override {
-    connector_ = connector;
-  }
-  bool AcceptConnection(shell::Connection* connection) override {
-    connection->AddInterface<ClientProcessTest>(this);
+  // shell::Service:
+  bool OnConnect(const shell::Identity& remote_identity,
+    shell::InterfaceRegistry* registry) override {
+    registry->AddInterface<ClientProcessTest>(this);
     return true;
   }
-  bool ShellConnectionLost() override {
+  bool OnStop() override {
     // TODO(rockot): http://crbug.com/596621. Should be able to remove this
     // override entirely.
     _exit(1);
   }
 
   // shell::InterfaceFactory<ConnectTestService>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               ClientProcessTestRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -65,12 +61,11 @@ class Driver : public shell::ShellClient,
 #endif
             shell::Identity("exe:connect_test_exe",
                             shell::mojom::kInheritUserID),
-            connector_, &process);
+            connector(), &process);
     callback.Run(static_cast<int32_t>(connection->GetResult()),
-                 shell::mojom::Identity::From(connection->GetRemoteIdentity()));
+                 connection->GetRemoteIdentity());
   }
 
-  shell::Connector* connector_ = nullptr;
   mojo::BindingSet<ClientProcessTest> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(Driver);

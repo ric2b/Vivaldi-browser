@@ -51,11 +51,12 @@ WebInspector.ServiceWorkerManager = function(target)
     WebInspector.targetManager.addModelListener(WebInspector.RuntimeModel, WebInspector.RuntimeModel.Events.ExecutionContextCreated, this._executionContextCreated, this);
 }
 
+/** @enum {symbol} */
 WebInspector.ServiceWorkerManager.Events = {
-    WorkersUpdated: "WorkersUpdated",
-    RegistrationUpdated: "RegistrationUpdated",
-    RegistrationErrorAdded: "RegistrationErrorAdded",
-    RegistrationDeleted: "RegistrationDeleted"
+    WorkersUpdated: Symbol("WorkersUpdated"),
+    RegistrationUpdated: Symbol("RegistrationUpdated"),
+    RegistrationErrorAdded: Symbol("RegistrationErrorAdded"),
+    RegistrationDeleted: Symbol("RegistrationDeleted")
 }
 
 WebInspector.ServiceWorkerManager.prototype = {
@@ -432,13 +433,14 @@ WebInspector.ServiceWorker = function(manager, workerId, url, versionId)
     this._versionId = versionId;
     var parsedURL = url.asParsedURL();
     this._name = parsedURL ? parsedURL.lastPathComponentWithFragment()  : "#" + (++WebInspector.ServiceWorker._lastAnonymousTargetId);
-    this._scope = parsedURL.host + parsedURL.folderPathComponents;
+    this._scope = parsedURL ? parsedURL.host + parsedURL.folderPathComponents : "";
 
     this._manager._workers.set(workerId, this);
-    this._target = WebInspector.targetManager.createTarget(this._name, WebInspector.Target.Type.ServiceWorker, this._connection, manager.target());
+    var capabilities = WebInspector.Target.Capability.Network | WebInspector.Target.Capability.Worker;
+    this._target = WebInspector.targetManager.createTarget(this._name, capabilities, this._connection, manager.target());
     this._target[WebInspector.ServiceWorker.Symbol] = this;
     this._manager.dispatchEventToListeners(WebInspector.ServiceWorkerManager.Events.WorkersUpdated);
-    this._target.runtimeAgent().run();
+    this._target.runtimeAgent().runIfWaitingForDebugger();
 }
 
 WebInspector.ServiceWorker.Symbol = Symbol("serviceWorker");
@@ -678,7 +680,8 @@ WebInspector.ServiceWorkerVersion.prototype = {
     {
         this.id = payload.versionId;
         this.scriptURL = payload.scriptURL;
-        this.securityOrigin = payload.scriptURL.asParsedURL().securityOrigin();
+        var parsedURL = new WebInspector.ParsedURL(payload.scriptURL);
+        this.securityOrigin = parsedURL.securityOrigin();
         this.runningStatus = payload.runningStatus;
         this.status = payload.status;
         this.scriptLastModified = payload.scriptLastModified;
@@ -822,7 +825,8 @@ WebInspector.ServiceWorkerRegistration.prototype = {
         this._fingerprint = Symbol("fingerprint");
         this.id = payload.registrationId;
         this.scopeURL = payload.scopeURL;
-        this.securityOrigin = payload.scopeURL.asParsedURL().securityOrigin();
+        var parsedURL = new WebInspector.ParsedURL(payload.scopeURL);
+        this.securityOrigin = parsedURL.securityOrigin();
         this.isDeleted = payload.isDeleted;
         this.forceUpdateOnPageLoad = payload.forceUpdateOnPageLoad;
     },

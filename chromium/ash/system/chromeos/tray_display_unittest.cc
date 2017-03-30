@@ -5,11 +5,10 @@
 #include "ash/system/chromeos/tray_display.h"
 
 #include "ash/common/system/chromeos/devicetype_utils.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/display/display_manager.h"
-#include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_system_tray_delegate.h"
@@ -126,8 +125,7 @@ TrayDisplay* TrayDisplayTest::GetTrayDisplay() {
 }
 
 void TrayDisplayTest::CheckUpdate() {
-  SystemTray* current =
-      Shell::GetPrimaryRootWindowController()->GetSystemTray();
+  SystemTray* current = GetPrimarySystemTray();
   if (tray_ != current) {
     tray_ = current;
     tray_display_ = new TrayDisplay(tray_);

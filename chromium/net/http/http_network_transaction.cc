@@ -401,7 +401,7 @@ bool HttpNetworkTransaction::GetLoadTimingInfo(
 }
 
 bool HttpNetworkTransaction::GetRemoteEndpoint(IPEndPoint* endpoint) const {
-  if (!remote_endpoint_.address().size())
+  if (remote_endpoint_.address().empty())
     return false;
 
   *endpoint = remote_endpoint_;
@@ -458,7 +458,7 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
   proxy_info_ = used_proxy_info;
   response_.was_npn_negotiated = stream_request_->was_npn_negotiated();
   response_.npn_negotiated_protocol = SSLClientSocket::NextProtoToString(
-      stream_request_->protocol_negotiated());
+      stream_request_->negotiated_protocol());
   response_.was_fetched_via_spdy = stream_request_->using_spdy();
   response_.was_fetched_via_proxy = !proxy_info_.is_direct();
   if (response_.was_fetched_via_proxy && !proxy_info_.is_empty())
@@ -1074,7 +1074,7 @@ int HttpNetworkTransaction::DoInitRequestBody() {
   next_state_ = STATE_INIT_REQUEST_BODY_COMPLETE;
   int rv = OK;
   if (request_->upload_data_stream)
-    rv = request_->upload_data_stream->Init(io_callback_);
+    rv = request_->upload_data_stream->Init(io_callback_, net_log_);
   return rv;
 }
 

@@ -14,6 +14,7 @@
 #include "v8/include/v8.h"
 
 struct ExtensionMsg_AccessibilityEventParams;
+struct ExtensionMsg_AccessibilityLocationChangeParams;
 
 namespace extensions {
 
@@ -146,6 +147,8 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   // Handle accessibility events from the browser process.
   void OnAccessibilityEvent(const ExtensionMsg_AccessibilityEventParams& params,
                             bool is_active_profile);
+  void OnAccessibilityLocationChange(
+      const ExtensionMsg_AccessibilityLocationChangeParams& params);
 
   void UpdateOverallTreeChangeObserverFilter();
 
@@ -172,8 +175,8 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   scoped_refptr<AutomationMessageFilter> message_filter_;
   bool is_active_profile_;
   std::vector<TreeChangeObserver> tree_change_observers_;
-  api::automation::TreeChangeObserverFilter
-      tree_change_observer_overall_filter_;
+  // A bit-map of api::automation::TreeChangeObserverFilter.
+  int tree_change_observer_overall_filter_;
   std::vector<int> deleted_node_ids_;
   std::vector<int> text_changed_node_ids_;
 

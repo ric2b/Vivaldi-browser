@@ -48,6 +48,12 @@ bool AppWebContentsHelper::ShouldSuppressGestureEvent(
 
 content::WebContents* AppWebContentsHelper::OpenURLFromTab(
     const content::OpenURLParams& params) const {
+  // NOTE(andre@vivadi.com): Since we are using WebContents owned by the
+  // tabstrip this is all ok. Allow opening urls in the current tab.
+  if (vivaldi::IsVivaldiRunning()) {
+    return NULL;
+  }
+
   // Don't allow the current tab to be navigated. It would be nice to map all
   // anchor tags (even those without target="_blank") to new tabs, but right
   // now we can't distinguish between those and <meta> refreshes or window.href
@@ -64,10 +70,8 @@ content::WebContents* AppWebContentsHelper::OpenURLFromTab(
   }
 
   // These dispositions aren't really navigations.
-  if (disposition == SUPPRESS_OPEN || disposition == SAVE_TO_DISK ||
-      disposition == IGNORE_ACTION) {
+  if (disposition == SAVE_TO_DISK || disposition == IGNORE_ACTION)
     return NULL;
-  }
 
   content::WebContents* contents =
       app_delegate_->OpenURLFromTab(browser_context_, web_contents_, params);

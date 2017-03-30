@@ -18,7 +18,6 @@
 #include "core/inspector/InspectorHighlight.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/ScriptForbiddenScope.h"
-#include "platform/inspector_protocol/Values.h"
 
 namespace blink {
 
@@ -36,8 +35,8 @@ std::unique_ptr<protocol::DictionaryValue> createAnchor(const String& type, cons
 std::unique_ptr<protocol::DictionaryValue> pointToJSON(FloatPoint point)
 {
     std::unique_ptr<protocol::DictionaryValue> object = protocol::DictionaryValue::create();
-    object->setNumber("x", point.x());
-    object->setNumber("y", point.y());
+    object->setDouble("x", point.x());
+    object->setDouble("y", point.y());
     return object;
 }
 
@@ -84,10 +83,10 @@ InspectorHighlightConfig affectedNodesHighlightConfig()
 void collectMediaQueriesFromRule(CSSRule* rule, Vector<String>& mediaArray)
 {
     MediaList* mediaList;
-    if (rule->type() == CSSRule::MEDIA_RULE) {
+    if (rule->type() == CSSRule::kMediaRule) {
         CSSMediaRule* mediaRule = toCSSMediaRule(rule);
         mediaList = mediaRule->media();
-    } else if (rule->type() == CSSRule::IMPORT_RULE) {
+    } else if (rule->type() == CSSRule::kImportRule) {
         CSSImportRule* importRule = toCSSImportRule(rule);
         mediaList = importRule->media();
     } else {
@@ -259,7 +258,7 @@ std::unique_ptr<protocol::DictionaryValue> LayoutEditor::createValueDescription(
         return nullptr;
 
     std::unique_ptr<protocol::DictionaryValue> object = protocol::DictionaryValue::create();
-    object->setNumber("value", cssValue ? cssValue->getFloatValue() : 0);
+    object->setDouble("value", cssValue ? cssValue->getFloatValue() : 0);
     CSSPrimitiveValue::UnitType unitType = cssValue ? cssValue->typeWithCalcResolved() : CSSPrimitiveValue::UnitType::Pixels;
     object->setString("unit", CSSPrimitiveValue::unitTypeToString(unitType));
     object->setBoolean("mutable", isMutableUnitType(unitType));

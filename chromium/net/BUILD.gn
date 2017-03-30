@@ -8,13 +8,13 @@ import("//build/config/compiler/compiler.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//build_overrides/v8.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//third_party/icu/config.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//tools/grit/grit_rule.gni")
 import("//url/features.gni")
+import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
@@ -46,7 +46,7 @@ declare_args() {
   # WebSockets and socket stream code are not used on iOS and are optional in
   # cronet.
   enable_websockets = !is_ios
-  disable_ftp_support = is_ios
+  disable_ftp_support = is_ios || is_chromecast
 
   # Enable Kerberos authentication. It is disabled by default on ChromeOS, iOS,
   # Chromecast, at least for now. This feature needs configuration (krb5.conf
@@ -195,7 +195,7 @@ component("net") {
       ]
     }
 
-    if (use_glib && use_gconf && !is_chromeos) {
+    if (use_gio) {
       deps += [ "//build/linux/libgio" ]
     }
 
@@ -231,10 +231,10 @@ component("net") {
         "ssl/ssl_platform_key_nss.cc",
       ]
     } else {
-      # client_cert_store_nss.c requires NSS_CmpCertChainWCANames from NSS's
-      # libssl, but our bundled copy is not built in OpenSSL ports. Pull that
-      # file in directly.
-      sources += [ "third_party/nss/ssl/cmpcert.c" ]
+      sources += [
+        "third_party/nss/ssl/cmpcert.cc",
+        "third_party/nss/ssl/cmpcert.h",
+      ]
     }
 
     if (!use_nss_certs) {
@@ -263,10 +263,6 @@ component("net") {
         "dns/mdns_client.h",
         "dns/mdns_client_impl.cc",
         "dns/mdns_client_impl.h",
-        "dns/record_parsed.cc",
-        "dns/record_parsed.h",
-        "dns/record_rdata.cc",
-        "dns/record_rdata.h",
       ]
     }
 
@@ -384,10 +380,7 @@ component("net") {
     if (use_platform_icu_alternatives) {
       if (is_android) {
         # Use ICU alternative on Android.
-        sources += [
-          "base/net_string_util_icu_alternatives_android.cc",
-          "base/net_string_util_icu_alternatives_android.h",
-        ]
+        sources += [ "base/net_string_util_icu_alternatives_android.cc" ]
         deps += [ ":net_jni_headers" ]
       } else if (is_ios) {
         # Use ICU alternative on iOS.
@@ -431,8 +424,8 @@ proto_library("net_quic_proto") {
   visibility = [ ":net" ]
 
   sources = [
-    "quic/proto/cached_network_parameters.proto",
-    "quic/proto/source_address_token.proto",
+    "quic/core/proto/cached_network_parameters.proto",
+    "quic/core/proto/source_address_token.proto",
   ]
   cc_generator_options = "dllexport_decl=NET_EXPORT_PRIVATE:"
   cc_include = "net/base/net_export.h"
@@ -510,7 +503,7 @@ bundle_data("test_support_bundle_data") {
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "base/load_timing_info_test_util.cc",
@@ -633,15 +626,15 @@ source_set("test_support") {
     "//url",
   ]
 
-  deps = [
-    ":test_support_bundle_data",
-  ]
+  deps = []
 
   data = [
     "data/",
   ]
 
-  if (!is_ios) {
+  if (is_ios) {
+    deps += [ ":test_support_bundle_data" ]
+  } else {
     public_deps += [ "//third_party/protobuf:py_proto" ]
   }
 
@@ -823,6 +816,8 @@ if (!is_ios && !is_android) {
       "tools/cert_verify_tool/cert_verify_tool_util.h",
       "tools/cert_verify_tool/verify_using_cert_verify_proc.cc",
       "tools/cert_verify_tool/verify_using_cert_verify_proc.h",
+      "tools/cert_verify_tool/verify_using_path_builder.cc",
+      "tools/cert_verify_tool/verify_using_path_builder.h",
     ]
 
     # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -978,14 +973,6 @@ if (!is_ios && !is_android) {
         "//build/config/sanitizers:deps",
         "//build/win:default_exe_manifest",
       ]
-
-      if (is_desktop_linux && use_gconf && use_glib) {
-        configs += [
-          "//build/config/linux/gconf",
-          "//build/config/linux:glib",
-        ]
-        deps += [ "//build/linux/libgio" ]
-      }
     }
   }
 
@@ -1079,87 +1066,6 @@ if (is_linux) {
     ]
   }
 
-  static_library("flip_in_mem_edsm_server_base") {
-    testonly = true
-    sources = [
-      "tools/flip_server/acceptor_thread.cc",
-      "tools/flip_server/acceptor_thread.h",
-      "tools/flip_server/constants.h",
-      "tools/flip_server/flip_config.cc",
-      "tools/flip_server/flip_config.h",
-      "tools/flip_server/http_interface.cc",
-      "tools/flip_server/http_interface.h",
-      "tools/flip_server/mem_cache.cc",
-      "tools/flip_server/mem_cache.h",
-      "tools/flip_server/output_ordering.cc",
-      "tools/flip_server/output_ordering.h",
-      "tools/flip_server/ring_buffer.cc",
-      "tools/flip_server/ring_buffer.h",
-      "tools/flip_server/sm_connection.cc",
-      "tools/flip_server/sm_connection.h",
-      "tools/flip_server/sm_interface.h",
-      "tools/flip_server/spdy_interface.cc",
-      "tools/flip_server/spdy_interface.h",
-      "tools/flip_server/spdy_ssl.cc",
-      "tools/flip_server/spdy_ssl.h",
-      "tools/flip_server/spdy_util.cc",
-      "tools/flip_server/spdy_util.h",
-      "tools/flip_server/streamer_interface.cc",
-      "tools/flip_server/streamer_interface.h",
-      "tools/flip_server/tcp_socket_util.cc",
-      "tools/flip_server/tcp_socket_util.h",
-      "tools/flip_server/url_to_filename_encoder.cc",
-      "tools/flip_server/url_to_filename_encoder.h",
-      "tools/flip_server/url_utilities.cc",
-      "tools/flip_server/url_utilities.h",
-    ]
-    deps = [
-      ":balsa",
-      ":epoll_server",
-      ":net",
-      "//base",
-      "//third_party/boringssl",
-    ]
-  }
-
-  executable("flip_in_mem_edsm_server_unittests") {
-    testonly = true
-    sources = [
-      "tools/flip_server/flip_test_utils.cc",
-      "tools/flip_server/flip_test_utils.h",
-      "tools/flip_server/http_interface_test.cc",
-      "tools/flip_server/mem_cache_test.cc",
-      "tools/flip_server/run_all_tests.cc",
-      "tools/flip_server/spdy_interface_test.cc",
-      "tools/flip_server/url_to_filename_encoder_unittest.cc",
-      "tools/flip_server/url_utilities_unittest.cc",
-    ]
-    deps = [
-      ":balsa",
-      ":flip_in_mem_edsm_server_base",
-      ":net",
-      ":test_support",
-      "//build/config/sanitizers:deps",
-      "//testing/gmock",
-      "//testing/gtest",
-      "//third_party/boringssl",
-    ]
-  }
-
-  executable("flip_in_mem_edsm_server") {
-    testonly = true
-    sources = [
-      "tools/flip_server/flip_in_mem_edsm_server.cc",
-    ]
-    deps = [
-      ":balsa",
-      ":flip_in_mem_edsm_server_base",
-      ":net",
-      "//base",
-      "//build/config/sanitizers:deps",
-    ]
-  }
-
   source_set("epoll_quic_tools") {
     sources = [
       "tools/quic/quic_client.cc",
@@ -1230,6 +1136,7 @@ if (is_linux) {
 if (is_android) {
   generate_jni("net_jni_headers") {
     sources = [
+      "android/java/src/org/chromium/net/AndroidCellularSignalStrength.java",
       "android/java/src/org/chromium/net/AndroidCertVerifyResult.java",
       "android/java/src/org/chromium/net/AndroidKeyStore.java",
       "android/java/src/org/chromium/net/AndroidNetworkLibrary.java",
@@ -1284,6 +1191,8 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_process_packet_interface.h",
     "tools/quic/quic_simple_client.cc",
     "tools/quic/quic_simple_client.h",
+    "tools/quic/quic_simple_dispatcher.cc",
+    "tools/quic/quic_simple_dispatcher.h",
     "tools/quic/quic_simple_per_connection_packet_writer.cc",
     "tools/quic/quic_simple_per_connection_packet_writer.h",
     "tools/quic/quic_simple_server.cc",
@@ -1421,7 +1330,6 @@ test("net_unittests") {
     ":balsa",
     ":extras",
     ":net",
-    ":net_unittests_bundle_data",
     ":simple_quic_tools",
     ":stale_while_revalidate_experiment_domains",
     ":test_support",
@@ -1473,7 +1381,6 @@ test("net_unittests") {
     deps += [
       ":epoll_quic_tools",
       ":epoll_server",
-      ":flip_in_mem_edsm_server_base",
     ]
   }
 
@@ -1596,8 +1503,6 @@ test("net_unittests") {
     sources -= [
       "dns/mdns_cache_unittest.cc",
       "dns/mdns_client_unittest.cc",
-      "dns/record_parsed_unittest.cc",
-      "dns/record_rdata_unittest.cc",
     ]
   }
 
@@ -1631,6 +1536,8 @@ test("net_unittests") {
       "socket/unix_domain_client_socket_posix_unittest.cc",
       "socket/unix_domain_server_socket_posix_unittest.cc",
     ]
+
+    bundle_deps = [ ":net_unittests_bundle_data" ]
   }
 
   # Unit tests that aren't supported by the current ICU alternatives on Android.
@@ -1752,12 +1659,12 @@ if (!is_ios) {
 
 # Fuzzers
 
+# This has a global (InitGlobals) that must always be linked in, so
+# must be a source set instead of a static library.
 source_set("net_fuzzer_test_support") {
   testonly = true
 
   sources = [
-    "base/fuzzed_data_provider.cc",
-    "base/fuzzed_data_provider.h",
     "base/fuzzer_test_support.cc",
     "socket/fuzzed_socket.cc",
     "socket/fuzzed_socket.h",
@@ -1765,6 +1672,9 @@ source_set("net_fuzzer_test_support") {
     "socket/fuzzed_socket_factory.h",
     "udp/fuzzed_datagram_client_socket.cc",
     "udp/fuzzed_datagram_client_socket.h",
+  ]
+  public_deps = [
+    "//base/test:test_support",
   ]
   deps = [
     "//base",
@@ -1794,6 +1704,7 @@ fuzzer_test("net_mime_sniffer_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_mime_sniffer_fuzzer.dict"
 }
 
 fuzzer_test("net_parse_proxy_list_pac_fuzzer") {
@@ -1834,6 +1745,7 @@ fuzzer_test("net_parse_proxy_rules_fuzzer") {
     ":net_fuzzer_test_support",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_parse_proxy_bypass_rules_fuzzer.dict"
 }
 
 fuzzer_test("net_parse_data_url_fuzzer") {
@@ -1845,6 +1757,7 @@ fuzzer_test("net_parse_data_url_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_parse_data_url_fuzzer.dict"
 }
 
 fuzzer_test("net_parse_ip_pattern_fuzzer") {
@@ -1866,6 +1779,7 @@ fuzzer_test("net_get_domain_and_registry_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_get_domain_and_registry_fuzzer.dict"
 }
 
 fuzzer_test("net_cert_verify_name_match_fuzzer") {
@@ -1929,6 +1843,7 @@ fuzzer_test("net_dns_record_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_dns_record_fuzzer.dict"
 }
 
 fuzzer_test("net_dns_hosts_parse_fuzzer") {
@@ -1940,6 +1855,7 @@ fuzzer_test("net_dns_hosts_parse_fuzzer") {
     "//base",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_dns_hosts_parse_fuzzer.dict"
 }
 
 fuzzer_test("net_host_resolver_impl_fuzzer") {
@@ -1954,7 +1870,7 @@ fuzzer_test("net_host_resolver_impl_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/dns/dns.dict"
+  dict = "data/fuzzer_dictionaries/net_host_resolver_impl_fuzzer.dict"
 }
 
 fuzzer_test("net_http_stream_parser_fuzzer") {
@@ -1967,7 +1883,7 @@ fuzzer_test("net_http_stream_parser_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_http_stream_parser_fuzzer.dict"
 }
 
 fuzzer_test("net_ftp_ctrl_response_fuzzer") {
@@ -2013,6 +1929,7 @@ fuzzer_test("net_websocket_frame_parser_fuzzer") {
     ":net_fuzzer_test_support",
     "//net",
   ]
+  dict = "data/fuzzer_dictionaries/net_websocket_frame_parser_fuzzer.dict"
 }
 
 fuzzer_test("net_http_chunked_decoder_fuzzer") {
@@ -2023,7 +1940,6 @@ fuzzer_test("net_http_chunked_decoder_fuzzer") {
     ":net_fuzzer_test_support",
     "//net",
   ]
-  dict = "http/http_chunked_decoder_fuzzer.dict"
 }
 
 fuzzer_test("net_http_proxy_client_socket_fuzzer") {
@@ -2036,12 +1952,12 @@ fuzzer_test("net_http_proxy_client_socket_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_http_proxy_client_socket_fuzzer.dict"
 }
 
 fuzzer_test("net_quic_crypto_framer_parse_message_fuzzer") {
   sources = [
-    "quic/quic_crypto_framer_parse_message_fuzzer.cc",
+    "quic/core/quic_crypto_framer_parse_message_fuzzer.cc",
   ]
   deps = [
     ":net_fuzzer_test_support",
@@ -2084,5 +2000,5 @@ fuzzer_test("net_url_request_fuzzer") {
     "//base",
     "//net",
   ]
-  dict = "data/http/http.dict"
+  dict = "data/fuzzer_dictionaries/net_url_request_fuzzer.dict"
 }

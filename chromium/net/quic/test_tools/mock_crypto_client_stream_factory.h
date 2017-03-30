@@ -9,9 +9,9 @@
 #include <string>
 
 #include "base/macros.h"
-#include "net/quic/crypto/proof_verifier_chromium.h"
-#include "net/quic/quic_crypto_client_stream_factory.h"
-#include "net/quic/quic_server_id.h"
+#include "net/quic/chromium/crypto/proof_verifier_chromium.h"
+#include "net/quic/core/quic_crypto_client_stream_factory.h"
+#include "net/quic/core/quic_server_id.h"
 #include "net/quic/test_tools/mock_crypto_client_stream.h"
 
 namespace net {
@@ -42,10 +42,14 @@ class MockCryptoClientStreamFactory : public QuicCryptoClientStreamFactory {
 
   MockCryptoClientStream* last_stream() const { return last_stream_; }
 
+  // Sets initial config for new sessions.
+  void SetConfig(const QuicConfig& config);
+
  private:
   MockCryptoClientStream::HandshakeMode handshake_mode_;
   MockCryptoClientStream* last_stream_;
   std::queue<const ProofVerifyDetailsChromium*> proof_verify_details_queue_;
+  std::unique_ptr<QuicConfig> config_;
 
   DISALLOW_COPY_AND_ASSIGN(MockCryptoClientStreamFactory);
 };

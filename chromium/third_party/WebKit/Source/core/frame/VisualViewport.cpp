@@ -53,18 +53,9 @@
 #include "platform/scroll/Scrollbar.h"
 #include "platform/scroll/ScrollbarThemeOverlay.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebLayer.h"
-#include "public/platform/WebLayerTreeView.h"
 #include "public/platform/WebScrollbar.h"
 #include "public/platform/WebScrollbarLayer.h"
 #include <memory>
-
-using blink::WebLayer;
-using blink::WebLayerTreeView;
-using blink::WebScrollbar;
-using blink::WebScrollbarLayer;
-using blink::FrameHost;
-using blink::GraphicsLayer;
 
 namespace blink {
 
@@ -250,7 +241,7 @@ double VisualViewport::clientWidth()
     updateStyleAndLayoutIgnorePendingStylesheets();
 
     double width = adjustScrollForAbsoluteZoom(visibleSize().width(), mainFrame()->pageZoomFactor());
-    return width - mainFrame()->view()->verticalScrollbarWidth();
+    return width - mainFrame()->view()->verticalScrollbarWidth() / m_scale;
 }
 
 double VisualViewport::clientHeight()
@@ -261,7 +252,7 @@ double VisualViewport::clientHeight()
     updateStyleAndLayoutIgnorePendingStylesheets();
 
     double height = adjustScrollForAbsoluteZoom(visibleSize().height(), mainFrame()->pageZoomFactor());
-    return height - mainFrame()->view()->horizontalScrollbarHeight();
+    return height - mainFrame()->view()->horizontalScrollbarHeight() / m_scale;
 }
 
 double VisualViewport::pageScale()
@@ -273,8 +264,14 @@ double VisualViewport::pageScale()
 
 void VisualViewport::setScaleAndLocation(float scale, const FloatPoint& location)
 {
+    if (didSetScaleOrLocation(scale, location))
+        clearScrollAnchor();
+}
+
+bool VisualViewport::didSetScaleOrLocation(float scale, const FloatPoint& location)
+{
     if (!mainFrame())
-        return;
+        return false;
 
     bool valuesChanged = false;
 
@@ -307,12 +304,23 @@ void VisualViewport::setScaleAndLocation(float scale, const FloatPoint& location
     }
 
     if (!valuesChanged)
-        return;
+        return false;
 
     InspectorInstrumentation::didUpdateLayout(mainFrame());
     mainFrame()->loader().saveScrollState();
 
     clampToBoundaries();
+
+    return true;
+}
+
+void VisualViewport::clearScrollAnchor()
+{
+    if (RuntimeEnabledFeatures::scrollAnchoringEnabled()) {
+        LocalFrame* frame = mainFrame();
+        if (frame && frame->view())
+            frame->view()->clearScrollAnchor();
+    }
 }
 
 bool VisualViewport::magnifyScaleAroundAnchor(float magnifyDelta, const FloatPoint& anchor)
@@ -476,29 +484,13 @@ void VisualViewport::setupScrollbar(WebScrollbar::Orientation orientation)
     scrollbarGraphicsLayer->setContentsRect(IntRect(0, 0, width, height));
 }
 
-void VisualViewport::registerLayersWithTreeView(WebLayerTreeView* layerTreeView) const
+void VisualViewport::setScrollLayerOnScrollbars(WebLayer* scrollLayer) const
 {
-    TRACE_EVENT0("blink", "VisualViewport::registerLayersWithTreeView");
-    ASSERT(layerTreeView);
-
-    if (!mainFrame())
-        return;
-
-    ASSERT(!frameHost().page().deprecatedLocalMainFrame()->contentLayoutItem().isNull());
-
-    PaintLayerCompositor* compositor = frameHost().page().deprecatedLocalMainFrame()->contentLayoutItem().compositor();
-    // Get the outer viewport scroll layer.
-    WebLayer* scrollLayer = compositor->scrollLayer() ? compositor->scrollLayer()->platformLayer() : 0;
-
+    // TODO(bokan): This is currently done while registering viewport layers
+    // with the compositor but could it actually be done earlier, like in
+    // setupScrollbars? Then we wouldn't need this method.
     m_webOverlayScrollbarHorizontal->setScrollLayer(scrollLayer);
     m_webOverlayScrollbarVertical->setScrollLayer(scrollLayer);
-
-    ASSERT(compositor);
-    layerTreeView->registerViewportLayers(
-        m_overscrollElasticityLayer->platformLayer(),
-        m_pageScaleLayer->platformLayer(),
-        m_innerViewportScrollLayer->platformLayer(),
-        scrollLayer);
 }
 
 bool VisualViewport::visualViewportSuppliesScrollbars() const
@@ -509,13 +501,6 @@ bool VisualViewport::visualViewportSuppliesScrollbars() const
 bool VisualViewport::scrollAnimatorEnabled() const
 {
     return frameHost().settings().scrollAnimatorEnabled();
-}
-
-void VisualViewport::clearLayersForTreeView(WebLayerTreeView* layerTreeView) const
-{
-    ASSERT(layerTreeView);
-
-    layerTreeView->clearViewportLayers();
 }
 
 HostWindow* VisualViewport::getHostWindow() const
@@ -540,6 +525,20 @@ bool VisualViewport::shouldUseIntegerScrollOffset() const
         return true;
 
     return ScrollableArea::shouldUseIntegerScrollOffset();
+}
+
+void VisualViewport::setScrollPosition(const DoublePoint& scrollPoint, ScrollType scrollType, ScrollBehavior scrollBehavior)
+{
+    // We clamp the position here, because the ScrollAnimator may otherwise be
+    // set to a non-clamped position by ScrollableArea::setScrollPosition,
+    // which may lead to incorrect scrolling behavior in RootFrameViewport down
+    // the line.
+    // TODO(eseckler): Solve this instead by ensuring that ScrollableArea and
+    // ScrollAnimator are kept in sync. This requires that ScrollableArea always
+    // stores fractional offsets and that truncation happens elsewhere, see
+    // crbug.com/626315.
+    DoublePoint newScrollPosition = clampScrollPosition(scrollPoint);
+    ScrollableArea::setScrollPosition(newScrollPosition, scrollType, scrollBehavior);
 }
 
 int VisualViewport::scrollSize(ScrollbarOrientation orientation) const
@@ -631,9 +630,10 @@ IntSize VisualViewport::contentsSize() const
     return frame->view()->visibleContentRect(IncludeScrollbars).size();
 }
 
-void VisualViewport::setScrollOffset(const DoublePoint& offset, ScrollType)
+void VisualViewport::setScrollOffset(const DoublePoint& offset, ScrollType scrollType)
 {
-    setLocation(toFloatPoint(offset));
+    if (didSetScaleOrLocation(m_scale, toFloatPoint(offset)) && scrollType != AnchoringScroll)
+        clearScrollAnchor();
 }
 
 GraphicsLayer* VisualViewport::layerForContainer() const

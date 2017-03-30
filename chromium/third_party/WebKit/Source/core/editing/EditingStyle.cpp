@@ -747,7 +747,7 @@ TriState EditingStyle::triStateOfStyle(const VisibleSelection& selection) const
     TriState state = FalseTriState;
     bool nodeIsStart = true;
     for (Node& node : NodeTraversal::startsAt(*selection.start().anchorNode())) {
-        if (node.layoutObject() && node.hasEditableStyle()) {
+        if (node.layoutObject() && hasEditableStyle(node)) {
             CSSComputedStyleDeclaration* nodeStyle = CSSComputedStyleDeclaration::create(&node);
             if (nodeStyle) {
                 // If the selected element has <sub> or <sup> ancestor element, apply the corresponding
@@ -1140,16 +1140,16 @@ EditingStyle* EditingStyle::wrappingStyleForSerialization(ContainerNode* context
     return wrappingStyle;
 }
 
-static CSSValueList* mergeTextDecorationValues(const CSSValueList* mergedValue, const CSSValueList* valueToMerge)
+static const CSSValueList& mergeTextDecorationValues(const CSSValueList& mergedValue, const CSSValueList& valueToMerge)
 {
     DEFINE_STATIC_LOCAL(CSSPrimitiveValue, underline, (CSSPrimitiveValue::createIdentifier(CSSValueUnderline)));
     DEFINE_STATIC_LOCAL(CSSPrimitiveValue, lineThrough, (CSSPrimitiveValue::createIdentifier(CSSValueLineThrough)));
-    CSSValueList* result = mergedValue->copy();
-    if (valueToMerge->hasValue(underline) && !mergedValue->hasValue(underline))
-        result->append(underline);
+    CSSValueList& result = *mergedValue.copy();
+    if (valueToMerge.hasValue(underline) && !mergedValue.hasValue(underline))
+        result.append(underline);
 
-    if (valueToMerge->hasValue(lineThrough) && !mergedValue->hasValue(lineThrough))
-        result->append(lineThrough);
+    if (valueToMerge.hasValue(lineThrough) && !mergedValue.hasValue(lineThrough))
+        result.append(lineThrough);
 
     return result;
 }
@@ -1170,9 +1170,9 @@ void EditingStyle::mergeStyle(const StylePropertySet* style, CSSPropertyOverride
         const CSSValue* value = m_mutableStyle->getPropertyCSSValue(property.id());
 
         // text decorations never override values
-        if ((property.id() == textDecorationPropertyForEditing() || property.id() == CSSPropertyWebkitTextDecorationsInEffect) && property.value()->isValueList() && value) {
+        if ((property.id() == textDecorationPropertyForEditing() || property.id() == CSSPropertyWebkitTextDecorationsInEffect) && property.value().isValueList() && value) {
             if (value->isValueList()) {
-                CSSValueList* result = mergeTextDecorationValues(toCSSValueList(value), toCSSValueList(property.value()));
+                const CSSValueList& result = mergeTextDecorationValues(*toCSSValueList(value), toCSSValueList(property.value()));
                 m_mutableStyle->setProperty(property.id(), result, property.isImportant());
                 continue;
             }
@@ -1221,10 +1221,10 @@ void EditingStyle::mergeStyleFromRulesForSerialization(Element* element)
         unsigned propertyCount = m_mutableStyle->propertyCount();
         for (unsigned i = 0; i < propertyCount; ++i) {
             StylePropertySet::PropertyReference property = m_mutableStyle->propertyAt(i);
-            CSSValue* value = property.value();
-            if (!value->isPrimitiveValue())
+            const CSSValue& value = property.value();
+            if (!value.isPrimitiveValue())
                 continue;
-            if (toCSSPrimitiveValue(value)->isPercentage()) {
+            if (toCSSPrimitiveValue(value).isPercentage()) {
                 if (const CSSValue* computedPropertyValue = computedStyleForElement->getPropertyCSSValue(property.id()))
                     fromComputedStyle->addRespectingCascade(CSSProperty(property.id(), *computedPropertyValue));
             }
@@ -1248,6 +1248,10 @@ void EditingStyle::removeStyleFromRulesAndContext(Element* element, ContainerNod
     DCHECK(element);
     if (!m_mutableStyle)
         return;
+
+    // TODO(yosin): The use of updateStyleAndLayoutIgnorePendingStylesheets
+    // needs to be audited. see http://crbug.com/590369 for more details.
+    element->document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(element);
 
     // 1. Remove style from matched rules because style remain without repeating it in inline style declaration
     MutableStylePropertySet* styleFromMatchedRules = styleFromMatchedRulesForElement(element, StyleResolver::AllButEmptyCSSRules);
@@ -1303,10 +1307,10 @@ void EditingStyle::addAbsolutePositioningFromElement(const Element& element)
     }
 
     m_mutableStyle->setProperty(CSSPropertyPosition, CSSValueAbsolute);
-    m_mutableStyle->setProperty(CSSPropertyLeft, CSSPrimitiveValue::create(x, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyTop, CSSPrimitiveValue::create(y, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyWidth, CSSPrimitiveValue::create(width, CSSPrimitiveValue::UnitType::Pixels));
-    m_mutableStyle->setProperty(CSSPropertyHeight, CSSPrimitiveValue::create(height, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyLeft, *CSSPrimitiveValue::create(x, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyTop, *CSSPrimitiveValue::create(y, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyWidth, *CSSPrimitiveValue::create(width, CSSPrimitiveValue::UnitType::Pixels));
+    m_mutableStyle->setProperty(CSSPropertyHeight, *CSSPrimitiveValue::create(height, CSSPrimitiveValue::UnitType::Pixels));
 }
 
 void EditingStyle::forceInline()
@@ -1396,12 +1400,12 @@ WritingDirection EditingStyle::textDirectionForSelection(const VisibleSelection&
         end = mostBackwardCaretPosition(selection.end());
 
         DCHECK(end.document());
-        Node* pastLast = Range::create(*end.document(), position.parentAnchoredEquivalent(), end.parentAnchoredEquivalent())->pastLastNode();
-        for (Node* n = node; n && n != pastLast; n = NodeTraversal::next(*n)) {
-            if (!n->isStyledElement())
+        const EphemeralRange caretRange(position.parentAnchoredEquivalent(), end.parentAnchoredEquivalent());
+        for (Node& n : caretRange.nodes()) {
+            if (!n.isStyledElement())
                 continue;
 
-            CSSComputedStyleDeclaration* style = CSSComputedStyleDeclaration::create(n);
+            CSSComputedStyleDeclaration* style = CSSComputedStyleDeclaration::create(&n);
             const CSSValue* unicodeBidi = style->getPropertyCSSValue(CSSPropertyUnicodeBidi);
             if (!unicodeBidi || !unicodeBidi->isPrimitiveValue())
                 continue;
@@ -1664,7 +1668,7 @@ MutableStylePropertySet* getPropertiesNotIn(StylePropertySet* styleWithRedundant
     diffTextDecorations(result, CSSPropertyWebkitTextDecorationsInEffect, baseTextDecorationsInEffect);
 
     if (const CSSValue* baseFontWeight = baseStyle->getPropertyCSSValueInternal(CSSPropertyFontWeight)) {
-        if (CSSValue* fontWeight = result->getPropertyCSSValue(CSSPropertyFontWeight)) {
+        if (const CSSValue* fontWeight = result->getPropertyCSSValue(CSSPropertyFontWeight)) {
             if (!fontWeightNeedsResolving(fontWeight) && !fontWeightNeedsResolving(baseFontWeight)
                 && (fontWeightIsBold(fontWeight) == fontWeightIsBold(baseFontWeight)))
                 result->removeProperty(CSSPropertyFontWeight);

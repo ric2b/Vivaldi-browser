@@ -35,13 +35,13 @@
 #include "platform/testing/WebLayerTreeViewImplForTesting.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
+#include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/web/WebFrameWidget.h"
-#include "public/web/WebRemoteFrame.h"
 #include "public/web/WebSettings.h"
 #include "public/web/WebTreeScopeType.h"
 #include "public/web/WebViewClient.h"
@@ -92,6 +92,12 @@ TestWebFrameClient* defaultWebFrameClient()
     return &client;
 }
 
+TestWebWidgetClient* defaultWebWidgetClient()
+{
+    DEFINE_STATIC_LOCAL(TestWebWidgetClient, client, ());
+    return &client;
+}
+
 TestWebViewClient* defaultWebViewClient()
 {
     DEFINE_STATIC_LOCAL(TestWebViewClient,  client, ());
@@ -106,7 +112,7 @@ String nameToUniqueName(const String& name)
     static int uniqueNameCounter = 0;
     StringBuilder uniqueName;
     uniqueName.append(name);
-    uniqueName.append(" ");
+    uniqueName.append(' ');
     uniqueName.appendNumber(uniqueNameCounter++);
     return uniqueName.toString();
 }
@@ -116,8 +122,8 @@ String nameToUniqueName(const String& name)
 void loadFrame(WebFrame* frame, const std::string& url)
 {
     WebURLRequest urlRequest;
-    urlRequest.initialize();
     urlRequest.setURL(URLTestHelpers::toKURL(url));
+    urlRequest.setRequestorOrigin(WebSecurityOrigin::createUnique());
     frame->loadRequest(urlRequest);
     pumpPendingRequestsForFrameToLoad(frame);
 }
@@ -165,22 +171,36 @@ WebMouseEvent createMouseEvent(WebInputEvent::Type type, WebMouseEvent::Button b
     return result;
 }
 
-WebLocalFrame* createLocalChild(WebRemoteFrame* parent, const WebString& name, WebFrameClient* client, WebFrame* previousSibling, const WebFrameOwnerProperties& properties)
+WebLocalFrameImpl* createLocalChild(WebRemoteFrame* parent, const WebString& name, WebFrameClient* client, WebWidgetClient* widgetClient, WebFrame* previousSibling, const WebFrameOwnerProperties& properties)
 {
     if (!client)
         client = defaultWebFrameClient();
 
-    return parent->createLocalChild(WebTreeScopeType::Document, name, nameToUniqueName(name), WebSandboxFlags::None, client, previousSibling, properties, nullptr);
+    WebLocalFrameImpl* frame = toWebLocalFrameImpl(parent->createLocalChild(WebTreeScopeType::Document, name, nameToUniqueName(name), WebSandboxFlags::None, client, previousSibling, properties, nullptr));
+
+    if (!widgetClient)
+        widgetClient = defaultWebWidgetClient();
+    WebFrameWidget::create(widgetClient, frame);
+
+    return frame;
 }
 
-WebRemoteFrame* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient* client, const WebString& name)
+WebRemoteFrameImpl* createRemoteChild(WebRemoteFrame* parent, WebRemoteFrameClient* client, const WebString& name)
 {
-    return parent->createRemoteChild(WebTreeScopeType::Document, name, nameToUniqueName(name), WebSandboxFlags::None, client, nullptr);
+    return toWebRemoteFrameImpl(parent->createRemoteChild(WebTreeScopeType::Document, name, nameToUniqueName(name), WebSandboxFlags::None, client, nullptr));
+}
+
+void DefaultSettingOverride(WebSettings*)
+{
+}
+
+void RootLayerScrollsSettingOverride(WebSettings *settings)
+{
+    settings->setRootLayerScrolls(true);
 }
 
 WebViewHelper::WebViewHelper(SettingOverrider* settingOverrider)
     : m_webView(nullptr)
-    , m_webViewWidget(nullptr)
     , m_settingOverrider(settingOverrider)
 {
 }
@@ -221,7 +241,7 @@ WebViewImpl* WebViewHelper::initializeWithOpener(WebFrame* opener, bool enableJa
     m_webView->setMainFrame(frame);
     // TODO(dcheng): The main frame widget currently has a special case.
     // Eliminate this once WebView is no longer a WebWidget.
-    m_webViewWidget = blink::WebFrameWidget::create(webWidgetClient, m_webView, frame);
+    blink::WebFrameWidget::create(webWidgetClient, m_webView, frame);
 
     m_testWebViewClient = webViewClient;
 
@@ -239,15 +259,11 @@ WebViewImpl* WebViewHelper::initializeAndLoad(const std::string& url, bool enabl
 
     loadFrame(webView()->mainFrame(), url);
 
-    return webViewImpl();
+    return webView();
 }
 
 void WebViewHelper::reset()
 {
-    if (m_webViewWidget) {
-        m_webViewWidget->close();
-        m_webViewWidget = nullptr;
-    }
     if (m_webView) {
         DCHECK(m_webView->mainFrame()->isWebRemoteFrame() || !testClientForFrame(m_webView->mainFrame())->isLoading());
         m_webView->willCloseLayerTreeView();
@@ -259,7 +275,7 @@ void WebViewHelper::reset()
 void WebViewHelper::resize(WebSize size)
 {
     m_testWebViewClient->clearAnimationScheduled();
-    webViewImpl()->resize(size);
+    webView()->resize(size);
     EXPECT_FALSE(m_testWebViewClient->animationScheduled());
     m_testWebViewClient->clearAnimationScheduled();
 }
@@ -275,10 +291,14 @@ WebFrame* TestWebFrameClient::createChildFrame(WebLocalFrame* parent, WebTreeSco
     return frame;
 }
 
-void TestWebFrameClient::frameDetached(WebFrame* frame, DetachType type)
+void TestWebFrameClient::frameDetached(WebLocalFrame* frame, DetachType type)
 {
     if (type == DetachType::Remove && frame->parent())
         frame->parent()->removeChild(frame);
+
+    if (frame->frameWidget())
+        frame->frameWidget()->close();
+
     frame->close();
 }
 
@@ -308,6 +328,26 @@ void TestWebRemoteFrameClient::frameDetached(DetachType type)
 void TestWebViewClient::initializeLayerTreeView()
 {
     m_layerTreeView = wrapUnique(new WebLayerTreeViewImplForTesting);
+}
+
+void TestWebViewWidgetClient::initializeLayerTreeView()
+{
+    m_testWebViewClient->initializeLayerTreeView();
+}
+
+WebLayerTreeView* TestWebViewWidgetClient::layerTreeView()
+{
+    return m_testWebViewClient->layerTreeView();
+}
+
+void TestWebViewWidgetClient::scheduleAnimation()
+{
+    m_testWebViewClient->scheduleAnimation();
+}
+
+void TestWebViewWidgetClient::didMeaningfulLayout(WebMeaningfulLayout layoutType)
+{
+    m_testWebViewClient->didMeaningfulLayout(layoutType);
 }
 
 } // namespace FrameTestHelpers

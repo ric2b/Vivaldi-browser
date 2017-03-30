@@ -8,7 +8,7 @@
 #include "base/memory/singleton.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/password_manager/sync/browser/password_manager_setting_migrator_service.h"
-#include "components/sync_driver/sync_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 
@@ -41,9 +41,9 @@ IOSChromePasswordManagerSettingMigratorServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  return base::WrapUnique(
-      new password_manager::PasswordManagerSettingMigratorService(
-          browser_state->GetSyncablePrefs()));
+  return base::MakeUnique<
+      password_manager::PasswordManagerSettingMigratorService>(
+      browser_state->GetSyncablePrefs());
 }
 
 web::BrowserState*

@@ -6,6 +6,7 @@
 #define COMPONENTS_COMPONENT_UPDATER_COMPONENT_UPDATER_SERVICE_INTERNAL_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -43,6 +44,8 @@ class CrxUpdateService : public ComponentUpdateService,
   bool RegisterComponent(const CrxComponent& component) override;
   bool UnregisterComponent(const std::string& id) override;
   std::vector<std::string> GetComponentIDs() const override;
+  std::unique_ptr<ComponentInfo> GetComponentForMimeType(
+      const std::string& id) const override;
   OnDemandUpdater& GetOnDemandUpdater() override;
   void MaybeThrottle(const std::string& id,
                      const base::Closure& callback) override;
@@ -54,7 +57,8 @@ class CrxUpdateService : public ComponentUpdateService,
   void OnEvent(Events event, const std::string& id) override;
 
   // Overrides for OnDemandUpdater.
-  bool OnDemandUpdate(const std::string& id) override;
+  void OnDemandUpdate(const std::string& id,
+                      CompletionCallback callback) override;
 
  private:
   void Start();
@@ -62,7 +66,8 @@ class CrxUpdateService : public ComponentUpdateService,
 
   bool CheckForUpdates();
 
-  bool OnDemandUpdateInternal(const std::string& id);
+  void OnDemandUpdateInternal(const std::string& id,
+                              CompletionCallback callback);
   bool OnDemandUpdateWithCooldown(const std::string& id);
 
   bool DoUnregisterComponent(const CrxComponent& component);
@@ -73,8 +78,16 @@ class CrxUpdateService : public ComponentUpdateService,
 
   void OnUpdate(const std::vector<std::string>& ids,
                 std::vector<CrxComponent>* components);
-  void OnUpdateComplete(const base::TimeTicks& start_time, int error);
+  void OnUpdateComplete(CompletionCallback callback,
+                        const base::TimeTicks& start_time,
+                        int error);
 
+  // Returns the map of installer attributes for the recovery component
+  // installer. This data corresponds to the Omaha updater state and it is
+  // serialized as part of the update check for the recovery component.
+  update_client::InstallerAttributes
+  GetInstallerAttributesForRecoveryComponentInstaller(
+      const CrxComponent& crx_component) const;
   base::ThreadChecker thread_checker_;
 
   scoped_refptr<Configurator> config_;
@@ -106,6 +119,11 @@ class CrxUpdateService : public ComponentUpdateService,
   // Contains the state of the component.
   using ComponentStates = std::map<std::string, CrxUpdateItem>;
   ComponentStates component_states_;
+
+  // Contains a map of media types to the component that implements a handler
+  // for that media type. Only the most recently-registered component is
+  // tracked. May include the IDs of un-registered components.
+  std::map<std::string, std::string> component_ids_by_mime_type_;
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
 

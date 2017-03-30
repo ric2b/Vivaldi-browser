@@ -16,6 +16,7 @@
 
 namespace views {
 namespace test {
+using InkDropMode = InkDropHostViewTestApi::InkDropMode;
 
 class InkDropHostViewColor : public InkDropHostView {
  protected:
@@ -65,17 +66,21 @@ TEST_F(InkDropHostViewTest, GetInkDropCenterBasedOnLastEventForLocatedEvent) {
   EXPECT_EQ(gfx::Point(5, 6), test_api_.GetInkDropCenterBasedOnLastEvent());
 }
 
-// Verifies that SetHasInkDrop() sets up gesture handling properly.
-TEST_F(InkDropHostViewTest, SetHasInkDropGestureHandler) {
+// Verifies that SetInkDropMode() sets up gesture handling properly.
+TEST_F(InkDropHostViewTest, SetInkDropModeGestureHandler) {
   EXPECT_FALSE(test_api_.HasGestureHandler());
 
-  test_api_.SetHasInkDrop(true);
+  test_api_.SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
+  EXPECT_FALSE(test_api_.HasGestureHandler());
+
+  test_api_.SetInkDropMode(InkDropMode::ON);
   EXPECT_TRUE(test_api_.HasGestureHandler());
 
-  test_api_.SetHasInkDrop(true);
+  // Enabling gesture handler the second time should just work (no crash).
+  test_api_.SetInkDropMode(InkDropMode::ON);
   EXPECT_TRUE(test_api_.HasGestureHandler());
 
-  test_api_.SetHasInkDrop(false);
+  test_api_.SetInkDropMode(InkDropMode::OFF);
   EXPECT_FALSE(test_api_.HasGestureHandler());
 }
 
@@ -83,7 +88,7 @@ TEST_F(InkDropHostViewTest, SetHasInkDropGestureHandler) {
 TEST_F(InkDropHostViewTest, NoInkDropOnTouchOrGestureEvents) {
   host_view_.SetSize(gfx::Size(20, 20));
 
-  test_api_.SetHasInkDrop(true);
+  test_api_.SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
 
   // Ensure the target ink drop is in the expected state.
   EXPECT_EQ(test_api_.ink_drop()->GetTargetInkDropState(),
@@ -117,7 +122,7 @@ TEST_F(InkDropHostViewTest, NoInkDropOnTouchOrGestureEvents) {
 TEST_F(InkDropHostViewTest, DismissInkDropOnTouchOrGestureEvents) {
   host_view_.SetSize(gfx::Size(20, 20));
 
-  test_api_.SetHasInkDrop(true);
+  test_api_.SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
 
   // Ensure the target ink drop is in the expected state.
   EXPECT_EQ(test_api_.ink_drop()->GetTargetInkDropState(),

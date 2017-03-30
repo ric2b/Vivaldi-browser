@@ -7,10 +7,10 @@ Polymer({
 
   properties: {
     // Name of the synced device.
-    device: {type: String, value: ''},
+    device: String,
 
     // When the device information was last updated.
-    lastUpdateTime: {type: String, value: ''},
+    lastUpdateTime: String,
 
     /**
      * The list of tabs open for this device.
@@ -31,25 +31,43 @@ Polymer({
     separatorIndexes: Array,
 
     // Whether the card is open.
-    cardOpen_: {type: Boolean, value: true},
+    opened: Boolean,
 
-    searchedTerm: String,
+    searchTerm: String,
+
+    // Internal identifier for the device.
+    sessionTag: String,
   },
 
   /**
-   * Opens all the tabs displayed on the device in separate tabs.
+   * Open a single synced tab. Listens to 'click' rather than 'tap'
+   * to determine what modifier keys were pressed.
+   * @param {DomRepeatClickEvent} e
    * @private
    */
-  openAllTabs_: function() {
-    // TODO(calamity): add a warning if an excessive number of tabs will open.
-    for (var i = 0; i < this.tabs.length; i++)
-      window.open(this.tabs[i].url, '_blank');
+  openTab_: function(e) {
+    var tab = /** @type {ForeignSessionTab} */(e.model.tab);
+    var browserService = md_history.BrowserService.getInstance();
+    browserService.recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.LINK_CLICKED,
+        SyncedTabsHistogram.LIMIT);
+    browserService.openForeignSessionTab(
+        this.sessionTag, tab.windowId, tab.sessionId, e);
+    e.preventDefault();
   },
 
   /**
    * Toggles the dropdown display of synced tabs for each device card.
    */
   toggleTabCard: function() {
+    var histogramValue = this.$.collapse.opened ?
+        SyncedTabsHistogram.COLLAPSE_SESSION :
+        SyncedTabsHistogram.EXPAND_SESSION;
+
+    md_history.BrowserService.getInstance().recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, histogramValue,
+        SyncedTabsHistogram.LIMIT);
+
     this.$.collapse.toggle();
     this.$['dropdown-indicator'].icon =
         this.$.collapse.opened ? 'cr:expand-less' : 'cr:expand-more';
@@ -74,5 +92,42 @@ Polymer({
   /** @private */
   isWindowSeparatorIndex_: function(index, separatorIndexes) {
     return this.separatorIndexes.indexOf(index) != -1;
-  }
+  },
+
+  /**
+   * @param {boolean} opened
+   * @return {string}
+   * @private
+   */
+  getCollapseIcon_: function(opened) {
+    return opened ? 'cr:expand-less' : 'cr:expand-more';
+  },
+
+  /**
+   * @param {boolean} opened
+   * @return {string}
+   * @private
+   */
+  getCollapseTitle_: function(opened) {
+    return opened ? loadTimeData.getString('collapseSessionButton') :
+                    loadTimeData.getString('expandSessionButton');
+  },
+
+  /**
+   * @param {CustomEvent} e
+   * @private
+   */
+  onMenuButtonTap_: function(e) {
+    this.fire('toggle-menu', {
+      target: Polymer.dom(e).localTarget,
+      tag: this.sessionTag
+    });
+    e.stopPropagation();  // Prevent iron-collapse.
+  },
+
+  onLinkRightClick_: function() {
+    md_history.BrowserService.getInstance().recordHistogram(
+        SYNCED_TABS_HISTOGRAM_NAME, SyncedTabsHistogram.LINK_RIGHT_CLICKED,
+        SyncedTabsHistogram.LIMIT);
+  },
 });

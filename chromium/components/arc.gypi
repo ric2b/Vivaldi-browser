@@ -35,6 +35,8 @@
       'sources': [
         'arc/arc_bridge_bootstrap.cc',
         'arc/arc_bridge_bootstrap.h',
+        'arc/arc_bridge_host_impl.h',
+        'arc/arc_bridge_host_impl.cc',
         'arc/arc_bridge_service_impl.cc',
         'arc/arc_bridge_service_impl.h',
         'arc/arc_service_manager.cc',
@@ -83,8 +85,6 @@
         'arc/storage_manager/arc_storage_manager.h',
         'arc/user_data/arc_user_data_service.cc',
         'arc/user_data/arc_user_data_service.h',
-        'arc/window_manager/arc_window_manager_bridge.cc',
-        'arc/window_manager/arc_window_manager_bridge.h',
       ],
     },
     {
@@ -113,8 +113,8 @@
         '..',
       ],
       'dependencies': [
-        'arc_mojo_bindings',
         '../skia/skia.gyp:skia',
+        'arc_mojo_bindings',
       ],
       'sources': [
         'arc/bitmap/bitmap_type_converters.cc',
@@ -156,8 +156,8 @@
         'mojom_typemaps': [
           'arc/common/app.typemap',
           'arc/common/bluetooth.typemap',
-          '../mojo/common/common_custom_types.typemap',
         ],
+        'use_new_wrapper_types': 'false',
       },
       'sources': [
         'arc/common/app.mojom',
@@ -178,20 +178,17 @@
         'arc/common/obb_mounter.mojom',
         'arc/common/policy.mojom',
         'arc/common/power.mojom',
+        'arc/common/print.mojom',
         'arc/common/process.mojom',
         'arc/common/scale_factor.mojom',
         'arc/common/screen_rect.mojom',
         'arc/common/storage_manager.mojom',
         'arc/common/video.mojom',
         'arc/common/video_accelerator.mojom',
-        'arc/common/window_manager.mojom',
         'arc/common/app_struct_traits.cc',
       ],
       'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
-      'dependencies': [
-        '../ui/gfx/gfx.gyp:gfx_geometry',
-        '../mojo/mojo_base.gyp:mojo_common_custom_types_mojom',
-      ],
+      'dependencies': [ '../ui/gfx/gfx.gyp:gfx_geometry' ],
     },
     {
       # GN version: //components/arc:arc_standalone_service

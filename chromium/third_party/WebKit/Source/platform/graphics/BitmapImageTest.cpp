@@ -140,6 +140,8 @@ public:
         return m_imageObserver->m_lastDecodedSizeChangedDelta;
     }
 
+    PassRefPtr<SharedBuffer> data() { return m_image->data(); }
+
 protected:
     void SetUp() override
     {
@@ -216,8 +218,6 @@ TEST_F(BitmapImageTest, noColorProfile)
     EXPECT_FALSE(m_image->hasColorProfile());
 }
 
-#if USE(QCMSLIB)
-
 TEST_F(BitmapImageTest, jpegHasColorProfile)
 {
     loadImage("/LayoutTests/fast/images/resources/icc-v2-gbr.jpg");
@@ -241,8 +241,6 @@ TEST_F(BitmapImageTest, webpHasColorProfile)
     EXPECT_EQ(2560000u, decodedSize());
     EXPECT_TRUE(m_image->hasColorProfile());
 }
-
-#endif // USE(QCMSLIB)
 
 TEST_F(BitmapImageTest, icoHasWrongFrameDimensions)
 {

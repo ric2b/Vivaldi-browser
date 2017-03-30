@@ -10,9 +10,11 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner_helpers.h"
 #include "content/browser/host_zoom_level_context.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/common/resource_type.h"
 
 namespace storage {
@@ -37,10 +39,7 @@ class ServiceWorkerContextWrapper;
 // will not interfere with browser UI.
 class CONTENT_EXPORT ResourceMessageFilter : public BrowserMessageFilter {
  public:
-  // TODO(ricea): Remove origin_pid when support for NPAPI plugins is removed.
-  // crbug.com/493212 is the tracking bug for NPAPI removal.
   typedef base::Callback<void(ResourceType resource_type,
-                              int origin_pid,
                               ResourceContext**,
                               net::URLRequestContext**)> GetContextsCallback;
 
@@ -61,11 +60,9 @@ class CONTENT_EXPORT ResourceMessageFilter : public BrowserMessageFilter {
   // BrowserMessageFilter implementation.
   void OnChannelClosing() override;
   bool OnMessageReceived(const IPC::Message& message) override;
+  void OnDestruct() const override;
 
-  // |origin_pid| is only required for NPAPI plugin processes. Its value is
-  // ignored otherwise.
   void GetContexts(ResourceType resource_type,
-                   int origin_pid,
                    ResourceContext** resource_context,
                    net::URLRequestContext** request_context);
 
@@ -102,6 +99,9 @@ class CONTENT_EXPORT ResourceMessageFilter : public BrowserMessageFilter {
   ~ResourceMessageFilter() override;
 
  private:
+  friend struct BrowserThread::DeleteOnThread<BrowserThread::IO>;
+  friend class base::DeleteHelper<ResourceMessageFilter>;
+
   // The ID of the child process.
   int child_id_;
 

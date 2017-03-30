@@ -6,14 +6,12 @@
 
 #import <Cocoa/Cocoa.h>
 
-#include "base/location.h"
 #import "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_nsautorelease_pool.h"
+#import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
@@ -260,6 +258,29 @@ class SimpleBubbleView : public BubbleDialogDelegateView {
   DISALLOW_COPY_AND_ASSIGN(SimpleBubbleView);
 };
 
+class CustomTooltipView : public View {
+ public:
+  CustomTooltipView(const base::string16& tooltip, View* tooltip_handler)
+      : tooltip_(tooltip), tooltip_handler_(tooltip_handler) {}
+
+  // View:
+  bool GetTooltipText(const gfx::Point& p,
+                      base::string16* tooltip) const override {
+    *tooltip = tooltip_;
+    return true;
+  }
+
+  View* GetTooltipHandlerForPoint(const gfx::Point& point) override {
+    return tooltip_handler_ ? tooltip_handler_ : this;
+  }
+
+ private:
+  base::string16 tooltip_;
+  View* tooltip_handler_;  // Weak
+
+  DISALLOW_COPY_AND_ASSIGN(CustomTooltipView);
+};
+
 // Test visibility states triggered externally.
 TEST_F(NativeWidgetMacTest, HideAndShowExternally) {
   Widget* widget = CreateTopLevelPlatformWidget();
@@ -419,10 +440,10 @@ TEST_F(NativeWidgetMacTest, DISABLED_OrderFrontAfterMiniaturize) {
 
   // Wait and check that child is really visible.
   // TODO(kirr): remove the fixed delay.
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
       base::TimeDelta::FromSeconds(2));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_FALSE(widget->IsMinimized());
   EXPECT_TRUE(widget->IsVisible());
@@ -807,6 +828,43 @@ TEST_F(NativeWidgetMacTest, Tooltips) {
   EXPECT_TRUE(TooltipTextForWidget(widget).empty());
 
   widget->CloseNow();
+}
+
+// Tests case when mouse events are handled in one Widget,
+// but tooltip belongs to another.
+// It happens in menus when a submenu is shown and the parent gets the
+// MouseExit event.
+TEST_F(NativeWidgetMacTest, TwoWidgetTooltips) {
+  // Init two widgets, one above another.
+  Widget* widget_below = CreateTopLevelPlatformWidget();
+  widget_below->SetBounds(gfx::Rect(50, 50, 200, 200));
+
+  Widget* widget_above =
+      CreateChildPlatformWidget(widget_below->GetNativeView());
+  widget_above->SetBounds(gfx::Rect(100, 0, 100, 200));
+
+  const base::string16 tooltip_above = base::ASCIIToUTF16("Front");
+  CustomTooltipView* view_above = new CustomTooltipView(tooltip_above, nullptr);
+  view_above->SetBoundsRect(widget_above->GetContentsView()->bounds());
+  widget_above->GetContentsView()->AddChildView(view_above);
+
+  CustomTooltipView* view_below =
+      new CustomTooltipView(base::ASCIIToUTF16("Back"), view_above);
+  view_below->SetBoundsRect(widget_below->GetContentsView()->bounds());
+  widget_below->GetContentsView()->AddChildView(view_below);
+
+  widget_below->Show();
+  widget_above->Show();
+
+  // Move mouse above second widget and check that it returns tooltip
+  // for second. Despite that event was handled in the first one.
+  ui::test::EventGenerator event_generator(GetContext(),
+                                           widget_below->GetNativeWindow());
+  event_generator.MoveMouseTo(gfx::Point(120, 60));
+  EXPECT_EQ(tooltip_above, TooltipTextForWidget(widget_below));
+
+  widget_above->CloseNow();
+  widget_below->CloseNow();
 }
 
 namespace {
@@ -1318,6 +1376,31 @@ TEST_F(NativeWidgetMacTest, InvalidateShadow) {
   test_api.SimulateFrameSwap(gfx::Size(123, 456));
   EXPECT_EQ(2, [window invalidateShadowCount]);
 
+  widget->CloseNow();
+}
+
+// Test that the contentView opacity corresponds to the window type.
+TEST_F(NativeWidgetMacTest, ContentOpacity) {
+  NativeWidgetMacTestWindow* window;
+  Widget::InitParams init_params =
+      CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+
+  EXPECT_EQ(init_params.opacity, Widget::InitParams::INFER_OPACITY);
+  Widget* widget = CreateWidgetWithTestWindow(init_params, &window);
+
+  // Infer should default to opaque on Mac.
+  EXPECT_TRUE([[window contentView] isOpaque]);
+  widget->CloseNow();
+
+  init_params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
+  widget = CreateWidgetWithTestWindow(init_params, &window);
+  EXPECT_FALSE([[window contentView] isOpaque]);
+  widget->CloseNow();
+
+  // Test opaque explicitly.
+  init_params.opacity = Widget::InitParams::OPAQUE_WINDOW;
+  widget = CreateWidgetWithTestWindow(init_params, &window);
+  EXPECT_TRUE([[window contentView] isOpaque]);
   widget->CloseNow();
 }
 

@@ -20,11 +20,10 @@ sys.path.append(
 import devil_chromium
 from devil.android import apk_helper
 from devil.android import device_utils
-from devil.android import device_errors
 from devil.android.sdk import version_codes
 from devil.utils import reraiser_thread
+from devil.utils import run_tests_helper
 from pylib import constants
-from pylib.utils import run_tests_helper
 from pylib.utils import time_profile
 
 prev_sys_path = list(sys.path)

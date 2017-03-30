@@ -61,6 +61,7 @@ class MESSAGE_CENTER_EXPORT RichNotificationData {
   std::vector<int> vibration_pattern;
   bool renotify;
   bool silent;
+  base::string16 accessible_name;
 };
 
 class MESSAGE_CENTER_EXPORT Notification {
@@ -171,11 +172,6 @@ class MESSAGE_CENTER_EXPORT Notification {
   const gfx::Image& icon() const { return icon_; }
   void set_icon(const gfx::Image& icon) { icon_ = icon; }
 
-  // Gets and sets whether to draw a solid background colour behind the
-  // notification's icon. Only applies to the Views implementation.
-  bool draw_icon_background() const { return draw_icon_background_; }
-  void set_draw_icon_background(bool draw) { draw_icon_background_ = draw; }
-
   const gfx::Image& image() const { return optional_fields_.image; }
   void set_image(const gfx::Image& image) { optional_fields_.image = image; }
 
@@ -228,6 +224,11 @@ class MESSAGE_CENTER_EXPORT Notification {
   void set_pinned(bool pinned) { optional_fields_.pinned = pinned; }
 #endif  // defined(OS_CHROMEOS)
 
+  // Gets a text for spoken feedback.
+  const base::string16& accessible_name() const {
+    return optional_fields_.accessible_name;
+  }
+
   NotificationDelegate* delegate() const { return delegate_.get(); }
 
   const RichNotificationData& rich_notification_data() const {
@@ -267,10 +268,6 @@ class MESSAGE_CENTER_EXPORT Notification {
 
   // Image data for the associated icon, used by Ash when available.
   gfx::Image icon_;
-
-  // True by default; controls whether to draw a solid background colour behind
-  // the |icon_|. Only applies to the Views implementation.
-  bool draw_icon_background_;
 
   // The display string for the source of the notification.  Could be
   // the same as origin_url_, or the name of an extension.

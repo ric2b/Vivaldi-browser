@@ -5,32 +5,39 @@
 #include "chrome/browser/android/browsing_data/browsing_data_counter_bridge.h"
 
 #include "base/android/jni_string.h"
+#include "chrome/browser/browsing_data/browsing_data_counter_factory.h"
 #include "chrome/browser/browsing_data/browsing_data_counter_utils.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
+#include "components/browsing_data/core/browsing_data_utils.h"
 #include "jni/BrowsingDataCounterBridge_jni.h"
+
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 BrowsingDataCounterBridge::BrowsingDataCounterBridge(
     JNIEnv* env, const JavaParamRef<jobject>& obj, jint data_type)
     : jobject_(obj) {
   DCHECK_GE(data_type, 0);
-  DCHECK_LT(data_type, BrowsingDataType::NUM_TYPES);
+  DCHECK_LT(data_type, browsing_data::NUM_TYPES);
 
   std::string pref;
-  if (!GetDeletionPreferenceFromDataType(
-      static_cast<BrowsingDataType>(data_type), &pref)) {
+  if (!browsing_data::GetDeletionPreferenceFromDataType(
+          static_cast<browsing_data::BrowsingDataType>(data_type), &pref)) {
     return;
   }
 
-  counter_.reset(CreateCounterForPreference(pref));
+  Profile* profile =
+      ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
+  counter_ = BrowsingDataCounterFactory::GetForProfileAndPref(profile, pref);
 
   if (!counter_)
     return;
 
-  counter_->Init(
-      ProfileManager::GetActiveUserProfile()->GetOriginalProfile(),
-      base::Bind(&BrowsingDataCounterBridge::onCounterFinished,
-                 base::Unretained(this)));
+  counter_->Init(profile->GetPrefs(),
+                 base::Bind(&BrowsingDataCounterBridge::onCounterFinished,
+                            base::Unretained(this)));
   counter_->Restart();
 }
 
@@ -48,13 +55,13 @@ bool BrowsingDataCounterBridge::Register(JNIEnv* env) {
 }
 
 void BrowsingDataCounterBridge::onCounterFinished(
-    std::unique_ptr<BrowsingDataCounter::Result> result) {
+    std::unique_ptr<browsing_data::BrowsingDataCounter::Result> result) {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> result_string =
       base::android::ConvertUTF16ToJavaString(
-          env, GetCounterTextFromResult(result.get()));
-  Java_BrowsingDataCounterBridge_onBrowsingDataCounterFinished(
-      env, jobject_.obj(), result_string.obj());
+          env, GetChromeCounterTextFromResult(result.get()));
+  Java_BrowsingDataCounterBridge_onBrowsingDataCounterFinished(env, jobject_,
+                                                               result_string);
 }
 
 static jlong Init(

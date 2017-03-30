@@ -87,6 +87,10 @@ uint16_t BluetoothDeviceWin::GetAppearance() const {
   return 0;
 }
 
+base::Optional<std::string> BluetoothDeviceWin::GetName() const {
+  return name_;
+}
+
 bool BluetoothDeviceWin::IsPaired() const {
   return paired_;
 }
@@ -108,17 +112,20 @@ bool BluetoothDeviceWin::IsConnecting() const {
   return false;
 }
 
-BluetoothDevice::UUIDList BluetoothDeviceWin::GetUUIDs() const {
+BluetoothDevice::UUIDSet BluetoothDeviceWin::GetUUIDs() const {
   return uuids_;
 }
 
-int16_t BluetoothDeviceWin::GetInquiryRSSI() const {
-  return kUnknownPower;
+base::Optional<int8_t> BluetoothDeviceWin::GetInquiryRSSI() const {
+  // In windows, we can only get connected devices and connected
+  // devices don't have an Inquiry RSSI.
+  return base::nullopt;
 }
 
-int16_t BluetoothDeviceWin::GetInquiryTxPower() const {
-  NOTIMPLEMENTED();
-  return kUnknownPower;
+base::Optional<int8_t> BluetoothDeviceWin::GetInquiryTxPower() const {
+  // In windows, we can only get connected devices and connected
+  // devices don't have an Inquiry Tx Power.
+  return base::nullopt;
 }
 
 bool BluetoothDeviceWin::ExpectingPinCode() const {
@@ -226,16 +233,9 @@ bool BluetoothDeviceWin::IsEqual(
   }
 
   // Checks service collection
-  typedef std::set<BluetoothUUID> UUIDSet;
   typedef base::ScopedPtrHashMap<std::string,
                                  std::unique_ptr<BluetoothServiceRecordWin>>
       ServiceRecordMap;
-
-  UUIDSet known_services;
-  for (UUIDList::const_iterator iter = uuids_.begin(); iter != uuids_.end();
-       ++iter) {
-    known_services.insert((*iter));
-  }
 
   UUIDSet new_services;
   ServiceRecordMap new_service_records;
@@ -250,14 +250,8 @@ bool BluetoothDeviceWin::IsEqual(
         std::unique_ptr<BluetoothServiceRecordWin>(service_record));
   }
 
-  UUIDSet removed_services =
-      base::STLSetDifference<UUIDSet>(known_services, new_services);
-  if (!removed_services.empty()) {
-    return false;
-  }
-  UUIDSet added_devices =
-      base::STLSetDifference<UUIDSet>(new_services, known_services);
-  if (!added_devices.empty()) {
+  // Check that no new services have been added or removed.
+  if (uuids_ != new_services) {
     return false;
   }
 
@@ -283,10 +277,6 @@ void BluetoothDeviceWin::Update(
   connected_ = device_state.connected;
   paired_ = device_state.authenticated;
   UpdateServices(device_state);
-}
-
-std::string BluetoothDeviceWin::GetDeviceName() const {
-  return name_;
 }
 
 void BluetoothDeviceWin::CreateGattConnectionImpl() {
@@ -317,7 +307,7 @@ void BluetoothDeviceWin::UpdateServices(
         new BluetoothServiceRecordWin(device_state.address, (*iter)->name,
                                       (*iter)->sdp_bytes, (*iter)->gatt_uuid);
     service_record_list_.push_back(service_record);
-    uuids_.push_back(service_record->uuid());
+    uuids_.insert(service_record->uuid());
   }
 
   if (!device_state.is_bluetooth_classic())

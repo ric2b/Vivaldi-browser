@@ -3,19 +3,21 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
-#include "mojo/public/c/system/main.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/c/main.h"
+#include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 #include "services/shell/tests/shutdown/shutdown_unittest.mojom.h"
 
 namespace shell {
 namespace {
 
-shell::ApplicationRunner* g_app = nullptr;
+shell::ServiceRunner* g_app = nullptr;
 
 class ShutdownServiceApp
-    : public ShellClient,
+    : public Service,
       public InterfaceFactory<mojom::ShutdownTestService>,
       public mojom::ShutdownTestService {
  public:
@@ -23,16 +25,15 @@ class ShutdownServiceApp
   ~ShutdownServiceApp() override {}
 
  private:
-  // shell::ShellClient:
-  void Initialize(Connector* connector, const Identity& identity,
-                  uint32_t id) override {}
-  bool AcceptConnection(Connection* connection) override {
-    connection->AddInterface<mojom::ShutdownTestService>(this);
+  // shell::Service:
+  bool OnConnect(const Identity& remote_identity,
+                 InterfaceRegistry* registry) override {
+    registry->AddInterface<mojom::ShutdownTestService>(this);
     return true;
   }
 
   // InterfaceFactory<mojom::ShutdownTestService>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               mojom::ShutdownTestServiceRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -50,8 +51,8 @@ class ShutdownServiceApp
 }  // namespace shell
 
 
-MojoResult MojoMain(MojoHandle shell_handle) {
-  shell::ApplicationRunner runner(new shell::ShutdownServiceApp);
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  shell::ServiceRunner runner(new shell::ShutdownServiceApp);
   shell::g_app = &runner;
-  return runner.Run(shell_handle);
+  return runner.Run(service_request_handle);
 }

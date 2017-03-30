@@ -87,6 +87,9 @@ public:
     bool updateGraphicsLayerConfiguration();
     void updateGraphicsLayerGeometry(const PaintLayer* compositingContainer, const PaintLayer* compositingStackingContext, Vector<PaintLayer*>& layersNeedingPaintInvalidation);
 
+    // Update whether background paints onto scrolling contents layer.
+    void updateBackgroundPaintsOntoScrollingContentsLayer();
+
     // Update whether layer needs blending.
     void updateContentsOpaque();
 
@@ -155,9 +158,7 @@ public:
     void updateElementIdAndCompositorMutableProperties();
 
     // GraphicsLayerClient interface
-    void notifyFirstPaint() override;
-    void notifyFirstTextPaint() override;
-    void notifyFirstImagePaint() override;
+    void notifyPaint(bool isFirstPaint, bool textPainted, bool imagePainted) override;
 
     IntRect computeInterestRect(const GraphicsLayer*, const IntRect& previousInterestRect) const override;
     LayoutSize subpixelAccumulation() const final;
@@ -218,6 +219,14 @@ public:
     void updateScrollingBlockSelection();
 
     void adjustForCompositedScrolling(const GraphicsLayer*, IntSize& offset) const;
+
+    // Returns true for layers with scrollable overflow which have a background
+    // that can be painted into the composited scrolling contents layer (i.e.
+    // the background can scroll with the content). When the background is also
+    // opaque this allows us to composite the scroller even on low DPI as we can
+    // draw with subpixel anti-aliasing.
+    bool canPaintBackgroundOntoScrollingContentsLayer() const;
+    bool backgroundPaintsOntoScrollingContentsLayer() { return m_backgroundPaintsOntoScrollingContentsLayer; }
 
 private:
     IntRect recomputeInterestRect(const GraphicsLayer*) const;
@@ -455,6 +464,9 @@ private:
 
     unsigned m_backgroundLayerPaintsFixedRootBackground : 1;
     unsigned m_scrollingContentsAreEmpty : 1;
+
+    // Keep track of whether the background is painted onto the scrolling contents layer for invalidations.
+    unsigned m_backgroundPaintsOntoScrollingContentsLayer : 1;
 
     friend class CompositedLayerMappingTest;
 };

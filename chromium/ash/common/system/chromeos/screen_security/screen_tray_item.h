@@ -7,11 +7,11 @@
 
 #include <string>
 
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_item.h"
 #include "ash/common/system/tray/tray_item_view.h"
 #include "ash/common/system/tray/tray_notification_view.h"
 #include "ash/common/system/tray/tray_popup_label_button.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/macros.h"
 #include "ui/message_center/notification_delegate.h"
 #include "ui/views/controls/button/button.h"
@@ -28,7 +28,7 @@ namespace tray {
 
 class ScreenTrayView : public TrayItemView {
  public:
-  ScreenTrayView(ScreenTrayItem* screen_tray_item, int icon_id);
+  explicit ScreenTrayView(ScreenTrayItem* screen_tray_item);
   ~ScreenTrayView() override;
 
   void Update();
@@ -42,7 +42,6 @@ class ScreenTrayView : public TrayItemView {
 class ScreenStatusView : public views::View, public views::ButtonListener {
  public:
   ScreenStatusView(ScreenTrayItem* screen_tray_item,
-                   int icon_id,
                    const base::string16& label_text,
                    const base::string16& stop_button_text);
   ~ScreenStatusView() override;
@@ -61,7 +60,6 @@ class ScreenStatusView : public views::View, public views::ButtonListener {
   views::ImageView* icon_;
   views::Label* label_;
   TrayPopupLabelButton* stop_button_;
-  int icon_id_;
   base::string16 label_text_;
   base::string16 stop_button_text_;
 

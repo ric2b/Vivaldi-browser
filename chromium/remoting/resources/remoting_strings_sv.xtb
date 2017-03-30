@@ -74,7 +74,6 @@ Du hittar mer information om sekretess i Googles sekretesspolicy (http://goo.gl/
 <translation id="2676780859508944670">Arbetar ...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Programuppdateringar sker oftast automatiskt, men kan ibland misslyckas. Uppdateringen av programvaran bör inte ta mer än några minuter och du kan göra den när du är fjärransluten till datorn.</translation>
-<translation id="2813770873348017932">Anslutningar till fjärrdatorn är tillfälligt blockerade eftersom någon försökt ansluta till fjärrdatorn med en ogiltig PIN-kod. Försök igen senare.</translation>
 <translation id="2841013758207633010">Tid</translation>
 <translation id="2851674870054673688">När koden anges startar delningssessionen.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Host</translation>
 <translation id="4573676252416618192">Chrome Remote
 Desktop Host</translation>
 <translation id="4619978527973181021">Godkänn och installera</translation>
-<translation id="4647791084836149355">Visa Cardboard-vy</translation>
 <translation id="4703302905453407178">En obligatorisk komponent har slutat fungera. Rapportera problemet till utvecklarna.</translation>
 <translation id="4703799847237267011">Chromoting-sessionen har avslutats.</translation>
 <translation id="4736223761657662401">Anslutningshistorik</translation>
@@ -210,7 +208,6 @@ Desktop Host</translation>
 <translation id="6284412385303060032">Värden som kördes på konsolens inloggningsskärm har avslutats för att stödja Curtain Mode genom att byta till en värd som körs i en användarspecifik session.</translation>
 <translation id="629730747756840877">Konto</translation>
 <translation id="6304318647555713317">Klient</translation>
-<translation id="6324708100353784493">Du har aktiverat läget för Google Cardboard-integrering. Anslut enheten till ett Google Cardboard-kompatibelt visningsprogram om du vill använda det här läget.</translation>
 <translation id="6381670701864002291">Något annat.</translation>
 <translation id="6398765197997659313">Avsluta helskärmsläge</translation>
 <translation id="6408143143164565232">• Lyssna på ljudet från Windows- eller Linux-datorer.
@@ -236,6 +233,7 @@ Desktop Host</translation>
 <translation id="6930242544192836755">Varaktighet</translation>
 <translation id="6939719207673461467">Visa/dölj tangentbordet.</translation>
 <translation id="6944854424004126054">Återställ fönstret</translation>
+<translation id="6963936880795878952">Anslutningar till fjärrdatorn är tillfälligt blockerade eftersom någon har försökt ansluta till fjärrdatorn med en ogiltig pinkod. Försök igen senare.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Är du säker på att du vill inaktivera fjärranslutningar till <ph name="HOSTNAME" />? Om du ångrar dig måste du besöka datorn för att kunna aktivera anslutningar igen.</translation>
 <translation id="6998989275928107238">Till</translation>

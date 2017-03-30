@@ -11,14 +11,18 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
-#include "components/mus/public/cpp/property_type_converters.h"
 #include "mash/session/public/interfaces/session.mojom.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/ui/public/cpp/property_type_converters.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
+#include "ui/views/background.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/label_button.h"
@@ -52,19 +56,20 @@ class WindowDelegateView : public views::WidgetDelegateView {
     PANEL = 1 << 2,
   };
 
-  explicit WindowDelegateView(uint32_t traits) : traits_(traits) {}
+  explicit WindowDelegateView(uint32_t traits) : traits_(traits) {
+    set_background(views::Background::CreateSolidBackground(SK_ColorRED));
+  }
   ~WindowDelegateView() override {}
 
   // Creates and shows a window with the specified traits.
   static void Create(uint32_t traits) {
-    // Widget destroys itself when closed or mus::Window destroyed.
+    // Widget destroys itself when closed or ui::Window destroyed.
     views::Widget* widget = new views::Widget;
     views::Widget::InitParams params(
         (traits & PANEL) != 0 ? views::Widget::InitParams::TYPE_PANEL
                               : views::Widget::InitParams::TYPE_WINDOW);
     if ((traits & PANEL) != 0) {
-      params
-          .mus_properties[mus::mojom::WindowManager::kInitialBounds_Property] =
+      params.mus_properties[ui::mojom::WindowManager::kInitialBounds_Property] =
           mojo::TypeConverter<std::vector<uint8_t>, gfx::Rect>::Convert(
               gfx::Rect(100, 100, 300, 300));
     }
@@ -82,6 +87,8 @@ class WindowDelegateView : public views::WidgetDelegateView {
   base::string16 GetWindowTitle() const override {
     return base::ASCIIToUTF16("Window");
   }
+  gfx::Size GetPreferredSize() const override { return gfx::Size(300, 300); }
+  View* GetContentsView() override { return this; }
 
  private:
   const uint32_t traits_;
@@ -439,14 +446,10 @@ class WindowTypeLauncherView : public views::WidgetDelegateView,
                          MenuItemView::NORMAL);
     // MenuRunner takes ownership of root.
     menu_runner_.reset(new MenuRunner(
-        root, MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
-    if (menu_runner_->RunMenuAt(GetWidget(),
-                                NULL,
-                                gfx::Rect(point, gfx::Size()),
-                                views::MENU_ANCHOR_TOPLEFT,
-                                source_type) == MenuRunner::MENU_DELETED) {
-      return;
-    }
+        root, MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU |
+                  views::MenuRunner::ASYNC));
+    menu_runner_->RunMenuAt(GetWidget(), NULL, gfx::Rect(point, gfx::Size()),
+                            views::MENU_ANCHOR_TOPLEFT, source_type);
   }
 
   WindowTypeLauncher* window_type_launcher_;
@@ -487,18 +490,16 @@ void WindowTypeLauncher::RemoveWindow(views::Widget* window) {
     base::MessageLoop::current()->QuitWhenIdle();
 }
 
-void WindowTypeLauncher::Initialize(shell::Connector* connector,
-                                    const shell::Identity& identity,
-                                    uint32_t id) {
-  connector_ = connector;
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-
+void WindowTypeLauncher::OnStart(const shell::Identity& identity) {
+  aura_init_.reset(
+      new views::AuraInit(connector(), "views_mus_resources.pak"));
   window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector, identity);
+      views::WindowManagerConnection::Create(connector(), identity);
 }
 
-bool WindowTypeLauncher::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mash::mojom::Launchable>(this);
+bool WindowTypeLauncher::OnConnect(const shell::Identity& remote_identity,
+                                   shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mash::mojom::Launchable>(this);
   return true;
 }
 
@@ -511,13 +512,18 @@ void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
   }
   views::Widget* window = new views::Widget;
   views::Widget::InitParams params(views::Widget::InitParams::TYPE_WINDOW);
-  params.delegate = new WindowTypeLauncherView(this, connector_);
+  params.delegate = new WindowTypeLauncherView(this, connector());
   window->Init(params);
   window->Show();
   windows_.push_back(window);
 }
 
-void WindowTypeLauncher::Create(shell::Connection* connection,
+void WindowTypeLauncher::Create(const shell::Identity& remote_identity,
                                 mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
+}
+
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  return shell::ServiceRunner(new WindowTypeLauncher)
+      .Run(service_request_handle);
 }

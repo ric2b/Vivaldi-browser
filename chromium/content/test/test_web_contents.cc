@@ -203,6 +203,7 @@ void TestWebContents::TestSetIsLoading(bool value) {
             node->render_manager()->speculative_frame_host();
         if (speculative_frame_host)
           speculative_frame_host->ResetLoadingState();
+        node->ResetNavigationRequest(false);
       } else {
         RenderFrameHostImpl* pending_frame_host =
             node->render_manager()->pending_frame_host();
@@ -252,9 +253,9 @@ void TestWebContents::CommitPendingNavigation() {
     page_id = GetMaxPageIDForSiteInstance(rfh->GetSiteInstance()) + 1;
   }
 
-  rfh->SendNavigate(page_id, entry->GetUniqueID(),
-                    GetController().GetPendingEntryIndex() == -1,
-                    entry->GetURL());
+  rfh->SendNavigateWithTransition(page_id, entry->GetUniqueID(),
+                                  GetController().GetPendingEntryIndex() == -1,
+                                  entry->GetURL(), entry->GetTransitionType());
   // Simulate the SwapOut_ACK. This is needed when cross-site navigation
   // happens.
   if (old_rfh != rfh)

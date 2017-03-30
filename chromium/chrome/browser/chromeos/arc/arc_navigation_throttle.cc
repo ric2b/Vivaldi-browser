@@ -10,12 +10,18 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/chromeos/arc/page_transition_util.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/arc/intent_helper/local_activity_resolver.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/web_contents.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ui/base/page_transition_types.h"
+#include "url/gurl.h"
 
 namespace arc {
 
@@ -26,38 +32,38 @@ constexpr int kMinInstanceVersion = 7;
 scoped_refptr<ActivityIconLoader> GetIconLoader() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   ArcServiceManager* arc_service_manager = ArcServiceManager::Get();
-  if (!arc_service_manager)
-    return nullptr;
-  return arc_service_manager->icon_loader();
+  return arc_service_manager ? arc_service_manager->icon_loader() : nullptr;
 }
 
-mojom::IntentHelperInstance* GetIntentHelper() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  ArcBridgeService* bridge_service = ArcBridgeService::Get();
-  if (!bridge_service) {
-    VLOG(1) << "ARC bridge is not ready.";
-    return nullptr;
+// Compares the host name of the referrer and target URL to decide whether
+// the navigation needs to be overriden.
+bool ShouldOverrideUrlLoading(const GURL& previous_url,
+                              const GURL& current_url) {
+  // When the navigation is initiated in a web page where sending a referrer
+  // is disabled, |previous_url| can be empty. In this case, we should open
+  // it in the desktop browser.
+  if (!previous_url.is_valid() || previous_url.is_empty())
+    return false;
+
+  // Also check |current_url| just in case.
+  if (!current_url.is_valid() || current_url.is_empty()) {
+    DVLOG(1) << "Unexpected URL: " << current_url << ", opening it in Chrome.";
+    return false;
   }
-  mojom::IntentHelperInstance* intent_helper_instance =
-      bridge_service->intent_helper()->instance();
-  if (!intent_helper_instance) {
-    VLOG(1) << "ARC intent helper instance is not ready.";
-    return nullptr;
-  }
-  if (bridge_service->intent_helper()->version() < kMinInstanceVersion) {
-    VLOG(1) << "ARC intent helper instance is too old.";
-    return nullptr;
-  }
-  return intent_helper_instance;
+
+  return !net::registry_controlled_domains::SameDomainOrHost(
+      current_url, previous_url,
+      net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
 }  // namespace
 
 ArcNavigationThrottle::ArcNavigationThrottle(
     content::NavigationHandle* navigation_handle,
-    const ShowDisambigDialogCallback& show_disambig_dialog_cb)
+    const ShowIntentPickerCallback& show_intent_picker_cb)
     : content::NavigationThrottle(navigation_handle),
-      show_disambig_dialog_callback_(show_disambig_dialog_cb),
+      show_intent_picker_callback_(show_intent_picker_cb),
+      previous_user_action_(CloseReason::INVALID),
       weak_ptr_factory_(this) {}
 
 ArcNavigationThrottle::~ArcNavigationThrottle() = default;
@@ -65,25 +71,69 @@ ArcNavigationThrottle::~ArcNavigationThrottle() = default;
 content::NavigationThrottle::ThrottleCheckResult
 ArcNavigationThrottle::WillStartRequest() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  const ui::PageTransition transition =
-      navigation_handle()->GetPageTransition();
-
-  if (!ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_LINK)) {
-    // If this navigation event wasn't spawned by the user clicking on a link.
+  // We must not handle navigations started from the context menu.
+  if (navigation_handle()->WasStartedFromContextMenu())
     return content::NavigationThrottle::PROCEED;
-  }
+  return HandleRequest();
+}
 
-  if (ui::PageTransitionGetQualifier(transition) != 0) {
-    // Qualifiers indicate that this navigation was the result of a click on a
-    // forward/back button, or a redirect, or typing in the URL bar, etc.  Don't
-    // pass any of those types of navigations to the intent helper (see
-    // crbug.com/630072).
-    return content::NavigationThrottle::PROCEED;
-  }
+content::NavigationThrottle::ThrottleCheckResult
+ArcNavigationThrottle::WillRedirectRequest() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  switch (previous_user_action_) {
+    case CloseReason::ERROR:
+    case CloseReason::DIALOG_DEACTIVATED:
+      // User dismissed the dialog, or some error occurred before.  Don't
+      // repeatedly pop up the dialog.
+      return content::NavigationThrottle::PROCEED;
+
+    case CloseReason::ALWAYS_PRESSED:
+    case CloseReason::JUST_ONCE_PRESSED:
+    case CloseReason::PREFERRED_ACTIVITY_FOUND:
+      // Should never get here - if the user selected one of these previously,
+      // Chrome should not see a redirect.
+      NOTREACHED();
+
+    case CloseReason::INVALID:
+      // No picker has previously been popped up for this - continue.
+      break;
+  }
+  return HandleRequest();
+}
+
+content::NavigationThrottle::ThrottleCheckResult
+ArcNavigationThrottle::HandleRequest() {
   const GURL& url = navigation_handle()->GetURL();
-  mojom::IntentHelperInstance* bridge_instance = GetIntentHelper();
+
+  // Always handle http(s) <form> submissions in Chrome for two reasons: 1) we
+  // don't have a way to send POST data to ARC, and 2) intercepting http(s) form
+  // submissions is not very important because such submissions are usually
+  // done within the same domain. ShouldOverrideUrlLoading() below filters out
+  // such submissions anyway.
+  constexpr bool kAllowFormSubmit = false;
+
+  if (ShouldIgnoreNavigation(navigation_handle()->GetPageTransition(),
+                             kAllowFormSubmit))
+    return content::NavigationThrottle::PROCEED;
+
+  const GURL previous_url = navigation_handle()->GetReferrer().url;
+  const GURL current_url = navigation_handle()->GetURL();
+  if (!ShouldOverrideUrlLoading(previous_url, current_url))
+    return content::NavigationThrottle::PROCEED;
+
+  arc::ArcServiceManager* arc_service_manager = arc::ArcServiceManager::Get();
+  DCHECK(arc_service_manager);
+  scoped_refptr<arc::LocalActivityResolver> local_resolver =
+      arc_service_manager->activity_resolver();
+  if (local_resolver->ShouldChromeHandleUrl(url)) {
+    // Allow navigation to proceed if there isn't an android app that handles
+    // the given URL.
+    return content::NavigationThrottle::PROCEED;
+  }
+
+  mojom::IntentHelperInstance* bridge_instance =
+      arc::ArcIntentHelperBridge::GetIntentHelperInstance(kMinInstanceVersion);
   if (!bridge_instance)
     return content::NavigationThrottle::PROCEED;
   bridge_instance->RequestUrlHandlerList(
@@ -92,20 +142,14 @@ ArcNavigationThrottle::WillStartRequest() {
   return content::NavigationThrottle::DEFER;
 }
 
-content::NavigationThrottle::ThrottleCheckResult
-ArcNavigationThrottle::WillRedirectRequest() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  return content::NavigationThrottle::PROCEED;
-}
-
 // We received the array of app candidates to handle this URL (even the Chrome
 // app is included).
 void ArcNavigationThrottle::OnAppCandidatesReceived(
     mojo::Array<mojom::UrlHandlerInfoPtr> handlers) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if ((handlers.size() == 1 && ArcIntentHelperBridge::IsIntentHelperPackage(
-                                   handlers[0]->package_name)) ||
-      handlers.size() == 0) {
+  if (handlers.empty() ||
+      (handlers.size() == 1 && ArcIntentHelperBridge::IsIntentHelperPackage(
+                                   handlers[0]->package_name))) {
     // This scenario shouldn't be accesed as ArcNavigationThrottle is created
     // iff there are ARC apps which can actually handle the given URL.
     DVLOG(1) << "There are no app candidates for this URL: "
@@ -127,8 +171,8 @@ void ArcNavigationThrottle::OnAppCandidatesReceived(
           << "Chrome browser is selected as the preferred app for this URL: "
           << navigation_handle()->GetURL().spec();
     }
-    OnDisambigDialogClosed(std::move(handlers), i,
-                           CloseReason::PREFERRED_ACTIVITY_FOUND);
+    OnIntentPickerClosed(std::move(handlers), i,
+                         CloseReason::PREFERRED_ACTIVITY_FOUND);
     return;
   }
 
@@ -174,20 +218,17 @@ void ArcNavigationThrottle::OnAppIconsReceived(
                                                     handler->activity_name);
     const auto it = icons->find(activity);
 
-    if (it != icons->end()) {
-      app_info.emplace_back(handler->name, it->second.icon20);
-    } else {
-      app_info.emplace_back(handler->name, gfx::Image());
-    }
+    app_info.emplace_back(
+        handler->name, it != icons->end() ? it->second.icon20 : gfx::Image());
   }
 
-  show_disambig_dialog_callback_.Run(
-      navigation_handle(), app_info,
-      base::Bind(&ArcNavigationThrottle::OnDisambigDialogClosed,
+  show_intent_picker_callback_.Run(
+      navigation_handle()->GetWebContents(), app_info,
+      base::Bind(&ArcNavigationThrottle::OnIntentPickerClosed,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&handlers)));
 }
 
-void ArcNavigationThrottle::OnDisambigDialogClosed(
+void ArcNavigationThrottle::OnIntentPickerClosed(
     mojo::Array<mojom::UrlHandlerInfoPtr> handlers,
     size_t selected_app_index,
     CloseReason close_reason) {
@@ -195,7 +236,10 @@ void ArcNavigationThrottle::OnDisambigDialogClosed(
   const GURL& url = navigation_handle()->GetURL();
   content::NavigationHandle* handle = navigation_handle();
 
-  mojom::IntentHelperInstance* bridge = GetIntentHelper();
+  previous_user_action_ = close_reason;
+
+  mojom::IntentHelperInstance* bridge =
+      arc::ArcIntentHelperBridge::GetIntentHelperInstance(kMinInstanceVersion);
   if (!bridge || selected_app_index >= handlers.size()) {
     close_reason = CloseReason::ERROR;
   }
@@ -224,10 +268,12 @@ void ArcNavigationThrottle::OnDisambigDialogClosed(
                           handlers[selected_app_index]->package_name);
         handle->CancelDeferredNavigation(
             content::NavigationThrottle::CANCEL_AND_IGNORE);
+        if (handle->GetWebContents()->GetController().IsInitialNavigation())
+          handle->GetWebContents()->Close();
       }
       break;
     }
-    case CloseReason::SIZE: {
+    case CloseReason::INVALID: {
       NOTREACHED();
       return;
     }
@@ -236,6 +282,13 @@ void ArcNavigationThrottle::OnDisambigDialogClosed(
   UMA_HISTOGRAM_ENUMERATION("Arc.IntentHandlerAction",
                             static_cast<int>(close_reason),
                             static_cast<int>(CloseReason::SIZE));
+}
+
+// static
+bool ArcNavigationThrottle::ShouldOverrideUrlLoadingForTesting(
+    const GURL& previous_url,
+    const GURL& current_url) {
+  return ShouldOverrideUrlLoading(previous_url, current_url);
 }
 
 }  // namespace arc

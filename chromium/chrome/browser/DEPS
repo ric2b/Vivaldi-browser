@@ -4,18 +4,18 @@ include_rules = [
   "+chrome/app",
   "+chrome/chrome_watcher",
   "+chrome/grit",  # For generated headers
+  "+chrome/install_static",
   "+chrome/installer",
   "+chrome_elf/blacklist",
   "+chrome_elf/chrome_elf_constants.h",
-  "+chrome_elf/create_file",
   "+chrome_elf/dll_hash",
   "+chromeos",
   "+components",
   "+content/public/browser",
-  "+content/test/net",
   "+courgette",
   "+device/bluetooth",
   "+device/core",
+  "+device/geolocation",
   "+device/hid",
   "+device/media_transfer_protocol",
   "+device/usb",
@@ -36,9 +36,8 @@ include_rules = [
   "+media/cdm/cdm_paths.h",
   "+media/midi",  # For midi switches
   "+media/mojo",  # For mojo media services.
-  "+mojo/converters",
-  "+mojo/runner/child",
   "+services/shell/public/cpp",
+  "+services/ui/public",
   "+policy",  # For generated headers and source
   "+ppapi/c",  # For various types.
   "+ppapi/host",
@@ -48,15 +47,9 @@ include_rules = [
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
   "+services/shell",
   "+skia/ext",
-  "+sync/api",  # Sync API files.
-  "+sync/internal_api/public/attachments",  # Needed for tests.
-  "+sync/internal_api/public/base",
-  "+sync/protocol",  # Sync protobuf files.
-  "+sync/util",  # Sync utilities like GetSessionName.
   "+syzygy/kasko",
   "+third_party/cros_system_api",
   "+third_party/kasko",
-  "+win8/util",
 
   # chrome only needs switches from cc. All usage of the compositor is from
   # content. Definitely don't include generic stuff from cc/base here, if this
@@ -99,6 +92,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h",
+  "+third_party/WebKit/public/platform/modules/budget_service/budget_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
@@ -112,3 +106,11 @@ include_rules = [
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/WebWindowFeatures.h",
 ]
+
+specific_include_rules = {
+  # Exploits don't abide by DEPS; so all IPC message definitions are fair game
+  # in this type of test.
+  'chrome_security_exploit_browsertest\.cc' : [
+    '+content/common',
+  ],
+}

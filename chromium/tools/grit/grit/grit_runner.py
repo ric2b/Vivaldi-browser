@@ -161,10 +161,11 @@ class Options(object):
     self.output_stream = sys.stdout
     self.profile_dest = None
     self.psyco = False
+    self.search_paths = []
 
   def ReadOptions(self, args):
     """Reads options from the start of args and returns the remainder."""
-    (opts, args) = getopt.getopt(args, 'g:qdvxc:i:p:h:', ('psyco',))
+    (opts, args) = getopt.getopt(args, 'g:qdvxc:i:p:h:I:', ('psyco',))
     for (key, val) in opts:
       if key == '-d': self.disconnected = True
       elif key == '-c': self.client = val
@@ -180,12 +181,16 @@ class Options(object):
         util.extra_verbose = True
       elif key == '-p': self.profile_dest = val
       elif key == '--psyco': self.psyco = True
+      elif key == '-I': self.search_paths.append(val)
 
     if not self.input:
       if 'GRIT_INPUT' in os.environ:
         self.input = os.environ['GRIT_INPUT']
       else:
         self.input = 'resource.grd'
+
+    if self.search_paths:
+      util.PathSearcher.Configure(self.search_paths)
 
     return args
 

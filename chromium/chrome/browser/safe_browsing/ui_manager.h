@@ -16,9 +16,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "chrome/browser/permissions/permission_uma_util.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "components/safe_browsing_db/util.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_type.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -27,6 +29,7 @@ class Thread;
 
 namespace content {
 class NavigationEntry;
+class WebContents;
 }  // namespace content
 
 namespace net {
@@ -71,6 +74,11 @@ class SafeBrowsingUIManager
     //   navigations), though a pending navigation is okay.
     content::NavigationEntry* GetNavigationEntryForResource() const;
 
+    // Helper to build a getter for WebContents* from render frame id.
+    static base::Callback<content::WebContents*(void)> GetWebContentsGetter(
+        int render_process_host_id,
+        int render_frame_id);
+
     GURL url;
     GURL original_url;
     std::vector<GURL> redirect_urls;
@@ -80,8 +88,7 @@ class SafeBrowsingUIManager
     ThreatMetadata threat_metadata;
     UrlCheckCallback callback;  // This is called back on |callback_thread|.
     scoped_refptr<base::SingleThreadTaskRunner> callback_thread;
-    int render_process_host_id;
-    int render_frame_id;
+    base::Callback<content::WebContents*(void)> web_contents_getter;
     safe_browsing::ThreatSource threat_source;
   };
 
@@ -118,9 +125,20 @@ class SafeBrowsingUIManager
   // chain). Otherwise, |original_url| = |url|.
   virtual void DisplayBlockingPage(const UnsafeResource& resource);
 
-  // Returns true if we already displayed an interstitial for that top-level
-  // site in a given WebContents. Called on the UI thread.
+  // A convenience wrapper method for IsUrlWhitelistedOrPendingForWebContents.
   bool IsWhitelisted(const UnsafeResource& resource);
+
+  // Checks if we already displayed an interstitial for that top-level
+  // site in a given WebContents. If |whitelist_only|, it returns true only if
+  // the user chose to ignore the interstitial; otherwise it returns true as
+  // long as the user has seen an interstitial (regardless of response).
+  // Called on the UI thread.
+  bool IsUrlWhitelistedOrPendingForWebContents(
+      const GURL& url,
+      bool is_subresource,
+      content::NavigationEntry* entry,
+      content::WebContents* web_contents,
+      bool whitelist_only);
 
   // The blocking page on the UI thread has completed.
   void OnBlockingPageDone(const std::vector<UnsafeResource>& resources,
@@ -148,6 +166,10 @@ class SafeBrowsingUIManager
   void ReportInvalidCertificateChain(const std::string& serialized_report,
                                      const base::Closure& callback);
 
+  // Report permission action to SafeBrowsing servers. Can only be called on UI
+  // thread.
+  void ReportPermissionAction(const PermissionReportInfo& report_info);
+
   // Add and remove observers.  These methods must be invoked on the UI thread.
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* remove);
@@ -168,8 +190,12 @@ class SafeBrowsingUIManager
   void ReportInvalidCertificateChainOnIOThread(
       const std::string& serialized_report);
 
-  // Updates the whitelist state.  Called on the UI thread.
-  void AddToWhitelist(const UnsafeResource& resource);
+  // Report permission action to SafeBrowsing servers.
+  void ReportPermissionActionOnIOThread(
+      const PermissionReportInfo& report_info);
+
+  // Updates the whitelist URL set.  Called on the UI thread.
+  void AddToWhitelistUrlSet(const UnsafeResource& resource, bool is_pending);
 
   // Safebrowsing service.
   scoped_refptr<SafeBrowsingService> sb_service_;

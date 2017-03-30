@@ -90,10 +90,12 @@ public:
 
     // Instrumentation from web/ layer.
     void didCommitLoadForLocalFrame(LocalFrame*);
+    void didStartProvisionalLoad(LocalFrame*);
     bool screencastEnabled();
     void willAddPageOverlay(const GraphicsLayer*);
     void didRemovePageOverlay(const GraphicsLayer*);
     void layerTreeViewChanged(WebLayerTreeView*);
+    void rootLayerCleared();
 
     // WebDevToolsAgent implementation.
     void attach(const WebString& hostId, int sessionId) override;
@@ -101,7 +103,7 @@ public:
     void detach() override;
     void continueProgram() override;
     void dispatchOnInspectorBackend(int sessionId, int callId, const WebString& method, const WebString& message) override;
-    void inspectElementAt(const WebPoint&) override;
+    void inspectElementAt(int sessionId, const WebPoint&) override;
     void failedToRequestDevTools() override;
     WebString evaluateInWebInspectorOverlay(const WebString& script) override;
 
@@ -111,21 +113,19 @@ private:
     // InspectorTracingAgent::Client implementation.
     void enableTracing(const WTF::String& categoryFilter) override;
     void disableTracing() override;
+    void showReloadingBlanket() override;
+    void hideReloadingBlanket() override;
 
     // InspectorEmulationAgent::Client implementation.
     void setCPUThrottlingRate(double) override;
 
     // InspectorPageAgent::Client implementation.
     void pageLayoutInvalidated(bool resized) override;
-    void setPausedInDebuggerMessage(const String&) override;
+    void configureOverlay(bool suspended, const String& message) override;
     void waitForCreateWindow(LocalFrame*) override;
 
     // InspectorSession::Client implementation.
     void sendProtocolMessage(int sessionId, int callId, const String& response, const String& state) override;
-    void resumeStartup() override;
-    void profilingStarted() override;
-    void profilingStopped() override;
-    void consoleCleared() override;
 
     // WebThread::TaskObserver implementation.
     void willProcessTask() override;

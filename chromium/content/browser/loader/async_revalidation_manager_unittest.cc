@@ -230,7 +230,6 @@ class BlackholeFilter : public ResourceMessageFilter {
   }
 
   void GetContexts(ResourceType resource_type,
-                   int origin_pid,
                    ResourceContext** resource_context,
                    net::URLRequestContext** request_context) {
     *resource_context = resource_context_;
@@ -404,7 +403,7 @@ class URLRequestRecordingNetworkDelegate : public net::TestNetworkDelegate {
   }
 
   void OnURLRequestDestroyed(net::URLRequest* request) override {
-    for (auto& recorded_request : requests_) {
+    for (auto*& recorded_request : requests_) {
       if (recorded_request == request)
         recorded_request = nullptr;
     }

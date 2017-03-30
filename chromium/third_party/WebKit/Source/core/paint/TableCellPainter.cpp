@@ -58,7 +58,7 @@ static EBorderStyle collapsedBorderStyle(EBorderStyle style)
 
 void TableCellPainter::paintCollapsedBorders(const PaintInfo& paintInfo, const LayoutPoint& paintOffset, const CollapsedBorderValue& currentBorderValue)
 {
-    if (m_layoutTableCell.style()->visibility() != VISIBLE)
+    if (m_layoutTableCell.style()->visibility() != EVisibility::Visible)
         return;
 
     LayoutPoint adjustedPaintOffset = paintOffset + m_layoutTableCell.location();
@@ -130,7 +130,7 @@ void TableCellPainter::paintContainerBackgroundBehindCell(const PaintInfo& paint
 {
     DCHECK(backgroundObject != m_layoutTableCell);
 
-    if (m_layoutTableCell.style()->visibility() != VISIBLE)
+    if (m_layoutTableCell.style()->visibility() != EVisibility::Visible)
         return;
 
     LayoutPoint adjustedPaintOffset = paintOffset + m_layoutTableCell.location();
@@ -151,6 +151,9 @@ void TableCellPainter::paintContainerBackgroundBehindCell(const PaintInfo& paint
 
 void TableCellPainter::paintBackground(const PaintInfo& paintInfo, const LayoutRect& paintRect, const LayoutObject& backgroundObject)
 {
+    if (m_layoutTableCell.backgroundStolenForBeingBody())
+        return;
+
     Color c = backgroundObject.resolveColor(CSSPropertyBackgroundColor);
     const FillLayer& bgLayer = backgroundObject.styleRef().backgroundLayers();
     if (bgLayer.hasImage() || c.alpha()) {
@@ -174,7 +177,7 @@ void TableCellPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo, 
         return;
 
     bool needsToPaintBorder = m_layoutTableCell.styleRef().hasBorderDecoration() && !table->collapseBorders();
-    if (!m_layoutTableCell.hasBackground() && !m_layoutTableCell.styleRef().boxShadow() && !needsToPaintBorder)
+    if (!m_layoutTableCell.styleRef().hasBackground() && !m_layoutTableCell.styleRef().boxShadow() && !needsToPaintBorder)
         return;
 
     if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableCell, DisplayItem::BoxDecorationBackground))
@@ -199,7 +202,7 @@ void TableCellPainter::paintBoxDecorationBackground(const PaintInfo& paintInfo, 
 
 void TableCellPainter::paintMask(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
-    if (m_layoutTableCell.style()->visibility() != VISIBLE || paintInfo.phase != PaintPhaseMask)
+    if (m_layoutTableCell.style()->visibility() != EVisibility::Visible || paintInfo.phase != PaintPhaseMask)
         return;
 
     LayoutTable* tableElt = m_layoutTableCell.table();

@@ -137,7 +137,7 @@
 #   persistent IDs for all fields (but not for groups!) are needed. These are
 #   specified by the 'id' keys of each policy. NEVER CHANGE EXISTING IDs,
 #   because doing so would break the deployed wire format!
-#   For your editing convenience: highest ID currently used: 337
+#   For your editing convenience: highest ID currently used: 343
 #
 # Placeholders:
 #   The following placeholder strings are automatically substituted:
@@ -386,17 +386,20 @@
       'name': 'DnsPrefetchingEnabled',
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome.*:8-', 'chrome_os:11-', 'android:30-'],
+      'supported_on': ['chrome.*:8-53', 'chrome_os:11-53', 'android:30-53'],
       'features': {
         'can_be_recommended': True,
         'dynamic_refresh': True,
         'per_profile': True,
       },
+      'deprecated': True,
       'example_value': True,
       'id': 7,
       'caption': '''Enable network prediction''',
       'tags': [],
-      'desc': '''Enables network prediction in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
+      'desc': '''This policy is deprecated in M48 in favor of <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME">NetworkPredictionOptions</ph>, and removed in M54.
+
+      Enables network prediction in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> and prevents users from changing this setting.
 
       This controls not only DNS prefetching but also TCP and SSL preconnection and prerendering of web pages. The policy name refers to DNS prefetching for historical reasons.
 
@@ -470,16 +473,19 @@
       'name': 'DisableSpdy',
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'supported_on': ['chrome.*:8-', 'chrome_os:11-', 'android:30-'],
+      'supported_on': ['chrome.*:8-53', 'chrome_os:11-53', 'android:30-53'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': False,
       },
+      'deprecated': True,
       'example_value': True,
       'id': 8,
       'caption': '''Disable SPDY protocol''',
       'tags': [],
-      'desc': '''Disables use of the SPDY protocol in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
+      'desc': '''This policy is deprecated in M53 and removed in M54, because SPDY/3.1 support is removed.
+
+      Disables use of the SPDY protocol in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
       If this policy is enabled the SPDY protocol will not be available in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.
 
@@ -3667,9 +3673,11 @@
       'tags': [],
       'desc': '''Specifies the period in milliseconds at which the device management service is queried for user policy information.
 
-      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1800000 (30 minutes) to 86400000 (1 day). Any values not in this range will be clamped to the respective boundary.
+      Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1800000 (30 minutes) to 86400000 (1 day). Any values not in this range will be clamped to the respective boundary. If the platform supports policy notifications, the refresh delay will be set to 24 hours because it is expected that policy notifications will force a refresh automatically whenever policy changes.
 
-      Leaving this policy not set will make <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> use the default value of 3 hours.''',
+      Leaving this policy not set will make <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> use the default value of 3 hours.
+
+      Note that if the platform supports policy notifications, the refresh delay will be set to 24 hours (ignoring all defaults and the value of this policy) because it is expected that policy notifications will force a refresh automatically whenever policy changes, making more frequent refreshes unnecessary.''',
     },
     {
       'name': 'MaxInvalidationFetchDelay',
@@ -4129,7 +4137,9 @@
 
       Setting this policy overrides the default value of 3 hours. Valid values for this policy are in the range from 1800000 (30 minutes) to 86400000 (1 day). Any values not in this range will be clamped to the respective boundary.
 
-      Leaving this policy not set will make <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> use the default value of 3 hours.''',
+      Leaving this policy not set will make <ph name="PRODUCT_OS_NAME">$2<ex>Google Chrome OS</ex></ph> use the default value of 3 hours.
+
+      Note that if the platform supports policy notifications, the refresh delay will be set to 24 hours (ignoring all defaults and the value of this policy) because it is expected that policy notifications will force a refresh automatically whenever policy changes, making more frequent refreshes unnecessary.''',
     },
     {
       'name': 'ImportBookmarks',
@@ -4608,6 +4618,25 @@
       If this policy is not set, or it is set to false, then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will use the existing online revocation checking settings.''',
     },
     {
+      'name': 'EnableSha1ForLocalAnchors',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:54-', 'chrome_os:54-', 'android:54-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': False,
+      'id': 340,
+      'caption': '''Whether SHA-1 signed certificates issued by local trust anchors are allowed''',
+      'tags': ['system-security'],
+      'desc': '''When this setting is enabled, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> allows SHA-1 signed certificates as long as they successfully validate and chain to a locally-installed CA certificates.
+
+      Note that this policy depends on the operating system certificate verification stack allowing SHA-1 signatures. If an OS update changes the OS handling of SHA-1 certificates, this policy may no longer have effect.  Further, this policy is intended as a temporary workaround to give enterprises more time to move away from SHA-1.  This policy will be removed on or around January 1st 2019.
+
+      If this policy is not set, or it is set to false, then <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> follows the publicly announced SHA-1 deprecation schedule.''',
+    },
+    {
       'name': 'ForceEphemeralProfiles',
       'type': 'main',
       'schema': { 'type': 'boolean' },
@@ -4862,13 +4891,13 @@
       },
       'example_value': False,
       'id': 293,
-      'caption': '''Send monitoring heartbeats to the management server''',
+      'caption': '''Send network packets to the management server to monitor online status''',
       'tags': ['admin-sharing'],
-      'desc': '''Send monitoring heartbeats to the management server, to allow
+      'desc': '''Send network packets to the management server to monitor online status, to allow
       the server to detect if the device is offline.
 
-      If this policy is set to true, monitoring heartbeats will be sent. If set
-      to false or unset, then no heartbeats will be sent.''',
+      If this policy is set to true, monitoring network packets (so-called <ph name="HEARTBEATS_TERM">heartbeats</ph>) will be sent.
+      If set to false or unset, no packets will be sent.''',
     },
     {
       'name': 'HeartbeatFrequency',
@@ -4881,9 +4910,9 @@
       },
       'example_value': 180000,
       'id': 294,
-      'caption': '''Frequency of monitoring heartbeats''',
+      'caption': '''Frequency of monitoring network packets''',
       'tags': [],
-      'desc': '''How frequently monitoring heartbeats are sent, in milliseconds.
+      'desc': '''How frequently monitoring network packets are sent, in milliseconds.
 
       If this policy is unset, the default frequency is 3 minutes. The minimum
       frequency is 30 seconds and the maximum frequency is 24 hours - values
@@ -5595,6 +5624,21 @@
       This policy affects all types of storage media. For example: USB flash drives, external hard drives, SD and other memory cards, optical storage etc. Internal storage is not affected, therefore files saved in the Download folder can still be accessed. Google Drive is also not affected by this policy.
 
       If this setting is disabled or not configured then users can use all supported types of external storage on their device.''',
+    },
+    {
+      'name': 'ExternalStorageReadOnly',
+      'id': 343,
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'tags': [],
+      'supported_on': ['chrome_os:54-'],
+      'caption': '''Treat external storage devices as read-only.''',
+      'desc': '''When this policy is set to true, users cannot write anything to external storage devices.''',
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': True,
+      },
+      'example_value': True
     },
     {
       'name': 'AudioOutputAllowed',
@@ -8567,6 +8611,52 @@
       allowed.'''
     },
     {
+      'name': 'LoginApps',
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome_os:54-'],
+      'device_only': True,
+      'features': {
+        'dynamic_refresh': True,
+      },
+      'example_value': ['gbchcmhmhahfdphkhkmpfmihenigjmpp;https://clients2.google.com/service/update2/crx'],
+      'id': 336,
+      'caption': '''Configure the list of installed apps on the login screen''',
+      'tags': ['full-admin-access'],
+      'desc': '''
+      Specifies a list of apps that are installed silently on the login screen,
+      without user interaction, and which cannot be uninstalled.
+      All permissions requested by the apps are granted
+      implicitly, without user interaction, including any additional
+      permissions requested by future versions of the app.
+
+      If an app that previously had been force-installed is removed from
+      this list, it is automatically uninstalled by <ph name="PRODUCT_NAME">$1<ex>Google
+      Chrome</ex></ph>.
+
+      Each list item of the policy is a string that contains an extension ID
+      and an "update" URL separated by a semicolon (<ph
+      name="SEMICOLON">;</ph>). The extension ID is the 32-letter string
+      found e.g. on <ph
+      name="CHROME_EXTENSIONS_LINK">chrome://extensions</ph> when in
+      developer mode. The "update" URL should point to an Update Manifest
+      XML document as described at <ph
+      name="LINK_TO_EXTENSION_DOC1">https://developer.chrome.com/extensions/autoupdate</ph>. Note
+      that the "update" URL set in this policy is only used for the initial
+      installation; subsequent updates of the extension employ the update
+      URL indicated in the extension's manifest.
+
+      For example, <ph
+      name="EXTENSION_POLICY_EXAMPLE">gbchcmhmhahfdphkhkmpfmihenigjmpp;https://clients2.google.com/service/update2/crx</ph>
+      installs the <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME">Chrome
+      Remote Desktop</ph> app from the standard Chrome Web Store "update"
+      URL. For more information about hosting extensions, see: <ph
+      name="LINK_TO_EXTENSION_DOC2">https://developer.chrome.com/extensions/hosting</ph>.''',
+    },
+    {
       'name': 'AllowScreenLock',
       'caption': '''Permit locking the screen''',
       'desc': '''Permit locking the screen.
@@ -8721,6 +8811,75 @@
       If this setting is configured then users are not able change it themselves.
 
       If this setting is not configured then users are able to turn Android Backup Service on and off in the Android Settings app.''',
+    },
+    {
+      'name': 'NTPContentSuggestionsEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['android:54-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': True,
+      'id': 338,
+      'default_for_enterprise_users': False,
+      'caption': '''Show content suggestions on the New Tab page''',
+      'tags': [],
+      'desc':
+      '''If this is set to true or not set, the New Tab page may show content suggestions based on the user's browsing history, interests, or location.
+
+      If this is set to false, automatically-generated content suggestions are not shown on the New Tab page.''',
+    },
+    {
+      'name': 'WebRtcUdpPortRange',
+      'type': 'string',
+      'schema': { 'type': 'string' },
+      'supported_on': ['chrome.*:54-', 'chrome_os:54-', 'android:54-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': True,
+      },
+      'example_value': '10000-11999',
+      'id': 339,
+      'caption': '''Restrict the range of local UDP ports used by WebRTC''',
+      'tags': [],
+      'desc': '''If the policy is set, the UDP port range used by WebRTC is restricted to the specified port interval (endpoints included).
+
+      If the policy is not set, or if it is set to the empty string or an invalid port range, WebRTC is allowed to use any available local UDP port.''',
+    },
+    {
+      'name': 'WebRestrictionsAuthority',
+      'id': 341,
+      'type': 'string',
+      'schema' : { 'type': 'string' },
+      'tags': ['filtering'],
+      'supported_on': ['webview_android:54-'],
+      'caption': '''Set an external source of URL restrictions''',
+      'desc' : '''When this policy is set to a non-empty string the WebView will read URL restrictions from the content provider with the given authority name.''',
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'example_value': 'com.android.chrome.SupervisedUserProvider'
+    },
+    {
+      'name': 'ComponentUpdatesEnabled',
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.*:54-', 'chrome_os:54-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'example_value': True,
+      'id': 342,
+      'caption': '''Enables component updates in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>.''',
+      'tags': [],
+      'desc': '''Enables component updates for all components in <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> when not set or set to True.
+
+      If set to False, updates to components are disabled. However, some components are exempt from this policy: updates to any component that does not contain executable code, or does not significantly alter the behavior of the browser, or is critical for its security will not be disabled.
+      Examples of such components include the certificate revocation lists and safe browsing data. ''',
     },
   ],
   'messages': {

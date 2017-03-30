@@ -56,8 +56,8 @@ public:
     LayoutText* createTextLayoutObject(const ComputedStyle&);
     void updateTextLayoutObject(unsigned offsetOfReplacedData, unsigned lengthOfReplacedData);
 
-    void attach(const AttachContext& = AttachContext()) final;
-    void reattachIfNeeded(const AttachContext& = AttachContext());
+    void attachLayoutTree(const AttachContext& = AttachContext()) final;
+    void reattachLayoutTreeIfNeeded(const AttachContext& = AttachContext());
 
     bool canContainRangeEndPoint() const final { return true; }
     NodeType getNodeType() const override;

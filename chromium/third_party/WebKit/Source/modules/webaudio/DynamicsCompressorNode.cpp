@@ -81,7 +81,7 @@ DynamicsCompressorHandler::~DynamicsCompressorHandler()
 void DynamicsCompressorHandler::process(size_t framesToProcess)
 {
     AudioBus* outputBus = output(0).bus();
-    ASSERT(outputBus);
+    DCHECK(outputBus);
 
     float threshold = m_threshold->value();
     float knee = m_knee->value();
@@ -126,7 +126,7 @@ double DynamicsCompressorHandler::latencyTime() const
 
 // ----------------------------------------------------------------
 
-DynamicsCompressorNode::DynamicsCompressorNode(AbstractAudioContext& context)
+DynamicsCompressorNode::DynamicsCompressorNode(BaseAudioContext& context)
     : AudioNode(context)
     , m_threshold(AudioParam::create(context, ParamTypeDynamicsCompressorThreshold, -24, -100, 0))
     , m_knee(AudioParam::create(context, ParamTypeDynamicsCompressorKnee, 30, 0, 40))
@@ -144,7 +144,7 @@ DynamicsCompressorNode::DynamicsCompressorNode(AbstractAudioContext& context)
         m_release->handler()));
 }
 
-DynamicsCompressorNode* DynamicsCompressorNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+DynamicsCompressorNode* DynamicsCompressorNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 

@@ -36,7 +36,7 @@ namespace {
 
 // In case the fields in the pickle ever change, version them so we can try to
 // read old pickles. (Note: do not eat old pickles past the expiration date.)
-const int kPickleVersion = 8;
+const int kPickleVersion = 9;
 
 // We could localize this string, but then changing your locale would cause
 // you to lose access to all your stored passwords. Maybe best not to do that.
@@ -164,16 +164,24 @@ bool DeserializeValueSize(const std::string& signon_realm,
     int generation_upload_status = 0;
     // Note that these will be read back in the order listed due to
     // short-circuit evaluation. This is important.
-    if (!iter.ReadInt(&scheme) ||
-        !ReadGURL(&iter, warn_only, &form->origin) ||
+    if (!iter.ReadInt(&scheme) || !ReadGURL(&iter, warn_only, &form->origin) ||
         !ReadGURL(&iter, warn_only, &form->action) ||
         !iter.ReadString16(&form->username_element) ||
         !iter.ReadString16(&form->username_value) ||
         !iter.ReadString16(&form->password_element) ||
         !iter.ReadString16(&form->password_value) ||
-        !iter.ReadString16(&form->submit_element) ||
-        !iter.ReadBool(&form->ssl_valid) ||
-        !iter.ReadBool(&form->preferred) ||
+        !iter.ReadString16(&form->submit_element)) {
+      LogDeserializationWarning(version, signon_realm, warn_only);
+      return false;
+    }
+    if (version <= 8) {
+      bool dummy_unused_flag = false;
+      if (!iter.ReadBool(&dummy_unused_flag)) {
+        LogDeserializationWarning(version, signon_realm, warn_only);
+        return false;
+      }
+    }
+    if (!iter.ReadBool(&form->preferred) ||
         !iter.ReadBool(&form->blacklisted_by_user) ||
         !iter.ReadInt64(&date_created)) {
       LogDeserializationWarning(version, signon_realm, warn_only);
@@ -254,7 +262,6 @@ void SerializeValue(const std::vector<autofill::PasswordForm*>& forms,
     pickle->WriteString16(form->password_element);
     pickle->WriteString16(form->password_value);
     pickle->WriteString16(form->submit_element);
-    pickle->WriteBool(form->ssl_valid);
     pickle->WriteBool(form->preferred);
     pickle->WriteBool(form->blacklisted_by_user);
     pickle->WriteInt64(form->date_created.ToInternalValue());
@@ -471,7 +478,7 @@ bool NativeBackendKWallet::RemoveLogin(
 
   ScopedVector<autofill::PasswordForm> kept_forms;
   kept_forms.reserve(all_forms.size());
-  for (auto& saved_form : all_forms) {
+  for (auto*& saved_form : all_forms) {
     if (!ArePasswordFormUniqueKeyEqual(form, *saved_form)) {
       kept_forms.push_back(saved_form);
       saved_form = nullptr;
@@ -502,14 +509,15 @@ bool NativeBackendKWallet::RemoveLoginsSyncedBetween(
   return RemoveLoginsBetween(delete_begin, delete_end, SYNC_TIMESTAMP, changes);
 }
 
-bool NativeBackendKWallet::DisableAutoSignInForAllLogins(
+bool NativeBackendKWallet::DisableAutoSignInForOrigins(
+    const base::Callback<bool(const GURL&)>& origin_filter,
     password_manager::PasswordStoreChangeList* changes) {
   ScopedVector<autofill::PasswordForm> all_forms;
   if (!GetAllLogins(&all_forms))
     return false;
 
-  for (auto& form : all_forms) {
-    if (!form->skip_zero_click) {
+  for (auto* form : all_forms) {
+    if (origin_filter.Run(form->origin) && !form->skip_zero_click) {
       form->skip_zero_click = true;
       if (!UpdateLogin(*form, changes))
         return false;
@@ -519,7 +527,7 @@ bool NativeBackendKWallet::DisableAutoSignInForAllLogins(
 }
 
 bool NativeBackendKWallet::GetLogins(
-    const PasswordForm& form,
+    const password_manager::PasswordStore::FormDigest& form,
     ScopedVector<autofill::PasswordForm>* forms) {
   int wallet_handle = WalletHandle();
   if (wallet_handle == kInvalidKWalletHandle)
@@ -622,7 +630,7 @@ bool NativeBackendKWallet::GetLoginsList(
   }
   // We have to read all the entries, and then filter them here.
   forms->reserve(all_forms.size());
-  for (auto& saved_form : all_forms) {
+  for (auto*& saved_form : all_forms) {
     if (saved_form->blacklisted_by_user ==
         (options == BlacklistOptions::BLACKLISTED)) {
       forms->push_back(saved_form);
@@ -734,7 +742,7 @@ bool NativeBackendKWallet::RemoveLoginsBetween(
         date_to_compare == CREATION_TIMESTAMP
             ? &autofill::PasswordForm::date_created
             : &autofill::PasswordForm::date_synced;
-    for (auto& saved_form : all_forms) {
+    for (auto*& saved_form : all_forms) {
       if (delete_begin <= saved_form->*date_member &&
           (delete_end.is_null() || saved_form->*date_member < delete_end)) {
         changes->push_back(password_manager::PasswordStoreChange(

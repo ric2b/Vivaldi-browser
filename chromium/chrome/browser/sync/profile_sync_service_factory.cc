@@ -37,9 +37,9 @@
 #include "components/network_time/network_time_tracker.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
 #include "components/signin/core/browser/signin_manager.h"
-#include "components/sync_driver/signin_manager_wrapper.h"
-#include "components/sync_driver/startup_controller.h"
-#include "components/sync_driver/sync_util.h"
+#include "components/sync/driver/signin_manager_wrapper.h"
+#include "components/sync/driver/startup_controller.h"
+#include "components/sync/driver/sync_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "url/gurl.h"
 
@@ -179,11 +179,10 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
 
-  init_params.db_thread = content::BrowserThread::GetMessageLoopProxyForThread(
+  init_params.db_thread = content::BrowserThread::GetTaskRunnerForThread(
       content::BrowserThread::DB);
-  init_params.file_thread =
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::FILE);
+  init_params.file_thread = content::BrowserThread::GetTaskRunnerForThread(
+      content::BrowserThread::FILE);
   init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
 
   auto pss = base::WrapUnique(new ProfileSyncService(std::move(init_params)));

@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "components/mus/public/cpp/window.h"
+#include "services/ui/public/cpp/window.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/events/event.h"
 #include "ui/platform_window/mojo/ime_type_converters.h"
@@ -18,7 +18,7 @@ namespace views {
 // InputMethodMUS, public:
 
 InputMethodMUS::InputMethodMUS(ui::internal::InputMethodDelegate* delegate,
-                               mus::Window* window)
+                               ui::Window* window)
     : window_(window) {
   SetDelegate(delegate);
 }

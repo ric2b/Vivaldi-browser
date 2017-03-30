@@ -37,7 +37,7 @@ inline const LayoutTableCell* TableSectionPainter::primaryCellToPaint(unsigned r
 
 void TableSectionPainter::paintRepeatingHeaderGroup(const PaintInfo& paintInfo, const LayoutPoint& paintOffset, const CollapsedBorderValue& currentBorderValue, ItemToPaint itemToPaint)
 {
-    if (!m_layoutTableSection.hasRepeatingHeaderGroup())
+    if (!m_layoutTableSection.isRepeatingHeaderGroup())
         return;
 
     LayoutTable* table = m_layoutTableSection.table();
@@ -50,18 +50,18 @@ void TableSectionPainter::paintRepeatingHeaderGroup(const PaintInfo& paintInfo, 
     if (LayoutTableRow* row = m_layoutTableSection.firstRow())
         headerGroupOffset += m_layoutTableSection.paginationStrutForRow(row, table->pageLogicalOffset());
     LayoutUnit offsetToNextPage = pageHeight - intMod(headerGroupOffset, pageHeight);
-    paginationOffset.move(0, offsetToNextPage);
+    paginationOffset.move(0, offsetToNextPage.toInt());
     // Now move paginationOffset to the top of the page the cull rect starts on.
     if (paintInfo.cullRect().m_rect.y() > paginationOffset.y())
-        paginationOffset.move(0, pageHeight * static_cast<int>((paintInfo.cullRect().m_rect.y() - paginationOffset.y()) / pageHeight));
+        paginationOffset.move(0, pageHeight.toInt() * ((paintInfo.cullRect().m_rect.y() - paginationOffset.y()) / pageHeight).toInt());
     LayoutUnit bottomBound = std::min(LayoutUnit(paintInfo.cullRect().m_rect.maxY()), paintOffset.y() + table->logicalHeight());
     while (paginationOffset.y() < bottomBound) {
-        LayoutPoint nestedOffset = paginationOffset + LayoutPoint(0, m_layoutTableSection.offsetForRepeatingHeader());
+        LayoutPoint nestedOffset = paginationOffset + LayoutPoint(0, m_layoutTableSection.offsetForRepeatingHeader().toInt());
         if (itemToPaint == PaintCollapsedBorders)
             paintCollapsedSectionBorders(paintInfo, nestedOffset, currentBorderValue);
         else
             paintSection(paintInfo, nestedOffset);
-        paginationOffset.move(0, pageHeight);
+        paginationOffset.move(0, pageHeight.toInt());
     }
 }
 
@@ -195,7 +195,7 @@ void TableSectionPainter::paintObject(const PaintInfo& paintInfo, const LayoutPo
 
             TableRowPainter rowPainter(*row);
             rowPainter.paintBoxShadow(paintInfoForDescendants, paintOffset, Normal);
-            if (row->hasBackground()) {
+            if (row->styleRef().hasBackground()) {
                 for (unsigned c = dirtiedColumns.start(); c < dirtiedColumns.end(); c++) {
                     if (const LayoutTableCell* cell = primaryCellToPaint(r, c, dirtiedRows, dirtiedColumns))
                         rowPainter.paintBackgroundBehindCell(*cell, paintInfoForDescendants, paintOffset);
@@ -273,13 +273,13 @@ void TableSectionPainter::paintBackgroundsBehindCell(const LayoutTableCell& cell
     // the stack, since we have already opened a transparency layer (potentially) for the table row group.
     // Note that we deliberately ignore whether or not the cell has a layer, since these backgrounds paint "behind" the
     // cell.
-    if (columnGroup && columnGroup->hasBackground())
+    if (columnGroup && columnGroup->styleRef().hasBackground())
         tableCellPainter.paintContainerBackgroundBehindCell(paintInfoForCells, cellPoint, *columnGroup, DisplayItem::TableCellBackgroundFromColumnGroup);
-    if (column && column->hasBackground())
+    if (column && column->styleRef().hasBackground())
         tableCellPainter.paintContainerBackgroundBehindCell(paintInfoForCells, cellPoint, *column, DisplayItem::TableCellBackgroundFromColumn);
 
     // Paint the row group next.
-    if (m_layoutTableSection.hasBackground())
+    if (m_layoutTableSection.styleRef().hasBackground())
         tableCellPainter.paintContainerBackgroundBehindCell(paintInfoForCells, cellPoint, m_layoutTableSection, DisplayItem::TableCellBackgroundFromSection);
 }
 
@@ -301,7 +301,7 @@ void TableSectionPainter::paintBoxShadow(const PaintInfo& paintInfo, const Layou
     if (LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintInfo.context, m_layoutTableSection, type))
         return;
 
-    LayoutRect bounds = BoxPainter(m_layoutTableSection).boundsForDrawingRecorder(paintOffset);
+    LayoutRect bounds = BoxPainter(m_layoutTableSection).boundsForDrawingRecorder(paintInfo, paintOffset);
     LayoutObjectDrawingRecorder recorder(paintInfo.context, m_layoutTableSection, type, bounds);
     BoxPainter::paintBoxShadow(paintInfo, LayoutRect(paintOffset, m_layoutTableSection.size()), m_layoutTableSection.styleRef(), shadowStyle);
 }

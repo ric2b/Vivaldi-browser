@@ -7,11 +7,14 @@
 #include "content/public/browser/android/content_view_core.h"
 #include "jni/PopupTouchHandleDrawable_jni.h"
 
+using base::android::ScopedJavaLocalRef;
+
 namespace content {
 
 // static
 std::unique_ptr<PopupTouchHandleDrawable> PopupTouchHandleDrawable::Create(
-    ContentViewCore* content_view_core) {
+    ContentViewCore* content_view_core,
+    float dpi_scale) {
   DCHECK(content_view_core);
   base::android::ScopedJavaLocalRef<jobject> content_view_core_obj =
       content_view_core->GetJavaObject();
@@ -19,9 +22,9 @@ std::unique_ptr<PopupTouchHandleDrawable> PopupTouchHandleDrawable::Create(
     return nullptr;
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> drawable_obj(
-      Java_PopupTouchHandleDrawable_create(env, content_view_core_obj.obj()));
-  return std::unique_ptr<PopupTouchHandleDrawable>(new PopupTouchHandleDrawable(
-      env, drawable_obj.obj(), content_view_core->GetDpiScale()));
+      Java_PopupTouchHandleDrawable_create(env, content_view_core_obj));
+  return std::unique_ptr<PopupTouchHandleDrawable>(
+      new PopupTouchHandleDrawable(env, drawable_obj.obj(), dpi_scale));
 }
 
 PopupTouchHandleDrawable::PopupTouchHandleDrawable(JNIEnv* env,
@@ -37,7 +40,7 @@ PopupTouchHandleDrawable::~PopupTouchHandleDrawable() {
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null())
-    Java_PopupTouchHandleDrawable_destroy(env, obj.obj());
+    Java_PopupTouchHandleDrawable_destroy(env, obj);
 }
 
 void PopupTouchHandleDrawable::SetEnabled(bool enabled) {
@@ -46,9 +49,9 @@ void PopupTouchHandleDrawable::SetEnabled(bool enabled) {
   if (obj.is_null())
     return;
   if (enabled)
-    Java_PopupTouchHandleDrawable_show(env, obj.obj());
+    Java_PopupTouchHandleDrawable_show(env, obj);
   else
-    Java_PopupTouchHandleDrawable_hide(env, obj.obj());
+    Java_PopupTouchHandleDrawable_hide(env, obj);
 }
 
 void PopupTouchHandleDrawable::SetOrientation(
@@ -59,7 +62,7 @@ void PopupTouchHandleDrawable::SetOrientation(
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null()) {
     Java_PopupTouchHandleDrawable_setOrientation(
-        env, obj.obj(), static_cast<int>(orientation), mirror_vertical,
+        env, obj, static_cast<int>(orientation), mirror_vertical,
         mirror_horizontal);
   }
 }
@@ -69,7 +72,7 @@ void PopupTouchHandleDrawable::SetOrigin(const gfx::PointF& origin) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null()) {
     const gfx::PointF origin_pix = gfx::ScalePoint(origin, dpi_scale_);
-    Java_PopupTouchHandleDrawable_setOrigin(env, obj.obj(), origin_pix.x(),
+    Java_PopupTouchHandleDrawable_setOrigin(env, obj, origin_pix.x(),
                                             origin_pix.y());
   }
 }
@@ -79,7 +82,7 @@ void PopupTouchHandleDrawable::SetAlpha(float alpha) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   bool visible = alpha > 0;
   if (!obj.is_null())
-    Java_PopupTouchHandleDrawable_setVisible(env, obj.obj(), visible);
+    Java_PopupTouchHandleDrawable_setVisible(env, obj, visible);
 }
 
 gfx::RectF PopupTouchHandleDrawable::GetVisibleBounds() const {
@@ -88,20 +91,15 @@ gfx::RectF PopupTouchHandleDrawable::GetVisibleBounds() const {
   if (obj.is_null())
     return gfx::RectF();
   gfx::RectF unscaled_rect(
-      Java_PopupTouchHandleDrawable_getPositionX(env, obj.obj()),
-      Java_PopupTouchHandleDrawable_getPositionY(env, obj.obj()),
-      Java_PopupTouchHandleDrawable_getVisibleWidth(env, obj.obj()),
-      Java_PopupTouchHandleDrawable_getVisibleHeight(env, obj.obj()));
+      Java_PopupTouchHandleDrawable_getPositionX(env, obj),
+      Java_PopupTouchHandleDrawable_getPositionY(env, obj),
+      Java_PopupTouchHandleDrawable_getVisibleWidth(env, obj),
+      Java_PopupTouchHandleDrawable_getVisibleHeight(env, obj));
   return gfx::ScaleRect(unscaled_rect, 1.f / dpi_scale_);
 }
 
 float PopupTouchHandleDrawable::GetDrawableHorizontalPaddingRatio() const {
   return drawable_horizontal_padding_ratio_;
-}
-
-// static
-bool PopupTouchHandleDrawable::RegisterPopupTouchHandleDrawable(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace content

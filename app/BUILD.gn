@@ -1,0 +1,81 @@
+import("//vivaldi/gn/config/product.gni")
+import("//vivaldi/gn/deepcopy.gni")
+
+import("resources/vivaldi_grit.gni")
+
+source_set("app") {
+  sources = [
+    "vivaldi.rc",
+  ]
+
+  public_deps = [
+    ":resources",
+  ]
+  deps = []
+}
+
+if (is_win) {
+  copy("vivaldi_local_profile.bat") {
+    sources = [
+      "vivaldi_local_profile.bat",
+    ]
+    outputs = [
+      "$root_out_dir/vivaldi_local_profile.bat",
+    ]
+  }
+}
+
+group("resources") {
+  public_deps = [
+    ":vivaldi_native_resources",
+    ":vivaldi_native_strings",
+    ":vivaldi_other_resources",
+    "resources",
+  ]
+}
+
+single_grit_action("vivaldi_native_strings") {
+  grit_out_dir = "$root_gen_dir/vivaldi"
+  source = "native_resources/vivaldi_native_strings.grd"
+  grit_resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+}
+
+grit("vivaldi_native_resources") {
+  output_dir = "$root_gen_dir/vivaldi"
+  resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+  source = "native_resources/vivaldi_native_resources.grd"
+  outputs = exec_script(gritinfo_cmd,
+                        grit_defines + [
+                              "--outputs",
+                              ".",
+                              rebase_path(source, root_build_dir),
+                              "-f",
+                              rebase_path(resource_ids, root_build_dir),
+                            ],
+                        "list lines")
+}
+
+grit("vivaldi_unscaled_native_resources") {
+  output_dir = "$root_gen_dir/vivaldi"
+  resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+  source = "native_resources/vivaldi_native_unscaled.grd"
+  outputs = exec_script(gritinfo_cmd,
+                        grit_defines + [
+                              "--outputs",
+                              ".",
+                              rebase_path(source, root_build_dir),
+                              "-f",
+                              rebase_path(resource_ids, root_build_dir),
+                            ],
+                        "list lines")
+}
+
+deepcopy("vivaldi_other_resources") {
+  destination = "$root_gen_dir/vivaldi_resources/other_resources/"
+  basepath = "other_resources/$VIVALDI_RELEASE_KIND/"
+  inputs = [
+    "other_resources/$VIVALDI_RELEASE_KIND/win8/Logo.png",
+    "other_resources/$VIVALDI_RELEASE_KIND/win8/SecondaryTile.png",
+    "other_resources/$VIVALDI_RELEASE_KIND/win8/SmallLogo.png",
+  ]
+}

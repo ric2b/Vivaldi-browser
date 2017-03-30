@@ -1,0 +1,51 @@
+
+if (is_win) {
+  unittests = []
+  foreach(test_target, [
+      "//chrome/test:browser_tests",
+      "//chrome/test:interactive_ui_tests",
+      "//chrome/test:sync_integration_tests",
+      "//chrome/test:unit_tests",
+      "//ash:ash_unittests",
+      "//ui/aura:aura_unittests",
+      "//ui/compositor:compositor_unittests",
+      "//ui/views:views_unittests",
+      "//printing:printing_unittests",
+      "//courgette:courgette_unittests",
+      "//sandbox/win:sbox_integration_tests",
+      "//sandbox/win:sbox_unittests",
+      "//sandbox/win:sbox_validation_tests",
+      "//jingle:jingle_unittests",
+      "//media:media_unittests",
+      "//media/cast:cast_unittests",
+      "//net:net_unittests",
+      "//ppapi:ppapi_unittests",
+      "//sql:sql_unittests",
+      "//third_party/cacheinvalidation:cacheinvalidation_unittests",
+      "//ui/gfx:gfx_unittests",
+      "//url:url_unittests",
+      "//chrome/test/chromedriver:chromedriver_unittests",
+      "//components:components_unittests",
+      "//content/test:content_browsertests",
+      "//content/test:content_unittests",
+      "//crypto:crypto_unittests",
+      "//device:device_unittests",
+      "//google_apis:google_apis_unittests",
+      "//base:base_unittests", 
+      "//cc:cc_unittests",
+      ]) {
+    current_target_name = get_label_info(test_target, "name")
+    unittests += [":"+current_target_name]
+
+    group(current_target_name) {
+      testonly = true
+      output_name = current_target_name + ".exe"
+      deps = [test_target]
+    }
+  }
+  
+  group("testing") {
+    testonly = true
+    deps = unittests
+  }
+}

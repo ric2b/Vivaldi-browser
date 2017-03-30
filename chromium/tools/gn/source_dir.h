@@ -32,6 +32,8 @@ class SourceDir {
 
   SourceDir();
   explicit SourceDir(const base::StringPiece& p);
+  explicit SourceDir(const base::StringPiece& p,
+                     const base::StringPiece& p_act);
   // Swaps the given string in without copies. The given string will be empty
   // after this call.
   SourceDir(SwapIn, std::string* s);
@@ -64,10 +66,12 @@ class SourceDir {
 
   // Resolves this source file relative to some given source root. Returns
   // an empty file path on error.
-  base::FilePath Resolve(const base::FilePath& source_root) const;
+  base::FilePath Resolve(const base::FilePath& source_root,
+                         bool use_actual_path) const;
 
   bool is_null() const { return value_.empty(); }
   const std::string& value() const { return value_; }
+  const std::string& actual_path() const { return actual_path_; }
 
   // Returns true if this path starts with a "//" which indicates a path
   // from the source root.
@@ -112,6 +116,8 @@ class SourceDir {
  private:
   friend class SourceFile;
   std::string value_;
+
+  std::string actual_path_;
 
   // Copy & assign supported.
 };

@@ -35,6 +35,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::AttachCurrentThread;
@@ -63,10 +64,8 @@ void OnLocalFaviconAvailable(
   }
 
   // Call java side OnLocalFaviconAvailable method.
-  Java_FaviconImageCallback_onFaviconAvailable(env,
-                                               j_favicon_image_callback->obj(),
-                                               j_favicon_bitmap.obj(),
-                                               j_icon_url.obj());
+  Java_FaviconImageCallback_onFaviconAvailable(
+      env, j_favicon_image_callback->obj(), j_favicon_bitmap, j_icon_url);
 }
 
 size_t GetLargestSizeIndex(const std::vector<gfx::Size>& sizes) {
@@ -106,7 +105,7 @@ void OnFaviconDownloaded(
 
   JNIEnv* env = AttachCurrentThread();
   Java_IconAvailabilityCallback_onIconAvailabilityChecked(
-      env, j_availability_callback.obj(), success);
+      env, j_availability_callback, success);
 }
 
 void OnFaviconImageResultAvailable(
@@ -122,7 +121,7 @@ void OnFaviconImageResultAvailable(
   if (!result.image.IsEmpty()) {
     JNIEnv* env = AttachCurrentThread();
     Java_IconAvailabilityCallback_onIconAvailabilityChecked(
-        env, j_availability_callback.obj(), false);
+        env, j_availability_callback, false);
     return;
   }
 

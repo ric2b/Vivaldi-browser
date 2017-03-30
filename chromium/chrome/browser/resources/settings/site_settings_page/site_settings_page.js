@@ -14,14 +14,6 @@ Polymer({
 
   properties: {
     /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * The category selected by the user.
      */
     categorySelected: {
@@ -52,6 +44,8 @@ Polymer({
         '#notifications');
     this.setDefaultValue_(this.ContentSettingsTypes.PLUGINS, '#plugins');
     this.setDefaultValue_(this.ContentSettingsTypes.POPUPS, '#popups');
+    this.setDefaultValue_(this.ContentSettingsTypes.PROTOCOL_HANDLERS,
+        '#handlers');
     this.setDefaultValue_(this.ContentSettingsTypes.UNSANDBOXED_PLUGINS,
         '#unsandboxedPlugins');
   },
@@ -71,20 +65,9 @@ Polymer({
    */
   onTapCategory: function(event) {
     var category = event.currentTarget.getAttribute('category');
-    if (category == settings.ALL_SITES) {
-      this.currentRoute = {
-        page: this.currentRoute.page,
-        section: 'privacy',
-        subpage: ['site-settings', 'all-sites'],
-      };
-    } else {
-      this.categorySelected = this.computeCategoryTextId(category);
-      this.currentRoute = {
-        page: this.currentRoute.page,
-        section: 'privacy',
-        subpage: ['site-settings', 'site-settings-category-' +
-            this.categorySelected],
-      };
-    }
+    if (category == settings.ALL_SITES)
+      settings.navigateTo(settings.Route.SITE_SETTINGS_ALL);
+    else
+      settings.navigateTo(this.computeCategoryRoute(category));
   },
 });

@@ -61,13 +61,11 @@ public:
                 // If a transform exists, we can rely on a layer existing to apply it.
                 DCHECK(!objectProperties || !objectProperties->transform() || object.hasLayer());
                 if (objectProperties->svgLocalToBorderBoxTransform()) {
-                    // FIXME(pdr): Enable the following DCHECK once the pixel snapping logic has
-                    // been included in svgLocalToBorderBox.
-                    // DCHECK(objectProperties->svgLocalToBorderBoxTransform()->matrix() == transform.toTransformationMatrix());
+                    DCHECK(objectProperties->svgLocalToBorderBoxTransform()->matrix() == transform.toTransformationMatrix());
                     auto& paintController = context.getPaintController();
                     PaintChunkProperties properties(paintController.currentPaintChunkProperties());
                     properties.transform = objectProperties->svgLocalToBorderBoxTransform();
-                    m_transformPropertyScope.emplace(paintController, properties);
+                    m_transformPropertyScope.emplace(paintController, object, properties);
                 }
             } else {
                 DCHECK(object.isSVG());
@@ -79,7 +77,7 @@ public:
                     auto& paintController = context.getPaintController();
                     PaintChunkProperties properties(paintController.currentPaintChunkProperties());
                     properties.transform = objectProperties->transform();
-                    m_transformPropertyScope.emplace(paintController, properties);
+                    m_transformPropertyScope.emplace(paintController, object, properties);
                 }
             }
         }

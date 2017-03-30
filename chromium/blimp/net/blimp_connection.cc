@@ -4,18 +4,21 @@
 
 #include "blimp/net/blimp_connection.h"
 
+#include <utility>
+
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "blimp/common/create_blimp_message.h"
 #include "blimp/common/logging.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/blimp_message_pump.h"
 #include "blimp/net/common.h"
 #include "blimp/net/connection_error_observer.h"
-#include "blimp/net/packet_reader.h"
+#include "blimp/net/message_port.h"
 #include "blimp/net/packet_writer.h"
 #include "net/base/completion_callback.h"
 
@@ -71,7 +74,6 @@ void BlimpMessageSender::ProcessMessage(
     callback.Run(net::ERR_MSG_TOO_BIG);
     return;
   }
-
   if (!message->SerializeToArray(buffer_->data(), message->GetCachedSize())) {
     DLOG(ERROR) << "Failed to serialize message.";
     callback.Run(net::ERR_INVALID_ARGUMENT);
@@ -150,16 +152,11 @@ void BlimpConnection::EndConnectionFilter::ProcessMessage(
   message_handler_->ProcessMessage(std::move(message), callback);
 }
 
-BlimpConnection::BlimpConnection(std::unique_ptr<PacketReader> reader,
-                                 std::unique_ptr<PacketWriter> writer)
-    : reader_(std::move(reader)),
-      message_pump_(new BlimpMessagePump(reader_.get())),
-      writer_(std::move(writer)),
-      outgoing_msg_processor_(new BlimpMessageSender(writer_.get())),
+BlimpConnection::BlimpConnection(std::unique_ptr<MessagePort> message_port)
+    : message_port_(std::move(message_port)),
+      message_pump_(new BlimpMessagePump(message_port_->reader())),
+      outgoing_msg_processor_(new BlimpMessageSender(message_port_->writer())),
       end_connection_filter_(new EndConnectionFilter(this)) {
-  DCHECK(writer_);
-  DCHECK(reader_);
-
   message_pump_->set_error_observer(this);
   outgoing_msg_processor_->set_error_observer(this);
 }

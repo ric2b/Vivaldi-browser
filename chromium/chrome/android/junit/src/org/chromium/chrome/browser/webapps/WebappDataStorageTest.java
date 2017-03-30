@@ -11,6 +11,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import android.os.AsyncTask;
 
 import org.chromium.base.test.util.Feature;
 import org.chromium.blink_public.platform.WebDisplayMode;
@@ -20,8 +21,9 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowLooper;
 
 import java.util.concurrent.TimeUnit;
 
@@ -69,11 +71,11 @@ public class WebappDataStorageTest {
 
     @Before
     public void setUp() throws Exception {
-        mSharedPreferences = Robolectric.application
+        mSharedPreferences = RuntimeEnvironment.application
                 .getSharedPreferences("webapp_test", Context.MODE_PRIVATE);
 
         // Set the last_used as if the web app had been registered by WebappRegistry.
-        mSharedPreferences.edit().putLong("last_used", 0).commit();
+        mSharedPreferences.edit().putLong("last_used", 0).apply();
 
         mCallbackCalled = false;
     }
@@ -101,14 +103,12 @@ public class WebappDataStorageTest {
     @Test
     @Feature({"Webapp"})
     public void testLastUsedRetrieval() throws Exception {
-        mSharedPreferences.edit()
-                .putLong(WebappDataStorage.KEY_LAST_USED, 100L)
-                .commit();
+        mSharedPreferences.edit().putLong(WebappDataStorage.KEY_LAST_USED, 100L).apply();
 
-        WebappDataStorage.getLastUsedTime(Robolectric.application, "test",
+        WebappDataStorage.getLastUsedTime(RuntimeEnvironment.application, "test",
                 new FetchCallback<Long>(new Long(100L)));
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertTrue(mCallbackCalled);
     }
@@ -121,7 +121,7 @@ public class WebappDataStorageTest {
                 .putString(WebappDataStorage.KEY_SPLASH_ICON,
                         ShortcutHelper.encodeBitmapAsString(expected))
                 .commit();
-        WebappDataStorage.open(Robolectric.application, "test")
+        WebappDataStorage.open(RuntimeEnvironment.application, "test")
                 .getSplashScreenImage(new WebappDataStorage.FetchCallback<Bitmap>() {
                     @Override
                     public void onDataRetrieved(Bitmap actual) {
@@ -134,7 +134,7 @@ public class WebappDataStorageTest {
                     }
                 });
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertTrue(mCallbackCalled);
     }
@@ -143,7 +143,7 @@ public class WebappDataStorageTest {
     @Feature({"Webapp"})
     public void testSplashImageUpdate() throws Exception {
         final Bitmap expectedImage = createBitmap();
-        WebappDataStorage.open(Robolectric.application, "test")
+        WebappDataStorage.open(RuntimeEnvironment.application, "test")
                 .updateSplashScreenImage(expectedImage);
         BackgroundShadowAsyncTask.runBackgroundTasks();
 
@@ -155,14 +155,12 @@ public class WebappDataStorageTest {
     @Feature({"Webapp"})
     public void testScopeRetrieval() throws Exception {
         final String scope = "http://drive.google.com";
-        mSharedPreferences.edit()
-                .putString(WebappDataStorage.KEY_SCOPE, scope)
-                .commit();
+        mSharedPreferences.edit().putString(WebappDataStorage.KEY_SCOPE, scope).apply();
 
-        WebappDataStorage.getScope(Robolectric.application, "test",
+        WebappDataStorage.getScope(RuntimeEnvironment.application, "test",
                 new FetchCallback<String>(scope));
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertTrue(mCallbackCalled);
     }
@@ -171,14 +169,12 @@ public class WebappDataStorageTest {
     @Feature({"Webapp"})
     public void testUrlRetrieval() throws Exception {
         final String url = "https://www.google.com";
-        mSharedPreferences.edit()
-                .putString(WebappDataStorage.KEY_URL, url)
-                .commit();
+        mSharedPreferences.edit().putString(WebappDataStorage.KEY_URL, url).apply();
 
-        WebappDataStorage.getUrl(Robolectric.application, "test",
+        WebappDataStorage.getUrl(RuntimeEnvironment.application, "test",
                 new FetchCallback<String>(url));
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertTrue(mCallbackCalled);
     }
@@ -190,15 +186,15 @@ public class WebappDataStorageTest {
         WebappDataStorage.setClockForTests(clock);
 
         // Opening a data storage doesn't count as a launch.
-        WebappDataStorage storage = WebappDataStorage.open(Robolectric.application, "test");
+        WebappDataStorage storage = WebappDataStorage.open(RuntimeEnvironment.application, "test");
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
         assertTrue(!storage.wasLaunchedRecently());
 
         // When the last used time is updated, then it is a launch.
         storage.updateLastUsedTime();
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
         assertTrue(storage.wasLaunchedRecently());
 
         long lastUsedTime = mSharedPreferences.getLong(WebappDataStorage.KEY_LAST_USED,
@@ -210,29 +206,29 @@ public class WebappDataStorageTest {
         // Move the last used time one day in the past.
         mSharedPreferences.edit()
                 .putLong(WebappDataStorage.KEY_LAST_USED, lastUsedTime - TimeUnit.DAYS.toMillis(1L))
-                .commit();
+                .apply();
         assertTrue(storage.wasLaunchedRecently());
 
         // Move the last used time three days in the past.
         mSharedPreferences.edit()
                 .putLong(WebappDataStorage.KEY_LAST_USED, lastUsedTime - TimeUnit.DAYS.toMillis(3L))
-                .commit();
+                .apply();
         assertTrue(storage.wasLaunchedRecently());
 
         // Move the last used time one week in the past.
         mSharedPreferences.edit()
                 .putLong(WebappDataStorage.KEY_LAST_USED, lastUsedTime - TimeUnit.DAYS.toMillis(7L))
-                .commit();
+                .apply();
         assertTrue(storage.wasLaunchedRecently());
 
         // Move the last used time just under ten days in the past.
         mSharedPreferences.edit().putLong(WebappDataStorage.KEY_LAST_USED,
-                lastUsedTime - TimeUnit.DAYS.toMillis(10L) + 1).commit();
+                lastUsedTime - TimeUnit.DAYS.toMillis(10L) + 1).apply();
         assertTrue(storage.wasLaunchedRecently());
 
         // Move the last used time to exactly ten days in the past.
         mSharedPreferences.edit().putLong(WebappDataStorage.KEY_LAST_USED,
-                lastUsedTime - TimeUnit.DAYS.toMillis(10L)).commit();
+                lastUsedTime - TimeUnit.DAYS.toMillis(10L)).apply();
         assertTrue(!storage.wasLaunchedRecently());
     }
 
@@ -251,14 +247,20 @@ public class WebappDataStorageTest {
         final long themeColor = 2;
         final long backgroundColor = 3;
         final boolean isIconGenerated = false;
-        Intent shortcutIntent = ShortcutHelper.createWebappShortcutIntent(id, action, url, scope,
-                name, shortName, icon, ShortcutHelper.WEBAPP_SHORTCUT_VERSION, displayMode,
-                orientation, themeColor, backgroundColor, isIconGenerated);
+        AsyncTask<Void, Void, Intent> shortcutIntentTask = new AsyncTask<Void, Void, Intent>() {
+            @Override
+            protected Intent doInBackground(Void... nothing) {
+                return ShortcutHelper.createWebappShortcutIntent(id, action, url, scope, name,
+                        shortName, icon, ShortcutHelper.WEBAPP_SHORTCUT_VERSION, displayMode,
+                        orientation, themeColor, backgroundColor, isIconGenerated);
+            }
+        };
+        Intent shortcutIntent = shortcutIntentTask.execute().get();
 
-        WebappDataStorage storage = WebappDataStorage.open(Robolectric.application, "test");
+        WebappDataStorage storage = WebappDataStorage.open(RuntimeEnvironment.application, "test");
         storage.updateFromShortcutIntent(shortcutIntent);
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertEquals(action, mSharedPreferences.getString(WebappDataStorage.KEY_ACTION, null));
         assertEquals(url, mSharedPreferences.getString(WebappDataStorage.KEY_URL, null));
@@ -289,7 +291,7 @@ public class WebappDataStorageTest {
                 .remove(WebappDataStorage.KEY_THEME_COLOR)
                 .remove(WebappDataStorage.KEY_BACKGROUND_COLOR)
                 .remove(WebappDataStorage.KEY_IS_ICON_GENERATED)
-                .commit();
+                .apply();
 
         assertEquals(null, mSharedPreferences.getString(WebappDataStorage.KEY_ACTION, null));
         assertEquals(null, mSharedPreferences.getString(WebappDataStorage.KEY_URL, null));
@@ -307,7 +309,7 @@ public class WebappDataStorageTest {
         // Update again from the intent and ensure that the data is restored.
         storage.updateFromShortcutIntent(shortcutIntent);
         BackgroundShadowAsyncTask.runBackgroundTasks();
-        Robolectric.runUiThreadTasks();
+        ShadowLooper.runUiThreadTasks();
 
         assertEquals(action, mSharedPreferences.getString(WebappDataStorage.KEY_ACTION, null));
         assertEquals(url, mSharedPreferences.getString(WebappDataStorage.KEY_URL, null));

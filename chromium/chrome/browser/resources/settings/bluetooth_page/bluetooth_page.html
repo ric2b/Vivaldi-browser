@@ -6,6 +6,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_policy_pref_indicator.html">
 <link rel="import" href="/icons.html">
 <link rel="import" href="/settings_page/settings_animated_pages.html">
 <link rel="import" href="/settings_shared_css.html">
@@ -39,9 +40,8 @@
         width: 500px;
       }
     </style>
-    <settings-animated-pages id="pages" current-route="{{currentRoute}}"
-        section="bluetooth">
-      <neon-animatable id="main">
+    <settings-animated-pages id="pages" section="bluetooth">
+      <neon-animatable route-path="default">
         <div class="settings-box first">
           <div class="layout horizontal center flex">
             <iron-icon icon="settings:bluetooth"></iron-icon>
@@ -52,8 +52,13 @@
             </cr-expand-button>
             <paper-toggle-button id="enableBluetooth"
                 checked="{{bluetoothEnabled}}"
+                disabled="[[!adapterState.available]]"
                 on-change="onBluetoothEnabledChange_">
             </paper-toggle-button>
+            <cr-policy-pref-indicator
+                pref="[[prefs.cros.device.allow_bluetooth]]"
+                hidden="[[prefs.cros.device.allow_bluetooth.value]]">
+            </cr-policy-pref-indicator>
           </div>
         </div>
         <iron-collapse opened="[[canShowDeviceList_(bluetoothEnabled,
@@ -82,11 +87,10 @@
     <bluetooth-device-dialog id="deviceDialog"
         adapter-state="[[adapterState]]"
         device-list="[[deviceList]]"
-        dialog-type="[[dialog]]"
-        on-close-dialog="onCloseDialog_"
+        dialog-id="[[dialogId]]"
+        on-close="onDialogClosed_"
+        error-message="[[errorMessage]]"
         on-device-event="onDeviceEvent_"
-        on-iron-overlay-closed="onDialogClosed_"
-        on-iron-overlay-opened="onDialogOpened_"
         on-response="onResponse_"
         pairing-device="[[pairingDevice]]"
         pairing-event="[[pairingEvent]]">

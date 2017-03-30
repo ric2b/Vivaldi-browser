@@ -295,8 +295,8 @@ void DOMSelection::setBaseAndExtent(Node* baseNode, int baseOffset, Node* extent
 
     VisiblePosition visibleBase = createVisiblePosition(createPosition(baseNode, baseOffset));
     VisiblePosition visibleExtent = createVisiblePosition(createPosition(extentNode, extentOffset));
-
-    m_frame->selection().moveTo(visibleBase, visibleExtent);
+    const bool selectionHasDirection = true;
+    m_frame->selection().setSelection(VisibleSelection(visibleBase, visibleExtent, selectionHasDirection));
 }
 
 void DOMSelection::modify(const String& alterString, const String& directionString, const String& granularityString)
@@ -417,7 +417,7 @@ void DOMSelection::addRange(Range* newRange)
     if (newRange->ownerDocument() != m_frame->document())
         return;
 
-    if (!newRange->inShadowIncludingDocument()) {
+    if (!newRange->isConnected()) {
         addConsoleError("The given range isn't in document.");
         return;
     }
@@ -445,8 +445,8 @@ void DOMSelection::addRange(Range* newRange)
         return;
     }
 
-    if (originalRange->compareBoundaryPoints(Range::START_TO_END, newRange, ASSERT_NO_EXCEPTION) < 0
-        || newRange->compareBoundaryPoints(Range::START_TO_END, originalRange, ASSERT_NO_EXCEPTION) < 0) {
+    if (originalRange->compareBoundaryPoints(Range::kStartToEnd, newRange, ASSERT_NO_EXCEPTION) < 0
+        || newRange->compareBoundaryPoints(Range::kStartToEnd, originalRange, ASSERT_NO_EXCEPTION) < 0) {
         addConsoleError("Discontiguous selection is not supported.");
         return;
     }
@@ -456,8 +456,8 @@ void DOMSelection::addRange(Range* newRange)
     // do the same, since we don't support discontiguous selection. Further discussions at
     // <https://code.google.com/p/chromium/issues/detail?id=353069>.
 
-    Range* start = originalRange->compareBoundaryPoints(Range::START_TO_START, newRange, ASSERT_NO_EXCEPTION) < 0 ? originalRange : newRange;
-    Range* end = originalRange->compareBoundaryPoints(Range::END_TO_END, newRange, ASSERT_NO_EXCEPTION) < 0 ? newRange : originalRange;
+    Range* start = originalRange->compareBoundaryPoints(Range::kStartToStart, newRange, ASSERT_NO_EXCEPTION) < 0 ? originalRange : newRange;
+    Range* end = originalRange->compareBoundaryPoints(Range::kEndToEnd, newRange, ASSERT_NO_EXCEPTION) < 0 ? newRange : originalRange;
     Range* merged = Range::create(originalRange->startContainer()->document(), start->startContainer(), start->startOffset(), end->endContainer(), end->endOffset());
     TextAffinity affinity = selection.selection().affinity();
     selection.setSelectedRange(merged, affinity);
@@ -577,7 +577,7 @@ bool DOMSelection::isValidForPosition(Node* node) const
     DCHECK(m_frame);
     if (!node)
         return true;
-    return node->document() == m_frame->document() && node->inShadowIncludingDocument();
+    return node->document() == m_frame->document() && node->isConnected();
 }
 
 void DOMSelection::addConsoleError(const String& message)

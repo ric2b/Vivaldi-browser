@@ -14,14 +14,6 @@ Polymer({
 
   properties: {
     /**
-     * The current active route.
-     */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
-
-    /**
      * Preferences state.
      */
     prefs: {
@@ -39,6 +31,9 @@ Polymer({
       notify: true,
     },
 
+    /** @type {!LanguageHelper} */
+    languageHelper: Object,
+
     /** @private */
     spellCheckSecondary_: {
       type: String,
@@ -52,28 +47,34 @@ Polymer({
      */
     detailLanguage_: Object,
 
-    /** @private {!LanguageHelper} */
-    languageHelper_: Object,
-  },
-
-  /** @override */
-  created: function() {
-    this.languageHelper_ = LanguageHelperImpl.getInstance();
+    /** @private */
+    showAddLanguagesDialog_: Boolean,
   },
 
   /**
    * Handler for clicking a language on the main page, which selects the
    * language as the prospective UI language on Chrome OS and Windows.
-   * @param {!{model: !{item: !LanguageState}}} e
+   * @param {!Event} e The tap event.
    */
   onLanguageTap_: function(e) {
     // Only change the UI language on platforms that allow it.
-    if (!cr.isChromeOS && !cr.isWindows)
+    if ((!cr.isChromeOS && !cr.isWindows) || loadTimeData.getBoolean('isGuest'))
       return;
 
     // Set the prospective UI language. This won't take effect until a restart.
-    if (e.model.item.language.supportsUI)
-      this.languageHelper_.setUILanguage(e.model.item.language.code);
+    var tapEvent = /** @type {!{model: !{item: !LanguageState}}} */(e);
+    if (tapEvent.model.item.language.supportsUI)
+      this.languageHelper.setUILanguage(tapEvent.model.item.language.code);
+  },
+
+  /**
+   * Stops tap events on the language options menu, its trigger, or its items
+   * from bubbling up to the language itself. Tap events on the language are
+   * handled in onLanguageTap_.
+   * @param {!Event} e The tap event.
+   */
+  stopPropagationHandler_: function(e) {
+    e.stopPropagation();
   },
 
   /**
@@ -81,8 +82,8 @@ Polymer({
    * @param {!{target: Element, model: !{item: !LanguageState}}} e
    */
   onSpellCheckChange_: function(e) {
-    this.languageHelper_.toggleSpellCheck(e.model.item.language.code,
-                                          e.target.checked);
+    this.languageHelper.toggleSpellCheck(e.model.item.language.code,
+                                         e.target.checked);
   },
 
   /** @private */
@@ -91,12 +92,18 @@ Polymer({
   },
 
   /**
-   * Opens the Manage Languages page.
+   * Stamps and opens the Add Languages dialog, registering a listener to
+   * disable the dialog's dom-if again on close.
    * @private
    */
-  onManageLanguagesTap_: function() {
-    this.$.pages.setSubpageChain(['manage-languages']);
-    this.forceRenderList_('settings-manage-languages-page');
+  onAddLanguagesTap_: function() {
+    this.showAddLanguagesDialog_ = true;
+    this.async(function() {
+      var dialog = this.$$('settings-add-languages-dialog');
+      dialog.addEventListener('close', function() {
+        this.showAddLanguagesDialog_ = false;
+      }.bind(this));
+    });
   },
 
   /**
@@ -135,7 +142,7 @@ Polymer({
    * @private
    */
   onMoveUpTap_: function(e) {
-    this.languageHelper_.moveLanguage(e.model.item.language.code, -1);
+    this.languageHelper.moveLanguage(e.model.item.language.code, -1);
   },
 
   /**
@@ -144,7 +151,16 @@ Polymer({
    * @private
    */
   onMoveDownTap_: function(e) {
-    this.languageHelper_.moveLanguage(e.model.item.language.code, 1);
+    this.languageHelper.moveLanguage(e.model.item.language.code, 1);
+  },
+
+  /**
+   * Disables the language.
+   * @param {!{model: !{item: !LanguageState}}} e
+   * @private
+   */
+  onRemoveLanguageTap_: function(e) {
+    this.languageHelper.disableLanguage(e.model.item.language.code);
   },
 
   /**
@@ -154,7 +170,7 @@ Polymer({
    */
   onShowLanguageDetailTap_: function(e) {
     this.detailLanguage_ = e.model.item;
-    this.$.pages.setSubpageChain(['language-detail']);
+    settings.navigateTo(settings.Route.LANGUAGES_DETAIL);
   },
 
   /**
@@ -163,7 +179,7 @@ Polymer({
    */
   onManageInputMethodsTap_: function() {
     assert(cr.isChromeOS);
-    this.$.pages.setSubpageChain(['manage-input-methods']);
+    settings.navigateTo(settings.Route.INPUT_METHODS);
   },
 
   /**
@@ -180,7 +196,7 @@ Polymer({
       return;
 
     // Set the input method.
-    this.languageHelper_.setCurrentInputMethod(e.model.item.id);
+    this.languageHelper.setCurrentInputMethod(e.model.item.id);
   },
 
   /**
@@ -191,7 +207,7 @@ Polymer({
    */
   onInputMethodOptionsTap_: function(e) {
     assert(cr.isChromeOS);
-    this.languageHelper_.openInputMethodOptions(e.model.item.id);
+    this.languageHelper.openInputMethodOptions(e.model.item.id);
   },
 
   /**
@@ -238,7 +254,7 @@ Polymer({
    */
   onEditDictionaryTap_: function() {
     assert(!cr.isMac);
-    this.$.pages.setSubpageChain(['edit-dictionary']);
+    settings.navigateTo(settings.Route.EDIT_DICTIONARY);
     this.forceRenderList_('settings-edit-dictionary-page');
   },
 
@@ -254,7 +270,7 @@ Polymer({
    */
   isProspectiveUILanguage_: function(languageCode, prospectiveUILanguage) {
     assert(cr.isChromeOS || cr.isWindows);
-    return languageCode == this.languageHelper_.getProspectiveUILanguage();
+    return languageCode == this.languageHelper.getProspectiveUILanguage();
   },
 
    /**
@@ -262,8 +278,8 @@ Polymer({
     * @private
     */
   getProspectiveUILanguageName_: function() {
-    return this.languageHelper_.getLanguage(
-        this.languageHelper_.getProspectiveUILanguage()).displayName;
+    return this.languageHelper.getLanguage(
+        this.languageHelper.getProspectiveUILanguage()).displayName;
   },
 
   /**
@@ -282,7 +298,7 @@ Polymer({
     var classes = [];
 
     if (cr.isChromeOS || cr.isWindows) {
-      if (supportsUI)
+      if (supportsUI && !loadTimeData.getBoolean('isGuest'))
         classes.push('list-button');  // Makes the item look "actionable".
 
       if (this.isProspectiveUILanguage_(languageCode, prospectiveUILanguage))

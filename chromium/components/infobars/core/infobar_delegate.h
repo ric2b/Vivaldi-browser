@@ -14,7 +14,7 @@ class ConfirmInfoBarDelegate;
 class HungRendererInfoBarDelegate;
 class InsecureContentInfoBarDelegate;
 class NativeAppInfoBarDelegate;
-class PermissionInfobarDelegate;
+class PermissionInfoBarDelegate;
 class PopupBlockedInfoBarDelegate;
 class RegisterProtocolHandlerInfoBarDelegate;
 class ScreenCaptureInfoBarDelegate;
@@ -85,7 +85,7 @@ class InfoBarDelegate {
     THEME_INSTALLED_INFOBAR_DELEGATE = 15,
     GEOLOCATION_INFOBAR_DELEGATE_ANDROID = 16,
     THREE_D_API_INFOBAR_DELEGATE = 17,
-    INSECURE_CONTENT_INFOBAR_DELEGATE = 18,
+    // Removed: INSECURE_CONTENT_INFOBAR_DELEGATE = 18,
     MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID = 19,
     PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID = 20,
     NACL_INFOBAR_DELEGATE = 21,
@@ -124,14 +124,17 @@ class InfoBarDelegate {
     NATIVE_APP_OPEN_POLICY_INFOBAR_DELEGATE = 54,
     RE_SIGN_IN_INFOBAR_DELEGATE = 55,
     SHOW_PASSKIT_INFOBAR_ERROR_DELEGATE = 56,
-    READER_MODE_INFOBAR_DELEGATE = 57,
+    READER_MODE_INFOBAR_DELEGATE_IOS = 57,
     SYNC_ERROR_INFOBAR_DELEGATE = 58,
-    UPGRADE_INFOBAR_DELEGATE = 59,
+    UPGRADE_INFOBAR_DELEGATE_IOS = 59,
     CHROME_WINDOW_ERROR = 60,
     CONFIRM_DANGEROUS_DOWNLOAD = 61,
     // Removed: DESKTOP_SEARCH_REDIRECTION_INFOBAR_DELEGATE = 62,
     UPDATE_PASSWORD_INFOBAR_DELEGATE = 63,
     DATA_REDUCTION_PROMO_INFOBAR_DELEGATE_ANDROID = 64,
+    AUTOFILL_CREDIT_CARD_FILLING_INFOBAR_DELEGATE_ANDROID = 65,
+    SUBRESOURCE_FILTER_INFOBAR_DELEGATE_ANDROID = 66,
+    INSTANT_APPS_INFOBAR_DELEGATE_ANDROID = 67,
   };
 
   // Describes navigation events, used to decide whether infobars should be
@@ -204,7 +207,7 @@ class InfoBarDelegate {
   virtual HungRendererInfoBarDelegate* AsHungRendererInfoBarDelegate();
   virtual InsecureContentInfoBarDelegate* AsInsecureContentInfoBarDelegate();
   virtual NativeAppInfoBarDelegate* AsNativeAppInfoBarDelegate();
-  virtual PermissionInfobarDelegate* AsPermissionInfobarDelegate();
+  virtual PermissionInfoBarDelegate* AsPermissionInfoBarDelegate();
   virtual PopupBlockedInfoBarDelegate* AsPopupBlockedInfoBarDelegate();
   virtual RegisterProtocolHandlerInfoBarDelegate*
       AsRegisterProtocolHandlerInfoBarDelegate();

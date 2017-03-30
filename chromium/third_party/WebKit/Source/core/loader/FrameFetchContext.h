@@ -35,6 +35,7 @@
 #include "core/fetch/FetchContext.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/loader/LinkLoader.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
 
@@ -67,7 +68,6 @@ public:
     bool isLiveContext() { return true; }
 
     void addAdditionalRequestHeaders(ResourceRequest&, FetchResourceType) override;
-    void setFirstPartyForCookies(ResourceRequest&) override;
     CachePolicy getCachePolicy() const override;
     WebCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type, FetchRequest::DeferOption) const override;
     void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue) override;
@@ -99,9 +99,10 @@ public:
     void sendImagePing(const KURL&) override;
     void addConsoleMessage(const String&) const override;
     SecurityOrigin* getSecurityOrigin() const override;
-    void upgradeInsecureRequest(FetchRequest&) override;
+    void upgradeInsecureRequest(ResourceRequest&) override;
     void addClientHintsIfNecessary(FetchRequest&) override;
     void addCSPHeaderIfNecessary(Resource::Type, FetchRequest&) override;
+    void populateRequestData(ResourceRequest&) override;
 
     MHTMLArchive* archive() const override;
 
@@ -123,7 +124,9 @@ private:
     void printAccessDeniedMessage(const KURL&) const;
     ResourceRequestBlockedReason canRequestInternal(Resource::Type, const ResourceRequest&, const KURL&, const ResourceLoaderOptions&, bool forPreload, FetchRequest::OriginRestriction, ResourceRequest::RedirectStatus) const;
 
-    void prepareRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse&);
+    void prepareRequest(ResourceRequest&);
+
+    void dispatchDidReceiveResponseInternal(unsigned long identifier, const ResourceResponse&, WebURLRequest::FrameType, WebURLRequest::RequestContext, Resource*, LinkLoader::CanLoadResources);
 
     // FIXME: Oilpan: Ideally this should just be a traced Member but that will
     // currently leak because ComputedStyle and its data are not on the heap.

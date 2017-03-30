@@ -120,9 +120,9 @@ component("views") {
     ]
     if (!is_chromeos) {
       sources += gypi_values.views_desktop_aura_sources
-      if (use_x11) {
+      if (use_atk) {
         sources += gypi_values.views_desktop_aura_x11_sources
-        configs += [ "//ui/accessibility:atk" ]
+        configs += [ "//build/config/linux/atk" ]
       } else if (is_win) {
         sources += gypi_values.views_desktop_aura_win_sources
       } else if (use_ozone) {
@@ -141,7 +141,6 @@ component("views") {
     ]
     libs = [
       "AppKit.framework",
-      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreGraphics.framework",
       "Foundation.framework",
       "QuartzCore.framework",  # Required by bridged_native_widget.mm.
@@ -149,7 +148,7 @@ component("views") {
   }
 }
 
-source_set("test_support_internal") {
+static_library("test_support_internal") {
   testonly = true
   sources = gypi_values.views_test_support_sources
 

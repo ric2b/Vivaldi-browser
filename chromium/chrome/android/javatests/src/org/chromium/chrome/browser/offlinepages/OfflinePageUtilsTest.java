@@ -9,7 +9,6 @@ import android.os.Environment;
 import android.test.suitebuilder.annotation.SmallTest;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -26,6 +25,7 @@ import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Semaphore;
@@ -34,7 +34,6 @@ import java.util.concurrent.TimeUnit;
 /** Unit tests for {@link OfflinePageUtils}. */
 @CommandLineFlags.Add("enable-features=OfflineBookmarks")
 public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActivity> {
-    private static final String TAG = "OfflinePageUtilsTest";
     private static final String TEST_PAGE = "/chrome/test/data/android/about.html";
     private static final int TIMEOUT_MS = 5000;
     private static final ClientId BOOKMARK_ID =
@@ -54,8 +53,8 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                // Ensure we start in an offline state.
-                NetworkChangeNotifier.forceConnectivityState(false);
+                // Ensure we start in an online state.
+                NetworkChangeNotifier.forceConnectivityState(true);
 
                 Profile profile = Profile.getLastUsedProfile();
                 mOfflinePageBridge = OfflinePageBridge.getForProfile(profile);
@@ -121,13 +120,11 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
 
         @Override
         public void onAction(Object actionData) {
-            Log.d(TAG, "onAction for snackbar");
             mTabId = (int) actionData;
         }
 
         @Override
         public void onDismissNoAction(Object actionData) {
-            Log.d(TAG, "onDismissNoAction for snackbar");
             if (actionData == null) return;
             mTabId = (int) actionData;
             mDismissed = true;
@@ -150,32 +147,31 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
     @SmallTest
     public void testShowOfflineSnackbarIfNecessary() throws Exception {
         // Arrange - build a mock controller for sensing.
-        Log.d(TAG, "Starting test");
+        OfflinePageUtils.setSnackbarDurationForTesting(1000);
         final MockSnackbarController mockSnackbarController = new MockSnackbarController();
-        Log.d(TAG, "mockSnackbarController " + mockSnackbarController);
 
         // Save an offline page.
+        loadPageAndSave();
+
+        // With network disconnected, loading an online URL will result in loading an offline page.
+        // Note that this will create a SnackbarController when the page loads, but we use our own
+        // for the test. The one created here will also get the notification, but that won't
+        // interfere with our test.
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                NetworkChangeNotifier.forceConnectivityState(false);
+            }
+        });
         String testUrl = mTestServer.getURL(TEST_PAGE);
         loadUrl(testUrl);
-        savePage(SavePageResult.SUCCESS, testUrl);
-
-        // Load an offline page into the current tab.  Note that this will create a
-        // SnackbarController when the page loads, but we use our own for the test. The one created
-        // here will also get the notification, but that won't interfere with our test.
-        List<OfflinePageItem> allPages = getAllPages();
-        OfflinePageItem offlinePage = allPages.get(0);
-        String offlinePageUrl = offlinePage.getOfflineUrl();
-        loadUrl(offlinePageUrl);
-        Log.d(TAG, "Calling showOfflineSnackbarIfNecessary from test");
 
         int tabId = getActivity().getActivityTab().getId();
 
         // Act.  This needs to be called from the UI thread.
-        Log.d(TAG, "before connecting NCN online state " + NetworkChangeNotifier.isOnline());
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                Log.d(TAG, "Showing offline snackbar from UI thread");
                 OfflinePageTabObserver.init(getActivity().getBaseContext(),
                         getActivity().getSnackbarManager(), mockSnackbarController);
                 OfflinePageUtils.showOfflineSnackbarIfNecessary(getActivity().getActivityTab());
@@ -193,10 +189,14 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
         mockSnackbarController.waitForSnackbarControllerToFinish();
 
         // Assert snackbar was shown.
-        Log.d(TAG, "last tab id = " + mockSnackbarController.getLastTabId());
-        Log.d(TAG, "dismissed = " + mockSnackbarController.getDismissed());
         assertEquals(tabId, mockSnackbarController.getLastTabId());
         assertTrue(mockSnackbarController.getDismissed());
+    }
+
+    private void loadPageAndSave() throws Exception {
+        String testUrl = mTestServer.getURL(TEST_PAGE);
+        loadUrl(testUrl);
+        savePage(SavePageResult.SUCCESS, testUrl);
     }
 
     // TODO(petewil): This is borrowed from OfflinePageBridge test.  We should refactor
@@ -241,5 +241,79 @@ public class OfflinePageUtilsTest extends ChromeActivityTestCaseBase<ChromeActiv
         });
         assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
         return result;
+    }
+
+    @SmallTest
+    public void testCopyToShareableLocation() throws Exception {
+        // Save an offline page.
+        loadPageAndSave();
+
+        // Get an offline page from the list and obtain the file path.
+        List<OfflinePageItem> allPages = getAllPages();
+        OfflinePageItem offlinePage = allPages.get(0);
+        String offlinePageFilePath = offlinePage.getFilePath();
+
+        File offlinePageOriginal = new File(offlinePageFilePath);
+
+        // Clear the directory before perform file copying.
+        Context context = getActivity().getBaseContext();
+        OfflinePageUtils.clearSharedOfflineFiles(context);
+
+        File offlineCacheDir =
+                OfflinePageUtils.getDirectoryForOfflineSharing(getActivity().getBaseContext());
+
+        assertTrue("The shareable offline page file should not already exist.",
+                (offlineCacheDir != null));
+
+        File offlinePageShareable = new File(offlineCacheDir, offlinePageOriginal.getName());
+
+        assertFalse("File with the same name should not exist.", offlinePageShareable.exists());
+        assertTrue("Should be able to copy file to shareable location.",
+                OfflinePageUtils.copyToShareableLocation(
+                        offlinePageOriginal, offlinePageShareable));
+        assertEquals("File copy result incorrect", offlinePageOriginal.length(),
+                offlinePageShareable.length());
+    }
+
+    @SmallTest
+    public void testDeleteSharedOfflineFiles() throws Exception {
+        // Save an offline page.
+        loadPageAndSave();
+
+        // Copies file to external cache directory.
+        List<OfflinePageItem> allPages = getAllPages();
+        OfflinePageItem offlinePage = allPages.get(0);
+        String offlinePageFilePath = offlinePage.getFilePath();
+
+        File offlinePageOriginal = new File(offlinePageFilePath);
+
+        final Context context = getActivity().getBaseContext();
+        final File offlineCacheDir = OfflinePageUtils.getDirectoryForOfflineSharing(context);
+
+        assertTrue("Should be able to create subdirectory in shareable directory.",
+                (offlineCacheDir != null));
+
+        File offlinePageShareable = new File(offlineCacheDir, offlinePageOriginal.getName());
+        if (!offlinePageShareable.exists()) {
+            assertTrue("Should be able to copy file to shareable location.",
+                    OfflinePageUtils.copyToShareableLocation(
+                            offlinePageOriginal, offlinePageShareable));
+        }
+
+        // Clear files.
+        OfflinePageUtils.clearSharedOfflineFiles(context);
+        try {
+            CriteriaHelper.pollInstrumentationThread(
+                    new Criteria("Failed while waiting for file operation to complete.") {
+                        @Override
+                        public boolean isSatisfied() {
+                            return !offlineCacheDir.exists();
+                        }
+                    });
+        } catch (InterruptedException e) {
+            fail("Failed while waiting for file operation to complete." + e);
+        }
+
+        assertFalse("Cache directory should be deleted.", offlineCacheDir.exists());
     }
 }

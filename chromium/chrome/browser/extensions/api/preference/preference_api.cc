@@ -31,6 +31,7 @@
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
+#include "components/spellcheck/browser/pref_names.h"
 #include "components/translate/core/common/translate_pref_names.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
@@ -116,7 +117,7 @@ PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy},
     {"searchSuggestEnabled", prefs::kSearchSuggestEnabled,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
-    {"spellingServiceEnabled", prefs::kSpellCheckUseSpellingService,
+    {"spellingServiceEnabled", spellcheck::prefs::kSpellCheckUseSpellingService,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"thirdPartyCookiesAllowed", prefs::kBlockThirdPartyCookies,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
@@ -132,6 +133,8 @@ PrefMappingEntry kPrefMapping[] = {
      APIPermission::kPrivacy, APIPermission::kPrivacy},
     {"webRTCIPHandlingPolicy", prefs::kWebRTCIPHandlingPolicy,
      APIPermission::kPrivacy, APIPermission::kPrivacy},
+    {"webRTCUDPPortRange", prefs::kWebRTCUDPPortRange, APIPermission::kPrivacy,
+     APIPermission::kPrivacy},
 #endif
     // accessibilityFeatures.animationPolicy is available for
     // all platforms but the others from accessibilityFeatures
@@ -298,8 +301,8 @@ class PrefMapping {
   }
 
   ~PrefMapping() {
-    STLDeleteContainerPairSecondPointers(transformers_.begin(),
-                                         transformers_.end());
+    base::STLDeleteContainerPairSecondPointers(transformers_.begin(),
+                                               transformers_.end());
   }
 
   void RegisterPrefTransformer(const std::string& browser_pref,

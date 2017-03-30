@@ -58,14 +58,10 @@ WebInspector.NavigatorView = function()
     this._navigatorGroupByFolderSetting.addChangeListener(this._groupingChanged.bind(this));
 
     this._initGrouping();
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.FrameNavigated, this._frameNavigated, this);
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.FrameDetached, this._frameDetached, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.Events.FrameNavigated, this._frameNavigated, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.Events.FrameDetached, this._frameDetached, this);
     WebInspector.targetManager.observeTargets(this);
-}
-
-WebInspector.NavigatorView.Events = {
-    ItemSelected: "ItemSelected",
-    ItemRenamed: "ItemRenamed",
+    this._resetWorkspace(WebInspector.workspace);
 }
 
 WebInspector.NavigatorView.Types = {
@@ -156,9 +152,17 @@ WebInspector.NavigatorView.appendSearchItem = function(contextMenu, path)
 
 WebInspector.NavigatorView.prototype = {
     /**
+     * @override
+     */
+    focus: function()
+    {
+        this._scriptsTree.focus();
+    },
+
+    /**
      * @param {!WebInspector.Workspace} workspace
      */
-    setWorkspace: function(workspace)
+    _resetWorkspace: function(workspace)
     {
         this._workspace = workspace;
         this._workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAdded, this);
@@ -189,10 +193,13 @@ WebInspector.NavigatorView.prototype = {
      */
     _uiSourceCodeFrame: function(uiSourceCode)
     {
-        var target = WebInspector.NetworkProject.targetForProject(uiSourceCode.project());
-        if (!target)
-            return null;
-        return WebInspector.NetworkProject.frameForProject(uiSourceCode.project()) || target.resourceTreeModel.mainFrame;
+        var frame = WebInspector.NetworkProject.frameForProject(uiSourceCode.project());
+        if (!frame) {
+            var target = WebInspector.NetworkProject.targetForProject(uiSourceCode.project());
+            var resourceTreeModel = target && WebInspector.ResourceTreeModel.fromTarget(target);
+            frame = resourceTreeModel && resourceTreeModel.mainFrame;
+        }
+        return frame;
     },
 
     /**
@@ -399,7 +406,7 @@ WebInspector.NavigatorView.prototype = {
 
         var targetNode = this._rootNode.child("target:" + target.id());
         if (!targetNode) {
-            targetNode = new WebInspector.NavigatorGroupTreeNode(this, project, "target:" + target.id(), target.isWorker() ? WebInspector.NavigatorView.Types.Worker : WebInspector.NavigatorView.Types.NetworkFolder, target.name());
+            targetNode = new WebInspector.NavigatorGroupTreeNode(this, project, "target:" + target.id(), !target.hasBrowserCapability() ? WebInspector.NavigatorView.Types.Worker : WebInspector.NavigatorView.Types.NetworkFolder, target.name());
             this._rootNode.appendChild(targetNode);
         }
         return targetNode;
@@ -448,8 +455,7 @@ WebInspector.NavigatorView.prototype = {
     _sourceSelected: function(uiSourceCode, focusSource)
     {
         this._lastSelectedUISourceCode = uiSourceCode;
-        var data = { uiSourceCode: uiSourceCode, focusSource: focusSource};
-        this.dispatchEventToListeners(WebInspector.NavigatorView.Events.ItemSelected, data);
+        WebInspector.Revealer.reveal(uiSourceCode, !focusSource);
     },
 
     /**
@@ -482,6 +488,8 @@ WebInspector.NavigatorView.prototype = {
             if (!parentNode || !node.isEmpty())
                 break;
             if (!(node instanceof WebInspector.NavigatorGroupTreeNode || node instanceof WebInspector.NavigatorFolderTreeNode))
+                break;
+            if (node._type === WebInspector.NavigatorView.Types.Frame)
                 break;
 
             var folderId = this._folderNodeId(project, target, frame, uiSourceCode.origin(), node._folderPath);
@@ -603,10 +611,9 @@ WebInspector.NavigatorView.prototype = {
 
         if (project && project.type() === WebInspector.projectTypes.FileSystem) {
             contextMenu.appendItem(WebInspector.UIString.capitalize("Refresh"), this._handleContextMenuRefresh.bind(this, project, path));
-            if (node instanceof WebInspector.NavigatorFolderTreeNode) {
-                contextMenu.appendItem(WebInspector.UIString.capitalize("New ^file"), this._handleContextMenuCreate.bind(this, project, path));
+            contextMenu.appendItem(WebInspector.UIString.capitalize("New ^file"), this._handleContextMenuCreate.bind(this, project, path));
+            if (node instanceof WebInspector.NavigatorFolderTreeNode)
                 contextMenu.appendItem(WebInspector.UIString.capitalize("Exclude ^folder"), this._handleContextMenuExclude.bind(this, project, path));
-            }
         }
         contextMenu.appendSeparator();
         WebInspector.NavigatorView.appendAddFolderItem(contextMenu);
@@ -648,7 +655,6 @@ WebInspector.NavigatorView.prototype = {
                 return;
             }
 
-            this.dispatchEventToListeners(WebInspector.NavigatorView.Events.ItemRenamed, uiSourceCode);
             this._sourceSelected(uiSourceCode, true);
         }
     },
@@ -903,7 +909,6 @@ WebInspector.NavigatorSourceTreeElement = function(navigatorView, uiSourceCode, 
     this.listItemElement.classList.add("navigator-" + uiSourceCode.contentType().name() + "-tree-item", "navigator-file-tree-item");
     this.tooltip = uiSourceCode.url();
     this.createIcon();
-
 
     this._navigatorView = navigatorView;
     this._uiSourceCode = uiSourceCode;

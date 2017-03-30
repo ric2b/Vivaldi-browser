@@ -41,22 +41,22 @@
 #include "components/browser_sync/browser/abstract_profile_sync_service_test.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/browser_sync/browser/test_profile_sync_service.h"
-#include "components/sync_driver/data_type_controller.h"
-#include "components/sync_driver/data_type_manager_impl.h"
-#include "components/sync_driver/sync_api_component_factory_mock.h"
+#include "components/sync/base/model_type.h"
+#include "components/sync/core/data_type_debug_info_listener.h"
+#include "components/sync/core/read_node.h"
+#include "components/sync/core/read_transaction.h"
+#include "components/sync/core/write_node.h"
+#include "components/sync/core/write_transaction.h"
+#include "components/sync/driver/data_type_controller.h"
+#include "components/sync/driver/data_type_manager_impl.h"
+#include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/protocol/autofill_specifics.pb.h"
+#include "components/sync/syncable/mutable_entry.h"
+#include "components/sync/syncable/syncable_write_transaction.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/version_info/version_info.h"
 #include "components/webdata/common/web_database.h"
 #include "components/webdata_services/web_data_service_test_util.h"
-#include "sync/internal_api/public/base/model_type.h"
-#include "sync/internal_api/public/data_type_debug_info_listener.h"
-#include "sync/internal_api/public/read_node.h"
-#include "sync/internal_api/public/read_transaction.h"
-#include "sync/internal_api/public/write_node.h"
-#include "sync/internal_api/public/write_transaction.h"
-#include "sync/protocol/autofill_specifics.pb.h"
-#include "sync/syncable/mutable_entry.h"
-#include "sync/syncable/syncable_write_transaction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -412,16 +412,16 @@ class ProfileSyncServiceAutofillTest
         data_type_thread()->task_runner());
 
     web_database_.reset(new WebDatabaseFake(&autofill_table_));
-    web_data_wrapper_ = base::WrapUnique(new MockWebDataServiceWrapper(
+    web_data_wrapper_ = base::MakeUnique<MockWebDataServiceWrapper>(
         new WebDataServiceFake(base::ThreadTaskRunnerHandle::Get(),
                                data_type_thread()->task_runner()),
         new TokenWebDataServiceFake(base::ThreadTaskRunnerHandle::Get(),
-                                    data_type_thread()->task_runner())));
+                                    data_type_thread()->task_runner()));
     web_data_service_ = static_cast<WebDataServiceFake*>(
         web_data_wrapper_->GetAutofillWebData().get());
     web_data_service_->SetDatabase(web_database_.get());
 
-    personal_data_manager_ = base::WrapUnique(new MockPersonalDataManager());
+    personal_data_manager_ = base::MakeUnique<MockPersonalDataManager>();
 
     EXPECT_CALL(personal_data_manager(), LoadProfiles());
     EXPECT_CALL(personal_data_manager(), LoadCreditCards());
@@ -1031,7 +1031,7 @@ TEST_F(
   AutofillProfile expected_profile(sync_profile);
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1064,7 +1064,7 @@ TEST_F(
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that matches an older new sync
@@ -1091,7 +1091,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   AutofillProfile expected_profile(sync_profile);
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
   expected_profile.set_use_date(native_profile->use_date());
 
   std::vector<AutofillProfile*> native_profiles;
@@ -1125,7 +1125,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that matches an a new sync
@@ -1155,7 +1155,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   expected_profile.SetRawInfo(NAME_FULL,
                               ASCIIToUTF16("Billing Mitchell Morrison"));
   expected_profile.set_use_date(sync_profile.use_date());
-  expected_profile.set_use_count(2);
+  expected_profile.set_use_count(1);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1189,7 +1189,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
   // Check that the use counts were added (default value is 1).
-  EXPECT_EQ(2U, new_sync_profiles[0].use_count());
+  EXPECT_EQ(1U, new_sync_profiles[0].use_count());
 }
 
 // Tests that a sync with a new native profile that differ only by name a new

@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
+#include "chrome/browser/chooser_controller/chooser_controller.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/chooser_content_view.h"
@@ -20,16 +21,11 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/location_bar/location_icon_view.h"
 #include "chrome/browser/ui/website_settings/chooser_bubble_delegate.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/bubble/bubble_controller.h"
-#include "components/chooser_controller/chooser_controller.h"
-#include "components/url_formatter/elide_url.h"
-#include "ui/base/l10n/l10n_util.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/controls/styled_label.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/controls/table/table_view_observer.h"
 #include "ui/views/window/dialog_client_view.h"
-#include "url/origin.h"
 
 std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
   return base::WrapUnique(
@@ -39,7 +35,6 @@ std::unique_ptr<BubbleUi> ChooserBubbleDelegate::BuildBubbleUi() {
 ///////////////////////////////////////////////////////////////////////////////
 // View implementation for the chooser bubble.
 class ChooserBubbleUiViewDelegate : public views::BubbleDialogDelegateView,
-                                    public views::StyledLabelListener,
                                     public views::TableViewObserver {
  public:
   ChooserBubbleUiViewDelegate(
@@ -54,6 +49,7 @@ class ChooserBubbleUiViewDelegate : public views::BubbleDialogDelegateView,
   // views::DialogDelegate:
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   bool IsDialogButtonEnabled(ui::DialogButton button) const override;
+  views::View* CreateExtraView() override;
   views::View* CreateFootnoteView() override;
   bool Accept() override;
   bool Cancel() override;
@@ -64,11 +60,6 @@ class ChooserBubbleUiViewDelegate : public views::BubbleDialogDelegateView,
   views::Widget* GetWidget() override;
   const views::Widget* GetWidget() const override;
 
-  // views::StyledLabelListener:
-  void StyledLabelLinkClicked(views::StyledLabel* label,
-                              const gfx::Range& range,
-                              int event_flags) override;
-
   // views::TableViewObserver:
   void OnSelectionChanged() override;
 
@@ -78,10 +69,9 @@ class ChooserBubbleUiViewDelegate : public views::BubbleDialogDelegateView,
                     views::BubbleBorder::Arrow anchor_arrow);
 
   void set_bubble_reference(BubbleReference bubble_reference);
-  void UpdateTableModel() const;
+  void UpdateTableView() const;
 
  private:
-  url::Origin origin_;
   ChooserContentView* chooser_content_view_;
   BubbleReference bubble_reference_;
 
@@ -109,7 +99,6 @@ ChooserBubbleUiViewDelegate::ChooserBubbleUiViewDelegate(
   // | Not seeing your device? Get help |
   // ------------------------------------
 
-  origin_ = chooser_controller->GetOrigin();
   chooser_content_view_ =
       new ChooserContentView(this, std::move(chooser_controller));
 }
@@ -117,10 +106,7 @@ ChooserBubbleUiViewDelegate::ChooserBubbleUiViewDelegate(
 ChooserBubbleUiViewDelegate::~ChooserBubbleUiViewDelegate() {}
 
 base::string16 ChooserBubbleUiViewDelegate::GetWindowTitle() const {
-  return l10n_util::GetStringFUTF16(
-      IDS_DEVICE_CHOOSER_PROMPT,
-      url_formatter::FormatOriginForSecurityDisplay(
-          origin_, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
+  return chooser_content_view_->GetWindowTitle();
 }
 
 base::string16 ChooserBubbleUiViewDelegate::GetDialogButtonLabel(
@@ -133,8 +119,12 @@ bool ChooserBubbleUiViewDelegate::IsDialogButtonEnabled(
   return chooser_content_view_->IsDialogButtonEnabled(button);
 }
 
+views::View* ChooserBubbleUiViewDelegate::CreateExtraView() {
+  return chooser_content_view_->CreateExtraView();
+}
+
 views::View* ChooserBubbleUiViewDelegate::CreateFootnoteView() {
-  return chooser_content_view_->CreateFootnoteView(this);
+  return chooser_content_view_->CreateFootnoteView();
 }
 
 bool ChooserBubbleUiViewDelegate::Accept() {
@@ -166,13 +156,6 @@ const views::Widget* ChooserBubbleUiViewDelegate::GetWidget() const {
   return chooser_content_view_->GetWidget();
 }
 
-void ChooserBubbleUiViewDelegate::StyledLabelLinkClicked(
-    views::StyledLabel* label,
-    const gfx::Range& range,
-    int event_flags) {
-  chooser_content_view_->StyledLabelLinkClicked();
-}
-
 void ChooserBubbleUiViewDelegate::OnSelectionChanged() {
   GetDialogClientView()->UpdateDialogButtons();
 }
@@ -195,8 +178,8 @@ void ChooserBubbleUiViewDelegate::set_bubble_reference(
   DCHECK(bubble_reference_);
 }
 
-void ChooserBubbleUiViewDelegate::UpdateTableModel() const {
-  chooser_content_view_->UpdateTableModel();
+void ChooserBubbleUiViewDelegate::UpdateTableView() const {
+  chooser_content_view_->UpdateTableView();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -225,7 +208,7 @@ void ChooserBubbleUiView::Show(BubbleReference bubble_reference) {
       chooser_bubble_ui_view_delegate_)
       ->Show();
 
-  chooser_bubble_ui_view_delegate_->UpdateTableModel();
+  chooser_bubble_ui_view_delegate_->UpdateTableView();
 }
 
 void ChooserBubbleUiView::Close() {}

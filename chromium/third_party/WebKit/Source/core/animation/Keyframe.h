@@ -6,7 +6,7 @@
 #define Keyframe_h
 
 #include "core/CoreExport.h"
-#include "core/animation/AnimationEffect.h"
+#include "core/animation/AnimationEffectReadOnly.h"
 #include "core/animation/EffectModel.h"
 #include "core/animation/PropertyHandle.h"
 #include "core/animation/animatable/AnimatableValue.h"
@@ -72,7 +72,7 @@ public:
         virtual PassRefPtr<PropertySpecificKeyframe> cloneWithOffset(double offset) const = 0;
 
         // FIXME: Remove this once CompositorAnimations no longer depends on AnimatableValues
-        virtual bool populateAnimatableValue(CSSPropertyID, Element&, const ComputedStyle* baseStyle, bool force) const { return false; }
+        virtual bool populateAnimatableValue(CSSPropertyID, Element&, const ComputedStyle& baseStyle, const ComputedStyle* parentStyle) const { return false; }
         virtual const PassRefPtr<AnimatableValue> getAnimatableValue() const = 0;
 
         virtual bool isAnimatableValuePropertySpecificKeyframe() const { return false; }

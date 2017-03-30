@@ -56,9 +56,6 @@ HistoryDatabase::~HistoryDatabase() {
 sql::InitStatus HistoryDatabase::Init(const base::FilePath& history_name) {
   db_.set_histogram_tag("History");
 
-  // Set the exceptional sqlite error handler.
-  db_.set_error_callback(error_callback_);
-
   // Set the database page size to something a little larger to give us
   // better performance (we're typically seek rather than bandwidth limited).
   // This only has an effect before any tables have been created, otherwise
@@ -201,8 +198,19 @@ TopHostsList HistoryDatabase::TopHosts(size_t num_hosts) {
       std::max(base::Time::Now() - base::TimeDelta::FromDays(30), base::Time());
 
   sql::Statement url_sql(db_.GetUniqueStatement(
-      "SELECT url, visit_count FROM urls WHERE last_visit_time > ?"));
+      "SELECT u.url, u.visit_count "
+      "FROM urls u JOIN visits v ON u.id = v.url "
+      "WHERE last_visit_time > ? "
+      "AND (v.transition & ?) != 0 "              // CHAIN_END
+      "AND (transition & ?) NOT IN (?, ?, ?)"));  // NO SUBFRAME or
+                                                  // KEYWORD_GENERATED
+
   url_sql.BindInt64(0, one_month_ago.ToInternalValue());
+  url_sql.BindInt(1, ui::PAGE_TRANSITION_CHAIN_END);
+  url_sql.BindInt(2, ui::PAGE_TRANSITION_CORE_MASK);
+  url_sql.BindInt(3, ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  url_sql.BindInt(4, ui::PAGE_TRANSITION_MANUAL_SUBFRAME);
+  url_sql.BindInt(5, ui::PAGE_TRANSITION_KEYWORD_GENERATED);
 
   // Collect a map from host to visit count.
   base::hash_map<std::string, int> host_count;
@@ -239,6 +247,37 @@ TopHostsList HistoryDatabase::TopHosts(size_t num_hosts) {
   return hosts;
 }
 
+TopUrlsPerDayList HistoryDatabase::TopUrlsPerDay(size_t num_hosts) {
+  sql::Statement url_sql(db_.GetUniqueStatement(
+    "SELECT date, url, visit_count, id FROM "
+    "  ( SELECT v.id, u.url, count(*) AS visit_count, "
+    "    strftime('%Y-%m-%d', datetime(v.visit_time / 1000000 + "
+    "      (strftime('%s', '1601-01-01')), 'unixepoch')) AS date "
+    "  FROM visits v "
+    "    JOIN urls u ON (v.url = u.id) "
+    "  GROUP BY date, u.url "
+    "  ORDER BY date DESC, visit_count DESC) g "
+    "  WHERE ( "
+    "    SELECT count(*) "
+    "      FROM (SELECT v.id, u.url, COUNT(*) AS visit_count, "
+    "        strftime('%Y-%m-%d', datetime(v.visit_time / 1000000 + "
+    "        (strftime('%s', '1601-01-01')), 'unixepoch')) AS date "
+    "          FROM visits v "
+    "            JOIN urls u ON (v.url = u.id) "
+    "              GROUP BY date, u.url) AS f "
+    "   WHERE g.id <= f.id AND f.date = g.date ) <= ? "
+    "    ORDER BY date DESC, visit_count DESC "));
+  url_sql.BindInt64(0, num_hosts);
+  TopUrlsPerDayList hosts;
+  while (url_sql.Step()) {
+    std::string date = url_sql.ColumnString(0);
+    GURL url(url_sql.ColumnString(1));
+    int64_t visit_count = url_sql.ColumnInt64(2);
+    hosts.push_back(UrlVisitCount(date, url, visit_count));
+  }
+  return hosts;
+}
+
 void HistoryDatabase::BeginExclusiveMode() {
   // We can't use set_exclusive_locking() since that only has an effect before
   // the DB is opened.
@@ -259,7 +298,13 @@ void HistoryDatabase::CommitTransaction() {
 }
 
 void HistoryDatabase::RollbackTransaction() {
-  db_.RollbackTransaction();
+  // If Init() returns with a failure status, the Transaction created there will
+  // be destructed and rolled back. HistoryBackend might try to kill the
+  // database after that, at which point it will try to roll back a non-existing
+  // transaction. This will crash on a DCHECK. So transaction_nesting() is
+  // checked first.
+  if (db_.transaction_nesting())
+    db_.RollbackTransaction();
 }
 
 bool HistoryDatabase::RecreateAllTablesButURL() {
@@ -294,6 +339,11 @@ void HistoryDatabase::TrimMemory(bool aggressively) {
 
 bool HistoryDatabase::Raze() {
   return db_.Raze();
+}
+
+std::string HistoryDatabase::GetDiagnosticInfo(int extended_error,
+                                               sql::Statement* statement) {
+  return db_.GetDiagnosticInfo(extended_error, statement);
 }
 
 bool HistoryDatabase::SetSegmentID(VisitID visit_id, SegmentID segment_id) {

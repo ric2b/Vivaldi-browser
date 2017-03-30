@@ -210,6 +210,7 @@ class TabStrip : public views::View,
   const ui::ListSelectionModel& GetSelectionModel() const override;
   bool SupportsMultipleSelection() override;
   bool ShouldHideCloseButtonForInactiveTabs() override;
+  bool MaySetClip() override;
   void SelectTab(Tab* tab) override;
   void ExtendSelectionTo(Tab* tab) override;
   void ToggleSelected(Tab* tab) override;
@@ -231,7 +232,10 @@ class TabStrip : public views::View,
   Tab* GetTabAt(Tab* tab, const gfx::Point& tab_in_tab_coordinates) override;
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override;
-  bool ShouldPaintTab(const Tab* tab, gfx::Rect* clip) override;
+  bool ShouldPaintTab(
+      const Tab* tab,
+      const base::Callback<gfx::Path(const gfx::Size&)>& border_callback,
+      gfx::Path* clip) override;
   bool CanPaintThrobberToLayer() const override;
   bool IsImmersiveStyle() const override;
   SkColor GetToolbarTopSeparatorColor() const override;
@@ -397,7 +401,7 @@ class TabStrip : public views::View,
   void DraggedTabsDetached();
 
   // Used by TabDragController when the user stops dragging tabs. |move_only| is
-  // true if the move behavior is TabDragController::MOVE_VISIBILE_TABS.
+  // true if the move behavior is TabDragController::MOVE_VISIBLE_TABS.
   // |completed| is true if the drag operation completed successfully, false if
   // it was reverted.
   void StoppedDraggingTabs(const Tabs& tabs,
@@ -511,19 +515,21 @@ class TabStrip : public views::View,
   int GetStartXForNormalTabs() const;
 
   // Returns the tab to use for event handling. This uses FindTabForEventFrom()
-  // to do the actual searching.
+  // to do the actual searching.  This method should be called when
+  // |touch_layout_| is set.
   Tab* FindTabForEvent(const gfx::Point& point);
 
-  // Returns the tab to use for event handling starting at index |start| and
-  // iterating by |delta|.
+  // Helper for FindTabForEvent().  Returns the tab to use for event handling
+  // starting at index |start| and iterating by |delta|.
   Tab* FindTabForEventFrom(const gfx::Point& point, int start, int delta);
 
   // For a given point, finds a tab that is hit by the point. If the point hits
   // an area on which two tabs are overlapping, the tab is selected as follows:
   // - If one of the tabs is active, select it.
   // - Select the left one.
-  // If no tabs are hit, returns NULL.
-  views::View* FindTabHitByPoint(const gfx::Point& point);
+  // If no tabs are hit, returns null.  This method should be called when
+  // |touch_layout_| is not set.
+  Tab* FindTabHitByPoint(const gfx::Point& point);
 
   // Returns the x-coordinates of the tabs.
   std::vector<int> GetTabXCoordinates();

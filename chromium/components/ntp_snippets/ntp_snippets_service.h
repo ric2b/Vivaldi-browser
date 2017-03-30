@@ -12,18 +12,24 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
+#include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "components/image_fetcher/image_fetcher_delegate.h"
-#include "components/keyed_service/core/keyed_service.h"
+#include "components/ntp_snippets/category.h"
+#include "components/ntp_snippets/category_factory.h"
+#include "components/ntp_snippets/category_status.h"
+#include "components/ntp_snippets/content_suggestion.h"
+#include "components/ntp_snippets/content_suggestions_provider.h"
 #include "components/ntp_snippets/ntp_snippet.h"
 #include "components/ntp_snippets/ntp_snippets_fetcher.h"
 #include "components/ntp_snippets/ntp_snippets_scheduler.h"
 #include "components/ntp_snippets/ntp_snippets_status_service.h"
+#include "components/ntp_snippets/request_throttler.h"
 #include "components/suggestions/suggestions_service.h"
-#include "components/sync_driver/sync_service_observer.h"
+#include "components/sync/driver/sync_service_observer.h"
 
 class PrefRegistrySimple;
 class PrefService;
@@ -56,18 +62,25 @@ namespace ntp_snippets {
 class NTPSnippetsDatabase;
 class NTPSnippetsServiceObserver;
 
-// Stores and vends fresh content data for the NTP.
-class NTPSnippetsService : public KeyedService,
+// Retrieves fresh content data (articles) from the server, stores them and
+// provides them as content suggestions.
+// TODO(pke): Rename this service to ArticleSuggestionsProvider and move to
+// a subdirectory.
+// TODO(jkrcal): this class grows really, really large. The fact that
+// NTPSnippetService also implements ImageFetcherDelegate adds unnecessary
+// complexity (and after all the Service is conceptually not an
+// ImagerFetcherDeletage ;-)). Instead, the cleaner solution would  be to define
+// a CachedImageFetcher class that handles the caching aspects and looks like an
+// image fetcher to the NTPSnippetService.
+class NTPSnippetsService : public ContentSuggestionsProvider,
                            public image_fetcher::ImageFetcherDelegate {
  public:
-  using ImageFetchedCallback =
-      base::Callback<void(const std::string& snippet_id, const gfx::Image&)>;
-
   // |application_language_code| should be a ISO 639-1 compliant string, e.g.
   // 'en' or 'en-US'. Note that this code should only specify the language, not
   // the locale, so 'en_US' (English language with US locale) and 'en-GB_US'
   // (British English person in the US) are not language codes.
-  NTPSnippetsService(bool enabled,
+  NTPSnippetsService(Observer* observer,
+                     CategoryFactory* category_factory,
                      PrefService* pref_service,
                      suggestions::SuggestionsService* suggestions_service,
                      const std::string& application_language_code,
@@ -82,11 +95,8 @@ class NTPSnippetsService : public KeyedService,
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
-  // Inherited from KeyedService.
-  void Shutdown() override;
-
   // Returns whether the service is ready. While this is false, the list of
-  // snippets will be empty, and all modifications to it (fetch, discard, etc)
+  // snippets will be empty, and all modifications to it (fetch, dismiss, etc)
   // will be ignored.
   bool ready() const { return state_ == State::READY; }
 
@@ -95,21 +105,17 @@ class NTPSnippetsService : public KeyedService,
   bool initialized() const { return ready() || state_ == State::DISABLED; }
 
   // Fetches snippets from the server and adds them to the current ones.
-  void FetchSnippets();
+  // Requests can be marked more important by setting |interactive_request| to
+  // true (such request might circumvent the daily quota for requests, etc.)
+  // Useful for requests triggered by the user.
+  void FetchSnippets(bool interactive_request);
+
   // Fetches snippets from the server for specified hosts (overriding
   // suggestions from the suggestion service) and adds them to the current ones.
   // Only called from chrome://snippets-internals, DO NOT USE otherwise!
   // Ignored while |loaded()| is false.
-  void FetchSnippetsFromHosts(const std::set<std::string>& hosts);
-
-  // Available snippets.
-  const NTPSnippet::PtrVector& snippets() const { return snippets_; }
-
-  // Returns the list of snippets previously discarded by the user (that are
-  // not expired yet).
-  const NTPSnippet::PtrVector& discarded_snippets() const {
-    return discarded_snippets_;
-  }
+  void FetchSnippetsFromHosts(const std::set<std::string>& hosts,
+                              bool interactive_request);
 
   const NTPSnippetsFetcher* snippets_fetcher() const {
     return snippets_fetcher_.get();
@@ -125,69 +131,78 @@ class NTPSnippetsService : public KeyedService,
   // the schedule depends on the time of day.
   void RescheduleFetching();
 
-  // Fetches the image for the snippet with the given |snippet_id| and runs the
-  // |callback|. If that snippet doesn't exist or the fetch fails, the callback
-  // gets a null image.
-  void FetchSnippetImage(const std::string& snippet_id,
-                         const ImageFetchedCallback& callback);
-
-  // Deletes all currently stored snippets.
-  void ClearSnippets();
-
-  // Discards the snippet with the given |snippet_id|, if it exists. Returns
-  // true iff a snippet was discarded.
-  bool DiscardSnippet(const std::string& snippet_id);
-
-  // Clears the lists of snippets previously discarded by the user.
-  void ClearDiscardedSnippets();
+  // ContentSuggestionsProvider implementation
+  CategoryStatus GetCategoryStatus(Category category) override;
+  CategoryInfo GetCategoryInfo(Category category) override;
+  void DismissSuggestion(const std::string& suggestion_id) override;
+  void FetchSuggestionImage(const std::string& suggestion_id,
+                            const ImageFetchedCallback& callback) override;
+  void ClearHistory(
+      base::Time begin,
+      base::Time end,
+      const base::Callback<bool(const GURL& url)>& filter) override;
+  void ClearCachedSuggestions(Category category) override;
+  void GetDismissedSuggestionsForDebugging(
+      Category category,
+      const DismissedSuggestionsCallback& callback) override;
+  void ClearDismissedSuggestionsForDebugging(Category category) override;
 
   // Returns the lists of suggestion hosts the snippets are restricted to.
   std::set<std::string> GetSuggestionsHosts() const;
 
-  // Observer accessors.
-  void AddObserver(NTPSnippetsServiceObserver* observer);
-  void RemoveObserver(NTPSnippetsServiceObserver* observer);
-
   // Returns the maximum number of snippets that will be shown at once.
   static int GetMaxSnippetCountForTesting();
 
+  // Available snippets, only for unit tests.
+  const NTPSnippet::PtrVector& GetSnippetsForTesting(Category category) const {
+    return categories_.find(category)->second.snippets;
+  }
+
+  // Dismissed snippets, only for unit tests.
+  const NTPSnippet::PtrVector& GetDismissedSnippetsForTesting(
+      Category category) const {
+    return categories_.find(category)->second.dismissed;
+  }
+
  private:
-  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsServiceTest, HistorySyncStateChanges);
+  friend class NTPSnippetsServiceTest;
+  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsServiceTest, StatusChanges);
 
   // Possible state transitions:
-  //  +------- NOT_INITED ------+
-  //  |        /       \        |
-  //  |   READY <--> DISABLED <-+
-  //  |       \        /
-  //  +-----> SHUT_DOWN
+  //       NOT_INITED --------+
+  //       /       \          |
+  //      v         v         |
+  //   READY <--> DISABLED    |
+  //       \       /          |
+  //        v     v           |
+  //     ERROR_OCCURRED <-----+
   enum class State {
     // The service has just been created. Can change to states:
-    // - DISABLED: if the constructor was called with |enabled == false| . In
-    //             that case the service will stay disabled until it is shut
-    //             down. It can also enter this state after the database is
-    //             done loading and GetStateForDependenciesStatus identifies
-    //             the next state to be DISABLED.
+    // - DISABLED: After the database is done loading,
+    //             GetStateForDependenciesStatus can identify the next state to
+    //             be DISABLED.
     // - READY: if GetStateForDependenciesStatus returns it, after the database
     //          is done loading.
+    // - ERROR_OCCURRED: when an unrecoverable error occurred.
     NOT_INITED,
 
     // The service registered observers, timers, etc. and is ready to answer to
     // queries, fetch snippets... Can change to states:
     // - DISABLED: when the global Chrome state changes, for example after
     //             |OnStateChanged| is called and sync is disabled.
-    // - SHUT_DOWN: when |Shutdown| is called, during the browser shutdown.
+    // - ERROR_OCCURRED: when an unrecoverable error occurred.
     READY,
 
     // The service is disabled and unregistered the related resources.
     // Can change to states:
     // - READY: when the global Chrome state changes, for example after
     //          |OnStateChanged| is called and sync is enabled.
-    // - SHUT_DOWN: when |Shutdown| is called, during the browser shutdown.
+    // - ERROR_OCCURRED: when an unrecoverable error occurred.
     DISABLED,
 
-    // The service shutdown and can't be used anymore. This state is checked
-    // for early exit in callbacks from observers.
-    SHUT_DOWN
+    // The service or one of its dependencies encountered an unrecoverable error
+    // and the service can't be used anymore.
+    ERROR_OCCURRED
   };
 
   // image_fetcher::ImageFetcherDelegate implementation.
@@ -205,39 +220,45 @@ class NTPSnippetsService : public KeyedService,
   void OnFetchFinished(NTPSnippetsFetcher::OptionalSnippets snippets);
 
   // Merges newly available snippets with the previously available list.
-  void MergeSnippets(NTPSnippet::PtrVector new_snippets);
+  void MergeSnippets(Category category, NTPSnippet::PtrVector new_snippets);
 
   std::set<std::string> GetSnippetHostsFromPrefs() const;
   void StoreSnippetHostsToPrefs(const std::set<std::string>& hosts);
 
-  // Removes the expired snippets (including discarded) from the service and the
+  // Removes the expired snippets (including dismissed) from the service and the
   // database, and schedules another pass for the next expiration.
   void ClearExpiredSnippets();
+
+  // Clears all stored snippets and updates the observer.
+  void NukeAllSnippets();
 
   // Completes the initialization phase of the service, registering the last
   // observers. This is done after construction, once the database is loaded.
   void FinishInitialization();
 
-  void LoadingSnippetsFinished();
-
-  void OnSnippetImageFetchedFromDatabase(const std::string& snippet_id,
-                                         const ImageFetchedCallback& callback,
+  void OnSnippetImageFetchedFromDatabase(const ImageFetchedCallback& callback,
+                                         const std::string& suggestion_id,
                                          std::string data);
 
-  void OnSnippetImageDecoded(const std::string& snippet_id,
-                             const ImageFetchedCallback& callback,
-                             const gfx::Image& image);
+  void OnSnippetImageDecodedFromDatabase(const ImageFetchedCallback& callback,
+                                         const std::string& suggestion_id,
+                                         const gfx::Image& image);
 
-  void FetchSnippetImageFromNetwork(const std::string& snippet_id,
+  void FetchSnippetImageFromNetwork(const std::string& suggestion_id,
                                     const ImageFetchedCallback& callback);
+
+  void OnSnippetImageDecodedFromNetwork(const ImageFetchedCallback& callback,
+                                        const std::string& suggestion_id,
+                                        const gfx::Image& image);
 
   // Triggers a state transition depending on the provided reason to be
   // disabled (or lack thereof). This method is called when a change is detected
-  // by |snippets_status_service_|
-  void UpdateStateForStatus(DisabledReason disabled_reason);
+  // by |snippets_status_service_|.
+  void OnDisabledReasonChanged(DisabledReason disabled_reason);
 
   // Verifies state transitions (see |State|'s documentation) and applies them.
-  // Does nothing if called with the current state.
+  // Also updates the provider status. Does nothing except updating the provider
+  // status if called with the current state.
   void EnterState(State state);
 
   // Enables the service and triggers a fetch if required. Do not call directly,
@@ -247,11 +268,19 @@ class NTPSnippetsService : public KeyedService,
   // Disables the service. Do not call directly, use |EnterState| instead.
   void EnterStateDisabled();
 
-  // Applies the effects of the transition to the SHUT_DOWN state. Do not call
-  // directly, use |EnterState| instead.
-  void EnterStateShutdown();
+  // Disables the service permanently because an unrecoverable error occurred.
+  // Do not call directly, use |EnterState| instead.
+  void EnterStateError();
 
-  void ClearDeprecatedPrefs();
+  // Converts the cached snippets to article content suggestions and notifies
+  // the observers.
+  void NotifyNewSuggestions();
+
+  // Updates the internal status for |category| to |category_status_| and
+  // notifies the content suggestions observer if it changed.
+  void UpdateCategoryStatus(Category category, CategoryStatus status);
+  // Calls UpdateCategoryStatus() for all provided categories.
+  void UpdateAllCategoryStatus(CategoryStatus status);
 
   State state_;
 
@@ -259,18 +288,37 @@ class NTPSnippetsService : public KeyedService,
 
   suggestions::SuggestionsService* suggestions_service_;
 
-  // All current suggestions (i.e. not discarded ones).
-  NTPSnippet::PtrVector snippets_;
+  const Category articles_category_;
 
-  // Suggestions that the user discarded. We keep these around until they expire
-  // so we won't re-add them on the next fetch.
-  NTPSnippet::PtrVector discarded_snippets_;
+  // TODO(sfiera): Reduce duplication of CategoryContent with CategoryInfo.
+  struct CategoryContent {
+    CategoryStatus status = CategoryStatus::INITIALIZING;
+
+    // The title of the section, localized to the running UI language.
+    base::string16 localized_title;
+
+    // True iff the server returned results in this category in the last fetch.
+    // We never remove categories that the server still provides, but if the
+    // server stops providing a category, we won't yet report it as NOT_PROVIDED
+    // while we still have non-expired snippets in it.
+    bool provided_by_server = true;
+
+    // All current suggestions (i.e. not dismissed ones).
+    NTPSnippet::PtrVector snippets;
+
+    // Suggestions that the user dismissed. We keep these around until they
+    // expire so we won't re-add them on the next fetch.
+    NTPSnippet::PtrVector dismissed;
+
+    CategoryContent();
+    CategoryContent(CategoryContent&&);
+    ~CategoryContent();
+    CategoryContent& operator=(CategoryContent&&);
+  };
+  std::map<Category, CategoryContent, Category::CompareByID> categories_;
 
   // The ISO 639-1 code of the language used by the application.
   const std::string application_language_code_;
-
-  // The observers.
-  base::ObserverList<NTPSnippetsServiceObserver> observers_;
 
   // Scheduler for fetching snippets. Not owned.
   NTPSnippetsScheduler* scheduler_;
@@ -301,24 +349,14 @@ class NTPSnippetsService : public KeyedService,
   // The fetch will be executed after the database load finishes.
   bool fetch_after_load_;
 
+  // Set to true if NukeAllSnippets is called before the database has been
+  // loaded. The nuke will be executed after the database load finishes.
+  bool nuke_after_load_;
+
+  // Request throttler for limiting requests to thumbnail images.
+  RequestThrottler thumbnail_requests_throttler_;
+
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsService);
-};
-
-class NTPSnippetsServiceObserver {
- public:
-  // Sent every time the service loads a new set of data.
-  virtual void NTPSnippetsServiceLoaded() = 0;
-
-  // Sent when the service is shutting down.
-  virtual void NTPSnippetsServiceShutdown() = 0;
-
-  // Sent when the state of the service is changing. Something changed in its
-  // dependencies so it's notifying observers about incoming data changes.
-  // If the service might be enabled, DisabledReason::NONE will be provided.
-  virtual void NTPSnippetsServiceDisabledReasonChanged(DisabledReason) = 0;
-
- protected:
-  virtual ~NTPSnippetsServiceObserver() {}
 };
 
 }  // namespace ntp_snippets

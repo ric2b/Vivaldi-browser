@@ -78,17 +78,10 @@ class CC_EXPORT RemoteChannelImpl : public ChannelImpl,
                                     public RemoteProtoChannel::ProtoReceiver,
                                     public Proxy {
  public:
-  static std::unique_ptr<RemoteChannelImpl> Create(
-      LayerTreeHost* layer_tree_host,
-      RemoteProtoChannel* remote_proto_channel,
-      TaskRunnerProvider* task_runner_provider);
-
-  ~RemoteChannelImpl() override;
-
- protected:
   RemoteChannelImpl(LayerTreeHost* layer_tree_host,
                     RemoteProtoChannel* remote_proto_channel,
                     TaskRunnerProvider* task_runner_provider);
+  ~RemoteChannelImpl() override;
 
   // virtual for testing.
   virtual std::unique_ptr<ProxyImpl> CreateProxyImpl(
@@ -111,8 +104,6 @@ class CC_EXPORT RemoteChannelImpl : public ChannelImpl,
     // The queue of messages received from the server. The messages are added to
     // this queue if we are waiting for a new output surface to be initialized.
     std::queue<proto::CompositorMessageToImpl> pending_messages;
-
-    RendererCapabilities renderer_capabilities;
 
     base::WeakPtrFactory<RemoteChannelImpl> remote_channel_weak_factory;
 
@@ -138,13 +129,11 @@ class CC_EXPORT RemoteChannelImpl : public ChannelImpl,
       std::unique_ptr<proto::CompositorMessage> proto) override;
 
   // Proxy implementation
-  void FinishAllRendering() override;
   bool IsStarted() const override;
   bool CommitToActiveTree() const override;
   void SetOutputSurface(OutputSurface* output_surface) override;
   void ReleaseOutputSurface() override;
   void SetVisible(bool visible) override;
-  const RendererCapabilities& GetRendererCapabilities() const override;
   void SetNeedsAnimate() override;
   void SetNeedsUpdateLayers() override;
   void SetNeedsCommit() override;
@@ -168,16 +157,12 @@ class CC_EXPORT RemoteChannelImpl : public ChannelImpl,
   // Called on impl thread.
   // ChannelImpl implementation
   void DidCompleteSwapBuffers() override;
-  void SetRendererCapabilitiesMainCopy(
-      const RendererCapabilities& capabilities) override;
   void BeginMainFrameNotExpectedSoon() override;
   void DidCommitAndDrawFrame() override;
   void SetAnimationEvents(std::unique_ptr<AnimationEvents> queue) override;
   void DidLoseOutputSurface() override;
   void RequestNewOutputSurface() override;
-  void DidInitializeOutputSurface(
-      bool success,
-      const RendererCapabilities& capabilities) override;
+  void DidInitializeOutputSurface(bool success) override;
   void DidCompletePageScaleAnimation() override;
   void BeginMainFrame(std::unique_ptr<BeginMainFrameAndCommitState>
                           begin_main_frame_state) override;
@@ -190,9 +175,7 @@ class CC_EXPORT RemoteChannelImpl : public ChannelImpl,
   void DidCommitAndDrawFrameOnMain();
   void DidLoseOutputSurfaceOnMain();
   void RequestNewOutputSurfaceOnMain();
-  void DidInitializeOutputSurfaceOnMain(
-      bool success,
-      const RendererCapabilities& capabilities);
+  void DidInitializeOutputSurfaceOnMain(bool success);
   void SendMessageProtoOnMain(std::unique_ptr<proto::CompositorMessage> proto);
   void PostSetNeedsRedrawToImpl(const gfx::Rect& damaged_rect);
 

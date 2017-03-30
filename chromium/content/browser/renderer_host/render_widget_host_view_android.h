@@ -20,8 +20,6 @@
 #include "base/process/process.h"
 #include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/surfaces/surface_factory_client.h"
-#include "cc/surfaces/surface_id.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/android/content_view_core_impl_observer.h"
 #include "content/browser/renderer_host/delegated_frame_evictor.h"
@@ -32,6 +30,7 @@
 #include "content/public/browser/readback_types.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/android/view_android.h"
 #include "ui/android/window_android_observer.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
@@ -44,13 +43,20 @@ class CopyOutputResult;
 class Layer;
 class SurfaceFactory;
 class SurfaceIdAllocator;
-enum class SurfaceDrawStatus;
+}
+
+namespace ui {
+struct DidOverscrollParams;
 }
 
 namespace blink {
 class WebExternalTextureLayer;
 class WebTouchEvent;
 class WebMouseEvent;
+}
+
+namespace ui {
+class DelegatedFrameHostAndroid;
 }
 
 namespace content {
@@ -60,7 +66,6 @@ class OverscrollControllerAndroid;
 class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class SynchronousCompositorHost;
-struct DidOverscrollParams;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
 
@@ -69,7 +74,6 @@ struct TextInputState;
 // -----------------------------------------------------------------------------
 class CONTENT_EXPORT RenderWidgetHostViewAndroid
     : public RenderWidgetHostViewBase,
-      public cc::SurfaceFactoryClient,
       public ui::GestureProviderClient,
       public ui::WindowAndroidObserver,
       public DelegatedFrameEvictorClient,
@@ -106,6 +110,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Size GetPhysicalBackingSize() const override;
   bool DoTopControlsShrinkBlinkSize() const override;
   float GetTopControlsHeight() const override;
+  float GetBottomControlsHeight() const override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
   void TextInputStateChanged(const TextInputState& params) override;
@@ -121,8 +126,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SelectionChanged(const base::string16& text,
                         size_t offset,
                         const gfx::Range& range) override;
-  void SelectionBoundsChanged(
-      const ViewHostMsg_SelectionBounds_Params& params) override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void SetBackgroundColor(SkColor color) override;
   void CopyFromCompositingSurface(
@@ -135,7 +138,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const scoped_refptr<media::VideoFrame>& target,
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
-  void GetScreenInfo(blink::WebScreenInfo* results) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -151,23 +153,17 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnSwapCompositorFrame(uint32_t output_surface_id,
                              cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
-  void DidOverscroll(const DidOverscrollParams& params) override;
+  void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
-  uint32_t GetSurfaceIdNamespace() override;
+  uint32_t GetSurfaceClientId() override;
   void ShowDisambiguationPopup(const gfx::Rect& rect_pixels,
                                const SkBitmap& zoomed_bitmap) override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
       override;
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
-  void OnTextSurroundingSelectionResponse(const base::string16& content,
-                                          size_t start_offset,
-                                          size_t end_offset) override;
   void OnDidNavigateMainFrameToNewPage() override;
-
-  // cc::SurfaceFactoryClient implementation.
-  void ReturnResources(const cc::ReturnedResourceArray& resources) override;
-  void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
+  void SetNeedsBeginFrames(bool needs_begin_frames) override;
 
   // ui::GestureProviderClient implementation.
   void OnGestureEvent(const ui::GestureEventData& gesture) override;
@@ -216,7 +212,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void SendGestureEvent(const blink::WebGestureEvent& event);
 
   void OnStartContentIntent(const GURL& content_url, bool is_main_frame);
-  void OnSetNeedsBeginFrames(bool enabled);
   void OnSmartClipDataExtracted(const base::string16& text,
                                 const base::string16& html,
                                 const gfx::Rect rect);
@@ -236,8 +231,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                               gfx::Rect src_subrect,
                               const ReadbackRequestCallback& result_callback);
 
-  scoped_refptr<cc::Layer> CreateDelegatedLayer() const;
-
   bool HasValidFrame() const;
 
   void MoveCaret(const gfx::Point& point);
@@ -250,24 +243,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void SetOverlayVideoMode(bool enabled);
 
-  typedef base::Callback<
-      void(const base::string16& content, int start_offset, int end_offset)>
-      TextSurroundingSelectionCallback;
-  void SetTextSurroundingSelectionCallback(
-      const TextSurroundingSelectionCallback& callback);
-
   static void OnContextLost();
 
  private:
-  void RunAckCallbacks(cc::SurfaceDrawStatus status);
+  void RunAckCallbacks();
 
-  void DestroyDelegatedContent();
   void CheckOutputSurfaceChanged(uint32_t output_surface_id);
   void SubmitCompositorFrame(cc::CompositorFrame frame_data);
-  void SwapDelegatedFrame(uint32_t output_surface_id,
-                          cc::CompositorFrame frame_data);
-  void SendDelegatedFrameAck(uint32_t output_surface_id);
-  void SendReturnedDelegatedResources(uint32_t output_surface_id);
+  void SendReclaimCompositorResources(uint32_t output_surface_id,
+                                      bool is_swap_ack);
 
   void OnFrameMetadataUpdated(
       const cc::CompositorFrameMetadata& frame_metadata);
@@ -282,8 +266,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Called after async screenshot task completes. Scales and crops the result
   // of the copy.
   static void PrepareTextureCopyOutputResult(
-      base::WeakPtr<RenderWidgetHostViewAndroid> rwhva,
-      scoped_refptr<cc::Layer> readback_layer,
       const gfx::Size& dst_size_in_pixel,
       SkColorType color_type,
       const base::TimeTicks& start_time,
@@ -307,7 +289,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void InternalSwapCompositorFrame(uint32_t output_surface_id,
                                    cc::CompositorFrame frame);
+  void DestroyDelegatedContent();
   void OnLostResources();
+
+  void ReturnResources(const cc::ReturnedResourceArray& resources);
 
   enum VSyncRequestType {
     FLUSH_INPUT = 1 << 0,
@@ -345,18 +330,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Body background color of the underlying document.
   SkColor cached_background_color_;
 
-  scoped_refptr<cc::Layer> layer_;
+  mutable ui::ViewAndroid view_;
 
-  std::unique_ptr<cc::SurfaceIdAllocator> id_allocator_;
-  std::unique_ptr<cc::SurfaceFactory> surface_factory_;
-  cc::SurfaceId surface_id_;
-  gfx::Size current_surface_size_;
+  // Manages the Compositor Frames received from the renderer.
+  std::unique_ptr<ui::DelegatedFrameHostAndroid> delegated_frame_host_;
+
   cc::ReturnedResourceArray surface_returned_resources_;
-  gfx::Vector2dF location_bar_content_translation_;
-  cc::Selection<gfx::SelectionBound> current_viewport_selection_;
 
-  // The most recent texture size that was pushed to the texture layer.
-  gfx::Size texture_size_in_layer_;
+  // The most recent surface size that was pushed to the surface layer.
+  gfx::Size current_surface_size_;
 
   // The output surface id of the last received frame.
   uint32_t last_output_surface_id_;
@@ -397,8 +379,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   };
 
   std::unique_ptr<LastFrameInfo> last_frame_info_;
-
-  TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
   // The last scroll offset of the view.
   gfx::Vector2dF last_scroll_offset_;

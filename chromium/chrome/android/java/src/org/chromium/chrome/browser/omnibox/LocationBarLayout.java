@@ -11,7 +11,6 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
-import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -43,7 +42,6 @@ import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
@@ -153,10 +151,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     private AutocompleteController mAutocomplete;
 
-    private ToolbarDataProvider mToolbarDataProvider;
+    protected ToolbarDataProvider mToolbarDataProvider;
     private UrlFocusChangeListener mUrlFocusChangeListener;
 
-    private boolean mNativeInitialized;
+    protected boolean mNativeInitialized;
 
     private final List<Runnable> mDeferredNativeRunnables = new ArrayList<Runnable>();
 
@@ -194,7 +192,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
 
     private boolean mSuggestionsShown;
     private boolean mUrlHasFocus;
-    private boolean mUrlFocusChangeInProgress;
+    protected boolean mUrlFocusChangeInProgress;
     private boolean mUrlFocusedFromFakebox;
     private boolean mUrlFocusedWithoutAnimations;
 
@@ -782,6 +780,15 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     }
 
     /**
+     * @param focusable Whether the url bar should be focusable.
+     */
+    public void setUrlBarFocusable(boolean focusable) {
+        if (mUrlBar == null) return;
+        mUrlBar.setFocusable(focusable);
+        mUrlBar.setFocusableInTouchMode(focusable);
+    }
+
+    /**
      * @return The WindowDelegate for the LocationBar. This should be used for all Window related
      * state queries.
      */
@@ -883,6 +890,16 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
     }
 
     @Override
+    public boolean isUrlBarFocused() {
+        return mUrlHasFocus;
+    }
+
+    @Override
+    public void selectAll() {
+        mUrlBar.selectAll();
+    }
+
+    @Override
     public void revertChanges() {
         if (!mUrlHasFocus) {
             setUrlToPageUrl();
@@ -892,7 +909,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 mUrlBar.setUrl("", null);
             } else {
                 mUrlBar.setUrl(
-                        mToolbarDataProvider.getText(), getOnlineUrlFromTab());
+                        mToolbarDataProvider.getText(), getCurrentTabUrl());
             }
         }
     }
@@ -1851,6 +1868,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         } else if (v == mMicButton) {
             RecordUserAction.record("MobileOmniboxVoiceSearch");
             startVoiceRecognition();
+        } else if (v == mOmniboxResultsContainer) {
+            // This will only be triggered when no suggestion items are selected in the container.
+            setUrlBarFocus(false);
+            updateOmniboxResultsContainerBackground(false);
         }
     }
 
@@ -2023,7 +2044,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
      */
     @Override
     public void setUrlToPageUrl() {
-        String url = getOnlineUrlFromTab();
+        String url = getCurrentTabUrl();
 
         // If the URL is currently focused, do not replace the text they have entered with the URL.
         // Once they stop editing the URL, the current tab's URL will automatically be filled in.
@@ -2063,16 +2084,10 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         updateCustomSelectionActionModeCallback();
     }
 
-    /**
-     * Gets the URL of the web page in the tab. When displaying offline page it gets the URL of the
-     * original page.
-     */
-    private String getOnlineUrlFromTab() {
+    /** Gets the URL of the web page in the tab. */
+    private String getCurrentTabUrl() {
         Tab currentTab = getCurrentTab();
         if (currentTab == null) return "";
-        if (currentTab.isOfflinePage()) {
-            return currentTab.getOfflinePageOriginalUrl().trim();
-        }
         return currentTab.getUrl().trim();
     }
 
@@ -2094,7 +2109,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
         // AutocompleteResults needed by onSuggestionsSelected. Therefore,
         // loadUrl should should be invoked last.
         Tab currentTab = getCurrentTab();
-        String currentPageUrl = currentTab != null ? currentTab.getUrl() : "";
+        String currentPageUrl = getCurrentTabUrl();
         WebContents webContents = currentTab != null ? currentTab.getWebContents() : null;
         long elapsedTimeSinceModified = mNewOmniboxEditSessionTimestamp > 0
                 ? (SystemClock.elapsedRealtime() - mNewOmniboxEditSessionTimestamp) : -1;
@@ -2169,20 +2184,7 @@ public class LocationBarLayout extends FrameLayout implements OnClickListener,
                 (ViewStub) getRootView().findViewById(R.id.omnibox_results_container_stub);
         mOmniboxResultsContainer = (ViewGroup) overlayStub.inflate();
         mOmniboxResultsContainer.setBackgroundColor(CONTENT_OVERLAY_COLOR);
-        // Prevent touch events from propagating down to the chrome view.
-        mOmniboxResultsContainer.setOnTouchListener(new OnTouchListener() {
-            @Override
-            @SuppressLint("ClickableViewAccessibility")
-            public boolean onTouch(View v, MotionEvent event) {
-                int action = event.getActionMasked();
-                if (action == MotionEvent.ACTION_CANCEL
-                        || action == MotionEvent.ACTION_UP) {
-                    setUrlBarFocus(false);
-                    updateOmniboxResultsContainerBackground(false);
-                }
-                return true;
-            }
-        });
+        mOmniboxResultsContainer.setOnClickListener(this);
     }
 
     private void updateOmniboxResultsContainer() {

@@ -22,7 +22,6 @@
 #include "remoting/client/jni/display_updater_factory.h"
 #include "remoting/client/jni/jni_client.h"
 #include "remoting/client/jni/jni_pairing_secret_fetcher.h"
-#include "remoting/client/jni/jni_video_renderer.h"
 #include "remoting/protocol/chromium_port_allocator_factory.h"
 #include "remoting/protocol/chromium_socket_factory.h"
 #include "remoting/protocol/client_authentication_config.h"
@@ -74,6 +73,7 @@ ChromotingJniInstance::ChromotingJniInstance(
       capabilities_(capabilities),
       weak_factory_(this) {
   DCHECK(jni_runtime_->ui_task_runner()->BelongsToCurrentThread());
+  weak_ptr_ = weak_factory_.GetWeakPtr();
 
   // Initialize XMPP config.
   xmpp_config_.host = kXmppServer;
@@ -369,7 +369,7 @@ void ChromotingJniInstance::InjectClipboardEvent(
 }
 
 base::WeakPtr<ChromotingJniInstance> ChromotingJniInstance::GetWeakPtr() {
-  return weak_factory_.GetWeakPtr();
+  return weak_ptr_;
 }
 
 void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
@@ -400,9 +400,9 @@ void ChromotingJniInstance::ConnectToHostOnNetworkThread() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signaling_.get(),
-          base::WrapUnique(new protocol::ChromiumPortAllocatorFactory()),
-          base::WrapUnique(
-              new ChromiumUrlRequestFactory(jni_runtime_->url_requester())),
+          base::MakeUnique<protocol::ChromiumPortAllocatorFactory>(),
+          base::MakeUnique<ChromiumUrlRequestFactory>(
+              jni_runtime_->url_requester()),
           protocol::NetworkSettings(
               protocol::NetworkSettings::NAT_TRAVERSAL_FULL),
           protocol::TransportRole::CLIENT);

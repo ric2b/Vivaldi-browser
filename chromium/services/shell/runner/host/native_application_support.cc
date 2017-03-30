@@ -44,12 +44,13 @@ base::NativeLibrary LoadNativeApplication(const base::FilePath& app_path) {
   base::NativeLibraryLoadError error;
   base::NativeLibrary app_library = base::LoadNativeLibrary(app_path, &error);
   LOG_IF(ERROR, !app_library)
-      << "Failed to load app library (path: " << app_path.value() << ")";
+      << "Failed to load app library (path: " << app_path.value()
+      << " reason: " << error.ToString() << ")";
   return app_library;
 }
 
 bool RunNativeApplication(base::NativeLibrary app_library,
-                          mojom::ShellClientRequest request) {
+                          mojom::ServiceRequest request) {
   // Tolerate |app_library| being null, to make life easier for callers.
   if (!app_library)
     return false;
@@ -85,18 +86,18 @@ bool RunNativeApplication(base::NativeLibrary app_library,
 
 #endif  // !defined(COMPONENT_BUILD)
 
-  typedef MojoResult (*MojoMainFunction)(MojoHandle);
-  MojoMainFunction main_function = reinterpret_cast<MojoMainFunction>(
-      base::GetFunctionPointerFromNativeLibrary(app_library, "MojoMain"));
+  typedef MojoResult (*ServiceMainFunction)(MojoHandle);
+  ServiceMainFunction main_function = reinterpret_cast<ServiceMainFunction>(
+      base::GetFunctionPointerFromNativeLibrary(app_library, "ServiceMain"));
   if (!main_function) {
-    LOG(ERROR) << "MojoMain not found";
+    LOG(ERROR) << "ServiceMain not found";
     return false;
   }
-  // |MojoMain()| takes ownership of the service handle.
+  // |ServiceMain()| takes ownership of the service handle.
   MojoHandle handle = request.PassMessagePipe().release().value();
   MojoResult result = main_function(handle);
   if (result != MOJO_RESULT_OK) {
-    LOG(ERROR) << "MojoMain returned error (result: " << result << ")";
+    LOG(ERROR) << "ServiceMain returned error (result: " << result << ")";
   }
   return true;
 }

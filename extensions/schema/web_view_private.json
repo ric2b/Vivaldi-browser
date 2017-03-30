@@ -244,6 +244,17 @@
             ]
           }
         ]
+      },
+      {
+        "name": "allowBlockedInsecureContent",
+        "type": "function",
+        "description": "Will load all blocked content in a page.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "instanceId"
+          }
+        ]
       }
     ]
   }

@@ -284,10 +284,6 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
   [progressView_ setToolTip:base::SysUTF16ToNSString(tooltip_text)];
 }
 
-- (void)updateDownloadItemView {
-  [progressView_ setNeedsDisplay:YES];
-}
-
 - (void)clearDangerousMode {
   [self setState:kNormal];
   // The state change hide the dangerouse download view and is now showing the
@@ -364,13 +360,6 @@ class DownloadShelfContextMenuMac : public DownloadShelfContextMenu {
   DownloadItem* download = bridge_->download_model()->download();
   download->Remove();
   // WARNING: we are deleted at this point.  Don't access 'this'.
-}
-
-- (IBAction)dismissMaliciousDownload:(id)sender {
-  // ExperienceSampling: User dismissed the dangerous download.
-  [self updateExperienceSamplingEvent:ExperienceSamplingEvent::kDeny];
-  [self remove];
-  // WARNING: we are deleted at this point.
 }
 
 - (IBAction)showContextMenu:(id)sender {

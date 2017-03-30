@@ -132,8 +132,12 @@ static void AddExternalClearKey(
       "org.chromium.externalclearkey";
   static const char kExternalClearKeyDecryptOnlyKeySystem[] =
       "org.chromium.externalclearkey.decryptonly";
+  static const char kExternalClearKeyRenewalKeySystem[] =
+      "org.chromium.externalclearkey.renewal";
   static const char kExternalClearKeyFileIOTestKeySystem[] =
       "org.chromium.externalclearkey.fileiotest";
+  static const char kExternalClearKeyOutputProtectionTestKeySystem[] =
+      "org.chromium.externalclearkey.outputprotectiontest";
   static const char kExternalClearKeyInitializeFailKeySystem[] =
       "org.chromium.externalclearkey.initializefail";
   static const char kExternalClearKeyCrashKeySystem[] =
@@ -154,9 +158,17 @@ static void AddExternalClearKey(
   concrete_key_systems->emplace_back(
       new ExternalClearKeyProperties(kExternalClearKeyDecryptOnlyKeySystem));
 
-  // A key system that triggers FileIO test in ClearKeyCdm.
+  // A key system that triggers renewal message in ClearKeyCdm.
+  concrete_key_systems->emplace_back(
+      new ExternalClearKeyProperties(kExternalClearKeyRenewalKeySystem));
+
+  // A key system that triggers the FileIO test in ClearKeyCdm.
   concrete_key_systems->emplace_back(
       new ExternalClearKeyProperties(kExternalClearKeyFileIOTestKeySystem));
+
+  // A key system that triggers the output protection test in ClearKeyCdm.
+  concrete_key_systems->emplace_back(new ExternalClearKeyProperties(
+      kExternalClearKeyOutputProtectionTestKeySystem));
 
   // A key system that Chrome thinks is supported by ClearKeyCdm, but actually
   // will be refused by ClearKeyCdm. This is to test the CDM initialization

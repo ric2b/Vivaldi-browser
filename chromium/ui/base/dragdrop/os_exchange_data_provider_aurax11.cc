@@ -4,6 +4,8 @@
 
 #include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
 
+#include <utility>
+
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/strings/string_split.h"
@@ -107,10 +109,12 @@ SelectionFormatMap OSExchangeDataProviderAuraX11::GetFormatMap() const {
   return selection_owner_.selection_format_map();
 }
 
-OSExchangeData::Provider* OSExchangeDataProviderAuraX11::Clone() const {
-  OSExchangeDataProviderAuraX11* ret = new OSExchangeDataProviderAuraX11();
+std::unique_ptr<OSExchangeData::Provider>
+OSExchangeDataProviderAuraX11::Clone() const {
+  std::unique_ptr<OSExchangeDataProviderAuraX11> ret(
+      new OSExchangeDataProviderAuraX11());
   ret->format_map_ = format_map_;
-  return ret;
+  return std::move(ret);
 }
 
 void OSExchangeDataProviderAuraX11::MarkOriginatedFromRenderer() {
@@ -541,14 +545,6 @@ bool OSExchangeDataProviderAuraX11::GetPlainTextURL(GURL* url) const {
 
 std::vector< ::Atom> OSExchangeDataProviderAuraX11::GetTargets() const {
   return format_map_.GetTypes();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// OSExchangeData, public:
-
-// static
-OSExchangeData::Provider* OSExchangeData::CreateProvider() {
-  return new OSExchangeDataProviderAuraX11();
 }
 
 }  // namespace ui

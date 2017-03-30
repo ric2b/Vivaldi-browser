@@ -375,6 +375,10 @@ void PaintLayerScrollableArea::setScrollOffset(const DoublePoint& newScrollOffse
     quadForFakeMouseMoveEvent = paintInvalidationContainer.localToAbsoluteQuad(quadForFakeMouseMoveEvent);
     frame->eventHandler().dispatchFakeMouseMoveEventSoonInQuad(quadForFakeMouseMoveEvent);
 
+    Page* page = frame->page();
+    if (page)
+        page->chromeClient().clearToolTip();
+
     bool requiresPaintInvalidation = true;
 
     if (box().view()->compositor()->inCompositingMode()) {
@@ -476,7 +480,7 @@ int PaintLayerScrollableArea::visibleWidth() const
 
 IntSize PaintLayerScrollableArea::contentsSize() const
 {
-    return IntSize(scrollWidth(), scrollHeight());
+    return IntSize(scrollWidth().toInt(), scrollHeight().toInt());
 }
 
 IntPoint PaintLayerScrollableArea::lastKnownMousePosition() const
@@ -713,11 +717,11 @@ void PaintLayerScrollableArea::updateAfterLayout()
         // Set up the range (and page step/line step).
         if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar()) {
             int clientWidth = box().pixelSnappedClientWidth();
-            horizontalScrollbar->setProportion(clientWidth, overflowRect().width());
+            horizontalScrollbar->setProportion(clientWidth, overflowRect().width().toInt());
         }
         if (Scrollbar* verticalScrollbar = this->verticalScrollbar()) {
             int clientHeight = box().pixelSnappedClientHeight();
-            verticalScrollbar->setProportion(clientHeight, overflowRect().height());
+            verticalScrollbar->setProportion(clientHeight, overflowRect().height().toInt());
         }
     }
 
@@ -752,15 +756,24 @@ void PaintLayerScrollableArea::clampScrollPositionsAfterLayout()
         return;
     }
 
-    DoublePoint clampedScrollPosition = clampScrollPosition(scrollPositionDouble());
-    if (clampedScrollPosition != scrollPositionDouble())
-        ScrollableArea::setScrollPosition(clampedScrollPosition, ProgrammaticScroll);
-    else if (scrollOriginChanged())
-        scrollPositionChanged(clampedScrollPosition, ProgrammaticScroll);
+    // Restore before clamping because clamping clears the scroll anchor.
+    if (shouldPerformScrollAnchoring())
+        m_scrollAnchor.restore();
+
+    DoublePoint clamped = clampScrollPosition(scrollPositionDouble());
+    if (clamped != scrollPositionDouble() || scrollOriginChanged())
+        ScrollableArea::setScrollPosition(clamped, ProgrammaticScroll);
 
     setNeedsScrollPositionClamp(false);
     resetScrollOriginChanged();
     m_scrollbarManager.destroyDetachedScrollbars();
+}
+
+bool PaintLayerScrollableArea::shouldPerformScrollAnchoring() const
+{
+    return RuntimeEnabledFeatures::scrollAnchoringEnabled()
+        && m_scrollAnchor.hasScroller()
+        && layoutBox()->style()->overflowAnchor() != AnchorNone;
 }
 
 ScrollBehavior PaintLayerScrollableArea::scrollBehaviorStyle() const
@@ -912,11 +925,11 @@ void PaintLayerScrollableArea::updateAfterOverflowRecalc()
     updateScrollDimensions();
     if (Scrollbar* horizontalScrollbar = this->horizontalScrollbar()) {
         int clientWidth = box().pixelSnappedClientWidth();
-        horizontalScrollbar->setProportion(clientWidth, overflowRect().width());
+        horizontalScrollbar->setProportion(clientWidth, overflowRect().width().toInt());
     }
     if (Scrollbar* verticalScrollbar = this->verticalScrollbar()) {
         int clientHeight = box().pixelSnappedClientHeight();
-        verticalScrollbar->setProportion(clientHeight, overflowRect().height());
+        verticalScrollbar->setProportion(clientHeight, overflowRect().height().toInt());
     }
 
     bool hasHorizontalOverflow = this->hasHorizontalOverflow();
@@ -971,10 +984,10 @@ int PaintLayerScrollableArea::horizontalScrollbarStart(int minX) const
 IntSize PaintLayerScrollableArea::scrollbarOffset(const Scrollbar& scrollbar) const
 {
     if (&scrollbar == verticalScrollbar())
-        return IntSize(verticalScrollbarStart(0, box().size().width()), box().borderTop());
+        return IntSize(verticalScrollbarStart(0, box().size().width().toInt()), box().borderTop());
 
     if (&scrollbar == horizontalScrollbar())
-        return IntSize(horizontalScrollbarStart(0), box().size().height() - box().borderBottom() - scrollbar.height());
+        return IntSize(horizontalScrollbarStart(0), (box().size().height() - box().borderBottom() - scrollbar.height()).toInt());
 
     ASSERT_NOT_REACHED();
     return IntSize();
@@ -1167,10 +1180,10 @@ bool PaintLayerScrollableArea::hitTestOverflowControls(HitTestResult& result, co
 
     int resizeControlSize = max(resizeControlRect.height(), 0);
     if (hasVerticalScrollbar() && verticalScrollbar()->shouldParticipateInHitTesting()) {
-        LayoutRect vBarRect(verticalScrollbarStart(0, box().size().width()),
-            LayoutUnit(box().borderTop()),
+        LayoutRect vBarRect(verticalScrollbarStart(0, box().size().width().toInt()),
+            box().borderTop(),
             verticalScrollbar()->width(),
-            box().size().height() - (box().borderTop() + box().borderBottom()) - (hasHorizontalScrollbar() ? horizontalScrollbar()->height() : resizeControlSize));
+            box().size().height().toInt() - (box().borderTop() + box().borderBottom()) - (hasHorizontalScrollbar() ? horizontalScrollbar()->height() : resizeControlSize));
         if (vBarRect.contains(localPoint)) {
             result.setScrollbar(verticalScrollbar());
             return true;
@@ -1179,9 +1192,10 @@ bool PaintLayerScrollableArea::hitTestOverflowControls(HitTestResult& result, co
 
     resizeControlSize = max(resizeControlRect.width(), 0);
     if (hasHorizontalScrollbar() && horizontalScrollbar()->shouldParticipateInHitTesting()) {
-        LayoutRect hBarRect(horizontalScrollbarStart(LayoutUnit()),
-            box().size().height() - box().borderBottom() - horizontalScrollbar()->height(),
-            box().size().width() - (box().borderLeft() + box().borderRight()) - (hasVerticalScrollbar() ? verticalScrollbar()->width() : resizeControlSize),
+        // TODO(crbug.com/638981): Are the conversions to int intentional?
+        LayoutRect hBarRect(horizontalScrollbarStart(0),
+            (box().size().height() - box().borderBottom() - horizontalScrollbar()->height()).toInt(),
+            (box().size().width() - (box().borderLeft() + box().borderRight()) - (hasVerticalScrollbar() ? verticalScrollbar()->width() : resizeControlSize)).toInt(),
             horizontalScrollbar()->height());
         if (hBarRect.contains(localPoint)) {
             result.setScrollbar(horizontalScrollbar());
@@ -1480,13 +1494,23 @@ static bool layerNeedsCompositedScrolling(PaintLayerScrollableArea::LCDTextMode 
     if (node && node->isElementNode() && (toElement(node)->compositorMutableProperties() & (CompositorMutableProperty::kScrollTop | CompositorMutableProperty::kScrollLeft)))
         return true;
 
-    if (mode == PaintLayerScrollableArea::ConsiderLCDText && !layer->compositor()->preferCompositingToLCDTextEnabled())
+    // TODO(schenney) The color test alone is inadequate. When https://codereview.chromium.org/2196583002 lands
+    // we should use PaintLayer::shouldPaintBackgroundOntoForeground() because we will not still get
+    // LCD text unless the conditions there are met. It also unifies logic for scrolling compositing decisions.
+    bool backgroundSupportsLCDText = RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled()
+        && !layer->layoutObject()->style()->visitedDependentColor(CSSPropertyBackgroundColor).hasAlpha();
+    if (mode == PaintLayerScrollableArea::ConsiderLCDText
+        && !layer->compositor()->preferCompositingToLCDTextEnabled()
+        && !backgroundSupportsLCDText)
         return false;
 
-    return !layer->size().isEmpty()
-        && !layer->hasDescendantWithClipPath()
-        && !layer->hasAncestorWithClipPath()
-        && !layer->layoutObject()->style()->hasBorderRadius();
+    // TODO(schenney) Tests fail if we do not also exclude layer->layoutObject()->style()->hasBorderDecoration()
+    // (missing background behind dashed borders). Resolve this case, or not, and update this check with
+    // the results.
+    return !(layer->size().isEmpty()
+        || layer->hasDescendantWithClipPath()
+        || layer->hasAncestorWithClipPath()
+        || layer->layoutObject()->style()->hasBorderRadius());
 }
 
 void PaintLayerScrollableArea::updateNeedsCompositedScrolling(LCDTextMode mode)

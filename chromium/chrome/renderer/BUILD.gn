@@ -44,7 +44,6 @@ static_library("renderer") {
     "//components/guest_view/renderer",
     "//components/network_hints/renderer",
     "//components/omnibox/common",
-    "//components/page_load_metrics/renderer",
     "//components/password_manager/content/renderer",
     "//components/plugins/renderer",
     "//components/printing/renderer",
@@ -58,6 +57,7 @@ static_library("renderer") {
     "//components/web_cache/renderer",
     "//content/app/resources",
     "//content/app/strings",
+    "//content/public/common",
     "//content/public/renderer",
     "//net",
     "//skia",
@@ -152,17 +152,7 @@ static_library("renderer") {
                     "..")
   }
   if (enable_spellcheck) {
-    sources +=
-        rebase_path(gypi_values.chrome_renderer_spellchecker_sources, ".", "..")
-    if (!is_android) {
-      deps += [ "//third_party/hunspell" ]
-    }
-  }
-  if (!use_browser_spellchecker) {
-    sources -= [
-      "spellchecker/platform_spelling_engine.cc",
-      "spellchecker/platform_spelling_engine.h",
-    ]
+    deps += [ "//components/spellcheck/renderer:renderer" ]
   }
   if (enable_basic_printing || enable_print_preview) {
     deps += [ "//printing" ]
@@ -178,16 +168,14 @@ static_library("renderer") {
   if (is_win) {
     deps += [ "//third_party/wtl" ]
   }
-  if (is_android) {
-    sources -= [
-      "spellchecker/hunspell_engine.cc",
-      "spellchecker/hunspell_engine.h",
-    ]
+
+  if (is_chromeos) {
+    deps += [ "//chrome/renderer/leak_detector:leak_detector" ]
   }
 }
 
 # In GYP this is part of test_support_common.
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   visibility = [ "//chrome/test:test_support" ]
 

@@ -67,6 +67,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["bookmark_bar.show_on_all_tabs"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["browser.custom_chrome_frame"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.show_home_button"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
@@ -112,6 +114,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)["net.network_prediction_options"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["profile.password_manager_enabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["credentials_enable_autosignin"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["safebrowsing.enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
@@ -241,11 +245,19 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.metrics.reportingEnabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["cros.device.allow_bluetooth"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["cros.device.attestation_for_content_protection_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.internet.wake_on_wifi_darkconnect"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.enable_screen_lock"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Ash settings.
+  (*s_whitelist)["settings.enable_stylus_tools"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.launch_palette_on_eject_event"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Input method settings.
@@ -259,6 +271,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["settings.touchpad.natural_scroll"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.touchpad.sensitivity2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)["settings.mouse.primary_right"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["settings.mouse.sensitivity2"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["settings.language.xkb_remap_search_key_to"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["settings.language.xkb_remap_control_key_to"] =
@@ -286,6 +304,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["hardware_acceleration_mode.enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)["proxy"] = settings_private::PrefType::PREF_TYPE_DICTIONARY;
 #endif
 
 #if defined(GOOGLE_CHROME_BUILD)
@@ -323,7 +342,7 @@ std::unique_ptr<settings_private::PrefObject> PrefsUtil::GetCrosSettingsPref(
 
 #if defined(OS_CHROMEOS)
   const base::Value* value = CrosSettings::Get()->GetPref(name);
-  DCHECK(value);
+  DCHECK(value) << "Pref not found: " << name;
   pref_object->key = name;
   pref_object->type = GetType(name, value->GetType());
   pref_object->value.reset(value->DeepCopy());

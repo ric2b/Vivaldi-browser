@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "content/public/common/user_agent.h"
 #include "headless/public/headless_browser.h"
+
+#include <utility>
+
+#include "content/public/common/user_agent.h"
 
 using Options = headless::HeadlessBrowser::Options;
 using Builder = headless::HeadlessBrowser::Options::Builder;
@@ -13,14 +16,19 @@ namespace headless {
 // Product name for building the default user agent string.
 namespace {
 const char kProductName[] = "HeadlessChrome";
+constexpr gfx::Size kDefaultWindowSize(800, 600);
 }
 
 Options::Options(int argc, const char** argv)
     : argc(argc),
       argv(argv),
-      user_agent(content::BuildUserAgentFromProduct(kProductName)),
       message_pump(nullptr),
-      single_process_mode(false) {}
+      single_process_mode(false),
+      disable_sandbox(false),
+      gl_implementation("osmesa"),
+      user_agent(content::BuildUserAgentFromProduct(kProductName)),
+      window_size(kDefaultWindowSize),
+      incognito_mode(true) {}
 
 Options::Options(Options&& options) = default;
 
@@ -64,8 +72,28 @@ Builder& Builder::SetSingleProcessMode(bool single_process_mode) {
   return *this;
 }
 
-Builder& Builder::SetProtocolHandlers(ProtocolHandlerMap protocol_handlers) {
-  options_.protocol_handlers = std::move(protocol_handlers);
+Builder& Builder::SetDisableSandbox(bool disable_sandbox) {
+  options_.disable_sandbox = disable_sandbox;
+  return *this;
+}
+
+Builder& Builder::SetGLImplementation(const std::string& gl_implementation) {
+  options_.gl_implementation = gl_implementation;
+  return *this;
+}
+
+Builder& Builder::SetUserDataDir(const base::FilePath& user_data_dir) {
+  options_.user_data_dir = user_data_dir;
+  return *this;
+}
+
+Builder& Builder::SetWindowSize(const gfx::Size& window_size) {
+  options_.window_size = window_size;
+  return *this;
+}
+
+Builder& Builder::SetIncognitoMode(bool incognito_mode) {
+  options_.incognito_mode = incognito_mode;
   return *this;
 }
 

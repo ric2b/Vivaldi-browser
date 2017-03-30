@@ -72,8 +72,8 @@
 #endif  // defined(OS_WIN)
 
 #if defined(USE_ASH)
-#include "ash/shelf/shelf_delegate.h"
-#include "ash/shell.h"
+#include "ash/common/shelf/shelf_delegate.h"  // nogncheck
+#include "ash/common/wm_shell.h"  // nogncheck
 #endif
 
 namespace {
@@ -571,10 +571,11 @@ void BookmarkAppHelper::CreateFromAppBanner(
   DCHECK(manifest.start_url.is_valid());
 
   callback_ = callback;
-  OnDidGetManifest(manifest);
+  OnDidGetManifest(GURL(), manifest);
 }
 
-void BookmarkAppHelper::OnDidGetManifest(const content::Manifest& manifest) {
+void BookmarkAppHelper::OnDidGetManifest(const GURL& manifest_url,
+                                         const content::Manifest& manifest) {
   if (contents_->IsBeingDestroyed())
     return;
 
@@ -717,7 +718,9 @@ void BookmarkAppHelper::FinishInstallation(const Extension* extension) {
   web_app::CreateShortcuts(web_app::SHORTCUT_CREATION_BY_USER,
                            creation_locations, current_profile, extension);
 #else
-  ash::Shell::GetInstance()->GetShelfDelegate()->PinAppWithID(extension->id());
+  ash::ShelfDelegate* shelf_delegate = ash::WmShell::Get()->shelf_delegate();
+  DCHECK(shelf_delegate);
+  shelf_delegate->PinAppWithID(extension->id());
 #endif  // !defined(USE_ASH)
 #endif  // !defined(OS_MACOSX)
 

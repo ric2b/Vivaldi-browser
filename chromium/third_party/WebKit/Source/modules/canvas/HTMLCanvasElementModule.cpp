@@ -22,7 +22,7 @@ void HTMLCanvasElementModule::getContext(HTMLCanvasElement& canvas, const String
 OffscreenCanvas* HTMLCanvasElementModule::transferControlToOffscreen(HTMLCanvasElement& canvas, ExceptionState& exceptionState)
 {
     if (!canvas.createSurfaceLayer()) {
-        exceptionState.throwDOMException(V8GeneralError, "Offscreen canvas creation failed due to an internal timeout.");
+        exceptionState.throwDOMException(V8Error, "Offscreen canvas creation failed due to an internal timeout.");
         return nullptr;
     }
 
@@ -37,6 +37,13 @@ OffscreenCanvas* HTMLCanvasElementModule::transferControlToOffscreenInternal(HTM
     }
     OffscreenCanvas* offscreenCanvas = OffscreenCanvas::create(canvas.width(), canvas.height());
     offscreenCanvas->setAssociatedCanvasId(DOMNodeIds::idForNode(&canvas));
+
+    CanvasSurfaceLayerBridge* bridge = canvas.surfaceLayerBridge();
+    if (bridge) {
+        // If a bridge exists, it means canvas.createSurfaceLayer() has been called
+        // and its SurfaceId has been populated as well.
+        offscreenCanvas->setSurfaceId(bridge->getSurfaceId().client_id(), bridge->getSurfaceId().local_id(), bridge->getSurfaceId().nonce());
+    }
     return offscreenCanvas;
 }
 

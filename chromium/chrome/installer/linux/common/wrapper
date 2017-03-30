@@ -47,26 +47,31 @@ elif [ -r "/etc/os-release" ]; then
   # OpenSUSE, SLES and derivatives will all have an ID_LIKE that includes "suse"
   if [[ "$ID_LIKE" =~ "suse" ]]; then
     set_lib_dir_suf
-    LIBFFMPEG_PATH="/usr/lib$LIB_DIR_SUFFIX/chromium/lib"
-    if [ -r "$LIBFFMPEG_PATH/libffmpeg.so" ]; then
+    # chromium-ffmpeg recently changed the path for libffmpeg.so, so we need to
+    # check both locations
+    if [ -r "/usr/lib$LIB_DIR_SUFFIX/chromium/libffmpeg.so" ]; then
+      LIBFFMPEG_PATH=/usr/lib$LIB_DIR_SUFFIX/chromium
+    elif [ -r "/usr/lib$LIB_DIR_SUFFIX/chromium/lib/libffmpeg.so" ]; then
+      LIBFFMPEG_PATH=/usr/lib$LIB_DIR_SUFFIX/chromium/lib
+    fi
+    if [[ -n "$LIBFFMPEG_PATH" ]]; then
       # Query RPM database and set the version if chromium-ffmpeg is installed.
       CHR_CODECS_VER=`rpm -qf "$LIBFFMPEG_PATH/libffmpeg.so" |
         sed -n 's/^chromium-ffmpeg-\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
     fi
-  # Slackware has the ID "slackware" but no ID_LIKE defined. Presumably derivatives
-  # might use ID_LIKE containing "slackware".
-  elif [ "$ID" = "slackware" ] || [[ "$ID_LIKE" =~ "slackware" ]]; then
-    set_lib_dir_suf
-    LIBFFMPEG_PATH="/usr/lib$LIB_DIR_SUFFIX/chromium/lib"
-    if [ -r "$LIBFFMPEG_PATH/libffmpeg.so" ]; then
-      # Query the package log and set the version if AlienBob's Chromium package
-      # is installed.
-      CHR_CODECS_VER=`echo /var/log/packages/chromium-*alien |
-        sed -n 's/.*chromium-\([0-9]\+\.\)\{2\}\([0-9]\+\)\.[0-9]\+-.*/\2/p'`
-    fi
   fi
 fi
 if [[ -n "$CHR_CODECS_VER" ]] && [ "$CHR_CODECS_VER" -ge "2564" ]; then
+  # For OpenSUSE, SLES and derivatives, seperate libffmpeg.so from the rest of
+  # the libs, as we do not want to prefer the others to our own.
+  VIVALDI_LOCAL_LIBS="$HOME/.local/lib/vivaldi"
+  if [[ "$ID_LIKE" =~ "suse" ]]; then
+    if [ ! -r "$VIVALDI_LOCAL_LIBS/libffmpeg.so" ]; then
+      mkdir -p "$VIVALDI_LOCAL_LIBS"
+      ln -fs "$LIBFFMPEG_PATH/libffmpeg.so" "$VIVALDI_LOCAL_LIBS/libffmpeg.so"
+    fi
+    LIBFFMPEG_PATH="$VIVALDI_LOCAL_LIBS"
+  fi
   FFMPEG_LD_LIBRARY_PATH=":$LIBFFMPEG_PATH"
 fi
 
@@ -90,37 +95,12 @@ exec < /dev/null
 exec > >(exec cat)
 exec 2> >(exec cat >&2)
 
-if [ -f "/opt/google/chrome/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/opt/google/chrome/PepperFlash/libpepflashplayer.so" # google
-elif [ -f "/usr/lib/pepperflashplugin-nonfree/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib/pepperflashplugin-nonfree/libpepflashplayer.so" # debian/ubuntu
-elif [ -f "/usr/lib/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib/PepperFlash/libpepflashplayer.so" # arch/slack
-elif [ -f "/usr/lib/chromium/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib/chromium/PepperFlash/libpepflashplayer.so" # openSuse 32-bit
-elif [ -f "/usr/lib64/chromium/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib64/chromium/PepperFlash/libpepflashplayer.so" # openSuse 64-bit
-elif [ -f "/usr/lib/pepflashplugin-installer/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib/pepflashplugin-installer/libpepflashplayer.so" # ppa:skunk/pepper-flash
-elif [ -f "/usr/lib/chromium-browser/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib/chromium-browser/PepperFlash/libpepflashplayer.so" # rosa/mandriva 32-bit
-elif [ -f "/usr/lib64/chromium-browser/PepperFlash/libpepflashplayer.so" ]; then
-  FLASH_PATH="/usr/lib64/chromium-browser/PepperFlash/libpepflashplayer.so" # rosa/mandriva 64-bit
-fi
-if [ -f $FLASH_PATH ]; then
-  FLASH_VERSION=`grep -m 1 -a -o "LNX [[:digit:]]\+,[[:digit:]]\+,[[:digit:]]\+,[[:digit:]]\+" $FLASH_PATH | cut -c 5- | sed -e "s/,/./g"`
-fi
-
 # Make sure that the profile directory specified in the environment, if any,
 # overrides the default.
 if [[ -n "$CHROME_USER_DATA_DIR" ]]; then
   # Note: exec -a below is a bashism.
   exec -a "$0" "$HERE/@@PROGNAME@@-bin" @@DEFAULT_FLAGS@@ \
-    --user-data-dir="$CHROME_USER_DATA_DIR" \
-    --ppapi-flash-path=$FLASH_PATH --ppapi-flash-version=$FLASH_VERSION \
-    "$@"
+    --user-data-dir="$CHROME_USER_DATA_DIR" "$@"
 else
-  exec -a "$0" "$HERE/@@PROGNAME@@"-bin @@DEFAULT_FLAGS@@ \
-    --ppapi-flash-path=$FLASH_PATH --ppapi-flash-version=$FLASH_VERSION \
-    "$@"
+  exec -a "$0" "$HERE/@@PROGNAME@@"-bin @@DEFAULT_FLAGS@@ "$@"
 fi

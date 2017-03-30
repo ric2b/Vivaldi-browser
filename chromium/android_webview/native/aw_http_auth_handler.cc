@@ -14,6 +14,7 @@
 #include "content/public/browser/web_contents.h"
 
 using base::android::ConvertJavaStringToUTF16;
+using base::android::JavaParamRef;
 using content::BrowserThread;
 
 namespace android_webview {
@@ -34,7 +35,7 @@ AwHttpAuthHandler::AwHttpAuthHandler(AwLoginDelegate* login_delegate,
 AwHttpAuthHandler:: ~AwHttpAuthHandler() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   Java_AwHttpAuthHandler_handlerDestroyed(base::android::AttachCurrentThread(),
-                                          http_auth_handler_.obj());
+                                          http_auth_handler_);
 }
 
 void AwHttpAuthHandler::Proceed(JNIEnv* env,

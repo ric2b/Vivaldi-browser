@@ -111,10 +111,8 @@ message OmniboxEventProto {
     // The instant new tab page enum value was deprecated on August 2, 2013.
     OBSOLETE_INSTANT_NTP = 5;
 
-    // The user is on a search result page that's doing search term
-    // replacement, meaning the search terms should've appeared in the omnibox
-    // before the user started editing it, not the URL of the page.
-    SEARCH_RESULT_PAGE_DOING_SEARCH_TERM_REPLACEMENT = 6;
+    // The search term replacement enum value was deprecated in August 2016.
+    OBSOLETE_SEARCH_RESULT_PAGE_DOING_SEARCH_TERM_REPLACEMENT = 6;
 
     // The new tab page in which this omnibox interaction first started
     // with the user having focus in the omnibox.
@@ -168,6 +166,8 @@ message OmniboxEventProto {
     // a suggestion powered by a Chrome content provider.
     ON_DEVICE_CHROME = 13;
     CLIPBOARD_URL = 14;  // Suggestion coming from clipboard (iOS only).
+    PHYSICAL_WEB = 15;     // Suggestions triggered by URLs broadcast by nearby
+                           // devices (iOS only).
   }
 
   // The result set displayed on the completion popup
@@ -226,6 +226,9 @@ message OmniboxEventProto {
                                     // suggestions of any type.
       CALCULATOR              = 23; // A calculator answer.
       CLIPBOARD               = 24; // An URL based on the clipboard.
+      PHYSICAL_WEB            = 25; // A Physical Web nearby URL.
+      PHYSICAL_WEB_OVERFLOW   = 26; // An item representing multiple Physical
+                                    // Web nearby URLs.
       BOOKMARK_NICK = 10000;        // A bookmark whose nickname contains the input.
       BOOKMARK_DESCRIPTION = 1001;  // A bookmark whose description contains the input.
     }

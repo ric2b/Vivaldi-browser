@@ -67,7 +67,7 @@ MockDiskMountManager::MockDiskMountManager() {
 }
 
 MockDiskMountManager::~MockDiskMountManager() {
-  STLDeleteContainerPairSecondPointers(disks_.begin(), disks_.end());
+  base::STLDeleteContainerPairSecondPointers(disks_.begin(), disks_.end());
   disks_.clear();
 }
 
@@ -150,8 +150,7 @@ void MockDiskMountManager::SetupDefaultReplies() {
   EXPECT_CALL(*this, FindDiskBySourcePath(_))
       .Times(AnyNumber());
   EXPECT_CALL(*this, EnsureMountInfoRefreshed(_, _)).Times(AnyNumber());
-  EXPECT_CALL(*this, MountPath(_, _, _, _))
-      .Times(AnyNumber());
+  EXPECT_CALL(*this, MountPath(_, _, _, _, _)).Times(AnyNumber());
   EXPECT_CALL(*this, UnmountPath(_, _, _))
       .Times(AnyNumber());
   EXPECT_CALL(*this, FormatMountedDevice(_))

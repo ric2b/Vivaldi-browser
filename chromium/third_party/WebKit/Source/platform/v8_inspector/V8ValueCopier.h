@@ -7,12 +7,12 @@
 
 #include <v8.h>
 
-namespace blink {
+namespace v8_inspector {
 
 v8::MaybeLocal<v8::Value> copyValueFromDebuggerContext(v8::Isolate*, v8::Local<v8::Context> debuggerContext, v8::Local<v8::Context> toContext, v8::Local<v8::Value>);
 v8::Maybe<bool> createDataProperty(v8::Local<v8::Context>, v8::Local<v8::Object>, v8::Local<v8::Name> key, v8::Local<v8::Value>);
 v8::Maybe<bool> createDataProperty(v8::Local<v8::Context>, v8::Local<v8::Array>, int index, v8::Local<v8::Value>);
 
-} // namespace blink
+} // namespace v8_inspector
 
 #endif // !defined(V8ValueCopier_h)

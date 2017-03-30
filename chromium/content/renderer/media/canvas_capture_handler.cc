@@ -26,27 +26,7 @@ namespace {
 
 using media::VideoFrame;
 
-static void CopyAlphaChannelIntoVideoFrame(
-    const uint8_t* const source_data,
-    const gfx::Size& source_size,
-    const scoped_refptr<VideoFrame>& dest_frame) {
-  const int dest_stride = dest_frame->stride(VideoFrame::kAPlane);
-  if (dest_stride == source_size.width()) {
-    for (int p = 0; p < source_size.GetArea(); ++p) {
-      dest_frame->visible_data(VideoFrame::kAPlane)[p] = source_data[p * 4 + 3];
-    }
-    return;
-  }
-
-  // Copy alpha values one-by-one if the destination stride != source width.
-  for (int h = 0; h < source_size.height(); ++h) {
-    const uint8_t* const src_ptr = &source_data[4 * h * source_size.width()];
-    uint8_t* dest_ptr =
-        &dest_frame->visible_data(VideoFrame::kAPlane)[h * dest_stride];
-    for (int pixel = 0; pixel < 4 * source_size.width(); pixel += 4)
-      *(dest_ptr++) = src_ptr[pixel + 3];
-  }
-}
+const size_t kArgbBytesPerPixel = 4;
 
 }  // namespace
 
@@ -155,7 +135,7 @@ CanvasCaptureHandler::CanvasCaptureHandler(
 }
 
 CanvasCaptureHandler::~CanvasCaptureHandler() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   io_task_runner_->DeleteSoon(FROM_HERE, delegate_.release());
 }
@@ -188,7 +168,7 @@ void CanvasCaptureHandler::StartVideoCapture(
     const media::VideoCapturerSource::VideoCaptureDeliverFrameCB&
         new_frame_callback,
     const media::VideoCapturerSource::RunningCallback& running_callback) {
-  DVLOG(3) << __FUNCTION__ << " requested "
+  DVLOG(3) << __func__ << " requested "
            << media::VideoCaptureFormat::ToString(params.requested_format);
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   DCHECK(params.requested_format.IsValid());
@@ -202,7 +182,7 @@ void CanvasCaptureHandler::StartVideoCapture(
 }
 
 void CanvasCaptureHandler::RequestRefreshFrame() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   if (last_frame_ && delegate_) {
     io_task_runner_->PostTask(
@@ -215,30 +195,29 @@ void CanvasCaptureHandler::RequestRefreshFrame() {
 }
 
 void CanvasCaptureHandler::StopVideoCapture() {
-  DVLOG(3) << __FUNCTION__;
+  DVLOG(3) << __func__;
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   ask_for_new_frame_ = false;
   io_task_runner_->DeleteSoon(FROM_HERE, delegate_.release());
 }
 
 void CanvasCaptureHandler::CreateNewFrame(const SkImage* image) {
-  DVLOG(4) << __FUNCTION__;
+  DVLOG(4) << __func__;
   DCHECK(main_render_thread_checker_.CalledOnValidThread());
   DCHECK(image);
 
   const gfx::Size size(image->width(), image->height());
   if (size != last_size) {
-    temp_data_.resize(
-        media::VideoFrame::AllocationSize(media::PIXEL_FORMAT_ARGB, size));
-    row_bytes_ =
-        media::VideoFrame::RowBytes(0, media::PIXEL_FORMAT_ARGB, size.width());
+    temp_data_stride_ = kArgbBytesPerPixel * size.width();
+    temp_data_.resize(temp_data_stride_ * size.height());
     image_info_ =
         SkImageInfo::Make(size.width(), size.height(), kBGRA_8888_SkColorType,
                           kUnpremul_SkAlphaType);
     last_size = size;
   }
 
-  if(!image->readPixels(image_info_, &temp_data_[0], row_bytes_, 0, 0)) {
+  if (!image->readPixels(image_info_, &temp_data_[0], temp_data_stride_, 0,
+                         0)) {
     DLOG(ERROR) << "Couldn't read SkImage pixels";
     return;
   }
@@ -250,7 +229,7 @@ void CanvasCaptureHandler::CreateNewFrame(const SkImage* image) {
       gfx::Rect(size), size, timestamp - base::TimeTicks());
   DCHECK(video_frame);
 
-  libyuv::ARGBToI420(temp_data_.data(), row_bytes_,
+  libyuv::ARGBToI420(temp_data_.data(), temp_data_stride_,
                      video_frame->visible_data(media::VideoFrame::kYPlane),
                      video_frame->stride(media::VideoFrame::kYPlane),
                      video_frame->visible_data(media::VideoFrame::kUPlane),
@@ -259,9 +238,10 @@ void CanvasCaptureHandler::CreateNewFrame(const SkImage* image) {
                      video_frame->stride(media::VideoFrame::kVPlane),
                      size.width(), size.height());
   if (!isOpaque) {
-    // TODO(emircan): Use https://code.google.com/p/libyuv/issues/detail?id=572
-    // when it becomes available.
-    CopyAlphaChannelIntoVideoFrame(temp_data_.data(), size, video_frame);
+    libyuv::ARGBExtractAlpha(temp_data_.data(), temp_data_stride_,
+                             video_frame->visible_data(VideoFrame::kAPlane),
+                             video_frame->stride(VideoFrame::kAPlane),
+                             size.width(), size.height());
   }
 
   last_frame_ = video_frame;

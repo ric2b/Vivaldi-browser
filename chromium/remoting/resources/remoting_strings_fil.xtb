@@ -74,7 +74,6 @@ Para sa higit pang impormasyon tungkol sa privacy, pakitingnan ang Patakaran sa 
 <translation id="2676780859508944670">Isinasagawa…</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Karaniwang awtomatikong isinasagawa ang mga pag-update sa software, ngunit maaaring mabigo sa ilang hindi pangkaraniwang sitwasyon. Hindi dapat tumagal nang mahigit sa ilang minuto ang pag-update sa software at magagawa ito habang nakakonekta sa iyong computer nang malayuan.</translation>
-<translation id="2813770873348017932">Pansamantalang naka-block ang mga koneksyon sa malayuang computer dahil may sumusubok na kumonekta rito gamit ang di-wastong PIN. Pakisubukang muli sa ibang pagkakataon.</translation>
 <translation id="2841013758207633010">Oras</translation>
 <translation id="2851674870054673688">Sa sandaling ilagay nila ang code, magsisimula ang iyong session ng pagbabahagi.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -149,7 +148,6 @@ Host</translation>
 <translation id="4573676252416618192">Host ng Remote na
 Desktop ng Chrome</translation>
 <translation id="4619978527973181021">Tanggapin at I-install</translation>
-<translation id="4647791084836149355">Ipakita ang Cardboard view</translation>
 <translation id="4703302905453407178">Huminto sa paggana ang isang kinakailangang bahagi. Pakiulat ang problemang ito sa mga developer.</translation>
 <translation id="4703799847237267011">Natapos na ang iyong session ng Chromoting.</translation>
 <translation id="4736223761657662401">Kasaysayan ng Koneksyon</translation>
@@ -210,7 +208,6 @@ Desktop ng Chrome</translation>
 <translation id="6284412385303060032">Nag-shutdown ang host na tumatakbo sa console logic screen upang masuportahan ang curtain mode sa pamamagitan ng paglipat sa isang host na tumatakbo sa isang user-specific session.</translation>
 <translation id="629730747756840877">Account</translation>
 <translation id="6304318647555713317">Client</translation>
-<translation id="6324708100353784493">Na-enable mo ang Google Cardboard integration mode. Upang magamit ang mode na ito, ilagay ang iyong device sa isang viewer na tumutugma sa Google Cardboard.</translation>
 <translation id="6381670701864002291">Iba pang bagay.</translation>
 <translation id="6398765197997659313">Lumabas sa buong screen</translation>
 <translation id="6408143143164565232">• Makinig sa audio mula sa mga Windows o Linux computer.
@@ -236,6 +233,7 @@ Desktop ng Chrome</translation>
 <translation id="6930242544192836755">Tagal</translation>
 <translation id="6939719207673461467">Ipakita/itago ang keyboard.</translation>
 <translation id="6944854424004126054">Ibalik ang window</translation>
+<translation id="6963936880795878952">Pansamantalang naka-block ang mga koneksyon sa malayuang computer dahil may sumubok na kumonekta rito gamit ang di-wastong PIN. Pakisubukang muli sa ibang pagkakataon.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Sigurado ka bang nais mong hindi paganahin ang mga malayuang koneksyon sa <ph name="HOSTNAME" />? Kung magbago ang iyong isip, kakailanganin mong bisitahin ang computer na iyon upang muling paganahin ang mga koneksyon.</translation>
 <translation id="6998989275928107238">Para sa</translation>

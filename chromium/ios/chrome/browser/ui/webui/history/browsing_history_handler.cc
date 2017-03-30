@@ -28,8 +28,10 @@
 #include "components/history/core/browser/web_history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync_driver/device_info.h"
-#include "components/sync_driver/device_info_tracker.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/device_info/device_info_tracker.h"
+#include "components/sync/protocol/history_delete_directive_specifics.pb.h"
+#include "components/sync/protocol/sync_enums.pb.h"
 #include "components/url_formatter/url_formatter.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
@@ -42,10 +44,8 @@
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/ui/show_privacy_settings_util.h"
 #include "ios/chrome/browser/ui/webui/history/favicon_source.h"
-#include "ios/public/provider/web/web_ui_ios.h"
 #include "ios/web/public/url_data_source_ios.h"
-#include "sync/protocol/history_delete_directive_specifics.pb.h"
-#include "sync/protocol/sync_enums.pb.h"
+#include "ios/web/public/webui/web_ui_ios.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 
@@ -801,7 +801,11 @@ void BrowsingHistoryHandler::SetQueryTimeInMonths(
   exploded.day_of_month = 1;
 
   if (offset == 0) {
-    options->begin_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
+      // This file will be deprecated soon. No need to implement failure
+      // handling here.
+      NOTIMPLEMENTED();
+    }
 
     // Set the end time of this first search to null (which will
     // show results from the future, should the user's clock have
@@ -815,12 +819,20 @@ void BrowsingHistoryHandler::SetQueryTimeInMonths(
     exploded.month -= offset - 1;
     // Set the correct year.
     NormalizeMonths(&exploded);
-    options->end_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->end_time)) {
+      // This file will be deprecated soon. No need to implement failure
+      // handling here.
+      NOTIMPLEMENTED();
+    }
 
     exploded.month -= 1;
     // Set the correct year
     NormalizeMonths(&exploded);
-    options->begin_time = base::Time::FromLocalExploded(exploded);
+    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
+      // This file will be deprecated soon. No need to implement failure
+      // handling here.
+      NOTIMPLEMENTED();
+    }
   }
 }
 

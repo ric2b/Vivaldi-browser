@@ -29,10 +29,8 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/ipc/common/android/surface_texture_peer.h"
-#include "media/base/android/media_codec_player.h"
 #include "media/base/android/media_player_bridge.h"
 #include "media/base/android/media_source_player.h"
-#include "media/base/android/media_task_runner.h"
 #include "media/base/android/media_url_interceptor.h"
 
 #if !defined(USE_AURA)
@@ -40,7 +38,6 @@
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #endif
 
-using media::MediaCodecPlayer;
 using media::MediaPlayerAndroid;
 using media::MediaPlayerBridge;
 using media::MediaPlayerManager;
@@ -242,23 +239,12 @@ MediaPlayerAndroid* BrowserMediaPlayerManager::CreateMediaPlayer(
     }
 
     case MEDIA_PLAYER_TYPE_MEDIA_SOURCE: {
-      if (media::UseMediaThreadForMediaPlayback()) {
-        return new MediaCodecPlayer(
-            media_player_params.player_id, weak_ptr_factory_.GetWeakPtr(),
-            base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
-                       weak_ptr_factory_.GetWeakPtr()),
-            demuxer->CreateDemuxer(media_player_params.demuxer_client_id),
-            media_player_params.frame_url,
-            media_player_params.media_session_id);
-      } else {
-        return new MediaSourcePlayer(
-            media_player_params.player_id, this,
-            base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
-                       weak_ptr_factory_.GetWeakPtr()),
-            demuxer->CreateDemuxer(media_player_params.demuxer_client_id),
-            media_player_params.frame_url,
-            media_player_params.media_session_id);
-      }
+      return new MediaSourcePlayer(
+          media_player_params.player_id, this,
+          base::Bind(&BrowserMediaPlayerManager::OnDecoderResourcesReleased,
+                     weak_ptr_factory_.GetWeakPtr()),
+          demuxer->CreateDemuxer(media_player_params.demuxer_client_id),
+          media_player_params.frame_url, media_player_params.media_session_id);
     }
   }
 
@@ -565,7 +551,17 @@ void BrowserMediaPlayerManager::OnEnterFullscreen(int player_id) {
   }
 
   // There's no ContentVideoView instance so create one.
-  video_view_.reset(new ContentVideoView(this, GetContentViewCore()));
+  // If we know the video frame size, use it.
+  gfx::Size natural_video_size;
+  MediaPlayerAndroid* player = GetFullscreenPlayer();
+  if (player && player->IsPlayerReady()) {
+    natural_video_size =
+        gfx::Size(player->GetVideoWidth(), player->GetVideoHeight());
+  }
+
+  video_view_.reset(
+      new ContentVideoView(this, GetContentViewCore(), natural_video_size));
+
   base::android::ScopedJavaLocalRef<jobject> j_content_video_view =
       video_view_->GetJavaObject(base::android::AttachCurrentThread());
   if (!j_content_video_view.is_null()) {

@@ -4,10 +4,10 @@
 
 #include "ui/message_center/views/message_view.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_view_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/simple_menu_model.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/shadow_value.h"
@@ -32,6 +32,27 @@ constexpr int kCloseIconRightPadding = 5;
 
 constexpr int kShadowOffset = 1;
 constexpr int kShadowBlur = 4;
+
+// Creates a text for spoken feedback from the data contained in the
+// notification.
+base::string16 CreateAccessibleName(
+    const message_center::Notification& notification) {
+  if (!notification.accessible_name().empty())
+    return notification.accessible_name();
+
+  // Fall back to a text constructed from the notification.
+  std::vector<base::string16> accessible_lines = {
+      notification.title(), notification.message(),
+      notification.context_message()};
+  std::vector<message_center::NotificationItem> items = notification.items();
+  for (size_t i = 0;
+       i < items.size() && i < message_center::kNotificationMaximumItems;
+       ++i) {
+    accessible_lines.push_back(items[i].title + base::ASCIIToUTF16(" ") +
+                               items[i].message);
+  }
+  return base::JoinString(accessible_lines, base::ASCIIToUTF16("\n"));
+}
 
 }  // namespace
 
@@ -61,6 +82,8 @@ MessageView::MessageView(MessageCenterController* controller,
 
   focus_painter_ = views::Painter::CreateSolidFocusPainter(
       kFocusBorderColor, gfx::Insets(0, 1, 3, 2));
+
+  accessible_name_ = CreateAccessibleName(notification);
 }
 
 MessageView::~MessageView() {
@@ -70,6 +93,7 @@ void MessageView::UpdateWithNotification(const Notification& notification) {
   small_image_view_->SetImage(notification.small_image().AsImageSkia());
   display_source_ = notification.display_source();
   CreateOrUpdateCloseButtonView(notification);
+  accessible_name_ = CreateAccessibleName(notification);
 }
 
 // static
@@ -234,8 +258,6 @@ void MessageView::OnSlideOut() {
 }
 
 void MessageView::SetDrawBackgroundAsActive(bool active) {
-  if (!switches::IsTouchFeedbackEnabled())
-    return;
   background_view_->background()->
       SetNativeControlColor(active ? kHoveredButtonBackgroundColor :
                                      kNotificationBackgroundColor);

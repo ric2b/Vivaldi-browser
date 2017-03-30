@@ -379,6 +379,7 @@ AXObject::AXObject(AXObjectCacheImpl& axObjectCache)
     , m_haveChildren(false)
     , m_role(UnknownRole)
     , m_lastKnownIsIgnoredValue(DefaultBehavior)
+    , m_explicitContainerID(0)
     , m_parent(nullptr)
     , m_lastModificationCount(-1)
     , m_cachedIsIgnored(false)
@@ -760,7 +761,7 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const
         return false;
 
     if (getLayoutObject())
-        return getLayoutObject()->style()->visibility() != VISIBLE;
+        return getLayoutObject()->style()->visibility() != EVisibility::Visible;
 
     // This is an obscure corner case: if a node has no LayoutObject, that means it's not rendered,
     // but we still may be exploring it as part of a text alternative calculation, for example if it
@@ -770,7 +771,7 @@ bool AXObject::isHiddenForTextAlternativeCalculation() const
     Document* doc = getDocument();
     if (doc && doc->frame() && getNode() && getNode()->isElementNode()) {
         RefPtr<ComputedStyle> style = doc->ensureStyleResolver().styleForElement(toElement(getNode()));
-        return style->display() == NONE || style->visibility() != VISIBLE;
+        return style->display() == NONE || style->visibility() != EVisibility::Visible;
     }
 
     return false;
@@ -865,7 +866,7 @@ String AXObject::textFromElements(bool inAriaLabelledbyTraversal, AXObjectSet& v
             localRelatedObjects.append(new NameSourceRelatedObject(axElement, result));
             if (!result.isEmpty()) {
                 if (!accumulatedText.isEmpty())
-                    accumulatedText.append(" ");
+                    accumulatedText.append(' ');
                 accumulatedText.append(result);
             }
         }
@@ -996,7 +997,7 @@ bool AXObject::isMultiline() const
     if (isHTMLTextAreaElement(*node))
         return true;
 
-    if (node->hasEditableStyle())
+    if (hasEditableStyle(*node))
         return true;
 
     if (!isNativeTextControl() && !isNonNativeTextControl())
@@ -1069,8 +1070,10 @@ bool AXObject::supportsSetSizeAndPosInSet() const
         || (role == MenuItemRole && parentRole == MenuRole)
         || (role == RadioButtonRole)
         || (role == TabRole && parentRole == TabListRole)
-        || (role == TreeItemRole && parentRole == TreeRole))
+        || (role == TreeItemRole && parentRole == TreeRole)
+        || (role == TreeItemRole && parentRole == GroupRole)) {
         return true;
+    }
 
     return false;
 }
@@ -1118,13 +1121,13 @@ const AtomicString& AXObject::containerLiveRegionRelevant() const
 bool AXObject::containerLiveRegionAtomic() const
 {
     updateCachedAttributeValuesIfNeeded();
-    return m_cachedLiveRegionRoot ? m_cachedLiveRegionRoot->liveRegionAtomic() : false;
+    return m_cachedLiveRegionRoot && m_cachedLiveRegionRoot->liveRegionAtomic();
 }
 
 bool AXObject::containerLiveRegionBusy() const
 {
     updateCachedAttributeValuesIfNeeded();
-    return m_cachedLiveRegionRoot ? m_cachedLiveRegionRoot->liveRegionBusy() : false;
+    return m_cachedLiveRegionRoot && m_cachedLiveRegionRoot->liveRegionBusy();
 }
 
 void AXObject::markCachedElementRectDirty() const
@@ -1712,6 +1715,7 @@ bool AXObject::nameFromContents() const
     case SwitchRole:
     case TabRole:
     case ToggleButtonRole:
+    case TreeItemRole:
         return true;
     default:
         return false;

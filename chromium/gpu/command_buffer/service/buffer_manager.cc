@@ -8,6 +8,7 @@
 
 #include <limits>
 
+#include "base/format_macros.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -20,12 +21,14 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/transform_feedback_manager.h"
 #include "ui/gl/gl_bindings.h"
-#include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/trace_util.h"
 
 namespace gpu {
 namespace gles2 {
+namespace {
+static const GLsizeiptr kDefaultMaxBufferSize = 1u << 30;  // 1GB
+}
 
 BufferManager::BufferManager(MemoryTracker* memory_tracker,
                              FeatureInfo* feature_info)
@@ -33,6 +36,7 @@ BufferManager::BufferManager(MemoryTracker* memory_tracker,
           new MemoryTypeTracker(memory_tracker)),
       memory_tracker_(memory_tracker),
       feature_info_(feature_info),
+      max_buffer_size_(kDefaultMaxBufferSize),
       allow_buffers_on_multiple_targets_(false),
       allow_fixed_attribs_(false),
       buffer_count_(0),
@@ -354,8 +358,9 @@ bool BufferManager::UseNonZeroSizeForClientSideArrayBuffer() {
 
 bool BufferManager::UseShadowBuffer(GLenum target, GLenum usage) {
   const bool is_client_side_array = IsUsageClientSideArray(usage);
+  // feature_info_ can be null in some unit tests.
   const bool support_fixed_attribs =
-      gl::GetGLImplementation() == gl::kGLImplementationEGLGLES2;
+      !feature_info_ || feature_info_->gl_version_info().SupportsFixedType();
 
   // TODO(zmo): Don't shadow buffer data on ES3. crbug.com/491002.
   return (
@@ -394,7 +399,7 @@ void BufferManager::ValidateAndDoBufferData(
     return;
   }
 
-  if (size > 1024 * 1024 * 1024) {
+  if (size > max_buffer_size_) {
     ERRORSTATE_SET_GL_ERROR(error_state, GL_OUT_OF_MEMORY, "glBufferData",
                             "cannot allocate more than 1GB.");
     return;
@@ -638,21 +643,23 @@ void BufferManager::SetPrimitiveRestartFixedIndexIfNecessary(GLenum type) {
 
 bool BufferManager::OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                                  base::trace_event::ProcessMemoryDump* pmd) {
-  const int client_id = memory_tracker_->ClientId();
+  const uint64_t share_group_tracing_guid =
+      memory_tracker_->ShareGroupTracingGUID();
   for (const auto& buffer_entry : buffers_) {
     const auto& client_buffer_id = buffer_entry.first;
     const auto& buffer = buffer_entry.second;
 
-    std::string dump_name = base::StringPrintf(
-        "gpu/gl/buffers/client_%d/buffer_%d", client_id, client_buffer_id);
+    std::string dump_name =
+        base::StringPrintf("gpu/gl/buffers/share_group_%" PRIu64 "/buffer_%d",
+                           share_group_tracing_guid, client_buffer_id);
     base::trace_event::MemoryAllocatorDump* dump =
         pmd->CreateAllocatorDump(dump_name);
     dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                     base::trace_event::MemoryAllocatorDump::kUnitsBytes,
                     static_cast<uint64_t>(buffer->size()));
 
-    auto guid = gl::GetGLBufferGUIDForTracing(
-        memory_tracker_->ShareGroupTracingGUID(), client_buffer_id);
+    auto guid = gl::GetGLBufferGUIDForTracing(share_group_tracing_guid,
+                                              client_buffer_id);
     pmd->CreateSharedGlobalAllocatorDump(guid);
     pmd->AddOwnershipEdge(dump->guid(), guid);
   }

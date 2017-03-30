@@ -49,7 +49,8 @@ void ProfileStatisticsAggregator::BookmarkModelHelper::BookmarkModelLoaded(
 }
 
 void ProfileStatisticsAggregator::PasswordStoreConsumerHelper::
-    OnGetPasswordStoreResults(ScopedVector<autofill::PasswordForm> results) {
+    OnGetPasswordStoreResults(
+        std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   parent_->StatisticsCallbackSuccess(
       profiles::kProfileStatisticsPasswords, results.size());
 }
@@ -90,8 +91,8 @@ void ProfileStatisticsAggregator::StartAggregator() {
 
   // Initiate bookmark counting (async).
   tracker_.PostTask(
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::UI).get(),
+      content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+          .get(),
       FROM_HERE,
       base::Bind(&ProfileStatisticsAggregator::WaitOrCountBookmarks, this));
 
@@ -122,12 +123,11 @@ void ProfileStatisticsAggregator::StartAggregator() {
 
   // Initiate preference counting (async).
   tracker_.PostTaskAndReplyWithResult(
-      content::BrowserThread::GetMessageLoopProxyForThread(
-          content::BrowserThread::UI).get(),
-      FROM_HERE,
-      base::Bind(&ProfileStatisticsAggregator::CountPrefs, this),
-      base::Bind(&ProfileStatisticsAggregator::StatisticsCallback,
-                 this, profiles::kProfileStatisticsSettings));
+      content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+          .get(),
+      FROM_HERE, base::Bind(&ProfileStatisticsAggregator::CountPrefs, this),
+      base::Bind(&ProfileStatisticsAggregator::StatisticsCallback, this,
+                 profiles::kProfileStatisticsSettings));
 }
 
 void ProfileStatisticsAggregator::StatisticsCallback(
@@ -192,7 +192,7 @@ void ProfileStatisticsAggregator::WaitOrCountBookmarks() {
     return;
 
   bookmarks::BookmarkModel* bookmark_model =
-      BookmarkModelFactory::GetForProfileIfExists(profile_);
+      BookmarkModelFactory::GetForBrowserContextIfExists(profile_);
 
   if (bookmark_model) {
     if (bookmark_model->loaded()) {

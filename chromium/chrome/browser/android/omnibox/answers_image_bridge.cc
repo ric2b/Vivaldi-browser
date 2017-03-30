@@ -19,6 +19,7 @@
 #include "ui/gfx/android/java_bitmap.h"
 #include "url/gurl.h"
 
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 using base::android::ConvertUTF8ToJavaString;
 
@@ -42,7 +43,7 @@ class AnswersImageObserverAndroid : public BitmapFetcherService::Observer {
     ScopedJavaLocalRef<jobject> java_bitmap =
         gfx::ConvertToJavaBitmap(&answers_image);
     Java_AnswersImageObserver_onAnswersImageChanged(
-        env, java_answers_image_observer_.obj(), java_bitmap.obj());
+        env, java_answers_image_observer_, java_bitmap);
   }
 
  private:

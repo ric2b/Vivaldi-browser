@@ -28,19 +28,17 @@ CredentialManagerPasswordFormManager::CredentialManagerPasswordFormManager(
           client,
           driver,
           observed_form,
-          true,
           base::WrapUnique(new FormSaverImpl(client->GetPasswordStore()))),
       delegate_(delegate),
       saved_form_(std::move(saved_form)) {
   DCHECK(saved_form_);
-  FetchDataFromPasswordStore();
 }
 
 CredentialManagerPasswordFormManager::~CredentialManagerPasswordFormManager() {
 }
 
 void CredentialManagerPasswordFormManager::OnGetPasswordStoreResults(
-    ScopedVector<autofill::PasswordForm> results) {
+    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   PasswordFormManager::OnGetPasswordStoreResults(std::move(results));
 
   // Mark the form as "preferred", as we've been told by the API that this is

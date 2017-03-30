@@ -148,7 +148,7 @@ class Executive(object):
             except OSError as e:
                 if e.errno == errno.EAGAIN:
                     if retries_left <= 0:
-                        _log.warn("Failed to kill pid %s.  Too many EAGAIN errors." % pid)
+                        _log.warning("Failed to kill pid %s.  Too many EAGAIN errors.", pid)
                     continue
                 if e.errno == errno.ESRCH:  # The process does not exist.
                     return
@@ -244,7 +244,7 @@ class Executive(object):
                 pid = line[1]
                 if process_name_filter(process_name):
                     running_pids.append(int(pid))
-            except (ValueError, IndexError) as e:
+            except (ValueError, IndexError):
                 pass
 
         return sorted(running_pids)
@@ -377,7 +377,7 @@ class Executive(object):
         exit_code = process.wait()
 
         if debug_logging:
-            _log.debug('"%s" took %.2fs' % (self.command_for_printing(args), time.time() - start_time))
+            _log.debug('"%s" took %.2fs', self.command_for_printing(args), time.time() - start_time)
 
         if return_exit_code:
             return exit_code

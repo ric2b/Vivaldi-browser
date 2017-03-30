@@ -33,13 +33,14 @@ enum ImporterType {
   TYPE_OPERA           = 7,
   TYPE_OPERA_BOOKMARK_FILE = 8,
   TYPE_CHROME          = 9,
-  TYPE_VIVALDI         = 10,
-  TYPE_YANDEX          = 11,
-  TYPE_OPERA_OPIUM_BETA = 12,   // Chromium-based Opera Beta channel
-  TYPE_OPERA_OPIUM_DEV = 13,
+  TYPE_CHROMIUM        = 10,
+  TYPE_VIVALDI         = 11,
+  TYPE_YANDEX          = 12,
+  TYPE_OPERA_OPIUM_BETA = 13,   // Chromium-based Opera Beta channel
+  TYPE_OPERA_OPIUM_DEV = 14,
 
   // Must be last due to profile_import_process_param_traits_macros.h
-  TYPE_OPERA_OPIUM = 14,        // Chromium-based Opera
+  TYPE_OPERA_OPIUM = 15,        // Chromium-based Opera
 };
 
 }  // namespace importer

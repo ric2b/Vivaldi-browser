@@ -1,5 +1,5 @@
 {
-  // chrome-extension://hoobinhbdbiehknkpbpejbbpdbkdjmoco/
+  // chrome-extension://oobinhbdbiehknkpbpejbbpdbkdjmoco/
   "key": "MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDBjsTE4ocXJWzgcCDCUcsPASoRCGaTHrHn6b4zDTCayTuJtyGKzw4xZPMiG4dbEbmSAwEU7UCoyJAM1XfLS7UQ/Zz7ft8wpZkSS8/PJW+E4Qu++tMS0csj2Wdrrd2c5yyWxlJ+H9o2ivwtwuxs7pd+LXt+gsBA0epnT04T9EvOTQIDAQAB",
   "name": "chrome file manager browser tests",
   "version": "0.1",
@@ -28,6 +28,7 @@
       "file_manager/open_image_files.js",
       "file_manager/open_video_files.js",
       "file_manager/providers.js",
+      "file_manager/quick_view.js",
       "file_manager/restore_geometry.js",
       "file_manager/restore_prefs.js",
       "file_manager/share_dialog.js",

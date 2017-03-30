@@ -7,9 +7,11 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/safe_browsing/permission_reporter.h"
 #include "components/certificate_reporting/error_reporter.h"
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/google_api_keys.h"
@@ -25,14 +27,12 @@
 using content::BrowserThread;
 
 namespace {
-// URLs to upload invalid certificate chain reports. The HTTP URL is
-// preferred since a client seeing an invalid cert might not be able to
+// URL to upload invalid certificate chain reports. An HTTP URL is
+// used because a client seeing an invalid cert might not be able to
 // make an HTTPS connection to report it.
 const char kExtendedReportingUploadUrlInsecure[] =
     "http://safebrowsing.googleusercontent.com/safebrowsing/clientreport/"
     "chrome-certs";
-const char kExtendedReportingUploadUrlSecure[] =
-    "https://sb-ssl.google.com/safebrowsing/clientreport/chrome-certs";
 }  // namespace
 
 namespace safe_browsing {
@@ -40,11 +40,12 @@ namespace safe_browsing {
 // SafeBrowsingPingManager implementation ----------------------------------
 
 // static
-SafeBrowsingPingManager* SafeBrowsingPingManager::Create(
+std::unique_ptr<SafeBrowsingPingManager> SafeBrowsingPingManager::Create(
     net::URLRequestContextGetter* request_context_getter,
     const SafeBrowsingProtocolConfig& config) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return new SafeBrowsingPingManager(request_context_getter, config);
+  return base::WrapUnique(
+      new SafeBrowsingPingManager(request_context_getter, config));
 }
 
 SafeBrowsingPingManager::SafeBrowsingPingManager(
@@ -56,24 +57,17 @@ SafeBrowsingPingManager::SafeBrowsingPingManager(
   DCHECK(!url_prefix_.empty());
 
   if (request_context_getter) {
-    // Set the upload URL and whether or not to send cookies with
-    // certificate reports sent to Safe Browsing servers.
-    bool use_insecure_certificate_upload_url =
-        certificate_reporting::ErrorReporter::IsHttpUploadUrlSupported();
-
     net::ReportSender::CookiesPreference cookies_preference;
     GURL certificate_upload_url;
-    if (use_insecure_certificate_upload_url) {
-      cookies_preference = net::ReportSender::DO_NOT_SEND_COOKIES;
-      certificate_upload_url = GURL(kExtendedReportingUploadUrlInsecure);
-    } else {
-      cookies_preference = net::ReportSender::SEND_COOKIES;
-      certificate_upload_url = GURL(kExtendedReportingUploadUrlSecure);
-    }
+    cookies_preference = net::ReportSender::DO_NOT_SEND_COOKIES;
+    certificate_upload_url = GURL(kExtendedReportingUploadUrlInsecure);
 
     certificate_error_reporter_.reset(new certificate_reporting::ErrorReporter(
         request_context_getter->GetURLRequestContext(), certificate_upload_url,
         cookies_preference));
+
+    permission_reporter_.reset(
+        new PermissionReporter(request_context_getter->GetURLRequestContext()));
   }
 
   version_ = SafeBrowsingProtocolManagerHelper::Version();
@@ -81,8 +75,8 @@ SafeBrowsingPingManager::SafeBrowsingPingManager(
 
 SafeBrowsingPingManager::~SafeBrowsingPingManager() {
   // Delete in-progress safebrowsing reports (hits and details).
-  STLDeleteContainerPointers(safebrowsing_reports_.begin(),
-                             safebrowsing_reports_.end());
+  base::STLDeleteContainerPointers(safebrowsing_reports_.begin(),
+                                   safebrowsing_reports_.end());
 }
 
 // net::URLFetcherDelegate implementation ----------------------------------
@@ -139,6 +133,11 @@ void SafeBrowsingPingManager::SetCertificateErrorReporterForTesting(
     std::unique_ptr<certificate_reporting::ErrorReporter>
         certificate_error_reporter) {
   certificate_error_reporter_ = std::move(certificate_error_reporter);
+}
+
+void SafeBrowsingPingManager::ReportPermissionAction(
+    const PermissionReportInfo& report_info) {
+  permission_reporter_->SendReport(report_info);
 }
 
 GURL SafeBrowsingPingManager::SafeBrowsingHitUrl(

@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -29,11 +30,12 @@
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
-#include "components/sync_driver/sync_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/infobars/infobar_manager_impl.h"
 #import "ios/chrome/browser/passwords/ios_chrome_save_password_infobar_delegate.h"
+#import "ios/chrome/browser/passwords/ios_chrome_update_password_infobar_delegate.h"
 #import "ios/chrome/browser/passwords/js_password_manager.h"
 #import "ios/chrome/browser/passwords/password_generation_agent.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
@@ -47,6 +49,11 @@ using password_manager::PasswordGenerationManager;
 using password_manager::PasswordManager;
 using password_manager::PasswordManagerClient;
 using password_manager::PasswordManagerDriver;
+
+namespace {
+// Types of password infobars to display.
+enum class PasswordInfoBarType { SAVE, UPDATE };
+}
 
 @interface PasswordController ()
 
@@ -105,6 +112,12 @@ using password_manager::PasswordManagerDriver;
 - (BOOL)getPasswordForm:(autofill::PasswordForm*)form
          fromDictionary:(const base::DictionaryValue*)dictionary
                 pageURL:(const GURL&)pageLocation;
+
+// Displays infobar for |form| with |type|. If |type| is UPDATE, the user
+// is prompted to update the password. If |type| is SAVE, the user is prompted
+// to save the password.
+- (void)showInfoBarForForm:(std::unique_ptr<PasswordFormManager>)form
+               infoBarType:(PasswordInfoBarType)type;
 
 @end
 
@@ -201,14 +214,14 @@ NSString* SerializePasswordFormFillData(
   // Input elements in the form. The list does not necessarily contain
   // all elements from the form, but all elements listed here are required
   // to identify the right form to fill.
-  auto fieldList = base::WrapUnique(new base::ListValue());
+  auto fieldList = base::MakeUnique<base::ListValue>();
 
-  auto usernameField = base::WrapUnique(new base::DictionaryValue());
+  auto usernameField = base::MakeUnique<base::DictionaryValue>();
   usernameField->SetString("name", formData.username_field.name);
   usernameField->SetString("value", formData.username_field.value);
   fieldList->Append(usernameField.release());
 
-  auto passwordField = base::WrapUnique(new base::DictionaryValue());
+  auto passwordField = base::MakeUnique<base::DictionaryValue>();
   passwordField->SetString("name", formData.password_field.name);
   passwordField->SetString("value", formData.password_field.value);
   fieldList->Append(passwordField.release());
@@ -333,13 +346,11 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
             const std::vector<autofill::PasswordForm>& forms) {
     for (const auto& form : forms) {
       autofill::PasswordFormFillData formData;
-      autofill::PasswordFormMap matches;
+      std::map<base::string16, const autofill::PasswordForm*> matches;
       // Initialize |matches| to satisfy the expectation from
       // InitPasswordFormFillData() that the preferred match (3rd parameter)
       // should be one of the |matches|.
-      auto scoped_form = base::WrapUnique(new autofill::PasswordForm(form));
-      matches.insert(
-          std::make_pair(form.username_value, std::move(scoped_form)));
+      matches.insert(std::make_pair(form.username_value, &form));
       autofill::InitPasswordFormFillData(form, matches, &form, false, false,
                                          &formData);
       [self fillPasswordForm:formData
@@ -431,10 +442,11 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 }
 
 - (void)getPasswordForms:(std::vector<autofill::PasswordForm>*)forms
-           fromFormsJSON:(NSString*)jsonString
+           fromFormsJSON:(NSString*)JSONNSString
                  pageURL:(const GURL&)pageURL {
   DCHECK(forms);
-  if (![jsonString length]) {
+  std::string JSONString = base::SysNSStringToUTF8(JSONNSString);
+  if (JSONString.empty()) {
     VLOG(1) << "Error in password controller javascript.";
     return;
   }
@@ -442,10 +454,10 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   int errorCode = 0;
   std::string errorMessage;
   std::unique_ptr<base::Value> jsonData(base::JSONReader::ReadAndReturnError(
-      std::string([jsonString UTF8String]), false, &errorCode, &errorMessage));
+      JSONString, false, &errorCode, &errorMessage));
   if (errorCode || !jsonData || !jsonData->IsType(base::Value::TYPE_LIST)) {
     VLOG(1) << "JSON parse error " << errorMessage
-            << " JSON string: " << [jsonString UTF8String];
+            << " JSON string: " << JSONString;
     return;
   }
 
@@ -616,6 +628,20 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   }
 }
 
+#pragma mark - PasswordManagerClientDelegate
+
+- (void)showSavePasswordInfoBar:
+    (std::unique_ptr<PasswordFormManager>)formToSave {
+  [self showInfoBarForForm:std::move(formToSave)
+               infoBarType:PasswordInfoBarType::SAVE];
+}
+
+- (void)showUpdatePasswordInfoBar:
+    (std::unique_ptr<PasswordFormManager>)formToUpdate {
+  [self showInfoBarForForm:std::move(formToUpdate)
+               infoBarType:PasswordInfoBarType::UPDATE];
+}
+
 #pragma mark -
 #pragma mark WebPasswordFormData Adaptation
 
@@ -691,37 +717,40 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
       form->password_value = values[0];
       break;
     case 2: {
-      if (values[0] == values[1]) {
-        // Treat two identical passwords as a single password.
-        form->password_element = elements[0];
-        form->password_value = values[0];
-      } else {
-        // Assume first is old password, second is new (no choice but to guess).
+      if (!values[0].empty() && values[0] == values[1]) {
+        // Treat two identical passwords as a single password new password, with
+        // confirmation. This can be either be a sign-up form or a password
+        // change form that does not ask for a new password.
         form->new_password_element = elements[0];
         form->new_password_value = values[0];
-        form->password_element = elements[1];
-        form->password_value = values[1];
+      } else {
+        // Assume first is old password, second is new (no choice but to guess).
+        form->password_element = elements[0];
+        form->password_value = values[0];
+        form->new_password_element = elements[1];
+        form->new_password_value = values[1];
       }
       break;
       default:
-        if (values[0] == values[1] && values[0] == values[2]) {
-          // All three passwords the same? Just treat as one and hope.
+        if (!values[0].empty() && values[0] == values[1] &&
+            values[0] == values[2]) {
+          // All three passwords the same? This does not make sense, do not
+          // add the password element.
+          break;
+        } else if (values[0] == values[1]) {
+          // First two the same and the third different implies that the old
+          // password is the duplicated one.
           form->password_element = elements[0];
           form->password_value = values[0];
-        } else if (values[0] == values[1]) {
-          // Two the same and one different -> old password is the duplicated
-          // one.
-          form->new_password_element = elements[0];
-          form->new_password_value = values[0];
-          form->password_element = elements[2];
-          form->password_value = values[2];
+          form->new_password_element = elements[2];
+          form->new_password_value = values[2];
         } else if (values[1] == values[2]) {
           // Two the same and one different -> new password is the duplicated
           // one.
-          form->new_password_element = elements[0];
-          form->new_password_value = values[0];
-          form->password_element = elements[1];
-          form->password_value = values[1];
+          form->password_element = elements[0];
+          form->password_value = values[0];
+          form->new_password_element = elements[1];
+          form->new_password_value = values[1];
         } else {
           // Three different passwords, or first and last match with middle
           // different. No idea which is which, so no luck.
@@ -752,26 +781,6 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   }
 
   return YES;
-}
-
-- (void)showSavePasswordInfoBar:
-    (std::unique_ptr<PasswordFormManager>)formToSave {
-  if (!webStateObserverBridge_ || !webStateObserverBridge_->web_state())
-    return;
-
-  bool isSmartLockBrandingEnabled = false;
-  if (self.browserState) {
-    sync_driver::SyncService* sync_service =
-        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
-            self.browserState);
-    isSmartLockBrandingEnabled =
-        password_bubble_experiment::IsSmartLockBrandingSavePromptEnabled(
-            sync_service);
-  }
-  infobars::InfoBarManager* infoBarManager =
-      InfoBarManagerImpl::FromWebState(webStateObserverBridge_->web_state());
-  IOSChromeSavePasswordInfoBarDelegate::Create(
-      isSmartLockBrandingEnabled, infoBarManager, std::move(formToSave));
 }
 
 - (void)fillPasswordForm:(const autofill::PasswordFormFillData&)formData
@@ -827,6 +836,38 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 - (JsPasswordManager*)passwordJsManager {
   return passwordJsManager_;
+}
+
+#pragma mark - Private methods
+
+- (void)showInfoBarForForm:(std::unique_ptr<PasswordFormManager>)form
+               infoBarType:(PasswordInfoBarType)type {
+  if (!webStateObserverBridge_ || !webStateObserverBridge_->web_state())
+    return;
+
+  bool isSmartLockBrandingEnabled = false;
+  if (self.browserState) {
+    sync_driver::SyncService* sync_service =
+        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+            self.browserState);
+    isSmartLockBrandingEnabled =
+        password_bubble_experiment::IsSmartLockBrandingSavePromptEnabled(
+            sync_service);
+  }
+  infobars::InfoBarManager* infoBarManager =
+      InfoBarManagerImpl::FromWebState(webStateObserverBridge_->web_state());
+
+  switch (type) {
+    case PasswordInfoBarType::SAVE:
+      IOSChromeSavePasswordInfoBarDelegate::Create(
+          isSmartLockBrandingEnabled, infoBarManager, std::move(form));
+      break;
+
+    case PasswordInfoBarType::UPDATE:
+      IOSChromeUpdatePasswordInfoBarDelegate::Create(
+          isSmartLockBrandingEnabled, infoBarManager, std::move(form));
+      break;
+  }
 }
 
 @end

@@ -21,14 +21,15 @@ TestMojoApp::TestMojoApp() : service_binding_(this) {
 TestMojoApp::~TestMojoApp() {
 }
 
-bool TestMojoApp::AcceptConnection(shell::Connection* connection) {
-  requestor_name_ = connection->GetRemoteIdentity().name();
-  connection->AddInterface<mojom::TestMojoService>(this);
+bool TestMojoApp::OnConnect(const shell::Identity& remote_identity,
+                            shell::InterfaceRegistry* registry) {
+  requestor_name_ = remote_identity.name();
+  registry->AddInterface<mojom::TestMojoService>(this);
   return true;
 }
 
 void TestMojoApp::Create(
-    shell::Connection* connection,
+    const shell::Identity& remote_identity,
     mojo::InterfaceRequest<mojom::TestMojoService> request) {
   DCHECK(!service_binding_.is_bound());
   service_binding_.Bind(std::move(request));

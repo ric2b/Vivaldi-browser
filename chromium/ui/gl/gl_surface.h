@@ -26,6 +26,10 @@ class Transform;
 class VSyncProvider;
 }
 
+namespace ui {
+struct CARendererLayerParams;
+}
+
 namespace gl {
 
 class GLContext;
@@ -92,7 +96,7 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
 
   // Returns the internal frame buffer object name if the surface is backed by
   // FBO. Otherwise returns 0.
-  virtual unsigned int GetBackingFrameBufferObject();
+  virtual unsigned int GetBackingFramebufferObject();
 
   typedef base::Callback<void(gfx::SwapResult)> SwapCompletionCallback;
   // Swaps front and back buffers. This has no effect for off-screen
@@ -173,17 +177,8 @@ class GL_EXPORT GLSurface : public base::RefCounted<GLSurface> {
 
   // Schedule a CALayer to be shown at swap time.
   // All arguments correspond to their CALayer properties.
-  virtual bool ScheduleCALayer(GLImage* contents_image,
-                               const gfx::RectF& contents_rect,
-                               float opacity,
-                               unsigned background_color,
-                               unsigned edge_aa_mask,
-                               const gfx::RectF& rect,
-                               bool is_clipped,
-                               const gfx::RectF& clip_rect,
-                               const gfx::Transform& transform,
-                               int sorting_content_id,
-                               unsigned filter);
+  virtual bool ScheduleCALayer(const ui::CARendererLayerParams& params);
+
   struct GL_EXPORT CALayerInUseQuery {
     CALayerInUseQuery();
     explicit CALayerInUseQuery(const CALayerInUseQuery&);
@@ -251,7 +246,7 @@ class GL_EXPORT GLSurfaceAdapter : public GLSurface {
   bool SupportsAsyncSwap() override;
   gfx::Size GetSize() override;
   void* GetHandle() override;
-  unsigned int GetBackingFrameBufferObject() override;
+  unsigned int GetBackingFramebufferObject() override;
   bool OnMakeCurrent(GLContext* context) override;
   bool SetBackbufferAllocation(bool allocated) override;
   void SetFrontbufferAllocation(bool allocated) override;

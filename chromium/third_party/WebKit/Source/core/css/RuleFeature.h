@@ -98,10 +98,11 @@ public:
     void collectInvalidationSetsForAttribute(InvalidationLists&, Element&, const QualifiedName& attributeName) const;
     void collectInvalidationSetsForPseudoClass(InvalidationLists&, Element&, CSSSelector::PseudoType) const;
 
-    void collectSiblingInvalidationSetForClass(InvalidationLists&, Element&, const AtomicString& className) const;
-    void collectSiblingInvalidationSetForId(InvalidationLists&, Element&, const AtomicString& id) const;
-    void collectSiblingInvalidationSetForAttribute(InvalidationLists&, Element&, const QualifiedName& attributeName) const;
-    void collectUniversalSiblingInvalidationSet(InvalidationLists&) const;
+    void collectSiblingInvalidationSetForClass(InvalidationLists&, Element&, const AtomicString& className, unsigned minDirectAdjacent) const;
+    void collectSiblingInvalidationSetForId(InvalidationLists&, Element&, const AtomicString& id, unsigned minDirectAdjacent) const;
+    void collectSiblingInvalidationSetForAttribute(InvalidationLists&, Element&, const QualifiedName& attributeName, unsigned minDirectAdjacent) const;
+    void collectUniversalSiblingInvalidationSet(InvalidationLists&, unsigned minDirectAdjacent) const;
+    void collectNthInvalidationSet(InvalidationLists&) const;
 
     bool hasIdsInSelectors() const
     {
@@ -112,6 +113,8 @@ public:
 
     HeapVector<RuleFeature> siblingRules;
     HeapVector<RuleFeature> uncommonAttributeRules;
+
+    bool isAlive() const { return m_isAlive; }
 
 protected:
     InvalidationSet* invalidationSetForSelector(const CSSSelector&, InvalidationType);
@@ -141,6 +144,7 @@ private:
     InvalidationSet& ensureIdInvalidationSet(const AtomicString& id, InvalidationType);
     InvalidationSet& ensurePseudoInvalidationSet(CSSSelector::PseudoType, InvalidationType);
     SiblingInvalidationSet& ensureUniversalSiblingInvalidationSet();
+    DescendantInvalidationSet& ensureNthInvalidationSet();
 
     void updateInvalidationSets(const RuleData&);
     void updateInvalidationSetsForContentAttribute(const RuleData&);
@@ -161,6 +165,7 @@ private:
         bool forceSubtree = false;
         bool contentPseudoCrossing = false;
         bool invalidatesSlotted = false;
+        bool hasNthPseudo = false;
     };
 
     static bool extractInvalidationSetFeature(const CSSSelector&, InvalidationSetFeatures&);
@@ -182,6 +187,10 @@ private:
     InvalidationSetMap m_idInvalidationSets;
     PseudoTypeInvalidationSetMap m_pseudoInvalidationSets;
     RefPtr<SiblingInvalidationSet> m_universalSiblingInvalidationSet;
+    RefPtr<DescendantInvalidationSet> m_nthInvalidationSet;
+
+    // If true, the RuleFeatureSet is alive and can be used.
+    unsigned m_isAlive : 1;
 
     friend class RuleFeatureSetTest;
 };

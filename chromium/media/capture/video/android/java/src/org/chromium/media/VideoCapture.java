@@ -12,6 +12,8 @@ import android.view.WindowManager;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
+import java.nio.ByteBuffer;
+
 /**
  * Video Capture Device base class, defines a set of methods that native code
  * needs to use to configure, start capture, and to be reached by callbacks and
@@ -50,6 +52,15 @@ public abstract class VideoCapture {
 
     @CalledByNative
     public abstract PhotoCapabilities getPhotoCapabilities();
+
+    /**
+    * @param zoom Zoom level, should be ignored if 0.
+    * @param pointsOfInterest2D 2D normlized oints of interest, marshalled with
+    * x coordinate first followed by the y coordinate.
+    */
+    @CalledByNative
+    public abstract void setPhotoOptions(int zoom, int focusMode, int exposureMode, int width,
+            int height, float[] pointsOfInterest2D);
 
     @CalledByNative
     public abstract boolean takePhoto(final long callbackId);
@@ -118,6 +129,10 @@ public abstract class VideoCapture {
     // Method for VideoCapture implementations to call back native code.
     public native void nativeOnFrameAvailable(
             long nativeVideoCaptureDeviceAndroid, byte[] data, int length, int rotation);
+
+    public native void nativeOnI420FrameAvailable(long nativeVideoCaptureDeviceAndroid,
+            ByteBuffer yBuffer, int yStride, ByteBuffer uBuffer, ByteBuffer vBuffer,
+            int uvRowStride, int uvPixelStride, int width, int height, int rotation);
 
     // Method for VideoCapture implementations to signal an asynchronous error.
     public native void nativeOnError(long nativeVideoCaptureDeviceAndroid, String message);

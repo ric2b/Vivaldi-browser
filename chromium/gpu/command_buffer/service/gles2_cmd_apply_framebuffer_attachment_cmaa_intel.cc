@@ -27,8 +27,6 @@ ApplyFramebufferAttachmentCMAAINTELResourceManager::
       frame_id_(0),
       width_(0),
       height_(0),
-      copy_to_framebuffer_shader_(0),
-      copy_to_image_shader_(0),
       edges0_shader_(0),
       edges1_shader_(0),
       edges_combine_shader_(0),
@@ -46,8 +44,7 @@ ApplyFramebufferAttachmentCMAAINTELResourceManager::
       edges1_shader_result_texture_(0),
       edges_combine_shader_result_texture_float4_slot1_(0),
       process_and_apply_shader_result_texture_float4_slot1_(0),
-      edges_combine_shader_result_texture_slot2_(0),
-      copy_to_image_shader_outTexture_(0) {}
+      edges_combine_shader_result_texture_slot2_(0) {}
 
 ApplyFramebufferAttachmentCMAAINTELResourceManager::
     ~ApplyFramebufferAttachmentCMAAINTELResourceManager() {
@@ -59,10 +56,6 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::Initialize(
   DCHECK(decoder);
   is_gles31_compatible_ =
       decoder->GetGLContext()->GetVersionInfo()->IsAtLeastGLES(3, 1);
-
-  copy_to_image_shader_ = CreateProgram("", vert_str_, copy_frag_str_);
-  copy_to_framebuffer_shader_ =
-      CreateProgram("#define OUT_FBO 1\n", vert_str_, copy_frag_str_);
 
   // Check if RGBA8UI is supported as an FBO colour target with depth.
   // If not supported, GLSL needs to convert the data to/from float so there is
@@ -189,8 +182,6 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::Initialize(
       glGetUniformLocation(edges_combine_shader_, "g_resultTextureSlot2");
   process_and_apply_shader_result_texture_float4_slot1_ = glGetUniformLocation(
       process_and_apply_shader_, "g_resultTextureFlt4Slot1");
-  copy_to_image_shader_outTexture_ =
-      glGetUniformLocation(copy_to_image_shader_, "outTexture");
 
   initialized_ = true;
 }
@@ -201,8 +192,6 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::Destroy() {
 
   ReleaseTextures();
 
-  glDeleteProgram(copy_to_image_shader_);
-  glDeleteProgram(copy_to_framebuffer_shader_);
   glDeleteProgram(process_and_apply_shader_);
   glDeleteProgram(edges_combine_shader_);
   glDeleteProgram(edges1_shader_);
@@ -223,7 +212,10 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::
   if (!framebuffer)
     return;
 
-  GLuint last_framebuffer = framebuffer->service_id();
+  glDisable(GL_SCISSOR_TEST);
+  glDisable(GL_STENCIL_TEST);
+  glDisable(GL_CULL_FACE);
+  glDisable(GL_BLEND);
 
   // Process each color attachment of the current draw framebuffer.
   uint32_t max_draw_buffers = decoder->GetContextGroup()->max_draw_buffers();
@@ -250,11 +242,13 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::
 
       // Copy source_texture to rgba8_texture_
       if (do_copy) {
-        CopyTexture(source_texture, rgba8_texture_, false);
+        glBindFramebufferEXT(GL_FRAMEBUFFER, copy_framebuffer_);
+        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                                  GL_TEXTURE_2D, source_texture, 0);
+        CopyTexture(rgba8_texture_);
       }
 
       // CMAA Effect
-      glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, last_framebuffer);
       if (do_copy) {
         ApplyCMAAEffectTexture(rgba8_texture_, rgba8_texture_);
       } else {
@@ -263,24 +257,12 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::
 
       // Copy rgba8_texture_ to source_texture
       if (do_copy) {
-        // Move source_texture to the first color attachment of the copy fbo.
-        glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, last_framebuffer);
-        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
-                                  GL_TEXTURE_2D, 0, 0);
-        glBindFramebufferEXT(GL_FRAMEBUFFER, copy_framebuffer_);
-        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                  GL_TEXTURE_2D, source_texture, 0);
-
-        CopyTexture(rgba8_texture_, source_texture, true);
-
-        // Restore color attachments
         glBindFramebufferEXT(GL_FRAMEBUFFER, copy_framebuffer_);
         glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
                                   GL_TEXTURE_2D, rgba8_texture_, 0);
-        glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, last_framebuffer);
-        glFramebufferTexture2DEXT(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i,
-                                  GL_TEXTURE_2D, source_texture, 0);
+        CopyTexture(source_texture);
       }
+      decoder->RestoreTextureState(source_texture);
     }
   }
 
@@ -348,8 +330,7 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ApplyCMAAEffectTexture(
 
   {
     glUseProgram(edges0_shader_);
-    glUniform1f(0, 1.0f);
-    glUniform2f(1, 1.0f / width_, 1.0f / height_);
+    glUniform2f(0, 1.0f / width_, 1.0f / height_);
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_ALWAYS);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
@@ -378,8 +359,7 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ApplyCMAAEffectTexture(
   //  image2D g_resultTexture             edge_texture_b               image0
   {
     glUseProgram(edges1_shader_);
-    glUniform1f(0, 0.0f);
-    glUniform2f(1, 1.0f / width_, 1.0f / height_);
+    glUniform2f(0, 1.0f / width_, 1.0f / height_);
     glDepthMask(GL_FALSE);
     glDepthFunc(GL_LESS);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -399,9 +379,7 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ApplyCMAAEffectTexture(
   }
 
   //  - Combine RightBottom (.xy) edges from previous pass into
-  //    RightBottomLeftTop (.xyzw) edges and output it into the mask (have to
-  //    fill in the whole buffer including empty ones for the line length
-  //    detection to work correctly).
+  //    RightBottomLeftTop (.xyzw) edges and output it into the mask.
   //  - On all pixels with any edge, input buffer into a temporary color buffer
   //    needed for correct blending in the next pass (other pixels not needed
   //    so not copied to avoid bandwidth use).
@@ -415,13 +393,12 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ApplyCMAAEffectTexture(
   //  gl_FragDepth                        mini4_edge_texture_          fbo.depth
   {
     // Combine edges: each pixel will now contain info on all (top, right,
-    // bottom, left) edges; also create depth mask as above depth and mark
-    // potential Z sAND also copy source color data but only on edge pixels
+    // bottom, left) edges; also mark depth 1 value on all pixels with any edge
+    // and also copy source color data but only on edge pixels
     glUseProgram(edges_combine_shader_);
-    glUniform1f(0, 1.0f);
-    glUniform2f(1, 1.0f / width_, 1.0f / height_);
+    glUniform2f(0, 1.0f / width_, 1.0f / height_);
     glDepthMask(GL_TRUE);
-    glDepthFunc(GL_ALWAYS);
+    glDepthFunc(GL_LESS);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
 
     if (!is_gles31_compatible_) {
@@ -455,8 +432,7 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ApplyCMAAEffectTexture(
   //  gl_FragDepth                         mini4_edge_texture_         fbo.depth
   {
     glUseProgram(process_and_apply_shader_);
-    glUniform1f(0, 0.0f);
-    glUniform2f(1, 1.0f / width_, 1.0f / height_);
+    glUniform2f(0, 1.0f / width_, 1.0f / height_);
     glDepthMask(GL_FALSE);
     glDepthFunc(GL_LESS);
     glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
@@ -570,32 +546,15 @@ void ApplyFramebufferAttachmentCMAAINTELResourceManager::ReleaseTextures() {
 }
 
 void ApplyFramebufferAttachmentCMAAINTELResourceManager::CopyTexture(
-    GLint source,
-    GLint dest,
-    bool via_fbo) {
-  glViewport(0, 0, width_, height_);
+    GLint dest) {
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, source);
+  glBindTexture(GL_TEXTURE_2D, dest);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 
-  if (!via_fbo) {
-    glUseProgram(copy_to_image_shader_);
-    if (!is_gles31_compatible_) {
-      glUniform1i(copy_to_image_shader_outTexture_, 0);
-    }
-    glBindImageTextureEXT(0, dest, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
-  } else {
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_STENCIL_TEST);
-    glDisable(GL_CULL_FACE);
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_BLEND);
-    glUseProgram(copy_to_framebuffer_shader_);
-  }
-
-  glDrawArrays(GL_TRIANGLES, 0, 3);
-  glUseProgram(0);
-  glBindTexture(GL_TEXTURE_2D, 0);
+  glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, width_, height_);
 }
 
 GLuint ApplyFramebufferAttachmentCMAAINTELResourceManager::CreateProgram(
@@ -690,7 +649,6 @@ GLuint ApplyFramebufferAttachmentCMAAINTELResourceManager::CreateShader(
 const char ApplyFramebufferAttachmentCMAAINTELResourceManager::vert_str_[] =
   SHADER(
     precision highp float;
-    layout(location = 0) uniform float g_Depth;
     // No input data.
     // Verts are autogenerated.
     //
@@ -703,7 +661,7 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::vert_str_[] =
     {
        float x = -1.0 + float((gl_VertexID & 1) << 2);
        float y = -1.0 + float((gl_VertexID & 2) << 1);
-       gl_Position = vec4(x, y, g_Depth, 1.0);
+       gl_Position = vec4(x, y, 0.0, 1.0);
     }
   );
 
@@ -716,12 +674,10 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s1_[] =
     \n#define EDGE_DETECT_THRESHOLD 13.0f\n
     \n#define saturate(x) clamp((x), 0.0, 1.0)\n
 
-    // bind to location 0
-    layout(location = 0) uniform float g_Depth;
     // bind to a uniform buffer bind point 0
-    layout(location = 1) uniform vec2 g_OneOverScreenSize;
+    layout(location = 0) uniform vec2 g_OneOverScreenSize;
     \n#ifndef EDGE_DETECT_THRESHOLD\n
-    layout(location = 2) uniform float g_ColorThreshold;
+    layout(location = 1) uniform float g_ColorThreshold;
     \n#endif\n
 
     \n#ifdef SUPPORTS_USAMPLER2D\n
@@ -1438,10 +1394,29 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
     \n#ifdef BLUR_EDGES\n
     layout(early_fragment_tests) in;
     void BlurEdges() {
-      int _i;
-
+      // Each |gl_FragCoord| updates 4 texels of the original texture, which are
+      // 2x|gl_FragCoord| + (-1 or 0, -1 or 0) in the unnormalized texture
+      // coordinate, which is the coordinate used by texelFetch().
+      // e.g. when gl_FragCoord == (3.5, 3.5), this fragment shader covers
+      // (6,6) (6,7) (7,6) (7,7) texels.
+      // Note: gl_FragCoord == (0.5, 0.5) (i.e. left-bottom-most fragment)
+      // covers (0,0) (0,1) (1,0) (1,1) texels
+      // gl_FragCoord == ((w/2)-0.5, (h/2)-0.5) (i.e. right-top-most fragment)
+      // covers (w-2,h-2) (w-2,h-1) (w-1,h-2) (w-1,h-1)
       ivec3 screenPosIBase = ivec3(ivec2(gl_FragCoord.xy) * 2, 0);
       vec3 screenPosBase = vec3(screenPosIBase);
+
+      // When gl_FragCoord == (0.5, 0.5) (i.e. left-bottom-most fragment),
+      // |sampA| textureGatherOffset() looks up (-1,-1), (-1,0), (0,-1), (0,0).
+      // (-1,-1), (-1,0), (0,-1) must be handled.
+      // Note: textureGatherOffset() on out of range gives an undefined value.
+      uvec2 notBottomLeft = uvec2(notEqual(screenPosIBase.xy, ivec2(0, 0)));
+      // When gl_FragCoord == ((w/2)-0.5, (h/2)-0.5) (i.e. right-top-most
+      // fragment), |sampD| looks up (w-1, h-1), (w-1, h), (w, h-1), (w, h).
+      // (w-1, h), (w, h-1), (w, h) must be handled.
+      uvec2 notTopRight = uvec2(
+          notEqual((screenPosIBase.xy + 2), textureSize(g_src0TextureFlt, 0)));
+
       uint forFollowUpCount = 0u;
       ivec4 forFollowUpCoords[4];
 
@@ -1464,24 +1439,27 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
                               screenPosBase.xy * g_OneOverScreenSize,
                               ivec2(2, 2)) *255.5);
 
-      packedEdgesArray[(0) * 4 + (0)] = sampA.w;
-      packedEdgesArray[(1) * 4 + (0)] = sampA.z;
-      packedEdgesArray[(0) * 4 + (1)] = sampA.x;
+      packedEdgesArray[(0) * 4 + (0)] =
+          sampA.w * notBottomLeft.x * notBottomLeft.y;
+      packedEdgesArray[(1) * 4 + (0)] = sampA.z * notBottomLeft.y;
+      packedEdgesArray[(0) * 4 + (1)] = sampA.x * notBottomLeft.x;
       packedEdgesArray[(1) * 4 + (1)] = sampA.y;
-      packedEdgesArray[(2) * 4 + (0)] = sampB.w;
-      packedEdgesArray[(3) * 4 + (0)] = sampB.z;
+      packedEdgesArray[(2) * 4 + (0)] = sampB.w * notBottomLeft.y;
+      packedEdgesArray[(3) * 4 + (0)] =
+          sampB.z * notBottomLeft.y * notTopRight.x;
       packedEdgesArray[(2) * 4 + (1)] = sampB.x;
-      packedEdgesArray[(3) * 4 + (1)] = sampB.y;
-      packedEdgesArray[(0) * 4 + (2)] = sampC.w;
+      packedEdgesArray[(3) * 4 + (1)] = sampB.y * notTopRight.x;
+      packedEdgesArray[(0) * 4 + (2)] = sampC.w * notBottomLeft.x;
       packedEdgesArray[(1) * 4 + (2)] = sampC.z;
-      packedEdgesArray[(0) * 4 + (3)] = sampC.x;
-      packedEdgesArray[(1) * 4 + (3)] = sampC.y;
+      packedEdgesArray[(0) * 4 + (3)] =
+          sampC.x * notBottomLeft.x * notTopRight.y;
+      packedEdgesArray[(1) * 4 + (3)] = sampC.y * notTopRight.y;
       packedEdgesArray[(2) * 4 + (2)] = sampD.w;
-      packedEdgesArray[(3) * 4 + (2)] = sampD.z;
-      packedEdgesArray[(2) * 4 + (3)] = sampD.x;
-      packedEdgesArray[(3) * 4 + (3)] = sampD.y;
+      packedEdgesArray[(3) * 4 + (2)] = sampD.z * notTopRight.x;
+      packedEdgesArray[(2) * 4 + (3)] = sampD.x * notTopRight.y;
+      packedEdgesArray[(3) * 4 + (3)] = sampD.y * notTopRight.x * notTopRight.y;
 
-      for (_i = 0; _i < 4; _i++) {
+      for (int _i = 0; _i < 4; _i++) {
         int _x = _i % 2;
         int _y = _i / 2;
 
@@ -1490,12 +1468,11 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
         uint packedEdgesC = packedEdgesArray[(1 + _x) * 4 + (1 + _y)];
 
         uvec4 edges = UnpackEdge(packedEdgesC);
-        vec4 edgesFlt = vec4(edges);
-
-        float numberOfEdges = dot(edgesFlt, vec4(1, 1, 1, 1));
-        if (numberOfEdges <= 1.0)
+        uint numberOfEdges = edges.x + edges.y + edges.z + edges.w;
+        if (numberOfEdges <= 1u)
           continue;
 
+        vec4 edgesFlt = vec4(edges);
         float fromRight = edgesFlt.r;
         float fromAbove = edgesFlt.g;
         float fromLeft = edgesFlt.b;
@@ -1518,7 +1495,7 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
         // the current pixel's colour in return.
         // However, in the case when this is an actual corner, the pixel's
         // colour will be partially overwritten by it's 2 neighbours.
-        if( numberOfEdges == 2.0 )
+        if (numberOfEdges == 2u)
         {
           // with value of 0.15, the pixel will retain approx 77% of its
           // colour and the remaining 23% will come from its 2 neighbours
@@ -1558,10 +1535,38 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
                            bool(packedEdgesB & 0x04u);
           if (large_l1 || large_l2 || large_l3 || large_l4)
             continue;
+
+          // Don't blend isolated L shape because it's not a closed geometry.
+          // isolated_l1 isolated_l2 isolated_l3 isolated_l4
+          //   _                                   _
+          //   X|          X|         |X          |X
+          //               ¯¯         ¯¯
+          bool isolated_l1 = (packedEdgesC == (0x01u | 0x02u)) &&
+                           bool((packedEdgesL & 0x02u) == 0x00u) &&
+                           bool((packedEdgesT & 0x04u) == 0x00u) &&
+                           bool((packedEdgesR & 0x08u) == 0x00u) &&
+                           bool((packedEdgesB & 0x01u) == 0x00u);
+          bool isolated_l2 = (packedEdgesC == (0x01u | 0x08u)) &&
+                           bool((packedEdgesL & 0x08u) == 0x00u) &&
+                           bool((packedEdgesT & 0x01u) == 0x00u) &&
+                           bool((packedEdgesR & 0x02u) == 0x00u) &&
+                           bool((packedEdgesB & 0x04u) == 0x00u);
+          bool isolated_l3 = (packedEdgesC == (0x04u | 0x08u)) &&
+                           bool((packedEdgesL & 0x02u) == 0x00u) &&
+                           bool((packedEdgesT & 0x04u) == 0x00u) &&
+                           bool((packedEdgesR & 0x08u) == 0x00u) &&
+                           bool((packedEdgesB & 0x01u) == 0x00u);
+          bool isolated_l4 = (packedEdgesC == (0x02u | 0x04u)) &&
+                           bool((packedEdgesL & 0x08u) == 0x00u) &&
+                           bool((packedEdgesT & 0x01u) == 0x00u) &&
+                           bool((packedEdgesR & 0x02u) == 0x00u) &&
+                           bool((packedEdgesB & 0x04u) == 0x00u);
+          if (isolated_l1 || isolated_l2 || isolated_l3 || isolated_l4)
+            continue;
         }
 
         // 2.) U-like shape (surrounded with edges from 3 sides)
-        if (numberOfEdges == 3.0) {
+        if (numberOfEdges == 3u) {
           // with value of 0.13, the pixel will retain approx 72% of its
           // colour and the remaining 28% will be picked from its 3
           // neighbours (which are unlikely to be blurred too but could be)
@@ -1569,7 +1574,7 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
         }
 
         // 3.) Completely surrounded with edges from all 4 sides
-        if (numberOfEdges == 4.0) {
+        if (numberOfEdges == 4u) {
           // with value of 0.07, the pixel will retain 78% of its colour
           // and the remaining 22% will come from its 4 neighbours (which
           // are unlikely to be blurred)
@@ -1629,11 +1634,11 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
 
     \n#ifdef DEBUG_OUTPUT_AAINFO\n
         imageStore(g_resultTextureSlot2, screenPosI.xy,
-                   PackBlurAAInfo(screenPosI.xy, uint(numberOfEdges)));
+                   PackBlurAAInfo(screenPosI.xy, numberOfEdges));
     \n#endif\n
         imageStore(g_resultTextureFlt4Slot1, screenPosI.xy, color);
 
-        if (numberOfEdges == 2.0) {
+        if (numberOfEdges == 2u) {
           uint packedEdgesL = packedEdgesArray[(0 + _x) * 4 + (1 + _y)];
           uint packedEdgesB = packedEdgesArray[(1 + _x) * 4 + (0 + _y)];
           uint packedEdgesR = packedEdgesArray[(2 + _x) * 4 + (1 + _y)];
@@ -1841,30 +1846,6 @@ const char ApplyFramebufferAttachmentCMAAINTELResourceManager::cmaa_frag_s2_[] =
     \n#endif\n
     }
   );
-
-const char
-  ApplyFramebufferAttachmentCMAAINTELResourceManager::copy_frag_str_[] =
-    SHADER(
-      precision highp float;
-      layout(binding = 0) uniform highp sampler2D inTexture;
-      layout(location = 0) out vec4 outColor;
-      \n#ifdef GL_ES\n
-      layout(binding = 0, rgba8) restrict writeonly uniform highp
-                                                     image2D outTexture;
-      \n#else\n
-      layout(rgba8) restrict writeonly uniform highp image2D outTexture;
-      \n#endif\n
-
-      void main() {
-        ivec2 screenPosI = ivec2( gl_FragCoord.xy );
-        vec4 pixel = texelFetch(inTexture, screenPosI, 0);
-      \n#ifdef OUT_FBO\n
-        outColor = pixel;
-      \n#else\n
-        imageStore(outTexture, screenPosI, pixel);
-      \n#endif\n
-      }
-    );
 /* clang-format on */
 
 }  // namespace gpu

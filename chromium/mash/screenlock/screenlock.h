@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "mash/session/public/interfaces/session.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/tracing/public/cpp/provider.h"
 
 namespace views {
 class AuraInit;
@@ -22,22 +22,20 @@ class WindowManagerConnection;
 namespace mash {
 namespace screenlock {
 
-class Screenlock : public shell::ShellClient,
+class Screenlock : public shell::Service,
                    public session::mojom::ScreenlockStateListener {
  public:
   Screenlock();
   ~Screenlock() override;
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
+  // shell::Service:
+  void OnStart(const shell::Identity& identity) override;
 
   // session::mojom::ScreenlockStateListener:
   void ScreenlockStateChanged(bool locked) override;
 
-  mojo::TracingImpl tracing_;
+  tracing::Provider tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
   std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
   mojo::BindingSet<session::mojom::ScreenlockStateListener> bindings_;

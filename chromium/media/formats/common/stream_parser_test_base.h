@@ -60,9 +60,7 @@ class StreamParserTestBase {
   void OnInitDone(const StreamParser::InitParameters& params);
   bool OnNewConfig(std::unique_ptr<MediaTracks> tracks,
                    const StreamParser::TextTrackConfigMap& text_config);
-  bool OnNewBuffers(const StreamParser::BufferQueue& audio_buffers,
-                    const StreamParser::BufferQueue& video_buffers,
-                    const StreamParser::TextBufferQueueMap& text_map);
+  bool OnNewBuffers(const StreamParser::BufferQueueMap& buffer_queue_map);
   void OnKeyNeeded(EmeInitDataType type, const std::vector<uint8_t>& init_data);
   void OnNewSegment();
   void OnEndOfSegment();
@@ -70,6 +68,7 @@ class StreamParserTestBase {
   std::unique_ptr<StreamParser> parser_;
   std::stringstream results_stream_;
   AudioDecoderConfig last_audio_config_;
+  StreamParser::TrackId audio_track_id_;
 
   DISALLOW_COPY_AND_ASSIGN(StreamParserTestBase);
 };

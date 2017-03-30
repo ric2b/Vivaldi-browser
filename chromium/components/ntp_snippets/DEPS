@@ -1,5 +1,6 @@
 include_rules = [
   "+components/data_use_measurement/core",
+  "+components/history/core",
   "+components/image_fetcher",
   "+components/keyed_service/core",
   "+components/leveldb_proto",
@@ -7,11 +8,13 @@ include_rules = [
   "+components/prefs",
   "+components/signin",
   "+components/suggestions",
-  "+components/sync_driver",
+  "+components/sync/driver",
   "+components/variations",
+  "+grit/components_strings.h",
   "+net/base",
   "+net/http",
   "+net/url_request",
   "+google_apis",
+  "+ui/base",
   "+ui/gfx",
 ]

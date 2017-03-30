@@ -26,6 +26,7 @@
 #ifndef ReplaceSelectionCommand_h
 #define ReplaceSelectionCommand_h
 
+#include "core/CoreExport.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 
@@ -34,7 +35,7 @@ namespace blink {
 class DocumentFragment;
 class ReplacementFragment;
 
-class ReplaceSelectionCommand final : public CompositeEditCommand {
+class CORE_EXPORT ReplaceSelectionCommand final : public CompositeEditCommand {
 public:
     enum CommandOption {
         SelectReplacement = 1 << 0,
@@ -47,9 +48,9 @@ public:
 
     typedef unsigned CommandOptions;
 
-    static ReplaceSelectionCommand* create(Document& document, DocumentFragment* fragment, CommandOptions options, EditAction action = EditActionPaste)
+    static ReplaceSelectionCommand* create(Document& document, DocumentFragment* fragment, CommandOptions options, InputEvent::InputType inputType = InputEvent::InputType::None)
     {
-        return new ReplaceSelectionCommand(document, fragment, options, action);
+        return new ReplaceSelectionCommand(document, fragment, options, inputType);
     }
 
     EphemeralRange insertedRange() const;
@@ -57,10 +58,10 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    ReplaceSelectionCommand(Document&, DocumentFragment*, CommandOptions, EditAction);
+    ReplaceSelectionCommand(Document&, DocumentFragment*, CommandOptions, InputEvent::InputType);
 
     void doApply(EditingState*) override;
-    EditAction editingAction() const override;
+    InputEvent::InputType inputType() const override;
     bool isReplaceSelectionCommand() const override;
 
     class InsertedNodes {
@@ -117,7 +118,7 @@ private:
     Member<DocumentFragment> m_documentFragment;
     bool m_preventNesting;
     bool m_movingParagraph;
-    EditAction m_editAction;
+    InputEvent::InputType m_inputType;
     bool m_sanitizeFragment;
     bool m_shouldMergeEnd;
 

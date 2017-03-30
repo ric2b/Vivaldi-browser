@@ -2,8 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("../../../mojo_application.gni")
-
 source_set("tests") {
   testonly = true
 
@@ -19,6 +17,7 @@ source_set("tests") {
     "constant_unittest.cc",
     "container_test_util.cc",
     "container_test_util.h",
+    "data_view_unittest.cc",
     "equals_unittest.cc",
     "handle_passing_unittest.cc",
     "interface_ptr_unittest.cc",
@@ -27,6 +26,7 @@ source_set("tests") {
     "message_queue.cc",
     "message_queue.h",
     "multiplex_router_unittest.cc",
+    "report_bad_message_unittest.cc",
     "request_response_unittest.cc",
     "router_test_util.cc",
     "router_test_util.h",
@@ -46,10 +46,12 @@ source_set("tests") {
 
   deps = [
     ":mojo_public_bindings_test_utils",
+    "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
     "//mojo/public/cpp/test_support:test_utils",
     "//mojo/public/interfaces/bindings/tests:test_associated_interfaces",
+    "//mojo/public/interfaces/bindings/tests:test_export_component",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",
     "//mojo/public/interfaces/bindings/tests:test_interfaces_experimental",
     "//mojo/public/interfaces/bindings/tests:test_struct_traits_interfaces",

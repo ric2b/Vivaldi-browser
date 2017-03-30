@@ -17,8 +17,8 @@
 
 namespace blink {
 
-RecordingImageBufferSurface::RecordingImageBufferSurface(const IntSize& size, std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory, OpacityMode opacityMode)
-    : ImageBufferSurface(size, opacityMode)
+RecordingImageBufferSurface::RecordingImageBufferSurface(const IntSize& size, std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory, OpacityMode opacityMode, sk_sp<SkColorSpace> colorSpace)
+    : ImageBufferSurface(size, opacityMode, std::move(colorSpace))
     , m_imageBuffer(0)
     , m_currentFramePixelCount(0)
     , m_previousFramePixelCount(0)
@@ -72,7 +72,7 @@ bool RecordingImageBufferSurface::writePixels(const SkImageInfo& origInfo, const
 void RecordingImageBufferSurface::fallBackToRasterCanvas(FallbackReason reason)
 {
     ASSERT(m_fallbackFactory);
-    DCHECK(reason != FallbackReasonUnknown);
+    CHECK(reason != FallbackReasonUnknown);
 
     if (m_fallbackSurface) {
         ASSERT(!m_currentFrame);
@@ -82,7 +82,7 @@ void RecordingImageBufferSurface::fallBackToRasterCanvas(FallbackReason reason)
     DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, canvasFallbackHistogram, new EnumerationHistogram("Canvas.DisplayListFallbackReason", FallbackReasonCount));
     canvasFallbackHistogram.count(reason);
 
-    m_fallbackSurface = m_fallbackFactory->createSurface(size(), getOpacityMode());
+    m_fallbackSurface = m_fallbackFactory->createSurface(size(), getOpacityMode(), colorSpace());
     m_fallbackSurface->setImageBuffer(m_imageBuffer);
 
     if (m_previousFrame) {
@@ -258,8 +258,8 @@ void RecordingImageBufferSurface::didDraw(const FloatRect& rect)
 
 bool RecordingImageBufferSurface::finalizeFrameInternal(FallbackReason* fallbackReason)
 {
-    ASSERT(!m_fallbackSurface);
-    ASSERT(m_currentFrame);
+    CHECK(!m_fallbackSurface);
+    CHECK(m_currentFrame);
     ASSERT(m_currentFrame->getRecordingCanvas());
     ASSERT(fallbackReason);
     ASSERT(*fallbackReason == FallbackReasonUnknown);
@@ -270,7 +270,8 @@ bool RecordingImageBufferSurface::finalizeFrameInternal(FallbackReason* fallback
             m_previousFrame = fromSkSp(m_currentFrame->finishRecordingAsPicture());
             initializeCurrentFrame();
         }
-        return m_currentFrame.get();
+        CHECK(m_currentFrame);
+        return true;
     }
 
     if (!m_frameWasCleared) {

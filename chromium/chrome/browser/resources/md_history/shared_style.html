@@ -1,31 +1,19 @@
+<link rel="import" href="chrome://history/shared_vars.html">
+
 <dom-module id="shared-style">
   <template>
     <style>
-      :root {
-        --card-border-color: rgba(0, 0, 0, 0.14);
-        --card-first-last-item-padding: 8px;
-        --card-max-width: 960px;
-        --card-min-width: 550px;
-        --card-padding-between: 20px;
-        --card-padding-side: 24px;
-        --first-card-padding-top: 24px;
-        --side-bar-width: 256px;
-        --toolbar-grouped-height: 101px;
-        --toolbar-height: 56px;
-      }
-
       [hidden] {
         display: none !important;
       }
 
       .card-title {
-        @apply(--layout-center);
-        @apply(--layout-horizontal);
         -webkit-padding-start: 20px;
-        background: #fafafa;
+        align-items: center;
         border-bottom: 1px solid var(--card-border-color);
         border-radius: 2px 2px 0 0;
-        color: #333;
+        color: var(--primary-text-color);
+        display: flex;
         font-size: 14px;
         font-weight: 500;
         height: 48px;
@@ -42,6 +30,13 @@
         justify-content: center;
       }
 
+      .menu-item {
+        -webkit-user-select: none;
+        cursor: pointer;
+        font: inherit;
+        white-space: nowrap;
+      }
+
       .website-icon {
         -webkit-margin-end: 16px;
         background-repeat: no-repeat;
@@ -51,15 +46,36 @@
       }
 
       .website-title {
-        color: #333;
+        color: var(--primary-text-color);
         overflow: hidden;
         text-decoration: none;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .website-title:hover {
-        text-decoration: underline;
+      button.icon-button {
+        height: 36px;
+        width: 36px;
+      }
+
+      button.icon-button iron-icon {
+        color: var(--secondary-text-color);
+        height: 20px;
+        width: 20px;
+      }
+
+      button.more-vert-button {
+        height: 36px;
+        padding: 6px;
+        width: 36px;
+      }
+
+      button.more-vert-button div {
+        border: 2px solid var(--secondary-text-color);
+        border-radius: 2px;
+        margin: 1px 10px;
+        pointer-events: none;
+        transform: scale(0.8);
       }
     </style>
   </template>

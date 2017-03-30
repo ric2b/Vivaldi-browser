@@ -31,6 +31,11 @@
             }
         }
     ],
+    "BlockSmallPluginContent": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "CaptivePortalInterstitial": [
         {
             "group_name": "Enabled"
@@ -83,6 +88,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
+        }
+    ],
     "ExtensionActionRedesign": [
         {
             "group_name": "Disabled"
@@ -121,26 +134,21 @@
             "group_name": "Enabled"
         }
     ],
-    "LocalNTPSuggestionsService": [
-        {
-            "group_name": "Enabled"
-        }
-    ],
     "MacMemoryMechanism": [
         {
             "group_name": "Mach"
         }
     ],
-    "MainFrameBeforeActivation": [
+    "MaterialDesignDownloads": [
         {
-            "enable_features": [
-                "MainFrameBeforeActivation"
-            ],
             "group_name": "Enabled"
         }
     ],
-    "MaterialDesignDownloads": [
+    "MaterialDesignUserManager": [
         {
+            "enable_features": [
+                "MaterialDesignUserManager"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -165,6 +173,14 @@
             "group_name": "Enabled"
         }
     ],
+    "NonValidatingReloadOnNormalReload": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnNormalReload"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -177,6 +193,26 @@
     ],
     "PageRevisitInstrumentation": [
         {
+            "group_name": "Enabled"
+        }
+    ],
+    "ParseHTMLOnMainThread": [
+        {
+            "enable_features": [
+                "ParseHTMLOnMainThread"
+            ],
+            "group_name": "Enabled",
+            "params": {
+                "parseHTMLOnMainThreadCoalesceChunks": "false",
+                "parseHTMLOnMainThreadSyncTokenize": "false"
+            }
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -194,6 +230,22 @@
         {
             "enable_features": [
                 "UsePasswordSeparatedSigninFlow"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "PasswordSmartBubble": [
+        {
+            "group_name": "3-Times",
+            "params": {
+                "dismissal_count": "3"
+            }
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
             ],
             "group_name": "Enabled"
         }
@@ -224,24 +276,6 @@
             "group_name": "ShowAndPossiblySend",
             "params": {
                 "sendingThreshold": "1.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "-1.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "0.0"
-            }
-        },
-        {
-            "group_name": "ShowAndPossiblySend",
-            "params": {
-                "sendingThreshold": "abcdef"
             }
         },
         {
@@ -319,9 +353,28 @@
             "group_name": "Enabled"
         }
     ],
+    "SignInPasswordPromo": [
+        {
+            "group_name": "Enable",
+            "params": {
+                "dismissal_threshold": "1"
+            }
+        }
+    ],
     "SimpleCacheTrial": [
         {
             "group_name": "ExperimentYes"
+        }
+    ],
+    "SpeculativeLaunchServiceWorker": [
+        {
+            "enable_features": [
+                "SpeculativeLaunchServiceWorker"
+            ],
+            "group_name": "Enabled"
+        },
+        {
+            "group_name": "Disabled"
         }
     ],
     "StrictSecureCookies": [
@@ -386,6 +439,11 @@
                 "ViewsSimplifiedFullscreenUI"
             ],
             "group_name": "Enabled"
+        }
+    ],
+    "WebFontsInterventionV2": [
+        {
+            "group_name": "Enabled-slow2g"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

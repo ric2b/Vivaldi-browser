@@ -70,11 +70,11 @@ void WaveShaperDSPKernel::process(const float* source, float* destination, size_
 
 void WaveShaperDSPKernel::processCurve(const float* source, float* destination, size_t framesToProcess)
 {
-    ASSERT(source);
-    ASSERT(destination);
-    ASSERT(getWaveShaperProcessor());
+    DCHECK(source);
+    DCHECK(destination);
+    DCHECK(getWaveShaperProcessor());
 
-    DOMFloat32Array* curve = getWaveShaperProcessor()->curve();
+    Vector<float>* curve = getWaveShaperProcessor()->curve();
     if (!curve) {
         // Act as "straight wire" pass-through if no curve is set.
         memcpy(destination, source, sizeof(float) * framesToProcess);
@@ -82,9 +82,9 @@ void WaveShaperDSPKernel::processCurve(const float* source, float* destination, 
     }
 
     float* curveData = curve->data();
-    int curveLength = curve->length();
+    int curveLength = curve->size();
 
-    ASSERT(curveData);
+    DCHECK(curveData);
 
     if (!curveData || !curveLength) {
         memcpy(destination, source, sizeof(float) * framesToProcess);
@@ -126,7 +126,7 @@ void WaveShaperDSPKernel::processCurve(const float* source, float* destination, 
 void WaveShaperDSPKernel::processCurve2x(const float* source, float* destination, size_t framesToProcess)
 {
     bool isSafe = framesToProcess == RenderingQuantum;
-    ASSERT(isSafe);
+    DCHECK(isSafe);
     if (!isSafe)
         return;
 
@@ -143,7 +143,7 @@ void WaveShaperDSPKernel::processCurve2x(const float* source, float* destination
 void WaveShaperDSPKernel::processCurve4x(const float* source, float* destination, size_t framesToProcess)
 {
     bool isSafe = framesToProcess == RenderingQuantum;
-    ASSERT(isSafe);
+    DCHECK(isSafe);
     if (!isSafe)
         return;
 

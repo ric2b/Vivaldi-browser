@@ -19,7 +19,12 @@ _branding_dictionary_template = "full_name = \"@PRODUCT_FULLNAME@\" " +
                                 "bundle_id = \"@MAC_BUNDLE_ID@\" " +
                                 "creator_code = \"@MAC_CREATOR_CODE@\" "
 
-_branding_file = "//chrome/app/theme/$branding_path_component/BRANDING"
+if (is_vivaldi) {
+  _branding_file = "//vivaldi/app/resources/theme/vivaldi/BRANDING"
+} else {
+  _branding_file = "//chrome/app/theme/$branding_path_component/BRANDING"
+}
+
 _result = exec_script("version.py",
                       [
                         "-f",

@@ -11,12 +11,16 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
 #include "base/strings/pattern.h"
+#include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/trace_uploader.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "content/test/test_content_browser_client.h"
 
 using base::trace_event::RECORD_CONTINUOUSLY;
 using base::trace_event::RECORD_UNTIL_FULL;
@@ -34,7 +38,7 @@ const char* kMetadataWhitelist[] = {
 };
 
 bool IsMetadataWhitelisted(const std::string& metadata_name) {
-  for (auto key : kMetadataWhitelist) {
+  for (auto* key : kMetadataWhitelist) {
     if (base::MatchPattern(metadata_name, key)) {
       return true;
     }
@@ -55,27 +59,22 @@ bool IsTraceEventArgsWhitelisted(
 
 }  // namespace
 
-class TracingControllerTestEndpoint
-    : public TracingController::TraceDataEndpoint {
+class TracingControllerTestEndpoint : public TraceDataEndpoint {
  public:
   TracingControllerTestEndpoint(
       base::Callback<void(std::unique_ptr<const base::DictionaryValue>,
                           base::RefCountedString*)> done_callback)
       : done_callback_(done_callback) {}
 
-  void ReceiveTraceChunk(const std::string& chunk) override {
-    EXPECT_FALSE(chunk.empty());
-    trace_ += chunk;
+  void ReceiveTraceChunk(std::unique_ptr<std::string> chunk) override {
+    EXPECT_FALSE(chunk->empty());
+    trace_ += *chunk;
   }
 
   void ReceiveTraceFinalContents(
-      std::unique_ptr<const base::DictionaryValue> metadata,
-      const std::string& contents) override {
-    EXPECT_EQ(trace_, contents);
-
-    std::string tmp = contents;
+      std::unique_ptr<const base::DictionaryValue> metadata) override {
     scoped_refptr<base::RefCountedString> chunk_ptr =
-        base::RefCountedString::TakeString(&tmp);
+        base::RefCountedString::TakeString(&trace_);
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
@@ -90,6 +89,25 @@ class TracingControllerTestEndpoint
   base::Callback<void(std::unique_ptr<const base::DictionaryValue>,
                       base::RefCountedString*)>
       done_callback_;
+};
+
+class TracingTestBrowserClient : public TestContentBrowserClient {
+ public:
+  TracingDelegate* GetTracingDelegate() override {
+    return new TestTracingDelegate();
+  };
+
+ private:
+  class TestTracingDelegate : public TracingDelegate {
+   public:
+    std::unique_ptr<TraceUploader> GetTraceUploader(
+        net::URLRequestContextGetter* request_context) override {
+      return nullptr;
+    }
+    MetadataFilterPredicate GetMetadataFilterPredicate() override {
+      return base::Bind(IsMetadataWhitelisted);
+    }
+  };
 };
 
 class TracingControllerTest : public ContentBrowserTest {
@@ -135,10 +153,13 @@ class TracingControllerTest : public ContentBrowserTest {
   void StopTracingFileDoneCallbackTest(base::Closure quit_callback,
                                             const base::FilePath& file_path) {
     disable_recording_done_callback_count_++;
-    EXPECT_TRUE(PathExists(file_path));
-    int64_t file_size;
-    base::GetFileSize(file_path, &file_size);
-    EXPECT_TRUE(file_size > 0);
+    {
+      base::ThreadRestrictions::ScopedAllowIO allow_io_for_test_verifications;
+      EXPECT_TRUE(PathExists(file_path));
+      int64_t file_size;
+      base::GetFileSize(file_path, &file_size);
+      EXPECT_GT(file_size, 0);
+    }
     quit_callback.Run();
     last_actual_recording_file_path_ = file_path;
   }
@@ -201,10 +222,13 @@ class TracingControllerTest : public ContentBrowserTest {
   }
 
   void TestStartAndStopTracingStringWithFilter() {
+    TracingTestBrowserClient client;
+    ContentBrowserClient* old_client = SetBrowserClientForTesting(&client);
     Navigate(shell());
 
     base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
         base::Bind(&IsTraceEventArgsWhitelisted));
+
     TracingController* controller = TracingController::GetInstance();
 
     {
@@ -234,17 +258,16 @@ class TracingControllerTest : public ContentBrowserTest {
       scoped_refptr<TracingController::TraceDataSink> trace_data_sink =
           TracingController::CreateStringSink(callback);
 
-      trace_data_sink->SetMetadataFilterPredicate(
-          base::Bind(&IsMetadataWhitelisted));
       base::DictionaryValue metadata;
       metadata.SetString("not-whitelisted", "this_not_found");
-      trace_data_sink->AddMetadata(metadata);
+      controller->AddMetadata(metadata);
 
       bool result = controller->StopTracing(trace_data_sink);
       ASSERT_TRUE(result);
       run_loop.Run();
       EXPECT_EQ(disable_recording_done_callback_count(), 1);
     }
+    SetBrowserClientForTesting(old_client);
   }
 
   void TestStartAndStopTracingCompressed() {
@@ -271,40 +294,8 @@ class TracingControllerTest : public ContentBrowserTest {
               &TracingControllerTest::StopTracingStringDoneCallbackTest,
               base::Unretained(this), run_loop.QuitClosure());
       bool result = controller->StopTracing(
-          TracingController::CreateCompressedStringSink(
+          TracingControllerImpl::CreateCompressedStringSink(
               new TracingControllerTestEndpoint(callback)));
-      ASSERT_TRUE(result);
-      run_loop.Run();
-      EXPECT_EQ(disable_recording_done_callback_count(), 1);
-    }
-  }
-
-  void TestStartAndStopTracingCompressedFile(
-      const base::FilePath& result_file_path) {
-    Navigate(shell());
-
-    TracingController* controller = TracingController::GetInstance();
-
-    {
-      base::RunLoop run_loop;
-      TracingController::StartTracingDoneCallback callback =
-          base::Bind(&TracingControllerTest::StartTracingDoneCallbackTest,
-                     base::Unretained(this), run_loop.QuitClosure());
-      bool result = controller->StartTracing(TraceConfig(), callback);
-      ASSERT_TRUE(result);
-      run_loop.Run();
-      EXPECT_EQ(enable_recording_done_callback_count(), 1);
-    }
-
-    {
-      base::RunLoop run_loop;
-      base::Closure callback = base::Bind(
-          &TracingControllerTest::StopTracingFileDoneCallbackTest,
-          base::Unretained(this), run_loop.QuitClosure(), result_file_path);
-      bool result = controller->StopTracing(
-          TracingController::CreateCompressedStringSink(
-              TracingController::CreateFileEndpoint(result_file_path,
-                                                    callback)));
       ASSERT_TRUE(result);
       run_loop.Run();
       EXPECT_EQ(disable_recording_done_callback_count(), 1);
@@ -432,7 +423,10 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest, NotWhitelistedMetadataStripped) {
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,
                        EnableAndStopTracingWithFilePath) {
   base::FilePath file_path;
-  base::CreateTemporaryFile(&file_path);
+  {
+    base::ThreadRestrictions::ScopedAllowIO allow_io_for_creating_test_file;
+    base::CreateTemporaryFile(&file_path);
+  }
   TestStartAndStopTracingFile(file_path);
   EXPECT_EQ(file_path.value(), last_actual_recording_file_path().value());
 }
@@ -440,14 +434,6 @@ IN_PROC_BROWSER_TEST_F(TracingControllerTest,
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,
                        EnableAndStopTracingWithCompression) {
   TestStartAndStopTracingCompressed();
-}
-
-IN_PROC_BROWSER_TEST_F(TracingControllerTest,
-                       EnableAndStopTracingToFileWithCompression) {
-  base::FilePath file_path;
-  base::CreateTemporaryFile(&file_path);
-  TestStartAndStopTracingCompressedFile(file_path);
-  EXPECT_EQ(file_path.value(), last_actual_recording_file_path().value());
 }
 
 IN_PROC_BROWSER_TEST_F(TracingControllerTest,

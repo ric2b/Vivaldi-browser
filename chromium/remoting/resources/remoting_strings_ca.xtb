@@ -74,7 +74,6 @@ Per obtenir informació sobre la privadesa, vegeu la Política de privadesa de G
 <translation id="2676780859508944670">S'hi està treballant...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Les actualitzacions de programari se solen fer automàticament, però poden fallar en casos excepcionals. L'actualització del programari hauria de trigar només uns minuts i es pot fer mentre esteu connectat a l'ordinador de forma remota.</translation>
-<translation id="2813770873348017932">S'han bloquejat temporalment les connexions a l'ordinador remot perquè algú ha provat de connectar-hi amb un PIN no vàlid. Torneu-ho a provar més tard.</translation>
 <translation id="2841013758207633010">Hora</translation>
 <translation id="2851674870054673688">Quan hagin introduït el codi, la sessió compartida començarà.</translation>
 <translation id="2851754573186462851">Chromium App Streaming</translation>
@@ -140,7 +139,7 @@ Host</translation>
 <translation id="4405930547258349619">Biblioteca principal</translation>
 <translation id="4430435636878359009">Desactiva les connexions remotes a aquest ordinador</translation>
 <translation id="4430915108080446161">S'està generant el codi d'accés...</translation>
-<translation id="4472575034687746823">Introducció</translation>
+<translation id="4472575034687746823">Comença</translation>
 <translation id="4481276415609939789">No teniu cap ordinador registrat. Per activar les connexions remotes a un ordinador, instal·leu-hi Chromoting i feu clic a <ph name="BUTTON_NAME" />.</translation>
 <translation id="4513946894732546136">Comentaris</translation>
 <translation id="4517233780764084060">NOTA: Per assegurar-vos que totes les tecles de drecera estiguin disponibles, activeu l'opció Obre com a finestra de la configuració de Chromoting.</translation>
@@ -149,7 +148,6 @@ Host</translation>
 <translation id="4573676252416618192">Amfitrió de l'escriptori
 remot de Chrome</translation>
 <translation id="4619978527973181021">Accepta i instal·la</translation>
-<translation id="4647791084836149355">Mostra la visualització de Cardboard</translation>
 <translation id="4703302905453407178">Un component obligatori ha deixat de funcionar. Informeu-ne els desenvolupadors.</translation>
 <translation id="4703799847237267011">La vostra sessió de Chromoting ha finalitzat.</translation>
 <translation id="4736223761657662401">Historial de connexions</translation>
@@ -210,7 +208,6 @@ remot de Chrome</translation>
 <translation id="6284412385303060032">L'amfitrió que s'executa a la pantalla d'inici de la consola s'ha aturat per admetre el mode Curtain, i fa servir un amfitrió que s'executa en una sessió específica de l'usuari.</translation>
 <translation id="629730747756840877">Compte</translation>
 <translation id="6304318647555713317">Client</translation>
-<translation id="6324708100353784493">Heu activat el mode d'integració amb Google Cardboard. Per utilitzar-lo, inseriu el vostre dispositiu en un visor compatible amb Google Cardboard.</translation>
 <translation id="6381670701864002291">Altres motius.</translation>
 <translation id="6398765197997659313">Surt del mode de pantalla completa</translation>
 <translation id="6408143143164565232">• Escolteu àudio des d'ordinadors Windows o Linux.
@@ -236,6 +233,7 @@ remot de Chrome</translation>
 <translation id="6930242544192836755">Durada</translation>
 <translation id="6939719207673461467">Mostra o amaga el teclat</translation>
 <translation id="6944854424004126054">Restaura la finestra</translation>
+<translation id="6963936880795878952">Les connexions amb l'ordinador remot s'han bloquejat temporalment perquè algú ha provat de connectar-s'hi amb un PIN no vàlid. Torna-ho a provar més tard.</translation>
 <translation id="6965382102122355670">D'acord</translation>
 <translation id="6985691951107243942">Esteu segur que voleu desactivar les connexions remotes a <ph name="HOSTNAME" />? Si canvieu de parer, haureu de visitar aquest ordinador per tornar-les a activar.</translation>
 <translation id="6998989275928107238">Per a</translation>

@@ -32,6 +32,8 @@
 #include "printing/metafile_skia_wrapper.h"
 #include "printing/pdf_metafile_skia.h"
 #include "printing/units.h"
+#include "third_party/WebKit/public/platform/WebDoubleSize.h"
+#include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -39,6 +41,7 @@
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPlugin.h"
 #include "third_party/WebKit/public/web/WebPluginDocument.h"
@@ -120,15 +123,15 @@ bool PrintMsg_Print_Params_IsValid(const PrintMsg_Print_Params& params) {
 }
 
 PrintMsg_Print_Params GetCssPrintParams(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params) {
   PrintMsg_Print_Params page_css_params = page_params;
   int dpi = GetDPI(&page_params);
 
-  blink::WebSize page_size_in_pixels(
-      ConvertUnit(page_params.page_size.width(), dpi, kPixelsPerInch),
-      ConvertUnit(page_params.page_size.height(), dpi, kPixelsPerInch));
+  blink::WebDoubleSize page_size_in_pixels(
+      ConvertUnitDouble(page_params.page_size.width(), dpi, kPixelsPerInch),
+      ConvertUnitDouble(page_params.page_size.height(), dpi, kPixelsPerInch));
   int margin_top_in_pixels =
       ConvertUnit(page_params.margin_top, dpi, kPixelsPerInch);
   int margin_right_in_pixels = ConvertUnit(
@@ -143,8 +146,6 @@ PrintMsg_Print_Params GetCssPrintParams(
       page_params.margin_left,
       dpi, kPixelsPerInch);
 
-  blink::WebSize original_page_size_in_pixels = page_size_in_pixels;
-
   if (frame) {
     frame->pageSizeAndMarginsInPixels(page_index,
                                       page_size_in_pixels,
@@ -154,9 +155,9 @@ PrintMsg_Print_Params GetCssPrintParams(
                                       margin_left_in_pixels);
   }
 
-  int new_content_width = page_size_in_pixels.width -
+  double new_content_width = page_size_in_pixels.width() -
                           margin_left_in_pixels - margin_right_in_pixels;
-  int new_content_height = page_size_in_pixels.height -
+  double new_content_height = page_size_in_pixels.height() -
                            margin_top_in_pixels - margin_bottom_in_pixels;
 
   // Invalid page size and/or margins. We just use the default setting.
@@ -166,20 +167,12 @@ PrintMsg_Print_Params GetCssPrintParams(
     return page_css_params;
   }
 
+  page_css_params.page_size =
+      gfx::Size(ConvertUnit(page_size_in_pixels.width(), kPixelsPerInch, dpi),
+                ConvertUnit(page_size_in_pixels.height(), kPixelsPerInch, dpi));
   page_css_params.content_size =
       gfx::Size(ConvertUnit(new_content_width, kPixelsPerInch, dpi),
-                ConvertUnit(new_content_height, kPixelsPerInch, dpi));
-
-  if (original_page_size_in_pixels != page_size_in_pixels) {
-    page_css_params.page_size =
-        gfx::Size(ConvertUnit(page_size_in_pixels.width, kPixelsPerInch, dpi),
-                  ConvertUnit(page_size_in_pixels.height, kPixelsPerInch, dpi));
-  } else {
-    // Printing frame doesn't have any page size css. Pixels to dpi conversion
-    // causes rounding off errors. Therefore use the default page size values
-    // directly.
-    page_css_params.page_size = page_params.page_size;
-  }
+              ConvertUnit(new_content_height, kPixelsPerInch, dpi));
 
   page_css_params.margin_top =
       ConvertUnit(margin_top_in_pixels, kPixelsPerInch, dpi);
@@ -318,7 +311,7 @@ bool IsPrintToPdfRequested(const base::DictionaryValue& job_settings) {
   return print_to_pdf;
 }
 
-bool PrintingFrameHasPageSizeStyle(blink::WebFrame* frame,
+bool PrintingFrameHasPageSizeStyle(blink::WebLocalFrame* frame,
                                    int total_page_count) {
   if (!frame)
     return false;
@@ -335,11 +328,13 @@ bool PrintingFrameHasPageSizeStyle(blink::WebFrame* frame,
 
 // Disable scaling when either:
 // - The PDF specifies disabling scaling.
-// - All the pages in the PDF are the same size, and that size is the same as
-//   the paper size.
+// - All the pages in the PDF are the same size,
+// - |ignore_page_size| is false and the uniform size is the same as the paper
+//   size.
 bool PDFShouldDisableScalingBasedOnPreset(
     const blink::WebPrintPresetOptions& options,
-    const PrintMsg_Print_Params& params) {
+    const PrintMsg_Print_Params& params,
+    bool ignore_page_size) {
   if (options.isScalingDisabled)
     return true;
 
@@ -353,6 +348,9 @@ bool PDFShouldDisableScalingBasedOnPreset(
     return true;
   }
 
+  if (ignore_page_size)
+    return false;
+
   blink::WebSize page_size(
       ConvertUnit(params.page_size.width(), dpi, kPointsPerInch),
       ConvertUnit(params.page_size.height(), dpi, kPointsPerInch));
@@ -361,19 +359,21 @@ bool PDFShouldDisableScalingBasedOnPreset(
 
 bool PDFShouldDisableScaling(blink::WebLocalFrame* frame,
                              const blink::WebNode& node,
-                             const PrintMsg_Print_Params& params) {
+                             const PrintMsg_Print_Params& params,
+                             bool ignore_page_size) {
   const bool kDefaultPDFShouldDisableScalingSetting = true;
   blink::WebPrintPresetOptions preset_options;
   if (!frame->getPrintPresetOptionsForPlugin(node, &preset_options))
     return kDefaultPDFShouldDisableScalingSetting;
-  return PDFShouldDisableScalingBasedOnPreset(preset_options, params);
+  return PDFShouldDisableScalingBasedOnPreset(preset_options, params,
+                                              ignore_page_size);
 }
 
 #if defined(ENABLE_BASIC_PRINTING)
 MarginType GetMarginsForPdf(blink::WebLocalFrame* frame,
                             const blink::WebNode& node,
                             const PrintMsg_Print_Params& params) {
-  return PDFShouldDisableScaling(frame, node, params) ?
+  return PDFShouldDisableScaling(frame, node, params, false) ?
       NO_MARGINS : PRINTABLE_AREA_MARGINS;
 }
 #endif
@@ -414,7 +414,8 @@ blink::WebPrintScalingOption GetPrintScalingOption(
     if (!FitToPageEnabled(job_settings))
       return blink::WebPrintScalingOptionNone;
 
-    bool no_plugin_scaling = PDFShouldDisableScaling(frame, node, params);
+    bool no_plugin_scaling = PDFShouldDisableScaling(frame, node, params,
+                                                     true);
     if (params.is_first_request && no_plugin_scaling)
       return blink::WebPrintScalingOptionNone;
   }
@@ -423,7 +424,7 @@ blink::WebPrintScalingOption GetPrintScalingOption(
 #endif  // defined(ENABLE_PRINT_PREVIEW)
 
 PrintMsg_Print_Params CalculatePrintParamsForCss(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params,
     bool ignore_css_margins,
@@ -529,6 +530,8 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
   blink::WebLocalFrame* frame =
       blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, NULL);
   web_view->setMainFrame(frame);
+  blink::WebFrameWidget* widget =
+      blink::WebFrameWidget::create(nullptr, web_view, frame);
 
   base::StringValue html(ResourceBundle::GetSharedInstance().GetLocalizedString(
       IDR_PRINT_PREVIEW_PAGE));
@@ -558,6 +561,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
   frame->printPage(0, canvas);
   frame->printEnd();
 
+  widget->close();
   web_view->close();
   frame->close();
 }
@@ -623,7 +627,7 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
       const blink::WebString& unique_name,
       blink::WebSandboxFlags sandbox_flags,
       const blink::WebFrameOwnerProperties& frame_owner_properties) override;
-  void frameDetached(blink::WebFrame* frame, DetachType type) override;
+  void frameDetached(blink::WebLocalFrame* frame, DetachType type) override;
 
   void CallOnReady();
   void ResizeForPrinting();
@@ -707,11 +711,11 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
 }
 
 void PrepareFrameAndViewForPrint::StartPrinting() {
-  ResizeForPrinting();
   blink::WebView* web_view = frame_.view();
   web_view->settings()->setShouldPrintBackgrounds(should_print_backgrounds_);
   expected_pages_count_ =
       frame()->printBegin(web_print_params_, node_to_print_);
+  ResizeForPrinting();
   is_printing_started_ = true;
 }
 
@@ -744,14 +748,18 @@ void PrepareFrameAndViewForPrint::CopySelection(
       blink::WebView::create(this, blink::WebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
-  web_view->setMainFrame(
-      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this));
+  blink::WebLocalFrame* main_frame =
+      blink::WebLocalFrame::create(blink::WebTreeScopeType::Document, this);
+  web_view->setMainFrame(main_frame);
+  blink::WebFrameWidget::create(this, web_view, main_frame);
   frame_.Reset(web_view->mainFrame()->toWebLocalFrame());
   node_to_print_.reset();
 
   // When loading is done this will call didStopLoading() and that will do the
   // actual printing.
-  frame()->loadRequest(blink::WebURLRequest(GURL(url_str)));
+  blink::WebURLRequest request = blink::WebURLRequest(GURL(url_str));
+  request.setRequestorOrigin(blink::WebSecurityOrigin::createUnique());
+  frame()->loadRequest(request);
 }
 
 bool PrepareFrameAndViewForPrint::allowsBrokenNullLayerTreeView() const {
@@ -779,7 +787,7 @@ blink::WebFrame* PrepareFrameAndViewForPrint::createChildFrame(
   return frame;
 }
 
-void PrepareFrameAndViewForPrint::frameDetached(blink::WebFrame* frame,
+void PrepareFrameAndViewForPrint::frameDetached(blink::WebLocalFrame* frame,
                                                 DetachType type) {
   DCHECK(type == DetachType::Remove);
   if (frame->parent())
@@ -815,6 +823,7 @@ void PrepareFrameAndViewForPrint::FinishPrinting() {
     if (owns_web_view_) {
       DCHECK(!frame->isLoading());
       owns_web_view_ = false;
+      frame->frameWidget()->close();
       web_view->close();
     }
   }
@@ -957,8 +966,7 @@ bool PrintWebViewHelper::GetPrintFrame(blink::WebLocalFrame** frame) {
 
   // If the user has selected text in the currently focused frame we print
   // only that frame (this makes print selection work for multiple frames).
-  blink::WebLocalFrame* focusedFrame =
-      webView->focusedFrame()->toWebLocalFrame();
+  blink::WebLocalFrame* focusedFrame = webView->focusedFrame();
   *frame = focusedFrame->hasSelection()
                ? focusedFrame
                : webView->mainFrame()->toWebLocalFrame();
@@ -1498,7 +1506,7 @@ void PrintWebViewHelper::FinishFramePrinting() {
 
 // static - Not anonymous so that platform implementations can use it.
 void PrintWebViewHelper::ComputePageLayoutInPointsForCss(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     int page_index,
     const PrintMsg_Print_Params& page_params,
     bool ignore_css_margins,
@@ -1588,7 +1596,7 @@ bool PrintWebViewHelper::SetOptionsFromPdfDocument(
   }
 
   options->is_scaling_disabled = PDFShouldDisableScalingBasedOnPreset(
-      preset_options, print_pages_params_->params);
+      preset_options, print_pages_params_->params, false);
   options->copies = preset_options.copies;
 
   // TODO(thestig) This should be a straight pass-through, but print preview
@@ -1704,6 +1712,7 @@ bool PrintWebViewHelper::GetPrintSettingsFromUser(blink::WebLocalFrame* frame,
   }
   params.margin_type = margin_type;
   params.is_scripted = is_scripted;
+  params.is_modifiable = !PrintingNodeOrPdfFrame(frame, node);
 
   Send(new PrintHostMsg_DidShowPrintDialog(routing_id()));
 
@@ -1744,7 +1753,7 @@ bool PrintWebViewHelper::RenderPagesForPrint(blink::WebLocalFrame* frame,
 #if !defined(OS_MACOSX)
 void PrintWebViewHelper::PrintPageInternal(
     const PrintMsg_PrintPage_Params& params,
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     PdfMetafileSkia* metafile,
     gfx::Size* page_size_in_dpi,
     gfx::Rect* content_area_in_dpi) {

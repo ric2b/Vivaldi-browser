@@ -98,10 +98,13 @@ ResourceResponse::ResourceResponse()
     , m_wasAlternateProtocolAvailable(false)
     , m_wasFetchedViaProxy(false)
     , m_wasFetchedViaServiceWorker(false)
+    , m_wasFetchedViaForeignFetch(false)
     , m_wasFallbackRequiredByServiceWorker(false)
     , m_serviceWorkerResponseType(WebServiceWorkerResponseTypeDefault)
     , m_responseTime(0)
     , m_remotePort(0)
+    , m_encodedBodyLength(0)
+    , m_decodedBodyLength(0)
 {
 }
 
@@ -134,10 +137,13 @@ ResourceResponse::ResourceResponse(const KURL& url, const AtomicString& mimeType
     , m_wasAlternateProtocolAvailable(false)
     , m_wasFetchedViaProxy(false)
     , m_wasFetchedViaServiceWorker(false)
+    , m_wasFetchedViaForeignFetch(false)
     , m_wasFallbackRequiredByServiceWorker(false)
     , m_serviceWorkerResponseType(WebServiceWorkerResponseTypeDefault)
     , m_responseTime(0)
     , m_remotePort(0)
+    , m_encodedBodyLength(0)
+    , m_decodedBodyLength(0)
 {
 }
 
@@ -164,9 +170,6 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_securityDetails.keyExchange = data->m_securityDetails.keyExchange;
     m_securityDetails.mac = data->m_securityDetails.mac;
     m_securityDetails.certID = data->m_securityDetails.certID;
-    m_securityDetails.numUnknownSCTs = data->m_securityDetails.numUnknownSCTs;
-    m_securityDetails.numInvalidSCTs = data->m_securityDetails.numInvalidSCTs;
-    m_securityDetails.numValidSCTs = data->m_securityDetails.numValidSCTs;
     m_securityDetails.sctList = data->m_securityDetails.sctList;
     m_httpVersion = data->m_httpVersion;
     m_appCacheID = data->m_appCacheID;
@@ -177,6 +180,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_wasAlternateProtocolAvailable = data->m_wasAlternateProtocolAvailable;
     m_wasFetchedViaProxy = data->m_wasFetchedViaProxy;
     m_wasFetchedViaServiceWorker = data->m_wasFetchedViaServiceWorker;
+    m_wasFetchedViaForeignFetch = data->m_wasFetchedViaForeignFetch;
     m_wasFallbackRequiredByServiceWorker = data->m_wasFallbackRequiredByServiceWorker;
     m_serviceWorkerResponseType = data->m_serviceWorkerResponseType;
     m_originalURLViaServiceWorker = data->m_originalURLViaServiceWorker;
@@ -184,12 +188,17 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_responseTime = data->m_responseTime;
     m_remoteIPAddress = AtomicString(data->m_remoteIPAddress);
     m_remotePort = data->m_remotePort;
+    m_encodedBodyLength = data->m_encodedBodyLength;
+    m_decodedBodyLength = data->m_decodedBodyLength;
     m_downloadedFilePath = data->m_downloadedFilePath;
     m_downloadedFileHandle = data->m_downloadedFileHandle;
 
     // Bug https://bugs.webkit.org/show_bug.cgi?id=60397 this doesn't support
     // whatever values may be present in the opaque m_extraData structure.
 }
+
+ResourceResponse::ResourceResponse(const ResourceResponse&) = default;
+ResourceResponse& ResourceResponse::operator=(const ResourceResponse&) = default;
 
 std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
 {
@@ -213,9 +222,6 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData() co
     data->m_securityDetails.keyExchange = m_securityDetails.keyExchange.isolatedCopy();
     data->m_securityDetails.mac = m_securityDetails.mac.isolatedCopy();
     data->m_securityDetails.certID = m_securityDetails.certID;
-    data->m_securityDetails.numUnknownSCTs = m_securityDetails.numUnknownSCTs;
-    data->m_securityDetails.numInvalidSCTs = m_securityDetails.numInvalidSCTs;
-    data->m_securityDetails.numValidSCTs = m_securityDetails.numValidSCTs;
     data->m_securityDetails.sctList = isolatedCopy(m_securityDetails.sctList);
     data->m_httpVersion = m_httpVersion;
     data->m_appCacheID = m_appCacheID;
@@ -226,6 +232,7 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData() co
     data->m_wasAlternateProtocolAvailable = m_wasAlternateProtocolAvailable;
     data->m_wasFetchedViaProxy = m_wasFetchedViaProxy;
     data->m_wasFetchedViaServiceWorker = m_wasFetchedViaServiceWorker;
+    data->m_wasFetchedViaForeignFetch = m_wasFetchedViaForeignFetch;
     data->m_wasFallbackRequiredByServiceWorker = m_wasFallbackRequiredByServiceWorker;
     data->m_serviceWorkerResponseType = m_serviceWorkerResponseType;
     data->m_originalURLViaServiceWorker = m_originalURLViaServiceWorker.copy();
@@ -233,6 +240,8 @@ std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData() co
     data->m_responseTime = m_responseTime;
     data->m_remoteIPAddress = m_remoteIPAddress.getString().isolatedCopy();
     data->m_remotePort = m_remotePort;
+    data->m_encodedBodyLength = m_encodedBodyLength;
+    data->m_decodedBodyLength = m_decodedBodyLength;
     data->m_downloadedFilePath = m_downloadedFilePath.isolatedCopy();
     data->m_downloadedFileHandle = m_downloadedFileHandle;
 
@@ -368,16 +377,13 @@ void ResourceResponse::updateHeaderParsedState(const AtomicString& name)
         m_haveParsedLastModifiedHeader = false;
 }
 
-void ResourceResponse::setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts, const SignedCertificateTimestampList& sctList)
+void ResourceResponse::setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, const SignedCertificateTimestampList& sctList)
 {
     m_securityDetails.protocol = protocol;
     m_securityDetails.keyExchange = keyExchange;
     m_securityDetails.cipher = cipher;
     m_securityDetails.mac = mac;
     m_securityDetails.certID = certId;
-    m_securityDetails.numUnknownSCTs = numUnknownScts;
-    m_securityDetails.numInvalidSCTs = numInvalidScts;
-    m_securityDetails.numValidSCTs = numValidScts;
     m_securityDetails.sctList = sctList;
 }
 
@@ -580,6 +586,16 @@ void ResourceResponse::setResourceLoadInfo(PassRefPtr<ResourceLoadInfo> loadInfo
     m_resourceLoadInfo = loadInfo;
 }
 
+void ResourceResponse::addToEncodedBodyLength(int value)
+{
+    m_encodedBodyLength += value;
+}
+
+void ResourceResponse::addToDecodedBodyLength(int value)
+{
+    m_decodedBodyLength += value;
+}
+
 void ResourceResponse::setDownloadedFilePath(const String& downloadedFilePath)
 {
     m_downloadedFilePath = downloadedFilePath;
@@ -616,6 +632,10 @@ bool ResourceResponse::compare(const ResourceResponse& a, const ResourceResponse
     if (a.resourceLoadTiming() && b.resourceLoadTiming() && *a.resourceLoadTiming() == *b.resourceLoadTiming())
         return true;
     if (a.resourceLoadTiming() != b.resourceLoadTiming())
+        return false;
+    if (a.encodedBodyLength() != b.encodedBodyLength())
+        return false;
+    if (a.decodedBodyLength() != b.decodedBodyLength())
         return false;
     return true;
 }

@@ -9,6 +9,7 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
 #include "base/supports_user_data.h"
 #include "components/offline_pages/offline_page_item.h"
@@ -28,6 +29,10 @@ namespace android {
 class OfflinePageBridge : public OfflinePageModel::Observer,
                           public base::SupportsUserData::Data {
  public:
+  static base::android::ScopedJavaLocalRef<jobject> ConvertToJavaOfflinePage(
+      JNIEnv* env,
+      const OfflinePageItem& offline_page);
+
   OfflinePageBridge(JNIEnv* env,
                     content::BrowserContext* browser_context,
                     OfflinePageModel* offline_page_model);
@@ -66,10 +71,12 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
       const base::android::JavaParamRef<jobject>& obj,
       jlong offline_id);
 
-  base::android::ScopedJavaLocalRef<jobject> GetBestPageForOnlineURL(
+  void SelectPageForOnlineUrl(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& online_url);
+      const base::android::JavaParamRef<jstring>& j_online_url,
+      int tab_id,
+      const base::android::JavaParamRef<jobject>& j_callback_obj);
 
   void GetPageByOfflineUrl(
       JNIEnv* env,
@@ -85,12 +92,12 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
       const base::android::JavaParamRef<jstring>& j_namespace,
       const base::android::JavaParamRef<jstring>& j_client_id);
 
-  void SavePageLater(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& url,
-      const base::android::JavaParamRef<jstring>& j_namespace,
-      const base::android::JavaParamRef<jstring>& j_client_id);
+  void SavePageLater(JNIEnv* env,
+                     const base::android::JavaParamRef<jobject>& obj,
+                     const base::android::JavaParamRef<jstring>& url,
+                     const base::android::JavaParamRef<jstring>& j_namespace,
+                     const base::android::JavaParamRef<jstring>& j_client_id,
+                     jboolean user_requested);
 
   void DeletePages(
       JNIEnv* env,
@@ -101,6 +108,22 @@ class OfflinePageBridge : public OfflinePageModel::Observer,
   void CheckMetadataConsistency(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+
+  base::android::ScopedJavaLocalRef<jstring> GetOfflinePageHeaderForReload(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& j_web_contents);
+
+  void GetRequestsInQueue(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& j_callback_obj);
+
+  void RemoveRequestsFromQueue(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jlongArray>& j_request_ids_array,
+      const base::android::JavaParamRef<jobject>& j_callback_obj);
 
   base::android::ScopedJavaGlobalRef<jobject> java_ref() { return java_ref_; }
 

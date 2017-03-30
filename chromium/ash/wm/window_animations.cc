@@ -9,17 +9,14 @@
 #include <utility>
 #include <vector>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/wm/window_animation_types.h"
 #include "ash/screen_util.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace_controller.h"
-#include "base/command_line.h"
-#include "base/compiler_specific.h"
+#include "base/i18n/rtl.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "ui/aura/client/aura_constants.h"
@@ -35,14 +32,13 @@
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
-#include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/gfx/interpolated_transform.h"
-#include "ui/views/view.h"
-#include "ui/views/widget/widget.h"
+#include "ui/gfx/transform.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace {
+
 const int kLayerAnimationsForMinimizeDurationMS = 200;
 
 // Durations for the cross-fade animation, in milliseconds.
@@ -58,10 +54,6 @@ const float kWindowAnimation_ShowBrightnessGrayscale = 0.f;
 
 const float kWindowAnimation_HideOpacity = 0.f;
 const float kWindowAnimation_ShowOpacity = 1.f;
-
-// Scales for AshWindow above/below current workspace.
-const float kLayerScaleAboveSize = 1.1f;
-const float kLayerScaleBelowSize = .9f;
 
 int64_t Round64(float f) {
   return static_cast<int64_t>(f + 0.5f);
@@ -434,25 +426,10 @@ CreateBrightnessGrayscaleAnimationSequence(float target_value,
   return animations;
 }
 
-// Returns scale related to the specified AshWindowScaleType.
-void SetTransformForScaleAnimation(ui::Layer* layer,
-                                   LayerScaleAnimationDirection type) {
-  const float scale = type == LAYER_SCALE_ANIMATION_ABOVE
-                          ? kLayerScaleAboveSize
-                          : kLayerScaleBelowSize;
-  gfx::Transform transform;
-  transform.Translate(-layer->bounds().width() * (scale - 1.0f) / 2,
-                      -layer->bounds().height() * (scale - 1.0f) / 2);
-  transform.Scale(scale, scale);
-  layer->SetTransform(transform);
-}
-
 gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
-  Shelf* shelf = Shelf::ForWindow(window);
-  // Shelf is created lazily and can be NULL.
-  if (!shelf)
-    return gfx::Rect();
-  gfx::Rect item_rect = shelf->GetScreenBoundsOfItemIconForWindow(window);
+  WmWindow* wm_window = WmWindowAura::Get(window);
+  WmShelf* shelf = WmShelf::ForWindow(wm_window);
+  gfx::Rect item_rect = shelf->GetScreenBoundsOfItemIconForWindow(wm_window);
 
   // The launcher item is visible and has an icon.
   if (!item_rect.IsEmpty())
@@ -464,8 +441,8 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
   // are still reported correctly and the window can be animated to the launcher
   // item's light bar.
   if (item_rect.width() != 0 || item_rect.height() != 0) {
-    if (shelf->shelf_layout_manager()->visibility_state() == SHELF_AUTO_HIDE) {
-      gfx::Rect shelf_bounds = shelf->shelf_widget()->GetWindowBoundsInScreen();
+    if (shelf->GetVisibilityState() == SHELF_AUTO_HIDE) {
+      gfx::Rect shelf_bounds = shelf->GetWindow()->GetBoundsInScreen();
       if (shelf->alignment() == SHELF_ALIGNMENT_LEFT)
         item_rect.set_x(shelf_bounds.right());
       else if (shelf->alignment() == SHELF_ALIGNMENT_RIGHT)
@@ -482,10 +459,17 @@ gfx::Rect GetMinimizeAnimationTargetBoundsInScreen(aura::Window* window) {
   gfx::Rect work_area =
       display::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
   int ltr_adjusted_x = base::i18n::IsRTL() ? work_area.right() : work_area.x();
-  return shelf->SelectValueForShelfAlignment(
-      gfx::Rect(ltr_adjusted_x, work_area.bottom(), 0, 0),
-      gfx::Rect(work_area.x(), work_area.y(), 0, 0),
-      gfx::Rect(work_area.right(), work_area.y(), 0, 0));
+  switch (shelf->alignment()) {
+    case SHELF_ALIGNMENT_BOTTOM:
+    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+      return gfx::Rect(ltr_adjusted_x, work_area.bottom(), 0, 0);
+    case SHELF_ALIGNMENT_LEFT:
+      return gfx::Rect(work_area.x(), work_area.y(), 0, 0);
+    case SHELF_ALIGNMENT_RIGHT:
+      return gfx::Rect(work_area.right(), work_area.y(), 0, 0);
+  }
+  NOTREACHED();
+  return gfx::Rect();
 }
 
 }  // namespace ash

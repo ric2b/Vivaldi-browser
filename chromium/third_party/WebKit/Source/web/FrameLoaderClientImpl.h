@@ -41,6 +41,7 @@
 
 namespace blink {
 
+class WebDevToolsAgentImpl;
 class WebLocalFrameImpl;
 
 class FrameLoaderClientImpl final : public FrameLoaderClient {
@@ -83,10 +84,8 @@ public:
     Frame* lastChild() const override;
     void willBeDetached() override;
     void detached(FrameDetachType) override;
-    void dispatchWillSendRequest(DocumentLoader*, unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse) override;
-    void dispatchDidReceiveResponse(DocumentLoader*, unsigned long identifier, const ResourceResponse&) override;
-    void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue) override;
-    void dispatchDidFinishLoading(DocumentLoader*, unsigned long identifier) override;
+    void dispatchWillSendRequest(ResourceRequest&) override;
+    void dispatchDidReceiveResponse(const ResourceResponse&) override;
     void dispatchDidLoadResourceFromMemoryCache(const ResourceRequest&, const ResourceResponse&) override;
     void dispatchDidHandleOnloadEvents() override;
     void dispatchDidReceiveServerRedirectForProvisionalLoad() override;
@@ -103,7 +102,6 @@ public:
 
     void dispatchDidChangeThemeColor() override;
     NavigationPolicy decidePolicyForNavigation(const ResourceRequest&, DocumentLoader*, NavigationType, NavigationPolicy, bool shouldReplaceCurrentEntry, bool isClientRedirect) override;
-    bool hasPendingNavigation() override;
     void dispatchWillSendSubmitEvent(HTMLFormElement*) override;
     void dispatchWillSubmitForm(HTMLFormElement*) override;
     void didStartLoading(LoadStartType) override;
@@ -184,6 +182,8 @@ public:
 
     WebEffectiveConnectionType getEffectiveConnectionType() override;
 
+    KURL overrideFlashEmbedWithHTML(const KURL&) override;
+
     // VB-6063:
     void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;
 
@@ -191,6 +191,7 @@ private:
     explicit FrameLoaderClientImpl(WebLocalFrameImpl*);
 
     bool isFrameLoaderClientImpl() const override { return true; }
+    WebDevToolsAgentImpl* devToolsAgent();
 
     // The WebFrame that owns this object and manages its lifetime. Therefore,
     // the web frame object is guaranteed to exist.

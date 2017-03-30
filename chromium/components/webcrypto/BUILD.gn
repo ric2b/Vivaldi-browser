@@ -5,7 +5,7 @@
 import("//testing/test.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 
-source_set("webcrypto") {
+static_library("webcrypto") {
   sources = [
     "algorithm_dispatch.cc",
     "algorithm_dispatch.h",
@@ -85,7 +85,6 @@ source_set("unit_tests") {
   deps = [
     ":webcrypto",
     "//base/test:test_support",
-    "//components/test_runner:test_runner",
     "//crypto",
     "//crypto:platform",
     "//testing/gtest",
@@ -107,13 +106,10 @@ source_set("fuzzer_support") {
   ]
   deps = [
     ":webcrypto",
+    "//base",
     "//crypto",
     "//crypto:platform",
     "//third_party/WebKit/public:blink",
-
-    # This contains a helper function for initializing Blink (needed for
-    # PartitionAlloc initialization).
-    "//components/test_runner:test_runner",
   ]
 }
 
@@ -133,6 +129,18 @@ fuzzer_test("webcrypto_ec_import_key_pkcs8_fuzzer") {
 fuzzer_test("webcrypto_ec_import_key_spki_fuzzer") {
   sources = [
     "ec_import_key_spki_fuzzer.cc",
+  ]
+  deps = [
+    ":fuzzer_support",
+    ":webcrypto",
+    "//third_party/WebKit/public:blink_headers",
+  ]
+}
+
+# Tests the import of raw (X9.62) formatted EC keys.
+fuzzer_test("webcrypto_ec_import_key_raw_fuzzer") {
+  sources = [
+    "ec_import_key_raw_fuzzer.cc",
   ]
   deps = [
     ":fuzzer_support",

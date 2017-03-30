@@ -98,8 +98,10 @@ void LayoutMenuList::adjustInnerStyle()
         innerStyle.setAlignSelfPosition(ItemPositionFlexStart);
     }
 
-    innerStyle.setPaddingLeft(Length(LayoutTheme::theme().popupInternalPaddingLeft(styleRef()), Fixed));
-    innerStyle.setPaddingRight(Length(LayoutTheme::theme().popupInternalPaddingRight(styleRef()), Fixed));
+    Length paddingStart = Length(LayoutTheme::theme().popupInternalPaddingStart(styleRef()), Fixed);
+    Length paddingEnd = Length(LayoutTheme::theme().popupInternalPaddingEnd(styleRef()), Fixed);
+    innerStyle.setPaddingLeft(styleRef().direction() == LTR ? paddingStart : paddingEnd);
+    innerStyle.setPaddingRight(styleRef().direction() == LTR ? paddingEnd : paddingStart);
     innerStyle.setPaddingTop(Length(LayoutTheme::theme().popupInternalPaddingTop(styleRef()), Fixed));
     innerStyle.setPaddingBottom(Length(LayoutTheme::theme().popupInternalPaddingBottom(styleRef()), Fixed));
 
@@ -157,12 +159,9 @@ void LayoutMenuList::updateOptionsWidth() const
 {
     float maxOptionWidth = 0;
 
-    for (const auto& element : selectElement()->listItems()) {
-        if (!isHTMLOptionElement(element))
-            continue;
-
-        String text = toHTMLOptionElement(element)->textIndentedToRespectGroupLabel();
-        const ComputedStyle* itemStyle = element->computedStyle() ? element->computedStyle() : style();
+    for (const auto& option : selectElement()->optionList()) {
+        String text = option->textIndentedToRespectGroupLabel();
+        const ComputedStyle* itemStyle = option->computedStyle() ? option->computedStyle() : style();
         applyTextTransform(itemStyle, text, ' ');
         TextRun textRun = constructTextRun(itemStyle->font(), text, *itemStyle);
 
@@ -178,37 +177,22 @@ float LayoutMenuList::computeTextWidth(const TextRun& textRun, const ComputedSty
 
 void LayoutMenuList::updateFromElement()
 {
-    setTextFromOption(selectElement()->optionIndexToBeShown());
-}
-
-void LayoutMenuList::setTextFromOption(int optionIndex)
-{
     HTMLSelectElement* select = selectElement();
-    const HeapVector<Member<HTMLElement>>& listItems = select->listItems();
-    const int size = listItems.size();
-
+    HTMLOptionElement* option = select->optionToBeShown();
     String text = emptyString();
     m_optionStyle.clear();
 
-    if (selectElement()->multiple()) {
+    if (select->multiple()) {
         unsigned selectedCount = 0;
-        int firstSelectedIndex = -1;
-        for (int i = 0; i < size; ++i) {
-            Element* element = listItems[i];
-            if (!isHTMLOptionElement(*element))
-                continue;
-
-            if (toHTMLOptionElement(element)->selected()) {
+        HTMLOptionElement* selectedOptionElement = nullptr;
+        for (const auto& option : select->optionList()) {
+            if (option->selected()) {
                 if (++selectedCount == 1)
-                    firstSelectedIndex = i;
+                    selectedOptionElement = option;
             }
         }
 
         if (selectedCount == 1) {
-            ASSERT(0 <= firstSelectedIndex);
-            ASSERT(firstSelectedIndex < size);
-            HTMLOptionElement* selectedOptionElement = toHTMLOptionElement(listItems[firstSelectedIndex]);
-            ASSERT(selectedOptionElement->selected());
             text = selectedOptionElement->textIndentedToRespectGroupLabel();
             m_optionStyle = selectedOptionElement->mutableComputedStyle();
         } else {
@@ -218,19 +202,15 @@ void LayoutMenuList::setTextFromOption(int optionIndex)
             ASSERT(!m_optionStyle);
         }
     } else {
-        const int i = select->optionToListIndex(optionIndex);
-        if (i >= 0 && i < size) {
-            Element* element = listItems[i];
-            if (isHTMLOptionElement(*element)) {
-                text = toHTMLOptionElement(element)->textIndentedToRespectGroupLabel();
-                m_optionStyle = element->mutableComputedStyle();
-            }
+        if (option) {
+            text = option->textIndentedToRespectGroupLabel();
+            m_optionStyle = option->mutableComputedStyle();
         }
     }
 
     setText(text.stripWhiteSpace());
 
-    didUpdateActiveOption(optionIndex);
+    didUpdateActiveOption(option);
 }
 
 void LayoutMenuList::setText(const String& s)
@@ -285,27 +265,27 @@ void LayoutMenuList::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, 
 void LayoutMenuList::computeLogicalHeight(LayoutUnit logicalHeight, LayoutUnit logicalTop,
     LogicalExtentComputedValues& computedValues) const
 {
-    logicalHeight = m_innerBlockHeight + borderAndPaddingHeight();
+    if (style()->hasAppearance())
+        logicalHeight = m_innerBlockHeight + borderAndPaddingHeight();
     LayoutBox::computeLogicalHeight(logicalHeight, logicalTop, computedValues);
 }
 
-void LayoutMenuList::didSetSelectedIndex(int optionIndex)
+void LayoutMenuList::didSelectOption(HTMLOptionElement* option)
 {
-    didUpdateActiveOption(optionIndex);
+    didUpdateActiveOption(option);
 }
 
-void LayoutMenuList::didUpdateActiveOption(int optionIndex)
+void LayoutMenuList::didUpdateActiveOption(HTMLOptionElement* option)
 {
     if (!document().existingAXObjectCache())
         return;
 
+    int optionIndex = option ? option->index() : -1;
     if (m_lastActiveIndex == optionIndex)
         return;
     m_lastActiveIndex = optionIndex;
 
-    HTMLSelectElement* select = selectElement();
-    int listIndex = select->optionToListIndex(optionIndex);
-    if (listIndex < 0 || listIndex >= static_cast<int>(select->listItems().size()))
+    if (optionIndex < 0)
         return;
 
     // We skip sending accessiblity notifications for the very first option, otherwise

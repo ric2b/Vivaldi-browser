@@ -15,17 +15,17 @@ typedef std::vector<DomainReliabilityConfig*> ConfigPointerVector;
 
 TEST(DomainReliabilityGoogleConfigsTest, Enumerate) {
   ConfigPointerVector configs;
-  STLElementDeleter<ConfigPointerVector> configs_deleter(&configs);
+  base::STLElementDeleter<ConfigPointerVector> configs_deleter(&configs);
 
   GetAllGoogleConfigs(&configs);
 }
 
 TEST(DomainReliabilityGoogleConfigsTest, ConfigsAreValid) {
   ConfigPointerVector configs;
-  STLElementDeleter<ConfigPointerVector> configs_deleter(&configs);
+  base::STLElementDeleter<ConfigPointerVector> configs_deleter(&configs);
 
   GetAllGoogleConfigs(&configs);
-  for (auto config : configs)
+  for (auto* config : configs)
     EXPECT_TRUE(config->IsValid());
 }
 

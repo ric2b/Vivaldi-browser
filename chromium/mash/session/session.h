@@ -14,7 +14,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 
 namespace mojo {
 class Connection;
@@ -23,7 +23,7 @@ class Connection;
 namespace mash {
 namespace session {
 
-class Session : public shell::ShellClient,
+class Session : public shell::Service,
                 public mojom::Session,
                 public shell::InterfaceFactory<mojom::Session> {
  public:
@@ -31,11 +31,10 @@ class Session : public shell::ShellClient,
   ~Session() override;
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
+  // shell::Service:
+  void OnStart(const shell::Identity& identity) override;
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override;
 
   // mojom::Session:
   void Logout() override;
@@ -46,11 +45,10 @@ class Session : public shell::ShellClient,
   void UnlockScreen() override;
 
   // shell::InterfaceFactory<mojom::Session>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::SessionRequest request) override;
 
   void StartWindowManager();
-  void StartSystemUI();
   void StartAppDriver();
   void StartQuickLaunch();
 
@@ -62,7 +60,6 @@ class Session : public shell::ShellClient,
   void StartRestartableService(const std::string& url,
                                const base::Closure& restart_callback);
 
-  shell::Connector* connector_;
   std::map<std::string, std::unique_ptr<shell::Connection>> connections_;
   bool screen_locked_;
   mojo::BindingSet<mojom::Session> bindings_;

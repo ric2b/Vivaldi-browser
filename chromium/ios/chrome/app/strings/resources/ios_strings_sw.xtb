@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sw">
-<translation id="1008557486741366299">Sio Sasa</translation>
 <translation id="1047726139967079566">Alamisha Ukurasa Huu...</translation>
 <translation id="1172898394251786223">Sehemu inayofuata</translation>
 <translation id="2320166752086256636">Ficha kibodi</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">Sasisha</translation>
 <translation id="4875622588773761625">Je, unataka <ph name="PASSWORD_MANAGER_BRAND" /> isasishe nenosiri lako kwa wavuti huu?</translation>
 <translation id="5317780077021120954">Hifadhi</translation>
+<translation id="6039694632319341016">Je, ungependa <ph name="PASSWORD_MANAGER_BRAND" /> isasishe nenosiri lako la <ph name="USERNAME" /> kwa tovuti hii?</translation>
 <translation id="605721222689873409">MK</translation>
 <translation id="6149061208933997199">Tumia Nenosiri</translation>
 <translation id="6196207969502475924">Utafutaji wa Sauti</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">Futa Matini</translation>
 <translation id="6456425917241817154">Nenosiri Lililoundwa na Chrome</translation>
 <translation id="6535543971741225613">Tovuti unayojaribu kufikia inaonekana si ya kawaida, na Chrome haiwezi kuthibitisha iwapo URL yake ni sahihi. Kwa sababu za usalama, hustahili kuendelea, labda ujaribu tena kesho au uende kwingine.</translation>
-<translation id="6647073004883890710">Je, ungependa <ph name="PASSWORD_MANAGER_BRAND" /> isasishe nenosiri lako la <ph name="USERNAME" /> kwa ajili ya tovuti hii?</translation>
 <translation id="7222245588540287464">Iwapo Kutafuta katika Muktadha kumewashwa au la</translation>
-<translation id="7378627244592794276">La</translation>
 <translation id="7456847797759667638">Fungua Mahali...</translation>
 <translation id="7481312909269577407">Mbele</translation>
 <translation id="7484580869648358686">Onyo: Kuna Tatizo Limetokea Hapa!</translation>

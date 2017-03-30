@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_USB_USB_CHOOSER_CONTROLLER_H_
 #define CHROME_BROWSER_USB_USB_CHOOSER_CONTROLLER_H_
 
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -12,7 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
-#include "components/chooser_controller/chooser_controller.h"
+#include "chrome/browser/chooser_controller/chooser_controller.h"
 #include "device/usb/public/interfaces/chooser_service.mojom.h"
 #include "device/usb/usb_service.h"
 #include "mojo/public/cpp/bindings/array.h"
@@ -39,8 +40,12 @@ class UsbChooserController : public ChooserController,
   ~UsbChooserController() override;
 
   // ChooserController:
+  base::string16 GetNoOptionsText() const override;
+  base::string16 GetOkButtonLabel() const override;
   size_t NumOptions() const override;
-  const base::string16& GetOption(size_t index) const override;
+  base::string16 GetOption(size_t index) const override;
+  void RefreshOptions() override;
+  base::string16 GetStatus() const override;
   void Select(size_t index) override;
   void Cancel() override;
   void Close() override;
@@ -63,6 +68,8 @@ class UsbChooserController : public ChooserController,
   // Each pair is a (device, device name).
   std::vector<std::pair<scoped_refptr<device::UsbDevice>, base::string16>>
       devices_;
+  // Maps from device name to number of devices.
+  std::unordered_map<base::string16, int> device_name_map_;
   base::WeakPtrFactory<UsbChooserController> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(UsbChooserController);

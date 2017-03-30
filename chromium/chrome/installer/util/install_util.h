@@ -84,17 +84,14 @@ class InstallUtil {
                                       const base::string16* const launch_cmd,
                                       WorkItemList* install_list);
 
-  // Update the installer stage reported by Google Update.  |state_key_path|
-  // should be obtained via the state_key method of an InstallerState instance
-  // created before the machine state is modified by the installer.
-  static void UpdateInstallerStage(bool system_install,
-                                   const base::string16& state_key_path,
-                                   installer::InstallerStage stage);
-
   // Returns true if this installation path is per user, otherwise returns false
   // (per machine install, meaning: the exe_path contains the path to Program
   // Files).
   static bool IsPerUserInstall(const base::FilePath& exe_path);
+
+  // Resets internal state for IsPerUserInstall so that the next call recomputes
+  // with fresh data.
+  static void ResetIsPerUserInstallForTest();
 
   // Returns true if the installation represented by the pair of |dist| and
   // |system_level| is a multi install.

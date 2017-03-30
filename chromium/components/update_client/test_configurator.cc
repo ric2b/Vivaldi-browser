@@ -29,7 +29,8 @@ TestConfigurator::TestConfigurator(
       brand_("TEST"),
       initial_time_(0),
       ondemand_time_(0),
-      use_cup_signing_(false),
+      enabled_cup_signing_(false),
+      enabled_component_updates_(true),
       context_(new net::TestURLRequestContextGetter(network_task_runner)) {}
 
 TestConfigurator::~TestConfigurator() {
@@ -107,16 +108,20 @@ scoped_refptr<OutOfProcessPatcher> TestConfigurator::CreateOutOfProcessPatcher()
   return NULL;
 }
 
-bool TestConfigurator::DeltasEnabled() const {
+bool TestConfigurator::EnabledDeltas() const {
   return true;
 }
 
-bool TestConfigurator::UseBackgroundDownloader() const {
+bool TestConfigurator::EnabledComponentUpdates() const {
+  return enabled_component_updates_;
+}
+
+bool TestConfigurator::EnabledBackgroundDownloader() const {
   return false;
 }
 
-bool TestConfigurator::UseCupSigning() const {
-  return use_cup_signing_;
+bool TestConfigurator::EnabledCupSigning() const {
+  return enabled_cup_signing_;
 }
 
 void TestConfigurator::SetBrand(const std::string& brand) {
@@ -131,8 +136,13 @@ void TestConfigurator::SetInitialDelay(int seconds) {
   initial_time_ = seconds;
 }
 
-void TestConfigurator::SetUseCupSigning(bool use_cup_signing) {
-  use_cup_signing_ = use_cup_signing;
+void TestConfigurator::SetEnabledCupSigning(bool enabled_cup_signing) {
+  enabled_cup_signing_ = enabled_cup_signing;
+}
+
+void TestConfigurator::SetEnabledComponentUpdates(
+    bool enabled_component_updates) {
+  enabled_component_updates_ = enabled_component_updates;
 }
 
 void TestConfigurator::SetDownloadPreference(

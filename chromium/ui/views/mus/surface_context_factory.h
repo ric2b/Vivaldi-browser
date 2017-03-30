@@ -8,28 +8,20 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "components/mus/common/mojo_gpu_memory_buffer_manager.h"
-#include "components/mus/gles2/raster_thread_helper.h"
-#include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "services/ui/public/cpp/raster_thread_helper.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/compositor/compositor.h"
 #include "ui/views/mus/mus_export.h"
-#include "ui/views/mus/surface_binding.h"
 
-namespace mojo {
-class Connector;
-}
-
-namespace mus {
-class Window;
+namespace ui {
+class GpuService;
 }
 
 namespace views {
 
 class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
  public:
-  SurfaceContextFactory(shell::Connector* connector,
-                        mus::Window* window,
-                        mus::mojom::SurfaceType surface_type);
+  explicit SurfaceContextFactory(ui::GpuService* gpu_service);
   ~SurfaceContextFactory() override;
 
  private:
@@ -47,22 +39,25 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   cc::SharedBitmapManager* GetSharedBitmapManager() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  std::unique_ptr<cc::SurfaceIdAllocator> CreateSurfaceIdAllocator() override;
+  uint32_t AllocateSurfaceClientId() override;
   cc::SurfaceManager* GetSurfaceManager() override;
+  void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
   void SetDisplayColorSpace(ui::Compositor* compositor,
                             const gfx::ColorSpace& color_space) override {}
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override {}
+  void SetDisplayVSyncParameters(ui::Compositor* compositor,
+                                 base::TimeTicks timebase,
+                                 base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
   void AddObserver(ui::ContextFactoryObserver* observer) override {}
   void RemoveObserver(ui::ContextFactoryObserver* observer) override {}
 
-  SurfaceBinding surface_binding_;
   uint32_t next_surface_id_namespace_;
-  gles2::RasterThreadHelper raster_thread_helper_;
-  mus::MojoGpuMemoryBufferManager gpu_memory_buffer_manager_;
+  ui::RasterThreadHelper raster_thread_helper_;
+  ui::GpuService* gpu_service_;
 
   DISALLOW_COPY_AND_ASSIGN(SurfaceContextFactory);
 };

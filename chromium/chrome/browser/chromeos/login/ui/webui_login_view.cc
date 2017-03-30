@@ -5,9 +5,9 @@
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 
 #include "ash/common/focus_cycler.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
@@ -314,8 +314,8 @@ void WebUILoginView::SetStatusAreaVisible(bool visible) {
       ash::Shell::GetInstance()->HasPrimaryStatusArea()) {
     ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
     tray->SetVisible(visible);
+    tray->GetWidget()->SetOpacity(visible ? 1.0 : 0.0);
     if (visible) {
-      // Tray may have been initialized being hidden.
       tray->GetWidget()->Show();
     } else {
       tray->GetWidget()->Hide();

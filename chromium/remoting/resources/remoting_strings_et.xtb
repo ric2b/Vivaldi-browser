@@ -74,7 +74,6 @@ Lisateavet privaatsuse kohta vaadake Google'i privaatsuseeskirjadest (http://goo
 <translation id="2676780859508944670">Töötab …</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Tarkvaravärskendused toimuvad tavaliselt automaatselt, kuid mõnel üksikul juhul võivad need ebaõnnestuda. Tarkvara värskendamine ei tohiks võtta üle paari minuti ja saate seda teha, kui olete oma arvutiga ühendatud kaugühenduse abil.</translation>
-<translation id="2813770873348017932">Ühendused kaugarvutiga on ajutiselt blokeeritud, sest keegi püüdis luua ühendust vale PIN-koodi kasutades. Proovige hiljem uuesti.</translation>
 <translation id="2841013758207633010">Aeg</translation>
 <translation id="2851674870054673688">Kui ta on koodi sisestanud, algab teie jagamisseanss.</translation>
 <translation id="2851754573186462851">Chromiumi rakenduste voogesitus</translation>
@@ -149,7 +148,6 @@ Host</translation>
 <translation id="4573676252416618192">Chrome Remote
 Desktopi host</translation>
 <translation id="4619978527973181021">Nõustu ja installi</translation>
-<translation id="4647791084836149355">Kuva Cardboardi vaade</translation>
 <translation id="4703302905453407178">Nõutav komponent peatas töö. Teavitage sellest probleemist arendajaid.</translation>
 <translation id="4703799847237267011">Teie rakenduse Chromoting seanss on lõppenud.</translation>
 <translation id="4736223761657662401">Ühenduse ajalugu</translation>
@@ -210,7 +208,6 @@ Desktopi host</translation>
 <translation id="6284412385303060032">Konsooli loogikakuval käitatav host on varjatud režiimi toetamiseks välja lülitatud, lülitades hostile, mida käitatakse kasutajapõhises seansis.</translation>
 <translation id="629730747756840877">Konto</translation>
 <translation id="6304318647555713317">Klient</translation>
-<translation id="6324708100353784493">Lubasite Google Cardboardi integreerimise režiimi. Selle režiimi kasutamiseks sisestage oma seade Google Cardboardiga ühilduvasse vaaturisse.</translation>
 <translation id="6381670701864002291">Midagi muud.</translation>
 <translation id="6398765197997659313">Välju täisekraanilt</translation>
 <translation id="6408143143164565232">• Kuulake heli Windowsi või Linuxi arvutitest.
@@ -236,6 +233,7 @@ Desktopi host</translation>
 <translation id="6930242544192836755">Kestus</translation>
 <translation id="6939719207673461467">Kuva/peida klaviatuur.</translation>
 <translation id="6944854424004126054">Akna taastamine</translation>
+<translation id="6963936880795878952">Ühendused kaugarvutiga on ajutiselt blokeeritud, sest keegi püüdis luua ühendust vale PIN-koodiga. Proovige hiljem uuesti.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Kas olete kindel, et soovite keelata kaugühenduse hostiga <ph name="HOSTNAME" />? Kui mõtlete ümber, peate selles arvutis ühendused uuesti lubama.</translation>
 <translation id="6998989275928107238">Kellele</translation>

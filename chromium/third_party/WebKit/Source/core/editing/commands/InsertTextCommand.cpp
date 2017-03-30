@@ -44,6 +44,11 @@ InsertTextCommand::InsertTextCommand(Document& document, const String& text, boo
 {
 }
 
+String InsertTextCommand::textDataForInputEvent() const
+{
+    return m_text;
+}
+
 Position InsertTextCommand::positionInsideTextNode(const Position& p, EditingState* editingState)
 {
     Position pos = p;
@@ -180,7 +185,7 @@ void InsertTextCommand::doApply(EditingState* editingState)
     DCHECK(startPosition.computeContainerNode()) << startPosition;
     Position positionBeforeStartNode(Position::inParentBeforeNode(*startPosition.computeContainerNode()));
     deleteInsignificantText(startPosition, mostForwardCaretPosition(startPosition));
-    if (!startPosition.inShadowIncludingDocument())
+    if (!startPosition.isConnected())
         startPosition = positionBeforeStartNode;
     if (!isVisuallyEquivalentCandidate(startPosition))
         startPosition = mostForwardCaretPosition(startPosition);

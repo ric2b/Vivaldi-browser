@@ -57,8 +57,8 @@
 #include "chrome/browser/ui/webui/chromeos/login/user_board_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_image_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/network_ui.h"
 #include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
+#include "chrome/browser/ui/webui/settings/md_settings_localized_strings_provider.h"
 #include "chrome/browser/ui/webui/test_files_request_filter.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/chrome_constants.h"
@@ -101,6 +101,7 @@ const char kOobeJSPath[] = "oobe.js";
 const char kKeyboardUtilsJSPath[] = "keyboard_utils.js";
 const char kCustomElementsHTMLPath[] = "custom_elements.html";
 const char kCustomElementsJSPath[] = "custom_elements.js";
+const char kCustomElementsUserPodHTMLPath[] = "custom_elements_user_pod.html";
 
 // Paths for deferred resource loading.
 const char kCustomElementsPinKeyboardHTMLPath[] =
@@ -136,6 +137,8 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
     source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
                             IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
+    source->AddResourcePath(kCustomElementsUserPodHTMLPath,
+                            IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   } else {
     source->SetDefaultResource(IDR_LOGIN_HTML);
     source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
@@ -143,13 +146,16 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_LOGIN_HTML);
     source->AddResourcePath(kCustomElementsJSPath,
                             IDR_CUSTOM_ELEMENTS_LOGIN_JS);
+    source->AddResourcePath(kCustomElementsUserPodHTMLPath,
+                            IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   }
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
   source->OverrideContentSecurityPolicyChildSrc(
       base::StringPrintf(
           "child-src chrome://terms/ %s/;",
           extensions::kGaiaAuthExtensionOrigin));
-  source->OverrideContentSecurityPolicyObjectSrc("object-src *;");
+  source->OverrideContentSecurityPolicyObjectSrc(
+      "object-src chrome:;");
   source->AddResourcePath("gaia_auth_host.js",
                           StartupUtils::IsWebviewSigninEnabled()
                               ? IDR_GAIA_AUTH_AUTHENTICATOR_JS
@@ -159,14 +165,6 @@ content::WebUIDataSource* CreateOobeUIDataSource(
   source->AddResourcePath(kEnrollmentHTMLPath, IDR_OOBE_ENROLLMENT_HTML);
   source->AddResourcePath(kEnrollmentCSSPath, IDR_OOBE_ENROLLMENT_CSS);
   source->AddResourcePath(kEnrollmentJSPath, IDR_OOBE_ENROLLMENT_JS);
-
-  if (display_type == OobeUI::kOobeDisplay) {
-    source->AddResourcePath("Roboto-Thin.ttf", IDR_FONT_ROBOTO_THIN);
-    source->AddResourcePath("Roboto-Light.ttf", IDR_FONT_ROBOTO_LIGHT);
-    source->AddResourcePath("Roboto-Regular.ttf", IDR_FONT_ROBOTO_REGULAR);
-    source->AddResourcePath("Roboto-Medium.ttf", IDR_FONT_ROBOTO_MEDIUM);
-    source->AddResourcePath("Roboto-Bold.ttf", IDR_FONT_ROBOTO_BOLD);
-  }
 
   // Only add a filter when runing as test.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -348,9 +346,10 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   content::URLDataSource::Add(profile, about_source);
 
   // Set up the chrome://oobe/ source.
-  content::WebUIDataSource::Add(profile,
-                                CreateOobeUIDataSource(localized_strings,
-                                                       display_type_));
+  content::WebUIDataSource* html_source =
+      CreateOobeUIDataSource(localized_strings, display_type_);
+  content::WebUIDataSource::Add(profile, html_source);
+  settings::AddCrNetworkStrings(html_source);
 
   // Set up the chrome://userimage/ source.
   options::UserImageSource* user_image_source =
@@ -499,7 +498,6 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
 
   bool new_kiosk_ui = KioskAppMenuHandler::EnableNewKioskUI();
   localized_strings->SetString("newKioskUI", new_kiosk_ui ? "on" : "off");
-
   localized_strings->SetString("newOobeUI", UseMDOobe() ? "on" : "off");
 }
 
@@ -600,10 +598,10 @@ void OobeUI::OnCurrentScreenChanged(const std::string& screen) {
     NOTIMPLEMENTED();
   }
 
+  current_screen_ = new_screen;
   FOR_EACH_OBSERVER(Observer,
                     observer_list_,
                     OnCurrentScreenChanged(current_screen_, new_screen));
-  current_screen_ = new_screen;
 }
 
 }  // namespace chromeos

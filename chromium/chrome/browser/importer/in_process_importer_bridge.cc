@@ -315,6 +315,14 @@ void InProcessImporterBridge::NotifyItemEnded(importer::ImportItem item) {
                  host_, item));
 }
 
+void InProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
+                                               const std::string& error) {
+  BrowserThread::PostTask(
+    BrowserThread::UI, FROM_HERE,
+    base::Bind(&ExternalProcessImporterHost::NotifyImportItemFailed,
+               host_, item, error));
+}
+
 void InProcessImporterBridge::NotifyEnded() {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,

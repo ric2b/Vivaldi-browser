@@ -35,10 +35,6 @@ const wchar_t kLegacyCmdQuickEnableApplicationHost[] =
 // The legacy app_host.exe executable, which should be eradicated.
 const wchar_t kLegacyChromeAppHostExe[] = L"app_host.exe";
 
-base::string16 GetAppLauncherDisplayName() {
-  return GetLocalizedString(IDS_PRODUCT_APP_LAUNCHER_NAME_BASE);
-}
-
 void AddLegacyAppCommandRemovalItem(const InstallerState& installer_state,
                                     const AppRegistrationData& reg_data,
                                     const wchar_t* name,
@@ -53,20 +49,6 @@ void AddLegacyAppCommandRemovalItem(const InstallerState& installer_state,
 }
 
 }  // namespace
-
-void AddAppLauncherVersionKeyWorkItems(HKEY root,
-                                       const base::Version& new_version,
-                                       bool add_language_identifier,
-                                       WorkItemList* list) {
-  DCHECK(!InstallUtil::IsChromeSxSProcess());
-  const UpdatingAppRegistrationData app_launcher_reg_data(kAppLauncherGuid);
-  AddVersionKeyWorkItems(root,
-                         app_launcher_reg_data.GetVersionKey(),
-                         GetAppLauncherDisplayName(),
-                         new_version,
-                         add_language_identifier,
-                         list);
-}
 
 void RemoveAppLauncherVersionKey(HKEY reg_root) {
   DCHECK(!InstallUtil::IsChromeSxSProcess());

@@ -59,10 +59,10 @@ SpinButtonElement* SpinButtonElement::create(Document& document, SpinButtonOwner
     return element;
 }
 
-void SpinButtonElement::detach(const AttachContext& context)
+void SpinButtonElement::detachLayoutTree(const AttachContext& context)
 {
     releaseCapture(EventDispatchDisallowed);
-    HTMLDivElement::detach(context);
+    HTMLDivElement::detachLayoutTree(context);
 }
 
 void SpinButtonElement::defaultEventHandler(Event* event)
@@ -88,7 +88,7 @@ void SpinButtonElement::defaultEventHandler(Event* event)
 
     MouseEvent* mouseEvent = toMouseEvent(event);
     IntPoint local = roundedIntPoint(box->absoluteToLocal(FloatPoint(mouseEvent->absoluteLocation()), UseTransforms));
-    if (mouseEvent->type() == EventTypeNames::mousedown && mouseEvent->button() == LeftButton) {
+    if (mouseEvent->type() == EventTypeNames::mousedown && mouseEvent->button() == static_cast<short>(WebPointerProperties::Button::Left)) {
         if (box->pixelSnappedBorderBoxRect().contains(local)) {
             if (m_spinButtonOwner)
                 m_spinButtonOwner->focusAndSelectSpinButtonOwner();
@@ -105,7 +105,7 @@ void SpinButtonElement::defaultEventHandler(Event* event)
             }
             event->setDefaultHandled();
         }
-    } else if (mouseEvent->type() == EventTypeNames::mouseup && mouseEvent->button() == LeftButton) {
+    } else if (mouseEvent->type() == EventTypeNames::mouseup && mouseEvent->button() == static_cast<short>(WebPointerProperties::Button::Left)) {
         releaseCapture();
     } else if (event->type() == EventTypeNames::mousemove) {
         if (box->pixelSnappedBorderBoxRect().contains(local)) {
@@ -234,7 +234,7 @@ void SpinButtonElement::step(int amount)
     doStepAction(amount);
 }
 
-void SpinButtonElement::repeatingTimerFired(Timer<SpinButtonElement>*)
+void SpinButtonElement::repeatingTimerFired(TimerBase*)
 {
     if (m_upDownState != Indeterminate)
         step(m_upDownState == Up ? 1 : -1);

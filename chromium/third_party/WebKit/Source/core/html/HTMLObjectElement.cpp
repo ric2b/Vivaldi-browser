@@ -26,14 +26,13 @@
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
+#include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/fetch/ImageResource.h"
 #include "core/frame/Settings.h"
-#include "core/html/FormData.h"
-#include "core/html/HTMLDocument.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/HTMLMetaElement.h"
 #include "core/html/HTMLParamElement.h"
@@ -245,7 +244,7 @@ void HTMLObjectElement::reloadPluginOnAttributeChange(const QualifiedName& name)
     } else if (name == classidAttr) {
         needsInvalidation = true;
     } else {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         needsInvalidation = false;
     }
     setNeedsWidgetUpdate(true);
@@ -257,8 +256,8 @@ void HTMLObjectElement::reloadPluginOnAttributeChange(const QualifiedName& name)
 // moved down into HTMLPluginElement.cpp
 void HTMLObjectElement::updateWidgetInternal()
 {
-    ASSERT(!layoutEmbeddedItem().showsUnavailablePluginIndicator());
-    ASSERT(needsWidgetUpdate());
+    DCHECK(!layoutEmbeddedItem().showsUnavailablePluginIndicator());
+    DCHECK(needsWidgetUpdate());
     setNeedsWidgetUpdate(false);
     // TODO(schenney): crbug.com/572908 This should ASSERT isFinishedParsingChildren() instead.
     if (!isFinishedParsingChildren()) {
@@ -315,7 +314,7 @@ void HTMLObjectElement::removedFrom(ContainerNode* insertionPoint)
 
 void HTMLObjectElement::childrenChanged(const ChildrenChange& change)
 {
-    if (inShadowIncludingDocument() && !useFallbackContent()) {
+    if (isConnected() && !useFallbackContent()) {
         setNeedsWidgetUpdate(true);
         lazyReattachIfNeeded();
     }
@@ -347,10 +346,10 @@ const AtomicString HTMLObjectElement::imageSourceURL() const
 // TODO(schenney): crbug.com/572908 Remove this hack.
 void HTMLObjectElement::reattachFallbackContent()
 {
-    // This can happen inside of attach() in the middle of a recalcStyle so we need to
+    // This can happen inside of attachLayoutTree() in the middle of a recalcStyle so we need to
     // reattach synchronously here.
     if (document().inStyleRecalc())
-        reattach();
+        reattachLayoutTree();
     else
         lazyReattachIfAttached();
 }
@@ -360,7 +359,7 @@ void HTMLObjectElement::renderFallbackContent()
     if (useFallbackContent())
         return;
 
-    if (!inShadowIncludingDocument())
+    if (!isConnected())
         return;
 
     // Before we give up and use fallback content, check to see if this is a MIME type issue.

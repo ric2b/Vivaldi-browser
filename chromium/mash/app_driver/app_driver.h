@@ -12,38 +12,36 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/mus/public/interfaces/accelerator_registrar.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/catalog/public/interfaces/catalog.mojom.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/ui/public/interfaces/accelerator_registrar.mojom.h"
 
 namespace mash {
 namespace app_driver {
 
-class AppDriver : public shell::ShellClient,
-                  public mus::mojom::AcceleratorHandler {
+class AppDriver : public shell::Service,
+                  public ui::mojom::AcceleratorHandler {
  public:
   AppDriver();
   ~AppDriver() override;
 
  private:
-  void OnAvailableCatalogEntries(mojo::Array<catalog::mojom::EntryPtr> entries);
+  void OnAvailableCatalogEntries(std::vector<catalog::mojom::EntryPtr> entries);
 
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
-  bool ShellConnectionLost() override;
+  // shell::Service:
+  void OnStart(const shell::Identity& identity) override;
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override;
+  bool OnStop() override;
 
-  // mus::mojom::AcceleratorHandler:
+  // ui::mojom::AcceleratorHandler:
   void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override;
 
   void AddAccelerators();
 
-  shell::Connector* connector_;
   catalog::mojom::CatalogPtr catalog_;
-  mojo::Binding<mus::mojom::AcceleratorHandler> binding_;
+  mojo::Binding<ui::mojom::AcceleratorHandler> binding_;
   base::WeakPtrFactory<AppDriver> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppDriver);

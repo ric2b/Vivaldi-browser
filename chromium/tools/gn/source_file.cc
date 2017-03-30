@@ -31,6 +31,17 @@ SourceFile::SourceFile(const base::StringPiece& p)
   DCHECK(!value_.empty());
   AssertValueSourceFileString(value_);
   NormalizePath(&value_);
+  actual_path_ = BuildSettings::RemapSourcePathToActual(value_);
+}
+
+SourceFile::SourceFile(const base::StringPiece& p,
+                       const base::StringPiece& p_act)
+    : value_(p.data(), p.size()),
+      actual_path_(p_act.data(), p_act.size()) {
+  DCHECK(!value_.empty());
+  AssertValueSourceFileString(value_);
+  NormalizePath(&value_);
+  NormalizePath(&actual_path_);
 }
 
 SourceFile::SourceFile(SwapIn, std::string* value) {
@@ -38,6 +49,7 @@ SourceFile::SourceFile(SwapIn, std::string* value) {
   DCHECK(!value_.empty());
   AssertValueSourceFileString(value_);
   NormalizePath(&value_);
+  actual_path_ = BuildSettings::RemapSourcePathToActual(value_);
 }
 
 SourceFile::~SourceFile() {
@@ -62,7 +74,8 @@ SourceDir SourceFile::GetDir() const {
   return SourceDir(base::StringPiece(&value_[0], last_slash + 1));
 }
 
-base::FilePath SourceFile::Resolve(const base::FilePath& source_root) const {
+base::FilePath SourceFile::Resolve(const base::FilePath& source_root,
+                                   bool use_actual_path) const {
   if (is_null())
     return base::FilePath();
 
@@ -77,6 +90,9 @@ base::FilePath SourceFile::Resolve(const base::FilePath& source_root) const {
     return base::FilePath(UTF8ToFilePath(converted));
   }
 
+  if (use_actual_path)
+    converted.assign(&actual_path_[2], actual_path_.size() - 2);
+  else
   converted.assign(&value_[2], value_.size() - 2);
   if (source_root.empty())
     return UTF8ToFilePath(converted).NormalizePathSeparatorsTo('/');

@@ -58,7 +58,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         clickInContactInfoAndWait(R.id.payments_add_option_button, mReadyToEdit);
         setTextInEditorAndWait(new String[] {"+++", "jane.jones"}, mEditorTextUpdate);
         clickInEditorAndWait(R.id.payments_edit_done_button, mEditorValidationError);
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -98,7 +98,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }
@@ -144,7 +144,7 @@ public class PaymentRequestContactDetailsTest extends PaymentRequestTestBase {
         });
         mReadyToEdit.waitForCallback(callCount);
 
-        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyToClose);
+        clickInEditorAndWait(R.id.payments_edit_cancel_button, mReadyForInput);
         clickAndWait(R.id.close_button, mDismissed);
         expectResultContains(new String[] {"Request cancelled"});
     }

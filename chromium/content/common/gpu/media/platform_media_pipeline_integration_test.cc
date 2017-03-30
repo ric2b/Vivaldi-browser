@@ -31,8 +31,7 @@ class PlatformMediaPipelineIntegrationTest
  public:
   static bool IsEnabled() {
 #if defined(OS_MACOSX)
-    if (base::mac::IsOSMavericksOrLater())
-      return true;
+    return true;
 #elif defined(OS_WIN)
     if (base::win::GetVersion() >= base::win::VERSION_WIN7)
       return true;

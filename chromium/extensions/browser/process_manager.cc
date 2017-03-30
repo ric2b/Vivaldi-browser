@@ -108,7 +108,7 @@ class IncognitoProcessManager : public ProcessManager {
 
 static void CreateBackgroundHostForExtensionLoad(
     ProcessManager* manager, const Extension* extension) {
-  DVLOG(1) << "CreateBackgroundHostForExtensionLoad";
+  DVLOG(1) << "CreateBackgroundHostForExtensionLoad " << extension->id();
   if (BackgroundInfo::HasPersistentBackgroundPage(extension))
     manager->CreateBackgroundHost(extension,
                                   BackgroundInfo::GetBackgroundURL(extension));
@@ -620,7 +620,7 @@ void ProcessManager::CancelSuspend(const Extension* extension) {
 }
 
 void ProcessManager::CloseBackgroundHosts() {
-  STLDeleteElements(&background_hosts_);
+  base::STLDeleteElements(&background_hosts_);
 }
 
 void ProcessManager::SetKeepaliveImpulseCallbackForTesting(

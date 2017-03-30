@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build_overrides/build.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/clang/clang.gni")
@@ -42,6 +43,7 @@ group("deps_no_options") {
       ":default_sanitizer_ldflags",
     ]
     deps = []
+    public_deps = []
 
     data = [
       "//tools/valgrind/asan/",
@@ -57,31 +59,52 @@ group("deps_no_options") {
       data += [ "$clang_base_path/lib/libstdc++.so.6" ]
     }
 
-    if (use_prebuilt_instrumented_libraries) {
+    if (use_prebuilt_instrumented_libraries ||
+        use_locally_built_instrumented_libraries) {
       deps += [ "//third_party/instrumented_libraries:deps" ]
     }
     if (use_custom_libcxx) {
-      public_deps = [
-        "//buildtools/third_party/libc++:libcxx_proxy",
-      ]
+      public_deps += [ "//buildtools/third_party/libc++:libcxx_proxy" ]
       data += [ "$root_out_dir/libc++.so" ]
     }
-    if (is_mac) {
+    if (is_mac || is_win) {
       data_deps = [
         ":copy_asan_runtime",
       ]
     }
+    if (is_mac) {
+      public_deps += [ ":asan_runtime_bundle_data" ]
+    }
   }
 }
 
-if (is_mac && using_sanitizer) {
+if ((is_mac || is_win) && using_sanitizer) {
   copy("copy_asan_runtime") {
+    if (is_mac) {
+      clang_rt_dso_path = "darwin/libclang_rt.asan_osx_dynamic.dylib"
+    } else if (is_win && target_cpu == "x86") {
+      clang_rt_dso_path = "windows/clang_rt.asan_dynamic-i386.dll"
+    } else if (is_win && target_cpu == "x64") {
+      clang_rt_dso_path = "windows/clang_rt.asan_dynamic-x86_64.dll"
+    }
     sources = [
-      "$clang_base_path/lib/clang/$clang_version/lib/darwin/libclang_rt.asan_osx_dynamic.dylib",
+      "$clang_base_path/lib/clang/$clang_version/lib/$clang_rt_dso_path",
     ]
     outputs = [
       "$root_out_dir/{{source_file_part}}",
     ]
+  }
+
+  if (is_mac) {
+    bundle_data("asan_runtime_bundle_data") {
+      sources = get_target_outputs(":copy_asan_runtime")
+      outputs = [
+        "{{bundle_executable_dir}}/{{source_file_part}}",
+      ]
+      public_deps = [
+        ":copy_asan_runtime",
+      ]
+    }
   }
 }
 
@@ -110,15 +133,15 @@ static_library("options_sources") {
   configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
 
   if (is_asan) {
-    sources += [ "//build/sanitizers/asan_suppressions.cc" ]
+    sources += [ asan_suppressions_file ]
   }
 
   if (is_lsan) {
-    sources += [ "//build/sanitizers/lsan_suppressions.cc" ]
+    sources += [ lsan_suppressions_file ]
   }
 
   if (is_tsan) {
-    sources += [ "//build/sanitizers/tsan_suppressions.cc" ]
+    sources += [ tsan_suppressions_file ]
   }
 }
 
@@ -154,16 +177,46 @@ config("default_sanitizer_ldflags") {
       ldflags += [ "-fsanitize=vptr" ]
     }
 
+    if (use_sanitizer_coverage) {
+      ldflags += [ "-fsanitize-coverage=$sanitizer_coverage_flags" ]
+    }
+
     if (is_cfi && !is_nacl) {
-      ldflags += [
-        "-fsanitize=cfi-vcall",
-        "-fsanitize=cfi-derived-cast",
-        "-fsanitize=cfi-unrelated-cast",
-      ]
+      ldflags += [ "-fsanitize=cfi-vcall" ]
+      if (use_cfi_cast) {
+        ldflags += [
+          "-fsanitize=cfi-derived-cast",
+          "-fsanitize=cfi-unrelated-cast",
+        ]
+      }
       if (use_cfi_diag) {
         ldflags += [
           "-fno-sanitize-trap=cfi",
           "-fsanitize-recover=cfi",
+        ]
+      }
+    }
+  } else if (is_win && is_asan) {
+    # Windows directly calls link.exe instead of the compiler driver when
+    # linking.  Hence, pass the runtime libraries instead of -fsanitize=address.
+    # In the static-library build, libraries are different for executables
+    # and dlls, see link_executable and link_shared_library below.
+    # This here handles only the component build.
+    if (target_cpu == "x64") {
+      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
+      if (is_component_build) {
+        assert(false, "win/asan does not work in 64-bit yet")
+        libs = [
+          "clang_rt.asan_dynamic-x86_64.lib",
+          "clang_rt.asan_dynamic_runtime_thunk-x86_64.lib",
+        ]
+      }
+    } else {
+      assert(target_cpu == "x86", "WinASan unsupported architecture")
+      if (is_component_build) {
+        libs = [
+          "clang_rt.asan_dynamic-i386.lib",
+          "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
         ]
       }
     }
@@ -206,6 +259,12 @@ config("asan_flags") {
   cflags = []
   if (is_asan) {
     cflags += [ "-fsanitize=address" ]
+    if (!asan_globals) {
+      cflags += [
+        "-mllvm",
+        "-asan-globals=0",
+      ]
+    }
     if (is_win) {
       cflags += [ "-fsanitize-blacklist=" +
                   rebase_path("//tools/memory/asan/blacklist_win.txt",
@@ -216,34 +275,31 @@ config("asan_flags") {
           [ "-fsanitize-blacklist=" +
             rebase_path("//tools/memory/asan/blacklist.txt", root_build_dir) ]
     }
-    if (is_android) {
-      # Android build relies on -Wl,--gc-sections removing unreachable code.
-      # ASan instrumentation for globals inhibits this and results in a
-      # library with unresolvable relocations.
-      # TODO(eugenis): find a way to reenable this.
-      cflags += [
-        "-mllvm",
-        "-asan-globals=0",
-      ]
-    } else if (is_mac) {
-      # http://crbug.com/352073
-      cflags += [
-        "-mllvm",
-        "-asan-globals=0",
-      ]
-      # TODO(GYP): deal with mac_bundles.
-    } else if (is_win) {
-      assert(current_cpu == "x86", "WinASan is 32-bit only currently")
-      if (is_component_build) {
-        libs = [
-          "clang_rt.asan_dynamic-i386.lib",
-          "clang_rt.asan_dynamic_runtime_thunk-i386.lib",
-        ]
-      } else {
-        # TODO(rnk): DLLs in the non-component build should link against
-        # clang_rt.asan_dll_thunk-i386.lib instead.
-        libs = [ "clang_rt.asan-i386.lib" ]
-      }
+  }
+}
+
+config("link_executable") {
+  if (is_asan && is_win && !is_component_build) {
+    if (target_cpu == "x64") {
+      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
+      assert(false, "win/asan does not work in 64-bit yet")
+      libs = [ "clang_rt.asan-x86_64.lib" ]
+    } else {
+      assert(target_cpu == "x86", "WinASan unsupported architecture")
+      libs = [ "clang_rt.asan-i386.lib" ]
+    }
+  }
+}
+
+config("link_shared_library") {
+  if (is_asan && is_win && !is_component_build) {
+    if (target_cpu == "x64") {
+      # Windows 64-bit. TODO(etienneb): Remove the assert when this is ready.
+      assert(false, "win/asan does not work in 64-bit yet")
+      libs = [ "clang_rt.asan_dll_thunk-x86_64.lib" ]
+    } else {
+      assert(target_cpu == "x86", "WinASan unsupported architecture")
+      libs = [ "clang_rt.asan_dll_thunk-i386.lib" ]
     }
   }
 }
@@ -255,10 +311,15 @@ config("cfi_flags") {
         rebase_path("//tools/cfi/blacklist.txt", root_build_dir)
     cflags += [
       "-fsanitize=cfi-vcall",
-      "-fsanitize=cfi-derived-cast",
-      "-fsanitize=cfi-unrelated-cast",
       "-fsanitize-blacklist=$cfi_blacklist_path",
     ]
+
+    if (use_cfi_cast) {
+      cflags += [
+        "-fsanitize=cfi-derived-cast",
+        "-fsanitize=cfi-unrelated-cast",
+      ]
+    }
 
     if (use_cfi_diag) {
       cflags += [

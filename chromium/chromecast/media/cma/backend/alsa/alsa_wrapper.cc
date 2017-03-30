@@ -42,6 +42,10 @@ snd_pcm_sframes_t AlsaWrapper::PcmStatusGetDelay(const snd_pcm_status_t* obj) {
   return snd_pcm_status_get_delay(obj);
 }
 
+snd_pcm_uframes_t AlsaWrapper::PcmStatusGetAvail(const snd_pcm_status_t* obj) {
+  return snd_pcm_status_get_avail(obj);
+}
+
 ssize_t AlsaWrapper::PcmFormatSize(snd_pcm_format_t format, size_t samples) {
   return snd_pcm_format_size(format, samples);
 }
@@ -49,6 +53,10 @@ ssize_t AlsaWrapper::PcmFormatSize(snd_pcm_format_t format, size_t samples) {
 void AlsaWrapper::PcmStatusGetHtstamp(const snd_pcm_status_t* obj,
                                       snd_htimestamp_t* ptr) {
   snd_pcm_status_get_htstamp(obj, ptr);
+}
+
+snd_pcm_state_t AlsaWrapper::PcmStatusGetState(const snd_pcm_status_t* obj) {
+  return snd_pcm_status_get_state(obj);
 }
 
 int AlsaWrapper::PcmHwParamsMalloc(snd_pcm_hw_params_t** ptr) {

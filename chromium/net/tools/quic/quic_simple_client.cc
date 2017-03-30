@@ -12,16 +12,16 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_info.h"
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_chromium_alarm_factory.h"
-#include "net/quic/quic_chromium_connection_helper.h"
-#include "net/quic/quic_chromium_packet_reader.h"
-#include "net/quic/quic_chromium_packet_writer.h"
-#include "net/quic/quic_connection.h"
-#include "net/quic/quic_flags.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_server_id.h"
-#include "net/quic/spdy_utils.h"
+#include "net/quic/chromium/quic_chromium_alarm_factory.h"
+#include "net/quic/chromium/quic_chromium_connection_helper.h"
+#include "net/quic/chromium/quic_chromium_packet_reader.h"
+#include "net/quic/chromium/quic_chromium_packet_writer.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_connection.h"
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/core/quic_protocol.h"
+#include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/spdy_utils.h"
 #include "net/spdy/spdy_header_block.h"
 #include "net/spdy/spdy_http_utils.h"
 #include "net/udp/udp_client_socket.h"
@@ -37,33 +37,35 @@ void QuicSimpleClient::ClientQuicDataToResend::Resend() {
   headers_ = nullptr;
 }
 
-QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
-                                   const QuicServerId& server_id,
-                                   const QuicVersionVector& supported_versions,
-                                   ProofVerifier* proof_verifier)
+QuicSimpleClient::QuicSimpleClient(
+    IPEndPoint server_address,
+    const QuicServerId& server_id,
+    const QuicVersionVector& supported_versions,
+    std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClientBase(server_id,
                      supported_versions,
                      QuicConfig(),
                      CreateQuicConnectionHelper(),
                      CreateQuicAlarmFactory(),
-                     proof_verifier),
+                     std::move(proof_verifier)),
       server_address_(server_address),
       local_port_(0),
       initialized_(false),
       packet_reader_started_(false),
       weak_factory_(this) {}
 
-QuicSimpleClient::QuicSimpleClient(IPEndPoint server_address,
-                                   const QuicServerId& server_id,
-                                   const QuicVersionVector& supported_versions,
-                                   const QuicConfig& config,
-                                   ProofVerifier* proof_verifier)
+QuicSimpleClient::QuicSimpleClient(
+    IPEndPoint server_address,
+    const QuicServerId& server_id,
+    const QuicVersionVector& supported_versions,
+    const QuicConfig& config,
+    std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClientBase(server_id,
                      supported_versions,
                      config,
                      CreateQuicConnectionHelper(),
                      CreateQuicAlarmFactory(),
-                     proof_verifier),
+                     std::move(proof_verifier)),
       server_address_(server_address),
       local_port_(0),
       initialized_(false),
@@ -76,8 +78,8 @@ QuicSimpleClient::~QuicSimpleClient() {
         QUIC_PEER_GOING_AWAY, "Shutting down",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
-  STLDeleteElements(&data_to_resend_on_connect_);
-  STLDeleteElements(&data_sent_before_handshake_);
+  base::STLDeleteElements(&data_to_resend_on_connect_);
+  base::STLDeleteElements(&data_sent_before_handshake_);
 }
 
 bool QuicSimpleClient::Initialize() {
@@ -179,7 +181,7 @@ bool QuicSimpleClient::Connect() {
       for (QuicDataToResend* data : data_to_resend_on_connect_) {
         data->Resend();
       }
-      STLDeleteElements(&data_to_resend_on_connect_);
+      base::STLDeleteElements(&data_to_resend_on_connect_);
     }
     if (session() != nullptr &&
         session()->error() != QUIC_CRYPTO_HANDSHAKE_STATELESS_REJECT) {
@@ -236,8 +238,8 @@ void QuicSimpleClient::Disconnect() {
         QUIC_PEER_GOING_AWAY, "Client disconnecting",
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
   }
-  STLDeleteElements(&data_to_resend_on_connect_);
-  STLDeleteElements(&data_sent_before_handshake_);
+  base::STLDeleteElements(&data_to_resend_on_connect_);
+  base::STLDeleteElements(&data_sent_before_handshake_);
 
   reset_writer();
   packet_reader_.reset();
@@ -255,8 +257,8 @@ void QuicSimpleClient::SendRequest(const HttpRequestInfo& headers,
     return;
   }
   SpdyHeaderBlock header_block;
-  CreateSpdyHeadersFromHttpRequest(headers, headers.extra_headers, net::HTTP2,
-                                   true, &header_block);
+  CreateSpdyHeadersFromHttpRequest(headers, headers.extra_headers, true,
+                                   &header_block);
   stream->set_visitor(this);
   stream->SendRequest(std::move(header_block), body, fin);
   if (FLAGS_enable_quic_stateless_reject_support) {
@@ -275,7 +277,7 @@ void QuicSimpleClient::MaybeAddQuicDataToResend(
   if (session()->IsCryptoHandshakeConfirmed()) {
     // The handshake is confirmed.  No need to continue saving requests to
     // resend.
-    STLDeleteElements(&data_sent_before_handshake_);
+    base::STLDeleteElements(&data_sent_before_handshake_);
     delete data_to_resend;
     return;
   }
@@ -348,8 +350,7 @@ void QuicSimpleClient::OnClose(QuicSpdyStream* stream) {
   QuicSpdyClientStream* client_stream =
       static_cast<QuicSpdyClientStream*>(stream);
   HttpResponseInfo response;
-  SpdyHeadersToHttpResponse(client_stream->response_headers(), net::HTTP2,
-                            &response);
+  SpdyHeadersToHttpResponse(client_stream->response_headers(), &response);
   if (response_listener_.get() != nullptr) {
     response_listener_->OnCompleteResponse(stream->id(), *response.headers,
                                            client_stream->data());

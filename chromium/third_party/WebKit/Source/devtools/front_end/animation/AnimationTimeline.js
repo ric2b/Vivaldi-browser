@@ -35,7 +35,7 @@ WebInspector.AnimationTimeline = function()
     /** @type {!Map.<string, !WebInspector.AnimationModel.Animation>} */
     this._animationsMap = new Map();
     WebInspector.targetManager.addModelListener(WebInspector.DOMModel, WebInspector.DOMModel.Events.NodeRemoved, this._nodeRemoved, this);
-    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Type.Page);
+    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.DOM);
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this._nodeChanged, this);
 }
 
@@ -51,13 +51,13 @@ WebInspector.AnimationTimeline._ControlState = {
 WebInspector.AnimationTimeline.prototype = {
     wasShown: function()
     {
-        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Type.Page))
+        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM))
             this._addEventListeners(target);
     },
 
     willHide: function()
     {
-        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Type.Page))
+        for (var target of WebInspector.targetManager.targets(WebInspector.Target.Capability.DOM))
             this._removeEventListeners(target);
         this._popoverHelper.hidePopover();
     },
@@ -194,9 +194,21 @@ WebInspector.AnimationTimeline.prototype = {
         var screenshots = animGroup.screenshots();
         if (!screenshots.length)
             return;
-        var content = new WebInspector.AnimationScreenshotPopover(screenshots);
-        popover.setNoMargins(true);
-        popover.showView(content, anchor);
+
+        if (!screenshots[0].complete)
+            screenshots[0].onload = onFirstScreenshotLoaded.bind(null, screenshots);
+        else
+            onFirstScreenshotLoaded(screenshots);
+
+        /**
+         * @param  {!Array.<!Image>} screenshots
+         */
+        function onFirstScreenshotLoaded(screenshots)
+        {
+            var content = new WebInspector.AnimationScreenshotPopover(screenshots);
+            popover.setNoMargins(true);
+            popover.showView(content, anchor);
+        }
     },
 
     _onHidePopover: function()
@@ -757,30 +769,4 @@ WebInspector.AnimationTimeline.StepTimingFunction.parse = function(text) {
     if (match)
         return new WebInspector.AnimationTimeline.StepTimingFunction(parseInt(match[1], 10), match[2]);
     return null;
-}
-
-/**
- * @constructor
- * @implements {WebInspector.ToolbarItem.Provider}
- */
-WebInspector.AnimationTimeline.ButtonProvider = function()
-{
-    this._button = new WebInspector.ToolbarButton(WebInspector.UIString("Animations"), "animation-toolbar-item");
-    this._button.addEventListener("click", this._clicked, this);
-}
-
-WebInspector.AnimationTimeline.ButtonProvider.prototype = {
-    _clicked: function()
-    {
-        WebInspector.inspectorView.showViewInDrawer("animations");
-    },
-
-    /**
-     * @override
-     * @return {!WebInspector.ToolbarItem}
-     */
-    item: function()
-    {
-        return this._button;
-    }
 }

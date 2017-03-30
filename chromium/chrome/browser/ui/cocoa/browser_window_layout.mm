@@ -88,7 +88,7 @@ const CGFloat kLocationBarRightOffset = 35;
   parameters_.inAnyFullscreen = inAnyFullscreen;
 }
 
-- (void)setFullscreenSlidingStyle:(fullscreen_mac::SlidingStyle)slidingStyle {
+- (void)setSlidingStyle:(FullscreenSlidingStyle)slidingStyle {
   parameters_.slidingStyle = slidingStyle;
 }
 
@@ -168,17 +168,8 @@ const CGFloat kLocationBarRightOffset = 35;
   CGFloat yOffset = 0;
   if (parameters_.inAnyFullscreen) {
     yOffset += parameters_.menubarOffset;
-    switch (parameters_.slidingStyle) {
-      case fullscreen_mac::OMNIBOX_TABS_PRESENT:
-        break;
-      case fullscreen_mac::OMNIBOX_TABS_NONE:
-      case fullscreen_mac::OMNIBOX_TABS_HIDDEN:
-        // In presentation mode, |yOffset| accounts for the sliding position of
-        // the floating bar and the extra offset needed to dodge the menu bar.
-        yOffset += std::floor((1 - parameters_.toolbarFraction) *
-                              [self fullscreenBackingBarHeight]);
-        break;
-    }
+    yOffset += std::floor((1 - parameters_.toolbarFraction) *
+                          [self fullscreenBackingBarHeight]);
   }
   fullscreenYOffset_ = yOffset;
 }
@@ -305,8 +296,9 @@ const CGFloat kLocationBarRightOffset = 35;
   output_.fullscreenExitButtonMaxY = maxY;
 
   if (parameters_.inAnyFullscreen &&
-      (parameters_.slidingStyle == fullscreen_mac::OMNIBOX_TABS_HIDDEN ||
-       parameters_.slidingStyle == fullscreen_mac::OMNIBOX_TABS_NONE)) {
+      (parameters_.slidingStyle ==
+           FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN ||
+       parameters_.slidingStyle == FullscreenSlidingStyle::OMNIBOX_TABS_NONE)) {
     // If in presentation mode, reset |maxY| to top of screen, so that the
     // floating bar slides over the things which appear to be in the content
     // area.
@@ -356,7 +348,8 @@ const CGFloat kLocationBarRightOffset = 35;
   }
 
   if (parameters_.inAnyFullscreen &&
-      parameters_.slidingStyle == fullscreen_mac::OMNIBOX_TABS_PRESENT) {
+      parameters_.slidingStyle ==
+          FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT) {
     // If in Canonical Fullscreen, content should be shifted down by an amount
     // equal to all the widgets and views at the top of the window. It should
     // not be further shifted by the appearance/disappearance of the AppKit

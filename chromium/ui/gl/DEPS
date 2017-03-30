@@ -1,10 +1,8 @@
 include_rules = [
   "+third_party/khronos",
   "+third_party/skia",
-  "+ui/base",
   "+ui/events",
   "+ui/gfx",
-  "+ui/ozone/public",
 ]
 
 specific_include_rules = {

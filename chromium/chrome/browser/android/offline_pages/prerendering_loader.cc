@@ -6,11 +6,13 @@
 
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "net/base/network_change_notifier.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace offline_pages {
@@ -157,17 +159,34 @@ void PrerenderingLoader::HandleLoadingStopped() {
   if (IsIdle())
     return;
 
-  if (adapter_->IsActive()) {
-    DVLOG(1) << "Load failed: " << adapter_->GetFinalStatus();
-    adapter_->DestroyActive();
-  }
   // Request status depends on whether we are still loading (failed) or
   // did load and then loading was stopped (cancel - from prerender stack).
   Offliner::RequestStatus request_status =
-      IsLoaded() ? Offliner::RequestStatus::CANCELED
-                 : Offliner::RequestStatus::FAILED;
-  // TODO(dougarnett): For failure, determine from final status if retry-able
-  // and report different failure statuses if retry-able or not.
+      IsLoaded() ? Offliner::RequestStatus::PRERENDERING_CANCELED
+                 : Offliner::RequestStatus::PRERENDERING_FAILED;
+
+  if (adapter_->IsActive()) {
+    prerender::FinalStatus final_status = adapter_->GetFinalStatus();
+    DVLOG(1) << "Load failed: " << final_status;
+
+    // Loss of network connection can show up as unsupported scheme per
+    // a redirect to a special data URL is used to navigate to error page.
+    // We want to be able to retry these request so for now treat any
+    // unsupported scheme error as a cancel.
+    // TODO(dougarnett): Use new FinalStatus code if/when supported (642768).
+    // TODO(dougarnett): Create whitelist of final status codes that should
+    // not be considered failures (and define new RequestStatus code for them).
+    if (adapter_->GetFinalStatus() ==
+        prerender::FinalStatus::FINAL_STATUS_UNSUPPORTED_SCHEME) {
+      request_status = Offliner::RequestStatus::PRERENDERING_CANCELED;
+      UMA_HISTOGRAM_ENUMERATION(
+          "OfflinePages.Background.UnsupportedScheme.ConnectionType",
+          net::NetworkChangeNotifier::GetConnectionType(),
+          net::NetworkChangeNotifier::ConnectionType::CONNECTION_LAST + 1);
+    }
+    adapter_->DestroyActive();
+  }
+
   snapshot_controller_.reset(nullptr);
   session_contents_.reset(nullptr);
   state_ = State::IDLE;
@@ -181,11 +200,6 @@ void PrerenderingLoader::CancelPrerender() {
   }
   snapshot_controller_.reset(nullptr);
   session_contents_.reset(nullptr);
-  if (!IsLoaded() && !IsIdle()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(callback_, Offliner::RequestStatus::CANCELED, nullptr));
-  }
   state_ = State::IDLE;
 }
 

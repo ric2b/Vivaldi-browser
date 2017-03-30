@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
@@ -80,8 +81,7 @@ class PlatformNotificationContextTest : public ::testing::Test {
 
  protected:
   // Creates a new PlatformNotificationContextImpl instance. When using this
-  // method, the underlying database will always be created in memory. The
-  // current message loop proxy will be used as the task runner.
+  // method, the underlying database will always be created in memory.
   PlatformNotificationContextImpl* CreatePlatformNotificationContext() {
     PlatformNotificationContextImpl* context =
         new PlatformNotificationContextImpl(base::FilePath(), &browser_context_,
@@ -168,6 +168,69 @@ TEST_F(PlatformNotificationContextTest, WriteReadNotification) {
 
   const NotificationDatabaseData& read_database_data = database_data();
   EXPECT_EQ(notification_database_data.origin, read_database_data.origin);
+}
+
+TEST_F(PlatformNotificationContextTest, WriteReadReplacedNotification) {
+  scoped_refptr<PlatformNotificationContextImpl> context =
+      CreatePlatformNotificationContext();
+
+  const GURL origin("https://example.com");
+  const std::string tag = "foo";
+
+  NotificationDatabaseData notification_database_data;
+  notification_database_data.service_worker_registration_id =
+      kFakeServiceWorkerRegistrationId;
+  notification_database_data.origin = origin;
+  notification_database_data.notification_data.title =
+      base::ASCIIToUTF16("First");
+  notification_database_data.notification_data.tag = tag;
+
+  // Write the first notification with the given |tag|.
+  context->WriteNotificationData(
+      origin, notification_database_data,
+      base::Bind(&PlatformNotificationContextTest::DidWriteNotificationData,
+                 base::Unretained(this)));
+
+  base::RunLoop().RunUntilIdle();
+
+  int64_t read_notification_id = notification_id();
+
+  // The write operation should have succeeded with a notification id.
+  ASSERT_TRUE(success());
+  EXPECT_GT(read_notification_id, 0);
+
+  notification_database_data.notification_data.title =
+      base::ASCIIToUTF16("Second");
+
+  // Write the second notification with the given |tag|.
+  context->WriteNotificationData(
+      origin, notification_database_data,
+      base::Bind(&PlatformNotificationContextTest::DidWriteNotificationData,
+                 base::Unretained(this)));
+
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(success());
+  ASSERT_NE(notification_id(), read_notification_id);
+  ASSERT_GT(notification_id(), 0);
+
+  // Reading the notifications should only yield the second, replaced one.
+  std::vector<NotificationDatabaseData> notification_database_datas;
+  context->ReadAllNotificationDataForServiceWorkerRegistration(
+      origin, kFakeServiceWorkerRegistrationId,
+      base::Bind(&PlatformNotificationContextTest::DidReadAllNotificationDatas,
+                 base::Unretained(this), &notification_database_datas));
+
+  base::RunLoop().RunUntilIdle();
+
+  // The read operation should have succeeded, with the right notification.
+  ASSERT_TRUE(success());
+
+  ASSERT_EQ(1u, notification_database_datas.size());
+
+  EXPECT_EQ(tag, notification_database_datas[0].notification_data.tag);
+  EXPECT_EQ(base::ASCIIToUTF16("Second"),
+            notification_database_datas[0].notification_data.title);
 }
 
 TEST_F(PlatformNotificationContextTest, DeleteInvalidNotification) {

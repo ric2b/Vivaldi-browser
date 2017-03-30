@@ -1,0 +1,40 @@
+import("//build/config/features.gni")
+import("//build/toolchain/cc_wrapper.gni")
+
+declare_args() {
+  enable_disabled_unit_tests = false
+
+  enable_permanently_disabled_unit_tests = 0
+}
+
+# Locales about to be added, but not ready
+vivaldi_pending_locales = [
+  "be",
+  "eo",
+  "es-PE",
+  "eu",
+  "fy",
+  "gl",
+  "hy",
+  "io",
+  "is",
+  "jbo",
+  "ka",
+  "ku",
+  "mk",
+  "sc",
+  "sq",
+  "nn",
+]
+
+if (use_cc_wrapper) {
+  disable_precompiled_headers = true
+}
+
+if (!is_mac) {
+  is_component_ffmpeg = true
+}
+
+if (is_mac && is_official_build) {
+  mac_strip_release = true
+}

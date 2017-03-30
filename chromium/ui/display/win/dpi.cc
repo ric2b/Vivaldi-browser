@@ -51,8 +51,7 @@ void SetDefaultDeviceScaleFactor(float scale) {
 float GetDPIScale() {
   if (display::Display::HasForceDeviceScaleFactor())
     return display::Display::GetForcedDeviceScaleFactor();
-  float dpi_scale = GetUnforcedDeviceScaleFactor();
-  return (dpi_scale <= 1.25f) ? 1.f : dpi_scale;
+  return GetUnforcedDeviceScaleFactor();
 }
 
 int GetDPIFromScalingFactor(float device_scaling_factor) {
@@ -61,13 +60,6 @@ int GetDPIFromScalingFactor(float device_scaling_factor) {
 
 float GetScalingFactorFromDPI(int dpi) {
   return static_cast<float>(dpi) / kDefaultDPI;
-}
-
-int GetSystemMetricsInDIP(int metric) {
-  // The system metrics always reflect the system DPI, not whatever scale we've
-  // forced or decided to use.
-  return static_cast<int>(
-      std::round(GetSystemMetrics(metric) / GetUnforcedDeviceScaleFactor()));
 }
 
 }  // namespace win

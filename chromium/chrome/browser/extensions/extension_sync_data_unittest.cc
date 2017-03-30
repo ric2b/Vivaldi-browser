@@ -8,11 +8,11 @@
 
 #include "base/files/file_path.h"
 #include "base/version.h"
+#include "components/sync/api/string_ordinal.h"
+#include "components/sync/protocol/app_specifics.pb.h"
+#include "components/sync/protocol/extension_specifics.pb.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "extensions/common/extension.h"
-#include "sync/api/string_ordinal.h"
-#include "sync/protocol/app_specifics.pb.h"
-#include "sync/protocol/extension_specifics.pb.h"
-#include "sync/protocol/sync.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -111,7 +111,7 @@ TEST_F(ExtensionSyncDataTest, ExtensionSyncDataForExtension) {
   EXPECT_FALSE(extension_sync_data.remote_install());
   EXPECT_EQ(ExtensionSyncData::BOOLEAN_TRUE,
             extension_sync_data.all_urls_enabled());
-  EXPECT_EQ(Version(kVersion), extension_sync_data.version());
+  EXPECT_EQ(base::Version(kVersion), extension_sync_data.version());
   EXPECT_EQ(std::string(kName), extension_sync_data.name());
 
   // Check the serialize-deserialize process for ExtensionSyncData to proto.

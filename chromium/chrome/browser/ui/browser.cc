@@ -36,7 +36,6 @@
 #include "chrome/browser/background/background_contents_service.h"
 #include "chrome/browser/background/background_contents_service_factory.h"
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
-#include "chrome/browser/banners/app_banner_manager_emulation.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/character_encoding.h"
@@ -68,6 +67,7 @@
 #include "chrome/browser/memory/tab_manager_web_contents_data.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/pepper_broker_infobar_delegate.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_destroyer.h"
@@ -85,7 +85,7 @@
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/tab_contents/retargeting_details.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/task_manager/web_contents_tags.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
@@ -143,7 +143,6 @@
 #include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/validation_message_bubble.h"
 #include "chrome/browser/ui/website_settings/chooser_bubble_delegate.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
@@ -153,7 +152,7 @@
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
-#include "chrome/common/search_types.h"
+#include "chrome/common/search/search_types.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -541,7 +540,7 @@ Browser::~Browser() {
   instant_controller_.reset();
 
   if (profile_->IsOffTheRecord() &&
-      !BrowserList::IsOffTheRecordSessionActiveForProfile(profile_)) {
+      !BrowserList::IsIncognitoSessionActiveForProfile(profile_)) {
     if (profile_->IsGuestSession()) {
 // ChromeOS handles guest data independently.
 #if !defined(OS_CHROMEOS)
@@ -937,9 +936,11 @@ void Browser::UpdateDownloadShelfVisibility(bool visible) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void Browser::UpdateUIForNavigationInTab(WebContents* contents,
-                                         ui::PageTransition transition,
-                                         bool user_initiated) {
+void Browser::UpdateUIForNavigationInTab(
+    WebContents* contents,
+    ui::PageTransition transition,
+    chrome::NavigateParams::WindowAction action,
+    bool user_initiated) {
   tab_strip_model_->TabNavigating(contents, transition);
 
   if (is_vivaldi()) return;
@@ -964,8 +965,10 @@ void Browser::UpdateUIForNavigationInTab(WebContents* contents,
   // navigating away from the new tab page.
   ScheduleUIUpdate(contents, content::INVALIDATE_TYPE_URL);
 
-  if (contents_is_selected)
+  if (contents_is_selected &&
+      (window()->IsActive() || action == chrome::NavigateParams::SHOW_WINDOW)) {
     contents->SetInitialFocus();
+  }
 }
 
 void Browser::ShowModalSigninWindow(profiles::BubbleViewMode mode,
@@ -1101,13 +1104,8 @@ void Browser::ActiveTabChanged(WebContents* old_contents,
   // Discarded tabs always get reloaded.
   // TODO(georgesak): Validate the usefulness of this. And if needed then move
   // to TabManager.
-  if (g_browser_process->GetTabManager() &&
-      g_browser_process->GetTabManager()->IsTabDiscarded(new_contents))
+  if (g_browser_process->GetTabManager()->IsTabDiscarded(new_contents))
     chrome::Reload(this, CURRENT_TAB);
-
-  // In Vivaldi we need to mark the tab as not discarded.
-  extensions::VivaldiPrivateTabObserver::FromWebContents(new_contents)
-      ->OnTabDiscarded(new_contents, false);
 
   // If we have any update pending, do it now.
   if (chrome_updater_factory_.HasWeakPtrs() && old_contents)
@@ -1425,9 +1423,9 @@ std::unique_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
 }
 
 void Browser::RequestAppBannerFromDevTools(content::WebContents* web_contents) {
-  banners::AppBannerManagerEmulation::CreateForWebContents(web_contents);
-  banners::AppBannerManagerEmulation* manager =
-      banners::AppBannerManagerEmulation::FromWebContents(web_contents);
+  banners::AppBannerManagerDesktop::CreateForWebContents(web_contents);
+  banners::AppBannerManagerDesktop* manager =
+      banners::AppBannerManagerDesktop::FromWebContents(web_contents);
   manager->RequestAppBanner(web_contents->GetLastCommittedURL(), true);
 }
 
@@ -1722,7 +1720,7 @@ void Browser::WebContentsCreated(WebContents* source_contents,
   TabHelpers::AttachTabHelpers(new_contents);
 
   // Make the tab show up in the task manager.
-  task_management::WebContentsTags::CreateForTabContents(new_contents);
+  task_manager::WebContentsTags::CreateForTabContents(new_contents);
 
   // Notify.
   RetargetingDetails details;
@@ -1846,10 +1844,10 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
     window_->GetLocationBar()->UpdateContentSettingsIcons();
   }
 
-  PermissionBubbleManager* bubble_manager =
-      PermissionBubbleManager::FromWebContents(web_contents);
-  if (bubble_manager) {
-    bubble_manager->AddRequest(
+  PermissionRequestManager* permission_request_manager =
+      PermissionRequestManager::FromWebContents(web_contents);
+  if (permission_request_manager) {
+    permission_request_manager->AddRequest(
         new RegisterProtocolHandlerPermissionRequest(registry, handler,
                                                      url, user_gesture));
   }

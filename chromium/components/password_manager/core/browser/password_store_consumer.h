@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/memory/scoped_vector.h"
 #include "base/task/cancelable_task_tracker.h"
 
 namespace autofill {
@@ -31,13 +30,12 @@ class PasswordStoreConsumer {
   // Called when the GetLogins() request is finished, with the associated
   // |results|.
   virtual void OnGetPasswordStoreResults(
-      ScopedVector<autofill::PasswordForm> results) = 0;
+      std::vector<std::unique_ptr<autofill::PasswordForm>> results) = 0;
 
-  // TODO(crbug.com/561749): The argument's type would ideally be just
-  // std::vector<std::unique_ptr<InteractionsStats>>, but currently it is not
-  // possible to pass that into a callback.
+  // Called when the GetLogins() request is finished, with the associated site
+  // statistics.
   virtual void OnGetSiteStatistics(
-      std::unique_ptr<std::vector<std::unique_ptr<InteractionsStats>>> stats);
+      std::vector<std::unique_ptr<InteractionsStats>> stats);
 
   // The base::CancelableTaskTracker can be used for cancelling the
   // tasks associated with the consumer.

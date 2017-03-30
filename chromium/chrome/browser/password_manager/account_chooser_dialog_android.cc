@@ -31,17 +31,19 @@
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF16ToJavaString;
+using base::android::JavaParamRef;
+using base::android::ScopedJavaLocalRef;
 
 namespace {
 
 void AddElementsToJavaCredentialArray(
     JNIEnv* env,
     ScopedJavaLocalRef<jobjectArray> java_credentials_array,
-    const std::vector<const autofill::PasswordForm*>& password_forms,
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_forms,
     password_manager::CredentialType type,
     int indexStart = 0) {
   int index = indexStart;
-  for (auto password_form : password_forms) {
+  for (const auto& password_form : password_forms) {
     ScopedJavaLocalRef<jobject> java_credential = CreateNativeCredential(
         env, *password_form, index - indexStart, static_cast<int>(type));
     env->SetObjectArrayElement(java_credentials_array.obj(), index,
@@ -83,21 +85,21 @@ void AvatarFetcherAndroid::OnFetchComplete(const GURL& url,
     base::android::ScopedJavaLocalRef<jobject> java_bitmap =
         gfx::ConvertToJavaBitmap(bitmap);
     Java_AccountChooserDialog_imageFetchComplete(
-        AttachCurrentThread(), java_dialog_.obj(), index_, java_bitmap.obj());
+        AttachCurrentThread(), java_dialog_, index_, java_bitmap);
   }
   delete this;
 }
 
 void FetchAvatars(
     const base::android::ScopedJavaGlobalRef<jobject>& java_dialog,
-    const std::vector<const autofill::PasswordForm*>& password_forms,
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_forms,
     int index,
     net::URLRequestContextGetter* request_context) {
-  for (auto password_form : password_forms) {
+  for (const auto& password_form : password_forms) {
     if (!password_form->icon_url.is_valid())
       continue;
     // Fetcher deletes itself once fetching is finished.
-    auto fetcher =
+    auto* fetcher =
         new AvatarFetcherAndroid(password_form->icon_url, index, java_dialog);
     fetcher->Start(request_context);
     ++index;
@@ -108,8 +110,8 @@ void FetchAvatars(
 
 AccountChooserDialogAndroid::AccountChooserDialogAndroid(
     content::WebContents* web_contents,
-    ScopedVector<autofill::PasswordForm> local_credentials,
-    ScopedVector<autofill::PasswordForm> federated_credentials,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials,
+    std::vector<std::unique_ptr<autofill::PasswordForm>> federated_credentials,
     const GURL& origin,
     const ManagePasswordsState::CredentialsCallback& callback)
     : content::WebContentsObserver(web_contents),
@@ -137,14 +139,14 @@ void AccountChooserDialogAndroid::ShowDialog() {
       &title, &title_link_range);
   gfx::NativeWindow native_window = web_contents_->GetTopLevelNativeWindow();
   size_t credential_array_size =
-      local_credentials_forms().size() + federated_credentials_forms().size();
+      local_credentials_forms().size() + federation_providers_forms().size();
   ScopedJavaLocalRef<jobjectArray> java_credentials_array =
       CreateNativeCredentialArray(env, credential_array_size);
   AddElementsToJavaCredentialArray(
       env, java_credentials_array, local_credentials_forms(),
       password_manager::CredentialType::CREDENTIAL_TYPE_PASSWORD);
   AddElementsToJavaCredentialArray(
-      env, java_credentials_array, federated_credentials_forms(),
+      env, java_credentials_array, federation_providers_forms(),
       password_manager::CredentialType::CREDENTIAL_TYPE_FEDERATED,
       local_credentials_forms().size());
   base::android::ScopedJavaGlobalRef<jobject> java_dialog_global;
@@ -155,17 +157,17 @@ void AccountChooserDialogAndroid::ShowDialog() {
         l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_ACCOUNT_CHOOSER_SIGN_IN);
   }
   dialog_jobject_.Reset(Java_AccountChooserDialog_createAndShowAccountChooser(
-      env, native_window->GetJavaObject().obj(),
-      reinterpret_cast<intptr_t>(this), java_credentials_array.obj(),
-      base::android::ConvertUTF16ToJavaString(env, title).obj(),
+      env, native_window->GetJavaObject(), reinterpret_cast<intptr_t>(this),
+      java_credentials_array,
+      base::android::ConvertUTF16ToJavaString(env, title),
       title_link_range.start(), title_link_range.end(),
-      base::android::ConvertUTF8ToJavaString(env, origin).obj(),
-      base::android::ConvertUTF16ToJavaString(env, signin_button).obj()));
+      base::android::ConvertUTF8ToJavaString(env, origin),
+      base::android::ConvertUTF16ToJavaString(env, signin_button)));
   net::URLRequestContextGetter* request_context =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext())
           ->GetRequestContext();
   FetchAvatars(dialog_jobject_, local_credentials_forms(), 0, request_context);
-  FetchAvatars(dialog_jobject_, federated_credentials_forms(),
+  FetchAvatars(dialog_jobject_, federation_providers_forms(),
                local_credentials_forms().size(), request_context);
 }
 
@@ -203,7 +205,7 @@ void AccountChooserDialogAndroid::OnLinkClicked(
 
 void AccountChooserDialogAndroid::WebContentsDestroyed() {
   JNIEnv* env = AttachCurrentThread();
-  Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_.obj());
+  Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_);
 }
 
 void AccountChooserDialogAndroid::WasHidden() {
@@ -211,7 +213,7 @@ void AccountChooserDialogAndroid::WasHidden() {
   // gone.
   OnDialogCancel();
   JNIEnv* env = AttachCurrentThread();
-  Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_.obj());
+  Java_AccountChooserDialog_dismissDialog(env, dialog_jobject_);
 }
 
 void AccountChooserDialogAndroid::OnDialogCancel() {
@@ -219,14 +221,14 @@ void AccountChooserDialogAndroid::OnDialogCancel() {
                    false /* signin_button_clicked */);
 }
 
-const std::vector<const autofill::PasswordForm*>&
+const std::vector<std::unique_ptr<autofill::PasswordForm>>&
 AccountChooserDialogAndroid::local_credentials_forms() const {
   return passwords_data_.GetCurrentForms();
 }
 
-const std::vector<const autofill::PasswordForm*>&
-AccountChooserDialogAndroid::federated_credentials_forms() const {
-  return passwords_data_.federated_credentials_forms();
+const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+AccountChooserDialogAndroid::federation_providers_forms() const {
+  return passwords_data_.federation_providers_forms();
 }
 
 void AccountChooserDialogAndroid::ChooseCredential(
@@ -245,9 +247,9 @@ void AccountChooserDialogAndroid::ChooseCredential(
     const auto& credentials_forms =
         (type == CredentialType::CREDENTIAL_TYPE_PASSWORD)
             ? local_credentials_forms()
-            : federated_credentials_forms();
+            : federation_providers_forms();
     if (index < credentials_forms.size()) {
-      passwords_data_.ChooseCredential(credentials_forms[index]);
+      passwords_data_.ChooseCredential(credentials_forms[index].get());
     }
   }
 

@@ -20,19 +20,32 @@ namespace network {
 class NetworkHandler {
  public:
   typedef DevToolsProtocolClient::Response Response;
-
   NetworkHandler();
   virtual ~NetworkHandler();
 
   void SetRenderFrameHost(RenderFrameHostImpl* host);
   void SetClient(std::unique_ptr<Client> client);
 
+  Response Enable(const int* max_total_size,
+                  const int* max_resource_size);
+  Response Disable();
   Response ClearBrowserCache();
   Response ClearBrowserCookies();
   Response GetCookies(DevToolsCommandId command_id);
   Response DeleteCookie(DevToolsCommandId command_id,
                         const std::string& cookie_name,
                         const std::string& url);
+
+  Response SetCookie(DevToolsCommandId command_id,
+      const std::string& url,
+      const std::string& name,
+      const std::string& value,
+      const std::string* domain,
+      const std::string* path,
+      bool* secure,
+      bool* http_only,
+      const std::string* same_site,
+      double* expires);
 
   Response CanEmulateNetworkConditions(bool* result);
   Response EmulateNetworkConditions(bool offline,
@@ -49,9 +62,11 @@ class NetworkHandler {
       DevToolsCommandId command_id,
       const net::CookieList& cookie_list);
   void SendDeleteCookieResponse(DevToolsCommandId command_id);
+  void SendSetCookieResponse(DevToolsCommandId command_id, bool success);
 
   RenderFrameHostImpl* host_;
   std::unique_ptr<Client> client_;
+  bool enabled_;
   base::WeakPtrFactory<NetworkHandler> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkHandler);

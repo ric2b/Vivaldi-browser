@@ -24,7 +24,6 @@
 #include "content/public/common/user_agent.h"
 #include "grit/browser_resources.h"
 #include "grit/components_chromium_strings.h"
-#include "grit/components_google_chrome_strings.h"
 #include "grit/components_resources.h"
 #include "grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -74,8 +73,6 @@ WebUIDataSource* CreateVersionUIDataSource() {
   html_source->AddLocalizedString(version_ui::kARC, IDS_ARC_LABEL);
   html_source->AddLocalizedString(version_ui::kPlatform, IDS_PLATFORM_LABEL);
   html_source->AddString(version_ui::kOSType, version_info::GetOSType());
-  html_source->AddString(version_ui::kBlinkVersion,
-                         content::GetWebKitVersion());
   html_source->AddString(version_ui::kJSEngine, "V8");
   html_source->AddString(version_ui::kJSVersion, v8::V8::GetVersion());
 
@@ -157,9 +154,11 @@ WebUIDataSource* CreateVersionUIDataSource() {
 #if defined(__clang__)
   html_source->AddString("compiler", "clang");
 #elif defined(_MSC_VER) && _MSC_VER == 1900
+#if BUILDFLAG(PGO_BUILD)
+  html_source->AddString("compiler", "MSVC 2015 (PGO)");
+#else
   html_source->AddString("compiler", "MSVC 2015");
-#elif defined(_MSC_VER) && _MSC_VER == 1800
-  html_source->AddString("compiler", "MSVC 2013");
+#endif
 #elif defined(_MSC_VER)
 #error "Unsupported version of MSVC."
 #else

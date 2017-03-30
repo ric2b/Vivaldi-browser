@@ -27,6 +27,8 @@ NinjaActionTargetWriter::~NinjaActionTargetWriter() {
 }
 
 void NinjaActionTargetWriter::Run() {
+  if (target_->is_disabled())
+    return;
   std::string custom_rule_name = WriteRuleDefinition();
 
   // Collect our deps to pass as "extra hard dependencies" for input deps. This
@@ -87,8 +89,11 @@ void NinjaActionTargetWriter::Run() {
   // runtime and should be compiled when the action is, but don't need to be
   // done before we run the action.
   std::vector<OutputFile> data_outs;
-  for (const auto& dep : target_->data_deps())
+  for (const auto& dep : target_->data_deps()) {
+    if (dep.ptr->is_disabled())
+      continue;
     data_outs.push_back(dep.ptr->dependency_output_file());
+  }
   WriteStampForTarget(output_files, data_outs);
 }
 

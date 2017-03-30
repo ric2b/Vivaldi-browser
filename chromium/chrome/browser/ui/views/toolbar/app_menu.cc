@@ -54,6 +54,7 @@
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_source.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/background.h"
@@ -162,10 +163,10 @@ class InMenuButtonBackground : public views::Background {
     // layout is RTL and the button isn't mirroring itself.
     gfx::Rect bounds(view->GetLocalBounds());
     if (type_ == LEADING_BORDER) {
-      gfx::Rect rect = view->FlipCanvasOnPaintForRTLUI()
-          ? gfx::Rect(0, 0, 1, h)
-          : gfx::Rect(view->GetMirroredXWithWidthInView(0, 1), 0, 1, h);
-      canvas->FillRect(rect, BorderColor(view, views::Button::STATE_NORMAL));
+      gfx::ScopedRTLFlipCanvas scoped_canvas(
+          canvas, view->width(), view->flip_canvas_on_paint_for_rtl_ui());
+      canvas->FillRect(gfx::Rect(0, 0, 1, h),
+                       BorderColor(view, views::Button::STATE_NORMAL));
       bounds.Inset(gfx::Insets(0, 1, 0, 0));
     }
 
@@ -633,7 +634,7 @@ class AppMenu::ZoomView : public AppMenuView {
     WebContents* contents = GetActiveWebContents();
     int zoom = 100;
     if (contents) {
-      auto zoom_controller = zoom::ZoomController::FromWebContents(contents);
+      auto* zoom_controller = zoom::ZoomController::FromWebContents(contents);
       if (zoom_controller)
         zoom = zoom_controller->GetZoomPercent();
       increment_button_->SetEnabled(zoom <
@@ -657,7 +658,7 @@ class AppMenu::ZoomView : public AppMenuView {
 
       WebContents* selected_tab = GetActiveWebContents();
       if (selected_tab) {
-        auto zoom_controller =
+        auto* zoom_controller =
             zoom::ZoomController::FromWebContents(selected_tab);
         DCHECK(zoom_controller);
         // Enumerate all zoom factors that can be used in PageZoom::Zoom.
@@ -803,8 +804,8 @@ AppMenu::AppMenu(Browser* browser, int run_flags)
 
 AppMenu::~AppMenu() {
   if (bookmark_menu_delegate_.get()) {
-    BookmarkModel* model = BookmarkModelFactory::GetForProfile(
-        browser_->profile());
+    BookmarkModel* model =
+        BookmarkModelFactory::GetForBrowserContext(browser_->profile());
     if (model)
       model->RemoveObserver(this);
   }
@@ -818,7 +819,7 @@ void AppMenu::Init(ui::MenuModel* model) {
                                // so we get the taller menu style.
   PopulateMenu(root_, model);
 
-  int32_t types = views::MenuRunner::HAS_MNEMONICS;
+  int32_t types = views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::ASYNC;
   if (for_drop()) {
     // We add NESTED_DRAG since currently the only operation to open the app
     // menu for is an extension action drag, which is controlled by the child
@@ -833,22 +834,8 @@ void AppMenu::RunMenu(views::MenuButton* host) {
   views::View::ConvertPointToScreen(host, &screen_loc);
   gfx::Rect bounds(screen_loc, host->size());
   content::RecordAction(UserMetricsAction("ShowAppMenu"));
-  if (menu_runner_->RunMenuAt(host->GetWidget(),
-                              host,
-                              bounds,
-                              views::MENU_ANCHOR_TOPRIGHT,
-                              ui::MENU_SOURCE_NONE) ==
-      views::MenuRunner::MENU_DELETED)
-    return;
-  if (bookmark_menu_delegate_.get()) {
-    BookmarkModel* model = BookmarkModelFactory::GetForProfile(
-        browser_->profile());
-    if (model)
-      model->RemoveObserver(this);
-  }
-  if (selected_menu_model_) {
-    selected_menu_model_->ActivatedAt(selected_index_);
-  }
+  menu_runner_->RunMenuAt(host->GetWidget(), host, bounds,
+                          views::MENU_ANCHOR_TOPRIGHT, ui::MENU_SOURCE_NONE);
 }
 
 void AppMenu::CloseMenu() {
@@ -1069,6 +1056,18 @@ bool AppMenu::ShouldCloseOnDragComplete() {
   return false;
 }
 
+void AppMenu::OnMenuClosed(views::MenuItemView* menu,
+                           views::MenuRunner::RunResult result) {
+  if (bookmark_menu_delegate_.get()) {
+    BookmarkModel* model =
+        BookmarkModelFactory::GetForBrowserContext(browser_->profile());
+    if (model)
+      model->RemoveObserver(this);
+  }
+  if (selected_menu_model_)
+    selected_menu_model_->ActivatedAt(selected_index_);
+}
+
 void AppMenu::BookmarkModelChanged() {
   DCHECK(bookmark_menu_delegate_.get());
   if (!bookmark_menu_delegate_->is_mutating_model())
@@ -1234,7 +1233,7 @@ void AppMenu::CreateBookmarkMenu() {
     return;  // Already created the menu.
 
   BookmarkModel* model =
-      BookmarkModelFactory::GetForProfile(browser_->profile());
+      BookmarkModelFactory::GetForBrowserContext(browser_->profile());
   if (!model->loaded())
     return;
 

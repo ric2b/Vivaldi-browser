@@ -34,10 +34,20 @@
 // Available key systems.
 const char kClearKeyKeySystem[] = "org.w3.clearkey";
 const char kExternalClearKeyKeySystem[] = "org.chromium.externalclearkey";
+
+// Variants of External Clear Key key system to test different scenarios.
+// To add a new variant, make sure you also update:
+// - media/test/data/eme_player_js/globals.js
+// - AddExternalClearKey() in chrome_key_systems.cc
+// - CreateCdmInstance() in clear_key_cdm.cc
+const char kExternalClearKeyRenewalKeySystem[] =
+    "org.chromium.externalclearkey.renewal";
 const char kExternalClearKeyFileIOTestKeySystem[] =
     "org.chromium.externalclearkey.fileiotest";
 const char kExternalClearKeyInitializeFailKeySystem[] =
     "org.chromium.externalclearkey.initializefail";
+const char kExternalClearKeyOutputProtectionTestKeySystem[] =
+    "org.chromium.externalclearkey.outputprotectiontest";
 const char kExternalClearKeyCrashKeySystem[] =
     "org.chromium.externalclearkey.crash";
 
@@ -57,7 +67,7 @@ const char kLoadableSession[] = "LoadableSession";
 const char kUnknownSession[] = "UnknownSession";
 
 // EME-specific test results and errors.
-const char kFileIOTestSuccess[] = "FILE_IO_TEST_SUCCESS";
+const char kUnitTestSuccess[] = "UNIT_TEST_SUCCESS";
 const char kEmeNotSupportedError[] = "NOTSUPPORTEDERROR";
 const char kEmeGenerateRequestFailed[] = "EME_GENERATEREQUEST_FAILED";
 const char kEmeSessionNotFound[] = "EME_SESSION_NOT_FOUND";
@@ -284,12 +294,12 @@ class ECKEncryptedMediaTest : public EncryptedMediaTestBase {
                           false, PlayTwice::NO, expected_title);
   }
 
-  void TestPlaybackCase(const std::string& session_to_load,
+  void TestPlaybackCase(const std::string& key_system,
+                        const std::string& session_to_load,
                         const std::string& expected_title) {
     RunEncryptedMediaTest(kDefaultEmePlayer, "bear-320x240-v_enc-v.webm",
-                          kWebMVideoOnly, kExternalClearKeyKeySystem, SRC,
-                          session_to_load, false, PlayTwice::NO,
-                          expected_title);
+                          kWebMVideoOnly, key_system, SRC, session_to_load,
+                          false, PlayTwice::NO, expected_title);
   }
 
  protected:
@@ -625,16 +635,27 @@ IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, CDMExpectedCrash) {
 }
 
 IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, FileIOTest) {
-  TestNonPlaybackCases(kExternalClearKeyFileIOTestKeySystem,
-                       kFileIOTestSuccess);
+  TestNonPlaybackCases(kExternalClearKeyFileIOTestKeySystem, kUnitTestSuccess);
+}
+
+// TODO(xhwang): Investigate how to fake capturing activities to test the
+// network link detection logic in OutputProtectionProxy.
+IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, OutputProtectionTest) {
+  TestNonPlaybackCases(kExternalClearKeyOutputProtectionTestKeySystem,
+                       kUnitTestSuccess);
+}
+
+IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, Renewal) {
+  TestPlaybackCase(kExternalClearKeyRenewalKeySystem, kNoSessionToLoad, kEnded);
 }
 
 IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, LoadLoadableSession) {
-  TestPlaybackCase(kLoadableSession, kEnded);
+  TestPlaybackCase(kExternalClearKeyKeySystem, kLoadableSession, kEnded);
 }
 
 IN_PROC_BROWSER_TEST_F(ECKEncryptedMediaTest, LoadUnknownSession) {
-  TestPlaybackCase(kUnknownSession, kEmeSessionNotFound);
+  TestPlaybackCase(kExternalClearKeyKeySystem, kUnknownSession,
+                   kEmeSessionNotFound);
 }
 
 #endif  // defined(ENABLE_PEPPER_CDMS)

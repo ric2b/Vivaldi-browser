@@ -28,6 +28,7 @@
 #include "core/CoreExport.h"
 #include "core/fetch/Resource.h"
 #include "platform/MemoryCacheDumpProvider.h"
+#include "platform/MemoryCoordinator.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
@@ -122,7 +123,7 @@ WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::MemoryCacheLRUList);
 
 namespace blink {
 
-class CORE_EXPORT MemoryCache final : public GarbageCollectedFinalized<MemoryCache>, public WebThread::TaskObserver, public MemoryCacheDumpClient {
+class CORE_EXPORT MemoryCache final : public GarbageCollectedFinalized<MemoryCache>, public WebThread::TaskObserver, public MemoryCacheDumpClient, public MemoryCoordinatorClient {
     USING_GARBAGE_COLLECTED_MIXIN(MemoryCache);
     WTF_MAKE_NONCOPYABLE(MemoryCache);
 public:
@@ -199,11 +200,6 @@ public:
     void makeLive(Resource*);
     void makeDead(Resource*);
 
-    // This should be called when a Resource object is created.
-    void registerLiveResource(Resource&);
-    // This should be called when a Resource object becomes unnecesarry.
-    void unregisterLiveResource(Resource&);
-
     void removeURLFromCache(const KURL&);
 
     Statistics getStatistics();
@@ -225,6 +221,8 @@ public:
     // Take memory usage snapshot for tracing.
     bool onMemoryDump(WebMemoryDumpLevelOfDetail, WebProcessMemoryDump*) override;
 
+    void onMemoryPressure(WebMemoryPressureLevel) override;
+
     bool isInSameLRUListForTest(const Resource*, const Resource*);
 private:
     enum PruneStrategy {
@@ -239,7 +237,7 @@ private:
     MemoryCacheLRUList* lruListFor(unsigned accessCount, size_t);
 
 #ifdef MEMORY_CACHE_STATS
-    void dumpStats(Timer<MemoryCache>*);
+    void dumpStats(TimerBase*);
     void dumpLRULists(bool includeLive) const;
 #endif
 

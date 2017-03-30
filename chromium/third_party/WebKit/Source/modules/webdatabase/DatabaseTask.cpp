@@ -31,14 +31,14 @@
 #include "modules/webdatabase/Database.h"
 #include "modules/webdatabase/DatabaseContext.h"
 #include "modules/webdatabase/DatabaseThread.h"
-#include "platform/Logging.h"
+#include "modules/webdatabase/StorageLog.h"
 
 namespace blink {
 
 DatabaseTask::DatabaseTask(Database* database, TaskSynchronizer* synchronizer)
     : m_database(database)
     , m_synchronizer(synchronizer)
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
     , m_complete(false)
 #endif
 {
@@ -46,7 +46,7 @@ DatabaseTask::DatabaseTask(Database* database, TaskSynchronizer* synchronizer)
 
 DatabaseTask::~DatabaseTask()
 {
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
     ASSERT(m_complete || !m_synchronizer);
 #endif
 }
@@ -54,27 +54,27 @@ DatabaseTask::~DatabaseTask()
 void DatabaseTask::run()
 {
     // Database tasks are meant to be used only once, so make sure this one hasn't been performed before.
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
     ASSERT(!m_complete);
 #endif
 
     if (!m_synchronizer && !m_database->getDatabaseContext()->databaseThread()->isDatabaseOpen(m_database.get())) {
         taskCancelled();
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
         m_complete = true;
 #endif
         return;
     }
-
-    WTF_LOG(StorageAPI, "Performing %s %p\n", debugTaskName(), this);
-
+#if DCHECK_IS_ON()
+    STORAGE_DVLOG(1) << "Performing " << debugTaskName() << " " << this;
+#endif
     m_database->resetAuthorizer();
     doPerformTask();
 
     if (m_synchronizer)
         m_synchronizer->taskCompleted();
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
     m_complete = true;
 #endif
 }
@@ -100,7 +100,7 @@ void Database::DatabaseOpenTask::doPerformTask()
         m_errorMessage = errorMessage.isolatedCopy();
 }
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
 const char* Database::DatabaseOpenTask::debugTaskName() const
 {
     return "DatabaseOpenTask";
@@ -120,7 +120,7 @@ void Database::DatabaseCloseTask::doPerformTask()
     database()->close();
 }
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
 const char* Database::DatabaseCloseTask::debugTaskName() const
 {
     return "DatabaseCloseTask";
@@ -158,7 +158,7 @@ void Database::DatabaseTransactionTask::taskCancelled()
     m_transaction->notifyDatabaseThreadIsShuttingDown();
 }
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
 const char* Database::DatabaseTransactionTask::debugTaskName() const
 {
     return "DatabaseTransactionTask";
@@ -180,7 +180,7 @@ void Database::DatabaseTableNamesTask::doPerformTask()
     m_tableNames = database()->performGetTableNames();
 }
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
 const char* Database::DatabaseTableNamesTask::debugTaskName() const
 {
     return "DatabaseTableNamesTask";

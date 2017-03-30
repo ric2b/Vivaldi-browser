@@ -66,7 +66,7 @@ FloatRect SVGLayoutSupport::localOverflowRectForPaintInvalidation(const LayoutOb
     ASSERT(!object.isSVGRoot());
 
     // Return early for any cases where we don't actually paint
-    if (object.styleRef().visibility() != VISIBLE && !object.enclosingLayer()->hasVisibleContent())
+    if (object.styleRef().visibility() != EVisibility::Visible && !object.enclosingLayer()->hasVisibleContent())
         return FloatRect();
 
     FloatRect paintInvalidationRect = object.paintInvalidationRectInLocalSVGCoordinates();
@@ -139,7 +139,7 @@ bool SVGLayoutSupport::mapToVisualRectInAncestorSpace(const LayoutObject& object
     return svgRoot.mapToVisualRectInAncestorSpace(ancestor, resultRect, visualRectFlags);
 }
 
-void SVGLayoutSupport::mapLocalToAncestor(const LayoutObject* object, const LayoutBoxModelObject* ancestor, TransformState& transformState)
+void SVGLayoutSupport::mapLocalToAncestor(const LayoutObject* object, const LayoutBoxModelObject* ancestor, TransformState& transformState, MapCoordinatesFlags flags)
 {
     transformState.applyTransform(object->localToSVGParentTransform());
 
@@ -151,8 +151,7 @@ void SVGLayoutSupport::mapLocalToAncestor(const LayoutObject* object, const Layo
     if (parent->isSVGRoot())
         transformState.applyTransform(toLayoutSVGRoot(parent)->localToBorderBoxTransform());
 
-    MapCoordinatesFlags mode = UseTransforms;
-    parent->mapLocalToAncestor(ancestor, transformState, mode);
+    parent->mapLocalToAncestor(ancestor, transformState, flags);
 }
 
 void SVGLayoutSupport::mapAncestorToLocal(const LayoutObject& object, const LayoutBoxModelObject* ancestor, TransformState& transformState)
@@ -369,23 +368,21 @@ bool SVGLayoutSupport::hasFilterResource(const LayoutObject& object)
     return resources && resources->filter();
 }
 
-bool SVGLayoutSupport::pointInClippingArea(const LayoutObject* object, const FloatPoint& point)
+bool SVGLayoutSupport::pointInClippingArea(const LayoutObject& object, const FloatPoint& point)
 {
-    ASSERT(object);
-
     // We just take clippers into account to determine if a point is on the node. The Specification may
     // change later and we also need to check maskers.
-    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(object);
+    SVGResources* resources = SVGResourcesCache::cachedResourcesForLayoutObject(&object);
     if (!resources)
         return true;
 
     if (LayoutSVGResourceClipper* clipper = resources->clipper())
-        return clipper->hitTestClipContent(object->objectBoundingBox(), point);
+        return clipper->hitTestClipContent(object.objectBoundingBox(), point);
 
     return true;
 }
 
-bool SVGLayoutSupport::transformToUserSpaceAndCheckClipping(const LayoutObject* object, const AffineTransform& localTransform, const FloatPoint& pointInParent, FloatPoint& localPoint)
+bool SVGLayoutSupport::transformToUserSpaceAndCheckClipping(const LayoutObject& object, const AffineTransform& localTransform, const FloatPoint& pointInParent, FloatPoint& localPoint)
 {
     if (!localTransform.isInvertible())
         return false;

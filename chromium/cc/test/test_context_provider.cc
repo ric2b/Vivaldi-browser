@@ -13,6 +13,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "cc/output/context_cache_controller.h"
 #include "cc/test/test_gles2_interface.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "third_party/skia/include/gpu/GrContext.h"
@@ -22,13 +24,17 @@ namespace cc {
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create() {
-  return Create(TestWebGraphicsContext3D::Create());
+  return new TestContextProvider(base::MakeUnique<TestContextSupport>(),
+                                 base::MakeUnique<TestGLES2Interface>(),
+                                 TestWebGraphicsContext3D::Create());
 }
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
-  scoped_refptr<TestContextProvider> worker_context_provider =
-      Create(TestWebGraphicsContext3D::Create());
+  scoped_refptr<TestContextProvider> worker_context_provider(
+      new TestContextProvider(base::MakeUnique<TestContextSupport>(),
+                              base::MakeUnique<TestGLES2Interface>(),
+                              TestWebGraphicsContext3D::Create()));
   // Worker contexts are bound to the thread they are created on.
   if (!worker_context_provider->BindToCurrentThread())
     return nullptr;
@@ -38,21 +44,50 @@ scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestWebGraphicsContext3D> context) {
-  if (!context)
-    return NULL;
-  return new TestContextProvider(std::move(context));
+  DCHECK(context);
+  return new TestContextProvider(base::MakeUnique<TestContextSupport>(),
+                                 base::MakeUnique<TestGLES2Interface>(),
+                                 std::move(context));
+}
+
+// static
+scoped_refptr<TestContextProvider> TestContextProvider::Create(
+    std::unique_ptr<TestGLES2Interface> gl) {
+  DCHECK(gl);
+  return new TestContextProvider(base::MakeUnique<TestContextSupport>(),
+                                 std::move(gl),
+                                 TestWebGraphicsContext3D::Create());
+}
+
+// static
+scoped_refptr<TestContextProvider> TestContextProvider::Create(
+    std::unique_ptr<TestWebGraphicsContext3D> context,
+    std::unique_ptr<TestContextSupport> support) {
+  DCHECK(context);
+  DCHECK(support);
+  return new TestContextProvider(std::move(support),
+                                 base::MakeUnique<TestGLES2Interface>(),
+                                 std::move(context));
 }
 
 TestContextProvider::TestContextProvider(
+    std::unique_ptr<TestContextSupport> support,
+    std::unique_ptr<TestGLES2Interface> gl,
     std::unique_ptr<TestWebGraphicsContext3D> context)
-    : context3d_(std::move(context)),
-      context_gl_(new TestGLES2Interface(context3d_.get())),
-      bound_(false),
+    : support_(std::move(support)),
+      context3d_(std::move(context)),
+      context_gl_(std::move(gl)),
       weak_ptr_factory_(this) {
   DCHECK(main_thread_checker_.CalledOnValidThread());
   DCHECK(context3d_);
+  DCHECK(context_gl_);
   context_thread_checker_.DetachFromThread();
-  context3d_->set_test_support(&support_);
+  context_gl_->set_test_context(context3d_.get());
+  context3d_->set_test_support(support_.get());
+  // Just pass nullptr to the ContextCacheController for its task runner. Idle
+  // handling is tested directly in ContextCacheController's unittests, and
+  // isn't needed here.
+  cache_controller_.reset(new ContextCacheController(support_.get(), nullptr));
 }
 
 TestContextProvider::~TestContextProvider() {
@@ -98,7 +133,7 @@ gpu::gles2::GLES2Interface* TestContextProvider::ContextGL() {
 }
 
 gpu::ContextSupport* TestContextProvider::ContextSupport() {
-  return &support_;
+  return support();
 }
 
 class GrContext* TestContextProvider::GrContext() {
@@ -113,11 +148,18 @@ class GrContext* TestContextProvider::GrContext() {
       kOpenGL_GrBackend,
       reinterpret_cast<GrBackendContext>(gl_interface.get())));
 
+  cache_controller_->SetGrContext(gr_context_.get());
+
   // If GlContext is already lost, also abandon the new GrContext.
   if (ContextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR)
     gr_context_->abandonContext();
 
   return gr_context_.get();
+}
+
+ContextCacheController* TestContextProvider::CacheController() {
+  DCHECK(context_thread_checker_.CalledOnValidThread());
+  return cache_controller_.get();
 }
 
 void TestContextProvider::InvalidateGrContext(uint32_t state) {
@@ -130,9 +172,6 @@ void TestContextProvider::InvalidateGrContext(uint32_t state) {
 
 base::Lock* TestContextProvider::GetLock() {
   return &context_lock_;
-}
-
-void TestContextProvider::DeleteCachedResources() {
 }
 
 void TestContextProvider::OnLostContext() {

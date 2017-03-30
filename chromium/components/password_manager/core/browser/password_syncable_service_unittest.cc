@@ -12,13 +12,14 @@
 
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
-#include "sync/api/sync_change_processor.h"
-#include "sync/api/sync_error.h"
-#include "sync/api/sync_error_factory_mock.h"
+#include "components/sync/api/sync_change_processor.h"
+#include "components/sync/api/sync_error.h"
+#include "components/sync/api/sync_error_factory_mock.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -88,7 +89,6 @@ MATCHER_P(PasswordIs, form, "") {
           actual_password.password_element() &&
       expected_password.username_value() == actual_password.username_value() &&
       expected_password.password_value() == actual_password.password_value() &&
-      expected_password.ssl_valid() == actual_password.ssl_valid() &&
       expected_password.preferred() == actual_password.preferred() &&
       expected_password.date_created() == actual_password.date_created() &&
       expected_password.blacklisted() == actual_password.blacklisted() &&
@@ -120,7 +120,7 @@ MATCHER_P2(SyncChangeIs, change_type, password, "") {
 // The argument is std::vector<autofill::PasswordForm*>*. The caller is
 // responsible for the lifetime of all the password forms.
 ACTION_P(AppendForm, form) {
-  arg0->push_back(new autofill::PasswordForm(form));
+  arg0->push_back(base::MakeUnique<autofill::PasswordForm>(form));
   return true;
 }
 
@@ -630,8 +630,6 @@ TEST_F(PasswordSyncableServiceTest, SerializeEmptyPasswordForm) {
   EXPECT_EQ("", specifics.password_element());
   EXPECT_TRUE(specifics.has_password_value());
   EXPECT_EQ("", specifics.password_value());
-  EXPECT_TRUE(specifics.has_ssl_valid());
-  EXPECT_FALSE(specifics.ssl_valid());
   EXPECT_TRUE(specifics.has_preferred());
   EXPECT_FALSE(specifics.preferred());
   EXPECT_TRUE(specifics.has_date_created());
@@ -662,7 +660,6 @@ TEST_F(PasswordSyncableServiceTest, SerializeNonEmptyPasswordForm) {
   form.username_value = base::ASCIIToUTF16("god@google.com");
   form.password_element = base::ASCIIToUTF16("password_element");
   form.password_value = base::ASCIIToUTF16("!@#$%^&*()");
-  form.ssl_valid = true;
   form.preferred = true;
   form.date_created = base::Time::FromInternalValue(100);
   form.blacklisted_by_user = true;
@@ -690,8 +687,6 @@ TEST_F(PasswordSyncableServiceTest, SerializeNonEmptyPasswordForm) {
   EXPECT_EQ("password_element", specifics.password_element());
   EXPECT_TRUE(specifics.has_password_value());
   EXPECT_EQ("!@#$%^&*()", specifics.password_value());
-  EXPECT_TRUE(specifics.has_ssl_valid());
-  EXPECT_TRUE(specifics.ssl_valid());
   EXPECT_TRUE(specifics.has_preferred());
   EXPECT_TRUE(specifics.preferred());
   EXPECT_TRUE(specifics.has_date_created());

@@ -269,6 +269,7 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="3392045790598181549"><ph name="NAME" />, mục menu</translation>
 <translation id="3406283310380167331">Hiển thị danh sách biểu mẫu</translation>
 <translation id="3422338090358345848">Mở trình khám phá bàn phím</translation>
+<translation id="3423495725743882470">hàng $1 cột $2</translation>
 <translation id="3457000393508828486">Được nhấn một phần</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, nút</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Tự động hoàn thành danh sách</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">dán $1.</translation>
 <translation id="3816633764618089385">Phương tiện tiếp theo</translation>
 <translation id="3819376190738087562">Không có điểm nhảy nào.</translation>
 <translation id="385383972552776628">Mở trang tùy chọn</translation>
@@ -411,6 +413,7 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="5000760171916499057">Không có biểu mẫu nào.</translation>
 <translation id="5005670136041063723">Không có phần tử tương tự nào khác.</translation>
 <translation id="501473567976723023">Tháng 1</translation>
+<translation id="5040591161308540832">Bảng $1, $2 x $3</translation>
 <translation id="5041394372352067729">Di chuyển màn hình chữ nổi về đầu trang</translation>
 <translation id="5042770794184672516">Tăng âm lượng giọng nói</translation>
 <translation id="5050015258024679800">Tiêu đề cấp 4 trước</translation>
@@ -518,7 +521,6 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="5876817486144482042">Giảm âm lượng giọng nói</translation>
 <translation id="5887397643266327462">Phụ đề chữ nổi đã được bật.</translation>
 <translation id="5891934789323004067">Bảng</translation>
-<translation id="5919442531159595654">sao chép.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{dấu bằng}other{# dấu bằng}}</translation>
 <translation id="5939518447894949180">Đặt lại</translation>
 <translation id="5948123859135882163">Chuyển đổi diễn giải biểu thức toán học giữa cấu trúc và ngữ nghĩa</translation>
@@ -554,6 +556,8 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="6355910664415701303">Không có mục danh sách trước nào.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Tiêu đề trước</translation>
+<translation id="6378565991815958969">sao chép $1.</translation>
+<translation id="6385591741672306837">cột</translation>
 <translation id="6387719785439924554">loại trừ</translation>
 <translation id="6411426777058107714">Không có nút radio trước nào.</translation>
 <translation id="6414968628640960377">Phần tử khác trước.</translation>
@@ -653,7 +657,6 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="7532613204005497612">Tháng 6</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, thanh trượt</translation>
 <translation id="7552432549459840808">Phím tắt hữu ích của Chrome</translation>
-<translation id="7586163296341959563">dán.</translation>
 <translation id="7596919493010894443">đã xóa lựa chọn</translation>
 <translation id="7604026522577407655">Đi tới đầu cột hiện tại</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="8153880621934657047">Không phải bên trong bảng.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{dấu gạch dưới}other{# dấu gạch dưới}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">hàng</translation>
 <translation id="8186185314313222077">chuyển đổi chế độ toàn màn hình</translation>
-<translation id="81960742267269908">cắt.</translation>
 <translation id="8199231515320852133">Thông báo các tiêu đề của ô hiện tại</translation>
 <translation id="820417203470636242">Ô trống.</translation>
 <translation id="8215202828671303819">Đa chọn</translation>
@@ -782,6 +785,7 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="9077213568694924680">đã xóa khỏi lựa chọn</translation>
 <translation id="9082874451376019682">Không có thanh trượt trước nào.</translation>
 <translation id="9089864840575085222">Nói khi nhập theo chu trình</translation>
+<translation id="9105227991373418255">cắt $1.</translation>
 <translation id="9107530006868467849">Không có tiện ích phương tiện trước nào.</translation>
 <translation id="9108370397979208512">toán học</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Nếu bạn đã hoàn tất hướng dẫn, hãy sử dụng ChromeVox để đ
 <translation id="9115913704608474258">Tháng 11</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Tab</translation>
 <translation id="9151211641321628915">Thông báo mô tả ngắn của vị trí hiện tại</translation>
 <translation id="9153606228985488238">Cao độ <ph name="PERCENT" /> phần trăm</translation>
 <translation id="9160096769946561184">Đi tới cuối cột hiện tại</translation>

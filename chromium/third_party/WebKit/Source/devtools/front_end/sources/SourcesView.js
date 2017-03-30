@@ -8,25 +8,22 @@
  * @implements {WebInspector.Searchable}
  * @implements {WebInspector.Replaceable}
  * @extends {WebInspector.VBox}
- * @param {!WebInspector.Workspace} workspace
- * @param {!WebInspector.SourcesPanel} sourcesPanel
  * @suppressGlobalPropertiesCheck
  */
-WebInspector.SourcesView = function(workspace, sourcesPanel)
+WebInspector.SourcesView = function()
 {
     WebInspector.VBox.call(this);
     this.registerRequiredCSS("sources/sourcesView.css");
     this.element.id = "sources-panel-sources-view";
     this.setMinimumAndPreferredSizes(50, 52, 150, 100);
 
-    this._workspace = workspace;
-    this._sourcesPanel = sourcesPanel;
+    var workspace = WebInspector.workspace;
 
     this._searchableView = new WebInspector.SearchableView(this, "sourcesViewSearchConfig");
     this._searchableView.setMinimalSearchQuerySize(0);
     this._searchableView.show(this.element);
 
-    /** @type {!Map.<!WebInspector.UISourceCode, !WebInspector.VBoxWithToolbarItems>} */
+    /** @type {!Map.<!WebInspector.UISourceCode, !WebInspector.Widget>} */
     this._sourceViewByUISourceCode = new Map();
 
     var tabbedEditorPlaceholderText = WebInspector.isMac() ? WebInspector.UIString("Hit Cmd+P to open a file") : WebInspector.UIString("Hit Ctrl+P to open a file");
@@ -40,7 +37,7 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
     this._toolbarContainerElement = this.element.createChild("div", "sources-toolbar");
     this._toolbarEditorActions = new WebInspector.Toolbar("", this._toolbarContainerElement);
 
-    self.runtime.instancesPromise(WebInspector.SourcesView.EditorAction).then(appendButtonsForExtensions.bind(this));
+    self.runtime.allInstances(WebInspector.SourcesView.EditorAction).then(appendButtonsForExtensions.bind(this));
     /**
      * @param {!Array.<!WebInspector.SourcesView.EditorAction>} actions
      * @this {WebInspector.SourcesView}
@@ -53,12 +50,12 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
     this._scriptViewToolbar = new WebInspector.Toolbar("", this._toolbarContainerElement);
 
     WebInspector.startBatchUpdate();
-    this._workspace.uiSourceCodes().forEach(this._addUISourceCode.bind(this));
+    workspace.uiSourceCodes().forEach(this._addUISourceCode.bind(this));
     WebInspector.endBatchUpdate();
 
-    this._workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAdded, this);
-    this._workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeRemoved, this._uiSourceCodeRemoved, this);
-    this._workspace.addEventListener(WebInspector.Workspace.Events.ProjectRemoved, this._projectRemoved.bind(this), this);
+    workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAdded, this);
+    workspace.addEventListener(WebInspector.Workspace.Events.UISourceCodeRemoved, this._uiSourceCodeRemoved, this);
+    workspace.addEventListener(WebInspector.Workspace.Events.ProjectRemoved, this._projectRemoved.bind(this), this);
 
     function handleBeforeUnload(event)
     {
@@ -80,9 +77,10 @@ WebInspector.SourcesView = function(workspace, sourcesPanel)
     this.element.addEventListener("keydown", this._handleKeyDown.bind(this), false);
 }
 
+/** @enum {symbol} */
 WebInspector.SourcesView.Events = {
-    EditorClosed: "EditorClosed",
-    EditorSelected: "EditorSelected",
+    EditorClosed: Symbol("EditorClosed"),
+    EditorSelected: Symbol("EditorSelected"),
 }
 
 WebInspector.SourcesView.prototype = {
@@ -151,15 +149,6 @@ WebInspector.SourcesView.prototype = {
     },
 
     /**
-     * @override
-     * @return {!Element}
-     */
-    defaultFocusedElement: function()
-    {
-        return this._editorContainer.view.defaultFocusedElement();
-    },
-
-    /**
      * @return {!WebInspector.SearchableView}
      */
     searchableView: function()
@@ -191,7 +180,7 @@ WebInspector.SourcesView.prototype = {
      */
     currentUISourceCode: function()
     {
-        return this._currentUISourceCode;
+        return this._editorContainer.currentFile();
     },
 
     /**
@@ -199,7 +188,7 @@ WebInspector.SourcesView.prototype = {
      */
     _onCloseEditorTab: function(event)
     {
-        var uiSourceCode = this.currentUISourceCode();
+        var uiSourceCode = this._editorContainer.currentFile();
         if (!uiSourceCode)
             return false;
         this._editorContainer.closeFile(uiSourceCode);
@@ -242,13 +231,13 @@ WebInspector.SourcesView.prototype = {
             return;
         this._editorContainer.addUISourceCode(uiSourceCode);
         // Replace debugger script-based uiSourceCode with a network-based one.
-        var currentUISourceCode = this._currentUISourceCode;
+        var currentUISourceCode = this._editorContainer.currentFile();
         if (!currentUISourceCode)
             return;
         var networkURL = WebInspector.networkMapping.networkURL(uiSourceCode);
         var currentNetworkURL = WebInspector.networkMapping.networkURL(currentUISourceCode);
         if (currentUISourceCode.isFromServiceProject() && currentUISourceCode !== uiSourceCode && currentNetworkURL === networkURL && networkURL) {
-            this._showFile(uiSourceCode);
+            this._editorContainer.showFile(uiSourceCode);
             this._editorContainer.removeUISourceCode(currentUISourceCode);
         }
     },
@@ -281,9 +270,9 @@ WebInspector.SourcesView.prototype = {
     _updateScriptViewToolbarItems: function()
     {
         this._scriptViewToolbar.removeToolbarItems();
-        var view = /** @type {?WebInspector.VBoxWithToolbarItems} */(this.visibleView());
-        if (view) {
-            for (var item of view.toolbarItems())
+        var view = this.visibleView()
+        if (view instanceof WebInspector.SimpleView) {
+            for (var item of (/** @type {?WebInspector.SimpleView} */(view)).syncToolbarItems())
                 this._scriptViewToolbar.appendToolbarItem(item);
         }
     },
@@ -298,37 +287,13 @@ WebInspector.SourcesView.prototype = {
     showSourceLocation: function(uiSourceCode, lineNumber, columnNumber, omitFocus, omitHighlight)
     {
         this._historyManager.updateCurrentState();
-        var sourceView = this._showFile(uiSourceCode);
-        if (typeof lineNumber === "number" && sourceView instanceof WebInspector.UISourceCodeFrame)
-            /** @type {!WebInspector.UISourceCodeFrame} */(sourceView).revealPosition(lineNumber, columnNumber, !omitHighlight);
+        this._editorContainer.showFile(uiSourceCode)
+        var currentSourceFrame = this.currentSourceFrame();
+        if (currentSourceFrame && typeof lineNumber === "number")
+            currentSourceFrame.revealPosition(lineNumber, columnNumber, !omitHighlight);
         this._historyManager.pushNewState();
         if (!omitFocus)
-            sourceView.focus();
-    },
-
-    /**
-     * @param {!WebInspector.UISourceCode} uiSourceCode
-     * @return {!WebInspector.Widget}
-     */
-    _showFile: function(uiSourceCode)
-    {
-        var sourceView = this._getOrCreateSourceView(uiSourceCode);
-        if (this._currentUISourceCode === uiSourceCode)
-            return sourceView;
-
-        var currentFrame = this.currentSourceFrame();
-        if (currentFrame)
-            currentFrame.setSearchableView(null);
-
-        this._currentUISourceCode = uiSourceCode;
-        this._editorContainer.showFile(uiSourceCode);
-        this._updateScriptViewToolbarItems();
-
-        currentFrame = this.currentSourceFrame();
-        if (currentFrame)
-            currentFrame.setSearchableView(this._searchableView);
-
-        return sourceView;
+            this.visibleView().focus();
     },
 
     /**
@@ -342,7 +307,7 @@ WebInspector.SourcesView.prototype = {
         var contentType = uiSourceCode.contentType();
 
         if (contentType.hasScripts())
-            sourceFrame = new WebInspector.JavaScriptSourceFrame(this._sourcesPanel, uiSourceCode);
+            sourceFrame = new WebInspector.JavaScriptSourceFrame(uiSourceCode);
         else if (contentType.isStyleSheet())
             sourceFrame = new WebInspector.CSSSourceFrame(uiSourceCode);
         else if (contentType === WebInspector.resourceTypes.Image)
@@ -356,8 +321,10 @@ WebInspector.SourcesView.prototype = {
             sourceFrame.setHighlighterType(WebInspector.NetworkProject.uiSourceCodeMimeType(uiSourceCode));
             this._historyManager.trackSourceFrameCursorJumps(sourceFrame);
         }
-        this._sourceViewByUISourceCode.set(uiSourceCode, /** @type {!WebInspector.VBoxWithToolbarItems} */(sourceFrame || sourceView));
-        return /** @type {!WebInspector.Widget} */(sourceFrame || sourceView);
+        var widget = /** @type {!WebInspector.Widget} */(sourceFrame || sourceView);
+        this._sourceViewByUISourceCode.set(uiSourceCode, widget);
+        uiSourceCode.addEventListener(WebInspector.UISourceCode.Events.TitleChanged, this._uiSourceCodeTitleChanged, this);
+        return widget;
     },
 
     /**
@@ -417,6 +384,7 @@ WebInspector.SourcesView.prototype = {
     {
         var sourceView = this._sourceViewByUISourceCode.get(uiSourceCode);
         this._sourceViewByUISourceCode.remove(uiSourceCode);
+        uiSourceCode.removeEventListener(WebInspector.UISourceCode.Events.TitleChanged, this._uiSourceCodeTitleChanged, this);
         if (sourceView && sourceView instanceof WebInspector.UISourceCodeFrame)
             /** @type {!WebInspector.UISourceCodeFrame} */ (sourceView).dispose();
     },
@@ -441,16 +409,17 @@ WebInspector.SourcesView.prototype = {
         }
     },
 
+    /**
+     * @param {!WebInspector.Event} event
+     */
     _editorClosed: function(event)
     {
         var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data);
         this._historyManager.removeHistoryForSourceCode(uiSourceCode);
 
         var wasSelected = false;
-        if (this._currentUISourceCode === uiSourceCode) {
-            delete this._currentUISourceCode;
+        if (!this._editorContainer.currentFile())
             wasSelected = true;
-        }
 
         // SourcesNavigator does not need to update on EditorClosed.
         this._updateScriptViewToolbarItems();
@@ -462,28 +431,31 @@ WebInspector.SourcesView.prototype = {
         this.dispatchEventToListeners(WebInspector.SourcesView.Events.EditorClosed, data);
     },
 
+    /**
+     * @param {!WebInspector.Event} event
+     */
     _editorSelected: function(event)
     {
-        var uiSourceCode = /** @type {!WebInspector.UISourceCode} */ (event.data.currentFile);
-        var shouldUseHistoryManager = uiSourceCode !== this._currentUISourceCode && event.data.userGesture;
-        if (shouldUseHistoryManager)
-            this._historyManager.updateCurrentState();
-        var sourceView = this._showFile(uiSourceCode);
-        if (shouldUseHistoryManager)
-            this._historyManager.pushNewState();
+        var previousSourceFrame = event.data.previousView instanceof WebInspector.UISourceCodeFrame ? event.data.previousView : null;
+        if (previousSourceFrame)
+            previousSourceFrame.setSearchableView(null);
+        var currentSourceFrame = event.data.currentView instanceof WebInspector.UISourceCodeFrame ? event.data.currentView : null;
+        if (currentSourceFrame)
+            currentSourceFrame.setSearchableView(this._searchableView);
 
-        this._searchableView.setReplaceable(sourceView instanceof WebInspector.UISourceCodeFrame && /** @type {!WebInspector.UISourceCodeFrame} */(sourceView).canEditSource());
+        this._searchableView.setReplaceable(!!currentSourceFrame && currentSourceFrame.canEditSource());
         this._searchableView.refreshSearch();
+        this._updateScriptViewToolbarItems();
 
-        this.dispatchEventToListeners(WebInspector.SourcesView.Events.EditorSelected, uiSourceCode);
+        this.dispatchEventToListeners(WebInspector.SourcesView.Events.EditorSelected, this._editorContainer.currentFile());
     },
 
     /**
-     * @param {!WebInspector.UISourceCode} uiSourceCode
+     * @param {!WebInspector.Event} event
      */
-    sourceRenamed: function(uiSourceCode)
+    _uiSourceCodeTitleChanged: function(event)
     {
-        this._recreateSourceFrameIfNeeded(uiSourceCode);
+        this._recreateSourceFrameIfNeeded(/** @type {!WebInspector.UISourceCode} */ (event.target));
     },
 
     /**
@@ -643,7 +615,7 @@ WebInspector.SourcesView.prototype = {
      */
     _showGoToLineDialog: function(event)
     {
-        if (this._currentUISourceCode)
+        if (this._editorContainer.currentFile())
             this.showOpenResourceDialog(":");
         return true;
     },

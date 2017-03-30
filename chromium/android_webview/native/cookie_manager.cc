@@ -45,7 +45,9 @@ using base::FilePath;
 using base::WaitableEvent;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertJavaStringToUTF16;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
+using base::android::ScopedJavaLocalRef;
 using content::BrowserThread;
 using net::CookieList;
 
@@ -77,8 +79,7 @@ class BoolCookieCallbackHolder {
   void Invoke(bool result) {
     if (!callback_.is_null()) {
       JNIEnv* env = base::android::AttachCurrentThread();
-      Java_AwCookieManager_invokeBooleanCookieCallback(env, callback_.obj(),
-                                                       result);
+      Java_AwCookieManager_invokeBooleanCookieCallback(env, callback_, result);
     }
   }
 

@@ -113,7 +113,8 @@ public:
 
     void removeStream(MediaStream*, ExceptionState&);
 
-    void getStats(ExecutionContext*, RTCStatsCallback* successCallback, MediaStreamTrack* selector);
+    ScriptPromise getStats(ScriptState*, RTCStatsCallback* successCallback, MediaStreamTrack* selector = nullptr);
+    ScriptPromise getStats(ScriptState*, MediaStreamTrack* selector = nullptr);
 
     RTCDataChannel* createDataChannel(String label, const Dictionary& dataChannelDict, ExceptionState&);
 
@@ -154,7 +155,7 @@ public:
     void resume() override;
     void stop() override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     // We keep the this object alive until either stopped or closed.
     bool hasPendingActivity() const final
     {

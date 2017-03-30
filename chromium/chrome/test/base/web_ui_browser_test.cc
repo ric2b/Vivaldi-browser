@@ -222,6 +222,17 @@ void WebUIBrowserTest::BrowsePreload(const GURL& browse_to) {
   chrome::NavigateParams params(
       browser(), GURL(browse_to), ui::PAGE_TRANSITION_TYPED);
   params.disposition = CURRENT_TAB;
+
+  // This is needed to make the test
+  // MaterialHistoryBrowserTest.HistoryToolbarFocusTest pass on macOS. The test
+  // is fundamentally flawed, since it expects a particular widget to be
+  // focused. Chrome focus semantics are based on the Windows platform, where a
+  // widget cannot be focused without window activation. browser_tests can be
+  // sharded, so there is no way to enforce that a given window is activated.
+  // Focus tests should be interactive_ui_tests, and they should explicitly
+  // activate the window. https://crbug.com/642467.
+  params.window_action = chrome::NavigateParams::SHOW_WINDOW;
+
   chrome::Navigate(&params);
   navigation_observer.Wait();
 }
@@ -459,7 +470,12 @@ bool WebUIBrowserTest::RunJavascriptUsingHandler(
     test_handler_->RunJavaScript(content);
 
   if (error_messages_.Get().size() > 0) {
-    LOG(ERROR) << "Encountered javascript console error(s)";
+    LOG(ERROR) << "CONDITION FAILURE: encountered javascript console error(s):";
+    for (const auto& msg : error_messages_.Get()) {
+      LOG(ERROR) << "JS ERROR: '" << msg << "'";
+    }
+    LOG(ERROR) << "JS call assumed failed, because JS console error(s) found.";
+
     result = false;
     error_messages_.Get().clear();
   }

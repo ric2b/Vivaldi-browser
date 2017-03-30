@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "build/build_config.h"
 #include "components/policy/core/common/policy_switches.h"
-#include "policy/proto/device_management_backend.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 
 namespace em = enterprise_management;
 
@@ -45,6 +45,7 @@ const char kValueRequestDeviceAttributeUpdatePermission[] =
 const char kValueRequestDeviceAttributeUpdate[] = "device_attribute_update";
 const char kValueRequestGcmIdUpdate[] = "gcm_id_update";
 const char kValueRequestCheckAndroidManagement[] = "check_android_management";
+const char kValueRequestCertBasedRegister[] = "certificate_based_register";
 
 const char kChromeDevicePolicyType[] = "google/chromeos/device";
 #if defined(OS_CHROMEOS)
@@ -93,8 +94,6 @@ const uint8_t kPolicyVerificationKey[] = {
 const char kPolicyVerificationKeyHash[] = "1:356l7w";
 
 std::string GetPolicyVerificationKey() {
-  // Disable key verification by default until production servers generate
-  // the proper signatures.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kDisablePolicyKeyVerification)) {
     return std::string();
@@ -102,45 +101,6 @@ std::string GetPolicyVerificationKey() {
     return std::string(reinterpret_cast<const char*>(kPolicyVerificationKey),
                        sizeof(kPolicyVerificationKey));
   }
-}
-
-void SetManagementMode(em::PolicyData& policy_data, ManagementMode mode) {
-  switch (mode) {
-    case MANAGEMENT_MODE_LOCAL_OWNER:
-      policy_data.set_management_mode(em::PolicyData::LOCAL_OWNER);
-      return;
-
-    case MANAGEMENT_MODE_ENTERPRISE_MANAGED:
-      policy_data.set_management_mode(em::PolicyData::ENTERPRISE_MANAGED);
-      return;
-
-    case MANAGEMENT_MODE_CONSUMER_MANAGED:
-      policy_data.set_management_mode(em::PolicyData::CONSUMER_MANAGED);
-      return;
-  }
-  NOTREACHED();
-}
-
-ManagementMode GetManagementMode(const em::PolicyData& policy_data) {
-  if (policy_data.has_management_mode()) {
-    switch (policy_data.management_mode()) {
-      case em::PolicyData::LOCAL_OWNER:
-        return MANAGEMENT_MODE_LOCAL_OWNER;
-
-      case em::PolicyData::ENTERPRISE_MANAGED:
-        return MANAGEMENT_MODE_ENTERPRISE_MANAGED;
-
-      case em::PolicyData::CONSUMER_MANAGED:
-        return MANAGEMENT_MODE_CONSUMER_MANAGED;
-
-      default:
-        NOTREACHED();
-        return MANAGEMENT_MODE_LOCAL_OWNER;
-    }
-  }
-
-  return policy_data.has_request_token() ?
-      MANAGEMENT_MODE_ENTERPRISE_MANAGED : MANAGEMENT_MODE_LOCAL_OWNER;
 }
 
 }  // namespace policy

@@ -27,6 +27,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/launcher/unit_test_launcher.h"
 #include "base/test/test_suite.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/display_compositor/gl_helper.h"
@@ -74,7 +75,8 @@ class GLHelperTest : public testing::Test {
         nullptr,                     /* share_context */
         attributes, gpu::SharedMemoryLimits(),
         nullptr, /* gpu_memory_buffer_manager */
-        nullptr /* image_factory */));
+        nullptr, /* image_factory */
+        base::ThreadTaskRunnerHandle::Get()));
     gl_ = context_->GetImplementation();
     gpu::ContextSupport* support = context_->GetImplementation();
 
@@ -258,10 +260,8 @@ class GLHelperTest : public testing::Test {
     }
 
     // Check the output size matches the destination of the last stage
-    EXPECT_EQ(scaler_stages[scaler_stages.size() - 1].dst_size.width(),
-              dst_size.width());
-    EXPECT_EQ(scaler_stages[scaler_stages.size() - 1].dst_size.height(),
-              dst_size.height());
+    EXPECT_EQ(scaler_stages.back().dst_size.width(), dst_size.width());
+    EXPECT_EQ(scaler_stages.back().dst_size.height(), dst_size.height());
 
     // Used to verify that up-scales are not attempted after some
     // other scale.

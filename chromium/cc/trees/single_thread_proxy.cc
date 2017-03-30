@@ -108,15 +108,6 @@ SingleThreadProxy::~SingleThreadProxy() {
   DCHECK(!layer_tree_host_impl_);
 }
 
-void SingleThreadProxy::FinishAllRendering() {
-  TRACE_EVENT0("cc", "SingleThreadProxy::FinishAllRendering");
-  DCHECK(task_runner_provider_->IsMainThread());
-  {
-    DebugScopedSetImplThread impl(task_runner_provider_);
-    layer_tree_host_impl_->FinishAllRendering();
-  }
-}
-
 bool SingleThreadProxy::IsStarted() const {
   DCHECK(task_runner_provider_->IsMainThread());
   return !!layer_tree_host_impl_;
@@ -161,7 +152,6 @@ void SingleThreadProxy::SetOutputSurface(OutputSurface* output_surface) {
   DCHECK(task_runner_provider_->IsMainThread());
   DCHECK(layer_tree_host_->output_surface_lost());
   DCHECK(output_surface_creation_requested_);
-  renderer_capabilities_for_main_thread_ = RendererCapabilities();
 
   bool success;
   {
@@ -182,12 +172,6 @@ void SingleThreadProxy::SetOutputSurface(OutputSurface* output_surface) {
     // and so output_surface_creation_requested remains true.
     layer_tree_host_->DidFailToInitializeOutputSurface();
   }
-}
-
-const RendererCapabilities& SingleThreadProxy::GetRendererCapabilities() const {
-  DCHECK(task_runner_provider_->IsMainThread());
-  DCHECK(!layer_tree_host_->output_surface_lost());
-  return renderer_capabilities_for_main_thread_;
 }
 
 void SingleThreadProxy::SetNeedsAnimate() {
@@ -236,6 +220,7 @@ void SingleThreadProxy::DoCommit() {
     commit_blocking_task_runner_.reset(new BlockingTaskRunner::CapturePostTasks(
         task_runner_provider_->blocking_main_thread_task_runner()));
 
+    layer_tree_host_impl_->ReadyToCommit();
     layer_tree_host_impl_->BeginCommit();
 
     // TODO(robliao): Remove ScopedTracker below once https://crbug.com/461509
@@ -252,15 +237,6 @@ void SingleThreadProxy::DoCommit() {
         FROM_HERE_WITH_EXPLICIT_FUNCTION(
             "461509 SingleThreadProxy::DoCommit7"));
     layer_tree_host_->FinishCommitOnImplThread(layer_tree_host_impl_.get());
-
-#if DCHECK_IS_ON()
-    // In the single-threaded case, the scale and scroll deltas should never be
-    // touched on the impl layer tree.
-    std::unique_ptr<ScrollAndScaleSet> scroll_info =
-        layer_tree_host_impl_->ProcessScrollDeltas();
-    DCHECK(!scroll_info->scrolls.size());
-    DCHECK_EQ(1.f, scroll_info->page_scale_delta);
-#endif
 
     if (scheduler_on_impl_thread_)
       scheduler_on_impl_thread_->DidCommit();
@@ -377,8 +353,8 @@ void SingleThreadProxy::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
 }
 
 void SingleThreadProxy::OnCanDrawStateChanged(bool can_draw) {
-  TRACE_EVENT1(
-      "cc", "SingleThreadProxy::OnCanDrawStateChanged", "can_draw", can_draw);
+  TRACE_EVENT1("cc", "SingleThreadProxy::OnCanDrawStateChanged", "can_draw",
+               can_draw);
   DCHECK(task_runner_provider_->IsImplThread());
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetCanDraw(can_draw);
@@ -447,7 +423,9 @@ void SingleThreadProxy::PostAnimationEventsToMainThreadOnImplThread(
   layer_tree_host_->SetAnimationEvents(std::move(events));
 }
 
-bool SingleThreadProxy::IsInsideDraw() { return inside_draw_; }
+bool SingleThreadProxy::IsInsideDraw() {
+  return inside_draw_;
+}
 
 void SingleThreadProxy::DidActivateSyncTree() {
   // Synchronously call to CommitComplete. Resetting
@@ -470,12 +448,6 @@ void SingleThreadProxy::DidPrepareTiles() {
 
 void SingleThreadProxy::DidCompletePageScaleAnimationOnImplThread() {
   layer_tree_host_->DidCompletePageScaleAnimation();
-}
-
-void SingleThreadProxy::UpdateRendererCapabilitiesOnImplThread() {
-  DCHECK(task_runner_provider_->IsImplThread());
-  renderer_capabilities_for_main_thread_ =
-      layer_tree_host_impl_->GetRendererCapabilities().MainThreadCapabilities();
 }
 
 void SingleThreadProxy::DidLoseOutputSurfaceOnImplThread() {
@@ -510,13 +482,6 @@ void SingleThreadProxy::SetBeginFrameSource(BeginFrameSource* source) {
 void SingleThreadProxy::SetEstimatedParentDrawTime(base::TimeDelta draw_time) {
   if (scheduler_on_impl_thread_)
     scheduler_on_impl_thread_->SetEstimatedParentDrawTime(draw_time);
-}
-
-void SingleThreadProxy::DidSwapBuffersOnImplThread() {
-  TRACE_EVENT0("cc", "SingleThreadProxy::DidSwapBuffersOnImplThread");
-  if (scheduler_on_impl_thread_)
-    scheduler_on_impl_thread_->DidSwapBuffers();
-  client_->DidPostSwapBuffers();
 }
 
 void SingleThreadProxy::DidSwapBuffersCompleteOnImplThread() {
@@ -600,8 +565,7 @@ bool SingleThreadProxy::SupportsImplScrolling() const {
 
 bool SingleThreadProxy::ShouldComposite() const {
   DCHECK(task_runner_provider_->IsImplThread());
-  return layer_tree_host_impl_->visible() &&
-         layer_tree_host_impl_->CanDraw();
+  return layer_tree_host_impl_->visible() && layer_tree_host_impl_->CanDraw();
 }
 
 void SingleThreadProxy::ScheduleRequestNewOutputSurface() {
@@ -696,7 +660,11 @@ DrawResult SingleThreadProxy::DoComposite(LayerTreeHostImpl::FrameData* frame) {
     tracked_objects::ScopedTracker tracking_profile8(
         FROM_HERE_WITH_EXPLICIT_FUNCTION(
             "461509 SingleThreadProxy::DoComposite8"));
-    layer_tree_host_impl_->SwapBuffers(*frame);
+    if (layer_tree_host_impl_->SwapBuffers(*frame)) {
+      if (scheduler_on_impl_thread_)
+        scheduler_on_impl_thread_->DidSwapBuffers();
+      client_->DidPostSwapBuffers();
+    }
   }
   // TODO(robliao): Remove ScopedTracker below once https://crbug.com/461509 is
   // fixed.
@@ -737,6 +705,7 @@ void SingleThreadProxy::WillBeginImplFrame(const BeginFrameArgs& args) {
 void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
     const BeginFrameArgs& begin_frame_args) {
   TRACE_EVENT0("cc", "SingleThreadProxy::ScheduledActionSendBeginMainFrame");
+#if DCHECK_IS_ON()
   // Although this proxy is single-threaded, it's problematic to synchronously
   // have BeginMainFrame happen after ScheduledActionSendBeginMainFrame.  This
   // could cause a commit to occur in between a series of SetNeedsCommit calls
@@ -744,7 +713,6 @@ void SingleThreadProxy::ScheduledActionSendBeginMainFrame(
   // fall on the next.  Doing it asynchronously instead matches the semantics of
   // ThreadProxy::SetNeedsCommit where SetNeedsCommit will not cause a
   // synchronous commit.
-#if DCHECK_IS_ON()
   DCHECK(inside_impl_frame_)
       << "BeginMainFrame should only be sent inside a BeginImplFrame";
 #endif
@@ -787,8 +755,8 @@ void SingleThreadProxy::BeginMainFrame(const BeginFrameArgs& begin_frame_args) {
   }
 
   if (layer_tree_host_->output_surface_lost()) {
-    TRACE_EVENT_INSTANT0(
-        "cc", "EarlyOut_OutputSurfaceLost", TRACE_EVENT_SCOPE_THREAD);
+    TRACE_EVENT_INSTANT0("cc", "EarlyOut_OutputSurfaceLost",
+                         TRACE_EVENT_SCOPE_THREAD);
     BeginMainFrameAbortedOnImplThread(
         CommitEarlyOutReason::ABORTED_OUTPUT_SURFACE_LOST);
     return;
@@ -804,6 +772,14 @@ void SingleThreadProxy::BeginMainFrame(const BeginFrameArgs& begin_frame_args) {
 
 void SingleThreadProxy::DoBeginMainFrame(
     const BeginFrameArgs& begin_frame_args) {
+  // In the single-threaded case, the scale deltas should never be touched on
+  // the impl layer tree. However, impl-side scroll deltas may be manipulated
+  // directly via the InputHandler on the UI thread.
+  std::unique_ptr<ScrollAndScaleSet> scroll_info =
+      layer_tree_host_impl_->ProcessScrollDeltas();
+  DCHECK_EQ(1.f, scroll_info->page_scale_delta);
+  layer_tree_host_->ApplyScrollAndScale(scroll_info.get());
+
   layer_tree_host_->WillBeginMainFrame();
   layer_tree_host_->BeginMainFrame(begin_frame_args);
   layer_tree_host_->AnimateLayers(begin_frame_args.frame_time);
@@ -827,7 +803,9 @@ void SingleThreadProxy::BeginMainFrameAbortedOnImplThread(
   DCHECK(scheduler_on_impl_thread_->CommitPending());
   DCHECK(!layer_tree_host_impl_->pending_tree());
 
-  layer_tree_host_impl_->BeginMainFrameAborted(reason);
+  std::vector<std::unique_ptr<SwapPromise>> empty_swap_promises;
+  layer_tree_host_impl_->BeginMainFrameAborted(reason,
+                                               std::move(empty_swap_promises));
   scheduler_on_impl_thread_->BeginMainFrameAborted(reason);
 }
 

@@ -80,7 +80,7 @@ def add_path_to_trie(path, value, trie):
         trie[path] = value
         return
 
-    directory, slash, rest = path.partition("/")
+    directory, _, rest = path.partition("/")
     if not directory in trie:
         trie[directory] = {}
     add_path_to_trie(rest, value, trie[directory])
@@ -124,8 +124,7 @@ class TestResult(object):
         try:
             test_name = test.split('.')[1]
         except IndexError:
-            _log.warn("Invalid test name: %s.", test)
-            pass
+            _log.warning("Invalid test name: %s.", test)
 
         if test_name.startswith('FAILS_'):
             self.modifier = self.FAILS

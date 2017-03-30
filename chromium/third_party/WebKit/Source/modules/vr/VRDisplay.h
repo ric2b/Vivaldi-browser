@@ -11,6 +11,7 @@
 #include "device/vr/vr_service.mojom-blink.h"
 #include "modules/vr/VRDisplayCapabilities.h"
 #include "modules/vr/VRLayer.h"
+#include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebThread.h"
@@ -72,7 +73,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    friend class VRDisplayCollection;
+    friend class VRController;
 
     VRDisplay(NavigatorVR*);
 
@@ -84,6 +85,8 @@ private:
     // TaskObserver implementation.
     void didProcessTask() override;
     void willProcessTask() override { }
+
+    void onFullscreenCheck(TimerBase*);
 
     Member<NavigatorVR> m_navigatorVR;
     unsigned m_displayId;
@@ -97,6 +100,9 @@ private:
     Member<VREyeParameters> m_eyeParametersLeft;
     Member<VREyeParameters> m_eyeParametersRight;
     Member<VRPose> m_framePose;
+    VRLayer m_layer;
+
+    Timer<VRDisplay> m_fullscreenCheckTimer;
 };
 
 using VRDisplayVector = HeapVector<Member<VRDisplay>>;

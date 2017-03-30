@@ -133,12 +133,16 @@ Router::Router(ScopedMessagePipeHandle message_pipe,
   filters_.SetSink(&thunk_);
   if (expects_sync_requests)
     connector_.AllowWokenUpBySyncWatchOnSameThread();
-  connector_.set_incoming_receiver(filters_.GetHead());
+  connector_.set_incoming_receiver(&filters_);
   connector_.set_connection_error_handler(
       base::Bind(&Router::OnConnectionError, base::Unretained(this)));
 }
 
 Router::~Router() {}
+
+void Router::AddFilter(std::unique_ptr<MessageReceiver> filter) {
+  filters_.Append(std::move(filter));
+}
 
 bool Router::Accept(Message* message) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -171,19 +175,17 @@ bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
   bool response_received = false;
   std::unique_ptr<MessageReceiver> sync_responder(responder);
   sync_responses_.insert(std::make_pair(
-      request_id, base::WrapUnique(new SyncResponseInfo(&response_received))));
+      request_id, base::MakeUnique<SyncResponseInfo>(&response_received)));
 
   base::WeakPtr<Router> weak_self = weak_factory_.GetWeakPtr();
   connector_.SyncWatch(&response_received);
   // Make sure that this instance hasn't been destroyed.
   if (weak_self) {
-    DCHECK(ContainsKey(sync_responses_, request_id));
+    DCHECK(base::ContainsKey(sync_responses_, request_id));
     auto iter = sync_responses_.find(request_id);
     DCHECK_EQ(&response_received, iter->second->response_received);
-    if (response_received) {
-      std::unique_ptr<Message> response = std::move(iter->second->response);
-      ignore_result(sync_responder->Accept(response.get()));
-    }
+    if (response_received)
+      ignore_result(sync_responder->Accept(&iter->second->response));
     sync_responses_.erase(iter);
   }
 
@@ -204,9 +206,7 @@ bool Router::HandleIncomingMessage(Message* message) {
       connector_.during_sync_handle_watcher_callback();
   if (!message->has_flag(Message::kFlagIsSync) &&
       (during_sync_call || !pending_messages_.empty())) {
-    std::unique_ptr<Message> pending_message(new Message);
-    message->MoveTo(pending_message.get());
-    pending_messages_.push(std::move(pending_message));
+    pending_messages_.emplace(std::move(*message));
 
     if (!pending_task_for_messages_) {
       pending_task_for_messages_ = true;
@@ -227,10 +227,10 @@ void Router::HandleQueuedMessages() {
 
   base::WeakPtr<Router> weak_self = weak_factory_.GetWeakPtr();
   while (!pending_messages_.empty()) {
-    std::unique_ptr<Message> message(std::move(pending_messages_.front()));
+    Message message(std::move(pending_messages_.front()));
     pending_messages_.pop();
 
-    bool result = HandleMessageInternal(message.get());
+    bool result = HandleMessageInternal(&message);
     if (!weak_self)
       return;
 
@@ -250,6 +250,8 @@ void Router::HandleQueuedMessages() {
 }
 
 bool Router::HandleMessageInternal(Message* message) {
+  DCHECK(!encountered_error_);
+
   if (message->has_flag(Message::kFlagExpectsResponse)) {
     if (!incoming_receiver_)
       return false;
@@ -270,8 +272,7 @@ bool Router::HandleMessageInternal(Message* message) {
         DCHECK(testing_mode_);
         return false;
       }
-      it->second->response.reset(new Message());
-      message->MoveTo(it->second->response.get());
+      it->second->response = std::move(*message);
       *it->second->response_received = true;
       return true;
     }
@@ -313,6 +314,11 @@ void Router::OnConnectionError() {
   }
 
   encountered_error_ = true;
+
+  // The callbacks may hold on to resources. There is no need to keep them any
+  // longer.
+  async_responders_.clear();
+
   if (!error_handler_.is_null())
     error_handler_.Run();
 }

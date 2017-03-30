@@ -10,7 +10,7 @@
 #include <set>
 #include <utility>
 
-#include "ash/multi_profile_uma.h"
+#include "ash/common/multi_profile_uma.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -63,6 +63,7 @@
 #include "chromeos/login/user_names.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/timezone/timezone_resolver.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -74,7 +75,6 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
-#include "policy/policy_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
@@ -717,9 +717,9 @@ void ChromeUserManagerImpl::GuestUserLoggedIn() {
   // mount point. Legacy (--login-profile) value will be used for now.
   // http://crosbug.com/230859
   active_user_->SetStubImage(
-      base::WrapUnique(new user_manager::UserImage(
+      base::MakeUnique<user_manager::UserImage>(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING))),
+              IDR_PROFILE_PICTURE_LOADING)),
       user_manager::User::USER_IMAGE_INVALID, false);
 
   // Initializes wallpaper after active_user_ is set.
@@ -820,9 +820,9 @@ void ChromeUserManagerImpl::KioskAppLoggedIn(user_manager::User* user) {
 
   active_user_ = user;
   active_user_->SetStubImage(
-      base::WrapUnique(new user_manager::UserImage(
+      base::MakeUnique<user_manager::UserImage>(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING))),
+              IDR_PROFILE_PICTURE_LOADING)),
       user_manager::User::USER_IMAGE_INVALID, false);
 
   const AccountId& kiosk_app_account_id = user->GetAccountId();
@@ -865,9 +865,9 @@ void ChromeUserManagerImpl::DemoAccountLoggedIn() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   active_user_ = user_manager::User::CreateKioskAppUser(login::DemoAccountId());
   active_user_->SetStubImage(
-      base::WrapUnique(new user_manager::UserImage(
+      base::MakeUnique<user_manager::UserImage>(
           *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-              IDR_PROFILE_PICTURE_LOADING))),
+              IDR_PROFILE_PICTURE_LOADING)),
       user_manager::User::USER_IMAGE_INVALID, false);
   WallpaperManager::Get()->SetUserWallpaperNow(login::DemoAccountId());
 
@@ -976,7 +976,7 @@ bool ChromeUserManagerImpl::UpdateAndCleanUpDeviceLocalAccounts(
 
   // Get the current list of device local accounts.
   std::vector<std::string> old_accounts;
-  for (const auto& user : users_) {
+  for (auto* user : users_) {
     if (user->IsDeviceLocalAccount())
       old_accounts.push_back(user->email());
   }

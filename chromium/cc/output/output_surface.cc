@@ -49,7 +49,7 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
                         const char* value_name,
                         const char* units,
                         uint64_t value) override {
-    auto dump = GetOrCreateAllocatorDump(dump_name);
+    auto* dump = GetOrCreateAllocatorDump(dump_name);
     dump->AddScalar(value_name, units, value);
   }
 
@@ -104,7 +104,7 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
   // Helper to create allocator dumps.
   base::trace_event::MemoryAllocatorDump* GetOrCreateAllocatorDump(
       const char* dump_name) {
-    auto dump = pmd_->GetAllocatorDump(dump_name);
+    auto* dump = pmd_->GetAllocatorDump(dump_name);
     if (!dump)
       dump = pmd_->CreateAllocatorDump(dump_name);
     return dump;
@@ -142,8 +142,8 @@ void OutputSurface::SetNeedsRedrawRect(const gfx::Rect& damage_rect) {
   client_->SetNeedsRedrawRect(damage_rect);
 }
 
-void OutputSurface::ReclaimResources(const CompositorFrameAck* ack) {
-  client_->ReclaimResources(ack);
+void OutputSurface::ReclaimResources(const ReturnedResourceArray& resources) {
+  client_->ReclaimResources(resources);
 }
 
 void OutputSurface::DidLoseOutputSurface() {
@@ -217,6 +217,7 @@ void OutputSurface::Reshape(const gfx::Size& size,
                             float scale_factor,
                             const gfx::ColorSpace& color_space,
                             bool has_alpha) {
+  device_color_space_ = color_space;
   if (size == surface_size_ && scale_factor == device_scale_factor_ &&
       has_alpha == has_alpha_)
     return;
@@ -274,25 +275,6 @@ bool OutputSurface::IsDisplayedAsOverlayPlane() const {
 
 unsigned OutputSurface::GetOverlayTextureId() const {
   return 0;
-}
-
-void OutputSurface::SetWorkerContextShouldAggressivelyFreeResources(
-    bool aggressively_free_resources) {
-  TRACE_EVENT1("cc",
-               "OutputSurface::SetWorkerContextShouldAggressivelyFreeResources",
-               "aggressively_free_resources", aggressively_free_resources);
-  if (auto* context_provider = worker_context_provider()) {
-    ContextProvider::ScopedContextLock scoped_context(context_provider);
-
-    if (aggressively_free_resources) {
-      context_provider->DeleteCachedResources();
-    }
-
-    if (auto* context_support = context_provider->ContextSupport()) {
-      context_support->SetAggressivelyFreeResources(
-          aggressively_free_resources);
-    }
-  }
 }
 
 bool OutputSurface::SurfaceIsSuspendForRecycle() const {

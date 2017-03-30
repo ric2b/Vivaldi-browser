@@ -16,7 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "media/base/data_source.h"
-#include "media/base/ranges.h"
+#include "media/blink/buffered_data_source_host_impl.h"
 #include "media/blink/buffered_resource_loader.h"
 #include "media/blink/media_blink_export.h"
 #include "url/gurl.h"
@@ -27,20 +27,6 @@ class SingleThreadTaskRunner;
 
 namespace media {
 class MediaLog;
-
-class MEDIA_BLINK_EXPORT BufferedDataSourceHost {
- public:
-  // Notify the host of the total size of the media file.
-  virtual void SetTotalBytes(int64_t total_bytes) = 0;
-
-  // Notify the host that byte range [start,end] has been buffered.
-  // TODO(fischman): remove this method when demuxing is push-based instead of
-  // pull-based.  http://crbug.com/131444
-  virtual void AddBufferedByteRange(int64_t start, int64_t end) = 0;
-
- protected:
-  virtual ~BufferedDataSourceHost() {}
-};
 
 // This interface is temporary and will go away once MultibufferDataSource
 // has been fully evaluated.

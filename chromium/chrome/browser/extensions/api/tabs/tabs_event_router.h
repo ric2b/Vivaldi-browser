@@ -12,6 +12,8 @@
 #include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
+#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/memory/tab_manager_observer.h"
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker_delegate.h"
@@ -39,7 +41,8 @@ class TabsEventRouter : public TabStripModelObserver,
                         public BrowserTabStripTrackerDelegate,
                         public chrome::BrowserListObserver,
                         public favicon::FaviconDriverObserver,
-                        public zoom::ZoomObserver {
+                        public zoom::ZoomObserver,
+                        public memory::TabManagerObserver {
  public:
   explicit TabsEventRouter(Profile* profile);
   ~TabsEventRouter() override;
@@ -87,6 +90,12 @@ class TabsEventRouter : public TabStripModelObserver,
                         const GURL& icon_url,
                         bool icon_url_changed,
                         const gfx::Image& image) override;
+
+  // memory::TabManagerObserver:
+  void OnDiscardedStateChange(content::WebContents* contents,
+                              bool is_discarded) override;
+  void OnAutoDiscardableStateChange(content::WebContents* contents,
+                                    bool is_auto_discardable) override;
 
  private:
   // "Synthetic" event. Called from TabInsertedAt if new tab is detected.
@@ -207,6 +216,9 @@ class TabsEventRouter : public TabStripModelObserver,
       favicon_scoped_observer_;
 
   BrowserTabStripTracker browser_tab_strip_tracker_;
+
+  ScopedObserver<memory::TabManager, TabsEventRouter>
+      tab_manager_scoped_observer_;
 
   DISALLOW_COPY_AND_ASSIGN(TabsEventRouter);
 };

@@ -30,7 +30,7 @@ OutOfProcessNativeRunner::~OutOfProcessNativeRunner() {
     child_process_host_->Join();
 }
 
-mojom::ShellClientPtr OutOfProcessNativeRunner::Start(
+mojom::ServicePtr OutOfProcessNativeRunner::Start(
     const base::FilePath& app_path,
     const Identity& target,
     bool start_sandboxed,
@@ -68,8 +68,8 @@ OutOfProcessNativeRunnerFactory::~OutOfProcessNativeRunnerFactory() {}
 
 std::unique_ptr<NativeRunner> OutOfProcessNativeRunnerFactory::Create(
     const base::FilePath& app_path) {
-  return base::WrapUnique(
-      new OutOfProcessNativeRunner(launch_process_runner_, delegate_));
+  return base::MakeUnique<OutOfProcessNativeRunner>(launch_process_runner_,
+                                                    delegate_);
 }
 
 }  // namespace shell

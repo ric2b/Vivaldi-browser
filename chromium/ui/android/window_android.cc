@@ -17,6 +17,8 @@
 namespace ui {
 
 using base::android::AttachCurrentThread;
+using base::android::JavaParamRef;
+using base::android::JavaRef;
 using base::android::ScopedJavaLocalRef;
 
 WindowAndroid::WindowAndroid(JNIEnv* env, jobject obj) : compositor_(NULL) {
@@ -36,12 +38,13 @@ bool WindowAndroid::RegisterWindowAndroid(JNIEnv* env) {
 }
 
 WindowAndroid::~WindowAndroid() {
+  DCHECK(parent_ == nullptr) << "WindowAndroid must be a root view.";
   DCHECK(!compositor_);
 }
 
 WindowAndroid* WindowAndroid::createForTesting() {
   JNIEnv* env = AttachCurrentThread();
-  jobject context = base::android::GetApplicationContext();
+  const JavaRef<jobject>& context = base::android::GetApplicationContext();
   return new WindowAndroid(
       env, Java_WindowAndroid_createForTesting(env, context).obj());
 }
@@ -81,7 +84,7 @@ void WindowAndroid::DetachCompositor() {
 
 void WindowAndroid::RequestVSyncUpdate() {
   JNIEnv* env = AttachCurrentThread();
-  Java_WindowAndroid_requestVSyncUpdate(env, GetJavaObject().obj());
+  Java_WindowAndroid_requestVSyncUpdate(env, GetJavaObject());
 }
 
 void WindowAndroid::SetNeedsAnimate() {
@@ -129,17 +132,20 @@ void WindowAndroid::OnActivityStarted(JNIEnv* env,
 bool WindowAndroid::HasPermission(const std::string& permission) {
   JNIEnv* env = AttachCurrentThread();
   return Java_WindowAndroid_hasPermission(
-      env,
-      GetJavaObject().obj(),
-      base::android::ConvertUTF8ToJavaString(env, permission).obj());
+      env, GetJavaObject(),
+      base::android::ConvertUTF8ToJavaString(env, permission));
 }
 
 bool WindowAndroid::CanRequestPermission(const std::string& permission) {
   JNIEnv* env = AttachCurrentThread();
   return Java_WindowAndroid_canRequestPermission(
-      env,
-      GetJavaObject().obj(),
-      base::android::ConvertUTF8ToJavaString(env, permission).obj());
+      env, GetJavaObject(),
+      base::android::ConvertUTF8ToJavaString(env, permission));
+}
+
+WindowAndroid* WindowAndroid::GetWindowAndroid() const {
+  DCHECK(parent_ == nullptr);
+  return const_cast<WindowAndroid*>(this);
 }
 
 // ----------------------------------------------------------------------------

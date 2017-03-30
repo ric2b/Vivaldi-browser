@@ -50,6 +50,8 @@ class ArcAppDeferredLauncherController : public ArcAppListPrefs::Observer,
   void Close(const std::string& app_id);
 
  private:
+  // Defines mapping of a shelf app id to a corresponded controller. Shelf app
+  // id is optional mapping (for example, Play Store to Arc Host Support).
   using AppControllerMap =
       std::map<std::string, ArcAppDeferredLauncherItemController*>;
 

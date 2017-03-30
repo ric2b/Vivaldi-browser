@@ -4,8 +4,8 @@
 
 #include "core/html/HTMLSelectElement.h"
 
+#include "core/dom/Document.h"
 #include "core/frame/FrameView.h"
-#include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/forms/FormController.h"
 #include "core/loader/EmptyClients.h"
@@ -18,11 +18,10 @@ namespace blink {
 class HTMLSelectElementTest : public::testing::Test {
 protected:
     void SetUp() override;
-    HTMLDocument& document() const { return *m_document; }
-
+    Document& document() const { return *m_document; }
 private:
     std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
-    Persistent<HTMLDocument> m_document;
+    Persistent<Document> m_document;
 };
 
 void HTMLSelectElementTest::SetUp()
@@ -31,7 +30,7 @@ void HTMLSelectElementTest::SetUp()
     fillWithEmptyClients(pageClients);
     m_dummyPageHolder = DummyPageHolder::create(IntSize(800, 600), &pageClients);
 
-    m_document = toHTMLDocument(&m_dummyPageHolder->document());
+    m_document = &m_dummyPageHolder->document();
     m_document->setMimeType("text/html");
 }
 
@@ -102,13 +101,45 @@ TEST_F(HTMLSelectElementTest, SaveRestoreSelectMultipleFormControlState)
     EXPECT_TRUE(opt3->selected());
 }
 
-TEST_F(HTMLSelectElementTest, ElementRectRelativeToViewport)
+TEST_F(HTMLSelectElementTest, RestoreUnmatchedFormControlState)
+{
+    // We had a bug that selectedOption() and m_lastOnChangeOption were
+    // mismatched in optionToBeShown(). It happened when
+    // restoreFormControlState() couldn't find matched OPTIONs.
+    // crbug.com/627833.
+
+    document().documentElement()->setInnerHTML("<select id='sel'>"
+        "<option selected>Default</option>"
+        "<option id='2'>222</option>"
+        "</select>", ASSERT_NO_EXCEPTION);
+    document().view()->updateAllLifecyclePhases();
+    Element* element = document().getElementById("sel");
+    HTMLFormControlElementWithState* select = toHTMLSelectElement(element);
+    HTMLOptionElement* opt2 = toHTMLOptionElement(document().getElementById("2"));
+
+    toHTMLSelectElement(element)->setSelectedIndex(1);
+    // Save the current state.
+    FormControlState selectState = select->saveFormControlState();
+    EXPECT_EQ(2U, selectState.valueSize());
+
+    // Reset the status.
+    select->reset();
+    ASSERT_FALSE(opt2->selected());
+    element->removeChild(opt2);
+
+    // Restore
+    select->restoreFormControlState(selectState);
+    EXPECT_EQ(-1, toHTMLSelectElement(element)->selectedIndex());
+    EXPECT_EQ(nullptr, toHTMLSelectElement(element)->optionToBeShown());
+}
+
+TEST_F(HTMLSelectElementTest, VisibleBoundsInVisualViewport)
 {
     document().documentElement()->setInnerHTML("<select style='position:fixed; top:12.3px; height:24px; -webkit-appearance:none;'><option>o1</select>", ASSERT_NO_EXCEPTION);
     document().view()->updateAllLifecyclePhases();
     HTMLSelectElement* select = toHTMLSelectElement(document().body()->firstChild());
-    ASSERT(select);
-    IntRect bounds = select->elementRectRelativeToViewport();
+    ASSERT_NE(select, nullptr);
+    IntRect bounds = select->visibleBoundsInVisualViewport();
     EXPECT_EQ(24, bounds.height());
 }
 
@@ -117,11 +148,11 @@ TEST_F(HTMLSelectElementTest, PopupIsVisible)
     document().documentElement()->setInnerHTML("<select><option>o1</option></select>", ASSERT_NO_EXCEPTION);
     document().view()->updateAllLifecyclePhases();
     HTMLSelectElement* select = toHTMLSelectElement(document().body()->firstChild());
-    ASSERT(select);
+    ASSERT_NE(select, nullptr);
     EXPECT_FALSE(select->popupIsVisible());
     select->showPopup();
     EXPECT_TRUE(select->popupIsVisible());
-    document().detach();
+    document().detachLayoutTree();
     EXPECT_FALSE(select->popupIsVisible());
 }
 

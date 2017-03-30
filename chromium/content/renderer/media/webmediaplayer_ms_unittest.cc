@@ -5,12 +5,14 @@
 #include <stddef.h>
 
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
 #include "content/renderer/media/webmediaplayer_ms.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "media/base/test_helpers.h"
 #include "media/base/video_frame.h"
+#include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
@@ -75,6 +77,8 @@ class FakeWebMediaPlayerDelegate
 
   bool IsHidden() override { return is_hidden_; }
 
+  bool IsPlayingBackgroundVideo() override { return false; }
+
   void set_hidden(bool is_hidden) { is_hidden_ = is_hidden; }
 
  private:
@@ -137,7 +141,8 @@ class MockMediaStreamVideoRenderer : public MediaStreamVideoRenderer {
   void QueueFrames(const std::vector<int>& timestamps_or_frame_type,
                    bool opaque_frame = true,
                    bool odd_size_frame = false,
-                   int double_size_index = -1);
+                   int double_size_index = -1,
+                   media::VideoRotation rotation = media::VIDEO_ROTATION_0);
   bool Started() { return started_; }
   bool Paused() { return paused_; }
 
@@ -197,7 +202,8 @@ void MockMediaStreamVideoRenderer::QueueFrames(
     const std::vector<int>& timestamp_or_frame_type,
     bool opaque_frame,
     bool odd_size_frame,
-    int double_size_index) {
+    int double_size_index,
+    media::VideoRotation rotation) {
   gfx::Size standard_size = gfx::Size(kStandardWidth, kStandardHeight);
   for (size_t i = 0; i < timestamp_or_frame_type.size(); i++) {
     const int token = timestamp_or_frame_type[i];
@@ -222,11 +228,14 @@ void MockMediaStreamVideoRenderer::QueueFrames(
       } else {
         frame_size.SetSize(standard_size.width(), standard_size.height());
       }
+
       auto frame = media::VideoFrame::CreateZeroInitializedFrame(
           opaque_frame ? media::PIXEL_FORMAT_YV12 : media::PIXEL_FORMAT_YV12A,
           frame_size, gfx::Rect(frame_size), frame_size,
           base::TimeDelta::FromMilliseconds(token));
 
+      frame->metadata()->SetRotation(media::VideoFrameMetadata::ROTATION,
+                                     rotation);
       frame->metadata()->SetTimeTicks(
           media::VideoFrameMetadata::Key::REFERENCE_TIME,
           base::TimeTicks::Now() + base::TimeDelta::FromMilliseconds(token));
@@ -446,6 +455,7 @@ class WebMediaPlayerMSTest
   std::unique_ptr<WebMediaPlayerMS> player_;
   WebMediaPlayerMSCompositor* compositor_;
   ReusableMessageLoopEvent message_loop_controller_;
+  blink::WebLayer* web_layer_;
 
  private:
   // Main function trying to ask WebMediaPlayerMS to submit a frame for
@@ -499,6 +509,7 @@ void WebMediaPlayerMSTest::readyStateChanged() {
 }
 
 void WebMediaPlayerMSTest::setWebLayer(blink::WebLayer* layer) {
+  web_layer_ = layer;
   if (layer)
     compositor_->SetVideoFrameProviderClient(this);
   DoSetWebLayer(!!layer);
@@ -512,7 +523,7 @@ void WebMediaPlayerMSTest::StopUsingProvider() {
 void WebMediaPlayerMSTest::StartRendering() {
   if (!rendering_) {
     rendering_ = true;
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&WebMediaPlayerMSTest::RenderFrame, base::Unretained(this)));
   }
@@ -542,7 +553,7 @@ void WebMediaPlayerMSTest::RenderFrame() {
     auto frame = compositor_->GetCurrentFrame();
     compositor_->PutCurrentFrame();
   }
-  message_loop_.PostDelayedTask(
+  message_loop_.task_runner()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&WebMediaPlayerMSTest::RenderFrame, base::Unretained(this)),
       base::TimeDelta::FromSecondsD(1.0 / 60.0));
@@ -575,6 +586,9 @@ TEST_F(WebMediaPlayerMSTest, Playing_Normal) {
               CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
   message_loop_controller_.RunAndWaitForStatus(
       media::PipelineStatus::PIPELINE_OK);
+  const blink::WebSize& natural_size = player_->naturalSize();
+  EXPECT_EQ(kStandardWidth, natural_size.width);
+  EXPECT_EQ(kStandardHeight, natural_size.height);
   testing::Mock::VerifyAndClearExpectations(this);
 
   EXPECT_CALL(*this, DoSetWebLayer(false));
@@ -708,6 +722,75 @@ INSTANTIATE_TEST_CASE_P(,
                         WebMediaPlayerMSTest,
                         ::testing::Combine(::testing::Bool(),
                                            ::testing::Bool()));
+
+// During this test, we check that when we send rotated video frames, it applies
+// to player's natural size.
+TEST_F(WebMediaPlayerMSTest, RotatedVideoFrame) {
+  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
+
+  static int tokens[] = {0, 33, 66};
+  std::vector<int> timestamps(tokens, tokens + sizeof(tokens) / sizeof(int));
+  provider->QueueFrames(timestamps, false, false, 17, media::VIDEO_ROTATION_90);
+
+  EXPECT_CALL(*this, DoSetWebLayer(true));
+  EXPECT_CALL(*this, DoStartRendering());
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::ReadyStateHaveMetadata));
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::ReadyStateHaveEnoughData));
+  EXPECT_CALL(*this,
+              CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  const blink::WebSize& natural_size = player_->naturalSize();
+  // Check that height and width are flipped.
+  EXPECT_EQ(kStandardHeight, natural_size.width);
+  EXPECT_EQ(kStandardWidth, natural_size.height);
+  testing::Mock::VerifyAndClearExpectations(this);
+
+  EXPECT_CALL(*this, DoSetWebLayer(false));
+  EXPECT_CALL(*this, DoStopRendering());
+}
+
+// During this test, we check that web layer changes opacity according to the
+// given frames.
+TEST_F(WebMediaPlayerMSTest, OpacityChange) {
+  MockMediaStreamVideoRenderer* provider = LoadAndGetFrameProvider(true);
+
+  // Push one opaque frame.
+  const int kTestBrake = static_cast<int>(FrameType::TEST_BRAKE);
+  static int tokens[] = {0, kTestBrake};
+  std::vector<int> timestamps(tokens, tokens + arraysize(tokens));
+  provider->QueueFrames(timestamps, true);
+  EXPECT_CALL(*this, DoSetWebLayer(true));
+  EXPECT_CALL(*this, DoStartRendering());
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::ReadyStateHaveMetadata));
+  EXPECT_CALL(*this, DoReadyStateChanged(
+                         blink::WebMediaPlayer::ReadyStateHaveEnoughData));
+  EXPECT_CALL(*this,
+              CheckSizeChanged(gfx::Size(kStandardWidth, kStandardHeight)));
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  ASSERT_TRUE(web_layer_ != nullptr);
+  EXPECT_TRUE(web_layer_->opaque());
+
+  // Push one transparent frame.
+  provider->QueueFrames(timestamps, false);
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  EXPECT_FALSE(web_layer_->opaque());
+
+  // Push another opaque frame.
+  provider->QueueFrames(timestamps, true);
+  message_loop_controller_.RunAndWaitForStatus(
+      media::PipelineStatus::PIPELINE_OK);
+  EXPECT_TRUE(web_layer_->opaque());
+
+  testing::Mock::VerifyAndClearExpectations(this);
+  EXPECT_CALL(*this, DoSetWebLayer(false));
+  EXPECT_CALL(*this, DoStopRendering());
+}
 
 TEST_F(WebMediaPlayerMSTest, BackgroundRendering) {
   // During this test, we will switch to background rendering mode, in which

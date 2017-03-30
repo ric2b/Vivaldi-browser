@@ -15,8 +15,26 @@
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #endif
 
+namespace {
+
+const bool* g_metrics_consent_for_testing = nullptr;
+
+}  // namespace
+
+// static
+void ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
+    const bool* value) {
+  DCHECK_NE(g_metrics_consent_for_testing == nullptr, value == nullptr)
+      << "Unpaired set/reset";
+
+  g_metrics_consent_for_testing = value;
+}
+
 // static
 bool ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled() {
+  if (g_metrics_consent_for_testing)
+    return *g_metrics_consent_for_testing;
+
   // TODO(blundell): Fix the unittests that don't set up the UI thread and
   // change this to just be DCHECK_CURRENTLY_ON().
   DCHECK(
@@ -53,6 +71,14 @@ bool ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
     const std::string& group_name) {
   return metrics::MetricsServiceAccessor::RegisterSyntheticFieldTrial(
       g_browser_process->metrics_service(), trial_name, group_name);
+}
+
+// static
+bool ChromeMetricsServiceAccessor::RegisterSyntheticMultiGroupFieldTrial(
+    const std::string& trial_name,
+    const std::vector<uint32_t>& group_name_hashes) {
+  return metrics::MetricsServiceAccessor::RegisterSyntheticMultiGroupFieldTrial(
+      g_browser_process->metrics_service(), trial_name, group_name_hashes);
 }
 
 // static

@@ -21,6 +21,7 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ScrollableAreaPainter.h"
+#include "platform/graphics/GraphicsLayer.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "wtf/Optional.h"
 
@@ -70,7 +71,7 @@ void BlockPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintOff
 void BlockPainter::paintOverflowControlsIfNeeded(const PaintInfo& paintInfo, const LayoutPoint& paintOffset)
 {
     if (m_layoutBlock.hasOverflowClip()
-        && m_layoutBlock.style()->visibility() == VISIBLE
+        && m_layoutBlock.style()->visibility() == EVisibility::Visible
         && shouldPaintSelfBlockBackground(paintInfo.phase)
         && !paintInfo.paintRootBackgroundOnly()) {
         Optional<ClipRecorder> clipRecorder;
@@ -129,7 +130,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
     const PaintPhase paintPhase = paintInfo.phase;
 
     if (shouldPaintSelfBlockBackground(paintPhase)) {
-        if (m_layoutBlock.style()->visibility() == VISIBLE && m_layoutBlock.hasBoxDecorationBackground())
+        if (m_layoutBlock.style()->visibility() == EVisibility::Visible && m_layoutBlock.hasBoxDecorationBackground())
             m_layoutBlock.paintBoxDecorationBackground(paintInfo, paintOffset);
         // We're done. We don't bother painting any children.
         if (paintPhase == PaintPhaseSelfBlockBackgroundOnly)
@@ -139,12 +140,12 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
     if (paintInfo.paintRootBackgroundOnly())
         return;
 
-    if (paintPhase == PaintPhaseMask && m_layoutBlock.style()->visibility() == VISIBLE) {
+    if (paintPhase == PaintPhaseMask && m_layoutBlock.style()->visibility() == EVisibility::Visible) {
         m_layoutBlock.paintMask(paintInfo, paintOffset);
         return;
     }
 
-    if (paintPhase == PaintPhaseClippingMask && m_layoutBlock.style()->visibility() == VISIBLE) {
+    if (paintPhase == PaintPhaseClippingMask && m_layoutBlock.style()->visibility() == EVisibility::Visible) {
         BoxPainter(m_layoutBlock).paintClippingMask(paintInfo, paintOffset);
         return;
     }
@@ -161,7 +162,7 @@ void BlockPainter::paintObject(const PaintInfo& paintInfo, const LayoutPoint& pa
             if (auto* scrollTranslation = objectProperties ? objectProperties->scrollTranslation() : nullptr) {
                 PaintChunkProperties properties(paintInfo.context.getPaintController().currentPaintChunkProperties());
                 properties.transform = scrollTranslation;
-                m_scopedScrollProperty.emplace(paintInfo.context.getPaintController(), properties);
+                m_scopedScrollProperty.emplace(paintInfo.context.getPaintController(), m_layoutBlock, DisplayItem::paintPhaseToDrawingType(paintPhase), properties);
                 scrolledPaintInfo.emplace(paintInfo);
                 scrolledPaintInfo->updateCullRect(scrollTranslation->matrix().toAffineTransform());
             }
@@ -222,11 +223,19 @@ bool BlockPainter::intersectsPaintRect(const PaintInfo& paintInfo, const LayoutP
     }
     overflowRect.unite(m_layoutBlock.visualOverflowRect());
 
-    if (m_layoutBlock.hasOverflowModel() && m_layoutBlock.usesCompositedScrolling()) {
-        overflowRect.unite(m_layoutBlock.layoutOverflowRect());
-        overflowRect.move(-m_layoutBlock.scrolledContentOffset());
+    bool usesCompositedScrolling = m_layoutBlock.hasOverflowModel() && m_layoutBlock.usesCompositedScrolling();
+
+    if (usesCompositedScrolling) {
+        LayoutRect layoutOverflowRect = m_layoutBlock.layoutOverflowRect();
+        overflowRect.unite(layoutOverflowRect);
     }
     m_layoutBlock.flipForWritingMode(overflowRect);
+
+    // Scrolling is applied in physical space, which is why it is after the flip above.
+    if (usesCompositedScrolling) {
+        overflowRect.move(-m_layoutBlock.scrolledContentOffset());
+    }
+
     overflowRect.moveBy(adjustedPaintOffset);
     return paintInfo.cullRect().intersectsCullRect(overflowRect);
 }

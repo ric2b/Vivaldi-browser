@@ -195,12 +195,6 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
                                        const SSLInfo& ssl_info,
                                        bool fatal);
 
-    // Called to notify that the request must use the network to complete the
-    // request and is about to do so. This is called at most once per
-    // URLRequest, and by default does not defer. If deferred, call
-    // ResumeNetworkStart() to continue or Cancel() to cancel.
-    virtual void OnBeforeNetworkStart(URLRequest* request, bool* defer);
-
     // After calling Start(), the delegate will receive an OnResponseStarted
     // callback when the request has completed.  If an error occurred, the
     // request->status() will be set.  On success, all redirects have been
@@ -658,8 +652,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Allow the URLRequestJob class to control the is_pending() flag.
   void set_is_pending(bool value) { is_pending_ = value; }
 
-  // Allow the URLRequestJob class to set our status too
-  void set_status(const URLRequestStatus& value) { status_ = value; }
+  // Allow the URLRequestJob class to set our status too.
+  void set_status(URLRequestStatus status);
 
   // Allow the URLRequestJob to redirect this request.  Returns OK if
   // successful, otherwise an error code is returned.
@@ -668,10 +662,6 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Called by URLRequestJob to allow interception when a redirect occurs.
   void NotifyReceivedRedirect(const RedirectInfo& redirect_info,
                               bool* defer_redirect);
-
-  // Called by URLRequestHttpJob (note, only HTTP(S) jobs will call this) to
-  // allow deferral of network initialization.
-  void NotifyBeforeNetworkStart(bool* defer);
 
   // Allow an interceptor's URLRequestJob to restart this request.
   // Should only be called if the original job has not started a response.
@@ -726,7 +716,7 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
 
   // Called by URLRequestJob to allow interception when the final response
   // occurs.
-  void NotifyResponseStarted();
+  void NotifyResponseStarted(const URLRequestStatus& status);
 
   // These functions delegate to |delegate_|.  See URLRequest::Delegate for the
   // meaning of these functions.
@@ -854,9 +844,6 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Timing information for the most recent request.  Its start times are
   // populated during Start(), and the rest are populated in OnResponseReceived.
   LoadTimingInfo load_timing_info_;
-
-  // Keeps track of whether or not OnBeforeNetworkStart has been called yet.
-  bool notified_before_network_start_;
 
   // The proxy server used for this request, if any.
   HostPortPair proxy_server_;

@@ -6,11 +6,14 @@
 
 #include <utility>
 
+#include "base/strings/string_util.h"
 #include "jingle/glue/thread_wrapper.h"
+#include "remoting/base/constants.h"
 #include "remoting/protocol/client_control_dispatcher.h"
 #include "remoting/protocol/client_event_dispatcher.h"
 #include "remoting/protocol/client_stub.h"
 #include "remoting/protocol/clipboard_stub.h"
+#include "remoting/protocol/message_pipe.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/protocol/video_renderer.h"
 #include "remoting/protocol/webrtc_transport.h"
@@ -102,13 +105,10 @@ void WebrtcConnectionToHost::OnSessionStateChange(Session::State state) {
 }
 
 void WebrtcConnectionToHost::OnWebrtcTransportConnecting() {
-  control_dispatcher_.reset(new ClientControlDispatcher());
-  control_dispatcher_->Init(transport_->incoming_channel_factory(), this);
-  control_dispatcher_->set_client_stub(client_stub_);
-  control_dispatcher_->set_clipboard_stub(clipboard_stub_);
-
   event_dispatcher_.reset(new ClientEventDispatcher());
-  event_dispatcher_->Init(transport_->outgoing_channel_factory(), this);
+  event_dispatcher_->Init(
+      transport_->CreateOutgoingChannel(event_dispatcher_->channel_name()),
+      this);
 }
 
 void WebrtcConnectionToHost::OnWebrtcTransportConnected() {}
@@ -118,14 +118,31 @@ void WebrtcConnectionToHost::OnWebrtcTransportError(ErrorCode error) {
   SetState(FAILED, error);
 }
 
+void WebrtcConnectionToHost::OnWebrtcTransportIncomingDataChannel(
+    const std::string& name,
+    std::unique_ptr<MessagePipe> pipe) {
+  if (!control_dispatcher_)
+    control_dispatcher_.reset(new ClientControlDispatcher());
+
+  if (name == control_dispatcher_->channel_name() &&
+      !control_dispatcher_->is_connected()) {
+    control_dispatcher_->set_client_stub(client_stub_);
+    control_dispatcher_->set_clipboard_stub(clipboard_stub_);
+    control_dispatcher_->Init(std::move(pipe), this);
+  } else if (base::StartsWith(name, kVideoStatsChannelNamePrefix,
+                              base::CompareCase::SENSITIVE)) {
+    std::string video_stream_label =
+        name.substr(strlen(kVideoStatsChannelNamePrefix));
+    GetOrCreateVideoAdapter(video_stream_label)
+        ->SetVideoStatsChannel(std::move(pipe));
+  } else {
+    LOG(WARNING) << "Received unknown incoming data channel " << name;
+  }
+}
+
 void WebrtcConnectionToHost::OnWebrtcTransportMediaStreamAdded(
     scoped_refptr<webrtc::MediaStreamInterface> stream) {
-  if (video_adapter_) {
-    LOG(WARNING)
-        << "Received multiple media streams. Ignoring all except the last one.";
-  }
-  video_adapter_.reset(new WebrtcVideoRendererAdapter(
-      stream, video_renderer_->GetFrameConsumer()));
+  GetOrCreateVideoAdapter(stream->label())->SetMediaStream(stream);
 }
 
 void WebrtcConnectionToHost::OnWebrtcTransportMediaStreamRemoved(
@@ -137,6 +154,13 @@ void WebrtcConnectionToHost::OnWebrtcTransportMediaStreamRemoved(
 void WebrtcConnectionToHost::OnChannelInitialized(
     ChannelDispatcherBase* channel_dispatcher) {
   NotifyIfChannelsReady();
+}
+
+void WebrtcConnectionToHost::OnChannelClosed(
+    ChannelDispatcherBase* channel_dispatcher) {
+  LOG(ERROR) << "Channel " << channel_dispatcher->channel_name()
+             << " was closed unexpectedly.";
+  SetState(FAILED, INCOMPATIBLE_PROTOCOL);
 }
 
 ConnectionToHost::State WebrtcConnectionToHost::state() const {
@@ -153,6 +177,19 @@ void WebrtcConnectionToHost::NotifyIfChannelsReady() {
   clipboard_forwarder_.set_clipboard_stub(control_dispatcher_.get());
   event_forwarder_.set_input_stub(event_dispatcher_.get());
   SetState(CONNECTED, OK);
+}
+
+WebrtcVideoRendererAdapter* WebrtcConnectionToHost::GetOrCreateVideoAdapter(
+    const std::string& label) {
+  if (!video_adapter_ || video_adapter_->label() != label) {
+    if (video_adapter_) {
+      LOG(WARNING) << "Received multiple media streams. Ignoring all except "
+                      "the last one.";
+    }
+    video_adapter_.reset(
+        new WebrtcVideoRendererAdapter(label, video_renderer_));
+  }
+  return video_adapter_.get();
 }
 
 void WebrtcConnectionToHost::CloseChannels() {

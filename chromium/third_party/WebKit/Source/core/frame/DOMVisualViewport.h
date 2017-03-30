@@ -59,12 +59,11 @@ public:
 
     double scrollLeft();
     double scrollTop();
+    double pageX();
+    double pageY();
     double clientWidth();
     double clientHeight();
     double scale();
-
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(resize);
-    DEFINE_ATTRIBUTE_EVENT_LISTENER(scroll);
 
 private:
     explicit DOMVisualViewport(LocalDOMWindow*);

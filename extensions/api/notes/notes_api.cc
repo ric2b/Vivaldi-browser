@@ -13,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/schema/notes.h"
 #include "notes/notesnode.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
@@ -256,8 +257,8 @@ bool NotesCreateFunction::RunAsync() {
 
   Notes_Node* parent = NULL;
 
-  int64_t newIndex = model->GetNewIndex();
-  Notes_Node* newnode = new Notes_Node(newIndex);
+  int64_t id = model->GetNewIndex();
+  Notes_Node* newnode = new Notes_Node(id);
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
     base::string16 title;
@@ -310,9 +311,21 @@ bool NotesCreateFunction::RunAsync() {
   }
   if (parent == model->root()) {
     // Insert it before Trash, hence the -1.
-    model->AddNode(parent, parent->child_count() - 1, newnode);
+    int64_t maxIndex = parent->child_count() - 1;
+    int64_t newIndex = maxIndex;
+    if (params->note.index.get()) {
+      newIndex = *params->note.index.get();
+      if (newIndex > maxIndex) {
+        newIndex = maxIndex;
+      }
+    }
+    model->AddNode(parent, newIndex, newnode);
   } else {
-    model->AddNode(parent, parent->child_count(), newnode);
+    int64_t newIndex = parent->child_count();
+    if (params->note.index.get()) {
+      newIndex = *params->note.index.get();
+    }
+    model->AddNode(parent, newIndex, newnode);
   }
 
   std::unique_ptr<vivaldi::notes::NoteTreeNode> treenode(CreateTreeNode(newnode));
@@ -356,14 +369,14 @@ bool NotesUpdateFunction::RunAsync() {
   if (params->changes.title.get()) {
     title = base::UTF8ToUTF16(*params->changes.title);
     node->SetTitle(title);
-    changeinfo.title = *params->changes.title;
+    changeinfo.title.reset(new std::string(*params->changes.title));
   }
 
   std::string content;
   if (params->changes.content.get()) {
     content = (*params->changes.content);
     node->SetContent(base::UTF8ToUTF16(content));
-    changeinfo.content = content;
+    changeinfo.content.reset(new std::string(*params->changes.content));
   }
 
   double dateGroupModified;
@@ -403,6 +416,16 @@ bool NotesUpdateFunction::RunAsync() {
             *params->changes.attachments->at(i).filename.get());
       node->AddAttachment(*attachment);
     }
+
+    std::vector<NoteAttachment> newattachments;
+    std::vector<Notes_attachment> attachments = node->GetAttachments();
+      for (unsigned int i = 0; i < attachments.size(); i++) {
+        std::unique_ptr<NoteAttachment> attachment(
+            CreateNoteAttachment(&(attachments[i])));
+        newattachments.push_back(std::move(*attachment));
+    }
+    changeinfo.attachments.reset(
+      new std::vector<NoteAttachment>(std::move(newattachments)));
   }
 
   std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
@@ -462,6 +485,8 @@ bool NotesRemoveFunction::RunAsync() {
     // Move to trash
     model->Move(node, trash_node, 0);
 
+    SendResponse(true);
+
     std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
     results_ = vivaldi::notes::Move::Results::Create(*ret);
 
@@ -470,8 +495,8 @@ bool NotesRemoveFunction::RunAsync() {
     moveInfo.index = 0;
     moveInfo.old_index = oldIndex;
 
-    moveInfo.parent_id = base::Int64ToString(parent->id());
-    moveInfo.old_parent_id = old_parent->id();
+    moveInfo.parent_id = base::Int64ToString(trash_node->id());
+    moveInfo.old_parent_id = base::Int64ToString(old_parent->id());
 
     std::unique_ptr<base::ListValue> args = vivaldi::notes::OnMoved::Create(
         base::Int64ToString(node->id()), moveInfo);
@@ -518,38 +543,37 @@ bool NotesSearchFunction::RunAsync() {
           vivaldi::notes::Search::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  base::string16 searchstring = base::UTF8ToUTF16(params->query);
-
   std::vector<vivaldi::notes::NoteTreeNode> search_result;
 
-  bool can_examine_url =
-      searchstring.length() > 0 && params->query.compare(".") != 0;
+  bool examine_url = true;
+  bool examine_content = true;
+  size_t offset = 0;
+  if (params->query.find("URL:") == 0) {
+    examine_content = false;
+    offset = 4;
+  } else if (params->query.find("CONTENT:") == 0) {
+    offset = 8;
+    examine_url = false;
+  }
+  if (params->query.compare(offset, std::string::npos, ".") == 0) {
+    examine_url = false;
+  }
 
-  // loop through the tree and match on content
-  Notes_Model* model = GetNotesModel();
-  Notes_Node* root = model->root();
+  base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
+  if (needle.length() > 0) {
+    ui::TreeNodeIterator<Notes_Node> iterator(GetNotesModel()->root());
 
-  ui::TreeNodeIterator<Notes_Node> iterator(root);
-  while (iterator.has_next()) {
-    Notes_Node* node = iterator.Next();
-
-    // I found this strange for the iterator to iterate on children in folders.
-    // These are added as children in the folder. See CreateTreeNode
-    // Note that the tree is flattened when searchstring has content.
-    bool show_at_rootlevel =
-        node->parent()->is_root() || (searchstring.length() > 0);
-    if (show_at_rootlevel) {
-      bool match = base::i18n::StringSearchIgnoringCaseAndAccents(
-        searchstring, node->GetContent(), NULL, NULL);
-      if (!match && can_examine_url && node->GetURL().is_valid()) {
-        base::string16 host = base::UTF8ToUTF16(node->GetURL().host());
+    while (iterator.has_next()) {
+      Notes_Node* node = iterator.Next();
+      bool match = false;
+      if (examine_content) {
         match = base::i18n::StringSearchIgnoringCaseAndAccents(
-          searchstring, host, NULL, NULL);
-        if (!match) {
-          base::string16 path = base::UTF8ToUTF16(node->GetURL().path());
-          match = base::i18n::StringSearchIgnoringCaseAndAccents(
-            searchstring, path, NULL, NULL);
-        }
+          needle, node->GetContent(), NULL, NULL);
+      }
+      if (!match && examine_url && node->GetURL().is_valid()) {
+        std::string value = node->GetURL().host() + node->GetURL().path();
+        match = base::i18n::StringSearchIgnoringCaseAndAccents(
+          needle, base::UTF8ToUTF16(value), NULL, NULL);
       }
       if (match) {
         std::unique_ptr<vivaldi::notes::NoteTreeNode>
@@ -609,7 +633,15 @@ bool NotesMoveFunction::RunAsync() {
   } else {
     index = parent->child_count();
   }
-  model->Move(node, parent, index);
+
+  bool moved = model->Move(node, parent, index);
+  DCHECK(moved);
+  if (!moved) {
+    // This will happen if we attempt to move a folder into a subfolder of its
+    // own. Should never happen (missing test in JS), but better be on the safe
+    // side as a reply will mess up the displayed data.
+    return false;
+  }
 
   std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
   results_ = vivaldi::notes::Move::Results::Create(*ret);
@@ -643,14 +675,16 @@ bool NotesEmptyTrashFunction::RunAsync() {
   Notes_Node* trash_node = model->trash_node();
   if (trash_node) {
     while (trash_node->child_count()) {
+      Notes_Node *node = trash_node->GetChild(0);
+      long removed_node_id = node->id();
       model->Remove(trash_node, 0);
+
       vivaldi::notes::OnRemoved::RemoveInfo info;
-
-      info.parent_id = trash_node->id();
+      info.parent_id = base::Int64ToString(trash_node->id());
       info.index = 0;
-
       std::unique_ptr<base::ListValue> args =
-        vivaldi::notes::OnRemoved::Create(base::Int64ToString(0), info);
+        vivaldi::notes::OnRemoved::Create(
+            base::Int64ToString(removed_node_id), info);
 
       BroadcastEvent(vivaldi::notes::OnRemoved::kEventName, std::move(args),
                      context_);

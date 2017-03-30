@@ -36,11 +36,15 @@
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/Values.h"
+#include "platform/inspector_protocol/InspectorProtocol.h"
 #include "public/web/WebInputEvent.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
+
+namespace v8_inspector {
+class V8InspectorSession;
+}
 
 namespace blink {
 
@@ -54,7 +58,6 @@ class LayoutEditor;
 class Node;
 class Page;
 class PageOverlay;
-class V8InspectorSession;
 class WebViewImpl;
 
 namespace protocol {
@@ -75,7 +78,7 @@ public:
     ~InspectorOverlay() override;
     DECLARE_TRACE();
 
-    void init(InspectorCSSAgent*, V8InspectorSession*, InspectorDOMAgent*);
+    void init(InspectorCSSAgent*, v8_inspector::V8InspectorSession*, InspectorDOMAgent*);
 
     void clear();
     void suspend();
@@ -83,6 +86,8 @@ public:
     bool handleInputEvent(const WebInputEvent&);
     void pageLayoutInvalidated(bool resized);
     void setShowViewportSizeOnResize(bool);
+    void showReloadingBlanket();
+    void hideReloadingBlanket();
     void setPausedInDebuggerMessage(const String&);
 
     // Does not yet include paint.
@@ -127,7 +132,7 @@ private:
     void reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset);
     void evaluateInOverlay(const String& method, const String& argument);
     void evaluateInOverlay(const String& method, std::unique_ptr<protocol::Value> argument);
-    void onTimer(Timer<InspectorOverlay>*);
+    void onTimer(TimerBase*);
     void rebuildOverlayPage();
     void invalidate();
     void scheduleUpdate();
@@ -155,10 +160,11 @@ private:
     bool m_resizeTimerActive;
     bool m_omitTooltip;
     Timer<InspectorOverlay> m_timer;
-    int m_suspendCount;
+    bool m_suspended;
+    bool m_showReloadingBlanket;
     bool m_inLayout;
     bool m_needsUpdate;
-    V8InspectorSession* m_v8Session;
+    v8_inspector::V8InspectorSession* m_v8Session;
     Member<InspectorDOMAgent> m_domAgent;
     Member<InspectorCSSAgent> m_cssAgent;
     Member<LayoutEditor> m_layoutEditor;

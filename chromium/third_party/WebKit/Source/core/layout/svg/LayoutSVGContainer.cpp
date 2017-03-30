@@ -166,6 +166,8 @@ void LayoutSVGContainer::updateCachedBoundaries()
 {
     SVGLayoutSupport::computeContainerBoundingBoxes(this, m_objectBoundingBox, m_objectBoundingBoxValid, m_strokeBoundingBox, m_paintInvalidationBoundingBox);
     SVGLayoutSupport::intersectPaintInvalidationRectWithResources(this, m_paintInvalidationBoundingBox);
+    if (element())
+        element()->setNeedsResizeObserverUpdate();
 }
 
 bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result, const FloatPoint& pointInParent, HitTestAction hitTestAction)
@@ -175,7 +177,7 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result, const FloatPoin
         return false;
 
     FloatPoint localPoint;
-    if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(this, localToSVGParentTransform(), pointInParent, localPoint))
+    if (!SVGLayoutSupport::transformToUserSpaceAndCheckClipping(*this, localToSVGParentTransform(), pointInParent, localPoint))
         return false;
 
     for (LayoutObject* child = lastChild(); child; child = child->previousSibling()) {
@@ -187,10 +189,10 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result, const FloatPoin
         }
     }
 
-    // pointer-events=boundingBox makes it possible for containers to be direct targets
+    // pointer-events: bounding-box makes it possible for containers to be direct targets.
     if (style()->pointerEvents() == PE_BOUNDINGBOX) {
-        ASSERT(isObjectBoundingBoxValid());
-        if (objectBoundingBox().contains(localPoint)) {
+        // Check for a valid bounding box because it will be invalid for empty containers.
+        if (isObjectBoundingBoxValid() && objectBoundingBox().contains(localPoint)) {
             const LayoutPoint& localLayoutPoint = roundedLayoutPoint(localPoint);
             updateHitTestResult(result, localLayoutPoint);
             if (result.addNodeToListBasedTestResult(element(), localLayoutPoint) == StopHitTesting)

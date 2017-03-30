@@ -115,6 +115,8 @@ public:
     void layoutRows();
     void computeOverflowFromCells();
     bool recalcChildOverflowAfterStyleChange();
+    enum WhatToMarkAllCells { MarkDirtyOnly, MarkDirtyAndNeedsLayout };
+    void markAllCellsWidthsDirtyAndOrNeedsLayout(WhatToMarkAllCells);
 
     LayoutTable* table() const { return toLayoutTable(parent()); }
 
@@ -226,6 +228,7 @@ public:
     }
     const LayoutTableCell* primaryCellAt(unsigned row, unsigned effectiveColumn) const { return const_cast<LayoutTableSection*>(this)->primaryCellAt(row, effectiveColumn); }
 
+    // Returns null for cells with a rowspan that exceed the last row. Possibly others.
     LayoutTableRow* rowLayoutObjectAt(unsigned row) { return m_grid[row].rowLayoutObject; }
     const LayoutTableRow* rowLayoutObjectAt(unsigned row) const { return m_grid[row].rowLayoutObject; }
 
@@ -243,7 +246,11 @@ public:
     int outerBorderStart() const { return m_outerBorderStart; }
     int outerBorderEnd() const { return m_outerBorderEnd; }
 
-    unsigned numRows() const { return m_grid.size(); }
+    unsigned numRows() const
+    {
+        DCHECK(!needsCellRecalc());
+        return m_grid.size();
+    }
     unsigned numEffectiveColumns() const;
 
     // recalcCells() is used when we are not sure about the section's structure
@@ -304,7 +311,7 @@ public:
 
     bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const override;
 
-    bool hasRepeatingHeaderGroup() const;
+    bool isRepeatingHeaderGroup() const;
 
 protected:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;

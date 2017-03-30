@@ -62,9 +62,13 @@ struct PrefsMapping kPrefsValues[] {
   // Controls if zoom values are re-used in tab when navigating between hosts
   { vivaldiprefs::kVivaldiTabZoom, booleanPreftype },
   { vivaldiprefs::kVivaldiHomepage, stringPreftype },
+  { vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, numberPreftype },
 
   // Control if tab only cycles input fields and tab index fields or not.
   { vivaldiprefs::kVivaldiTabsToLinks, booleanPreftype },
+
+  // Wait until a restored tab is activated before loading the page.
+  { vivaldiprefs::kDeferredTabLoadingAfterRestore, booleanPreftype },
 
   // Startup preferences:
   // An integer pref. Holds one of several values:
@@ -79,6 +83,9 @@ struct PrefsMapping kPrefsValues[] {
   // Mostly the same as chrome.importData.getStartupAction().
   { prefs::kRestoreOnStartup, numberPreftype },
   { prefs::kURLsToRestoreOnStartup, arrayPreftype },
+
+  // Used to store active feature flags (experimental features).
+  { vivaldiprefs::kVivaldiExperiments, arrayPreftype },
 
 #if defined(OS_MACOSX)
   { vivaldiprefs::kAppleKeyboardUIMode, numberPreftype },
@@ -284,6 +291,15 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
+
+  registry->RegisterBooleanPref(vivaldiprefs::kDeferredTabLoadingAfterRestore,
+                                true);
+
+  registry->RegisterIntegerPref(
+      vivaldiprefs::kVivaldiNumberOfDaysToKeepVisits, 90,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
 
   ::vivaldi::RegisterPlatformPrefs(registry);
 }

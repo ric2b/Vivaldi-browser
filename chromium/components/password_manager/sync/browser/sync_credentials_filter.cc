@@ -10,6 +10,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/sync/browser/password_sync_util.h"
@@ -48,8 +49,8 @@ SyncCredentialsFilter::SyncCredentialsFilter(
 
 SyncCredentialsFilter::~SyncCredentialsFilter() {}
 
-ScopedVector<PasswordForm> SyncCredentialsFilter::FilterResults(
-    ScopedVector<PasswordForm> results) const {
+std::vector<std::unique_ptr<PasswordForm>> SyncCredentialsFilter::FilterResults(
+    std::vector<std::unique_ptr<PasswordForm>> results) const {
   const AutofillForSyncCredentialsState autofill_sync_state =
       GetAutofillForSyncCredentialsState();
 
@@ -62,7 +63,9 @@ ScopedVector<PasswordForm> SyncCredentialsFilter::FilterResults(
 
   auto begin_of_removed =
       std::partition(results.begin(), results.end(),
-                     [this](PasswordForm* form) { return ShouldSave(*form); });
+                     [this](const std::unique_ptr<PasswordForm>& form) {
+                       return ShouldSave(*form);
+                     });
 
   UMA_HISTOGRAM_BOOLEAN("PasswordManager.SyncCredentialFiltered",
                         begin_of_removed != results.end());
@@ -79,10 +82,16 @@ bool SyncCredentialsFilter::ShouldSave(
       signin_manager_factory_function_.Run());
 }
 
-void SyncCredentialsFilter::ReportFormUsed(
-    const autofill::PasswordForm& form) const {
-  base::RecordAction(
-      base::UserMetricsAction("PasswordManager_SyncCredentialUsed"));
+void SyncCredentialsFilter::ReportFormLoginSuccess(
+    const PasswordFormManager& form_manager) const {
+  if (!form_manager.IsNewLogin() &&
+      sync_util::IsSyncAccountCredential(
+          form_manager.pending_credentials(),
+          sync_service_factory_function_.Run(),
+          signin_manager_factory_function_.Run())) {
+    base::RecordAction(base::UserMetricsAction(
+        "PasswordManager_SyncCredentialFilledAndLoginSuccessfull"));
+  }
 }
 
 // static

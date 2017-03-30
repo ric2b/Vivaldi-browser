@@ -22,6 +22,9 @@ enum EventType {
   ET_MOUSE_CAPTURE_CHANGED,  // Event has no location.
   ET_TOUCH_RELEASED,
   ET_TOUCH_PRESSED,
+  // NOTE: This corresponds to a drag and is always preceeded by an
+  // ET_TOUCH_PRESSED. GestureRecognizers generally ignore ET_TOUCH_MOVED events
+  // without a corresponding ET_TOUCH_PRESSED.
   ET_TOUCH_MOVED,
   ET_TOUCH_CANCELLED,
   ET_DROP_TARGET_EVENT,
@@ -57,9 +60,6 @@ enum EventType {
   // was released.
   ET_GESTURE_SWIPE,
   ET_GESTURE_SHOW_PRESS,
-
-  // Sent by Win8+ metro when the user swipes from the bottom or top.
-  ET_GESTURE_WIN8_EDGE_SWIPE,
 
   // Scroll support.
   // TODO[davemoore] we need to unify these events w/ touch and gestures.
@@ -127,13 +127,15 @@ enum KeyEventFlags {
 
 // Flags specific to mouse events
 enum MouseEventFlags {
-  EF_IS_DOUBLE_CLICK     = 1 << 15,
-  EF_IS_TRIPLE_CLICK     = 1 << 16,
-  EF_IS_NON_CLIENT       = 1 << 17,
-  EF_FROM_TOUCH          = 1 << 18,  // Indicates this mouse event is generated
+  EF_IS_DOUBLE_CLICK = 1 << 15,
+  EF_IS_TRIPLE_CLICK = 1 << 16,
+  EF_IS_NON_CLIENT = 1 << 17,
+  EF_FROM_TOUCH = 1 << 18,           // Indicates this mouse event is generated
                                      // from an unconsumed touch/gesture event.
   EF_TOUCH_ACCESSIBILITY = 1 << 19,  // Indicates this event was generated from
                                      // touch accessibility mode.
+  EF_DIRECT_INPUT = 1 << 20,         // Mouse event coming from direct,
+                                     // on-screen input.
 };
 
 // Result of dispatching an event.
@@ -171,6 +173,7 @@ enum class EventPointerType : int {
   POINTER_TYPE_MOUSE,
   POINTER_TYPE_PEN,
   POINTER_TYPE_TOUCH,
+  POINTER_TYPE_ERASER,
 };
 
 // Device type for gesture events.

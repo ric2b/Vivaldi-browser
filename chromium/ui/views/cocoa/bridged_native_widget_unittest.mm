@@ -19,12 +19,16 @@
 #import "testing/gtest_mac.h"
 #import "ui/base/cocoa/window_size_constants.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/material_design/material_design_controller.h"
+#include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/events/test/cocoa_test_event_utils.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #import "ui/gfx/test/ui_cocoa_test_helper.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/controls/textfield/textfield_model.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/native_widget_mac.h"
 #include "ui/views/widget/root_view.h"
@@ -56,6 +60,11 @@ using base::SysUTF8ToNSString;
   EXPECT_EQ(expected_cocoa, actual_views);
 
 namespace {
+
+enum class TestCase {
+  ALL,       // Test all strings.
+  LTR_ONLY,  // Only test Left To Right strings.
+};
 
 // Implemented NSResponder action messages for use in tests.
 NSArray* const kMoveActions = @[
@@ -113,7 +122,7 @@ NSArray* const kDeleteActions = @[
 ];
 
 NSArray* const kMiscActions =
-    @[ @"insertText:", @"cancelOperation:", @"transpose:" ];
+    @[ @"insertText:", @"cancelOperation:", @"transpose:", @"yank:" ];
 
 // Empty range shortcut for readibility.
 NSRange EmptyRange() {
@@ -237,6 +246,7 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
   // Overridden from testing::Test:
   void SetUp() override {
     ui::CocoaTest::SetUp();
+    ui::MaterialDesignController::Initialize();
 
     init_params_.native_widget = native_widget_mac_;
 
@@ -254,6 +264,11 @@ class BridgedNativeWidgetTestBase : public ui::CocoaTest {
     init_params_.bounds = gfx::Rect(100, 100, 100, 100);
 
     native_widget_mac_->GetWidget()->Init(init_params_);
+  }
+
+  void TearDown() override {
+    ui::test::MaterialDesignControllerTestAPI::Uninitialize();
+    ui::CocoaTest::TearDown();
   }
 
  protected:
@@ -304,6 +319,9 @@ class BridgedNativeWidgetTest : public BridgedNativeWidgetTestBase {
   // |start|.
   void MakeSelection(int start, int end);
 
+  // Helper method to set the private |keyDownEvent_| field on |ns_view_|.
+  void SetKeyDownEvent(NSEvent* event);
+
   // testing::Test:
   void SetUp() override;
   void TearDown() override;
@@ -319,11 +337,12 @@ class BridgedNativeWidgetTest : public BridgedNativeWidgetTestBase {
 
   // Test editing commands in |selectors| against the expectations set by
   // |dummy_text_view_|. This is done by selecting every substring within a set
-  // of test strings (both RTL and non-RTL) and performing every selector on
-  // both the NSTextView and the BridgedContentView hosting a focused
-  // views::TextField to ensure the resulting text and selection ranges match.
-  // |selectors| is an NSArray of NSStrings.
-  void TestEditingCommands(NSArray* selectors);
+  // of test strings (both RTL and non-RTL by default) and performing every
+  // selector on both the NSTextView and the BridgedContentView hosting a
+  // focused views::TextField to ensure the resulting text and selection ranges
+  // match. |selectors| is an NSArray of NSStrings. |cases| determines whether
+  // RTL strings are to be tested.
+  void TestEditingCommands(NSArray* selectors, TestCase cases = TestCase::ALL);
 
   std::unique_ptr<views::View> view_;
 
@@ -426,6 +445,10 @@ void BridgedNativeWidgetTest::MakeSelection(int start, int end) {
     [dummy_text_view_ doCommandBySelector:sel];
 }
 
+void BridgedNativeWidgetTest::SetKeyDownEvent(NSEvent* event) {
+  [ns_view_ setValue:event forKey:@"keyDownEvent_"];
+}
+
 void BridgedNativeWidgetTest::SetUp() {
   BridgedNativeWidgetTestBase::SetUp();
 
@@ -449,6 +472,9 @@ void BridgedNativeWidgetTest::SetUp() {
 }
 
 void BridgedNativeWidgetTest::TearDown() {
+  // Clear kill buffer so that no state persists between tests.
+  TextfieldModel::ClearKillBuffer();
+
   if (bridge())
     bridge()->SetRootView(nullptr);
   view_.reset();
@@ -483,6 +509,12 @@ void BridgedNativeWidgetTest::TestDeleteBeginning(SEL sel) {
   EXPECT_NSEQ_3(@" bar ", GetExpectedText(), GetActualText());
   EXPECT_EQ_RANGE_3(NSMakeRange(5, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
+
+  // Verify yanking inserts the deleted text.
+  PerformCommand(@selector(yank:));
+  EXPECT_NSEQ_3(@" bar baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(8, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 }
 
 void BridgedNativeWidgetTest::TestDeleteEnd(SEL sel) {
@@ -511,13 +543,22 @@ void BridgedNativeWidgetTest::TestDeleteEnd(SEL sel) {
   EXPECT_NSEQ_3(@"bar", GetExpectedText(), GetActualText());
   EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
+
+  // Verify yanking inserts the deleted text.
+  PerformCommand(@selector(yank:));
+  EXPECT_NSEQ_3(@"foo bar", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(4, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 }
 
-void BridgedNativeWidgetTest::TestEditingCommands(NSArray* selectors) {
-  const base::string16 test_strings[] = {
-      base::WideToUTF16(L"ab c"),
-      base::WideToUTF16(L"\x0634\x0632 \x064A")  // RTL string.
-  };
+void BridgedNativeWidgetTest::TestEditingCommands(NSArray* selectors,
+                                                  TestCase cases) {
+  std::vector<base::string16> test_strings;
+  test_strings.push_back(base::WideToUTF16(L"ab c"));
+  if (cases == TestCase::ALL) {
+    test_strings.push_back(
+        base::WideToUTF16(L"\x0634\x0632 \x064A"));  // RTL string.
+  }
 
   for (const base::string16& test_string : test_strings) {
     for (NSString* selector_string in selectors) {
@@ -863,6 +904,51 @@ TEST_F(BridgedNativeWidgetTest, TextInput_Compose) {
                     GetExpectedSelectionRange(), GetActualSelectionRange());
 }
 
+// Test IME composition for accented characters.
+TEST_F(BridgedNativeWidgetTest, TextInput_AccentedCharacter) {
+  InstallTextField("abc");
+
+  // Simulate action messages generated when the key 'a' is pressed repeatedly
+  // and leads to the showing of an IME candidate window. To simulate an event,
+  // set the private keyDownEvent field on the BridgedContentView.
+
+  // First an insertText: message with key 'a' is generated.
+  SetKeyDownEvent(cocoa_test_event_utils::SynthesizeKeyEvent(
+      widget_->GetNativeWindow(), true, ui::VKEY_A, 0));
+  [ns_view_ insertText:@"a" replacementRange:EmptyRange()];
+  [dummy_text_view_ insertText:@"a" replacementRange:EmptyRange()];
+  EXPECT_EQ_3(NO, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+  EXPECT_NSEQ_3(@"abca", GetExpectedText(), GetActualText());
+
+  // Next the IME popup appears. On selecting the accented character using arrow
+  // keys, setMarkedText action message is generated which replaces the earlier
+  // inserted 'a'.
+  SetKeyDownEvent(cocoa_test_event_utils::SynthesizeKeyEvent(
+      widget_->GetNativeWindow(), true, ui::VKEY_RIGHT, 0));
+  [ns_view_ setMarkedText:@"à"
+            selectedRange:NSMakeRange(0, 1)
+         replacementRange:NSMakeRange(3, 1)];
+  [dummy_text_view_ setMarkedText:@"à"
+                    selectedRange:NSMakeRange(0, 1)
+                 replacementRange:NSMakeRange(3, 1)];
+  EXPECT_EQ_3(YES, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(3, 1), [dummy_text_view_ markedRange],
+                    [ns_view_ markedRange]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(3, 1), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+  EXPECT_NSEQ_3(@"abcà", GetExpectedText(), GetActualText());
+
+  // On pressing enter, the marked text is confirmed.
+  SetKeyDownEvent(cocoa_test_event_utils::SynthesizeKeyEvent(
+      widget_->GetNativeWindow(), true, ui::VKEY_RETURN, 0));
+  [ns_view_ insertText:@"à" replacementRange:EmptyRange()];
+  [dummy_text_view_ insertText:@"à" replacementRange:EmptyRange()];
+  EXPECT_EQ_3(NO, [dummy_text_view_ hasMarkedText], [ns_view_ hasMarkedText]);
+  EXPECT_EQ_RANGE_3(NSMakeRange(4, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+  EXPECT_NSEQ_3(@"abcà", GetExpectedText(), GetActualText());
+}
+
 // Test moving the caret left and right using text input protocol.
 TEST_F(BridgedNativeWidgetTest, TextInput_MoveLeftRight) {
   InstallTextField("foo");
@@ -897,6 +983,12 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteBackward) {
   EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
 
+  // Verify that deletion did not modify the kill buffer.
+  PerformCommand(@selector(yank:));
+  EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
   // Try to delete again on an empty string.
   PerformCommand(@selector(deleteBackward:));
   EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
@@ -919,6 +1011,12 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteForward) {
   // Should succeed after moving left first.
   PerformCommand(@selector(moveLeft:));
   PerformCommand(@selector(deleteForward:));
+  EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Verify that deletion did not modify the kill buffer.
+  PerformCommand(@selector(yank:));
   EXPECT_NSEQ_3(nil, GetExpectedText(), GetActualText());
   EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
@@ -948,6 +1046,12 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteWordForward) {
   SetSelectionRange(NSMakeRange(0, 2));
   PerformCommand(@selector(deleteWordForward:));
   // Verify only the selection is deleted and state is "|o b baz".
+  EXPECT_NSEQ_3(@"o b baz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
+
+  // Verify that deletion did not modify the kill buffer.
+  PerformCommand(@selector(yank:));
   EXPECT_NSEQ_3(@"o b baz", GetExpectedText(), GetActualText());
   EXPECT_EQ_RANGE_3(NSMakeRange(0, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
@@ -982,6 +1086,12 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteWordBackward) {
   EXPECT_NSEQ_3(@"faz", GetExpectedText(), GetActualText());
   EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
                     GetActualSelectionRange());
+
+  // Verify that deletion did not modify the kill buffer.
+  PerformCommand(@selector(yank:));
+  EXPECT_NSEQ_3(@"faz", GetExpectedText(), GetActualText());
+  EXPECT_EQ_RANGE_3(NSMakeRange(1, 0), GetExpectedSelectionRange(),
+                    GetActualSelectionRange());
 }
 
 // Test deleting to beginning/end of line/paragraph using text input protocol.
@@ -1007,12 +1117,12 @@ TEST_F(BridgedNativeWidgetTest, TextInput_MoveEditingCommands) {
   TestEditingCommands(kMoveActions);
 }
 
-// Todo(karandeepb): Enable this test once the behavior of all move and select
-// commands are fixed.
 // Test move and select commands against expectations set by |dummy_text_view_|.
-TEST_F(BridgedNativeWidgetTest,
-       TextInput_MoveAndSelectEditingCommands_DISABLED) {
-  TestEditingCommands(kSelectActions);
+TEST_F(BridgedNativeWidgetTest, TextInput_MoveAndSelectEditingCommands) {
+  // The behavior of NSTextView for RTL strings is buggy for some move and
+  // select commands. Hence don't test against an RTL string. See
+  // rdar://27863290.
+  TestEditingCommands(kSelectActions, TestCase::LTR_ONLY);
 }
 
 // Test delete commands against expectations set by |dummy_text_view_|.

@@ -55,6 +55,9 @@
 [submodule "third_party/cld_2/src"]
 	path = third_party/cld_2/src
 	url = ../../external/github.com/CLD2Owners/cld2.git
+[submodule "third_party/cld_3/src"]
+	path = third_party/cld_3/src
+	url = ../../external/github.com/google/cld_3.git
 [submodule "third_party/colorama/src"]
 	path = third_party/colorama/src
 	url = ../../external/colorama.git
@@ -141,7 +144,7 @@
 	url = ../deps/lighttpd.git
 [submodule "third_party/lss"]
 	path = third_party/lss
-	url = ../../external/linux-syscall-support/lss.git
+	url = ../../linux-syscall-support.git
 [submodule "third_party/mesa/src"]
 	path = third_party/mesa/src
 	url = ../deps/mesa.git
@@ -160,9 +163,6 @@
 [submodule "third_party/openmax_dl"]
 	path = third_party/openmax_dl
 	url = ../../external/webrtc/deps/third_party/openmax.git
-[submodule "third_party/opus/src"]
-	path = third_party/opus/src
-	url = ../deps/opus.git
 [submodule "third_party/pdfium"]
 	path = third_party/pdfium
 	url = ../../pdfium/pdfium.git
@@ -205,9 +205,15 @@
 [submodule "third_party/snappy/src"]
 	path = third_party/snappy/src
 	url = ../../external/snappy.git
+[submodule "third_party/swiftshader"]
+	path = third_party/swiftshader
+	url = ../../swiftshader/SwiftShader.git
 [submodule "third_party/usrsctp/usrsctplib"]
 	path = third_party/usrsctp/usrsctplib
 	url = ../../external/github.com/sctplab/usrsctp.git
+[submodule "third_party/visualmetrics/src"]
+	path = third_party/visualmetrics/src
+	url = ../../external/github.com/WPO-Foundation/visualmetrics.git
 [submodule "third_party/wayland-protocols/src"]
 	path = third_party/wayland-protocols/src
 	url = ../../external/anongit.freedesktop.org/git/wayland/wayland-protocols.git

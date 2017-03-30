@@ -181,8 +181,6 @@
         }],
         ['OS=="android"', {
           'sources': [
-            'android/events_jni_registrar.cc',
-            'android/events_jni_registrar.h',
             'android/motion_event_android.cc',
             'android/motion_event_android.h',
             'android/key_event_utils.cc',
@@ -349,7 +347,7 @@
             'keycodes/events_keycodes.gyp:keycodes_x11',
           ],
         }],
-        ['use_x11==1 or ozone_platform_ozonex==1', {
+        ['use_x11==1', {
           'dependencies': [
             'x/events_x.gyp:events_x',
           ],

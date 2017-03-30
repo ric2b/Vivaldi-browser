@@ -13,9 +13,6 @@
 #include "content/common/cache_storage/cache_storage_messages.h"
 #include "content/common/clipboard_messages.h"
 #include "content/common/database_messages.h"
-#include "content/common/device_sensors/device_light_messages.h"
-#include "content/common/device_sensors/device_motion_messages.h"
-#include "content/common/device_sensors/device_orientation_messages.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/dom_storage/dom_storage_messages.h"
 #include "content/common/drag_messages.h"
@@ -39,7 +36,6 @@
 #include "content/common/media/midi_messages.h"
 #include "content/common/media/peer_connection_tracker_messages.h"
 #include "content/common/media/video_capture_messages.h"
-#include "content/common/media/webrtc_identity_messages.h"
 #include "content/common/memory_messages.h"
 #include "content/common/message_port_messages.h"
 #include "content/common/page_messages.h"
@@ -56,7 +52,6 @@
 #include "content/common/text_input_client_messages.h"
 #include "content/common/utility_messages.h"
 #include "content/common/view_messages.h"
-#include "content/common/websocket_messages.h"
 #include "content/common/worker_messages.h"
 
 #if defined(ENABLE_WEBRTC)

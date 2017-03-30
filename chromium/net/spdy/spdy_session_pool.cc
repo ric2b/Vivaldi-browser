@@ -37,8 +37,6 @@ SpdySessionPool::SpdySessionPool(
     HttpServerProperties* http_server_properties,
     TransportSecurityState* transport_security_state,
     bool enable_ping_based_connection_checking,
-    bool enable_priority_dependencies,
-    NextProto default_protocol,
     size_t session_max_recv_window_size,
     size_t stream_max_recv_window_size,
     SpdySessionPool::TimeFunc time_func,
@@ -51,17 +49,10 @@ SpdySessionPool::SpdySessionPool(
       enable_sending_initial_data_(true),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
-      enable_priority_dependencies_(enable_priority_dependencies),
-      // TODO(akalin): Force callers to have a valid value of
-      // |default_protocol_|.
-      default_protocol_((default_protocol == kProtoUnknown) ? kProtoSPDY31
-                                                            : default_protocol),
       session_max_recv_window_size_(session_max_recv_window_size),
       stream_max_recv_window_size_(stream_max_recv_window_size),
       time_func_(time_func),
       proxy_delegate_(proxy_delegate) {
-  DCHECK(default_protocol_ >= kProtoSPDYMinimumVersion &&
-         default_protocol_ <= kProtoSPDYMaximumVersion);
   NetworkChangeNotifier::AddIPAddressObserver(this);
   if (ssl_config_service_.get())
     ssl_config_service_->AddObserver(this);
@@ -90,8 +81,6 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
     int certificate_error_code,
     bool is_secure) {
   TRACE_EVENT0("net", "SpdySessionPool::CreateAvailableSessionFromSocket");
-  DCHECK_GE(default_protocol_, kProtoSPDYMinimumVersion);
-  DCHECK_LE(default_protocol_, kProtoSPDYMaximumVersion);
 
   UMA_HISTOGRAM_ENUMERATION(
       "Net.SpdySessionGet", IMPORTED_FROM_SOCKET, SPDY_SESSION_GET_MAX);
@@ -99,8 +88,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
   std::unique_ptr<SpdySession> new_session(new SpdySession(
       key, http_server_properties_, transport_security_state_,
       verify_domain_authentication_, enable_sending_initial_data_,
-      enable_ping_based_connection_checking_, enable_priority_dependencies_,
-      default_protocol_, session_max_recv_window_size_,
+      enable_ping_based_connection_checking_, session_max_recv_window_size_,
       stream_max_recv_window_size_, time_func_, proxy_delegate_,
       net_log.net_log()));
 
@@ -206,7 +194,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
 
     const base::WeakPtr<SpdySession>& available_session =
         available_session_it->second;
-    DCHECK(ContainsKey(sessions_, available_session.get()));
+    DCHECK(base::ContainsKey(sessions_, available_session.get()));
     // If the session is a secure one, we need to verify that the
     // server is authenticated to serve traffic for |host_port_proxy_pair| too.
     if (!available_session->VerifyDomainAuthentication(
@@ -285,7 +273,7 @@ void SpdySessionPool::RegisterUnclaimedPushedStream(
     base::WeakPtr<SpdySession> spdy_session) {
   DCHECK(!url.is_empty());
   // This SpdySessionPool  must own |spdy_session|.
-  DCHECK(ContainsKey(sessions_, spdy_session.get()));
+  DCHECK(base::ContainsKey(sessions_, spdy_session.get()));
   UnclaimedPushedStreamMap::iterator url_it =
       unclaimed_pushed_streams_.lower_bound(url);
   if (url_it == unclaimed_pushed_streams_.end() || url_it->first != url) {
@@ -396,7 +384,7 @@ bool SpdySessionPool::IsSessionAvailable(
 void SpdySessionPool::MapKeyToAvailableSession(
     const SpdySessionKey& key,
     const base::WeakPtr<SpdySession>& session) {
-  DCHECK(ContainsKey(sessions_, session.get()));
+  DCHECK(base::ContainsKey(sessions_, session.get()));
   std::pair<AvailableSessionMap::iterator, bool> result =
       available_sessions_.insert(std::make_pair(key, session));
   CHECK(result.second);

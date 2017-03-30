@@ -5,6 +5,7 @@
 #include "android_webview/browser/aw_browser_main_parts.h"
 
 #include "android_webview/browser/aw_browser_context.h"
+#include "android_webview/browser/aw_content_browser_client.h"
 #include "android_webview/browser/aw_dev_tools_discovery_provider.h"
 #include "android_webview/browser/aw_result_codes.h"
 #include "android_webview/browser/deferred_gpu_command_service.h"
@@ -26,6 +27,9 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
+#include "device/geolocation/access_token_store.h"
+#include "device/geolocation/geolocation_delegate.h"
+#include "device/geolocation/geolocation_provider.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -36,9 +40,45 @@
 #include "ui/gl/gl_surface.h"
 
 namespace android_webview {
+namespace {
 
-AwBrowserMainParts::AwBrowserMainParts(AwBrowserContext* browser_context)
-    : browser_context_(browser_context) {
+class AwAccessTokenStore : public device::AccessTokenStore {
+ public:
+  AwAccessTokenStore() { }
+
+  // device::AccessTokenStore implementation
+  void LoadAccessTokens(const LoadAccessTokensCallback& request) override {
+    AccessTokenStore::AccessTokenMap access_token_map;
+    // AccessTokenMap and net::URLRequestContextGetter not used on Android,
+    // but Run needs to be called to finish the geolocation setup.
+    request.Run(access_token_map, NULL);
+  }
+  void SaveAccessToken(const GURL& server_url,
+                       const base::string16& access_token) override {}
+
+ private:
+  ~AwAccessTokenStore() override {}
+
+  DISALLOW_COPY_AND_ASSIGN(AwAccessTokenStore);
+};
+
+// A provider of Geolocation services to override AccessTokenStore.
+class AwGeolocationDelegate : public device::GeolocationDelegate {
+ public:
+  AwGeolocationDelegate() = default;
+
+  scoped_refptr<device::AccessTokenStore> CreateAccessTokenStore() final {
+    return new AwAccessTokenStore();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AwGeolocationDelegate);
+};
+
+}  // anonymous namespace
+
+AwBrowserMainParts::AwBrowserMainParts(AwContentBrowserClient* browser_client)
+    : browser_client_(browser_client) {
 }
 
 AwBrowserMainParts::~AwBrowserMainParts() {
@@ -59,19 +99,19 @@ int AwBrowserMainParts::PreCreateThreads() {
   std::string locale = ui::ResourceBundle::InitSharedInstanceWithLocale(
       base::android::GetDefaultLocale(),
       NULL,
-      ui::ResourceBundle::DO_NOT_LOAD_COMMON_RESOURCES);
+      ui::ResourceBundle::LOAD_COMMON_RESOURCES);
   if (locale.empty()) {
     LOG(WARNING) << "Failed to load locale .pak from the apk. "
         "Bringing up WebView without any locale";
   }
   base::i18n::SetICUDefaultLocale(locale);
 
-  // Try to directly mmap the webviewchromium.pak from the apk. Fall back to
-  // load from file, using PATH_SERVICE, otherwise.
+  // Try to directly mmap the resources.pak from the apk. Fall back to load
+  // from file, using PATH_SERVICE, otherwise.
   base::FilePath pak_file_path;
   PathService::Get(ui::DIR_RESOURCE_PAKS_ANDROID, &pak_file_path);
-  pak_file_path = pak_file_path.AppendASCII("webviewchromium.pak");
-  ui::LoadMainAndroidPackFile("assets/webviewchromium.pak", pak_file_path);
+  pak_file_path = pak_file_path.AppendASCII("resources.pak");
+  ui::LoadMainAndroidPackFile("assets/resources.pak", pak_file_path);
 
   base::android::MemoryPressureListenerAndroid::RegisterSystemCallback(
       base::android::AttachCurrentThread());
@@ -86,7 +126,10 @@ int AwBrowserMainParts::PreCreateThreads() {
 }
 
 void AwBrowserMainParts::PreMainMessageLoopRun() {
-  browser_context_->PreMainMessageLoopRun();
+  browser_client_->InitBrowserContext()->PreMainMessageLoopRun();
+
+  device::GeolocationProvider::SetGeolocationDelegate(
+      new AwGeolocationDelegate());
 
   AwDevToolsDiscoveryProvider::Install();
 

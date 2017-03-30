@@ -106,7 +106,7 @@ void DomainReliabilityContext::OnBeacon(
 }
 
 void DomainReliabilityContext::ClearBeacons() {
-  STLDeleteElements(&beacons_);
+  base::STLDeleteElements(&beacons_);
   beacons_.clear();
   uploading_beacons_size_ = 0;
 }
@@ -204,7 +204,7 @@ std::unique_ptr<const Value> DomainReliabilityContext::CreateReport(
   int max_upload_depth = 0;
 
   std::unique_ptr<ListValue> beacons_value(new ListValue());
-  for (const auto& beacon : beacons_) {
+  for (const auto* beacon : beacons_) {
     beacons_value->Append(beacon->ToValue(upload_time,
                                           *last_network_change_time_,
                                           collector_url,
@@ -230,7 +230,7 @@ void DomainReliabilityContext::MarkUpload() {
 void DomainReliabilityContext::CommitUpload() {
   auto begin = beacons_.begin();
   auto end = begin + uploading_beacons_size_;
-  STLDeleteContainerPointers(begin, end);
+  base::STLDeleteContainerPointers(begin, end);
   beacons_.erase(begin, end);
   DCHECK_NE(0u, uploading_beacons_size_);
   uploading_beacons_size_ = 0;

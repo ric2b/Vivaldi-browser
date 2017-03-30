@@ -30,6 +30,7 @@ hooks = [
         'vivaldi/chromium/printing',
         'vivaldi/chromium/third_party/catapult',
         'vivaldi/chromium/third_party/closure_compiler/build',
+        'vivaldi/chromium/third_party/WebKit/Tools/Scripts',  # See http://crbug.com/625877.
         'vivaldi/chromium/tools',
     ],
   },
@@ -105,6 +106,15 @@ hooks = [
       ],
   },
   {
+    # Update skia_commit_hash.h.
+    'name': 'lastchange_skia',
+    'pattern': '.',
+    'action': ['python', 'vivaldi/chromium/build/util/lastchange.py',
+               '-m', 'SKIA_COMMIT_HASH',
+               '-s', 'vivaldi/chromium/third_party/skia',
+               '--header', 'vivaldi/chromium/skia/ext/skia_commit_hash.h'],
+  },
+  {
     'name': 'lastchange_vivaldi',
     'pattern': '.',
     'action': [
@@ -114,40 +124,6 @@ hooks = [
       '-s', 'vivaldi/.',
       '--name-suffix', '_VIVALDI',
       '-o','vivaldi/chromium/build/util/LASTCHANGE.vivaldi'
-      ],
-  },
-  # Pull GN binaries. This needs to be before running GYP below.
-  {
-    'name': 'gn_win',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-      '--no_resume',
-      '--platform=win32',
-      '--no_auth',
-      '--bucket', 'chromium-gn',
-      '-s', 'vivaldi/chromium/buildtools/win/gn.exe.sha1'
-      ],
-    },
-    {
-    'name': 'gn_mac',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-      '--no_resume',
-      '--platform=darwin',
-      '--no_auth',
-      '--bucket', 'chromium-gn',
-      '-s', 'vivaldi/chromium/buildtools/mac/gn.sha1'
-      ],
-    },
-    {
-    'name': 'gn_linux64',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-      '--no_resume',
-      '--platform=linux*',
-      '--no_auth',
-      '--bucket', 'chromium-gn',
-      '-s', 'vivaldi/chromium/buildtools/linux64/gn.sha1'
       ],
   },
   # Pull clang-format binaries using checked-in hashes.
@@ -260,7 +236,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=da2c31c5634ec66236ab5851a53c4497e2212bfc',
+      '--revision=eb38b59577062c496435c346d7595dc609326a0a',
       '--overwrite'
     ],
   },
@@ -314,19 +290,12 @@ hooks = [
     ],
   },
   {
-    'name': 'gyp',
+    'name': 'bootstrap-gn',
     'pattern': '.',
     'action': [
       'python',
-      '-O',
-      'vivaldi/chromium/build/gyp_chromium',
-      '--depth',
-      'vivaldi/chromium/.',
-      '-I',
-      'vivaldi/vivaldi_common.gypi',
-      '-G',
-      'output_dir=../out',
-      'vivaldi/all.gyp'
+      'vivaldi/scripts/rungn.py',
+      '--refresh',
     ],
-  }
+  },
 ]

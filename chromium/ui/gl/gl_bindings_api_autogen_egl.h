@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
@@ -91,6 +91,9 @@ EGLBoolean eglGetSyncValuesCHROMIUMFn(EGLDisplay dpy,
                                       EGLuint64CHROMIUM* ust,
                                       EGLuint64CHROMIUM* msc,
                                       EGLuint64CHROMIUM* sbc) override;
+EGLBoolean eglImageFlushExternalEXTFn(EGLDisplay dpy,
+                                      EGLImageKHR image,
+                                      const EGLAttrib* attrib_list) override;
 EGLBoolean eglInitializeFn(EGLDisplay dpy,
                            EGLint* major,
                            EGLint* minor) override;

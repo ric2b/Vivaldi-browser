@@ -49,8 +49,8 @@ GURL GetOriginOrURL(const WebFrame* frame) {
   // document URL as the primary URL in those cases.
   // TODO(alexmos): This is broken for --site-per-process, since top() can be a
   // WebRemoteFrame which does not have a document(), and the WebRemoteFrame's
-  // URL is not replicated.
-  if (top_origin == "null")
+  // URL is not replicated.  See https://crbug.com/628759.
+  if (top_origin == "null" && frame->top()->isWebLocalFrame())
     return frame->top()->document().url();
   return blink::WebStringToGURL(top_origin);
 }
@@ -90,7 +90,6 @@ ContentSettingsObserver::ContentSettingsObserver(
 #if defined(ENABLE_EXTENSIONS)
       extension_dispatcher_(extension_dispatcher),
 #endif
-      allow_displaying_insecure_content_(false),
       allow_running_insecure_content_(false),
       content_setting_rules_(NULL),
       is_interstitial_page_(false),
@@ -108,8 +107,6 @@ ContentSettingsObserver::ContentSettingsObserver(
     // Copy all the settings from the main render frame to avoid race conditions
     // when initializing this data. See https://crbug.com/333308.
     ContentSettingsObserver* parent = ContentSettingsObserver::Get(main_frame);
-    allow_displaying_insecure_content_ =
-        parent->allow_displaying_insecure_content_;
     allow_running_insecure_content_ = parent->allow_running_insecure_content_;
     temporarily_allowed_plugins_ = parent->temporarily_allowed_plugins_;
     is_interstitial_page_ = parent->is_interstitial_page_;
@@ -155,8 +152,6 @@ bool ContentSettingsObserver::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ContentSettingsObserver, message)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetAsInterstitial, OnSetAsInterstitial)
-    IPC_MESSAGE_HANDLER(ChromeViewMsg_SetAllowDisplayingInsecureContent,
-                        OnSetAllowDisplayingInsecureContent)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetAllowRunningInsecureContent,
                         OnSetAllowRunningInsecureContent)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_ReloadFrame, OnReloadFrame);
@@ -405,15 +400,10 @@ bool ContentSettingsObserver::allowMutationEvents(bool default_value) {
 bool ContentSettingsObserver::allowDisplayingInsecureContent(
     bool allowed_per_settings,
     const blink::WebURL& resource_url) {
+  DCHECK(allowed_per_settings);
   ReportInsecureContent(SslInsecureContentType::DISPLAY);
   FilteredReportInsecureContentDisplayed(GURL(resource_url));
-
-  if (allowed_per_settings || allow_displaying_insecure_content_)
-    return true;
-
-  Send(new ChromeViewHostMsg_DidBlockDisplayingInsecureContent(routing_id()));
-
-  return false;
+  return true;
 }
 
 bool ContentSettingsObserver::allowRunningInsecureContent(
@@ -466,13 +456,8 @@ void ContentSettingsObserver::OnSetAsInterstitial() {
   is_interstitial_page_ = true;
 }
 
-void ContentSettingsObserver::OnSetAllowDisplayingInsecureContent(bool allow) {
-  allow_displaying_insecure_content_ = allow;
-}
-
 void ContentSettingsObserver::OnSetAllowRunningInsecureContent(bool allow) {
   allow_running_insecure_content_ = allow;
-  OnSetAllowDisplayingInsecureContent(allow);
 }
 
 void ContentSettingsObserver::OnReloadFrame() {

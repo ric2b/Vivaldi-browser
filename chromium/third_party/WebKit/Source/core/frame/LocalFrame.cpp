@@ -31,6 +31,7 @@
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/InstrumentingAgents.h"
+#include "core/dom/ChildFrameDisconnector.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/editing/EditingUtilities.h"
@@ -47,6 +48,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/input/EventHandler.h"
@@ -80,7 +82,7 @@
 #include "platform/graphics/paint/TransformDisplayItem.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/text/TextStream.h"
-#include "public/platform/ServiceRegistry.h"
+#include "public/platform/InterfaceProvider.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/WebViewScheduler.h"
@@ -108,12 +110,13 @@ public:
     {
         // TODO(oshima): Remove this when all platforms are migrated to use-zoom-for-dsf.
         float deviceScaleFactor = m_localFrame->host()->deviceScaleFactorDeprecated();
-        m_bounds.setWidth(m_bounds.width() * deviceScaleFactor);
-        m_bounds.setHeight(m_bounds.height() * deviceScaleFactor);
+        float pageScaleFactor = m_localFrame->host()->visualViewport().scale();
+        m_bounds.setWidth(m_bounds.width() * deviceScaleFactor * pageScaleFactor);
+        m_bounds.setHeight(m_bounds.height() * deviceScaleFactor * pageScaleFactor);
         m_pictureBuilder = wrapUnique(new SkPictureBuilder(SkRect::MakeIWH(m_bounds.width(), m_bounds.height())));
 
         AffineTransform transform;
-        transform.scale(deviceScaleFactor, deviceScaleFactor);
+        transform.scale(deviceScaleFactor * pageScaleFactor, deviceScaleFactor * pageScaleFactor);
         transform.translate(-m_bounds.x(), -m_bounds.y());
         context().getPaintController().createAndAppend<BeginTransformDisplayItem>(*m_pictureBuilder, transform);
     }
@@ -141,40 +144,47 @@ private:
     std::unique_ptr<SkPictureBuilder> m_pictureBuilder;
 };
 
-class NodeImageBuilder {
+class DraggedNodeImageBuilder {
     STACK_ALLOCATED();
 public:
-    NodeImageBuilder(const LocalFrame& localFrame, const Node& node)
+    DraggedNodeImageBuilder(const LocalFrame& localFrame, Node& node)
         : m_localFrame(&localFrame)
-        , m_draggedLayoutObject(draggedLayoutObjectOf(localFrame, node))
-#if DCHECK_IS_ON()
-        , m_layoutCount(m_localFrame->view()->layoutCount())
+        , m_node(&node)
+#if ENABLE(ASSERT)
+        , m_domTreeVersion(node.document().domTreeVersion())
 #endif
     {
+        for (Node& descendant : NodeTraversal::inclusiveDescendantsOf(*m_node))
+            descendant.setDragged(true);
     }
 
-    ~NodeImageBuilder()
+    ~DraggedNodeImageBuilder()
     {
-        DCHECK(isValid());
-        if (!m_draggedLayoutObject)
-            return;
-        DCHECK(m_draggedLayoutObject->isDragging());
-        m_draggedLayoutObject->updateDragState(false);
+#if ENABLE(ASSERT)
+        DCHECK_EQ(m_domTreeVersion, m_node->document().domTreeVersion());
+#endif
+        for (Node& descendant : NodeTraversal::inclusiveDescendantsOf(*m_node))
+            descendant.setDragged(false);
     }
 
     std::unique_ptr<DragImage> createImage()
     {
-        DCHECK(isValid());
-        if (!m_draggedLayoutObject)
+#if ENABLE(ASSERT)
+        DCHECK_EQ(m_domTreeVersion, m_node->document().domTreeVersion());
+#endif
+        // Construct layout object for |m_node| with pseudo class "-webkit-drag"
+        m_localFrame->view()->updateAllLifecyclePhasesExceptPaint();
+        LayoutObject* const draggedLayoutObject = m_node->layoutObject();
+        if (!draggedLayoutObject)
             return nullptr;
         // Paint starting at the nearest stacking context, clipped to the object
         // itself. This will also paint the contents behind the object if the
         // object contains transparency and there are other elements in the same
         // stacking context which stacked below.
-        PaintLayer* layer = m_draggedLayoutObject->enclosingLayer();
+        PaintLayer* layer = draggedLayoutObject->enclosingLayer();
         if (!layer->stackingNode()->isStackingContext())
             layer = layer->stackingNode()->ancestorStackingContextNode()->layer();
-        IntRect absoluteBoundingBox = m_draggedLayoutObject->absoluteBoundingBoxRectIncludingDescendants();
+        IntRect absoluteBoundingBox = draggedLayoutObject->absoluteBoundingBoxRectIncludingDescendants();
         FloatRect boundingBox = layer->layoutObject()->absoluteToLocalQuad(FloatQuad(absoluteBoundingBox), UseTransforms).boundingBox();
         DragImageBuilder dragImageBuilder(*m_localFrame, boundingBox);
         {
@@ -182,42 +192,14 @@ public:
             PaintLayerFlags flags = PaintLayerHaveTransparency | PaintLayerAppliedTransform | PaintLayerUncachedClipRects;
             PaintLayerPainter(*layer).paintLayer(dragImageBuilder.context(), paintingInfo, flags);
         }
-        return dragImageBuilder.createImage(1.0f, LayoutObject::shouldRespectImageOrientation(m_draggedLayoutObject));
+        return dragImageBuilder.createImage(1.0f, LayoutObject::shouldRespectImageOrientation(draggedLayoutObject));
     }
 
 private:
-    static LayoutObject* draggedLayoutObjectOf(const LocalFrame& localFrame, const Node& node)
-    {
-        // TODO(yosin): We should handle pseudo-class ":-webkit-drag" as similar
-        // as ":hover" and ":active", rather than using flag in |LayoutObject|,
-        // to avoid update layout tree here.
-        localFrame.view()->updateAllLifecyclePhasesExceptPaint();
-        LayoutObject* layoutObject = node.layoutObject();
-        if (!layoutObject)
-            return nullptr;
-        // Update layout object for |node| with pseudo-class ":-webkit-drag".
-        layoutObject->updateDragState(true);
-        localFrame.view()->updateAllLifecyclePhasesExceptPaint();
-        // |node| with pseudo-class ":-webkit-drag" may blow away layout object.
-        return node.layoutObject();
-    }
-
-    bool isValid() const
-    {
-#if DCHECK_IS_ON()
-        return m_layoutCount == m_localFrame->view()->layoutCount();
-#else
-        return true;
-#endif
-    }
-
     const Member<const LocalFrame> m_localFrame;
-
-    // This class manages |isDrag()| of |m_draggedLayoutObject|.
-    LayoutObject* const m_draggedLayoutObject;
-
-#if DCHECK_IS_ON()
-    const int m_layoutCount;
+    const Member<Node> m_node;
+#if ENABLE(ASSERT)
+    const uint64_t m_domTreeVersion;
 #endif
 };
 
@@ -239,9 +221,11 @@ inline float parentTextZoomFactor(LocalFrame* frame)
 
 } // namespace
 
-LocalFrame* LocalFrame::create(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner, ServiceRegistry* serviceRegistry)
+template class CORE_TEMPLATE_EXPORT Supplement<LocalFrame>;
+
+LocalFrame* LocalFrame::create(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner, InterfaceProvider* interfaceProvider)
 {
-    LocalFrame* frame = new LocalFrame(client, host, owner, serviceRegistry ? serviceRegistry : ServiceRegistry::getEmptyServiceRegistry());
+    LocalFrame* frame = new LocalFrame(client, host, owner, interfaceProvider ? interfaceProvider : InterfaceProvider::getEmptyInterfaceProvider());
     InspectorInstrumentation::frameAttachedToParent(frame);
     return frame;
 }
@@ -290,7 +274,7 @@ void LocalFrame::createView(const IntSize& viewportSize, const Color& background
         frameView->setParentVisible(true);
 
     // FIXME: Not clear what the right thing for OOPI is here.
-    if (ownerLayoutObject()) {
+    if (!ownerLayoutItem().isNull()) {
         HTMLFrameOwnerElement* owner = deprecatedLocalOwner();
         ASSERT(owner);
         // FIXME: OOPI might lead to us temporarily lying to a frame and telling it
@@ -353,8 +337,7 @@ void LocalFrame::navigate(const FrameLoadRequest& request)
 
 void LocalFrame::reload(FrameLoadType loadType, ClientRedirectPolicy clientRedirectPolicy)
 {
-    ASSERT(loadType == FrameLoadTypeReload || loadType == FrameLoadTypeReloadBypassingCache);
-    ASSERT(clientRedirectPolicy == ClientRedirectPolicy::NotClientRedirect || loadType == FrameLoadTypeReload);
+    DCHECK(isReloadLoadType(loadType));
     if (clientRedirectPolicy == ClientRedirectPolicy::NotClientRedirect) {
         if (!m_loader.currentItem())
             return;
@@ -363,6 +346,7 @@ void LocalFrame::reload(FrameLoadType loadType, ClientRedirectPolicy clientRedir
         request.setClientRedirect(clientRedirectPolicy);
         m_loader.load(request, loadType);
     } else {
+        DCHECK_EQ(FrameLoadTypeReload, loadType);
         m_navigationScheduler->scheduleReload();
     }
 }
@@ -377,7 +361,6 @@ void LocalFrame::detach(FrameDetachType type)
     SubframeLoadingDisabler disabler(*document());
     m_loader.dispatchUnloadEvent();
     detachChildren();
-    m_frameScheduler.reset();
 
     // All done if detaching the subframes brought about a detach of this frame also.
     if (!client())
@@ -388,14 +371,12 @@ void LocalFrame::detach(FrameDetachType type)
     // handlers might start a new subresource load in this frame.
     m_loader.stopAllLoaders();
     m_loader.detach();
-    document()->detach();
+    document()->detachLayoutTree();
     // This is the earliest that scripting can be disabled:
     // - FrameLoader::detach() can fire XHR abort events
-    // - Document::detach()'s deferred widget updates can run script.
+    // - Document::detachLayoutTree()'s deferred widget updates can run script.
     ScriptForbiddenScope forbidScript;
     m_loader.clear();
-    // Clear FrameScheduler again in case it is recreated in scripting.
-    m_frameScheduler.reset();
     if (!client())
         return;
 
@@ -404,14 +385,27 @@ void LocalFrame::detach(FrameDetachType type)
     // back to FrameLoaderClient via WindowProxy.
     script().clearForClose();
     setView(nullptr);
-    willDetachFrameHost();
-    InspectorInstrumentation::frameDetachedFromParent(this);
-    Frame::detach(type);
+
+    m_host->eventHandlerRegistry().didRemoveAllEventHandlers(*localDOMWindow());
 
     // Signal frame destruction here rather than in the destructor.
     // Main motivation is to avoid being dependent on its exact timing (Oilpan.)
     LocalFrameLifecycleNotifier::notifyContextDestroyed();
+
+    // TODO: Page should take care of updating focus/scrolling instead of Frame.
+    // TODO: It's unclear as to why this is called more than once, but it is,
+    // so page() could be null.
+    if (page() && page()->focusController().focusedFrame() == this)
+        page()->focusController().setFocusedFrame(nullptr);
+
+    if (page() && page()->scrollingCoordinator() && m_view)
+        page()->scrollingCoordinator()->willDestroyScrollableArea(m_view.get());
+
+    InspectorInstrumentation::frameDetachedFromParent(this);
+    Frame::detach(type);
+
     m_supplements.clear();
+    m_frameScheduler.reset();
     WeakIdentifierMap<LocalFrame>::notifyObjectDestroyed(this);
 }
 
@@ -447,18 +441,12 @@ bool LocalFrame::shouldClose()
     return m_loader.shouldClose();
 }
 
-void LocalFrame::willDetachFrameHost()
+void LocalFrame::detachChildren()
 {
-    LocalFrameLifecycleNotifier::notifyWillDetachFrameHost();
+    DCHECK(m_loader.stateMachine()->creatingInitialEmptyDocument() || document());
 
-    // FIXME: Page should take care of updating focus/scrolling instead of Frame.
-    // FIXME: It's unclear as to why this is called more than once, but it is,
-    // so page() could be null.
-    if (page() && page()->focusController().focusedFrame() == this)
-        page()->focusController().setFocusedFrame(nullptr);
-
-    if (page() && page()->scrollingCoordinator() && m_view)
-        page()->scrollingCoordinator()->willDestroyScrollableArea(m_view.get());
+    if (Document* document = this->document())
+        ChildFrameDisconnector(*document).disconnect();
 }
 
 void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow)
@@ -483,6 +471,7 @@ void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow)
     if (m_domWindow)
         m_domWindow->reset();
     m_domWindow = domWindow;
+    page()->chromeClient().installSupplements(*this);
 }
 
 Document* LocalFrame::document() const
@@ -520,6 +509,14 @@ LocalFrame* LocalFrame::localFrameRoot()
         curFrame = toLocalFrame(curFrame->tree().parent());
 
     return curFrame;
+}
+
+
+bool LocalFrame::isCrossOriginSubframe() const
+{
+    const SecurityOrigin* securityOrigin = securityContext()->getSecurityOrigin();
+    Frame* top = tree().top();
+    return top && !securityOrigin->canAccess(top->securityContext()->getSecurityOrigin());
 }
 
 void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio)
@@ -652,7 +649,7 @@ double LocalFrame::devicePixelRatio() const
 
 std::unique_ptr<DragImage> LocalFrame::nodeImage(Node& node)
 {
-    NodeImageBuilder imageNode(*this, node);
+    DraggedNodeImageBuilder imageNode(*this, node);
     return imageNode.createImage();
 }
 
@@ -776,14 +773,14 @@ String LocalFrame::layerTreeAsText(unsigned flags) const
     if (contentLayoutItem().isNull())
         return String();
 
-    RefPtr<JSONObject> layerTree = contentLayoutItem().compositor()->layerTreeAsJSON(static_cast<LayerTreeFlags>(flags));
+    std::unique_ptr<JSONObject> layerTree = contentLayoutItem().compositor()->layerTreeAsJSON(static_cast<LayerTreeFlags>(flags));
 
     if (flags & LayerTreeIncludesPaintInvalidations) {
-        RefPtr<JSONArray> objectPaintInvalidations = m_view->trackedObjectPaintInvalidationsAsJSON();
-        if (objectPaintInvalidations) {
+        std::unique_ptr<JSONArray> objectPaintInvalidations = m_view->trackedObjectPaintInvalidationsAsJSON();
+        if (objectPaintInvalidations && objectPaintInvalidations->size()) {
             if (!layerTree)
                 layerTree = JSONObject::create();
-            layerTree->setArray("objectPaintInvalidations", objectPaintInvalidations);
+            layerTree->setArray("objectPaintInvalidations", std::move(objectPaintInvalidations));
         }
     }
 
@@ -795,8 +792,9 @@ bool LocalFrame::shouldThrottleRendering() const
     return view() && view()->shouldThrottleRendering();
 }
 
-inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner, ServiceRegistry* serviceRegistry)
+inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameOwner* owner, InterfaceProvider* interfaceProvider)
     : Frame(client, host, owner)
+    , m_frameScheduler(page()->chromeClient().createFrameScheduler(client->frameBlameContext()))
     , m_loader(this)
     , m_navigationScheduler(NavigationScheduler::create(this))
     , m_script(ScriptController::create(this))
@@ -810,7 +808,7 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameO
     , m_pageZoomFactor(parentPageZoomFactor(this))
     , m_textZoomFactor(parentTextZoomFactor(this))
     , m_inViewSourceMode(false)
-    , m_serviceRegistry(serviceRegistry)
+    , m_interfaceProvider(interfaceProvider)
 {
     if (isLocalRoot())
         m_instrumentingAgents = new InstrumentingAgents();
@@ -820,10 +818,6 @@ inline LocalFrame::LocalFrame(FrameLoaderClient* client, FrameHost* host, FrameO
 
 WebFrameScheduler* LocalFrame::frameScheduler()
 {
-    if (!m_frameScheduler.get())
-        m_frameScheduler = page()->chromeClient().createFrameScheduler(client()->frameBlameContext());
-
-    ASSERT(m_frameScheduler.get());
     return m_frameScheduler.get();
 }
 

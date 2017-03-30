@@ -60,6 +60,7 @@
 #include "platform/graphics/SquashingDisallowedReasons.h"
 #include "public/platform/WebBlendMode.h"
 #include "wtf/Allocator.h"
+#include "wtf/AutoReset.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
 
@@ -90,7 +91,7 @@ class CORE_EXPORT DisableCompositingQueryAsserts {
 public:
     DisableCompositingQueryAsserts();
 private:
-    TemporaryChange<CompositingQueryMode> m_disabler;
+    AutoReset<CompositingQueryMode> m_disabler;
 };
 
 struct PaintLayerRareData {
@@ -358,24 +359,27 @@ public:
 
     bool intersectsDamageRect(const LayoutRect& layerBounds, const LayoutRect& damageRect, const LayoutPoint& offsetFromRoot) const;
 
+    // MaybeIncludeTransformForAncestorLayer means that a transform on |ancestorLayer| may be applied to the bounding box,
+    // in particular if paintsWithTransform() is true.
+    enum CalculateBoundsOptions {
+        MaybeIncludeTransformForAncestorLayer,
+        NeverIncludeTransformForAncestorLayer,
+        IncludeTransformsAndCompositedChildLayers,
+    };
+
     // Bounding box relative to some ancestor layer. Pass offsetFromRoot if known.
     LayoutRect physicalBoundingBox(const LayoutPoint& offsetFromRoot) const;
     LayoutRect physicalBoundingBox(const PaintLayer* ancestorLayer) const;
-    LayoutRect physicalBoundingBoxIncludingReflectionAndStackingChildren(const LayoutPoint& offsetFromRoot) const;
+    LayoutRect physicalBoundingBoxIncludingReflectionAndStackingChildren(const LayoutPoint& offsetFromRoot, CalculateBoundsOptions = MaybeIncludeTransformForAncestorLayer) const;
     LayoutRect fragmentsBoundingBox(const PaintLayer* ancestorLayer) const;
+
+    LayoutRect boxForClipPath() const;
 
     LayoutRect boundingBoxForCompositingOverlapTest() const;
 
     // If true, this layer's children are included in its bounds for overlap testing.
     // We can't rely on the children's positions if this layer has a filter that could have moved the children's pixels around.
     bool overlapBoundsIncludeChildren() const;
-
-    // MaybeIncludeTransformForAncestorLayer means that a transform on |ancestorLayer| may be applied to the bounding box,
-    // in particular if paintsWithTransform() is true.
-    enum CalculateBoundsOptions {
-        MaybeIncludeTransformForAncestorLayer,
-        NeverIncludeTransformForAncestorLayer,
-    };
     LayoutRect boundingBoxForCompositing(const PaintLayer* ancestorLayer = 0, CalculateBoundsOptions = MaybeIncludeTransformForAncestorLayer) const;
 
     LayoutUnit staticInlinePosition() const { return m_staticInlinePosition; }

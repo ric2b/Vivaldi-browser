@@ -1,0 +1,14 @@
+product_extra_default_compiler_configs = [ "//vivaldi/gn/config:features" ]
+
+# end users already contain product_extra_default_compiler_configs
+product_extra_linker_configs = []
+
+# end users already contain product_extra_default_compiler_configs
+# and product_extra_linker_configs
+product_extra_executable_configs = []
+
+# end users already contain product_extra_default_compiler_configs
+# and product_extra_linker_configs
+product_extra_shared_library_configs = []
+
+has_product_extra_configs = true

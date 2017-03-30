@@ -29,6 +29,7 @@ declare_args() {
 default_chrome_public_jinja_variables = [
   "channel=$android_channel",
   "enable_leakcanary=$enable_leakcanary",
+  "enable_vr_shell=$enable_vr_shell",
 ]
 
 # GYP: //chrome/android/chrome_apk.gypi
@@ -48,8 +49,15 @@ template("chrome_public_apk_tmpl") {
         _prev_proguard_configs = proguard_configs
       }
       proguard_configs = []
-      proguard_configs =
-          [ "//chrome/android/java/proguard.flags" ] + _prev_proguard_configs
+      proguard_configs = _prev_proguard_configs + [
+                           "//chrome/android/java/proguard.flags",
+                           "//base/android/base_proguard_config.flags",
+                           "//base/android/release_proguard_config.flags",
+                         ]
+      if (enable_webvr) {
+        proguard_configs +=
+            [ "//third_party/gvr-android-sdk/proguard/base.flags" ]
+      }
     }
 
     if (!defined(use_chromium_linker)) {

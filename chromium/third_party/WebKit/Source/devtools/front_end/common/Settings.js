@@ -399,7 +399,7 @@ WebInspector.VersionController = function()
 }
 
 WebInspector.VersionController._currentVersionName = "inspectorVersion";
-WebInspector.VersionController.currentVersion = 18;
+WebInspector.VersionController.currentVersion = 19;
 
 WebInspector.VersionController.prototype = {
     updateVersion: function()
@@ -700,17 +700,44 @@ WebInspector.VersionController.prototype = {
         setting.set(newValue);
     },
 
+    _updateVersionFrom18To19: function()
+    {
+        var defaultColumns = {
+            status: true,
+            type: true,
+            initiator: true,
+            size: true,
+            time: true
+        };
+        var visibleColumnSettings = WebInspector.settings.createSetting("networkLogColumnsVisibility", defaultColumns);
+        var visibleColumns = visibleColumnSettings.get();
+        visibleColumns.name = true;
+        visibleColumns.timeline = true;
+
+        var configs = {};
+        for (var columnId in visibleColumns) {
+            if (!visibleColumns.hasOwnProperty(columnId))
+                continue;
+            configs[columnId.toLowerCase()] = {
+                visible: visibleColumns[columnId]
+            };
+        }
+        var newSetting = WebInspector.settings.createSetting("networkLogColumns", {});
+        newSetting.set(configs);
+        visibleColumnSettings.remove();
+    },
+
     _migrateSettingsFromLocalStorage: function()
     {
         // This step migrates all the settings except for the ones below into the browser profile.
-        var localSettings = [ "advancedSearchConfig", "breakpoints", "consoleHistory", "domBreakpoints", "eventListenerBreakpoints",
+        var localSettings = new Set([ "advancedSearchConfig", "breakpoints", "consoleHistory", "domBreakpoints", "eventListenerBreakpoints",
                               "fileSystemMapping", "lastSelectedSourcesSidebarPaneTab", "previouslyViewedFiles",
-                              "savedURLs", "watchExpressions", "workspaceExcludedFolders", "xhrBreakpoints" ].keySet();
+                              "savedURLs", "watchExpressions", "workspaceExcludedFolders", "xhrBreakpoints" ]);
         if (!window.localStorage)
             return;
 
         for (var key in window.localStorage) {
-            if (key in localSettings)
+            if (localSettings.has(key))
                 continue;
             var value = window.localStorage[key];
             window.localStorage.removeItem(key);

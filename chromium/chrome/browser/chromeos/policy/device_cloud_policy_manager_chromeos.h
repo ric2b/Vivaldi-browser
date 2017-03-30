@@ -39,6 +39,8 @@ class HeartbeatScheduler;
 class StatusUploader;
 class SystemLogUploader;
 
+enum class ZeroTouchEnrollmentMode { DISABLED, ENABLED, FORCED };
+
 // CloudPolicyManager specialization for device policy on Chrome OS.
 class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
  public:
@@ -89,6 +91,9 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
   // Returns the machine model, or an empty string if not available.
   static std::string GetMachineModel();
 
+  // Returns the mode for using zero-touch enrollment.
+  static ZeroTouchEnrollmentMode GetZeroTouchEnrollmentMode();
+
   // Returns the robot 'email address' associated with the device robot
   // account (sometimes called a service account) associated with this device
   // during enterprise enrollment.
@@ -119,8 +124,6 @@ class DeviceCloudPolicyManagerChromeOS : public CloudPolicyManager {
 
   // Initializes requisition settings at OOBE with values from VPD.
   void InitializeRequisition();
-  // Initializes enrollment settings at OOBE with values from flags.
-  void InitializeEnrollment();
 
   void NotifyConnected();
   void NotifyDisconnected();

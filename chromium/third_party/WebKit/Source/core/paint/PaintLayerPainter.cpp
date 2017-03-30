@@ -4,27 +4,21 @@
 
 #include "core/paint/PaintLayerPainter.h"
 
-#include "core/frame/FrameView.h"
-#include "core/frame/Settings.h"
-#include "core/layout/LayoutBlock.h"
+#include "core/frame/LocalFrame.h"
+#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/svg/LayoutSVGResourceClipper.h"
-#include "core/page/Page.h"
+#include "core/paint/ClipPathClipper.h"
 #include "core/paint/FilterPainter.h"
 #include "core/paint/LayerClipRecorder.h"
 #include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
-#include "core/paint/SVGClipPainter.h"
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ScrollableAreaPainter.h"
 #include "core/paint/Transform3DRecorder.h"
-#include "core/style/ClipPathOperation.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/graphics/GraphicsLayer.h"
-#include "platform/graphics/paint/ClipPathRecorder.h"
-#include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/CompositingRecorder.h"
 #include "platform/graphics/paint/DisplayItemCacheSkipper.h"
 #include "platform/graphics/paint/PaintChunkProperties.h"
@@ -119,73 +113,6 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContentsAndReflectio
 
     return result;
 }
-
-class ClipPathHelper {
-public:
-    ClipPathHelper(GraphicsContext& context, const PaintLayer& paintLayer, PaintLayerPaintingInfo& paintingInfo, LayoutRect& rootRelativeBounds, bool& rootRelativeBoundsComputed,
-        const LayoutPoint& offsetFromRoot, PaintLayerFlags paintFlags)
-        : m_resourceClipper(0), m_paintLayer(paintLayer), m_context(context)
-    {
-        const ComputedStyle& style = paintLayer.layoutObject()->styleRef();
-
-        // Clip-path, like border radius, must not be applied to the contents of a composited-scrolling container.
-        // It must, however, still be applied to the mask layer, so that the compositor can properly mask the
-        // scrolling contents and scrollbars.
-        if (!paintLayer.layoutObject()->hasClipPath() || (paintLayer.needsCompositedScrolling() && !(paintFlags & PaintLayerPaintingChildClippingMaskPhase)))
-            return;
-
-        m_clipperState = SVGClipPainter::ClipperNotApplied;
-
-        paintingInfo.ancestorHasClipPathClipping = true;
-
-        ASSERT(style.clipPath());
-        if (style.clipPath()->type() == ClipPathOperation::SHAPE) {
-            ShapeClipPathOperation* clipPath = toShapeClipPathOperation(style.clipPath());
-            if (clipPath->isValid()) {
-                if (!rootRelativeBoundsComputed) {
-                    rootRelativeBounds = paintLayer.physicalBoundingBoxIncludingReflectionAndStackingChildren(offsetFromRoot);
-                    rootRelativeBoundsComputed = true;
-                }
-                m_clipPathRecorder.emplace(context, *paintLayer.layoutObject(), clipPath->path(FloatRect(rootRelativeBounds)));
-            }
-        } else if (style.clipPath()->type() == ClipPathOperation::REFERENCE) {
-            ReferenceClipPathOperation* referenceClipPathOperation = toReferenceClipPathOperation(style.clipPath());
-            Document& document = paintLayer.layoutObject()->document();
-            // FIXME: It doesn't work with forward or external SVG references (https://bugs.webkit.org/show_bug.cgi?id=90405)
-            Element* element = document.getElementById(referenceClipPathOperation->fragment());
-            if (isSVGClipPathElement(element) && element->layoutObject()) {
-                if (!rootRelativeBoundsComputed) {
-                    rootRelativeBounds = paintLayer.physicalBoundingBoxIncludingReflectionAndStackingChildren(offsetFromRoot);
-                    rootRelativeBoundsComputed = true;
-                }
-
-                m_resourceClipper = toLayoutSVGResourceClipper(toLayoutSVGResourceContainer(element->layoutObject()));
-                // When SVG applies the clip and the coordinate system is "user space on use", we must explicitly pass in
-                // the layer offset to have the clip paint in the correct location. When the coordinate system is
-                // "object bounding box" the offset is already accounted for in the rootRelativeBounds.
-                FloatPoint layerPositionOffset = m_resourceClipper->clipPathUnits() == SVGUnitTypes::SVG_UNIT_TYPE_USERSPACEONUSE ?
-                    FloatPoint(offsetFromRoot) : FloatPoint();
-                if (!SVGClipPainter(*m_resourceClipper).prepareEffect(*paintLayer.layoutObject(), FloatRect(rootRelativeBounds),
-                    FloatRect(rootRelativeBounds), layerPositionOffset, context, m_clipperState)) {
-                    // No need to post-apply the clipper if this failed.
-                    m_resourceClipper = 0;
-                }
-            }
-        }
-    }
-
-    ~ClipPathHelper()
-    {
-        if (m_resourceClipper)
-            SVGClipPainter(*m_resourceClipper).finishEffect(*m_paintLayer.layoutObject(), m_context, m_clipperState);
-    }
-private:
-    LayoutSVGResourceClipper* m_resourceClipper;
-    Optional<ClipPathRecorder> m_clipPathRecorder;
-    SVGClipPainter::ClipperState m_clipperState;
-    const PaintLayer& m_paintLayer;
-    GraphicsContext& m_context;
-};
 
 static bool shouldCreateSubsequence(const PaintLayer& paintLayer, GraphicsContext& context, const PaintLayerPaintingInfo& paintingInfo, PaintLayerFlags paintFlags)
 {
@@ -317,7 +244,22 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
 
     // These helpers output clip and compositing operations using a RAII pattern. Stack-allocated-varibles are destructed in the reverse order of construction,
     // so they are nested properly.
-    ClipPathHelper clipPathHelper(context, m_paintLayer, paintingInfo, rootRelativeBounds, rootRelativeBoundsComputed, offsetFromRoot, paintFlags);
+    Optional<ClipPathClipper> clipPathClipper;
+    // Clip-path, like border radius, must not be applied to the contents of a composited-scrolling container.
+    // It must, however, still be applied to the mask layer, so that the compositor can properly mask the
+    // scrolling contents and scrollbars.
+    if (m_paintLayer.layoutObject()->hasClipPath() && (!m_paintLayer.needsCompositedScrolling() || (paintFlags & PaintLayerPaintingChildClippingMaskPhase))) {
+        if (!rootRelativeBoundsComputed) {
+            rootRelativeBounds = m_paintLayer.physicalBoundingBoxIncludingReflectionAndStackingChildren(offsetFromRoot);
+            rootRelativeBoundsComputed = true;
+        }
+        paintingInfo.ancestorHasClipPathClipping = true;
+
+        LayoutRect referenceBox(m_paintLayer.boxForClipPath());
+        referenceBox.moveBy(offsetFromRoot);
+        clipPathClipper.emplace(
+            context, *m_paintLayer.layoutObject(), FloatRect(referenceBox), FloatRect(rootRelativeBounds), FloatPoint(offsetFromRoot));
+    }
 
     Optional<CompositingRecorder> compositingRecorder;
     // Blending operations must be performed only with the nearest ancestor stacking context.
@@ -370,18 +312,20 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerContents(GraphicsCon
 
         Optional<ScopedPaintChunkProperties> scopedPaintChunkProperties;
         if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-            ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
+            const ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
             ASSERT(objectPaintProperties && objectPaintProperties->localBorderBoxProperties());
             PaintChunkProperties properties(context.getPaintController().currentPaintChunkProperties());
             auto& localBorderBoxProperties = *objectPaintProperties->localBorderBoxProperties();
-            properties.transform = localBorderBoxProperties.transform;
-            properties.clip = localBorderBoxProperties.clip;
-            properties.effect = localBorderBoxProperties.effect;
+            properties.transform = localBorderBoxProperties.propertyTreeState.transform;
+            properties.clip = localBorderBoxProperties.propertyTreeState.clip;
+            properties.effect = localBorderBoxProperties.propertyTreeState.effect;
             properties.backfaceHidden = m_paintLayer.layoutObject()->hasHiddenBackface();
-            scopedPaintChunkProperties.emplace(context.getPaintController(), properties);
+            scopedPaintChunkProperties.emplace(context.getPaintController(), m_paintLayer, properties);
         }
 
-        bool shouldPaintBackground = isPaintingCompositedBackground && shouldPaintContent && !selectionOnly;
+        bool isPaintingRootLayer = (&m_paintLayer) == paintingInfo.rootLayer;
+        bool shouldPaintBackground = shouldPaintContent && !selectionOnly
+            && (isPaintingCompositedBackground || (isPaintingRootLayer && !(paintFlags & PaintLayerPaintingSkipRootBackground)));
         bool shouldPaintNegZOrderList = (isPaintingScrollingContent && isPaintingOverflowContents) || (!isPaintingScrollingContent && isPaintingCompositedBackground);
         bool shouldPaintOwnContents = isPaintingCompositedForeground && shouldPaintContent;
         bool shouldPaintNormalFlowAndPosZOrderLists = isPaintingCompositedForeground;
@@ -499,7 +443,7 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(Graphi
             fragment.backgroundRect = paintingInfo.paintDirtyRect;
             fragment.paginationOffset = paginationOffset;
             fragments.append(fragment);
-            paginationOffset += LayoutPoint(0, view->pageLogicalHeight());
+            paginationOffset += LayoutPoint(LayoutUnit(), view->pageLogicalHeight());
         }
     } else if (paginationLayer) {
         // FIXME: This is a mess. Look closely at this code and the code in Layer and fix any
@@ -542,6 +486,8 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintLayerWithTransform(Graphi
                 if (m_paintLayer.layoutObject()->isPositioned() && clipRectForFragment.isClippedByClipCss())
                     UseCounter::count(m_paintLayer.layoutObject()->document(), UseCounter::ClipCssOfPositionedElement);
                 clipRecorder.emplace(context, *parentLayer->layoutObject(), DisplayItem::ClipLayerParent, clipRectForFragment, &paintingInfo, fragment.paginationOffset, paintFlags);
+                if (m_paintLayer.layoutObject()->isFixedPositioned())
+                    UseCounter::count(m_paintLayer.layoutObject()->document(), UseCounter::ClipCssOfFixedPositionElement);
             }
         }
         if (paintFragmentByApplyingTransform(context, paintingInfo, paintFlags, fragment.paginationOffset) == MayBeClippedByPaintDirtyRect)
@@ -574,6 +520,11 @@ PaintLayerPainter::PaintResult PaintLayerPainter::paintFragmentByApplyingTransfo
     PaintLayerPaintingInfo transformedPaintingInfo(&m_paintLayer, LayoutRect(enclosingIntRect(transform.inverse().mapRect(paintingInfo.paintDirtyRect))), paintingInfo.getGlobalPaintFlags(),
         adjustedSubPixelAccumulation);
     transformedPaintingInfo.ancestorHasClipPathClipping = paintingInfo.ancestorHasClipPathClipping;
+
+    // Remove skip root background flag when we're painting with a new root.
+    if (&m_paintLayer != paintingInfo.rootLayer)
+        paintFlags &= ~PaintLayerPaintingSkipRootBackground;
+
     return paintLayerContentsAndReflection(context, transformedPaintingInfo, paintFlags, ForceSingleFragment);
 }
 
@@ -693,7 +644,7 @@ void PaintLayerPainter::paintFragmentWithPhase(PaintPhase phase, const PaintLaye
     Optional<ScrollRecorder> scrollRecorder;
     LayoutPoint paintOffset = -m_paintLayer.layoutBoxLocation();
     if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-        ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
+        const ObjectPaintProperties* objectPaintProperties = m_paintLayer.layoutObject()->objectPaintProperties();
         ASSERT(objectPaintProperties && objectPaintProperties->localBorderBoxProperties());
         paintOffset += toSize(objectPaintProperties->localBorderBoxProperties()->paintOffset);
     } else {

@@ -117,9 +117,10 @@ private:
     Length flexBasisForChild(const LayoutBox& child) const;
     LayoutUnit crossAxisExtentForChild(const LayoutBox& child) const;
     LayoutUnit crossAxisIntrinsicExtentForChild(const LayoutBox& child) const;
-    LayoutUnit childIntrinsicHeight(const LayoutBox& child) const;
-    LayoutUnit childIntrinsicWidth(const LayoutBox& child) const;
+    LayoutUnit childIntrinsicLogicalHeight(const LayoutBox& child) const;
+    LayoutUnit childIntrinsicLogicalWidth(const LayoutBox& child) const;
     LayoutUnit mainAxisExtentForChild(const LayoutBox& child) const;
+    LayoutUnit mainAxisContentExtentForChildIncludingScrollbar(const LayoutBox& child) const;
     LayoutUnit crossAxisExtent() const;
     LayoutUnit mainAxisExtent() const;
     LayoutUnit crossAxisContentExtent() const;
@@ -144,10 +145,9 @@ private:
     bool useChildAspectRatio(const LayoutBox& child) const;
     LayoutUnit computeMainSizeFromAspectRatioUsing(const LayoutBox& child, Length crossSizeLength) const;
     void setFlowAwareLocationForChild(LayoutBox& child, const LayoutPoint&);
+    LayoutUnit computeInnerFlexBaseSizeForChild(LayoutBox& child, LayoutUnit mainAxisBorderAndPadding, ChildLayoutType = LayoutIfNeeded);
     void adjustAlignmentForChild(LayoutBox& child, LayoutUnit);
     ItemPosition alignmentForChild(const LayoutBox& child) const;
-    LayoutUnit mainAxisBorderAndPaddingExtentForChild(const LayoutBox& child) const;
-    LayoutUnit computeInnerFlexBaseSizeForChild(LayoutBox& child, ChildLayoutType = LayoutIfNeeded);
     bool mainAxisLengthIsDefinite(const LayoutBox& child, const Length& flexBasis) const;
     bool crossAxisLengthIsDefinite(const LayoutBox& child, const Length& flexBasis) const;
     bool childFlexBaseSizeRequiresLayout(const LayoutBox& child) const;
@@ -173,6 +173,7 @@ private:
     void prepareOrderIteratorAndMargins();
     LayoutUnit adjustChildSizeForMinAndMax(const LayoutBox& child, LayoutUnit childSize);
     LayoutUnit adjustChildSizeForAspectRatioCrossAxisMinAndMax(const LayoutBox& child, LayoutUnit childSize);
+    FlexItem constructFlexItem(LayoutBox& child, ChildLayoutType);
     // The hypothetical main size of an item is the flex base size clamped according to its min and max main size properties
     bool computeNextFlexLine(OrderedFlexItemList& orderedChildren, LayoutUnit& sumFlexBaseSize, double& totalFlexGrow, double& totalFlexShrink, double& totalWeightedFlexShrink, LayoutUnit& sumHypotheticalMainSize, bool relayoutChildren);
 
@@ -181,7 +182,7 @@ private:
     void freezeViolations(Vector<FlexItem*>&, LayoutUnit& availableFreeSpace, double& totalFlexGrow, double& totalFlexShrink, double& totalWeightedFlexShrink);
 
     void resetAutoMarginsAndLogicalTopInCrossAxis(LayoutBox& child);
-    void setOverrideMainAxisSizeForChild(LayoutBox& child, LayoutUnit childPreferredSize);
+    void setOverrideMainAxisContentSizeForChild(LayoutBox& child, LayoutUnit childPreferredSize);
     void prepareChildForPositionedLayout(LayoutBox& child);
     size_t numberOfInFlowPositionedChildren(const OrderedFlexItemList&) const;
     void layoutAndPlaceChildren(LayoutUnit& crossAxisOffset, const OrderedFlexItemList&, LayoutUnit availableFreeSpace, bool relayoutChildren, SubtreeLayoutScope&, Vector<LineContext>&);

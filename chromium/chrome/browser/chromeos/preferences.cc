@@ -256,8 +256,13 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterIntegerPref(prefs::kLanguageRemapCapsLockKeyTo,
                                 input_method::kCapsLockKey);
   registry->RegisterIntegerPref(
-      prefs::kLanguageRemapDiamondKeyTo,
-      input_method::kControlKey,
+      prefs::kLanguageRemapEscapeKeyTo, input_method::kEscapeKey,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kLanguageRemapBackspaceKeyTo, input_method::kBackspaceKey,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kLanguageRemapDiamondKeyTo, input_method::kControlKey,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
   // The following pref isn't synced since the user may desire a different value
   // depending on whether an external keyboard is attached to a particular
@@ -274,6 +279,13 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterIntegerPref(
       prefs::kLanguageXkbAutoRepeatInterval,
       language_prefs::kXkbAutoRepeatIntervalInMs,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+
+  registry->RegisterBooleanPref(
+      prefs::kEnableStylusTools, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kLaunchPaletteOnEjectEvent, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   // We don't sync wake-on-wifi related prefs because they are device specific.
@@ -296,6 +308,8 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterBooleanPref(prefs::kExternalStorageDisabled, false);
 
+  registry->RegisterBooleanPref(prefs::kExternalStorageReadOnly, false);
+
   registry->RegisterStringPref(prefs::kTermsOfServiceURL, "");
 
   registry->RegisterBooleanPref(prefs::kTouchHudProjectionEnabled, false);
@@ -317,6 +331,9 @@ void Preferences::RegisterProfilePrefs(
 
   registry->RegisterInt64Pref(prefs::kHatsLastInteractionTimestamp,
                               base::Time().ToInternalValue());
+
+  registry->RegisterBooleanPref(prefs::kQuickUnlockFeatureNotificationShown,
+                                false);
 
   // We don't sync EOL related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kEolNotificationDismissed, false);

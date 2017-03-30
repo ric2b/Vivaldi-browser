@@ -30,8 +30,6 @@
 #include "core/CoreExport.h"
 #include "core/events/EventTarget.h"
 #include "core/frame/DOMWindow.h"
-#include "core/frame/DOMWindowLifecycleNotifier.h"
-#include "core/frame/DOMWindowLifecycleObserver.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameLifecycleObserver.h"
 #include "platform/Supplementable.h"
@@ -42,7 +40,7 @@
 
 namespace blink {
 
-class CustomElementsRegistry;
+class CustomElementRegistry;
 class DOMWindowEventQueue;
 class DOMWindowProperty;
 class DocumentInit;
@@ -65,10 +63,18 @@ enum PageshowEventPersistence {
 
 // Note: if you're thinking of returning something DOM-related by reference,
 // please ping dcheng@chromium.org first. You probably don't want to do that.
-class CORE_EXPORT LocalDOMWindow final : public DOMWindow, public Supplementable<LocalDOMWindow>, public DOMWindowLifecycleNotifier {
+class CORE_EXPORT LocalDOMWindow final : public DOMWindow, public Supplementable<LocalDOMWindow> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalDOMWindow);
     USING_PRE_FINALIZER(LocalDOMWindow, dispose);
 public:
+
+    class CORE_EXPORT EventListenerObserver : public GarbageCollectedMixin {
+    public:
+        virtual void didAddEventListener(LocalDOMWindow*, const AtomicString&) = 0;
+        virtual void didRemoveEventListener(LocalDOMWindow*, const AtomicString&) = 0;
+        virtual void didRemoveAllEventListeners(LocalDOMWindow*) = 0;
+    };
+
     static Document* createDocument(const String& mimeType, const DocumentInit&, bool forceXHTML);
     static LocalDOMWindow* create(LocalFrame& frame)
     {
@@ -146,11 +152,14 @@ public:
     void cancelAnimationFrame(int id) override;
     int requestIdleCallback(IdleRequestCallback*, const IdleRequestOptions&) override;
     void cancelIdleCallback(int id) override;
-    CustomElementsRegistry* customElements(ScriptState*) const override;
-    CustomElementsRegistry* customElements() const;
+    CustomElementRegistry* customElements(ScriptState*) const override;
+    CustomElementRegistry* customElements() const;
+    CustomElementRegistry* maybeCustomElements() const;
 
     void registerProperty(DOMWindowProperty*);
     void unregisterProperty(DOMWindowProperty*);
+
+    void registerEventListenerObserver(EventListenerObserver*);
 
     void reset();
 
@@ -184,8 +193,6 @@ public:
     // Dispatch the (deprecated) orientationchange event to this DOMWindow and
     // recurse on its child frames.
     void sendOrientationChangeEvent();
-
-    void willDetachDocumentFromFrame();
 
     EventQueue* getEventQueue() const;
     void enqueueWindowEvent(Event*);
@@ -248,7 +255,7 @@ private:
     mutable Member<BarProp> m_toolbar;
     mutable Member<Navigator> m_navigator;
     mutable Member<StyleMedia> m_media;
-    mutable Member<CustomElementsRegistry> m_customElements;
+    mutable Member<CustomElementRegistry> m_customElements;
 
     String m_status;
     String m_defaultStatus;
@@ -259,6 +266,7 @@ private:
     RefPtr<SerializedScriptValue> m_pendingStateObject;
 
     HeapHashSet<Member<PostMessageTimer>> m_postMessageTimers;
+    HeapHashSet<WeakMember<EventListenerObserver>> m_eventListenerObservers;
 };
 
 DEFINE_TYPE_CASTS(LocalDOMWindow, DOMWindow, x, x->isLocalDOMWindow(), x.isLocalDOMWindow());

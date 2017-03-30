@@ -22,37 +22,6 @@
 namespace media {
 namespace mp2t {
 
-namespace {
-
-VideoCodecProfile ProfileIDCToVideoCodecProfile(int profile_idc) {
-  switch (profile_idc) {
-    case H264SPS::kProfileIDCBaseline:
-      return H264PROFILE_BASELINE;
-    case H264SPS::kProfileIDCMain:
-      return H264PROFILE_MAIN;
-    case H264SPS::kProfileIDCHigh:
-      return H264PROFILE_HIGH;
-    case H264SPS::kProfileIDHigh10:
-      return H264PROFILE_HIGH10PROFILE;
-    case H264SPS::kProfileIDHigh422:
-      return H264PROFILE_HIGH422PROFILE;
-    case H264SPS::kProfileIDHigh444Predictive:
-      return H264PROFILE_HIGH444PREDICTIVEPROFILE;
-    case H264SPS::kProfileIDScalableBaseline:
-      return H264PROFILE_SCALABLEBASELINE;
-    case H264SPS::kProfileIDScalableHigh:
-      return H264PROFILE_SCALABLEHIGH;
-    case H264SPS::kProfileIDStereoHigh:
-      return H264PROFILE_STEREOHIGH;
-    case H264SPS::kProfileIDSMultiviewHigh:
-      return H264PROFILE_MULTIVIEWHIGH;
-  }
-  NOTREACHED() << "unknown video profile: " << profile_idc;
-  return VIDEO_CODEC_PROFILE_UNKNOWN;
-}
-
-}  // namespace
-
 // An AUD NALU is at least 4 bytes:
 // 3 bytes for the start code + 1 byte for the NALU type.
 const int kMinAUDSize = 4;
@@ -235,7 +204,7 @@ bool EsParserH264::EmitFrame(int64_t access_unit_pos,
                              bool is_key_frame,
                              int pps_id) {
   // Get the access unit timing info.
-  // Note: |current_timing_desc.pts| might be |kNoTimestamp()| at this point
+  // Note: |current_timing_desc.pts| might be |kNoTimestamp| at this point
   // if:
   // - the stream is not fully MPEG-2 compliant.
   // - or if the stream relies on H264 VUI parameters to compute the timestamps.
@@ -243,8 +212,7 @@ bool EsParserH264::EmitFrame(int64_t access_unit_pos,
   //   This part is not yet implemented in EsParserH264.
   // |es_adapter_| will take care of the missing timestamps.
   TimingDesc current_timing_desc = GetTimingDescriptor(access_unit_pos);
-  DVLOG_IF(1, current_timing_desc.pts == kNoTimestamp())
-      << "Missing timestamp";
+  DVLOG_IF(1, current_timing_desc.pts == kNoTimestamp) << "Missing timestamp";
 
   // If only the PTS is provided, copy the PTS into the DTS.
   if (current_timing_desc.dts == kNoDecodeTimestamp()) {
@@ -280,12 +248,8 @@ bool EsParserH264::EmitFrame(int64_t access_unit_pos,
   // TODO(wolenetz/acolwell): Validate and use a common cross-parser TrackId
   // type and allow multiple video tracks. See https://crbug.com/341581.
   scoped_refptr<StreamParserBuffer> stream_parser_buffer =
-      StreamParserBuffer::CopyFrom(
-          es,
-          access_unit_size,
-          is_key_frame,
-          DemuxerStream::VIDEO,
-          0);
+      StreamParserBuffer::CopyFrom(es, access_unit_size, is_key_frame,
+                                   DemuxerStream::VIDEO, kMp2tVideoTrackId);
   stream_parser_buffer->SetDecodeTimestamp(current_timing_desc.dts);
   stream_parser_buffer->set_timestamp(current_timing_desc.pts);
   return es_adapter_.OnNewBuffer(stream_parser_buffer);
@@ -330,7 +294,7 @@ bool EsParserH264::UpdateVideoDecoderConfig(const H264SPS* sps,
     return false;
 
   VideoDecoderConfig video_decoder_config(
-      kCodecH264, ProfileIDCToVideoCodecProfile(sps->profile_idc),
+      kCodecH264, H264Parser::ProfileIDCToVideoCodecProfile(sps->profile_idc),
       PIXEL_FORMAT_YV12, COLOR_SPACE_HD_REC709, coded_size, visible_rect,
       natural_size, EmptyExtraData(), scheme);
 

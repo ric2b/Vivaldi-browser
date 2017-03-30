@@ -11,7 +11,7 @@
 // The following unique IDs are available:
 //    7, 11, 12, 13, 14, 18, 19, 20, 22, 24, 26, 28, 29, 30, 32, 33, 34, 39, 37,
 //    38, 40, 41, 42, 46, 47, 48, 49, 51, 52, 58, 59, 69, 71, 72, 82, 84, 86,
-//    88, 89, 91+
+//    89, 91+
 //
 // IDs > 1000 are reserved for distribution custom engines.
 //
@@ -30,7 +30,7 @@
 
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version.
-    "kCurrentDataVersion": 91
+    "kCurrentDataVersion": 94
   },
 
   // The following engines are included in country lists and are added to the
@@ -163,9 +163,9 @@
     "naver": {
       "name": "\ub124\uc774\ubc84",
       "keyword": "naver.com",
-      "favicon_url": "http://sstatic.naver.net/search/favicon/favicon_140327.ico",
-      "search_url": "http://search.naver.com/search.naver?ie={inputEncoding}&query={searchTerms}",
-      "suggest_url": "http://ac.search.naver.com/nx/ac?of=os&ie={inputEncoding}&q={searchTerms}&oe={outputEncoding}",
+      "favicon_url": "https://ssl.pstatic.net/sstatic/search/favicon/favicon_140327.ico",
+      "search_url": "https://search.naver.com/search.naver?ie={inputEncoding}&query={searchTerms}",
+      "suggest_url": "https://ac.search.naver.com/nx/ac?of=os&ie={inputEncoding}&q={searchTerms}&oe={outputEncoding}",
       "type": "SEARCH_ENGINE_NAVER",
       "id": 67
     },
@@ -189,11 +189,22 @@
       "id": 25
     },
 
+    "so_360": {
+      "name": "360",
+      "keyword": "so.com",
+      "favicon_url": "https://www.so.com/favicon.ico",
+      "search_url": "https://www.so.com/s?ie={inputEncoding}&q={searchTerms}",
+      "suggest_url": "https://sug.so.360.cn/suggest?encodein={inputEncoding}&encodeout={outputEncoding}&format=opensearch&word={searchTerms}",
+      "type": "SEARCH_ENGINE_360",
+      "id": 88
+    },
+
     "sogou": {
       "name": "\u641c\u72d7",
       "keyword": "sogou.com",
       "favicon_url": "http://www.sogou.com/images/logo/old/favicon.ico",
       "search_url": "http://www.sogou.com/web?ie={inputEncoding}&query={searchTerms}",
+      "suggest_url": "http://api.sugg.sogou.com/su?type=addrbar&key={searchTerms}&ie={inputEncoding}",
       "type": "SEARCH_ENGINE_SOGOU",
       "id": 56
     },

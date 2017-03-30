@@ -26,6 +26,8 @@ struct ClientId {
   ClientId(std::string name_space, std::string id);
 
   bool operator==(const ClientId& client_id) const;
+
+  bool operator<(const ClientId& client_id) const;
 };
 
 // Metadata of the offline page.
@@ -82,6 +84,8 @@ struct OfflinePageItem {
   base::Time expiration_time;
   // Number of times that the offline archive has been accessed.
   int access_count;
+  // The title of the page at the time it was saved.
+  base::string16 title;
   // Flags about the state and behavior of the offline page.
   Flags flags;
 };

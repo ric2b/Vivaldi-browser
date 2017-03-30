@@ -28,7 +28,7 @@ class VivaldiUtilitiesEventRouter {
     // Helper to actually dispatch an event to extension listeners.
     void DispatchEvent(const std::string& event_name,
                        std::unique_ptr<base::ListValue> event_args);
-private:
+ private:
     content::BrowserContext* browser_context_;
     DISALLOW_COPY_AND_ASSIGN(VivaldiUtilitiesEventRouter);
 };

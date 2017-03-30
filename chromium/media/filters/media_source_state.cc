@@ -1,11 +1,14 @@
-// Copyright (c) 2016 The Chromium Authors. All rights reserved.
+// Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 #include "media/filters/media_source_state.h"
 
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "media/base/media_switches.h"
 #include "media/base/media_track.h"
 #include "media/base/media_tracks.h"
 #include "media/filters/chunk_demuxer.h"
@@ -28,7 +31,7 @@ static TimeDelta EndTimestamp(const StreamParser::BufferQueue& queue) {
 // List of time ranges for each SourceBuffer.
 // static
 Ranges<TimeDelta> MediaSourceState::ComputeRangesIntersection(
-    const RangesList& activeRanges,
+    const RangesList& active_ranges,
     bool ended) {
   // TODO(servolk): Perhaps this can be removed in favor of blink implementation
   // (MediaSource::buffered)? Currently this is only used on Android and for
@@ -39,7 +42,7 @@ Ranges<TimeDelta> MediaSourceState::ComputeRangesIntersection(
 
   // Step 1: If activeSourceBuffers.length equals 0 then return an empty
   //  TimeRanges object and abort these steps.
-  if (activeRanges.empty())
+  if (active_ranges.empty())
     return Ranges<TimeDelta>();
 
   // Step 2: Let active ranges be the ranges returned by buffered for each
@@ -47,12 +50,11 @@ Ranges<TimeDelta> MediaSourceState::ComputeRangesIntersection(
   // Step 3: Let highest end time be the largest range end time in the active
   //  ranges.
   TimeDelta highest_end_time;
-  for (RangesList::const_iterator itr = activeRanges.begin();
-       itr != activeRanges.end(); ++itr) {
-    if (!itr->size())
+  for (const auto& range : active_ranges) {
+    if (!range.size())
       continue;
 
-    highest_end_time = std::max(highest_end_time, itr->end(itr->size() - 1));
+    highest_end_time = std::max(highest_end_time, range.end(range.size() - 1));
   }
 
   // Step 4: Let intersection ranges equal a TimeRange object containing a
@@ -62,15 +64,14 @@ Ranges<TimeDelta> MediaSourceState::ComputeRangesIntersection(
 
   // Step 5: For each SourceBuffer object in activeSourceBuffers run the
   //  following steps:
-  for (RangesList::const_iterator itr = activeRanges.begin();
-       itr != activeRanges.end(); ++itr) {
+  for (const auto& range : active_ranges) {
     // Step 5.1: Let source ranges equal the ranges returned by the buffered
     //  attribute on the current SourceBuffer.
-    Ranges<TimeDelta> source_ranges = *itr;
+    Ranges<TimeDelta> source_ranges = range;
 
     // Step 5.2: If readyState is "ended", then set the end time on the last
     //  range in source ranges to highest end time.
-    if (ended && source_ranges.size() > 0u) {
+    if (ended && source_ranges.size()) {
       source_ranges.Add(source_ranges.start(source_ranges.size() - 1),
                         highest_end_time);
     }
@@ -109,7 +110,7 @@ MediaSourceState::MediaSourceState(
 MediaSourceState::~MediaSourceState() {
   Shutdown();
 
-  STLDeleteValues(&text_stream_map_);
+  base::STLDeleteValues(&text_stream_map_);
 }
 
 void MediaSourceState::Init(
@@ -172,8 +173,7 @@ bool MediaSourceState::Append(const uint8_t* data,
   bool result = stream_parser_->Parse(data, length);
   if (!result) {
     MEDIA_LOG(ERROR, media_log_)
-        << __FUNCTION__ << ": stream parsing failed."
-        << " Data size=" << length
+        << __func__ << ": stream parsing failed. Data size=" << length
         << " append_window_start=" << append_window_start.InSecondsF()
         << " append_window_end=" << append_window_end.InSecondsF();
   }
@@ -254,7 +254,7 @@ bool MediaSourceState::EvictCodedFrames(DecodeTimestamp media_time,
                                         size_t newDataSize) {
   bool success = true;
 
-  DVLOG(3) << __FUNCTION__ << " media_time=" << media_time.InSecondsF()
+  DVLOG(3) << __func__ << " media_time=" << media_time.InSecondsF()
            << " newDataSize=" << newDataSize
            << " videoBufferedSize=" << (video_ ? video_->GetBufferedSize() : 0)
            << " audioBufferedSize=" << (audio_ ? audio_->GetBufferedSize() : 0);
@@ -270,8 +270,8 @@ bool MediaSourceState::EvictCodedFrames(DecodeTimestamp media_time,
     newAudioSize = newDataSize;
   }
 
-  DVLOG(3) << __FUNCTION__ << " estimated audio/video sizes: "
-           << " newVideoSize=" << newVideoSize
+  DVLOG(3) << __func__
+           << " estimated audio/video sizes: newVideoSize=" << newVideoSize
            << " newAudioSize=" << newAudioSize;
 
   if (audio_)
@@ -285,7 +285,7 @@ bool MediaSourceState::EvictCodedFrames(DecodeTimestamp media_time,
     success = itr->second->EvictCodedFrames(media_time, 0) && success;
   }
 
-  DVLOG(3) << __FUNCTION__ << " result=" << success
+  DVLOG(3) << __func__ << " result=" << success
            << " videoBufferedSize=" << (video_ ? video_->GetBufferedSize() : 0)
            << " audioBufferedSize=" << (audio_ ? audio_->GetBufferedSize() : 0);
 
@@ -575,6 +575,7 @@ bool MediaSourceState::OnNewConfigs(
                                     GetCodecName(audio_config.codec()));
     }
 
+    bool audio_stream_just_created = false;
     if (!audio_) {
       audio_ = create_demuxer_stream_cb_.Run(DemuxerStream::AUDIO);
 
@@ -582,6 +583,7 @@ bool MediaSourceState::OnNewConfigs(
         DVLOG(1) << "Failed to create an audio stream.";
         return false;
       }
+      audio_stream_just_created = true;
 
       if (!frame_processor_->AddTrack(FrameProcessor::kAudioTrackId, audio_)) {
         DVLOG(1) << "Failed to add audio track to frame processor.";
@@ -591,6 +593,19 @@ bool MediaSourceState::OnNewConfigs(
 
     frame_processor_->OnPossibleAudioConfigUpdate(audio_config);
     success &= audio_->UpdateAudioConfig(audio_config, media_log_);
+
+    if (audio_stream_just_created) {
+      std::string audio_buf_limit_switch =
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              switches::kMSEAudioBufferSizeLimit);
+      unsigned audio_buf_size_limit = 0;
+      if (base::StringToUint(audio_buf_limit_switch, &audio_buf_size_limit) &&
+          audio_buf_size_limit > 0) {
+        MEDIA_LOG(INFO, media_log_) << "Custom audio SourceBuffer size limit="
+                                    << audio_buf_size_limit;
+        audio_->SetStreamMemoryLimit(audio_buf_size_limit);
+      }
+    }
   }
 
   if (video_config.IsValidConfig()) {
@@ -603,6 +618,7 @@ bool MediaSourceState::OnNewConfigs(
                                     GetCodecName(video_config.codec()));
     }
 
+    bool video_stream_just_created = false;
     if (!video_) {
       video_ = create_demuxer_stream_cb_.Run(DemuxerStream::VIDEO);
 
@@ -610,6 +626,7 @@ bool MediaSourceState::OnNewConfigs(
         DVLOG(1) << "Failed to create a video stream.";
         return false;
       }
+      video_stream_just_created = true;
 
       if (!frame_processor_->AddTrack(FrameProcessor::kVideoTrackId, video_)) {
         DVLOG(1) << "Failed to add video track to frame processor.";
@@ -618,6 +635,19 @@ bool MediaSourceState::OnNewConfigs(
     }
 
     success &= video_->UpdateVideoConfig(video_config, media_log_);
+
+    if (video_stream_just_created) {
+      std::string video_buf_limit_switch =
+          base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+              switches::kMSEVideoBufferSizeLimit);
+      unsigned video_buf_size_limit = 0;
+      if (base::StringToUint(video_buf_limit_switch, &video_buf_size_limit) &&
+          video_buf_size_limit > 0) {
+        MEDIA_LOG(INFO, media_log_) << "Custom video SourceBuffer size limit="
+                                    << video_buf_size_limit;
+        video_->SetStreamMemoryLimit(video_buf_size_limit);
+      }
+    }
   }
 
   typedef StreamParser::TextTrackConfigMap::const_iterator TextConfigItr;
@@ -746,16 +776,21 @@ void MediaSourceState::OnEndOfMediaSegment() {
 }
 
 bool MediaSourceState::OnNewBuffers(
-    const StreamParser::BufferQueue& audio_buffers,
-    const StreamParser::BufferQueue& video_buffers,
-    const StreamParser::TextBufferQueueMap& text_map) {
+    const StreamParser::BufferQueueMap& buffer_queue_map) {
   DVLOG(2) << "OnNewBuffers()";
   DCHECK_EQ(state_, PARSER_INITIALIZED);
   DCHECK(timestamp_offset_during_append_);
   DCHECK(parsing_media_segment_);
 
-  media_segment_contained_audio_frame_ |= !audio_buffers.empty();
-  media_segment_contained_video_frame_ |= !video_buffers.empty();
+  for (const auto& it : buffer_queue_map) {
+    const StreamParser::BufferQueue& bufq = it.second;
+    DCHECK(!bufq.empty());
+    if (bufq[0]->type() == DemuxerStream::AUDIO) {
+      media_segment_contained_audio_frame_ = true;
+    } else if (bufq[0]->type() == DemuxerStream::VIDEO) {
+      media_segment_contained_video_frame_ = true;
+    }
+  }
 
   const TimeDelta timestamp_offset_before_processing =
       *timestamp_offset_during_append_;
@@ -764,22 +799,23 @@ bool MediaSourceState::OnNewBuffers(
   // parser has requested automatic updates.
   TimeDelta new_timestamp_offset = timestamp_offset_before_processing;
   if (auto_update_timestamp_offset_) {
-    const bool have_audio_buffers = !audio_buffers.empty();
-    const bool have_video_buffers = !video_buffers.empty();
-    if (have_audio_buffers && have_video_buffers) {
-      new_timestamp_offset +=
-          std::min(EndTimestamp(audio_buffers), EndTimestamp(video_buffers));
-    } else if (have_audio_buffers) {
-      new_timestamp_offset += EndTimestamp(audio_buffers);
-    } else if (have_video_buffers) {
-      new_timestamp_offset += EndTimestamp(video_buffers);
+    TimeDelta min_end_timestamp = kNoTimestamp;
+    for (const auto& it : buffer_queue_map) {
+      const StreamParser::BufferQueue& bufq = it.second;
+      DCHECK(!bufq.empty());
+      if (min_end_timestamp == kNoTimestamp ||
+          EndTimestamp(bufq) < min_end_timestamp) {
+        min_end_timestamp = EndTimestamp(bufq);
+        DCHECK_NE(kNoTimestamp, min_end_timestamp);
+      }
     }
+    if (min_end_timestamp != kNoTimestamp)
+      new_timestamp_offset += min_end_timestamp;
   }
 
-  if (!frame_processor_->ProcessFrames(audio_buffers, video_buffers, text_map,
-                                       append_window_start_during_append_,
-                                       append_window_end_during_append_,
-                                       timestamp_offset_during_append_)) {
+  if (!frame_processor_->ProcessFrames(
+          buffer_queue_map, append_window_start_during_append_,
+          append_window_end_during_append_, timestamp_offset_during_append_)) {
     return false;
   }
 

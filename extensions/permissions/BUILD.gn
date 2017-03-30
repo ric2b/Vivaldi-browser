@@ -1,0 +1,6 @@
+source_set("permissions") {
+  sources = [
+    "vivaldi_api_permissions.cpp",
+    "vivaldi_api_permissions.h",
+  ]
+}

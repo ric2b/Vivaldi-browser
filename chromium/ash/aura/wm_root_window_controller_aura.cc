@@ -7,20 +7,19 @@
 #include "ash/aura/wm_shelf_aura.h"
 #include "ash/aura/wm_shell_aura.h"
 #include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/shelf.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/wm/workspace/workspace_layout_manager_backdrop_delegate.h"
 #include "ash/common/wm_root_window_controller_observer.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/wm/workspace_controller.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_property.h"
-
 #include "ui/aura/window_tree_host.h"
 #include "ui/display/screen.h"
-
 #include "ui/events/event_targeter.h"
 #include "ui/events/event_utils.h"
 
@@ -77,6 +76,8 @@ WmShell* WmRootWindowControllerAura::GetShell() {
 }
 
 wm::WorkspaceWindowState WmRootWindowControllerAura::GetWorkspaceWindowState() {
+  if (!root_window_controller_->workspace_controller())
+    return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
   return root_window_controller_->workspace_controller()->GetWindowState();
 }
 
@@ -120,6 +121,12 @@ WmWindow* WmRootWindowControllerAura::FindEventTarget(
   return WmWindowAura::Get(static_cast<aura::Window*>(event_handler));
 }
 
+gfx::Point WmRootWindowControllerAura::GetLastMouseLocationInRoot() {
+  return root_window_controller_->GetHost()
+      ->dispatcher()
+      ->GetLastMouseLocationInRoot();
+}
+
 void WmRootWindowControllerAura::AddObserver(
     WmRootWindowControllerObserver* observer) {
   observers_.AddObserver(observer);
@@ -128,17 +135,6 @@ void WmRootWindowControllerAura::AddObserver(
 void WmRootWindowControllerAura::RemoveObserver(
     WmRootWindowControllerObserver* observer) {
   observers_.RemoveObserver(observer);
-}
-
-void WmRootWindowControllerAura::OnFullscreenStateChanged(
-    bool is_fullscreen,
-    WmWindow* root_window) {
-  if (WmWindowAura::GetAuraWindow(root_window) !=
-      root_window_controller_->GetRootWindow())
-    return;
-
-  FOR_EACH_OBSERVER(WmRootWindowControllerObserver, observers_,
-                    OnFullscreenStateChanged(is_fullscreen));
 }
 
 void WmRootWindowControllerAura::OnShelfAlignmentChanged(

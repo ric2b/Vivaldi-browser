@@ -30,6 +30,11 @@
 
 namespace blink {
 
+// TODO(sashab): Change these enums to enum classes with an unsigned underlying
+// type. Enum classes provide better type safety, and forcing an unsigned
+// underlying type prevents msvc from interpreting enums as negative numbers.
+// See: crbug.com/628043
+
 // Sides used when drawing borders and outlines. The values should run clockwise from top.
 enum BoxSide {
     BSTop,
@@ -42,6 +47,7 @@ enum StyleRecalcChange {
     NoChange,
     NoInherit,
     UpdatePseudoElements,
+    IndependentInherit,
     Inherit,
     Force,
     Reattach,
@@ -132,6 +138,10 @@ enum EBoxDecorationBreak { BoxDecorationBreakSlice, BoxDecorationBreakClone };
 enum EBoxSizing { BoxSizingContentBox, BoxSizingBorderBox };
 
 // Random visual rendering model attributes. Not inherited.
+
+enum EOverflowAnchor {
+    AnchorVisible, AnchorNone, AnchorAuto
+};
 
 enum EOverflow {
     OverflowVisible, OverflowHidden, OverflowScroll, OverflowAuto, OverflowOverlay, OverflowPagedX, OverflowPagedY
@@ -382,7 +392,9 @@ enum ECaptionSide {
 
 enum EListStylePosition { ListStylePositionOutside, ListStylePositionInside };
 
-enum EVisibility { VISIBLE, HIDDEN, COLLAPSE };
+// TODO(sashab): Add a static_assert when this is used in bitfields to ensure it
+// uses unsigned as the underlying type.
+enum class EVisibility : unsigned { Visible, Hidden, Collapse };
 
 enum ECursor {
     // The following must match the order in CSSValueKeywords.in.
@@ -478,15 +490,7 @@ enum TextOverflow { TextOverflowClip = 0, TextOverflowEllipsis };
 
 enum EImageRendering { ImageRenderingAuto, ImageRenderingOptimizeSpeed, ImageRenderingOptimizeQuality, ImageRenderingOptimizeContrast, ImageRenderingPixelated };
 
-enum ImageResolutionSource { ImageResolutionSpecified = 0, ImageResolutionFromImage };
-
-enum ImageResolutionSnap { ImageResolutionNoSnap = 0, ImageResolutionSnapPixels };
-
 enum Order { LogicalOrder = 0, VisualOrder };
-
-enum WrapFlow { WrapFlowAuto, WrapFlowBoth, WrapFlowStart, WrapFlowEnd, WrapFlowMaximum, WrapFlowClear };
-
-enum WrapThrough { WrapThroughWrap, WrapThroughNone };
 
 enum RubyPosition { RubyPositionBefore, RubyPositionAfter };
 
@@ -546,7 +550,8 @@ inline Containment operator| (Containment a, Containment b) { return Containment
 inline Containment& operator|= (Containment& a, Containment b) { return a = a | b; }
 
 enum ItemPosition {
-    ItemPositionAuto,
+    ItemPositionAuto, // It will mean 'normal' after running the StyleAdjuster to avoid resolving the initial values.
+    ItemPositionNormal,
     ItemPositionStretch,
     ItemPositionBaseline,
     ItemPositionLastBaseline,
@@ -594,7 +599,7 @@ enum ContentDistributionType {
 };
 
 // Reasonable maximum to prevent insane font sizes from causing crashes on some platforms (such as Windows).
-static const float maximumAllowedFontSize = 1000000.0f;
+static const float maximumAllowedFontSize = 10000.0f;
 
 enum TextIndentLine { TextIndentFirstLine, TextIndentEachLine };
 enum TextIndentType { TextIndentNormal, TextIndentHanging };

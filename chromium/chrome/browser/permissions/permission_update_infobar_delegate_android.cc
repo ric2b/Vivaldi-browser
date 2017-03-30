@@ -20,6 +20,8 @@
 #include "ui/android/window_android.h"
 #include "ui/base/l10n/l10n_util.h"
 
+using base::android::JavaParamRef;
+
 // static
 infobars::InfoBar* PermissionUpdateInfoBarDelegate::Create(
     content::WebContents* web_contents,
@@ -137,15 +139,13 @@ PermissionUpdateInfoBarDelegate::PermissionUpdateInfoBarDelegate(
       callback_(callback) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_delegate_.Reset(Java_PermissionUpdateInfoBarDelegate_create(
-      env,
-      reinterpret_cast<intptr_t>(this),
-      web_contents->GetJavaWebContents().obj(),
-      base::android::ToJavaArrayOfStrings(env, android_permissions_).obj()));
+      env, reinterpret_cast<intptr_t>(this), web_contents->GetJavaWebContents(),
+      base::android::ToJavaArrayOfStrings(env, android_permissions_)));
 }
 
 PermissionUpdateInfoBarDelegate::~PermissionUpdateInfoBarDelegate() {
   Java_PermissionUpdateInfoBarDelegate_onNativeDestroyed(
-      base::android::AttachCurrentThread(), java_delegate_.obj());
+      base::android::AttachCurrentThread(), java_delegate_);
 }
 
 infobars::InfoBarDelegate::InfoBarIdentifier
@@ -173,7 +173,7 @@ base::string16 PermissionUpdateInfoBarDelegate::GetButtonLabel(
 
 bool PermissionUpdateInfoBarDelegate::Accept() {
   Java_PermissionUpdateInfoBarDelegate_requestPermissions(
-      base::android::AttachCurrentThread(), java_delegate_.obj());
+      base::android::AttachCurrentThread(), java_delegate_);
   return false;
 }
 

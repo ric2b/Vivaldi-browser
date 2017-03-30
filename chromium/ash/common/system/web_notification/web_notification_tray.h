@@ -18,7 +18,6 @@
 #include "ui/message_center/message_center_tray.h"
 #include "ui/message_center/message_center_tray_delegate.h"
 #include "ui/views/bubble/tray_bubble_view.h"
-#include "ui/views/controls/button/button.h"
 
 // Status area tray for showing browser and app notifications. This hosts
 // a MessageCenter class which manages the notification list. This class
@@ -29,7 +28,6 @@
 // is controlled by StatusAreaWidget.
 
 namespace views {
-class ImageButton;
 class MenuRunner;
 }
 
@@ -123,8 +121,6 @@ class ASH_EXPORT WebNotificationTray
   // Overridden from ui::SimpleMenuModel::Delegate.
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
   message_center::MessageCenter* message_center() const;

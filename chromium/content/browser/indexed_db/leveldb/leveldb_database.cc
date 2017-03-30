@@ -116,7 +116,7 @@ static leveldb::Status OpenDB(
     leveldb::Comparator* comparator,
     leveldb::Env* env,
     const base::FilePath& path,
-    leveldb::DB** db,
+    std::unique_ptr<leveldb::DB>* db,
     std::unique_ptr<const leveldb::FilterPolicy>* filter_policy) {
   filter_policy->reset(leveldb::NewBloomFilterPolicy(10));
   leveldb::Options options;
@@ -126,6 +126,8 @@ static leveldb::Status OpenDB(
   options.filter_policy = filter_policy->get();
   options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
   options.compression = leveldb::kSnappyCompression;
+  options.write_buffer_size =
+      leveldb_env::WriteBufferSize(base::SysInfo::AmountOfTotalDiskSpace(path));
 
   // For info about the troubles we've run into with this parameter, see:
   // https://code.google.com/p/chromium/issues/detail?id=227313#c11
@@ -133,7 +135,9 @@ static leveldb::Status OpenDB(
   options.env = env;
 
   // ChromiumEnv assumes UTF8, converts back to FilePath before using.
-  leveldb::Status s = leveldb::DB::Open(options, path.AsUTF8Unsafe(), db);
+  leveldb::DB* db_ptr = nullptr;
+  leveldb::Status s = leveldb::DB::Open(options, path.AsUTF8Unsafe(), &db_ptr);
+  db->reset(db_ptr);
 
   return s;
 }
@@ -169,7 +173,7 @@ std::unique_ptr<LevelDBLock> LevelDBDatabase::LockForTesting(
   if (!status.ok())
     return std::unique_ptr<LevelDBLock>();
   DCHECK(lock);
-  return std::unique_ptr<LevelDBLock>(new LockImpl(env, lock));
+  return base::MakeUnique<LockImpl>(env, lock);
 }
 
 static int CheckFreeSpace(const char* const type,
@@ -289,9 +293,9 @@ leveldb::Status LevelDBDatabase::Open(const base::FilePath& file_name,
   base::TimeTicks begin_time = base::TimeTicks::Now();
 
   std::unique_ptr<ComparatorAdapter> comparator_adapter(
-      new ComparatorAdapter(comparator));
+      base::MakeUnique<ComparatorAdapter>(comparator));
 
-  leveldb::DB* db;
+  std::unique_ptr<leveldb::DB> db;
   std::unique_ptr<const leveldb::FilterPolicy> filter_policy;
   const leveldb::Status s = OpenDB(comparator_adapter.get(), LevelDBEnv::Get(),
                                    file_name, &db, &filter_policy);
@@ -314,8 +318,8 @@ leveldb::Status LevelDBDatabase::Open(const base::FilePath& file_name,
 
   CheckFreeSpace("Success", file_name);
 
-  (*result).reset(new LevelDBDatabase);
-  (*result)->db_ = base::WrapUnique(db);
+  (*result) = base::WrapUnique(new LevelDBDatabase());
+  (*result)->db_ = std::move(db);
   (*result)->comparator_adapter_ = std::move(comparator_adapter);
   (*result)->comparator_ = comparator;
   (*result)->filter_policy_ = std::move(filter_policy);
@@ -327,11 +331,11 @@ leveldb::Status LevelDBDatabase::Open(const base::FilePath& file_name,
 std::unique_ptr<LevelDBDatabase> LevelDBDatabase::OpenInMemory(
     const LevelDBComparator* comparator) {
   std::unique_ptr<ComparatorAdapter> comparator_adapter(
-      new ComparatorAdapter(comparator));
+      base::MakeUnique<ComparatorAdapter>(comparator));
   std::unique_ptr<leveldb::Env> in_memory_env(
       leveldb::NewMemEnv(LevelDBEnv::Get()));
 
-  leveldb::DB* db;
+  std::unique_ptr<leveldb::DB> db;
   std::unique_ptr<const leveldb::FilterPolicy> filter_policy;
   const leveldb::Status s = OpenDB(comparator_adapter.get(),
                                    in_memory_env.get(),
@@ -344,9 +348,10 @@ std::unique_ptr<LevelDBDatabase> LevelDBDatabase::OpenInMemory(
     return std::unique_ptr<LevelDBDatabase>();
   }
 
-  std::unique_ptr<LevelDBDatabase> result(new LevelDBDatabase);
+  std::unique_ptr<LevelDBDatabase> result =
+      base::WrapUnique(new LevelDBDatabase());
   result->env_ = std::move(in_memory_env);
-  result->db_ = base::WrapUnique(db);
+  result->db_ = std::move(db);
   result->comparator_adapter_ = std::move(comparator_adapter);
   result->comparator_ = comparator;
   result->filter_policy_ = std::move(filter_policy);
@@ -461,7 +466,7 @@ bool LevelDBDatabase::OnMemoryDump(
   DCHECK(res);
   base::StringToUint64(value, &size);
 
-  auto dump = pmd->CreateAllocatorDump(base::StringPrintf(
+  auto* dump = pmd->CreateAllocatorDump(base::StringPrintf(
       "leveldb/index_db/0x%" PRIXPTR, reinterpret_cast<uintptr_t>(db_.get())));
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes, size);

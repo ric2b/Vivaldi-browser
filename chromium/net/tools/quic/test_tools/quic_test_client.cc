@@ -7,14 +7,17 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/x509_certificate.h"
-#include "net/quic/crypto/proof_verifier.h"
-#include "net/quic/quic_flags.h"
-#include "net/quic/quic_server_id.h"
+#include "net/quic/core/crypto/proof_verifier.h"
+#include "net/quic/core/quic_flags.h"
+#include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/quic_utils.h"
+#include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/quic_connection_peer.h"
 #include "net/quic/test_tools/quic_spdy_session_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -35,28 +38,36 @@ using net::test::QuicSpdySessionPeer;
 using net::test::ReliableQuicStreamPeer;
 using std::string;
 using std::vector;
+using testing::_;
+using testing::Invoke;
 
 namespace net {
 namespace test {
 namespace {
 
 // RecordingProofVerifier accepts any certificate chain and records the common
-// name of the leaf.
+// name of the leaf and then delegates the actual verfication to an actual
+// verifier. If no optional verifier is provided, then VerifyProof will return
+// success.
 class RecordingProofVerifier : public ProofVerifier {
  public:
+  explicit RecordingProofVerifier(std::unique_ptr<ProofVerifier> verifier)
+      : verifier_(std::move(verifier)) {}
+
   // ProofVerifier interface.
-  QuicAsyncStatus VerifyProof(const string& hostname,
-                              const uint16_t port,
-                              const string& server_config,
-                              QuicVersion quic_version,
-                              StringPiece chlo_hash,
-                              const vector<string>& certs,
-                              const string& cert_sct,
-                              const string& signature,
-                              const ProofVerifyContext* context,
-                              string* error_details,
-                              std::unique_ptr<ProofVerifyDetails>* details,
-                              ProofVerifierCallback* callback) override {
+  QuicAsyncStatus VerifyProof(
+      const string& hostname,
+      const uint16_t port,
+      const string& server_config,
+      QuicVersion quic_version,
+      StringPiece chlo_hash,
+      const vector<string>& certs,
+      const string& cert_sct,
+      const string& signature,
+      const ProofVerifyContext* context,
+      string* error_details,
+      std::unique_ptr<ProofVerifyDetails>* details,
+      std::unique_ptr<ProofVerifierCallback> callback) override {
     common_name_.clear();
     if (certs.empty()) {
       return QUIC_FAILURE;
@@ -79,6 +90,22 @@ class RecordingProofVerifier : public ProofVerifier {
     //    common_name_ = cert->subject().GetDisplayName();
     cert_sct_ = cert_sct;
 
+    if (!verifier_) {
+      return QUIC_SUCCESS;
+    }
+
+    return verifier_->VerifyProof(
+        hostname, port, server_config, quic_version, chlo_hash, certs, cert_sct,
+        signature, context, error_details, details, std::move(callback));
+  }
+
+  QuicAsyncStatus VerifyCertChain(
+      const std::string& hostname,
+      const std::vector<std::string>& certs,
+      const ProofVerifyContext* verify_context,
+      std::string* error_details,
+      std::unique_ptr<ProofVerifyDetails>* verify_details,
+      std::unique_ptr<ProofVerifierCallback> callback) override {
     return QUIC_SUCCESS;
   }
 
@@ -87,6 +114,7 @@ class RecordingProofVerifier : public ProofVerifier {
   const string& cert_sct() const { return cert_sct_; }
 
  private:
+  std::unique_ptr<ProofVerifier> verifier_;
   string common_name_;
   string cert_sct_;
 };
@@ -105,7 +133,7 @@ BalsaHeaders* MungeHeaders(const BalsaHeaders* const_headers) {
   headers->CopyFrom(*const_headers);
   if (!uri.starts_with("https://") && !uri.starts_with("http://")) {
     // If we have a relative URL, set some defaults.
-    string full_uri = "https://www.google.com";
+    string full_uri = "https://test.example.com";
     full_uri.append(uri.as_string());
     headers->SetRequestUri(full_uri);
   }
@@ -129,14 +157,38 @@ MockableQuicClient::MockableQuicClient(
     const QuicConfig& config,
     const QuicVersionVector& supported_versions,
     EpollServer* epoll_server)
+    : MockableQuicClient(server_address,
+                         server_id,
+                         config,
+                         supported_versions,
+                         epoll_server,
+                         nullptr) {}
+
+MockableQuicClient::MockableQuicClient(
+    IPEndPoint server_address,
+    const QuicServerId& server_id,
+    const QuicConfig& config,
+    const QuicVersionVector& supported_versions,
+    EpollServer* epoll_server,
+    std::unique_ptr<ProofVerifier> proof_verifier)
     : QuicClient(server_address,
                  server_id,
                  supported_versions,
                  config,
                  epoll_server,
-                 new RecordingProofVerifier()),
+                 base::WrapUnique(
+                     new RecordingProofVerifier(std::move(proof_verifier)))),
       override_connection_id_(0),
-      test_writer_(nullptr) {}
+      test_writer_(nullptr) {
+  ON_CALL(*this, ProcessPacket(_, _, _))
+      .WillByDefault(Invoke(this, &MockableQuicClient::ProcessPacketBase));
+}
+
+void MockableQuicClient::ProcessPacketBase(const IPEndPoint& self_address,
+                                           const IPEndPoint& peer_address,
+                                           const QuicReceivedPacket& packet) {
+  QuicClient::ProcessPacket(self_address, peer_address, packet);
+}
 
 MockableQuicClient::~MockableQuicClient() {
   if (connected()) {
@@ -187,11 +239,31 @@ QuicTestClient::QuicTestClient(IPEndPoint server_address,
                                      config,
                                      supported_versions,
                                      &epoll_server_)),
+      response_complete_(false),
       allow_bidirectional_data_(false) {
   Initialize();
 }
 
-QuicTestClient::QuicTestClient() : allow_bidirectional_data_(false) {}
+QuicTestClient::QuicTestClient(IPEndPoint server_address,
+                               const string& server_hostname,
+                               const QuicConfig& config,
+                               const QuicVersionVector& supported_versions,
+                               std::unique_ptr<ProofVerifier> proof_verifier)
+    : client_(new MockableQuicClient(server_address,
+                                     QuicServerId(server_hostname,
+                                                  server_address.port(),
+                                                  PRIVACY_MODE_DISABLED),
+                                     config,
+                                     supported_versions,
+                                     &epoll_server_,
+                                     std::move(proof_verifier))),
+      response_complete_(false),
+      allow_bidirectional_data_(false) {
+  Initialize();
+}
+
+QuicTestClient::QuicTestClient()
+    : response_complete_(false), allow_bidirectional_data_(false) {}
 
 QuicTestClient::~QuicTestClient() {
   if (stream_) {
@@ -300,6 +372,10 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
 
 ssize_t QuicTestClient::SendMessage(const HTTPMessage& message) {
   stream_ = nullptr;  // Always force creation of a stream for SendMessage.
+  // Any response we might have received for a previous request would no longer
+  // be valid.  TODO(jeffpiazza): There's probably additional client state that
+  // should be reset here, too, if we were being more careful.
+  response_complete_ = false;
 
   // If we're not connected, try to find an sni hostname.
   if (!connected()) {
@@ -386,6 +462,14 @@ string QuicTestClient::SendSynchronousRequest(const string& uri) {
   return SendCustomSynchronousRequest(message);
 }
 
+void QuicTestClient::SetStream(QuicSpdyClientStream* stream) {
+  stream_ = stream;
+  if (stream_ != nullptr) {
+    response_complete_ = false;
+    stream_->set_visitor(this);
+  }
+}
+
 QuicSpdyClientStream* QuicTestClient::GetOrCreateStream() {
   if (!connect_attempted_ || auto_reconnect_) {
     if (!connected()) {
@@ -396,14 +480,11 @@ QuicSpdyClientStream* QuicTestClient::GetOrCreateStream() {
     }
   }
   if (!stream_) {
-    stream_ = client_->CreateReliableClientStream();
-    if (stream_ == nullptr) {
-      return nullptr;
+    SetStream(client_->CreateReliableClientStream());
+    if (stream_) {
+      stream_->SetPriority(priority_);
+      stream_->set_allow_bidirectional_data(allow_bidirectional_data_);
     }
-    stream_->set_visitor(this);
-    QuicSpdyClientStream* cs = reinterpret_cast<QuicSpdyClientStream*>(stream_);
-    cs->SetPriority(priority_);
-    cs->set_allow_bidirectional_data(allow_bidirectional_data_);
   }
 
   return stream_;
@@ -485,7 +566,7 @@ bool QuicTestClient::HaveActiveStream() {
           !client_->session()->IsClosedStream(stream_->id()));
 }
 
-void QuicTestClient::WaitForResponseForMs(int timeout_ms) {
+void QuicTestClient::WaitUntil(int timeout_ms, std::function<bool()> trigger) {
   int64_t timeout_us = timeout_ms * base::Time::kMicrosecondsPerMillisecond;
   int64_t old_timeout_us = epoll_server()->timeout_in_us();
   if (timeout_us > 0) {
@@ -495,35 +576,16 @@ void QuicTestClient::WaitForResponseForMs(int timeout_ms) {
       QuicConnectionPeer::GetHelper(client()->session()->connection())
           ->GetClock();
   QuicTime end_waiting_time =
-      clock->Now().Add(QuicTime::Delta::FromMicroseconds(timeout_us));
-  while (HaveActiveStream() &&
+      clock->Now() + QuicTime::Delta::FromMicroseconds(timeout_us);
+  while (HaveActiveStream() && !(trigger && trigger()) &&
          (timeout_us < 0 || clock->Now() < end_waiting_time)) {
     client_->WaitForEvents();
   }
   if (timeout_us > 0) {
     epoll_server()->set_timeout_in_us(old_timeout_us);
   }
-}
-
-void QuicTestClient::WaitForInitialResponseForMs(int timeout_ms) {
-  int64_t timeout_us = timeout_ms * base::Time::kMicrosecondsPerMillisecond;
-  int64_t old_timeout_us = epoll_server()->timeout_in_us();
-  if (timeout_us > 0) {
-    epoll_server()->set_timeout_in_us(timeout_us);
-  }
-  const QuicClock* clock =
-      QuicConnectionPeer::GetHelper(client()->session()->connection())
-          ->GetClock();
-  QuicTime end_waiting_time =
-      clock->Now().Add(QuicTime::Delta::FromMicroseconds(timeout_us));
-  while (stream_ != nullptr &&
-         !client_->session()->IsClosedStream(stream_->id()) &&
-         stream_->stream_bytes_read() == 0 &&
-         (timeout_us < 0 || clock->Now() < end_waiting_time)) {
-    client_->WaitForEvents();
-  }
-  if (timeout_us > 0) {
-    epoll_server()->set_timeout_in_us(old_timeout_us);
+  if (trigger && !trigger()) {
+    VLOG(1) << "Client WaitUntil returning with trigger returning false.";
   }
 }
 
@@ -553,15 +615,27 @@ const SpdyHeaderBlock& QuicTestClient::response_trailers() const {
 }
 
 int64_t QuicTestClient::response_size() const {
-  return bytes_read_;
+  return bytes_read();
 }
 
 size_t QuicTestClient::bytes_read() const {
-  return bytes_read_;
+  // While stream_ is available, its member functions provide more accurate
+  // information.  bytes_read_ is updated only when stream_ becomes null.
+  if (stream_) {
+    return stream_->stream_bytes_read() + stream_->header_bytes_read();
+  } else {
+    return bytes_read_;
+  }
 }
 
 size_t QuicTestClient::bytes_written() const {
-  return bytes_written_;
+  // While stream_ is available, its member functions provide more accurate
+  // information.  bytes_written_ is updated only when stream_ becomes null.
+  if (stream_) {
+    return stream_->stream_bytes_written() + stream_->header_bytes_written();
+  } else {
+    return bytes_written_;
+  }
 }
 
 void QuicTestClient::OnClose(QuicSpdyStream* stream) {
@@ -601,9 +675,8 @@ bool QuicTestClient::CheckVary(const SpdyHeaderBlock& client_request,
 void QuicTestClient::OnRendezvousResult(QuicSpdyStream* stream) {
   std::unique_ptr<TestClientDataToResend> data_to_resend =
       std::move(push_promise_data_to_resend_);
-  stream_ = static_cast<QuicSpdyClientStream*>(stream);
+  SetStream(static_cast<QuicSpdyClientStream*>(stream));
   if (stream) {
-    stream->set_visitor(this);
     stream->OnDataAvailable();
   } else if (data_to_resend.get()) {
     data_to_resend->Resend();

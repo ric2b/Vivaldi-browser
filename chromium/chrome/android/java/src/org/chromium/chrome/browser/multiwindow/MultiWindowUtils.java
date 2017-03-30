@@ -50,6 +50,7 @@ public class MultiWindowUtils implements ActivityStateListener {
     // used in case both activities die in the background and MultiWindowUtils is recreated.
     private Boolean mTabbedActivity2TaskRunning;
     private WeakReference<ChromeTabbedActivity> mLastResumedTabbedActivity;
+    private boolean mIsInMultiWindowModeForTesting;
 
     /**
      * Returns the singleton instance of MultiWindowUtils, creating it if needed.
@@ -68,6 +69,7 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @return Whether or not {@code activity} is currently in Android N+ multi-window mode.
      */
     public boolean isInMultiWindowMode(Activity activity) {
+        if (mIsInMultiWindowModeForTesting) return true;
         if (activity == null) return false;
 
         if (Build.VERSION.CODENAME.equals("N") || Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
@@ -87,6 +89,11 @@ public class MultiWindowUtils implements ActivityStateListener {
         }
 
         return false;
+    }
+
+    @VisibleForTesting
+    public void setIsInMultiWindowModeForTesting(boolean isInMultiWindowMode) {
+        mIsInMultiWindowModeForTesting = isInMultiWindowMode;
     }
 
     /**
@@ -235,6 +242,7 @@ public class MultiWindowUtils implements ActivityStateListener {
      * @return True if the Activity still has a task in Android recents, regardless of whether
      *         the Activity has been destroyed.
      */
+    @TargetApi(Build.VERSION_CODES.M)
     private boolean isActivityTaskInRecents(String className, Context context) {
         ActivityManager activityManager = (ActivityManager)
                 context.getSystemService(Context.ACTIVITY_SERVICE);

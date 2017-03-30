@@ -30,8 +30,9 @@
 
 #include "bindings/core/v8/SourceLocation.h"
 #include "core/frame/FrameHost.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/IdentifiersFactory.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
@@ -50,59 +51,44 @@ FrameConsole::FrameConsole(LocalFrame& frame)
 void FrameConsole::addMessage(ConsoleMessage* consoleMessage)
 {
     if (addMessageToStorage(consoleMessage))
-        reportMessageToClient(consoleMessage);
+        reportMessageToClient(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->location());
 }
 
 bool FrameConsole::addMessageToStorage(ConsoleMessage* consoleMessage)
 {
-    // TODO(dgozman): drop this check, it's left here to preserve tests output.
-    if (!m_frame->document())
+    if (!m_frame->document() || !m_frame->host())
         return false;
-    MainThreadDebugger* debugger = MainThreadDebugger::instance();
-    return debugger->debugger()->addConsoleMessage(
-        debugger->contextGroupId(m_frame),
-        consoleMessage->source(),
-        consoleMessage->level(),
-        consoleMessage->message(),
-        consoleMessage->location()->url(),
-        consoleMessage->location()->lineNumber(),
-        consoleMessage->location()->columnNumber(),
-        consoleMessage->location()->cloneStackTrace(),
-        consoleMessage->location()->scriptId(),
-        IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
+    m_frame->host()->consoleMessageStorage().addConsoleMessage(m_frame->document(), consoleMessage);
+    return true;
 }
 
-void FrameConsole::reportMessageToClient(ConsoleMessage* consoleMessage)
+void FrameConsole::reportMessageToClient(MessageSource source, MessageLevel level, const String& message, SourceLocation* location)
 {
-    if (consoleMessage->source() == NetworkMessageSource)
+    if (source == NetworkMessageSource)
         return;
 
-    String url = consoleMessage->location()->url();
+    String url = location->url();
     String stackTrace;
-    if (consoleMessage->source() == ConsoleAPIMessageSource) {
-        if (!frame().host())
+    if (source == ConsoleAPIMessageSource) {
+        if (!m_frame->host())
             return;
-        if (frame().chromeClient().shouldReportDetailedMessageForSource(frame(), url)) {
-            std::unique_ptr<SourceLocation> location = SourceLocation::captureWithFullStackTrace();
-            if (!location->isUnknown())
-                stackTrace = location->toString();
+        if (m_frame->chromeClient().shouldReportDetailedMessageForSource(*m_frame, url)) {
+            std::unique_ptr<SourceLocation> fullLocation = SourceLocation::captureWithFullStackTrace();
+            if (!fullLocation->isUnknown())
+                stackTrace = fullLocation->toString();
         }
     } else {
-        if (!consoleMessage->location()->isUnknown() && frame().chromeClient().shouldReportDetailedMessageForSource(frame(), url))
-            stackTrace = consoleMessage->location()->toString();
+        if (!location->isUnknown() && m_frame->chromeClient().shouldReportDetailedMessageForSource(*m_frame, url))
+            stackTrace = location->toString();
     }
 
-    frame().chromeClient().addMessageToConsole(m_frame, consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), consoleMessage->location()->lineNumber(), url, stackTrace);
+    m_frame->chromeClient().addMessageToConsole(m_frame, source, level, message, location->lineNumber(), url, stackTrace);
 }
 
-void FrameConsole::reportWorkerMessage(ConsoleMessage* consoleMessage)
+void FrameConsole::addMessageFromWorker(MessageLevel level, const String& message, std::unique_ptr<SourceLocation> location, const String& workerId)
 {
-    reportMessageToClient(consoleMessage);
-}
-
-void FrameConsole::adoptWorkerMessage(ConsoleMessage* consoleMessage)
-{
-    addMessageToStorage(consoleMessage);
+    reportMessageToClient(WorkerMessageSource, level, message, location.get());
+    addMessageToStorage(ConsoleMessage::createFromWorker(level, message, std::move(location), workerId));
 }
 
 void FrameConsole::reportResourceResponseReceived(DocumentLoader* loader, unsigned long requestIdentifier, const ResourceResponse& response)

@@ -43,6 +43,7 @@
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -61,30 +62,27 @@ ScopedJavaLocalRef<jobject> CreateJavaProfileFromNative(
     JNIEnv* env,
     const AutofillProfile& profile) {
   return Java_AutofillProfile_create(
-      env, ConvertUTF8ToJavaString(env, profile.guid()).obj(),
-      ConvertUTF8ToJavaString(env, profile.origin()).obj(),
+      env, ConvertUTF8ToJavaString(env, profile.guid()),
+      ConvertUTF8ToJavaString(env, profile.origin()),
       profile.record_type() == AutofillProfile::LOCAL_PROFILE,
-      ConvertUTF16ToJavaString(env, profile.GetInfo(
-          AutofillType(NAME_FULL),
-          g_browser_process->GetApplicationLocale())).obj(),
-      ConvertUTF16ToJavaString(env, profile.GetRawInfo(COMPANY_NAME)).obj(),
       ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS)).obj(),
+          env, profile.GetInfo(AutofillType(NAME_FULL),
+                               g_browser_process->GetApplicationLocale())),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(COMPANY_NAME)),
+      ConvertUTF16ToJavaString(env,
+                               profile.GetRawInfo(ADDRESS_HOME_STREET_ADDRESS)),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(ADDRESS_HOME_STATE)),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(ADDRESS_HOME_CITY)),
       ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_STATE)).obj(),
-      ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_CITY)).obj(),
-      ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY)).obj(),
-      ConvertUTF16ToJavaString(env, profile.GetRawInfo(ADDRESS_HOME_ZIP)).obj(),
-      ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_SORTING_CODE)).obj(),
-      ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(ADDRESS_HOME_COUNTRY)).obj(),
-      ConvertUTF16ToJavaString(
-          env, profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER)).obj(),
-      ConvertUTF16ToJavaString(env, profile.GetRawInfo(EMAIL_ADDRESS)).obj(),
-      ConvertUTF8ToJavaString(env, profile.language_code()).obj());
+          env, profile.GetRawInfo(ADDRESS_HOME_DEPENDENT_LOCALITY)),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(ADDRESS_HOME_ZIP)),
+      ConvertUTF16ToJavaString(env,
+                               profile.GetRawInfo(ADDRESS_HOME_SORTING_CODE)),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(ADDRESS_HOME_COUNTRY)),
+      ConvertUTF16ToJavaString(env,
+                               profile.GetRawInfo(PHONE_HOME_WHOLE_NUMBER)),
+      ConvertUTF16ToJavaString(env, profile.GetRawInfo(EMAIL_ADDRESS)),
+      ConvertUTF8ToJavaString(env, profile.language_code()));
 }
 
 void MaybeSetRawInfo(AutofillProfile* profile,
@@ -99,41 +97,38 @@ void PopulateNativeProfileFromJava(
     JNIEnv* env,
     AutofillProfile* profile) {
   profile->set_origin(
-      ConvertJavaStringToUTF8(
-          Java_AutofillProfile_getOrigin(env, jprofile.obj())));
-  profile->SetInfo(AutofillType(NAME_FULL),
-                   ConvertJavaStringToUTF16(
-                       Java_AutofillProfile_getFullName(env, jprofile.obj())),
-                   g_browser_process->GetApplicationLocale());
+      ConvertJavaStringToUTF8(Java_AutofillProfile_getOrigin(env, jprofile)));
+  profile->SetInfo(
+      AutofillType(NAME_FULL),
+      ConvertJavaStringToUTF16(Java_AutofillProfile_getFullName(env, jprofile)),
+      g_browser_process->GetApplicationLocale());
   MaybeSetRawInfo(profile, autofill::COMPANY_NAME,
-                  Java_AutofillProfile_getCompanyName(env, jprofile.obj()));
+                  Java_AutofillProfile_getCompanyName(env, jprofile));
   MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_STREET_ADDRESS,
-                  Java_AutofillProfile_getStreetAddress(env, jprofile.obj()));
+                  Java_AutofillProfile_getStreetAddress(env, jprofile));
   MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_STATE,
-                  Java_AutofillProfile_getRegion(env, jprofile.obj()));
+                  Java_AutofillProfile_getRegion(env, jprofile));
   MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_CITY,
-                  Java_AutofillProfile_getLocality(env, jprofile.obj()));
-  MaybeSetRawInfo(
-      profile, autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
-      Java_AutofillProfile_getDependentLocality(env, jprofile.obj()));
+                  Java_AutofillProfile_getLocality(env, jprofile));
+  MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_DEPENDENT_LOCALITY,
+                  Java_AutofillProfile_getDependentLocality(env, jprofile));
   MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_ZIP,
-                  Java_AutofillProfile_getPostalCode(env, jprofile.obj()));
+                  Java_AutofillProfile_getPostalCode(env, jprofile));
   MaybeSetRawInfo(profile, autofill::ADDRESS_HOME_SORTING_CODE,
-                  Java_AutofillProfile_getSortingCode(env, jprofile.obj()));
+                  Java_AutofillProfile_getSortingCode(env, jprofile));
   ScopedJavaLocalRef<jstring> country_code =
-      Java_AutofillProfile_getCountryCode(env, jprofile.obj());
+      Java_AutofillProfile_getCountryCode(env, jprofile);
   if (!country_code.is_null()) {
     profile->SetInfo(AutofillType(ADDRESS_HOME_COUNTRY),
                      ConvertJavaStringToUTF16(country_code),
                      g_browser_process->GetApplicationLocale());
   }
   MaybeSetRawInfo(profile, autofill::PHONE_HOME_WHOLE_NUMBER,
-                  Java_AutofillProfile_getPhoneNumber(env, jprofile.obj()));
+                  Java_AutofillProfile_getPhoneNumber(env, jprofile));
   MaybeSetRawInfo(profile, autofill::EMAIL_ADDRESS,
-                  Java_AutofillProfile_getEmailAddress(env, jprofile.obj()));
-  profile->set_language_code(
-      ConvertJavaStringToUTF8(
-          Java_AutofillProfile_getLanguageCode(env, jprofile.obj())));
+                  Java_AutofillProfile_getEmailAddress(env, jprofile));
+  profile->set_language_code(ConvertJavaStringToUTF8(
+      Java_AutofillProfile_getLanguageCode(env, jprofile)));
 }
 
 // Mapping from Chrome card types to PaymentRequest basic card payment spec and
@@ -172,24 +167,21 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
   const PaymentRequestData& payment_request_data =
       GetPaymentRequestData(card.type());
   return Java_CreditCard_create(
-      env, ConvertUTF8ToJavaString(env, card.guid()).obj(),
-      ConvertUTF8ToJavaString(env, card.origin()).obj(),
+      env, ConvertUTF8ToJavaString(env, card.guid()),
+      ConvertUTF8ToJavaString(env, card.origin()),
       card.record_type() == CreditCard::LOCAL_CARD,
       card.record_type() == CreditCard::FULL_SERVER_CARD,
-      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NAME_FULL))
-          .obj(),
-      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NUMBER)).obj(),
-      ConvertUTF16ToJavaString(env, card.TypeAndLastFourDigits()).obj(),
-      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_EXP_MONTH))
-          .obj(),
+      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NAME_FULL)),
+      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_NUMBER)),
+      ConvertUTF16ToJavaString(env, card.TypeAndLastFourDigits()),
+      ConvertUTF16ToJavaString(env, card.GetRawInfo(CREDIT_CARD_EXP_MONTH)),
       ConvertUTF16ToJavaString(env,
-                               card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR))
-          .obj(),
-      ConvertUTF8ToJavaString(env, payment_request_data.basic_card_payment_type)
-          .obj(),
+                               card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR)),
+      ConvertUTF8ToJavaString(env,
+                              payment_request_data.basic_card_payment_type),
       ResourceMapper::MapFromChromiumId(payment_request_data.icon_resource_id),
-      ConvertUTF8ToJavaString(env, card.billing_address_id()) .obj(),
-      ConvertUTF8ToJavaString(env, card.server_id()) .obj());
+      ConvertUTF8ToJavaString(env, card.billing_address_id()),
+      ConvertUTF8ToJavaString(env, card.server_id()));
 }
 
 const char* GetCardTypeForBasicCardPaymentType(
@@ -293,15 +285,15 @@ class FullCardRequester : public payments::FullCardRequest::Delegate,
                          const base::string16& cvc) override {
     JNIEnv* env = base::android::AttachCurrentThread();
     Java_FullCardRequestDelegate_onFullCardDetails(
-        env, jdelegate_.obj(), CreateJavaCreditCardFromNative(env, card).obj(),
-        base::android::ConvertUTF16ToJavaString(env, cvc).obj());
+        env, jdelegate_, CreateJavaCreditCardFromNative(env, card),
+        base::android::ConvertUTF16ToJavaString(env, cvc));
     delete this;
   }
 
   // payments::FullCardRequest::Delegate:
   void OnFullCardError() override {
     JNIEnv* env = base::android::AttachCurrentThread();
-    Java_FullCardRequestDelegate_onFullCardError(env, jdelegate_.obj());
+    Java_FullCardRequestDelegate_onFullCardError(env, jdelegate_);
     delete this;
   }
 
@@ -376,14 +368,16 @@ ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetProfileLabelsForSettings(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj) {
-  return GetProfileLabels(env, false, personal_data_manager_->GetProfiles());
+  return GetProfileLabels(env, false, false,
+                          personal_data_manager_->GetProfiles());
 }
 
 ScopedJavaLocalRef<jobjectArray>
 PersonalDataManagerAndroid::GetProfileLabelsToSuggest(
     JNIEnv* env,
-    const JavaParamRef<jobject>& unused_obj) {
-  return GetProfileLabels(env, true,
+    const JavaParamRef<jobject>& unused_obj,
+    jboolean include_name) {
+  return GetProfileLabels(env, true, include_name,
                           personal_data_manager_->GetProfilesToSuggest());
 }
 
@@ -541,8 +535,7 @@ void PersonalDataManagerAndroid::OnPersonalDataChanged() {
   if (weak_java_obj_.get(env).is_null())
     return;
 
-  Java_PersonalDataManager_personalDataChanged(env,
-                                               weak_java_obj_.get(env).obj());
+  Java_PersonalDataManager_personalDataChanged(env, weak_java_obj_.get(env));
 }
 
 // static
@@ -666,11 +659,14 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetCreditCardGUIDs(
 ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     JNIEnv* env,
     bool address_only,
+    bool include_name,
     std::vector<AutofillProfile*> profiles) {
   std::unique_ptr<std::vector<ServerFieldType>> suggested_fields;
   size_t minimal_fields_shown = 2;
   if (address_only) {
     suggested_fields.reset(new std::vector<ServerFieldType>);
+    if (include_name)
+      suggested_fields->push_back(NAME_FULL);
     suggested_fields->push_back(COMPANY_NAME);
     suggested_fields->push_back(ADDRESS_HOME_LINE1);
     suggested_fields->push_back(ADDRESS_HOME_LINE2);
@@ -683,9 +679,11 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
     minimal_fields_shown = suggested_fields->size();
   }
 
+  ServerFieldType excluded_field = include_name ? UNKNOWN_TYPE : NAME_FULL;
+
   std::vector<base::string16> labels;
   AutofillProfile::CreateInferredLabels(
-      profiles, suggested_fields.get(), NAME_FULL, minimal_fields_shown,
+      profiles, suggested_fields.get(), excluded_field, minimal_fields_shown,
       g_browser_process->GetApplicationLocale(), &labels);
 
   return base::android::ToJavaArrayOfStrings(env, labels);

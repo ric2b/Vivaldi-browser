@@ -33,6 +33,7 @@
 #include "core/html/PluginDocument.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/LayoutPart.h"
+#include "core/loader/FrameLoaderClient.h"
 
 namespace blink {
 
@@ -125,8 +126,8 @@ void HTMLEmbedElement::parametersForPlugin(Vector<String>& paramNames, Vector<St
 // moved down into HTMLPluginElement.cpp
 void HTMLEmbedElement::updateWidgetInternal()
 {
-    ASSERT(!layoutEmbeddedItem().showsUnavailablePluginIndicator());
-    ASSERT(needsWidgetUpdate());
+    DCHECK(!layoutEmbeddedItem().showsUnavailablePluginIndicator());
+    DCHECK(needsWidgetUpdate());
     setNeedsWidgetUpdate(false);
 
     if (m_url.isEmpty() && m_serviceType.isEmpty())
@@ -145,6 +146,13 @@ void HTMLEmbedElement::updateWidgetInternal()
     // FIXME: Can we not have layoutObject here now that beforeload events are gone?
     if (!layoutObject())
         return;
+
+    // Overwrites the URL and MIME type of a Flash embed to use an HTML5 embed.
+    KURL overridenUrl = document().frame()->loader().client()->overrideFlashEmbedWithHTML(document().completeURL(m_url));
+    if (!overridenUrl.isEmpty()) {
+        m_url = overridenUrl.getString();
+        m_serviceType = "text/html";
+    }
 
     requestObject(m_url, m_serviceType, paramNames, paramValues);
 }
@@ -170,9 +178,9 @@ bool HTMLEmbedElement::layoutObjectIsNeeded(const ComputedStyle& style)
     //   fallback content.
     ContainerNode* p = parentNode();
     if (isHTMLObjectElement(p)) {
-        ASSERT(p->layoutObject());
+        DCHECK(p->layoutObject());
         if (!toHTMLObjectElement(p)->useFallbackContent()) {
-            ASSERT(!p->layoutObject()->isEmbeddedObject());
+            DCHECK(!p->layoutObject()->isEmbeddedObject());
             return false;
         }
     }

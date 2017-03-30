@@ -11,14 +11,15 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_pump_default.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
 #include "services/catalog/store.h"
 #include "services/shell/connect_params.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/shell/public/cpp/shell_connection.h"
-#include "services/shell/shell.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_context.h"
+#include "services/shell/service_manager.h"
 #include "services/shell/standalone/context.h"
 
 namespace shell {
@@ -52,17 +53,17 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
         init_params_(std::move(init_params)) {}
   ~MojoThread() override {}
 
-  void CreateShellClientRequest(base::WaitableEvent* signal,
+  void CreateServiceRequest(base::WaitableEvent* signal,
                                 const std::string& name,
-                                mojom::ShellClientRequest* request) {
+                                mojom::ServiceRequest* request) {
     // Only valid to call this on the background thread.
     DCHECK(message_loop_->task_runner()->BelongsToCurrentThread());
-    *request = context_->shell()->InitInstanceForEmbedder(name);
+    *request = context_->service_manager()->StartEmbedderService(name);
     signal->Signal();
   }
 
   void Connect(std::unique_ptr<ConnectParams> params) {
-    context_->shell()->Connect(std::move(params));
+    context_->service_manager()->Connect(std::move(params));
   }
 
   base::MessageLoop* message_loop() { return message_loop_; }
@@ -75,9 +76,10 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
     Join();
   }
 
-  void RunShellCallback(const BackgroundShell::ShellThreadCallback& callback) {
+  void RunServiceManagerCallback(
+      const BackgroundShell::ServiceManagerThreadCallback& callback) {
     DCHECK(message_loop_->task_runner()->BelongsToCurrentThread());
-    callback.Run(context_->shell());
+    callback.Run(context_->service_manager());
   }
 
   // base::SimpleThread:
@@ -109,7 +111,7 @@ class BackgroundShell::MojoThread : public base::SimpleThread {
     context_ = context.get();
     context_->Init(std::move(context_init_params));
 
-    message_loop_->Run();
+    base::RunLoop().Run();
 
     // Has to happen after run, but while messageloop still valid.
     context_->Shutdown();
@@ -146,17 +148,17 @@ void BackgroundShell::Init(std::unique_ptr<InitParams> init_params) {
   thread_->Start();
 }
 
-mojom::ShellClientRequest BackgroundShell::CreateShellClientRequest(
+mojom::ServiceRequest BackgroundShell::CreateServiceRequest(
     const std::string& name) {
   std::unique_ptr<ConnectParams> params(new ConnectParams);
-  params->set_source(CreateShellIdentity());
+  params->set_source(CreateServiceManagerIdentity());
   params->set_target(Identity(name, mojom::kRootUserID));
-  mojom::ShellClientRequest request;
+  mojom::ServiceRequest request;
   base::WaitableEvent signal(base::WaitableEvent::ResetPolicy::MANUAL,
                              base::WaitableEvent::InitialState::NOT_SIGNALED);
   thread_->message_loop()->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&MojoThread::CreateShellClientRequest,
+      base::Bind(&MojoThread::CreateServiceRequest,
                  base::Unretained(thread_.get()), &signal, name, &request));
   signal.Wait();
   thread_->message_loop()->task_runner()->PostTask(
@@ -166,10 +168,10 @@ mojom::ShellClientRequest BackgroundShell::CreateShellClientRequest(
   return request;
 }
 
-void BackgroundShell::ExecuteOnShellThread(
-    const ShellThreadCallback& callback) {
+void BackgroundShell::ExecuteOnServiceManagerThread(
+    const ServiceManagerThreadCallback& callback) {
   thread_->message_loop()->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&MojoThread::RunShellCallback,
+      FROM_HERE, base::Bind(&MojoThread::RunServiceManagerCallback,
                             base::Unretained(thread_.get()), callback));
 }
 

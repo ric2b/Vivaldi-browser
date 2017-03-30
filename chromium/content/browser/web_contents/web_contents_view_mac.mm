@@ -30,9 +30,11 @@
 #include "ui/base/clipboard/custom_data_helper.h"
 #import "ui/base/cocoa/focus_tracker.h"
 #include "ui/base/dragdrop/cocoa_dnd_util.h"
+#include "ui/display/screen.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 
 #include "content/public/browser/web_drag_dest_delegate.h"
+#include "app/vivaldi_apptools.h"
 
 using blink::WebDragOperation;
 using blink::WebDragOperationsMask;
@@ -76,7 +78,39 @@ STATIC_ASSERT_ENUM(NSDragOperationEvery, blink::WebDragOperationEvery);
 - (content::WebContentsImpl*)webContents;
 @end
 
+namespace {
+
+blink::WebScreenInfo GetWebScreenInfo(NSView* view) {
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(view);
+
+  NSScreen* screen = [NSScreen deepestScreen];
+
+  blink::WebScreenInfo results;
+
+  results.deviceScaleFactor = static_cast<int>(display.device_scale_factor());
+  results.depth = NSBitsPerPixelFromDepth([screen depth]);
+  results.depthPerComponent = NSBitsPerSampleFromDepth([screen depth]);
+  results.isMonochrome =
+      [[screen colorSpace] colorSpaceModel] == NSGrayColorSpaceModel;
+  results.rect = display.bounds();
+  results.availableRect = display.work_area();
+  results.orientationAngle = display.RotationAsDegree();
+  results.orientationType =
+      content::RenderWidgetHostViewBase::GetOrientationTypeForDesktop(display);
+
+  return results;
+}
+
+}  // namespace
+
 namespace content {
+
+// static
+void WebContentsView::GetDefaultScreenInfo(
+    blink::WebScreenInfo* results) {
+  *results = GetWebScreenInfo(NULL);
+}
 
 WebContentsView* CreateWebContentsView(
     WebContentsImpl* web_contents,
@@ -117,6 +151,10 @@ gfx::NativeView WebContentsViewMac::GetContentNativeView() const {
 gfx::NativeWindow WebContentsViewMac::GetTopLevelNativeWindow() const {
   NSWindow* window = [cocoa_view_.get() window];
   return window ? window : delegate_->GetNativeWindow();
+}
+
+void WebContentsViewMac::GetScreenInfo(blink::WebScreenInfo* results) const {
+  *results = GetWebScreenInfo(GetNativeView());
 }
 
 void WebContentsViewMac::GetContainerBounds(gfx::Rect* out) const {
@@ -307,6 +345,7 @@ void WebContentsViewMac::CreateView(
 
 RenderWidgetHostViewBase* WebContentsViewMac::CreateViewForWidget(
     RenderWidgetHost* render_widget_host, bool is_guest_view_hack) {
+  if (!vivaldi::IsVivaldiRunning())
   if (render_widget_host->GetView()) {
     // During testing, the view will already be set up in most cases to the
     // test view, so we don't want to clobber it with a real one. To verify that
@@ -575,6 +614,11 @@ void WebContentsViewMac::CloseTab() {
   // when dropping tabs outside a window, we add this extra event.
   content::WebDragDestDelegate* delegate = [dragDest_ getDragDelegate];
   if (delegate) {
+    // Flip |screenPoint|.
+    NSScreen* screen = [[NSScreen screens] firstObject];
+    NSRect screenFrame = [screen frame];
+    screenPoint.y = screenFrame.size.height - screenPoint.y;
+
     delegate->OnDragEnd(screenPoint.x, screenPoint.y,
         static_cast<blink::WebDragOperation>(operation),
         [dragDest_ isCanceled]);
@@ -700,7 +744,6 @@ void WebContentsViewMac::CloseTab() {
 }
 
 - (void)windowChangedOcclusionState:(NSNotification*)notification {
-  DCHECK(base::mac::IsOSMavericksOrLater());
   NSWindow* window = [notification object];
   WebContentsImpl* webContents = [self webContents];
   if (window && webContents && !webContents->IsBeingDestroyed()) {

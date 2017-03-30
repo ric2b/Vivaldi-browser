@@ -1,0 +1,23 @@
+source_set("extraparts") {
+  sources = [
+    "vivaldi_browser_main_extra_parts.cc",
+    "vivaldi_browser_main_extra_parts.h",
+  ]
+  if (is_linux) {
+    sources += [ "vivaldi_browser_main_extra_parts_linux.cc" ]
+  }
+  if (is_mac) {
+    sources += [ "vivaldi_browser_main_extra_parts_mac.mm" ]
+  }
+  if (is_win) {
+    sources += [ "vivaldi_browser_main_extra_parts_win.cc" ]
+  }
+  deps = [
+    "//base:base",
+    "//chrome/common:constants",
+    "//skia",
+    "//third_party/WebKit/public:blink_headers",
+    "//vivaldi/extensions/schema:api",
+  ]
+  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+}

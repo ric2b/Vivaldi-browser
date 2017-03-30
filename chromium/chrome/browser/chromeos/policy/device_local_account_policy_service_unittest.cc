@@ -42,11 +42,11 @@
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/core/common/schema_registry.h"
+#include "components/policy/policy_constants.h"
+#include "components/policy/proto/cloud_policy.pb.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
-#include "policy/policy_constants.h"
-#include "policy/proto/cloud_policy.pb.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::AnyNumber;
@@ -143,13 +143,14 @@ DeviceLocalAccountPolicyServiceTestBase::
 void DeviceLocalAccountPolicyServiceTestBase::SetUp() {
   chromeos::DeviceSettingsTestBase::SetUp();
 
-  expected_policy_map_.Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY,
+  expected_policy_map_.Set(key::kSearchSuggestEnabled, POLICY_LEVEL_MANDATORY,
                            POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                           base::WrapUnique(new base::FundamentalValue(true)),
+                           base::MakeUnique<base::FundamentalValue>(true),
                            nullptr);
 
-  device_local_account_policy_.payload().mutable_disablespdy()->set_value(
-      true);
+  device_local_account_policy_.payload()
+      .mutable_searchsuggestenabled()
+      ->set_value(true);
   device_local_account_policy_.policy_data().set_policy_type(
       dm_protocol::kChromePublicAccountPolicyType);
 }
@@ -808,21 +809,21 @@ void DeviceLocalAccountPolicyProviderTest::SetUp() {
   expected_policy_map_.Set(
       key::kLidCloseAction, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
       POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
-      base::WrapUnique(new base::FundamentalValue(
-          chromeos::PowerPolicyController::ACTION_STOP_SESSION)),
+      base::MakeUnique<base::FundamentalValue>(
+          chromeos::PowerPolicyController::ACTION_STOP_SESSION),
       nullptr);
   expected_policy_map_.Set(
       key::kShelfAutoHideBehavior, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
       POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
-      base::WrapUnique(new base::StringValue("Never")), nullptr);
+      base::MakeUnique<base::StringValue>("Never"), nullptr);
   expected_policy_map_.Set(
       key::kShowLogoutButtonInTray, POLICY_LEVEL_MANDATORY,
       POLICY_SCOPE_MACHINE, POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
-      base::WrapUnique(new base::FundamentalValue(true)), nullptr);
+      base::MakeUnique<base::FundamentalValue>(true), nullptr);
   expected_policy_map_.Set(
       key::kFullscreenAllowed, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
       POLICY_SOURCE_PUBLIC_SESSION_OVERRIDE,
-      base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+      base::MakeUnique<base::FundamentalValue>(false), nullptr);
 }
 
 void DeviceLocalAccountPolicyProviderTest::TearDown() {
@@ -872,8 +873,9 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, Policy) {
   // Policy change should be reported.
   EXPECT_CALL(provider_observer_, OnUpdatePolicy(provider_.get()))
       .Times(AtLeast(1));
-  device_local_account_policy_.payload().mutable_disablespdy()->set_value(
-      false);
+  device_local_account_policy_.payload()
+      .mutable_searchsuggestenabled()
+      ->set_value(false);
   InstallDeviceLocalAccountPolicy(kAccount1);
   DeviceLocalAccountPolicyBroker* broker =
       service_->GetBrokerForUser(account_1_user_id_);
@@ -884,9 +886,9 @@ TEST_F(DeviceLocalAccountPolicyProviderTest, Policy) {
 
   expected_policy_bundle
       .Get(PolicyNamespace(POLICY_DOMAIN_CHROME, std::string()))
-      .Set(key::kDisableSpdy, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-           POLICY_SOURCE_CLOUD,
-           base::WrapUnique(new base::FundamentalValue(false)), nullptr);
+      .Set(key::kSearchSuggestEnabled, POLICY_LEVEL_MANDATORY,
+           POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
+           base::MakeUnique<base::FundamentalValue>(false), nullptr);
   EXPECT_TRUE(expected_policy_bundle.Equals(provider_->policies()));
 
   // Any values set for the |ShelfAutoHideBehavior|, |ShowLogoutButtonInTray|

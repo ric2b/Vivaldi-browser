@@ -15,6 +15,8 @@ NinjaBundleDataTargetWriter::NinjaBundleDataTargetWriter(const Target* target,
 NinjaBundleDataTargetWriter::~NinjaBundleDataTargetWriter() {}
 
 void NinjaBundleDataTargetWriter::Run() {
+  if (target_->is_disabled())
+    return;
   std::vector<OutputFile> output_files;
   for (const SourceFile& source_file : target_->sources()) {
     output_files.push_back(
@@ -27,8 +29,11 @@ void NinjaBundleDataTargetWriter::Run() {
     output_files.push_back(input_dep);
 
   std::vector<OutputFile> order_only_deps;
-  for (const auto& pair : target_->data_deps())
+  for (const auto& pair : target_->data_deps()) {
+    if (pair.ptr->is_disabled())
+      continue;
     order_only_deps.push_back(pair.ptr->dependency_output_file());
+  }
 
   WriteStampForTarget(output_files, order_only_deps);
 }

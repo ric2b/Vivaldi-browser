@@ -239,7 +239,7 @@ void InstallVerifier::Init() {
         InstallSignature::FromValue(*pref);
     if (!signature_from_prefs.get()) {
       LogInitResultHistogram(INIT_UNPARSEABLE_PREF);
-    } else if (!InstallSigner::VerifySignature(*signature_from_prefs.get())) {
+    } else if (!InstallSigner::VerifySignature(*signature_from_prefs)) {
       LogInitResultHistogram(INIT_INVALID_SIGNATURE);
       DVLOG(1) << "Init - ignoring invalid signature";
     } else {
@@ -271,12 +271,12 @@ base::Time InstallVerifier::SignatureTimestamp() {
 }
 
 bool InstallVerifier::IsKnownId(const std::string& id) const {
-  return signature_.get() && (ContainsKey(signature_->ids, id) ||
-                              ContainsKey(signature_->invalid_ids, id));
+  return signature_.get() && (base::ContainsKey(signature_->ids, id) ||
+                              base::ContainsKey(signature_->invalid_ids, id));
 }
 
 bool InstallVerifier::IsInvalid(const std::string& id) const {
-  return ((signature_.get() && ContainsKey(signature_->invalid_ids, id)));
+  return ((signature_.get() && base::ContainsKey(signature_->invalid_ids, id)));
 }
 
 void InstallVerifier::VerifyExtension(const std::string& extension_id) {
@@ -328,8 +328,8 @@ void InstallVerifier::RemoveMany(const ExtensionIdSet& ids) {
 
   bool found_any = false;
   for (ExtensionIdSet::const_iterator i = ids.begin(); i != ids.end(); ++i) {
-    if (ContainsKey(signature_->ids, *i) ||
-        ContainsKey(signature_->invalid_ids, *i)) {
+    if (base::ContainsKey(signature_->ids, *i) ||
+        base::ContainsKey(signature_->invalid_ids, *i)) {
       found_any = true;
       break;
     }
@@ -406,7 +406,8 @@ bool InstallVerifier::MustRemainDisabled(const Extension* extension,
 
   bool verified = true;
   MustRemainDisabledOutcome outcome = VERIFIED;
-  if (ContainsKey(InstallSigner::GetForcedNotFromWebstore(), extension->id())) {
+  if (base::ContainsKey(InstallSigner::GetForcedNotFromWebstore(),
+                        extension->id())) {
     verified = false;
     outcome = FORCED_NOT_VERIFIED;
   } else if (!IsFromStore(*extension)) {
@@ -421,7 +422,7 @@ bool InstallVerifier::MustRemainDisabled(const Extension* extension,
     outcome = NO_SIGNATURE;
   } else if (!IsVerified(extension->id())) {
     if (signature_.get() &&
-        !ContainsKey(signature_->invalid_ids, extension->id())) {
+        !base::ContainsKey(signature_->invalid_ids, extension->id())) {
       outcome = NOT_VERIFIED_BUT_UNKNOWN_ID;
     } else {
       verified = false;
@@ -458,7 +459,7 @@ ExtensionIdSet InstallVerifier::GetExtensionsToVerify() const {
   for (ExtensionSet::const_iterator iter = extensions->begin();
        iter != extensions->end();
        ++iter) {
-    if (NeedsVerification(*iter->get()))
+    if (NeedsVerification(**iter))
       result.insert((*iter)->id());
   }
   return result;
@@ -548,8 +549,8 @@ void InstallVerifier::GarbageCollect() {
 }
 
 bool InstallVerifier::IsVerified(const std::string& id) const {
-  return ((signature_.get() && ContainsKey(signature_->ids, id)) ||
-          ContainsKey(provisional_, id));
+  return ((signature_.get() && base::ContainsKey(signature_->ids, id)) ||
+          base::ContainsKey(provisional_, id));
 }
 
 void InstallVerifier::BeginFetch() {
@@ -568,7 +569,7 @@ void InstallVerifier::BeginFetch() {
   if (operation.type == InstallVerifier::REMOVE) {
     for (ExtensionIdSet::const_iterator i = operation.ids.begin();
          i != operation.ids.end(); ++i) {
-      if (ContainsKey(ids_to_sign, *i))
+      if (base::ContainsKey(ids_to_sign, *i))
         ids_to_sign.erase(*i);
     }
   } else {  // All other operation types are some form of "ADD".
@@ -596,10 +597,10 @@ void InstallVerifier::SaveToPrefs() {
     if (VLOG_IS_ON(1)) {
       DVLOG(1) << "SaveToPrefs - saving";
 
-      DCHECK(InstallSigner::VerifySignature(*signature_.get()));
+      DCHECK(InstallSigner::VerifySignature(*signature_));
       std::unique_ptr<InstallSignature> rehydrated =
           InstallSignature::FromValue(pref);
-      DCHECK(InstallSigner::VerifySignature(*rehydrated.get()));
+      DCHECK(InstallSigner::VerifySignature(*rehydrated));
     }
     prefs_->SetInstallSignature(&pref);
   }

@@ -21,7 +21,7 @@
 #include "components/test_runner/test_runner.h"
 #include "components/test_runner/web_frame_test_proxy.h"
 #include "components/test_runner/web_test_delegate.h"
-#include "components/test_runner/web_test_proxy.h"
+#include "components/test_runner/web_view_test_proxy.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -96,25 +96,6 @@ void PrintResponseDescription(WebTestDelegate* delegate,
       response.httpStatusCode()));
 }
 
-std::string PriorityDescription(
-    const blink::WebURLRequest::Priority& priority) {
-  switch (priority) {
-    case blink::WebURLRequest::PriorityVeryLow:
-      return "VeryLow";
-    case blink::WebURLRequest::PriorityLow:
-      return "Low";
-    case blink::WebURLRequest::PriorityMedium:
-      return "Medium";
-    case blink::WebURLRequest::PriorityHigh:
-      return "High";
-    case blink::WebURLRequest::PriorityVeryHigh:
-      return "VeryHigh";
-    case blink::WebURLRequest::PriorityUnresolved:
-    default:
-      return "Unresolved";
-  }
-}
-
 void BlockRequest(blink::WebURLRequest& request) {
   request.setURL(GURL("255.255.255.255"));
 }
@@ -186,15 +167,15 @@ const char* WebNavigationTypeToString(blink::WebNavigationType type) {
 WebFrameTestClient::WebFrameTestClient(
     TestRunner* test_runner,
     WebTestDelegate* delegate,
-    WebTestProxyBase* web_test_proxy_base,
+    WebViewTestProxyBase* web_view_test_proxy_base,
     WebFrameTestProxyBase* web_frame_test_proxy_base)
     : test_runner_(test_runner),
       delegate_(delegate),
-      web_test_proxy_base_(web_test_proxy_base),
+      web_view_test_proxy_base_(web_view_test_proxy_base),
       web_frame_test_proxy_base_(web_frame_test_proxy_base) {
   DCHECK(test_runner);
   DCHECK(delegate_);
-  DCHECK(web_test_proxy_base_);
+  DCHECK(web_view_test_proxy_base_);
 }
 
 WebFrameTestClient::~WebFrameTestClient() {}
@@ -354,7 +335,7 @@ void WebFrameTestClient::postAccessibilityEvent(const blink::WebAXObject& obj,
   }
 
   AccessibilityController* accessibility_controller =
-      web_test_proxy_base_->accessibility_controller();
+      web_view_test_proxy_base_->accessibility_controller();
   accessibility_controller->NotificationReceived(obj, event_name);
   if (accessibility_controller->ShouldLogAccessibilityEvents()) {
     std::string message("AccessibilityNotification - ");
@@ -390,7 +371,8 @@ blink::WebPlugin* WebFrameTestClient::createPlugin(
 
 void WebFrameTestClient::showContextMenu(
     const blink::WebContextMenuData& context_menu_data) {
-  web_test_proxy_base_->event_sender()->SetContextMenuData(context_menu_data);
+  web_view_test_proxy_base_->event_sender()->SetContextMenuData(
+      context_menu_data);
 }
 
 blink::WebUserMediaClient* WebFrameTestClient::userMediaClient() {
@@ -511,6 +493,18 @@ void WebFrameTestClient::didFinishLoad(blink::WebLocalFrame* frame) {
   }
 }
 
+void WebFrameTestClient::didNavigateWithinPage(
+    blink::WebLocalFrame* frame,
+    const blink::WebHistoryItem& history_item,
+    blink::WebHistoryCommitType commit_type,
+    bool contentInitiated) {
+  test_runner_->OnNavigationEnd();
+}
+
+void WebFrameTestClient::didStartLoading(bool to_different_document) {
+  test_runner_->OnNavigationBegin(web_frame_test_proxy_base_->web_frame());
+}
+
 void WebFrameTestClient::didStopLoading() {
   test_runner_->tryToClearTopLoadingFrame(
       web_frame_test_proxy_base_->web_frame());
@@ -528,32 +522,16 @@ void WebFrameTestClient::didDispatchPingLoader(const blink::WebURL& url) {
                             URLDescription(url).c_str() + "'.\n");
 }
 
-void WebFrameTestClient::willSendRequest(
-    blink::WebLocalFrame* frame,
-    unsigned identifier,
-    blink::WebURLRequest& request,
-    const blink::WebURLResponse& redirect_response) {
+void WebFrameTestClient::willSendRequest(blink::WebLocalFrame* frame,
+                                         blink::WebURLRequest& request) {
   // Need to use GURL for host() and SchemeIs()
   GURL url = request.url();
   std::string request_url = url.possibly_invalid_spec();
 
   GURL main_document_url = request.firstPartyForCookies();
 
-  if (redirect_response.isNull() &&
-      (test_runner_->shouldDumpResourceLoadCallbacks() ||
-       test_runner_->shouldDumpResourcePriorities())) {
-    DCHECK(resource_identifier_map_.find(identifier) ==
-           resource_identifier_map_.end());
-    resource_identifier_map_[identifier] =
-        DescriptionSuitableForTestResult(request_url);
-  }
-
   if (test_runner_->shouldDumpResourceLoadCallbacks()) {
-    if (resource_identifier_map_.find(identifier) ==
-        resource_identifier_map_.end())
-      delegate_->PrintMessage("<unknown>");
-    else
-      delegate_->PrintMessage(resource_identifier_map_[identifier]);
+    delegate_->PrintMessage(DescriptionSuitableForTestResult(request_url));
     delegate_->PrintMessage(" - willSendRequest <NSURLRequest URL ");
     delegate_->PrintMessage(
         DescriptionSuitableForTestResult(request_url).c_str());
@@ -561,17 +539,7 @@ void WebFrameTestClient::willSendRequest(
     delegate_->PrintMessage(URLDescription(main_document_url).c_str());
     delegate_->PrintMessage(", http method ");
     delegate_->PrintMessage(request.httpMethod().utf8().data());
-    delegate_->PrintMessage("> redirectResponse ");
-    PrintResponseDescription(delegate_, redirect_response);
-    delegate_->PrintMessage("\n");
-  }
-
-  if (test_runner_->shouldDumpResourcePriorities()) {
-    delegate_->PrintMessage(
-        DescriptionSuitableForTestResult(request_url).c_str());
-    delegate_->PrintMessage(" has priority ");
-    delegate_->PrintMessage(PriorityDescription(request.getPriority()));
-    delegate_->PrintMessage("\n");
+    delegate_->PrintMessage(">\n");
   }
 
   if (test_runner_->httpHeadersToClear()) {
@@ -605,14 +573,10 @@ void WebFrameTestClient::willSendRequest(
 }
 
 void WebFrameTestClient::didReceiveResponse(
-    unsigned identifier,
     const blink::WebURLResponse& response) {
   if (test_runner_->shouldDumpResourceLoadCallbacks()) {
-    if (resource_identifier_map_.find(identifier) ==
-        resource_identifier_map_.end())
-      delegate_->PrintMessage("<unknown>");
-    else
-      delegate_->PrintMessage(resource_identifier_map_[identifier]);
+    delegate_->PrintMessage(DescriptionSuitableForTestResult(
+        GURL(response.url()).possibly_invalid_spec()));
     delegate_->PrintMessage(" - didReceiveResponse ");
     PrintResponseDescription(delegate_, response);
     delegate_->PrintMessage("\n");
@@ -628,35 +592,6 @@ void WebFrameTestClient::didReceiveResponse(
                                                 : mime_type.utf8().data());
     delegate_->PrintMessage("\n");
   }
-}
-
-void WebFrameTestClient::didChangeResourcePriority(
-    unsigned identifier,
-    const blink::WebURLRequest::Priority& priority,
-    int intra_priority_value) {
-  if (test_runner_->shouldDumpResourcePriorities()) {
-    if (resource_identifier_map_.find(identifier) ==
-        resource_identifier_map_.end())
-      delegate_->PrintMessage("<unknown>");
-    else
-      delegate_->PrintMessage(resource_identifier_map_[identifier]);
-    delegate_->PrintMessage(base::StringPrintf(
-        " changed priority to %s, intra_priority %d\n",
-        PriorityDescription(priority).c_str(), intra_priority_value));
-  }
-}
-
-void WebFrameTestClient::didFinishResourceLoad(blink::WebLocalFrame* frame,
-                                               unsigned identifier) {
-  if (test_runner_->shouldDumpResourceLoadCallbacks()) {
-    if (resource_identifier_map_.find(identifier) ==
-        resource_identifier_map_.end())
-      delegate_->PrintMessage("<unknown>");
-    else
-      delegate_->PrintMessage(resource_identifier_map_[identifier]);
-    delegate_->PrintMessage(" - didFinishLoading\n");
-  }
-  resource_identifier_map_.erase(identifier);
 }
 
 void WebFrameTestClient::didAddMessageToConsole(
@@ -748,8 +683,8 @@ void WebFrameTestClient::checkIfAudioSinkExistsAndIsAuthorized(
 }
 
 void WebFrameTestClient::didClearWindowObject(blink::WebLocalFrame* frame) {
-  web_test_proxy_base_->test_interfaces()->BindTo(frame);
-  web_test_proxy_base_->BindTo(frame);
+  web_view_test_proxy_base_->test_interfaces()->BindTo(frame);
+  web_view_test_proxy_base_->BindTo(frame);
 }
 
 bool WebFrameTestClient::runFileChooser(

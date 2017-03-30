@@ -7,16 +7,13 @@
 #include <math.h>
 
 #include <limits>
-#include <memory>
 #include <set>
-#include <utility>
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
@@ -29,6 +26,8 @@
 #include "content/browser/indexed_db/indexed_db_cursor.h"
 #include "content/browser/indexed_db/indexed_db_factory.h"
 #include "content/browser/indexed_db/indexed_db_index_writer.h"
+#include "content/browser/indexed_db/indexed_db_observation.h"
+#include "content/browser/indexed_db/indexed_db_observer_changes.h"
 #include "content/browser/indexed_db/indexed_db_pending_connection.h"
 #include "content/browser/indexed_db/indexed_db_return_value.h"
 #include "content/browser/indexed_db/indexed_db_tracing.h"
@@ -77,61 +76,280 @@ HistogramIDBKeyPathType HistogramKeyPathType(const IndexedDBKeyPath& key_path) {
 
 }  // namespace
 
-// PendingUpgradeCall has a std::unique_ptr<IndexedDBConnection> because it owns
-// the
-// in-progress connection.
-class IndexedDBDatabase::PendingUpgradeCall {
+// This represents what script calls an 'IDBOpenDBRequest' - either a database
+// open or delete call. These may be blocked on other connections. After every
+// callback, the request must call IndexedDBDatabase::RequestComplete() or be
+// expecting a further callback.
+class IndexedDBDatabase::ConnectionRequest {
  public:
-  PendingUpgradeCall(scoped_refptr<IndexedDBCallbacks> callbacks,
-                     std::unique_ptr<IndexedDBConnection> connection,
-                     int64_t transaction_id,
-                     int64_t version)
-      : callbacks_(callbacks),
-        connection_(std::move(connection)),
-        version_(version),
-        transaction_id_(transaction_id) {}
-  scoped_refptr<IndexedDBCallbacks> callbacks() const { return callbacks_; }
-  // Takes ownership of the connection object.
-  std::unique_ptr<IndexedDBConnection> ReleaseConnection() WARN_UNUSED_RESULT {
-    return std::move(connection_);
+  explicit ConnectionRequest(scoped_refptr<IndexedDBDatabase> db) : db_(db) {}
+
+  virtual ~ConnectionRequest() {}
+
+  // Called when the request makes it to the front of the queue.
+  virtual void Perform() = 0;
+
+  // Called if a front-end signals that it is ignoring a "versionchange"
+  // event. This should result in firing a "blocked" event at the request.
+  virtual void OnVersionChangeIgnored() const = 0;
+
+  // Called when a connection is closed; if it corresponds to this connection,
+  // need to do cleanup. Otherwise, it may unblock further steps.
+  virtual void OnConnectionClosed(IndexedDBConnection* connection) = 0;
+
+  // Called when the upgrade transaction has started executing.
+  virtual void UpgradeTransactionStarted(int64_t old_version) = 0;
+
+  // Called when the upgrade transaction has finished.
+  virtual void UpgradeTransactionFinished(bool committed) = 0;
+
+ protected:
+  scoped_refptr<IndexedDBDatabase> db_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ConnectionRequest);
+};
+
+class IndexedDBDatabase::OpenRequest
+    : public IndexedDBDatabase::ConnectionRequest {
+ public:
+  OpenRequest(scoped_refptr<IndexedDBDatabase> db,
+              std::unique_ptr<IndexedDBPendingConnection> pending_connection)
+      : ConnectionRequest(db), pending_(std::move(pending_connection)) {}
+
+  void Perform() override {
+    if (db_->metadata_.id == kInvalidId) {
+      // The database was deleted then immediately re-opened; OpenInternal()
+      // recreates it in the backing store.
+      if (!db_->OpenInternal().ok()) {
+        // TODO(jsbell): Consider including sanitized leveldb status message.
+        base::string16 message;
+        if (pending_->version == IndexedDBDatabaseMetadata::NO_VERSION) {
+          message = ASCIIToUTF16(
+              "Internal error opening database with no version specified.");
+        } else {
+          message =
+              ASCIIToUTF16("Internal error opening database with version ") +
+              Int64ToString16(pending_->version);
+        }
+        pending_->callbacks->OnError(IndexedDBDatabaseError(
+            blink::WebIDBDatabaseExceptionUnknownError, message));
+        db_->RequestComplete(this);
+        return;
+      }
+
+      DCHECK_EQ(IndexedDBDatabaseMetadata::NO_VERSION, db_->metadata_.version);
+    }
+
+    const int64_t old_version = db_->metadata_.version;
+    int64_t& new_version = pending_->version;
+
+    bool is_new_database = old_version == IndexedDBDatabaseMetadata::NO_VERSION;
+
+    if (new_version == IndexedDBDatabaseMetadata::DEFAULT_VERSION) {
+      // For unit tests only - skip upgrade steps. (Calling from script with
+      // DEFAULT_VERSION throws exception.)
+      DCHECK(is_new_database);
+      pending_->callbacks->OnSuccess(
+          db_->CreateConnection(pending_->database_callbacks,
+                                pending_->child_process_id),
+          db_->metadata_);
+      db_->RequestComplete(this);
+      return;
+    }
+
+    if (!is_new_database &&
+        (new_version == old_version ||
+         new_version == IndexedDBDatabaseMetadata::NO_VERSION)) {
+      pending_->callbacks->OnSuccess(
+          db_->CreateConnection(pending_->database_callbacks,
+                                pending_->child_process_id),
+          db_->metadata_);
+      db_->RequestComplete(this);
+      return;
+    }
+
+    if (new_version == IndexedDBDatabaseMetadata::NO_VERSION) {
+      // If no version is specified and no database exists, upgrade the
+      // database version to 1.
+      DCHECK(is_new_database);
+      new_version = 1;
+    } else if (new_version < old_version) {
+      // Requested version is lower than current version - fail the request.
+      DCHECK(!is_new_database);
+      pending_->callbacks->OnError(IndexedDBDatabaseError(
+          blink::WebIDBDatabaseExceptionVersionError,
+          ASCIIToUTF16("The requested version (") +
+              Int64ToString16(pending_->version) +
+              ASCIIToUTF16(") is less than the existing version (") +
+              Int64ToString16(db_->metadata_.version) + ASCIIToUTF16(").")));
+      db_->RequestComplete(this);
+      return;
+    }
+
+    // Requested version is higher than current version - upgrade needed.
+    DCHECK_GT(new_version, old_version);
+
+    if (db_->connections_.empty()) {
+      StartUpgrade();
+      return;
+    }
+
+    // There are outstanding connections - fire "versionchange" events and
+    // wait for the connections to close. Front end ensures the event is not
+    // fired at connections that have close_pending set. A "blocked" event
+    // will be fired at the request when one of the connections acks that the
+    // "versionchange" event was ignored.
+    DCHECK_NE(pending_->data_loss_info.status, blink::WebIDBDataLossTotal);
+    for (const auto* connection : db_->connections_)
+      connection->callbacks()->OnVersionChange(old_version, new_version);
+
+    // When all connections have closed the upgrade can proceed.
   }
-  int64_t version() const { return version_; }
-  int64_t transaction_id() const { return transaction_id_; }
+
+  void OnVersionChangeIgnored() const override {
+    pending_->callbacks->OnBlocked(db_->metadata_.version);
+  }
+
+  void OnConnectionClosed(IndexedDBConnection* connection) override {
+    // This connection closed prematurely; signal an error and complete.
+    if (connection && connection->callbacks() == pending_->database_callbacks) {
+      pending_->callbacks->OnError(
+          IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionAbortError,
+                                 "The connection was closed."));
+      db_->RequestComplete(this);
+      return;
+    }
+
+    if (!db_->connections_.empty())
+      return;
+
+    StartUpgrade();
+  }
+
+  // Initiate the upgrade. The bulk of the work actually happens in
+  // IndexedDBDatabase::VersionChangeOperation in order to kick the
+  // transaction into the correct state.
+  void StartUpgrade() {
+    connection_ = db_->CreateConnection(pending_->database_callbacks,
+                                        pending_->child_process_id);
+    DCHECK_EQ(db_->connections_.count(connection_.get()), 1UL);
+
+    std::vector<int64_t> object_store_ids;
+    IndexedDBTransaction* transaction = db_->CreateTransaction(
+        pending_->transaction_id, connection_.get(), object_store_ids,
+        blink::WebIDBTransactionModeVersionChange);
+
+    DCHECK(db_->transaction_coordinator_.IsRunningVersionChangeTransaction());
+    transaction->ScheduleTask(
+        base::Bind(&IndexedDBDatabase::VersionChangeOperation, db_,
+                   pending_->version, pending_->callbacks));
+  }
+
+  // Called when the upgrade transaction has started executing.
+  void UpgradeTransactionStarted(int64_t old_version) override {
+    DCHECK(connection_);
+    pending_->callbacks->OnUpgradeNeeded(old_version, std::move(connection_),
+                                         db_->metadata_,
+                                         pending_->data_loss_info);
+  }
+
+  void UpgradeTransactionFinished(bool committed) override {
+    // Ownership of connection was already passed along in OnUpgradeNeeded.
+    DCHECK(!connection_);
+
+    if (committed) {
+      DCHECK_EQ(pending_->version, db_->metadata_.version);
+      pending_->callbacks->OnSuccess(std::unique_ptr<IndexedDBConnection>(),
+                                     db_->metadata());
+    } else {
+      DCHECK_NE(pending_->version, db_->metadata_.version);
+      pending_->callbacks->OnError(
+          IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionAbortError,
+                                 "Version change transaction was aborted in "
+                                 "upgradeneeded event handler."));
+    }
+    db_->RequestComplete(this);
+  }
 
  private:
-  scoped_refptr<IndexedDBCallbacks> callbacks_;
+  std::unique_ptr<IndexedDBPendingConnection> pending_;
+
+  // If an upgrade is needed, holds the pending connection until ownership is
+  // transferred to the IndexedDBDispatcherHost via OnUpgradeNeeded.
   std::unique_ptr<IndexedDBConnection> connection_;
-  int64_t version_;
-  const int64_t transaction_id_;
+
+  DISALLOW_COPY_AND_ASSIGN(OpenRequest);
 };
 
-// PendingSuccessCall has a IndexedDBConnection* because the connection is now
-// owned elsewhere, but we need to cancel the success call if that connection
-// closes before it is sent.
-class IndexedDBDatabase::PendingSuccessCall {
+class IndexedDBDatabase::DeleteRequest
+    : public IndexedDBDatabase::ConnectionRequest {
  public:
-  PendingSuccessCall(scoped_refptr<IndexedDBCallbacks> callbacks,
-                     IndexedDBConnection* connection,
-                     int64_t version)
-      : callbacks_(callbacks), connection_(connection), version_(version) {}
-  scoped_refptr<IndexedDBCallbacks> callbacks() const { return callbacks_; }
-  IndexedDBConnection* connection() const { return connection_; }
-  int64_t version() const { return version_; }
+  DeleteRequest(scoped_refptr<IndexedDBDatabase> db,
+                scoped_refptr<IndexedDBCallbacks> callbacks)
+      : ConnectionRequest(db), callbacks_(callbacks) {}
+
+  void Perform() override {
+    if (db_->connections_.empty()) {
+      // No connections, so delete immediately.
+      DoDelete();
+      return;
+    }
+
+    // Front end ensures the event is not fired at connections that have
+    // close_pending set.
+    const int64_t old_version = db_->metadata_.version;
+    const int64_t new_version = IndexedDBDatabaseMetadata::NO_VERSION;
+    for (const auto* connection : db_->connections_)
+      connection->callbacks()->OnVersionChange(old_version, new_version);
+  }
+
+  void OnVersionChangeIgnored() const override {
+    callbacks_->OnBlocked(db_->metadata_.version);
+  }
+
+  void OnConnectionClosed(IndexedDBConnection* connection) override {
+    if (!db_->connections_.empty())
+      return;
+    DoDelete();
+  }
+
+  void DoDelete() {
+    leveldb::Status s =
+        db_->backing_store_->DeleteDatabase(db_->metadata_.name);
+    if (!s.ok()) {
+      // TODO(jsbell): Consider including sanitized leveldb status message.
+      IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,
+                                   "Internal error deleting database.");
+      callbacks_->OnError(error);
+      if (s.IsCorruption()) {
+        url::Origin origin = db_->backing_store_->origin();
+        db_->backing_store_ = nullptr;
+        db_->factory_->HandleBackingStoreCorruption(origin, error);
+      }
+      db_->RequestComplete(this);
+      return;
+    }
+
+    int64_t old_version = db_->metadata_.version;
+    db_->metadata_.id = kInvalidId;
+    db_->metadata_.version = IndexedDBDatabaseMetadata::NO_VERSION;
+    db_->metadata_.max_object_store_id = kInvalidId;
+    db_->metadata_.object_stores.clear();
+    callbacks_->OnSuccess(old_version);
+    db_->factory_->DatabaseDeleted(db_->identifier_);
+
+    db_->RequestComplete(this);
+  }
+
+  void UpgradeTransactionStarted(int64_t old_version) override { NOTREACHED(); }
+
+  void UpgradeTransactionFinished(bool committed) override { NOTREACHED(); }
 
  private:
   scoped_refptr<IndexedDBCallbacks> callbacks_;
-  IndexedDBConnection* connection_;
-  int64_t version_;
-};
 
-class IndexedDBDatabase::PendingDeleteCall {
- public:
-  explicit PendingDeleteCall(scoped_refptr<IndexedDBCallbacks> callbacks)
-      : callbacks_(callbacks) {}
-  scoped_refptr<IndexedDBCallbacks> callbacks() const { return callbacks_; }
-
- private:
-  scoped_refptr<IndexedDBCallbacks> callbacks_;
+  DISALLOW_COPY_AND_ASSIGN(DeleteRequest);
 };
 
 scoped_refptr<IndexedDBDatabase> IndexedDBDatabase::Create(
@@ -231,8 +449,8 @@ leveldb::Status IndexedDBDatabase::OpenInternal() {
 
 IndexedDBDatabase::~IndexedDBDatabase() {
   DCHECK(transactions_.empty());
-  DCHECK(pending_open_calls_.empty());
-  DCHECK(pending_delete_calls_.empty());
+  DCHECK(!active_request_);
+  DCHECK(pending_requests_.empty());
 }
 
 size_t IndexedDBDatabase::GetMaxMessageSizeInBytes() const {
@@ -243,7 +461,7 @@ std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
     scoped_refptr<IndexedDBDatabaseCallbacks> database_callbacks,
     int child_process_id) {
   std::unique_ptr<IndexedDBConnection> connection(
-      new IndexedDBConnection(this, database_callbacks));
+      base::MakeUnique<IndexedDBConnection>(this, database_callbacks));
   connections_.insert(connection.get());
   backing_store_->GrantChildProcessPermissions(child_process_id);
   return connection;
@@ -251,15 +469,14 @@ std::unique_ptr<IndexedDBConnection> IndexedDBDatabase::CreateConnection(
 
 IndexedDBTransaction* IndexedDBDatabase::GetTransaction(
     int64_t transaction_id) const {
-  TransactionMap::const_iterator trans_iterator =
-      transactions_.find(transaction_id);
+  const auto& trans_iterator = transactions_.find(transaction_id);
   if (trans_iterator == transactions_.end())
     return NULL;
   return trans_iterator->second;
 }
 
 bool IndexedDBDatabase::ValidateObjectStoreId(int64_t object_store_id) const {
-  if (!ContainsKey(metadata_.object_stores, object_store_id)) {
+  if (!base::ContainsKey(metadata_.object_stores, object_store_id)) {
     DLOG(ERROR) << "Invalid object_store_id";
     return false;
   }
@@ -273,7 +490,7 @@ bool IndexedDBDatabase::ValidateObjectStoreIdAndIndexId(
     return false;
   const IndexedDBObjectStoreMetadata& object_store_metadata =
       metadata_.object_stores.find(object_store_id)->second;
-  if (!ContainsKey(object_store_metadata.indexes, index_id)) {
+  if (!base::ContainsKey(object_store_metadata.indexes, index_id)) {
     DLOG(ERROR) << "Invalid index_id";
     return false;
   }
@@ -288,7 +505,7 @@ bool IndexedDBDatabase::ValidateObjectStoreIdAndOptionalIndexId(
   const IndexedDBObjectStoreMetadata& object_store_metadata =
       metadata_.object_stores.find(object_store_id)->second;
   if (index_id != IndexedDBIndexMetadata::kInvalidId &&
-      !ContainsKey(object_store_metadata.indexes, index_id)) {
+      !base::ContainsKey(object_store_metadata.indexes, index_id)) {
     DLOG(ERROR) << "Invalid index_id";
     return false;
   }
@@ -302,7 +519,7 @@ bool IndexedDBDatabase::ValidateObjectStoreIdAndNewIndexId(
     return false;
   const IndexedDBObjectStoreMetadata& object_store_metadata =
       metadata_.object_stores.find(object_store_id)->second;
-  if (ContainsKey(object_store_metadata.indexes, index_id)) {
+  if (base::ContainsKey(object_store_metadata.indexes, index_id)) {
     DLOG(ERROR) << "Invalid index_id";
     return false;
   }
@@ -320,7 +537,7 @@ void IndexedDBDatabase::CreateObjectStore(int64_t transaction_id,
     return;
   DCHECK_EQ(transaction->mode(), blink::WebIDBTransactionModeVersionChange);
 
-  if (ContainsKey(metadata_.object_stores, object_store_id)) {
+  if (base::ContainsKey(metadata_.object_stores, object_store_id)) {
     DLOG(ERROR) << "Invalid object_store_id";
     return;
   }
@@ -539,6 +756,66 @@ void IndexedDBDatabase::Abort(int64_t transaction_id,
   IndexedDBTransaction* transaction = GetTransaction(transaction_id);
   if (transaction)
     transaction->Abort(error);
+}
+
+void IndexedDBDatabase::AddPendingObserver(
+    int64_t transaction_id,
+    int32_t observer_id,
+    const IndexedDBObserver::Options& options) {
+  IndexedDBTransaction* transaction = GetTransaction(transaction_id);
+  if (!transaction)
+    return;
+  transaction->AddPendingObserver(observer_id, options);
+}
+
+void IndexedDBDatabase::RemovePendingObservers(
+    IndexedDBConnection* connection,
+    const std::vector<int32_t>& pending_observer_ids) {
+  for (const auto& it : transactions_) {
+    // Avoid call to RemovePendingObservers for transactions on other
+    // connections.
+    if (it.second->connection() == connection)
+      it.second->RemovePendingObservers(pending_observer_ids);
+  }
+}
+
+// TODO(palakj): Augment the function with IDBValue later. Issue
+// crbug.com/609934.
+void IndexedDBDatabase::FilterObservation(IndexedDBTransaction* transaction,
+                                          int64_t object_store_id,
+                                          blink::WebIDBOperationType type,
+                                          const IndexedDBKeyRange& key_range) {
+  for (auto* connection : connections_) {
+    bool recorded = false;
+    for (const auto& observer : connection->active_observers()) {
+      if (!observer->IsRecordingType(type) ||
+          !observer->IsRecordingObjectStore(object_store_id))
+        continue;
+      if (!recorded) {
+        if (type == blink::WebIDBClear) {
+          transaction->AddObservation(
+              connection->id(),
+              base::MakeUnique<IndexedDBObservation>(object_store_id, type));
+        } else {
+          transaction->AddObservation(connection->id(),
+                                      base::MakeUnique<IndexedDBObservation>(
+                                          object_store_id, type, key_range));
+        }
+        recorded = true;
+      }
+      transaction->RecordObserverForLastObservation(connection->id(),
+                                                    observer->id());
+    }
+  }
+}
+
+void IndexedDBDatabase::SendObservations(
+    std::map<int32_t, std::unique_ptr<IndexedDBObserverChanges>> changes_map) {
+  for (auto* conn : connections_) {
+    auto it = changes_map.find(conn->id());
+    if (it != changes_map.end())
+      conn->callbacks()->OnDatabaseChange(it->first, std::move(it->second));
+  }
 }
 
 void IndexedDBDatabase::GetAll(int64_t transaction_id,
@@ -892,13 +1169,12 @@ static std::unique_ptr<IndexedDBKey> GenerateKey(
       &current_number);
   if (!s.ok()) {
     LOG(ERROR) << "Failed to GetKeyGeneratorCurrentNumber";
-    return base::WrapUnique(new IndexedDBKey());
+    return base::MakeUnique<IndexedDBKey>();
   }
   if (current_number < 0 || current_number > max_generator_value)
-    return base::WrapUnique(new IndexedDBKey());
+    return base::MakeUnique<IndexedDBKey>();
 
-  return base::WrapUnique(
-      new IndexedDBKey(current_number, WebIDBKeyTypeNumber));
+  return base::MakeUnique<IndexedDBKey>(current_number, WebIDBKeyTypeNumber);
 }
 
 static leveldb::Status UpdateKeyGenerator(IndexedDBBackingStore* backing_store,
@@ -917,7 +1193,7 @@ struct IndexedDBDatabase::PutOperationParams {
   PutOperationParams() {}
   int64_t object_store_id;
   IndexedDBValue value;
-  ScopedVector<storage::BlobDataHandle> handles;
+  std::vector<std::unique_ptr<storage::BlobDataHandle>> handles;
   std::unique_ptr<IndexedDBKey> key;
   blink::WebIDBPutMode put_mode;
   scoped_refptr<IndexedDBCallbacks> callbacks;
@@ -927,14 +1203,15 @@ struct IndexedDBDatabase::PutOperationParams {
   DISALLOW_COPY_AND_ASSIGN(PutOperationParams);
 };
 
-void IndexedDBDatabase::Put(int64_t transaction_id,
-                            int64_t object_store_id,
-                            IndexedDBValue* value,
-                            ScopedVector<storage::BlobDataHandle>* handles,
-                            std::unique_ptr<IndexedDBKey> key,
-                            blink::WebIDBPutMode put_mode,
-                            scoped_refptr<IndexedDBCallbacks> callbacks,
-                            const std::vector<IndexKeys>& index_keys) {
+void IndexedDBDatabase::Put(
+    int64_t transaction_id,
+    int64_t object_store_id,
+    IndexedDBValue* value,
+    std::vector<std::unique_ptr<storage::BlobDataHandle>>* handles,
+    std::unique_ptr<IndexedDBKey> key,
+    blink::WebIDBPutMode put_mode,
+    scoped_refptr<IndexedDBCallbacks> callbacks,
+    const std::vector<IndexKeys>& index_keys) {
   IDB_TRACE1("IndexedDBDatabase::Put", "txn.id", transaction_id);
   IndexedDBTransaction* transaction = GetTransaction(transaction_id);
   if (!transaction)
@@ -946,7 +1223,8 @@ void IndexedDBDatabase::Put(int64_t transaction_id,
 
   DCHECK(key);
   DCHECK(value);
-  std::unique_ptr<PutOperationParams> params(new PutOperationParams());
+  std::unique_ptr<PutOperationParams> params(
+      base::MakeUnique<PutOperationParams>());
   params->object_store_id = object_store_id;
   params->value.swap(*value);
   params->handles.swap(*handles);
@@ -1015,7 +1293,7 @@ void IndexedDBDatabase::PutOperation(std::unique_ptr<PutOperationParams> params,
     }
   }
 
-  ScopedVector<IndexWriter> index_writers;
+  std::vector<std::unique_ptr<IndexWriter>> index_writers;
   base::string16 error_message;
   bool obeys_constraints = false;
   bool backing_store_success = MakeIndexWriters(transaction,
@@ -1062,11 +1340,10 @@ void IndexedDBDatabase::PutOperation(std::unique_ptr<PutOperationParams> params,
   {
     IDB_TRACE1("IndexedDBDatabase::PutOperation.UpdateIndexes", "txn.id",
                transaction->id());
-    for (size_t i = 0; i < index_writers.size(); ++i) {
-      IndexWriter* index_writer = index_writers[i];
-      index_writer->WriteIndexKeys(record_identifier, backing_store_.get(),
-                                   transaction->BackingStoreTransaction(), id(),
-                                   params->object_store_id);
+    for (const auto& writer : index_writers) {
+      writer->WriteIndexKeys(record_identifier, backing_store_.get(),
+                             transaction->BackingStoreTransaction(), id(),
+                             params->object_store_id);
     }
   }
 
@@ -1095,6 +1372,11 @@ void IndexedDBDatabase::PutOperation(std::unique_ptr<PutOperationParams> params,
                transaction->id());
     params->callbacks->OnSuccess(*key);
   }
+  FilterObservation(transaction, params->object_store_id,
+                    params->put_mode == blink::WebIDBPutModeAddOnly
+                        ? blink::WebIDBAdd
+                        : blink::WebIDBPut,
+                    IndexedDBKeyRange(*key));
 }
 
 void IndexedDBDatabase::SetIndexKeys(int64_t transaction_id,
@@ -1133,7 +1415,7 @@ void IndexedDBDatabase::SetIndexKeys(int64_t transaction_id,
     return;
   }
 
-  ScopedVector<IndexWriter> index_writers;
+  std::vector<std::unique_ptr<IndexWriter>> index_writers;
   base::string16 error_message;
   bool obeys_constraints = false;
   DCHECK(metadata_.object_stores.find(object_store_id) !=
@@ -1162,13 +1444,10 @@ void IndexedDBDatabase::SetIndexKeys(int64_t transaction_id,
     return;
   }
 
-  for (size_t i = 0; i < index_writers.size(); ++i) {
-    IndexWriter* index_writer = index_writers[i];
-    index_writer->WriteIndexKeys(record_identifier,
-                                 backing_store_.get(),
-                                 transaction->BackingStoreTransaction(),
-                                 id(),
-                                 object_store_id);
+  for (const auto& writer : index_writers) {
+    writer->WriteIndexKeys(record_identifier, backing_store_.get(),
+                           transaction->BackingStoreTransaction(), id(),
+                           object_store_id);
   }
 }
 
@@ -1226,7 +1505,7 @@ void IndexedDBDatabase::OpenCursor(
     return;
 
   std::unique_ptr<OpenCursorOperationParams> params(
-      new OpenCursorOperationParams());
+      base::MakeUnique<OpenCursorOperationParams>());
   params->object_store_id = object_store_id;
   params->index_id = index_id;
   params->key_range = std::move(key_range);
@@ -1438,6 +1717,8 @@ void IndexedDBDatabase::DeleteRangeOperation(
   } else {
     callbacks->OnSuccess();
   }
+  FilterObservation(transaction, object_store_id, blink::WebIDBDelete,
+                    *key_range);
 }
 
 void IndexedDBDatabase::Clear(int64_t transaction_id,
@@ -1473,6 +1754,9 @@ void IndexedDBDatabase::ClearOperation(
     return;
   }
   callbacks->OnSuccess();
+
+  FilterObservation(transaction, object_store_id, blink::WebIDBClear,
+                    IndexedDBKeyRange());
 }
 
 void IndexedDBDatabase::DeleteObjectStoreOperation(
@@ -1510,7 +1794,6 @@ void IndexedDBDatabase::DeleteObjectStoreOperation(
 void IndexedDBDatabase::VersionChangeOperation(
     int64_t version,
     scoped_refptr<IndexedDBCallbacks> callbacks,
-    std::unique_ptr<IndexedDBConnection> connection,
     IndexedDBTransaction* transaction) {
   IDB_TRACE1(
       "IndexedDBDatabase::VersionChangeOperation", "txn.id", transaction->id());
@@ -1534,10 +1817,7 @@ void IndexedDBDatabase::VersionChangeOperation(
                  metadata_.version));
   metadata_.version = version;
 
-  DCHECK(!pending_second_half_open_);
-  pending_second_half_open_.reset(
-      new PendingSuccessCall(callbacks, connection.get(), version));
-  callbacks->OnUpgradeNeeded(old_version, std::move(connection), metadata());
+  active_request_->UpgradeTransactionStarted(old_version);
 }
 
 void IndexedDBDatabase::TransactionFinished(IndexedDBTransaction* transaction,
@@ -1547,27 +1827,12 @@ void IndexedDBDatabase::TransactionFinished(IndexedDBTransaction* transaction,
   DCHECK_EQ(transactions_[transaction->id()], transaction);
   transactions_.erase(transaction->id());
 
-  if (transaction->mode() == blink::WebIDBTransactionModeVersionChange) {
-    if (pending_second_half_open_) {
-      if (committed) {
-        DCHECK_EQ(pending_second_half_open_->version(), metadata_.version);
-        DCHECK(metadata_.id != kInvalidId);
-
-        // Connection was already minted for OnUpgradeNeeded callback.
-        std::unique_ptr<IndexedDBConnection> connection;
-        pending_second_half_open_->callbacks()->OnSuccess(std::move(connection),
-                                                          this->metadata());
-      } else {
-        pending_second_half_open_->callbacks()->OnError(
-            IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionAbortError,
-                                   "Version change transaction was aborted in "
-                                   "upgradeneeded event handler."));
-      }
-      pending_second_half_open_.reset();
-    }
-
-    // Connection queue is now unblocked.
-    ProcessPendingCalls();
+  // This may be an unrelated transaction finishing while waiting for
+  // connections to close, or the actual upgrade transaction from an active
+  // request. Notify the active request if it's the latter.
+  if (active_request_ &&
+      transaction->mode() == blink::WebIDBTransactionModeVersionChange) {
+    active_request_->UpgradeTransactionFinished(committed);
   }
 }
 
@@ -1581,73 +1846,42 @@ void IndexedDBDatabase::TransactionCommitFailed(const leveldb::Status& status) {
   }
 }
 
-size_t IndexedDBDatabase::ConnectionCount() const {
-  // This does not include pending open calls, as those should not block version
-  // changes and deletes.
-  return connections_.size();
+void IndexedDBDatabase::AppendRequest(
+    std::unique_ptr<ConnectionRequest> request) {
+  pending_requests_.push(std::move(request));
+
+  if (!active_request_)
+    ProcessRequestQueue();
 }
 
-size_t IndexedDBDatabase::PendingOpenCount() const {
-  return pending_open_calls_.size();
+void IndexedDBDatabase::RequestComplete(ConnectionRequest* request) {
+  DCHECK_EQ(request, active_request_.get());
+  active_request_.reset();
+
+  if (!pending_requests_.empty())
+    ProcessRequestQueue();
 }
 
-size_t IndexedDBDatabase::PendingUpgradeCount() const {
-  return pending_run_version_change_transaction_call_ ? 1 : 0;
-}
-
-size_t IndexedDBDatabase::RunningUpgradeCount() const {
-  return pending_second_half_open_ ? 1 : 0;
-}
-
-size_t IndexedDBDatabase::PendingDeleteCount() const {
-  return pending_delete_calls_.size();
-}
-
-void IndexedDBDatabase::ProcessPendingCalls() {
-  if (pending_run_version_change_transaction_call_ && ConnectionCount() == 1) {
-    DCHECK(pending_run_version_change_transaction_call_->version() >
-           metadata_.version);
-    std::unique_ptr<PendingUpgradeCall> pending_call =
-        std::move(pending_run_version_change_transaction_call_);
-    RunVersionChangeTransactionFinal(pending_call->callbacks(),
-                                     pending_call->ReleaseConnection(),
-                                     pending_call->transaction_id(),
-                                     pending_call->version());
-    DCHECK_EQ(1u, ConnectionCount());
-    // Fall through would be a no-op, since transaction must complete
-    // asynchronously.
-    DCHECK(IsDeleteDatabaseBlocked());
-    DCHECK(IsOpenConnectionBlocked());
+void IndexedDBDatabase::ProcessRequestQueue() {
+  // Don't run re-entrantly to avoid exploding call stacks for requests that
+  // complete synchronously. The loop below will process requests until one is
+  // blocked.
+  if (processing_pending_requests_)
     return;
-  }
 
-  if (!IsDeleteDatabaseBlocked()) {
-    std::list<PendingDeleteCall*> pending_delete_calls;
-    pending_delete_calls_.swap(pending_delete_calls);
-    while (!pending_delete_calls.empty()) {
-      // Only the first delete call will delete the database, but each must fire
-      // callbacks.
-      std::unique_ptr<PendingDeleteCall> pending_delete_call(
-          pending_delete_calls.front());
-      pending_delete_calls.pop_front();
-      DeleteDatabaseFinal(pending_delete_call->callbacks());
-    }
-    // delete_database_final should never re-queue calls.
-    DCHECK(pending_delete_calls_.empty());
-    // Fall through when complete, as pending opens may be unblocked.
-  }
+  DCHECK(!active_request_);
+  DCHECK(!pending_requests_.empty());
 
-  if (!IsOpenConnectionBlocked()) {
-    std::queue<IndexedDBPendingConnection> pending_open_calls;
-    pending_open_calls_.swap(pending_open_calls);
-    while (!pending_open_calls.empty()) {
-      OpenConnection(pending_open_calls.front());
-      pending_open_calls.pop();
-    }
-  }
+  base::AutoReset<bool> processing(&processing_pending_requests_, true);
+  do {
+    active_request_ = std::move(pending_requests_.front());
+    pending_requests_.pop();
+    active_request_->Perform();
+    // If the active request completed synchronously, keep going.
+  } while (!active_request_ && !pending_requests_.empty());
 }
 
-void IndexedDBDatabase::CreateTransaction(
+IndexedDBTransaction* IndexedDBDatabase::CreateTransaction(
     int64_t transaction_id,
     IndexedDBConnection* connection,
     const std::vector<int64_t>& object_store_ids,
@@ -1656,7 +1890,7 @@ void IndexedDBDatabase::CreateTransaction(
   DCHECK(connections_.count(connection));
   DCHECK(transactions_.find(transaction_id) == transactions_.end());
   if (transactions_.find(transaction_id) != transactions_.end())
-    return;
+    return nullptr;
 
   UMA_HISTOGRAM_COUNTS_1000(
       "WebCore.IndexedDB.Database.OutstandingTransactionCount",
@@ -1664,214 +1898,33 @@ void IndexedDBDatabase::CreateTransaction(
 
   // The transaction will add itself to this database's coordinator, which
   // manages the lifetime of the object.
-  TransactionCreated(IndexedDBClassFactory::Get()->CreateIndexedDBTransaction(
-      transaction_id, connection->callbacks(),
-      std::set<int64_t>(object_store_ids.begin(), object_store_ids.end()), mode,
-      this, new IndexedDBBackingStore::Transaction(backing_store_.get())));
+  IndexedDBTransaction* transaction =
+      IndexedDBClassFactory::Get()->CreateIndexedDBTransaction(
+          transaction_id, connection->GetWeakPtr(),
+          std::set<int64_t>(object_store_ids.begin(), object_store_ids.end()),
+          mode, new IndexedDBBackingStore::Transaction(backing_store_.get()));
+  TransactionCreated(transaction);
+  return transaction;
 }
 
 void IndexedDBDatabase::TransactionCreated(IndexedDBTransaction* transaction) {
   transactions_[transaction->id()] = transaction;
 }
 
-bool IndexedDBDatabase::IsOpenConnectionBlocked() const {
-  return !pending_delete_calls_.empty() ||
-         transaction_coordinator_.IsRunningVersionChangeTransaction() ||
-         pending_run_version_change_transaction_call_;
-}
-
 void IndexedDBDatabase::OpenConnection(
-    const IndexedDBPendingConnection& connection) {
-  DCHECK(backing_store_.get());
-
-  // TODO(jsbell): Should have a priority queue so that higher version
-  // requests are processed first. http://crbug.com/225850
-  if (IsOpenConnectionBlocked()) {
-    // The backing store only detects data loss when it is first opened. The
-    // presence of existing connections means we didn't even check for data loss
-    // so there'd better not be any.
-    DCHECK_NE(blink::WebIDBDataLossTotal, connection.callbacks->data_loss());
-    pending_open_calls_.push(connection);
-    return;
-  }
-
-  if (metadata_.id == kInvalidId) {
-    // The database was deleted then immediately re-opened; OpenInternal()
-    // recreates it in the backing store.
-    if (OpenInternal().ok()) {
-      DCHECK_EQ(IndexedDBDatabaseMetadata::NO_VERSION, metadata_.version);
-    } else {
-      base::string16 message;
-      if (connection.version == IndexedDBDatabaseMetadata::NO_VERSION) {
-        message = ASCIIToUTF16(
-            "Internal error opening database with no version specified.");
-      } else {
-        message =
-            ASCIIToUTF16("Internal error opening database with version ") +
-            Int64ToString16(connection.version);
-      }
-      connection.callbacks->OnError(IndexedDBDatabaseError(
-          blink::WebIDBDatabaseExceptionUnknownError, message));
-      return;
-    }
-  }
-
-  // We infer that the database didn't exist from its lack of either type of
-  // version.
-  bool is_new_database =
-      metadata_.version == IndexedDBDatabaseMetadata::NO_VERSION;
-
-  if (connection.version == IndexedDBDatabaseMetadata::DEFAULT_VERSION) {
-    // For unit tests only - skip upgrade steps. Calling from script with
-    // DEFAULT_VERSION throws exception.
-    // TODO(jsbell): DCHECK that not in unit tests.
-    DCHECK(is_new_database);
-    connection.callbacks->OnSuccess(
-        CreateConnection(connection.database_callbacks,
-                         connection.child_process_id),
-        this->metadata());
-    return;
-  }
-
-  // We may need to change the version.
-  int64_t local_version = connection.version;
-  if (local_version == IndexedDBDatabaseMetadata::NO_VERSION) {
-    if (!is_new_database) {
-      connection.callbacks->OnSuccess(
-          CreateConnection(connection.database_callbacks,
-                           connection.child_process_id),
-          this->metadata());
-      return;
-    }
-    // Spec says: If no version is specified and no database exists, set
-    // database version to 1.
-    local_version = 1;
-  }
-
-  if (local_version > metadata_.version) {
-    RunVersionChangeTransaction(connection.callbacks,
-                                CreateConnection(connection.database_callbacks,
-                                                 connection.child_process_id),
-                                connection.transaction_id,
-                                local_version);
-    return;
-  }
-  if (local_version < metadata_.version) {
-    connection.callbacks->OnError(IndexedDBDatabaseError(
-        blink::WebIDBDatabaseExceptionVersionError,
-        ASCIIToUTF16("The requested version (") +
-            Int64ToString16(local_version) +
-            ASCIIToUTF16(") is less than the existing version (") +
-            Int64ToString16(metadata_.version) + ASCIIToUTF16(").")));
-    return;
-  }
-  DCHECK_EQ(local_version, metadata_.version);
-  connection.callbacks->OnSuccess(
-      CreateConnection(connection.database_callbacks,
-                       connection.child_process_id),
-      this->metadata());
-}
-
-void IndexedDBDatabase::RunVersionChangeTransaction(
-    scoped_refptr<IndexedDBCallbacks> callbacks,
-    std::unique_ptr<IndexedDBConnection> connection,
-    int64_t transaction_id,
-    int64_t requested_version) {
-  DCHECK(callbacks.get());
-  DCHECK(connections_.count(connection.get()));
-  if (ConnectionCount() > 1) {
-    DCHECK_NE(blink::WebIDBDataLossTotal, callbacks->data_loss());
-    // Front end ensures the event is not fired at connections that have
-    // close_pending set.
-    for (const auto* iter : connections_) {
-      if (iter != connection.get()) {
-        iter->callbacks()->OnVersionChange(metadata_.version,
-                                           requested_version);
-      }
-    }
-    // OnBlocked will be fired at the request when one of the other
-    // connections acks that the OnVersionChange was ignored.
-
-    DCHECK(!pending_run_version_change_transaction_call_);
-    pending_run_version_change_transaction_call_.reset(new PendingUpgradeCall(
-        callbacks, std::move(connection), transaction_id, requested_version));
-    return;
-  }
-  RunVersionChangeTransactionFinal(callbacks, std::move(connection),
-                                   transaction_id, requested_version);
-}
-
-void IndexedDBDatabase::RunVersionChangeTransactionFinal(
-    scoped_refptr<IndexedDBCallbacks> callbacks,
-    std::unique_ptr<IndexedDBConnection> connection,
-    int64_t transaction_id,
-    int64_t requested_version) {
-  std::vector<int64_t> object_store_ids;
-  CreateTransaction(transaction_id,
-                    connection.get(),
-                    object_store_ids,
-                    blink::WebIDBTransactionModeVersionChange);
-
-  transactions_[transaction_id]->ScheduleTask(
-      base::Bind(&IndexedDBDatabase::VersionChangeOperation,
-                 this,
-                 requested_version,
-                 callbacks,
-                 base::Passed(&connection)));
-  DCHECK(!pending_second_half_open_);
+    std::unique_ptr<IndexedDBPendingConnection> connection) {
+  AppendRequest(base::MakeUnique<OpenRequest>(this, std::move(connection)));
 }
 
 void IndexedDBDatabase::DeleteDatabase(
     scoped_refptr<IndexedDBCallbacks> callbacks) {
-
-  if (IsDeleteDatabaseBlocked()) {
-    for (const auto* connection : connections_) {
-      // Front end ensures the event is not fired at connections that have
-      // close_pending set.
-      connection->callbacks()->OnVersionChange(
-          metadata_.version, IndexedDBDatabaseMetadata::NO_VERSION);
-    }
-    // OnBlocked will be fired at the request when one of the other
-    // connections acks that the OnVersionChange was ignored.
-
-    pending_delete_calls_.push_back(new PendingDeleteCall(callbacks));
-    return;
-  }
-  DeleteDatabaseFinal(callbacks);
-}
-
-bool IndexedDBDatabase::IsDeleteDatabaseBlocked() const {
-  return !!ConnectionCount();
-}
-
-void IndexedDBDatabase::DeleteDatabaseFinal(
-    scoped_refptr<IndexedDBCallbacks> callbacks) {
-  DCHECK(!IsDeleteDatabaseBlocked());
-  DCHECK(backing_store_.get());
-  leveldb::Status s = backing_store_->DeleteDatabase(metadata_.name);
-  if (!s.ok()) {
-    IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,
-                                 "Internal error deleting database.");
-    callbacks->OnError(error);
-    if (s.IsCorruption()) {
-      url::Origin origin = backing_store_->origin();
-      backing_store_ = NULL;
-      factory_->HandleBackingStoreCorruption(origin, error);
-    }
-    return;
-  }
-  int64_t old_version = metadata_.version;
-  metadata_.id = kInvalidId;
-  metadata_.version = IndexedDBDatabaseMetadata::NO_VERSION;
-  metadata_.object_stores.clear();
-  callbacks->OnSuccess(old_version);
-  factory_->DatabaseDeleted(identifier_);
+  AppendRequest(base::MakeUnique<DeleteRequest>(this, callbacks));
 }
 
 void IndexedDBDatabase::ForceClose() {
   // IndexedDBConnection::ForceClose() may delete this database, so hold ref.
   scoped_refptr<IndexedDBDatabase> protect(this);
-  ConnectionSet::const_iterator it = connections_.begin();
+  auto it = connections_.begin();
   while (it != connections_.end()) {
     IndexedDBConnection* connection = *it++;
     connection->ForceClose();
@@ -1880,14 +1933,9 @@ void IndexedDBDatabase::ForceClose() {
 }
 
 void IndexedDBDatabase::VersionChangeIgnored() {
-  if (pending_run_version_change_transaction_call_)
-    pending_run_version_change_transaction_call_->callbacks()->OnBlocked(
-        metadata_.version);
-
-  for (const auto& pending_delete_call : pending_delete_calls_)
-    pending_delete_call->callbacks()->OnBlocked(metadata_.version);
+  if (active_request_)
+    active_request_->OnVersionChangeIgnored();
 }
-
 
 void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
   DCHECK(connections_.count(connection));
@@ -1896,37 +1944,37 @@ void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
 
   IDB_TRACE("IndexedDBDatabase::Close");
 
-  connections_.erase(connection);
-
-  // Abort outstanding transactions from the closing connection. This
-  // can not happen if the close is requested by the connection itself
-  // as the front-end defers the close until all transactions are
-  // complete, but can occur on process termination or forced close.
+  // Abort outstanding transactions from the closing connection. This can not
+  // happen if the close is requested by the connection itself as the
+  // front-end defers the close until all transactions are complete, but can
+  // occur on process termination or forced close.
   {
-    TransactionMap transactions(transactions_);
+    auto transactions(transactions_);
     for (const auto& it : transactions) {
-      if (it.second->connection() == connection->callbacks())
+      if (it.second->callbacks() == connection->callbacks())
         it.second->Abort(
             IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionUnknownError,
                                    "Connection is closing."));
     }
   }
 
-  if (pending_second_half_open_ &&
-      pending_second_half_open_->connection() == connection) {
-    pending_second_half_open_->callbacks()->OnError(
-        IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionAbortError,
-                               "The connection was closed."));
-    pending_second_half_open_.reset();
-  }
+  // Abort transactions before removing the connection; aborting may complete
+  // an upgrade, and thus allow the next open/delete requests to proceed. The
+  // new active_request_ should see the old connection count until explicitly
+  // notified below.
+  connections_.erase(connection);
 
-  ProcessPendingCalls();
+  // Notify the active request, which may need to do cleanup or proceed with
+  // the operation. This may trigger other work, such as more connections or
+  // deletions, so |active_request_| itself may change.
+  if (active_request_)
+    active_request_->OnConnectionClosed(connection);
 
-  // TODO(jsbell): Add a test for the pending_open_calls_ cases below.
-  if (!ConnectionCount() && pending_open_calls_.empty() &&
-      !pending_delete_calls_.size()) {
+  // If there are no more connections (current, active, or pending), tell the
+  // factory to clean us up.
+  if (connections_.empty() && !active_request_ && pending_requests_.empty()) {
     DCHECK(transactions_.empty());
-    backing_store_ = NULL;
+    backing_store_ = nullptr;
     factory_->ReleaseDatabase(identifier_, forced);
   }
 }

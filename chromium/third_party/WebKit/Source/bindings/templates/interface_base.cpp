@@ -1,3 +1,5 @@
+{% filter format_blink_cpp_source_code %}
+
 {% include 'copyright_block.txt' %}
 #include "{{v8_class_or_partial}}.h"
 
@@ -6,15 +8,17 @@
 {% endfor %}
 
 namespace blink {
-{% set to_active_scriptwrappable = '%s::toActiveScriptWrappable' % v8_class
-                                   if active_scriptwrappable else '0' %}
+{% set dom_template = '%s::domTemplate' % v8_class if not is_array_buffer_or_view else '0' %}
 {% set visit_dom_wrapper = '%s::visitDOMWrapper' % v8_class
                            if has_visit_dom_wrapper else '0' %}
 {% set parent_wrapper_type_info = '&V8%s::wrapperTypeInfo' % parent_interface
                                   if parent_interface else '0' %}
 {% set wrapper_type_prototype = 'WrapperTypeExceptionPrototype' if is_exception else
                                 'WrapperTypeObjectPrototype' %}
-{% set dom_template = '%s::domTemplate' % v8_class if not is_array_buffer_or_view else '0' %}
+{% set active_scriptwrappable_inheritance =
+    'InheritFromActiveScriptWrappable'
+    if active_scriptwrappable else
+    'NotInheritFromActiveScriptWrappable' %}
 
 {% set wrapper_type_info_const = '' if has_partial_interface else 'const ' %}
 {% if not is_partial %}
@@ -24,19 +28,47 @@ namespace blink {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = { gin::kEmbedderBlink, {{dom_template}}, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{to_active_scriptwrappable}}, {{visit_dom_wrapper}}, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", {{parent_wrapper_type_info}}, WrapperTypeInfo::{{wrapper_type_prototype}}, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
+{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = { gin::kEmbedderBlink, {{dom_template}}, {{v8_class}}::trace, {{v8_class}}::traceWrappers, {{visit_dom_wrapper}}, {{v8_class}}::preparePrototypeAndInterfaceObject,{% if has_conditional_attributes %} {{v8_class}}::installConditionallyEnabledProperties{% else %} nullptr{% endif %}, "{{interface_name}}", {{parent_wrapper_type_info}}, WrapperTypeInfo::{{wrapper_type_prototype}}, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{event_target_inheritance}}, WrapperTypeInfo::{{lifetime}} };
 #if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
 #pragma clang diagnostic pop
 #endif
 
+{% if not is_typed_array_type %}
 // This static member must be declared by DEFINE_WRAPPERTYPEINFO in {{cpp_class}}.h.
 // For details, see the comment of DEFINE_WRAPPERTYPEINFO in
 // bindings/core/v8/ScriptWrappable.h.
-{% if not is_typed_array_type %}
 const WrapperTypeInfo& {{cpp_class}}::s_wrapperTypeInfo = {{v8_class}}::wrapperTypeInfo;
 {% endif %}
 
+{% if active_scriptwrappable %}
+// [ActiveScriptWrappable]
+static_assert(
+    std::is_base_of<ActiveScriptWrappable, {{cpp_class}}>::value,
+    "{{cpp_class}} does not inherit from ActiveScriptWrappable, but specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    !std::is_same<decltype(&{{cpp_class}}::hasPendingActivity),
+                  decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "{{cpp_class}} is not overriding hasPendingActivity(), but is specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+{% else %}
+// not [ActiveScriptWrappable]
+static_assert(
+    !std::is_base_of<ActiveScriptWrappable, {{cpp_class}}>::value,
+    "{{cpp_class}} inherits from ActiveScriptWrappable, but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
+static_assert(
+    std::is_same<decltype(&{{cpp_class}}::hasPendingActivity),
+                 decltype(&ScriptWrappable::hasPendingActivity)>::value,
+    "{{cpp_class}} is overriding hasPendingActivity(), but is not specifying "
+    "[ActiveScriptWrappable] extended attribute in the IDL file.  "
+    "Be consistent.");
 {% endif %}
+
+{% endif %}{# not is_partial #}
 {% if not is_array_buffer_or_view %}
 namespace {{cpp_class_or_partial}}V8Internal {
 {% if has_partial_interface %}
@@ -89,11 +121,11 @@ bool securityCheck(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object
         return false; // the frame is gone.
 
     const DOMWindow* targetWindow = V8Window::toImpl(window);
-    return BindingSecurity::shouldAllowAccessTo(isolate, toLocalDOMWindow(toDOMWindow(accessingContext)), targetWindow, DoNotReportSecurityError);
+    return BindingSecurity::shouldAllowAccessTo(toLocalDOMWindow(toDOMWindow(accessingContext)), targetWindow, BindingSecurity::ErrorReportOption::DoNotReport);
     {% else %}{# if interface_name == 'Window' #}
     {# Not 'Window' means it\'s Location. #}
     {{cpp_class}}* impl = {{v8_class}}::toImpl(accessedObject);
-    return BindingSecurity::shouldAllowAccessTo(v8::Isolate::GetCurrent(), toLocalDOMWindow(toDOMWindow(accessingContext)), impl, DoNotReportSecurityError);
+    return BindingSecurity::shouldAllowAccessTo(toLocalDOMWindow(toDOMWindow(accessingContext)), impl, BindingSecurity::ErrorReportOption::DoNotReport);
     {% endif %}{# if interface_name == 'Window' #}
 }
 
@@ -285,7 +317,7 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
     prototypeTemplate->SetIntrinsicDataProperty(v8::Symbol::GetIterator(isolate), v8::kArrayProto_values, v8::DontEnum);
     {% endif %}
 
-    {%- for group in attributes | runtime_enabled_attributes | groupby('runtime_feature_name') %}{{newline}}
+    {%- for group in attributes | purely_runtime_enabled_attributes | groupby('runtime_feature_name') %}{{newline}}
     if ({{group.list[0].runtime_enabled_function}}()) {
         {% for attribute in group.list | unique_by('name') | sort %}
         {% if attribute.is_data_type_property %}
@@ -356,25 +388,21 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
 {% from 'attributes.cpp' import attribute_configuration with context %}
 {% from 'constants.cpp' import constant_configuration with context %}
 {% from 'methods.cpp' import method_configuration with context %}
-{% for origin_trial_feature_name in origin_trial_feature_names %}{{newline}}
-void {{v8_class_or_partial}}::install{{origin_trial_feature_name}}(ScriptState* scriptState, v8::Local<v8::Object> instance)
+{% for origin_trial_feature in origin_trial_features %}{{newline}}
+void {{v8_class_or_partial}}::install{{origin_trial_feature.name}}(ScriptState* scriptState, v8::Local<v8::Object> instance)
 {
-    v8::Local<v8::Object> prototype = instance->GetPrototype()->ToObject(scriptState->isolate());
-
-    {# Origin-Trial-enabled attributes #}
-    {% if attributes | for_origin_trial_feature(origin_trial_feature_name) or
-          methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) %}
-    V8PerIsolateData* perIsolateData = V8PerIsolateData::from(scriptState->isolate());
-    v8::Local<v8::FunctionTemplate> interfaceTemplate = perIsolateData->findInterfaceTemplate(scriptState->world(), &{{v8_class}}::wrapperTypeInfo);
+    {% if attributes | for_origin_trial_feature(origin_trial_feature.name) or
+          methods | method_for_origin_trial_feature(origin_trial_feature.name, is_partial) %}
+    v8::Local<v8::FunctionTemplate> interfaceTemplate = {{v8_class}}::wrapperTypeInfo.domTemplate(scriptState->isolate(), scriptState->world());
     v8::Local<v8::Signature> signature = v8::Signature::New(scriptState->isolate(), interfaceTemplate);
     ALLOW_UNUSED_LOCAL(signature);
     {% endif %}
-    {% if constants | for_origin_trial_feature(origin_trial_feature_name) or
-          methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) %}
     V8PerContextData* perContextData = V8PerContextData::from(scriptState->context());
+    v8::Local<v8::Object> prototype = perContextData->prototypeForType(&{{v8_class}}::wrapperTypeInfo);
     v8::Local<v8::Function> interface = perContextData->constructorForType(&{{v8_class}}::wrapperTypeInfo);
-    {% endif %}
-    {% for attribute in attributes | for_origin_trial_feature(origin_trial_feature_name) | unique_by('name') | sort %}
+    ALLOW_UNUSED_LOCAL(interface);
+    {# Origin-Trial-enabled attributes #}
+    {% for attribute in attributes | for_origin_trial_feature(origin_trial_feature.name) | unique_by('name') | sort %}
     {% if attribute.is_data_type_property %}
     const V8DOMConfiguration::AttributeConfiguration attribute{{attribute.name}}Configuration = \
         {{attribute_configuration(attribute)}};
@@ -382,22 +410,29 @@ void {{v8_class_or_partial}}::install{{origin_trial_feature_name}}(ScriptState* 
     {% else %}
     const V8DOMConfiguration::AccessorConfiguration accessor{{attribute.name}}Configuration = \
         {{attribute_configuration(attribute)}};
-    V8DOMConfiguration::installAccessor(scriptState->isolate(), scriptState->world(), instance, prototype, v8::Local<v8::Function>(), signature, accessor{{attribute.name}}Configuration);
+    V8DOMConfiguration::installAccessor(scriptState->isolate(), scriptState->world(), instance, prototype, interface, signature, accessor{{attribute.name}}Configuration);
     {% endif %}
     {% endfor %}
     {# Origin-Trial-enabled constants #}
-    {% for constant in constants | for_origin_trial_feature(origin_trial_feature_name) | unique_by('name') | sort %}
+    {% for constant in constants | for_origin_trial_feature(origin_trial_feature.name) | unique_by('name') | sort %}
     {% set constant_name = constant.name.title().replace('_', '') %}
     const V8DOMConfiguration::ConstantConfiguration constant{{constant_name}}Configuration = {{constant_configuration(constant)}};
     V8DOMConfiguration::installConstant(scriptState->isolate(), interface, prototype, constant{{constant_name}}Configuration);
     {% endfor %}
     {# Origin-Trial-enabled methods (no overloads) #}
-    {% for method in methods | method_for_origin_trial_feature(origin_trial_feature_name, is_partial) | unique_by('name') | sort %}
+    {% for method in methods | method_for_origin_trial_feature(origin_trial_feature.name, is_partial) | unique_by('name') | sort %}
     {% set method_name = method.name.title().replace('_', '') %}
     const V8DOMConfiguration::MethodConfiguration method{{method_name}}Configuration = {{method_configuration(method)}};
     V8DOMConfiguration::installMethod(scriptState->isolate(), scriptState->world(), instance, prototype, interface, signature, method{{method_name}}Configuration);
     {% endfor %}
 }
+{% if not origin_trial_feature.needs_instance %}
+
+void {{v8_class_or_partial}}::install{{origin_trial_feature.name}}(ScriptState* scriptState)
+{
+    install{{origin_trial_feature.name}}(scriptState, v8::Local<v8::Object>());
+}
+{% endif %}
 {% endfor %}
 {% endblock %}
 {##############################################################################}
@@ -410,7 +445,6 @@ void {{v8_class_or_partial}}::install{{origin_trial_feature_name}}(ScriptState* 
 {##############################################################################}
 {% block prepare_prototype_and_interface_object %}{% endblock %}
 {##############################################################################}
-{% block to_active_scriptwrappable %}{% endblock %}
 {% for method in methods if method.is_implemented_in_private_script and method.visible %}
 {{method_implemented_in_private_script(method)}}
 {% endfor %}
@@ -422,3 +456,5 @@ void {{v8_class_or_partial}}::install{{origin_trial_feature_name}}(ScriptState* 
 {% endfor %}
 {% block partial_interface %}{% endblock %}
 } // namespace blink
+
+{% endfilter %}{# format_blink_cpp_source_code #}

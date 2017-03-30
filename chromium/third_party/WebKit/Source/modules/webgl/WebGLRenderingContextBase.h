@@ -34,6 +34,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/TypedFlexibleArrayBufferView.h"
+#include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/layout/ContentChangeType.h"
 #include "modules/webgl/WebGLContextAttributes.h"
@@ -72,6 +73,7 @@ class EXTShaderTextureLOD;
 class EXTsRGB;
 class EXTTextureFilterAnisotropic;
 class ExceptionState;
+class HTMLCanvasElementOrOffscreenCanvas;
 class HTMLImageElement;
 class HTMLVideoElement;
 class ImageBitmap;
@@ -131,7 +133,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext {
 public:
     ~WebGLRenderingContextBase() override;
 
-    virtual unsigned version() const = 0;
     virtual String contextName() const = 0;
     virtual void registerContextExtensions() = 0;
 
@@ -139,9 +140,11 @@ public:
 
     static unsigned getWebGLVersion(const CanvasRenderingContext*);
 
-    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
-    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(ScriptState*, WebGLContextAttributes, unsigned webGLVersion);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, const CanvasContextCreationAttributes&, unsigned webGLVersion);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(ScriptState*, const CanvasContextCreationAttributes&, unsigned webGLVersion);
     static void forceNextWebGLContextCreationToFail();
+
+    unsigned version() const { return m_version; }
 
     int drawingBufferWidth() const;
     int drawingBufferHeight() const;
@@ -412,6 +415,8 @@ public:
     void setFilterQuality(SkFilterQuality) override;
     bool isWebGL2OrHigher() { return version() >= 2; }
 
+    void getHTMLOrOffscreenCanvas(HTMLCanvasElementOrOffscreenCanvas&) const;
+
 protected:
     friend class EXTDisjointTimerQuery;
     friend class WebGLDrawBuffers;
@@ -430,8 +435,8 @@ protected:
     friend class ScopedTexture2DRestorer;
     friend class ScopedFramebufferRestorer;
 
-    WebGLRenderingContextBase(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    WebGLRenderingContextBase(OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    WebGLRenderingContextBase(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes&, unsigned);
+    WebGLRenderingContextBase(OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes&, unsigned);
     PassRefPtr<DrawingBuffer> createDrawingBuffer(std::unique_ptr<WebGraphicsContext3DProvider>);
     void setupFlags();
 
@@ -564,7 +569,6 @@ protected:
     bool m_unpackFlipY;
     bool m_unpackPremultiplyAlpha;
     GLenum m_unpackColorspaceConversion;
-    WebGLContextAttributes m_requestedAttributes;
 
     GLfloat m_clearColor[4];
     bool m_scissorEnabled;
@@ -819,6 +823,11 @@ protected:
     // ASCII subset as defined in GLSL ES 1.0 spec section 3.1.
     bool validateString(const char* functionName, const String&);
 
+    // Helper function to check if all characters in the shader source belong to the ASCII
+    // subset as defined in GLSL ES 1.0 spec section 3.1 Character Set for WebGL 1.0 and
+    // in GLSL ES 3.00 spec section 3.1 Character Set for WebGL 2.0.
+    bool validateShaderSource(const String&);
+
     // Helper function to check texture binding target and texture bound to the target.
     // Generate GL errors and return 0 if target is invalid or texture bound is
     // null.  Otherwise, return the texture bound to the target.
@@ -885,13 +894,14 @@ protected:
 
     enum NullDisposition {
         NullAllowed,
-        NullNotAllowed
+        NullNotAllowed,
+        NullNotReachable
     };
 
     // Helper function to validate that the given ArrayBufferView
     // is of the correct type and contains enough data for the texImage call.
     // Generates GL error and returns false if parameters are invalid.
-    bool validateTexFuncData(const char* functionName, TexImageDimension, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition);
+    bool validateTexFuncData(const char* functionName, TexImageDimension, GLint level, GLsizei width, GLsizei height, GLsizei depth, GLenum format, GLenum type, DOMArrayBufferView* pixels, NullDisposition, GLuint srcOffset);
 
     // Helper function to validate a given texture format is settable as in
     // you can supply data to texImage2D, or call texImage2D, copyTexImage2D and
@@ -1003,9 +1013,9 @@ protected:
     // Return false if caller should return without further processing.
     bool checkObjectToBeBound(const char* functionName, WebGLObject*, bool& deleted);
 
-    void dispatchContextLostEvent(Timer<WebGLRenderingContextBase>*);
+    void dispatchContextLostEvent(TimerBase*);
     // Helper for restoration after context lost.
-    void maybeRestoreContext(Timer<WebGLRenderingContextBase>*);
+    void maybeRestoreContext(TimerBase*);
 
     enum ConsoleDisplayPreference {
         DisplayInConsole,
@@ -1093,7 +1103,7 @@ protected:
     ImageBitmap* transferToImageBitmapBase();
 
     // Helper functions for tex(Sub)Image2D && texSubImage3D
-    void texImageHelperDOMArrayBufferView(TexImageFunctionID, GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLsizei, GLint, GLint, GLint, DOMArrayBufferView*);
+    void texImageHelperDOMArrayBufferView(TexImageFunctionID, GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, GLint, GLint, GLint, DOMArrayBufferView*, NullDisposition, GLuint srcOffset);
     void texImageHelperImageData(TexImageFunctionID, GLenum, GLint, GLint, GLint, GLenum, GLenum, GLsizei, GLint, GLint, GLint, ImageData*);
     void texImageHelperHTMLImageElement(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, HTMLImageElement*, ExceptionState&);
     void texImageHelperHTMLCanvasElement(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, HTMLCanvasElement*, ExceptionState&);
@@ -1102,10 +1112,14 @@ protected:
     static const char* getTexImageFunctionName(TexImageFunctionID);
 
 private:
-    WebGLRenderingContextBase(HTMLCanvasElement*, OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    static std::unique_ptr<WebGraphicsContext3DProvider> createContextProviderInternal(HTMLCanvasElement*, ScriptState*, WebGLContextAttributes, unsigned);
+    WebGLRenderingContextBase(HTMLCanvasElement*, OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes&, unsigned);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createContextProviderInternal(HTMLCanvasElement*, ScriptState*, const CanvasContextCreationAttributes&, unsigned);
     void texImageCanvasByGPU(HTMLCanvasElement*, GLuint, GLenum, GLenum, GLint);
     void texImageBitmapByGPU(ImageBitmap*, GLuint, GLenum, GLenum, GLint, bool);
+
+    const unsigned m_version;
+
+    bool isPaintable() const final { return drawingBuffer(); }
 };
 
 DEFINE_TYPE_CASTS(WebGLRenderingContextBase, CanvasRenderingContext, context, context->is3d(), context.is3d());

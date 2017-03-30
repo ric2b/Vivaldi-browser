@@ -17,6 +17,7 @@
 #include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_edit_commands.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/canvas_painter.h"
@@ -59,6 +60,18 @@
 namespace views {
 
 namespace {
+
+#if defined(OS_MACOSX)
+const gfx::SelectionBehavior kLineSelectionBehavior = gfx::SELECTION_EXTEND;
+const gfx::SelectionBehavior kWordSelectionBehavior = gfx::SELECTION_CARET;
+const gfx::SelectionBehavior kMoveParagraphSelectionBehavior =
+    gfx::SELECTION_CARET;
+#else
+const gfx::SelectionBehavior kLineSelectionBehavior = gfx::SELECTION_RETAIN;
+const gfx::SelectionBehavior kWordSelectionBehavior = gfx::SELECTION_RETAIN;
+const gfx::SelectionBehavior kMoveParagraphSelectionBehavior =
+    gfx::SELECTION_RETAIN;
+#endif
 
 // Default placeholder text color.
 const SkColor kDefaultPlaceholderTextColor = SK_ColorLTGRAY;
@@ -1179,7 +1192,7 @@ bool Textfield::IsCommandIdEnabled(int command_id) const {
 }
 
 bool Textfield::GetAcceleratorForCommandId(int command_id,
-                                           ui::Accelerator* accelerator) {
+                                           ui::Accelerator* accelerator) const {
   switch (command_id) {
     case IDS_APP_UNDO:
       *accelerator = ui::Accelerator(ui::VKEY_Z, ui::EF_CONTROL_DOWN);
@@ -1467,6 +1480,8 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH:
     case ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::MOVE_PARAGRAPH_FORWARD_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::MOVE_PARAGRAPH_BACKWARD_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_WORD_BACKWARD:
     case ui::TextEditCommand::MOVE_WORD_BACKWARD_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_WORD_FORWARD:
@@ -1493,6 +1508,8 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::TRANSPOSE:
       return editable && !model_->HasSelection() &&
              !model_->HasCompositionText();
+    case ui::TextEditCommand::YANK:
+      return editable;
     case ui::TextEditCommand::MOVE_DOWN:
     case ui::TextEditCommand::MOVE_DOWN_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_PAGE_DOWN:
@@ -1501,6 +1518,13 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::MOVE_PAGE_UP_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_UP:
     case ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION:
+// On Mac, the textfield should respond to Up/Down arrows keys and
+// PageUp/PageDown.
+#if defined(OS_MACOSX)
+      return true;
+#else
+      return false;
+#endif
     case ui::TextEditCommand::INSERT_TEXT:
     case ui::TextEditCommand::SET_MARK:
     case ui::TextEditCommand::UNSELECT:
@@ -1543,21 +1567,24 @@ base::string16 Textfield::GetSelectionClipboardText() const {
 void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
   DestroyTouchSelection();
 
+  bool add_to_kill_buffer = false;
+
   // Some codepaths may bypass GetCommandForKeyEvent, so any selection-dependent
   // modifications of the command should happen here.
-  if (HasSelection()) {
-    switch (command) {
-      case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_LINE:
-      case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_PARAGRAPH:
-      case ui::TextEditCommand::DELETE_TO_END_OF_LINE:
-      case ui::TextEditCommand::DELETE_TO_END_OF_PARAGRAPH:
-      case ui::TextEditCommand::DELETE_WORD_BACKWARD:
-      case ui::TextEditCommand::DELETE_WORD_FORWARD:
+  switch (command) {
+    case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_LINE:
+    case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_PARAGRAPH:
+    case ui::TextEditCommand::DELETE_TO_END_OF_LINE:
+    case ui::TextEditCommand::DELETE_TO_END_OF_PARAGRAPH:
+      add_to_kill_buffer = true;
+    // Fall through.
+    case ui::TextEditCommand::DELETE_WORD_BACKWARD:
+    case ui::TextEditCommand::DELETE_WORD_FORWARD:
+      if (HasSelection())
         command = ui::TextEditCommand::DELETE_FORWARD;
-        break;
-      default:
-        break;
-    }
+      break;
+    default:
+      break;
   }
 
   // We only execute the commands enabled in Textfield::IsTextEditCommandEnabled
@@ -1575,98 +1602,125 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
   OnBeforeUserAction();
   switch (command) {
     case ui::TextEditCommand::DELETE_BACKWARD:
-      text_changed = cursor_changed = model_->Backspace();
+      text_changed = cursor_changed = model_->Backspace(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::DELETE_FORWARD:
-      text_changed = cursor_changed = model_->Delete();
+      text_changed = cursor_changed = model_->Delete(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_LINE:
     case ui::TextEditCommand::DELETE_TO_BEGINNING_OF_PARAGRAPH:
-      model_->MoveCursor(gfx::LINE_BREAK, begin, true);
-      text_changed = cursor_changed = model_->Backspace();
+      model_->MoveCursor(gfx::LINE_BREAK, begin, gfx::SELECTION_RETAIN);
+      text_changed = cursor_changed = model_->Backspace(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::DELETE_TO_END_OF_LINE:
     case ui::TextEditCommand::DELETE_TO_END_OF_PARAGRAPH:
-      model_->MoveCursor(gfx::LINE_BREAK, end, true);
-      text_changed = cursor_changed = model_->Delete();
+      model_->MoveCursor(gfx::LINE_BREAK, end, gfx::SELECTION_RETAIN);
+      text_changed = cursor_changed = model_->Delete(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::DELETE_WORD_BACKWARD:
-      model_->MoveCursor(gfx::WORD_BREAK, begin, true);
-      text_changed = cursor_changed = model_->Backspace();
+      model_->MoveCursor(gfx::WORD_BREAK, begin, gfx::SELECTION_RETAIN);
+      text_changed = cursor_changed = model_->Backspace(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::DELETE_WORD_FORWARD:
-      model_->MoveCursor(gfx::WORD_BREAK, end, true);
-      text_changed = cursor_changed = model_->Delete();
+      model_->MoveCursor(gfx::WORD_BREAK, end, gfx::SELECTION_RETAIN);
+      text_changed = cursor_changed = model_->Delete(add_to_kill_buffer);
       break;
     case ui::TextEditCommand::MOVE_BACKWARD:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, begin, false);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, begin, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_BACKWARD_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, begin, true);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, begin, gfx::SELECTION_RETAIN);
       break;
     case ui::TextEditCommand::MOVE_FORWARD:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, end, false);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, end, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_FORWARD_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, end, true);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, end, gfx::SELECTION_RETAIN);
       break;
     case ui::TextEditCommand::MOVE_LEFT:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_LEFT, false);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_LEFT,
+                         gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_LEFT_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_LEFT, true);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_LEFT,
+                         gfx::SELECTION_RETAIN);
       break;
     case ui::TextEditCommand::MOVE_RIGHT:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_RIGHT, false);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_RIGHT,
+                         gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_RIGHT_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_RIGHT, true);
+      model_->MoveCursor(gfx::CHARACTER_BREAK, gfx::CURSOR_RIGHT,
+                         gfx::SELECTION_RETAIN);
       break;
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_DOCUMENT:
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE:
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_PARAGRAPH:
-      model_->MoveCursor(gfx::LINE_BREAK, begin, false);
+    case ui::TextEditCommand::MOVE_UP:
+    case ui::TextEditCommand::MOVE_PAGE_UP:
+      model_->MoveCursor(gfx::LINE_BREAK, begin, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::
         MOVE_TO_BEGINNING_OF_DOCUMENT_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::
         MOVE_TO_BEGINNING_OF_PARAGRAPH_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::LINE_BREAK, begin, true);
+      model_->MoveCursor(gfx::LINE_BREAK, begin, kLineSelectionBehavior);
+      break;
+    case ui::TextEditCommand::MOVE_PAGE_UP_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION:
+      model_->MoveCursor(gfx::LINE_BREAK, begin, gfx::SELECTION_RETAIN);
       break;
     case ui::TextEditCommand::MOVE_TO_END_OF_DOCUMENT:
     case ui::TextEditCommand::MOVE_TO_END_OF_LINE:
     case ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH:
-      model_->MoveCursor(gfx::LINE_BREAK, end, false);
+    case ui::TextEditCommand::MOVE_DOWN:
+    case ui::TextEditCommand::MOVE_PAGE_DOWN:
+      model_->MoveCursor(gfx::LINE_BREAK, end, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_TO_END_OF_DOCUMENT_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION:
     case ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::LINE_BREAK, end, true);
+      model_->MoveCursor(gfx::LINE_BREAK, end, kLineSelectionBehavior);
+      break;
+    case ui::TextEditCommand::MOVE_PAGE_DOWN_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::MOVE_DOWN_AND_MODIFY_SELECTION:
+      model_->MoveCursor(gfx::LINE_BREAK, end, gfx::SELECTION_RETAIN);
+      break;
+    case ui::TextEditCommand::MOVE_PARAGRAPH_BACKWARD_AND_MODIFY_SELECTION:
+      model_->MoveCursor(gfx::LINE_BREAK, begin,
+                         kMoveParagraphSelectionBehavior);
+      break;
+    case ui::TextEditCommand::MOVE_PARAGRAPH_FORWARD_AND_MODIFY_SELECTION:
+      model_->MoveCursor(gfx::LINE_BREAK, end, kMoveParagraphSelectionBehavior);
       break;
     case ui::TextEditCommand::MOVE_WORD_BACKWARD:
-      model_->MoveCursor(gfx::WORD_BREAK, begin, false);
+      model_->MoveCursor(gfx::WORD_BREAK, begin, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_WORD_BACKWARD_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::WORD_BREAK, begin, true);
+      model_->MoveCursor(gfx::WORD_BREAK, begin, kWordSelectionBehavior);
       break;
     case ui::TextEditCommand::MOVE_WORD_FORWARD:
-      model_->MoveCursor(gfx::WORD_BREAK, end, false);
+      model_->MoveCursor(gfx::WORD_BREAK, end, gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_WORD_FORWARD_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::WORD_BREAK, end, true);
+      model_->MoveCursor(gfx::WORD_BREAK, end, kWordSelectionBehavior);
       break;
     case ui::TextEditCommand::MOVE_WORD_LEFT:
-      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_LEFT, false);
+      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_LEFT,
+                         gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_WORD_LEFT_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_LEFT, true);
+      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_LEFT,
+                         kWordSelectionBehavior);
       break;
     case ui::TextEditCommand::MOVE_WORD_RIGHT:
-      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_RIGHT, false);
+      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_RIGHT,
+                         gfx::SELECTION_NONE);
       break;
     case ui::TextEditCommand::MOVE_WORD_RIGHT_AND_MODIFY_SELECTION:
-      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_RIGHT, true);
+      model_->MoveCursor(gfx::WORD_BREAK, gfx::CURSOR_RIGHT,
+                         kWordSelectionBehavior);
       break;
     case ui::TextEditCommand::UNDO:
       text_changed = cursor_changed = model_->Undo();
@@ -1689,14 +1743,9 @@ void Textfield::ExecuteTextEditCommand(ui::TextEditCommand command) {
     case ui::TextEditCommand::TRANSPOSE:
       text_changed = cursor_changed = model_->Transpose();
       break;
-    case ui::TextEditCommand::MOVE_DOWN:
-    case ui::TextEditCommand::MOVE_DOWN_AND_MODIFY_SELECTION:
-    case ui::TextEditCommand::MOVE_PAGE_DOWN:
-    case ui::TextEditCommand::MOVE_PAGE_DOWN_AND_MODIFY_SELECTION:
-    case ui::TextEditCommand::MOVE_PAGE_UP:
-    case ui::TextEditCommand::MOVE_PAGE_UP_AND_MODIFY_SELECTION:
-    case ui::TextEditCommand::MOVE_UP:
-    case ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION:
+    case ui::TextEditCommand::YANK:
+      text_changed = cursor_changed = model_->Yank();
+      break;
     case ui::TextEditCommand::INSERT_TEXT:
     case ui::TextEditCommand::SET_MARK:
     case ui::TextEditCommand::UNSELECT:
@@ -1724,12 +1773,18 @@ void Textfield::AccessibilitySetValue(const base::string16& new_value) {
 
 void Textfield::UpdateBackgroundColor() {
   const SkColor color = GetBackgroundColor();
-  set_background(Background::CreateSolidBackground(color));
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    set_background(Background::CreateBackgroundPainter(
+        true, Painter::CreateSolidRoundRectPainter(
+                  color, FocusableBorder::kCornerRadiusDp)));
+  } else {
+    set_background(Background::CreateSolidBackground(color));
+  }
   // Disable subpixel rendering when the background color is transparent
   // because it draws incorrect colors around the glyphs in that case.
   // See crbug.com/115198
   GetRenderText()->set_subpixel_rendering_suppressed(
-      SkColorGetA(color) != 0xFF);
+      SkColorGetA(color) != SK_AlphaOPAQUE);
   SchedulePaint();
 }
 
@@ -1802,10 +1857,12 @@ void Textfield::SelectThroughLastDragLocation() {
   const bool drags_to_end = PlatformStyle::kTextfieldDragVerticallyDragsToEnd;
   if (drags_to_end && last_drag_location_.y() < 0) {
     model_->MoveCursor(gfx::BreakType::LINE_BREAK,
-                       gfx::VisualCursorDirection::CURSOR_LEFT, true);
+                       gfx::VisualCursorDirection::CURSOR_LEFT,
+                       gfx::SELECTION_RETAIN);
   } else if (drags_to_end && last_drag_location_.y() > height()) {
     model_->MoveCursor(gfx::BreakType::LINE_BREAK,
-                       gfx::VisualCursorDirection::CURSOR_RIGHT, true);
+                       gfx::VisualCursorDirection::CURSOR_RIGHT,
+                       gfx::SELECTION_RETAIN);
   } else {
     model_->MoveCursorTo(last_drag_location_, true);
   }

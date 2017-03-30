@@ -12,16 +12,34 @@
         variant_path|upper|replace("/","_")|replace(".","_")|
             replace("-", "_")) %}
 
+{%- macro namespace_begin() %}
+{%-   for namespace in namespaces_as_array %}
+namespace {{namespace}} {
+{%-   endfor %}
+{%-   if variant %}
+namespace {{variant}} {
+{%-   endif %}
+{%- endmacro %}
+
+{%- macro namespace_end() %}
+{%-   if variant %}
+}  // namespace {{variant}}
+{%-   endif %}
+{%-   for namespace in namespaces_as_array|reverse %}
+}  // namespace {{namespace}}
+{%-   endfor %}
+{%- endmacro %}
+
 #ifndef {{header_guard}}
 #define {{header_guard}}
 
 #include <stdint.h>
-#include <ostream>
+
 #include <type_traits>
 #include <utility>
 
 #include "base/callback.h"
-#include "base/strings/string_piece.h"
+#include "base/optional.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
@@ -30,14 +48,14 @@
 #include "mojo/public/cpp/bindings/lib/control_message_handler.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
 #include "mojo/public/cpp/bindings/lib/serialization.h"
+#include "mojo/public/cpp/bindings/lib/union_accessor.h"
 #include "mojo/public/cpp/bindings/map.h"
-#include "mojo/public/cpp/bindings/message_filter.h"
-#include "mojo/public/cpp/bindings/native_enum.h"
 #include "mojo/public/cpp/bindings/native_struct.h"
 #include "mojo/public/cpp/bindings/no_interface.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
-#include "{{variant_path}}-internal.h"
+#include "mojo/public/cpp/bindings/union_traits.h"
+#include "{{module.path}}-shared.h"
 {%- for import in imports %}
 {%-   if variant %}
 #include "{{"%s-%s.h"|format(import.module.path, variant)}}"
@@ -51,6 +69,7 @@
 {%- else %}
 #include "mojo/public/cpp/bindings/wtf_array.h"
 #include "mojo/public/cpp/bindings/wtf_map.h"
+#include "third_party/WebKit/Source/wtf/Optional.h"
 #include "third_party/WebKit/Source/wtf/text/WTFString.h"
 {%- endif %}
 
@@ -58,26 +77,18 @@
 #include "{{header}}"
 {%- endfor %}
 
-{%- for namespace in namespaces_as_array %}
-namespace {{namespace}} {
-{%- endfor %}
-{%- if variant %}
-namespace {{variant}} {
+{%- if export_header %}
+#include "{{export_header}}"
 {%- endif %}
 
+{{namespace_begin()}}
+
 {#--- Enums #}
-{% from "enum_macros.tmpl" import enum_decl -%}
-{% from "enum_macros.tmpl" import enum_stream_operator -%}
-{% from "enum_macros.tmpl" import is_known_enum_value -%}
-{%- for enum in enums %}
-{%-   if enum|is_native_only_kind %}
-using {{enum.name}} = mojo::NativeEnum;
-{%-   else %}
-{{enum_decl(enum)}}
-{{enum_stream_operator(enum)}}
-{{is_known_enum_value(enum)}}
-{%-   endif %}
-{%- endfor %}
+{%- if variant %}
+{%-   for enum in enums %}
+using {{enum.name}} = {{enum.name}};  // Alias for definition in the parent namespace.
+{%-   endfor %}
+{%- endif %}
 
 {#--- Constants #}
 {%- for constant in module.constants %}
@@ -111,7 +122,6 @@ using {{struct.name}} = mojo::NativeStruct;
 using {{struct.name}}Ptr = mojo::NativeStructPtr;
 {%-   else %}
 class {{struct.name}};
-class {{struct.name}}DataView;
 {%-     if struct|should_inline %}
 using {{struct.name}}Ptr = mojo::InlinedStructPtr<{{struct.name}}>;
 {%-     else %}
@@ -162,7 +172,6 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%  for struct in structs %}
 {%    if struct|should_inline and not struct|is_native_only_kind %}
 {%      include "wrapper_class_declaration.tmpl" %}
-{%      include "struct_data_view_declaration.tmpl" %}
 {%    endif %}
 {%- endfor %}
 
@@ -177,7 +186,6 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%  for struct in structs %}
 {%    if not struct|should_inline and not struct|is_native_only_kind %}
 {%      include "wrapper_class_declaration.tmpl" %}
-{%      include "struct_data_view_declaration.tmpl" %}
 {%    endif %}
 {%- endfor %}
 
@@ -189,67 +197,23 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%-   if not struct|is_native_only_kind %}
 {%      include "wrapper_class_template_definition.tmpl" %}
 {%-   endif %}
-
-{%-   for enum in struct.enums %}
-{%-     if not enum|is_native_only_kind %}
-{{enum_stream_operator(enum)}}
-{{is_known_enum_value(enum)}}
-{%-     endif %}
-{%-   endfor %}
 {%- endfor %}
 
-{%- for interface in interfaces %}
-{%-   for enum in interface.enums %}
-{%-     if not enum|is_native_only_kind %}
-{{enum_stream_operator(enum)}}
-{{is_known_enum_value(enum)}}
-{%-     endif %}
-{%-   endfor %}
-{%- endfor %}
-
-{%- if variant %}
-}  // namespace {{variant}}
-{%- endif %}
-{%- for namespace in namespaces_as_array|reverse %}
-}  // namespace {{namespace}}
-{%- endfor %}
+{{namespace_end()}}
 
 namespace mojo {
-
-{#--- Enum Serialization Helpers -#}
-{%- for enum in enums %}
-{%-   if not enum|is_native_only_kind %}
-{%      include "enum_serialization_declaration.tmpl" %}
-{%-   endif %}
-{%- endfor %}
-
-{%- for struct in structs %}
-{%-   for enum in struct.enums %}
-{%-     if not enum|is_native_only_kind %}
-{%        include "enum_serialization_declaration.tmpl" %}
-{%-     endif %}
-{%-   endfor %}
-{%- endfor %}
-
-{%- for interface in interfaces %}
-{%-   for enum in interface.enums %}
-{%-     if not enum|is_native_only_kind %}
-{%        include "enum_serialization_declaration.tmpl" %}
-{%-     endif %}
-{%-   endfor %}
-{%- endfor %}
 
 {#--- Struct Serialization Helpers -#}
 {%  for struct in structs %}
 {%-   if not struct|is_native_only_kind %}
-{%      include "struct_serialization_declaration.tmpl" %}
+{%      include "struct_traits_declaration.tmpl" %}
 {%-   endif %}
 {%- endfor %}
 
 {#--- Union Serialization Helpers -#}
 {%  if unions %}
 {%-   for union in unions %}
-{%      include "union_serialization_declaration.tmpl" %}
+{%      include "union_traits_declaration.tmpl" %}
 {%-   endfor %}
 {%- endif %}
 

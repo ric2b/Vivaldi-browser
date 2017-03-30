@@ -16,6 +16,8 @@
             the generated style resources under res_v14_compatibility/values/ (crbug.com/243952).
     -->
 
+    <style name="LauncherTheme" parent="@android:style/Theme.NoDisplay" />
+
     <style name="MainTheme" parent="Theme.AppCompat.Light.NoActionBar">
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:textColorHighlight">@color/text_highlight_color</item>
@@ -51,6 +53,14 @@
         <item name="colorAccent">@color/light_active_color</item>
     </style>
 
+    <style name="DownloadActivityTheme" parent="FullscreenWhiteDialog">
+        <item name="colorPrimaryDark">@android:color/black</item>
+
+        <!-- Remove ActionBar -->
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
+    </style>
+
     <!-- Web app themes -->
     <style name="WebappTheme" parent="MainTheme">
         <item name="android:windowBackground">@null</item>
@@ -81,6 +91,11 @@
 
         <!-- Default TintedImageButton tint -->
         <item name="tint">@color/dark_mode_tint</item>
+    </style>
+
+    <style name="LightweightFreDialog" parent="AlertDialogTheme">
+        <item name="windowNoTitle">true</item>
+        <item name="windowActionBar">false</item>
     </style>
 
     <!-- Preferences -->
@@ -215,6 +230,13 @@
         <item name="android:listDivider">@null</item>
         <item name="android:listPreferredItemHeightSmall">48dp</item>
         <item name="android:textSize">16sp</item>
+    </style>
+    <style name="OverflowMenuButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">?attr/listChoiceBackgroundIndicator</item>
+        <item name="android:scaleType">center</item>
     </style>
     <style name="OverflowMenuAnim">
         <item name="android:windowEnterAnimation">@anim/menu_enter</item>
@@ -523,6 +545,12 @@
     <style name="LocationBarButton">
         <item name="android:background">@null</item>
     </style>
+    <style name="LocationBarButtonTablet" parent="LocationBarButton">
+        <item name="android:layout_width">@dimen/location_bar_icon_width</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:layout_gravity">end</item>
+    </style>
     <style name="LocationBarMenuButton" parent="LocationBarButton">
         <item name="android:layout_height">match_parent</item>
         <item name="android:layout_width">match_parent</item>
@@ -547,5 +575,17 @@
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">16dp</item>
         <item name="android:background">?attr/listChoiceBackgroundIndicator</item>
+    </style>
+    <style name="RobotoMediumStyle">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="MaterialProgressBar" parent="Widget.AppCompat.ProgressBar.Horizontal">
+        <item name="android:progressDrawable">@drawable/material_progressbar</item>
+    </style>
+
+    <!-- New tab page RecyclerView overscroll color -->
+    <style name="NewTabPageRecyclerView">
+        <item name="android:colorEdgeEffect">@color/google_grey_300</item>
     </style>
 </resources>

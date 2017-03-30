@@ -37,20 +37,20 @@ LongOrTestDictionary LongOrTestDictionary::fromLong(int value)
     return container;
 }
 
-TestDictionary LongOrTestDictionary::getAsTestDictionary() const
+const TestDictionary& LongOrTestDictionary::getAsTestDictionary() const
 {
     ASSERT(isTestDictionary());
     return m_testDictionary;
 }
 
-void LongOrTestDictionary::setTestDictionary(TestDictionary value)
+void LongOrTestDictionary::setTestDictionary(const TestDictionary& value)
 {
     ASSERT(isNull());
     m_testDictionary = value;
     m_type = SpecificTypeTestDictionary;
 }
 
-LongOrTestDictionary LongOrTestDictionary::fromTestDictionary(TestDictionary value)
+LongOrTestDictionary LongOrTestDictionary::fromTestDictionary(const TestDictionary& value)
 {
     LongOrTestDictionary container;
     container.setTestDictionary(value);
@@ -107,7 +107,6 @@ void V8LongOrTestDictionary::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v
         impl.setLong(cppValue);
         return;
     }
-
 }
 
 v8::Local<v8::Value> toV8(const LongOrTestDictionary& impl, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)

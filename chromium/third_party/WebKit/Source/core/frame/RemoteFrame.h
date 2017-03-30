@@ -22,7 +22,7 @@ class WebLayer;
 class WindowProxyManager;
 struct FrameLoadRequest;
 
-class CORE_EXPORT RemoteFrame: public Frame {
+class CORE_EXPORT RemoteFrame final : public Frame {
 public:
     static RemoteFrame* create(RemoteFrameClient*, FrameHost*, FrameOwner*);
 
@@ -70,6 +70,8 @@ private:
     // already RemoteFrame.
     bool isLocalFrame() const override { return false; }
     bool isRemoteFrame() const override { return true; }
+
+    void detachChildren();
 
     Member<RemoteFrameView> m_view;
     Member<RemoteSecurityContext> m_securityContext;

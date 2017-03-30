@@ -29,19 +29,25 @@ import threading
 import time
 
 from webkitpy.common.checkout.scm.git import Git
-from webkitpy.common.config.irc import server, port, channel, nickname
-from webkitpy.common.config.irc import update_wait_seconds, retry_attempts
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.thirdparty.irc.ircbot import SingleServerIRCBot
 
 _log = logging.getLogger(__name__)
+
+SERVER = "irc.freenode.net"
+PORT = 6667
+CHANNEL = "#blink"
+NICKNAME = "commit-bot"
+
+UPDATE_WAIT_SECONDS = 10
+RETRY_ATTEMPTS = 8
 
 
 class CommitAnnouncer(SingleServerIRCBot):
     _commit_detail_format = "%H\n%ae\n%s\n%b"  # commit-sha1, author email, subject, body
 
     def __init__(self, tool, announce_path, irc_password):
-        SingleServerIRCBot.__init__(self, [(server, port, irc_password)], nickname, nickname)
+        SingleServerIRCBot.__init__(self, [(SERVER, PORT, irc_password)], NICKNAME, NICKNAME)
         self.announce_path = announce_path
         self.git = Git(cwd=tool.scm().checkout_root, filesystem=tool.filesystem, executive=tool.executive)
         self.commands = {
@@ -72,11 +78,11 @@ class CommitAnnouncer(SingleServerIRCBot):
                 continue
             commit_detail = self._commit_detail(commit)
             if commit_detail:
-                _log.info('%s Posting commit %s' % (self._time(), commit))
-                _log.info('%s Posted message: %s' % (self._time(), repr(commit_detail)))
+                _log.info('%s Posting commit %s', self._time(), commit)
+                _log.info('%s Posted message: %s', self._time(), repr(commit_detail))
                 self._post(commit_detail)
             else:
-                _log.error('Malformed commit log for %s' % commit)
+                _log.error('Malformed commit log for %s', commit)
 
     # Bot commands.
 
@@ -96,7 +102,7 @@ class CommitAnnouncer(SingleServerIRCBot):
         connection.nick('%s_' % connection.get_nickname())
 
     def on_welcome(self, connection, event):
-        connection.join(channel)
+        connection.join(CHANNEL)
 
     def on_pubmsg(self, connection, event):
         message = event.arguments()[0]
@@ -113,31 +119,31 @@ class CommitAnnouncer(SingleServerIRCBot):
             try:
                 self.git.ensure_cleanly_tracking_remote_master()
             except ScriptError as e:
-                _log.error('Failed to clean repository: %s' % e)
+                _log.error('Failed to clean repository: %s', e)
                 return False
 
         attempts = 1
-        while attempts <= retry_attempts:
+        while attempts <= RETRY_ATTEMPTS:
             if attempts > 1:
                 # User may have sent a keyboard interrupt during the wait.
                 if not self.connection.is_connected():
                     return False
-                wait = int(update_wait_seconds) << (attempts - 1)
+                wait = int(UPDATE_WAIT_SECONDS) << (attempts - 1)
                 if wait < 120:
-                    _log.info('Waiting %s seconds' % wait)
+                    _log.info('Waiting %s seconds', wait)
                 else:
-                    _log.info('Waiting %s minutes' % (wait / 60))
+                    _log.info('Waiting %s minutes', wait / 60)
                 time.sleep(wait)
-                _log.info('Pull attempt %s out of %s' % (attempts, retry_attempts))
+                _log.info('Pull attempt %s out of %s', attempts, RETRY_ATTEMPTS)
             try:
                 self.git.pull()
                 return True
             except ScriptError as e:
-                _log.error('Error pulling from server: %s' % e)
-                _log.error('Output: %s' % e.output)
+                _log.error('Error pulling from server: %s', e)
+                _log.error('Output: %s', e.output)
             attempts += 1
         _log.error('Exceeded pull attempts')
-        _log.error('Aborting at time: %s' % self._time())
+        _log.error('Aborting at time: %s', self._time())
         return False
 
     def _time(self):
@@ -182,7 +188,7 @@ class CommitAnnouncer(SingleServerIRCBot):
         return ('%s %s committed "%s" %s' % (url, email, subject, red_flag_message)).strip()
 
     def _post(self, message):
-        self.connection.execute_delayed(0, lambda: self.connection.privmsg(channel, self._sanitize_string(message)))
+        self.connection.execute_delayed(0, lambda: self.connection.privmsg(CHANNEL, self._sanitize_string(message)))
 
     def _sanitize_string(self, message):
         return message.encode('ascii', 'backslashreplace')

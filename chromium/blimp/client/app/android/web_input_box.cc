@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "blimp/client/app/android/web_input_box.h"
+
 #include "base/android/jni_string.h"
 #include "blimp/client/app/android/blimp_client_session_android.h"
-#include "blimp/client/app/android/web_input_box.h"
-#include "blimp/client/feature/ime_feature.h"
+#include "blimp/client/core/contents/ime_feature.h"
 #include "jni/WebInputBox_jni.h"
 #include "ui/base/ime/text_input_type.h"
+
+using base::android::JavaParamRef;
 
 namespace blimp {
 namespace client {
@@ -48,13 +51,13 @@ void WebInputBox::OnShowImeRequested(ui::TextInputType input_type,
   JNIEnv* env = base::android::AttachCurrentThread();
   DCHECK_NE(ui::TEXT_INPUT_TYPE_NONE, input_type);
   Java_WebInputBox_onShowImeRequested(
-      env, java_obj_.obj(), input_type,
-      base::android::ConvertUTF8ToJavaString(env, text).obj());
+      env, java_obj_, input_type,
+      base::android::ConvertUTF8ToJavaString(env, text));
 }
 
 void WebInputBox::OnHideImeRequested() {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_WebInputBox_onHideImeRequested(env, java_obj_.obj());
+  Java_WebInputBox_onHideImeRequested(env, java_obj_);
 }
 
 void WebInputBox::OnImeTextEntered(JNIEnv* env,

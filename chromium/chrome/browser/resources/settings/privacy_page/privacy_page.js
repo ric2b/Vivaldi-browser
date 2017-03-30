@@ -10,6 +10,13 @@
 Polymer({
   is: 'settings-privacy-page',
 
+  behaviors: [
+    settings.RouteObserverBehavior,
+<if expr="_google_chrome and not chromeos">
+    WebUIListenerBehavior,
+</if>
+  ],
+
   properties: {
     /**
      * Preferences state.
@@ -20,85 +27,78 @@ Polymer({
     },
 
     /**
-     * The current active route.
+     * Dictionary defining page visibility.
+     * @type {!PrivacyPageVisibility}
      */
-    currentRoute: {
-      type: Object,
-      notify: true,
-    },
+    pageVisibility: Object,
+
+<if expr="_google_chrome and not chromeos">
+    /** @type {MetricsReporting} */
+    metricsReporting_: Object,
+</if>
 
     /** @private */
-    showClearBrowsingDataDialog_: {
-      computed: 'computeShowClearBrowsingDataDialog_(currentRoute)',
-      type: Boolean,
-    },
+    showClearBrowsingDataDialog_: Boolean,
   },
 
   ready: function() {
     this.ContentSettingsTypes = settings.ContentSettingsTypes;
+
+<if expr="_google_chrome and not chromeos">
+    var boundSetMetricsReporting = this.setMetricsReporting_.bind(this);
+    this.addWebUIListener('metrics-reporting-change', boundSetMetricsReporting);
+
+    var browserProxy = settings.PrivacyPageBrowserProxyImpl.getInstance();
+    browserProxy.getMetricsReporting().then(boundSetMetricsReporting);
+</if>
   },
 
-  /** @suppress {missingProperties} */
-  attached: function() {
-    settings.main.rendered.then(function() {
-      if (this.showClearBrowsingDataDialog_) {
-        var dialog = this.$$('settings-clear-browsing-data-dialog').$.dialog;
-        // TODO(dbeam): cast to a CrDialogElement when it compiles.
-        dialog.refit();
-      }
-    }.bind(this));
-  },
-
-  /**
-   * @return {boolean} Whether the Clear Browsing Data dialog should be showing.
-   * @private
-   */
-  computeShowClearBrowsingDataDialog_: function() {
-    var route = this.currentRoute;
-    return route && route.dialog == 'clear-browsing-data';
+  /** @protected */
+  currentRouteChanged: function() {
+    this.showClearBrowsingDataDialog_ =
+        settings.getCurrentRoute() == settings.Route.CLEAR_BROWSER_DATA;
   },
 
   /** @private */
   onManageCertificatesTap_: function() {
 <if expr="use_nss_certs">
-    var pages = /** @type {!SettingsAnimatedPagesElement} */(this.$.pages);
-    pages.setSubpageChain(['manage-certificates']);
+    settings.navigateTo(settings.Route.CERTIFICATES);
 </if>
 <if expr="is_win or is_macosx">
     settings.PrivacyPageBrowserProxyImpl.getInstance().
-      showManageSSLCertificates();
+        showManageSSLCertificates();
 </if>
   },
 
   /** @private */
   onSiteSettingsTap_: function() {
-    var pages = /** @type {!SettingsAnimatedPagesElement} */(this.$.pages);
-    pages.setSubpageChain(['site-settings']);
+    settings.navigateTo(settings.Route.SITE_SETTINGS);
   },
 
   /** @private */
   onClearBrowsingDataTap_: function() {
-    this.currentRoute = {
-      page: this.currentRoute.page,
-      section: this.currentRoute.section,
-      subpage: this.currentRoute.subpage,
-      dialog: 'clear-browsing-data',
-    };
+    settings.navigateTo(settings.Route.CLEAR_BROWSER_DATA);
+  },
+
+  /** @private */
+  onDialogClosed_: function() {
+    settings.navigateToPreviousRoute();
+  },
+
+<if expr="_google_chrome and not chromeos">
+  /** @private */
+  onMetricsReportingCheckboxTap_: function() {
+    var browserProxy = settings.PrivacyPageBrowserProxyImpl.getInstance();
+    var enabled = this.$.metricsReportingCheckbox.checked;
+    browserProxy.setMetricsReportingEnabled(enabled);
   },
 
   /**
-   * @param {!Event} event
+   * @param {!MetricsReporting} metricsReporting
    * @private
    */
-  onIronOverlayClosed_: function(event) {
-    if (Polymer.dom(event).rootTarget.tagName != 'CR-DIALOG')
-      return;
-
-    this.currentRoute = {
-      page: this.currentRoute.page,
-      section: this.currentRoute.section,
-      subpage: this.currentRoute.subpage,
-      // Drop dialog key.
-    };
+  setMetricsReporting_: function(metricsReporting) {
+    this.metricsReporting_ = metricsReporting;
   },
+</if>
 });

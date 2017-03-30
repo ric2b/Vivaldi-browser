@@ -5,15 +5,15 @@
 #include "ash/sysui/shell_delegate_mus.h"
 
 #include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/gpu_support_stub.h"
 #include "ash/common/media_delegate.h"
+#include "ash/common/palette_delegate.h"
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/common/system/tray/default_system_tray_delegate.h"
-#include "ash/gpu_support_stub.h"
+#include "ash/mus/context_menu_mus.h"
 #include "ash/sysui/app_list_presenter_mus.h"
-#include "ash/sysui/context_menu_mus.h"
-#include "ash/sysui/pointer_watcher_delegate_mus.h"
 #include "ash/sysui/shelf_delegate_mus.h"
-#include "ash/sysui/user_wallpaper_delegate_mus.h"
+#include "ash/sysui/wallpaper_delegate_mus.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "components/user_manager/user_info_impl.h"
@@ -154,20 +154,6 @@ keyboard::KeyboardUI* ShellDelegateMus::CreateKeyboardUI() {
   return nullptr;
 }
 
-void ShellDelegateMus::VirtualKeyboardActivated(bool activated) {
-  NOTIMPLEMENTED();
-}
-
-void ShellDelegateMus::AddVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-  NOTIMPLEMENTED();
-}
-
-void ShellDelegateMus::RemoveVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-  NOTIMPLEMENTED();
-}
-
 void ShellDelegateMus::OpenUrlFromArc(const GURL& url) {
   NOTIMPLEMENTED();
 }
@@ -185,8 +171,8 @@ SystemTrayDelegate* ShellDelegateMus::CreateSystemTrayDelegate() {
   return new DefaultSystemTrayDelegate;
 }
 
-UserWallpaperDelegate* ShellDelegateMus::CreateUserWallpaperDelegate() {
-  return new UserWallpaperDelegateMus();
+std::unique_ptr<WallpaperDelegate> ShellDelegateMus::CreateWallpaperDelegate() {
+  return base::MakeUnique<WallpaperDelegateMus>();
 }
 
 SessionStateDelegate* ShellDelegateMus::CreateSessionStateDelegate() {
@@ -209,14 +195,15 @@ MediaDelegate* ShellDelegateMus::CreateMediaDelegate() {
   return new MediaDelegateStub;
 }
 
-std::unique_ptr<PointerWatcherDelegate>
-ShellDelegateMus::CreatePointerWatcherDelegate() {
-  return base::WrapUnique(new PointerWatcherDelegateMus);
+std::unique_ptr<PaletteDelegate> ShellDelegateMus::CreatePaletteDelegate() {
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 ui::MenuModel* ShellDelegateMus::CreateContextMenu(WmShelf* wm_shelf,
                                                    const ShelfItem* item) {
-  return new ContextMenuMus(wm_shelf);
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 
 GPUSupport* ShellDelegateMus::CreateGPUSupport() {

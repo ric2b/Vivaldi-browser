@@ -23,6 +23,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -542,12 +543,12 @@ void OCSPIOLoop::EnsureIOLoop() {
 }
 
 void OCSPIOLoop::AddRequest(OCSPRequestSession* request) {
-  DCHECK(!ContainsKey(requests_, request));
+  DCHECK(!base::ContainsKey(requests_, request));
   requests_.insert(request);
 }
 
 void OCSPIOLoop::RemoveRequest(OCSPRequestSession* request) {
-  DCHECK(ContainsKey(requests_, request));
+  DCHECK(base::ContainsKey(requests_, request));
   requests_.erase(request);
 }
 

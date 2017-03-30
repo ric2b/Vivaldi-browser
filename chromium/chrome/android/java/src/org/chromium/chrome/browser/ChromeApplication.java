@@ -38,6 +38,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.accessibility.FontSizePrefs;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.banners.AppDetailsDelegate;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
+import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
 import org.chromium.chrome.browser.datausage.ExternalDataUseObserver;
 import org.chromium.chrome.browser.document.DocumentActivity;
@@ -53,6 +55,7 @@ import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.init.InvalidStartupDialog;
+import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.invalidation.UniqueIdInvalidationClientNameGenerator;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.metrics.UmaUtils;
@@ -91,19 +94,17 @@ import org.chromium.chrome.browser.tabmodel.document.DocumentTabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.StorageDelegate;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.util.FeatureUtilities;
-import org.chromium.chrome.browser.webapps.WebApkBuilder;
+import org.chromium.components.sync.signin.AccountManagerDelegate;
+import org.chromium.components.sync.signin.AccountManagerHelper;
+import org.chromium.components.sync.signin.SystemAccountManagerDelegate;
 import org.chromium.content.app.ContentApplication;
 import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.ChildProcessLauncher;
-import org.chromium.content.browser.ContentViewStatics;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.policy.AppRestrictionsProvider;
 import org.chromium.policy.CombinedPolicyProvider;
 import org.chromium.policy.CombinedPolicyProvider.PolicyChangeListener;
 import org.chromium.printing.PrintingController;
-import org.chromium.sync.signin.AccountManagerDelegate;
-import org.chromium.sync.signin.AccountManagerHelper;
-import org.chromium.sync.signin.SystemAccountManagerDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.base.ActivityWindowAndroid;
 import org.chromium.ui.base.ResourceBundle;
@@ -129,54 +130,6 @@ public class ChromeApplication extends ContentApplication {
     private static boolean sIsFinishedCachingNativeFlags;
     private static DocumentTabModelSelector sDocumentTabModelSelector;
 
-    /**
-     * This class allows pausing scripts & network connections when we
-     * go to the background and resume when we are back in foreground again.
-     * TODO(pliard): Get rid of this class once JavaScript timers toggling is done directly on
-     * the native side by subscribing to the system monitor events.
-     */
-    private static class BackgroundProcessing {
-        private class SuspendRunnable implements Runnable {
-            @Override
-            public void run() {
-                mSuspendRunnable = null;
-                assert !mWebKitTimersAreSuspended;
-                mWebKitTimersAreSuspended = true;
-                ContentViewStatics.setWebKitSharedTimersSuspended(true);
-            }
-        }
-
-        private static final int SUSPEND_TIMERS_AFTER_MS = 5 * 60 * 1000;
-        private final Handler mHandler = new Handler();
-        private boolean mWebKitTimersAreSuspended = false;
-        private SuspendRunnable mSuspendRunnable;
-
-        private void onDestroy() {
-            if (mSuspendRunnable != null) {
-                mHandler.removeCallbacks(mSuspendRunnable);
-                mSuspendRunnable = null;
-            }
-        }
-
-        private void suspendTimers() {
-            if (mSuspendRunnable == null) {
-                mSuspendRunnable = new SuspendRunnable();
-                mHandler.postDelayed(mSuspendRunnable, SUSPEND_TIMERS_AFTER_MS);
-            }
-        }
-
-        private void startTimers() {
-            if (mSuspendRunnable != null) {
-                mHandler.removeCallbacks(mSuspendRunnable);
-                mSuspendRunnable = null;
-            } else if (mWebKitTimersAreSuspended) {
-                ContentViewStatics.setWebKitSharedTimersSuspended(false);
-                mWebKitTimersAreSuspended = false;
-            }
-        }
-    }
-
-    private final BackgroundProcessing mBackgroundProcessing = new BackgroundProcessing();
     private final PowerBroadcastReceiver mPowerBroadcastReceiver = new PowerBroadcastReceiver();
 
     // Used to trigger variation changes (such as seed fetches) upon application foregrounding.
@@ -207,6 +160,10 @@ public class ChromeApplication extends ContentApplication {
     @Override
     public void onCreate() {
         UmaUtils.recordMainEntryPointTime();
+        initCommandLine();
+        TraceEvent.maybeEnableEarlyTracing();
+        TraceEvent.begin("ChromeApplication.onCreate");
+
         super.onCreate();
         ContextUtils.initApplicationContext(this);
 
@@ -245,6 +202,7 @@ public class ChromeApplication extends ContentApplication {
         // in the SyncController constructor.
         UniqueIdentificationGeneratorFactory.registerGenerator(SyncController.GENERATOR_ID,
                 new UuidBasedUniqueIdentificationGenerator(this, SESSIONS_UUID_PREF_KEY), false);
+        TraceEvent.end("ChromeApplication.onCreate");
     }
 
     /**
@@ -271,8 +229,8 @@ public class ChromeApplication extends ContentApplication {
      * activity.
      */
     private void onForegroundSessionStart() {
+        UmaUtils.recordForegroundStartTime();
         ChildProcessLauncher.onBroughtToForeground();
-        mBackgroundProcessing.startTimers();
         updatePasswordEchoState();
         FontSizePrefs.getInstance(this).onSystemFontScaleChanged();
         updateAcceptLanguages();
@@ -294,34 +252,27 @@ public class ChromeApplication extends ContentApplication {
      */
     private void onForegroundSessionEnd() {
         if (!mIsStarted) return;
-        mBackgroundProcessing.suspendTimers();
         flushPersistentData();
         mIsStarted = false;
         mPowerBroadcastReceiver.onForegroundSessionEnd();
 
         ChildProcessLauncher.onSentToBackground();
         IntentHandler.clearPendingReferrer();
+        IntentHandler.clearPendingIncognitoUrl();
 
-        if (FeatureUtilities.isDocumentMode(this)) {
-            if (sDocumentTabModelSelector != null) {
-                RecordHistogram.recordCountHistogram("Tab.TotalTabCount.BeforeLeavingApp",
-                        sDocumentTabModelSelector.getTotalTabCount());
-            }
-        } else {
-            int totalTabCount = 0;
-            for (WeakReference<Activity> reference : ApplicationStatus.getRunningActivities()) {
-                Activity activity = reference.get();
-                if (activity instanceof ChromeActivity) {
-                    TabModelSelector tabModelSelector =
-                            ((ChromeActivity) activity).getTabModelSelector();
-                    if (tabModelSelector != null) {
-                        totalTabCount += tabModelSelector.getTotalTabCount();
-                    }
+        int totalTabCount = 0;
+        for (WeakReference<Activity> reference : ApplicationStatus.getRunningActivities()) {
+            Activity activity = reference.get();
+            if (activity instanceof ChromeActivity) {
+                TabModelSelector tabModelSelector =
+                        ((ChromeActivity) activity).getTabModelSelector();
+                if (tabModelSelector != null) {
+                    totalTabCount += tabModelSelector.getTotalTabCount();
                 }
             }
-            RecordHistogram.recordCountHistogram(
-                    "Tab.TotalTabCount.BeforeLeavingApp", totalTabCount);
         }
+        RecordHistogram.recordCountHistogram(
+                "Tab.TotalTabCount.BeforeLeavingApp", totalTabCount);
     }
 
     /**
@@ -330,15 +281,9 @@ public class ChromeApplication extends ContentApplication {
      */
     private void onForegroundActivityDestroyed() {
         if (ApplicationStatus.isEveryActivityDestroyed()) {
-            mBackgroundProcessing.onDestroy();
-            if (mDevToolsServer != null) {
-                mDevToolsServer.destroy();
-                mDevToolsServer = null;
-            }
-            stopApplicationActivityTracker();
+            // These will all be re-initialized when a new Activity starts / upon next use.
             PartnerBrowserCustomizations.destroy();
             ShareHelper.clearSharedImages(this);
-            CombinedPolicyProvider.get().destroy();
         }
     }
 
@@ -360,13 +305,6 @@ public class ChromeApplication extends ContentApplication {
      */
     public VariationsSession createVariationsSession() {
         return new VariationsSession();
-    }
-
-    /**
-     * Returns factory for building WebAPKs.
-     */
-    public WebApkBuilder createWebApkBuilder() {
-        return null;
     }
 
     /**
@@ -443,38 +381,61 @@ public class ChromeApplication extends ContentApplication {
         if (mInitializedSharedClasses) return;
         mInitializedSharedClasses = true;
 
-        ForcedSigninProcessor.start(this);
-        AccountsChangedReceiver.addObserver(new AccountsChangedReceiver.AccountsChangedObserver() {
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
             @Override
-            public void onAccountsChanged(Context context, Intent intent) {
-                ThreadUtils.runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        ForcedSigninProcessor.start(ChromeApplication.this);
-                    }
-                });
+            public void run() {
+                ForcedSigninProcessor.start(getApplicationContext());
+                AccountsChangedReceiver.addObserver(
+                        new AccountsChangedReceiver.AccountsChangedObserver() {
+                            @Override
+                            public void onAccountsChanged(Context context, Intent intent) {
+                                ThreadUtils.runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        ForcedSigninProcessor.start(getApplicationContext());
+                                    }
+                                });
+                            }
+                        });
             }
         });
-        GoogleServicesManager.get(this).onMainActivityStart();
-        RevenueStats.getInstance();
 
-        mDevToolsServer = new DevToolsServer(DEV_TOOLS_SERVER_SOCKET_PREFIX);
-        mDevToolsServer.setRemoteDebuggingEnabled(
-                true, DevToolsServer.Security.ALLOW_DEBUG_PERMISSION);
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
+            @Override
+            public void run() {
+                GoogleServicesManager.get(getApplicationContext()).onMainActivityStart();
+                RevenueStats.getInstance();
+            }
+        });
 
-        startApplicationActivityTracker();
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
+            @Override
+            public void run() {
+                mDevToolsServer = new DevToolsServer(DEV_TOOLS_SERVER_SOCKET_PREFIX);
+                mDevToolsServer.setRemoteDebuggingEnabled(
+                        true, DevToolsServer.Security.ALLOW_DEBUG_PERMISSION);
 
-        // Add process check to diagnose http://crbug.com/606309. Remove this after the bug is
-        // fixed.
-        assert !CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE);
-        if (!CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE)) {
-            DownloadController.setDownloadNotificationService(
-                    DownloadManagerService.getDownloadManagerService(this));
-        }
+                startApplicationActivityTracker();
+            }
+        });
 
-        if (ApiCompatibilityUtils.isPrintingSupported()) {
-            mPrintingController = PrintingControllerFactory.create(getApplicationContext());
-        }
+        DeferredStartupHandler.getInstance().addDeferredTask(new Runnable() {
+            @Override
+            public void run() {
+                // Add process check to diagnose http://crbug.com/606309. Remove this after the bug
+                // is fixed.
+                assert !CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE);
+                if (!CommandLine.getInstance().hasSwitch(ContentSwitches.SWITCH_PROCESS_TYPE)) {
+                    DownloadController.setDownloadNotificationService(
+                            DownloadManagerService.getDownloadManagerService(
+                                    getApplicationContext()));
+                }
+
+                if (ApiCompatibilityUtils.isPrintingSupported()) {
+                    mPrintingController = PrintingControllerFactory.create(getApplicationContext());
+                }
+            }
+        });
     }
 
     /**
@@ -522,7 +483,7 @@ public class ChromeApplication extends ContentApplication {
         // Using an anonymous subclass as the constructor is protected.
         // This is done to deter instantiation of LocationSettings elsewhere without using the
         // getInstance() helper method.
-        return new LocationSettings(this){};
+        return new LocationSettings(){};
     }
 
     /**
@@ -683,8 +644,8 @@ public class ChromeApplication extends ContentApplication {
         return mPrintingController;
     }
 
-    public AppLinkHandler createAppLinkHandler() {
-        return new AppLinkHandler();
+    public InstantAppsHandler createInstantAppsHandler() {
+        return new InstantAppsHandler();
     }
 
     /**
@@ -792,14 +753,6 @@ public class ChromeApplication extends ContentApplication {
     }
 
     /**
-     * @return Whether or not the Singleton has been initialized.
-     */
-    @VisibleForTesting
-    public static boolean isDocumentTabModelSelectorInitializedForTests() {
-        return sDocumentTabModelSelector != null;
-    }
-
-    /**
      * @return An instance of RevenueStats to be installed as a singleton.
      */
     public RevenueStats createRevenueStatsInstance() {
@@ -830,7 +783,7 @@ public class ChromeApplication extends ContentApplication {
             // OnBrowsingDataRemoverDone() is called, in which case we may have to reload as well.
             // Check if it can happen.
             instance.clearBrowsingData(
-                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.EVERYTHING);
+                    null, new int[]{ BrowsingDataType.CACHE }, TimePeriod.ALL_TIME);
         }
     }
 

@@ -3,14 +3,15 @@
 // found in the LICENSE file.
 
 #include "base/memory/ptr_util.h"
-#include "blimp/client/feature/ime_feature.h"
-#include "blimp/client/feature/mock_ime_feature_delegate.h"
-#include "blimp/client/feature/mock_navigation_feature_delegate.h"
+#include "blimp/client/core/contents/ime_feature.h"
+#include "blimp/client/core/contents/mock_ime_feature_delegate.h"
+#include "blimp/client/core/contents/mock_navigation_feature_delegate.h"
+#include "blimp/client/core/contents/navigation_feature.h"
+#include "blimp/client/core/contents/tab_control_feature.h"
+#include "blimp/client/core/session/assignment_source.h"
 #include "blimp/client/feature/mock_render_widget_feature_delegate.h"
-#include "blimp/client/feature/navigation_feature.h"
 #include "blimp/client/feature/render_widget_feature.h"
-#include "blimp/client/feature/tab_control_feature.h"
-#include "blimp/client/session/assignment_source.h"
+#include "blimp/client/public/session/assignment.h"
 #include "blimp/client/session/test_client_session.h"
 #include "blimp/engine/browser_tests/blimp_browser_test.h"
 #include "content/public/test/browser_test.h"
@@ -59,23 +60,28 @@ class EngineBrowserTest : public BlimpBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(EngineBrowserTest, LoadUrl) {
+  testing::InSequence s;
+
   EXPECT_TRUE(embedded_test_server()->Start());
   GURL url = embedded_test_server()->GetURL("/hello.html");
 
   EXPECT_CALL(client_rw_feature_delegate_, OnRenderWidgetCreated(1));
-  EXPECT_CALL(client_nav_feature_delegate_, OnUrlChanged(kDummyTabId, url))
-      .WillOnce(InvokeWithoutArgs(this, &EngineBrowserTest::QuitRunLoop));
+  EXPECT_CALL(client_nav_feature_delegate_,
+              OnTitleChanged(kDummyTabId, url.GetContent()));
+  EXPECT_CALL(client_nav_feature_delegate_,
+              OnTitleChanged(kDummyTabId, "hello"))
+      .WillOnce(InvokeWithoutArgs(this, &EngineBrowserTest::SignalCompletion));
 
   // Skip assigner. Engine info is already available.
-  client_session_->ConnectWithAssignment(
-      client::AssignmentSource::Result::RESULT_OK, GetAssignment());
+  client_session_->ConnectWithAssignment(client::ASSIGNMENT_REQUEST_RESULT_OK,
+                                         GetAssignment());
   client_session_->GetTabControlFeature()->SetSizeAndScale(gfx::Size(100, 100),
                                                            1);
   client_session_->GetTabControlFeature()->CreateTab(kDummyTabId);
   client_session_->GetNavigationFeature()->NavigateToUrlText(kDummyTabId,
                                                              url.spec());
 
-  RunUntilQuit();
+  RunUntilCompletion();
 }
 
 }  // namespace

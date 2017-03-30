@@ -5,6 +5,7 @@
 #include "components/browser_sync/browser/profile_sync_service.h"
 
 #include <stddef.h>
+
 #include <cstddef>
 #include <map>
 #include <utility>
@@ -41,27 +42,45 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync_driver/backend_migrator.h"
-#include "components/sync_driver/change_processor.h"
-#include "components/sync_driver/data_type_controller.h"
-#include "components/sync_driver/device_info.h"
-#include "components/sync_driver/device_info_service.h"
-#include "components/sync_driver/device_info_sync_service.h"
-#include "components/sync_driver/device_info_tracker.h"
-#include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
-#include "components/sync_driver/glue/sync_backend_host.h"
-#include "components/sync_driver/glue/sync_backend_host_impl.h"
-#include "components/sync_driver/pref_names.h"
-#include "components/sync_driver/signin_manager_wrapper.h"
-#include "components/sync_driver/sync_api_component_factory.h"
-#include "components/sync_driver/sync_client.h"
-#include "components/sync_driver/sync_driver_switches.h"
-#include "components/sync_driver/sync_error_controller.h"
-#include "components/sync_driver/sync_stopped_reporter.h"
-#include "components/sync_driver/sync_type_preference_provider.h"
-#include "components/sync_driver/sync_util.h"
-#include "components/sync_driver/system_encryptor.h"
-#include "components/sync_driver/user_selectable_sync_type.h"
+#include "components/sync/api/model_type_store.h"
+#include "components/sync/api/sync_error.h"
+#include "components/sync/base/cryptographer.h"
+#include "components/sync/base/experiments.h"
+#include "components/sync/base/stop_source.h"
+#include "components/sync/base/sync_db_util.h"
+#include "components/sync/core/configure_reason.h"
+#include "components/sync/core/http_bridge_network_resources.h"
+#include "components/sync/core/network_resources.h"
+#include "components/sync/core/shared_model_type_processor.h"
+#include "components/sync/core/shutdown_reason.h"
+#include "components/sync/core/sync_encryption_handler.h"
+#include "components/sync/device_info/device_info.h"
+#include "components/sync/device_info/device_info_service.h"
+#include "components/sync/device_info/device_info_sync_service.h"
+#include "components/sync/device_info/device_info_tracker.h"
+#include "components/sync/driver/backend_migrator.h"
+#include "components/sync/driver/change_processor.h"
+#include "components/sync/driver/data_type_controller.h"
+#include "components/sync/driver/glue/chrome_report_unrecoverable_error.h"
+#include "components/sync/driver/glue/sync_backend_host.h"
+#include "components/sync/driver/glue/sync_backend_host_impl.h"
+#include "components/sync/driver/pref_names.h"
+#include "components/sync/driver/signin_manager_wrapper.h"
+#include "components/sync/driver/sync_api_component_factory.h"
+#include "components/sync/driver/sync_client.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_error_controller.h"
+#include "components/sync/driver/sync_stopped_reporter.h"
+#include "components/sync/driver/sync_type_preference_provider.h"
+#include "components/sync/driver/sync_util.h"
+#include "components/sync/driver/system_encryptor.h"
+#include "components/sync/driver/user_selectable_sync_type.h"
+#include "components/sync/engine/cycle/model_neutral_state.h"
+#include "components/sync/engine/cycle/type_debug_info_observer.h"
+#include "components/sync/engine/sync_string_conversions.h"
+#include "components/sync/js/js_event_details.h"
+#include "components/sync/protocol/sync.pb.h"
+#include "components/sync/syncable/directory.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/session_data_type_controller.h"
 #include "components/sync_sessions/sessions_sync_manager.h"
@@ -70,29 +89,11 @@
 #include "components/version_info/version_info_values.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "sync/api/model_type_store.h"
-#include "sync/api/sync_error.h"
-#include "sync/internal_api/public/base/stop_source.h"
-#include "sync/internal_api/public/configure_reason.h"
-#include "sync/internal_api/public/http_bridge_network_resources.h"
-#include "sync/internal_api/public/network_resources.h"
-#include "sync/internal_api/public/sessions/model_neutral_state.h"
-#include "sync/internal_api/public/sessions/type_debug_info_observer.h"
-#include "sync/internal_api/public/shared_model_type_processor.h"
-#include "sync/internal_api/public/shutdown_reason.h"
-#include "sync/internal_api/public/sync_encryption_handler.h"
-#include "sync/internal_api/public/util/experiments.h"
-#include "sync/internal_api/public/util/sync_db_util.h"
-#include "sync/internal_api/public/util/sync_string_conversions.h"
-#include "sync/js/js_event_details.h"
-#include "sync/protocol/sync.pb.h"
-#include "sync/syncable/directory.h"
-#include "sync/util/cryptographer.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 
 #if defined(OS_ANDROID)
-#include "sync/internal_api/public/read_transaction.h"
+#include "components/sync/core/read_transaction.h"
 #endif
 
 using browser_sync::SessionsSyncManager;
@@ -970,7 +971,7 @@ void ProfileSyncService::PostBackendInitialization() {
   GoogleServiceAuthError error(GoogleServiceAuthError::NONE);
   if (gaia_cookie_manager_service_ &&
       gaia_cookie_manager_service_->ListAccounts(
-          &accounts, &signed_out_accounts)) {
+          &accounts, &signed_out_accounts, "ChromiumProfileSyncService")) {
     OnGaiaAccountsInCookieUpdated(accounts, signed_out_accounts, error);
   }
 
@@ -1024,12 +1025,11 @@ void ProfileSyncService::OnBackendInitialized(
 
 void ProfileSyncService::OnSyncCycleCompleted() {
   UpdateLastSyncedTime();
-  const syncer::sessions::SyncSessionSnapshot snapshot =
-      GetLastSessionSnapshot();
+  const syncer::SyncCycleSnapshot snapshot = GetLastCycleSnapshot();
   if (IsDataTypeControllerRunning(syncer::SESSIONS) &&
       snapshot.model_neutral_state().get_updates_request_types.Has(
           syncer::SESSIONS) &&
-      !syncer::sessions::HasSyncerError(snapshot.model_neutral_state())) {
+      !syncer::HasSyncerError(snapshot.model_neutral_state())) {
     // Trigger garbage collection of old sessions now that we've downloaded
     // any new session data.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -1813,11 +1813,10 @@ syncer::UserShare* ProfileSyncService::GetUserShare() const {
   return NULL;
 }
 
-syncer::sessions::SyncSessionSnapshot
-ProfileSyncService::GetLastSessionSnapshot() const {
+syncer::SyncCycleSnapshot ProfileSyncService::GetLastCycleSnapshot() const {
   if (backend_)
-    return backend_->GetLastSessionSnapshot();
-  return syncer::sessions::SyncSessionSnapshot();
+    return backend_->GetLastCycleSnapshot();
+  return syncer::SyncCycleSnapshot();
 }
 
 bool ProfileSyncService::HasUnsyncedItems() const {

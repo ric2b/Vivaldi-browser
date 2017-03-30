@@ -8,11 +8,6 @@
 #include "content/common/content_export.h"
 #include "ipc/ipc_listener.h"
 
-namespace shell {
-class InterfaceProvider;
-class InterfaceRegistry;
-}
-
 namespace content {
 
 // Interface that all users of BrowserChildProcessHost need to provide.
@@ -37,14 +32,6 @@ class CONTENT_EXPORT BrowserChildProcessHostDelegate : public IPC::Listener {
   // process crashed (for posix, as returned from waitpid(), for Windows, as
   // returned from GetExitCodeProcess()).
   virtual void OnProcessCrashed(int exit_code) {}
-
-  // Returns the shell::InterfaceRegistry the browser process uses to expose
-  // interfaces to the child.
-  virtual shell::InterfaceRegistry* GetInterfaceRegistry();
-
-  // Returns the shell::InterfaceProvider the browser process can use to bind
-  // interfaces exposed to it from the child.
-  virtual shell::InterfaceProvider* GetRemoteInterfaces();
 };
 
 };  // namespace content

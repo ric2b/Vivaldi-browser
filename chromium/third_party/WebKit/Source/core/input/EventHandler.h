@@ -28,6 +28,7 @@
 
 #include "core/CoreExport.h"
 #include "core/events/TextEventInputType.h"
+#include "core/input/GestureManager.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/input/PointerEventManager.h"
 #include "core/input/ScrollManager.h"
@@ -179,13 +180,14 @@ public:
 
     WebInputEventResult sendContextMenuEvent(const PlatformMouseEvent&, Node* overrideTargetNode = nullptr);
     WebInputEventResult sendContextMenuEventForKey(Element* overrideTargetElement = nullptr);
-    WebInputEventResult sendContextMenuEventForGesture(const GestureEventWithHitTestResults&);
 
     // Returns whether pointerId is active or not
     bool isPointerEventActive(int);
 
     void setPointerCapture(int, EventTarget*);
     void releasePointerCapture(int, EventTarget*);
+    bool hasPointerCapture(int, EventTarget*);
+
     void elementRemoved(EventTarget*);
 
     void setMouseDownMayStartAutoscroll() { m_mouseDownMayStartAutoscroll = true; }
@@ -258,11 +260,11 @@ private:
     OptionalCursor selectCursor(const HitTestResult&);
     OptionalCursor selectAutoCursor(const HitTestResult&, Node*, const Cursor& iBeam);
 
-    void hoverTimerFired(Timer<EventHandler>*);
-    void cursorUpdateTimerFired(Timer<EventHandler>*);
-    void activeIntervalTimerFired(Timer<EventHandler>*);
+    void hoverTimerFired(TimerBase*);
+    void cursorUpdateTimerFired(TimerBase*);
+    void activeIntervalTimerFired(TimerBase*);
 
-    void fakeMouseMoveEventTimerFired(Timer<EventHandler>*);
+    void fakeMouseMoveEventTimerFired(TimerBase*);
     void cancelFakeMouseMoveEvent();
     bool isCursorVisible() const;
     void updateCursor();
@@ -293,7 +295,13 @@ private:
 
     bool handleDrag(const MouseEventWithHitTestResults&, DragInitiator);
     bool tryStartDrag(const MouseEventWithHitTestResults&);
+
+    // Clears drag target and related states. It is called when drag is done or canceled.
     void clearDragState();
+
+    // Resets the state that indicates the next events could cause a drag. It is called when
+    // we realize the next events should not cause drag based on the drag heuristics.
+    void clearDragHeuristicState();
 
     WebInputEventResult dispatchDragSrcEvent(const AtomicString& eventType, const PlatformMouseEvent&);
 
@@ -318,6 +326,10 @@ private:
     WebInputEventResult handleGestureShowPress();
 
     void setLastKnownMousePosition(const PlatformMouseEvent&);
+
+    void setClickNode(Node*);
+    bool handleDragDropIfPossible(const GestureEventWithHitTestResults&);
+    static ContainerNode* parentForClickEvent(const Node&);
 
     bool shouldTopControlsConsumeScroll(FloatSize) const;
 
@@ -386,6 +398,7 @@ private:
     PointerEventManager m_pointerEventManager;
     ScrollManager m_scrollManager;
     KeyboardEventManager m_keyboardEventManager;
+    GestureManager m_gestureManager;
 
     double m_maxMouseMovedDuration;
 
@@ -399,6 +412,9 @@ private:
     // triggering |touchstart| event was canceled. This suppresses mouse event
     // firing for the current gesture sequence (i.e. until next GestureTapDown).
     bool m_suppressMouseEventsFromGestures;
+
+    // TODO(nzolghadr): Temporary until further refactoring
+    friend GestureManager;
 };
 
 } // namespace blink

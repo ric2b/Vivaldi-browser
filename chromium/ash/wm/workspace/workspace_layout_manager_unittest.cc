@@ -9,6 +9,9 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_observer.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/maximize_mode/workspace_backdrop_delegate.h"
@@ -19,23 +22,26 @@
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
+#include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/display/manager/display_layout.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/keyboard/keyboard_controller.h"
+#include "ui/keyboard/keyboard_ui.h"
+#include "ui/keyboard/keyboard_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/window_util.h"
@@ -223,7 +229,9 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeInDisplayToBeRestored) {
   // is inside 2nd display.
   window_state->Maximize();
   EXPECT_EQ(root_windows[1], window->GetRootWindow());
-  EXPECT_EQ("300,0 400x453", window->GetBoundsInScreen().ToString());
+  EXPECT_EQ(
+      gfx::Rect(300, 0, 400, 500 - GetShelfConstant(SHELF_SIZE)).ToString(),
+      window->GetBoundsInScreen().ToString());
 
   window_state->Restore();
   EXPECT_EQ(root_windows[1], window->GetRootWindow());
@@ -234,7 +242,9 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeInDisplayToBeRestored) {
   window_state->SetRestoreBoundsInScreen(gfx::Rect(295, 0, 30, 40));
   window_state->Maximize();
   EXPECT_EQ(root_windows[1], window->GetRootWindow());
-  EXPECT_EQ("300,0 400x453", window->GetBoundsInScreen().ToString());
+  EXPECT_EQ(
+      gfx::Rect(300, 0, 400, 500 - GetShelfConstant(SHELF_SIZE)).ToString(),
+      window->GetBoundsInScreen().ToString());
 
   window_state->Restore();
   EXPECT_EQ(root_windows[1], window->GetRootWindow());
@@ -250,7 +260,9 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeInDisplayToBeRestored) {
   w1->Show();
   EXPECT_TRUE(w1->IsMaximized());
   EXPECT_EQ(root_windows[1], w1->GetNativeView()->GetRootWindow());
-  EXPECT_EQ("300,0 400x453", w1->GetWindowBoundsInScreen().ToString());
+  EXPECT_EQ(
+      gfx::Rect(300, 0, 400, 500 - GetShelfConstant(SHELF_SIZE)).ToString(),
+      w1->GetWindowBoundsInScreen().ToString());
   w1->Restore();
   EXPECT_EQ(root_windows[1], w1->GetNativeView()->GetRootWindow());
   EXPECT_EQ("400,0 30x40", w1->GetWindowBoundsInScreen().ToString());
@@ -301,6 +313,7 @@ class DontClobberRestoreBoundsWindowObserver : public aura::WindowObserver {
 
   void set_window(aura::Window* window) { window_ = window; }
 
+  // aura::WindowObserver:
   void OnWindowPropertyChanged(aura::Window* window,
                                const void* key,
                                intptr_t old) override {
@@ -312,7 +325,7 @@ class DontClobberRestoreBoundsWindowObserver : public aura::WindowObserver {
       window_ = nullptr;
 
       gfx::Rect shelf_bounds(
-          Shelf::ForPrimaryDisplay()->shelf_layout_manager()->GetIdealBounds());
+          test::AshTestBase::GetPrimaryShelf()->GetIdealBounds());
       const gfx::Rect& window_bounds(w->bounds());
       w->SetBounds(gfx::Rect(window_bounds.x(), shelf_bounds.y() - 1,
                              window_bounds.width(), window_bounds.height()));
@@ -829,7 +842,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
   window->SetProperty(aura::client::kAlwaysOnTopKey, true);
   window->Show();
 
-  Shelf* shelf = Shelf::ForWindow(window.get());
+  WmShelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
   window->SetBounds(ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()));
@@ -1024,7 +1037,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, VerifyBackdropAndItsStacking) {
 // Tests that when hidding the shelf, that the backdrop resizes to fill the
 // entire workspace area.
 TEST_F(WorkspaceLayoutManagerBackdropTest, ShelfVisibilityChangesBounds) {
-  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  WmShelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
   ShowTopWindowBackdrop(true);
   RunAllPendingInMessageLoop();
@@ -1087,6 +1100,12 @@ class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
     keyboard_bounds_.SetRect(work_area.x(),
                              work_area.y() + work_area.height() / 2,
                              work_area.width(), work_area.height() / 2);
+  }
+
+  void EnableNewVKMode() {
+    base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+    if (!command_line->HasSwitch(::switches::kUseNewVirtualKeyboardBehavior))
+      command_line->AppendSwitch(::switches::kUseNewVirtualKeyboardBehavior);
   }
 
   const gfx::Rect& keyboard_bounds() const { return keyboard_bounds_; }
@@ -1194,6 +1213,106 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest, IgnoreKeyboardBoundsChagne) {
   EXPECT_EQ(keyboard_bounds(), window->bounds());
   ShowKeyboard();
   EXPECT_EQ(keyboard_bounds(), window->bounds());
+}
+
+TEST_F(WorkspaceLayoutManagerKeyboardTest, ChangeWorkAreaInNonStickyMode) {
+  keyboard::SetAccessibilityKeyboardEnabled(true);
+  InitKeyboardBounds();
+  Shell::GetInstance()->CreateKeyboard();
+  keyboard::KeyboardController* kb_controller =
+      keyboard::KeyboardController::GetInstance();
+
+  gfx::Rect work_area(
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+
+  aura::test::TestWindowDelegate delegate;
+  gfx::Rect orig_window_bounds(0, 100, work_area.width(),
+                               work_area.height() - 100);
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithDelegate(&delegate, -1, orig_window_bounds));
+
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+
+  // Open keyboard in non-sticky mode.
+  kb_controller->ShowKeyboard(false);
+  kb_controller->ui()->GetKeyboardWindow()->SetBounds(
+      keyboard::FullWidthKeyboardBoundsFromRootBounds(
+          Shell::GetPrimaryRootWindow()->bounds(), 100));
+
+  int shift =
+      work_area.height() - kb_controller->GetContainerWindow()->bounds().y();
+  gfx::Rect changed_window_bounds(orig_window_bounds);
+  changed_window_bounds.Offset(0, -shift);
+  // Window should be shifted up.
+  EXPECT_EQ(changed_window_bounds, window->bounds());
+
+  kb_controller->HideKeyboard(
+      keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+
+  // Open keyboard in sticky mode.
+  kb_controller->ShowKeyboard(true);
+
+  // Window should be shifted up.
+  EXPECT_EQ(changed_window_bounds, window->bounds());
+
+  kb_controller->HideKeyboard(
+      keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+}
+
+// When kAshUseNewVKWindowBehavior flag enabled, do not change accessibility
+// keyboard work area in non-sticky mode.
+TEST_F(WorkspaceLayoutManagerKeyboardTest,
+       IgnoreWorkAreaChangeinNonStickyMode) {
+  // Append flag to ignore work area change in non-sticky mode.
+  EnableNewVKMode();
+
+  keyboard::SetAccessibilityKeyboardEnabled(true);
+  InitKeyboardBounds();
+  Shell::GetInstance()->CreateKeyboard();
+  keyboard::KeyboardController* kb_controller =
+      keyboard::KeyboardController::GetInstance();
+
+  gfx::Rect work_area(
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
+
+  aura::test::TestWindowDelegate delegate;
+  gfx::Rect orig_window_bounds(0, 100, work_area.width(),
+                               work_area.height() - 100);
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindowInShellWithDelegate(&delegate, -1, orig_window_bounds));
+
+  wm::ActivateWindow(window.get());
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+
+  // Open keyboard in non-sticky mode.
+  kb_controller->ShowKeyboard(false);
+  kb_controller->ui()->GetKeyboardWindow()->SetBounds(
+      keyboard::FullWidthKeyboardBoundsFromRootBounds(
+          Shell::GetPrimaryRootWindow()->bounds(), 100));
+
+  // Window should not be shifted up.
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+
+  kb_controller->HideKeyboard(
+      keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+  EXPECT_EQ(orig_window_bounds, window->bounds());
+
+  // Open keyboard in sticky mode.
+  kb_controller->ShowKeyboard(true);
+
+  int shift =
+      work_area.height() - kb_controller->GetContainerWindow()->bounds().y();
+  gfx::Rect changed_window_bounds(orig_window_bounds);
+  changed_window_bounds.Offset(0, -shift);
+  // Window should be shifted up.
+  EXPECT_EQ(changed_window_bounds, window->bounds());
+
+  kb_controller->HideKeyboard(
+      keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+  EXPECT_EQ(orig_window_bounds, window->bounds());
 }
 
 }  // namespace ash

@@ -9,6 +9,7 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
+#include "base/test/scoped_feature_list.h"
 
 namespace subresource_filter {
 namespace testing {
@@ -20,10 +21,20 @@ class ScopedSubresourceFilterFeatureToggle {
  public:
   ScopedSubresourceFilterFeatureToggle(
       base::FeatureList::OverrideState feature_state,
-      const std::string& maximum_activation_state);
+      const std::string& maximum_activation_state,
+      const std::string& activation_scope);
+
+  ScopedSubresourceFilterFeatureToggle(
+      base::FeatureList::OverrideState feature_state,
+      const std::string& maximum_activation_state,
+      const std::string& activation_scope,
+      const std::string& activation_lists);
+
   ~ScopedSubresourceFilterFeatureToggle();
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   DISALLOW_COPY_AND_ASSIGN(ScopedSubresourceFilterFeatureToggle);
 };
 

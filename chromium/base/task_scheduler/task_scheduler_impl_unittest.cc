@@ -15,13 +15,16 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/task_scheduler/test_task_factory.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace base {
@@ -38,7 +41,7 @@ struct TraitsExecutionModePair {
   ExecutionMode execution_mode;
 };
 
-#if ENABLE_THREAD_RESTRICTIONS
+#if DCHECK_IS_ON()
 // Returns whether I/O calls are allowed on the current thread.
 bool GetIOAllowed() {
   const bool previous_value = ThreadRestrictions::SetIOAllowed(true);
@@ -51,14 +54,19 @@ bool GetIOAllowed() {
 // to run a Task with |traits|.
 // Note: ExecutionMode is verified inside TestTaskFactory.
 void VerifyTaskEnvironement(const TaskTraits& traits) {
-  EXPECT_EQ(traits.priority() == TaskPriority::BACKGROUND
+  const bool supports_background_priority =
+      Lock::HandlesMultipleThreadPriorities() &&
+      PlatformThread::CanIncreaseCurrentThreadPriority();
+
+  EXPECT_EQ(supports_background_priority &&
+                    traits.priority() == TaskPriority::BACKGROUND
                 ? ThreadPriority::BACKGROUND
                 : ThreadPriority::NORMAL,
             PlatformThread::GetCurrentThreadPriority());
 
-#if ENABLE_THREAD_RESTRICTIONS
+#if DCHECK_IS_ON()
   // The #if above is required because GetIOAllowed() always returns true when
-  // !ENABLE_THREAD_RESTRICTIONS, even when |traits| don't allow file I/O.
+  // !DCHECK_IS_ON(), even when |traits| don't allow file I/O.
   EXPECT_EQ(traits.with_file_io(), GetIOAllowed());
 #endif
 
@@ -158,30 +166,27 @@ class TaskSchedulerImplTest
   TaskSchedulerImplTest() = default;
 
   void SetUp() override {
-    using IORestriction = SchedulerWorkerPoolImpl::IORestriction;
+    using IORestriction = SchedulerWorkerPoolParams::IORestriction;
 
-    std::vector<TaskSchedulerImpl::WorkerPoolCreationArgs> worker_pools;
+    std::vector<SchedulerWorkerPoolParams> params_vector;
 
-    ASSERT_EQ(BACKGROUND_WORKER_POOL, worker_pools.size());
-    worker_pools.push_back({"TaskSchedulerBackground",
-                            ThreadPriority::BACKGROUND,
-                            IORestriction::DISALLOWED, 1U});
+    ASSERT_EQ(BACKGROUND_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("Background", ThreadPriority::BACKGROUND,
+                               IORestriction::DISALLOWED, 1U, TimeDelta::Max());
 
-    ASSERT_EQ(BACKGROUND_FILE_IO_WORKER_POOL, worker_pools.size());
-    worker_pools.push_back({"TaskSchedulerBackgroundFileIO",
-                            ThreadPriority::BACKGROUND, IORestriction::ALLOWED,
-                            3U});
+    ASSERT_EQ(BACKGROUND_FILE_IO_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("BackgroundFileIO", ThreadPriority::BACKGROUND,
+                               IORestriction::ALLOWED, 3U, TimeDelta::Max());
 
-    ASSERT_EQ(FOREGROUND_WORKER_POOL, worker_pools.size());
-    worker_pools.push_back({"TaskSchedulerForeground", ThreadPriority::NORMAL,
-                            IORestriction::DISALLOWED, 4U});
+    ASSERT_EQ(FOREGROUND_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("Foreground", ThreadPriority::NORMAL,
+                               IORestriction::DISALLOWED, 4U, TimeDelta::Max());
 
-    ASSERT_EQ(FOREGROUND_FILE_IO_WORKER_POOL, worker_pools.size());
-    worker_pools.push_back({"TaskSchedulerForegroundFileIO",
-                            ThreadPriority::NORMAL, IORestriction::ALLOWED,
-                            12U});
+    ASSERT_EQ(FOREGROUND_FILE_IO_WORKER_POOL, params_vector.size());
+    params_vector.emplace_back("ForegroundFileIO", ThreadPriority::NORMAL,
+                               IORestriction::ALLOWED, 12U, TimeDelta::Max());
 
-    scheduler_ = TaskSchedulerImpl::Create(worker_pools,
+    scheduler_ = TaskSchedulerImpl::Create(params_vector,
                                            Bind(&GetThreadPoolIndexForTraits));
     ASSERT_TRUE(scheduler_);
   }

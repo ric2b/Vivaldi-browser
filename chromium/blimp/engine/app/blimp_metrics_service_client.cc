@@ -90,12 +90,9 @@ metrics::MetricsService* BlimpMetricsServiceClient::GetMetricsService() {
 
 // In Chrome, UMA and Breakpad are enabled/disabled together by the same
 // checkbox and they share the same client ID (a.k.a. GUID).
-// This is not required by Blimp, so these are no-ops.
+// This is not required by Blimp, so this is a no-op.
 void BlimpMetricsServiceClient::SetMetricsClientId(
     const std::string& client_id) {}
-
-// Recording can not be disabled in Blimp, so this function is a no-op.
-void BlimpMetricsServiceClient::OnRecordingDisabled() {}
 
 bool BlimpMetricsServiceClient::IsOffTheRecordSessionActive() {
   // Blimp does not have incognito mode.
@@ -118,8 +115,11 @@ bool BlimpMetricsServiceClient::GetBrand(std::string* brand_code) {
 }
 
 metrics::SystemProfileProto::Channel BlimpMetricsServiceClient::GetChannel() {
-  // Blimp engine does not have channel info yet.
-  return metrics::SystemProfileProto::CHANNEL_UNKNOWN;
+  // Blimp engine does not have channel info yet, however metrics data with
+  // CHANNEL_UNKNOWN is filtered in metrics visualization tools since the value
+  // typically implies a non-official build.
+  // Using CHANNEL_CANARY as a work around until channel is set here.
+  return metrics::SystemProfileProto::CHANNEL_CANARY;
 }
 
 std::string BlimpMetricsServiceClient::GetVersionString() {

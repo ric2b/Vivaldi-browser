@@ -10,7 +10,7 @@
 #include "core/editing/FrameSelection.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
-#include "core/html/HTMLDocument.h"
+#include "core/frame/Settings.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
 #include "core/testing/DummyPageHolder.h"
@@ -75,7 +75,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll)
     PlatformMouseEvent mouseDownEvent(
         IntPoint(0, 0),
         IntPoint(100, 200),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MousePressed,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -85,7 +85,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll)
     PlatformMouseEvent mouseMoveEvent(
         IntPoint(100, 50),
         IntPoint(200, 250),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MouseMoved,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -98,7 +98,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll)
     PlatformMouseEvent mouseUpEvent(
         IntPoint(100, 50),
         IntPoint(200, 250),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MouseReleased,
         1,
         static_cast<PlatformEvent::Modifiers>(0),
@@ -185,7 +185,7 @@ TEST_F(EventHandlerTest, draggedInlinePositionTest)
     PlatformMouseEvent mouseDownEvent(
         IntPoint(262, 29),
         IntPoint(329, 67),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MousePressed,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -195,7 +195,7 @@ TEST_F(EventHandlerTest, draggedInlinePositionTest)
     PlatformMouseEvent mouseMoveEvent(
         IntPoint(618, 298),
         IntPoint(685, 436),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MouseMoved,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -221,7 +221,7 @@ TEST_F(EventHandlerTest, draggedSVGImagePositionTest)
     PlatformMouseEvent mouseDownEvent(
         IntPoint(145, 144),
         IntPoint(212, 282),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MousePressed,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -231,7 +231,7 @@ TEST_F(EventHandlerTest, draggedSVGImagePositionTest)
     PlatformMouseEvent mouseMoveEvent(
         IntPoint(618, 298),
         IntPoint(685, 436),
-        LeftButton,
+        WebPointerProperties::Button::Left,
         PlatformEvent::MouseMoved,
         1,
         PlatformEvent::Modifiers::LeftButtonDown,
@@ -239,6 +239,33 @@ TEST_F(EventHandlerTest, draggedSVGImagePositionTest)
     document().frame()->eventHandler().handleMouseMoveEvent(mouseMoveEvent);
 
     EXPECT_EQ(IntPoint(45, 44), document().frame()->eventHandler().dragDataTransferLocationForTesting());
+}
+
+// Regression test for http://crbug.com/641403 to verify we use up-to-date
+// layout tree for dispatching "contextmenu" event.
+TEST_F(EventHandlerTest, sendContextMenuEventWithHover)
+{
+    setHtmlInnerHTML(
+        "<style>*:hover { color: red; }</style>"
+        "<div>foo</div>");
+    document().settings()->setScriptEnabled(true);
+    Element* script = document().createElement("script", ASSERT_NO_EXCEPTION);
+    script->setInnerHTML(
+        "document.addEventListener('contextmenu', event => event.preventDefault());",
+        ASSERT_NO_EXCEPTION);
+    document().body()->appendChild(script);
+    document().frame()->selection().setSelection(
+        VisibleSelection(Position(document().body(), 0)));
+    PlatformMouseEvent mouseDownEvent(
+        IntPoint(0, 0),
+        IntPoint(100, 200),
+        WebPointerProperties::Button::Right,
+        PlatformEvent::MousePressed,
+        1,
+        PlatformEvent::Modifiers::RightButtonDown,
+        WTF::monotonicallyIncreasingTime());
+    EXPECT_EQ(WebInputEventResult::HandledApplication,
+        document().frame()->eventHandler().sendContextMenuEvent(mouseDownEvent));
 }
 
 } // namespace blink

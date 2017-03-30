@@ -175,12 +175,6 @@ class GoogleUpdateSettings {
   // true if this operation succeeded.
   static bool ClearReferral();
 
-  // Set did_run "dr" in the client state value for app specified by
-  // |app_reg_data|. This is used to measure active users. Returns false if
-  // registry write fails.
-  static bool UpdateDidRunStateForApp(const AppRegistrationData& app_reg_data,
-                                      bool did_run);
-
   // Convenience routine: UpdateDidRunStateForApp() specialized for the current
   // BrowserDistribution, and also updates Chrome Binary's did_run if the
   // current distribution is multi-install.
@@ -209,10 +203,19 @@ class GoogleUpdateSettings {
   // There is no fall-back for full installer :)
   // - Unconditionally remove "-multifail" since we haven't crashed.
   // |state_key| should be obtained via InstallerState::state_key().
+  // - Unconditionally clear a legacy "-stage:" modifier.
   static void UpdateInstallStatus(bool system_install,
                                   installer::ArchiveType archive_type,
                                   int install_return_code,
                                   const base::string16& product_guid);
+
+  // Sets the InstallerProgress value in the registry so that Google Update can
+  // provide informative user feedback. |path| is the full path to the app's
+  // ClientState key. |progress| should be a number between 0 and 100,
+  // inclusive.
+  static void SetProgress(bool system_install,
+                          const base::string16& path,
+                          int progress);
 
   // This method updates the value for Google Update "ap" key for Chrome
   // based on whether we are doing incremental install (or not) and whether
@@ -222,6 +225,8 @@ class GoogleUpdateSettings {
   //   not present already).
   // - If full installer failed, still remove this magic
   //   string (if it is present already).
+  // Additionally, any legacy "-multifail" or "-stage:*" values are
+  // unconditionally removed.
   //
   // archive_type: tells whether this is incremental install or not.
   // install_return_code: if 0, means installation was successful.
@@ -294,7 +299,7 @@ class GoogleUpdateSettings {
   static base::string16 GetUninstallCommandLine(bool system_install);
 
   // Returns the version of Google Update that is installed.
-  static Version GetGoogleUpdateVersion(bool system_install);
+  static base::Version GetGoogleUpdateVersion(bool system_install);
 
   // Returns the time at which Google Update last started an automatic update
   // check, or the null time if this information isn't available.

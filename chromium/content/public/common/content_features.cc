@@ -39,16 +39,15 @@ const base::Feature kDoNotUnlockSharedBuffer{"DoNotUnlockSharedBuffer",
 const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the Feature Policy framework for granting and removing access to
+// other features through HTTP headers.
+const base::Feature kFeaturePolicy{"FeaturePolicy",
+                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables a blink::FontCache optimization that reuses a font to serve different
 // size of font.
 const base::Feature kFontCacheScaling{"FontCacheScaling",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Can main thread be pipelined with activation. Always disabled for devices
-// with fewer than 4 cores irrespective of this flag. Can also be overridden by
-// --enable(disable)-main-frame-before-activation command line flag.
-const base::Feature kMainFrameBeforeActivation{
-    "MainFrameBeforeActivation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // FeatureList definition for trials to enable the download button on
 // MediaDocument.
@@ -65,8 +64,7 @@ const base::Feature kNewMediaPlaybackUi{"NewMediaPlaybackUi",
 // Non-validating reload for desktop.
 // See https://crbug.com/591245
 const base::Feature kNonValidatingReloadOnNormalReload{
-    "NonValidatingReloadOnNormalReload",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    "NonValidatingReloadOnNormalReload", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Non-validating reload on reload-to-refresh-content (e.g. pull-to-refresh).
 // See https://crbug.com/591245
@@ -92,9 +90,23 @@ const base::Feature kPaintOptimizations{"PaintOptimizations",
 const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Partial support for pointer event feature.
+// Whether document level event listeners should default 'passive' to true.
+const base::Feature kPassiveDocumentEventListeners{
+    "PassiveDocumentEventListeners", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Whether we should force a touchstart and first touchmove per scroll event
+// listeners to be 'passive' during fling.
+const base::Feature kPassiveEventListenersDueToFling{
+    "PassiveEventListenersDueToFling", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Pointer events support.
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If Pepper 3D Image Chromium is allowed, this feature controls whether it is
+// enabled.
+const base::Feature kPepper3DImageChromium{"Pepper3DImageChromium",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{
@@ -104,16 +116,28 @@ const base::Feature kRenderingPipelineThrottling{
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Speculatively launches Service Workers on mouse/touch events.
+const base::Feature kSpeculativeLaunchServiceWorker{
+    "SpeculativeLaunchServiceWorker", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables implementation of the Cache-Control: stale-while-revalidate directive
 // which permits servers to allow the use of stale resources while revalidation
 // proceeds in the background. See http://crbug.com/348877
 const base::Feature kStaleWhileRevalidate{"StaleWhileRevalidate2",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Throttle Blink timers in out-of-view cross origin frames.
+const base::Feature kTimerThrottlingForHiddenFrames{
+    "TimerThrottlingForHiddenFrames", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables token binding
 // (https://www.ietf.org/id/draft-ietf-tokbind-protocol-04.txt).
 const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables touchpad and wheel scroll latching.
+const base::Feature kTouchpadAndWheelScrollLatching{
+    "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Weak MemoryCache (https://crbug.com/603462).
 const base::Feature kWeakMemoryCache{"WeakMemoryCache",
@@ -129,9 +153,19 @@ const base::Feature kWebGLImageChromium{"WebGLImageChromium",
 const base::Feature kWebRtcEcdsaDefault {"WebRTC-EnableWebRtcEcdsa",
                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Use GpuMemoryBuffer backed VideoFrames in media streams.
+const base::Feature kWebRtcUseGpuMemoryBufferVideoFrames{
+    "WebRTC-UseGpuMemoryBufferVideoFrames",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls whether the WebUSB API is enabled:
 // https://wicg.github.io/webusb
 const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Make sendBeacon throw for a Blob with a non simple type.
+const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
+    "SendBeaconThrowForBlobWithNonSimpleType",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Allow videos to autoplay without a user gesture if muted.
@@ -141,7 +175,7 @@ const base::Feature kAutoplayMutedVideos{"AutoplayMutedVideos",
 // Use IME's own thread instead of using main UI thread. It also means that
 // we will not use replica editor and do a round trip to renderer to synchronize
 // with Blink data.
-const base::Feature kImeThread{"ImeThread", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kImeThread{"ImeThread", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",

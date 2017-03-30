@@ -40,18 +40,60 @@ const GURL& GetDocumentURL(const ContextMenuParams& params) {
 void VivaldiAddLinkItems(SimpleMenuModel &menu,
                          const ContextMenuParams &params) {
 
-  int index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
-  DCHECK(index>=0);
-  menu.InsertItemWithStringIdAt(++index,
-                               IDC_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB,
-                               IDS_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB);
+  if (IsVivaldiRunning() && !params.link_url.is_empty()) {
+    int firstIndex =
+      menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB);
+    DCHECK(firstIndex>=0);
+    menu.RemoveItemAt(firstIndex);
+    int index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW);
+    DCHECK(index>=0);
+    menu.RemoveItemAt(index);
+    index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD);
+    DCHECK(index>=0);
+    menu.RemoveItemAt(index);
+
+    index = firstIndex;
+    menu.InsertItemWithStringIdAt(index,
+                                 IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
+                                 IDS_VIV_OPEN_LINK_NEW_FOREGROUND_TAB);
+    menu.InsertItemWithStringIdAt(++index,
+                                 IDC_CONTENT_CONTEXT_OPENLINKBACKGROUNDTAB,
+                                 IDS_VIV_OPEN_LINK_NEW_BACKGROUND_TAB);
+    menu.InsertItemWithStringIdAt(++index,
+                                 IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW,
+                                 IDS_VIV_OPEN_LINK_NEW_WINDOW);
+    menu.InsertItemWithStringIdAt(++index,
+                                 IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD,
+                                 IDS_VIV_OPEN_LINK_NEW_PRIVATE_WINDOW);
+  }
 }
 
 
 void VivaldiAddImageItems(SimpleMenuModel &menu,
                           const ContextMenuParams &params) {
-  menu.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOADIMAGE,
-                                  IDS_CONTENT_CONTEXT_RELOADIMAGE);
+
+  if (IsVivaldiRunning()) {
+    int index = menu.GetIndexOfCommandId(IDC_CONTENT_CONTEXT_OPENIMAGENEWTAB);
+    DCHECK(index>=0);
+    menu.RemoveItemAt(index);
+
+    menu.InsertItemWithStringIdAt(index,
+                                  IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB,
+                                  IDS_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB);
+    menu.InsertItemWithStringIdAt(++index,
+                                  IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB,
+                                  IDS_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB);
+    menu.InsertItemWithStringIdAt(++index,
+                                  IDC_VIV_OPEN_IMAGE_NEW_WINDOW,
+                                  IDS_VIV_OPEN_IMAGE_NEW_WINDOW);
+    menu.InsertItemWithStringIdAt(++index,
+                                  IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW,
+                                  IDS_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW);
+    menu.InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
+
+    menu.AddItemWithStringId(IDC_CONTENT_CONTEXT_RELOADIMAGE,
+                             IDS_CONTENT_CONTEXT_RELOADIMAGE);
+  }
 }
 
 void VivaldiAddEditableItems(SimpleMenuModel &menu,
@@ -108,6 +150,10 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel &menu,
       enabled = params.link_url.is_valid();
       break;
     case IDC_CONTENT_CONTEXT_RELOADIMAGE:
+    case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
+    case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
+    case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
+    case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
       enabled = params.has_image_contents == WebContextMenuData::MediaTypeImage;
       break;
     case IDC_CONTENT_CONTEXT_PASTE_AND_GO: {
@@ -150,6 +196,30 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
     case IDC_CONTENT_CONTEXT_RELOADIMAGE:
       source_web_contents->GetRenderViewHost()->LoadImageAt(
         params.x, params.y);
+      break;
+    case IDC_VIV_OPEN_IMAGE_NEW_FOREGROUND_TAB:
+      openurl.Run(params.src_url,
+        GetDocumentURL(params),
+        NEW_FOREGROUND_TAB,
+        ui::PAGE_TRANSITION_LINK);
+      break;
+    case IDC_VIV_OPEN_IMAGE_NEW_BACKGROUND_TAB:
+      openurl.Run(params.src_url,
+        GetDocumentURL(params),
+        NEW_BACKGROUND_TAB,
+        ui::PAGE_TRANSITION_LINK);
+      break;
+    case IDC_VIV_OPEN_IMAGE_NEW_WINDOW:
+      openurl.Run(params.src_url,
+        GetDocumentURL(params),
+        NEW_WINDOW,
+        ui::PAGE_TRANSITION_LINK);
+      break;
+    case IDC_VIV_OPEN_IMAGE_NEW_PRIVATE_WINDOW:
+      openurl.Run(params.src_url,
+        GetDocumentURL(params),
+        OFF_THE_RECORD,
+        ui::PAGE_TRANSITION_LINK);
       break;
     case IDC_CONTENT_CONTEXT_PASTE_AND_GO:
       if (IsVivaldiRunning()) {

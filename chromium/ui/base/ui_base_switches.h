@@ -28,7 +28,6 @@ UI_BASE_EXPORT extern const char kDisableDwmComposition[];
 UI_BASE_EXPORT extern const char kDisableIconNtp[];
 UI_BASE_EXPORT extern const char kDisableTouchAdjustment[];
 UI_BASE_EXPORT extern const char kDisableTouchDragDrop[];
-UI_BASE_EXPORT extern const char kDisableTouchFeedback[];
 UI_BASE_EXPORT extern const char kEnableIconNtp[];
 UI_BASE_EXPORT extern const char kEnableTouchDragDrop[];
 UI_BASE_EXPORT extern const char kLang[];
@@ -40,6 +39,7 @@ UI_BASE_EXPORT extern const char kTopChromeMD[];
 UI_BASE_EXPORT extern const char kTopChromeMDMaterial[];
 UI_BASE_EXPORT extern const char kTopChromeMDMaterialHybrid[];
 UI_BASE_EXPORT extern const char kTopChromeMDNonMaterial[];
+UI_BASE_EXPORT extern const char kUseNewVirtualKeyboardBehavior[];
 UI_BASE_EXPORT extern const char kExtendMdToSecondaryUi[];
 
 }  // namespace switches

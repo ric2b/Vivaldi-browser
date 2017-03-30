@@ -23,9 +23,7 @@ MEDIA_EXPORT extern const char kDisableMediaSuspend[];
 MEDIA_EXPORT extern const char kReportVp9AsAnUnsupportedMimeType[];
 
 #if defined(OS_ANDROID)
-MEDIA_EXPORT extern const char kDisableMediaThreadForMediaPlayback[];
 MEDIA_EXPORT extern const char kDisableUnifiedMediaPipeline[];
-MEDIA_EXPORT extern const char kEnableMediaThreadForMediaPlayback[];
 #endif
 
 #if defined(OS_LINUX) || defined(OS_FREEBSD) || defined(OS_SOLARIS)
@@ -65,7 +63,10 @@ MEDIA_EXPORT extern const char kDisableRTCSmoothnessAlgorithm[];
 
 MEDIA_EXPORT extern const char kEnableVp9InMp4[];
 
-MEDIA_EXPORT extern const char kCastEncoderUtilHeuristic[];
+MEDIA_EXPORT extern const char kForceVideoOverlays[];
+
+MEDIA_EXPORT extern const char kMSEAudioBufferSizeLimit[];
+MEDIA_EXPORT extern const char kMSEVideoBufferSizeLimit[];
 
 }  // namespace switches
 
@@ -73,8 +74,19 @@ namespace media {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+
+#if defined(OS_WIN)
+MEDIA_EXPORT extern const base::Feature kMediaFoundationH264Encoding;
+#endif  // defined(OS_WIN)
+
+#if defined(ENABLE_PLUGINS)
+MEDIA_EXPORT extern const base::Feature kFlashJoinsMediaSession;
+#endif  // defined(ENABLE_PLUGINS)
+
 MEDIA_EXPORT extern const base::Feature kNewAudioRenderingMixingStrategy;
+MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
+MEDIA_EXPORT extern const base::Feature kVideoColorManagement;
 
 }  // namespace media
 

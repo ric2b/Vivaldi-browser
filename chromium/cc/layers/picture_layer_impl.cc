@@ -12,6 +12,7 @@
 #include <limits>
 #include <set>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "cc/base/math_util.h"
@@ -58,6 +59,32 @@ const int kGpuDefaultTileRoundUp = 32;
 // For performance reasons and to support compressed tile textures, tile
 // width and height should be an even multiple of 4 in size.
 const int kTileMinimalAlignment = 4;
+
+// Large contents scale can cause overflow issues. Cap the ideal contents scale
+// by this constant, since scales larger than this are usually not correct or
+// their scale doesn't matter as long as it's large. See
+// Renderer4.IdealContentsScale UMA for distribution of existing contents
+// scales.
+const float kMaxIdealContentsScale = 10000.f;
+
+// Intersect rects which may have right() and bottom() that overflow integer
+// boundaries. This code is similar to gfx::Rect::Intersect with the exception
+// that the types are promoted to int64_t when there is a chance of overflow.
+gfx::Rect SafeIntersectRects(const gfx::Rect& one, const gfx::Rect& two) {
+  if (one.IsEmpty() || two.IsEmpty())
+    return gfx::Rect();
+
+  int rx = std::max(one.x(), two.x());
+  int ry = std::max(one.y(), two.y());
+  int64_t rr = std::min(static_cast<int64_t>(one.x()) + one.width(),
+                        static_cast<int64_t>(two.x()) + two.width());
+  int64_t rb = std::min(static_cast<int64_t>(one.y()) + one.height(),
+                        static_cast<int64_t>(two.y()) + two.height());
+  if (rx > rr || ry > rb)
+    return gfx::Rect();
+  return gfx::Rect(rx, ry, static_cast<int>(rr - rx),
+                   static_cast<int>(rb - ry));
+}
 
 }  // namespace
 
@@ -295,8 +322,10 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
     if (visible_geometry_rect.IsEmpty())
       continue;
 
-    append_quads_data->visible_layer_area +=
-        visible_geometry_rect.width() * visible_geometry_rect.height();
+    int64_t visible_geometry_area =
+        static_cast<int64_t>(visible_geometry_rect.width()) *
+        visible_geometry_rect.height();
+    append_quads_data->visible_layer_area += visible_geometry_area;
 
     bool has_draw_quad = false;
     if (*iter && iter->draw_info().IsReadyToDraw()) {
@@ -360,10 +389,8 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         append_quads_data->num_missing_tiles++;
         ++missing_tile_count;
       }
-      int64_t checkerboarded_area =
-          visible_geometry_rect.width() * visible_geometry_rect.height();
       append_quads_data->checkerboarded_visible_content_area +=
-          checkerboarded_area;
+          visible_geometry_area;
       // Intersect checkerboard rect with interest rect to generate rect where
       // we checkerboarded and has recording. The area where we don't have
       // recording is not necessarily a Rect, and its area is calculated using
@@ -371,18 +398,18 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
       gfx::Rect visible_rect_has_recording = visible_geometry_rect;
       visible_rect_has_recording.Intersect(scaled_recorded_viewport);
       int64_t checkerboarded_has_recording_area =
-          visible_rect_has_recording.width() *
+          static_cast<int64_t>(visible_rect_has_recording.width()) *
           visible_rect_has_recording.height();
       append_quads_data->checkerboarded_needs_raster_content_area +=
           checkerboarded_has_recording_area;
       append_quads_data->checkerboarded_no_recording_content_area +=
-          checkerboarded_area - checkerboarded_has_recording_area;
+          visible_geometry_area - checkerboarded_has_recording_area;
       continue;
     }
 
     if (iter.resolution() != HIGH_RESOLUTION) {
       append_quads_data->approximated_visible_content_area +=
-          visible_geometry_rect.width() * visible_geometry_rect.height();
+          visible_geometry_area;
     }
 
     // If we have a draw quad, but it's not low resolution, then
@@ -518,7 +545,8 @@ void PictureLayerImpl::UpdateViewportRectForTilePriorityInContentSpace() {
                                .skewport_extrapolation_limit_in_screen_pixels *
                            MaximumTilingContentsScale();
       padded_bounds.Inset(-padding_amount, -padding_amount);
-      visible_rect_in_content_space.Intersect(padded_bounds);
+      visible_rect_in_content_space =
+          SafeIntersectRects(visible_rect_in_content_space, padded_bounds);
     }
   }
   viewport_rect_for_tile_priority_in_content_space_ =
@@ -1237,9 +1265,13 @@ void PictureLayerImpl::UpdateIdealScales() {
                           ? layer_tree_impl()->current_page_scale_factor()
                           : 1.f;
   ideal_device_scale_ = layer_tree_impl()->device_scale_factor();
-  ideal_contents_scale_ = std::max(GetIdealContentsScale(), min_contents_scale);
+  ideal_contents_scale_ =
+      std::min(kMaxIdealContentsScale,
+               std::max(GetIdealContentsScale(), min_contents_scale));
   ideal_source_scale_ =
       ideal_contents_scale_ / ideal_page_scale_ / ideal_device_scale_;
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Renderer4.IdealContentsScale",
+                              ideal_contents_scale_, 1, 10000, 50);
 }
 
 void PictureLayerImpl::GetDebugBorderProperties(

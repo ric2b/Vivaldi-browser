@@ -4,7 +4,6 @@
 
 #include "third_party/leveldatabase/env_chromium.h"
 
-#include <memory>
 #include <utility>
 
 #if defined(OS_POSIX)
@@ -12,6 +11,7 @@
 #include <sys/types.h>
 #endif
 
+#include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/metrics/histogram.h"
@@ -22,6 +22,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/leveldatabase/chromium_logger.h"
+#include "third_party/leveldatabase/src/include/leveldb/options.h"
 #include "third_party/re2/src/re2/re2.h"
 
 using base::FilePath;
@@ -151,13 +152,13 @@ class Retrier {
 class ChromiumSequentialFile : public leveldb::SequentialFile {
  public:
   ChromiumSequentialFile(const std::string& fname,
-                         base::File* f,
+                         base::File f,
                          const UMALogger* uma_logger)
-      : filename_(fname), file_(f), uma_logger_(uma_logger) {}
+      : filename_(fname), file_(std::move(f)), uma_logger_(uma_logger) {}
   virtual ~ChromiumSequentialFile() {}
 
   Status Read(size_t n, Slice* result, char* scratch) override {
-    int bytes_read = file_->ReadAtCurrentPosNoBestEffort(scratch, n);
+    int bytes_read = file_.ReadAtCurrentPosNoBestEffort(scratch, n);
     if (bytes_read == -1) {
       base::File::Error error = LastFileError();
       uma_logger_->RecordErrorAt(kSequentialFileRead);
@@ -170,7 +171,7 @@ class ChromiumSequentialFile : public leveldb::SequentialFile {
   }
 
   Status Skip(uint64_t n) override {
-    if (file_->Seek(base::File::FROM_CURRENT, n) == -1) {
+    if (file_.Seek(base::File::FROM_CURRENT, n) == -1) {
       base::File::Error error = LastFileError();
       uma_logger_->RecordErrorAt(kSequentialFileSkip);
       return MakeIOError(filename_, base::File::ErrorToString(error),
@@ -182,7 +183,7 @@ class ChromiumSequentialFile : public leveldb::SequentialFile {
 
  private:
   std::string filename_;
-  std::unique_ptr<base::File> file_;
+  base::File file_;
   const UMALogger* uma_logger_;
 };
 
@@ -219,9 +220,8 @@ class ChromiumRandomAccessFile : public leveldb::RandomAccessFile {
 class ChromiumWritableFile : public leveldb::WritableFile {
  public:
   ChromiumWritableFile(const std::string& fname,
-                       base::File* f,
-                       const UMALogger* uma_logger,
-                       bool make_backup);
+                       base::File f,
+                       const UMALogger* uma_logger);
   virtual ~ChromiumWritableFile() {}
   leveldb::Status Append(const leveldb::Slice& data) override;
   leveldb::Status Close() override;
@@ -233,22 +233,19 @@ class ChromiumWritableFile : public leveldb::WritableFile {
   leveldb::Status SyncParent();
 
   std::string filename_;
-  std::unique_ptr<base::File> file_;
+  base::File file_;
   const UMALogger* uma_logger_;
   Type file_type_;
   std::string parent_dir_;
-  bool make_backup_;
 };
 
 ChromiumWritableFile::ChromiumWritableFile(const std::string& fname,
-                                           base::File* f,
-                                           const UMALogger* uma_logger,
-                                           bool make_backup)
+                                           base::File f,
+                                           const UMALogger* uma_logger)
     : filename_(fname),
-      file_(f),
+      file_(std::move(f)),
       uma_logger_(uma_logger),
-      file_type_(kOther),
-      make_backup_(make_backup) {
+      file_type_(kOther) {
   FilePath path = FilePath::FromUTF8Unsafe(fname);
   if (path.BaseName().AsUTF8Unsafe().find("MANIFEST") == 0)
     file_type_ = kManifest;
@@ -276,7 +273,7 @@ Status ChromiumWritableFile::SyncParent() {
 }
 
 Status ChromiumWritableFile::Append(const Slice& data) {
-  int bytes_written = file_->WriteAtCurrentPos(data.data(), data.size());
+  int bytes_written = file_.WriteAtCurrentPos(data.data(), data.size());
   if (bytes_written != data.size()) {
     base::File::Error error = LastFileError();
     uma_logger_->RecordOSError(kWritableFileAppend, error);
@@ -288,7 +285,7 @@ Status ChromiumWritableFile::Append(const Slice& data) {
 }
 
 Status ChromiumWritableFile::Close() {
-  file_->Close();
+  file_.Close();
   return Status::OK();
 }
 
@@ -301,15 +298,12 @@ Status ChromiumWritableFile::Flush() {
 Status ChromiumWritableFile::Sync() {
   TRACE_EVENT0("leveldb", "WritableFile::Sync");
 
-  if (!file_->Flush()) {
+  if (!file_.Flush()) {
     base::File::Error error = LastFileError();
     uma_logger_->RecordErrorAt(kWritableFileSync);
     return MakeIOError(filename_, base::File::ErrorToString(error),
                        kWritableFileSync, error);
   }
-
-  if (make_backup_ && file_type_ == kTable)
-    uma_logger_->RecordBackupResult(ChromiumEnv::MakeBackup(filename_));
 
   // leveldb's implicit contract for Sync() is that if this instance is for a
   // manifest file then the directory is also sync'ed. See leveldb's
@@ -500,20 +494,42 @@ bool IndicatesDiskFull(const leveldb::Status& status) {
               base::File::FILE_ERROR_NO_SPACE);
 }
 
-bool ChromiumEnv::MakeBackup(const std::string& fname) {
-  FilePath original_table_name = FilePath::FromUTF8Unsafe(fname);
-  FilePath backup_table_name =
-      original_table_name.ReplaceExtension(backup_table_extension);
-  return base::CopyFile(original_table_name, backup_table_name);
+// Given the size of the disk, identified by |disk_size| in bytes, determine the
+// appropriate write_buffer_size. Ignoring snapshots, if the current set of
+// tables in a database contains a set of key/value pairs identified by {A}, and
+// a set of key/value pairs identified by {B} has been written and is in the log
+// file, then during compaction you will have {A} + {B} + {A, B} = 2A + 2B.
+// There is no way to know the size of A, so minimizing the size of B will
+// maximize the likelihood of a successful compaction.
+size_t WriteBufferSize(int64_t disk_size) {
+  const leveldb::Options default_options;
+  const int64_t kMinBufferSize = 1024 * 1024;
+  const int64_t kMaxBufferSize = default_options.write_buffer_size;
+  const int64_t kDiskMinBuffSize = 10 * 1024 * 1024;
+  const int64_t kDiskMaxBuffSize = 40 * 1024 * 1024;
+
+  if (disk_size == -1)
+    return default_options.write_buffer_size;
+
+  if (disk_size <= kDiskMinBuffSize)
+    return kMinBufferSize;
+
+  if (disk_size >= kDiskMaxBuffSize)
+    return kMaxBufferSize;
+
+  // A linear equation to intersect (kDiskMinBuffSize, kMinBufferSize) and
+  // (kDiskMaxBuffSize, kMaxBufferSize).
+  return static_cast<size_t>(
+      kMinBufferSize +
+      ((kMaxBufferSize - kMinBufferSize) * (disk_size - kDiskMinBuffSize)) /
+          (kDiskMaxBuffSize - kDiskMinBuffSize));
 }
 
-ChromiumEnv::ChromiumEnv()
-    : ChromiumEnv("LevelDBEnv", false /* make_backup */) {}
+ChromiumEnv::ChromiumEnv() : ChromiumEnv("LevelDBEnv") {}
 
-ChromiumEnv::ChromiumEnv(const std::string& name, bool make_backup)
+ChromiumEnv::ChromiumEnv(const std::string& name)
     : kMaxRetryTimeMillis(1000),
       name_(name),
-      make_backup_(make_backup),
       bgsignal_(&mu_),
       started_bgthread_(false) {
   uma_ioerror_base_name_ = name_ + ".IOError.BFE";
@@ -572,55 +588,29 @@ const char* ChromiumEnv::FileErrorString(base::File::Error error) {
   return "Unknown error.";
 }
 
-FilePath ChromiumEnv::RestoreFromBackup(const FilePath& base_name) {
-  FilePath table_name = base_name.AddExtension(table_extension);
-  bool result = base::CopyFile(base_name.AddExtension(backup_table_extension),
-                               table_name);
-  std::string uma_name(name_);
-  uma_name.append(".TableRestore");
-  base::BooleanHistogram::FactoryGet(
-      uma_name, base::Histogram::kUmaTargetedHistogramFlag)->AddBoolean(result);
-  return table_name;
-}
+// Delete unused table backup files - a feature no longer supported.
+// TODO(cmumford): Delete this function once found backup files drop below some
+//                 very small (TBD) number.
+void ChromiumEnv::DeleteBackupFiles(const FilePath& dir) {
+  base::HistogramBase* histogram = base::BooleanHistogram::FactoryGet(
+      "LevelDBEnv.DeleteTableBackupFile",
+      base::Histogram::kUmaTargetedHistogramFlag);
 
-void ChromiumEnv::RestoreIfNecessary(const std::string& dir,
-                                     std::vector<std::string>* dir_entries) {
-  std::set<FilePath> tables_found;
-  std::set<FilePath> backups_found;
-  for (const std::string& entry : *dir_entries) {
-    FilePath current = FilePath::FromUTF8Unsafe(entry);
-    if (current.MatchesExtension(table_extension))
-      tables_found.insert(current.RemoveExtension());
-    if (current.MatchesExtension(backup_table_extension))
-      backups_found.insert(current.RemoveExtension());
-  }
-  std::set<FilePath> backups_only =
-      base::STLSetDifference<std::set<FilePath>>(backups_found, tables_found);
-
-  if (backups_only.size()) {
-    std::string uma_name(name_);
-    uma_name.append(".MissingFiles");
-    int num_missing_files =
-        backups_only.size() > INT_MAX ? INT_MAX : backups_only.size();
-    base::Histogram::FactoryGet(uma_name,
-                                1 /*min*/,
-                                100 /*max*/,
-                                8 /*num_buckets*/,
-                                base::Histogram::kUmaTargetedHistogramFlag)
-        ->Add(num_missing_files);
-  }
-  FilePath dir_path = FilePath::FromUTF8Unsafe(dir);
-  for (const FilePath& backup : backups_only) {
-    FilePath restored_table_name = RestoreFromBackup(dir_path.Append(backup));
-    dir_entries->push_back(restored_table_name.BaseName().AsUTF8Unsafe());
+  base::FileEnumerator dir_reader(dir, false, base::FileEnumerator::FILES,
+                                  FILE_PATH_LITERAL("*.bak"));
+  for (base::FilePath fname = dir_reader.Next(); !fname.empty();
+       fname = dir_reader.Next()) {
+    histogram->AddBoolean(base::DeleteFile(fname, false));
   }
 }
 
 Status ChromiumEnv::GetChildren(const std::string& dir,
                                 std::vector<std::string>* result) {
+  FilePath dir_path = FilePath::FromUTF8Unsafe(dir);
+  DeleteBackupFiles(dir_path);
+
   std::vector<FilePath> entries;
-  base::File::Error error =
-      GetDirectoryEntries(FilePath::FromUTF8Unsafe(dir), &entries);
+  base::File::Error error = GetDirectoryEntries(dir_path, &entries);
   if (error != base::File::FILE_OK) {
     RecordOSError(kGetChildren, error);
     return MakeIOError(dir, "Could not open/read directory", kGetChildren,
@@ -630,9 +620,6 @@ Status ChromiumEnv::GetChildren(const std::string& dir,
   result->clear();
   for (const auto& entry : entries)
     result->push_back(entry.BaseName().AsUTF8Unsafe());
-
-  if (make_backup_)
-    RestoreIfNecessary(dir, result);
 
   return Status::OK();
 }
@@ -644,10 +631,6 @@ Status ChromiumEnv::DeleteFile(const std::string& fname) {
   if (!base::DeleteFile(fname_filepath, false)) {
     result = MakeIOError(fname, "Could not delete file.", kDeleteFile);
     RecordErrorAt(kDeleteFile);
-  }
-  if (make_backup_ && fname_filepath.MatchesExtension(table_extension)) {
-    base::DeleteFile(fname_filepath.ReplaceExtension(backup_table_extension),
-                     false);
   }
   return result;
 }
@@ -810,15 +793,14 @@ Status ChromiumEnv::GetTestDirectory(std::string* path) {
 Status ChromiumEnv::NewLogger(const std::string& fname,
                               leveldb::Logger** result) {
   FilePath path = FilePath::FromUTF8Unsafe(fname);
-  std::unique_ptr<base::File> f(new base::File(
-      path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE));
-  if (!f->IsValid()) {
+  base::File f(path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  if (!f.IsValid()) {
     *result = NULL;
-    RecordOSError(kNewLogger, f->error_details());
+    RecordOSError(kNewLogger, f.error_details());
     return MakeIOError(fname, "Unable to create log file", kNewLogger,
-                       f->error_details());
+                       f.error_details());
   } else {
-    *result = new leveldb::ChromiumLogger(f.release());
+    *result = new leveldb::ChromiumLogger(std::move(f));
     return Status::OK();
   }
 }
@@ -826,15 +808,14 @@ Status ChromiumEnv::NewLogger(const std::string& fname,
 Status ChromiumEnv::NewSequentialFile(const std::string& fname,
                                       leveldb::SequentialFile** result) {
   FilePath path = FilePath::FromUTF8Unsafe(fname);
-  std::unique_ptr<base::File> f(
-      new base::File(path, base::File::FLAG_OPEN | base::File::FLAG_READ));
-  if (!f->IsValid()) {
+  base::File f(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  if (!f.IsValid()) {
     *result = NULL;
-    RecordOSError(kNewSequentialFile, f->error_details());
+    RecordOSError(kNewSequentialFile, f.error_details());
     return MakeIOError(fname, "Unable to create sequential file",
-                       kNewSequentialFile, f->error_details());
+                       kNewSequentialFile, f.error_details());
   } else {
-    *result = new ChromiumSequentialFile(fname, f.release(), this);
+    *result = new ChromiumSequentialFile(fname, std::move(f), this);
     return Status::OK();
   }
 }
@@ -873,14 +854,13 @@ Status ChromiumEnv::NewWritableFile(const std::string& fname,
                                     leveldb::WritableFile** result) {
   *result = NULL;
   FilePath path = FilePath::FromUTF8Unsafe(fname);
-  std::unique_ptr<base::File> f(new base::File(
-      path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE));
-  if (!f->IsValid()) {
+  base::File f(path, base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
+  if (!f.IsValid()) {
     RecordErrorAt(kNewWritableFile);
     return MakeIOError(fname, "Unable to create writable file",
-                       kNewWritableFile, f->error_details());
+                       kNewWritableFile, f.error_details());
   } else {
-    *result = new ChromiumWritableFile(fname, f.release(), this, make_backup_);
+    *result = new ChromiumWritableFile(fname, std::move(f), this);
     return Status::OK();
   }
 }
@@ -889,14 +869,13 @@ Status ChromiumEnv::NewAppendableFile(const std::string& fname,
                                       leveldb::WritableFile** result) {
   *result = NULL;
   FilePath path = FilePath::FromUTF8Unsafe(fname);
-  std::unique_ptr<base::File> f(new base::File(
-      path, base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_APPEND));
-  if (!f->IsValid()) {
+  base::File f(path, base::File::FLAG_OPEN_ALWAYS | base::File::FLAG_APPEND);
+  if (!f.IsValid()) {
     RecordErrorAt(kNewAppendableFile);
     return MakeIOError(fname, "Unable to create appendable file",
-                       kNewAppendableFile, f->error_details());
+                       kNewAppendableFile, f.error_details());
   }
-  *result = new ChromiumWritableFile(fname, f.release(), this, make_backup_);
+  *result = new ChromiumWritableFile(fname, std::move(f), this);
   return Status::OK();
 }
 
@@ -922,13 +901,6 @@ void ChromiumEnv::RecordOSError(MethodID method,
   DCHECK_LT(error, 0);
   RecordErrorAt(method);
   GetOSErrorHistogram(method, -base::File::FILE_ERROR_MAX)->Add(-error);
-}
-
-void ChromiumEnv::RecordBackupResult(bool result) const {
-  std::string uma_name(name_);
-  uma_name.append(".TableBackup");
-  base::BooleanHistogram::FactoryGet(
-      uma_name, base::Histogram::kUmaTargetedHistogramFlag)->AddBoolean(result);
 }
 
 base::HistogramBase* ChromiumEnv::GetOSErrorHistogram(MethodID method,

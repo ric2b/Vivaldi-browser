@@ -16,6 +16,7 @@ class MediaSessionDelegate {
   // Factory method returning an implementation of MediaSessionDelegate.
   static std::unique_ptr<MediaSessionDelegate> Create(
       MediaSession* media_session);
+  virtual ~MediaSessionDelegate() = default;
 
   virtual bool RequestAudioFocus(MediaSession::Type type) = 0;
   virtual void AbandonAudioFocus() = 0;

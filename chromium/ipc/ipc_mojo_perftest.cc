@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "base/process/process_metrics.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -28,10 +29,10 @@ class MojoChannelPerfTest : public test::IPCChannelPerfTestBase {
 
   std::unique_ptr<ChannelFactory> CreateChannelFactory(
       const ChannelHandle& handle,
-      base::SequencedTaskRunner* runner) override {
+      base::SingleThreadTaskRunner* runner) override {
     ipc_support_.reset(new mojo::edk::test::ScopedIPCSupport(io_task_runner()));
     return ChannelMojo::CreateServerFactory(
-        helper_.StartChild("MojoPerfTestClient"));
+        helper_.StartChild("MojoPerfTestClient"), runner);
   }
 
   bool StartClient() override {

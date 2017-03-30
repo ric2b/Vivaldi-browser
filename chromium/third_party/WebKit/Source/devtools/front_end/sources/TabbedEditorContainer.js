@@ -60,8 +60,8 @@ WebInspector.TabbedEditorContainer = function(delegate, setting, placeholderText
     this._tabbedPane.insertBeforeTabStrip(createElementWithClass("div", "sources-editor-tabstrip-left"));
     this._tabbedPane.appendAfterTabStrip(createElementWithClass("div", "sources-editor-tabstrip-right"));
 
-    this._tabbedPane.addEventListener(WebInspector.TabbedPane.EventTypes.TabClosed, this._tabClosed, this);
-    this._tabbedPane.addEventListener(WebInspector.TabbedPane.EventTypes.TabSelected, this._tabSelected, this);
+    this._tabbedPane.addEventListener(WebInspector.TabbedPane.Events.TabClosed, this._tabClosed, this);
+    this._tabbedPane.addEventListener(WebInspector.TabbedPane.Events.TabSelected, this._tabSelected, this);
 
     this._tabIds = new Map();
     this._files = {};
@@ -70,9 +70,10 @@ WebInspector.TabbedEditorContainer = function(delegate, setting, placeholderText
     this._history = WebInspector.TabbedEditorContainer.History.fromObject(this._previouslyViewedFilesSetting.get());
 }
 
+/** @enum {symbol} */
 WebInspector.TabbedEditorContainer.Events = {
-    EditorSelected: "EditorSelected",
-    EditorClosed: "EditorClosed"
+    EditorSelected: Symbol("EditorSelected"),
+    EditorClosed: Symbol("EditorClosed")
 }
 
 WebInspector.TabbedEditorContainer._tabId = 0;
@@ -212,10 +213,16 @@ WebInspector.TabbedEditorContainer.prototype = {
         if (userGesture)
             this._editorSelectedByUserAction();
 
+        var previousView = this._currentView;
         this._currentView = this.visibleView;
         this._addViewListeners();
 
-        var eventData = { currentFile: this._currentFile, userGesture: userGesture };
+        var eventData = {
+            currentFile: this._currentFile,
+            currentView: this._currentView,
+            previousView: previousView,
+            userGesture: userGesture
+        };
         this.dispatchEventToListeners(WebInspector.TabbedEditorContainer.Events.EditorSelected, eventData);
     },
 
@@ -243,6 +250,7 @@ WebInspector.TabbedEditorContainer.prototype = {
         // FIXME: this should be replaced with common Save/Discard/Cancel dialog.
         if (!shouldPrompt || confirm(WebInspector.UIString("Are you sure you want to close unsaved file: %s?", uiSourceCode.name()))) {
             uiSourceCode.resetWorkingCopy();
+            var previousView = this._currentView;
             if (nextTabId)
                 this._tabbedPane.selectTab(nextTabId, true);
             this._tabbedPane.closeTab(id, true);
@@ -509,11 +517,11 @@ WebInspector.TabbedEditorContainer.prototype = {
     },
 
     /**
-     * @return {!WebInspector.UISourceCode} uiSourceCode
+     * @return {?WebInspector.UISourceCode} uiSourceCode
      */
     currentFile: function()
     {
-        return this._currentFile;
+        return this._currentFile || null;
     },
 
     __proto__: WebInspector.Object.prototype

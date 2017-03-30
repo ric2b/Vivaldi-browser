@@ -11,10 +11,12 @@
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/events/blink/scoped_web_input_event.h"
 #include "ui/gfx/geometry/vector2d_f.h"
 
 namespace ui {
 class LatencyInfo;
+struct DidOverscrollParams;
 }
 
 namespace cc {
@@ -22,11 +24,11 @@ class InputHandler;
 }
 
 namespace ui {
+class LatencyInfo;
 class SynchronousInputHandlerProxy;
 }
 
 namespace content {
-struct DidOverscrollParams;
 
 class CONTENT_EXPORT InputHandlerManagerClient {
  public:
@@ -42,17 +44,21 @@ class CONTENT_EXPORT InputHandlerManagerClient {
 
   // Called from the main thread.
   virtual void SetBoundHandler(const Handler& handler) = 0;
+  virtual void NotifyInputEventHandled(int routing_id,
+                                       blink::WebInputEvent::Type type,
+                                       InputEventAckState ack_result) = 0;
 
   // Called from the compositor thread.
   virtual void RegisterRoutingID(int routing_id) = 0;
   virtual void UnregisterRoutingID(int routing_id) = 0;
   virtual void DidOverscroll(int routing_id,
-                             const DidOverscrollParams& params) = 0;
+                             const ui::DidOverscrollParams& params) = 0;
   virtual void DidStartFlinging(int routing_id) = 0;
   virtual void DidStopFlinging(int routing_id) = 0;
-  virtual void NotifyInputEventHandled(int routing_id,
-                                       blink::WebInputEvent::Type type,
-                                       InputEventAckState ack_result) = 0;
+  virtual void DispatchNonBlockingEventToMainThread(
+      int routing_id,
+      ui::ScopedWebInputEvent event,
+      const ui::LatencyInfo& latency_info) = 0;
 
  protected:
   InputHandlerManagerClient() {}

@@ -17,7 +17,7 @@ class AccessibilityController;
 class TestRunner;
 class WebFrameTestProxyBase;
 class WebTestDelegate;
-class WebTestProxyBase;
+class WebViewTestProxyBase;
 
 // WebFrameTestClient implements WebFrameClient interface, providing behavior
 // expected by tests.  WebFrameTestClient ends up used by WebFrameTestProxy
@@ -29,7 +29,7 @@ class WebFrameTestClient : public blink::WebFrameClient {
   // forth) live longer than |this|.
   WebFrameTestClient(TestRunner* test_runner,
                      WebTestDelegate* delegate,
-                     WebTestProxyBase* web_test_proxy_base,
+                     WebViewTestProxyBase* web_view_test_proxy_base,
                      WebFrameTestProxyBase* web_frame_test_proxy_base);
 
   ~WebFrameTestClient() override;
@@ -84,21 +84,18 @@ class WebFrameTestClient : public blink::WebFrameClient {
                    const blink::WebURLError& error,
                    blink::WebHistoryCommitType commit_type) override;
   void didFinishLoad(blink::WebLocalFrame* frame) override;
+  void didNavigateWithinPage(blink::WebLocalFrame* frame,
+                             const blink::WebHistoryItem& history_item,
+                             blink::WebHistoryCommitType commit_type,
+                             bool contentInitiated) override;
+  void didStartLoading(bool to_different_document) override;
   void didStopLoading() override;
   void didDetectXSS(const blink::WebURL& insecure_url,
                     bool did_block_entire_page) override;
   void didDispatchPingLoader(const blink::WebURL& url) override;
   void willSendRequest(blink::WebLocalFrame* frame,
-                       unsigned identifier,
-                       blink::WebURLRequest& request,
-                       const blink::WebURLResponse& redirect_response) override;
-  void didReceiveResponse(unsigned identifier,
-                          const blink::WebURLResponse& response) override;
-  void didChangeResourcePriority(unsigned identifier,
-                                 const blink::WebURLRequest::Priority& priority,
-                                 int intra_priority_value) override;
-  void didFinishResourceLoad(blink::WebLocalFrame* frame,
-                             unsigned identifier) override;
+                       blink::WebURLRequest& request) override;
+  void didReceiveResponse(const blink::WebURLResponse& response) override;
   blink::WebNavigationPolicy decidePolicyForNavigation(
       const blink::WebFrameClient::NavigationPolicyInfo& info) override;
   void checkIfAudioSinkExistsAndIsAuthorized(
@@ -113,13 +110,8 @@ class WebFrameTestClient : public blink::WebFrameClient {
   // Borrowed pointers to other parts of Layout Tests state.
   TestRunner* test_runner_;
   WebTestDelegate* delegate_;
-  WebTestProxyBase* web_test_proxy_base_;
+  WebViewTestProxyBase* web_view_test_proxy_base_;
   WebFrameTestProxyBase* web_frame_test_proxy_base_;
-
-  // Map from request identifier into resource url description.  The map is used
-  // to track resource requests spanning willSendRequest, didReceiveResponse,
-  // didChangeResourcePriority, didFinishResourceLoad.
-  std::map<unsigned, std::string> resource_identifier_map_;
 
   DISALLOW_COPY_AND_ASSIGN(WebFrameTestClient);
 };

@@ -36,6 +36,7 @@ static_library("renderer") {
     "//content/public/renderer",
     "//google_apis",
     "//ipc",
+    "//mojo/common:common_base",
     "//net",
     "//services/shell/public/cpp",
     "//skia",
@@ -48,7 +49,7 @@ static_library("renderer") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "test_password_autofill_agent.cc",

@@ -11,7 +11,7 @@ Replaces: @@REPLACES@@
 Conflicts: @@CONFLICTS@@
 Pre-Depends: @@PREDEPENDS@@
 Depends: @@DEPENDS@@
-Recommends: pepperflashplugin-nonfree, chromium-codecs-ffmpeg-extra
+Recommends: adobe-flashplugin, chromium-codecs-ffmpeg-extra
 Architecture: @@ARCHITECTURE@@
 Homepage: https://vivaldi.com
 Description: @@SHORTDESC@@

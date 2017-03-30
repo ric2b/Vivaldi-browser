@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_pref_util.h"
 #include "ash/display/display_util.h"
@@ -26,6 +25,7 @@
 #include "components/user_manager/user_manager.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_layout_store.h"
 #include "ui/gfx/geometry/insets.h"
 #include "url/url_canon.h"
 #include "url/url_util.h"
@@ -111,7 +111,8 @@ bool UserCanSaveDisplayPreference() {
 
 void LoadDisplayLayouts() {
   PrefService* local_state = g_browser_process->local_state();
-  ash::DisplayLayoutStore* layout_store = GetDisplayManager()->layout_store();
+  display::DisplayLayoutStore* layout_store =
+      GetDisplayManager()->layout_store();
 
   const base::DictionaryValue* layouts = local_state->GetDictionary(
       prefs::kSecondaryDisplays);
@@ -266,15 +267,14 @@ void StoreCurrentDisplayProperties() {
     property_value->SetInteger(
         "ui-scale", static_cast<int>(info.configured_ui_scale() * 1000));
 
-    ash::DisplayMode mode;
-    if (!display.IsInternal() &&
-        display_manager->GetSelectedModeForDisplayId(id, &mode) &&
-        !mode.native) {
-      property_value->SetInteger("width", mode.size.width());
-      property_value->SetInteger("height", mode.size.height());
+    scoped_refptr<ash::ManagedDisplayMode> mode =
+        display_manager->GetSelectedModeForDisplayId(id);
+    if (!display.IsInternal() && mode && !mode->native()) {
+      property_value->SetInteger("width", mode->size().width());
+      property_value->SetInteger("height", mode->size().height());
       property_value->SetInteger(
           "device-scale-factor",
-          static_cast<int>(mode.device_scale_factor * 1000));
+          static_cast<int>(mode->device_scale_factor() * 1000));
     }
     if (!info.overscan_insets_in_dip().IsEmpty())
       InsetsToValue(info.overscan_insets_in_dip(), property_value.get());

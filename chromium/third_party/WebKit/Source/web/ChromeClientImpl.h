@@ -55,8 +55,8 @@ public:
 
     // ChromeClient methods:
     void chromeDestroyed() override;
-    void setWindowRect(const IntRect&) override;
-    IntRect windowRect() override;
+    void setWindowRect(const IntRect&, LocalFrame&) override;
+    IntRect rootWindowRect() override;
     IntRect pageRect() override;
     void focus() override;
     bool canTakeFocus(WebFocusType) override;
@@ -117,7 +117,7 @@ public:
     DateTimeChooser* openDateTimeChooser(DateTimeChooserClient*, const DateTimeChooserParameters&) override;
     void openFileChooser(LocalFrame*, PassRefPtr<FileChooser>) override;
     void enumerateChosenDirectory(FileChooser*) override;
-    void setCursor(const Cursor&, LocalFrame* localRoot) override;
+    void setCursor(const Cursor&, LocalFrame*) override;
     Cursor lastSetCursorForTesting() const override;
     void setEventListenerProperties(WebEventListenerClass, WebEventListenerProperties) override;
     WebEventListenerProperties eventListenerProperties(WebEventListenerClass) const override;
@@ -130,21 +130,21 @@ public:
 
     void didPaint(const PaintArtifact&) override;
 
-    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame* localRoot) override;
-    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame* localRoot) override;
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame*) override;
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*, LocalFrame*) override;
 
     void enterFullScreenForElement(Element*) override;
     void exitFullScreenForElement(Element*) override;
 
-    void clearCompositedSelection() override;
-    void updateCompositedSelection(const CompositedSelection&) override;
+    void clearCompositedSelection(LocalFrame*) override;
+    void updateCompositedSelection(LocalFrame*, const CompositedSelection&) override;
 
     // ChromeClient methods:
     void postAccessibilityNotification(AXObject*, AXObjectCache::AXNotification) override;
     String acceptLanguages() override;
 
     // ChromeClientImpl:
-    void setCursorForPlugin(const WebCursorInfo&, LocalFrame* localRoot);
+    void setCursorForPlugin(const WebCursorInfo&, LocalFrame*);
     void setNewWindowNavigationPolicy(WebNavigationPolicy);
     void setCursorOverridden(bool);
 
@@ -160,7 +160,7 @@ public:
     void requestPointerUnlock(LocalFrame*) override;
 
     // AutofillClient pass throughs:
-    void didAssociateFormControls(const HeapVector<Member<Element>>&, LocalFrame*) override;
+    void didAssociateFormControlsAfterLoad(LocalFrame*) override;
     void handleKeyboardEventOnTextField(HTMLInputElement&, KeyboardEvent&) override;
     void didChangeValueInTextField(HTMLFormControlElement&) override;
     void didEndEditingOnTextField(HTMLInputElement&) override;
@@ -190,6 +190,8 @@ public:
 
     void notifyPopupOpeningObservers() const;
 
+    void installSupplements(LocalFrame&) override;
+
 private:
     explicit ChromeClientImpl(WebViewImpl*);
 
@@ -197,7 +199,7 @@ private:
     void registerPopupOpeningObserver(PopupOpeningObserver*) override;
     void unregisterPopupOpeningObserver(PopupOpeningObserver*) override;
 
-    void setCursor(const WebCursorInfo&, LocalFrame* localRoot);
+    void setCursor(const WebCursorInfo&, LocalFrame*);
 
     WebViewImpl* m_webView; // Weak pointer.
     WindowFeatures m_windowFeatures;

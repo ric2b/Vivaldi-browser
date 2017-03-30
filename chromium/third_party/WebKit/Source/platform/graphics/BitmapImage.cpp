@@ -118,6 +118,11 @@ void BitmapImage::destroyDecodedData()
     notifyMemoryChanged();
 }
 
+PassRefPtr<SharedBuffer> BitmapImage::data()
+{
+    return m_source.data();
+}
+
 void BitmapImage::notifyMemoryChanged()
 {
     if (getImageObserver())
@@ -184,7 +189,24 @@ bool BitmapImage::getHotSpot(IntPoint& hotSpot) const
     return m_source.getHotSpot(hotSpot);
 }
 
-bool BitmapImage::dataChanged(bool allDataReceived)
+Image::SizeAvailability BitmapImage::setData(PassRefPtr<SharedBuffer> data, bool allDataReceived)
+{
+    if (!data.get())
+        return SizeAvailable;
+
+    int length = data->size();
+    if (!length)
+        return SizeAvailable;
+
+    // If ImageSource::setData() fails, we know that this is a decode error.
+    // Report size available so that it gets registered as such in ImageResource.
+    if (!m_source.setData(data, allDataReceived))
+        return SizeAvailable;
+
+    return dataChanged(allDataReceived);
+}
+
+Image::SizeAvailability BitmapImage::dataChanged(bool allDataReceived)
 {
     TRACE_EVENT0("blink", "BitmapImage::dataChanged");
 
@@ -218,11 +240,9 @@ bool BitmapImage::dataChanged(bool allDataReceived)
 
     // Feed all the data we've seen so far to the image decoder.
     m_allDataReceived = allDataReceived;
-    ASSERT(data());
-    m_source.setData(*data(), allDataReceived);
 
     m_haveFrameCount = false;
-    return isSizeAvailable();
+    return isSizeAvailable() ? SizeAvailable : SizeUnavailable;
 }
 
 bool BitmapImage::hasColorProfile() const
@@ -364,10 +384,17 @@ bool BitmapImage::frameHasAlphaAtIndex(size_t index)
     if (m_frames.size() <= index)
         return true;
 
-    if (m_frames[index].m_haveMetadata)
-        return m_frames[index].m_hasAlpha;
+    if (m_frames[index].m_haveMetadata && !m_frames[index].m_hasAlpha)
+        return false;
 
-    return m_source.frameHasAlphaAtIndex(index);
+    // m_hasAlpha may change after m_haveMetadata is set to true, so always ask
+    // ImageSource for the value if the cached value is the default value.
+    bool hasAlpha = m_source.frameHasAlphaAtIndex(index);
+
+    if (m_frames[index].m_haveMetadata)
+        m_frames[index].m_hasAlpha = hasAlpha;
+
+    return hasAlpha;
 }
 
 bool BitmapImage::currentFrameKnownToBeOpaque(MetadataMode metadataMode)
@@ -493,9 +520,11 @@ void BitmapImage::startAnimation(CatchUpAnimation catchUpIfNecessary)
             if (time < frameAfterNextStartTime)
                 break;
 
-            // Yes; skip over it without notifying our observers.
-            if (!internalAdvanceAnimation(true))
+            // Skip the next frame by advancing the animation forward one frame.
+            if (!internalAdvanceAnimation(SkipFramesToCatchUp)) {
+                DCHECK(m_animationFinished);
                 return;
+            }
             m_desiredFrameStartTime = frameAfterNextStartTime;
             nextFrame = frameAfterNext;
         }
@@ -544,56 +573,72 @@ void BitmapImage::advanceTime(double deltaTimeInSeconds)
         m_desiredFrameStartTime = monotonicallyIncreasingTime() - deltaTimeInSeconds;
 }
 
-void BitmapImage::advanceAnimation(Timer<BitmapImage>*)
+void BitmapImage::advanceAnimation(TimerBase*)
 {
-    internalAdvanceAnimation(false);
+    internalAdvanceAnimation();
     // At this point the image region has been marked dirty, and if it's
     // onscreen, we'll soon make a call to draw(), which will call
     // startAnimation() again to keep the animation moving.
 }
 
-void BitmapImage::advanceAnimationWithoutCatchUp(Timer<BitmapImage>*)
+void BitmapImage::advanceAnimationWithoutCatchUp(TimerBase*)
 {
-    if (internalAdvanceAnimation(false))
+    if (internalAdvanceAnimation())
         startAnimation(DoNotCatchUp);
 }
 
-bool BitmapImage::internalAdvanceAnimation(bool skippingFrames)
+bool BitmapImage::internalAdvanceAnimation(AnimationAdvancement advancement)
 {
     // Stop the animation.
     stopAnimation();
 
     // See if anyone is still paying attention to this animation.  If not, we don't
     // advance and will remain suspended at the current frame until the animation is resumed.
-    if (!skippingFrames && getImageObserver()->shouldPauseAnimation(this))
+    if (advancement != SkipFramesToCatchUp && getImageObserver()->shouldPauseAnimation(this))
         return false;
 
-    ++m_currentFrame;
-    bool advancedAnimation = true;
-    if (m_currentFrame >= frameCount()) {
-        ++m_repetitionsComplete;
+    if (m_currentFrame + 1 < frameCount()) {
+        m_currentFrame++;
+    } else {
+        m_repetitionsComplete++;
 
-        // Get the repetition count again.  If we weren't able to get a
+        // Get the repetition count again. If we weren't able to get a
         // repetition count before, we should have decoded the whole image by
         // now, so it should now be available.
-        // Note that we don't need to special-case cAnimationLoopOnce here
-        // because it is 0 (see comments on its declaration in ImageAnimation.h).
+        // We don't need to special-case cAnimationLoopOnce here because it is
+        // 0 (see comments on its declaration in ImageAnimation.h).
         if ((repetitionCount(true) != cAnimationLoopInfinite && m_repetitionsComplete > m_repetitionCount)
-            || (m_animationPolicy == ImageAnimationPolicyAnimateOnce && m_repetitionsComplete > 0)) {
+            || m_animationPolicy == ImageAnimationPolicyAnimateOnce) {
             m_animationFinished = true;
             m_desiredFrameStartTime = 0;
-            --m_currentFrame;
-            advancedAnimation = false;
-        } else
-            m_currentFrame = 0;
+
+            // We skipped to the last frame and cannot advance further. The
+            // observer will not receive animationAdvanced notifications while
+            // skipping but we still need to notify the observer to draw the
+            // last frame. Skipping frames occurs while painting so we do not
+            // synchronously notify the observer which could cause a layout.
+            if (advancement == SkipFramesToCatchUp) {
+                m_frameTimer = wrapUnique(new Timer<BitmapImage>(this, &BitmapImage::notifyObserversOfAnimationAdvance));
+                m_frameTimer->startOneShot(0, BLINK_FROM_HERE);
+            }
+
+            return false;
+        }
+
+        // Loop the animation back to the first frame.
+        m_currentFrame = 0;
     }
 
-    // We need to draw this frame if we advanced to it while not skipping, or if
-    // while trying to skip frames we hit the last frame and thus had to stop.
-    if (skippingFrames != advancedAnimation)
+    // We need to draw this frame if we advanced to it while not skipping.
+    if (advancement != SkipFramesToCatchUp)
         getImageObserver()->animationAdvanced(this);
 
-    return advancedAnimation;
+    return true;
+}
+
+void BitmapImage::notifyObserversOfAnimationAdvance(TimerBase*)
+{
+    getImageObserver()->animationAdvanced(this);
 }
 
 } // namespace blink

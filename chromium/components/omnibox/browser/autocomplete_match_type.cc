@@ -29,6 +29,8 @@ std::string AutocompleteMatchType::ToString(AutocompleteMatchType::Type type) {
     "search-calculator-answer",
     "url-from-clipboard",
     "voice-suggest",
+    "physical-web",
+    "physical-web-overflow",
     "bookmark-nick",
     "bookmark-description",
   };

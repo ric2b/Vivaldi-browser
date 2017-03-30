@@ -10,7 +10,9 @@ import("//build/config/ui.gni")
 import("//chrome/chrome_tests.gni")
 import("//chrome/common/features.gni")
 import("//chrome/test/base/js2gtest.gni")
+import("//components/os_crypt/features.gni")
 import("//testing/test.gni")
+import("//v8/gni/v8.gni")
 
 if (is_android) {
   import("//build/config/android/rules.gni")
@@ -109,7 +111,8 @@ static_library("test_support") {
     "//components/rappor:test_support",
     "//components/search_engines:test_support",
     "//components/signin/core/browser:test_support",
-    "//components/sync_driver:test_support",
+    "//components/sync",
+    "//components/sync:test_support_sync_driver",
     "//components/sync_sessions:test_support",
     "//components/syncable_prefs:test_support",
     "//components/toolbar:test_support",
@@ -122,7 +125,6 @@ static_library("test_support") {
     "//skia",
     "//sql",
     "//sql:test_support",
-    "//sync",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/zlib",
@@ -137,7 +139,6 @@ static_library("test_support") {
       "//chrome/utility",
       "//components/autofill/core/browser:test_support",
       "//components/captive_portal:test_support",
-      "//components/chooser_controller:test_support",
       "//components/gcm_driver/crypto:test_support",
       "//components/guest_view/browser:test_support",
       "//components/infobars/core",
@@ -376,6 +377,10 @@ if (!is_android) {
       "//third_party/zlib/google/test/data/",
       "//tools/metrics/histograms/histograms.xml",
       "$root_out_dir/pyproto/google/",
+      "$root_out_dir/test_case.html",
+      "$root_out_dir/test_case.html.mock-http-headers",
+      "$root_out_dir/test_page.css",
+      "$root_out_dir/test_page.css.mock-http-headers",
       "$root_out_dir/ui_test.pak",
     ]
     if (is_linux || is_win) {
@@ -408,8 +413,10 @@ if (!is_android) {
       "//chrome/browser/devtools",
       "//chrome/renderer",
       "//components/resources",
+      "//components/sync",
+      "//components/sync:test_support_sync_api",
       "//content/app/resources",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//crypto:platform",
       "//crypto:test_support",
       "//google_apis:test_support",
@@ -417,8 +424,6 @@ if (!is_android) {
       "//net:net_resources",
       "//net:test_support",
       "//skia",
-      "//sync",
-      "//sync:test_support_sync_api",
       "//testing/gmock",
       "//testing/gtest",
       "//third_party/hunspell",
@@ -478,10 +483,10 @@ if (!is_android) {
           "../../ui/views/widget/desktop_aura/x11_topmost_window_finder_interactive_uitest.cc",
         ]
       }
-      if (use_aura) {
-        # TODO(ekaramad): These tests are activated for aura only. They should
-        # be moved to 'interactive_ui_tests' sources for all platforms once bug
-        # 578168 is fixed.
+      if (use_aura || is_mac) {
+        # TODO(ekaramad): These tests are activated for aura and mac only. They
+        # should be moved to 'interactive_ui_tests' sources for all platforms
+        # once https://crbug.com/578168 is fixed.
         sources += [ "//chrome/browser/renderer_host/site_per_process_text_input_browsertest.cc" ]
         deps += [ "//ui/touch_selection" ]
       }
@@ -518,9 +523,12 @@ if (!is_android) {
       if (enable_nacl) {
         data_deps += [
           "//components/nacl/loader:nacl_helper",
-          "//components/nacl/loader:helper_nonsfi",
           "//ppapi/native_client:irt",
         ]
+
+        if (enable_nacl_nonsfi) {
+          data_deps += [ "//components/nacl/loader:helper_nonsfi" ]
+        }
       }
 
       if (is_chrome_branded) {
@@ -529,28 +537,6 @@ if (!is_android) {
           "../browser/ui/views/bookmarks/bookmark_bar_view_test.cc",
         ]
       }
-    } else {
-      # ChromeOS doesn't use panels, everybody else does.
-      sources += rebase_path(
-              chrome_tests_gypi_values.chrome_interactive_ui_test_panels_sources,
-              ".",
-              "//chrome")
-
-      # TODO(tapted): Include on mac when views panels are ported.
-      if (toolkit_views && !is_mac) {
-        sources += rebase_path(
-                chrome_tests_gypi_values.chrome_interactive_ui_test_panels_views_sources,
-                ".",
-                "//chrome")
-      }
-    }
-
-    if (!is_linux) {
-      # Non-Linux platforms (Linux includes ChromeOS here).
-      sources += rebase_path(
-              chrome_tests_gypi_values.chrome_interactive_ui_test_non_linux_and_chromeos_sources,
-              ".",
-              "//chrome")
     }
 
     if (is_win) {
@@ -663,7 +649,7 @@ if (!is_android) {
   }
 
   if (enable_app_list && use_ash) {
-    source_set("test_support_applist_ash") {
+    static_library("test_support_applist_ash") {
       defines = []
       testonly = true
 
@@ -679,7 +665,7 @@ if (!is_android) {
     }
   }
 
-  source_set("sync_integration_test_support") {
+  static_library("sync_integration_test_support") {
     testonly = true
     sources = rebase_path(
             chrome_tests_gypi_values.test_support_sync_integration_sources,
@@ -693,12 +679,12 @@ if (!is_android) {
       "//base",
       "//components/invalidation/impl",
       "//components/invalidation/impl:test_support",
-      "//content/test:browsertest_base",
+      "//components/sync",
+      "//components/sync:test_support_sync_fake_server",
+      "//components/sync:test_support_sync_testserver",
+      "//content/test:test_support",
       "//net",
       "//skia",
-      "//sync",
-      "//sync:test_support_sync_fake_server",
-      "//sync:test_support_sync_testserver",
     ]
 
     if (is_mac) {
@@ -867,26 +853,182 @@ if (!is_android) {
       ":browser_tests",
     ]
   }
+}
 
-  test("browser_tests") {
-    sources = [
-      "base/browser_tests_main.cc",
+static_library("browser_tests_runner") {
+  testonly = true
+  sources = [
+    "base/browser_tests_main.cc",
+  ]
+
+  deps = [
+    ":test_support",
+  ]
+
+  if (use_aura) {
+    sources += [
+      "base/mash_browser_tests_main.cc",
+      "base/mash_browser_tests_main.h",
+      "base/mojo_test_connector.cc",
+      "base/mojo_test_connector.h",
     ]
-    sources +=
-        rebase_path(chrome_tests_gypi_values.chrome_browser_tests_sources,
-                    ".",
-                    "//chrome")
+
+    deps += [
+      "//services/shell/background:lib",
+      "//services/shell/background/tests:test_support",
+    ]
+
+    data_deps = [
+      "//chrome/app:mojo_manifests",
+      "//mash/session",
+    ]
+  }
+}
+
+test("browser_tests") {
+  sources = rebase_path(chrome_tests_gypi_values.chrome_browser_tests_sources,
+                        ".",
+                        "//chrome")
+
+  configs += [
+    "//build/config:precompiled_headers",
+    "//third_party/WebKit/public:debug_devtools",
+  ]
+
+  deps = [
+    ":browser_tests_runner",
+    ":test_support",
+    "//base",
+    "//components/sync:test_support_sync_api",
+  ]
+
+  data_deps = []
+
+  data = []
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  if (is_win) {
+    data += [ "$root_out_dir/chrome_200_percent.pak" ]
+  }
+  if (is_chromeos) {
+    data += [
+      # TODO(GYP): figure out which of these things are
+      # actually needed and also which should be pulled in via
+      # data or data_deps and through which dependencies.
+      "//chrome/browser/chromeos/login/test/https_forwarder.py",
+      "//chrome/browser/resources/chromeos/wallpaper_manager/",
+      "//chromeos/test/data/",
+      "//components/chrome_apps/webstore_widget/cws_widget/",
+      "//ui/file_manager/file_manager/",
+      "//ui/file_manager/gallery/",
+      "//ui/file_manager/image_loader/",
+      "//ui/file_manager/integration_tests/",
+      "//third_party/analytics/",
+      "//third_party/polymer/v1_0/components-chromium/polymer/",
+      "$root_out_dir/chromevox_test_data/",
+      "$root_out_dir/content_shell.pak",
+      "$root_out_dir/locales/",
+      "$root_out_dir/resources/chromeos/",
+    ]
+
+    data_deps += [ "//ui/keyboard:resources" ]
+
+    if (enable_nacl) {
+      data_deps += [
+        "//components/nacl/loader:nacl_helper",
+        "//ppapi/native_client:irt",
+      ]
+    }
+  }
+
+  # TODO(jbudorick): In progress. See crbug.com/611756
+  if (is_android) {
+    deps += [
+      "//chrome/android:chrome_java",
+      "//v8:v8_external_startup_data_assets",
+    ]
+
+    enable_multidex = true
+  } else {
     sources += rebase_path(
-            chrome_tests_gypi_values.chrome_browser_extensions_test_support_sources,
+            chrome_tests_gypi_values.chrome_browser_tests_desktop_only_sources,
             ".",
             "//chrome")
 
-    configs += [
-      "//build/config:precompiled_headers",
-      "//third_party/WebKit/public:debug_devtools",
+    deps += [
+      ":browser_tests_js_webui",
+      ":sync_integration_test_support",
+      ":test_support_ui",
+      "//base:i18n",
+      "//base/test:test_support",
+      "//chrome:browser_tests_pak",
+      "//chrome:packed_extra_resources",
+      "//chrome:packed_resources",
+      "//chrome:resources",
+      "//chrome:strings",
+      "//chrome/browser",
+      "//chrome/browser/resources:extension_resource_demo",
+      "//chrome/renderer",
+      "//components/autofill/content/browser:risk_proto",
+      "//components/autofill/content/renderer:test_support",
+      "//components/captive_portal:test_support",
+      "//components/dom_distiller/content/browser",
+      "//components/dom_distiller/content/renderer",
+      "//components/dom_distiller/core:test_support",
+      "//components/guest_view/browser:test_support",
+      "//components/policy:chrome_settings_proto",
+      "//components/resources",
+      "//components/safe_browsing_db:test_database_manager",
+      "//components/strings",
+      "//components/sync",
+      "//components/translate/core/common",
+      "//content/public/common:features",
+      "//content/test:test_support",
+      "//crypto:platform",
+      "//crypto:test_support",
+      "//device/bluetooth:mocks",
+      "//device/serial:test_support",
+      "//device/usb:test_support",
+      "//google_apis:test_support",
+      "//media",
+      "//media/base:test_support",
+      "//media/cast:test_support",
+      "//mojo/common:common_base",
+      "//net",
+      "//net:test_support",
+      "//sdch",
+      "//services/shell/public/cpp",
+      "//skia",
+      "//testing/gmock",
+      "//testing/gtest",
+      "//testing/perf",
+      "//third_party/cacheinvalidation",
+      "//third_party/icu",
+      "//third_party/leveldatabase",
+      "//third_party/libjingle",
+      "//third_party/webrtc/modules/desktop_capture",
+      "//third_party/widevine/cdm:version_h",
+      "//ui/accessibility:test_support",
+      "//ui/base:test_support",
+      "//ui/compositor:test_support",
+      "//ui/resources",
+      "//ui/web_dialogs:test_support",
+      "//v8",
     ]
 
-    data = [
+    # Runtime dependencies
+    data_deps += [
+      "//chrome",
+      "//ppapi:ppapi_tests",
+      "//ppapi:power_saver_test_plugin",
+      "//remoting/webapp:browser_test_resources",
+      "//remoting/webapp:unit_tests",
+      "//third_party/mesa:osmesa",
+      "//third_party/widevine/cdm:widevine_test_license_server",
+    ]
+
+    data += [
       "data/",
       "//chrome/browser/policy/test/asn1der.py",
       "//chrome/browser/policy/test/policy_testserver.py",
@@ -922,141 +1064,18 @@ if (!is_android) {
       "$root_out_dir/test_page.css.mock-http-headers",
       "$root_out_dir/test_url_loader_data/",
     ]
-    if (is_win) {
-      data += [ "$root_out_dir/chrome_200_percent.pak" ]
-    }
-    if (is_mac) {
-      data += [
-        "$root_out_dir/chrome_material_100_percent.pak",
-        "$root_out_dir/chrome_material_200_percent.pak",
-      ]
-    }
-    if (is_chromeos) {
-      data += [
-        # TODO(GYP): figure out which of these things are
-        # actually needed and also which should be pulled in via
-        # data or data_deps and through which dependencies.
-        "//chrome/browser/chromeos/login/test/https_forwarder.py",
-        "//chrome/browser/resources/chromeos/wallpaper_manager/",
-        "//chromeos/test/data/",
-        "//components/chrome_apps/webstore_widget/cws_widget/",
-        "//ui/file_manager/file_manager/",
-        "//ui/file_manager/gallery/",
-        "//ui/file_manager/image_loader/",
-        "//ui/file_manager/integration_tests/",
-        "//third_party/analytics/",
-        "//third_party/polymer/v1_0/components-chromium/polymer/",
-        "$root_out_dir/chromevox_test_data/",
-        "$root_out_dir/content_shell.pak",
-        "$root_out_dir/locales/",
-        "$root_out_dir/resources/chromeos/",
-      ]
-
-      data_deps = [
-        "//ui/keyboard:resources",
-      ]
-
-      if (enable_nacl) {
-        data_deps += [
-          "//components/nacl/loader:nacl_helper",
-          "//ppapi/native_client:irt",
-        ]
-      }
-    } else {
-      data_deps = []
-    }
-
-    deps = [
-      ":browser_tests_js_webui",
-      ":sync_integration_test_support",
-      ":test_support",
-      ":test_support_ui",
-      "//base",
-      "//base:i18n",
-      "//base/test:test_support",
-      "//chrome:browser_tests_pak",
-      "//chrome:packed_extra_resources",
-      "//chrome:packed_resources",
-      "//chrome:resources",
-      "//chrome:strings",
-      "//chrome/browser",
-      "//chrome/browser/resources:extension_resource_demo",
-      "//chrome/common/extensions/api",
-      "//chrome/renderer",
-      "//components/autofill/content/browser:risk_proto",
-      "//components/autofill/content/renderer:test_support",
-      "//components/captive_portal:test_support",
-      "//components/dom_distiller/content/browser",
-      "//components/dom_distiller/content/renderer",
-      "//components/dom_distiller/core:test_support",
-      "//components/guest_view/browser:test_support",
-      "//components/resources",
-      "//components/safe_browsing_db:test_database_manager",
-      "//components/strings",
-      "//components/translate/core/common",
-      "//content/public/common:features",
-      "//content/test:browsertest_base",
-      "//crypto:platform",
-      "//crypto:test_support",
-      "//device/bluetooth:mocks",
-      "//device/serial:test_support",
-      "//device/usb:test_support",
-      "//extensions/common/api",
-      "//google_apis:test_support",
-      "//media",
-      "//media/base:test_support",
-      "//media/cast:test_support",
-      "//net",
-      "//net:test_support",
-      "//sdch",
-      "//skia",
-      "//sync",
-      "//sync:test_support_sync_api",
-      "//testing/gmock",
-      "//testing/gtest",
-      "//testing/perf",
-      "//third_party/cacheinvalidation",
-      "//third_party/icu",
-      "//third_party/leveldatabase",
-      "//third_party/libjingle",
-      "//third_party/webrtc/modules/desktop_capture",
-      "//third_party/widevine/cdm:version_h",
-      "//ui/accessibility:test_support",
-      "//ui/base:test_support",
-      "//ui/compositor:test_support",
-      "//ui/resources",
-      "//ui/web_dialogs:test_support",
-      "//v8",
-    ]
-
-    # TODO(rockot) bug 505926: The chrome_extensions_browsertests target should
-    # be deleted and this line removed. See the chrome_extensions_browsertests
-    # target for more.
-    deps += [ "//extensions:chrome_extensions_browsertests" ]
-
-    # Runtime dependencies
-    data_deps += [
-      "//chrome",
-      "//ppapi:ppapi_tests",
-      "//ppapi:power_saver_test_plugin",
-      "//remoting/webapp:browser_test_resources",
-      "//remoting/webapp:unit_tests",
-      "//third_party/mesa:osmesa",
-      "//third_party/widevine/cdm:widevine_test_license_server",
-    ]
 
     if (!is_mac) {
       data += [ "$root_out_dir/locales/" ]
       data_deps += [ "//chrome:packed_extra_resources" ]
     }
 
-    defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
     if (!enable_one_click_signin) {
       sources -= [ "../browser/ui/sync/one_click_signin_links_delegate_impl_browsertest.cc" ]
     }
     if (enable_nacl) {
       sources += [
+        "../browser/chrome_service_worker_browsertest.cc",
         "../browser/extensions/extension_nacl_browsertest.cc",
         "../browser/nacl_host/test/gdb_debug_stub_browsertest.cc",
         "nacl/nacl_browsertest.cc",
@@ -1098,12 +1117,31 @@ if (!is_android) {
             [ "//build/config/win:default_large_module_incremental_linking" ]
       }
       if (is_linux) {
-        data_deps += [
-          "//components/nacl/loader:nacl_helper",
-          "//components/nacl/loader:helper_nonsfi",
-        ]
+        data_deps += [ "//components/nacl/loader:nacl_helper" ]
+
+        if (enable_nacl_nonsfi) {
+          data_deps += [ "//components/nacl/loader:helper_nonsfi" ]
+        }
       }
     }
+
+    if (enable_extensions) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_extensions_test_support_sources,
+              ".",
+              "//chrome")
+
+      deps += [
+        "//chrome/common/extensions/api",
+
+        # TODO(rockot) bug 505926: The chrome_extensions_browsertests target
+        # should be deleted and this line removed. See the
+        # chrome_extensions_browsertests target for more.
+        "//extensions:chrome_extensions_browsertests",
+        "//extensions/common/api",
+      ]
+    }
+
     if (use_ash) {
       sources +=
           rebase_path(chrome_tests_gypi_values.chrome_browser_tests_ash_sources,
@@ -1124,17 +1162,17 @@ if (!is_android) {
               ".",
               "//chrome")
       deps += [ "//ui/views" ]
+      if (!is_chromeos && (!is_mac || mac_views_browser)) {
+        sources += rebase_path(
+                chrome_tests_gypi_values.chrome_browser_tests_views_non_cros_sources,
+                ".",
+                "//chrome")
+      }
       if (!is_mac) {
         sources += rebase_path(
                 chrome_tests_gypi_values.chrome_browser_tests_views_non_mac_sources,
                 ".",
                 "//chrome")
-        if (!is_chromeos) {
-          sources += rebase_path(
-                  chrome_tests_gypi_values.chrome_browser_tests_views_non_cros_or_mac_sources,
-                  ".",
-                  "//chrome")
-        }
       }
     }
 
@@ -1155,9 +1193,6 @@ if (!is_android) {
         # chromeos does not support profile list avatar menu
         "../browser/profiles/profile_list_desktop_browsertest.cc",
         "../browser/service_process/service_process_control_browsertest.cc",
-
-        # chromeos does not use cross-platform panels
-        "../browser/ui/panels/panel_extension_browsertest.cc",
 
         # inline login UI is disabled on chromeos
         "../browser/ui/webui/signin/inline_login_ui_browsertest.cc",
@@ -1236,12 +1271,12 @@ if (!is_android) {
     if (is_win) {
       deps += [
         "//chrome:other_version",
+        "//chrome/app:command_ids",
         "//third_party/wtl",
         "//ui/resources",
       ]
     } else {
       sources -= [
-        "../app/chrome_command_ids.h",
         "../app/chrome_dll_resource.h",
         "../app/chrome_version.rc.version",
         "../browser/media_galleries/fileapi/iapps_finder_impl_win_browsertest.cc",
@@ -1359,30 +1394,17 @@ if (!is_android) {
     if (!is_posix || is_chromeos) {
       sources -= [ "../common/time_format_browsertest.cc" ]
     }
-    if (is_android) {
-      sources -= [
-        "../browser/policy/cloud/component_cloud_policy_browsertest.cc",
-        "../browser/prefs/pref_hash_browsertest.cc",
-        "../renderer/spellchecker/spellcheck_provider_hunspell_unittest.cc",
-        "../renderer/spellchecker/spellcheck_unittest.cc",
-      ]
-    }
     if (is_chromeos) {
       sources += [
         "../browser/extensions/api/networking_private/networking_private_apitest.cc",
         "../browser/extensions/api/networking_private/networking_private_chromeos_apitest.cc",
       ]
     }
-    if (is_android || is_ios || is_chromeos) {
-      sources -= [ "../browser/profiles/profile_statistics_browsertest.cc" ]
-    }
-    if (!is_android && !is_ios) {
-      sources +=
-          [ "../browser/copresence/chrome_whispernet_client_browsertest.cc" ]
-      deps += [
-        "//components/copresence",
-        "//third_party/libaddressinput",
-      ]
+    if (is_mac || is_win || (is_linux && !is_chromeos)) {
+      sources += rebase_path(
+              chrome_tests_gypi_values.chrome_browser_tests_non_mobile_non_cros_sources,
+              ".",
+              "//chrome")
     }
     if (enable_app_list) {
       sources += rebase_path(
@@ -1458,8 +1480,6 @@ if (!is_android) {
         "../renderer/safe_browsing/phishing_classifier_delegate_browsertest.cc",
       ]
     }
-    if (is_android || is_ios) {
-    }
     if (enable_remoting) {
       sources += rebase_path(
               chrome_tests_gypi_values.chrome_browser_tests_remoting_sources,
@@ -1472,25 +1492,6 @@ if (!is_android) {
     }
 
     if (use_aura) {
-      sources += [
-        "base/mash_browser_tests_main.cc",
-        "base/mash_browser_tests_main.h",
-        "base/mojo_test_connector.cc",
-        "base/mojo_test_connector.h",
-      ]
-
-      deps += [
-        "//services/shell/background:lib",
-        "//services/shell/background/tests:test_support",
-      ]
-
-      data_deps += [
-        "//chrome/app:mojo_manifests",
-        "//mash/session",
-      ]
-
-      defines += [ "MOJO_SHELL_CLIENT" ]
-
       if (enable_wifi_display) {
         sources += rebase_path(
                 chrome_tests_gypi_values.chrome_browser_tests_display_source_apitest,
@@ -1499,7 +1500,9 @@ if (!is_android) {
       }
     }
   }
+}
 
+if (!is_android) {
   test("sync_integration_tests") {
     sources =
         rebase_path(chrome_tests_gypi_values.sync_integration_tests_sources,
@@ -1509,7 +1512,7 @@ if (!is_android) {
     data = [
       "//chrome/test/data/sync/",
       "//net/tools/testserver/",
-      "//sync/tools/testserver/",
+      "//components/sync/tools/testserver/",
       "//third_party/pyftpdlib/",
       "//third_party/pywebsocket/",
       "//third_party/tlslite/",
@@ -1528,6 +1531,7 @@ if (!is_android) {
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
 
     deps = [
+      ":browser_tests_runner",
       ":sync_integration_test_support",
       ":test_support",
       ":test_support_ui",
@@ -1535,10 +1539,11 @@ if (!is_android) {
       "//chrome:packed_resources",
       "//chrome:resources",
       "//chrome:strings",
+      "//chrome/app:command_ids",
       "//chrome/common",
       "//chrome/renderer",
+      "//components/sync",
       "//crypto:platform",
-      "//sync",
       "//testing/gmock",
       "//testing/gtest",
       "//third_party/WebKit/public:blink",
@@ -1616,8 +1621,9 @@ if (!is_android) {
     deps = [
       ":sync_integration_test_support",
       ":test_support_ui",
+      "//chrome/app:command_ids",
+      "//components/sync",
       "//crypto:platform",
-      "//sync",
       "//testing/gmock",
       "//testing/gtest",
     ]
@@ -1783,15 +1789,15 @@ test("unit_tests") {
     "//components/browser_sync/browser:test_support",
     "//components/content_settings/core/test:test_support",
     "//components/resources",
+    "//components/sync:test_support_sync_api",
+    "//components/sync:test_support_sync_core",
+    "//components/sync:test_support_sync_core_impl",
     "//content/public/app:both",
     "//content/test:test_support",
     "//crypto:platform",
     "//crypto:test_support",
     "//net",
     "//net:test_support",
-    "//sync:test_support_sync_api",
-    "//sync:test_support_sync_core",
-    "//sync:test_support_sync_internal_api",
     "//testing/gmock",
     "//testing/gtest",
 
@@ -1837,7 +1843,7 @@ test("unit_tests") {
       "//third_party/libjingle",
       "//third_party/libphonenumber",
       "//third_party/webrtc/modules/desktop_capture",
-      "//tools/json_schema_compiler/test",
+      "//tools/json_schema_compiler/test:schema_test",
       "//ui/gl",
       "//v8",
     ]
@@ -1905,22 +1911,12 @@ test("unit_tests") {
             ".",
             "//chrome")
   }
+
   if (enable_spellcheck) {
     sources += rebase_path(
             chrome_tests_unit_gypi_values.chrome_unit_tests_spellchecker_sources,
             ".",
             "//chrome")
-    if (is_mac && !is_ios) {
-      deps += [ "//third_party/hunspell" ]
-    }
-
-    if (is_android) {
-      sources -= [
-        "../renderer/spellchecker/spellcheck_multilingual_unittest.cc",
-        "../renderer/spellchecker/spellcheck_provider_hunspell_unittest.cc",
-        "../renderer/spellchecker/spellcheck_unittest.cc",
-      ]
-    }
   }
 
   if (enable_one_click_signin) {
@@ -1937,9 +1933,9 @@ test("unit_tests") {
             "//chrome")
     deps += [
       "//chrome/common/extensions/api",
-      "//components/audio_modem:test_support",
       "//extensions:extensions_resources",
       "//extensions/strings",
+      "//tools/json_schema_compiler/test:features_generation_test",
     ]
     if (enable_service_discovery) {
       sources += rebase_path(
@@ -1961,8 +1957,8 @@ test("unit_tests") {
                     "//chrome")
     deps += [
       "//ash:test_support",
+      "//ash/common/strings",
       "//ash/resources",
-      "//ash/strings",
     ]
 
     # We eventually want to compile both in Win Aura builds, see
@@ -1992,11 +1988,11 @@ test("unit_tests") {
       "//chrome/browser/ui/startup/default_browser_infobar_delegate_unittest.cc",
     ]
   }
+  if (use_gio) {
+    deps += [ "//build/linux/libgio" ]
+  }
   if (!is_chromeos && !use_ozone && is_linux) {
-    deps += [
-      "//build/linux/libgio",
-      "//chrome/browser/ui/libgtk2ui",
-    ]
+    deps += [ "//chrome/browser/ui/libgtk2ui" ]
   }
 
   if (enable_task_manager) {
@@ -2113,14 +2109,14 @@ test("unit_tests") {
   } else {
     sources -= [ "../browser/password_manager/password_store_x_unittest.cc" ]
   }
-  if (is_desktop_linux && current_cpu == "x64") {
+  if (use_gnome_keyring && current_cpu == "x64") {
     # Only add this test for 64 bit builds because otherwise we need the 32
     # bit library on 64 bit systems when running this test.
     sources +=
         [ "../browser/password_manager/native_backend_gnome_x_unittest.cc" ]
     configs += [
-      "//chrome/browser:gnome_keyring",
-      "//chrome/browser:gnome_keyring_direct",
+      "//components/os_crypt:gnome_keyring",
+      "//components/os_crypt:gnome_keyring_direct",
     ]
   }
   if (is_linux && !is_chromeos) {
@@ -2145,8 +2141,6 @@ test("unit_tests") {
       "../browser/ui/tests/ui_gfx_image_unittest.cc",
 
       # This tests Chrome's spellchecker which Mac doesn't use.
-      "../renderer/spellchecker/spellcheck_multilingual_unittest.cc",
-      "../renderer/spellchecker/spellcheck_provider_hunspell_unittest.cc",
       "../tools/convert_dict/convert_dict_unittest.cc",
     ]
 
@@ -2203,9 +2197,12 @@ test("unit_tests") {
     ]
   }
   if (is_win) {
-    # The PDB gets too large for incremental linking.
-    configs -= [ "//build/config/win:default_incremental_linking" ]
-    configs += [ "//build/config/win:no_incremental_linking" ]
+    if (!is_component_build) {
+      # The PDB gets too large for incremental linking.
+      configs -= [ "//build/config/win:default_incremental_linking" ]
+      configs +=
+          [ "//build/config/win:default_large_module_incremental_linking" ]
+    }
 
     sources +=
         rebase_path(chrome_tests_unit_gypi_values.chrome_unit_tests_win_sources,
@@ -2292,6 +2289,9 @@ test("unit_tests") {
             chrome_tests_unit_gypi_values.chrome_unit_tests_supervised_user_legacy_sources,
             ".",
             "//chrome")
+  }
+  if (enable_supervised_users && !is_android && !is_chromeos) {
+    sources += [ "../browser/ui/webui/signin/signin_supervised_user_import_handler_unittest.cc" ]
   }
   if (safe_browsing_mode == 1 && enable_extensions) {
     sources += [ "../browser/extensions/blacklist_unittest.cc" ]
@@ -2410,7 +2410,7 @@ if (!is_android && !is_ios && !is_chromecast) {
       "//chrome/renderer",
       "//components/about_handler",
       "//components/autofill/content/renderer:test_support",
-      "//content/test:browsertest_base",
+      "//content/test:test_support",
       "//media/cast:test_support",
       "//testing/gmock",
       "//testing/gtest",
@@ -2421,11 +2421,9 @@ if (!is_android && !is_ios && !is_chromecast) {
       configs -= [ "//build/config/win:default_incremental_linking" ]
       configs +=
           [ "//build/config/win:default_large_module_incremental_linking" ]
+      deps += [ "//chrome/app:command_ids" ]
     } else {
-      sources -= [
-        "../app/chrome_command_ids.h",
-        "../app/chrome_version.rc.version",
-      ]
+      sources -= [ "../app/chrome_version.rc.version" ]
     }
     if (!is_mac) {
       sources -= [ "perf/mach_ports_performancetest.cc" ]
@@ -2436,7 +2434,7 @@ if (!is_android && !is_ios && !is_chromecast) {
   }
 }
 
-source_set("test_support_unit") {
+static_library("test_support_unit") {
   testonly = true
   sources = [
     "../browser/sync/glue/session_sync_test_helper.cc",

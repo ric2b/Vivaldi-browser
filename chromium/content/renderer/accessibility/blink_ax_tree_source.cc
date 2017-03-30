@@ -19,6 +19,7 @@
 #include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/web_frame_utils.h"
+#include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -40,6 +41,7 @@ using base::UTF16ToUTF8;
 using blink::WebAXObject;
 using blink::WebDocument;
 using blink::WebElement;
+using blink::WebFloatRect;
 using blink::WebFrame;
 using blink::WebLocalFrame;
 using blink::WebNode;
@@ -150,7 +152,9 @@ bool BlinkAXTreeSource::GetTreeData(AXContentTreeData* tree_data) const {
 
   WebAXObject anchor_object, focus_object;
   int anchor_offset, focus_offset;
-  root.selection(anchor_object, anchor_offset, focus_object, focus_offset);
+  blink::WebAXTextAffinity anchor_affinity, focus_affinity;
+  root.selection(anchor_object, anchor_offset, anchor_affinity,
+                 focus_object, focus_offset, focus_affinity);
   if (!anchor_object.isNull() && !focus_object.isNull() &&
       anchor_offset >= 0 && focus_offset >= 0) {
     int32_t anchor_id = anchor_object.axID();
@@ -159,6 +163,8 @@ bool BlinkAXTreeSource::GetTreeData(AXContentTreeData* tree_data) const {
     tree_data->sel_anchor_offset = anchor_offset;
     tree_data->sel_focus_object_id = focus_id;
     tree_data->sel_focus_offset = focus_offset;
+    tree_data->sel_anchor_affinity = AXTextAffinityFromBlink(anchor_affinity);
+    tree_data->sel_focus_affinity = AXTextAffinityFromBlink(focus_affinity);
   }
 
   // Get the tree ID for this frame and the parent frame.
@@ -261,8 +267,18 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
                                       AXContentNodeData* dst) const {
   dst->role = AXRoleFromBlink(src.role());
   dst->state = AXStateFromBlink(src);
-  dst->location = src.boundingBoxRect();
   dst->id = src.axID();
+
+  WebAXObject offset_container;
+  WebFloatRect bounds_in_container;
+  SkMatrix44 container_transform;
+  src.getRelativeBounds(
+      offset_container, bounds_in_container, container_transform);
+  dst->location = bounds_in_container;
+  if (!container_transform.isIdentity())
+    dst->transform = base::WrapUnique(new gfx::Transform(container_transform));
+  if (!offset_container.isDetached())
+    dst->offset_container_id = offset_container.axID();
 
   blink::WebAXNameFrom nameFrom;
   blink::WebVector<blink::WebAXObject> nameObjects;
@@ -425,11 +441,11 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
   if (!src.url().isEmpty())
     dst->AddStringAttribute(ui::AX_ATTR_URL, src.url().string().utf8());
 
-  if (dst->role == ui::AX_ROLE_HEADING)
+  if (dst->role == ui::AX_ROLE_HEADING && src.headingLevel()) {
     dst->AddIntAttribute(ui::AX_ATTR_HIERARCHICAL_LEVEL, src.headingLevel());
-  else if ((dst->role == ui::AX_ROLE_TREE_ITEM ||
-            dst->role == ui::AX_ROLE_ROW) &&
-           src.hierarchicalLevel() > 0) {
+  } else if ((dst->role == ui::AX_ROLE_TREE_ITEM ||
+              dst->role == ui::AX_ROLE_ROW) &&
+             src.hierarchicalLevel()) {
     dst->AddIntAttribute(ui::AX_ATTR_HIERARCHICAL_LEVEL,
                          src.hierarchicalLevel());
   }
@@ -525,14 +541,12 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
           browser_plugin->browser_plugin_instance_id());
     }
 
-    // Iframe.
-    if (is_iframe) {
-      WebFrame* frame = WebFrame::fromFrameOwnerElement(element);
-      if (frame) {
-        dst->AddContentIntAttribute(
-            AX_CONTENT_ATTR_CHILD_ROUTING_ID,
-            GetRoutingIdForFrameOrProxy(frame));
-      }
+    // Frames and iframes.
+    WebFrame* frame = WebFrame::fromFrameOwnerElement(element);
+    if (frame) {
+      dst->AddContentIntAttribute(
+          AX_CONTENT_ATTR_CHILD_ROUTING_ID,
+          GetRoutingIdForFrameOrProxy(frame));
     }
   }
 
@@ -579,11 +593,8 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
                            src.minValueForRange());
   }
 
-  if (dst->role == ui::AX_ROLE_ROOT_WEB_AREA) {
+  if (dst->role == ui::AX_ROLE_ROOT_WEB_AREA)
     dst->AddStringAttribute(ui::AX_ATTR_HTML_TAG, "#document");
-    dst->transform.reset(
-        new gfx::Transform(src.transformFromLocalParentFrame()));
-  }
 
   if (dst->role == ui::AX_ROLE_TABLE) {
     int column_count = src.columnCount();

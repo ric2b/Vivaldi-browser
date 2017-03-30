@@ -70,11 +70,11 @@ class TestDisplayScheduler : public DisplayScheduler {
 
   void DisplayResized() override { display_resized_ = true; }
 
-  void SetNewRootSurface(SurfaceId root_surface_id) override {
+  void SetNewRootSurface(const SurfaceId& root_surface_id) override {
     has_new_root_surface = true;
   }
 
-  void SurfaceDamaged(SurfaceId surface_id) override {
+  void SurfaceDamaged(const SurfaceId& surface_id) override {
     damaged = true;
     needs_draw_ = true;
   }
@@ -97,9 +97,13 @@ class DisplayTest : public testing::Test {
  public:
   DisplayTest()
       : factory_(&manager_, &surface_factory_client_),
-        id_allocator_(kArbitrarySurfaceNamespace),
+        id_allocator_(kArbitraryClientId),
         task_runner_(new base::NullTaskRunner) {
-    id_allocator_.RegisterSurfaceIdNamespace(&manager_);
+    manager_.RegisterSurfaceClientId(id_allocator_.client_id());
+  }
+
+  ~DisplayTest() override {
+    manager_.InvalidateSurfaceClientId(id_allocator_.client_id());
   }
 
   void SetUpDisplay(const RendererSettings& settings,
@@ -123,15 +127,16 @@ class DisplayTest : public testing::Test {
     scheduler_ = scheduler.get();
 
     display_ = base::MakeUnique<Display>(
-        &manager_, &shared_bitmap_manager_,
-        nullptr /* gpu_memory_buffer_manager */, settings,
-        id_allocator_.id_namespace(), std::move(begin_frame_source),
-        std::move(output_surface), std::move(scheduler),
+        &shared_bitmap_manager_, nullptr /* gpu_memory_buffer_manager */,
+        settings, std::move(begin_frame_source), std::move(output_surface),
+        std::move(scheduler),
         base::MakeUnique<TextureMailboxDeleter>(task_runner_.get()));
+    display_->SetVisible(true);
   }
 
  protected:
-  void SubmitCompositorFrame(RenderPassList* pass_list, SurfaceId surface_id) {
+  void SubmitCompositorFrame(RenderPassList* pass_list,
+                             const SurfaceId& surface_id) {
     std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     pass_list->swap(frame_data->render_pass_list);
 
@@ -142,7 +147,7 @@ class DisplayTest : public testing::Test {
                                    SurfaceFactory::DrawCallback());
   }
 
-  static constexpr int kArbitrarySurfaceNamespace = 3;
+  static constexpr int kArbitraryClientId = 3;
 
   SurfaceManager manager_;
   FakeSurfaceFactoryClient surface_factory_client_;
@@ -160,6 +165,9 @@ class StubDisplayClient : public DisplayClient {
  public:
   void DisplayOutputSurfaceLost() override {}
   void DisplaySetMemoryPolicy(const ManagedMemoryPolicy& policy) override {}
+  void DisplayWillDrawAndSwap(bool will_draw_and_swap,
+                              const RenderPassList& render_passes) override {}
+  void DisplayDidDrawAndSwap() override {}
 };
 
 void CopyCallback(bool* called, std::unique_ptr<CopyOutputResult> result) {
@@ -174,7 +182,7 @@ TEST_F(DisplayTest, DisplayDamaged) {
   SetUpDisplay(settings, nullptr);
 
   StubDisplayClient client;
-  display_->Initialize(&client);
+  display_->Initialize(&client, &manager_, id_allocator_.client_id());
 
   SurfaceId surface_id(id_allocator_.GenerateId());
   EXPECT_FALSE(scheduler_->damaged);
@@ -437,7 +445,7 @@ TEST_F(DisplayTest, Finish) {
   SetUpDisplay(settings, std::move(context));
 
   StubDisplayClient client;
-  display_->Initialize(&client);
+  display_->Initialize(&client, &manager_, id_allocator_.client_id());
 
   display_->SetSurfaceId(surface_id, 1.f);
 

@@ -76,8 +76,8 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // has changed our activation.
   void HandleNativeWidgetActivationChanged(bool active);
 
-  void AddObserver(views::DesktopWindowTreeHostObserverX11* observer);
-  void RemoveObserver(views::DesktopWindowTreeHostObserverX11* observer);
+  void AddObserver(DesktopWindowTreeHostObserverX11* observer);
+  void RemoveObserver(DesktopWindowTreeHostObserverX11* observer);
 
   // Swaps the current handler for events in the non client view with |handler|.
   void SwapNonClientEventHandler(std::unique_ptr<ui::EventHandler> handler);
@@ -111,7 +111,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   gfx::Rect GetRestoredBounds() const override;
   std::string GetWorkspace() const override;
   gfx::Rect GetWorkAreaBoundsInScreen() const override;
-  void SetShape(SkRegion* native_region) override;
+  void SetShape(std::unique_ptr<SkRegion> native_region) override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;
@@ -124,6 +124,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   void SetAlwaysOnTop(bool always_on_top) override;
   bool IsAlwaysOnTop() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
+  bool IsVisibleOnAllWorkspaces() const override;
   bool SetWindowTitle(const base::string16& title) override;
   void ClearNativeFocus() override;
   Widget::MoveLoopResult RunMoveLoop(
@@ -184,6 +185,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
 
   // Called when |xwindow_|'s _NET_FRAME_EXTENTS property is updated.
   void OnFrameExtentsUpdated();
+
+  // Makes a round trip to the X server to get the enclosing workspace for this
+  // window.  Returns true iff |workspace_| was changed.
+  bool UpdateWorkspace();
 
   // Updates |xwindow_|'s minimum and maximum size.
   void UpdateMinAndMaxSize();
@@ -283,6 +288,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
 
   // |xwindow_|'s maximum size.
   gfx::Size max_size_in_pixels_;
+
+  // The workspace containing |xwindow_|.
+  std::string workspace_;
 
   // The window manager state bits.
   std::set< ::Atom> window_properties_;

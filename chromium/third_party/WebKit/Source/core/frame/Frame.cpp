@@ -78,17 +78,6 @@ void Frame::detach(FrameDetachType type)
     m_host = nullptr;
 }
 
-void Frame::detachChildren()
-{
-    typedef HeapVector<Member<Frame>> FrameVector;
-    FrameVector childrenToDetach;
-    childrenToDetach.reserveCapacity(tree().childCount());
-    for (Frame* child = tree().firstChild(); child; child = child->tree().nextSibling())
-        childrenToDetach.append(child);
-    for (const auto& child : childrenToDetach)
-        child->detach(FrameDetachType::Remove);
-}
-
 void Frame::disconnectOwnerElement()
 {
     if (m_owner) {
@@ -287,14 +276,6 @@ Settings* Frame::settings() const
     if (m_host)
         return &m_host->settings();
     return nullptr;
-}
-
-bool Frame::isCrossOrigin() const
-{
-    // Check to see if the frame can script into the top level document.
-    const SecurityOrigin* securityOrigin = securityContext()->getSecurityOrigin();
-    Frame* top = tree().top();
-    return top && !securityOrigin->canAccess(top->securityContext()->getSecurityOrigin());
 }
 
 void Frame::didChangeVisibilityState()

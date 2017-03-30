@@ -8,26 +8,70 @@ from model import Platforms
 from schema_util import CapitalizeFirstLetter
 from schema_util import JsFunctionNameToClassName
 
+import collections
+import copy
 import json
 import os
 import re
 
 
-def _RemoveDescriptions(node):
-  """Returns a copy of |schema| with "description" fields removed.
-  """
+def _RemoveKey(node, key, type_restriction):
   if isinstance(node, dict):
-    result = {}
-    for key, value in node.items():
-      # Some schemas actually have properties called "description", so only
-      # remove descriptions that have string values.
-      if key == 'description' and isinstance(value, basestring):
-        continue
-      result[key] = _RemoveDescriptions(value)
-    return result
-  if isinstance(node, list):
-    return [_RemoveDescriptions(v) for v in node]
-  return node
+    if key in node and isinstance(node[key], type_restriction):
+      del node[key]
+    for value in node.values():
+      _RemoveKey(value, key, type_restriction)
+  elif isinstance(node, list):
+    for value in node:
+      _RemoveKey(value, key, type_restriction)
+
+def _RemoveUnneededFields(schema):
+  """Returns a copy of |schema| with fields that aren't necessary at runtime
+  removed.
+  """
+  # Return a copy so that we don't pollute the global api object, which may be
+  # used elsewhere.
+  ret = copy.deepcopy(schema)
+  _RemoveKey(ret, "description", basestring)
+  _RemoveKey(ret, "compiler_options", dict)
+  _RemoveKey(ret, "nodoc", bool)
+  _RemoveKey(ret, "noinline_doc", bool)
+  return ret
+
+def _PrefixSchemaWithNamespace(schema):
+  """Modifies |schema| in place to prefix all types and references with a
+  namespace, if they aren't already qualified. That is, in the tabs API, this
+  will turn type Tab into tabs.Tab, but will leave the fully-qualified
+  windows.Window as-is.
+  """
+  assert isinstance(schema, dict), "Schema is unexpected type"
+  namespace = schema['namespace']
+  def prefix(obj, key, mandatory):
+    if not key in obj:
+      assert not mandatory, (
+             'Required key "%s" is not present in object.' % key)
+      return
+    assert type(obj[key]) in [str, unicode]
+    if obj[key].find('.') == -1:
+      obj[key] = '%s.%s' % (namespace, obj[key])
+
+  if 'types' in schema:
+    assert isinstance(schema['types'], list)
+    for t in schema['types']:
+      assert isinstance(t, dict), "Type entry is unexpected type"
+      prefix(t, 'id', True)
+      prefix(t, 'customBindings', False)
+
+  def prefix_refs(val):
+    if type(val) is list:
+      for sub_val in val:
+        prefix_refs(sub_val)
+    elif type(val) is dict or type(val) is collections.OrderedDict:
+      prefix(val, '$ref', False)
+      for key, sub_val in val.items():
+        prefix_refs(sub_val)
+  prefix_refs(schema)
+  return schema
 
 
 class CppBundleGenerator(object):
@@ -282,8 +326,8 @@ class _SchemasCCGenerator(object):
     c.Append('namespace {')
     for api in self._bundle._api_defs:
       namespace = self._bundle._model.namespaces[api.get('namespace')]
-      # JSON parsing code expects lists of schemas, so dump a singleton list.
-      json_content = json.dumps([_RemoveDescriptions(api)],
+      json_content = json.dumps(_PrefixSchemaWithNamespace(
+                                     _RemoveUnneededFields(api)),
                                 separators=(',', ':'))
       # Escape all double-quotes and backslashes. For this to output a valid
       # JSON C string, we need to escape \ and ". Note that some schemas are

@@ -1,3 +1,5 @@
+per-file chrome_features.cc=*
+per-file chrome_features.h=*
 per-file chrome_switches.cc=*
 per-file chrome_switches.h=*
 per-file pref_names.cc=*
@@ -12,6 +14,11 @@ per-file nacl_loader.sb=rsesek@chromium.org
 per-file *_messages*.h=set noparent
 per-file *_messages*.h=file://ipc/SECURITY_OWNERS
 
+# Changes to Mojo interfaces require a security review to avoid
+# introducing new sandbox escapes.
+per-file *.mojom=set noparent
+per-file *.mojom=file://ipc/SECURITY_OWNERS
+
 # Spellcheck files. Not using spellcheck* since it covers IPC messages too.
 per-file spellcheck_bdict_language.h=groby@chromium.org
 per-file spellcheck_bdict_language.h=rouslan@chromium.org
@@ -21,11 +28,6 @@ per-file spellcheck_marker.h=groby@chromium.org
 per-file spellcheck_marker.h=rouslan@chromium.org
 per-file spellcheck_result.h=groby@chromium.org
 per-file spellcheck_result.h=rouslan@chromium.org
-
-# Instant/Search files.
-per-file instant_types*=file://chrome/browser/search/OWNERS
-per-file search_types.*=file://chrome/browser/search/OWNERS
-per-file search_urls*=file://chrome/browser/search/OWNERS
 
 #Content settings
 per-file content_settings*=markusheintz@chromium.org
@@ -44,3 +46,7 @@ per-file crash_keys*=rsesek@chromium.org
 per-file trace_event_args_whitelist*=nduca@chromium.org
 per-file trace_event_args_whitelist*=dsinclair@chromium.org
 per-file trace_event_args_whitelist*=oysteine@chromium.org
+
+# IPC
+per-file *.mojom=set noparent
+per-file *.mojom=file://ipc/SECURITY_OWNERS

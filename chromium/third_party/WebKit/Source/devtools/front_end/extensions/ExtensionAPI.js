@@ -49,6 +49,7 @@ function defineCommonExtensionSymbols(apiPrivate)
         PreviousSearchResult: "previousSearchResult"
     };
 
+    /** @enum {string} */
     apiPrivate.Events = {
         AuditStarted: "audit-started-",
         ButtonClicked: "button-clicked-",
@@ -62,6 +63,7 @@ function defineCommonExtensionSymbols(apiPrivate)
         ViewHidden: "view-hidden-"
     };
 
+    /** @enum {string} */
     apiPrivate.Commands = {
         AddAuditCategory: "addAuditCategory",
         AddAuditResult: "addAuditResult",
@@ -83,6 +85,7 @@ function defineCommonExtensionSymbols(apiPrivate)
         SetOpenResourceHandler: "setOpenResourceHandler",
         SetResourceContent: "setResourceContent",
         SetSidebarContent: "setSidebarContent",
+        SetSidebarHeight: "setSidebarHeight",
         SetSidebarPage: "setSidebarPage",
         ShowPanel: "showPanel",
         StopAuditCategoryRun: "stopAuditCategoryRun",
@@ -389,20 +392,6 @@ function defineDeprecatedProperty(object, className, oldName, newName)
     object.__defineGetter__(oldName, getter);
 }
 
-function defineDeprecatedMethod(object, className, oldName)
-{
-    var warningGiven = false;
-    function noop()
-    {
-        if (warningGiven)
-            return;
-
-        console.warn(className + "." + oldName + " is deprecated, please don't use it. It is a no-op.");
-        warningGiven = true;
-    }
-    object[oldName] = noop;
-}
-
 function extractCallbackArgument(args)
 {
     var lastArgument = args[args.length - 1];
@@ -496,10 +485,14 @@ ExtensionPanelImpl.prototype = {
 function ExtensionSidebarPaneImpl(id)
 {
     ExtensionViewImpl.call(this, id);
-    defineDeprecatedMethod(this, "ExtensionSidebarPane", "setHeight");
 }
 
 ExtensionSidebarPaneImpl.prototype = {
+    setHeight: function(height)
+    {
+        extensionServer.sendRequest({ command: commands.SetSidebarHeight, id: this._id, height: height });
+    },
+
     setExpression: function(expression, rootTitle, evaluateOptions)
     {
         var request = {
@@ -863,7 +856,7 @@ function ExtensionServerClient()
     this._port.addEventListener("message", this._onMessage.bind(this), false);
     this._port.start();
 
-    window.parent.postMessage("registerExtension", [ channel.port2 ], "*");
+    window.parent.postMessage("registerExtension", "*", [ channel.port2 ]);
 }
 
 ExtensionServerClient.prototype = {
@@ -978,6 +971,7 @@ function platformExtensionAPI(coreAPI)
     chrome.devtools.inspectedWindow.__proto__ = coreAPI.inspectedWindow;
     chrome.devtools.network = coreAPI.network;
     chrome.devtools.panels = coreAPI.panels;
+    chrome.devtools.panels.themeName = themeName;
 
     // default to expose experimental APIs for now.
     if (extensionInfo.exposeExperimentalAPIs !== false) {
@@ -998,27 +992,30 @@ function platformExtensionAPI(coreAPI)
 /**
  * @param {!ExtensionDescriptor} extensionInfo
  * @param {string} inspectedTabId
+ * @param {string} themeName
  * @return {string}
  */
-function buildPlatformExtensionAPI(extensionInfo, inspectedTabId)
+function buildPlatformExtensionAPI(extensionInfo, inspectedTabId, themeName)
 {
     return "var extensionInfo = " + JSON.stringify(extensionInfo) + ";" +
        "var tabId = " + inspectedTabId + ";" +
+       "var themeName = '" + themeName + "';" +
        platformExtensionAPI.toString();
 }
 
 /**
  * @param {!ExtensionDescriptor} extensionInfo
  * @param {string} inspectedTabId
+ * @param {string} themeName
  * @return {string}
  */
-function buildExtensionAPIInjectedScript(extensionInfo, inspectedTabId)
+function buildExtensionAPIInjectedScript(extensionInfo, inspectedTabId, themeName)
 {
     return "(function(injectedScriptId){ " +
         "var extensionServer;" +
         defineCommonExtensionSymbols.toString() + ";" +
         injectedExtensionAPI.toString() + ";" +
-        buildPlatformExtensionAPI(extensionInfo, inspectedTabId) + ";" +
+        buildPlatformExtensionAPI(extensionInfo, inspectedTabId, themeName) + ";" +
         "platformExtensionAPI(injectedExtensionAPI(injectedScriptId));" +
         "return {};" +
         "})";

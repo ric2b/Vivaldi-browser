@@ -9,16 +9,15 @@
 
 #include "ash/common/ash_switches.h"
 #include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_layout_manager.h"
+#include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
-#include "ash/shell_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/wm/window_util.h"
@@ -115,11 +114,6 @@ class SimpleMenuDelegate : public ui::SimpleMenuModel::Delegate {
   bool IsCommandIdChecked(int command_id) const override { return false; }
 
   bool IsCommandIdEnabled(int command_id) const override { return true; }
-
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override {
-    return false;
-  }
 
   void ExecuteCommand(int command_id, int event_flags) override {}
 
@@ -377,7 +371,7 @@ TEST_F(ShellTest, ManagedWindowModeBasics) {
   // We start with the usual window containers.
   ExpectAllContainers();
   // Shelf is visible.
-  ShelfWidget* shelf_widget = Shelf::ForPrimaryDisplay()->shelf_widget();
+  ShelfWidget* shelf_widget = GetPrimaryShelf()->GetShelfWidgetForTesting();
   EXPECT_TRUE(shelf_widget->IsVisible());
   // Shelf is at bottom-left of screen.
   EXPECT_EQ(0, shelf_widget->GetWindowBoundsInScreen().x());
@@ -447,7 +441,7 @@ TEST_F(ShellTest, ToggleAutoHide) {
   window->Show();
   wm::ActivateWindow(window.get());
 
-  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  WmShelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
 

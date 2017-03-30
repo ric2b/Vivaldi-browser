@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/win/win_util.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_layout.h"
@@ -34,6 +35,9 @@ ScreenWin* g_screen_win_instance = nullptr;
 
 float GetMonitorScaleFactor(HMONITOR monitor) {
   DCHECK(monitor);
+  if (display::Display::HasForceDeviceScaleFactor())
+    return display::Display::GetForcedDeviceScaleFactor();
+
   if (base::win::IsProcessPerMonitorDpiAware()) {
     static auto get_dpi_for_monitor_func = [](){
       using GetDpiForMonitorPtr = decltype(::GetDpiForMonitor)*;
@@ -249,25 +253,35 @@ gfx::Point ScreenWin::DIPToClientPoint(HWND hwnd, const gfx::Point& dip_point) {
 
 // static
 gfx::Rect ScreenWin::ScreenToDIPRect(HWND hwnd, const gfx::Rect& pixel_bounds) {
-  float scale_factor = hwnd ?
-      GetScaleFactorForHWND(hwnd) :
-      GetScreenWinDisplayVia(
-          &ScreenWin::GetScreenWinDisplayNearestScreenRect, pixel_bounds).
-              display().device_scale_factor();
+  const ScreenWinDisplay screen_win_display = hwnd
+      ? GetScreenWinDisplayVia(&ScreenWin::GetScreenWinDisplayNearestHWND, hwnd)
+      : GetScreenWinDisplayVia(
+            &ScreenWin::GetScreenWinDisplayNearestScreenRect, pixel_bounds);
+  float scale_factor = screen_win_display.display().device_scale_factor();
   gfx::Rect dip_rect = ScaleToEnclosingRect(pixel_bounds, 1.0f / scale_factor);
-  dip_rect.set_origin(ScreenToDIPPoint(pixel_bounds.origin()));
+  const display::Display display = screen_win_display.display();
+  dip_rect.set_origin(ScalePointRelative(
+      screen_win_display.pixel_bounds().origin(),
+      display.bounds().origin(),
+      1.0f / scale_factor,
+      pixel_bounds.origin()));
   return dip_rect;
 }
 
 // static
 gfx::Rect ScreenWin::DIPToScreenRect(HWND hwnd, const gfx::Rect& dip_bounds) {
-  float scale_factor = hwnd ?
-      GetScaleFactorForHWND(hwnd) :
-      GetScreenWinDisplayVia(
-          &ScreenWin::GetScreenWinDisplayNearestDIPRect, dip_bounds).display().
-              device_scale_factor();
+  const ScreenWinDisplay screen_win_display = hwnd
+      ? GetScreenWinDisplayVia(&ScreenWin::GetScreenWinDisplayNearestHWND, hwnd)
+      : GetScreenWinDisplayVia(
+            &ScreenWin::GetScreenWinDisplayNearestDIPRect, dip_bounds);
+  float scale_factor = screen_win_display.display().device_scale_factor();
   gfx::Rect screen_rect = ScaleToEnclosingRect(dip_bounds, scale_factor);
-  screen_rect.set_origin(DIPToScreenPoint(dip_bounds.origin()));
+  const display::Display display = screen_win_display.display();
+  screen_rect.set_origin(ScalePointRelative(
+      display.bounds().origin(),
+      screen_win_display.pixel_bounds().origin(),
+      scale_factor,
+      dip_bounds.origin()));
   return screen_rect;
 }
 
@@ -310,6 +324,31 @@ int ScreenWin::GetSystemMetricsForHwnd(HWND hwnd, int metric) {
       : 1.0f;
   return static_cast<int>(std::round(
       system_metrics_result * metrics_relative_scale_factor));
+}
+
+// static
+int ScreenWin::GetSystemMetricsInDIP(int metric) {
+  if (!g_screen_win_instance)
+    return ::GetSystemMetrics(metric);
+
+  // GetSystemMetrics returns screen values based off of the primary monitor's
+  // DPI.
+  Display primary_display(g_screen_win_instance->GetPrimaryDisplay());
+  int system_metrics_result = g_screen_win_instance->GetSystemMetrics(metric);
+  return static_cast<int>(std::round(
+      system_metrics_result / primary_display.device_scale_factor()));
+}
+
+// static
+float ScreenWin::GetScaleFactorForHWND(HWND hwnd) {
+  if (!g_screen_win_instance)
+    return ScreenWinDisplay().display().device_scale_factor();
+
+  DCHECK(hwnd);
+  HWND rootHwnd = g_screen_win_instance->GetRootWindow(hwnd);
+  ScreenWinDisplay screen_win_display =
+      g_screen_win_instance->GetScreenWinDisplayNearestHWND(rootHwnd);
+  return screen_win_display.display().device_scale_factor();
 }
 
 HWND ScreenWin::GetHWNDFromNativeView(gfx::NativeView window) const {
@@ -411,6 +450,7 @@ void ScreenWin::Initialize() {
       new gfx::SingletonHwndObserver(
           base::Bind(&ScreenWin::OnWndProc, base::Unretained(this))));
   UpdateFromDisplayInfos(GetDisplayInfosFromSystem());
+  RecordDisplayScaleFactors();
 }
 
 MONITORINFOEX ScreenWin::MonitorInfoFromScreenPoint(
@@ -489,11 +529,11 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplayNearestDIPRect(
   for (const auto& screen_win_display : screen_win_displays_) {
     display::Display display = screen_win_display.display();
     gfx::Rect dip_bounds = display.bounds();
+    if (dip_rect.Intersects(dip_bounds))
+      return screen_win_display;
     int64_t distance_squared = SquaredDistanceBetweenRects(dip_rect,
                                                            dip_bounds);
-    if (distance_squared == 0) {
-      return screen_win_display;
-    } else if (distance_squared < closest_distance_squared) {
+    if (distance_squared < closest_distance_squared) {
       closest_distance_squared = distance_squared;
       closest_screen_win_display = screen_win_display;
     }
@@ -527,18 +567,6 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplay(
 }
 
 // static
-float ScreenWin::GetScaleFactorForHWND(HWND hwnd) {
-  if (!g_screen_win_instance)
-    return ScreenWinDisplay().display().device_scale_factor();
-
-  DCHECK(hwnd);
-  HWND rootHwnd = g_screen_win_instance->GetRootWindow(hwnd);
-  ScreenWinDisplay screen_win_display =
-      g_screen_win_instance->GetScreenWinDisplayNearestHWND(rootHwnd);
-  return screen_win_display.display().device_scale_factor();
-}
-
-// static
 template <typename Getter, typename GetterType>
 ScreenWinDisplay ScreenWin::GetScreenWinDisplayVia(Getter getter,
                                                    GetterType value) {
@@ -546,6 +574,23 @@ ScreenWinDisplay ScreenWin::GetScreenWinDisplayVia(Getter getter,
     return ScreenWinDisplay();
 
   return (g_screen_win_instance->*getter)(value);
+}
+
+void ScreenWin::RecordDisplayScaleFactors() const {
+  std::vector<int> unique_scale_factors;
+  for (const auto& screen_win_display : screen_win_displays_) {
+    const float scale_factor =
+        screen_win_display.display().device_scale_factor();
+    // Multiply the reported value by 100 to display it as a percentage. Clamp
+    // it so that if it's wildly out-of-band we won't send it to the backend.
+    const int reported_scale = std::min(
+        std::max(base::checked_cast<int>(scale_factor * 100), 0), 1000);
+    if (std::find(unique_scale_factors.begin(), unique_scale_factors.end(),
+                  reported_scale) == unique_scale_factors.end()) {
+      unique_scale_factors.push_back(reported_scale);
+      UMA_HISTOGRAM_SPARSE_SLOWLY("UI.DeviceScale", reported_scale);
+    }
+  }
 }
 
 }  // namespace win

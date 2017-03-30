@@ -29,11 +29,11 @@
         'gcm_driver_common',
         'gcm_driver_crypto',
         'os_crypt',
-        'sync_driver',
         '../base/base.gyp:base',
+        '../components/components.gyp:crx_file',
+        '../components/sync.gyp:sync',
         '../google_apis/gcm/gcm.gyp:gcm',
         '../net/net.gyp:net',
-        '../sync/sync.gyp:sync_proto',
         '../url/url.gyp:url_lib',
       ],
       'include_dirs': [
@@ -100,6 +100,7 @@
             'gcm_driver_jni_headers',
           ],
           'dependencies!': [
+            '../components/components.gyp:crx_file',
             '../google_apis/gcm/gcm.gyp:gcm',
           ],
           'sources!': [
@@ -297,7 +298,7 @@
           'dependencies': [
             '../base/base.gyp:base_java',
             '../content/content.gyp:content_java',
-            '../sync/sync.gyp:sync_java',
+            '../components/sync.gyp:sync_java',
           ],
           'variables': {
             'java_in_dir': 'gcm_driver/android/java',

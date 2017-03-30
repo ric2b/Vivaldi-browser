@@ -31,7 +31,7 @@
 #include "components/test_runner/test_runner_for_specific_view.h"
 #include "components/test_runner/web_task.h"
 #include "components/test_runner/web_test_delegate.h"
-#include "components/test_runner/web_test_proxy.h"
+#include "components/test_runner/web_view_test_proxy.h"
 #include "gin/arguments.h"
 #include "gin/array_buffer.h"
 #include "gin/handle.h"
@@ -150,7 +150,6 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void DumpPermissionClientCallbacks();
   void DumpPingLoaderCallbacks();
   void DumpResourceLoadCallbacks();
-  void DumpResourceRequestPriorities();
   void DumpResourceResponseMIMETypes();
   void DumpSelectionRect();
   void DumpSpellCheckCallbacks();
@@ -197,7 +196,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetAllowRunningOfInsecureContent(bool allowed);
   void SetAutoplayAllowed(bool allowed);
   void SetAllowUniversalAccessFromFileURLs(bool allow);
-  void SetAlwaysAcceptCookies(bool accept);
+  void SetBlockThirdPartyCookies(bool block);
   void SetAudioData(const gin::ArrayBufferView& view);
   void SetBackingScaleFactor(double value, v8::Local<v8::Function> callback);
   void SetBluetoothFakeAdapter(const std::string& adapter_name,
@@ -215,6 +214,7 @@ class TestRunnerBindings : public gin::Wrappable<TestRunnerBindings> {
   void SetDomainRelaxationForbiddenForURLScheme(bool forbidden,
                                                 const std::string& scheme);
   void SetDumpConsoleMessages(bool value);
+  void SetMockSpellCheckerEnabled(bool enabled);
   void SetImagesAllowed(bool allowed);
   void SetIsolatedWorldContentSecurityPolicy(int world_id,
                                              const std::string& policy);
@@ -400,8 +400,6 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::DumpPingLoaderCallbacks)
       .SetMethod("dumpResourceLoadCallbacks",
                  &TestRunnerBindings::DumpResourceLoadCallbacks)
-      .SetMethod("dumpResourceRequestPriorities",
-                 &TestRunnerBindings::DumpResourceRequestPriorities)
       .SetMethod("dumpResourceResponseMIMETypes",
                  &TestRunnerBindings::DumpResourceResponseMIMETypes)
       .SetMethod("dumpSelectionRect", &TestRunnerBindings::DumpSelectionRect)
@@ -492,8 +490,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
       .SetMethod("setAutoplayAllowed", &TestRunnerBindings::SetAutoplayAllowed)
       .SetMethod("setAllowUniversalAccessFromFileURLs",
                  &TestRunnerBindings::SetAllowUniversalAccessFromFileURLs)
-      .SetMethod("setAlwaysAcceptCookies",
-                 &TestRunnerBindings::SetAlwaysAcceptCookies)
+      .SetMethod("setBlockThirdPartyCookies",
+                 &TestRunnerBindings::SetBlockThirdPartyCookies)
       .SetMethod("setAudioData", &TestRunnerBindings::SetAudioData)
       .SetMethod("setBackingScaleFactor",
                  &TestRunnerBindings::SetBackingScaleFactor)
@@ -517,6 +515,8 @@ gin::ObjectTemplateBuilder TestRunnerBindings::GetObjectTemplateBuilder(
                  &TestRunnerBindings::SetDomainRelaxationForbiddenForURLScheme)
       .SetMethod("setDumpConsoleMessages",
                  &TestRunnerBindings::SetDumpConsoleMessages)
+      .SetMethod("setMockSpellCheckerEnabled",
+                 &TestRunnerBindings::SetMockSpellCheckerEnabled)
       .SetMethod("setIconDatabaseEnabled", &TestRunnerBindings::NotImplemented)
       .SetMethod("setImagesAllowed", &TestRunnerBindings::SetImagesAllowed)
       .SetMethod("setIsolatedWorldContentSecurityPolicy",
@@ -708,6 +708,11 @@ void TestRunnerBindings::SetDumpConsoleMessages(bool enabled) {
     runner_->SetDumpConsoleMessages(enabled);
 }
 
+void TestRunnerBindings::SetMockSpellCheckerEnabled(bool enabled) {
+  if (runner_)
+    runner_->SetMockSpellCheckerEnabled(enabled);
+}
+
 v8::Local<v8::Value>
 TestRunnerBindings::EvaluateScriptInIsolatedWorldAndReturnValue(
     int world_id, const std::string& script) {
@@ -843,45 +848,45 @@ void TestRunnerBindings::SetMockDeviceMotion(gin::Arguments* args) {
   if (!runner_)
     return;
 
-  bool has_acceleration_x;
-  double acceleration_x;
-  bool has_acceleration_y;
-  double acceleration_y;
-  bool has_acceleration_z;
-  double acceleration_z;
-  bool has_acceleration_including_gravity_x;
-  double acceleration_including_gravity_x;
-  bool has_acceleration_including_gravity_y;
-  double acceleration_including_gravity_y;
-  bool has_acceleration_including_gravity_z;
-  double acceleration_including_gravity_z;
-  bool has_rotation_rate_alpha;
-  double rotation_rate_alpha;
-  bool has_rotation_rate_beta;
-  double rotation_rate_beta;
-  bool has_rotation_rate_gamma;
-  double rotation_rate_gamma;
-  double interval;
+  bool has_acceleration_x = false;
+  double acceleration_x = 0.0;
+  bool has_acceleration_y = false;
+  double acceleration_y = 0.0;
+  bool has_acceleration_z = false;
+  double acceleration_z = 0.0;
+  bool has_acceleration_including_gravity_x = false;
+  double acceleration_including_gravity_x = 0.0;
+  bool has_acceleration_including_gravity_y = false;
+  double acceleration_including_gravity_y = 0.0;
+  bool has_acceleration_including_gravity_z = false;
+  double acceleration_including_gravity_z = 0.0;
+  bool has_rotation_rate_alpha = false;
+  double rotation_rate_alpha = 0.0;
+  bool has_rotation_rate_beta = false;
+  double rotation_rate_beta = 0.0;
+  bool has_rotation_rate_gamma = false;
+  double rotation_rate_gamma = 0.0;
+  double interval = false;
 
   args->GetNext(&has_acceleration_x);
-  args->GetNext(& acceleration_x);
+  args->GetNext(&acceleration_x);
   args->GetNext(&has_acceleration_y);
-  args->GetNext(& acceleration_y);
+  args->GetNext(&acceleration_y);
   args->GetNext(&has_acceleration_z);
-  args->GetNext(& acceleration_z);
+  args->GetNext(&acceleration_z);
   args->GetNext(&has_acceleration_including_gravity_x);
-  args->GetNext(& acceleration_including_gravity_x);
+  args->GetNext(&acceleration_including_gravity_x);
   args->GetNext(&has_acceleration_including_gravity_y);
-  args->GetNext(& acceleration_including_gravity_y);
+  args->GetNext(&acceleration_including_gravity_y);
   args->GetNext(&has_acceleration_including_gravity_z);
-  args->GetNext(& acceleration_including_gravity_z);
+  args->GetNext(&acceleration_including_gravity_z);
   args->GetNext(&has_rotation_rate_alpha);
-  args->GetNext(& rotation_rate_alpha);
+  args->GetNext(&rotation_rate_alpha);
   args->GetNext(&has_rotation_rate_beta);
-  args->GetNext(& rotation_rate_beta);
+  args->GetNext(&rotation_rate_beta);
   args->GetNext(&has_rotation_rate_gamma);
-  args->GetNext(& rotation_rate_gamma);
-  args->GetNext(& interval);
+  args->GetNext(&rotation_rate_gamma);
+  args->GetNext(&interval);
 
   runner_->SetMockDeviceMotion(has_acceleration_x, acceleration_x,
                                has_acceleration_y, acceleration_y,
@@ -1189,11 +1194,6 @@ void TestRunnerBindings::SetWillSendRequestClearHeader(
     runner_->SetWillSendRequestClearHeader(header);
 }
 
-void TestRunnerBindings::DumpResourceRequestPriorities() {
-  if (runner_)
-    runner_->DumpResourceRequestPriorities();
-}
-
 void TestRunnerBindings::SetUseMockTheme(bool use) {
   if (runner_)
     runner_->SetUseMockTheme(use);
@@ -1264,9 +1264,9 @@ void TestRunnerBindings::SetDatabaseQuota(int quota) {
     runner_->SetDatabaseQuota(quota);
 }
 
-void TestRunnerBindings::SetAlwaysAcceptCookies(bool accept) {
+void TestRunnerBindings::SetBlockThirdPartyCookies(bool block) {
   if (runner_)
-    runner_->SetAlwaysAcceptCookies(accept);
+    runner_->SetBlockThirdPartyCookies(block);
 }
 
 void TestRunnerBindings::SetWindowIsKey(bool value) {
@@ -1555,6 +1555,7 @@ TestRunner::TestRunner(TestInterfaces* interfaces)
       main_view_(nullptr),
       mock_content_settings_client_(
           new MockContentSettingsClient(&layout_test_runtime_flags_)),
+      will_navigate_(false),
       credential_manager_client_(new MockCredentialManagerClient),
       mock_screen_orientation_client_(new MockScreenOrientationClient),
       spellcheck_(new SpellCheckClient(this)),
@@ -1586,6 +1587,7 @@ void TestRunner::SetMainView(WebView* web_view) {
 
 void TestRunner::Reset() {
   is_web_platform_tests_mode_ = false;
+  will_navigate_ = false;
   top_loading_frame_ = nullptr;
   layout_test_runtime_flags_.Reset();
   mock_screen_orientation_client_->ResetData();
@@ -1602,7 +1604,7 @@ void TestRunner::Reset() {
     delegate_->SetDatabaseQuota(5 * 1024 * 1024);
     delegate_->SetDeviceColorProfile("reset");
     delegate_->SetDeviceScaleFactor(GetDefaultDeviceScaleFactor());
-    delegate_->SetAcceptAllCookies(false);
+    delegate_->SetBlockThirdPartyCookies(true);
     delegate_->SetLocale("");
     delegate_->UseUnfortunateSynchronousResizeMode(false);
     delegate_->DisableAutoResizeMode(WebSize());
@@ -1635,6 +1637,8 @@ void TestRunner::Reset() {
     delegate_->CloseRemainingWindows();
   else
     close_remaining_windows_ = true;
+
+  spellcheck_->SetEnabled(false);
 }
 
 void TestRunner::SetTestIsRunning(bool running) {
@@ -1723,8 +1727,7 @@ void TestRunner::DumpPixelsAsync(
   }
 
   test_runner::DumpPixelsAsync(web_view, layout_test_runtime_flags_,
-                               delegate_->GetDeviceScaleFactorForTest(),
-                               callback);
+                               delegate_->GetDeviceScaleFactor(), callback);
 }
 
 void TestRunner::ReplicateLayoutTestRuntimeFlagsChanges(
@@ -1837,7 +1840,13 @@ bool TestRunner::IsFramePartOfMainTestWindow(blink::WebFrame* frame) const {
   return test_is_running_ && frame->top()->view() == main_view_;
 }
 
+void TestRunner::OnNavigationBegin(WebFrame* frame) {
+  if (IsFramePartOfMainTestWindow(frame))
+    will_navigate_ = true;
+}
+
 bool TestRunner::tryToSetTopLoadingFrame(WebFrame* frame) {
+  will_navigate_ = false;
   if (!IsFramePartOfMainTestWindow(frame))
     return false;
 
@@ -1851,6 +1860,7 @@ bool TestRunner::tryToSetTopLoadingFrame(WebFrame* frame) {
 }
 
 bool TestRunner::tryToClearTopLoadingFrame(WebFrame* frame) {
+  will_navigate_ = false;
   if (!IsFramePartOfMainTestWindow(frame))
     return false;
 
@@ -1887,10 +1897,6 @@ bool TestRunner::policyDelegateIsPermissive() const {
 
 bool TestRunner::policyDelegateShouldNotifyDone() const {
   return layout_test_runtime_flags_.policy_delegate_should_notify_done();
-}
-
-bool TestRunner::shouldDumpResourcePriorities() const {
-  return layout_test_runtime_flags_.dump_resource_priorities();
 }
 
 void TestRunner::setToolTipText(const WebString& text) {
@@ -2229,7 +2235,7 @@ void TestRunner::SetMockScreenOrientation(const std::string& orientation_str) {
     orientation = WebScreenOrientationLandscapeSecondary;
   }
 
-  for (WebTestProxyBase* window : test_interfaces_->GetWindowList()) {
+  for (WebViewTestProxyBase* window : test_interfaces_->GetWindowList()) {
     WebFrame* main_frame = window->web_view()->mainFrame();
     // TODO(lukasza): Need to make this work for remote frames.
     if (main_frame->isWebLocalFrame()) {
@@ -2321,6 +2327,8 @@ void TestRunner::OverridePreference(const std::string& key,
     prefs->should_respect_image_orientation = value->BooleanValue();
   } else if (key == "WebKitWebSecurityEnabled") {
     prefs->web_security_enabled = value->BooleanValue();
+  } else if (key == "WebKitSpatialNavigationEnabled") {
+    prefs->spatial_navigation_enabled = value->BooleanValue();
   } else {
     std::string message("Invalid name for preference: ");
     message.append(key);
@@ -2340,7 +2348,7 @@ void TestRunner::SetAcceptLanguages(const std::string& accept_languages) {
   layout_test_runtime_flags_.set_accept_languages(accept_languages);
   OnLayoutTestRuntimeFlagsChanged();
 
-  for (WebTestProxyBase* window : test_interfaces_->GetWindowList())
+  for (WebViewTestProxyBase* window : test_interfaces_->GetWindowList())
     window->web_view()->acceptLanguagesChanged();
 }
 
@@ -2541,11 +2549,6 @@ void TestRunner::SetWillSendRequestClearHeader(const std::string& header) {
     http_headers_to_clear_.insert(header);
 }
 
-void TestRunner::DumpResourceRequestPriorities() {
-  layout_test_runtime_flags_.set_dump_resource_priorities(true);
-  OnLayoutTestRuntimeFlagsChanged();
-}
-
 void TestRunner::SetUseMockTheme(bool use) {
   use_mock_theme_ = use;
   blink::setMockThemeEnabledForTest(use);
@@ -2575,6 +2578,10 @@ void TestRunner::DumpNavigationPolicy() {
 void TestRunner::SetDumpConsoleMessages(bool value) {
   layout_test_runtime_flags_.set_dump_console_messages(value);
   OnLayoutTestRuntimeFlagsChanged();
+}
+
+void TestRunner::SetMockSpellCheckerEnabled(bool enabled) {
+  spellcheck_->SetEnabled(enabled);
 }
 
 bool TestRunner::ShouldDumpConsoleMessages() const {
@@ -2607,8 +2614,8 @@ void TestRunner::SetDatabaseQuota(int quota) {
   delegate_->SetDatabaseQuota(quota);
 }
 
-void TestRunner::SetAlwaysAcceptCookies(bool accept) {
-  delegate_->SetAcceptAllCookies(accept);
+void TestRunner::SetBlockThirdPartyCookies(bool block) {
+  delegate_->SetBlockThirdPartyCookies(block);
 }
 
 void TestRunner::SetFocus(blink::WebView* web_view, bool focus) {
@@ -2734,7 +2741,7 @@ void TestRunner::CheckResponseMimeType() {
 
 void TestRunner::NotifyDone() {
   if (layout_test_runtime_flags_.wait_until_done() && !topLoadingFrame() &&
-      work_queue_.is_empty())
+      !will_navigate_ && work_queue_.is_empty())
     delegate_->TestFinished();
   layout_test_runtime_flags_.set_wait_until_done(false);
   OnLayoutTestRuntimeFlagsChanged();

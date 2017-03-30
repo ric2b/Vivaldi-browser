@@ -5,10 +5,10 @@
 import("//build/config/clang/clang.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/sanitizers/sanitizers.gni")
+import("//build/config/v8_target_cpu.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
-import("//build/toolchain/concurrent_links.gni")
 
 # This template defines a toolchain for something that works like gcc
 # (including clang).
@@ -18,11 +18,6 @@ import("//build/toolchain/concurrent_links.gni")
 #  - cc
 #  - cxx
 #  - ld
-# and the following which is used in the toolchain_args
-#  - toolchain_cpu  (What "current_cpu" should be set to when invoking a
-#                    build using this toolchain.)
-#  - toolchain_os  (What "current_os" should be set to when invoking a
-#                   build using this toolchain.)
 #
 # Optional parameters that control the tools:
 #
@@ -72,60 +67,12 @@ import("//build/toolchain/concurrent_links.gni")
 #      Location of the strip executable. When specified, strip will be run on
 #      all shared libraries and executables as they are built. The pre-stripped
 #      artifacts will be put in lib.unstripped/ and exe.unstripped/.
-#
-# Optional build argument contols.
-#
-#  - clear_sanitizers
-#      When set to true, is_asan, is_msan, etc.will all be set to false. Often
-#      secondary toolchains do not want to run with sanitizers.
-#  - is_clang
-#      Whether to use clang instead of gcc.
-#  - is_component_build
-#      Whether to forcibly enable or disable component builds for this
-#      toolchain; if not specified, the toolchain will inherit the
-#      default setting.
-#  - is_nacl_glibc
-#      Whether NaCl code is built using Glibc instead of Newlib.
-#  - cc_wrapper
-#      Override the global cc_wrapper setting. e.g. "ccache" or "icecc".
-#      useful to opt-out of cc_wrapper in a particular toolchain by setting
-#      cc_wrapper = "" in it.
-#  - use_debug_fission
-#      Override the global use_debug_fission setting, useful if the particular
-#      toolchain should not be generating split-dwarf code.
-#  - use_goma
-#      Override the global use_goma setting, useful to opt-out of goma in a
-#      particular toolchain by setting use_gome = false in it.
-#  - use_gold
-#      Override the global use_gold setting, useful if the particular
-#      toolchain has a custom link step that is not actually using Gold.
 template("gcc_toolchain") {
   toolchain(target_name) {
     assert(defined(invoker.ar), "gcc_toolchain() must specify a \"ar\" value")
     assert(defined(invoker.cc), "gcc_toolchain() must specify a \"cc\" value")
     assert(defined(invoker.cxx), "gcc_toolchain() must specify a \"cxx\" value")
     assert(defined(invoker.ld), "gcc_toolchain() must specify a \"ld\" value")
-    assert(defined(invoker.toolchain_cpu),
-           "gcc_toolchain() must specify a \"toolchain_cpu\"")
-    assert(defined(invoker.toolchain_os),
-           "gcc_toolchain() must specify a \"toolchain_os\"")
-
-    # concurrent_links is picked up from the declare_arg().
-
-    if (defined(invoker.cc_wrapper)) {
-      cc_wrapper = invoker.cc_wrapper
-    }
-    if (defined(invoker.use_goma)) {
-      use_goma = invoker.use_goma
-    }
-    if (use_goma) {
-      assert(cc_wrapper == "", "Goma and cc_wrapper can't be used together.")
-      compiler_prefix = "$goma_dir/gomacc "
-    } else if (cc_wrapper != "") {
-      compiler_prefix = cc_wrapper + " "
-    } else {
-      compiler_prefix = ""
-    }
 
     # This define changes when the toolchain changes, forcing a rebuild.
     # Nothing should ever use this define.
@@ -133,6 +80,68 @@ template("gcc_toolchain") {
       rebuild_string = "-D" + invoker.rebuild_define + " "
     } else {
       rebuild_string = ""
+    }
+
+    # GN's syntax can't handle more than one scope dereference at once, like
+    # "invoker.toolchain_args.foo", so make a temporary to hold the toolchain
+    # args so we can do "invoker_toolchain_args.foo".
+    assert(defined(invoker.toolchain_args),
+           "Toolchains must specify toolchain_args")
+    invoker_toolchain_args = invoker.toolchain_args
+    assert(defined(invoker_toolchain_args.current_cpu),
+           "toolchain_args must specify a current_cpu")
+    assert(defined(invoker_toolchain_args.current_os),
+           "toolchain_args must specify a current_os")
+
+    # When invoking this toolchain not as the default one, these args will be
+    # passed to the build. They are ignored when this is the default toolchain.
+    toolchain_args = {
+      # Populate toolchain args from the invoker.
+      forward_variables_from(invoker_toolchain_args, "*")
+
+      # The host toolchain value computed by the default toolchain's setup
+      # needs to be passed through unchanged to all secondary toolchains to
+      # ensure that it's always the same, regardless of the values that may be
+      # set on those toolchains.
+      host_toolchain = host_toolchain
+
+      if (!defined(invoker_toolchain_args.v8_current_cpu)) {
+        v8_current_cpu = invoker_toolchain_args.current_cpu
+      }
+    }
+
+    # When the invoker has explicitly overridden use_goma or cc_wrapper in the
+    # toolchain args, use those values, otherwise default to the global one.
+    # This works because the only reasonable override that toolchains might
+    # supply for these values are to force-disable them.
+    if (defined(toolchain_args.use_goma)) {
+      toolchain_uses_goma = toolchain_args.use_goma
+    } else {
+      toolchain_uses_goma = use_goma
+    }
+    if (defined(toolchain_args.cc_wrapper)) {
+      toolchain_cc_wrapper = toolchain_args.cc_wrapper
+    } else {
+      toolchain_cc_wrapper = cc_wrapper
+    }
+    if (defined(toolchain_args.use_cc_wrapper)) {
+      toolchain_use_cc_wrapper = toolchain_args.use_cc_wrapper
+    } else {
+      toolchain_use_cc_wrapper = use_cc_wrapper
+    }
+
+    # Compute the compiler prefix.
+    if (toolchain_uses_goma) {
+      assert(toolchain_cc_wrapper == "",
+             "Goma and cc_wrapper can't be used together.")
+      compiler_prefix = "$goma_dir/gomacc "
+    } else if (toolchain_use_cc_wrapper && toolchain_cc_wrapper != "") {
+      compiler_prefix = toolchain_cc_wrapper + " "
+    } else {
+      compiler_prefix = ""
+    }
+    if (toolchain_cc_wrapper != "") {
+      # Dummy statement to get around no-effect assignment error
     }
 
     cc = compiler_prefix + invoker.cc
@@ -275,6 +284,7 @@ template("gcc_toolchain") {
       soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
       sofile = "{{output_dir}}/$soname"  # Possibly including toolchain dir.
       rspfile = sofile + ".rsp"
+      pool = "//build/toolchain:link_pool($default_toolchain)"
 
       if (defined(invoker.strip)) {
         unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
@@ -341,6 +351,7 @@ template("gcc_toolchain") {
       soname = "{{target_output_name}}{{output_extension}}"  # e.g. "libfoo.so".
       sofile = "{{output_dir}}/$soname"
       rspfile = sofile + ".rsp"
+      pool = "//build/toolchain:link_pool($default_toolchain)"
 
       if (defined(invoker.strip)) {
         unstripped_sofile = "{{root_out_dir}}/lib.unstripped/$soname"
@@ -387,6 +398,7 @@ template("gcc_toolchain") {
       outfile = "{{output_dir}}/$exename"
       rspfile = "$outfile.rsp"
       unstripped_outfile = outfile
+      pool = "//build/toolchain:link_pool($default_toolchain)"
 
       # Use this for {{output_extension}} expansions unless a target manually
       # overrides it (in which case {{output_extension}} will be what the target
@@ -430,80 +442,18 @@ template("gcc_toolchain") {
       description = copy_description
     }
 
-    # When invoking this toolchain not as the default one, these args will be
-    # passed to the build. They are ignored when this is the default toolchain.
-    toolchain_args() {
-      current_cpu = invoker.toolchain_cpu
-      current_os = invoker.toolchain_os
-
-      # These values need to be passed through unchanged.
-      host_toolchain = host_toolchain
-      target_os = target_os
-      target_cpu = target_cpu
-
-      if (defined(invoker.is_clang)) {
-        is_clang = invoker.is_clang
-      }
-      if (defined(invoker.is_component_build)) {
-        is_component_build = invoker.is_component_build
-      }
-      if (defined(invoker.is_nacl_glibc)) {
-        is_nacl_glibc = invoker.is_nacl_glibc
-      }
-      if (defined(invoker.symbol_level)) {
-        symbol_level = invoker.symbol_level
-      }
-      if (defined(invoker.use_allocator)) {
-        use_allocator = invoker.use_allocator
-      }
-      if (defined(invoker.use_debug_fission)) {
-        use_debug_fission = invoker.use_debug_fission
-      }
-      if (defined(invoker.use_gold)) {
-        use_gold = invoker.use_gold
-      }
-      if (defined(invoker.use_sysroot)) {
-        use_sysroot = invoker.use_sysroot
-      }
-
-      # Disable sanitizers for non-default toolchains.
-      is_asan = false
-      is_cfi = false
-      is_lsan = false
-      is_msan = false
-      is_syzyasan = false
-      is_tsan = false
-      is_ubsan = false
-      is_ubsan_null = false
-      is_ubsan_no_recover = false
-      is_ubsan_security = false
-      is_ubsan_vptr = false
-      msan_track_origins = 0
-      sanitizer_coverage_flags = ""
-      use_cfi_diag = false
-      use_custom_libcxx = false
-      use_drfuzz = false
-      use_libfuzzer = false
-      use_prebuilt_instrumented_libraries = false
-      use_sanitizer_coverage = false
-    }
-
     forward_variables_from(invoker, [ "deps" ])
   }
 }
 
-# This is a shorthand for gcc_toolchain instances based on the
-# Chromium-built version of Clang.  Only the toolchain_cpu and
-# toolchain_os variables need to be specified by the invoker, and
-# optionally toolprefix if it's a cross-compile case.  Note that for
-# a cross-compile case this toolchain requires a config to pass the
-# appropriate -target option, or else it will actually just be doing
-# a native compile.  The invoker can optionally override use_gold too.
+# This is a shorthand for gcc_toolchain instances based on the Chromium-built
+# version of Clang. Only the toolchain_cpu and toolchain_os variables need to
+# be specified by the invoker, and optionally toolprefix if it's a
+# cross-compile case. Note that for a cross-compile case this toolchain
+# requires a config to pass the appropriate -target option, or else it will
+# actually just be doing a native compile. The invoker can optionally override
+# use_gold too.
 template("clang_toolchain") {
-  assert(defined(invoker.toolchain_cpu),
-         "clang_toolchain() must specify a \"toolchain_cpu\"")
-  assert(defined(invoker.toolchain_os),
-         "clang_toolchain() must specify a \"toolchain_os\"")
   if (defined(invoker.toolprefix)) {
     toolprefix = invoker.toolprefix
   } else {
@@ -515,22 +465,18 @@ template("clang_toolchain") {
     cc = "$prefix/clang"
     cxx = "$prefix/clang++"
     ld = cxx
-    is_clang = true
 
     readelf = "${toolprefix}readelf"
     ar = "${toolprefix}ar"
     nm = "${toolprefix}nm"
 
-    forward_variables_from(invoker,
-                           [
-                             "toolchain_cpu",
-                             "toolchain_os",
-                             "use_gold",
-                             "strip",
-                           ])
+    forward_variables_from(invoker, [ "strip" ])
 
-    if (defined(invoker.use_debug_fission)) {
-      use_debug_fission = invoker.use_debug_fission
+    toolchain_args = {
+      if (defined(invoker.toolchain_args)) {
+        forward_variables_from(invoker.toolchain_args, "*")
+      }
+      is_clang = true
     }
   }
 }

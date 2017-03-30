@@ -19,13 +19,13 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/signin/core/browser/fake_auth_status_provider.h"
+#include "components/sync/api/fake_sync_change_processor.h"
+#include "components/sync/api/sync_data.h"
+#include "components/sync/api/sync_error_factory_mock.h"
+#include "components/sync/core/attachments/attachment_service_proxy_for_test.h"
+#include "components/sync/protocol/sync.pb.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "content/public/test/test_web_ui.h"
-#include "sync/api/fake_sync_change_processor.h"
-#include "sync/api/sync_data.h"
-#include "sync/api/sync_error_factory_mock.h"
-#include "sync/internal_api/public/attachments/attachment_service_proxy_for_test.h"
-#include "sync/protocol/sync.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -228,8 +228,8 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
   }
 
   void TearDown() override {
-    profile_manager_.reset();
     handler_.reset();
+    profile_manager_.reset();
     BrowserWithTestWindowTest::TearDown();
   }
 
@@ -304,10 +304,6 @@ TEST_F(SigninCreateProfileHandlerTest, ReturnSignedInProfiles) {
   ASSERT_TRUE(profile_manager()->profile_attributes_storage()->
       GetProfileAttributesWithPath(profile_2->GetPath(), &entry));
   entry->SetAuthInfo(kTestGaiaId2, base::UTF8ToUTF16(kTestEmail2));
-
-  // Request a list of signed in profiles.
-  base::ListValue list_args;
-  handler()->RequestSignedInProfiles(&list_args);
 
   // Expect a JS callback with a list containing profile_2.
   EXPECT_EQ(1U, web_ui()->call_data().size());

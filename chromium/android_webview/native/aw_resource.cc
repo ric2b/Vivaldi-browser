@@ -2,12 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "android_webview/native/aw_resource.h"
+#include "android_webview/common/aw_resource.h"
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "jni/AwResource_jni.h"
+
+using base::android::ScopedJavaLocalRef;
 
 namespace android_webview {
 namespace AwResource {
@@ -20,10 +22,6 @@ std::vector<std::string> GetConfigKeySystemUuidMapping() {
   base::android::AppendJavaStringArrayToStringVector(env, mappings.obj(),
                                                      &key_system_uuid_mappings);
   return key_system_uuid_mappings;
-}
-
-bool RegisterAwResource(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace AwResource

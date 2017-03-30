@@ -6,11 +6,12 @@
 #define ASH_TEST_ASH_MD_TEST_BASE_H_
 
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/test/material_design_controller_test_api.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/material_design_controller_test_api.h"
 
 namespace ash {
 namespace test {
+class MaterialDesignControllerTestAPI;
 
 class AshMDTestBase
     : public AshTestBase,
@@ -21,16 +22,18 @@ class AshMDTestBase
 
   // AshTestBase:
   void SetUp() override;
-  void TearDown() override;
 
   int GetMdMaximizedWindowHeightOffset();
+  int GetMdAutoHiddenShelfHeightOffset();
 
  private:
-  std::unique_ptr<MaterialDesignControllerTestAPI> material_design_state_;
-
   // The material design shelf is taller (by 1px) so use this offset to
   // adjust the expected height of a maximized window.
   int md_maximized_window_height_offset_ = 0;
+
+  // The material design auto hidden shelf is shorter (by 3) so use this offset
+  // to adjust the display/root window size.
+  int md_auto_hidden_shelf_height_offset_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(AshMDTestBase);
 };

@@ -20,6 +20,7 @@
 using base::android::AttachCurrentThread;
 using base::android::ConvertUTF8ToJavaString;
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
 namespace net {
@@ -64,8 +65,7 @@ HttpAuthNegotiateAndroid::HttpAuthNegotiateAndroid(
   JNIEnv* env = AttachCurrentThread();
   java_authenticator_.Reset(Java_HttpNegotiateAuthenticator_create(
       env,
-      ConvertUTF8ToJavaString(env, prefs->AuthAndroidNegotiateAccountType())
-          .obj()));
+      ConvertUTF8ToJavaString(env, prefs->AuthAndroidNegotiateAccountType())));
 }
 
 HttpAuthNegotiateAndroid::~HttpAuthNegotiateAndroid() {
@@ -139,9 +139,8 @@ int HttpAuthNegotiateAndroid::GenerateAuthToken(
   JavaNegotiateResultWrapper* callback_wrapper = new JavaNegotiateResultWrapper(
       callback_task_runner, thread_safe_callback);
   Java_HttpNegotiateAuthenticator_getNextAuthToken(
-      env, java_authenticator_.obj(),
-      reinterpret_cast<intptr_t>(callback_wrapper), java_spn.obj(),
-      java_server_auth_token.obj(), can_delegate_);
+      env, java_authenticator_, reinterpret_cast<intptr_t>(callback_wrapper),
+      java_spn, java_server_auth_token, can_delegate_);
   return ERR_IO_PENDING;
 }
 

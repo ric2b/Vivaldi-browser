@@ -230,7 +230,14 @@ bool WebViewInternalThumbnailFunction::InternalRunAsyncSafe(
     error_ = "Error: Guest is not visible, no screenshot taken.";
     return false;
   }
-
+  // If this happens, the guest view is not attached to a window for some
+  // reason. See also VB-23154.
+  DCHECK(guest->embedder_web_contents());
+  if (!guest->embedder_web_contents()) {
+    error_ =
+        "Error: Guest view is not attached to a window, no screenshot taken.";
+    return false;
+  }
   content::RenderWidgetHostView* embedder_view =
       guest->embedder_web_contents()->GetRenderWidgetHostView();
   RenderViewHost* embedder_render_view_host =
@@ -554,6 +561,19 @@ WebViewPrivateIsFocusedElementEditableFunction::
 
 WebViewPrivateIsFocusedElementEditableFunction::
     ~WebViewPrivateIsFocusedElementEditableFunction() {}
+
+WebViewPrivateAllowBlockedInsecureContentFunction::
+WebViewPrivateAllowBlockedInsecureContentFunction() {}
+
+WebViewPrivateAllowBlockedInsecureContentFunction::
+~WebViewPrivateAllowBlockedInsecureContentFunction() {}
+
+bool WebViewPrivateAllowBlockedInsecureContentFunction::RunAsyncSafe(
+    WebViewGuest *guest) {
+    guest->AllowRunningInsecureContent();
+    SendResponse(true);
+    return true;
+}
 
 }  // namespace vivaldi
 }  // namespace extensions

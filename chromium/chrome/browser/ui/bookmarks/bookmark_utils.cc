@@ -126,13 +126,20 @@ void ToggleBookmarkBarWhenVisible(content::BrowserContext* browser_context) {
 
 base::string16 FormatBookmarkURLForDisplay(const GURL& url) {
   // Because this gets re-parsed by FixupURL(), it's safe to omit the scheme
-  // and trailing slash, and unescape most characters.  However, it's
+  // and trailing slash, and unescape most characters. However, it's
   // important not to drop any username/password, or unescape anything that
   // changes the URL's meaning.
-  return url_formatter::FormatUrl(
-      url, url_formatter::kFormatUrlOmitAll &
-               ~url_formatter::kFormatUrlOmitUsernamePassword,
-      net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
+  url_formatter::FormatUrlTypes format_types =
+      url_formatter::kFormatUrlOmitAll &
+      ~url_formatter::kFormatUrlOmitUsernamePassword;
+
+  // If username is present, we must not omit the scheme because FixupURL() will
+  // subsequently interpret the username as a scheme. crbug.com/639126
+  if (url.has_username())
+    format_types &= ~url_formatter::kFormatUrlOmitHTTP;
+
+  return url_formatter::FormatUrl(url, format_types, net::UnescapeRule::SPACES,
+                                  nullptr, nullptr, nullptr);
 }
 
 bool IsAppsShortcutEnabled(Profile* profile) {
@@ -184,8 +191,8 @@ bool ShouldRemoveBookmarkOpenPagesUI(Profile* profile) {
 int GetBookmarkDragOperation(content::BrowserContext* browser_context,
                              const BookmarkNode* node) {
   PrefService* prefs = user_prefs::UserPrefs::Get(browser_context);
-  Profile* profile = Profile::FromBrowserContext(browser_context);
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
+  BookmarkModel* model =
+      BookmarkModelFactory::GetForBrowserContext(browser_context);
 
   int move = ui::DragDropTypes::DRAG_MOVE;
   if (!prefs->GetBoolean(bookmarks::prefs::kEditBookmarksEnabled) ||
@@ -224,7 +231,7 @@ int GetBookmarkDropOperation(Profile* profile,
   if (!IsValidBookmarkDropLocation(profile, data, parent, index))
     return ui::DragDropTypes::DRAG_NONE;
 
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
   if (!model->client()->CanBeEditedByUser(parent))
     return ui::DragDropTypes::DRAG_NONE;
 
@@ -257,7 +264,7 @@ bool IsValidBookmarkDropLocation(Profile* profile,
   if (!data.is_valid())
     return false;
 
-  BookmarkModel* model = BookmarkModelFactory::GetForProfile(profile);
+  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
   if (!model->client()->CanBeEditedByUser(drop_parent))
     return false;
 

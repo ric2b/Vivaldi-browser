@@ -303,7 +303,7 @@ class TestReceiverAudioCallback
 
  protected:
   virtual ~TestReceiverAudioCallback() {
-    STLDeleteElements(&expected_frames_);
+    base::STLDeleteElements(&expected_frames_);
   }
 
  private:
@@ -432,15 +432,15 @@ class End2EndTest : public ::testing::Test {
   }
 
   void Configure(Codec video_codec, Codec audio_codec) {
-    audio_sender_config_.ssrc = 1;
+    audio_sender_config_.sender_ssrc = 1;
     audio_sender_config_.receiver_ssrc = 2;
     audio_sender_config_.max_playout_delay =
         base::TimeDelta::FromMilliseconds(kTargetPlayoutDelayMs);
-    audio_sender_config_.rtp_payload_type = 96;
+    audio_sender_config_.rtp_payload_type = RtpPayloadType::AUDIO_OPUS;
     audio_sender_config_.use_external_encoder = false;
-    audio_sender_config_.frequency = kDefaultAudioSamplingRate;
+    audio_sender_config_.rtp_timebase = kDefaultAudioSamplingRate;
     audio_sender_config_.channels = kAudioChannels;
-    audio_sender_config_.bitrate = kDefaultAudioEncoderBitrate;
+    audio_sender_config_.max_bitrate = kDefaultAudioEncoderBitrate;
     audio_sender_config_.codec = audio_codec;
     audio_sender_config_.aes_iv_mask =
         ConvertFromBase16String("abcdeffedcba12345678900987654321");
@@ -449,11 +449,11 @@ class End2EndTest : public ::testing::Test {
 
     audio_receiver_config_.receiver_ssrc =
         audio_sender_config_.receiver_ssrc;
-    audio_receiver_config_.sender_ssrc = audio_sender_config_.ssrc;
+    audio_receiver_config_.sender_ssrc = audio_sender_config_.sender_ssrc;
     audio_receiver_config_.rtp_max_delay_ms = kTargetPlayoutDelayMs;
     audio_receiver_config_.rtp_payload_type =
         audio_sender_config_.rtp_payload_type;
-    audio_receiver_config_.rtp_timebase = audio_sender_config_.frequency;
+    audio_receiver_config_.rtp_timebase = audio_sender_config_.rtp_timebase;
     audio_receiver_config_.channels = kAudioChannels;
     audio_receiver_config_.target_frame_rate = 100;
     audio_receiver_config_.codec = audio_sender_config_.codec;
@@ -463,17 +463,18 @@ class End2EndTest : public ::testing::Test {
     test_receiver_audio_callback_->SetExpectedSamplingFrequency(
         audio_receiver_config_.rtp_timebase);
 
-    video_sender_config_.ssrc = 3;
+    video_sender_config_.sender_ssrc = 3;
     video_sender_config_.receiver_ssrc = 4;
     video_sender_config_.max_playout_delay =
         base::TimeDelta::FromMilliseconds(kTargetPlayoutDelayMs);
-    video_sender_config_.rtp_payload_type = 97;
+    video_sender_config_.rtp_payload_type = RtpPayloadType::VIDEO_VP8;
     video_sender_config_.use_external_encoder = false;
+    video_sender_config_.rtp_timebase = kVideoFrequency;
     video_sender_config_.max_bitrate = 50000;
     video_sender_config_.min_bitrate = 10000;
     video_sender_config_.start_bitrate = 10000;
-    video_sender_config_.max_qp = 30;
-    video_sender_config_.min_qp = 4;
+    video_sender_config_.video_codec_params.max_qp = 30;
+    video_sender_config_.video_codec_params.min_qp = 4;
     video_sender_config_.max_frame_rate = 30;
     video_sender_config_.codec = video_codec;
     video_sender_config_.aes_iv_mask =
@@ -483,7 +484,7 @@ class End2EndTest : public ::testing::Test {
 
     video_receiver_config_.receiver_ssrc =
         video_sender_config_.receiver_ssrc;
-    video_receiver_config_.sender_ssrc = video_sender_config_.ssrc;
+    video_receiver_config_.sender_ssrc = video_sender_config_.sender_ssrc;
     video_receiver_config_.rtp_max_delay_ms = kTargetPlayoutDelayMs;
     video_receiver_config_.rtp_payload_type =
         video_sender_config_.rtp_payload_type;
@@ -834,8 +835,8 @@ class End2EndTest : public ::testing::Test {
 
   FrameReceiverConfig audio_receiver_config_;
   FrameReceiverConfig video_receiver_config_;
-  AudioSenderConfig audio_sender_config_;
-  VideoSenderConfig video_sender_config_;
+  FrameSenderConfig audio_sender_config_;
+  FrameSenderConfig video_sender_config_;
 
   base::TimeTicks start_time_;
 
@@ -894,9 +895,7 @@ class TransportClient : public CastTransport::Client {
       : log_event_dispatcher_(log_event_dispatcher), e2e_test_(e2e_test) {}
 
   void OnStatusChanged(media::cast::CastTransportStatus status) final {
-    bool result = (status == TRANSPORT_AUDIO_INITIALIZED ||
-                   status == TRANSPORT_VIDEO_INITIALIZED);
-    EXPECT_TRUE(result);
+    EXPECT_EQ(TRANSPORT_STREAM_INITIALIZED, status);
   };
   void OnLoggingEventsReceived(
       std::unique_ptr<std::vector<FrameEvent>> frame_events,
@@ -921,14 +920,14 @@ class TransportClient : public CastTransport::Client {
 void End2EndTest::Create() {
   transport_sender_.reset(new CastTransportImpl(
       testing_clock_sender_, base::TimeDelta::FromMilliseconds(1),
-      base::WrapUnique(
-          new TransportClient(cast_environment_sender_->logger(), nullptr)),
+      base::MakeUnique<TransportClient>(cast_environment_sender_->logger(),
+                                        nullptr),
       base::WrapUnique(sender_to_receiver_), task_runner_sender_));
 
   transport_receiver_.reset(new CastTransportImpl(
       testing_clock_sender_, base::TimeDelta::FromMilliseconds(1),
-      base::WrapUnique(
-          new TransportClient(cast_environment_receiver_->logger(), this)),
+      base::MakeUnique<TransportClient>(cast_environment_receiver_->logger(),
+                                        this),
       base::WrapUnique(receiver_to_sender_), task_runner_sender_));
 
   cast_receiver_ =
@@ -958,7 +957,7 @@ void End2EndTest::Create() {
   video_frame_input_ = cast_sender_->video_frame_input();
 
   audio_bus_factory_.reset(new TestAudioBusFactory(
-      audio_sender_config_.channels, audio_sender_config_.frequency,
+      audio_sender_config_.channels, audio_sender_config_.rtp_timebase,
       kSoundFrequency, kSoundVolume));
 }
 

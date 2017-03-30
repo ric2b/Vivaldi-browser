@@ -7,12 +7,14 @@
 #include <algorithm>
 
 #include "ash/common/ash_layout_constants.h"
+#include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "ash/common/frame/default_header_painter.h"
+#include "ash/common/frame/frame_border_hit_test.h"
+#include "ash/common/frame/header_painter_util.h"
 #include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm_lookup.h"
 #include "ash/common/wm_shell.h"
-#include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/default_header_painter.h"
-#include "ash/frame/frame_border_hit_test_controller.h"
-#include "ash/frame/header_painter_util.h"
+#include "ash/common/wm_window.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
@@ -94,9 +96,10 @@ BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
     : BrowserNonClientFrameView(frame, browser_view),
       caption_button_container_(nullptr),
       web_app_left_header_view_(nullptr),
-      window_icon_(nullptr),
-      frame_border_hit_test_controller_(
-          new ash::FrameBorderHitTestController(frame)) {
+      window_icon_(nullptr) {
+  ash::WmLookup::Get()
+      ->GetWindowForWidget(frame)
+      ->InstallResizeHandleWindowTargeter(nullptr);
   ash::WmShell::Get()->AddShellObserver(this);
 }
 
@@ -215,8 +218,8 @@ gfx::Rect BrowserNonClientFrameViewAsh::GetWindowBoundsForClientBounds(
 }
 
 int BrowserNonClientFrameViewAsh::NonClientHitTest(const gfx::Point& point) {
-  const int hit_test = ash::FrameBorderHitTestController::NonClientHitTest(
-      this, caption_button_container_, point);
+  const int hit_test =
+      ash::FrameBorderNonClientHitTest(this, caption_button_container_, point);
 
   // See if the point is actually within the web app back button.
   if (hit_test == HTCAPTION && web_app_left_header_view_ &&
@@ -247,6 +250,8 @@ void BrowserNonClientFrameViewAsh::ResetWindowControls() {
   // Hide the caption buttons in immersive fullscreen when the tab light bar
   // is visible because it's confusing when the user hovers or clicks in the
   // top-right of the screen and hits one.
+  // TODO(yiyix): Update |caption_button_container_|'s visibility calculation
+  // when Chrome OS MD is enabled by default.
   caption_button_container_->SetVisible(!UseImmersiveLightbarHeaderStyle());
   caption_button_container_->ResetWindowControls();
 }
@@ -440,8 +445,8 @@ bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
   const int avatar_right = profile_indicator_icon()
-                               ? (insets.left() + GetOTRAvatarIcon().width())
-                               : 0;
+      ? (insets.left() + GetIncognitoAvatarIcon().width())
+      : 0;
   return avatar_right + insets.right();
 }
 
@@ -478,7 +483,7 @@ void BrowserNonClientFrameViewAsh::LayoutProfileIndicatorIcon() {
   DCHECK(browser_view()->IsTabStripVisible());
 #endif
 
-  const gfx::ImageSkia incognito_icon = GetOTRAvatarIcon();
+  const gfx::ImageSkia incognito_icon = GetIncognitoAvatarIcon();
   const gfx::Insets avatar_insets = GetLayoutInsets(AVATAR_ICON);
   const int avatar_bottom = GetTopInset(false) +
       browser_view()->GetTabStripHeight() - avatar_insets.bottom();
@@ -547,8 +552,7 @@ void BrowserNonClientFrameViewAsh::PaintToolbarBackground(gfx::Canvas* canvas) {
     gfx::ScopedCanvas scoped_canvas(canvas);
     gfx::Rect tabstrip_bounds(GetBoundsForTabStrip(browser_view()->tabstrip()));
     tabstrip_bounds.set_x(GetMirroredXForRect(tabstrip_bounds));
-    canvas->sk_canvas()->clipRect(gfx::RectToSkRect(tabstrip_bounds),
-                                  SkRegion::kDifference_Op);
+    canvas->ClipRect(tabstrip_bounds, SkRegion::kDifference_Op);
     separator_rect.set_y(tabstrip_bounds.bottom());
     BrowserView::Paint1pxHorizontalLine(canvas, GetToolbarTopSeparatorColor(),
                                         separator_rect, true);

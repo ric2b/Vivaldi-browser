@@ -32,7 +32,9 @@ namespace content {
 namespace devtools {
 namespace network {
 
+using Response = DevToolsProtocolClient::Response;
 using CookieListCallback = net::CookieStore::GetCookieListCallback;
+using SetCookieCallback = net::CookieStore::SetCookiesCallback;
 
 namespace {
 
@@ -126,6 +128,72 @@ void DeleteCookieOnUI(
                  callback));
 }
 
+void CookieSetOnIO(const SetCookieCallback& callback, bool success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  BrowserThread::PostTask(
+      BrowserThread::UI,
+      FROM_HERE,
+      base::Bind(callback, success));
+}
+
+void SetCookieOnIO(
+    ResourceContext* resource_context,
+    net::URLRequestContextGetter* context_getter,
+    const GURL& url,
+    const std::string& name,
+    const std::string& value,
+    const std::string& domain,
+    const std::string& path,
+    bool secure,
+    bool http_only,
+    net::CookieSameSite same_site,
+    base::Time expires,
+    const SetCookieCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  net::URLRequestContext* request_context =
+      GetRequestContextOnIO(resource_context, context_getter, url);
+
+  bool are_experimental_cookie_features_enabled =
+      request_context->network_delegate()
+        ->AreExperimentalCookieFeaturesEnabled();
+
+  request_context->cookie_store()->SetCookieWithDetailsAsync(
+      url, name, value, domain, path,
+      base::Time(),
+      expires,
+      base::Time(),
+      secure,
+      http_only,
+      same_site,
+      are_experimental_cookie_features_enabled,
+      net::COOKIE_PRIORITY_DEFAULT,
+      base::Bind(&CookieSetOnIO, callback));
+}
+
+void SetCookieOnUI(
+    ResourceContext* resource_context,
+    net::URLRequestContextGetter* context_getter,
+    const GURL& url,
+    const std::string& name,
+    const std::string& value,
+    const std::string& domain,
+    const std::string& path,
+    bool secure,
+    bool http_only,
+    net::CookieSameSite same_site,
+    base::Time expires,
+    const SetCookieCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  BrowserThread::PostTask(
+      BrowserThread::IO,
+      FROM_HERE,
+      base::Bind(&SetCookieOnIO,
+                 base::Unretained(resource_context),
+                 base::Unretained(context_getter),
+                 url, name, value, domain, path, secure, http_only,
+                 same_site, expires, callback));
+}
+
 class GetCookiesCommand {
  public:
   explicit GetCookiesCommand(
@@ -191,7 +259,8 @@ class GetCookiesCommand {
 
 typedef DevToolsProtocolClient::Response Response;
 
-NetworkHandler::NetworkHandler() : host_(nullptr), weak_factory_(this) {
+NetworkHandler::NetworkHandler()
+    : host_(nullptr), enabled_(false), weak_factory_(this) {
 }
 
 NetworkHandler::~NetworkHandler() {
@@ -203,6 +272,19 @@ void NetworkHandler::SetRenderFrameHost(RenderFrameHostImpl* host) {
 
 void NetworkHandler::SetClient(std::unique_ptr<Client> client) {
   client_.swap(client);
+}
+
+Response NetworkHandler::Enable(const int* max_total_size,
+                                const int* max_resource_size) {
+  // Start collecting ssl info.
+  enabled_ = true;
+  return Response::FallThrough();
+}
+
+Response NetworkHandler::Disable() {
+  // Stop collecting ssl info.
+  enabled_ = false;
+  return Response::FallThrough();
 }
 
 Response NetworkHandler::ClearBrowserCache() {
@@ -228,6 +310,50 @@ Response NetworkHandler::GetCookies(DevToolsCommandId command_id) {
   return Response::OK();
 }
 
+Response NetworkHandler::SetCookie(DevToolsCommandId command_id,
+    const std::string& url,
+    const std::string& name,
+    const std::string& value,
+    const std::string* domain,
+    const std::string* path,
+    bool* secure,
+    bool* http_only,
+    const std::string* same_site,
+    double* expires) {
+  if (!host_)
+    return Response::InternalError("Could not connect to view");
+
+  net::CookieSameSite same_site_enum = net::CookieSameSite::DEFAULT_MODE;
+  if (same_site && *same_site == kCookieSameSiteLax)
+    same_site_enum = net::CookieSameSite::LAX_MODE;
+  else if (same_site && *same_site == kCookieSameSiteStrict)
+    same_site_enum = net::CookieSameSite::STRICT_MODE;
+
+  base::Time expiration_date;
+  if (expires)
+    expiration_date = (*expires == 0)
+            ? base::Time::UnixEpoch()
+            : base::Time::FromDoubleT(*expires);
+
+  SetCookieOnUI(
+      host_->GetSiteInstance()->GetBrowserContext()->GetResourceContext(),
+      host_->GetProcess()->GetStoragePartition()->GetURLRequestContext(),
+      GURL(url), name, value,
+      domain ? *domain : std::string(), path ? *path : std::string(),
+      secure ? *secure : false, http_only ? *http_only : false,
+      same_site_enum, expiration_date,
+      base::Bind(&NetworkHandler::SendSetCookieResponse,
+                 weak_factory_.GetWeakPtr(),
+                 command_id));
+  return Response::OK();
+}
+
+void NetworkHandler::SendSetCookieResponse(DevToolsCommandId command_id,
+    bool success) {
+  client_->SendSetCookieResponse(command_id,
+      SetCookieResponse::Create()->set_success(success));
+}
+
 void NetworkHandler::SendGetCookiesResponse(
     DevToolsCommandId command_id,
     const net::CookieList& cookie_list) {
@@ -247,10 +373,10 @@ void NetworkHandler::SendGetCookiesResponse(
 
     switch (cookie.SameSite()) {
       case net::CookieSameSite::STRICT_MODE:
-        devtools_cookie->set_same_site(cookie::kSameSiteStrict);
+        devtools_cookie->set_same_site(kCookieSameSiteStrict);
         break;
       case net::CookieSameSite::LAX_MODE:
-        devtools_cookie->set_same_site(cookie::kSameSiteLax);
+        devtools_cookie->set_same_site(kCookieSameSiteLax);
         break;
       case net::CookieSameSite::NO_RESTRICTION:
         break;
@@ -316,14 +442,22 @@ Response NetworkHandler::GetCertificateDetails(
   std::vector<std::string> ip_addrs;
   cert->GetSubjectAltName(&dns_names, &ip_addrs);
 
+  // IP addresses are in raw network bytes and must be converted to string form
+  std::vector<std::string> ip_addrs_string;
+  for (const std::string& ip : ip_addrs) {
+    net::IPAddress ip_addr(reinterpret_cast<const uint8_t*>(ip.c_str()),
+                           ip.length());
+    ip_addrs_string.push_back(ip_addr.ToString());
+  }
+
   *result = CertificateDetails::Create()
-                    ->set_subject(CertificateSubject::Create()
+                ->set_subject(CertificateSubject::Create()
                                   ->set_name(name)
                                   ->set_san_dns_names(dns_names)
-                                  ->set_san_ip_addresses(ip_addrs))
-                    ->set_issuer(issuer)
-                    ->set_valid_from(valid_from.ToDoubleT())
-                    ->set_valid_to(valid_to.ToDoubleT());
+                                  ->set_san_ip_addresses(ip_addrs_string))
+                ->set_issuer(issuer)
+                ->set_valid_from(valid_from.ToDoubleT())
+                ->set_valid_to(valid_to.ToDoubleT());
   return Response::OK();
 }
 

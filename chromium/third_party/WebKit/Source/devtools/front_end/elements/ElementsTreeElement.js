@@ -56,15 +56,15 @@ WebInspector.ElementsTreeElement.InitialChildrenLimit = 500;
 
 // A union of HTML4 and HTML5-Draft elements that explicitly
 // or implicitly (for HTML5) forbid the closing tag.
-WebInspector.ElementsTreeElement.ForbiddenClosingTagElements = [
+WebInspector.ElementsTreeElement.ForbiddenClosingTagElements = new Set([
     "area", "base", "basefont", "br", "canvas", "col", "command", "embed", "frame",
     "hr", "img", "input", "keygen", "link", "menuitem", "meta", "param", "source", "track", "wbr"
-].keySet();
+]);
 
 // These tags we do not allow editing their tag name.
-WebInspector.ElementsTreeElement.EditTagBlacklist = [
+WebInspector.ElementsTreeElement.EditTagBlacklist = new Set([
     "html", "head", "body"
-].keySet();
+]);
 
 /**
  * @param {!WebInspector.ElementsTreeElement} treeElement
@@ -229,7 +229,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
         if (this.listItemElement) {
             if (x) {
-                this.updateSelection();
+                this._createSelection();
                 this.listItemElement.classList.add("hovered");
             } else {
                 this.listItemElement.classList.remove("hovered");
@@ -253,7 +253,7 @@ WebInspector.ElementsTreeElement.prototype = {
         this._expandedChildrenLimit = expandedChildrenLimit;
     },
 
-    updateSelection: function()
+    _createSelection: function()
     {
         var listItemElement = this.listItemElement;
         if (!listItemElement)
@@ -290,7 +290,7 @@ WebInspector.ElementsTreeElement.prototype = {
     onattach: function()
     {
         if (this._hovered) {
-            this.updateSelection();
+            this._createSelection();
             this.listItemElement.classList.add("hovered");
         }
 
@@ -337,7 +337,6 @@ WebInspector.ElementsTreeElement.prototype = {
             return;
 
         this.updateTitle();
-        this.treeOutline.updateSelection();
     },
 
     oncollapse: function()
@@ -346,7 +345,6 @@ WebInspector.ElementsTreeElement.prototype = {
             return;
 
         this.updateTitle();
-        this.treeOutline.updateSelection();
     },
 
     /**
@@ -373,7 +371,7 @@ WebInspector.ElementsTreeElement.prototype = {
         this.treeOutline.selectDOMNode(this._node, selectedByUser);
         if (selectedByUser)
             this._node.highlight();
-        this.updateSelection();
+        this._createSelection();
         this.treeOutline.suppressRevealAndSelect = false;
         return true;
     },
@@ -454,8 +452,6 @@ WebInspector.ElementsTreeElement.prototype = {
             tag.appendChild(node);
             tag.createTextChild(">");
         }
-
-        this.updateSelection();
     },
 
     /**
@@ -682,7 +678,9 @@ WebInspector.ElementsTreeElement.prototype = {
             WebInspector.handleElementValueModifications(event, attribute);
             return "";
         }
-        config.setPostKeydownFinishHandler(postKeyDownFinishHandler);
+
+        if (!attributeValueElement.textContent.asParsedURL())
+            config.setPostKeydownFinishHandler(postKeyDownFinishHandler);
 
         this._editing = WebInspector.InplaceEditor.startEditing(attribute, config);
 
@@ -727,7 +725,7 @@ WebInspector.ElementsTreeElement.prototype = {
         }
 
         var tagName = tagNameElement.textContent;
-        if (WebInspector.ElementsTreeElement.EditTagBlacklist[tagName.toLowerCase()])
+        if (WebInspector.ElementsTreeElement.EditTagBlacklist.has(tagName.toLowerCase()))
             return false;
 
         if (WebInspector.isBeingEdited(tagNameElement))
@@ -810,8 +808,6 @@ WebInspector.ElementsTreeElement.prototype = {
         this.listItemElement.classList.add("editing-as-html");
         this.treeOutline.element.addEventListener("mousedown", consume, false);
 
-        this.updateSelection();
-
         /**
          * @param {!Element} element
          * @param {string} newValue
@@ -847,7 +843,6 @@ WebInspector.ElementsTreeElement.prototype = {
             }
 
             this.treeOutline.element.removeEventListener("mousedown", consume, false);
-            this.updateSelection();
             this.treeOutline.focus();
         }
 
@@ -1079,7 +1074,7 @@ WebInspector.ElementsTreeElement.prototype = {
 
         delete this.selectionElement;
         if (this.selected)
-            this.updateSelection();
+            this._createSelection();
         this._preventFollowingLinksOnDoubleClick();
         this._highlightSearchResults();
     },
@@ -1125,7 +1120,7 @@ WebInspector.ElementsTreeElement.prototype = {
             var extension = markerToExtension.get(marker);
             if (!extension)
                 return;
-            promises.push(extension.instancePromise().then(collectDecoration.bind(null, n)));
+            promises.push(extension.instance().then(collectDecoration.bind(null, n)));
         }
 
         /**
@@ -1443,7 +1438,7 @@ WebInspector.ElementsTreeElement.prototype = {
                 break;
             }
 
-            if (this.treeOutline.isXMLMimeType || !WebInspector.ElementsTreeElement.ForbiddenClosingTagElements[tagName])
+            if (this.treeOutline.isXMLMimeType || !WebInspector.ElementsTreeElement.ForbiddenClosingTagElements.has(tagName))
                 this._buildTagDOM(titleDOM, tagName, true, false, updateRecord);
             break;
 

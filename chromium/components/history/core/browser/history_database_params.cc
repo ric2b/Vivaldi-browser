@@ -9,7 +9,8 @@ namespace history {
 HistoryDatabaseParams::HistoryDatabaseParams()
     : history_dir(),
       download_interrupt_reason_none(0),
-      download_interrupt_reason_crash(0) {
+      download_interrupt_reason_crash(0),
+      number_of_days_to_keep_visits(90) {
 }
 
 HistoryDatabaseParams::HistoryDatabaseParams(

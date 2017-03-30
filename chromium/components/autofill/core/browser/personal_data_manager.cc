@@ -5,6 +5,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 
 #include <stddef.h>
+
 #include <algorithm>
 #include <list>
 #include <map>
@@ -39,7 +40,7 @@
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/signin_pref_names.h"
-#include "components/sync_driver/sync_service.h"
+#include "components/sync/driver/sync_service.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "third_party/libaddressinput/src/cpp/include/libaddressinput/address_data.h"
@@ -600,10 +601,10 @@ void PersonalDataManager::UpdateServerCreditCard(
     return;
 
   // Look up by server id, not GUID.
-  CreditCard* existing_credit_card = nullptr;
-  for (auto it : server_credit_cards_) {
-    if (credit_card.server_id() == it->server_id()) {
-      existing_credit_card = it;
+  const CreditCard* existing_credit_card = nullptr;
+  for (const auto* server_card : server_credit_cards_) {
+    if (credit_card.server_id() == server_card->server_id()) {
+      existing_credit_card = server_card;
       break;
     }
   }
@@ -630,9 +631,9 @@ void PersonalDataManager::UpdateServerCardBillingAddress(
     return;
 
   CreditCard* existing_credit_card = nullptr;
-  for (auto it : server_credit_cards_) {
-    if (credit_card.server_id() == it->server_id()) {
-      existing_credit_card = it;
+  for (auto* server_card : server_credit_cards_) {
+    if (credit_card.server_id() == server_card->server_id()) {
+      existing_credit_card = server_card;
       break;
     }
   }

@@ -37,6 +37,10 @@ var EVENTS_PRIVATE = {
   'contentsdiscarded': {
     evt: CreateEvent('webViewPrivate.onWebcontentsDiscarded')
   },
+  'contentblocked': {
+    evt: CreateEvent('webViewPrivate.onContentBlocked'),
+    fields: ['blockedType']
+  },
 };
 
 

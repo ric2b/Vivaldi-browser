@@ -79,7 +79,11 @@ struct CrxUpdateItem {
   std::string id;
   CrxComponent component;
 
+  // Time when an update check for this CRX has happened.
   base::Time last_check;
+
+  // Time when the update of this CRX has begun.
+  base::TimeTicks update_begin;
 
   // A component can be made available for download from several urls.
   std::vector<GURL> crx_urls;
@@ -90,8 +94,8 @@ struct CrxUpdateItem {
   std::string hashdiff_sha256;
 
   // The from/to version and fingerprint values.
-  Version previous_version;
-  Version next_version;
+  base::Version previous_version;
+  base::Version next_version;
   std::string previous_fp;
   std::string next_fp;
 

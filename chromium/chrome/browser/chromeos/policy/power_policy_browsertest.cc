@@ -48,6 +48,7 @@
 #include "components/policy/core/common/external_data_fetcher.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_service.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -55,7 +56,6 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api/power/power_api.h"
 #include "extensions/common/api/power.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -232,8 +232,8 @@ void PowerPolicyBrowserTestBase::StoreAndReloadUserPolicy() {
   // Reload user policy from session manager client and wait for the update to
   // take effect.
   RunClosureAndWaitForUserPolicyUpdate(
-      base::Bind(&PowerPolicyBrowserTestBase::ReloadUserPolicy, this,
-                 browser()->profile()),
+      base::Bind(&PowerPolicyBrowserTestBase::ReloadUserPolicy,
+                 base::Unretained(this), browser()->profile()),
       browser()->profile());
 }
 
@@ -246,7 +246,8 @@ void PowerPolicyBrowserTestBase::
   // policy from session manager client and wait for a change in the login
   // profile's policy to be observed.
   RunClosureAndWaitForUserPolicyUpdate(
-      base::Bind(&PowerPolicyBrowserTestBase::RefreshDevicePolicy, this),
+      base::Bind(&PowerPolicyBrowserTestBase::RefreshDevicePolicy,
+                 base::Unretained(this)),
       profile);
 }
 

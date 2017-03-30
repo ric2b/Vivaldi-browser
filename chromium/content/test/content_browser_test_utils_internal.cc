@@ -24,10 +24,10 @@
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/test/browser_test_utils.h"
@@ -38,30 +38,6 @@
 #include "net/url_request/url_request.h"
 
 namespace content {
-
-namespace {
-
-// Helper class used by the TestNavigationManager to pause navigations.
-class TestNavigationManagerThrottle : public NavigationThrottle {
- public:
-  TestNavigationManagerThrottle(NavigationHandle* handle,
-                                base::Closure on_will_start_request_closure)
-      : NavigationThrottle(handle),
-        on_will_start_request_closure_(on_will_start_request_closure) {}
-  ~TestNavigationManagerThrottle() override {}
-
- private:
-  // NavigationThrottle implementation.
-  NavigationThrottle::ThrottleCheckResult WillStartRequest() override {
-    BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            on_will_start_request_closure_);
-    return NavigationThrottle::DEFER;
-  }
-
-  base::Closure on_will_start_request_closure_;
-};
-
-}  // namespace
 
 void NavigateFrameToURL(FrameTreeNode* node, const GURL& url) {
   TestFrameNavigationObserver observer(node);
@@ -367,66 +343,6 @@ void NavigationStallDelegate::RequestBeginning(
     throttles->push_back(new HttpRequestStallThrottle);
 }
 
-TestNavigationManager::TestNavigationManager(WebContents* web_contents,
-                                             const GURL& url)
-    : WebContentsObserver(web_contents),
-      url_(url),
-      navigation_paused_(false),
-      handle_(nullptr),
-      weak_factory_(this) {}
-
-TestNavigationManager::~TestNavigationManager() {}
-
-void TestNavigationManager::WaitForWillStartRequest() {
-  if (navigation_paused_)
-    return;
-  loop_runner_ = new MessageLoopRunner();
-  loop_runner_->Run();
-  loop_runner_ = nullptr;
-}
-
-void TestNavigationManager::ResumeNavigation() {
-  if (!navigation_paused_ || !handle_)
-    return;
-  navigation_paused_ = false;
-  handle_->Resume();
-}
-
-void TestNavigationManager::WaitForNavigationFinished() {
-  if (!handle_)
-    return;
-  loop_runner_ = new MessageLoopRunner();
-  loop_runner_->Run();
-  loop_runner_ = nullptr;
-}
-
-void TestNavigationManager::DidStartNavigation(NavigationHandle* handle) {
-  if (handle_ || handle->GetURL() != url_)
-    return;
-
-  handle_ = handle;
-  std::unique_ptr<NavigationThrottle> throttle(
-      new TestNavigationManagerThrottle(
-          handle_, base::Bind(&TestNavigationManager::OnWillStartRequest,
-                              weak_factory_.GetWeakPtr())));
-  handle_->RegisterThrottleForTesting(std::move(throttle));
-}
-
-void TestNavigationManager::DidFinishNavigation(NavigationHandle* handle) {
-  if (handle != handle_)
-    return;
-  handle_ = nullptr;
-  navigation_paused_ = false;
-  if (loop_runner_)
-    loop_runner_->Quit();
-}
-
-void TestNavigationManager::OnWillStartRequest() {
-  navigation_paused_ = true;
-  if (loop_runner_)
-    loop_runner_->Quit();
-}
-
 FileChooserDelegate::FileChooserDelegate(const base::FilePath& file)
       : file_(file), file_chosen_(false) {}
 
@@ -440,6 +356,19 @@ void FileChooserDelegate::RunFileChooser(RenderFrameHost* render_frame_host,
   render_frame_host->FilesSelectedInChooser(files, FileChooserParams::Open);
 
   file_chosen_ = true;
+}
+
+FrameTestNavigationManager::FrameTestNavigationManager(
+    int filtering_frame_tree_node_id,
+    WebContents* web_contents,
+    const GURL& url)
+    : TestNavigationManager(web_contents, url),
+      filtering_frame_tree_node_id_(filtering_frame_tree_node_id) {}
+
+bool FrameTestNavigationManager::ShouldMonitorNavigation(
+    NavigationHandle* handle) {
+  return TestNavigationManager::ShouldMonitorNavigation(handle) &&
+         handle->GetFrameTreeNodeId() == filtering_frame_tree_node_id_;
 }
 
 }  // namespace content

@@ -12,6 +12,7 @@ import grit.format.rc_header
 
 from grit import xtb_reader
 from grit.node import base
+from grit import util
 
 
 class FileNode(base.Node):
@@ -63,7 +64,8 @@ class FileNode(base.Node):
             'specified\nby the \'lang\' attribute.')
 
   def GetInputPath(self):
-    return os.path.expandvars(self.attrs['path'])
+    path = os.path.expandvars(self.attrs['path'])
+    return util.PathSearcher.LocatePath(path, self.GetRoot().GetBaseDir())
 
 
 class OutputNode(base.Node):

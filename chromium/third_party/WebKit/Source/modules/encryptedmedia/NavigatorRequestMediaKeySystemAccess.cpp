@@ -17,7 +17,6 @@
 #include "modules/encryptedmedia/MediaKeysController.h"
 #include "platform/EncryptedMediaRequest.h"
 #include "platform/Histogram.h"
-#include "platform/Logging.h"
 #include "platform/network/ParsedContentType.h"
 #include "public/platform/WebEncryptedMediaClient.h"
 #include "public/platform/WebEncryptedMediaRequest.h"
@@ -251,7 +250,7 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
     const String& keySystem,
     const HeapVector<MediaKeySystemConfiguration>& supportedConfigurations)
 {
-    DVLOG(3) << __FUNCTION__;
+    DVLOG(3) << __func__;
 
     // From https://w3c.github.io/encrypted-media/#requestMediaKeySystemAccess
     // When this method is invoked, the user agent must run the following steps:

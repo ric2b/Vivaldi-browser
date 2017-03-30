@@ -38,7 +38,8 @@ class PluginInstanceThrottlerImplTest
   }
 
   void SetUp() override {
-    throttler_.reset(new PluginInstanceThrottlerImpl);
+    throttler_.reset(
+        new PluginInstanceThrottlerImpl(RenderFrame::DONT_RECORD_DECISION));
     throttler_->Initialize(nullptr, url::Origin(GURL("http://example.com")),
                            "Shockwave Flash", gfx::Size(100, 100));
     throttler_->AddObserver(this);
@@ -104,12 +105,12 @@ TEST_F(PluginInstanceThrottlerImplTest, ThrottleByKeyframe) {
   SkBitmap interesting_bitmap = skia::ReadPixels(canvas.sk_canvas());
 
   // Don't throttle for a boring frame.
-  throttler()->OnImageFlush(&boring_bitmap);
+  throttler()->OnImageFlush(boring_bitmap);
   EXPECT_FALSE(throttler()->IsThrottled());
   EXPECT_EQ(0, change_callback_calls());
 
   // Throttle after an interesting frame.
-  throttler()->OnImageFlush(&interesting_bitmap);
+  throttler()->OnImageFlush(interesting_bitmap);
   EXPECT_TRUE(throttler()->IsThrottled());
   EXPECT_EQ(1, change_callback_calls());
 }
@@ -122,7 +123,7 @@ TEST_F(PluginInstanceThrottlerImplTest, MaximumKeyframesAnalyzed) {
 
   // Throttle after tons of boring bitmaps.
   for (int i = 0; i < kMaximumFramesToExamine; ++i) {
-    throttler()->OnImageFlush(&boring_bitmap);
+    throttler()->OnImageFlush(boring_bitmap);
   }
   EXPECT_TRUE(throttler()->IsThrottled());
   EXPECT_EQ(1, change_callback_calls());

@@ -1282,7 +1282,7 @@ class DownloadProtectionService::PPAPIDownloadRequest
   }
 
   void WhitelistCheckComplete(bool was_on_whitelist) {
-    DVLOG(2) << __FUNCTION__ << " was_on_whitelist:" << was_on_whitelist;
+    DVLOG(2) << __func__ << " was_on_whitelist:" << was_on_whitelist;
     if (was_on_whitelist) {
       RecordCountOfWhitelistedDownload(URL_WHITELIST);
       // TODO(asanka): Should sample whitelisted downloads based on
@@ -1297,7 +1297,7 @@ class DownloadProtectionService::PPAPIDownloadRequest
   }
 
   void SendRequest() {
-    DVLOG(2) << __FUNCTION__;
+    DVLOG(2) << __func__;
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     ClientDownloadRequest request;
@@ -1370,13 +1370,13 @@ class DownloadProtectionService::PPAPIDownloadRequest
 
   void OnRequestTimedOut() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    DVLOG(2) << __FUNCTION__;
+    DVLOG(2) << __func__;
     Finish(RequestOutcome::TIMEDOUT, UNKNOWN);
   }
 
   void Finish(RequestOutcome reason, DownloadCheckResult response) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    DVLOG(2) << __FUNCTION__ << " response: " << response;
+    DVLOG(2) << __func__ << " response: " << response;
     UMA_HISTOGRAM_SPARSE_SLOWLY(
         "SBClientDownload.PPAPIDownloadRequest.RequestOutcome",
         static_cast<int>(reason));
@@ -1577,7 +1577,7 @@ void DownloadProtectionService::CheckPPAPIDownloadRequest(
     const std::vector<base::FilePath::StringType>& alternate_extensions,
     Profile* profile,
     const CheckDownloadCallback& callback) {
-  DVLOG(1) << __FUNCTION__ << " url:" << requestor_url
+  DVLOG(1) << __func__ << " url:" << requestor_url
            << " default_file_path:" << default_file_path.value();
   std::unique_ptr<PPAPIDownloadRequest> request(new PPAPIDownloadRequest(
       requestor_url, default_file_path, alternate_extensions, profile, callback,

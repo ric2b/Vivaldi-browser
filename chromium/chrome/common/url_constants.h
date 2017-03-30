@@ -125,11 +125,6 @@ extern const char kChromeUIMetroFlowURL[];
 extern const char kChromeUITabModalConfirmDialogURL[];
 #endif
 
-#if !defined(OS_ANDROID)
-extern const char kChromeUICopresenceURL[];
-extern const char kChromeUICopresenceHost[];
-#endif
-
 #if defined(ENABLE_WEBRTC)
 extern const char kChromeUIWebRtcLogsURL[];
 #endif
@@ -238,11 +233,10 @@ extern const char kChromeUITouchIconHost[];
 extern const char kChromeUITranslateInternalsHost[];
 extern const char kChromeUIUberFrameHost[];
 extern const char kChromeUIUberHost[];
+extern const char kChromeUIUsbInternalsHost[];
 extern const char kChromeUIUserActionsHost[];
 extern const char kChromeUIVersionHost[];
 extern const char kChromeUIWorkersHost[];
-
-extern const char kChromeUIThemePath[];
 
 #if defined(ENABLE_PRINT_PREVIEW)
 extern const char kChromeUIPrintHost[];
@@ -335,6 +329,7 @@ extern const char kResetProfileSettingsSubPage[];
 extern const char kSearchEnginesSubPage[];
 extern const char kSearchSubPage[];
 extern const char kSearchUsersSubPage[];
+extern const char kSignOutSubPage[];
 extern const char kSyncSetupSubPage[];
 extern const char kTriggeredResetProfileSettingsSubPage[];
 #if defined(OS_CHROMEOS)
@@ -373,6 +368,8 @@ extern const char kChromeHelpViaWebUIURL[];
 extern const char kChromeAccessibilityHelpURL[];
 // Accessibility settings link for Chrome.
 extern const char kChromeAccessibilitySettingsURL[];
+// Palette help link for Chrome.
+extern const char kChromePaletteHelpURL[];
 #endif
 
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)

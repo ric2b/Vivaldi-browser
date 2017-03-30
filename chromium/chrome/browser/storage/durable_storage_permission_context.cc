@@ -34,12 +34,14 @@ void DurableStoragePermissionContext::DecidePermission(
     const PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
+    bool user_gesture,
     const BrowserPermissionCallback& callback) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
   // TODO(dgrogan): Remove bookmarks check in favor of site engagement. In the
   // meantime maybe grant permission to A2HS origins as well.
-  BookmarkModel* model = BookmarkModelFactory::GetForProfileIfExists(profile());
+  BookmarkModel* model =
+      BookmarkModelFactory::GetForBrowserContextIfExists(profile());
   if (model) {
     std::vector<bookmarks::BookmarkModel::URLAndTitle> bookmarks;
     model->GetBookmarks(&bookmarks);

@@ -14,23 +14,44 @@
 
 class GURL;
 
-namespace ios {
-class ChromeBrowserState;
-}
-
 namespace dom_distiller {
 
 class DistilledPagePrefs;
 
-// A very simple and naive implementation of the dom_distiller
-// ViewRequestDelegate: From an URL it builds an HTML string and notifies when
-// finished.
-class DistillerViewer : public DomDistillerRequestViewBase {
+// An interface for a dom_distiller ViewRequestDelegate that distills a URL and
+// calls the given callback with the distilled HTML string and the images it
+// contains.
+class DistillerViewerInterface : public DomDistillerRequestViewBase {
  public:
-  typedef base::Callback<void(const GURL&, const std::string&)>
+  typedef struct {
+    // The url of the image.
+    GURL url;
+    // The image data as a string.
+    std::string data;
+  } ImageInfo;
+  typedef base::Callback<void(const GURL&,
+                              const std::string&,
+                              const std::vector<ImageInfo>& images)>
       DistillationFinishedCallback;
 
-  DistillerViewer(ios::ChromeBrowserState* browser_state,
+  DistillerViewerInterface(dom_distiller::DomDistillerService* distillerService,
+                           PrefService* prefs)
+      : DomDistillerRequestViewBase(new DistilledPagePrefs(prefs)) {}
+  ~DistillerViewerInterface() override {}
+
+  void OnArticleReady(
+      const dom_distiller::DistilledArticleProto* article_proto) override = 0;
+
+  void SendJavaScript(const std::string& buffer) override = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(DistillerViewerInterface);
+};
+
+// A very simple and naive implementation of the DistillerViewer.
+class DistillerViewer : public DistillerViewerInterface {
+ public:
+  DistillerViewer(dom_distiller::DomDistillerService* distillerService,
+                  PrefService* prefs,
                   const GURL& url,
                   const DistillationFinishedCallback& callback);
   ~DistillerViewer() override;

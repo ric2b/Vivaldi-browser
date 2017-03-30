@@ -48,6 +48,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/line/LineWidth.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
+#include "core/paint/BlockFlowPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
 #include "wtf/PtrUtil.h"
 #include <memory>
@@ -166,6 +167,18 @@ public:
         , m_previousBreakAfterValue(BreakAuto)
         , m_isAtFirstInFlowChild(true) { }
 
+    // Store multicol layout state before first layout of a block child. The child may contain a
+    // column spanner. If we need to re-lay out the block child because our initial logical top
+    // estimate was wrong, we need to roll back to how things were before laying out the child.
+    void storeMultiColumnLayoutState(const LayoutFlowThread& flowThread)
+    {
+        m_multiColumnLayoutState = flowThread.multiColumnLayoutState();
+    }
+    void rollBackToInitialMultiColumnLayoutState(LayoutFlowThread& flowThread)
+    {
+        flowThread.restoreMultiColumnLayoutState(m_multiColumnLayoutState);
+    }
+
     const MarginInfo& marginInfo() const { return m_marginInfo; }
     MarginInfo& marginInfo() { return m_marginInfo; }
     LayoutUnit& previousFloatLogicalBottom() { return m_previousFloatLogicalBottom; }
@@ -177,6 +190,7 @@ public:
     void clearIsAtFirstInFlowChild() { m_isAtFirstInFlowChild = false; }
 
 private:
+    MultiColumnLayoutState m_multiColumnLayoutState;
     MarginInfo m_marginInfo;
     LayoutUnit m_previousFloatLogicalBottom;
     EBreak m_previousBreakAfterValue;
@@ -628,6 +642,9 @@ void LayoutBlockFlow::markDescendantsWithFloatsForLayoutIfNeeded(LayoutBlockFlow
 
 bool LayoutBlockFlow::positionAndLayoutOnceIfNeeded(LayoutBox& child, LayoutUnit newLogicalTop, BlockChildrenLayoutInfo& layoutInfo)
 {
+    if (LayoutFlowThread* flowThread = flowThreadContainingBlock())
+        layoutInfo.rollBackToInitialMultiColumnLayoutState(*flowThread);
+
     if (child.isLayoutBlockFlow()) {
         LayoutUnit& previousFloatLogicalBottom = layoutInfo.previousFloatLogicalBottom();
         LayoutBlockFlow& childBlockFlow = toLayoutBlockFlow(child);
@@ -702,6 +719,9 @@ void LayoutBlockFlow::layoutBlockChild(LayoutBox& child, BlockChildrenLayoutInfo
 
     // Cache our old rect so that we can dirty the proper paint invalidation rects if the child moves.
     LayoutRect oldRect = child.frameRect();
+
+    if (LayoutFlowThread* flowThread = flowThreadContainingBlock())
+        layoutInfo.storeMultiColumnLayoutState(*flowThread);
 
     // Use the estimated block position and lay out the child if needed. After child layout, when
     // we have enough information to perform proper margin collapsing, float clearing and
@@ -782,8 +802,8 @@ void LayoutBlockFlow::layoutBlockChild(LayoutBox& child, BlockChildrenLayoutInfo
     // If the child moved, we have to invalidate its paint as well as any floating/positioned
     // descendants. An exception is if we need a layout. In this case, we know we're going to
     // invalidate our paint (and the child) anyway.
-    if (!selfNeedsLayout() && (childOffset.width() || childOffset.height()))
-        child.invalidatePaintForOverhangingFloats(true);
+    if (!selfNeedsLayout() && (childOffset.width() || childOffset.height()) && child.isLayoutBlockFlow())
+        BlockFlowPaintInvalidator(toLayoutBlockFlow(child)).invalidatePaintForOverhangingFloats();
 
     if (paginated) {
         // Keep track of the break-after value of the child, so that it can be joined with the
@@ -1153,12 +1173,19 @@ void LayoutBlockFlow::layoutBlockChildren(bool relayoutChildren, SubtreeLayoutSc
     // It doesn't get included in the normal layout process but is instead skipped.
     LayoutObject* childToExclude = layoutSpecialExcludedChild(relayoutChildren, layoutScope);
 
-    LayoutBox* next = firstChildBox();
+    // TODO(foolip): Speculative CHECKs to crash if any non-LayoutBox
+    // children ever appear, the childrenInline() check at the call site
+    // should make this impossible. crbug.com/632848
+    LayoutObject* firstChild = this->firstChild();
+    CHECK(!firstChild || firstChild->isBox());
+    LayoutBox* next = toLayoutBox(firstChild);
     LayoutBox* lastNormalFlowChild = nullptr;
 
     while (next) {
         LayoutBox* child = next;
-        next = child->nextSiblingBox();
+        LayoutObject* nextSibling = child->nextSibling();
+        CHECK(!nextSibling || nextSibling->isBox());
+        next = toLayoutBox(nextSibling);
 
         child->setMayNeedPaintInvalidation();
 
@@ -1975,13 +2002,6 @@ LayoutObject* LayoutBlockFlow::hoverAncestor() const
     return isAnonymousBlockContinuation() ? continuation() : LayoutBlock::hoverAncestor();
 }
 
-void LayoutBlockFlow::updateDragState(bool dragOn)
-{
-    LayoutBlock::updateDragState(dragOn);
-    if (LayoutBoxModelObject* continuation = this->continuation())
-        continuation->updateDragState(dragOn);
-}
-
 RootInlineBox* LayoutBlockFlow::createAndAppendRootInlineBox()
 {
     RootInlineBox* rootBox = createRootInlineBox();
@@ -2022,7 +2042,7 @@ int LayoutBlockFlow::firstLineBoxBaseline() const
     if (!childrenInline())
         return LayoutBlock::firstLineBoxBaseline();
     if (firstLineBox())
-        return firstLineBox()->logicalTop() + style(true)->getFontMetrics().ascent(firstRootBox()->baselineType());
+        return (firstLineBox()->logicalTop() + style(true)->getFontMetrics().ascent(firstRootBox()->baselineType())).toInt();
     return -1;
 }
 
@@ -2039,20 +2059,20 @@ int LayoutBlockFlow::inlineBlockBaseline(LineDirectionMode lineDirection) const
 
     if ((!style()->isOverflowVisible() && !shouldIgnoreOverflowPropertyForInlineBlockBaseline()) || style()->containsSize()) {
         // We are not calling baselinePosition here because the caller should add the margin-top/margin-right, not us.
-        return lineDirection == HorizontalLine ? size().height() + marginBottom() : size().width() + marginLeft();
+        return (lineDirection == HorizontalLine ? size().height() + marginBottom() : size().width() + marginLeft()).toInt();
     }
     if (isWritingModeRoot() && !isRubyRun())
         return -1;
     if (!childrenInline())
         return LayoutBlock::inlineBlockBaseline(lineDirection);
     if (lastLineBox())
-        return lastLineBox()->logicalTop() + style(lastLineBox() == firstLineBox())->getFontMetrics().ascent(lastRootBox()->baselineType());
+        return (lastLineBox()->logicalTop() + style(lastLineBox() == firstLineBox())->getFontMetrics().ascent(lastRootBox()->baselineType())).toInt();
     if (!hasLineIfEmpty())
         return -1;
     const FontMetrics& fontMetrics = firstLineStyle()->getFontMetrics();
-    return fontMetrics.ascent()
+    return (fontMetrics.ascent()
         + (lineHeight(true, lineDirection, PositionOfInteriorLineBoxes) - fontMetrics.height()) / 2
-        + (lineDirection == HorizontalLine ? borderTop() + paddingTop() : borderRight() + paddingRight());
+        + (lineDirection == HorizontalLine ? borderTop() + paddingTop() : borderRight() + paddingRight())).toInt();
 }
 
 void LayoutBlockFlow::removeFloatingObjectsFromDescendants()
@@ -2408,6 +2428,11 @@ void LayoutBlockFlow::addChild(LayoutObject* newChild, LayoutObject* beforeChild
     }
 }
 
+static bool isMergeableAnonymousBlock(const LayoutBlockFlow* block)
+{
+    return block->isAnonymousBlock() && !block->continuation() && !block->beingDestroyed() && !block->isRubyRun() && !block->isRubyBase();
+}
+
 void LayoutBlockFlow::removeChild(LayoutObject* oldChild)
 {
     // No need to waste time in merging or removing empty anonymous blocks.
@@ -2433,11 +2458,12 @@ void LayoutBlockFlow::removeChild(LayoutObject* oldChild)
     LayoutBlock::removeChild(oldChild);
 
     LayoutObject* child = prev ? prev : next;
-    if (mergedAnonymousBlocks && child && !child->previousSibling() && !child->nextSibling()) {
-        // The removal has knocked us down to containing only a single anonymous
-        // box.  We can go ahead and pull the content right back up into our
+    if (child && child->isLayoutBlockFlow() && !child->previousSibling() && !child->nextSibling()) {
+        // If the removal has knocked us down to containing only a single anonymous
+        // box we can go ahead and pull the content right back up into our
         // box.
-        collapseAnonymousBlockChild(toLayoutBlockFlow(child));
+        if (mergedAnonymousBlocks || isMergeableAnonymousBlock(toLayoutBlockFlow(child)))
+            collapseAnonymousBlockChild(toLayoutBlockFlow(child));
     }
 
     if (!firstChild()) {
@@ -2557,11 +2583,6 @@ void LayoutBlockFlow::collapseAnonymousBlockChild(LayoutBlockFlow* child)
 
     children()->removeChildNode(this, child, child->hasLayer());
     child->destroy();
-}
-
-static bool isMergeableAnonymousBlock(const LayoutBlockFlow* block)
-{
-    return block->isAnonymousBlock() && !block->continuation() && !block->beingDestroyed() && !block->isRubyRun() && !block->isRubyBase();
 }
 
 bool LayoutBlockFlow::mergeSiblingContiguousAnonymousBlock(LayoutBlockFlow* siblingThatMayBeDeleted)
@@ -2753,54 +2774,6 @@ void LayoutBlockFlow::childBecameNonInline(LayoutObject*)
     if (isAnonymousBlock() && parent() && parent()->isLayoutBlock())
         toLayoutBlock(parent())->removeLeftoverAnonymousBlock(this);
     // |this| may be dead here
-}
-
-void LayoutBlockFlow::invalidatePaintForOverhangingFloats(bool paintAllDescendants)
-{
-    // Invalidate paint of any overhanging floats (if we know we're the one to paint them).
-    // Otherwise, bail out.
-    if (!hasOverhangingFloats())
-        return;
-
-    const FloatingObjectSet& floatingObjectSet = m_floatingObjects->set();
-    FloatingObjectSetIterator end = floatingObjectSet.end();
-    for (FloatingObjectSetIterator it = floatingObjectSet.begin(); it != end; ++it) {
-        const FloatingObject& floatingObject = *it->get();
-        // Only issue paint invaldiations for the object if it is overhanging, is not in its own layer, and
-        // is our responsibility to paint (m_shouldPaint is set). When paintAllDescendants is true, the latter
-        // condition is replaced with being a descendant of us.
-        if (isOverhangingFloat(floatingObject)
-            && !floatingObject.layoutObject()->hasSelfPaintingLayer()
-            && (floatingObject.shouldPaint() || (paintAllDescendants && floatingObject.layoutObject()->isDescendantOf(this)))) {
-
-            LayoutBox* floatingLayoutBox = floatingObject.layoutObject();
-            floatingLayoutBox->setShouldDoFullPaintInvalidation();
-            floatingLayoutBox->invalidatePaintForOverhangingFloats(false);
-        }
-    }
-}
-
-void LayoutBlockFlow::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
-{
-    LayoutBlock::invalidateDisplayItemClients(invalidationReason);
-
-    // If the block is a continuation or containing block of an inline continuation, invalidate the
-    // start object of the continuations if it has focus ring because change of continuation may change
-    // the shape of the focus ring.
-    if (!isAnonymous())
-        return;
-
-    LayoutObject* startOfContinuations = nullptr;
-    if (LayoutInline* inlineElementContinuation = this->inlineElementContinuation()) {
-        // This block is an anonymous block continuation.
-        startOfContinuations = inlineElementContinuation->node()->layoutObject();
-    } else if (LayoutObject* firstChild = this->firstChild()) {
-        // This block is the anonymous containing block of an inline element continuation.
-        if (firstChild->isElementContinuation())
-            startOfContinuations = firstChild->node()->layoutObject();
-    }
-    if (startOfContinuations && startOfContinuations->styleRef().outlineStyleIsAuto())
-        startOfContinuations->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*startOfContinuations, invalidationReason);
 }
 
 void LayoutBlockFlow::clearFloats(EClear clear)
@@ -3350,10 +3323,10 @@ LayoutUnit LayoutBlockFlow::logicalRightFloatOffsetForLine(LayoutUnit logicalTop
     return fixedOffset;
 }
 
-void LayoutBlockFlow::setAncestorShouldPaintFloatingObject(const LayoutBox& floatBox, bool shouldPaint)
+void LayoutBlockFlow::setAncestorShouldPaintFloatingObject(const LayoutBox& floatBox)
 {
     ASSERT(floatBox.isFloating());
-    ASSERT(!floatBox.hasSelfPaintingLayer());
+    bool floatBoxIsSelfPaintingLayer = floatBox.hasLayer() && floatBox.layer()->isSelfPaintingLayer();
     for (LayoutObject* ancestor = floatBox.parent(); ancestor && ancestor->isLayoutBlockFlow(); ancestor = ancestor->parent()) {
         LayoutBlockFlow* ancestorBlock = toLayoutBlockFlow(ancestor);
         FloatingObjects* ancestorFloatingObjects = ancestorBlock->m_floatingObjects.get();
@@ -3364,8 +3337,7 @@ void LayoutBlockFlow::setAncestorShouldPaintFloatingObject(const LayoutBox& floa
             break;
 
         FloatingObject& floatingObject = **it;
-        if (shouldPaint) {
-            ASSERT(!floatingObject.shouldPaint());
+        if (!floatBoxIsSelfPaintingLayer) {
             // This repeats the logic in addOverhangingFloats() about shouldPaint flag:
             // - The nearest enclosing block in which the float doesn't overhang paints the float;
             // - Or even if the float overhangs, if the ancestor block has self-painting layer, it
@@ -3784,6 +3756,19 @@ void LayoutBlockFlow::addOutlineRects(Vector<LayoutRect>& rects, const LayoutPoi
 
     if (inlineElementContinuation)
         inlineElementContinuation->addOutlineRects(rects, additionalOffset + (inlineElementContinuation->containingBlock()->location() - location()), includeBlockOverflows);
+}
+
+PaintInvalidationReason LayoutBlockFlow::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
+{
+    if (containsFloats())
+        paintInvalidationState.paintingLayer().setNeedsPaintPhaseFloat();
+
+    return LayoutBlock::invalidatePaintIfNeeded(paintInvalidationState);
+}
+
+void LayoutBlockFlow::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
+{
+    BlockFlowPaintInvalidator(*this).invalidateDisplayItemClients(invalidationReason);
 }
 
 } // namespace blink

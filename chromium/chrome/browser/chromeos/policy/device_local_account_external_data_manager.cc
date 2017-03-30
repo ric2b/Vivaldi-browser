@@ -11,7 +11,7 @@
 #include "chrome/browser/chromeos/policy/cloud_external_data_store.h"
 #include "chrome/browser/chromeos/policy/device_local_account_external_data_service.h"
 #include "components/policy/core/common/cloud/resource_cache.h"
-#include "policy/policy_constants.h"
+#include "components/policy/policy_constants.h"
 
 namespace policy {
 
@@ -24,8 +24,8 @@ DeviceLocalAccountExternalDataManager::DeviceLocalAccountExternalDataManager(
     : CloudExternalDataManagerBase(get_policy_details,
                                    backend_task_runner,
                                    io_task_runner) {
-  SetExternalDataStore(base::WrapUnique(new CloudExternalDataStore(
-      account_id, backend_task_runner, resource_cache)));
+  SetExternalDataStore(base::MakeUnique<CloudExternalDataStore>(
+      account_id, backend_task_runner, resource_cache));
 }
 
 DeviceLocalAccountExternalDataManager::

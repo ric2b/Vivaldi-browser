@@ -60,10 +60,10 @@ bool EsParserMpeg1Audio::ParseFromEsQueue() {
     // Get the PTS & the duration of this access unit.
     TimingDesc current_timing_desc =
         GetTimingDescriptor(mpeg1audio_frame.queue_offset);
-    if (current_timing_desc.pts != kNoTimestamp())
+    if (current_timing_desc.pts != kNoTimestamp)
       audio_timestamp_helper_->SetBaseTimestamp(current_timing_desc.pts);
 
-    if (audio_timestamp_helper_->base_timestamp() == kNoTimestamp()) {
+    if (audio_timestamp_helper_->base_timestamp() == kNoTimestamp) {
       DVLOG(1) << "Skipping audio frame with unknown timestamp";
       SkipMpeg1AudioFrame(mpeg1audio_frame);
       continue;
@@ -79,11 +79,9 @@ bool EsParserMpeg1Audio::ParseFromEsQueue() {
     // TODO(wolenetz/acolwell): Validate and use a common cross-parser TrackId
     // type and allow multiple audio tracks. See https://crbug.com/341581.
     scoped_refptr<StreamParserBuffer> stream_parser_buffer =
-        StreamParserBuffer::CopyFrom(
-            mpeg1audio_frame.data,
-            mpeg1audio_frame.size,
-            is_key_frame,
-            DemuxerStream::AUDIO, 0);
+        StreamParserBuffer::CopyFrom(mpeg1audio_frame.data,
+                                     mpeg1audio_frame.size, is_key_frame,
+                                     DemuxerStream::AUDIO, kMp2tAudioTrackId);
     stream_parser_buffer->set_timestamp(current_pts);
     stream_parser_buffer->set_duration(frame_duration);
     emit_buffer_cb_.Run(stream_parser_buffer);
@@ -179,7 +177,7 @@ bool EsParserMpeg1Audio::UpdateAudioConfiguration(
     DVLOG(1) << "Channel layout: " << header.channel_layout;
     // Reset the timestamp helper to use a new time scale.
     if (audio_timestamp_helper_ &&
-        audio_timestamp_helper_->base_timestamp() != kNoTimestamp()) {
+        audio_timestamp_helper_->base_timestamp() != kNoTimestamp) {
       base::TimeDelta base_timestamp = audio_timestamp_helper_->GetTimestamp();
       audio_timestamp_helper_.reset(
         new AudioTimestampHelper(header.sample_rate));

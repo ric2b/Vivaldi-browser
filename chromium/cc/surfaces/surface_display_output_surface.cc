@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_ack.h"
 #include "cc/surfaces/display.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_id_allocator.h"
@@ -74,11 +73,9 @@ void SurfaceDisplayOutputSurface::SwapBuffers(CompositorFrame frame) {
   display_->SetSurfaceId(delegated_surface_id_,
                          frame.metadata.device_scale_factor);
 
-  client_->DidSwapBuffers();
-
   factory_.SubmitCompositorFrame(
       delegated_surface_id_, std::move(frame),
-      base::Bind(&SurfaceDisplayOutputSurface::SwapBuffersComplete,
+      base::Bind(&SurfaceDisplayOutputSurface::DidDrawCallback,
                  base::Unretained(this)));
 }
 
@@ -86,7 +83,7 @@ bool SurfaceDisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   surface_manager_->RegisterSurfaceFactoryClient(
-      surface_id_allocator_->id_namespace(), this);
+      surface_id_allocator_->client_id(), this);
 
   if (!OutputSurface::BindToClient(client))
     return false;
@@ -99,7 +96,8 @@ bool SurfaceDisplayOutputSurface::BindToClient(OutputSurfaceClient* client) {
 
   // Avoid initializing GL context here, as this should be sharing the
   // Display's context.
-  display_->Initialize(this);
+  display_->Initialize(this, surface_manager_,
+                       surface_id_allocator_->client_id());
   return true;
 }
 
@@ -115,7 +113,7 @@ void SurfaceDisplayOutputSurface::DetachFromClient() {
   // Unregister the SurfaceFactoryClient here instead of the dtor so that only
   // one client is alive for this namespace at any given time.
   surface_manager_->UnregisterSurfaceFactoryClient(
-      surface_id_allocator_->id_namespace());
+      surface_id_allocator_->client_id());
   if (!delegated_surface_id_.is_null())
     factory_.Destroy(delegated_surface_id_);
 
@@ -135,10 +133,8 @@ uint32_t SurfaceDisplayOutputSurface::GetFramebufferCopyTextureFormat() {
 
 void SurfaceDisplayOutputSurface::ReturnResources(
     const ReturnedResourceArray& resources) {
-  CompositorFrameAck ack;
-  ack.resources = resources;
   if (client_)
-    client_->ReclaimResources(&ack);
+    client_->ReclaimResources(resources);
 }
 
 void SurfaceDisplayOutputSurface::SetBeginFrameSource(
@@ -157,7 +153,19 @@ void SurfaceDisplayOutputSurface::DisplaySetMemoryPolicy(
   SetMemoryPolicy(policy);
 }
 
-void SurfaceDisplayOutputSurface::SwapBuffersComplete(SurfaceDrawStatus drawn) {
+void SurfaceDisplayOutputSurface::DisplayWillDrawAndSwap(
+    bool will_draw_and_swap,
+    const RenderPassList& render_passes) {
+  // This notification is not relevant to our client outside of tests.
+}
+
+void SurfaceDisplayOutputSurface::DisplayDidDrawAndSwap() {
+  // This notification is not relevant to our client outside of tests. We
+  // unblock the client from DidDrawCallback() when the surface is going to
+  // be drawn.
+}
+
+void SurfaceDisplayOutputSurface::DidDrawCallback() {
   // TODO(danakj): Why the lost check?
   if (!output_surface_lost_)
     client_->DidSwapBuffersComplete();

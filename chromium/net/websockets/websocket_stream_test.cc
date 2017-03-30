@@ -26,15 +26,19 @@
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/socket_test_util.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/gtest_util.h"
 #include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_basic_handshake_stream.h"
 #include "net/websockets/websocket_frame.h"
 #include "net/websockets/websocket_stream_create_test_base.h"
 #include "net/websockets/websocket_test_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+
+using net::test::IsOk;
 
 namespace net {
 namespace {
@@ -571,7 +575,7 @@ TEST_F(WebSocketStreamCreateExtensionTest, PerMessageDeflateInflates) {
   ASSERT_TRUE(stream_);
   std::vector<std::unique_ptr<WebSocketFrame>> frames;
   CompletionCallback callback;
-  ASSERT_EQ(OK, stream_->ReadFrames(&frames, callback));
+  ASSERT_THAT(stream_->ReadFrames(&frames, callback), IsOk());
   ASSERT_EQ(1U, frames.size());
   ASSERT_EQ(5U, frames[0]->header.payload_length);
   EXPECT_EQ("Hello", std::string(frames[0]->data->data(), 5));
@@ -1005,11 +1009,11 @@ TEST_F(WebSocketStreamCreateTest, CancellationDuringRead) {
 // "cookie-flood.html".
 TEST_F(WebSocketStreamCreateTest, VeryLargeResponseHeaders) {
   std::string set_cookie_headers;
-  set_cookie_headers.reserve(45 * 10000);
-  for (int i = 0; i < 10000; ++i) {
-    set_cookie_headers +=
-        base::StringPrintf("Set-Cookie: WK-websocket-test-flood-%d=1\r\n", i);
+  set_cookie_headers.reserve(24 * 20000);
+  for (int i = 0; i < 20000; ++i) {
+    set_cookie_headers += base::StringPrintf("Set-Cookie: ws-%d=1\r\n", i);
   }
+  ASSERT_GT(set_cookie_headers.size(), 256U * 1024U);
   CreateAndConnectStandard("ws://localhost/", "localhost", "/",
                            NoSubProtocols(), LocalhostOrigin(), LocalhostUrl(),
                            "", "", set_cookie_headers);

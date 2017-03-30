@@ -17,13 +17,13 @@ static_library("webdata_services") {
     "//components/password_manager/core/browser",
     "//components/search_engines",
     "//components/signin/core/browser",
+    "//components/sync",
     "//components/webdata/common",
     "//sql",
-    "//sync",
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "web_data_service_test_util.cc",

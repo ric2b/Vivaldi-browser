@@ -61,7 +61,7 @@ PickerIndicatorElement* PickerIndicatorElement::create(Document& document, Picke
 
 PickerIndicatorElement::~PickerIndicatorElement()
 {
-    ASSERT(!m_chooser);
+    DCHECK(!m_chooser);
 }
 
 LayoutObject* PickerIndicatorElement::createLayoutObject(const ComputedStyle&)
@@ -133,7 +133,7 @@ void PickerIndicatorElement::openPopup()
 
 Element& PickerIndicatorElement::ownerElement() const
 {
-    ASSERT(m_pickerIndicatorOwner);
+    DCHECK(m_pickerIndicatorOwner);
     return m_pickerIndicatorOwner->pickerOwnerElement();
 }
 
@@ -144,10 +144,10 @@ void PickerIndicatorElement::closePopup()
     m_chooser->endChooser();
 }
 
-void PickerIndicatorElement::detach(const AttachContext& context)
+void PickerIndicatorElement::detachLayoutTree(const AttachContext& context)
 {
     closePopup();
-    HTMLDivElement::detach(context);
+    HTMLDivElement::detachLayoutTree(context);
 }
 
 AXObject* PickerIndicatorElement::popupRootAXObject() const

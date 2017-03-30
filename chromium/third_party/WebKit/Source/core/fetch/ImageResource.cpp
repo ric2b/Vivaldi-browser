@@ -29,8 +29,8 @@
 #include "core/fetch/ResourceClientOrObserverWalker.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/fetch/ResourceLoader.h"
+#include "core/fetch/ResourceLoadingLog.h"
 #include "core/svg/graphics/SVGImage.h"
-#include "platform/Logging.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/SharedBuffer.h"
 #include "platform/TraceEvent.h"
@@ -40,6 +40,7 @@
 #include "wtf/CurrentTime.h"
 #include "wtf/StdLibExtras.h"
 #include <memory>
+#include <v8.h>
 
 namespace blink {
 
@@ -65,7 +66,7 @@ ImageResource::ImageResource(const ResourceRequest& resourceRequest, const Resou
     , m_image(nullptr)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(ResourceLoading, "new ImageResource(ResourceRequest) %p", this);
+    RESOURCE_LOADING_DVLOG(1) << "new ImageResource(ResourceRequest) " << this;
 }
 
 ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& options)
@@ -74,13 +75,13 @@ ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& o
     , m_image(image)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(ResourceLoading, "new ImageResource(Image) %p", this);
+    RESOURCE_LOADING_DVLOG(1) << "new ImageResource(Image) " << this;
     setStatus(Cached);
 }
 
 ImageResource::~ImageResource()
 {
-    WTF_LOG(ResourceLoading, "~ImageResource %p", this);
+    RESOURCE_LOADING_DVLOG(1) << "~ImageResource " << this;
     clearImage();
 }
 
@@ -119,17 +120,9 @@ void ImageResource::markObserverFinished(ImageResourceObserver* observer)
     }
 }
 
-void ImageResource::ensureImage()
-{
-    if (m_data && !m_image && !errorOccurred()) {
-        createImage();
-        m_image->setData(m_data, true);
-    }
-}
-
 void ImageResource::didAddClient(ResourceClient* client)
 {
-    ensureImage();
+    DCHECK((m_multipartParser && isLoading()) || !data() || m_image);
     Resource::didAddClient(client);
 }
 
@@ -142,7 +135,15 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
     if (isCacheValidator())
         return;
 
-    ensureImage();
+    // When the response is not multipart, if |data()| exists, |m_image| must be
+    // created. This is assured that |updateImage()| is called when
+    // |appendData()| is called.
+    //
+    // On the other hand, when the response is multipart, |updateImage()| is
+    // not called in |appendData()|, which means |m_image| might not be created
+    // even when |data()| exists. This is intentional since creating a |m_image|
+    // on receiving data might destroy an existing image in a previous part.
+    DCHECK((m_multipartParser && isLoading()) || !data() || m_image);
 
     if (m_image && !m_image->isNull()) {
         observer->imageChanged(this);
@@ -194,12 +195,6 @@ ResourcePriority ImageResource::priorityFromObservers()
     return priority;
 }
 
-bool ImageResource::isSafeToUnlock() const
-{
-    // Note that |m_image| holds a reference to |m_data| in addition to the one held by the Resource parent class.
-    return !m_image || (m_image->hasOneRef() && m_data->refCount() == 2);
-}
-
 void ImageResource::destroyDecodedDataForFailedRevalidation()
 {
     clearImage();
@@ -208,12 +203,10 @@ void ImageResource::destroyDecodedDataForFailedRevalidation()
 
 void ImageResource::destroyDecodedDataIfPossible()
 {
-    if (!hasClientsOrObservers() && !isLoading() && (!m_image || (m_image->hasOneRef() && m_image->isBitmapImage()))) {
-        clearImage();
-        setDecodedSize(0);
-    } else if (m_image && !errorOccurred()) {
-        m_image->destroyDecodedData();
-    }
+    if (!m_image)
+        return;
+    CHECK(!errorOccurred());
+    m_image->destroyDecodedData();
 }
 
 void ImageResource::doResetAnimation()
@@ -224,7 +217,8 @@ void ImageResource::doResetAnimation()
 
 void ImageResource::allClientsAndObserversRemoved()
 {
-    if (m_image && !errorOccurred()) {
+    if (m_image) {
+        CHECK(!errorOccurred());
         // If possible, delay the resetting until back at the event loop.
         // Doing so after a conservative GC prevents resetAnimation() from
         // upsetting ongoing animation updates (crbug.com/613709)
@@ -238,8 +232,18 @@ void ImageResource::allClientsAndObserversRemoved()
     Resource::allClientsAndObserversRemoved();
 }
 
+PassRefPtr<SharedBuffer> ImageResource::resourceBuffer() const
+{
+    if (data())
+        return data();
+    if (m_image)
+        return m_image->data();
+    return nullptr;
+}
+
 void ImageResource::appendData(const char* data, size_t length)
 {
+    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(length);
     if (m_multipartParser) {
         m_multipartParser->appendData(data, length);
     } else {
@@ -266,8 +270,6 @@ bool ImageResource::willPaintBrokenImage() const
 
 blink::Image* ImageResource::getImage()
 {
-    ASSERT(!isPurgeable());
-
     if (errorOccurred()) {
         // Returning the 1x broken image is non-ideal, but we cannot reliably access the appropriate
         // deviceScaleFactor from here. It is critical that callers use ImageResource::brokenImage()
@@ -299,8 +301,6 @@ bool ImageResource::imageHasRelativeSize() const
 
 LayoutSize ImageResource::imageSize(RespectImageOrientationEnum shouldRespectImageOrientation, float multiplier, SizeType sizeType)
 {
-    ASSERT(!isPurgeable());
-
     if (!m_image)
         return LayoutSize();
 
@@ -340,9 +340,8 @@ void ImageResource::notifyObservers(const IntRect* changeRect)
 
 void ImageResource::clear()
 {
-    prune();
     clearImage();
-    m_data.clear();
+    clearData();
     setEncodedSize(0);
 }
 
@@ -352,7 +351,7 @@ inline void ImageResource::createImage()
     if (m_image)
         return;
 
-    if (m_response.mimeType() == "image/svg+xml") {
+    if (response().mimeType() == "image/svg+xml") {
         m_image = SVGImage::create(this);
     } else {
         m_image = BitmapImage::create(this);
@@ -363,6 +362,8 @@ inline void ImageResource::clearImage()
 {
     if (!m_image)
         return;
+    int64_t length = m_image->data() ? m_image->data()->size() : 0;
+    v8::Isolate::GetCurrent()->AdjustAmountOfExternalAllocatedMemory(-length);
 
     // If our Image has an observer, it's always us so we need to clear the back pointer
     // before dropping our reference.
@@ -374,51 +375,61 @@ void ImageResource::updateImage(bool allDataReceived)
 {
     TRACE_EVENT0("blink", "ImageResource::updateImage");
 
-    if (m_data)
+    if (data())
         createImage();
 
-    bool sizeAvailable = false;
+    Image::SizeAvailability sizeAvailable = Image::SizeUnavailable;
 
     // Have the image update its data from its internal buffer.
     // It will not do anything now, but will delay decoding until
     // queried for info (like size or specific image frames).
-    if (m_image)
-        sizeAvailable = m_image->setData(m_data, allDataReceived);
+    if (data()) {
+        DCHECK(m_image);
+        sizeAvailable = m_image->setData(data(), allDataReceived);
+    }
 
     // Go ahead and tell our observers to try to draw if we have either
     // received all the data or the size is known. Each chunk from the
     // network causes observers to repaint, which will force that chunk
     // to decode.
-    if (sizeAvailable || allDataReceived) {
-        if (!m_image || m_image->isNull()) {
-            if (!errorOccurred())
-                setStatus(DecodeError);
-            clear();
-            if (memoryCache()->contains(this))
-                memoryCache()->remove(this);
-        }
-
-        // It would be nice to only redraw the decoded band of the image, but with the current design
-        // (decoding delayed until painting) that seems hard.
-        notifyObservers();
+    if (sizeAvailable == Image::SizeUnavailable && !allDataReceived)
+        return;
+    if (!m_image || m_image->isNull()) {
+        size_t size = encodedSize();
+        clear();
+        if (!errorOccurred())
+            setStatus(DecodeError);
+        if (!allDataReceived && loader())
+            loader()->didFinishLoading(nullptr, monotonicallyIncreasingTime(), size);
+        memoryCache()->remove(this);
     }
+
+    // It would be nice to only redraw the decoded band of the image, but with the current design
+    // (decoding delayed until painting) that seems hard.
+    notifyObservers();
 }
 
 void ImageResource::updateImageAndClearBuffer()
 {
     clearImage();
     updateImage(true);
-    m_data.clear();
+    clearData();
 }
 
 void ImageResource::finish(double loadFinishTime)
 {
     if (m_multipartParser) {
         m_multipartParser->finish();
-        if (m_data)
+        if (data())
             updateImageAndClearBuffer();
     } else {
         updateImage(true);
+        // As encoded image data can be created from m_image  (see
+        // ImageResource::resourceBuffer(), we don't have to keep m_data. Let's
+        // clear this. As for the lifetimes of m_image and m_data, see this
+        // document:
+        // https://docs.google.com/document/d/1v0yTAZ6wkqX2U_M6BNIGUJpM1s0TIw1VsqpxoL7aciY/edit?usp=sharing
+        clearData();
     }
     Resource::finish(loadFinishTime);
 }
@@ -441,7 +452,7 @@ void ImageResource::responseReceived(const ResourceResponse& response, std::uniq
         m_multipartParser = new MultipartImageResourceParser(response, response.multipartBoundary(), this);
     Resource::responseReceived(response, std::move(handle));
     if (RuntimeEnabledFeatures::clientHintsEnabled()) {
-        m_devicePixelRatioHeaderValue = m_response.httpHeaderField(HTTPNames::Content_DPR).toFloat(&m_hasDevicePixelRatioHeaderValue);
+        m_devicePixelRatioHeaderValue = this->response().httpHeaderField(HTTPNames::Content_DPR).toFloat(&m_hasDevicePixelRatioHeaderValue);
         if (!m_hasDevicePixelRatioHeaderValue || m_devicePixelRatioHeaderValue <= 0.0) {
             m_devicePixelRatioHeaderValue = 1.0;
             m_hasDevicePixelRatioHeaderValue = false;
@@ -523,17 +534,17 @@ void ImageResource::updateImageAnimationPolicy()
 
 void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
 {
-    if (m_resourceRequest.loFiState() != WebURLRequest::LoFiOn)
+    if (resourceRequest().loFiState() != WebURLRequest::LoFiOn)
         return;
-    if (isLoaded() && !m_response.httpHeaderField("chrome-proxy").contains("q=low"))
+    if (isLoaded() && !response().httpHeaderField("chrome-proxy").contains("q=low"))
         return;
-    m_resourceRequest.setCachePolicy(WebCachePolicy::BypassingCache);
-    m_resourceRequest.setLoFiState(WebURLRequest::LoFiOff);
+    setCachePolicyBypassingCache();
+    setLoFiStateOff();
     if (isLoading())
-        m_loader->cancel();
+        loader()->cancel();
     clear();
-    m_data.clear();
     notifyObservers();
+
     setStatus(NotStarted);
     fetcher->startLoad(this);
 }
@@ -549,7 +560,7 @@ void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
 {
     ASSERT(m_multipartParser);
 
-    m_response = response;
+    setResponse(response);
     if (m_multipartParsingState == MultipartParsingState::WaitingForFirstPart) {
         // We have nothing to do because we don't have any data.
         m_multipartParsingState = MultipartParsingState::ParsingFirstPart;
@@ -566,8 +577,8 @@ void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
         // Resource::finish()/error() so we don't mark them finished here.
         notifyObserversInternal(MarkFinishedOption::DoNotMarkFinished);
         notifyClientsInternal(MarkFinishedOption::DoNotMarkFinished);
-        if (m_loader)
-            m_loader->didFinishLoadingFirstPartInMultipart();
+        if (loader())
+            loader()->didFinishLoadingFirstPartInMultipart();
     }
 }
 

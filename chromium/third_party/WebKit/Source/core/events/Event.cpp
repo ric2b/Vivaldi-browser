@@ -80,10 +80,10 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
     , m_cancelBubble(false)
     , m_wasInitialized(true)
     , m_isTrusted(false)
-    , m_handlingPassive(false)
+    , m_preventDefaultCalledOnUncancelableEvent(false)
+    , m_handlingPassive(PassiveMode::NotPassive)
     , m_eventPhase(0)
     , m_currentTarget(nullptr)
-    , m_createTime(convertSecondsToDOMTimeStamp(currentTime()))
     , m_platformTimeStamp(platformTimeStamp)
 {
 }
@@ -117,6 +117,7 @@ void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool 
     m_immediatePropagationStopped = false;
     m_defaultPrevented = false;
     m_isTrusted = false;
+    m_preventDefaultCalledOnUncancelableEvent = false;
 
     m_type = eventTypeArg;
     m_canBubble = canBubbleArg;
@@ -224,15 +225,33 @@ bool Event::isBeforeUnloadEvent() const
 
 void Event::preventDefault()
 {
-    if (m_handlingPassive) {
+    if (m_handlingPassive != PassiveMode::NotPassive) {
+        m_preventDefaultCalledDuringPassive = true;
+
         const LocalDOMWindow* window = m_eventPath ? m_eventPath->windowEventContext().window() : 0;
-        if (window)
-            window->printErrorMessage("Unable to preventDefault inside passive event listener invocation.");
+        if (window) {
+            const char* devToolsMsg = nullptr;
+            switch (m_handlingPassive) {
+            case PassiveMode::NotPassive:
+                NOTREACHED();
+                break;
+            case PassiveMode::Passive:
+                devToolsMsg = "Unable to preventDefault inside passive event listener invocation.";
+                break;
+            case PassiveMode::PassiveForcedDocumentLevel:
+                devToolsMsg = "Unable to preventDefault inside passive event listener due to target being treated as passive. See https://www.chromestatus.com/features/5093566007214080";
+                break;
+            }
+            if (devToolsMsg)
+                window->printErrorMessage(devToolsMsg);
+        }
         return;
     }
 
     if (m_cancelable)
         m_defaultPrevented = true;
+    else
+        m_preventDefaultCalledOnUncancelableEvent = true;
 }
 
 void Event::setTarget(EventTarget* target)
@@ -277,18 +296,24 @@ HeapVector<Member<EventTarget>> Event::composedPath(ScriptState* scriptState) co
     return pathInternal(scriptState, EmptyAfterDispatch);
 }
 
+void Event::setHandlingPassive(PassiveMode mode)
+{
+    m_handlingPassive = mode;
+    m_preventDefaultCalledDuringPassive = false;
+}
+
 HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState, EventPathMode mode) const
 {
     if (m_target)
         HostsUsingFeatures::countHostOrIsolatedWorldHumanReadableName(scriptState, *m_target, HostsUsingFeatures::Feature::EventPath);
 
     if (!m_currentTarget) {
-        ASSERT(m_eventPhase == Event::NONE);
+        DCHECK_EQ(Event::kNone, m_eventPhase);
         if (!m_eventPath) {
             // Before dispatching the event
             return HeapVector<Member<EventTarget>>();
         }
-        ASSERT(!m_eventPath->isEmpty());
+        DCHECK(!m_eventPath->isEmpty());
         // After dispatching the event
         if (mode == EmptyAfterDispatch)
             return HeapVector<Member<EventTarget>>();
@@ -296,14 +321,14 @@ HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState, Ev
     }
 
     if (Node* node = m_currentTarget->toNode()) {
-        ASSERT(m_eventPath);
+        DCHECK(m_eventPath);
         size_t eventPathSize = m_eventPath->size();
         for (size_t i = 0; i < eventPathSize; ++i) {
             if (node == (*m_eventPath)[i].node()) {
                 return (*m_eventPath)[i].treeScopeEventContext().ensureEventPath(*m_eventPath);
             }
         }
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
     // Returns [window] for events that are directly dispatched to the window object;
@@ -319,31 +344,12 @@ EventDispatchMediator* Event::createMediator()
     return EventDispatchMediator::create(this);
 }
 
-EventTarget* Event::currentTarget() const
-{
-    if (!m_currentTarget)
-        return nullptr;
-    Node* node = m_currentTarget->toNode();
-    if (node && node->isSVGElement()) {
-        if (SVGElement* svgElement = toSVGElement(node)->correspondingElement())
-            return svgElement;
-    }
-    return m_currentTarget.get();
-}
-
 double Event::timeStamp(ScriptState* scriptState) const
 {
     double timeStamp = 0;
-    // TODO(majidvp): Get rid of m_createTime once the flag is enabled by default;
-    if (UNLIKELY(RuntimeEnabledFeatures::hiResEventTimeStampEnabled())) {
-        // Only expose monotonic time after changing its origin to its target
-        // document's time origin.
-        if (scriptState && scriptState->domWindow()) {
-            Performance* performance = DOMWindowPerformance::performance(*scriptState->domWindow());
-            timeStamp = performance->monotonicTimeToDOMHighResTimeStamp(m_platformTimeStamp);
-        }
-    } else {
-        timeStamp = m_createTime;
+    if (scriptState && scriptState->domWindow()) {
+        Performance* performance = DOMWindowPerformance::performance(*scriptState->domWindow());
+        timeStamp = performance->monotonicTimeToDOMHighResTimeStamp(m_platformTimeStamp);
     }
 
     return timeStamp;

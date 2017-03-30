@@ -42,8 +42,10 @@ using media_gpu::StubPathMap;
 
 namespace media {
 
+namespace {
+
 // Only H.264 with 4:2:0 chroma sampling is supported.
-static const VideoCodecProfile kSupportedProfiles[] = {
+const VideoCodecProfile kSupportedProfiles[] = {
     H264PROFILE_BASELINE, H264PROFILE_MAIN, H264PROFILE_EXTENDED,
     H264PROFILE_HIGH,
     // TODO(hubbe): Try to re-enable this again somehow. Currently it seems
@@ -56,21 +58,24 @@ static const VideoCodecProfile kSupportedProfiles[] = {
 };
 
 // Size to use for NALU length headers in AVC format (can be 1, 2, or 4).
-static const int kNALUHeaderLength = 4;
+const int kNALUHeaderLength = 4;
 
 // We request 5 picture buffers from the client, each of which has a texture ID
 // that we can bind decoded frames to. We need enough to satisfy preroll, and
 // enough to avoid unnecessary stalling, but no more than that. The resource
 // requirements are low, as we don't need the textures to be backed by storage.
-static const int kNumPictureBuffers = limits::kMaxVideoFrames + 1;
+const int kNumPictureBuffers = limits::kMaxVideoFrames + 1;
 
-// Maximum number of frames to queue for reordering before we stop asking for
-// more. (NotifyEndOfBitstreamBuffer() is called when frames are moved into the
-// reorder queue.)
-static const int kMaxReorderQueueSize = 16;
+// Maximum number of frames to queue for reordering. (Also controls the maximum
+// number of in-flight frames, since NotifyEndOfBitstreamBuffer() is called when
+// frames are moved into the reorder queue.)
+//
+// Since the maximum possible |reorder_window| is 16 for H.264, 17 is the
+// minimum safe (static) size of the reorder queue.
+const int kMaxReorderQueueSize = 17;
 
 // Build an |image_config| dictionary for VideoToolbox initialization.
-static base::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
+base::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
     CMVideoDimensions coded_dimensions) {
   base::ScopedCFTypeRef<CFMutableDictionaryRef> image_config;
 
@@ -106,11 +111,11 @@ static base::ScopedCFTypeRef<CFMutableDictionaryRef> BuildImageConfig(
 // successful.
 //
 // TODO(sandersd): Merge with ConfigureDecoder(), as the code is very similar.
-static bool CreateVideoToolboxSession(const uint8_t* sps,
-                                      size_t sps_size,
-                                      const uint8_t* pps,
-                                      size_t pps_size,
-                                      bool require_hardware) {
+bool CreateVideoToolboxSession(const uint8_t* sps,
+                               size_t sps_size,
+                               const uint8_t* pps,
+                               size_t pps_size,
+                               bool require_hardware) {
   const uint8_t* data_ptrs[] = {sps, pps};
   const size_t data_sizes[] = {sps_size, pps_size};
 
@@ -172,7 +177,7 @@ static bool CreateVideoToolboxSession(const uint8_t* sps,
 // must actually create a decompression session. If creating a decompression
 // session fails, hardware decoding will be disabled (Initialize() will always
 // return false).
-static bool InitializeVideoToolboxInternal() {
+bool InitializeVideoToolboxInternal() {
   if (!IsVtInitialized()) {
     // CoreVideo is also required, but the loader stops after the first path is
     // loaded. Instead we rely on the transitive dependency from VideoToolbox to
@@ -213,32 +218,46 @@ static bool InitializeVideoToolboxInternal() {
   return true;
 }
 
-bool InitializeVideoToolbox() {
-  // InitializeVideoToolbox() is called only from the GPU process main thread;
-  // once for sandbox warmup, and then once each time a VTVideoDecodeAccelerator
-  // is initialized.
-  static bool attempted = false;
-  static bool succeeded = false;
+// TODO(sandersd): Share this computation with the VAAPI decoder.
+int32_t ComputeReorderWindow(const H264SPS* sps) {
+  // TODO(sandersd): Compute MaxDpbFrames.
+  int32_t max_dpb_frames = 16;
 
-  if (!attempted) {
-    attempted = true;
-    succeeded = InitializeVideoToolboxInternal();
+  // See AVC spec section E.2.1 definition of |max_num_reorder_frames|.
+  if (sps->vui_parameters_present_flag && sps->bitstream_restriction_flag) {
+    return std::min(sps->max_num_reorder_frames, max_dpb_frames);
+  } else if (sps->constraint_set3_flag) {
+    if (sps->profile_idc == 44 || sps->profile_idc == 86 ||
+        sps->profile_idc == 100 || sps->profile_idc == 110 ||
+        sps->profile_idc == 122 || sps->profile_idc == 244) {
+      return 0;
+    }
   }
-
-  return succeeded;
+  return max_dpb_frames;
 }
 
 // Route decoded frame callbacks back into the VTVideoDecodeAccelerator.
-static void OutputThunk(void* decompression_output_refcon,
-                        void* source_frame_refcon,
-                        OSStatus status,
-                        VTDecodeInfoFlags info_flags,
-                        CVImageBufferRef image_buffer,
-                        CMTime presentation_time_stamp,
-                        CMTime presentation_duration) {
+void OutputThunk(void* decompression_output_refcon,
+                 void* source_frame_refcon,
+                 OSStatus status,
+                 VTDecodeInfoFlags info_flags,
+                 CVImageBufferRef image_buffer,
+                 CMTime presentation_time_stamp,
+                 CMTime presentation_duration) {
   VTVideoDecodeAccelerator* vda =
       reinterpret_cast<VTVideoDecodeAccelerator*>(decompression_output_refcon);
   vda->Output(source_frame_refcon, status, image_buffer);
+}
+
+}  // namespace
+
+bool InitializeVideoToolbox() {
+  // InitializeVideoToolbox() is called only from the GPU process main thread:
+  // once for sandbox warmup, and then once each time a VTVideoDecodeAccelerator
+  // is initialized. This ensures that everything is loaded whether or not the
+  // sandbox is enabled.
+  static bool succeeded = InitializeVideoToolboxInternal();
+  return succeeded;
 }
 
 VTVideoDecodeAccelerator::Task::Task(TaskType type) : type(type) {}
@@ -300,11 +319,13 @@ VTVideoDecodeAccelerator::VTVideoDecodeAccelerator(
 }
 
 VTVideoDecodeAccelerator::~VTVideoDecodeAccelerator() {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
 }
 
 bool VTVideoDecodeAccelerator::Initialize(const Config& config,
                                           Client* client) {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
 
   if (make_context_current_cb_.is_null() || bind_image_cb_.is_null()) {
@@ -348,6 +369,7 @@ bool VTVideoDecodeAccelerator::Initialize(const Config& config,
 }
 
 bool VTVideoDecodeAccelerator::FinishDelayedFrames() {
+  DVLOG(3) << __func__;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   if (session_) {
     OSStatus status = VTDecompressionSessionWaitForAsynchronousFrames(session_);
@@ -361,6 +383,7 @@ bool VTVideoDecodeAccelerator::FinishDelayedFrames() {
 }
 
 bool VTVideoDecodeAccelerator::ConfigureDecoder() {
+  DVLOG(2) << __func__;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK(!last_sps_.empty());
   DCHECK(!last_pps_.empty());
@@ -463,6 +486,7 @@ bool VTVideoDecodeAccelerator::ConfigureDecoder() {
 
 void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
                                           Frame* frame) {
+  DVLOG(2) << __func__ << "(" << frame->bitstream_id << ")";
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
 
   // Map the bitstream buffer.
@@ -597,11 +621,7 @@ void VTVideoDecodeAccelerator::DecodeTask(const BitstreamBuffer& bitstream,
           if (nalu.nal_unit_type == H264NALU::kIDRSlice)
             frame->is_idr = true;
 
-          if (sps->vui_parameters_present_flag &&
-              sps->bitstream_restriction_flag) {
-            frame->reorder_window =
-                std::min(sps->max_num_reorder_frames, kMaxReorderQueueSize - 1);
-          }
+          frame->reorder_window = ComputeReorderWindow(sps);
         }
         has_slice = true;
       default:
@@ -796,7 +816,9 @@ void VTVideoDecodeAccelerator::Output(void* source_frame_refcon,
 }
 
 void VTVideoDecodeAccelerator::DecodeDone(Frame* frame) {
+  DVLOG(3) << __func__ << "(" << frame->bitstream_id << ")";
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
+
   DCHECK_EQ(1u, pending_frames_.count(frame->bitstream_id));
   Task task(TASK_FRAME);
   task.frame = pending_frames_[frame->bitstream_id];
@@ -806,7 +828,9 @@ void VTVideoDecodeAccelerator::DecodeDone(Frame* frame) {
 }
 
 void VTVideoDecodeAccelerator::FlushTask(TaskType type) {
+  DVLOG(3) << __func__;
   DCHECK(decoder_thread_.task_runner()->BelongsToCurrentThread());
+
   FinishDelayedFrames();
 
   // Always queue a task, even if FinishDelayedFrames() fails, so that
@@ -817,13 +841,16 @@ void VTVideoDecodeAccelerator::FlushTask(TaskType type) {
 }
 
 void VTVideoDecodeAccelerator::FlushDone(TaskType type) {
+  DVLOG(3) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   task_queue_.push(Task(type));
   ProcessWorkQueues();
 }
 
 void VTVideoDecodeAccelerator::Decode(const BitstreamBuffer& bitstream) {
+  DVLOG(2) << __func__ << "(" << bitstream.id() << ")";
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
+
   if (bitstream.id() < 0) {
     DLOG(ERROR) << "Invalid bitstream, id: " << bitstream.id();
     if (base::SharedMemory::IsHandleValid(bitstream.handle()))
@@ -831,8 +858,10 @@ void VTVideoDecodeAccelerator::Decode(const BitstreamBuffer& bitstream) {
     NotifyError(INVALID_ARGUMENT, SFT_INVALID_STREAM);
     return;
   }
+
   DCHECK_EQ(0u, assigned_bitstream_ids_.count(bitstream.id()));
   assigned_bitstream_ids_.insert(bitstream.id());
+
   Frame* frame = new Frame(bitstream.id());
   pending_frames_[frame->bitstream_id] = make_linked_ptr(frame);
   decoder_thread_.task_runner()->PostTask(
@@ -842,6 +871,7 @@ void VTVideoDecodeAccelerator::Decode(const BitstreamBuffer& bitstream) {
 
 void VTVideoDecodeAccelerator::AssignPictureBuffers(
     const std::vector<PictureBuffer>& pictures) {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
 
   for (const PictureBuffer& picture : pictures) {
@@ -852,8 +882,8 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
     DCHECK_LE(1u, picture.texture_ids().size());
     picture_info_map_.insert(std::make_pair(
         picture.id(),
-        base::WrapUnique(new PictureInfo(picture.internal_texture_ids()[0],
-                                         picture.texture_ids()[0]))));
+        base::MakeUnique<PictureInfo>(picture.internal_texture_ids()[0],
+                                      picture.texture_ids()[0])));
   }
 
   // Pictures are not marked as uncleared until after this method returns, and
@@ -865,6 +895,7 @@ void VTVideoDecodeAccelerator::AssignPictureBuffers(
 }
 
 void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
+  DVLOG(2) << __func__ << "(" << picture_id << ")";
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
 
   auto it = picture_info_map_.find(picture_id);
@@ -884,6 +915,7 @@ void VTVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_id) {
 }
 
 void VTVideoDecodeAccelerator::ProcessWorkQueues() {
+  DVLOG(3) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   switch (state_) {
     case STATE_DECODING:
@@ -912,6 +944,7 @@ void VTVideoDecodeAccelerator::ProcessWorkQueues() {
 }
 
 bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
+  DVLOG(3) << __func__ << " size=" << task_queue_.size();
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, STATE_DECODING);
 
@@ -923,6 +956,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
     case TASK_FRAME:
       if (reorder_queue_.size() < kMaxReorderQueueSize &&
           (!task.frame->is_idr || reorder_queue_.empty())) {
+        DVLOG(2) << "Decode(" << task.frame->bitstream_id << ") complete";
         assigned_bitstream_ids_.erase(task.frame->bitstream_id);
         client_->NotifyEndOfBitstreamBuffer(task.frame->bitstream_id);
         reorder_queue_.push(task.frame);
@@ -934,6 +968,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
     case TASK_FLUSH:
       DCHECK_EQ(task.type, pending_flush_tasks_.front());
       if (reorder_queue_.size() == 0) {
+        DVLOG(1) << "Flush complete";
         pending_flush_tasks_.pop();
         client_->NotifyFlushDone();
         task_queue_.pop();
@@ -944,6 +979,7 @@ bool VTVideoDecodeAccelerator::ProcessTaskQueue() {
     case TASK_RESET:
       DCHECK_EQ(task.type, pending_flush_tasks_.front());
       if (reorder_queue_.size() == 0) {
+        DVLOG(1) << "Reset complete";
         waiting_for_idr_ = true;
         pending_flush_tasks_.pop();
         client_->NotifyResetDone();
@@ -974,6 +1010,8 @@ bool VTVideoDecodeAccelerator::ProcessReorderQueue() {
                                task_queue_.front().frame->is_idr);
 
   size_t reorder_window = std::max(0, reorder_queue_.top()->reorder_window);
+  DVLOG(3) << __func__ << " size=" << reorder_queue_.size()
+           << " window=" << reorder_window << " flushing=" << flushing;
   if (flushing || reorder_queue_.size() > reorder_window) {
     if (ProcessFrame(*reorder_queue_.top())) {
       reorder_queue_.pop();
@@ -985,6 +1023,7 @@ bool VTVideoDecodeAccelerator::ProcessReorderQueue() {
 }
 
 bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
+  DVLOG(3) << __func__ << "(" << frame.bitstream_id << ")";
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, STATE_DECODING);
 
@@ -1020,6 +1059,7 @@ bool VTVideoDecodeAccelerator::ProcessFrame(const Frame& frame) {
 }
 
 bool VTVideoDecodeAccelerator::SendFrame(const Frame& frame) {
+  DVLOG(2) << __func__ << "(" << frame.bitstream_id << ")";
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   DCHECK_EQ(state_, STATE_DECODING);
 
@@ -1100,16 +1140,19 @@ void VTVideoDecodeAccelerator::QueueFlush(TaskType type) {
 }
 
 void VTVideoDecodeAccelerator::Flush() {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   QueueFlush(TASK_FLUSH);
 }
 
 void VTVideoDecodeAccelerator::Reset() {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
   QueueFlush(TASK_RESET);
 }
 
 void VTVideoDecodeAccelerator::Destroy() {
+  DVLOG(1) << __func__;
   DCHECK(gpu_thread_checker_.CalledOnValidThread());
 
   // In a forceful shutdown, the decoder thread may be dead already.

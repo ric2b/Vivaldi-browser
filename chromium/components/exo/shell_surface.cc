@@ -20,6 +20,7 @@
 #include "base/trace_event/trace_event_argument.h"
 #include "components/exo/surface.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/client/cursor_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_property.h"
@@ -29,11 +30,11 @@
 #include "ui/gfx/path.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/shadow.h"
 #include "ui/wm/core/shadow_controller.h"
 #include "ui/wm/core/shadow_types.h"
 #include "ui/wm/core/window_util.h"
-#include "ui/wm/public/activation_client.h"
 
 DECLARE_WINDOW_PROPERTY_TYPE(std::string*)
 
@@ -264,7 +265,7 @@ ShellSurface::ShellSurface(Surface* surface,
       initial_bounds_(initial_bounds),
       activatable_(activatable),
       container_(container) {
-  ash::Shell::GetInstance()->activation_client()->AddObserver(this);
+  WMHelper::GetInstance()->AddActivationObserver(this);
   surface_->SetSurfaceDelegate(this);
   surface_->AddSurfaceObserver(this);
   surface_->window()->Show();
@@ -291,7 +292,7 @@ ShellSurface::~ShellSurface() {
       widget_->Hide();
     widget_->CloseNow();
   }
-  ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
+  WMHelper::GetInstance()->RemoveActivationObserver(this);
   if (parent_)
     parent_->RemoveObserver(this);
   if (surface_) {
@@ -807,10 +808,9 @@ void ShellSurface::OnWindowDestroying(aura::Window* window) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// aura::client::ActivationChangeObserver overrides:
+// WMHelper::ActivationObserver overrides:
 
 void ShellSurface::OnWindowActivated(
-    aura::client::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
     aura::Window* lost_active) {
   if (!widget_)
@@ -916,8 +916,9 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.show_state = show_state;
+  // Make shell surface a transient child if |parent_| has been set.
   params.parent =
-      ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(), container_);
+      parent_ ? parent_ : WMHelper::GetInstance()->GetContainer(container_);
   params.bounds = initial_bounds_;
   bool activatable = activatable_;
   // ShellSurfaces in system modal container are only activatable if input
@@ -959,10 +960,6 @@ void ShellSurface::CreateShellSurfaceWidget(ui::WindowShowState show_state) {
   // Disable movement if initial bounds were specified.
   widget_->set_movement_disabled(!initial_bounds_.IsEmpty());
   window_state->set_ignore_keyboard_bounds_change(!initial_bounds_.IsEmpty());
-
-  // Make shell surface a transient child if |parent_| has been set.
-  if (parent_)
-    wm::AddTransientChild(parent_, window);
 
   // Allow Ash to manage the position of a top-level shell surfaces if show
   // state is one that allows auto positioning and |initial_bounds_| has
@@ -1091,7 +1088,7 @@ void ShellSurface::AttemptToStartDrag(int component) {
   pending_origin_offset_ = gfx::Vector2d();
   resize_component_ = pending_resize_component_;
 
-  ash::Shell::GetInstance()->AddPreTargetHandler(this);
+  WMHelper::GetInstance()->AddPreTargetHandler(this);
   widget_->GetNativeWindow()->SetCapture();
 
   // Notify client that resizing state has changed.
@@ -1110,7 +1107,7 @@ void ShellSurface::EndDrag(bool revert) {
   else
     resizer_->CompleteDrag();
 
-  ash::Shell::GetInstance()->RemovePreTargetHandler(this);
+  WMHelper::GetInstance()->RemovePreTargetHandler(this);
   widget_->GetNativeWindow()->ReleaseCapture();
   resizer_.reset();
 
@@ -1194,10 +1191,10 @@ void ShellSurface::UpdateWidgetBounds() {
   gfx::Rect visible_bounds = GetVisibleBounds();
   gfx::Rect new_widget_bounds = visible_bounds;
 
-  // Avoid changing widget origin unless initial bounds were specificed and
+  // Avoid changing widget origin unless initial bounds were specified and
   // widget origin is always relative to it.
   if (initial_bounds_.IsEmpty())
-    new_widget_bounds.set_origin(widget_->GetNativeWindow()->bounds().origin());
+    new_widget_bounds.set_origin(widget_->GetWindowBoundsInScreen().origin());
 
   // Update widget origin using the surface origin if the current location of
   // surface is being anchored to one side of the widget as a result of a
@@ -1205,9 +1202,7 @@ void ShellSurface::UpdateWidgetBounds() {
   if (resize_component_ != HTCAPTION) {
     gfx::Point new_widget_origin =
         GetSurfaceOrigin() + visible_bounds.OffsetFromOrigin();
-    aura::Window::ConvertPointToTarget(widget_->GetNativeWindow(),
-                                       widget_->GetNativeWindow()->parent(),
-                                       &new_widget_origin);
+    wm::ConvertPointToScreen(widget_->GetNativeWindow(), &new_widget_origin);
     new_widget_bounds.set_origin(new_widget_origin);
   }
 
@@ -1215,7 +1210,7 @@ void ShellSurface::UpdateWidgetBounds() {
   // should not result in a configure request.
   DCHECK(!ignore_window_bounds_changes_);
   ignore_window_bounds_changes_ = true;
-  if (widget_->GetNativeWindow()->bounds() != new_widget_bounds)
+  if (widget_->GetWindowBoundsInScreen() != new_widget_bounds)
     widget_->SetBounds(new_widget_bounds);
   ignore_window_bounds_changes_ = false;
 

@@ -142,16 +142,6 @@ IntRect CaretBase::absoluteBoundsForLocalRect(Node* node, const LayoutRect& rect
     return caretPainter->localToAbsoluteQuad(FloatRect(localRect)).enclosingBoundingBox();
 }
 
-DisplayItemClient* CaretBase::displayItemClientForCaret(Node* node)
-{
-    LayoutBlock* caretLayoutBlock = caretLayoutObject(node);
-    if (!caretLayoutBlock)
-        return nullptr;
-    if (caretLayoutBlock->usesCompositedScrolling())
-        return static_cast<DisplayItemClient*>(caretLayoutBlock->layer()->graphicsLayerBackingForScrolling());
-    return caretLayoutBlock;
-}
-
 // TODO(yoichio): |node| is FrameSelection::m_previousCaretNode and this is bad
 // design. We should use only previous layoutObject or Rectangle to invalidate
 // old caret.
@@ -169,7 +159,7 @@ void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
     // FIXME: We should not allow paint invalidation out of paint invalidation state. crbug.com/457415
     DisablePaintInvalidationStateAsserts disabler;
 
-    node->layoutObject()->invalidatePaintRectangle(inflatedRect, displayItemClientForCaret(node));
+    m_visualRect = node->layoutObject()->invalidatePaintRectangle(inflatedRect, this);
 }
 
 bool CaretBase::shouldRepaintCaret(Node& node) const
@@ -177,7 +167,8 @@ bool CaretBase::shouldRepaintCaret(Node& node) const
     // If PositionAnchorType::BeforeAnchor or PositionAnchorType::AfterAnchor,
     // carets need to be repainted not only when the node is contentEditable but
     // also when its parentNode() is contentEditable.
-    return node.isContentEditable() || (node.parentNode() && node.parentNode()->isContentEditable());
+    node.document().updateStyleAndLayoutTree();
+    return hasEditableStyle(node) || (node.parentNode() && hasEditableStyle(*node.parentNode()));
 }
 
 bool CaretBase::shouldRepaintCaret(const LayoutViewItem view) const
@@ -196,7 +187,8 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
         return;
 
     if (LayoutViewItem view = node->document().layoutViewItem()) {
-        if (node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable) || shouldRepaintCaret(view))
+        node->document().updateStyleAndLayoutTree();
+        if (hasEditableStyle(*node) || shouldRepaintCaret(view))
             invalidateLocalCaretRect(node, localCaretRectWithoutUpdate());
     }
 }
@@ -206,11 +198,7 @@ void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoi
     if (m_caretVisibility == CaretVisibility::Hidden)
         return;
 
-    DisplayItemClient* displayItemClient = displayItemClientForCaret(node);
-    if (!displayItemClient)
-        return;
-
-    if (DrawingRecorder::useCachedDrawingIfPossible(context, *displayItemClient, displayItemType))
+    if (DrawingRecorder::useCachedDrawingIfPossible(context, *this, displayItemType))
         return;
 
     LayoutRect drawingRect = localCaretRectWithoutUpdate();
@@ -229,7 +217,7 @@ void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoi
     if (element && element->layoutObject())
         caretColor = element->layoutObject()->resolveColor(CSSPropertyColor);
 
-    DrawingRecorder drawingRecorder(context, *displayItemClientForCaret(node), DisplayItem::Caret, FloatRect(drawingRect));
+    DrawingRecorder drawingRecorder(context, *this, DisplayItem::Caret, FloatRect(drawingRect));
 
     context.fillRect(FloatRect(drawingRect), caretColor);
 }
@@ -237,6 +225,16 @@ void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoi
 void CaretBase::setCaretVisibility(CaretVisibility visibility)
 {
     m_caretVisibility = visibility;
+}
+
+String CaretBase::debugName() const
+{
+    return "Caret";
+}
+
+LayoutRect CaretBase::visualRect() const
+{
+    return m_visualRect;
 }
 
 } // namespace blink

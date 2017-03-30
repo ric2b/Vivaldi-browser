@@ -100,12 +100,12 @@ source_set("browser") {
     # isn't needed. crbug.com/541577
     "//components/metrics:ui",
     "//components/network_hints/browser",
-    "//components/network_session_configurator:switches",
     "//components/prefs",
     "//content",
     "//content/public/browser",
     "//content/public/common",
     "//content/public/utility",
+    "//device/geolocation:device_geolocation",
     "//gpu",
     "//ipc",
     "//media",
@@ -114,6 +114,7 @@ source_set("browser") {
     "//ui/compositor",
     "//ui/display",
     "//ui/gl",
+    "//ui/native_theme:native_theme",
   ]
 
   if (is_linux) {
@@ -159,7 +160,7 @@ source_set("test_support") {
   public_deps = [
     ":browser",
     "//chromecast:cast_shell_common",
-    "//content/test:browsertest_base",
+    "//content/test:test_support",
   ]
 
   deps = [
@@ -168,7 +169,6 @@ source_set("test_support") {
     "//chromecast/base",
     "//content/public/browser",
     "//content/public/common",
-    "//content/test:test_support",
     "//testing/gtest",
   ]
 }
@@ -188,7 +188,6 @@ test("cast_shell_browser_test") {
     ":test_support",
     "//base",
     "//chromecast:chromecast_features",
-    "//content/test:browsertest_base",
     "//content/test:test_support",
     "//media/base:test_support",
     "//testing/gtest",

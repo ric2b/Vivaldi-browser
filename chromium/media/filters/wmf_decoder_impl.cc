@@ -152,7 +152,7 @@ void WMFDecoderImpl<StreamType>::Decode(
                                             : media::DecodeStatus::DECODE_ERROR;
 
   if (status == media::DecodeStatus::OK &&
-      buffer->splice_timestamp() != kNoTimestamp()) {
+      buffer->splice_timestamp() != kNoTimestamp) {
     DVLOG(1) << "Splice detected, must drain the decoder";
     if (!Drain())
       status = media::DecodeStatus::DECODE_ERROR;
@@ -764,7 +764,7 @@ WMFDecoderImpl<DemuxerStream::AUDIO>::CreateOutputBufferInternal(
   return AudioBuffer::CopyFrom(
       ConvertToSampleFormat(output_sample_size_), config_.channel_layout(),
       ChannelLayoutToChannelCount(config_.channel_layout()),
-      config_.samples_per_second(), frame_count, &data, kNoTimestamp());
+      config_.samples_per_second(), frame_count, &data, kNoTimestamp);
 }
 
 template <>

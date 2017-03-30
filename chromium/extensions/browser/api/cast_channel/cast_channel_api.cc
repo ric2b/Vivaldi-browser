@@ -271,12 +271,12 @@ bool CastChannelOpenFunction::Prepare() {
   } else {
     // Parse timeout parameters if they are set.
     if (connect_info.liveness_timeout.get()) {
-      liveness_timeout_ = base::TimeDelta::FromMilliseconds(
-          *connect_info.liveness_timeout.get());
+      liveness_timeout_ =
+          base::TimeDelta::FromMilliseconds(*connect_info.liveness_timeout);
     }
     if (connect_info.ping_interval.get()) {
       ping_interval_ =
-          base::TimeDelta::FromMilliseconds(*connect_info.ping_interval.get());
+          base::TimeDelta::FromMilliseconds(*connect_info.ping_interval);
     }
 
     // Validate timeout parameters.
@@ -313,10 +313,10 @@ void CastChannelOpenFunction::AsyncWorkStart() {
         extension_->id(), *ip_endpoint_, channel_auth_,
         ExtensionsBrowserClient::Get()->GetNetLog(),
         base::TimeDelta::FromMilliseconds(connect_info.timeout.get()
-                                              ? *connect_info.timeout.get()
+                                              ? *connect_info.timeout
                                               : kDefaultConnectTimeoutMillis),
         liveness_timeout_ > base::TimeDelta(), api_->GetLogger(),
-        connect_info.capabilities.get() ? *connect_info.capabilities.get()
+        connect_info.capabilities.get() ? *connect_info.capabilities
                                         : CastDeviceCapability::NONE);
   }
   new_channel_id_ = AddSocket(socket);
@@ -324,9 +324,9 @@ void CastChannelOpenFunction::AsyncWorkStart() {
 
   // Construct read delegates.
   std::unique_ptr<api::cast_channel::CastTransport::Delegate> delegate(
-      base::WrapUnique(new CastMessageHandler(
+      base::MakeUnique<CastMessageHandler>(
           base::Bind(&CastChannelAPI::SendEvent, api_->AsWeakPtr()), socket,
-          api_->GetLogger())));
+          api_->GetLogger()));
   if (socket->keep_alive()) {
     // Wrap read delegate in a KeepAliveDelegate for timeout handling.
     api::cast_channel::KeepAliveDelegate* keep_alive =
@@ -336,9 +336,8 @@ void CastChannelOpenFunction::AsyncWorkStart() {
     std::unique_ptr<base::Timer> injected_timer =
         api_->GetInjectedTimeoutTimerForTest();
     if (injected_timer) {
-      keep_alive->SetTimersForTest(
-          base::WrapUnique(new base::Timer(false, false)),
-          std::move(injected_timer));
+      keep_alive->SetTimersForTest(base::MakeUnique<base::Timer>(false, false),
+                                   std::move(injected_timer));
     }
     delegate.reset(keep_alive);
   }

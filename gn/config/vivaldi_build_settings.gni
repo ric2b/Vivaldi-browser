@@ -1,0 +1,26 @@
+declare_overrides() {
+  # We normally build the component build
+  # The autobuilders builds statically linked builds
+  is_component_build = true
+}
+
+# Static feature overrides, don't change
+# Features we either always want enable or don't want at all
+# Cannot depend on platform settings
+declare_overrides() {
+  is_vivaldi = true
+
+  # Features we don't want
+
+  enable_remoting = false
+
+  enable_nacl = false
+
+  enable_ipc_fuzzer = false
+
+  # We don't need the Chrome field trials
+  fieldtrial_testing_like_official_build = true
+
+  # Don't need this normally
+  chrome_pgo_phase = 0
+}

@@ -137,7 +137,9 @@ void V4Database::UpdatedStoreReady(UpdateListIdentifier identifier,
                                    std::unique_ptr<V4Store> new_store) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(pending_store_updates_);
-  (*store_map_)[identifier] = std::move(new_store);
+  if (new_store) {
+    (*store_map_)[identifier] = std::move(new_store);
+  }
 
   pending_store_updates_--;
   if (!pending_store_updates_) {
@@ -164,6 +166,21 @@ std::unique_ptr<StoreStateMap> V4Database::GetStoreStateMap() {
     (*store_state_map)[store_map_iter.first] = store_map_iter.second->state();
   }
   return store_state_map;
+}
+
+void V4Database::GetStoresMatchingFullHash(
+    const FullHash& full_hash,
+    const base::hash_set<UpdateListIdentifier>& stores_to_look,
+    MatchedHashPrefixMap* matched_hash_prefix_map) {
+  for (const UpdateListIdentifier& identifier : stores_to_look) {
+    const auto& store_pair = store_map_->find(identifier);
+    DCHECK(store_pair != store_map_->end());
+    const std::unique_ptr<V4Store>& store = store_pair->second;
+    HashPrefix hash_prefix = store->GetMatchingHashPrefix(full_hash);
+    if (!hash_prefix.empty()) {
+      (*matched_hash_prefix_map)[identifier] = hash_prefix;
+    }
+  }
 }
 
 }  // namespace safe_browsing

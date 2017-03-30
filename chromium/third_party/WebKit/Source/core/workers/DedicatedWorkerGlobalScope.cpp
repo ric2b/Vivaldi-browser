@@ -32,7 +32,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/SerializedScriptValue.h"
-#include "core/dom/CrossThreadTask.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -51,6 +51,7 @@ DedicatedWorkerGlobalScope* DedicatedWorkerGlobalScope::create(DedicatedWorkerTh
     // passed along to the created 'context'.
     DedicatedWorkerGlobalScope* context = new DedicatedWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, thread, timeOrigin, std::move(startupData->m_starterOriginPrivilegeData), startupData->m_workerClients.release());
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
+    context->setWorkerSettings(std::move(startupData->m_workerSettings));
     if (!startupData->m_referrerPolicy.isNull())
         context->parseAndSetReferrerPolicy(startupData->m_referrerPolicy);
     context->setAddressSpace(startupData->m_addressSpace);

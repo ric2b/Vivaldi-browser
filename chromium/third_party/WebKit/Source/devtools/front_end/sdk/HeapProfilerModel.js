@@ -11,12 +11,13 @@ WebInspector.HeapProfilerModel = function(target)
     this._heapProfilerAgent = target.heapProfilerAgent();
 }
 
+/** @enum {symbol} */
 WebInspector.HeapProfilerModel.Events = {
-    HeapStatsUpdate: "HeapStatsUpdate",
-    LastSeenObjectId: "LastSeenObjectId",
-    AddHeapSnapshotChunk: "AddHeapSnapshotChunk",
-    ReportHeapSnapshotProgress: "ReportHeapSnapshotProgress",
-    ResetProfiles: "ResetProfiles"
+    HeapStatsUpdate: Symbol("HeapStatsUpdate"),
+    LastSeenObjectId: Symbol("LastSeenObjectId"),
+    AddHeapSnapshotChunk: Symbol("AddHeapSnapshotChunk"),
+    ReportHeapSnapshotProgress: Symbol("ReportHeapSnapshotProgress"),
+    ResetProfiles: Symbol("ResetProfiles")
 }
 
 WebInspector.HeapProfilerModel.prototype = {
@@ -36,7 +37,7 @@ WebInspector.HeapProfilerModel.prototype = {
     },
 
     /**
-     * @return {!Promise.<?ProfilerAgent.CPUProfile>}
+     * @return {!Promise.<?ProfilerAgent.Profile>}
      */
     stopSampling: function()
     {

@@ -45,11 +45,11 @@ class WebTestWithWebState : public WebTest,
   // Blocks until known NSRunLoop-based have completed, known message-loop-based
   // background tasks have completed and |condition| evaluates to true.
   void WaitForCondition(ConditionBlock condition);
-  // Evaluates JavaScript and returns result as a string.
-  // DEPRECATED. TODO(crbug.com/595761): Remove this API.
-  NSString* EvaluateJavaScriptAsString(NSString* script);
   // Synchronously executes JavaScript and returns result as id.
   id ExecuteJavaScript(NSString* script);
+
+  // Returns the base URL of the loaded page.
+  std::string BaseUrl() const;
 
   // Returns web state for this web controller.
   web::WebState* web_state();

@@ -82,7 +82,7 @@ class DeclarativeContentIsBookmarkedConditionTrackerTest
 
     // ContentPredicateEvaluator::Delegate:
     void RequestEvaluation(content::WebContents* contents) override {
-      EXPECT_FALSE(ContainsKey(evaluation_requests_, contents));
+      EXPECT_FALSE(base::ContainsKey(evaluation_requests_, contents));
       evaluation_requests_.insert(contents);
     }
 
@@ -100,8 +100,8 @@ class DeclarativeContentIsBookmarkedConditionTrackerTest
   DeclarativeContentIsBookmarkedConditionTrackerTest() {
     profile()->CreateBookmarkModel(true);
     bookmarks::test::WaitForBookmarkModelToLoad(
-        BookmarkModelFactory::GetForProfile(profile()));
-    bookmark_model_ = BookmarkModelFactory::GetForProfile(profile());
+        BookmarkModelFactory::GetForBrowserContext(profile()));
+    bookmark_model_ = BookmarkModelFactory::GetForBrowserContext(profile());
     tracker_.reset(new DeclarativeContentIsBookmarkedConditionTracker(
         profile(),
         &delegate_));

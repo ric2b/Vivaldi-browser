@@ -215,6 +215,23 @@ class WebViewPrivateIsFocusedElementEditableFunction
   DISALLOW_COPY_AND_ASSIGN(WebViewPrivateIsFocusedElementEditableFunction);
 };
 
+class WebViewPrivateAllowBlockedInsecureContentFunction
+    : public LegacyWebViewInternalExtensionFunction {
+public:
+    DECLARE_EXTENSION_FUNCTION("webViewPrivate.allowBlockedInsecureContent",
+                               WEBVIEWINTERNAL_ALLOWBLOCKEDINSECURECONTENT)
+
+        WebViewPrivateAllowBlockedInsecureContentFunction();
+
+protected:
+    ~WebViewPrivateAllowBlockedInsecureContentFunction() override;
+
+private:
+    bool RunAsyncSafe(WebViewGuest* guest) override;
+
+    DISALLOW_COPY_AND_ASSIGN(WebViewPrivateAllowBlockedInsecureContentFunction);
+};
+
 }  // namespace vivaldi
 }  // namespace extensions
 

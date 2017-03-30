@@ -2,6 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
+if (is_vivaldi) {
+  import("//vivaldi/gn/config/version.gni")
+}
+
 # This exposes the Chrome version as GN variables for use in build files.
 #
 # PREFER NOT TO USE THESE. The GYP build uses this kind of thing extensively.
@@ -17,14 +22,10 @@
 # all values we need at once.
 _version_dictionary_template = "full = \"@MAJOR@.@MINOR@.@BUILD@.@PATCH@\" " +
                                "major = \"@MAJOR@\" minor = \"@MINOR@\" " +
-                               "build = \"@BUILD@\" patch = \"@PATCH@\" " +
-                               "remoting = \"@REMOTING_PATCH\" "
+                               "build = \"@BUILD@\" patch = \"@PATCH@\" "
 
 # The file containing the Chrome version number.
 chrome_version_file = "//chrome/VERSION"
-
-# The file containing the Chromoting version number.
-remoting_version_file = "//remoting/VERSION"
 
 _result = exec_script("version.py",
                       [
@@ -38,15 +39,17 @@ _result = exec_script("version.py",
 
 # Full version. For example "45.0.12321.0"
 chrome_version_full = _result.full
+if (is_vivaldi) {
+  chrome_version_full = vivaldi_version_full
+}
 
 # The consituent parts of the full version.
 chrome_version_major = _result.major
 chrome_version_minor = _result.minor
 chrome_version_build = _result.build
 chrome_version_patch = _result.patch
-remoting_version_patch = _result.remoting
 
-if (is_mac) {
+if (is_mac && !is_vivaldi) {
   _result = exec_script("version.py",
                         [
                           "-f",

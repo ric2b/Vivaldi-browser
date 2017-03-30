@@ -128,7 +128,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool privileged_webgl_extensions_enabled;
   bool webgl_errors_to_console_enabled;
   bool mock_scrollbars_enabled;
-  bool unified_textchecker_enabled;
   bool accelerated_2d_canvas_enabled;
   int minimum_accelerated_2d_canvas_size;
   bool disable_2d_canvas_copy_on_write;
@@ -172,7 +171,7 @@ struct CONTENT_EXPORT WebPreferences {
   int available_hover_types;
   ui::HoverType primary_hover_type;
   bool sync_xhr_in_documents_enabled;
-  bool image_color_profiles_enabled;
+  bool color_correct_rendering_enabled = false;
   bool should_respect_image_orientation;
   int number_of_cpu_cores;
   EditingBehavior editing_behavior;

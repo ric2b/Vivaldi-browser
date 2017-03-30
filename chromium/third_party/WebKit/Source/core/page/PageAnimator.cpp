@@ -10,7 +10,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/svg/SVGDocumentExtensions.h"
-#include "platform/Logging.h"
+#include "wtf/AutoReset.h"
 
 namespace blink {
 
@@ -33,7 +33,7 @@ DEFINE_TRACE(PageAnimator)
 
 void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
 {
-    TemporaryChange<bool> servicing(m_servicingAnimations, true);
+    AutoReset<bool> servicing(&m_servicingAnimations, true);
     clock().updateTime(monotonicAnimationStartTime);
 
     HeapVector<Member<Document>, 32> documents;
@@ -44,7 +44,7 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
 
     for (auto& document : documents) {
         ScopedFrameBlamer frameBlamer(document->frame());
-        TRACE_EVENT0("blink", "PageAnimator::serviceScriptedAnimations");
+        TRACE_EVENT0("blink,rail", "PageAnimator::serviceScriptedAnimations");
         DocumentAnimations::updateAnimationTimingForAnimationFrame(*document);
         if (document->view()) {
             if (document->view()->shouldThrottleRendering())
@@ -81,7 +81,7 @@ void PageAnimator::scheduleVisualUpdate(LocalFrame* frame)
 void PageAnimator::updateAllLifecyclePhases(LocalFrame& rootFrame)
 {
     FrameView* view = rootFrame.view();
-    TemporaryChange<bool> servicing(m_updatingLayoutAndStyleForPainting, true);
+    AutoReset<bool> servicing(&m_updatingLayoutAndStyleForPainting, true);
     view->updateAllLifecyclePhases();
 }
 

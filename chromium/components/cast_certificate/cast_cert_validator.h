@@ -14,7 +14,12 @@
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
 
+namespace net {
+class TrustStore;
+}
 namespace cast_certificate {
+
+class CastCRL;
 
 // Describes the policy for a Device certificate.
 enum class CastDeviceCertPolicy {
@@ -23,6 +28,14 @@ enum class CastDeviceCertPolicy {
 
   // The device certificate is for an audio-only device.
   AUDIO_ONLY,
+};
+
+enum class CRLPolicy {
+  // Revocation is only checked if a CRL is provided.
+  CRL_OPTIONAL,
+
+  // Revocation is always checked. A missing CRL results in failure.
+  CRL_REQUIRED,
 };
 
 // An object of this type is returned by the VerifyDeviceCert function, and can
@@ -49,17 +62,25 @@ class CertVerificationContext {
   DISALLOW_COPY_AND_ASSIGN(CertVerificationContext);
 };
 
-// Verifies a cast device certficate given a chain of DER-encoded certificates.
+// Verifies a cast device certficate given a chain of DER-encoded certificates,
+// using the built-in Cast trust anchors.
 //
 // Inputs:
 //
 // * |certs| is a chain of DER-encoded certificates:
-//   * |certs[0]| is the target certificate (i.e. the device certificate)
-//   * |certs[i]| is the certificate that issued certs[i-1]
-//   * |certs.back()| must be signed by a trust anchor
+//   * |certs[0]| is the target certificate (i.e. the device certificate).
+//   * |certs[1..n-1]| are intermediates certificates to use in path building.
+//     Their ordering does not matter.
 //
-// * |time| is the UTC time to use for determining if the certificate
+// * |time| is the unix timestamp to use for determining if the certificate
 //   is expired.
+//
+// * |crl| is the CRL to check for certificate revocation status.
+//   If this is a nullptr, then revocation checking is currently disabled.
+//
+// * |crl_options| is for choosing how to handle the absence of a CRL.
+//   If crl_required is set to true, then an empty |crl| input would result
+//   in a failed verification. Otherwise, |crl| is ignored if it is absent.
 //
 // Outputs:
 //
@@ -72,9 +93,23 @@ class CertVerificationContext {
 //   * |policy| is filled with an indication of the device certificate's policy
 //     (i.e. is it for audio-only devices or is it unrestricted?)
 bool VerifyDeviceCert(const std::vector<std::string>& certs,
-                      const base::Time::Exploded& time,
+                      const base::Time& time,
                       std::unique_ptr<CertVerificationContext>* context,
-                      CastDeviceCertPolicy* policy) WARN_UNUSED_RESULT;
+                      CastDeviceCertPolicy* policy,
+                      const CastCRL* crl,
+                      CRLPolicy crl_policy) WARN_UNUSED_RESULT;
+
+// Exposed only for testing, not for use in production code.
+//
+// This is an overloaded version of VerifyDeviceCert that allows
+// the input of a custom TrustStore.
+bool VerifyDeviceCertForTest(const std::vector<std::string>& certs,
+                             const base::Time& time,
+                             std::unique_ptr<CertVerificationContext>* context,
+                             CastDeviceCertPolicy* policy,
+                             const CastCRL* crl,
+                             CRLPolicy crl_policy,
+                             net::TrustStore* trust_store) WARN_UNUSED_RESULT;
 
 // Exposed only for unit-tests, not for use in production code.
 // Production code would get a context from VerifyDeviceCert().
@@ -83,16 +118,6 @@ bool VerifyDeviceCert(const std::vector<std::string>& certs,
 // The common name will be hardcoded to some test value.
 std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
     const base::StringPiece& spki);
-
-// Exposed only for testing, not for use in production code.
-//
-// Injects trusted root certificates into the CastTrustStore.
-// |data| must remain valid and not be mutated throughout the lifetime of
-// the program.
-// Warning: Using this function concurrently with VerifyDeviceCert()
-//          is not thread safe.
-bool AddTrustAnchorForTest(const uint8_t* data,
-                           size_t length) WARN_UNUSED_RESULT;
 
 }  // namespace cast_certificate
 

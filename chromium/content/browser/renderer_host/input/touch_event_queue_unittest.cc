@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/renderer_host/input/timeout_monitor.h"
@@ -188,7 +189,7 @@ class TouchEventQueueTest : public testing::Test,
 
   void ChangeTouchPointRadius(int index, float radius_x, float radius_y) {
     CHECK_GE(index, 0);
-    CHECK_LT(index, touch_event_.touchesLengthCap);
+    CHECK_LT(index, touch_event_.kTouchesLengthCap);
     WebTouchPoint& point = touch_event_.touches[index];
     point.radiusX = radius_x;
     point.radiusY = radius_y;
@@ -202,7 +203,7 @@ class TouchEventQueueTest : public testing::Test,
 
   void ChangeTouchPointRotationAngle(int index, float rotation_angle) {
     CHECK_GE(index, 0);
-    CHECK_LT(index, touch_event_.touchesLengthCap);
+    CHECK_LT(index, touch_event_.kTouchesLengthCap);
     WebTouchPoint& point = touch_event_.touches[index];
     point.rotationAngle = rotation_angle;
     touch_event_.touches[index].state = WebTouchPoint::StateMoved;
@@ -215,7 +216,7 @@ class TouchEventQueueTest : public testing::Test,
 
   void ChangeTouchPointForce(int index, float force) {
     CHECK_GE(index, 0);
-    CHECK_LT(index, touch_event_.touchesLengthCap);
+    CHECK_LT(index, touch_event_.kTouchesLengthCap);
     WebTouchPoint& point = touch_event_.touches[index];
     point.force = force;
     touch_event_.touches[index].state = WebTouchPoint::StateMoved;
@@ -308,7 +309,7 @@ class TouchEventQueueTest : public testing::Test,
   static void RunTasksAndWait(base::TimeDelta delay) {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(), delay);
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
   }
 
   size_t uncancelable_touch_moves_pending_ack_count() const {
@@ -2711,6 +2712,30 @@ TEST_F(TouchEventQueueTest, TouchScrollNotificationOrder_SecondPosition) {
   EXPECT_EQ(WebInputEvent::TouchMove, all_sent_events()[2].type);
   EXPECT_EQ(WebInputEvent::TouchEnd, all_sent_events()[3].type);
   EXPECT_EQ(4U, GetAndResetSentEventCount());
+}
+
+// Tests that if touchStartOrFirstTouchMove is correctly set up for touch
+// events.
+TEST_F(TouchEventQueueTest, TouchStartOrFirstTouchMove) {
+  PressTouchPoint(1, 1);
+  SendTouchEventAck(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(WebInputEvent::TouchStart, sent_event().type);
+  EXPECT_TRUE(sent_event().touchStartOrFirstTouchMove);
+
+  MoveTouchPoint(0, 5, 5);
+  SendTouchEventAck(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(WebInputEvent::TouchMove, sent_event().type);
+  EXPECT_TRUE(sent_event().touchStartOrFirstTouchMove);
+
+  MoveTouchPoint(0, 15, 15);
+  SendTouchEventAck(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(WebInputEvent::TouchMove, sent_event().type);
+  EXPECT_FALSE(sent_event().touchStartOrFirstTouchMove);
+
+  ReleaseTouchPoint(0);
+  SendTouchEventAck(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(WebInputEvent::TouchEnd, sent_event().type);
+  EXPECT_FALSE(sent_event().touchStartOrFirstTouchMove);
 }
 
 }  // namespace content

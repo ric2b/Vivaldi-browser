@@ -31,6 +31,10 @@ import sys
 #         "... -o out/gn/obj/foo/libbar.dylib ... -Wcrl,dsym,out/gn ..."
 #       The resulting dSYM would be out/gn/libbar.dylib.dSYM/.
 #
+#   -Wcrl,unstripped,<unstripped_path_prefix>
+#       After invoking the linker, and before strip, this will save a copy of
+#       the unstripped linker output in the directory unstripped_path_prefix.
+#
 #   -Wcrl,strip,<strip_arguments>
 #       After invoking the linker, and optionally dsymutil, this will run
 #       the strip command on the linker's output. strip_arguments are
@@ -135,6 +139,29 @@ def RunDsymUtil(dsym_path_prefix, full_args):
   return [dsym_out]
 
 
+def RunSaveUnstripped(unstripped_path_prefix, full_args):
+  """Linker driver action for -Wcrl,unstripped,<unstripped_path_prefix>. Copies
+  the linker output to |unstripped_path_prefix| before stripping.
+
+  Args:
+    unstripped_path_prefix: string, The path at which the unstripped output
+        should be located.
+    full_args: list of string, Full argument list for the linker driver.
+
+  Returns:
+    list of string, Build step outputs.
+  """
+  if not len(unstripped_path_prefix):
+    raise ValueError('Unspecified unstripped output file')
+
+  linker_out = _FindLinkerOutput(full_args)
+  (head, tail) = os.path.split(linker_out)
+  unstripped_out = os.path.join(unstripped_path_prefix, tail + '.unstripped')
+
+  shutil.copyfile(linker_out, unstripped_out)
+  return [unstripped_out]
+
+
 def RunStrip(strip_args_string, full_args):
   """Linker driver action for -Wcrl,strip,<strip_arguments>.
 
@@ -158,7 +185,15 @@ def _FindLinkerOutput(full_args):
   argument list. As this is a required linker argument, raises an error if it
   cannot be found.
   """
-  return full_args[full_args.index('-o') + 1]
+  # The linker_driver.py script may be used to wrap either the compiler linker
+  # (uses -o to configure the output) or lipo (uses -output to configure the
+  # output). Since wrapping the compiler linker is the most likely possibility
+  # use try/except and fallback to checking for -output if -o is not found.
+  try:
+    output_flag_index = full_args.index('-o')
+  except ValueError:
+    output_flag_index = full_args.index('-output')
+  return full_args[output_flag_index + 1]
 
 
 def _RemovePath(path):
@@ -178,6 +213,7 @@ argument's -Wcrl,<sub_argument> and the second is the function to invoke.
 """
 _LINKER_DRIVER_ACTIONS = [
     ('dsym,', RunDsymUtil),
+    ('unstripped,', RunSaveUnstripped),
     ('strip,', RunStrip),
 ]
 

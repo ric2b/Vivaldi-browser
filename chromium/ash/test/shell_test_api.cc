@@ -7,9 +7,7 @@
 #include "ash/common/session/session_state_delegate.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/shelf/shelf_delegate.h"
 #include "ash/shell.h"
-#include "ash/shell_delegate.h"
 
 namespace ash {
 namespace test {
@@ -32,24 +30,12 @@ AshNativeCursorManager* ShellTestApi::ash_native_cursor_manager() {
   return shell_->native_cursor_manager_;
 }
 
-ShelfModel* ShellTestApi::shelf_model() {
-  return shell_->shelf_model_.get();
-}
-
 DragDropController* ShellTestApi::drag_drop_controller() {
   return shell_->drag_drop_controller_.get();
 }
 
-app_list::AppListPresenter* ShellTestApi::app_list_presenter() {
-  return shell_->delegate_->GetAppListPresenter();
-}
-
 void ShellTestApi::DisableDisplayAnimator() {
   shell_->display_configuration_controller()->ResetAnimatorForTest();
-}
-
-void ShellTestApi::SetShelfDelegate(ShelfDelegate* delegate) {
-  shell_->shelf_delegate_.reset(delegate);
 }
 
 void ShellTestApi::SetSessionStateDelegate(

@@ -15,12 +15,12 @@
 #include "base/test/test_suite.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/names.h"
-#include "services/shell/public/cpp/shell_test.h"
-#include "services/shell/public/interfaces/shell.mojom.h"
+#include "services/shell/public/cpp/service_test.h"
+#include "services/shell/public/interfaces/service_manager.mojom.h"
 #include "services/shell/tests/connect/connect_test.mojom.h"
 
 // Tests that multiple applications can be packaged in a single Mojo application
-// implementing ShellClientFactory; that these applications can be specified by
+// implementing ServiceFactory; that these applications can be specified by
 // the package's manifest and are thus registered with the PackageManager.
 
 namespace shell {
@@ -37,7 +37,7 @@ const char kTestDriverName[] = "exe:connect_test_driver";
 
 void ReceiveOneString(std::string* out_string,
                       base::RunLoop* loop,
-                      mojo::String in_string) {
+                      const std::string& in_string) {
   *out_string = in_string;
   loop->Quit();
 }
@@ -45,8 +45,8 @@ void ReceiveOneString(std::string* out_string,
 void ReceiveTwoStrings(std::string* out_string_1,
                        std::string* out_string_2,
                        base::RunLoop* loop,
-                       mojo::String in_string_1,
-                       mojo::String in_string_2) {
+                       const std::string& in_string_1,
+                       const std::string& in_string_2) {
   *out_string_1 = in_string_1;
   *out_string_2 = in_string_2;
   loop->Quit();
@@ -56,9 +56,9 @@ void ReceiveConnectionResult(mojom::ConnectResult* out_result,
                              Identity* out_target,
                              base::RunLoop* loop,
                              int32_t in_result,
-                             mojom::IdentityPtr in_identity) {
+                             const shell::Identity& in_identity) {
   *out_result = static_cast<mojom::ConnectResult>(in_result);
-  *out_target = in_identity.To<Identity>();
+  *out_target = in_identity;
   loop->Quit();
 }
 
@@ -68,11 +68,11 @@ void QuitLoop(base::RunLoop* loop) {
 
 }  // namespace
 
-class ConnectTest : public test::ShellTest,
+class ConnectTest : public test::ServiceTest,
                     public InterfaceFactory<test::mojom::ExposedInterface>,
                     public test::mojom::ExposedInterface {
  public:
-  ConnectTest() : ShellTest("mojo:connect_unittests") {}
+  ConnectTest() : ServiceTest("mojo:connect_unittests") {}
   ~ConnectTest() override {}
 
  protected:
@@ -84,33 +84,43 @@ class ConnectTest : public test::ShellTest,
     return connection;
   }
 
-  void set_ping_callback(const base::Closure& callback) {
-    ping_callback_ = callback;
-  }
-
   void CompareConnectionState(
       const std::string& connection_local_name,
       const std::string& connection_remote_name,
       const std::string& connection_remote_userid,
-      uint32_t connection_remote_id,
       const std::string& initialize_local_name,
-      const std::string& initialize_userid,
-      uint32_t initialize_id) {
-    EXPECT_EQ(connection_local_name, connection_state_->connection_local_name);
+      const std::string& initialize_userid) {
     EXPECT_EQ(connection_remote_name,
               connection_state_->connection_remote_name);
     EXPECT_EQ(connection_remote_userid,
               connection_state_->connection_remote_userid);
-    EXPECT_EQ(connection_remote_id, connection_state_->connection_remote_id);
     EXPECT_EQ(initialize_local_name, connection_state_->initialize_local_name);
-    EXPECT_EQ(initialize_id, connection_state_->initialize_id);
     EXPECT_EQ(initialize_userid, connection_state_->initialize_userid);
   }
 
  private:
-  // test::ShellTest:
+  class TestService : public test::ServiceTestClient {
+   public:
+    explicit TestService(ConnectTest* connect_test)
+        : test::ServiceTestClient(connect_test),
+          connect_test_(connect_test) {}
+    ~TestService() override {}
+
+   private:
+    bool OnConnect(const Identity& remote_identity,
+                   InterfaceRegistry* registry) override {
+      registry->AddInterface<test::mojom::ExposedInterface>(connect_test_);
+      return true;
+    }
+
+    ConnectTest* connect_test_;
+
+    DISALLOW_COPY_AND_ASSIGN(TestService);
+  };
+
+  // test::ServiceTest:
   void SetUp() override {
-    test::ShellTest::SetUp();
+    test::ServiceTest::SetUp();
     // We need to connect to the package first to force the shell to read the
     // package app's manifest and register aliases for the applications it
     // provides.
@@ -124,19 +134,20 @@ class ConnectTest : public test::ShellTest,
         base::Bind(&ReceiveOneString, &root_name, &run_loop));
     run_loop.Run();
   }
+  std::unique_ptr<Service> CreateService() override {
+    return base::MakeUnique<TestService>(this);
+  }
 
   // InterfaceFactory<test::mojom::ExposedInterface>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               test::mojom::ExposedInterfaceRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
 
   void ConnectionAccepted(test::mojom::ConnectionStatePtr state) override {
     connection_state_ = std::move(state);
-    ping_callback_.Run();
   }
 
-  base::Closure ping_callback_;
   test::mojom::ConnectionStatePtr connection_state_;
 
   mojo::BindingSet<test::mojom::ExposedInterface> bindings_;
@@ -156,7 +167,6 @@ TEST_F(ConnectTest, Connect) {
   run_loop.Run();
   EXPECT_EQ("APP", title);
   EXPECT_FALSE(connection->IsPending());
-  EXPECT_NE(mojom::kInvalidInstanceID, connection->GetRemoteInstanceID());
   EXPECT_EQ(connection->GetRemoteIdentity().name(), kTestAppName);
 }
 
@@ -248,7 +258,6 @@ TEST_F(ConnectTest, PackagedApp) {
   run_loop.Run();
   EXPECT_EQ("A", a_name);
   EXPECT_FALSE(connection->IsPending());
-  EXPECT_NE(mojom::kInvalidInstanceID, connection->GetRemoteInstanceID());
   EXPECT_EQ(connection->GetRemoteIdentity().name(), kTestAppAName);
 }
 
@@ -291,7 +300,6 @@ TEST_F(ConnectTest, BlockedPackagedApplication) {
   run_loop.Run();
   EXPECT_FALSE(connection->IsPending());
   EXPECT_EQ(mojom::ConnectResult::ACCESS_DENIED, connection->GetResult());
-  EXPECT_EQ(mojom::kInvalidInstanceID, connection->GetRemoteInstanceID());
 }
 
 TEST_F(ConnectTest, CapabilityClasses) {
@@ -330,7 +338,7 @@ TEST_F(ConnectTest, ConnectAsDifferentUser_Allowed) {
   {
     base::RunLoop loop;
     user_id_test->ConnectToClassAppAsDifferentUser(
-        mojom::Identity::From(target),
+        target,
         base::Bind(&ReceiveConnectionResult, &result, &result_identity, &loop));
     loop.Run();
   }
@@ -348,7 +356,7 @@ TEST_F(ConnectTest, ConnectAsDifferentUser_Blocked) {
   {
     base::RunLoop loop;
     user_id_test->ConnectToClassAppAsDifferentUser(
-        mojom::Identity::From(target),
+        target,
         base::Bind(&ReceiveConnectionResult, &result, &result_identity, &loop));
     loop.Run();
   }
@@ -401,71 +409,6 @@ TEST_F(ConnectTest, AllUsersSingleton) {
     loop.Run();
     EXPECT_EQ(inherit_connection->GetRemoteIdentity().user_id(),
               connection->GetRemoteIdentity().user_id());
-  }
-}
-
-// Tests that we can expose an interface to targets on outbound connections.
-TEST_F(ConnectTest, LocalInterface) {
-  // Connect to a standalone application.
-  {
-    test::mojom::ConnectTestServicePtr service;
-    std::unique_ptr<Connection> connection = connector()->Connect(kTestAppName);
-    connection->GetInterface(&service);
-    connection->AddInterface<test::mojom::ExposedInterface>(this);
-
-    uint32_t remote_id = mojom::kInvalidInstanceID;
-    {
-      base::RunLoop run_loop;
-      EXPECT_TRUE(connection->IsPending());
-      EXPECT_EQ(mojom::kInvalidInstanceID, connection->GetRemoteInstanceID());
-      connection->AddConnectionCompletedClosure(
-          base::Bind(&QuitLoop, &run_loop));
-      run_loop.Run();
-      EXPECT_FALSE(connection->IsPending());
-      remote_id = connection->GetRemoteInstanceID();
-      EXPECT_NE(mojom::kInvalidInstanceID, remote_id);
-    }
-
-    {
-      base::RunLoop run_loop;
-      set_ping_callback(base::Bind(&QuitLoop, &run_loop));
-      run_loop.Run();
-      CompareConnectionState(
-          kTestAppName, test_name(), test_userid(), test_instance_id(),
-          kTestAppName, connection->GetRemoteIdentity().user_id(), remote_id);
-    }
-  }
-
-  // Connect to an application provided by a package.
-  {
-    test::mojom::ConnectTestServicePtr service_a;
-    std::unique_ptr<Connection> connection =
-        connector()->Connect(kTestAppAName);
-    connection->GetInterface(&service_a);
-    connection->AddInterface<test::mojom::ExposedInterface>(this);
-
-    uint32_t remote_id = mojom::kInvalidInstanceID;
-    {
-      base::RunLoop run_loop;
-      EXPECT_TRUE(connection->IsPending());
-      EXPECT_EQ(mojom::kInvalidInstanceID, connection->GetRemoteInstanceID());
-      connection->AddConnectionCompletedClosure(
-          base::Bind(&QuitLoop, &run_loop));
-      run_loop.Run();
-      EXPECT_FALSE(connection->IsPending());
-      remote_id = connection->GetRemoteInstanceID();
-      EXPECT_NE(mojom::kInvalidInstanceID, remote_id);
-    }
-
-    {
-      base::RunLoop run_loop;
-      set_ping_callback(base::Bind(&QuitLoop, &run_loop));
-      run_loop.Run();
-      CompareConnectionState(
-          kTestAppAName, test_name(), test_userid(), test_instance_id(),
-          kTestAppAName, connection->GetRemoteIdentity().user_id(), remote_id);
-    }
-
   }
 }
 

@@ -35,6 +35,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/grit/theme_resources.h"
+#include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -42,7 +43,6 @@
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
-#include "policy/policy_constants.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/image/image_skia.h"
 
@@ -409,9 +409,9 @@ void UserImageManagerImpl::Job::UpdateUser(
     user->SetImage(std::move(user_image), image_index_);
   } else {
     user->SetStubImage(
-        base::WrapUnique(new user_manager::UserImage(
+        base::MakeUnique<user_manager::UserImage>(
             *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                IDR_PROFILE_PICTURE_LOADING))),
+                IDR_PROFILE_PICTURE_LOADING)),
         image_index_, false);
   }
   user->SetImageURL(image_url_);
@@ -542,8 +542,8 @@ void UserImageManagerImpl::LoadUserImage() {
   image_properties->GetInteger(kImageIndexNodeName, &image_index);
   if (image_index >= 0 &&
       image_index < default_user_image::kDefaultImagesCount) {
-    user->SetImage(base::WrapUnique(new user_manager::UserImage(
-                       default_user_image::GetDefaultImage(image_index))),
+    user->SetImage(base::MakeUnique<user_manager::UserImage>(
+                       default_user_image::GetDefaultImage(image_index)),
                    image_index);
     return;
   }
@@ -561,9 +561,9 @@ void UserImageManagerImpl::LoadUserImage() {
   image_properties->GetString(kImagePathNodeName, &image_path);
 
   user->SetImageURL(image_url);
-  user->SetStubImage(base::WrapUnique(new user_manager::UserImage(
+  user->SetStubImage(base::MakeUnique<user_manager::UserImage>(
                          *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                             IDR_PROFILE_PICTURE_LOADING))),
+                             IDR_PROFILE_PICTURE_LOADING)),
                      image_index, true);
   DCHECK(!image_path.empty() ||
          image_index == user_manager::User::USER_IMAGE_PROFILE);

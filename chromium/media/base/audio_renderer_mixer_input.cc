@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/trace_event/trace_event.h"
 #include "media/base/audio_renderer_mixer.h"
 #include "media/base/audio_renderer_mixer_pool.h"
 
@@ -65,12 +66,6 @@ void AudioRendererMixerInput::Start() {
 
   // Note: OnRenderError() may be called immediately after this call returns.
   mixer_->AddErrorCallback(error_cb_);
-
-  if (!pending_switch_callback_.is_null()) {
-    SwitchOutputDevice(pending_switch_device_id_,
-                       pending_switch_security_origin_,
-                       base::ResetAndReturn(&pending_switch_callback_));
-  }
 }
 
 void AudioRendererMixerInput::Stop() {
@@ -88,11 +83,6 @@ void AudioRendererMixerInput::Stop() {
   }
 
   started_ = false;
-
-  if (!pending_switch_callback_.is_null()) {
-    base::ResetAndReturn(&pending_switch_callback_)
-        .Run(OUTPUT_DEVICE_STATUS_ERROR_INTERNAL);
-  }
 }
 
 void AudioRendererMixerInput::Play() {
@@ -132,49 +122,52 @@ void AudioRendererMixerInput::SwitchOutputDevice(
     const std::string& device_id,
     const url::Origin& security_origin,
     const OutputDeviceStatusCB& callback) {
-  if (!mixer_) {
-    if (pending_switch_callback_.is_null()) {
-      pending_switch_callback_ = callback;
-      pending_switch_device_id_ = device_id;
-      pending_switch_security_origin_ = security_origin;
-    } else {
-      callback.Run(OUTPUT_DEVICE_STATUS_ERROR_INTERNAL);
-    }
-
-    return;
-  }
-
-  DCHECK(pending_switch_callback_.is_null());
   if (device_id == device_id_) {
     callback.Run(OUTPUT_DEVICE_STATUS_OK);
     return;
   }
 
-  OutputDeviceStatus new_mixer_status = OUTPUT_DEVICE_STATUS_ERROR_INTERNAL;
-  AudioRendererMixer* new_mixer =
-      mixer_pool_->GetMixer(owner_id_, params_, latency_, device_id,
-                            security_origin, &new_mixer_status);
-  if (new_mixer_status != OUTPUT_DEVICE_STATUS_OK) {
-    callback.Run(new_mixer_status);
-    return;
+  if (mixer_) {
+    OutputDeviceStatus new_mixer_status = OUTPUT_DEVICE_STATUS_ERROR_INTERNAL;
+    AudioRendererMixer* new_mixer =
+        mixer_pool_->GetMixer(owner_id_, params_, latency_, device_id,
+                              security_origin, &new_mixer_status);
+    if (new_mixer_status != OUTPUT_DEVICE_STATUS_OK) {
+      callback.Run(new_mixer_status);
+      return;
+    }
+
+    bool was_playing = playing_;
+    Stop();
+    device_id_ = device_id;
+    security_origin_ = security_origin;
+    mixer_ = new_mixer;
+    mixer_->AddErrorCallback(error_cb_);
+    started_ = true;
+
+    if (was_playing)
+      Play();
+
+  } else {
+    OutputDeviceStatus new_mixer_status =
+        mixer_pool_
+            ->GetOutputDeviceInfo(owner_id_, 0 /* session_id */, device_id,
+                                  security_origin)
+            .device_status();
+    if (new_mixer_status != OUTPUT_DEVICE_STATUS_OK) {
+      callback.Run(new_mixer_status);
+      return;
+    }
+    device_id_ = device_id;
+    security_origin_ = security_origin;
   }
-
-  bool was_playing = playing_;
-  Stop();
-  device_id_ = device_id;
-  security_origin_ = security_origin;
-  mixer_ = new_mixer;
-  mixer_->AddErrorCallback(error_cb_);
-  started_ = true;
-
-  if (was_playing)
-    Play();
 
   callback.Run(OUTPUT_DEVICE_STATUS_OK);
 }
 
 double AudioRendererMixerInput::ProvideInput(AudioBus* audio_bus,
                                              uint32_t frames_delayed) {
+  TRACE_EVENT0("audio", "AudioRendererMixerInput::ProvideInput");
   int frames_filled = callback_->Render(audio_bus, frames_delayed, 0);
 
   // AudioConverter expects unfilled frames to be zeroed.

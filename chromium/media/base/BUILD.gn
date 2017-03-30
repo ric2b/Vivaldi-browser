@@ -22,7 +22,12 @@ config("base_config") {
   ]
 }
 
-source_set("base") {
+if (is_component_build) {
+  link_target_type = "source_set"
+} else {
+  link_target_type = "static_library"
+}
+target(link_target_type, "base") {
   # This is part of the media component.
   visibility = [ "//media/*" ]
   sources = [
@@ -47,8 +52,6 @@ source_set("base") {
     "audio_discard_helper.h",
     "audio_fifo.cc",
     "audio_fifo.h",
-    "audio_hardware_config.cc",
-    "audio_hardware_config.h",
     "audio_hash.cc",
     "audio_hash.h",
     "audio_latency.cc",
@@ -129,6 +132,7 @@ source_set("base") {
     "eme_constants.h",
     "encryption_scheme.cc",
     "encryption_scheme.h",
+    "feedback_signal_accumulator.h",
     "key_system_names.cc",
     "key_system_names.h",
     "key_system_properties.cc",
@@ -156,6 +160,8 @@ source_set("base") {
     "media_track.h",
     "media_tracks.cc",
     "media_tracks.h",
+    "media_url_demuxer.cc",
+    "media_url_demuxer.h",
     "media_util.cc",
     "media_util.h",
     "mime_util.cc",
@@ -190,6 +196,8 @@ source_set("base") {
     "seekable_buffer.h",
     "serial_runner.cc",
     "serial_runner.h",
+    "silent_sink_suspender.cc",
+    "silent_sink_suspender.h",
     "simd/convert_rgb_to_yuv.h",
     "simd/convert_rgb_to_yuv_c.cc",
     "simd/convert_yuv_to_rgb.h",
@@ -202,6 +210,7 @@ source_set("base") {
     "stream_parser.h",
     "stream_parser_buffer.cc",
     "stream_parser_buffer.h",
+    "subsample_entry.h",
     "surface_manager.h",
     "text_cue.cc",
     "text_cue.h",
@@ -327,42 +336,26 @@ source_set("base") {
       "keyboard_event_counter.h",
     ]
   }
-}
 
-# Minimal media component for media/cast on iOS.
-config("base_for_cast_ios_dependent_config") {
-  defines = [ "MEDIA_FOR_CAST_IOS" ]
-}
-
-if (is_ios) {
-  source_set("base_for_cast_ios") {
-    sources = [
-      "simd/convert_rgb_to_yuv.h",
-      "simd/convert_rgb_to_yuv_c.cc",
-      "simd/convert_yuv_to_rgb.h",
-      "simd/convert_yuv_to_rgb_c.cc",
-      "simd/filter_yuv.h",
-      "simd/filter_yuv_c.cc",
-      "video_frame.cc",
-      "video_frame.h",
-      "video_frame_metadata.cc",
-      "video_frame_metadata.h",
-      "video_types.cc",
-      "video_types.h",
-      "video_util.cc",
-      "video_util.h",
-      "yuv_convert.cc",
-      "yuv_convert.h",
+  if (system_proprietary_codecs) {
+    sources += [
+      "pipeline_stats.cc",
+      "pipeline_stats.h",
+      "platform_mime_util.h",
     ]
-    configs += [
-      "//build/config/compiler:no_size_t_to_int_warning",
-      "//media:media_config",
-    ]
-    all_dependent_configs = [ ":base_for_cast_ios_dependent_config" ]
+    if (is_mac) {
+      sources += [ "platform_mime_util_mac.mm" ]
+    }
+    if (is_win) {
+      sources += [ "platform_mime_util_win.cc" ]
+      deps += [ 
+        "//media/base/win:win",
+      ]
+    }
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "fake_audio_render_callback.cc",
@@ -403,14 +396,6 @@ source_set("test_support") {
     "//testing/gmock",
     "//ui/gfx:test_support",
   ]
-  if (is_android) {
-    deps += [
-      # Needed to register capture Java/Jni objects. TODO(mcasas): Remove when
-      # the dependency to capture is not needed, see https://crbug.com/618718.
-      "//media/capture",
-      "//media/capture/video/android",
-    ]
-  }
 }
 
 source_set("unittests") {
@@ -424,7 +409,6 @@ source_set("unittests") {
     "audio_converter_unittest.cc",
     "audio_discard_helper_unittest.cc",
     "audio_fifo_unittest.cc",
-    "audio_hardware_config_unittest.cc",
     "audio_hash_unittest.cc",
     "audio_latency_unittest.cc",
     "audio_parameters_unittest.cc",
@@ -449,8 +433,10 @@ source_set("unittests") {
     "decoder_buffer_unittest.cc",
     "djb2_unittest.cc",
     "fake_demuxer_stream_unittest.cc",
+    "feedback_signal_accumulator_unittest.cc",
     "gmock_callback_support_unittest.cc",
     "key_systems_unittest.cc",
+    "media_url_demuxer_unittest.cc",
     "mime_util_unittest.cc",
     "moving_average_unittest.cc",
     "multi_channel_resampler_unittest.cc",
@@ -460,6 +446,7 @@ source_set("unittests") {
     "run_all_unittests.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
+    "silent_sink_suspender_unittest.cc",
     "sinc_resampler_unittest.cc",
     "stream_parser_unittest.cc",
     "text_ranges_unittest.cc",
@@ -467,6 +454,7 @@ source_set("unittests") {
     "time_delta_interpolator_unittest.cc",
     "user_input_monitor_unittest.cc",
     "vector_math_unittest.cc",
+    "video_codecs_unittest.cc",
     "video_decoder_config_unittest.cc",
     "video_frame_pool_unittest.cc",
     "video_frame_unittest.cc",
@@ -483,6 +471,7 @@ source_set("unittests") {
     "//base/test:test_support",
     "//gpu/command_buffer/common",
     "//media",
+    "//media/base/android:anywhere_unittests",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

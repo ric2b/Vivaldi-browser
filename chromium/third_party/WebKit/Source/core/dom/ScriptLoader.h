@@ -50,14 +50,12 @@ public:
     Element* element() const { return m_element; }
 
     enum LegacyTypeSupport { DisallowLegacyTypeInTypeAttribute, AllowLegacyTypeInTypeAttribute };
-    static bool isValidScriptTypeAndLanguage(const String& typeAttributeValue, const String& languageAttributeValue, LegacyTypeSupport supportLegacyTypes);
-
     bool prepareScript(const TextPosition& scriptStartPosition = TextPosition::minimumPosition(), LegacyTypeSupport = DisallowLegacyTypeInTypeAttribute);
 
     String scriptCharset() const { return m_characterEncoding; }
     String scriptContent() const;
     // Returns false if and only if execution was blocked.
-    bool executeScript(const ScriptSourceCode&, double* compilationFinishTime = 0);
+    bool executeScript(const ScriptSourceCode&);
     virtual void execute();
 
     // XML parser calls these

@@ -184,9 +184,11 @@ gpu::gles2::ProgramCache* InProcessCommandBuffer::Service::program_cache() {
       (gl::g_driver_gl.ext.b_GL_ARB_get_program_binary ||
        gl::g_driver_gl.ext.b_GL_OES_get_program_binary) &&
       !gpu_preferences().disable_gpu_program_cache) {
-    program_cache_.reset(new gpu::gles2::MemoryProgramCache(
-          gpu_preferences().gpu_program_cache_size,
-          gpu_preferences().disable_gpu_shader_disk_cache));
+    bool disable_disk_cache =
+        gpu_preferences_.disable_gpu_shader_disk_cache ||
+        gpu_driver_bug_workarounds_.disable_program_disk_cache;
+    program_cache_.reset(new gles2::MemoryProgramCache(
+        gpu_preferences_.gpu_program_cache_size, disable_disk_cache));
   }
   return program_cache_.get();
 }
@@ -254,16 +256,22 @@ bool InProcessCommandBuffer::Initialize(
     const gles2::ContextCreationAttribHelper& attribs,
     InProcessCommandBuffer* share_group,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    ImageFactory* image_factory) {
+    ImageFactory* image_factory,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   DCHECK(!share_group || service_.get() == share_group->service_.get());
 
   if (surface) {
+    // If a surface is provided, we are running in a webview and should not have
+    // a task runner.
+    DCHECK(!task_runner);
+
     // GPU thread must be the same as client thread due to GLSurface not being
     // thread safe.
     sequence_checker_.reset(new base::SequenceChecker);
     surface_ = surface;
   } else {
-    origin_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+    DCHECK(task_runner);
+    origin_task_runner_ = std::move(task_runner);
     client_thread_weak_ptr_ = client_thread_weak_ptr_factory_.GetWeakPtr();
   }
 
@@ -463,8 +471,7 @@ bool InProcessCommandBuffer::DestroyOnGpuThread() {
 }
 
 void InProcessCommandBuffer::CheckSequencedThread() {
-  DCHECK(!sequence_checker_ ||
-         sequence_checker_->CalledOnValidSequencedThread());
+  DCHECK(!sequence_checker_ || sequence_checker_->CalledOnValidSequence());
 }
 
 void InProcessCommandBuffer::OnContextLostOnGpuThread() {
@@ -684,9 +691,6 @@ int32_t InProcessCommandBuffer::CreateImage(ClientBuffer buffer,
   DCHECK(gpu::IsImageFormatCompatibleWithGpuMemoryBufferFormat(
       internalformat, gpu_memory_buffer->GetFormat()));
 
-  DCHECK(image_gmb_ids_map_.find(new_id) == image_gmb_ids_map_.end());
-  image_gmb_ids_map_[new_id] = gpu_memory_buffer->GetId().id;
-
   // This handle is owned by the GPU thread and must be passed to it or it
   // will leak. In otherwords, do not early out on error between here and the
   // queuing of the CreateImage task below.
@@ -792,10 +796,6 @@ void InProcessCommandBuffer::CreateImageOnGpuThread(
 void InProcessCommandBuffer::DestroyImage(int32_t id) {
   CheckSequencedThread();
 
-  auto it = image_gmb_ids_map_.find(id);
-  if (it != image_gmb_ids_map_.end())
-    image_gmb_ids_map_.erase(it);
-
   QueueTask(base::Bind(&InProcessCommandBuffer::DestroyImageOnGpuThread,
                        base::Unretained(this),
                        id));
@@ -832,14 +832,6 @@ int32_t InProcessCommandBuffer::CreateGpuMemoryBufferImage(
     return -1;
 
   return CreateImage(buffer->AsClientBuffer(), width, height, internalformat);
-}
-
-int32_t InProcessCommandBuffer::GetImageGpuMemoryBufferId(unsigned image_id) {
-  CheckSequencedThread();
-  auto it = image_gmb_ids_map_.find(image_id);
-  if (it != image_gmb_ids_map_.end())
-    return it->second;
-  return -1;
 }
 
 void InProcessCommandBuffer::FenceSyncReleaseOnGpuThread(uint64_t release) {

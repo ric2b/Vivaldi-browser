@@ -42,6 +42,7 @@ base::FilePath g_temp_history_dir;
 const int kMoreAccumulationsThanNeededToMaxDailyEngagement = 40;
 const int kMoreDaysThanNeededToMaxTotalEngagement = 40;
 const int kMorePeriodsThanNeededToDecayMaxScore = 40;
+const double kMaxRoundingDeviation = 0.0001;
 
 // Waits until a change is observed in site engagement content settings.
 class SiteEngagementChangeWaiter : public content_settings::Observer {
@@ -85,7 +86,10 @@ base::Time GetReferenceTime() {
   exploded_reference_time.second = 0;
   exploded_reference_time.millisecond = 0;
 
-  return base::Time::FromLocalExploded(exploded_reference_time);
+  base::Time out_time;
+  EXPECT_TRUE(
+      base::Time::FromLocalExploded(exploded_reference_time, &out_time));
+  return out_time;
 }
 
 std::unique_ptr<KeyedService> BuildTestHistoryService(
@@ -173,6 +177,14 @@ class SiteEngagementServiceTest : public ChromeRenderViewHostTestHarness {
         ->TestDidNavigate(web_contents()->GetMainFrame(), 1, pending_id, true,
                           url, transition);
     EXPECT_EQ(prev_score, service->GetScore(url));
+  }
+
+  void SetParamValue(SiteEngagementScore::Variation variation, double value) {
+    SiteEngagementScore::GetParamValues()[variation].second = value;
+  }
+
+  void AssertInRange(double expected, double actual) {
+    EXPECT_NEAR(expected, actual, kMaxRoundingDeviation);
   }
 
  private:
@@ -927,6 +939,38 @@ TEST_F(SiteEngagementServiceTest, CleanupEngagementScores) {
   }
 }
 
+TEST_F(SiteEngagementServiceTest, CleanupEngagementScoresProportional) {
+  SetParamValue(SiteEngagementScore::DECAY_PROPORTION, 0.5);
+  SetParamValue(SiteEngagementScore::DECAY_POINTS, 0);
+  SetParamValue(SiteEngagementScore::SCORE_CLEANUP_THRESHOLD, 0.5);
+
+  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  std::unique_ptr<SiteEngagementService> service(
+      new SiteEngagementService(profile(), base::WrapUnique(clock)));
+
+  base::Time current_day = GetReferenceTime();
+  clock->SetNow(current_day);
+
+  GURL url1("https://www.google.com/");
+  GURL url2("https://www.somewhereelse.com/");
+
+  service->AddPoints(url1, 1.0);
+  service->AddPoints(url2, 1.2);
+
+  current_day += base::TimeDelta::FromDays(7);
+  clock->SetNow(current_day);
+  std::map<GURL, double> score_map = service->GetScoreMap();
+  EXPECT_EQ(2u, score_map.size());
+  AssertInRange(0.5, service->GetScore(url1));
+  AssertInRange(0.6, service->GetScore(url2));
+
+  service->CleanupEngagementScores(false);
+  score_map = service->GetScoreMap();
+  EXPECT_EQ(1u, score_map.size());
+  EXPECT_EQ(0, service->GetScore(url1));
+  AssertInRange(0.6, service->GetScore(url2));
+}
+
 TEST_F(SiteEngagementServiceTest, NavigationAccumulation) {
   GURL url("https://www.google.com/");
 
@@ -981,6 +1025,10 @@ TEST_F(SiteEngagementServiceTest, IsBootstrapped) {
 }
 
 TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
+  // Enable proportional decay to ensure that the undecay that happens to
+  // balance out history deletion also accounts for the proportional decay.
+  SetParamValue(SiteEngagementScore::DECAY_PROPORTION, 0.5);
+
   base::SimpleTestClock* clock = new base::SimpleTestClock();
   std::unique_ptr<SiteEngagementService> engagement(
       new SiteEngagementService(profile(), base::WrapUnique(clock)));
@@ -1022,10 +1070,10 @@ TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
   history->AddPage(origin4a, yesterday_afternoon, history::SOURCE_BROWSED);
   engagement->AddPoints(origin4, 5.0);
 
-  EXPECT_EQ(3.0, engagement->GetScore(origin1));
-  EXPECT_EQ(5.0, engagement->GetScore(origin2));
-  EXPECT_EQ(5.0, engagement->GetScore(origin3));
-  EXPECT_EQ(5.0, engagement->GetScore(origin4));
+  AssertInRange(3.0, engagement->GetScore(origin1));
+  AssertInRange(5.0, engagement->GetScore(origin2));
+  AssertInRange(5.0, engagement->GetScore(origin3));
+  AssertInRange(5.0, engagement->GetScore(origin4));
 
   {
     SiteEngagementChangeWaiter waiter(profile());
@@ -1041,11 +1089,11 @@ TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     // cutting origin1's score by 1/3. origin3 is untouched. origin4 has 1 URL
     // deleted and 1 remaining, but its most recent visit is more than 1 week in
     // the past. Ensure that its scored is halved, and not decayed further.
-    EXPECT_EQ(2, engagement->GetScore(origin1));
+    AssertInRange(2, engagement->GetScore(origin1));
     EXPECT_EQ(0, engagement->GetScore(origin2));
-    EXPECT_EQ(5.0, engagement->GetScore(origin3));
-    EXPECT_EQ(2.5, engagement->GetScore(origin4));
-    EXPECT_EQ(9.5, engagement->GetTotalEngagementPoints());
+    AssertInRange(5.0, engagement->GetScore(origin3));
+    AssertInRange(2.5, engagement->GetScore(origin4));
+    AssertInRange(9.5, engagement->GetTotalEngagementPoints());
   }
 
   {
@@ -1065,11 +1113,11 @@ TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
 
     // origin1's score should be halved again. origin3 and origin4 remain
     // untouched.
-    EXPECT_EQ(1, engagement->GetScore(origin1));
+    AssertInRange(1, engagement->GetScore(origin1));
     EXPECT_EQ(0, engagement->GetScore(origin2));
-    EXPECT_EQ(5.0, engagement->GetScore(origin3));
-    EXPECT_EQ(2.5, engagement->GetScore(origin4));
-    EXPECT_EQ(8.5, engagement->GetTotalEngagementPoints());
+    AssertInRange(5.0, engagement->GetScore(origin3));
+    AssertInRange(2.5, engagement->GetScore(origin4));
+    AssertInRange(8.5, engagement->GetTotalEngagementPoints());
   }
 
   {
@@ -1090,9 +1138,9 @@ TEST_F(SiteEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     // origin1 should be removed. origin3 and origin4 remain untouched.
     EXPECT_EQ(0, engagement->GetScore(origin1));
     EXPECT_EQ(0, engagement->GetScore(origin2));
-    EXPECT_EQ(5.0, engagement->GetScore(origin3));
-    EXPECT_EQ(2.5, engagement->GetScore(origin4));
-    EXPECT_EQ(7.5, engagement->GetTotalEngagementPoints());
+    AssertInRange(5.0, engagement->GetScore(origin3));
+    AssertInRange(2.5, engagement->GetScore(origin4));
+    AssertInRange(7.5, engagement->GetTotalEngagementPoints());
   }
 }
 

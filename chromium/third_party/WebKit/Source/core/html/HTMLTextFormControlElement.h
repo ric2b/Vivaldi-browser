@@ -43,13 +43,6 @@ public:
     // Common flag for HTMLInputElement::tooLong(), HTMLTextAreaElement::tooLong(),
     // HTMLInputElement::tooShort() and HTMLTextAreaElement::tooShort().
     enum NeedsToCheckDirtyFlag {CheckDirtyFlag, IgnoreDirtyFlag};
-    // Option of setSelectionRange.
-    enum SelectionOption {
-        ChangeSelection,
-        ChangeSelectionAndFocus,
-        ChangeSelectionIfFocused,
-        NotChangeSelection
-    };
 
     ~HTMLTextFormControlElement() override;
 
@@ -74,11 +67,15 @@ public:
     void setSelectionStart(int);
     void setSelectionEnd(int);
     void setSelectionDirection(const String&);
-    void select(NeedToDispatchSelectEvent = DispatchSelectEvent);
+    void select();
     virtual void setRangeText(const String& replacement, ExceptionState&);
     virtual void setRangeText(const String& replacement, unsigned start, unsigned end, const String& selectionMode, ExceptionState&);
-    void setSelectionRange(int start, int end, const String& direction);
-    void setSelectionRange(int start, int end, TextFieldSelectionDirection = SelectionHasNoDirection, NeedToDispatchSelectEvent = DispatchSelectEvent, SelectionOption = ChangeSelection);
+    // Web-exposed setSelectionRange() function. This schedule to dispatch
+    // 'select' event.
+    void setSelectionRangeForBinding(int start, int end, const String& direction = "none");
+    // Blink-internal version of setSelectionRange(). This translates "none"
+    // direction to "forward" on platforms without "none" direction.
+    void setSelectionRange(int start, int end, TextFieldSelectionDirection = SelectionHasNoDirection, NeedToDispatchSelectEvent = DispatchSelectEvent);
     Range* selection() const;
 
     virtual bool supportsAutocapitalize() const = 0;
@@ -118,14 +115,6 @@ protected:
 
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
 
-    void cacheSelection(int start, int end, TextFieldSelectionDirection direction)
-    {
-        ASSERT(start >= 0);
-        m_cachedSelectionStart = start;
-        m_cachedSelectionEnd = end;
-        m_cachedSelectionDirection = direction;
-    }
-
     void restoreCachedSelection();
 
     void defaultEventHandler(Event*) override;
@@ -142,6 +131,15 @@ private:
     int computeSelectionStart() const;
     int computeSelectionEnd() const;
     TextFieldSelectionDirection computeSelectionDirection() const;
+    void cacheSelection(int start, int end, TextFieldSelectionDirection direction)
+    {
+        DCHECK_GE(start, 0);
+        // TODO(tkent): Add DCHECK_LE(start, end). It breaks
+        // editing/selection/select-across-readonly-input-{1,4}.html
+        m_cachedSelectionStart = start;
+        m_cachedSelectionEnd = end;
+        m_cachedSelectionDirection = direction;
+    }
 
     void dispatchFocusEvent(Element* oldFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities) final;
     void dispatchBlurEvent(Element* newFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities) final;

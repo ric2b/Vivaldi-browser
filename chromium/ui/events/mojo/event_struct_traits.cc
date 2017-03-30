@@ -118,22 +118,24 @@ static_assert(ui::mojom::kEventFlagForwardMouseButton ==
                   static_cast<int32_t>(ui::EF_FORWARD_MOUSE_BUTTON),
               "EVENT_FLAGS must match");
 
-ui::mojom::EventType StructTraits<ui::mojom::Event, EventUniquePtr>::action(
+ui::mojom::EventType
+StructTraits<ui::mojom::EventDataView, EventUniquePtr>::action(
     const EventUniquePtr& event) {
   return UIEventTypeToMojo(event->type());
 }
 
-int32_t StructTraits<ui::mojom::Event, EventUniquePtr>::flags(
+int32_t StructTraits<ui::mojom::EventDataView, EventUniquePtr>::flags(
     const EventUniquePtr& event) {
   return event->flags();
 }
 
-int64_t StructTraits<ui::mojom::Event, EventUniquePtr>::time_stamp(
+int64_t StructTraits<ui::mojom::EventDataView, EventUniquePtr>::time_stamp(
     const EventUniquePtr& event) {
   return event->time_stamp().ToInternalValue();
 }
 
-ui::mojom::KeyDataPtr StructTraits<ui::mojom::Event, EventUniquePtr>::key_data(
+ui::mojom::KeyDataPtr
+StructTraits<ui::mojom::EventDataView, EventUniquePtr>::key_data(
     const EventUniquePtr& event) {
   if (!event->IsKeyEvent())
     return nullptr;
@@ -154,7 +156,7 @@ ui::mojom::KeyDataPtr StructTraits<ui::mojom::Event, EventUniquePtr>::key_data(
 }
 
 ui::mojom::PointerDataPtr
-StructTraits<ui::mojom::Event, EventUniquePtr>::pointer_data(
+StructTraits<ui::mojom::EventDataView, EventUniquePtr>::pointer_data(
     const EventUniquePtr& event) {
   if (!event->IsPointerEvent() && !event->IsMouseWheelEvent())
     return nullptr;
@@ -165,6 +167,7 @@ StructTraits<ui::mojom::Event, EventUniquePtr>::pointer_data(
   if (event->IsPointerEvent()) {
     const ui::PointerEvent* pointer_event = event->AsPointerEvent();
     pointer_data->pointer_id = pointer_event->pointer_id();
+    pointer_data->changed_button_flags = pointer_event->changed_button_flags();
     pointer_details = &pointer_event->pointer_details();
   } else {
     const ui::MouseWheelEvent* wheel_event = event->AsMouseWheelEvent();
@@ -232,7 +235,7 @@ StructTraits<ui::mojom::Event, EventUniquePtr>::pointer_data(
   return pointer_data;
 }
 
-bool StructTraits<ui::mojom::Event, EventUniquePtr>::Read(
+bool StructTraits<ui::mojom::EventDataView, EventUniquePtr>::Read(
     ui::mojom::EventDataView event,
     EventUniquePtr* out) {
   switch (event.action()) {
@@ -285,6 +288,7 @@ bool StructTraits<ui::mojom::Event, EventUniquePtr>::Read(
           out->reset(new ui::PointerEvent(
               MojoPointerEventTypeToUIEvent(event.action()), location,
               screen_location, event.flags(), ui::PointerEvent::kMousePointerId,
+              pointer_data->changed_button_flags,
               ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE),
               ui::EventTimeForNow()));
           return true;
@@ -293,6 +297,7 @@ bool StructTraits<ui::mojom::Event, EventUniquePtr>::Read(
           out->reset(new ui::PointerEvent(
               MojoPointerEventTypeToUIEvent(event.action()), location,
               screen_location, event.flags(), pointer_data->pointer_id,
+              pointer_data->changed_button_flags,
               ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH,
                                  pointer_data->brush_data->width,
                                  pointer_data->brush_data->height,

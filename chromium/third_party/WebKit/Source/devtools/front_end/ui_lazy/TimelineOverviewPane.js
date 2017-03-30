@@ -62,8 +62,9 @@ WebInspector.TimelineOverviewPane = function(prefix)
     this._lastWidth = 0;
 }
 
+/** @enum {symbol} */
 WebInspector.TimelineOverviewPane.Events = {
-    WindowChanged: "WindowChanged"
+    WindowChanged: Symbol("WindowChanged")
 };
 
 WebInspector.TimelineOverviewPane.prototype = {
@@ -476,8 +477,8 @@ WebInspector.TimelineOverview = function()
 
 WebInspector.TimelineOverview.prototype = {
     /**
-     * @param {?Element} parentElement
-     * @param {!Element=} insertBefore
+     * @param {!Element} parentElement
+     * @param {?Element=} insertBefore
      */
     show: function(parentElement, insertBefore) { },
 

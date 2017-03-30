@@ -19,8 +19,10 @@
 #include "cc/test/fake_impl_task_runner_provider.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_rendering_stats_instrumentation.h"
+#include "cc/test/stub_layer_tree_host_single_thread_client.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "cc/trees/task_runner_provider.h"
@@ -60,7 +62,7 @@ class MockLayer : public Layer {
 
   std::unique_ptr<LayerImpl> CreateLayerImpl(
       LayerTreeImpl* tree_impl) override {
-    return MockLayerImpl::Create(tree_impl, layer_id_);
+    return MockLayerImpl::Create(tree_impl, id());
   }
 
   void PushPropertiesTo(LayerImpl* layer_impl) override {
@@ -81,9 +83,9 @@ class MockLayer : public Layer {
 void ExpectTreesAreIdentical(Layer* root_layer,
                              LayerImpl* root_layer_impl,
                              LayerTreeImpl* tree_impl) {
-  auto layer_iter = root_layer->layer_tree_host()->begin();
+  auto layer_iter = root_layer->GetLayerTree()->begin();
   auto layer_impl_iter = tree_impl->begin();
-  for (; layer_iter != root_layer->layer_tree_host()->end();
+  for (; layer_iter != root_layer->GetLayerTree()->end();
        ++layer_iter, ++layer_impl_iter) {
     Layer* layer = *layer_iter;
     LayerImpl* layer_impl = *layer_impl_iter;
@@ -101,25 +103,25 @@ void ExpectTreesAreIdentical(Layer* root_layer,
       SCOPED_TRACE("mask_layer");
       int mask_layer_id = layer->mask_layer()->id();
       EXPECT_TRUE(tree_impl->LayerById(mask_layer_id));
-      EXPECT_EQ(mask_layer_id,
-                effect_tree.Node(layer_impl->effect_tree_index())
-                    ->data.mask_layer_id);
+      EXPECT_EQ(
+          mask_layer_id,
+          effect_tree.Node(layer_impl->effect_tree_index())->mask_layer_id);
     }
 
     if (layer->replica_layer()) {
       SCOPED_TRACE("replica_layer");
       int replica_layer_id = layer->replica_layer()->id();
       EXPECT_TRUE(tree_impl->LayerById(layer->replica_layer()->id()));
-      EXPECT_EQ(replica_layer_id,
-                effect_tree.Node(layer_impl->effect_tree_index())
-                    ->data.replica_layer_id);
+      EXPECT_EQ(
+          replica_layer_id,
+          effect_tree.Node(layer_impl->effect_tree_index())->replica_layer_id);
       if (layer->replica_layer()->mask_layer()) {
         SCOPED_TRACE("replica_mask_layer");
         int replica_mask_layer_id = layer->replica_layer()->mask_layer()->id();
         EXPECT_TRUE(tree_impl->LayerById(replica_mask_layer_id));
         EXPECT_EQ(replica_mask_layer_id,
                   effect_tree.Node(layer_impl->effect_tree_index())
-                      ->data.replica_mask_layer_id);
+                      ->replica_mask_layer_id);
       }
     }
 
@@ -141,15 +143,9 @@ void ExpectTreesAreIdentical(Layer* root_layer,
 }
 
 class TreeSynchronizerTest : public testing::Test {
- public:
-  TreeSynchronizerTest()
-      : client_(FakeLayerTreeHostClient::DIRECT_3D),
-        host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_)) {}
-
  protected:
-  FakeLayerTreeHostClient client_;
-  TestTaskGraphRunner task_graph_runner_;
-  std::unique_ptr<FakeLayerTreeHost> host_;
+  TreeSynchronizerTest()
+      : host_(FakeLayerTreeHost::Create(&client_, &task_graph_runner_)) {}
 
   bool is_equal(ScrollTree::ScrollOffsetMap map,
                 ScrollTree::ScrollOffsetMap other) {
@@ -168,6 +164,11 @@ class TreeSynchronizerTest : public testing::Test {
     }
     return true;
   }
+
+  FakeLayerTreeHostClient client_;
+  StubLayerTreeHostSingleThreadClient single_thread_client_;
+  TestTaskGraphRunner task_graph_runner_;
+  std::unique_ptr<FakeLayerTreeHost> host_;
 };
 
 // Attempts to synchronizes a null tree. This should not crash, and should
@@ -216,7 +217,7 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeReusingLayers) {
                           host_->active_tree());
 
   // We have to push properties to pick up the destruction list pointer.
-  TreeSynchronizer::PushLayerProperties(layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   // Add a new layer to the Layer side
@@ -265,7 +266,7 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeAndTrackStackingOrderChange) {
                           host_->active_tree());
 
   // We have to push properties to pick up the destruction list pointer.
-  TreeSynchronizer::PushLayerProperties(layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   host_->active_tree()->ResetAllChangeTracking();
@@ -279,7 +280,7 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeAndTrackStackingOrderChange) {
   ExpectTreesAreIdentical(layer_tree_root.get(), layer_impl_tree_root,
                           host_->active_tree());
 
-  TreeSynchronizer::PushLayerProperties(layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   // Check that the impl thread properly tracked the change.
@@ -315,7 +316,7 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeAndProperties) {
   ExpectTreesAreIdentical(layer_tree_root.get(), layer_impl_tree_root,
                           host_->active_tree());
 
-  TreeSynchronizer::PushLayerProperties(layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   // Check that the property values we set on the Layer tree are reflected in
@@ -365,7 +366,7 @@ TEST_F(TreeSynchronizerTest, ReuseLayerImplsAfterStructuralChange) {
                           host_->active_tree());
 
   // We have to push properties to pick up the destruction list pointer.
-  TreeSynchronizer::PushLayerProperties(layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   // Now restructure the tree to look like this:
@@ -421,7 +422,7 @@ TEST_F(TreeSynchronizerTest, SyncSimpleTreeThenDestroy) {
                           host_->active_tree());
 
   // We have to push properties to pick up the destruction list pointer.
-  TreeSynchronizer::PushLayerProperties(old_layer_tree_root->layer_tree_host(),
+  TreeSynchronizer::PushLayerProperties(old_layer_tree_root->GetLayerTree(),
                                         host_->active_tree());
 
   // Remove all children on the Layer side.
@@ -562,8 +563,8 @@ TEST_F(TreeSynchronizerTest, SynchronizeCurrentlyScrollingNode) {
 }
 
 TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
-  host_->InitializeSingleThreaded(&client_, base::ThreadTaskRunnerHandle::Get(),
-                                  nullptr);
+  host_->InitializeSingleThreaded(&single_thread_client_,
+                                  base::ThreadTaskRunnerHandle::Get(), nullptr);
   LayerTreeSettings settings;
   FakeLayerTreeHostImplClient client;
   FakeImplTaskRunnerProvider task_runner_provider;
@@ -626,7 +627,7 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
 
   // Pull ScrollOffset delta for main thread, and change offset on main thread
   std::unique_ptr<ScrollAndScaleSet> scroll_info(new ScrollAndScaleSet());
-  scroll_tree.CollectScrollDeltas(scroll_info.get());
+  scroll_tree.CollectScrollDeltas(scroll_info.get(), Layer::INVALID_ID);
   host_->proxy()->SetNeedsCommit();
   host_->ApplyScrollAndScale(scroll_info.get());
   EXPECT_EQ(gfx::ScrollOffset(20, 30), scroll_layer->scroll_offset());
@@ -658,8 +659,8 @@ TEST_F(TreeSynchronizerTest, SynchronizeScrollTreeScrollOffsetMap) {
 }
 
 TEST_F(TreeSynchronizerTest, RefreshPropertyTreesCachedData) {
-  host_->InitializeSingleThreaded(&client_, base::ThreadTaskRunnerHandle::Get(),
-                                  nullptr);
+  host_->InitializeSingleThreaded(&single_thread_client_,
+                                  base::ThreadTaskRunnerHandle::Get(), nullptr);
   LayerTreeSettings settings;
   FakeLayerTreeHostImplClient client;
   FakeImplTaskRunnerProvider task_runner_provider;

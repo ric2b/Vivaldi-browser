@@ -19,11 +19,12 @@
 #include "base/values.h"
 #include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_origin.h"
+#include "chrome/common/prerender_types.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
-#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/rect.h"
 
 class Profile;
 
@@ -101,6 +102,11 @@ class PrerenderContents : public content::NotificationObserver,
 
   bool Init();
 
+  // Set the mode of this contents. This must be called before prerender has
+  // started.
+  void SetPrerenderMode(PrerenderMode mode);
+  PrerenderMode prerender_mode() const { return prerender_mode_; }
+
   static Factory* CreateFactory();
 
   // Returns a PrerenderContents from the given web_contents, if it's used for
@@ -110,12 +116,12 @@ class PrerenderContents : public content::NotificationObserver,
 
   // Start rendering the contents in the prerendered state. If
   // |is_control_group| is true, this will go through some of the mechanics of
-  // starting a prerender, without actually creating the RenderView. |size|
-  // indicates the rectangular dimensions that the prerendered page should be.
+  // starting a prerender, without actually creating the RenderView. |bounds|
+  // indicates the rectangle that the prerendered page should be in.
   // |session_storage_namespace| indicates the namespace that the prerendered
   // page should be part of.
   virtual void StartPrerendering(
-      const gfx::Size& size,
+      const gfx::Rect& bounds,
       content::SessionStorageNamespace* session_storage_namespace);
 
   // Verifies that the prerendering is not using too many resources, and kills
@@ -195,7 +201,7 @@ class PrerenderContents : public content::NotificationObserver,
     return prerender_contents_.get();
   }
 
-  content::WebContents* ReleasePrerenderContents();
+  std::unique_ptr<content::WebContents> ReleasePrerenderContents();
 
   // Sets the final status, calls OnDestroy and adds |this| to the
   // PrerenderManager's pending deletes list.
@@ -210,7 +216,7 @@ class PrerenderContents : public content::NotificationObserver,
   // new tab.
   void CommitHistory(content::WebContents* tab);
 
-  base::Value* GetAsValue() const;
+  std::unique_ptr<base::DictionaryValue> GetAsValue() const;
 
   // Returns whether a pending cross-site navigation is happening.
   // This could happen with renderer-issued navigations, such as a
@@ -264,6 +270,7 @@ class PrerenderContents : public content::NotificationObserver,
   content::WebContents* CreateWebContents(
       content::SessionStorageNamespace* session_storage_namespace);
 
+  PrerenderMode prerender_mode_;
   bool prerendering_has_started_;
 
   // Time at which we started to load the URL.  This is used to compute
@@ -343,8 +350,8 @@ class PrerenderContents : public content::NotificationObserver,
   // Origin for this prerender.
   Origin origin_;
 
-  // The size of the WebView from the launching page.
-  gfx::Size size_;
+  // The bounds of the WebView from the launching page.
+  gfx::Rect bounds_;
 
   typedef std::vector<history::HistoryAddPageArgs> AddPageVector;
 

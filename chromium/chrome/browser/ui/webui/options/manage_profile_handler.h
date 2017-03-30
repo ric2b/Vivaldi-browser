@@ -12,7 +12,7 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/ui/webui/options/options_ui.h"
 #include "components/prefs/pref_change_registrar.h"
-#include "components/sync_driver/sync_service_observer.h"
+#include "components/sync/driver/sync_service_observer.h"
 
 namespace base {
 class StringValue;
@@ -87,13 +87,6 @@ class ManageProfileHandler : public OptionsPageUIHandler,
   //   /*string*/ newProfileName,
   // ]
   void SetProfileIconAndName(const base::ListValue* args);
-
-#if defined(ENABLE_SETTINGS_APP)
-  // Callback for the "switchAppListProfile" message. Asks the
-  // app_list_controller to change the profile registered for the AppList.
-  // |args| is of the form: [ {string} profileFilePath ]
-  void SwitchAppListProfile(const base::ListValue* args);
-#endif
 
   // Callback for the 'profileIconSelectionChanged' message. Used to update the
   // name in the manager profile dialog based on the selected icon.

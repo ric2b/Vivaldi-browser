@@ -15,14 +15,17 @@ WebInspector.CommandMenu.prototype = {
     _loadCommands: function()
     {
         // Populate panels.
-        var panelExtensions = self.runtime.extensions(WebInspector.PanelFactory);
+        var panelExtensions = self.runtime.extensions(WebInspector.Panel);
         for (var extension of panelExtensions)
             this._commands.push(WebInspector.CommandMenu.createRevealPanelCommand(extension));
 
         // Populate drawers.
-        var drawerExtensions = self.runtime.extensions("drawer-view");
-        for (var extension of drawerExtensions)
+        var drawerExtensions = self.runtime.extensions("view");
+        for (var extension of drawerExtensions) {
+            if (extension.descriptor()["location"] !== "drawer-view")
+                continue;
             this._commands.push(WebInspector.CommandMenu.createRevealDrawerCommand(extension));
+        }
 
         // Populate whitelisted settings.
         var settingExtensions = self.runtime.extensions("setting");
@@ -307,7 +310,7 @@ WebInspector.CommandMenu.createRevealPanelCommand = function(extension)
 {
     var panelName = extension.descriptor()["name"];
     var tags = extension.descriptor()["tags"] || "";
-    return WebInspector.CommandMenu.createCommand(WebInspector.UIString("Panel"), tags, WebInspector.UIString("Show %s", extension.title(WebInspector.platform())), "", executeHandler, availableHandler);
+    return WebInspector.CommandMenu.createCommand(WebInspector.UIString("Panel"), tags, WebInspector.UIString("Show %s", extension.title()), "", executeHandler, availableHandler);
 
     /**
      * @return {boolean}
@@ -329,10 +332,10 @@ WebInspector.CommandMenu.createRevealPanelCommand = function(extension)
  */
 WebInspector.CommandMenu.createRevealDrawerCommand = function(extension)
 {
-    var drawerId = extension.descriptor()["name"];
-    var executeHandler = WebInspector.inspectorView.showViewInDrawer.bind(WebInspector.inspectorView, drawerId);
+    var drawerId = extension.descriptor()["id"];
+    var executeHandler = WebInspector.viewManager.showView.bind(WebInspector.viewManager, drawerId);
     var tags = extension.descriptor()["tags"] || "";
-    return WebInspector.CommandMenu.createCommand(WebInspector.UIString("Drawer"), tags, WebInspector.UIString("Show %s", extension.title(WebInspector.platform())), "", executeHandler);
+    return WebInspector.CommandMenu.createCommand(WebInspector.UIString("Drawer"), tags, WebInspector.UIString("Show %s", extension.title()), "", executeHandler);
 }
 
 /** @type {!WebInspector.CommandMenu} */

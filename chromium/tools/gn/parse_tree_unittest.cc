@@ -47,7 +47,7 @@ TEST(ParseTree, Accessor) {
   const int64_t kBValue = 42;
   err = Err();
   setup.scope()
-      ->GetMutableValue("a", false)
+      ->GetMutableValue("a", Scope::SEARCH_NESTED, false)
       ->scope_value()
       ->SetValue("b", Value(nullptr, kBValue), nullptr);
   result = accessor.Execute(setup.scope(), &err);
@@ -225,7 +225,7 @@ TEST(ParseTree, Integers) {
       "9223372036854775807",   // INT64_MAX
       "-9223372036854775808",  // INT64_MIN
   };
-  for (auto s : kGood) {
+  for (auto* s : kGood) {
     TestParseInput input(std::string("x = ") + s);
     EXPECT_FALSE(input.has_error());
 
@@ -242,7 +242,7 @@ TEST(ParseTree, Integers) {
       "9223372036854775808",   // INT64_MAX + 1
       "-9223372036854775809",  // INT64_MIN - 1
   };
-  for (auto s : kBad) {
+  for (auto* s : kBad) {
     TestParseInput input(std::string("x = ") + s);
     EXPECT_FALSE(input.has_error());
 

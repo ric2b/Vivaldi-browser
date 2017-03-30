@@ -8,6 +8,7 @@
 #include "base/file_descriptor_posix.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "components/nacl/common/nacl_messages.h"
 #include "components/nacl/common/nacl_types.h"
@@ -49,7 +50,7 @@ void NonSfiListener::Listen() {
       io_thread_.task_runner().get(),
       true,  // Create pipe now.
       &shutdown_event_);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 bool NonSfiListener::OnMessageReceived(const IPC::Message& msg) {
@@ -92,10 +93,10 @@ void NonSfiListener::OnStart(const nacl::NaClStartParams& params) {
   CHECK_NE(params.trusted_service_channel_handle.socket.fd, -1);
   CHECK_NE(params.manifest_service_channel_handle.socket.fd, -1);
 
-  ppapi::SetIPCFileDescriptors(
-      params.ppapi_browser_channel_handle.socket.fd,
-      params.ppapi_renderer_channel_handle.socket.fd,
-      params.manifest_service_channel_handle.socket.fd);
+  ppapi::SetIPCChannelHandles(
+      params.ppapi_browser_channel_handle,
+      params.ppapi_renderer_channel_handle,
+      params.manifest_service_channel_handle);
   ppapi::StartUpPlugin();
 
   // TODO(teravest): Do we plan on using this renderer handle for nexe loading

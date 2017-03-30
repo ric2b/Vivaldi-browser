@@ -7,34 +7,32 @@
 #include "apps/ui/views/app_window_frame_view.h"
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/ash_constants.h"
+#include "ash/common/frame/custom_frame_view_ash.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/window_state_delegate.h"
 #include "ash/common/wm/window_state_observer.h"
-#include "ash/frame/custom_frame_view_ash.h"
 #include "ash/screen_util.h"
+#include "ash/shared/immersive_fullscreen_controller.h"
 #include "ash/shell.h"
-#include "ash/wm/immersive_fullscreen_controller.h"
 #include "ash/wm/panels/panel_frame_view.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
 #include "ui/aura/client/aura_constants.h"
+#include "ui/aura/mus/mus_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/models/simple_menu_model.h"
+#include "ui/gfx/skia_util.h"
+#include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
-#include "ui/aura/mus/mus_util.h"
-#include "ui/gfx/skia_util.h"
-#endif
 
 using extensions::AppWindow;
 
@@ -148,11 +146,9 @@ void ChromeNativeAppWindowViewsAuraAsh::OnBeforeWidgetInit(
         ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                  ash::kShellWindowId_ImeWindowParentContainer);
   }
-#if defined(MOJO_SHELL_CLIENT)
   init_params->mus_properties
-      [mus::mojom::WindowManager::kRemoveStandardFrame_Property] =
+      [ui::mojom::WindowManager::kRemoveStandardFrame_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(init_params->remove_standard_frame);
-#endif
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::OnBeforePanelWidgetInit(
@@ -241,9 +237,8 @@ void ChromeNativeAppWindowViewsAuraAsh::ShowContextMenuForView(
     views::View* source,
     const gfx::Point& p,
     ui::MenuSourceType source_type) {
-  std::unique_ptr<ui::MenuModel> model =
-      CreateMultiUserContextMenu(app_window()->GetNativeWindow());
-  if (!model.get())
+  menu_model_ = CreateMultiUserContextMenu(app_window()->GetNativeWindow());
+  if (!menu_model_.get())
     return;
 
   // Only show context menu if point is in caption.
@@ -253,15 +248,19 @@ void ChromeNativeAppWindowViewsAuraAsh::ShowContextMenuForView(
   int hit_test =
       widget()->non_client_view()->NonClientHitTest(point_in_view_coords);
   if (hit_test == HTCAPTION) {
+    menu_model_adapter_.reset(new views::MenuModelAdapter(
+        menu_model_.get(),
+        base::Bind(&ChromeNativeAppWindowViewsAuraAsh::OnMenuClosed,
+                   base::Unretained(this))));
     menu_runner_.reset(new views::MenuRunner(
-        model.get(),
-        views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU));
-    if (menu_runner_->RunMenuAt(source->GetWidget(), NULL,
-                                gfx::Rect(p, gfx::Size(0, 0)),
-                                views::MENU_ANCHOR_TOPLEFT, source_type) ==
-        views::MenuRunner::MENU_DELETED) {
-      return;
-    }
+        menu_model_adapter_->CreateMenu(), views::MenuRunner::HAS_MNEMONICS |
+                                               views::MenuRunner::CONTEXT_MENU |
+                                               views::MenuRunner::ASYNC));
+    menu_runner_->RunMenuAt(source->GetWidget(), NULL,
+                            gfx::Rect(p, gfx::Size(0, 0)),
+                            views::MENU_ANCHOR_TOPLEFT, source_type);
+  } else {
+    menu_model_.reset();
   }
 }
 
@@ -332,7 +331,6 @@ void ChromeNativeAppWindowViewsAuraAsh::UpdateDraggableRegions(
     const std::vector<extensions::DraggableRegion>& regions) {
   ChromeNativeAppWindowViewsAura::UpdateDraggableRegions(regions);
 
-#if defined(MOJO_SHELL_CLIENT)
   SkRegion* draggable_region = GetDraggableRegion();
   // Set the NativeAppWindow's draggable region on the mus window.
   if (draggable_region && !draggable_region->isEmpty() && widget() &&
@@ -351,5 +349,10 @@ void ChromeNativeAppWindowViewsAuraAsh::UpdateDraggableRegions(
     GetMusWindow(widget()->GetNativeWindow())
         ->SetClientArea(insets, std::move(additional_client_regions));
   }
-#endif
+}
+
+void ChromeNativeAppWindowViewsAuraAsh::OnMenuClosed() {
+  menu_runner_.reset();
+  menu_model_adapter_.reset();
+  menu_model_.reset();
 }

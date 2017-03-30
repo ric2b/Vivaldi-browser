@@ -80,7 +80,7 @@ void LayoutFullScreen::willBeDestroyed()
         remove();
         if (!m_placeholder->beingDestroyed())
             m_placeholder->destroy();
-        ASSERT(!m_placeholder);
+        DCHECK(!m_placeholder);
     }
 
     // LayoutObjects are unretained, so notify the document (which holds a pointer to a LayoutFullScreen)
@@ -92,18 +92,20 @@ void LayoutFullScreen::willBeDestroyed()
     LayoutFlexibleBox::willBeDestroyed();
 }
 
-void LayoutFullScreen::updateStyle()
+void LayoutFullScreen::updateStyle(LayoutObject* parent)
 {
     RefPtr<ComputedStyle> fullscreenStyle = ComputedStyle::create();
 
     // Create a stacking context:
     fullscreenStyle->setZIndex(INT_MAX);
+    fullscreenStyle->setIsStackingContext(true);
 
     fullscreenStyle->setFontDescription(FontDescription());
     fullscreenStyle->font().update(nullptr);
 
     fullscreenStyle->setDisplay(FLEX);
     fullscreenStyle->setJustifyContentPosition(ContentPositionCenter);
+    // TODO (lajava): Since the FullScrenn layout object is anonymous, its Default Alignment (align-items) value can't be used to resolve its children Self Alignment 'auto' values.
     fullscreenStyle->setAlignItemsPosition(ItemPositionCenter);
     fullscreenStyle->setFlexDirection(FlowColumn);
 
@@ -116,7 +118,12 @@ void LayoutFullScreen::updateStyle()
 
     fullscreenStyle->setBackgroundColor(StyleColor(Color::black));
 
-    setStyleWithWritingModeOfParent(fullscreenStyle);
+    setStyleWithWritingModeOf(fullscreenStyle, parent);
+}
+
+void LayoutFullScreen::updateStyle()
+{
+    updateStyle(parent());
 }
 
 LayoutObject* LayoutFullScreen::wrapLayoutObject(LayoutObject* object, LayoutObject* parent, Document* document)
@@ -126,7 +133,7 @@ LayoutObject* LayoutFullScreen::wrapLayoutObject(LayoutObject* object, LayoutObj
     DeprecatedDisableModifyLayoutTreeStructureAsserts disabler;
 
     LayoutFullScreen* fullscreenLayoutObject = LayoutFullScreen::createAnonymous(document);
-    fullscreenLayoutObject->updateStyle();
+    fullscreenLayoutObject->updateStyle(parent);
     if (parent && !parent->isChildAllowed(fullscreenLayoutObject, fullscreenLayoutObject->styleRef())) {
         fullscreenLayoutObject->destroy();
         return nullptr;
@@ -136,7 +143,7 @@ LayoutObject* LayoutFullScreen::wrapLayoutObject(LayoutObject* object, LayoutObj
         // to |parent|.
         if (LayoutObject* parent = object->parent()) {
             LayoutBlock* containingBlock = object->containingBlock();
-            ASSERT(containingBlock);
+            DCHECK(containingBlock);
             // Since we are moving the |object| to a new parent |fullscreenLayoutObject|,
             // the line box tree underneath our |containingBlock| is not longer valid.
             if (containingBlock->isLayoutBlockFlow())
@@ -155,7 +162,7 @@ LayoutObject* LayoutFullScreen::wrapLayoutObject(LayoutObject* object, LayoutObj
         fullscreenLayoutObject->setNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(LayoutInvalidationReason::Fullscreen);
     }
 
-    ASSERT(document);
+    DCHECK(document);
     Fullscreen::from(*document).setFullScreenLayoutObject(fullscreenLayoutObject);
     return fullscreenLayoutObject;
 }

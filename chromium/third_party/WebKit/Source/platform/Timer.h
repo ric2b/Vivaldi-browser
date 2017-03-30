@@ -44,7 +44,6 @@ namespace blink {
 class PLATFORM_EXPORT TimerBase {
     WTF_MAKE_NONCOPYABLE(TimerBase);
 public:
-    TimerBase();
     explicit TimerBase(WebTaskRunner*);
     virtual ~TimerBase();
 
@@ -59,6 +58,8 @@ public:
         start(interval, 0, caller);
     }
 
+    // Timer cancellation is supported but not free. Please be careful not to
+    // cause a flood of timer cancellations.
     void stop();
     bool isActive() const;
     const WebTraceLocation& location() const { return m_location; }
@@ -77,7 +78,8 @@ public:
     };
 
 protected:
-    static WebTaskRunner* UnthrottledWebTaskRunner();
+    static WebTaskRunner* getTimerTaskRunner();
+    static WebTaskRunner* getUnthrottledTaskRunner();
 
 private:
     virtual void fired() = 0;
@@ -155,16 +157,16 @@ public:
 };
 
 template <typename TimerFiredClass>
-class Timer : public TimerBase {
+class TaskRunnerTimer : public TimerBase {
 public:
-    using TimerFiredFunction = void (TimerFiredClass::*)(Timer<TimerFiredClass>*);
+    using TimerFiredFunction = void (TimerFiredClass::*)(TimerBase*);
 
-    Timer(TimerFiredClass* o, TimerFiredFunction f)
-        : m_object(o), m_function(f)
+    TaskRunnerTimer(WebTaskRunner* webTaskRunner, TimerFiredClass* o, TimerFiredFunction f)
+        : TimerBase(webTaskRunner), m_object(o), m_function(f)
     {
     }
 
-    ~Timer() override { }
+    ~TaskRunnerTimer() override { }
 
 protected:
     void fired() override
@@ -181,11 +183,6 @@ protected:
         return TimerIsObjectAliveTrait<TimerFiredClass>::isHeapObjectAlive(m_object);
     }
 
-    Timer(TimerFiredClass* o, TimerFiredFunction f, WebTaskRunner* webTaskRunner)
-        : TimerBase(webTaskRunner), m_object(o), m_function(f)
-    {
-    }
-
 private:
     // FIXME: Oilpan: TimerBase should be moved to the heap and m_object should be traced.
     // This raw pointer is safe as long as Timer<X> is held by the X itself (That's the case
@@ -195,17 +192,33 @@ private:
     TimerFiredFunction m_function;
 };
 
+// TODO(dcheng): Consider removing this overload once all timers are using the
+// appropriate task runner. https://crbug.com/624694
+template <typename TimerFiredClass>
+class Timer : public TaskRunnerTimer<TimerFiredClass> {
+public:
+    using TimerFiredFunction = typename TaskRunnerTimer<TimerFiredClass>::TimerFiredFunction;
+
+    ~Timer() override { }
+
+    Timer(TimerFiredClass* timerFiredClass, TimerFiredFunction timerFiredFunction)
+        : TaskRunnerTimer<TimerFiredClass>(TimerBase::getTimerTaskRunner(), timerFiredClass, timerFiredFunction)
+    {
+    }
+};
+
+
 // This subclass of Timer posts its tasks on the current thread's default task runner.
 // Tasks posted on there are not throttled when the tab is in the background.
 template <typename TimerFiredClass>
-class UnthrottledTimer : public Timer<TimerFiredClass> {
+class UnthrottledThreadTimer : public TaskRunnerTimer<TimerFiredClass> {
 public:
-    using TimerFiredFunction = void (TimerFiredClass::*)(Timer<TimerFiredClass>*);
+    using TimerFiredFunction = typename TaskRunnerTimer<TimerFiredClass>::TimerFiredFunction;
 
-    ~UnthrottledTimer() override { }
+    ~UnthrottledThreadTimer() override { }
 
-    UnthrottledTimer(TimerFiredClass* timerFiredClass, TimerFiredFunction timerFiredFunction)
-        : Timer<TimerFiredClass>(timerFiredClass, timerFiredFunction, TimerBase::UnthrottledWebTaskRunner())
+    UnthrottledThreadTimer(TimerFiredClass* timerFiredClass, TimerFiredFunction timerFiredFunction)
+        : TaskRunnerTimer<TimerFiredClass>(TimerBase::getUnthrottledTaskRunner(), timerFiredClass, timerFiredFunction)
     {
     }
 };

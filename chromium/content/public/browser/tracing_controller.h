@@ -42,53 +42,17 @@ class TracingController {
    public:
     TraceDataSink();
 
-    virtual void AddTraceChunk(const std::string& chunk) {}
-
-    // Add a TracingAgent's trace to the data sink.
-    virtual void AddAgentTrace(const std::string& trace_label,
-                               const std::string& trace_data);
-
-    // Notice that TracingController adds some default metadata when
-    // StopTracing is called, which may override metadata that you would
-    // set beforehand in case of key collision.
-    virtual void AddMetadata(const base::DictionaryValue& data);
-    virtual std::unique_ptr<const base::DictionaryValue> GetMetadataCopy()
-        const;
-    virtual void SetMetadataFilterPredicate(
-        const MetadataFilterPredicate& metadata_filter_predicate);
-    virtual void Close() {}
-
    protected:
+    friend class TracingControllerImpl;
     friend class base::RefCountedThreadSafe<TraceDataSink>;
 
-    // Get a map of TracingAgent's data, which is previously added by
-    // AddAgentTrace(). The map's key is the trace label and the map's value is
-    // the trace data.
-    virtual const std::map<std::string, std::string>& GetAgentTrace() const;
-
+    virtual void AddTraceChunk(const std::string& chunk) = 0;
+    // Add a TracingAgent's trace to the data sink.
+    virtual void AddAgentTrace(const std::string& trace_label,
+                               const std::string& trace_data) {}
+    virtual void AddMetadata(std::unique_ptr<base::DictionaryValue> data) {}
+    virtual void Close() {}
     virtual ~TraceDataSink();
-
-   private:
-    std::map<std::string, std::string> additional_tracing_agent_trace_;
-    MetadataFilterPredicate metadata_filter_predicate_;
-    base::DictionaryValue metadata_;
-  };
-
-  // An implementation of this interface is passed when constructing a
-  // TraceDataSink, and receives chunks of the final trace data as it's being
-  // constructed.
-  // Methods may be called from any thread.
-  class CONTENT_EXPORT TraceDataEndpoint
-      : public base::RefCountedThreadSafe<TraceDataEndpoint> {
-   public:
-    virtual void ReceiveTraceChunk(const std::string& chunk) {}
-    virtual void ReceiveTraceFinalContents(
-        std::unique_ptr<const base::DictionaryValue> metadata,
-        const std::string& contents) {}
-
-   protected:
-    friend class base::RefCountedThreadSafe<TraceDataEndpoint>;
-    virtual ~TraceDataEndpoint() {}
   };
 
   // Create a trace sink that may be supplied to StopTracing
@@ -97,24 +61,9 @@ class TracingController {
       const base::Callback<void(std::unique_ptr<const base::DictionaryValue>,
                                 base::RefCountedString*)>& callback);
 
-  CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateCompressedStringSink(
-      scoped_refptr<TraceDataEndpoint> endpoint);
-
   // Create a trace sink that may be supplied to StopTracing
   // to dump the trace data to a file.
   CONTENT_EXPORT static scoped_refptr<TraceDataSink> CreateFileSink(
-      const base::FilePath& file_path,
-      const base::Closure& callback);
-
-  // Create an endpoint that may be supplied to any TraceDataSink to
-  // dump the trace data to a callback.
-  CONTENT_EXPORT static scoped_refptr<TraceDataEndpoint> CreateCallbackEndpoint(
-      const base::Callback<void(std::unique_ptr<const base::DictionaryValue>,
-                                base::RefCountedString*)>& callback);
-
-  // Create an endpoint that may be supplied to any TraceDataSink to
-  // dump the trace data to a file.
-  CONTENT_EXPORT static scoped_refptr<TraceDataEndpoint> CreateFileEndpoint(
       const base::FilePath& file_path,
       const base::Closure& callback);
 
@@ -170,6 +119,13 @@ class TracingController {
   //
   virtual bool StopTracing(
       const scoped_refptr<TraceDataSink>& trace_data_sink) = 0;
+
+  // Appends metadata to the current tracing session. The metadata are
+  // subject to filtering according to current trace config.
+  // Note that TracingController adds some default metadata when
+  // StopTracing is called, which may override metadata that you would
+  // set beforehand in case of key collision.
+  virtual void AddMetadata(const base::DictionaryValue& metadata) = 0;
 
   // Get the maximum across processes of trace buffer percent full state.
   // When the TraceBufferUsage value is determined, the callback is

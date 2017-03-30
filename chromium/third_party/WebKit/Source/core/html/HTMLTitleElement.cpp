@@ -29,6 +29,7 @@
 #include "core/dom/Text.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/StyleInheritedData.h"
+#include "wtf/AutoReset.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -46,7 +47,7 @@ DEFINE_NODE_FACTORY(HTMLTitleElement)
 Node::InsertionNotificationRequest HTMLTitleElement::insertedInto(ContainerNode* insertionPoint)
 {
     HTMLElement::insertedInto(insertionPoint);
-    if (inShadowIncludingDocument() && !isInShadowTree())
+    if (isInDocumentTree())
         document().setTitleElement(this);
     return InsertionDone;
 }
@@ -54,14 +55,14 @@ Node::InsertionNotificationRequest HTMLTitleElement::insertedInto(ContainerNode*
 void HTMLTitleElement::removedFrom(ContainerNode* insertionPoint)
 {
     HTMLElement::removedFrom(insertionPoint);
-    if (insertionPoint->inShadowIncludingDocument() && !insertionPoint->isInShadowTree())
+    if (insertionPoint->isInDocumentTree())
         document().removeTitle(this);
 }
 
 void HTMLTitleElement::childrenChanged(const ChildrenChange& change)
 {
     HTMLElement::childrenChanged(change);
-    if (inShadowIncludingDocument() && !isInShadowTree() && !m_ignoreTitleUpdatesWhenChildrenChange)
+    if (isInDocumentTree() && !m_ignoreTitleUpdatesWhenChildrenChange)
         document().setTitleElement(this);
 }
 
@@ -83,7 +84,7 @@ void HTMLTitleElement::setText(const String &value)
 
     {
         // Avoid calling Document::setTitleElement() during intermediate steps.
-        TemporaryChange<bool> inhibitTitleUpdateScope(m_ignoreTitleUpdatesWhenChildrenChange, !value.isEmpty());
+        AutoReset<bool> inhibitTitleUpdateScope(&m_ignoreTitleUpdatesWhenChildrenChange, !value.isEmpty());
         removeChildren(OmitSubtreeModifiedEvent);
     }
 

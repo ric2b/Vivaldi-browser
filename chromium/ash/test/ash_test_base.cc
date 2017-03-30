@@ -91,7 +91,10 @@ class AshEventGeneratorDelegate
 /////////////////////////////////////////////////////////////////////////////
 
 AshTestBase::AshTestBase()
-    : setup_called_(false), teardown_called_(false), start_session_(true) {
+    : setup_called_(false),
+      teardown_called_(false),
+      start_session_(true),
+      material_mode_(MaterialDesignController::Mode::UNINITIALIZED) {
 #if defined(USE_X11)
   // This is needed for tests which use this base class but are run in browser
   // test binaries so don't get the default initialization in the unit test
@@ -130,7 +133,8 @@ void AshTestBase::SetUp() {
 #if defined(OS_WIN)
   ui::test::SetUsePopupAsRootWindowForTest(true);
 #endif
-  ash_test_helper_->SetUp(start_session_);
+
+  ash_test_helper_->SetUp(start_session_, material_mode_);
 
   Shell::GetPrimaryRootWindow()->Show();
   Shell::GetPrimaryRootWindow()->GetHost()->Show();
@@ -172,6 +176,14 @@ void AshTestBase::TearDown() {
 }
 
 // static
+WmShelf* AshTestBase::GetPrimaryShelf() {
+  return WmShell::Get()
+      ->GetPrimaryRootWindow()
+      ->GetRootWindowController()
+      ->GetShelf();
+}
+
+// static
 SystemTray* AshTestBase::GetPrimarySystemTray() {
   return Shell::GetInstance()->GetPrimarySystemTray();
 }
@@ -207,20 +219,32 @@ bool AshTestBase::SupportsHostWindowResize() {
   return AshTestHelper::SupportsHostWindowResize();
 }
 
-// static
-WmShelf* AshTestBase::GetPrimaryShelf() {
-  return WmShell::Get()
-      ->GetPrimaryRootWindow()
-      ->GetRootWindowController()
-      ->GetShelf();
-}
-
 void AshTestBase::UpdateDisplay(const std::string& display_specs) {
   DisplayManagerTestApi().UpdateDisplay(display_specs);
 }
 
 aura::Window* AshTestBase::CurrentContext() {
   return ash_test_helper_->CurrentContext();
+}
+
+// static
+std::unique_ptr<views::Widget> AshTestBase::CreateTestWidget(
+    views::WidgetDelegate* delegate,
+    int container_id,
+    const gfx::Rect& bounds) {
+  std::unique_ptr<views::Widget> widget(new views::Widget);
+  views::Widget::InitParams params;
+  params.delegate = delegate;
+  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.bounds = bounds;
+  WmShell::Get()
+      ->GetPrimaryRootWindow()
+      ->GetRootWindowController()
+      ->ConfigureWidgetInitParamsForContainer(widget.get(), container_id,
+                                              &params);
+  widget->Init(params);
+  widget->Show();
+  return widget;
 }
 
 aura::Window* AshTestBase::CreateTestWindowInShellWithId(int id) {

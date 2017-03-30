@@ -6,18 +6,19 @@
 
 #include <string>
 
+#include "base/optional.h"
 #include "base/time/time.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/renderer_host/chrome_navigation_data.h"
+#include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_pingback_client.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_page_load_timing.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
-#include "components/page_load_metrics/browser/page_load_metrics_observer.h"
-#include "components/page_load_metrics/browser/page_load_metrics_util.h"
-#include "components/page_load_metrics/common/page_load_timing.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_handle.h"
@@ -28,10 +29,10 @@ namespace data_reduction_proxy {
 namespace {
 
 bool ShouldRecordHistogram(const DataReductionProxyData* data,
-                           const base::TimeDelta& event,
+                           const base::Optional<base::TimeDelta>& event,
                            const page_load_metrics::PageLoadExtraInfo& info) {
   return data && data->used_data_reduction_proxy() &&
-         WasStartedInForegroundEventInForeground(event, info);
+         WasStartedInForegroundOptionalEventInForeground(event, info);
 }
 
 // A macro is needed because PAGE_LOAD_HISTOGRAM creates a static instance of
@@ -43,12 +44,12 @@ bool ShouldRecordHistogram(const DataReductionProxyData* data,
       PAGE_LOAD_HISTOGRAM(                                                  \
           std::string(internal::kHistogramDataReductionProxyPrefix)         \
               .append(histogram_suffix),                                    \
-          event);                                                           \
+          event.value());                                                   \
       if (data->lofi_requested()) {                                         \
         PAGE_LOAD_HISTOGRAM(                                                \
             std::string(internal::kHistogramDataReductionProxyLoFiOnPrefix) \
                 .append(histogram_suffix),                                  \
-            event);                                                         \
+            event.value());                                                 \
       }                                                                     \
     }                                                                       \
   } while (false)
@@ -126,18 +127,24 @@ void DataReductionProxyMetricsObserver::OnComplete(
   }
   // Only consider timing events that happened before the first background
   // event.
-  base::TimeDelta response_start;
-  base::TimeDelta load_event_start;
-  base::TimeDelta first_image_paint;
-  base::TimeDelta first_contentful_paint;
-  if (WasStartedInForegroundEventInForeground(timing.response_start, info))
+  base::Optional<base::TimeDelta> response_start;
+  base::Optional<base::TimeDelta> load_event_start;
+  base::Optional<base::TimeDelta> first_image_paint;
+  base::Optional<base::TimeDelta> first_contentful_paint;
+  if (WasStartedInForegroundOptionalEventInForeground(timing.response_start,
+                                                      info)) {
     response_start = timing.response_start;
-  if (WasStartedInForegroundEventInForeground(timing.load_event_start, info))
+  }
+  if (WasStartedInForegroundOptionalEventInForeground(timing.load_event_start,
+                                                      info)) {
     load_event_start = timing.load_event_start;
-  if (WasStartedInForegroundEventInForeground(timing.first_image_paint, info))
+  }
+  if (WasStartedInForegroundOptionalEventInForeground(timing.first_image_paint,
+                                                      info)) {
     first_image_paint = timing.first_image_paint;
-  if (WasStartedInForegroundEventInForeground(timing.first_contentful_paint,
-                                              info)) {
+  }
+  if (WasStartedInForegroundOptionalEventInForeground(
+          timing.first_contentful_paint, info)) {
     first_contentful_paint = timing.first_contentful_paint;
   }
   DataReductionProxyPageLoadTiming data_reduction_proxy_timing(

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<grit latest_public_release="0" current_release="1">
+<grit latest_public_release="0" current_release="1" output_all_resource_defines="false">
   <outputs>
     <output filename="grit/content_resources.h" type="rc_header">
       <emit emit_type='prepend'></emit>
@@ -30,9 +30,10 @@
       <include name="IDR_MOJO_CATALOG_MANIFEST" file="../services/catalog/manifest.json" type="BINDATA" />
       <include name="IDR_MOJO_CONTENT_BROWSER_MANIFEST" file="${root_out_dir}/content_browser_manifest.json" use_base_dir="false" type="BINDATA" />
       <include name="IDR_MOJO_CONTENT_GPU_MANIFEST" file="${root_out_dir}/content_gpu_manifest.json" use_base_dir="false" type="BINDATA" />
+      <include name="IDR_MOJO_CONTENT_PLUGIN_MANIFEST" file="${root_out_dir}/content_plugin_manifest.json" use_base_dir="false" type="BINDATA" />
       <include name="IDR_MOJO_CONTENT_RENDERER_MANIFEST" file="${root_out_dir}/content_renderer_manifest.json" use_base_dir="false" type="BINDATA" />
       <include name="IDR_MOJO_CONTENT_UTILITY_MANIFEST" file="${root_out_dir}/content_utility_manifest.json" use_base_dir="false" type="BINDATA" />
-      <include name="IDR_MOJO_PROFILE_MANIFEST" file="../services/user/manifest.json" type="BINDATA" />
+      <include name="IDR_MOJO_FILE_MANIFEST" file="../services/file/manifest.json" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_HTML" file="browser/resources/net/network_errors_listing.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_JS" file="browser/resources/net/network_errors_listing.js" flattenhtml="true" type="BINDATA" />
       <include name="IDR_NETWORK_ERROR_LISTING_CSS" file="browser/resources/net/network_errors_listing.css" flattenhtml="true" type="BINDATA" />

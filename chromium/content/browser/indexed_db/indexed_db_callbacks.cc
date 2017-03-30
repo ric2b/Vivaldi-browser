@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "base/metrics/histogram.h"
 #include "base/strings/utf_string_conversions.h"
@@ -142,17 +143,11 @@ void IndexedDBCallbacks::OnBlocked(int64_t existing_version) {
   }
 }
 
-void IndexedDBCallbacks::OnDataLoss(blink::WebIDBDataLoss data_loss,
-                                    std::string data_loss_message) {
-  DCHECK_NE(blink::WebIDBDataLossNone, data_loss);
-  data_loss_ = data_loss;
-  data_loss_message_ = data_loss_message;
-}
-
 void IndexedDBCallbacks::OnUpgradeNeeded(
     int64_t old_version,
     std::unique_ptr<IndexedDBConnection> connection,
-    const IndexedDBDatabaseMetadata& metadata) {
+    const IndexedDBDatabaseMetadata& metadata,
+    const IndexedDBDataLossInfo& data_loss_info) {
   DCHECK(dispatcher_host_.get());
 
   DCHECK_EQ(kNoCursor, ipc_cursor_id_);
@@ -160,6 +155,7 @@ void IndexedDBCallbacks::OnUpgradeNeeded(
   DCHECK_EQ(kNoDatabase, ipc_database_id_);
   DCHECK_NE(kNoDatabaseCallbacks, ipc_database_callbacks_id_);
 
+  data_loss_ = data_loss_info.status;
   dispatcher_host_->RegisterTransactionId(host_transaction_id_, origin_);
   int32_t ipc_database_id =
       dispatcher_host_->Add(connection.release(), ipc_thread_id_, origin_);
@@ -173,8 +169,8 @@ void IndexedDBCallbacks::OnUpgradeNeeded(
   params.ipc_database_callbacks_id = ipc_database_callbacks_id_;
   params.old_version = old_version;
   params.idb_metadata = IndexedDBDispatcherHost::ConvertMetadata(metadata);
-  params.data_loss = data_loss_;
-  params.data_loss_message = data_loss_message_;
+  params.data_loss = data_loss_info.status;
+  params.data_loss_message = data_loss_info.message;
   dispatcher_host_->Send(new IndexedDBMsg_CallbacksUpgradeNeeded(params));
 
   if (!connection_open_start_time_.is_null()) {

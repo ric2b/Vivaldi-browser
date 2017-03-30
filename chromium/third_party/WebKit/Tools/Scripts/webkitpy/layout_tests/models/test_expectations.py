@@ -127,7 +127,7 @@ class TestExpectationParser(object):
 
     def expectation_for_skipped_test(self, test_name):
         if not self._port.test_exists(test_name):
-            _log.warning('The following test %s from the Skipped list doesn\'t exist' % test_name)
+            _log.warning('The following test %s from the Skipped list doesn\'t exist', test_name)
         expectation_line = self._create_expectation_line(test_name, [TestExpectationParser.PASS_EXPECTATION], '<Skipped file>')
         expectation_line.expectations = [TestExpectationParser.SKIP_MODIFIER, TestExpectationParser.WONTFIX_MODIFIER]
         expectation_line.is_skipped_outside_expectations_file = True
@@ -336,7 +336,10 @@ class TestExpectationParser(object):
                 warnings.append('"%s" is not legal in the new TestExpectations syntax.' % token)
                 break
             elif state == 'configuration':
-                specifiers.append(cls._configuration_tokens.get(token, token))
+                if token not in cls._configuration_tokens:
+                    warnings.append('Unrecognized specifier "%s"' % token)
+                else:
+                    specifiers.append(cls._configuration_tokens.get(token, token))
             elif state == 'expectations':
                 if token not in cls._expectation_tokens:
                     has_unrecognized_expectation = True
@@ -485,7 +488,7 @@ class TestExpectationLine(object):
         result.is_skipped_outside_expectations_file = line1.is_skipped_outside_expectations_file or line2.is_skipped_outside_expectations_file
         return result
 
-    def to_string(self, test_configuration_converter, include_specifiers=True, include_expectations=True, include_comment=True):
+    def to_string(self, test_configuration_converter=None, include_specifiers=True, include_expectations=True, include_comment=True):
         parsed_expectation_to_string = dict([[parsed_expectation, expectation_string]
                                              for expectation_string, parsed_expectation in TestExpectations.EXPECTATIONS.items()])
 
@@ -1034,6 +1037,9 @@ class TestExpectations(object):
     def model(self):
         return self._model
 
+    def expectations(self):
+        return self._expectations
+
     def get_needs_rebaseline_failures(self):
         return self._model.get_test_set(NEEDS_REBASELINE)
 
@@ -1164,7 +1170,6 @@ class TestExpectations(object):
             expectation_line = self._parser.expectation_line_for_test(test_name, bot_expectations[test_name])
 
             # Unexpected results are merged into existing expectations.
-            merge = self._port.get_option('ignore_flaky_tests') == 'unexpected'
             model.add_expectation_line(expectation_line)
         self._model.merge_model(model)
 

@@ -27,12 +27,12 @@
 #include "components/gcm_driver/gcm_connection_observer.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
+#include "components/sync/protocol/experiment_status.pb.h"
+#include "components/sync/protocol/experiments_specifics.pb.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_delegate.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
-#include "sync/protocol/experiment_status.pb.h"
-#include "sync/protocol/experiments_specifics.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace gcm {
@@ -238,10 +238,12 @@ FakeGCMClient* GCMDriverTest::GetGCMClient() {
 void GCMDriverTest::CreateDriver() {
   scoped_refptr<net::URLRequestContextGetter> request_context =
       new net::TestURLRequestContextGetter(io_thread_.task_runner());
+  GCMClient::ChromeBuildInfo chrome_build_info;
+  chrome_build_info.product_category_for_subtypes = "com.chrome.macosx";
   driver_.reset(new GCMDriverDesktop(
       std::unique_ptr<GCMClientFactory>(new FakeGCMClientFactory(
           base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner())),
-      GCMClient::ChromeBuildInfo(), "http://channel.status.request.url",
+      chrome_build_info, "http://channel.status.request.url",
       "user-agent-string", &prefs_, temp_dir_.path(), request_context,
       base::ThreadTaskRunnerHandle::Get(), io_thread_.task_runner(),
       message_loop_.task_runner()));

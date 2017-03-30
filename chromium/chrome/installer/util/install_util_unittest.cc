@@ -107,101 +107,6 @@ TEST_F(InstallUtilTest, GetCurrentDate) {
   }
 }
 
-TEST_F(InstallUtilTest, UpdateInstallerStageAP) {
-  const bool system_level = false;
-  const HKEY root = system_level ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  std::wstring state_key_path(L"PhonyClientState");
-
-  // Update the stage when there's no "ap" value.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE);
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::BUILDING);
-    std::wstring value;
-    EXPECT_EQ(ERROR_SUCCESS,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValue(google_update::kRegApField, &value));
-    EXPECT_EQ(L"-stage:building", value);
-  }
-
-  // Update the stage when there is an "ap" value.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE)
-        .WriteValue(google_update::kRegApField, L"2.0-dev");
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::BUILDING);
-    std::wstring value;
-    EXPECT_EQ(ERROR_SUCCESS,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValue(google_update::kRegApField, &value));
-    EXPECT_EQ(L"2.0-dev-stage:building", value);
-  }
-
-  // Clear the stage.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE)
-      .WriteValue(google_update::kRegApField, L"2.0-dev-stage:building");
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::NO_STAGE);
-    std::wstring value;
-    EXPECT_EQ(ERROR_SUCCESS,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValue(google_update::kRegApField, &value));
-    EXPECT_EQ(L"2.0-dev", value);
-  }
-}
-
-TEST_F(InstallUtilTest, UpdateInstallerStage) {
-  const bool system_level = false;
-  const HKEY root = system_level ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-  std::wstring state_key_path(L"PhonyClientState");
-
-  // Update the stage when there's no "InstallerExtraCode1" value.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE)
-        .DeleteValue(installer::kInstallerExtraCode1);
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::BUILDING);
-    DWORD value;
-    EXPECT_EQ(ERROR_SUCCESS,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValueDW(installer::kInstallerExtraCode1, &value));
-    EXPECT_EQ(static_cast<DWORD>(installer::BUILDING), value);
-  }
-
-  // Update the stage when there is an "InstallerExtraCode1" value.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE)
-        .WriteValue(installer::kInstallerExtraCode1,
-                    static_cast<DWORD>(installer::UNPACKING));
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::BUILDING);
-    DWORD value;
-    EXPECT_EQ(ERROR_SUCCESS,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValueDW(installer::kInstallerExtraCode1, &value));
-    EXPECT_EQ(static_cast<DWORD>(installer::BUILDING), value);
-  }
-
-  // Clear the stage.
-  {
-    ResetRegistryOverrides();
-    RegKey(root, state_key_path.c_str(), KEY_SET_VALUE)
-        .WriteValue(installer::kInstallerExtraCode1, static_cast<DWORD>(5));
-    InstallUtil::UpdateInstallerStage(system_level, state_key_path,
-                                      installer::NO_STAGE);
-    DWORD value;
-    EXPECT_EQ(ERROR_FILE_NOT_FOUND,
-              RegKey(root, state_key_path.c_str(), KEY_QUERY_VALUE)
-                  .ReadValueDW(installer::kInstallerExtraCode1, &value));
-  }
-}
-
 TEST_F(InstallUtilTest, DeleteRegistryKeyIf) {
   const HKEY root = HKEY_CURRENT_USER;
   std::wstring parent_key_path(L"SomeKey\\ToDelete");
@@ -507,6 +412,8 @@ TEST_F(InstallUtilTest, ProgramCompareWithDirectories) {
 // DIR_PROGRAM_FILESX86 as a suffix but not DIR_PROGRAM_FILES when the two are
 // unrelated.
 TEST_F(InstallUtilTest, IsPerUserInstall) {
+  InstallUtil::ResetIsPerUserInstallForTest();
+
 #if defined(_WIN64)
   const int kChromeProgramFilesKey = base::DIR_PROGRAM_FILESX86;
 #else
@@ -519,6 +426,7 @@ TEST_F(InstallUtilTest, IsPerUserInstall) {
       .AppendASCII("Product")
       .AppendASCII("product.exe");
   EXPECT_FALSE(InstallUtil::IsPerUserInstall(some_exe));
+  InstallUtil::ResetIsPerUserInstallForTest();
 
 #if defined(_WIN64)
   const int kOtherProgramFilesKey = base::DIR_PROGRAM_FILES;
@@ -528,6 +436,7 @@ TEST_F(InstallUtilTest, IsPerUserInstall) {
       .AppendASCII("Product")
       .AppendASCII("product.exe");
   EXPECT_TRUE(InstallUtil::IsPerUserInstall(some_exe));
+  InstallUtil::ResetIsPerUserInstallForTest();
 #endif  // defined(_WIN64)
 }
 

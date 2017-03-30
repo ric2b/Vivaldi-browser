@@ -132,14 +132,12 @@ public:
         ConsoleMarkTimeline = 102,
         DocumentCreateAttribute = 111,
         DocumentCreateAttributeNS = 112,
-        DocumentCreateCDATASection = 113, // Removed from DOM4.
         DocumentXMLEncoding = 115, // Removed from DOM4.
         DocumentXMLStandalone = 116, // Removed from DOM4.
         DocumentXMLVersion = 117, // Removed from DOM4.
         NavigatorProductSub = 123,
         NavigatorVendor = 124,
         NavigatorVendorSub = 125,
-        FileError = 126,
         PrefixedAnimationEndEvent = 128,
         UnprefixedAnimationEndEvent = 129,
         PrefixedAndUnprefixedAnimationEndEvent = 130,
@@ -398,7 +396,6 @@ public:
         RequestFileSystem = 508,
         RequestFileSystemWorker = 509,
         RequestFileSystemSyncWorker = 510,
-        DevToolsConsoleProfile = 518,
         SVGStyleElementTitle = 519,
         PictureSourceSrc = 520,
         // The above items are available in M38 branch.
@@ -503,7 +500,6 @@ public:
         AudioContextCreateMediaStreamDestination = 641,
         AudioContextCreateMediaStreamSource = 642,
         AudioContextCreateOscillator = 643,
-        AudioContextCreatePanner = 644,
         AudioContextCreatePeriodicWave = 645,
         AudioContextCreateScriptProcessor = 646,
         AudioContextCreateStereoPanner = 647,
@@ -553,7 +549,6 @@ public:
         V8Animation_Onfinish_AttributeGetter = 700,
         V8Animation_Onfinish_AttributeSetter = 701,
         V8Window_WebKitAnimationEvent_ConstructorGetter = 707,
-        V8Window_WebKitAnimationEvent_AttributeSetter = 708,
         CryptoGetRandomValues = 710,
         SubtleCryptoEncrypt = 711,
         SubtleCryptoDecrypt = 712,
@@ -625,14 +620,12 @@ public:
         CSSKeyframesRuleAnonymousIndexedGetter = 785,
         V8Screen_AvailLeft_AttributeGetter = 786,
         V8Screen_AvailTop_AttributeGetter = 787,
-        ObjectObserve = 788,
         V8SVGFEConvolveMatrixElement_PreserveAlpha_AttributeGetter = 791,
         V8SVGStyleElement_Disabled_AttributeGetter = 798,
         V8SVGStyleElement_Disabled_AttributeSetter = 799,
         InputTypeFileSecureOrigin = 801,
         InputTypeFileInsecureOrigin = 802,
         ElementAttachShadow = 804,
-        V8KeyboardEvent_KeyIdentifier_AttributeGetter = 805,
         V8SecurityPolicyViolationEvent_DocumentURI_AttributeGetter = 806,
         V8SecurityPolicyViolationEvent_BlockedURI_AttributeGetter = 807,
         V8SecurityPolicyViolationEvent_StatusCode_AttributeGetter = 808,
@@ -641,12 +634,9 @@ public:
         V8HTMLLinkElement_Disabled_AttributeSetter = 811,
         V8HTMLStyleElement_Disabled_AttributeGetter = 812,
         V8HTMLStyleElement_Disabled_AttributeSetter = 813,
-        V8FileReader_ReadAsBinaryString_Method = 814,
-        V8FileReaderSync_ReadAsBinaryString_Method = 815,
         V8DOMError_Constructor = 816,
         V8DOMError_Name_AttributeGetter = 817,
         V8DOMError_Message_AttributeGetter = 818,
-        V8FileReader_Error_AttributeGetter = 819,
         V8Location_AncestorOrigins_AttributeGetter = 823,
         V8IDBDatabase_ObjectStoreNames_AttributeGetter = 824,
         V8IDBObjectStore_IndexNames_AttributeGetter = 825,
@@ -692,12 +682,9 @@ public:
         V8MouseEvent_InitMouseEvent_Method = 869,
         V8MutationEvent_InitMutationEvent_Method = 870,
         V8StorageEvent_InitStorageEvent_Method = 871,
-        V8TouchEvent_InitTouchEvent_Method = 872,
         V8UIEvent_InitUIEvent_Method = 873,
         V8Document_CreateTouch_Method = 874,
         RequestFileSystemNonWebbyOrigin = 876,
-        V8Console_Memory_AttributeGetter = 877,
-        V8Console_Memory_AttributeSetter = 878,
         V8MemoryInfo_TotalJSHeapSize_AttributeGetter = 879,
         V8MemoryInfo_UsedJSHeapSize_AttributeGetter = 880,
         V8MemoryInfo_JSHeapSizeLimit_AttributeGetter = 881,
@@ -779,7 +766,6 @@ public:
         CredentialManagerRequireUserMediation = 964,
         // The above items are available in M47 branch.
 
-        RequestAutocomplete = 965,
         BlockableMixedContentInSubframeBlocked = 966,
         AddEventListenerThirdArgumentIsObject = 967,
         RemoveEventListenerThirdArgumentIsObject = 968,
@@ -835,7 +821,6 @@ public:
         CSSFilterBlur = 1023,
         CSSFilterDropShadow = 1024,
         BackgroundSyncRegister = 1025,
-        BorderImageWithBorderStyleNone = 1026,
         ExecCommandOnInputOrTextarea = 1027,
         V8History_ScrollRestoration_AttributeGetter = 1028,
         V8History_ScrollRestoration_AttributeSetter = 1029,
@@ -868,7 +853,6 @@ public:
         RTCPeerConnectionGetStatsLegacyNonCompliant = 1058,
         NodeFilterIsFunction = 1059,
         NodeFilterIsObject = 1060,
-        TextEncoderUTF16 = 1061,
         CSSSelectorInternalPseudoListBox = 1062,
         CSSSelectorInternalMediaControlsCastButton = 1063,
         CSSSelectorInternalMediaControlsOverlayCastButton = 1064,
@@ -968,9 +952,7 @@ public:
         DocumentCreateEventFontFaceSetLoadEvent = 1160,
         DocumentCreateEventMediaQueryListEvent = 1161,
         DocumentCreateEventAnimationEvent = 1162,
-        DocumentCreateEventAnimationPlayerEvent = 1163,
         DocumentCreateEventApplicationCacheErrorEvent = 1164,
-        DocumentCreateEventAutocompleteErrorEvent = 1165,
         DocumentCreateEventBeforeUnloadEvent = 1166,
         DocumentCreateEventClipboardEvent = 1167,
         DocumentCreateEventCompositionEvent = 1168,
@@ -980,11 +962,9 @@ public:
         DocumentCreateEventHashChangeEvent = 1172,
         DocumentCreateEventMutationEvent = 1173,
         DocumentCreateEventPageTransitionEvent = 1174,
-        DocumentCreateEventPointerEvent = 1175,
         DocumentCreateEventPopStateEvent = 1176,
         DocumentCreateEventProgressEvent = 1177,
         DocumentCreateEventPromiseRejectionEvent = 1178,
-        DocumentCreateEventRelatedEvent = 1179,
         DocumentCreateEventResourceProgressEvent = 1180,
         DocumentCreateEventSecurityPolicyViolationEvent = 1181,
         DocumentCreateEventTextEvent = 1182,
@@ -998,7 +978,6 @@ public:
         DocumentCreateEventWebKitTransitionEvent = 1191,
         DocumentCreateEventBeforeInstallPromptEvent = 1192,
         DocumentCreateEventSyncEvent = 1193,
-        DocumentCreateEventDeviceLightEvent = 1194,
         DocumentCreateEventDeviceMotionEvent = 1195,
         DocumentCreateEventDeviceOrientationEvent = 1196,
         DocumentCreateEventMediaEncryptedEvent = 1197,
@@ -1018,7 +997,6 @@ public:
         DocumentCreateEventExtendableEvent = 1213,
         DocumentCreateEventExtendableMessageEvent = 1214,
         DocumentCreateEventFetchEvent = 1215,
-        DocumentCreateEventInstallEvent = 1216,
         DocumentCreateEventServiceWorkerMessageEvent = 1217,
         DocumentCreateEventSpeechRecognitionError = 1218,
         DocumentCreateEventSpeechRecognitionEvent = 1219,
@@ -1034,7 +1012,6 @@ public:
         HTMLMediaElement = 1229,
         HTMLMediaElementInDocument = 1230,
         HTMLMediaElementControlsAttribute = 1231,
-        SVGZoomEvent = 1232,
         V8Animation_Oncancel_AttributeGetter = 1233,
         V8Animation_Oncancel_AttributeSetter = 1234,
         V8HTMLCommentInExternalScript = 1235,
@@ -1043,8 +1020,6 @@ public:
         V8ForInInitializer = 1238,
         V8Animation_Id_AttributeGetter = 1239,
         V8Animation_Id_AttributeSetter = 1240,
-        MediaStreamOnEnded = 1241,
-        DocumentCreateEventInputEvent = 1242,
         WebAnimationHyphenatedProperty = 1243,
         FormControlsCollectionReturnsRadioNodeListForFieldSet = 1244,
         ApplicationCacheManifestSelectInsecureOrigin = 1245,
@@ -1076,7 +1051,6 @@ public:
         V8IDBFactory_WebkitGetDatabaseNames_Method = 1273,
         ImageDocument = 1274,
         ScriptPassesCSPDynamic = 1275,
-        ScriptPassesCSPNonce = 1276,
         CSPWithStrictDynamic = 1277,
         ScrollAnchored = 1278,
         AddEventListenerFourArguments = 1279,
@@ -1084,7 +1058,6 @@ public:
         InvalidReportUriDirectiveInMetaCSP = 1281,
         InvalidSandboxDirectiveInMetaCSP = 1282,
         InvalidFrameAncestorsDirectiveInMetaCSP = 1283,
-        DocumentCreateEventForeignFetchEvent = 1286,
         SVGCalcModeDiscrete = 1287,
         SVGCalcModeLinear = 1288,
         SVGCalcModePaced = 1289,
@@ -1139,9 +1112,6 @@ public:
         During_Microtask_Print = 1336,
         During_Microtask_Prompt = 1337,
         During_Microtask_SyncXHR = 1338,
-        URLMethodCreateObjectURLServiceWorker = 1339,
-        URLMethodRevokeObjectURLServiceWorker = 1340,
-        DocumentCreateEventPaymentRequestUpdateEvent = 1341,
         CredentialManagerGetReturnedCredential = 1342,
         GeolocationInsecureOriginDeprecatedNotRemoved = 1343,
         GeolocationInsecureOriginIframeDeprecatedNotRemoved = 1344,
@@ -1173,16 +1143,12 @@ public:
         DurableStoragePersisted = 1370,
         DurableStorageEstimate = 1371,
         UntrustedEventDefaultHandled = 1372,
-        // The following two items (FixedRasterScale*) are unused.
-        FixedRasterScaleBlurryContent = 1373,
-        FixedRasterScalePotentialPerformanceRegression = 1374,
         CSSDeepCombinatorAndShadow = 1375,
         OpacityWithPreserve3DQuirk = 1376,
         CSSSelectorPseudoReadOnly = 1377,
         CSSSelectorPseudoReadWrite = 1378,
         // The above items are available in M52 branch
 
-        UnloadHandler_Navigation = 1379,
         TouchStartUserGestureUtilized = 1380,
         TouchMoveUserGestureUtilized = 1381,
         TouchEndDuringScrollUserGestureUtilized = 1382,
@@ -1190,8 +1156,6 @@ public:
         RTCPeerConnectionAddIceCandidatePromise = 1384,
         RTCPeerConnectionAddIceCandidateLegacy = 1385,
         RTCIceCandidateDefaultSdpMLineIndex = 1386,
-        DocumentCreateEventSensorErrorEvent = 1387,
-        DocumentCreateEventSensorReadingEvent = 1388,
         MediaStreamConstraintsOldAndNew = 1389,
         V8ArrayProtectorDirtied = 1390,
         V8ArraySpeciesModified = 1391,
@@ -1234,6 +1198,46 @@ public:
         MediaSourceAbortRemove = 1428,
         MediaSourceDurationTruncatingBuffered = 1429,
         AudioContextCrossOriginIframe = 1430,
+        // The above items are available in M53 branch
+
+        PointerEventSetCapture = 1431,
+        PointerEventDispatch = 1432,
+        MIDIMessageEventReceivedTime = 1433,
+        SummaryElementWithDisplayBlockAuthorRule = 1434,
+        V8MediaStream_Active_AttributeGetter = 1435,
+        BeforeInstallPromptEvent = 1436,
+        BeforeInstallPromptEventUserChoice = 1437,
+        BeforeInstallPromptEventPreventDefault = 1438,
+        BeforeInstallPromptEventPrompt = 1439,
+        ExecCommandAltersHTMLStructure = 1440,
+        SecureContextCheckPassed = 1441,
+        SecureContextCheckFailed = 1442,
+        SecureContextCheckForSandboxedOriginPassed = 1443,
+        SecureContextCheckForSandboxedOriginFailed = 1444,
+        V8DefineGetterOrSetterWouldThrow = 1445,
+        V8FunctionConstructorReturnedUndefined = 1446,
+        V8BroadcastChannel_Constructor = 1447,
+        V8BroadcastChannel_PostMessage_Method = 1448,
+        V8BroadcastChannel_Close_Method = 1449,
+        TouchStartFired = 1450,
+        MouseDownFired = 1451,
+        PointerDownFired = 1452,
+        PointerDownFiredForTouch = 1453,
+        PointerEventDispatchPointerDown = 1454,
+        SVGSMILBeginOrEndEventValue = 1455,
+        SVGSMILBeginOrEndSyncbaseValue = 1456,
+        SVGSMILElementInsertedAfterLoad = 1457,
+        V8VisualViewport_ScrollLeft_AttributeGetter = 1458,
+        V8VisualViewport_ScrollTop_AttributeGetter = 1459,
+        V8VisualViewport_PageX_AttributeGetter = 1460,
+        V8VisualViewport_PageY_AttributeGetter = 1461,
+        V8VisualViewport_ClientWidth_AttributeGetter = 1462,
+        V8VisualViewport_ClientHeight_AttributeGetter = 1463,
+        V8VisualViewport_Scale_AttributeGetter = 1464,
+        VisualViewportScrollFired = 1465,
+        VisualViewportResizeFired = 1466,
+        NodeGetRootNode = 1467,
+        SlotChangeEventAddListener = 1468,
         CSSValueAppearanceButtonRendered = 1469,
         CSSValueAppearanceButtonForAnchor = 1470,
         CSSValueAppearanceButtonForButton = 1471,
@@ -1246,7 +1250,66 @@ public:
         PerformanceResourceTimingSizes = 1478,
         EventSourceDocument = 1479,
         EventSourceWorker = 1480,
+        SingleOriginInTimingAllowOrigin = 1481,
+        MultipleOriginsInTimingAllowOrigin = 1482,
+        StarInTimingAllowOrigin = 1483,
+        SVGSMILAdditiveAnimation = 1484,
+        SendBeaconWithNonSimpleContentType = 1485,
+        ChromeLoadTimesRequestTime = 1486,
+        ChromeLoadTimesStartLoadTime = 1487,
+        ChromeLoadTimesCommitLoadTime = 1488,
+        ChromeLoadTimesFinishDocumentLoadTime = 1489,
+        ChromeLoadTimesFinishLoadTime = 1490,
+        ChromeLoadTimesFirstPaintTime = 1491,
+        ChromeLoadTimesFirstPaintAfterLoadTime = 1492,
+        ChromeLoadTimesNavigationType = 1493,
+        ChromeLoadTimesWasFetchedViaSpdy = 1494,
+        ChromeLoadTimesWasNpnNegotiated = 1495,
+        ChromeLoadTimesNpnNegotiatedProtocol = 1496,
+        ChromeLoadTimesWasAlternateProtocolAvailable = 1497,
+        ChromeLoadTimesConnectionInfo = 1498,
+        ChromeLoadTimesUnknown = 1499,
+        SVGViewElement = 1500,
+        WebShareShare = 1501,
+        AuxclickAddListenerCount = 1502,
+        HTMLCanvasElement = 1503,
+        SVGSMILAnimationElementTiming = 1504,
+        SVGSMILBeginEndAnimationElement = 1505,
+        SVGSMILPausing = 1506,
+        SVGSMILCurrentTime = 1507,
+        HTMLBodyElementOnSelectionChangeAttribute = 1508,
+        ForeignFetchInterception = 1509,
+        MapNameMatchingStrict = 1510,
+        MapNameMatchingASCIICaseless = 1511,
+        MapNameMatchingUnicodeLower = 1512,
+        RadioNameMatchingStrict = 1513,
+        RadioNameMatchingASCIICaseless = 1514,
+        RadioNameMatchingCaseFolding = 1515,
+        NavigatorPointerEnabled = 1516,
+        InputSelectionGettersThrow = 1517,
+        DocumentCreateEventVRDisplayEvent = 1518,
+        UsbGetDevices = 1519,
+        UsbRequestDevice = 1520,
+        UsbDeviceOpen = 1521,
+        UsbDeviceClose = 1522,
+        UsbDeviceSelectConfiguration = 1523,
+        UsbDeviceClaimInterface = 1524,
+        UsbDeviceReleaseInterface = 1525,
+        UsbDeviceSelectAlternateInterface = 1526,
+        UsbDeviceControlTransferIn = 1527,
+        UsbDeviceControlTransferOut = 1528,
+        UsbDeviceClearHalt = 1529,
+        UsbDeviceTransferIn = 1530,
+        UsbDeviceTransferOut = 1531,
+        UsbDeviceIsochronousTransferIn = 1532,
+        UsbDeviceIsochronousTransferOut = 1533,
+        UsbDeviceReset = 1534,
 
+        ClipCssOfFixedPositionElement = 1552,
+        RTCPeerConnectionCreateOfferOptionsOfferToReceive = 1553,
+        DragAndDropScrollStart = 1554,
+        PresentationConnectionListConnectionAvailableEventListener = 1555,
+        WebAudioAutoplayCrossOriginIframe = 1556,
         // Add new features immediately above this line. Don't change assigned
         // numbers of any item, and don't reuse removed slots.
         // Also, run update_use_counter_feature_enum.py in chromium/src/tools/metrics/histograms/
@@ -1290,10 +1353,10 @@ public:
 
     static int mapCSSPropertyIdToCSSSampleIdForHistogram(int id);
 
-    static void muteForInspector();
-    static void unmuteForInspector();
+    void muteForInspector();
+    void unmuteForInspector();
 
-    void recordMeasurement(Feature feature) { m_countBits.recordMeasurement(feature); }
+    void recordMeasurement(Feature);
     void updateMeasurements();
 
     bool hasRecordedMeasurement(Feature feature) const { return m_countBits.hasRecordedMeasurement(feature); }
@@ -1305,8 +1368,6 @@ public:
 
         bool hasRecordedMeasurement(Feature feature) const
         {
-            if (UseCounter::m_muteCount)
-                return false;
             ASSERT(feature != PageDestruction); // PageDestruction is reserved as a scaling factor.
             ASSERT(feature < NumberOfFeatures);
 
@@ -1315,8 +1376,6 @@ public:
 
         void recordMeasurement(Feature feature)
         {
-            if (UseCounter::m_muteCount)
-                return;
             ASSERT(feature != PageDestruction); // PageDestruction is reserved as a scaling factor.
             ASSERT(feature < NumberOfFeatures);
 
@@ -1331,7 +1390,7 @@ public:
 
 protected:
     friend class UseCounterTest;
-    static int m_muteCount;
+    unsigned m_muteCount;
 
     CountBits m_countBits;
     BitVector m_CSSFeatureBits;

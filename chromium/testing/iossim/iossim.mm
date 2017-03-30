@@ -17,8 +17,11 @@ void PrintUsage() {
       "Options:\n"
       "  -d  Specifies the device (must be one of the values from the iOS "
       "Simulator's Hardware -> Device menu. Defaults to 'iPhone 6s'.\n"
-      "  -e  Erase the device's contents and settings before running the "
+      "  -w  Wipe the device's contents and settings before running the "
       "test.\n"
+      "  -e  Specifies an environment key=value pair that will be"
+      " set in the simulated application's environment.\n"
+      "  -c  Specifies command line flags to pass to application.\n"
       "  -p  Print the device's home directory, does not run a test.\n"
       "  -s  Specifies the SDK version to use (e.g '9.3'). Will use system "
       "default if not specified.\n");
@@ -86,6 +89,14 @@ void LogError(NSString* format, ...) {
   [_task waitUntilExit];
 }
 
+- (void)launch {
+  [_task launch];
+}
+
+- (void)waitUntilExit {
+  [_task waitUntilExit];
+}
+
 @end
 
 // Return array of available iOS runtime dictionaries.  Unavailable (old Xcode
@@ -124,9 +135,16 @@ NSDictionary* GetSimulatorList() {
       initWithArguments:@[ @"simctl", @"list", @"-j" ]] autorelease];
   NSPipe* out = [NSPipe pipe];
   [task setStandardOutput:out];
-  [task run];
 
+  // In the rest of the this file we read from the pipe after -waitUntilExit
+  // (We normally wrap -launch and -waitUntilExit in one -run method).  However,
+  // on some swarming slaves this led to a hang on simctl's pipe.  Since the
+  // output of simctl is so instant, reading it before exit seems to work, and
+  // seems to avoid the hang.
+  [task launch];
   NSData* data = [[out fileHandleForReading] readDataToEndOfFile];
+  [task waitUntilExit];
+
   NSError* error = nil;
   return [NSJSONSerialization JSONObjectWithData:data
                                          options:kNilOptions
@@ -181,7 +199,7 @@ void PrintDeviceHome(NSString* udid) {
 }
 
 // Erase a device, used by the bots before a clean test run.
-void EraseDevice(NSString* udid) {
+void WipeDevice(NSString* udid) {
   XCRunTask* shutdown = [[[XCRunTask alloc]
       initWithArguments:@[ @"simctl", @"shutdown", udid ]] autorelease];
   [shutdown setStandardOutput:nil];
@@ -201,80 +219,101 @@ void KillSimulator() {
   [task run];
 }
 
-void RunApplication(NSString* app_path, NSString* xctest_path, NSString* udid) {
+void RunApplication(NSString* app_path,
+                    NSString* xctest_path,
+                    NSString* udid,
+                    NSMutableDictionary* app_env,
+                    NSString* cmd_args) {
   NSString* tempFilePath = [NSTemporaryDirectory()
       stringByAppendingPathComponent:[[NSUUID UUID] UUIDString]];
   [[NSFileManager defaultManager] createFileAtPath:tempFilePath
                                           contents:nil
                                         attributes:nil];
 
-  NSString* file_string =
-      @"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-       "<!DOCTYPE plist PUBLIC \"-//Apple Computer//DTD PLIST 1.0//EN\" "
-       "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
-       "<plist version=\"1.0\">\n"
-       "<dict>\n"
-       "    <key>TestTargetName</key>\n"
-       "    <dict>\n"
-       "         <key>TestBundlePath</key>\n"
-       "         <string>{0}</string>\n"
-       "         <key>TestHostPath</key>\n"
-       "         <string>{1}</string>\n"
-       "         <key>TestingEnvironmentVariables</key>\n"
-       "         <dict>\n"
-       "              <key>IDEiPhoneInternalTestBundleName</key>\n"
-       "              <string>{2}</string>\n"
-       "{3}"
-       "         </dict>\n"
-       "    </dict>\n"
-       "</dict>\n"
-       "</plist>\n";
+  NSMutableDictionary* xctestrun = [NSMutableDictionary dictionary];
+  NSMutableDictionary* testTargetName = [NSMutableDictionary dictionary];
 
-  NSString* xctest_inject =
-      @"              <key>DYLD_INSERT_LIBRARIES</key>\n"
-       "              "
-       "<string>__PLATFORMS__/iPhoneSimulator.platform/Developer/Library/"
-       "PrivateFrameworks/IDEBundleInjection.framework/IDEBundleInjection</"
-       "string>\n";
+  NSMutableDictionary* testingEnvironmentVariables =
+      [NSMutableDictionary dictionary];
+  [testingEnvironmentVariables setValue:[app_path lastPathComponent]
+                                 forKey:@"IDEiPhoneInternalTestBundleName"];
 
   if (xctest_path) {
-    file_string =
-        [file_string stringByReplacingOccurrencesOfString:@"{0}"
-                                               withString:xctest_path];
-    file_string =
-        [file_string stringByReplacingOccurrencesOfString:@"{3}"
-                                               withString:xctest_inject];
-
+    [testTargetName setValue:xctest_path forKey:@"TestBundlePath"];
+    NSString* inject =
+        @"__PLATFORMS__/iPhoneSimulator.platform/Developer/Library/"
+         "PrivateFrameworks/IDEBundleInjection.framework/IDEBundleInjection";
+    [testingEnvironmentVariables setValue:inject
+                                   forKey:@"DYLD_INSERT_LIBRARIES"];
   } else {
-    file_string = [file_string stringByReplacingOccurrencesOfString:@"{0}"
-                                                         withString:app_path];
-    file_string = [file_string stringByReplacingOccurrencesOfString:@"{3}"
-                                                         withString:@""];
+    [testTargetName setValue:app_path forKey:@"TestBundlePath"];
   }
-  file_string = [file_string stringByReplacingOccurrencesOfString:@"{1}"
-                                                       withString:app_path];
-  file_string = [file_string
-      stringByReplacingOccurrencesOfString:@"{2}"
-                                withString:[app_path lastPathComponent]];
+  [testTargetName setValue:app_path forKey:@"TestHostPath"];
 
-  [file_string writeToFile:tempFilePath
-                atomically:YES
-                  encoding:NSUTF8StringEncoding
-                     error:nil];
+  if ([app_env count]) {
+    [testTargetName setObject:app_env forKey:@"EnvironmentVariables"];
+  }
 
+  if (cmd_args) {
+    [testTargetName setObject:@[ cmd_args ] forKey:@"CommandLineArguments"];
+  }
+
+  [testTargetName setObject:testingEnvironmentVariables
+                     forKey:@"TestingEnvironmentVariables"];
+  [xctestrun setObject:testTargetName forKey:@"TestTargetName"];
+
+  NSString* error;
+  NSData* data = [NSPropertyListSerialization
+      dataFromPropertyList:xctestrun
+                    format:NSPropertyListXMLFormat_v1_0
+          errorDescription:&error];
+  [data writeToFile:tempFilePath atomically:YES];
   XCRunTask* task = [[[XCRunTask alloc] initWithArguments:@[
     @"xcodebuild", @"-xctestrun", tempFilePath, @"-destination",
     [@"platform=iOS Simulator,id=" stringByAppendingString:udid],
     @"test-without-building"
   ]] autorelease];
+
+  if (!xctest_path) {
+    // The following stderr messages are meaningless on iossim when not running
+    // xctests and can be safely stripped.
+    NSArray* ignore_strings = @[
+      @"IDETestOperationsObserverErrorDomain", @"** TEST EXECUTE FAILED **"
+    ];
+    NSPipe* stderr_pipe = [NSPipe pipe];
+    stderr_pipe.fileHandleForReading.readabilityHandler =
+        ^(NSFileHandle* handle) {
+          NSString* log = [[[NSString alloc] initWithData:handle.availableData
+                                                 encoding:NSUTF8StringEncoding]
+              autorelease];
+          for (NSString* ignore_string in ignore_strings) {
+            if ([log rangeOfString:ignore_string].location != NSNotFound) {
+              return;
+            }
+          }
+          printf("%s", [log UTF8String]);
+        };
+    [task setStandardError:stderr_pipe];
+  }
   [task run];
 }
 
 int main(int argc, char* const argv[]) {
+  // When the last running simulator is from Xcode 7, an Xcode 8 run will yeild
+  // a failure to "unload a stale CoreSimulatorService job" message.  Sending a
+  // hidden simctl to do something simple (list devices) helpfully works around
+  // this issue.
+  XCRunTask* workaround_task = [[[XCRunTask alloc]
+      initWithArguments:@[ @"simctl", @"list", @"-j" ]] autorelease];
+  [workaround_task setStandardOutput:nil];
+  [workaround_task setStandardError:nil];
+  [workaround_task run];
+
   NSString* app_path = nil;
   NSString* xctest_path = nil;
+  NSString* cmd_args = nil;
   NSString* device_name = @"iPhone 6s";
-  bool wants_erase = false;
+  bool wants_wipe = false;
   bool wants_print_home = false;
   NSDictionary* simctl_list = GetSimulatorList();
   float sdk = 0;
@@ -282,9 +321,10 @@ int main(int argc, char* const argv[]) {
     sdk = fmax(sdk, [runtime[@"version"] floatValue]);
   }
   NSString* sdk_version = [NSString stringWithFormat:@"%0.1f", sdk];
+  NSMutableDictionary* app_env = [NSMutableDictionary dictionary];
 
   int c;
-  while ((c = getopt(argc, argv, "hs:d:u:t:pel")) != -1) {
+  while ((c = getopt(argc, argv, "hs:d:u:t:e:c:pwl")) != -1) {
     switch (c) {
       case 's':
         sdk_version = [NSString stringWithUTF8String:optarg];
@@ -292,9 +332,24 @@ int main(int argc, char* const argv[]) {
       case 'd':
         device_name = [NSString stringWithUTF8String:optarg];
         break;
-      case 'e':
-        wants_erase = true;
+      case 'w':
+        wants_wipe = true;
         break;
+      case 'c':
+        cmd_args = [NSString stringWithUTF8String:optarg];
+        break;
+      case 'e': {
+        NSString* envLine = [NSString stringWithUTF8String:optarg];
+        NSRange range = [envLine rangeOfString:@"="];
+        if (range.location == NSNotFound) {
+          LogError(@"Invalid key=value argument for -e.");
+          PrintUsage();
+          exit(kExitInvalidArguments);
+        }
+        NSString* key = [envLine substringToIndex:range.location];
+        NSString* value = [envLine substringFromIndex:(range.location + 1)];
+        [app_env setObject:value forKey:key];
+      } break;
       case 'p':
         wants_print_home = true;
         break;
@@ -328,6 +383,13 @@ int main(int argc, char* const argv[]) {
     exit(kExitSuccess);
   }
 
+  KillSimulator();
+  if (wants_wipe) {
+    WipeDevice(udid);
+    printf("Device wiped.\n");
+    exit(kExitSuccess);
+  }
+
   // There should be at least one arg left, specifying the app path. Any
   // additional args are passed as arguments to the app.
   if (optind < argc) {
@@ -356,12 +418,8 @@ int main(int argc, char* const argv[]) {
     exit(kExitInvalidArguments);
   }
 
+  RunApplication(app_path, xctest_path, udid, app_env, cmd_args);
   KillSimulator();
-  if (wants_erase) {
-    EraseDevice(udid);
-  }
-
-  RunApplication(app_path, xctest_path, udid);
   return kExitSuccess;
 }
 #else

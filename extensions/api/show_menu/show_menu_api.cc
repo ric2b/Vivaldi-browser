@@ -491,8 +491,7 @@ void VivaldiMenuController::LoadFavicon(int command_id,
     base::Bind(&VivaldiMenuController::OnFaviconDataAvailable,
         base::Unretained(this), command_id);
 
-  base::CancelableTaskTracker::TaskId taskId =
-    favicon_service_->GetFaviconImageForPageURL(
+  favicon_service_->GetFaviconImageForPageURL(
         GURL(url),
         callback,
         &cancelable_task_tracker_);
@@ -529,7 +528,7 @@ base::string16 VivaldiMenuController::GetLabelForCommandId(
 }
 
 bool VivaldiMenuController::GetAcceleratorForCommandId(
-    int command_id, ui::Accelerator* accelerator) {
+    int command_id, ui::Accelerator* accelerator) const {
   const show_menu::MenuItem* item = getItemByCommandId(command_id);
   if (item && item->shortcut) {
     //printf("shortcut: %s\n", item->shortcut->c_str());

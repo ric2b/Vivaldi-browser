@@ -15,6 +15,7 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/output/context_cache_controller.h"
 #include "cc/output/managed_memory_policy.h"
 #include "content/common/gpu/client/command_buffer_metrics.h"
 #include "gpu/command_buffer/client/gles2_cmd_helper.h"
@@ -149,8 +150,6 @@ bool ContextProviderCommandBuffer::BindToCurrentThread() {
       DCHECK_EQ(!!shared_command_buffer, !!share_group);
     }
 
-    DCHECK(attributes_.buffer_preserved);
-
     // This command buffer is a client-side proxy to the command buffer in the
     // GPU process.
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -159,7 +158,7 @@ bool ContextProviderCommandBuffer::BindToCurrentThread() {
       task_runner = base::ThreadTaskRunnerHandle::Get();
     command_buffer_ = gpu::CommandBufferProxyImpl::Create(
         std::move(channel_), surface_handle_, shared_command_buffer, stream_id_,
-        stream_priority_, attributes_, active_url_, std::move(task_runner));
+        stream_priority_, attributes_, active_url_, task_runner);
     if (!command_buffer_) {
       DLOG(ERROR) << "GpuChannelHost failed to create command buffer.";
       command_buffer_metrics::UmaRecordContextInitFailed(context_type_);
@@ -217,6 +216,9 @@ bool ContextProviderCommandBuffer::BindToCurrentThread() {
       return false;
 
     shared_providers_->list.push_back(this);
+
+    cache_controller_.reset(new cc::ContextCacheController(
+        gles2_impl_.get(), std::move(task_runner)));
   }
   set_bind_failed.Reset();
   bind_succeeded_ = true;
@@ -243,11 +245,13 @@ bool ContextProviderCommandBuffer::BindToCurrentThread() {
   ContextGL()->TraceBeginCHROMIUM("gpu_toplevel", unique_context_name.c_str());
   // If support_locking_ is true, the context may be used from multiple
   // threads, and any async callstacks will need to hold the same lock, so
-  // give it to the command buffer.
+  // give it to the command buffer and cache controller.
   // We don't hold a lock here since there's no need, so set the lock very last
   // to prevent asserts that we're not holding it.
-  if (support_locking_)
+  if (support_locking_) {
     command_buffer_->SetLock(&context_lock_);
+    cache_controller_->SetLock(&context_lock_);
+  }
   return true;
 }
 
@@ -276,6 +280,7 @@ class GrContext* ContextProviderCommandBuffer::GrContext() {
     return gr_context_->get();
 
   gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(ContextGL()));
+  cache_controller_->SetGrContext(gr_context_->get());
 
   // If GlContext is already lost, also abandon the new GrContext.
   if (gr_context_->get() &&
@@ -283,6 +288,11 @@ class GrContext* ContextProviderCommandBuffer::GrContext() {
     gr_context_->get()->abandonContext();
 
   return gr_context_->get();
+}
+
+cc::ContextCacheController* ContextProviderCommandBuffer::CacheController() {
+  DCHECK(context_thread_checker_.CalledOnValidThread());
+  return cache_controller_.get();
 }
 
 void ContextProviderCommandBuffer::InvalidateGrContext(uint32_t state) {
@@ -309,13 +319,6 @@ gpu::Capabilities ContextProviderCommandBuffer::ContextCapabilities() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
   // Skips past the trace_impl_ as it doesn't have capabilities.
   return gles2_impl_->capabilities();
-}
-
-void ContextProviderCommandBuffer::DeleteCachedResources() {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
-
-  if (gr_context_)
-    gr_context_->FreeGpuResources();
 }
 
 void ContextProviderCommandBuffer::OnLostContext() {

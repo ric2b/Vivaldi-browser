@@ -65,12 +65,12 @@ public:
     static bool hasFilterResource(const LayoutObject&);
 
     // Determines whether the passed point lies in a clipping area
-    static bool pointInClippingArea(const LayoutObject*, const FloatPoint&);
+    static bool pointInClippingArea(const LayoutObject&, const FloatPoint&);
 
     // Transform |pointInParent| to |object|'s user-space and check if it is
     // within the clipping area. Returns false if the transform is singular or
     // the point is outside the clipping area.
-    static bool transformToUserSpaceAndCheckClipping(const LayoutObject*, const AffineTransform& localTransform, const FloatPoint& pointInParent, FloatPoint& localPoint);
+    static bool transformToUserSpaceAndCheckClipping(const LayoutObject&, const AffineTransform& localTransform, const FloatPoint& pointInParent, FloatPoint& localPoint);
 
     static void computeContainerBoundingBoxes(const LayoutObject* container, FloatRect& objectBoundingBox, bool& objectBoundingBoxValid, FloatRect& strokeBoundingBox, FloatRect& paintInvalidationBoundingBox);
 
@@ -79,7 +79,7 @@ public:
     static LayoutRect clippedOverflowRectForPaintInvalidation(const LayoutObject&, const LayoutBoxModelObject& paintInvalidationContainer);
     static LayoutRect transformPaintInvalidationRect(const LayoutObject&, const AffineTransform&, const FloatRect&);
     static bool mapToVisualRectInAncestorSpace(const LayoutObject&, const LayoutBoxModelObject* ancestor, const FloatRect& localPaintInvalidationRect, LayoutRect& resultRect, VisualRectFlags = DefaultVisualRectFlags);
-    static void mapLocalToAncestor(const LayoutObject*, const LayoutBoxModelObject* ancestor, TransformState&);
+    static void mapLocalToAncestor(const LayoutObject*, const LayoutBoxModelObject* ancestor, TransformState&, MapCoordinatesFlags);
     static void mapAncestorToLocal(const LayoutObject&, const LayoutBoxModelObject* ancestor, TransformState&);
     static const LayoutObject* pushMappingToContainer(const LayoutObject*, const LayoutBoxModelObject* ancestorToStopAt, LayoutGeometryMap&);
 

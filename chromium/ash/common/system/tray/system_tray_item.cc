@@ -4,8 +4,8 @@
 
 #include "ash/common/system/tray/system_tray_item.h"
 
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray.h"
 #include "ui/views/view.h"
 
 namespace ash {
@@ -57,8 +57,8 @@ void SystemTrayItem::SetDetailedViewCloseDelay(int for_seconds) {
   system_tray()->SetDetailedViewCloseDelay(for_seconds);
 }
 
-void SystemTrayItem::HideDetailedView() {
-  system_tray()->HideDetailedView(this);
+void SystemTrayItem::HideDetailedView(bool animate) {
+  system_tray()->HideDetailedView(this, animate);
 }
 
 void SystemTrayItem::ShowNotificationView() {

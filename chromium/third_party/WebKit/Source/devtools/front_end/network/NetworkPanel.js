@@ -95,12 +95,12 @@ WebInspector.NetworkPanel = function()
     this._toggleRecordFilmStrip();
     this._updateUI();
 
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.WillReloadPage, this._willReloadPage, this);
-    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.EventTypes.Load, this._load, this);
-    this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.RequestSelected, this._onRequestSelected, this);
-    this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.SearchCountUpdated, this._onSearchCountUpdated, this);
-    this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.SearchIndexUpdated, this._onSearchIndexUpdated, this);
-    this._networkLogView.addEventListener(WebInspector.NetworkLogView.EventTypes.UpdateRequest, this._onUpdateRequest, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.Events.WillReloadPage, this._willReloadPage, this);
+    WebInspector.targetManager.addModelListener(WebInspector.ResourceTreeModel, WebInspector.ResourceTreeModel.Events.Load, this._load, this);
+    this._networkLogView.addEventListener(WebInspector.NetworkLogView.Events.RequestSelected, this._onRequestSelected, this);
+    this._networkLogView.addEventListener(WebInspector.NetworkLogView.Events.SearchCountUpdated, this._onSearchCountUpdated, this);
+    this._networkLogView.addEventListener(WebInspector.NetworkLogView.Events.SearchIndexUpdated, this._onSearchIndexUpdated, this);
+    this._networkLogView.addEventListener(WebInspector.NetworkLogView.Events.UpdateRequest, this._onUpdateRequest, this);
 
     WebInspector.DataSaverInfobar.maybeShowInPanel(this);
 }
@@ -654,28 +654,7 @@ WebInspector.NetworkPanel.revealAndFilter = function(filters)
  */
 WebInspector.NetworkPanel._instance = function()
 {
-    if (!WebInspector.NetworkPanel._instanceObject)
-        WebInspector.NetworkPanel._instanceObject = new WebInspector.NetworkPanel();
-    return WebInspector.NetworkPanel._instanceObject;
-}
-
-/**
- * @constructor
- * @implements {WebInspector.PanelFactory}
- */
-WebInspector.NetworkPanelFactory = function()
-{
-}
-
-WebInspector.NetworkPanelFactory.prototype = {
-    /**
-     * @override
-     * @return {!WebInspector.Panel}
-     */
-    createPanel: function()
-    {
-        return WebInspector.NetworkPanel._instance();
-    }
+    return /** @type {!WebInspector.NetworkPanel} */ (self.runtime.sharedInstance(WebInspector.NetworkPanel));
 }
 
 /**
@@ -716,9 +695,8 @@ WebInspector.NetworkPanel.FilmStripRecorder.prototype = {
         if (!this._tracingModel)
             return;
         this._tracingModel.tracingComplete();
-        var resourceTreeModel = this._target.resourceTreeModel;
+        WebInspector.targetManager.resumeReload(this._target);
         this._target = null;
-        setImmediate(resourceTreeModel.resumeReload.bind(resourceTreeModel));
         this._callback(new WebInspector.FilmStripModel(this._tracingModel, this._timeCalculator.minimumBoundary() * 1000));
         delete this._callback;
     },
@@ -770,7 +748,7 @@ WebInspector.NetworkPanel.FilmStripRecorder.prototype = {
             return;
 
         this._target.tracingManager.stop();
-        this._target.resourceTreeModel.suspendReload();
+        WebInspector.targetManager.suspendReload(this._target);
         this._callback = callback;
         this._filmStripView.setStatusText(WebInspector.UIString("Fetching frames..."));
     }

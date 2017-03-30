@@ -30,6 +30,7 @@ var HotwordConfirmDialog = options.HotwordConfirmDialog;
 var ImportDataOverlay = options.ImportDataOverlay;
 var LanguageOptions = options.LanguageOptions;
 var ManageProfileOverlay = options.ManageProfileOverlay;
+var DisconnectAccountOverlay = options.DisconnectAccountOverlay;
 var OptionsFocusManager = options.OptionsFocusManager;
 var OptionsPage = options.OptionsPage;
 var PageManager = cr.ui.pageManager.PageManager;
@@ -123,6 +124,8 @@ function load() {
                                $('show-cookies-button')]);
   PageManager.registerOverlay(CreateProfileOverlay.getInstance(),
                               BrowserOptions.getInstance());
+  PageManager.registerOverlay(DisconnectAccountOverlay.getInstance(),
+                              BrowserOptions.getInstance());
   PageManager.registerOverlay(EasyUnlockTurnOffOverlay.getInstance(),
                               BrowserOptions.getInstance(),
                               [$('easy-unlock-turn-off-button')]);
@@ -205,8 +208,6 @@ function load() {
                                 [$('account-picture')]);
     PageManager.registerOverlay(StorageClearDriveCacheOverlay.getInstance(),
                                 StorageManager.getInstance());
-    PageManager.registerOverlay(ConsumerManagementOverlay.getInstance(),
-                                BrowserOptions.getInstance());
     PageManager.registerOverlay(DetailsInternetPage.getInstance(),
                                 BrowserOptions.getInstance());
     PageManager.registerOverlay(DisplayOptions.getInstance(),
@@ -222,9 +223,15 @@ function load() {
                                 [$('pointer-settings-button')]);
     PageManager.registerOverlay(PreferredNetworks.getInstance(),
                                 BrowserOptions.getInstance());
+    PageManager.registerOverlay(StylusOverlay.getInstance(),
+                                BrowserOptions.getInstance(),
+                                [$('stylus-settings-link')]);
     PageManager.registerOverlay(PowerOverlay.getInstance(),
                                 BrowserOptions.getInstance(),
                                 [$('power-settings-link')]);
+    PageManager.registerOverlay(QuickUnlockConfigureOverlay.getInstance(),
+                                BrowserOptions.getInstance(),
+                                [$('manage-screenlock')]);
     PageManager.registerOverlay(StorageManager.getInstance(),
                                 BrowserOptions.getInstance(),
                                 [$('storage-manager-button')]);

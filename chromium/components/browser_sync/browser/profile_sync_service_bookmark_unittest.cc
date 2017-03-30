@@ -36,24 +36,24 @@
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/bookmarks/test/test_bookmark_client.h"
 #include "components/browser_sync/browser/profile_sync_test_util.h"
+#include "components/sync/api/sync_error.h"
+#include "components/sync/api/sync_merge_result.h"
+#include "components/sync/core/change_record.h"
+#include "components/sync/core/data_type_error_handler.h"
+#include "components/sync/core/read_node.h"
+#include "components/sync/core/read_transaction.h"
+#include "components/sync/core/test/data_type_error_handler_mock.h"
+#include "components/sync/core/test/test_user_share.h"
+#include "components/sync/core/write_node.h"
+#include "components/sync/core/write_transaction.h"
+#include "components/sync/core_impl/syncapi_internal.h"
+#include "components/sync/driver/fake_sync_client.h"
+#include "components/sync/syncable/mutable_entry.h"
+#include "components/sync/syncable/syncable_id.h"
+#include "components/sync/syncable/syncable_util.h"
+#include "components/sync/syncable/syncable_write_transaction.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
-#include "components/sync_driver/fake_sync_client.h"
-#include "sync/api/sync_error.h"
-#include "sync/api/sync_merge_result.h"
-#include "sync/internal_api/public/change_record.h"
-#include "sync/internal_api/public/data_type_error_handler.h"
-#include "sync/internal_api/public/read_node.h"
-#include "sync/internal_api/public/read_transaction.h"
-#include "sync/internal_api/public/test/data_type_error_handler_mock.h"
-#include "sync/internal_api/public/test/test_user_share.h"
-#include "sync/internal_api/public/write_node.h"
-#include "sync/internal_api/public/write_transaction.h"
-#include "sync/internal_api/syncapi_internal.h"
-#include "sync/syncable/mutable_entry.h"
-#include "sync/syncable/syncable_id.h"
-#include "sync/syncable/syncable_util.h"
-#include "sync/syncable/syncable_write_transaction.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -437,8 +437,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   // will be deleted before starting up the BookmarkModel.
   std::unique_ptr<BookmarkModel> CreateBookmarkModel(bool delete_bookmarks) {
     const base::FilePath& data_path = data_dir_.path();
-    auto model = base::WrapUnique(new BookmarkModel(
-        base::WrapUnique(new bookmarks::TestBookmarkClient())));
+    auto model = base::MakeUnique<BookmarkModel>(
+        base::WrapUnique(new bookmarks::TestBookmarkClient()));
     managed_bookmark_service_->BookmarkModelCreated(model.get());
     int64_t next_id = 0;
     static_cast<bookmarks::TestBookmarkClient*>(model->client())
@@ -787,8 +787,8 @@ class ProfileSyncServiceBookmarkTest : public testing::Test {
   void delete_change_processor() { change_processor_.reset(); }
 
   void ResetChangeProcessor() {
-    change_processor_ = base::WrapUnique(new BookmarkChangeProcessor(
-        sync_client_.get(), model_associator_.get(), &mock_error_handler_));
+    change_processor_ = base::MakeUnique<BookmarkChangeProcessor>(
+        sync_client_.get(), model_associator_.get(), &mock_error_handler_);
   }
 
   syncer::DataTypeErrorHandlerMock* mock_error_handler() {

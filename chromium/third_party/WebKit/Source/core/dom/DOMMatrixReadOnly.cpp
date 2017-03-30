@@ -6,6 +6,34 @@
 
 namespace blink {
 
+DOMMatrixReadOnly* DOMMatrixReadOnly::create(Vector<double> sequence, ExceptionState& exceptionState)
+{
+    if (sequence.size() != 6 && sequence.size() != 16) {
+        exceptionState.throwTypeError("An invalid number sequence is specified. The sequence must contain 6 elements for 2D matrix and 16 elements for 3D matrix.");
+        return nullptr;
+    }
+    return new DOMMatrixReadOnly(sequence);
+}
+
+DOMMatrixReadOnly::DOMMatrixReadOnly(Vector<double> sequence)
+{
+    if (sequence.size() == 6) {
+        m_matrix = TransformationMatrix::create(
+            sequence[0], sequence[1], sequence[2], sequence[3],
+            sequence[4], sequence[5]);
+        m_is2D = true;
+    } else if (sequence.size() == 16) {
+        m_matrix = TransformationMatrix::create(
+            sequence[0], sequence[1], sequence[2], sequence[3],
+            sequence[4], sequence[5], sequence[6], sequence[7],
+            sequence[8], sequence[9], sequence[10], sequence[11],
+            sequence[12], sequence[13], sequence[14], sequence[15]);
+        m_is2D = false;
+    } else {
+        NOTREACHED();
+    }
+}
+
 DOMMatrixReadOnly::~DOMMatrixReadOnly()
 {
 }
@@ -46,6 +74,36 @@ DOMMatrix* DOMMatrixReadOnly::scaleNonUniform(double sx, double sy, double sz,
     return DOMMatrix::create(this)->scaleNonUniformSelf(sx, sy, sz, ox, oy, oz);
 }
 
+DOMMatrix* DOMMatrixReadOnly::skewX(double sx)
+{
+    return DOMMatrix::create(this)->skewXSelf(sx);
+}
+
+DOMMatrix* DOMMatrixReadOnly::skewY(double sy)
+{
+    return DOMMatrix::create(this)->skewYSelf(sy);
+}
+
+DOMMatrix* DOMMatrixReadOnly::flipX()
+{
+    DOMMatrix* flipX = DOMMatrix::create(this);
+    flipX->setM11(-this->m11());
+    flipX->setM12(-this->m12());
+    flipX->setM13(-this->m13());
+    flipX->setM14(-this->m14());
+    return flipX;
+}
+
+DOMMatrix* DOMMatrixReadOnly::flipY()
+{
+    DOMMatrix* flipY = DOMMatrix::create(this);
+    flipY->setM21(-this->m21());
+    flipY->setM22(-this->m22());
+    flipY->setM23(-this->m23());
+    flipY->setM24(-this->m24());
+    return flipY;
+}
+
 DOMFloat32Array* DOMMatrixReadOnly::toFloat32Array() const
 {
     float array[] = {
@@ -68,6 +126,25 @@ DOMFloat64Array* DOMMatrixReadOnly::toFloat64Array() const
     };
 
     return DOMFloat64Array::create(array, 16);
+}
+
+const String DOMMatrixReadOnly::toString() const
+{
+    std::stringstream stream;
+    if (is2D()) {
+        stream << "matrix("
+        << a() << ", " << b() << ", " << c() << ", "
+        << d() << ", " << e() << ", " << f();
+    } else {
+        stream << "matrix3d("
+        << m11() << ", " << m12() << ", " << m13() << ", " << m14() << ", "
+        << m21() << ", " << m22() << ", " << m23() << ", " << m24() << ", "
+        << m31() << ", " << m32() << ", " << m33() << ", " << m34() << ", "
+        << m41() << ", " << m42() << ", " << m43() << ", " << m44();
+    }
+    stream << ")";
+
+    return String(stream.str().c_str());
 }
 
 } // namespace blink

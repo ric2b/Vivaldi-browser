@@ -44,16 +44,14 @@ class MEDIA_EXPORT FrameProcessor {
   bool sequence_mode() { return sequence_mode_; }
   void SetSequenceMode(bool sequence_mode);
 
-  // Processes buffers in |audio_buffers|, |video_buffers|, and |text_map|.
+  // Processes buffers in |buffer_queue_map|.
   // Returns true on success or false on failure which indicates decode error.
   // |append_window_start| and |append_window_end| correspond to the MSE spec's
   // similarly named source buffer attributes that are used in coded frame
   // processing.
   // Uses |*timestamp_offset| according to the coded frame processing algorithm,
   // including updating it as required in 'sequence' mode frame processing.
-  bool ProcessFrames(const StreamParser::BufferQueue& audio_buffers,
-                     const StreamParser::BufferQueue& video_buffers,
-                     const StreamParser::TextBufferQueueMap& text_map,
+  bool ProcessFrames(const StreamParser::BufferQueueMap& buffer_queue_map,
                      base::TimeDelta append_window_start,
                      base::TimeDelta append_window_end,
                      base::TimeDelta* timestamp_offset);
@@ -165,7 +163,7 @@ class MEDIA_EXPORT FrameProcessor {
   DecodeTimestamp coded_frame_group_last_dts_ = kNoDecodeTimestamp();
 
   // Tracks the MSE coded frame processing variable of same name.
-  // Initially kNoTimestamp(), meaning "unset".
+  // Initially kNoTimestamp, meaning "unset".
   base::TimeDelta group_start_timestamp_;
 
   // Tracks the MSE coded frame processing variable of same name. It stores the

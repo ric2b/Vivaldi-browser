@@ -1,7 +1,6 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
-<translation id="1008557486741366299">後で</translation>
 <translation id="1047726139967079566">ブックマークに追加...</translation>
 <translation id="1172898394251786223">次の項目</translation>
 <translation id="2320166752086256636">キーボードを非表示</translation>
@@ -23,6 +22,7 @@
 <translation id="473775607612524610">アップデート</translation>
 <translation id="4875622588773761625"><ph name="PASSWORD_MANAGER_BRAND" /> でこのサイトのパスワードを更新しますか？</translation>
 <translation id="5317780077021120954">保存</translation>
+<translation id="6039694632319341016"><ph name="PASSWORD_MANAGER_BRAND" /> に保存されているこのサイトの <ph name="USERNAME" /> のパスワードを更新しますか？</translation>
 <translation id="605721222689873409">YY</translation>
 <translation id="6149061208933997199">パスワードを使用</translation>
 <translation id="6196207969502475924">音声検索</translation>
@@ -30,9 +30,7 @@
 <translation id="6344783595350022745">テキストを消去</translation>
 <translation id="6456425917241817154">自動生成パスワード</translation>
 <translation id="6535543971741225613">アクセスしようとしているサイトに不審な動作が見られます。ChromeではこのURLが正しいことを確認できません。セキュリティ上の理由により、今すぐこのサイトへのアクセスを中止し、明日もう一度お試しいただくか、別のサイトをご利用ください。</translation>
-<translation id="6647073004883890710"><ph name="PASSWORD_MANAGER_BRAND" /> に保存されているこのサイトの <ph name="USERNAME" /> のパスワードを更新しますか？</translation>
 <translation id="7222245588540287464">コンテキスト検索を有効にするかどうかです。</translation>
-<translation id="7378627244592794276">いいえ</translation>
 <translation id="7456847797759667638">場所を開く...</translation>
 <translation id="7481312909269577407">進む</translation>
 <translation id="7484580869648358686">警告: 不正なソフトウェアが存在する可能性があります</translation>

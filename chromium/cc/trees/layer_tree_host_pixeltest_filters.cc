@@ -170,7 +170,7 @@ class LayerTreeHostFiltersScaledPixelTest
   }
 
   void SetupTree() override {
-    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
+    layer_tree()->SetDeviceScaleFactor(device_scale_factor_);
     LayerTreePixelTest::SetupTree();
   }
 
@@ -329,6 +329,50 @@ TEST_F(ImageFilterClippedPixelTest, ImageFilterClipped_Software) {
   RunPixelTestType(PIXEL_TEST_SOFTWARE);
 }
 
+class ImageFilterNonZeroOriginPixelTest : public LayerTreeHostFiltersPixelTest {
+ protected:
+  void RunPixelTestType(PixelTestType test_type) {
+    scoped_refptr<SolidColorLayer> background =
+        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorYELLOW);
+
+    scoped_refptr<SolidColorLayer> foreground =
+        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorRED);
+    background->AddChild(foreground);
+
+    SkScalar matrix[20];
+    memset(matrix, 0, 20 * sizeof(matrix[0]));
+    // This filter does a red-blue swap, so the foreground becomes blue.
+    matrix[2] = matrix[6] = matrix[10] = matrix[18] = SK_Scalar1;
+    // Set up a crop rec to filter the bottom 200x100 pixels of the foreground.
+    SkImageFilter::CropRect crop_rect(SkRect::MakeXYWH(0, 100, 200, 100));
+    FilterOperations filters;
+    filters.Append(
+        FilterOperation::CreateReferenceFilter(SkColorFilterImageFilter::Make(
+            SkColorFilter::MakeMatrixFilterRowMajor255(matrix), nullptr,
+            &crop_rect)));
+
+    // Make the foreground layer's render surface be clipped by the background
+    // layer.
+    background->SetMasksToBounds(true);
+    foreground->SetFilters(filters);
+
+    // Now move the filters origin up by 100 pixels, so the crop rect is
+    // applied only to the top 100 pixels, not the bottom.
+    foreground->SetFiltersOrigin(gfx::PointF(0.0f, -100.0f));
+
+    RunPixelTest(test_type, background,
+                 base::FilePath(FILE_PATH_LITERAL("blue_yellow.png")));
+  }
+};
+
+TEST_F(ImageFilterNonZeroOriginPixelTest, ImageFilterNonZeroOrigin_GL) {
+  RunPixelTestType(PIXEL_TEST_GL);
+}
+
+TEST_F(ImageFilterNonZeroOriginPixelTest, ImageFilterNonZeroOrigin_Software) {
+  RunPixelTestType(PIXEL_TEST_SOFTWARE);
+}
+
 class ImageScaledBackgroundFilter : public LayerTreeHostFiltersPixelTest {
  protected:
   void RunPixelTestType(PixelTestType test_type, base::FilePath image_name) {
@@ -436,9 +480,9 @@ class ImageBackgroundFilter : public LayerTreeHostFiltersPixelTest {
     filters.Append(FilterOperation::CreateBlurFilter(5.0f));
     filter->SetBackgroundFilters(filters);
 
-#if defined(OS_WIN)
-    // Windows has 3.065% pixels off by at most 2: crbug.com/225027
-    float percentage_pixels_large_error = 3.1f;
+    // Allow some fuzziness so that this doesn't fail when Skia makes minor
+    // changes to blur or rectangle rendering.
+    float percentage_pixels_large_error = 4.f;
     float percentage_pixels_small_error = 0.0f;
     float average_error_allowed_in_bad_pixels = 2.f;
     int large_error_allowed = 2;
@@ -448,7 +492,6 @@ class ImageBackgroundFilter : public LayerTreeHostFiltersPixelTest {
         percentage_pixels_large_error, percentage_pixels_small_error,
         average_error_allowed_in_bad_pixels, large_error_allowed,
         small_error_allowed));
-#endif
 
     RunPixelTest(test_type, background, image_name);
   }
@@ -901,7 +944,7 @@ class BackgroundFilterWithDeviceScaleFactorTest
   }
 
   void SetupTree() override {
-    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
+    layer_tree()->SetDeviceScaleFactor(device_scale_factor_);
     LayerTreeHostFiltersPixelTest::SetupTree();
   }
 

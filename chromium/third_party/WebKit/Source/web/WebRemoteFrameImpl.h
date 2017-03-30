@@ -24,7 +24,7 @@ enum class WebFrameLoadType;
 
 class WEB_EXPORT WebRemoteFrameImpl final : public WebFrameImplBase, WTF_NON_EXPORTED_BASE(public WebRemoteFrame) {
 public:
-    static WebRemoteFrameImpl* create(WebTreeScopeType, WebRemoteFrameClient*, WebFrame* opener);
+    static WebRemoteFrameImpl* create(WebTreeScopeType, WebRemoteFrameClient*, WebFrame* opener = nullptr);
     ~WebRemoteFrameImpl() override;
 
     // WebFrame methods:
@@ -82,48 +82,11 @@ public:
     void dispatchWillSendRequest(WebURLRequest&) override;
     WebURLLoader* createAssociatedURLLoader(const WebURLLoaderOptions&) override;
     unsigned unloadListenerCount() const override;
-    void insertText(const WebString&) override;
-    void setMarkedText(const WebString&, unsigned location, unsigned length) override;
-    void unmarkText() override;
-    bool hasMarkedText() const override;
-    WebRange markedRange() const override;
-    bool firstRectForCharacterRange(unsigned location, unsigned length, WebRect&) const override;
-    size_t characterIndexForPoint(const WebPoint&) const override;
-    bool executeCommand(const WebString&) override;
-    bool executeCommand(const WebString&, const WebString& value) override;
-    bool isCommandEnabled(const WebString&) const override;
-    void enableContinuousSpellChecking(bool) override;
-    bool isContinuousSpellCheckingEnabled() const override;
-    void requestTextChecking(const WebElement&) override;
-    void removeSpellingMarkers() override;
-    bool hasSelection() const override;
-    WebRange selectionRange() const override;
-    WebString selectionAsText() const override;
-    WebString selectionAsMarkup() const override;
-    bool selectWordAroundCaret() override;
-    void selectRange(const WebPoint& base, const WebPoint& extent) override;
-    void selectRange(const WebRange&) override;
-    void moveRangeSelection(const WebPoint& base, const WebPoint& extent, WebFrame::TextGranularity = CharacterGranularity) override;
-    void moveCaretSelection(const WebPoint&) override;
-    bool setEditableSelectionOffsets(int start, int end) override;
-    bool setCompositionFromExistingText(int compositionStart, int compositionEnd, const WebVector<WebCompositionUnderline>& underlines) override;
-    void extendSelectionAndDelete(int before, int after) override;
-    void setCaretVisible(bool) override;
     int printBegin(const WebPrintParams&, const WebNode& constrainToNode) override;
     float printPage(int pageToPrint, WebCanvas*) override;
     float getPrintPageShrink(int page) override;
     void printEnd() override;
     bool isPrintScalingDisabledForPlugin(const WebNode&) override;
-    bool hasCustomPageSizeStyle(int pageIndex) override;
-    bool isPageBoxVisible(int pageIndex) override;
-    void pageSizeAndMarginsInPixels(
-        int pageIndex,
-        WebSize& pageSize,
-        int& marginTop,
-        int& marginRight,
-        int& marginBottom,
-        int& marginLeft) override;
-    WebString pageProperty(const WebString& propertyName, int pageIndex) override;
     void printPagesWithBoundaries(WebCanvas*, const WebSize&) override;
     void dispatchMessageEventWithOriginCheck(
         const WebSecurityOrigin& intendedTargetOrigin,
@@ -150,8 +113,6 @@ public:
     WebLocalFrame* createLocalChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebFrameClient*, WebFrame* previousSibling, const WebFrameOwnerProperties&, WebFrame* opener) override;
     WebRemoteFrame* createRemoteChild(WebTreeScopeType, const WebString& name, const WebString& uniqueName, WebSandboxFlags, WebRemoteFrameClient*, WebFrame* opener) override;
 
-    void initializeFromFrame(WebLocalFrame*) const override;
-
     void setReplicatedOrigin(const WebSecurityOrigin&) const override;
     void setReplicatedSandboxFlags(WebSandboxFlags) const override;
     void setReplicatedName(const WebString& name, const WebString& uniqueName) const override;
@@ -166,7 +127,7 @@ public:
 
     bool isIgnoredForHitTest() const override;
 
-    void willEnterFullScreen() override;
+    void willEnterFullscreen() override;
 
     DECLARE_TRACE();
 

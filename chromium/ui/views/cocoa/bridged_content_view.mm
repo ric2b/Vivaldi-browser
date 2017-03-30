@@ -332,7 +332,8 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
   views::View* view = hostedView_->GetTooltipHandlerForPoint(locationInContent);
   if (view) {
     gfx::Point viewPoint = locationInContent;
-    views::View::ConvertPointToTarget(hostedView_, view, &viewPoint);
+    views::View::ConvertPointToScreen(hostedView_, &viewPoint);
+    views::View::ConvertPointFromScreen(view, &viewPoint);
     if (!view->GetTooltipText(viewPoint, &newTooltipText))
       DCHECK(newTooltipText.empty());
   }
@@ -436,11 +437,23 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
   if (textInputClient_ && ![self activeMenuController]) {
     // If a single character is inserted by keyDown's call to
     // interpretKeyEvents: then use InsertChar() to allow editing events to be
-    // merged.
-    if (isCharacterEvent)
-      textInputClient_->InsertChar(GetCharacterEventFromNSEvent(keyDownEvent_));
-    else
+    // merged. We use ui::VKEY_UNKNOWN as the key code since it's not feasible
+    // to determine the correct key code for each unicode character. Also a
+    // correct keycode is not needed in the current context. Send ui::EF_NONE as
+    // the key modifier since |text| already accounts for the pressed key
+    // modifiers.
+
+    // Also, note we don't use |keyDownEvent_| to generate the synthetic
+    // ui::KeyEvent since for text inserted using an IME, [keyDownEvent_
+    // characters] might not be the same as |text|. This is because
+    // |keyDownEvent_| will correspond to the event that caused the composition
+    // text to be confirmed, say, Return key press.
+    if (isCharacterEvent) {
+      textInputClient_->InsertChar(ui::KeyEvent([text characterAtIndex:0],
+                                                ui::VKEY_UNKNOWN, ui::EF_NONE));
+    } else {
       textInputClient_->InsertText(base::SysNSStringToUTF16(text));
+    }
     return;
   }
 
@@ -649,6 +662,14 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
       ui::CanvasPainter(&canvas, 1.f).context());
 }
 
+- (BOOL)isOpaque {
+  if (!hostedView_)
+    return NO;
+
+  ui::Layer* layer = hostedView_->GetWidget()->GetLayer();
+  return layer && layer->fills_bounds_opaquely();
+}
+
 // To maximize consistency with the Cocoa browser (mac_views_browser=0), accept
 // mouse clicks immediately so that clicking on Chrome from an inactive window
 // will allow the event to be processed, rather than merely activate the window.
@@ -742,8 +763,10 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 // Selection movement and scrolling.
 
 - (void)moveForward:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveLeft:sender]
-                              : [self moveRight:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_FORWARD
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveRight:(id)sender {
@@ -754,8 +777,10 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 }
 
 - (void)moveBackward:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveRight:sender]
-                              : [self moveLeft:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_BACKWARD
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveLeft:(id)sender {
@@ -766,27 +791,31 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 }
 
 - (void)moveUp:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE
+  [self handleAction:ui::TextEditCommand::MOVE_UP
              keyCode:ui::VKEY_UP
              domCode:ui::DomCode::ARROW_UP
           eventFlags:0];
 }
 
 - (void)moveDown:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE
+  [self handleAction:ui::TextEditCommand::MOVE_DOWN
              keyCode:ui::VKEY_DOWN
              domCode:ui::DomCode::ARROW_DOWN
           eventFlags:0];
 }
 
 - (void)moveWordForward:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveWordLeft:sender]
-                              : [self moveWordRight:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_WORD_FORWARD
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveWordBackward:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveWordRight:sender]
-                              : [self moveWordLeft:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_WORD_BACKWARD
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveToBeginningOfLine:(id)sender {
@@ -804,75 +833,91 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 }
 
 - (void)moveToBeginningOfParagraph:(id)sender {
-  [self moveToBeginningOfLine:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_TO_BEGINNING_OF_PARAGRAPH
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveToEndOfParagraph:(id)sender {
-  [self moveToEndOfLine:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_TO_END_OF_PARAGRAPH
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveToEndOfDocument:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE
+  [self handleAction:ui::TextEditCommand::MOVE_TO_END_OF_DOCUMENT
              keyCode:ui::VKEY_END
              domCode:ui::DomCode::END
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
 - (void)moveToBeginningOfDocument:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE
+  [self handleAction:ui::TextEditCommand::MOVE_TO_BEGINNING_OF_DOCUMENT
              keyCode:ui::VKEY_HOME
              domCode:ui::DomCode::HOME
           eventFlags:ui::EF_CONTROL_DOWN];
 }
 
 - (void)pageDown:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE
+  // The pageDown: action message is bound to the key combination
+  // [Option+PageDown].
+  [self handleAction:ui::TextEditCommand::MOVE_PAGE_DOWN
              keyCode:ui::VKEY_NEXT
              domCode:ui::DomCode::PAGE_DOWN
-          eventFlags:0];
+          eventFlags:ui::EF_ALT_DOWN];
 }
 
 - (void)pageUp:(id)sender {
-  [self handleAction:ui::TextEditCommand::MOVE_TO_BEGINNING_OF_LINE
+  // The pageUp: action message is bound to the key combination [Option+PageUp].
+  [self handleAction:ui::TextEditCommand::MOVE_PAGE_UP
              keyCode:ui::VKEY_PRIOR
              domCode:ui::DomCode::PAGE_UP
-          eventFlags:0];
+          eventFlags:ui::EF_ALT_DOWN];
 }
 
 - (void)moveBackwardAndModifySelection:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveRightAndModifySelection:sender]
-                              : [self moveLeftAndModifySelection:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_BACKWARD_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveForwardAndModifySelection:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveLeftAndModifySelection:sender]
-                              : [self moveRightAndModifySelection:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_FORWARD_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveWordForwardAndModifySelection:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveWordLeftAndModifySelection:sender]
-                              : [self moveWordRightAndModifySelection:sender];
+  [self handleAction:ui::TextEditCommand::MOVE_WORD_FORWARD_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveWordBackwardAndModifySelection:(id)sender {
-  IsTextRTL(textInputClient_) ? [self moveWordRightAndModifySelection:sender]
-                              : [self moveWordLeftAndModifySelection:sender];
+  [self
+      handleAction:ui::TextEditCommand::MOVE_WORD_BACKWARD_AND_MODIFY_SELECTION
+           keyCode:ui::VKEY_UNKNOWN
+           domCode:ui::DomCode::NONE
+        eventFlags:0];
 }
 
 - (void)moveUpAndModifySelection:(id)sender {
-  [self handleAction:ui::TextEditCommand::
-                         MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+  [self handleAction:ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION
              keyCode:ui::VKEY_UP
              domCode:ui::DomCode::ARROW_UP
           eventFlags:ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveDownAndModifySelection:(id)sender {
-  [self
-      handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-           keyCode:ui::VKEY_DOWN
-           domCode:ui::DomCode::ARROW_DOWN
-        eventFlags:ui::EF_SHIFT_DOWN];
+  [self handleAction:ui::TextEditCommand::MOVE_DOWN_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_DOWN
+             domCode:ui::DomCode::ARROW_DOWN
+          eventFlags:ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveToBeginningOfLineAndModifySelection:(id)sender {
@@ -892,56 +937,62 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 }
 
 - (void)moveToBeginningOfParagraphAndModifySelection:(id)sender {
-  [self moveToBeginningOfLineAndModifySelection:sender];
+  [self handleAction:ui::TextEditCommand::
+                         MOVE_TO_BEGINNING_OF_PARAGRAPH_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveToEndOfParagraphAndModifySelection:(id)sender {
-  [self moveToEndOfLineAndModifySelection:sender];
+  [self handleAction:ui::TextEditCommand::
+                         MOVE_TO_END_OF_PARAGRAPH_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)moveToEndOfDocumentAndModifySelection:(id)sender {
-  [self
-      handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-           keyCode:ui::VKEY_END
-           domCode:ui::DomCode::END
-        eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+  [self handleAction:ui::TextEditCommand::
+                         MOVE_TO_END_OF_DOCUMENT_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_END
+             domCode:ui::DomCode::END
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveToBeginningOfDocumentAndModifySelection:(id)sender {
   [self handleAction:ui::TextEditCommand::
-                         MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+                         MOVE_TO_BEGINNING_OF_DOCUMENT_AND_MODIFY_SELECTION
              keyCode:ui::VKEY_HOME
              domCode:ui::DomCode::HOME
           eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
 }
 
 - (void)pageDownAndModifySelection:(id)sender {
-  [self
-      handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-           keyCode:ui::VKEY_NEXT
-           domCode:ui::DomCode::PAGE_DOWN
-        eventFlags:ui::EF_SHIFT_DOWN];
+  [self handleAction:ui::TextEditCommand::MOVE_PAGE_DOWN_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_NEXT
+             domCode:ui::DomCode::PAGE_DOWN
+          eventFlags:ui::EF_SHIFT_DOWN];
 }
 
 - (void)pageUpAndModifySelection:(id)sender {
-  [self handleAction:ui::TextEditCommand::
-                         MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+  [self handleAction:ui::TextEditCommand::MOVE_PAGE_UP_AND_MODIFY_SELECTION
              keyCode:ui::VKEY_PRIOR
              domCode:ui::DomCode::PAGE_UP
           eventFlags:ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveParagraphForwardAndModifySelection:(id)sender {
-  [self
-      handleAction:ui::TextEditCommand::MOVE_TO_END_OF_LINE_AND_MODIFY_SELECTION
-           keyCode:ui::VKEY_DOWN
-           domCode:ui::DomCode::ARROW_DOWN
-        eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
+  [self handleAction:ui::TextEditCommand::
+                         MOVE_PARAGRAPH_FORWARD_AND_MODIFY_SELECTION
+             keyCode:ui::VKEY_DOWN
+             domCode:ui::DomCode::ARROW_DOWN
+          eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
 }
 
 - (void)moveParagraphBackwardAndModifySelection:(id)sender {
   [self handleAction:ui::TextEditCommand::
-                         MOVE_TO_BEGINNING_OF_LINE_AND_MODIFY_SELECTION
+                         MOVE_PARAGRAPH_BACKWARD_AND_MODIFY_SELECTION
              keyCode:ui::VKEY_UP
              domCode:ui::DomCode::ARROW_UP
           eventFlags:ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN];
@@ -1065,11 +1116,24 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 }
 
 - (void)deleteToBeginningOfParagraph:(id)sender {
-  [self deleteToBeginningOfLine:sender];
+  [self handleAction:ui::TextEditCommand::DELETE_TO_BEGINNING_OF_PARAGRAPH
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
 }
 
 - (void)deleteToEndOfParagraph:(id)sender {
-  [self deleteToEndOfLine:sender];
+  [self handleAction:ui::TextEditCommand::DELETE_TO_END_OF_PARAGRAPH
+             keyCode:ui::VKEY_UNKNOWN
+             domCode:ui::DomCode::NONE
+          eventFlags:0];
+}
+
+- (void)yank:(id)sender {
+  [self handleAction:ui::TextEditCommand::YANK
+             keyCode:ui::VKEY_Y
+             domCode:ui::DomCode::US_Y
+          eventFlags:ui::EF_CONTROL_DOWN];
 }
 
 // Cancellation.
@@ -1213,9 +1277,21 @@ ui::KeyEvent GetCharacterEventFromNSEvent(NSEvent* event) {
 
   if ([text isKindOfClass:[NSAttributedString class]])
     text = [text string];
+
+  textInputClient_->DeleteRange(gfx::Range(replacementRange));
   ui::CompositionText composition;
   composition.text = base::SysNSStringToUTF16(text);
   composition.selection = gfx::Range(selectedRange);
+
+  // Add a black underline with a transparent background to the composition
+  // text. TODO(karandeepb): On Cocoa textfields, the target clause of the
+  // composition has a thick underlines. The composition text also has
+  // discontinous underlines for different clauses. This is also supported in
+  // the Chrome renderer. Add code to extract underlines from |text| once our
+  // render text implementation supports thick underlines and discontinous
+  // underlines for consecutive characters. See http://crbug.com/612675.
+  composition.underlines.push_back(ui::CompositionUnderline(
+      0, [text length], SK_ColorBLACK, false, SK_ColorTRANSPARENT));
   textInputClient_->SetCompositionText(composition);
 }
 

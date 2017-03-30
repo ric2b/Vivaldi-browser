@@ -36,12 +36,11 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/Histogram.h"
+#include "platform/TraceEvent.h"
 
 namespace blink {
 
 static int totalPagesMeasuredCSSSampleId() { return 1; }
-
-int UseCounter::m_muteCount = 0;
 
 int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
 {
@@ -365,7 +364,7 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyAliasWebkitTransitionTimingFunction: return 336;
     case CSSPropertyWebkitUserDrag: return 337;
     case CSSPropertyWebkitUserModify: return 338;
-    case CSSPropertyWebkitUserSelect: return 339;
+    case CSSPropertyAliasWebkitUserSelect: return 339;
     // case CSSPropertyWebkitFlowInto: return 340;
     // case CSSPropertyWebkitFlowFrom: return 341;
     // case CSSPropertyWebkitRegionFragment: return 342;
@@ -565,7 +564,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     case CSSPropertyFontVariantNumeric: return 535;
     case CSSPropertyTextSizeAdjust: return 536;
     case CSSPropertyAliasWebkitTextSizeAdjust: return 537;
-
+    case CSSPropertyOverflowAnchor: return 538;
+    case CSSPropertyUserSelect: return 539;
     // 1. Add new features above this line (don't change the assigned numbers of the existing
     // items).
     // 2. Update maximumCSSSampleId() with the new maximum value.
@@ -581,8 +581,8 @@ int UseCounter::mapCSSPropertyIdToCSSSampleIdForHistogram(int id)
     return 0;
 }
 
-
-static int maximumCSSSampleId() { return 537; }
+// Make sure update_use_counter_css.py was run which updates histograms.xml.
+static int maximumCSSSampleId() { return 539; }
 
 static EnumerationHistogram& featureObserverHistogram()
 {
@@ -592,15 +592,27 @@ static EnumerationHistogram& featureObserverHistogram()
 
 void UseCounter::muteForInspector()
 {
-    UseCounter::m_muteCount++;
+    m_muteCount++;
 }
 
 void UseCounter::unmuteForInspector()
 {
-    UseCounter::m_muteCount--;
+    m_muteCount--;
+}
+
+void UseCounter::recordMeasurement(Feature feature)
+{
+    if (m_muteCount)
+        return;
+
+    if (!m_countBits.hasRecordedMeasurement(feature)) {
+        TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.feature_usage"), "FeatureFirstUsed", "feature", feature);
+    }
+    m_countBits.recordMeasurement(feature);
 }
 
 UseCounter::UseCounter()
+    : m_muteCount(0)
 {
     m_CSSFeatureBits.ensureSize(lastUnresolvedCSSProperty + 1);
     m_CSSFeatureBits.clearAll();
@@ -662,8 +674,7 @@ void UseCounter::count(const Frame* frame, Feature feature)
     if (!host)
         return;
 
-    ASSERT(Deprecation::deprecationMessage(feature).isEmpty());
-    host->useCounter().recordMeasurement(feature);
+    host->useCounter().count(feature);
 }
 
 void UseCounter::count(const Document& document, Feature feature)
@@ -738,8 +749,8 @@ void UseCounter::countIfNotPrivateScript(v8::Isolate* isolate, const ExecutionCo
 
 void UseCounter::countCrossOriginIframe(const Document& document, Feature feature)
 {
-    Frame* frame = document.frame();
-    if (frame && frame->isCrossOrigin())
+    LocalFrame* frame = document.frame();
+    if (frame && frame->isCrossOriginSubframe())
         count(frame, feature);
 }
 
@@ -748,9 +759,12 @@ void UseCounter::count(CSSParserMode cssParserMode, CSSPropertyID feature)
     ASSERT(feature >= firstCSSProperty);
     ASSERT(feature <= lastUnresolvedCSSProperty);
 
-    if (!isUseCounterEnabledForMode(cssParserMode))
+    if (!isUseCounterEnabledForMode(cssParserMode) || m_muteCount)
         return;
 
+    if (!m_CSSFeatureBits.quickGet(feature)) {
+        TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.feature_usage"), "CSSFeatureFirstUsed", "feature", feature);
+    }
     m_CSSFeatureBits.quickSet(feature);
 }
 

@@ -39,7 +39,6 @@ WebInspector.DebuggerModel = function(target)
 
     target.registerDebuggerDispatcher(new WebInspector.DebuggerDispatcher(this));
     this._agent = target.debuggerAgent();
-    WebInspector.targetManager.addEventListener(WebInspector.TargetManager.Events.TargetDisposed, this._targetDisposed, this);
 
     /** @type {?WebInspector.DebuggerPausedDetails} */
     this._debuggerPausedDetails = null;
@@ -59,11 +58,8 @@ WebInspector.DebuggerModel = function(target)
     this.enableDebugger();
 }
 
-/** @typedef {{location: ?WebInspector.DebuggerModel.Location, sourceURL: ?string, functionName: string, scopeChain: (Array.<!DebuggerAgent.Scope>|null)}} */
+/** @typedef {{location: ?WebInspector.DebuggerModel.Location, functionName: string}} */
 WebInspector.DebuggerModel.FunctionDetails;
-
-/** @typedef {{location: ?WebInspector.DebuggerModel.Location, sourceURL: ?string, functionName: string, status: string}} */
-WebInspector.DebuggerModel.GeneratorObjectDetails;
 
 /**
  * Keep these in sync with WebCore::V8Debugger
@@ -98,19 +94,8 @@ WebInspector.DebuggerModel.BreakReason = {
     Exception: "exception",
     PromiseRejection: "promiseRejection",
     Assert: "assert",
-    CSPViolation: "CSPViolation",
     DebugCommand: "debugCommand",
     Other: "other"
-}
-
-/**
- * @param {number=} value
- * @return {number}
- */
-WebInspector.DebuggerModel.fromOneBased = function(value)
-{
-    // FIXME(webkit:62725): console stack trace line/column numbers are one-based.
-    return value ? value - 1 : 0;
 }
 
 WebInspector.DebuggerModel.prototype = {
@@ -352,7 +337,7 @@ WebInspector.DebuggerModel.prototype = {
 
     /**
      * @param {!RuntimeAgent.ScriptId} scriptId
-     * @return {!WebInspector.Script}
+     * @return {?WebInspector.Script}
      */
     scriptForId: function(scriptId)
     {
@@ -372,7 +357,7 @@ WebInspector.DebuggerModel.prototype = {
     /**
      * @param {!RuntimeAgent.ScriptId} scriptId
      * @param {string} newSource
-     * @param {function(?Protocol.Error, !DebuggerAgent.SetScriptSourceError=)} callback
+     * @param {function(?Protocol.Error, !RuntimeAgent.ExceptionDetails=)} callback
      */
     setScriptSource: function(scriptId, newSource, callback)
     {
@@ -382,24 +367,24 @@ WebInspector.DebuggerModel.prototype = {
     /**
      * @param {!RuntimeAgent.ScriptId} scriptId
      * @param {string} newSource
-     * @param {function(?Protocol.Error, !DebuggerAgent.SetScriptSourceError=)} callback
+     * @param {function(?Protocol.Error, !RuntimeAgent.ExceptionDetails=)} callback
      * @param {?Protocol.Error} error
-     * @param {!DebuggerAgent.SetScriptSourceError=} errorData
+     * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
      * @param {!Array.<!DebuggerAgent.CallFrame>=} callFrames
      * @param {!RuntimeAgent.StackTrace=} asyncStackTrace
      * @param {boolean=} needsStepIn
      */
-    _didEditScriptSource: function(scriptId, newSource, callback, error, errorData, callFrames, asyncStackTrace, needsStepIn)
+    _didEditScriptSource: function(scriptId, newSource, callback, error, exceptionDetails, callFrames, asyncStackTrace, needsStepIn)
     {
         if (needsStepIn) {
             this.stepInto();
-            this._pendingLiveEditCallback = callback.bind(this, error, errorData);
+            this._pendingLiveEditCallback = callback.bind(this, error, exceptionDetails);
             return;
         }
 
         if (!error && callFrames && callFrames.length)
             this._pausedScript(callFrames, this._debuggerPausedDetails.reason, this._debuggerPausedDetails.auxData, this._debuggerPausedDetails.breakpointIds, asyncStackTrace);
-        callback(error, errorData);
+        callback(error, exceptionDetails);
     },
 
     /**
@@ -477,31 +462,24 @@ WebInspector.DebuggerModel.prototype = {
      * @param {number} endColumn
      * @param {!RuntimeAgent.ExecutionContextId} executionContextId
      * @param {string} hash
-     * @param {boolean} isContentScript
-     * @param {boolean} isInternalScript
+     * @param {*|undefined} executionContextAuxData
      * @param {boolean} isLiveEdit
      * @param {string=} sourceMapURL
      * @param {boolean=} hasSourceURL
-     * @param {boolean=} deprecatedCommentWasUsed
      * @param {boolean=} hasSyntaxError
      * @return {!WebInspector.Script}
      */
-    _parsedScriptSource: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL, deprecatedCommentWasUsed, hasSyntaxError)
+    _parsedScriptSource: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, executionContextAuxData, isLiveEdit, sourceMapURL, hasSourceURL, hasSyntaxError)
     {
-        var script = new WebInspector.Script(this, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL);
+        var isContentScript = false;
+        if (executionContextAuxData && ("isDefault" in executionContextAuxData))
+            isContentScript = !executionContextAuxData["isDefault"];
+        var script = new WebInspector.Script(this, scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, isContentScript, isLiveEdit, sourceMapURL, hasSourceURL);
         this._registerScript(script);
         if (!hasSyntaxError)
             this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.ParsedScriptSource, script);
         else
             this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.FailedToParseScriptSource, script);
-
-        if (deprecatedCommentWasUsed) {
-            var text = WebInspector.UIString("'//@ sourceURL' and '//@ sourceMappingURL' are deprecated, please use '//# sourceURL=' and '//# sourceMappingURL=' instead.");
-            var msg = new WebInspector.ConsoleMessage(this.target(), WebInspector.ConsoleMessage.MessageSource.JS, WebInspector.ConsoleMessage.MessageLevel.Warning, text, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, scriptId);
-            var consoleModel = this.target().consoleModel;
-            if (consoleModel)
-                consoleModel.addMessage(msg);
-        }
         return script;
     },
 
@@ -586,7 +564,7 @@ WebInspector.DebuggerModel.prototype = {
 
         var rawLocations = [];
         for (var frame of frames) {
-            var rawLocation = this.createRawLocationByScriptId(frame.scriptId, WebInspector.DebuggerModel.fromOneBased(frame.lineNumber), WebInspector.DebuggerModel.fromOneBased(frame.columnNumber));
+            var rawLocation = this.createRawLocationByScriptId(frame.scriptId, frame.lineNumber, frame.columnNumber);
             if (rawLocation)
                 rawLocations.push(rawLocation);
         }
@@ -633,59 +611,68 @@ WebInspector.DebuggerModel.prototype = {
      * @param {string} code
      * @param {string} objectGroup
      * @param {boolean} includeCommandLineAPI
-     * @param {boolean} doNotPauseOnExceptionsAndMuteConsole
+     * @param {boolean} silent
      * @param {boolean} returnByValue
      * @param {boolean} generatePreview
-     * @param {function(?WebInspector.RemoteObject, boolean, ?RuntimeAgent.RemoteObject=, ?RuntimeAgent.ExceptionDetails=)} callback
+     * @param {function(?WebInspector.RemoteObject, !RuntimeAgent.ExceptionDetails=)} callback
      */
-    evaluateOnSelectedCallFrame: function(code, objectGroup, includeCommandLineAPI, doNotPauseOnExceptionsAndMuteConsole, returnByValue, generatePreview, callback)
+    evaluateOnSelectedCallFrame: function(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback)
     {
         /**
          * @param {?RuntimeAgent.RemoteObject} result
-         * @param {boolean=} wasThrown
-         * @param {?RuntimeAgent.ExceptionDetails=} exceptionDetails
+         * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
          * @this {WebInspector.DebuggerModel}
          */
-        function didEvaluate(result, wasThrown, exceptionDetails)
+        function didEvaluate(result, exceptionDetails)
         {
             if (!result)
-                callback(null, false);
-            else if (returnByValue)
-                callback(null, !!wasThrown, wasThrown ? null : result, exceptionDetails);
+                callback(null);
             else
-                callback(this.target().runtimeModel.createRemoteObject(result), !!wasThrown, undefined, exceptionDetails);
-
-            if (objectGroup === "console")
-                this.dispatchEventToListeners(WebInspector.DebuggerModel.Events.ConsoleCommandEvaluatedInSelectedCallFrame);
+                callback(this.target().runtimeModel.createRemoteObject(result), exceptionDetails);
         }
 
-        this.selectedCallFrame().evaluate(code, objectGroup, includeCommandLineAPI, doNotPauseOnExceptionsAndMuteConsole, returnByValue, generatePreview, didEvaluate.bind(this));
+        this.selectedCallFrame().evaluate(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, didEvaluate.bind(this));
     },
 
     /**
      * @param {!WebInspector.RemoteObject} remoteObject
-     * @param {function(?WebInspector.DebuggerModel.FunctionDetails)} callback
+     * @return {!Promise<?WebInspector.DebuggerModel.FunctionDetails>}
      */
-    functionDetails: function(remoteObject, callback)
+    functionDetailsPromise: function(remoteObject)
     {
-        this._agent.getFunctionDetails(remoteObject.objectId, didGetDetails.bind(this));
+        return remoteObject.getAllPropertiesPromise(/* accessorPropertiesOnly */false).then(buildDetails.bind(this));
 
         /**
-         * @param {?Protocol.Error} error
-         * @param {!DebuggerAgent.FunctionDetails} response
-         * @this {WebInspector.DebuggerModel}
+         * @param {!{properties: ?Array.<!WebInspector.RemoteObjectProperty>, internalProperties: ?Array.<!WebInspector.RemoteObjectProperty>}} response
+         * @return {?WebInspector.DebuggerModel.FunctionDetails}
+         * @this {!WebInspector.DebuggerModel}
          */
-        function didGetDetails(error, response)
+        function buildDetails(response)
         {
-            if (error) {
-                callback(null);
-                return;
+            if (!response)
+                return null;
+            var location = null;
+            if (response.internalProperties) {
+                for (var prop of response.internalProperties) {
+                    if (prop.name === "[[FunctionLocation]]")
+                        location = prop.value;
+                }
             }
-            var location = response.location;
-            var script = this.scriptForId(location.scriptId);
-            var rawLocation = script ? this.createRawLocation(script, location.lineNumber, location.columnNumber || 0) : null;
-            var sourceURL = script ? script.contentURL() : null;
-            callback({location: rawLocation, sourceURL: sourceURL, functionName: response.functionName, scopeChain: response.scopeChain || null});
+            var functionName = null;
+            if (response.properties) {
+                for (var prop of response.properties) {
+                    if (prop.name === "name" && prop.value && prop.value.type === "string")
+                        functionName = prop.value;
+                    if (prop.name === "displayName" && prop.value && prop.value.type === "string") {
+                        functionName = prop.value;
+                        break;
+                    }
+                }
+            }
+            var debuggerLocation = null;
+            if (location)
+                debuggerLocation = this.createRawLocationByScriptId(location.value.scriptId, location.value.lineNumber, location.value.columnNumber);
+            return { location: debuggerLocation, functionName: functionName ? functionName.value : "" };
         }
     },
 
@@ -713,34 +700,6 @@ WebInspector.DebuggerModel.prototype = {
             }
             if (callback)
                 callback();
-        }
-    },
-
-    /**
-     * @param {!WebInspector.RemoteObject} remoteObject
-     * @param {function(?WebInspector.DebuggerModel.GeneratorObjectDetails)} callback
-     */
-    generatorObjectDetails: function(remoteObject, callback)
-    {
-        this._agent.getGeneratorObjectDetails(remoteObject.objectId, didGetDetails.bind(this));
-
-        /**
-         * @param {?Protocol.Error} error
-         * @param {!DebuggerAgent.GeneratorObjectDetails} response
-         * @this {WebInspector.DebuggerModel}
-         */
-        function didGetDetails(error, response)
-        {
-            if (error) {
-                console.error(error);
-                callback(null);
-                return;
-            }
-            var location = response.location;
-            var script = location && this.scriptForId(location.scriptId);
-            var rawLocation = script ? this.createRawLocation(script, location.lineNumber, location.columnNumber || 0) : null;
-            var sourceURL = script ? script.contentURL() : null;
-            callback({location: rawLocation, sourceURL: sourceURL, functionName: response.functionName, status: response.status});
         }
     },
 
@@ -786,14 +745,8 @@ WebInspector.DebuggerModel.prototype = {
         }
     },
 
-    /**
-     * @param {!WebInspector.Event} event
-     */
-    _targetDisposed: function(event)
+    dispose: function()
     {
-        var target = /** @type {!WebInspector.Target} */ (event.data);
-        if (target !== this.target())
-            return;
         WebInspector.moduleSetting("pauseOnExceptionEnabled").removeChangeListener(this._pauseOnExceptionStateChanged, this);
         WebInspector.moduleSetting("pauseOnCaughtException").removeChangeListener(this._pauseOnExceptionStateChanged, this);
         WebInspector.moduleSetting("enableAsyncStackTraces").removeChangeListener(this.asyncStackTracesStateChanged, this);
@@ -886,16 +839,14 @@ WebInspector.DebuggerDispatcher.prototype = {
      * @param {number} endColumn
      * @param {!RuntimeAgent.ExecutionContextId} executionContextId
      * @param {string} hash
-     * @param {boolean=} isContentScript
-     * @param {boolean=} isInternalScript
+     * @param {*=} executionContextAuxData
      * @param {boolean=} isLiveEdit
      * @param {string=} sourceMapURL
      * @param {boolean=} hasSourceURL
-     * @param {boolean=} deprecatedCommentWasUsed
      */
-    scriptParsed: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, isContentScript, isInternalScript, isLiveEdit, sourceMapURL, hasSourceURL, deprecatedCommentWasUsed)
+    scriptParsed: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, executionContextAuxData, isLiveEdit, sourceMapURL, hasSourceURL)
     {
-        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, !!isContentScript, !!isInternalScript, !!isLiveEdit, sourceMapURL, hasSourceURL, deprecatedCommentWasUsed, false);
+        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, executionContextAuxData, !!isLiveEdit, sourceMapURL, hasSourceURL, false);
     },
 
     /**
@@ -908,15 +859,13 @@ WebInspector.DebuggerDispatcher.prototype = {
      * @param {number} endColumn
      * @param {!RuntimeAgent.ExecutionContextId} executionContextId
      * @param {string} hash
-     * @param {boolean=} isContentScript
-     * @param {boolean=} isInternalScript
+     * @param {*=} executionContextAuxData
      * @param {string=} sourceMapURL
      * @param {boolean=} hasSourceURL
-     * @param {boolean=} deprecatedCommentWasUsed
      */
-    scriptFailedToParse: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, isContentScript, isInternalScript, sourceMapURL, hasSourceURL, deprecatedCommentWasUsed)
+    scriptFailedToParse: function(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, executionContextAuxData, sourceMapURL, hasSourceURL)
     {
-        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, !!isContentScript, !!isInternalScript, false, sourceMapURL, hasSourceURL, deprecatedCommentWasUsed, true);
+        this._debuggerModel._parsedScriptSource(scriptId, sourceURL, startLine, startColumn, endLine, endColumn, executionContextId, hash, executionContextAuxData, false, sourceMapURL, hasSourceURL, true);
     },
 
     /**
@@ -967,7 +916,7 @@ WebInspector.DebuggerModel.Location.prototype = {
     },
 
     /**
-     * @return {!WebInspector.Script}
+     * @return {?WebInspector.Script}
      */
     script: function()
     {
@@ -1112,29 +1061,28 @@ WebInspector.DebuggerModel.CallFrame.prototype = {
      * @param {string} code
      * @param {string} objectGroup
      * @param {boolean} includeCommandLineAPI
-     * @param {boolean} doNotPauseOnExceptionsAndMuteConsole
+     * @param {boolean} silent
      * @param {boolean} returnByValue
      * @param {boolean} generatePreview
-     * @param {function(?RuntimeAgent.RemoteObject, boolean=, ?RuntimeAgent.ExceptionDetails=)} callback
+     * @param {function(?RuntimeAgent.RemoteObject, !RuntimeAgent.ExceptionDetails=)} callback
      */
-    evaluate: function(code, objectGroup, includeCommandLineAPI, doNotPauseOnExceptionsAndMuteConsole, returnByValue, generatePreview, callback)
+    evaluate: function(code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, callback)
     {
         /**
          * @param {?Protocol.Error} error
          * @param {!RuntimeAgent.RemoteObject} result
-         * @param {boolean=} wasThrown
-         * @param {?RuntimeAgent.ExceptionDetails=} exceptionDetails
+         * @param {!RuntimeAgent.ExceptionDetails=} exceptionDetails
          */
-        function didEvaluateOnCallFrame(error, result, wasThrown, exceptionDetails)
+        function didEvaluateOnCallFrame(error, result, exceptionDetails)
         {
             if (error) {
                 console.error(error);
-                callback(null, false);
+                callback(null);
                 return;
             }
-            callback(result, wasThrown, exceptionDetails);
+            callback(result, exceptionDetails);
         }
-        this._debuggerAgent.evaluateOnCallFrame(this._payload.callFrameId, code, objectGroup, includeCommandLineAPI, doNotPauseOnExceptionsAndMuteConsole, returnByValue, generatePreview, didEvaluateOnCallFrame);
+        this._debuggerAgent.evaluateOnCallFrame(this._payload.callFrameId, code, objectGroup, includeCommandLineAPI, silent, returnByValue, generatePreview, didEvaluateOnCallFrame);
     },
 
     /**
@@ -1325,7 +1273,7 @@ WebInspector.DebuggerModel.instances = function()
  */
 WebInspector.DebuggerModel.fromTarget = function(target)
 {
-    if (!target || !target.hasJSContext())
+    if (!target || !target.hasJSCapability())
         return null;
     return /** @type {?WebInspector.DebuggerModel} */ (target.model(WebInspector.DebuggerModel));
 }

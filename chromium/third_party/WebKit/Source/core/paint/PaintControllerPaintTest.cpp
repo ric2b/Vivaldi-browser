@@ -4,10 +4,13 @@
 
 #include "core/paint/PaintControllerPaintTest.h"
 
+#include "core/editing/FrameCaret.h"
+#include "core/editing/FrameSelection.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/page/FocusController.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
+#include "core/paint/ObjectPaintProperties.h"
 #include "core/paint/PaintLayerPainter.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
@@ -22,7 +25,6 @@ TEST_P(PaintControllerPaintTestForSlimmingPaintV1AndV2, FullDocumentPaintingWith
     document().page()->focusController().setActive(true);
     document().page()->focusController().setFocused(true);
     Element& div = *toElement(document().body()->firstChild());
-    LayoutObject& divLayoutObject = *document().body()->firstChild()->layoutObject();
     InlineTextBox& textInlineBox = *toLayoutText(div.firstChild()->layoutObject())->firstTextBox();
 
     EXPECT_DISPLAY_LIST(rootPaintController().getDisplayItemList(), 2,
@@ -35,7 +37,7 @@ TEST_P(PaintControllerPaintTestForSlimmingPaintV1AndV2, FullDocumentPaintingWith
     EXPECT_DISPLAY_LIST(rootPaintController().getDisplayItemList(), 3,
         TestDisplayItem(layoutView(), documentBackgroundType),
         TestDisplayItem(textInlineBox, foregroundType),
-        TestDisplayItem(divLayoutObject, DisplayItem::Caret)); // New!
+        TestDisplayItem(*document().frame()->selection().m_frameCaret, DisplayItem::Caret)); // New!
 }
 
 TEST_P(PaintControllerPaintTestForSlimmingPaintV1AndV2, InlineRelayout)
@@ -62,5 +64,58 @@ TEST_P(PaintControllerPaintTestForSlimmingPaintV1AndV2, InlineRelayout)
         TestDisplayItem(newFirstTextBox, foregroundType),
         TestDisplayItem(secondTextBox, foregroundType));
 }
+
+TEST_F(PaintControllerPaintTestForSlimmingPaintV2, ChunkIdClientCacheFlag)
+{
+    setBodyInnerHTML(
+        "<div id='div' style='width: 200px; height: 200px; opacity: 0.5'>"
+        "  <div style='width: 100px; height: 100px; background-color: blue'></div>"
+        "  <div style='width: 100px; height: 100px; background-color: blue'></div>"
+        "</div>");
+    PaintLayer& htmlLayer = *toLayoutBoxModelObject(document().documentElement()->layoutObject())->layer();
+    LayoutBlock& div = *toLayoutBlock(getLayoutObjectByElementId("div"));
+    LayoutObject& subDiv = *div.firstChild();
+    LayoutObject& subDiv2 = *subDiv.nextSibling();
+    EXPECT_DISPLAY_LIST(rootPaintController().getDisplayItemList(), 7,
+        TestDisplayItem(layoutView(), documentBackgroundType),
+        TestDisplayItem(htmlLayer, DisplayItem::Subsequence),
+        TestDisplayItem(div, DisplayItem::BeginCompositing),
+        TestDisplayItem(subDiv, backgroundType),
+        TestDisplayItem(subDiv2, backgroundType),
+        TestDisplayItem(div, DisplayItem::EndCompositing),
+        TestDisplayItem(htmlLayer, DisplayItem::EndSubsequence));
+
+    const EffectPaintPropertyNode* effectNode = div.objectPaintProperties()->effect();
+    EXPECT_EQ(0.5f, effectNode->opacity());
+    const PaintChunk& chunk = rootPaintController().paintChunks()[1];
+    EXPECT_EQ(*div.layer(), chunk.id->client);
+    EXPECT_EQ(effectNode, chunk.properties.effect.get());
+
+    EXPECT_FALSE(div.layer()->isJustCreated());
+    // Client used by only paint chunks and non-cachaeable display items but not by any
+    // cacheable display items won't be marked as validly cached.
+    EXPECT_FALSE(rootPaintController().clientCacheIsValid(*div.layer()));
+    EXPECT_FALSE(rootPaintController().clientCacheIsValid(div));
+    EXPECT_TRUE(rootPaintController().clientCacheIsValid(subDiv));
+}
+
+TEST_F(PaintControllerPaintTestForSlimmingPaintV2, CompositingFold)
+{
+    setBodyInnerHTML(
+        "<div id='div' style='width: 200px; height: 200px; opacity: 0.5'>"
+        "  <div style='width: 100px; height: 100px; background-color: blue'></div>"
+        "</div>");
+    PaintLayer& htmlLayer = *toLayoutBoxModelObject(document().documentElement()->layoutObject())->layer();
+    LayoutBlock& div = *toLayoutBlock(getLayoutObjectByElementId("div"));
+    LayoutObject& subDiv = *div.firstChild();
+
+    EXPECT_DISPLAY_LIST(rootPaintController().getDisplayItemList(), 4,
+        TestDisplayItem(layoutView(), documentBackgroundType),
+        TestDisplayItem(htmlLayer, DisplayItem::Subsequence),
+        // The begin and end compositing display items have been folded into this one.
+        TestDisplayItem(subDiv, backgroundType),
+        TestDisplayItem(htmlLayer, DisplayItem::EndSubsequence));
+}
+
 
 } // namespace blink

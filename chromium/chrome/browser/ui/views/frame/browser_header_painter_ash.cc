@@ -5,8 +5,8 @@
 #include "chrome/browser/ui/views/frame/browser_header_painter_ash.h"
 
 #include "ash/common/ash_layout_constants.h"
-#include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/frame/header_painter_util.h"
+#include "ash/common/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "ash/common/frame/header_painter_util.h"
 #include "base/logging.h"  // DCHECK
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
@@ -152,8 +152,8 @@ void BrowserHeaderPainterAsh::Init(
   view_ = header_view;
   window_icon_ = window_icon;
   caption_button_container_ = caption_button_container;
-  // Use light images in otr, even when a custom theme is installed. The
-  // otr window with a custom theme is still darker than a normal window.
+  // Use light images in incognito, even when a custom theme is installed. The
+  // incognito window with a custom theme is still darker than a normal window.
   caption_button_container_->SetUseLightImages(is_incognito_);
 }
 

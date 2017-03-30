@@ -18,7 +18,8 @@ namespace {
 
 // Callback to handle database error. It seems chrome uses this to
 // display an error dialog box only.
-void DatabaseErrorCallback(sql::InitStatus status) {
+void DatabaseErrorCallback(sql::InitStatus init_status,
+                           const std::string& diagnostics) {
   LOG(WARNING) << "initializing autocomplete database failed";
 }
 
@@ -28,16 +29,16 @@ namespace android_webview {
 
 AwFormDatabaseService::AwFormDatabaseService(const base::FilePath path) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  web_database_ = new WebDatabaseService(path.Append(kWebDataFilename),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB));
+  web_database_ = new WebDatabaseService(
+      path.Append(kWebDataFilename),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
   web_database_->AddTable(base::WrapUnique(new autofill::AutofillTable));
   web_database_->LoadDatabase();
 
   autofill_data_ = new autofill::AutofillWebDataService(
-      web_database_,
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
-      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::DB),
+      web_database_, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::DB),
       base::Bind(&DatabaseErrorCallback));
   autofill_data_->Init();
 }

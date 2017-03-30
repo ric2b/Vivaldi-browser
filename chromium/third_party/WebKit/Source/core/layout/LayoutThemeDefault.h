@@ -61,8 +61,6 @@ public:
     int sliderTickOffsetFromTrackCenter() const override;
     void adjustSliderThumbSize(ComputedStyle&) const override;
 
-    static void setCaretBlinkInterval(double);
-
     void setCheckboxSize(ComputedStyle&) const override;
     void setRadioSize(ComputedStyle&) const override;
     void adjustInnerSpinButtonStyle(ComputedStyle&) const override;
@@ -111,8 +109,8 @@ public:
     double animationDurationForProgressBar() const override;
 
     // These methods define the padding for the MenuList's inner block.
-    int popupInternalPaddingLeft(const ComputedStyle&) const override;
-    int popupInternalPaddingRight(const ComputedStyle&) const override;
+    int popupInternalPaddingStart(const ComputedStyle&) const override;
+    int popupInternalPaddingEnd(const ComputedStyle&) const override;
     int popupInternalPaddingTop(const ComputedStyle&) const override;
     int popupInternalPaddingBottom(const ComputedStyle&) const override;
 
@@ -136,7 +134,7 @@ protected:
 private:
     ThemePainter& painter() override { return m_painter; }
 
-    int menuListInternalPadding(const ComputedStyle&, int paddingType) const;
+    int menuListInternalPadding(const ComputedStyle&, int padding) const;
 
     static const RGBA32 defaultTapHighlightColor = 0x2e000000; // 18% black.
     static double m_caretBlinkInterval;

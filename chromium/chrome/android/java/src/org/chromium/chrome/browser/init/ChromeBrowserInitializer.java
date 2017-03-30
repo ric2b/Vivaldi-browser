@@ -192,9 +192,7 @@ public class ChromeBrowserInitializer {
         ContentApplication.initCommandLine(mApplication);
         waitForDebuggerIfNeeded();
         ChromeStrictMode.configureStrictMode();
-        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_WEBAPK)) {
-            ChromeWebApkHost.init();
-        }
+        ChromeWebApkHost.init();
 
         warmUpSharedPrefs();
 
@@ -229,7 +227,7 @@ public class ChromeBrowserInitializer {
             throws ProcessInitException {
         assert ThreadUtils.runningOnUiThread() : "Tried to start the browser on the wrong thread";
 
-        final LinkedList<Runnable> initQueue = new LinkedList<Runnable>();
+        final LinkedList<Runnable> initQueue = new LinkedList<>();
 
         abstract class NativeInitTask implements Runnable {
             @Override
@@ -349,7 +347,6 @@ public class ChromeBrowserInitializer {
             BrowserStartupController.StartupCallback callback) throws ProcessInitException {
         try {
             TraceEvent.begin("ChromeBrowserInitializer.startChromeBrowserProcessesAsync");
-            mApplication.registerPolicyProviders(CombinedPolicyProvider.get());
             BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesAsync(startGpuProcess, callback);
         } finally {
@@ -367,9 +364,6 @@ public class ChromeBrowserInitializer {
             libraryLoader.ensureInitialized(mApplication);
             StrictMode.setThreadPolicy(oldPolicy);
             libraryLoader.asyncPrefetchLibrariesToMemory();
-            // The policies are used by browser startup, so we need to register the policy providers
-            // before starting the browser process.
-            mApplication.registerPolicyProviders(CombinedPolicyProvider.get());
             BrowserStartupController.get(mApplication, LibraryProcessType.PROCESS_BROWSER)
                     .startBrowserProcessesSync(false);
             GoogleServicesManager.get(mApplication);
@@ -390,6 +384,10 @@ public class ChromeBrowserInitializer {
     private void onStartNativeInitialization() {
         ThreadUtils.assertOnUiThread();
         if (mNativeInitializationComplete) return;
+        // The policies are used by browser startup, so we need to register the policy providers
+        // before starting the browser process.
+        mApplication.registerPolicyProviders(CombinedPolicyProvider.get());
+
         SpeechRecognition.initialize(mApplication);
     }
 

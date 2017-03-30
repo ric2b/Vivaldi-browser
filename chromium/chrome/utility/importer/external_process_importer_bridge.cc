@@ -238,6 +238,11 @@ void ExternalProcessImporterBridge::NotifyItemEnded(importer::ImportItem item) {
   Send(new ProfileImportProcessHostMsg_ImportItem_Finished(item));
 }
 
+void ExternalProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
+                                                     const std::string& error) {
+  Send(new ProfileImportProcessHostMsg_ImportItem_Failed(item, error));
+}
+
 void ExternalProcessImporterBridge::NotifyEnded() {
   // The internal process detects import end when all items have been received.
 }

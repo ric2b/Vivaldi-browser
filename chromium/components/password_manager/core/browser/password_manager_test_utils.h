@@ -52,7 +52,6 @@ struct PasswordFormData {
   const wchar_t* username_value;  // Set to NULL for a blacklist entry.
   const wchar_t* password_value;
   const bool preferred;
-  const bool ssl_valid;
   const double creation_time;
 };
 
@@ -63,23 +62,18 @@ std::unique_ptr<autofill::PasswordForm> CreatePasswordFormFromDataForTesting(
 // Checks whether the PasswordForms pointed to in |actual_values| are in some
 // permutation pairwise equal to those in |expectations|. Returns true in case
 // of a perfect match; otherwise returns false and writes details of mismatches
-// in human readable format to |mismatches_output| unless it is null.
+// in human readable format to |mismatch_output| unless it is null.
+// Note: |expectations| should be a const ref, but needs to be a const pointer,
+// because GMock tried to copy the reference by value.
 bool ContainsEqualPasswordFormsUnordered(
-    const std::vector<autofill::PasswordForm*>& expectations,
-    const std::vector<autofill::PasswordForm*>& actual_values,
-    std::ostream* mismatches_output);
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& expectations,
+    const std::vector<std::unique_ptr<autofill::PasswordForm>>& actual_values,
+    std::ostream* mismatch_output);
 
 MATCHER_P(UnorderedPasswordFormElementsAre, expectations, "") {
-  return ContainsEqualPasswordFormsUnordered(expectations, arg,
+  return ContainsEqualPasswordFormsUnordered(*expectations, arg,
                                              result_listener->stream());
 }
-
-// Helper function to initialize feature overrides via command-line flags
-// supplied as |enable_features| and |disable_features| using the
-// |feature_list|.
-void SetFeatures(const std::vector<const base::Feature*>& enable_features,
-                 const std::vector<const base::Feature*>& disable_features,
-                 std::unique_ptr<base::FeatureList> feature_list);
 
 class MockPasswordStoreObserver : public PasswordStore::Observer {
  public:

@@ -297,7 +297,7 @@ void HostZoomMapImpl::SetDefaultZoomLevel(double level) {
 
   // Second, update zoom levels for all pages that do not have an overriding
   // entry.
-  for (auto web_contents : WebContentsImpl::GetAllWebContents()) {
+  for (auto* web_contents : WebContentsImpl::GetAllWebContents()) {
     // Only change zoom for WebContents tied to the StoragePartition this
     // HostZoomMap serves.
     if (GetForWebContents(web_contents) != this)
@@ -440,14 +440,14 @@ bool HostZoomMapImpl::UsesTemporaryZoomLevel(int render_process_id,
   RenderViewKey key(render_process_id, render_view_id);
 
   base::AutoLock auto_lock(lock_);
-  return ContainsKey(temporary_zoom_levels_, key);
+  return base::ContainsKey(temporary_zoom_levels_, key);
 }
 
 double HostZoomMapImpl::GetTemporaryZoomLevel(int render_process_id,
                                               int render_view_id) const {
   base::AutoLock auto_lock(lock_);
   RenderViewKey key(render_process_id, render_view_id);
-  if (!ContainsKey(temporary_zoom_levels_, key))
+  if (!base::ContainsKey(temporary_zoom_levels_, key))
     return 0;
 
   return temporary_zoom_levels_.find(key)->second;
@@ -483,7 +483,7 @@ double HostZoomMapImpl::GetZoomLevelForView(const GURL& url,
   RenderViewKey key(render_process_id, render_view_id);
   base::AutoLock auto_lock(lock_);
 
-  if (ContainsKey(temporary_zoom_levels_, key))
+  if (base::ContainsKey(temporary_zoom_levels_, key))
     return temporary_zoom_levels_.find(key)->second;
 
   return GetZoomLevelForHostAndSchemeInternal(url.scheme(),
@@ -531,7 +531,7 @@ void HostZoomMapImpl::SendZoomLevelChange(const std::string& scheme,
   // other case of interest is where the renderer is hosting a plugin document;
   // that should be reflected in our temporary zoom level map, but we will
   // double check on the renderer side to avoid the possibility of any races.
-  for (auto web_contents : WebContentsImpl::GetAllWebContents()) {
+  for (auto* web_contents : WebContentsImpl::GetAllWebContents()) {
     // Only send zoom level changes to WebContents that are using this
     // HostZoomMap.
     if (GetForWebContents(web_contents) != this)

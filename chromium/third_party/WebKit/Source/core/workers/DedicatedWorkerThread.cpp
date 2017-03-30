@@ -56,16 +56,14 @@ DedicatedWorkerThread::~DedicatedWorkerThread()
 {
 }
 
-WorkerGlobalScope* DedicatedWorkerThread::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
+WorkerOrWorkletGlobalScope* DedicatedWorkerThread::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
 {
     return DedicatedWorkerGlobalScope::create(this, std::move(startupData), m_timeOrigin);
 }
 
-void DedicatedWorkerThread::postInitialize()
+void DedicatedWorkerThread::clearWorkerBackingThread()
 {
-    // Notify the parent object of our current active state before the event
-    // loop starts processing tasks.
-    m_workerObjectProxy.reportPendingActivity(false);
+    m_workerBackingThread = nullptr;
 }
 
 } // namespace blink

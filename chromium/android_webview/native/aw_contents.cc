@@ -90,6 +90,7 @@ using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertJavaStringToUTF8;
 using base::android::ConvertUTF16ToJavaString;
 using base::android::ConvertUTF8ToJavaString;
+using base::android::JavaParamRef;
 using base::android::JavaRef;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
@@ -174,7 +175,7 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
       functor_(nullptr),
       browser_view_renderer_(
           this,
-          BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI)),
+          BrowserThread::GetTaskRunnerForThread(BrowserThread::UI)),
       web_contents_(std::move(web_contents)),
       renderer_manager_key_(GLViewRendererManager::GetInstance()->NullKey()) {
   base::subtle::NoBarrier_AtomicIncrement(&g_instance_count, 1);
@@ -233,8 +234,8 @@ void AwContents::SetJavaPeers(
                                           io_thread_client);
 
   InterceptNavigationDelegate::Associate(
-      web_contents_.get(), base::WrapUnique(new InterceptNavigationDelegate(
-                               env, intercept_navigation_delegate)));
+      web_contents_.get(), base::MakeUnique<InterceptNavigationDelegate>(
+                               env, intercept_navigation_delegate));
 
   // Finally, having setup the associations, release any deferred requests
   for (content::RenderFrameHost* rfh : web_contents_->GetAllFrames()) {
@@ -278,7 +279,7 @@ void AwContents::SetAwAutofillClient(jobject client) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
-  Java_AwContents_setAwAutofillClient(env, obj.obj(), client);
+  Java_AwContents_setAwAutofillClient(env, obj, client);
 }
 
 AwContents::~AwContents() {
@@ -376,9 +377,8 @@ jint GetNativeInstanceCount(JNIEnv* env, const JavaParamRef<jclass>&) {
 namespace {
 void DocumentHasImagesCallback(const ScopedJavaGlobalRef<jobject>& message,
                                bool has_images) {
-  Java_AwContents_onDocumentHasImagesResponse(AttachCurrentThread(),
-                                              has_images,
-                                              message.obj());
+  Java_AwContents_onDocumentHasImagesResponse(AttachCurrentThread(), has_images,
+                                              message);
 }
 }  // namespace
 
@@ -399,9 +399,8 @@ void GenerateMHTMLCallback(ScopedJavaGlobalRef<jobject>* callback,
   JNIEnv* env = AttachCurrentThread();
   // Android files are UTF8, so the path conversion below is safe.
   Java_AwContents_generateMHTMLCallback(
-      env,
-      ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()).obj(),
-      size, callback->obj());
+      env, ConvertUTF8ToJavaString(env, path.AsUTF8Unsafe()), size,
+      callback->obj());
 }
 }  // namespace
 
@@ -440,8 +439,7 @@ bool AwContents::OnReceivedHttpAuthRequest(const JavaRef<jobject>& handler,
   ScopedJavaLocalRef<jstring> jrealm = ConvertUTF8ToJavaString(env, realm);
   devtools_instrumentation::ScopedEmbedderCallbackTask embedder_callback(
       "onReceivedHttpAuthRequest");
-  Java_AwContents_onReceivedHttpAuthRequest(env, obj.obj(), handler.obj(),
-      jhost.obj(), jrealm.obj());
+  Java_AwContents_onReceivedHttpAuthRequest(env, obj, handler, jhost, jrealm);
   return true;
 }
 
@@ -485,9 +483,7 @@ void ShowGeolocationPromptHelperTask(const JavaObjectWeakGlobalRef& java_ref,
         ConvertUTF8ToJavaString(env, origin.spec()));
     devtools_instrumentation::ScopedEmbedderCallbackTask embedder_callback(
         "onGeolocationPermissionsShowPrompt");
-    Java_AwContents_onGeolocationPermissionsShowPrompt(env,
-                                                       j_ref.obj(),
-                                                       j_origin.obj());
+    Java_AwContents_onGeolocationPermissionsShowPrompt(env, j_ref, j_origin);
   }
 }
 
@@ -561,7 +557,7 @@ void AwContents::HideGeolocationPrompt(const GURL& origin) {
     if (j_ref.obj()) {
       devtools_instrumentation::ScopedEmbedderCallbackTask embedder_callback(
           "onGeolocationPermissionsHidePrompt");
-      Java_AwContents_onGeolocationPermissionsHidePrompt(env, j_ref.obj());
+      Java_AwContents_onGeolocationPermissionsHidePrompt(env, j_ref);
     }
     if (!pending_geolocation_prompts_.empty()) {
       ShowGeolocationPromptHelper(java_ref_,
@@ -584,7 +580,7 @@ void AwContents::OnPermissionRequest(
     return;
   }
 
-  Java_AwContents_onPermissionRequest(env, j_ref.obj(), j_request.obj());
+  Java_AwContents_onPermissionRequest(env, j_ref, j_request);
 }
 
 void AwContents::OnPermissionRequestCanceled(AwPermissionRequest* request) {
@@ -594,8 +590,7 @@ void AwContents::OnPermissionRequestCanceled(AwPermissionRequest* request) {
   if (j_request.is_null() || j_ref.is_null())
     return;
 
-  Java_AwContents_onPermissionRequestCanceled(
-      env, j_ref.obj(), j_request.obj());
+  Java_AwContents_onPermissionRequestCanceled(env, j_ref, j_request);
 }
 
 void AwContents::PreauthorizePermission(JNIEnv* env,
@@ -628,7 +623,7 @@ void AwContents::RequestGeolocationPermission(
   if (obj.is_null())
     return;
 
-  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj.obj())) {
+  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj)) {
     ShowGeolocationPrompt(origin, callback);
     return;
   }
@@ -643,7 +638,7 @@ void AwContents::CancelGeolocationPermissionRequests(const GURL& origin) {
   if (obj.is_null())
     return;
 
-  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj.obj())) {
+  if (Java_AwContents_useLegacyGeolocationPermissionAPI(env, obj)) {
     HideGeolocationPrompt(origin);
     return;
   }
@@ -711,8 +706,8 @@ void AwContents::OnFindResultReceived(int active_ordinal,
   if (obj.is_null())
     return;
 
-  Java_AwContents_onFindResultReceived(
-      env, obj.obj(), active_ordinal, match_count, finished);
+  Java_AwContents_onFindResultReceived(env, obj, active_ordinal, match_count,
+                                       finished);
 }
 
 bool AwContents::ShouldDownloadFavicon(const GURL& icon_url) {
@@ -735,8 +730,7 @@ void AwContents::OnReceivedIcon(const GURL& icon_url, const SkBitmap& bitmap) {
     entry->GetFavicon().image = gfx::Image::CreateFrom1xBitmap(bitmap);
   }
 
-  Java_AwContents_onReceivedIcon(
-      env, obj.obj(), gfx::ConvertToJavaBitmap(&bitmap).obj());
+  Java_AwContents_onReceivedIcon(env, obj, gfx::ConvertToJavaBitmap(&bitmap));
 }
 
 void AwContents::OnReceivedTouchIconUrl(const std::string& url,
@@ -748,7 +742,7 @@ void AwContents::OnReceivedTouchIconUrl(const std::string& url,
     return;
 
   Java_AwContents_onReceivedTouchIconUrl(
-      env, obj.obj(), ConvertUTF8ToJavaString(env, url).obj(), precomposed);
+      env, obj, ConvertUTF8ToJavaString(env, url), precomposed);
 }
 
 void AwContents::PostInvalidate() {
@@ -756,7 +750,7 @@ void AwContents::PostInvalidate() {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (!obj.is_null())
-    Java_AwContents_postInvalidateOnAnimation(env, obj.obj());
+    Java_AwContents_postInvalidateOnAnimation(env, obj);
 }
 
 void AwContents::OnNewPicture() {
@@ -766,7 +760,7 @@ void AwContents::OnNewPicture() {
   if (!obj.is_null()) {
     devtools_instrumentation::ScopedEmbedderCallbackTask embedder_callback(
         "onNewPicture");
-    Java_AwContents_onNewPicture(env, obj.obj());
+    Java_AwContents_onNewPicture(env, obj);
   }
 }
 
@@ -830,13 +824,8 @@ void AwContents::UpdateLastHitTestData(JNIEnv* env,
   if (data.img_src.is_valid())
     img_src = ConvertUTF8ToJavaString(env, data.img_src.spec());
 
-  Java_AwContents_updateHitTestData(env,
-                                    obj,
-                                    data.type,
-                                    extra_data_for_type.obj(),
-                                    href.obj(),
-                                    anchor_text.obj(),
-                                    img_src.obj());
+  Java_AwContents_updateHitTestData(env, obj, data.type, extra_data_for_type,
+                                    href, anchor_text, img_src);
 }
 
 void AwContents::OnSizeChanged(JNIEnv* env,
@@ -1030,9 +1019,7 @@ gfx::Point AwContents::GetLocationOnScreen() {
     return gfx::Point();
   std::vector<int> location;
   base::android::JavaIntArrayToIntVector(
-      env,
-      Java_AwContents_getLocationOnScreen(env, obj.obj()).obj(),
-      &location);
+      env, Java_AwContents_getLocationOnScreen(env, obj).obj(), &location);
   return gfx::Point(location[0], location[1]);
 }
 
@@ -1042,8 +1029,7 @@ void AwContents::ScrollContainerViewTo(const gfx::Vector2d& new_value) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
-  Java_AwContents_scrollContainerViewTo(
-      env, obj.obj(), new_value.x(), new_value.y());
+  Java_AwContents_scrollContainerViewTo(env, obj, new_value.x(), new_value.y());
 }
 
 void AwContents::UpdateScrollState(const gfx::Vector2d& max_scroll_offset,
@@ -1056,15 +1042,10 @@ void AwContents::UpdateScrollState(const gfx::Vector2d& max_scroll_offset,
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
-  Java_AwContents_updateScrollState(env,
-                                    obj.obj(),
-                                    max_scroll_offset.x(),
-                                    max_scroll_offset.y(),
-                                    contents_size_dip.width(),
-                                    contents_size_dip.height(),
-                                    page_scale_factor,
-                                    min_page_scale_factor,
-                                    max_page_scale_factor);
+  Java_AwContents_updateScrollState(
+      env, obj, max_scroll_offset.x(), max_scroll_offset.y(),
+      contents_size_dip.width(), contents_size_dip.height(), page_scale_factor,
+      min_page_scale_factor, max_page_scale_factor);
 }
 
 void AwContents::DidOverscroll(const gfx::Vector2d& overscroll_delta,
@@ -1074,7 +1055,7 @@ void AwContents::DidOverscroll(const gfx::Vector2d& overscroll_delta,
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
-  Java_AwContents_didOverscroll(env, obj.obj(), overscroll_delta.x(),
+  Java_AwContents_didOverscroll(env, obj, overscroll_delta.x(),
                                 overscroll_delta.y(), overscroll_velocity.x(),
                                 overscroll_velocity.y());
 }
@@ -1117,8 +1098,8 @@ void AwContents::OnWebLayoutPageScaleFactorChanged(float page_scale_factor) {
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
-  Java_AwContents_onWebLayoutPageScaleFactorChanged(env, obj.obj(),
-                                                         page_scale_factor);
+  Java_AwContents_onWebLayoutPageScaleFactorChanged(env, obj,
+                                                    page_scale_factor);
 }
 
 void AwContents::OnWebLayoutContentsSizeChanged(
@@ -1129,7 +1110,7 @@ void AwContents::OnWebLayoutContentsSizeChanged(
   if (obj.is_null())
     return;
   Java_AwContents_onWebLayoutContentsSizeChanged(
-      env, obj.obj(), contents_size.width(), contents_size.height());
+      env, obj, contents_size.width(), contents_size.height());
 }
 
 jlong AwContents::CapturePicture(JNIEnv* env,
@@ -1157,8 +1138,8 @@ void InvokeVisualStateCallback(const JavaObjectWeakGlobalRef& java_ref,
   ScopedJavaLocalRef<jobject> obj = java_ref.get(env);
   if (obj.is_null())
      return;
-  Java_AwContents_invokeVisualStateCallback(
-      env, obj.obj(), callback->obj(), request_id);
+  Java_AwContents_invokeVisualStateCallback(env, obj, callback->obj(),
+                                            request_id);
 }
 }  // namespace
 

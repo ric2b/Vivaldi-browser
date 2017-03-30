@@ -30,10 +30,38 @@
 
 #include "platform/testing/TestingPlatformSupport.h"
 
+#include "base/command_line.h"
+#include "base/memory/discardable_memory_allocator.h"
+#include "base/metrics/statistics_recorder.h"
+#include "base/test/icu_test_util.h"
+#include "base/test/test_discardable_memory_allocator.h"
+#include "cc/blink/web_compositor_support_impl.h"
+#include "platform/EventTracer.h"
+#include "platform/HTTPNames.h"
+#include "platform/heap/Heap.h"
+#include "wtf/CryptographicallyRandomNumber.h"
+#include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
+#include "wtf/WTF.h"
+#include "wtf/allocator/Partitions.h"
 #include <memory>
 
 namespace blink {
+
+namespace {
+
+double dummyCurrentTime()
+{
+    return 0.0;
+}
+
+class DummyThread final : public blink::WebThread {
+public:
+    bool isCurrentThread() const override { return true; }
+    blink::WebScheduler* scheduler() const override { return nullptr; }
+};
+
+} // namespace
 
 TestingPlatformSupport::TestingPlatformSupport()
     : TestingPlatformSupport(TestingPlatformSupport::Config())
@@ -81,24 +109,36 @@ public:
 
     void postDelayedTask(const WebTraceLocation&, Task*, double delayMs) override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
-    WebTaskRunner* clone() override
+    bool runsTasksOnCurrentThread() override
     {
-        return new TestingPlatformMockWebTaskRunner(m_tasks);
+        NOTREACHED();
+        return true;
+    }
+
+    std::unique_ptr<WebTaskRunner> clone() override
+    {
+        return WTF::wrapUnique(new TestingPlatformMockWebTaskRunner(m_tasks));
     }
 
     double virtualTimeSeconds() const override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0.0;
     }
 
     double monotonicallyIncreasingVirtualTimeSeconds() const override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0.0;
+    }
+
+    base::SingleThreadTaskRunner* taskRunner() override
+    {
+        NOTREACHED();
+        return nullptr;
     }
 
 private:
@@ -148,7 +188,7 @@ public:
 
     bool isCurrentThread() const override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return true;
     }
 
@@ -185,6 +225,49 @@ WebThread* TestingPlatformSupportWithMockScheduler::currentThread()
 TestingPlatformMockScheduler* TestingPlatformSupportWithMockScheduler::mockWebScheduler()
 {
     return m_mockWebThread->mockWebScheduler();
+}
+
+class ScopedUnittestsEnvironmentSetup::DummyPlatform final : public blink::Platform {
+public:
+    DummyPlatform() { }
+
+    blink::WebThread* currentThread() override
+    {
+        static DummyThread dummyThread;
+        return &dummyThread;
+    };
+};
+
+ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc, char** argv)
+{
+    base::CommandLine::Init(argc, argv);
+
+    base::test::InitializeICUForTesting();
+
+    m_discardableMemoryAllocator = wrapUnique(new base::TestDiscardableMemoryAllocator);
+    base::DiscardableMemoryAllocator::SetInstance(m_discardableMemoryAllocator.get());
+    base::StatisticsRecorder::Initialize();
+
+    m_platform = wrapUnique(new DummyPlatform);
+    Platform::setCurrentPlatformForTesting(m_platform.get());
+
+    WTF::Partitions::initialize(nullptr);
+    WTF::setTimeFunctionsForTesting(dummyCurrentTime);
+    WTF::initialize(nullptr);
+
+    m_compositorSupport = wrapUnique(new cc_blink::WebCompositorSupportImpl);
+    m_testingPlatformConfig.compositorSupport = m_compositorSupport.get();
+    m_testingPlatformSupport = wrapUnique(new TestingPlatformSupport(m_testingPlatformConfig));
+
+    ProcessHeap::init();
+    ThreadState::attachMainThread();
+    ThreadState::current()->registerTraceDOMWrappers(nullptr, nullptr, nullptr);
+    EventTracer::initialize();
+    HTTPNames::init();
+}
+
+ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup()
+{
 }
 
 } // namespace blink

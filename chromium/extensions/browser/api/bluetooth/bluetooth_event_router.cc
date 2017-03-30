@@ -199,7 +199,7 @@ void BluetoothEventRouter::SetDiscoveryFilter(
 
 BluetoothApiPairingDelegate* BluetoothEventRouter::GetPairingDelegate(
     const std::string& extension_id) {
-  return ContainsKey(pairing_delegate_map_, extension_id)
+  return base::ContainsKey(pairing_delegate_map_, extension_id)
              ? pairing_delegate_map_[extension_id]
              : nullptr;
 }
@@ -241,7 +241,7 @@ void BluetoothEventRouter::AddPairingDelegateImpl(
     LOG(ERROR) << "Unable to get adapter for extension_id: " << extension_id;
     return;
   }
-  if (ContainsKey(pairing_delegate_map_, extension_id)) {
+  if (base::ContainsKey(pairing_delegate_map_, extension_id)) {
     // For WebUI there may be more than one page open to the same url
     // (e.g. chrome://settings). These will share the same pairing delegate.
     VLOG(1) << "Pairing delegate already exists for extension_id: "
@@ -258,7 +258,7 @@ void BluetoothEventRouter::AddPairingDelegateImpl(
 
 void BluetoothEventRouter::RemovePairingDelegate(
     const std::string& extension_id) {
-  if (ContainsKey(pairing_delegate_map_, extension_id)) {
+  if (base::ContainsKey(pairing_delegate_map_, extension_id)) {
     BluetoothApiPairingDelegate* delegate = pairing_delegate_map_[extension_id];
     if (adapter_.get())
       adapter_->RemovePairingDelegate(delegate);
@@ -375,7 +375,7 @@ void BluetoothEventRouter::DispatchAdapterStateEvent() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   api::bluetooth::AdapterState state;
   CHECK(adapter_.get());
-  PopulateAdapterState(*adapter_.get(), &state);
+  PopulateAdapterState(*adapter_, &state);
 
   std::unique_ptr<base::ListValue> args =
       bluetooth::OnAdapterStateChanged::Create(state);

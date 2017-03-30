@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/threading/thread_checker.h"
-#include "media/capture/content/feedback_signal_accumulator.h"
+#include "media/base/feedback_signal_accumulator.h"
 #include "media/cast/cast_config.h"
 #include "media/cast/sender/software_video_encoder.h"
 #include "third_party/libvpx/source/libvpx/vpx/vpx_encoder.h"
@@ -26,7 +26,7 @@ namespace cast {
 
 class Vp8Encoder : public SoftwareVideoEncoder {
  public:
-  explicit Vp8Encoder(const VideoSenderConfig& video_config);
+  explicit Vp8Encoder(const FrameSenderConfig& video_config);
 
   ~Vp8Encoder() final;
 
@@ -51,7 +51,7 @@ class Vp8Encoder : public SoftwareVideoEncoder {
   // |encoder_| instance.
   void ConfigureForNewFrameSize(const gfx::Size& frame_size);
 
-  const VideoSenderConfig cast_config_;
+  const FrameSenderConfig cast_config_;
 
   const double target_encoder_utilization_;
 

@@ -6,23 +6,21 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/ash_switches.h"
-#include "ash/common/shelf/shelf_model.h"
 #include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shelf/shelf_widget.h"
+#include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/dock/docked_window_layout_manager.h"
 #include "ash/common/wm/panels/panel_layout_manager.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm/wm_event.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
-#include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/window_state_aura.h"
@@ -45,14 +43,12 @@ class DockedWindowResizerTest
     : public test::AshTestBase,
       public testing::WithParamInterface<ui::wm::WindowType> {
  public:
-  DockedWindowResizerTest() : model_(NULL), window_type_(GetParam()) {}
+  DockedWindowResizerTest() : window_type_(GetParam()) {}
   virtual ~DockedWindowResizerTest() {}
 
   void SetUp() override {
     AshTestBase::SetUp();
     UpdateDisplay("600x400");
-    test::ShellTestApi test_api(Shell::GetInstance());
-    model_ = test_api.shelf_model();
   }
 
   void TearDown() override { AshTestBase::TearDown(); }
@@ -235,7 +231,6 @@ class DockedWindowResizerTest
 
  private:
   std::unique_ptr<WindowResizer> resizer_;
-  ShelfModel* model_;
   ui::wm::WindowType window_type_;
   aura::test::TestWindowDelegate delegate_;
 
@@ -366,21 +361,21 @@ TEST_P(DockedWindowResizerTest, AttachRightChangeShelf) {
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
   // set launcher shelf to be aligned on the right
-  Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
+  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_RIGHT);
   // The window should have moved and get attached to the left dock.
   EXPECT_EQ(window->GetRootWindow()->GetBoundsInScreen().x(),
             window->GetBoundsInScreen().x());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
   // set launcher shelf to be aligned on the left
-  Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_LEFT);
   // The window should have moved and get attached to the right edge.
   EXPECT_EQ(window->GetRootWindow()->GetBoundsInScreen().right(),
             window->GetBoundsInScreen().right());
   EXPECT_EQ(kShellWindowId_DockedContainer, window->parent()->id());
 
   // set launcher shelf to be aligned at the bottom
-  Shelf::ForPrimaryDisplay()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  GetPrimaryShelf()->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
   // The window should stay in the right edge.
   EXPECT_EQ(window->GetRootWindow()->GetBoundsInScreen().right(),
             window->GetBoundsInScreen().right());
@@ -600,8 +595,7 @@ TEST_P(DockedWindowResizerTest, AttachOneAutoHideShelf) {
   EXPECT_EQ(work_area.bottom(), manager->docked_bounds().bottom());
 
   // Turn on shelf auto-hide.
-  Shelf::ForPrimaryDisplay()->SetAutoHideBehavior(
-      SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  GetPrimaryShelf()->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
   work_area = display::Screen::GetScreen()
                   ->GetDisplayNearestWindow(w1.get())
                   .work_area();
@@ -1377,7 +1371,7 @@ TEST_P(DockedWindowResizerTest, DragToShelf) {
   EXPECT_EQ(DOCKED_ALIGNMENT_NONE, docked_alignment(manager));
 
   // Drag down almost to shelf. A panel will snap, a regular window won't.
-  ShelfWidget* shelf = Shelf::ForPrimaryDisplay()->shelf_widget();
+  ShelfWidget* shelf = GetPrimaryShelf()->GetShelfWidgetForTesting();
   const int shelf_y = shelf->GetWindowBoundsInScreen().y();
   const int kDistanceFromShelf = 10;
   ASSERT_NO_FATAL_FAILURE(DragStart(w1.get()));

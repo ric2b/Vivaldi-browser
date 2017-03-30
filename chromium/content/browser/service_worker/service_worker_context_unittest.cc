@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/time/time.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
@@ -59,7 +60,7 @@ void ExpectRegisteredWorkers(
     bool expect_waiting,
     bool expect_active,
     ServiceWorkerStatusCode status,
-    const scoped_refptr<ServiceWorkerRegistration>& registration) {
+    scoped_refptr<ServiceWorkerRegistration> registration) {
   ASSERT_EQ(expect_status, status);
   if (status != SERVICE_WORKER_OK) {
     EXPECT_FALSE(registration.get());
@@ -87,7 +88,7 @@ class RejectInstallTestHelper : public EmbeddedWorkerTestHelper {
                       int request_id) override {
     SimulateSend(new ServiceWorkerHostMsg_InstallEventFinished(
         embedded_worker_id, request_id,
-        blink::WebServiceWorkerEventResultRejected, true));
+        blink::WebServiceWorkerEventResultRejected, true, base::Time::Now()));
   }
 };
 
@@ -96,10 +97,9 @@ class RejectActivateTestHelper : public EmbeddedWorkerTestHelper {
   RejectActivateTestHelper() : EmbeddedWorkerTestHelper(base::FilePath()) {}
 
   void OnActivateEvent(int embedded_worker_id, int request_id) override {
-    SimulateSend(
-        new ServiceWorkerHostMsg_ActivateEventFinished(
-            embedded_worker_id, request_id,
-            blink::WebServiceWorkerEventResultRejected));
+    SimulateSend(new ServiceWorkerHostMsg_ActivateEventFinished(
+        embedded_worker_id, request_id,
+        blink::WebServiceWorkerEventResultRejected, base::Time::Now()));
   }
 };
 

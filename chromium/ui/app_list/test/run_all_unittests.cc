@@ -38,13 +38,14 @@ class AppListTestSuite : public base::TestSuite {
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     command_line->AppendSwitchASCII(kTestType, "applist");
 
+    // Vivaldi: Have to init here, because InitializeOneOff check features early
+    base::TestSuite::Initialize();
 #if defined(OS_MACOSX)
     mock_cr_app::RegisterMockCrApp();
 #endif
 #if defined(TOOLKIT_VIEWS)
     gl::GLSurfaceTestSupport::InitializeOneOff();
 #endif
-    base::TestSuite::Initialize();
     ui::RegisterPathProvider();
 
     base::FilePath ui_test_pak_path;

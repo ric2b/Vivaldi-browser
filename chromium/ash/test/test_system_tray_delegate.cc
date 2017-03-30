@@ -13,6 +13,14 @@
 #include "base/message_loop/message_loop.h"
 #include "base/time/time.h"
 
+#if defined(OS_CHROMEOS)
+#include "ash/system/chromeos/rotation/tray_rotation_lock.h"
+#include "ash/system/chromeos/tray_display.h"
+#include "base/memory/ptr_util.h"
+#else
+#include "ash/common/system/tray/system_tray_item.h"
+#endif
+
 namespace ash {
 namespace test {
 
@@ -55,6 +63,14 @@ void TestSystemTrayDelegate::ClearSessionLengthLimit() {
   session_length_limit_set_ = false;
 }
 
+void TestSystemTrayDelegate::SetCurrentIME(const IMEInfo& info) {
+  current_ime_ = info;
+}
+
+void TestSystemTrayDelegate::SetAvailableIMEList(const IMEInfoList& list) {
+  ime_list_ = list;
+}
+
 LoginStatus TestSystemTrayDelegate::GetUserLoginStatus() const {
   // Initial login status has been changed for testing.
   if (g_initial_status != LoginStatus::USER &&
@@ -79,7 +95,7 @@ bool TestSystemTrayDelegate::IsUserSupervised() const {
 
 void TestSystemTrayDelegate::GetSystemUpdateInfo(UpdateInfo* info) const {
   DCHECK(info);
-  info->severity = UpdateInfo::UPDATE_NORMAL;
+  info->severity = UpdateInfo::UPDATE_NONE;
   info->update_required = g_system_update_required;
   info->factory_reset_required = false;
 }
@@ -106,6 +122,32 @@ bool TestSystemTrayDelegate::GetSessionLengthLimit(
 
 void TestSystemTrayDelegate::SignOut() {
   base::MessageLoop::current()->QuitWhenIdle();
+}
+
+std::unique_ptr<SystemTrayItem> TestSystemTrayDelegate::CreateDisplayTrayItem(
+    SystemTray* tray) {
+#if defined(OS_CHROMEOS)
+  return base::MakeUnique<TrayDisplay>(tray);
+#else
+  return nullptr;
+#endif
+}
+
+std::unique_ptr<SystemTrayItem>
+TestSystemTrayDelegate::CreateRotationLockTrayItem(SystemTray* tray) {
+#if defined(OS_CHROMEOS)
+  return base::MakeUnique<TrayRotationLock>(tray);
+#else
+  return nullptr;
+#endif
+}
+
+void TestSystemTrayDelegate::GetCurrentIME(IMEInfo* info) {
+  *info = current_ime_;
+}
+
+void TestSystemTrayDelegate::GetAvailableIMEList(IMEInfoList* list) {
+  *list = ime_list_;
 }
 
 }  // namespace test

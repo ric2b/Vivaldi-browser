@@ -37,7 +37,7 @@ public:
 
     private:
         RefPtr<Context> m_context;
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
         WebThread* const m_thread;
 #endif
     };
@@ -48,7 +48,7 @@ public:
     template<typename T>
     static std::unique_ptr<WebDataConsumerHandle> create(std::unique_ptr<WebDataConsumerHandle> handle, T* updater)
     {
-        ASSERT(handle);
+        DCHECK(handle);
         Updater* u = nullptr;
         std::unique_ptr<CompositeDataConsumerHandle> p = wrapUnique(new CompositeDataConsumerHandle(std::move(handle), &u));
         *updater = u;
@@ -56,9 +56,10 @@ public:
     }
     ~CompositeDataConsumerHandle() override;
 
+    std::unique_ptr<Reader> obtainReader(Client*) override;
+
 private:
     class ReaderImpl;
-    Reader* obtainReaderInternal(Client*) override;
 
     const char* debugName() const override { return "CompositeDataConsumerHandle"; }
 

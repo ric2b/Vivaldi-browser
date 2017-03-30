@@ -6,10 +6,10 @@
 
 #include <vector>
 
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_model.h"
-#include "ash/shelf/shelf_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shelf/shelf_util.h"
-#include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_app_menu_item.h"
@@ -72,11 +72,6 @@ BrowserShortcutLauncherItemController::
 }
 
 void BrowserShortcutLauncherItemController::UpdateBrowserItemState() {
-  // The shell will not be available for win7_aura unittests like
-  // ChromeLauncherControllerTest.BrowserMenuGeneration.
-  if (!ash::Shell::HasInstance())
-    return;
-
   // Determine the new browser's active state and change if necessary.
   int browser_index =
       shelf_model_->GetItemIndexForType(ash::TYPE_BROWSER_SHORTCUT);
@@ -227,7 +222,7 @@ BrowserShortcutLauncherItemController::ItemSelected(const ui::Event& event) {
 
   // In case of a keyboard event, we were called by a hotkey. In that case we
   // activate the next item in line if an item of our list is already active.
-  if (event.type() & ui::ET_KEY_RELEASED) {
+  if (event.type() == ui::ET_KEY_RELEASED) {
     return ActivateOrAdvanceToNextBrowser();
   }
 
@@ -310,7 +305,7 @@ BrowserShortcutLauncherItemController::ActivateOrAdvanceToNextBrowser() {
     }
     browser = items[0];
   } else {
-    // If there is more then one suitable browser, we advance to the next if
+    // If there is more than one suitable browser, we advance to the next if
     // |browser| is already active - or - check the last used browser if it can
     // be used.
     std::vector<Browser*>::iterator i =
@@ -338,9 +333,8 @@ bool BrowserShortcutLauncherItemController::IsBrowserRepresentedInBrowserList(
     return false;
 
   // v1 App popup windows with a valid app id have their own icon.
-  if (browser->is_app() &&
-      browser->is_type_popup() &&
-      ash::Shell::GetInstance()->GetShelfDelegate()->GetShelfIDForAppID(
+  if (browser->is_app() && browser->is_type_popup() &&
+      ash::WmShell::Get()->shelf_delegate()->GetShelfIDForAppID(
           web_app::GetExtensionIdFromApplicationName(browser->app_name())) > 0)
     return false;
 

@@ -261,7 +261,7 @@ STDMETHODIMP BrowserAccessibilityWin::accHitTest(LONG x_left,
     return E_INVALIDARG;
 
   gfx::Point point(x_left, y_top);
-  if (!GetGlobalBoundsRect().Contains(point)) {
+  if (!GetScreenBoundsRect().Contains(point)) {
     // Return S_FALSE and VT_EMPTY when outside the object's boundaries.
     child->vt = VT_EMPTY;
     return S_FALSE;
@@ -294,7 +294,7 @@ STDMETHODIMP BrowserAccessibilityWin::accLocation(LONG* x_left,
   if (!target)
     return E_INVALIDARG;
 
-  gfx::Rect bounds = target->GetGlobalBoundsRect();
+  gfx::Rect bounds = target->GetScreenBoundsRect();
   *x_left = bounds.x();
   *y_top  = bounds.y();
   *width  = bounds.width();
@@ -516,8 +516,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_accParent(IDispatch** disp_parent) {
     // destruction. Possible cases where this could occur include tabs being
     // dragged to a new window, etc.
     if (!parent_obj) {
-      DVLOG(1) <<  "In Function: "
-               << __FUNCTION__
+      DVLOG(1) << "In Function: " << __func__
                << ". Parent IAccessible interface is NULL. Returning failure";
       return E_FAIL;
     }
@@ -699,7 +698,6 @@ STDMETHODIMP BrowserAccessibilityWin::role(LONG* role) {
     return E_INVALIDARG;
 
   *role = ia2_role();
-
   return S_OK;
 }
 
@@ -829,7 +827,7 @@ STDMETHODIMP BrowserAccessibilityWin::scrollTo(IA2ScrollType scroll_type) {
   if (!instance_active())
     return E_FAIL;
 
-  gfx::Rect r = GetLocation();
+  gfx::Rect r = GetFrameBoundsRect();
   switch(scroll_type) {
     case IA2_SCROLL_TYPE_TOP_LEFT:
       manager()->ScrollToMakeVisible(*this, gfx::Rect(r.x(), r.y(), 0, 0));
@@ -877,7 +875,7 @@ STDMETHODIMP BrowserAccessibilityWin::scrollToPoint(
     scroll_to -= manager()->GetViewBounds().OffsetFromOrigin();
   } else if (coordinate_type == IA2_COORDTYPE_PARENT_RELATIVE) {
     if (GetParent())
-      scroll_to += GetParent()->GetLocation().OffsetFromOrigin();
+      scroll_to += GetParent()->GetFrameBoundsRect().OffsetFromOrigin();
   } else {
     return E_INVALIDARG;
   }
@@ -898,9 +896,12 @@ STDMETHODIMP BrowserAccessibilityWin::get_groupPosition(
   if (!group_level || !similar_items_in_group || !position_in_group)
     return E_INVALIDARG;
 
-  *group_level = 0;
+  *group_level = GetIntAttribute(ui::AX_ATTR_HIERARCHICAL_LEVEL);
   *similar_items_in_group = GetIntAttribute(ui::AX_ATTR_SET_SIZE);
   *position_in_group = GetIntAttribute(ui::AX_ATTR_POS_IN_SET);
+
+  if (*group_level == *similar_items_in_group == *position_in_group == 0)
+    return S_FALSE;
   return S_OK;
 }
 
@@ -1042,21 +1043,15 @@ STDMETHODIMP BrowserAccessibilityWin::get_imagePosition(
     return E_INVALIDARG;
 
   if (coordinate_type == IA2_COORDTYPE_SCREEN_RELATIVE) {
-    HWND parent_hwnd =
-        manager()->ToBrowserAccessibilityManagerWin()->GetParentHWND();
-    if (!parent_hwnd)
-      return E_FAIL;
-    POINT top_left = {0, 0};
-    ::ClientToScreen(parent_hwnd, &top_left);
-    *x = GetLocation().x() + top_left.x;
-    *y = GetLocation().y() + top_left.y;
+    gfx::Rect bounds = GetScreenBoundsRect();
+    *x = bounds.x();
+    *y = bounds.y();
   } else if (coordinate_type == IA2_COORDTYPE_PARENT_RELATIVE) {
-    *x = GetLocation().x();
-    *y = GetLocation().y();
-    if (GetParent()) {
-      *x -= GetParent()->GetLocation().x();
-      *y -= GetParent()->GetLocation().y();
-    }
+    gfx::Rect bounds = GetPageBoundsRect();
+    gfx::Rect parent_bounds =
+        GetParent() ? GetParent()->GetPageBoundsRect() : gfx::Rect();
+    *x = bounds.x() - parent_bounds.x();
+    *y = bounds.y() - parent_bounds.y();
   } else {
     return E_INVALIDARG;
   }
@@ -1071,8 +1066,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_imageSize(LONG* height, LONG* width) {
   if (!height || !width)
     return E_INVALIDARG;
 
-  *height = GetLocation().height();
-  *width = GetLocation().width();
+  *height = GetPageBoundsRect().height();
+  *width = GetPageBoundsRect().width();
   return S_OK;
 }
 
@@ -2013,10 +2008,11 @@ STDMETHODIMP BrowserAccessibilityWin::get_characterExtents(
 
   gfx::Rect character_bounds;
   if (coordinate_type == IA2_COORDTYPE_SCREEN_RELATIVE) {
-    character_bounds = GetGlobalBoundsForRange(offset, 1);
+    character_bounds = GetScreenBoundsForRange(offset, 1);
   } else if (coordinate_type == IA2_COORDTYPE_PARENT_RELATIVE) {
-    character_bounds = GetLocalBoundsForRange(offset, 1);
-    character_bounds -= GetLocation().OffsetFromOrigin();
+    character_bounds = GetPageBoundsForRange(offset, 1);
+    if (GetParent())
+      character_bounds -= GetParent()->GetPageBoundsRect().OffsetFromOrigin();
   } else {
     return E_INVALIDARG;
   }
@@ -2517,7 +2513,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_startIndex(long* index) {
     return E_INVALIDARG;
 
   int32_t hypertext_offset = 0;
-  const auto parent = GetParent();
+  auto* parent = GetParent();
   if (parent) {
     hypertext_offset =
         ToBrowserAccessibilityWin(parent)->GetHypertextOffsetFromChild(*this);
@@ -3097,7 +3093,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_unclippedSubstringBounds(
     return E_INVALIDARG;
   }
 
-  gfx::Rect bounds = GetGlobalBoundsForRange(
+  gfx::Rect bounds = GetScreenBoundsForRange(
       start_index, end_index - start_index);
   *out_x = bounds.x();
   *out_y = bounds.y();
@@ -3118,7 +3114,7 @@ STDMETHODIMP BrowserAccessibilityWin::scrollToSubstring(
     return E_INVALIDARG;
   }
 
-  manager()->ScrollToMakeVisible(*this, GetLocalBoundsForRange(
+  manager()->ScrollToMakeVisible(*this, GetPageBoundsForRange(
       start_index, end_index - start_index));
   manager()->ToBrowserAccessibilityManagerWin()->TrackScrollingObject(this);
 
@@ -3225,10 +3221,7 @@ BrowserAccessibilityWin::ConvertReturnedElement(
 
 STDMETHODIMP BrowserAccessibilityWin::GetPatternProvider(PATTERNID id,
                                                          IUnknown** provider) {
-  DVLOG(1) << "In Function: "
-           << __FUNCTION__
-           << " for pattern id: "
-           << id;
+  DVLOG(1) << "In Function: " << __func__ << " for pattern id: " << id;
   if (id == UIA_ValuePatternId || id == UIA_TextPatternId) {
     if (HasState(ui::AX_STATE_EDITABLE)) {
       DVLOG(1) << "Returning UIA text provider";
@@ -3242,10 +3235,7 @@ STDMETHODIMP BrowserAccessibilityWin::GetPatternProvider(PATTERNID id,
 
 STDMETHODIMP BrowserAccessibilityWin::GetPropertyValue(PROPERTYID id,
                                                        VARIANT* ret) {
-  DVLOG(1) << "In Function: "
-           << __FUNCTION__
-           << " for property id: "
-           << id;
+  DVLOG(1) << "In Function: " << __func__ << " for property id: " << id;
   V_VT(ret) = VT_EMPTY;
   if (id == UIA_ControlTypePropertyId) {
     if (HasState(ui::AX_STATE_EDITABLE)) {
@@ -3310,7 +3300,8 @@ HRESULT WINAPI BrowserAccessibilityWin::InternalQueryInterface(
       return E_NOINTERFACE;
     }
   } else if (iid == IID_IAccessibleHyperlink) {
-    auto ax_object = reinterpret_cast<const BrowserAccessibilityWin*>(this_ptr);
+    auto* ax_object =
+        reinterpret_cast<const BrowserAccessibilityWin*>(this_ptr);
     if (!ax_object || !ax_object->IsHyperlink()) {
       *object = nullptr;
       return E_NOINTERFACE;
@@ -3326,7 +3317,7 @@ void BrowserAccessibilityWin::ComputeStylesIfNeeded() {
     return;
 
   std::map<int, std::vector<base::string16>> attributes_map;
-  if (PlatformIsLeaf()) {
+  if (PlatformIsLeaf() || IsSimpleTextControl()) {
     attributes_map[0] = ComputeTextAttributes();
     std::map<int, std::vector<base::string16>> spelling_attributes =
         GetSpellingAttributes();
@@ -3338,11 +3329,15 @@ void BrowserAccessibilityWin::ComputeStylesIfNeeded() {
       } else {
         std::vector<base::string16>& existing_attributes =
             attributes_iterator->second;
+
+        // There might be a spelling attribute already in the list of text
+        // attributes, originating from "aria-invalid".
         auto existing_spelling_attribute =
             std::find(existing_attributes.begin(), existing_attributes.end(),
                       L"invalid:false");
         if (existing_spelling_attribute != existing_attributes.end())
           existing_attributes.erase(existing_spelling_attribute);
+
         existing_attributes.insert(existing_attributes.end(),
                                    spelling_attribute.second.begin(),
                                    spelling_attribute.second.end());
@@ -3354,7 +3349,7 @@ void BrowserAccessibilityWin::ComputeStylesIfNeeded() {
 
   int start_offset = 0;
   for (size_t i = 0; i < PlatformChildCount(); ++i) {
-    const auto child = ToBrowserAccessibilityWin(PlatformGetChild(i));
+    auto* child = ToBrowserAccessibilityWin(PlatformGetChild(i));
     DCHECK(child);
     std::vector<base::string16> attributes(child->ComputeTextAttributes());
 
@@ -3409,10 +3404,7 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
   StringAttributeToIA2(ui::AX_ATTR_HTML_TAG, "tag");
   StringAttributeToIA2(ui::AX_ATTR_ROLE, "xml-roles");
 
-  // Expose "level" attribute for headings, trees, etc.
   IntAttributeToIA2(ui::AX_ATTR_HIERARCHICAL_LEVEL, "level");
-
-  // Expose the set size and position in set.
   IntAttributeToIA2(ui::AX_ATTR_SET_SIZE, "setsize");
   IntAttributeToIA2(ui::AX_ATTR_POS_IN_SET, "posinset");
 
@@ -3559,16 +3551,17 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
 }
 
 void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
+  if (IsSimpleTextControl()) {
+    win_attributes_->hypertext = value();
+    return;
+  }
+
   if (!PlatformChildCount()) {
-    if (IsSimpleTextControl()) {
-      win_attributes_->hypertext = value();
-    } else if (IsRichTextControl()) {
+    if (IsRichTextControl()) {
       // We don't want to expose any associated label in IA2 Hypertext.
       return;
-    } else {
-      win_attributes_->hypertext = name();
     }
-
+    win_attributes_->hypertext = name();
     return;
   }
 
@@ -3578,7 +3571,7 @@ void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
   // the character index of each embedded object character to the id of the
   // child object it points to.
   for (unsigned int i = 0; i < PlatformChildCount(); ++i) {
-    const auto child = ToBrowserAccessibilityWin(PlatformGetChild(i));
+    auto* child = ToBrowserAccessibilityWin(PlatformGetChild(i));
     DCHECK(child);
     // Similar to Firefox, we don't expose text-only objects in IA2 hypertext.
     if (child->IsTextOnlyObject()) {
@@ -3889,13 +3882,6 @@ BrowserAccessibilityWin* BrowserAccessibilityWin::NewReference() {
 std::map<int, std::vector<base::string16>>
 BrowserAccessibilityWin::GetSpellingAttributes() const {
   std::map<int, std::vector<base::string16>> spelling_attributes;
-
-  // It doesn't make sense to expose spelling error information on anything
-  // other than a leaf object, because non-leaf objects do not expose text
-  // directly.
-  if (!PlatformIsLeaf())
-    return spelling_attributes;
-
   if (IsTextOnlyObject()) {
     const std::vector<int32_t>& marker_types =
         GetIntListAttribute(ui::AX_ATTR_MARKER_TYPES);
@@ -3917,14 +3903,13 @@ BrowserAccessibilityWin::GetSpellingAttributes() const {
       spelling_attributes[end_offset] = end_attributes;
     }
   }
-
   if (IsSimpleTextControl()) {
     int start_offset = 0;
     for (const BrowserAccessibility* static_text =
              BrowserAccessibilityManager::NextTextOnlyObject(
                  InternalGetChild(0));
          static_text; static_text = static_text->GetNextSibling()) {
-      auto text_win = ToBrowserAccessibilityWin(static_text);
+      auto* text_win = ToBrowserAccessibilityWin(static_text);
       if (text_win) {
         std::map<int, std::vector<base::string16>> text_spelling_attributes =
             text_win->GetSpellingAttributes();
@@ -3936,7 +3921,6 @@ BrowserAccessibilityWin::GetSpellingAttributes() const {
       }
     }
   }
-
   return spelling_attributes;
 }
 
@@ -4027,7 +4011,7 @@ void BrowserAccessibilityWin::IntAttributeToIA2(
 
 bool BrowserAccessibilityWin::IsHyperlink() const {
   int32_t hyperlink_index = -1;
-  const auto parent = GetParent();
+  auto* parent = GetParent();
   if (parent) {
     hyperlink_index =
         ToBrowserAccessibilityWin(parent)->GetHyperlinkIndexFromChild(*this);
@@ -4114,8 +4098,8 @@ int32_t BrowserAccessibilityWin::GetHypertextOffsetFromChild(
 
 int32_t BrowserAccessibilityWin::GetHypertextOffsetFromDescendant(
     const BrowserAccessibilityWin& descendant) const {
-  auto parent_object = ToBrowserAccessibilityWin(descendant.GetParent());
-  auto current_object = const_cast<BrowserAccessibilityWin*>(&descendant);
+  auto* parent_object = ToBrowserAccessibilityWin(descendant.GetParent());
+  auto* current_object = const_cast<BrowserAccessibilityWin*>(&descendant);
   while (parent_object && parent_object != this) {
     current_object = parent_object;
     parent_object = ToBrowserAccessibilityWin(current_object->GetParent());
@@ -4384,17 +4368,26 @@ LONG BrowserAccessibilityWin::FindBoundary(
     IA2TextBoundaryType ia2_boundary,
     LONG start_offset,
     ui::TextBoundaryDirection direction) {
+  // If the boundary is relative to the caret, use the selection
+  // affinity, otherwise default to downstream affinity.
+  ui::AXTextAffinity affinity =
+      start_offset == IA2_TEXT_OFFSET_CARET ?
+      manager()->GetTreeData().sel_focus_affinity :
+      ui::AX_TEXT_AFFINITY_DOWNSTREAM;
+
   HandleSpecialTextOffset(text, &start_offset);
   if (ia2_boundary == IA2_TEXT_BOUNDARY_WORD)
     return GetWordStartBoundary(static_cast<int>(start_offset), direction);
-  if (ia2_boundary == IA2_TEXT_BOUNDARY_LINE)
-    return GetLineStartBoundary(static_cast<int>(start_offset), direction);
+  if (ia2_boundary == IA2_TEXT_BOUNDARY_LINE) {
+    return GetLineStartBoundary(
+        static_cast<int>(start_offset), direction, affinity);
+  }
 
   ui::TextBoundaryType boundary = IA2TextBoundaryToTextBoundary(ia2_boundary);
   const std::vector<int32_t>& line_breaks =
       GetIntListAttribute(ui::AX_ATTR_LINE_BREAKS);
   return ui::FindAccessibleTextBoundary(
-      text, line_breaks, boundary, start_offset, direction);
+      text, line_breaks, boundary, start_offset, direction, affinity);
 }
 
 LONG BrowserAccessibilityWin::FindStartOfStyle(
@@ -4687,7 +4680,7 @@ void BrowserAccessibilityWin::InitRoleAndState() {
     ia_state |= STATE_SYSTEM_SELECTED;
   if (HasState(ui::AX_STATE_VISITED))
     ia_state |= STATE_SYSTEM_TRAVERSED;
-  if (!HasState(ui::AX_STATE_ENABLED))
+  if (HasState(ui::AX_STATE_DISABLED))
     ia_state |= STATE_SYSTEM_UNAVAILABLE;
   if (HasState(ui::AX_STATE_VERTICAL))
     ia2_state |= IA2_STATE_VERTICAL;

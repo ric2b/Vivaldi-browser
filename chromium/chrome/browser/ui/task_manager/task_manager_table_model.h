@@ -11,10 +11,14 @@
 
 #include "base/macros.h"
 #include "base/values.h"
-#include "chrome/browser/task_management/task_manager_observer.h"
+#include "chrome/browser/task_manager/task_manager_observer.h"
 #include "ui/base/models/table_model.h"
 
-namespace task_management {
+namespace content {
+class WebContents;
+}
+
+namespace task_manager {
 
 class TaskManagerValuesStringifier;
 
@@ -45,9 +49,8 @@ class TableViewDelegate {
 
   virtual TableSortDescriptor GetSortDescriptor() const = 0;
 
-  // As the name of |visible_column_index| implies, it must by the index of the
-  // column in the visible columns array.
-  virtual void ToggleSortOrder(int visible_column_index) = 0;
+  virtual void SetSortDescriptor(
+      const TableSortDescriptor& sort_descriptor) = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TableViewDelegate);
@@ -67,7 +70,7 @@ class TaskManagerTableModel
   void SetObserver(ui::TableModelObserver* observer) override;
   int CompareValues(int row1, int row2, int column_id) override;
 
-  // task_management::TaskManagerObserver:
+  // task_manager::TaskManagerObserver:
   void OnTaskAdded(TaskId id) override;
   void OnTaskToBeRemoved(TaskId id) override;
   void OnTasksRefreshed(const TaskIdList& task_ids) override;
@@ -100,8 +103,13 @@ class TaskManagerTableModel
 
   void ToggleColumnVisibility(int column_id);
 
+  // Returns the row index corresponding to a particular WebContents. Returns -1
+  // if |web_contents| is nullptr, or is not currently found in the model (for
+  // example, if the tab is currently crashed).
+  int GetRowForWebContents(content::WebContents* web_contents);
+
  private:
-  friend class TaskManagerTesterImpl;
+  friend class TaskManagerTester;
 
   // Start / stop observing the task manager.
   void StartUpdating();
@@ -140,6 +148,6 @@ class TaskManagerTableModel
   DISALLOW_COPY_AND_ASSIGN(TaskManagerTableModel);
 };
 
-}  // namespace task_management
+}  // namespace task_manager
 
 #endif  // CHROME_BROWSER_UI_TASK_MANAGER_TASK_MANAGER_TABLE_MODEL_H_

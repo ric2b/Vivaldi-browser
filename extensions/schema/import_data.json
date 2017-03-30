@@ -441,6 +441,23 @@
             "description": "Name of data type."
           }
         ]
+      },
+      {
+        "name": "onImportItemFailed",
+        "type": "function",
+        "description": "Fired when a import session for a data type has failed.",
+        "parameters": [
+          {
+            "name": "item",
+            "type": "string",
+            "description": "Name of data type."
+          },
+          {
+            "name": "error",
+            "type": "string",
+            "description": "Error message that can be shown to the user."
+          }
+        ]
       }
     ]
   }

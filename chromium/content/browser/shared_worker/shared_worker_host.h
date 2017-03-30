@@ -7,6 +7,7 @@
 
 #include <list>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -56,6 +57,11 @@ class SharedWorkerHost {
   void DocumentDetached(SharedWorkerMessageFilter* filter,
                         unsigned long long document_id);
 
+  // Removes the references to shared workers from the all documents in the
+  // renderer frame. And shuts down any shared workers that are no longer
+  // referenced by active documents.
+  void RenderFrameDetached(int render_process_id, int render_frame_id);
+
   void WorkerContextClosed();
   void WorkerReadyForInspection();
   void WorkerScriptLoaded();
@@ -97,11 +103,11 @@ class SharedWorkerHost {
 
    private:
     SharedWorkerMessageFilter* filter_;
-    int route_id_;
+    const int route_id_;
     int message_port_id_;
   };
 
-  typedef std::list<FilterInfo> FilterList;
+  using FilterList = std::list<FilterInfo>;
 
   // Relays |message| to the SharedWorker. Takes care of parsing the message if
   // it contains a message port and sending it a valid route id.
@@ -122,8 +128,8 @@ class SharedWorkerHost {
   scoped_refptr<WorkerDocumentSet> worker_document_set_;
   FilterList filters_;
   SharedWorkerMessageFilter* container_render_filter_;
-  int worker_process_id_;
-  int worker_route_id_;
+  const int worker_process_id_;
+  const int worker_route_id_;
   bool termination_message_sent_;
   bool closed_;
   const base::TimeTicks creation_time_;

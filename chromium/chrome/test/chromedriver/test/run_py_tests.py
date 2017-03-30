@@ -49,9 +49,6 @@ if util.IsLinux():
 
 
 _NEGATIVE_FILTER = [
-    # This test is flaky since it uses setTimeout.
-    # Re-enable once crbug.com/177511 is fixed and we can remove setTimeout.
-    'ChromeDriverTest.testAlert',
     # This test is too flaky on the bots, but seems to run perfectly fine
     # on developer workstations.
     'ChromeDriverTest.testEmulateNetworkConditionsNameSpeed',
@@ -61,12 +58,20 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testReturningAFunctionInJavascript',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1367
     'ChromeExtensionsCapabilityTest.testWaitsForExtensionToLoad',
+    # TODO: re-enable tests when DevTools supports ScreenOrientation commands.
+    'ChromeDriverAndroidTest.testScreenOrientation',
+    'ChromeDriverAndroidTest.testMultipleScreenOrientationChanges',
+    'ChromeDriverAndroidTest.testDeleteScreenOrientationManual',
+    'ChromeDriverAndroidTest.testScreenOrientationAcrossMultipleTabs',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
 _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://code.google.com/p/chromedriver/issues/detail?id=992
     'ChromeDownloadDirTest.testDownloadDirectoryOverridesExistingPreferences',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1431
+    'ChromeDriverTest.testAutoReporting',
+    'ChromeDriverTest.testConsoleLogSources',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -144,6 +149,9 @@ _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1431
+        'ChromeDriverTest.testAutoReporting',
+        'ChromeDriverTest.testConsoleLogSources',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -181,6 +189,8 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverPageLoadTimeoutTest.testPageLoadTimeoutCrossDomain',
         'ChromeDriverPageLoadTimeoutTest.'
             'testHistoryNavigationWithPageLoadTimeout',
+        # Webview shell doesn't support Alerts.
+        'ChromeDriverTest.testAlert',
     ]
 )
 
@@ -545,6 +555,10 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     alert_button.Click()
     self.assertTrue(self._driver.IsAlertOpen())
 
+  def testPageLoadStrategyIsNormalByDefault(self):
+    self.assertEquals('normal',
+                      self._driver.capabilities['pageLoadStrategy'])
+
   def testClearElement(self):
     self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
     text = self._driver.ExecuteScript(
@@ -717,10 +731,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
 
   def testAlert(self):
     self.assertFalse(self._driver.IsAlertOpen())
-    self._driver.ExecuteScript(
-        'window.setTimeout('
-        '    function() { window.confirmed = confirm(\'HI\'); },'
-        '    0);')
+    self._driver.ExecuteScript('window.confirmed = confirm(\'HI\');')
     self.assertTrue(self._driver.IsAlertOpen())
     self.assertEquals('HI', self._driver.GetAlertMessage())
     self._driver.HandleAlert(False)
@@ -818,6 +829,22 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     else:
       self.assertEqual(2, len(logs))
 
+  def testPendingConsoleLog(self):
+    new_logs = [""]
+    def GetPendingLogs(driver):
+      new_logs[0] = driver.GetLog('browser')
+      return new_logs[0]
+
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/pending_console_log.html'))
+    logs = self._driver.GetLog('browser')
+    self.assertEqual('console-api', logs[0]['source'])
+    self.assertTrue('InitialError' in logs[0]['message'])
+
+    self.WaitForCondition(lambda: len(GetPendingLogs(self._driver)) > 0 , 11)
+    self.assertEqual('console-api', new_logs[0][0]['source'])
+    self.assertTrue('RepeatedError' in new_logs[0][0]['message'])
+
   def testAutoReporting(self):
     self.assertFalse(self._driver.IsAutoReporting())
     self._driver.SetAutoReporting(True)
@@ -881,167 +908,10 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertRaises(chromedriver.UnknownError,
                       self._driver.GetNetworkConditions)
 
-  def testEmulateNetworkConnection(self):
-    # Network conditions must be set before it can be retrieved.
-    self.assertRaises(chromedriver.UnknownError,
-                      self._driver.GetNetworkConditions)
-
-    # Test 4G connection.
-    connection_type = 0x8
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 20)
-    self.assertEquals(network['upload_throughput'], 4096 * 1024)
-    self.assertEquals(network['upload_throughput'], 4096 * 1024)
-    self.assertEquals(network['offline'], False)
-
-    # Test 3G connection.
-    connection_type = 0x10
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 100)
-    self.assertEquals(network['upload_throughput'], 750 * 1024)
-    self.assertEquals(network['upload_throughput'], 750 * 1024)
-    self.assertEquals(network['offline'], False)
-
-    # Test 2G connection.
-    connection_type = 0x20
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 300)
-    self.assertEquals(network['upload_throughput'], 250 * 1024)
-    self.assertEquals(network['upload_throughput'], 250 * 1024)
-    self.assertEquals(network['offline'], False)
-
-    # Connection with 4G, 3G, and 2G bits on.
-    # Tests that 4G takes precedence.
-    connection_type = 0x38
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 20)
-    self.assertEquals(network['upload_throughput'], 4096 * 1024)
-    self.assertEquals(network['upload_throughput'], 4096 * 1024)
-    self.assertEquals(network['offline'], False)
-
-    # Network Conditions again cannot be retrieved after they've been deleted.
-    self._driver.DeleteNetworkConditions()
-    self.assertRaises(chromedriver.UnknownError,
-                      self._driver.GetNetworkConditions)
-
-  def testWifiEmulation(self):
-    connection_type = 0x2
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 2)
-    self.assertEquals(network['upload_throughput'], 30720 * 1024)
-    self.assertEquals(network['download_throughput'], 30720 * 1024)
-    self.assertEquals(network['offline'], False)
-
-  def testAirplaneModeEmulation(self):
-    connection_type = 0x1
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 0)
-    self.assertEquals(network['upload_throughput'], 0)
-    self.assertEquals(network['download_throughput'], 0)
-    self.assertEquals(network['offline'], True)
-
-  def testWifiAndAirplaneModeEmulation(self):
-    # Connection with both Wifi and Airplane Mode on.
-    # Tests that Wifi takes precedence over Airplane Mode.
-    connection_type = 0x3
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 2)
-    self.assertEquals(network['upload_throughput'], 30720 * 1024)
-    self.assertEquals(network['download_throughput'], 30720 * 1024)
-    self.assertEquals(network['offline'], False)
-
-  def testNetworkConnectionTypeIsAppliedToAllTabsImmediately(self):
-    def respondWithString(request):
-      return {}, """
-        <html>
-        <body>%s</body>
-        </html>""" % "hello world!"
-
-    self._http_server.SetCallbackForPath(
-      '/helloworld', respondWithString)
-
-    # Set network to online
-    connection_type = 0x10
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['offline'], False)
-
-    # Open a window with two divs counting successful + unsuccessful
-    # attempts to complete XML task
-    self._driver.Load(
-        self.GetHttpUrlForFile('/chromedriver/xmlrequest_test.html'))
-    window1_handle = self._driver.GetCurrentWindowHandle()
-    old_handles = self._driver.GetWindowHandles()
-    self._driver.FindElement('id', 'requestButton').Click()
-
-    self._driver.FindElement('id', 'link').Click()
-    new_window_handle = self.WaitForNewWindow(self._driver, old_handles)
-    self.assertNotEqual(None, new_window_handle)
-    self._driver.SwitchToWindow(new_window_handle)
-    self.assertEquals(new_window_handle, self._driver.GetCurrentWindowHandle())
-
-    # Set network to offline to determine whether the XML task continues to
-    # run in the background, indicating that the conditions are only applied
-    # to the current WebView
-    connection_type = 0x1
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['offline'], True)
-
-    self._driver.SwitchToWindow(window1_handle)
-    connection_type = 0x1
-    self._driver.SetNetworkConnection(connection_type)
-    self.assertEquals(network['offline'], True)
-
-  def testNetworkConnectionTypeIsAppliedToAllTabs(self):
-
-    self.assertRaises(chromedriver.UnknownError,
-                      self._driver.GetNetworkConditions)
-
-    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/page_test.html'))
-    window1_handle = self._driver.GetCurrentWindowHandle()
-    old_handles = self._driver.GetWindowHandles()
-
-    # Test connection is offline.
-    connection_type = 0x1;
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 0)
-    self.assertEquals(network['offline'], True)
-
-    # Navigate to another window.
-    self._driver.FindElement('id', 'link').Click()
-    new_window_handle = self.WaitForNewWindow(self._driver, old_handles)
-    self.assertNotEqual(None, new_window_handle)
-    self._driver.SwitchToWindow(new_window_handle)
-    self.assertEquals(new_window_handle, self._driver.GetCurrentWindowHandle())
-    self.assertRaises(
-        chromedriver.NoSuchElement, self._driver.FindElement, 'id', 'link')
-
-    # Set connection to 3G in second window.
-    connection_type = 0x10;
-    self._driver.SetNetworkConnection(connection_type)
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['offline'], False)
-
-    self._driver.SwitchToWindow(window1_handle)
-    self.assertEquals(window1_handle, self._driver.GetCurrentWindowHandle())
-
-    # Test whether first window has old or new network conditions.
-    network = self._driver.GetNetworkConditions()
-    self.assertEquals(network['latency'], 100)
-
   def testEmulateNetworkConditionsName(self):
     # DSL: 2Mbps throughput, 5ms RTT
-    #latency = 5
-    #throughput = 2048 * 1024
+    # latency = 5
+    # throughput = 2048 * 1024
     self._driver.SetNetworkConditionsName('DSL')
 
     network = self._driver.GetNetworkConditions()
@@ -1413,6 +1283,11 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.WaitForCondition(lambda: self._driver.IsAlertOpen())
     self._driver.HandleAlert(True)
 
+  def testThrowErrorWithExecuteScript(self):
+    self.assertRaisesRegexp(
+        chromedriver.UnknownError, "some error",
+        self._driver.ExecuteScript, 'throw new Error("some error")')
+
 
 class ChromeDriverPageLoadTimeoutTest(ChromeDriverBaseTestWithWebServer):
 
@@ -1526,6 +1401,112 @@ class ChromeDriverAndroidTest(ChromeDriverBaseTest):
     self.assertRaises(chromedriver.UnknownError, self.CreateDriver)
     self._drivers[0].Quit()
     self._drivers[0] = self.CreateDriver()
+
+  def testScreenOrientation(self):
+    self._driver = self.CreateDriver()
+    self._driver.Load(
+      ChromeDriverTest.GetHttpUrlForFile('/chromedriver/orientation_test.html'))
+    screen_orientation_js = self._driver.ExecuteScript(
+        'return screen.orientation.type')
+    screen_orientation = self._driver.GetScreenOrientation()['orientation']
+    if screen_orientation == "LANDSCAPE":
+      screen_orientation = 'landscape-primary'
+    elif screen_orientation == "PORTRAIT":
+      screen_orientation = 'portrait-primary'
+    self.assertEqual(screen_orientation, screen_orientation_js)
+
+    self._driver.SetScreenOrientation("portrait-primary")
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.WaitForCondition(
+      lambda: 'orientation change 1' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    self.assertEqual(screen_orientation['orientation'], "PORTRAIT")
+
+    self._driver.SetScreenOrientation("portrait-secondary")
+    self.WaitForCondition(
+      lambda: 'orientation change 2' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "PORTRAIT")
+
+    self._driver.SetScreenOrientation("PORTRAIT")
+    self.WaitForCondition(
+      lambda: 'orientation change 3' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "PORTRAIT")
+
+    self._driver.SetScreenOrientation("landscape-primary")
+    self.WaitForCondition(
+      lambda: 'orientation change 4' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "LANDSCAPE")
+
+    self._driver.SetScreenOrientation("landscape-secondary")
+    self.WaitForCondition(
+      lambda: 'orientation change 5' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "LANDSCAPE")
+
+    self._driver.SetScreenOrientation("LANDSCAPE")
+    self.WaitForCondition(
+      lambda: 'orientation change 6' in self._driver.FindElement(
+        'tag name', 'div').GetText())
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "LANDSCAPE")
+
+  def testMultipleScreenOrientationChanges(self):
+    self._driver = self.CreateDriver()
+
+    self._driver.SetScreenOrientation('PORTRAIT')
+    self.assertEqual(
+      self._driver.GetScreenOrientation()['orientation'], 'PORTRAIT')
+
+    self._driver.SetScreenOrientation('PORTRAIT')
+    self.assertEqual(
+      self._driver.GetScreenOrientation()['orientation'], 'PORTRAIT')
+
+    self._driver.DeleteScreenOrientation()
+    self._driver.DeleteScreenOrientation()
+
+  def testDeleteScreenOrientationManual(self):
+    self._driver = self.CreateDriver()
+
+    manual_test = False;
+
+    self._driver.SetScreenOrientation("LANDSCAPE")
+    screen_orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(screen_orientation['orientation'], "LANDSCAPE")
+    if(manual_test):
+      time.sleep(10)
+      # While sleeping, test that the orientation cannot be changed.
+
+    print "Screen orientation lock deleted."
+    self._driver.DeleteScreenOrientation();
+    if(manual_test):
+      time.sleep(10)
+      # While sleeping, test that orientation can be changed by manually
+      # rotating the device.
+
+  def testScreenOrientationAcrossMultipleTabs(self):
+    self._driver = self.CreateDriver()
+
+    self._driver.SetScreenOrientation('LANDSCAPE')
+    self._driver.Load(
+      ChromeDriverTest.GetHttpUrlForFile('/chromedriver/page_test.html'))
+    window1 = self._driver.GetCurrentWindowHandle()
+    self._driver.FindElement('id', 'link').Click()
+    orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(orientation['orientation'], 'LANDSCAPE')
+
+    self._driver.ExecuteScript('window.name = "oldWindow";')
+    self._driver.SwitchToWindow('oldWindow')
+    self.assertEqual(window1, self._driver.GetCurrentWindowHandle())
+    orientation = self._driver.GetScreenOrientation()
+    self.assertEqual(orientation['orientation'], 'LANDSCAPE')
+
 
 class ChromeDownloadDirTest(ChromeDriverBaseTest):
 
@@ -1860,6 +1841,185 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
         mobile_emulation = {'deviceName': 'Google Nexus 5'})
     self.assertIn('hasTouchScreen', driver.capabilities)
     self.assertTrue(driver.capabilities['hasTouchScreen'])
+
+  def testDoesntWaitWhenPageLoadStrategyIsNone(self):
+    class HandleRequest(object):
+      def __init__(self):
+        self.sent_hello = threading.Event()
+
+      def slowPage(self, request):
+        self.sent_hello.wait(2)
+        return {}, """
+        <html>
+        <body>hello</body>
+        </html>"""
+
+    handler = HandleRequest()
+    self._http_server.SetCallbackForPath('/slow', handler.slowPage)
+
+    driver = self.CreateDriver(page_load_strategy='none')
+    self.assertEquals('none', driver.capabilities['pageLoadStrategy'])
+
+    driver.Load(self._http_server.GetUrl() + '/chromedriver/empty.html')
+    driver.Load(self._http_server.GetUrl() + '/slow')
+    self.assertFalse('hello' in driver.GetPageSource())
+    handler.sent_hello.set()
+    self.WaitForCondition(lambda: 'hello' in driver.GetPageSource())
+    self.assertTrue('hello' in driver.GetPageSource())
+
+  def testUnsupportedPageLoadStrategyRaisesException(self):
+    self.assertRaises(chromedriver.UnknownError,
+                      self.CreateDriver, page_load_strategy="unsupported")
+
+  def testNetworkConnectionDisabledByDefault(self):
+    driver = self.CreateDriver()
+    self.assertFalse(driver.capabilities['networkConnectionEnabled'])
+
+  def testNetworkConnectionUnsupported(self):
+    driver = self.CreateDriver()
+    # Network connection capability must be enabled to set/retrieve
+    self.assertRaises(chromedriver.UnknownError,
+                      driver.GetNetworkConnection)
+
+    self.assertRaises(chromedriver.UnknownError,
+                      driver.SetNetworkConnection, 0x1)
+
+  def testNetworkConnectionEnabled(self):
+    # mobileEmulation must be enabled for networkConnection to be enabled
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+    self.assertTrue(driver.capabilities['mobileEmulationEnabled'])
+    self.assertTrue(driver.capabilities['networkConnectionEnabled'])
+
+  def testEmulateNetworkConnection4g(self):
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+    # Test 4G connection.
+    connection_type = 0x8
+    driver.SetNetworkConnection(connection_type)
+    network = driver.GetNetworkConnection()
+    self.assertEquals(network, connection_type)
+
+  def testEmulateNetworkConnectionMultipleBits(self):
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+    # Connection with 4G, 3G, and 2G bits on.
+    # Tests that 4G takes precedence.
+    connection_type = 0x38
+    driver.SetNetworkConnection(connection_type)
+    network = driver.GetNetworkConnection()
+    self.assertEquals(network, connection_type)
+
+  def testWifiAndAirplaneModeEmulation(self):
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+    # Connection with both Wifi and Airplane Mode on.
+    # Tests that Wifi takes precedence over Airplane Mode.
+    connection_type = 0x3
+    driver.SetNetworkConnection(connection_type)
+    network = driver.GetNetworkConnection()
+    self.assertEquals(network, connection_type)
+
+  def testNetworkConnectionTypeIsAppliedToAllTabsImmediately(self):
+    def respondWithString(request):
+      return {}, """
+        <html>
+        <body>%s</body>
+        </html>""" % "hello world!"
+
+    self._http_server.SetCallbackForPath(
+      '/helloworld', respondWithString)
+
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+
+    # Set network to online
+    connection_type = 0x10
+    driver.SetNetworkConnection(connection_type)
+
+    # Open a window with two divs counting successful + unsuccessful
+    # attempts to complete XML task
+    driver.Load(
+        self._http_server.GetUrl() +'/chromedriver/xmlrequest_test.html')
+    window1_handle = driver.GetCurrentWindowHandle()
+    old_handles = driver.GetWindowHandles()
+    driver.FindElement('id', 'requestButton').Click()
+
+    driver.FindElement('id', 'link').Click()
+    new_window_handle = self.WaitForNewWindow(driver, old_handles)
+    self.assertNotEqual(None, new_window_handle)
+    driver.SwitchToWindow(new_window_handle)
+    self.assertEquals(new_window_handle, driver.GetCurrentWindowHandle())
+
+    # Set network to offline to determine whether the XML task continues to
+    # run in the background, indicating that the conditions are only applied
+    # to the current WebView
+    connection_type = 0x1
+    driver.SetNetworkConnection(connection_type)
+
+    driver.SwitchToWindow(window1_handle)
+    connection_type = 0x1
+
+  def testNetworkConnectionTypeIsAppliedToAllTabs(self):
+    driver = self.CreateDriver(
+        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        network_connection=True)
+    driver.Load(self._http_server.GetUrl() +'/chromedriver/page_test.html')
+    window1_handle = driver.GetCurrentWindowHandle()
+    old_handles = driver.GetWindowHandles()
+
+    # Test connection is offline.
+    connection_type = 0x1;
+    driver.SetNetworkConnection(connection_type)
+    network = driver.GetNetworkConnection()
+    self.assertEquals(network, connection_type)
+
+    # Navigate to another window.
+    driver.FindElement('id', 'link').Click()
+    new_window_handle = self.WaitForNewWindow(driver, old_handles)
+    self.assertNotEqual(None, new_window_handle)
+    driver.SwitchToWindow(new_window_handle)
+    self.assertEquals(new_window_handle, driver.GetCurrentWindowHandle())
+    self.assertRaises(
+        chromedriver.NoSuchElement, driver.FindElement, 'id', 'link')
+
+    # Set connection to 3G in second window.
+    connection_type = 0x10;
+    driver.SetNetworkConnection(connection_type)
+
+    driver.SwitchToWindow(window1_handle)
+    self.assertEquals(window1_handle, driver.GetCurrentWindowHandle())
+
+    # Test whether first window has old or new network conditions.
+    network = driver.GetNetworkConnection()
+    self.assertEquals(network, connection_type)
+
+  def testW3cCompliantResponses(self):
+    # Asserts that chromedriver has received the correct response.
+    # W3C compliant responses should only be received when the capability has
+    # been set and the request was sent in the correct format.
+    driver = self.CreateDriver(send_w3c_request=True)
+    self.assertFalse(driver.w3c_compliant)
+
+    driver = self.CreateDriver(send_w3c_capability=True)
+    self.assertFalse(driver.w3c_compliant)
+
+    driver = self.CreateDriver(send_w3c_capability=True, send_w3c_request=True)
+    self.assertTrue(driver.w3c_compliant)
+
+    # Asserts that errors are being raised correctly in the test client
+    # with a w3c compliant driver.
+    self.assertRaises(chromedriver.UnknownError,
+                      driver.GetNetworkConnection)
+
+  def testNonCompliantByDefault(self):
+    driver = self.CreateDriver();
+    self.assertFalse(driver.w3c_compliant)
 
 
 class ChromeDriverLogTest(ChromeDriverBaseTest):

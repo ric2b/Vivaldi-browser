@@ -39,7 +39,6 @@ private:
 
     // Keep interpolate private, but allow calls within the hierarchy without
     // knowledge of type.
-    friend class DeferredLegacyStyleInterpolation;
     friend class InterpolableNumber;
     friend class InterpolableBool;
     friend class InterpolableList;
@@ -123,20 +122,17 @@ public:
     bool isList() const final { return true; }
     void set(size_t position, std::unique_ptr<InterpolableValue> value)
     {
-        ASSERT(position < m_size);
         m_values[position] = std::move(value);
     }
     const InterpolableValue* get(size_t position) const
     {
-        ASSERT(position < m_size);
         return m_values[position].get();
     }
     std::unique_ptr<InterpolableValue>& getMutable(size_t position)
     {
-        ASSERT(position < m_size);
         return m_values[position];
     }
-    size_t length() const { return m_size; }
+    size_t length() const { return m_values.size(); }
     bool equals(const InterpolableValue& other) const final;
     std::unique_ptr<InterpolableValue> clone() const final { return create(*this); }
     std::unique_ptr<InterpolableValue> cloneAndZero() const final;
@@ -146,20 +142,17 @@ public:
 private:
     void interpolate(const InterpolableValue& to, const double progress, InterpolableValue& result) const final;
     explicit InterpolableList(size_t size)
-        : m_size(size)
-        , m_values(m_size)
+        : m_values(size)
     {
     }
 
     InterpolableList(const InterpolableList& other)
-        : m_size(other.m_size)
-        , m_values(m_size)
+        : m_values(other.length())
     {
-        for (size_t i = 0; i < m_size; i++)
+        for (size_t i = 0; i < length(); i++)
             set(i, other.m_values[i]->clone());
     }
 
-    size_t m_size;
     Vector<std::unique_ptr<InterpolableValue>> m_values;
 };
 

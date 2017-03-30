@@ -14,7 +14,6 @@ if (is_mac) {
 }
 
 is_linux_without_udev = is_linux && !use_udev
-is_linux_without_dbus = is_linux && !use_dbus
 
 test("device_unittests") {
   sources = [
@@ -37,6 +36,7 @@ test("device_unittests") {
     "bluetooth/bluetooth_service_record_win_unittest.cc",
     "bluetooth/bluetooth_task_manager_win_unittest.cc",
     "bluetooth/bluetooth_uuid_unittest.cc",
+    "bluetooth/string_util_icu_unittest.cc",
     "bluetooth/test/bluetooth_gatt_server_test.cc",
     "bluetooth/test/bluetooth_gatt_server_test.h",
     "bluetooth/test/bluetooth_test.cc",
@@ -63,7 +63,6 @@ test("device_unittests") {
     "nfc/nfc_chromeos_unittest.cc",
     "nfc/nfc_ndef_record_unittest.cc",
     "test/run_all_unittests.cc",
-    "vr/vr_device_manager_unittest.cc",
   ]
 
   deps = [
@@ -74,11 +73,9 @@ test("device_unittests") {
     "//device/bluetooth:mocks",
     "//device/gamepad",
     "//device/gamepad:test_helpers",
+    "//device/geolocation:unittests",
     "//device/nfc",
     "//device/power_save_blocker",
-    "//device/vr",
-    "//device/vr:fakes",
-    "//device/vr:mojo_bindings",
     "//mojo/common",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
@@ -89,8 +86,9 @@ test("device_unittests") {
     "//url",
   ]
 
-  if (!is_linux_without_dbus && !is_chromeos) {
+  if (is_linux && !is_chromeos && use_dbus) {
     sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
+    deps += [ "//dbus:test_support" ]
   }
 
   # HID and Serial:
@@ -160,6 +158,8 @@ test("device_unittests") {
     deps += [
       ":bluetooth_test_java",
       ":bluetooth_test_jni_headers",
+      "//device/geolocation:geolocation_java",
+      "//device/geolocation:geolocation_java_test_support",
       "//device/usb:java",
     ]
     deps -= [ "//device/battery" ]
@@ -221,6 +221,19 @@ test("device_unittests") {
       "bluetooth/bluetooth_low_energy_win_fake.h",
     ]
   }
+
+  if (enable_webvr) {
+    sources += [
+      "vr/vr_device_manager_unittest.cc",
+      "vr/vr_service_impl_unittest.cc",
+    ]
+
+    deps += [
+      "//device/vr",
+      "//device/vr:fakes",
+      "//device/vr:mojo_bindings",
+    ]
+  }
 }
 
 if (is_android) {
@@ -237,7 +250,10 @@ if (is_android) {
       "//base:base_java",
       "//components/location/android:location_java",
       "//device/bluetooth:java",
+      "//third_party/android_tools:android_support_annotations_java",
     ]
+
+    srcjar_deps = [ ":bluetooth_test_javagen" ]
   }
 
   junit_binary("device_junit_tests") {
@@ -246,7 +262,14 @@ if (is_android) {
       "//base:base_java",
       "//base:base_java_test_support",
       "//device/gamepad:java",
+      "//third_party/android_tools:android_support_annotations_java",
     ]
     srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]
+  }
+
+  java_cpp_enum("bluetooth_test_javagen") {
+    sources = [
+      "bluetooth/test/bluetooth_test.h",
+    ]
   }
 }

@@ -87,7 +87,6 @@ preferCompositingToLCDTextEnabled initial=false, invalidate=AcceleratedCompositi
 webGLEnabled initial=false
 
 webGLErrorsToConsoleEnabled initial=true
-accelerated2dCanvasEnabled initial=false
 antialiased2dCanvasEnabled initial=true
 antialiasedClips2dCanvasEnabled initial=false
 accelerated2dCanvasMSAASampleCount type=int, initial=0
@@ -159,8 +158,6 @@ spatialNavigationEnabled initial=false
 # enabled, the user can initiate drag using long press.
 # crbug.com/304894 tracks removal once it's been enabled on all platforms.
 touchDragDropEnabled initial=false
-
-unifiedTextCheckerEnabled initial=false
 
 # Some apps could have a default video poster if it is not set.
 defaultVideoPosterURL type=String
@@ -290,6 +287,10 @@ layerSquashingEnabled initial=false
 # HTML sandbox, plugin sandboxing, and other important details.
 scriptEnabled initial=false
 
+# Forces initialization of main world, even if no scripts will be executed.
+# Used by inspector to report all contexts.
+forceMainWorldInitialization initial=false, invalidate=DOMWorlds
+
 # Compensates for poor text legibility on mobile devices. This value is
 # multiplied by the font scale factor when performing text autosizing of
 # websites that do not set an explicit viewport description.
@@ -416,3 +417,8 @@ useDefaultImageInterpolationQuality initial=false
 # Variant of the ParseHTMLOnMainThread experiment. One experiment immediately
 # tokenizes input bytes. The default is to tokenize with a post task.
 parseHTMLOnMainThreadSyncTokenize initial=false
+# Variant of the ParseHTMLOnMainThread experiment. This is designed to coalesce
+# TokenizedChunks when the experiment is running in threaded mode.
+parseHTMLOnMainThreadCoalesceChunks initial=false
+
+browserSideNavigationEnabled initial=false

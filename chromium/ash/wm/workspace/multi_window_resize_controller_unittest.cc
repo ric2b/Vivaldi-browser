@@ -6,7 +6,7 @@
 
 #include "ash/aura/wm_window_aura.h"
 #include "ash/common/ash_constants.h"
-#include "ash/frame/custom_frame_view_ash.h"
+#include "ash/common/frame/custom_frame_view_ash.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
@@ -89,7 +89,8 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
     if ((resize_controller_->windows_.window1 == wm_window ||
          resize_controller_->windows_.window2 == wm_window))
       return true;
-    return ContainsValue(resize_controller_->windows_.other_windows, wm_window);
+    return base::ContainsValue(resize_controller_->windows_.other_windows,
+                               wm_window);
   }
 
   bool IsOverWindows(const gfx::Point& loc) {

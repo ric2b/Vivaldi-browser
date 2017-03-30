@@ -34,9 +34,9 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/WritingDirection.h"
-#include "core/editing/commands/EditAction.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarker.h"
+#include "core/events/InputEvent.h"
 #include "platform/PasteMode.h"
 #include "platform/heap/Handle.h"
 #include <memory>
@@ -56,6 +56,8 @@ class SpellChecker;
 class StylePropertySet;
 class TextEvent;
 class UndoStack;
+
+enum class DeleteDirection;
 
 enum EditorCommandSource { CommandFromMenuOrKeyBinding, CommandFromDOM };
 enum EditorParagraphSeparator { EditorParagraphSeparatorIsDiv, EditorParagraphSeparatorIsP };
@@ -106,13 +108,13 @@ public:
 
     void clearLastEditCommand();
 
-    bool deleteWithDirection(SelectionDirection, TextGranularity, bool killRing, bool isTypingAction);
-    void deleteSelectionWithSmartDelete(bool smartDelete);
+    bool deleteWithDirection(DeleteDirection, TextGranularity, bool killRing, bool isTypingAction);
+    void deleteSelectionWithSmartDelete(bool smartDelete, InputEvent::InputType);
 
-    void applyStyle(StylePropertySet*, EditAction = EditActionUnspecified);
-    void applyParagraphStyle(StylePropertySet*, EditAction = EditActionUnspecified);
-    void applyStyleToSelection(StylePropertySet*, EditAction);
-    void applyParagraphStyleToSelection(StylePropertySet*, EditAction);
+    void applyStyle(StylePropertySet*, InputEvent::InputType);
+    void applyParagraphStyle(StylePropertySet*, InputEvent::InputType);
+    void applyStyleToSelection(StylePropertySet*, InputEvent::InputType);
+    void applyParagraphStyleToSelection(StylePropertySet*, InputEvent::InputType);
 
     void appliedEditing(CompositeEditCommand*);
     void unappliedEditing(EditCommandComposition*);
@@ -213,7 +215,7 @@ public:
     const VisibleSelection& mark() const; // Mark, to be used as emacs uses it.
     void setMark(const VisibleSelection&);
 
-    void computeAndSetTypingStyle(StylePropertySet* , EditAction = EditActionUnspecified);
+    void computeAndSetTypingStyle(StylePropertySet*, InputEvent::InputType);
 
     IntRect firstRectForRange(const EphemeralRange&) const;
     IntRect firstRectForRange(const Range*) const;
@@ -253,6 +255,7 @@ public:
 private:
     Member<LocalFrame> m_frame;
     Member<CompositeEditCommand> m_lastEditCommand;
+    const Member<UndoStack> m_undoStack;
     int m_preventRevealSelection;
     bool m_shouldStartNewKillRingSequence;
     bool m_shouldStyleWithCSS;
@@ -273,8 +276,6 @@ private:
     bool canDeleteRange(const EphemeralRange&) const;
     bool shouldDeleteRange(const EphemeralRange&) const;
 
-    UndoStack* undoStack() const;
-
     bool tryDHTMLCopy();
     bool tryDHTMLCut();
     bool tryDHTMLPaste(PasteMode);
@@ -294,7 +295,6 @@ private:
     SpellChecker& spellChecker() const;
 
     bool handleEditingKeyboardEvent(KeyboardEvent*);
-    void requestSpellcheckingAfterApplyingCommand(CompositeEditCommand*);
 };
 
 inline void Editor::setStartNewKillRingSequence(bool flag)

@@ -17,6 +17,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -28,16 +29,16 @@
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/sync_driver/data_type_manager.h"
-#include "components/sync_driver/data_type_manager_observer.h"
-#include "components/sync_driver/fake_data_type_controller.h"
-#include "components/sync_driver/glue/sync_backend_host_mock.h"
-#include "components/sync_driver/pref_names.h"
-#include "components/sync_driver/sync_api_component_factory_mock.h"
-#include "components/sync_driver/sync_driver_switches.h"
-#include "components/sync_driver/sync_prefs.h"
-#include "components/sync_driver/sync_service_observer.h"
-#include "components/sync_driver/sync_util.h"
+#include "components/sync/driver/data_type_manager.h"
+#include "components/sync/driver/data_type_manager_observer.h"
+#include "components/sync/driver/fake_data_type_controller.h"
+#include "components/sync/driver/glue/sync_backend_host_mock.h"
+#include "components/sync/driver/pref_names.h"
+#include "components/sync/driver/sync_api_component_factory_mock.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/sync_prefs.h"
+#include "components/sync/driver/sync_service_observer.h"
+#include "components/sync/driver/sync_util.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
 #include "components/version_info/version_info.h"
 #include "components/version_info/version_info_values.h"
@@ -726,9 +727,9 @@ TEST_F(ProfileSyncServiceTest, MemoryPressureRecording) {
 // Verify that OnLocalSetPassphraseEncryption triggers catch up configure sync
 // cycle, calls ClearServerData, shuts down and restarts sync.
 TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
-  base::FeatureList::ClearInstanceForTesting();
-  ASSERT_TRUE(base::FeatureList::InitializeInstance(
-      switches::kSyncClearDataOnPassphraseEncryption.name, std::string()));
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      switches::kSyncClearDataOnPassphraseEncryption);
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
 
@@ -778,9 +779,9 @@ TEST_F(ProfileSyncServiceTest, OnLocalSetPassphraseEncryption) {
 TEST_F(ProfileSyncServiceTest,
        OnLocalSetPassphraseEncryption_RestartDuringCatchUp) {
   syncer::ConfigureReason configure_reason = syncer::CONFIGURE_REASON_UNKNOWN;
-  base::FeatureList::ClearInstanceForTesting();
-  ASSERT_TRUE(base::FeatureList::InitializeInstance(
-      switches::kSyncClearDataOnPassphraseEncryption.name, std::string()));
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      switches::kSyncClearDataOnPassphraseEncryption);
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   ExpectSyncBackendHostCreation(1);
@@ -834,9 +835,9 @@ TEST_F(ProfileSyncServiceTest,
        OnLocalSetPassphraseEncryption_RestartDuringClearServerData) {
   syncer::SyncManager::ClearServerDataCallback captured_callback;
   syncer::ConfigureReason configure_reason = syncer::CONFIGURE_REASON_UNKNOWN;
-  base::FeatureList::ClearInstanceForTesting();
-  ASSERT_TRUE(base::FeatureList::InitializeInstance(
-      switches::kSyncClearDataOnPassphraseEncryption.name, std::string()));
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      switches::kSyncClearDataOnPassphraseEncryption);
   IssueTestTokens();
   CreateService(ProfileSyncService::AUTO_START);
   ExpectSyncBackendHostCreationCaptureClearServerData(&captured_callback);

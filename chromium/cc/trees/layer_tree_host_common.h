@@ -80,6 +80,7 @@ class CC_EXPORT LayerTreeHostCommon {
         bool can_render_to_separate_surface,
         bool can_adjust_raster_scales,
         bool verify_clip_tree_calculations,
+        bool verify_transform_tree_calculations,
         LayerImplList* render_surface_layer_list,
         PropertyTrees* property_trees);
 
@@ -97,6 +98,7 @@ class CC_EXPORT LayerTreeHostCommon {
     bool can_render_to_separate_surface;
     bool can_adjust_raster_scales;
     bool verify_clip_tree_calculations;
+    bool verify_transform_tree_calculations;
     LayerImplList* render_surface_layer_list;
     PropertyTrees* property_trees;
   };
@@ -106,9 +108,18 @@ class CC_EXPORT LayerTreeHostCommon {
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
                                       const gfx::Transform& device_transform,
+                                      float device_scale_factor,
                                       LayerImplList* render_surface_layer_list);
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
+                                      const gfx::Transform& device_transform,
+                                      LayerImplList* render_surface_layer_list);
+    CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
+                                      const gfx::Size& device_viewport_size,
+                                      LayerImplList* render_surface_layer_list);
+    CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
+                                      const gfx::Size& device_viewport_size,
+                                      float device_scale_factor,
                                       LayerImplList* render_surface_layer_list);
   };
 
@@ -121,7 +132,7 @@ class CC_EXPORT LayerTreeHostCommon {
       CalcDrawPropsImplInputsForTesting* inputs);
 
   template <typename Function>
-  static void CallFunctionForEveryLayer(LayerTreeHost* layer,
+  static void CallFunctionForEveryLayer(LayerTree* layer,
                                         const Function& function);
 
   template <typename Function>
@@ -134,6 +145,8 @@ class CC_EXPORT LayerTreeHostCommon {
     // franctional scroll offset.
     gfx::Vector2d scroll_delta;
 
+    ScrollUpdateInfo();
+
     bool operator==(const ScrollUpdateInfo& other) const;
 
     void ToProtobuf(proto::ScrollUpdateInfo* proto) const;
@@ -144,6 +157,12 @@ class CC_EXPORT LayerTreeHostCommon {
 struct CC_EXPORT ScrollAndScaleSet {
   ScrollAndScaleSet();
   ~ScrollAndScaleSet();
+
+  // The inner viewport scroll delta is kept separate since it's special.
+  // Because the inner (visual) viewport's maximum offset depends on the
+  // current page scale, the two must be committed at the same time to prevent
+  // clamping.
+  LayerTreeHostCommon::ScrollUpdateInfo inner_viewport_scroll;
 
   std::vector<LayerTreeHostCommon::ScrollUpdateInfo> scrolls;
   float page_scale_delta;
@@ -160,7 +179,7 @@ struct CC_EXPORT ScrollAndScaleSet {
 };
 
 template <typename Function>
-void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeHost* host,
+void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTree* host,
                                                     const Function& function) {
   for (auto* layer : *host) {
     function(layer);

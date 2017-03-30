@@ -56,14 +56,7 @@ if (use_opus_rtcd) {
   }
 }
 
-config("opus_warnings") {
-  if (is_clang && !is_nacl) {
-    # TODO(thakis): Remove once silk/macros.h has been fixed
-    cflags = [ "-Wno-expansion-to-defined" ]
-  }
-}
-
-source_set("opus") {
+static_library("opus") {
   gypi_values = exec_script("//build/gypi_to_gn.py",
                             [ rebase_path("opus_srcs.gypi") ],
                             "scope",
@@ -81,12 +74,7 @@ source_set("opus") {
   ]
 
   configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [
-    "//build/config/compiler:no_chromium_code",
-
-    # Must be after no_chromium_code to have an effect:
-    ":opus_warnings",
-  ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
   public_configs = [ ":opus_config" ]
   cflags = []
 
@@ -137,15 +125,17 @@ source_set("opus") {
 
   if (use_opus_arm_optimization) {
     sources += [
+      "src/celt/arm/fixed_arm64.h",
       "src/celt/arm/fixed_armv4.h",
       "src/celt/arm/fixed_armv5e.h",
       "src/celt/arm/kiss_fft_armv4.h",
       "src/celt/arm/kiss_fft_armv5e.h",
-      "src/celt/pitch_arm.h",
+      "src/celt/arm/pitch_arm.h",
       "src/silk/arm/SigProc_FIX_armv4.h",
       "src/silk/arm/SigProc_FIX_armv5e.h",
-      "src/silk/arm/macro_armv4.h",
-      "src/silk/arm/macro_armv5e.h",
+      "src/silk/arm/macros_arm64.h",
+      "src/silk/arm/macros_armv4.h",
+      "src/silk/arm/macros_armv5e.h",
     ]
 
     defines += [
@@ -164,7 +154,12 @@ source_set("opus") {
         "src/celt/arm/fft_arm.h",
         "src/celt/arm/mdct_arm.h",
         "src/celt/arm/pitch_arm.h",
+        "src/silk/arm/NSQ_neon.c",
+        "src/silk/arm/NSQ_neon.h",
+        "src/silk/arm/arm_silk_map.c",
       ]
+
+      include_dirs += [ "src" ]
 
       defines += [
         "OPUS_ARM_MAY_HAVE_EDSP",

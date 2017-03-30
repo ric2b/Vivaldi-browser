@@ -34,7 +34,7 @@
 #define EventListenerMap_h
 
 #include "core/CoreExport.h"
-#include "core/events/AddEventListenerOptions.h"
+#include "core/events/AddEventListenerOptionsResolved.h"
 #include "core/events/EventListenerOptions.h"
 #include "core/events/RegisteredEventListener.h"
 #include "wtf/Noncopyable.h"
@@ -57,24 +57,26 @@ public:
     bool containsCapturing(const AtomicString& eventType) const;
 
     void clear();
-    bool add(const AtomicString& eventType, EventListener*, const AddEventListenerOptions&, RegisteredEventListener* registeredListener);
+    bool add(const AtomicString& eventType, EventListener*, const AddEventListenerOptionsResolved&, RegisteredEventListener* registeredListener);
     bool remove(const AtomicString& eventType, const EventListener*, const EventListenerOptions&, size_t* indexOfRemovedListener, RegisteredEventListener* registeredListener);
     EventListenerVector* find(const AtomicString& eventType);
     Vector<AtomicString> eventTypes() const;
-
-    void copyEventListenersNotCreatedFromMarkupToTarget(EventTarget*);
 
     DECLARE_TRACE();
 
 private:
     friend class EventListenerIterator;
 
-    void assertNoActiveIterators();
+    void checkNoActiveIterators();
 
+    // We use HeapVector instead of HeapHashMap because
+    //  - HeapVector is much more space efficient than HeapHashMap.
+    //  - An EventTarget rarely has event listeners for many event types, and
+    //    HeapVector is faster in such cases.
     HeapVector<std::pair<AtomicString, Member<EventListenerVector>>, 2> m_entries;
 
-#if ENABLE(ASSERT)
-    int m_activeIteratorCount;
+#if DCHECK_IS_ON()
+    int m_activeIteratorCount = 0;
 #endif
 };
 
@@ -83,7 +85,7 @@ class EventListenerIterator {
     STACK_ALLOCATED();
 public:
     explicit EventListenerIterator(EventTarget*);
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     ~EventListenerIterator();
 #endif
 
@@ -97,8 +99,8 @@ private:
     unsigned m_index;
 };
 
-#if !ENABLE(ASSERT)
-inline void EventListenerMap::assertNoActiveIterators() { }
+#if !DCHECK_IS_ON()
+inline void EventListenerMap::checkNoActiveIterators() { }
 #endif
 
 } // namespace blink

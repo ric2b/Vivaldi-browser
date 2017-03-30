@@ -36,7 +36,6 @@ void CastBrowserCdmFactory::Create(
     const ::media::CdmConfig& cdm_config,
     const ::media::SessionMessageCB& session_message_cb,
     const ::media::SessionClosedCB& session_closed_cb,
-    const ::media::LegacySessionErrorCB& legacy_session_error_cb,
     const ::media::SessionKeysChangeCB& session_keys_change_cb,
     const ::media::SessionExpirationUpdateCB& session_expiration_update_cb,
     const ::media::CdmCreatedCB& cdm_created_cb) {
@@ -53,7 +52,7 @@ void CastBrowserCdmFactory::Create(
   if (cast_key_system == chromecast::media::KEY_SYSTEM_CLEAR_KEY) {
     // TODO(gunsch): handle ClearKey decryption. See crbug.com/441957
   } else {
-    cast_cdm = CreatePlatformBrowserCdm(cast_key_system);
+    cast_cdm = CreatePlatformBrowserCdm(cast_key_system, security_origin);
   }
 
   if (!cast_cdm) {
@@ -67,7 +66,6 @@ void CastBrowserCdmFactory::Create(
       base::Bind(&CastCdm::Initialize, base::Unretained(cast_cdm.get()),
                  ::media::BindToCurrentLoop(session_message_cb),
                  ::media::BindToCurrentLoop(session_closed_cb),
-                 ::media::BindToCurrentLoop(legacy_session_error_cb),
                  ::media::BindToCurrentLoop(session_keys_change_cb),
                  ::media::BindToCurrentLoop(session_expiration_update_cb)));
 
@@ -81,7 +79,8 @@ void CastBrowserCdmFactory::Create(
 }
 
 scoped_refptr<CastCdm> CastBrowserCdmFactory::CreatePlatformBrowserCdm(
-    const CastKeySystem& cast_key_system) {
+    const CastKeySystem& cast_key_system,
+    const GURL& security_origin) {
   return nullptr;
 }
 

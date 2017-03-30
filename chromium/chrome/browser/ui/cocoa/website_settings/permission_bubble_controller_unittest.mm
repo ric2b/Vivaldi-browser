@@ -12,6 +12,7 @@
 #include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/permissions/mock_permission_request.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/browser_window_controller.h"
@@ -20,7 +21,6 @@
 #include "chrome/browser/ui/cocoa/run_loop_testing.h"
 #import "chrome/browser/ui/cocoa/website_settings/permission_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/website_settings/split_block_button.h"
-#include "chrome/browser/ui/website_settings/mock_permission_bubble_request.h"
 #include "chrome/grit/generated_resources.h"
 #include "grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -38,6 +38,7 @@
 - (void)onBlock:(id)sender;
 - (void)onCustomize:(id)sender;
 - (void)onCheckboxChanged:(id)sender;
++ (NSInteger)getFullscreenLeftOffset;
 @end
 
 @interface SplitBlockButton (ExposedForTesting)
@@ -65,15 +66,16 @@ const char* const kPermissionC = "Permission C";
 }
 
 class PermissionBubbleControllerTest : public CocoaProfileTest,
-                                       public PermissionBubbleView::Delegate {
+                                       public PermissionPrompt::Delegate {
  public:
 
   MOCK_METHOD2(ToggleAccept, void(int, bool));
+  MOCK_METHOD1(TogglePersist, void(bool));
   MOCK_METHOD0(SetCustomizationMode, void());
   MOCK_METHOD0(Accept, void());
   MOCK_METHOD0(Deny, void());
   MOCK_METHOD0(Closing, void());
-  MOCK_METHOD1(SetView, void(PermissionBubbleView*));
+  MOCK_METHOD1(SetView, void(PermissionPrompt*));
 
   void SetUp() override {
     CocoaProfileTest::SetUp();
@@ -87,12 +89,12 @@ class PermissionBubbleControllerTest : public CocoaProfileTest,
   void TearDown() override {
     [controller_ close];
     chrome::testing::NSRunLoopRunAllPending();
-    STLDeleteElements(&requests_);
+    base::STLDeleteElements(&requests_);
     CocoaProfileTest::TearDown();
   }
 
   void AddRequest(const std::string& title) {
-    MockPermissionBubbleRequest* request = new MockPermissionBubbleRequest(
+    MockPermissionRequest* request = new MockPermissionRequest(
         title,
         l10n_util::GetStringUTF8(IDS_PERMISSION_ALLOW),
         l10n_util::GetStringUTF8(IDS_PERMISSION_DENY));
@@ -157,7 +159,7 @@ class PermissionBubbleControllerTest : public CocoaProfileTest,
  protected:
   PermissionBubbleController* controller_;  // Weak;  it deletes itself.
   std::unique_ptr<PermissionBubbleCocoa> bridge_;
-  std::vector<PermissionBubbleRequest*> requests_;
+  std::vector<PermissionRequest*> requests_;
   std::vector<bool> accept_states_;
 };
 
@@ -374,10 +376,12 @@ TEST_F(PermissionBubbleControllerTest, AnchorPositionWithoutLocationBar) {
 
   NSPoint anchor = [controller_ getExpectedAnchorPoint];
 
-  // Expected anchor location will be top center when there's no location bar.
+  // Expected anchor location will be top left when there's no location bar.
   NSWindow* window = browser()->window()->GetNativeWindow();
-  NSRect frame = [window frame];
-  NSPoint expected = NSMakePoint(frame.size.width / 2, frame.size.height);
+  NSRect frame = [[window contentView] frame];
+  NSPoint expected = NSMakePoint(
+      NSMinX(frame) + [PermissionBubbleController getFullscreenLeftOffset],
+      NSMaxY(frame));
   expected = ui::ConvertPointFromWindowToScreen(window, expected);
   EXPECT_NSEQ(expected, anchor);
 }

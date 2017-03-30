@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
@@ -24,6 +25,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/policy_switches.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -35,7 +37,6 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -116,7 +117,7 @@ class BlockingLoginTest
   void TearDownOnMainThread() override {
     RunUntilIdle();
     EXPECT_TRUE(responses_.empty());
-    STLDeleteElements(&responses_);
+    base::STLDeleteElements(&responses_);
     OobeBaseTest::TearDownOnMainThread();
   }
 
@@ -177,8 +178,10 @@ class BlockingLoginTest
     GaiaUrls* gaia = GaiaUrls::GetInstance();
     if (request.relative_url == gaia->client_login_to_oauth2_url().path() ||
         request.relative_url == gaia->oauth2_token_url().path() ||
-        request.relative_url.find(kDMRegisterRequest) == 0 ||
-        request.relative_url.find(kDMPolicyRequest) == 0) {
+        base::StartsWith(request.relative_url, kDMRegisterRequest,
+                         base::CompareCase::SENSITIVE) ||
+        base::StartsWith(request.relative_url, kDMPolicyRequest,
+                         base::CompareCase::SENSITIVE)) {
       if (!responses_.empty()) {
         response.reset(responses_.back());
         responses_.pop_back();

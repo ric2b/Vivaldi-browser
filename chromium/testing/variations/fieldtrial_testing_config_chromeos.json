@@ -20,6 +20,11 @@
             "group_name": "Enabled"
         }
     ],
+    "BlockSmallPluginContent": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "CaptivePortalInterstitial": [
         {
             "group_name": "Enabled"
@@ -64,6 +69,14 @@
             "group_name": "Enabled"
         }
     ],
+    "ExpectCTReporting": [
+        {
+            "enable_features": [
+                "ExpectCTReporting"
+            ],
+            "group_name": "ExpectCTReportingEnabled"
+        }
+    ],
     "ExtensionActionRedesign": [
         {
             "group_name": "Enabled"
@@ -72,19 +85,6 @@
     "GoogleBrandedContextMenu": [
         {
             "group_name": "branded"
-        }
-    ],
-    "LocalNTPSuggestionsService": [
-        {
-            "group_name": "Enabled"
-        }
-    ],
-    "MainFrameBeforeActivation": [
-        {
-            "enable_features": [
-                "MainFrameBeforeActivation"
-            ],
-            "group_name": "Enabled"
         }
     ],
     "MaterialDesignDownloads": [
@@ -120,6 +120,26 @@
             "group_name": "Enabled"
         }
     ],
+    "ParseHTMLOnMainThread": [
+        {
+            "enable_features": [
+                "ParseHTMLOnMainThread"
+            ],
+            "group_name": "Enabled",
+            "params": {
+                "parseHTMLOnMainThreadCoalesceChunks": "false",
+                "parseHTMLOnMainThreadSyncTokenize": "false"
+            }
+        }
+    ],
+    "PassiveDocumentEventListeners": [
+        {
+            "enable_features": [
+                "PassiveDocumentEventListeners"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "PasswordBranding": [
         {
             "group_name": "SmartLockBrandingSavePromptOnly"
@@ -128,6 +148,22 @@
     "PasswordManagerSettingsMigration": [
         {
             "group_name": "Enable"
+        }
+    ],
+    "PasswordSmartBubble": [
+        {
+            "group_name": "3-Times",
+            "params": {
+                "dismissal_count": "3"
+            }
+        }
+    ],
+    "PointerEvent": [
+        {
+            "enable_features": [
+                "PointerEvent"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "PreconnectMore": [
@@ -232,6 +268,17 @@
             "group_name": "ExperimentYes"
         }
     ],
+    "SpeculativeLaunchServiceWorker": [
+        {
+            "enable_features": [
+                "SpeculativeLaunchServiceWorker"
+            ],
+            "group_name": "Enabled"
+        },
+        {
+            "group_name": "Disabled"
+        }
+    ],
     "StrictSecureCookies": [
         {
             "group_name": "Enabled"
@@ -278,6 +325,11 @@
             "params": {
                 "fetch_period_min": "30"
             }
+        }
+    ],
+    "WebFontsInterventionV2": [
+        {
+            "group_name": "Enabled-slow2g"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

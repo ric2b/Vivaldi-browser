@@ -94,27 +94,29 @@ public:
         GammaAndColorProfileIgnored
     };
 
-    ImageDecoder(AlphaOption alphaOption, GammaAndColorProfileOption colorOptions, size_t maxDecodedBytes)
-        : m_premultiplyAlpha(alphaOption == AlphaPremultiplied)
-        , m_ignoreGammaAndColorProfile(colorOptions == GammaAndColorProfileIgnored)
-        , m_maxDecodedBytes(maxDecodedBytes)
-        , m_sizeAvailable(false)
-        , m_isAllDataReceived(false)
-        , m_failed(false) { }
-
     virtual ~ImageDecoder() { }
 
-    // Returns a caller-owned decoder of the appropriate type.  Returns 0 if
+    // Returns a caller-owned decoder of the appropriate type.  Returns nullptr if
     // we can't sniff a supported type from the provided data (possibly
     // because there isn't enough data yet).
     // Sets m_maxDecodedBytes to Platform::maxImageDecodedBytes().
-    static std::unique_ptr<ImageDecoder> create(const char* data, size_t length, AlphaOption, GammaAndColorProfileOption);
-    static std::unique_ptr<ImageDecoder> create(const SharedBuffer&, AlphaOption, GammaAndColorProfileOption);
-    static std::unique_ptr<ImageDecoder> create(const SegmentReader&, AlphaOption, GammaAndColorProfileOption);
+    static std::unique_ptr<ImageDecoder> create(PassRefPtr<SegmentReader> data, bool dataComplete,
+        AlphaOption, GammaAndColorProfileOption);
+    static std::unique_ptr<ImageDecoder> create(PassRefPtr<SharedBuffer> data, bool dataComplete,
+        AlphaOption alphaoption, GammaAndColorProfileOption colorOptions)
+    {
+        return create(SegmentReader::createFromSharedBuffer(data), dataComplete, alphaoption, colorOptions);
+    }
+
 
     virtual String filenameExtension() const = 0;
 
     bool isAllDataReceived() const { return m_isAllDataReceived; }
+
+    // Returns true if the buffer holds enough data to instantiate a decoder.
+    // This is useful for callers to determine whether a decoder instantiation
+    // failure is due to insufficient or bad data.
+    static bool hasSufficientDataToSniffImageType(const SharedBuffer&);
 
     void setData(PassRefPtr<SegmentReader> data, bool allDataReceived)
     {
@@ -218,14 +220,19 @@ public:
 
     ImageOrientation orientation() const { return m_orientation; }
 
-    void setIgnoreGammaAndColorProfile(bool flag) { m_ignoreGammaAndColorProfile = flag; }
     bool ignoresGammaAndColorProfile() const { return m_ignoreGammaAndColorProfile; }
-
     static void setTargetColorProfile(const WebVector<char>&);
-    bool hasColorProfile() const;
+
+
+    // Note that hasColorProfile refers to the existence of a not-ignored
+    // embedded color profile, and is independent of whether or not that
+    // profile's transform has been baked into the pixel values.
+    bool hasColorProfile() const { return m_hasColorProfile; }
+    void setColorProfileAndComputeTransform(const char* iccData, unsigned iccLength, bool hasAlpha, bool useSRGB);
 
 #if USE(QCMSLIB)
-    void setColorProfileAndTransform(const char* iccData, unsigned iccLength, bool hasAlpha, bool useSRGB);
+    // In contrast with hasColorProfile, this refers to the transform that has
+    // been baked into the pixels.
     qcms_transform* colorTransform() { return m_sourceToOutputDeviceColorTransform.get(); }
 #endif
 
@@ -267,6 +274,11 @@ public:
     virtual void setImagePlanes(std::unique_ptr<ImagePlanes>) { }
 
 protected:
+    ImageDecoder(AlphaOption alphaOption, GammaAndColorProfileOption colorOptions, size_t maxDecodedBytes)
+        : m_premultiplyAlpha(alphaOption == AlphaPremultiplied)
+        , m_ignoreGammaAndColorProfile(colorOptions == GammaAndColorProfileIgnored)
+        , m_maxDecodedBytes(maxDecodedBytes) { }
+
     // Calculates the most recent frame whose image data may be needed in
     // order to decode frame |frameIndex|, based on frame disposal methods
     // and |frameRectIsOpaque|, where |frameRectIsOpaque| signifies whether
@@ -302,10 +314,13 @@ protected:
     // Decodes the requested frame.
     virtual void decode(size_t) = 0;
 
+    // Returns the embedded image color profile.
+    const ImageFrame::ICCProfile& colorProfile() const { return m_colorProfile; }
+
     RefPtr<SegmentReader> m_data; // The encoded data.
     Vector<ImageFrame, 1> m_frameBufferCache;
-    bool m_premultiplyAlpha;
-    bool m_ignoreGammaAndColorProfile;
+    const bool m_premultiplyAlpha;
+    const bool m_ignoreGammaAndColorProfile;
     ImageOrientation m_orientation;
 
     // The maximum amount of memory a decoded image should require. Ideally,
@@ -313,9 +328,21 @@ protected:
     // (and then return the downsampled size from decodedSize()). Ignoring
     // this limit can cause excessive memory use or even crashes on low-
     // memory devices.
-    size_t m_maxDecodedBytes;
+    const size_t m_maxDecodedBytes;
 
 private:
+    enum class SniffResult {
+        JPEG,
+        PNG,
+        GIF,
+        WEBP,
+        ICO,
+        BMP,
+        Invalid
+    };
+
+    static SniffResult determineImageType(const char* data, size_t length);
+
     // Some code paths compute the size of the image as "width * height * 4"
     // and return it as a (signed) int.  Avoid overflow.
     static bool sizeCalculationMayOverflow(unsigned width, unsigned height)
@@ -326,9 +353,12 @@ private:
     }
 
     IntSize m_size;
-    bool m_sizeAvailable;
-    bool m_isAllDataReceived;
-    bool m_failed;
+    bool m_sizeAvailable = false;
+    bool m_isAllDataReceived = false;
+    bool m_failed = false;
+
+    bool m_hasColorProfile = false;
+    ImageFrame::ICCProfile m_colorProfile;
 
 #if USE(QCMSLIB)
     QCMSTransformUniquePtr m_sourceToOutputDeviceColorTransform;

@@ -16,6 +16,9 @@ declare_args() {
   # warnings, so normally this is done on a build machine and only the new
   # warnings are examined.
   use_vs_code_analysis = false
+
+  # Turn this on to have the linker output extra timing information.
+  win_linker_timing = false
 }
 
 # This is included by reference in the //build/config/compiler config that
@@ -37,10 +40,6 @@ config("compiler") {
     "/Gy",  # Enable function-level linking.
     "/FS",  # Preserve previous PDB behavior.
     "/bigobj",  # Some of our files are bigger than the regular limits.
-
-    # Tell the compiler to crash on failures. This is undocumented
-    # and unsupported but very handy.
-    "/d2FastFail",
   ]
 
   # Force C/C++ mode for the given GN detected file type. This is necessary
@@ -48,6 +47,15 @@ config("compiler") {
   # modes.
   cflags_c = [ "/TC" ]
   cflags_cc = [ "/TP" ]
+
+  # Flags not supported in version 2013.
+  if (visual_studio_version != "2013" && visual_studio_version != "2013e") {
+    cflags += [
+      # Tell the compiler to crash on failures. This is undocumented
+      # and unsupported but very handy.
+      "/d2FastFail",
+    ]
+  }
 
   if (visual_studio_version == "2015") {
     cflags += [
@@ -172,7 +180,6 @@ config("runtime_library") {
     "_ATL_NO_OPENGL",
     "_WINDOWS",
     "CERT_CHAIN_PARA_HAS_EXTRA_FIELDS",
-    "NTDDI_VERSION=0x0A000000",
     "PSAPI_VERSION=1",
     "WIN32",
     "_SECURE_ATL",
@@ -216,6 +223,7 @@ config("runtime_library") {
 # targets need to manually override it for their compiles.
 config("winver") {
   defines = [
+    "NTDDI_VERSION=0x0A000000",
     "_WIN32_WINNT=0x0A00",
     "WINVER=0x0A00",
   ]
@@ -260,7 +268,9 @@ config("common_linker_setup") {
     # which started happening more regularly after VS2013 Update 4.
     # Needs to be a bit lower for VS2015, or else errors out.
     "/maxilksize:0x7ff00000",
+  ]
 
+  ldflags += [
     # Tell the linker to crash on failures.
     "/fastfail",
   ]
@@ -275,6 +285,13 @@ config("common_linker_setup") {
     ldflags += [ "/DYNAMICBASE:NO" ]
   } else {
     ldflags += [ "/DYNAMICBASE" ]
+  }
+
+  if (win_linker_timing) {
+    ldflags += [
+      "/time",
+      "/verbose:incr",
+    ]
   }
 }
 
@@ -385,7 +402,13 @@ config("target_winrt") {
 # Config used by the MIDL template to disable warnings.
 config("midl_warnings") {
   if (is_clang) {
-    # MIDL generates code like "#endif !_MIDL_USE_GUIDDEF_".
-    cflags = [ "-Wno-extra-tokens" ]
+    cflags = [
+      # MIDL generates code like "#endif !_MIDL_USE_GUIDDEF_".
+      "-Wno-extra-tokens",
+
+      # TODO(thakis): Remove this once clang is rolled past r279116,
+      # https://crbug.com/637456
+      "-Wno-extern-initializer",
+    ]
   }
 }

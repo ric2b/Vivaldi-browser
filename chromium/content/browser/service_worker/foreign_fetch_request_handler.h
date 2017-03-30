@@ -46,6 +46,12 @@ class CONTENT_EXPORT ForeignFetchRequestHandler
     : public base::SupportsUserData::Data,
       public ServiceWorkerURLRequestJob::Delegate {
  public:
+  // Returns true if Foreign Fetch is enabled. Foreign Fetch is considered to be
+  // enabled if an OriginTrialPolicy exists, and that policy doesn't disable the
+  // feature. When the policy does disable the feature, that can be overridden
+  // with the experimental web platform features command line flag.
+  static bool IsForeignFetchEnabled();
+
   // Attaches a newly created handler if the given |request| needs to
   // be handled by a foreign fetch handling ServiceWorker.
   static void InitializeHandler(
@@ -96,7 +102,7 @@ class CONTENT_EXPORT ForeignFetchRequestHandler
   void DidFindRegistration(
       const base::WeakPtr<ServiceWorkerURLRequestJob>& job,
       ServiceWorkerStatusCode status,
-      const scoped_refptr<ServiceWorkerRegistration>& registration);
+      scoped_refptr<ServiceWorkerRegistration> registration);
 
   // ServiceWorkerURLRequestJob::Delegate implementation:
   void OnPrepareToRestart() override;
@@ -116,6 +122,7 @@ class CONTENT_EXPORT ForeignFetchRequestHandler
   RequestContextType request_context_type_;
   RequestContextFrameType frame_type_;
   scoped_refptr<ResourceRequestBodyImpl> body_;
+  ResourceContext* resource_context_;
 
   base::WeakPtr<ServiceWorkerURLRequestJob> job_;
   scoped_refptr<ServiceWorkerVersion> target_worker_;

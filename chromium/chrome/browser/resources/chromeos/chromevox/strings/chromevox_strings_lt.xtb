@@ -269,6 +269,7 @@ Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektum�
 <translation id="3392045790598181549"><ph name="NAME" />, meniu elementas</translation>
 <translation id="3406283310380167331">Rodyti formų sąrašą</translation>
 <translation id="3422338090358345848">Atidaryti klaviatūros naršyklę</translation>
+<translation id="3423495725743882470">$1 eilutė, $2 stulpelis</translation>
 <translation id="3457000393508828486">Iš dalies paspausta</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, mygtukas</translation>
 <translation id="3473644018603298796">pas. elem.: <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektum�
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}one{#}few{#}many{#}other{#}}</translation>
 <translation id="3801735343383419236">Sąrašo automatinis užbaigimas</translation>
 <translation id="3810838688059735925">Vaizdo</translation>
+<translation id="3812237531158591503">įklijuoti $1.</translation>
 <translation id="3816633764618089385">Kitas medijų raktas</translation>
 <translation id="3819376190738087562">Nėra perėjimų.</translation>
 <translation id="385383972552776628">Atidaryti parinkčių puslapį</translation>
@@ -411,6 +413,7 @@ Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektum�
 <translation id="5000760171916499057">Nėra formų.</translation>
 <translation id="5005670136041063723">Daugiau panašių elementų nėra.</translation>
 <translation id="501473567976723023">Sausis</translation>
+<translation id="5040591161308540832">$1 lentelė, $2 ir $3</translation>
 <translation id="5041394372352067729">Perkelti Brailio rašmenų pateiktį į puslapio viršų</translation>
 <translation id="5042770794184672516">Didinti kalbos garsumą</translation>
 <translation id="5050015258024679800">Ankstesnė 4 lygio antraštė</translation>
@@ -518,7 +521,6 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="5876817486144482042">Mažinti kalbos garsumą</translation>
 <translation id="5887397643266327462">Brailio rašmenų antraštės įgalintos.</translation>
 <translation id="5891934789323004067">Lentelė</translation>
-<translation id="5919442531159595654">kopijuoti.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{lygybės ženklas}one{# lygybės ženklas}few{# lygybės ženklai}many{# equal signs}other{# lygybės ženklų}}</translation>
 <translation id="5939518447894949180">Nustatyti iš naujo</translation>
 <translation id="5948123859135882163">Kaitalioti struktūrinį ir semantinį matematinių reiškinių interpretavimą</translation>
@@ -554,6 +556,8 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="6355910664415701303">Nėra ankstesnio sąrašo elemento.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Ankstesnė antraštė</translation>
+<translation id="6378565991815958969">kopijuoti $1.</translation>
+<translation id="6385591741672306837">stulp.</translation>
 <translation id="6387719785439924554">šalia</translation>
 <translation id="6411426777058107714">Nėra ankstesnės akutės.</translation>
 <translation id="6414968628640960377">Ankstesnis kitoks elementas.</translation>
@@ -653,7 +657,6 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="7532613204005497612">Birželis</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, šliaužiklis</translation>
 <translation id="7552432549459840808">Naudingi „Chrome“ spartieji klavišai</translation>
-<translation id="7586163296341959563">įklijuoti.</translation>
 <translation id="7596919493010894443">išvalytas pasirinkimas</translation>
 <translation id="7604026522577407655">Eiti į dabartinio stulpelio pradžią</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="8153880621934657047">Ne lentelės viduje.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{apatinis brūkšnys}one{# apatinis brūkšnys}few{# apatiniai brūkšniai}many{# underscores}other{# apatinių brūkšnių}}</translation>
 <translation id="8179976553408161302">Įvesti</translation>
+<translation id="8184828902145951186">eil.</translation>
 <translation id="8186185314313222077">viso ekrano režimo perjungimas</translation>
-<translation id="81960742267269908">iškirpti.</translation>
 <translation id="8199231515320852133">Pranešti apie dabartinio langelio antraštes</translation>
 <translation id="820417203470636242">Tuščias langelis.</translation>
 <translation id="8215202828671303819">Kelių elementų pasirinkimas</translation>
@@ -782,6 +785,7 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="9077213568694924680">pašalinta iš pasirinkimo srities</translation>
 <translation id="9082874451376019682">Nėra ankstesnio šliaužiklio.</translation>
 <translation id="9089864840575085222">Ciklo įvedimo aidas</translation>
+<translation id="9105227991373418255">iškirpti $1.</translation>
 <translation id="9107530006868467849">Nėra ankstesnio medijų valdiklio.</translation>
 <translation id="9108370397979208512">matematika</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</
 <translation id="9115913704608474258">Lapkritis</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Skirtukas</translation>
 <translation id="9151211641321628915">Paskelbiamas trumpas esamos pozicijos aprašas</translation>
 <translation id="9153606228985488238">Aukštis <ph name="PERCENT" /> proc.</translation>
 <translation id="9160096769946561184">Eiti į dabartinio stulpelio pabaigą</translation>

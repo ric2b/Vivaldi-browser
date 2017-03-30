@@ -6,12 +6,13 @@
 #define IOS_CHROME_BROWSER_SYNC_SYNC_SETUP_SERVICE_H_
 
 #include <map>
+#include <memory>
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "sync/internal_api/public/base/model_type.h"
-#include "sync/internal_api/public/util/syncer_error.h"
+#include "components/sync/base/model_type.h"
+#include "components/sync/base/syncer_error.h"
 
 namespace sync_driver {
 class SyncService;
@@ -42,6 +43,7 @@ class SyncSetupService : public KeyedService {
     kSyncPasswords,
     kSyncOpenTabs,
     kSyncAutofill,
+    kSyncPreferences,
     kNumberOfSyncableDatatypes
   } SyncableDatatype;
 

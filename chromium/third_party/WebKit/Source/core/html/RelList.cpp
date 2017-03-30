@@ -5,6 +5,7 @@
 #include "core/html/RelList.h"
 
 #include "core/dom/Document.h"
+#include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/HashMap.h"
 
@@ -37,33 +38,36 @@ void RelList::setRelValues(const AtomicString& value)
     m_relValues.set(value, SpaceSplitString::ShouldNotFoldCase);
 }
 
-static RelList::SupportedTokens& supportedTokens()
+static HashSet<AtomicString>& supportedTokens()
 {
-    DEFINE_STATIC_LOCAL(RelList::SupportedTokens, supportedValuesMap, ());
-    if (supportedValuesMap.isEmpty()) {
-        supportedValuesMap.add("preload");
-        supportedValuesMap.add("preconnect");
-        supportedValuesMap.add("dns-prefetch");
-        supportedValuesMap.add("stylesheet");
-        supportedValuesMap.add("import");
-        supportedValuesMap.add("icon");
-        supportedValuesMap.add("alternate");
-        supportedValuesMap.add("prefetch");
-        supportedValuesMap.add("prerender");
-        supportedValuesMap.add("next");
-        supportedValuesMap.add("manifest");
-        supportedValuesMap.add("apple-touch-icon");
-        supportedValuesMap.add("apple-touch-icon-precomposed");
-        if (RuntimeEnabledFeatures::linkServiceWorkerEnabled())
-            supportedValuesMap.add("serviceworker");
+    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, tokens, ());
+
+    if (tokens.isEmpty()) {
+        tokens = {
+            "preload",
+            "preconnect",
+            "dns-prefetch",
+            "stylesheet",
+            "import",
+            "icon",
+            "alternate",
+            "prefetch",
+            "prerender",
+            "next",
+            "manifest",
+            "apple-touch-icon",
+            "apple-touch-icon-precomposed",
+        };
     }
 
-    return supportedValuesMap;
+    return tokens;
 }
 
 bool RelList::validateTokenValue(const AtomicString& tokenValue, ExceptionState&) const
 {
-    return supportedTokens().contains(tokenValue);
+    if (supportedTokens().contains(tokenValue))
+        return true;
+    return OriginTrials::linkServiceWorkerEnabled(m_element->getExecutionContext()) && tokenValue == "serviceworker";
 }
 
 DEFINE_TRACE(RelList)

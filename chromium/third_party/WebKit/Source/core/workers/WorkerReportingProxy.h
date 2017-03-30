@@ -32,6 +32,7 @@
 #define WorkerReportingProxy_h
 
 #include "core/CoreExport.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include <memory>
@@ -40,17 +41,16 @@ namespace blink {
 
 class ConsoleMessage;
 class SourceLocation;
-class WorkerGlobalScope;
+class WorkerOrWorkletGlobalScope;
 
 // APIs used by workers to report console and worker activity.
 class CORE_EXPORT WorkerReportingProxy {
 public:
     virtual ~WorkerReportingProxy() { }
 
-    virtual void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>) = 0;
-    virtual void reportConsoleMessage(ConsoleMessage*) = 0;
+    virtual void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId) = 0;
+    virtual void reportConsoleMessage(MessageSource, MessageLevel, const String& message, SourceLocation*) = 0;
     virtual void postMessageToPageInspector(const String&) = 0;
-    virtual void postWorkerConsoleAgentEnabled() = 0;
 
     // Invoked when the worker script is evaluated. |success| is true if the
     // evaluation completed with no uncaught exception.
@@ -60,7 +60,7 @@ public:
     virtual void didInitializeWorkerContext() { }
 
     // Invoked when the new WorkerGlobalScope is started.
-    virtual void workerGlobalScopeStarted(WorkerGlobalScope*) = 0;
+    virtual void workerGlobalScopeStarted(WorkerOrWorkletGlobalScope*) = 0;
 
     // Invoked when close() is invoked on the worker context.
     virtual void workerGlobalScopeClosed() = 0;

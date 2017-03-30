@@ -33,6 +33,7 @@
 
 #include "core/workers/WorkerLoaderProxy.h"
 
+#include "platform/heap/Handle.h"
 #include "public/web/WebContentSecurityPolicy.h"
 #include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebEmbeddedWorker.h"
@@ -42,6 +43,7 @@
 
 namespace blink {
 
+class ParentFrameTaskRunners;
 class ServiceWorkerGlobalScopeProxy;
 class WebLocalFrameImpl;
 class WebServiceWorkerNetworkProvider;
@@ -77,9 +79,7 @@ private:
     void loadShadowPage();
 
     // WebFrameClient overrides.
-    void willSendRequest(
-        WebLocalFrame*, unsigned identifier, WebURLRequest&,
-        const WebURLResponse& redirectResponse) override;
+    void willSendRequest(WebLocalFrame*, WebURLRequest&) override;
     void didFinishDocumentLoad(WebLocalFrame*) override;
 
     // WebDevToolsAgentClient overrides.
@@ -91,8 +91,8 @@ private:
     void startWorkerThread();
 
     // WorkerLoaderProxyProvider
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     WebEmbeddedWorkerStartData m_workerStartData;
 
@@ -108,6 +108,8 @@ private:
 
     // Kept around only while main script loading is ongoing.
     RefPtr<WorkerScriptLoader> m_mainScriptLoader;
+
+    Persistent<ParentFrameTaskRunners> m_mainThreadTaskRunners;
 
     std::unique_ptr<WorkerThread> m_workerThread;
     RefPtr<WorkerLoaderProxy> m_loaderProxy;

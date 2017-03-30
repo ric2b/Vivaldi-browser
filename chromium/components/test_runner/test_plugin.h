@@ -11,9 +11,6 @@
 #include "base/macros.h"
 #include "cc/layers/texture_layer.h"
 #include "cc/layers/texture_layer_client.h"
-#include "third_party/WebKit/public/platform/WebExternalTextureLayer.h"
-#include "third_party/WebKit/public/platform/WebExternalTextureLayerClient.h"
-#include "third_party/WebKit/public/platform/WebExternalTextureMailbox.h"
 #include "third_party/WebKit/public/platform/WebLayer.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -98,8 +95,7 @@ class TestPlugin : public blink::WebPlugin, public cc::TextureLayerClient {
   // cc::TextureLayerClient methods:
   bool PrepareTextureMailbox(
       cc::TextureMailbox* mailbox,
-      std::unique_ptr<cc::SingleReleaseCallback>* release_callback,
-      bool use_shared_memory) override;
+      std::unique_ptr<cc::SingleReleaseCallback>* release_callback) override;
 
  private:
   TestPlugin(blink::WebFrame* frame,

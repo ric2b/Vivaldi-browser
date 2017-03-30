@@ -6,10 +6,10 @@
 
 #include "base/run_loop.h"
 #import "base/test/ios/wait_util.h"
-#include "ios/public/provider/web/web_ui_ios_controller.h"
-#include "ios/public/provider/web/web_ui_ios_controller_factory.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
+#include "ios/web/public/webui/web_ui_ios_controller.h"
+#include "ios/web/public/webui/web_ui_ios_controller_factory.h"
 #include "ios/web/test/grit/test_resources.h"
 #include "ios/web/test/mojo_test.mojom.h"
 #include "ios/web/test/test_url_constants.h"
@@ -17,6 +17,7 @@
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/shell/public/cpp/identity.h"
 #include "services/shell/public/cpp/interface_registry.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
@@ -68,7 +69,7 @@ class TestUIHandler : public TestUIHandlerMojo,
 
  private:
   // shell::InterfaceFactory overrides.
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojo::InterfaceRequest<TestUIHandlerMojo> request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -151,7 +152,6 @@ class WebUIMojoTest : public WebIntTest {
 // |TestUIHandler| sucessfully receives "ack" message from WebUI page.
 TEST_F(WebUIMojoTest, MessageExchange) {
   web_state()->SetWebUsageEnabled(true);
-  web_state()->GetWebController().useMojoForWebUI = YES;
   web_state()->GetView();  // WebState won't load URL without view.
   NavigationManager::WebLoadParams load_params(GURL(
       url::SchemeHostPort(kTestWebUIScheme, kTestWebUIURLHost, 0).Serialize()));

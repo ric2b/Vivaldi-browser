@@ -4,6 +4,8 @@
 
 namespace vivaldiprefs {
 
+const char kDeferredTabLoadingAfterRestore[] =
+    "vivaldi.deferred_tab_loading_after_restore";
 const char kMousegesturesEnabled[] = "mousegestures_enabled";
 const char kRockerGesturesEnabled[] = "vivaldi.rocker_gestures_enabled";
 const char kSmoothScrollingEnabled[] = "smooth_scrolling_enabled";
@@ -12,6 +14,11 @@ const char kVivaldiLastTopSitesVacuumDate[] =
     "vivaldi.last_topsites_vacuum_date";
 const char kVivaldiTabZoom[] = "vivaldi.tab_zoom_enabled";
 const char kVivaldiHomepage[] = "vivaldi.home_page";
+const char kVivaldiNumberOfDaysToKeepVisits[] =
+    "vivaldi.days_to_keep_visits";
+
+// Used to store active vivaldi experiments
+const char kVivaldiExperiments[] = "vivaldi.experiments";
 
 #if defined(OS_MACOSX)
 const char kAppleKeyboardUIMode[] = "vivaldi.apple_keyboard_ui_mode";

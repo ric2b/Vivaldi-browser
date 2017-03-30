@@ -179,7 +179,7 @@ class ServerProcess(object):
         try:
             self._log_data(' IN', bytes)
             self._proc.stdin.write(bytes)
-        except IOError as e:
+        except IOError:
             self.stop(0.0)
             # stop() calls _reset(), so we have to set crashed to True after calling stop().
             self._crashed = True
@@ -381,12 +381,12 @@ class ServerProcess(object):
             while self._proc.poll() is None and time.time() < deadline:
                 time.sleep(0.01)
             if self._proc.poll() is None:
-                _log.warning('stopping %s(pid %d) timed out, killing it' % (self._name, self._proc.pid))
+                _log.warning('stopping %s(pid %d) timed out, killing it', self._name, self._proc.pid)
 
         if self._proc.poll() is None:
             self._kill()
             killed = True
-            _log.debug('killed pid %d' % self._proc.pid)
+            _log.debug('killed pid %d', self._proc.pid)
 
         # read any remaining data on the pipes and return it.
         if not killed:

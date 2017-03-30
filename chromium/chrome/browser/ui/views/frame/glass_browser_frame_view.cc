@@ -4,9 +4,9 @@
 
 #include "chrome/browser/ui/views/frame/glass_browser_frame_view.h"
 
+#include <dwmapi.h>
 #include <utility>
 
-#include "base/strings/utf_string_conversions.h"
 #include "base/win/windows_version.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/chrome_dll_resource.h"
@@ -18,22 +18,18 @@
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/signin_header_helper.h"
-#include "components/signin/core/common/profile_management_switches.h"
 #include "grit/theme_resources.h"
 #include "skia/ext/image_operations.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/resource/resource_bundle_win.h"
 #include "ui/base/theme_provider.h"
 #include "ui/display/win/dpi.h"
+#include "ui/display/win/screen_win.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/icon_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/scoped_canvas.h"
-#include "ui/resources/grit/ui_resources.h"
-#include "ui/views/controls/label.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/win/hwnd_util.h"
 #include "ui/views/window/client_view.h"
@@ -42,11 +38,8 @@ HICON GlassBrowserFrameView::throbber_icons_[
     GlassBrowserFrameView::kThrobberIconCount];
 
 namespace {
-// Thickness of the border in the client area that separates it from the
-// non-client area. Includes but is distinct from kClientEdgeThickness, which is
-// the thickness of the border between the web content and our frame border.
-const int kClientBorderThicknessPreWin10 = 3;
-const int kClientBorderThicknessWin10 = 1;
+// Thickness of the frame edge between the non-client area and the web content.
+const int kClientBorderThickness = 3;
 // Besides the frame border, there's empty space atop the window in restored
 // mode, to use to drag the window around.
 const int kNonClientRestoredExtraThickness = 11;
@@ -70,6 +63,9 @@ const int kNewTabCaptionMaximizedSpacing = 16;
 // TODO(bsep): Windows 10 caption buttons look very different and we would like
 // the profile switcher button to match on that platform.
 const int kProfileSwitcherButtonHeight = 20;
+// There is a small one-pixel strip right above the caption buttons in which the
+// resize border "peeks" through.
+const int kCaptionButtonTopInset = 1;
 
 // Converts the |image| to a Windows icon and returns the corresponding HICON
 // handle. |image| is resized to desired |width| and |height| if needed.
@@ -216,11 +212,15 @@ gfx::Rect GlassBrowserFrameView::GetWindowBoundsForClientBounds(
 }
 
 int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
-  // If the browser isn't in normal mode, we haven't customized the frame, so
-  // Windows can figure this out.  If the point isn't within our bounds, then
-  // it's in the native portion of the frame, so again Windows can figure it
-  // out.
-  if (!browser_view()->IsBrowserTypeNormal() || !bounds().Contains(point))
+  // For app windows and popups without a custom titlebar we haven't customized
+  // the frame at all so Windows can figure it out.
+  if (!frame()->CustomDrawSystemTitlebar() &&
+      !browser_view()->IsBrowserTypeNormal())
+    return HTNOWHERE;
+
+  // If the point isn't within our bounds, then it's in the native portion of
+  // the frame so again Windows can figure it out.
+  if (!bounds().Contains(point))
     return HTNOWHERE;
 
   // See if the point is within the incognito icon or the profile switcher menu.
@@ -235,15 +235,41 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
   // See if we're in the sysmenu region.  We still have to check the tabstrip
   // first so that clicks in a tab don't get treated as sysmenu clicks.
   int client_border_thickness = ClientBorderThickness(false);
-  gfx::Rect sys_menu_region(client_border_thickness,
-                            display::win::GetSystemMetricsInDIP(SM_CYSIZEFRAME),
-                            display::win::GetSystemMetricsInDIP(SM_CXSMICON),
-                            display::win::GetSystemMetricsInDIP(SM_CYSMICON));
+  gfx::Rect sys_menu_region(
+      client_border_thickness,
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSIZEFRAME),
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXSMICON),
+      display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSMICON));
   if (sys_menu_region.Contains(point))
     return (frame_component == HTCLIENT) ? HTCLIENT : HTSYSMENU;
 
   if (frame_component != HTNOWHERE)
     return frame_component;
+
+  // On Windows 8+, the caption buttons are almost butted up to the top right
+  // corner of the window. This code ensures the mouse isn't set to a size
+  // cursor while hovering over the caption buttons, thus giving the incorrect
+  // impression that the user can resize the window.
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
+    RECT button_bounds = {0};
+    if (SUCCEEDED(DwmGetWindowAttribute(views::HWNDForWidget(frame()),
+                                        DWMWA_CAPTION_BUTTON_BOUNDS,
+                                        &button_bounds,
+                                        sizeof(button_bounds)))) {
+      gfx::Rect buttons = gfx::ConvertRectToDIP(display::win::GetDPIScale(),
+                                                gfx::Rect(button_bounds));
+      // The sizing region at the window edge above the caption buttons is
+      // 1 px regardless of scale factor. If we inset by 1 before converting
+      // to DIPs, the precision loss might eliminate this region entirely. The
+      // best we can do is to inset after conversion. This guarantees we'll
+      // show the resize cursor when resizing is possible. The cost of which
+      // is also maybe showing it over the portion of the DIP that isn't the
+      // outermost pixel.
+      buttons.Inset(0, kCaptionButtonTopInset, 0, 0);
+      if (buttons.Contains(point))
+        return HTNOWHERE;
+    }
+  }
 
   int top_border_thickness = FrameTopBorderThickness(false);
   // We want the resize corner behavior to apply to the kResizeCornerWidth
@@ -265,11 +291,13 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
 // GlassBrowserFrameView, views::View overrides:
 
 void GlassBrowserFrameView::OnPaint(gfx::Canvas* canvas) {
+  if (frame()->CustomDrawSystemTitlebar())
+    PaintTitlebar(canvas);
   if (!browser_view()->IsTabStripVisible())
     return;
   if (IsToolbarVisible())
     PaintToolbarBackground(canvas);
-  if (!frame()->IsMaximized())
+  if (ClientBorderThickness(false) > 0)
     PaintClientEdge(canvas);
 }
 
@@ -309,17 +337,19 @@ bool GlassBrowserFrameView::DoesIntersectRect(const views::View* target,
 }
 
 int GlassBrowserFrameView::ClientBorderThickness(bool restored) const {
+  // The frame ends abruptly at the 1 pixel window border drawn by Windows 10.
+  if (!browser_view()->HasClientEdge())
+    return 0;
+
   if ((frame()->IsMaximized() || frame()->IsFullscreen()) && !restored)
     return 0;
 
-  return (base::win::GetVersion() < base::win::VERSION_WIN10)
-             ? kClientBorderThicknessPreWin10
-             : kClientBorderThicknessWin10;
+  return kClientBorderThickness;
 }
 
 int GlassBrowserFrameView::FrameBorderThickness() const {
   return (frame()->IsMaximized() || frame()->IsFullscreen()) ?
-      0 : display::win::GetSystemMetricsInDIP(SM_CXSIZEFRAME);
+      0 : display::win::ScreenWin::GetSystemMetricsInDIP(SM_CXSIZEFRAME);
 }
 
 int GlassBrowserFrameView::FrameTopBorderThickness(bool restored) const {
@@ -336,6 +366,7 @@ int GlassBrowserFrameView::FrameTopBorderThickness(bool restored) const {
   // Mouse and touch locations are floored but GetSystemMetricsInDIP is rounded,
   // so we need to floor instead or else the difference will cause the hittest
   // to fail when it ought to succeed.
+  // TODO(robliao): Resolve this GetSystemMetrics call.
   return std::floor(GetSystemMetrics(SM_CYSIZEFRAME) /
                     display::win::GetDPIScale());
 }
@@ -358,6 +389,13 @@ int GlassBrowserFrameView::TopAreaHeight(bool restored) const {
       (top + kNonClientRestoredExtraThickness - exclusion);
 }
 
+int GlassBrowserFrameView::TitlebarHeight(bool restored) const {
+  if (frame()->IsFullscreen() && !restored)
+    return 0;
+  return display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYCAPTION) +
+         display::win::ScreenWin::GetSystemMetricsInDIP(SM_CYSIZEFRAME);
+}
+
 int GlassBrowserFrameView::WindowTopY() const {
   return frame()->IsMaximized() ? FrameTopBorderThickness(false) : 1;
 }
@@ -372,6 +410,17 @@ bool GlassBrowserFrameView::CaptionButtonsOnLeadingEdge() const {
   // own RTL layout logic), Windows always draws the caption buttons on the
   // right, even when we want to be RTL. See crbug.com/560619.
   return base::i18n::IsRTL();
+}
+
+void GlassBrowserFrameView::PaintTitlebar(gfx::Canvas* canvas) const {
+  SkColor frame_color = 0xFFCCCCCC;
+  gfx::Rect tabstrip_bounds = GetBoundsForTabStrip(browser_view()->tabstrip());
+  const int y = WindowTopY();
+  canvas->FillRect(gfx::Rect(0, y, width(), tabstrip_bounds.bottom() - y),
+                   frame_color);
+  // The 1 pixel line at the top is drawn by Windows when we leave that section
+  // of the window blank because we have called DwmExtendFrameIntoClientArea()
+  // inside BrowserDesktopWindowTreeHostWin::UpdateDWMFrame().
 }
 
 void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
@@ -417,7 +466,6 @@ void GlassBrowserFrameView::PaintToolbarBackground(gfx::Canvas* canvas) const {
                                         separator_rect, true);
 
     // Toolbar/content separator.
-    toolbar_bounds.Inset(kClientEdgeThickness, 0);
     BrowserView::Paint1pxHorizontalLine(canvas, separator_color, toolbar_bounds,
                                         true);
   } else {
@@ -553,7 +601,7 @@ void GlassBrowserFrameView::LayoutProfileSwitcher() {
 void GlassBrowserFrameView::LayoutIncognitoIcon() {
   const bool md = ui::MaterialDesignController::IsModeMaterial();
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
-  const gfx::Size size(GetOTRAvatarIcon().size());
+  const gfx::Size size(GetIncognitoAvatarIcon().size());
   int x = ClientBorderThickness(false);
   // In RTL, the icon needs to start after the caption buttons.
   if (CaptionButtonsOnLeadingEdge()) {
@@ -586,8 +634,11 @@ void GlassBrowserFrameView::LayoutClientView() {
 }
 
 gfx::Insets GlassBrowserFrameView::GetClientAreaInsets(bool restored) const {
-  if (!browser_view()->IsTabStripVisible())
-    return gfx::Insets();
+  if (!browser_view()->IsTabStripVisible()) {
+    const int top =
+        frame()->CustomDrawSystemTitlebar() ? TitlebarHeight(restored) : 0;
+    return gfx::Insets(top, 0, 0, 0);
+  }
 
   const int top_height = TopAreaHeight(restored);
   const int border_thickness = ClientBorderThickness(restored);

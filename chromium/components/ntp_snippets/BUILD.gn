@@ -10,12 +10,30 @@ if (is_android) {
 }
 
 # GYP version: components/ntp_snippets.gypi:ntp_snippets
-source_set("ntp_snippets") {
+static_library("ntp_snippets") {
   sources = [
+    "bookmarks/bookmark_last_visit_utils.cc",
+    "bookmarks/bookmark_last_visit_utils.h",
+    "bookmarks/bookmark_suggestions_provider.cc",
+    "bookmarks/bookmark_suggestions_provider.h",
+    "category.cc",
+    "category.h",
+    "category_factory.cc",
+    "category_factory.h",
+    "category_info.cc",
+    "category_info.h",
+    "category_status.cc",
+    "category_status.h",
     "content_suggestion.cc",
     "content_suggestion.h",
-    "content_suggestion_category.h",
-    "content_suggestions_provider_type.h",
+    "content_suggestions_metrics.cc",
+    "content_suggestions_metrics.h",
+    "content_suggestions_provider.cc",
+    "content_suggestions_provider.h",
+    "content_suggestions_service.cc",
+    "content_suggestions_service.h",
+    "features.cc",
+    "features.h",
     "ntp_snippet.cc",
     "ntp_snippet.h",
     "ntp_snippets_constants.cc",
@@ -29,10 +47,18 @@ source_set("ntp_snippets") {
     "ntp_snippets_service.h",
     "ntp_snippets_status_service.cc",
     "ntp_snippets_status_service.h",
+    "offline_pages/offline_page_suggestions_provider.cc",
+    "offline_pages/offline_page_suggestions_provider.h",
+    "physical_web_pages/physical_web_page_suggestions_provider.cc",
+    "physical_web_pages/physical_web_page_suggestions_provider.h",
     "pref_names.cc",
     "pref_names.h",
+    "request_throttler.cc",
+    "request_throttler.h",
     "switches.cc",
     "switches.h",
+    "user_classifier.cc",
+    "user_classifier.h",
   ]
 
   public_deps = [
@@ -42,17 +68,22 @@ source_set("ntp_snippets") {
     "//components/prefs",
     "//components/signin/core/browser",
     "//components/suggestions",
-    "//components/sync_driver",
+    "//components/sync",
     "//google_apis",
     "//net",
+    "//ui/base",
     "//url",
   ]
 
   deps = [
+    "//components/bookmarks/browser",
     "//components/data_use_measurement/core",
+    "//components/history/core/browser",
     "//components/image_fetcher",
     "//components/metrics",
     "//components/ntp_snippets/proto",
+    "//components/offline_pages",
+    "//components/strings",
     "//components/variations",
     "//components/variations/net",
     "//third_party/icu/",
@@ -63,7 +94,9 @@ source_set("ntp_snippets") {
 if (is_android) {
   java_cpp_enum("ntp_snippets_java_enums_srcjar") {
     sources = [
-      "ntp_snippets_status_service.h",
+      "category.h",
+      "category_info.h",
+      "category_status.h",
     ]
   }
 }
@@ -71,6 +104,11 @@ if (is_android) {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "bookmarks/bookmark_last_visit_utils_unittest.cc",
+    "category_factory_unittest.cc",
+    "content_suggestions_service_unittest.cc",
+    "mock_content_suggestions_provider_observer.cc",
+    "mock_content_suggestions_provider_observer.h",
     "ntp_snippet_unittest.cc",
     "ntp_snippets_database_unittest.cc",
     "ntp_snippets_fetcher_unittest.cc",
@@ -78,20 +116,29 @@ source_set("unit_tests") {
     "ntp_snippets_status_service_unittest.cc",
     "ntp_snippets_test_utils.cc",
     "ntp_snippets_test_utils.h",
+    "offline_pages/offline_page_suggestions_provider_unittest.cc",
+    "physical_web_pages/physical_web_page_suggestions_provider_unittest.cc",
+    "request_throttler_unittest.cc",
   ]
 
   deps = [
     ":ntp_snippets",
     "//base",
     "//base/test:test_support",
+    "//components/bookmarks/browser",
+    "//components/bookmarks/test",
     "//components/image_fetcher",
     "//components/leveldb_proto:test_support",
+    "//components/offline_pages",
+    "//components/offline_pages:test_support",
     "//components/signin/core/browser:test_support",
     "//components/signin/core/common",
-    "//components/sync_driver:test_support",
+    "//components/strings",
+    "//components/sync:test_support_sync_driver",
     "//components/variations",
     "//net:test_support",
     "//testing/gtest",
     "//third_party/icu/",
+    "//ui/gfx:test_support",
   ]
 }

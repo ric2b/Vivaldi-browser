@@ -6,6 +6,7 @@
 
 #include "core/dom/Range.h"
 #include "core/editing/EditingTestBase.h"
+#include "core/editing/SelectionAdjuster.h"
 
 #define LOREM_IPSUM \
     "Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor " \
@@ -173,9 +174,9 @@ TEST_F(VisibleSelectionTest, ShadowCrossing)
     ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
 
     Element* body = document().body();
-    Element* host = body->querySelector("#host", ASSERT_NO_EXCEPTION);
-    Element* one = body->querySelector("#one", ASSERT_NO_EXCEPTION);
-    Element* six = shadowRoot->querySelector("#s6", ASSERT_NO_EXCEPTION);
+    Element* host = body->querySelector("#host");
+    Element* one = body->querySelector("#one");
+    Element* six = shadowRoot->querySelector("#s6");
 
     VisibleSelection selection(Position::firstPositionInNode(one), Position::lastPositionInNode(shadowRoot));
     VisibleSelectionInFlatTree selectionInFlatTree(PositionInFlatTree::firstPositionInNode(one), PositionInFlatTree::lastPositionInNode(host));
@@ -194,9 +195,9 @@ TEST_F(VisibleSelectionTest, ShadowV0DistributedNodes)
     ShadowRoot* shadowRoot = setShadowContent(shadowContent, "host");
 
     Element* body = document().body();
-    Element* one = body->querySelector("#one", ASSERT_NO_EXCEPTION);
-    Element* two = body->querySelector("#two", ASSERT_NO_EXCEPTION);
-    Element* five = shadowRoot->querySelector("#s5", ASSERT_NO_EXCEPTION);
+    Element* one = body->querySelector("#one");
+    Element* two = body->querySelector("#two");
+    Element* five = shadowRoot->querySelector("#s5");
 
     VisibleSelection selection(Position::firstPositionInNode(one), Position::lastPositionInNode(two));
     VisibleSelectionInFlatTree selectionInFlatTree(PositionInFlatTree::firstPositionInNode(one), PositionInFlatTree::lastPositionInNode(two));
@@ -225,9 +226,9 @@ TEST_F(VisibleSelectionTest, ShadowNested)
     //    <span id="s6">66</span>
     //  </p>
     Element* body = document().body();
-    Element* host = body->querySelector("#host", ASSERT_NO_EXCEPTION);
-    Element* one = body->querySelector("#one", ASSERT_NO_EXCEPTION);
-    Element* eight = shadowRoot2->querySelector("#s8", ASSERT_NO_EXCEPTION);
+    Element* host = body->querySelector("#host");
+    Element* one = body->querySelector("#one");
+    Element* eight = shadowRoot2->querySelector("#s8");
 
     VisibleSelection selection(Position::firstPositionInNode(one), Position::lastPositionInNode(shadowRoot2));
     VisibleSelectionInFlatTree selectionInFlatTree(PositionInFlatTree::firstPositionInNode(one), PositionInFlatTree::afterNode(eight));
@@ -348,6 +349,31 @@ TEST_F(VisibleSelectionTest, WordGranularity)
         EXPECT_EQ("Lorem ipsum", range->text());
         testFlatTreePositionsToEqualToDOMTreePositions(selection, selectionInFlatTree);
     }
+}
+
+// This is for crbug.com/627783, simulating restoring selection
+// in undo stack.
+TEST_F(VisibleSelectionTest, validatePositionsIfNeededWithShadowHost)
+{
+    setBodyContent("<div id=host></div><div id=sample>foo</div>");
+    setShadowContent("<content>", "host");
+    Element* sample = document().getElementById("sample");
+
+    // Simulates saving selection in undo stack.
+    VisibleSelection selection(Position(sample->firstChild(), 0));
+    EXPECT_EQ(Position(sample->firstChild(), 0), selection.start());
+
+    // Simulates modifying DOM tree to invalidate distribution.
+    Element* host = document().getElementById("host");
+    host->appendChild(sample);
+
+    // Simulates to restore selection from undo stack.
+    selection.validatePositionsIfNeeded();
+    EXPECT_EQ(Position(sample->firstChild(), 0), selection.start());
+
+    VisibleSelectionInFlatTree selectionInFlatTree;
+    SelectionAdjuster::adjustSelectionInFlatTree(&selectionInFlatTree, selection);
+    EXPECT_EQ(PositionInFlatTree(sample->firstChild(), 0), selectionInFlatTree.start());
 }
 
 } // namespace blink

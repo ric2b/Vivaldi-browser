@@ -217,7 +217,7 @@ class WizardController : public BaseScreenDelegate,
   void OnDeviceDisabledChecked(bool device_disabled);
 
   // Callback function after setting MetricsReporting.
-  void InitiateMetricsReportingChangeCallback(bool enabled);
+  void OnChangedMetricsReportingState(bool enabled);
 
   // Loads brand code on I/O enabled thread and stores to Local State.
   void LoadBrandCodeFromFile();
@@ -328,12 +328,16 @@ class WizardController : public BaseScreenDelegate,
   void OnSharkConnected(std::unique_ptr<pairing_chromeos::HostPairingController>
                             pairing_controller);
 
-  // Callback function for AddNetworkRequested().
+  // Callback functions for AddNetworkRequested().
+  void OnSetHostNetworkSuccessful();
   void OnSetHostNetworkFailed();
 
   // Start the enrollment screen using the config from
-  // |prescribed_enrollment_config_|.
-  void StartEnrollmentScreen();
+  // |prescribed_enrollment_config_|. If |force_interactive| is true,
+  // the user will be presented with a manual enrollment screen requiring
+  // Gaia credentials. If it is false, the screen may return after trying
+  // attestation-based enrollment if appropriate.
+  void StartEnrollmentScreen(bool force_interactive);
 
   // Whether to skip any screens that may normally be shown after login
   // (registration, Terms of Service, user image selection).

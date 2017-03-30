@@ -87,6 +87,9 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
   // item has completed.
   virtual void NotifyItemEnded(importer::ImportItem item) = 0;
 
+  virtual void NotifyItemFailed(importer::ImportItem item,
+                                const std::string& error) = 0;
+
   // Notifies the coordinator that the entire import operation has completed.
   virtual void NotifyEnded() = 0;
 

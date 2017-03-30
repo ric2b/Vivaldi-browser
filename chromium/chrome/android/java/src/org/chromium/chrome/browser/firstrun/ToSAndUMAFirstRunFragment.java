@@ -18,7 +18,6 @@ import android.widget.TextView;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeVersionInfo;
-import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
@@ -63,7 +62,7 @@ public class ToSAndUMAFirstRunFragment extends FirstRunPage {
                     ApiCompatibilityUtils.getPaddingEnd(mSendReportCheckBox),
                     mSendReportCheckBox.getPaddingBottom());
 
-            mSendReportCheckBox.setChecked(!getPageDelegate().isNeverUploadCrashDump());
+            mSendReportCheckBox.setChecked(FirstRunActivity.DEFAULT_METRICS_AND_CRASH_REPORTING);
         } else {
             mSendReportCheckBox.setVisibility(View.GONE);
         }
@@ -94,6 +93,6 @@ public class ToSAndUMAFirstRunFragment extends FirstRunPage {
 
     @Override
     public boolean shouldSkipPageOnCreate(Context appContext) {
-        return PrefServiceBridge.getInstance().isFirstRunEulaAccepted();
+        return FirstRunStatus.shouldSkipWelcomePage(appContext);
     }
 }

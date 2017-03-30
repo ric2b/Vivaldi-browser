@@ -20,6 +20,8 @@ class WebURLLoaderTestDelegate;
 class WebURLRequest;
 class WebURLResponse;
 
+const int kRedirectResponseOverheadBytes = 300;
+
 // A simple class for mocking WebURLLoader.
 // If the WebURLLoaderMockFactory it is associated with has been configured to
 // mock the request it gets, it serves the mocked resource.  Otherwise it just
@@ -46,7 +48,8 @@ class WebURLLoaderMock : public WebURLLoader {
   void loadSynchronously(const WebURLRequest& request,
                          WebURLResponse& response,
                          WebURLError& error,
-                         WebData& data) override;
+                         WebData& data,
+                         int64_t& encoded_data_length) override;
   void loadAsynchronously(const WebURLRequest& request,
                           WebURLLoaderClient* client) override;
   void cancel() override;

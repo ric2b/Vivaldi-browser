@@ -183,11 +183,125 @@
       }
     },
     {
+      "command": "nextHeading1",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [49]
+        }
+      }
+    },
+    {
+      "command": "nextHeading2",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [50]
+        }
+      }
+    },
+    {
+      "command": "nextHeading3",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [51]
+        }
+      }
+    },
+    {
+      "command": "nextHeading4",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [52]
+        }
+      }
+    },
+    {
+      "command": "nextHeading5",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [53]
+        }
+      }
+    },
+    {
+      "command": "nextHeading6",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [54]
+        }
+      }
+    },
+    {
       "command": "previousHeading",
       "sequence": {
         "cvoxModifier": true,
         "keys": {
           "keyCode": [72],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading1",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [49],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading2",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [50],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading3",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [51],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading4",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [52],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading5",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [53],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousHeading6",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [54],
           "shiftKey": [true]
         }
       }
@@ -245,6 +359,25 @@
         "cvoxModifier": true,
         "keys": {
           "keyCode": [86],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "nextLandmark",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [186]
+        }
+      }
+    },
+    {
+      "command": "previousLandmark",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [186],
           "shiftKey": [true]
         }
       }
@@ -374,7 +507,8 @@
       "sequence": {
         "cvoxModifier": true,
         "keys": {
-          "keyCode": [219]
+          "keyCode": [219],
+          "shiftKey": [true]
         }
       }
     },
@@ -383,7 +517,7 @@
       "sequence": {
         "cvoxModifier": true,
         "keys": {
-          "keyCode": [221]
+          "keyCode": [219]
         }
       }
     },
@@ -392,7 +526,8 @@
       "sequence": {
         "cvoxModifier": true,
         "keys": {
-          "keyCode": [186]
+          "keyCode": [221],
+          "shiftKey": [true]
         }
       }
     },
@@ -401,7 +536,7 @@
       "sequence": {
         "cvoxModifier": true,
         "keys": {
-          "keyCode": [222]
+          "keyCode": [221]
         }
       }
     },
@@ -568,6 +703,147 @@
         "cvoxModifier": true,
         "keys": {
           "keyCode": [65, 66]
+        }
+      }
+    },
+    {
+      "command": "toggleSelection",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [83]
+        }
+      }
+    },
+    {
+      "command": "fullyDescribe",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [75]
+        }
+      }
+    },
+    {
+      "command": "copy",
+      "sequence": {
+        "keys": {
+          "keyCode": [67],
+          "ctrlKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousRow",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [38],
+          "ctrlKey": [true],
+          "altKey": [true]
+        }
+      }
+    },
+    {
+      "command": "nextRow",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [40],
+          "ctrlKey": [true],
+          "altKey": [true]
+        }
+      }
+    },
+    {
+      "command": "nextCol",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [39],
+          "ctrlKey": [true],
+          "altKey": [true]
+        }
+      }
+    },
+    {
+      "command": "previousCol",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [37],
+          "ctrlKey": [true],
+          "altKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToRowFirstCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [37],
+          "ctrlKey": [true],
+          "altKey": [true],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToColFirstCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [38],
+          "ctrlKey": [true],
+          "altKey": [true],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToColLastCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [40],
+          "ctrlKey": [true],
+          "altKey": [true],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToFirstCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [37],
+          "altKey": [true],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToLastCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [39],
+          "altKey": [true],
+          "shiftKey": [true]
+        }
+      }
+    },
+    {
+      "command": "goToRowLastCell",
+      "sequence": {
+        "cvoxModifier": true,
+        "keys": {
+          "keyCode": [39],
+          "ctrlKey": [true],
+          "altKey": [true],
+          "shiftKey": [true]
         }
       }
     }

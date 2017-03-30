@@ -1,13 +1,13 @@
 Name: libvpx
 URL: http://www.webmproject.org
-Version: v1.5.0
+Version: v1.6.0
 License: BSD
 License File: source/libvpx/LICENSE
 Security Critical: yes
 
-Date: Saturday June 25 2016
+Date: Monday August 22 2016
 Branch: master
-Commit: 1c0a9f36f15a83816aebe5395e19c21f3d545aa2
+Commit: f5bd76f5c1b56bcb0e38063daff0c3a604ac420a
 
 Description:
 Contains the sources used to compile libvpx binaries used by Google Chrome and
@@ -33,7 +33,7 @@ Please follow these steps to update libvpx source code:
    cd third_party/libvpx
    ./generate_gypi.sh
 
-3. Update README.chromium with Date, Branch, and Commit.
+3. Update 'Branch' in README.chromium if necessary.
 
 Tools needed to build libvpx:
 

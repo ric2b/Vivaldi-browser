@@ -123,6 +123,7 @@ private:
     bool rewindToFirstMidWordBreak(LineLayoutText, const ComputedStyle&, const Font&, bool breakAll, WordMeasurement&);
     bool rewindToMidWordBreak(LineLayoutText, const ComputedStyle&, const Font&, bool breakAll, WordMeasurement&);
     bool hyphenate(LineLayoutText, const ComputedStyle&, const Font&, const Hyphenation&, float lastSpaceWordSpacing, WordMeasurement&);
+    bool isBreakAtSoftHyphen() const;
 
     InlineBidiResolver& m_resolver;
 
@@ -205,6 +206,9 @@ inline bool alwaysRequiresLineBox(LineLayoutItem flow)
 
 inline bool requiresLineBox(const InlineIterator& it, const LineInfo& lineInfo = LineInfo(), WhitespacePosition whitespacePosition = LeadingWhitespace)
 {
+    if (it.getLineLayoutItem().isEmptyText())
+        return false;
+
     if (it.getLineLayoutItem().isFloatingOrOutOfFlowPositioned())
         return false;
 
@@ -372,20 +376,22 @@ inline void BreakingContext::handleOutOfFlowPositioned(Vector<LineLayoutBox>& po
     if (!isInlineType) {
         m_block.setStaticInlinePositionForChild(box, m_block.startOffsetForContent());
     } else {
-        // If our original display was an INLINE type, then we can go ahead
-        // and determine our static y position now.
+        // If our original display was an INLINE type, then we can determine our static y position
+        // now. Note, however, that if we're paginated, we may have to update this position after
+        // the line has been laid out, since the line may be pushed by a pagination strut.
         box.layer()->setStaticBlockPosition(m_block.logicalHeight());
     }
 
     // If we're ignoring spaces, we have to stop and include this object and
     // then start ignoring spaces again.
-    if (isInlineType || box.container().isLayoutInline()) {
+    bool containerIsInline = box.container().isLayoutInline();
+    if (isInlineType || containerIsInline) {
         if (m_ignoringSpaces)
             ensureLineBoxInsideIgnoredSpaces(&m_lineMidpointState, box);
         m_trailingObjects.appendObjectIfNeeded(box);
-    } else {
-        positionedObjects.append(box);
     }
+    if (!containerIsInline)
+        positionedObjects.append(box);
     m_width.addUncommittedWidth(inlineLogicalWidthFromAncestorsIfNeeded(box).toFloat());
     // Reset prior line break context characters.
     m_layoutTextInfo.m_lineBreakIterator.resetPriorContext();
@@ -420,8 +426,10 @@ inline bool shouldSkipWhitespaceAfterStartObject(LineLayoutBlockFlow block, Line
     while (next && next.isFloatingOrOutOfFlowPositioned())
         next = bidiNextSkippingEmptyInlines(block, next);
 
-    if (next && isEmptyInline(next))
-        next = LineLayoutInline(next).firstChild();
+    while (next && isEmptyInline(next)) {
+        LineLayoutItem child = LineLayoutInline(next).firstChild();
+        next = child ? child : bidiNextSkippingEmptyInlines(block, next);
+    }
 
     if (next && !next.isBR() && next.isText() && LineLayoutText(next).textLength() > 0) {
         LineLayoutText nextText(next);
@@ -695,6 +703,13 @@ ALWAYS_INLINE bool BreakingContext::hyphenate(LineLayoutText text,
         font.getCharacterRange(run, 0, prefixLength).width() + hyphenWidth);
 }
 
+ALWAYS_INLINE bool BreakingContext::isBreakAtSoftHyphen() const
+{
+    return m_lineBreak != m_resolver.position()
+        ? m_lineBreak.previousInSameNode() == softHyphenCharacter
+        : m_current.previousInSameNode() == softHyphenCharacter;
+}
+
 inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool& hyphenated)
 {
     if (!m_current.offset())
@@ -733,8 +748,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
     // See: fast/css3-text/css3-word-break/word-break-all-wrap-with-floats.html
     float widthMeasurementAtLastBreakOpportunity = 0;
 
-    Hyphenation* hyphenation = style.getHyphens() == HyphensAuto
-        ? Hyphenation::get(font.getFontDescription().locale()) : nullptr;
+    Hyphenation* hyphenation = style.getHyphenation();
     bool disableSoftHyphen = style.getHyphens() == HyphensNone;
     float hyphenWidth = 0;
 
@@ -981,9 +995,7 @@ inline bool BreakingContext::handleText(WordMeasurements& wordMeasurements, bool
             }
             m_width.addUncommittedWidth(wordMeasurement.width);
         }
-        if (!hyphenated
-            && m_lineBreak.previousInSameNode() == softHyphenCharacter
-            && !disableSoftHyphen) {
+        if (!hyphenated && isBreakAtSoftHyphen() && !disableSoftHyphen) {
             hyphenated = true;
             m_atEnd = true;
         }
@@ -1079,7 +1091,7 @@ inline bool BreakingContext::canBreakAtWhitespace(bool breakWords, WordMeasureme
             m_lineInfo.setPreviousLineBrokeCleanly(true);
             wordMeasurement.endOffset = m_lineBreak.offset();
         }
-        if (m_lineBreak.getLineLayoutItem() && m_lineBreak.offset() && m_lineBreak.getLineLayoutItem().isText() && LineLayoutText(m_lineBreak.getLineLayoutItem()).textLength() && LineLayoutText(m_lineBreak.getLineLayoutItem()).characterAt(m_lineBreak.offset() - 1) == softHyphenCharacter && !disableSoftHyphen)
+        if (isBreakAtSoftHyphen() && !disableSoftHyphen)
             hyphenated = true;
         if (m_lineBreak.offset() && m_lineBreak.offset() != (unsigned)wordMeasurement.endOffset && !wordMeasurement.width) {
             if (charWidth) {

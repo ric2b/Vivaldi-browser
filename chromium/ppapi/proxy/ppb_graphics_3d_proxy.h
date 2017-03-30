@@ -22,6 +22,9 @@
 #include "ppapi/utility/completion_callback_factory.h"
 
 namespace gpu {
+namespace gles2 {
+struct ContextCreationAttribHelper;
+}
 struct Capabilities;
 }
 
@@ -36,7 +39,7 @@ class PpapiCommandBufferProxy;
 
 class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
  public:
-  explicit Graphics3D(const HostResource& resource);
+  Graphics3D(const HostResource& resource, const gfx::Size& size);
   ~Graphics3D() override;
 
   bool Init(gpu::gles2::GLES2Implementation* share_gles2,
@@ -61,7 +64,8 @@ class PPAPI_PROXY_EXPORT Graphics3D : public PPB_Graphics3D_Shared {
   // PPB_Graphics3D_Shared overrides.
   gpu::CommandBuffer* GetCommandBuffer() override;
   gpu::GpuControl* GetGpuControl() override;
-  int32_t DoSwapBuffers(const gpu::SyncToken& sync_token) override;
+  int32_t DoSwapBuffers(const gpu::SyncToken& sync_token,
+                        const gfx::Size& size) override;
 
   std::unique_ptr<PpapiCommandBufferProxy> command_buffer_;
 
@@ -86,7 +90,7 @@ class PPB_Graphics3D_Proxy : public InterfaceProxy {
  private:
   void OnMsgCreate(PP_Instance instance,
                    HostResource share_context,
-                   const std::vector<int32_t>& attribs,
+                   const gpu::gles2::ContextCreationAttribHelper& attrib_helper,
                    HostResource* result,
                    gpu::Capabilities* capabilities,
                    SerializedHandle* handle,
@@ -110,7 +114,8 @@ class PPB_Graphics3D_Proxy : public InterfaceProxy {
       ppapi::proxy::SerializedHandle* transfer_buffer);
   void OnMsgDestroyTransferBuffer(const HostResource& context, int32_t id);
   void OnMsgSwapBuffers(const HostResource& context,
-                        const gpu::SyncToken& sync_token);
+                        const gpu::SyncToken& sync_token,
+                        const gfx::Size& size);
   void OnMsgTakeFrontBuffer(const HostResource& context);
   void OnMsgEnsureWorkVisible(const HostResource& context);
   // Renderer->plugin message handlers.

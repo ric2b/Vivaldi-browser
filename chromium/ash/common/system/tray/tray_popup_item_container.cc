@@ -5,9 +5,7 @@
 #include "ash/common/system/tray/tray_popup_item_container.h"
 
 #include "ash/common/system/tray/tray_constants.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/gfx/canvas.h"
-#include "ui/views/border.h"
 #include "ui/views/layout/box_layout.h"
 
 namespace ash {
@@ -29,12 +27,6 @@ TrayPopupItemContainer::TrayPopupItemContainer(views::View* view,
 }
 
 TrayPopupItemContainer::~TrayPopupItemContainer() {}
-
-void TrayPopupItemContainer::SetDrawBorder(bool draw_border) {
-  SetBorder(draw_border ? views::Border::CreateSolidSidedBorder(
-                              0, 0, 1, 0, kBorderLightColor)
-                        : nullptr);
-}
 
 void TrayPopupItemContainer::SetActive(bool active) {
   if (!change_background_ || active_ == active)
@@ -63,8 +55,6 @@ void TrayPopupItemContainer::OnMouseExited(const ui::MouseEvent& event) {
 }
 
 void TrayPopupItemContainer::OnGestureEvent(ui::GestureEvent* event) {
-  if (!switches::IsTouchFeedbackEnabled())
-    return;
   if (event->type() == ui::ET_GESTURE_TAP_DOWN) {
     SetActive(true);
   } else if (event->type() == ui::ET_GESTURE_TAP_CANCEL ||

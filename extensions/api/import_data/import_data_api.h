@@ -71,6 +71,8 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   void ImportItemStarted(importer::ImportItem item) override;
   void ImportItemEnded(importer::ImportItem item) override;
   void ImportEnded() override;
+  void ImportItemFailed(importer::ImportItem item,
+                        const std::string& error) override;
 
   // KeyedService implementation.
   void Shutdown() override;

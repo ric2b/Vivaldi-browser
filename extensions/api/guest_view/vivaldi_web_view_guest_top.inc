@@ -16,6 +16,8 @@
 
 #include "content/public/browser/render_widget_host.h"
 
+#include "components/content_settings/core/common/content_settings_types.h"
+
 namespace extensions {
 
 class ExtensionHostForWebContents : public ExtensionHost {

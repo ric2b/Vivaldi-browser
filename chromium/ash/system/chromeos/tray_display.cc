@@ -13,15 +13,14 @@
 #include "ash/common/system/system_notifier.h"
 #include "ash/common/system/tray/actionable_view.h"
 #include "ash/common/system/tray/fixed_sized_image_view.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_constants.h"
 #include "ash/common/system/tray/tray_notification_view.h"
 #include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
-#include "ash/display/window_tree_host_manager.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -154,13 +153,14 @@ const char TrayDisplay::kNotificationId[] = "chrome://settings/display";
 
 class DisplayView : public ActionableView {
  public:
-  explicit DisplayView() {
+  explicit DisplayView(SystemTrayItem* owner) : ActionableView(owner) {
     SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
                                           kTrayPopupPaddingHorizontal, 0,
                                           kTrayPopupPaddingBetweenItems));
 
     ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-    image_ = new FixedSizedImageView(0, kTrayPopupItemHeight);
+    image_ =
+        new FixedSizedImageView(0, GetTrayConstant(TRAY_POPUP_ITEM_HEIGHT));
     image_->SetImage(
         bundle.GetImageNamed(IDR_AURA_UBER_TRAY_DISPLAY).ToImageSkia());
     AddChildView(image_);
@@ -301,6 +301,7 @@ class DisplayView : public ActionableView {
     if (OpenSettings()) {
       WmShell::Get()->RecordUserMetricsAction(
           UMA_STATUS_AREA_DISPLAY_DEFAULT_SHOW_SETTINGS);
+      CloseSystemBubble();
     }
     return true;
   }
@@ -320,12 +321,12 @@ class DisplayView : public ActionableView {
 
 TrayDisplay::TrayDisplay(SystemTray* system_tray)
     : SystemTrayItem(system_tray, UMA_DISPLAY), default_(nullptr) {
-  Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
+  WmShell::Get()->AddDisplayObserver(this);
   UpdateDisplayInfo(NULL);
 }
 
 TrayDisplay::~TrayDisplay() {
-  Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
+  WmShell::Get()->RemoveDisplayObserver(this);
 }
 
 void TrayDisplay::UpdateDisplayInfo(TrayDisplay::DisplayInfoMap* old_info) {
@@ -436,7 +437,7 @@ void TrayDisplay::CreateOrUpdateNotification(
 
 views::View* TrayDisplay::CreateDefaultView(LoginStatus status) {
   DCHECK(default_ == NULL);
-  default_ = new DisplayView();
+  default_ = new DisplayView(this);
   return default_;
 }
 

@@ -14,10 +14,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/mock_timer.h"
 #include "chrome/browser/chromeos/resource_reporter/resource_reporter.h"
-#include "chrome/browser/task_management/test_task_manager.h"
+#include "chrome/browser/task_manager/test_task_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using task_management::TaskId;
+using task_manager::TaskId;
 
 namespace chromeos {
 
@@ -46,7 +46,7 @@ const ResourceReporter::TaskRecord kTestTasks[] = {
 
 // A list of task IDs that will be removed from the task manager later after all
 // the above tasks have been added.
-const task_management::TaskId kIdsOfTasksToRemove[] = {
+const task_manager::TaskId kIdsOfTasksToRemove[] = {
     4, 7, 12, 8, 5,
 };
 
@@ -63,7 +63,7 @@ const size_t kTasksToBeRemovedSize = arraysize(kIdsOfTasksToRemove);
 
 // A test implementation of the task manager that can be used to collect CPU and
 // memory usage so that they can be tested with the resource reporter.
-class DummyTaskManager : public task_management::TestTaskManager {
+class DummyTaskManager : public task_manager::TestTaskManager {
  public:
   DummyTaskManager() {
     set_timer_for_testing(
@@ -71,7 +71,7 @@ class DummyTaskManager : public task_management::TestTaskManager {
   }
   ~DummyTaskManager() override {}
 
-  // task_management::TestTaskManager:
+  // task_manager::TestTaskManager:
   double GetCpuUsage(TaskId task_id) const override {
     return tasks_.at(task_id)->cpu_percent;
   }
@@ -81,16 +81,16 @@ class DummyTaskManager : public task_management::TestTaskManager {
   const std::string& GetTaskNameForRappor(TaskId task_id) const override {
     return tasks_.at(task_id)->task_name_for_rappor;
   }
-  task_management::Task::Type GetType(TaskId task_id) const override {
+  task_manager::Task::Type GetType(TaskId task_id) const override {
     switch (task_id) {
       case 3:
-        return task_management::Task::BROWSER;
+        return task_manager::Task::BROWSER;
 
       case 6:
-        return task_management::Task::GPU;
+        return task_manager::Task::GPU;
 
       default:
-        return task_management::Task::RENDERER;
+        return task_manager::Task::RENDERER;
     }
   }
 
@@ -161,7 +161,7 @@ class ResourceReporterTest : public testing::Test {
   // properly sorted by the CPU usage in a descending order.
   bool IsCpuRecordsSetSorted() const {
     double current_cpu = std::numeric_limits<double>::max();
-    for (const auto& record : resource_reporter()->task_records_by_cpu_) {
+    for (auto* record : resource_reporter()->task_records_by_cpu_) {
       if (record->cpu_percent > current_cpu)
         return false;
       current_cpu = record->cpu_percent;
@@ -174,7 +174,7 @@ class ResourceReporterTest : public testing::Test {
   // are properly sorted by the memory usage in a descending order.
   bool IsMemoryRecordsSetSorted() const {
     int64_t current_memory = std::numeric_limits<int64_t>::max();
-    for (const auto& record : resource_reporter()->task_records_by_memory_) {
+    for (auto* record : resource_reporter()->task_records_by_memory_) {
       if (record->memory_bytes > current_memory)
         return false;
       current_memory = record->memory_bytes;

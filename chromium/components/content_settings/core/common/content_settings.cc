@@ -41,7 +41,7 @@ ContentSettingsType kHistogramOrder[] = {
     CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
-    CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
+    CONTENT_SETTINGS_TYPE_DEFAULT,  // PUSH_MESSAGING (removed).
     CONTENT_SETTINGS_TYPE_SSL_CERT_DECISIONS,
     CONTENT_SETTINGS_TYPE_DEFAULT,  // METRO_SWITCH_TO_DESKTOP (deprecated).
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
@@ -56,6 +56,7 @@ ContentSettingsType kHistogramOrder[] = {
     CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD,
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
+    CONTENT_SETTINGS_TYPE_PROMPT_NO_DECISION_COUNT,
 };
 
 int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting,
@@ -70,7 +71,7 @@ int ContentSettingTypeToHistogramValue(ContentSettingsType content_setting,
     }
   }
 
-  DCHECK(ContainsKey(kMap, content_setting));
+  DCHECK(base::ContainsKey(kMap, content_setting));
   *num_values = arraysize(kHistogramOrder);
   return kMap[content_setting];
 }

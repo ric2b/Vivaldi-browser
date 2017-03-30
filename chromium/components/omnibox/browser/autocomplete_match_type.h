@@ -51,9 +51,12 @@ struct AutocompleteMatchType {
     VOICE_SUGGEST               = 20,  // An Android-specific type which
                                        // indicates a search from voice
                                        // recognizer.
+    PHYSICAL_WEB                = 21,  // A Physical Web nearby URL.
+    PHYSICAL_WEB_OVERFLOW       = 22,  // An item representing multiple
+                                       // Physical Web nearby URLs.
 
-    BOOKMARK_NICK               = 21,  // A bookmark whose nickname contains the input.
-    BOOKMARK_DESCRIPTION        = 22,  // A bookmark whose description contains the input.
+    BOOKMARK_NICK               = 23,  // A bookmark whose nickname contains the input.
+    BOOKMARK_DESCRIPTION        = 24,  // A bookmark whose description contains the input.
     NUM_TYPES,
   };
 

@@ -4,6 +4,8 @@
 
 #include "net/spdy/header_coalescer.h"
 
+#include <utility>
+
 #include "base/strings/string_util.h"
 
 namespace net {
@@ -29,12 +31,19 @@ void HeaderCoalescer::OnHeader(base::StringPiece key, base::StringPiece value) {
   }
 
   if (key[0] == ':') {
-    if (protocol_version_ == HTTP2 && regular_header_seen_) {
+    if (regular_header_seen_) {
       error_seen_ = true;
       return;
     }
   } else {
     regular_header_seen_ = true;
+  }
+
+  // End of line delimiter is forbidden according to RFC 7230 Section 3.2.
+  // Line folding, RFC 7230 Section 3.2.4., is a special case of this.
+  if (value.find("\r\n") != base::StringPiece::npos) {
+    error_seen_ = true;
+    return;
   }
 
   auto iter = headers_.find(key);
@@ -53,6 +62,12 @@ void HeaderCoalescer::OnHeader(base::StringPiece key, base::StringPiece value) {
     value.AppendToString(&s);
     headers_.ReplaceOrAppendHeader(key, s);
   }
+}
+
+SpdyHeaderBlock HeaderCoalescer::release_headers() {
+  DCHECK(headers_valid_);
+  headers_valid_ = false;
+  return std::move(headers_);
 }
 
 }  // namespace net

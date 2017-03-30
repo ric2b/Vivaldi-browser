@@ -6,11 +6,9 @@
 
 #import <Foundation/Foundation.h>
 
-#include "base/mac/bind_objc_block.h"
-#include "base/strings/stringprintf.h"
-#include "base/strings/utf_string_conversions.h"
-#include "base/test/ios/wait_util.h"
 #include "ios/testing/earl_grey/wait_util.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
+#include "ios/web/web_state/web_state_impl.h"
 
 using web::NavigationManager;
 
@@ -19,13 +17,31 @@ namespace test {
 
 void TapWebViewElementWithId(web::WebState* web_state,
                              const std::string& element_id) {
-  const char kJsClick[] = "document.getElementById('%s').click()";
+  RunActionOnWebViewElementWithId(web_state, element_id, CLICK);
+}
+
+void RunActionOnWebViewElementWithId(web::WebState* web_state,
+                                     const std::string& element_id,
+                                     ElementAction action) {
+  CRWWebController* web_controller =
+      static_cast<WebStateImpl*>(web_state)->GetWebController();
+  const char* jsAction = nullptr;
+  switch (action) {
+    case CLICK:
+      jsAction = ".click()";
+      break;
+    case FOCUS:
+      jsAction = ".focus();";
+      break;
+  }
+  NSString* script =
+      [NSString stringWithFormat:@"document.getElementById('%s')%s",
+                                 element_id.c_str(), jsAction];
   __block bool did_complete = false;
-  web_state->ExecuteJavaScript(
-      base::UTF8ToUTF16(base::StringPrintf(kJsClick, element_id.c_str())),
-      base::BindBlock(^(const base::Value*) {
-        did_complete = true;
-      }));
+  [web_controller executeUserJavaScript:script
+                      completionHandler:^(id, NSError*) {
+                        did_complete = true;
+                      }];
 
   testing::WaitUntilCondition(testing::kWaitForJSCompletionTimeout, ^{
     return did_complete;

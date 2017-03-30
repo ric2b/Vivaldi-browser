@@ -5,13 +5,13 @@
 #include "core/animation/KeyframeEffect.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "bindings/core/v8/EffectModelOrDictionarySequenceOrDictionary.h"
+#include "bindings/core/v8/DictionarySequenceOrDictionary.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/core/v8/V8KeyframeEffectOptions.h"
 #include "core/animation/AnimationClock.h"
 #include "core/animation/AnimationEffectTiming.h"
 #include "core/animation/AnimationTestHelper.h"
-#include "core/animation/AnimationTimeline.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/animation/KeyframeEffectModel.h"
 #include "core/animation/Timing.h"
 #include "core/dom/Document.h"
@@ -46,11 +46,11 @@ protected:
     template<typename T>
     static KeyframeEffect* createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector, T timingInput, ExceptionState& exceptionState)
     {
-        return KeyframeEffect::create(nullptr, element, EffectModelOrDictionarySequenceOrDictionary::fromDictionarySequence(keyframeDictionaryVector), timingInput, exceptionState);
+        return KeyframeEffect::create(nullptr, element, DictionarySequenceOrDictionary::fromDictionarySequence(keyframeDictionaryVector), timingInput, exceptionState);
     }
     static KeyframeEffect* createAnimation(Element* element, Vector<Dictionary> keyframeDictionaryVector, ExceptionState& exceptionState)
     {
-        return KeyframeEffect::create(nullptr, element, EffectModelOrDictionarySequenceOrDictionary::fromDictionarySequence(keyframeDictionaryVector), exceptionState);
+        return KeyframeEffect::create(nullptr, element, DictionarySequenceOrDictionary::fromDictionarySequence(keyframeDictionaryVector), exceptionState);
     }
 };
 
@@ -89,13 +89,11 @@ TEST_F(AnimationKeyframeEffectV8Test, CanCreateAnAnimation)
     EXPECT_EQ(0, keyframes[0]->offset());
     EXPECT_EQ(1, keyframes[1]->offset());
 
-    const CSSValue* keyframe1Width = toStringKeyframe(keyframes[0].get())->cssPropertyValue(CSSPropertyWidth);
-    const CSSValue* keyframe2Width = toStringKeyframe(keyframes[1].get())->cssPropertyValue(CSSPropertyWidth);
-    ASSERT(keyframe1Width);
-    ASSERT(keyframe2Width);
+    const CSSValue& keyframe1Width = toStringKeyframe(keyframes[0].get())->cssPropertyValue(CSSPropertyWidth);
+    const CSSValue& keyframe2Width = toStringKeyframe(keyframes[1].get())->cssPropertyValue(CSSPropertyWidth);
 
-    EXPECT_EQ("100px", keyframe1Width->cssText());
-    EXPECT_EQ("0px", keyframe2Width->cssText());
+    EXPECT_EQ("100px", keyframe1Width.cssText());
+    EXPECT_EQ("0px", keyframe2Width.cssText());
 
     EXPECT_EQ(*(CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseType::EASE_IN_OUT)), keyframes[0]->easing());
     EXPECT_EQ(*(CubicBezierTimingFunction::create(1, 1, 0.3, 0.3).get()), keyframes[1]->easing());
@@ -129,7 +127,6 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedGetters)
     setV8ObjectPropertyAsString(scope.isolate(), timingInput, "fill", "backwards");
     setV8ObjectPropertyAsNumber(scope.isolate(), timingInput, "iterationStart", 2);
     setV8ObjectPropertyAsNumber(scope.isolate(), timingInput, "iterations", 10);
-    setV8ObjectPropertyAsNumber(scope.isolate(), timingInput, "playbackRate", 2);
     setV8ObjectPropertyAsString(scope.isolate(), timingInput, "direction", "reverse");
     setV8ObjectPropertyAsString(scope.isolate(), timingInput, "easing", "step-start");
     KeyframeEffectOptions timingInputDictionary;
@@ -143,7 +140,6 @@ TEST_F(AnimationKeyframeEffectV8Test, SpecifiedGetters)
     EXPECT_EQ("backwards", specified->fill());
     EXPECT_EQ(2, specified->iterationStart());
     EXPECT_EQ(10, specified->iterations());
-    EXPECT_EQ(2, specified->playbackRate());
     EXPECT_EQ("reverse", specified->direction());
     EXPECT_EQ("step-start", specified->easing());
 }
@@ -263,7 +259,7 @@ TEST_F(KeyframeEffectTest, TimeToEffectChange)
     timing.iterationDuration = 100;
     timing.startDelay = 100;
     timing.endDelay = 100;
-    timing.fillMode = Timing::FillModeNone;
+    timing.fillMode = Timing::FillMode::NONE;
     KeyframeEffect* animation = KeyframeEffect::create(0, nullptr, timing);
     Animation* player = document().timeline().play(animation);
     double inf = std::numeric_limits<double>::infinity();
@@ -296,7 +292,7 @@ TEST_F(KeyframeEffectTest, TimeToEffectChangeWithPlaybackRate)
     timing.startDelay = 100;
     timing.endDelay = 100;
     timing.playbackRate = 2;
-    timing.fillMode = Timing::FillModeNone;
+    timing.fillMode = Timing::FillMode::NONE;
     KeyframeEffect* animation = KeyframeEffect::create(0, nullptr, timing);
     Animation* player = document().timeline().play(animation);
     double inf = std::numeric_limits<double>::infinity();
@@ -329,7 +325,7 @@ TEST_F(KeyframeEffectTest, TimeToEffectChangeWithNegativePlaybackRate)
     timing.startDelay = 100;
     timing.endDelay = 100;
     timing.playbackRate = -2;
-    timing.fillMode = Timing::FillModeNone;
+    timing.fillMode = Timing::FillMode::NONE;
     KeyframeEffect* animation = KeyframeEffect::create(0, nullptr, timing);
     Animation* player = document().timeline().play(animation);
     double inf = std::numeric_limits<double>::infinity();

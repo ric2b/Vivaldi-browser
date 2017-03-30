@@ -19,10 +19,6 @@ public abstract class ChromeSwitches {
     /** Whether fullscreen support is disabled (auto hiding controls, etc...). */
     public static final String DISABLE_FULLSCREEN = "disable-fullscreen";
 
-    /** Enable toolbar swipe to change tabs in document mode */
-    public static final String ENABLE_TOOLBAR_SWIPE_IN_DOCUMENT_MODE =
-            "enable-toolbar-swipe-in-document-mode";
-
     /** Whether instant is disabled. */
     public static final String DISABLE_INSTANT = "disable-instant";
 
@@ -34,6 +30,9 @@ public abstract class ChromeSwitches {
 
     /** Disable the First Run Experience. */
     public static final String DISABLE_FIRST_RUN_EXPERIENCE = "disable-fre";
+
+    /** Enable the Lightweight First Run Experience. */
+    public static final String ENABLE_LIGHTWEIGHT_FIRST_RUN_EXPERIENCE = "enable-lightweight-fre";
 
     /** Force the crash dump to be uploaded regardless of preferences. */
     public static final String FORCE_CRASH_DUMP_UPLOAD = "force-dump-upload";
@@ -58,10 +57,6 @@ public abstract class ChromeSwitches {
     /** Enable Contextual Search. */
     public static final String ENABLE_CONTEXTUAL_SEARCH = "enable-contextual-search";
 
-    /** Enable Contextual Search for instrumentation testing. Not exposed to user. */
-    public static final String ENABLE_CONTEXTUAL_SEARCH_FOR_TESTING =
-            "enable-contextual-search-for-testing";
-
     // How many thumbnails should we allow in the cache (per tab stack)?
     public static final String THUMBNAILS = "thumbnails";
 
@@ -80,11 +75,6 @@ public abstract class ChromeSwitches {
     public static final String DISABLE_LOFI_SNACKBAR = "disable-lo-fi-snackbar";
 
     /**
-     * Enable interests on the NTP
-     */
-    public static final String ENABLE_INTERESTS = "enable-interests";
-
-    /**
      * Forces the update menu item to show.
      */
     public static final String FORCE_SHOW_UPDATE_MENU_ITEM = "force-show-update-menu-item";
@@ -98,9 +88,6 @@ public abstract class ChromeSwitches {
      * Sets the market URL for Chrome for use in testing.
      */
     public static final String MARKET_URL_FOR_TESTING = "market-url-for-testing";
-
-    /** Enables the download manager UI. */
-    public static final String ENABLE_DOWNLOAD_MANAGER_UI = "enable-download-manager-ui";
 
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Native Switches
@@ -139,12 +126,6 @@ public abstract class ChromeSwitches {
      * Native switch - switches::kEnableAndroidSpellChecker
      */
     public static final String ENABLE_ANDROID_SPELLCHECKER = "enable-android-spellchecker";
-
-    /**
-     * Disable speculative TCP/IP preconnection.
-     * Native switch - switches::kDisablePreconnect
-     */
-    public static final String DISABLE_PRECONNECT = "disable-preconnect";
 
     /**
      * Specifies Android phone page loading progress bar animation.
@@ -220,12 +201,6 @@ public abstract class ChromeSwitches {
     public static final String ENABLE_APP_LINK = "enable-app-link";
 
     /**
-     * Enable tab switcher in document mode (merged tabs and apps option).
-     */
-    public static final String ENABLE_TAB_SWITCHER_IN_DOCUMENT_MODE =
-            "enable-tab-switcher-in-document-mode";
-
-    /**
      * Set the partner-defined homepage URL, for testing.
      */
     public static final String PARTNER_HOMEPAGE_FOR_TESTING = "partner-homepage-for-testing";
@@ -239,12 +214,6 @@ public abstract class ChromeSwitches {
      * Enables "Add to Home screen" to mint a WebApk.
      */
     public static final String ENABLE_WEBAPK = "enable-webapk";
-
-    /**
-     * Enables theme colors in the tab switcher.
-     */
-    public static final String ENABLE_TAB_SWITCHER_THEME_COLORS =
-            "enable-tab-switcher-theme-colors";
 
     /**
      * Forces the WebAPK runtime dex to be extracted each time that Chrome is started.

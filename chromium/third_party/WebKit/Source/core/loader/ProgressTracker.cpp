@@ -34,7 +34,6 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
-#include "platform/Logging.h"
 #include "platform/network/ResourceResponse.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/PtrUtil.h"
@@ -240,7 +239,12 @@ void ProgressTracker::completeProgress(unsigned long identifier)
         return;
 
     item->estimatedLength = item->bytesReceived;
-    m_elementsLoaded++;
+
+    // NOTE(pettern@vivaldi.com): Empty bytesReceived means it never got loaded
+    // to begin with.
+    if (item->bytesReceived) {
+      m_elementsLoaded++;
+    }
     maybeSendProgress();
 }
 

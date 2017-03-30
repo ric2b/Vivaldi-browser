@@ -59,24 +59,33 @@ static_library("gcm_driver") {
     "system_encryptor.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
     "//components/gcm_driver/common",
     "//components/gcm_driver/crypto",
+    "//components/gcm_driver/instance_id",
+  ]
+  deps = [
+    "//components/crx_file",
     "//components/keyed_service/core",
     "//components/os_crypt",
     "//components/pref_registry",
     "//components/prefs",
     "//components/signin/core/browser",
-    "//components/sync_driver",
+    "//components/sync",
     "//components/version_info",
     "//google_apis",
     "//google_apis/gcm",
     "//net",
-    "//sync/protocol",
     "//url:url",
   ]
-  allow_circular_includes_from = [ "//components/gcm_driver/crypto" ]
+
+  # This target goes with these other deps and they can include headers from
+  # each other.
+  allow_circular_includes_from = [
+    "//components/gcm_driver/crypto",
+    "//components/gcm_driver/instance_id",
+  ]
 
   if (is_chromeos) {
     deps += [ "//components/timers" ]
@@ -101,13 +110,16 @@ static_library("gcm_driver") {
       "gcm_stats_recorder_impl.cc",
       "gcm_stats_recorder_impl.h",
     ]
-    deps -= [ "//google_apis/gcm" ]
+    deps -= [
+      "//components/crx_file",
+      "//google_apis/gcm",
+    ]
     deps += [ "android:jni_headers" ]
   }
 }
 
 # GYP version: components/gcm_driver.gypi:gcm_driver_test_support
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "fake_gcm_app_handler.cc",
@@ -162,10 +174,10 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/gcm_driver/crypto",
     "//components/prefs:test_support",
+    "//components/sync/protocol",
     "//google_apis:test_support",
     "//google_apis/gcm:test_support",
     "//net:test_support",
-    "//sync/protocol",
     "//testing/gtest",
     "//third_party/protobuf:protobuf_lite",
   ]

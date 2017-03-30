@@ -6,8 +6,15 @@
 
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSColorValue.h"
+#include "core/css/CSSCrossfadeValue.h"
+#include "core/css/CSSGradientValue.h"
+#include "core/css/CSSImageSetValue.h"
+#include "core/css/CSSImageValue.h"
+#include "core/css/CSSPaintValue.h"
 #include "core/css/CSSStringValue.h"
+#include "core/css/CSSURIValue.h"
 #include "core/css/CSSValuePair.h"
+#include "core/frame/UseCounter.h"
 
 namespace blink {
 
@@ -214,6 +221,20 @@ CSSPrimitiveValue* consumePercent(CSSParserTokenRange& range, ValueRange valueRa
     return nullptr;
 }
 
+bool canConsumeCalcValue(CalculationCategory category, CSSParserMode cssParserMode)
+{
+    if (category == CalcLength || category == CalcPercent || category == CalcPercentLength)
+        return true;
+
+    if (cssParserMode != SVGAttributeMode)
+        return false;
+
+    if (category == CalcNumber || category == CalcPercentNumber || category == CalcLengthNumber || category == CalcPercentLengthNumber)
+        return true;
+
+    return false;
+}
+
 CSSPrimitiveValue* consumeLengthOrPercent(CSSParserTokenRange& range, CSSParserMode cssParserMode, ValueRange valueRange, UnitlessQuirk unitless)
 {
     const CSSParserToken& token = range.peek();
@@ -223,7 +244,7 @@ CSSPrimitiveValue* consumeLengthOrPercent(CSSParserTokenRange& range, CSSParserM
         return consumePercent(range, valueRange);
     CalcParser calcParser(range, valueRange);
     if (const CSSCalcValue* calculation = calcParser.value()) {
-        if (calculation->category() == CalcLength || calculation->category() == CalcPercent || calculation->category() == CalcPercentLength)
+        if (canConsumeCalcValue(calculation->category(), cssParserMode))
             return calcParser.consumeValue();
     }
     return nullptr;
@@ -302,26 +323,34 @@ CSSStringValue* consumeString(CSSParserTokenRange& range)
     return CSSStringValue::create(range.consumeIncludingWhitespace().value().toString());
 }
 
-String consumeUrl(CSSParserTokenRange& range)
+StringView consumeUrlAsStringView(CSSParserTokenRange& range)
 {
     const CSSParserToken& token = range.peek();
     if (token.type() == UrlToken) {
         range.consumeIncludingWhitespace();
-        return token.value().toString();
+        return token.value();
     }
     if (token.functionId() == CSSValueUrl) {
         CSSParserTokenRange urlRange = range;
         CSSParserTokenRange urlArgs = urlRange.consumeBlock();
         const CSSParserToken& next = urlArgs.consumeIncludingWhitespace();
         if (next.type() == BadStringToken || !urlArgs.atEnd())
-            return String();
+            return StringView();
         ASSERT(next.type() == StringToken);
         range = urlRange;
         range.consumeWhitespace();
-        return next.value().toString();
+        return next.value();
     }
 
-    return String();
+    return StringView();
+}
+
+CSSURIValue* consumeUrl(CSSParserTokenRange& range)
+{
+    StringView url = consumeUrlAsStringView(range);
+    if (url.isNull())
+        return nullptr;
+    return CSSURIValue::create(url.toString());
 }
 
 static int clampRGBComponent(const CSSPrimitiveValue& value)
@@ -459,11 +488,24 @@ CSSValue* consumeColor(CSSParserTokenRange& range, CSSParserMode cssParserMode, 
     return CSSColorValue::create(color);
 }
 
-static CSSPrimitiveValue* consumePositionComponent(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless)
+static CSSPrimitiveValue* consumePositionComponent(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless, bool& horizontalEdge, bool& verticalEdge)
 {
-    if (range.peek().type() == IdentToken)
-        return consumeIdent<CSSValueLeft, CSSValueTop, CSSValueBottom, CSSValueRight, CSSValueCenter>(range);
-    return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll, unitless);
+    if (range.peek().type() != IdentToken)
+        return consumeLengthOrPercent(range, cssParserMode, ValueRangeAll, unitless);
+
+    CSSValueID id = range.peek().id();
+    if (id == CSSValueLeft || id == CSSValueRight) {
+        if (horizontalEdge)
+            return nullptr;
+        horizontalEdge = true;
+    } else if (id == CSSValueTop || id == CSSValueBottom) {
+        if (verticalEdge)
+            return nullptr;
+        verticalEdge = true;
+    } else if (id != CSSValueCenter) {
+        return nullptr;
+    }
+    return consumeIdent(range);
 }
 
 static bool isHorizontalPositionKeywordOnly(const CSSPrimitiveValue& value)
@@ -485,33 +527,29 @@ static void positionFromOneValue(CSSPrimitiveValue* value, CSSValue*& resultX, C
         std::swap(resultX, resultY);
 }
 
-static bool positionFromTwoValues(CSSPrimitiveValue* value1, CSSPrimitiveValue* value2,
+static void positionFromTwoValues(CSSPrimitiveValue* value1, CSSPrimitiveValue* value2,
     CSSValue*& resultX, CSSValue*& resultY)
 {
     bool mustOrderAsXY = isHorizontalPositionKeywordOnly(*value1) || isVerticalPositionKeywordOnly(*value2)
         || !value1->isValueID() || !value2->isValueID();
     bool mustOrderAsYX = isVerticalPositionKeywordOnly(*value1) || isHorizontalPositionKeywordOnly(*value2);
-    if (mustOrderAsXY && mustOrderAsYX)
-        return false;
+    DCHECK(!mustOrderAsXY || !mustOrderAsYX);
     resultX = value1;
     resultY = value2;
     if (mustOrderAsYX)
         std::swap(resultX, resultY);
-    return true;
 }
 
-static bool positionFromThreeOrFourValues(CSSPrimitiveValue** values, CSSValue*& resultX, CSSValue*& resultY)
+static void positionFromThreeOrFourValues(CSSPrimitiveValue** values, CSSValue*& resultX, CSSValue*& resultY)
 {
     CSSPrimitiveValue* center = nullptr;
     for (int i = 0; values[i]; i++) {
         CSSPrimitiveValue* currentValue = values[i];
-        if (!currentValue->isValueID())
-            return false;
+        DCHECK(currentValue->isValueID());
         CSSValueID id = currentValue->getValueID();
 
         if (id == CSSValueCenter) {
-            if (center)
-                return false;
+            DCHECK(!center);
             center = currentValue;
             continue;
         }
@@ -524,57 +562,69 @@ static bool positionFromThreeOrFourValues(CSSPrimitiveValue** values, CSSValue*&
         }
 
         if (id == CSSValueLeft || id == CSSValueRight) {
-            if (resultX)
-                return false;
+            DCHECK(!resultX);
             resultX = result;
         } else {
-            ASSERT(id == CSSValueTop || id == CSSValueBottom);
-            if (resultY)
-                return false;
+            DCHECK(id == CSSValueTop || id == CSSValueBottom);
+            DCHECK(!resultY);
             resultY = result;
         }
     }
 
     if (center) {
-        ASSERT(resultX || resultY);
-        if (resultX && resultY)
-            return false;
+        DCHECK(!!resultX != !!resultY);
         if (!resultX)
             resultX = center;
         else
             resultY = center;
     }
 
-    ASSERT(resultX && resultY);
-    return true;
+    DCHECK(resultX && resultY);
 }
 
-// TODO(timloh): This may consume from the range upon failure. The background
-// shorthand works around it, but we should just fix it here.
 bool consumePosition(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless, CSSValue*& resultX, CSSValue*& resultY)
 {
-    CSSPrimitiveValue* value1 = consumePositionComponent(range, cssParserMode, unitless);
+    bool horizontalEdge = false;
+    bool verticalEdge = false;
+    CSSPrimitiveValue* value1 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
     if (!value1)
         return false;
+    if (!value1->isValueID())
+        horizontalEdge = true;
 
-    CSSPrimitiveValue* value2 = consumePositionComponent(range, cssParserMode, unitless);
+    CSSParserTokenRange rangeAfterFirstConsume = range;
+    CSSPrimitiveValue* value2 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
     if (!value2) {
         positionFromOneValue(value1, resultX, resultY);
         return true;
     }
 
-    CSSPrimitiveValue* value3 = consumePositionComponent(range, cssParserMode, unitless);
-    if (!value3)
-        return positionFromTwoValues(value1, value2, resultX, resultY);
+    CSSPrimitiveValue* value3 = nullptr;
+    if (value1->isValueID()
+        && value2->isValueID() != (range.peek().type() == IdentToken)
+        && (value2->isValueID() ? value2->getValueID() : value1->getValueID()) != CSSValueCenter)
+        value3 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
+    if (!value3) {
+        if (verticalEdge && !value2->isValueID()) {
+            range = rangeAfterFirstConsume;
+            positionFromOneValue(value1, resultX, resultY);
+            return true;
+        }
+        positionFromTwoValues(value1, value2, resultX, resultY);
+        return true;
+    }
 
-    CSSPrimitiveValue* value4 = consumePositionComponent(range, cssParserMode, unitless);
+    CSSPrimitiveValue* value4 = nullptr;
+    if (value3->isValueID() && value3->getValueID() != CSSValueCenter && range.peek().type() != IdentToken)
+        value4 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
     CSSPrimitiveValue* values[5];
     values[0] = value1;
     values[1] = value2;
     values[2] = value3;
     values[3] = value4;
     values[4] = nullptr;
-    return positionFromThreeOrFourValues(values, resultX, resultY);
+    positionFromThreeOrFourValues(values, resultX, resultY);
+    return true;
 }
 
 CSSValuePair* consumePosition(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless)
@@ -588,15 +638,474 @@ CSSValuePair* consumePosition(CSSParserTokenRange& range, CSSParserMode cssParse
 
 bool consumeOneOrTwoValuedPosition(CSSParserTokenRange& range, CSSParserMode cssParserMode, UnitlessQuirk unitless, CSSValue*& resultX, CSSValue*& resultY)
 {
-    CSSPrimitiveValue* value1 = consumePositionComponent(range, cssParserMode, unitless);
+    bool horizontalEdge = false;
+    bool verticalEdge = false;
+    CSSPrimitiveValue* value1 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
     if (!value1)
         return false;
-    CSSPrimitiveValue* value2 = consumePositionComponent(range, cssParserMode, unitless);
+    if (!value1->isValueID())
+        horizontalEdge = true;
+
+    CSSPrimitiveValue* value2 = nullptr;
+    if (!verticalEdge || range.peek().type() == IdentToken)
+        value2 = consumePositionComponent(range, cssParserMode, unitless, horizontalEdge, verticalEdge);
     if (!value2) {
         positionFromOneValue(value1, resultX, resultY);
         return true;
     }
-    return positionFromTwoValues(value1, value2, resultX, resultY);
+    positionFromTwoValues(value1, value2, resultX, resultY);
+    return true;
+}
+
+// This should go away once we drop support for -webkit-gradient
+static CSSPrimitiveValue* consumeDeprecatedGradientPoint(CSSParserTokenRange& args, bool horizontal)
+{
+    if (args.peek().type() == IdentToken) {
+        if ((horizontal && consumeIdent<CSSValueLeft>(args)) || (!horizontal && consumeIdent<CSSValueTop>(args)))
+            return CSSPrimitiveValue::create(0., CSSPrimitiveValue::UnitType::Percentage);
+        if ((horizontal && consumeIdent<CSSValueRight>(args)) || (!horizontal && consumeIdent<CSSValueBottom>(args)))
+            return CSSPrimitiveValue::create(100., CSSPrimitiveValue::UnitType::Percentage);
+        if (consumeIdent<CSSValueCenter>(args))
+            return CSSPrimitiveValue::create(50., CSSPrimitiveValue::UnitType::Percentage);
+        return nullptr;
+    }
+    CSSPrimitiveValue* result = consumePercent(args, ValueRangeAll);
+    if (!result)
+        result = consumeNumber(args, ValueRangeAll);
+    return result;
+}
+
+// Used to parse colors for -webkit-gradient(...).
+static CSSValue* consumeDeprecatedGradientStopColor(CSSParserTokenRange& args, CSSParserMode cssParserMode)
+{
+    if (args.peek().id() == CSSValueCurrentcolor)
+        return nullptr;
+    return consumeColor(args, cssParserMode);
+}
+
+static bool consumeDeprecatedGradientColorStop(CSSParserTokenRange& range, CSSGradientColorStop& stop, CSSParserMode cssParserMode)
+{
+    CSSValueID id = range.peek().functionId();
+    if (id != CSSValueFrom && id != CSSValueTo && id != CSSValueColorStop)
+        return false;
+
+    CSSParserTokenRange args = consumeFunction(range);
+    double position;
+    if (id == CSSValueFrom || id == CSSValueTo) {
+        position = (id == CSSValueFrom) ? 0 : 1;
+    } else {
+        DCHECK(id == CSSValueColorStop);
+        const CSSParserToken& arg = args.consumeIncludingWhitespace();
+        if (arg.type() == PercentageToken)
+            position = arg.numericValue() / 100.0;
+        else if (arg.type() == NumberToken)
+            position = arg.numericValue();
+        else
+            return false;
+
+        if (!consumeCommaIncludingWhitespace(args))
+            return false;
+    }
+
+    stop.m_position = CSSPrimitiveValue::create(position, CSSPrimitiveValue::UnitType::Number);
+    stop.m_color = consumeDeprecatedGradientStopColor(args, cssParserMode);
+    return stop.m_color && args.atEnd();
+}
+
+static CSSValue* consumeDeprecatedGradient(CSSParserTokenRange& args, CSSParserMode cssParserMode)
+{
+    CSSGradientValue* result = nullptr;
+    CSSValueID id = args.consumeIncludingWhitespace().id();
+    bool isDeprecatedRadialGradient = (id == CSSValueRadial);
+    if (isDeprecatedRadialGradient)
+        result = CSSRadialGradientValue::create(NonRepeating, CSSDeprecatedRadialGradient);
+    else if (id == CSSValueLinear)
+        result = CSSLinearGradientValue::create(NonRepeating, CSSDeprecatedLinearGradient);
+    if (!result || !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+
+    CSSPrimitiveValue* point = consumeDeprecatedGradientPoint(args, true);
+    if (!point)
+        return nullptr;
+    result->setFirstX(point);
+    point = consumeDeprecatedGradientPoint(args, false);
+    if (!point)
+        return nullptr;
+    result->setFirstY(point);
+
+    if (!consumeCommaIncludingWhitespace(args))
+        return nullptr;
+
+    // For radial gradients only, we now expect a numeric radius.
+    if (isDeprecatedRadialGradient) {
+        CSSPrimitiveValue* radius = consumeNumber(args, ValueRangeAll);
+        if (!radius || !consumeCommaIncludingWhitespace(args))
+            return nullptr;
+        toCSSRadialGradientValue(result)->setFirstRadius(radius);
+    }
+
+    point = consumeDeprecatedGradientPoint(args, true);
+    if (!point)
+        return nullptr;
+    result->setSecondX(point);
+    point = consumeDeprecatedGradientPoint(args, false);
+    if (!point)
+        return nullptr;
+    result->setSecondY(point);
+
+    // For radial gradients only, we now expect the second radius.
+    if (isDeprecatedRadialGradient) {
+        if (!consumeCommaIncludingWhitespace(args))
+            return nullptr;
+        CSSPrimitiveValue* radius = consumeNumber(args, ValueRangeAll);
+        if (!radius)
+            return nullptr;
+        toCSSRadialGradientValue(result)->setSecondRadius(radius);
+    }
+
+    CSSGradientColorStop stop;
+    while (consumeCommaIncludingWhitespace(args)) {
+        if (!consumeDeprecatedGradientColorStop(args, stop, cssParserMode))
+            return nullptr;
+        result->addStop(stop);
+    }
+
+    return result;
+}
+
+static bool consumeGradientColorStops(CSSParserTokenRange& range, CSSParserMode cssParserMode, CSSGradientValue* gradient)
+{
+    bool supportsColorHints = gradient->gradientType() == CSSLinearGradient || gradient->gradientType() == CSSRadialGradient;
+
+    // The first color stop cannot be a color hint.
+    bool previousStopWasColorHint = true;
+    do {
+        CSSGradientColorStop stop;
+        stop.m_color = consumeColor(range, cssParserMode);
+        // Two hints in a row are not allowed.
+        if (!stop.m_color && (!supportsColorHints || previousStopWasColorHint))
+            return false;
+        previousStopWasColorHint = !stop.m_color;
+        stop.m_position = consumeLengthOrPercent(range, cssParserMode, ValueRangeAll);
+        if (!stop.m_color && !stop.m_position)
+            return false;
+        gradient->addStop(stop);
+    } while (consumeCommaIncludingWhitespace(range));
+
+    // The last color stop cannot be a color hint.
+    if (previousStopWasColorHint)
+        return false;
+
+    // Must have 2 or more stops to be valid.
+    return gradient->stopCount() >= 2;
+}
+
+static CSSValue* consumeDeprecatedRadialGradient(CSSParserTokenRange& args, CSSParserMode cssParserMode, CSSGradientRepeat repeating)
+{
+    CSSRadialGradientValue* result = CSSRadialGradientValue::create(repeating, CSSPrefixedRadialGradient);
+    CSSValue* centerX = nullptr;
+    CSSValue* centerY = nullptr;
+    consumeOneOrTwoValuedPosition(args, cssParserMode, UnitlessQuirk::Forbid, centerX, centerY);
+    if ((centerX || centerY) && !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+
+    result->setFirstX(toCSSPrimitiveValue(centerX));
+    result->setSecondX(toCSSPrimitiveValue(centerX));
+    result->setFirstY(toCSSPrimitiveValue(centerY));
+    result->setSecondY(toCSSPrimitiveValue(centerY));
+
+    CSSPrimitiveValue* shape = consumeIdent<CSSValueCircle, CSSValueEllipse>(args);
+    CSSPrimitiveValue* sizeKeyword = consumeIdent<CSSValueClosestSide, CSSValueClosestCorner, CSSValueFarthestSide, CSSValueFarthestCorner, CSSValueContain, CSSValueCover>(args);
+    if (!shape)
+        shape = consumeIdent<CSSValueCircle, CSSValueEllipse>(args);
+    result->setShape(shape);
+    result->setSizingBehavior(sizeKeyword);
+
+    // Or, two lengths or percentages
+    if (!shape && !sizeKeyword) {
+        CSSPrimitiveValue* horizontalSize = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+        CSSPrimitiveValue* verticalSize = nullptr;
+        if (horizontalSize) {
+            verticalSize = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+            if (!verticalSize)
+                return nullptr;
+            consumeCommaIncludingWhitespace(args);
+            result->setEndHorizontalSize(horizontalSize);
+            result->setEndVerticalSize(verticalSize);
+        }
+    } else {
+        consumeCommaIncludingWhitespace(args);
+    }
+    if (!consumeGradientColorStops(args, cssParserMode, result))
+        return nullptr;
+
+    return result;
+}
+
+static CSSValue* consumeRadialGradient(CSSParserTokenRange& args, CSSParserMode cssParserMode, CSSGradientRepeat repeating)
+{
+    CSSRadialGradientValue* result = CSSRadialGradientValue::create(repeating, CSSRadialGradient);
+
+    CSSPrimitiveValue* shape = nullptr;
+    CSSPrimitiveValue* sizeKeyword = nullptr;
+    CSSPrimitiveValue* horizontalSize = nullptr;
+    CSSPrimitiveValue* verticalSize = nullptr;
+
+    // First part of grammar, the size/shape clause:
+    // [ circle || <length> ] |
+    // [ ellipse || [ <length> | <percentage> ]{2} ] |
+    // [ [ circle | ellipse] || <size-keyword> ]
+    for (int i = 0; i < 3; ++i) {
+        if (args.peek().type() == IdentToken) {
+            CSSValueID id = args.peek().id();
+            if (id == CSSValueCircle || id == CSSValueEllipse) {
+                if (shape)
+                    return nullptr;
+                shape = consumeIdent(args);
+            } else if (id == CSSValueClosestSide || id == CSSValueClosestCorner || id == CSSValueFarthestSide || id == CSSValueFarthestCorner) {
+                if (sizeKeyword)
+                    return nullptr;
+                sizeKeyword = consumeIdent(args);
+            } else {
+                break;
+            }
+        } else {
+            CSSPrimitiveValue* center = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+            if (!center)
+                break;
+            if (horizontalSize)
+                return nullptr;
+            horizontalSize = center;
+            center = consumeLengthOrPercent(args, cssParserMode, ValueRangeAll);
+            if (center) {
+                verticalSize = center;
+                ++i;
+            }
+        }
+    }
+
+    // You can specify size as a keyword or a length/percentage, not both.
+    if (sizeKeyword && horizontalSize)
+        return nullptr;
+    // Circles must have 0 or 1 lengths.
+    if (shape && shape->getValueID() == CSSValueCircle && verticalSize)
+        return nullptr;
+    // Ellipses must have 0 or 2 length/percentages.
+    if (shape && shape->getValueID() == CSSValueEllipse && horizontalSize && !verticalSize)
+        return nullptr;
+    // If there's only one size, it must be a length.
+    if (!verticalSize && horizontalSize && horizontalSize->isPercentage())
+        return nullptr;
+    if ((horizontalSize && horizontalSize->isCalculatedPercentageWithLength())
+        || (verticalSize && verticalSize->isCalculatedPercentageWithLength()))
+        return nullptr;
+
+    result->setShape(shape);
+    result->setSizingBehavior(sizeKeyword);
+    result->setEndHorizontalSize(horizontalSize);
+    result->setEndVerticalSize(verticalSize);
+
+    CSSValue* centerX = nullptr;
+    CSSValue* centerY = nullptr;
+    if (args.peek().id() == CSSValueAt) {
+        args.consumeIncludingWhitespace();
+        consumePosition(args, cssParserMode, UnitlessQuirk::Forbid, centerX, centerY);
+        if (!(centerX && centerY))
+            return nullptr;
+        result->setFirstX(centerX);
+        result->setFirstY(centerY);
+        // Right now, CSS radial gradients have the same start and end centers.
+        result->setSecondX(centerX);
+        result->setSecondY(centerY);
+    }
+
+    if ((shape || sizeKeyword || horizontalSize || centerX || centerY) && !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+    if (!consumeGradientColorStops(args, cssParserMode, result))
+        return nullptr;
+    return result;
+}
+
+static CSSValue* consumeLinearGradient(CSSParserTokenRange& args, CSSParserMode cssParserMode, CSSGradientRepeat repeating, CSSGradientType gradientType)
+{
+    CSSLinearGradientValue* result = CSSLinearGradientValue::create(repeating, gradientType);
+
+    bool expectComma = true;
+    CSSPrimitiveValue* angle = consumeAngle(args);
+    if (angle) {
+        result->setAngle(angle);
+    } else if (gradientType == CSSPrefixedLinearGradient || consumeIdent<CSSValueTo>(args)) {
+        CSSPrimitiveValue* endX = consumeIdent<CSSValueLeft, CSSValueRight>(args);
+        CSSPrimitiveValue* endY = consumeIdent<CSSValueBottom, CSSValueTop>(args);
+        if (!endX && !endY) {
+            if (gradientType == CSSLinearGradient)
+                return nullptr;
+            endY = CSSPrimitiveValue::createIdentifier(CSSValueTop);
+            expectComma = false;
+        } else if (!endX) {
+            endX = consumeIdent<CSSValueLeft, CSSValueRight>(args);
+        }
+
+        result->setFirstX(endX);
+        result->setFirstY(endY);
+    } else {
+        expectComma = false;
+    }
+
+    if (expectComma && !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+    if (!consumeGradientColorStops(args, cssParserMode, result))
+        return nullptr;
+    return result;
+}
+
+CSSValue* consumeImageOrNone(CSSParserTokenRange& range, CSSParserContext context)
+{
+    if (range.peek().id() == CSSValueNone)
+        return consumeIdent(range);
+    return consumeImage(range, context);
+}
+
+static CSSValue* consumeCrossFade(CSSParserTokenRange& args, CSSParserContext context)
+{
+    CSSValue* fromImageValue = consumeImageOrNone(args, context);
+    if (!fromImageValue || !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+    CSSValue* toImageValue = consumeImageOrNone(args, context);
+    if (!toImageValue || !consumeCommaIncludingWhitespace(args))
+        return nullptr;
+
+    CSSPrimitiveValue* percentage = nullptr;
+    const CSSParserToken& percentageArg = args.consumeIncludingWhitespace();
+    if (percentageArg.type() == PercentageToken)
+        percentage = CSSPrimitiveValue::create(clampTo<double>(percentageArg.numericValue() / 100, 0, 1), CSSPrimitiveValue::UnitType::Number);
+    else if (percentageArg.type() == NumberToken)
+        percentage = CSSPrimitiveValue::create(clampTo<double>(percentageArg.numericValue(), 0, 1), CSSPrimitiveValue::UnitType::Number);
+
+    if (!percentage)
+        return nullptr;
+    return CSSCrossfadeValue::create(fromImageValue, toImageValue, percentage);
+}
+
+static CSSValue* consumePaint(CSSParserTokenRange& args, CSSParserContext context)
+{
+    DCHECK(RuntimeEnabledFeatures::cssPaintAPIEnabled());
+
+    CSSCustomIdentValue* name = consumeCustomIdent(args);
+    if (!name)
+        return nullptr;
+
+    return CSSPaintValue::create(name);
+}
+
+static CSSValue* consumeGeneratedImage(CSSParserTokenRange& range, CSSParserContext context)
+{
+    CSSValueID id = range.peek().functionId();
+    CSSParserTokenRange rangeCopy = range;
+    CSSParserTokenRange args = consumeFunction(rangeCopy);
+    CSSValue* result = nullptr;
+    if (id == CSSValueRadialGradient) {
+        result = consumeRadialGradient(args, context.mode(), NonRepeating);
+    } else if (id == CSSValueRepeatingRadialGradient) {
+        result = consumeRadialGradient(args, context.mode(), Repeating);
+    } else if (id == CSSValueWebkitLinearGradient) {
+        // FIXME: This should send a deprecation message.
+        if (context.useCounter())
+            context.useCounter()->count(UseCounter::DeprecatedWebKitLinearGradient);
+        result = consumeLinearGradient(args, context.mode(), NonRepeating, CSSPrefixedLinearGradient);
+    } else if (id == CSSValueWebkitRepeatingLinearGradient) {
+        // FIXME: This should send a deprecation message.
+        if (context.useCounter())
+            context.useCounter()->count(UseCounter::DeprecatedWebKitRepeatingLinearGradient);
+        result = consumeLinearGradient(args, context.mode(), Repeating, CSSPrefixedLinearGradient);
+    } else if (id == CSSValueRepeatingLinearGradient) {
+        result = consumeLinearGradient(args, context.mode(), Repeating, CSSLinearGradient);
+    } else if (id == CSSValueLinearGradient) {
+        result = consumeLinearGradient(args, context.mode(), NonRepeating, CSSLinearGradient);
+    } else if (id == CSSValueWebkitGradient) {
+        // FIXME: This should send a deprecation message.
+        if (context.useCounter())
+            context.useCounter()->count(UseCounter::DeprecatedWebKitGradient);
+        result = consumeDeprecatedGradient(args, context.mode());
+    } else if (id == CSSValueWebkitRadialGradient) {
+        // FIXME: This should send a deprecation message.
+        if (context.useCounter())
+            context.useCounter()->count(UseCounter::DeprecatedWebKitRadialGradient);
+        result = consumeDeprecatedRadialGradient(args, context.mode(), NonRepeating);
+    } else if (id == CSSValueWebkitRepeatingRadialGradient) {
+        if (context.useCounter())
+            context.useCounter()->count(UseCounter::DeprecatedWebKitRepeatingRadialGradient);
+        result = consumeDeprecatedRadialGradient(args, context.mode(), Repeating);
+    } else if (id == CSSValueWebkitCrossFade) {
+        result = consumeCrossFade(args, context);
+    } else if (id == CSSValuePaint) {
+        result = RuntimeEnabledFeatures::cssPaintAPIEnabled() ? consumePaint(args, context) : nullptr;
+    }
+    if (!result || !args.atEnd())
+        return nullptr;
+    range = rangeCopy;
+    return result;
+}
+
+static CSSValue* createCSSImageValueWithReferrer(const AtomicString& rawValue, const CSSParserContext& context)
+{
+    CSSValue* imageValue = CSSImageValue::create(rawValue, context.completeURL(rawValue));
+    toCSSImageValue(imageValue)->setReferrer(context.referrer());
+    return imageValue;
+}
+
+static CSSValue* consumeImageSet(CSSParserTokenRange& range, const CSSParserContext& context)
+{
+    CSSParserTokenRange rangeCopy = range;
+    CSSParserTokenRange args = consumeFunction(rangeCopy);
+    CSSImageSetValue* imageSet = CSSImageSetValue::create();
+    do {
+        AtomicString urlValue = consumeUrlAsStringView(args).toAtomicString();
+        if (urlValue.isNull())
+            return nullptr;
+
+        CSSValue* image = createCSSImageValueWithReferrer(urlValue, context);
+        imageSet->append(*image);
+
+        const CSSParserToken& token = args.consumeIncludingWhitespace();
+        if (token.type() != DimensionToken)
+            return nullptr;
+        if (token.value() != "x")
+            return nullptr;
+        DCHECK(token.unitType() == CSSPrimitiveValue::UnitType::Unknown);
+        double imageScaleFactor = token.numericValue();
+        if (imageScaleFactor <= 0)
+            return nullptr;
+        imageSet->append(*CSSPrimitiveValue::create(imageScaleFactor, CSSPrimitiveValue::UnitType::Number));
+    } while (consumeCommaIncludingWhitespace(args));
+    if (!args.atEnd())
+        return nullptr;
+    range = rangeCopy;
+    return imageSet;
+}
+
+static bool isGeneratedImage(CSSValueID id)
+{
+    return id == CSSValueLinearGradient || id == CSSValueRadialGradient
+        || id == CSSValueRepeatingLinearGradient || id == CSSValueRepeatingRadialGradient
+        || id == CSSValueWebkitLinearGradient || id == CSSValueWebkitRadialGradient
+        || id == CSSValueWebkitRepeatingLinearGradient || id == CSSValueWebkitRepeatingRadialGradient
+        || id == CSSValueWebkitGradient || id == CSSValueWebkitCrossFade || id == CSSValuePaint;
+}
+
+CSSValue* consumeImage(CSSParserTokenRange& range, CSSParserContext context, ConsumeGeneratedImage generatedImage)
+{
+    AtomicString uri = consumeUrlAsStringView(range).toAtomicString();
+    if (!uri.isNull())
+        return createCSSImageValueWithReferrer(uri, context);
+    if (range.peek().type() == FunctionToken) {
+        CSSValueID id = range.peek().functionId();
+        if (id == CSSValueWebkitImageSet)
+            return consumeImageSet(range, context);
+        if (generatedImage == ConsumeGeneratedImage::Allow && isGeneratedImage(id))
+            return consumeGeneratedImage(range, context);
+    }
+    return nullptr;
 }
 
 } // namespace CSSPropertyParserHelpers

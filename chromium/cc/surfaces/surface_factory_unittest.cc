@@ -26,6 +26,8 @@
 namespace cc {
 namespace {
 
+static constexpr uint32_t kArbitraryClientId = 0;
+
 class TestSurfaceFactoryClient : public SurfaceFactoryClient {
  public:
   TestSurfaceFactoryClient() : begin_frame_source_(nullptr) {}
@@ -66,7 +68,7 @@ class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
  public:
   SurfaceFactoryTest()
       : factory_(new SurfaceFactory(&manager_, &client_)),
-        surface_id_(0, 3, 0),
+        surface_id_(kArbitraryClientId, 3, 0),
         frame_sync_token_(GenTestSyncToken(4)),
         consumer_sync_token_(GenTestSyncToken(5)) {
     manager_.AddObserver(this);
@@ -74,7 +76,7 @@ class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
   }
 
   // SurfaceDamageObserver implementation.
-  void OnSurfaceDamaged(SurfaceId id, bool* changed) override {
+  void OnSurfaceDamaged(const SurfaceId& id, bool* changed) override {
     *changed = true;
   }
 
@@ -419,7 +421,7 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
 }
 
 TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
-  SurfaceId surface_id(0, 6, 0);
+  SurfaceId surface_id(kArbitraryClientId, 6, 0);
   factory_->Create(surface_id);
   Surface* surface = manager_.GetSurfaceForId(surface_id);
   ASSERT_NE(nullptr, surface);
@@ -434,44 +436,36 @@ TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
 }
 
 void CreateSurfaceDrawCallback(SurfaceFactory* factory,
-                               uint32_t* execute_count,
-                               SurfaceDrawStatus* result,
-                               SurfaceDrawStatus drawn) {
-  SurfaceId new_id(0, 7, 0);
+                               uint32_t* execute_count) {
+  SurfaceId new_id(kArbitraryClientId, 7, 0);
   factory->Create(new_id);
   factory->Destroy(new_id);
   *execute_count += 1;
-  *result = drawn;
 }
 
 TEST_F(SurfaceFactoryTest, AddDuringDestroy) {
-  SurfaceId surface_id(0, 6, 0);
+  SurfaceId surface_id(kArbitraryClientId, 6, 0);
   factory_->Create(surface_id);
   CompositorFrame frame;
   frame.delegated_frame_data.reset(new DelegatedFrameData);
 
   uint32_t execute_count = 0;
-  SurfaceDrawStatus drawn = SurfaceDrawStatus::DRAW_SKIPPED;
   factory_->SubmitCompositorFrame(
       surface_id, std::move(frame),
       base::Bind(&CreateSurfaceDrawCallback, base::Unretained(factory_.get()),
-                 &execute_count, &drawn));
+                 &execute_count));
   EXPECT_EQ(0u, execute_count);
   factory_->Destroy(surface_id);
   EXPECT_EQ(1u, execute_count);
-  EXPECT_EQ(SurfaceDrawStatus::DRAW_SKIPPED, drawn);
 }
 
-void DrawCallback(uint32_t* execute_count,
-                  SurfaceDrawStatus* result,
-                  SurfaceDrawStatus drawn) {
+void DrawCallback(uint32_t* execute_count) {
   *execute_count += 1;
-  *result = drawn;
 }
 
 // Tests doing a DestroyAll before shutting down the factory;
 TEST_F(SurfaceFactoryTest, DestroyAll) {
-  SurfaceId id(0, 7, 0);
+  SurfaceId id(kArbitraryClientId, 7, 0);
   factory_->Create(id);
 
   std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
@@ -482,22 +476,19 @@ TEST_F(SurfaceFactoryTest, DestroyAll) {
   CompositorFrame frame;
   frame.delegated_frame_data = std::move(frame_data);
   uint32_t execute_count = 0;
-  SurfaceDrawStatus drawn = SurfaceDrawStatus::DRAW_SKIPPED;
-
-  factory_->SubmitCompositorFrame(
-      id, std::move(frame), base::Bind(&DrawCallback, &execute_count, &drawn));
+  factory_->SubmitCompositorFrame(id, std::move(frame),
+                                  base::Bind(&DrawCallback, &execute_count));
 
   surface_id_ = SurfaceId();
   factory_->DestroyAll();
   EXPECT_EQ(1u, execute_count);
-  EXPECT_EQ(SurfaceDrawStatus::DRAW_SKIPPED, drawn);
 }
 
 TEST_F(SurfaceFactoryTest, DestroySequence) {
-  SurfaceId id2(0, 5, 0);
+  SurfaceId id2(kArbitraryClientId, 5, 0);
   factory_->Create(id2);
 
-  manager_.RegisterSurfaceIdNamespace(0);
+  manager_.RegisterSurfaceClientId(0);
 
   // Check that waiting before the sequence is satisfied works.
   manager_.GetSurfaceForId(id2)
@@ -525,12 +516,12 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
 
 // Tests that Surface ID namespace invalidation correctly allows
 // Sequences to be ignored.
-TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
+TEST_F(SurfaceFactoryTest, InvalidClientId) {
   uint32_t id_namespace = 9u;
   SurfaceId id(id_namespace, 5, 0);
   factory_->Create(id);
 
-  manager_.RegisterSurfaceIdNamespace(id_namespace);
+  manager_.RegisterSurfaceClientId(id_namespace);
   manager_.GetSurfaceForId(id)
       ->AddDestructionDependency(SurfaceSequence(id_namespace, 4));
   factory_->Destroy(id);
@@ -538,7 +529,7 @@ TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
   // Verify the dependency has prevented the surface from getting destroyed.
   EXPECT_TRUE(manager_.GetSurfaceForId(id));
 
-  manager_.InvalidateSurfaceIdNamespace(id_namespace);
+  manager_.InvalidateSurfaceClientId(id_namespace);
 
   // Verify that the invalidated namespace caused the unsatisfied sequence
   // to be ignored.
@@ -546,10 +537,10 @@ TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroyCycle) {
-  SurfaceId id2(0, 5, 0);
+  SurfaceId id2(kArbitraryClientId, 5, 0);
   factory_->Create(id2);
 
-  manager_.RegisterSurfaceIdNamespace(0);
+  manager_.RegisterSurfaceClientId(0);
 
   manager_.GetSurfaceForId(id2)
       ->AddDestructionDependency(SurfaceSequence(0, 4));

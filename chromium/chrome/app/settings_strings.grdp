@@ -3,6 +3,15 @@
 <grit-part>
   <!-- About Page -->
   <if expr="chromeos">
+    <message name="IDS_SETTINGS_ABOUT_PAGE_DETAILED_BUILD_INFO" desc="Label describing the section that shows detailed information about the current Chrome build.">
+      Detailed build information
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_ARC_VERSION" desc="Label for ARC version">
+      ARC Version
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_CHANNEL" desc="The channel label under Detailed build info.">
+      Channel
+    </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_CHECK_FOR_UPDATES" desc="The button label to check for updates and apply (download and install) if found">
       Check for updates
     </message>
@@ -17,6 +26,12 @@
     </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_CURRENT_CHANNEL" desc="The message about current channel.">
       Currently on <ph name="CHANNEL_NAME">$1<ex>stable</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_FIRMWARE" desc="Label used for Chrome OS BIOS firmware version.">
+      Firmware
+    </message>
+    <message name="IDS_SETTINGS_ABOUT_PAGE_PLATFORM" desc="Label for Platform">
+      Platform
     </message>
     <message name="IDS_SETTINGS_ABOUT_PAGE_RELAUNCH" desc="The label for the relaunch button that relaunches the browser once update is complete">
       Restart
@@ -121,19 +136,19 @@
       Delay before click:
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_EXTREMELY_SHORT" desc="Description of an extremely short delay before clicks.">
-      extremely short
+      extremely short (600ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_SHORT" desc="Description of a very short delay before clicks.">
-      very short
+      very short (800ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_SHORT" desc="Description of a short delay before clicks.">
-      short
+      short (1000ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_LONG" desc="Description of a long delay before clicks.">
-      long
+      long (2000ms)
     </message>
     <message name="IDS_SETTINGS_DELAY_BEFORE_CLICK_VERY_LONG" desc="Description of a very long delay before clicks.">
-      very long
+      very long (4000ms)
     </message>
     <message name="IDS_SETTINGS_ON_SCREEN_KEYBOARD_LABEL" desc="Label for checkbox which enables an on-screen keyboard.">
       Enable on-screen keyboard
@@ -194,8 +209,17 @@
   <message name="IDS_SETTINGS_BASIC" desc="Name of the settings page which displays advanced preferences.">
     Basic
   </message>
+  <message name="IDS_SETTINGS_MENU_BUTTON_LABEL" desc="Tooltips for the sidebar menu button.">
+    Main menu
+  </message>
   <message name="IDS_SETTINGS_SEARCH_PROMPT" desc="Label for input field to search within settings.">
     Search settings
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_NO_RESULTS" desc="Text description of a search that has no results.">
+    No matches were found.
+  </message>
+  <message name="IDS_SETTINGS_SEARCH_NO_RESULTS_HELP" desc="Help text for a search that has no results.">
+    Go to <ph name="BEGIN_LINK_CHROMIUM">&lt;a target="_blank" href="$1"&gt;</ph>Google Chrome help<ph name="END_LINK_CHROMIUM">&lt;/a&gt;</ph> if you can't find what you're looking for.
   </message>
   <message name="IDS_SETTINGS_SETTINGS" desc="The settings page title.">
     Settings
@@ -213,7 +237,7 @@
 
   <!-- Passwords and Autofill Page -->
   <message name="IDS_SETTINGS_OVERFLOW_MENU" desc="Alt text for the overflow button on a list item. Triggers a context menu when clicked.">
-   Menu
+    Menu
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_AND_AUTOFILL_PAGE_TITLE" desc="Name of the settings page which allows managing passwords and autofill settings.">
     Passwords and forms
@@ -226,6 +250,21 @@
   </message>
   <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_HEADING" desc="Title for the list of addresses that chrome has saved for use in filling in forms.">
     Addresses
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_ADD_TITLE" desc="This is the title for the 'Add address' dialog. This dialog allows a user to create a new address.">
+    Add address
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_EDIT_TITLE" desc="This is the title for the 'Edit address' dialog. This dialog allows a user to edit an address that is already saved.">
+    Edit address
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_COUNTRY" desc="This is the label for the dropdown that lets a user select the country their address is in. Will be shown when editing or adding an address to use in autofill.">
+    Country / Region
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_PHONE" desc="This is the label for the field that lets a user modify the phone number that will be used when auto-filling forms on the web.">
+    Phone
+  </message>
+  <message name="IDS_SETTINGS_AUTOFILL_ADDRESSES_EMAIL" desc="This is the label for the field that lets a user modify the email address that will be used when auto-filling forms on the web.">
+    Email
   </message>
   <message name="IDS_SETTINGS_AUTOFILL_ADD_ADDRESS_BUTTON" desc="Label for a button that allows a user to enter a new address that can be used to fill in forms.">
     Add address
@@ -243,16 +282,16 @@
     Enable Autofill to fill out forms in a single click
   </message>
   <message name="IDS_SETTINGS_ADDRESS_EDIT" desc="Label for a context menu item that shows a dialog with edit options for the selected address." meaning="Edit selected address.">
-   Edit
+    Edit
   </message>
   <message name="IDS_SETTINGS_ADDRESS_REMOVE" desc="Label for a context menu item that removes the selected address." meaning="Remove selected address.">
-   Remove
+    Remove
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_EDIT" desc="Label for a context menu item that shows a dialog with edit options for the selected credit card." meaning="Edit selected credit card.">
-   Edit
+    Edit
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_REMOVE" desc="Label for a context menu item that removes the selected credit card." meaning="Remove selected credit card.">
-   Remove
+    Remove
   </message>
   <message name="IDS_SETTINGS_CREDIT_CARD_CLEAR" desc="Label for a context menu item clears the locally cached credit card that is also saved on Google Payments. Clicking this will NOT remove the credit card from Google Payments.">
    Clear copy
@@ -281,6 +320,12 @@
   <message name="IDS_SETTINGS_PASSWORDS" desc="Name for the password section and toggle">
     Manage passwords
   </message>
+  <message name="IDS_SETTINGS_PASSWORDS_AUTOSIGNIN_CHECKBOX_LABEL" desc="Label for a checkbox that allows users to sign in automatically to websites when their credentials are already saved.">
+    Auto Sign-in
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_AUTOSIGNIN_CHECKBOX_DESC" desc="Text that describes the 'Auto Sign-in' functionality to users.">
+    Automatically sign in to websites using stored credentials. When the feature is disabled, you will be asked for confirmation every time before signing in to a website.
+  </message>
   <message name="IDS_SETTINGS_PASSWORDS_DETAIL" desc="Description of what toggling the 'Manage passwords' setting does. Immediately underneath IDS_SETTINGS_PASSWORDS">
     Offer to save your web passwords
   </message>
@@ -293,14 +338,20 @@
   <message name="IDS_SETTINGS_PASSWORDS_DELETE_EXCEPTION" desc="The alt text for a button that deletes a site for which passwords would not be saved.">
     Delete this item
   </message>
-  <message name="IDS_SETTINGS_PASSWORD_EDIT" desc="Label for a context menu item that shows a dialog with edit options for the selected password." meaning="Edit selected password.">
-   Edit
+  <message name="IDS_SETTINGS_PASSWORD_DONE" desc="Label for a button that dismisses the password details dialog.">
+    Done
   </message>
   <message name="IDS_SETTINGS_PASSWORD_REMOVE" desc="Label for a context menu item that removes the selected password." meaning="Remove selected password.">
-   Remove
+    Remove
   </message>
-  <message name="IDS_SETTINGS_PASSWORDS_EDIT_TITLE" desc="Title for the 'Edit saved password' dialog. This dialog lets a user see a saved password and copy the username.">
-    Edit saved password
+  <message name="IDS_SETTINGS_PASSWORD_SEARCH" desc="Placeholder/label for the text input field that allows a user to filter saved passwords.">
+    Search passwords
+  </message>
+  <message name="IDS_SETTINGS_PASSWORDS_VIEW_DETAILS_TITLE" desc="Title for the dialog that shows password details. This dialog lets a user see a saved password and copy the username.">
+    Saved password details
+  </message>
+  <message name="IDS_SETTINGS_PASSWORD_VIEW_DETAILS" desc="Label for a context menu item that shows a dialog with details for the selected password.">
+    View details
   </message>
   <message name="IDS_SETTINGS_PASSWORDS_WEBSITE" desc="Label for the website a password is for when editing a password.">
     Website
@@ -313,7 +364,7 @@
   </message>
   <if expr="is_macosx">
     <then>
-      <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link. Also notifies mac users that chrome will sync passwords to the OS's Keychain, so their passwords will be synced to other chrome profiles.">
+      <message name="IDS_SETTINGS_PASSWORDS_MANAGE_PASSWORDS" desc="Shown in the passwords section of settings. Descriptive text to inform that passwords can be accessed online. Has a link. Also notifies mac users that chrome will sync passwords to the OS's Keychain, so their passwords will be synced to other chrome profiles. 'Keychain' is the name of a program on Mac and should not be translated.">
         Access your passwords from any device at <ph name="BEGIN_LINK">&lt;a is="action-link" href="$1" target="_blank"&gt;</ph>passwords.google.com<ph name="END_LINK">&lt;/a&gt;</ph>. On Mac, passwords may be saved to your Keychain and accessed or synced by other Chrome users sharing this OS X account.
       </message>
     </then>
@@ -363,8 +414,62 @@
     <message name="IDS_SETTINGS_BLUETOOTH_CONFIRM_PASSKEY" desc="Bluetooth pairing message typically shown when pairing with a device that has a display.">
       Please confirm this passkey is shown on "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>":
     </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECTING">
+      Connecting...
+    </message>
     <message name="IDS_SETTINGS_BLUETOOTH_START_CONNECTING">
       Connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_UNKNOWN_ERROR">
+      An unknown error occurred trying to connect to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_IN_PROGRESS">
+      Connection to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>" still in progress.
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_FAILED">
+      Failed to connect to "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_FAILED">
+      Authentication failed while connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_CANCELED">
+      Authentication canceled while connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_REJECTED">
+      Authentication code rejected while connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_AUTH_TIMEOUT">
+      Authentication timeout while connecting to "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_UNSUPPORTED_DEVICE">
+      Unsupported Bluetooth device: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_ATTRIBUTE_LENGTH_INVALID">
+      Write operation exceeds the maximum length of the attribute to: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_CONNECTION_CONGESTED">
+      Connection is congested to remote device: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_INSUFFICIENT_ENCRYPTION">
+      Insufficient encryption for a given operation on: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_OFFSET_INVALID">
+      Read or write operation was requested with an invalid offset on: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_READ_NOT_PERMITTED">
+      Read operation is not permitted on: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_REQUEST_NOT_SUPPORTED">
+      The given request is not supported to: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_CONNECT_WRITE_NOT_PERMITTED">
+      Write operation is not permitted on: "<ph name="DEVICE_NAME">$1<ex>Nexus 4</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_DISCONNECT_FAILED">
+      Failed to disconnect from "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
+    </message>
+    <message name="IDS_SETTINGS_BLUETOOTH_FORGET_FAILED">
+      Failed to disconnect and unpair from "<ph name="DEVICE_NAME">$1<ex>Nexus S</ex></ph>".
     </message>
   </if>
 
@@ -623,6 +728,53 @@
   <message name="IDS_SETTINGS_PRINTING_MANAGE_CLOUD_PRINT_DEVICES" desc="Text for the button which allows users to manager their Google Cloud Print devices">
     Manage Cloud Print devices
   </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS" desc="In Printing Settings, the title of the CUPS printers setting section.">
+      Printers
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_ADD_PRINTER" desc="In CUPS printing settings subpage, text for the link adding a new CUPS printer.">
+      Add Printer
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_DETAILS" desc="Text for the drop down menu which allows the user to see the printer details.">
+      Details
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTERS_REMOVE" desc="Text for the drop down menu which allows the user to remove the selected printer.">
+      Remove
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_SEARCH_LABEL" desc="The placeholder text in the printer search field.">
+      printer name
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_TITLE" desc="Text for the title of the Add Printer dialog.">
+      Add Printer
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_TITLE" desc="Text for the title of the Printer Details subpage.">
+      Printer details
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED" desc="Label for the toggle control to show/hide the advanced details of the printer.">
+      Advanced
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_ADDRESS" desc="Label for the CUPS printer address in the Advanced section in the printer details page.">
+      Address
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_PROTOCOL" desc="Label for the CUPS printer protocol in the Advanced section in the printer details page.">
+      Protocol
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_NAME" desc="Lable for the CUPS printer name in the printer details page.">
+      Name
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_DETAILS_MODEL" desc="Lable for the CUPS printer model in the printer details page.">
+      Model
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_CANCEL" desc="Text for the button which cancels adding a CUPS printer.">
+      Cancel
+    </message>
+    <message name="IDS_SETTINGS_PRINTING_CUPS_ADD_PRINTER_BUTTON_ADD" desc="Text for the button which allows the user to add a CUPS printer.">
+      Add
+    </message>
+  </if>
+  <message name="IDS_SETTINGS_PRINTING_CLOUD_PRINTERS" desc="In Printing Settings, the title of the google cloud printers setting section.">
+    Google Cloud Print
+  </message>
 
   <!-- Downloads Page -->
   <message name="IDS_SETTINGS_DOWNLOADS" desc="Name of the settings page which displays download preferences.">
@@ -709,6 +861,54 @@
     <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS" desc="Name of the settings page which displays the list of known networks.">
       Known Networks
     </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_CONNECTING" desc="Settings > Internet, text in network summary when the primary network is connecting.">
+      Connecting to <ph name="NAME">$1<ex>GoogleGuest</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_DISABLED" desc="Settings > Internet, text in network summary when the network type is connected">
+      Disabled
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_NOT_CONNECTED" desc="Settings > Internet, text in network summary when there is no network for the type.">
+      No network
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_NETWORK_LIST_ITEM_CONNECTED" desc="Settings > Internet, text to show in a network list item that is connected.">
+      connected
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
+      Ethernet
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_WIFI" desc="The wifi network type.">
+      Wi-Fi
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_WIMAX" desc="The wimax network type.">
+      WiMAX
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_BLUETOOTH" desc="The bluetooth network type.">
+      Bluetooth
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_CELLULAR" desc="The cellular network type.">
+      Cellular
+    </message>
+    <message name="IDS_SETTINGS_NETWORK_TYPE_VPN" desc="The vpn network type.">
+      VPN
+    </message>
+    <message name="IDS_SETTINGS_THIRD_PARTY_VPN_NAME_TEMPLATE" desc="Template for constructing the name of a VPN network that is handled by a third-party VPN provider from the provider name and the network name.">
+      <ph name="PROVIDER_NAME">$1<ex>OpenVPN</ex></ph>: <ph name="NETWORK_NAME">$2<ex>Work Network</ex></ph>
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_BUTTON" desc="Text for button that opens the known networks subpage.">
+      Known networks
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_PREFFERED" desc="Title for list of preferred networks.">
+      Preferred networks
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_NO_PREFERRED" desc="Entry when there are no preferred networks in the known networks page.">
+      None
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_MESSAGE" desc="Message describing the behavior of the known networks page.">
+      Preferred networks will be preferred over other known networks if more than one is available.
+    </message>
+    <message name="IDS_SETTINGS_INTERNET_KNOWN_NETWORKS_ALL" desc="Title for list of all other (non preferred) networks.">
+      All networks
+    </message>
   </if>
 
   <!-- On Startup Page -->
@@ -766,11 +966,14 @@
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_MOVE_DOWN" desc="Label for the menu item that moves the language down in the list of languages.">
     Move down
   </message>
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_REMOVE" desc="Label for the menu item to remove a language from the list of enabled languages.">
+    Remove
+  </message>
   <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_LANGUAGE_DETAIL" desc="Label for the menu item which opens a sub-page that displays details for a language.">
     Language settings
   </message>
-  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_MANAGE" desc="Button under the list of enabled languages which opens a sub-page that lets the user enable or disable languages.">
-    Manage languages
+  <message name="IDS_SETTINGS_LANGUAGES_LANGUAGES_ADD" desc="Button under the list of enabled languages which opens a dialog that lets the user enable additional languages.">
+    Add languages
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_OFFER_TO_TRANSLATE_IN_THIS_LANGUAGE" desc="The label for a checkbox which indicates whether or not pages in this language should be translated by default.">
     Offer to translate pages in this language
@@ -789,8 +992,8 @@
       Manage input methods
     </message>
   </if>
-  <message name="IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE" desc="Name of the settings sub-page which allows enabling and disabling languages.">
-    Manage languages
+  <message name="IDS_SETTINGS_LANGUAGES_MANAGE_LANGUAGES_TITLE" desc="Name of the settings dialog which allows enabling additional languages.">
+    Add languages
   </message>
   <message name="IDS_SETTINGS_LANGUAGES_ALL_LANGUAGES" desc="Header for the list of all supported languages, which the user can use to enable languages, on the Manage Languages page.">
     All languages
@@ -835,14 +1038,21 @@
   <message name="IDS_SETTINGS_LINKDOCTOR_PREF" desc="The documentation string of the 'Use Link Doctor' preference to help with navigation errors.">
     Use a web service to help resolve navigation errors
   </message>
-  <message name="IDS_SETTINGS_SUGGEST_PREF" desc="The documentation string of the 'Use Suggest' preference">
-    Use a prediction service to help complete searches and URLs typed in the address bar or the app launcher search box
-  </message>
+  <if expr="chromeos">
+    <message name="IDS_SETTINGS_SUGGEST_PREF" desc="The documentation string of the 'Use Suggest' preference">
+      Use a prediction service to help complete searches and URLs typed in the address bar or the app launcher search box
+    </message>
+  </if>
+  <if expr="not chromeos">
+    <message name="IDS_SETTINGS_SUGGEST_PREF" desc="The documentation string of the 'Use Suggest' preference">
+      Use a prediction service to help complete searches and URLs typed in the address bar
+    </message>
+  </if>
   <message name="IDS_SETTINGS_NETWORK_PREDICTION_ENABLED_DESCRIPTION" desc="In the advanced options tab, the text next to the checkbox that enables prediction of network actions.  Actions include browser-initiated DNS prefetching, TCP and SSL preconnection, and prerendering of webpages.">
     Use a prediction service to load pages more quickly
   </message>
-  <message name="IDS_SETTINGS_SAFEBROWSING_ENABLEPROTECTION" desc="The label of the 'Enable phishing and malware protection' checkbox">
-    Enable phishing and malware protection
+  <message name="IDS_SETTINGS_SAFEBROWSING_ENABLEPROTECTION" desc="The label of the 'Protect you and your device from dangerous sites' checkbox">
+    Protect you and your device from dangerous sites
   </message>
   <message name="IDS_SETTINGS_SAFEBROWSING_ENABLE_EXTENDED_REPORTING" desc="Checkbox label: should Chrome upload information about suspicious downloads and websites to Safe Browsing">
     Automatically report details of possible security incidents to Google
@@ -852,6 +1062,9 @@
   </message>
   <message name="IDS_SETTINGS_ENABLE_LOGGING" desc="The label of the checkbox to enable/disable crash and user metrics logging">
     Automatically send usage statistics and crash reports to Google
+  </message>
+  <message name="IDS_SETTINGS_ENABLE_LOGGING_DIAGNOSTIC_AND_USAGE_DATA" desc="The label of the checkbox to enable/disable diagnostic and user metrics logging">
+    Automatically send diagnostic and usage data to Google
   </message>
   <message name="IDS_SETTINGS_ENABLE_DO_NOT_TRACK" desc="The label of the checkbox to enable/disable sending the 'Do Not track' header">
     Send a "Do Not Track" request with your browsing traffic
@@ -866,7 +1079,7 @@
     Manage Certificates
   </message>
   <message name="IDS_SETTINGS_MANAGE_CERTIFICATES_DESCRIPTION" desc="Secondary, continued explanation of how to manage SSL certificates and settings in Privacy options">
-    Manage your SSL certificates and settings
+    Manage HTTPS/SSL certificates and settings
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS" desc="Text of the button that takes a user to settings page thats allows users to modify site settings. Also the title of that settings page.">
     Site Settings
@@ -960,9 +1173,6 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_CATEGORY" desc="Name of the settings page which allows users to modify a specific category under site settings.">
     Permission Category
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_SITE_DETAILS" desc="Name of the settings page which allows users to modify details about a particular site.">
-    Site Details
-  </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_ALL_SITES" desc="Label for the all sites site settings.">
     All sites
   </message>
@@ -977,6 +1187,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIES" desc="Label for the cookies site settings.">
     Cookies
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS" desc="Label for the protocol handlers (e.g. mailto) in site settings.">
+    Handlers
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_LOCATION" desc="Label for the location site settings.">
     Location
@@ -1004,6 +1217,9 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_UNSANDBOXED_PLUGINS" desc="Label for the unsandboxed plugin access site settings.">
     Unsandboxed plugin access
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_USB_DEVICES" desc="Label for the USB devices in site settings.">
+    USB devices
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_FULLSCREEN" desc="Label for the fullscreen site settings.">
     Fullscreen
@@ -1061,6 +1277,15 @@
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_BACKGROUND_SYNC_BLOCKED" desc="The block label for background sync in site settings.">
     Do not allow recently closed sites to finish sending and receiving data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK" desc="The allow label for protocol handlers in site settings.">
+    Allow sites to ask to become default handlers for protocols
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS_ASK_RECOMMENDED" desc="The allow label for protocol handlers in site settings (with the 'recommended' suffix).">
+    Allow sites to ask to become default handlers for protocols (recommended)
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLERS_BLOCKED" desc="The block label for protocol handlers in site settings.">
+    Do not allow any site to handle protocols
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_KEYGEN_ALLOW" desc="The allow label for keygen in site settings.">
     Allow all sites to use key generation in forms
@@ -1125,8 +1350,8 @@
   <message name="IDS_SETTINGS_SITE_SETTINGS_BLOCK_MENU" desc="Label for the menu item to block permission for a particular site.">
     Block
   </message>
-  <message name="IDS_SETTINGS_SITE_SETTINGS_RESET_MENU" desc="Label for the menu item to reset the permission for a particular site (make it ask you again next time).">
-    Reset to ask
+  <message name="IDS_SETTINGS_SITE_SETTINGS_RESET_MENU" desc="Label for the menu item to remove the permission for a particular site (make it ask you again next time).">
+    Remove
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_SESSION_ONLY_MENU" desc="Label for the menu item to set cookies to be deleted on browser exit.">
     Clear on exit
@@ -1138,16 +1363,37 @@
     Permissions
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_CLEAR_BUTTON" desc="The Clear and Reset button, used to clear all permissions and storage for a given site.">
-    Clear &amp; Reset
+    Clear and reset
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_DELETE" desc="Label for the trashcan icon used to delete storage on the Site Details page.">
     Delete
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_HEADER" desc="A header for the list of showing all sites and their data.">
+    All cookies and site data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_DIALOG" desc="A label for cookie dialog, stating which site we're showing data for.">
+    <ph name="SITE">$1<ex>www.example.com</ex></ph> locally stored data
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE" desc="Label for the button to delete a single site cookie.">
+    Remove
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_COOKIE_REMOVE_ALL" desc="Label for the button to delete all cookies for a site.">
+    Remove All
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE" desc="Label for the Block 3rd-party cookie checkbox on the Cookies category.">
     Block third-party cookies.
   </message>
   <message name="IDS_SETTINGS_SITE_SETTINGS_THIRD_PARTY_COOKIE_SUBLABEL" desc="A sub-label below the Block 3rd-party cookie checkbox.">
     Prevent third-party websites from saving and reading cookie data.
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLER_IS_DEFAULT" desc="A label showing that a certain handler for a given protocol is the default.">
+    Default
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_HANDLER_SET_DEFAULT" desc="A label for the action of making a certain handler the default for a given protocol.">
+    Set as default
+  </message>
+  <message name="IDS_SETTINGS_SITE_SETTINGS_REMOVE" desc="A label for the action of removing (deleting) a certain handler.">
+    Remove
   </message>
 
   <!-- Sync / People Page -->
@@ -1165,56 +1411,56 @@
   </message>
 
   <if expr="chromeos">
-    <message name="IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK" desc="The text on the checkbox to enable screenlocker for current user.">
-      Require password to wake from sleep
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CHOOSE_PIN_TITLE" desc="Message shown below the title that tells the user to enter the initial PIN.">
+      Enter your PIN
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_TITLE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
-      Configure quick unlock
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONFIRM_PIN_TITLE" desc="Message shown below the title that tells the user to confirm their initial PIN entry.">
+      Confirm your PIN
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIRM_LOGIN" desc="Text above a password input field that tells the user they need to submit their password to configure these settings.">
-      Confirm your login to continue
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_WEAK_PIN" desc="Message shown below the title that warns the user they have entered a PIN that is easy to guess.">
+      PIN may be easy to guess
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_PASSWORD_LABEL" desc="An input box label that tells the user to enter their password in that input box.">
-      Password
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_TOO_SHORT" desc="Message shown below the title that tells the user that the PIN they entered needs to be at least four digits long.">
+      PIN must be at least 4 digits
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_INVALID_PASSWORD" desc="Text on a password field that tells the user the password is incorrect.">
-      Not valid
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_MISMATCHED" desc="Message shown below the title that tells the user they have entered two different PIN values.">
+      PINs do not match
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CHOOSE_UNLOCK_METHOD" desc="Text below the page title that tells the user to select a method to unlock the device. This is *only* for unlocking a device; it cannot be used to sign into a device.">
-      Choose the method you would like to use to log back in to your account:
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PASSWORD" desc="Only the account password can be used to unlock the device.">
-      Only password
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_PIN_AND_PASSWORD" desc="The account password or a custom PIN can be used to unlock the device.">
-      PIN or password
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_UNLOCK_METHOD_NONE" desc="After the device resumes, there will not be a lock screen and no password of any type will be required.">
-      None
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BUTTON" desc="Button that is only shown when the user has selected PIN as their unlock method. This button opens up the configuration flow where the user selects the PIN they would like to use.">
-      Configure PIN
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_TITLE" desc="Message shown below the title that tells the user to enter the initial PIN.">
-      Choose your PIN:
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_WEAK_PIN_WARNING" desc="Message shown below the title that warns the user they have entered a PIN that is easy to guess.">
-      This PIN is easy to guess:
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CHOOSE_PIN_TOO_SHORT" desc="Message shown below the title that tells the user that the PIN they entered needs to be at least four digits long.">
-      PIN must be at least 4 digits:
-    </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONTINUE_BUTTON" desc="A button that accepts the users initial PIN. The user will have to enter the PIN again after hitting this button to confirm that they entered it correctly.">
+    <message name="IDS_SETTINGS_PEOPLE_CONFIGURE_PIN_CONTINUE_BUTTON" desc="A button that accepts the users initial PIN. The user will have to enter the PIN again after hitting this button to confirm that they entered it correctly.">
       Continue
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_CONFIRM_PIN_TITLE" desc="Message shown below the title that tells the user to confirm their initial PIN entry.">
-      Confirm your PIN:
+    <message name="IDS_SETTINGS_PEOPLE_ENABLE_SCREENLOCK" desc="The text on the checkbox to enable screenlocker for current user.">
+      Show lock screen when waking from sleep
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_MISMATCHED_PINS" desc="Message shown below the title that tells the user they have entered two different PIN values.">
-      PIN's don't match:
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_TITLE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
+      Screen lock
     </message>
-    <message name="IDS_SETTINGS_PEOPLE_QUICK_UNLOCK_CONFIGURE_PIN_BACK_BUTTON" desc="Button that goes from the confirm PIN screen to the initial PIN setup screen.">
-      Back
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PASSWORD_ONLY" desc="Only the account password can be used to unlock the device.">
+      Password only
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_PIN_OR_PASSWORD" desc="The account password or a custom PIN can be used to unlock the device.">
+      PIN or password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_NONE" desc="Text on the people page which opens up the quick unlock subpage and the title of the quick unlock subpage.">
+      None
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_CHANGE_PIN_BUTTON" desc="Button that the user can click to change an existing already-active PIN.">
+      Change PIN
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_LOCK_SCREEN_SETUP_PIN_BUTTON" desc="Button that is used to setup a new PIN when the user does not have a PIN yet.">
+      Set up PIN
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_TITLE" desc="Title of the password prompt dialog popup.">
+      Confirm your password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_ENTER_PASSWORD" desc="Text above a password input field that tells the user they need to submit their password to configure these settings.">
+      Enter your password to configure screen lock.
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_PASSWORD_LABEL" desc="An input box label that tells the user to enter their password in that input box.">
+      Password
+    </message>
+    <message name="IDS_SETTINGS_PEOPLE_PASSWORD_PROMPT_INVALID_PASSWORD" desc="Text on a password field that tells the user the password is incorrect.">
+      Invalid password
     </message>
     <message name="IDS_SETTINGS_CHANGE_PICTURE_DIALOG_TITLE" desc="Title of the subpage shown when user wants to change his/her picture.">
       Change picture
@@ -1258,7 +1504,7 @@
     <message name="IDS_SETTINGS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO" desc="The text on the loading stub for Google profile image.">
       Google Profile photo (loading)
     </message>
-    <message name="IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO" desc="The text on the existing photo from camera or file.">
+    <message name="IDS_SETTINGS_CHANGE_PICTURE_OLD_PHOTO" desc="The text on the existing photo, which was either taken by the webcam or read from a file.">
       Existing photo from camera or file
     </message>
   </if>
@@ -1270,7 +1516,7 @@
     <message name="IDS_SETTINGS_SYNC_DISCONNECT_MANAGED_PROFILE_EXPLANATION" desc="The text to display in the 'Sign out of Chrome' dialog to stop syncing for managed profiles.">
       Because this account is managed by <ph name="DOMAIN">$1<ex>example.com</ex></ph>, your bookmarks, history, passwords, and other settings will be cleared from this device. However, your data will remain stored in your Google Account.
     </message>
-    <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage">
+    <message name="IDS_SETTINGS_EDIT_PERSON" desc="Title of the edit person subpage. This is a subpage to edit the name and icon of a Chrome Profile.">
       Edit person
     </message>
   </if>
@@ -1365,6 +1611,9 @@
   </message>
   <message name="IDS_SETTINGS_INCORRECT_PASSPHRASE_ERROR" desc="Message when the passphrase is incorrect.">
     The passphrase you entered is incorrect.
+  </message>
+  <message name="IDS_SETTINGS_PASSPHRASE_RECOVER" desc="Message about how to recover from a lost passphrase.">
+    If you forgot your passphrase or want to change this setting, <ph name="BEGIN_LINK">&lt;a href="$1" target=&quot;_blank&quot;&gt;<ex>&lt;a href="$1" target=&quot;_blank&quot;&gt;</ex></ph>reset sync<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
   </message>
   <message name="IDS_SETTINGS_PASSPHRASE_PLACEHOLDER" desc="Placeholder for the passphrase field.">
     Passphrase
@@ -1498,12 +1747,30 @@
     <message name="IDS_SETTINGS_DEVICE_TITLE" desc="Name of the settings page which displays device and peripheral settings.">
       Device
     </message>
-    <!-- Touchpad -->
-    <message name="IDS_SETTINGS_TOUCHPAD_TITLE" desc="In Device Settings, the title of the Touchpad Settings section.">
-      Touchpad settings
+    <message name="IDS_SETTINGS_MOUSE_TITLE" desc="In Device Settings, the title of the mouse settings subpage.">
+      Mouse
     </message>
+    <message name="IDS_SETTINGS_TOUCHPAD_TITLE" desc="In Device Settings, the title of the touchpad settings subpage.">
+      Touchpad
+    </message>
+    <message name="IDS_SETTINGS_MOUSE_AND_TOUCHPAD_TITLE" desc="In Device Settings, the title of the mouse and touchpad settings subpage (when the user has both types of devices).">
+      Mouse and touchpad
+    </message>
+    <message name="IDS_SETTINGS_KEYBOARD_TITLE" desc="In Device Settings, the title of the keyboard settings subpage.">
+      Keyboard
+    </message>
+    <!-- Touchpad -->
     <message name="IDS_SETTINGS_TOUCHPAD_TAP_TO_CLICK_ENABLED_LABEL" desc="In Device Settings, the text next to the checkbox that allows tapping the touchpad to work as a click.">
       Enable tap-to-click
+    </message>
+    <message name="IDS_SETTINGS_TOUCHPAD_SPEED_LABEL" desc="In Device Settings, the text next to the slider that sets the speed (sensitivity) of the touchpad.">
+      Touchpad speed
+    </message>
+    <message name="IDS_SETTINGS_POINTER_SPEED_SLOW_LABEL" desc="In Device Settings, the text under the left (less sensitive) side of the slider for the pointer (mouse/touch) speed (sensitivity).">
+      Slow
+    </message>
+    <message name="IDS_SETTINGS_POINTER_SPEED_FAST_LABEL" desc="In Device Settings, the text under the right (more sensitive) side of the slider for the pointer (mouse/touchpad) speed (sensitivity).">
+      Fast
     </message>
     <message name="IDS_SETTINGS_SCROLL_LABEL" desc="In Device Settings, the title above the radio buttons to choose the scrolling behavior.">
       Scrolling
@@ -1517,10 +1784,14 @@
     <message name="IDS_SETTINGS_NATURAL_SCROLL_LEARN_MORE" desc="In Device Settings, the text for the link next to the Australian (natural) scrolling option; opens a page to learn more about natural scrolling.">
       Learn more
     </message>
-    <!-- Keyboard -->
-    <message name="IDS_SETTINGS_KEYBOARD_TITLE" desc="In Device Settings, the title for keyboard settings.">
-      Keyboard settings
+    <!-- Mouse -->
+    <message name="IDS_SETTINGS_MOUSE_SPEED_LABEL" desc="In Device Settings, the text next to the slider that sets the speed (sensitivity) of the mouse.">
+      Mouse speed
     </message>
+    <message name="IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL" desc="In Device Settings, the text next to the checkbox to set the primary mouse button to the right button instead of the left button.">
+      Swap primary mouse button
+    </message>
+    <!-- Keyboard -->
     <message name="IDS_SETTINGS_KEYBOARD_KEY_SEARCH" desc="In Device Settings, the label and dropdown list item for the Search key.">
       Search
     </message>
@@ -1574,6 +1845,20 @@
     </message>
     <message name="IDS_SETTINGS_KEYBOARD_SHOW_LANGUAGE_AND_INPUT" desc="The link to navigate to the language and input method settings.">
       Change language and input settings
+    </message>
+
+    <!-- Stylus -->
+    <message name="IDS_SETTINGS_STYLUS_TITLE" desc="Title of the stylus settings page.">
+      Stylus settings
+    </message>
+    <message name="IDS_SETTINGS_STYLUS_AUTO_OPEN_STYLUS_TOOLS" desc="Label that tells the user that the stylus tools will be automatically opened and closed when they insert or eject the stylus.">
+      Open stylus tools when the stylus is removed
+    </message>
+    <message name="IDS_SETTINGS_STYLUS_ENABLE_STYLUS_TOOLS" desc="Toggle that lets the user enable or disable the stylus tools.">
+      Show stylus tools in the shelf
+    </message>
+    <message name="IDS_SETTINGS_STYLUS_FIND_MORE_APPS" desc="URL label that opens up the Play Store to a curated list of stylus applications.">
+      Find more stylus applications
     </message>
 
     <!-- Display -->

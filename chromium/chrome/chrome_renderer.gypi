@@ -22,8 +22,6 @@
       'renderer/content_settings_observer.cc',
       'renderer/content_settings_observer.h',
       'renderer/custom_menu_commands.h',
-      'renderer/external_extension.cc',
-      'renderer/external_extension.h',
       'renderer/instant_restricted_id_cache.h',
       'renderer/loadtimes_extension_bindings.cc',
       'renderer/loadtimes_extension_bindings.h',
@@ -37,6 +35,10 @@
       'renderer/net_benchmarking_extension.h',
       'renderer/page_load_histograms.cc',
       'renderer/page_load_histograms.h',
+      'renderer/page_load_metrics/metrics_render_frame_observer.cc',
+      'renderer/page_load_metrics/metrics_render_frame_observer.h',
+      'renderer/page_load_metrics/page_timing_metrics_sender.cc',
+      'renderer/page_load_metrics/page_timing_metrics_sender.h',
       'renderer/plugins/non_loadable_plugin_placeholder.cc',
       'renderer/plugins/non_loadable_plugin_placeholder.h',
       'renderer/plugins/plugin_uma.cc',
@@ -209,23 +211,6 @@
       'renderer/safe_browsing/scorer.cc',
       'renderer/safe_browsing/scorer.h',
     ],
-    'chrome_renderer_spellchecker_sources': [
-      'renderer/spellchecker/custom_dictionary_engine.cc',
-      'renderer/spellchecker/custom_dictionary_engine.h',
-      'renderer/spellchecker/hunspell_engine.cc',
-      'renderer/spellchecker/hunspell_engine.h',
-      'renderer/spellchecker/platform_spelling_engine.cc',
-      'renderer/spellchecker/platform_spelling_engine.h',
-      'renderer/spellchecker/spellcheck.cc',
-      'renderer/spellchecker/spellcheck.h',
-      'renderer/spellchecker/spellcheck_language.cc',
-      'renderer/spellchecker/spellcheck_language.h',
-      'renderer/spellchecker/spellcheck_provider.cc',
-      'renderer/spellchecker/spellcheck_provider.h',
-      'renderer/spellchecker/spellcheck_worditerator.cc',
-      'renderer/spellchecker/spellcheck_worditerator.h',
-      'renderer/spellchecker/spelling_engine.h',
-    ],
     'chrome_renderer_printing_sources': [
       'renderer/printing/chrome_print_web_view_helper_delegate.cc',
       'renderer/printing/chrome_print_web_view_helper_delegate.h',
@@ -233,6 +218,10 @@
     'chrome_renderer_full_printing_sources': [
       'renderer/pepper/chrome_pdf_print_client.cc',
       'renderer/pepper/chrome_pdf_print_client.h',
+    ],
+    'chrome_renderer_leak_detector_sources': [
+      'renderer/leak_detector/leak_detector_remote_client.cc',
+      'renderer/leak_detector/leak_detector_remote_client.h',
     ],
   },
   'targets': [
@@ -256,7 +245,6 @@
         '../components/components.gyp:network_hints_renderer',
         '../components/components.gyp:omnibox_common',
         '../components/components.gyp:error_page_renderer',
-        '../components/components.gyp:page_load_metrics_renderer',
         '../components/components.gyp:password_manager_content_renderer',
         '../components/components.gyp:plugins_renderer',
         '../components/components.gyp:startup_metric_utils_interfaces',
@@ -352,28 +340,7 @@
           ],
         }],
         ['enable_spellcheck==1', {
-          'sources': [
-            '<@(chrome_renderer_spellchecker_sources)',
-          ],
-          'conditions': [
-            ['OS!="android"', {
-              'dependencies': [
-                '../third_party/hunspell/hunspell.gyp:hunspell',
-              ],
-            }],
-          ],
-        }],
-        ['use_browser_spellchecker==0', {
-          'sources!': [
-            'renderer/spellchecker/platform_spelling_engine.cc',
-            'renderer/spellchecker/platform_spelling_engine.h',
-          ]
-        }],
-        ['OS=="android"', {
-          'sources!': [
-            'renderer/spellchecker/hunspell_engine.cc',
-            'renderer/spellchecker/hunspell_engine.h',
-          ]
+          'dependencies': [ '../components/components.gyp:spellcheck_renderer' ]
         }],
         ['enable_basic_printing==1 or enable_print_preview==1', {
           'dependencies': [
@@ -396,6 +363,15 @@
           ],
           'include_dirs': [
             '<(DEPTH)/third_party/wtl/include',
+          ],
+        }],
+        ['chromeos==1', {
+          'sources': [
+            '<@(chrome_renderer_leak_detector_sources)',
+          ],
+          'dependencies': [
+            '../components/components.gyp:metrics_leak_detector',
+            '../components/components.gyp:metrics_mojo_bindings',
           ],
         }],
       ],

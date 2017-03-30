@@ -586,6 +586,16 @@
     ]
   },
 
+  "EnableSha1ForLocalAnchors": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "EnableSha1ForLocalAnchors": true },
+    "pref_mappings": [
+      { "pref": "ssl.sha1_enabled_for_local_anchors",
+        "local_state": true
+      }
+    ]
+  },
+
   "AuthSchemes": {
     "os": ["win", "linux", "mac", "chromeos", "android"],
     "test_policy": { "AuthSchemes": "AuthSchemes" },
@@ -1943,6 +1953,32 @@
     ]
   },
 
+  "NTPContentSuggestionsEnabled": {
+    "os": ["android"],
+    "test_policy": { "NTPContentSuggestionsEnabled": false },
+    "pref_mappings": [
+      { "pref": "ntp_snippets.enable" }
+    ]
+  },
+
+  "WebRtcUdpPortRange": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "WebRtcUdpPortRange": "10000-11999" },
+    "pref_mappings": [
+      { "pref": "webrtc.udp_port_range" }
+    ]
+  },
+
+  "ComponentUpdatesEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "ComponentUpdatesEnabled": true },
+    "pref_mappings": [
+      { "pref": "component_updates.component_updates_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
   "----- Chrome OS policies ------------------------------------------------": {},
 
   "ChromeOsLockOnIdleSuspend": {
@@ -2019,6 +2055,14 @@
     "test_policy": { "ExternalStorageDisabled": true },
     "pref_mappings": [
       { "pref": "hardware.external_storage_disabled" }
+    ]
+  },
+
+  "ExternalStorageReadOnly": {
+    "os": ["chromeos"],
+    "test_policy": { "ExternalStorageReadOnly": true },
+    "pref_mappings": [
+      { "pref": "hardware.external_storage_read_only" }
     ]
   },
 
@@ -2786,6 +2830,9 @@
     ]
   },
 
+  "WebRestrictionsAuthority": {
+  },
+
   "TaskManagerEndProcessEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "TaskManagerEndProcessEnabled": false },
@@ -2802,6 +2849,14 @@
     "test_policy": { "LoginVideoCaptureAllowedUrls": [ "https://example.com" ] },
     "pref_mappings": [
       { "pref": "cros.device.login_video_capture_allowed_urls" }
+    ]
+  },
+
+  "LoginApps": {
+    "os": ["chromeos"],
+    "test_policy": { "LoginApps": [ "abcdefghijklmnopabcdefghijklmnop" ] },
+    "pref_mappings": [
+      { "pref": "cros.device.login_apps" }
     ]
   },
 

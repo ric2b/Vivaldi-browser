@@ -1,0 +1,27 @@
+_vivaldi_version_py_path = "//build/util/version.py"
+
+_vivaldi_version_path = "$root_build_dir/vivaldi_version.txt"
+
+_version_full = exec_script(
+        _vivaldi_version_py_path,
+        [
+          "-f",
+          rebase_path(_vivaldi_version_path, root_build_dir),
+          "-t",
+          "@VIVALDI_MAJOR@.@VIVALDI_MINOR@.@VIVALDI_NIGHTLY@.@VIVALDI_BUILD@",
+        ],
+        "trim string")
+
+_vivaldi_global_build_number =
+    exec_script(_vivaldi_version_py_path,
+                [
+                  "-f",
+                  rebase_path(_vivaldi_version_path, root_build_dir),
+                  "-t",
+                  "@VIVALDI_BUILD@",
+                ],
+                "trim string")
+
+declare_overrides() {
+  GLOBAL_BUILDNUM = _vivaldi_global_build_number
+}

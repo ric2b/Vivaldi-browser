@@ -353,8 +353,8 @@ bool BufferedResourceLoader::range_supported() {
 void BufferedResourceLoader::willFollowRedirect(
     WebURLLoader* loader,
     WebURLRequest& newRequest,
-    const WebURLResponse& redirectResponse) {
-
+    const WebURLResponse& redirectResponse,
+    int64_t encodedDataLength) {
   // The load may have been stopped and |start_cb| is destroyed.
   // In this case we shouldn't do anything.
   if (start_cb_.is_null()) {
@@ -484,11 +484,11 @@ void BufferedResourceLoader::didReceiveResponse(
   DoneStart(kOk);
 }
 
-void BufferedResourceLoader::didReceiveData(
-    WebURLLoader* loader,
-    const char* data,
-    int data_length,
-    int encoded_data_length) {
+void BufferedResourceLoader::didReceiveData(WebURLLoader* loader,
+                                            const char* data,
+                                            int data_length,
+                                            int encoded_data_length,
+                                            int encoded_body_length) {
   DVLOG(1) << "didReceiveData: " << data_length << " bytes";
   DCHECK(active_loader_.get());
   DCHECK_GT(data_length, 0);
@@ -764,8 +764,10 @@ bool BufferedResourceLoader::ParseContentRange(
     int64_t* last_byte_position,
     int64_t* instance_size) {
   const std::string kUpThroughBytesUnit = "bytes ";
-  if (content_range_str.find(kUpThroughBytesUnit) != 0)
+  if (!base::StartsWith(content_range_str, kUpThroughBytesUnit,
+                        base::CompareCase::SENSITIVE)) {
     return false;
+  }
   std::string range_spec =
       content_range_str.substr(kUpThroughBytesUnit.length());
   size_t dash_offset = range_spec.find("-");

@@ -224,7 +224,7 @@ public:
     bool checkThread() const { return m_thread == currentThread(); }
 #endif
 
-    ThreadHeap& heap() { return *m_heap; }
+    ThreadHeap& heap() const { return *m_heap; }
 
     // When ThreadState is detaching from non-main thread its
     // heap is expected to be empty (because it is going away).
@@ -300,6 +300,18 @@ public:
         m_gcForbiddenCount--;
     }
     bool sweepForbidden() const { return m_sweepForbidden; }
+
+    class GCForbiddenScope final {
+        STACK_ALLOCATED();
+    public:
+        GCForbiddenScope() : m_threadState(ThreadState::current()) {
+            m_threadState->enterGCForbiddenScope();
+        }
+        ~GCForbiddenScope() { m_threadState->leaveGCForbiddenScope(); }
+
+    private:
+        ThreadState* const m_threadState;
+    };
 
     void flushHeapDoesNotContainCacheIfNeeded();
 
@@ -577,7 +589,7 @@ private:
     size_t totalMemorySize();
     double heapGrowingRate();
     double partitionAllocGrowingRate();
-    bool judgeGCThreshold(size_t allocatedObjectSizeThreshold, double heapGrowingRateThreshold);
+    bool judgeGCThreshold(size_t allocatedObjectSizeThreshold, size_t totalMemorySizeThreshold, double heapGrowingRateThreshold);
 
     void runScheduledGC(BlinkGC::StackState);
 
@@ -651,7 +663,7 @@ private:
     bool m_shouldFlushHeapDoesNotContainCache;
     GCState m_gcState;
 
-    CallbackStack* m_threadLocalWeakCallbackStack;
+    std::unique_ptr<CallbackStack> m_threadLocalWeakCallbackStack;
 
     // Pre-finalizers are called in the reverse order in which they are
     // registered by the constructors (including constructors of Mixin objects)

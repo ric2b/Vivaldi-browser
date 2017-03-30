@@ -137,10 +137,11 @@ by a child template that "extends" this file.
              (shown in Android's Settings/Apps list) share the same label, we
              do not specify one here to allow it to inherit from the app. -->
         <activity android:name="org.chromium.chrome.browser.document.ChromeLauncherActivity"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:theme="@style/LauncherTheme"
             android:relinquishTaskIdentity="true"
             android:taskAffinity=""
-            android:excludeFromRecents="true">
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
         <activity-alias android:name="com.google.android.apps.chrome.Main"
             android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
@@ -154,6 +155,11 @@ by a child template that "extends" this file.
                 <category android:name="android.intent.category.NOTIFICATION_PREFERENCES" />
                 {% if channel in ['dev', 'canary', 'default'] %}
                 <category android:name="android.intent.category.MULTIWINDOW_LAUNCHER" />
+                {% endif %}
+                {% set enable_vr_shell = enable_vr_shell|default(0) %}
+                {% if enable_vr_shell == "true" %}
+                <!-- Show icon in Daydream app launcher. -->
+                <category android:name="com.google.intent.category.DAYDREAM" />
                 {% endif %}
             </intent-filter>
             <!-- Matches the common case of intents with no MIME type.
@@ -188,7 +194,32 @@ by a child template that "extends" this file.
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="file" android:mimeType="multipart/related"/>
+                <data android:scheme="file"/>
+                <data android:scheme="content"/>
+                <data android:mimeType="multipart/related"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file"/>
+                <data android:scheme="content"/>
+                <data android:host="*" />
+                <data android:pathPattern="/.*\\.mhtml"/>
+                <data android:pathPattern="/.*\\.mht"/>
+            </intent-filter>
+            <!-- Same filter as above but with mimeType="*/*". Used for
+                 handling intent send by ShareIt. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file"/>
+                <data android:scheme="content"/>
+                <data android:host="*" />
+                <data android:mimeType="*/*"/>
+                <data android:pathPattern="/.*\\.mhtml"/>
+                <data android:pathPattern="/.*\\.mht"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_SEARCH" />
@@ -294,6 +325,7 @@ by a child template that "extends" this file.
         {% for i in range(10) %}
         <activity android:name="org.chromium.chrome.browser.customtabs.SeparateTaskCustomTabActivity{{ i }}"
             android:theme="@style/MainTheme"
+            android:icon="@mipmap/app_single_page_icon"
             android:exported="false"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustResize"
@@ -334,10 +366,18 @@ by a child template that "extends" this file.
             android:theme="@style/MainTheme"
             android:autoRemoveFromRecents="true">
         </activity>
+        <activity android:name="org.chromium.chrome.browser.firstrun.LightweightFirstRunActivity"
+            android:theme="@style/LightweightFreDialog"
+            android:launchMode="singleTop"
+            android:autoRemoveFromRecents="true"
+            android:windowSoftInputMode="stateHidden|adjustPan"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
+        </activity>
         <activity android:name="org.chromium.chrome.browser.firstrun.FirstRunActivity"
             android:theme="@style/DialogWhenLarge"
             android:label="@string/fre_label"
             android:launchMode="singleTop"
+            android:autoRemoveFromRecents="true"
             android:windowSoftInputMode="stateHidden|adjustPan"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
@@ -395,7 +435,7 @@ by a child template that "extends" this file.
 
         <!-- Activities for downloads. -->
         <activity android:name="org.chromium.chrome.browser.download.DownloadActivity"
-            android:theme="@style/DrawerDialog"
+            android:theme="@style/DownloadActivityTheme"
             android:windowSoftInputMode="stateAlwaysHidden"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize">
         </activity>
@@ -502,6 +542,24 @@ by a child template that "extends" this file.
             android:process=":browser_restart_process">
         </activity>
 
+        <!-- This activity is to expose the print option via the generic Android share action. -->
+        <activity
+            android:name="org.chromium.chrome.browser.printing.PrintShareActivity"
+            android:icon="@drawable/print"
+            android:label="@string/print_share_activity_title"
+            android:enabled="false"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize" >
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- Activity to list Physical Web Urls -->
         <activity android:name="org.chromium.chrome.browser.physicalweb.ListUrlsActivity"
             android:label="@string/physical_web_list_urls_activity_title"
@@ -523,6 +581,10 @@ by a child template that "extends" this file.
         <receiver android:name="org.chromium.chrome.browser.physicalweb.ClearNotificationAlarmReceiver"
             android:exported="false">
         </receiver>
+
+        <!-- Service for handling Nearby Messages -->
+        <service android:name="org.chromium.chrome.browser.physicalweb.NearbyMessageIntentService"
+            android:exported="false" />
 
         <!-- Providers for chrome data. -->
         <provider android:name="org.chromium.chrome.browser.provider.ChromeBrowserProvider"
@@ -655,7 +717,7 @@ by a child template that "extends" this file.
             android:exported="false"/>
         <receiver android:name="com.google.ipc.invalidation.ticl.android2.AndroidInternalScheduler$AlarmReceiver"
             android:exported="false"/>
-        <receiver android:name="com.google.ipc.invalidation.external.client2.contrib.AndroidListener$AlarmReceiver"
+        <receiver android:name="com.google.ipc.invalidation.external.client.contrib.AndroidListener$AlarmReceiver"
             android:exported="false"/>
 
         <!-- Android Notification service listener -->
@@ -805,8 +867,6 @@ android:value="true" />
 
         <meta-data android:name="org.chromium.content.browser.SMART_CLIP_PROVIDER"
             android:value="org.chromium.content.browser.SmartClipProvider"/>
-        <meta-data android:name="org.chromium.components.service_tab_launcher.SERVICE_TAB_LAUNCHER"
-                   android:value="org.chromium.chrome.browser.ChromeServiceTabLauncher" />
 
         {% set enable_leakcanary = enable_leakcanary|default(0) %}
         {% if enable_leakcanary == "true" %}

@@ -59,9 +59,9 @@ public:
     ~FileWriter() override;
 
     enum ReadyState {
-        INIT = 0,
-        WRITING = 1,
-        DONE = 2
+        kInit = 0,
+        kWriting = 1,
+        kDone = 2
     };
 
     void write(Blob*, ExceptionState&);
@@ -69,7 +69,7 @@ public:
     void truncate(long long length, ExceptionState&);
     void abort(ExceptionState&);
     ReadyState getReadyState() const { return m_readyState; }
-    FileError* error() const { return m_error.get(); }
+    DOMException* error() const { return m_error.get(); }
 
     // WebFileWriterClient
     void didWrite(long long bytes, bool complete) override;
@@ -79,7 +79,7 @@ public:
     // ActiveDOMObject
     void stop() override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable
     bool hasPendingActivity() const final;
 
     // EventTarget
@@ -115,7 +115,7 @@ private:
 
     void setError(FileError::ErrorCode, ExceptionState&);
 
-    Member<FileError> m_error;
+    Member<DOMException> m_error;
     ReadyState m_readyState;
     Operation m_operationInProgress;
     Operation m_queuedOperation;

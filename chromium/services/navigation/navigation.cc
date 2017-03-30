@@ -6,25 +6,40 @@
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "services/navigation/view_impl.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace navigation {
 
+namespace {
+
+void CreateViewOnViewTaskRunner(
+    std::unique_ptr<shell::Connector> connector,
+    const std::string& client_user_id,
+    mojom::ViewClientPtr client,
+    mojom::ViewRequest request,
+    std::unique_ptr<shell::ServiceContextRef> context_ref) {
+  // Owns itself.
+  new ViewImpl(std::move(connector), client_user_id, std::move(client),
+               std::move(request), std::move(context_ref));
+}
+
+}  // namespace
+
 Navigation::Navigation()
-    : ref_factory_(base::MessageLoop::QuitWhenIdleClosure()) {
+    : view_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      ref_factory_(base::MessageLoop::QuitWhenIdleClosure()),
+      weak_factory_(this) {
   bindings_.set_connection_error_handler(
       base::Bind(&Navigation::ViewFactoryLost, base::Unretained(this)));
 }
 Navigation::~Navigation() {}
 
-void Navigation::Initialize(shell::Connector* connector,
-                            const shell::Identity& identity,
-                            uint32_t instance_id) {
-  connector_ = connector;
-}
-
-bool Navigation::AcceptConnection(shell::Connection* connection) {
-  std::string remote_user_id = connection->GetRemoteIdentity().user_id();
+bool Navigation::OnConnect(const shell::Identity& remote_identity,
+                           shell::InterfaceRegistry* registry,
+                           shell::Connector* connector) {
+  std::string remote_user_id = remote_identity.user_id();
   if (!client_user_id_.empty() && client_user_id_ != remote_user_id) {
     LOG(ERROR) << "Must have a separate Navigation service instance for "
                << "different BrowserContexts.";
@@ -32,20 +47,26 @@ bool Navigation::AcceptConnection(shell::Connection* connection) {
   }
   client_user_id_ = remote_user_id;
 
-  connection->AddInterface<mojom::ViewFactory>(this);
+  registry->AddInterface(
+      base::Bind(&Navigation::CreateViewFactory, weak_factory_.GetWeakPtr()));
   return true;
-}
-
-void Navigation::Create(shell::Connection* connection,
-                        mojom::ViewFactoryRequest request) {
-  bindings_.AddBinding(this, std::move(request));
-  refs_.insert(ref_factory_.CreateRef());
 }
 
 void Navigation::CreateView(mojom::ViewClientPtr client,
                             mojom::ViewRequest request) {
-  new ViewImpl(connector_, client_user_id_, std::move(client),
-               std::move(request), ref_factory_.CreateRef());
+  std::unique_ptr<shell::Connector> new_connector = connector_->Clone();
+  std::unique_ptr<shell::ServiceContextRef> context_ref =
+      ref_factory_.CreateRef();
+  view_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&CreateViewOnViewTaskRunner, base::Passed(&new_connector),
+                 client_user_id_, base::Passed(&client), base::Passed(&request),
+                 base::Passed(&context_ref)));
+}
+
+void Navigation::CreateViewFactory(mojom::ViewFactoryRequest request) {
+  bindings_.AddBinding(this, std::move(request));
+  refs_.insert(ref_factory_.CreateRef());
 }
 
 void Navigation::ViewFactoryLost() {

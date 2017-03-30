@@ -78,26 +78,6 @@ ScrollbarOrientation PaintedScrollbarLayer::orientation() const {
   return scrollbar_->Orientation();
 }
 
-int PaintedScrollbarLayer::MaxTextureSize() {
-  DCHECK(layer_tree_host());
-  return layer_tree_host()->GetRendererCapabilities().max_texture_size;
-}
-
-float PaintedScrollbarLayer::ClampScaleToMaxTextureSize(float scale) {
-  // If the scaled bounds() is bigger than the max texture size of the
-  // device, we need to clamp it by rescaling, since this is used
-  // below to set the texture size.
-  gfx::Size scaled_bounds = gfx::ScaleToCeiledSize(bounds(), scale);
-  if (scaled_bounds.width() > MaxTextureSize() ||
-      scaled_bounds.height() > MaxTextureSize()) {
-    if (bounds().width() > bounds().height())
-      return (MaxTextureSize() - 1) / static_cast<float>(bounds().width());
-    else
-      return (MaxTextureSize() - 1) / static_cast<float>(bounds().height());
-  }
-  return scale;
-}
-
 void PaintedScrollbarLayer::PushPropertiesTo(LayerImpl* layer) {
   Layer::PushPropertiesTo(layer);
 
@@ -189,21 +169,20 @@ void PaintedScrollbarLayer::UpdateThumbAndTrackGeometry() {
 }
 
 void PaintedScrollbarLayer::UpdateInternalContentScale() {
-  float scale = layer_tree_host()->device_scale_factor();
+  float scale = GetLayerTree()->device_scale_factor();
   if (layer_tree_host()
           ->settings()
           .layer_transforms_should_scale_layer_contents) {
     gfx::Transform transform;
     transform = draw_property_utils::ScreenSpaceTransform(
-        this, layer_tree_host()->property_trees()->transform_tree);
+        this, GetLayerTree()->property_trees()->transform_tree);
 
     gfx::Vector2dF transform_scales =
         MathUtil::ComputeTransform2dScaleComponents(transform, scale);
     scale = std::max(transform_scales.x(), transform_scales.y());
   }
   bool changed = false;
-  changed |= UpdateProperty(ClampScaleToMaxTextureSize(scale),
-                            &internal_contents_scale_);
+  changed |= UpdateProperty(scale, &internal_contents_scale_);
   changed |=
       UpdateProperty(gfx::ScaleToCeiledSize(bounds(), internal_contents_scale_),
                      &internal_content_bounds_);
@@ -245,7 +224,7 @@ bool PaintedScrollbarLayer::Update() {
     updated = true;
   }
 
-  if (update_rect_.IsEmpty() && track_resource_)
+  if (update_rect().IsEmpty() && track_resource_)
     return updated;
 
   if (!track_resource_ || scrollbar_->NeedsPaintPart(TRACK)) {

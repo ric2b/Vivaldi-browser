@@ -269,6 +269,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="3392045790598181549"><ph name="NAME" />, valikkokohde</translation>
 <translation id="3406283310380167331">Näytä muotojen luettelo</translation>
 <translation id="3422338090358345848">Avaa näppäimistöselain</translation>
+<translation id="3423495725743882470">Rivi $1, sarake $2</translation>
 <translation id="3457000393508828486">Painettu osittain</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, painike</translation>
 <translation id="3473644018603298796">sld <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Ennakoivan tekstinsyötön luettelo</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">liitä $1.</translation>
 <translation id="3816633764618089385">Seuraava mediakohde</translation>
 <translation id="3819376190738087562">Ei siirtymiä.</translation>
 <translation id="385383972552776628">Avaa asetussivu</translation>
@@ -411,6 +413,7 @@ Jos haluat poistua opetusohjelmasta, siirry ChromeVox-komennoilla Sulje-painikke
 <translation id="5000760171916499057">Ei lomakkeita.</translation>
 <translation id="5005670136041063723">Ei muita samanlaisia ​​elementtejä.</translation>
 <translation id="501473567976723023">tammikuu</translation>
+<translation id="5040591161308540832">Tekijän $3 taulukko $1, $2</translation>
 <translation id="5041394372352067729">Siirrä pistekirjoitusnäyttö sivun yläreunaan</translation>
 <translation id="5042770794184672516">Lisää puheen äänenvoimakkuutta</translation>
 <translation id="5050015258024679800">Edellinen tason 4 otsikko</translation>
@@ -518,7 +521,6 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="5876817486144482042">Pienennä puheen äänenvoimakkuutta</translation>
 <translation id="5887397643266327462">Pistekirjoituskuvatekstit ovat käytössä.</translation>
 <translation id="5891934789323004067">Taulukko</translation>
-<translation id="5919442531159595654">kopioi.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{yhtäläisyys}other{# yhtäläisyysmerkkiä}}</translation>
 <translation id="5939518447894949180">Tyhjennä</translation>
 <translation id="5948123859135882163">Vaihda matemaattisten lausekkeiden tulkintatapaa rakenteellisen ja semanttisen välillä</translation>
@@ -554,6 +556,8 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="6355910664415701303">Ei edellisiä luettelokohteita.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Edellinen otsikko</translation>
+<translation id="6378565991815958969">kopioi $1.</translation>
+<translation id="6385591741672306837">sarake</translation>
 <translation id="6387719785439924554">sivuun</translation>
 <translation id="6411426777058107714">Ei edellisiä valintanappeja.</translation>
 <translation id="6414968628640960377">Edellinen erilainen elementti.</translation>
@@ -653,7 +657,6 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="7532613204005497612">kesäkuu</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, liukusäädin</translation>
 <translation id="7552432549459840808">Hyödyllisiä Chrome-pikanäppäimiä</translation>
-<translation id="7586163296341959563">liitä.</translation>
 <translation id="7596919493010894443">valinta poistettu</translation>
 <translation id="7604026522577407655">Siirry nykyisen sarakkeen alkuun</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="8153880621934657047">Et ole taulukossa.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{alaviiva}other{# alaviivaa}}</translation>
 <translation id="8179976553408161302">Enter</translation>
+<translation id="8184828902145951186">rivi</translation>
 <translation id="8186185314313222077">Ota koko näytön tila käyttöön tai poista se käytöstä.</translation>
-<translation id="81960742267269908">leikkaa.</translation>
 <translation id="8199231515320852133">Ilmoita nykyisen solun otsikot</translation>
 <translation id="820417203470636242">Tyhjä solu.</translation>
 <translation id="8215202828671303819">Monivalinta</translation>
@@ -782,6 +785,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="9077213568694924680">poistettu valinnasta</translation>
 <translation id="9082874451376019682">Ei edellisiä liukusäätimiä.</translation>
 <translation id="9089864840575085222">Ota kirjoituksen puhuminen käyttöön tai pois käytöstä</translation>
+<translation id="9105227991373418255">leikkaa $1.</translation>
 <translation id="9107530006868467849">Ei edellistä mediawidgetiä.</translation>
 <translation id="9108370397979208512">matematiikka</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Avaa Chrome-selaimen valikko painamalla Alt + F.</translation>
 <translation id="9115913704608474258">marraskuu</translation>
 <translation id="9128414153595658330">ikk.</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Välilehti</translation>
 <translation id="9151211641321628915">Ilmoittaa nykyisen aseman lyhyen kuvauksen</translation>
 <translation id="9153606228985488238">Äänenkorkeus <ph name="PERCENT" /> prosenttia</translation>
 <translation id="9160096769946561184">Siirry nykyisen sarakkeen loppuun</translation>

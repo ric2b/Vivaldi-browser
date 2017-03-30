@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <initializer_list>
 #include <memory>
 #include <set>
 #include <string>
@@ -17,9 +18,9 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/values.h"
+#include "components/version_info/version_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/features/feature.h"
-#include "extensions/common/features/simple_feature_filter.h"
 #include "extensions/common/manifest.h"
 
 namespace extensions {
@@ -46,20 +47,6 @@ class SimpleFeature : public Feature {
   SimpleFeature();
   ~SimpleFeature() override;
 
-  // Dependency resolution is a property of Features that is preferrably
-  // handled internally to avoid temptation, but FeatureFilters may need
-  // to know if there are any at all.
-  bool HasDependencies() const;
-
-  // Adds a filter to this feature. The feature takes ownership of the filter.
-  void AddFilter(std::unique_ptr<SimpleFeatureFilter> filter);
-
-  // Parses the JSON representation of a feature into the fields of this object.
-  // Unspecified values in the JSON are not modified in the object. This allows
-  // us to implement inheritance by parsing one value after another. Returns
-  // the error found, or an empty string on success.
-  virtual std::string Parse(const base::DictionaryValue* dictionary);
-
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context) const {
     return IsAvailableToContext(extension, context, GURL());
@@ -81,19 +68,13 @@ class SimpleFeature : public Feature {
                                      Manifest::Location location,
                                      int manifest_version,
                                      Platform platform) const override;
-
   Availability IsAvailableToContext(const Extension* extension,
                                     Context context,
                                     const GURL& url,
                                     Platform platform) const override;
-
-  std::string GetAvailabilityMessage(AvailabilityResult result,
-                                     Manifest::Type type,
-                                     const GURL& url,
-                                     Context context) const override;
-
   bool IsInternal() const override;
   bool IsVivaldiFeature() const override;
+  void set_vivaldi(bool flag) override;
 
   bool IsIdInBlacklist(const std::string& extension_id) const override;
   bool IsIdInWhitelist(const std::string& extension_id) const override;
@@ -102,10 +83,9 @@ class SimpleFeature : public Feature {
                           const char* const array[],
                           size_t array_length);
 
- protected:
   // Similar to Manifest::Location, these are the classes of locations
-  // supported in feature files. Production code should never directly access
-  // these.
+  // supported in feature files. These should only be used in this class and in
+  // generated files.
   enum Location {
     UNSPECIFIED_LOCATION,
     COMPONENT_LOCATION,
@@ -113,34 +93,66 @@ class SimpleFeature : public Feature {
     POLICY_LOCATION,
   };
 
-  // Accessors defined for testing.
-  std::vector<std::string>* blacklist() { return &blacklist_; }
-  const std::vector<std::string>* blacklist() const { return &blacklist_; }
-  std::vector<std::string>* whitelist() { return &whitelist_; }
-  const std::vector<std::string>* whitelist() const { return &whitelist_; }
-  std::vector<Manifest::Type>* extension_types() { return &extension_types_; }
-  const std::vector<Manifest::Type>* extension_types() const {
-    return &extension_types_;
+  // Setters used by generated code to create the feature.
+  // NOTE: These setters use base::StringPiece and std::initalizer_list rather
+  // than std::string and std::vector for binary size reasons. Using STL types
+  // directly in the header means that code that doesn't already have that exact
+  // type ends up triggering many implicit conversions which are all inlined.
+  void set_blacklist(std::initializer_list<const char* const> blacklist);
+  void set_channel(version_info::Channel channel) {
+    channel_.reset(new version_info::Channel(channel));
   }
-  std::vector<Context>* contexts() { return &contexts_; }
-  const std::vector<Context>* contexts() const { return &contexts_; }
-  std::vector<Platform>* platforms() { return &platforms_; }
-  Location location() const { return location_; }
+  void set_command_line_switch(base::StringPiece command_line_switch);
+  void set_component_extensions_auto_granted(bool granted) {
+    component_extensions_auto_granted_ = granted;
+  }
+  void set_contexts(std::initializer_list<Context> contexts);
+  void set_dependencies(std::initializer_list<const char* const> dependencies);
+  void set_extension_types(std::initializer_list<Manifest::Type> types);
+  void set_internal(bool is_internal) { is_internal_ = is_internal; }
   void set_location(Location location) { location_ = location; }
-  int min_manifest_version() const { return min_manifest_version_; }
-  void set_min_manifest_version(int min_manifest_version) {
-    min_manifest_version_ = min_manifest_version;
-  }
-  int max_manifest_version() const { return max_manifest_version_; }
+  // set_matches() is an exception to pass-by-value since we construct an
+  // URLPatternSet from the vector of strings.
+  // TODO(devlin): Pass in an URLPatternSet directly.
+  void set_matches(std::initializer_list<const char* const> matches);
   void set_max_manifest_version(int max_manifest_version) {
     max_manifest_version_ = max_manifest_version;
   }
+  void set_min_manifest_version(int min_manifest_version) {
+    min_manifest_version_ = min_manifest_version;
+  }
+  void set_noparent(bool no_parent) { no_parent_ = no_parent; }
+  void set_platforms(std::initializer_list<Platform> platforms);
+  void set_whitelist(std::initializer_list<const char* const> whitelist);
+
+ protected:
+  // Accessors used by subclasses in feature verification.
+  const std::vector<std::string>& blacklist() const { return blacklist_; }
+  const std::vector<std::string>& whitelist() const { return whitelist_; }
+  const std::vector<Manifest::Type>& extension_types() const {
+    return extension_types_;
+  }
+  const std::vector<Platform>& platforms() const { return platforms_; }
+  const std::vector<Context>& contexts() const { return contexts_; }
+  const std::vector<std::string>& dependencies() const { return dependencies_; }
+  bool has_channel() const { return channel_.get() != nullptr; }
+  version_info::Channel channel() const { return *channel_; }
+  Location location() const { return location_; }
+  int min_manifest_version() const { return min_manifest_version_; }
+  int max_manifest_version() const { return max_manifest_version_; }
   const std::string& command_line_switch() const {
     return command_line_switch_;
   }
-  void set_command_line_switch(const std::string& command_line_switch) {
-    command_line_switch_ = command_line_switch;
+  bool component_extensions_auto_granted() const {
+    return component_extensions_auto_granted_;
   }
+  const URLPatternSet& matches() const { return matches_; }
+
+  std::string GetAvailabilityMessage(AvailabilityResult result,
+                                     Manifest::Type type,
+                                     const GURL& url,
+                                     Context context,
+                                     version_info::Channel channel) const;
 
   // Handy utilities which construct the correct availability message.
   Availability CreateAvailability(AvailabilityResult result) const;
@@ -150,16 +162,22 @@ class SimpleFeature : public Feature {
                                   const GURL& url) const;
   Availability CreateAvailability(AvailabilityResult result,
                                   Context context) const;
+  Availability CreateAvailability(AvailabilityResult result,
+                                  version_info::Channel channel) const;
 
  private:
+  friend struct FeatureComparator;
   friend class SimpleFeatureTest;
   FRIEND_TEST_ALL_PREFIXES(BaseFeatureProviderTest, ManifestFeatureTypes);
   FRIEND_TEST_ALL_PREFIXES(BaseFeatureProviderTest, PermissionFeatureTypes);
   FRIEND_TEST_ALL_PREFIXES(ExtensionAPITest, DefaultConfigurationFeatures);
+  FRIEND_TEST_ALL_PREFIXES(FeaturesGenerationTest, FeaturesTest);
   FRIEND_TEST_ALL_PREFIXES(ManifestUnitTest, Extension);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Blacklist);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, CommandLineSwitch);
+  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ComplexFeatureAvailability);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Context);
+  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, FeatureValidation);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, HashedIdBlacklist);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, HashedIdWhitelist);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Inheritance);
@@ -174,6 +192,7 @@ class SimpleFeature : public Feature {
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParsePlatforms);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, ParseWhitelist);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Platform);
+  FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, SimpleFeatureAvailability);
   FRIEND_TEST_ALL_PREFIXES(SimpleFeatureTest, Whitelist);
 
   // Holds String to Enum value mappings.
@@ -204,10 +223,10 @@ class SimpleFeature : public Feature {
   int min_manifest_version_;
   int max_manifest_version_;
   bool component_extensions_auto_granted_;
+  bool is_internal_;
   std::string command_line_switch_;
-  bool is_vivaldi_feature_;
-
-  std::vector<std::unique_ptr<SimpleFeatureFilter>> filters_;
+  std::unique_ptr<version_info::Channel> channel_;
+  bool is_vivaldi_feature_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SimpleFeature);
 };

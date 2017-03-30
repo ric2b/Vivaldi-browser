@@ -263,6 +263,8 @@ NinjaBinaryTargetWriter::~NinjaBinaryTargetWriter() {
 }
 
 void NinjaBinaryTargetWriter::Run() {
+  if (target_->is_disabled())
+    return;
   // Figure out what source types are needed.
   SourceFileTypeSet used_types;
   for (const auto& source : target_->sources())
@@ -417,10 +419,8 @@ OutputFile NinjaBinaryTargetWriter::WriteInputsStampAndGetDep() const {
     return OutputFile(settings_->build_settings(), target_->inputs()[0]);
 
   // Make a stamp file.
-  OutputFile input_stamp_file(
-      RebasePath(GetTargetOutputDir(target_).value(),
-                 settings_->build_settings()->build_dir(),
-                 settings_->build_settings()->root_path_utf8()));
+  OutputFile input_stamp_file =
+      GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
   input_stamp_file.value().append(target_->label().name());
   input_stamp_file.value().append(".inputs.stamp");
 
@@ -838,6 +838,9 @@ void NinjaBinaryTargetWriter::WriteLinkerStuff(
       target_->output_type() == Target::LOADABLE_MODULE) {
     WriteLinkerFlags(optional_def_file);
     WriteLibs();
+    if (!target_->pool().empty()) {
+      out_ << "  pool = " << target_->pool() << std::endl;
+    }
   } else if (target_->output_type() == Target::STATIC_LIBRARY) {
     out_ << "  arflags =";
     RecursiveTargetConfigStringsToStream(target_, &ConfigValues::arflags,
@@ -948,8 +951,11 @@ void NinjaBinaryTargetWriter::WriteSourceSetStamp(
   DCHECK(extra_object_files.empty());
 
   std::vector<OutputFile> order_only_deps;
-  for (const auto& dep : non_linkable_deps)
+  for (auto* dep : non_linkable_deps) {
+    if (dep->is_disabled())
+      continue;
     order_only_deps.push_back(dep->dependency_output_file());
+  }
 
   WriteStampForTarget(object_files, order_only_deps);
 }
@@ -965,8 +971,7 @@ void NinjaBinaryTargetWriter::GetDeps(
   }
 
   // Inherited libraries.
-  for (const auto& inherited_target :
-           target_->inherited_libraries().GetOrdered()) {
+  for (auto* inherited_target : target_->inherited_libraries().GetOrdered()) {
     ClassifyDependency(inherited_target, extra_object_files,
                        linkable_deps, non_linkable_deps);
   }
@@ -1029,7 +1034,7 @@ void NinjaBinaryTargetWriter::WriteOrderOnlyDependencies(
     out_ << " ||";
 
     // Non-linkable targets.
-    for (const auto& non_linkable_dep : non_linkable_deps) {
+    for (auto* non_linkable_dep : non_linkable_deps) {
       out_ << " ";
       path_output_.WriteFile(out_, non_linkable_dep->dependency_output_file());
     }
@@ -1040,7 +1045,7 @@ OutputFile NinjaBinaryTargetWriter::GetWindowsPCHFile(
     Toolchain::ToolType tool_type) const {
   // Use "obj/{dir}/{target_name}_{lang}.pch" which ends up
   // looking like "obj/chrome/browser/browser_cc.pch"
-  OutputFile ret = GetTargetOutputDirAsOutputFile(target_);
+  OutputFile ret = GetBuildDirForTargetAsOutputFile(target_, BuildDirType::OBJ);
   ret.value().append(target_->label().name());
   ret.value().push_back('_');
   ret.value().append(GetPCHLangSuffixForToolType(tool_type));

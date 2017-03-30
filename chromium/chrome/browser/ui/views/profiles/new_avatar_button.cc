@@ -56,8 +56,8 @@ NewAvatarButton::NewAvatarButton(AvatarButtonDelegate* delegate,
                                  Profile* profile)
     : LabelButton(delegate, base::string16()),
       delegate_(delegate),
+      error_controller_(this, profile),
       profile_(profile),
-      has_auth_error_(false),
       suppress_mouse_released_action_(false) {
   set_triggerable_event_flags(
       ui::EF_LEFT_MOUSE_BUTTON | ui::EF_RIGHT_MOUSE_BUTTON);
@@ -103,26 +103,13 @@ NewAvatarButton::NewAvatarButton(AvatarButtonDelegate* delegate,
 
   g_browser_process->profile_manager()->
       GetProfileAttributesStorage().AddObserver(this);
-
-  // Subscribe to authentication error changes so that the avatar button can
-  // update itself.  Note that guest mode profiles won't have a token service.
-  SigninErrorController* error = profiles::GetSigninErrorController(profile_);
-  if (error) {
-    error->AddObserver(this);
-    OnErrorChanged();  // This calls Update().
-  } else {
-    Update();
-  }
+  Update();
   SchedulePaint();
 }
 
 NewAvatarButton::~NewAvatarButton() {
   g_browser_process->profile_manager()->
       GetProfileAttributesStorage().RemoveObserver(this);
-  SigninErrorController* error =
-      profiles::GetSigninErrorController(profile_);
-  if (error)
-    error->RemoveObserver(this);
 }
 
 bool NewAvatarButton::OnMousePressed(const ui::MouseEvent& event) {
@@ -149,6 +136,10 @@ void NewAvatarButton::OnGestureEvent(ui::GestureEvent* event) {
     LabelButton::OnGestureEvent(event);
 }
 
+void NewAvatarButton::OnAvatarErrorChanged() {
+  Update();
+}
+
 void NewAvatarButton::OnProfileAdded(const base::FilePath& profile_path) {
   Update();
 }
@@ -173,15 +164,6 @@ void NewAvatarButton::OnProfileSupervisedUserIdChanged(
       const base::FilePath& profile_path) {
   if (profile_->GetPath() == profile_path)
     Update();
-}
-
-void NewAvatarButton::OnErrorChanged() {
-  // If there is an error, show an warning icon.
-  const SigninErrorController* error =
-      profiles::GetSigninErrorController(profile_);
-  has_auth_error_ = error && error->HasError();
-
-  Update();
 }
 
 void NewAvatarButton::Update() {
@@ -213,10 +195,10 @@ void NewAvatarButton::Update() {
 
   if (use_generic_button) {
     SetImage(views::Button::STATE_NORMAL, generic_avatar_);
-  } else if (has_auth_error_) {
+  } else if (error_controller_.HasAvatarError()) {
     if (switches::IsMaterialDesignUserMenu()) {
       SetImage(views::Button::STATE_NORMAL,
-               gfx::CreateVectorIcon(gfx::VectorIconId::SYNC_PROBLEM, 13,
+               gfx::CreateVectorIcon(gfx::VectorIconId::SYNC_PROBLEM, 16,
                                      gfx::kGoogleRed700));
     } else {
       SetImage(views::Button::STATE_NORMAL,

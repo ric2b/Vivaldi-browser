@@ -18,6 +18,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
@@ -43,39 +44,9 @@ constexpr size_t kOutputBufferCount = 3;
 // used when copy is needed to match the required coded size.
 constexpr size_t kExtraInputBufferCount = 2;
 
-// Parses the command-line flag and returns 0 (default) to use the old/flawed
-// "deadline utilization" heuristic to measure encoder utilization. Otherwise,
-// returns the "redline" value for the "backlog" heuristic (i.e., num_frames /
-// redline = utilization).
-//
-// Example command line switches and results:
-//
-//   --cast-encoder-util-heuristic=foobar    ==> 0  (unrecognized, use deadline)
-//   --cast-encoder-util-heuristic=backlog   ==> 6  (use backlog, default)
-//   --cast-encoder-util-heuristic=backlog7  ==> 7  (use backlog, redline=7)
-//
-// TODO(miu): This is temporary, for lab performance testing, until a
-// good "works for all" solution is confirmed.
-// https://code.google.com/p/chrome-os-partner/issues/detail?id=54806
-int GetConfiguredBacklogRedline() {
-  constexpr char kBacklogSwitchValue[] = "backlog";
-  constexpr int kBacklogDefaultRedline = 6;
-
-  const std::string& switch_value =
-      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          switches::kCastEncoderUtilHeuristic);
-  if (switch_value.find(kBacklogSwitchValue) == 0) {
-    int redline = kBacklogDefaultRedline;
-    if (!base::StringToInt(switch_value.substr(sizeof(kBacklogSwitchValue) - 1),
-                           &redline)) {
-      redline = kBacklogDefaultRedline;
-    }
-    VLOG(1) << "Using 'backlog' heuristic with a redline of " << redline
-            << " to compute encoder utilization.";
-    return redline;
-  }
-  return 0;
-}
+// This value is used to calculate the encoder utilization. The encoder is
+// assumed to be in full usage when the number of frames in progress reaches it.
+constexpr int kBacklogRedlineThreshold = 4;
 
 }  // namespace
 
@@ -124,7 +95,7 @@ class ExternalVideoEncoder::VEAClientImpl
       const scoped_refptr<CastEnvironment>& cast_environment,
       const scoped_refptr<base::SingleThreadTaskRunner>& encoder_task_runner,
       std::unique_ptr<media::VideoEncodeAccelerator> vea,
-      int max_frame_rate,
+      double max_frame_rate,
       const StatusChangeCallback& status_change_cb,
       const CreateVideoEncodeMemoryCallback& create_video_encode_memory_cb)
       : cast_environment_(cast_environment),
@@ -133,7 +104,6 @@ class ExternalVideoEncoder::VEAClientImpl
         status_change_cb_(status_change_cb),
         create_video_encode_memory_cb_(create_video_encode_memory_cb),
         video_encode_accelerator_(std::move(vea)),
-        backlog_redline_threshold_(GetConfiguredBacklogRedline()),
         encoder_active_(false),
         next_frame_id_(FrameId::first()),
         key_frame_encountered_(false),
@@ -176,8 +146,8 @@ class ExternalVideoEncoder::VEAClientImpl
     DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
     requested_bit_rate_ = bit_rate;
-    video_encode_accelerator_->RequestEncodingParametersChange(bit_rate,
-                                                               max_frame_rate_);
+    video_encode_accelerator_->RequestEncodingParametersChange(
+        bit_rate, static_cast<uint32_t>(max_frame_rate_ + 0.5));
   }
 
   // The destruction call back of the copied video frame to free its use of
@@ -345,30 +315,21 @@ class ExternalVideoEncoder::VEAClientImpl
       if (request.video_frame->metadata()->GetTimeDelta(
               media::VideoFrameMetadata::FRAME_DURATION, &frame_duration) &&
           frame_duration > base::TimeDelta()) {
-        if (backlog_redline_threshold_ == 0) {
-          // Compute encoder utilization as the real-world time elapsed divided
-          // by the frame duration.
-          const base::TimeDelta processing_time =
-              base::TimeTicks::Now() - request.start_time;
-          encoded_frame->encoder_utilization =
-              processing_time.InSecondsF() / frame_duration.InSecondsF();
-        } else {
-          // Compute encoder utilization in terms of the number of frames in
-          // backlog, including the current frame encode that is finishing
-          // here. This "backlog" model works as follows: First, assume that all
-          // frames utilize the encoder by the same amount. This is actually a
-          // false assumption, but it still works well because any frame that
-          // takes longer to encode will naturally cause the backlog to
-          // increase, and this will result in a higher computed utilization for
-          // the offending frame. If the backlog continues to increase, because
-          // the following frames are also taking too long to encode, the
-          // computed utilization for each successive frame will be higher. At
-          // some point, upstream control logic will decide that the data volume
-          // must be reduced.
-          encoded_frame->encoder_utilization =
-              static_cast<double>(in_progress_frame_encodes_.size()) /
-              backlog_redline_threshold_;
-        }
+        // Compute encoder utilization in terms of the number of frames in
+        // backlog, including the current frame encode that is finishing
+        // here. This "backlog" model works as follows: First, assume that all
+        // frames utilize the encoder by the same amount. This is actually a
+        // false assumption, but it still works well because any frame that
+        // takes longer to encode will naturally cause the backlog to
+        // increase, and this will result in a higher computed utilization for
+        // the offending frame. If the backlog continues to increase, because
+        // the following frames are also taking too long to encode, the
+        // computed utilization for each successive frame will be higher. At
+        // some point, upstream control logic will decide that the data volume
+        // must be reduced.
+        encoded_frame->encoder_utilization =
+            static_cast<double>(in_progress_frame_encodes_.size()) /
+            kBacklogRedlineThreshold;
 
         const double actual_bit_rate =
             encoded_frame->data.size() * 8.0 / frame_duration.InSecondsF();
@@ -592,11 +553,10 @@ class ExternalVideoEncoder::VEAClientImpl
 
   const scoped_refptr<CastEnvironment> cast_environment_;
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-  const int max_frame_rate_;
+  const double max_frame_rate_;
   const StatusChangeCallback status_change_cb_;  // Must be run on MAIN thread.
   const CreateVideoEncodeMemoryCallback create_video_encode_memory_cb_;
   std::unique_ptr<media::VideoEncodeAccelerator> video_encode_accelerator_;
-  const int backlog_redline_threshold_;
   bool encoder_active_;
   FrameId next_frame_id_;
   bool key_frame_encountered_;
@@ -647,7 +607,7 @@ class ExternalVideoEncoder::VEAClientImpl
 };
 
 // static
-bool ExternalVideoEncoder::IsSupported(const VideoSenderConfig& video_config) {
+bool ExternalVideoEncoder::IsSupported(const FrameSenderConfig& video_config) {
   if (video_config.codec != CODEC_VIDEO_VP8 &&
       video_config.codec != CODEC_VIDEO_H264)
     return false;
@@ -661,7 +621,7 @@ bool ExternalVideoEncoder::IsSupported(const VideoSenderConfig& video_config) {
 
 ExternalVideoEncoder::ExternalVideoEncoder(
     const scoped_refptr<CastEnvironment>& cast_environment,
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     const gfx::Size& frame_size,
     FrameId first_frame_id,
     const StatusChangeCallback& status_change_cb,
@@ -730,7 +690,7 @@ void ExternalVideoEncoder::GenerateKeyFrame() {
 }
 
 void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     FrameId first_frame_id,
     const StatusChangeCallback& status_change_cb,
     scoped_refptr<base::SingleThreadTaskRunner> encoder_task_runner,
@@ -782,7 +742,7 @@ void ExternalVideoEncoder::OnCreateVideoEncodeAccelerator(
 
 SizeAdaptableExternalVideoEncoder::SizeAdaptableExternalVideoEncoder(
     const scoped_refptr<CastEnvironment>& cast_environment,
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     const StatusChangeCallback& status_change_cb,
     const CreateVideoEncodeAcceleratorCallback& create_vea_cb,
     const CreateVideoEncodeMemoryCallback& create_video_encode_memory_cb)

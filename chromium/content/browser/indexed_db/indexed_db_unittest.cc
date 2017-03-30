@@ -8,6 +8,7 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/browser/browser_thread_impl.h"
@@ -86,12 +87,12 @@ TEST_F(IndexedDBTest, ClearSessionOnlyDatabases) {
     ASSERT_TRUE(base::CreateDirectory(normal_path));
     ASSERT_TRUE(base::CreateDirectory(session_only_path));
     FlushIndexedDBTaskRunner();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     quota_manager_proxy_->SimulateQuotaManagerDestroyed();
   }
 
   FlushIndexedDBTaskRunner();
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(base::DirectoryExists(normal_path));
   EXPECT_FALSE(base::DirectoryExists(session_only_path));
@@ -121,11 +122,11 @@ TEST_F(IndexedDBTest, SetForceKeepSessionState) {
     session_only_path = idb_context->GetFilePathForTesting(kSessionOnlyOrigin);
     ASSERT_TRUE(base::CreateDirectory(normal_path));
     ASSERT_TRUE(base::CreateDirectory(session_only_path));
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   // Make sure we wait until the destructor has run.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // No data was cleared because of SetForceKeepSessionState.
   EXPECT_TRUE(base::DirectoryExists(normal_path));
@@ -136,7 +137,7 @@ class ForceCloseDBCallbacks : public IndexedDBCallbacks {
  public:
   ForceCloseDBCallbacks(scoped_refptr<IndexedDBContextImpl> idb_context,
                         const Origin& origin)
-      : IndexedDBCallbacks(NULL, 0, 0),
+      : IndexedDBCallbacks(nullptr, 0, 0),
         idb_context_(idb_context),
         origin_(origin) {}
 
@@ -193,21 +194,19 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
 
     test_path = idb_context->GetFilePathForTesting(kTestOrigin);
 
-    IndexedDBPendingConnection open_connection(open_callbacks,
-                                               open_db_callbacks,
-                                               0 /* child_process_id */,
-                                               0 /* host_transaction_id */,
-                                               0 /* version */);
-    factory->Open(base::ASCIIToUTF16("opendb"), open_connection,
-                  NULL /* request_context */, Origin(kTestOrigin),
+    std::unique_ptr<IndexedDBPendingConnection> open_connection(
+        base::MakeUnique<IndexedDBPendingConnection>(
+            open_callbacks, open_db_callbacks, 0 /* child_process_id */,
+            0 /* host_transaction_id */, 0 /* version */));
+    factory->Open(base::ASCIIToUTF16("opendb"), std::move(open_connection),
+                  nullptr /* request_context */, Origin(kTestOrigin),
                   idb_context->data_path());
-    IndexedDBPendingConnection closed_connection(closed_callbacks,
-                                                 closed_db_callbacks,
-                                                 0 /* child_process_id */,
-                                                 0 /* host_transaction_id */,
-                                                 0 /* version */);
-    factory->Open(base::ASCIIToUTF16("closeddb"), closed_connection,
-                  NULL /* request_context */, Origin(kTestOrigin),
+    std::unique_ptr<IndexedDBPendingConnection> closed_connection(
+        base::MakeUnique<IndexedDBPendingConnection>(
+            closed_callbacks, closed_db_callbacks, 0 /* child_process_id */,
+            0 /* host_transaction_id */, 0 /* version */));
+    factory->Open(base::ASCIIToUTF16("closeddb"), std::move(closed_connection),
+                  nullptr /* request_context */, Origin(kTestOrigin),
                   idb_context->data_path());
 
     closed_callbacks->connection()->Close();
@@ -219,11 +218,11 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnDelete) {
                        &IndexedDBContextImpl::DeleteForOrigin),
                    idb_context, kTestOrigin));
     FlushIndexedDBTaskRunner();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   // Make sure we wait until the destructor has run.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(open_db_callbacks->forced_close_called());
   EXPECT_FALSE(closed_db_callbacks->forced_close_called());
@@ -274,11 +273,12 @@ TEST_F(IndexedDBTest, ForceCloseOpenDatabasesOnCommitFailure) {
   scoped_refptr<MockIndexedDBDatabaseCallbacks> db_callbacks(
       new MockIndexedDBDatabaseCallbacks());
   const int64_t transaction_id = 1;
-  IndexedDBPendingConnection connection(
-      callbacks, db_callbacks, 0 /* child_process_id */, transaction_id,
-      IndexedDBDatabaseMetadata::DEFAULT_VERSION);
-  factory->Open(base::ASCIIToUTF16("db"), connection,
-                NULL /* request_context */, Origin(kTestOrigin),
+  std::unique_ptr<IndexedDBPendingConnection> connection(
+      base::MakeUnique<IndexedDBPendingConnection>(
+          callbacks, db_callbacks, 0 /* child_process_id */, transaction_id,
+          IndexedDBDatabaseMetadata::DEFAULT_VERSION));
+  factory->Open(base::ASCIIToUTF16("db"), std::move(connection),
+                nullptr /* request_context */, Origin(kTestOrigin),
                 temp_dir.path());
 
   EXPECT_TRUE(callbacks->connection());

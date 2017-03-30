@@ -28,8 +28,7 @@
 
 #include "core/dom/ContainerNode.h"
 #include "core/editing/commands/UndoStep.h"
-#include "platform/EventDispatchForbiddenScope.h"
-#include "wtf/TemporaryChange.h"
+#include "wtf/AutoReset.h"
 
 namespace blink {
 
@@ -63,25 +62,6 @@ void UndoStack::registerRedoStep(UndoStep* step)
     m_redoStack.append(step);
 }
 
-void UndoStack::didUnloadFrame(const LocalFrame& frame)
-{
-    EventDispatchForbiddenScope assertNoEventDispatch;
-    filterOutUndoSteps(m_undoStack, frame);
-    filterOutUndoSteps(m_redoStack, frame);
-}
-
-void UndoStack::filterOutUndoSteps(UndoStepStack& stack, const LocalFrame& frame)
-{
-    UndoStepStack newStack;
-    while (!stack.isEmpty()) {
-        UndoStep* step = stack.first().get();
-        if (!step->belongsTo(frame))
-            newStack.append(step);
-        stack.removeFirst();
-    }
-    stack.swap(newStack);
-}
-
 bool UndoStack::canUndo() const
 {
     return !m_undoStack.isEmpty();
@@ -111,10 +91,16 @@ void UndoStack::redo()
         m_redoStack.remove(back);
 
         DCHECK(!m_inRedo);
-        TemporaryChange<bool> redoScope(m_inRedo, true);
+        AutoReset<bool> redoScope(&m_inRedo, true);
         step->reapply();
         // reapply will call us back to push this command onto the undo stack.
     }
+}
+
+void UndoStack::clear()
+{
+    m_undoStack.clear();
+    m_redoStack.clear();
 }
 
 DEFINE_TRACE(UndoStack)

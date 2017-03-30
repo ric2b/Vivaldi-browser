@@ -13,8 +13,8 @@
 #include "chrome/browser/chromeos/policy/remote_commands/screenshot_delegate.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/remote_commands/remote_command_job.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/browser/browser_thread.h"
-#include "policy/proto/device_management_backend.pb.h"
 
 namespace em = enterprise_management;
 
@@ -33,11 +33,11 @@ DeviceCommandsFactoryChromeOS::BuildJobForType(em::RemoteCommand_Type type) {
       return base::WrapUnique<RemoteCommandJob>(new DeviceCommandRebootJob(
           chromeos::DBusThreadManager::Get()->GetPowerManagerClient()));
     case em::RemoteCommand_Type_DEVICE_SCREENSHOT:
-      return base::WrapUnique<RemoteCommandJob>(new DeviceCommandScreenshotJob(
-          base::WrapUnique(new ScreenshotDelegate(
+      return base::WrapUnique<RemoteCommandJob>(
+          new DeviceCommandScreenshotJob(base::MakeUnique<ScreenshotDelegate>(
               content::BrowserThread::GetBlockingPool()->GetSequencedTaskRunner(
                   content::BrowserThread::GetBlockingPool()
-                      ->GetSequenceToken())))));
+                      ->GetSequenceToken()))));
     default:
       return nullptr;
   }

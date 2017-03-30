@@ -21,6 +21,7 @@
 #include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/connector.h"
+#include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/bindings/pipe_control_message_handler.h"
@@ -47,6 +48,9 @@ namespace internal {
 // Some public methods are only allowed to be called on the creating thread;
 // while the others are safe to call from any threads. Please see the method
 // comments for more details.
+//
+// NOTE: CloseMessagePipe() or PassMessagePipe() MUST be called on |runner|'s
+// thread before this object is destroyed.
 class MultiplexRouter
     : public MessageReceiver,
       public AssociatedGroupController,
@@ -102,14 +106,8 @@ class MultiplexRouter
   }
 
   // See Binding for details of pause/resume.
-  void PauseIncomingMethodCallProcessing() {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    connector_.PauseIncomingMethodCallProcessing();
-  }
-  void ResumeIncomingMethodCallProcessing() {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    connector_.ResumeIncomingMethodCallProcessing();
-  }
+  void PauseIncomingMethodCallProcessing();
+  void ResumeIncomingMethodCallProcessing();
 
   // Whether there are any associated interfaces running currently.
   bool HasAssociatedEndpoints() const;
@@ -207,7 +205,12 @@ class MultiplexRouter
   // comments of kInterfaceIdNamespaceMask.
   const bool set_interface_id_namespace_bit_;
 
-  MessageHeaderValidator header_validator_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  // Owned by |filters_| below.
+  MessageHeaderValidator* header_validator_;
+
+  FilterChain filters_;
   Connector connector_;
 
   base::ThreadChecker thread_checker_;
@@ -228,6 +231,8 @@ class MultiplexRouter
   scoped_refptr<base::SingleThreadTaskRunner> posted_to_task_runner_;
 
   bool encountered_error_;
+
+  bool paused_;
 
   bool testing_mode_;
 

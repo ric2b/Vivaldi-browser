@@ -176,6 +176,36 @@ int64_t IPCDemuxer::GetMemoryUsage() const {
   return 0;
 }
 
+void IPCDemuxer::OnEnabledAudioTracksChanged(
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  bool enabled = false;
+  DemuxerStream* audio_stream = GetStream(DemuxerStream::AUDIO);
+  CHECK(audio_stream);
+  if (track_ids.size() > 0) {
+    enabled = true;
+  }
+  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
+           << " audio stream";
+  audio_stream->set_enabled(enabled, currTime);
+}
+
+void IPCDemuxer::OnSelectedVideoTrackChanged(
+    const std::vector<MediaTrack::Id>& track_ids,
+    base::TimeDelta currTime) {
+  DCHECK(task_runner_->BelongsToCurrentThread());
+  bool enabled = false;
+  DemuxerStream* video_stream = GetStream(DemuxerStream::VIDEO);
+  CHECK(video_stream);
+  if (track_ids.size() > 0) {
+    enabled = true;
+  }
+  DVLOG(1) << __func__ << ": " << (enabled ? "enabling" : "disabling")
+           << " video stream";
+  video_stream->set_enabled(enabled, currTime);
+}
+
 void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
                                bool success,
                                int bitrate,

@@ -23,9 +23,9 @@
  */
 
 #include "modules/webaudio/AudioBasicInspectorNode.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 
 namespace blink {
 
@@ -48,9 +48,9 @@ void AudioBasicInspectorHandler::pullInputs(size_t framesToProcess)
 
 AudioNode* AudioBasicInspectorNode::connect(AudioNode* destination, unsigned outputIndex, unsigned inputIndex, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
-    AbstractAudioContext::AutoLocker locker(context());
+    BaseAudioContext::AutoLocker locker(context());
 
     AudioNode::connect(destination, outputIndex, inputIndex, exceptionState);
     static_cast<AudioBasicInspectorHandler&>(handler()).updatePullStatus();
@@ -60,9 +60,9 @@ AudioNode* AudioBasicInspectorNode::connect(AudioNode* destination, unsigned out
 
 void AudioBasicInspectorNode::disconnect(unsigned outputIndex, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
-    AbstractAudioContext::AutoLocker locker(context());
+    BaseAudioContext::AutoLocker locker(context());
 
     AudioNode::disconnect(outputIndex, exceptionState);
     static_cast<AudioBasicInspectorHandler&>(handler()).updatePullStatus();
@@ -70,10 +70,10 @@ void AudioBasicInspectorNode::disconnect(unsigned outputIndex, ExceptionState& e
 
 void AudioBasicInspectorHandler::checkNumberOfChannelsForInput(AudioNodeInput* input)
 {
-    ASSERT(context()->isAudioThread());
+    DCHECK(context()->isAudioThread());
     ASSERT(context()->isGraphOwner());
 
-    ASSERT(input == &this->input(0));
+    DCHECK_EQ(input, &this->input(0));
     if (input != &this->input(0))
         return;
 

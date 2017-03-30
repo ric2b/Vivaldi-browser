@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include "base/debug/activity_tracker.h"
 #include "base/debug/alias.h"
 #include "base/debug/profiler.h"
 #include "base/logging.h"
@@ -196,12 +197,23 @@ bool PlatformThread::CreateWithPriority(size_t stack_size, Delegate* delegate,
 
 // static
 bool PlatformThread::CreateNonJoinable(size_t stack_size, Delegate* delegate) {
-  return CreateThreadInternal(stack_size, delegate, nullptr,
-                              ThreadPriority::NORMAL);
+  return CreateNonJoinableWithPriority(stack_size, delegate,
+                                       ThreadPriority::NORMAL);
+}
+
+// static
+bool PlatformThread::CreateNonJoinableWithPriority(size_t stack_size,
+                                                   Delegate* delegate,
+                                                   ThreadPriority priority) {
+  return CreateThreadInternal(stack_size, delegate, nullptr /* non-joinable */,
+                              priority);
 }
 
 // static
 void PlatformThread::Join(PlatformThreadHandle thread_handle) {
+  // Record the event that this thread is blocking upon (for hang diagnosis).
+  base::debug::ScopedThreadJoinActivity thread_activity(&thread_handle);
+
   DCHECK(thread_handle.platform_handle());
   // TODO(willchan): Enable this check once I can get it to work for Windows
   // shutdown.
@@ -222,6 +234,11 @@ void PlatformThread::Join(PlatformThreadHandle thread_handle) {
 // static
 void PlatformThread::Detach(PlatformThreadHandle thread_handle) {
   CloseHandle(thread_handle.platform_handle());
+}
+
+// static
+bool PlatformThread::CanIncreaseCurrentThreadPriority() {
+  return true;
 }
 
 // static
@@ -246,7 +263,7 @@ void PlatformThread::SetCurrentThreadPriority(ThreadPriority priority) {
   }
   DCHECK_NE(desired_priority, THREAD_PRIORITY_ERROR_RETURN);
 
-#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+#if DCHECK_IS_ON()
   const BOOL success =
 #endif
       ::SetThreadPriority(PlatformThread::CurrentHandle().platform_handle(),

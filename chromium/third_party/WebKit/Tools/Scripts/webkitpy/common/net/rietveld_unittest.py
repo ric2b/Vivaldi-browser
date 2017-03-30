@@ -3,22 +3,18 @@
 # found in the LICENSE file.
 
 import json
-import logging
-import unittest
 import urllib2
 
-from webkitpy.common.net.rietveld import latest_try_jobs, TryJob, get_latest_try_job_results
+from webkitpy.common.net.rietveld import Rietveld
+from webkitpy.common.net.buildbot import Build
 from webkitpy.common.net.web_mock import MockWeb
-from webkitpy.common.system.outputcapture import OutputCapture
+from webkitpy.common.system.logtesting import LoggingTestCase
 
 
-_log = logging.getLogger(__name__)
+class RietveldTest(LoggingTestCase):
 
-
-class RietveldTest(unittest.TestCase):
-
-    def setUp(self):
-        self.web = MockWeb(urls={
+    def mock_web(self):
+        return MockWeb(urls={
             'https://codereview.chromium.org/api/11112222': json.dumps({
                 'patchsets': [1, 2, 3],
             }),
@@ -26,13 +22,11 @@ class RietveldTest(unittest.TestCase):
                 'try_job_results': [
                     {
                         'builder': 'foo-builder',
-                        'master': 'master.tryserver.foo',
                         'buildnumber': 10,
                         'result': -1
                     },
                     {
                         'builder': 'bar-builder',
-                        'master': 'master.tryserver.bar',
                         'buildnumber': 50,
                         'results': 0
                     },
@@ -42,54 +36,81 @@ class RietveldTest(unittest.TestCase):
                 'try_job_results': [
                     {
                         'builder': 'foo-builder',
-                        'master': 'master.tryserver.foo',
                         'buildnumber': 20,
                         'result': 1
                     },
                     {
                         'builder': 'bar-builder',
-                        'master': 'master.tryserver.bar',
                         'buildnumber': 60,
                         'result': 0
                     },
                 ],
+                'files': {
+                    'some/path/foo.cc': {'status': 'M'},
+                    'some/path/bar.html': {'status': 'M'},
+                }
             }),
             'https://codereview.chromium.org/api/11113333': 'my non-JSON contents',
         })
 
     def test_latest_try_jobs(self):
+        rietveld = Rietveld(self.mock_web())
         self.assertEqual(
-            latest_try_jobs(11112222, ('bar-builder', 'other-builder'), self.web),
-            [TryJob('bar-builder', 'tryserver.bar', 60)])
+            rietveld.latest_try_jobs(11112222, ('bar-builder', 'other-builder')),
+            [Build('bar-builder', 60)])
 
     def test_latest_try_jobs_http_error(self):
         def raise_error(_):
             raise urllib2.URLError('Some request error message')
-        self.web.get_binary = raise_error
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.assertEqual(latest_try_jobs(11112222, ('bar-builder',), self.web), [])
-        finally:
-            _, _, logs = oc.restore_output()
-        self.assertEqual(logs, 'Request failed to URL: https://codereview.chromium.org/api/11112222\n')
+        web = self.mock_web()
+        web.get_binary = raise_error
+        rietveld = Rietveld(web)
+        self.assertEqual(rietveld.latest_try_jobs(11112222, ('bar-builder',)), [])
+        self.assertLog(['ERROR: Request failed to URL: https://codereview.chromium.org/api/11112222\n'])
 
     def test_latest_try_jobs_non_json_response(self):
-        oc = OutputCapture()
-        try:
-            oc.capture_output()
-            self.assertEqual(latest_try_jobs(11113333, ('bar-builder',), self.web), [])
-        finally:
-            _, _, logs = oc.restore_output()
-        self.assertEqual(logs, 'Invalid JSON: my non-JSON contents\n')
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(rietveld.latest_try_jobs(11113333, ('bar-builder',)), [])
+        self.assertLog(['ERROR: Invalid JSON: my non-JSON contents\n'])
 
     def test_latest_try_jobs_with_patchset(self):
+        rietveld = Rietveld(self.mock_web())
         self.assertEqual(
-            latest_try_jobs(11112222, ('bar-builder', 'other-builder'), self.web, patchset_number=2),
-            [TryJob('bar-builder', 'tryserver.bar', 50)])
+            rietveld.latest_try_jobs(11112222, ('bar-builder', 'other-builder'), patchset_number=2),
+            [Build('bar-builder', 50)])
 
     def test_latest_try_jobs_no_relevant_builders(self):
-        self.assertEqual(latest_try_jobs(11112222, ('foo', 'bar'), self.web), [])
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(rietveld.latest_try_jobs(11112222, ('foo', 'bar')), [])
 
-    def test_get_latest_try_job_results(self):
-        self.assertEqual(get_latest_try_job_results(11112222, self.web), {'foo-builder': 1, 'bar-builder': 0})
+    def test_filter_latest_jobs_empty(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(rietveld.filter_latest_jobs([]), [])
+
+    def test_filter_latest_jobs_higher_build_first(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld.filter_latest_jobs([Build('foo', 5), Build('foo', 3), Build('bar', 5)]),
+            [Build('foo', 5), Build('bar', 5)])
+
+    def test_filter_latest_jobs_higher_build_last(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld.filter_latest_jobs([Build('foo', 3), Build('bar', 5), Build('foo', 5)]),
+            [Build('bar', 5), Build('foo', 5)])
+
+    def test_filter_latest_jobs_no_build_number(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld.filter_latest_jobs([Build('foo', 3), Build('bar')]),
+            [Build('foo', 3)])
+
+    def test_changed_files(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertEqual(
+            rietveld.changed_files(11112222),
+            ['some/path/bar.html', 'some/path/foo.cc'])
+
+    def test_changed_files_no_results(self):
+        rietveld = Rietveld(self.mock_web())
+        self.assertIsNone(rietveld.changed_files(11113333))

@@ -19,19 +19,19 @@
 #include "net/base/network_change_notifier.h"
 
 using base::android::ConvertJavaStringToUTF16;
+using base::android::JavaParamRef;
 
 namespace prerender {
 
 namespace {
 
-static bool CheckAndConvertParams(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& jprofile,
-    const JavaParamRef<jstring>& jurl,
-    const JavaParamRef<jobject>& jweb_contents,
-    GURL* url,
-    prerender::PrerenderManager** prerender_manager,
-    content::WebContents** web_contents) {
+bool CheckAndConvertParams(JNIEnv* env,
+                           const JavaParamRef<jobject>& jprofile,
+                           const JavaParamRef<jstring>& jurl,
+                           const JavaParamRef<jobject>& jweb_contents,
+                           GURL* url,
+                           PrerenderManager** prerender_manager,
+                           content::WebContents** web_contents) {
   if (!jurl)
     return false;
 
@@ -40,8 +40,7 @@ static bool CheckAndConvertParams(
     return false;
 
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
-  *prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(profile);
+  *prerender_manager = PrerenderManagerFactory::GetForProfile(profile);
   if (!*prerender_manager)
     return false;
 
@@ -58,8 +57,10 @@ bool ExternalPrerenderHandlerAndroid::AddPrerender(
     const JavaParamRef<jobject>& jweb_contents,
     const JavaParamRef<jstring>& jurl,
     const JavaParamRef<jstring>& jreferrer,
-    jint width,
-    jint height,
+    jint top,
+    jint left,
+    jint bottom,
+    jint right,
     jboolean prerender_on_cellular) {
   Profile* profile = ProfileAndroid::FromProfileAndroid(jprofile);
 
@@ -77,7 +78,7 @@ bool ExternalPrerenderHandlerAndroid::AddPrerender(
   }
 
   PrerenderManager* prerender_manager =
-      prerender::PrerenderManagerFactory::GetForProfile(profile);
+      PrerenderManagerFactory::GetForProfile(profile);
   if (!prerender_manager)
     return false;
 
@@ -88,19 +89,16 @@ bool ExternalPrerenderHandlerAndroid::AddPrerender(
 
   if (prerender_on_cellular && net::NetworkChangeNotifier::IsConnectionCellular(
                    net::NetworkChangeNotifier::GetConnectionType())) {
-    prerender_handle_.reset(
+    prerender_handle_ =
         prerender_manager->AddPrerenderOnCellularFromExternalRequest(
-            url,
-            referrer,
+            url, referrer,
             web_contents->GetController().GetDefaultSessionStorageNamespace(),
-            gfx::Size(width, height)));
+            gfx::Rect(left, top, right - left, bottom - top));
   } else {
-    prerender_handle_.reset(
-        prerender_manager->AddPrerenderFromExternalRequest(
-            url,
-            referrer,
-            web_contents->GetController().GetDefaultSessionStorageNamespace(),
-            gfx::Size(width, height)));
+    prerender_handle_ = prerender_manager->AddPrerenderFromExternalRequest(
+        url, referrer,
+        web_contents->GetController().GetDefaultSessionStorageNamespace(),
+        gfx::Rect(left, top, right - left, bottom - top));
   }
 
   return !!prerender_handle_;
@@ -122,7 +120,7 @@ static jboolean HasPrerenderedUrl(JNIEnv* env,
                                   const JavaParamRef<jstring>& jurl,
                                   const JavaParamRef<jobject>& jweb_contents) {
   GURL url;
-  prerender::PrerenderManager* prerender_manager;
+  PrerenderManager* prerender_manager;
   content::WebContents* web_contents;
   if (!CheckAndConvertParams(env, jprofile, jurl, jweb_contents, &url,
                              &prerender_manager, &web_contents))
@@ -138,7 +136,7 @@ static jboolean HasPrerenderedAndFinishedLoadingUrl(
     const JavaParamRef<jstring>& jurl,
     const JavaParamRef<jobject>& jweb_contents) {
   GURL url;
-  prerender::PrerenderManager* prerender_manager;
+  PrerenderManager* prerender_manager;
   content::WebContents* web_contents;
   if (!CheckAndConvertParams(env, jprofile, jurl, jweb_contents, &url,
                              &prerender_manager, &web_contents))
@@ -163,4 +161,4 @@ bool ExternalPrerenderHandlerAndroid::RegisterExternalPrerenderHandlerAndroid(
   return RegisterNativesImpl(env);
 }
 
-} // namespace prerender
+}  // namespace prerender

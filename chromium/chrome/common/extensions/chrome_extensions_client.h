@@ -31,8 +31,8 @@ class ChromeExtensionsClient : public ExtensionsClient {
   const std::string GetProductName() override;
   std::unique_ptr<FeatureProvider> CreateFeatureProvider(
       const std::string& name) const override;
-  std::unique_ptr<JSONFeatureProviderSource> CreateFeatureProviderSource(
-      const std::string& name) const override;
+  std::unique_ptr<JSONFeatureProviderSource> CreateAPIFeatureSource()
+      const override;
   void FilterHostPermissions(const URLPatternSet& hosts,
                              URLPatternSet* new_hosts,
                              PermissionIDSet* permissions) const override;
@@ -44,7 +44,6 @@ class ChromeExtensionsClient : public ExtensionsClient {
   bool IsScriptableURL(const GURL& url, std::string* error) const override;
   bool IsAPISchemaGenerated(const std::string& name) const override;
   base::StringPiece GetAPISchema(const std::string& name) const override;
-  void RegisterAPISchemaResources(ExtensionAPI* api) const override;
   bool ShouldSuppressFatalErrors() const override;
   void RecordDidSuppressFatalError() override;
   std::string GetWebstoreBaseURL() const override;

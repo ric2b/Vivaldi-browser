@@ -58,6 +58,8 @@ class ChromeAutofillClient
       const CreditCard& card,
       std::unique_ptr<base::DictionaryValue> legal_message,
       const base::Closure& callback) override;
+  void ConfirmCreditCardFillAssist(const CreditCard& card,
+                                   const base::Closure& callback) override;
   void LoadRiskData(
       const base::Callback<void(const std::string&)>& callback) override;
   bool HasCreditCardScanFeature() override;
@@ -79,6 +81,8 @@ class ChromeAutofillClient
                              const base::string16& profile_full_name) override;
   void OnFirstUserGestureObserved() override;
   bool IsContextSecure(const GURL& form_origin) override;
+  bool ShouldShowSigninPromo() override;
+  void StartSigninFlow() override;
 
   // content::WebContentsObserver implementation.
   void MainFrameWasResized(bool width_changed) override;

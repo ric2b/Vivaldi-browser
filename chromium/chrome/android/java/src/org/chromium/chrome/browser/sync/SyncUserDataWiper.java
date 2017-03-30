@@ -5,9 +5,9 @@
 package org.chromium.chrome.browser.sync;
 
 import org.chromium.base.Promise;
-import org.chromium.chrome.browser.BrowsingDataType;
-import org.chromium.chrome.browser.TimePeriod;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
+import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge.OnClearBrowsingDataListener;
 
@@ -43,7 +43,7 @@ public class SyncUserDataWiper {
                                 promise.fulfill(null);
                             }
                         },
-                        SYNC_DATA_TYPES, TimePeriod.EVERYTHING);
+                        SYNC_DATA_TYPES, TimePeriod.ALL_TIME);
             }
         });
 

@@ -71,7 +71,7 @@ static String serializePositionOffset(const CSSValuePair& offset, const CSSValue
 static CSSValuePair* buildSerializablePositionOffset(CSSValue* offset, CSSValueID defaultSide)
 {
     CSSValueID side = defaultSide;
-    CSSPrimitiveValue* amount = nullptr;
+    const CSSPrimitiveValue* amount = nullptr;
 
     if (!offset) {
         side = CSSValueCenter;
@@ -325,7 +325,7 @@ static String buildInsetString(const String& top, const String& right, const Str
             }
             if (horizontalRadii != verticalRadii) {
                 result.append(separator);
-                result.append("/");
+                result.append('/');
 
                 for (size_t i = 0; i < verticalRadii.size(); ++i) {
                     result.append(separator);

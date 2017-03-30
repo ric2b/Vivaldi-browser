@@ -20,9 +20,9 @@
 #include "net/base/ip_endpoint.h"
 #include "net/http/http_response_headers.h"
 #include "net/log/net_log.h"
-#include "net/quic/quic_chromium_packet_reader.h"
-#include "net/quic/quic_config.h"
-#include "net/quic/quic_spdy_stream.h"
+#include "net/quic/chromium/quic_chromium_packet_reader.h"
+#include "net/quic/core/quic_config.h"
+#include "net/quic/core/quic_spdy_stream.h"
 #include "net/tools/quic/quic_client_base.h"
 
 namespace net {
@@ -85,12 +85,12 @@ class QuicSimpleClient : public QuicClientBase,
   QuicSimpleClient(IPEndPoint server_address,
                    const QuicServerId& server_id,
                    const QuicVersionVector& supported_versions,
-                   ProofVerifier* proof_verifier);
+                   std::unique_ptr<ProofVerifier> proof_verifier);
   QuicSimpleClient(IPEndPoint server_address,
                    const QuicServerId& server_id,
                    const QuicVersionVector& supported_versions,
                    const QuicConfig& config,
-                   ProofVerifier* proof_verifier);
+                   std::unique_ptr<ProofVerifier> proof_verifier);
 
   ~QuicSimpleClient() override;
 

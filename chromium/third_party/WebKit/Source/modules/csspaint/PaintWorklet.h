@@ -5,9 +5,9 @@
 #ifndef PaintWorklet_h
 #define PaintWorklet_h
 
+#include "core/workers/Worklet.h"
 #include "modules/ModulesExport.h"
 #include "modules/csspaint/PaintWorkletGlobalScope.h"
-#include "modules/worklet/Worklet.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -18,7 +18,7 @@ class CSSPaintImageGeneratorImpl;
 class MODULES_EXPORT PaintWorklet final : public Worklet {
     WTF_MAKE_NONCOPYABLE(PaintWorklet);
 public:
-    static PaintWorklet* create(LocalFrame*, ExecutionContext*);
+    static PaintWorklet* create(LocalFrame*);
     ~PaintWorklet() override;
 
     PaintWorkletGlobalScope* workletGlobalScopeProxy() const final;
@@ -28,7 +28,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    PaintWorklet(LocalFrame*, ExecutionContext*);
+    explicit PaintWorklet(LocalFrame*);
 
     Member<PaintWorkletGlobalScope> m_paintWorkletGlobalScope;
 };

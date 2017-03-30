@@ -92,6 +92,7 @@
 #include "public/web/WebDOMMessageEvent.h"
 #include "public/web/WebDocument.h"
 #include "public/web/WebElement.h"
+#include "public/web/WebFrameClient.h"
 #include "public/web/WebInputEvent.h"
 #include "public/web/WebPlugin.h"
 #include "public/web/WebPrintParams.h"
@@ -100,6 +101,7 @@
 #include "web/ChromeClientImpl.h"
 #include "web/WebDataSourceImpl.h"
 #include "web/WebInputEventConversion.h"
+#include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "wtf/Assertions.h"
 
@@ -171,8 +173,8 @@ void WebPluginContainerImpl::invalidateRect(const IntRect& rect)
 
     IntRect dirtyRect = rect;
     dirtyRect.move(
-        layoutObject->borderLeft() + layoutObject->paddingLeft(),
-        layoutObject->borderTop() + layoutObject->paddingTop());
+        (layoutObject->borderLeft() + layoutObject->paddingLeft()).toInt(),
+        (layoutObject->borderTop() + layoutObject->paddingTop()).toInt());
 
     m_pendingInvalidationRect.unite(dirtyRect);
 
@@ -321,9 +323,7 @@ void WebPluginContainerImpl::requestFullscreen()
 
 bool WebPluginContainerImpl::isFullscreenElement() const
 {
-    if (Fullscreen* fullscreen = Fullscreen::fromIfExists(m_element->document()))
-        return m_element == fullscreen->webkitCurrentFullScreenElement();
-    return false;
+    return Fullscreen::isCurrentFullScreenElement(*m_element);
 }
 
 void WebPluginContainerImpl::cancelFullscreen()
@@ -444,7 +444,7 @@ void WebPluginContainerImpl::scheduleAnimation()
 void WebPluginContainerImpl::reportGeometry()
 {
     // We cannot compute geometry without a parent or layoutObject.
-    if (!parent() || !m_element || !m_element->layoutObject())
+    if (!parent() || !m_element || !m_element->layoutObject() || !m_webPlugin)
         return;
 
     IntRect windowRect, clipRect, unobscuredRect;
@@ -661,7 +661,7 @@ bool WebPluginContainerImpl::wantsWheelEvents()
 // Private methods -------------------------------------------------------------
 
 WebPluginContainerImpl::WebPluginContainerImpl(HTMLPlugInElement* element, WebPlugin* webPlugin)
-    : LocalFrameLifecycleObserver(element->document().frame())
+    : DOMWindowProperty(element->document().frame())
     , m_element(element)
     , m_webPlugin(webPlugin)
     , m_webLayer(nullptr)
@@ -700,7 +700,7 @@ void WebPluginContainerImpl::dispose()
 DEFINE_TRACE(WebPluginContainerImpl)
 {
     visitor->trace(m_element);
-    LocalFrameLifecycleObserver::trace(visitor);
+    DOMWindowProperty::trace(visitor);
     PluginView::trace(visitor);
 }
 
@@ -753,7 +753,7 @@ void WebPluginContainerImpl::handleDragEvent(MouseEvent* event)
     WebDragData dragData = dataTransfer->dataObject()->toWebDragData();
     WebDragOperationsMask dragOperationMask = static_cast<WebDragOperationsMask>(dataTransfer->sourceOperation());
     WebPoint dragScreenLocation(event->screenX(), event->screenY());
-    WebPoint dragLocation(event->absoluteLocation().x() - location().x(), event->absoluteLocation().y() - location().y());
+    WebPoint dragLocation((event->absoluteLocation().x() - location().x()).toInt(), (event->absoluteLocation().y() - location().y()).toInt());
 
     m_webPlugin->handleDragStatusUpdate(dragStatus, dragData, dragOperationMask, dragLocation, dragScreenLocation);
 }
@@ -803,9 +803,9 @@ void WebPluginContainerImpl::handleKeyboardEvent(KeyboardEvent* event)
     }
 
     // Give the client a chance to issue edit comamnds.
-    WebViewImpl* view = WebViewImpl::fromPage(m_element->document().frame()->page());
-    if (m_webPlugin->supportsEditCommands() && view->client())
-        view->client()->handleCurrentKeyboardEvent();
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(m_element->document().frame());
+    if (m_webPlugin->supportsEditCommands())
+        webFrame->client()->handleCurrentKeyboardEvent();
 
     WebCursorInfo cursorInfo;
     if (m_webPlugin->handleInputEvent(webEvent, cursorInfo) != WebInputEventResult::NotHandled)
@@ -903,17 +903,16 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
 
     LayoutBox* box = toLayoutBox(ownerElement->layoutObject());
 
-    // Plugin frameRects are in absolute space within their frame.
-    FloatRect frameRectInOwnerElementSpace = box->absoluteToLocalQuad(FloatRect(frameRect()), UseTransforms).boundingBox();
-
-    LayoutRect unclippedAbsoluteRect(frameRectInOwnerElementSpace);
+    // Note: frameRect() for this plugin is equal to contentBoxRect, mapped to the containing view space, and rounded off.
+    // See LayoutPart.cpp::updateWidgetGeometryInternal. To remove the lossy effect of rounding off, use contentBoxRect directly.
+    LayoutRect unclippedAbsoluteRect(box->contentBoxRect());
     box->mapToVisualRectInAncestorSpace(rootView, unclippedAbsoluteRect);
 
     // The frameRect is already in absolute space of the local frame to the plugin.
     windowRect = frameRect();
     // Map up to the root frame.
     LayoutRect layoutWindowRect =
-        LayoutRect(m_element->document().view()->layoutView()->localToAbsoluteQuad(FloatQuad(FloatRect(frameRect())), TraverseDocumentBoundaries).boundingBox());
+        LayoutRect(m_element->document().view()->layoutViewItem().localToAbsoluteQuad(FloatQuad(FloatRect(frameRect())), TraverseDocumentBoundaries).boundingBox());
     // Finally, adjust for scrolling of the root frame, which the above does not take into account.
     layoutWindowRect.moveBy(-rootView->viewRect().location());
     windowRect = pixelSnappedIntRect(layoutWindowRect);
@@ -922,11 +921,10 @@ void WebPluginContainerImpl::computeClipRectsForPlugin(
     LayoutRect unclippedLayoutLocalRect = layoutClippedLocalRect;
     layoutClippedLocalRect.intersect(LayoutRect(rootView->frameView()->visibleContentRect()));
 
-    // TODO(chrishtr): intentionally ignore transform, because the positioning of frameRect() does also. This is probably wrong.
-    unclippedIntLocalRect = box->absoluteToLocalQuad(FloatRect(unclippedLayoutLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
+    unclippedIntLocalRect = box->absoluteToLocalQuad(FloatRect(unclippedLayoutLocalRect), TraverseDocumentBoundaries | UseTransforms).enclosingBoundingBox();
     // As a performance optimization, map the clipped rect separately if is different than the unclipped rect.
     if (layoutClippedLocalRect != unclippedLayoutLocalRect)
-        clippedLocalRect = box->absoluteToLocalQuad(FloatRect(layoutClippedLocalRect), TraverseDocumentBoundaries).enclosingBoundingBox();
+        clippedLocalRect = box->absoluteToLocalQuad(FloatRect(layoutClippedLocalRect), TraverseDocumentBoundaries | UseTransforms).enclosingBoundingBox();
     else
         clippedLocalRect = unclippedIntLocalRect;
 }
@@ -936,7 +934,7 @@ void WebPluginContainerImpl::calculateGeometry(IntRect& windowRect, IntRect& cli
     // document().layoutView() can be null when we receive messages from the
     // plugins while we are destroying a frame.
     // FIXME: Can we just check m_element->document().isActive() ?
-    if (m_element->layoutObject()->document().layoutView()) {
+    if (!m_element->layoutObject()->document().layoutViewItem().isNull()) {
         // Take our element and get the clip rect from the enclosing layer and
         // frame view.
         computeClipRectsForPlugin(m_element, windowRect, clipRect, unobscuredRect);

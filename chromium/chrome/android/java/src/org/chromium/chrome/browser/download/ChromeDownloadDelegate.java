@@ -35,7 +35,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.PermissionCallback;
-import org.chromium.ui.widget.Toast;
 
 import java.io.File;
 
@@ -59,7 +58,7 @@ public class ChromeDownloadDelegate {
             if (mPendingRequest.getDownloadGuid() != null) {
                 nativeDangerousDownloadValidated(mTab, mPendingRequest.getDownloadGuid(), confirm);
                 if (confirm) {
-                    showDownloadStartNotification();
+                    DownloadUtils.showDownloadStartToast(mContext);
                 }
                 mPendingRequest = null;
                 return closeBlankTab();
@@ -483,16 +482,9 @@ public class ChromeDownloadDelegate {
     @CalledByNative
     private void onDownloadStarted(String filename, String mimeType) {
         if (!isDangerousFile(filename, mimeType)) {
-            showDownloadStartNotification();
+            DownloadUtils.showDownloadStartToast(mContext);
             closeBlankTab();
         }
-    }
-
-    /**
-     * Shows the download started notification.
-     */
-    private void showDownloadStartNotification() {
-        Toast.makeText(mContext, R.string.download_pending, Toast.LENGTH_SHORT).show();
     }
 
     /**
@@ -509,18 +501,16 @@ public class ChromeDownloadDelegate {
      * @param filename file name obtained from content disposition header
      * @return The MIME type that should be used for this data.
      */
-    private static String remapGenericMimeType(String mimeType, String url, String filename) {
+    static String remapGenericMimeType(String mimeType, String url, String filename) {
         // If we have one of "generic" MIME types, try to deduce
         // the right MIME type from the file extension (if any):
         if (mimeType == null || mimeType.isEmpty() || "text/plain".equals(mimeType)
                 || "application/octet-stream".equals(mimeType)
                 || "octet/stream".equals(mimeType)
-                || "application/force-download".equals(mimeType)) {
+                || "application/force-download".equals(mimeType)
+                || "application/unknown".equals(mimeType)) {
 
-            if (!TextUtils.isEmpty(filename)) {
-                url = filename;
-            }
-            String extension = MimeTypeMap.getFileExtensionFromUrl(url);
+            String extension = getFileExtension(url, filename);
             String newMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension);
             if (newMimeType != null) {
                 mimeType = newMimeType;
@@ -531,6 +521,22 @@ public class ChromeDownloadDelegate {
             }
         }
         return mimeType;
+    }
+
+    /**
+     * Retrieve the file extension from a given file name or url.
+     *
+     * @param url URL to extract the extension.
+     * @param filename File name to extract the extension.
+     * @return If extension can be extracted from file name, use that. Or otherwise, use the
+     *         extension extracted from the url.
+     */
+    static String getFileExtension(String url, String filename) {
+        if (!TextUtils.isEmpty(filename)) {
+            int index = filename.lastIndexOf(".");
+            if (index > 0) return filename.substring(index + 1);
+        }
+        return MimeTypeMap.getFileExtensionFromUrl(url);
     }
 
     /**

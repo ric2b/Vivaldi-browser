@@ -13,9 +13,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/threading/platform_thread.h"
+#include "components/policy/policy_constants.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "policy/policy_constants.h"
 #include "remoting/base/auto_thread.h"
 #include "remoting/base/chromium_url_request.h"
 #include "remoting/base/logging.h"
@@ -261,6 +261,7 @@ void It2MeHost::FinishConnect() {
   // Disable audio by default.
   // TODO(sergeyu): Add UI to enable it.
   protocol_config->DisableAudioChannel();
+  protocol_config->set_webrtc_supported(true);
   session_manager->set_protocol_config(std::move(protocol_config));
 
   // Create the host.

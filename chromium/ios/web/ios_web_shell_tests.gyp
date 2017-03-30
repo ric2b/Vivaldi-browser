@@ -8,6 +8,7 @@
   },
   'targets': [
     {
+      # GN version: //ios/web/shell/test:ios_web_shell_test
       'target_name': 'ios_web_shell_test',
       'type': 'loadable_module',
       'mac_xctest_bundle': 1,
@@ -40,6 +41,7 @@
     {
       # Create a test host for earl grey tests, so Xcode 7.3 and above
       # doesn't contaminate the app structure.
+      # GN version: //ios/web/shell/test:ios_web_shell_test_host
       'target_name': 'ios_web_shell_test_host',
       'includes': [
         'ios_web_shell_exe.gypi',
@@ -61,7 +63,12 @@
         '<(DEPTH)/ios/third_party/earl_grey/earl_grey.gyp:EarlGrey',
       ],
       'sources': [
-        'shell/test/web_shell_navigation_egtest.mm',
+        'shell/test/meta_tags_egtest.mm',
+        'shell/test/navigation_egtest.mm',
+        'shell/test/page_state_egtest.mm',
+        'shell/test/pdf_egtest.mm',
+        'shell/test/plugin_placeholder_egtest.mm',
+        'shell/test/redirect_egtest.mm',
       ],
       'actions': [{
         'action_name': 'copy_test_data',
@@ -101,6 +108,7 @@
     {
       # TODO(crbug.com/606815): Refactor out code that is common across Chrome
       # and the web shell.
+      # GN version: //ios/web/shell/test:earl_grey_test_support
       'target_name': 'ios_web_shell_earl_grey_test_support',
       'type': 'static_library',
       'dependencies': [
@@ -115,6 +123,8 @@
         'shell/test/app/web_shell_test_util.mm',
         'shell/test/app/web_view_interaction_test_util.h',
         'shell/test/app/web_view_interaction_test_util.mm',
+        'shell/test/earl_grey/shell_base_test_case.h',
+        'shell/test/earl_grey/shell_base_test_case.mm',
         'shell/test/earl_grey/shell_matchers.h',
         'shell/test/earl_grey/shell_matchers.mm',
       ],

@@ -22,6 +22,8 @@ LINK_RESOURCE_ID(IDR_INFOBAR_3D_BLOCKED, R.drawable.infobar_3d_blocked)
 LINK_RESOURCE_ID(IDR_INFOBAR_AUTOFILL_CC, R.drawable.infobar_autofill_cc)
 LINK_RESOURCE_ID(IDR_INFOBAR_MEDIA_STREAM_CAMERA, R.drawable.infobar_camera)
 LINK_RESOURCE_ID(IDR_INFOBAR_MEDIA_STREAM_MIC, R.drawable.infobar_microphone)
+LINK_RESOURCE_ID(IDR_INFOBAR_MEDIA_STREAM_SCREEN,
+                 R.drawable.infobar_screen_share)
 LINK_RESOURCE_ID(IDR_INFOBAR_MIDI, R.drawable.infobar_midi)
 LINK_RESOURCE_ID(IDR_INFOBAR_MULTIPLE_DOWNLOADS,
                  R.drawable.infobar_multiple_downloads)
@@ -38,6 +40,8 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_NOTIFICATIONS,
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_GEOLOCATION,
                     R.drawable.infobar_geolocation)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_FROZEN_TAB, R.drawable.infobar_restore)
+DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SUBRESOURCE_FILTERING,
+                    R.drawable.infobar_subresource_filtering)
 
 // WebsiteSettingsUI images, used in ConnectionInfoPopup
 // Good:

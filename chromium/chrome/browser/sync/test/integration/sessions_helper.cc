@@ -27,7 +27,7 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/sync_driver/sync_client.h"
+#include "components/sync/driver/sync_client.h"
 #include "components/sync_sessions/open_tabs_ui_delegate.h"
 #include "content/public/test/test_utils.h"
 #include "url/gurl.h"
@@ -44,7 +44,7 @@ ScopedWindowMap::ScopedWindowMap(SessionWindowMap* windows) {
 }
 
 ScopedWindowMap::~ScopedWindowMap() {
-  STLDeleteContainerPairSecondPointers(windows_.begin(), windows_.end());
+  base::STLDeleteContainerPairSecondPointers(windows_.begin(), windows_.end());
 }
 
 SessionWindowMap* ScopedWindowMap::GetMutable() {
@@ -56,7 +56,7 @@ const SessionWindowMap* ScopedWindowMap::Get() const {
 }
 
 void ScopedWindowMap::Reset(SessionWindowMap* windows) {
-  STLDeleteContainerPairSecondPointers(windows_.begin(), windows_.end());
+  base::STLDeleteContainerPairSecondPointers(windows_.begin(), windows_.end());
   windows_.clear();
   std::swap(*windows, windows_);
 }

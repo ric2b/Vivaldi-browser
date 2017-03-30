@@ -63,7 +63,7 @@ class ASH_EXPORT MaximizeModeWindowManager : public WmWindowObserver,
   void OnWindowBoundsChanged(WmWindow* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
-  void OnWindowVisibilityChanging(WmWindow* window, bool visible) override;
+  void OnWindowVisibilityChanged(WmWindow* window, bool visible) override;
 
   // display::DisplayObserver overrides:
   void OnDisplayAdded(const display::Display& display) override;

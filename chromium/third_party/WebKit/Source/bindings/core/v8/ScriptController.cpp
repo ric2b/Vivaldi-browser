@@ -67,7 +67,6 @@
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/Widget.h"
-#include "platform/v8_inspector/public/V8StackTrace.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/CurrentTime.h"
@@ -83,7 +82,7 @@ bool ScriptController::canAccessFromCurrentOrigin(v8::Isolate* isolate, Frame* f
 {
     if (!frame)
         return false;
-    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, currentDOMWindow(isolate), frame, ReportSecurityError);
+    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(currentDOMWindow(isolate), frame, BindingSecurity::ErrorReportOption::Report);
 }
 
 ScriptController::ScriptController(LocalFrame* frame)
@@ -111,18 +110,7 @@ void ScriptController::updateSecurityOrigin(SecurityOrigin* origin)
         m_windowProxyManager->windowProxy(isolatedContext.first->world())->updateSecurityOrigin(isolatedContext.second);
 }
 
-v8::MaybeLocal<v8::Value> ScriptController::callFunction(v8::Local<v8::Function> function, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> info[])
-{
-    return ScriptController::callFunction(frame()->document(), function, receiver, argc, info, isolate());
-}
-
-v8::MaybeLocal<v8::Value> ScriptController::callFunction(ExecutionContext* context, v8::Local<v8::Function> function, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> info[], v8::Isolate* isolate)
-{
-    v8::MaybeLocal<v8::Value> result = V8ScriptRunner::callFunction(function, context, receiver, argc, info, isolate);
-    return result;
-}
-
-v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8::Context> context, const ScriptSourceCode& source, AccessControlStatus accessControlStatus, double* compilationFinishTime)
+v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8::Context> context, const ScriptSourceCode& source, AccessControlStatus accessControlStatus)
 {
     TRACE_EVENT1("devtools.timeline", "EvaluateScript", "data", InspectorEvaluateScriptEvent::data(frame(), source.url().getString(), source.startPosition()));
     InspectorInstrumentation::NativeBreakpoint nativeBreakpoint(frame()->document(), "scriptFirstStatement", false);
@@ -158,9 +146,6 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8:
         if (!v8Call(V8ScriptRunner::compileScript(source, isolate(), accessControlStatus, v8CacheOptions), script, tryCatch))
             return result;
 
-        if (compilationFinishTime) {
-            *compilationFinishTime = WTF::monotonicallyIncreasingTime();
-        }
         if (!v8Call(V8ScriptRunner::runCompiledScript(isolate(), script, frame()->document()), result, tryCatch))
             return result;
     }
@@ -382,10 +367,10 @@ void ScriptController::executeScriptInMainWorld(const String& script, ExecuteScr
     evaluateScriptInMainWorld(ScriptSourceCode(script), NotSharableCrossOrigin, policy);
 }
 
-void ScriptController::executeScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus accessControlStatus, double* compilationFinishTime)
+void ScriptController::executeScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus accessControlStatus)
 {
     v8::HandleScope handleScope(isolate());
-    evaluateScriptInMainWorld(sourceCode, accessControlStatus, DoNotExecuteScriptWhenScriptsDisabled, compilationFinishTime);
+    evaluateScriptInMainWorld(sourceCode, accessControlStatus, DoNotExecuteScriptWhenScriptsDisabled);
 }
 
 v8::Local<v8::Value> ScriptController::executeScriptInMainWorldAndReturnValue(const ScriptSourceCode& sourceCode, ExecuteScriptPolicy policy)
@@ -393,7 +378,7 @@ v8::Local<v8::Value> ScriptController::executeScriptInMainWorldAndReturnValue(co
     return evaluateScriptInMainWorld(sourceCode, NotSharableCrossOrigin, policy);
 }
 
-v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus accessControlStatus, ExecuteScriptPolicy policy, double* compilationFinishTime)
+v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSourceCode& sourceCode, AccessControlStatus accessControlStatus, ExecuteScriptPolicy policy)
 {
     if (policy == DoNotExecuteScriptWhenScriptsDisabled && !canExecuteScripts(AboutToExecuteScript))
         return v8::Local<v8::Value>();
@@ -407,7 +392,7 @@ v8::Local<v8::Value> ScriptController::evaluateScriptInMainWorld(const ScriptSou
     if (frame()->loader().stateMachine()->isDisplayingInitialEmptyDocument())
         frame()->loader().didAccessInitialDocument();
 
-    v8::Local<v8::Value> object = executeScriptAndReturnValue(scriptState->context(), sourceCode, accessControlStatus, compilationFinishTime);
+    v8::Local<v8::Value> object = executeScriptAndReturnValue(scriptState->context(), sourceCode, accessControlStatus);
 
     if (object.IsEmpty())
         return v8::Local<v8::Value>();

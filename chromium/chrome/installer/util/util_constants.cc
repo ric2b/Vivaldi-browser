@@ -251,6 +251,8 @@ const wchar_t kInstallerResultUIString[] = L"InstallerResultUIString";
 const wchar_t kInstallerSuccessLaunchCmdLine[] =
     L"InstallerSuccessLaunchCmdLine";
 
+const wchar_t kVivaldiAutoUpdate[] = L"AutoUpdate";
+const wchar_t kVivaldiDeltaPatchFailed[] = L"DeltaPatchFailed";
 const wchar_t kVivaldiKey[] = L"Software\\Vivaldi";
 const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
 

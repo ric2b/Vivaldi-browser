@@ -23,6 +23,7 @@ animationstart
 audioend
 audioprocess
 audiostart
+auxclick
 availablechange
 beforecopy
 beforecut
@@ -135,6 +136,7 @@ loading
 loadingdone
 loadingerror
 loadstart
+longtasktimingbufferfull
 lostpointercapture
 mark
 message
@@ -245,6 +247,11 @@ versionchange
 visibilitychange
 voiceschanged
 volumechange
+vrdisplayconnect
+vrdisplaydisconnect
+vrdisplayactivate
+vrdisplaydeactivate
+vrdisplaypresentchange
 waiting
 waitingforkey
 webglcontextcreationerror

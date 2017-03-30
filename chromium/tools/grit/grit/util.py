@@ -660,3 +660,38 @@ class TempDir(object):
       os.chdir(self.path)
     def __exit__(self, *exc_info):
       os.chdir(self.oldpath)
+
+class PathSearcher:
+
+  search_paths = []
+
+  @classmethod
+  def Configure(cls, paths):
+    for p in paths:
+      if p not in cls.search_paths:
+        cls.search_paths.append(p)
+
+  @classmethod
+  def LocatePath(cls, path, base_path=None):
+    if os.path.isabs(path):
+      return path
+
+    pl = []
+    if base_path:
+      if os.access(os.path.join(base_path, path), os.F_OK):
+        return path
+      # Generate list of  search dirs with the path relative to the actual
+      # prefix path of the base_path, if any. Search these first
+      for p in cls.search_paths :
+        r = os.path.relpath(base_path, p)
+        if r[0] != ".":
+          for p1 in cls.search_paths :
+            pl.append(os.path.join(p1, r))
+
+    for p in pl+ cls.search_paths :
+      candidate_path = os.path.join(p, path)
+      if os.access(candidate_path, os.F_OK):
+        if base_path:
+          candidate_path = os.path.relpath(candidate_path, base_path)
+        return candidate_path
+    return path

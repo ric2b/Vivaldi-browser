@@ -19,6 +19,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/file_version_info.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -482,15 +483,31 @@ void GetShellIntegrationEntries(BrowserDistribution* dist,
                                        L"StartMenuInternet", reg_app_name));
 
   const base::string16 html_prog_id(GetBrowserProgId(suffix));
+#if defined(VIVALDI_BUILD)
+  for (int i = 0; ShellUtil::kDefaultFileAssociations[i] != NULL; i++) {
+#else
   for (int i = 0; ShellUtil::kPotentialFileAssociations[i] != NULL; i++) {
+#endif
     entries->push_back(new RegistryEntry(
         capabilities + L"\\FileAssociations",
+#if defined(VIVALDI_BUILD)
+        ShellUtil::kDefaultFileAssociations[i], html_prog_id));
+#else
         ShellUtil::kPotentialFileAssociations[i], html_prog_id));
+#endif
   }
+#if defined(VIVALDI_BUILD)
+  for (int i = 0; ShellUtil::kBrowserProtocolAssociations[i] != NULL; i++) {
+#else
   for (int i = 0; ShellUtil::kPotentialProtocolAssociations[i] != NULL; i++) {
+#endif
     entries->push_back(new RegistryEntry(
         capabilities + L"\\URLAssociations",
+#if defined(VIVALDI_BUILD)
+        ShellUtil::kBrowserProtocolAssociations[i], html_prog_id));
+#else
         ShellUtil::kPotentialProtocolAssociations[i], html_prog_id));
+#endif
   }
 }
 
@@ -687,18 +704,31 @@ bool ElevateAndRegisterChrome(BrowserDistribution* dist,
   // register.
   DCHECK(InstallUtil::IsPerUserInstall(chrome_exe));
   DCHECK_LT(base::win::GetVersion(), base::win::VERSION_WIN8);
-  base::FilePath exe_path = chrome_exe.DirName().Append(installer::kSetupExe);
-  if (!base::PathExists(exe_path)) {
-    HKEY reg_root = InstallUtil::IsPerUserInstall(chrome_exe) ?
-        HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
-    RegKey key(reg_root,
-               dist->GetUninstallRegPath().c_str(),
-               KEY_READ | KEY_WOW64_32KEY);
-    base::string16 uninstall_string;
-    key.ReadValue(installer::kUninstallStringField, &uninstall_string);
-    base::CommandLine command_line =
-        base::CommandLine::FromString(uninstall_string);
-    exe_path = command_line.GetProgram();
+
+  base::FilePath exe_path;
+  if (base::CommandLine::ForCurrentProcess()->
+      HasSwitch(installer::switches::kVivaldiStandalone)) {
+    std::unique_ptr<FileVersionInfo> version_info(
+        FileVersionInfo::CreateFileVersionInfo(chrome_exe));
+    if (version_info.get()) {
+      exe_path = chrome_exe.DirName().Append(version_info->product_version());
+      exe_path = exe_path.Append(installer::kInstallerDir);
+      exe_path = exe_path.Append(installer::kSetupExe);
+    }
+  } else {
+    exe_path = chrome_exe.DirName().Append(installer::kSetupExe);
+    if (!base::PathExists(exe_path)) {
+      HKEY reg_root = InstallUtil::IsPerUserInstall(chrome_exe) ?
+          HKEY_CURRENT_USER : HKEY_LOCAL_MACHINE;
+      RegKey key(reg_root,
+                 dist->GetUninstallRegPath().c_str(),
+                 KEY_READ | KEY_WOW64_32KEY);
+      base::string16 uninstall_string;
+      key.ReadValue(installer::kUninstallStringField, &uninstall_string);
+      base::CommandLine command_line =
+          base::CommandLine::FromString(uninstall_string);
+      exe_path = command_line.GetProgram();
+    }
   }
 
   if (base::PathExists(exe_path)) {

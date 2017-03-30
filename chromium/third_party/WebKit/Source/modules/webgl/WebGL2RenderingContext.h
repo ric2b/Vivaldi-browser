@@ -32,7 +32,6 @@ public:
 
     CanvasRenderingContext::ContextType getContextType() const override { return CanvasRenderingContext::ContextWebgl2; }
     ImageBitmap* transferToImageBitmap(ExceptionState&) final;
-    unsigned version() const override { return 2; }
     String contextName() const override { return "WebGL2RenderingContext"; }
     void registerContextExtensions() override;
     void setCanvasGetContextResult(RenderingContext&) final;
@@ -43,7 +42,7 @@ public:
     DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 protected:
-    WebGL2RenderingContext(HTMLCanvasElement* passedCanvas, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes& requestedAttributes);
+    WebGL2RenderingContext(HTMLCanvasElement* passedCanvas, std::unique_ptr<WebGraphicsContext3DProvider>, const CanvasContextCreationAttributes& requestedAttributes);
 
     Member<EXTColorBufferFloat> m_extColorBufferFloat;
     Member<EXTDisjointTimerQuery> m_extDisjointTimerQuery;

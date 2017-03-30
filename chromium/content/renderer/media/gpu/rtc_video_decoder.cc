@@ -35,7 +35,10 @@ namespace content {
 const int32_t RTCVideoDecoder::ID_LAST = 0x3FFFFFFF;
 const int32_t RTCVideoDecoder::ID_HALF = 0x20000000;
 const int32_t RTCVideoDecoder::ID_INVALID = -1;
-const uint32_t kNumVDAErrorsBeforeSWFallback = 50;
+
+// Number of consecutive frames that can be lost due to a VDA error before
+// falling back to SW implementation.
+const uint32_t kNumVDAErrorsBeforeSWFallback = 5;
 
 // Maximum number of concurrent VDA::Decode() operations RVD will maintain.
 // Higher values allow better pipelining in the GPU, but also require more
@@ -84,10 +87,10 @@ RTCVideoDecoder::~RTCVideoDecoder() {
   DestroyVDA();
 
   // Delete all shared memories.
-  STLDeleteElements(&available_shm_segments_);
-  STLDeleteValues(&bitstream_buffers_in_decoder_);
-  STLDeleteContainerPairFirstPointers(decode_buffers_.begin(),
-                                      decode_buffers_.end());
+  base::STLDeleteElements(&available_shm_segments_);
+  base::STLDeleteValues(&bitstream_buffers_in_decoder_);
+  base::STLDeleteContainerPairFirstPointers(decode_buffers_.begin(),
+                                            decode_buffers_.end());
   decode_buffers_.clear();
   ClearPendingBuffers();
 }
@@ -666,7 +669,7 @@ void RTCVideoDecoder::MovePendingBuffersToDecodeBuffers() {
 }
 
 void RTCVideoDecoder::ResetInternal() {
-  DVLOG(2) << __FUNCTION__;
+  DVLOG(2) << __func__;
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   if (vda_) {
@@ -805,7 +808,7 @@ std::unique_ptr<base::SharedMemory> RTCVideoDecoder::GetSHM_Locked(
   }
 
   if (num_shm_buffers_ != 0) {
-    STLDeleteElements(&available_shm_segments_);
+    base::STLDeleteElements(&available_shm_segments_);
     num_shm_buffers_ = 0;
   }
 

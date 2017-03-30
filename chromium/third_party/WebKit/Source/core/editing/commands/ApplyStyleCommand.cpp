@@ -114,7 +114,7 @@ bool isEmptyFontTag(const Element* element, ShouldStyleAttributeBeEmpty shouldSt
 
 static bool offsetIsBeforeLastNodeOffset(int offset, Node* anchorNode)
 {
-    if (anchorNode->offsetInCharacters())
+    if (anchorNode->isCharacterDataNode())
         return offset < anchorNode->maxCharacterOffset();
     int currentOffset = 0;
     for (Node* node = NodeTraversal::firstChild(*anchorNode); node && currentOffset < offset; node = NodeTraversal::nextSibling(*node))
@@ -122,10 +122,10 @@ static bool offsetIsBeforeLastNodeOffset(int offset, Node* anchorNode)
     return offset < currentOffset;
 }
 
-ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, EditAction editingAction, EPropertyLevel propertyLevel)
+ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, InputEvent::InputType inputType, EPropertyLevel propertyLevel)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(editingAction)
+    , m_inputType(inputType)
     , m_propertyLevel(propertyLevel)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -139,7 +139,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* sty
 ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, const Position& start, const Position& end)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(EditActionChangeAttributes)
+    , m_inputType(InputEvent::InputType::ChangeAttributes)
     , m_propertyLevel(PropertyDefault)
     , m_start(start)
     , m_end(end)
@@ -153,7 +153,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* sty
 ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly)
     : CompositeEditCommand(element->document())
     , m_style(EditingStyle::create())
-    , m_editingAction(EditActionChangeAttributes)
+    , m_inputType(InputEvent::InputType::ChangeAttributes)
     , m_propertyLevel(PropertyDefault)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -164,10 +164,10 @@ ApplyStyleCommand::ApplyStyleCommand(Element* element, bool removeOnly)
 {
 }
 
-ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, IsInlineElementToRemoveFunction isInlineElementToRemoveFunction, EditAction editingAction)
+ApplyStyleCommand::ApplyStyleCommand(Document& document, const EditingStyle* style, IsInlineElementToRemoveFunction isInlineElementToRemoveFunction, InputEvent::InputType inputType)
     : CompositeEditCommand(document)
     , m_style(style->copy())
-    , m_editingAction(editingAction)
+    , m_inputType(inputType)
     , m_propertyLevel(PropertyDefault)
     , m_start(mostForwardCaretPosition(endingSelection().start()))
     , m_end(mostBackwardCaretPosition(endingSelection().end()))
@@ -235,9 +235,9 @@ void ApplyStyleCommand::doApply(EditingState* editingState)
     }
 }
 
-EditAction ApplyStyleCommand::editingAction() const
+InputEvent::InputType ApplyStyleCommand::inputType() const
 {
-    return m_editingAction;
+    return m_inputType;
 }
 
 void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editingState)
@@ -275,6 +275,7 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editi
     VisiblePosition nextParagraphStart(nextPositionOf(endOfParagraph(paragraphStart)));
     VisiblePosition beyondEnd(nextPositionOf(endOfParagraph(visibleEnd)));
     while (paragraphStart.isNotNull() && paragraphStart.deepEquivalent() != beyondEnd.deepEquivalent()) {
+        DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
         StyleChange styleChange(style, paragraphStart.deepEquivalent());
         if (styleChange.cssStyle().length() || m_removeOnly) {
             Element* block = enclosingBlock(paragraphStart.deepEquivalent().anchorNode());
@@ -283,24 +284,38 @@ void ApplyStyleCommand::applyBlockStyle(EditingStyle *style, EditingState* editi
                 HTMLElement* newBlock = moveParagraphContentsToNewBlockIfNecessary(paragraphStartToMove, editingState);
                 if (editingState->isAborted())
                     return;
-                if (newBlock)
+                if (newBlock) {
                     block = newBlock;
+                    if (paragraphStart.isOrphan())
+                        paragraphStart = createVisiblePosition(Position::firstPositionInNode(newBlock));
+                }
+                DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
             }
             if (block && block->isHTMLElement()) {
                 removeCSSStyle(style, toHTMLElement(block), editingState);
                 if (editingState->isAborted())
                     return;
-                if (!m_removeOnly)
+                DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
+                if (!m_removeOnly) {
                     addBlockStyle(styleChange, toHTMLElement(block));
+                    DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
+                }
             }
 
+            DCHECK(!paragraphStart.isOrphan()) << paragraphStart;
             if (nextParagraphStart.isOrphan())
                 nextParagraphStart = nextPositionOf(endOfParagraph(paragraphStart));
         }
 
+        DCHECK(!nextParagraphStart.isOrphan()) << nextParagraphStart;
         paragraphStart = nextParagraphStart;
         nextParagraphStart = nextPositionOf(endOfParagraph(paragraphStart));
     }
+
+    // Update style and layout again, since added or removed styles could have
+    // affected the layout. We need clean layout in order to compute
+    // plain-text ranges below.
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
 
     EphemeralRange startEphemeralRange = PlainTextRange(startIndex).createRangeForSelection(toContainerNode(scope));
     if (startEphemeralRange.isNull())
@@ -365,17 +380,12 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(EditingStyle* style, Editin
         end = endPosition();
     }
 
+    DCHECK(start.anchorNode());
+    DCHECK(end.anchorNode());
     // Calculate loop end point.
     // If the end node is before the start node (can only happen if the end node is
     // an ancestor of the start node), we gather nodes up to the next sibling of the end node
-    Node* beyondEnd;
-    DCHECK(start.anchorNode());
-    DCHECK(end.anchorNode());
-    if (start.anchorNode()->isDescendantOf(end.anchorNode()))
-        beyondEnd = NodeTraversal::nextSkippingChildren(*end.anchorNode());
-    else
-        beyondEnd = NodeTraversal::next(*end.anchorNode());
-
+    const Node* const beyondEnd = end.nodeAsRangePastLastNode();
     start = mostBackwardCaretPosition(start); // Move upstream to ensure we do not add redundant spans.
     Node* startNode = start.anchorNode();
     DCHECK(startNode);
@@ -429,13 +439,13 @@ void ApplyStyleCommand::applyRelativeFontStyleChange(EditingStyle* style, Editin
         MutableStylePropertySet* inlineStyle = copyStyleOrCreateEmpty(element->inlineStyle());
         float currentFontSize = computedFontSize(node);
         float desiredFontSize = max(MinimumFontSize, startingFontSizes.get(node) + style->fontSizeDelta());
-        CSSValue* value = inlineStyle->getPropertyCSSValue(CSSPropertyFontSize);
+        const CSSValue* value = inlineStyle->getPropertyCSSValue(CSSPropertyFontSize);
         if (value) {
             element->removeInlineStyleProperty(CSSPropertyFontSize);
             currentFontSize = computedFontSize(node);
         }
         if (currentFontSize != desiredFontSize) {
-            inlineStyle->setProperty(CSSPropertyFontSize, CSSPrimitiveValue::create(desiredFontSize, CSSPrimitiveValue::UnitType::Pixels), false);
+            inlineStyle->setProperty(CSSPropertyFontSize, *CSSPrimitiveValue::create(desiredFontSize, CSSPrimitiveValue::UnitType::Pixels), false);
             setNodeAttribute(element, styleAttr, AtomicString(inlineStyle->asText()));
         }
         if (inlineStyle->isEmpty()) {
@@ -768,7 +778,7 @@ void ApplyStyleCommand::fixRangeAndApplyInlineStyle(EditingStyle* style, const P
     // e.g. When applying font-size: large on <font color="blue">hello</font>, we need to include the font element in our run
     // to generate <font color="blue" size="4">hello</font> instead of <font color="blue"><font size="4">hello</font></font>
     Range* range = Range::create(startNode->document(), start, end);
-    Element* editableRoot = startNode->rootEditableElement();
+    Element* editableRoot = rootEditableElement(*startNode);
     if (startNode != editableRoot) {
         while (editableRoot && startNode->parentNode() != editableRoot && isNodeVisiblyContainedWithin(*startNode->parentNode(), *range))
             startNode = startNode->parentNode();
@@ -779,12 +789,12 @@ void ApplyStyleCommand::fixRangeAndApplyInlineStyle(EditingStyle* style, const P
 
 static bool containsNonEditableRegion(Node& node)
 {
-    if (!node.hasEditableStyle())
+    if (!hasEditableStyle(node))
         return true;
 
     Node* sibling = NodeTraversal::nextSkippingChildren(node);
     for (Node* descendent = node.firstChild(); descendent && descendent != sibling; descendent = NodeTraversal::next(*descendent)) {
-        if (!descendent->hasEditableStyle())
+        if (!hasEditableStyle(*descendent))
             return true;
     }
 
@@ -804,7 +814,7 @@ public:
 
     bool startAndEndAreStillInDocument()
     {
-        return start && end && start->inShadowIncludingDocument() && end->inShadowIncludingDocument();
+        return start && end && start->isConnected() && end->isConnected();
     }
 
     DEFINE_INLINE_TRACE()
@@ -842,10 +852,10 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, Node* s
     for (Node* next; node && node != pastEndNode; node = next) {
         next = NodeTraversal::next(*node);
 
-        if (!node->layoutObject() || !node->hasEditableStyle())
+        if (!node->layoutObject() || !hasEditableStyle(*node))
             continue;
 
-        if (!node->layoutObjectIsRichlyEditable() && node->isHTMLElement()) {
+        if (!hasRichlyEditableStyle(*node) && node->isHTMLElement()) {
             HTMLElement* element = toHTMLElement(node);
             // This is a plaintext-only region. Only proceed if it's fully selected.
             // pastEndNode is the node after the last fully selected node, so if it's inside node then
@@ -866,7 +876,7 @@ void ApplyStyleCommand::applyInlineStyleToNodeRange(EditingStyle* style, Node* s
             continue;
 
         if (node->hasChildren()) {
-            if (node->contains(pastEndNode) || containsNonEditableRegion(*node) || !node->parentNode()->hasEditableStyle())
+            if (node->contains(pastEndNode) || containsNonEditableRegion(*node) || !hasEditableStyle(*node->parentNode()))
                 continue;
             if (editingIgnoresContent(node)) {
                 next = NodeTraversal::nextSkippingChildren(*node);
@@ -953,7 +963,7 @@ void ApplyStyleCommand::removeConflictingInlineStyleFromRun(EditingStyle* style,
     DCHECK(runStart);
     DCHECK(runEnd);
     Node* next = runStart;
-    for (Node* node = next; node && node->inShadowIncludingDocument() && node != pastEndNode; node = next) {
+    for (Node* node = next; node && node->isConnected() && node != pastEndNode; node = next) {
         if (editingIgnoresContent(node)) {
             DCHECK(!node->contains(pastEndNode)) << node << " " << pastEndNode;
             next = NodeTraversal::nextSkippingChildren(*node);
@@ -970,7 +980,7 @@ void ApplyStyleCommand::removeConflictingInlineStyleFromRun(EditingStyle* style,
         removeInlineStyleFromElement(style, &element, editingState, RemoveAlways);
         if (editingState->isAborted())
             return;
-        if (!element.inShadowIncludingDocument()) {
+        if (!element.isConnected()) {
             // FIXME: We might need to update the start and the end of current selection here but need a test.
             if (runStart == element)
                 runStart = previousSibling ? previousSibling->nextSibling() : parent->firstChild();
@@ -983,8 +993,8 @@ void ApplyStyleCommand::removeConflictingInlineStyleFromRun(EditingStyle* style,
 bool ApplyStyleCommand::removeInlineStyleFromElement(EditingStyle* style, HTMLElement* element, EditingState* editingState, InlineStyleRemovalMode mode, EditingStyle* extractedStyle)
 {
     DCHECK(element);
-
-    if (!element->parentNode() || !element->parentNode()->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable))
+    document().updateStyleAndLayoutTree();
+    if (!element->parentNode() || !hasEditableStyle(*element->parentNode()))
         return false;
 
     if (isStyledInlineElementToRemove(element)) {
@@ -1002,7 +1012,7 @@ bool ApplyStyleCommand::removeInlineStyleFromElement(EditingStyle* style, HTMLEl
     if (editingState->isAborted())
         return false;
 
-    if (!element->inShadowIncludingDocument())
+    if (!element->isConnected())
         return removed;
 
     // If the node was converted to a span, the span may still contain relevant
@@ -1077,6 +1087,20 @@ bool ApplyStyleCommand::removeCSSStyle(EditingStyle* style, HTMLElement* element
         removeNodePreservingChildren(element, editingState);
 
     return true;
+}
+
+// Finds the enclosing element until which the tree can be split.
+// When a user hits ENTER, they won't expect this element to be split into two.
+// You may pass it as the second argument of splitTreeToNode.
+static Element* unsplittableElementForPosition(const Position& p)
+{
+    // Since enclosingNodeOfType won't search beyond the highest root editable node,
+    // this code works even if the closest table cell was outside of the root editable node.
+    Element* enclosingCell = toElement(enclosingNodeOfType(p, &isTableCell));
+    if (enclosingCell)
+        return enclosingCell;
+
+    return rootEditableElementOf(p);
 }
 
 HTMLElement* ApplyStyleCommand::highestAncestorWithConflictingInlineStyle(EditingStyle* style, Node* node)
@@ -1197,8 +1221,8 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style, const Position &s
 {
     DCHECK(start.isNotNull());
     DCHECK(end.isNotNull());
-    DCHECK(start.inShadowIncludingDocument()) << start;
-    DCHECK(end.inShadowIncludingDocument()) << end;
+    DCHECK(start.isConnected()) << start;
+    DCHECK(end.isConnected()) << end;
     DCHECK(Position::commonAncestorTreeScope(start, end)) << start << " " << end;
     DCHECK_LE(start, end);
     // FIXME: We should assert that start/end are not in the middle of a text node.
@@ -1261,7 +1285,7 @@ void ApplyStyleCommand::removeInlineStyle(EditingStyle* style, const Position &s
             removeInlineStyleFromElement(style, elem, editingState, RemoveIfNeeded, styleToPushDown);
             if (editingState->isAborted())
                 return;
-            if (!elem->inShadowIncludingDocument()) {
+            if (!elem->isConnected()) {
                 if (s.anchorNode() == elem) {
                     // Since elem must have been fully selected, and it is at the start
                     // of the selection, it is clear we can set the new s offset to 0.
@@ -1474,9 +1498,10 @@ void ApplyStyleCommand::surroundNodeRangeWithElement(Node* passedStartNode, Node
     if (editingState->isAborted())
         return;
 
+    document().updateStyleAndLayoutTree();
     while (node) {
         Node* next = node->nextSibling();
-        if (node->isContentEditable(Node::UserSelectAllIsAlwaysNonEditable)) {
+        if (hasEditableStyle(*node)) {
             removeNode(node, editingState);
             if (editingState->isAborted())
                 return;
@@ -1491,16 +1516,16 @@ void ApplyStyleCommand::surroundNodeRangeWithElement(Node* passedStartNode, Node
 
     Node* nextSibling = element->nextSibling();
     Node* previousSibling = element->previousSibling();
-    if (nextSibling && nextSibling->isElementNode() && nextSibling->hasEditableStyle()
+    if (nextSibling && nextSibling->isElementNode() && hasEditableStyle(*nextSibling)
         && areIdenticalElements(*element, toElement(*nextSibling))) {
         mergeIdenticalElements(element, toElement(nextSibling), editingState);
         if (editingState->isAborted())
             return;
     }
 
-    if (previousSibling && previousSibling->isElementNode() && previousSibling->hasEditableStyle()) {
+    if (previousSibling && previousSibling->isElementNode() && hasEditableStyle(*previousSibling)) {
         Node* mergedElement = previousSibling->nextSibling();
-        if (mergedElement->isElementNode() && mergedElement->hasEditableStyle()
+        if (mergedElement->isElementNode() && hasEditableStyle(*mergedElement)
             && areIdenticalElements(toElement(*previousSibling), toElement(*mergedElement))) {
             mergeIdenticalElements(toElement(previousSibling), toElement(mergedElement), editingState);
             if (editingState->isAborted())
@@ -1533,7 +1558,7 @@ void ApplyStyleCommand::addBlockStyle(const StyleChange& styleChange, HTMLElemen
 
 void ApplyStyleCommand::addInlineStyleIfNeeded(EditingStyle* style, Node* passedStart, Node* passedEnd, EditingState* editingState)
 {
-    if (!passedStart || !passedEnd || !passedStart->inShadowIncludingDocument() || !passedEnd->inShadowIncludingDocument())
+    if (!passedStart || !passedEnd || !passedStart->isConnected() || !passedEnd->isConnected())
         return;
 
     Node* start = passedStart;
@@ -1569,8 +1594,8 @@ void ApplyStyleCommand::applyInlineStyleChange(Node* passedStart, Node* passedEn
 {
     Node* startNode = passedStart;
     Node* endNode = passedEnd;
-    DCHECK(startNode->inShadowIncludingDocument()) << startNode;
-    DCHECK(endNode->inShadowIncludingDocument()) << endNode;
+    DCHECK(startNode->isConnected()) << startNode;
+    DCHECK(endNode->isConnected()) << endNode;
 
     // Find appropriate font and span elements top-down.
     HTMLFontElement* fontContainer = nullptr;

@@ -80,7 +80,7 @@ StyleImage* CSSImageValue::cacheImage(Document* document, CrossOriginAttributeVa
 
 void CSSImageValue::restoreCachedResourceIfNeeded(Document& document) const
 {
-    if (m_isCachePending || !m_cachedImage || !document.fetcher())
+    if (m_isCachePending || !m_cachedImage || !document.fetcher() || m_absoluteURL.isNull())
         return;
     if (document.fetcher()->cachedResource(KURL(ParsedURLString, m_absoluteURL)))
         return;
@@ -90,6 +90,7 @@ void CSSImageValue::restoreCachedResourceIfNeeded(Document& document) const
         return;
 
     FetchRequest request(ResourceRequest(m_absoluteURL), m_initiatorName.isEmpty() ? FetchInitiatorTypeNames::css : m_initiatorName, resource->options());
+    request.mutableResourceRequest().setRequestContext(WebURLRequest::RequestContextImage);
     MixedContentChecker::shouldBlockFetch(document.frame(), resource->lastResourceRequest(),
         resource->lastResourceRequest().url(), MixedContentChecker::SendReport);
     document.fetcher()->requestLoadStarted(resource->identifier(), resource, request, ResourceFetcher::ResourceLoadingFromCache);

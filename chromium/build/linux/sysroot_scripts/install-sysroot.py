@@ -3,18 +3,19 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Install Debian Wheezy sysroots for building chromium.
+"""Install Debian sysroots for building chromium.
 """
 
 # The sysroot is needed to ensure that binaries will run on Debian Wheezy,
-# the oldest supported linux distribution.  This script can be run manually but
-# is more often run as part of gclient hooks. When run from hooks this script
-# in a no-op on non-linux platforms.
+# the oldest supported linux distribution. For ARM64 linux, we have Debian
+# Jessie sysroot as Jessie is the first version with ARM64 support. This script
+# can be run manually but is more often run as part of gclient hooks. When run
+# from hooks this script is a no-op on non-linux platforms.
 
 # The sysroot image could be constructed from scratch based on the current
-# state or Debian Wheezy but for consistency we currently use a pre-built root
-# image. The image will normally need to be rebuilt every time chrome's build
-# dependencies are changed.
+# state or Debian Wheezy/Jessie but for consistency we currently use a
+# pre-built root image. The image will normally need to be rebuilt every time
+# chrome's build dependencies are changed.
 
 import hashlib
 import platform
@@ -34,24 +35,28 @@ import gyp_environment
 
 URL_PREFIX = 'https://commondatastorage.googleapis.com'
 URL_PATH = 'chrome-linux-sysroot/toolchain'
-REVISION_AMD64 = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
-REVISION_ARM = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
-REVISION_I386 = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
-REVISION_MIPS = 'c52471d9dec240c8d0a88fa98aa1eefeee32e22f'
+REVISION_AMD64 = '24f935a3d8cdfcdfbabd23928a42304b1ffc52ba'
+REVISION_ARM = '24f935a3d8cdfcdfbabd23928a42304b1ffc52ba'
+REVISION_ARM64 = '24f935a3d8cdfcdfbabd23928a42304b1ffc52ba'
+REVISION_I386 = '24f935a3d8cdfcdfbabd23928a42304b1ffc52ba'
+REVISION_MIPS = '24f935a3d8cdfcdfbabd23928a42304b1ffc52ba'
 TARBALL_AMD64 = 'debian_wheezy_amd64_sysroot.tgz'
 TARBALL_ARM = 'debian_wheezy_arm_sysroot.tgz'
+TARBALL_ARM64 = 'debian_jessie_arm64_sysroot.tgz'
 TARBALL_I386 = 'debian_wheezy_i386_sysroot.tgz'
 TARBALL_MIPS = 'debian_wheezy_mips_sysroot.tgz'
-TARBALL_AMD64_SHA1SUM = 'ca4ed6e7c9e333b046be19d38584a11f6785eea6'
-TARBALL_ARM_SHA1SUM = '1fab0c2b1e93a933ddc593df3b43872b0ba5ded2'
-TARBALL_I386_SHA1SUM = '80c48c303319af2284e4a104c882d888af75ba81'
-TARBALL_MIPS_SHA1SUM = '01da32a35288627e05cfca193b7f3659531c6f7d'
+TARBALL_AMD64_SHA1SUM = 'a7f3df28b02799fbd7675c2ab24f1924c104c0ee'
+TARBALL_ARM_SHA1SUM = '2df01b8173a363977daf04e176b8c7dba5b0b933'
+TARBALL_ARM64_SHA1SUM = 'df9270e00c258e6cd80f8172b1bfa39aafc4756f'
+TARBALL_I386_SHA1SUM = 'e2c7131fa5f711de28c37fd9442e77d32abfb3ff'
+TARBALL_MIPS_SHA1SUM = '22fe7b45b144691aeb515083025f0fceb131d724'
 SYSROOT_DIR_AMD64 = 'debian_wheezy_amd64-sysroot'
 SYSROOT_DIR_ARM = 'debian_wheezy_arm-sysroot'
+SYSROOT_DIR_ARM64 = 'debian_jessie_arm64-sysroot'
 SYSROOT_DIR_I386 = 'debian_wheezy_i386-sysroot'
 SYSROOT_DIR_MIPS = 'debian_wheezy_mips-sysroot'
 
-valid_archs = ('arm', 'i386', 'amd64', 'mips')
+valid_archs = ('arm', 'arm64', 'i386', 'amd64', 'mips')
 
 
 class Error(Exception):
@@ -129,7 +134,7 @@ def InstallDefaultSysroots():
   # Don't attampt to install arm64 since this is currently and android-only
   # architecture.
   target_arch = DetectTargetArch()
-  if target_arch and target_arch not in (host_arch, 'i386', 'arm64'):
+  if target_arch and target_arch not in (host_arch, 'i386'):
     InstallSysroot(target_arch)
 
 
@@ -160,6 +165,7 @@ def InstallSysroot(target_arch):
   # TODO(thestig) Consider putting this else where to avoid having to recreate
   # it on every build.
   linux_dir = os.path.dirname(SCRIPT_DIR)
+  debian_release = 'Wheezy'
   if target_arch == 'amd64':
     sysroot = os.path.join(linux_dir, SYSROOT_DIR_AMD64)
     tarball_filename = TARBALL_AMD64
@@ -170,6 +176,12 @@ def InstallSysroot(target_arch):
     tarball_filename = TARBALL_ARM
     tarball_sha1sum = TARBALL_ARM_SHA1SUM
     revision = REVISION_ARM
+  elif target_arch == 'arm64':
+    debian_release = 'Jessie'
+    sysroot = os.path.join(linux_dir, SYSROOT_DIR_ARM64)
+    tarball_filename = TARBALL_ARM64
+    tarball_sha1sum = TARBALL_ARM64_SHA1SUM
+    revision = REVISION_ARM64
   elif target_arch == 'i386':
     sysroot = os.path.join(linux_dir, SYSROOT_DIR_I386)
     tarball_filename = TARBALL_I386
@@ -189,11 +201,12 @@ def InstallSysroot(target_arch):
   if os.path.exists(stamp):
     with open(stamp) as s:
       if s.read() == url:
-        print 'Debian Wheezy %s root image already up to date: %s' % \
-            (target_arch, sysroot)
+        print 'Debian %s %s root image already up to date: %s' % \
+            (debian_release, target_arch, sysroot)
         return
 
-  print 'Installing Debian Wheezy %s root image: %s' % (target_arch, sysroot)
+  print 'Installing Debian %s %s root image: %s' % \
+      (debian_release, target_arch, sysroot)
   if os.path.isdir(sysroot):
     shutil.rmtree(sysroot)
   os.mkdir(sysroot)

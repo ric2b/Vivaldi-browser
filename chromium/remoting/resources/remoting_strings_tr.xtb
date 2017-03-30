@@ -74,7 +74,6 @@ Gizlilikle ilgili daha fazla bilgi edinmek için lütfen Google Gizlilik Politik
 <translation id="2676780859508944670">Çalışıyor...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Yazılım güncellemeleri genellikle otomatik olarak gerçekleştirilir, ancak bazı nadir durumlarda güncelleme başarısız olabilir. Yazılımın güncellenmesi birkaç dakikadan fazla sürmeyecektir ve bilgisayarınıza uzaktan bağlanılarak yapılabilir.</translation>
-<translation id="2813770873348017932">Bir kullanıcı geçersiz PIN ile bağlanmaya çalıştığından uzak bilgisayara yapılan bağlantılar geçici olarak engellenmiştir. Lütfen daha sonra tekrar deneyin.</translation>
 <translation id="2841013758207633010">Zaman</translation>
 <translation id="2851674870054673688">Kullanıcı, kodu girdiğinde paylaşım oturumunuz başlar.</translation>
 <translation id="2851754573186462851">Chromium Uygulama Akışı</translation>
@@ -149,7 +148,6 @@ Ana Makinesi</translation>
 <translation id="4573676252416618192">Chrome Uzaktan
 Masaüstü Ana Makinesi</translation>
 <translation id="4619978527973181021">Kabul Et ve Yükle</translation>
-<translation id="4647791084836149355">Cardboard görünümünü göster</translation>
 <translation id="4703302905453407178">Gerekli bir bileşenin çalışması durdu. Lütfen bu sorunu geliştiricilere bildirin.</translation>
 <translation id="4703799847237267011">Chromoting oturumunuz sonlandırıldı.</translation>
 <translation id="4736223761657662401">Bağlantı Geçmişi</translation>
@@ -210,7 +208,6 @@ Masaüstü Ana Makinesi</translation>
 <translation id="6284412385303060032">Konsol mantık ekranında çalışan ana makine, kullanıcı tanımlı oturumda çalışan bir ana makineye geçerek perde modunu desteklemek için kapandı.</translation>
 <translation id="629730747756840877">Hesap</translation>
 <translation id="6304318647555713317">İstemci</translation>
-<translation id="6324708100353784493">Google Cardboard entegrasyon modunu etkinleştirdiniz. Bu modu kullanmak için cihazınızı Google Cardboard uyumlu bir görüntüleyiciye yerleştirin.</translation>
 <translation id="6381670701864002291">Başka bir şey.</translation>
 <translation id="6398765197997659313">Tam ekrandan çık</translation>
 <translation id="6408143143164565232">• Windows veya Linux bilgisayarlardan ses dinleme.
@@ -236,6 +233,7 @@ Masaüstü Ana Makinesi</translation>
 <translation id="6930242544192836755">Süre</translation>
 <translation id="6939719207673461467">Klavyeyi göster/gizle</translation>
 <translation id="6944854424004126054">Pencereyi geri yükle</translation>
+<translation id="6963936880795878952">Bir kullanıcı geçersiz PIN ile bağlanmaya çalıştığından uzak bilgisayara yapılan bağlantılar geçici olarak engellenmiştir. Lütfen daha sonra tekrar deneyin.</translation>
 <translation id="6965382102122355670">Tamam</translation>
 <translation id="6985691951107243942"><ph name="HOSTNAME" /> adlı ana bilgisayara uzaktan bağlantıları devre dışı bırakmak istediğinizden emin misiniz? Daha sonra fikrinizi değiştirirseniz, bağlantıları yeniden etkinleştirmek için söz konusu bilgisayarı ziyaret etmeniz gerekecektir.</translation>
 <translation id="6998989275928107238">Nereye</translation>

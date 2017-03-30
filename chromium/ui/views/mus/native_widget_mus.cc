@@ -7,26 +7,24 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/bitmap_uploader/bitmap_uploader.h"
-#include "components/mus/public/cpp/property_type_converters.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_observer.h"
-#include "components/mus/public/cpp/window_property.h"
-#include "components/mus/public/cpp/window_tree_client.h"
-#include "components/mus/public/interfaces/cursor.mojom.h"
-#include "components/mus/public/interfaces/window_manager.mojom.h"
-#include "components/mus/public/interfaces/window_manager_constants.mojom.h"
-#include "components/mus/public/interfaces/window_tree.mojom.h"
+#include "services/ui/public/cpp/property_type_converters.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_observer.h"
+#include "services/ui/public/cpp/window_property.h"
+#include "services/ui/public/cpp/window_tree_client.h"
+#include "services/ui/public/interfaces/cursor.mojom.h"
+#include "services/ui/public/interfaces/window_manager.mojom.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
+#include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/window_tree_client.h"
-#include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_property.h"
 #include "ui/base/hit_test.h"
-#include "ui/base/view_prop.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -34,7 +32,6 @@
 #include "ui/gfx/path.h"
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/platform_window/platform_window_delegate.h"
-#include "ui/views/mus/surface_context_factory.h"
 #include "ui/views/mus/window_manager_constants_converters.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/mus/window_tree_host_mus.h"
@@ -48,14 +45,14 @@
 #include "ui/wm/core/focus_controller.h"
 #include "ui/wm/core/native_cursor_manager.h"
 
-DECLARE_WINDOW_PROPERTY_TYPE(mus::Window*);
+DECLARE_WINDOW_PROPERTY_TYPE(ui::Window*);
 
-using mus::mojom::EventResult;
+using ui::mojom::EventResult;
 
 namespace views {
 namespace {
 
-DEFINE_WINDOW_PROPERTY_KEY(mus::Window*, kMusWindow, nullptr);
+DEFINE_WINDOW_PROPERTY_KEY(ui::Window*, kMusWindow, nullptr);
 
 MUS_DEFINE_WINDOW_PROPERTY_KEY(NativeWidgetMus*, kNativeWidgetMusKey, nullptr);
 
@@ -77,7 +74,7 @@ class FocusRulesImpl : public wm::BaseFocusRules {
 
 // This makes sure that an aura::Window focused (or activated) through the
 // aura::client::FocusClient (or ActivationClient) focuses (or activates) the
-// corresponding mus::Window too.
+// corresponding ui::Window too.
 class FocusControllerMus : public wm::FocusController {
  public:
   explicit FocusControllerMus(wm::FocusRules* rules) : FocusController(rules) {}
@@ -87,8 +84,7 @@ class FocusControllerMus : public wm::FocusController {
   void FocusWindow(aura::Window* window) override {
     FocusController::FocusWindow(window);
     if (window) {
-      mus::Window* mus_window =
-          window->GetRootWindow()->GetProperty(kMusWindow);
+      ui::Window* mus_window = window->GetRootWindow()->GetProperty(kMusWindow);
       if (mus_window)
         mus_window->SetFocus();
     }
@@ -147,10 +143,10 @@ class NativeWidgetMusWindowTreeClient : public aura::client::WindowTreeClient {
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMusWindowTreeClient);
 };
 
-// A screen position client that applies the offset of the mus::Window.
+// A screen position client that applies the offset of the ui::Window.
 class ScreenPositionClientMus : public wm::DefaultScreenPositionClient {
  public:
-  explicit ScreenPositionClientMus(mus::Window* mus_window)
+  explicit ScreenPositionClientMus(ui::Window* mus_window)
       : mus_window_(mus_window) {}
   ~ScreenPositionClientMus() override {}
 
@@ -169,14 +165,14 @@ class ScreenPositionClientMus : public wm::DefaultScreenPositionClient {
   }
 
  private:
-  mus::Window* mus_window_;
+  ui::Window* mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenPositionClientMus);
 };
 
 class NativeCursorManagerMus : public wm::NativeCursorManager {
  public:
-  explicit NativeCursorManagerMus(mus::Window* mus_window)
+  explicit NativeCursorManagerMus(ui::Window* mus_window)
       : mus_window_(mus_window) {}
   ~NativeCursorManagerMus() override {}
 
@@ -188,7 +184,7 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
 
   void SetCursor(gfx::NativeCursor cursor,
                  wm::NativeCursorManagerDelegate* delegate) override {
-    mus_window_->SetPredefinedCursor(mus::mojom::Cursor(cursor.native_type()));
+    mus_window_->SetPredefinedCursor(ui::mojom::Cursor(cursor.native_type()));
     delegate->CommitCursor(cursor);
   }
 
@@ -199,7 +195,7 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
     if (visible)
       SetCursor(delegate->GetCursor(), delegate);
     else
-      mus_window_->SetPredefinedCursor(mus::mojom::Cursor::NONE);
+      mus_window_->SetPredefinedCursor(ui::mojom::Cursor::NONE);
   }
 
   void SetCursorSet(ui::CursorSetType cursor_set,
@@ -224,7 +220,7 @@ class NativeCursorManagerMus : public wm::NativeCursorManager {
   }
 
  private:
-  mus::Window* mus_window_;
+  ui::Window* mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeCursorManagerMus);
 };
@@ -248,11 +244,16 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
   // NonClientFrameView:
   gfx::Rect GetBoundsForClientView() const override {
     gfx::Rect result(GetLocalBounds());
+    if (widget_->IsFullscreen())
+      return result;
     result.Inset(GetDefaultWindowManagerInsets(widget_->IsMaximized()));
     return result;
   }
   gfx::Rect GetWindowBoundsForClientBounds(
       const gfx::Rect& client_bounds) const override {
+    if (widget_->IsFullscreen())
+      return client_bounds;
+
     const gfx::Insets insets(
         GetDefaultWindowManagerInsets(widget_->IsMaximized()));
     return gfx::Rect(client_bounds.x() - insets.left(),
@@ -305,15 +306,15 @@ class ClientSideNonClientFrameView : public NonClientFrameView {
 
 int ResizeBehaviorFromDelegate(WidgetDelegate* delegate) {
   if (!delegate)
-    return mus::mojom::kResizeBehaviorNone;
+    return ui::mojom::kResizeBehaviorNone;
 
-  int32_t behavior = mus::mojom::kResizeBehaviorNone;
+  int32_t behavior = ui::mojom::kResizeBehaviorNone;
   if (delegate->CanResize())
-    behavior |= mus::mojom::kResizeBehaviorCanResize;
+    behavior |= ui::mojom::kResizeBehaviorCanResize;
   if (delegate->CanMaximize())
-    behavior |= mus::mojom::kResizeBehaviorCanMaximize;
+    behavior |= ui::mojom::kResizeBehaviorCanMaximize;
   if (delegate->CanMinimize())
-    behavior |= mus::mojom::kResizeBehaviorCanMinimize;
+    behavior |= ui::mojom::kResizeBehaviorCanMinimize;
   return behavior;
 }
 
@@ -328,7 +329,7 @@ SkBitmap AppIconFromDelegate(WidgetDelegate* delegate) {
   return app_icon.GetRepresentation(1.f).sk_bitmap();
 }
 
-// Handles acknowledgement of an input event, either immediately when a nested
+// Handles acknowledgment of an input event, either immediately when a nested
 // message loop starts, or upon destruction.
 class EventAckHandler : public base::MessageLoop::NestingObserver {
  public:
@@ -366,13 +367,31 @@ class EventAckHandler : public base::MessageLoop::NestingObserver {
   DISALLOW_COPY_AND_ASSIGN(EventAckHandler);
 };
 
+void OnMoveLoopEnd(bool* out_success,
+                   base::Closure quit_closure,
+                   bool in_success) {
+  *out_success = in_success;
+  quit_closure.Run();
+}
+
+ui::mojom::ShowState GetShowState(const ui::Window* window) {
+  if (!window ||
+      !window->HasSharedProperty(
+          ui::mojom::WindowManager::kShowState_Property)) {
+    return ui::mojom::ShowState::DEFAULT;
+  }
+
+  return static_cast<ui::mojom::ShowState>(window->GetSharedProperty<int32_t>(
+      ui::mojom::WindowManager::kShowState_Property));
+}
+
 }  // namespace
 
-class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
+class NativeWidgetMus::MusWindowObserver : public ui::WindowObserver {
  public:
   explicit MusWindowObserver(NativeWidgetMus* native_widget_mus)
       : native_widget_mus_(native_widget_mus),
-        show_state_(mus::mojom::ShowState::DEFAULT) {
+        show_state_(ui::mojom::ShowState::DEFAULT) {
     mus_window()->AddObserver(this);
   }
 
@@ -380,77 +399,73 @@ class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
     mus_window()->RemoveObserver(this);
   }
 
-  mus::mojom::ShowState show_state() { return show_state_; }
-
-  // mus::WindowObserver:
-  void OnWindowVisibilityChanging(mus::Window* window) override {
+  // ui::WindowObserver:
+  void OnWindowVisibilityChanging(ui::Window* window) override {
     native_widget_mus_->OnMusWindowVisibilityChanging(window);
   }
-  void OnWindowVisibilityChanged(mus::Window* window) override {
+  void OnWindowVisibilityChanged(ui::Window* window) override {
     native_widget_mus_->OnMusWindowVisibilityChanged(window);
   }
-  void OnWindowPredefinedCursorChanged(mus::Window* window,
-                                       mus::mojom::Cursor cursor) override {
+  void OnWindowPredefinedCursorChanged(ui::Window* window,
+                                       ui::mojom::Cursor cursor) override {
     DCHECK_EQ(window, mus_window());
     native_widget_mus_->set_last_cursor(cursor);
   }
   void OnWindowSharedPropertyChanged(
-      mus::Window* window,
+      ui::Window* window,
       const std::string& name,
       const std::vector<uint8_t>* old_data,
       const std::vector<uint8_t>* new_data) override {
-    if (name != mus::mojom::WindowManager::kShowState_Property)
+    if (name != ui::mojom::WindowManager::kShowState_Property)
       return;
-    mus::mojom::ShowState show_state =
-        static_cast<mus::mojom::ShowState>(window->GetSharedProperty<int32_t>(
-            mus::mojom::WindowManager::kShowState_Property));
+    const ui::mojom::ShowState show_state = GetShowState(window);
     if (show_state == show_state_)
       return;
     show_state_ = show_state;
     ui::PlatformWindowState state = ui::PLATFORM_WINDOW_STATE_UNKNOWN;
     switch (show_state_) {
-      case mus::mojom::ShowState::MINIMIZED:
+      case ui::mojom::ShowState::MINIMIZED:
         state = ui::PLATFORM_WINDOW_STATE_MINIMIZED;
         break;
-      case mus::mojom::ShowState::MAXIMIZED:
+      case ui::mojom::ShowState::MAXIMIZED:
         state = ui::PLATFORM_WINDOW_STATE_MAXIMIZED;
         break;
-      case mus::mojom::ShowState::DEFAULT:
-      case mus::mojom::ShowState::INACTIVE:
-      case mus::mojom::ShowState::NORMAL:
-      case mus::mojom::ShowState::DOCKED:
+      case ui::mojom::ShowState::DEFAULT:
+      case ui::mojom::ShowState::INACTIVE:
+      case ui::mojom::ShowState::NORMAL:
+      case ui::mojom::ShowState::DOCKED:
         // TODO(sky): support docked.
         state = ui::PLATFORM_WINDOW_STATE_NORMAL;
         break;
-      case mus::mojom::ShowState::FULLSCREEN:
+      case ui::mojom::ShowState::FULLSCREEN:
         state = ui::PLATFORM_WINDOW_STATE_FULLSCREEN;
         break;
     }
     platform_window_delegate()->OnWindowStateChanged(state);
   }
-  void OnWindowDestroyed(mus::Window* window) override {
+  void OnWindowDestroyed(ui::Window* window) override {
     DCHECK_EQ(mus_window(), window);
     platform_window_delegate()->OnClosed();
   }
-  void OnWindowBoundsChanging(mus::Window* window,
+  void OnWindowBoundsChanging(ui::Window* window,
                               const gfx::Rect& old_bounds,
                               const gfx::Rect& new_bounds) override {
     DCHECK_EQ(window, mus_window());
     window_tree_host()->SetBounds(new_bounds);
   }
-  void OnWindowFocusChanged(mus::Window* gained_focus,
-                            mus::Window* lost_focus) override {
+  void OnWindowFocusChanged(ui::Window* gained_focus,
+                            ui::Window* lost_focus) override {
     if (gained_focus == mus_window())
       platform_window_delegate()->OnActivationChanged(true);
     else if (lost_focus == mus_window())
       platform_window_delegate()->OnActivationChanged(false);
   }
-  void OnRequestClose(mus::Window* window) override {
+  void OnRequestClose(ui::Window* window) override {
     platform_window_delegate()->OnCloseRequest();
   }
 
  private:
-  mus::Window* mus_window() { return native_widget_mus_->window(); }
+  ui::Window* mus_window() { return native_widget_mus_->window(); }
   WindowTreeHostMus* window_tree_host() {
     return native_widget_mus_->window_tree_host();
   }
@@ -459,7 +474,7 @@ class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
   }
 
   NativeWidgetMus* native_widget_mus_;
-  mus::mojom::ShowState show_state_;
+  ui::mojom::ShowState show_state_;
 
   DISALLOW_COPY_AND_ASSIGN(MusWindowObserver);
 };
@@ -467,10 +482,12 @@ class NativeWidgetMus::MusWindowObserver : public mus::WindowObserver {
 class NativeWidgetMus::MusCaptureClient
     : public aura::client::DefaultCaptureClient {
  public:
-  MusCaptureClient(aura::Window* root_window, aura::Window* aura_window,
-                   mus::Window* mus_window)
+  MusCaptureClient(aura::Window* root_window,
+                   aura::Window* aura_window,
+                   ui::Window* mus_window)
       : aura::client::DefaultCaptureClient(root_window),
-        aura_window_(aura_window), mus_window_(mus_window) {}
+        aura_window_(aura_window),
+        mus_window_(mus_window) {}
   ~MusCaptureClient() override {}
 
   // aura::client::DefaultCaptureClient:
@@ -487,7 +504,7 @@ class NativeWidgetMus::MusCaptureClient
 
  private:
   aura::Window* aura_window_;
-  mus::Window* mus_window_;
+  ui::Window* mus_window_;
 
   DISALLOW_COPY_AND_ASSIGN(MusCaptureClient);
 };
@@ -496,14 +513,13 @@ class NativeWidgetMus::MusCaptureClient
 // NativeWidgetMus, public:
 
 NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
-                                 shell::Connector* connector,
-                                 mus::Window* window,
-                                 mus::mojom::SurfaceType surface_type)
+                                 ui::Window* window,
+                                 ui::mojom::SurfaceType surface_type)
     : window_(window),
-      last_cursor_(mus::mojom::Cursor::CURSOR_NULL),
+      last_cursor_(ui::mojom::Cursor::CURSOR_NULL),
       native_widget_delegate_(delegate),
       surface_type_(surface_type),
-      show_state_before_fullscreen_(mus::mojom::ShowState::DEFAULT),
+      show_state_before_fullscreen_(ui::mojom::ShowState::DEFAULT),
       ownership_(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET),
       content_(new aura::Window(this)),
       close_widget_factory_(this) {
@@ -513,35 +529,7 @@ NativeWidgetMus::NativeWidgetMus(internal::NativeWidgetDelegate* delegate,
   // TODO(fsamuel): Figure out lifetime of |window_|.
   aura::SetMusWindow(content_, window_);
   window->SetLocalProperty(kNativeWidgetMusKey, this);
-
-  // WindowTreeHost creates the compositor using the ContextFactory from
-  // aura::Env. Install |context_factory_| there so that |context_factory_| is
-  // picked up.
-  ui::ContextFactory* default_context_factory =
-      aura::Env::GetInstance()->context_factory();
-  // For Chrome, we need the GpuProcessTransportFactory so that renderer and
-  // browser pixels are composited into a single backing SoftwareOutputDeviceMus
-  // (which also requires the BitmapUploader).
-  bool needs_bitmap_uploader = false;
-  if (!default_context_factory) {
-    context_factory_.reset(
-        new SurfaceContextFactory(connector, window_, surface_type_));
-    aura::Env::GetInstance()->set_context_factory(context_factory_.get());
-  } else {
-    needs_bitmap_uploader = true;
-  }
-
   window_tree_host_.reset(new WindowTreeHostMus(this, window_));
-  if (needs_bitmap_uploader) {
-    bitmap_uploader_.reset(new bitmap_uploader::BitmapUploader(window));
-    bitmap_uploader_->Init(connector);
-    prop_.reset(
-        new ui::ViewProp(window_tree_host_->GetAcceleratedWidget(),
-                         bitmap_uploader::kBitmapUploaderForAcceleratedWidget,
-                         bitmap_uploader_.get()));
-  }
-
-  aura::Env::GetInstance()->set_context_factory(default_context_factory);
 }
 
 NativeWidgetMus::~NativeWidgetMus() {
@@ -556,8 +544,8 @@ NativeWidgetMus::~NativeWidgetMus() {
 }
 
 // static
-void NativeWidgetMus::NotifyFrameChanged(mus::WindowTreeClient* client) {
-  for (mus::Window* window : client->GetRoots()) {
+void NativeWidgetMus::NotifyFrameChanged(ui::WindowTreeClient* client) {
+  for (ui::Window* window : client->GetRoots()) {
     NativeWidgetMus* native_widget =
         window->GetLocalProperty(kNativeWidgetMusKey);
     if (native_widget && native_widget->GetWidget()->non_client_view()) {
@@ -570,11 +558,16 @@ void NativeWidgetMus::NotifyFrameChanged(mus::WindowTreeClient* client) {
 }
 
 // static
-Widget* NativeWidgetMus::GetWidgetForWindow(mus::Window* window) {
-  if (!window)
-    return nullptr;
+NativeWidgetMus* NativeWidgetMus::GetForWindow(ui::Window* window) {
+  DCHECK(window);
   NativeWidgetMus* native_widget =
       window->GetLocalProperty(kNativeWidgetMusKey);
+  return native_widget;
+}
+
+// static
+Widget* NativeWidgetMus::GetWidgetForWindow(ui::Window* window) {
+  NativeWidgetMus* native_widget = GetForWindow(window);
   if (!native_widget)
     return nullptr;
   return native_widget->GetWidget();
@@ -619,6 +612,9 @@ void NativeWidgetMus::OnActivationChanged(bool active) {
 }
 
 void NativeWidgetMus::UpdateClientArea() {
+  if (is_parallel_widget_in_window_manager())
+    return;
+
   NonClientView* non_client_view =
       native_widget_delegate_->AsWidget()->non_client_view();
   if (!non_client_view || !non_client_view->client_view())
@@ -641,28 +637,32 @@ void NativeWidgetMus::ConfigurePropertiesForNewWindow(
   properties->insert(init_params.mus_properties.begin(),
                      init_params.mus_properties.end());
   if (!init_params.bounds.IsEmpty()) {
-    (*properties)[mus::mojom::WindowManager::kUserSetBounds_Property] =
+    (*properties)[ui::mojom::WindowManager::kUserSetBounds_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(init_params.bounds);
   }
   if (!init_params.name.empty()) {
-    (*properties)[mus::mojom::WindowManager::kName_Property] =
+    (*properties)[ui::mojom::WindowManager::kName_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(init_params.name);
   }
-  (*properties)[mus::mojom::WindowManager::kAlwaysOnTop_Property] =
+  (*properties)[ui::mojom::WindowManager::kAlwaysOnTop_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(init_params.keep_on_top);
 
   if (!Widget::RequiresNonClientView(init_params.type))
     return;
 
-  (*properties)[mus::mojom::WindowManager::kWindowType_Property] =
+  (*properties)[ui::mojom::WindowManager::kWindowType_Property] =
       mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(
-          mojo::ConvertTo<mus::mojom::WindowType>(init_params.type)));
-  (*properties)[mus::mojom::WindowManager::kResizeBehavior_Property] =
-      mojo::ConvertTo<std::vector<uint8_t>>(
-          ResizeBehaviorFromDelegate(init_params.delegate));
+          mojo::ConvertTo<ui::mojom::WindowType>(init_params.type)));
+  if (init_params.delegate &&
+      properties->count(ui::mojom::WindowManager::kResizeBehavior_Property) ==
+          0) {
+    (*properties)[ui::mojom::WindowManager::kResizeBehavior_Property] =
+        mojo::ConvertTo<std::vector<uint8_t>>(
+            ResizeBehaviorFromDelegate(init_params.delegate));
+  }
   SkBitmap app_icon = AppIconFromDelegate(init_params.delegate);
   if (!app_icon.isNull()) {
-    (*properties)[mus::mojom::WindowManager::kWindowAppIcon_Property] =
+    (*properties)[ui::mojom::WindowManager::kWindowAppIcon_Property] =
         mojo::ConvertTo<std::vector<uint8_t>>(app_icon);
   }
 }
@@ -681,6 +681,7 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   ownership_ = params.ownership;
   window_->SetCanFocus(params.activatable ==
                        Widget::InitParams::ACTIVATABLE_YES);
+  window_->SetCanAcceptEvents(params.accept_events);
 
   window_tree_host_->AddObserver(this);
   window_tree_host_->InitHost();
@@ -695,12 +696,12 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
   aura::client::SetScreenPositionClient(hosted_window,
                                         screen_position_client_.get());
 
-  // TODO(erg): Remove this check when ash/mus/frame/move_event_handler.cc's
-  // direct usage of mus::Window::SetPredefinedCursor() is switched to a
+  // TODO(erg): Remove this check when ash/mus/move_event_handler.cc's
+  // direct usage of ui::Window::SetPredefinedCursor() is switched to a
   // private method on WindowManagerClient.
-  if (surface_type_ == mus::mojom::SurfaceType::DEFAULT) {
+  if (!is_parallel_widget_in_window_manager()) {
     cursor_manager_.reset(new wm::CursorManager(
-        base::WrapUnique(new NativeCursorManagerMus(window_))));
+        base::MakeUnique<NativeCursorManagerMus>(window_)));
     aura::client::SetCursorClient(hosted_window, cursor_manager_.get());
   }
 
@@ -716,12 +717,13 @@ void NativeWidgetMus::InitNativeWidget(const Widget::InitParams& params) {
     content_->Show();
   content_->SetTransparent(true);
   content_->SetFillsBoundsCompletely(false);
+  content_->set_ignore_events(!params.accept_events);
   hosted_window->AddChild(content_);
 
   // Set-up transiency if appropriate.
   if (params.parent && !params.child) {
     aura::Window* parent_root = params.parent->GetRootWindow();
-    mus::Window* parent_mus = parent_root->GetProperty(kMusWindow);
+    ui::Window* parent_mus = parent_root->GetProperty(kMusWindow);
     if (parent_mus)
       parent_mus->AddTransientWindow(window_);
   }
@@ -742,7 +744,7 @@ void NativeWidgetMus::OnWidgetInitDone() {
   // The client area is calculated from the NonClientView. During
   // InitNativeWidget() the NonClientView has not been created. When this
   // function is called the NonClientView has been created, so that we can
-  // correctly calculate the client area and push it to the mus::Window.
+  // correctly calculate the client area and push it to the ui::Window.
   UpdateClientArea();
   UpdateHitTestMask();
 }
@@ -804,14 +806,14 @@ void NativeWidgetMus::ViewRemoved(View* view) {
 // used safely in a world where we separate things with mojo. They should be
 // removed; not ported.
 void NativeWidgetMus::SetNativeWindowProperty(const char* name, void* value) {
-  // TODO(beng): push properties to mus::Window.
-  // NOTIMPLEMENTED();
+  native_window_properties_[name] = value;
 }
 
 void* NativeWidgetMus::GetNativeWindowProperty(const char* name) const {
-  // TODO(beng): pull properties to mus::Window.
-  // NOTIMPLEMENTED();
-  return nullptr;
+  auto it = native_window_properties_.find(name);
+  if (it == native_window_properties_.end())
+    return nullptr;
+  return it->second;
 }
 
 TooltipManager* NativeWidgetMus::GetTooltipManager() const {
@@ -838,9 +840,11 @@ ui::InputMethod* NativeWidgetMus::GetInputMethod() {
 }
 
 void NativeWidgetMus::CenterWindow(const gfx::Size& size) {
+  if (is_parallel_widget_in_window_manager())
+    return;
   // TODO(beng): clear user-placed property and set preferred size property.
   window_->SetSharedProperty<gfx::Size>(
-      mus::mojom::WindowManager::kPreferredSize_Property, size);
+      ui::mojom::WindowManager::kPreferredSize_Property, size);
 
   gfx::Rect bounds = display::Screen::GetScreen()
                          ->GetDisplayNearestWindow(content_)
@@ -856,10 +860,10 @@ void NativeWidgetMus::GetWindowPlacement(
 }
 
 bool NativeWidgetMus::SetWindowTitle(const base::string16& title) {
-  if (!window_)
+  if (!window_ || is_parallel_widget_in_window_manager())
     return false;
   const char* kWindowTitle_Property =
-      mus::mojom::WindowManager::kWindowTitle_Property;
+      ui::mojom::WindowManager::kWindowTitle_Property;
   const base::string16 current_title =
       window_->HasSharedProperty(kWindowTitle_Property)
           ? window_->GetSharedProperty<base::string16>(kWindowTitle_Property)
@@ -872,8 +876,11 @@ bool NativeWidgetMus::SetWindowTitle(const base::string16& title) {
 
 void NativeWidgetMus::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                      const gfx::ImageSkia& app_icon) {
+  if (is_parallel_widget_in_window_manager())
+    return;
+
   const char* const kWindowAppIcon_Property =
-      mus::mojom::WindowManager::kWindowAppIcon_Property;
+      ui::mojom::WindowManager::kWindowAppIcon_Property;
 
   if (!app_icon.isNull()) {
     // Send the app icon 1x bitmap to the window manager.
@@ -908,7 +915,7 @@ gfx::Rect NativeWidgetMus::GetRestoredBounds() const {
   // not in either state.
   if (IsMinimized() || IsMaximized() || IsFullscreen()) {
     const char* kRestoreBounds_Property =
-        mus::mojom::WindowManager::kRestoreBounds_Property;
+        ui::mojom::WindowManager::kRestoreBounds_Property;
     if (window_->HasSharedProperty(kRestoreBounds_Property))
       return window_->GetSharedProperty<gfx::Rect>(kRestoreBounds_Property);
   }
@@ -954,7 +961,7 @@ void NativeWidgetMus::StackBelow(gfx::NativeView native_view) {
   // NOTIMPLEMENTED();
 }
 
-void NativeWidgetMus::SetShape(SkRegion* shape) {
+void NativeWidgetMus::SetShape(std::unique_ptr<SkRegion> shape) {
   // NOTIMPLEMENTED();
 }
 
@@ -981,9 +988,9 @@ void NativeWidgetMus::Hide() {
   if (!(window_ && window_tree_host_))
     return;
 
-  window_tree_host_->Hide();
+  // NOTE: |window_tree_host_| and |window_| visibility is updated in
+  // OnMusWindowVisibilityChanged().
   window_->SetVisible(false);
-  GetNativeWindow()->Hide();
 }
 
 void NativeWidgetMus::ShowMaximizedWithBounds(
@@ -995,9 +1002,9 @@ void NativeWidgetMus::ShowWithWindowState(ui::WindowShowState state) {
   if (!(window_ && window_tree_host_))
     return;
 
-  window_tree_host_->Show();
+  // NOTE: |window_tree_host_| and |window_| visibility is updated in
+  // OnMusWindowVisibilityChanged().
   window_->SetVisible(true);
-  GetNativeWindow()->Show();
   if (native_widget_delegate_->CanActivate()) {
     if (state != ui::SHOW_STATE_INACTIVE)
       Activate();
@@ -1024,71 +1031,73 @@ void NativeWidgetMus::Deactivate() {
 }
 
 bool NativeWidgetMus::IsActive() const {
-  mus::Window* focused =
+  ui::Window* focused =
       window_ ? window_->window_tree()->GetFocusedWindow() : nullptr;
   return focused && window_->Contains(focused);
 }
 
 void NativeWidgetMus::SetAlwaysOnTop(bool always_on_top) {
-  if (window_) {
+  if (window_ && !is_parallel_widget_in_window_manager()) {
     window_->SetSharedProperty<bool>(
-        mus::mojom::WindowManager::kAlwaysOnTop_Property, always_on_top);
+        ui::mojom::WindowManager::kAlwaysOnTop_Property, always_on_top);
   }
 }
 
 bool NativeWidgetMus::IsAlwaysOnTop() const {
   return window_ &&
          window_->HasSharedProperty(
-             mus::mojom::WindowManager::kAlwaysOnTop_Property) &&
+             ui::mojom::WindowManager::kAlwaysOnTop_Property) &&
          window_->GetSharedProperty<bool>(
-             mus::mojom::WindowManager::kAlwaysOnTop_Property);
+             ui::mojom::WindowManager::kAlwaysOnTop_Property);
 }
 
 void NativeWidgetMus::SetVisibleOnAllWorkspaces(bool always_visible) {
   // Not needed for chromeos.
 }
 
+bool NativeWidgetMus::IsVisibleOnAllWorkspaces() const {
+  return false;
+}
+
 void NativeWidgetMus::Maximize() {
-  SetShowState(mus::mojom::ShowState::MAXIMIZED);
+  SetShowState(ui::mojom::ShowState::MAXIMIZED);
 }
 
 void NativeWidgetMus::Minimize() {
-  SetShowState(mus::mojom::ShowState::MINIMIZED);
+  SetShowState(ui::mojom::ShowState::MINIMIZED);
 }
 
 bool NativeWidgetMus::IsMaximized() const {
-  return mus_window_observer_ &&
-      mus_window_observer_->show_state() == mus::mojom::ShowState::MAXIMIZED;
+  return GetShowState(window_) == ui::mojom::ShowState::MAXIMIZED;
 }
 
 bool NativeWidgetMus::IsMinimized() const {
-  return mus_window_observer_ &&
-      mus_window_observer_->show_state() == mus::mojom::ShowState::MINIMIZED;
+  return GetShowState(window_) == ui::mojom::ShowState::MINIMIZED;
 }
 
 void NativeWidgetMus::Restore() {
-  SetShowState(mus::mojom::ShowState::NORMAL);
+  SetShowState(ui::mojom::ShowState::NORMAL);
 }
 
 void NativeWidgetMus::SetFullscreen(bool fullscreen) {
   if (IsFullscreen() == fullscreen)
     return;
   if (fullscreen) {
-    show_state_before_fullscreen_ = mus_window_observer_->show_state();
-    // TODO(markdittmer): Fullscreen not implemented in mus::Window.
+    show_state_before_fullscreen_ = GetShowState(window_);
+    // TODO(markdittmer): Fullscreen not implemented in ui::Window.
   } else {
     switch (show_state_before_fullscreen_) {
-      case mus::mojom::ShowState::MAXIMIZED:
+      case ui::mojom::ShowState::MAXIMIZED:
         Maximize();
         break;
-      case mus::mojom::ShowState::MINIMIZED:
+      case ui::mojom::ShowState::MINIMIZED:
         Minimize();
         break;
-      case mus::mojom::ShowState::DEFAULT:
-      case mus::mojom::ShowState::NORMAL:
-      case mus::mojom::ShowState::INACTIVE:
-      case mus::mojom::ShowState::FULLSCREEN:
-      case mus::mojom::ShowState::DOCKED:
+      case ui::mojom::ShowState::DEFAULT:
+      case ui::mojom::ShowState::NORMAL:
+      case ui::mojom::ShowState::INACTIVE:
+      case ui::mojom::ShowState::FULLSCREEN:
+      case ui::mojom::ShowState::DOCKED:
         // TODO(sad): This may not be sufficient.
         Restore();
         break;
@@ -1097,8 +1106,7 @@ void NativeWidgetMus::SetFullscreen(bool fullscreen) {
 }
 
 bool NativeWidgetMus::IsFullscreen() const {
-  return mus_window_observer_ &&
-      mus_window_observer_->show_state() == mus::mojom::ShowState::FULLSCREEN;
+  return GetShowState(window_) == ui::mojom::ShowState::FULLSCREEN;
 }
 
 void NativeWidgetMus::SetOpacity(float opacity) {
@@ -1134,7 +1142,7 @@ void NativeWidgetMus::SetCursor(gfx::NativeCursor cursor) {
   // also send an image, but as the cursor code is currently written, the image
   // is in a platform native format that's already uploaded to the window
   // server.
-  mus::mojom::Cursor new_cursor = mus::mojom::Cursor(cursor.native_type());
+  ui::mojom::Cursor new_cursor = ui::mojom::Cursor(cursor.native_type());
   if (last_cursor_ != new_cursor)
     window_->SetPredefinedCursor(new_cursor);
 }
@@ -1147,7 +1155,7 @@ bool NativeWidgetMus::IsMouseEventsEnabled() const {
 void NativeWidgetMus::ClearNativeFocus() {
   if (!IsActive())
     return;
-  mus::Window* focused =
+  ui::Window* focused =
       window_ ? window_->window_tree()->GetFocusedWindow() : nullptr;
   if (focused && window_->Contains(focused) && focused != window_)
     window_->SetFocus();
@@ -1166,12 +1174,31 @@ Widget::MoveLoopResult NativeWidgetMus::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  // NOTIMPLEMENTED();
-  return Widget::MOVE_LOOP_CANCELED;
+  ReleaseCapture();
+
+  base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
+  base::MessageLoop::ScopedNestableTaskAllower allow_nested(loop);
+  base::RunLoop run_loop;
+
+  ui::mojom::MoveLoopSource mus_source =
+      source == Widget::MOVE_LOOP_SOURCE_MOUSE
+          ? ui::mojom::MoveLoopSource::MOUSE
+          : ui::mojom::MoveLoopSource::TOUCH;
+
+  bool success = false;
+  gfx::Point cursor_location =
+      display::Screen::GetScreen()->GetCursorScreenPoint();
+  window_->PerformWindowMove(
+      mus_source, cursor_location,
+      base::Bind(OnMoveLoopEnd, &success, run_loop.QuitClosure()));
+
+  run_loop.Run();
+
+  return success ? Widget::MOVE_LOOP_SUCCESSFUL : Widget::MOVE_LOOP_CANCELED;
 }
 
 void NativeWidgetMus::EndMoveLoop() {
-  // NOTIMPLEMENTED();
+  window_->CancelWindowMove();
 }
 
 void NativeWidgetMus::SetVisibilityChangedAnimationsEnabled(bool value) {
@@ -1202,11 +1229,11 @@ bool NativeWidgetMus::IsTranslucentWindowOpacitySupported() const {
 }
 
 void NativeWidgetMus::OnSizeConstraintsChanged() {
-  if (!window_)
+  if (!window_ || is_parallel_widget_in_window_manager())
     return;
 
   window_->SetSharedProperty<int32_t>(
-      mus::mojom::WindowManager::kResizeBehavior_Property,
+      ui::mojom::WindowManager::kResizeBehavior_Property,
       ResizeBehaviorFromDelegate(GetWidget()->widget_delegate()));
 }
 
@@ -1231,18 +1258,8 @@ gfx::Size NativeWidgetMus::GetMaximumSize() const {
 
 void NativeWidgetMus::OnBoundsChanged(const gfx::Rect& old_bounds,
                                       const gfx::Rect& new_bounds) {
-  // Assume that if the old bounds was completely empty a move happened. This
-  // handles the case of a maximize animation acquiring the layer (acquiring a
-  // layer results in clearing the bounds).
-  if (old_bounds.origin() != new_bounds.origin() ||
-      (old_bounds == gfx::Rect(0, 0, 0, 0) && !new_bounds.IsEmpty())) {
-    native_widget_delegate_->OnNativeWidgetMove();
-  }
-  if (old_bounds.size() != new_bounds.size()) {
-    native_widget_delegate_->OnNativeWidgetSizeChanged(new_bounds.size());
-    UpdateClientArea();
-    UpdateHitTestMask();
-  }
+  // This is handled in OnHost{Resized,Moved}() like DesktopNativeWidgetAura
+  // instead of here like in NativeWidgetAura.
 }
 
 gfx::NativeCursor NativeWidgetMus::GetCursor(const gfx::Point& point) {
@@ -1294,11 +1311,11 @@ void NativeWidgetMus::GetHitTestMask(gfx::Path* mask) const {
   native_widget_delegate_->GetHitTestMask(mask);
 }
 
-void NativeWidgetMus::SetShowState(mus::mojom::ShowState show_state) {
+void NativeWidgetMus::SetShowState(ui::mojom::ShowState show_state) {
   if (!window_)
     return;
   window_->SetSharedProperty<int32_t>(
-      mus::mojom::WindowManager::kShowState_Property,
+      ui::mojom::WindowManager::kShowState_Property,
       static_cast<int32_t>(show_state));
 }
 
@@ -1345,12 +1362,24 @@ void NativeWidgetMus::OnGestureEvent(ui::GestureEvent* event) {
   native_widget_delegate_->OnGestureEvent(event);
 }
 
+void NativeWidgetMus::OnHostResized(const aura::WindowTreeHost* host) {
+  native_widget_delegate_->OnNativeWidgetSizeChanged(
+      host->window()->bounds().size());
+  UpdateClientArea();
+  UpdateHitTestMask();
+}
+
+void NativeWidgetMus::OnHostMoved(const aura::WindowTreeHost* host,
+                                  const gfx::Point& new_origin) {
+  native_widget_delegate_->OnNativeWidgetMove();
+}
+
 void NativeWidgetMus::OnHostCloseRequested(const aura::WindowTreeHost* host) {
   GetWidget()->Close();
 }
 
 void NativeWidgetMus::OnWindowInputEvent(
-    mus::Window* view,
+    ui::Window* view,
     const ui::Event& event_in,
     std::unique_ptr<base::Callback<void(EventResult)>>* ack_callback) {
   // Take ownership of the callback, indicating that we will handle it.
@@ -1366,14 +1395,14 @@ void NativeWidgetMus::OnWindowInputEvent(
   // |ack_handler| acks the event on destruction if necessary.
 }
 
-void NativeWidgetMus::OnMusWindowVisibilityChanging(mus::Window* window) {
+void NativeWidgetMus::OnMusWindowVisibilityChanging(ui::Window* window) {
   if (window == window_) {
     native_widget_delegate_->OnNativeWidgetVisibilityChanging(
         !window->visible());
   }
 }
 
-void NativeWidgetMus::OnMusWindowVisibilityChanged(mus::Window* window) {
+void NativeWidgetMus::OnMusWindowVisibilityChanged(ui::Window* window) {
   if (window != window_)
     return;
 
@@ -1390,7 +1419,7 @@ void NativeWidgetMus::OnMusWindowVisibilityChanged(mus::Window* window) {
 void NativeWidgetMus::UpdateHitTestMask() {
   // The window manager (or other underlay window provider) is not allowed to
   // set a hit test mask, as that could interfere with a client app mask.
-  if (surface_type_ == mus::mojom::SurfaceType::UNDERLAY)
+  if (is_parallel_widget_in_window_manager())
     return;
 
   if (!native_widget_delegate_->HasHitTestMask()) {

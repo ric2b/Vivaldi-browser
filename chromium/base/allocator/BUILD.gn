@@ -13,8 +13,10 @@ declare_args() {
   enable_debugallocation = is_debug
 }
 
-# Allocator shim is only enabled for Release static builds.
-win_use_allocator_shim = is_win && !is_component_build && !is_debug
+# The Windows-only allocator shim is only enabled for Release static builds, and
+# is mutually exclusive with the generalized shim.
+win_use_allocator_shim = is_win && !is_component_build && !is_debug &&
+                         !use_experimental_allocator_shim && !is_asan
 
 # This "allocator" meta-target will forward to the default allocator according
 # to the build settings.
@@ -71,6 +73,18 @@ config("tcmalloc_flags") {
       # typedefs.
       "-Wno-unused-private-field",
     ]
+  } else {
+    cflags = []
+  }
+
+  if (is_linux || is_android) {
+    # We enable all warnings by default, but upstream disables a few.
+    # Keep "-Wno-*" flags in sync with upstream by comparing against:
+    # http://code.google.com/p/google-perftools/source/browse/trunk/Makefile.am
+    cflags += [
+      "-Wno-sign-compare",
+      "-Wno-unused-result",
+    ]
   }
 }
 
@@ -81,6 +95,8 @@ if (win_use_allocator_shim) {
     sources = [
       "allocator_shim_win.cc",
       "allocator_shim_win.h",
+      "winheap_stubs_win.cc",
+      "winheap_stubs_win.h",
     ]
     configs += [ ":allocator_shim_define" ]
   }
@@ -228,14 +244,6 @@ if (use_allocator == "tcmalloc") {
         "$tcmalloc_dir/src/windows/port.h",
       ]
 
-      # We enable all warnings by default, but upstream disables a few.
-      # Keep "-Wno-*" flags in sync with upstream by comparing against:
-      # http://code.google.com/p/google-perftools/source/browse/trunk/Makefile.am
-      cflags = [
-        "-Wno-sign-compare",
-        "-Wno-unused-result",
-      ]
-
       # Compiling tcmalloc with -fvisibility=default is only necessary when
       # not using the allocator shim, which provides the correct visibility
       # annotations for those symbols which need to be exported (see
@@ -272,7 +280,10 @@ if (use_allocator == "tcmalloc") {
 
 buildflag_header("features") {
   header = "features.h"
-  flags = [ "USE_EXPERIMENTAL_ALLOCATOR_SHIM=$use_experimental_allocator_shim" ]
+  flags = [
+    "USE_EXPERIMENTAL_ALLOCATOR_SHIM=$use_experimental_allocator_shim",
+    "ENABLE_WIN_ALLOCATOR_SHIM_TESTS=($use_experimental_allocator_shim || $win_use_allocator_shim)",
+  ]
 }
 
 if (use_experimental_allocator_shim) {
@@ -302,7 +313,14 @@ if (use_experimental_allocator_shim) {
       "allocator_shim_override_cpp_symbols.h",
       "allocator_shim_override_libc_symbols.h",
     ]
-    if (is_linux && use_allocator == "tcmalloc") {
+    if (is_win) {
+      sources += [
+        "allocator_shim_default_dispatch_to_winheap.cc",
+        "allocator_shim_override_ucrt_symbols_win.h",
+        "winheap_stubs_win.cc",
+        "winheap_stubs_win.h",
+      ]
+    } else if (is_linux && use_allocator == "tcmalloc") {
       sources += [
         "allocator_shim_default_dispatch_to_tcmalloc.cc",
         "allocator_shim_override_glibc_weak_symbols.h",

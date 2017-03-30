@@ -7,9 +7,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/audio/StereoPanner.h"
 #include "wtf/MathExtras.h"
 
@@ -59,7 +59,7 @@ void StereoPannerHandler::process(size_t framesToProcess)
 
     if (m_pan->hasSampleAccurateValues()) {
         // Apply sample-accurate panning specified by AudioParam automation.
-        ASSERT(framesToProcess <= m_sampleAccuratePanValues.size());
+        DCHECK_LE(framesToProcess, m_sampleAccuratePanValues.size());
         if (framesToProcess <= m_sampleAccuratePanValues.size()) {
             float* panValues = m_sampleAccuratePanValues.data();
             m_pan->calculateSampleAccurateValues(panValues, framesToProcess);
@@ -75,15 +75,15 @@ void StereoPannerHandler::initialize()
     if (isInitialized())
         return;
 
-    m_stereoPanner = Spatializer::create(Spatializer::PanningModelEqualPower, sampleRate());
+    m_stereoPanner = StereoPanner::create(sampleRate());
 
     AudioHandler::initialize();
 }
 
 void StereoPannerHandler::setChannelCount(unsigned long channelCount, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     // A PannerNode only supports 1 or 2 channels
     if (channelCount > 0 && channelCount <= 2) {
@@ -107,8 +107,8 @@ void StereoPannerHandler::setChannelCount(unsigned long channelCount, ExceptionS
 
 void StereoPannerHandler::setChannelCountMode(const String& mode, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     ChannelCountMode oldMode = m_channelCountMode;
 
@@ -134,14 +134,14 @@ void StereoPannerHandler::setChannelCountMode(const String& mode, ExceptionState
 
 // ----------------------------------------------------------------
 
-StereoPannerNode::StereoPannerNode(AbstractAudioContext& context)
+StereoPannerNode::StereoPannerNode(BaseAudioContext& context)
     : AudioNode(context)
     , m_pan(AudioParam::create(context, ParamTypeStereoPannerPan, 0, -1, 1))
 {
     setHandler(StereoPannerHandler::create(*this, context.sampleRate(), m_pan->handler()));
 }
 
-StereoPannerNode* StereoPannerNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+StereoPannerNode* StereoPannerNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 

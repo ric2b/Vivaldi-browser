@@ -17,6 +17,8 @@
 #include "chrome/browser/ui/toolbar/media_router_action.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 ComponentToolbarActionsFactory* testing_factory_ = nullptr;
@@ -52,10 +54,11 @@ ComponentToolbarActionsFactory::GetComponentToolbarActionForId(
     const std::string& id,
     Browser* browser,
     ToolbarActionsBar* bar) {
+  if (!vivaldi::IsVivaldiRunning()) {// See note in ToolbarActionsModel.
   // This is currently behind the extension-action-redesign flag, as it is
   // designed for the new toolbar.
   DCHECK(extensions::FeatureSwitch::extension_action_redesign()->IsEnabled());
-
+  }
   // Add component toolbar actions here.
   // This current design means that the ComponentToolbarActionsFactory is aware
   // of all actions. Since we should *not* have an excessive amount of these

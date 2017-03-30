@@ -17,6 +17,7 @@
 #include "base/process/kill.h"
 #include "base/process/process.h"
 #include "base/rand_util.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/multiprocess_test.h"
@@ -283,7 +284,7 @@ int CloudPrintMockService_Main(SetExpectationsCallback set_expectations) {
                                 &listener,
                                 service_process.io_task_runner());
 
-  main_message_loop.Run();
+  base::RunLoop().Run();
   if (!Mock::VerifyAndClearExpectations(&server))
     return kExpectationsNotMet;
   if (!g_good_shutdown)
@@ -319,7 +320,7 @@ class CloudPrintProxyPolicyStartupTest : public base::MultiProcessTest,
   void TearDown() override;
 
   scoped_refptr<base::SingleThreadTaskRunner> IOTaskRunner() {
-    return BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO);
+    return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
   }
   base::Process Launch(const std::string& name);
   void WaitForConnect();

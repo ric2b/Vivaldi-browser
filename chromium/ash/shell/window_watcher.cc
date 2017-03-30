@@ -6,13 +6,13 @@
 
 #include <utility>
 
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
+#include "ash/common/shelf/shelf.h"
 #include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shelf/shelf_widget.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_util.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/shell/window_watcher_shelf_item_delegate.h"
 #include "ash/wm/window_util.h"
@@ -96,7 +96,7 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
     return;
 
   static int image_count = 0;
-  ShelfModel* model = Shell::GetInstance()->shelf_model();
+  ShelfModel* model = WmShell::Get()->shelf_model();
   ShelfItem item;
   item.type = new_window->type() == ui::wm::WINDOW_TYPE_PANEL
                   ? ash::TYPE_APP_PANEL
@@ -113,11 +113,9 @@ void WindowWatcher::OnWindowAdded(aura::Window* new_window) {
 
   model->Add(item);
 
-  ShelfItemDelegateManager* manager =
-      Shell::GetInstance()->shelf_item_delegate_manager();
   std::unique_ptr<ShelfItemDelegate> delegate(
       new WindowWatcherShelfItemDelegate(id, this));
-  manager->SetShelfItemDelegate(id, std::move(delegate));
+  model->SetShelfItemDelegate(id, std::move(delegate));
   SetShelfIDForWindow(id, new_window);
 }
 
@@ -125,7 +123,7 @@ void WindowWatcher::OnWillRemoveWindow(aura::Window* window) {
   for (IDToWindow::iterator i = id_to_window_.begin(); i != id_to_window_.end();
        ++i) {
     if (i->second == window) {
-      ShelfModel* model = Shell::GetInstance()->shelf_model();
+      ShelfModel* model = WmShell::Get()->shelf_model();
       int index = model->ItemIndexByID(i->first);
       DCHECK_NE(-1, index);
       model->RemoveItemAt(index);

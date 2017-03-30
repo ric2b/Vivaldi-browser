@@ -39,6 +39,14 @@
 #include "wtf/Vector.h"
 #include <memory>
 
+namespace base {
+class TestDiscardableMemoryAllocator;
+} // namespace base
+
+namespace cc_blink {
+class WebCompositorSupportImpl;
+} // namespace cc_blink
+
 namespace blink {
 
 class TestingPlatformMockWebTaskRunner;
@@ -67,7 +75,7 @@ public:
     void postIdleTask(const WebTraceLocation&, WebThread::IdleTask*) override { }
     void postNonNestableIdleTask(const WebTraceLocation&, WebThread::IdleTask*) override { }
     void postIdleTaskAfterWakeup(const WebTraceLocation&, WebThread::IdleTask*) override { }
-    std::unique_ptr<WebViewScheduler> createWebViewScheduler(blink::WebView*) override { return nullptr; }
+    std::unique_ptr<WebViewScheduler> createWebViewScheduler(InterventionReporter*) override { return nullptr; }
     void suspendTimerQueue() override { }
     void resumeTimerQueue() override { }
     void addPendingNavigation(WebScheduler::NavigatingFrameType) override { }
@@ -114,6 +122,21 @@ public:
 
 protected:
     std::unique_ptr<TestingPlatformMockWebThread> m_mockWebThread;
+};
+
+class ScopedUnittestsEnvironmentSetup {
+    WTF_MAKE_NONCOPYABLE(ScopedUnittestsEnvironmentSetup);
+public:
+    ScopedUnittestsEnvironmentSetup(int argc, char** argv);
+    ~ScopedUnittestsEnvironmentSetup();
+
+private:
+    class DummyPlatform;
+    std::unique_ptr<base::TestDiscardableMemoryAllocator> m_discardableMemoryAllocator;
+    std::unique_ptr<DummyPlatform> m_platform;
+    std::unique_ptr<cc_blink::WebCompositorSupportImpl> m_compositorSupport;
+    TestingPlatformSupport::Config m_testingPlatformConfig;
+    std::unique_ptr<TestingPlatformSupport> m_testingPlatformSupport;
 };
 
 } // namespace blink

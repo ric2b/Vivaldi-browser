@@ -181,7 +181,8 @@ class PanelCalloutWidget : public views::Widget {
   }
 
   void SetAlignment(ShelfAlignment alignment) {
-    gfx::Rect callout_bounds = GetWindowBoundsInScreen();
+    WmWindow* window = WmLookup::Get()->GetWindowForWidget(this);
+    gfx::Rect callout_bounds = window->GetBounds();
     if (IsHorizontalAlignment(alignment)) {
       callout_bounds.set_width(kArrowWidth);
       callout_bounds.set_height(kArrowHeight);
@@ -189,7 +190,12 @@ class PanelCalloutWidget : public views::Widget {
       callout_bounds.set_width(kArrowHeight);
       callout_bounds.set_height(kArrowWidth);
     }
-    SetBounds(callout_bounds);
+    WmWindow* parent = window->GetParent();
+    // It's important this go through WmWindow and not Widget. Going through
+    // Widget means it may move do a different screen, we don't want that.
+    window->SetBounds(callout_bounds);
+    // Setting the bounds should not trigger changing the parent.
+    DCHECK_EQ(parent, window->GetParent());
     if (background_->alignment() != alignment) {
       background_->set_alignment(alignment);
       SchedulePaintInRect(gfx::Rect(callout_bounds.size()));
@@ -364,6 +370,7 @@ void PanelLayoutManager::OnWillRemoveWindowFromLayout(WmWindow* child) {}
 void PanelLayoutManager::OnWindowRemovedFromLayout(WmWindow* child) {
   if (child->GetType() == ui::wm::WINDOW_TYPE_POPUP)
     return;
+
   PanelList::iterator found =
       std::find(panel_windows_.begin(), panel_windows_.end(), child);
   if (found != panel_windows_.end()) {
@@ -829,6 +836,8 @@ void PanelLayoutManager::UpdateCallouts() {
         callout_bounds);
 
     callout_widget_window->SetBoundsDirect(callout_bounds);
+    DCHECK_EQ(panel_container_, callout_widget_window->GetParent());
+    DCHECK_EQ(panel_container_, panel->GetParent());
     panel_container_->StackChildAbove(callout_widget_window, panel);
 
     ui::Layer* layer = callout_widget_window->GetLayer();

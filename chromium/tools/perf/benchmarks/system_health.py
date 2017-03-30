@@ -16,47 +16,6 @@ import page_sets
 _IGNORED_STATS_RE = re.compile(r'_(std|count|max|min|sum|pct_\d{4}(_\d+)?)$')
 
 
-class _SystemHealthBenchmark(perf_benchmark.PerfBenchmark):
-  TRACING_CATEGORIES = [
-    'benchmark',
-    'navigation',
-    'blink.user_timing',
-  ]
-
-  def CreateTimelineBasedMeasurementOptions(self):
-    options = timeline_based_measurement.Options()
-    options.config.chrome_trace_config.SetCategoryFilter(
-        chrome_trace_category_filter.ChromeTraceCategoryFilter(','.join(
-            self.TRACING_CATEGORIES)))
-    options.SetTimelineBasedMetric('systemHealthMetrics')
-    return options
-
-  @classmethod
-  def ShouldDisable(cls, browser):
-    # http://crbug.com/600463
-    galaxy_s5_type_name = 'SM-G900H'
-    return browser.platform.GetDeviceTypeName() == galaxy_s5_type_name
-
-
-@benchmark.Disabled('all')  # crbug.com/613050
-class SystemHealthTop25(_SystemHealthBenchmark):
-  page_set = page_sets.Top25PageSet
-
-  @classmethod
-  def Name(cls):
-    return 'system_health.top25'
-
-
-@benchmark.Disabled('android')  # crbug.com/601953
-@benchmark.Disabled('all')  # crbug.com/613050
-class SystemHealthKeyMobileSites(_SystemHealthBenchmark):
-  page_set = page_sets.KeyMobileSitesPageSet
-
-  @classmethod
-  def Name(cls):
-    return 'system_health.key_mobile_sites'
-
-
 class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """Chrome Memory System Health Benchmark.
 
@@ -64,9 +23,6 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """
 
   def SetExtraBrowserOptions(self, options):
-    # TODO(petrcermak): Remove this and switch to log-on-retry
-    # (http://crbug.com/623058).
-    options.logging_verbosity = options.NON_VERBOSE_LOGGING
     options.AppendExtraBrowserArgs([
         # TODO(perezju): Temporary workaround to disable periodic memory dumps.
         # See: http://crbug.com/513692
@@ -78,12 +34,20 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
         chrome_trace_category_filter.ChromeTraceCategoryFilter(
             '-*,disabled-by-default-memory-infra'))
     options.config.enable_android_graphics_memtrack = True
-    options.SetTimelineBasedMetric('memoryMetric')
+    options.SetTimelineBasedMetrics(['memoryMetric'])
     return options
+
+  def CreateStorySet(self, options):
+    return page_sets.SystemHealthStorySet(platform=self.PLATFORM,
+                                          take_memory_measurement=True)
+
+  @classmethod
+  def ShouldTearDownStateAfterEachStoryRun(cls):
+    return True
 
   @classmethod
   def Name(cls):
-    return 'system_health.memory_%s' % cls.page_set.PLATFORM
+    return 'system_health.memory_%s' % cls.PLATFORM
 
   @classmethod
   def ValueCanBeAddedPredicate(cls, value, is_first_result):
@@ -94,7 +58,7 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
 
 class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
-  page_set = page_sets.DesktopSystemHealthStorySet
+  PLATFORM = 'desktop'
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
@@ -105,14 +69,16 @@ class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
 
 class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Mobile Chrome Memory System Health Benchmark."""
-  page_set = page_sets.MobileSystemHealthStorySet
+  PLATFORM = 'mobile'
 
   @classmethod
   def ShouldDisable(cls, possible_browser):
-    # http://crbug.com/612144 (reference on Nexus 5X).
-    return possible_browser.platform.GetDeviceTypeName() == 'Desktop' or (
-        possible_browser.browser_type == 'reference' and
-        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X')
+    # http://crbug.com/612144
+    if (possible_browser.browser_type == 'reference' and
+        possible_browser.platform.GetDeviceTypeName() == 'Nexus 5X'):
+      return True
+
+    return possible_browser.platform.GetDeviceTypeName() == 'Desktop'
 
 
 @benchmark.Enabled('android-webview')
@@ -128,7 +94,7 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
 
   def CreateTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options()
-    options.SetTimelineBasedMetric('webviewStartupMetric')
+    options.SetTimelineBasedMetrics(['webviewStartupMetric'])
     options.config.enable_atrace_trace = True
     options.config.enable_chrome_trace = False
     options.config.atrace_config.app_name = 'org.chromium.webview_shell'

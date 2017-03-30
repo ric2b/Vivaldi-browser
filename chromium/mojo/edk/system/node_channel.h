@@ -76,8 +76,12 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
                                          const ports::NodeName& source_node,
                                          Channel::MessagePtr message) = 0;
 #endif
-
-    virtual void OnChannelError(const ports::NodeName& node) = 0;
+    virtual void OnAcceptPeer(const ports::NodeName& from_node,
+                              const ports::NodeName& token,
+                              const ports::NodeName& peer_name,
+                              const ports::PortName& port_name) = 0;
+    virtual void OnChannelError(const ports::NodeName& node,
+                                NodeChannel* channel) = 0;
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
     virtual MachPortRelay* GetMachPortRelay() = 0;
@@ -123,6 +127,9 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
                    const ports::NodeName& token);
   void AcceptParent(const ports::NodeName& token,
                     const ports::NodeName& child_name);
+  void AcceptPeer(const ports::NodeName& sender_name,
+                  const ports::NodeName& token,
+                  const ports::PortName& port_name);
   void AddBrokerClient(const ports::NodeName& client_name,
                        base::ProcessHandle process_handle);
   void BrokerClientAdded(const ports::NodeName& client_name,

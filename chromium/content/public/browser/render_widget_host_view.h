@@ -132,7 +132,7 @@ class CONTENT_EXPORT RenderWidgetHostView {
   virtual void SetShowingContextMenu(bool showing) = 0;
 
   // Returns the currently selected text.
-  virtual base::string16 GetSelectedText() const = 0;
+  virtual base::string16 GetSelectedText() = 0;
 
   // Subclasses should override this method to set the background color. |color|
   // could be transparent or opaque.
@@ -174,6 +174,11 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // an input field, etc.
   virtual void FocusedNodeTouched(const gfx::Point& location_dips_screen,
                                   bool editable) = 0;
+
+  // Informs the view that its associated render widget has frames to draw and
+  // wants to have BeginFrame messages sent to it.  This should only be called
+  // when the value has changed.  Views must initially default to false.
+  virtual void SetNeedsBeginFrames(bool needs_begin_frames) = 0;
 
 #if defined(OS_MACOSX)
   // Return the accelerated widget which hosts the CALayers that draw the

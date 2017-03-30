@@ -32,11 +32,11 @@ public:
 
     // CanvasRenderingContext implementation
     ContextType getContextType() const override { return CanvasRenderingContext::ContextImageBitmap; }
-    bool hasAlpha() const override { return m_hasAlpha; }
     void setIsHidden(bool) override { }
     bool isContextLost() const override { return false; }
     bool paint(GraphicsContext&, const IntRect&) override;
     void setCanvasGetContextResult(RenderingContext&) final;
+    PassRefPtr<Image> getImage() const final { return m_image.get(); }
 
     // TODO(junov): Implement GPU accelerated rendering using a layer bridge
     WebLayer* platformLayer() const override { return nullptr; }
@@ -48,11 +48,16 @@ public:
     virtual ~ImageBitmapRenderingContext();
 
 private:
-    ImageBitmapRenderingContext(HTMLCanvasElement*, CanvasContextCreationAttributes, Document&);
+    ImageBitmapRenderingContext(HTMLCanvasElement*, const CanvasContextCreationAttributes&, Document&);
 
-    bool m_hasAlpha;
     RefPtr<Image> m_image;
+
+    bool isPaintable() const final { return m_image.get(); }
 };
+
+DEFINE_TYPE_CASTS(ImageBitmapRenderingContext, CanvasRenderingContext, context,
+    context->getContextType() == CanvasRenderingContext::ContextImageBitmap,
+    context.getContextType() == CanvasRenderingContext::ContextImageBitmap);
 
 } // blink
 

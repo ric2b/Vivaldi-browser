@@ -3,18 +3,20 @@
 // found in the LICENSE file.
 
 #include "base/macros.h"
-#include "mojo/public/c/system/main.h"
+#include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connector.h"
 #include "services/shell/public/cpp/interface_factory.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
 #include "services/shell/tests/shutdown/shutdown_unittest.mojom.h"
 
 namespace shell {
 
 class ShutdownClientApp
-    : public ShellClient,
+    : public Service,
       public InterfaceFactory<mojom::ShutdownTestClientController>,
       public mojom::ShutdownTestClientController,
       public mojom::ShutdownTestClient {
@@ -23,19 +25,15 @@ class ShutdownClientApp
   ~ShutdownClientApp() override {}
 
  private:
-  // shell::ShellClient:
-  void Initialize(Connector* connector, const Identity& identity,
-                  uint32_t id) override {
-    connector_ = connector;
-  }
-
-  bool AcceptConnection(Connection* connection) override {
-    connection->AddInterface<mojom::ShutdownTestClientController>(this);
+  // shell::Service:
+  bool OnConnect(const Identity& remote_identity,
+                 InterfaceRegistry* registry) override {
+    registry->AddInterface<mojom::ShutdownTestClientController>(this);
     return true;
   }
 
   // InterfaceFactory<mojom::ShutdownTestClientController>:
-  void Create(Connection* connection,
+  void Create(const Identity& remote_identity,
               mojom::ShutdownTestClientControllerRequest request) override {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -43,7 +41,8 @@ class ShutdownClientApp
   // mojom::ShutdownTestClientController:
   void ConnectAndWait(const ConnectAndWaitCallback& callback) override {
     mojom::ShutdownTestServicePtr service;
-    connector_->ConnectToInterface("mojo:shutdown_service", &service);
+    connector()->ConnectToInterface("mojo:shutdown_service",
+                                               &service);
 
     mojo::Binding<mojom::ShutdownTestClient> client_binding(this);
 
@@ -52,11 +51,15 @@ class ShutdownClientApp
 
     service->SetClient(std::move(client_ptr));
 
-    client_binding.WaitForIncomingMethodCall();
+    base::MessageLoop::ScopedNestableTaskAllower nestable_allower(
+        base::MessageLoop::current());
+    base::RunLoop run_loop;
+    client_binding.set_connection_error_handler(run_loop.QuitClosure());
+    run_loop.Run();
+
     callback.Run();
   }
 
-  Connector* connector_ = nullptr;
   mojo::BindingSet<mojom::ShutdownTestClientController> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(ShutdownClientApp);
@@ -65,7 +68,7 @@ class ShutdownClientApp
 }  // namespace shell
 
 
-MojoResult MojoMain(MojoHandle shell_handle) {
-  return shell::ApplicationRunner(new shell::ShutdownClientApp)
-      .Run(shell_handle);
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  shell::ServiceRunner runner(new shell::ShutdownClientApp);
+  return runner.Run(service_request_handle);
 }

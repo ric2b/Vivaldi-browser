@@ -1,6 +1,6 @@
 Name: opus
-URL: http://git.xiph.org/?p=opus.git
-Version: 1.1.2
+URL: http://downloads.xiph.org/releases/opus/opus-1.1.3.tar.gz
+Version: 1.1.3
 License: BSD
 License File: src/COPYING
 Security Critical: yes
@@ -12,4 +12,7 @@ This library is used by Chrome Remote Desktop and WebRTC for audio stream
 encoding/decoding.
 
 Local changes:
-- merged http://git.xiph.org/?p=opus.git;a=commitdiff;h=e70faf98b0465e4f278c72ce2d7b4ad10221a2f2
+* copy .gitignore from https://git.xiph.org/?p=opus.git;a=tree
+* set 'x' flags: "chmod 750 win32/genversion.bat"
+* Apply patch from
+  https://git.xiph.org/?p=opus.git;a=commit;h=79e8f527b0344b0897a65be35e77f7885bd99409

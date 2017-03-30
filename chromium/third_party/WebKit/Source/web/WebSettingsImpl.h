@@ -51,7 +51,6 @@ public:
     bool mainFrameResizesAreOrientationChanges() const override;
     bool shrinksViewportContentToFit() const override;
     bool viewportEnabled() const override;
-    void setAccelerated2dCanvasEnabled(bool) override;
     void setAccelerated2dCanvasMSAASampleCount(int) override;
     void setAcceleratedCompositingEnabled(bool) override;
     void setPreferCompositingToLCDTextEnabled(bool) override;
@@ -69,6 +68,7 @@ public:
     void setAntialiasedClips2dCanvasEnabled(bool) override;
     void setAutoplayExperimentMode(const WebString&) override;
     void setAutoZoomFocusedNodeToLegibleScale(bool) override;
+    void setBrowserSideNavigationEnabled(bool) override;
     void setCaretBrowsingEnabled(bool) override;
     void setClobberUserAgentInitialScaleQuirk(bool) override;
     void setCookieEnabled(bool) override;
@@ -177,7 +177,6 @@ public:
     void setTextTrackTextSize(const WebString&) override;
     void setThreadedScrollingEnabled(bool) override;
     void setTouchDragDropEnabled(bool) override;
-    void setUnifiedTextCheckerEnabled(bool) override;
     void setUsesEncodingDetector(bool) override;
     void setUseLegacyBackgroundSizeShorthandBehavior(bool) override;
     void setViewportStyle(WebViewportStyle) override;

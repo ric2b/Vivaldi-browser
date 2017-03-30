@@ -87,7 +87,7 @@ class PDFiumEngine : public PDFEngine,
   pp::Rect GetPageBoundsRect(int index) override;
   pp::Rect GetPageContentsRect(int index) override;
   pp::Rect GetPageScreenRect(int page_index) const override;
-  int GetVerticalScrollbarYPosition() override { return position_.y(); }
+  int GetVerticalScrollbarYPosition() override;
   void SetGrayscale(bool grayscale) override;
   void OnCallback(int id) override;
   int GetCharCount(int page_index) override;
@@ -104,8 +104,9 @@ class PDFiumEngine : public PDFEngine,
   bool GetPageSizeAndUniformity(pp::Size* size) override;
   void AppendBlankPages(int num_pages) override;
   void AppendPage(PDFEngine* engine, int index) override;
-  pp::Point GetScrollPosition() override;
+#if defined(PDF_ENABLE_XFA)
   void SetScrollPosition(const pp::Point& position) override;
+#endif
   bool IsProgressiveLoad() override;
   std::string GetMetadata(const std::string& key) override;
 
@@ -513,7 +514,7 @@ class PDFiumEngine : public PDFEngine,
   static void Form_GotoPage(IPDF_JSPLATFORM* param, int page_number);
   static int Form_Browse(IPDF_JSPLATFORM* param, void* file_path, int length);
 
-#ifdef PDF_USE_XFA
+#if defined(PDF_ENABLE_XFA)
   static void Form_EmailTo(FPDF_FORMFILLINFO* param,
                            FPDF_FILEHANDLER* file_handler,
                            FPDF_WIDESTRING to,
@@ -575,7 +576,7 @@ class PDFiumEngine : public PDFEngine,
   static int Form_GetLanguage(FPDF_FORMFILLINFO* param,
                               void* language,
                               int length);
-#endif  // PDF_USE_XFA
+#endif  // defined(PDF_ENABLE_XFA)
 
   // IFSDK_PAUSE callbacks
   static FPDF_BOOL Pause_NeedToPauseNow(IFSDK_PAUSE* param);
@@ -670,11 +671,11 @@ class PDFiumEngine : public PDFEngine,
   std::map<int, std::pair<int, TimerCallback> > timers_;
   int next_timer_id_;
 
-  // Holds the page index of the last page that the mouse clicked on.
+  // Holds the zero-based page index of the last page that the mouse clicked on.
   int last_page_mouse_down_;
 
-  // Holds the page index of the most visible page; refreshed by calling
-  // CalculateVisiblePages()
+  // Holds the zero-based page index of the most visible page; refreshed by
+  // calling CalculateVisiblePages()
   int most_visible_page_;
 
   // Set to true after FORM_DoDocumentJSAction/FORM_DoDocumentOpenAction have
@@ -725,9 +726,9 @@ class ScopedUnsupportedFeature {
  public:
   explicit ScopedUnsupportedFeature(PDFiumEngine* engine);
   ~ScopedUnsupportedFeature();
+
  private:
-  PDFiumEngine* engine_;
-  PDFiumEngine* old_engine_;
+  PDFiumEngine* const old_engine_;
 };
 
 class PDFiumEngineExports : public PDFEngineExports {
@@ -741,6 +742,10 @@ class PDFiumEngineExports : public PDFEngineExports {
                          int page_number,
                          const RenderingSettings& settings,
                          HDC dc) override;
+  void SetPDFEnsureTypefaceCharactersAccessible(
+      PDFEnsureTypefaceCharactersAccessible func) override;
+
+  void SetPDFUseGDIPrinting(bool enable) override;
 #endif  // defined(OS_WIN)
   bool RenderPDFPageToBitmap(const void* pdf_buffer,
                              int pdf_buffer_size,

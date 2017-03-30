@@ -1,9 +1,6 @@
 # http://crbug.com/293125
 WebRtcBrowserTest.CanMakeEmptyCallThenAddStreamsAndRenegotiate
 
-# https://crbug.com/376668
-TouchActionBrowserTest.DefaultAuto
-
 # crbug.com/395172
 WebRtcBrowserTest.CanForwardRemoteStream
 WebRtcBrowserTest.CanForwardRemoteStream720p
@@ -34,12 +31,6 @@ WebRtcBrowserTest.CallAndModifyStream
 
 # http://crbug.com/470507
 SRC_ClearKey/EncryptedMediaTest.Playback_VideoClearAudio_WebM/0
-
-# http://crbug.com/484351
-PluginTest.VerifyPluginWindowRect
-
-# http://crbug.com/484852
-PluginTest.NPObjectIdentity
 
 # http://crbug.com/500070
 DumpAccessibilityEventsTest.AccessibilityEventsListboxNext
@@ -87,7 +78,3 @@ DumpAccessibilityEventsTest.AccessibilityEventsMenuListFocus
 
 # https://crbug.com/617727
 VibrationTest.CancelVibrationFromMainFrameWhenMainFrameIsReloaded
-
-# https://crbug.com/622085
-WebRtcGetUserMediaBrowserTest.AudioInIFrameAndCloseInSuccessCb
-WebRtcGetUserMediaBrowserTest.GetUserMediaWithMandatorySourceID

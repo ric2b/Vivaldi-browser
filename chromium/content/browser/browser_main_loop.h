@@ -50,6 +50,10 @@ class MidiManager;
 }  // namespace midi
 }  // namespace media
 
+namespace memory_coordinator {
+class MemoryCoordinator;
+}  // namespace memory_coordinator
+
 namespace mojo {
 namespace edk {
 class ScopedIPCSupport;
@@ -74,6 +78,7 @@ class LoaderDelegateImpl;
 class MediaStreamManager;
 class MojoShellContext;
 class ResourceDispatcherHostImpl;
+class SaveFileManager;
 class SpeechRecognitionManagerImpl;
 class StartupTaskRunner;
 class TimeZoneMonitor;
@@ -143,6 +148,10 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   void StopStartupTracingTimer();
 
+  memory_coordinator::MemoryCoordinator* memory_coordinator() const {
+    return memory_coordinator_.get();
+  }
+
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   media::DeviceMonitorMac* device_monitor_mac() const {
     return device_monitor_mac_.get();
@@ -167,6 +176,7 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   void MainMessageLoopRun();
 
+  void InitializeMojo();
   base::FilePath GetStartupTraceFileName(
       const base::CommandLine& command_line) const;
   void InitStartupTracingForDuration(const base::CommandLine& command_line);
@@ -249,6 +259,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   // Members initialized in |PreCreateThreads()| -------------------------------
   // Torn down in ShutdownThreadsAndCleanUp.
   std::unique_ptr<base::MemoryPressureMonitor> memory_pressure_monitor_;
+  std::unique_ptr<memory_coordinator::MemoryCoordinator> memory_coordinator_;
 
   // Members initialized in |CreateThreads()| ----------------------------------
   std::unique_ptr<BrowserProcessSubThread> db_thread_;
@@ -287,6 +298,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;
   std::unique_ptr<TimeZoneMonitor> time_zone_monitor_;
+  scoped_refptr<SaveFileManager> save_file_manager_;
 
   // DO NOT add members here. Add them to the right categories above.
 

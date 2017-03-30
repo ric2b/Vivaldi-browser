@@ -111,9 +111,14 @@ ResourceFormat ZeroCopyRasterBufferProvider::GetResourceFormat(
   return resource_provider_->best_texture_format();
 }
 
-bool ZeroCopyRasterBufferProvider::GetResourceRequiresSwizzle(
+bool ZeroCopyRasterBufferProvider::IsResourceSwizzleRequired(
     bool must_support_alpha) const {
   return ResourceFormatRequiresSwizzle(GetResourceFormat(must_support_alpha));
+}
+
+bool ZeroCopyRasterBufferProvider::CanPartialRasterIntoProvidedResource()
+    const {
+  return false;
 }
 
 void ZeroCopyRasterBufferProvider::Shutdown() {}

@@ -37,16 +37,18 @@ void CredentialManagerPendingRequireUserMediationTask::AddOrigin(
 }
 
 void CredentialManagerPendingRequireUserMediationTask::
-    OnGetPasswordStoreResults(ScopedVector<autofill::PasswordForm> results) {
+    OnGetPasswordStoreResults(
+        std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
   PasswordStore* store = delegate_->GetPasswordStore();
-  for (autofill::PasswordForm* form : results) {
+  for (const auto& form : results) {
     std::string form_registrable_domain =
         net::registry_controlled_domains::GetDomainAndRegistry(
             form->origin,
             net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
     if (registrable_domains_.count(form_registrable_domain) ||
         (affiliated_realms_.count(form->signon_realm) &&
-         AffiliatedMatchHelper::IsValidAndroidCredential(*form))) {
+         AffiliatedMatchHelper::IsValidAndroidCredential(
+             PasswordStore::FormDigest(*form)))) {
       form->skip_zero_click = true;
       // Note that UpdateLogin ends up copying the form while posting a task to
       // update the PasswordStore, so it's fine to let |results| delete the

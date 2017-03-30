@@ -17,7 +17,10 @@ cr.define('settings', function() {
      */
     clearBrowsingData: function() {},
 
-    /** Initializes the dialog. */
+    /**
+     * Kick off counter updates and return initial state.
+     * @return {!Promise<void>} Signal when the setup is complete.
+     */
     initialize: function() {},
   };
 
@@ -36,7 +39,7 @@ cr.define('settings', function() {
 
     /** @override */
     initialize: function() {
-      chrome.send('initializeClearBrowsingData');
+      return cr.sendWithPromise('initializeClearBrowsingData');
     },
   };
 

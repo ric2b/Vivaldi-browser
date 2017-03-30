@@ -17,7 +17,7 @@
 #include "chrome/browser/supervised_user/supervised_users.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_store.h"
-#include "sync/api/syncable_service.h"
+#include "components/sync/api/syncable_service.h"
 
 class PersistentPrefStore;
 class Profile;
@@ -95,7 +95,7 @@ class SupervisedUserSettingsService : public KeyedService,
   void SetActive(bool active);
 
   // Whether supervised user settings are available.
-  bool IsReady();
+  bool IsReady() const;
 
   // Clears all supervised user settings and items.
   void Clear();
@@ -172,7 +172,7 @@ class SupervisedUserSettingsService : public KeyedService,
   // directly hooked up to the PrefService.
   scoped_refptr<PersistentPrefStore> store_;
 
-  Profile* profile_;
+  Profile* const profile_;
 
   bool active_;
 

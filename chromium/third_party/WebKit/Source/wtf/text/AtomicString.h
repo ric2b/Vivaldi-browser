@@ -25,6 +25,7 @@
 #include "wtf/HashTableDeletedValueType.h"
 #include "wtf/WTFExport.h"
 #include "wtf/text/CString.h"
+#include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 #include <cstring>
 #include <iosfwd>
@@ -45,7 +46,6 @@ public:
         : AtomicString(reinterpret_cast<const LChar*>(chars)) {}
     AtomicString(const LChar* chars, unsigned length);
     AtomicString(const UChar* chars, unsigned length);
-    AtomicString(const UChar* chars, unsigned length, unsigned existingHash);
     AtomicString(const UChar* chars);
 
     template<size_t inlineCapacity>
@@ -56,8 +56,6 @@ public:
     // the StringImpl is not already atomic.
     explicit AtomicString(StringImpl* impl) : m_string(add(impl)) { }
     explicit AtomicString(const String& s) : m_string(add(s.impl())) { }
-
-    AtomicString(StringImpl* baseString, unsigned start, unsigned length);
 
     // Hash table deleted values, which are only constructed and never copied or destroyed.
     AtomicString(WTF::HashTableDeletedValueType) : m_string(WTF::HashTableDeletedValue) { }
@@ -75,35 +73,46 @@ public:
 
     UChar operator[](unsigned i) const { return m_string[i]; }
 
-    bool contains(UChar c) const { return m_string.contains(c); }
-    bool contains(const LChar* s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.contains(s, caseSensitivity); }
-    bool contains(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.contains(s, caseSensitivity); }
-
-    size_t find(UChar c, size_t start = 0) const { return m_string.find(c, start); }
+    // Find characters.
+    size_t find(UChar c, unsigned start = 0) const
+        { return m_string.find(c, start); }
+    size_t find(LChar c, unsigned start = 0) const
+        { return m_string.find(c, start); }
+    size_t find(char c, unsigned start = 0) const { return find(static_cast<LChar>(c), start); }
     size_t find(CharacterMatchFunctionPtr matchFunction, unsigned start = 0) const
         { return m_string.find(matchFunction, start); }
-    size_t find(const LChar* s, size_t start = 0, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.find(s, start, caseSensitivity); }
-    size_t find(const String& s, size_t start = 0, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.find(s, start, caseSensitivity); }
 
-    bool startsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.startsWith(s, caseSensitivity); }
+    // Find substrings.
+    size_t find(const StringView& value, unsigned start = 0, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_string.find(value, start, caseSensitivity); }
+
+    // Unicode aware case insensitive string matching.
+    size_t findIgnoringCase(const StringView& value, unsigned start = 0) const
+        { return m_string.findIgnoringCase(value, start); }
+
+    // ASCII case insensitive string matching.
+    size_t findIgnoringASCIICase(const StringView& value, unsigned start = 0) const
+        { return m_string.findIgnoringASCIICase(value, start); }
+
+    bool contains(char c) const { return find(c) != kNotFound; }
+    bool contains(const StringView& value, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return find(value, 0, caseSensitivity) != kNotFound; }
+
+    // Find the last instance of a single character or string.
+    size_t reverseFind(UChar c, unsigned start = UINT_MAX) const
+        { return m_string.reverseFind(c, start); }
+    size_t reverseFind(const StringView& value, unsigned start = UINT_MAX) const
+        { return m_string.reverseFind(value, start); }
+
+    bool startsWith(const StringView& prefix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_string.startsWith(prefix, caseSensitivity); }
     bool startsWith(UChar character) const
         { return m_string.startsWith(character); }
-    template<unsigned matchLength>
-    bool startsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.startsWith<matchLength>(prefix, caseSensitivity); }
 
-    bool endsWith(const String& s, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.endsWith(s, caseSensitivity); }
+    bool endsWith(const StringView& suffix, TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
+        { return m_string.endsWith(suffix, caseSensitivity); }
     bool endsWith(UChar character) const
         { return m_string.endsWith(character); }
-    template<unsigned matchLength>
-    bool endsWith(const char (&prefix)[matchLength], TextCaseSensitivity caseSensitivity = TextCaseSensitive) const
-        { return m_string.endsWith<matchLength>(prefix, caseSensitivity); }
 
     AtomicString lower() const;
     AtomicString lowerASCII() const;
@@ -120,7 +129,7 @@ public:
     static AtomicString number(long long);
     static AtomicString number(unsigned long long);
 
-    static AtomicString number(double, unsigned precision = 6, TrailingZerosTruncatingPolicy = TruncateTrailingZeros);
+    static AtomicString number(double, unsigned precision = 6);
 
     bool isNull() const { return m_string.isNull(); }
     bool isEmpty() const { return m_string.isEmpty(); }
@@ -138,6 +147,8 @@ public:
     CString ascii() const { return m_string.ascii(); }
     CString latin1() const { return m_string.latin1(); }
     CString utf8(UTF8ConversionMode mode = LenientUTF8Conversion) const { return m_string.utf8(mode); }
+
+    size_t charactersSizeInBytes() const { return m_string.charactersSizeInBytes(); }
 
 #ifndef NDEBUG
     void show() const;
@@ -178,17 +189,6 @@ inline bool operator!=(const char* a, const AtomicString& b) { return !(b == a);
 inline bool operator!=(const String& a, const AtomicString& b) { return !equal(a.impl(), b.impl()); }
 inline bool operator!=(const Vector<UChar>& a, const AtomicString& b) { return !(a == b); }
 
-inline bool equalIgnoringCase(const AtomicString& a, const AtomicString& b) { return equalIgnoringCase(a.impl(), b.impl()); }
-inline bool equalIgnoringCase(const AtomicString& a, const LChar* b) { return equalIgnoringCase(a.impl(), b); }
-inline bool equalIgnoringCase(const AtomicString& a, const char* b) { return equalIgnoringCase(a.impl(), reinterpret_cast<const LChar*>(b)); }
-inline bool equalIgnoringCase(const AtomicString& a, const String& b) { return equalIgnoringCase(a.impl(), b.impl()); }
-inline bool equalIgnoringCase(const LChar* a, const AtomicString& b) { return equalIgnoringCase(a, b.impl()); }
-inline bool equalIgnoringCase(const char* a, const AtomicString& b) { return equalIgnoringCase(reinterpret_cast<const LChar*>(a), b.impl()); }
-inline bool equalIgnoringCase(const String& a, const AtomicString& b) { return equalIgnoringCase(a.impl(), b.impl()); }
-
-inline bool equalIgnoringASCIICase(const AtomicString& a, const AtomicString& b) { return equalIgnoringASCIICase(a.impl(), b.impl()); }
-inline bool equalIgnoringASCIICase(const AtomicString& a, const char* b) { return equalIgnoringASCIICase(a.impl(), reinterpret_cast<const LChar*>(b)); }
-
 // Define external global variables for the commonly used atomic strings.
 // These are only usable from the main thread.
 WTF_EXPORT extern const AtomicString& nullAtom;
@@ -208,6 +208,13 @@ template<> struct DefaultHash<AtomicString> {
 // Pretty printer for gtest and base/logging.*.  It prepends and appends
 // double-quotes, and escapes chracters other than ASCII printables.
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const AtomicString&);
+
+inline StringView::StringView(const AtomicString& string, unsigned offset, unsigned length)
+    : StringView(string.impl(), offset, length) {}
+inline StringView::StringView(const AtomicString& string, unsigned offset)
+    : StringView(string.impl(), offset) {}
+inline StringView::StringView(const AtomicString& string)
+    : StringView(string.impl()) {}
 
 } // namespace WTF
 

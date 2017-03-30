@@ -17,7 +17,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "cc/layers/layer.h"
-#include "cc/trees/layer_tree_host.h"
 #include "content/common/child_process_messages.h"
 #include "content/common/input/synthetic_gesture_params.h"
 #include "content/common/input/synthetic_pinch_gesture_params.h"
@@ -39,13 +38,18 @@
 #include "third_party/WebKit/public/web/WebImageCache.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/WebKit/public/web/WebPrintParams.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "third_party/skia/include/core/SkPicture.h"
+#include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkPixelRef.h"
 #include "third_party/skia/include/core/SkPixelSerializer.h"
 #include "third_party/skia/include/core/SkStream.h"
+// Note that headers in third_party/skia/src are fragile.  This is
+// an experimental, fragile, and diagnostic-only document type.
+#include "third_party/skia/src/utils/SkMultiPictureDocument.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "v8/include/v8.h"
 
@@ -96,7 +100,7 @@ class EncodingSerializer : public SkPixelSerializer {
         // interesting.
         vector.push_back(pixmap.colorType());
         vector.push_back(pixmap.alphaType());
-        return SkData::NewWithCopy(&vector.front(), vector.size());
+        return SkData::MakeWithCopy(&vector.front(), vector.size()).release();
     } else {
       SkBitmap bm;
       // The const_cast is fine, since we only read from the bitmap.
@@ -104,7 +108,7 @@ class EncodingSerializer : public SkPixelSerializer {
                            const_cast<void*>(pixmap.addr()),
                            pixmap.rowBytes())) {
         if (gfx::PNGCodec::EncodeBGRASkBitmap(bm, false, &vector)) {
-          return SkData::NewWithCopy(&vector.front(), vector.size());
+          return SkData::MakeWithCopy(&vector.front(), vector.size()).release();
         }
       }
     }
@@ -126,7 +130,7 @@ class SkPictureSerializer {
   // Each layer in the tree is serialized into a separate skp file
   // in the given directory.
   void Serialize(const cc::Layer* root_layer) {
-    for (auto* layer : *root_layer->layer_tree_host()) {
+    for (auto* layer : *root_layer->GetLayerTree()) {
       sk_sp<SkPicture> picture = layer->GetPicture();
       if (!picture)
         continue;
@@ -309,10 +313,11 @@ void OnSyntheticGestureCompleted(CallbackAndContext* callback_and_context) {
   v8::HandleScope scope(isolate);
   v8::Local<v8::Context> context = callback_and_context->GetContext();
   v8::Context::Scope context_scope(context);
+  v8::Local<v8::Function> callback = callback_and_context->GetCallback();
   WebLocalFrame* frame = WebLocalFrame::frameForContext(context);
-  if (frame) {
+  if (frame && !callback.IsEmpty()) {
     frame->callFunctionEvenIfScriptDisabled(
-        callback_and_context->GetCallback(), v8::Object::New(isolate), 0, NULL);
+        callback, v8::Object::New(isolate), 0, NULL);
   }
 }
 
@@ -486,6 +491,8 @@ gin::ObjectTemplateBuilder GpuBenchmarking::GetObjectTemplateBuilder(
       .SetMethod("setRasterizeOnlyVisibleContent",
                  &GpuBenchmarking::SetRasterizeOnlyVisibleContent)
       .SetMethod("printToSkPicture", &GpuBenchmarking::PrintToSkPicture)
+      .SetMethod("printPagesToSkPictures",
+                 &GpuBenchmarking::PrintPagesToSkPictures)
       .SetValue("DEFAULT_INPUT", 0)
       .SetValue("TOUCH_INPUT", 1)
       .SetValue("MOUSE_INPUT", 2)
@@ -526,6 +533,45 @@ void GpuBenchmarking::SetRasterizeOnlyVisibleContent() {
     return;
 
   context.compositor()->SetRasterizeOnlyVisibleContent();
+}
+
+void GpuBenchmarking::PrintPagesToSkPictures(v8::Isolate* isolate,
+                                             const std::string& filename) {
+  GpuBenchmarkingContext context;
+  if (!context.Init(true))
+    return;
+
+  base::FilePath path = base::FilePath::FromUTF8Unsafe(filename);
+  if (!base::PathIsWritable(path.DirName())) {
+    std::string msg("Path is not writable: ");
+    msg.append(path.DirName().MaybeAsASCII());
+    isolate->ThrowException(v8::Exception::Error(v8::String::NewFromUtf8(
+        isolate, msg.c_str(), v8::String::kNormalString, msg.length())));
+    return;
+  }
+  const int kWidth = 612;          // 8.5 inch
+  const int kHeight = 792;         // 11 inch
+  const int kMarginTop = 29;       // 0.40 inch
+  const int kMarginLeft = 29;      // 0.40 inch
+  const int kContentWidth = 555;   // 7.71 inch
+  const int kContentHeight = 735;  // 10.21 inch
+  blink::WebPrintParams params(blink::WebSize(kWidth, kHeight));
+  params.printerDPI = 72;
+  params.printScalingOption = blink::WebPrintScalingOptionSourceSize;
+  params.printContentArea =
+      blink::WebRect(kMarginLeft, kMarginTop, kContentWidth, kContentHeight);
+  SkFILEWStream wStream(path.MaybeAsASCII().c_str());
+  sk_sp<SkDocument> doc = SkMakeMultiPictureDocument(&wStream);
+  int page_count = context.web_frame()->printBegin(params);
+  for (int i = 0; i < page_count; ++i) {
+    SkCanvas* canvas =
+        doc->beginPage(SkIntToScalar(kWidth), SkIntToScalar(kHeight));
+    SkAutoCanvasRestore auto_restore(canvas, true);
+    canvas->translate(SkIntToScalar(kMarginLeft), SkIntToScalar(kMarginTop));
+    context.web_frame()->printPage(i, canvas);
+  }
+  context.web_frame()->printEnd();
+  doc->close();
 }
 
 void GpuBenchmarking::PrintToSkPicture(v8::Isolate* isolate,
@@ -569,7 +615,7 @@ bool GpuBenchmarking::SmoothScrollBy(gin::Arguments* args) {
     return false;
 
   float page_scale_factor = context.web_view()->pageScaleFactor();
-  blink::WebRect rect = context.render_view_impl()->GetWidget()->windowRect();
+  blink::WebRect rect = context.render_view_impl()->GetWidget()->viewRect();
 
   float pixels_to_scroll = 0;
   v8::Local<v8::Function> callback;
@@ -639,7 +685,7 @@ bool GpuBenchmarking::Swipe(gin::Arguments* args) {
     return false;
 
   float page_scale_factor = context.web_view()->pageScaleFactor();
-  blink::WebRect rect = context.render_view_impl()->GetWidget()->windowRect();
+  blink::WebRect rect = context.render_view_impl()->GetWidget()->viewRect();
 
   std::string direction = "up";
   float pixels_to_scroll = 0;
@@ -674,7 +720,7 @@ bool GpuBenchmarking::ScrollBounce(gin::Arguments* args) {
     return false;
 
   float page_scale_factor = context.web_view()->pageScaleFactor();
-  blink::WebRect rect = context.render_view_impl()->GetWidget()->windowRect();
+  blink::WebRect rect = context.render_view_impl()->GetWidget()->viewRect();
 
   std::string direction = "down";
   float distance_length = 0;
@@ -955,7 +1001,8 @@ void GpuBenchmarking::GetGpuDriverBugWorkarounds(gin::Arguments* args) {
   std::vector<std::string> gpu_driver_bug_workarounds;
   gpu::GpuChannelHost* gpu_channel =
       RenderThreadImpl::current()->GetGpuChannel();
-  if (!gpu_channel->Send(new GpuChannelMsg_GetDriverBugWorkArounds(
+  if (!gpu_channel ||
+      !gpu_channel->Send(new GpuChannelMsg_GetDriverBugWorkArounds(
           &gpu_driver_bug_workarounds))) {
     return;
   }

@@ -123,10 +123,14 @@ PassRefPtr<ClipPathOperation> StyleBuilderConverter::convertClipPath(StyleResolv
     if (value.isBasicShapeValue())
         return ShapeClipPathOperation::create(basicShapeForValue(state, value));
     if (value.isURIValue()) {
-        String cssURLValue = toCSSURIValue(value).value();
-        KURL url = state.document().completeURL(cssURLValue);
+        SVGURLReferenceResolver resolver(toCSSURIValue(value).value(), state.document());
+        // If the reference is non-local, then the fragment will remain as a
+        // null string, which makes the element lookup fail.
+        AtomicString fragmentIdentifier;
+        if (resolver.isLocal())
+            fragmentIdentifier = resolver.fragmentIdentifier();
         // TODO(fs): Doesn't work with forward or external SVG references (crbug.com/391604, crbug.com/109212, ...)
-        return ReferenceClipPathOperation::create(cssURLValue, AtomicString(url.fragmentIdentifier()));
+        return ReferenceClipPathOperation::create(toCSSURIValue(value).value(), fragmentIdentifier);
     }
     DCHECK(value.isPrimitiveValue() && toCSSPrimitiveValue(value).getValueID() == CSSValueNone);
     return nullptr;
@@ -555,6 +559,18 @@ static void convertGridLineNamesList(const CSSValue& value, size_t currentNamedG
     }
 }
 
+Vector<GridTrackSize> StyleBuilderConverter::convertGridTrackSizeList(StyleResolverState& state, const CSSValue& value)
+{
+    DCHECK(value.isValueList());
+    Vector<GridTrackSize> trackSizes;
+    for (auto& currValue : toCSSValueList(value)) {
+        DCHECK(!currValue->isGridLineNamesValue());
+        DCHECK(!currValue->isGridAutoRepeatValue());
+        trackSizes.append(convertGridTrackSize(state, *currValue));
+    }
+    return trackSizes;
+}
+
 void StyleBuilderConverter::convertGridTrackList(const CSSValue& value, Vector<GridTrackSize>& trackSizes, NamedGridLinesMap& namedGridLines, OrderedNamedGridLines& orderedNamedGridLines, Vector<GridTrackSize>& autoRepeatTrackSizes, NamedGridLinesMap& autoRepeatNamedGridLines, OrderedNamedGridLines& autoRepeatOrderedNamedGridLines, size_t& autoRepeatInsertionPoint, AutoRepeatType &autoRepeatType, StyleResolverState& state)
 {
     if (value.isPrimitiveValue()) {
@@ -750,6 +766,7 @@ StyleMotionRotation StyleBuilderConverter::convertMotionRotation(const CSSValue&
             result.angle += primitiveValue.computeDegrees();
         }
     }
+    result.angle = clampTo<float>(result.angle);
 
     return result;
 }

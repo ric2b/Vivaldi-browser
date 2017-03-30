@@ -32,12 +32,12 @@
 
 #include "platform/network/HTTPParsers.h"
 
-#include "platform/ParsingUtilities.h"
 #include "platform/weborigin/Suborigin.h"
 #include "wtf/DateMath.h"
 #include "wtf/MathExtras.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/CharacterNames.h"
+#include "wtf/text/ParsingUtilities.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 
@@ -52,12 +52,13 @@ static bool isWhitespace(UChar chr)
 
 // true if there is more to parse, after incrementing pos past whitespace.
 // Note: Might return pos == str.length()
-static inline bool skipWhiteSpace(const String& str, unsigned& pos, bool fromHttpEquivMeta)
+// if |matcher| is nullptr, isWhitespace() is used.
+static inline bool skipWhiteSpace(const String& str, unsigned& pos, CharacterMatchFunctionPtr matcher = nullptr)
 {
     unsigned len = str.length();
 
-    if (fromHttpEquivMeta) {
-        while (pos < len && str[pos] <= ' ')
+    if (matcher) {
+        while (pos < len && matcher(str[pos]))
             ++pos;
     } else {
         while (pos < len && isWhitespace(str[pos]))
@@ -91,7 +92,7 @@ static inline bool skipToken(const String& str, unsigned& pos, const char* token
 // True if the expected equals sign is seen and there is more to follow.
 static inline bool skipEquals(const String& str, unsigned &pos)
 {
-    return skipWhiteSpace(str, pos, false) && str[pos++] == '=' && skipWhiteSpace(str, pos, false);
+    return skipWhiteSpace(str, pos) && str[pos++] == '=' && skipWhiteSpace(str, pos);
 }
 
 // True if a value present, incrementing pos to next space or semicolon, if any.
@@ -185,7 +186,10 @@ bool isValidHTTPHeaderValue(const String& name)
     // FIXME: This should really match name against
     // field-value in section 4.2 of RFC 2616.
 
-    return name.containsOnlyLatin1() && !name.contains('\r') && !name.contains('\n') && !name.contains(static_cast<UChar>('\0'));
+    return name.containsOnlyLatin1()
+        && !name.contains('\r')
+        && !name.contains('\n')
+        && !name.contains('\0');
 }
 
 // See RFC 7230, Section 3.2.
@@ -264,15 +268,16 @@ ContentDispositionType getContentDispositionType(const String& contentDispositio
     return ContentDispositionAttachment;
 }
 
-bool parseHTTPRefresh(const String& refresh, bool fromHttpEquivMeta, double& delay, String& url)
+bool parseHTTPRefresh(const String& refresh, CharacterMatchFunctionPtr matcher, double& delay, String& url)
 {
     unsigned len = refresh.length();
     unsigned pos = 0;
+    matcher = matcher ? matcher : isWhitespace;
 
-    if (!skipWhiteSpace(refresh, pos, fromHttpEquivMeta))
+    if (!skipWhiteSpace(refresh, pos, matcher))
         return false;
 
-    while (pos != len && refresh[pos] != ',' && refresh[pos] != ';')
+    while (pos != len && refresh[pos] != ',' && refresh[pos] != ';' && !matcher(refresh[pos]))
         ++pos;
 
     if (pos == len) { // no URL
@@ -286,15 +291,17 @@ bool parseHTTPRefresh(const String& refresh, bool fromHttpEquivMeta, double& del
         if (!ok)
             return false;
 
-        ++pos;
-        skipWhiteSpace(refresh, pos, fromHttpEquivMeta);
+        skipWhiteSpace(refresh, pos, matcher);
+        if (pos < len && (refresh[pos] == ',' || refresh[pos] == ';'))
+            ++pos;
+        skipWhiteSpace(refresh, pos, matcher);
         unsigned urlStartPos = pos;
         if (refresh.find("url", urlStartPos, TextCaseInsensitive) == urlStartPos) {
             urlStartPos += 3;
-            skipWhiteSpace(refresh, urlStartPos, fromHttpEquivMeta);
+            skipWhiteSpace(refresh, urlStartPos, matcher);
             if (refresh[urlStartPos] == '=') {
                 ++urlStartPos;
-                skipWhiteSpace(refresh, urlStartPos, fromHttpEquivMeta);
+                skipWhiteSpace(refresh, urlStartPos, matcher);
             } else {
                 urlStartPos = pos; // e.g. "Refresh: 0; url.html"
             }
@@ -428,7 +435,7 @@ ReflectedXSSDisposition parseXSSProtectionHeader(const String& header, String& f
 
     unsigned pos = 0;
 
-    if (!skipWhiteSpace(header, pos, false))
+    if (!skipWhiteSpace(header, pos))
         return ReflectedXSSUnset;
 
     if (header[pos] == '0')
@@ -445,7 +452,7 @@ ReflectedXSSDisposition parseXSSProtectionHeader(const String& header, String& f
 
     while (1) {
         // At end of previous directive: consume whitespace, semicolon, and whitespace.
-        if (!skipWhiteSpace(header, pos, false))
+        if (!skipWhiteSpace(header, pos))
             return result;
 
         if (header[pos++] != ';') {
@@ -454,7 +461,7 @@ ReflectedXSSDisposition parseXSSProtectionHeader(const String& header, String& f
             return ReflectedXSSInvalid;
         }
 
-        if (!skipWhiteSpace(header, pos, false))
+        if (!skipWhiteSpace(header, pos))
             return result;
 
         // At start of next directive.

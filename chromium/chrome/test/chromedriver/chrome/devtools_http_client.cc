@@ -9,6 +9,8 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/json/json_reader.h"
+#include "base/stl_util.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
@@ -32,7 +34,8 @@ WebViewInfo::WebViewInfo(const WebViewInfo& other) = default;
 WebViewInfo::~WebViewInfo() {}
 
 bool WebViewInfo::IsFrontend() const {
-  return url.find("chrome-devtools://") == 0u;
+  return base::StartsWith(url, "chrome-devtools://",
+                          base::CompareCase::SENSITIVE);
 }
 
 bool WebViewInfo::IsInactiveBackgroundPage() const {
@@ -67,14 +70,16 @@ DevToolsHttpClient::DevToolsHttpClient(
     scoped_refptr<URLRequestContextGetter> context_getter,
     const SyncWebSocketFactory& socket_factory,
     std::unique_ptr<DeviceMetrics> device_metrics,
-    std::unique_ptr<std::set<WebViewInfo::Type>> window_types)
+    std::unique_ptr<std::set<WebViewInfo::Type>> window_types,
+    std::string page_load_strategy)
     : context_getter_(context_getter),
       socket_factory_(socket_factory),
       server_url_("http://" + address.ToString()),
       web_socket_url_prefix_(base::StringPrintf("ws://%s/devtools/page/",
                                                 address.ToString().c_str())),
       device_metrics_(std::move(device_metrics)),
-      window_types_(std::move(window_types)) {
+      window_types_(std::move(window_types)),
+      page_load_strategy_(page_load_strategy) {
   window_types_->insert(WebViewInfo::kPage);
   window_types_->insert(WebViewInfo::kApp);
 }
@@ -153,11 +158,12 @@ const DeviceMetrics* DevToolsHttpClient::device_metrics() {
 }
 
 bool DevToolsHttpClient::IsBrowserWindow(const WebViewInfo& view) const {
-  return window_types_->find(view.type) != window_types_->end() ||
-      (view.type == WebViewInfo::kOther &&
-        (view.url.find("chrome-extension://") == 0 ||
-         view.url == "chrome://print/" ||
-         view.url == "chrome://media-router/"));
+  return base::ContainsKey(*window_types_, view.type) ||
+         (view.type == WebViewInfo::kOther &&
+          (base::StartsWith(view.url, "chrome-extension://",
+                            base::CompareCase::SENSITIVE) ||
+           view.url == "chrome://print/" ||
+           view.url == "chrome://media-router/"));
 }
 
 Status DevToolsHttpClient::CloseFrontends(const std::string& for_client_id) {
@@ -199,7 +205,8 @@ Status DevToolsHttpClient::CloseFrontends(const std::string& for_client_id) {
     std::unique_ptr<DevToolsClient> client(new DevToolsClientImpl(
         socket_factory_, web_socket_url_prefix_ + *it, *it));
     std::unique_ptr<WebViewImpl> web_view(
-        new WebViewImpl(*it, &browser_info_, std::move(client), NULL));
+        new WebViewImpl(*it, &browser_info_, std::move(client), NULL,
+                        page_load_strategy_));
 
     status = web_view->ConnectIfNecessary();
     // Ignore disconnected error, because the debugger might have closed when

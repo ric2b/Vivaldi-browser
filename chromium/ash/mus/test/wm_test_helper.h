@@ -9,7 +9,7 @@
 
 #include "ash/mus/window_manager_application.h"
 #include "base/macros.h"
-#include "components/mus/public/cpp/tests/test_window_tree_client_setup.h"
+#include "services/ui/public/cpp/tests/test_window_tree_client_setup.h"
 
 namespace base {
 class MessageLoop;
@@ -19,7 +19,7 @@ namespace gfx {
 class Rect;
 }
 
-namespace mus {
+namespace ui {
 class Window;
 }
 
@@ -45,7 +45,7 @@ class WmTestHelper {
 
  private:
   std::unique_ptr<base::MessageLoop> message_loop_;
-  ::mus::TestWindowTreeClientSetup window_tree_client_setup_;
+  ui::TestWindowTreeClientSetup window_tree_client_setup_;
   WindowManagerApplication window_manager_app_;
   WmTestScreen* screen_ = nullptr;  // Owned by |window_manager_app_|.
 

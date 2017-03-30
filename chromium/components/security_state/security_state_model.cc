@@ -72,19 +72,14 @@ SecurityStateModel::SHA1DeprecationStatus GetSHA1DeprecationStatus(
   return SecurityStateModel::NO_DEPRECATED_SHA1;
 }
 
-SecurityStateModel::MixedContentStatus GetMixedContentStatus(
-    const SecurityStateModel::VisibleSecurityState& visible_security_state) {
-  bool ran_insecure_content = visible_security_state.ran_mixed_content;
-  bool displayed_insecure_content =
-      visible_security_state.displayed_mixed_content;
-  if (ran_insecure_content && displayed_insecure_content)
-    return SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
-  if (ran_insecure_content)
-    return SecurityStateModel::RAN_MIXED_CONTENT;
-  if (displayed_insecure_content)
-    return SecurityStateModel::DISPLAYED_MIXED_CONTENT;
-
-  return SecurityStateModel::NO_MIXED_CONTENT;
+SecurityStateModel::ContentStatus GetContentStatus(bool displayed, bool ran) {
+  if (ran && displayed)
+    return SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN;
+  if (ran)
+    return SecurityStateModel::CONTENT_STATUS_RAN;
+  if (displayed)
+    return SecurityStateModel::CONTENT_STATUS_DISPLAYED;
+  return SecurityStateModel::CONTENT_STATUS_NONE;
 }
 
 SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
@@ -92,8 +87,16 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
     SecurityStateModelClient* client,
     const scoped_refptr<net::X509Certificate>& cert,
     SecurityStateModel::SHA1DeprecationStatus sha1_status,
-    SecurityStateModel::MixedContentStatus mixed_content_status) {
-  DCHECK(visible_security_state.initialized);
+    SecurityStateModel::ContentStatus mixed_content_status,
+    SecurityStateModel::ContentStatus content_with_cert_errors_status) {
+  DCHECK(visible_security_state.connection_info_initialized ||
+         visible_security_state.fails_malware_check);
+
+  // Override the connection security information if the website failed the
+  // browser's malware checks.
+  if (visible_security_state.fails_malware_check)
+    return SecurityStateModel::SECURITY_ERROR;
+
   GURL url = visible_security_state.url;
   switch (visible_security_state.initial_security_level) {
     case SecurityStateModel::NONE: {
@@ -119,9 +122,13 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
           !net::IsCertStatusMinorError(cert_status)) {
         return SecurityStateModel::SECURITY_ERROR;
       }
-      if (mixed_content_status == SecurityStateModel::RAN_MIXED_CONTENT ||
+      if (mixed_content_status == SecurityStateModel::CONTENT_STATUS_RAN ||
           mixed_content_status ==
-              SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT) {
+              SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN ||
+          content_with_cert_errors_status ==
+              SecurityStateModel::CONTENT_STATUS_RAN ||
+          content_with_cert_errors_status ==
+              SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN) {
         return SecurityStateModel::kRanInsecureContentLevel;
       }
 
@@ -139,11 +146,16 @@ SecurityStateModel::SecurityLevel GetSecurityLevelForRequest(
         return SecurityStateModel::NONE;
 
       // Active mixed content is handled above.
-      DCHECK_NE(SecurityStateModel::RAN_MIXED_CONTENT, mixed_content_status);
-      DCHECK_NE(SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT,
+      DCHECK_NE(SecurityStateModel::CONTENT_STATUS_RAN, mixed_content_status);
+      DCHECK_NE(SecurityStateModel::CONTENT_STATUS_DISPLAYED_AND_RAN,
                 mixed_content_status);
-      if (mixed_content_status == SecurityStateModel::DISPLAYED_MIXED_CONTENT)
+
+      if (mixed_content_status ==
+              SecurityStateModel::CONTENT_STATUS_DISPLAYED ||
+          content_with_cert_errors_status ==
+              SecurityStateModel::CONTENT_STATUS_DISPLAYED) {
         return SecurityStateModel::kDisplayedInsecureContentLevel;
+      }
 
       if (net::IsCertStatusError(cert_status)) {
         // Major cert errors are handled above.
@@ -170,34 +182,47 @@ void SecurityInfoForRequest(
     const SecurityStateModel::VisibleSecurityState& visible_security_state,
     const scoped_refptr<net::X509Certificate>& cert,
     SecurityStateModel::SecurityInfo* security_info) {
-  if (!visible_security_state.initialized) {
+  if (!visible_security_state.connection_info_initialized) {
     *security_info = SecurityStateModel::SecurityInfo();
+    security_info->fails_malware_check =
+        visible_security_state.fails_malware_check;
+    if (security_info->fails_malware_check) {
+      security_info->security_level = GetSecurityLevelForRequest(
+          visible_security_state, client, cert,
+          SecurityStateModel::UNKNOWN_SHA1,
+          SecurityStateModel::CONTENT_STATUS_UNKNOWN,
+          SecurityStateModel::CONTENT_STATUS_UNKNOWN);
+    }
     return;
   }
   security_info->cert_id = visible_security_state.cert_id;
   security_info->sha1_deprecation_status =
       GetSHA1DeprecationStatus(cert, visible_security_state);
   security_info->mixed_content_status =
-      GetMixedContentStatus(visible_security_state);
+      GetContentStatus(visible_security_state.displayed_mixed_content,
+                       visible_security_state.ran_mixed_content);
+  security_info->content_with_cert_errors_status = GetContentStatus(
+      visible_security_state.displayed_content_with_cert_errors,
+      visible_security_state.ran_content_with_cert_errors);
   security_info->security_bits = visible_security_state.security_bits;
   security_info->connection_status = visible_security_state.connection_status;
   security_info->cert_status = visible_security_state.cert_status;
   security_info->scheme_is_cryptographic =
       visible_security_state.url.SchemeIsCryptographic();
+  security_info->obsolete_ssl_status =
+      net::ObsoleteSSLStatus(security_info->connection_status);
   security_info->pkp_bypassed = visible_security_state.pkp_bypassed;
-  security_info->is_secure_protocol_and_ciphersuite =
-      (net::SSLConnectionStatusToVersion(security_info->connection_status) >=
-           net::SSL_CONNECTION_VERSION_TLS1_2 &&
-       net::IsSecureTLSCipherSuite(net::SSLConnectionStatusToCipherSuite(
-           security_info->connection_status)));
-
   security_info->sct_verify_statuses =
       visible_security_state.sct_verify_statuses;
 
-  security_info->security_level =
-      GetSecurityLevelForRequest(visible_security_state, client, cert,
-                                 security_info->sha1_deprecation_status,
-                                 security_info->mixed_content_status);
+  security_info->fails_malware_check =
+      visible_security_state.fails_malware_check;
+
+  security_info->security_level = GetSecurityLevelForRequest(
+      visible_security_state, client, cert,
+      security_info->sha1_deprecation_status,
+      security_info->mixed_content_status,
+      security_info->content_with_cert_errors_status);
 }
 
 }  // namespace
@@ -211,14 +236,16 @@ const SecurityStateModel::SecurityLevel
 
 SecurityStateModel::SecurityInfo::SecurityInfo()
     : security_level(SecurityStateModel::NONE),
+      fails_malware_check(false),
       sha1_deprecation_status(SecurityStateModel::NO_DEPRECATED_SHA1),
-      mixed_content_status(SecurityStateModel::NO_MIXED_CONTENT),
+      mixed_content_status(SecurityStateModel::CONTENT_STATUS_NONE),
+      content_with_cert_errors_status(SecurityStateModel::CONTENT_STATUS_NONE),
       scheme_is_cryptographic(false),
       cert_status(0),
       cert_id(0),
       security_bits(-1),
       connection_status(0),
-      is_secure_protocol_and_ciphersuite(false),
+      obsolete_ssl_status(net::OBSOLETE_SSL_NONE),
       pkp_bypassed(false) {}
 
 SecurityStateModel::SecurityInfo::~SecurityInfo() {}
@@ -258,14 +285,17 @@ void SecurityStateModel::SetClient(SecurityStateModelClient* client) {
 }
 
 SecurityStateModel::VisibleSecurityState::VisibleSecurityState()
-    : initialized(false),
-      initial_security_level(SecurityStateModel::NONE),
+    : initial_security_level(SecurityStateModel::NONE),
+      fails_malware_check(false),
+      connection_info_initialized(false),
       cert_id(0),
       cert_status(0),
       connection_status(0),
       security_bits(-1),
       displayed_mixed_content(false),
       ran_mixed_content(false),
+      displayed_content_with_cert_errors(false),
+      ran_content_with_cert_errors(false),
       pkp_bypassed(false) {}
 
 SecurityStateModel::VisibleSecurityState::~VisibleSecurityState() {}
@@ -274,12 +304,16 @@ bool SecurityStateModel::VisibleSecurityState::operator==(
     const SecurityStateModel::VisibleSecurityState& other) const {
   return (url == other.url &&
           initial_security_level == other.initial_security_level &&
+          fails_malware_check == other.fails_malware_check &&
           cert_id == other.cert_id && cert_status == other.cert_status &&
           connection_status == other.connection_status &&
           security_bits == other.security_bits &&
           sct_verify_statuses == other.sct_verify_statuses &&
           displayed_mixed_content == other.displayed_mixed_content &&
           ran_mixed_content == other.ran_mixed_content &&
+          displayed_content_with_cert_errors ==
+              other.displayed_content_with_cert_errors &&
+          ran_content_with_cert_errors == other.ran_content_with_cert_errors &&
           pkp_bypassed == other.pkp_bypassed);
 }
 

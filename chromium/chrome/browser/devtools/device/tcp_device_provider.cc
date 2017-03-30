@@ -40,7 +40,7 @@ class ResolveHostAndOpenSocket final {
         request_info, net::DEFAULT_PRIORITY, &address_list_,
         base::Bind(&ResolveHostAndOpenSocket::OnResolved,
                    base::Unretained(this)),
-        nullptr, net::BoundNetLog());
+        &request_, net::BoundNetLog());
     if (result != net::ERR_IO_PENDING)
       OnResolved(result);
   }
@@ -60,6 +60,7 @@ class ResolveHostAndOpenSocket final {
   }
 
   std::unique_ptr<net::HostResolver> host_resolver_;
+  std::unique_ptr<net::HostResolver::Request> request_;
   net::AddressList address_list_;
   AdbClientSocket::SocketCallback callback_;
 };
@@ -81,7 +82,7 @@ void TCPDeviceProvider::QueryDevices(const SerialsCallback& callback) {
   std::vector<std::string> result;
   for (const net::HostPortPair& target : targets_) {
     const std::string& host = target.host();
-    if (ContainsValue(result, host))
+    if (base::ContainsValue(result, host))
       continue;
     result.push_back(host);
   }

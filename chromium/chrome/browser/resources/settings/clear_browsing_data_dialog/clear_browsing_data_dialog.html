@@ -22,14 +22,21 @@
         visibility: hidden;
       }
 
+      #dialog .button-container {
+        border-top: 1px solid rgba(0, 0, 0, 0.14);
+        margin-top: 0;
+        padding-top: 10px;
+      }
+
+      #dialog .footer {
+        background-color: #fff;
+        color: var(--paper-grey-600);
+      }
+
       .row {
         align-items: center;
         display: flex;
         min-height: 40px;
-      }
-
-      .row .start {
-        flex: 1;
       }
 
       paper-spinner {
@@ -61,19 +68,18 @@
       }
 
       .clear-browsing-data-footer {
+        align-items: flex-start;
+        display: flex;
+        line-height: 1.538em; /* 20px/13px */
         padding-left: 4px;
       }
 
       .clear-browsing-data-footer .footer-text {
-        -webkit-margin-start: 36px;
+        -webkit-margin-start: 16px;
       }
 
       .clear-browsing-data-footer iron-icon {
-        float: left;
-      }
-
-      html[dir='rtl'] .clear-browsing-data-footer iron-icon {
-        float: right;
+        flex-shrink: 0;
       }
 
       .clear-browsing-data-footer a {
@@ -85,19 +91,35 @@
           display: none;
         };
       }
+
+      #clearFrom {
+        display: inline;
+      }
+
+      /* Cap the height on smaller screens to avoid unfavorable clipping.
+       * Replace the bottom margin with padding to avoid the gap between
+       * the scrollbar and the bottom separator. */
+      @media all and (max-height: 714px) {
+        #dialog .body {
+          margin-bottom: 0;
+          max-height: 270px;
+          overflow-y: scroll;
+          padding-bottom: 12px;
+        }
+      }
     </style>
 
-    <!-- #notice correctly places its own backdrop above #dialog and under
-         itself, so when it is shown, #dialog should not use backdrop. -->
-    <cr-dialog id="dialog" with-backdrop="[[!showHistoryDeletionDialog_]]">
+    <dialog is="cr-dialog" id="dialog">
       <div class="title">$i18n{clearBrowsingData}</div>
       <div class="body">
         <div class="row">
-          <span class="start">$i18n{clearFollowingItemsFrom}</span>
-          <settings-dropdown-menu id="clearFrom"
-              pref="{{prefs.browser.clear_data.time_period}}"
-              menu-options="[[clearFromOptions_]]" no-label-float>
-          </settings-dropdown-menu>
+          <span>
+            $i18n{clearFollowingItemsFrom}
+            <settings-dropdown-menu id="clearFrom"
+                pref="{{prefs.browser.clear_data.time_period}}"
+                menu-options="[[clearFromOptions_]]" no-label-float>
+            </settings-dropdown-menu>
+          </span>
         </div>
         <settings-checkbox id="browsingCheckbox"
             pref="{{prefs.browser.clear_data.browsing_history}}"
@@ -143,7 +165,7 @@
       <div class="button-container">
         <paper-spinner active="[[clearingInProgress_]]"></paper-spinner>
         <paper-button class="cancel-button" disabled="[[clearingInProgress_]]"
-            dialog-dismiss>$i18n{cancel}</paper-button>
+            on-tap="onCancelTap_">$i18n{cancel}</paper-button>
         <paper-button class="action-button" disabled="[[clearingInProgress_]]"
             on-tap="onClearBrowsingDataTap_">
           $i18n{clearBrowsingData}
@@ -165,11 +187,11 @@
           </div>
         </div>
       </div>
-    </cr-dialog>
+    </dialog>
 
     <template is="dom-if" if="[[showHistoryDeletionDialog_]]" restamp>
       <settings-history-deletion-dialog id="notice"
-          on-iron-overlay-closed="onHistoryDeletionDialogClose_">
+          on-close="onHistoryDeletionDialogClose_">
       </settings-history-deletion-dialog>
     </template>
   </template>

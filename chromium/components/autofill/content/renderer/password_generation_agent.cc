@@ -54,6 +54,7 @@ bool ContainsURL(const std::vector<GURL>& urls, const GURL& url) {
   return std::find(urls.begin(), urls.end(), url) != urls.end();
 }
 
+// Finds a form in |forms| that has the same action and name as |form|.
 const PasswordFormGenerationData* FindFormGenerationData(
     const std::vector<PasswordFormGenerationData>& forms,
     const PasswordForm& form) {

@@ -12,8 +12,9 @@
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/Document.h"
+#include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/custom/CustomElementsRegistry.h"
+#include "core/dom/custom/CustomElementRegistry.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
@@ -55,13 +56,7 @@ void V8HTMLElement::constructorCustom(
     Element* element;
     if (definition->constructionStack().isEmpty()) {
         // This is an element being created with 'new' from script
-        // TODO(kojii): When HTMLElementFactory has an option not to queue
-        // upgrade, call that instead of HTMLElement. HTMLElement is enough
-        // for now, but type extension will require HTMLElementFactory.
-        element = HTMLElement::create(
-            QualifiedName(nullAtom, definition->descriptor().localName(), HTMLNames::xhtmlNamespaceURI),
-            *window->document());
-        element->setCustomElementState(CustomElementState::Undefined);
+        element = definition->createElementForConstructor(*window->document());
     } else {
         element = definition->constructionStack().last();
         if (element) {
@@ -88,13 +83,7 @@ void V8HTMLElement::constructorCustom(
     // instead.
     v8SetReturnValue(info, wrapper);
 
-    v8CallOrCrash(wrapper->SetPrototype(
-        scriptState->context(),
-        definition->prototype()));
-
-    // TODO(dominicc): Move this to the exactly correct place when
-    // https://github.com/whatwg/html/issues/1297 is closed.
-    element->setCustomElementState(CustomElementState::Custom);
+    wrapper->SetPrototype(scriptState->context(), definition->prototype()).ToChecked();
 }
 
 } // namespace blink

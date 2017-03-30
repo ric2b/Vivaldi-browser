@@ -4,12 +4,13 @@
 
 #include "core/workers/WorkerInspectorProxy.h"
 
-#include "core/dom/CrossThreadTask.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/frame/FrameConsole.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/WorkerInspectorController.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
@@ -19,8 +20,6 @@
 namespace blink {
 
 namespace {
-
-static const unsigned maxConsoleMessageCount = 1000;
 
 static WorkerInspectorProxy::WorkerInspectorProxySet& inspectorProxies()
 {
@@ -39,7 +38,6 @@ WorkerInspectorProxy::WorkerInspectorProxy()
     : m_workerThread(nullptr)
     , m_document(nullptr)
     , m_pageInspector(nullptr)
-    , m_ignoreConsoleMessages(false)
 {
 }
 
@@ -85,13 +83,6 @@ void WorkerInspectorProxy::workerThreadTerminated()
         InspectorInstrumentation::workerTerminated(m_document, this);
     }
 
-    LocalFrame* frame = m_document ? m_document->frame() : nullptr;
-    if (frame) {
-        for (ConsoleMessage* message : m_consoleMessages)
-            frame->console().adoptWorkerMessage(message);
-        m_consoleMessages.clear();
-    }
-
     m_workerThread = nullptr;
     m_pageInspector = nullptr;
     m_document = nullptr;
@@ -103,27 +94,15 @@ void WorkerInspectorProxy::dispatchMessageFromWorker(const String& message)
         m_pageInspector->dispatchMessageFromWorker(this, message);
 }
 
-void WorkerInspectorProxy::workerConsoleAgentEnabled()
+void WorkerInspectorProxy::addConsoleMessageFromWorker(MessageLevel level, const String& message, std::unique_ptr<SourceLocation> location)
 {
-    m_ignoreConsoleMessages = true;
-    m_consoleMessages.clear();
-}
-
-void WorkerInspectorProxy::addConsoleMessageFromWorker(ConsoleMessage* consoleMessage)
-{
-    if (!m_ignoreConsoleMessages) {
-        DCHECK(m_consoleMessages.size() <= maxConsoleMessageCount);
-        if (m_consoleMessages.size() == maxConsoleMessageCount)
-            m_consoleMessages.removeFirst();
-        m_consoleMessages.append(consoleMessage);
-    }
     if (LocalFrame* frame = m_document->frame())
-        frame->console().reportWorkerMessage(consoleMessage);
+        frame->console().addMessageFromWorker(level, message, std::move(location), m_inspectorId);
 }
 
 static void connectToWorkerGlobalScopeInspectorTask(WorkerThread* workerThread)
 {
-    if (WorkerInspectorController* inspector = workerThread->workerGlobalScope()->workerInspectorController())
+    if (WorkerInspectorController* inspector = workerThread->workerInspectorController())
         inspector->connectFrontend();
 }
 
@@ -138,7 +117,7 @@ void WorkerInspectorProxy::connectToInspector(WorkerInspectorProxy::PageInspecto
 
 static void disconnectFromWorkerGlobalScopeInspectorTask(WorkerThread* workerThread)
 {
-    if (WorkerInspectorController* inspector = workerThread->workerGlobalScope()->workerInspectorController())
+    if (WorkerInspectorController* inspector = workerThread->workerInspectorController())
         inspector->disconnectFrontend();
 }
 
@@ -152,7 +131,7 @@ void WorkerInspectorProxy::disconnectFromInspector(WorkerInspectorProxy::PageIns
 
 static void dispatchOnInspectorBackendTask(const String& message, WorkerThread* workerThread)
 {
-    if (WorkerInspectorController* inspector = workerThread->workerGlobalScope()->workerInspectorController())
+    if (WorkerInspectorController* inspector = workerThread->workerInspectorController())
         inspector->dispatchMessageFromFrontend(message);
 }
 
@@ -172,7 +151,6 @@ void WorkerInspectorProxy::writeTimelineStartedEvent(const String& sessionId)
 DEFINE_TRACE(WorkerInspectorProxy)
 {
     visitor->trace(m_document);
-    visitor->trace(m_consoleMessages);
 }
 
 } // namespace blink

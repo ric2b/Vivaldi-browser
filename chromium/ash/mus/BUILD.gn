@@ -3,15 +3,23 @@
 # found in the LICENSE file.
 
 import("//build/config/ui.gni")
-import("//mojo/public/mojo_application.gni")
-import("//mojo/public/mojo_application_manifest.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//services/shell/public/cpp/service.gni")
+import("//services/shell/public/service_manifest.gni")
 import("//tools/grit/repack.gni")
 
 source_set("lib") {
   sources = [
-    "accelerator_registrar_impl.cc",
-    "accelerator_registrar_impl.h",
+    "accelerators/accelerator_controller_delegate_mus.cc",
+    "accelerators/accelerator_controller_delegate_mus.h",
+    "accelerators/accelerator_controller_registrar.cc",
+    "accelerators/accelerator_controller_registrar.h",
+    "accelerators/accelerator_handler.h",
+    "accelerators/accelerator_ids.h",
+    "accelerators/accelerator_registrar_impl.cc",
+    "accelerators/accelerator_registrar_impl.h",
+    "accessibility_delegate_mus.cc",
+    "accessibility_delegate_mus.h",
     "bridge/mus_layout_manager_adapter.cc",
     "bridge/mus_layout_manager_adapter.h",
     "bridge/wm_lookup_mus.cc",
@@ -26,28 +34,20 @@ source_set("lib") {
     "bridge/wm_window_mus.h",
     "container_ids.cc",
     "container_ids.h",
+    "context_menu_mus.cc",
+    "context_menu_mus.h",
     "disconnected_app_handler.cc",
     "disconnected_app_handler.h",
     "drag_window_resizer.cc",
     "drag_window_resizer.h",
-    "frame/caption_buttons/caption_button_types.h",
-    "frame/caption_buttons/frame_caption_button.cc",
-    "frame/caption_buttons/frame_caption_button.h",
-    "frame/caption_buttons/frame_caption_button_container_view.cc",
-    "frame/caption_buttons/frame_caption_button_container_view.h",
-    "frame/default_header_painter.cc",
-    "frame/default_header_painter.h",
-    "frame/frame_border_hit_test_controller.cc",
-    "frame/frame_border_hit_test_controller.h",
-    "frame/header_painter.h",
-    "frame/header_painter_util.cc",
-    "frame/header_painter_util.h",
-    "frame/move_event_handler.cc",
-    "frame/move_event_handler.h",
-    "frame/non_client_frame_view_mash.cc",
-    "frame/non_client_frame_view_mash.h",
     "layout_manager.cc",
     "layout_manager.h",
+    "move_event_handler.cc",
+    "move_event_handler.h",
+    "native_widget_factory_mus.cc",
+    "native_widget_factory_mus.h",
+    "new_window_delegate_mus.cc",
+    "new_window_delegate_mus.h",
     "non_client_frame_controller.cc",
     "non_client_frame_controller.h",
     "property_util.cc",
@@ -60,15 +60,11 @@ source_set("lib") {
     "shadow.h",
     "shadow_controller.cc",
     "shadow_controller.h",
-    "shelf_layout_impl.cc",
-    "shelf_layout_impl.h",
     "shelf_layout_manager.cc",
     "shelf_layout_manager.h",
     "shelf_layout_manager_delegate.h",
-    "status_layout_manager.cc",
-    "status_layout_manager.h",
-    "user_window_controller_impl.cc",
-    "user_window_controller_impl.h",
+    "shell_delegate_mus.cc",
+    "shell_delegate_mus.h",
     "window_manager.cc",
     "window_manager.h",
     "window_manager_application.cc",
@@ -76,25 +72,28 @@ source_set("lib") {
     "window_manager_observer.h",
   ]
 
+  defines = [ "NOTIMPLEMENTED_POLICY=5" ]
+
   deps = [
     "//components/user_manager",
+    "//mash/shelf/public/interfaces",
+    "//ui/app_list/presenter",
+    "//ui/message_center",
   ]
 
   public_deps = [
     "//ash",
-    "//ash/mus/resources",
     "//ash/public/interfaces",
     "//base",
-    "//components/mus/common:mus_common",
-    "//components/mus/public/cpp",
-    "//components/mus/public/interfaces",
     "//mash/session/public/interfaces",
     "//mojo/common:common_base",
     "//services/shell/public/cpp",
     "//services/tracing/public/cpp",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/interfaces",
     "//skia",
     "//ui/aura",
-    "//ui/display/mojo",
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -104,9 +103,17 @@ source_set("lib") {
     "//ui/views",
     "//ui/views/mus:for_mojo_application",
   ]
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos",
+      "//chromeos:power_manager_proto",
+      "//device/bluetooth",
+    ]
+  }
 }
 
-mojo_native_application("mus") {
+service("mus") {
   output_name = "ash"
 
   sources = [
@@ -123,29 +130,31 @@ mojo_native_application("mus") {
   #             can't state that dependency here.
   data_deps = [
     ":manifest",
-    "//components/mus",
+    "//services/ui",
   ]
 
   resources = [ "$root_out_dir/ash_mus_resources.pak" ]
 }
 
-mojo_application_manifest("manifest") {
-  application_name = "ash"
+service_manifest("manifest") {
+  name = "ash"
   source = "manifest.json"
 }
 
+# TODO: Load resources at additional scales and load locale-specific strings.
+# TODO: Avoid duplication between Mash and Chrome pak files: crbug.com/628715.
 repack("resources") {
+  output = "$root_out_dir/ash_mus_resources.pak"
   sources = [
-    "$root_gen_dir/ash/mus/resources/ash_mus_resources_100_percent.pak",
+    "$root_gen_dir/ash/common/strings/ash_strings_en-US.pak",
     "$root_gen_dir/ash/resources/ash_resources_100_percent.pak",
     "$root_gen_dir/ui/resources/ui_resources_100_percent.pak",
     "$root_gen_dir/ui/strings/app_locale_settings_en-US.pak",
     "$root_gen_dir/ui/strings/ui_strings_en-US.pak",
     "$root_gen_dir/ui/views/resources/views_resources_100_percent.pak",
   ]
-  output = "$root_out_dir/ash_mus_resources.pak"
   deps = [
-    "//ash/mus/resources",
+    "//ash/common/strings",
     "//ash/resources",
     "//ui/resources",
     "//ui/strings",
@@ -158,9 +167,15 @@ source_set("unittests") {
   testonly = true
 
   sources = [
-    "accelerator_registrar_unittest.cc",
+    "accelerators/accelerator_controller_registrar_test_api.cc",
+    "accelerators/accelerator_controller_registrar_test_api.h",
+    "accelerators/accelerator_controller_unittest.cc",
+    "accelerators/accelerator_registrar_unittest.cc",
     "app_launch_unittest.cc",
+    "bridge/wm_shell_mus_test_api.h",
+    "bridge/wm_window_mus_test_api.h",
     "layout_manager_unittest.cc",
+    "root_window_controller_unittest.cc",
     "test/wm_test_base.cc",
     "test/wm_test_base.h",
     "test/wm_test_helper.cc",
@@ -176,25 +191,29 @@ source_set("unittests") {
     ":lib",
     ":resources",
     "//ash",
+    "//ash:test_support",
     "//ash/public/interfaces",
     "//base",
     "//base/test:test_config",
-    "//components/mus/common:mus_common",
-    "//components/mus/public/cpp",
-    "//components/mus/public/cpp/tests:test_support",
-    "//components/mus/public/cpp/tests:unittest_support",
-    "//components/mus/public/interfaces",
     "//mojo/public/cpp/system",
-    "//services/shell/public/cpp:shell_test_support",
+    "//services/shell/public/cpp:service_test_support",
+    "//services/ui/common:mus_common",
+    "//services/ui/public/cpp",
+    "//services/ui/public/cpp/tests:test_support",
+    "//services/ui/public/cpp/tests:unittest_support",
+    "//services/ui/public/interfaces",
     "//skia",
     "//testing/gtest",
     "//ui/aura",
     "//ui/base",
+    "//ui/base:test_support",
     "//ui/display",
     "//ui/events",
+    "//ui/events:test_support",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gfx/geometry/mojo",
+    "//ui/message_center",
     "//ui/views/mus",
   ]
 
@@ -202,4 +221,6 @@ source_set("unittests") {
     ":mus",
     "//mash/quick_launch",
   ]
+
+  defines = [ "NOTIMPLEMENTED_POLICY=5" ]
 }

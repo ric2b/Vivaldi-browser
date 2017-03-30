@@ -50,7 +50,6 @@
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CullRect.h"
-#include "platform/inspector_protocol/Values.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
@@ -58,6 +57,7 @@
 #include "web/WebInputEventConversion.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/AutoReset.h"
 #include <memory>
 #include <v8.h>
 
@@ -74,7 +74,7 @@ Node* hoveredNodeForPoint(LocalFrame* frame, const IntPoint& pointInRootFrame, b
     HitTestResult result(request, frame->view()->rootFrameToContents(pointInRootFrame));
     frame->contentLayoutItem().hitTest(result);
     Node* node = result.innerPossiblyPseudoNode();
-    while (node && node->getNodeType() == Node::TEXT_NODE)
+    while (node && node->getNodeType() == Node::kTextNode)
         node = node->parentNode();
     return node;
 }
@@ -104,12 +104,6 @@ public:
         : m_overlay(&overlay)
     { }
 
-    DEFINE_INLINE_VIRTUAL_TRACE()
-    {
-        visitor->trace(m_overlay);
-        PageOverlay::Delegate::trace(visitor);
-    }
-
     void paintPageOverlay(const PageOverlay&, GraphicsContext& graphicsContext, const WebSize& webViewSize) const override
     {
         if (m_overlay->isEmpty())
@@ -121,7 +115,7 @@ public:
     }
 
 private:
-    Member<InspectorOverlay> m_overlay;
+    Persistent<InspectorOverlay> m_overlay;
 };
 
 
@@ -142,7 +136,7 @@ public:
     void setCursor(const Cursor& cursor, LocalFrame* localRoot) override
     {
         toChromeClientImpl(m_client)->setCursorOverridden(false);
-        toChromeClientImpl(m_client)->setCursor(cursor, localRoot);
+        toChromeClientImpl(m_client)->setCursor(cursor, m_overlay->m_webViewImpl->mainFrameImpl()->frame());
         bool overrideCursor = m_overlay->m_layoutEditor;
         toChromeClientImpl(m_client)->setCursorOverridden(overrideCursor);
     }
@@ -183,7 +177,8 @@ InspectorOverlay::InspectorOverlay(WebViewImpl* webViewImpl)
     , m_resizeTimerActive(false)
     , m_omitTooltip(false)
     , m_timer(this, &InspectorOverlay::onTimer)
-    , m_suspendCount(0)
+    , m_suspended(false)
+    , m_showReloadingBlanket(false)
     , m_inLayout(false)
     , m_needsUpdate(false)
     , m_inspectMode(InspectorDOMAgent::NotSearching)
@@ -208,7 +203,7 @@ DEFINE_TRACE(InspectorOverlay)
     visitor->trace(m_hoveredNodeForInspectMode);
 }
 
-void InspectorOverlay::init(InspectorCSSAgent* cssAgent, V8InspectorSession* v8Session, InspectorDOMAgent* domAgent)
+void InspectorOverlay::init(InspectorCSSAgent* cssAgent, v8_inspector::V8InspectorSession* v8Session, InspectorDOMAgent* domAgent)
 {
     m_v8Session = v8Session;
     m_domAgent = domAgent;
@@ -219,7 +214,7 @@ void InspectorOverlay::init(InspectorCSSAgent* cssAgent, V8InspectorSession* v8S
 void InspectorOverlay::invalidate()
 {
     if (!m_pageOverlay)
-        m_pageOverlay = PageOverlay::create(m_webViewImpl, new InspectorPageOverlayDelegate(*this));
+        m_pageOverlay = PageOverlay::create(m_webViewImpl, wrapUnique(new InspectorPageOverlayDelegate(*this)));
 
     m_pageOverlay->update();
 }
@@ -229,7 +224,7 @@ void InspectorOverlay::updateAllLifecyclePhases()
     if (isEmpty())
         return;
 
-    TemporaryChange<bool> scoped(m_inLayout, true);
+    AutoReset<bool> scoped(&m_inLayout, true);
     if (m_needsUpdate) {
         m_needsUpdate = false;
         rebuildOverlayPage();
@@ -299,6 +294,23 @@ void InspectorOverlay::setPausedInDebuggerMessage(const String& message)
     scheduleUpdate();
 }
 
+void InspectorOverlay::showReloadingBlanket()
+{
+    m_showReloadingBlanket = true;
+    scheduleUpdate();
+}
+
+void InspectorOverlay::hideReloadingBlanket()
+{
+    if (!m_showReloadingBlanket)
+        return;
+    m_showReloadingBlanket = false;
+    if (m_suspended)
+        clearInternal();
+    else
+        scheduleUpdate();
+}
+
 void InspectorOverlay::hideHighlight()
 {
     m_highlightNode.clear();
@@ -359,7 +371,9 @@ void InspectorOverlay::highlightQuad(std::unique_ptr<FloatQuad> quad, const Insp
 
 bool InspectorOverlay::isEmpty()
 {
-    if (m_suspendCount)
+    if (m_showReloadingBlanket)
+        return false;
+    if (m_suspended)
         return true;
     bool hasVisibleElements = m_highlightNode || m_eventTargetNode || m_highlightQuad  || (m_resizeTimerActive && m_drawViewSize) || !m_pausedInDebuggerMessage.isNull();
     return !hasVisibleElements && m_inspectMode == InspectorDOMAgent::NotSearching;
@@ -393,6 +407,10 @@ void InspectorOverlay::rebuildOverlayPage()
 
     reset(viewportSize, visibleRectInDocument.location());
 
+    if (m_showReloadingBlanket) {
+        evaluateInOverlay("showReloadingBlanket", "");
+        return;
+    }
     drawNodeHighlight();
     drawQuadHighlight();
     drawPausedInDebuggerMessage();
@@ -404,8 +422,8 @@ void InspectorOverlay::rebuildOverlayPage()
 static std::unique_ptr<protocol::DictionaryValue> buildObjectForSize(const IntSize& size)
 {
     std::unique_ptr<protocol::DictionaryValue> result = protocol::DictionaryValue::create();
-    result->setNumber("width", size.width());
-    result->setNumber("height", size.height());
+    result->setInteger("width", size.width());
+    result->setInteger("height", size.height());
     return result;
 }
 
@@ -518,7 +536,7 @@ Page* InspectorOverlay::overlayPage()
     v8::Local<v8::Object> global = scriptState->context()->Global();
     v8::Local<v8::Value> overlayHostObj = toV8(m_overlayHost.get(), global, isolate);
     DCHECK(!overlayHostObj.IsEmpty());
-    v8CallOrCrash(global->Set(scriptState->context(), v8AtomicString(isolate, "InspectorOverlayHost"), overlayHostObj));
+    global->Set(scriptState->context(), v8AtomicString(isolate, "InspectorOverlayHost"), overlayHostObj).ToChecked();
 
 #if OS(WIN)
     evaluateInOverlay("setPlatform", "windows");
@@ -539,8 +557,8 @@ LocalFrame* InspectorOverlay::overlayMainFrame()
 void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset)
 {
     std::unique_ptr<protocol::DictionaryValue> resetData = protocol::DictionaryValue::create();
-    resetData->setNumber("deviceScaleFactor", m_webViewImpl->page()->deviceScaleFactor());
-    resetData->setNumber("pageScaleFactor", m_webViewImpl->page()->pageScaleFactor());
+    resetData->setDouble("deviceScaleFactor", m_webViewImpl->page()->deviceScaleFactor());
+    resetData->setDouble("pageScaleFactor", m_webViewImpl->page()->pageScaleFactor());
 
     IntRect viewportInScreen = m_webViewImpl->chromeClient().viewportToScreen(
         IntRect(IntPoint(), viewportSize), m_webViewImpl->mainFrameImpl()->frame()->view());
@@ -548,10 +566,10 @@ void InspectorOverlay::reset(const IntSize& viewportSize, const IntPoint& docume
 
     // The zoom factor in the overlay frame already has been multiplied by the window to viewport scale
     // (aka device scale factor), so cancel it.
-    resetData->setNumber("pageZoomFactor", m_webViewImpl->mainFrameImpl()->frame()->pageZoomFactor() / windowToViewportScale());
+    resetData->setDouble("pageZoomFactor", m_webViewImpl->mainFrameImpl()->frame()->pageZoomFactor() / windowToViewportScale());
 
-    resetData->setNumber("scrollX", documentScrollOffset.x());
-    resetData->setNumber("scrollY", documentScrollOffset.y());
+    resetData->setInteger("scrollX", documentScrollOffset.x());
+    resetData->setInteger("scrollY", documentScrollOffset.y());
     evaluateInOverlay("reset", std::move(resetData));
 }
 
@@ -581,7 +599,7 @@ String InspectorOverlay::evaluateInOverlayForTest(const String& script)
     return toCoreStringWithUndefinedOrNullCheck(string);
 }
 
-void InspectorOverlay::onTimer(Timer<InspectorOverlay>*)
+void InspectorOverlay::onTimer(TimerBase*)
 {
     m_resizeTimerActive = false;
     scheduleUpdate();
@@ -677,13 +695,15 @@ void InspectorOverlay::overlayClearSelection(bool commitChanges)
 
 void InspectorOverlay::suspend()
 {
-    if (!m_suspendCount++)
+    if (!m_suspended) {
+        m_suspended = true;
         clearInternal();
+    }
 }
 
 void InspectorOverlay::resume()
 {
-    --m_suspendCount;
+    m_suspended = false;
 }
 
 void InspectorOverlay::pageLayoutInvalidated(bool resized)

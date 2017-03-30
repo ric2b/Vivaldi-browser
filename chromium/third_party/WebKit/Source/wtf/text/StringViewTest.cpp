@@ -71,6 +71,62 @@ TEST(StringViewTest, ConstructionStringImpl16)
     EXPECT_STREQ("3", StringView(impl16Bit.get(), 2, 1).toString().utf8().data());
 }
 
+TEST(StringViewTest, ConstructionStringImplRef8)
+{
+    RefPtr<StringImpl> impl8Bit = StringImpl::create(kChars8, 5);
+
+    // StringView(StringImpl&);
+    ASSERT_TRUE(StringView(*impl8Bit).is8Bit());
+    EXPECT_FALSE(StringView(*impl8Bit).isNull());
+    EXPECT_EQ(impl8Bit->characters8(), StringView(*impl8Bit).characters8());
+    EXPECT_EQ(impl8Bit->length(), StringView(*impl8Bit).length());
+    EXPECT_STREQ(kChars, StringView(*impl8Bit).toString().utf8().data());
+
+    // StringView(StringImpl&, unsigned offset);
+    ASSERT_TRUE(StringView(*impl8Bit, 2).is8Bit());
+    EXPECT_FALSE(StringView(*impl8Bit, 2).isNull());
+    EXPECT_EQ(impl8Bit->characters8() + 2, StringView(*impl8Bit, 2).characters8());
+    EXPECT_EQ(3u, StringView(*impl8Bit, 2).length());
+    EXPECT_EQ(StringView("345"), StringView(*impl8Bit, 2));
+    EXPECT_STREQ("345", StringView(*impl8Bit, 2).toString().utf8().data());
+
+    // StringView(StringImpl&, unsigned offset, unsigned length);
+    ASSERT_TRUE(StringView(*impl8Bit, 2, 1).is8Bit());
+    EXPECT_FALSE(StringView(*impl8Bit, 2, 1).isNull());
+    EXPECT_EQ(impl8Bit->characters8() + 2, StringView(*impl8Bit, 2, 1).characters8());
+    EXPECT_EQ(1u, StringView(*impl8Bit, 2, 1).length());
+    EXPECT_EQ(StringView("3"), StringView(*impl8Bit, 2, 1));
+    EXPECT_STREQ("3", StringView(*impl8Bit, 2, 1).toString().utf8().data());
+}
+
+TEST(StringViewTest, ConstructionStringImplRef16)
+{
+    RefPtr<StringImpl> impl16Bit = StringImpl::create(kChars16, 5);
+
+    // StringView(StringImpl&);
+    ASSERT_FALSE(StringView(*impl16Bit).is8Bit());
+    EXPECT_FALSE(StringView(*impl16Bit).isNull());
+    EXPECT_EQ(impl16Bit->characters16(), StringView(*impl16Bit).characters16());
+    EXPECT_EQ(impl16Bit->length(), StringView(*impl16Bit).length());
+    EXPECT_STREQ(kChars, StringView(*impl16Bit).toString().utf8().data());
+
+    // StringView(StringImpl&, unsigned offset);
+    ASSERT_FALSE(StringView(*impl16Bit, 2).is8Bit());
+    EXPECT_FALSE(StringView(*impl16Bit, 2).isNull());
+    EXPECT_EQ(impl16Bit->characters16() + 2, StringView(*impl16Bit, 2).characters16());
+    EXPECT_EQ(3u, StringView(*impl16Bit, 2).length());
+    EXPECT_EQ(StringView("345"), StringView(*impl16Bit, 2));
+    EXPECT_STREQ("345", StringView(*impl16Bit, 2).toString().utf8().data());
+
+    // StringView(StringImpl&, unsigned offset, unsigned length);
+    ASSERT_FALSE(StringView(*impl16Bit, 2, 1).is8Bit());
+    EXPECT_FALSE(StringView(*impl16Bit, 2, 1).isNull());
+    EXPECT_EQ(impl16Bit->characters16() + 2, StringView(*impl16Bit, 2, 1).characters16());
+    EXPECT_EQ(1u, StringView(*impl16Bit, 2, 1).length());
+    EXPECT_EQ(StringView("3"), StringView(*impl16Bit, 2, 1));
+    EXPECT_STREQ("3", StringView(*impl16Bit, 2, 1).toString().utf8().data());
+}
+
 TEST(StringViewTest, ConstructionString8)
 {
     String string8Bit = String(StringImpl::create(kChars8, 5));
@@ -287,20 +343,6 @@ TEST(StringViewTest, ConstructionLiteral16)
     EXPECT_EQ(StringView(reinterpret_cast<const UChar*>(u"12")), StringView(kChars16, 2));
     EXPECT_EQ(2u, StringView(kChars16, 2).length());
     EXPECT_EQ(String("12"), StringView(kChars16, 2).toString());
-}
-
-TEST(StringViewTest, ConstructionRawBytes)
-{
-    // StringView(const void* bytes, unsigned length, bool is8Bit);
-    StringView view8(reinterpret_cast<const void*>(kChars), 2, true);
-    ASSERT_TRUE(view8.is8Bit());
-    EXPECT_EQ(2u, view8.length());
-    EXPECT_EQ("12", view8);
-
-    StringView view16(reinterpret_cast<const void*>(kChars16), 3, false);
-    ASSERT_FALSE(view16.is8Bit());
-    EXPECT_EQ(3u, view16.length());
-    EXPECT_EQ("123", view16);
 }
 
 TEST(StringViewTest, IsEmpty)

@@ -45,14 +45,12 @@ WebInspector.ProfileType = function(id, name)
         window.addEventListener("unload", this._clearTempStorage.bind(this), false);
 }
 
-/**
- * @enum {string}
- */
+/** @enum {symbol} */
 WebInspector.ProfileType.Events = {
-    AddProfileHeader: "add-profile-header",
-    ProfileComplete: "profile-complete",
-    RemoveProfileHeader: "remove-profile-header",
-    ViewUpdated: "view-updated"
+    AddProfileHeader: Symbol("add-profile-header"),
+    ProfileComplete: Symbol("profile-complete"),
+    RemoveProfileHeader: Symbol("remove-profile-header"),
+    ViewUpdated: Symbol("view-updated")
 }
 
 WebInspector.ProfileType.prototype = {
@@ -331,9 +329,10 @@ WebInspector.ProfileHeader.StatusUpdate = function(subtitle, wait)
     this.wait = wait;
 }
 
+/** @enum {symbol} */
 WebInspector.ProfileHeader.Events = {
-    UpdateStatus: "UpdateStatus",
-    ProfileReceived: "ProfileReceived"
+    UpdateStatus: Symbol("UpdateStatus"),
+    ProfileReceived: Symbol("ProfileReceived")
 }
 
 WebInspector.ProfileHeader.prototype = {
@@ -479,7 +478,7 @@ WebInspector.ProfilesPanel = function()
 
     this._profileGroups = {};
     this._launcherView = new WebInspector.MultiProfileLauncherView(this);
-    this._launcherView.addEventListener(WebInspector.MultiProfileLauncherView.EventTypes.ProfileTypeSelected, this._onProfileTypeSelected, this);
+    this._launcherView.addEventListener(WebInspector.MultiProfileLauncherView.Events.ProfileTypeSelected, this._onProfileTypeSelected, this);
 
     this._profileToView = [];
     this._typeIdToSidebarSection = {};
@@ -815,7 +814,7 @@ WebInspector.ProfilesPanel.prototype = {
 
         this._profileViewToolbar.removeToolbarItems();
 
-        var toolbarItems = view.toolbarItems();
+        var toolbarItems = view.syncToolbarItems();
         for (var i = 0; i < toolbarItems.length; ++i)
             this._profileViewToolbar.appendToolbarItem(toolbarItems[i]);
 
@@ -1267,28 +1266,7 @@ WebInspector.ProfilesPanel.show = function()
  */
 WebInspector.ProfilesPanel._instance = function()
 {
-    if (!WebInspector.ProfilesPanel._instanceObject)
-        WebInspector.ProfilesPanel._instanceObject = new WebInspector.ProfilesPanel();
-    return WebInspector.ProfilesPanel._instanceObject;
-}
-
-/**
- * @constructor
- * @implements {WebInspector.PanelFactory}
- */
-WebInspector.ProfilesPanelFactory = function()
-{
-}
-
-WebInspector.ProfilesPanelFactory.prototype = {
-    /**
-     * @override
-     * @return {!WebInspector.Panel}
-     */
-    createPanel: function()
-    {
-        return WebInspector.ProfilesPanel._instance();
-    }
+    return /** @type {!WebInspector.ProfilesPanel} */ (self.runtime.sharedInstance(WebInspector.ProfilesPanel));
 }
 
 /**

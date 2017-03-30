@@ -10,16 +10,22 @@
 
 namespace web {
 
-// Shorthand for GREYMatchers::matcherForWebViewContainingText:inWebState.
-id<GREYMatcher> webViewContainingText(const std::string& text,
-                                      web::WebState* webState);
-
-}  // namespace web
-
-@interface GREYMatchers (WebViewAdditions)
+// Matcher for WKWebView which belogs to the given |webState|.
+id<GREYMatcher> webViewInWebState(WebState* web_state);
 
 // Matcher for WKWebView containing |text|.
-+ (id<GREYMatcher>)matcherForWebViewContainingText:(const std::string&)text
-                                        inWebState:(web::WebState*)webState;
+id<GREYMatcher> webViewContainingText(std::string text, WebState* web_state);
 
-@end
+// Matcher for WKWebView containing a blocked |image_id|.  When blocked, the
+// image will be smaller than |expected_size|.
+id<GREYMatcher> webViewContainingBlockedImage(std::string image_id,
+                                              CGSize expected_size,
+                                              WebState* web_state);
+
+// Matcher for WKWebView containing an html element which matches |selector|.
+id<GREYMatcher> webViewCssSelector(std::string selector, WebState* web_state);
+
+// Matcher for WKWebView's scroll view.
+id<GREYMatcher> webViewScrollView(WebState* web_state);
+
+}  // namespace web

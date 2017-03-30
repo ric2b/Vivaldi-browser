@@ -82,6 +82,8 @@ static_library("with_no_strings") {
       "product.cc",
       "product.h",
       "product_operations.h",
+      "progress_calculator.cc",
+      "progress_calculator.h",
       "registry_entry.cc",
       "registry_entry.h",
       "scoped_user_protocol_entry.cc",
@@ -244,8 +246,14 @@ action("generate_strings") {
   ]
   script = "prebuild/create_string_rc.py"
 
-  if (is_chrome_branded) {
+  if (is_chrome_branded || is_vivaldi) {
     grdfile = "//chrome/app/google_chrome_strings.grd"
+  }
+  if (is_vivaldi) {
+    grdfile = "$root_gen_dir/vivaldi_resources/chrome/app/chromium_strings/chromium_strings.grd"
+    deps = [
+      "//chrome/app:chromium_strings",
+    ]
   } else {
     grdfile = "//chrome/app/chromium_strings.grd"
   }
@@ -313,6 +321,7 @@ if (is_win) {
       "move_tree_work_item_unittest.cc",
       "product_state_unittest.cc",
       "product_unittest.cc",
+      "progress_calculator_unittest.cc",
       "registry_key_backup_unittest.cc",
       "registry_test_data.cc",
       "registry_test_data.h",

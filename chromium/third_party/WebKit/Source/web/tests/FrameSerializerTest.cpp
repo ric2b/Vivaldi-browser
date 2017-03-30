@@ -105,7 +105,6 @@ protected:
         error.domain = "FrameSerializerTest";
 
         WebURLResponse response;
-        response.initialize();
         response.setMIMEType("text/html");
         response.setHTTPStatusCode(statusCode);
 
@@ -121,7 +120,7 @@ protected:
     {
         FrameTestHelpers::loadFrame(m_helper.webView()->mainFrame(), KURL(m_baseUrl, url).getString().utf8().data());
         FrameSerializer serializer(m_resources, *this);
-        Frame* frame = m_helper.webViewImpl()->mainFrameImpl()->frame();
+        Frame* frame = m_helper.webView()->mainFrameImpl()->frame();
         for (; frame; frame = frame->tree().traverseNext()) {
             // This is safe, because tests do not do cross-site navigation
             // (and therefore don't have remote frames).
@@ -141,7 +140,7 @@ protected:
         for (size_t i = 0; i < m_resources.size(); ++i) {
             const SerializedResource& resource = m_resources[i];
             if (resource.url == url && !resource.data->isEmpty()
-                && (mime.isNull() || equalIgnoringCase(resource.mimeType, mime)))
+                && (mime.isNull() || equalIgnoringASCIICase(resource.mimeType, mime)))
                 return &resource;
         }
         return nullptr;
@@ -184,7 +183,7 @@ private:
 
         StringBuilder uriBuilder;
         uriBuilder.append(m_rewriteFolder);
-        uriBuilder.append("/");
+        uriBuilder.append('/');
         uriBuilder.append(m_rewriteURLs.get(completeURL));
         rewrittenLink = uriBuilder.toString();
         return true;

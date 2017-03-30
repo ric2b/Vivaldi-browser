@@ -60,9 +60,9 @@ HTMLStyleElement* HTMLStyleElement::create(Document& document, bool createdByPar
 
 void HTMLStyleElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
-    if (name == titleAttr && m_sheet) {
+    if (name == titleAttr && m_sheet && isInDocumentTree()) {
         m_sheet->setTitle(value);
-    } else if (name == mediaAttr && inShadowIncludingDocument() && document().isActive() && m_sheet) {
+    } else if (name == mediaAttr && isConnected() && document().isActive() && m_sheet) {
         m_sheet->setMediaQueries(MediaQuerySet::create(value));
         document().styleEngine().setNeedsActiveStyleUpdate(m_sheet.get(), FullStyleUpdate);
     } else {
@@ -121,7 +121,7 @@ void HTMLStyleElement::dispatchPendingLoadEvents()
 
 void HTMLStyleElement::dispatchPendingEvent(StyleEventSender* eventSender)
 {
-    ASSERT_UNUSED(eventSender, eventSender == &styleLoadEventSender());
+    DCHECK_EQ(eventSender, &styleLoadEventSender());
     dispatchEvent(Event::create(m_loadedSheet ? EventTypeNames::load : EventTypeNames::error));
 }
 

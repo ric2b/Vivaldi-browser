@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/trace_event/trace_event.h"
+#include "cc/base/math_util.h"
 #include "cc/base/region.h"
 #include "cc/debug/debug_colors.h"
 #include "cc/playback/display_item_list.h"
@@ -40,8 +41,7 @@ RasterSource::RasterSource(const RecordingSource* other, bool can_use_lcd_text)
       slow_down_raster_scale_factor_for_debug_(
           other->slow_down_raster_scale_factor_for_debug_),
       should_attempt_to_use_distance_field_text_(false),
-      image_decode_controller_(nullptr) {
-}
+      image_decode_controller_(nullptr) {}
 
 RasterSource::RasterSource(const RasterSource* other, bool can_use_lcd_text)
     : display_list_(other->display_list_),
@@ -73,6 +73,8 @@ void RasterSource::PlaybackToCanvas(SkCanvas* raster_canvas,
   if (!canvas_playback_rect.IsEmpty() &&
       !raster_bounds.intersect(gfx::RectToSkIRect(canvas_playback_rect)))
     return;
+  // Treat all subnormal values as zero for performance.
+  ScopedSubnormalFloatDisabler disabler;
 
   raster_canvas->save();
   raster_canvas->translate(-canvas_bitmap_rect.x(), -canvas_bitmap_rect.y());

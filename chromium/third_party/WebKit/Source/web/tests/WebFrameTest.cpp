@@ -38,6 +38,7 @@
 #include "core/css/StyleSheetContents.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
+#include "core/dom/Document.h"
 #include "core/dom/Fullscreen.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Range.h"
@@ -58,7 +59,6 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLBodyElement.h"
-#include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/ImageDocument.h"
@@ -87,6 +87,7 @@
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
+#include "platform/weborigin/KURLHash.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
@@ -209,7 +210,6 @@ protected:
     void registerMockedHttpURLLoadWithCSP(const std::string& fileName, const std::string& csp, bool reportOnly = false)
     {
         WebURLResponse response;
-        response.initialize();
         response.setMIMEType("text/html");
         response.addHTTPHeaderField(reportOnly ? WebString("Content-Security-Policy-Report-Only") : WebString("Content-Security-Policy"), WebString::fromUTF8(csp));
         std::string fullString = m_baseURL + fileName;
@@ -228,7 +228,7 @@ protected:
         RuleSet* ruleSet = RuleSet::create();
         ruleSet->addRulesFromSheet(styleSheet, MediaQueryEvaluator("screen"));
 
-        Document* document = toLocalFrame(webViewHelper->webViewImpl()->page()->mainFrame())->document();
+        Document* document = toLocalFrame(webViewHelper->webView()->page()->mainFrame())->document();
         document->ensureStyleResolver().viewportStyleResolver()->collectViewportRules(ruleSet, ViewportStyleResolver::UserAgentOrigin);
         document->ensureStyleResolver().viewportStyleResolver()->resolve();
     }
@@ -264,7 +264,7 @@ protected:
         registerMockedHttpURLLoad("nodeimage.html");
         webViewHelper->initializeAndLoad(m_baseURL + "nodeimage.html");
         webViewHelper->resize(WebSize(640, 480));
-        LocalFrame* frame = toLocalFrame(webViewHelper->webViewImpl()->page()->mainFrame());
+        LocalFrame* frame = toLocalFrame(webViewHelper->webView()->page()->mainFrame());
         DCHECK(frame);
         Element* element = frame->document()->getElementById(testcase.c_str());
         return frame->nodeImage(*element);
@@ -282,45 +282,21 @@ protected:
     std::string m_chromeURL;
 };
 
-enum ParameterizedWebFrameTestConfig {
-    Default,
-    RootLayerScrolls
-};
-
 class ParameterizedWebFrameTest
     : public WebFrameTest
-    , public ::testing::WithParamInterface<ParameterizedWebFrameTestConfig>
+    , public ::testing::WithParamInterface<FrameTestHelpers::SettingOverrideFunction>
     , public FrameTestHelpers::SettingOverrider {
 public:
 
-    void overrideSettings(WebSettings* settings)
+    void overrideSettings(WebSettings *settings) override
     {
-        switch (GetParam()) {
-        case Default:
-            break;
-        case RootLayerScrolls:
-            settings->setRootLayerScrolls(true);
-            break;
-        }
+        GetParam()(settings);
     }
 };
 
-// Friendly string for gtest failure messages.
-void PrintTo(ParameterizedWebFrameTestConfig config, ::std::ostream* os)
-{
-    switch (config) {
-    case Default:
-        *os << "Default";
-        break;
-    case RootLayerScrolls:
-        *os << "RootLayerScrolls";
-        break;
-    }
-}
-
 INSTANTIATE_TEST_CASE_P(All, ParameterizedWebFrameTest, ::testing::Values(
-    ParameterizedWebFrameTestConfig::Default,
-    ParameterizedWebFrameTestConfig::RootLayerScrolls));
+    FrameTestHelpers::DefaultSettingOverride,
+    FrameTestHelpers::RootLayerScrollsSettingOverride));
 
 TEST_P(ParameterizedWebFrameTest, ContentText)
 {
@@ -407,8 +383,8 @@ TEST_P(ParameterizedWebFrameTest, SuspendedRequestExecuteScript)
     ScriptExecutionCallbackHelper callbackHelper(webViewHelper.webView()->mainFrame()->mainWorldScriptContext());
 
     // Suspend scheduled tasks so the script doesn't run.
-    toWebLocalFrameImpl(webViewHelper.webView()->mainFrame())->frame()->document()->suspendScheduledTasks();
-    webViewHelper.webView()->mainFrame()->toWebLocalFrame()->requestExecuteScriptAndReturnValue(WebScriptSource(WebString("'hello';")), false, &callbackHelper);
+    webViewHelper.webView()->mainFrameImpl()->frame()->document()->suspendScheduledTasks();
+    webViewHelper.webView()->mainFrameImpl()->requestExecuteScriptAndReturnValue(WebScriptSource(WebString("'hello';")), false, &callbackHelper);
     runPendingTasks();
     EXPECT_FALSE(callbackHelper.didComplete());
 
@@ -846,7 +822,7 @@ TEST_P(ParameterizedWebFrameTest, PostMessageThenDetach)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad("about:blank");
 
-    LocalFrame* frame = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame());
+    LocalFrame* frame = toLocalFrame(webViewHelper.webView()->page()->mainFrame());
     NonThrowableExceptionState exceptionState;
     MessagePortArray messagePorts;
     frame->domWindow()->postMessage(SerializedScriptValue::serialize("message"), messagePorts, "*", frame->localDOMWindow(), exceptionState);
@@ -919,7 +895,7 @@ TEST_P(ParameterizedWebFrameTest, ChangeInFixedLayoutResetsTextAutosizingMultipl
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "fixed_layout.html", true, nullptr, &client, nullptr, enableViewportSettings);
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     document->settings()->setTextAutosizingEnabled(true);
     EXPECT_TRUE(document->settings()->textAutosizingEnabled());
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
@@ -930,7 +906,7 @@ TEST_P(ParameterizedWebFrameTest, ChangeInFixedLayoutResetsTextAutosizingMultipl
     // Choose a width that's not going match the viewport width of the loaded document.
     description.minWidth = Length(100, blink::Fixed);
     description.maxWidth = Length(100, blink::Fixed);
-    webViewHelper.webViewImpl()->updatePageDefinedViewportConstraints(description);
+    webViewHelper.webView()->updatePageDefinedViewportConstraints(description);
 
     EXPECT_TRUE(checkTextAutosizingMultiplier(document, 1));
 }
@@ -945,7 +921,7 @@ TEST_P(ParameterizedWebFrameTest, WorkingTextAutosizingMultipliers_VirtualViewpo
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + htmlFile, true, nullptr, &client, nullptr, configureAndroid);
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     document->settings()->setTextAutosizingEnabled(true);
     EXPECT_TRUE(document->settings()->textAutosizingEnabled());
 
@@ -967,9 +943,9 @@ TEST_P(ParameterizedWebFrameTest, VisualViewportSetSizeInvalidatesTextAutosizing
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "iframe_reload.html", true, nullptr, &client, nullptr, enableViewportSettings);
 
-    LocalFrame* mainFrame = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame());
+    LocalFrame* mainFrame = toLocalFrame(webViewHelper.webView()->page()->mainFrame());
     Document* document = mainFrame->document();
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
     document->settings()->setTextAutosizingEnabled(true);
     EXPECT_TRUE(document->settings()->textAutosizingEnabled());
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
@@ -1007,8 +983,8 @@ TEST_P(ParameterizedWebFrameTest, ZeroHeightPositiveWidthNotIgnored)
     webViewHelper.initialize(true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
-    EXPECT_EQ(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag)
@@ -1026,7 +1002,7 @@ TEST_P(ParameterizedWebFrameTest, DeviceScaleFactorUsesDefaultWithoutViewportTag
 
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(2, webViewHelper.webViewImpl()->page()->deviceScaleFactor());
+    EXPECT_EQ(2, webViewHelper.webView()->page()->deviceScaleFactor());
 
     // Device scale factor should be independent of page scale.
     webViewHelper.webView()->setDefaultPageScaleLimits(1, 2);
@@ -1057,8 +1033,8 @@ TEST_P(ParameterizedWebFrameTest, FixedLayoutInitializeAtMinimumScale)
 
     int defaultFixedLayoutWidth = 980;
     float minimumPageScaleFactor = viewportWidth / (float) defaultFixedLayoutWidth;
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->minimumPageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->minimumPageScaleFactor());
 
     // Assume the user has pinch zoomed to page scale factor 2.
     float userPinchPageScaleFactor = 2;
@@ -1066,8 +1042,8 @@ TEST_P(ParameterizedWebFrameTest, FixedLayoutInitializeAtMinimumScale)
     webViewHelper.webView()->updateAllLifecyclePhases();
 
     // Make sure we don't reset to initial scale if the page continues to load.
-    webViewHelper.webViewImpl()->didCommitLoad(false, false);
-    webViewHelper.webViewImpl()->didChangeContentsSize();
+    webViewHelper.webView()->didCommitLoad(false, false);
+    webViewHelper.webView()->didChangeContentsSize();
     EXPECT_EQ(userPinchPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
 
     // Make sure we don't reset to initial scale if the viewport size changes.
@@ -1094,8 +1070,8 @@ TEST_P(ParameterizedWebFrameTest, WideDocumentInitializeAtMinimumScale)
 
     int wideDocumentWidth = 1500;
     float minimumPageScaleFactor = viewportWidth / (float) wideDocumentWidth;
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->minimumPageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->minimumPageScaleFactor());
 
     // Assume the user has pinch zoomed to page scale factor 2.
     float userPinchPageScaleFactor = 2;
@@ -1103,8 +1079,8 @@ TEST_P(ParameterizedWebFrameTest, WideDocumentInitializeAtMinimumScale)
     webViewHelper.webView()->updateAllLifecyclePhases();
 
     // Make sure we don't reset to initial scale if the page continues to load.
-    webViewHelper.webViewImpl()->didCommitLoad(false, false);
-    webViewHelper.webViewImpl()->didChangeContentsSize();
+    webViewHelper.webView()->didCommitLoad(false, false);
+    webViewHelper.webView()->didChangeContentsSize();
     EXPECT_EQ(userPinchPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
 
     // Make sure we don't reset to initial scale if the viewport size changes.
@@ -1127,7 +1103,7 @@ TEST_P(ParameterizedWebFrameTest, DelayedViewportInitialScale)
 
     EXPECT_EQ(0.25f, webViewHelper.webView()->pageScaleFactor());
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     ViewportDescription description = document->viewportDescription();
     description.zoom = 2;
     document->setViewportDescription(description);
@@ -1190,8 +1166,8 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportIgnoresPageViewportWidth)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
     // The page sets viewport width to 3000, but with UseWideViewport == false is must be ignored.
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
-    EXPECT_EQ(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().height());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, NoWideViewportIgnoresPageViewportWidthButAccountsScale)
@@ -1211,8 +1187,8 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportIgnoresPageViewportWidthButAccou
 
     // The page sets viewport width to 3000, but with UseWideViewport == false it must be ignored.
     // While the initial scale specified by the page must be accounted.
-    EXPECT_EQ(viewportWidth / 2, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
-    EXPECT_EQ(viewportHeight / 2, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().height());
+    EXPECT_EQ(viewportWidth / 2, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(viewportHeight / 2, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithoutViewportTag)
@@ -1231,8 +1207,8 @@ TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithoutViewportTag)
     webViewHelper.webView()->settings()->setUseWideViewport(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(980, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
-    EXPECT_EQ(980.0 / viewportWidth * viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().height());
+    EXPECT_EQ(980, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(980.0 / viewportWidth * viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithXhtmlMp)
@@ -1252,8 +1228,8 @@ TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithXhtmlMp)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "viewport/viewport-legacy-xhtmlmp.html");
 
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
-    EXPECT_EQ(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().height());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, NoWideViewportAndHeightInMeta)
@@ -1271,7 +1247,7 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportAndHeightInMeta)
     webViewHelper.webView()->settings()->setUseWideViewport(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
 }
 
 TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithAutoWidth)
@@ -1290,8 +1266,8 @@ TEST_P(ParameterizedWebFrameTest, WideViewportSetsTo980WithAutoWidth)
     webViewHelper.webView()->settings()->setUseWideViewport(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(980, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
-    EXPECT_EQ(980.0 / viewportWidth * viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().height());
+    EXPECT_EQ(980, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(980.0 / viewportWidth * viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, PageViewportInitialScaleOverridesLoadWithOverviewMode)
@@ -1429,7 +1405,7 @@ TEST_P(ParameterizedWebFrameTest, PermanentInitialPageScaleFactorAffectsLayoutWi
     webViewHelper.webView()->setInitialPageScaleOverride(enforcedPageScaleFactor);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(viewportWidth / enforcedPageScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(viewportWidth / enforcedPageScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
     EXPECT_EQ(enforcedPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
 }
 
@@ -1448,7 +1424,7 @@ TEST_P(ParameterizedWebFrameTest, DocumentElementClientHeightWorksWithWrapConten
     webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    LocalFrame* frame = webViewHelper.webViewImpl()->mainFrameImpl()->frame();
+    LocalFrame* frame = webViewHelper.webView()->mainFrameImpl()->frame();
     Document* document = frame->document();
     EXPECT_EQ(viewportHeight, document->documentElement()->clientHeight());
     EXPECT_EQ(viewportWidth, document->documentElement()->clientWidth());
@@ -1467,15 +1443,15 @@ TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeightWorksWithWrapContentMo
 
     webViewHelper.initializeAndLoad(m_baseURL + "0-by-0.html", true, nullptr, &client, nullptr, configureAndroid);
     webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
-    PaintLayerCompositor* compositor = webViewHelper.webViewImpl()->compositor();
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    PaintLayerCompositor* compositor = webViewHelper.webView()->compositor();
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     EXPECT_EQ(0.0, compositor->containerLayer()->size().width());
     EXPECT_EQ(0.0, compositor->containerLayer()->size().height());
 
     webViewHelper.resize(WebSize(viewportWidth, 0));
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     EXPECT_EQ(viewportWidth, compositor->containerLayer()->size().width());
     EXPECT_EQ(0.0, compositor->containerLayer()->size().height());
 
@@ -1483,13 +1459,13 @@ TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeightWorksWithWrapContentMo
     // height to be ignored by the outer viewport (the container layer of
     // LayerCompositor). The height of the visualViewport, however, is not affected.
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
-    EXPECT_FALSE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_FALSE(webViewHelper.webView()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     EXPECT_EQ(viewportWidth, compositor->containerLayer()->size().width());
     EXPECT_EQ(viewportHeight, compositor->containerLayer()->size().height());
 
-    LocalFrame* frame = webViewHelper.webViewImpl()->mainFrameImpl()->frame();
+    LocalFrame* frame = webViewHelper.webView()->mainFrameImpl()->frame();
     VisualViewport& visualViewport = frame->page()->frameHost().visualViewport();
     EXPECT_EQ(viewportHeight, visualViewport.containerLayer()->size().height());
     EXPECT_TRUE(visualViewport.containerLayer()->platformLayer()->masksToBounds());
@@ -1510,21 +1486,21 @@ TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeight)
     webViewHelper.initializeAndLoad(m_baseURL + "200-by-300.html", true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_LE(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_LE(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
-    EXPECT_TRUE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_TRUE(webViewHelper.webView()->mainFrameImpl()->frameView()->needsLayout());
 
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight * 2));
-    EXPECT_FALSE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_FALSE(webViewHelper.webView()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 
     webViewHelper.resize(WebSize(viewportWidth * 2, viewportHeight));
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 
     webViewHelper.webView()->settings()->setForceZeroLayoutHeight(false);
-    EXPECT_LE(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_LE(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_F(WebFrameTest, ToggleViewportMetaOnOff)
@@ -1545,7 +1521,7 @@ TEST_F(WebFrameTest, ToggleViewportMetaOnOff)
     settings->setShrinksViewportContentToFit(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     EXPECT_FALSE(document->viewportDescription().isLegacyViewportType());
 
     settings->setViewportMetaEnabled(true);
@@ -1583,7 +1559,7 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksWithRelayoutsWhenHeightChanged
 
     IntPoint hitPoint = IntPoint(30, 30); // button size is 100x100
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("tap_button");
 
@@ -1591,7 +1567,7 @@ TEST_F(WebFrameTest, SetForceZeroLayoutHeightWorksWithRelayoutsWhenHeightChanged
     EXPECT_EQ(String("oldValue"), element->innerText());
 
     PlatformGestureEvent gestureEvent(PlatformEvent::EventType::GestureTap, hitPoint, hitPoint, IntSize(0, 0), 0, PlatformEvent::NoModifiers, PlatformGestureSourceTouchscreen);
-    webViewHelper.webViewImpl()->mainFrameImpl()->frame()->eventHandler().handleGestureEvent(gestureEvent);
+    webViewHelper.webView()->mainFrameImpl()->frame()->eventHandler().handleGestureEvent(gestureEvent);
     // when pressed, the button changes its own text to "updatedValue"
     EXPECT_EQ(String("updatedValue"), element->innerText());
 }
@@ -1609,18 +1585,18 @@ TEST_F(WebFrameTest, FrameOwnerPropertiesMargin)
     WebFrameOwnerProperties properties;
     properties.marginWidth = 11;
     properties.marginHeight = 22;
-    WebLocalFrame* localFrame = FrameTestHelpers::createLocalChild(root, "frameName", nullptr, nullptr, properties);
+    WebLocalFrameImpl* localFrame = FrameTestHelpers::createLocalChild(root, "frameName", nullptr, nullptr, nullptr, properties);
 
     registerMockedHttpURLLoad("frame_owner_properties.html");
     FrameTestHelpers::loadFrame(localFrame, m_baseURL + "frame_owner_properties.html");
 
     // Check if the LocalFrame has seen the marginwidth and marginheight
     // properties.
-    Document* childDocument = toWebLocalFrameImpl(localFrame)->frame()->document();
+    Document* childDocument = localFrame->frame()->document();
     EXPECT_EQ(11, childDocument->firstBodyElement()->getIntegralAttribute(HTMLNames::marginwidthAttr));
     EXPECT_EQ(22, childDocument->firstBodyElement()->getIntegralAttribute(HTMLNames::marginheightAttr));
 
-    FrameView* frameView = toWebLocalFrameImpl(localFrame)->frameView();
+    FrameView* frameView = localFrame->frameView();
     // Expect scrollbars to be enabled by default.
     EXPECT_NE(nullptr, frameView->horizontalScrollbar());
     EXPECT_NE(nullptr, frameView->verticalScrollbar());
@@ -1641,12 +1617,12 @@ TEST_F(WebFrameTest, FrameOwnerPropertiesScrolling)
     WebFrameOwnerProperties properties;
     // Turn off scrolling in the subframe.
     properties.scrollingMode = WebFrameOwnerProperties::ScrollingMode::AlwaysOff;
-    WebLocalFrame* localFrame = FrameTestHelpers::createLocalChild(root, "frameName", nullptr, nullptr, properties);
+    WebLocalFrameImpl* localFrame = FrameTestHelpers::createLocalChild(root, "frameName", nullptr, nullptr, nullptr, properties);
 
     registerMockedHttpURLLoad("frame_owner_properties.html");
     FrameTestHelpers::loadFrame(localFrame, m_baseURL + "frame_owner_properties.html");
 
-    Document* childDocument = toWebLocalFrameImpl(localFrame)->frame()->document();
+    Document* childDocument = localFrame->frame()->document();
     EXPECT_EQ(0, childDocument->firstBodyElement()->getIntegralAttribute(HTMLNames::marginwidthAttr));
     EXPECT_EQ(0, childDocument->firstBodyElement()->getIntegralAttribute(HTMLNames::marginheightAttr));
 
@@ -1677,7 +1653,7 @@ TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeightWorksAcrossNavigations
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "large-div.html");
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeightWithWideViewportQuirk)
@@ -1697,7 +1673,7 @@ TEST_P(ParameterizedWebFrameTest, SetForceZeroLayoutHeightWithWideViewportQuirk)
     webViewHelper.webView()->settings()->setForceZeroLayoutHeight(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, WideViewportAndWideContentWithInitialScale)
@@ -1722,8 +1698,8 @@ TEST_P(ParameterizedWebFrameTest, WideViewportAndWideContentWithInitialScale)
 
     int wideDocumentWidth = 800;
     float minimumPageScaleFactor = viewportWidth / (float) wideDocumentWidth;
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
-    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webViewImpl()->minimumPageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, webViewHelper.webView()->minimumPageScaleFactor());
 }
 
 TEST_P(ParameterizedWebFrameTest, WideViewportQuirkClobbersHeight)
@@ -1745,7 +1721,7 @@ TEST_P(ParameterizedWebFrameTest, WideViewportQuirkClobbersHeight)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "viewport-height-1000.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(800, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(800, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     EXPECT_EQ(1, webViewHelper.webView()->pageScaleFactor());
 }
 
@@ -1768,36 +1744,36 @@ TEST_P(ParameterizedWebFrameTest, LayoutSize320Quirk)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "viewport/viewport-30.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(600, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
-    EXPECT_EQ(800, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(600, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(800, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
     EXPECT_EQ(1, webViewHelper.webView()->pageScaleFactor());
 
     // The magic number to snap to device-width is 320, so test that 321 is
     // respected.
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     ViewportDescription description = document->viewportDescription();
     description.minWidth = Length(321, blink::Fixed);
     description.maxWidth = Length(321, blink::Fixed);
     document->setViewportDescription(description);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(321, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(321, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
 
     description.minWidth = Length(320, blink::Fixed);
     description.maxWidth = Length(320, blink::Fixed);
     document->setViewportDescription(description);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(600, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(600, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
 
     description = document->viewportDescription();
     description.maxHeight = Length(1000, blink::Fixed);
     document->setViewportDescription(description);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(1000, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(1000, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 
     description.maxHeight = Length(320, blink::Fixed);
     document->setViewportDescription(description);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(800, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height());
+    EXPECT_EQ(800, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height());
 }
 
 TEST_P(ParameterizedWebFrameTest, ZeroValuesQuirk)
@@ -1817,12 +1793,12 @@ TEST_P(ParameterizedWebFrameTest, ZeroValuesQuirk)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "viewport-zero-values.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
     EXPECT_EQ(1.0f, webViewHelper.webView()->pageScaleFactor());
 
     webViewHelper.webView()->settings()->setUseWideViewport(true);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
     EXPECT_EQ(1.0f, webViewHelper.webView()->pageScaleFactor());
 }
 
@@ -1840,7 +1816,7 @@ TEST_P(ParameterizedWebFrameTest, OverflowHiddenDisablesScrolling)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "body-overflow-hidden.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_FALSE(view->userInputScrollable(VerticalScrollbar));
     EXPECT_FALSE(view->userInputScrollable(HorizontalScrollbar));
 }
@@ -1859,11 +1835,11 @@ TEST_P(ParameterizedWebFrameTest, OverflowHiddenDisablesScrollingWithSetCanHaveS
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "body-overflow-hidden-short.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_FALSE(view->userInputScrollable(VerticalScrollbar));
     EXPECT_FALSE(view->userInputScrollable(HorizontalScrollbar));
 
-    webViewHelper.webViewImpl()->mainFrameImpl()->setCanHaveScrollbars(true);
+    webViewHelper.webView()->mainFrameImpl()->setCanHaveScrollbars(true);
     EXPECT_FALSE(view->userInputScrollable(VerticalScrollbar));
     EXPECT_FALSE(view->userInputScrollable(HorizontalScrollbar));
 }
@@ -1883,7 +1859,7 @@ TEST_F(WebFrameTest, IgnoreOverflowHiddenQuirk)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "body-overflow-hidden.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_TRUE(view->userInputScrollable(VerticalScrollbar));
 }
 
@@ -1904,12 +1880,12 @@ TEST_P(ParameterizedWebFrameTest, NonZeroValuesNoQuirk)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "viewport-nonzero-values.html");
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(viewportWidth / expectedPageScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(viewportWidth / expectedPageScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
     EXPECT_EQ(expectedPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
 
     webViewHelper.webView()->settings()->setUseWideViewport(true);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    EXPECT_EQ(viewportWidth / expectedPageScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width());
+    EXPECT_EQ(viewportWidth / expectedPageScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width());
     EXPECT_EQ(expectedPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
 }
 
@@ -1927,10 +1903,10 @@ TEST_P(ParameterizedWebFrameTest, setPageScaleFactorDoesNotLayout)
     webViewHelper.initializeAndLoad(m_baseURL + "fixed_layout.html", true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    int prevLayoutCount = webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutCount();
-    webViewHelper.webViewImpl()->setPageScaleFactor(3);
-    EXPECT_FALSE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
-    EXPECT_EQ(prevLayoutCount, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutCount());
+    int prevLayoutCount = webViewHelper.webView()->mainFrameImpl()->frameView()->layoutCount();
+    webViewHelper.webView()->setPageScaleFactor(3);
+    EXPECT_FALSE(webViewHelper.webView()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_EQ(prevLayoutCount, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutCount());
 }
 
 TEST_P(ParameterizedWebFrameTest, setPageScaleFactorWithOverlayScrollbarsDoesNotLayout)
@@ -1946,10 +1922,10 @@ TEST_P(ParameterizedWebFrameTest, setPageScaleFactorWithOverlayScrollbarsDoesNot
     webViewHelper.initializeAndLoad(m_baseURL + "fixed_layout.html", true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    int prevLayoutCount = webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutCount();
-    webViewHelper.webViewImpl()->setPageScaleFactor(30);
-    EXPECT_FALSE(webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->needsLayout());
-    EXPECT_EQ(prevLayoutCount, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutCount());
+    int prevLayoutCount = webViewHelper.webView()->mainFrameImpl()->frameView()->layoutCount();
+    webViewHelper.webView()->setPageScaleFactor(30);
+    EXPECT_FALSE(webViewHelper.webView()->mainFrameImpl()->frameView()->needsLayout());
+    EXPECT_EQ(prevLayoutCount, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutCount());
 
 }
 
@@ -1967,7 +1943,7 @@ TEST_P(ParameterizedWebFrameTest, pageScaleFactorWrittenToHistoryItem)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
     webViewHelper.webView()->setPageScaleFactor(3);
-    EXPECT_EQ(3, toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(3, toLocalFrame(webViewHelper.webView()->page()->mainFrame())->loader().currentItem()->pageScaleFactor());
 }
 
 TEST_P(ParameterizedWebFrameTest, initialScaleWrittenToHistoryItem)
@@ -1987,7 +1963,7 @@ TEST_P(ParameterizedWebFrameTest, initialScaleWrittenToHistoryItem)
 
     int defaultFixedLayoutWidth = 980;
     float minimumPageScaleFactor = viewportWidth / (float) defaultFixedLayoutWidth;
-    EXPECT_EQ(minimumPageScaleFactor, toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().currentItem()->pageScaleFactor());
+    EXPECT_EQ(minimumPageScaleFactor, toLocalFrame(webViewHelper.webView()->page()->mainFrame())->loader().currentItem()->pageScaleFactor());
 }
 
 TEST_P(ParameterizedWebFrameTest, pageScaleFactorDoesntShrinkFrameView)
@@ -2004,7 +1980,7 @@ TEST_P(ParameterizedWebFrameTest, pageScaleFactorDoesntShrinkFrameView)
     webViewHelper.initializeAndLoad(m_baseURL + "large-div.html", true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     int viewportWidthMinusScrollbar = viewportWidth;
     int viewportHeightMinusScrollbar = viewportHeight;
 
@@ -2044,8 +2020,8 @@ TEST_P(ParameterizedWebFrameTest, pageScaleFactorDoesNotApplyCssTransform)
 
     webViewHelper.webView()->setPageScaleFactor(2);
 
-    EXPECT_EQ(980, toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->contentLayoutItem().documentRect().width());
-    EXPECT_EQ(980, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->contentsSize().width());
+    EXPECT_EQ(980, toLocalFrame(webViewHelper.webView()->page()->mainFrame())->contentLayoutItem().documentRect().width());
+    EXPECT_EQ(980, webViewHelper.webView()->mainFrameImpl()->frameView()->contentsSize().width());
 }
 
 TEST_P(ParameterizedWebFrameTest, targetDensityDpiHigh)
@@ -2073,8 +2049,8 @@ TEST_P(ParameterizedWebFrameTest, targetDensityDpiHigh)
         // We need to account for the fact that logical pixels are unconditionally multiplied by deviceScaleFactor to produce
         // physical pixels.
         float densityDpiScaleRatio = deviceScaleFactor * targetDpi / deviceDpi;
-        EXPECT_NEAR(viewportWidth * densityDpiScaleRatio, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-        EXPECT_NEAR(viewportHeight * densityDpiScaleRatio, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+        EXPECT_NEAR(viewportWidth * densityDpiScaleRatio, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+        EXPECT_NEAR(viewportHeight * densityDpiScaleRatio, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
         EXPECT_NEAR(1.0f / densityDpiScaleRatio, webViewHelper.webView()->pageScaleFactor(), 0.01f);
     }
 }
@@ -2098,8 +2074,8 @@ TEST_P(ParameterizedWebFrameTest, targetDensityDpiDevice)
         webViewHelper.webView()->settings()->setSupportDeprecatedTargetDensityDPI(true);
         webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-        EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-        EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+        EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+        EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
         EXPECT_NEAR(1.0f / client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.01f);
     }
 }
@@ -2124,8 +2100,8 @@ TEST_P(ParameterizedWebFrameTest, targetDensityDpiDeviceAndFixedWidth)
         webViewHelper.webView()->settings()->setUseWideViewport(true);
         webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-        EXPECT_NEAR(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-        EXPECT_NEAR(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+        EXPECT_NEAR(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+        EXPECT_NEAR(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
         EXPECT_NEAR(1.0f, webViewHelper.webView()->pageScaleFactor(), 0.01f);
     }
 }
@@ -2146,8 +2122,8 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportAndScaleLessThanOne)
     webViewHelper.webView()->settings()->setUseWideViewport(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(1.0f / client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2168,8 +2144,8 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportAndScaleLessThanOneWithDeviceWid
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
     const float pageZoom = 0.25f;
-    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor / pageZoom, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor / pageZoom, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor / pageZoom, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor / pageZoom, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(1.0f / client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2190,8 +2166,8 @@ TEST_P(ParameterizedWebFrameTest, NoWideViewportAndNoViewportWithInitialPageScal
     webViewHelper.webView()->setInitialPageScaleOverride(enforcedPageScaleFactor);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(viewportWidth / enforcedPageScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight / enforcedPageScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth / enforcedPageScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight / enforcedPageScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(enforcedPageScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2208,8 +2184,8 @@ TEST_P(ParameterizedWebFrameTest, NoUserScalableQuirkIgnoresViewportScale)
     webViewHelper.webView()->settings()->setViewportMetaNonUserScalableQuirk(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(1.0f, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2230,8 +2206,8 @@ TEST_P(ParameterizedWebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForNonW
     webViewHelper.webView()->settings()->setUseWideViewport(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight * client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(1.0f / client.m_screenInfo.deviceScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2250,8 +2226,8 @@ TEST_P(ParameterizedWebFrameTest, NoUserScalableQuirkIgnoresViewportScaleForWide
     webViewHelper.webView()->settings()->setUseWideViewport(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(viewportWidth, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
-    EXPECT_NEAR(viewportHeight, webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
+    EXPECT_NEAR(viewportWidth, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().width(), 1.0f);
+    EXPECT_NEAR(viewportHeight, webViewHelper.webView()->mainFrameImpl()->frameView()->layoutSize().height(), 1.0f);
     EXPECT_NEAR(1.0f, webViewHelper.webView()->pageScaleFactor(), 0.01f);
 }
 
@@ -2270,9 +2246,9 @@ TEST_P(ParameterizedWebFrameTest, DesktopPageCanBeZoomedInWhenWideViewportIsTurn
     webViewHelper.webView()->settings()->setUseWideViewport(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_NEAR(1.0f, webViewHelper.webViewImpl()->pageScaleFactor(), 0.01f);
-    EXPECT_NEAR(1.0f, webViewHelper.webViewImpl()->minimumPageScaleFactor(), 0.01f);
-    EXPECT_NEAR(5.0f, webViewHelper.webViewImpl()->maximumPageScaleFactor(), 0.01f);
+    EXPECT_NEAR(1.0f, webViewHelper.webView()->pageScaleFactor(), 0.01f);
+    EXPECT_NEAR(1.0f, webViewHelper.webView()->minimumPageScaleFactor(), 0.01f);
+    EXPECT_NEAR(5.0f, webViewHelper.webView()->maximumPageScaleFactor(), 0.01f);
 }
 
 class WebFrameResizeTest : public ParameterizedWebFrameTest {
@@ -2296,40 +2272,40 @@ protected:
 
         FrameTestHelpers::WebViewHelper webViewHelper(this);
         webViewHelper.initializeAndLoad(m_baseURL + url, true, nullptr, nullptr, nullptr, enableViewportSettings);
-        webViewHelper.webViewImpl()->setDefaultPageScaleLimits(0.25f, 5);
+        webViewHelper.webView()->setDefaultPageScaleLimits(0.25f, 5);
 
         // Origin scrollOffsets preserved under resize.
         {
             webViewHelper.resize(WebSize(viewportSize.width, viewportSize.height));
-            webViewHelper.webViewImpl()->setPageScaleFactor(initialPageScaleFactor);
-            ASSERT_EQ(viewportSize, webViewHelper.webViewImpl()->size());
-            ASSERT_EQ(initialPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
+            webViewHelper.webView()->setPageScaleFactor(initialPageScaleFactor);
+            ASSERT_EQ(viewportSize, webViewHelper.webView()->size());
+            ASSERT_EQ(initialPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
             webViewHelper.resize(WebSize(viewportSize.height, viewportSize.width));
             float expectedPageScaleFactor = initialPageScaleFactor * (shouldScaleRelativeToViewportWidth ? 1 / aspectRatio : 1);
-            EXPECT_NEAR(expectedPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor(), 0.05f);
-            EXPECT_EQ(WebSize(), webViewHelper.webViewImpl()->mainFrame()->scrollOffset());
+            EXPECT_NEAR(expectedPageScaleFactor, webViewHelper.webView()->pageScaleFactor(), 0.05f);
+            EXPECT_EQ(WebSize(), webViewHelper.webView()->mainFrame()->scrollOffset());
         }
 
         // Resizing just the height should not affect pageScaleFactor or scrollOffset.
         {
             webViewHelper.resize(WebSize(viewportSize.width, viewportSize.height));
-            webViewHelper.webViewImpl()->setPageScaleFactor(initialPageScaleFactor);
-            webViewHelper.webViewImpl()->mainFrame()->setScrollOffset(scrollOffset);
-            webViewHelper.webViewImpl()->updateAllLifecyclePhases();
-            const WebSize expectedScrollOffset = webViewHelper.webViewImpl()->mainFrame()->scrollOffset();
+            webViewHelper.webView()->setPageScaleFactor(initialPageScaleFactor);
+            webViewHelper.webView()->mainFrame()->setScrollOffset(scrollOffset);
+            webViewHelper.webView()->updateAllLifecyclePhases();
+            const WebSize expectedScrollOffset = webViewHelper.webView()->mainFrame()->scrollOffset();
             webViewHelper.resize(WebSize(viewportSize.width, viewportSize.height * 0.8f));
-            EXPECT_EQ(initialPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
-            EXPECT_EQ(expectedScrollOffset, webViewHelper.webViewImpl()->mainFrame()->scrollOffset());
+            EXPECT_EQ(initialPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
+            EXPECT_EQ(expectedScrollOffset, webViewHelper.webView()->mainFrame()->scrollOffset());
             webViewHelper.resize(WebSize(viewportSize.width, viewportSize.height * 0.8f));
-            EXPECT_EQ(initialPageScaleFactor, webViewHelper.webViewImpl()->pageScaleFactor());
-            EXPECT_EQ(expectedScrollOffset, webViewHelper.webViewImpl()->mainFrame()->scrollOffset());
+            EXPECT_EQ(initialPageScaleFactor, webViewHelper.webView()->pageScaleFactor());
+            EXPECT_EQ(expectedScrollOffset, webViewHelper.webView()->mainFrame()->scrollOffset());
         }
     }
 };
 
 INSTANTIATE_TEST_CASE_P(All, WebFrameResizeTest, ::testing::Values(
-    ParameterizedWebFrameTestConfig::Default,
-    ParameterizedWebFrameTestConfig::RootLayerScrolls));
+    FrameTestHelpers::DefaultSettingOverride,
+    FrameTestHelpers::RootLayerScrollsSettingOverride));
 
 TEST_P(WebFrameResizeTest, ResizeYieldsCorrectScrollAndScaleForWidthEqualsDeviceWidth)
 {
@@ -2400,7 +2376,7 @@ TEST_P(ParameterizedWebFrameTest, pageScaleFactorUpdatesScrollbars)
     webViewHelper.initializeAndLoad(m_baseURL + "fixed_layout.html", true, nullptr, &client, nullptr, enableViewportSettings);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_EQ(view->scrollSize(HorizontalScrollbar), view->contentsSize().width() - view->visibleContentRect().width());
     EXPECT_EQ(view->scrollSize(VerticalScrollbar), view->contentsSize().height() - view->visibleContentRect().height());
 
@@ -2424,20 +2400,20 @@ TEST_P(ParameterizedWebFrameTest, CanOverrideScaleLimits)
     webViewHelper.webView()->setDefaultPageScaleLimits(0.25f, 5);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    EXPECT_EQ(2.0f, webViewHelper.webViewImpl()->minimumPageScaleFactor());
-    EXPECT_EQ(2.0f, webViewHelper.webViewImpl()->maximumPageScaleFactor());
+    EXPECT_EQ(2.0f, webViewHelper.webView()->minimumPageScaleFactor());
+    EXPECT_EQ(2.0f, webViewHelper.webView()->maximumPageScaleFactor());
 
     webViewHelper.webView()->setIgnoreViewportTagScaleLimits(true);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    EXPECT_EQ(1.0f, webViewHelper.webViewImpl()->minimumPageScaleFactor());
-    EXPECT_EQ(5.0f, webViewHelper.webViewImpl()->maximumPageScaleFactor());
+    EXPECT_EQ(1.0f, webViewHelper.webView()->minimumPageScaleFactor());
+    EXPECT_EQ(5.0f, webViewHelper.webView()->maximumPageScaleFactor());
 
     webViewHelper.webView()->setIgnoreViewportTagScaleLimits(false);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    EXPECT_EQ(2.0f, webViewHelper.webViewImpl()->minimumPageScaleFactor());
-    EXPECT_EQ(2.0f, webViewHelper.webViewImpl()->maximumPageScaleFactor());
+    EXPECT_EQ(2.0f, webViewHelper.webView()->minimumPageScaleFactor());
+    EXPECT_EQ(2.0f, webViewHelper.webView()->maximumPageScaleFactor());
 }
 
 // Android doesn't have scrollbars on the main FrameView
@@ -2459,7 +2435,7 @@ TEST_F(WebFrameTest, updateOverlayScrollbarLayers)
     webViewHelper.resize(WebSize(viewWidth, viewHeight));
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "large-div.html");
 
-    FrameView* view = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* view = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_TRUE(view->layoutViewItem().compositor()->layerForHorizontalScrollbar());
     EXPECT_TRUE(view->layoutViewItem().compositor()->layerForVerticalScrollbar());
 
@@ -2518,30 +2494,30 @@ TEST_P(ParameterizedWebFrameTest, DivAutoZoomParamsTest)
     float scale;
     WebPoint scroll;
 
-    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
 
     // Test double-tap zooming into wide div.
-    WebRect wideBlockBound = webViewHelper.webViewImpl()->computeBlockBound(doubleTapPointWide, false);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointWide.x, doubleTapPointWide.y), wideBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
+    WebRect wideBlockBound = webViewHelper.webView()->computeBlockBound(doubleTapPointWide, false);
+    webViewHelper.webView()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointWide.x, doubleTapPointWide.y), wideBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
     // The div should horizontally fill the screen (modulo margins), and
     // vertically centered (modulo integer rounding).
     EXPECT_NEAR(viewportWidth / (float) wideDiv.width, scale, 0.1);
     EXPECT_NEAR(wideDiv.x, scroll.x, 20);
     EXPECT_EQ(0, scroll.y);
 
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), scroll, scale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), scroll, scale);
 
     // Test zoom out back to minimum scale.
-    wideBlockBound = webViewHelper.webViewImpl()->computeBlockBound(doubleTapPointWide, false);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointWide.x, doubleTapPointWide.y), wideBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
+    wideBlockBound = webViewHelper.webView()->computeBlockBound(doubleTapPointWide, false);
+    webViewHelper.webView()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointWide.x, doubleTapPointWide.y), wideBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
     // FIXME: Looks like we are missing EXPECTs here.
 
-    scale = webViewHelper.webViewImpl()->minimumPageScaleFactor();
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), scale);
+    scale = webViewHelper.webView()->minimumPageScaleFactor();
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), scale);
 
     // Test double-tap zooming into tall div.
-    WebRect tallBlockBound = webViewHelper.webViewImpl()->computeBlockBound(doubleTapPointTall, false);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointTall.x, doubleTapPointTall.y), tallBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
+    WebRect tallBlockBound = webViewHelper.webView()->computeBlockBound(doubleTapPointTall, false);
+    webViewHelper.webView()->computeScaleAndScrollForBlockRect(WebPoint(doubleTapPointTall.x, doubleTapPointTall.y), tallBlockBound, touchPointPadding, doubleTapZoomAlreadyLegibleScale, scale, scroll);
     // The div should start at the top left of the viewport.
     EXPECT_NEAR(viewportWidth / (float) tallDiv.width, scale, 0.1);
     EXPECT_NEAR(tallDiv.x, scroll.x, 20);
@@ -2563,19 +2539,19 @@ TEST_P(ParameterizedWebFrameTest, DivAutoZoomWideDivTest)
     webViewHelper.webView()->setPageScaleFactor(1.0f);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
-    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
 
     WebRect div(0, 100, viewportWidth, 150);
     WebPoint point(div.x + 50, div.y + 50);
     float scale;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
 
-    simulateDoubleTap(webViewHelper.webViewImpl(), point, scale);
+    simulateDoubleTap(webViewHelper.webView(), point, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), point, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), point, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
 }
 
 TEST_P(ParameterizedWebFrameTest, DivAutoZoomVeryTallTest)
@@ -2600,8 +2576,8 @@ TEST_P(ParameterizedWebFrameTest, DivAutoZoomVeryTallTest)
     float scale;
     WebPoint scroll;
 
-    WebRect blockBound = webViewHelper.webViewImpl()->computeBlockBound(point, true);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForBlockRect(point, blockBound, 0, 1.0f, scale, scroll);
+    WebRect blockBound = webViewHelper.webView()->computeBlockBound(point, true);
+    webViewHelper.webView()->computeScaleAndScrollForBlockRect(point, blockBound, 0, 1.0f, scale, scroll);
     EXPECT_EQ(scale, 1.0f);
     EXPECT_EQ(scroll.y, 2660);
 }
@@ -2623,37 +2599,37 @@ TEST_F(WebFrameTest, DivAutoZoomMultipleDivsTest)
     webViewHelper.webView()->setMaximumLegibleScale(1.f);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     WebRect topDiv(200, 100, 200, 150);
     WebRect bottomDiv(200, 300, 200, 150);
     WebPoint topPoint(topDiv.x + 50, topDiv.y + 50);
     WebPoint bottomPoint(bottomDiv.x + 50, bottomDiv.y + 50);
     float scale;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
 
     // Test double tap on two different divs
     // After first zoom, we should go back to minimum page scale with a second double tap.
-    simulateDoubleTap(webViewHelper.webViewImpl(), topPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), topPoint, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), bottomPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), bottomPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
 
     // If the user pinch zooms after double tap, a second double tap should zoom back to the div.
-    simulateDoubleTap(webViewHelper.webViewImpl(), topPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), topPoint, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 0.6f, 0);
-    simulateDoubleTap(webViewHelper.webViewImpl(), bottomPoint, scale);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 0.6f, 0);
+    simulateDoubleTap(webViewHelper.webView(), bottomPoint, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), bottomPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), bottomPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
 
     // If we didn't yet get an auto-zoom update and a second double-tap arrives, should go back to minimum scale.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
-    webViewHelper.webViewImpl()->animateDoubleTapZoom(topPoint);
-    EXPECT_TRUE(webViewHelper.webViewImpl()->fakeDoubleTapAnimationPendingForTesting());
-    simulateDoubleTap(webViewHelper.webViewImpl(), bottomPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->animateDoubleTapZoom(topPoint);
+    EXPECT_TRUE(webViewHelper.webView()->fakeDoubleTapAnimationPendingForTesting());
+    simulateDoubleTap(webViewHelper.webView(), bottomPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
 }
 
 TEST_F(WebFrameTest, DivAutoZoomScaleBoundsTest)
@@ -2670,7 +2646,7 @@ TEST_F(WebFrameTest, DivAutoZoomScaleBoundsTest)
     webViewHelper.webView()->setMaximumLegibleScale(1.f);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     WebRect div(200, 100, 200, 150);
     WebPoint doubleTapPoint(div.x + 50, div.y + 50);
@@ -2680,41 +2656,41 @@ TEST_F(WebFrameTest, DivAutoZoomScaleBoundsTest)
     // minimumPageScale < doubleTapZoomAlreadyLegibleScale < 1
     webViewHelper.webView()->setDefaultPageScaleLimits(0.5f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(1, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // 1 < minimumPageScale < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(1.1f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // minimumPageScale < 1 < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(0.95f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 }
 
@@ -2732,8 +2708,8 @@ TEST_F(WebFrameTest, DivAutoZoomScaleLegibleScaleTest)
     webViewHelper.webView()->setMaximumLegibleScale(maximumLegibleScaleFactor);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(true);
 
     WebRect div(200, 100, 200, 150);
     WebPoint doubleTapPoint(div.x + 50, div.y + 50);
@@ -2742,57 +2718,57 @@ TEST_F(WebFrameTest, DivAutoZoomScaleLegibleScaleTest)
     // Test double tap scale bounds.
     // minimumPageScale < doubleTapZoomAlreadyLegibleScale < 1 < maximumLegibleScaleFactor
     float legibleScale = maximumLegibleScaleFactor;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
     webViewHelper.webView()->setDefaultPageScaleLimits(0.5f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // 1 < maximumLegibleScaleFactor < minimumPageScale < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(1.0f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // minimumPageScale < 1 < maximumLegibleScaleFactor < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(0.95f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // minimumPageScale < 1 < doubleTapZoomAlreadyLegibleScale < maximumLegibleScaleFactor
     webViewHelper.webView()->setDefaultPageScaleLimits(0.9f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
 }
 
@@ -2811,9 +2787,9 @@ TEST_F(WebFrameTest, DivAutoZoomScaleFontScaleFactorTest)
     webViewHelper.webView()->setMaximumLegibleScale(1.f);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(true);
-    webViewHelper.webViewImpl()->page()->settings().setAccessibilityFontScaleFactor(accessibilityFontScaleFactor);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(true);
+    webViewHelper.webView()->page()->settings().setAccessibilityFontScaleFactor(accessibilityFontScaleFactor);
 
     WebRect div(200, 100, 200, 150);
     WebPoint doubleTapPoint(div.x + 50, div.y + 50);
@@ -2822,57 +2798,57 @@ TEST_F(WebFrameTest, DivAutoZoomScaleFontScaleFactorTest)
     // Test double tap scale bounds.
     // minimumPageScale < doubleTapZoomAlreadyLegibleScale < 1 < accessibilityFontScaleFactor
     float legibleScale = accessibilityFontScaleFactor;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    float doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
     webViewHelper.webView()->setDefaultPageScaleLimits(0.5f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // 1 < accessibilityFontScaleFactor < minimumPageScale < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(1.0f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // minimumPageScale < 1 < accessibilityFontScaleFactor < doubleTapZoomAlreadyLegibleScale
     webViewHelper.webView()->setDefaultPageScaleLimits(0.95f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(doubleTapZoomAlreadyLegibleScale, scale);
 
     // Zoom in to reset double_tap_zoom_in_effect flag.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.1f, 0);
     // minimumPageScale < 1 < doubleTapZoomAlreadyLegibleScale < accessibilityFontScaleFactor
     webViewHelper.webView()->setDefaultPageScaleLimits(0.9f, 4);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    doubleTapZoomAlreadyLegibleScale = webViewHelper.webViewImpl()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    doubleTapZoomAlreadyLegibleScale = webViewHelper.webView()->minimumPageScaleFactor() * doubleTapZoomAlreadyLegibleRatio;
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
-    EXPECT_FLOAT_EQ(webViewHelper.webViewImpl()->minimumPageScaleFactor(), scale);
-    simulateDoubleTap(webViewHelper.webViewImpl(), doubleTapPoint, scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
+    EXPECT_FLOAT_EQ(webViewHelper.webView()->minimumPageScaleFactor(), scale);
+    simulateDoubleTap(webViewHelper.webView(), doubleTapPoint, scale);
     EXPECT_FLOAT_EQ(legibleScale, scale);
 }
 
@@ -2888,25 +2864,25 @@ TEST_P(ParameterizedWebFrameTest, BlockBoundTest)
     IntRect rectRightBottom = IntRect(110, 110, 80, 80);
     IntRect blockBound;
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(9, 9), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(9, 9), true));
     EXPECT_RECT_EQ(rectBack, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(10, 10), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(10, 10), true));
     EXPECT_RECT_EQ(rectLeftTop, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(50, 50), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(50, 50), true));
     EXPECT_RECT_EQ(rectLeftTop, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(89, 89), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(89, 89), true));
     EXPECT_RECT_EQ(rectLeftTop, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(90, 90), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(90, 90), true));
     EXPECT_RECT_EQ(rectBack, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(109, 109), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(109, 109), true));
     EXPECT_RECT_EQ(rectBack, blockBound);
 
-    blockBound = IntRect(webViewHelper.webViewImpl()->computeBlockBound(WebPoint(110, 110), true));
+    blockBound = IntRect(webViewHelper.webView()->computeBlockBound(WebPoint(110, 110), true));
     EXPECT_RECT_EQ(rectRightBottom, blockBound);
 }
 
@@ -2927,22 +2903,22 @@ TEST_P(ParameterizedWebFrameTest, DivMultipleTargetZoomMultipleDivsTest)
     webViewHelper.webView()->setMaximumLegibleScale(1.f);
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     WebRect viewportRect(0, 0, viewportWidth, viewportHeight);
     WebRect topDiv(200, 100, 200, 150);
     WebRect bottomDiv(200, 300, 200, 150);
     float scale;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), (webViewHelper.webViewImpl()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), (webViewHelper.webView()->minimumPageScaleFactor()) * (1 + doubleTapZoomAlreadyLegibleRatio) / 2);
 
-    simulateMultiTargetZoom(webViewHelper.webViewImpl(), topDiv, scale);
+    simulateMultiTargetZoom(webViewHelper.webView(), topDiv, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    simulateMultiTargetZoom(webViewHelper.webViewImpl(), bottomDiv, scale);
+    simulateMultiTargetZoom(webViewHelper.webView(), bottomDiv, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    simulateMultiTargetZoom(webViewHelper.webViewImpl(), viewportRect, scale);
+    simulateMultiTargetZoom(webViewHelper.webView(), viewportRect, scale);
     EXPECT_FLOAT_EQ(1, scale);
-    webViewHelper.webViewImpl()->setPageScaleFactor(webViewHelper.webViewImpl()->minimumPageScaleFactor());
-    simulateMultiTargetZoom(webViewHelper.webViewImpl(), topDiv, scale);
+    webViewHelper.webView()->setPageScaleFactor(webViewHelper.webView()->minimumPageScaleFactor());
+    simulateMultiTargetZoom(webViewHelper.webView(), topDiv, scale);
     EXPECT_FLOAT_EQ(1, scale);
 }
 
@@ -2955,38 +2931,38 @@ TEST_F(WebFrameTest, DontZoomInOnFocusedInTouchAction)
 
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "textbox_in_touch_action.html");
-    webViewHelper.webViewImpl()->setDefaultPageScaleLimits(0.25f, 4);
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
-    webViewHelper.webViewImpl()->settings()->setAutoZoomFocusedNodeToLegibleScale(true);
+    webViewHelper.webView()->setDefaultPageScaleLimits(0.25f, 4);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(false);
+    webViewHelper.webView()->settings()->setAutoZoomFocusedNodeToLegibleScale(true);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
 
-    float initialScale = webViewHelper.webViewImpl()->pageScaleFactor();
+    float initialScale = webViewHelper.webView()->pageScaleFactor();
 
     // Focus the first textbox that's in a touch-action: pan-x ancestor, this
     // shouldn't cause an autozoom since pan-x disables pinch-zoom.
-    webViewHelper.webViewImpl()->advanceFocus(false);
-    webViewHelper.webViewImpl()->scrollFocusedEditableElementIntoRect(WebRect());
-    EXPECT_EQ(webViewHelper.webViewImpl()->fakePageScaleAnimationPageScaleForTesting(), 0);
+    webViewHelper.webView()->advanceFocus(false);
+    webViewHelper.webView()->scrollFocusedEditableElementIntoRect(WebRect());
+    EXPECT_EQ(webViewHelper.webView()->fakePageScaleAnimationPageScaleForTesting(), 0);
 
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
-    ASSERT_EQ(initialScale, webViewHelper.webViewImpl()->pageScaleFactor());
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
+    ASSERT_EQ(initialScale, webViewHelper.webView()->pageScaleFactor());
 
     // Focus the second textbox that's in a touch-action: manipulation ancestor,
     // this should cause an autozoom since it allows pinch-zoom.
-    webViewHelper.webViewImpl()->advanceFocus(false);
-    webViewHelper.webViewImpl()->scrollFocusedEditableElementIntoRect(WebRect());
-    EXPECT_GT(webViewHelper.webViewImpl()->fakePageScaleAnimationPageScaleForTesting(), initialScale);
+    webViewHelper.webView()->advanceFocus(false);
+    webViewHelper.webView()->scrollFocusedEditableElementIntoRect(WebRect());
+    EXPECT_GT(webViewHelper.webView()->fakePageScaleAnimationPageScaleForTesting(), initialScale);
 
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
-    ASSERT_EQ(initialScale, webViewHelper.webViewImpl()->pageScaleFactor());
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
+    ASSERT_EQ(initialScale, webViewHelper.webView()->pageScaleFactor());
 
     // Focus the third textbox that has a touch-action: pan-x ancestor, this
     // should cause an autozoom since it's seperated from the node with the
     // touch-action by an overflow:scroll element.
     webViewHelper.webView()->advanceFocus(false);
-    webViewHelper.webViewImpl()->scrollFocusedEditableElementIntoRect(WebRect());
-    EXPECT_GT(webViewHelper.webViewImpl()->fakePageScaleAnimationPageScaleForTesting(), initialScale);
+    webViewHelper.webView()->scrollFocusedEditableElementIntoRect(WebRect());
+    EXPECT_GT(webViewHelper.webView()->fakePageScaleAnimationPageScaleForTesting(), initialScale);
 }
 
 
@@ -3002,11 +2978,11 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     float minReadableCaretHeight = 16.0f;
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "get_scale_for_zoom_into_editable_test.html");
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewHelper.webView()->setDefaultPageScaleLimits(0.25f, 4);
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     WebRect editBoxWithText(200, 200, 250, 20);
     WebRect editBoxWithNoText(200, 250, 250, 20);
@@ -3016,18 +2992,18 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     webViewHelper.webView()->advanceFocus(false);
     // Set the caret to the end of the input box.
     webViewHelper.webView()->mainFrame()->document().getElementById("EditBoxWithText").to<WebInputElement>().setSelectionRange(1000, 1000);
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), 1);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), 1);
     WebRect rect, caret;
-    webViewHelper.webViewImpl()->selectionBounds(caret, rect);
+    webViewHelper.webView()->selectionBounds(caret, rect);
 
     // Set the page scale to be smaller than the minimal readable scale.
     float initialScale = minReadableCaretHeight / caret.height * 0.5f;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
 
     float scale;
     IntPoint scroll;
     bool needAnimation;
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // The edit box should be left aligned with a margin for possible label.
     int hScroll = editBoxWithText.x - leftBoxRatio * viewportWidth / scale;
@@ -3040,18 +3016,18 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     viewportWidth = 200;
     viewportHeight = 150;
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // The caret should be right aligned since the caret would be offscreen when the edit box is left aligned.
     hScroll = caret.x + caret.width + caretPadding - viewportWidth / scale;
     EXPECT_NEAR(hScroll, scroll.x(), 2);
     EXPECT_NEAR(minReadableCaretHeight / caret.height, scale, 0.1);
 
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
     // Move focus to edit box with text.
     webViewHelper.webView()->advanceFocus(false);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // The edit box should be left aligned.
     hScroll = editBoxWithNoText.x;
@@ -3064,10 +3040,10 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTest)
     webViewHelper.webView()->advanceFocus(true);
     // Zoom out slightly.
     const float withinToleranceScale = scale * 0.9f;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), scroll, withinToleranceScale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), scroll, withinToleranceScale);
     // Move focus back to the second edit box.
     webViewHelper.webView()->advanceFocus(false);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     // The scale should not be adjusted as the zoomed out scale was sufficiently close to the previously focused scale.
     EXPECT_FALSE(needAnimation);
 }
@@ -3082,27 +3058,27 @@ TEST_F(WebFrameTest, DivScrollIntoEditablePreservePageScaleTest)
     const float minReadableCaretHeight = 16.0f;
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "get_scale_for_zoom_into_editable_test.html");
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     const WebRect editBoxWithText(200, 200, 250, 20);
 
     webViewHelper.webView()->advanceFocus(false);
     // Set the caret to the begining of the input box.
     webViewHelper.webView()->mainFrame()->document().getElementById("EditBoxWithText").to<WebInputElement>().setSelectionRange(0, 0);
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), 1);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), 1);
     WebRect rect, caret;
-    webViewHelper.webViewImpl()->selectionBounds(caret, rect);
+    webViewHelper.webView()->selectionBounds(caret, rect);
 
     // Set the page scale to be twice as large as the minimal readable scale.
     float newScale = minReadableCaretHeight / caret.height * 2.0;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), newScale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), newScale);
 
     float scale;
     IntPoint scroll;
     bool needAnimation;
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // Edit box and caret should be left alinged
     int hScroll = editBoxWithText.x;
@@ -3115,8 +3091,8 @@ TEST_F(WebFrameTest, DivScrollIntoEditablePreservePageScaleTest)
     // Set page scale and scroll such that edit box will be under the screen
     newScale = 3.0;
     hScroll = 200;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(hScroll, 0), newScale);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(hScroll, 0), newScale);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
     EXPECT_TRUE(needAnimation);
     // Horizontal scroll have to be the same
     EXPECT_NEAR(hScroll, scroll.x(), 1);
@@ -3138,11 +3114,11 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTestZoomToLegibleScaleDisabled)
     float leftBoxRatio = 0.3f;
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "get_scale_for_zoom_into_editable_test.html");
-    webViewHelper.webViewImpl()->page()->settings().setTextAutosizingEnabled(false);
+    webViewHelper.webView()->page()->settings().setTextAutosizingEnabled(false);
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewHelper.webView()->setDefaultPageScaleLimits(0.25f, 4);
 
-    webViewHelper.webViewImpl()->enableFakePageScaleAnimationForTesting(true);
+    webViewHelper.webView()->enableFakePageScaleAnimationForTesting(true);
 
     WebRect editBoxWithText(200, 200, 250, 20);
     WebRect editBoxWithNoText(200, 250, 250, 20);
@@ -3157,12 +3133,12 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTestZoomToLegibleScaleDisabled)
 
     // Set the page scale to be smaller than the minimal readable scale.
     float initialScale = 0.25f;
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), WebPoint(0, 0), initialScale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), WebPoint(0, 0), initialScale);
 
     float scale;
     IntPoint scroll;
     bool needAnimation;
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
 
     // There should be no change in page scale.
     EXPECT_EQ(initialScale, scale);
@@ -3173,13 +3149,13 @@ TEST_F(WebFrameTest, DivScrollIntoEditableTestZoomToLegibleScaleDisabled)
     int vScroll = editBoxWithNoText.y - (viewportHeight / scale - editBoxWithNoText.height) / 2;
     EXPECT_NEAR(vScroll, scroll.y(), 2);
 
-    setScaleAndScrollAndLayout(webViewHelper.webViewImpl(), scroll, scale);
+    setScaleAndScrollAndLayout(webViewHelper.webView(), scroll, scale);
 
     // Select the first textbox.
     webViewHelper.webView()->advanceFocus(true);
     WebRect rect, caret;
-    webViewHelper.webViewImpl()->selectionBounds(caret, rect);
-    webViewHelper.webViewImpl()->computeScaleAndScrollForFocusedNode(webViewHelper.webViewImpl()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
+    webViewHelper.webView()->selectionBounds(caret, rect);
+    webViewHelper.webView()->computeScaleAndScrollForFocusedNode(webViewHelper.webView()->focusedElement(), autoZoomToLegibleScale, scale, scroll, needAnimation);
 
     // There should be no change at all since the textbox is fully visible already.
     EXPECT_EQ(initialScale, scale);
@@ -3194,13 +3170,13 @@ TEST_P(ParameterizedWebFrameTest, CharacterIndexAtPointWithPinchZoom)
     webViewHelper.initializeAndLoad(m_baseURL + "sometext.html");
     webViewHelper.resize(WebSize(640, 480));
 
-    webViewHelper.webViewImpl()->setPageScaleFactor(2);
-    webViewHelper.webViewImpl()->setVisualViewportOffset(WebFloatPoint(50, 60));
+    webViewHelper.webView()->setPageScaleFactor(2);
+    webViewHelper.webView()->setVisualViewportOffset(WebFloatPoint(50, 60));
 
     WebRect baseRect;
     WebRect extentRect;
 
-    WebFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame();
+    WebLocalFrame* mainFrame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     size_t ix = mainFrame->characterIndexForPoint(WebPoint(320, 388));
 
     EXPECT_EQ(2ul, ix);
@@ -3214,7 +3190,7 @@ TEST_P(ParameterizedWebFrameTest, FirstRectForCharacterRangeWithPinchZoom)
     webViewHelper.initializeAndLoad(m_baseURL + "textbox.html", true);
     webViewHelper.resize(WebSize(640, 480));
 
-    WebFrame* mainFrame = webViewHelper.webViewImpl()->mainFrame();
+    WebLocalFrame* mainFrame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
     mainFrame->executeScript(WebScriptSource("selectRange();"));
 
     WebRect oldRect;
@@ -3222,8 +3198,8 @@ TEST_P(ParameterizedWebFrameTest, FirstRectForCharacterRangeWithPinchZoom)
 
     WebFloatPoint visualOffset(100, 130);
     float scale = 2;
-    webViewHelper.webViewImpl()->setPageScaleFactor(scale);
-    webViewHelper.webViewImpl()->setVisualViewportOffset(visualOffset);
+    webViewHelper.webView()->setPageScaleFactor(scale);
+    webViewHelper.webView()->setVisualViewportOffset(visualOffset);
 
     WebRect baseRect;
     WebRect extentRect;
@@ -3285,32 +3261,32 @@ TEST_F(WebFrameTest, ReloadWithOverrideURLPreservesState)
     ClearScrollStateOnCommitWebFrameClient client;
     webViewHelper.initializeAndLoad(m_baseURL + firstURL, true, &client);
     webViewHelper.resize(WebSize(pageWidth, pageHeight));
-    webViewHelper.webViewImpl()->mainFrame()->setScrollOffset(WebSize(pageWidth / 4, pageHeight / 4));
-    webViewHelper.webViewImpl()->setPageScaleFactor(pageScaleFactor);
+    webViewHelper.webView()->mainFrame()->setScrollOffset(WebSize(pageWidth / 4, pageHeight / 4));
+    webViewHelper.webView()->setPageScaleFactor(pageScaleFactor);
 
-    WebSize previousOffset = webViewHelper.webViewImpl()->mainFrame()->scrollOffset();
-    float previousScale = webViewHelper.webViewImpl()->pageScaleFactor();
+    WebSize previousOffset = webViewHelper.webView()->mainFrame()->scrollOffset();
+    float previousScale = webViewHelper.webView()->pageScaleFactor();
 
     // Reload the page and end up at the same url. State should be propagated.
-    webViewHelper.webViewImpl()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + firstURL), WebFrameLoadType::Reload);
-    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webViewImpl()->mainFrame());
-    EXPECT_EQ(previousOffset.width, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(previousOffset.height, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().height);
-    EXPECT_EQ(previousScale, webViewHelper.webViewImpl()->pageScaleFactor());
+    webViewHelper.webView()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + firstURL), WebFrameLoadType::Reload);
+    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
+    EXPECT_EQ(previousOffset.width, webViewHelper.webView()->mainFrame()->scrollOffset().width);
+    EXPECT_EQ(previousOffset.height, webViewHelper.webView()->mainFrame()->scrollOffset().height);
+    EXPECT_EQ(previousScale, webViewHelper.webView()->pageScaleFactor());
 
     // Reload the page using the cache. State should not be propagated.
-    webViewHelper.webViewImpl()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + secondURL), WebFrameLoadType::Reload);
-    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webViewImpl()->mainFrame());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().height);
-    EXPECT_EQ(1.0f, webViewHelper.webViewImpl()->pageScaleFactor());
+    webViewHelper.webView()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + secondURL), WebFrameLoadType::Reload);
+    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrame()->scrollOffset().width);
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrame()->scrollOffset().height);
+    EXPECT_EQ(1.0f, webViewHelper.webView()->pageScaleFactor());
 
     // Reload the page while ignoring the cache. State should not be propagated.
-    webViewHelper.webViewImpl()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + thirdURL), WebFrameLoadType::ReloadBypassingCache);
-    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webViewImpl()->mainFrame());
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().width);
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->mainFrame()->scrollOffset().height);
-    EXPECT_EQ(1.0f, webViewHelper.webViewImpl()->pageScaleFactor());
+    webViewHelper.webView()->mainFrame()->reloadWithOverrideURL(toKURL(m_baseURL + thirdURL), WebFrameLoadType::ReloadBypassingCache);
+    FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrame()->scrollOffset().width);
+    EXPECT_EQ(0, webViewHelper.webView()->mainFrame()->scrollOffset().height);
+    EXPECT_EQ(1.0f, webViewHelper.webView()->pageScaleFactor());
 }
 
 TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional)
@@ -3322,8 +3298,8 @@ TEST_P(ParameterizedWebFrameTest, ReloadWhileProvisional)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initialize();
     WebURLRequest request;
-    request.initialize();
     request.setURL(toKURL(m_baseURL + "fixed_layout.html"));
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     webViewHelper.webView()->mainFrame()->loadRequest(request);
     // start reload before first request is delivered.
     FrameTestHelpers::reloadFrameIgnoringCache(webViewHelper.webView()->mainFrame());
@@ -3362,7 +3338,7 @@ TEST_P(ParameterizedWebFrameTest, IframeRedirect)
     // Pump pending requests one more time. The test page loads script that navigates.
     FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
 
-    WebFrame* iframe = webViewHelper.webView()->findFrameByName(WebString::fromUTF8("ifr"));
+    WebFrame* iframe = webViewHelper.webView()->findFrameByName(WebString::fromUTF8("ifr"), nullptr);
     ASSERT_TRUE(iframe);
     WebDataSource* iframeDataSource = iframe->dataSource();
     ASSERT_TRUE(iframeDataSource);
@@ -3385,7 +3361,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFocusedNodeTest)
     webViewHelper.webView()->clearFocusedElement();
 
     // Now retrieve the FocusedNode and test it should be null.
-    EXPECT_EQ(0, webViewHelper.webViewImpl()->focusedElement());
+    EXPECT_EQ(0, webViewHelper.webView()->focusedElement());
 }
 
 // Implementation of WebFrameClient that tracks the v8 contexts that are created
@@ -3568,14 +3544,13 @@ TEST_P(ParameterizedWebFrameTest, FindInPage)
     registerMockedHttpURLLoad("find.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find.html");
-    ASSERT_TRUE(webViewHelper.webView()->mainFrame()->isWebLocalFrame());
-    webViewHelper.webView()->setFocus(true);
-    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
+    ASSERT_TRUE(webViewHelper.webView()->mainFrameImpl());
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrameImpl();
     const int findIdentifier = 12345;
     WebFindOptions options;
 
     // Find in a <div> element.
-    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar1"), options, false, 0));
+    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar1"), options, false));
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
     WebRange range = frame->selectionRange();
     EXPECT_EQ(5, range.startOffset());
@@ -3583,7 +3558,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPage)
     EXPECT_TRUE(frame->document().focusedElement().isNull());
 
     // Find in an <input> value.
-    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar2"), options, false, 0));
+    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar2"), options, false));
     // Confirm stopFinding(WebLocalFrame::StopFindActionKeepSelection) sets the selection on the found text.
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
     range = frame->selectionRange();
@@ -3593,7 +3568,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPage)
     EXPECT_TRUE(frame->document().focusedElement().hasHTMLTagName("input"));
 
     // Find in a <textarea> content.
-    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar3"), options, false, 0));
+    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar3"), options, false));
     // Confirm stopFinding(WebLocalFrame::StopFindActionKeepSelection) sets the selection on the found text.
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
     range = frame->selectionRange();
@@ -3603,7 +3578,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPage)
     EXPECT_TRUE(frame->document().focusedElement().hasHTMLTagName("textarea"));
 
     // Find in a contentEditable element.
-    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar4"), options, false, 0));
+    EXPECT_TRUE(frame->find(findIdentifier, WebString::fromUTF8("bar4"), options, false));
     // Confirm stopFinding(WebLocalFrame::StopFindActionKeepSelection) sets the selection on the found text.
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
     range = frame->selectionRange();
@@ -3614,7 +3589,7 @@ TEST_P(ParameterizedWebFrameTest, FindInPage)
     EXPECT_TRUE(frame->document().focusedElement().hasHTMLTagName("div"));
 
     // Find in <select> content.
-    EXPECT_FALSE(frame->find(findIdentifier, WebString::fromUTF8("bar5"), options, false, 0));
+    EXPECT_FALSE(frame->find(findIdentifier, WebString::fromUTF8("bar5"), options, false));
     // If there are any matches, stopFinding will set the selection on the found text.
     // However, we do not expect any matches, so check that the selection is null.
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
@@ -3668,7 +3643,7 @@ TEST_P(ParameterizedWebFrameTest, GetFullHtmlOfPage)
 {
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad("about:blank", true);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrameImpl();
 
     // Generate a simple test case.
     const char simpleSource[] = "<p>Hello</p><p>World</p>";
@@ -3678,12 +3653,12 @@ TEST_P(ParameterizedWebFrameTest, GetFullHtmlOfPage)
     WebString text = WebFrameContentDumper::dumpWebViewAsText(webViewHelper.webView(), std::numeric_limits<size_t>::max());
     EXPECT_EQ("Hello\n\nWorld", text.utf8());
 
-    const std::string html = WebFrameContentDumper::dumpAsMarkup(frame->toWebLocalFrame()).utf8();
+    const std::string html = WebFrameContentDumper::dumpAsMarkup(frame).utf8();
 
     // Load again with the output html.
     FrameTestHelpers::loadHTMLString(frame, html, testURL);
 
-    EXPECT_EQ(html, WebFrameContentDumper::dumpAsMarkup(frame->toWebLocalFrame()).utf8());
+    EXPECT_EQ(html, WebFrameContentDumper::dumpAsMarkup(frame).utf8());
 
     text = WebFrameContentDumper::dumpWebViewAsText(webViewHelper.webView(), std::numeric_limits<size_t>::max());
     EXPECT_EQ("Hello\n\nWorld", text.utf8());
@@ -3758,7 +3733,6 @@ TEST_P(ParameterizedWebFrameTest, FindInPageMatchRects)
     webViewHelper.resize(WebSize(640, 480));
     webViewHelper.webView()->setMaximumLegibleScale(1.f);
     webViewHelper.webView()->updateAllLifecyclePhases();
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     // Note that the 'result 19' in the <select> element is not expected to
@@ -3770,13 +3744,13 @@ TEST_P(ParameterizedWebFrameTest, FindInPageMatchRects)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false, 0));
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false));
 
-    mainFrame->resetMatchCount();
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
@@ -3821,7 +3795,6 @@ TEST_F(WebFrameTest, FindInPageActiveIndex)
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "find_match_count.html", true, &client);
     webViewHelper.webView()->resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char* kFindString = "a";
@@ -3830,19 +3803,19 @@ TEST_F(WebFrameTest, FindInPageActiveIndex)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false, 0));
-    mainFrame->resetMatchCount();
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false));
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false, 0));
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false));
     mainFrame->stopFinding(WebLocalFrame::StopFindActionClearSelection);
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
@@ -3851,11 +3824,11 @@ TEST_F(WebFrameTest, FindInPageActiveIndex)
     const char* kFindStringNew = "e";
     WebString searchTextNew = WebString::fromUTF8(kFindStringNew);
 
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchTextNew, options, false, 0));
-    mainFrame->resetMatchCount();
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchTextNew, options, false));
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchTextNew, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchTextNew, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
@@ -3871,7 +3844,6 @@ TEST_P(ParameterizedWebFrameTest, FindOnDetachedFrame)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find_in_page.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char kFindString[] = "result";
@@ -3879,22 +3851,22 @@ TEST_P(ParameterizedWebFrameTest, FindOnDetachedFrame)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
     WebLocalFrameImpl* secondFrame = toWebLocalFrameImpl(mainFrame->traverseNext(false));
 
     // Detach the frame before finding.
     removeElementById(mainFrame, "frame");
 
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false, 0));
-    EXPECT_FALSE(secondFrame->find(kFindIdentifier, searchText, options, false, 0));
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false));
+    EXPECT_FALSE(secondFrame->find(kFindIdentifier, searchText, options, false));
 
     runPendingTasks();
     EXPECT_FALSE(client.findResultsAreReady());
 
-    mainFrame->resetMatchCount();
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
@@ -3909,7 +3881,6 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameBeforeScopeStrings)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find_in_page.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char kFindString[] = "result";
@@ -3917,12 +3888,10 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameBeforeScopeStrings)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false)) {
-        webViewHelper.webView()->setFocusedFrame(frame);
-        EXPECT_TRUE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false, 0));
-    }
+    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
+        EXPECT_TRUE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false));
 
     runPendingTasks();
     EXPECT_FALSE(client.findResultsAreReady());
@@ -3930,10 +3899,10 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameBeforeScopeStrings)
     // Detach the frame between finding and scoping.
     removeElementById(mainFrame, "frame");
 
-    mainFrame->resetMatchCount();
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
@@ -3948,7 +3917,6 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameWhileScopingStrings)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find_in_page.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char kFindString[] = "result";
@@ -3956,20 +3924,18 @@ TEST_P(ParameterizedWebFrameTest, FindDetachFrameWhileScopingStrings)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false)) {
-        webViewHelper.webView()->setFocusedFrame(frame);
-        EXPECT_TRUE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false, 0));
-    }
+    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
+        EXPECT_TRUE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false));
 
     runPendingTasks();
     EXPECT_FALSE(client.findResultsAreReady());
 
-    mainFrame->resetMatchCount();
+    mainFrame->ensureTextFinder().resetMatchCount();
 
-    for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        frame->toWebLocalFrame()->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    for (WebLocalFrameImpl* frame = mainFrame; frame; frame = static_cast<WebLocalFrameImpl*>(frame->traverseNext(false)))
+        frame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     // The first scopeStringMatches will have reset the state. Detach before it actually scopes.
     removeElementById(mainFrame, "frame");
@@ -3986,7 +3952,6 @@ TEST_P(ParameterizedWebFrameTest, ResetMatchCount)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find_in_generated_frame.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char kFindString[] = "result";
@@ -3994,18 +3959,18 @@ TEST_P(ParameterizedWebFrameTest, ResetMatchCount)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
 
     // Check that child frame exists.
     EXPECT_TRUE(!!mainFrame->traverseNext(false));
 
     for (WebFrame* frame = mainFrame; frame; frame = frame->traverseNext(false))
-        EXPECT_FALSE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false, 0));
+        EXPECT_FALSE(frame->toWebLocalFrame()->find(kFindIdentifier, searchText, options, false));
 
     runPendingTasks();
     EXPECT_FALSE(client.findResultsAreReady());
 
-    mainFrame->resetMatchCount();
+    mainFrame->ensureTextFinder().resetMatchCount();
 }
 
 TEST_P(ParameterizedWebFrameTest, SetTickmarks)
@@ -4016,7 +3981,6 @@ TEST_P(ParameterizedWebFrameTest, SetTickmarks)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
     const char kFindString[] = "foo";
@@ -4024,17 +3988,17 @@ TEST_P(ParameterizedWebFrameTest, SetTickmarks)
 
     WebFindOptions options;
     WebString searchText = WebString::fromUTF8(kFindString);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
-    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false, 0));
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
+    EXPECT_TRUE(mainFrame->find(kFindIdentifier, searchText, options, false));
 
-    mainFrame->resetMatchCount();
-    mainFrame->scopeStringMatches(kFindIdentifier, searchText, options, true);
+    mainFrame->ensureTextFinder().resetMatchCount();
+    mainFrame->ensureTextFinder().scopeStringMatches(kFindIdentifier, searchText, options, true);
 
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
 
     // Get the tickmarks for the original find request.
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
     Scrollbar* scrollbar = frameView->createScrollbar(HorizontalScrollbar);
     Vector<IntRect> originalTickmarks;
     scrollbar->getTickmarks(originalTickmarks);
@@ -4070,24 +4034,23 @@ TEST_P(ParameterizedWebFrameTest, FindInPageJavaScriptUpdatesDOM)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "find.html", true, &client);
     webViewHelper.resize(WebSize(640, 480));
-    webViewHelper.webView()->setFocus(true);
     runPendingTasks();
 
-    WebLocalFrame* frame = webViewHelper.webView()->mainFrame()->toWebLocalFrame();
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     const int findIdentifier = 12345;
     static const char* kFindString = "foo";
     WebString searchText = WebString::fromUTF8(kFindString);
     WebFindOptions options;
     bool activeNow;
 
-    frame->resetMatchCount();
-    frame->scopeStringMatches(findIdentifier, searchText, options, true);
+    frame->ensureTextFinder().resetMatchCount();
+    frame->ensureTextFinder().scopeStringMatches(findIdentifier, searchText, options, true);
     runPendingTasks();
     EXPECT_TRUE(client.findResultsAreReady());
 
     // Find in a <div> element.
     options.findNext = true;
-    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, 0, &activeNow));
+    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, &activeNow));
     EXPECT_TRUE(activeNow);
 
     // Insert new text, which contains occurence of |searchText|.
@@ -4097,11 +4060,11 @@ TEST_P(ParameterizedWebFrameTest, FindInPageJavaScriptUpdatesDOM)
         "document.body.insertBefore(newTextNode, textArea);"));
 
     // Find in a <input> element.
-    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, 0, &activeNow));
+    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, &activeNow));
     EXPECT_TRUE(activeNow);
 
     // Find in the inserted text node.
-    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, 0, &activeNow));
+    EXPECT_TRUE(frame->find(findIdentifier, searchText, options, false, &activeNow));
     frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
     WebRange range = frame->selectionRange();
     EXPECT_EQ(5, range.startOffset());
@@ -4131,12 +4094,12 @@ static WebRect elementBounds(WebFrame* frame, const WebString& id)
 
 static std::string selectionAsString(WebFrame* frame)
 {
-    return frame->selectionAsText().utf8();
+    return frame->toWebLocalFrame()->selectionAsText().utf8();
 }
 
 TEST_P(ParameterizedWebFrameTest, SelectRange)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4145,7 +4108,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRange)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_basic.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("Some test text for testing.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4157,7 +4120,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRange)
         || selectionString == "Some test text for testing");
 
     initializeTextSelectionWebView(m_baseURL + "select_range_scroll.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("Some offscreen test text for testing.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4181,7 +4144,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeInIframe)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_iframe.html", &webViewHelper);
     frame = webViewHelper.webView()->mainFrame();
-    WebFrame* subframe = frame->firstChild();
+    WebLocalFrame* subframe = frame->firstChild()->toWebLocalFrame();
     EXPECT_EQ("Some test text for testing.", selectionAsString(subframe));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     subframe->executeCommand(WebString::fromUTF8("Unselect"));
@@ -4195,7 +4158,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeInIframe)
 
 TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4205,7 +4168,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
     // The selection range should be clipped to the bounds of the editable element.
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_div_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4214,7 +4177,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 
     // As above, but extending the selection to the bottom of the document.
     initializeTextSelectionWebView(m_baseURL + "select_range_div_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
 
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->selectRange(topLeft(startWebRect), bottomRightMinusOne(endWebRect));
@@ -4230,7 +4193,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeDivContentEditable)
 // http://crbug.com/238334.
 TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
 {
-    WebFrame* frame;
+    WebLocalFrame* frame;
     WebRect startWebRect;
     WebRect endWebRect;
 
@@ -4240,7 +4203,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
     // The selection range should be clipped to the bounds of the editable element.
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_span_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4249,7 +4212,7 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_SelectRangeSpanContentEditable)
 
     // As above, but extending the selection to the bottom of the document.
     initializeTextSelectionWebView(m_baseURL + "select_range_span_editable.html", &webViewHelper);
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
 
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     frame->selectRange(topLeft(startWebRect), bottomRightMinusOne(endWebRect));
@@ -4267,7 +4230,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeCanMoveSelectionStart)
     registerMockedHttpURLLoad("text_selection.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "text_selection.html", &webViewHelper);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrameImpl();
 
     // Select second span. We can move the start to include the first span.
     frame->executeScript(WebScriptSource("selectElement('header_2');"));
@@ -4315,7 +4278,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeCanMoveSelectionEnd)
     registerMockedHttpURLLoad("text_selection.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "text_selection.html", &webViewHelper);
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrameImpl();
 
     // Select first span. We can move the end to include the second span.
     frame->executeScript(WebScriptSource("selectElement('header_1');"));
@@ -4368,7 +4331,7 @@ TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtent)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "move_range_selection_extent.html", &webViewHelper);
-    frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4402,7 +4365,7 @@ TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtentCannotCollapse)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "move_range_selection_extent.html", &webViewHelper);
-    frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("This text is initially selected.", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4427,7 +4390,7 @@ TEST_P(ParameterizedWebFrameTest, MoveRangeSelectionExtentScollsInputField)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "move_range_selection_extent_input_field.html", &webViewHelper);
-    frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ("Length", selectionAsString(frame));
     webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
 
@@ -4449,14 +4412,14 @@ TEST_P(ParameterizedWebFrameTest, DISABLED_PositionForPointTest)
     registerMockedHttpURLLoad("select_range_span_editable.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "select_range_span_editable.html", &webViewHelper);
-    WebLocalFrameImpl* mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
     LayoutObject* layoutObject = mainFrame->frame()->selection().rootEditableElement()->layoutObject();
     EXPECT_EQ(0, computeOffset(layoutObject, -1, -1));
     EXPECT_EQ(64, computeOffset(layoutObject, 1000, 1000));
 
     registerMockedHttpURLLoad("select_range_div_editable.html");
     initializeTextSelectionWebView(m_baseURL + "select_range_div_editable.html", &webViewHelper);
-    mainFrame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    mainFrame = webViewHelper.webView()->mainFrameImpl();
     layoutObject = mainFrame->frame()->selection().rootEditableElement()->layoutObject();
     EXPECT_EQ(0, computeOffset(layoutObject, -1, -1));
     EXPECT_EQ(64, computeOffset(layoutObject, 1000, 1000));
@@ -4469,7 +4432,7 @@ TEST_P(ParameterizedWebFrameTest, SelectRangeStaysHorizontallyAlignedWhenMoved)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     initializeTextSelectionWebView(m_baseURL + "move_caret.html", &webViewHelper);
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
 
     WebRect initialStartRect;
     WebRect initialEndRect;
@@ -4608,7 +4571,7 @@ protected:
         const WebSelectionBound* selectEnd = m_fakeSelectionLayerTreeView.end();
 
         v8::HandleScope handleScope(v8::Isolate::GetCurrent());
-        v8::Local<v8::Value> result = m_webViewHelper.webView()->mainFrame()->toWebLocalFrame()->executeScriptAndReturnValue(WebScriptSource("expectedResult"));
+        v8::Local<v8::Value> result = m_webViewHelper.webView()->mainFrameImpl()->executeScriptAndReturnValue(WebScriptSource("expectedResult"));
         if (result.IsEmpty() || (*result)->IsUndefined()) {
             EXPECT_FALSE(selection);
             EXPECT_FALSE(selectStart);
@@ -4717,7 +4680,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "select_range_basic.html");
 
     // The frame starts with no selection.
-    WebFrame* frame = webViewHelper.webView()->mainFrame();
+    WebLocalFrame* frame = webViewHelper.webView()->mainFrameImpl();
     ASSERT_TRUE(frame->hasSelection());
     EXPECT_TRUE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
 
@@ -4740,7 +4703,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     // Transitions between non-empty selections should not trigger a clearing.
     WebRect startWebRect;
     WebRect endWebRect;
-    webViewHelper.webViewImpl()->selectionBounds(startWebRect, endWebRect);
+    webViewHelper.webView()->selectionBounds(startWebRect, endWebRect);
     WebPoint movedEnd(bottomRightMinusOne(endWebRect));
     endWebRect.x -= 20;
     frame->selectRange(topLeft(startWebRect), movedEnd);
@@ -4748,7 +4711,7 @@ TEST_P(ParameterizedWebFrameTest, CompositedSelectionBoundsCleared)
     ASSERT_TRUE(frame->hasSelection());
     EXPECT_FALSE(fakeSelectionLayerTreeView.getAndResetSelectionCleared());
 
-    frame = webViewHelper.webView()->mainFrame();
+    frame = webViewHelper.webView()->mainFrameImpl();
     frame->executeCommand(WebString::fromUTF8("Unselect"));
     webViewHelper.webView()->updateAllLifecyclePhases();
     ASSERT_FALSE(frame->hasSelection());
@@ -4930,7 +4893,7 @@ TEST_F(WebFrameTest, DisambiguationPopupVisualViewport)
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + htmlFile, true, nullptr, &client, nullptr, configureAndroid);
 
-    WebViewImpl* webViewImpl = webViewHelper.webViewImpl();
+    WebViewImpl* webViewImpl = webViewHelper.webView();
     ASSERT_TRUE(webViewImpl);
     LocalFrame* frame = webViewImpl->mainFrameImpl()->frame();
     ASSERT_TRUE(frame);
@@ -5075,7 +5038,6 @@ TEST_P(ParameterizedWebFrameTest, ReplaceNavigationAfterHistoryNavigation)
     error.domain = "WebFrameTest";
     std::string errorURL = "http://0.0.0.0";
     WebURLResponse response;
-    response.initialize();
     response.setURL(URLTestHelpers::toKURL(errorURL));
     response.setMIMEType("text/html");
     response.setHTTPStatusCode(500);
@@ -5146,7 +5108,7 @@ TEST_P(ParameterizedWebFrameTest, MoveCaretSelectionTowardsWindowPointWithNoSele
     WebFrame* frame = webViewHelper.webView()->mainFrame();
 
     // This test passes if this doesn't crash.
-    frame->moveCaretSelection(WebPoint(0, 0));
+    frame->toWebLocalFrame()->moveCaretSelection(WebPoint(0, 0));
 }
 
 class SpellCheckClient : public WebSpellCheckClient {
@@ -5176,11 +5138,10 @@ TEST_P(ParameterizedWebFrameTest, ReplaceMisspelledRange)
     SpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5190,7 +5151,7 @@ TEST_P(ParameterizedWebFrameTest, ReplaceMisspelledRange)
 
     const int allTextBeginOffset = 0;
     const int allTextLength = 11;
-    frame->selectRange(WebRange::fromDocumentRange(frame, allTextBeginOffset, allTextLength));
+    frame->selectRange(WebRange(allTextBeginOffset, allTextLength));
     EphemeralRange selectionRange = frame->frame()->selection().selection().toNormalizedEphemeralRange();
 
     EXPECT_EQ(1, spellcheck.numberOfTimesChecked());
@@ -5208,11 +5169,10 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkers)
     SpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5224,7 +5184,7 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkers)
 
     const int allTextBeginOffset = 0;
     const int allTextLength = 11;
-    frame->selectRange(WebRange::fromDocumentRange(frame, allTextBeginOffset, allTextLength));
+    frame->selectRange(WebRange(allTextBeginOffset, allTextLength));
     EphemeralRange selectionRange = frame->frame()->selection().selection().toNormalizedEphemeralRange();
 
     EXPECT_EQ(0U, document->markers().markersInRange(selectionRange, DocumentMarker::Spelling).size());
@@ -5238,11 +5198,10 @@ TEST_P(ParameterizedWebFrameTest, RemoveSpellingMarkersUnderWords)
     SpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    LocalFrame* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame())->frame();
+    LocalFrame* frame = webViewHelper.webView()->mainFrameImpl()->frame();
     Document* document = frame->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5273,11 +5232,10 @@ TEST_P(ParameterizedWebFrameTest, MarkerHashIdentifiers)
     SpellCheckClient spellcheck(kHash);
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5303,6 +5261,14 @@ public:
         WebTextCheckingCompletion* completion) override
     {
         m_completion = completion;
+    }
+
+    void cancelAllPendingRequests() override
+    {
+        if (!m_completion)
+            return;
+        m_completion->didCancelCheckingText();
+        m_completion = nullptr;
     }
 
     void kickNoResults()
@@ -5349,11 +5315,10 @@ TEST_P(ParameterizedWebFrameTest, SlowSpellcheckMarkerPosition)
     StubbornSpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5379,11 +5344,10 @@ TEST_P(ParameterizedWebFrameTest, CancelSpellingRequestCrash)
     webViewHelper.initializeAndLoad(m_baseURL + "spell.html");
     webViewHelper.webView()->setSpellCheckClient(0);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5400,16 +5364,18 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultErasesMarkers)
     StubbornSpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
     NonThrowableExceptionState exceptionState;
     document->execCommand("InsertText", false, "welcome ", exceptionState);
+
+    document->updateStyleAndLayout();
+
     EXPECT_FALSE(exceptionState.hadException());
     auto range = EphemeralRange::rangeOfContents(*element);
     document->markers().addMarker(range.startPosition(), range.endPosition(), DocumentMarker::Spelling);
@@ -5430,11 +5396,10 @@ TEST_P(ParameterizedWebFrameTest, SpellcheckResultsSavedInDocument)
     StubbornSpellCheckClient spellcheck;
     webViewHelper.webView()->setSpellCheckClient(&spellcheck);
 
-    WebLocalFrameImpl* frame = toWebLocalFrameImpl(webViewHelper.webView()->mainFrame());
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     Document* document = frame->frame()->document();
     Element* element = document->getElementById("data");
 
-    webViewHelper.webView()->settings()->setUnifiedTextCheckerEnabled(true);
     webViewHelper.webView()->settings()->setEditingBehavior(WebSettings::EditingBehaviorWin);
 
     element->focus();
@@ -5664,15 +5629,18 @@ TEST_P(ParameterizedWebFrameTest, CompositorScrollIsUserScrollLongPage)
     webViewHelper.initializeAndLoad(m_baseURL + "long_scroll.html", true, &client);
     webViewHelper.resize(WebSize(1000, 1000));
 
-    WebLocalFrameImpl* frameImpl = webViewHelper.webViewImpl()->mainFrameImpl();
+    WebLocalFrameImpl* frameImpl = webViewHelper.webView()->mainFrameImpl();
     DocumentLoader::InitialScrollState& initialScrollState =
         frameImpl->frame()->loader().documentLoader()->initialScrollState();
+    GraphicsLayer* frameViewLayer = frameImpl->frameView()->layerForScrolling();
 
     EXPECT_FALSE(client.wasFrameScrolled());
     EXPECT_FALSE(initialScrollState.wasScrolledByUser);
 
     // Do a compositor scroll, verify that this is counted as a user scroll.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(0, 1), WebFloatSize(), 1.7f, 0);
+    frameViewLayer->platformLayer()->setScrollPositionDouble(WebDoublePoint(0, 1));
+    frameViewLayer->didScroll();
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.7f, 0);
     EXPECT_TRUE(client.wasFrameScrolled());
     EXPECT_TRUE(initialScrollState.wasScrolledByUser);
 
@@ -5680,20 +5648,25 @@ TEST_P(ParameterizedWebFrameTest, CompositorScrollIsUserScrollLongPage)
     initialScrollState.wasScrolledByUser = false;
 
     // The page scale 1.0f and scroll.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(0, 1), WebFloatSize(), 1.0f, 0);
+    frameViewLayer->platformLayer()->setScrollPositionDouble(WebDoublePoint(0, 2));
+    frameViewLayer->didScroll();
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.0f, 0);
     EXPECT_TRUE(client.wasFrameScrolled());
     EXPECT_TRUE(initialScrollState.wasScrolledByUser);
     client.reset();
     initialScrollState.wasScrolledByUser = false;
 
     // No scroll event if there is no scroll delta.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.0f, 0);
+    frameViewLayer->didScroll();
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 1.0f, 0);
     EXPECT_FALSE(client.wasFrameScrolled());
     EXPECT_FALSE(initialScrollState.wasScrolledByUser);
     client.reset();
 
     // Non zero page scale and scroll.
-    webViewHelper.webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(9, 13), WebFloatSize(), 0.6f, 0);
+    frameViewLayer->platformLayer()->setScrollPositionDouble(WebDoublePoint(9, 15));
+    frameViewLayer->didScroll();
+    webViewHelper.webView()->applyViewportDeltas(WebFloatSize(), WebFloatSize(), WebFloatSize(), 0.6f, 0);
     EXPECT_TRUE(client.wasFrameScrolled());
     EXPECT_TRUE(initialScrollState.wasScrolledByUser);
     client.reset();
@@ -5721,14 +5694,12 @@ TEST_P(ParameterizedWebFrameTest, FirstPartyForCookiesForRedirect)
     char redirect[] = "http://internal.test/first_party.html";
     WebURL redirectURL(toKURL(redirect));
     WebURLResponse redirectResponse;
-    redirectResponse.initialize();
     redirectResponse.setMIMEType("text/html");
     redirectResponse.setHTTPStatusCode(302);
     redirectResponse.setHTTPHeaderField("Location", redirect);
     Platform::current()->getURLLoaderMockFactory()->registerURL(testURL, redirectResponse, filePath);
 
     WebURLResponse finalResponse;
-    finalResponse.initialize();
     finalResponse.setMIMEType("text/html");
     Platform::current()->getURLLoaderMockFactory()->registerURL(redirectURL, finalResponse, filePath);
 
@@ -5753,7 +5724,7 @@ TEST_P(ParameterizedWebFrameTest, SimulateFragmentAnchorMiddleClick)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "fragment_middle_click.html", true, &client);
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     KURL destination = document->url();
     destination.setFragmentIdentifier("test");
 
@@ -5762,7 +5733,7 @@ TEST_P(ParameterizedWebFrameTest, SimulateFragmentAnchorMiddleClick)
         PlatformMouseEvent::RealOrIndistinguishable, String());
     FrameLoadRequest frameRequest(document, ResourceRequest(destination));
     frameRequest.setTriggeringEvent(event);
-    toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().load(frameRequest);
+    toLocalFrame(webViewHelper.webView()->page()->mainFrame())->loader().load(frameRequest);
 }
 
 class TestNewWindowWebViewClient : public FrameTestHelpers::TestWebViewClient {
@@ -5803,7 +5774,7 @@ TEST_P(ParameterizedWebFrameTest, ModifiedClickNewWindow)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "ctrl_click.html", true, &webFrameClient, &webViewClient);
 
-    Document* document = toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document();
+    Document* document = toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document();
     KURL destination = toKURL(m_baseURL + "hello_world.html");
 
     // ctrl+click event
@@ -5813,7 +5784,7 @@ TEST_P(ParameterizedWebFrameTest, ModifiedClickNewWindow)
     FrameLoadRequest frameRequest(document, ResourceRequest(destination));
     frameRequest.setTriggeringEvent(event);
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
-    toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().load(frameRequest);
+    toLocalFrame(webViewHelper.webView()->page()->mainFrame())->loader().load(frameRequest);
     FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
 
     // decidePolicyForNavigation should be called both for the original request and the ctrl+click.
@@ -5826,7 +5797,7 @@ TEST_P(ParameterizedWebFrameTest, BackToReload)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "fragment_middle_click.html", true);
     WebFrame* frame = webViewHelper.webView()->mainFrame();
-    const FrameLoader& mainFrameLoader = webViewHelper.webViewImpl()->mainFrameImpl()->frame()->loader();
+    const FrameLoader& mainFrameLoader = webViewHelper.webView()->mainFrameImpl()->frame()->loader();
     Persistent<HistoryItem> firstItem = mainFrameLoader.currentItem();
     EXPECT_TRUE(firstItem);
 
@@ -5846,8 +5817,8 @@ TEST_P(ParameterizedWebFrameTest, BackDuringChildFrameReload)
     registerMockedHttpURLLoad("page_with_blank_iframe.html");
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "page_with_blank_iframe.html", true);
-    WebFrame* mainFrame = webViewHelper.webView()->mainFrame();
-    const FrameLoader& mainFrameLoader = webViewHelper.webViewImpl()->mainFrameImpl()->frame()->loader();
+    WebLocalFrame* mainFrame = webViewHelper.webView()->mainFrameImpl();
+    const FrameLoader& mainFrameLoader = webViewHelper.webView()->mainFrameImpl()->frame()->loader();
     WebFrame* childFrame = mainFrame->firstChild();
     ASSERT_TRUE(childFrame);
 
@@ -5860,8 +5831,8 @@ TEST_P(ParameterizedWebFrameTest, BackDuringChildFrameReload)
     item.initialize();
     WebURL historyURL(toKURL(m_baseURL + "white-1x1.png"));
     item.setURLString(historyURL.string());
-    WebURLRequest request = mainFrame->toWebLocalFrame()->requestFromHistoryItem(item, WebCachePolicy::UseProtocolCachePolicy);
-    mainFrame->toWebLocalFrame()->load(request, WebFrameLoadType::BackForward, item);
+    WebURLRequest request = mainFrame->requestFromHistoryItem(item, WebCachePolicy::UseProtocolCachePolicy);
+    mainFrame->load(request, WebFrameLoadType::BackForward, item);
 
     FrameTestHelpers::reloadFrame(childFrame);
     EXPECT_EQ(item.urlString(), mainFrame->document().url().string());
@@ -5892,7 +5863,7 @@ TEST_P(ParameterizedWebFrameTest, LoadHistoryItemReload)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "fragment_middle_click.html", true);
     WebFrame* frame = webViewHelper.webView()->mainFrame();
-    const FrameLoader& mainFrameLoader = webViewHelper.webViewImpl()->mainFrameImpl()->frame()->loader();
+    const FrameLoader& mainFrameLoader = webViewHelper.webView()->mainFrameImpl()->frame()->loader();
     Persistent<HistoryItem> firstItem = mainFrameLoader.currentItem();
     EXPECT_TRUE(firstItem);
 
@@ -5950,7 +5921,7 @@ public:
         TestWebFrameClient::didStopLoading();
     }
 
-    void willSendRequest(WebLocalFrame* frame, unsigned, WebURLRequest& request, const WebURLResponse&) override
+    void willSendRequest(WebLocalFrame*, WebURLRequest& request) override
     {
         m_policy = request.getCachePolicy();
         m_willSendRequestCallCount++;
@@ -5976,7 +5947,7 @@ TEST_P(ParameterizedWebFrameTest, ReloadIframe)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "iframe_reload.html", true, &mainClient);
 
-    WebLocalFrameImpl* mainFrame = webViewHelper.webViewImpl()->mainFrameImpl();
+    WebLocalFrameImpl* mainFrame = webViewHelper.webView()->mainFrameImpl();
     WebLocalFrameImpl* childFrame = toWebLocalFrameImpl(mainFrame->firstChild());
     ASSERT_EQ(childFrame->client(), &childClient);
     EXPECT_EQ(mainClient.childFrameCreationCount(), 1);
@@ -6001,7 +5972,7 @@ public:
     {
     }
 
-    virtual void willSendRequest(WebLocalFrame* frame, unsigned, WebURLRequest&, const WebURLResponse&)
+    virtual void willSendRequest(WebLocalFrame* frame, WebURLRequest&)
     {
         if (toWebLocalFrameImpl(frame)->frame()->loader().loadType() == FrameLoadTypeReloadMainResource)
             m_frameLoadTypeReloadMainResourceSeen = true;
@@ -6021,8 +5992,8 @@ TEST_P(ParameterizedWebFrameTest, NavigateToSame)
     webViewHelper.initializeAndLoad(m_baseURL + "navigate_to_same.html", true, &client);
     EXPECT_FALSE(client.frameLoadTypeReloadMainResourceSeen());
 
-    FrameLoadRequest frameRequest(0, ResourceRequest(toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->document()->url()));
-    toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame())->loader().load(frameRequest);
+    FrameLoadRequest frameRequest(0, ResourceRequest(toLocalFrame(webViewHelper.webView()->page()->mainFrame())->document()->url()));
+    toLocalFrame(webViewHelper.webView()->page()->mainFrame())->loader().load(frameRequest);
     FrameTestHelpers::pumpPendingRequestsForFrameToLoad(webViewHelper.webView()->mainFrame());
 
     EXPECT_TRUE(client.frameLoadTypeReloadMainResourceSeen());
@@ -6035,7 +6006,7 @@ public:
     {
     }
 
-    virtual void willSendRequest(WebLocalFrame* frame, unsigned, WebURLRequest& request, const WebURLResponse&)
+    virtual void willSendRequest(WebLocalFrame*, WebURLRequest& request)
     {
         if (request.getRequestContext() == WebURLRequest::RequestContextImage) {
             m_numOfImageRequests++;
@@ -6264,7 +6235,7 @@ TEST_F(WebFrameTest, overflowHiddenRewrite)
     webViewHelper.resize(WebSize(100, 100));
     FrameTestHelpers::loadFrame(webViewHelper.webView()->mainFrame(), m_baseURL + "non-scrollable.html");
 
-    PaintLayerCompositor* compositor =  webViewHelper.webViewImpl()->compositor();
+    PaintLayerCompositor* compositor =  webViewHelper.webView()->compositor();
     ASSERT_TRUE(compositor->scrollLayer());
 
     // Verify that the WebLayer is not scrollable initially.
@@ -6290,10 +6261,10 @@ TEST_P(ParameterizedWebFrameTest, CurrentHistoryItem)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initialize();
     WebFrame* frame = webViewHelper.webView()->mainFrame();
-    const FrameLoader& mainFrameLoader = webViewHelper.webViewImpl()->mainFrameImpl()->frame()->loader();
+    const FrameLoader& mainFrameLoader = webViewHelper.webView()->mainFrameImpl()->frame()->loader();
     WebURLRequest request;
-    request.initialize();
     request.setURL(toKURL(url));
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
     frame->loadRequest(request);
 
     // Before commit, there is no history item.
@@ -6340,10 +6311,10 @@ TEST_P(ParameterizedWebFrameTest, fixedPositionInFixedViewport)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "fixed-position-in-fixed-viewport.html", true, nullptr, nullptr, nullptr, enableViewportSettings);
 
-    WebView* webView = webViewHelper.webView();
+    WebViewImpl* webView = webViewHelper.webView();
     webViewHelper.resize(WebSize(100, 100));
 
-    Document* document = toWebLocalFrameImpl(webView->mainFrame())->frame()->document();
+    Document* document = webView->mainFrameImpl()->frame()->document();
     Element* bottomFixed = document->getElementById("bottom-fixed");
     Element* topBottomFixed = document->getElementById("top-bottom-fixed");
     Element* rightFixed = document->getElementById("right-fixed");
@@ -6365,9 +6336,9 @@ TEST_P(ParameterizedWebFrameTest, FrameViewMoveWithSetFrameRect)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad("about:blank");
     webViewHelper.resize(WebSize(200, 200));
-    webViewHelper.webViewImpl()->updateAllLifecyclePhases();
+    webViewHelper.webView()->updateAllLifecyclePhases();
 
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_RECT_EQ(IntRect(0, 0, 200, 200), frameView->frameRect());
     frameView->setFrameRect(IntRect(100, 100, 200, 200));
     EXPECT_RECT_EQ(IntRect(100, 100, 200, 200), frameView->frameRect());
@@ -6380,8 +6351,8 @@ TEST_F(WebFrameTest, FrameViewScrollAccountsForTopControls)
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "long_scroll.html", true, nullptr, &client, nullptr, configureAndroid);
 
-    WebViewImpl* webView = webViewHelper.webViewImpl();
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    WebViewImpl* webView = webViewHelper.webView();
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
 
     float topControlsHeight = 40;
     webView->resizeWithTopControls(WebSize(100, 100), topControlsHeight, false);
@@ -6452,7 +6423,7 @@ TEST_F(WebFrameTest, MaximumScrollPositionCanBeNegative)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewHelper.webView()->updateAllLifecyclePhases();
 
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
     EXPECT_LT(frameView->maximumScrollPosition().x(), 0);
 }
 
@@ -6469,13 +6440,13 @@ TEST_P(ParameterizedWebFrameTest, FullscreenLayerSize)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
-    ASSERT_TRUE(Fullscreen::isFullScreen(*document));
+    EXPECT_EQ(Fullscreen::currentFullScreenElementFrom(*document), divFullscreen);
 
     // Verify that the element is sized to the viewport.
     LayoutFullScreen* fullscreenLayoutObject = Fullscreen::from(*document).fullScreenLayoutObject();
@@ -6502,16 +6473,16 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the viewports are nonscrollable.
-    ASSERT_TRUE(Fullscreen::isFullScreen(*document));
-    FrameView* frameView = webViewHelper.webViewImpl()->mainFrameImpl()->frameView();
+    EXPECT_EQ(Fullscreen::currentFullScreenElementFrom(*document), divFullscreen);
+    FrameView* frameView = webViewHelper.webView()->mainFrameImpl()->frameView();
     WebLayer* layoutViewportScrollLayer = webViewImpl->compositor()->scrollLayer()->platformLayer();
     WebLayer* visualViewportScrollLayer = frameView->page()->frameHost().visualViewport().scrollLayer()->platformLayer();
     ASSERT_FALSE(layoutViewportScrollLayer->userScrollableHorizontal());
@@ -6520,9 +6491,9 @@ TEST_F(WebFrameTest, FullscreenLayerNonScrollable)
     ASSERT_FALSE(visualViewportScrollLayer->userScrollableVertical());
 
     // Verify that the viewports are scrollable upon exiting fullscreen.
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
-    ASSERT_FALSE(Fullscreen::isFullScreen(*document));
+    EXPECT_EQ(Fullscreen::currentFullScreenElementFrom(*document), nullptr);
     ASSERT_TRUE(layoutViewportScrollLayer->userScrollableHorizontal());
     ASSERT_TRUE(layoutViewportScrollLayer->userScrollableVertical());
     ASSERT_TRUE(visualViewportScrollLayer->userScrollableHorizontal());
@@ -6540,14 +6511,14 @@ TEST_P(ParameterizedWebFrameTest, FullscreenMainFrame)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the main frame is still scrollable.
-    ASSERT_TRUE(Fullscreen::isFullScreen(*document));
+    EXPECT_EQ(Fullscreen::currentFullScreenElementFrom(*document), document->documentElement());
     WebLayer* webScrollLayer = webViewImpl->compositor()->scrollLayer()->platformLayer();
     ASSERT_TRUE(webScrollLayer->scrollable());
     ASSERT_TRUE(webScrollLayer->userScrollableHorizontal());
@@ -6578,7 +6549,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenSubframe)
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Element* divFullscreen = document->getElementById("div1");
     Fullscreen::from(*document).requestFullscreen(*divFullscreen, Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Verify that the element is sized to the viewport.
@@ -6608,17 +6579,17 @@ TEST_P(ParameterizedWebFrameTest, FullscreenWithTinyViewport)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    LayoutViewItem layoutViewItem = webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutViewItem();
+    LayoutViewItem layoutViewItem = webViewHelper.webView()->mainFrameImpl()->frameView()->layoutViewItem();
     EXPECT_EQ(320, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(533, layoutViewItem.logicalHeight().floor());
     EXPECT_FLOAT_EQ(1.2, webViewImpl->pageScaleFactor());
     EXPECT_FLOAT_EQ(1.2, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(5.0, webViewImpl->maximumPageScaleFactor());
 
-    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(384, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(640, layoutViewItem.logicalHeight().floor());
@@ -6626,7 +6597,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenWithTinyViewport)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(320, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(533, layoutViewItem.logicalHeight().floor());
@@ -6648,11 +6619,11 @@ TEST_P(ParameterizedWebFrameTest, FullscreenResizeWithTinyViewport)
     webViewHelper.resize(WebSize(viewportWidth, viewportHeight));
     webViewImpl->updateAllLifecyclePhases();
 
-    LayoutViewItem layoutViewItem = webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutViewItem();
-    Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+    LayoutViewItem layoutViewItem = webViewHelper.webView()->mainFrameImpl()->frameView()->layoutViewItem();
+    Document* document = webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(*document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(384, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(640, layoutViewItem.logicalHeight().floor());
@@ -6672,7 +6643,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenResizeWithTinyViewport)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     EXPECT_EQ(320, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(192, layoutViewItem.logicalHeight().floor());
@@ -6698,7 +6669,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting)
     client.m_screenInfo.rect.width = screenSizeMinusStatusBarsMinusUrlBar.width;
     client.m_screenInfo.rect.height = screenSizeMinusStatusBarsMinusUrlBar.height;
     webViewHelper.resize(screenSizeMinusStatusBarsMinusUrlBar);
-    LayoutViewItem layoutViewItem = webViewHelper.webViewImpl()->mainFrameImpl()->frameView()->layoutViewItem();
+    LayoutViewItem layoutViewItem = webViewHelper.webView()->mainFrameImpl()->frameView()->layoutViewItem();
     EXPECT_EQ(screenSizeMinusStatusBarsMinusUrlBar.width, layoutViewItem.logicalWidth().floor());
     EXPECT_EQ(screenSizeMinusStatusBarsMinusUrlBar.height, layoutViewItem.logicalHeight().floor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->pageScaleFactor());
@@ -6706,12 +6677,12 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting)
     EXPECT_FLOAT_EQ(5.0, webViewImpl->maximumPageScaleFactor());
 
     {
-        Document* document = toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+        Document* document = webViewImpl->mainFrameImpl()->frame()->document();
         UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
         Fullscreen::from(*document).requestFullscreen(*document->body(), Fullscreen::PrefixedRequest);
     }
 
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     client.m_screenInfo.rect.width = screenSizeMinusStatusBars.width;
     client.m_screenInfo.rect.height = screenSizeMinusStatusBars.height;
@@ -6725,7 +6696,7 @@ TEST_P(ParameterizedWebFrameTest, FullscreenRestoreScaleFactorUponExiting)
     EXPECT_FLOAT_EQ(1.0, webViewImpl->minimumPageScaleFactor());
     EXPECT_FLOAT_EQ(1.0, webViewImpl->maximumPageScaleFactor());
 
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
     client.m_screenInfo.rect.width = screenSizeMinusStatusBars.width;
     client.m_screenInfo.rect.height = screenSizeMinusStatusBars.height;
@@ -6771,11 +6742,11 @@ TEST_P(ParameterizedWebFrameTest, ClearFullscreenConstraintsOnNavigation)
     EXPECT_FLOAT_EQ(5.0, webViewImpl->maximumPageScaleFactor());
 
     Document* document =
-        toWebLocalFrameImpl(webViewImpl->mainFrame())->frame()->document();
+        webViewImpl->mainFrameImpl()->frame()->document();
     UserGestureIndicator gesture(DefinitelyProcessingUserGesture);
     Fullscreen::from(*document).requestFullscreen(
         *document->documentElement(), Fullscreen::PrefixedRequest);
-    webViewImpl->didEnterFullScreen();
+    webViewImpl->didEnterFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Entering fullscreen causes layout size and page scale limits to be
@@ -6792,7 +6763,7 @@ TEST_P(ParameterizedWebFrameTest, ClearFullscreenConstraintsOnNavigation)
     KURL testURL = toKURL("about:blank");
     WebFrame* frame = webViewHelper.webView()->mainFrame();
     FrameTestHelpers::loadHTMLString(frame, source, testURL);
-    webViewImpl->didExitFullScreen();
+    webViewImpl->didExitFullscreen();
     webViewImpl->updateAllLifecyclePhases();
 
     // Make sure the new page's layout size and scale factor limits aren't
@@ -6811,11 +6782,11 @@ TEST_P(ParameterizedWebFrameTest, LayoutBlockPercentHeightDescendants)
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "percent-height-descendants.html");
 
-    WebView* webView = webViewHelper.webView();
+    WebViewImpl* webView = webViewHelper.webView();
     webViewHelper.resize(WebSize(800, 800));
     webView->updateAllLifecyclePhases();
 
-    Document* document = toWebLocalFrameImpl(webView->mainFrame())->frame()->document();
+    Document* document = webView->mainFrameImpl()->frame()->document();
     LayoutBlock* container = toLayoutBlock(document->getElementById("container")->layoutObject());
     LayoutBox* percentHeightInAnonymous = toLayoutBox(document->getElementById("percent-height-in-anonymous")->layoutObject());
     LayoutBox* percentHeightDirectChild = toLayoutBox(document->getElementById("percent-height-direct-child")->layoutObject());
@@ -6894,7 +6865,7 @@ TEST_P(ParameterizedWebFrameTest, ManifestFetch)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "foo.html");
-    Document* document = toWebLocalFrameImpl(webViewHelper.webViewImpl()->mainFrame())->frame()->document();
+    Document* document = webViewHelper.webView()->mainFrameImpl()->frame()->document();
 
     Resource* resource = fetchManifest(document, toKURL(m_baseURL + "link-manifest-fetch.json"));
 
@@ -6908,7 +6879,7 @@ TEST_P(ParameterizedWebFrameTest, ManifestCSPFetchAllow)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "foo.html");
-    Document* document = toWebLocalFrameImpl(webViewHelper.webViewImpl()->mainFrame())->frame()->document();
+    Document* document = webViewHelper.webView()->mainFrameImpl()->frame()->document();
 
     Resource* resource = fetchManifest(document, toKURL(m_notBaseURL + "link-manifest-fetch.json"));
 
@@ -6922,7 +6893,7 @@ TEST_P(ParameterizedWebFrameTest, ManifestCSPFetchSelf)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "foo.html");
-    Document* document = toWebLocalFrameImpl(webViewHelper.webViewImpl()->mainFrame())->frame()->document();
+    Document* document = webViewHelper.webView()->mainFrameImpl()->frame()->document();
 
     Resource* resource = fetchManifest(document, toKURL(m_notBaseURL + "link-manifest-fetch.json"));
 
@@ -6936,7 +6907,7 @@ TEST_P(ParameterizedWebFrameTest, ManifestCSPFetchSelfReportOnly)
 
     FrameTestHelpers::WebViewHelper webViewHelper(this);
     webViewHelper.initializeAndLoad(m_baseURL + "foo.html");
-    Document* document = toWebLocalFrameImpl(webViewHelper.webViewImpl()->mainFrame())->frame()->document();
+    Document* document = webViewHelper.webView()->mainFrameImpl()->frame()->document();
 
     Resource* resource = fetchManifest(document, toKURL(m_notBaseURL + "link-manifest-fetch.json"));
 
@@ -7069,7 +7040,7 @@ TEST_P(ParameterizedWebFrameTest, ThemeColor)
     ThemeColorTestWebFrameClient client;
     webViewHelper.initializeAndLoad(m_baseURL + "theme_color_test.html", true, &client);
     EXPECT_TRUE(client.didNotify());
-    WebLocalFrameImpl* frame = webViewHelper.webViewImpl()->mainFrameImpl();
+    WebLocalFrameImpl* frame = webViewHelper.webView()->mainFrameImpl();
     EXPECT_EQ(0xff0000ff, frame->document().themeColor());
     // Change color by rgb.
     client.reset();
@@ -7135,6 +7106,8 @@ TEST_F(WebFrameSwapTest, SwapMainFrame)
 
     FrameTestHelpers::TestWebFrameClient client;
     WebLocalFrame* localFrame = WebLocalFrame::createProvisional(&client, remoteFrame, WebSandboxFlags::None);
+    FrameTestHelpers::TestWebWidgetClient webWidgetClient;
+    WebFrameWidget::create(&webWidgetClient, localFrame);
     remoteFrame->swap(localFrame);
 
     // Finally, make sure an embedder triggered load in the local frame swapped
@@ -7618,11 +7591,11 @@ TEST_F(WebFrameSwapTest, UniqueNameAfterRemoteToLocalSwap)
 
     // Swap to a RemoteFrame.
     FrameTestHelpers::TestWebRemoteFrameClient remoteFrameClient;
-    WebRemoteFrame* remoteFrame = WebRemoteFrame::create(WebTreeScopeType::Document, &remoteFrameClient);
+    WebRemoteFrameImpl* remoteFrame = WebRemoteFrameImpl::create(WebTreeScopeType::Document, &remoteFrameClient);
     targetFrame->swap(remoteFrame);
     ASSERT_TRUE(mainFrame()->firstChild());
     ASSERT_EQ(mainFrame()->firstChild(), remoteFrame);
-    EXPECT_EQ(uniqueName.utf8(), WebString(toWebRemoteFrameImpl(remoteFrame)->frame()->tree().uniqueName()).utf8());
+    EXPECT_EQ(uniqueName.utf8(), WebString(remoteFrame->frame()->tree().uniqueName()).utf8());
 
     // Swap back to a LocalFrame.
     RemoteToLocalSwapWebFrameClient client(remoteFrame);
@@ -7637,11 +7610,11 @@ TEST_F(WebFrameSwapTest, UniqueNameAfterRemoteToLocalSwap)
     EXPECT_EQ("<!--framePath //<!--frame2-->-->", uniqueName2.utf8());
 
     FrameTestHelpers::TestWebRemoteFrameClient remoteFrameClient2;
-    WebRemoteFrame* remoteFrame2 = WebRemoteFrame::create(WebTreeScopeType::Document, &remoteFrameClient2);
+    WebRemoteFrameImpl* remoteFrame2 = WebRemoteFrameImpl::create(WebTreeScopeType::Document, &remoteFrameClient2);
     localFrame->swap(remoteFrame2);
     ASSERT_TRUE(mainFrame()->firstChild());
     ASSERT_EQ(mainFrame()->firstChild(), remoteFrame2);
-    EXPECT_EQ(uniqueName2.utf8(), WebString(toWebRemoteFrameImpl(remoteFrame2)->frame()->tree().uniqueName()).utf8());
+    EXPECT_EQ(uniqueName2.utf8(), WebString(remoteFrame2->frame()->tree().uniqueName()).utf8());
 
     RemoteToLocalSwapWebFrameClient client2(remoteFrame2);
     WebLocalFrame* localFrame2 = WebLocalFrame::createProvisional(&client2, remoteFrame2, WebSandboxFlags::None);
@@ -7848,9 +7821,12 @@ TEST_P(ParameterizedWebFrameTest, RemoteFrameInitialCommitType)
     view->close();
 }
 
-class GestureEventTestWebViewClient : public FrameTestHelpers::TestWebViewClient {
+class GestureEventTestWebWidgetClient : public FrameTestHelpers::TestWebWidgetClient {
 public:
-    GestureEventTestWebViewClient() : m_didHandleGestureEvent(false) { }
+    GestureEventTestWebWidgetClient()
+        : m_didHandleGestureEvent(false)
+    {
+    }
     void didHandleGestureEvent(const WebGestureEvent& event, bool eventCancelled) override { m_didHandleGestureEvent = true; }
     bool didHandleGestureEvent() const { return m_didHandleGestureEvent; }
 
@@ -7866,17 +7842,14 @@ TEST_P(ParameterizedWebFrameTest, FrameWidgetTest)
     FrameTestHelpers::TestWebRemoteFrameClient remoteClient;
     view->setMainFrame(remoteClient.frame());
 
-    WebLocalFrame* childFrame = FrameTestHelpers::createLocalChild(view->mainFrame()->toWebRemoteFrame());
-
-    GestureEventTestWebViewClient childViewClient;
-    WebFrameWidget* widget = WebFrameWidget::create(childViewClient.widgetClient(), childFrame);
+    GestureEventTestWebWidgetClient childWidgetClient;
+    WebLocalFrame* childFrame = FrameTestHelpers::createLocalChild(view->mainFrame()->toWebRemoteFrame(), WebString(), nullptr, &childWidgetClient);
 
     view->resize(WebSize(1000, 1000));
 
-    widget->handleInputEvent(fatTap(20, 20));
-    EXPECT_TRUE(childViewClient.didHandleGestureEvent());
+    childFrame->frameWidget()->handleInputEvent(fatTap(20, 20));
+    EXPECT_TRUE(childWidgetClient.didHandleGestureEvent());
 
-    widget->close();
     view->close();
 }
 
@@ -7907,7 +7880,7 @@ TEST_P(ParameterizedWebFrameTest, LoaderOriginAccess)
     request.setRequestContext(WebURLRequest::RequestContextObject);
     registerMockedChromeURLLoad("test.pdf");
 
-    LocalFrame* frame(toLocalFrame(webViewHelper.webViewImpl()->page()->mainFrame()));
+    LocalFrame* frame(toLocalFrame(webViewHelper.webView()->page()->mainFrame()));
 
     MockDocumentThreadableLoaderClient client;
     ThreadableLoaderOptions options;
@@ -8011,7 +7984,7 @@ protected:
         String code = "dumpSize('" + id + "')";
         v8::HandleScope scope(v8::Isolate::GetCurrent());
         ScriptExecutionCallbackHelper callbackHelper(m_webViewHelper.webView()->mainFrame()->mainWorldScriptContext());
-        m_webViewHelper.webView()->mainFrame()->toWebLocalFrame()->requestExecuteScriptAndReturnValue(WebScriptSource(WebString(code)), false, &callbackHelper);
+        m_webViewHelper.webView()->mainFrameImpl()->requestExecuteScriptAndReturnValue(WebScriptSource(WebString(code)), false, &callbackHelper);
         runPendingTasks();
         EXPECT_TRUE(callbackHelper.didComplete());
         return callbackHelper.stringValue();
@@ -8022,8 +7995,8 @@ protected:
 };
 
 INSTANTIATE_TEST_CASE_P(All, DeviceEmulationTest, ::testing::Values(
-    ParameterizedWebFrameTestConfig::Default,
-    ParameterizedWebFrameTestConfig::RootLayerScrolls));
+    FrameTestHelpers::DefaultSettingOverride,
+    FrameTestHelpers::RootLayerScrollsSettingOverride));
 
 TEST_P(DeviceEmulationTest, DeviceSizeInvalidatedOnResize)
 {
@@ -8061,8 +8034,8 @@ TEST_P(ParameterizedWebFrameTest, CreateLocalChildWithPreviousSibling)
     WebRemoteFrame* parent = view->mainFrame()->toWebRemoteFrame();
 
     WebLocalFrame* secondFrame(FrameTestHelpers::createLocalChild(parent, "name2"));
-    WebLocalFrame* fourthFrame(FrameTestHelpers::createLocalChild(parent, "name4", nullptr, secondFrame));
-    WebLocalFrame* thirdFrame(FrameTestHelpers::createLocalChild(parent, "name3", nullptr, secondFrame));
+    WebLocalFrame* fourthFrame(FrameTestHelpers::createLocalChild(parent, "name4", nullptr, nullptr, secondFrame));
+    WebLocalFrame* thirdFrame(FrameTestHelpers::createLocalChild(parent, "name3", nullptr, nullptr, secondFrame));
     WebLocalFrame* firstFrame(FrameTestHelpers::createLocalChild(parent, "name1"));
 
     EXPECT_EQ(firstFrame, parent->firstChild());
@@ -8221,17 +8194,17 @@ protected:
 
     void ScrollBegin(FrameTestHelpers::WebViewHelper* webViewHelper)
     {
-        webViewHelper->webViewImpl()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollBegin));
+        webViewHelper->webView()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollBegin));
     }
 
     void ScrollUpdate(FrameTestHelpers::WebViewHelper* webViewHelper, float deltaX, float deltaY)
     {
-        webViewHelper->webViewImpl()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollUpdate, deltaX, deltaY));
+        webViewHelper->webView()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollUpdate, deltaX, deltaY));
     }
 
     void ScrollEnd(FrameTestHelpers::WebViewHelper* webViewHelper)
     {
-        webViewHelper->webViewImpl()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollEnd));
+        webViewHelper->webView()->handleInputEvent(generateEvent(WebInputEvent::GestureScrollEnd));
     }
 };
 
@@ -8493,8 +8466,8 @@ TEST_F(WebFrameTest, ImageDocumentLoadFinishTime)
     registerMockedHttpURLLoadWithMimeType("white-1x1.png", "image/png");
     FrameTestHelpers::WebViewHelper webViewHelper;
     webViewHelper.initializeAndLoad(m_baseURL + "white-1x1.png");
-    WebView* webView = webViewHelper.webView();
-    Document* document = toWebLocalFrameImpl(webView->mainFrame())->frame()->document();
+    WebViewImpl* webView = webViewHelper.webView();
+    Document* document = webView->mainFrameImpl()->frame()->document();
 
     EXPECT_TRUE(document);
     EXPECT_TRUE(document->isImageDocument());
@@ -8624,7 +8597,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithNoOpener)
     FrameTestHelpers::WebViewHelper helper;
     helper.initialize(true);
 
-    WebLocalFrame* mainFrame = helper.webView()->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* mainFrame = helper.webView()->mainFrameImpl();
     v8::HandleScope scope(v8::Isolate::GetCurrent());
     mainFrame->executeScript(WebScriptSource("hello = 'world';"));
     FrameTestHelpers::loadFrame(mainFrame, "data:text/html,new page");
@@ -8640,7 +8613,7 @@ TEST(WebFrameGlobalReuseTest, ChildFrame)
     FrameTestHelpers::WebViewHelper helper;
     helper.initialize(true, nullptr, nullptr, nullptr, enableGlobalReuseForUnownedMainFrames);
 
-    WebLocalFrame* mainFrame = helper.webView()->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* mainFrame = helper.webView()->mainFrameImpl();
     FrameTestHelpers::loadFrame(mainFrame, "data:text/html,<iframe></iframe>");
 
     WebLocalFrame* childFrame = mainFrame->firstChild()->toWebLocalFrame();
@@ -8662,7 +8635,7 @@ TEST(WebFrameGlobalReuseTest, MainFrameWithOpener)
     FrameTestHelpers::WebViewHelper helper;
     helper.initializeWithOpener(openerHelper.webView()->mainFrame(), true, nullptr, nullptr, nullptr, enableGlobalReuseForUnownedMainFrames);
 
-    WebLocalFrame* mainFrame = helper.webView()->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* mainFrame = helper.webView()->mainFrameImpl();
     v8::HandleScope scope(v8::Isolate::GetCurrent());
     mainFrame->executeScript(WebScriptSource("hello = 'world';"));
     FrameTestHelpers::loadFrame(mainFrame, "data:text/html,new page");
@@ -8680,7 +8653,7 @@ TEST(WebFrameGlobalReuseTest, ReuseForMainFrameIfEnabled)
     FrameTestHelpers::WebViewHelper helper;
     helper.initialize(true, nullptr, nullptr, nullptr, enableGlobalReuseForUnownedMainFrames);
 
-    WebLocalFrame* mainFrame = helper.webView()->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* mainFrame = helper.webView()->mainFrameImpl();
     v8::HandleScope scope(v8::Isolate::GetCurrent());
     mainFrame->executeScript(WebScriptSource("hello = 'world';"));
     FrameTestHelpers::loadFrame(mainFrame, "data:text/html,new page");
@@ -8714,7 +8687,7 @@ TEST_F(WebFrameTest, SaveImageAt)
     webView->resize(WebSize(400, 400));
     webView->updateAllLifecyclePhases();
 
-    WebLocalFrame* localFrame = webView->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* localFrame = webView->mainFrameImpl();
 
     client.reset();
     localFrame->saveImageAt(WebPoint(1, 1));
@@ -8743,10 +8716,10 @@ TEST_F(WebFrameTest, SaveImageWithImageMap)
 
     FrameTestHelpers::WebViewHelper helper;
     SaveImageFromDataURLWebFrameClient client;
-    WebView* webView = helper.initializeAndLoad(url, true, &client);
+    WebViewImpl* webView = helper.initializeAndLoad(url, true, &client);
     webView->resize(WebSize(400, 400));
 
-    WebLocalFrame* localFrame = webView->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* localFrame = webView->mainFrameImpl();
 
     client.reset();
     localFrame->saveImageAt(WebPoint(25, 25));
@@ -8771,12 +8744,12 @@ TEST_F(WebFrameTest, CopyImageAt)
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "canvas-copy-image.html");
 
     FrameTestHelpers::WebViewHelper helper;
-    WebView* webView = helper.initializeAndLoad(url, true, 0);
+    WebViewImpl* webView = helper.initializeAndLoad(url, true, 0);
     webView->resize(WebSize(400, 400));
 
     uint64_t sequence = Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard);
 
-    WebLocalFrame* localFrame = webView->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* localFrame = webView->mainFrameImpl();
     localFrame->copyImageAt(WebPoint(50, 50));
 
     EXPECT_NE(sequence, Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard));
@@ -8801,7 +8774,7 @@ TEST_F(WebFrameTest, CopyImageAtWithPinchZoom)
 
     uint64_t sequence = Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard);
 
-    WebLocalFrame* localFrame = webView->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* localFrame = webView->mainFrameImpl();
     localFrame->copyImageAt(WebPoint(0, 0));
 
     EXPECT_NE(sequence, Platform::current()->clipboard()->sequenceNumber(WebClipboard::BufferStandard));
@@ -8820,11 +8793,11 @@ TEST_F(WebFrameTest, CopyImageWithImageMap)
     URLTestHelpers::registerMockedURLLoad(toKURL(url), "image-map.html");
 
     FrameTestHelpers::WebViewHelper helper;
-    WebView* webView = helper.initializeAndLoad(url, true, &client);
+    WebViewImpl* webView = helper.initializeAndLoad(url, true, &client);
     webView->resize(WebSize(400, 400));
 
     client.reset();
-    WebLocalFrame* localFrame = webView->mainFrame()->toWebLocalFrame();
+    WebLocalFrame* localFrame = webView->mainFrameImpl();
     localFrame->saveImageAt(WebPoint(25, 25));
     EXPECT_EQ(WebString::fromUTF8("data:image/gif;base64"
         ",R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs="), client.result());
@@ -8849,14 +8822,105 @@ TEST_F(WebFrameTest, LoadJavascriptURLInNewFrame)
     WebURLRequest request;
     std::string redirectURL = m_baseURL + "foo.html";
     URLTestHelpers::registerMockedURLLoad(toKURL(redirectURL), "foo.html");
-    request.initialize();
     request.setURL(toKURL("javascript:location='" + redirectURL + "'"));
-    helper.webViewImpl()->mainFrame()->toWebLocalFrame()->loadRequest(request);
+    request.setRequestorOrigin(WebSecurityOrigin::createUnique());
+    helper.webView()->mainFrameImpl()->loadRequest(request);
 
     // Normally, the result of the JS url replaces the existing contents on the
     // Document. However, if the JS triggers a navigation, the contents should
     // not be replaced.
-    EXPECT_EQ("", toLocalFrame(helper.webViewImpl()->page()->mainFrame())->document()->documentElement()->innerText());
+    EXPECT_EQ("", toLocalFrame(helper.webView()->page()->mainFrame())->document()->documentElement()->innerText());
+}
+
+class TestResourcePriorityWebFrameClient : public FrameTestHelpers::TestWebFrameClient {
+public:
+    class ExpectedRequest {
+    public:
+        ExpectedRequest(const KURL& url, WebURLRequest::Priority priority)
+            : url(url)
+            , priority(priority)
+            , seen(false)
+        {
+        }
+
+        KURL url;
+        WebURLRequest::Priority priority;
+        bool seen;
+    };
+
+    TestResourcePriorityWebFrameClient()
+    {
+    }
+
+    void willSendRequest(WebLocalFrame*, WebURLRequest& request) override
+    {
+        ExpectedRequest* expectedRequest = m_expectedRequests.get(request.url());
+        DCHECK(expectedRequest);
+        EXPECT_EQ(expectedRequest->priority, request.getPriority());
+        expectedRequest->seen = true;
+    }
+
+    void addExpectedRequest(const KURL& url, WebURLRequest::Priority priority)
+    {
+        m_expectedRequests.add(url, wrapUnique(new ExpectedRequest(url, priority)));
+    }
+
+    void verifyAllRequests()
+    {
+        for (const auto& request : m_expectedRequests)
+            EXPECT_TRUE(request.value->seen);
+    }
+
+private:
+    HashMap<KURL, std::unique_ptr<ExpectedRequest>> m_expectedRequests;
+};
+
+TEST_F(WebFrameTest, ChangeResourcePriority)
+{
+    TestResourcePriorityWebFrameClient client;
+    registerMockedHttpURLLoad("promote_img_in_viewport_priority.html");
+    registerMockedHttpURLLoad("image_slow.pl");
+    registerMockedHttpURLLoad("image_slow_out_of_viewport.pl");
+    client.addExpectedRequest(toKURL("http://internal.test/promote_img_in_viewport_priority.html"), WebURLRequest::PriorityVeryHigh);
+    client.addExpectedRequest(toKURL("http://internal.test/image_slow.pl"), WebURLRequest::PriorityLow);
+    client.addExpectedRequest(toKURL("http://internal.test/image_slow_out_of_viewport.pl"), WebURLRequest::PriorityLow);
+
+    FrameTestHelpers::WebViewHelper helper;
+    helper.initialize(true, &client);
+    helper.resize(WebSize(640, 480));
+    FrameTestHelpers::loadFrame(helper.webView()->mainFrame(), m_baseURL + "promote_img_in_viewport_priority.html");
+
+    // Ensure the image in the viewport got promoted after the request was sent.
+    Resource* image = toWebLocalFrameImpl(helper.webView()->mainFrame())->frame()->document()->fetcher()->allResources().get(toKURL("http://internal.test/image_slow.pl"));
+    DCHECK(image);
+    EXPECT_EQ(ResourceLoadPriorityHigh, image->resourceRequest().priority());
+
+    client.verifyAllRequests();
+}
+
+TEST_F(WebFrameTest, ScriptPriority)
+{
+    TestResourcePriorityWebFrameClient client;
+    registerMockedHttpURLLoad("script_priority.html");
+    registerMockedHttpURLLoad("priorities/defer.js");
+    registerMockedHttpURLLoad("priorities/async.js");
+    registerMockedHttpURLLoad("priorities/head.js");
+    registerMockedHttpURLLoad("priorities/document-write.js");
+    registerMockedHttpURLLoad("priorities/injected.js");
+    registerMockedHttpURLLoad("priorities/injected-async.js");
+    registerMockedHttpURLLoad("priorities/body.js");
+    client.addExpectedRequest(toKURL("http://internal.test/script_priority.html"), WebURLRequest::PriorityVeryHigh);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/defer.js"), WebURLRequest::PriorityLow);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/async.js"), WebURLRequest::PriorityLow);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/head.js"), WebURLRequest::PriorityHigh);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/document-write.js"), WebURLRequest::PriorityHigh);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/injected.js"), WebURLRequest::PriorityLow);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/injected-async.js"), WebURLRequest::PriorityLow);
+    client.addExpectedRequest(toKURL("http://internal.test/priorities/body.js"), WebURLRequest::PriorityHigh);
+
+    FrameTestHelpers::WebViewHelper helper;
+    helper.initializeAndLoad(m_baseURL + "script_priority.html", true, &client);
+    client.verifyAllRequests();
 }
 
 } // namespace blink

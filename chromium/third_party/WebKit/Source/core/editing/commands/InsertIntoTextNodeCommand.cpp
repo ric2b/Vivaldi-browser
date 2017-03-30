@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/dom/Document.h"
 #include "core/dom/Text.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutText.h"
 
@@ -50,7 +51,7 @@ void InsertIntoTextNodeCommand::doApply(EditingState*)
     if (passwordEchoEnabled)
         document().updateStyleAndLayoutIgnorePendingStylesheets();
 
-    if (!m_node->hasEditableStyle())
+    if (!hasEditableStyle(*m_node))
         return;
 
     if (passwordEchoEnabled) {
@@ -65,7 +66,7 @@ void InsertIntoTextNodeCommand::doApply(EditingState*)
 
 void InsertIntoTextNodeCommand::doUnapply()
 {
-    if (!m_node->hasEditableStyle())
+    if (!hasEditableStyle(*m_node))
         return;
 
     m_node->deleteData(m_offset, m_text.length(), IGNORE_EXCEPTION);

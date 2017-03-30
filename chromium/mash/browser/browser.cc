@@ -13,19 +13,19 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
-#include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_client.h"
 #include "mash/browser/debug_view.h"
 #include "mash/public/interfaces/launchable.mojom.h"
-#include "mojo/public/c/system/main.h"
 #include "services/navigation/public/cpp/view.h"
 #include "services/navigation/public/cpp/view_delegate.h"
 #include "services/navigation/public/cpp/view_observer.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/tracing/public/cpp/tracing_impl.h"
+#include "services/shell/public/cpp/service.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/tracing/public/cpp/provider.h"
+#include "services/ui/public/cpp/window.h"
+#include "services/ui/public/cpp/window_tree_client.h"
 #include "ui/aura/mus/mus_util.h"
 #include "ui/base/models/menu_model.h"
 #include "ui/gfx/canvas.h"
@@ -102,8 +102,8 @@ class Tab : public views::LabelButton,
 
   bool selected() const { return selected_; }
 
-  mus::Window* window() { return window_; }
-  void SetWindow(mus::Window* window) {
+  ui::Window* window() { return window_; }
+  void SetWindow(ui::Window* window) {
     window_ = window;
     window_->SetVisible(selected_);
     view_->EmbedInWindow(window_);
@@ -137,7 +137,7 @@ class Tab : public views::LabelButton,
       window_->SetVisible(selected_);
   }
 
-  mus::Window* window_ = nullptr;
+  ui::Window* window_ = nullptr;
   std::unique_ptr<navigation::View> view_;
   bool selected_ = false;
 
@@ -183,11 +183,11 @@ class TabStrip : public views::View,
       RemoveObserver(tab);
   }
 
-  void SetContainerWindow(mus::Window* container) {
+  void SetContainerWindow(ui::Window* container) {
     DCHECK(!container_);
     container_ = container;
     for (auto* tab : tabs_) {
-      mus::Window* window = container_->window_tree()->NewWindow();
+      ui::Window* window = container_->window_tree()->NewWindow();
       container_->AddChild(window);
       tab->SetWindow(window);
     }
@@ -198,7 +198,7 @@ class TabStrip : public views::View,
     Tab* tab = new Tab(std::move(view), this);
     // We won't have a WindowTree until we're added to a view hierarchy.
     if (container_) {
-      mus::Window* window = container_->window_tree()->NewWindow();
+      ui::Window* window = container_->window_tree()->NewWindow();
       container_->AddChild(window);
       tab->SetWindow(window);
     }
@@ -287,7 +287,7 @@ class TabStrip : public views::View,
   std::vector<Tab*> tabs_;
   int selected_index_ = -1;
   base::ObserverList<TabStripObserver> observers_;
-  mus::Window* container_ = nullptr;
+  ui::Window* container_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(TabStrip);
 };
@@ -676,7 +676,7 @@ class UI : public views::WidgetDelegateView,
   void ViewHierarchyChanged(
       const views::View::ViewHierarchyChangedDetails& details) override {
     if (details.is_add && GetWidget() && !content_area_) {
-      mus::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
+      ui::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
       content_area_ = window->window_tree()->NewWindow(nullptr);
       content_area_->SetVisible(true);
       window->AddChild(content_area_);
@@ -788,7 +788,7 @@ class UI : public views::WidgetDelegateView,
     } else {
       selected_view()->GetForwardMenuItems(&entries);
     }
-    return base::WrapUnique(new NavMenuModel(entries, this));
+    return base::MakeUnique<NavMenuModel>(entries, this);
   }
 
   // NavMenuModel::Delegate:
@@ -836,7 +836,7 @@ class UI : public views::WidgetDelegateView,
   Throbber* throbber_;
   ProgressBar* progress_bar_;
 
-  mus::Window* content_area_ = nullptr;
+  ui::Window* content_area_ = nullptr;
 
   DebugView* debug_view_;
   bool showing_debug_view_ = false;
@@ -861,23 +861,22 @@ void Browser::RemoveWindow(views::Widget* window) {
 
 std::unique_ptr<navigation::View> Browser::CreateView() {
   navigation::mojom::ViewFactoryPtr factory;
-  connector_->ConnectToInterface("exe:navigation", &factory);
-  return base::WrapUnique(new navigation::View(std::move(factory)));
+  connector()->ConnectToInterface("exe:navigation", &factory);
+  return base::MakeUnique<navigation::View>(std::move(factory));
 }
 
-void Browser::Initialize(shell::Connector* connector,
-                         const shell::Identity& identity,
-                         uint32_t id) {
-  connector_ = connector;
-  tracing_.Initialize(connector, identity.name());
+void Browser::OnStart(const shell::Identity& identity) {
+  tracing_.Initialize(connector(), identity.name());
 
-  aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
+  aura_init_.reset(
+      new views::AuraInit(connector(), "views_mus_resources.pak"));
   window_manager_connection_ =
-      views::WindowManagerConnection::Create(connector, identity);
+      views::WindowManagerConnection::Create(connector(), identity);
 }
 
-bool Browser::AcceptConnection(shell::Connection* connection) {
-  connection->AddInterface<mojom::Launchable>(this);
+bool Browser::OnConnect(const shell::Identity& remote_identity,
+                        shell::InterfaceRegistry* registry) {
+  registry->AddInterface<mojom::Launchable>(this);
   return true;
 }
 
@@ -897,7 +896,7 @@ void Browser::Launch(uint32_t what, mojom::LaunchMode how) {
   AddWindow(window);
 }
 
-void Browser::Create(shell::Connection* connection,
+void Browser::Create(const shell::Identity& remote_identity,
                      mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }

@@ -93,7 +93,7 @@ bool ReadFile(const base::FilePath& file_path, std::string* content) {
     return false;
   }
 
-  STLClearObject(content);
+  base::STLClearObject(content);
   int rv;
   do {
     char buf[4096];
@@ -218,8 +218,8 @@ class UsbGadgetFactory : public UsbService::Observer,
   std::unique_ptr<UsbTestGadget> WaitForDevice() {
     EnumerateDevices();
     run_loop_.Run();
-    return base::WrapUnique(
-        new UsbTestGadgetImpl(request_context_getter_, usb_service_, device_));
+    return base::MakeUnique<UsbTestGadgetImpl>(request_context_getter_,
+                                               usb_service_, device_);
   }
 
  private:

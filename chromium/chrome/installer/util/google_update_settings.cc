@@ -227,13 +227,18 @@ bool GetUpdatePolicyFromDword(
 }
 #endif  // defined(GOOGLE_CHROME_BUILD)
 
+bool UpdateDidRunStateForApp(const AppRegistrationData& app_reg_data,
+                             bool did_run) {
+  return WriteGoogleUpdateStrKeyInternal(
+      app_reg_data, google_update::kRegDidRunField, did_run ? L"1" : L"0");
+}
+
 // Convenience routine: GoogleUpdateSettings::UpdateDidRunStateForApp()
 // specialized for Chrome Binaries.
 bool UpdateDidRunStateForBinaries(bool did_run) {
   BrowserDistribution* dist = BrowserDistribution::GetSpecificDistribution(
       BrowserDistribution::CHROME_BINARIES);
-  return GoogleUpdateSettings::UpdateDidRunStateForApp(
-      dist->GetAppRegistrationData(), did_run);
+  return UpdateDidRunStateForApp(dist->GetAppRegistrationData(), did_run);
 }
 
 }  // namespace
@@ -329,6 +334,11 @@ bool GoogleUpdateSettings::SetCollectStatsConsentAtLevel(bool system_install,
         << google_update::kRegUsageStatsField << " in key " << reg_path
         << "; result: " << result;
   }
+
+  // When opting out, clear registry backup of client id and related values.
+  if (result == ERROR_SUCCESS && !consented)
+    StoreMetricsClientInfo(metrics::ClientInfo());
+
   return (result == ERROR_SUCCESS);
 }
 
@@ -484,14 +494,6 @@ bool GoogleUpdateSettings::ClearReferral() {
   return ClearGoogleUpdateStrKey(google_update::kRegReferralField);
 }
 
-bool GoogleUpdateSettings::UpdateDidRunStateForApp(
-    const AppRegistrationData& app_reg_data,
-    bool did_run) {
-  return WriteGoogleUpdateStrKeyInternal(app_reg_data,
-                                         google_update::kRegDidRunField,
-                                         did_run ? L"1" : L"0");
-}
-
 bool GoogleUpdateSettings::UpdateDidRunState(bool did_run, bool system_level) {
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   bool result = UpdateDidRunStateForApp(dist->GetAppRegistrationData(),
@@ -558,6 +560,19 @@ void GoogleUpdateSettings::UpdateInstallStatus(bool system_install,
   }
 }
 
+void GoogleUpdateSettings::SetProgress(bool system_install,
+                                       const base::string16& path,
+                                       int progress) {
+  DCHECK_GE(progress, 0);
+  DCHECK_LE(progress, 100);
+  const HKEY root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
+  base::win::RegKey key(root, path.c_str(), KEY_SET_VALUE | KEY_WOW64_32KEY);
+  if (key.Valid()) {
+    key.WriteValue(google_update::kRegInstallerProgress,
+                   static_cast<DWORD>(progress));
+  }
+}
+
 bool GoogleUpdateSettings::UpdateGoogleUpdateApKey(
     installer::ArchiveType archive_type, int install_return_code,
     installer::ChannelInfo* value) {
@@ -589,6 +604,12 @@ bool GoogleUpdateSettings::UpdateGoogleUpdateApKey(
 
   if (value->SetMultiFailSuffix(false)) {
     VLOG(1) << "Removed multi-install failure key; switching to channel: "
+            << value->value();
+    modified = true;
+  }
+
+  if (value->ClearStage()) {
+    VLOG(1) << "Removed (legacy) stage information; switching to channel: "
             << value->value();
     modified = true;
   }
@@ -866,7 +887,8 @@ base::string16 GoogleUpdateSettings::GetUninstallCommandLine(
   return cmd_line;
 }
 
-Version GoogleUpdateSettings::GetGoogleUpdateVersion(bool system_install) {
+base::Version GoogleUpdateSettings::GetGoogleUpdateVersion(
+    bool system_install) {
   const HKEY root_key = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   base::string16 version;
   RegKey key;
@@ -876,10 +898,10 @@ Version GoogleUpdateSettings::GetGoogleUpdateVersion(bool system_install) {
                KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS &&
       key.ReadValue(google_update::kRegGoogleUpdateVersion, &version) ==
           ERROR_SUCCESS) {
-    return Version(base::UTF16ToUTF8(version));
+    return base::Version(base::UTF16ToUTF8(version));
   }
 
-  return Version();
+  return base::Version();
 }
 
 base::Time GoogleUpdateSettings::GetGoogleUpdateLastStartedAU(

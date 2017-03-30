@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "cc/base/cc_export.h"
+#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/resources/resource_format.h"
 
 namespace cc {
@@ -30,11 +31,14 @@ class CC_EXPORT RendererSettings {
   bool should_clear_root_render_pass;
   bool disable_display_vsync;
   bool release_overlay_resources_after_gpu_query;
+  bool gl_composited_texture_quad_border;
+
   double refresh_rate;
   int highp_threshold_min;
   size_t texture_id_allocation_chunk_size;
   bool use_gpu_memory_buffer_resources;
   ResourceFormat preferred_tile_format;
+  BufferToTextureTargetMap buffer_to_texture_target_map;
 
   void ToProtobuf(proto::RendererSettings* proto) const;
   void FromProtobuf(const proto::RendererSettings& proto);

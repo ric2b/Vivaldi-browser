@@ -2,11 +2,12 @@
 
 #include "extensions/permissions/vivaldi_api_permissions.h"
 
+#include "base/memory/ptr_util.h"
 #include "extensions/common/permissions/api_permission.h"
 
 namespace extensions {
 
-std::vector<APIPermissionInfo*>
+std::vector<std::unique_ptr<APIPermissionInfo>>
 VivaldiAPIPermissions::GetAllPermissions() const {
   // WARNING: If you are modifying a permission message in this list, be sure to
   // add the corresponding permission message rule to
@@ -32,10 +33,11 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kWebViewPrivate, "webViewPrivate"},
   };
 
-  std::vector<APIPermissionInfo*> permissions;
+  std::vector<std::unique_ptr<APIPermissionInfo>> permissions;
 
   for (size_t i = 0; i < arraysize(permissions_to_register); ++i)
-    permissions.push_back(new APIPermissionInfo(permissions_to_register[i]));
+    permissions.push_back(
+        base::WrapUnique(new APIPermissionInfo(permissions_to_register[i])));
   return permissions;
 }
 

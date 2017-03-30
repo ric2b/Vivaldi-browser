@@ -35,6 +35,9 @@
 #include "base/win/registry.h"
 #endif
 
+#include "base/command_line.h"
+#include "tools/gn/switches.h"
+
 namespace {
 
 struct SemicolonSeparatedWriter {
@@ -166,22 +169,26 @@ base::StringPiece FindParentDir(const std::string* path) {
 }
 
 bool FilterTargets(const BuildSettings* build_settings,
-                   Builder* builder,
-                   const std::string& dir_filters,
+                   const Builder& builder,
+                   const std::string& filters,
+                   bool no_deps,
                    std::vector<const Target*>* targets,
                    Err* err) {
-  if (dir_filters.empty()) {
-    *targets = builder->GetAllResolvedTargets();
+  if (filters.empty()) {
+    *targets = builder.GetAllResolvedTargets();
     return true;
   }
 
-  std::vector<LabelPattern> filters;
-  if (!commands::FilterPatternsFromString(build_settings, dir_filters, &filters,
+  std::vector<LabelPattern> patterns;
+  if (!commands::FilterPatternsFromString(build_settings, filters, &patterns,
                                           err))
     return false;
 
-  commands::FilterTargetsByPatterns(builder->GetAllResolvedTargets(), filters,
+  commands::FilterTargetsByPatterns(builder.GetAllResolvedTargets(), patterns,
                                     targets);
+
+  if (no_deps)
+    return true;
 
   std::set<Label> labels;
   std::queue<const Target*> to_process;
@@ -269,13 +276,14 @@ VisualStudioWriter::~VisualStudioWriter() {
 
 // static
 bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
-                                          Builder* builder,
+                                          const Builder& builder,
                                           Version version,
                                           const std::string& sln_name,
-                                          const std::string& dir_filters,
+                                          const std::string& filters,
+                                          bool no_deps,
                                           Err* err) {
   std::vector<const Target*> targets;
-  if (!FilterTargets(build_settings, builder, dir_filters, &targets, err))
+  if (!FilterTargets(build_settings, builder, filters, no_deps, &targets, err))
     return false;
 
   const char* config_platform = "Win32";
@@ -308,6 +316,11 @@ bool VisualStudioWriter::RunAndWriteFiles(const BuildSettings* build_settings,
   }
 
   if (writer.projects_.empty()) {
+    const base::CommandLine* command_line =
+        base::CommandLine::ForCurrentProcess();
+  	bool quiet = command_line->HasSwitch(switches::kQuiet);
+  	if (quiet) // Don't fail when quiet if no VS studio projects were written
+  	  return true;
     *err = Err(Location(), "No Visual Studio projects generated.");
     return false;
   }
@@ -337,8 +350,9 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target, Err* err) {
       project_config_platform = "Win32";
   }
 
-  SourceFile target_file = GetTargetOutputDir(target).ResolveRelativeFile(
-      Value(nullptr, project_name + ".vcxproj"), err);
+  SourceFile target_file =
+      GetBuildDirForTargetAsSourceDir(target, BuildDirType::OBJ)
+          .ResolveRelativeFile(Value(nullptr, project_name + ".vcxproj"), err);
   if (target_file.is_null())
     return false;
 
@@ -377,9 +391,9 @@ bool VisualStudioWriter::WriteProjectFileContents(
     const Target* target,
     SourceFileCompileTypePairs* source_types,
     Err* err) {
-  PathOutput path_output(GetTargetOutputDir(target),
-                         build_settings_->root_path_utf8(),
-                         EscapingMode::ESCAPE_NONE);
+  PathOutput path_output(
+      GetBuildDirForTargetAsSourceDir(target, BuildDirType::OBJ),
+      build_settings_->root_path_utf8(), EscapingMode::ESCAPE_NONE);
 
   out << "<?xml version=\"1.0\" encoding=\"utf-8\"?>" << std::endl;
   XmlElementWriter project(
@@ -466,7 +480,15 @@ bool VisualStudioWriter::WriteProjectFileContents(
                            build_settings_->build_dir(),
                            PathOutput::DIR_INCLUDE_LAST_SLASH);
     }
-    properties->SubElement("TargetName")->Text("$(ProjectName)");
+
+    bool renamed_output = !target->output_name().empty() &&
+                           target->output_name() != target->label().name();
+    properties->SubElement("TargetName")->Text(
+        renamed_output ? target->output_name() : "$(ProjectName)");
+    if (renamed_output) {
+      properties->SubElement("TargetPath")
+          ->Text("$(OutDir)\\"+ target->output_name());
+    } else
     if (target->output_type() != Target::GROUP) {
       properties->SubElement("TargetPath")
           ->Text("$(OutDir)\\$(ProjectName)$(TargetExt)");
@@ -612,9 +634,9 @@ void VisualStudioWriter::WriteFiltersFileContents(
     // File paths are relative to vcxproj files which are generated to out dirs.
     // Filters tree structure need to reflect source directories and be relative
     // to target file. We need two path outputs then.
-    PathOutput file_path_output(GetTargetOutputDir(target),
-                                build_settings_->root_path_utf8(),
-                                EscapingMode::ESCAPE_NONE);
+    PathOutput file_path_output(
+        GetBuildDirForTargetAsSourceDir(target, BuildDirType::OBJ),
+        build_settings_->root_path_utf8(), EscapingMode::ESCAPE_NONE);
     PathOutput filter_path_output(target->label().dir(),
                                   build_settings_->root_path_utf8(),
                                   EscapingMode::ESCAPE_NONE);

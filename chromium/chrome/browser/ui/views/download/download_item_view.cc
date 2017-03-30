@@ -52,6 +52,7 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
+#include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/controls/button/label_button.h"
@@ -559,18 +560,8 @@ void DownloadItemView::ButtonPressed(views::Button* sender,
 
   // WARNING: all end states after this point delete |this|.
   DCHECK_EQ(discard_button_, sender);
-  if (model_.IsMalicious()) {
-    UMA_HISTOGRAM_LONG_TIMES("clickjacking.dismiss_download", warning_duration);
-    // ExperienceSampling: User chose to dismiss the dangerous download.
-    if (sampling_event_.get()) {
-      sampling_event_->CreateUserDecisionEvent(ExperienceSamplingEvent::kDeny);
-      sampling_event_.reset(NULL);
-    }
-    shelf_->RemoveDownloadView(this);
-    return;
-  }
   UMA_HISTOGRAM_LONG_TIMES("clickjacking.discard_download", warning_duration);
-  if (model_.ShouldAllowDownloadFeedback() &&
+  if (!model_.IsMalicious() && model_.ShouldAllowDownloadFeedback() &&
       !shelf_->browser()->profile()->IsOffTheRecord()) {
     if (!shelf_->browser()->profile()->GetPrefs()->HasPrefPath(
         prefs::kSafeBrowsingExtendedReportingEnabled)) {
@@ -713,84 +704,75 @@ void DownloadItemView::OnPaintBackground(gfx::Canvas* canvas) {
   }
 
   // Paint the background images.
-  int x = kLeftPadding;
-  canvas->Save();
-  if (base::i18n::IsRTL()) {
-    // Since we do not have the mirrored images for
-    // (hot_)body_image_set->top_left, (hot_)body_image_set->left,
-    // (hot_)body_image_set->bottom_left, and drop_down_image_set,
-    // for RTL UI, we flip the canvas to draw those images mirrored.
-    // Consequently, we do not need to mirror the x-axis of those images.
-    canvas->Translate(gfx::Vector2d(width(), 0));
-    canvas->Scale(-1, 1);
-  }
-  PaintImages(canvas,
-              body_image_set->top_left, body_image_set->left,
-              body_image_set->bottom_left,
-              x, box_y_, box_height_, body_image_set->top_left->width());
-  x += body_image_set->top_left->width();
-  PaintImages(canvas,
-              body_image_set->top, body_image_set->center,
-              body_image_set->bottom,
-              x, box_y_, box_height_, center_width);
-  x += center_width;
-  PaintImages(canvas,
-              body_image_set->top_right, body_image_set->right,
-              body_image_set->bottom_right,
-              x, box_y_, box_height_, body_image_set->top_right->width());
-
-  // Overlay our body hot state. Warning dialogs don't display body a hot state.
-  if (!IsShowingWarningDialog() &&
-      body_hover_animation_->GetCurrentValue() > 0) {
-    canvas->SaveLayerAlpha(
-        static_cast<int>(body_hover_animation_->GetCurrentValue() * 255));
+  {
+    gfx::ScopedRTLFlipCanvas scoped_canvas(canvas, width());
 
     int x = kLeftPadding;
     PaintImages(canvas,
-                hot_body_image_set_.top_left, hot_body_image_set_.left,
-                hot_body_image_set_.bottom_left,
-                x, box_y_, box_height_, hot_body_image_set_.top_left->width());
+                body_image_set->top_left, body_image_set->left,
+                body_image_set->bottom_left,
+                x, box_y_, box_height_, body_image_set->top_left->width());
     x += body_image_set->top_left->width();
     PaintImages(canvas,
-                hot_body_image_set_.top, hot_body_image_set_.center,
-                hot_body_image_set_.bottom,
+                body_image_set->top, body_image_set->center,
+                body_image_set->bottom,
                 x, box_y_, box_height_, center_width);
     x += center_width;
     PaintImages(canvas,
-                hot_body_image_set_.top_right, hot_body_image_set_.right,
-                hot_body_image_set_.bottom_right,
-                x, box_y_, box_height_,
-                hot_body_image_set_.top_right->width());
-    canvas->Restore();
-  }
+                body_image_set->top_right, body_image_set->right,
+                body_image_set->bottom_right,
+                x, box_y_, box_height_, body_image_set->top_right->width());
 
-  x += body_image_set->top_right->width();
-
-  // Paint the drop-down.
-  if (drop_down_image_set) {
-    PaintImages(canvas,
-                drop_down_image_set->top, drop_down_image_set->center,
-                drop_down_image_set->bottom,
-                x, box_y_, box_height_, drop_down_image_set->top->width());
-
-    // Overlay our drop-down hot state.
-    if (drop_hover_animation_->GetCurrentValue() > 0) {
+    // Overlay our body hot state. Warning dialogs don't display body a hot
+    // state.
+    if (!IsShowingWarningDialog() &&
+        body_hover_animation_->GetCurrentValue() > 0) {
       canvas->SaveLayerAlpha(
-          static_cast<int>(drop_hover_animation_->GetCurrentValue() * 255));
+          static_cast<int>(body_hover_animation_->GetCurrentValue() * 255));
 
+      int x = kLeftPadding;
+      PaintImages(canvas,
+                  hot_body_image_set_.top_left, hot_body_image_set_.left,
+                  hot_body_image_set_.bottom_left,
+                  x, box_y_, box_height_,
+                  hot_body_image_set_.top_left->width());
+      x += body_image_set->top_left->width();
+      PaintImages(canvas,
+                  hot_body_image_set_.top, hot_body_image_set_.center,
+                  hot_body_image_set_.bottom,
+                  x, box_y_, box_height_, center_width);
+      x += center_width;
+      PaintImages(canvas,
+                  hot_body_image_set_.top_right, hot_body_image_set_.right,
+                  hot_body_image_set_.bottom_right,
+                  x, box_y_, box_height_,
+                  hot_body_image_set_.top_right->width());
+      canvas->Restore();
+    }
+
+    x += body_image_set->top_right->width();
+
+    // Paint the drop-down.
+    if (drop_down_image_set) {
       PaintImages(canvas,
                   drop_down_image_set->top, drop_down_image_set->center,
                   drop_down_image_set->bottom,
                   x, box_y_, box_height_, drop_down_image_set->top->width());
 
-      canvas->Restore();
+      // Overlay our drop-down hot state.
+      if (drop_hover_animation_->GetCurrentValue() > 0) {
+        canvas->SaveLayerAlpha(
+            static_cast<int>(drop_hover_animation_->GetCurrentValue() * 255));
+
+        PaintImages(canvas,
+                    drop_down_image_set->top, drop_down_image_set->center,
+                    drop_down_image_set->bottom,
+                    x, box_y_, box_height_, drop_down_image_set->top->width());
+
+        canvas->Restore();
+      }
     }
   }
-
-  // Restore the canvas to avoid file name etc. text are drawn flipped.
-  // Consequently, the x-axis of following canvas->DrawXXX() method should be
-  // mirrored so the text and images are down in the right positions.
-  canvas->Restore();
 
   // Print the text, left aligned and always print the file extension.
   // Last value of x was the end of the right image, just before the button.
@@ -1198,10 +1180,8 @@ void DownloadItemView::ShowWarningDialog() {
     save_button_->SetStyle(views::Button::STYLE_BUTTON);
     AddChildView(save_button_);
   }
-  int discard_button_message = model_.IsMalicious() ?
-      IDS_DISMISS_DOWNLOAD : IDS_DISCARD_DOWNLOAD;
   discard_button_ = new views::LabelButton(
-      this, l10n_util::GetStringUTF16(discard_button_message));
+      this, l10n_util::GetStringUTF16(IDS_DISCARD_DOWNLOAD));
   discard_button_->SetStyle(views::Button::STYLE_BUTTON);
   AddChildView(discard_button_);
 

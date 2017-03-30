@@ -7,7 +7,8 @@ class {{interface.name}}RequestValidator;
 class {{interface.name}}ResponseValidator;
 {%- endif %}
 
-class {{interface.name}} {
+class {{export_attribute}} {{interface.name}}
+    : public {{interface.name}}InterfaceBase {
  public:
   static const char Name_[];
   static const uint32_t Version_ = {{interface.version}};
@@ -25,13 +26,8 @@ class {{interface.name}} {
 {%- endif %}
 
 {#--- Enums #}
-{% from "enum_macros.tmpl" import enum_decl -%}
 {%- for enum in interface.enums %}
-{%-   if enum|is_native_only_kind %}
-  using {{enum.name}} = mojo::NativeEnum;
-{%-   else %}
-  {{enum_decl(enum)|indent(2)}}
-{%-   endif %}
+  using {{enum.name}} = {{enum|get_name_for_kind(flatten_nested_kind=True)}};
 {%- endfor %}
 
 {#--- Constants #}
@@ -54,7 +50,8 @@ class {{interface.name}} {
   virtual bool {{method.name}}({{interface_macros.declare_sync_method_params("", method)}});
 {%-     endif %}
 
-  using {{method.name}}Callback = {{interface_macros.declare_callback(method, for_blink)}};
+  using {{method.name}}Callback = {{interface_macros.declare_callback(method,
+      for_blink, use_new_wrapper_types)}};
 {%-   endif %}
   virtual void {{method.name}}({{interface_macros.declare_request_params("", method)}}) = 0;
 {%- endfor %}

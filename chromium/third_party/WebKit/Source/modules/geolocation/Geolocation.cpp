@@ -35,8 +35,8 @@
 #include "modules/geolocation/GeolocationError.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/mojo/MojoHelper.h"
+#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
-#include "public/platform/ServiceRegistry.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
 
@@ -47,7 +47,7 @@ static const char permissionDeniedErrorMessage[] = "User denied Geolocation";
 static const char failedToStartServiceErrorMessage[] = "Failed to start Geolocation service";
 static const char framelessDocumentErrorMessage[] = "Geolocation cannot be used in frameless documents";
 
-static Geoposition* createGeoposition(const mojom::blink::Geoposition& position)
+static Geoposition* createGeoposition(const device::mojom::blink::Geoposition& position)
 {
     Coordinates* coordinates = Coordinates::create(
         position.latitude,
@@ -65,18 +65,18 @@ static Geoposition* createGeoposition(const mojom::blink::Geoposition& position)
     return Geoposition::create(coordinates, convertSecondsToDOMTimeStamp(position.timestamp));
 }
 
-static PositionError* createPositionError(mojom::blink::Geoposition::ErrorCode mojomErrorCode, const String& error)
+static PositionError* createPositionError(device::mojom::blink::Geoposition::ErrorCode mojomErrorCode, const String& error)
 {
-    PositionError::ErrorCode errorCode = PositionError::POSITION_UNAVAILABLE;
+    PositionError::ErrorCode errorCode = PositionError::kPositionUnavailable;
     switch (mojomErrorCode) {
-    case mojom::blink::Geoposition::ErrorCode::PERMISSION_DENIED:
-        errorCode = PositionError::PERMISSION_DENIED;
+    case device::mojom::blink::Geoposition::ErrorCode::PERMISSION_DENIED:
+        errorCode = PositionError::kPermissionDenied;
         break;
-    case mojom::blink::Geoposition::ErrorCode::POSITION_UNAVAILABLE:
-        errorCode = PositionError::POSITION_UNAVAILABLE;
+    case device::mojom::blink::Geoposition::ErrorCode::POSITION_UNAVAILABLE:
+        errorCode = PositionError::kPositionUnavailable;
         break;
-    case mojom::blink::Geoposition::ErrorCode::NONE:
-    case mojom::blink::Geoposition::ErrorCode::TIMEOUT:
+    case device::mojom::blink::Geoposition::ErrorCode::NONE:
+    case device::mojom::blink::Geoposition::ErrorCode::TIMEOUT:
         NOTREACHED();
         break;
     }
@@ -93,7 +93,7 @@ Geolocation* Geolocation::create(ExecutionContext* context)
 
 Geolocation::Geolocation(ExecutionContext* context)
     : ContextLifecycleObserver(context)
-    , PageLifecycleObserver(document()->page())
+    , PageVisibilityObserver(document()->page())
     , m_geolocationPermission(PermissionUnknown)
 {
 }
@@ -110,7 +110,7 @@ DEFINE_TRACE(Geolocation)
     visitor->trace(m_pendingForPermissionNotifiers);
     visitor->trace(m_lastPosition);
     ContextLifecycleObserver::trace(visitor);
-    PageLifecycleObserver::trace(visitor);
+    PageVisibilityObserver::trace(visitor);
 }
 
 Document* Geolocation::document() const
@@ -132,7 +132,7 @@ void Geolocation::contextDestroyed()
     m_pendingForPermissionNotifiers.clear();
     m_lastPosition = nullptr;
     ContextLifecycleObserver::clearContext();
-    PageLifecycleObserver::clearContext();
+    PageVisibilityObserver::clearContext();
 }
 
 void Geolocation::recordOriginTypeAccess() const
@@ -196,14 +196,14 @@ void Geolocation::startRequest(GeoNotifier *notifier)
     recordOriginTypeAccess();
     String errorMessage;
     if (!frame()->settings()->allowGeolocationOnInsecureOrigins() && !getExecutionContext()->isSecureContext(errorMessage)) {
-        notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, errorMessage));
+        notifier->setFatalError(PositionError::create(PositionError::kPermissionDenied, errorMessage));
         return;
     }
 
     // Check whether permissions have already been denied. Note that if this is the case,
     // the permission state can not change again in the lifetime of this page.
     if (isDenied())
-        notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, permissionDeniedErrorMessage));
+        notifier->setFatalError(PositionError::create(PositionError::kPermissionDenied, permissionDeniedErrorMessage));
     else if (haveSuitableCachedPosition(notifier->options()))
         notifier->setUseCachedPosition();
     else if (!notifier->options().timeout())
@@ -296,7 +296,7 @@ void Geolocation::onGeolocationPermissionUpdated(mojom::blink::PermissionStatus 
             startUpdating(notifier);
             notifier->startTimer();
         } else {
-            notifier->setFatalError(PositionError::create(PositionError::PERMISSION_DENIED, permissionDeniedErrorMessage));
+            notifier->setFatalError(PositionError::create(PositionError::kPermissionDenied, permissionDeniedErrorMessage));
         }
     }
     m_pendingForPermissionNotifiers.clear();
@@ -345,7 +345,7 @@ void Geolocation::stopTimers()
 void Geolocation::cancelRequests(GeoNotifierVector& notifiers)
 {
     for (GeoNotifier* notifier : notifiers)
-        notifier->setFatalError(PositionError::create(PositionError::POSITION_UNAVAILABLE, framelessDocumentErrorMessage));
+        notifier->setFatalError(PositionError::create(PositionError::kPositionUnavailable, framelessDocumentErrorMessage));
 }
 
 void Geolocation::cancelAllRequests()
@@ -422,16 +422,15 @@ void Geolocation::requestPermission()
         return;
 
     m_geolocationPermission = PermissionRequested;
-    frame->serviceRegistry()->connectToRemoteService(
-        mojo::GetProxy(&m_permissionService));
-    m_permissionService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onPermissionConnectionError, wrapWeakPersistent(this))));
+    frame->interfaceProvider()->getInterface(mojo::GetProxy(&m_permissionService));
+    m_permissionService.set_connection_error_handler(convertToBaseCallback(WTF::bind(&Geolocation::onPermissionConnectionError, wrapWeakPersistent(this))));
 
     // Ask the embedder: it maintains the geolocation challenge policy itself.
     m_permissionService->RequestPermission(
         mojom::blink::PermissionName::GEOLOCATION,
-        getExecutionContext()->getSecurityOrigin()->toString(),
+        getExecutionContext()->getSecurityOrigin(),
         UserGestureIndicator::processingUserGesture(),
-        createBaseCallback(WTF::bind(&Geolocation::onGeolocationPermissionUpdated, wrapPersistent(this))));
+        convertToBaseCallback(WTF::bind(&Geolocation::onGeolocationPermissionUpdated, wrapPersistent(this))));
 }
 
 void Geolocation::makeSuccessCallbacks()
@@ -495,8 +494,8 @@ void Geolocation::updateGeolocationServiceConnection()
     if (m_geolocationService)
         return;
 
-    frame()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_geolocationService));
-    m_geolocationService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onGeolocationConnectionError, wrapWeakPersistent(this))));
+    frame()->interfaceProvider()->getInterface(mojo::GetProxy(&m_geolocationService));
+    m_geolocationService.set_connection_error_handler(convertToBaseCallback(WTF::bind(&Geolocation::onGeolocationConnectionError, wrapWeakPersistent(this))));
     if (m_enableHighAccuracy)
         m_geolocationService->SetHighAccuracy(true);
     queryNextPosition();
@@ -504,10 +503,10 @@ void Geolocation::updateGeolocationServiceConnection()
 
 void Geolocation::queryNextPosition()
 {
-    m_geolocationService->QueryNextPosition(createBaseCallback(WTF::bind(&Geolocation::onPositionUpdated, wrapPersistent(this))));
+    m_geolocationService->QueryNextPosition(convertToBaseCallback(WTF::bind(&Geolocation::onPositionUpdated, wrapPersistent(this))));
 }
 
-void Geolocation::onPositionUpdated(mojom::blink::GeopositionPtr position)
+void Geolocation::onPositionUpdated(device::mojom::blink::GeopositionPtr position)
 {
     m_disconnectedGeolocationService = false;
     if (position->valid) {
@@ -534,7 +533,7 @@ void Geolocation::onGeolocationConnectionError()
     if (!Platform::current())
         return;
 
-    PositionError* error = PositionError::create(PositionError::POSITION_UNAVAILABLE, failedToStartServiceErrorMessage);
+    PositionError* error = PositionError::create(PositionError::kPositionUnavailable, failedToStartServiceErrorMessage);
     error->setIsFatal(true);
     handleError(error);
 }

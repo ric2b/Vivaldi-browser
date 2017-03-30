@@ -118,11 +118,11 @@ WebInspector.NetworkDataGridNode.prototype = {
         case "protocol": cell.setTextAndTitle(this._request.protocol); break;
         case "scheme": cell.setTextAndTitle(this._request.scheme); break;
         case "domain": cell.setTextAndTitle(this._request.domain); break;
-        case "remoteAddress": cell.setTextAndTitle(this._request.remoteAddress()); break;
+        case "remoteaddress": cell.setTextAndTitle(this._request.remoteAddress()); break;
         case "cookies": cell.setTextAndTitle(this._arrayLength(this._request.requestCookies)); break;
-        case "setCookies": cell.setTextAndTitle(this._arrayLength(this._request.responseCookies)); break;
+        case "setcookies": cell.setTextAndTitle(this._arrayLength(this._request.responseCookies)); break;
         case "priority": cell.setTextAndTitle(WebInspector.uiLabelForPriority(this._request.initialPriority())); break;
-        case "connectionId": cell.setTextAndTitle(this._request.connectionId); break;
+        case "connectionid": cell.setTextAndTitle(this._request.connectionId); break;
         case "type": this._renderTypeCell(cell); break;
         case "initiator": this._renderInitiatorCell(cell); break;
         case "size": this._renderSizeCell(cell); break;
@@ -169,7 +169,7 @@ WebInspector.NetworkDataGridNode.prototype = {
     select: function()
     {
         WebInspector.SortableDataGridNode.prototype.select.apply(this, arguments);
-        this._parentView.dispatchEventToListeners(WebInspector.NetworkLogView.EventTypes.RequestSelected, this._request);
+        this._parentView.dispatchEventToListeners(WebInspector.NetworkLogView.Events.RequestSelected, this._request);
     },
 
     /**
@@ -340,9 +340,9 @@ WebInspector.NetworkDataGridNode.prototype = {
             cell.appendChild(createTextNode(WebInspector.UIString("Push / ")));
         switch (initiator.type) {
         case WebInspector.NetworkRequest.InitiatorType.Parser:
-            cell.title = initiator.url + ":" + initiator.lineNumber;
+            cell.title = initiator.url + ":" + (initiator.lineNumber + 1);
             var uiSourceCode = WebInspector.networkMapping.uiSourceCodeForURLForAnyTarget(initiator.url);
-            cell.appendChild(WebInspector.linkifyResourceAsNode(initiator.url, initiator.lineNumber - 1, initiator.columnNumber - 1, undefined, undefined, uiSourceCode ? uiSourceCode.displayName() : undefined));
+            cell.appendChild(WebInspector.linkifyResourceAsNode(initiator.url, initiator.lineNumber, initiator.columnNumber, undefined, undefined, uiSourceCode ? uiSourceCode.displayName() : undefined));
             this._appendSubtitle(cell, WebInspector.UIString("Parser"));
             break;
 
@@ -356,7 +356,7 @@ WebInspector.NetworkDataGridNode.prototype = {
 
         case WebInspector.NetworkRequest.InitiatorType.Script:
             if (!this._linkifiedInitiatorAnchor) {
-                this._linkifiedInitiatorAnchor = this._parentView.linkifier.linkifyScriptLocation(request.target(), initiator.scriptId, initiator.url, initiator.lineNumber - 1, initiator.columnNumber - 1);
+                this._linkifiedInitiatorAnchor = this._parentView.linkifier.linkifyScriptLocation(request.target(), initiator.scriptId, initiator.url, initiator.lineNumber, initiator.columnNumber);
                 this._linkifiedInitiatorAnchor.title = "";
             }
             cell.appendChild(this._linkifiedInitiatorAnchor);
@@ -381,7 +381,10 @@ WebInspector.NetworkDataGridNode.prototype = {
             cell.setTextAndTitle(WebInspector.UIString("(from ServiceWorker)"));
             cell.classList.add("network-dim-cell");
         } else if (this._request.cached()) {
-            cell.setTextAndTitle(WebInspector.UIString("(from cache)"));
+            if (this._request.cachedInMemory())
+                cell.setTextAndTitle(WebInspector.UIString("(from memory cache)"));
+            else
+                cell.setTextAndTitle(WebInspector.UIString("(from disk cache)"));
             cell.classList.add("network-dim-cell");
         } else {
             var resourceSize = Number.bytesToString(this._request.resourceSize);

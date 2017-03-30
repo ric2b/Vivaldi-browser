@@ -191,6 +191,9 @@ class SafeBrowsingDatabaseManager
         return cached_results_;
     }
     SafeBrowsingDatabaseManager::Client* client() {return client_;}
+    base::TimeTicks start_time() {return start_time_;}
+
+    void set_start_time(base::TimeTicks start) {start_time_ = start;}
 
    private:
     GURL url_;
@@ -206,6 +209,9 @@ class SafeBrowsingDatabaseManager
 
     // Not owned.
     SafeBrowsingDatabaseManager::Client* client_;
+
+    // When the check was sent to the Safe Browsing service.
+    base::TimeTicks start_time_;
 
     DISALLOW_COPY_AND_ASSIGN(SafeBrowsingApiCheck);
   };
@@ -260,8 +266,9 @@ class SafeBrowsingDatabaseManager
                                 std::vector<SBFullHashResult>* cached_results);
 
   // Populates |md| with permission api metadata from all results that have a
-  // match in |full_hashes|.
-  void PopulateApiMetadataResult(const std::vector<SBFullHashResult>& results,
+  // match in |full_hashes|. Returns |true| if any of the results have a match
+  // in |full_hashes|.
+  bool PopulateApiMetadataResult(const std::vector<SBFullHashResult>& results,
                                  const std::vector<SBFullHash>& full_hashes,
                                  ThreatMetadata* md);
 

@@ -26,9 +26,9 @@ const unsigned MaxHardwareContexts = 6;
 static unsigned s_hardwareContextCount = 0;
 static unsigned s_contextId = 0;
 
-AbstractAudioContext* AudioContext::create(Document& document, ExceptionState& exceptionState)
+BaseAudioContext* AudioContext::create(Document& document, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     UseCounter::countCrossOriginIframe(document, UseCounter::AudioContextCrossOriginIframe);
 
@@ -67,7 +67,7 @@ AbstractAudioContext* AudioContext::create(Document& document, ExceptionState& e
     audioContext->startRendering();
     ++s_hardwareContextCount;
 #if DEBUG_AUDIONODE_REFERENCES
-    fprintf(stderr, "%p: AudioContext::AudioContext(): %u #%u\n",
+    fprintf(stderr, "[%16p]: AudioContext::AudioContext(): %u #%u\n",
         audioContext, audioContext->m_contextId, s_hardwareContextCount);
 #endif
 
@@ -82,7 +82,7 @@ AbstractAudioContext* AudioContext::create(Document& document, ExceptionState& e
 }
 
 AudioContext::AudioContext(Document& document)
-    : AbstractAudioContext(&document)
+    : BaseAudioContext(&document)
     , m_contextId(s_contextId++)
 {
 }
@@ -90,19 +90,19 @@ AudioContext::AudioContext(Document& document)
 AudioContext::~AudioContext()
 {
 #if DEBUG_AUDIONODE_REFERENCES
-    fprintf(stderr, "%p: AudioContext::~AudioContext(): %u\n", this, m_contextId);
+    fprintf(stderr, "[16%p]: AudioContext::~AudioContext(): %u\n", this, m_contextId);
 #endif
 }
 
 DEFINE_TRACE(AudioContext)
 {
     visitor->trace(m_closeResolver);
-    AbstractAudioContext::trace(visitor);
+    BaseAudioContext::trace(visitor);
 }
 
 ScriptPromise AudioContext::suspendContext(ScriptState* scriptState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     AutoLocker locker(this);
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -126,7 +126,7 @@ ScriptPromise AudioContext::suspendContext(ScriptState* scriptState)
 
 ScriptPromise AudioContext::resumeContext(ScriptState* scriptState)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
 
     if (isContextClosed()) {
         return ScriptPromise::rejectWithDOMException(
@@ -187,7 +187,7 @@ void AudioContext::didClose()
     // are closed in their completion event.
     setContextState(Closed);
 
-    ASSERT(s_hardwareContextCount);
+    DCHECK(s_hardwareContextCount);
     --s_hardwareContextCount;
 
     if (m_closeResolver)
@@ -196,13 +196,13 @@ void AudioContext::didClose()
 
 bool AudioContext::isContextClosed() const
 {
-    return m_closeResolver || AbstractAudioContext::isContextClosed();
+    return m_closeResolver || BaseAudioContext::isContextClosed();
 }
 
 void AudioContext::stopRendering()
 {
-    ASSERT(isMainThread());
-    ASSERT(destination());
+    DCHECK(isMainThread());
+    DCHECK(destination());
 
     if (contextState() == Running) {
         destination()->audioDestinationHandler().stopRendering();

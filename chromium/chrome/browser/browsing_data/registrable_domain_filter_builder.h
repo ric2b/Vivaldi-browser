@@ -29,16 +29,30 @@
 //
 // See net/base/registry_controlled_domains/registry_controlled_domain.h for
 // more details on registrable domains and the current list of effective eTLDs.
+//
+// This filter also recognizes IP addresses and internal hostnames. Neither of
+// those have subdomains (or support domain cookies), and so the filter requires
+// the cookie (or other data type) source domain to be identical to the
+// domain (IP address or internal hostname) for it to be considered a match.
+//
+// Note that e.g. "subdomain.localhost" is NOT considered to be a subdomain
+// of the internal hostname "localhost". It is understood as a registrable
+// domain in the scope of the TLD "localhost" (from unknown registry),
+// and treated as any other registrable domain. For example,
+// "www.subdomain.localhost" will be matched by a filter containing
+// "subdomain.localhost". However, it is unrelated to "localhost", whose cookies
+// will never be visible on "*.localhost" or vice versa.
 class RegistrableDomainFilterBuilder : public BrowsingDataFilterBuilder {
  public:
   // Constructs a filter with the given |mode| - whitelist or blacklist.
   explicit RegistrableDomainFilterBuilder(Mode mode);
 
-  ~RegistrableDomainFilterBuilder();
+  ~RegistrableDomainFilterBuilder() override;
 
   // Adds a registerable domain to the (white- or black-) list. This is expected
   // to not include subdomains, so basically tld+1. This can also be an IP
-  // address.
+  // address or an internal hostname.
+  //
   // Refer to net/base/registry_controlled_domains/registry_controlled_domain.h
   // for more details on registrable domains and the current list of effective.
   // TLDs. We expect a string that would be returned by
@@ -70,6 +84,14 @@ class RegistrableDomainFilterBuilder : public BrowsingDataFilterBuilder {
   // or are not in the blacklist.
   base::Callback<bool(const std::string& cookie)>
       BuildChannelIDFilter() const override;
+
+  // Builds a filter that matches plugins whose |site|s are registrable domains
+  // that are in the whitelist, or are not in the blacklist.
+  base::Callback<bool(const std::string& site)>
+      BuildPluginFilter() const override;
+
+  // Used for testing.
+  bool operator==(const RegistrableDomainFilterBuilder& other) const;
 
  protected:
   bool IsEmpty() const override;
@@ -105,6 +127,14 @@ class RegistrableDomainFilterBuilder : public BrowsingDataFilterBuilder {
       std::set<std::string>* domains_and_ips,
       Mode mode,
       const std::string& channel_id_server_id);
+
+  // True if none of the supplied domains matches this plugin's |site| and we're
+  // a blacklist, or one of them does and we're a whitelist. The whitelist or
+  // blacklist is represented by |domains_and_ips| and |mode|.
+  static bool MatchesPluginSiteForRegisterableDomainsAndIPs(
+      std::set<std::string>* domains_and_ips,
+      Mode mode,
+      const std::string& site);
 
   // The list of domains and whether they should be interpreted as a whitelist
   // or blacklist.

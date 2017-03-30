@@ -98,24 +98,20 @@ void DocumentMarkerController::clear()
 
 void DocumentMarkerController::addMarker(const Position& start, const Position& end, DocumentMarker::MarkerType type, const String& description, uint32_t hash)
 {
-    // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
-    // see http://crbug.com/590369 for more details.
-    start.document()->updateStyleAndLayoutIgnorePendingStylesheets();
-
     // Use a TextIterator to visit the potentially multiple nodes the range covers.
     for (TextIterator markedText(start, end); !markedText.atEnd(); markedText.advance()) {
         addMarker(markedText.currentContainer(), DocumentMarker(type, markedText.startOffsetInCurrentContainer(), markedText.endOffsetInCurrentContainer(), description, hash));
     }
 }
 
-void DocumentMarkerController::addTextMatchMarker(const Range* range, bool activeMatch)
+void DocumentMarkerController::addTextMatchMarker(const EphemeralRange& range, bool activeMatch)
 {
     // TODO(dglazkov): The use of updateStyleAndLayoutIgnorePendingStylesheets needs to be audited.
     // see http://crbug.com/590369 for more details.
-    range->startPosition().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    range.startPosition().document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     // Use a TextIterator to visit the potentially multiple nodes the range covers.
-    for (TextIterator markedText(range->startPosition(), range->endPosition()); !markedText.atEnd(); markedText.advance())
+    for (TextIterator markedText(range.startPosition(), range.endPosition()); !markedText.atEnd(); markedText.advance())
         addMarker(markedText.currentContainer(), DocumentMarker(markedText.startOffsetInCurrentContainer(), markedText.endOffsetInCurrentContainer(), activeMatch));
     // Don't invalidate tickmarks here. TextFinder invalidates tickmarks using a throttling algorithm. crbug.com/6819.
 }
@@ -188,7 +184,7 @@ static bool doesNotInclude(const Member<RenderedDocumentMarker>& marker, size_t 
     return marker->endOffset() < startOffset;
 }
 
-static bool updateMarkerRenderedRect(const Node& node, RenderedDocumentMarker& marker)
+static void updateMarkerRenderedRect(const Node& node, RenderedDocumentMarker& marker)
 {
     Range* range = Range::create(node.document());
     // The offsets of the marker may be out-dated, so check for exceptions.
@@ -196,15 +192,14 @@ static bool updateMarkerRenderedRect(const Node& node, RenderedDocumentMarker& m
     range->setStart(&const_cast<Node&>(node), marker.startOffset(), exceptionState);
     if (!exceptionState.hadException())
         range->setEnd(&const_cast<Node&>(node), marker.endOffset(), IGNORE_EXCEPTION);
-    if (exceptionState.hadException()) {
-        range->dispose();
-        return marker.nullifyRenderedRect();
+    if (!exceptionState.hadException()) {
+        // TODO(yosin): Once we have a |EphemeralRange| version of |boundingBox()|,
+        // we should use it instead of |Range| version.
+        marker.setRenderedRect(LayoutRect(range->boundingBox()));
+    } else {
+        marker.nullifyRenderedRect();
     }
-    // TODO(yosin): Once we have a |EphemeralRange| version of |boundingBox()|,
-    // we should use it instead of |Range| version.
-    const bool isUpdated = marker.setRenderedRect(LayoutRect(range->boundingBox()));
     range->dispose();
-    return isUpdated;
 }
 
 // Markers are stored in order sorted by their start offset.
@@ -461,9 +456,8 @@ DocumentMarkerVector DocumentMarkerController::markersInRange(const EphemeralRan
     DCHECK(endContainer);
     unsigned endOffset = static_cast<unsigned>(range.endPosition().computeOffsetInContainerNode());
 
-    Node* pastLastNode = range.endPosition().nodeAsRangePastLastNode();
-    for (Node* node = range.startPosition().nodeAsRangeFirstNode(); node != pastLastNode; node = NodeTraversal::next(*node)) {
-        for (DocumentMarker* marker : markersFor(node)) {
+    for (Node& node : range.nodes()) {
+        for (DocumentMarker* marker : markersFor(&node)) {
             if (!markerTypes.contains(marker->type()))
                 continue;
             if (node == startContainer && marker->endOffset() <= startOffset)
@@ -719,23 +713,26 @@ void DocumentMarkerController::shiftMarkers(Node* node, unsigned startOffset, in
     }
 }
 
-bool DocumentMarkerController::setMarkersActive(Range* range, bool active)
+bool DocumentMarkerController::setMarkersActive(const EphemeralRange& range, bool active)
 {
     if (!possiblyHasMarkers(DocumentMarker::AllMarkers()))
         return false;
 
     DCHECK(!m_markers.isEmpty());
 
-    Node* startContainer = range->startContainer();
-    Node* endContainer = range->endContainer();
+    Node* const startContainer = range.startPosition().computeContainerNode();
+    DCHECK(startContainer);
+    Node* const endContainer = range.endPosition().computeContainerNode();
+    DCHECK(endContainer);
 
-    Node* pastLastNode = range->pastLastNode();
+    const unsigned containerStartOffset = range.startPosition().computeOffsetInContainerNode();
+    const unsigned containerEndOffset = range.endPosition().computeOffsetInContainerNode();
 
     bool markerFound = false;
-    for (Node* node = range->firstNode(); node != pastLastNode; node = NodeTraversal::next(*node)) {
-        int startOffset = node == startContainer ? range->startOffset() : 0;
-        int endOffset = node == endContainer ? range->endOffset() : INT_MAX;
-        markerFound |= setMarkersActive(node, startOffset, endOffset, active);
+    for (Node& node : range.nodes()) {
+        int startOffset = node == startContainer ? containerStartOffset : 0;
+        int endOffset = node == endContainer ? containerEndOffset : INT_MAX;
+        markerFound |= setMarkersActive(&node, startOffset, endOffset, active);
     }
     return markerFound;
 }

@@ -8,15 +8,17 @@
 
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/chooser_controller/mock_chooser_controller.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/chooser_controller/mock_chooser_controller.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/controls/styled_label.h"
-#include "ui/views/controls/styled_label_listener.h"
 #include "ui/views/controls/table/table_view.h"
 #include "ui/views/controls/table/table_view_observer.h"
+#include "ui/views/controls/throbber.h"
+#include "ui/views/test/views_test_base.h"
 
 namespace {
 
@@ -26,23 +28,15 @@ class MockTableViewObserver : public views::TableViewObserver {
   MOCK_METHOD0(OnSelectionChanged, void());
 };
 
-class MockStyledLabelListener : public views::StyledLabelListener {
- public:
-  // views::StyledLabelListener:
-  MOCK_METHOD3(StyledLabelLinkClicked,
-               void(views::StyledLabel* label,
-                    const gfx::Range& range,
-                    int event_flags));
-};
-
 }  // namespace
 
-class ChooserContentViewTest : public testing::Test {
+class ChooserContentViewTest : public views::ViewsTestBase {
  public:
   ChooserContentViewTest() {}
 
-  // testing::Test:
+  // views::ViewsTestBase:
   void SetUp() override {
+    views::ViewsTestBase::SetUp();
     std::unique_ptr<MockChooserController> mock_chooser_controller(
         new MockChooserController(nullptr));
     mock_chooser_controller_ = mock_chooser_controller.get();
@@ -53,19 +47,25 @@ class ChooserContentViewTest : public testing::Test {
     ASSERT_TRUE(table_view_);
     table_model_ = table_view_->model();
     ASSERT_TRUE(table_model_);
-    mock_styled_label_listener_.reset(new MockStyledLabelListener());
-    styled_label_.reset(chooser_content_view_->CreateFootnoteView(
-        mock_styled_label_listener_.get()));
+    throbber_ = chooser_content_view_->throbber_for_test();
+    ASSERT_TRUE(throbber_);
+    discovery_state_.reset(chooser_content_view_->CreateExtraView());
+    ASSERT_TRUE(discovery_state_);
+    styled_label_.reset(chooser_content_view_->CreateFootnoteView());
     ASSERT_TRUE(styled_label_);
   }
 
  protected:
+  // |discovery_state_| needs to be valid when |chooser_content_view_| is
+  // released, since ChooserContentView's destructor needs to access it.
+  // So it is declared before |chooser_content_view_|.
+  std::unique_ptr<views::Link> discovery_state_;
   std::unique_ptr<MockTableViewObserver> mock_table_view_observer_;
   std::unique_ptr<ChooserContentView> chooser_content_view_;
   MockChooserController* mock_chooser_controller_;
   views::TableView* table_view_;
   ui::TableModel* table_model_;
-  std::unique_ptr<MockStyledLabelListener> mock_styled_label_listener_;
+  views::Throbber* throbber_;
   std::unique_ptr<views::StyledLabel> styled_label_;
 
  private:
@@ -75,6 +75,7 @@ class ChooserContentViewTest : public testing::Test {
 TEST_F(ChooserContentViewTest, InitialState) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(0);
 
+  EXPECT_TRUE(table_view_->visible());
   // Since "No devices found." needs to be displayed on the |table_view_|,
   // the number of rows is 1.
   EXPECT_EQ(1, table_view_->RowCount());
@@ -86,12 +87,15 @@ TEST_F(ChooserContentViewTest, InitialState) {
   // No option selected.
   EXPECT_EQ(0, table_view_->SelectedRowCount());
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  EXPECT_TRUE(discovery_state_->text().empty());
 }
 
 TEST_F(ChooserContentViewTest, AddOption) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(0);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
   EXPECT_EQ(1, table_view_->RowCount());
   EXPECT_EQ(base::ASCIIToUTF16("a"), table_model_->GetText(0, 0));
   // |table_view_| should be enabled since there is an option.
@@ -100,14 +104,16 @@ TEST_F(ChooserContentViewTest, AddOption) {
   EXPECT_EQ(0, table_view_->SelectedRowCount());
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
   EXPECT_EQ(2, table_view_->RowCount());
   EXPECT_EQ(base::ASCIIToUTF16("b"), table_model_->GetText(1, 0));
   EXPECT_TRUE(table_view_->enabled());
   EXPECT_EQ(0, table_view_->SelectedRowCount());
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
   EXPECT_EQ(3, table_view_->RowCount());
   EXPECT_EQ(base::ASCIIToUTF16("c"), table_model_->GetText(2, 0));
   EXPECT_TRUE(table_view_->enabled());
@@ -119,9 +125,12 @@ TEST_F(ChooserContentViewTest, RemoveOption) {
   // Called from TableView::OnItemsRemoved().
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(3);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
 
   mock_chooser_controller_->OptionRemoved(base::ASCIIToUTF16("b"));
   EXPECT_EQ(2, table_view_->RowCount());
@@ -160,19 +169,45 @@ TEST_F(ChooserContentViewTest, RemoveOption) {
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
 }
 
+TEST_F(ChooserContentViewTest, UpdateOption) {
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(0);
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+
+  mock_chooser_controller_->OptionUpdated(
+      base::ASCIIToUTF16("b"), base::ASCIIToUTF16("d"),
+      MockChooserController::kSignalStrengthLevel2Bar);
+  EXPECT_EQ(3, table_view_->RowCount());
+  EXPECT_EQ(base::ASCIIToUTF16("a"), table_model_->GetText(0, 0));
+  EXPECT_EQ(base::ASCIIToUTF16("d"), table_model_->GetText(1, 0));
+  EXPECT_EQ(base::ASCIIToUTF16("c"), table_model_->GetText(2, 0));
+  EXPECT_TRUE(table_view_->enabled());
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+}
+
 TEST_F(ChooserContentViewTest, AddAndRemoveOption) {
   // Called from TableView::OnItemsRemoved().
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(3);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
   EXPECT_EQ(1, table_view_->RowCount());
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
   EXPECT_EQ(2, table_view_->RowCount());
   mock_chooser_controller_->OptionRemoved(base::ASCIIToUTF16("b"));
   EXPECT_EQ(1, table_view_->RowCount());
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
   EXPECT_EQ(2, table_view_->RowCount());
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("d"));
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("d"), MockChooserController::kSignalStrengthLevel2Bar);
   EXPECT_EQ(3, table_view_->RowCount());
   mock_chooser_controller_->OptionRemoved(base::ASCIIToUTF16("d"));
   EXPECT_EQ(2, table_view_->RowCount());
@@ -180,12 +215,39 @@ TEST_F(ChooserContentViewTest, AddAndRemoveOption) {
   EXPECT_EQ(1, table_view_->RowCount());
 }
 
+TEST_F(ChooserContentViewTest, UpdateAndRemoveTheUpdatedOption) {
+  // Called from TableView::OnItemsRemoved().
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(1);
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+
+  mock_chooser_controller_->OptionUpdated(
+      base::ASCIIToUTF16("b"), base::ASCIIToUTF16("d"),
+      MockChooserController::kSignalStrengthLevel2Bar);
+  mock_chooser_controller_->OptionRemoved(base::ASCIIToUTF16("d"));
+
+  EXPECT_EQ(2, table_view_->RowCount());
+  EXPECT_EQ(base::ASCIIToUTF16("a"), table_model_->GetText(0, 0));
+  EXPECT_EQ(base::ASCIIToUTF16("c"), table_model_->GetText(1, 0));
+  EXPECT_TRUE(table_view_->enabled());
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+}
+
 TEST_F(ChooserContentViewTest, SelectAndDeselectAnOption) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(4);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
 
   // Select option 0.
   table_view_->Select(0);
@@ -211,9 +273,12 @@ TEST_F(ChooserContentViewTest, SelectAndDeselectAnOption) {
 TEST_F(ChooserContentViewTest, SelectAnOptionAndThenSelectAnotherOption) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(3);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
 
   // Select option 0.
   table_view_->Select(0);
@@ -236,9 +301,12 @@ TEST_F(ChooserContentViewTest, SelectAnOptionAndRemoveAnotherOption) {
   // TableView::OnItemsRemoved().
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(3);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
 
   // Select option 1.
   table_view_->Select(1);
@@ -263,9 +331,12 @@ TEST_F(ChooserContentViewTest, SelectAnOptionAndRemoveAnotherOption) {
 TEST_F(ChooserContentViewTest, SelectAnOptionAndRemoveTheSelectedOption) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(2);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("b"));
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("c"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
 
   // Select option 1.
   table_view_->Select(1);
@@ -280,11 +351,37 @@ TEST_F(ChooserContentViewTest, SelectAnOptionAndRemoveTheSelectedOption) {
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
 }
 
+TEST_F(ChooserContentViewTest, SelectAnOptionAndUpdateTheSelectedOption) {
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(1);
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+
+  // Select option 1.
+  table_view_->Select(1);
+
+  // Update option 1.
+  mock_chooser_controller_->OptionUpdated(
+      base::ASCIIToUTF16("b"), base::ASCIIToUTF16("d"),
+      MockChooserController::kSignalStrengthLevel2Bar);
+
+  EXPECT_EQ(1, table_view_->SelectedRowCount());
+  EXPECT_EQ(1, table_view_->FirstSelectedRow());
+  EXPECT_EQ(base::ASCIIToUTF16("a"), table_model_->GetText(0, 0));
+  EXPECT_EQ(base::ASCIIToUTF16("d"), table_model_->GetText(1, 0));
+  EXPECT_EQ(base::ASCIIToUTF16("c"), table_model_->GetText(2, 0));
+}
+
 TEST_F(ChooserContentViewTest,
        AddAnOptionAndSelectItAndRemoveTheSelectedOption) {
   EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(2);
 
-  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"));
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
 
   // Select option 0.
   table_view_->Select(0);
@@ -306,9 +403,166 @@ TEST_F(ChooserContentViewTest,
   EXPECT_EQ(-1, table_view_->FirstSelectedRow());
 }
 
+TEST_F(ChooserContentViewTest, AdapterOnAndOffAndOn) {
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(2);
+
+  mock_chooser_controller_->OnAdapterPresenceChanged(
+      content::BluetoothChooser::AdapterPresence::POWERED_ON);
+  EXPECT_TRUE(table_view_->visible());
+  // Since "No devices found." needs to be displayed on the |table_view_|,
+  // the number of rows is 1.
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT),
+      table_model_->GetText(0, 0));
+  // |table_view_| should be disabled since there is no option shown.
+  EXPECT_FALSE(table_view_->enabled());
+  // No option selected.
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  EXPECT_TRUE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
+            discovery_state_->text());
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+  table_view_->Select(1);
+
+  mock_chooser_controller_->OnAdapterPresenceChanged(
+      content::BluetoothChooser::AdapterPresence::POWERED_OFF);
+  EXPECT_EQ(0u, mock_chooser_controller_->NumOptions());
+  EXPECT_TRUE(table_view_->visible());
+  // Since "Bluetooth turned off." needs to be displayed on the |table_view_|,
+  // the number of rows is 1.
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_ADAPTER_OFF),
+            table_model_->GetText(0, 0));
+  // |table_view_| should be disabled since there is no option shown.
+  EXPECT_FALSE(table_view_->enabled());
+  // No option selected.
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  EXPECT_FALSE(discovery_state_->enabled());
+  EXPECT_TRUE(discovery_state_->text().empty());
+
+  mock_chooser_controller_->OnAdapterPresenceChanged(
+      content::BluetoothChooser::AdapterPresence::POWERED_ON);
+  EXPECT_EQ(0u, mock_chooser_controller_->NumOptions());
+  EXPECT_TRUE(table_view_->visible());
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT),
+      table_model_->GetText(0, 0));
+  EXPECT_FALSE(table_view_->enabled());
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  EXPECT_TRUE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
+            discovery_state_->text());
+}
+
+TEST_F(ChooserContentViewTest, DiscoveringAndNoOptionAddedAndIdle) {
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(2);
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+  table_view_->Select(1);
+
+  mock_chooser_controller_->OnDiscoveryStateChanged(
+      content::BluetoothChooser::DiscoveryState::DISCOVERING);
+  EXPECT_FALSE(table_view_->visible());
+  EXPECT_TRUE(throbber_->visible());
+  // |discovery_state_| is disabled and shows a label instead of a link.
+  EXPECT_FALSE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING),
+            discovery_state_->text());
+
+  mock_chooser_controller_->OnDiscoveryStateChanged(
+      content::BluetoothChooser::DiscoveryState::IDLE);
+  EXPECT_TRUE(table_view_->visible());
+  // Since "No devices found." needs to be displayed on the |table_view_|,
+  // the number of rows is 1.
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT),
+      table_model_->GetText(0, 0));
+  // |table_view_| should be disabled since there is no option shown.
+  EXPECT_FALSE(table_view_->enabled());
+  // No option selected.
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  // |discovery_state_| is enabled and shows a link.
+  EXPECT_TRUE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
+            discovery_state_->text());
+}
+
+TEST_F(ChooserContentViewTest, DiscoveringAndOneOptionAddedAndSelectedAndIdle) {
+  EXPECT_CALL(*mock_table_view_observer_, OnSelectionChanged()).Times(3);
+
+  mock_chooser_controller_->OptionAdded(base::ASCIIToUTF16("a"),
+                                        MockChooserController::kNoImage);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("b"), MockChooserController::kSignalStrengthLevel0Bar);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("c"), MockChooserController::kSignalStrengthLevel1Bar);
+  table_view_->Select(1);
+
+  mock_chooser_controller_->OnDiscoveryStateChanged(
+      content::BluetoothChooser::DiscoveryState::DISCOVERING);
+  mock_chooser_controller_->OptionAdded(
+      base::ASCIIToUTF16("d"), MockChooserController::kSignalStrengthLevel2Bar);
+  EXPECT_TRUE(table_view_->visible());
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(base::ASCIIToUTF16("d"), table_model_->GetText(0, 0));
+  // |table_view_| should be enabled since there is an option.
+  EXPECT_TRUE(table_view_->enabled());
+  // No option selected.
+  EXPECT_EQ(0, table_view_->SelectedRowCount());
+  EXPECT_EQ(-1, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  // |discovery_state_| is disabled and shows a label instead of a link.
+  EXPECT_FALSE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING),
+            discovery_state_->text());
+  table_view_->Select(0);
+  EXPECT_EQ(1, table_view_->SelectedRowCount());
+  EXPECT_EQ(0, table_view_->FirstSelectedRow());
+
+  mock_chooser_controller_->OnDiscoveryStateChanged(
+      content::BluetoothChooser::DiscoveryState::IDLE);
+  EXPECT_TRUE(table_view_->visible());
+  EXPECT_EQ(1, table_view_->RowCount());
+  EXPECT_EQ(base::ASCIIToUTF16("d"), table_model_->GetText(0, 0));
+  // |table_view_| should be enabled since there is an option.
+  EXPECT_TRUE(table_view_->enabled());
+  EXPECT_EQ(1, table_view_->SelectedRowCount());
+  EXPECT_EQ(0, table_view_->FirstSelectedRow());
+  EXPECT_FALSE(throbber_->visible());
+  // |discovery_state_| is enabled and shows a link.
+  EXPECT_TRUE(discovery_state_->enabled());
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN),
+            discovery_state_->text());
+}
+
+TEST_F(ChooserContentViewTest, ClickRescanLink) {
+  EXPECT_CALL(*mock_chooser_controller_, RefreshOptions()).Times(1);
+  chooser_content_view_->LinkClicked(nullptr, 0);
+}
+
 TEST_F(ChooserContentViewTest, ClickStyledLabelLink) {
-  EXPECT_CALL(*mock_styled_label_listener_,
-              StyledLabelLinkClicked(styled_label_.get(), testing::_, 0))
-      .Times(1);
+  EXPECT_CALL(*mock_chooser_controller_, OpenHelpCenterUrl()).Times(1);
   styled_label_->LinkClicked(nullptr, 0);
 }

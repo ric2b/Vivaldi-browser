@@ -21,7 +21,6 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/platform_shared_buffer.h"
-#include "mojo/edk/system/async_waiter.h"
 #include "mojo/edk/system/channel.h"
 #include "mojo/edk/system/configuration.h"
 #include "mojo/edk/system/data_pipe_consumer_dispatcher.h"
@@ -168,6 +167,11 @@ scoped_refptr<Dispatcher> Core::GetDispatcher(MojoHandle handle) {
   return handles_.GetDispatcher(handle);
 }
 
+void Core::SetDefaultProcessErrorCallback(
+    const ProcessErrorCallback& callback) {
+  default_process_error_callback_ = callback;
+}
+
 void Core::AddChild(base::ProcessHandle process_handle,
                     ScopedPlatformHandle platform_handle,
                     const std::string& child_token,
@@ -181,6 +185,17 @@ void Core::AddChild(base::ProcessHandle process_handle,
 void Core::ChildLaunchFailed(const std::string& child_token) {
   RequestContext request_context;
   GetNodeController()->CloseChildPorts(child_token);
+}
+
+ScopedMessagePipeHandle Core::ConnectToPeerProcess(
+    ScopedPlatformHandle pipe_handle) {
+  RequestContext request_context;
+  ports::PortRef port0, port1;
+  GetNodeController()->node()->CreatePortPair(&port0, &port1);
+  MojoHandle handle = AddDispatcher(new MessagePipeDispatcher(
+      GetNodeController(), port0, kUnknownPipeIdForDebug, 0));
+  GetNodeController()->ConnectToPeer(std::move(pipe_handle), port1);
+  return ScopedMessagePipeHandle(MessagePipeHandle(handle));
 }
 
 void Core::InitChild(ScopedPlatformHandle platform_handle) {
@@ -361,20 +376,6 @@ ScopedMessagePipeHandle Core::CreateChildMessagePipe(const std::string& token) {
                                 kUnknownPipeIdForDebug, 1));
   GetNodeController()->MergePortIntoParent(token, port1);
   return ScopedMessagePipeHandle(MessagePipeHandle(handle));
-}
-
-MojoResult Core::AsyncWait(MojoHandle handle,
-                           MojoHandleSignals signals,
-                           const base::Callback<void(MojoResult)>& callback) {
-  scoped_refptr<Dispatcher> dispatcher = GetDispatcher(handle);
-  DCHECK(dispatcher);
-
-  std::unique_ptr<AsyncWaiter> waiter =
-      base::WrapUnique(new AsyncWaiter(callback));
-  MojoResult rv = dispatcher->AddAwakable(waiter.get(), signals, 0, nullptr);
-  if (rv == MOJO_RESULT_OK)
-    ignore_result(waiter.release());
-  return rv;
 }
 
 MojoResult Core::SetProperty(MojoPropertyType type, const void* value) {
@@ -787,6 +788,8 @@ MojoResult Core::NotifyBadMessage(MojoMessageHandle message,
       reinterpret_cast<MessageForTransit*>(message)->ports_message();
   if (ports_message.source_node() == ports::kInvalidNodeName) {
     DVLOG(1) << "Received invalid message from unknown node.";
+    if (!default_process_error_callback_.is_null())
+      default_process_error_callback_.Run(std::string(error, error_num_bytes));
     return MOJO_RESULT_OK;
   }
 

@@ -18,10 +18,12 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/shell/public/cpp/interface_provider.h"
 
+namespace arc {
+
 namespace {
 
 void DeprecatedConnectToVideoAcceleratorServiceOnIOThread(
-    arc::mojom::VideoAcceleratorServiceClientRequest request) {
+    mojom::VideoAcceleratorServiceClientRequest request) {
   // Note |request| is not a ServiceRequest. It is a ClientRequest but doesn't
   // request for a Client. Instead, it requests for a Service while specified
   // the client. It works this odd way because the interfaces were modeled as
@@ -32,13 +34,11 @@ void DeprecatedConnectToVideoAcceleratorServiceOnIOThread(
 }
 
 void ConnectToVideoAcceleratorServiceOnIOThread(
-    arc::mojom::VideoAcceleratorServiceRequest request) {
+    mojom::VideoAcceleratorServiceRequest request) {
   content::GetGpuRemoteInterfaces()->GetInterface(std::move(request));
 }
 
 }  // namespace
-
-namespace arc {
 
 class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
  public:
@@ -62,24 +62,25 @@ class VideoAcceleratorFactoryService : public mojom::VideoAcceleratorFactory {
 GpuArcVideoServiceHost::GpuArcVideoServiceHost(
     arc::ArcBridgeService* bridge_service)
     : ArcService(bridge_service), binding_(this) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   arc_bridge_service()->video()->AddObserver(this);
 }
 
 GpuArcVideoServiceHost::~GpuArcVideoServiceHost() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   arc_bridge_service()->video()->RemoveObserver(this);
 }
 
 void GpuArcVideoServiceHost::OnInstanceReady() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  auto video_instance = arc_bridge_service()->video()->instance();
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  auto* video_instance = arc_bridge_service()->video()->instance();
   DCHECK(video_instance);
   video_instance->Init(binding_.CreateInterfacePtrAndBind());
 }
 
 void GpuArcVideoServiceHost::DeprecatedOnRequestArcVideoAcceleratorChannel(
     const DeprecatedOnRequestArcVideoAcceleratorChannelCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle =
@@ -113,14 +114,13 @@ void GpuArcVideoServiceHost::DeprecatedOnRequestArcVideoAcceleratorChannel(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(
           &DeprecatedConnectToVideoAcceleratorServiceOnIOThread,
-          base::Passed(
-              mojo::MakeRequest<::arc::mojom::VideoAcceleratorServiceClient>(
-                  std::move(server_pipe)))));
+          base::Passed(mojo::MakeRequest<mojom::VideoAcceleratorServiceClient>(
+              std::move(server_pipe)))));
 }
 
 void GpuArcVideoServiceHost::OnBootstrapVideoAcceleratorFactory(
     const OnBootstrapVideoAcceleratorFactoryCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle =
@@ -153,7 +153,7 @@ void GpuArcVideoServiceHost::OnBootstrapVideoAcceleratorFactory(
   // The lifetime is managed by the StrongBinding insides the
   // VideoAcceleratorFactoryService.
   new VideoAcceleratorFactoryService(
-      mojo::MakeRequest<::arc::mojom::VideoAcceleratorFactory>(
+      mojo::MakeRequest<mojom::VideoAcceleratorFactory>(
           std::move(server_pipe)));
 }
 

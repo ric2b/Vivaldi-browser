@@ -35,7 +35,7 @@ class AVFDataBufferQueue::Queue {
 
 void AVFDataBufferQueue::Queue::Push(
     const scoped_refptr<media::DataBuffer>& buffer) {
-  DCHECK(buffer->timestamp() != media::kNoTimestamp());
+  DCHECK(buffer->timestamp() != media::kNoTimestamp);
   DCHECK(buffers_.empty() || buffer->timestamp() > buffers_.back()->timestamp())
       << "Out-of-order buffer @" << buffer->timestamp().InMicroseconds();
   DCHECK_GE(buffer->data_size(), 0);

@@ -20,8 +20,8 @@
 namespace {
 const char kMotionEventClassPath[] = "android/view/MotionEvent";
 // Leaking this jclass as we cannot use LazyInstance from some threads.
-jclass g_MotionEvent_clazz = NULL;
-#define MotionEvent_clazz(env) g_MotionEvent_clazz
+base::subtle::AtomicWord g_MotionEvent_clazz __attribute__((unused)) = 0;
+#define MotionEvent_clazz(env) base::android::LazyGetClass(env, kMotionEventClassPath, &g_MotionEvent_clazz)
 
 }  // namespace
 
@@ -113,11 +113,11 @@ enum Java_MotionEvent_constant_fields {
 // Step 2: method stubs.
 
 static base::subtle::AtomicWord g_MotionEvent_finalize = 0;
-static void Java_MotionEvent_finalize(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static void Java_MotionEvent_finalize(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_finalize(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static void Java_MotionEvent_finalize(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -127,7 +127,7 @@ static void Java_MotionEvent_finalize(JNIEnv* env, jobject obj) {
       "()V",
       &g_MotionEvent_finalize);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
 
@@ -135,14 +135,14 @@ static void Java_MotionEvent_finalize(JNIEnv* env, jobject obj) {
 
 static base::subtle::AtomicWord
     g_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I = 0;
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I(JNIEnv*
     env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    jobjectArray p4,
-    jobjectArray p5,
+    const base::android::JavaRefOrBare<jobjectArray>& p4,
+    const base::android::JavaRefOrBare<jobjectArray>& p5,
     JniIntWrapper p6,
     JniIntWrapper p7,
     jfloat p8,
@@ -151,14 +151,14 @@ static ScopedJavaLocalRef<jobject>
     JniIntWrapper p11,
     JniIntWrapper p12,
     JniIntWrapper p13) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_LAVMEPP_LAVMEPC_I_I_F_F_I_I_I_I(JNIEnv*
     env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    jobjectArray p4,
-    jobjectArray p5,
+    const base::android::JavaRefOrBare<jobjectArray>& p4,
+    const base::android::JavaRefOrBare<jobjectArray>& p5,
     JniIntWrapper p6,
     JniIntWrapper p7,
     jfloat p8,
@@ -167,7 +167,6 @@ static ScopedJavaLocalRef<jobject>
     JniIntWrapper p11,
     JniIntWrapper p12,
     JniIntWrapper p13) {
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -180,23 +179,23 @@ static ScopedJavaLocalRef<jobject>
 
   jobject ret =
       env->CallStaticObjectMethod(MotionEvent_clazz(env),
-          method_id, p0, p1, as_jint(p2), as_jint(p3), p4, p5, as_jint(p6),
-              as_jint(p7), p8, p9, as_jint(p10), as_jint(p11), as_jint(p12),
-              as_jint(p13));
+          method_id, p0, p1, as_jint(p2), as_jint(p3), p4.obj(), p5.obj(),
+              as_jint(p6), as_jint(p7), p8, p9, as_jint(p10), as_jint(p11),
+              as_jint(p12), as_jint(p13));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord
     g_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I = 0;
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I(JNIEnv* env,
     jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    jintArray p4,
-    jobjectArray p5,
+    const base::android::JavaRefOrBare<jintArray>& p4,
+    const base::android::JavaRefOrBare<jobjectArray>& p5,
     JniIntWrapper p6,
     jfloat p7,
     jfloat p8,
@@ -204,14 +203,14 @@ static ScopedJavaLocalRef<jobject>
     JniIntWrapper p10,
     JniIntWrapper p11,
     JniIntWrapper p12) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_AI_LAVMEPC_I_F_F_I_I_I_I(JNIEnv* env,
     jlong p0,
     jlong p1,
     JniIntWrapper p2,
     JniIntWrapper p3,
-    jintArray p4,
-    jobjectArray p5,
+    const base::android::JavaRefOrBare<jintArray>& p4,
+    const base::android::JavaRefOrBare<jobjectArray>& p5,
     JniIntWrapper p6,
     jfloat p7,
     jfloat p8,
@@ -219,7 +218,6 @@ static ScopedJavaLocalRef<jobject>
     JniIntWrapper p10,
     JniIntWrapper p11,
     JniIntWrapper p12) {
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -232,15 +230,16 @@ static ScopedJavaLocalRef<jobject>
 
   jobject ret =
       env->CallStaticObjectMethod(MotionEvent_clazz(env),
-          method_id, p0, p1, as_jint(p2), as_jint(p3), p4, p5, as_jint(p6), p7,
-              p8, as_jint(p9), as_jint(p10), as_jint(p11), as_jint(p12));
+          method_id, p0, p1, as_jint(p2), as_jint(p3), p4.obj(), p5.obj(),
+              as_jint(p6), p7, p8, as_jint(p9), as_jint(p10), as_jint(p11),
+              as_jint(p12));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I
     = 0;
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
@@ -253,7 +252,7 @@ static ScopedJavaLocalRef<jobject>
     jfloat p9,
     JniIntWrapper p10,
     JniIntWrapper p11) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
@@ -266,7 +265,6 @@ static ScopedJavaLocalRef<jobject>
     jfloat p9,
     JniIntWrapper p10,
     JniIntWrapper p11) {
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -282,12 +280,12 @@ static ScopedJavaLocalRef<jobject>
           method_id, p0, p1, as_jint(p2), p3, p4, p5, p6, as_jint(p7), p8, p9,
               as_jint(p10), as_jint(p11));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord
     g_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I = 0;
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
@@ -301,7 +299,7 @@ static ScopedJavaLocalRef<jobject>
     jfloat p10,
     JniIntWrapper p11,
     JniIntWrapper p12) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_I_F_F_F_F_I_F_F_I_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
@@ -315,7 +313,6 @@ static ScopedJavaLocalRef<jobject>
     jfloat p10,
     JniIntWrapper p11,
     JniIntWrapper p12) {
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -331,25 +328,24 @@ static ScopedJavaLocalRef<jobject>
           method_id, p0, p1, as_jint(p2), as_jint(p3), p4, p5, p6, p7,
               as_jint(p8), p9, p10, as_jint(p11), as_jint(p12));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_obtainAVME_J_J_I_F_F_I = 0;
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject>
+static base::android::ScopedJavaLocalRef<jobject>
     Java_MotionEvent_obtainAVME_J_J_I_F_F_I(JNIEnv* env, jlong p0,
     jlong p1,
     JniIntWrapper p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) {
-  /* Must call RegisterNativesImpl()  */
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -364,15 +360,16 @@ static ScopedJavaLocalRef<jobject>
       env->CallStaticObjectMethod(MotionEvent_clazz(env),
           method_id, p0, p1, as_jint(p2), p3, p4, as_jint(p5));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_obtainAVME_AVME = 0;
-static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainAVME_AVME(JNIEnv* env,
-    jobject p0) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainAVME_AVME(JNIEnv* env,
-    jobject p0) {
-  /* Must call RegisterNativesImpl()  */
+static base::android::ScopedJavaLocalRef<jobject>
+    Java_MotionEvent_obtainAVME_AVME(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+static base::android::ScopedJavaLocalRef<jobject>
+    Java_MotionEvent_obtainAVME_AVME(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& p0) {
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -385,17 +382,18 @@ static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainAVME_AVME(JNIEnv* env,
 
   jobject ret =
       env->CallStaticObjectMethod(MotionEvent_clazz(env),
-          method_id, p0);
+          method_id, p0.obj());
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_obtainNoHistory = 0;
-static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainNoHistory(JNIEnv* env,
-    jobject p0) __attribute__ ((unused));
-static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainNoHistory(JNIEnv* env,
-    jobject p0) {
-  /* Must call RegisterNativesImpl()  */
+static base::android::ScopedJavaLocalRef<jobject>
+    Java_MotionEvent_obtainNoHistory(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+static base::android::ScopedJavaLocalRef<jobject>
+    Java_MotionEvent_obtainNoHistory(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& p0) {
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -408,17 +406,17 @@ static ScopedJavaLocalRef<jobject> Java_MotionEvent_obtainNoHistory(JNIEnv* env,
 
   jobject ret =
       env->CallStaticObjectMethod(MotionEvent_clazz(env),
-          method_id, p0);
+          method_id, p0.obj());
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jobject>(env, ret);
+  return base::android::ScopedJavaLocalRef<jobject>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_recycle = 0;
-static void Java_MotionEvent_recycle(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static void Java_MotionEvent_recycle(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_recycle(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static void Java_MotionEvent_recycle(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -428,18 +426,18 @@ static void Java_MotionEvent_recycle(JNIEnv* env, jobject obj) {
       "()V",
       &g_MotionEvent_recycle);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getDeviceId = 0;
-static jint Java_MotionEvent_getDeviceId(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jint Java_MotionEvent_getDeviceId(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getDeviceId(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getDeviceId(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -450,18 +448,18 @@ static jint Java_MotionEvent_getDeviceId(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getDeviceId);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getSource = 0;
-static jint Java_MotionEvent_getSource(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jint Java_MotionEvent_getSource(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getSource(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getSource(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -472,19 +470,19 @@ static jint Java_MotionEvent_getSource(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getSource);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_setSource = 0;
-static void Java_MotionEvent_setSource(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) __attribute__ ((unused));
-static void Java_MotionEvent_setSource(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_setSource(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static void Java_MotionEvent_setSource(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -494,18 +492,18 @@ static void Java_MotionEvent_setSource(JNIEnv* env, jobject obj, JniIntWrapper
       "(I)V",
       &g_MotionEvent_setSource);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getAction = 0;
-static jint Java_MotionEvent_getAction(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jint Java_MotionEvent_getAction(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getAction(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getAction(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -516,18 +514,18 @@ static jint Java_MotionEvent_getAction(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getAction);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getActionMasked = 0;
-static jint Java_MotionEvent_getActionMasked(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getActionMasked(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getActionMasked(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getActionMasked(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -538,18 +536,18 @@ static jint Java_MotionEvent_getActionMasked(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getActionMasked);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getActionIndex = 0;
-static jint Java_MotionEvent_getActionIndex(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getActionIndex(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getActionIndex(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getActionIndex(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -560,18 +558,18 @@ static jint Java_MotionEvent_getActionIndex(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getActionIndex);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getFlags = 0;
-static jint Java_MotionEvent_getFlags(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jint Java_MotionEvent_getFlags(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -582,18 +580,18 @@ static jint Java_MotionEvent_getFlags(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getFlags);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getDownTime = 0;
-static jlong Java_MotionEvent_getDownTime(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jlong Java_MotionEvent_getDownTime(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jlong Java_MotionEvent_getDownTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jlong Java_MotionEvent_getDownTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -604,18 +602,18 @@ static jlong Java_MotionEvent_getDownTime(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getDownTime);
 
   jlong ret =
-      env->CallLongMethod(obj,
+      env->CallLongMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getEventTime = 0;
-static jlong Java_MotionEvent_getEventTime(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jlong Java_MotionEvent_getEventTime(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jlong Java_MotionEvent_getEventTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jlong Java_MotionEvent_getEventTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -626,18 +624,18 @@ static jlong Java_MotionEvent_getEventTime(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getEventTime);
 
   jlong ret =
-      env->CallLongMethod(obj,
+      env->CallLongMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getXF = 0;
-static jfloat Java_MotionEvent_getXF(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jfloat Java_MotionEvent_getXF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getXF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getXF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -648,18 +646,18 @@ static jfloat Java_MotionEvent_getXF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getXF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getYF = 0;
-static jfloat Java_MotionEvent_getYF(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jfloat Java_MotionEvent_getYF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getYF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getYF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -670,18 +668,18 @@ static jfloat Java_MotionEvent_getYF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getYF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPressureF = 0;
-static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -692,18 +690,18 @@ static jfloat Java_MotionEvent_getPressureF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getPressureF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getSizeF = 0;
-static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -714,18 +712,18 @@ static jfloat Java_MotionEvent_getSizeF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getSizeF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getTouchMajorF = 0;
-static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -736,18 +734,18 @@ static jfloat Java_MotionEvent_getTouchMajorF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getTouchMajorF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getTouchMinorF = 0;
-static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -758,18 +756,18 @@ static jfloat Java_MotionEvent_getTouchMinorF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getTouchMinorF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getToolMajorF = 0;
-static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -780,18 +778,18 @@ static jfloat Java_MotionEvent_getToolMajorF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getToolMajorF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getToolMinorF = 0;
-static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -802,18 +800,18 @@ static jfloat Java_MotionEvent_getToolMinorF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getToolMinorF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getOrientationF = 0;
-static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -824,19 +822,19 @@ static jfloat Java_MotionEvent_getOrientationF(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getOrientationF);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getAxisValueF_I = 0;
-static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -847,18 +845,18 @@ static jfloat Java_MotionEvent_getAxisValueF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getAxisValueF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPointerCount = 0;
-static jint Java_MotionEvent_getPointerCount(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getPointerCount(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getPointerCount(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getPointerCount(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -869,19 +867,19 @@ static jint Java_MotionEvent_getPointerCount(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getPointerCount);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPointerId = 0;
-static jint Java_MotionEvent_getPointerId(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jint Java_MotionEvent_getPointerId(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getPointerId(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jint Java_MotionEvent_getPointerId(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -892,19 +890,19 @@ static jint Java_MotionEvent_getPointerId(JNIEnv* env, jobject obj,
       &g_MotionEvent_getPointerId);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getToolType = 0;
-static jint Java_MotionEvent_getToolType(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) __attribute__ ((unused));
-static jint Java_MotionEvent_getToolType(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getToolType(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jint Java_MotionEvent_getToolType(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -915,19 +913,19 @@ static jint Java_MotionEvent_getToolType(JNIEnv* env, jobject obj, JniIntWrapper
       &g_MotionEvent_getToolType);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_findPointerIndex = 0;
-static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -938,19 +936,19 @@ static jint Java_MotionEvent_findPointerIndex(JNIEnv* env, jobject obj,
       &g_MotionEvent_findPointerIndex);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getXF_I = 0;
-static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -961,19 +959,19 @@ static jfloat Java_MotionEvent_getXF_I(JNIEnv* env, jobject obj, JniIntWrapper
       &g_MotionEvent_getXF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getYF_I = 0;
-static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -984,19 +982,19 @@ static jfloat Java_MotionEvent_getYF_I(JNIEnv* env, jobject obj, JniIntWrapper
       &g_MotionEvent_getYF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPressureF_I = 0;
-static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1007,19 +1005,19 @@ static jfloat Java_MotionEvent_getPressureF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getPressureF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getSizeF_I = 0;
-static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1030,19 +1028,19 @@ static jfloat Java_MotionEvent_getSizeF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getSizeF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getTouchMajorF_I = 0;
-static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1053,19 +1051,19 @@ static jfloat Java_MotionEvent_getTouchMajorF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getTouchMajorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getTouchMinorF_I = 0;
-static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1076,19 +1074,19 @@ static jfloat Java_MotionEvent_getTouchMinorF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getTouchMinorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getToolMajorF_I = 0;
-static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1099,19 +1097,19 @@ static jfloat Java_MotionEvent_getToolMajorF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getToolMajorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getToolMinorF_I = 0;
-static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1122,19 +1120,19 @@ static jfloat Java_MotionEvent_getToolMinorF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getToolMinorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getOrientationF_I = 0;
-static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1145,21 +1143,20 @@ static jfloat Java_MotionEvent_getOrientationF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getOrientationF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getAxisValueF_I_I = 0;
-static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1170,21 +1167,20 @@ static jfloat Java_MotionEvent_getAxisValueF_I_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getAxisValueF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPointerCoords = 0;
-static void Java_MotionEvent_getPointerCoords(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
-    jobject p1) __attribute__ ((unused));
-static void Java_MotionEvent_getPointerCoords(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
-    jobject p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_getPointerCoords(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRefOrBare<jobject>& p1) __attribute__ ((unused));
+static void Java_MotionEvent_getPointerCoords(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRefOrBare<jobject>& p1) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1194,21 +1190,20 @@ static void Java_MotionEvent_getPointerCoords(JNIEnv* env, jobject obj,
       "(ILandroid/view/MotionEvent$PointerCoords;)V",
       &g_MotionEvent_getPointerCoords);
 
-     env->CallVoidMethod(obj,
-          method_id, as_jint(p0), p1);
+     env->CallVoidMethod(obj.obj(),
+          method_id, as_jint(p0), p1.obj());
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getPointerProperties = 0;
-static void Java_MotionEvent_getPointerProperties(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
-    jobject p1) __attribute__ ((unused));
-static void Java_MotionEvent_getPointerProperties(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
-    jobject p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_getPointerProperties(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRefOrBare<jobject>& p1) __attribute__ ((unused));
+static void Java_MotionEvent_getPointerProperties(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
+    const base::android::JavaRefOrBare<jobject>& p1) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1218,18 +1213,18 @@ static void Java_MotionEvent_getPointerProperties(JNIEnv* env, jobject obj,
       "(ILandroid/view/MotionEvent$PointerProperties;)V",
       &g_MotionEvent_getPointerProperties);
 
-     env->CallVoidMethod(obj,
-          method_id, as_jint(p0), p1);
+     env->CallVoidMethod(obj.obj(),
+          method_id, as_jint(p0), p1.obj());
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getMetaState = 0;
-static jint Java_MotionEvent_getMetaState(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getMetaState(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getMetaState(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getMetaState(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1240,18 +1235,18 @@ static jint Java_MotionEvent_getMetaState(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getMetaState);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getButtonState = 0;
-static jint Java_MotionEvent_getButtonState(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getButtonState(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getButtonState(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getButtonState(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1262,18 +1257,18 @@ static jint Java_MotionEvent_getButtonState(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getButtonState);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getRawX = 0;
-static jfloat Java_MotionEvent_getRawX(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jfloat Java_MotionEvent_getRawX(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getRawX(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getRawX(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1284,18 +1279,18 @@ static jfloat Java_MotionEvent_getRawX(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getRawX);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getRawY = 0;
-static jfloat Java_MotionEvent_getRawY(JNIEnv* env, jobject obj) __attribute__
-    ((unused));
-static jfloat Java_MotionEvent_getRawY(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getRawY(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getRawY(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1306,18 +1301,18 @@ static jfloat Java_MotionEvent_getRawY(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getRawY);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getXPrecision = 0;
-static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1328,18 +1323,18 @@ static jfloat Java_MotionEvent_getXPrecision(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getXPrecision);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getYPrecision = 0;
-static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1350,18 +1345,18 @@ static jfloat Java_MotionEvent_getYPrecision(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getYPrecision);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistorySize = 0;
-static jint Java_MotionEvent_getHistorySize(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getHistorySize(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getHistorySize(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getHistorySize(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1372,19 +1367,19 @@ static jint Java_MotionEvent_getHistorySize(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getHistorySize);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalEventTime = 0;
-static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1395,19 +1390,19 @@ static jlong Java_MotionEvent_getHistoricalEventTime(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalEventTime);
 
   jlong ret =
-      env->CallLongMethod(obj,
+      env->CallLongMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalXF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1418,19 +1413,19 @@ static jfloat Java_MotionEvent_getHistoricalXF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalXF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalYF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1441,19 +1436,19 @@ static jfloat Java_MotionEvent_getHistoricalYF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalYF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalPressureF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1464,19 +1459,19 @@ static jfloat Java_MotionEvent_getHistoricalPressureF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalPressureF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalSizeF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1487,19 +1482,19 @@ static jfloat Java_MotionEvent_getHistoricalSizeF_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalSizeF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMajorF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1510,19 +1505,19 @@ static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalTouchMajorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMinorF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1533,19 +1528,19 @@ static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalTouchMinorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMajorF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1556,19 +1551,19 @@ static jfloat Java_MotionEvent_getHistoricalToolMajorF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalToolMajorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMinorF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1579,19 +1574,19 @@ static jfloat Java_MotionEvent_getHistoricalToolMinorF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalToolMinorF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalOrientationF_I = 0;
-static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1602,21 +1597,20 @@ static jfloat Java_MotionEvent_getHistoricalOrientationF_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalOrientationF_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalAxisValueF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1627,21 +1621,20 @@ static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalAxisValueF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalXF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1652,21 +1645,20 @@ static jfloat Java_MotionEvent_getHistoricalXF_I_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalXF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalYF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1677,21 +1669,20 @@ static jfloat Java_MotionEvent_getHistoricalYF_I_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalYF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalPressureF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1702,21 +1693,20 @@ static jfloat Java_MotionEvent_getHistoricalPressureF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalPressureF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalSizeF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, jobject obj,
-    JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1727,21 +1717,20 @@ static jfloat Java_MotionEvent_getHistoricalSizeF_I_I(JNIEnv* env, jobject obj,
       &g_MotionEvent_getHistoricalSizeF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMajorF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1752,21 +1741,20 @@ static jfloat Java_MotionEvent_getHistoricalTouchMajorF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalTouchMajorF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalTouchMinorF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1777,21 +1765,20 @@ static jfloat Java_MotionEvent_getHistoricalTouchMinorF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalTouchMinorF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMajorF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1802,21 +1789,20 @@ static jfloat Java_MotionEvent_getHistoricalToolMajorF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalToolMajorF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalToolMinorF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1827,21 +1813,20 @@ static jfloat Java_MotionEvent_getHistoricalToolMinorF_I_I(JNIEnv* env, jobject
       &g_MotionEvent_getHistoricalToolMinorF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalOrientationF_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env,
-    jobject obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env,
-    jobject obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1852,23 +1837,22 @@ static jfloat Java_MotionEvent_getHistoricalOrientationF_I_I(JNIEnv* env,
       &g_MotionEvent_getHistoricalOrientationF_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalAxisValueF_I_I_I = 0;
-static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env,
-    jobject obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
     JniIntWrapper p2) __attribute__ ((unused));
-static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env,
-    jobject obj, JniIntWrapper p0,
+static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
     JniIntWrapper p2) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1879,23 +1863,22 @@ static jfloat Java_MotionEvent_getHistoricalAxisValueF_I_I_I(JNIEnv* env,
       &g_MotionEvent_getHistoricalAxisValueF_I_I_I);
 
   jfloat ret =
-      env->CallFloatMethod(obj,
+      env->CallFloatMethod(obj.obj(),
           method_id, as_jint(p0), as_jint(p1), as_jint(p2));
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getHistoricalPointerCoords = 0;
-static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
-    jobject p2) __attribute__ ((unused));
-static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, jobject
-    obj, JniIntWrapper p0,
+    const base::android::JavaRefOrBare<jobject>& p2) __attribute__ ((unused));
+static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0,
     JniIntWrapper p1,
-    jobject p2) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+    const base::android::JavaRefOrBare<jobject>& p2) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1905,18 +1888,18 @@ static void Java_MotionEvent_getHistoricalPointerCoords(JNIEnv* env, jobject
       "(IILandroid/view/MotionEvent$PointerCoords;)V",
       &g_MotionEvent_getHistoricalPointerCoords);
 
-     env->CallVoidMethod(obj,
-          method_id, as_jint(p0), as_jint(p1), p2);
+     env->CallVoidMethod(obj.obj(),
+          method_id, as_jint(p0), as_jint(p1), p2.obj());
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_getEdgeFlags = 0;
-static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, jobject obj)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1927,19 +1910,19 @@ static jint Java_MotionEvent_getEdgeFlags(JNIEnv* env, jobject obj) {
       &g_MotionEvent_getEdgeFlags);
 
   jint ret =
-      env->CallIntMethod(obj,
+      env->CallIntMethod(obj.obj(),
           method_id);
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_setEdgeFlags = 0;
-static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) __attribute__ ((unused));
-static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, jobject obj,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1949,19 +1932,19 @@ static void Java_MotionEvent_setEdgeFlags(JNIEnv* env, jobject obj,
       "(I)V",
       &g_MotionEvent_setEdgeFlags);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_setAction = 0;
-static void Java_MotionEvent_setAction(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) __attribute__ ((unused));
-static void Java_MotionEvent_setAction(JNIEnv* env, jobject obj, JniIntWrapper
-    p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_setAction(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) __attribute__
+    ((unused));
+static void Java_MotionEvent_setAction(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, JniIntWrapper p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1971,19 +1954,20 @@ static void Java_MotionEvent_setAction(JNIEnv* env, jobject obj, JniIntWrapper
       "(I)V",
       &g_MotionEvent_setAction);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, as_jint(p0));
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_offsetLocation = 0;
-static void Java_MotionEvent_offsetLocation(JNIEnv* env, jobject obj, jfloat p0,
+static void Java_MotionEvent_offsetLocation(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
     jfloat p1) __attribute__ ((unused));
-static void Java_MotionEvent_offsetLocation(JNIEnv* env, jobject obj, jfloat p0,
+static void Java_MotionEvent_offsetLocation(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
     jfloat p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -1993,19 +1977,20 @@ static void Java_MotionEvent_offsetLocation(JNIEnv* env, jobject obj, jfloat p0,
       "(FF)V",
       &g_MotionEvent_offsetLocation);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, p0, p1);
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_setLocation = 0;
-static void Java_MotionEvent_setLocation(JNIEnv* env, jobject obj, jfloat p0,
+static void Java_MotionEvent_setLocation(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
     jfloat p1) __attribute__ ((unused));
-static void Java_MotionEvent_setLocation(JNIEnv* env, jobject obj, jfloat p0,
+static void Java_MotionEvent_setLocation(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jfloat p0,
     jfloat p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2015,18 +2000,20 @@ static void Java_MotionEvent_setLocation(JNIEnv* env, jobject obj, jfloat p0,
       "(FF)V",
       &g_MotionEvent_setLocation);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, p0, p1);
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_transform = 0;
-static void Java_MotionEvent_transform(JNIEnv* env, jobject obj, jobject p0)
-    __attribute__ ((unused));
-static void Java_MotionEvent_transform(JNIEnv* env, jobject obj, jobject p0) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static void Java_MotionEvent_transform(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, const
+    base::android::JavaRefOrBare<jobject>& p0) __attribute__ ((unused));
+static void Java_MotionEvent_transform(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, const
+    base::android::JavaRefOrBare<jobject>& p0) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2036,29 +2023,28 @@ static void Java_MotionEvent_transform(JNIEnv* env, jobject obj, jobject p0) {
       "(Landroid/graphics/Matrix;)V",
       &g_MotionEvent_transform);
 
-     env->CallVoidMethod(obj,
-          method_id, p0);
+     env->CallVoidMethod(obj.obj(),
+          method_id, p0.obj());
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_addBatchV_J_F_F_F_F_I = 0;
-static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, jobject obj,
-    jlong p0,
+static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
     jfloat p1,
     jfloat p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) __attribute__ ((unused));
-static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, jobject obj,
-    jlong p0,
+static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
     jfloat p1,
     jfloat p2,
     jfloat p3,
     jfloat p4,
     JniIntWrapper p5) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2068,23 +2054,22 @@ static void Java_MotionEvent_addBatchV_J_F_F_F_F_I(JNIEnv* env, jobject obj,
       "(JFFFFI)V",
       &g_MotionEvent_addBatchV_J_F_F_F_F_I);
 
-     env->CallVoidMethod(obj,
+     env->CallVoidMethod(obj.obj(),
           method_id, p0, p1, p2, p3, p4, as_jint(p5));
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_addBatchV_J_LAVMEPC_I = 0;
-static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, jobject obj,
-    jlong p0,
-    jobjectArray p1,
+static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
+    const base::android::JavaRefOrBare<jobjectArray>& p1,
     JniIntWrapper p2) __attribute__ ((unused));
-static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, jobject obj,
-    jlong p0,
-    jobjectArray p1,
+static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, jlong p0,
+    const base::android::JavaRefOrBare<jobjectArray>& p1,
     JniIntWrapper p2) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2094,19 +2079,20 @@ static void Java_MotionEvent_addBatchV_J_LAVMEPC_I(JNIEnv* env, jobject obj,
       "(J[Landroid/view/MotionEvent$PointerCoords;I)V",
       &g_MotionEvent_addBatchV_J_LAVMEPC_I);
 
-     env->CallVoidMethod(obj,
-          method_id, p0, p1, as_jint(p2));
+     env->CallVoidMethod(obj.obj(),
+          method_id, p0, p1.obj(), as_jint(p2));
   jni_generator::CheckException(env);
 
 }
 
 static base::subtle::AtomicWord g_MotionEvent_toString = 0;
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_toString(JNIEnv* env,
-    jobject obj) __attribute__ ((unused));
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_toString(JNIEnv* env,
-    jobject obj) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_toString(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) __attribute__ ((unused));
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_toString(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj) {
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2117,18 +2103,18 @@ static ScopedJavaLocalRef<jstring> Java_MotionEvent_toString(JNIEnv* env,
       &g_MotionEvent_toString);
 
   jstring ret =
-      static_cast<jstring>(env->CallObjectMethod(obj,
+      static_cast<jstring>(env->CallObjectMethod(obj.obj(),
           method_id));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jstring>(env, ret);
+  return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_actionToString = 0;
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_actionToString(JNIEnv* env,
-    JniIntWrapper p0) __attribute__ ((unused));
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_actionToString(JNIEnv* env,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_actionToString(JNIEnv* env, JniIntWrapper p0) __attribute__
+    ((unused));
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_actionToString(JNIEnv* env, JniIntWrapper p0) {
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -2143,15 +2129,15 @@ static ScopedJavaLocalRef<jstring> Java_MotionEvent_actionToString(JNIEnv* env,
       static_cast<jstring>(env->CallStaticObjectMethod(MotionEvent_clazz(env),
           method_id, as_jint(p0)));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jstring>(env, ret);
+  return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_axisToString = 0;
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_axisToString(JNIEnv* env,
-    JniIntWrapper p0) __attribute__ ((unused));
-static ScopedJavaLocalRef<jstring> Java_MotionEvent_axisToString(JNIEnv* env,
-    JniIntWrapper p0) {
-  /* Must call RegisterNativesImpl()  */
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_axisToString(JNIEnv* env, JniIntWrapper p0) __attribute__
+    ((unused));
+static base::android::ScopedJavaLocalRef<jstring>
+    Java_MotionEvent_axisToString(JNIEnv* env, JniIntWrapper p0) {
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), NULL);
   jmethodID method_id =
@@ -2166,14 +2152,14 @@ static ScopedJavaLocalRef<jstring> Java_MotionEvent_axisToString(JNIEnv* env,
       static_cast<jstring>(env->CallStaticObjectMethod(MotionEvent_clazz(env),
           method_id, as_jint(p0)));
   jni_generator::CheckException(env);
-  return ScopedJavaLocalRef<jstring>(env, ret);
+  return base::android::ScopedJavaLocalRef<jstring>(env, ret);
 }
 
 static base::subtle::AtomicWord g_MotionEvent_axisFromString = 0;
-static jint Java_MotionEvent_axisFromString(JNIEnv* env, jstring p0)
-    __attribute__ ((unused));
-static jint Java_MotionEvent_axisFromString(JNIEnv* env, jstring p0) {
-  /* Must call RegisterNativesImpl()  */
+static jint Java_MotionEvent_axisFromString(JNIEnv* env, const
+    base::android::JavaRefOrBare<jstring>& p0) __attribute__ ((unused));
+static jint Java_MotionEvent_axisFromString(JNIEnv* env, const
+    base::android::JavaRefOrBare<jstring>& p0) {
   CHECK_CLAZZ(env, MotionEvent_clazz(env),
       MotionEvent_clazz(env), 0);
   jmethodID method_id =
@@ -2186,18 +2172,21 @@ static jint Java_MotionEvent_axisFromString(JNIEnv* env, jstring p0) {
 
   jint ret =
       env->CallStaticIntMethod(MotionEvent_clazz(env),
-          method_id, p0);
+          method_id, p0.obj());
   jni_generator::CheckException(env);
   return ret;
 }
 
 static base::subtle::AtomicWord g_MotionEvent_writeToParcel = 0;
-static void Java_MotionEvent_writeToParcel(JNIEnv* env, jobject obj, jobject p0,
+static void Java_MotionEvent_writeToParcel(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, const
+    base::android::JavaRefOrBare<jobject>& p0,
     JniIntWrapper p1) __attribute__ ((unused));
-static void Java_MotionEvent_writeToParcel(JNIEnv* env, jobject obj, jobject p0,
+static void Java_MotionEvent_writeToParcel(JNIEnv* env, const
+    base::android::JavaRefOrBare<jobject>& obj, const
+    base::android::JavaRefOrBare<jobject>& p0,
     JniIntWrapper p1) {
-  /* Must call RegisterNativesImpl()  */
-  CHECK_CLAZZ(env, obj,
+  CHECK_CLAZZ(env, obj.obj(),
       MotionEvent_clazz(env));
   jmethodID method_id =
       base::android::MethodID::LazyGet<
@@ -2207,21 +2196,13 @@ static void Java_MotionEvent_writeToParcel(JNIEnv* env, jobject obj, jobject p0,
       "(Landroid/os/Parcel;I)V",
       &g_MotionEvent_writeToParcel);
 
-     env->CallVoidMethod(obj,
-          method_id, p0, as_jint(p1));
+     env->CallVoidMethod(obj.obj(),
+          method_id, p0.obj(), as_jint(p1));
   jni_generator::CheckException(env);
 
 }
 
 // Step 3: RegisterNatives.
-
-static bool RegisterNativesImpl(JNIEnv* env) {
-
-  g_MotionEvent_clazz = reinterpret_cast<jclass>(env->NewGlobalRef(
-      base::android::GetClass(env, kMotionEventClassPath).obj()));
-
-  return true;
-}
 
 }  // namespace JNI_MotionEvent
 

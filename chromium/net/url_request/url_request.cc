@@ -159,10 +159,6 @@ void URLRequest::Delegate::OnSSLCertificateError(URLRequest* request,
   request->Cancel();
 }
 
-void URLRequest::Delegate::OnBeforeNetworkStart(URLRequest* request,
-                                                bool* defer) {
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // URLRequest
 
@@ -570,8 +566,7 @@ URLRequest::URLRequest(const GURL& url,
                                           base::Unretained(this))),
       has_notified_completion_(false),
       received_response_content_length_(0),
-      creation_time_(base::TimeTicks::Now()),
-      notified_before_network_start_(false) {
+      creation_time_(base::TimeTicks::Now()) {
   // Sanity check out environment.
   DCHECK(base::MessageLoop::current())
       << "The current base::MessageLoop must exist";
@@ -756,6 +751,23 @@ bool URLRequest::Read(IOBuffer* dest, int dest_size, int* bytes_read) {
   }
 
   bool rv = job_->Read(dest, dest_size, bytes_read);
+  if (*bytes_read < 0) {
+    if (*bytes_read == ERR_IO_PENDING) {
+      set_status(URLRequestStatus::FromError(ERR_IO_PENDING));
+      // Check the status was set correctly.
+      DCHECK_EQ(*bytes_read, status_.error());
+      // Adjust to the previous behavior. If the error is ERR_IO_PENDING,
+      // |*bytes_read| should be 0.
+      *bytes_read = 0;
+    } else {
+      // Check the status was set correctly.
+      DCHECK_EQ(*bytes_read, status_.error());
+      // Adjust to the previous behavior. If the error is other than
+      // ERR_IO_PENDING, |*bytes_read| should be -1.
+      *bytes_read = -1;
+    }
+  }
+
   // If rv is false, the status cannot be success.
   DCHECK(rv || status_.status() != URLRequestStatus::SUCCESS);
 
@@ -786,25 +798,18 @@ void URLRequest::NotifyReceivedRedirect(const RedirectInfo& redirect_info,
   }
 }
 
-void URLRequest::NotifyBeforeNetworkStart(bool* defer) {
-  if (!notified_before_network_start_) {
-    OnCallToDelegate();
-    delegate_->OnBeforeNetworkStart(this, defer);
-    if (!*defer)
-      OnCallToDelegateComplete();
-    notified_before_network_start_ = true;
-  }
-}
-
 void URLRequest::ResumeNetworkStart() {
   DCHECK(job_.get());
-  DCHECK(notified_before_network_start_);
 
   OnCallToDelegateComplete();
   job_->ResumeNetworkStart();
 }
 
-void URLRequest::NotifyResponseStarted() {
+void URLRequest::NotifyResponseStarted(const URLRequestStatus& status) {
+  // Change status if there was an error.
+  if (status.status() != URLRequestStatus::SUCCESS)
+    set_status(status);
+
   int net_error = OK;
   if (!status_.is_success())
     net_error = status_.error();
@@ -1129,6 +1134,8 @@ bool URLRequest::CanEnablePrivacyMode() const {
 
 
 void URLRequest::NotifyReadCompleted(int bytes_read) {
+  if (bytes_read > 0)
+    set_status(URLRequestStatus());
   // Notify in case the entire URL Request has been finished.
   if (bytes_read <= 0)
     NotifyRequestCompleted();
@@ -1146,6 +1153,7 @@ void URLRequest::NotifyReadCompleted(int bytes_read) {
 }
 
 void URLRequest::OnHeadersComplete() {
+  set_status(URLRequestStatus());
   // Cache load timing information now, as information will be lost once the
   // socket is closed and the ClientSocketHandle is Reset, which will happen
   // once the body is complete.  The start times should already be populated.
@@ -1200,6 +1208,12 @@ void URLRequest::GetConnectionAttempts(ConnectionAttempts* out) const {
     job_->GetConnectionAttempts(out);
   else
     out->clear();
+}
+
+void URLRequest::set_status(URLRequestStatus status) {
+  DCHECK(status_.is_io_pending() || status_.is_success() ||
+         (!status.is_success() && !status.is_io_pending()));
+  status_ = status;
 }
 
 }  // namespace net

@@ -19,7 +19,7 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/browser/shell_integration.h"
-#include "grit/generated_resources.h"
+#include "chrome/grit/generated_resources.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "base/json/json_reader.h"
 
@@ -104,7 +104,6 @@ void ChromeBookmarkFileReader::LoadFile(base::FilePath& file) {
 
 bool ChromeBookmarkFileReader::DecodeNode(const base::DictionaryValue& value) {
   std::string id_string;
-  int64_t id = 0;
 
   base::string16 title;
   value.GetString(kNameKey, &title);

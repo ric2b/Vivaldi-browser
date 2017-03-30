@@ -35,13 +35,16 @@
 
 namespace blink {
 
+class CompositeEditCommand;
 class LocalFrame;
+class ReplaceSelectionCommand;
 class SpellCheckerClient;
 class SpellCheckRequest;
 class SpellCheckRequester;
 class TextCheckerClient;
 class TextCheckingParagraph;
 struct TextCheckingResult;
+class TypingCommand;
 
 class CORE_EXPORT SpellChecker final : public GarbageCollected<SpellChecker> {
     WTF_MAKE_NONCOPYABLE(SpellChecker);
@@ -53,19 +56,12 @@ public:
     SpellCheckerClient& spellCheckerClient() const;
     TextCheckerClient& textChecker() const;
 
-    bool isContinuousSpellCheckingEnabled() const;
-    void toggleContinuousSpellChecking();
+    bool isSpellCheckingEnabled() const;
+    void toggleSpellCheckingEnabled();
     void ignoreSpelling();
     bool isSpellCheckingEnabledInFocusedNode() const;
-    bool isSpellCheckingEnabledFor(Node*) const;
-    static bool isSpellCheckingEnabledFor(const VisibleSelection&);
-    void markMisspellingsAfterLineBreak(const VisibleSelection& wordSelection);
-    void markMisspellingsAfterTypingToWord(const VisiblePosition &wordStart, const VisibleSelection& selectionAfterTyping);
-    bool markMisspellings(const VisibleSelection&);
-    void markBadGrammar(const VisibleSelection&);
-    void markMisspellingsAndBadGrammar(const VisibleSelection& spellingSelection, bool markGrammar, const VisibleSelection& grammarSelection);
+    void markMisspellingsAfterApplyingCommand(const CompositeEditCommand&);
     void markAndReplaceFor(SpellCheckRequest*, const Vector<TextCheckingResult>&);
-    void markAllMisspellingsAndBadGrammarInRanges(TextCheckingTypeMask, const EphemeralRange& spellingRange, const EphemeralRange& grammarRange);
     void advanceToNextMisspelling(bool startBeforeSelection = false);
     void showSpellingGuessPanel();
     void didBeginEditing(Element*);
@@ -76,14 +72,12 @@ public:
     void removeSpellingMarkers();
     void removeSpellingMarkersUnderWords(const Vector<String>& words);
     void spellCheckAfterBlur();
-    void spellCheckOldSelection(const VisibleSelection& oldSelection, const VisibleSelection& newAdjacentWords);
 
     void didEndEditingOnTextField(Element*);
     bool selectionStartHasMarkerFor(DocumentMarker::MarkerType, int from, int length) const;
     bool selectionStartHasSpellingMarkerFor(int from, int length) const;
     void updateMarkersForWordsAffectedByEditing(bool onlyHandleWordsContainingSelection);
     void cancelCheck();
-    void chunkAndMarkAllMisspellingsAndBadGrammar(Node*, const EphemeralRange&);
     void requestTextChecking(const Element&);
 
     // Exposed for testing only
@@ -106,13 +100,19 @@ private:
         return *m_frame;
     }
 
-    bool markMisspellingsOrBadGrammar(const VisibleSelection&, bool checkSpelling);
-    TextCheckingTypeMask resolveTextCheckingTypeMask(TextCheckingTypeMask);
+    // Helper functions for advanceToNextMisspelling()
+    Vector<TextCheckingResult> findMisspellings(const String&);
+    std::pair<String, int> findFirstMisspelling(const Position&, const Position&);
+
+    void markMisspellingsAfterLineBreak(const VisibleSelection& wordSelection);
+    void markMisspellingsAfterTypingToWord(const VisiblePosition &wordStart);
+    void markMisspellingsAfterTypingCommand(const TypingCommand&);
+    void markMisspellingsAfterReplaceSelectionCommand(const ReplaceSelectionCommand&);
 
     void removeMarkers(const VisibleSelection&, DocumentMarker::MarkerTypes);
-    bool unifiedTextCheckerEnabled() const;
 
-    void chunkAndMarkAllMisspellingsAndBadGrammar(TextCheckingTypeMask textCheckingOptions, const TextCheckingParagraph& fullParagraphToCheck);
+    void chunkAndMarkAllMisspellingsAndBadGrammar(const EphemeralRange&);
+    void spellCheckOldSelection(const VisibleSelection& oldSelection, const VisibleSelection& newAdjacentWords);
 
     Member<LocalFrame> m_frame;
     const Member<SpellCheckRequester> m_spellCheckRequester;

@@ -68,8 +68,6 @@ class ManagePasswordsBubbleCocoaTest : public CocoaProfileTest {
     ASSERT_TRUE(testing::Mock::VerifyAndClearExpectations(mock));
     autofill::PasswordForm form;
     EXPECT_CALL(*mock, GetPendingPassword()).WillOnce(ReturnRef(form));
-    std::vector<const autofill::PasswordForm*> forms;
-    EXPECT_CALL(*mock, GetCurrentForms()).WillOnce(ReturnRef(forms));
     GURL origin;
     EXPECT_CALL(*mock, GetOrigin()).WillOnce(ReturnRef(origin));
     EXPECT_CALL(*mock, GetState())
@@ -97,7 +95,7 @@ class ManagePasswordsBubbleCocoaTest : public CocoaProfileTest {
 
   ManagePasswordsUIControllerMock* UIController() {
     return static_cast<ManagePasswordsUIControllerMock*>(
-        PasswordsModelDelegateFromWebContents(test_web_contents_));
+        ManagePasswordsUIController::FromWebContents(test_web_contents_));
   }
 
   ManagePasswordsBubbleController* controller() {

@@ -35,36 +35,31 @@
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF16;
+using base::android::JavaParamRef;
 
 namespace content {
 namespace {
 
 // Maps a java KeyEvent into a NativeWebKeyboardEvent.
 // |java_key_event| is used to maintain a globalref for KeyEvent.
-// |action| will help determine the WebInputEvent type.
+// |type| will determine the WebInputEvent type.
 // type, |modifiers|, |time_ms|, |key_code|, |unicode_char| is used to create
 // WebKeyboardEvent. |key_code| is also needed ad need to treat the enter key
 // as a key press of character \r.
 NativeWebKeyboardEvent NativeWebKeyboardEventFromKeyEvent(
     JNIEnv* env,
     const base::android::JavaRef<jobject>& java_key_event,
-    int action,
+    int type,
     int modifiers,
     long time_ms,
     int key_code,
     int scan_code,
     bool is_system_key,
     int unicode_char) {
-  blink::WebInputEvent::Type type = blink::WebInputEvent::Undefined;
-  if (action == AKEY_EVENT_ACTION_DOWN)
-    type = blink::WebInputEvent::RawKeyDown;
-  else if (action == AKEY_EVENT_ACTION_UP)
-    type = blink::WebInputEvent::KeyUp;
-  else
-    NOTREACHED() << "Invalid Android key event action: " << action;
-  return NativeWebKeyboardEvent(env, java_key_event, type, modifiers,
-                                time_ms / 1000.0, key_code, scan_code,
-                                unicode_char, is_system_key);
+  return NativeWebKeyboardEvent(env, java_key_event,
+                                static_cast<blink::WebInputEvent::Type>(type),
+                                modifiers, time_ms / 1000.0, key_code,
+                                scan_code, unicode_char, is_system_key);
 }
 
 }  // anonymous namespace
@@ -123,28 +118,14 @@ ImeAdapterAndroid::~ImeAdapterAndroid() {
   JNIEnv* env = AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jobject> obj = java_ime_adapter_.get(env);
   if (!obj.is_null())
-    Java_ImeAdapter_detach(env, obj.obj());
-}
-
-bool ImeAdapterAndroid::SendSyntheticKeyEvent(JNIEnv*,
-                                              const JavaParamRef<jobject>&,
-                                              int type,
-                                              long time_ms,
-                                              int key_code,
-                                              int modifiers,
-                                              int text) {
-  NativeWebKeyboardEvent event(static_cast<blink::WebInputEvent::Type>(type),
-                               modifiers, time_ms / 1000.0, key_code, 0,
-                               text, false /* is_system_key */);
-  rwhva_->SendKeyEvent(event);
-  return true;
+    Java_ImeAdapter_detach(env, obj);
 }
 
 bool ImeAdapterAndroid::SendKeyEvent(
     JNIEnv* env,
     const JavaParamRef<jobject>&,
     const JavaParamRef<jobject>& original_key_event,
-    int action,
+    int type,
     int modifiers,
     long time_ms,
     int key_code,
@@ -152,25 +133,9 @@ bool ImeAdapterAndroid::SendKeyEvent(
     bool is_system_key,
     int unicode_char) {
   NativeWebKeyboardEvent event = NativeWebKeyboardEventFromKeyEvent(
-          env, original_key_event, action, modifiers,
-          time_ms, key_code, scan_code, is_system_key, unicode_char);
-  bool key_down_text_insertion =
-      event.type == blink::WebInputEvent::RawKeyDown && event.text[0];
-  // If we are going to follow up with a synthetic Char event, then that's the
-  // one we expect to test if it's handled or unhandled, so skip handling the
-  // "real" event in the browser.
-  event.skip_in_browser = key_down_text_insertion;
+          env, original_key_event, type, modifiers,
+          time_ms / 1000.0, key_code, scan_code, is_system_key, unicode_char);
   rwhva_->SendKeyEvent(event);
-  if (key_down_text_insertion) {
-    // Send a Char event, but without an os_event since we don't want to
-    // roundtrip back to java such synthetic event.
-    NativeWebKeyboardEvent char_event(blink::WebInputEvent::Char, modifiers,
-                                      time_ms / 1000.0, key_code, scan_code,
-                                      unicode_char,
-                                      is_system_key);
-    char_event.skip_in_browser = key_down_text_insertion;
-    rwhva_->SendKeyEvent(char_event);
-  }
   return true;
 }
 
@@ -241,15 +206,14 @@ void ImeAdapterAndroid::CancelComposition() {
   base::android::ScopedJavaLocalRef<jobject> obj =
       java_ime_adapter_.get(AttachCurrentThread());
   if (!obj.is_null())
-    Java_ImeAdapter_cancelComposition(AttachCurrentThread(), obj.obj());
+    Java_ImeAdapter_cancelComposition(AttachCurrentThread(), obj);
 }
 
 void ImeAdapterAndroid::FocusedNodeChanged(bool is_editable_node) {
   base::android::ScopedJavaLocalRef<jobject> obj =
       java_ime_adapter_.get(AttachCurrentThread());
   if (!obj.is_null()) {
-    Java_ImeAdapter_focusedNodeChanged(AttachCurrentThread(),
-                                       obj.obj(),
+    Java_ImeAdapter_focusedNodeChanged(AttachCurrentThread(), obj,
                                        is_editable_node);
   }
 }
@@ -285,11 +249,8 @@ void ImeAdapterAndroid::SetCharacterBounds(
     coordinates_array[coordinates_array_index + 3] = rect.bottom();
   }
   Java_ImeAdapter_setCharacterBounds(
-      env,
-      obj.obj(),
-      base::android::ToJavaFloatArray(env,
-                                      coordinates_array.get(),
-                                      coordinates_array_size).obj());
+      env, obj, base::android::ToJavaFloatArray(env, coordinates_array.get(),
+                                                coordinates_array_size));
 }
 
 void ImeAdapterAndroid::SetComposingRegion(JNIEnv*,
@@ -326,6 +287,18 @@ bool ImeAdapterAndroid::RequestTextInputStateUpdate(
     return false;
   rwhi->Send(new InputMsg_RequestTextInputStateUpdate(rwhi->GetRoutingID()));
   return true;
+}
+
+void ImeAdapterAndroid::RequestCursorUpdate(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj,
+    bool immediate_request,
+    bool monitor_request) {
+  RenderWidgetHostImpl* rwhi = GetRenderWidgetHostImpl();
+  if (!rwhi)
+    return;
+  rwhi->Send(new InputMsg_RequestCompositionUpdate(
+      rwhi->GetRoutingID(), immediate_request, monitor_request));
 }
 
 bool ImeAdapterAndroid::IsImeThreadEnabled(

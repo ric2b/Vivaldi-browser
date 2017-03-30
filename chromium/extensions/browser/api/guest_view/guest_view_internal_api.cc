@@ -19,6 +19,8 @@
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/browser/guest_view/web_view/web_view_guest.h"
 
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
@@ -75,16 +77,22 @@ bool GuestViewInternalCreateGuestFunction::RunAsync() {
     TabStripModel* tab_strip;
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,
       &browser, &tab_strip, &contents, &tab_index);
-    // the guest could have been created prior for new windows.
     guest = GuestViewBase::FromWebContents(contents);
-    if(guest)
-      callback.Run(contents);
+    if(guest) {
+      // If there is a guest with the WebContents already in the tabstrip then
+      // use this. This is done through the WebContentsImpl::CreateNewWindow
+      // code-path. Ie. clicking a link in a webpage with target set. The guest
+      // has been created with
+      // GuestViewManager::CreateGuestWithWebContentsParams.
+      callback.Run(guest->web_contents());
+    }
   }
-  if(!guest)
+  if (!guest) {
   guest_view_manager->CreateGuest(view_type,
                                   sender_web_contents,
                                   *create_params,
                                   callback);
+  }
   return true;
 }
 

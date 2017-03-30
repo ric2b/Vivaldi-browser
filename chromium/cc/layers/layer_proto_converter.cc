@@ -57,9 +57,9 @@ void LayerProtoConverter::SerializeLayerProperties(
     LayerTreeHost* host,
     proto::LayerUpdate* layer_update) {
   TRACE_EVENT0("cc.remote", "LayerProtoConverter::SerializeLayerProperties");
-  for (auto layer : host->LayersThatShouldPushProperties())
+  for (auto* layer : host->GetLayerTree()->LayersThatShouldPushProperties())
     layer->ToLayerPropertiesProto(layer_update);
-  host->LayersThatShouldPushProperties().clear();
+  host->GetLayerTree()->LayersThatShouldPushProperties().clear();
 }
 
 // static
@@ -85,7 +85,7 @@ void LayerProtoConverter::DeserializeLayerProperties(
 void LayerProtoConverter::RecursivelyFindAllLayers(Layer* root_layer,
                                                    LayerIdMap* layer_id_map) {
   LayerTreeHostCommon::CallFunctionForEveryLayer(
-      root_layer->layer_tree_host(),
+      root_layer->GetLayerTree(),
       [layer_id_map](Layer* layer) { (*layer_id_map)[layer->id()] = layer; });
 }
 

@@ -19,9 +19,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "policy/proto/device_management_backend.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -185,8 +185,8 @@ void MockScreenshotDelegate::TakeSnapshot(
 std::unique_ptr<UploadJob> MockScreenshotDelegate::CreateUploadJob(
     const GURL& upload_url,
     UploadJob::Delegate* delegate) {
-  return base::WrapUnique(new MockUploadJob(upload_url, delegate,
-                                            std::move(upload_job_error_code_)));
+  return base::MakeUnique<MockUploadJob>(upload_url, delegate,
+                                         std::move(upload_job_error_code_));
 }
 
 }  // namespace
@@ -267,7 +267,7 @@ void DeviceCommandScreenshotTest::VerifyResults(
 
 TEST_F(DeviceCommandScreenshotTest, Success) {
   std::unique_ptr<RemoteCommandJob> job(new DeviceCommandScreenshotJob(
-      base::WrapUnique(new MockScreenshotDelegate(nullptr, true))));
+      base::MakeUnique<MockScreenshotDelegate>(nullptr, true)));
   InitializeScreenshotJob(job.get(), kUniqueID, test_start_time_,
                           kMockUploadUrl);
   bool success = job->Run(
@@ -282,7 +282,7 @@ TEST_F(DeviceCommandScreenshotTest, Success) {
 
 TEST_F(DeviceCommandScreenshotTest, FailureUserInput) {
   std::unique_ptr<RemoteCommandJob> job(new DeviceCommandScreenshotJob(
-      base::WrapUnique(new MockScreenshotDelegate(nullptr, false))));
+      base::MakeUnique<MockScreenshotDelegate>(nullptr, false)));
   InitializeScreenshotJob(job.get(), kUniqueID, test_start_time_,
                           kMockUploadUrl);
   bool success =
@@ -300,9 +300,8 @@ TEST_F(DeviceCommandScreenshotTest, Failure) {
   using ErrorCode = UploadJob::ErrorCode;
   std::unique_ptr<ErrorCode> error_code(
       new ErrorCode(UploadJob::AUTHENTICATION_ERROR));
-  std::unique_ptr<RemoteCommandJob> job(
-      new DeviceCommandScreenshotJob(base::WrapUnique(
-          new MockScreenshotDelegate(std::move(error_code), true))));
+  std::unique_ptr<RemoteCommandJob> job(new DeviceCommandScreenshotJob(
+      base::MakeUnique<MockScreenshotDelegate>(std::move(error_code), true)));
   InitializeScreenshotJob(job.get(), kUniqueID, test_start_time_,
                           kMockUploadUrl);
   bool success = job->Run(

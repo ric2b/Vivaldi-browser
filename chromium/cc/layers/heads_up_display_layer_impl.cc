@@ -17,7 +17,6 @@
 #include "cc/debug/debug_colors.h"
 #include "cc/debug/frame_rate_counter.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/output/renderer.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/memory_history.h"
 #include "cc/trees/layer_tree_host_impl.h"
@@ -96,9 +95,9 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
 
   std::unique_ptr<ScopedResource> resource =
       ScopedResource::Create(resource_provider);
-  resource->Allocate(internal_content_bounds_,
-                     ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                     resource_provider->best_texture_format());
+  resource->Allocate(
+      internal_content_bounds_, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
+      resource_provider->best_texture_format(), gfx::ColorSpace());
   resources_.push_back(std::move(resource));
 }
 
@@ -120,6 +119,9 @@ bool HeadsUpDisplayLayerImpl::WillDraw(DrawMode draw_mode,
   internal_contents_scale_ = GetIdealContentsScale();
   internal_content_bounds_ =
       gfx::ScaleToCeiledSize(bounds(), internal_contents_scale_);
+  internal_content_bounds_.SetToMin(
+      gfx::Size(resource_provider->max_texture_size(),
+                resource_provider->max_texture_size()));
 
   ReleaseUnmatchedSizeResources(resource_provider);
   AcquireResource(resource_provider);

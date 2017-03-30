@@ -204,7 +204,7 @@ void ElementShadow::attach(const Node::AttachContext& context)
 
     for (ShadowRoot* root = &youngestShadowRoot(); root; root = root->olderShadowRoot()) {
         if (root->needsAttach())
-            root->attach(childrenContext);
+            root->attachLayoutTree(childrenContext);
     }
 }
 
@@ -214,7 +214,7 @@ void ElementShadow::detach(const Node::AttachContext& context)
     childrenContext.resolvedStyle = 0;
 
     for (ShadowRoot* root = &youngestShadowRoot(); root; root = root->olderShadowRoot())
-        root->detach(childrenContext);
+        root->detachLayoutTree(childrenContext);
 }
 
 void ElementShadow::setNeedsDistributionRecalc()

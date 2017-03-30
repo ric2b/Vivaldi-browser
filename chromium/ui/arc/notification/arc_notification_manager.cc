@@ -4,10 +4,11 @@
 
 #include "ui/arc/notification/arc_notification_manager.h"
 
-#include "ash/shell.h"
-#include "ash/system/toast/toast_manager.h"
+#include "ash/common/system/toast/toast_manager.h"
+#include "ash/common/wm_shell.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
+#include "mojo/common/common_type_converters.h"
 #include "ui/arc/notification/arc_custom_notification_item.h"
 #include "ui/arc/notification/arc_notification_item.h"
 
@@ -44,7 +45,7 @@ ArcNotificationManager::~ArcNotificationManager() {
 void ArcNotificationManager::OnInstanceReady() {
   DCHECK(!ready_);
 
-  auto notifications_instance =
+  auto* notifications_instance =
       arc_bridge_service()->notifications()->instance();
   if (!notifications_instance) {
     VLOG(2) << "Request to refresh app list when bridge service is not ready.";
@@ -117,7 +118,7 @@ void ArcNotificationManager::SendNotificationRemovedFromChrome(
   std::unique_ptr<ArcNotificationItem> item = std::move(it->second);
   items_.erase(it);
 
-  auto notifications_instance =
+  auto* notifications_instance =
       arc_bridge_service()->notifications()->instance();
 
   // On shutdown, the ARC channel may quit earlier then notifications.
@@ -139,7 +140,7 @@ void ArcNotificationManager::SendNotificationClickedOnChrome(
     return;
   }
 
-  auto notifications_instance =
+  auto* notifications_instance =
       arc_bridge_service()->notifications()->instance();
 
   // On shutdown, the ARC channel may quit earlier then notifications.
@@ -162,7 +163,7 @@ void ArcNotificationManager::SendNotificationButtonClickedOnChrome(
     return;
   }
 
-  auto notifications_instance =
+  auto* notifications_instance =
       arc_bridge_service()->notifications()->instance();
 
   // On shutdown, the ARC channel may quit earlier then notifications.
@@ -250,12 +251,13 @@ void ArcNotificationManager::CloseNotificationWindow(const std::string& key) {
 }
 
 void ArcNotificationManager::OnToastPosted(mojom::ArcToastDataPtr data) {
-  ash::Shell::GetInstance()->toast_manager()->Show(
-      ash::ToastData(data->id, data->text, data->duration, data->dismiss_text));
+  ash::WmShell::Get()->toast_manager()->Show(
+      ash::ToastData(data->id, data->text.To<base::string16>(), data->duration,
+                     data->dismiss_text.To<base::string16>()));
 }
 
 void ArcNotificationManager::OnToastCancelled(mojom::ArcToastDataPtr data) {
-  ash::Shell::GetInstance()->toast_manager()->Cancel(data->id);
+  ash::WmShell::Get()->toast_manager()->Cancel(data->id);
 }
 
 }  // namespace arc

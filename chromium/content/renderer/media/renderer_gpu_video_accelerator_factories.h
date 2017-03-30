@@ -15,6 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/waitable_event.h"
+#include "cc/output/buffer_to_texture_target_map.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/content_export.h"
 #include "media/renderers/gpu_video_accelerator_factories.h"
@@ -52,7 +53,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
       bool enable_gpu_memory_buffer_video_frames,
-      std::vector<unsigned> image_texture_targets,
+      const cc::BufferToTextureTargetMap& image_texture_targets,
       bool enable_video_accelerator);
 
   // media::GpuVideoAcceleratorFactories implementation.
@@ -69,6 +70,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
                       std::vector<gpu::Mailbox>* texture_mailboxes,
                       uint32_t texture_target) override;
   void DeleteTexture(uint32_t texture_id) override;
+  gpu::SyncToken CreateSyncToken() override;
   void WaitSyncToken(const gpu::SyncToken& sync_token) override;
 
   std::unique_ptr<gfx::GpuMemoryBuffer> AllocateGpuMemoryBuffer(
@@ -107,7 +109,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
       bool enable_gpu_memory_buffer_video_frames,
-      std::vector<unsigned> image_texture_targets,
+      const cc::BufferToTextureTargetMap& image_texture_targets,
       bool enable_video_accelerator);
 
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
@@ -123,7 +125,7 @@ class CONTENT_EXPORT RendererGpuVideoAcceleratorFactories
 
   // Whether gpu memory buffers should be used to hold video frames data.
   bool enable_gpu_memory_buffer_video_frames_;
-  const std::vector<unsigned> image_texture_targets_;
+  const cc::BufferToTextureTargetMap image_texture_targets_;
   // Whether video acceleration encoding/decoding should be enabled.
   const bool video_accelerator_enabled_;
 

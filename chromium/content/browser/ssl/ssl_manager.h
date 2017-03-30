@@ -28,10 +28,8 @@ class NavigationEntryImpl;
 class NavigationControllerImpl;
 class SSLPolicy;
 struct LoadCommittedDetails;
-struct LoadFromMemoryCacheDetails;
 struct ResourceRedirectDetails;
 struct ResourceRequestDetails;
-struct SSLStatus;
 
 // The SSLManager SSLManager controls the SSL UI elements in a WebContents.  It
 // listens for various events that influence when these elements should or
@@ -84,12 +82,14 @@ class CONTENT_EXPORT SSLManager {
   NavigationControllerImpl* controller() { return controller_; }
 
   void DidCommitProvisionalLoad(const LoadCommittedDetails& details);
-  void DidLoadFromMemoryCache(const LoadFromMemoryCacheDetails& details);
   void DidStartResourceResponse(const ResourceRequestDetails& details);
   void DidReceiveResourceRedirect(const ResourceRedirectDetails& details);
 
-  // Insecure content entry point.
+  // Entry point for insecure mixed content (loaded over HTTP).
   void DidRunInsecureContent(const GURL& security_origin);
+
+  // Entry point for content loaded with HTTPS certificate errors.
+  void DidRunContentWithCertErrors(const GURL& security_origin);
 
  private:
   // Updates the NavigationEntry with our current state. This will

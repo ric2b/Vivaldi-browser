@@ -269,14 +269,14 @@ CGFloat BookmarkLeftMargin() {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return 2.0;
   }
-  return 10.0;
+  return 8.0;
 }
 
 CGFloat BookmarkRightMargin() {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
     return 2.0;
   }
-  return 10.0;
+  return 8.0;
 }
 
 }  // namespace bookmarks
@@ -300,7 +300,8 @@ CGFloat BookmarkRightMargin() {
 
     browser_ = browser;
     initialWidth_ = initialWidth;
-    bookmarkModel_ = BookmarkModelFactory::GetForProfile(browser_->profile());
+    bookmarkModel_ =
+        BookmarkModelFactory::GetForBrowserContext(browser_->profile());
     managedBookmarkService_ =
         ManagedBookmarkServiceFactory::GetForProfile(browser_->profile());
     buttons_.reset([[NSMutableArray alloc] init]);
@@ -1239,7 +1240,10 @@ CGFloat BookmarkRightMargin() {
 // too small.  For "FBL" it is 2 pixels too small.
 // For a bookmark named "SFGateFooWoo", it is just fine.
 - (CGFloat)widthForBookmarkButtonCell:(NSCell*)cell {
-  CGFloat desired = [cell cellSize].width + 2;
+  CGFloat desired = [cell cellSize].width;
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    desired += 2;
+  }
   return std::min(desired, bookmarks::kDefaultBookmarkWidth);
 }
 
@@ -1971,10 +1975,12 @@ CGFloat BookmarkRightMargin() {
       [BookmarkButtonCell buttonCellWithText:text
                                        image:image
                               menuController:contextMenuController_];
-  if (ui::MaterialDesignController::IsModeMaterial())
+  if (ui::MaterialDesignController::IsModeMaterial()) {
     [cell setTag:kMaterialStandardButtonTypeWithLimitedClickFeedback];
-  else
+    [cell setHighlightsBy:NSNoCellMask];
+  } else {
     [cell setTag:kStandardButtonTypeWithLimitedClickFeedback];
+  }
 
   // Note: a quirk of setting a cell's text color is that it won't work
   // until the cell is associated with a button, so we can't theme the cell yet.
@@ -2108,10 +2114,9 @@ CGFloat BookmarkRightMargin() {
       NSTimeInterval thisTime = [event timestamp];
       if (lastKeyDownEventTime != thisTime) {
         lastKeyDownEventTime = thisTime;
-        if ([event modifierFlags] & NSCommandKeyMask)
-          return YES;
-        else if (folderController_)
-          return [folderController_ handleInputText:[event characters]];
+        // Ignore all modifiers like Cmd - keyboard shortcuts should not work
+        // while a bookmark folder window (essentially a menu) is open.
+        return [folderController_ handleInputText:[event characters]];
       }
       return NO;
     }
@@ -2884,9 +2889,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
       ![self isAnimatingToState:BookmarkBar::DETACHED]) {
     BrowserWindowController* browserController =
         [BrowserWindowController browserWindowControllerForView:[self view]];
-    [browserController lockBarVisibilityForOwner:child
-                                   withAnimation:NO
-                                           delay:NO];
+    [browserController lockBarVisibilityForOwner:child withAnimation:NO];
   }
 }
 
@@ -2895,9 +2898,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   // mode.
   BrowserWindowController* browserController =
       [BrowserWindowController browserWindowControllerForView:[self view]];
-  [browserController releaseBarVisibilityForOwner:child
-                                    withAnimation:NO
-                                            delay:NO];
+  [browserController releaseBarVisibilityForOwner:child withAnimation:NO];
 }
 
 // Add a new folder controller as triggered by the given folder button.
@@ -2909,9 +2910,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
       [BrowserWindowController browserWindowControllerForView:[self view]];
   // Confirm we're not re-locking with ourself as an owner before locking.
   DCHECK([browserController isBarVisibilityLockedForOwner:self] == NO);
-  [browserController lockBarVisibilityForOwner:self
-                                 withAnimation:NO
-                                         delay:NO];
+  [browserController lockBarVisibilityForOwner:self withAnimation:NO];
 
   if (folderController_)
     [self closeAllBookmarkFolders];
@@ -2930,9 +2929,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
   [self watchForExitEvent:YES];
 
   // No longer need to hold the lock; the folderController_ now owns it.
-  [browserController releaseBarVisibilityForOwner:self
-                                    withAnimation:NO
-                                            delay:NO];
+  [browserController releaseBarVisibilityForOwner:self withAnimation:NO];
 }
 
 - (void)openAll:(const BookmarkNode*)node

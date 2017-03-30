@@ -49,12 +49,17 @@ bool ResourceMessageFilter::OnMessageReceived(const IPC::Message& message) {
   return ResourceDispatcherHostImpl::Get()->OnMessageReceived(message, this);
 }
 
+void ResourceMessageFilter::OnDestruct() const {
+  // Destroy the filter on the IO thread since that's where its weak pointers
+  // are being used.
+  BrowserThread::DeleteOnIOThread::Destruct(this);
+}
+
 void ResourceMessageFilter::GetContexts(
     ResourceType resource_type,
-    int origin_pid,
     ResourceContext** resource_context,
     net::URLRequestContext** request_context) {
-  return get_contexts_callback_.Run(resource_type, origin_pid, resource_context,
+  return get_contexts_callback_.Run(resource_type, resource_context,
                                     request_context);
 }
 
@@ -65,6 +70,7 @@ const HostZoomMap* ResourceMessageFilter::GetHostZoomMap() const {
 }
 
 base::WeakPtr<ResourceMessageFilter> ResourceMessageFilter::GetWeakPtr() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return weak_ptr_factory_.GetWeakPtr();
 }
 

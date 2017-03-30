@@ -31,8 +31,6 @@
 
 #include "core/html/LinkRelAttribute.h"
 
-#include "platform/RuntimeEnabledFeatures.h"
-
 namespace blink {
 
 LinkRelAttribute::LinkRelAttribute(const String& rel)
@@ -74,11 +72,9 @@ LinkRelAttribute::LinkRelAttribute(const String& rel)
         } else if (equalIgnoringCase(linkType, "dns-prefetch")) {
             m_isDNSPrefetch = true;
         } else if (equalIgnoringCase(linkType, "preconnect")) {
-            if (RuntimeEnabledFeatures::linkPreconnectEnabled())
-                m_isPreconnect = true;
+            m_isPreconnect = true;
         } else if (equalIgnoringCase(linkType, "preload")) {
-            if (RuntimeEnabledFeatures::linkPreloadEnabled())
-                m_isLinkPreload = true;
+            m_isLinkPreload = true;
         } else if (equalIgnoringCase(linkType, "prerender")) {
             m_isLinkPrerender = true;
         } else if (equalIgnoringCase(linkType, "next")) {

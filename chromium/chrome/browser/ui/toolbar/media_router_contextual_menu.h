@@ -20,12 +20,15 @@ class MediaRouterContextualMenu : public ui::SimpleMenuModel::Delegate {
   ui::MenuModel* menu_model() { return &menu_model_; }
 
  private:
+#if defined(GOOGLE_CHROME_BUILD)
+  FRIEND_TEST_ALL_PREFIXES(MediaRouterContextualMenuUnitTest,
+                           ToggleCloudServicesItem);
+#endif  // GOOGLE_CHROME_BUILD
+
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
   bool IsCommandIdVisible(int command_id) const override;
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
   void ReportIssue();

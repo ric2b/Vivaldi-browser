@@ -9,7 +9,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
-#include "chrome/browser/ui/views/new_task_manager_view.h"
+#include "chrome/browser/ui/views/task_manager_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 
 // This file provides definitions of desktop browser dialog-creation methods for
@@ -56,15 +56,15 @@ void ShowBookmarkBubbleViewsAtPoint(const gfx::Point& anchor_point,
       std::move(delegate), browser->profile(), virtual_url, already_bookmarked);
 }
 
-ui::TableModel* ShowTaskManagerViews(Browser* browser) {
-  // On platforms other than Mac, the new task manager is shown unless
+task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser) {
+  // On platforms other than Mac, the Views task manager is shown unless
   // explicitly disabled. Assume that running with ToolkitViewsDialogsEnabled()
-  // on Mac also means the new task manager is desired.
-  return task_management::NewTaskManagerView::Show(browser);
+  // on Mac also means the Views task manager is desired.
+  return task_manager::TaskManagerView::Show(browser);
 }
 
 void HideTaskManagerViews() {
-  task_management::NewTaskManagerView::Hide();
+  task_manager::TaskManagerView::Hide();
 }
 
 void ContentSettingBubbleViewsBridge::Show(gfx::NativeView parent_view,

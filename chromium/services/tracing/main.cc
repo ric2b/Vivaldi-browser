@@ -2,11 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "mojo/public/c/system/main.h"
-#include "services/shell/public/cpp/application_runner.h"
-#include "services/tracing/tracing_app.h"
+#include "services/shell/public/c/main.h"
+#include "services/shell/public/cpp/service_runner.h"
+#include "services/tracing/service.h"
 
-MojoResult MojoMain(MojoHandle shell_handle) {
-  shell::ApplicationRunner runner(new tracing::TracingApp);
-  return runner.Run(shell_handle);
+MojoResult ServiceMain(MojoHandle service_request_handle) {
+  return shell::ServiceRunner(new tracing::Service).Run(service_request_handle);
 }

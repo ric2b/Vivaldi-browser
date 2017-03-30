@@ -11,7 +11,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../skia/skia.gyp:skia',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../third_party/dom_distiller_js/dom_distiller_js.gyp:dom_distiller_js_proto',
         '../third_party/re2/re2.gyp:re2',
         'components.gyp:leveldb_proto',
@@ -103,7 +103,7 @@
       'dependencies': [
         'dom_distiller_core',
         'components.gyp:leveldb_proto_test_support',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../testing/gmock.gyp:gmock',
         '../url/url.gyp:url_lib',
       ],
@@ -144,6 +144,9 @@
         'dom_distiller/content/common/distiller_javascript_service.mojom',
         'dom_distiller/content/common/distiller_page_notifier_service.mojom',
       ],
+      'variables': {
+        'use_new_wrapper_types': 'false',
+      },
       'includes': [
         '../mojo/mojom_bindings_generator.gypi',
       ],
@@ -165,7 +168,7 @@
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia',
-            '../sync/sync.gyp:sync',
+            '../components/sync.gyp:sync',
             '../ui/display/display.gyp:display',
             '../ui/gfx/gfx.gyp:gfx',
             '../url/url.gyp:url_lib',
@@ -241,7 +244,7 @@
             '../content/content.gyp:content_browser',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia',
-            '../sync/sync.gyp:sync',
+            '../components/sync.gyp:sync',
             '../url/url.gyp:url_lib',
             'components_resources.gyp:components_resources',
             'components_strings.gyp:components_strings',

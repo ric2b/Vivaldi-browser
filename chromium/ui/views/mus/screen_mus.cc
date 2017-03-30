@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// This has to be before any other includes, else default is picked up.
+// See base/logging for details on this.
+#define NOTIMPLEMENTED_POLICY 5
+
 #include "ui/views/mus/screen_mus.h"
 
 #include "services/shell/public/cpp/connection.h"
@@ -9,22 +13,16 @@
 #include "ui/aura/window.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/display_observer.h"
-#include "ui/display/mojo/display_type_converters.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/mus/window_manager_frame_values.h"
-
-#ifdef NOTIMPLEMENTED
-#undef NOTIMPLEMENTED
-#define NOTIMPLEMENTED() DVLOG(1) << "notimplemented"
-#endif
 
 namespace mojo {
 
 template <>
 struct TypeConverter<views::WindowManagerFrameValues,
-                     mus::mojom::FrameDecorationValuesPtr> {
+                     ui::mojom::FrameDecorationValuesPtr> {
   static views::WindowManagerFrameValues Convert(
-      const mus::mojom::FrameDecorationValuesPtr& input) {
+      const ui::mojom::FrameDecorationValuesPtr& input) {
     views::WindowManagerFrameValues result;
     result.normal_insets = input->normal_client_area_insets;
     result.maximized_insets = input->maximized_client_area_insets;
@@ -50,7 +48,7 @@ ScreenMus::~ScreenMus() {
 void ScreenMus::Init(shell::Connector* connector) {
   display::Screen::SetScreenInstance(this);
 
-  connector->ConnectToInterface("mojo:mus", &display_manager_);
+  connector->ConnectToInterface("mojo:ui", &display_manager_);
 
   display_manager_->AddObserver(
       display_manager_observer_binding_.CreateInterfacePtrAndBind());
@@ -150,22 +148,19 @@ void ScreenMus::RemoveObserver(display::DisplayObserver* observer) {
   display_list_.RemoveObserver(observer);
 }
 
-void ScreenMus::OnDisplays(
-    mojo::Array<mus::mojom::DisplayPtr> transport_displays) {
+void ScreenMus::OnDisplays(mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) {
   // This should only be called once from Init() before any observers have been
   // added.
   DCHECK(display_list_.displays().empty());
-  std::vector<display::Display> displays =
-      transport_displays.To<std::vector<display::Display>>();
-  for (size_t i = 0; i < displays.size(); ++i) {
-    const bool is_primary = transport_displays[i]->is_primary;
-    display_list_.AddDisplay(displays[i], is_primary
-                                              ? DisplayList::Type::PRIMARY
-                                              : DisplayList::Type::NOT_PRIMARY);
+  for (size_t i = 0; i < ws_displays.size(); ++i) {
+    const bool is_primary = ws_displays[i]->is_primary;
+    display_list_.AddDisplay(ws_displays[i]->display,
+                             is_primary ? DisplayList::Type::PRIMARY
+                                        : DisplayList::Type::NOT_PRIMARY);
     if (is_primary) {
       // TODO(sky): Make WindowManagerFrameValues per display.
       WindowManagerFrameValues frame_values =
-          transport_displays[i]
+          ws_displays[i]
               ->frame_decoration_values.To<WindowManagerFrameValues>();
       WindowManagerFrameValues::SetInstance(frame_values);
     }
@@ -174,14 +169,13 @@ void ScreenMus::OnDisplays(
 }
 
 void ScreenMus::OnDisplaysChanged(
-    mojo::Array<mus::mojom::DisplayPtr> transport_displays) {
-  for (size_t i = 0; i < transport_displays.size(); ++i) {
-    const bool is_primary = transport_displays[i]->is_primary;
-    ProcessDisplayChanged(transport_displays[i].To<display::Display>(),
-                          is_primary);
+    mojo::Array<ui::mojom::WsDisplayPtr> ws_displays) {
+  for (size_t i = 0; i < ws_displays.size(); ++i) {
+    const bool is_primary = ws_displays[i]->is_primary;
+    ProcessDisplayChanged(ws_displays[i]->display, is_primary);
     if (is_primary) {
       WindowManagerFrameValues frame_values =
-          transport_displays[i]
+          ws_displays[i]
               ->frame_decoration_values.To<WindowManagerFrameValues>();
       WindowManagerFrameValues::SetInstance(frame_values);
       if (delegate_)

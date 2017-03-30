@@ -10,6 +10,7 @@
 
 using base::android::AttachCurrentThread;
 using base::android::JavaArrayOfByteArrayToStringVector;
+using base::android::ScopedJavaLocalRef;
 
 namespace net {
 namespace android {
@@ -30,10 +31,6 @@ void ExtractCertVerifyResult(jobject result,
       Java_AndroidCertVerifyResult_getCertificateChainEncoded(env, result);
   JavaArrayOfByteArrayToStringVector(
       env, chain_byte_array.obj(), verified_chain);
-}
-
-bool RegisterCertVerifyResult(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

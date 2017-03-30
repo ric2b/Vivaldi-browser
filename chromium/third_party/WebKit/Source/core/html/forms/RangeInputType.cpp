@@ -36,13 +36,10 @@
 #include "core/InputTypeNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/NodeComputedStyle.h"
-#include "core/dom/Touch.h"
-#include "core/dom/TouchList.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/events/TouchEvent.h"
 #include "core/html/HTMLDataListElement.h"
 #include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLDivElement.h"
@@ -157,7 +154,7 @@ void RangeInputType::handleMouseDownEvent(MouseEvent* event)
         return;
 
     Node* targetNode = event->target()->toNode();
-    if (event->button() != LeftButton || !targetNode)
+    if (event->button() != static_cast<short>(WebPointerProperties::Button::Left) || !targetNode)
         return;
     DCHECK(element().shadow());
     if (targetNode != element() && !targetNode->isDescendantOf(element().userAgentShadowRoot()))
@@ -166,29 +163,6 @@ void RangeInputType::handleMouseDownEvent(MouseEvent* event)
     if (targetNode == thumb)
         return;
     thumb->dragFrom(event->absoluteLocation());
-}
-
-void RangeInputType::handleTouchEvent(TouchEvent* event)
-{
-    if (element().isDisabledOrReadOnly())
-        return;
-
-    if (event->type() == EventTypeNames::touchend) {
-        element().dispatchFormControlChangeEvent();
-        event->setDefaultHandled();
-        return;
-    }
-
-    TouchList* touches = event->targetTouches();
-    if (touches->length() == 1) {
-        sliderThumbElement()->setPositionFromPoint(touches->item(0)->absoluteLocation());
-        event->setDefaultHandled();
-    }
-}
-
-bool RangeInputType::hasTouchEventHandler() const
-{
-    return true;
 }
 
 void RangeInputType::handleKeydownEvent(KeyboardEvent* event)
@@ -263,6 +237,7 @@ void RangeInputType::createShadowSubtree()
     HTMLElement* container = SliderContainerElement::create(document);
     container->appendChild(track);
     element().userAgentShadowRoot()->appendChild(container);
+    container->setAttribute(styleAttr, "-webkit-appearance:inherit");
 }
 
 LayoutObject* RangeInputType::createLayoutObject(const ComputedStyle&) const

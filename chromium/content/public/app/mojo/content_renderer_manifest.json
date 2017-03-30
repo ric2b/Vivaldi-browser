@@ -7,10 +7,14 @@
       "all_interfaces": [ "*" ]
     },
     "required": {
-      "mojo:mus": {
-        "interfaces":  [
-          "mus::mojom::Gpu",
-          "mus::mojom::GpuService"
+      // Remove this once http://crbug.com/632818 is fixed.
+      "exe:content_browser": {
+        "classes":  [ "all_interfaces" ]
+      },
+      "mojo:ui": {
+        "interfaces": [
+          "ui::mojom::Gpu",
+          "ui::mojom::GpuService"
         ]
       }
     }

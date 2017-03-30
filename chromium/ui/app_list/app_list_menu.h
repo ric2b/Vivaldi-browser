@@ -13,7 +13,7 @@ namespace app_list {
 
 // Menu for the app list. This is shown in the top right hand corner of the
 // app list.
-// TODO(benwells): We should consider moving this into Chrome.
+// TODO(benwells): We should delete this. http://crbug.com/600915.
 class AppListMenu : public ui::SimpleMenuModel::Delegate {
  public:
   enum AppListMenuCommands {
@@ -35,8 +35,6 @@ class AppListMenu : public ui::SimpleMenuModel::Delegate {
 
   bool IsCommandIdChecked(int command_id) const override;
   bool IsCommandIdEnabled(int command_id) const override;
-  bool GetAcceleratorForCommandId(int command_id,
-                                  ui::Accelerator* accelerator) override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
   ui::SimpleMenuModel menu_model_;

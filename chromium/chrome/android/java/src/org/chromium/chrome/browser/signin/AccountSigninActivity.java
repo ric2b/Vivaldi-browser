@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.signin;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -175,6 +176,9 @@ public class AccountSigninActivity extends AppCompatActivity
 
     private void recordSigninStartedUserAction() {
         switch (getAccessPoint()) {
+            case SigninAccessPoint.AUTOFILL_DROPDOWN:
+                RecordUserAction.record("Signin_Signin_FromAutofillDropdown");
+                break;
             case SigninAccessPoint.BOOKMARK_MANAGER:
                 RecordUserAction.record("Signin_Signin_FromBookmarkManager");
                 break;
@@ -193,5 +197,11 @@ public class AccountSigninActivity extends AppCompatActivity
             default:
                 assert false : "Invalid access point.";
         }
+    }
+
+    // AccountSigninView.Delegate implementation.
+    @Override
+    public Activity getActivity() {
+        return this;
     }
 }

@@ -12,12 +12,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
-#include "cc/test/pixel_test_delegating_output_surface.h"
-#include "components/scheduler/test/renderer_scheduler_test_support.h"
+#include "cc/output/copy_output_request.h"
+#include "cc/test/pixel_test_output_surface.h"
+#include "cc/test/test_delegating_output_surface.h"
 #include "components/test_runner/test_common.h"
 #include "components/test_runner/web_frame_test_proxy.h"
-#include "components/test_runner/web_test_proxy.h"
-#include "content/browser/bluetooth/bluetooth_adapter_factory_wrapper.h"
+#include "components/test_runner/web_view_test_proxy.h"
+#include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
@@ -34,12 +35,12 @@
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/shell/common/shell_switches.h"
-#include "device/bluetooth/bluetooth_adapter.h"
 #include "gpu/ipc/service/image_transport_surface.h"
 #include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -70,17 +71,18 @@ base::LazyInstance<ViewProxyCreationCallback>::Leaky
 base::LazyInstance<FrameProxyCreationCallback>::Leaky
     g_frame_test_proxy_callback = LAZY_INSTANCE_INITIALIZER;
 
-using WebTestProxyType = test_runner::WebTestProxy<RenderViewImpl,
-                                                   CompositorDependencies*,
-                                                   const ViewMsg_New_Params&>;
+using WebViewTestProxyType =
+    test_runner::WebViewTestProxy<RenderViewImpl,
+                                  CompositorDependencies*,
+                                  const ViewMsg_New_Params&>;
 using WebFrameTestProxyType =
     test_runner::WebFrameTestProxy<RenderFrameImpl,
                                    const RenderFrameImpl::CreateParams&>;
 
-RenderViewImpl* CreateWebTestProxy(CompositorDependencies* compositor_deps,
-                                   const ViewMsg_New_Params& params) {
-  WebTestProxyType* render_view_proxy =
-      new WebTestProxyType(compositor_deps, params);
+RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
+                                       const ViewMsg_New_Params& params) {
+  WebViewTestProxyType* render_view_proxy =
+      new WebViewTestProxyType(compositor_deps, params);
   if (g_view_test_proxy_callback == 0)
     return render_view_proxy;
   g_view_test_proxy_callback.Get().Run(render_view_proxy, render_view_proxy);
@@ -112,10 +114,11 @@ void RegisterSideloadedTypefaces(SkFontMgr* fontmgr) {
 
 }  // namespace
 
-test_runner::WebTestProxyBase* GetWebTestProxyBase(RenderView* render_view) {
-  WebTestProxyType* render_view_proxy =
-      static_cast<WebTestProxyType*>(render_view);
-  return static_cast<test_runner::WebTestProxyBase*>(render_view_proxy);
+test_runner::WebViewTestProxyBase* GetWebViewTestProxyBase(
+    RenderView* render_view) {
+  WebViewTestProxyType* render_view_proxy =
+      static_cast<WebViewTestProxyType*>(render_view);
+  return static_cast<test_runner::WebViewTestProxyBase*>(render_view_proxy);
 }
 
 test_runner::WebFrameTestProxyBase* GetWebFrameTestProxyBase(
@@ -130,7 +133,7 @@ void EnableWebTestProxyCreation(
     const FrameProxyCreationCallback& frame_proxy_creation_callback) {
   g_view_test_proxy_callback.Get() = view_proxy_creation_callback;
   g_frame_test_proxy_callback.Get() = frame_proxy_creation_callback;
-  RenderViewImpl::InstallCreateHook(CreateWebTestProxy);
+  RenderViewImpl::InstallCreateHook(CreateWebViewTestProxy);
   RenderFrameImpl::InstallCreateHook(CreateWebFrameTestProxy);
 }
 
@@ -177,9 +180,48 @@ void SetMockDeviceOrientationData(const WebDeviceOrientationData& data) {
   RendererBlinkPlatformImpl::SetMockDeviceOrientationDataForTesting(data);
 }
 
+namespace {
+
+// Invokes a callback on commit (on the main thread) to obtain the output
+// surface that should be used, then asks that output surface to submit the copy
+// request at SwapBuffers time.
+class CopyRequestSwapPromise : public cc::SwapPromise {
+ public:
+  using FindOutputSurfaceCallback =
+      base::Callback<cc::TestDelegatingOutputSurface*()>;
+  CopyRequestSwapPromise(std::unique_ptr<cc::CopyOutputRequest> request,
+                         FindOutputSurfaceCallback output_surface_callback)
+      : copy_request_(std::move(request)),
+        output_surface_callback_(std::move(output_surface_callback)) {}
+
+  // cc::SwapPromise implementation.
+  void OnCommit() override {
+    output_surface_from_commit_ = output_surface_callback_.Run();
+    DCHECK(output_surface_from_commit_);
+  }
+  void DidActivate() override {}
+  void DidSwap(cc::CompositorFrameMetadata*) override {
+    output_surface_from_commit_->RequestCopyOfOutput(std::move(copy_request_));
+  }
+  DidNotSwapAction DidNotSwap(DidNotSwapReason r) override {
+    // The compositor should always swap in layout test mode.
+    NOTREACHED() << "did not swap for reason " << r;
+    return DidNotSwapAction::BREAK_PROMISE;
+  }
+  int64_t TraceId() const override { return 0; }
+
+ private:
+  std::unique_ptr<cc::CopyOutputRequest> copy_request_;
+  FindOutputSurfaceCallback output_surface_callback_;
+  cc::TestDelegatingOutputSurface* output_surface_from_commit_ = nullptr;
+};
+
+}  // namespace
+
 class LayoutTestDependenciesImpl : public LayoutTestDependencies {
  public:
   std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+      int32_t routing_id,
       scoped_refptr<gpu::GpuChannelHost> gpu_channel,
       scoped_refptr<cc::ContextProvider> compositor_context_provider,
       scoped_refptr<cc::ContextProvider> worker_context_provider,
@@ -197,27 +239,65 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies {
     const bool automatic_flushes = false;
     const bool support_locking = false;
 
-    scoped_refptr<cc::ContextProvider> display_context_provider(
-        new ContextProviderCommandBuffer(
-            std::move(gpu_channel), gpu::GPU_STREAM_DEFAULT,
-            gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
-            GURL(
-                "chrome://gpu/LayoutTestDependenciesImpl::CreateOutputSurface"),
-            automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
-            attributes, nullptr,
-            command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING));
+    bool flipped_output_surface = false;
+    std::unique_ptr<cc::OutputSurface> display_output_surface(
+        new cc::PixelTestOutputSurface(
+            make_scoped_refptr(new ContextProviderCommandBuffer(
+                std::move(gpu_channel), gpu::GPU_STREAM_DEFAULT,
+                gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
+                GURL("chrome://gpu/"
+                     "LayoutTestDependenciesImpl::CreateOutputSurface"),
+                automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
+                attributes, nullptr,
+                command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING)),
+            nullptr, flipped_output_surface));
+
+    auto* task_runner = deps->GetCompositorImplThreadTaskRunner().get();
+    bool synchronous_composite = !task_runner;
+    if (!task_runner)
+      task_runner = base::ThreadTaskRunnerHandle::Get().get();
 
     cc::LayerTreeSettings settings =
         RenderWidgetCompositor::GenerateLayerTreeSettings(
             *base::CommandLine::ForCurrentProcess(), deps, 1.f);
 
-    return base::MakeUnique<cc::PixelTestDelegatingOutputSurface>(
+    auto output_surface = base::MakeUnique<cc::TestDelegatingOutputSurface>(
         std::move(compositor_context_provider),
-        std::move(worker_context_provider), std::move(display_context_provider),
-        settings.renderer_settings, deps->GetSharedBitmapManager(),
-        deps->GetGpuMemoryBufferManager(), gfx::Size(), false,
-        !deps->GetCompositorImplThreadTaskRunner());
+        std::move(worker_context_provider), std::move(display_output_surface),
+        deps->GetSharedBitmapManager(), deps->GetGpuMemoryBufferManager(),
+        settings.renderer_settings, task_runner, synchronous_composite,
+        false /* force_disable_reclaim_resources */);
+    output_surfaces_[routing_id] = output_surface.get();
+    return std::move(output_surface);
   }
+
+  std::unique_ptr<cc::SwapPromise> RequestCopyOfOutput(
+      int32_t routing_id,
+      std::unique_ptr<cc::CopyOutputRequest> request) override {
+    // Note that we can't immediately check output_surfaces_, since it may not
+    // have been created yet. Instead, we wait until OnCommit to find the
+    // currently active OutputSurface for the given RenderWidget routing_id.
+    return base::MakeUnique<CopyRequestSwapPromise>(
+        std::move(request),
+        base::Bind(
+            &LayoutTestDependenciesImpl::FindOutputSurface,
+            // |this| will still be valid, because its lifetime is tied to
+            // RenderThreadImpl, which outlives layout test execution.
+            base::Unretained(this), routing_id));
+  }
+
+ private:
+  cc::TestDelegatingOutputSurface* FindOutputSurface(int32_t routing_id) {
+    auto it = output_surfaces_.find(routing_id);
+    return it == output_surfaces_.end() ? nullptr : it->second;
+  }
+
+  // Entries are not removed, so this map can grow. However, it is only used in
+  // layout tests, so this memory usage does not occur in production.
+  // Entries in this map will outlive the output surface, because this object is
+  // owned by RenderThreadImpl, which outlives layout test execution.
+  std::unordered_map<int32_t, cc::TestDelegatingOutputSurface*>
+      output_surfaces_;
 };
 
 void EnableRendererLayoutTestMode() {
@@ -273,14 +353,9 @@ float GetWindowToViewportScale(RenderView* render_view) {
 }
 
 void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
-  if (name == "reset") {
-    render_view->GetWidget()->ResetDeviceColorProfileForTesting();
-    return;
-  }
-
   std::vector<char> color_profile;
 
-  struct TestColorProfile { // A whacked (aka color spin) profile.
+  struct TestColorProfile { // A color spin profile.
     char* data() {
       static unsigned char color_profile_data[] = {
         0x00,0x00,0x01,0xea,0x54,0x45,0x53,0x54,0x00,0x00,0x00,0x00,
@@ -398,7 +473,7 @@ void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
 
   if (name == "sRGB") {
     color_profile.assign(name.data(), name.data() + name.size());
-  } else if (name == "test" || name == "whacked") {
+  } else if (name == "test" || name == "colorSpin") {
     TestColorProfile test;
     color_profile.assign(test.data(), test.data() + test.size());
   } else if (name == "adobeRGB") {
@@ -406,17 +481,13 @@ void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
     color_profile.assign(test.data(), test.data() + test.size());
   }
 
-  render_view->GetWidget()->SetDeviceColorProfileForTesting(color_profile);
+  static_cast<RenderViewImpl*>(render_view)
+      ->GetWidget()
+      ->SetDeviceColorProfileForTesting(color_profile);
 }
 
-void SetBluetoothAdapter(int render_process_id,
-                         scoped_refptr<device::BluetoothAdapter> adapter) {
-  RenderProcessHostImpl* render_process_host_impl =
-      static_cast<RenderProcessHostImpl*>(
-          RenderProcessHost::FromID(render_process_id));
-
-  render_process_host_impl->GetBluetoothAdapterFactoryWrapper()
-      ->SetBluetoothAdapterForTesting(std::move(adapter));
+void SetTestBluetoothScanDuration() {
+  BluetoothDeviceChooserController::SetTestScanDurationForTesting();
 }
 
 void UseSynchronousResizeMode(RenderView* render_view, bool enable) {
@@ -494,9 +565,9 @@ std::string DumpBackForwardList(std::vector<PageState>& page_state,
 }
 
 void SchedulerRunIdleTasks(const base::Closure& callback) {
-    scheduler::RendererScheduler* scheduler =
-        content::RenderThreadImpl::current()->GetRendererScheduler();
-    scheduler::RunIdleTasksForTesting(scheduler, callback);
+  blink::scheduler::RendererScheduler* scheduler =
+      content::RenderThreadImpl::current()->GetRendererScheduler();
+  blink::scheduler::RunIdleTasksForTesting(scheduler, callback);
 }
 
 }  // namespace content

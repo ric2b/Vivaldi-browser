@@ -75,7 +75,6 @@
 #include "chrome/browser/extensions/api/file_system/request_file_system_dialog_view.h"
 #include "chrome/browser/extensions/api/file_system/request_file_system_notification.h"
 #include "chrome/browser/ui/simple_message_box.h"
-#include "components/prefs/testing_pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_registry.h"
@@ -196,7 +195,7 @@ bool GetFileTypesFromAcceptOption(
     return false;
 
   if (accept_option.description.get())
-    *description = base::UTF8ToUTF16(*accept_option.description.get());
+    *description = base::UTF8ToUTF16(*accept_option.description);
   else if (description_id)
     *description = l10n_util::GetStringUTF16(description_id);
 
@@ -461,7 +460,7 @@ bool ConsentProviderDelegate::IsAutoLaunched(const Extension& extension) {
 
 bool ConsentProviderDelegate::IsWhitelistedComponent(
     const Extension& extension) {
-  for (const auto& whitelisted_id : kRequestFileSystemComponentWhitelist) {
+  for (auto* whitelisted_id : kRequestFileSystemComponentWhitelist) {
     if (extension.id().compare(whitelisted_id) == 0)
       return true;
   }

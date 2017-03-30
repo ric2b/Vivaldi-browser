@@ -50,11 +50,11 @@
 // Notifies the CRWNativeContent that it has been hidden.
 - (void)wasHidden;
 
-// Evaluates JavaScript on the native view. |handler| is called with the results
+// Executes JavaScript on the native view. |handler| is called with the results
 // of the evaluation. If the native view cannot evaluate JS at the moment,
 // |handler| is called with an NSError.
-- (void)evaluateJavaScript:(NSString*)script
-       stringResultHandler:(web::JavaScriptCompletion)handler;
+- (void)executeJavaScript:(NSString*)script
+        completionHandler:(web::JavaScriptResultBlock)handler;
 
 // Returns |YES| if CRWNativeContent wants the keyboard shield when the keyboard
 // is up.

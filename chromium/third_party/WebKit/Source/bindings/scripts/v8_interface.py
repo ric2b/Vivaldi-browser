@@ -36,7 +36,7 @@ Design doc: http://www.chromium.org/developers/design-documents/idl-compiler
 
 from collections import defaultdict
 import itertools
-from operator import itemgetter
+from operator import itemgetter, or_
 
 from idl_definitions import IdlOperation, IdlArgument
 from idl_types import IdlType, inherits_interface
@@ -50,6 +50,7 @@ from v8_utilities import (cpp_name_or_partial, cpp_name, has_extended_attribute_
 
 
 INTERFACE_H_INCLUDES = frozenset([
+    'bindings/core/v8/GeneratedCodeHelper.h',
     'bindings/core/v8/ScriptWrappable.h',
     'bindings/core/v8/ToV8.h',
     'bindings/core/v8/V8Binding.h',
@@ -98,23 +99,37 @@ def constant_filters():
             'origin_trial_enabled_constants': filter_origin_trial_enabled}
 
 
-def origin_trial_feature_names(interface, constants, attributes, methods):
-    """ Returns a list of the names of each origin trial feature used in this interface.
+def origin_trial_features(interface, constants, attributes, methods):
+    """ Returns a list of the origin trial features used in this interface.
 
-    This list is the union of the sets of names used for constants, attributes and methods.
+    Each element is a dictionary with keys 'name' and 'needs_instance'.
+    'needs_instance' is true if any member associated with the interface needs
+    to be installed on every instance of the interface. This list is the union
+    of the sets of features used for constants, attributes and methods.
     """
 
-    feature_names = set(
-        [constant['origin_trial_feature_name'] for constant in constants if constant['origin_trial_feature_name']] +
-        [attribute['origin_trial_feature_name'] for attribute in attributes if attribute['origin_trial_feature_name']] +
-        [method['origin_trial_feature_name'] for method in methods if (
+    # Collect all members visible on this interface with a defined origin trial
+    origin_trial_members = (
+        [constant for constant in constants if constant['origin_trial_feature_name']] +
+        [attribute for attribute in attributes if attribute['origin_trial_feature_name']] +
+        [method for method in methods if (
             v8_methods.method_is_visible(method, interface.is_partial) and
             method['origin_trial_feature_name'])]
     )
-    if feature_names:
+    # Group members by origin_trial_feature_name
+    members_by_name = itertools.groupby(sorted(origin_trial_members,
+                                               key=itemgetter('origin_trial_feature_name')),
+                                        itemgetter('origin_trial_feature_name'))
+    # Construct the list of dictionaries. 'needs_instance' will be true if any
+    # member for the feature has 'on_instance' defined as true.
+    features = [{'name': name,
+                 'needs_instance': reduce(or_, (member.get('on_instance', False)
+                                                for member in members))}
+                for name, members in members_by_name]
+    if features:
         includes.add('bindings/core/v8/ScriptState.h')
         includes.add('core/origin_trials/OriginTrials.h')
-    return sorted(feature_names)
+    return sorted(features)
 
 
 def interface_context(interface):
@@ -163,6 +178,7 @@ def interface_context(interface):
     is_check_security = 'CheckSecurity' in extended_attributes
     if is_check_security:
         includes.add('bindings/core/v8/BindingSecurity.h')
+        includes.add('core/frame/LocalDOMWindow.h')
 
     # [DependentLifetime]
     is_dependent_lifetime = 'DependentLifetime' in extended_attributes
@@ -199,6 +215,11 @@ def interface_context(interface):
         set_wrapper_reference_from or set_wrapper_reference_to)
 
     wrapper_class_id = ('NodeClassId' if inherits_interface(interface.name, 'Node') else 'ObjectClassId')
+
+    # [ActiveScriptWrappable] must be accompanied with [DependentLifetime].
+    if active_scriptwrappable and not is_dependent_lifetime:
+        raise Exception('[ActiveScriptWrappable] interface must also specify '
+                        '[DependentLifetime]: %s' % interface.name)
 
     v8_class_name = v8_utilities.v8_class_name(interface)
     cpp_class_name = cpp_name(interface)
@@ -543,10 +564,10 @@ def interface_context(interface):
 
     # Conditionally enabled members
     has_conditional_attributes_on_instance = any(
-        attribute['exposed_test'] and attribute['on_instance']
+        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_instance']
         for attribute in attributes)
     has_conditional_attributes_on_prototype = any(
-        attribute['exposed_test'] and attribute['on_prototype']
+        (attribute['exposed_test'] or attribute['secure_context_test']) and attribute['on_prototype']
         for attribute in attributes)
     context.update({
         'has_conditional_attributes_on_instance':
@@ -570,9 +591,21 @@ def interface_context(interface):
 
     # Origin Trials
     context.update({
-        'origin_trial_feature_names': origin_trial_feature_names(interface, context['constants'], context['attributes'], context['methods']),
+        'origin_trial_features': origin_trial_features(interface, context['constants'], context['attributes'], context['methods']),
     })
     return context
+
+
+def reflected_name(constant_name):
+    """Returns the name to use for the matching constant name in blink code.
+
+    Given an all-uppercase 'CONSTANT_NAME', returns a camel-case
+    'kConstantName'.
+    """
+    # Check for SHOUTY_CASE constants
+    if constant_name.upper() != constant_name:
+        return constant_name
+    return 'k' + ''.join(part.title() for part in constant_name.split('_'))
 
 
 # [DeprecateAs], [OriginTrialEnabled], [Reflect], [RuntimeEnabled]
@@ -588,7 +621,7 @@ def constant_context(constant, interface):
         'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(constant),  # [OriginTrialEnabled]
         'origin_trial_feature_name': v8_utilities.origin_trial_feature_name(constant),  # [OriginTrialEnabled]
         # FIXME: use 'reflected_name' as correct 'name'
-        'reflected_name': extended_attributes.get('Reflect', constant.name),
+        'reflected_name': extended_attributes.get('Reflect', reflected_name(constant.name)),
         'runtime_enabled_function': runtime_enabled_function_name(constant),  # [RuntimeEnabled]
         'runtime_feature_name': v8_utilities.runtime_feature_name(constant),  # [RuntimeEnabled]
         'value': constant.value,
@@ -762,6 +795,7 @@ def overloads_context(interface, overloads):
         'runtime_determined_lengths': runtime_determined_lengths,
         'runtime_determined_maxargs': runtime_determined_maxargs,
         'runtime_enabled_function_all': common_value(overloads, 'runtime_enabled_function'),  # [RuntimeEnabled]
+        'secure_context_test_all': common_value(overloads, 'secure_context_test'),  # [SecureContext]
         'valid_arities': (lengths
                           # Only need to report valid arities if there is a gap in the
                           # sequence of possible lengths, otherwise invalid length means
@@ -1093,9 +1127,9 @@ def resolution_tests_methods(effective_overloads):
             # Array in overloaded method: http://crbug.com/262383
             yield '%s->IsArray()' % cpp_value, method
     for idl_type, method in idl_types_methods:
-        if idl_type.is_dictionary or idl_type.name == 'Dictionary':
-            # FIXME: should be '{1}->IsObject() && !{1}->IsDate() && !{1}->IsRegExp()'.format(cpp_value)
-            # FIXME: the IsDate and IsRegExp checks can be skipped if we've
+        if idl_type.is_dictionary or idl_type.name == 'Dictionary' or idl_type.is_callback_interface:
+            # FIXME: should be '{1}->IsObject() && !{1}->IsRegExp()'.format(cpp_value)
+            # FIXME: the IsRegExp checks can be skipped if we've
             # already generated tests for them.
             yield '%s->IsObject()' % cpp_value, method
 

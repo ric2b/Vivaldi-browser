@@ -21,7 +21,8 @@ class ContentViewCore;
 class PopupTouchHandleDrawable : public ui::TouchHandleDrawable {
  public:
   static std::unique_ptr<PopupTouchHandleDrawable> Create(
-      ContentViewCore* content_view_core);
+      ContentViewCore* content_view_core,
+      float dpi_scale);
   ~PopupTouchHandleDrawable() override;
 
   // ui::TouchHandleDrawable implementation.
@@ -33,8 +34,6 @@ class PopupTouchHandleDrawable : public ui::TouchHandleDrawable {
   void SetAlpha(float alpha) override;
   gfx::RectF GetVisibleBounds() const override;
   float GetDrawableHorizontalPaddingRatio() const override;
-
-  static bool RegisterPopupTouchHandleDrawable(JNIEnv* env);
 
  private:
   PopupTouchHandleDrawable(JNIEnv* env, jobject obj, float dpi_scale);

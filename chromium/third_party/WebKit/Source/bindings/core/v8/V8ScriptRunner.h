@@ -32,7 +32,6 @@
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/CoreExport.h"
 #include "core/fetch/AccessControlStatus.h"
-#include "platform/text/CompressibleString.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/TextPosition.h"
 #include "wtf/text/WTFString.h"
@@ -53,12 +52,12 @@ public:
     // For the following methods, the caller sites have to hold
     // a HandleScope and a ContextScope.
     static v8::MaybeLocal<v8::Script> compileScript(const ScriptSourceCode&, v8::Isolate*, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
-    static v8::MaybeLocal<v8::Script> compileScript(const CompressibleString&, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
+    static v8::MaybeLocal<v8::Script> compileScript(const String&, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
     // CachedMetadataHandler is set when metadata caching is supported. For
     // normal scripe resources, CachedMetadataHandler is from ScriptResource.
     // For worker script, ScriptResource is null but CachedMetadataHandler may be
     // set. When ScriptStreamer is set, ScriptResource must be set.
-    static v8::MaybeLocal<v8::Script> compileScript(v8::Local<v8::String>, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, ScriptResource* = nullptr, ScriptStreamer* = nullptr, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault, bool isInternalScript = false);
+    static v8::MaybeLocal<v8::Script> compileScript(v8::Local<v8::String>, const String& fileName, const String& sourceMapUrl, const TextPosition&, v8::Isolate*, ScriptResource* = nullptr, ScriptStreamer* = nullptr, CachedMetadataHandler* = nullptr, AccessControlStatus = SharableCrossOrigin, V8CacheOptions = V8CacheOptionsDefault);
     static v8::MaybeLocal<v8::Value> runCompiledScript(v8::Isolate*, v8::Local<v8::Script>, ExecutionContext*);
     static v8::MaybeLocal<v8::Value> compileAndRunInternalScript(v8::Local<v8::String>, v8::Isolate*, const String& = String(), const TextPosition& = TextPosition());
     static v8::MaybeLocal<v8::Value> runCompiledInternalScript(v8::Isolate*, v8::Local<v8::Script>);
@@ -85,8 +84,11 @@ public:
     template <size_t N>
     static v8::Local<v8::Value> callExtraOrCrash(ScriptState* scriptState, const char* name, v8::Local<v8::Value>(&args)[N])
     {
-        return v8CallOrCrash(callExtraHelper(scriptState, name, N, args));
+        return callExtraHelper(scriptState, name, N, args).ToLocalChecked();
     }
+
+    // Use V8ThrowException instead of this function unless absolutely needed.
+    static void throwException(v8::Isolate*, v8::Local<v8::Value> exception, const v8::ScriptOrigin&);
 
 private:
     static v8::MaybeLocal<v8::Value> callExtraHelper(ScriptState* scriptState, const char* name, size_t numArgs, v8::Local<v8::Value>* args)

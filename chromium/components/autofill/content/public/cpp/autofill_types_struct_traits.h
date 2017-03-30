@@ -13,7 +13,10 @@
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/form_field_data_predictions.h"
+#include "components/autofill/core/common/password_form.h"
+#include "components/autofill/core/common/password_form_field_prediction_map.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/autofill/core/common/password_form_generation_data.h"
 #include "mojo/public/cpp/bindings/struct_traits.h"
 
 namespace mojo {
@@ -45,7 +48,53 @@ struct EnumTraits<autofill::mojom::TextDirection, base::i18n::TextDirection> {
 };
 
 template <>
-struct StructTraits<autofill::mojom::FormFieldData, autofill::FormFieldData> {
+struct EnumTraits<autofill::mojom::GenerationUploadStatus,
+                  autofill::PasswordForm::GenerationUploadStatus> {
+  static autofill::mojom::GenerationUploadStatus ToMojom(
+      autofill::PasswordForm::GenerationUploadStatus input);
+  static bool FromMojom(autofill::mojom::GenerationUploadStatus input,
+                        autofill::PasswordForm::GenerationUploadStatus* output);
+};
+
+template <>
+struct EnumTraits<autofill::mojom::PasswordFormLayout,
+                  autofill::PasswordForm::Layout> {
+  static autofill::mojom::PasswordFormLayout ToMojom(
+      autofill::PasswordForm::Layout input);
+  static bool FromMojom(autofill::mojom::PasswordFormLayout input,
+                        autofill::PasswordForm::Layout* output);
+};
+
+template <>
+struct EnumTraits<autofill::mojom::PasswordFormType,
+                  autofill::PasswordForm::Type> {
+  static autofill::mojom::PasswordFormType ToMojom(
+      autofill::PasswordForm::Type input);
+  static bool FromMojom(autofill::mojom::PasswordFormType input,
+                        autofill::PasswordForm::Type* output);
+};
+
+template <>
+struct EnumTraits<autofill::mojom::PasswordFormScheme,
+                  autofill::PasswordForm::Scheme> {
+  static autofill::mojom::PasswordFormScheme ToMojom(
+      autofill::PasswordForm::Scheme input);
+  static bool FromMojom(autofill::mojom::PasswordFormScheme input,
+                        autofill::PasswordForm::Scheme* output);
+};
+
+template <>
+struct EnumTraits<autofill::mojom::PasswordFormFieldPredictionType,
+                  autofill::PasswordFormFieldPredictionType> {
+  static autofill::mojom::PasswordFormFieldPredictionType ToMojom(
+      autofill::PasswordFormFieldPredictionType input);
+  static bool FromMojom(autofill::mojom::PasswordFormFieldPredictionType input,
+                        autofill::PasswordFormFieldPredictionType* output);
+};
+
+template <>
+struct StructTraits<autofill::mojom::FormFieldDataDataView,
+                    autofill::FormFieldData> {
   static const base::string16& label(const autofill::FormFieldData& r) {
     return r.label;
   }
@@ -70,6 +119,14 @@ struct StructTraits<autofill::mojom::FormFieldData, autofill::FormFieldData> {
 
   static const base::string16& placeholder(const autofill::FormFieldData& r) {
     return r.placeholder;
+  }
+
+  static const base::string16& css_classes(const autofill::FormFieldData& r) {
+    return r.css_classes;
+  }
+
+  static uint32_t properties_mask(const autofill::FormFieldData& r) {
+    return r.properties_mask;
   }
 
   static uint64_t max_length(const autofill::FormFieldData& r) {
@@ -118,7 +175,7 @@ struct StructTraits<autofill::mojom::FormFieldData, autofill::FormFieldData> {
 };
 
 template <>
-struct StructTraits<autofill::mojom::FormData, autofill::FormData> {
+struct StructTraits<autofill::mojom::FormDataDataView, autofill::FormData> {
   static const base::string16& name(const autofill::FormData& r) {
     return r.name;
   }
@@ -143,7 +200,7 @@ struct StructTraits<autofill::mojom::FormData, autofill::FormData> {
 };
 
 template <>
-struct StructTraits<autofill::mojom::FormFieldDataPredictions,
+struct StructTraits<autofill::mojom::FormFieldDataPredictionsDataView,
                     autofill::FormFieldDataPredictions> {
   static const autofill::FormFieldData& field(
       const autofill::FormFieldDataPredictions& r) {
@@ -180,7 +237,7 @@ struct StructTraits<autofill::mojom::FormFieldDataPredictions,
 };
 
 template <>
-struct StructTraits<autofill::mojom::FormDataPredictions,
+struct StructTraits<autofill::mojom::FormDataPredictionsDataView,
                     autofill::FormDataPredictions> {
   static const autofill::FormData& data(
       const autofill::FormDataPredictions& r) {
@@ -201,7 +258,7 @@ struct StructTraits<autofill::mojom::FormDataPredictions,
 };
 
 template <>
-struct StructTraits<autofill::mojom::PasswordAndRealm,
+struct StructTraits<autofill::mojom::PasswordAndRealmDataView,
                     autofill::PasswordAndRealm> {
   static const base::string16& password(const autofill::PasswordAndRealm& r) {
     return r.password;
@@ -216,7 +273,7 @@ struct StructTraits<autofill::mojom::PasswordAndRealm,
 };
 
 template <>
-struct StructTraits<autofill::mojom::UsernamesCollectionKey,
+struct StructTraits<autofill::mojom::UsernamesCollectionKeyDataView,
                     autofill::UsernamesCollectionKey> {
   static const base::string16& username(
       const autofill::UsernamesCollectionKey& r) {
@@ -237,7 +294,7 @@ struct StructTraits<autofill::mojom::UsernamesCollectionKey,
 };
 
 template <>
-struct StructTraits<autofill::mojom::PasswordFormFillData,
+struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
                     autofill::PasswordFormFillData> {
   using UsernamesCollectionKeysValuesPair =
       std::pair<std::vector<autofill::UsernamesCollectionKey>,
@@ -303,6 +360,234 @@ struct StructTraits<autofill::mojom::PasswordFormFillData,
 
   static bool Read(autofill::mojom::PasswordFormFillDataDataView data,
                    autofill::PasswordFormFillData* out);
+};
+
+template <>
+struct StructTraits<autofill::mojom::PasswordFormGenerationDataDataView,
+                    autofill::PasswordFormGenerationData> {
+  static const base::string16& name(
+      const autofill::PasswordFormGenerationData& r) {
+    return r.name;
+  }
+
+  static const GURL& action(const autofill::PasswordFormGenerationData& r) {
+    return r.action;
+  }
+
+  static const autofill::FormFieldData& generation_field(
+      const autofill::PasswordFormGenerationData& r) {
+    return r.generation_field;
+  }
+
+  static bool Read(autofill::mojom::PasswordFormGenerationDataDataView data,
+                   autofill::PasswordFormGenerationData* out);
+};
+
+template <>
+struct StructTraits<autofill::mojom::PasswordFormDataView,
+                    autofill::PasswordForm> {
+  static autofill::PasswordForm::Scheme scheme(
+      const autofill::PasswordForm& r) {
+    return r.scheme;
+  }
+
+  static const std::string& signon_realm(const autofill::PasswordForm& r) {
+    return r.signon_realm;
+  }
+
+  static const GURL& origin_with_path(const autofill::PasswordForm& r) {
+    return r.origin;
+  }
+
+  static const GURL& action(const autofill::PasswordForm& r) {
+    return r.action;
+  }
+
+  static const std::string& affiliated_web_realm(
+      const autofill::PasswordForm& r) {
+    return r.affiliated_web_realm;
+  }
+
+  static const base::string16& submit_element(const autofill::PasswordForm& r) {
+    return r.submit_element;
+  }
+
+  static const base::string16& username_element(
+      const autofill::PasswordForm& r) {
+    return r.username_element;
+  }
+
+  static bool username_marked_by_site(const autofill::PasswordForm& r) {
+    return r.username_marked_by_site;
+  }
+
+  static const base::string16& username_value(const autofill::PasswordForm& r) {
+    return r.username_value;
+  }
+
+  static const std::vector<base::string16>& other_possible_usernames(
+      const autofill::PasswordForm& r) {
+    return r.other_possible_usernames;
+  }
+
+  static const base::string16& password_element(
+      const autofill::PasswordForm& r) {
+    return r.password_element;
+  }
+
+  static const base::string16& password_value(const autofill::PasswordForm& r) {
+    return r.password_value;
+  }
+
+  static bool password_value_is_default(const autofill::PasswordForm& r) {
+    return r.password_value_is_default;
+  }
+
+  static const base::string16& new_password_element(
+      const autofill::PasswordForm& r) {
+    return r.new_password_element;
+  }
+
+  static const base::string16& new_password_value(
+      const autofill::PasswordForm& r) {
+    return r.new_password_value;
+  }
+
+  static bool new_password_value_is_default(const autofill::PasswordForm& r) {
+    return r.new_password_value_is_default;
+  }
+
+  static bool new_password_marked_by_site(const autofill::PasswordForm& r) {
+    return r.new_password_marked_by_site;
+  }
+
+  static bool preferred(const autofill::PasswordForm& r) { return r.preferred; }
+
+  static const base::Time& date_created(const autofill::PasswordForm& r) {
+    return r.date_created;
+  }
+
+  static const base::Time& date_synced(const autofill::PasswordForm& r) {
+    return r.date_synced;
+  }
+
+  static bool blacklisted_by_user(const autofill::PasswordForm& r) {
+    return r.blacklisted_by_user;
+  }
+
+  static autofill::PasswordForm::Type type(const autofill::PasswordForm& r) {
+    return r.type;
+  }
+
+  static int32_t times_used(const autofill::PasswordForm& r) {
+    return r.times_used;
+  }
+
+  static const autofill::FormData& form_data(const autofill::PasswordForm& r) {
+    return r.form_data;
+  }
+
+  static autofill::PasswordForm::GenerationUploadStatus
+  generation_upload_status(const autofill::PasswordForm& r) {
+    return r.generation_upload_status;
+  }
+
+  static const base::string16& display_name(const autofill::PasswordForm& r) {
+    return r.display_name;
+  }
+
+  static const GURL& icon_url(const autofill::PasswordForm& r) {
+    return r.icon_url;
+  }
+
+  static const url::Origin& federation_origin(const autofill::PasswordForm& r) {
+    return r.federation_origin;
+  }
+
+  static bool skip_zero_click(const autofill::PasswordForm& r) {
+    return r.skip_zero_click;
+  }
+
+  static autofill::PasswordForm::Layout layout(
+      const autofill::PasswordForm& r) {
+    return r.layout;
+  }
+
+  static bool was_parsed_using_autofill_predictions(
+      const autofill::PasswordForm& r) {
+    return r.was_parsed_using_autofill_predictions;
+  }
+
+  static bool is_public_suffix_match(const autofill::PasswordForm& r) {
+    return r.is_public_suffix_match;
+  }
+
+  static bool is_affiliation_based_match(const autofill::PasswordForm& r) {
+    return r.is_affiliation_based_match;
+  }
+
+  static bool does_look_like_signup_form(const autofill::PasswordForm& r) {
+    return r.does_look_like_signup_form;
+  }
+
+  static bool Read(autofill::mojom::PasswordFormDataView data,
+                   autofill::PasswordForm* out);
+};
+
+template <>
+struct StructTraits<autofill::mojom::PasswordFormFieldPredictionMapDataView,
+                    autofill::PasswordFormFieldPredictionMap> {
+  using KeysValuesPair =
+      std::pair<std::vector<autofill::FormFieldData>,
+                std::vector<autofill::PasswordFormFieldPredictionType>>;
+
+  static void* SetUpContext(const autofill::PasswordFormFieldPredictionMap& r);
+
+  static void TearDownContext(const autofill::PasswordFormFieldPredictionMap& r,
+                              void* context);
+
+  static const std::vector<autofill::FormFieldData>& keys(
+      const autofill::PasswordFormFieldPredictionMap& r,
+      void* context) {
+    return static_cast<KeysValuesPair*>(context)->first;
+  }
+
+  static const std::vector<autofill::PasswordFormFieldPredictionType>& values(
+      const autofill::PasswordFormFieldPredictionMap& r,
+      void* context) {
+    return static_cast<KeysValuesPair*>(context)->second;
+  }
+
+  static bool Read(autofill::mojom::PasswordFormFieldPredictionMapDataView data,
+                   autofill::PasswordFormFieldPredictionMap* out);
+};
+
+template <>
+struct StructTraits<autofill::mojom::FormsPredictionsMapDataView,
+                    autofill::FormsPredictionsMap> {
+  using KeysValuesPair =
+      std::pair<std::vector<autofill::FormData>,
+                std::vector<autofill::PasswordFormFieldPredictionMap>>;
+
+  static void* SetUpContext(const autofill::FormsPredictionsMap& r);
+
+  static void TearDownContext(const autofill::FormsPredictionsMap& r,
+                              void* context);
+
+  static const std::vector<autofill::FormData>& keys(
+      const autofill::FormsPredictionsMap& r,
+      void* context) {
+    return static_cast<KeysValuesPair*>(context)->first;
+  }
+
+  static const std::vector<autofill::PasswordFormFieldPredictionMap>& values(
+      const autofill::FormsPredictionsMap& r,
+      void* context) {
+    return static_cast<KeysValuesPair*>(context)->second;
+  }
+
+  static bool Read(autofill::mojom::FormsPredictionsMapDataView data,
+                   autofill::FormsPredictionsMap* out);
 };
 
 }  // namespace mojo

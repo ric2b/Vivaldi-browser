@@ -228,11 +228,11 @@ public interface UrlRequest {
 
         /**
          * Associates the annotation object with this request. May add more than one.
-         * Passed through to a {@link CronetEngine.RequestFinishedListener},
-         * see {@link CronetEngine.UrlRequestInfo#getAnnotations}.
+         * Passed through to a {@link RequestFinishedInfo.Listener},
+         * see {@link RequestFinishedInfo#getAnnotations}.
          *
-         * @param annotation an object to pass on to the
-         * {@link CronetEngine.RequestFinishedListener} with a {@link CronetEngine.UrlRequestInfo}.
+         * @param annotation an object to pass on to the {@link RequestFinishedInfo.Listener} with a
+         * {@link RequestFinishedInfo}.
          * @return the builder to facilitate chaining.
          *
          * @hide as it's a prototype.
@@ -505,9 +505,10 @@ public interface UrlRequest {
          * Convert a LoadState int to one of values listed above.
          * @param loadState a LoadState to convert.
          * @return static int Status.
+         * @hide only used by internal implementation.
          */
         @StatusValues
-        static int convertLoadState(int loadState) {
+        public static int convertLoadState(int loadState) {
             assert loadState >= LoadState.IDLE && loadState <= LoadState.READING_RESPONSE;
             switch (loadState) {
                 case (LoadState.IDLE):

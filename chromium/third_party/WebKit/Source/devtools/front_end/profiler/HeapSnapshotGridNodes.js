@@ -53,8 +53,9 @@ WebInspector.HeapSnapshotGridNode = function(tree, hasChildren)
     this._providerObject = null;
 }
 
+/** @enum {symbol} */
 WebInspector.HeapSnapshotGridNode.Events = {
-    PopulateComplete: "PopulateComplete"
+    PopulateComplete: Symbol("PopulateComplete")
 }
 
 /**
@@ -584,7 +585,7 @@ WebInspector.HeapSnapshotGenericObjectNode.prototype = {
         case "array":
             value = (value || "") + "[]";
             break;
-        };
+        }
         if (this._reachableFromWindow)
             valueStyle += " highlight";
         if (value === "Object")

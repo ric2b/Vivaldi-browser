@@ -17,6 +17,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -31,14 +32,15 @@
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host_ui_shim.h"
 #include "content/browser/gpu/shader_disk_cache.h"
-#include "content/browser/mojo/constants.h"
-#include "content/browser/mojo/mojo_child_connection.h"
 #include "content/browser/mojo/mojo_shell_context.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/establish_channel_params.h"
 #include "content/common/gpu_host_messages.h"
+#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/in_process_child_thread_params.h"
+#include "content/common/mojo/constants.h"
+#include "content/common/mojo/mojo_child_connection.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -46,6 +48,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
+#include "content/public/common/connection_filter.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
@@ -62,7 +65,7 @@
 #include "mojo/edk/embedder/embedder.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/interface_provider.h"
-#include "services/shell/public/cpp/interface_registry.h"
+#include "services/shell/runner/common/client_util.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/latency_info.h"
 #include "ui/gl/gl_switches.h"
@@ -106,59 +109,61 @@ namespace {
 
 // Command-line switches to propagate to the GPU process.
 static const char* const kSwitchNames[] = {
-  switches::kDisableAcceleratedVideoDecode,
-  switches::kDisableBreakpad,
-  switches::kDisableGpuSandbox,
-  switches::kDisableGpuWatchdog,
-  switches::kDisableGLExtensions,
-  switches::kDisableLogging,
-  switches::kDisableSeccompFilterSandbox,
+    switches::kCreateDefaultGLContext,
+    switches::kDisableAcceleratedVideoDecode,
+    switches::kDisableBreakpad,
+    switches::kDisableGpuSandbox,
+    switches::kDisableGpuWatchdog,
+    switches::kDisableGLExtensions,
+    switches::kDisableLogging,
+    switches::kDisableSeccompFilterSandbox,
 #if defined(ENABLE_WEBRTC)
-  switches::kDisableWebRtcHWEncoding,
+    switches::kDisableWebRtcHWEncoding,
 #endif
 #if defined(OS_WIN)
-  switches::kEnableAcceleratedVpxDecode,
+    switches::kEnableAcceleratedVpxDecode,
 #endif
-  switches::kEnableHeapProfiling,
-  switches::kEnableLogging,
+    switches::kEnableHeapProfiling,
+    switches::kEnableLogging,
 #if defined(OS_CHROMEOS)
-  switches::kDisableVaapiAcceleratedVideoEncode,
+    switches::kDisableVaapiAcceleratedVideoEncode,
 #endif
-  switches::kGpuDriverBugWorkarounds,
-  switches::kGpuStartupDialog,
-  switches::kGpuSandboxAllowSysVShm,
-  switches::kGpuSandboxFailuresFatal,
-  switches::kGpuSandboxStartEarly,
-  switches::kLoggingLevel,
-  switches::kEnableLowEndDeviceMode,
-  switches::kDisableLowEndDeviceMode,
-  switches::kEnableMemoryBenchmarking,
-  switches::kNoSandbox,
-  switches::kProfilerTiming,
-  switches::kTestGLLib,
-  switches::kTraceConfigFile,
-  switches::kTraceStartup,
-  switches::kTraceToConsole,
-  switches::kV,
-  switches::kVModule,
-  switches::kDebugVivaldi,
+    switches::kGpuDriverBugWorkarounds,
+    switches::kGpuStartupDialog,
+    switches::kGpuSandboxAllowSysVShm,
+    switches::kGpuSandboxFailuresFatal,
+    switches::kGpuSandboxStartEarly,
+    switches::kLoggingLevel,
+    switches::kEnableLowEndDeviceMode,
+    switches::kDisableLowEndDeviceMode,
+    switches::kEnableMemoryBenchmarking,
+    switches::kNoSandbox,
+    switches::kProfilerTiming,
+    switches::kTestGLLib,
+    switches::kTraceConfigFile,
+    switches::kTraceStartup,
+    switches::kTraceToConsole,
+    switches::kUseGpuInTests,
+    switches::kV,
+    switches::kVModule,
+    switches::kDebugVivaldi,
 #if defined(OS_MACOSX)
-  switches::kDisableRemoteCoreAnimation,
-  switches::kEnableSandboxLogging,
-  switches::kShowMacOverlayBorders,
+    switches::kDisableRemoteCoreAnimation,
+    switches::kEnableSandboxLogging,
+    switches::kShowMacOverlayBorders,
 #endif
 #if defined(USE_OZONE)
-  switches::kOzonePlatform,
+    switches::kOzonePlatform,
 #endif
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
-  switches::kWindowDepth,
-  switches::kX11Display,
-  switches::kX11VisualID,
+    switches::kWindowDepth,
+    switches::kX11Display,
+    switches::kX11VisualID,
 #endif
-  switches::kGpuTestingGLVendor,
-  switches::kGpuTestingGLRenderer,
-  switches::kGpuTestingGLVersion,
-};
+    switches::kGpuTestingGLVendor,
+    switches::kGpuTestingGLRenderer,
+    switches::kGpuTestingGLVersion,
+    switches::kDisableGpuDriverBugWorkarounds};
 
 enum GPUProcessLifetimeEvent {
   LAUNCHED,
@@ -173,11 +178,10 @@ enum GPUProcessLifetimeEvent {
 // only be accessed from the IO thread.
 GpuProcessHost* g_gpu_process_hosts[GpuProcessHost::GPU_PROCESS_KIND_COUNT];
 
-
 void SendGpuProcessMessage(GpuProcessHost::GpuProcessKind kind,
-                           CauseForGpuLaunch cause,
+                           bool force_create,
                            IPC::Message* message) {
-  GpuProcessHost* host = GpuProcessHost::Get(kind, cause);
+  GpuProcessHost* host = GpuProcessHost::Get(kind, force_create);
   if (host) {
     host->Send(message);
   } else {
@@ -295,6 +299,28 @@ class GpuSandboxedProcessLauncherDelegate
 
 }  // anonymous namespace
 
+class GpuProcessHost::ConnectionFilterImpl : public ConnectionFilter {
+ public:
+  ConnectionFilterImpl(GpuProcessHost* host) : host_(host) {}
+
+ private:
+  // ConnectionFilter:
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry,
+                 shell::Connector* connector) override {
+    if (remote_identity.name() != kGpuMojoApplicationName)
+      return false;
+
+    GetContentClient()->browser()->ExposeInterfacesToGpuProcess(registry,
+                                                                host_);
+    return true;
+  }
+
+  GpuProcessHost* host_;
+
+  DISALLOW_COPY_AND_ASSIGN(ConnectionFilterImpl);
+};
+
 // static
 bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
   // The Gpu process is invalid if it's not using SwiftShader, the card is
@@ -314,8 +340,9 @@ bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
 }
 
 // static
-GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind,
-                                    CauseForGpuLaunch cause) {
+GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create,
+    CauseForGpuLaunch cause) {
+  DCHECK(!shell::ShellIsRemote());
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // Don't grant further access to GPU if it is not allowed.
@@ -328,16 +355,12 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind,
   if (g_gpu_process_hosts[kind] && ValidateHost(g_gpu_process_hosts[kind]))
     return g_gpu_process_hosts[kind];
 
-  if (cause == CAUSE_FOR_GPU_LAUNCH_NO_LAUNCH)
-    return NULL;
+  if (!force_create)
+    return nullptr;
 
   static int last_host_id = 0;
   int host_id;
   host_id = ++last_host_id;
-
-  UMA_HISTOGRAM_ENUMERATION("GPU.GPUProcessLaunchCause",
-                            cause,
-                            CAUSE_FOR_GPU_LAUNCH_MAX_ENUM);
 
   GpuProcessHost* host = new GpuProcessHost(host_id, kind);
   if (host->Init())
@@ -376,12 +399,11 @@ void GpuProcessHost::GetProcessHandles(
 
 // static
 void GpuProcessHost::SendOnIO(GpuProcessKind kind,
-                              CauseForGpuLaunch cause,
+                              bool force_create,
                               IPC::Message* message) {
   if (!BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,
-          base::Bind(
-              &SendGpuProcessMessage, kind, cause, message))) {
+          base::Bind(&SendGpuProcessMessage, kind, force_create, message))) {
     delete message;
   }
 }
@@ -399,6 +421,10 @@ GpuProcessHost::EstablishChannelRequest::~EstablishChannelRequest() {}
 void GpuProcessHost::RegisterGpuMainThreadFactory(
     GpuMainThreadFactoryFunction create) {
   g_gpu_main_thread_factory = create;
+}
+
+shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
+  return process_->child_connection()->GetRemoteInterfaces();
 }
 
 // static
@@ -422,8 +448,7 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       kind_(kind),
       process_launched_(false),
       initialized_(false),
-      uma_memory_stats_received_(false),
-      child_token_(mojo::edk::GenerateRandomToken()) {
+      uma_memory_stats_received_(false) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -447,8 +472,8 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       FROM_HERE,
       base::Bind(base::IgnoreResult(&GpuProcessHostUIShim::Create), host_id));
 
-  process_.reset(new BrowserChildProcessHostImpl(PROCESS_TYPE_GPU, this,
-                                                 child_token_));
+  process_.reset(new BrowserChildProcessHostImpl(
+      PROCESS_TYPE_GPU, this, kGpuMojoApplicationName));
 }
 
 GpuProcessHost::~GpuProcessHost() {
@@ -556,16 +581,13 @@ bool GpuProcessHost::Init() {
 
   TRACE_EVENT_INSTANT0("gpu", "LaunchGpuProcess", TRACE_EVENT_SCOPE_THREAD);
 
-  std::string channel_id = process_->GetHost()->CreateChannel();
-  if (channel_id.empty())
-    return false;
+  // May be null during test execution.
+  if (MojoShellConnection::GetForProcess()) {
+    MojoShellConnection::GetForProcess()->AddConnectionFilter(
+        base::MakeUnique<ConnectionFilterImpl>(this));
+  }
 
-  DCHECK(!mojo_child_connection_);
-  mojo_child_connection_.reset(new MojoChildConnection(
-      kGpuMojoApplicationName,
-      "",
-      child_token_,
-      MojoShellContext::GetConnectorForIOThread()));
+  process_->GetHost()->CreateChannelMojo();
 
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
@@ -573,8 +595,8 @@ bool GpuProcessHost::Init() {
     DCHECK(g_gpu_main_thread_factory);
     in_process_gpu_thread_.reset(g_gpu_main_thread_factory(
         InProcessChildThreadParams(
-            channel_id, base::ThreadTaskRunnerHandle::Get(), std::string(),
-            mojo_child_connection_->shell_client_token()),
+            std::string(), base::ThreadTaskRunnerHandle::Get(),
+            process_->child_connection()->service_token()),
         gpu_preferences));
     base::Thread::Options options;
 #if defined(OS_WIN)
@@ -587,7 +609,7 @@ bool GpuProcessHost::Init() {
     in_process_gpu_thread_->StartWithOptions(options);
 
     OnProcessLaunched();  // Fake a callback that the process is ready.
-  } else if (!LaunchGpuProcess(channel_id, &gpu_preferences)) {
+  } else if (!LaunchGpuProcess(&gpu_preferences)) {
     return false;
   }
 
@@ -972,14 +994,6 @@ void GpuProcessHost::OnProcessCrashed(int exit_code) {
       process_->GetTerminationStatus(true /* known_dead */, NULL));
 }
 
-shell::InterfaceRegistry* GpuProcessHost::GetInterfaceRegistry() {
-  return mojo_child_connection_->connection()->GetInterfaceRegistry();
-}
-
-shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
-  return mojo_child_connection_->connection()->GetRemoteInterfaces();
-}
-
 GpuProcessHost::GpuProcessKind GpuProcessHost::kind() {
   return kind_;
 }
@@ -997,8 +1011,7 @@ void GpuProcessHost::StopGpuProcess() {
   Send(new GpuMsg_Finalize());
 }
 
-bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
-                                      gpu::GpuPreferences* gpu_preferences) {
+bool GpuProcessHost::LaunchGpuProcess(gpu::GpuPreferences* gpu_preferences) {
   if (!(gpu_enabled_ &&
       GpuDataManagerImpl::GetInstance()->ShouldUseSwiftShader()) &&
       !hardware_gpu_enabled_) {
@@ -1033,9 +1046,6 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
   base::CommandLine* cmd_line = new base::CommandLine(exe_path);
 #endif
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
-  cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
-  cmd_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
-                              mojo_child_connection_->shell_client_token());
   BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
 
 #if defined(OS_WIN)

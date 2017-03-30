@@ -1,0 +1,32 @@
+{
+  "manifest_version":  1,
+  "name": "mojo:ui",
+  "display_name": "UI Service",
+  "capabilities": {
+    "provided": {
+      // A collection of interfaces needed by a generic client of mus.
+      // Additional interfaces may be requested a-la-carte.
+      "app": [
+        "ui::mojom::Clipboard",
+        "ui::mojom::DisplayManager",
+        "ui::mojom::Gpu",
+        "ui::mojom::GpuService",
+        "ui::mojom::IMEServer",
+        "ui::mojom::InputDeviceServer",
+        "ui::mojom::WindowTreeFactory"
+      ],
+      // Interfaces provided by mus-gpu for mus-ws.
+      "ozone": [
+        "ui::ozone::mojom::DeviceCursor"
+      ],
+      "test": [
+        "ui::mojom::WindowServerTest"
+      ]
+    },
+    "required": {
+      "mojo:ui": { "classes": [ "ozone" ] },
+      "*": { "classes": [ "app" ] },
+      "mojo:shell": { "classes": [ "shell:all_users", "shell:explicit_class" ] }
+    }
+  }
+}

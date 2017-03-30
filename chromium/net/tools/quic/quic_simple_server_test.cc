@@ -4,8 +4,8 @@
 
 #include "net/tools/quic/quic_simple_server.h"
 
-#include "net/quic/crypto/quic_random.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/crypto/quic_random.h"
+#include "net/quic/core/quic_utils.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/mock_quic_dispatcher.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -25,9 +25,11 @@ class QuicChromeServerDispatchPacketTest : public ::testing::Test {
       : crypto_config_("blah",
                        QuicRandom::GetInstance(),
                        CryptoTestUtils::ProofSourceForTesting()),
+        version_manager_(AllSupportedVersions()),
         dispatcher_(
             config_,
             &crypto_config_,
+            &version_manager_,
             std::unique_ptr<MockQuicConnectionHelper>(
                 new net::test::MockQuicConnectionHelper),
             std::unique_ptr<QuicServerSessionBase::Helper>(
@@ -45,6 +47,7 @@ class QuicChromeServerDispatchPacketTest : public ::testing::Test {
  protected:
   QuicConfig config_;
   QuicCryptoServerConfig crypto_config_;
+  QuicVersionManager version_manager_;
   net::test::MockQuicDispatcher dispatcher_;
 };
 

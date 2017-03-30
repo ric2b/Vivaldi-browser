@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -79,21 +80,18 @@ class FakeAppInstance : public mojom::AppInstance {
   explicit FakeAppInstance(mojom::AppHost* app_host);
   ~FakeAppInstance() override;
 
-  void Bind(mojo::InterfaceRequest<mojom::AppInstance> interface_request) {
-    binding_.Bind(std::move(interface_request));
-  }
-
   // mojom::AppInstance overrides:
   void Init(mojom::AppHostPtr host_ptr) override {}
   void RefreshAppList() override;
   void LaunchApp(const mojo::String& package_name,
                  const mojo::String& activity,
-                 const gfx::Rect& dimension) override;
+                 const base::Optional<gfx::Rect>& dimension) override;
   void RequestAppIcon(const mojo::String& package_name,
                       const mojo::String& activity,
                       mojom::ScaleFactor scale_factor) override;
-  void LaunchIntent(const mojo::String& intent_uri,
-                    const gfx::Rect& dimension_on_screen) override;
+  void LaunchIntent(
+      const mojo::String& intent_uri,
+      const base::Optional<gfx::Rect>& dimension_on_screen) override;
   void RequestIcon(const mojo::String& icon_resource_id,
                    arc::mojom::ScaleFactor scale_factor,
                    const RequestIconCallback& callback) override;
@@ -155,24 +153,9 @@ class FakeAppInstance : public mojom::AppInstance {
     return shortcut_icon_requests_;
   }
 
-  // This method can be called on tests when a method is intended to
-  // be called across a Mojo proxy.
-  void WaitForIncomingMethodCall();
-
-  // As part of the initialization process, the instance side calls
-  // mojom::AppHost::OnAppInstanceReady(), which in turn calls
-  // mojom::AppInstance::Init() and
-  // mojom::AppInstance::RefreshAppList(). This method should be called after a
-  // call
-  // to mojom::ArcBridgeHost::OnAppInstanceReady() to make sure all method calls
-  // have
-  // been dispatched.
-  void WaitForOnAppInstanceReady();
-
  private:
   using TaskIdToInfo = std::map<int32_t, std::unique_ptr<Request>>;
   // Mojo endpoints.
-  mojo::Binding<mojom::AppInstance> binding_;
   mojom::AppHost* app_host_;
   // Number of RefreshAppList calls.
   int refresh_app_list_count_ = 0;

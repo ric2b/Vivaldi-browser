@@ -13,18 +13,15 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/common/chrome_paths.h"
+#include "chrome/common/extensions/extension_features_unittest.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
-#include "extensions/common/features/api_feature.h"
-#include "extensions/common/features/base_feature_provider.h"
 #include "extensions/common/features/simple_feature.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_constants.h"
@@ -34,11 +31,32 @@
 
 namespace extensions {
 
-using test_util::BuildExtension;
+namespace {
 
-SimpleFeature* CreateAPIFeature() {
-  return new APIFeature();
-}
+const char* const kTestFeatures[] = {
+    "test1", "test2", "test3",   "test4",   "test5",
+    "test6", "test7", "parent1", "parent2", "parent3",
+};
+
+class TestExtensionAPI : public ExtensionAPI {
+ public:
+  TestExtensionAPI() {}
+  ~TestExtensionAPI() override {}
+
+  void add_fake_schema(const std::string& name) { fake_schemas_.insert(name); }
+
+ private:
+  bool IsKnownAPI(const std::string& name, ExtensionsClient* client) override {
+    return fake_schemas_.count(name) != 0;
+  }
+
+  std::set<std::string> fake_schemas_;
+  DISALLOW_COPY_AND_ASSIGN(TestExtensionAPI);
+};
+
+}  // namespace
+
+using test_util::BuildExtension;
 
 TEST(ExtensionAPITest, Creation) {
   ExtensionAPI* shared_instance = ExtensionAPI::GetSharedInstance();
@@ -164,31 +182,15 @@ TEST(ExtensionAPITest, APIFeatures) {
         GURL() }
   };
 
-  base::FilePath api_features_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &api_features_path);
-  api_features_path = api_features_path.AppendASCII("extensions")
-      .AppendASCII("extension_api_unittest")
-      .AppendASCII("api_features.json");
-
-  std::string api_features_str;
-  ASSERT_TRUE(base::ReadFileToString(
-      api_features_path, &api_features_str)) << "api_features.json";
-
-  std::unique_ptr<base::DictionaryValue> value(
-      static_cast<base::DictionaryValue*>(
-          base::JSONReader::Read(api_features_str).release()));
-  BaseFeatureProvider api_feature_provider(*value, CreateAPIFeature);
+  UnittestFeatureProvider api_feature_provider;
 
   for (size_t i = 0; i < arraysize(test_data); ++i) {
-    ExtensionAPI api;
+    TestExtensionAPI api;
     api.RegisterDependencyProvider("api", &api_feature_provider);
-    for (base::DictionaryValue::Iterator iter(*value); !iter.IsAtEnd();
-         iter.Advance()) {
-      if (iter.key().find(".") == std::string::npos)
-        api.RegisterSchemaResource(iter.key(), 0);
-    }
-
+    for (const auto& key : kTestFeatures)
+      api.add_fake_schema(key);
     ExtensionAPI::OverrideSharedInstanceForTest scope(&api);
+
     bool expected = test_data[i].expect_is_available;
     Feature::Availability availability =
         api.IsAvailable(test_data[i].api_full_name,
@@ -258,29 +260,14 @@ TEST(ExtensionAPITest, IsAnyFeatureAvailableToContext) {
     { "test7", false, Feature::WEB_PAGE_CONTEXT, NULL, GURL("http://bar.com") }
   };
 
-  base::FilePath api_features_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &api_features_path);
-  api_features_path = api_features_path.AppendASCII("extensions")
-      .AppendASCII("extension_api_unittest")
-      .AppendASCII("api_features.json");
-
-  std::string api_features_str;
-  ASSERT_TRUE(base::ReadFileToString(
-      api_features_path, &api_features_str)) << "api_features.json";
-
-  std::unique_ptr<base::DictionaryValue> value(
-      static_cast<base::DictionaryValue*>(
-          base::JSONReader::Read(api_features_str).release()));
-  BaseFeatureProvider api_feature_provider(*value, CreateAPIFeature);
+  UnittestFeatureProvider api_feature_provider;
 
   for (size_t i = 0; i < arraysize(test_data); ++i) {
-    ExtensionAPI api;
+    TestExtensionAPI api;
     api.RegisterDependencyProvider("api", &api_feature_provider);
-    for (base::DictionaryValue::Iterator iter(*value); !iter.IsAtEnd();
-         iter.Advance()) {
-      if (iter.key().find(".") == std::string::npos)
-        api.RegisterSchemaResource(iter.key(), 0);
-    }
+    for (const auto& key : kTestFeatures)
+      api.add_fake_schema(key);
+    ExtensionAPI::OverrideSharedInstanceForTest scope(&api);
 
     Feature* test_feature =
         api_feature_provider.GetFeature(test_data[i].api_full_name);
@@ -668,45 +655,13 @@ TEST(ExtensionAPITest, DefaultConfigurationFeatures) {
     SimpleFeature* feature = test_data[i].feature;
     ASSERT_TRUE(feature) << i;
 
-    EXPECT_TRUE(feature->whitelist()->empty());
-    EXPECT_TRUE(feature->extension_types()->empty());
+    EXPECT_TRUE(feature->whitelist().empty());
+    EXPECT_TRUE(feature->extension_types().empty());
 
     EXPECT_EQ(SimpleFeature::UNSPECIFIED_LOCATION, feature->location());
-    EXPECT_TRUE(feature->platforms()->empty());
+    EXPECT_TRUE(feature->platforms().empty());
     EXPECT_EQ(0, feature->min_manifest_version());
     EXPECT_EQ(0, feature->max_manifest_version());
-  }
-}
-
-TEST(ExtensionAPITest, FeaturesRequireContexts) {
-  // TODO(cduvall): Make this check API featues.
-  std::unique_ptr<base::DictionaryValue> api_features1(
-      new base::DictionaryValue());
-  std::unique_ptr<base::DictionaryValue> api_features2(
-      new base::DictionaryValue());
-  base::DictionaryValue* test1 = new base::DictionaryValue();
-  base::DictionaryValue* test2 = new base::DictionaryValue();
-  base::ListValue* contexts = new base::ListValue();
-  contexts->AppendString("content_script");
-  test1->Set("contexts", contexts);
-  test1->SetString("channel", "stable");
-  test2->SetString("channel", "stable");
-  api_features1->Set("test", test1);
-  api_features2->Set("test", test2);
-
-  struct {
-    base::DictionaryValue* api_features;
-    bool expect_success;
-  } test_data[] = {
-    { api_features1.get(), true },
-    { api_features2.get(), false }
-  };
-
-  for (size_t i = 0; i < arraysize(test_data); ++i) {
-    BaseFeatureProvider api_feature_provider(*test_data[i].api_features,
-                                             CreateAPIFeature);
-    Feature* feature = api_feature_provider.GetFeature("test");
-    EXPECT_EQ(test_data[i].expect_success, feature != NULL) << i;
   }
 }
 
@@ -719,64 +674,93 @@ static void GetDictionaryFromList(const base::DictionaryValue* schema,
   EXPECT_TRUE(list->GetDictionary(list_index, out));
 }
 
+static const base::DictionaryValue* GetDictChecked(
+    const base::DictionaryValue* dict,
+    const std::string& key) {
+  const base::DictionaryValue* out = nullptr;
+  CHECK(dict->GetDictionary(key, &out)) << key;
+  return out;
+}
+
+static std::string GetStringChecked(const base::DictionaryValue* dict,
+                                    const std::string& key) {
+  std::string out;
+  CHECK(dict->GetString(key, &out)) << key;
+  return out;
+}
+
 TEST(ExtensionAPITest, TypesHaveNamespace) {
-  base::FilePath manifest_path;
-  PathService::Get(chrome::DIR_TEST_DATA, &manifest_path);
-  manifest_path = manifest_path.AppendASCII("extensions")
-      .AppendASCII("extension_api_unittest")
-      .AppendASCII("types_have_namespace.json");
+  std::unique_ptr<ExtensionAPI> api(
+      ExtensionAPI::CreateWithDefaultConfiguration());
 
-  std::string manifest_str;
-  ASSERT_TRUE(base::ReadFileToString(manifest_path, &manifest_str))
-      << "Failed to load: " << manifest_path.value();
+  // Returns the dictionary that has |key|: |value|.
+  auto get_dict_from_list = [](
+      const base::ListValue* list, const std::string& key,
+      const std::string& value) -> const base::DictionaryValue* {
+    const base::DictionaryValue* ret = nullptr;
+    for (const auto& val : *list) {
+      const base::DictionaryValue* dict = nullptr;
+      if (!val->GetAsDictionary(&dict))
+        continue;
+      std::string str;
+      if (dict->GetString(key, &str) && str == value) {
+        ret = dict;
+        break;
+      }
+    }
+    return ret;
+  };
 
-  ExtensionAPI api;
-  api.RegisterSchemaResource("test.foo", 0);
-  api.LoadSchema("test.foo", manifest_str);
+  const base::DictionaryValue* schema = api->GetSchema("sessions");
+  ASSERT_TRUE(schema);
 
-  const base::DictionaryValue* schema = api.GetSchema("test.foo");
+  const base::ListValue* types = nullptr;
+  ASSERT_TRUE(schema->GetList("types", &types));
+  {
+    const base::DictionaryValue* session_type =
+        get_dict_from_list(types, "id", "sessions.Session");
+    ASSERT_TRUE(session_type);
+    const base::DictionaryValue* props =
+        GetDictChecked(session_type, "properties");
+    const base::DictionaryValue* tab = GetDictChecked(props, "tab");
+    EXPECT_EQ("tabs.Tab", GetStringChecked(tab, "$ref"));
+    const base::DictionaryValue* window = GetDictChecked(props, "window");
+    EXPECT_EQ("windows.Window", GetStringChecked(window, "$ref"));
+  }
+  {
+    const base::DictionaryValue* device_type =
+        get_dict_from_list(types, "id", "sessions.Device");
+    ASSERT_TRUE(device_type);
+    const base::DictionaryValue* props =
+        GetDictChecked(device_type, "properties");
+    const base::DictionaryValue* sessions = GetDictChecked(props, "sessions");
+    const base::DictionaryValue* items = GetDictChecked(sessions, "items");
+    EXPECT_EQ("sessions.Session", GetStringChecked(items, "$ref"));
+  }
+  const base::ListValue* functions = nullptr;
+  ASSERT_TRUE(schema->GetList("functions", &functions));
+  {
+    const base::DictionaryValue* get_recently_closed =
+        get_dict_from_list(functions, "name", "getRecentlyClosed");
+    ASSERT_TRUE(get_recently_closed);
+    const base::ListValue* parameters = nullptr;
+    ASSERT_TRUE(get_recently_closed->GetList("parameters", &parameters));
+    const base::DictionaryValue* filter =
+        get_dict_from_list(parameters, "name", "filter");
+    ASSERT_TRUE(filter);
+    EXPECT_EQ("sessions.Filter", GetStringChecked(filter, "$ref"));
+  }
 
-  const base::DictionaryValue* dict;
-  const base::DictionaryValue* sub_dict;
-  std::string type;
-
-  GetDictionaryFromList(schema, "types", 0, &dict);
-  EXPECT_TRUE(dict->GetString("id", &type));
-  EXPECT_EQ("test.foo.TestType", type);
-  EXPECT_TRUE(dict->GetString("customBindings", &type));
-  EXPECT_EQ("test.foo.TestType", type);
-  EXPECT_TRUE(dict->GetDictionary("properties", &sub_dict));
-  const base::DictionaryValue* property;
-  EXPECT_TRUE(sub_dict->GetDictionary("foo", &property));
-  EXPECT_TRUE(property->GetString("$ref", &type));
-  EXPECT_EQ("test.foo.OtherType", type);
-  EXPECT_TRUE(sub_dict->GetDictionary("bar", &property));
-  EXPECT_TRUE(property->GetString("$ref", &type));
-  EXPECT_EQ("fully.qualified.Type", type);
-
-  GetDictionaryFromList(schema, "functions", 0, &dict);
-  GetDictionaryFromList(dict, "parameters", 0, &sub_dict);
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("test.foo.TestType", type);
-  EXPECT_TRUE(dict->GetDictionary("returns", &sub_dict));
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("fully.qualified.Type", type);
-
-  GetDictionaryFromList(schema, "functions", 1, &dict);
-  GetDictionaryFromList(dict, "parameters", 0, &sub_dict);
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("fully.qualified.Type", type);
-  EXPECT_TRUE(dict->GetDictionary("returns", &sub_dict));
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("test.foo.TestType", type);
-
-  GetDictionaryFromList(schema, "events", 0, &dict);
-  GetDictionaryFromList(dict, "parameters", 0, &sub_dict);
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("test.foo.TestType", type);
-  GetDictionaryFromList(dict, "parameters", 1, &sub_dict);
-  EXPECT_TRUE(sub_dict->GetString("$ref", &type));
-  EXPECT_EQ("fully.qualified.Type", type);
+  schema = api->GetSchema("types");
+  ASSERT_TRUE(schema);
+  ASSERT_TRUE(schema->GetList("types", &types));
+  {
+    const base::DictionaryValue* chrome_setting =
+        get_dict_from_list(types, "id", "types.ChromeSetting");
+    ASSERT_TRUE(chrome_setting);
+    EXPECT_EQ("types.ChromeSetting",
+              GetStringChecked(chrome_setting, "customBindings"));
+  }
 }
 
 // Tests API availability with an empty manifest.

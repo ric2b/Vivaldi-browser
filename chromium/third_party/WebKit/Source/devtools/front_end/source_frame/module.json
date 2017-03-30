@@ -32,6 +32,7 @@
         "../cm/javascript.js",
         "../cm/simple.js",
         "../cm/xml.js",
+        "../cm/multiplex.js",
         "../cm/htmlmixed.js",
         "../cm/htmlembedded.js",
 
@@ -43,9 +44,9 @@
         "../cm/activeline.js",
 
         "CodeMirrorUtils.js",
-        "CodeMirrorDictionary.js",
         "TextEditorAutocompleteController.js",
         "CodeMirrorTextEditor.js",
+        "SourcesTextEditor.js",
         "FontView.js",
         "ImageView.js",
         "SourceFrame.js",
@@ -57,6 +58,7 @@
         "../cm/javascript.js",
         "../cm/simple.js",
         "../cm/xml.js",
+        "../cm/multiplex.js",
         "../cm/htmlmixed.js",
         "../cm/htmlembedded.js",
 

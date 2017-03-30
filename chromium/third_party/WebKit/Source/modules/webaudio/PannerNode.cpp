@@ -27,10 +27,10 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioBufferSourceNode.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 #include "platform/Histogram.h"
 #include "platform/audio/HRTFPanner.h"
 #include "wtf/MathExtras.h"
@@ -67,10 +67,6 @@ PannerHandler::PannerHandler(
     , m_orientationY(orientationY)
     , m_orientationZ(orientationZ)
 {
-    // Load the HRTF database asynchronously so we don't block the Javascript thread while creating the HRTF database.
-    // The HRTF panner will return zeroes until the database is loaded.
-    listener()->createAndLoadHRTFDatabaseLoader(node.context()->sampleRate());
-
     addInput();
     addOutput(2);
 
@@ -131,14 +127,10 @@ void PannerHandler::process(size_t framesToProcess)
     MutexTryLocker tryListenerLocker(listener()->listenerLock());
 
     if (tryLocker.locked() && tryListenerLocker.locked()) {
-        // HRTFDatabase should be loaded before proceeding when the panning model is HRTF.
-        if (m_panningModel == Panner::PanningModelHRTF && !listener()->isHRTFDatabaseLoaded()) {
-            if (context()->hasRealtimeConstraint()) {
-                // Some AbstractAudioContexts cannot block on the HRTFDatabase loader.
-                destination->zero();
-                return;
-            }
-
+        if (!context()->hasRealtimeConstraint() && m_panningModel == Panner::PanningModelHRTF) {
+            // For an OfflineAudioContext, we need to make sure the HRTFDatabase
+            // is loaded before proceeding.  For realtime contexts, we don't
+            // have to wait.  The HRTF panner handles that case itself.
             listener()->waitForHRTFDatabaseLoaderThreadCompletion();
         }
 
@@ -159,7 +151,7 @@ void PannerHandler::process(size_t framesToProcess)
 
             azimuthElevation(&azimuth, &elevation);
 
-            m_panner->pan(azimuth, elevation, source, destination, framesToProcess);
+            m_panner->pan(azimuth, elevation, source, destination, framesToProcess, internalChannelInterpretation());
 
             // Get the distance and cone gain.
             float totalGain = distanceConeGain();
@@ -229,7 +221,7 @@ void PannerHandler::processSampleAccurateValues(AudioBus* destination, const Aud
         totalGain[k] = calculateDistanceConeGain(pannerPosition, orientation, listenerPosition);
     }
 
-    m_panner->panWithSampleAccurateValues(azimuth, elevation, source, destination, framesToProcess);
+    m_panner->panWithSampleAccurateValues(azimuth, elevation, source, destination, framesToProcess, internalChannelInterpretation());
     destination->copyWithSampleAccurateGainValuesFrom(*destination, totalGain, framesToProcess);
 }
 
@@ -280,33 +272,37 @@ String PannerHandler::panningModel() const
 
 void PannerHandler::setPanningModel(const String& model)
 {
+    // WebIDL should guarantee that we are never called with an invalid string
+    // for the model.
     if (model == "equalpower")
         setPanningModel(Panner::PanningModelEqualPower);
     else if (model == "HRTF")
         setPanningModel(Panner::PanningModelHRTF);
+    else
+        NOTREACHED();
 }
 
+// This method should only be called from setPanningModel(const String&)!
 bool PannerHandler::setPanningModel(unsigned model)
 {
     DEFINE_STATIC_LOCAL(EnumerationHistogram, panningModelHistogram,
         ("WebAudio.PannerNode.PanningModel", 2));
     panningModelHistogram.count(model);
 
-    switch (model) {
-    case Panner::PanningModelEqualPower:
-    case Panner::PanningModelHRTF:
-        if (!m_panner.get() || model != m_panningModel) {
-            // This synchronizes with process().
-            MutexLocker processLocker(m_processLock);
-            m_panner = Panner::create(model, sampleRate(), listener()->hrtfDatabaseLoader());
-            m_panningModel = model;
-        }
-        break;
-    default:
-        ASSERT_NOT_REACHED();
-        return false;
+    if (model == Panner::PanningModelHRTF) {
+        // Load the HRTF database asynchronously so we don't block the
+        // Javascript thread while creating the HRTF database. It's ok to call
+        // this multiple times; we won't be constantly loading the database over
+        // and over.
+        listener()->createAndLoadHRTFDatabaseLoader(context()->sampleRate());
     }
 
+    if (!m_panner.get() || model != m_panningModel) {
+        // This synchronizes with process().
+        MutexLocker processLocker(m_processLock);
+        m_panner = Panner::create(model, sampleRate(), listener()->hrtfDatabaseLoader());
+        m_panningModel = model;
+    }
     return true;
 }
 
@@ -518,7 +514,7 @@ float PannerHandler::calculateDistanceConeGain(
 
 void PannerHandler::azimuthElevation(double* outAzimuth, double* outElevation)
 {
-    ASSERT(context()->isAudioThread());
+    DCHECK(context()->isAudioThread());
 
     // Calculate new azimuth and elevation if the panner or the listener changed
     // position or orientation in any way.
@@ -539,7 +535,7 @@ void PannerHandler::azimuthElevation(double* outAzimuth, double* outElevation)
 
 float PannerHandler::distanceConeGain()
 {
-    ASSERT(context()->isAudioThread());
+    DCHECK(context()->isAudioThread());
 
     // Calculate new distance and cone gain if the panner or the listener
     // changed position or orientation in any way.
@@ -562,8 +558,8 @@ void PannerHandler::markPannerAsDirty(unsigned dirty)
 
 void PannerHandler::setChannelCount(unsigned long channelCount, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     // A PannerNode only supports 1 or 2 channels
     if (channelCount > 0 && channelCount <= 2) {
@@ -587,8 +583,8 @@ void PannerHandler::setChannelCount(unsigned long channelCount, ExceptionState& 
 
 void PannerHandler::setChannelCountMode(const String& mode, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     ChannelCountMode oldMode = m_channelCountMode;
 
@@ -640,7 +636,7 @@ void PannerHandler::updateDirtyState()
 }
 // ----------------------------------------------------------------
 
-PannerNode::PannerNode(AbstractAudioContext& context)
+PannerNode::PannerNode(BaseAudioContext& context)
     : AudioNode(context)
     , m_positionX(AudioParam::create(context, ParamTypePannerPositionX, 0.0))
     , m_positionY(AudioParam::create(context, ParamTypePannerPositionY, 0.0))
@@ -660,7 +656,7 @@ PannerNode::PannerNode(AbstractAudioContext& context)
         m_orientationZ->handler()));
 }
 
-PannerNode* PannerNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+PannerNode* PannerNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 

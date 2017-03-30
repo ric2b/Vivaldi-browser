@@ -74,13 +74,18 @@ public:
     void handleEvent(ExecutionContext*, Event*) final;
     virtual void handleEvent(ScriptState*, Event*);
 
+    v8::Local<v8::Value> getListenerOrNull(v8::Isolate* isolate, ExecutionContext* executionContext)
+    {
+        v8::Local<v8::Object> listener = getListenerObject(executionContext);
+        return listener.IsEmpty() ? v8::Null(isolate).As<v8::Value>() : listener.As<v8::Value>();
+    }
+
     // Returns the listener object, either a function or an object, or the empty
     // handle if the user script is not compilable.  No exception will be thrown
     // even if the user script is not compilable.
     v8::Local<v8::Object> getListenerObject(ExecutionContext* executionContext)
     {
-        prepareListenerObject(executionContext);
-        return m_listener.newLocal(m_isolate);
+        return getListenerObjectInternal(executionContext);
     }
 
     v8::Local<v8::Object> getExistingListenerObject()
@@ -113,7 +118,10 @@ public:
 protected:
     V8AbstractEventListener(bool isAttribute, DOMWrapperWorld&, v8::Isolate*);
 
-    virtual void prepareListenerObject(ExecutionContext*) { }
+    virtual v8::Local<v8::Object> getListenerObjectInternal(ExecutionContext* executionContext)
+    {
+        return getExistingListenerObject();
+    }
 
     void setListenerObject(v8::Local<v8::Object>);
 

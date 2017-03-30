@@ -7,12 +7,12 @@
 namespace ntp_tiles {
 namespace prefs {
 
-// Ordered list of website suggestions shown on the new tab page that will allow
-// retaining the order even if the suggestions change over time.
-const char kNTPSuggestionsURL[] = "ntp.suggestions_url";
+const char kDeprecatedNTPTilesURL[] = "ntp.suggestions_url";
+const char kDeprecatedNTPTilesIsPersonal[] = "ntp.suggestions_is_personal";
 
-// Whether the suggestion was derived from personal data.
-const char kNTPSuggestionsIsPersonal[] = "ntp.suggestions_is_personal";
+// The number of personal tiles we had previously. Used to figure out
+// whether we need popular sites.
+const char kNumPersonalTiles[] = "ntp.num_personal_suggestions";
 
 // If set, overrides the URL for popular sites, including the individual
 // overrides for country and version below.

@@ -1,3 +1,5 @@
+{% filter format_blink_cpp_source_code %}
+
 {% include 'copyright_block.txt' %}
 #ifndef {{cpp_class}}_h
 #define {{cpp_class}}_h
@@ -8,7 +10,7 @@
 
 namespace blink {
 
-{# FIXME: Add "final" if this class doesn't have subclasses #}
+{# FIXME: Add "final" if this class doesn\'t have subclasses #}
 class {{exported}}{{cpp_class}}{% if parent_cpp_class %} : public {{parent_cpp_class}}{% endif %} {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
@@ -24,6 +26,7 @@ public:
     {% endif %}
 
     {% endfor %}
+    v8::Local<v8::Value> toV8Impl(v8::Local<v8::Object>, v8::Isolate*) const override;
     DECLARE_VIRTUAL_TRACE();
 
 private:
@@ -37,3 +40,5 @@ private:
 } // namespace blink
 
 #endif // {{cpp_class}}_h
+
+{% endfilter %}{# format_blink_cpp_source_code #}

@@ -31,7 +31,6 @@
 #include "core/fetch/RawResource.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "platform/Logging.h"
 #include "platform/SharedBuffer.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
@@ -50,7 +49,7 @@ TextTrackLoader::~TextTrackLoader()
 {
 }
 
-void TextTrackLoader::cueLoadTimerFired(Timer<TextTrackLoader>* timer)
+void TextTrackLoader::cueLoadTimerFired(TimerBase* timer)
 {
     ASSERT_UNUSED(timer, timer == &m_cueLoadTimer);
 
@@ -65,6 +64,18 @@ void TextTrackLoader::cueLoadTimerFired(Timer<TextTrackLoader>* timer)
 
 void TextTrackLoader::cancelLoad()
 {
+    clearResource();
+}
+
+void TextTrackLoader::redirectReceived(Resource* resource, ResourceRequest& request, const ResourceResponse&)
+{
+    DCHECK_EQ(this->resource(), resource);
+    if (resource->options().corsEnabled == IsCORSEnabled || document().getSecurityOrigin()->canRequestNoSuborigin(request.url()))
+        return;
+
+    corsPolicyPreventedLoad(document().getSecurityOrigin(), request.url());
+    if (!m_cueLoadTimer.isActive())
+        m_cueLoadTimer.startOneShot(0, BLINK_FROM_HERE);
     clearResource();
 }
 

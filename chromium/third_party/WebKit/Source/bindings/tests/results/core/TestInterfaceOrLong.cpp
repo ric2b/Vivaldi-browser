@@ -12,6 +12,7 @@
 #include "bindings/tests/idls/core/TestImplements3Implementation.h"
 #include "bindings/tests/idls/core/TestInterfacePartial.h"
 #include "bindings/tests/idls/core/TestInterfacePartial2Implementation.h"
+#include "bindings/tests/idls/core/TestInterfacePartialSecureContext.h"
 
 namespace blink {
 
@@ -98,7 +99,6 @@ void V8TestInterfaceOrLong::toImpl(v8::Isolate* isolate, v8::Local<v8::Value> v8
         impl.setLong(cppValue);
         return;
     }
-
 }
 
 v8::Local<v8::Value> toV8(const TestInterfaceOrLong& impl, v8::Local<v8::Object> creationContext, v8::Isolate* isolate)

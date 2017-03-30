@@ -119,128 +119,6 @@ static bool parentStyleForcesZIndexToCreateStackingContext(const ComputedStyle& 
     return parentStyle.isDisplayFlexibleOrGridBox();
 }
 
-static bool hasWillChangeThatCreatesStackingContext(const ComputedStyle& style)
-{
-    for (size_t i = 0; i < style.willChangeProperties().size(); ++i) {
-        switch (style.willChangeProperties()[i]) {
-        case CSSPropertyOpacity:
-        case CSSPropertyTransform:
-        case CSSPropertyAliasWebkitTransform:
-        case CSSPropertyTransformStyle:
-        case CSSPropertyAliasWebkitTransformStyle:
-        case CSSPropertyPerspective:
-        case CSSPropertyAliasWebkitPerspective:
-        case CSSPropertyWebkitMask:
-        case CSSPropertyWebkitMaskBoxImage:
-        case CSSPropertyWebkitClipPath:
-        case CSSPropertyWebkitBoxReflect:
-        case CSSPropertyFilter:
-        case CSSPropertyAliasWebkitFilter:
-        case CSSPropertyBackdropFilter:
-        case CSSPropertyZIndex:
-        case CSSPropertyPosition:
-        case CSSPropertyMixBlendMode:
-        case CSSPropertyIsolation:
-            return true;
-        default:
-            break;
-        }
-    }
-    return false;
-}
-
-void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyle& parentStyle, Element* element)
-{
-    if (style.display() != NONE) {
-        if (element && element->isHTMLElement())
-            adjustStyleForHTMLElement(style, parentStyle, toHTMLElement(*element));
-
-        // Per the spec, position 'static' and 'relative' in the top layer compute to 'absolute'.
-        if (isInTopLayer(element, style) && (style.position() == StaticPosition || style.position() == RelativePosition))
-            style.setPosition(AbsolutePosition);
-
-        // Absolute/fixed positioned elements, floating elements and the document element need block-like outside display.
-        if (style.hasOutOfFlowPosition() || style.isFloating() || (element && element->document().documentElement() == element))
-            style.setDisplay(equivalentBlockDisplay(style.display()));
-
-        // We don't adjust the first letter style earlier because we may change the display setting in
-        // adjustStyeForTagName() above.
-        adjustStyleForFirstLetter(style);
-
-        adjustStyleForDisplay(style, parentStyle, element ? &element->document() : 0);
-
-        // Paint containment forces a block formatting context, so we must coerce from inline.
-        // https://drafts.csswg.org/css-containment/#containment-paint
-        if (style.containsPaint() && style.display() == INLINE)
-            style.setDisplay(BLOCK);
-    } else {
-        adjustStyleForFirstLetter(style);
-    }
-
-    if (element && element->hasCompositorProxy())
-        style.setHasCompositorProxy(true);
-
-    // Make sure our z-index value is only applied if the object is positioned.
-    if (style.position() == StaticPosition && !parentStyleForcesZIndexToCreateStackingContext(parentStyle))
-        style.setHasAutoZIndex();
-
-    if (style.overflowX() != OverflowVisible || style.overflowY() != OverflowVisible)
-        adjustOverflow(style);
-
-    // Auto z-index becomes 0 for the root element and transparent objects. This prevents
-    // cases where objects that should be blended as a single unit end up with a non-transparent
-    // object wedged in between them. Auto z-index also becomes 0 for objects that specify transforms/masks/reflections.
-    if (style.hasAutoZIndex() && ((element && element->document().documentElement() == element)
-        || style.hasOpacity()
-        || style.hasTransformRelatedProperty()
-        || style.hasMask()
-        || style.clipPath()
-        || style.boxReflect()
-        || style.hasFilterInducingProperty()
-        || style.hasBlendMode()
-        || style.hasIsolation()
-        || style.hasViewportConstrainedPosition()
-        || isInTopLayer(element, style)
-        || hasWillChangeThatCreatesStackingContext(style)
-        || style.containsPaint()))
-        style.setZIndex(0);
-
-    if (doesNotInheritTextDecoration(style, element))
-        style.clearAppliedTextDecorations();
-
-    style.applyTextDecorations();
-
-    // Cull out any useless layers and also repeat patterns into additional layers.
-    style.adjustBackgroundLayers();
-    style.adjustMaskLayers();
-
-    // Let the theme also have a crack at adjusting the style.
-    if (style.hasAppearance())
-        LayoutTheme::theme().adjustStyle(style, element);
-
-    // If we have first-letter pseudo style, transitions, or animations, do not share this style.
-    if (style.hasPseudoStyle(PseudoIdFirstLetter) || style.transitions() || style.animations())
-        style.setUnique();
-
-    adjustStyleForEditing(style);
-
-    bool isSVGElement = element && element->isSVGElement();
-    if (isSVGElement) {
-        // Only the root <svg> element in an SVG document fragment tree honors css position
-        if (!(isSVGSVGElement(*element) && element->parentNode() && !element->parentNode()->isSVGElement()))
-            style.setPosition(ComputedStyle::initialPosition());
-
-        // SVG text layout code expects us to be a block-level style element.
-        if ((isSVGForeignObjectElement(*element) || isSVGTextElement(*element)) && style.isDisplayInlineType())
-            style.setDisplay(BLOCK);
-
-        // Columns don't apply to svg text elements.
-        if (isSVGTextElement(*element))
-            style.clearMultiCol();
-    }
-    adjustStyleForAlignment(style, parentStyle);
-}
-
 void StyleAdjuster::adjustStyleForEditing(ComputedStyle& style)
 {
     if (style.userModify() != READ_WRITE_PLAINTEXT_ONLY)
@@ -254,7 +132,7 @@ void StyleAdjuster::adjustStyleForEditing(ComputedStyle& style)
         style.setWhiteSpace(PRE_WRAP);
 }
 
-void StyleAdjuster::adjustStyleForFirstLetter(ComputedStyle& style)
+static void adjustStyleForFirstLetter(ComputedStyle& style)
 {
     if (style.styleType() != PseudoIdFirstLetter)
         return;
@@ -268,41 +146,34 @@ void StyleAdjuster::adjustStyleForFirstLetter(ComputedStyle& style)
 
 void StyleAdjuster::adjustStyleForAlignment(ComputedStyle& style, const ComputedStyle& parentStyle)
 {
-    bool isFlexOrGrid = style.isDisplayFlexibleOrGridBox();
-    bool absolutePositioned = style.position() == AbsolutePosition;
+    // To avoid needing to copy the RareNonInheritedData, we repurpose the 'auto' flag
+    // to not just mean 'auto' prior to running the StyleAdjuster but also mean 'normal'
+    // after running it.
 
-    // If the inherited value of justify-items includes the legacy keyword, 'auto'
+    // If the inherited value of justify-items includes the 'legacy' keyword, 'auto'
     // computes to the the inherited value.
-    // Otherwise, auto computes to:
-    //  - 'stretch' for flex containers and grid containers.
-    //  - 'start' for everything else.
+    // Otherwise, 'auto' computes to 'normal'.
     if (style.justifyItemsPosition() == ItemPositionAuto) {
         if (parentStyle.justifyItemsPositionType() == LegacyPosition)
             style.setJustifyItems(parentStyle.justifyItems());
-        else if (isFlexOrGrid)
-            style.setJustifyItemsPosition(ItemPositionStretch);
     }
 
-    // The 'auto' keyword computes to 'stretch' on absolutely-positioned elements,
-    // and to the computed value of justify-items on the parent (minus
-    // any legacy keywords) on all other boxes.
+    // The 'auto' keyword computes the computed value of justify-items on the parent (minus
+    // any legacy keywords), or 'normal' if the box has no parent.
     if (style.justifySelfPosition() == ItemPositionAuto) {
-        if (absolutePositioned)
-            style.setJustifySelfPosition(ItemPositionStretch);
-        else
+        if (parentStyle.justifyItemsPositionType() == LegacyPosition)
+            style.setJustifySelfPosition(parentStyle.justifyItemsPosition());
+        else if (parentStyle.justifyItemsPosition() != ItemPositionAuto)
             style.setJustifySelf(parentStyle.justifyItems());
     }
 
-    // The 'auto' keyword computes to:
-    //  - 'stretch' for flex containers and grid containers,
-    //  - 'start' for everything else.
-    if (style.alignItemsPosition() == ItemPositionAuto) {
-        if (isFlexOrGrid)
-            style.setAlignItemsPosition(ItemPositionStretch);
-    }
+    // The 'auto' keyword computes the computed value of align-items on the parent
+    // or 'normal' if the box has no parent.
+    if (style.alignSelfPosition() == ItemPositionAuto && parentStyle.alignItemsPosition() != ComputedStyle::initialDefaultAlignment().position())
+        style.setAlignSelf(parentStyle.alignItems());
 }
 
-void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const ComputedStyle& parentStyle, HTMLElement& element)
+static void adjustStyleForHTMLElement(ComputedStyle& style, const ComputedStyle& parentStyle, HTMLElement& element)
 {
     // <div> and <span> are the most common elements on the web, we skip all the work for them.
     if (isHTMLDivElement(element) || isHTMLSpanElement(element))
@@ -371,7 +242,7 @@ void StyleAdjuster::adjustStyleForHTMLElement(ComputedStyle& style, const Comput
     }
 }
 
-void StyleAdjuster::adjustOverflow(ComputedStyle& style)
+static void adjustOverflow(ComputedStyle& style)
 {
     ASSERT(style.overflowX() != OverflowVisible || style.overflowY() != OverflowVisible);
 
@@ -408,7 +279,7 @@ void StyleAdjuster::adjustOverflow(ComputedStyle& style)
     }
 }
 
-void StyleAdjuster::adjustStyleForDisplay(ComputedStyle& style, const ComputedStyle& parentStyle, Document* document)
+static void adjustStyleForDisplay(ComputedStyle& style, const ComputedStyle& parentStyle, Document* document)
 {
     if (style.display() == BLOCK && !style.isFloating())
         return;
@@ -456,6 +327,87 @@ void StyleAdjuster::adjustStyleForDisplay(ComputedStyle& style, const ComputedSt
         if (style.marginBefore().hasPercent() || style.marginAfter().hasPercent())
             UseCounter::count(document, UseCounter::FlexboxPercentageMarginVertical);
     }
+}
+
+void StyleAdjuster::adjustComputedStyle(ComputedStyle& style, const ComputedStyle& parentStyle, Element* element)
+{
+    if (style.display() != NONE) {
+        if (element && element->isHTMLElement())
+            adjustStyleForHTMLElement(style, parentStyle, toHTMLElement(*element));
+
+        // Per the spec, position 'static' and 'relative' in the top layer compute to 'absolute'.
+        if (isInTopLayer(element, style) && (style.position() == StaticPosition || style.position() == RelativePosition))
+            style.setPosition(AbsolutePosition);
+
+        // Absolute/fixed positioned elements, floating elements and the document element need block-like outside display.
+        if (style.hasOutOfFlowPosition() || style.isFloating() || (element && element->document().documentElement() == element))
+            style.setDisplay(equivalentBlockDisplay(style.display()));
+
+        // We don't adjust the first letter style earlier because we may change the display setting in
+        // adjustStyeForTagName() above.
+        adjustStyleForFirstLetter(style);
+
+        adjustStyleForDisplay(style, parentStyle, element ? &element->document() : 0);
+
+        // Paint containment forces a block formatting context, so we must coerce from inline.
+        // https://drafts.csswg.org/css-containment/#containment-paint
+        if (style.containsPaint() && style.display() == INLINE)
+            style.setDisplay(BLOCK);
+    } else {
+        adjustStyleForFirstLetter(style);
+    }
+
+    if (element && element->hasCompositorProxy())
+        style.setHasCompositorProxy(true);
+
+    // Make sure our z-index value is only applied if the object is positioned.
+    if (style.position() == StaticPosition && !parentStyleForcesZIndexToCreateStackingContext(parentStyle)) {
+        style.setIsStackingContext(false);
+        // TODO(alancutter): Avoid altering z-index here.
+        if (!style.hasAutoZIndex())
+            style.setZIndex(0);
+    } else if (!style.hasAutoZIndex()) {
+        style.setIsStackingContext(true);
+    }
+
+    if (style.overflowX() != OverflowVisible || style.overflowY() != OverflowVisible)
+        adjustOverflow(style);
+
+    if (doesNotInheritTextDecoration(style, element))
+        style.clearAppliedTextDecorations();
+    else
+        style.restoreParentTextDecorations(parentStyle);
+    style.applyTextDecorations();
+
+    // Cull out any useless layers and also repeat patterns into additional layers.
+    style.adjustBackgroundLayers();
+    style.adjustMaskLayers();
+
+    // Let the theme also have a crack at adjusting the style.
+    if (style.hasAppearance())
+        LayoutTheme::theme().adjustStyle(style, element);
+
+    // If we have first-letter pseudo style, transitions, or animations, do not share this style.
+    if (style.hasPseudoStyle(PseudoIdFirstLetter) || style.transitions() || style.animations())
+        style.setUnique();
+
+    adjustStyleForEditing(style);
+
+    bool isSVGElement = element && element->isSVGElement();
+    if (isSVGElement) {
+        // Only the root <svg> element in an SVG document fragment tree honors css position
+        if (!(isSVGSVGElement(*element) && element->parentNode() && !element->parentNode()->isSVGElement()))
+            style.setPosition(ComputedStyle::initialPosition());
+
+        // SVG text layout code expects us to be a block-level style element.
+        if ((isSVGForeignObjectElement(*element) || isSVGTextElement(*element)) && style.isDisplayInlineType())
+            style.setDisplay(BLOCK);
+
+        // Columns don't apply to svg text elements.
+        if (isSVGTextElement(*element))
+            style.clearMultiCol();
+    }
+    adjustStyleForAlignment(style, parentStyle);
 }
 
 } // namespace blink

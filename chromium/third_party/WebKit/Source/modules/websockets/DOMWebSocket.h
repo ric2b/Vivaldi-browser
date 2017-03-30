@@ -49,6 +49,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
 #include <memory>
+#include <stddef.h>
 #include <stdint.h>
 
 namespace blink {
@@ -73,10 +74,10 @@ public:
     ~DOMWebSocket() override;
 
     enum State {
-        CONNECTING = 0,
-        OPEN = 1,
-        CLOSING = 2,
-        CLOSED = 3
+        kConnecting = 0,
+        kOpen = 1,
+        kClosing = 2,
+        kClosed = 3
     };
 
     void connect(const String& url, const Vector<String>& protocols, ExceptionState&);
@@ -120,7 +121,7 @@ public:
     void resume() override;
     void stop() override;
 
-    // ActiveScriptWrappable
+    // ScriptWrappable functions.
     // Prevent this instance from being collected while it's not in CLOSED
     // state.
     bool hasPendingActivity() const final;
@@ -176,7 +177,7 @@ private:
         // Dispatches queued events if this queue is active.
         // Does nothing otherwise.
         void dispatchQueuedEvents();
-        void resumeTimerFired(Timer<EventQueue>*);
+        void resumeTimerFired(TimerBase*);
 
         State m_state;
         Member<EventTarget> m_target;
@@ -199,6 +200,11 @@ private:
         WebSocketReceiveTypeMax,
     };
 
+    enum BinaryType {
+        BinaryTypeBlob,
+        BinaryTypeArrayBuffer
+    };
+
     // This function is virtual for unittests.
     // FIXME: Move WebSocketChannel::create here.
     virtual WebSocketChannel* createChannel(ExecutionContext* context, WebSocketChannelClient* client)
@@ -217,16 +223,16 @@ private:
     // Updates m_bufferedAmountAfterClose given the amount of data passed to
     // send() method after the state changed to CLOSING or CLOSED.
     void updateBufferedAmountAfterClose(uint64_t);
-    void reflectBufferedAmountConsumption(Timer<DOMWebSocket>*);
+    void reflectBufferedAmountConsumption(TimerBase*);
 
     void releaseChannel();
     void recordSendTypeHistogram(WebSocketSendType);
+    void recordSendMessageSizeHistogram(WebSocketSendType, size_t);
     void recordReceiveTypeHistogram(WebSocketReceiveType);
+    void recordReceiveMessageSizeHistogram(WebSocketReceiveType, size_t);
 
-    enum BinaryType {
-        BinaryTypeBlob,
-        BinaryTypeArrayBuffer
-    };
+    void setBinaryTypeInternal(BinaryType);
+    void logBinaryTypeChangesAfterOpen();
 
     Member<WebSocketChannel> m_channel;
 
@@ -238,6 +244,7 @@ private:
     uint64_t m_consumedBufferedAmount;
     uint64_t m_bufferedAmountAfterClose;
     BinaryType m_binaryType;
+    int m_binaryTypeChangesAfterOpen;
     // The subprotocol the server selected.
     String m_subprotocol;
     String m_extensions;

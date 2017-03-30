@@ -4,26 +4,22 @@
 
 #include "base/power_monitor/power_monitor_device_source.h"
 
-#include "base/time/time.h"
-#include "build/build_config.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace base {
 
-#if defined(ENABLE_BATTERY_MONITORING)
-// The amount of time (in ms) to wait before running the initial
-// battery check.
-static int kDelayedBatteryCheckMs = 10 * 1000;
-#endif  // defined(ENABLE_BATTERY_MONITORING)
-
 PowerMonitorDeviceSource::PowerMonitorDeviceSource() {
-  DCHECK(MessageLoop::current());
-#if defined(ENABLE_BATTERY_MONITORING)
-  delayed_battery_check_.Start(FROM_HERE,
-      base::TimeDelta::FromMilliseconds(kDelayedBatteryCheckMs), this,
-      &PowerMonitorDeviceSource::BatteryCheck);
-#endif  // defined(ENABLE_BATTERY_MONITORING)
+  DCHECK(ThreadTaskRunnerHandle::IsSet());
+
 #if defined(OS_MACOSX)
   PlatformInit();
+#endif
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // Provide the correct battery status if possible. Others platforms, such as
+  // Android and ChromeOS, will update their status once their backends are
+  // actually initialized.
+  SetInitialOnBatteryPowerState(IsOnBatteryPowerImpl());
 #endif
 }
 
@@ -31,10 +27,6 @@ PowerMonitorDeviceSource::~PowerMonitorDeviceSource() {
 #if defined(OS_MACOSX)
   PlatformDestroy();
 #endif
-}
-
-void PowerMonitorDeviceSource::BatteryCheck() {
-  ProcessPowerEvent(PowerMonitorSource::POWER_STATE_EVENT);
 }
 
 }  // namespace base

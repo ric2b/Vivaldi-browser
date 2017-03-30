@@ -130,7 +130,7 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
   // FFmpeg expects the initialize allocation to be zero-initialized.  Failure
   // to do so can lead to unitialized value usage.  See http://crbug.com/390941
   scoped_refptr<VideoFrame> video_frame = frame_pool_.CreateFrame(
-      format, coded_size, gfx::Rect(size), natural_size, kNoTimestamp());
+      format, coded_size, gfx::Rect(size), natural_size, kNoTimestamp);
 
   // Prefer the color space from the codec context. If it's not specified (or is
   // set to an unsupported value), fall back on the value from the config.
@@ -140,6 +140,18 @@ int FFmpegVideoDecoder::GetVideoBuffer(struct AVCodecContext* codec_context,
     color_space = config_.color_space();
   video_frame->metadata()->SetInteger(VideoFrameMetadata::COLOR_SPACE,
                                       color_space);
+
+  if (codec_context->color_primaries != AVCOL_PRI_UNSPECIFIED ||
+      codec_context->color_trc != AVCOL_TRC_UNSPECIFIED ||
+      codec_context->colorspace != AVCOL_SPC_UNSPECIFIED) {
+    video_frame->set_color_space(gfx::ColorSpace(
+        static_cast<gfx::ColorSpace::PrimaryID>(codec_context->color_primaries),
+        static_cast<gfx::ColorSpace::TransferID>(codec_context->color_trc),
+        static_cast<gfx::ColorSpace::MatrixID>(codec_context->colorspace),
+        codec_context->color_range != AVCOL_RANGE_MPEG
+            ? gfx::ColorSpace::RangeID::FULL
+            : gfx::ColorSpace::RangeID::LIMITED));
+  }
 
   for (size_t i = 0; i < VideoFrame::NumPlanes(video_frame->format()); i++) {
     frame->data[i] = video_frame->data(i);

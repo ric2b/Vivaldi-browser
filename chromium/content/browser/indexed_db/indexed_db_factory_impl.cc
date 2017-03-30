@@ -36,7 +36,7 @@ IndexedDBFactoryImpl::~IndexedDBFactoryImpl() {
 
 void IndexedDBFactoryImpl::RemoveDatabaseFromMaps(
     const IndexedDBDatabase::Identifier& identifier) {
-  IndexedDBDatabaseMap::iterator it = database_map_.find(identifier);
+  const auto& it = database_map_.find(identifier);
   DCHECK(it != database_map_.end());
   IndexedDBDatabase* database = it->second;
   database_map_.erase(it);
@@ -68,8 +68,7 @@ void IndexedDBFactoryImpl::ReleaseDatabase(
 void IndexedDBFactoryImpl::ReleaseBackingStore(const Origin& origin,
                                                bool immediate) {
   if (immediate) {
-    IndexedDBBackingStoreMap::iterator it =
-        backing_stores_with_active_blobs_.find(origin);
+    const auto& it = backing_stores_with_active_blobs_.find(origin);
     if (it != backing_stores_with_active_blobs_.end()) {
       it->second->active_blob_registry()->ForceShutdown();
       backing_stores_with_active_blobs_.erase(it);
@@ -104,7 +103,7 @@ void IndexedDBFactoryImpl::MaybeCloseBackingStore(const Origin& origin) {
 }
 
 void IndexedDBFactoryImpl::CloseBackingStore(const Origin& origin) {
-  IndexedDBBackingStoreMap::iterator it = backing_store_map_.find(origin);
+  const auto& it = backing_store_map_.find(origin);
   DCHECK(it != backing_store_map_.end());
   // Stop the timer (if it's running) - this may happen if the timer was started
   // and then a forced close occurs.
@@ -117,8 +116,7 @@ bool IndexedDBFactoryImpl::HasLastBackingStoreReference(
   IndexedDBBackingStore* ptr;
   {
     // Scope so that the implicit scoped_refptr<> is freed.
-    IndexedDBBackingStoreMap::const_iterator it =
-        backing_store_map_.find(origin);
+    const auto& it = backing_store_map_.find(origin);
     DCHECK(it != backing_store_map_.end());
     ptr = it->second.get();
   }
@@ -156,14 +154,13 @@ void IndexedDBFactoryImpl::ReportOutstandingBlobs(const Origin& origin,
     return;
   if (blobs_outstanding) {
     DCHECK(!backing_stores_with_active_blobs_.count(origin));
-    IndexedDBBackingStoreMap::iterator it = backing_store_map_.find(origin);
+    const auto& it = backing_store_map_.find(origin);
     if (it != backing_store_map_.end())
       backing_stores_with_active_blobs_.insert(*it);
     else
       DCHECK(false);
   } else {
-    IndexedDBBackingStoreMap::iterator it =
-        backing_stores_with_active_blobs_.find(origin);
+    const auto& it = backing_stores_with_active_blobs_.find(origin);
     if (it != backing_stores_with_active_blobs_.end()) {
       backing_stores_with_active_blobs_.erase(it);
       ReleaseBackingStore(origin, false /* immediate */);
@@ -175,17 +172,16 @@ void IndexedDBFactoryImpl::GetDatabaseNames(
     scoped_refptr<IndexedDBCallbacks> callbacks,
     const Origin& origin,
     const base::FilePath& data_directory,
-    net::URLRequestContext* request_context) {
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter) {
   IDB_TRACE("IndexedDBFactoryImpl::GetDatabaseNames");
   // TODO(dgrogan): Plumb data_loss back to script eventually?
-  blink::WebIDBDataLoss data_loss;
-  std::string data_loss_message;
+  IndexedDBDataLossInfo data_loss_info;
   bool disk_full;
   leveldb::Status s;
   // TODO(cmumford): Handle this error
   scoped_refptr<IndexedDBBackingStore> backing_store =
-      OpenBackingStore(origin, data_directory, request_context, &data_loss,
-                       &data_loss_message, &disk_full, &s);
+      OpenBackingStore(origin, data_directory, request_context_getter,
+                       &data_loss_info, &disk_full, &s);
   if (!backing_store.get()) {
     callbacks->OnError(
         IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionUnknownError,
@@ -213,13 +209,13 @@ void IndexedDBFactoryImpl::GetDatabaseNames(
 
 void IndexedDBFactoryImpl::DeleteDatabase(
     const base::string16& name,
-    net::URLRequestContext* request_context,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
     scoped_refptr<IndexedDBCallbacks> callbacks,
     const Origin& origin,
     const base::FilePath& data_directory) {
   IDB_TRACE("IndexedDBFactoryImpl::DeleteDatabase");
   IndexedDBDatabase::Identifier unique_identifier(origin, name);
-  IndexedDBDatabaseMap::iterator it = database_map_.find(unique_identifier);
+  const auto& it = database_map_.find(unique_identifier);
   if (it != database_map_.end()) {
     // If there are any connections to the database, directly delete the
     // database.
@@ -228,13 +224,12 @@ void IndexedDBFactoryImpl::DeleteDatabase(
   }
 
   // TODO(dgrogan): Plumb data_loss back to script eventually?
-  blink::WebIDBDataLoss data_loss;
-  std::string data_loss_message;
+  IndexedDBDataLossInfo data_loss_info;
   bool disk_full = false;
   leveldb::Status s;
   scoped_refptr<IndexedDBBackingStore> backing_store =
-      OpenBackingStore(origin, data_directory, request_context, &data_loss,
-                       &data_loss_message, &disk_full, &s);
+      OpenBackingStore(origin, data_directory, request_context_getter,
+                       &data_loss_info, &disk_full, &s);
   if (!backing_store.get()) {
     IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,
                                  ASCIIToUTF16(
@@ -259,7 +254,7 @@ void IndexedDBFactoryImpl::DeleteDatabase(
       HandleBackingStoreCorruption(origin, error);
     return;
   }
-  if (!ContainsValue(names, name)) {
+  if (!base::ContainsValue(names, name)) {
     const int64_t version = 0;
     callbacks->OnSuccess(version);
     backing_store = NULL;
@@ -338,7 +333,7 @@ bool IndexedDBFactoryImpl::IsBackingStoreOpen(const Origin& origin) const {
 
 bool IndexedDBFactoryImpl::IsBackingStorePendingClose(
     const Origin& origin) const {
-  IndexedDBBackingStoreMap::const_iterator it = backing_store_map_.find(origin);
+  const auto& it = backing_store_map_.find(origin);
   if (it == backing_store_map_.end())
     return false;
   return it->second->close_timer()->IsRunning();
@@ -348,28 +343,26 @@ scoped_refptr<IndexedDBBackingStore>
 IndexedDBFactoryImpl::OpenBackingStoreHelper(
     const Origin& origin,
     const base::FilePath& data_directory,
-    net::URLRequestContext* request_context,
-    blink::WebIDBDataLoss* data_loss,
-    std::string* data_loss_message,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    IndexedDBDataLossInfo* data_loss_info,
     bool* disk_full,
     bool first_time,
     leveldb::Status* status) {
   return IndexedDBBackingStore::Open(
-      this, origin, data_directory, request_context, data_loss,
-      data_loss_message, disk_full, context_->TaskRunner(), first_time, status);
+      this, origin, data_directory, request_context_getter, data_loss_info,
+      disk_full, context_->TaskRunner(), first_time, status);
 }
 
 scoped_refptr<IndexedDBBackingStore> IndexedDBFactoryImpl::OpenBackingStore(
     const Origin& origin,
     const base::FilePath& data_directory,
-    net::URLRequestContext* request_context,
-    blink::WebIDBDataLoss* data_loss,
-    std::string* data_loss_message,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    IndexedDBDataLossInfo* data_loss_info,
     bool* disk_full,
     leveldb::Status* status) {
   const bool open_in_memory = data_directory.empty();
 
-  IndexedDBBackingStoreMap::iterator it2 = backing_store_map_.find(origin);
+  const auto& it2 = backing_store_map_.find(origin);
   if (it2 != backing_store_map_.end()) {
     it2->second->close_timer()->Stop();
     return it2->second;
@@ -383,9 +376,9 @@ scoped_refptr<IndexedDBBackingStore> IndexedDBFactoryImpl::OpenBackingStore(
   } else {
     first_time = !backends_opened_since_boot_.count(origin);
 
-    backing_store = OpenBackingStoreHelper(
-        origin, data_directory, request_context, data_loss, data_loss_message,
-        disk_full, first_time, status);
+    backing_store =
+        OpenBackingStoreHelper(origin, data_directory, request_context_getter,
+                               data_loss_info, disk_full, first_time, status);
   }
 
   if (backing_store.get()) {
@@ -406,39 +399,37 @@ scoped_refptr<IndexedDBBackingStore> IndexedDBFactoryImpl::OpenBackingStore(
   return 0;
 }
 
-void IndexedDBFactoryImpl::Open(const base::string16& name,
-                                const IndexedDBPendingConnection& connection,
-                                net::URLRequestContext* request_context,
-                                const Origin& origin,
-                                const base::FilePath& data_directory) {
+void IndexedDBFactoryImpl::Open(
+    const base::string16& name,
+    std::unique_ptr<IndexedDBPendingConnection> connection,
+    scoped_refptr<net::URLRequestContextGetter> request_context_getter,
+    const Origin& origin,
+    const base::FilePath& data_directory) {
   IDB_TRACE("IndexedDBFactoryImpl::Open");
   scoped_refptr<IndexedDBDatabase> database;
   IndexedDBDatabase::Identifier unique_identifier(origin, name);
-  IndexedDBDatabaseMap::iterator it = database_map_.find(unique_identifier);
-  blink::WebIDBDataLoss data_loss =
-      blink::WebIDBDataLossNone;
-  std::string data_loss_message;
+  const auto& it = database_map_.find(unique_identifier);
+  IndexedDBDataLossInfo data_loss_info;
   bool disk_full = false;
   bool was_open = (it != database_map_.end());
   if (!was_open) {
     leveldb::Status s;
     scoped_refptr<IndexedDBBackingStore> backing_store =
-        OpenBackingStore(origin, data_directory, request_context, &data_loss,
-                         &data_loss_message, &disk_full, &s);
+        OpenBackingStore(origin, data_directory, request_context_getter,
+                         &data_loss_info, &disk_full, &s);
     if (!backing_store.get()) {
       if (disk_full) {
-        connection.callbacks->OnError(
-            IndexedDBDatabaseError(blink::WebIDBDatabaseExceptionQuotaError,
-                                   ASCIIToUTF16(
-                                       "Encountered full disk while opening "
-                                       "backing store for indexedDB.open.")));
+        connection->callbacks->OnError(IndexedDBDatabaseError(
+            blink::WebIDBDatabaseExceptionQuotaError,
+            ASCIIToUTF16("Encountered full disk while opening "
+                         "backing store for indexedDB.open.")));
         return;
       }
       IndexedDBDatabaseError error(blink::WebIDBDatabaseExceptionUnknownError,
                                    ASCIIToUTF16(
                                        "Internal error opening backing store"
                                        " for indexedDB.open."));
-      connection.callbacks->OnError(error);
+      connection->callbacks->OnError(error);
       if (s.IsCorruption()) {
         HandleBackingStoreCorruption(origin, error);
       }
@@ -454,7 +445,7 @@ void IndexedDBFactoryImpl::Open(const base::string16& name,
                                        "Internal error creating "
                                        "database backend for "
                                        "indexedDB.open."));
-      connection.callbacks->OnError(error);
+      connection->callbacks->OnError(error);
       if (s.IsCorruption()) {
         backing_store = NULL;  // Closes the LevelDB so that it can be deleted
         HandleBackingStoreCorruption(origin, error);
@@ -465,10 +456,9 @@ void IndexedDBFactoryImpl::Open(const base::string16& name,
     database = it->second;
   }
 
-  if (data_loss != blink::WebIDBDataLossNone)
-    connection.callbacks->OnDataLoss(data_loss, data_loss_message);
+  connection->data_loss_info = data_loss_info;
 
-  database->OpenConnection(connection);
+  database->OpenConnection(std::move(connection));
 
   if (!was_open && database->ConnectionCount() > 0) {
     database_map_[unique_identifier] = database.get();

@@ -269,6 +269,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="3392045790598181549">Menüü-üksus <ph name="NAME" /></translation>
 <translation id="3406283310380167331">Kuva vormide loend</translation>
 <translation id="3422338090358345848">Ava Keyboard Explorer</translation>
+<translation id="3423495725743882470">rida $1, veerg $2</translation>
 <translation id="3457000393508828486">Osaliselt vajutatud</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, nupp</translation>
 <translation id="3473644018603298796">valitud <ph name="COUNT" /></translation>
@@ -297,6 +298,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="3795836767122514678">+{COUNT,plural, =1{#}other{#}}</translation>
 <translation id="3801735343383419236">Loendi automaatne täitmine</translation>
 <translation id="3810838688059735925">Video</translation>
+<translation id="3812237531158591503">kleebi $1.</translation>
 <translation id="3816633764618089385">Järgmine meediaüksus</translation>
 <translation id="3819376190738087562">Siirdeid ei ole.</translation>
 <translation id="385383972552776628">Ava valikute leht</translation>
@@ -411,6 +413,7 @@ Kui olete õpetusega lõpetanud, navigeerige ChromeVoxi abil sulgemisnupuni ja k
 <translation id="5000760171916499057">Vorme ei ole.</translation>
 <translation id="5005670136041063723">Pole rohkem sarnaseid elemente.</translation>
 <translation id="501473567976723023">Jaanuar</translation>
+<translation id="5040591161308540832">Tabel $1, $2 x $3</translation>
 <translation id="5041394372352067729">Braille' kuva lehe ülaserva liigutamine</translation>
 <translation id="5042770794184672516">Suurenda kõne helitugevust</translation>
 <translation id="5050015258024679800">Eelmine 4. taseme pealkiri</translation>
@@ -518,7 +521,6 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="5876817486144482042">Vähenda kõne helitugevust</translation>
 <translation id="5887397643266327462">Punktkirjas tiitrid on lubatud.</translation>
 <translation id="5891934789323004067">Tabel</translation>
-<translation id="5919442531159595654">kopeeri.</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{võrdusmärk}other{# võrdusmärki}}</translation>
 <translation id="5939518447894949180">Lähtesta</translation>
 <translation id="5948123859135882163">Matemaatiliste avaldiste struktuurse ja semantilise kujutamise vahetamine</translation>
@@ -554,6 +556,8 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="6355910664415701303">Eelmist loendiüksust ei ole.</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Eelmine pealkiri</translation>
+<translation id="6378565991815958969">kopeeri $1.</translation>
+<translation id="6385591741672306837">veerg</translation>
 <translation id="6387719785439924554">kõrvale</translation>
 <translation id="6411426777058107714">Eelmist raadionuppu ei ole.</translation>
 <translation id="6414968628640960377">Eelmine erinev element.</translation>
@@ -653,7 +657,6 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="7532613204005497612">Juuni</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, liugur</translation>
 <translation id="7552432549459840808">Kasulikud Chrome'i otseteed</translation>
-<translation id="7586163296341959563">kleebi.</translation>
 <translation id="7596919493010894443">valik on tühjendatud</translation>
 <translation id="7604026522577407655">Mine praeguse veeru algusesse</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="8153880621934657047">Ei ole tabelis.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{alljoon}other{# alljoont}}</translation>
 <translation id="8179976553408161302">Sisestusklahv</translation>
+<translation id="8184828902145951186">rida</translation>
 <translation id="8186185314313222077">lülitab täisekraani sisse/välja</translation>
-<translation id="81960742267269908">lõika.</translation>
 <translation id="8199231515320852133">Esita praeguse lahtri päised</translation>
 <translation id="820417203470636242">Tühi lahter.</translation>
 <translation id="8215202828671303819">Mitmikvalimine</translation>
@@ -782,6 +785,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="9077213568694924680">eemaldatakse valikust</translation>
 <translation id="9082874451376019682">Eelmist liugurit ei ole.</translation>
 <translation id="9089864840575085222">Teksti sisestamise kaja tsükkel</translation>
+<translation id="9105227991373418255">lõika $1.</translation>
 <translation id="9107530006868467849">Eelmist meediavidinat pole.</translation>
 <translation id="9108370397979208512">matemaatika</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Chrome'i brauseri menüü avamiseks vajutage klahvikombinatsiooni Alt + F.</tran
 <translation id="9115913704608474258">November</translation>
 <translation id="9128414153595658330">dlg</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Vahekaart</translation>
 <translation id="9151211641321628915">Esitab praeguse asukoha lühikirjelduse</translation>
 <translation id="9153606228985488238">Helikõrgus: <ph name="PERCENT" /> protsenti</translation>
 <translation id="9160096769946561184">Mine praeguse veeru lõppu</translation>

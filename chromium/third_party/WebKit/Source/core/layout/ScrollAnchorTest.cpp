@@ -4,6 +4,8 @@
 
 #include "core/layout/ScrollAnchor.h"
 
+#include "core/dom/ClientRect.h"
+#include "core/frame/VisualViewport.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/paint/PaintLayerScrollableArea.h"
@@ -28,6 +30,11 @@ protected:
     ScrollableArea* layoutViewport()
     {
         return document().view()->layoutViewportScrollableArea();
+    }
+
+    VisualViewport& visualViewport()
+    {
+        return document().view()->page()->frameHost().visualViewport();
     }
 
     ScrollableArea* scrollerForElement(Element* element)
@@ -111,6 +118,135 @@ TEST_F(ScrollAnchorTest, Basic)
     EXPECT_EQ(nullptr, scrollAnchor(viewport).anchorObject());
 }
 
+TEST_F(ScrollAnchorTest, VisualViewportAnchors)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    * { font-size: 1.2em; font-family: sans-serif; }"
+        "    div { height: 100px; width: 20px; background-color: pink; }"
+        "</style>"
+        "<div id='div'></div>"
+        "<div id='text'><b>This is a scroll anchoring test</div>");
+
+    ScrollableArea* lViewport = layoutViewport();
+    VisualViewport& vViewport = visualViewport();
+
+    vViewport.setScale(2.0);
+
+    // No anchor at origin (0,0).
+    EXPECT_EQ(nullptr, scrollAnchor(lViewport).anchorObject());
+
+    // Scroll the visual viewport to bring #text to the top.
+    int top = document().getElementById("text")->getBoundingClientRect()->top();
+    vViewport.setLocation(FloatPoint(0, top));
+
+    setHeight(document().getElementById("div"), 10);
+    EXPECT_EQ(document().getElementById("text")->layoutObject(),
+        scrollAnchor(lViewport).anchorObject());
+    EXPECT_EQ(top - 90, vViewport.scrollPosition().y());
+
+    setHeight(document().getElementById("div"), 100);
+    EXPECT_EQ(document().getElementById("text")->layoutObject(),
+        scrollAnchor(lViewport).anchorObject());
+    EXPECT_EQ(top, vViewport.scrollPosition().y());
+
+    // Scrolling the visual viewport should clear the anchor.
+    vViewport.setLocation(FloatPoint(0, 0));
+    EXPECT_EQ(nullptr, scrollAnchor(lViewport).anchorObject());
+}
+
+// Test that we ignore the clipped content when computing visibility otherwise
+// we may end up with an anchor that we think is in the viewport but is not.
+TEST_F(ScrollAnchorTest, ClippedScrollersSkipped)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 2000px; }"
+        "    #scroller { overflow: scroll; width: 500px; height: 300px; }"
+        "    .anchor {"
+        "         position:relative; height: 100px; width: 150px;"
+        "         background-color: #afa; border: 1px solid gray;"
+        "    }"
+        "    #forceScrolling { height: 500px; background-color: #fcc; }"
+        "</style>"
+        "<div id='scroller'>"
+        "    <div id='innerChanger'></div>"
+        "    <div id='innerAnchor' class='anchor'></div>"
+        "    <div id='forceScrolling'></div>"
+        "</div>"
+        "<div id='outerChanger'></div>"
+        "<div id='outerAnchor' class='anchor'></div>");
+
+    ScrollableArea* scroller = scrollerForElement(document().getElementById("scroller"));
+    ScrollableArea* viewport = layoutViewport();
+
+    document().getElementById("scroller")->setScrollTop(100);
+    scrollLayoutViewport(DoubleSize(0, 350));
+
+    setHeight(document().getElementById("innerChanger"), 200);
+    setHeight(document().getElementById("outerChanger"), 150);
+
+    EXPECT_EQ(300, scroller->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("innerAnchor")->layoutObject(),
+        scrollAnchor(scroller).anchorObject());
+    EXPECT_EQ(500, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("outerAnchor")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
+// Test that scroll anchoring causes no visible jump when a layout change
+// (such as removal of a DOM element) changes the scroll bounds.
+TEST_F(ScrollAnchorTest, AnchoringWhenContentRemoved)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    #changer { height: 1500px; }"
+        "    #anchor {"
+        "        width: 150px; height: 1000px; background-color: pink;"
+        "    }"
+        "</style>"
+        "<div id='changer'></div>"
+        "<div id='anchor'></div>");
+
+    ScrollableArea* viewport = layoutViewport();
+    scrollLayoutViewport(DoubleSize(0, 1600));
+
+    setHeight(document().getElementById("changer"), 0);
+
+    EXPECT_EQ(100, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("anchor")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
+// Test that scroll anchoring causes no visible jump when a layout change
+// (such as removal of a DOM element) changes the scroll bounds of a scrolling
+// div.
+TEST_F(ScrollAnchorTest, AnchoringWhenContentRemovedFromScrollingDiv)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    #scroller { height: 500px; width: 200px; overflow: scroll; }"
+        "    #changer { height: 1500px; }"
+        "    #anchor {"
+        "        width: 150px; height: 1000px; overflow: scroll;"
+        "    }"
+        "</style>"
+        "<div id='scroller'>"
+        "    <div id='changer'></div>"
+        "    <div id='anchor'></div>"
+        "</div>");
+
+    ScrollableArea* scroller = scrollerForElement(document().getElementById("scroller"));
+
+    document().getElementById("scroller")->setScrollTop(1600);
+
+    setHeight(document().getElementById("changer"), 0);
+
+    EXPECT_EQ(100, scroller->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("anchor")->layoutObject(),
+        scrollAnchor(scroller).anchorObject());
+}
+
 TEST_F(ScrollAnchorTest, FractionalOffsetsAreRoundedBeforeComparing)
 {
     setBodyInnerHTML(
@@ -173,7 +309,8 @@ TEST_F(ScrollAnchorTest, ExcludeAnonymousCandidates)
         "<div id='div'>"
         "    <a id='inline'>text</a>"
         "    <p id='block'>Some text</p>"
-        "</div>");
+        "</div>"
+        "<div id=a>after</div>");
 
     ScrollableArea* viewport = layoutViewport();
     Element* inlineElem = document().getElementById("inline");
@@ -183,8 +320,7 @@ TEST_F(ScrollAnchorTest, ExcludeAnonymousCandidates)
     document().getElementById("div")->scrollIntoView();
 
     // Trigger layout and verify that we don't anchor to the anonymous block.
-    document().getElementById("div")->setAttribute(HTMLNames::styleAttr,
-        AtomicString("top: 6px"));
+    setHeight(document().getElementById("a"), 100);
     update();
     EXPECT_EQ(inlineElem->layoutObject()->slowFirstChild(),
         scrollAnchor(viewport).anchorObject());
@@ -211,10 +347,11 @@ TEST_F(ScrollAnchorTest, FullyContainedInlineBlock)
 
     scrollLayoutViewport(DoubleSize(0, 150));
 
-    Element* ib2 = document().getElementById("ib2");
-    ib2->setAttribute(HTMLNames::styleAttr, "line-height: 150px");
+    Element* ib1 = document().getElementById("ib1");
+    ib1->setAttribute(HTMLNames::styleAttr, "line-height: 150px");
     update();
-    EXPECT_EQ(ib2->layoutObject(), scrollAnchor(layoutViewport()).anchorObject());
+    EXPECT_EQ(document().getElementById("ib2")->layoutObject(),
+        scrollAnchor(layoutViewport()).anchorObject());
 }
 
 TEST_F(ScrollAnchorTest, TextBounds)
@@ -229,11 +366,12 @@ TEST_F(ScrollAnchorTest, TextBounds)
         "        line-height: 100px;"
         "    }"
         "</style>"
-        "abc <b id=b>def</b> ghi");
+        "abc <b id=b>def</b> ghi"
+        "<div id=a>after</div>");
 
     scrollLayoutViewport(DoubleSize(0, 150));
 
-    setHeight(document().body(), 1100);
+    setHeight(document().getElementById("a"), 100);
     EXPECT_EQ(document().getElementById("b")->layoutObject()->slowFirstChild(),
         scrollAnchor(layoutViewport()).anchorObject());
 }
@@ -247,11 +385,12 @@ TEST_F(ScrollAnchorTest, ExcludeFixedPosition)
         "    #f { position: fixed }"
         "</style>"
         "<div id=f>fixed</div>"
-        "<div id=c>content</div>");
+        "<div id=c>content</div>"
+        "<div id=a>after</div>");
 
     scrollLayoutViewport(DoubleSize(0, 50));
 
-    setHeight(document().body(), 1100);
+    setHeight(document().getElementById("a"), 100);
     EXPECT_EQ(document().getElementById("c")->layoutObject(),
         scrollAnchor(layoutViewport()).anchorObject());
 }
@@ -277,6 +416,7 @@ TEST_F(ScrollAnchorTest, ExcludeAbsolutePositionThatSticksToViewport)
         "<div id='scroller'><div id='space'>"
         "    <div id='abs'></div>"
         "    <div id='rel'></div>"
+        "    <div id=a>after</div>"
         "</div></div>");
 
     Element* scrollerElement = document().getElementById("scroller");
@@ -285,82 +425,18 @@ TEST_F(ScrollAnchorTest, ExcludeAbsolutePositionThatSticksToViewport)
     Element* relPos = document().getElementById("rel");
 
     scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 100);
+    setHeight(document().getElementById("a"), 100);
 
     // When the scroller is position:static, the anchor cannot be position:absolute.
     EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
 
     scrollerElement->setAttribute(HTMLNames::styleAttr, "position: relative");
+    update();
     scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 125);
+    setHeight(document().getElementById("a"), 125);
 
     // When the scroller is position:relative, the anchor may be position:absolute.
     EXPECT_EQ(absPos->layoutObject(), scrollAnchor(scroller).anchorObject());
-}
-
-// This test verifies that position:absolute elements with top/right/bottom/left
-// set are not selected as anchors.
-TEST_F(ScrollAnchorTest, ExcludeOffsettedAbsolutePosition)
-{
-    setBodyInnerHTML(
-        "<style>"
-        "    body { margin: 0; }"
-        "    #scroller { overflow: scroll; width: 500px; height: 400px; position:relative; }"
-        "    #space { height: 1000px; }"
-        "    #abs {"
-        "        position: absolute; background-color: red;"
-        "        width: 100px; height: 100px;"
-        "    }"
-        "    #rel {"
-        "        position: relative; background-color: green;"
-        "        left: 50px; top: 100px; width: 100px; height: 75px;"
-        "    }"
-        "    .top { top: 10px }"
-        "    .left { left: 10px }"
-        "    .right { right: 10px }"
-        "    .bottom { bottom: 10px }"
-        "</style>"
-        "<div id='scroller'><div id='space'>"
-        "    <div id='abs'></div>"
-        "    <div id='rel'></div>"
-        "</div></div>");
-
-    Element* scrollerElement = document().getElementById("scroller");
-    ScrollableArea* scroller = scrollerForElement(scrollerElement);
-    Element* relPos = document().getElementById("rel");
-    Element* absPos = document().getElementById("abs");
-
-    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 100);
-    // Pick absolute anchor.
-    EXPECT_EQ(absPos->layoutObject(), scrollAnchor(scroller).anchorObject());
-
-    absPos->setAttribute(HTMLNames::classAttr, "top");
-    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 125);
-    // Don't pick absolute anchor since top is set.
-    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
-
-    absPos->removeAttribute(HTMLNames::classAttr);
-    absPos->setAttribute(HTMLNames::classAttr, "right");
-    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 150);
-    // Don't pick absolute anchor since right is set.
-    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
-
-    absPos->removeAttribute(HTMLNames::classAttr);
-    absPos->setAttribute(HTMLNames::classAttr, "bottom");
-    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 175);
-    // Don't pick absolute anchor since bottom is set.
-    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
-
-    absPos->removeAttribute(HTMLNames::classAttr);
-    absPos->setAttribute(HTMLNames::classAttr, "left");
-    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
-    setHeight(relPos, 200);
-    // Don't pick absolute anchor since left is set.
-    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
 }
 
 // Test that we descend into zero-height containers that have overflowing content.
@@ -411,36 +487,250 @@ TEST_F(ScrollAnchorTest, DescendsIntoContainerWithFloat)
         "         <div id='inner'></div>"
         "      </div>"
         "    </div>"
-        "</div>");
+        "</div>"
+        "<div id=a>after</div>");
 
     EXPECT_EQ(0, toLayoutBox(document().getElementById("zeroheight")->layoutObject())->size().height());
 
     ScrollableArea* viewport = layoutViewport();
 
     scrollLayoutViewport(DoubleSize(0, 200));
-    setHeight(document().getElementById("float"), 600);
+    setHeight(document().getElementById("a"), 100);
 
     EXPECT_EQ(200, viewport->scrollPosition().y());
     EXPECT_EQ(document().getElementById("float")->layoutObject(),
         scrollAnchor(viewport).anchorObject());
 }
 
+TEST_F(ScrollAnchorTest, FlexboxDelayedClampingAlsoDelaysAdjustment)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    html { overflow: hidden; }"
+        "    body {"
+        "        position: absolute; display: flex;"
+        "        top: 0; bottom: 0; margin: 0;"
+        "    }"
+        "    #scroller { overflow: auto; }"
+        "    #spacer { width: 600px; height: 1200px; }"
+        "    #before { height: 50px; }"
+        "    #anchor {"
+        "        width: 100px; height: 100px;"
+        "        background-color: #8f8;"
+        "    }"
+        "</style>"
+        "<div id='scroller'>"
+        "    <div id='spacer'>"
+        "        <div id='before'></div>"
+        "        <div id='anchor'></div>"
+        "    </div>"
+        "</div>");
+
+    Element* scroller = document().getElementById("scroller");
+    scroller->setScrollTop(100);
+
+    setHeight(document().getElementById("before"), 100);
+    EXPECT_EQ(150, scrollerForElement(scroller)->scrollPosition().y());
+}
+
+// Test then an element and its children are not selected as the anchor when
+// it has the overflow-anchor property set to none.
+TEST_F(ScrollAnchorTest, OptOutElement)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "     body { height: 1000px }"
+        "     .div {"
+        "          height: 100px; width: 100px;"
+        "          border: 1px solid gray; background-color: #afa;"
+        "     }"
+        "     #innerDiv {"
+        "          height: 50px; width: 50px;"
+        "          border: 1px solid gray; background-color: pink;"
+        "     }"
+        "</style>"
+        "<div id='changer'></div>"
+        "<div class='div' id='firstDiv'><div id='innerDiv'></div></div>"
+        "<div class='div' id='secondDiv'></div>");
+
+    ScrollableArea* viewport = layoutViewport();
+    scrollLayoutViewport(DoubleSize(0, 50));
+
+    // No opt-out.
+    setHeight(document().getElementById("changer"), 100);
+    EXPECT_EQ(150, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("innerDiv")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+
+    // Clear anchor and opt-out element.
+    scrollLayoutViewport(DoubleSize(0, 10));
+    document().getElementById("firstDiv")->setAttribute(HTMLNames::styleAttr,
+        AtomicString("overflow-anchor: none"));
+    update();
+
+    // Opted out element and it's children skipped.
+    setHeight(document().getElementById("changer"), 200);
+    EXPECT_EQ(260, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("secondDiv")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
+TEST_F(ScrollAnchorTest, SuppressAnchorNodeAncestorChangingLayoutAffectingProperty)
+{
+    setBodyInnerHTML(
+        "<style> body { height: 1000px } div { height: 100px } </style>"
+        "<div id='block1'>abc</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+
+    scrollLayoutViewport(DoubleSize(0, 50));
+    document().body()->setAttribute(HTMLNames::styleAttr, "padding-top: 20px");
+    update();
+
+    EXPECT_EQ(50, viewport->scrollPosition().y());
+    EXPECT_EQ(nullptr, scrollAnchor(viewport).anchorObject());
+}
+
+TEST_F(ScrollAnchorTest, AnchorNodeAncestorChangingNonLayoutAffectingProperty)
+{
+    setBodyInnerHTML(
+        "<style> body { height: 1000px } div { height: 100px } </style>"
+        "<div id='block1'>abc</div>"
+        "<div id='block2'>def</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+    scrollLayoutViewport(DoubleSize(0, 150));
+
+    document().body()->setAttribute(HTMLNames::styleAttr, "color: red");
+    setHeight(document().getElementById("block1"), 200);
+
+    EXPECT_EQ(250, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("block2")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
+TEST_F(ScrollAnchorTest, TransformIsLayoutAffecting)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 1000px }"
+        "    #block1 { height: 100px }"
+        "</style>"
+        "<div id='block1'>abc</div>"
+        "<div id=a>after</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+
+    scrollLayoutViewport(DoubleSize(0, 50));
+    document().getElementById("block1")->setAttribute(
+        HTMLNames::styleAttr, "transform: matrix(1, 0, 0, 1, 25, 25);");
+    update();
+
+    document().getElementById("block1")->setAttribute(
+        HTMLNames::styleAttr, "transform: matrix(1, 0, 0, 1, 50, 50);");
+    setHeight(document().getElementById("a"), 100);
+    update();
+
+    EXPECT_EQ(50, viewport->scrollPosition().y());
+    EXPECT_EQ(nullptr, scrollAnchor(viewport).anchorObject());
+}
+
+TEST_F(ScrollAnchorTest, OptOutBody)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 2000px; overflow-anchor: none; }"
+        "    #scroller { overflow: scroll; width: 500px; height: 300px; }"
+        "    .anchor {"
+        "        position:relative; height: 100px; width: 150px;"
+        "        background-color: #afa; border: 1px solid gray;"
+        "    }"
+        "    #forceScrolling { height: 500px; background-color: #fcc; }"
+        "</style>"
+        "<div id='outerChanger'></div>"
+        "<div id='outerAnchor' class='anchor'></div>"
+        "<div id='scroller'>"
+        "    <div id='innerChanger'></div>"
+        "    <div id='innerAnchor' class='anchor'></div>"
+        "    <div id='forceScrolling'></div>"
+        "</div>");
+
+    ScrollableArea* scroller = scrollerForElement(document().getElementById("scroller"));
+    ScrollableArea* viewport = layoutViewport();
+
+    document().getElementById("scroller")->setScrollTop(100);
+    scrollLayoutViewport(DoubleSize(0, 100));
+
+    setHeight(document().getElementById("innerChanger"), 200);
+    setHeight(document().getElementById("outerChanger"), 150);
+
+    // Scroll anchoring should apply within #scroller.
+    EXPECT_EQ(300, scroller->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("innerAnchor")->layoutObject(),
+        scrollAnchor(scroller).anchorObject());
+    // Scroll anchoring should not apply within main frame.
+    EXPECT_EQ(100, viewport->scrollPosition().y());
+    EXPECT_EQ(nullptr, scrollAnchor(viewport).anchorObject());
+}
+
+TEST_F(ScrollAnchorTest, OptOutScrollingDiv)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 2000px; }"
+        "    #scroller {"
+        "        overflow: scroll; width: 500px; height: 300px;"
+        "        overflow-anchor: none;"
+        "    }"
+        "    .anchor {"
+        "        position:relative; height: 100px; width: 150px;"
+        "        background-color: #afa; border: 1px solid gray;"
+        "    }"
+        "    #forceScrolling { height: 500px; background-color: #fcc; }"
+        "</style>"
+        "<div id='outerChanger'></div>"
+        "<div id='outerAnchor' class='anchor'></div>"
+        "<div id='scroller'>"
+        "    <div id='innerChanger'></div>"
+        "    <div id='innerAnchor' class='anchor'></div>"
+        "    <div id='forceScrolling'></div>"
+        "</div>");
+
+    ScrollableArea* scroller = scrollerForElement(document().getElementById("scroller"));
+    ScrollableArea* viewport = layoutViewport();
+
+    document().getElementById("scroller")->setScrollTop(100);
+    scrollLayoutViewport(DoubleSize(0, 100));
+
+    setHeight(document().getElementById("innerChanger"), 200);
+    setHeight(document().getElementById("outerChanger"), 150);
+
+    // Scroll anchoring should not apply within #scroller.
+    EXPECT_EQ(100, scroller->scrollPosition().y());
+    EXPECT_EQ(nullptr, scrollAnchor(scroller).anchorObject());
+    // Scroll anchoring should apply within main frame.
+    EXPECT_EQ(250, viewport->scrollPosition().y());
+    EXPECT_EQ(document().getElementById("outerAnchor")->layoutObject(),
+        scrollAnchor(viewport).anchorObject());
+}
+
 class ScrollAnchorCornerTest : public ScrollAnchorTest {
 protected:
-    void checkCorner(const AtomicString& id, Corner corner, DoublePoint startPos, DoubleSize expectedAdjustment)
+    void checkCorner(Corner corner, DoublePoint startPos, DoubleSize expectedAdjustment)
     {
         ScrollableArea* viewport = layoutViewport();
-        Element* element = document().getElementById(id);
+        Element* element = document().getElementById("changer");
 
         viewport->setScrollPosition(startPos, UserScroll);
-        element->setAttribute(HTMLNames::classAttr, "big");
+        element->setAttribute(HTMLNames::classAttr, "change");
         update();
 
         DoublePoint endPos = startPos;
         endPos.move(expectedAdjustment);
 
         EXPECT_EQ(endPos, viewport->scrollPositionDouble());
-        EXPECT_EQ(element->layoutObject(), scrollAnchor(viewport).anchorObject());
+        EXPECT_EQ(document().getElementById("a")->layoutObject(),
+            scrollAnchor(viewport).anchorObject());
         EXPECT_EQ(corner, scrollAnchor(viewport).corner());
 
         element->removeAttribute(HTMLNames::classAttr);
@@ -448,129 +738,69 @@ protected:
     }
 };
 
-TEST_F(ScrollAnchorCornerTest, Corners)
+// Verify that we anchor to the top left corner of an element for LTR.
+TEST_F(ScrollAnchorCornerTest, CornersLTR)
 {
     setBodyInnerHTML(
         "<style>"
-        "    body {"
-        "        position: absolute; border: 10px solid #ccc;"
-        "        width: 1220px; height: 920px;"
-        "    }"
-        "    #a, #b, #c, #d {"
-        "        position: absolute; background-color: #ace;"
-        "        width: 400px; height: 300px;"
-        "    }"
-        "    #a, #b { top: 0; }"
-        "    #a, #c { left: 0; }"
-        "    #b, #d { right: 0; }"
-        "    #c, #d { bottom: 0; }"
-        "    .big { width: 800px !important; height: 600px !important }"
+        "    body { position: relative; width: 1220px; height: 920px; }"
+        "    #a { width: 400px; height: 300px; }"
+        "    .change { height: 100px; }"
         "</style>"
-        "<div id=a></div>"
-        "<div id=b></div>"
-        "<div id=c></div>"
-        "<div id=d></div>");
+        "<div id='changer'></div>"
+        "<div id='a'></div>");
 
-    checkCorner("a", Corner::TopLeft, DoublePoint(20,  20),  DoubleSize(0, 0));
-    checkCorner("b", Corner::TopLeft, DoublePoint(420, 20),  DoubleSize(-400, 0));
-    checkCorner("c", Corner::TopLeft, DoublePoint(20,  320), DoubleSize(0, -300));
-    checkCorner("d", Corner::TopLeft, DoublePoint(420, 320), DoubleSize(-400, -300));
+    checkCorner(Corner::TopLeft, DoublePoint(20,  20), DoubleSize(0, 100));
 }
 
+// Verify that we anchor to the top left corner of an anchor element for
+// vertical-lr writing mode.
 TEST_F(ScrollAnchorCornerTest, CornersVerticalLR)
 {
     setBodyInnerHTML(
         "<style>"
-        "    html {"
-        "        writing-mode: vertical-lr;"
-        "    }"
-        "    body {"
-        "        position: absolute; border: 10px solid #ccc;"
-        "        width: 1220px; height: 920px;"
-        "    }"
-        "    #a, #b, #c, #d {"
-        "        position: absolute; background-color: #ace;"
-        "        width: 400px; height: 300px;"
-        "    }"
-        "    #a, #b { top: 0; }"
-        "    #a, #c { left: 0; }"
-        "    #b, #d { right: 0; }"
-        "    #c, #d { bottom: 0; }"
-        "    .big { width: 800px !important; height: 600px !important }"
+        "    html { writing-mode: vertical-lr; }"
+        "    body { position: relative; width: 1220px; height: 920px; }"
+        "    #a { width: 400px; height: 300px; }"
+        "    .change { width: 100px; }"
         "</style>"
-        "<div id=a></div>"
-        "<div id=b></div>"
-        "<div id=c></div>"
-        "<div id=d></div>");
+        "<div id='changer'></div>"
+        "<div id='a'></div>");
 
-    checkCorner("a", Corner::TopLeft, DoublePoint(20,  20),  DoubleSize(0, 0));
-    checkCorner("b", Corner::TopLeft, DoublePoint(420, 20),  DoubleSize(-400, 0));
-    checkCorner("c", Corner::TopLeft, DoublePoint(20,  320), DoubleSize(0, -300));
-    checkCorner("d", Corner::TopLeft, DoublePoint(420, 320), DoubleSize(-400, -300));
+    checkCorner(Corner::TopLeft, DoublePoint(20,  20), DoubleSize(100, 0));
 }
 
+// Verify that we anchor to the top right corner of an anchor element for RTL.
 TEST_F(ScrollAnchorCornerTest, CornersRTL)
 {
     setBodyInnerHTML(
         "<style>"
-        "    html {"
-        "        direction: rtl;"
-        "    }"
-        "    body {"
-        "        position: absolute; border: 10px solid #ccc;"
-        "        width: 1220px; height: 920px;"
-        "    }"
-        "    #a, #b, #c, #d {"
-        "        position: absolute; background-color: #ace;"
-        "        width: 400px; height: 300px;"
-        "    }"
-        "    #a, #b { top: 0; }"
-        "    #a, #c { left: 0; }"
-        "    #b, #d { right: 0; }"
-        "    #c, #d { bottom: 0; }"
-        "    .big { width: 800px !important; height: 600px !important }"
+        "    html { direction: rtl; }"
+        "    body { position: relative; width: 1220px; height: 920px; }"
+        "    #a { width: 400px; height: 300px; }"
+        "    .change { height: 100px; }"
         "</style>"
-        "<div id=a></div>"
-        "<div id=b></div>"
-        "<div id=c></div>"
-        "<div id=d></div>");
+        "<div id='changer'></div>"
+        "<div id='a'></div>");
 
-    checkCorner("b", Corner::TopRight, DoublePoint(-20,  20),  DoubleSize(0, 0));
-    checkCorner("a", Corner::TopRight, DoublePoint(-420, 20),  DoubleSize(400, 0));
-    checkCorner("d", Corner::TopRight, DoublePoint(-20,  320), DoubleSize(0, -300));
-    checkCorner("c", Corner::TopRight, DoublePoint(-420, 320), DoubleSize(400, -300));
+    checkCorner(Corner::TopRight, DoublePoint(-20,  20), DoubleSize(0, 100));
 }
 
+// Verify that we anchor to the top right corner of an anchor element for
+// vertical-lr writing mode.
 TEST_F(ScrollAnchorCornerTest, CornersVerticalRL)
 {
     setBodyInnerHTML(
         "<style>"
-        "    html {"
-        "        writing-mode: vertical-rl;"
-        "    }"
-        "    body {"
-        "        position: absolute; border: 10px solid #ccc;"
-        "        width: 1220px; height: 920px;"
-        "    }"
-        "    #a, #b, #c, #d {"
-        "        position: absolute; background-color: #ace;"
-        "        width: 400px; height: 300px;"
-        "    }"
-        "    #a, #b { top: 0; }"
-        "    #a, #c { left: 0; }"
-        "    #b, #d { right: 0; }"
-        "    #c, #d { bottom: 0; }"
-        "    .big { width: 800px !important; height: 600px !important }"
+        "    html { writing-mode: vertical-rl; }"
+        "    body { position: relative; width: 1220px; height: 920px; }"
+        "    #a { width: 400px; height: 300px; }"
+        "    .change { width: 100px; }"
         "</style>"
-        "<div id=a></div>"
-        "<div id=b></div>"
-        "<div id=c></div>"
-        "<div id=d></div>");
+        "<div id='changer'></div>"
+        "<div id='a'></div>");
 
-    checkCorner("b", Corner::TopRight, DoublePoint(-20,  20),  DoubleSize(0, 0));
-    checkCorner("a", Corner::TopRight, DoublePoint(-420, 20),  DoubleSize(400, 0));
-    checkCorner("d", Corner::TopRight, DoublePoint(-20,  320), DoubleSize(0, -300));
-    checkCorner("c", Corner::TopRight, DoublePoint(-420, 320), DoubleSize(400, -300));
+    checkCorner(Corner::TopRight, DoublePoint(-20,  20), DoubleSize(-100, 0));
 }
 
 }

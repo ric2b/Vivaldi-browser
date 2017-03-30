@@ -430,6 +430,7 @@
         # Note: sources list duplicated in GN build.
         'command_buffer/tests/compressed_texture_test.cc',
         'command_buffer/tests/es3_misc_functions_unittest.cc',
+        'command_buffer/tests/gl_bgra_mipmap_unittest.cc',
         'command_buffer/tests/gl_bind_uniform_location_unittest.cc',
         'command_buffer/tests/gl_chromium_framebuffer_mixed_samples_unittest.cc',
         'command_buffer/tests/gl_chromium_framebuffer_multisample_unittest.cc',
@@ -699,6 +700,7 @@
             '../build/android/disable_gcc_lto.gypi',
           ],
           'dependencies': [
+            '../third_party/angle/src/angle.gyp:angle_image_util',
             'command_buffer_common',
             'disk_cache_proto',
             'gpu_config',
@@ -793,6 +795,7 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
+            '../third_party/angle/src/angle.gyp:angle_image_util',
             'command_buffer/command_buffer.gyp:gles2_utils',
             'disk_cache_proto',
           ],
@@ -911,31 +914,8 @@
           'dependencies': [
             '../base/base.gyp:base_win64',
             '../ipc/ipc.gyp:ipc_win64',
-            'command_buffer_common_win64',
-          ],
-          'defines': [
-            '<@(nacl_win64_defines)',
-            'GPU_IMPLEMENTATION',
-          ],
-          'configurations': {
-            'Common_Base': {
-              'msvs_target_platform': 'x64',
-            },
-          },
-        },
-        {
-          'target_name': 'gpu_ipc_common_win64',
-          'type': 'static_library',
-          'variables': {
-            'nacl_win64_target': 1,
-          },
-          'includes': [
-            'command_buffer_traits.gypi',
-            'gpu_ipc_common.gypi',
-          ],
-          'dependencies': [
-            '../base/base.gyp:base_win64',
-            '../ipc/ipc.gyp:ipc_win64',
+            '../ui/gfx/ipc/geometry/gfx_ipc_geometry.gyp:gfx_ipc_geometry_win64',
+            'command_buffer/command_buffer.gyp:gles2_utils_win64',
             'command_buffer_common_win64',
           ],
           'defines': [

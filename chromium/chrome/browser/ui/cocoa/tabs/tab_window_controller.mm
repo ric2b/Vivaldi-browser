@@ -45,6 +45,14 @@
   return [[self parentWindow] themeImagePositionForAlignment:alignment];
 }
 
+- (BOOL)hasDarkTheme {
+  return [[self parentWindow] hasDarkTheme];
+}
+
+- (BOOL)inIncognitoModeWithSystemTheme {
+  return [[self parentWindow] inIncognitoModeWithSystemTheme];
+}
+
 @end
 
 @implementation TabWindowController

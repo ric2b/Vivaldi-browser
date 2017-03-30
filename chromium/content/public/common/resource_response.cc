@@ -23,6 +23,7 @@ scoped_refptr<ResourceResponse> ResourceResponse::DeepCopy() const {
       head.has_major_certificate_errors;
   new_response->head.content_length = head.content_length;
   new_response->head.encoded_data_length = head.encoded_data_length;
+  new_response->head.encoded_body_length = head.encoded_body_length;
   new_response->head.appcache_id = head.appcache_id;
   new_response->head.appcache_manifest_url = head.appcache_manifest_url;
   new_response->head.load_timing = head.load_timing;
@@ -41,6 +42,8 @@ scoped_refptr<ResourceResponse> ResourceResponse::DeepCopy() const {
   new_response->head.socket_address = head.socket_address;
   new_response->head.was_fetched_via_service_worker =
       head.was_fetched_via_service_worker;
+  new_response->head.was_fetched_via_foreign_fetch =
+      head.was_fetched_via_foreign_fetch;
   new_response->head.was_fallback_required_by_service_worker =
       head.was_fallback_required_by_service_worker;
   new_response->head.original_url_via_service_worker =

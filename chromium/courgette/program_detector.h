@@ -6,6 +6,7 @@
 #define COURGETTE_PROGRAM_DETECTOR_H_
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <memory>
 
@@ -23,7 +24,7 @@ class AssemblyProgram;
 // On failure:
 //   Fills in |type| with UNKNOWN, |detected_length| with 0, and returns
 //   C_INPUT_NOT_RECOGNIZED.
-Status DetectExecutableType(const void* buffer,
+Status DetectExecutableType(const uint8_t* buffer,
                             size_t length,
                             ExecutableType* type,
                             size_t* detected_length);
@@ -35,7 +36,7 @@ Status DetectExecutableType(const void* buffer,
 //   C_OK.
 // On failure:
 //   Returns an error status and assigns |*output| to null.
-Status ParseDetectedExecutable(const void* buffer,
+Status ParseDetectedExecutable(const uint8_t* buffer,
                                size_t length,
                                std::unique_ptr<AssemblyProgram>* output);
 

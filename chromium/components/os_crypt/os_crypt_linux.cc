@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/lock.h"
 #include "components/os_crypt/key_storage_linux.h"
 #include "crypto/encryptor.h"
 #include "crypto/symmetric_key.h"
@@ -54,6 +55,9 @@ struct Cache {
   std::unique_ptr<std::string> password_v11_cache;
   bool is_key_storage_cached;
   bool is_password_v11_cached;
+  // Guards access to |g_cache|, making lazy initialization of individual parts
+  // thread safe.
+  base::Lock lock;
 };
 
 base::LazyInstance<Cache>::Leaky g_cache = LAZY_INSTANCE_INITIALIZER;
@@ -68,27 +72,32 @@ KeyStorageLinux* GetKeyStorage() {
   return g_cache.Get().key_storage_cache.get();
 }
 
-// Returns a cached string of "peanuts".
+// Pointer to a function that creates and returns the |KeyStorage| instance to
+// be used. The function maintains ownership of the pointer.
+KeyStorageLinux* (*g_key_storage_provider)() = &GetKeyStorage;
+
+// Returns a cached string of "peanuts". Is thread-safe.
 std::string* GetPasswordV10() {
-  if (!g_cache.Get().password_v10_cache.get())
+  base::AutoLock auto_lock(g_cache.Get().lock);
+  if (!g_cache.Get().password_v10_cache.get()) {
     g_cache.Get().password_v10_cache.reset(new std::string("peanuts"));
+  }
   return g_cache.Get().password_v10_cache.get();
 }
 
 // Caches and returns the password from the KeyStorage or null if there is no
-// service.
+// service. Is thread-safe.
 std::string* GetPasswordV11() {
+  base::AutoLock auto_lock(g_cache.Get().lock);
   if (!g_cache.Get().is_password_v11_cached) {
-    g_cache.Get().is_password_v11_cached = true;
     g_cache.Get().password_v11_cache.reset(
-        GetKeyStorage() ? new std::string(GetKeyStorage()->GetKey()) : nullptr);
+        g_key_storage_provider()
+            ? new std::string(g_key_storage_provider()->GetKey())
+            : nullptr);
+    g_cache.Get().is_password_v11_cached = true;
   }
   return g_cache.Get().password_v11_cache.get();
 }
-
-// Pointer to a function that creates and returns the |KeyStorage| instance to
-// be used. The function maintains ownership of the pointer.
-KeyStorageLinux* (*g_key_storage_provider)() = &GetKeyStorage;
 
 // Pointers to functions that return a password for deriving the encryption key.
 // One function for each supported password version (see Version enum).
@@ -143,12 +152,16 @@ bool OSCrypt::EncryptString(const std::string& plaintext,
     return true;
   }
 
-  // If a |KeyStorage| is available, use a password backed by the |KeyStorage|.
-  // Otherwise use the hardcoded password.
-  Version version = g_key_storage_provider() ? Version::V11 : Version::V10;
-
+  // If we are able to create a V11 key (i.e. a KeyStorage was available), then
+  // we'll use it. If not, we'll use V10.
+  Version version = Version::V11;
   std::unique_ptr<crypto::SymmetricKey> encryption_key(
       GetEncryptionKey(version));
+  if (!encryption_key) {
+    version = Version::V10;
+    encryption_key = GetEncryptionKey(version);
+  }
+
   if (!encryption_key)
     return false;
 
@@ -218,6 +231,23 @@ void OSCrypt::SetStore(const std::string& store_type) {
   KeyStorageLinux::SetStore(store_type);
 }
 
+// static
+void OSCrypt::SetProductName(const std::string& product_name) {
+  // Setting the product name makes no sense after initializing.
+  DCHECK(!g_cache.Get().is_key_storage_cached);
+
+  KeyStorageLinux::SetProductName(product_name);
+}
+
+// static
+void OSCrypt::SetMainThreadRunner(
+    scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner) {
+  // Setting the task runner makes no sense after initializing.
+  DCHECK(!g_cache.Get().is_key_storage_cached);
+
+  KeyStorageLinux::SetMainThreadRunner(main_thread_runner);
+}
+
 void UseMockKeyStorageForTesting(KeyStorageLinux* (*get_key_storage_mock)(),
                                  std::string* (*get_password_v11_mock)()) {
   // Save the real implementation to restore it later.
@@ -231,13 +261,16 @@ void UseMockKeyStorageForTesting(KeyStorageLinux* (*get_key_storage_mock)(),
 
   if (get_key_storage_mock && get_password_v11_mock) {
     // Bypass calling KeyStorage::CreateService and caching of the key for V11
-    g_get_password[Version::V11] = get_password_v11_mock;
+    if (get_password_v11_mock)
+      g_get_password[Version::V11] = get_password_v11_mock;
     // OSCrypt will determine the encryption version by checking if a
     // |KeyStorage| instance can be created. Enable V11 by returning the mock.
-    g_key_storage_provider = get_key_storage_mock;
+    if (get_key_storage_mock)
+      g_key_storage_provider = get_key_storage_mock;
   } else {
     // Restore real implementation
     std::copy(std::begin(get_password_save), std::end(get_password_save),
               std::begin(g_get_password));
+    g_key_storage_provider = &GetKeyStorage;
   }
 }

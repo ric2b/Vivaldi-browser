@@ -14,14 +14,14 @@
 namespace blink {
 
 struct PrePaintTreeWalkContext {
-    PrePaintTreeWalkContext() { }
-    PrePaintTreeWalkContext(const PaintPropertyTreeBuilderContext& parentTreeBuilderContext)
-        : treeBuilderContext(parentTreeBuilderContext) { }
+    PrePaintTreeWalkContext() : paintInvalidatorContext(treeBuilderContext) { }
+    PrePaintTreeWalkContext(const PrePaintTreeWalkContext& parentContext)
+        : treeBuilderContext(parentContext.treeBuilderContext)
+        , paintInvalidatorContext(treeBuilderContext, parentContext.paintInvalidatorContext)
+    { }
 
     PaintPropertyTreeBuilderContext treeBuilderContext;
-    // This will be initialized by PaintInvalidator::invalidatePaintIfNeeded().
-    // TODO(wangxianzhu): Change to copy-and-update pattern like PaintPropertyTreeBuilderContext.
-    Optional<PaintInvalidatorContext> paintInvalidatorContext;
+    PaintInvalidatorContext paintInvalidatorContext;
 };
 
 void PrePaintTreeWalk::walk(FrameView& rootFrame)
@@ -36,11 +36,14 @@ void PrePaintTreeWalk::walk(FrameView& rootFrame)
 
 void PrePaintTreeWalk::walk(FrameView& frameView, const PrePaintTreeWalkContext& context)
 {
-    PrePaintTreeWalkContext localContext(context.treeBuilderContext);
+    if (frameView.shouldThrottleRendering())
+        return;
+
+    PrePaintTreeWalkContext localContext(context);
     m_propertyTreeBuilder.buildTreeNodes(frameView, localContext.treeBuilderContext);
 
     if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-        m_paintInvalidator.invalidatePaintIfNeeded(frameView, localContext.treeBuilderContext, localContext.paintInvalidatorContext);
+        m_paintInvalidator.invalidatePaintIfNeeded(frameView, localContext.paintInvalidatorContext);
 
     if (LayoutView* layoutView = frameView.layoutView())
         walk(*layoutView, localContext);
@@ -48,11 +51,12 @@ void PrePaintTreeWalk::walk(FrameView& frameView, const PrePaintTreeWalkContext&
 
 void PrePaintTreeWalk::walk(const LayoutObject& object, const PrePaintTreeWalkContext& context)
 {
-    PrePaintTreeWalkContext localContext(context.treeBuilderContext);
-    m_propertyTreeBuilder.buildTreeNodes(object, localContext.treeBuilderContext);
+    PrePaintTreeWalkContext localContext(context);
 
-    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() && context.paintInvalidatorContext)
-        m_paintInvalidator.invalidatePaintIfNeeded(object, localContext.treeBuilderContext, *context.paintInvalidatorContext, localContext.paintInvalidatorContext);
+    m_propertyTreeBuilder.buildTreeNodesForSelf(object, localContext.treeBuilderContext);
+    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
+        m_paintInvalidator.invalidatePaintIfNeeded(object, localContext.paintInvalidatorContext);
+    m_propertyTreeBuilder.buildTreeNodesForChildren(object, localContext.treeBuilderContext);
 
     for (const LayoutObject* child = object.slowFirstChild(); child; child = child->nextSibling()) {
         // Column spanners are walked through their placeholders. See below.
@@ -65,9 +69,13 @@ void PrePaintTreeWalk::walk(const LayoutObject& object, const PrePaintTreeWalkCo
         walk(*toLayoutMultiColumnSpannerPlaceholder(object).layoutObjectInFlowThread(), localContext);
 
     if (object.isLayoutPart()) {
-        Widget* widget = toLayoutPart(object).widget();
-        if (widget && widget->isFrameView())
+        const LayoutPart& layoutPart = toLayoutPart(object);
+        Widget* widget = layoutPart.widget();
+        if (widget && widget->isFrameView()) {
+            localContext.treeBuilderContext.current.paintOffset += layoutPart.replacedContentRect().location() - widget->frameRect().location();
+            localContext.treeBuilderContext.current.paintOffset = roundedIntPoint(localContext.treeBuilderContext.current.paintOffset);
             walk(*toFrameView(widget), localContext);
+        }
         // TODO(pdr): Investigate RemoteFrameView (crbug.com/579281).
     }
 }

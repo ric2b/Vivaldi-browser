@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_set>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
@@ -95,6 +96,7 @@ class TabListSceneLayer : public SceneLayer {
       jboolean show_toolbar,
       jint default_theme_color,
       jint toolbar_background_color,
+      jint close_button_color,
       jboolean anonymize_toolbar,
       jint toolbar_textbox_resource_id,
       jint toolbar_textbox_background_color,
@@ -112,6 +114,9 @@ class TabListSceneLayer : public SceneLayer {
   SkColor GetBackgroundColor() override;
 
  private:
+  // The set of tint colors that were used for a frame.
+  std::unordered_set<int> used_tints_;
+
   typedef std::map<int, scoped_refptr<TabLayer>> TabMap;
   TabMap tab_map_;
   std::set<int> visible_tabs_this_frame_;

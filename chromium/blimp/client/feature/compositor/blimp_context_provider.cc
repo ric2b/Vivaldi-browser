@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "cc/output/context_cache_controller.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
@@ -42,12 +44,16 @@ BlimpContextProvider::BlimpContextProvider(
   attribs_for_gles2.lose_context_when_out_of_memory = true;
 
   context_.reset(gpu::GLInProcessContext::Create(
-      nullptr /* service */, nullptr /* surface */, false /* is_offscreen */,
-      widget, nullptr /* share_context */, attribs_for_gles2,
-      gpu::SharedMemoryLimits(), gpu_memory_buffer_manager,
-      nullptr /* memory_limits */));
+      nullptr /* service */, nullptr /* surface */,
+      widget == gfx::kNullAcceleratedWidget /* is_offscreen */, widget,
+      nullptr /* share_context */, attribs_for_gles2, gpu::SharedMemoryLimits(),
+      gpu_memory_buffer_manager, nullptr /* memory_limits */,
+      base::ThreadTaskRunnerHandle::Get()));
   context_->GetImplementation()->SetLostContextCallback(
       base::Bind(&BlimpContextProvider::OnLostContext, base::Unretained(this)));
+
+  cache_controller_.reset(new cc::ContextCacheController(
+      context_->GetImplementation(), base::ThreadTaskRunnerHandle::Get()));
 }
 
 BlimpContextProvider::~BlimpContextProvider() {
@@ -86,8 +92,13 @@ class GrContext* BlimpContextProvider::GrContext() {
     return gr_context_->get();
 
   gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(ContextGL()));
-
+  cache_controller_->SetGrContext(gr_context_->get());
   return gr_context_->get();
+}
+
+cc::ContextCacheController* BlimpContextProvider::CacheController() {
+  DCHECK(context_thread_checker_.CalledOnValidThread());
+  return cache_controller_.get();
 }
 
 void BlimpContextProvider::InvalidateGrContext(uint32_t state) {
@@ -101,13 +112,6 @@ base::Lock* BlimpContextProvider::GetLock() {
   // This context provider is not used on multiple threads.
   NOTREACHED();
   return nullptr;
-}
-
-void BlimpContextProvider::DeleteCachedResources() {
-  DCHECK(context_thread_checker_.CalledOnValidThread());
-
-  if (gr_context_)
-    gr_context_->FreeGpuResources();
 }
 
 void BlimpContextProvider::SetLostContextCallback(

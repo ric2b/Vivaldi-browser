@@ -53,14 +53,14 @@ void WebViewFrameWidget::resizeVisualViewport(const WebSize& size)
     return m_webView->resizeVisualViewport(size);
 }
 
-void WebViewFrameWidget::didEnterFullScreen()
+void WebViewFrameWidget::didEnterFullscreen()
 {
-    return m_webView->didEnterFullScreen();
+    return m_webView->didEnterFullscreen();
 }
 
-void WebViewFrameWidget::didExitFullScreen()
+void WebViewFrameWidget::didExitFullscreen()
 {
-    return m_webView->didExitFullScreen();
+    return m_webView->didExitFullscreen();
 }
 
 void WebViewFrameWidget::beginFrame(double lastFrameTimeMonotonic)
@@ -259,12 +259,27 @@ void WebViewFrameWidget::setBaseBackgroundColor(WebColor color)
 
 void WebViewFrameWidget::scheduleAnimation()
 {
-    m_webView->scheduleAnimation();
+    m_webView->scheduleAnimationForWidget();
 }
 
 CompositorProxyClient* WebViewFrameWidget::createCompositorProxyClient()
 {
     return m_webView->createCompositorProxyClient();
+}
+
+void WebViewFrameWidget::setRootGraphicsLayer(GraphicsLayer* layer)
+{
+    m_webView->setRootGraphicsLayer(layer);
+}
+
+void WebViewFrameWidget::attachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline)
+{
+    m_webView->attachCompositorAnimationTimeline(compositorTimeline);
+}
+
+void WebViewFrameWidget::detachCompositorAnimationTimeline(CompositorAnimationTimeline* compositorTimeline)
+{
+    m_webView->detachCompositorAnimationTimeline(compositorTimeline);
 }
 
 } // namespace blink

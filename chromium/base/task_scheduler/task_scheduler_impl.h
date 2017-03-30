@@ -16,7 +16,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/synchronization/waitable_event.h"
+#include "base/synchronization/atomic_flag.h"
 #include "base/task_runner.h"
 #include "base/task_scheduler/delayed_task_manager.h"
 #include "base/task_scheduler/scheduler_worker_pool_impl.h"
@@ -27,6 +27,9 @@
 #include "base/threading/thread.h"
 
 namespace base {
+
+class SchedulerWorkerPoolParams;
+
 namespace internal {
 
 class SchedulerServiceThread;
@@ -34,32 +37,12 @@ class SchedulerServiceThread;
 // Default TaskScheduler implementation. This class is thread-safe.
 class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
  public:
-  struct WorkerPoolCreationArgs {
-    // Name of the pool. Used to label the pool's threads.
-    std::string name;
-
-    // Priority of the pool's threads.
-    ThreadPriority thread_priority;
-
-    // Whether I/O is allowed in the pool.
-    SchedulerWorkerPoolImpl::IORestriction io_restriction;
-
-    // Maximum number of threads in the pool.
-    size_t max_threads;
-  };
-
-  // Returns the index of the worker pool in which a task with |traits| should
-  // run. This should be coded in a future-proof way: new traits should
-  // gracefully map to a default pool.
-  using WorkerPoolIndexForTraitsCallback =
-      Callback<size_t(const TaskTraits& traits)>;
-
   // Creates and returns an initialized TaskSchedulerImpl. CHECKs on failure.
-  // |worker_pools| describes the worker pools to create.
+  // |worker_pool_params_vector| describes the worker pools to create.
   // |worker_pool_index_for_traits_callback| returns the index in |worker_pools|
   // of the worker pool in which a task with given traits should run.
   static std::unique_ptr<TaskSchedulerImpl> Create(
-      const std::vector<WorkerPoolCreationArgs>& worker_pools,
+      const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector,
       const WorkerPoolIndexForTraitsCallback&
           worker_pool_index_for_traits_callback);
 
@@ -82,10 +65,11 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   void JoinForTesting();
 
  private:
-  TaskSchedulerImpl(const WorkerPoolIndexForTraitsCallback&
-                        worker_pool_index_for_traits_callback);
+  explicit TaskSchedulerImpl(const WorkerPoolIndexForTraitsCallback&
+                                 worker_pool_index_for_traits_callback);
 
-  void Initialize(const std::vector<WorkerPoolCreationArgs>& worker_pools);
+  void Initialize(
+      const std::vector<SchedulerWorkerPoolParams>& worker_pool_params_vector);
 
   // Returns the worker pool that runs Tasks with |traits|.
   SchedulerWorkerPool* GetWorkerPoolForTraits(const TaskTraits& traits);
@@ -105,8 +89,8 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
   std::unique_ptr<SchedulerServiceThread> service_thread_;
 
 #if DCHECK_IS_ON()
-  // Signaled once JoinForTesting() has returned.
-  WaitableEvent join_for_testing_returned_;
+  // Set once JoinForTesting() has returned.
+  AtomicFlag join_for_testing_returned_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerImpl);

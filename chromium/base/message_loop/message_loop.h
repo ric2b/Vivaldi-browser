@@ -37,6 +37,16 @@
 #include "base/message_loop/message_pump_libevent.h"
 #endif
 
+#if defined(OS_ANDROID)
+namespace base {
+namespace android {
+
+class JavaMessageHandlerFactory;
+
+}  // namespace android
+}  // namespace base
+#endif  // defined(OS_ANDROID)
+
 namespace base {
 
 class HistogramBase;
@@ -171,6 +181,7 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   void AddNestingObserver(NestingObserver* observer);
   void RemoveNestingObserver(NestingObserver* observer);
 
+#if !(defined(OS_MACOSX) && !defined(OS_IOS))
   // NOTE: Deprecated; prefer task_runner() and the TaskRunner interfaces.
   // TODO(skyostil): Remove these functions (crbug.com/465354).
   //
@@ -241,6 +252,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
     base::subtle::ReleaseHelperInternal<T, void>::ReleaseViaSequencedTaskRunner(
         this, from_here, object);
   }
+#endif  // !(defined(OS_MACOSX) && !defined(OS_IOS))
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+ protected:
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Deprecated: use RunLoop instead.
   // Run the message loop.
@@ -250,6 +266,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Process all pending tasks, windows messages, etc., but don't wait/sleep.
   // Return as soon as all items that can be run are taken care of.
   void RunUntilIdle();
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+ public:
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
 
   // Deprecated: use RunLoop instead.
   //
@@ -291,9 +311,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Returns the type passed to the constructor.
   Type type() const { return type_; }
 
-  // Returns the name of the thread this message loop is bound to.
-  // This function is only valid when this message loop is running and
-  // BindToCurrentThread has already been called.
+  // Returns the name of the thread this message loop is bound to. This function
+  // is only valid when this message loop is running, BindToCurrentThread has
+  // already been called and has an "happens-before" relationship with this call
+  // (this relationship is obtained implicitly by the MessageLoop's task posting
+  // system unless calling this very early).
   std::string GetThreadName() const;
 
   // Gets the TaskRunner associated with this message loop.
@@ -450,10 +472,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
 
   // Calls RunTask or queues the pending_task on the deferred task list if it
   // cannot be run right now.  Returns true if the task was run.
-  bool DeferOrRunPendingTask(const PendingTask& pending_task);
+  bool DeferOrRunPendingTask(PendingTask pending_task);
 
   // Adds the pending task to delayed_work_queue_.
-  void AddToDelayedWorkQueue(const PendingTask& pending_task);
+  void AddToDelayedWorkQueue(PendingTask pending_task);
 
   // Delete tasks that haven't run yet without running them.  Used in the
   // destructor to make sure all the task's destructors get called.  Returns
@@ -542,9 +564,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   scoped_refptr<SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<ThreadTaskRunnerHandle> thread_task_runner_handle_;
 
-  // Id of the thread this message loop is bound to.
+  // Id of the thread this message loop is bound to. Initialized once when the
+  // MessageLoop is bound to its thread and constant forever after.
   PlatformThreadId thread_id_;
 
+#if !(defined(OS_MACOSX) && !defined(OS_IOS))
   template <class T, class R> friend class base::subtle::DeleteHelperInternal;
   template <class T, class R> friend class base::subtle::ReleaseHelperInternal;
 
@@ -554,6 +578,7 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   void ReleaseSoonInternal(const tracked_objects::Location& from_here,
                            void(*releaser)(const void*),
                            const void* object);
+#endif  // !(defined(OS_MACOSX) && !defined(OS_IOS))
 
   DISALLOW_COPY_AND_ASSIGN(MessageLoop);
 };
@@ -569,6 +594,9 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
 //
 class BASE_EXPORT MessageLoopForUI : public MessageLoop {
  public:
+  using MessageLoop::Run;
+  using MessageLoop::RunUntilIdle;
+
   MessageLoopForUI() : MessageLoop(TYPE_UI) {
   }
 
@@ -599,6 +627,11 @@ class BASE_EXPORT MessageLoopForUI : public MessageLoop {
   // never be called. Instead use Start(), which will forward all the native UI
   // events to the Java message loop.
   void Start();
+  void StartForTesting(base::android::JavaMessageHandlerFactory* factory,
+                       WaitableEvent* test_done_event);
+  // In Android there are cases where we want to abort immediately without
+  // calling Quit(), in these cases we call Abort().
+  void Abort();
 #endif
 
 #if defined(USE_OZONE) || (defined(USE_X11) && !defined(USE_GLIB))
@@ -629,6 +662,9 @@ static_assert(sizeof(MessageLoop) == sizeof(MessageLoopForUI),
 //
 class BASE_EXPORT MessageLoopForIO : public MessageLoop {
  public:
+  using MessageLoop::Run;
+  using MessageLoop::RunUntilIdle;
+
   MessageLoopForIO() : MessageLoop(TYPE_IO) {
   }
 

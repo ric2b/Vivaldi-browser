@@ -20,12 +20,12 @@
 #include "ppapi/c/private/pp_content_decryptor.h"
 #include "ppapi/cpp/completion_callback.h"
 #include "ppapi/cpp/private/content_decryptor_private.h"
+#include "ppapi/cpp/private/output_protection_private.h"
 #include "ppapi/cpp/var.h"
 #include "ppapi/cpp/var_array_buffer.h"
 #include "ppapi/utility/completion_callback_factory.h"
 
 #if defined(OS_CHROMEOS)
-#include "ppapi/cpp/private/output_protection_private.h"
 #include "ppapi/cpp/private/platform_verification.h"
 #endif
 
@@ -38,7 +38,6 @@ void* GetCdmHost(int host_interface_version, void* user_data);
 // Content Decryption Module (CDM).
 class PpapiCdmAdapter : public pp::Instance,
                         public pp::ContentDecryptor_Private,
-                        public cdm::Host_7,
                         public cdm::Host_8 {
  public:
   PpapiCdmAdapter(PP_Instance instance, pp::Module* module);
@@ -86,7 +85,7 @@ class PpapiCdmAdapter : public pp::Instance,
       pp::Buffer_Dev encrypted_buffer,
       const PP_EncryptedBlockInfo& encrypted_block_info) override;
 
-  // cdm::Host_7 and cdm::Host_8 implementation.
+  // cdm::Host_8 implementation.
   cdm::Buffer* Allocate(uint32_t capacity) override;
   void SetTimer(int64_t delay_ms, void* context) override;
   cdm::Time GetCurrentWallTime() override;
@@ -158,12 +157,10 @@ class PpapiCdmAdapter : public pp::Instance,
     SessionMessage(const std::string& session_id,
                    cdm::MessageType message_type,
                    const char* message,
-                   uint32_t message_size,
-                   const std::string& legacy_destination_url);
+                   uint32_t message_size);
     std::string session_id;
     cdm::MessageType message_type;
     std::vector<uint8_t> message;
-    std::string legacy_destination_url;
   };
 
   // Create an instance of the |key_system| CDM. Caller owns the returned
@@ -184,9 +181,6 @@ class PpapiCdmAdapter : public pp::Instance,
   void SendSessionMessageInternal(int32_t result,
                                   const SessionMessage& message);
   void SendSessionClosedInternal(int32_t result, const std::string& session_id);
-  void SendSessionErrorInternal(int32_t result,
-                                const std::string& session_id,
-                                const SessionError& error);
   void SendSessionKeysChangeInternal(
       int32_t result,
       const std::string& session_id,
@@ -238,11 +232,14 @@ class PpapiCdmAdapter : public pp::Instance,
   void LogToConsole(const pp::Var& value);
 #endif  // !defined(NDEBUG)
 
-#if defined(OS_CHROMEOS)
   void ReportOutputProtectionUMA(OutputProtectionStatus status);
   void ReportOutputProtectionQuery();
   void ReportOutputProtectionQueryResult();
 
+  void EnableProtectionDone(int32_t result);
+  void QueryOutputProtectionStatusDone(int32_t result);
+
+#if defined(OS_CHROMEOS)
   struct PepperPlatformChallengeResponse {
     pp::Var signed_data;
     pp::Var signed_data_signature;
@@ -252,11 +249,9 @@ class PpapiCdmAdapter : public pp::Instance,
   void SendPlatformChallengeDone(
       int32_t result,
       const linked_ptr<PepperPlatformChallengeResponse>& response);
-  void EnableProtectionDone(int32_t result);
-  void QueryOutputProtectionStatusDone(int32_t result);
+#endif
 
   pp::OutputProtection_Private output_protection_;
-  pp::PlatformVerification platform_verification_;
 
   // Same as above, these are only read by QueryOutputProtectionStatusDone().
   uint32_t output_link_mask_;
@@ -267,6 +262,9 @@ class PpapiCdmAdapter : public pp::Instance,
   // unprotected external link) have been reported to UMA.
   bool uma_for_output_protection_query_reported_;
   bool uma_for_output_protection_positive_result_reported_;
+
+#if defined(OS_CHROMEOS)
+  pp::PlatformVerification platform_verification_;
 #endif
 
   PpbBufferAllocator allocator_;

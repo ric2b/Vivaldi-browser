@@ -39,7 +39,7 @@ class BrowsingDataFilterBuilder {
   // Constructs a filter with the given |mode| - whitelist or blacklist.
   explicit BrowsingDataFilterBuilder(Mode mode);
 
-  ~BrowsingDataFilterBuilder();
+  virtual ~BrowsingDataFilterBuilder();
 
   // Sets the |mode| of the filter.
   void SetMode(Mode mode);
@@ -66,6 +66,10 @@ class BrowsingDataFilterBuilder {
   // the whitelist, or aren't in the blacklist.
   virtual base::Callback<bool(const std::string& server_id)>
       BuildChannelIDFilter() const = 0;
+
+  // Builds a filter that matches the |site| of a plugin.
+  virtual base::Callback<bool(const std::string& site)>
+      BuildPluginFilter() const = 0;
 
   // A convenience method to produce an empty blacklist, a filter that matches
   // everything.

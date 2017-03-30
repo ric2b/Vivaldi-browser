@@ -61,11 +61,11 @@ BUILDERS = {
     },
     "WebKit Mac10.11": {
         "port_name": "mac-mac10.11",
-        "specifiers": ['10.11', 'Release']
+        "specifiers": ['Mac10.11', 'Release']
     },
     "WebKit Mac10.11 (dbg)": {
         "port_name": "mac-mac10.11",
-        "specifiers": ['10.11', 'Debug']
+        "specifiers": ['Mac10.11', 'Debug']
     },
     "WebKit Mac10.11 (retina)": {
         "port_name": "mac-retina",
@@ -75,21 +75,49 @@ BUILDERS = {
         "port_name": "android",
         "specifiers": ['Android', 'Release']
     },
-    # TODO(qyearsley): Update this set of builders when new builders
-    # are set up for layout test try jobs. http://crbug.com/474273.
-    "linux_chromium_rel_ng": {
+    "linux_precise_blink_rel": {
         "port_name": "linux-precise",
         "specifiers": ['Precise', 'Release'],
-        "is_try_bot": True,
+        "is_try_builder": True,
     },
-    "mac_chromium_rel_ng": {
+    "linux_trusty_blink_rel": {
+        "port_name": "linux-trusty",
+        "specifiers": ['Trusty', 'Release'],
+        "is_try_builder": True,
+    },
+    "mac10.9_blink_rel": {
         "port_name": "mac-mac10.9",
         "specifiers": ['Mac10.9', 'Release'],
-        "is_try_bot": True,
+        "is_try_builder": True,
     },
-    "win_chromium_rel_ng": {
+    "mac10.10_blink_rel": {
+        "port_name": "mac-mac10.10",
+        "specifiers": ['Mac10.10', 'Release'],
+        "is_try_builder": True,
+    },
+    "mac10.11_blink_rel": {
+        "port_name": "mac-mac10.11",
+        "specifiers": ['Mac10.11', 'Release'],
+        "is_try_builder": True,
+    },
+    "mac10.11_retina_blink_rel": {
+        "port_name": "mac-retina",
+        "specifiers": ['Retina', 'Release'],
+        "is_try_builder": True,
+    },
+    "win7_blink_rel": {
         "port_name": "win-win7",
         "specifiers": ['Win7', 'Release'],
-        "is_try_bot": True,
+        "is_try_builder": True,
+    },
+    "win10_blink_rel": {
+        "port_name": "win-win10",
+        "specifiers": ['Win10', 'Release'],
+        "is_try_builder": True,
+    },
+    "android_blink_rel": {
+        "port_name": "android",
+        "specifiers": ['Android', 'Release'],
+        "is_try_builder": True,
     },
 }

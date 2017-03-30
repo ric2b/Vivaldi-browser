@@ -45,7 +45,6 @@
         'models/tree_node_iterator_unittest.cc',
         'resource/data_pack_literal.cc',
         'resource/data_pack_unittest.cc',
-        'resource/resource_bundle_mac_unittest.mm',
         'resource/resource_bundle_unittest.cc',
         'resource/scale_factor_unittest.cc',
         'template_expressions_unittest.cc',
@@ -55,6 +54,7 @@
         # Note: file list duplicated in GN build.
         '<@(_common_sources)',
         'accelerators/accelerator_manager_unittest.cc',
+        'accelerators/accelerator_unittest.cc',
         'accelerators/menu_label_accelerator_util_linux_unittest.cc',
         'clipboard/custom_data_helper_unittest.cc',
         'cocoa/base_view_unittest.mm',

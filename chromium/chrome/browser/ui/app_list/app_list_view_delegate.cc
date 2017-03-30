@@ -76,10 +76,6 @@
 #include "chrome/browser/ui/ash/app_list/app_sync_ui_state_watcher.h"
 #endif
 
-#if defined(OS_WIN)
-#include "chrome/browser/web_applications/web_app_win.h"
-#endif
-
 #if !defined(OS_CHROMEOS)
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -94,26 +90,13 @@ namespace {
 
 const int kAutoLaunchDefaultTimeoutMilliSec = 50;
 
-#if defined(OS_WIN)
-void CreateShortcutInWebAppDir(
-    const base::FilePath& app_data_dir,
-    base::Callback<void(const base::FilePath&)> callback,
-    std::unique_ptr<web_app::ShortcutInfo> info) {
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(web_app::CreateShortcutInWebAppDir, app_data_dir,
-                 base::Passed(&info)),
-      callback);
-}
-#endif
-
 void PopulateUsers(const base::FilePath& active_profile_path,
                    app_list::AppListViewDelegate::Users* users) {
   users->clear();
   std::vector<ProfileAttributesEntry*> entries = g_browser_process->
       profile_manager()->GetProfileAttributesStorage().
       GetAllProfilesAttributesSortedByName();
-  for (const auto entry : entries) {
+  for (const auto* entry : entries) {
     app_list::AppListViewDelegate::User user;
     user.name = entry->GetName();
     user.email = entry->GetUserName();
@@ -447,32 +430,6 @@ app_list::SpeechUIModel* AppListViewDelegate::GetSpeechUI() {
   return speech_ui_.get();
 }
 
-void AppListViewDelegate::GetShortcutPathForApp(
-    const std::string& app_id,
-    const base::Callback<void(const base::FilePath&)>& callback) {
-#if defined(OS_WIN)
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
-          app_id, extensions::ExtensionRegistry::EVERYTHING);
-  if (!extension) {
-    callback.Run(base::FilePath());
-    return;
-  }
-
-  base::FilePath app_data_dir(
-      web_app::GetWebAppDataDirectory(profile_->GetPath(),
-                                      extension->id(),
-                                      GURL()));
-
-  web_app::GetShortcutInfoForApp(
-      extension,
-      profile_,
-      base::Bind(CreateShortcutInWebAppDir, app_data_dir, callback));
-#else
-  callback.Run(base::FilePath());
-#endif
-}
-
 void AppListViewDelegate::StartSearch() {
   if (search_controller_) {
     search_controller_->Start(is_voice_query_);
@@ -565,18 +522,6 @@ void AppListViewDelegate::ViewClosing() {
       }
     }
   }
-}
-
-void AppListViewDelegate::OpenSettings() {
-  const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
-          extension_misc::kSettingsAppId,
-          extensions::ExtensionRegistry::EVERYTHING);
-  DCHECK(extension);
-  controller_->ActivateApp(profile_,
-                           extension,
-                           AppListControllerDelegate::LAUNCH_FROM_UNKNOWN,
-                           0);
 }
 
 void AppListViewDelegate::OpenHelp() {

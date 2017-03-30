@@ -85,6 +85,16 @@ cr.define('settings', function() {
       displayName: 'US Dvorak keyboard',
       languageCodes: ['en', 'en-US'],
       enabled: true,
+    }, {
+      id: '_comp_ime_abcdefghijklmnopqrstuvwxyzabcdefxkb:sw:sw',
+      displayName: 'Swahili keyboard',
+      languageCodes: ['sw', 'tk'],
+      enabled: false,
+    }, {
+      id: '_comp_ime_abcdefghijklmnopqrstuvwxyzabcdefxkb:us:sw',
+      displayName: 'US Swahili keyboard',
+      languageCodes: ['en', 'en-US', 'sw'],
+      enabled: false,
     }];
   }
 
@@ -110,16 +120,42 @@ cr.define('settings', function() {
     },
 
     /**
-     * Sets the accepted languages, used to decide which languages to translate,
-     * generate the Accept-Language header, etc.
-     * @param {!Array<string>} languageCodes
+     * Enables a language, adding it to the Accept-Language list (used to decide
+     * which languages to translate, generate the Accept-Language header, etc.).
+     * @param {string} languageCode
      */
-    setLanguageList: function(languageCodes) {
-      var languages = languageCodes.join(',');
-      this.settingsPrefs_.set('prefs.intl.accept_languages.value', languages);
+    enableLanguage: function(languageCode) {
+      var languageCodes = this.settingsPrefs_.prefs.intl.accept_languages.value;
+      var languages = languageCodes.split(',');
+      if (languages.indexOf(languageCode) != -1)
+        return;
+      languages.push(languageCode);
+      languageCodes = languages.join(',');
+      this.settingsPrefs_.set(
+          'prefs.intl.accept_languages.value', languageCodes);
       if (cr.isChromeOS) {
         this.settingsPrefs_.set(
-            'prefs.settings.language.preferred_languages.value', languages);
+            'prefs.settings.language.preferred_languages.value', languageCodes);
+      }
+    },
+
+    /**
+     * Disables a language, removing it from the Accept-Language list.
+     * @param {string} languageCode
+     */
+    disableLanguage: function(languageCode) {
+      var languageCodes = this.settingsPrefs_.prefs.intl.accept_languages.value;
+      var languages = languageCodes.split(',');
+      var index = languages.indexOf(languageCode);
+      if (index == -1)
+        return;
+      languages.splice(index, 1);
+      languageCodes = languages.join(',');
+      this.settingsPrefs_.set(
+          'prefs.intl.accept_languages.value', languageCodes);
+      if (cr.isChromeOS) {
+        this.settingsPrefs_.set(
+            'prefs.settings.language.preferred_languages.value', languageCodes);
       }
     },
 
@@ -179,7 +215,18 @@ cr.define('settings', function() {
      * methods, enabling the input method for the current user. Chrome OS only.
      * @param {string} inputMethodId
      */
-    addInputMethod: wrapAssertNotReached('addInputMethod'),
+    addInputMethod: function(inputMethodId) {
+      assert(cr.isChromeOS);
+      var inputMethod = this.componentExtensionImes.find(function(ime) {
+        return ime.id == inputMethodId;
+      });
+      assertTrue(!!inputMethod);
+      inputMethod.enabled = true;
+      var prefPath = 'prefs.settings.language.preload_engines.value';
+      var enabledInputMethods = this.settingsPrefs_.get(prefPath).split(',');
+      enabledInputMethods.push(inputMethodId);
+      this.settingsPrefs_.set(prefPath, enabledInputMethods.join(','))
+    },
 
     /**
      * Removes the input method from the current user's list of enabled input

@@ -34,7 +34,7 @@ class UserScriptInjector : public ScriptInjector,
  private:
   // UserScriptSet::Observer implementation.
   void OnUserScriptsUpdated(const std::set<HostID>& changed_hosts,
-                            const std::vector<UserScript*>& scripts) override;
+                            const UserScriptList& scripts) override;
 
   // ScriptInjector implementation.
   UserScript::InjectionType script_type() const override;
@@ -49,7 +49,7 @@ class UserScriptInjector : public ScriptInjector,
       int tab_id) const override;
   std::vector<blink::WebScriptSource> GetJsSources(
       UserScript::RunLocation run_location) const override;
-  std::vector<std::string> GetCssSources(
+  std::vector<blink::WebString> GetCssSources(
       UserScript::RunLocation run_location) const override;
   void GetRunInfo(ScriptsRunInfo* scripts_run_info,
                   UserScript::RunLocation run_location) const override;

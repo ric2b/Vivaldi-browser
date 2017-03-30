@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 # GYP version: components/sync_sessions.gypi:sync_sessions
-source_set("sync_sessions") {
+static_library("sync_sessions") {
   sources = [
     "favicon_cache.cc",
     "favicon_cache.h",
@@ -56,16 +56,15 @@ source_set("sync_sessions") {
     "//components/history/core/browser",
     "//components/prefs",
     "//components/sessions",
-    "//components/sync_driver",
+    "//components/sync",
     "//components/variations",
-    "//sync",
     "//ui/base:base",
     "//ui/gfx",
     "//url",
   ]
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
     "fake_sync_sessions_client.cc",
@@ -105,10 +104,9 @@ source_set("unit_tests") {
     "//components/history/core/browser",
     "//components/prefs:test_support",
     "//components/sessions:test_support",
-    "//components/sync_driver",
-    "//components/sync_driver:test_support",
-    "//sync",
-    "//sync:test_support_sync_api",
+    "//components/sync",
+    "//components/sync:test_support_sync_api",
+    "//components/sync:test_support_sync_driver",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/base:base",

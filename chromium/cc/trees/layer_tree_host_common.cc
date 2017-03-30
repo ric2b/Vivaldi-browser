@@ -18,9 +18,11 @@
 #include "cc/proto/begin_main_frame_and_commit_state.pb.h"
 #include "cc/proto/gfx_conversions.h"
 #include "cc/trees/draw_property_utils.h"
+#include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree_builder.h"
+#include "cc/trees/scroll_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/transform.h"
@@ -81,6 +83,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
     bool can_render_to_separate_surface,
     bool can_adjust_raster_scales,
     bool verify_clip_tree_calculations,
+    bool verify_transform_tree_calculations,
     LayerImplList* render_surface_layer_list,
     PropertyTrees* property_trees)
     : root_layer(root_layer),
@@ -98,6 +101,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
       can_render_to_separate_surface(can_render_to_separate_surface),
       can_adjust_raster_scales(can_adjust_raster_scales),
       verify_clip_tree_calculations(verify_clip_tree_calculations),
+      verify_transform_tree_calculations(verify_transform_tree_calculations),
       render_surface_layer_list(render_surface_layer_list),
       property_trees(property_trees) {}
 
@@ -105,11 +109,12 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
                                       const gfx::Transform& device_transform,
+                                      float device_scale_factor,
                                       LayerImplList* render_surface_layer_list)
     : CalcDrawPropsImplInputs(root_layer,
                               device_viewport_size,
                               device_transform,
-                              1.f,
+                              device_scale_factor,
                               1.f,
                               NULL,
                               NULL,
@@ -120,6 +125,7 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               true,
                               false,
                               true,
+                              true,
                               render_surface_layer_list,
                               GetPropertyTrees(root_layer)) {
   DCHECK(root_layer);
@@ -129,11 +135,37 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
 LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
     CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
                                       const gfx::Size& device_viewport_size,
+                                      const gfx::Transform& device_transform,
+                                      LayerImplList* render_surface_layer_list)
+    : CalcDrawPropsImplInputsForTesting(root_layer,
+                                        device_viewport_size,
+                                        device_transform,
+                                        1.f,
+                                        render_surface_layer_list) {}
+
+LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
+    CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
+                                      const gfx::Size& device_viewport_size,
                                       LayerImplList* render_surface_layer_list)
     : CalcDrawPropsImplInputsForTesting(root_layer,
                                         device_viewport_size,
                                         gfx::Transform(),
+                                        1.f,
                                         render_surface_layer_list) {}
+
+LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
+    CalcDrawPropsImplInputsForTesting(LayerImpl* root_layer,
+                                      const gfx::Size& device_viewport_size,
+                                      float device_scale_factor,
+                                      LayerImplList* render_surface_layer_list)
+    : CalcDrawPropsImplInputsForTesting(root_layer,
+                                        device_viewport_size,
+                                        gfx::Transform(),
+                                        device_scale_factor,
+                                        render_surface_layer_list) {}
+
+LayerTreeHostCommon::ScrollUpdateInfo::ScrollUpdateInfo()
+    : layer_id(Layer::INVALID_ID) {}
 
 bool LayerTreeHostCommon::ScrollUpdateInfo::operator==(
     const LayerTreeHostCommon::ScrollUpdateInfo& other) const {
@@ -216,11 +248,10 @@ static inline void ClearIsDrawnRenderSurfaceLayerListMember(
     ScrollTree* scroll_tree) {
   for (LayerImpl* layer : *layer_list) {
     if (layer->is_drawn_render_surface_layer_list_member()) {
-      DCHECK_GT(scroll_tree->Node(layer->scroll_tree_index())
-                    ->data.num_drawn_descendants,
-                0);
-      scroll_tree->Node(layer->scroll_tree_index())
-          ->data.num_drawn_descendants--;
+      DCHECK_GT(
+          scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants,
+          0);
+      scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants--;
     }
     layer->set_is_drawn_render_surface_layer_list_member(false);
   }
@@ -300,14 +331,14 @@ static void ComputeLayerScrollsDrawnDescendants(LayerTreeImpl* layer_tree_impl,
                                                 ScrollTree* scroll_tree) {
   for (int i = static_cast<int>(scroll_tree->size()) - 1; i > 0; --i) {
     ScrollNode* node = scroll_tree->Node(i);
-    scroll_tree->parent(node)->data.num_drawn_descendants +=
-        node->data.num_drawn_descendants;
+    scroll_tree->parent(node)->num_drawn_descendants +=
+        node->num_drawn_descendants;
   }
   for (LayerImpl* layer : *layer_tree_impl) {
     bool scrolls_drawn_descendant = false;
     if (layer->scrollable()) {
       ScrollNode* node = scroll_tree->Node(layer->scroll_tree_index());
-      if (node->data.num_drawn_descendants > 0)
+      if (node->num_drawn_descendants > 0)
         scrolls_drawn_descendant = true;
     }
     layer->set_scrolls_drawn_descendant(scrolls_drawn_descendant);
@@ -321,7 +352,7 @@ static void ComputeInitialRenderSurfaceLayerList(
     bool can_render_to_separate_surface) {
   ScrollTree* scroll_tree = &property_trees->scroll_tree;
   for (int i = 0; i < static_cast<int>(scroll_tree->size()); ++i)
-    scroll_tree->Node(i)->data.num_drawn_descendants = 0;
+    scroll_tree->Node(i)->num_drawn_descendants = 0;
 
   // Add all non-skipped surfaces to the initial render surface layer list. Add
   // all non-skipped layers to the layer list of their target surface, and
@@ -335,8 +366,7 @@ static void ComputeInitialRenderSurfaceLayerList(
     layer->set_is_drawn_render_surface_layer_list_member(false);
 
     bool layer_is_drawn =
-        property_trees->effect_tree.Node(layer->effect_tree_index())
-            ->data.is_drawn;
+        property_trees->effect_tree.Node(layer->effect_tree_index())->is_drawn;
     bool is_root = layer_tree_impl->IsRootLayer(layer);
     bool skip_layer =
         !is_root && draw_property_utils::LayerShouldBeSkipped(
@@ -377,10 +407,10 @@ static void ComputeInitialRenderSurfaceLayerList(
       // same is true for layers with filters that move pixels.
       // TODO(senorblanco): make this smarter for the SkImageFilter case (check
       // for pixel-moving filters)
-      bool is_occlusion_immune = surface->HasCopyRequest() ||
-                                 surface->HasReplica() ||
-                                 layer->filters().HasReferenceFilter() ||
-                                 layer->filters().HasFilterThatMovesPixels();
+      const FilterOperations& filters = surface->Filters();
+      bool is_occlusion_immune =
+          surface->HasCopyRequest() || surface->HasReplica() ||
+          filters.HasReferenceFilter() || filters.HasFilterThatMovesPixels();
       if (is_occlusion_immune) {
         surface->SetNearestOcclusionImmuneAncestor(surface);
       } else if (is_root) {
@@ -396,7 +426,7 @@ static void ComputeInitialRenderSurfaceLayerList(
       continue;
 
     layer->set_is_drawn_render_surface_layer_list_member(true);
-    scroll_tree->Node(layer->scroll_tree_index())->data.num_drawn_descendants++;
+    scroll_tree->Node(layer->scroll_tree_index())->num_drawn_descendants++;
     layer->render_target()->layer_list().push_back(layer);
 
     // The layer contributes its drawable content rect to its render target.
@@ -592,6 +622,9 @@ void CalculateDrawPropertiesInternal(
   if (inputs->verify_clip_tree_calculations)
     draw_property_utils::VerifyClipTreeCalculations(visible_layer_list,
                                                     inputs->property_trees);
+  if (inputs->verify_transform_tree_calculations)
+    draw_property_utils::VerifyTransformTreeCalculations(
+        visible_layer_list, inputs->property_trees);
 
   if (should_measure_property_tree_performance) {
     TRACE_EVENT_END0(TRACE_DISABLED_BY_DEFAULT("cc.debug.cdp-perf"),
@@ -608,7 +641,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   LayerList update_layer_list;
   bool can_render_to_separate_surface = true;
   PropertyTrees* property_trees =
-      inputs->root_layer->layer_tree_host()->property_trees();
+      inputs->root_layer->GetLayerTree()->property_trees();
   Layer* overscroll_elasticity_layer = nullptr;
   gfx::Vector2dF elastic_overscroll;
   PropertyTreeBuilder::BuildPropertyTrees(
@@ -621,7 +654,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
   draw_property_utils::UpdatePropertyTrees(property_trees,
                                            can_render_to_separate_surface);
   draw_property_utils::FindLayersThatNeedUpdates(
-      inputs->root_layer->layer_tree_host(), property_trees->transform_tree,
+      inputs->root_layer->GetLayerTree(), property_trees->transform_tree,
       property_trees->effect_tree, &update_layer_list);
 }
 
@@ -682,7 +715,7 @@ void LayerTreeHostCommon::CalculateDrawPropertiesForTesting(
 }
 
 PropertyTrees* GetPropertyTrees(Layer* layer) {
-  return layer->layer_tree_host()->property_trees();
+  return layer->GetLayerTree()->property_trees();
 }
 
 PropertyTrees* GetPropertyTrees(LayerImpl* layer) {

@@ -18,6 +18,7 @@
 #include "ui/events/gesture_detection/motion_event_generic.h"
 #include "ui/events/gesture_detection/scale_gesture_listeners.h"
 #include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace ui {
 namespace {
@@ -118,7 +119,6 @@ class GestureProvider::GestureListenerImpl : public ScaleGestureListener,
       tap_down_point_ = gfx::PointF(event.GetX(), event.GetY());
       max_diameter_before_show_press_ = event.GetTouchMajor();
     }
-
     gesture_detector_.OnTouchEvent(event);
     scale_gesture_detector_.OnTouchEvent(event);
 
@@ -284,25 +284,19 @@ class GestureProvider::GestureListenerImpl : public ScaleGestureListener,
 
   bool OnScroll(const MotionEvent& e1,
                 const MotionEvent& e2,
+                const MotionEvent& secondary_pointer_down,
                 float raw_distance_x,
                 float raw_distance_y) override {
     float distance_x = raw_distance_x;
     float distance_y = raw_distance_y;
-    if (!scroll_event_sent_ && e2.GetPointerCount() == 1) {
-      // Remove the touch slop region from the first scroll event to
-      // avoid a jump. Touch slop isn't used for multi-finger
-      // gestures, so in those cases we don't subtract the slop.
-      float distance =
-          std::sqrt(distance_x * distance_x + distance_y * distance_y);
-      float epsilon = 1e-3f;
-      if (distance > epsilon) {
-        float ratio =
-            std::max(0.f,
-                     distance - config_.gesture_detector_config.touch_slop) /
-            distance;
-        distance_x *= ratio;
-        distance_y *= ratio;
-      }
+    if (!scroll_event_sent_ && e2.GetPointerCount() < 3) {
+      // Remove the touch slop region from the first scroll event to avoid a
+      // jump. Touch slop isn't used for scroll gestures with greater than 2
+      // pointers down, in those cases we don't subtract the slop.
+      gfx::Vector2dF delta =
+          ComputeFirstScrollDelta(e1, e2, secondary_pointer_down);
+      distance_x = delta.x();
+      distance_y = delta.y();
     }
 
     snap_scroll_controller_.UpdateSnapScrollMode(distance_x, distance_y);
@@ -363,6 +357,7 @@ class GestureProvider::GestureListenerImpl : public ScaleGestureListener,
     if (!velocity_x && !velocity_y)
       return true;
 
+    DCHECK(scroll_event_sent_);
     if (!scroll_event_sent_) {
       // The native side needs a ET_GESTURE_SCROLL_BEGIN before
       // ET_SCROLL_FLING_START to send the fling to the correct target.
@@ -655,6 +650,54 @@ class GestureProvider::GestureListenerImpl : public ScaleGestureListener,
   }
 
   void SetIgnoreSingleTap(bool value) { ignore_single_tap_ = value; }
+
+  gfx::Vector2dF SubtractSlopRegion(const float dx, const float dy) {
+    float distance = std::sqrt(dx * dx + dy * dy);
+    float epsilon = 1e-3f;
+    if (distance > epsilon) {
+      float ratio =
+          std::max(0.f, distance - config_.gesture_detector_config.touch_slop) /
+          distance;
+      gfx::Vector2dF delta(dx * ratio, dy * ratio);
+      return delta;
+    }
+    gfx::Vector2dF delta(dx, dy);
+    return delta;
+  }
+
+  // When any of the currently down pointers exceeds its slop region
+  // for the first time, scroll delta is adjusted.
+  // The new deltas are calculated for each pointer individually,
+  // and the final scroll delta is the average over all delta values.
+  gfx::Vector2dF ComputeFirstScrollDelta(
+      const MotionEvent& ev1,
+      const MotionEvent& ev2,
+      const MotionEvent& secondary_pointer_down) {
+    // If there are more than two down pointers, tapping is not possible,
+    // so Slop region is not deducted.
+    DCHECK(ev2.GetPointerCount() < 3);
+
+    gfx::Vector2dF delta(0, 0);
+    for (size_t i = 0; i < ev2.GetPointerCount(); i++) {
+      const int pointer_id = ev2.GetPointerId(i);
+      const MotionEvent* source_pointer_down_event =
+          gesture_detector_.GetSourcePointerDownEvent(
+              ev1, secondary_pointer_down, pointer_id);
+      DCHECK(source_pointer_down_event);
+      if (!source_pointer_down_event)
+        continue;
+      int source_index =
+          source_pointer_down_event->FindPointerIndexOfId(pointer_id);
+      DCHECK_GE(source_index, 0);
+      if (source_index < 0)
+        continue;
+      float dx = source_pointer_down_event->GetX(source_index) - ev2.GetX(i);
+      float dy = source_pointer_down_event->GetY(source_index) - ev2.GetY(i);
+      delta += SubtractSlopRegion(dx, dy);
+    }
+    delta.Scale(1.0 / ev2.GetPointerCount());
+    return delta;
+  }
 
   const GestureProvider::Config config_;
   GestureProviderClient* const client_;

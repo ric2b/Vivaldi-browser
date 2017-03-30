@@ -91,6 +91,7 @@ def GetImageList(
   filename = filename.replace(DIST_SUBSTR, distribution)
   if filename_expansion_function:
     filename = filename_expansion_function(filename)
+  filename = util.PathSearcher.LocatePath(filename, base_path)
   filepath = os.path.join(base_path, filename)
   images = [('1x', filename)]
 
@@ -341,6 +342,8 @@ class ChromeHtml(interface.GathererBase):
     filename = self.GetInputPath()
     if self.filename_expansion_function:
       filename = self.filename_expansion_function(filename)
+    filename = util.PathSearcher.LocatePath(filename,
+                       self.grd_node.GetRoot().GetBaseDir())
     # Hack: some unit tests supply an absolute path and no root node.
     if not os.path.isabs(filename):
       filename = self.grd_node.ToRealPath(filename)
@@ -349,6 +352,7 @@ class ChromeHtml(interface.GathererBase):
           filename,
           self.grd_node,
           allow_external_script = self.allow_external_script_,
+          strip_whitespace=True,
           preprocess_only = self.preprocess_only_,
           rewrite_function=lambda fp, t, d: ProcessImageSets(
               fp, t, self.scale_factors_, d,

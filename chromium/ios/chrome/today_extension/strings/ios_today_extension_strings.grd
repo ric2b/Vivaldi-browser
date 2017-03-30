@@ -11,7 +11,7 @@ all other OS specific variables will be false.
 -->
 
 <grit base_dir="." latest_public_release="0" current_release="1"
-      source_lang_id="en" enc_check="möl">
+      output_all_resource_defines="false" source_lang_id="en" enc_check="möl">
   <outputs>
     <output filename="grit/ios_today_extension_strings.h" type="rc_header">
       <emit emit_type="prepend"></emit>
@@ -174,6 +174,9 @@ all other OS specific variables will be false.
       </message>
       <message name="IDS_IOS_VOICE_SEARCH_TODAY_EXTENSION_TITLE" desc="The title for Voice Search button in today extension [Length: 20em]">
         Voice Search
+      </message>
+      <message name="IDS_IOS_EMPTY_TODAY_EXTENSION_TEXT" desc="The text to display if today extension is empty. Refer to the possibility to open copied links from there. [Length: 26em]">
+        No Copied Link
       </message>
     </messages>
   </release>

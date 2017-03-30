@@ -31,6 +31,9 @@ namespace blink {
 
 class HTMLFormElement;
 
+// Inheritance of FormAssociatedElement was used for NPAPI form association, but is still
+// kept here so that legacy APIs such as form attribute can keep working according to the spec.
+// See: https://html.spec.whatwg.org/multipage/embedded-content.html#the-object-element
 class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement, public FormAssociatedElement {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLObjectElement);
@@ -114,21 +117,21 @@ template<typename T> inline const T* toElement(const FormAssociatedElement*);
 // Make toHTMLObjectElement() accept a FormAssociatedElement as input instead of a Node.
 template<> inline const HTMLObjectElement* toElement<HTMLObjectElement>(const FormAssociatedElement* element)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!element || !element->isFormControlElement());
+    SECURITY_DCHECK(!element || !element->isFormControlElement());
     const HTMLObjectElement* objectElement = static_cast<const HTMLObjectElement*>(element);
     // We need to assert after the cast because FormAssociatedElement doesn't
     // have hasTagName.
-    ASSERT_WITH_SECURITY_IMPLICATION(!objectElement || objectElement->hasTagName(HTMLNames::objectTag));
+    SECURITY_DCHECK(!objectElement || objectElement->hasTagName(HTMLNames::objectTag));
     return objectElement;
 }
 
 template<> inline const HTMLObjectElement& toElement<HTMLObjectElement>(const FormAssociatedElement& element)
 {
-    ASSERT_WITH_SECURITY_IMPLICATION(!element.isFormControlElement());
+    SECURITY_DCHECK(!element.isFormControlElement());
     const HTMLObjectElement& objectElement = static_cast<const HTMLObjectElement&>(element);
     // We need to assert after the cast because FormAssociatedElement doesn't
     // have hasTagName.
-    ASSERT_WITH_SECURITY_IMPLICATION(objectElement.hasTagName(HTMLNames::objectTag));
+    SECURITY_DCHECK(objectElement.hasTagName(HTMLNames::objectTag));
     return objectElement;
 }
 

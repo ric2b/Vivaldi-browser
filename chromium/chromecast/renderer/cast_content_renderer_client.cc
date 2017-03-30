@@ -11,17 +11,20 @@
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "chromecast/base/chromecast_switches.h"
+#include "chromecast/common/media/cast_media_client.h"
 #include "chromecast/crash/cast_crash_keys.h"
-#include "chromecast/media/base/media_caps.h"
 #include "chromecast/renderer/cast_media_load_deferrer.h"
 #include "chromecast/renderer/cast_render_thread_observer.h"
 #include "chromecast/renderer/key_systems_cast.h"
 #include "chromecast/renderer/media/chromecast_media_renderer_factory.h"
+#include "chromecast/renderer/media/media_caps_observer_impl.h"
 #include "components/network_hints/renderer/prescient_networking_dispatcher.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/render_frame.h"
+#include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "media/base/media.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebColor.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebSettings.h"
@@ -63,15 +66,15 @@ CastContentRendererClient::~CastContentRendererClient() {
 void CastContentRendererClient::RenderThreadStarted() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
-  // Set the initial known codecs mask.
-  if (command_line->HasSwitch(switches::kHdmiSinkSupportedCodecs)) {
-    int hdmi_codecs_mask;
-    if (base::StringToInt(command_line->GetSwitchValueASCII(
-                              switches::kHdmiSinkSupportedCodecs),
-                          &hdmi_codecs_mask)) {
-      ::media::SetHdmiSinkCodecs(hdmi_codecs_mask);
-    }
-  }
+  // Register as observer for media capabilities
+  content::RenderThread* thread = content::RenderThread::Get();
+  media::mojom::MediaCapsPtr media_caps;
+  thread->GetRemoteInterfaces()->GetInterface(&media_caps);
+  media::mojom::MediaCapsObserverPtr proxy;
+  media_caps_observer_.reset(new media::MediaCapsObserverImpl(&proxy));
+  media_caps->AddObserver(std::move(proxy));
+
+  chromecast::media::CastMediaClient::Initialize();
 
   cast_observer_.reset(new CastRenderThreadObserver());
 
@@ -96,17 +99,8 @@ void CastContentRendererClient::RenderViewCreated(
     blink::WebFrameWidget* web_frame_widget = render_view->GetWebFrameWidget();
     web_frame_widget->setBaseBackgroundColor(kColorBlack);
 
-    // The following settings express consistent behaviors across Cast
-    // embedders, though Android has enabled by default for mobile browsers.
-    webview->settings()->setShrinksViewportContentToFit(false);
+    // Settings for ATV (Android defaults are not what we want):
     webview->settings()->setMediaControlsOverlayPlayButtonEnabled(false);
-
-    // Scale 1 ensures window.innerHeight/Width match application resolution.
-    // PageScaleOverride is the 'user agent' value which overrides page
-    // settings (from meta viewport tag) - thus preventing inconsistency
-    // between Android and non-Android cast_shell.
-    webview->setDefaultPageScaleLimits(1.f, 1.f);
-    webview->setInitialPageScaleOverride(1.f);
 
     // Disable application cache as Chromecast doesn't support off-line
     // application running.

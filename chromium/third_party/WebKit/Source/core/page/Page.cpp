@@ -19,12 +19,12 @@
 
 #include "core/page/Page.h"
 
+#include "bindings/core/v8/ScriptController.h"
 #include "core/css/resolver/ViewportStyleResolver.h"
 #include "core/dom/ClientRectList.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/VisitedLinkState.h"
 #include "core/editing/DragCaretController.h"
-#include "core/editing/commands/UndoStack.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/Event.h"
 #include "core/fetch/ResourceFetcher.h"
@@ -37,6 +37,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/AutoscrollController.h"
@@ -51,7 +52,6 @@
 #include "core/paint/PaintLayer.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/plugins/PluginData.h"
-#include "platform/text/CompressibleString.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -119,7 +119,6 @@ Page::Page(PageClients& pageClients)
     , m_focusController(FocusController::create(this))
     , m_contextMenuController(ContextMenuController::create(this, pageClients.contextMenuClient))
     , m_pointerLockController(PointerLockController::create(this))
-    , m_undoStack(UndoStack::create())
     , m_mainFrame(nullptr)
     , m_editorClient(pageClients.editorClient)
     , m_spellCheckerClient(pageClients.spellCheckerClient)
@@ -133,7 +132,6 @@ Page::Page(PageClients& pageClients)
     , m_isPainting(false)
 #endif
     , m_frameHost(FrameHost::create(*this))
-    , m_timerForCompressStrings(this, &Page::compressStrings)
 {
     ASSERT(m_editorClient);
 
@@ -288,16 +286,6 @@ void Page::setDeviceScaleFactor(float scaleFactor)
         deprecatedLocalMainFrame()->deviceScaleFactorChanged();
 }
 
-void Page::setDeviceColorProfile(const Vector<char>& profile)
-{
-    // FIXME: implement.
-}
-
-void Page::resetDeviceColorProfileForTesting()
-{
-    RuntimeEnabledFeatures::setImageColorProfilesEnabled(false);
-}
-
 void Page::allVisitedStateChanged(bool invalidateVisitedLinkHashes)
 {
     for (const Page* page : ordinaryPages()) {
@@ -320,8 +308,6 @@ void Page::visitedStateChanged(LinkHash linkHash)
 
 void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitialState)
 {
-    static const double waitingTimeBeforeCompressingString = 10;
-
     if (m_visibilityState == visibilityState)
         return;
     m_visibilityState = visibilityState;
@@ -331,15 +317,6 @@ void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitia
 
     if (!isInitialState && m_mainFrame)
         m_mainFrame->didChangeVisibilityState();
-
-    // Compress CompressibleStrings when 10 seconds have passed since the page
-    // went to background.
-    if (m_visibilityState == PageVisibilityStateHidden) {
-        if (!m_timerForCompressStrings.isActive())
-            m_timerForCompressStrings.startOneShot(waitingTimeBeforeCompressingString, BLINK_FROM_HERE);
-    } else if (m_timerForCompressStrings.isActive()) {
-        m_timerForCompressStrings.stop();
-    }
 }
 
 PageVisibilityState Page::visibilityState() const
@@ -427,6 +404,20 @@ void Page::settingsChanged(SettingsDelegate::ChangeType changeType)
             }
         }
         break;
+    case SettingsDelegate::DOMWorldsChange:
+        {
+            if (!settings().forceMainWorldInitialization())
+                break;
+            if (!mainFrame() || !mainFrame()->isLocalFrame())
+                break;
+            if (!toLocalFrame(mainFrame())->loader().stateMachine()->committedFirstRealDocumentLoad())
+                break;
+            for (Frame* frame = mainFrame(); frame; frame = frame->tree().traverseNext()) {
+                if (frame->isLocalFrame())
+                    toLocalFrame(frame)->script().initializeMainWorld();
+            }
+        }
+        break;
     }
 }
 
@@ -442,8 +433,8 @@ void Page::updateAcceleratedCompositingSettings()
 
 void Page::didCommitLoad(LocalFrame* frame)
 {
-    notifyDidCommitLoad(frame);
     if (m_mainFrame == frame) {
+        frameHost().consoleMessageStorage().clear();
         useCounter().didCommitLoad();
         deprecation().clearSuppression();
         frameHost().visualViewport().sendUMAMetrics();
@@ -478,12 +469,11 @@ DEFINE_TRACE(Page)
     visitor->trace(m_contextMenuController);
     visitor->trace(m_pointerLockController);
     visitor->trace(m_scrollingCoordinator);
-    visitor->trace(m_undoStack);
     visitor->trace(m_mainFrame);
     visitor->trace(m_validationMessageClient);
     visitor->trace(m_frameHost);
     Supplementable<Page>::trace(visitor);
-    PageLifecycleNotifier::trace(visitor);
+    PageVisibilityNotifier::trace(visitor);
 }
 
 void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView)
@@ -521,14 +511,7 @@ void Page::willBeDestroyed()
         m_validationMessageClient->willBeDestroyed();
     m_mainFrame = nullptr;
 
-    PageLifecycleNotifier::notifyContextDestroyed();
-}
-
-void Page::compressStrings(Timer<Page>* timer)
-{
-    ASSERT_UNUSED(timer, timer == &m_timerForCompressStrings);
-    if (m_visibilityState == PageVisibilityStateHidden)
-        CompressibleStringImpl::compressAll();
+    PageVisibilityNotifier::notifyContextDestroyed();
 }
 
 Page::PageClients::PageClients()

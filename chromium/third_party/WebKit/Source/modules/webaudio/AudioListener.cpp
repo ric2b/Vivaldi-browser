@@ -34,7 +34,7 @@
 
 namespace blink {
 
-AudioListener::AudioListener(AbstractAudioContext& context)
+AudioListener::AudioListener(BaseAudioContext& context)
     : m_positionX(AudioParam::create(context, ParamTypeAudioListenerPositionX, 0.0))
     , m_positionY(AudioParam::create(context, ParamTypeAudioListenerPositionY, 0.0))
     , m_positionZ(AudioParam::create(context, ParamTypeAudioListenerPositionZ, 0.0))
@@ -86,14 +86,14 @@ DEFINE_TRACE(AudioListener)
 
 void AudioListener::addPanner(PannerHandler& panner)
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     m_panners.add(&panner);
 }
 
 void AudioListener::removePanner(PannerHandler& panner)
 {
-    ASSERT(isMainThread());
-    ASSERT(m_panners.contains(&panner));
+    DCHECK(isMainThread());
+    DCHECK(m_panners.contains(&panner));
     m_panners.remove(&panner);
 }
 
@@ -231,13 +231,15 @@ void AudioListener::updateState()
 
 void AudioListener::createAndLoadHRTFDatabaseLoader(float sampleRate)
 {
+    DCHECK(isMainThread());
+
     if (!m_hrtfDatabaseLoader)
         m_hrtfDatabaseLoader = HRTFDatabaseLoader::createAndLoadAsynchronouslyIfNecessary(sampleRate);
 }
 
 bool AudioListener::isHRTFDatabaseLoaded()
 {
-    return m_hrtfDatabaseLoader->isLoaded();
+    return m_hrtfDatabaseLoader && m_hrtfDatabaseLoader->isLoaded();
 }
 
 void AudioListener::waitForHRTFDatabaseLoaderThreadCompletion()

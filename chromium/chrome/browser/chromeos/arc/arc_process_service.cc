@@ -40,7 +40,9 @@ using std::vector;
 
 ArcProcessService::ArcProcessService(ArcBridgeService* bridge_service)
     : ArcService(bridge_service),
-      worker_pool_(new SequencedWorkerPool(1, "arc_process_manager")),
+      worker_pool_(new SequencedWorkerPool(1,
+                                           "arc_process_manager",
+                                           base::TaskPriority::USER_VISIBLE)),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   arc_bridge_service()->process()->AddObserver(this);
@@ -98,10 +100,10 @@ void ArcProcessService::OnReceiveProcessList(
     mojo::Array<arc::mojom::RunningAppProcessInfoPtr> mojo_processes) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  auto raw_processes = new vector<mojom::RunningAppProcessInfoPtr>();
+  auto* raw_processes = new vector<mojom::RunningAppProcessInfoPtr>();
   mojo_processes.Swap(raw_processes);
 
-  auto ret_processes = new vector<ArcProcess>();
+  auto* ret_processes = new vector<ArcProcess>();
   // Post to its dedicated worker thread to avoid race condition.
   // Since no two tasks with the same token should be run at the same.
   // Note: GetSequencedTaskRunner's shutdown behavior defaults to
@@ -172,7 +174,8 @@ void ArcProcessService::PopulateProcessList(
     // In case the process already dies so couldn't find corresponding pid.
     if (it != nspid_to_pid_.end() && it->second != kNullProcessId) {
       ArcProcess arc_process(entry->pid, it->second, entry->process_name,
-                             entry->process_state);
+                             entry->process_state, entry->is_focused,
+                             entry->last_activity_time);
       // |entry->packages| is provided only when process.mojom's verion is >=4.
       if (entry->packages) {
         for (const auto& package : entry->packages) {

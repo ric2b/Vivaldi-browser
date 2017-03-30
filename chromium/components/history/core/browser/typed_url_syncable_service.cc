@@ -5,6 +5,7 @@
 #include "components/history/core/browser/typed_url_syncable_service.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/auto_reset.h"
@@ -12,9 +13,9 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/history/core/browser/history_backend.h"
+#include "components/sync/protocol/sync.pb.h"
+#include "components/sync/protocol/typed_url_specifics.pb.h"
 #include "net/base/url_util.h"
-#include "sync/protocol/sync.pb.h"
-#include "sync/protocol/typed_url_specifics.pb.h"
 
 namespace history {
 
@@ -149,6 +150,9 @@ syncer::SyncMergeResult TypedUrlSyncableService::MergeDataAndStartSyncing(
     // Extract specifics
     const sync_pb::EntitySpecifics& specifics = sync_iter->GetSpecifics();
     const sync_pb::TypedUrlSpecifics& typed_url(specifics.typed_url());
+
+    if (ShouldIgnoreUrl(GURL(typed_url.url())))
+      continue;
 
     // Add url to cache of sync state. Note that this is done irrespective of
     // whether the synced url is ignored locally, so that we know what to delete
@@ -745,6 +749,12 @@ bool TypedUrlSyncableService::ShouldIgnoreUrl(const GURL& url) {
 
   // Ignore localhost URLs.
   if (net::IsLocalhost(url.host()))
+    return true;
+
+  // Ignore username and password, sonce history backend will remove user name
+  // and password in URLDatabase::GURLToDatabaseURL and send username/password
+  // removed url to sync later.
+  if (url.has_username() || url.has_password())
     return true;
 
   return false;

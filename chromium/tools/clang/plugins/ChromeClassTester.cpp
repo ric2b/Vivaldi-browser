@@ -197,30 +197,20 @@ bool ChromeClassTester::HasIgnoredBases(const CXXRecordDecl* record) {
 bool ChromeClassTester::InImplementationFile(SourceLocation record_location) {
   std::string filename;
 
-  if (options_.follow_macro_expansion) {
-    // If |record_location| is a macro, check the whole chain of expansions.
-    const SourceManager& source_manager = instance_.getSourceManager();
-    while (true) {
-      if (GetFilename(record_location, &filename)) {
-        if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
-            ends_with(filename, ".mm")) {
-          return true;
-        }
+  // If |record_location| is a macro, check the whole chain of expansions.
+  const SourceManager& source_manager = instance_.getSourceManager();
+  while (true) {
+    if (GetFilename(record_location, &filename)) {
+      if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
+          ends_with(filename, ".mm")) {
+        return true;
       }
-      if (!record_location.isMacroID()) {
-        break;
-      }
-      record_location =
-          source_manager.getImmediateExpansionRange(record_location).first;
     }
-  } else {
-    if (!GetFilename(record_location, &filename))
-      return false;
-
-    if (ends_with(filename, ".cc") || ends_with(filename, ".cpp") ||
-        ends_with(filename, ".mm")) {
-      return true;
+    if (!record_location.isMacroID()) {
+      break;
     }
+    record_location =
+        source_manager.getImmediateExpansionRange(record_location).first;
   }
 
   return false;
@@ -232,10 +222,6 @@ void ChromeClassTester::BuildBannedLists() {
 
   if (options_.enforce_in_thirdparty_webkit) {
     allowed_directories_.emplace("/third_party/WebKit/");
-  }
-
-  if (!options_.enforce_in_pdf) {
-    banned_directories_.emplace("/pdf/");
   }
 
   banned_directories_.emplace("/third_party/");

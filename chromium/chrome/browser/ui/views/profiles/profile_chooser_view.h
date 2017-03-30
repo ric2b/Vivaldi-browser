@@ -211,6 +211,9 @@ class ProfileChooserView : public content::WebContentsDelegate,
       views::LabelButton** button,
       views::ImageButton** close_button);
 
+  // Creates a header for signin and sync error surfacing for the user menu.
+  views::View* CreateSyncErrorViewIfNeeded();
+
   // Create a view that shows various options for an upgrade user who is not
   // the same person as the currently signed in user.
   views::View* CreateSwitchUserView();
@@ -238,15 +241,26 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::Link* tutorial_learn_more_link_;
   views::ImageButton* tutorial_close_button_;
 
+  // Buttons in the signin/sync error header on top of the desktop user menu.
+  views::LabelButton* sync_error_signin_button_;
+  views::LabelButton* sync_error_passphrase_button_;
+  views::LabelButton* sync_error_upgrade_button_;
+  views::LabelButton* sync_error_signin_again_button_;
+  views::LabelButton* sync_error_signout_button_;
+
   // Links and buttons displayed in the active profile card.
   views::Link* manage_accounts_link_;
+  views::LabelButton* manage_accounts_button_;
   views::LabelButton* signin_current_profile_button_;
   views::LabelButton* auth_error_email_button_;
 
-  // The profile name and photo in the active profile card. Owned by the
-  // views hierarchy.
+  // The profile name and photo in the active profile card in non-material-
+  // design user menu. Owned by the views hierarchy.
   EditableProfilePhoto* current_profile_photo_;
   EditableProfileName* current_profile_name_;
+  // For material design user menu, the active profile card owns the profile
+  // name and photo.
+  views::LabelButton* current_profile_card_;
 
   // Action buttons.
   views::LabelButton* guest_profile_button_;

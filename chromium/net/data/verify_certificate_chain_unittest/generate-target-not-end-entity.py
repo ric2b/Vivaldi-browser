@@ -3,23 +3,23 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-"""Certificate chain with 1 intermediary, a trusted root, and a target
+"""Certificate chain with 1 intermediate, a trusted root, and a target
 certificate that is also a CA. Verification is expected to succeed, as the test
 code accepts any target certificate."""
 
 import common
 
-# Self-signed root certificate (part of trust store).
+# Self-signed root certificate (used as trust anchor).
 root = common.create_self_signed_root_certificate('Root')
 
-# Intermediary certificate.
-intermediary = common.create_intermediary_certificate('Intermediary', root)
+# Intermediate certificate.
+intermediate = common.create_intermediate_certificate('Intermediate', root)
 
 # Target certificate (is also a CA)
-target = common.create_intermediary_certificate('Target', intermediary)
+target = common.create_intermediate_certificate('Target', intermediate)
 
-chain = [target, intermediary]
-trusted = [root]
+chain = [target, intermediate]
+trusted = common.TrustAnchor(root, constrained=False)
 time = common.DEFAULT_TIME
 verify_result = True
 

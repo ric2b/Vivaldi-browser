@@ -15,9 +15,8 @@ Here's what works:
 *   Editing code works well (especially if you're used to it and get used to the
     shortcuts).
 *   Navigating around the code works well. There are multiple ways to do this (a
-    full list of keyboard shortcuts is available for [Windows/Linux](http://
-    docs.sublimetext.info/en/latest/reference/keyboard_shortcuts_win.html) and
-    [Mac](http://docs.sublimetext.info/en/latest/reference/keyboard_shortcuts_osx.html)).
+    full list of keyboard shortcuts is available for [Windows/Linux](http://docs.sublimetext.info/en/latest/reference/keyboard_shortcuts_win.html)
+    and [Mac](http://docs.sublimetext.info/en/latest/reference/keyboard_shortcuts_osx.html)).
 *   Building works fairly well and it does a decent job of parsing errors so
     that you can click and jump to the problem spot.
 
@@ -74,6 +73,9 @@ Here are some settings that help match the Chromium style guide:
   "draw_white_space": "all",
   "enable_tab_scrolling": false,
   "highlight_line": true,
+
+  // Mainly for Windows, but harmless on Mac/Linux
+  "default_line_ending": "unix",
 }
 ```
 
@@ -286,7 +288,7 @@ page](https://github.com/quarnster/SublimeClang).
     ```
 
 1.  Edit your project file `Project > Edit Project` to call the script above
-    (replace `out/Debug` with your out directory):
+    (replace `/path/to/depot_tools` with your depot_tools directory):
 
     ```
     {
@@ -300,7 +302,7 @@ page](https://github.com/quarnster/SublimeClang).
         [
           "-Wno-attributes",
         ],
-        "sublimeclang_options_script": "python ${project_path}/src/tools/sublime/ninja_options_script.py ${project_path}/src ${project_path}/src/out/Debug",
+        "sublimeclang_options_script": "python ${project_path}/src/tools/sublime/ninja_options_script.py -d '/path/to/depot_tools'",
       }
     }
     ```

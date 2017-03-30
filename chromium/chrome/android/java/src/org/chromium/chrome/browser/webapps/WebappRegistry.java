@@ -6,10 +6,15 @@ package org.chromium.chrome.browser.webapps;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.AsyncTask;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
+import org.chromium.chrome.browser.browsing_data.UrlFilter;
+import org.chromium.chrome.browser.browsing_data.UrlFilterBridge;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -68,7 +73,7 @@ public class WebappRegistry {
                 SharedPreferences preferences = openSharedPreferences(context);
                 // The set returned by getRegisteredWebappIds must be treated as immutable, so we
                 // make a copy to edit and save.
-                Set<String> webapps = new HashSet<String>(getRegisteredWebappIds(preferences));
+                Set<String> webapps = new HashSet<>(getRegisteredWebappIds(preferences));
                 boolean added = webapps.add(webappId);
                 assert added;
 
@@ -173,9 +178,10 @@ public class WebappRegistry {
     }
 
     /**
-     * Deletes the data for all "old" web apps.
+     * 1. Deletes the data for all "old" web apps.
      * "Old" web apps have not been opened by the user in the last 3 months, or have had their last
      * used time set to 0 by the user clearing their history. Cleanup is run, at most, once a month.
+     * 2. Deletes the data for all WebAPKs that have been uninstalled in the last month.
      *
      * @param context     Context to open the registry with.
      * @param currentTime The current time which will be checked to decide if the task should be run
@@ -190,11 +196,17 @@ public class WebappRegistry {
                 if ((currentTime - lastCleanup) < FULL_CLEANUP_DURATION) return null;
 
                 Set<String> currentWebapps = getRegisteredWebappIds(preferences);
-                Set<String> retainedWebapps = new HashSet<String>(currentWebapps);
+                Set<String> retainedWebapps = new HashSet<>(currentWebapps);
+                PackageManager pm = context.getPackageManager();
                 for (String id : currentWebapps) {
-                    long lastUsed = new WebappDataStorage(context, id).getLastUsedTime();
-                    if ((currentTime - lastUsed) < WEBAPP_UNOPENED_CLEANUP_DURATION) continue;
-
+                    WebappDataStorage storage = new WebappDataStorage(context, id);
+                    String webApkPackage = storage.getWebApkPackageName();
+                    if (webApkPackage != null) {
+                        if (isWebApkInstalled(pm, webApkPackage)) continue;
+                    } else {
+                        long lastUsed = storage.getLastUsedTime();
+                        if ((currentTime - lastUsed) < WEBAPP_UNOPENED_CLEANUP_DURATION) continue;
+                    }
                     WebappDataStorage.deleteDataForWebapp(context, id);
                     retainedWebapps.remove(id);
                 }
@@ -209,18 +221,49 @@ public class WebappRegistry {
     }
 
     /**
-     * Deletes the data of all web apps, as well as the registry tracking the web apps.
+     * Returns whether the given WebAPK is still installed.
+     */
+    private static boolean isWebApkInstalled(PackageManager pm, String webApkPackage) {
+        assert !ThreadUtils.runningOnUiThread();
+        try {
+            pm.getPackageInfo(webApkPackage, PackageManager.GET_ACTIVITIES);
+        } catch (NameNotFoundException e) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Deletes the data of all web apps whose url matches |urlFilter|, as well as the registry
+     * tracking those web apps.
      */
     @VisibleForTesting
-    static void unregisterAllWebapps(final Context context, final Runnable callback) {
+    static void unregisterWebappsForUrls(
+            final Context context, final UrlFilter urlFilter, final Runnable callback) {
         new AsyncTask<Void, Void, Void>() {
             @Override
             protected final Void doInBackground(Void... nothing) {
                 SharedPreferences preferences = openSharedPreferences(context);
-                for (String id : getRegisteredWebappIds(preferences)) {
-                    WebappDataStorage.deleteDataForWebapp(context, id);
+                Set<String> registeredWebapps =
+                        new HashSet<>(getRegisteredWebappIds(preferences));
+                Set<String> webappsToUnregister = new HashSet<>();
+                for (String id : registeredWebapps) {
+                    if (urlFilter.matchesUrl(WebappDataStorage.open(context, id).getUrl())) {
+                        WebappDataStorage.deleteDataForWebapp(context, id);
+                        webappsToUnregister.add(id);
+                    }
                 }
-                preferences.edit().clear().apply();
+
+                // TODO(dominickn): SharedPreferences should be accessed on the main thread, not
+                // from an AsyncTask. Simultaneous access from two threads creates a race condition.
+                // Update all callsites in this class.
+                registeredWebapps.removeAll(webappsToUnregister);
+                if (registeredWebapps.isEmpty()) {
+                    preferences.edit().clear().apply();
+                } else {
+                    preferences.edit().putStringSet(KEY_WEBAPP_SET, registeredWebapps).apply();
+                }
+
                 return null;
             }
 
@@ -233,10 +276,12 @@ public class WebappRegistry {
     }
 
     @CalledByNative
-    static void unregisterAllWebapps(Context context, final long callbackPointer) {
-        unregisterAllWebapps(context, new Runnable() {
+    static void unregisterWebappsForUrls(
+            Context context, final UrlFilterBridge urlFilter, final long callbackPointer) {
+        unregisterWebappsForUrls(context, urlFilter, new Runnable() {
             @Override
             public void run() {
+                urlFilter.destroy();
                 nativeOnWebappsUnregistered(callbackPointer);
             }
         });

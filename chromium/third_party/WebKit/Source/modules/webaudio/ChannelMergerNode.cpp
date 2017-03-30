@@ -31,9 +31,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/BaseAudioContext.h"
 
 
 namespace blink {
@@ -63,15 +63,15 @@ PassRefPtr<ChannelMergerHandler> ChannelMergerHandler::create(AudioNode& node, f
 void ChannelMergerHandler::process(size_t framesToProcess)
 {
     AudioNodeOutput& output = this->output(0);
-    ASSERT_UNUSED(framesToProcess, framesToProcess == output.bus()->length());
+    DCHECK_EQ(framesToProcess, output.bus()->length());
 
     unsigned numberOfOutputChannels = output.numberOfChannels();
-    ASSERT(numberOfInputs() == numberOfOutputChannels);
+    DCHECK_EQ(numberOfInputs(), numberOfOutputChannels);
 
     // Merge multiple inputs into one output.
     for (unsigned i = 0; i < numberOfOutputChannels; ++i) {
         AudioNodeInput& input = this->input(i);
-        ASSERT(input.numberOfChannels() == 1);
+        DCHECK_EQ(input.numberOfChannels(), 1u);
         AudioChannel* outputChannel = output.bus()->channel(i);
         if (input.isConnected()) {
 
@@ -93,8 +93,8 @@ void ChannelMergerHandler::process(size_t framesToProcess)
 
 void ChannelMergerHandler::setChannelCount(unsigned long channelCount, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     // channelCount must be 1.
     if (channelCount != 1) {
@@ -106,8 +106,8 @@ void ChannelMergerHandler::setChannelCount(unsigned long channelCount, Exception
 
 void ChannelMergerHandler::setChannelCountMode(const String& mode, ExceptionState& exceptionState)
 {
-    ASSERT(isMainThread());
-    AbstractAudioContext::AutoLocker locker(context());
+    DCHECK(isMainThread());
+    BaseAudioContext::AutoLocker locker(context());
 
     // channcelCountMode must be 'explicit'.
     if (mode != "explicit") {
@@ -119,13 +119,13 @@ void ChannelMergerHandler::setChannelCountMode(const String& mode, ExceptionStat
 
 // ----------------------------------------------------------------
 
-ChannelMergerNode::ChannelMergerNode(AbstractAudioContext& context, unsigned numberOfInputs)
+ChannelMergerNode::ChannelMergerNode(BaseAudioContext& context, unsigned numberOfInputs)
     : AudioNode(context)
 {
     setHandler(ChannelMergerHandler::create(*this, context.sampleRate(), numberOfInputs));
 }
 
-ChannelMergerNode* ChannelMergerNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
+ChannelMergerNode* ChannelMergerNode::create(BaseAudioContext& context, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 
@@ -133,7 +133,7 @@ ChannelMergerNode* ChannelMergerNode::create(AbstractAudioContext& context, Exce
     return create(context, 6, exceptionState);
 }
 
-ChannelMergerNode* ChannelMergerNode::create(AbstractAudioContext& context, unsigned numberOfInputs, ExceptionState& exceptionState)
+ChannelMergerNode* ChannelMergerNode::create(BaseAudioContext& context, unsigned numberOfInputs, ExceptionState& exceptionState)
 {
     DCHECK(isMainThread());
 
@@ -142,7 +142,7 @@ ChannelMergerNode* ChannelMergerNode::create(AbstractAudioContext& context, unsi
         return nullptr;
     }
 
-    if (!numberOfInputs || numberOfInputs > AbstractAudioContext::maxNumberOfChannels()) {
+    if (!numberOfInputs || numberOfInputs > BaseAudioContext::maxNumberOfChannels()) {
         exceptionState.throwDOMException(
             IndexSizeError,
             ExceptionMessages::indexOutsideRange<size_t>(
@@ -150,7 +150,7 @@ ChannelMergerNode* ChannelMergerNode::create(AbstractAudioContext& context, unsi
                 numberOfInputs,
                 1,
                 ExceptionMessages::InclusiveBound,
-                AbstractAudioContext::maxNumberOfChannels(),
+                BaseAudioContext::maxNumberOfChannels(),
                 ExceptionMessages::InclusiveBound));
         return nullptr;
     }

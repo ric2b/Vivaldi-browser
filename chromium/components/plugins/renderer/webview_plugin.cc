@@ -95,22 +95,6 @@ WebViewPlugin::~WebViewPlugin() {
 }
 
 void WebViewPlugin::ReplayReceivedData(WebPlugin* plugin) {
-  if (!response_.isNull()) {
-    plugin->didReceiveResponse(response_);
-    size_t total_bytes = 0;
-    for (std::list<std::string>::iterator it = data_.begin(); it != data_.end();
-         ++it) {
-      plugin->didReceiveData(
-          it->c_str(), base::checked_cast<int, size_t>(it->length()));
-      total_bytes += it->length();
-    }
-    UMA_HISTOGRAM_MEMORY_KB(
-        "PluginDocument.Memory",
-        (base::checked_cast<int, size_t>(total_bytes / 1024)));
-    UMA_HISTOGRAM_COUNTS(
-        "PluginDocument.NumChunks",
-        (base::checked_cast<int, size_t>(data_.size())));
-  }
   // We need to transfer the |focused_| to new plugin after it loaded.
   if (focused_) {
     plugin->updateFocus(true, blink::WebFocusTypeNone);
@@ -256,11 +240,6 @@ blink::WebInputEventResult WebViewPlugin::handleInputEvent(
   return handled;
 }
 
-void WebViewPlugin::didReceiveResponse(const WebURLResponse& response) {
-  DCHECK(response_.isNull());
-  response_ = response;
-}
-
 void WebViewPlugin::didReceiveData(const char* data, int data_length) {
   data_.push_back(std::string(data, data_length));
 }
@@ -335,11 +314,6 @@ void WebViewPlugin::didClearWindowObject(WebLocalFrame* frame) {
 
   global->Set(gin::StringToV8(isolate, "plugin"),
               delegate_->GetV8Handle(isolate));
-}
-
-void WebViewPlugin::didReceiveResponse(unsigned identifier,
-                                       const WebURLResponse& response) {
-  WebFrameClient::didReceiveResponse(identifier, response);
 }
 
 void WebViewPlugin::OnDestruct() {}

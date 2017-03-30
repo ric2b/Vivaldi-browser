@@ -50,6 +50,9 @@
 
 namespace blink {
 
+namespace {
+
+// An image of size 1x1.
 static Vector<unsigned char> jpegImage()
 {
     Vector<unsigned char> jpeg;
@@ -82,14 +85,81 @@ static Vector<unsigned char> jpegImage()
     return jpeg;
 }
 
-namespace {
+// An image of size 50x50.
+static Vector<unsigned char> jpegImage2()
+{
+    Vector<unsigned char> jpeg;
+
+    static const unsigned char data[] = {
+        0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x01, 0x00, 0x48,
+        0x00, 0x48, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xdb, 0x00, 0x43, 0x01, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+        0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0,
+        0x00, 0x11, 0x08, 0x00, 0x32, 0x00, 0x32, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11,
+        0x01, 0xff, 0xc4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xc4, 0x00, 0x14, 0x10, 0x01, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xc4, 0x00,
+        0x15, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x00, 0x14, 0x11, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xda, 0x00, 0x0c, 0x03, 0x01,
+        0x00, 0x02, 0x11, 0x03, 0x11, 0x00, 0x3f, 0x00, 0x00, 0x94, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x03, 0xff, 0xd9
+    };
+
+    jpeg.append(data, sizeof(data));
+    return jpeg;
+}
+
+static Vector<unsigned char> svgImage()
+{
+    static const char data[] =
+        "<svg width=\"200\" height=\"200\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+        "<rect x=\"0\" y=\"0\" width=\"100px\" height=\"100px\" fill=\"red\"/>"
+        "</svg>";
+
+    Vector<unsigned char> svg;
+    svg.append(data, strlen(data));
+    return svg;
+}
+
+static Vector<unsigned char> svgImage2()
+{
+    static const char data[] =
+        "<svg width=\"300\" height=\"300\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">"
+        "<rect x=\"0\" y=\"0\" width=\"200px\" height=\"200px\" fill=\"green\"/>"
+        "</svg>";
+
+    Vector<unsigned char> svg;
+    svg.append(data, strlen(data));
+    return svg;
+}
+
+void receiveResponse(ImageResource* imageResource, const KURL& url, const AtomicString& mimeType, const Vector<unsigned char>& data)
+{
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(200);
+    response.setMimeType(mimeType);
+    imageResource->responseReceived(response, nullptr);
+    imageResource->appendData(reinterpret_cast<const char*>(data.data()), data.size());
+    imageResource->finish();
+}
 
 class MockTaskRunner : public blink::WebTaskRunner {
     void postTask(const WebTraceLocation&, Task*) override { }
     void postDelayedTask(const WebTraceLocation&, Task*, double) override { }
-    WebTaskRunner* clone() override { return nullptr; }
+    bool runsTasksOnCurrentThread() override { return true; }
+    std::unique_ptr<WebTaskRunner> clone() override { return nullptr; }
     double virtualTimeSeconds() const override { return 0.0; }
     double monotonicallyIncreasingVirtualTimeSeconds() const override { return 0.0; }
+    SingleThreadTaskRunner* taskRunner() override { return nullptr; }
 };
 
 }
@@ -162,6 +232,12 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_EQ(client->imageChangedCount(), 0);
     ASSERT_FALSE(client->notifyFinishedCalled());
 
+    // Add a client to check an assertion error doesn't happen
+    // (crbug.com/630983).
+    Persistent<MockImageResourceClient> client2 = new MockImageResourceClient(cachedImage);
+    ASSERT_EQ(client2->imageChangedCount(), 0);
+    ASSERT_FALSE(client2->notifyFinishedCalled());
+
     const char thirdPart[] = "--boundary";
     cachedImage->appendData(thirdPart, strlen(thirdPart));
     ASSERT_TRUE(cachedImage->resourceBuffer());
@@ -169,7 +245,7 @@ TEST(ImageResourceTest, MultipartImage)
 
     // This part finishes. The image is created, callbacks are sent, and the data buffer is cleared.
     cachedImage->loader()->didFinishLoading(nullptr, 0.0, 0);
-    ASSERT_FALSE(cachedImage->resourceBuffer());
+    ASSERT_TRUE(cachedImage->resourceBuffer());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
@@ -177,6 +253,8 @@ TEST(ImageResourceTest, MultipartImage)
     ASSERT_EQ(cachedImage->getImage()->height(), 1);
     ASSERT_EQ(client->imageChangedCount(), 1);
     ASSERT_TRUE(client->notifyFinishedCalled());
+    ASSERT_EQ(client2->imageChangedCount(), 1);
+    ASSERT_TRUE(client2->notifyFinishedCalled());
 }
 
 TEST(ImageResourceTest, CancelOnDetach)
@@ -234,12 +312,14 @@ TEST(ImageResourceTest, DecodedDataRemainsWhileHasClients)
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
 
-    // The ImageResource no longer has clients. The image should be deleted by prune.
+    // The ImageResource no longer has clients. The decoded image data should be
+    // deleted by prune.
     client->removeAsClient();
     cachedImage->prune();
     ASSERT_FALSE(cachedImage->hasClientsOrObservers());
-    ASSERT_FALSE(cachedImage->hasImage());
-    ASSERT_TRUE(cachedImage->getImage()->isNull());
+    ASSERT_TRUE(cachedImage->hasImage());
+    // TODO(hajimehoshi): Should check cachedImage doesn't have decoded image
+    // data.
 }
 
 TEST(ImageResourceTest, UpdateBitmapImages)
@@ -297,14 +377,220 @@ TEST(ImageResourceTest, ReloadIfLoFi)
     ASSERT_FALSE(cachedImage->hasImage());
     ASSERT_EQ(client->imageChangedCount(), 3);
 
+    Vector<unsigned char> jpeg2 = jpegImage2();
     cachedImage->loader()->didReceiveResponse(nullptr, WrappedResourceResponse(resourceResponse), nullptr);
-    cachedImage->loader()->didReceiveData(nullptr, reinterpret_cast<const char*>(jpeg.data()), jpeg.size(), jpeg.size());
-    cachedImage->loader()->didFinishLoading(nullptr, 0.0, jpeg.size());
+    cachedImage->loader()->didReceiveData(nullptr, reinterpret_cast<const char*>(jpeg2.data()), jpeg2.size(), jpeg2.size(), jpeg2.size());
+    cachedImage->loader()->didFinishLoading(nullptr, 0.0, jpeg2.size());
     ASSERT_FALSE(cachedImage->errorOccurred());
     ASSERT_TRUE(cachedImage->hasImage());
     ASSERT_FALSE(cachedImage->getImage()->isNull());
     ASSERT_TRUE(client->notifyFinishedCalled());
     ASSERT_TRUE(cachedImage->getImage()->isBitmapImage());
+    EXPECT_EQ(50, cachedImage->getImage()->width());
+    EXPECT_EQ(50, cachedImage->getImage()->height());
+}
+
+TEST(ImageResourceTest, SVGImage)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+}
+
+TEST(ImageResourceTest, SuccessfulRevalidationJpeg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(2, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(304);
+
+    imageResource->responseReceived(response, nullptr);
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(2, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+}
+
+TEST(ImageResourceTest, SuccessfulRevalidationSvg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(200, imageResource->getImage()->width());
+    EXPECT_EQ(200, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    ResourceResponse response;
+    response.setURL(url);
+    response.setHTTPStatusCode(304);
+    imageResource->responseReceived(response, nullptr);
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(200, imageResource->getImage()->width());
+    EXPECT_EQ(200, imageResource->getImage()->height());
+}
+
+TEST(ImageResourceTest, FailedRevalidationJpegToJpeg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(2, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage2());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(4, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(50, imageResource->getImage()->width());
+    EXPECT_EQ(50, imageResource->getImage()->height());
+}
+
+TEST(ImageResourceTest, FailedRevalidationJpegToSvg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(2, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(3, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(200, imageResource->getImage()->width());
+    EXPECT_EQ(200, imageResource->getImage()->height());
+}
+
+TEST(ImageResourceTest, FailedRevalidationSvgToJpeg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(1, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(200, imageResource->getImage()->width());
+    EXPECT_EQ(200, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(3, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_TRUE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(1, imageResource->getImage()->width());
+    EXPECT_EQ(1, imageResource->getImage()->height());
+}
+
+TEST(ImageResourceTest, FailedRevalidationSvgToSvg)
+{
+    KURL url(ParsedURLString, "http://127.0.0.1:8000/foo");
+    ImageResource* imageResource = ImageResource::create(ResourceRequest(url));
+    Persistent<MockImageResourceClient> client = new MockImageResourceClient(imageResource);
+
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(client->imageChangedCount(), 1);
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(200, imageResource->getImage()->width());
+    EXPECT_EQ(200, imageResource->getImage()->height());
+
+    imageResource->setRevalidatingRequest(ResourceRequest(url));
+    receiveResponse(imageResource, url, "image/svg+xml", svgImage2());
+
+    EXPECT_FALSE(imageResource->errorOccurred());
+    ASSERT_TRUE(imageResource->hasImage());
+    EXPECT_FALSE(imageResource->getImage()->isNull());
+    EXPECT_EQ(2, client->imageChangedCount());
+    EXPECT_TRUE(client->notifyFinishedCalled());
+    EXPECT_FALSE(imageResource->getImage()->isBitmapImage());
+    EXPECT_EQ(300, imageResource->getImage()->width());
+    EXPECT_EQ(300, imageResource->getImage()->height());
 }
 
 // Tests for pruning.
@@ -317,14 +603,7 @@ TEST(ImageResourceTest, AddClientAfterPrune)
     // Adds a ResourceClient but not ImageResourceObserver.
     Persistent<MockResourceClient> client1 = new MockResourceClient(imageResource);
 
-    Vector<unsigned char> jpeg = jpegImage();
-    ResourceResponse response;
-    response.setURL(url);
-    response.setHTTPStatusCode(200);
-    response.setMimeType("image/jpeg");
-    imageResource->responseReceived(response, nullptr);
-    imageResource->appendData(reinterpret_cast<const char*>(jpeg.data()), jpeg.size());
-    imageResource->finish();
+    receiveResponse(imageResource, url, "image/jpeg", jpegImage());
 
     EXPECT_FALSE(imageResource->errorOccurred());
     ASSERT_TRUE(imageResource->hasImage());
@@ -339,7 +618,7 @@ TEST(ImageResourceTest, AddClientAfterPrune)
 
     imageResource->prune();
 
-    EXPECT_FALSE(imageResource->hasImage());
+    EXPECT_TRUE(imageResource->hasImage());
 
     // Re-adds a ResourceClient but not ImageResourceObserver.
     Persistent<MockResourceClient> client2 = new MockResourceClient(imageResource);
@@ -349,6 +628,22 @@ TEST(ImageResourceTest, AddClientAfterPrune)
     EXPECT_EQ(1, imageResource->getImage()->width());
     EXPECT_EQ(1, imageResource->getImage()->height());
     EXPECT_TRUE(client2->notifyFinishedCalled());
+}
+
+TEST(ImageResourceTest, CancelOnDecodeError)
+{
+    KURL testURL(ParsedURLString, "http://www.test.com/cancelTest.html");
+    URLTestHelpers::registerMockedURLLoad(testURL, "cancelTest.html", "text/html");
+
+    ResourceFetcher* fetcher = ResourceFetcher::create(ImageResourceTestMockFetchContext::create());
+    FetchRequest request(testURL, FetchInitiatorInfo());
+    ImageResource* cachedImage = ImageResource::fetch(request, fetcher);
+    Platform::current()->getURLLoaderMockFactory()->unregisterURL(testURL);
+
+    cachedImage->loader()->didReceiveResponse(nullptr, WrappedResourceResponse(ResourceResponse(testURL, "image/jpeg", 18, nullAtom, String())), nullptr);
+    cachedImage->loader()->didReceiveData(nullptr, "notactuallyanimage", 18, 18, 18);
+    EXPECT_EQ(Resource::DecodeError, cachedImage->getStatus());
+    EXPECT_FALSE(cachedImage->isLoading());
 }
 
 } // namespace blink

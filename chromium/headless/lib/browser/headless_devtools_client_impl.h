@@ -7,10 +7,13 @@
 
 #include <unordered_map>
 
+#include "base/memory/weak_ptr.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/browser/devtools_agent_host_client.h"
 #include "headless/public/domains/accessibility.h"
 #include "headless/public/domains/animation.h"
 #include "headless/public/domains/application_cache.h"
+#include "headless/public/domains/browser.h"
 #include "headless/public/domains/cache_storage.h"
 #include "headless/public/domains/console.h"
 #include "headless/public/domains/css.h"
@@ -27,6 +30,7 @@
 #include "headless/public/domains/inspector.h"
 #include "headless/public/domains/io.h"
 #include "headless/public/domains/layer_tree.h"
+#include "headless/public/domains/log.h"
 #include "headless/public/domains/memory.h"
 #include "headless/public/domains/network.h"
 #include "headless/public/domains/page.h"
@@ -63,6 +67,7 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   accessibility::Domain* GetAccessibility() override;
   animation::Domain* GetAnimation() override;
   application_cache::Domain* GetApplicationCache() override;
+  browser::Domain* GetBrowser() override;
   cache_storage::Domain* GetCacheStorage() override;
   console::Domain* GetConsole() override;
   css::Domain* GetCSS() override;
@@ -79,6 +84,7 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   inspector::Domain* GetInspector() override;
   io::Domain* GetIO() override;
   layer_tree::Domain* GetLayerTree() override;
+  log::Domain* GetLog() override;
   memory::Domain* GetMemory() override;
   network::Domain* GetNetwork() override;
   page::Domain* GetPage() override;
@@ -143,17 +149,26 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   void SendMessageWithoutParams(const char* method, CallbackType callback);
 
   bool DispatchMessageReply(const base::DictionaryValue& message_dict);
-  bool DispatchEvent(const base::DictionaryValue& message_dict);
+
+  using EventHandler = base::Callback<void(const base::Value&)>;
+  using EventHandlerMap = std::unordered_map<std::string, EventHandler>;
+
+  bool DispatchEvent(std::unique_ptr<base::Value> owning_message,
+                     const base::DictionaryValue& message_dict);
+  void DispatchEventTask(std::unique_ptr<base::Value> owning_message,
+                         const EventHandler* event_handler,
+                         const base::DictionaryValue* result_dict);
 
   content::DevToolsAgentHost* agent_host_;  // Not owned.
   int next_message_id_;
   std::unordered_map<int, Callback> pending_messages_;
-  std::unordered_map<std::string, base::Callback<void(const base::Value&)>>
-      event_handlers_;
+
+  EventHandlerMap event_handlers_;
 
   accessibility::ExperimentalDomain accessibility_domain_;
   animation::ExperimentalDomain animation_domain_;
   application_cache::ExperimentalDomain application_cache_domain_;
+  browser::ExperimentalDomain browser_domain_;
   cache_storage::ExperimentalDomain cache_storage_domain_;
   console::ExperimentalDomain console_domain_;
   css::ExperimentalDomain css_domain_;
@@ -170,6 +185,7 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   inspector::ExperimentalDomain inspector_domain_;
   io::ExperimentalDomain io_domain_;
   layer_tree::ExperimentalDomain layer_tree_domain_;
+  log::ExperimentalDomain log_domain_;
   memory::ExperimentalDomain memory_domain_;
   network::ExperimentalDomain network_domain_;
   page::ExperimentalDomain page_domain_;
@@ -180,6 +196,8 @@ class HeadlessDevToolsClientImpl : public HeadlessDevToolsClient,
   service_worker::ExperimentalDomain service_worker_domain_;
   tracing::ExperimentalDomain tracing_domain_;
   worker::ExperimentalDomain worker_domain_;
+  scoped_refptr<base::SingleThreadTaskRunner> browser_main_thread_;
+  base::WeakPtrFactory<HeadlessDevToolsClientImpl> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(HeadlessDevToolsClientImpl);
 };

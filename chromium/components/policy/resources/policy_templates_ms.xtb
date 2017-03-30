@@ -1,6 +1,11 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ms">
+<translation id="1007441141628883408">Mendayakan kemas kini komponen untuk semua komponen dalam <ph name="PRODUCT_NAME" /> apabila tidak ditetapkan atau ditetapkan kepada Benar.
+
+      Jika ditetapkan kepada Palsu, kemas kini kepada komponen akan dilumpuhkan. Walau bagaimanapun, sesetengah komponen dikecualikan daripada dasar ini: kemas kini kepada mana-mana komponen yang tidak mengandungi kod boleh laksana atau tidak mengubah gelagat penyemak imbas dengan ketara atau yang penting untuk keselamatannya tidak akan dilumpuhkan.
+
+Contoh komponen seperti itu termasuk senarai pembatalan sijil dan data semakan imbas selamat. </translation>
 <translation id="101438888985615157">Putar skrin 180 darjah</translation>
 <translation id="1017967144265860778">Pengurusan kuasa pada skrin log masuk</translation>
 <translation id="1019101089073227242">Tetapkan direktori data pengguna</translation>
@@ -22,13 +27,6 @@
       Jika ditetapkan kepada benar atau dibiarkan tanpa ditetapkan, statistik akan dilaporkan.</translation>
 <translation id="1046484220783400299">Dayakan ciri platform web untuk masa yang terhad</translation>
 <translation id="1047128214168693844">Jangan benarkan mana-mana tapak untuk menjejak lokasi fizikal pengguna</translation>
-<translation id="1057535219415338480">Mendayakan ramalan rangkaian dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubah tetapan ini.
-
-      Dasar ini bukan sahaja mengawal pra-pengambilan DNS tetapi juga pra-penyambungan TCP dan SSL serta pra-pemaparan halaman web. Nama dasar ini merujuk kepada pra-pengambilan DNS atas sebab-sebab sejarah.
-
-      Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh mengubah atau menggantikan tetapan ini dalam <ph name="PRODUCT_NAME" />.
-
-      Jika dasar ini dibiarkan tanpa ditetapkan, dasar ini akan akan didayakan tetapi pengguna akan boleh mengubahnya.</translation>
 <translation id="1062011392452772310">Dayakan pembuktian jauh untuk peranti</translation>
 <translation id="1090892140761957285">URL untuk mengesahkan token pengesahan pelanggan akses jauh.
 
@@ -127,11 +125,6 @@
       dilumpuhkan. Dalam keadaan ini, pengguna tidak dapat mendayakan ciri ini.</translation>
 <translation id="1474273443907024088">Lumpuhkan Mula Palsu TLS</translation>
 <translation id="1477934438414550161">TLS 1.2</translation>
-<translation id="1492145937778428165">Menetapkan tempoh dalam milisaat apabila perkhidmatan pengurusan peranti disoal untuk mendapatkan maklumat dasar peranti.
-
-      Penetapan dasar ini mengatasi nilai lalai 3 jam. Nilai sah untuk dasar ini adalah dalam julat dari 1800000 (30 minit) sehingga 86400000 (1 hari). Mana-mana nilai yang tidak berada dalam julat ini akan diapit kepada sempadan masing-masing.
-
-      Membiarkan dasar ini tanpa ditetapkan akan membuat <ph name="PRODUCT_OS_NAME" /> menggunakan nilai lalai 3 jam.</translation>
 <translation id="1504431521196476721">Pembuktian Jauh</translation>
 <translation id="1509692106376861764">Dasar ini telah dihentikan pada <ph name="PRODUCT_NAME" /> versi 29.</translation>
 <translation id="1522425503138261032">Membenarkan tapak untuk mengesan lokasi fizikal pengguna</translation>
@@ -146,6 +139,7 @@
       perusahaan tidak dapat menggunakan ARC.</translation>
 <translation id="1561424797596341174">Pembatalan dasar untuk binaan Nyahpepijat bagi hos akses jauh</translation>
 <translation id="1583248206450240930">Gunakan <ph name="PRODUCT_FRAME_NAME" /> secara lalai</translation>
+<translation id="1606958238518590302">Apabila dasar ini ditetapkan kepada benar, pengguna tidak boleh menulis apa-apa pada peranti storan luar.</translation>
 <translation id="1608755754295374538">URL yang akan diberikan akses kepada peranti tangkapan audio tanpa gesaan</translation>
 <translation id="1617235075406854669">Dayakan pemadaman sejarah penyemak imbas dan muat turun</translation>
 <translation id="1617384279878333801">Dayakan tambah orang dalam pengurus profil</translation>
@@ -257,6 +251,13 @@
       Jika dasar ini ditetapkan kepada benar, <ph name="PRODUCT_OS_NAME" /> akan cuba memuat turun beban bayar auto kemas kini melalui HTTP. Jika dasar ini ditetapkan kepada palsu atau tidak ditetapkan, HTTPS akan digunakan untuk memuat turun beban bayar auto kemas kini.</translation>
 <translation id="2006530844219044261">Pengurusan kuasa</translation>
 <translation id="201557587962247231">Kekerapan muat naik laporan status peranti</translation>
+<translation id="2018836497795982119">Menentukan tempoh dalam milisaat ketika perkhidmatan pengurusan peranti diminta maklumat dasar pengguna.
+
+      Tindakan menetapkan dasar ini akan mengatasi nilai lalai iaitu 3 jam. Nilai yang sah untuk dasar ini ialah dalam julat 1800000 (30 minit) hingga 86400000 (1 hari). Sebarang nilai yang tidak berada dalam julat ini akan diapit ke sempadan masing-masing. Jika platform menyokong pemberitahuan dasar, lengahan muat semula akan ditetapkan kepada 24 jam kerana pemberitahuan dasar dijangka akan memaksa muat semula secara automatik apabila dasar berubah.
+
+      Apabila dasar ini dibiarkan tanpa ditetapkan, <ph name="PRODUCT_NAME" /> akan menggunakan nilai lalai 3 jam.
+
+      Ambil perhatian bahawa jika platform menyokong pemberitahuan dasar, lengahan muat semula akan ditetapkan kepada 24 jam (mengabaikan semua nilai lalai dan nilai dasar ini) kerana pemberitahuan dasar dijangka akan memaksa muat semula secara automatik apabila dasar berubah, melakukan muat semula yang tidak diperlukan dengan lebih kerap.</translation>
 <translation id="2024476116966025075">Konfigurasikan nama domain yang diperlukan untuk pelanggan akses jauh</translation>
 <translation id="2030905906517501646">Kata kunci pembekal carian lalai</translation>
 <translation id="206623763829450685">Menetapkan skim pengesahan HTTP yang disokong oleh <ph name="PRODUCT_NAME" />.
@@ -348,11 +349,6 @@
 
       Selepas mendayakan Bluetooth, peranti ini mesti dibut semula supaya perubahan dapat diterapkan (tidak perlu but semula peranti apabila melumpuhkan Bluetooth).</translation>
 <translation id="2366415278352956652">Mendayakan penghantaran</translation>
-<translation id="2371309782685318247">Menetapkan tempoh dalam milisaat apabila perkhidmatan pengurusan peranti disoal untuk mendapatkan maklumat dasar pengguna.
-
-      Penetapan dasar ini mengatasi nilai lalai 3 jam. Nilai sah untuk dasar ini berada dalam julat dari 1800000 (30 minit) sehingga 86400000 (1 hari). Mana-mana nilai yang tidak berada dalam julat ini akan diapit ke sempadan masing-masing.
-
-      Membiarkan dasar ini tanpa ditetapkan akan memaksa <ph name="PRODUCT_NAME" /> menggunakan nilai lalai 3 jam.</translation>
 <translation id="2372547058085956601">Kelewatan log masuk automatik sesi terbuka.
 
       Jika dasar |DeviceLocalAccountAutoLoginId| tidak ditetapkan, dasar ini tidak mempunyai sebarang kesan. Jika tidak:
@@ -551,6 +547,7 @@
       Jika tetapan ini dilumpuhkan, halaman web tidak dapat menggunakan JavaScript dan pengguna tidak boleh mengubah tetapan tersebut.
 
       Jika tetapan ini didayakan atau tidak ditetapkan, halaman web boleh menggunakan JavaScript tetapi pengguna boleh mengubah tetapan tersebut.</translation>
+<translation id="2753637905605932878">Hadkan julat port UDP setempat yang digunakan oleh WebRTC</translation>
 <translation id="2757054304033424106">Jenis sambungan/apl yang boleh dipasang</translation>
 <translation id="2759224876420453487">Kawal kelakuan pengguna dalam sesi berbilang profil</translation>
 <translation id="2761483219396643566">Kelewatan amaran melahu apabila dijalankan dengan kuasa bateri</translation>
@@ -684,6 +681,7 @@
 
           Jika dasar ini dibiarkan tanpa ditetapkan, 'AllowJavaScript' akan digunakan dan pengguna akan boleh mengubahnya.</translation>
 <translation id="3038323923255997294">Terus jalankan apl latar belakang apabila <ph name="PRODUCT_NAME" /> ditutup</translation>
+<translation id="3046192273793919231">Hantar bingkisan rangkaian ke pelayan pengurusan untuk memantau status dalam talian</translation>
 <translation id="3048744057455266684">Jika dasar ini ditetapkan dan URL carian yang dicadangkan dari kotak omni mengandungi parameter ini dalam rentetan pertanyaan atau dalam pengecam serpihan, maka cadangan akan memaparkan istilah carian dan penyedia carian, bukannya URL carian mentah.
 
           Dasar ini tidak wajib. Jika tidak ditetapkan, tiada penggantian istilah carian akan dilaksanakan.
@@ -786,6 +784,15 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3264793472749429012">Pengekodan pembekal carian lalai</translation>
 <translation id="3273221114520206906">Tetapan JavaScript lalai</translation>
 <translation id="3288595667065905535">Saluran keluaran</translation>
+<translation id="3291367259589875381">Dasar ini ditamatkan dalam M48 bagi menggantikan <ph name="NETWORKPREDICTIONOPTIONS_POLICY_NAME" /> dan dialih keluar dalam M54.
+
+      Mendayakan ramalan rangkaian dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubah tetapan ini.
+
+      Tetapan ini bukan sahaja mengawal praambilan DNS tetapi juga prasambungan serta prapemaparan TCP dan SSL bagi halaman web. Nama dasar merujuk pada praambilan DNS atas sebab sejarah.
+
+      Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak dapat mengubah atau mengatasi tetapan ini dalam <ph name="PRODUCT_NAME" />.
+
+      Jika dasar ini dibiarkan tanpa ditetapkan, ramalan rangkaian akan didayakan tetapi pengguna akan boleh mengubahnya.</translation>
 <translation id="3292147213643666827">Dayakan <ph name="PRODUCT_NAME" /> untuk bertindak sebagai proksi antara <ph name="CLOUD_PRINT_NAME" /> dan pencetak legasi yang disambungkan pada mesin.
 
       Jika tetapan ini didayakan atau tidak dikonfigurasi, pengguna boleh mendayakan proksi cetakan awan melalui pengesahan dengan akaun Google mereka.
@@ -890,6 +897,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Jika tetapan ini dilumpuhkan, <ph name="PRODUCT_NAME" /> tidak akan sesekali memeriksa jika ia adalah penyemak imbas lalai dan akan melumpuhkan kawalan pengguna untuk menetapkan pilihan ini.
 
       Jika tetapan ini tidak ditetapkan, <ph name="PRODUCT_NAME" /> akan membenarkan pengguna untuk mengawal sama ada ia adalah penyemak imbas lalai dan sama ada pemberitahuan pengguna perlu dipaparkan apabila ia tidak perlu.</translation>
+<translation id="379659290574555063">Kendalikan peranti storan luaran sebagai baca sahaja.</translation>
 <translation id="3800626789999016379">Mengkonfigurasi direktori yang <ph name="PRODUCT_NAME" /> akan gunakan untuk memuat turun fail.
 
       Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan direktori yang disediakan tidak kira sama ada pengguna telah menetapkan satu direktori atau mendayakan bendera untuk digesa bagi lokasi muat turun pada setiap kali.
@@ -941,16 +949,20 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3864818549971490907">Tetapan pemalam lalai</translation>
 <translation id="3866249974567520381">Huraian</translation>
 <translation id="3866530186104388232">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_OS_NAME" /> akan memaparkan pengguna sedia ada pada skrin log masuk dan membenarkan untuk memiilih satu. Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> akan menggunakan gesaan nama pengguna/kata laluan untuk log masuk.</translation>
-<translation id="3866824067696705379">Berapa kerap pemantauan degupan jantung dihantar, dalam milisaat.
-
-      Jika dasar ini dinyahtetapkan, kekerapan lalai ialah 3 minit. Kekerapan minimum
-      ialah 30 saat dan kekerapan maksimum ialah 24 jam - nilai di luar 
-      julat ini akan diapit menurut julat ini.</translation>
 <translation id="3868347814555911633">Dasar ini aktif dalam mod runcit sahaja.
 
       Senarai sambungan yang dipasang secara automatik untuk pengguna Tunjuk Cara, bagi peranti dalam mod runcit. Sambungan ini disimpan dalam peranti dan boleh dipasang semasa di luar talian selepas pemasangan.
 
       Setiap masukan senarai mengandungi kamus yang mesti merangkumi ID sambungan dalam medan 'extension-id' dan URL kemas kininya dalam medan 'update-url'.</translation>
+<translation id="388237772682176890">Dasar ini ditamatkan dalam M53 dan dialih keluar dalam M54 kerana sokongan SPDY/3.1 dialih keluar.
+
+      Melumpuhkan penggunaan protokol SPDY dalam <ph name="PRODUCT_NAME" />.
+
+      Jika dasar ini didayakan, protokol SPDY tidak akan tersedia dalam <ph name="PRODUCT_NAME" />.
+
+      Menetapkan dasar ini kepada dilumpuhkan akan membolehkan penggunaan SPDY.
+
+      Jika dasar ini dibiarkan tanpa ditetapkan, SPDY akan tersedia.</translation>
 <translation id="3891357445869647828">Dayakan JavaScript</translation>
 <translation id="3898060089412156345">Benarkan atau tolak penangkapan audio.
 
@@ -969,6 +981,11 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika tidak ditetapkan atau ditetapkan kepada Palsu, maka pengguna akan dapat memindahkan fail ke Google Drive.</translation>
 <translation id="3915395663995367577">URL untuk fail .pac proksi</translation>
+<translation id="3939893074578116847">Hantar bingkisan rangkaian ke pelayan pengurusan untuk memantau status dalam talian, untuk membenarkan
+      pelayan mengesan jika peranti berada di luar talian.
+
+      Jika dasar ditetapkan kepada benar, pemantauan bingkisan rangkaian (yang dipanggil <ph name="HEARTBEATS_TERM" />) akan dihantar.
+      Jika ditetapkan kepada palsu atau tidak ditetapkan, bingkisan tidak akan dihantar.</translation>
 <translation id="3964909636571393861">Membenarkan akses kepada senarai URL</translation>
 <translation id="3965339130942650562">Tamat masa sehingga log keluar pengguna melahu dilaksanakan</translation>
 <translation id="3967075520570946456">Dayakan pemaparan halaman aluan semasa pelancaran penyemak imbas yang pertama sesudah peningkatan OS.</translation>
@@ -1169,7 +1186,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika anda membiarkan dasar ini tanpa ditetapkan, <ph name="PRODUCT_NAME" /> tidak akan mewakilkan bukti kelayakan pengguna walaupun pelayan dikesan sebagai Intranet.</translation>
 <translation id="4752880493649142945">Sijil pelanggan untuk menyambung kepada RemoteAccessHostTokenValidationUrl</translation>
-<translation id="4768493164188395498">Kekerapan pemantauan degupan jantung</translation>
 <translation id="4791031774429044540">Dayakan ciri kebolehcapaian kursor besar.
 
           Jika dasar ini ditetapkan kepada benar, kursor besar akan sentiasa didayakan.
@@ -1275,6 +1291,9 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Nilai senarai hitam '*' bermaksud semua hos pemesejan natif disenaraihitamkan melainkan hos ini disenaraikan dengan jelas dalam senarai putih.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, <ph name="PRODUCT_NAME" /> akan memuatkan semua hos pemesejan natif yang telah dipasang.</translation>
+<translation id="5288772341821359899">Jika dasar ini ditetapkan, julat port UDP yang digunakan oleh WebRTC dihadkan kepada selang port yang ditentukan (termasuk titik akhir).
+
+      Jika dasar ini tidak ditetapkan, atau ditetapkan pada rentetan kosong atau julat port yang tidak sah, WebRTC dibenarkan untuk menggunakan mana-mana port UDP setempat yang tersedia.</translation>
 <translation id="5290940294294002042">Tentukan senarai pemalam yang boleh didayakan atau dilumpuhkan pengguna</translation>
 <translation id="5302612588919538756">Dasar ini ditamatkan, sebaliknya pertimbangkan untuk menggunakan SyncDisabled.
 
@@ -1345,6 +1364,18 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Jika dasar ini ditetapkan, sesi yang dinyatakan akan log masuk secara automatik selepas berlalunya suatu tempoh pada skrin log masuk tanpa interaksi pengguna. Sesi terbuka hendaklah telah dikonfigurasi (lihat |DeviceLocalAccounts|).
 
       Jika dasar ini tidak ditetapkan, log masuk automatik tidak akan berlaku.</translation>
+<translation id="5529037166721644841">Menentukan tempoh dalam milisaat ketika perkhidmatan pengurusan peranti diminta maklumat dasar peranti.
+
+      Tindakan menetapkan dasar ini akan mengatasi nilai lalai iaitu 3 jam. Nilai yang sah untuk dasar ini ialah dalam julat 1800000 (30 minit) hingga 86400000 (1 hari).
+
+      Apabila dasar ini dibiarkan tanpa ditetapkan, <ph name="PRODUCT_OS_NAME" /> akan menggunakan nilai lalai 3 jam.
+
+      Ambil perhatian bahawa jika platform menyokong pemberitahuan dasar, lengahan muat semula akan ditetapkan kepada 24 jam (mengabaikan semua nilai lalai dan nilai dasar ini) kerana pemberitahuan dasar dijangka akan memaksa muat semula secara automatik apabila dasar berubah, melakukan muat semula yang tidak diperlukan dengan lebih kerap.</translation>
+<translation id="5535957389335373033">Kekerapan pemantauan bingkisan rangkaian dihantar, dalam milisaat.
+
+      Jika dasar ini tidak ditetapkan, kekerapan lalai ialah 3 minit. Kekerapan minimum
+      ialah 30 saat dan kekerapan maksimum ialah 24 jam - nilai
+      di luar julat ini akan diapit menurut julat ini.</translation>
 <translation id="5535973522252703021">Senarai putih pelayan penugasan Kerberos</translation>
 <translation id="5560039246134246593">Tambahkan parameter kepada pengambilan benih Variasi dalam <ph name="PRODUCT_NAME" />.
 
@@ -1384,6 +1415,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika tetapan ini dilumpuhkan atau tidak ditetapkan, maka hos akses jauh boleh dikaitkan dengan mana-mana pengguna setempat.</translation>
 <translation id="5697306356229823047">Laporkan pengguna peranti</translation>
+<translation id="570062449808736508">Apabila dasar ini ditetapkan kepada rentetan bukan kosong, WebView akan membaca sekatan URL daripada pembekal kandungan dengan nama autoriti yang diberikan.</translation>
 <translation id="5703863730741917647">Menentukan tindakan yang perlu diambil apabila kelewatan melahu dicapai.
 
           Harap maklum bahawa dasar ini telah lapuk dan akan dialih keluar pada masa hadapan.
@@ -1653,6 +1685,7 @@ Jika dasar ini ditetapkan kepada palsu, papan kekunci pada skrin akan dilumpuhka
 Jika anda menetapkan dasar ini, pengguna boleh mengatasi dasar sementara dengan mendayakan atau melumpuhkan papan kekunci pada skrin. Walau bagaimanapun, pilihan pengguna tidak berterusan dan pilihan lalai dipulihkan apabila skrin log masuk ditunjukkan semula atau pengguna melahu pada skrin log masuk selama seminit.
 
 Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan apabila skrin log masuk mula-mula ditunjukkan. Pengguna boleh mendayakan atau melumpuhkan papan kekunci pada skrin pada bila-bila masa dan status pada skrin log masuk diteruskan antara pengguna.</translation>
+<translation id="6573305661369899995">Tetapkan sumber luaran sekatan URL</translation>
 <translation id="6598235178374410284">Imej avatar pengguna</translation>
 <translation id="6628646143828354685">Membenarkan anda menetapkan sama ada tapak web dibenarkan untuk mendapatkan akses kepada peranti Bluetooth berhampiran. Akses boleh disekat sepenuhnya atau pengguna boleh ditanya setiap kali tapak web ingin mendapatkan akses kepada peranti Bluetooth berhampiran.
 
@@ -1782,6 +1815,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
           Jika tetapan ini dilumpuhkan atau tidak ditetapkan, maka hos boleh dikongsi dengan menggunakan mana-mana akaun.
 
           Lihat juga RemoteAccessHostClientDomain.</translation>
+<translation id="6979510692034647325">Mendayakan kemas kini komponen dalam <ph name="PRODUCT_NAME" />.</translation>
 <translation id="6997592395211691850">Sama ada semakan OCSP/CRL dalam talian diperlukan untuk pengukuhan kepercayaan setempat</translation>
 <translation id="7003334574344702284">Dasar ini memaksa kata laluan yang disimpan diimport dari pelayar lalai sebelumnya jika didayakan. Jika didayakan, dasar ini juga memberi kesan pada dialog import.
 
@@ -1915,6 +1949,9 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
           Dasar ini hanya dihormati jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="7302043767260300182">Kelewatan kunci skrin apabila dijalankan dengan kuasa AC</translation>
+<translation id="7311458740754205918">Jika dasar ini ditetapkan kepada benar atau tidak ditetapkan, halaman Tab Baharu boleh menunjukkan cadangan kandungan berdasarkan sejarah penyemakan imbas, minat atau lokasi pengguna.
+
+      Jika dasar ini ditetapkan kepada palsu, cadangan kandungan yang dihasilkan secara automatik tidak ditunjukkan pada halaman Tab Baharu.</translation>
 <translation id="7323896582714668701">Parameter baris perintah tambahan untuk <ph name="PRODUCT_NAME" /></translation>
 <translation id="7329842439428490522">Menyatakan panjang masa tanpa input pengguna dan skrin akan dimatikan selepas masa ini tamat apabila dijalankan dengan kuasa bateri.
 
@@ -1942,7 +1979,6 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
       Jika dasar ini tidak ditetapkan, pembersihan autimatik menggunakan strategi terbina dalam lalai. Pada masa ini, itu adalah strategi 'RemoveLRUIfDormant'.</translation>
 <translation id="7336878834592315572">Simpan kuki sepanjang tempoh sesi</translation>
 <translation id="7340034977315324840">Laporkan masa aktiviti peranti</translation>
-<translation id="7381326101471547614">Melumpuhkan penggunaan protokol SPDY dalam <ph name="PRODUCT_NAME" />. Jika dasar ini didayakan, protokol SPDY tidak akan tersedia dalam <ph name="PRODUCT_NAME" />. Menetapkan dasar ini kepada dilumpuhkan akan membolehkan penggunaan SPDY. Jika dasar ini dibiarkan tanpa ditetapkan, SPDY akan tersedia.</translation>
 <translation id="7384999953864505698">Membenarkan protokol QUIC</translation>
 <translation id="7406651467768226499">Sama ada hendak membenarkan apl kios kelewatan sifar yang dilancarkan secara automatik untuk mengawal versi <ph name="PRODUCT_OS_NAME" />.
 
@@ -1961,6 +1997,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7443616896860707393">Gesaan Pengesahan Asas HTTP Asas Silang</translation>
 <translation id="7468416082528382842">Lokasi pendaftaran tetingkap:</translation>
 <translation id="7469554574977894907">Dayakan cadangan carian</translation>
+<translation id="7474249562477552702">Sama ada sijil yang ditandatangani SHA-1 dikeluarkan oleh pengukuhan kepercayaan setempat dibenarkan</translation>
 <translation id="7485481791539008776">Peraturan pilihan pencetak lalai</translation>
 <translation id="749556411189861380">Laporkan versi OS dan perisian tegar peranti tersenarai.
 
@@ -1968,7 +2005,6 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7511361072385293666">Jika dasar ini ditetapkan kepada benar atau tidak ditetapkan, penggunaan protokol QUIC dalam <ph name="PRODUCT_NAME" /> dibenarkan.
       Jika dasar ini ditetapkan kepada palsu, penggunaan protokol QUIC tidak dibenarkan.</translation>
 <translation id="7519251620064708155">Benarkan penghasilan kunci pada tapak ini</translation>
-<translation id="7523476810162382273">Hantar pemantauan degupan jantung ke pelayan pengurusan</translation>
 <translation id="7529100000224450960">Membolehkan anda menetapkan senarai pola url yang menentukan tapak yang dibenarkan untuk membuka pop timbul.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak sama ada dari dasar 'DefaultPopupsSetting' jika ia ditetapkan atau konfigurasi peribadi pengguna jika sebaliknya.</translation>
@@ -1979,6 +2015,11 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika ditetapkan kepada SAML_INTERSTITIAL, log masuk akan menunjukkan skrin ruang antara yang memberi peluang kepada pengguna supaya meneruskan dengan pengesahan melalui SAML IdP domain pendaftaran peranti atau kembali kepada aliran log masuk GAIA yang biasa.</translation>
 <translation id="7567380065339179813">Benarkan pemalam pada tapak ini</translation>
+<translation id="757395965347379751">Apabila tetapan ini didayakan, <ph name="PRODUCT_NAME" /> membenarkan sijil yang ditandatangani SHA-1 selagi sijil ini berjaya disahkan dan dikaitkan dengan sijil CA yang dipasang setempat.
+
+      Sila ambil perhatian bahawa dasar ini bergantung pada tindanan pengesahan sijil sistem pengendalian yang membenarkan tandatangan SHA-1. Jika kemas kini OS mengubah cara pengendalian OS terhadap sijil SHA-1, dasar ini tidak berkuat kuasa lagi.  Selain itu, dasar ini bertujuan digunakan sebagai penyelesaian sementara bagi memberikan pihak syarikat lebih masa untuk beralih daripada SHA-1.  Dasar ini akan dialih keluar pada atau kira-kira 1 Januari 2019.
+
+      Jika dasar ini tidak ditetapkan atau ditetapkan kepada palsu, maka <ph name="PRODUCT_NAME" /> akan mengikut jadual penamatan SHA-1 yang telah diumumkan.</translation>
 <translation id="7593523670408385997">Mengkonfigurasikan saiz cache yang <ph name="PRODUCT_NAME" /> akan gunakan untuk menyimpan fail cache pada cakera.
 
       Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan saiz cache yang diberikan tidak kira sama ada pengguna telah menyatakan bendera '--saiz-cache-cakera' atau tidak. Nilai yang dinyatakan dalam dasar ini bukan sempadan keras tetapi lebih kepada cadangan kepada sistem cache, sebarang nilai di bawah beberapa megabait adalah terlalu kecil dan akan dibulatkan kepada jumlah minimum yang munasabah.
@@ -2036,6 +2077,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
           Jika tetapan ini dilumpuhkan atau tidak ditetapkan, maka dua faktor tidak akan didayakan dan gelagat lalai menggunakan PIN yang ditentukan pengguna akan digunakan.</translation>
 <translation id="7750991880413385988">Buka Halaman Tab Baharu</translation>
+<translation id="7761446981238915769">Konfigurasikan senarai apl yang dipasang pada skrin log masuk</translation>
 <translation id="7761526206824804472">Menetapkan satu atau beberapa penempatan yang disyorkan untuk sesi awam, membolehkan para pengguna memilih satu daripada penempatan ini dengan mudah.
 
       Pengguna boleh memilih satu penempatan dan reka letak papan kekunci sebelum memulakan sesi awam. Secara lalai, semua penempatan yang disokong oleh <ph name="PRODUCT_OS_NAME" /> disenaraikan dalam urutan abjad. Anda boleh menggunakan dasar ini untuk mengalihkan satu set penempatan yang disyorkan ke bahagian atas senarai.
@@ -2058,6 +2100,7 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7763479091692861127"> Jenis sambungan yang dibenarkan untuk digunakan bagi kemas kini OS. Kemas kini OS mungkin akan membebankan sambungan disebabkan oleh saiznya dan boleh menyebabkan kos tambahan. Oleh itu, kemas kini ini tidak didayakan secara lalai untuk jenis sambungan yang dianggap mahal, yang merangkumi WiMax, Bluetooth dan Selular pada masa ini.
 
       Pengecam jenis sambungan yang diperakui ialah "ethernet", "wifi", "wimax", "bluetooth" dan "selular".</translation>
+<translation id="7763614521440615342">Tunjukkan cadangan kandungan pada halaman Tab Baharu</translation>
 <translation id="7766336524667238790">Laporkan maklumat tentang sesi kios yang aktif, seperti ID
       dan versi aplikasi.
 
@@ -2466,6 +2509,28 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="8858642179038618439">Paksa Mod Keselamatan YouTube</translation>
 <translation id="8864975621965365890">Menyekat gesaan penolakan yang dipaparkan apabila tapak dipaparkan oleh <ph name="PRODUCT_FRAME_NAME" /> .</translation>
 <translation id="8870318296973696995">Halaman utama</translation>
+<translation id="88890388118515381">
+      Menentukan senarai apl yang dipasang secara senyap pada skrin log masuk,
+      tanpa interaksi pengguna dan tidak boleh dinyahpasang.
+      Semua kebenaran yang diminta oleh apl diberikan
+      secara tersirat, tanpa interaksi pengguna, termasuk sebarang
+      kebenaran tambahan yang diminta oleh apl versi akan datang.
+
+      Jika apl yang telah dipasang secara paksa sebelum ini dialih keluar daripada
+      senarai ini, apl ini akan dinyahpasang secara automatik oleh <ph name="PRODUCT_NAME" />.
+
+      Setiap item senarai dasar ialah rentetan yang mengandungi ID sambungan
+      dan URL "kemas kini" yang dipisahkan oleh koma bertitik (<ph name="SEMICOLON" />). ID sambungan ialah rentetan 32 huruf
+      yang boleh ditemui misalnya pada <ph name="CHROME_EXTENSIONS_LINK" /> semasa berada dalam
+      mod pembangun. URL "kemas kini" hendaklah menunjukkan ke arah
+      dokumen XML Manifes Kemas Kini seperti yang diterangkan di <ph name="LINK_TO_EXTENSION_DOC1" />. Ambil
+      perhatian bahawa URL "kemas kini" yang ditetapkan dalam dasar ni hanya digunakan untuk
+      pemasangan awal; kemas kini sambungan yang berikutnya menggunakan
+      URL yang dinyatakan dalam manifes sambungan.
+
+      Sebagai contoh, <ph name="EXTENSION_POLICY_EXAMPLE" />
+      memasang apl <ph name="EXTENSION_POLICY_EXAMPLE_EXTENSION_NAME" /> daripada URL "kemas kini" standard Gedung Web
+      Chrome. Untuk mendapatkan maklumat lanjut tentang sambungan pengehosan, lihat: <ph name="LINK_TO_EXTENSION_DOC2" />.</translation>
 <translation id="8889588091638298603">Pelayan Quirks menyediakan fail konfigurasi khusus perkakasan seperti
       profil paparan ICC untuk melaras penentukuran monitor.
 
@@ -2519,12 +2584,6 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="9088444059179765143">Konfigurasi kaedah pengesanan zon waktu automatik</translation>
 <translation id="9096086085182305205">Senarai putih pelayan pengesahan</translation>
 <translation id="9098553063150791878">Dasar untuk pengesahan HTTP</translation>
-<translation id="9104138886225968319">Hantar degupan jantung pemantauan ke pelayan pengurusan, untuk membenarkan
-      pelayan mengesan jika peranti itu di luar talian.
-
-      Jika dasar ini ditetapkan kepada benar, degupan jantung pemantauan akan 
-      dihantar. Jika ditetapkan kepada palsu atau tidak ditetapkan, maka tiada
-      degupan jantung akan dihantar.</translation>
 <translation id="9112897538922695510">Membolehkan anda mendaftar senarai pengendali protokol. Langkah ini hanya boleh menjadi dasar yang disyorkan. Sifat |protocol| hendaklah ditetapkan kepada skema seperti 'mailto' dan sifat |url| hendaklah ditetapkan kepada corak URL aplikasi yang mengendalikan skema. Corak boleh mengandungi '%s', di mana apabila disertakan akan digantikan oleh URL yang dikendalikan.
 
           Pengendali protokol yang didaftarkan oleh dasar digabungkan dengan protokol yang didaftarkan oleh pengguna dan kedua-duanya tersedia untuk digunakan. Pengguna boleh mengatasi pengendali protokol yang dipasang oleh dasar dengan memasang pengendali lalai baharu tetapi tidak boleh mengalih keluar pengendali protokol yang didaftarkan oleh dasar.</translation>
@@ -2566,6 +2625,7 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="9187743794267626640">Lumpuhkan pelekapan storan luaran</translation>
 <translation id="9197740283131855199">Peratusan yang digunakan untuk menskala kelewatan pemalapan skrin jika pengguna menjadi aktif selepas pemalapan</translation>
 <translation id="9200828125069750521">Parameter untuk URL imej yang menggunakan POST</translation>
+<translation id="9217154963008402249">Kekerapan pemantauan bingkisan rangkaian</translation>
 <translation id="922540222991413931">Konfigurasi sambungan, apl dan sumber pemasangan skrip pengguna</translation>
 <translation id="924557436754151212">Import kata laluan yang disimpan daripada penyemak imbas lalai pada kali pertama menjalankannya</translation>
 <translation id="930930237275114205">Tetapkan direktori data pengguna <ph name="PRODUCT_FRAME_NAME" /></translation>

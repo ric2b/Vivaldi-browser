@@ -22,7 +22,12 @@ const int PlatformStyle::kComboboxNormalArrowPadding = 0;
 const int PlatformStyle::kMinLabelButtonWidth = 32;
 const int PlatformStyle::kMinLabelButtonHeight = 30;
 const bool PlatformStyle::kDefaultLabelButtonHasBoldFont = false;
+const bool PlatformStyle::kDialogDefaultButtonCanBeCancel = false;
 const bool PlatformStyle::kTextfieldDragVerticallyDragsToEnd = true;
+const bool PlatformStyle::kTreeViewSelectionPaintsEntireRow = true;
+
+const CustomButton::NotifyAction PlatformStyle::kMenuNotifyActivationAction =
+    CustomButton::NOTIFY_ON_PRESS;
 
 // static
 gfx::ImageSkia PlatformStyle::CreateComboboxArrow(bool is_enabled,
@@ -48,21 +53,21 @@ std::unique_ptr<FocusableBorder> PlatformStyle::CreateComboboxBorder() {
 // static
 std::unique_ptr<Background> PlatformStyle::CreateComboboxBackground(
     int shoulder_width) {
-  return base::WrapUnique(new ComboboxBackgroundMac(shoulder_width));
+  return base::MakeUnique<ComboboxBackgroundMac>(shoulder_width);
 }
 
 // static
 std::unique_ptr<LabelButtonBorder> PlatformStyle::CreateLabelButtonBorder(
     Button::ButtonStyle style) {
   if (style == Button::STYLE_BUTTON)
-    return base::WrapUnique(new DialogButtonBorderMac());
+    return base::MakeUnique<DialogButtonBorderMac>();
 
-  return base::WrapUnique(new LabelButtonAssetBorder(style));
+  return base::MakeUnique<LabelButtonAssetBorder>(style);
 }
 
 // static
 std::unique_ptr<ScrollBar> PlatformStyle::CreateScrollBar(bool is_horizontal) {
-  return base::WrapUnique(new CocoaScrollBar(is_horizontal));
+  return base::MakeUnique<CocoaScrollBar>(is_horizontal);
 }
 
 // static

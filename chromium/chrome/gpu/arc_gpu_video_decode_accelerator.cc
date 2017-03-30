@@ -8,8 +8,8 @@
 #include "base/logging.h"
 #include "base/numerics/safe_math.h"
 #include "base/run_loop.h"
-#include "content/public/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/base/video_frame.h"
+#include "media/gpu/gpu_video_decode_accelerator_factory.h"
 
 namespace chromeos {
 namespace arc {
@@ -51,11 +51,13 @@ ArcGpuVideoDecodeAccelerator::OutputBufferInfo::OutputBufferInfo(
 
 ArcGpuVideoDecodeAccelerator::OutputBufferInfo::~OutputBufferInfo() = default;
 
-ArcGpuVideoDecodeAccelerator::ArcGpuVideoDecodeAccelerator()
+ArcGpuVideoDecodeAccelerator::ArcGpuVideoDecodeAccelerator(
+    const gpu::GpuPreferences& gpu_preferences)
     : arc_client_(nullptr),
       next_bitstream_buffer_id_(0),
       output_pixel_format_(media::PIXEL_FORMAT_UNKNOWN),
-      output_buffer_size_(0) {}
+      output_buffer_size_(0),
+      gpu_preferences_(gpu_preferences) {}
 
 ArcGpuVideoDecodeAccelerator::~ArcGpuVideoDecodeAccelerator() {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -102,6 +104,9 @@ ArcVideoAccelerator::Result ArcGpuVideoDecodeAccelerator::Initialize(
     case HAL_PIXEL_FORMAT_VP8:
       vda_config.profile = media::VP8PROFILE_ANY;
       break;
+    case HAL_PIXEL_FORMAT_VP9:
+      vda_config.profile = media::VP9PROFILE_PROFILE0;
+      break;
     default:
       DLOG(ERROR) << "Unsupported input format: " << config.input_pixel_format;
       return INVALID_ARGUMENT;
@@ -109,9 +114,9 @@ ArcVideoAccelerator::Result ArcGpuVideoDecodeAccelerator::Initialize(
   vda_config.output_mode =
       media::VideoDecodeAccelerator::Config::OutputMode::IMPORT;
 
-  std::unique_ptr<content::GpuVideoDecodeAcceleratorFactory> vda_factory =
-      content::GpuVideoDecodeAcceleratorFactory::CreateWithNoGL();
-  vda_ = vda_factory->CreateVDA(this, vda_config);
+  auto vda_factory = media::GpuVideoDecodeAcceleratorFactory::CreateWithNoGL();
+  vda_ = vda_factory->CreateVDA(
+      this, vda_config, gpu::GpuDriverBugWorkarounds(), gpu_preferences_);
   if (!vda_) {
     DLOG(ERROR) << "Failed to create VDA.";
     return PLATFORM_FAILURE;
@@ -294,8 +299,8 @@ void ArcGpuVideoDecodeAccelerator::UseBuffer(PortType port,
         handle.native_pixmap_handle.fds.emplace_back(
             base::FileDescriptor(info.handle.release(), true));
         for (const auto& plane : info.planes) {
-          handle.native_pixmap_handle.strides_and_offsets.emplace_back(
-              plane.stride, plane.offset);
+          handle.native_pixmap_handle.planes.emplace_back(
+              plane.stride, plane.offset, 0);
         }
 #endif
         vda_->ImportBufferForPicture(index, handle);

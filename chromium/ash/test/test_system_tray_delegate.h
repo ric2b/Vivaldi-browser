@@ -6,6 +6,7 @@
 #define ASH_TEST_TEST_SYSTEM_TRAY_DELEGATE_H_
 
 #include "ash/common/system/tray/default_system_tray_delegate.h"
+#include "ash/common/system/tray/ime_info.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 
@@ -47,6 +48,12 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
   // Clears the session length limit.
   void ClearSessionLengthLimit();
 
+  // Sets the IME info.
+  void SetCurrentIME(const IMEInfo& info);
+
+  // Sets the list of available IMEs.
+  void SetAvailableIMEList(const IMEInfoList& list);
+
   // Overridden from SystemTrayDelegate:
   LoginStatus GetUserLoginStatus() const override;
   bool IsUserSupervised() const override;
@@ -55,12 +62,20 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
   void SignOut() override;
+  std::unique_ptr<SystemTrayItem> CreateDisplayTrayItem(
+      SystemTray* tray) override;
+  std::unique_ptr<SystemTrayItem> CreateRotationLockTrayItem(
+      SystemTray* tray) override;
+  void GetCurrentIME(IMEInfo* info) override;
+  void GetAvailableIMEList(IMEInfoList* list) override;
 
  private:
   bool should_show_display_notification_;
   LoginStatus login_status_;
   base::TimeDelta session_length_limit_;
   bool session_length_limit_set_;
+  IMEInfo current_ime_;
+  IMEInfoList ime_list_;
 
   DISALLOW_COPY_AND_ASSIGN(TestSystemTrayDelegate);
 };

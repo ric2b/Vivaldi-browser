@@ -5,23 +5,24 @@
 /**
  * @constructor
  * @extends {WebInspector.BreakpointsSidebarPaneBase}
+ * @implements {WebInspector.ContextFlavorListener}
  * @implements {WebInspector.TargetManager.Observer}
+ * @implements {WebInspector.ToolbarItem.ItemsProvider}
  */
 WebInspector.XHRBreakpointsSidebarPane = function()
 {
-    WebInspector.BreakpointsSidebarPaneBase.call(this, WebInspector.UIString("XHR Breakpoints"));
+    WebInspector.BreakpointsSidebarPaneBase.call(this);
     this._xhrBreakpointsSetting = WebInspector.settings.createLocalSetting("xhrBreakpoints", []);
 
     /** @type {!Map.<string, !Element>} */
     this._breakpointElements = new Map();
 
-    var addButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add breakpoint"), "add-toolbar-item");
-    addButton.addEventListener("click", this._addButtonClicked.bind(this));
-    this.toolbar().appendToolbarItem(addButton);
+    this._addButton = new WebInspector.ToolbarButton(WebInspector.UIString("Add breakpoint"), "add-toolbar-item");
+    this._addButton.addEventListener("click", this._addButtonClicked.bind(this));
 
     this.emptyElement.addEventListener("contextmenu", this._emptyElementContextMenu.bind(this), true);
-
-    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Type.Page);
+    WebInspector.targetManager.observeTargets(this, WebInspector.Target.Capability.Browser);
+    this._update();
 }
 
 WebInspector.XHRBreakpointsSidebarPane.prototype = {
@@ -40,6 +41,15 @@ WebInspector.XHRBreakpointsSidebarPane.prototype = {
      */
     targetRemoved: function(target) { },
 
+    /**
+     * @override
+     * @return {!Array<!WebInspector.ToolbarItem>}
+     */
+    toolbarItems: function()
+    {
+        return [this._addButton];
+    },
+
     _emptyElementContextMenu: function(event)
     {
         var contextMenu = new WebInspector.ContextMenu(event);
@@ -52,7 +62,7 @@ WebInspector.XHRBreakpointsSidebarPane.prototype = {
         if (event)
             event.consume();
 
-        this.expand();
+        WebInspector.viewManager.showView("sources.xhrBreakpoints");
 
         var inputElementContainer = createElementWithClass("p", "breakpoint-condition");
         inputElementContainer.textContent = WebInspector.UIString("Break when URL contains:");
@@ -139,12 +149,12 @@ WebInspector.XHRBreakpointsSidebarPane.prototype = {
      */
     _updateBreakpointOnTarget: function(url, enable, target)
     {
-        var targets = target ? [target] : WebInspector.targetManager.targets(WebInspector.Target.Type.Page);
-        for (var i = 0; i < targets.length; ++i) {
+        var targets = target ? [target] : WebInspector.targetManager.targets(WebInspector.Target.Capability.Browser);
+        for (target of targets) {
             if (enable)
-                targets[i].domdebuggerAgent().setXHRBreakpoint(url);
+                target.domdebuggerAgent().setXHRBreakpoint(url);
             else
-                targets[i].domdebuggerAgent().removeXHRBreakpoint(url);
+                target.domdebuggerAgent().removeXHRBreakpoint(url);
         }
     },
 
@@ -212,22 +222,32 @@ WebInspector.XHRBreakpointsSidebarPane.prototype = {
         WebInspector.InplaceEditor.startEditing(inputElement, new WebInspector.InplaceEditor.Config(finishEditing.bind(this, true), finishEditing.bind(this, false)));
     },
 
-    highlightBreakpoint: function(url)
+    /**
+     * @override
+     * @param {?Object} object
+     */
+    flavorChanged: function(object)
     {
+        this._update();
+    },
+
+    _update: function()
+    {
+        var details = WebInspector.context.flavor(WebInspector.DebuggerPausedDetails);
+        if (!details || details.reason !== WebInspector.DebuggerModel.BreakReason.XHR) {
+            if (this._highlightedElement) {
+                this._highlightedElement.classList.remove("breakpoint-hit");
+                delete this._highlightedElement;
+            }
+            return;
+        }
+        var url = details.auxData["breakpointURL"];
         var element = this._breakpointElements.get(url);
         if (!element)
             return;
-        this.expand();
+        WebInspector.viewManager.showView("sources.xhrBreakpoints");
         element.classList.add("breakpoint-hit");
         this._highlightedElement = element;
-    },
-
-    clearBreakpointHighlight: function()
-    {
-        if (this._highlightedElement) {
-            this._highlightedElement.classList.remove("breakpoint-hit");
-            delete this._highlightedElement;
-        }
     },
 
     _saveBreakpoints: function()

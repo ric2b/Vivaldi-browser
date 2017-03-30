@@ -31,6 +31,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/events/SecurityPolicyViolationEvent.h"
+#include "core/fetch/IntegrityMetadata.h"
 #include "core/frame/FrameClient.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
@@ -46,7 +47,6 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/PingLoader.h"
 #include "platform/JSONValues.h"
-#include "platform/ParsingUtilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
@@ -62,6 +62,7 @@
 #include "public/platform/WebURLRequest.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StringHasher.h"
+#include "wtf/text/ParsingUtilities.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 #include <memory>
@@ -104,6 +105,9 @@ const char ContentSecurityPolicy::UpgradeInsecureRequests[] = "upgrade-insecure-
 // https://mikewest.github.io/cors-rfc1918/#csp
 const char ContentSecurityPolicy::TreatAsPublicAddress[] = "treat-as-public-address";
 
+// https://w3c.github.io/webappsec-subresource-integrity/#require-sri-for
+const char ContentSecurityPolicy::RequireSRIFor[] = "require-sri-for";
+
 bool ContentSecurityPolicy::isDirectiveName(const String& name)
 {
     return (equalIgnoringCase(name, ConnectSrc)
@@ -127,7 +131,8 @@ bool ContentSecurityPolicy::isDirectiveName(const String& name)
         || equalIgnoringCase(name, ManifestSrc)
         || equalIgnoringCase(name, BlockAllMixedContent)
         || equalIgnoringCase(name, UpgradeInsecureRequests)
-        || equalIgnoringCase(name, TreatAsPublicAddress));
+        || equalIgnoringCase(name, TreatAsPublicAddress)
+        || equalIgnoringCase(name, RequireSRIFor));
 }
 
 static UseCounter::Feature getUseCounterType(ContentSecurityPolicyHeaderType type)
@@ -536,8 +541,9 @@ bool ContentSecurityPolicy::allowPluginTypeForDocument(const Document& document,
     // FIXME: The plugin-types directive should be pushed down into the
     // current document instead of reaching up to the parent for it here.
     LocalFrame* frame = document.frame();
-    if (frame && frame->tree().parent() && frame->tree().parent()->isLocalFrame() && document.isPluginDocument()) {
-        ContentSecurityPolicy* parentCSP = toLocalFrame(frame->tree().parent())->document()->contentSecurityPolicy();
+    if (frame && frame->tree().parent() && document.isPluginDocument()) {
+        ContentSecurityPolicy* parentCSP =
+            frame->tree().parent()->securityContext()->contentSecurityPolicy();
         if (parentCSP && !parentCSP->allowPluginType(type, typeAttribute, url))
             return false;
     }
@@ -560,8 +566,21 @@ bool ContentSecurityPolicy::allowStyleWithHash(const String& source, InlineType 
     return checkDigest<&CSPDirectiveList::allowStyleHash>(source, type, m_styleHashAlgorithmsUsed, m_policies);
 }
 
-bool ContentSecurityPolicy::allowRequest(WebURLRequest::RequestContext context, const KURL& url, const String& nonce, RedirectStatus redirectStatus, ReportingStatus reportingStatus) const
+bool ContentSecurityPolicy::allowRequestWithoutIntegrity(WebURLRequest::RequestContext context, const KURL& url, RedirectStatus redirectStatus, ContentSecurityPolicy::ReportingStatus reportingStatus) const
 {
+    for (const auto& policy : m_policies) {
+        if (!policy->allowRequestWithoutIntegrity(context, url, redirectStatus, reportingStatus))
+            return false;
+    }
+    return true;
+}
+
+bool ContentSecurityPolicy::allowRequest(WebURLRequest::RequestContext context, const KURL& url, const String& nonce, const IntegrityMetadataSet& integrityMetadata, RedirectStatus redirectStatus, ReportingStatus reportingStatus) const
+{
+    if (integrityMetadata.isEmpty()
+        && !allowRequestWithoutIntegrity(context, url, redirectStatus, reportingStatus))
+        return false;
+
     switch (context) {
     case WebURLRequest::RequestContextAudio:
     case WebURLRequest::RequestContextTrack:
@@ -588,6 +607,7 @@ bool ContentSecurityPolicy::allowRequest(WebURLRequest::RequestContext context, 
         return allowChildFrameFromSource(url, redirectStatus, reportingStatus);
     case WebURLRequest::RequestContextImport:
     case WebURLRequest::RequestContextScript:
+        return allowScriptFromSource(url, nonce, redirectStatus, reportingStatus);
     case WebURLRequest::RequestContextXSLT:
         return allowScriptFromSource(url, nonce, redirectStatus, reportingStatus);
     case WebURLRequest::RequestContextManifest:
@@ -837,7 +857,8 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
     // https://crbug.com/376522).
     if (!m_executionContext && !contextFrame) {
         DCHECK(equalIgnoringCase(effectiveDirective, ContentSecurityPolicy::ChildSrc)
-            || equalIgnoringCase(effectiveDirective, ContentSecurityPolicy::FrameSrc));
+            || equalIgnoringCase(effectiveDirective, ContentSecurityPolicy::FrameSrc)
+            || equalIgnoringCase(effectiveDirective, ContentSecurityPolicy::PluginTypes));
         return;
     }
 
@@ -868,7 +889,7 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
     // sent explicitly. As for which directive was violated, that's pretty
     // harmless information.
 
-    RefPtr<JSONObject> cspReport = JSONObject::create();
+    std::unique_ptr<JSONObject> cspReport = JSONObject::create();
     cspReport->setString("document-uri", violationData.documentURI());
     cspReport->setString("referrer", violationData.referrer());
     cspReport->setString("violated-directive", violationData.violatedDirective());
@@ -876,15 +897,15 @@ void ContentSecurityPolicy::reportViolation(const String& directiveText, const S
     cspReport->setString("original-policy", violationData.originalPolicy());
     cspReport->setString("blocked-uri", violationData.blockedURI());
     if (violationData.lineNumber())
-        cspReport->setNumber("line-number", violationData.lineNumber());
+        cspReport->setInteger("line-number", violationData.lineNumber());
     if (violationData.columnNumber())
-        cspReport->setNumber("column-number", violationData.columnNumber());
+        cspReport->setInteger("column-number", violationData.columnNumber());
     if (!violationData.sourceFile().isEmpty())
         cspReport->setString("source-file", violationData.sourceFile());
-    cspReport->setNumber("status-code", violationData.statusCode());
+    cspReport->setInteger("status-code", violationData.statusCode());
 
-    RefPtr<JSONObject> reportObject = JSONObject::create();
-    reportObject->setObject("csp-report", cspReport.release());
+    std::unique_ptr<JSONObject> reportObject = JSONObject::create();
+    reportObject->setObject("csp-report", std::move(cspReport));
     String stringifiedReport = reportObject->toJSONString();
 
     if (!shouldSendViolationReport(stringifiedReport))
@@ -1004,6 +1025,11 @@ void ContentSecurityPolicy::reportInvalidReflectedXSS(const String& invalidValue
     logToConsole("The 'reflected-xss' Content Security Policy directive has the invalid value \"" + invalidValue + "\". Valid values are \"allow\", \"filter\", and \"block\".");
 }
 
+void ContentSecurityPolicy::reportInvalidRequireSRIForTokens(const String& invalidTokens)
+{
+    logToConsole("Error while parsing the 'require-sri-for' Content Security Policy directive: " + invalidTokens);
+}
+
 void ContentSecurityPolicy::reportInvalidDirectiveValueCharacter(const String& directiveName, const String& value)
 {
     String message = "The value for Content Security Policy directive '" + directiveName + "' contains an invalid character: '" + value + "'. Non-whitespace characters outside ASCII 0x21-0x7E must be percent-encoded, as described in RFC 3986, section 2.1: http://tools.ietf.org/html/rfc3986#section-2.1.";
@@ -1051,7 +1077,7 @@ void ContentSecurityPolicy::logToConsole(ConsoleMessage* consoleMessage, LocalFr
 
 void ContentSecurityPolicy::reportBlockedScriptExecutionToInspector(const String& directiveText) const
 {
-    m_executionContext->reportBlockedScriptExecutionToInspector(directiveText);
+    InspectorInstrumentation::scriptExecutionBlockedByCSP(m_executionContext, directiveText);
 }
 
 bool ContentSecurityPolicy::experimentalFeaturesEnabled() const

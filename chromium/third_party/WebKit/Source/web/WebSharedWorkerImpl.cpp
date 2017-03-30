@@ -30,8 +30,8 @@
 
 #include "web/WebSharedWorkerImpl.h"
 
-#include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
+#include "core/dom/ExecutionContextTask.h"
 #include "core/events/MessageEvent.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -39,6 +39,7 @@
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
+#include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/SharedWorkerGlobalScope.h"
 #include "core/workers/SharedWorkerThread.h"
 #include "core/workers/WorkerClients.h"
@@ -161,8 +162,7 @@ void WebSharedWorkerImpl::loadShadowPage()
 }
 
 void WebSharedWorkerImpl::willSendRequest(
-    WebLocalFrame* frame, unsigned, WebURLRequest& request,
-    const WebURLResponse& redirectResponse)
+    WebLocalFrame* frame, WebURLRequest& request)
 {
     if (m_networkProvider)
         m_networkProvider->willSendRequest(frame->dataSource(), request);
@@ -219,12 +219,12 @@ WebDevToolsAgentClient::WebKitClientMessageLoop* WebSharedWorkerImpl::createClie
 
 // WorkerReportingProxy --------------------------------------------------------
 
-void WebSharedWorkerImpl::reportException(const String& errorMessage, std::unique_ptr<SourceLocation>)
+void WebSharedWorkerImpl::reportException(const String& errorMessage, std::unique_ptr<SourceLocation>, int exceptionId)
 {
     // Not suppported in SharedWorker.
 }
 
-void WebSharedWorkerImpl::reportConsoleMessage(ConsoleMessage*)
+void WebSharedWorkerImpl::reportConsoleMessage(MessageSource, MessageLevel, const String& message, SourceLocation*)
 {
     // Not supported in SharedWorker.
 }
@@ -251,7 +251,7 @@ void WebSharedWorkerImpl::workerGlobalScopeClosedOnMainThread()
     terminateWorkerThread();
 }
 
-void WebSharedWorkerImpl::workerGlobalScopeStarted(WorkerGlobalScope*)
+void WebSharedWorkerImpl::workerGlobalScopeStarted(WorkerOrWorkletGlobalScope*)
 {
 }
 
@@ -269,15 +269,17 @@ void WebSharedWorkerImpl::workerThreadTerminatedOnMainThread()
 
 // WorkerLoaderProxyProvider -----------------------------------------------------------
 
-void WebSharedWorkerImpl::postTaskToLoader(std::unique_ptr<ExecutionContextTask> task)
+void WebSharedWorkerImpl::postTaskToLoader(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
-    m_mainFrame->frame()->document()->postTask(BLINK_FROM_HERE, std::move(task));
+    // TODO(hiroshige,yuryu): Make this not use ExecutionContextTask and
+    // consider using m_mainThreadTaskRunners->get(TaskType::Networking)
+    // instead.
+    m_mainFrame->frame()->document()->postTask(location, std::move(task));
 }
 
-bool WebSharedWorkerImpl::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask> task)
+void WebSharedWorkerImpl::postTaskToWorkerGlobalScope(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
 {
-    m_workerThread->postTask(BLINK_FROM_HERE, std::move(task));
-    return true;
+    m_workerThread->postTask(location, std::move(task));
 }
 
 void WebSharedWorkerImpl::connect(WebMessagePortChannel* webChannel)
@@ -337,6 +339,7 @@ void WebSharedWorkerImpl::onScriptLoaderFinished()
     provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
     ContentSecurityPolicy* contentSecurityPolicy = m_mainScriptLoader->releaseContentSecurityPolicy();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
+    std::unique_ptr<WorkerSettings> workerSettings = wrapUnique(new WorkerSettings(document->settings()));
     std::unique_ptr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
         m_url,
         m_loadingDocument->userAgent(),
@@ -348,7 +351,15 @@ void WebSharedWorkerImpl::onScriptLoaderFinished()
         starterOrigin,
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),
-        m_mainScriptLoader->originTrialTokens());
+        m_mainScriptLoader->originTrialTokens(),
+        std::move(workerSettings));
+
+    // We have a dummy document here for loading but it doesn't really represent
+    // the document/frame of associated document(s) for this worker. Here we
+    // populate the task runners with null document not to confuse the frame
+    // scheduler (which will end up using the thread's default task runner).
+    m_mainThreadTaskRunners = ParentFrameTaskRunners::create(nullptr);
+
     m_loaderProxy = WorkerLoaderProxy::create(this);
     m_workerThread = SharedWorkerThread::create(m_name, m_loaderProxy, *this);
     InspectorInstrumentation::scriptImported(m_loadingDocument.get(), m_mainScriptLoader->identifier(), m_mainScriptLoader->script());

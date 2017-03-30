@@ -39,6 +39,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
+#include "media/base/win/mf_helpers.h"
 #include "media/base/win/mf_initializer.h"
 #include "media/gpu/dxva_picture_buffer_win.h"
 #include "media/video/video_decode_accelerator.h"
@@ -51,38 +52,27 @@
 
 namespace {
 
+// AMD
 // Path is appended on to the PROGRAM_FILES base path.
-const wchar_t kVPXDecoderDLLPath[] = L"Intel\\Media SDK\\";
+const wchar_t kAMDVPXDecoderDLLPath[] =
+    L"Common Files\\ATI Technologies\\Multimedia\\";
 
-const wchar_t kVP8DecoderDLLName[] =
+const wchar_t kAMDVP9DecoderDLLName[] =
 #if defined(ARCH_CPU_X86)
-    L"mfx_mft_vp8vd_32.dll";
+    L"amf-mft-decvp9-decoder32.dll";
 #elif defined(ARCH_CPU_X86_64)
-    L"mfx_mft_vp8vd_64.dll";
+    L"amf-mft-decvp9-decoder64.dll";
 #else
 #error Unsupported Windows CPU Architecture
 #endif
 
-const wchar_t kVP9DecoderDLLName[] =
-#if defined(ARCH_CPU_X86)
-    L"mfx_mft_vp9vd_32.dll";
-#elif defined(ARCH_CPU_X86_64)
-    L"mfx_mft_vp9vd_64.dll";
-#else
-#error Unsupported Windows CPU Architecture
-#endif
+const CLSID CLSID_AMDWebmMfVp9Dec = {
+    0x2d2d728a,
+    0x67d6,
+    0x48ab,
+    {0x89, 0xfb, 0xa6, 0xec, 0x65, 0x55, 0x49, 0x70}};
 
-const CLSID CLSID_WebmMfVp8Dec = {
-    0x451e3cb7,
-    0x2622,
-    0x4ba5,
-    {0x8e, 0x1d, 0x44, 0xb3, 0xc4, 0x1d, 0x09, 0x24}};
-
-const CLSID CLSID_WebmMfVp9Dec = {
-    0x07ab4bd2,
-    0x1979,
-    0x4fcd,
-    {0xa6, 0x97, 0xdf, 0x9a, 0xd1, 0x5b, 0x34, 0xfe}};
+const wchar_t kMSVP9DecoderDLLName[] = L"MSVP9DEC.dll";
 
 const CLSID MEDIASUBTYPE_VP80 = {
     0x30385056,
@@ -185,35 +175,8 @@ static const DWORD g_IntelLegacyGPUList[] = {
     0x102, 0x106, 0x116, 0x126,
 };
 
-// Provides scoped access to the underlying buffer in an IMFMediaBuffer
-// instance.
-class MediaBufferScopedPointer {
- public:
-  MediaBufferScopedPointer(IMFMediaBuffer* media_buffer)
-      : media_buffer_(media_buffer),
-        buffer_(nullptr),
-        max_length_(0),
-        current_length_(0) {
-    HRESULT hr = media_buffer_->Lock(&buffer_, &max_length_, &current_length_);
-    CHECK(SUCCEEDED(hr));
-  }
-
-  ~MediaBufferScopedPointer() {
-    HRESULT hr = media_buffer_->Unlock();
-    CHECK(SUCCEEDED(hr));
-  }
-
-  uint8_t* get() { return buffer_; }
-
-  DWORD current_length() const { return current_length_; }
-
- private:
-  base::win::ScopedComPtr<IMFMediaBuffer> media_buffer_;
-  uint8_t* buffer_;
-  DWORD max_length_;
-  DWORD current_length_;
-
-  DISALLOW_COPY_AND_ASSIGN(MediaBufferScopedPointer);
+constexpr const wchar_t* const kMediaFoundationVideoDecoderDLLs[] = {
+    L"mf.dll", L"mfplat.dll", L"msmpeg2vdec.dll",
 };
 
 }  // namespace
@@ -227,32 +190,6 @@ static const VideoCodecProfile kSupportedProfiles[] = {
 
 CreateDXGIDeviceManager
     DXVAVideoDecodeAccelerator::create_dxgi_device_manager_ = NULL;
-
-#define RETURN_ON_FAILURE(result, log, ret) \
-  do {                                      \
-    if (!(result)) {                        \
-      DLOG(ERROR) << log;                   \
-      return ret;                           \
-    }                                       \
-  } while (0)
-
-#define RETURN_ON_HR_FAILURE(result, log, ret) \
-  RETURN_ON_FAILURE(SUCCEEDED(result),         \
-                    log << ", HRESULT: 0x" << std::hex << result, ret);
-
-#define RETURN_AND_NOTIFY_ON_FAILURE(result, log, error_code, ret) \
-  do {                                                             \
-    if (!(result)) {                                               \
-      DVLOG(1) << log;                                             \
-      StopOnError(error_code);                                     \
-      return ret;                                                  \
-    }                                                              \
-  } while (0)
-
-#define RETURN_AND_NOTIFY_ON_HR_FAILURE(result, log, error_code, ret)        \
-  RETURN_AND_NOTIFY_ON_FAILURE(SUCCEEDED(result),                            \
-                               log << ", HRESULT: 0x" << std::hex << result, \
-                               error_code, ret);
 
 enum {
   // Maximum number of iterations we allow before aborting the attempt to flush
@@ -273,41 +210,6 @@ enum {
   kAcquireSyncWaitMs = 0,
 };
 
-static IMFSample* CreateEmptySample() {
-  base::win::ScopedComPtr<IMFSample> sample;
-  HRESULT hr = MFCreateSample(sample.Receive());
-  RETURN_ON_HR_FAILURE(hr, "MFCreateSample failed", NULL);
-  return sample.Detach();
-}
-
-// Creates a Media Foundation sample with one buffer of length |buffer_length|
-// on a |align|-byte boundary. Alignment must be a perfect power of 2 or 0.
-static IMFSample* CreateEmptySampleWithBuffer(uint32_t buffer_length,
-                                              int align) {
-  CHECK_GT(buffer_length, 0U);
-
-  base::win::ScopedComPtr<IMFSample> sample;
-  sample.Attach(CreateEmptySample());
-
-  base::win::ScopedComPtr<IMFMediaBuffer> buffer;
-  HRESULT hr = E_FAIL;
-  if (align == 0) {
-    // Note that MFCreateMemoryBuffer is same as MFCreateAlignedMemoryBuffer
-    // with the align argument being 0.
-    hr = MFCreateMemoryBuffer(buffer_length, buffer.Receive());
-  } else {
-    hr =
-        MFCreateAlignedMemoryBuffer(buffer_length, align - 1, buffer.Receive());
-  }
-  RETURN_ON_HR_FAILURE(hr, "Failed to create memory buffer for sample", NULL);
-
-  hr = sample->AddBuffer(buffer.get());
-  RETURN_ON_HR_FAILURE(hr, "Failed to add buffer to sample", NULL);
-
-  buffer->SetCurrentLength(0);
-  return sample.Detach();
-}
-
 // Creates a Media Foundation sample with one buffer containing a copy of the
 // given Annex B stream data.
 // If duration and sample time are not known, provide 0.
@@ -321,7 +223,7 @@ static IMFSample* CreateInputSample(const uint8_t* stream,
   CHECK_GT(size, 0U);
   base::win::ScopedComPtr<IMFSample> sample;
   sample.Attach(
-      CreateEmptySampleWithBuffer(std::max(min_size, size), alignment));
+      mf::CreateEmptySampleWithBuffer(std::max(min_size, size), alignment));
   RETURN_ON_FAILURE(sample.get(), "Failed to create empty sample", NULL);
 
   base::win::ScopedComPtr<IMFMediaBuffer> buffer;
@@ -630,7 +532,8 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   main_thread_task_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   if (!config.supported_output_formats.empty() &&
-      !ContainsValue(config.supported_output_formats, PIXEL_FORMAT_NV12)) {
+      !base::ContainsValue(config.supported_output_formats,
+                           PIXEL_FORMAT_NV12)) {
     share_nv12_textures_ = false;
     copy_nv12_textures_ = false;
   }
@@ -694,6 +597,8 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
 
   InitializeMediaFoundation();
 
+  config_ = config;
+
   RETURN_AND_NOTIFY_ON_FAILURE(InitDecoder(config.profile),
                                "Failed to initialize decoder", PLATFORM_FAILURE,
                                false);
@@ -711,8 +616,6 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
       SendMFTMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0),
       "Send MFT_MESSAGE_NOTIFY_START_OF_STREAM notification failed",
       PLATFORM_FAILURE, false);
-
-  config_ = config;
 
   config_change_detector_.reset(new H264ConfigChangeDetector);
 
@@ -1155,13 +1058,28 @@ GLenum DXVAVideoDecodeAccelerator::GetSurfaceInternalFormat() const {
 
 // static
 VideoDecodeAccelerator::SupportedProfiles
-DXVAVideoDecodeAccelerator::GetSupportedProfiles() {
+DXVAVideoDecodeAccelerator::GetSupportedProfiles(
+    const gpu::GpuPreferences& preferences) {
   TRACE_EVENT0("gpu,startup",
                "DXVAVideoDecodeAccelerator::GetSupportedProfiles");
 
   // TODO(henryhsu): Need to ensure the profiles are actually supported.
   SupportedProfiles profiles;
+
+  for (const wchar_t* mfdll : kMediaFoundationVideoDecoderDLLs) {
+    if (!::GetModuleHandle(mfdll)) {
+      // Windows N is missing the media foundation DLLs unless the media
+      // feature pack is installed.
+      DVLOG(ERROR) << mfdll << " is required for hardware video decoding";
+      return profiles;
+    }
+  }
   for (const auto& supported_profile : kSupportedProfiles) {
+    if (!preferences.enable_accelerated_vpx_decode &&
+        (supported_profile >= VP8PROFILE_MIN) &&
+        (supported_profile <= VP9PROFILE_MAX)) {
+      continue;
+    }
     std::pair<int, int> min_resolution = GetMinResolution(supported_profile);
     std::pair<int, int> max_resolution = GetMaxResolution(supported_profile);
 
@@ -1176,9 +1094,8 @@ DXVAVideoDecodeAccelerator::GetSupportedProfiles() {
 
 // static
 void DXVAVideoDecodeAccelerator::PreSandboxInitialization() {
-  ::LoadLibrary(L"MFPlat.dll");
-  ::LoadLibrary(L"msmpeg2vdec.dll");
-  ::LoadLibrary(L"mf.dll");
+  for (const wchar_t* mfdll : kMediaFoundationVideoDecoderDLLs)
+    ::LoadLibrary(mfdll);
   ::LoadLibrary(L"dxva2.dll");
 
   if (base::win::GetVersion() > base::win::VERSION_WIN7) {
@@ -1421,30 +1338,39 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
               profile == VP9PROFILE_PROFILE1 ||
               profile == VP9PROFILE_PROFILE2 ||
               profile == VP9PROFILE_PROFILE3)) {
+    if (profile != VP8PROFILE_ANY &&
+        (enable_accelerated_vpx_decode_ &
+         gpu::GpuPreferences::VPX_VENDOR_MICROSOFT)) {
+      codec_ = kCodecVP9;
+      clsid = CLSID_MSVPxDecoder;
+      decoder_dll = ::LoadLibrary(kMSVP9DecoderDLLName);
+      if (decoder_dll)
+        using_ms_vp9_mft_ = true;
+    }
+
     int program_files_key = base::DIR_PROGRAM_FILES;
     if (base::win::OSInfo::GetInstance()->wow64_status() ==
         base::win::OSInfo::WOW64_ENABLED) {
       program_files_key = base::DIR_PROGRAM_FILES6432;
     }
 
-    base::FilePath dll_path;
-    RETURN_ON_FAILURE(PathService::Get(program_files_key, &dll_path),
-                      "failed to get path for Program Files", false);
-
-    dll_path = dll_path.Append(kVPXDecoderDLLPath);
-    if (profile == VP8PROFILE_ANY) {
-      codec_ = kCodecVP8;
-      dll_path = dll_path.Append(kVP8DecoderDLLName);
-      clsid = CLSID_WebmMfVp8Dec;
-    } else {
-      codec_ = kCodecVP9;
-      dll_path = dll_path.Append(kVP9DecoderDLLName);
-      clsid = CLSID_WebmMfVp9Dec;
+    // AMD
+    if (!decoder_dll &&
+        enable_accelerated_vpx_decode_ & gpu::GpuPreferences::VPX_VENDOR_AMD &&
+        profile == VP9PROFILE_PROFILE0) {
+      base::FilePath dll_path;
+      if (PathService::Get(program_files_key, &dll_path)) {
+        codec_ = media::kCodecVP9;
+        dll_path = dll_path.Append(kAMDVPXDecoderDLLPath);
+        dll_path = dll_path.Append(kAMDVP9DecoderDLLName);
+        clsid = CLSID_AMDWebmMfVp9Dec;
+        decoder_dll = ::LoadLibraryEx(dll_path.value().data(), NULL,
+                                      LOAD_WITH_ALTERED_SEARCH_PATH);
+      }
     }
-    decoder_dll = ::LoadLibraryEx(dll_path.value().data(), NULL,
-                                  LOAD_WITH_ALTERED_SEARCH_PATH);
-    RETURN_ON_FAILURE(decoder_dll, "vpx decoder dll is not loaded", false);
-  } else {
+  }
+
+  if (!decoder_dll) {
     RETURN_ON_FAILURE(false, "Unsupported codec.", false);
   }
 
@@ -1518,7 +1444,7 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
     DVLOG(1) << "Failed to set Low latency mode on decoder. Error: " << hr;
   }
 
-  auto gl_context = get_gl_context_cb_.Run();
+  auto* gl_context = get_gl_context_cb_.Run();
   RETURN_ON_FAILURE(gl_context, "Couldn't get GL context", false);
 
   // The decoder should use DX11 iff
@@ -1545,13 +1471,20 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
     copy_nv12_textures_ = false;
   }
 
+  // The MS VP9 MFT doesn't pass through the bind flags we specify, so
+  // textures aren't created with D3D11_BIND_SHADER_RESOURCE and can't be used
+  // from ANGLE.
+  if (using_ms_vp9_mft_)
+    share_nv12_textures_ = false;
+
   return true;
 }
 
 bool DXVAVideoDecodeAccelerator::SetDecoderMediaTypes() {
   RETURN_ON_FAILURE(SetDecoderInputMediaType(),
                     "Failed to set decoder input media type", false);
-  return SetDecoderOutputMediaType(MFVideoFormat_NV12);
+  return SetDecoderOutputMediaType(MFVideoFormat_NV12) ||
+         SetDecoderOutputMediaType(MFVideoFormat_P010);
 }
 
 bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
@@ -1574,11 +1507,22 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
   }
   RETURN_ON_HR_FAILURE(hr, "Failed to set subtype", false);
 
-  // Not sure about this. msdn recommends setting this value on the input
-  // media type.
-  hr = media_type->SetUINT32(MF_MT_INTERLACE_MODE,
-                             MFVideoInterlace_MixedInterlaceOrProgressive);
-  RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
+  if (using_ms_vp9_mft_) {
+    hr = MFSetAttributeSize(media_type.get(), MF_MT_FRAME_SIZE,
+                            config_.initial_expected_coded_size.width(),
+                            config_.initial_expected_coded_size.height());
+    RETURN_ON_HR_FAILURE(hr, "Failed to set attribute size", false);
+
+    hr = media_type->SetUINT32(MF_MT_INTERLACE_MODE,
+                               MFVideoInterlace_Progressive);
+    RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
+  } else {
+    // Not sure about this. msdn recommends setting this value on the input
+    // media type.
+    hr = media_type->SetUINT32(MF_MT_INTERLACE_MODE,
+                               MFVideoInterlace_MixedInterlaceOrProgressive);
+    RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
+  }
 
   hr = decoder_->SetInputType(0, media_type.get(), 0);  // No flags
   RETURN_ON_HR_FAILURE(hr, "Failed to set decoder input type", false);
@@ -1675,7 +1619,8 @@ void DXVAVideoDecodeAccelerator::DoDecode() {
     // A stream change needs further ProcessInput calls to get back decoder
     // output which is why we need to set the state to stopped.
     if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
-      if (!SetDecoderOutputMediaType(MFVideoFormat_NV12)) {
+      if (!SetDecoderOutputMediaType(MFVideoFormat_NV12) &&
+          !SetDecoderOutputMediaType(MFVideoFormat_P010)) {
         // Decoder didn't let us set NV12 output format. Not sure as to why
         // this can happen. Give up in disgust.
         NOTREACHED() << "Failed to set decoder output media type to NV12";
@@ -1751,7 +1696,7 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
   TRACE_EVENT0("media", "DXVAVideoDecodeAccelerator::ProcessPendingSamples");
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
 
-  if (!output_picture_buffers_.size())
+  if (output_picture_buffers_.empty())
     return;
 
   RETURN_AND_NOTIFY_ON_FAILURE(make_context_current_cb_.Run(),
@@ -1789,7 +1734,7 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
       }
 
       pending_sample->picture_buffer_id = index->second->id();
-      index->second->set_available(false);
+      index->second->set_bound();
       if (share_nv12_textures_) {
         main_thread_task_runner_->PostTask(
             FROM_HERE,
@@ -1831,7 +1776,6 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
               this, surface.get(), d3d11_texture.get(),
               pending_sample->input_buffer_id),
           "Failed to copy output sample", PLATFORM_FAILURE, );
-
     }
   }
 }
@@ -2724,7 +2668,7 @@ HRESULT DXVAVideoDecodeAccelerator::CheckConfigChanged(IMFSample* sample,
   HRESULT hr = sample->GetBufferByIndex(0, buffer.Receive());
   RETURN_ON_HR_FAILURE(hr, "Failed to get buffer from input sample", hr);
 
-  MediaBufferScopedPointer scoped_media_buffer(buffer.get());
+  mf::MediaBufferScopedPointer scoped_media_buffer(buffer.get());
 
   if (!config_change_detector_->DetectConfig(
           scoped_media_buffer.get(), scoped_media_buffer.current_length())) {

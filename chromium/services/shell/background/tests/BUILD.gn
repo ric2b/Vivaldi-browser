@@ -2,11 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//mojo/public/mojo_application.gni")
+import("//services/shell/public/cpp/service.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 
-source_set("test_support") {
+static_library("test_support") {
   sources = [
     "test_catalog_store.cc",
     "test_catalog_store.h",
@@ -45,9 +45,11 @@ mojom("test_app_bindings") {
   sources = [
     "test.mojom",
   ]
+
+  use_new_wrapper_types = false
 }
 
-mojo_native_application("test_app") {
+service("test_app") {
   output_name = "background_shell_test_app"
 
   sources = [

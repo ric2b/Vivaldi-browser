@@ -5,54 +5,32 @@
 #ifndef ASH_MUS_BRIDGE_WM_SHELF_MUS_H_
 #define ASH_MUS_BRIDGE_WM_SHELF_MUS_H_
 
-#include <stdint.h>
-
-#include <vector>
-
 #include "ash/common/shelf/wm_shelf.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
 
 namespace ash {
-namespace mus {
 
-class ShelfLayoutManager;
+class Shelf;
+class ShelfWidget;
+class WmRootWindowController;
+
+namespace mus {
 
 // WmShelf implementation for mus.
 class WmShelfMus : public WmShelf {
  public:
-  explicit WmShelfMus(ShelfLayoutManager* shelf_layout_manager);
+  WmShelfMus(WmRootWindowController* root_window_controller);
   ~WmShelfMus() override;
 
   // WmShelf:
-  WmWindow* GetWindow() override;
-  ShelfAlignment GetAlignment() const override;
-  void SetAlignment(ShelfAlignment alignment) override;
-  ShelfAutoHideBehavior GetAutoHideBehavior() const override;
-  void SetAutoHideBehavior(ShelfAutoHideBehavior behavior) override;
-  ShelfAutoHideState GetAutoHideState() const override;
-  void UpdateAutoHideState() override;
-  ShelfBackgroundType GetBackgroundType() const override;
-  bool IsDimmed() const override;
-  bool IsVisible() const override;
-  void UpdateVisibilityState() override;
-  ShelfVisibilityState GetVisibilityState() const override;
-  gfx::Rect GetIdealBounds() override;
-  gfx::Rect GetUserWorkAreaBounds() const override;
-  void UpdateIconPositionForWindow(WmWindow* window) override;
-  gfx::Rect GetScreenBoundsOfItemIconForWindow(WmWindow* window) override;
-  bool ProcessGestureEvent(const ui::GestureEvent& event,
-                           WmWindow* target_window) override;
-  void UpdateAutoHideForMouseEvent(ui::MouseEvent* event) override;
-  void UpdateAutoHideForGestureEvent(ui::GestureEvent* event) override;
-  void AddObserver(WmShelfObserver* observer) override;
-  void RemoveObserver(WmShelfObserver* observer) override;
-  void SetKeyboardBoundsForTesting(const gfx::Rect& bounds) override;
+  void WillDeleteShelfLayoutManager() override;
 
  private:
-  base::ObserverList<WmShelfObserver> observers_;
+  // Legacy shelf controller. Only present after shelf is created (post-login).
+  std::unique_ptr<Shelf> shelf_;
 
-  ShelfLayoutManager* shelf_layout_manager_;
+  // The shelf widget for this shelf.
+  std::unique_ptr<ShelfWidget> shelf_widget_;
 
   DISALLOW_COPY_AND_ASSIGN(WmShelfMus);
 };

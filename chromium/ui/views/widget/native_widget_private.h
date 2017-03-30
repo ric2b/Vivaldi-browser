@@ -5,6 +5,7 @@
 #ifndef UI_VIEWS_WIDGET_NATIVE_WIDGET_PRIVATE_H_
 #define UI_VIEWS_WIDGET_NATIVE_WIDGET_PRIVATE_H_
 
+#include <memory>
 #include <string>
 
 #include "base/strings/string16.h"
@@ -177,7 +178,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void StackAbove(gfx::NativeView native_view) = 0;
   virtual void StackAtTop() = 0;
   virtual void StackBelow(gfx::NativeView native_view) = 0;
-  virtual void SetShape(SkRegion* shape) = 0;
+  virtual void SetShape(std::unique_ptr<SkRegion> shape) = 0;
   virtual void Close() = 0;
   virtual void CloseNow() = 0;
   virtual void Show() = 0;
@@ -193,6 +194,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual void SetAlwaysOnTop(bool always_on_top) = 0;
   virtual bool IsAlwaysOnTop() const = 0;
   virtual void SetVisibleOnAllWorkspaces(bool always_visible) = 0;
+  virtual bool IsVisibleOnAllWorkspaces() const = 0;
   virtual void Maximize() = 0;
   virtual void Minimize() = 0;
   virtual bool IsMaximized() const = 0;

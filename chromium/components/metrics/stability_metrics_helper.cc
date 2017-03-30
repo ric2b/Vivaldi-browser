@@ -95,6 +95,12 @@ void StabilityMetricsHelper::ProvideStabilityMetrics(
     local_state_->SetInteger(prefs::kStabilityRendererFailedLaunchCount, 0);
   }
 
+  count = local_state_->GetInteger(prefs::kStabilityRendererLaunchCount);
+  if (count) {
+    stability_proto->set_renderer_launch_count(count);
+    local_state_->SetInteger(prefs::kStabilityRendererLaunchCount, 0);
+  }
+
   count =
       local_state_->GetInteger(prefs::kStabilityExtensionRendererCrashCount);
   if (count) {
@@ -115,6 +121,13 @@ void StabilityMetricsHelper::ProvideStabilityMetrics(
     stability_proto->set_renderer_hang_count(count);
     local_state_->SetInteger(prefs::kStabilityRendererHangCount, 0);
   }
+
+  count =
+      local_state_->GetInteger(prefs::kStabilityExtensionRendererLaunchCount);
+  if (count) {
+    stability_proto->set_extension_renderer_launch_count(count);
+    local_state_->SetInteger(prefs::kStabilityExtensionRendererLaunchCount, 0);
+  }
 }
 
 void StabilityMetricsHelper::ClearSavedStabilityMetrics() {
@@ -124,10 +137,12 @@ void StabilityMetricsHelper::ClearSavedStabilityMetrics() {
   local_state_->SetInteger(prefs::kStabilityExtensionRendererCrashCount, 0);
   local_state_->SetInteger(prefs::kStabilityExtensionRendererFailedLaunchCount,
                            0);
+  local_state_->SetInteger(prefs::kStabilityExtensionRendererLaunchCount, 0);
   local_state_->SetInteger(prefs::kStabilityPageLoadCount, 0);
   local_state_->SetInteger(prefs::kStabilityRendererCrashCount, 0);
   local_state_->SetInteger(prefs::kStabilityRendererFailedLaunchCount, 0);
   local_state_->SetInteger(prefs::kStabilityRendererHangCount, 0);
+  local_state_->SetInteger(prefs::kStabilityRendererLaunchCount, 0);
 }
 
 // static
@@ -137,10 +152,13 @@ void StabilityMetricsHelper::RegisterPrefs(PrefRegistrySimple* registry) {
                                 0);
   registry->RegisterIntegerPref(
       prefs::kStabilityExtensionRendererFailedLaunchCount, 0);
+  registry->RegisterIntegerPref(prefs::kStabilityExtensionRendererLaunchCount,
+                                0);
   registry->RegisterIntegerPref(prefs::kStabilityPageLoadCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererCrashCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererFailedLaunchCount, 0);
   registry->RegisterIntegerPref(prefs::kStabilityRendererHangCount, 0);
+  registry->RegisterIntegerPref(prefs::kStabilityRendererLaunchCount, 0);
 
   registry->RegisterInt64Pref(prefs::kUninstallMetricsPageLoadCount, 0);
 }
@@ -164,46 +182,71 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
                                               int exit_code) {
   int histogram_type =
       was_extension_process ? RENDERER_TYPE_EXTENSION : RENDERER_TYPE_RENDERER;
-  if (status == base::TERMINATION_STATUS_PROCESS_CRASHED ||
-      status == base::TERMINATION_STATUS_ABNORMAL_TERMINATION) {
-    if (was_extension_process) {
-      IncrementPrefValue(prefs::kStabilityExtensionRendererCrashCount);
 
-      UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Extension",
-                                  MapCrashExitCodeForHistogram(exit_code));
-    } else {
-      IncrementPrefValue(prefs::kStabilityRendererCrashCount);
+  switch (status) {
+    case base::TERMINATION_STATUS_NORMAL_TERMINATION:
+      break;
+    case base::TERMINATION_STATUS_PROCESS_CRASHED:
+    case base::TERMINATION_STATUS_ABNORMAL_TERMINATION:
+    case base::TERMINATION_STATUS_OOM:
+      if (was_extension_process) {
+        IncrementPrefValue(prefs::kStabilityExtensionRendererCrashCount);
 
-      UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Renderer",
-                                  MapCrashExitCodeForHistogram(exit_code));
-    }
+        UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Extension",
+                                    MapCrashExitCodeForHistogram(exit_code));
+      } else {
+        IncrementPrefValue(prefs::kStabilityRendererCrashCount);
 
-    UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildCrashes",
-                              histogram_type, RENDERER_TYPE_COUNT);
-  } else if (status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED) {
-    RecordChildKills(histogram_type);
-#if defined(OS_CHROMEOS)
-  } else if (status == base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM) {
-    RecordChildKills(histogram_type);
-    UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildKills.OOM",
-                              was_extension_process ? 2 : 1, 3);
-    RecordMemoryStats(was_extension_process
-                          ? RECORD_MEMORY_STATS_EXTENSIONS_OOM_KILLED
-                          : RECORD_MEMORY_STATS_CONTENTS_OOM_KILLED);
+        UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Renderer",
+                                    MapCrashExitCodeForHistogram(exit_code));
+      }
+
+      UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildCrashes",
+                                histogram_type, RENDERER_TYPE_COUNT);
+      break;
+    case base::TERMINATION_STATUS_PROCESS_WAS_KILLED:
+      RecordChildKills(histogram_type);
+      break;
+#if defined(OS_ANDROID)
+    case base::TERMINATION_STATUS_OOM_PROTECTED:
+      // TODO(wfh): Check if this should be a Kill or a Crash on Android.
+      break;
 #endif
-  } else if (status == base::TERMINATION_STATUS_STILL_RUNNING) {
-    UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.DisconnectedAlive",
-                              histogram_type, RENDERER_TYPE_COUNT);
-  } else if (status == base::TERMINATION_STATUS_LAUNCH_FAILED) {
-    UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildLaunchFailures",
-                              histogram_type, RENDERER_TYPE_COUNT);
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
-        "BrowserRenderProcessHost.ChildLaunchFailureCodes", exit_code);
-    if (was_extension_process)
-      IncrementPrefValue(prefs::kStabilityExtensionRendererFailedLaunchCount);
-    else
-      IncrementPrefValue(prefs::kStabilityRendererFailedLaunchCount);
+#if defined(OS_CHROMEOS)
+    case base::TERMINATION_STATUS_PROCESS_WAS_KILLED_BY_OOM:
+      RecordChildKills(histogram_type);
+      UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildKills.OOM",
+                                was_extension_process ? 2 : 1, 3);
+      RecordMemoryStats(was_extension_process
+                            ? RECORD_MEMORY_STATS_EXTENSIONS_OOM_KILLED
+                            : RECORD_MEMORY_STATS_CONTENTS_OOM_KILLED);
+      break;
+#endif
+    case base::TERMINATION_STATUS_STILL_RUNNING:
+      UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.DisconnectedAlive",
+                                histogram_type, RENDERER_TYPE_COUNT);
+      break;
+    case base::TERMINATION_STATUS_LAUNCH_FAILED:
+      UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildLaunchFailures",
+                                histogram_type, RENDERER_TYPE_COUNT);
+      UMA_HISTOGRAM_SPARSE_SLOWLY(
+          "BrowserRenderProcessHost.ChildLaunchFailureCodes", exit_code);
+      if (was_extension_process)
+        IncrementPrefValue(prefs::kStabilityExtensionRendererFailedLaunchCount);
+      else
+        IncrementPrefValue(prefs::kStabilityRendererFailedLaunchCount);
+      break;
+    case base::TERMINATION_STATUS_MAX_ENUM:
+      NOTREACHED();
+      break;
   }
+}
+
+void StabilityMetricsHelper::LogRendererLaunched(bool was_extension_process) {
+  if (was_extension_process)
+    IncrementPrefValue(prefs::kStabilityExtensionRendererLaunchCount);
+  else
+    IncrementPrefValue(prefs::kStabilityRendererLaunchCount);
 }
 
 void StabilityMetricsHelper::IncrementPrefValue(const char* path) {

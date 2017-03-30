@@ -195,7 +195,7 @@ bool DefaultComponentInstaller::FindPreinstallation(
 }
 
 void DefaultComponentInstaller::StartRegistration(ComponentUpdateService* cus) {
-  VLOG(1) << __FUNCTION__ << " for " << installer_traits_->GetName();
+  VLOG(1) << __func__ << " for " << installer_traits_->GetName();
   DCHECK(task_runner_.get());
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
@@ -322,28 +322,30 @@ void DefaultComponentInstaller::UninstallOnTaskRunner() {
 void DefaultComponentInstaller::FinishRegistration(
     ComponentUpdateService* cus,
     const base::Closure& callback) {
-  VLOG(1) << __FUNCTION__ << " for " << installer_traits_->GetName();
+  VLOG(1) << __func__ << " for " << installer_traits_->GetName();
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (installer_traits_->CanAutoUpdate()) {
-    CrxComponent crx;
-    installer_traits_->GetHash(&crx.pk_hash);
-    crx.installer = this;
-    crx.version = current_version_;
-    crx.fingerprint = current_fingerprint_;
-    crx.name = installer_traits_->GetName();
-    crx.installer_attributes = installer_traits_->GetInstallerAttributes();
-    crx.requires_network_encryption =
-        installer_traits_->RequiresNetworkEncryption();
-    if (!cus->RegisterComponent(crx)) {
-      LOG(ERROR) << "Component registration failed for "
-                 << installer_traits_->GetName();
-      return;
-    }
+  CrxComponent crx;
+  installer_traits_->GetHash(&crx.pk_hash);
+  crx.installer = this;
+  crx.version = current_version_;
+  crx.fingerprint = current_fingerprint_;
+  crx.name = installer_traits_->GetName();
+  crx.installer_attributes = installer_traits_->GetInstallerAttributes();
+  crx.requires_network_encryption =
+      installer_traits_->RequiresNetworkEncryption();
+  crx.handled_mime_types = installer_traits_->GetMimeTypes();
+  crx.supports_group_policy_enable_component_updates =
+      installer_traits_->SupportsGroupPolicyEnabledComponentUpdates();
 
-    if (!callback.is_null())
-      callback.Run();
+  if (!cus->RegisterComponent(crx)) {
+    LOG(ERROR) << "Component registration failed for "
+               << installer_traits_->GetName();
+    return;
   }
+
+  if (!callback.is_null())
+    callback.Run();
 
   if (!current_manifest_) {
     DVLOG(1) << "No component found for " << installer_traits_->GetName();

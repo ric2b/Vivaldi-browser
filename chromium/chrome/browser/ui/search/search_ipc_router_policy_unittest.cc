@@ -52,17 +52,6 @@ TEST_F(SearchIPCRouterPolicyTest, DoNotProcessFocusOmnibox) {
   EXPECT_FALSE(GetSearchIPCRouterPolicy()->ShouldProcessFocusOmnibox(true));
 }
 
-TEST_F(SearchIPCRouterPolicyTest, SendSetPromoInformation) {
-  NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
-  EXPECT_TRUE(GetSearchIPCRouterPolicy()->ShouldSendSetPromoInformation());
-}
-
-TEST_F(SearchIPCRouterPolicyTest, DoNotSendSetPromoInformation) {
-  // Send promo information only if the underlying page is an InstantNTP.
-  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
-  EXPECT_FALSE(GetSearchIPCRouterPolicy()->ShouldSendSetPromoInformation());
-}
-
 TEST_F(SearchIPCRouterPolicyTest, ProcessDeleteMostVisitedItem) {
   NavigateAndCommitActiveTab(GURL(chrome::kChromeSearchLocalNtpUrl));
   EXPECT_TRUE(GetSearchIPCRouterPolicy()->ShouldProcessDeleteMostVisitedItem());
@@ -147,11 +136,6 @@ TEST_F(SearchIPCRouterPolicyTest, DoNotProcessMessagesForInactiveTab) {
   EXPECT_FALSE(router_policy->ShouldSendSetInputInProgress(false));
 }
 
-TEST_F(SearchIPCRouterPolicyTest, SendSetDisplayInstantResults) {
-  NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
-  EXPECT_TRUE(GetSearchIPCRouterPolicy()->ShouldSendSetDisplayInstantResults());
-}
-
 TEST_F(SearchIPCRouterPolicyTest, SendSetSuggestionToPrefetch) {
   NavigateAndCommitActiveTab(GURL("chrome-search://foo/bar"));
   EXPECT_TRUE(GetSearchIPCRouterPolicy()->ShouldSendSetSuggestionToPrefetch());
@@ -164,8 +148,6 @@ TEST_F(SearchIPCRouterPolicyTest,
 
   SearchIPCRouter::Policy* router_policy = GetSearchIPCRouterPolicy();
   EXPECT_FALSE(router_policy->ShouldSendSetSuggestionToPrefetch());
-  EXPECT_FALSE(router_policy->ShouldSendSetDisplayInstantResults());
-  EXPECT_FALSE(router_policy->ShouldSendSetPromoInformation());
   EXPECT_FALSE(router_policy->ShouldSendThemeBackgroundInfo());
   EXPECT_FALSE(router_policy->ShouldSendMostVisitedItems());
   EXPECT_FALSE(router_policy->ShouldSendSetInputInProgress(true));

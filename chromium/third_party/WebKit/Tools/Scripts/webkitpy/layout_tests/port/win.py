@@ -125,7 +125,6 @@ class WinPort(base.Port):
             if e.errno != errno.ENOENT:
                 raise e
             # The key simply probably doesn't exist.
-            pass
 
         # Note that we write to HKCU so that we don't need privileged access
         # to the registry, and that will get reflected in HKCR when it is read, above.
@@ -161,7 +160,7 @@ class WinPort(base.Port):
         # FIXME: This is a temporary hack to get the cr-win bot online until
         # someone from the cr-win port can take a look.
         apache_envvars = ['SYSTEMDRIVE', 'SYSTEMROOT', 'TEMP', 'TMP']
-        for key, value in os.environ.items():
+        for key, value in self.host.environ.copy().items():
             if key not in env and key in apache_envvars:
                 env[key] = value
 

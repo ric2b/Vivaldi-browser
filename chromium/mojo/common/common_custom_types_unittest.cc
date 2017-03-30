@@ -5,6 +5,7 @@
 #include "base/files/file_path.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "mojo/common/common_custom_types.mojom.h"
 #include "mojo/common/test_common_custom_types.mojom.h"
@@ -40,16 +41,37 @@ struct BounceTestTraits<base::ListValue> {
 };
 
 template <typename T>
+struct PassTraits {
+  using Type = const T&;
+};
+
+template <>
+struct PassTraits<base::Time> {
+  using Type = base::Time;
+};
+
+template <>
+struct PassTraits<base::TimeDelta> {
+  using Type = base::TimeDelta;
+};
+
+template <>
+struct PassTraits<base::TimeTicks> {
+  using Type = base::TimeTicks;
+};
+
+template <typename T>
 void DoExpectResponse(T* expected_value,
                       const base::Closure& closure,
-                      const T& value) {
+                      typename PassTraits<T>::Type value) {
   BounceTestTraits<T>::ExpectEquality(*expected_value, value);
   closure.Run();
 }
 
 template <typename T>
-base::Callback<void(const T&)> ExpectResponse(T* expected_value,
-                                              const base::Closure& closure) {
+base::Callback<void(typename PassTraits<T>::Type)> ExpectResponse(
+    T* expected_value,
+    const base::Closure& closure) {
   return base::Bind(&DoExpectResponse<T>, expected_value, closure);
 }
 
@@ -74,18 +96,17 @@ class TestTimeImpl : public TestTime {
       : binding_(this, std::move(request)) {}
 
   // TestTime implementation:
-  void BounceTime(const base::Time& in,
-                  const BounceTimeCallback& callback) override {
+  void BounceTime(base::Time in, const BounceTimeCallback& callback) override {
     callback.Run(in);
   }
 
-  void BounceTimeDelta(const base::TimeDelta& in,
-                  const BounceTimeDeltaCallback& callback) override {
+  void BounceTimeDelta(base::TimeDelta in,
+                       const BounceTimeDeltaCallback& callback) override {
     callback.Run(in);
   }
 
-  void BounceTimeTicks(const base::TimeTicks& in,
-                  const BounceTimeTicksCallback& callback) override {
+  void BounceTimeTicks(base::TimeTicks in,
+                       const BounceTimeTicksCallback& callback) override {
     callback.Run(in);
   }
 
@@ -111,6 +132,21 @@ class TestValueImpl : public TestValue {
 
  private:
   mojo::Binding<TestValue> binding_;
+};
+
+class TestString16Impl : public TestString16 {
+ public:
+  explicit TestString16Impl(TestString16Request request)
+      : binding_(this, std::move(request)) {}
+
+  // TestString16 implementation:
+  void BounceString16(const base::string16& in,
+                      const BounceString16Callback& callback) override {
+    callback.Run(in);
+  }
+
+ private:
+  mojo::Binding<TestString16> binding_;
 };
 
 class CommonCustomTypesTest : public testing::Test {
@@ -219,6 +255,19 @@ TEST_F(CommonCustomTypesTest, Value) {
     ptr->BounceListValue(list, ExpectResponse(&list, run_loop.QuitClosure()));
     run_loop.Run();
   }
+}
+
+TEST_F(CommonCustomTypesTest, String16) {
+  base::RunLoop run_loop;
+
+  TestString16Ptr ptr;
+  TestString16Impl impl(GetProxy(&ptr));
+
+  base::string16 str16 = base::ASCIIToUTF16("hello world");
+
+  ptr->BounceString16(str16, ExpectResponse(&str16, run_loop.QuitClosure()));
+
+  run_loop.Run();
 }
 
 }  // namespace test

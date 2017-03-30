@@ -17,7 +17,9 @@
 #include "cc/output/bsp_tree.h"
 #include "cc/output/bsp_walk_action.h"
 #include "cc/output/copy_output_request.h"
+#include "cc/output/renderer_settings.h"
 #include "cc/quads/draw_quad.h"
+#include "cc/resources/scoped_resource.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/transform.h"
@@ -61,13 +63,33 @@ static gfx::Transform window_matrix(int x, int y, int width, int height) {
 
 namespace cc {
 
-DirectRenderer::DrawingFrame::DrawingFrame()
-    : root_render_pass(NULL), current_render_pass(NULL), current_texture(NULL) {
+DirectRenderer::DrawingFrame::DrawingFrame() = default;
+DirectRenderer::DrawingFrame::~DrawingFrame() = default;
+
+DirectRenderer::DirectRenderer(const RendererSettings* settings,
+                               OutputSurface* output_surface,
+                               ResourceProvider* resource_provider)
+    : settings_(settings),
+      output_surface_(output_surface),
+      resource_provider_(resource_provider),
+      overlay_processor_(new OverlayProcessor(output_surface)) {}
+
+DirectRenderer::~DirectRenderer() = default;
+
+void DirectRenderer::Initialize() {
+  overlay_processor_->Initialize();
+
+  auto* context_provider = output_surface_->context_provider();
+
+  use_partial_swap_ = settings_->partial_swap_enabled && CanPartialSwap();
+  allow_empty_swap_ = use_partial_swap_;
+  if (context_provider &&
+      context_provider->ContextCapabilities().commit_overlay_planes)
+    allow_empty_swap_ = true;
+
+  initialized_ = true;
 }
 
-DirectRenderer::DrawingFrame::~DrawingFrame() {}
-
-//
 // static
 gfx::RectF DirectRenderer::QuadVertexRect() {
   return gfx::RectF(-0.5f, -0.5f, 1.f, 1.f);
@@ -128,22 +150,17 @@ gfx::Rect DirectRenderer::MoveFromDrawToWindowSpace(
   return window_rect;
 }
 
-DirectRenderer::DirectRenderer(RendererClient* client,
-                               const RendererSettings* settings,
-                               OutputSurface* output_surface,
-                               ResourceProvider* resource_provider)
-    : Renderer(client, settings),
-      output_surface_(output_surface),
-      resource_provider_(resource_provider),
-      overlay_processor_(new OverlayProcessor(output_surface)) {
-  overlay_processor_->Initialize();
-}
-
-DirectRenderer::~DirectRenderer() {}
-
 const TileDrawQuad* DirectRenderer::CanPassBeDrawnDirectly(
     const RenderPass* pass) {
   return nullptr;
+}
+
+void DirectRenderer::SetVisible(bool visible) {
+  DCHECK(initialized_);
+  if (visible_ == visible)
+    return;
+  visible_ = visible;
+  DidChangeVisibility();
 }
 
 void DirectRenderer::DecideRenderPassAllocationsForFrame(
@@ -200,8 +217,8 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
                                float device_scale_factor,
                                const gfx::ColorSpace& device_color_space,
                                const gfx::Rect& device_viewport_rect,
-                               const gfx::Rect& device_clip_rect,
-                               bool disable_picture_quad_image_filtering) {
+                               const gfx::Rect& device_clip_rect) {
+  DCHECK(visible_);
   TRACE_EVENT0("cc", "DirectRenderer::DrawFrame");
   UMA_HISTOGRAM_COUNTS(
       "Renderer4.renderPassCount",
@@ -218,10 +235,6 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   frame.root_damage_rect.Intersect(gfx::Rect(device_viewport_rect.size()));
   frame.device_viewport_rect = device_viewport_rect;
   frame.device_clip_rect = device_clip_rect;
-  frame.disable_picture_quad_image_filtering =
-      disable_picture_quad_image_filtering;
-
-  EnsureBackbuffer();
 
   // Only reshape when we know we are going to draw. Otherwise, the reshape
   // can leave the window at the wrong size if we never draw and the proper
@@ -260,11 +273,11 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
 
   // We can skip all drawing if the damage rect is now empty.
   bool skip_drawing_root_render_pass =
-      frame.root_damage_rect.IsEmpty() && Capabilities().allow_empty_swap;
+      frame.root_damage_rect.IsEmpty() && allow_empty_swap_;
 
   // If we have to draw but don't support partial swap, the whole output should
   // be considered damaged.
-  if (!skip_drawing_root_render_pass && !Capabilities().using_partial_swap)
+  if (!skip_drawing_root_render_pass && !use_partial_swap_)
     frame.root_damage_rect = root_render_pass->output_rect;
 
   if (skip_drawing_root_render_pass) {
@@ -377,8 +390,6 @@ void DirectRenderer::SetScissorTestRectInDrawSpace(
   SetScissorTestRect(window_space_rect);
 }
 
-void DirectRenderer::FinishDrawingQuadList() {}
-
 void DirectRenderer::DoDrawPolygon(const DrawPolygon& poly,
                                    DrawingFrame* frame,
                                    const gfx::Rect& render_pass_scissor,
@@ -452,7 +463,7 @@ void DirectRenderer::DrawRenderPass(DrawingFrame* frame,
         DeviceViewportRectInDrawSpace(frame));
   }
 
-  if (Capabilities().using_partial_swap) {
+  if (use_partial_swap_) {
     render_pass_scissor_in_draw_space.Intersect(
         ComputeScissorRectForRenderPass(frame));
   }
@@ -555,7 +566,8 @@ bool DirectRenderer::UseRenderPass(DrawingFrame* frame,
   if (!texture->id()) {
     texture->Allocate(size,
                       ResourceProvider::TEXTURE_HINT_IMMUTABLE_FRAMEBUFFER,
-                      resource_provider_->best_texture_format());
+                      resource_provider_->best_texture_format(),
+                      output_surface_->device_color_space());
   }
   DCHECK(texture->id());
 

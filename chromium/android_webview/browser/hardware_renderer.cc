@@ -13,6 +13,7 @@
 #include "android_webview/browser/render_thread_manager.h"
 #include "android_webview/browser/surfaces_instance.h"
 #include "android_webview/public/browser/draw_gl.h"
+#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/surfaces/surface_factory.h"
@@ -23,17 +24,19 @@
 
 namespace android_webview {
 
-HardwareRenderer::HardwareRenderer(RenderThreadManager* state,
-                                   int framebuffer_binding_ext)
+HardwareRenderer::HardwareRenderer(RenderThreadManager* state)
     : render_thread_manager_(state),
       last_egl_context_(eglGetCurrentContext()),
-      surfaces_(SurfacesInstance::GetOrCreateInstance(framebuffer_binding_ext)),
-      surface_id_allocator_(surfaces_->CreateSurfaceIdAllocator()),
+      surfaces_(SurfacesInstance::GetOrCreateInstance()),
+      surface_id_allocator_(
+          new cc::SurfaceIdAllocator(surfaces_->AllocateSurfaceClientId())),
       last_committed_output_surface_id_(0u),
       last_submitted_output_surface_id_(0u) {
   DCHECK(last_egl_context_);
+  surfaces_->GetSurfaceManager()->RegisterSurfaceClientId(
+      surface_id_allocator_->client_id());
   surfaces_->GetSurfaceManager()->RegisterSurfaceFactoryClient(
-      surface_id_allocator_->id_namespace(), this);
+      surface_id_allocator_->client_id(), this);
 }
 
 HardwareRenderer::~HardwareRenderer() {
@@ -43,7 +46,9 @@ HardwareRenderer::~HardwareRenderer() {
     DestroySurface();
   surface_factory_.reset();
   surfaces_->GetSurfaceManager()->UnregisterSurfaceFactoryClient(
-      surface_id_allocator_->id_namespace());
+      surface_id_allocator_->client_id());
+  surfaces_->GetSurfaceManager()->InvalidateSurfaceClientId(
+      surface_id_allocator_->client_id());
 
   // Reset draw constraints.
   render_thread_manager_->PostExternalDrawConstraintsToChildCompositorOnRT(
@@ -66,8 +71,7 @@ void HardwareRenderer::CommitFrame() {
   DCHECK(!child_frame_->frame->gl_frame_data);
 }
 
-void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info,
-                              const ScopedAppGLStateRestore& gl_state) {
+void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
   TRACE_EVENT0("android_webview", "HardwareRenderer::DrawGL");
 
   // We need to watch if the current Android context has changed and enforce
@@ -137,8 +141,7 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info,
   gfx::Rect clip(draw_info->clip_left, draw_info->clip_top,
                  draw_info->clip_right - draw_info->clip_left,
                  draw_info->clip_bottom - draw_info->clip_top);
-  surfaces_->DrawAndSwap(viewport, clip, transform, frame_size_, child_id_,
-                         gl_state);
+  surfaces_->DrawAndSwap(viewport, clip, transform, frame_size_, child_id_);
 }
 
 void HardwareRenderer::AllocateSurface() {
@@ -152,6 +155,14 @@ void HardwareRenderer::AllocateSurface() {
 void HardwareRenderer::DestroySurface() {
   DCHECK(!child_id_.is_null());
   DCHECK(surface_factory_);
+
+  // Submit an empty frame to force any existing resources to be returned.
+  cc::CompositorFrame empty_frame;
+  empty_frame.delegated_frame_data =
+      base::WrapUnique(new cc::DelegatedFrameData);
+  surface_factory_->SubmitCompositorFrame(child_id_, std::move(empty_frame),
+                                          cc::SurfaceFactory::DrawCallback());
+
   surfaces_->RemoveChildId(child_id_);
   surface_factory_->Destroy(child_id_);
   child_id_ = cc::SurfaceId();
@@ -166,11 +177,6 @@ void HardwareRenderer::ReturnResources(
 void HardwareRenderer::SetBeginFrameSource(
     cc::BeginFrameSource* begin_frame_source) {
   // TODO(tansell): Hook this up.
-}
-
-void HardwareRenderer::SetBackingFrameBufferObject(
-    int framebuffer_binding_ext) {
-  surfaces_->SetBackingFrameBufferObject(framebuffer_binding_ext);
 }
 
 void HardwareRenderer::ReturnResourcesInChildFrame() {

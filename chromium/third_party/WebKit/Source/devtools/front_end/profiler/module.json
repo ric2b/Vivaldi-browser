@@ -1,24 +1,16 @@
 {
     "extensions": [
         {
-            "type": "@WebInspector.PanelFactory",
+            "type": "@WebInspector.Panel",
             "name": "profiles",
             "title": "Profiles",
             "order": 60,
-            "className": "WebInspector.ProfilesPanelFactory"
+            "className": "WebInspector.ProfilesPanel"
         },
         {
             "type": "@WebInspector.ContextMenu.Provider",
             "contextTypes": ["WebInspector.RemoteObject"],
             "className": "WebInspector.ProfilesPanel.ContextMenuProvider"
-        },
-        {
-            "type": "setting",
-            "category": "Profiler",
-            "title": "Show advanced heap snapshot properties",
-            "settingName": "showAdvancedHeapSnapshotProperties",
-            "settingType": "boolean",
-            "defaultValue": false
         },
         {
             "type": "setting",

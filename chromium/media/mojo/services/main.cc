@@ -8,12 +8,12 @@
 #include "base/memory/ptr_util.h"
 #include "media/mojo/services/mojo_media_application.h"
 #include "media/mojo/services/test_mojo_media_client.h"
-#include "mojo/public/c/system/main.h"
-#include "services/shell/public/cpp/application_runner.h"
+#include "services/shell/public/c/main.h"
+#include "services/shell/public/cpp/service_runner.h"
 
 namespace {
 
-shell::ApplicationRunner* g_runner = nullptr;
+shell::ServiceRunner* g_runner = nullptr;
 
 void QuitApplication() {
   DCHECK(g_runner);
@@ -22,17 +22,17 @@ void QuitApplication() {
 
 }  // namespace
 
-MojoResult MojoMain(MojoHandle mojo_handle) {
+MojoResult ServiceMain(MojoHandle mojo_handle) {
   // Enable logging.
   base::AtExitManager at_exit;
-  shell::ApplicationRunner::InitBaseCommandLine();
+  shell::ServiceRunner::InitBaseCommandLine();
 
   logging::LoggingSettings settings;
   settings.logging_dest = logging::LOG_TO_SYSTEM_DEBUG_LOG;
   logging::InitLogging(settings);
 
-  shell::ApplicationRunner runner(new media::MojoMediaApplication(
-      base::WrapUnique(new media::TestMojoMediaClient()),
+  shell::ServiceRunner runner(new media::MojoMediaApplication(
+      base::MakeUnique<media::TestMojoMediaClient>(),
       base::Bind(&QuitApplication)));
   g_runner = &runner;
   return runner.Run(mojo_handle, false /* init_base */);

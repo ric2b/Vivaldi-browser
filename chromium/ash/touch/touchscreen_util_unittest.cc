@@ -26,19 +26,23 @@ class TouchscreenUtilTest : public test::AshTestBase {
     // with matching size.
     {
       DisplayInfo display(1, "1", false);
-      DisplayMode mode(gfx::Size(1920, 1080), 60.0, false, true);
-      mode.native = true;
-      std::vector<DisplayMode> modes(1, mode);
-      display.SetDisplayModes(modes);
+      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+          gfx::Size(1920, 1080), 60.0, false /* interlaced */,
+          true /* native */, 1.0 /* ui_scale */,
+          1.0 /* device_scale_factor */));
+      DisplayInfo::ManagedDisplayModeList modes(1, mode);
+      display.SetManagedDisplayModes(modes);
       displays_.push_back(display);
     }
 
     {
       DisplayInfo display(2, "2", false);
-      DisplayMode mode(gfx::Size(800, 600), 60.0, false, true);
-      mode.native = true;
-      std::vector<DisplayMode> modes(1, mode);
-      display.SetDisplayModes(modes);
+
+      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+          gfx::Size(800, 600), 60.0, false /* interlaced */, true /* native */,
+          1.0 /* ui_scale */, 1.0 /* device_scale_factor */));
+      DisplayInfo::ManagedDisplayModeList modes(1, mode);
+      display.SetManagedDisplayModes(modes);
       displays_.push_back(display);
     }
 
@@ -50,10 +54,13 @@ class TouchscreenUtilTest : public test::AshTestBase {
 
     {
       DisplayInfo display(4, "4", false);
-      DisplayMode mode(gfx::Size(1024, 768), 60.0, false, true);
-      mode.native = true;
-      std::vector<DisplayMode> modes(1, mode);
-      display.SetDisplayModes(modes);
+
+      scoped_refptr<ManagedDisplayMode> mode(new ManagedDisplayMode(
+          gfx::Size(1024, 768), 60.0, false /* interlaced */,
+          /* native */ true, 1.0 /* ui_scale */,
+          1.0 /* device_scale_factor */));
+      DisplayInfo::ManagedDisplayModeList modes(1, mode);
+      display.SetManagedDisplayModes(modes);
       displays_.push_back(display);
     }
   }

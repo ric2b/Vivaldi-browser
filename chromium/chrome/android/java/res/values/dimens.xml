@@ -130,11 +130,6 @@
     <dimen name="data_reduction_promo_button_text_size">13sp</dimen>
     <dimen name="data_reduction_promo_illustration_margin_bottom">30dp</dimen>
 
-    <!-- Compositor Tab Title Dimensions -->
-    <dimen name="compositor_tab_title_bar_shadow_x_offset">0.6667dp</dimen>            <!-- 1px hdpi -->
-    <dimen name="compositor_tab_title_bar_shadow_y_offset">0.6667dp</dimen>            <!-- 1px hdpi -->
-    <dimen name="compositor_tab_title_bar_shadow_x_offset_incognito">-0.6667dp</dimen> <!-- -1px hdpi -->
-    <dimen name="compositor_tab_title_bar_shadow_y_offset_incognito">-0.6667dp</dimen> <!-- -1px hdpi -->
     <!-- The size of the text for tab titles. -->
     <dimen name="compositor_tab_title_text_size">13sp</dimen>
     <!-- The size of the bounding box for favicons. -->
@@ -222,18 +217,16 @@
     <dimen name="toolbar_tab_count_text_size_1_digit">12dp</dimen>
     <dimen name="toolbar_tab_count_text_size_2_digit">10dp</dimen>
     <dimen name="toolbar_height_no_shadow">56dp</dimen>
-    <dimen name="toolbar_elevation">2dp</dimen>
     <dimen name="toolbar_progress_bar_height">2dp</dimen>
     <dimen name="toolbar_button_width">48dp</dimen>
 
-    <dimen name="location_bar_margin_top">5dp</dimen>
-    <dimen name="location_bar_margin_bottom">5dp</dimen>
-
     <dimen name="toolbar_edge_padding">8dp</dimen>
+    <dimen name="location_bar_vertical_margin">8dp</dimen>
     <dimen name="location_bar_url_text_size">16sp</dimen>
     <dimen name="location_bar_incognito_badge_padding">7dp</dimen>
+    <dimen name="location_bar_icon_width">32dp</dimen>
+    <dimen name="location_bar_corner_radius">1dp</dimen>
 
-    <dimen name="location_bar_icon_width">36dp</dimen>
     <dimen name="tablet_toolbar_start_padding">4dp</dimen>
     <dimen name="tablet_toolbar_start_padding_no_buttons">6dp</dimen>
     <dimen name="tablet_toolbar_end_padding">6dp</dimen>
@@ -275,29 +268,26 @@
     <dimen name="ntp_search_box_material_margin_left">10dp</dimen>
     <dimen name="ntp_search_box_material_margin_right">10dp</dimen>
     <dimen name="ntp_search_box_material_margin_top">0dp</dimen>
-    <dimen name="ntp_search_box_material_margin_bottom">5dp</dimen>
-    <dimen name="ntp_search_box_material_height">54dp</dimen>
+    <dimen name="ntp_search_box_material_margin_bottom">1dp</dimen>
+    <dimen name="ntp_search_box_material_height">62dp</dimen>
     <dimen name="ntp_search_box_material_extra_width">4dp</dimen>
     <dimen name="ntp_search_box_material_padding_top">3dp</dimen>
     <dimen name="ntp_search_box_material_padding_bottom">3dp</dimen>
     <dimen name="ntp_search_box_material_padding_left">2dp</dimen>
     <dimen name="ntp_search_box_material_padding_right">2dp</dimen>
     <dimen name="ntp_search_box_transition_length">16dp</dimen>
-    <dimen name="ntp_list_item_padding">16dp</dimen>
+    <dimen name="ntp_wide_card_lateral_margins">48dp</dimen>
     <dimen name="ntp_list_item_min_height">48dp</dimen>
     <dimen name="ntp_list_item_text_size">16sp</dimen>
     <dimen name="ntp_shadow_height">9dp</dimen>
+    <dimen name="ntp_min_bottom_spacing_recycler_view">32dp</dimen>
+    <dimen name="ntp_progress_indicator_diameter">56dp</dimen>
     <dimen name="snippets_thumbnail_size">72dp</dimen>
     <dimen name="snippets_padding_and_peeking_card_height">16dp</dimen>
     <dimen name="snippets_card_9_patch_adjustment">2dp</dimen>
     <dimen name="snippets_article_header_height">40dp</dimen>
-    <dimen name="snippets_card_elevation">2dp</dimen>
-
-    <!-- Interests page -->
-    <dimen name="ntp_interest_item_text_size">20sp</dimen>
-    <dimen name="ntp_interest_item_min_height">180dp</dimen>
-    <dimen name="ntp_interest_item_image_size">120dp</dimen>
-    <dimen name="ntp_interest_item_image_text_size">20sp</dimen>
+    <dimen name="snippets_publisher_margin_top_with_article_snippet">16dp</dimen>
+    <dimen name="snippets_publisher_margin_top_without_article_snippet">8dp</dimen>
 
     <!-- Recent tabs page -->
     <dimen name="recent_tabs_visible_separator_padding">8dp</dimen>
@@ -309,6 +299,7 @@
 
     <!-- Drawers -->
     <dimen name="drawer_width">240dp</dimen>
+    <dimen name="drawer_drawable_padding">32dp</dimen>
     <dimen name="drawer_margin_large">16dp</dimen>
 
     <!-- Bookmarks dimensions -->

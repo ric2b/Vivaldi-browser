@@ -17,7 +17,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
-#include "net/quic/quic_flags.h"
+#include "net/quic/core/quic_flags.h"
 #include "net/spdy/hpack/hpack_constants.h"
 #include "net/spdy/mock_spdy_framer_visitor.h"
 #include "net/spdy/spdy_flags.h"
@@ -1004,8 +1004,6 @@ TEST_P(SpdyFramerTest, AcceptMaxFrameSizeSetting) {
 // Test that if we receive a frame with payload length larger than the
 // advertised max size, we set an error of SPDY_INVALID_CONTROL_FRAME_SIZE.
 TEST_P(SpdyFramerTest, ExceedMaxFrameSizeSetting) {
-  FLAGS_chromium_http2_flag_enforce_max_frame_size = true;
-
   if (!IsHttp2()) {
     return;
   }
@@ -1031,36 +1029,6 @@ TEST_P(SpdyFramerTest, ExceedMaxFrameSizeSetting) {
   EXPECT_TRUE(framer.HasError());
   EXPECT_EQ(SpdyFramer::SPDY_OVERSIZED_PAYLOAD, framer.error_code())
       << SpdyFramer::ErrorCodeToString(framer.error_code());
-}
-
-// Test demonstrating pre-flag behavior
-TEST_P(SpdyFramerTest, ExceedMaxFrameSizeSettingFlagOff) {
-  FLAGS_chromium_http2_flag_enforce_max_frame_size = false;
-
-  if (!IsHttp2()) {
-    return;
-  }
-
-  testing::StrictMock<test::MockSpdyFramerVisitor> visitor;
-  SpdyFramer framer(spdy_version_);
-  framer.set_visitor(&visitor);
-
-  // DATA frame with too large payload length.
-  unsigned char kH2FrameData[] = {
-      0x00, 0x40, 0x01,        // Length: 2^14 + 1
-      0x00,                    //   Type: HEADERS
-      0x00,                    //  Flags: None
-      0x00, 0x00, 0x00, 0x01,  // Stream: 1
-      0x00, 0x00, 0x00, 0x00,  // Junk payload
-  };
-
-  SpdySerializedFrame frame(reinterpret_cast<char*>(kH2FrameData),
-                            sizeof(kH2FrameData), false);
-  EXPECT_CALL(visitor, OnDataFrameHeader(1, _, false));
-  EXPECT_CALL(visitor, OnStreamFrameData(1, _, 4));
-  EXPECT_SPDY_BUG(framer.ProcessInput(frame.data(), frame.size()),
-                  "DATA frame too large for HTTP/2.");
-  EXPECT_FALSE(framer.HasError());
 }
 
 // Test that if we receive a DATA frame with padding length larger than the
@@ -4087,8 +4055,8 @@ TEST_P(SpdyFramerTest, ControlFrameTooLarge) {
   SpdySerializedFrame control_frame(framer.SerializeSynStream(syn_stream));
   const size_t kBigValueSize =
       TestSpdyVisitor::received_control_frame_max_size() +
-      SpdyConstants::GetControlFrameHeaderSize(spdy_version_) -
-      control_frame.size() + 1;
+      SpdyConstants::GetFrameHeaderSize(spdy_version_) - control_frame.size() +
+      1;
 
   // Create a frame at exatly that size.
   string big_value(kBigValueSize, 'x');
@@ -4100,7 +4068,7 @@ TEST_P(SpdyFramerTest, ControlFrameTooLarge) {
                     "Serializing frame over-capacity.");
   }
   EXPECT_EQ(TestSpdyVisitor::received_control_frame_max_size() +
-                SpdyConstants::GetControlFrameHeaderSize(spdy_version_) + 1,
+                SpdyConstants::GetFrameHeaderSize(spdy_version_) + 1,
             control_frame.size());
 
   TestSpdyVisitor visitor(spdy_version_);
@@ -4243,9 +4211,9 @@ TEST_P(SpdyFramerTest, ControlFrameSizesAreValidated) {
 
   // HTTP/2 GOAWAY frames are only bound by a minimal length, since they may
   // carry opaque data. Verify that minimal length is tested.
-  ASSERT_GT(framer.GetGoAwayMinimumSize(), framer.GetControlFrameHeaderSize());
+  ASSERT_GT(framer.GetGoAwayMinimumSize(), framer.GetFrameHeaderSize());
   const size_t less_than_min_length =
-      framer.GetGoAwayMinimumSize() - framer.GetControlFrameHeaderSize() - 1;
+      framer.GetGoAwayMinimumSize() - framer.GetFrameHeaderSize() - 1;
   ASSERT_LE(less_than_min_length, std::numeric_limits<unsigned char>::max());
   const unsigned char kH2Len = static_cast<unsigned char>(less_than_min_length);
   const unsigned char kH2FrameData[] = {
@@ -4257,7 +4225,7 @@ TEST_P(SpdyFramerTest, ControlFrameSizesAreValidated) {
       0x00, 0x00, 0x00,          // Truncated Status Field
   };
   const size_t pad_length =
-      length + framer.GetControlFrameHeaderSize() -
+      length + framer.GetFrameHeaderSize() -
       (IsSpdy3() ? sizeof(kV3FrameData) : sizeof(kH2FrameData));
   string pad(pad_length, 'A');
   TestSpdyVisitor visitor(spdy_version_);
@@ -4286,7 +4254,7 @@ TEST_P(SpdyFramerTest, ReadZeroLenSettingsFrame) {
   visitor.use_compression_ = false;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.data()),
-      framer.GetControlFrameHeaderSize());
+      framer.GetFrameHeaderSize());
   if (IsSpdy3()) {
     // Should generate an error, since zero-len settings frames are unsupported.
     EXPECT_EQ(1, visitor.error_count_);
@@ -4312,7 +4280,7 @@ TEST_P(SpdyFramerTest, ReadBogusLenSettingsFrame) {
   visitor.use_compression_ = false;
   visitor.SimulateInFramer(
       reinterpret_cast<unsigned char*>(control_frame.data()),
-      framer.GetControlFrameHeaderSize() + kNewLength);
+      framer.GetFrameHeaderSize() + kNewLength);
   // Should generate an error, since its not possible to have a
   // settings frame of length kNewLength.
   EXPECT_EQ(1, visitor.error_count_);
@@ -5042,7 +5010,7 @@ TEST_P(SpdyFramerTest, SizesTest) {
   SpdyFramer framer(spdy_version_);
   if (IsSpdy3()) {
     EXPECT_EQ(8u, framer.GetDataFrameMinimumSize());
-    EXPECT_EQ(8u, framer.GetControlFrameHeaderSize());
+    EXPECT_EQ(8u, framer.GetFrameHeaderSize());
     EXPECT_EQ(18u, framer.GetSynStreamMinimumSize());
     EXPECT_EQ(12u, framer.GetSynReplyMinimumSize());
     EXPECT_EQ(16u, framer.GetRstStreamMinimumSize());
@@ -5056,7 +5024,7 @@ TEST_P(SpdyFramerTest, SizesTest) {
     EXPECT_EQ(16777215u, framer.GetDataFrameMaximumPayload());
   } else {
     EXPECT_EQ(9u, framer.GetDataFrameMinimumSize());
-    EXPECT_EQ(9u, framer.GetControlFrameHeaderSize());
+    EXPECT_EQ(9u, framer.GetFrameHeaderSize());
     EXPECT_EQ(14u, framer.GetSynStreamMinimumSize());
     EXPECT_EQ(9u, framer.GetSynReplyMinimumSize());
     EXPECT_EQ(13u, framer.GetRstStreamMinimumSize());
@@ -5760,8 +5728,8 @@ TEST_P(SpdyFramerTest, EmptySynStream) {
   syn_stream.set_priority(1);
   SpdySerializedFrame frame(framer.SerializeSynStream(syn_stream));
   // Adjust size to remove the header block.
-  SetFrameLength(&frame, framer.GetSynStreamMinimumSize() -
-                             framer.GetControlFrameHeaderSize(),
+  SetFrameLength(&frame,
+                 framer.GetSynStreamMinimumSize() - framer.GetFrameHeaderSize(),
                  spdy_version_);
 
   EXPECT_CALL(debug_visitor, OnReceiveCompressedFrame(1, SYN_STREAM, _));

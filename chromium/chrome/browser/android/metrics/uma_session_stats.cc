@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/metrics/uma_session_stats.h"
 
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram.h"
@@ -25,6 +26,7 @@
 #include "jni/UmaSessionStats_jni.h"
 
 using base::android::ConvertJavaStringToUTF8;
+using base::android::JavaParamRef;
 using base::UserMetricsAction;
 
 namespace {
@@ -61,6 +63,9 @@ void UmaSessionStats::UmaEndSession(JNIEnv* env,
 
   if (active_session_count_ == 0) {
     base::TimeDelta duration = base::TimeTicks::Now() - session_start_time_;
+
+    // Note: This metric is recorded separately on desktop in
+    // DesktopEngagementService::EndSession.
     UMA_HISTOGRAM_LONG_TIMES("Session.TotalDuration", duration);
 
     DCHECK(g_browser_process);
@@ -73,14 +78,6 @@ void UmaSessionStats::UmaEndSession(JNIEnv* env,
 }
 
 // static
-void UmaSessionStats::RegisterSyntheticFieldTrialWithNameHash(
-    uint32_t trial_name_hash,
-    const std::string& group_name) {
-  ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrialWithNameHash(
-      trial_name_hash, group_name);
-}
-
-// static
 void UmaSessionStats::RegisterSyntheticFieldTrial(
     const std::string& trial_name,
     const std::string& group_name) {
@@ -88,32 +85,54 @@ void UmaSessionStats::RegisterSyntheticFieldTrial(
                                                             group_name);
 }
 
-// Starts/stops the MetricsService when permissions have changed.
+// static
+void UmaSessionStats::RegisterSyntheticMultiGroupFieldTrial(
+    const std::string& trial_name,
+    const std::vector<uint32_t>& group_name_hashes) {
+  ChromeMetricsServiceAccessor::RegisterSyntheticMultiGroupFieldTrial(
+      trial_name, group_name_hashes);
+}
+
+// Updates metrics reporting state managed by native code. This should only be
+// called when consent is changing, and UpdateMetricsServiceState() should be
+// called immediately after for metrics services to be started or stopped as
+// needed. This is enforced by UmaSessionStats.changeMetricsReportingConsent on
+// the Java side.
+static void ChangeMetricsReportingConsent(JNIEnv*,
+                                          const JavaParamRef<jclass>&,
+                                          jboolean consent) {
+  UpdateMetricsPrefsOnPermissionChange(consent);
+
+  // This function ensures a consent file in the data directory is either
+  // created, or deleted, depending on consent. Starting up metrics services
+  // will ensure that the consent file contains the ClientID. The ID is passed
+  // to the renderer for crash reporting when things go wrong.
+  content::BrowserThread::GetBlockingPool()->PostTask(
+      FROM_HERE, base::Bind(base::IgnoreResult(
+                                GoogleUpdateSettings::SetCollectStatsConsent),
+                            consent));
+}
+
+// Starts/stops the MetricsService based on existing consent and upload
+// preferences.
 // There are three possible states:
 // * Logs are being recorded and being uploaded to the server.
 // * Logs are being recorded, but not being uploaded to the server.
 //   This happens when we've got permission to upload on Wi-Fi but we're on a
 //   mobile connection (for example).
 // * Logs are neither being recorded or uploaded.
-static void UpdateMetricsServiceState(JNIEnv* env,
-                                      const JavaParamRef<jobject>& obj,
-                                      jboolean may_record,
+// If logs aren't being recorded, then |may_upload| is ignored.
+//
+// This can be called at any time when consent hasn't changed, such as
+// connection type change, or start up. If consent has changed, then
+// ChangeMetricsReportingConsent() should be called first.
+static void UpdateMetricsServiceState(JNIEnv*,
+                                      const JavaParamRef<jclass>&,
                                       jboolean may_upload) {
-  metrics::MetricsService* metrics = g_browser_process->metrics_service();
-  DCHECK(metrics);
-
-  if (metrics->recording_active() != may_record) {
-    // This function puts a consent file with the ClientID in the
-    // data directory. The ID is passed to the renderer for crash
-    // reporting when things go wrong.
-    content::BrowserThread::GetBlockingPool()->PostTask(FROM_HERE,
-        base::Bind(
-            base::IgnoreResult(GoogleUpdateSettings::SetCollectStatsConsent),
-            may_record));
-  }
-
-  g_browser_process->GetMetricsServicesManager()->UpdatePermissions(
-      may_record, may_upload);
+  // This will also apply the consent state, taken from Chrome Local State
+  // prefs.
+  g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(
+      may_upload);
 }
 
 // Renderer process crashed in the foreground.
@@ -126,21 +145,37 @@ static void LogRendererCrash(JNIEnv*, const JavaParamRef<jclass>&) {
   pref->SetInteger(metrics::prefs::kStabilityRendererCrashCount, value + 1);
 }
 
-static void RegisterExternalExperiment(JNIEnv* env,
-                                       const JavaParamRef<jclass>& clazz,
-                                       jint study_id,
-                                       jint experiment_id) {
-  const std::string group_name_utf8 = base::IntToString(experiment_id);
+static void RegisterExternalExperiment(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jtrial_name,
+    const JavaParamRef<jintArray>& jexperiment_ids) {
+  const std::string trial_name_utf8(ConvertJavaStringToUTF8(env, jtrial_name));
+  std::vector<int> experiment_ids;
+  // A null |jexperiment_ids| is the same as an empty list.
+  if (jexperiment_ids) {
+    base::android::JavaIntArrayToIntVector(env, jexperiment_ids,
+                                           &experiment_ids);
+  }
+
+  UMA_HISTOGRAM_COUNTS_100("UMA.ExternalExperiment.GroupCount",
+                           experiment_ids.size());
+
+  std::vector<uint32_t> group_name_hashes;
+  group_name_hashes.reserve(experiment_ids.size());
 
   variations::ActiveGroupId active_group;
-  active_group.name = static_cast<uint32_t>(study_id);
-  active_group.group = metrics::HashName(group_name_utf8);
-  variations::AssociateGoogleVariationIDForceHashes(
-      variations::GOOGLE_WEB_PROPERTIES, active_group,
-      static_cast<variations::VariationID>(experiment_id));
+  active_group.name = metrics::HashName(trial_name_utf8);
+  for (int experiment_id : experiment_ids) {
+    active_group.group = metrics::HashName(base::IntToString(experiment_id));
+    variations::AssociateGoogleVariationIDForceHashes(
+        variations::GOOGLE_WEB_PROPERTIES, active_group,
+        static_cast<variations::VariationID>(experiment_id));
+    group_name_hashes.push_back(active_group.group);
+  }
 
-  UmaSessionStats::RegisterSyntheticFieldTrialWithNameHash(
-      static_cast<uint32_t>(study_id), group_name_utf8);
+  UmaSessionStats::RegisterSyntheticMultiGroupFieldTrial(trial_name_utf8,
+                                                         group_name_hashes);
 }
 
 static void RegisterSyntheticFieldTrial(

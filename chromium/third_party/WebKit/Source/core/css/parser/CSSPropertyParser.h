@@ -45,7 +45,7 @@ public:
         HeapVector<CSSProperty, 256>&, StyleRule::RuleType);
 
     // Parses a non-shorthand CSS property
-    static CSSValue* parseSingleValue(CSSPropertyID, const CSSParserTokenRange&, const CSSParserContext&);
+    static const CSSValue* parseSingleValue(CSSPropertyID, const CSSParserTokenRange&, const CSSParserContext&);
 
 private:
     CSSPropertyParser(const CSSParserTokenRange&, const CSSParserContext&,
@@ -54,15 +54,15 @@ private:
     // TODO(timloh): Rename once the CSSParserValue-based parseValue is removed
     bool parseValueStart(CSSPropertyID unresolvedProperty, bool important);
     bool consumeCSSWideKeyword(CSSPropertyID unresolvedProperty, bool important);
-    CSSValue* parseSingleValue(CSSPropertyID, CSSPropertyID = CSSPropertyInvalid);
+    const CSSValue* parseSingleValue(CSSPropertyID, CSSPropertyID = CSSPropertyInvalid);
 
     bool inQuirksMode() const { return isQuirksModeBehavior(m_context.mode()); }
 
     bool parseViewportDescriptor(CSSPropertyID propId, bool important);
     bool parseFontFaceDescriptor(CSSPropertyID);
 
-    void addProperty(CSSPropertyID, CSSPropertyID, CSSValue*, bool important, bool implicit = false);
-    void addExpandedPropertyForValue(CSSPropertyID propId, CSSValue*, bool);
+    void addProperty(CSSPropertyID, CSSPropertyID, const CSSValue&, bool important, bool implicit = false);
+    void addExpandedPropertyForValue(CSSPropertyID propId, const CSSValue&, bool);
 
     bool consumeBorder(bool important);
 

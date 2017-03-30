@@ -11,9 +11,6 @@ cr.define('md_history', function() {
       // from the history backend, as well as fields computed by history-list.
       item: {type: Object, observer: 'showIcon_'},
 
-      // True if the website is a bookmarked page.
-      starred: {type: Boolean, reflectToAttribute: true},
-
       // Search term used to obtain this history-item.
       searchTerm: {type: String},
 
@@ -25,20 +22,61 @@ cr.define('md_history', function() {
 
       isCardEnd: {type: Boolean, reflectToAttribute: true},
 
+      // True if the item is being displayed embedded in another element and
+      // should not manage its own borders or size.
+      embedded: {type: Boolean, reflectToAttribute: true},
+
       hasTimeGap: {type: Boolean},
 
-      numberOfItems: {type: Number}
+      numberOfItems: {type: Number},
+
+      // The path of this history item inside its parent.
+      path: String,
+
+      index: Number,
     },
 
     /**
      * When a history-item is selected the toolbar is notified and increases
      * or decreases its count of selected items accordingly.
+     * @param {MouseEvent} e
      * @private
      */
-    onCheckboxSelected_: function() {
+    onCheckboxSelected_: function(e) {
+      // TODO(calamity): Fire this event whenever |selected| changes.
       this.fire('history-checkbox-select', {
-        countAddition: this.$.checkbox.checked ? 1 : -1
+        element: this,
+        shiftKey: e.shiftKey,
       });
+      e.preventDefault();
+    },
+
+    /**
+     * @param {MouseEvent} e
+     * @private
+     */
+    onCheckboxMousedown_: function(e) {
+      // Prevent shift clicking a checkbox from selecting text.
+      if (e.shiftKey)
+        e.preventDefault();
+    },
+
+    /**
+     * Remove bookmark of current item when bookmark-star is clicked.
+     * @private
+     */
+    onRemoveBookmarkTap_: function() {
+      if (!this.item.starred)
+        return;
+
+      if (this.$$('#bookmark-star') == this.root.activeElement)
+        this.$['menu-button'].focus();
+
+      var browserService = md_history.BrowserService.getInstance();
+      browserService.removeBookmark(this.item.url);
+      browserService.recordAction('BookmarkStarClicked');
+
+      this.fire('remove-bookmark-stars', this.item.url);
     },
 
     /**
@@ -48,11 +86,42 @@ cr.define('md_history', function() {
     onMenuButtonTap_: function(e) {
       this.fire('toggle-menu', {
         target: Polymer.dom(e).localTarget,
+        index: this.index,
         item: this.item,
+        path: this.path,
       });
 
       // Stops the 'tap' event from closing the menu when it opens.
       e.stopPropagation();
+    },
+
+    /**
+     * Record metrics when a result is clicked. This is deliberately tied to
+   * on-click rather than on-tap, as on-click triggers from middle clicks.
+     */
+    onLinkClick_: function() {
+      var browserService = md_history.BrowserService.getInstance();
+      browserService.recordAction('EntryLinkClick');
+
+      if (this.searchTerm)
+        browserService.recordAction('SearchResultClick');
+
+      if (this.index == undefined)
+        return;
+
+      browserService.recordHistogram(
+          'HistoryPage.ClickPosition', this.index, UMA_MAX_BUCKET_VALUE);
+
+      if (this.index <= UMA_MAX_SUBSET_BUCKET_VALUE) {
+        browserService.recordHistogram(
+            'HistoryPage.ClickPositionSubset', this.index,
+            UMA_MAX_SUBSET_BUCKET_VALUE);
+      }
+    },
+
+    onLinkRightClick_: function() {
+      md_history.BrowserService.getInstance().recordAction(
+          'EntryLinkRightClick');
     },
 
     /**

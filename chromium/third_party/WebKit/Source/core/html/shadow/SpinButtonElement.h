@@ -76,7 +76,7 @@ public:
 private:
     SpinButtonElement(Document&, SpinButtonOwner&);
 
-    void detach(const AttachContext&) override;
+    void detachLayoutTree(const AttachContext&) override;
     bool isSpinButtonElement() const override { return true; }
     bool isDisabledFormControl() const override { return shadowHost() && shadowHost()->isDisabledFormControl(); }
     bool matchesReadOnlyPseudoClass() const override;
@@ -86,7 +86,7 @@ private:
     void doStepAction(int);
     void startRepeatingTimer();
     void stopRepeatingTimer();
-    void repeatingTimerFired(Timer<SpinButtonElement>*);
+    void repeatingTimerFired(TimerBase*);
     void setHovered(bool = true) override;
     bool shouldRespondToMouseEvents();
     bool isMouseFocusable() const override { return false; }

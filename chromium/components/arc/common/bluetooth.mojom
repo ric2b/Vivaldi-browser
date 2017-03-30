@@ -169,6 +169,8 @@ struct BluetoothGattValue {
   array<uint8> value;
 };
 
+const int8 kUnknownPower = 127;
+
 // Copy from Bluetooth Assigned Numbers Document, Generic Access Profile
 // https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile
 [Extensible]
@@ -331,6 +333,9 @@ interface BluetoothHost {
   [MinVersion=1] ReadRemoteRssi@28(BluetoothAddress remote_addr)
       => (int32 rssi);
 
+  [MinVersion=2] OpenBluetoothSocket@29()
+      => (handle sock);
+
   // Bluetooth Gatt Server functions
   // Copied from Android API
   // https://source.android.com/devices/halref/bt__gatt__server_8h.html
@@ -357,9 +362,6 @@ interface BluetoothHost {
                                    bool confirm,
                                    array<uint8> value)
       => (BluetoothGattStatus status);
-
-  [MinVersion=2] OpenBluetoothSocket@29()
-      => (handle sock);
 
   // Bluetooth SDP functions
   [MinVersion=5] GetSdpRecords@37(BluetoothAddress remote_addr,

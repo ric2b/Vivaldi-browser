@@ -27,8 +27,6 @@
 #include "content/public/browser/browser_message_filter.h"
 #include "gpu/config/gpu_info.h"
 #include "ipc/message_filter.h"
-#include "media/base/audio_parameters.h"
-#include "media/base/channel_layout.h"
 #include "third_party/WebKit/public/web/WebPopupType.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -71,7 +69,6 @@ struct SyncToken;
 }
 
 namespace media {
-class AudioManager;
 struct MediaLogEvent;
 }
 
@@ -105,7 +102,6 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
                       BrowserContext* browser_context,
                       net::URLRequestContextGetter* request_context,
                       RenderWidgetHelper* render_widget_helper,
-                      media::AudioManager* audio_manager,
                       MediaInternals* media_internals,
                       DOMStorageContextWrapper* dom_storage_context,
                       CacheStorageContextImpl* cache_storage_context);
@@ -115,8 +111,6 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
   void OnDestruct() const override;
   void OverrideThreadForMessage(const IPC::Message& message,
                                 BrowserThread::ID* thread) override;
-  base::TaskRunner* OverrideTaskRunnerForMessage(
-      const IPC::Message& message) override;
 
   int render_process_id() const { return render_process_id_; }
 
@@ -139,18 +133,13 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
   // Messages for OOP font loading.
   void OnLoadFont(const FontDescriptor& font, IPC::Message* reply_msg);
   void SendLoadFontReply(IPC::Message* reply, FontLoader::Result* result);
-#elif defined(OS_WIN)
-  void OnPreCacheFontCharacters(const LOGFONT& log_font,
-                                const base::string16& characters);
 #endif
 
   void OnGenerateRoutingID(int* route_id);
 
-  void OnGetAudioHardwareConfig(media::AudioParameters* input_params,
-                                media::AudioParameters* output_params);
-
   // Message handlers called on the browser IO thread:
-  void OnEstablishGpuChannel(CauseForGpuLaunch, IPC::Message* reply);
+  void OnEstablishGpuChannel(CauseForGpuLaunch cause_for_gpu_launch,
+                             IPC::Message* reply);
   void OnHasGpuProcess(IPC::Message* reply);
   // Helper callbacks for the message handlers.
   void EstablishChannelCallback(std::unique_ptr<IPC::Message> reply,
@@ -187,6 +176,13 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
                                                IPC::Message* reply_message);
   void DeletedDiscardableSharedMemoryOnFileThread(DiscardableSharedMemoryId id);
   void OnDeletedDiscardableSharedMemory(DiscardableSharedMemoryId id);
+
+#if defined(OS_LINUX)
+  void SetThreadPriorityOnFileThread(base::PlatformThreadId ns_tid,
+                                     base::ThreadPriority priority);
+  void OnSetThreadPriority(base::PlatformThreadId ns_tid,
+                           base::ThreadPriority priority);
+#endif
 
   void OnCacheableMetadataAvailable(const GURL& url,
                                     base::Time expected_response_time,
@@ -251,7 +247,6 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
   int gpu_process_id_;
   int render_process_id_;
 
-  media::AudioManager* audio_manager_;
   MediaInternals* media_internals_;
   CacheStorageContextImpl* cache_storage_context_;
 

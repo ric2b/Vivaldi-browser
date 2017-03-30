@@ -58,9 +58,6 @@
 #include "gpu/ipc/client/gpu_memory_buffer_impl.h"
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_platform_file.h"
-#include "media/audio/audio_device_description.h"
-#include "media/audio/audio_manager.h"
-#include "media/base/audio_parameters.h"
 #include "media/base/media_log_event.h"
 #include "net/base/io_buffer.h"
 #include "net/base/keygen_handler.h"
@@ -90,6 +87,11 @@
 
 #if defined(OS_MACOSX)
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
+#endif
+
+#if defined(OS_LINUX)
+#include "base/linux_util.h"
+#include "base/threading/platform_thread.h"
 #endif
 
 namespace content {
@@ -127,7 +129,6 @@ RenderMessageFilter::RenderMessageFilter(
     BrowserContext* browser_context,
     net::URLRequestContextGetter* request_context,
     RenderWidgetHelper* render_widget_helper,
-    media::AudioManager* audio_manager,
     MediaInternals* media_internals,
     DOMStorageContextWrapper* dom_storage_context,
     CacheStorageContextImpl* cache_storage_context)
@@ -141,7 +142,6 @@ RenderMessageFilter::RenderMessageFilter(
       dom_storage_context_(dom_storage_context),
       gpu_process_id_(0),
       render_process_id_(render_process_id),
-      audio_manager_(audio_manager),
       media_internals_(media_internals),
       cache_storage_context_(cache_storage_context),
       weak_ptr_factory_(this) {
@@ -180,6 +180,9 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER_GENERIC(
         ViewHostMsg_UpdateRect,
         ResizeHelperPostMsgToUIThread(render_process_id_, message))
+    IPC_MESSAGE_HANDLER_GENERIC(
+        ViewHostMsg_SetNeedsBeginFrames,
+        ResizeHelperPostMsgToUIThread(render_process_id_, message))
 #endif
     // NB: The SyncAllocateSharedMemory, SyncAllocateGpuMemoryBuffer, and
     // DeletedGpuMemoryBuffer IPCs are handled here for renderer processes. For
@@ -206,19 +209,18 @@ bool RenderMessageFilter::OnMessageReceived(const IPC::Message& message) {
         OnAllocateLockedDiscardableSharedMemory)
     IPC_MESSAGE_HANDLER(ChildProcessHostMsg_DeletedDiscardableSharedMemory,
                         OnDeletedDiscardableSharedMemory)
+#if defined(OS_LINUX)
+    IPC_MESSAGE_HANDLER(ChildProcessHostMsg_SetThreadPriority,
+                        OnSetThreadPriority)
+#endif
     IPC_MESSAGE_HANDLER_DELAY_REPLY(RenderProcessHostMsg_Keygen, OnKeygen)
     IPC_MESSAGE_HANDLER(RenderProcessHostMsg_DidGenerateCacheableMetadata,
                         OnCacheableMetadataAvailable)
     IPC_MESSAGE_HANDLER(
         RenderProcessHostMsg_DidGenerateCacheableMetadataInCacheStorage,
         OnCacheableMetadataAvailableForCacheStorage)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_GetAudioHardwareConfig,
-                        OnGetAudioHardwareConfig)
 #if defined(OS_MACOSX)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(RenderProcessHostMsg_LoadFont, OnLoadFont)
-#elif defined(OS_WIN)
-    IPC_MESSAGE_HANDLER(RenderProcessHostMsg_PreCacheFontCharacters,
-                        OnPreCacheFontCharacters)
 #endif
     IPC_MESSAGE_HANDLER(ViewHostMsg_MediaLogEvents, OnMediaLogEvents)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -238,14 +240,6 @@ void RenderMessageFilter::OverrideThreadForMessage(const IPC::Message& message,
     *thread = BrowserThread::UI;
 }
 
-base::TaskRunner* RenderMessageFilter::OverrideTaskRunnerForMessage(
-    const IPC::Message& message) {
-  // Always query audio device parameters on the audio thread.
-  if (message.type() == ViewHostMsg_GetAudioHardwareConfig::ID)
-    return audio_manager_->GetTaskRunner();
-  return NULL;
-}
-
 void RenderMessageFilter::OnCreateWindow(
     const ViewHostMsg_CreateWindow_Params& params,
     ViewHostMsg_CreateWindow_Reply* reply) {
@@ -259,6 +253,7 @@ void RenderMessageFilter::OnCreateWindow(
           params.window_container_type,
           params.target_url,
           params.referrer,
+          params.frame_name,
           params.disposition,
           params.features,
           params.user_gesture,
@@ -304,18 +299,6 @@ void RenderMessageFilter::OnGenerateRoutingID(int* route_id) {
   *route_id = render_widget_helper_->GetNextRoutingID();
 }
 
-void RenderMessageFilter::OnGetAudioHardwareConfig(
-    media::AudioParameters* input_params,
-    media::AudioParameters* output_params) {
-  DCHECK(input_params);
-  DCHECK(output_params);
-  *output_params = audio_manager_->GetDefaultOutputStreamParameters();
-
-  // TODO(henrika): add support for all available input devices.
-  *input_params = audio_manager_->GetInputStreamParameters(
-      media::AudioDeviceDescription::kDefaultDeviceId);
-}
-
 #if defined(OS_MACOSX)
 
 void RenderMessageFilter::OnLoadFont(const FontDescriptor& font,
@@ -344,42 +327,7 @@ void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
   Send(reply);
 }
 
-#elif defined(OS_WIN)
-
-void RenderMessageFilter::OnPreCacheFontCharacters(
-    const LOGFONT& font,
-    const base::string16& str) {
-  // TODO(scottmg): pdf/ppapi still require the renderer to be able to precache
-  // GDI fonts (http://crbug.com/383227), even when using DirectWrite.
-  // Eventually this shouldn't be added and should be moved to
-  // FontCacheDispatcher too. http://crbug.com/356346.
-
-  // First, comments from FontCacheDispatcher::OnPreCacheFont do apply here too.
-  // Except that for True Type fonts,
-  // GetTextMetrics will not load the font in memory.
-  // The only way windows seem to load properly, it is to create a similar
-  // device (like the one in which we print), then do an ExtTextOut,
-  // as we do in the printing thread, which is sandboxed.
-  HDC hdc = CreateEnhMetaFile(NULL, NULL, NULL, NULL);
-  HFONT font_handle = CreateFontIndirect(&font);
-  DCHECK(NULL != font_handle);
-
-  HGDIOBJ old_font = SelectObject(hdc, font_handle);
-  DCHECK(NULL != old_font);
-
-  ExtTextOut(hdc, 0, 0, ETO_GLYPH_INDEX, 0, str.c_str(), str.length(), NULL);
-
-  SelectObject(hdc, old_font);
-  DeleteObject(font_handle);
-
-  HENHMETAFILE metafile = CloseEnhMetaFile(hdc);
-
-  if (metafile)
-    DeleteEnhMetaFile(metafile);
-}
-
-
-#endif  // OS_*
+#endif  // defined(OS_MACOSX)
 
 void RenderMessageFilter::AllocateSharedMemoryOnFileThread(
     uint32_t buffer_size,
@@ -474,6 +422,35 @@ void RenderMessageFilter::OnDeletedDiscardableSharedMemory(
           &RenderMessageFilter::DeletedDiscardableSharedMemoryOnFileThread,
           this, id));
 }
+
+#if defined(OS_LINUX)
+void RenderMessageFilter::SetThreadPriorityOnFileThread(
+    base::PlatformThreadId ns_tid,
+    base::ThreadPriority priority) {
+  bool ns_pid_supported = false;
+  pid_t peer_tid = base::FindThreadID(peer_pid(), ns_tid, &ns_pid_supported);
+  if (peer_tid == -1) {
+    if (ns_pid_supported)
+      DLOG(WARNING) << "Could not find tid";
+    return;
+  }
+
+  if (peer_tid == peer_pid()) {
+    DLOG(WARNING) << "Changing priority of main thread is not allowed";
+    return;
+  }
+
+  base::PlatformThread::SetThreadPriority(peer_tid, priority);
+}
+
+void RenderMessageFilter::OnSetThreadPriority(base::PlatformThreadId ns_tid,
+                                              base::ThreadPriority priority) {
+  BrowserThread::PostTask(
+      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
+      base::Bind(&RenderMessageFilter::SetThreadPriorityOnFileThread, this,
+                 ns_tid, priority));
+}
+#endif
 
 void RenderMessageFilter::OnCacheableMetadataAvailable(
     const GURL& url,
@@ -661,7 +638,7 @@ void RenderMessageFilter::OnEstablishGpuChannel(
   GpuProcessHost* host = GpuProcessHost::FromID(gpu_process_id_);
   if (!host) {
     host = GpuProcessHost::Get(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
-                               cause_for_gpu_launch);
+                               true, cause_for_gpu_launch);
     if (!host) {
       reply->set_reply_error();
       Send(reply.release());
@@ -679,16 +656,16 @@ void RenderMessageFilter::OnEstablishGpuChannel(
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&reply));
   if (cause_for_gpu_launch != CAUSE_FOR_GPU_LAUNCH_PLATFORM_MEDIA_PIPELINE)
     host->EstablishGpuChannel(
-      render_process_id_,
-      ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
-          render_process_id_),
-      preempts, allow_view_command_buffers, allow_real_time_streams,
+       render_process_id_,
+       ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
+           render_process_id_),
+       preempts, allow_view_command_buffers, allow_real_time_streams,
       callback);
   else
     host->EstablishGpuChannelIgnoreDisallowedGpu(
       render_process_id_,
       ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
-           render_process_id_),
+          render_process_id_),
       preempts, allow_view_command_buffers, allow_real_time_streams,
       callback);
 }

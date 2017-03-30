@@ -162,15 +162,11 @@ std::string GetPathForAndroidLocalePakWithinApk(const std::string& locale) {
   JNIEnv* env = base::android::AttachCurrentThread();
   base::android::ScopedJavaLocalRef<jstring> ret =
       Java_ResourceBundle_getLocalePakResourcePath(
-          env, base::android::ConvertUTF8ToJavaString(env, locale).obj());
+          env, base::android::ConvertUTF8ToJavaString(env, locale));
   if (ret.obj() == nullptr) {
     return std::string();
   }
   return base::android::ConvertJavaStringToUTF8(env, ret.obj());
-}
-
-bool RegisterResourceBundleAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace ui

@@ -12,6 +12,8 @@
 #include "ui/android/window_android.h"
 #include "url/gurl.h"
 
+using base::android::ScopedJavaLocalRef;
+
 namespace dom_distiller {
 
 namespace android {
@@ -29,7 +31,7 @@ void DistillerUIHandleAndroid::ReportExternalFeedback(
       env, url_utils::GetOriginalUrlFromDistillerUrl(url).spec());
 
   Java_DomDistillerUIUtils_reportFeedbackWithWebContents(
-      env, web_contents->GetJavaWebContents().obj(), jurl.obj(), good);
+      env, web_contents->GetJavaWebContents(), jurl, good);
 }
 
 // static
@@ -37,18 +39,13 @@ void DistillerUIHandleAndroid::OpenSettings(
     content::WebContents* web_contents) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_DomDistillerUIUtils_openSettings(env,
-      web_contents->GetJavaWebContents().obj());
+                                        web_contents->GetJavaWebContents());
 }
 
 // static
 void DistillerUIHandleAndroid::ClosePanel(bool animate) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_DomDistillerUIUtils_closePanel(env, animate);
-}
-
-// static
-bool RegisterUIHandle(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

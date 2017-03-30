@@ -384,41 +384,21 @@ void FrameLoaderClientImpl::detached(FrameDetachType type)
     m_webFrame->setCoreFrame(nullptr);
 }
 
-void FrameLoaderClientImpl::dispatchWillSendRequest(
-    DocumentLoader* loader, unsigned long identifier, ResourceRequest& request,
-    const ResourceResponse& redirectResponse)
+void FrameLoaderClientImpl::dispatchWillSendRequest(ResourceRequest& request)
 {
     // Give the WebFrameClient a crack at the request.
     if (m_webFrame->client()) {
         WrappedResourceRequest webreq(request);
-        WrappedResourceResponse webresp(redirectResponse);
-        m_webFrame->client()->willSendRequest(
-            m_webFrame, identifier, webreq, webresp);
+        m_webFrame->client()->willSendRequest(m_webFrame, webreq);
     }
 }
 
-void FrameLoaderClientImpl::dispatchDidReceiveResponse(DocumentLoader* loader,
-                                                       unsigned long identifier,
-                                                       const ResourceResponse& response)
+void FrameLoaderClientImpl::dispatchDidReceiveResponse(const ResourceResponse& response)
 {
     if (m_webFrame->client()) {
         WrappedResourceResponse webresp(response);
-        m_webFrame->client()->didReceiveResponse(identifier, webresp);
+        m_webFrame->client()->didReceiveResponse(webresp);
     }
-}
-
-void FrameLoaderClientImpl::dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority priority, int intraPriorityValue)
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didChangeResourcePriority(identifier, static_cast<WebURLRequest::Priority>(priority), intraPriorityValue);
-}
-
-// Called when a particular resource load completes
-void FrameLoaderClientImpl::dispatchDidFinishLoading(DocumentLoader* loader,
-                                                    unsigned long identifier)
-{
-    if (m_webFrame->client())
-        m_webFrame->client()->didFinishResourceLoad(m_webFrame, identifier);
 }
 
 void FrameLoaderClientImpl::dispatchDidFinishDocumentLoad()
@@ -468,6 +448,8 @@ void FrameLoaderClientImpl::dispatchDidStartProvisionalLoad(double triggeringEve
 {
     if (m_webFrame->client())
         m_webFrame->client()->didStartProvisionalLoad(m_webFrame, triggeringEventTime);
+    if (WebDevToolsAgentImpl* devTools = devToolsAgent())
+        devTools->didStartProvisionalLoad(m_webFrame->frame());
 }
 
 void FrameLoaderClientImpl::dispatchDidReceiveTitle(const String& title)
@@ -496,9 +478,8 @@ void FrameLoaderClientImpl::dispatchDidCommitLoad(HistoryItem* item, HistoryComm
 
     if (m_webFrame->client())
         m_webFrame->client()->didCommitProvisionalLoad(m_webFrame, WebHistoryItem(item), static_cast<WebHistoryCommitType>(commitType));
-    WebDevToolsAgentImpl* devToolsAgent = WebLocalFrameImpl::fromFrame(m_webFrame->frame()->localFrameRoot())->devToolsAgentImpl();
-    if (devToolsAgent)
-        devToolsAgent->didCommitLoadForLocalFrame(m_webFrame->frame());
+    if (WebDevToolsAgentImpl* devTools = devToolsAgent())
+        devTools->didCommitLoadForLocalFrame(m_webFrame->frame());
 }
 
 void FrameLoaderClientImpl::dispatchDidFailProvisionalLoad(
@@ -536,13 +517,13 @@ static bool allowCreatingBackgroundTabs()
         const WebMouseEvent* mouseEvent = static_cast<const WebMouseEvent*>(inputEvent);
 
         switch (mouseEvent->button) {
-        case WebMouseEvent::ButtonLeft:
+        case WebMouseEvent::Button::Left:
             buttonNumber = 0;
             break;
-        case WebMouseEvent::ButtonMiddle:
+        case WebMouseEvent::Button::Middle:
             buttonNumber = 1;
             break;
-        case WebMouseEvent::ButtonRight:
+        case WebMouseEvent::Button::Right:
             buttonNumber = 2;
             break;
         default:
@@ -594,14 +575,6 @@ NavigationPolicy FrameLoaderClientImpl::decidePolicyForNavigation(const Resource
 
     WebNavigationPolicy webPolicy = m_webFrame->client()->decidePolicyForNavigation(navigationInfo);
     return static_cast<NavigationPolicy>(webPolicy);
-}
-
-bool FrameLoaderClientImpl::hasPendingNavigation()
-{
-    if (!m_webFrame->client())
-        return false;
-
-    return m_webFrame->client()->hasPendingNavigation();
 }
 
 void FrameLoaderClientImpl::dispatchWillSendSubmitEvent(HTMLFormElement* form)
@@ -851,11 +824,6 @@ ObjectContentType FrameLoaderClientImpl::getObjectContentType(
         if (extensionPos >= 0) {
             String extension = filename.substring(extensionPos + 1);
             mimeType = MIMETypeRegistry::getWellKnownMIMETypeForExtension(extension);
-            if (mimeType.isEmpty()) {
-                // If there's no mimetype registered for the extension, check to see
-                // if a plugin can handle the extension.
-                mimeType = getPluginMimeTypeFromExtension(extension);
-            }
         }
 
         if (mimeType.isEmpty())
@@ -1035,6 +1003,16 @@ WebEffectiveConnectionType FrameLoaderClientImpl::getEffectiveConnectionType()
     if (m_webFrame->client())
         return m_webFrame->client()->getEffectiveConnectionType();
     return WebEffectiveConnectionType::TypeUnknown;
+}
+
+WebDevToolsAgentImpl* FrameLoaderClientImpl::devToolsAgent()
+{
+    return WebLocalFrameImpl::fromFrame(m_webFrame->frame()->localFrameRoot())->devToolsAgentImpl();
+}
+
+KURL FrameLoaderClientImpl::overrideFlashEmbedWithHTML(const KURL& url)
+{
+    return m_webFrame->client()->overrideFlashEmbedWithHTML(WebURL(url));
 }
 
 // VB-6063:

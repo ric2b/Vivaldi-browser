@@ -40,8 +40,8 @@
 #include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "net/quic/quic_framer.h"
-#include "net/quic/quic_utils.h"
+#include "net/quic/core/quic_framer.h"
+#include "net/quic/core/quic_utils.h"
 
 using std::cerr;
 using std::string;
@@ -184,7 +184,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
   string hex = net::QuicUtils::HexDecode(ArgToString(args[1]));
-  net::QuicVersionVector versions = net::QuicSupportedVersions();
+  net::QuicVersionVector versions = net::AllSupportedVersions();
   // Fake a time since we're not actually generating acks.
   net::QuicTime start(net::QuicTime::Zero());
   net::QuicFramer framer(versions, start, perspective);

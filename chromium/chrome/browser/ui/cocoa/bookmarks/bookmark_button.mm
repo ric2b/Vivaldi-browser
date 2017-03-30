@@ -59,6 +59,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
 
 @synthesize delegate = delegate_;
 @synthesize acceptsTrackIn = acceptsTrackIn_;
+@synthesize backgroundColor = backgroundColor_;
 
 - (id)initWithFrame:(NSRect)frameRect {
   // BookmarkButton's ViewID may be changed to VIEW_ID_OTHER_BOOKMARKS in
@@ -80,6 +81,8 @@ BookmarkButton* gDraggedButton = nil; // Weak
     [self removeTrackingArea:area_];
     [area_ release];
   }
+
+  [backgroundColor_ release];
 
   [super dealloc];
 }
@@ -194,9 +197,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
     NSWindow* window = [[self delegate] browserWindow];
     visibilityDelegate_ =
         [BrowserWindowController browserWindowControllerForWindow:window];
-    [visibilityDelegate_ lockBarVisibilityForOwner:self
-                                     withAnimation:NO
-                                             delay:NO];
+    [visibilityDelegate_ lockBarVisibilityForOwner:self withAnimation:NO];
   }
   const BookmarkNode* node = [self bookmarkNode];
   const BookmarkNode* parent = node->parent();
@@ -255,9 +256,7 @@ BookmarkButton* gDraggedButton = nil; // Weak
   gDraggedButton = nil;
 
   // visibilityDelegate_ can be nil if we're detached, and that's fine.
-  [visibilityDelegate_ releaseBarVisibilityForOwner:self
-                                      withAnimation:YES
-                                              delay:YES];
+  [visibilityDelegate_ releaseBarVisibilityForOwner:self withAnimation:YES];
   visibilityDelegate_ = nil;
 
   return kDraggableButtonImplUseBase;
@@ -424,7 +423,12 @@ BookmarkButton* gDraggedButton = nil; // Weak
 
 - (void)drawRect:(NSRect)rect {
   NSView* bookmarkBarToolbarView = [[self superview] superview];
-  [self cr_drawUsingAncestor:bookmarkBarToolbarView inRect:(NSRect)rect];
+  if (backgroundColor_) {
+    [backgroundColor_ set];
+    NSRectFill(rect);
+  } else {
+    [self cr_drawUsingAncestor:bookmarkBarToolbarView inRect:(NSRect)rect];
+  }
   [super drawRect:rect];
 }
 

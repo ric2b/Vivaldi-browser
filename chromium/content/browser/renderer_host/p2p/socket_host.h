@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
@@ -44,8 +46,18 @@ class CONTENT_EXPORT P2PSocketHost {
 
   virtual ~P2PSocketHost();
 
-  // Initalizes the socket. Returns false when initiazations fails.
+  // Initalizes the socket. Returns false when initialization fails.
+  // |min_port| and |max_port| specify the valid range of allowed ports.
+  // |min_port| must be less than or equal to |max_port|.
+  // If |min_port| is zero, |max_port| must also be zero and it means all ports
+  // are valid.
+  // If |local_address.port()| is zero, the socket will be initialized to a port
+  // in the valid range.
+  // If |local_address.port()| is nonzero and not in the valid range,
+  // initialization will fail.
   virtual bool Init(const net::IPEndPoint& local_address,
+                    uint16_t min_port,
+                    uint16_t max_port,
                     const P2PHostAndIPEndPoint& remote_address) = 0;
 
   // Sends |data| on the socket to |to|.
@@ -54,8 +66,9 @@ class CONTENT_EXPORT P2PSocketHost {
                     const rtc::PacketOptions& options,
                     uint64_t packet_id) = 0;
 
-  virtual P2PSocketHost* AcceptIncomingTcpConnection(
-      const net::IPEndPoint& remote_address, int id) = 0;
+  virtual std::unique_ptr<P2PSocketHost> AcceptIncomingTcpConnection(
+      const net::IPEndPoint& remote_address,
+      int id) = 0;
 
   virtual bool SetOption(P2PSocketOption option, int value) = 0;
 
@@ -114,6 +127,8 @@ class CONTENT_EXPORT P2PSocketHost {
   static bool GetStunPacketType(const char* data, int data_size,
                                 StunMessageType* type);
   static bool IsRequestOrResponse(StunMessageType type);
+
+  static void ReportSocketError(int result, const char* histogram_name);
 
   // Calls |packet_dump_callback_| to record the RTP header.
   void DumpRtpPacket(const char* packet, size_t length, bool incoming);

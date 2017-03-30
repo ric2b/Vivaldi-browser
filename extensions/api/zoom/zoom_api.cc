@@ -95,8 +95,6 @@ ZoomSetVivaldiUIZoomFunction::~ZoomSetVivaldiUIZoomFunction() {
 }
 
 bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
-  Browser* browser = chrome::FindLastActive();
-
   std::unique_ptr<vivaldi::zoom::SetVivaldiUIZoom::Params> params(
     vivaldi::zoom::SetVivaldiUIZoom::Params::Create(*args_));
 
@@ -125,8 +123,6 @@ ZoomGetVivaldiUIZoomFunction::~ZoomGetVivaldiUIZoomFunction() {
 }
 
 bool ZoomGetVivaldiUIZoomFunction::RunAsync() {
-  Browser* browser = chrome::FindLastActive();
-
   WebContents* web_contents =
     dispatcher()->GetAssociatedWebContents();
 

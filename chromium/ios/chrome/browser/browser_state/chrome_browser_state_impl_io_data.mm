@@ -335,8 +335,6 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
       io_thread_globals->http_auth_handler_factory.get());
 
   main_context->set_proxy_service(proxy_service());
-  main_context->set_backoff_manager(
-      io_thread_globals->url_request_backoff_manager.get());
 
   net::ChannelIDService* channel_id_service = NULL;
 
@@ -404,7 +402,7 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
   sdch_policy_.reset(new net::SdchOwner(sdch_manager_.get(), main_context));
   main_context->set_sdch_manager(sdch_manager_.get());
   sdch_policy_->EnablePersistentStorage(
-      base::WrapUnique(new SdchOwnerPrefStorage(network_json_store_.get())));
+      base::MakeUnique<SdchOwnerPrefStorage>(network_json_store_.get()));
 
   lazy_params_.reset();
 }

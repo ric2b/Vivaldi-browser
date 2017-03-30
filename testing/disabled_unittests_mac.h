@@ -47,3 +47,6 @@
   // Broke in v53
   DISABLE(BrowserWindowControllerTest,
           FullscreenToolbarExposedForTabstripChanges)
+
+  DISABLE(ExtensionWindowCreateTest,AcceptState)
+  DISABLE_MULTI(SavePageOriginalVsSavedComparisonTest, ObjectElementsViaFile)

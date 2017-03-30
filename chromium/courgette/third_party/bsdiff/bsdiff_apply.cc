@@ -25,7 +25,7 @@
 // For the terms under which this work may be distributed, please see
 // the adjoining file "LICENSE".
 //
-// Changelog:
+// ChangeLog:
 // 2009-03-31 - Change to use Streams.  Move CRC code to crc.{h,cc}
 //                --Stephen Adams <sra@chromium.org>
 // 2013-04-10 - Add wrapper method to apply a patch to files directly.
@@ -44,7 +44,17 @@
 #include "courgette/crc.h"
 #include "courgette/streams.h"
 
-namespace courgette {
+namespace {
+
+using courgette::CalculateCrc;
+using courgette::SinkStream;
+using courgette::SinkStreamSet;
+using courgette::SourceStream;
+using courgette::SourceStreamSet;
+
+}  // namespace
+
+namespace bsdiff {
 
 BSDiffStatus MBS_ReadHeader(SourceStream* stream, MBSPatchHeader* header) {
   if (!stream->Read(header->tag, sizeof(header->tag)))
@@ -215,4 +225,4 @@ BSDiffStatus ApplyBinaryPatch(const base::FilePath& old_file_path,
   return OK;
 }
 
-}  // namespace
+}  // namespace bsdiff

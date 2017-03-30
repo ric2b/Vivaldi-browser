@@ -49,7 +49,7 @@ SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
       more_read_data_pending_(false),
       direct_(direct),
       was_npn_negotiated_(false),
-      protocol_negotiated_(kProtoUnknown),
+      negotiated_protocol_(kProtoUnknown),
       weak_factory_(this) {
   DCHECK(spdy_session_.get());
 }
@@ -79,9 +79,7 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
     // |stream_| may be NULL even if OK was returned.
     if (stream_.get()) {
       DCHECK_EQ(stream_->type(), SPDY_PUSH_STREAM);
-      stream_->SetDelegate(this);
-      stream_->GetSSLInfo(&ssl_info_, &was_npn_negotiated_,
-                          &protocol_negotiated_);
+      InitializeStreamHelper();
       return OK;
     }
   }
@@ -94,9 +92,7 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
 
   if (rv == OK) {
     stream_ = stream_request_.ReleaseStream();
-    stream_->SetDelegate(this);
-    stream_->GetSSLInfo(&ssl_info_, &was_npn_negotiated_,
-                        &protocol_negotiated_);
+    InitializeStreamHelper();
   }
 
   return rv;
@@ -280,13 +276,12 @@ int SpdyHttpStream::SendRequest(const HttpRequestHeaders& request_headers,
     return ERR_IO_PENDING;
   }
 
-  std::unique_ptr<SpdyHeaderBlock> headers(new SpdyHeaderBlock);
-  CreateSpdyHeadersFromHttpRequest(*request_info_, request_headers,
-                                   stream_->GetProtocolVersion(), direct_,
-                                   headers.get());
+  SpdyHeaderBlock headers;
+  CreateSpdyHeadersFromHttpRequest(*request_info_, request_headers, direct_,
+                                   &headers);
   stream_->net_log().AddEvent(
       NetLog::TYPE_HTTP_TRANSACTION_HTTP2_SEND_REQUEST_HEADERS,
-      base::Bind(&SpdyHeaderBlockNetLogCallback, headers.get()));
+      base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
   result = stream_->SendRequestHeaders(
       std::move(headers),
       HasUploadData() ? MORE_DATA_TO_SEND : NO_MORE_DATA_TO_SEND);
@@ -325,8 +320,7 @@ SpdyResponseHeadersStatus SpdyHttpStream::OnResponseHeadersUpdated(
     response_info_ = push_response_info_.get();
   }
 
-  if (!SpdyHeadersToHttpResponse(
-          response_headers, stream_->GetProtocolVersion(), response_info_)) {
+  if (!SpdyHeadersToHttpResponse(response_headers, response_info_)) {
     // We do not have complete headers yet.
     return RESPONSE_HEADERS_ARE_INCOMPLETE;
   }
@@ -337,10 +331,10 @@ SpdyResponseHeadersStatus SpdyHttpStream::OnResponseHeadersUpdated(
   // will take care of that part.
   response_info_->was_npn_negotiated = was_npn_negotiated_;
   response_info_->npn_negotiated_protocol =
-      SSLClientSocket::NextProtoToString(protocol_negotiated_);
+      SSLClientSocket::NextProtoToString(negotiated_protocol_);
   response_info_->request_time = stream_->GetRequestTime();
   response_info_->connection_info =
-      HttpResponseInfo::ConnectionInfoFromNextProto(stream_->GetProtocol());
+      HttpResponseInfo::ConnectionInfoFromNextProto(kProtoHTTP2);
   response_info_->vary_data
       .Init(*request_info_, *response_info_->headers.get());
 
@@ -428,9 +422,7 @@ void SpdyHttpStream::OnStreamCreated(
     int rv) {
   if (rv == OK) {
     stream_ = stream_request_.ReleaseStream();
-    stream_->SetDelegate(this);
-    stream_->GetSSLInfo(&ssl_info_, &was_npn_negotiated_,
-                        &protocol_negotiated_);
+    InitializeStreamHelper();
   }
   callback.Run(rv);
 }
@@ -452,6 +444,13 @@ void SpdyHttpStream::ReadAndSendRequestBodyData() {
 
   if (rv != ERR_IO_PENDING)
     OnRequestBodyReadCompleted(rv);
+}
+
+void SpdyHttpStream::InitializeStreamHelper() {
+  stream_->SetDelegate(this);
+  stream_->GetSSLInfo(&ssl_info_);
+  was_npn_negotiated_ = stream_->WasNpnNegotiated();
+  negotiated_protocol_ = stream_->GetNegotiatedProtocol();
 }
 
 void SpdyHttpStream::ResetStreamInternal() {
@@ -560,13 +559,13 @@ void SpdyHttpStream::DoRequestCallback(int rv) {
 
 void SpdyHttpStream::MaybeDoRequestCallback(int rv) {
   CHECK_NE(ERR_IO_PENDING, rv);
-  if (!request_callback_.is_null())
+  if (request_callback_)
     base::ResetAndReturn(&request_callback_).Run(rv);
 }
 
 void SpdyHttpStream::MaybePostRequestCallback(int rv) {
   CHECK_NE(ERR_IO_PENDING, rv);
-  if (!request_callback_.is_null())
+  if (request_callback_)
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&SpdyHttpStream::MaybeDoRequestCallback,
                               weak_factory_.GetWeakPtr(), rv));

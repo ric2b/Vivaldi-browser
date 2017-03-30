@@ -12,8 +12,8 @@
 #include "cc/input/input_handler.h"
 #include "third_party/WebKit/public/platform/WebGestureCurve.h"
 #include "third_party/WebKit/public/platform/WebGestureCurveTarget.h"
+#include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/web/WebActiveWheelFlingParameters.h"
-#include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/events/blink/input_scroll_elasticity_controller.h"
 #include "ui/events/blink/synchronous_input_handler_proxy.h"
 
@@ -27,6 +27,7 @@ class InputHandlerProxyClient;
 class InputScrollElasticityController;
 class SynchronousInputHandler;
 class SynchronousInputHandlerProxy;
+struct DidOverscrollParams;
 
 // This class is a proxy between the blink web input events for a WebWidget and
 // the compositor's input handling logic. InputHandlerProxy instances live
@@ -99,7 +100,9 @@ class InputHandlerProxy
   // Helper functions for handling more complicated input events.
   EventDisposition HandleMouseWheel(
       const blink::WebMouseWheelEvent& event);
-  EventDisposition ScrollByMouseWheel(const blink::WebMouseWheelEvent& event);
+  EventDisposition ScrollByMouseWheel(
+      const blink::WebMouseWheelEvent& event,
+      cc::EventListenerProperties listener_properties);
   EventDisposition HandleGestureScrollBegin(
       const blink::WebGestureEvent& event);
   EventDisposition HandleGestureScrollUpdate(

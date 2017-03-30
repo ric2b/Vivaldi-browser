@@ -265,8 +265,8 @@ AVFMediaDecoder::AVFMediaDecoder(AVFMediaDecoderClient* client)
     : client_(client),
       audio_stream_format_({0}),
       bitrate_(-1),
-      last_audio_timestamp_(media::kNoTimestamp()),
-      last_video_timestamp_(media::kNoTimestamp()),
+      last_audio_timestamp_(media::kNoTimestamp),
+      last_video_timestamp_(media::kNoTimestamp),
       playback_state_(STOPPED),
       seeking_(false),
       stream_has_ended_(false),
@@ -605,7 +605,7 @@ void AVFMediaDecoder::PlayerRateChanged(base::scoped_nsobject<id> new_rate) {
 
   if (last_audio_timestamp_ >= duration_) {
     PlayerPlayedToEnd("pause");
-  } else if (!seeking_ && last_audio_timestamp_ != media::kNoTimestamp()) {
+  } else if (!seeking_ && last_audio_timestamp_ != media::kNoTimestamp) {
     TRACE_EVENT_ASYNC_BEGIN0("IPC_MEDIA", "AVFMediaDecoder::Auto-seek", this);
 
     DCHECK(has_audio_track());
@@ -895,7 +895,7 @@ void AVFMediaDecoder::AudioSamplesReady(
     return;
   }
 
-  if (last_audio_timestamp_ != media::kNoTimestamp() &&
+  if (last_audio_timestamp_ != media::kNoTimestamp &&
       buffer->timestamp() <= last_audio_timestamp_) {
     DVLOG(1) << "Audio buffer @" << buffer->timestamp().InMicroseconds()
              << " older than last buffer @"
@@ -966,7 +966,7 @@ void AVFMediaDecoder::ReadFromVideoOutput(const CMTime& cm_timestamp) {
 
   const base::TimeDelta timestamp = media::CMTimeToTimeDelta(cm_timestamp);
 
-  if (last_video_timestamp_ != media::kNoTimestamp() &&
+  if (last_video_timestamp_ != media::kNoTimestamp &&
       timestamp <= last_video_timestamp_) {
     DVLOG(1) << "Video buffer @" << timestamp.InMicroseconds()
              << " older than last buffer @"
@@ -1005,8 +1005,8 @@ void AVFMediaDecoder::SeekDone(const ResultCB& result_cb, bool finished) {
   seeking_ = false;
   stream_has_ended_ = false;
 
-  last_audio_timestamp_ = media::kNoTimestamp();
-  last_video_timestamp_ = media::kNoTimestamp();
+  last_audio_timestamp_ = media::kNoTimestamp;
+  last_video_timestamp_ = media::kNoTimestamp;
 
   result_cb.Run(finished);
 

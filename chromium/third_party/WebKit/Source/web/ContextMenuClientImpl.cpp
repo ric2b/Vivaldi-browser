@@ -86,7 +86,7 @@
 namespace blink {
 
 // Figure out the URL of a page or subframe. Returns |page_type| as the type,
-// which indicates page or subframe, or ContextNodeType::NONE if the URL could not
+// which indicates page or subframe, or ContextNodeType::kNone if the URL could not
 // be determined for some reason.
 static WebURL urlFromFrame(LocalFrame* frame)
 {
@@ -333,12 +333,6 @@ bool ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu, bool
         data.writingDirectionLeftToRight |= WebContextMenuData::CheckableMenuItemChecked;
     if (selectedFrame->editor().selectionHasStyle(CSSPropertyDirection, "rtl") != FalseTriState)
         data.writingDirectionRightToLeft |= WebContextMenuData::CheckableMenuItemChecked;
-
-    // Now retrieve the security info.
-    DocumentLoader* dl = selectedFrame->loader().documentLoader();
-    WebDataSource* ds = WebDataSourceImpl::fromDocumentLoader(dl);
-    if (ds)
-        data.securityInfo = ds->response().securityInfo();
 
     data.referrerPolicy = static_cast<WebReferrerPolicy>(selectedFrame->document()->getReferrerPolicy());
 

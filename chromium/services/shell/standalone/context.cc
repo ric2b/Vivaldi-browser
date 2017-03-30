@@ -39,9 +39,8 @@
 #include "services/shell/runner/host/out_of_process_native_runner.h"
 #include "services/shell/standalone/tracer.h"
 #include "services/shell/switches.h"
+#include "services/tracing/public/cpp/provider.h"
 #include "services/tracing/public/cpp/switches.h"
-#include "services/tracing/public/cpp/trace_provider_impl.h"
-#include "services/tracing/public/cpp/tracing_impl.h"
 #include "services/tracing/public/interfaces/tracing.mojom.h"
 
 #if defined(OS_MACOSX)
@@ -70,11 +69,12 @@ class TracingInterfaceProvider : public mojom::InterfaceProvider {
   ~TracingInterfaceProvider() override {}
 
   // mojom::InterfaceProvider:
-  void GetInterface(const mojo::String& interface_name,
+  void GetInterface(const std::string& interface_name,
                     mojo::ScopedMessagePipeHandle client_handle) override {
-    if (tracer_ && interface_name == tracing::TraceProvider::Name_) {
+    if (tracer_ && interface_name == tracing::mojom::Provider::Name_) {
       tracer_->ConnectToProvider(
-          mojo::MakeRequest<tracing::TraceProvider>(std::move(client_handle)));
+          mojo::MakeRequest<tracing::mojom::Provider>(
+              std::move(client_handle)));
     }
   }
 
@@ -136,9 +136,10 @@ void Context::Init(std::unique_ptr<InitParams> init_params) {
   if (!init_params || init_params->init_edk)
     EnsureEmbedderIsInitialized();
 
-  shell_runner_ = base::ThreadTaskRunnerHandle::Get();
+  service_manager_runner_ = base::ThreadTaskRunnerHandle::Get();
   blocking_pool_ =
-      new base::SequencedWorkerPool(kMaxBlockingPoolThreads, "blocking_pool");
+      new base::SequencedWorkerPool(kMaxBlockingPoolThreads, "blocking_pool",
+                                    base::TaskPriority::USER_VISIBLE);
 
   init_edk_ = !init_params || init_params->init_edk;
   if (init_edk_) {
@@ -168,34 +169,34 @@ void Context::Init(std::unique_ptr<InitParams> init_params) {
     store = std::move(init_params->catalog_store);
   catalog_.reset(
       new catalog::Catalog(blocking_pool_.get(), std::move(store), nullptr));
-  shell_.reset(new Shell(std::move(runner_factory),
-                         catalog_->TakeShellClient()));
+  service_manager_.reset(new ServiceManager(std::move(runner_factory),
+                                            catalog_->TakeService()));
 
   mojom::InterfaceProviderPtr tracing_remote_interfaces;
   mojom::InterfaceProviderPtr tracing_local_interfaces;
   new TracingInterfaceProvider(&tracer_, GetProxy(&tracing_local_interfaces));
 
   std::unique_ptr<ConnectParams> params(new ConnectParams);
-  params->set_source(CreateShellIdentity());
+  params->set_source(CreateServiceManagerIdentity());
   params->set_target(Identity("mojo:tracing", mojom::kRootUserID));
   params->set_remote_interfaces(mojo::GetProxy(&tracing_remote_interfaces));
-  params->set_local_interfaces(std::move(tracing_local_interfaces));
-  shell_->Connect(std::move(params));
+  service_manager_->Connect(std::move(params));
 
   if (command_line.HasSwitch(tracing::kTraceStartup)) {
-    tracing::TraceCollectorPtr coordinator;
+    tracing::mojom::CollectorPtr coordinator;
     auto coordinator_request = GetProxy(&coordinator);
     tracing_remote_interfaces->GetInterface(
-        tracing::TraceCollector::Name_, coordinator_request.PassMessagePipe());
+        tracing::mojom::Collector::Name_,
+        coordinator_request.PassMessagePipe());
     tracer_.StartCollectingFromTracingService(std::move(coordinator));
   }
 
   // Record the shell startup metrics used for performance testing.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           tracing::kEnableStatsCollectionBindings)) {
-    tracing::StartupPerformanceDataCollectorPtr collector;
+    tracing::mojom::StartupPerformanceDataCollectorPtr collector;
     tracing_remote_interfaces->GetInterface(
-        tracing::StartupPerformanceDataCollector::Name_,
+        tracing::mojom::StartupPerformanceDataCollector::Name_,
         mojo::GetProxy(&collector).PassMessagePipe());
 #if defined(OS_MACOSX) || defined(OS_WIN) || defined(OS_LINUX)
     // CurrentProcessInfo::CreationTime is only defined on some platforms.
@@ -210,9 +211,9 @@ void Context::Shutdown() {
   // Actions triggered by Shell's destructor may require a current message loop,
   // so we should destruct it explicitly now as ~Context() occurs post message
   // loop shutdown.
-  shell_.reset();
+  service_manager_.reset();
 
-  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(), shell_runner_);
+  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(), service_manager_runner_);
 
   // If we didn't initialize the edk we should not shut it down.
   if (!init_edk_)
@@ -227,7 +228,7 @@ void Context::Shutdown() {
 }
 
 void Context::OnShutdownComplete() {
-  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(), shell_runner_);
+  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(), service_manager_runner_);
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
@@ -248,17 +249,16 @@ void Context::RunCommandLineApplication() {
 }
 
 void Context::Run(const std::string& name) {
-  shell_->SetInstanceQuitCallback(base::Bind(&OnInstanceQuit, name));
+  service_manager_->SetInstanceQuitCallback(base::Bind(&OnInstanceQuit, name));
 
   mojom::InterfaceProviderPtr remote_interfaces;
   mojom::InterfaceProviderPtr local_interfaces;
 
   std::unique_ptr<ConnectParams> params(new ConnectParams);
-  params->set_source(CreateShellIdentity());
+  params->set_source(CreateServiceManagerIdentity());
   params->set_target(Identity(name, mojom::kRootUserID));
   params->set_remote_interfaces(mojo::GetProxy(&remote_interfaces));
-  params->set_local_interfaces(std::move(local_interfaces));
-  shell_->Connect(std::move(params));
+  service_manager_->Connect(std::move(params));
 }
 
 }  // namespace shell

@@ -129,10 +129,15 @@ WebInspector.AuditsPanel.prototype = {
      */
     showResults: function(categoryResults)
     {
-        if (!categoryResults._resultView)
-            categoryResults._resultView = new WebInspector.AuditResultView(categoryResults);
-
-        this.visibleView = categoryResults._resultView;
+        if (!categoryResults._resultLocation) {
+            categoryResults.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+            var resultView = WebInspector.viewManager.createStackLocation();
+            resultView.widget().element.classList.add("audit-result-view");
+            for (var i = 0; i < categoryResults.length; ++i)
+                resultView.showView(new WebInspector.AuditCategoryResultPane(categoryResults[i]));
+            categoryResults._resultLocation = resultView;
+        }
+        this.visibleView = categoryResults._resultLocation.widget();
     },
 
     showLauncherView: function()
@@ -546,28 +551,7 @@ WebInspector.AuditsPanel.show = function()
  */
 WebInspector.AuditsPanel.instance = function()
 {
-    if (!WebInspector.AuditsPanel._instanceObject)
-        WebInspector.AuditsPanel._instanceObject = new WebInspector.AuditsPanel();
-    return WebInspector.AuditsPanel._instanceObject;
-}
-
-/**
- * @constructor
- * @implements {WebInspector.PanelFactory}
- */
-WebInspector.AuditsPanelFactory = function()
-{
-}
-
-WebInspector.AuditsPanelFactory.prototype = {
-    /**
-     * @override
-     * @return {!WebInspector.Panel}
-     */
-    createPanel: function()
-    {
-        return WebInspector.AuditsPanel.instance();
-    }
+    return /** @type {!WebInspector.AuditsPanel} */ (self.runtime.sharedInstance(WebInspector.AuditsPanel));
 }
 
 // Contributed audit rules should go into this namespace.

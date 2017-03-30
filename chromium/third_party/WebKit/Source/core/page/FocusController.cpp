@@ -772,6 +772,11 @@ void FocusController::focusDocumentView(Frame* frame, bool notifyEmbedder)
             dispatchFocusEvent(*document, *focusedElement);
     }
 
+    // dispatchBlurEvent/dispatchFocusEvent could have changed the focused frame, or
+    // detached the frame.
+    if (newFocusedFrame && !newFocusedFrame->view())
+        return;
+
     setFocusedFrame(frame, notifyEmbedder);
 }
 
@@ -1020,8 +1025,8 @@ Element* FocusController::findFocusableElementInShadowHost(const Element& shadow
 
 static bool relinquishesEditingFocus(const Element& element)
 {
-    DCHECK(element.hasEditableStyle());
-    return element.document().frame() && element.rootEditableElement();
+    DCHECK(hasEditableStyle(element));
+    return element.document().frame() && rootEditableElement(element);
 }
 
 static void clearSelectionIfNeeded(LocalFrame* oldFocusedFrame, LocalFrame* newFocusedFrame, Element* newFocusedElement)
@@ -1068,7 +1073,7 @@ bool FocusController::setFocusedElement(Element* element, Frame* newFocusedFrame
         return true;
 
     // FIXME: Might want to disable this check for caretBrowsing
-    if (oldFocusedElement && oldFocusedElement->isRootEditableElement() && !relinquishesEditingFocus(*oldFocusedElement))
+    if (oldFocusedElement && isRootEditableElement(*oldFocusedElement) && !relinquishesEditingFocus(*oldFocusedElement))
         return false;
 
     m_page->chromeClient().willSetInputMethodState();
@@ -1154,7 +1159,7 @@ static void updateFocusCandidateIfNeeded(WebFocusType type, const FocusCandidate
         LayoutUnit y = intersectionRect.y() + intersectionRect.height() / 2;
         if (!candidate.visibleNode->document().page()->mainFrame()->isLocalFrame())
             return;
-        HitTestResult result = candidate.visibleNode->document().page()->deprecatedLocalMainFrame()->eventHandler().hitTestResultAtPoint(IntPoint(x, y), HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::IgnoreClipping);
+        HitTestResult result = candidate.visibleNode->document().page()->deprecatedLocalMainFrame()->eventHandler().hitTestResultAtPoint(IntPoint(x.toInt(), y.toInt()), HitTestRequest::ReadOnly | HitTestRequest::Active | HitTestRequest::IgnoreClipping);
         if (candidate.visibleNode->contains(result.innerNode())) {
             closest = candidate;
             return;

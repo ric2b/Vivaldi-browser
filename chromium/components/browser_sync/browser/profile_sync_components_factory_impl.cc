@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
@@ -24,28 +25,28 @@
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/sync/browser/password_data_type_controller.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/core/attachments/attachment_downloader.h"
+#include "components/sync/core/attachments/attachment_service.h"
+#include "components/sync/core/attachments/attachment_service_impl.h"
+#include "components/sync/core/attachments/attachment_uploader_impl.h"
+#include "components/sync/device_info/device_info_data_type_controller.h"
+#include "components/sync/device_info/local_device_info_provider_impl.h"
+#include "components/sync/driver/data_type_manager_impl.h"
+#include "components/sync/driver/glue/chrome_report_unrecoverable_error.h"
+#include "components/sync/driver/glue/sync_backend_host.h"
+#include "components/sync/driver/glue/sync_backend_host_impl.h"
+#include "components/sync/driver/proxy_data_type_controller.h"
+#include "components/sync/driver/sync_client.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/driver/ui_data_type_controller.h"
+#include "components/sync/driver/ui_model_type_controller.h"
 #include "components/sync_bookmarks/bookmark_change_processor.h"
 #include "components/sync_bookmarks/bookmark_data_type_controller.h"
 #include "components/sync_bookmarks/bookmark_model_associator.h"
-#include "components/sync_driver/data_type_manager_impl.h"
-#include "components/sync_driver/device_info_data_type_controller.h"
-#include "components/sync_driver/glue/chrome_report_unrecoverable_error.h"
-#include "components/sync_driver/glue/sync_backend_host.h"
-#include "components/sync_driver/glue/sync_backend_host_impl.h"
-#include "components/sync_driver/local_device_info_provider_impl.h"
-#include "components/sync_driver/proxy_data_type_controller.h"
-#include "components/sync_driver/sync_client.h"
-#include "components/sync_driver/sync_driver_switches.h"
-#include "components/sync_driver/ui_data_type_controller.h"
-#include "components/sync_driver/ui_model_type_controller.h"
 #include "components/sync_sessions/session_data_type_controller.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 #include "google_apis/gaia/oauth2_token_service_request.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "sync/internal_api/public/attachments/attachment_downloader.h"
-#include "sync/internal_api/public/attachments/attachment_service.h"
-#include "sync/internal_api/public/attachments/attachment_service_impl.h"
-#include "sync/internal_api/public/attachments/attachment_uploader_impl.h"
 
 using bookmarks::BookmarkModel;
 using browser_sync::AutofillDataTypeController;
@@ -85,6 +86,13 @@ syncer::ModelTypeSet GetEnabledTypesFromCommandLine(
     const base::CommandLine& command_line) {
   return syncer::ModelTypeSet();
 }
+
+// Used to gate syncing preferences, see crbug.com/374865 for more information.
+// Has always been on for desktop/ChromeOS, so default to on. This feature is
+// mainly to give us a kill switch should something go wrong with starting to
+// sync prefs on mobile.
+const base::Feature kSyncPreferencesFeature{"SyncPreferences",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 }  // namespace
 
@@ -244,6 +252,12 @@ void ProfileSyncComponentsFactoryImpl::RegisterCommonDataTypes(
         sync_client_->GetPasswordStateChangedCallback(), password_store_));
   }
 
+  if (!disabled_types.Has(syncer::PREFERENCES) &&
+      base::FeatureList::IsEnabled(kSyncPreferencesFeature)) {
+    sync_service->RegisterDataTypeController(new UIDataTypeController(
+        ui_thread_, error_callback, syncer::PREFERENCES, sync_client_));
+  }
+
   if (!disabled_types.Has(syncer::PRIORITY_PREFERENCES)) {
     sync_service->RegisterDataTypeController(
         new UIDataTypeController(ui_thread_, error_callback,
@@ -280,9 +294,8 @@ ProfileSyncComponentsFactoryImpl::CreateSyncBackendHost(
 
 std::unique_ptr<sync_driver::LocalDeviceInfoProvider>
 ProfileSyncComponentsFactoryImpl::CreateLocalDeviceInfoProvider() {
-  return base::WrapUnique(
-      new browser_sync::LocalDeviceInfoProviderImpl(channel_, version_,
-                                                    is_tablet_));
+  return base::MakeUnique<browser_sync::LocalDeviceInfoProviderImpl>(
+      channel_, version_, is_tablet_);
 }
 
 class TokenServiceProvider

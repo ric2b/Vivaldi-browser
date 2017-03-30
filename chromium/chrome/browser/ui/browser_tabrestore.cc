@@ -20,8 +20,6 @@
 #include "content/public/browser/session_storage_namespace.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
-#include "components/guest_view/browser/guest_view_base.h"
-#include "components/guest_view/browser/guest_view_manager.h"
 
 using content::WebContents;
 using content::NavigationController;
@@ -136,7 +134,7 @@ content::WebContents* AddRestoredTab(
     // yet and the bounds may not be available on all platforms.
     if (size.IsEmpty())
       size = browser->window()->GetRestoredBounds().size();
-    ResizeWebContents(web_contents, size);
+    ResizeWebContents(web_contents, gfx::Rect(size));
     web_contents->WasHidden();
   }
   SessionService* session_service =

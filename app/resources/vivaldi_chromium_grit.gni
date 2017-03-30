@@ -1,0 +1,209 @@
+import("//vivaldi/gn/config/features.gni")
+import("//vivaldi/gn/deepcopy.gni")
+import("//vivaldi/app/resources/untranslated.gni")
+
+_default_main_resource_dir = "//chrome/app"
+_default_combined_target_dir_base = "$root_gen_dir/vivaldi_resources"
+gritinfo_cmd = "//tools/grit/grit_info.py"
+_grit_cmd = "//tools/grit/grit.py"
+_default_grit_resource_ids = "//tools/gritsettings/resource_ids"
+_list_lang_cmd = "//vivaldi/app/list_lang_xmb_files.py"
+_merge_resources_cmd = "//vivaldi/app/resources/merge_resources.py"
+_mergeid_tool_path = "//vivaldi/app/resources/merge_idfile.py"
+_update_json_path = "//vivaldi/app/resources/updates.json"
+_update_tool_path = "//vivaldi/app/resources/update_file.py"
+
+template("chromium_merge_grit_action") {
+  assert(defined(invoker.merge_main_file))
+  assert(defined(invoker.vivaldi_resource_path))
+  forward_variables_from(invoker,
+                         [
+                           "main_resource_dir",
+                           "combined_target_dir",
+                           "merge_main_file",
+                           "translation_dir",
+                           "target_filename",
+                           "have_strings",
+                           "grit_resource_ids",
+                           "grit_flags",
+                           "vivaldi_resource_path",
+                           "extra_grit_defines",
+                           "grit_defines",
+                           "grit_additional_defines",
+                         ])
+
+  if (!defined(main_resource_dir)) {
+    main_resource_dir = _default_main_resource_dir
+  }
+  if (!defined(combined_target_dir)) {
+    combined_target_dir = "$_default_combined_target_dir_base/$target_name"
+  }
+  if (!defined(translation_dir)) {
+    translation_dir = "resources"
+  }
+  if (!defined(grit_resource_ids)) {
+    grit_resource_ids = "$combined_target_dir/resource_ids"
+  }
+  if (!defined(target_filename)) {
+    target_filename = get_path_info(merge_main_file, "file")
+  }
+  if (!defined(have_strings)) {
+    have_strings = true
+  }
+  if (!defined(extra_grit_defines)) {
+    extra_grit_defines = []
+  }
+  if (!defined(grit_flags)) {
+    grit_flags = []
+  }
+  if (!defined(grit_defines)) {
+    grit_defines = []
+  }
+  if (!defined(grit_additional_defines)) {
+    grit_additional_defines = []
+  }
+  main_resource_path = "$main_resource_dir/$merge_main_file"
+
+  combined_target_file = "$combined_target_dir/$target_filename"
+  translation_stamp = "${combined_target_file}.translation.stamp"
+
+  command_parameters =
+      grit_flags + grit_defines + extra_grit_defines + grit_additional_defines +
+      [
+        "--updatejson",
+        rebase_path(_update_json_path, root_build_dir),
+
+        "--root",
+        rebase_path("//vivaldi/", root_build_dir),
+        "--translation",
+        translation_dir,
+        "--translation-stamp",
+        rebase_path(translation_stamp, root_build_dir),
+        "--output-file-name",
+        target_filename,
+        rebase_path(main_resource_path, root_build_dir),
+        rebase_path(vivaldi_resource_path, root_build_dir),
+        rebase_path(combined_target_dir, root_build_dir),
+      ]
+
+  # Hack to generate the merged GRD, JSON target list, and resource_ids files
+  # before they are used by the other variables and actions.
+  exec_script(_mergeid_tool_path,
+              [
+                rebase_path(_default_grit_resource_ids, root_build_dir),
+                rebase_path(grit_resource_ids, root_build_dir),
+                rebase_path(main_resource_path, root_build_dir),
+                rebase_path(combined_target_file, root_build_dir),
+                rebase_path("//vivaldi",
+                            get_path_info(grit_resource_ids, "dir")),
+              ])
+  exec_script(_merge_resources_cmd, [ "--setup" ] + command_parameters)
+
+  special_update_sources = []
+  foreach(file,
+          exec_script(_merge_resources_cmd,
+                      [ "--list-update-sources" ] + command_parameters,
+                      "list lines")) {
+    special_update_sources += [ "//vivaldi/$root_build_dir/$file" ]
+  }
+  grit_grd_file = combined_target_file
+  deps_list = []
+
+  resource_id_name = "resource_id_$target_name"
+  deps_list += [ ":" + resource_id_name ]
+  action(resource_id_name) {
+    script = _mergeid_tool_path
+    inputs = [
+      _default_grit_resource_ids,
+    ]
+    outputs = [
+      grit_resource_ids,
+    ]
+    args = [
+      rebase_path(_default_grit_resource_ids, root_build_dir),
+      rebase_path(grit_resource_ids, root_build_dir),
+      rebase_path(main_resource_path, root_build_dir),
+      rebase_path(combined_target_file, root_build_dir),
+      rebase_path("//vivaldi", get_path_info(grit_resource_ids, "dir")),
+    ]
+  }
+
+  merger_name = "resource_merge_$target_name"
+  deps_list += [ ":" + merger_name ]
+
+  #print ("$target_name  $merger_name : $grit_grd_file")
+  action(merger_name) {
+    script = _merge_resources_cmd
+    inputs = [
+      grit_resource_ids,
+    ]
+    deps = [
+      ":" + resource_id_name,
+    ]
+    inputs = []
+    foreach(file,
+            exec_script(_merge_resources_cmd,
+                        [ "--list-main-sources" ] + command_parameters,
+                        "list lines")) {
+      inputs += [ "//" + rebase_path(file, "//", root_build_dir) ]
+    }
+    foreach(file,
+            exec_script(_merge_resources_cmd,
+                        [ "--list-secondary-sources" ] + command_parameters,
+                        "list lines")) {
+      inputs +=
+          [ "//vivaldi/" + rebase_path(file, "//vivaldi/", root_build_dir) ]
+    }
+
+    outputs = [
+      grit_grd_file,
+    ]
+    if (have_strings) {
+      outputs += [ translation_stamp ]
+    }
+
+    args = [ "--build" ] + command_parameters
+  }
+
+  if (special_update_sources != []) {
+    special_update_targets =
+        exec_script(_merge_resources_cmd,
+                    [ "--list-update-targets" ] + command_parameters,
+                    "list lines")
+    name = "Special_update_$target_name"
+    deps_list += [ ":" + name ]
+    action(name) {
+      script = _update_tool_path
+      sources = [ _update_json_path ] + special_update_sources
+      outputs = []
+      foreach(file, special_update_targets) {
+        outputs += [ "$root_build_dir/$file" ]
+      }
+
+      args = [
+        rebase_path(_update_json_path, root_build_dir),
+        target_name,
+        rebase_path(combined_target_dir, root_build_dir),
+        rebase_path("//vivaldi", root_build_dir),
+      ]
+    }
+  }
+
+  if (have_strings && (generate_untranslated)) {
+    name = "Extract_strings_$target_name"
+    deps_list += [ ":" + name ]
+    vivaldi_extract_untranslated(name) {
+      source = combined_target_file
+      original_source = main_resource_path
+      stampfile = translation_stamp
+      deps = [
+        ":" + merger_name,
+        ":" + resource_id_name,
+      ]
+    }
+  }
+
+  group(target_name) {
+    public_deps = deps_list
+  }
+}

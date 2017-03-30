@@ -74,7 +74,6 @@ Untuk mendapatkan maklumat tentang privasi, sila lihat Dasar Privasi Google (htt
 <translation id="2676780859508944670">Mengusahakan...</translation>
 <translation id="2699970397166997657">Chromoting</translation>
 <translation id="2747641796667576127">Kemas kini perisian biasanya berlaku secara automatik, tetapi boleh gagal dalam beberapa kes yang jarang berlaku. Proses mengemas kini perisian akan mengambil masa tidak lebih daripada beberapa minit dan boleh dilakukan semasa disambungkan ke komputer anda dari jauh.</translation>
-<translation id="2813770873348017932">Sambungan kepada komputer jauh disekat buat sementara waktu kerana seseorang sedang cuba untuk menyambung kepadanya dengan PIN yang tidak sah. Sila cuba lagi kemudian.</translation>
 <translation id="2841013758207633010">Masa</translation>
 <translation id="2851674870054673688">Setelah mereka memasukkan kod, sesi perkongsian anda akan bermula.</translation>
 <translation id="2851754573186462851">Penstriman Apl Chromium</translation>
@@ -149,7 +148,6 @@ Chromoting</translation>
 <translation id="4573676252416618192">Hos Desktop
 Jauh Chrome</translation>
 <translation id="4619978527973181021">Terima dan Pasang</translation>
-<translation id="4647791084836149355">Tunjukkan paparan Cardboard</translation>
 <translation id="4703302905453407178">Komponen yang diperlukan telah berhenti berfungsi. Sila laporkan masalah ini kepada pembangun.</translation>
 <translation id="4703799847237267011">Sesi Chromoting anda telah tamat.</translation>
 <translation id="4736223761657662401">Sejarah Sambungan</translation>
@@ -210,7 +208,6 @@ Jauh Chrome</translation>
 <translation id="6284412385303060032">Hos yang berjalan pada skrin logik konsol telah ditutup untuk menyokong mod tirai dengan menukar kepada hos yang berjalan dalam sesi khusus pengguna.</translation>
 <translation id="629730747756840877">Akaun</translation>
 <translation id="6304318647555713317">Klien</translation>
-<translation id="6324708100353784493">Anda telah mendayakan mod penyepaduan Google Cardboard. Untuk menggunakan mod ini, masukkan peranti anda dalam pemapar yang serasi dengan Google Cardboard.</translation>
 <translation id="6381670701864002291">Sesuatu yang lain.</translation>
 <translation id="6398765197997659313">Keluar daripada skrin penuh</translation>
 <translation id="6408143143164565232">• Dengar audio daripada komputer Windows atau Linux.
@@ -236,6 +233,7 @@ Jauh Chrome</translation>
 <translation id="6930242544192836755">Tempoh</translation>
 <translation id="6939719207673461467">Paparkan/Sembunyikan papan kekunci.</translation>
 <translation id="6944854424004126054">Pulihkan tetingkap</translation>
+<translation id="6963936880795878952">Sambungan kepada komputer jauh disekat buat sementara waktu kerana seseorang sedang cuba untuk menyambung kepadanya dengan PIN yang tidak sah. Sila cuba sebentar lagi.</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Adakah anda pasti mahu melumpuhkan sambungan jauh ke <ph name="HOSTNAME" />? Jika anda berubah fikiran, anda perlu pergi ke komputer tersebut untuk mendayakan semula sambungan.</translation>
 <translation id="6998989275928107238">Kepada</translation>

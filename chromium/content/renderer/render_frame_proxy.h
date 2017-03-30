@@ -36,6 +36,7 @@ class RenderFrameImpl;
 class RenderViewImpl;
 class RenderWidget;
 struct ContentSecurityPolicyHeader;
+struct FrameOwnerProperties;
 struct FrameReplicationState;
 
 // When a page's frames are rendered by multiple processes, each renderer has a
@@ -130,7 +131,6 @@ class CONTENT_EXPORT RenderFrameProxy
                           blink::WebRemoteFrame* targetFrame,
                           blink::WebSecurityOrigin target,
                           blink::WebDOMMessageEvent event) override;
-  void initializeChildFrame(float scale_factor) override;
   void navigate(const blink::WebURLRequest& request,
                 bool should_replace_current_entry) override;
   void forwardInputEvent(const blink::WebInputEvent* event) override;
@@ -170,8 +170,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnAddContentSecurityPolicy(const ContentSecurityPolicyHeader& header);
   void OnResetContentSecurityPolicy();
   void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
-  void OnSetFrameOwnerProperties(
-      const blink::WebFrameOwnerProperties& properties);
+  void OnSetFrameOwnerProperties(const FrameOwnerProperties& properties);
   void OnDidUpdateOrigin(const url::Origin& origin,
                          bool is_potentially_trustworthy_unique_origin);
   void OnSetPageFocus(bool is_focused);

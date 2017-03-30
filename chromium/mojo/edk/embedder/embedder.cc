@@ -76,6 +76,12 @@ void SetParentPipeHandleFromCommandLine() {
   SetParentPipeHandle(std::move(platform_channel));
 }
 
+ScopedMessagePipeHandle ConnectToPeerProcess(ScopedPlatformHandle pipe) {
+  CHECK(internal::g_process_delegate);
+  DCHECK(pipe.is_valid());
+  return internal::g_core->ConnectToPeerProcess(std::move(pipe));
+}
+
 void Init() {
   MojoSystemThunks thunks = MakeSystemThunks();
   size_t expected_size = MojoEmbedderSetSystemThunks(&thunks);
@@ -84,11 +90,8 @@ void Init() {
   internal::g_core = new Core();
 }
 
-MojoResult AsyncWait(MojoHandle handle,
-                     MojoHandleSignals signals,
-                     const base::Callback<void(MojoResult)>& callback) {
-  CHECK(internal::g_core);
-  return internal::g_core->AsyncWait(handle, signals, callback);
+void SetDefaultProcessErrorCallback(const ProcessErrorCallback& callback) {
+  internal::g_core->SetDefaultProcessErrorCallback(callback);
 }
 
 MojoResult CreatePlatformHandleWrapper(

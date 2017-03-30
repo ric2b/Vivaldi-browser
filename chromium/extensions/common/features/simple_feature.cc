@@ -20,6 +20,7 @@
 #include "base/strings/stringprintf.h"
 #include "components/crx_file/id_util.h"
 #include "extensions/common/extension_api.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/feature_util.h"
 #include "extensions/common/switches.h"
@@ -51,88 +52,6 @@ Feature::Availability IsAvailableToContextForBind(const Extension* extension,
                                                   Feature::Platform platform,
                                                   const Feature* feature) {
   return feature->IsAvailableToContext(extension, context, url, platform);
-}
-
-// TODO(aa): Can we replace all this manual parsing with JSON schema stuff?
-
-void ParseVector(const base::Value* value,
-                 std::vector<std::string>* vector) {
-  const base::ListValue* list_value = NULL;
-  if (!value->GetAsList(&list_value))
-    return;
-
-  vector->clear();
-  size_t list_size = list_value->GetSize();
-  vector->reserve(list_size);
-  for (size_t i = 0; i < list_size; ++i) {
-    std::string str_val;
-    CHECK(list_value->GetString(i, &str_val));
-    vector->push_back(str_val);
-  }
-  std::sort(vector->begin(), vector->end());
-}
-
-template<typename T>
-void ParseEnum(const std::string& string_value,
-               T* enum_value,
-               const std::map<std::string, T>& mapping) {
-  const auto& iter = mapping.find(string_value);
-  if (iter == mapping.end())
-    CRASH_WITH_MINIDUMP("Enum value not found: " + string_value);
-  *enum_value = iter->second;
-}
-
-template<typename T>
-void ParseEnum(const base::DictionaryValue* value,
-               const std::string& property,
-               T* enum_value,
-               const std::map<std::string, T>& mapping) {
-  std::string string_value;
-  if (!value->GetString(property, &string_value))
-    return;
-
-  ParseEnum(string_value, enum_value, mapping);
-}
-
-template<typename T>
-void ParseEnumVector(const base::Value* value,
-                     std::vector<T>* enum_vector,
-                     const std::map<std::string, T>& mapping) {
-  enum_vector->clear();
-  std::string property_string;
-  if (value->GetAsString(&property_string)) {
-    if (property_string == "all") {
-      enum_vector->reserve(mapping.size());
-      for (const auto& it : mapping)
-        enum_vector->push_back(it.second);
-    }
-    std::sort(enum_vector->begin(), enum_vector->end());
-    return;
-  }
-
-  std::vector<std::string> string_vector;
-  ParseVector(value, &string_vector);
-  enum_vector->reserve(string_vector.size());
-  for (const auto& str : string_vector) {
-    T enum_value = static_cast<T>(0);
-    ParseEnum(str, &enum_value, mapping);
-    enum_vector->push_back(enum_value);
-  }
-  std::sort(enum_vector->begin(), enum_vector->end());
-}
-
-void ParseURLPatterns(const base::DictionaryValue* value,
-                      const std::string& key,
-                      URLPatternSet* set) {
-  const base::ListValue* matches = NULL;
-  if (value->GetList(key, &matches)) {
-    set->ClearPatterns();
-    for (size_t i = 0; i < matches->GetSize(); ++i) {
-      std::string pattern;
-      CHECK(matches->GetString(i, &pattern));
-      set->AddPattern(URLPattern(URLPattern::SCHEME_ALL, pattern));
-    }
-  }
 }
 
 // Gets a human-readable name for the given extension type, suitable for giving
@@ -186,6 +105,23 @@ std::string GetDisplayName(Feature::Context context) {
       return "webui";
     case Feature::SERVICE_WORKER_CONTEXT:
       return "service worker";
+  }
+  NOTREACHED();
+  return "";
+}
+
+std::string GetDisplayName(version_info::Channel channel) {
+  switch (channel) {
+    case version_info::Channel::UNKNOWN:
+      return "trunk";
+    case version_info::Channel::CANARY:
+      return "canary";
+    case version_info::Channel::DEV:
+      return "dev";
+    case version_info::Channel::BETA:
+      return "beta";
+    case version_info::Channel::STABLE:
+      return "stable";
   }
   NOTREACHED();
   return "";
@@ -249,141 +185,14 @@ SimpleFeature::ScopedWhitelistForTest::~ScopedWhitelistForTest() {
   g_whitelisted_extension_id = previous_id_;
 }
 
-struct SimpleFeature::Mappings {
-  Mappings() {
-    extension_types["extension"] = Manifest::TYPE_EXTENSION;
-    extension_types["theme"] = Manifest::TYPE_THEME;
-    extension_types["legacy_packaged_app"] = Manifest::TYPE_LEGACY_PACKAGED_APP;
-    extension_types["hosted_app"] = Manifest::TYPE_HOSTED_APP;
-    extension_types["platform_app"] = Manifest::TYPE_PLATFORM_APP;
-    extension_types["shared_module"] = Manifest::TYPE_SHARED_MODULE;
-
-    contexts["blessed_extension"] = Feature::BLESSED_EXTENSION_CONTEXT;
-    contexts["unblessed_extension"] = Feature::UNBLESSED_EXTENSION_CONTEXT;
-    contexts["content_script"] = Feature::CONTENT_SCRIPT_CONTEXT;
-    contexts["web_page"] = Feature::WEB_PAGE_CONTEXT;
-    contexts["blessed_web_page"] = Feature::BLESSED_WEB_PAGE_CONTEXT;
-    contexts["webui"] = Feature::WEBUI_CONTEXT;
-    contexts["extension_service_worker"] = Feature::SERVICE_WORKER_CONTEXT;
-
-    locations["component"] = SimpleFeature::COMPONENT_LOCATION;
-    locations["external_component"] =
-        SimpleFeature::EXTERNAL_COMPONENT_LOCATION;
-    locations["policy"] = SimpleFeature::POLICY_LOCATION;
-
-    platforms["chromeos"] = Feature::CHROMEOS_PLATFORM;
-    platforms["linux"] = Feature::LINUX_PLATFORM;
-    platforms["mac"] = Feature::MACOSX_PLATFORM;
-    platforms["win"] = Feature::WIN_PLATFORM;
-  }
-
-  std::map<std::string, Manifest::Type> extension_types;
-  std::map<std::string, Feature::Context> contexts;
-  std::map<std::string, SimpleFeature::Location> locations;
-  std::map<std::string, Feature::Platform> platforms;
-};
-
 SimpleFeature::SimpleFeature()
     : location_(UNSPECIFIED_LOCATION),
       min_manifest_version_(0),
       max_manifest_version_(0),
       component_extensions_auto_granted_(true),
-      is_vivaldi_feature_(false) {
-}
+      is_internal_(false) {}
 
 SimpleFeature::~SimpleFeature() {}
-
-bool SimpleFeature::HasDependencies() const {
-  return !dependencies_.empty();
-}
-
-void SimpleFeature::AddFilter(std::unique_ptr<SimpleFeatureFilter> filter) {
-  filters_.push_back(std::move(filter));
-}
-
-std::string SimpleFeature::Parse(const base::DictionaryValue* dictionary) {
-  static base::LazyInstance<SimpleFeature::Mappings> mappings =
-      LAZY_INSTANCE_INITIALIZER;
-
-  no_parent_ = false;
-  for (base::DictionaryValue::Iterator it(*dictionary);
-      !it.IsAtEnd();
-      it.Advance()) {
-    std::string key = it.key();
-    const base::Value* value = &it.value();
-    if (key == "matches") {
-      ParseURLPatterns(dictionary, "matches", &matches_);
-    } else if (key == "blacklist") {
-      ParseVector(value, &blacklist_);
-    } else if (key == "whitelist") {
-
-      bool parse_whitelist = true;
-      if(!vivaldi::IsVivaldiRunning()){
-        const base::ListValue* list_value = nullptr;
-        if (value->GetAsList(&list_value)) {
-          size_t list_size = list_value->GetSize();
-          if (list_size == 1) {
-            std::string str_val;
-            CHECK(list_value->GetString(0, &str_val));
-            if (vivaldi::IsVivaldiApp(str_val)) {
-              parse_whitelist = false;
-            }
-          }
-        }
-      }
-
-      if(parse_whitelist){
-      ParseVector(value, &whitelist_);
-      }
-
-    } else if (key == "dependencies") {
-      ParseVector(value, &dependencies_);
-    } else if (key == "extension_types") {
-      ParseEnumVector<Manifest::Type>(value, &extension_types_,
-                                      mappings.Get().extension_types);
-    } else if (key == "contexts") {
-      ParseEnumVector<Context>(value, &contexts_,
-                               mappings.Get().contexts);
-    } else if (key == "location") {
-      ParseEnum<Location>(dictionary, "location", &location_,
-                          mappings.Get().locations);
-    } else if (key == "platforms") {
-      ParseEnumVector<Platform>(value, &platforms_,
-                                mappings.Get().platforms);
-    } else if (key == "min_manifest_version") {
-      dictionary->GetInteger("min_manifest_version", &min_manifest_version_);
-    } else if (key == "max_manifest_version") {
-      dictionary->GetInteger("max_manifest_version", &max_manifest_version_);
-    } else if (key == "noparent") {
-      dictionary->GetBoolean("noparent", &no_parent_);
-    } else if (key == "component_extensions_auto_granted") {
-      dictionary->GetBoolean("component_extensions_auto_granted",
-                             &component_extensions_auto_granted_);
-    } else if (key == "command_line_switch") {
-      dictionary->GetString("command_line_switch", &command_line_switch_);
-    }
-  }
-
-  dictionary->GetBoolean("vivaldi", &is_vivaldi_feature_);
-
-  // NOTE: ideally we'd sanity check that "matches" can be specified if and
-  // only if there's a "web_page" or "webui" context, but without
-  // (Simple)Features being aware of their own heirarchy this is impossible.
-  //
-  // For example, we might have feature "foo" available to "web_page" context
-  // and "matches" google.com/*. Then a sub-feature "foo.bar" might override
-  // "matches" to be chromium.org/*. That sub-feature doesn't need to specify
-  // "web_page" context because it's inherited, but we don't know that here.
-
-  std::string result;
-  for (const auto& filter : filters_) {
-    result = filter->Parse(dictionary);
-    if (!result.empty())
-      break;
-  }
-
-  return result;
-}
 
 Feature::Availability SimpleFeature::IsAvailableToManifest(
     const std::string& extension_id,
@@ -398,7 +207,7 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
   Manifest::Type type_to_check = (type == Manifest::TYPE_USER_SCRIPT) ?
       Manifest::TYPE_EXTENSION : type;
   if (!extension_types_.empty() &&
-      !ContainsValue(extension_types_, type_to_check)) {
+      !base::ContainsValue(extension_types_, type_to_check)) {
     return CreateAvailability(INVALID_TYPE, type);
   }
 
@@ -420,7 +229,7 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
   if (!MatchesManifestLocation(location))
     return CreateAvailability(INVALID_LOCATION, type);
 
-  if (!platforms_.empty() && !ContainsValue(platforms_, platform))
+  if (!platforms_.empty() && !base::ContainsValue(platforms_, platform))
     return CreateAvailability(INVALID_PLATFORM, type);
 
   if (min_manifest_version_ != 0 && manifest_version < min_manifest_version_)
@@ -434,12 +243,8 @@ Feature::Availability SimpleFeature::IsAvailableToManifest(
     return CreateAvailability(MISSING_COMMAND_LINE_SWITCH, type);
   }
 
-  for (const auto& filter : filters_) {
-    Availability availability = filter->IsAvailableToManifest(
-        extension_id, type, location, manifest_version, platform);
-    if (!availability.is_available())
-      return availability;
-  }
+  if (channel_ && *channel_ < GetCurrentChannel())
+    return CreateAvailability(UNSUPPORTED_CHANNEL, *channel_);
 
   return CheckDependencies(base::Bind(&IsAvailableToManifestForBind,
                                       extension_id,
@@ -468,7 +273,7 @@ Feature::Availability SimpleFeature::IsAvailableToContext(
   // extension API calls, since there's no guarantee that the extension is
   // "active" in current renderer process when the API permission check is
   // done.
-  if (!contexts_.empty() && !ContainsValue(contexts_, context))
+  if (!contexts_.empty() && !base::ContainsValue(contexts_, context))
     return CreateAvailability(INVALID_CONTEXT, context);
 
   // TODO(kalman): Consider checking |matches_| regardless of context type.
@@ -477,13 +282,6 @@ Feature::Availability SimpleFeature::IsAvailableToContext(
   if ((context == WEB_PAGE_CONTEXT || context == WEBUI_CONTEXT) &&
       !matches_.MatchesURL(url)) {
     return CreateAvailability(INVALID_URL, url);
-  }
-
-  for (const auto& filter : filters_) {
-    Availability availability =
-        filter->IsAvailableToContext(extension, context, url, platform);
-    if (!availability.is_available())
-      return availability;
   }
 
   // TODO(kalman): Assert that if the context was a webpage or WebUI context
@@ -496,7 +294,8 @@ std::string SimpleFeature::GetAvailabilityMessage(
     AvailabilityResult result,
     Manifest::Type type,
     const GURL& url,
-    Context context) const {
+    Context context,
+    version_info::Channel channel) const {
   switch (result) {
     case IS_AVAILABLE:
       return std::string();
@@ -546,8 +345,9 @@ std::string SimpleFeature::GetAvailabilityMessage(
           name().c_str());
     case UNSUPPORTED_CHANNEL:
       return base::StringPrintf(
-          "'%s' is unsupported in this version of the platform.",
-          name().c_str());
+          "'%s' requires %s channel or newer, but this is the %s channel.",
+          name().c_str(), GetDisplayName(channel).c_str(),
+          GetDisplayName(GetCurrentChannel()).c_str());
     case MISSING_COMMAND_LINE_SWITCH:
       return base::StringPrintf(
           "'%s' requires the '%s' command line switch to be enabled.",
@@ -562,13 +362,15 @@ Feature::Availability SimpleFeature::CreateAvailability(
     AvailabilityResult result) const {
   return Availability(
       result, GetAvailabilityMessage(result, Manifest::TYPE_UNKNOWN, GURL(),
-                                     UNSPECIFIED_CONTEXT));
+                                     UNSPECIFIED_CONTEXT,
+                                     version_info::Channel::UNKNOWN));
 }
 
 Feature::Availability SimpleFeature::CreateAvailability(
     AvailabilityResult result, Manifest::Type type) const {
-  return Availability(result, GetAvailabilityMessage(result, type, GURL(),
-                                                     UNSPECIFIED_CONTEXT));
+  return Availability(
+      result, GetAvailabilityMessage(result, type, GURL(), UNSPECIFIED_CONTEXT,
+                                     version_info::Channel::UNKNOWN));
 }
 
 Feature::Availability SimpleFeature::CreateAvailability(
@@ -576,7 +378,8 @@ Feature::Availability SimpleFeature::CreateAvailability(
     const GURL& url) const {
   return Availability(
       result, GetAvailabilityMessage(result, Manifest::TYPE_UNKNOWN, url,
-                                     UNSPECIFIED_CONTEXT));
+                                     UNSPECIFIED_CONTEXT,
+                                     version_info::Channel::UNKNOWN));
 }
 
 Feature::Availability SimpleFeature::CreateAvailability(
@@ -584,15 +387,27 @@ Feature::Availability SimpleFeature::CreateAvailability(
     Context context) const {
   return Availability(
       result, GetAvailabilityMessage(result, Manifest::TYPE_UNKNOWN, GURL(),
-                                     context));
+                                     context, version_info::Channel::UNKNOWN));
+}
+
+Feature::Availability SimpleFeature::CreateAvailability(
+    AvailabilityResult result,
+    version_info::Channel channel) const {
+  return Availability(
+      result, GetAvailabilityMessage(result, Manifest::TYPE_UNKNOWN, GURL(),
+                                     UNSPECIFIED_CONTEXT, channel));
 }
 
 bool SimpleFeature::IsInternal() const {
-  return false;
+  return is_internal_;
 }
 
 bool SimpleFeature::IsVivaldiFeature() const {
   return is_vivaldi_feature_;
+}
+
+void SimpleFeature::set_vivaldi(bool flag) {
+  is_vivaldi_feature_ = flag;
 }
 
 bool SimpleFeature::IsIdInBlacklist(const std::string& extension_id) const {
@@ -623,8 +438,8 @@ bool SimpleFeature::IsIdInList(const std::string& extension_id,
   if (!IsValidExtensionId(extension_id))
     return false;
 
-  return (ContainsValue(list, extension_id) ||
-          ContainsValue(list, HashedIdInHex(extension_id)));
+  return (base::ContainsValue(list, extension_id) ||
+          base::ContainsValue(list, HashedIdInHex(extension_id)));
 }
 
 bool SimpleFeature::MatchesManifestLocation(
@@ -666,6 +481,51 @@ bool SimpleFeature::IsValidExtensionId(const std::string& extension_id) {
   // leads to hash collisions.
   // 128 bits / 4 = 32 mpdecimal characters
   return (extension_id.length() == 32);
+}
+
+void SimpleFeature::set_blacklist(
+    std::initializer_list<const char* const> blacklist) {
+  blacklist_.assign(blacklist.begin(), blacklist.end());
+}
+
+void SimpleFeature::set_command_line_switch(
+    base::StringPiece command_line_switch) {
+  command_line_switch_ = command_line_switch.as_string();
+}
+
+void SimpleFeature::set_contexts(std::initializer_list<Context> contexts) {
+  contexts_ = contexts;
+}
+
+void SimpleFeature::set_dependencies(
+    std::initializer_list<const char* const> dependencies) {
+  dependencies_.assign(dependencies.begin(), dependencies.end());
+}
+
+void SimpleFeature::set_extension_types(
+    std::initializer_list<Manifest::Type> types) {
+  extension_types_ = types;
+}
+
+void SimpleFeature::set_matches(
+    std::initializer_list<const char* const> matches) {
+  matches_.ClearPatterns();
+  for (const auto* pattern : matches)
+    matches_.AddPattern(URLPattern(URLPattern::SCHEME_ALL, pattern));
+}
+
+void SimpleFeature::set_platforms(std::initializer_list<Platform> platforms) {
+  platforms_ = platforms;
+}
+
+void SimpleFeature::set_whitelist(
+    std::initializer_list<const char* const> whitelist) {
+  if (!vivaldi::IsVivaldiRunning() &&
+      whitelist.size() == 1 &&
+      vivaldi::IsVivaldiApp(*whitelist.begin())) {
+    return; // Don't set the vivaldi whitelist when not running as Vivaldi
+  }
+  whitelist_.assign(whitelist.begin(), whitelist.end());
 }
 
 }  // namespace extensions

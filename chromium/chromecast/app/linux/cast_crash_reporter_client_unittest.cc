@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <fstream>
+#include <vector>
 
 #include "base/base_paths.h"
 #include "base/bind.h"
@@ -10,7 +11,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/test/scoped_path_override.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -99,7 +99,7 @@ class CastCrashReporterClientTest : public testing::Test {
     base::FilePath lockfile =
         home_path().Append("minidumps").Append("lockfile");
     ASSERT_TRUE(base::PathExists(lockfile));
-    ScopedVector<DumpInfo> dumps;
+    std::vector<std::unique_ptr<DumpInfo>> dumps;
     ASSERT_TRUE(FetchDumps(lockfile.value(), &dumps));
     ASSERT_EQ(1u, dumps.size());
 
@@ -123,7 +123,7 @@ class CastCrashReporterClientTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(CastCrashReporterClientTest);
 };
 
-#if ENABLE_THREAD_RESTRICTIONS
+#if DCHECK_IS_ON()
 // This test shall only be run when thread restricitons are enabled. Otherwise,
 // the thread will not actually be IO-restricted, and the final ASSERT will
 // fail.
@@ -137,7 +137,7 @@ TEST_F(CastCrashReporterClientTest, EndToEndTestOnIORestrictedThread) {
   // Note that SetIOAllowed returns the previous value.
   ASSERT_FALSE(base::ThreadRestrictions::SetIOAllowed(true));
 }
-#endif  // ENABLE_THREAD_RESTRICTIONS
+#endif  // DCHECK_IS_ON()
 
 TEST_F(CastCrashReporterClientTest, EndToEndTestOnNonIORestrictedThread) {
   // Handle a crash on a non-IO restricted thread.

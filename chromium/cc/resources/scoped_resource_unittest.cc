@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "cc/output/renderer.h"
 #include "cc/test/fake_output_surface.h"
 #include "cc/test/fake_output_surface_client.h"
 #include "cc/test/fake_resource_provider.h"
@@ -18,7 +17,8 @@ namespace {
 
 TEST(ScopedResourceTest, NewScopedResource) {
   FakeOutputSurfaceClient output_surface_client;
-  std::unique_ptr<OutputSurface> output_surface(FakeOutputSurface::Create3d());
+  std::unique_ptr<OutputSurface> output_surface(
+      FakeOutputSurface::CreateDelegating3d());
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -40,7 +40,8 @@ TEST(ScopedResourceTest, NewScopedResource) {
 
 TEST(ScopedResourceTest, CreateScopedResource) {
   FakeOutputSurfaceClient output_surface_client;
-  std::unique_ptr<OutputSurface> output_surface(FakeOutputSurface::Create3d());
+  std::unique_ptr<OutputSurface> output_surface(
+      FakeOutputSurface::CreateDelegating3d());
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -51,7 +52,7 @@ TEST(ScopedResourceTest, CreateScopedResource) {
   std::unique_ptr<ScopedResource> texture =
       ScopedResource::Create(resource_provider.get());
   texture->Allocate(gfx::Size(30, 30), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
-                    RGBA_8888);
+                    RGBA_8888, gfx::ColorSpace());
 
   // The texture has an allocated byte-size now.
   size_t expected_bytes = 30 * 30 * 4;
@@ -65,7 +66,8 @@ TEST(ScopedResourceTest, CreateScopedResource) {
 
 TEST(ScopedResourceTest, ScopedResourceIsDeleted) {
   FakeOutputSurfaceClient output_surface_client;
-  std::unique_ptr<OutputSurface> output_surface(FakeOutputSurface::Create3d());
+  std::unique_ptr<OutputSurface> output_surface(
+      FakeOutputSurface::CreateDelegating3d());
   CHECK(output_surface->BindToClient(&output_surface_client));
 
   std::unique_ptr<SharedBitmapManager> shared_bitmap_manager(
@@ -79,7 +81,8 @@ TEST(ScopedResourceTest, ScopedResourceIsDeleted) {
 
     EXPECT_EQ(0u, resource_provider->num_resources());
     texture->Allocate(gfx::Size(30, 30),
-                      ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
+                      ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+                      gfx::ColorSpace());
     EXPECT_LT(0u, texture->id());
     EXPECT_EQ(1u, resource_provider->num_resources());
   }
@@ -90,7 +93,8 @@ TEST(ScopedResourceTest, ScopedResourceIsDeleted) {
         ScopedResource::Create(resource_provider.get());
     EXPECT_EQ(0u, resource_provider->num_resources());
     texture->Allocate(gfx::Size(30, 30),
-                      ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
+                      ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+                      gfx::ColorSpace());
     EXPECT_LT(0u, texture->id());
     EXPECT_EQ(1u, resource_provider->num_resources());
     texture->Free();

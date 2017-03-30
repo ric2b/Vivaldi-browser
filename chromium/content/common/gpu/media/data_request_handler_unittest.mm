@@ -112,7 +112,7 @@ class DataRequestHandlerTest : public testing::Test {
   }
 
   ~DataRequestHandlerTest() override {
-    STLDeleteContainerPairSecondPointers(requests_.begin(), requests_.end());
+    base::STLDeleteContainerPairSecondPointers(requests_.begin(), requests_.end());
   }
 
  protected:

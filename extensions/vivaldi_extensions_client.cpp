@@ -43,23 +43,12 @@ VivaldiExtensionsClient::GetAPISchema(const std::string& name) const {
 
 
 std::unique_ptr<JSONFeatureProviderSource>
-VivaldiExtensionsClient::CreateFeatureProviderSource(
-    const std::string& name) const {
+VivaldiExtensionsClient::CreateAPIFeatureSource() const {
   std::unique_ptr<JSONFeatureProviderSource> source(
-      ChromeExtensionsClient::CreateFeatureProviderSource(name));
+      ChromeExtensionsClient::CreateAPIFeatureSource());
   DCHECK(source);
 
-  if (name == "api") {
-    source->LoadJSON(IDR_VIVALDI_EXTENSION_API_FEATURES);
-  } else if (name == "manifest") {
-    source->LoadJSON(IDR_VIVALDI_EXTENSION_MANIFEST_FEATURES);
-  } else if (name == "permission") {
-    source->LoadJSON(IDR_VIVALDI_EXTENSION_PERMISSION_FEATURES);
-  } else if (name == "behavior") {
-  } else {
-    NOTREACHED();
-    source.reset();
-  }
+  source->LoadJSON(IDR_VIVALDI_EXTENSION_API_FEATURES);
   return source;
 }
 

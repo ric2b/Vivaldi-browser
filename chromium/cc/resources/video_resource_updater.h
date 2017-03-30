@@ -67,6 +67,7 @@ class CC_EXPORT VideoFrameExternalResources {
   // After a lookup, subtract offset and multiply by multiplier.
   float offset;
   float multiplier;
+  uint32_t bits_per_channel;
 
   VideoFrameExternalResources();
   VideoFrameExternalResources(const VideoFrameExternalResources& other);
@@ -137,6 +138,7 @@ class CC_EXPORT VideoResourceUpdater
   typedef std::list<PlaneResource> ResourceList;
   ResourceList::iterator AllocateResource(const gfx::Size& plane_size,
                                           ResourceFormat format,
+                                          const gfx::ColorSpace& color_space,
                                           bool has_mailbox,
                                           bool immutable_hint);
   void DeleteResource(ResourceList::iterator resource_it);

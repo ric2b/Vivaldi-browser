@@ -6,10 +6,9 @@
 #define ASH_WM_LOCK_LAYOUT_MANAGER_H_
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/common/wm/wm_types.h"
-#include "ash/shell_delegate.h"
 #include "ash/snap_to_pixel_layout_manager.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window_observer.h"
@@ -46,7 +45,7 @@ class WMEvent;
 class ASH_EXPORT LockLayoutManager
     : public SnapToPixelLayoutManager,
       public aura::WindowObserver,
-      public VirtualKeyboardStateObserver,
+      public ShellObserver,
       public keyboard::KeyboardControllerObserver {
  public:
   explicit LockLayoutManager(aura::Window* window);
@@ -74,7 +73,7 @@ class ASH_EXPORT LockLayoutManager
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
 
-  // VirtualKeyboardStateObserver overrides:
+  // ShellObserver:
   void OnVirtualKeyboardStateChanged(bool activated) override;
 
   // keyboard::KeyboardControllerObserver overrides:

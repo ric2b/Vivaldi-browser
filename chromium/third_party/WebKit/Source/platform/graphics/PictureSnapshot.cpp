@@ -60,14 +60,13 @@ PictureSnapshot::PictureSnapshot(PassRefPtr<const SkPicture> picture)
 
 static bool decodeBitmap(const void* data, size_t length, SkBitmap* result)
 {
-    std::unique_ptr<ImageDecoder> imageDecoder = ImageDecoder::create(static_cast<const char*>(data), length,
+    // No need to copy the data; this decodes immediately.
+    RefPtr<SegmentReader> segmentReader = SegmentReader::createFromSkData(SkData::MakeWithoutCopy(data, length));
+    std::unique_ptr<ImageDecoder> imageDecoder = ImageDecoder::create(segmentReader.release(), true,
         ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileIgnored);
     if (!imageDecoder)
         return false;
 
-    // No need to copy the data; this decodes immediately.
-    RefPtr<SegmentReader> segmentReader = SegmentReader::createFromSkData(adoptRef(SkData::NewWithoutCopy(data, length)));
-    imageDecoder->setData(segmentReader.release(), true);
     ImageFrame* frame = imageDecoder->frameBufferAtIndex(0);
     if (!frame)
         return true;
@@ -174,7 +173,7 @@ std::unique_ptr<PictureSnapshot::Timings> PictureSnapshot::profile(unsigned minR
     return timings;
 }
 
-PassRefPtr<JSONArray> PictureSnapshot::snapshotCommandLog() const
+std::unique_ptr<JSONArray> PictureSnapshot::snapshotCommandLog() const
 {
     const SkIRect bounds = m_picture->cullRect().roundOut();
     LoggingCanvas canvas(bounds.width(), bounds.height());

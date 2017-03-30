@@ -12,6 +12,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/platform/atk_util_auralinux.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 //
 // ax_platform_node_auralinux AtkObject definition and implementation.
@@ -442,7 +443,7 @@ void AXPlatformNodeAuraLinux::GetAtkState(AtkStateSet* atk_state_set) {
     atk_state_set_add_state(atk_state_set, ATK_STATE_DEFAULT);
   if (state & (1 << ui::AX_STATE_EDITABLE))
     atk_state_set_add_state(atk_state_set, ATK_STATE_EDITABLE);
-  if (state & (1 << ui::AX_STATE_ENABLED))
+  if (!(state & (1 << ui::AX_STATE_DISABLED)))
     atk_state_set_add_state(atk_state_set, ATK_STATE_ENABLED);
   if (state & (1 << ui::AX_STATE_EXPANDED))
     atk_state_set_add_state(atk_state_set, ATK_STATE_EXPANDED);
@@ -528,7 +529,7 @@ void AXPlatformNodeAuraLinux::GetPosition(gint* x, gint* y,
 }
 
 void AXPlatformNodeAuraLinux::GetSize(gint* width, gint* height) {
-  gfx::Rect rect_size = GetData().location;
+  gfx::Rect rect_size = gfx::ToEnclosingRect(GetData().location);
   if (width)
     *width = rect_size.width();
   if (height)

@@ -46,7 +46,6 @@ void RenderCdmFactory::Create(
     const media::CdmConfig& cdm_config,
     const media::SessionMessageCB& session_message_cb,
     const media::SessionClosedCB& session_closed_cb,
-    const media::LegacySessionErrorCB& legacy_session_error_cb,
     const media::SessionKeysChangeCB& session_keys_change_cb,
     const media::SessionExpirationUpdateCB& session_expiration_update_cb,
     const media::CdmCreatedCB& cdm_created_cb) {
@@ -59,11 +58,8 @@ void RenderCdmFactory::Create(
   }
 
   if (media::CanUseAesDecryptor(key_system)) {
-    // TODO(sandersd): Address this now that prefixed EME has been removed.
-    // http://crbug.com/249976. The prefixed API always allowed distinctive
-    // identifiers and persistent state. Once that changes we can sanity check
-    // here that neither is allowed for AesDecryptor, since it does not support
-    // them and should never be configured that way. http://crbug.com/455271
+    DCHECK(!cdm_config.allow_distinctive_identifier);
+    DCHECK(!cdm_config.allow_persistent_state);
     scoped_refptr<media::MediaKeys> cdm(
         new media::AesDecryptor(security_origin, session_message_cb,
                                 session_closed_cb, session_keys_change_cb));
@@ -77,15 +73,15 @@ void RenderCdmFactory::Create(
   PpapiDecryptor::Create(
       key_system, security_origin, cdm_config.allow_distinctive_identifier,
       cdm_config.allow_persistent_state, create_pepper_cdm_cb_,
-      session_message_cb, session_closed_cb, legacy_session_error_cb,
-      session_keys_change_cb, session_expiration_update_cb, cdm_created_cb);
+      session_message_cb, session_closed_cb, session_keys_change_cb,
+      session_expiration_update_cb, cdm_created_cb);
 #elif defined(ENABLE_BROWSER_CDMS)
   DCHECK(cdm_config.allow_distinctive_identifier);
   DCHECK(cdm_config.allow_persistent_state);
   ProxyMediaKeys::Create(
       key_system, security_origin, cdm_config.use_hw_secure_codecs, manager_,
-      session_message_cb, session_closed_cb, legacy_session_error_cb,
-      session_keys_change_cb, session_expiration_update_cb, cdm_created_cb);
+      session_message_cb, session_closed_cb, session_keys_change_cb,
+      session_expiration_update_cb, cdm_created_cb);
 #else
   // No possible CDM to create, so fail the request.
   base::ThreadTaskRunnerHandle::Get()->PostTask(

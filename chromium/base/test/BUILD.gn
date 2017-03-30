@@ -9,7 +9,7 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-source_set("test_config") {
+static_library("test_config") {
   testonly = true
   sources = [
     "test_switches.cc",
@@ -23,9 +23,16 @@ source_set("test_config") {
 }
 
 # GYP: //base/base.gyp:test_support_base
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
   sources = [
+    "../trace_event/trace_config_memory_test_util.h",
+    "android/java_handler_thread_for_testing.cc",
+    "android/java_handler_thread_for_testing.h",
+    "android/test_system_message_handler_link_android.cc",
+    "android/test_system_message_handler_link_android.h",
+    "fuzzed_data_provider.cc",
+    "fuzzed_data_provider.h",
     "gtest_util.cc",
     "gtest_util.h",
     "gtest_xml_unittest_result_printer.cc",
@@ -34,6 +41,8 @@ source_set("test_support") {
     "gtest_xml_util.h",
     "histogram_tester.cc",
     "histogram_tester.h",
+    "icu_test_util.cc",
+    "icu_test_util.h",
     "ios/wait_util.h",
     "ios/wait_util.mm",
     "launcher/test_result.cc",
@@ -63,6 +72,8 @@ source_set("test_support") {
     "power_monitor_test_base.h",
     "scoped_command_line.cc",
     "scoped_command_line.h",
+    "scoped_feature_list.cc",
+    "scoped_feature_list.h",
     "scoped_locale.cc",
     "scoped_locale.h",
     "scoped_path_override.cc",
@@ -128,6 +139,8 @@ source_set("test_support") {
     sources += [
       "launcher/test_launcher.cc",
       "launcher/test_launcher.h",
+      "launcher/test_launcher_tracer.cc",
+      "launcher/test_launcher_tracer.h",
       "launcher/test_results_tracker.cc",
       "launcher/unit_test_launcher.cc",
       "multiprocess_test.cc",
@@ -188,6 +201,8 @@ source_set("test_support") {
     sources -= [
       "gtest_xml_util.cc",
       "gtest_xml_util.h",
+      "icu_test_util.cc",
+      "icu_test_util.h",
       "perf_test_suite.cc",
       "perf_test_suite.h",
       "scoped_path_override.cc",
@@ -214,6 +229,9 @@ config("perf_test_config") {
   defines = [ "PERF_TEST" ]
 }
 
+# This is a source set instead of a static library because it seems like some
+# linkers get confused when "main" is in a static library, and if you link to
+# this, you always want the object file anyway.
 source_set("test_support_perf") {
   testonly = true
   sources = [
@@ -228,7 +246,7 @@ source_set("test_support_perf") {
   public_configs = [ ":perf_test_config" ]
 }
 
-source_set("test_launcher_nacl_nonsfi") {
+static_library("test_launcher_nacl_nonsfi") {
   testonly = true
   sources = [
     "launcher/test_launcher_nacl_nonsfi.cc",
@@ -239,10 +257,45 @@ source_set("test_launcher_nacl_nonsfi") {
   ]
 }
 
-source_set("run_all_unittests") {
+static_library("run_all_unittests") {
   testonly = true
   sources = [
     "run_all_unittests.cc",
+  ]
+  deps = [
+    ":test_support",
+  ]
+}
+
+# These sources are linked into both the base_unittests binary and the test
+# shared library target below.
+source_set("native_library_test_utils") {
+  testonly = true
+  sources = [
+    "native_library_test_utils.cc",
+    "native_library_test_utils.h",
+  ]
+}
+
+# This shared library is dynamically loaded by NativeLibrary unittests.
+shared_library("test_shared_library") {
+  testonly = true
+  sources = [
+    "test_shared_library.cc",
+  ]
+
+  deps = [
+    ":native_library_test_utils",
+  ]
+}
+
+static_library("run_all_base_unittests") {
+  # Only targets in base should depend on this, targets outside base
+  # should depend on run_all_unittests above.
+  visibility = [ "//base/*" ]
+  testonly = true
+  sources = [
+    "run_all_base_unittests.cc",
   ]
   deps = [
     ":test_support",
@@ -266,6 +319,7 @@ if (is_android) {
   generate_jni("base_unittests_jni_headers") {
     sources = [
       "android/java/src/org/chromium/base/ContentUriTestUtils.java",
+      "android/java/src/org/chromium/base/TestSystemMessageHandler.java",
       "android/java/src/org/chromium/base/TestUiThread.java",
     ]
     jni_package = "base"

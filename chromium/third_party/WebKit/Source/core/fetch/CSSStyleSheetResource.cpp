@@ -82,14 +82,12 @@ void CSSStyleSheetResource::didAddClient(ResourceClient* c)
     Resource::didAddClient(c);
 
     if (!isLoading())
-        static_cast<StyleSheetResourceClient*>(c)->setCSSStyleSheet(m_resourceRequest.url(), m_response.url(), encoding(), this);
+        static_cast<StyleSheetResourceClient*>(c)->setCSSStyleSheet(resourceRequest().url(), response().url(), encoding(), this);
 }
 
 const String CSSStyleSheetResource::sheetText(MIMETypeCheck mimeTypeCheck) const
 {
-    ASSERT(!isPurgeable());
-
-    if (!m_data || m_data->isEmpty() || !canUseSheet(mimeTypeCheck))
+    if (!data() || data()->isEmpty() || !canUseSheet(mimeTypeCheck))
         return String();
 
     if (!m_decodedSheetText.isNull())
@@ -102,21 +100,16 @@ const String CSSStyleSheetResource::sheetText(MIMETypeCheck mimeTypeCheck) const
 void CSSStyleSheetResource::checkNotify()
 {
     // Decode the data to find out the encoding and keep the sheet text around during checkNotify()
-    if (m_data)
+    if (data())
         m_decodedSheetText = decodedText();
 
-    ResourceClientWalker<StyleSheetResourceClient> w(m_clients);
+    ResourceClientWalker<StyleSheetResourceClient> w(clients());
     while (StyleSheetResourceClient* c = w.next()) {
         markClientFinished(c);
         c->setCSSStyleSheet(resourceRequest().url(), response().url(), encoding(), this);
     }
     // Clear the decoded text as it is unlikely to be needed immediately again and is cheap to regenerate.
     m_decodedSheetText = String();
-}
-
-bool CSSStyleSheetResource::isSafeToUnlock() const
-{
-    return m_data->hasOneRef();
 }
 
 void CSSStyleSheetResource::destroyDecodedDataIfPossible()

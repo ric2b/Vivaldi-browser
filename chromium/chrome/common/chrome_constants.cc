@@ -125,6 +125,7 @@ const base::FilePath::CharType kFrameworkName[] =
 
 #if defined(OS_WIN)
 const base::FilePath::CharType kBrowserResourcesDll[] = FPL("vivaldi.dll");
+const base::FilePath::CharType kChromeElfDllName[] = FPL("vivaldi_elf.dll");
 const base::FilePath::CharType kStatusTrayWindowClass[] =
     FPL("Vivaldi_StatusTrayWindow");
 #endif  // defined(OS_WIN)
@@ -204,13 +205,6 @@ const float kMaxShareOfExtensionProcesses = 0.30f;
 #if defined(OS_LINUX)
 const int kLowestRendererOomScore = 300;
 const int kHighestRendererOomScore = 1000;
-#endif
-
-#if defined(OS_WIN)
-const wchar_t kMetroNavigationAndSearchMessage[] =
-    L"VIVALDI_METRO_NAV_SEARCH_REQUEST";
-const wchar_t kMetroGetCurrentTabInfoMessage[] =
-    L"VIVALDI_METRO_GET_CURRENT_TAB_INFO";
 #endif
 
 #if defined(OS_CHROMEOS)

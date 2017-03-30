@@ -41,6 +41,7 @@
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/features/behavior_feature.h"
 #include "extensions/common/features/feature.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/features/feature_provider.h"
 #include "extensions/common/features/feature_util.h"
 #include "extensions/common/manifest.h"
@@ -616,10 +617,11 @@ void Dispatcher::DidCreateDocumentElement(blink::WebLocalFrame* frame) {
   if (extension && extension->is_extension() &&
       OptionsPageInfo::ShouldUseChromeStyle(extension) &&
       effective_document_url == OptionsPageInfo::GetOptionsPage(extension)) {
+    base::StringPiece extension_css =
+        ResourceBundle::GetSharedInstance().GetRawDataResource(
+            IDR_EXTENSION_CSS);
     frame->document().insertStyleSheet(
-        WebString::fromUTF8(ResourceBundle::GetSharedInstance()
-                                .GetRawDataResource(IDR_EXTENSION_CSS)
-                                .as_string()));
+        WebString::fromUTF8(extension_css.data(), extension_css.length()));
   }
 
   // In testing, the document lifetime events can happen after the render
@@ -1152,8 +1154,13 @@ void Dispatcher::OnMessageInvoke(const std::string& extension_id,
       NULL, extension_id, module_name, function_name, args, user_gesture);
 }
 
-void Dispatcher::OnSetChannel(int channel) {
-  delegate_->SetChannel(channel);
+void Dispatcher::OnSetChannel(version_info::Channel channel) {
+  SetCurrentChannel(channel);
+  if (feature_util::ExtensionServiceWorkersEnabled()) {
+    // chrome-extension: resources should be allowed to register ServiceWorkers.
+    blink::WebSecurityPolicy::registerURLSchemeAsAllowingServiceWorkers(
+        blink::WebString::fromUTF8(extensions::kExtensionScheme));
+  }
 }
 
 void Dispatcher::OnSetScriptingWhitelist(
@@ -1316,8 +1323,7 @@ void Dispatcher::OnSetActivityLoggingEnabled(bool enabled) {
   user_script_set_manager_->set_activity_logging_enabled(enabled);
 }
 
-void Dispatcher::OnUserScriptsUpdated(const std::set<HostID>& changed_hosts,
-                                      const std::vector<UserScript*>& scripts) {
+void Dispatcher::OnUserScriptsUpdated(const std::set<HostID>& changed_hosts) {
   UpdateActiveExtensions();
 }
 
@@ -1452,7 +1458,7 @@ void Dispatcher::UpdateBindingsForContext(ScriptContext* context) {
           continue;
         }
 
-        if (context->IsAnyFeatureAvailableToContext(*map_entry.second.get())) {
+        if (context->IsAnyFeatureAvailableToContext(*map_entry.second)) {
           // TODO(lazyboy): RegisterBinding() uses |source_map_|, any thread
           // safety issue?
           RegisterBinding(map_entry.first, context);

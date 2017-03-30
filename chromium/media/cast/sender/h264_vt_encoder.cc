@@ -147,13 +147,13 @@ class H264VideoToolboxEncoder::VideoFrameFactoryImpl::Proxy
 
 // static
 bool H264VideoToolboxEncoder::IsSupported(
-    const VideoSenderConfig& video_config) {
+    const FrameSenderConfig& video_config) {
   return video_config.codec == CODEC_VIDEO_H264 && VideoToolboxGlue::Get();
 }
 
 H264VideoToolboxEncoder::H264VideoToolboxEncoder(
     const scoped_refptr<CastEnvironment>& cast_environment,
-    const VideoSenderConfig& video_config,
+    const FrameSenderConfig& video_config,
     const StatusChangeCallback& status_change_cb)
     : cast_environment_(cast_environment),
       videotoolbox_glue_(VideoToolboxGlue::Get()),
@@ -183,7 +183,7 @@ H264VideoToolboxEncoder::H264VideoToolboxEncoder(
             weak_factory_.GetWeakPtr(), cast_environment_));
 
     // Register for power state changes.
-    auto power_monitor = base::PowerMonitor::Get();
+    auto* power_monitor = base::PowerMonitor::Get();
     if (power_monitor) {
       power_monitor->AddObserver(this);
       VLOG(1) << "Registered for power state changes.";
@@ -200,7 +200,7 @@ H264VideoToolboxEncoder::~H264VideoToolboxEncoder() {
   // If video_frame_factory_ is not null, the encoder registered for power state
   // changes in the ctor and it must now unregister.
   if (video_frame_factory_) {
-    auto power_monitor = base::PowerMonitor::Get();
+    auto* power_monitor = base::PowerMonitor::Get();
     if (power_monitor)
       power_monitor->RemoveObserver(this);
   }
@@ -253,7 +253,7 @@ void H264VideoToolboxEncoder::ResetCompressionSession() {
       video_toolbox::DictionaryWithKeysAndValues(
           buffer_attributes_keys, buffer_attributes_values,
           arraysize(buffer_attributes_keys));
-  for (auto& v : buffer_attributes_values)
+  for (auto* v : buffer_attributes_values)
     CFRelease(v);
 
   // Create the compression session.
@@ -322,7 +322,7 @@ void H264VideoToolboxEncoder::ConfigureCompressionSession() {
       (video_config_.min_bitrate + video_config_.max_bitrate) / 2);
   session_property_setter.Set(
       videotoolbox_glue_->kVTCompressionPropertyKey_ExpectedFrameRate(),
-      video_config_.max_frame_rate);
+      static_cast<int>(video_config_.max_frame_rate + 0.5));
   // Keep these attachment settings in-sync with those in Initialize().
   session_property_setter.Set(
       videotoolbox_glue_->kVTCompressionPropertyKey_ColorPrimaries(),
@@ -333,10 +333,10 @@ void H264VideoToolboxEncoder::ConfigureCompressionSession() {
   session_property_setter.Set(
       videotoolbox_glue_->kVTCompressionPropertyKey_YCbCrMatrix(),
       kCVImageBufferYCbCrMatrix_ITU_R_709_2);
-  if (video_config_.max_number_of_video_buffers_used > 0) {
+  if (video_config_.video_codec_params.max_number_of_video_buffers_used > 0) {
     session_property_setter.Set(
         videotoolbox_glue_->kVTCompressionPropertyKey_MaxFrameDelayCount(),
-        video_config_.max_number_of_video_buffers_used);
+        video_config_.video_codec_params.max_number_of_video_buffers_used);
   }
 }
 
@@ -515,7 +515,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
                                                   OSStatus status,
                                                   VTEncodeInfoFlags info,
                                                   CMSampleBufferRef sbuf) {
-  auto encoder = reinterpret_cast<H264VideoToolboxEncoder*>(encoder_opaque);
+  auto* encoder = reinterpret_cast<H264VideoToolboxEncoder*>(encoder_opaque);
   const std::unique_ptr<InProgressFrameEncode> request(
       reinterpret_cast<InProgressFrameEncode*>(request_opaque));
   bool keyframe = false;
@@ -529,7 +529,7 @@ void H264VideoToolboxEncoder::CompressionCallback(void* encoder_opaque,
   } else if ((info & VideoToolboxGlue::kVTEncodeInfo_FrameDropped)) {
     DVLOG(2) << " frame dropped";
   } else {
-    auto sample_attachments =
+    auto* sample_attachments =
         static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(
             CoreMediaGlue::CMSampleBufferGetSampleAttachmentsArray(sbuf, true),
             0));

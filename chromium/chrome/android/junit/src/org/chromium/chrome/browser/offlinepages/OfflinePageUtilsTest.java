@@ -5,10 +5,11 @@
 package org.chromium.chrome.browser.offlinepages;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.any;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -16,7 +17,6 @@ import static org.mockito.Mockito.when;
 import android.os.Environment;
 
 import org.chromium.base.BaseChromiumApplication;
-import org.chromium.base.test.shadows.ShadowMultiDex;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -32,6 +32,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
+import org.robolectric.shadows.multidex.ShadowMultiDex;
 
 import java.io.File;
 
@@ -70,7 +71,7 @@ public class OfflinePageUtilsTest {
 
         doReturn(mOfflinePageBridge)
                 .when(mOfflinePageUtils)
-                .getOfflinePageBridge(any(Profile.class));
+                .getOfflinePageBridge((Profile) isNull());
         OfflinePageUtils.setInstanceForTesting(mOfflinePageUtils);
 
         OfflinePageBridge.setOfflineBookmarksEnabledForTesting(true);
@@ -176,6 +177,26 @@ public class OfflinePageUtilsTest {
         verify(mOfflinePageBridge, times(0))
                 .savePage(eq(mWebContents), any(ClientId.class),
                         any(OfflinePageBridge.SavePageCallback.class));
+    }
+
+    @Test
+    @Feature({"OfflinePagesSharing"})
+    public void testRewriteOfflineFileName() {
+        // Only dots in file name get replaced.
+        assertEquals("cs_chromium_org.mhtml",
+                OfflinePageUtils.rewriteOfflineFileName("cs.chromium.org.mhtml"));
+        // Successive dots should all be replaced.
+        assertEquals("cs_chromium___org_.mhtml",
+                OfflinePageUtils.rewriteOfflineFileName("cs.chromium...org..mhtml"));
+        // White spaces are trimmed.
+        assertEquals("cs_chromium_org.mhtml",
+                OfflinePageUtils.rewriteOfflineFileName(" cs.chromium .org .mhtml"));
+        // Other special characters is not touched
+        String directoryPath = "chrome/src/offline/";
+        assertEquals(directoryPath + "cs_chromium!_org#.mhtml",
+                OfflinePageUtils.rewriteOfflineFileName(directoryPath + "cs.chromium!.org#.mhtml"));
+        // If there is no dot other than file extension, nothing changes.
+        assertEquals("chromium.mhtml", OfflinePageUtils.rewriteOfflineFileName("chromium.mhtml"));
     }
 
     /** A shadow/wrapper of android.os.Environment that allows injecting a test directory. */

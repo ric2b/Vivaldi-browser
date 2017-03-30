@@ -7,14 +7,16 @@
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8BindingMacros.h"
-#include "bindings/core/v8/V8CustomElementsRegistry.h"
+#include "bindings/core/v8/V8CustomElementRegistry.h"
 #include "bindings/core/v8/V8Element.h"
+#include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8HiddenValue.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/custom/CustomElement.h"
+#include "core/events/ErrorEvent.h"
 #include "core/html/HTMLElement.h"
-#include "core/html/HTMLUnknownElement.h"
 #include "v8.h"
 #include "wtf/Allocator.h"
 
@@ -22,9 +24,9 @@ namespace blink {
 
 // Retrieves the custom elements constructor -> name map, creating it
 // if necessary. The same map is used to keep prototypes alive.
-static v8::Local<v8::Map> ensureCustomElementsRegistryMap(
+static v8::Local<v8::Map> ensureCustomElementRegistryMap(
     ScriptState* scriptState,
-    CustomElementsRegistry* registry)
+    CustomElementRegistry* registry)
 {
     CHECK(scriptState->world().isMainWorld());
     v8::Local<v8::String> name = V8HiddenValue::customElementsRegistryMap(
@@ -42,13 +44,12 @@ static v8::Local<v8::Map> ensureCustomElementsRegistryMap(
 
 ScriptCustomElementDefinition* ScriptCustomElementDefinition::forConstructor(
     ScriptState* scriptState,
-    CustomElementsRegistry* registry,
+    CustomElementRegistry* registry,
     const v8::Local<v8::Value>& constructor)
 {
     v8::Local<v8::Map> map =
-        ensureCustomElementsRegistryMap(scriptState, registry);
-    v8::Local<v8::Value> nameValue = v8CallOrCrash(
-        map->Get(scriptState->context(), constructor));
+        ensureCustomElementRegistryMap(scriptState, registry);
+    v8::Local<v8::Value> nameValue = map->Get(scriptState->context(), constructor).ToLocalChecked();
     if (!nameValue->IsString())
         return nullptr;
     AtomicString name = toCoreAtomicString(nameValue.As<v8::String>());
@@ -63,12 +64,12 @@ ScriptCustomElementDefinition* ScriptCustomElementDefinition::forConstructor(
     //    Audit the use of V8HiddenValue/hidden values in general and
     //    how the map is handled--it should never be leaked to script.
     //
-    // 2. CustomElementsRegistry does not overwrite definitions with a
-    //    given name--see the CHECK in CustomElementsRegistry::define
+    // 2. CustomElementRegistry does not overwrite definitions with a
+    //    given name--see the CHECK in CustomElementRegistry::define
     //    --and adds ScriptCustomElementDefinitions to the map without
     //    fail.
     //
-    // 3. The relationship between the CustomElementsRegistry and its
+    // 3. The relationship between the CustomElementRegistry and its
     //    map is never mixed up; this is guaranteed by the bindings
     //    system which provides a stable wrapper, and the map hangs
     //    off the wrapper.
@@ -91,7 +92,7 @@ static void keepAlive(v8::Local<v8::Array>& array, uint32_t index,
     if (value.IsEmpty())
         return;
 
-    v8CallOrCrash(array->Set(scriptState->context(), index, value));
+    array->Set(scriptState->context(), index, value).ToChecked();
 
     persistent.set(scriptState->isolate(), value);
     persistent.setPhantom();
@@ -99,12 +100,13 @@ static void keepAlive(v8::Local<v8::Array>& array, uint32_t index,
 
 ScriptCustomElementDefinition* ScriptCustomElementDefinition::create(
     ScriptState* scriptState,
-    CustomElementsRegistry* registry,
+    CustomElementRegistry* registry,
     const CustomElementDescriptor& descriptor,
     const v8::Local<v8::Object>& constructor,
     const v8::Local<v8::Object>& prototype,
     const v8::Local<v8::Function>& connectedCallback,
     const v8::Local<v8::Function>& disconnectedCallback,
+    const v8::Local<v8::Function>& adoptedCallback,
     const v8::Local<v8::Function>& attributeChangedCallback,
     const HashSet<AtomicString>& observedAttributes)
 {
@@ -116,6 +118,7 @@ ScriptCustomElementDefinition* ScriptCustomElementDefinition::create(
             prototype,
             connectedCallback,
             disconnectedCallback,
+            adoptedCallback,
             attributeChangedCallback,
             observedAttributes);
 
@@ -123,18 +126,19 @@ ScriptCustomElementDefinition* ScriptCustomElementDefinition::create(
     v8::Local<v8::Value> nameValue =
         v8String(scriptState->isolate(), descriptor.name());
     v8::Local<v8::Map> map =
-        ensureCustomElementsRegistryMap(scriptState, registry);
-    v8CallOrCrash(map->Set(scriptState->context(), constructor, nameValue));
+        ensureCustomElementRegistryMap(scriptState, registry);
+    map->Set(scriptState->context(), constructor, nameValue).ToLocalChecked();
     definition->m_constructor.setPhantom();
 
     // We add the prototype and callbacks here to keep them alive. We use the
     // name as the key because it is unique per-registry.
-    v8::Local<v8::Array> array = v8::Array::New(scriptState->isolate(), 4);
+    v8::Local<v8::Array> array = v8::Array::New(scriptState->isolate(), 5);
     keepAlive(array, 0, prototype, definition->m_prototype, scriptState);
     keepAlive(array, 1, connectedCallback, definition->m_connectedCallback, scriptState);
     keepAlive(array, 2, disconnectedCallback, definition->m_disconnectedCallback, scriptState);
-    keepAlive(array, 3, attributeChangedCallback, definition->m_attributeChangedCallback, scriptState);
-    v8CallOrCrash(map->Set(scriptState->context(), nameValue, array));
+    keepAlive(array, 3, adoptedCallback, definition->m_adoptedCallback, scriptState);
+    keepAlive(array, 4, attributeChangedCallback, definition->m_attributeChangedCallback, scriptState);
+    map->Set(scriptState->context(), nameValue, array).ToLocalChecked();
 
     return definition;
 }
@@ -146,6 +150,7 @@ ScriptCustomElementDefinition::ScriptCustomElementDefinition(
     const v8::Local<v8::Object>& prototype,
     const v8::Local<v8::Function>& connectedCallback,
     const v8::Local<v8::Function>& disconnectedCallback,
+    const v8::Local<v8::Function>& adoptedCallback,
     const v8::Local<v8::Function>& attributeChangedCallback,
     const HashSet<AtomicString>& observedAttributes)
     : CustomElementDefinition(descriptor, observedAttributes)
@@ -165,8 +170,15 @@ HTMLElement* ScriptCustomElementDefinition::createElementSync(
     // 6. If definition is non-null
     // 6.1. If the synchronous custom elements flag is set:
     // 6.1.2. Set result to Construct(C). Rethrow any exceptions.
-    Element* element = nullptr;
+
+    // Create an element and push to the construction stack.
+    // V8HTMLElement::constructorCustom() can only refer to
+    // window.document(), but it is different from the document here
+    // when it is an import document.  This is not exactly what the
+    // spec defines, but the public behavior matches to the spec.
+    Element* element = createElementForConstructor(document);
     {
+        ConstructionStackScope constructionStackScope(this, element);
         v8::TryCatch tryCatch(m_scriptState->isolate());
         element = runConstructor();
         if (tryCatch.HasCaught()) {
@@ -184,6 +196,15 @@ HTMLElement* ScriptCustomElementDefinition::createElementSync(
     return toHTMLElement(element);
 }
 
+static void dispatchErrorEvent(v8::Isolate* isolate,
+    v8::Local<v8::Value> exception, v8::Local<v8::Object> constructor)
+{
+    v8::TryCatch tryCatch(isolate);
+    tryCatch.SetVerbose(true);
+    V8ScriptRunner::throwException(isolate, exception,
+        constructor.As<v8::Function>()->GetScriptOrigin());
+}
+
 HTMLElement* ScriptCustomElementDefinition::createElementSync(
     Document& document, const QualifiedName& tagName)
 {
@@ -197,21 +218,15 @@ HTMLElement* ScriptCustomElementDefinition::createElementSync(
         "CustomElement", constructor(), isolate);
     HTMLElement* element = createElementSync(document, tagName, exceptionState);
 
-    if (exceptionState.hadException() || !element) {
+    if (exceptionState.hadException()) {
+        DCHECK(!element);
         // 7. If this step throws an exception, then report the exception, ...
-        {
-            v8::TryCatch tryCatch(isolate);
-            tryCatch.SetVerbose(true);
-            exceptionState.throwIfNeeded();
-        }
-
-        // ...and let element be instead a new element that implements
-        // HTMLUnknownElement, with no attributes, namespace set to given
-        // namespace, namespace prefix set to null, custom element state
-        // "undefined", and node document set to document.
-        element = HTMLUnknownElement::create(tagName, document);
-        element->setCustomElementState(CustomElementState::Undefined);
+        dispatchErrorEvent(isolate, exceptionState.getException(), constructor());
+        exceptionState.clearException();
+        // and return HTMLUnknownElement.
+        return CustomElement::createFailedElement(document, tagName);
     }
+    DCHECK(element);
     return element;
 }
 
@@ -229,18 +244,20 @@ bool ScriptCustomElementDefinition::runConstructor(Element* element)
     tryCatch.SetVerbose(true);
 
     Element* result = runConstructor();
-    if (!result)
+
+    // To report exception thrown from runConstructor()
+    if (tryCatch.HasCaught())
         return false;
 
+    // To report InvalidStateError Exception, when the constructor returns some different object
     if (result != element) {
-        V8ThrowException::throwException(
-            V8ThrowException::createDOMException(
-                m_scriptState->isolate(),
-                InvalidStateError,
-                "custom element constructors must call super() first and must "
-                "not return a different object",
-                constructor()),
-            m_scriptState->isolate());
+        const String& message = "custom element constructors must call super() first and must "
+            "not return a different object";
+        v8::Local<v8::Value> exception =  V8ThrowException::createDOMException(
+            m_scriptState->isolate(),
+            InvalidStateError,
+            message);
+        dispatchErrorEvent(isolate, exception, constructor());
         return false;
     }
 
@@ -293,6 +310,11 @@ bool ScriptCustomElementDefinition::hasDisconnectedCallback() const
     return !m_disconnectedCallback.isEmpty();
 }
 
+bool ScriptCustomElementDefinition::hasAdoptedCallback() const
+{
+    return !m_adoptedCallback.isEmpty();
+}
+
 void ScriptCustomElementDefinition::runCallback(
     v8::Local<v8::Function> callback,
     Element* element, int argc, v8::Local<v8::Value> argv[])
@@ -332,6 +354,15 @@ void ScriptCustomElementDefinition::runDisconnectedCallback(Element* element)
     ScriptState::Scope scope(m_scriptState.get());
     v8::Isolate* isolate = m_scriptState->isolate();
     runCallback(m_disconnectedCallback.newLocal(isolate), element);
+}
+
+void ScriptCustomElementDefinition::runAdoptedCallback(Element* element)
+{
+    if (!m_scriptState->contextIsValid())
+        return;
+    ScriptState::Scope scope(m_scriptState.get());
+    v8::Isolate* isolate = m_scriptState->isolate();
+    runCallback(m_adoptedCallback.newLocal(isolate), element);
 }
 
 void ScriptCustomElementDefinition::runAttributeChangedCallback(

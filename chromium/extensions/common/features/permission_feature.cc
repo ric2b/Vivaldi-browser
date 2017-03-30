@@ -33,20 +33,4 @@ Feature::Availability PermissionFeature::IsAvailableToContext(
   return CreateAvailability(IS_AVAILABLE);
 }
 
-std::string PermissionFeature::Parse(const base::DictionaryValue* value) {
-  std::string error = SimpleFeature::Parse(value);
-  if (!error.empty())
-    return error;
-
-  if (extension_types()->empty()) {
-    return name() + ": Permission features must specify at least one " +
-        "value for extension_types.";
-  }
-
-  if (value->HasKey("contexts"))
-    return name() + ": Permission features do not support contexts.";
-
-  return std::string();
-}
-
 }  // namespace extensions

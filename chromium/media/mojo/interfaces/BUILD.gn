@@ -12,6 +12,7 @@ mojom("interfaces") {
     "content_decryption_module.mojom",
     "decryptor.mojom",
     "demuxer_stream.mojom",
+    "media_service.mojom",
     "media_types.mojom",
     "output_protection.mojom",
     "renderer.mojom",
@@ -28,9 +29,13 @@ mojom("interfaces") {
   }
 
   public_deps = [
+    "//mojo/common:common_custom_types",
+    "//services/shell/public/interfaces",
     "//ui/gfx/geometry/mojo",
     "//url/mojo:url_mojom_gurl",
   ]
+
+  use_new_wrapper_types = false
 }
 
 mojom("image_capture") {

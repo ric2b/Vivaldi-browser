@@ -53,7 +53,12 @@ ServiceWorkerThread::~ServiceWorkerThread()
 {
 }
 
-WorkerGlobalScope* ServiceWorkerThread::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
+void ServiceWorkerThread::clearWorkerBackingThread()
+{
+    m_workerBackingThread = nullptr;
+}
+
+WorkerOrWorkletGlobalScope* ServiceWorkerThread::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
 {
     return ServiceWorkerGlobalScope::create(this, std::move(startupData));
 }

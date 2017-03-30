@@ -41,7 +41,7 @@ namespace blink {
 
 class MemoryCacheTest : public ::testing::Test {
 public:
-    class FakeDecodedResource : public Resource {
+    class FakeDecodedResource final : public Resource {
     public:
         static FakeDecodedResource* create(const ResourceRequest& request, Type type)
         {
@@ -54,7 +54,7 @@ public:
             setDecodedSize(this->size());
         }
 
-    protected:
+    private:
         FakeDecodedResource(const ResourceRequest& request, Type type, const ResourceLoaderOptions& options)
             : Resource(request, type, options)
         {
@@ -66,7 +66,7 @@ public:
         }
     };
 
-    class FakeResource : public Resource {
+    class FakeResource final : public Resource {
     public:
         static FakeResource* create(const ResourceRequest& request, Type type)
         {
@@ -423,6 +423,57 @@ TEST_F(MemoryCacheTest, ResourceMapIsolation)
     memoryCache()->evictResources();
     EXPECT_FALSE(memoryCache()->contains(resource1));
     EXPECT_FALSE(memoryCache()->contains(resource3));
+}
+
+TEST_F(MemoryCacheTest, FragmentIdentifier)
+{
+    const KURL url1 = KURL(ParsedURLString, "http://test/resource#foo");
+    FakeResource* resource = FakeResource::create(ResourceRequest(url1), Resource::Raw);
+    memoryCache()->add(resource);
+    ASSERT_TRUE(memoryCache()->contains(resource));
+
+    EXPECT_EQ(resource, memoryCache()->resourceForURL(url1));
+
+    const KURL url2 = MemoryCache::removeFragmentIdentifierIfNeeded(url1);
+    EXPECT_EQ(resource, memoryCache()->resourceForURL(url2));
+}
+
+TEST_F(MemoryCacheTest, MakeLiveAndDead)
+{
+    FakeResource* resource = FakeResource::create(ResourceRequest("http://test/resource"), Resource::Raw);
+    const char data[6] = "abcde";
+    resource->appendData(data, 5u);
+    memoryCache()->add(resource);
+
+    const size_t deadSize = memoryCache()->deadSize();
+    const size_t liveSize = memoryCache()->liveSize();
+
+    memoryCache()->makeLive(resource);
+    ASSERT_EQ(deadSize, memoryCache()->deadSize() + resource->size());
+    ASSERT_EQ(liveSize, memoryCache()->liveSize() - resource->size());
+
+    memoryCache()->makeDead(resource);
+    ASSERT_EQ(deadSize, memoryCache()->deadSize());
+    ASSERT_EQ(liveSize, memoryCache()->liveSize());
+}
+
+TEST_F(MemoryCacheTest, RemoveURLFromCache)
+{
+    const KURL url1 = KURL(ParsedURLString, "http://test/resource1");
+    FakeResource* resource1 = FakeResource::create(ResourceRequest(url1), Resource::Raw);
+    memoryCache()->add(resource1);
+    ASSERT_TRUE(memoryCache()->contains(resource1));
+
+    memoryCache()->removeURLFromCache(url1);
+    EXPECT_FALSE(memoryCache()->contains(resource1));
+
+    const KURL url2 = KURL(ParsedURLString, "http://test/resource2#foo");
+    FakeResource* resource2 = FakeResource::create(ResourceRequest(url2), Resource::Raw);
+    memoryCache()->add(resource2);
+    ASSERT_TRUE(memoryCache()->contains(resource2));
+
+    memoryCache()->removeURLFromCache(url2);
+    EXPECT_FALSE(memoryCache()->contains(resource2));
 }
 
 } // namespace blink

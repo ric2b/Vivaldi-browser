@@ -27,6 +27,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
+#include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/frame/LocalFrame.h"
@@ -37,24 +38,19 @@ namespace blink {
 
 SpellCheckRequest::SpellCheckRequest(
     Range* checkingRange,
-    Range* paragraphRange,
     const String& text,
-    TextCheckingTypeMask mask,
     TextCheckingProcessType processType,
     const Vector<uint32_t>& documentMarkersInRange,
     const Vector<unsigned>& documentMarkerOffsets,
     int requestNumber)
     : m_requester(nullptr)
     , m_checkingRange(checkingRange)
-    , m_paragraphRange(paragraphRange)
-    , m_rootEditableElement(m_checkingRange->startContainer()->rootEditableElement())
-    , m_requestData(unrequestedTextCheckingSequence, text, mask, processType, documentMarkersInRange, documentMarkerOffsets)
+    , m_rootEditableElement(blink::rootEditableElement(*m_checkingRange->startContainer()))
+    , m_requestData(unrequestedTextCheckingSequence, text, processType, documentMarkersInRange, documentMarkerOffsets)
     , m_requestNumber(requestNumber)
 {
     DCHECK(m_checkingRange);
-    DCHECK(m_checkingRange->inShadowIncludingDocument());
-    DCHECK(m_paragraphRange);
-    DCHECK(m_paragraphRange->inShadowIncludingDocument());
+    DCHECK(m_checkingRange->isConnected());
     DCHECK(m_rootEditableElement);
 }
 
@@ -66,7 +62,6 @@ DEFINE_TRACE(SpellCheckRequest)
 {
     visitor->trace(m_requester);
     visitor->trace(m_checkingRange);
-    visitor->trace(m_paragraphRange);
     visitor->trace(m_rootEditableElement);
     TextCheckingRequest::trace(visitor);
 }
@@ -75,16 +70,14 @@ void SpellCheckRequest::dispose()
 {
     if (m_checkingRange)
         m_checkingRange->dispose();
-    if (m_paragraphRange && m_paragraphRange != m_checkingRange)
-        m_paragraphRange->dispose();
 }
 
 // static
-SpellCheckRequest* SpellCheckRequest::create(TextCheckingTypeMask textCheckingOptions, TextCheckingProcessType processType, const EphemeralRange& checkingRange, const EphemeralRange& paragraphRange, int requestNumber)
+SpellCheckRequest* SpellCheckRequest::create(TextCheckingProcessType processType, const EphemeralRange& checkingRange, int requestNumber)
 {
     if (checkingRange.isNull())
         return nullptr;
-    if (!checkingRange.startPosition().computeContainerNode()->rootEditableElement())
+    if (!blink::rootEditableElement(*checkingRange.startPosition().computeContainerNode()))
         return nullptr;
 
     String text = plainText(checkingRange, TextIteratorEmitsObjectReplacementCharacter);
@@ -92,12 +85,6 @@ SpellCheckRequest* SpellCheckRequest::create(TextCheckingTypeMask textCheckingOp
         return nullptr;
 
     Range* checkingRangeObject = createRange(checkingRange);
-    Range* paragraphRangeObject = nullptr;
-    // Share identical Range objects.
-    if (checkingRange == paragraphRange)
-        paragraphRangeObject = checkingRangeObject;
-    else
-        paragraphRangeObject = createRange(paragraphRange);
 
     const DocumentMarkerVector& markers = checkingRangeObject->ownerDocument().markers().markersInRange(checkingRange, DocumentMarker::SpellCheckClientMarkers());
     Vector<uint32_t> hashes(markers.size());
@@ -107,7 +94,7 @@ SpellCheckRequest* SpellCheckRequest::create(TextCheckingTypeMask textCheckingOp
         offsets[i] = markers[i]->startOffset();
     }
 
-    return new SpellCheckRequest(checkingRangeObject, paragraphRangeObject, text, textCheckingOptions, processType, hashes, offsets, requestNumber);
+    return new SpellCheckRequest(checkingRangeObject, text, processType, hashes, offsets, requestNumber);
 }
 
 const TextCheckingRequestData& SpellCheckRequest::data() const
@@ -117,7 +104,7 @@ const TextCheckingRequestData& SpellCheckRequest::data() const
 
 bool SpellCheckRequest::isValid() const
 {
-    return m_checkingRange->inShadowIncludingDocument() && m_paragraphRange->inShadowIncludingDocument() && m_rootEditableElement->inShadowIncludingDocument();
+    return m_checkingRange->isConnected() && m_rootEditableElement->isConnected();
 }
 
 void SpellCheckRequest::didSucceed(const Vector<TextCheckingResult>& results)
@@ -163,7 +150,7 @@ TextCheckerClient& SpellCheckRequester::client() const
     return frame().spellChecker().textChecker();
 }
 
-void SpellCheckRequester::timerFiredToProcessQueuedRequest(Timer<SpellCheckRequester>*)
+void SpellCheckRequester::timerFiredToProcessQueuedRequest(TimerBase*)
 {
     DCHECK(!m_requestQueue.isEmpty());
     if (m_requestQueue.isEmpty())
@@ -172,24 +159,9 @@ void SpellCheckRequester::timerFiredToProcessQueuedRequest(Timer<SpellCheckReque
     invokeRequest(m_requestQueue.takeFirst());
 }
 
-bool SpellCheckRequester::canCheckAsynchronously(Range* range) const
-{
-    return isCheckable(range);
-}
-
-bool SpellCheckRequester::isCheckable(Range* range) const
-{
-    if (!range || !range->firstNode() || !range->firstNode()->layoutObject())
-        return false;
-    const Node* node = range->startContainer();
-    if (node && node->isElementNode() && !toElement(node)->isSpellCheckingEnabled())
-        return false;
-    return true;
-}
-
 void SpellCheckRequester::requestCheckingFor(SpellCheckRequest* request)
 {
-    if (!request || !canCheckAsynchronously(request->paragraphRange()))
+    if (!request)
         return;
 
     DCHECK_EQ(request->data().sequence(), unrequestedTextCheckingSequence);
@@ -224,6 +196,10 @@ void SpellCheckRequester::prepareForLeakDetection()
     // the leak detector, they're all cancelled to prevent flaky leaks being
     // reported.
     m_requestQueue.clear();
+    // WebSpellCheckClient stores a set of WebTextCheckingCompletion objects,
+    // which may store references to already invoked requests. We should clear
+    // these references to prevent them from being a leak source.
+    client().cancelAllPendingRequests();
 }
 
 void SpellCheckRequester::invokeRequest(SpellCheckRequest* request)
@@ -292,10 +268,6 @@ void SpellCheckRequester::didCheckSucceed(int sequence, const Vector<TextCheckin
     TextCheckingRequestData requestData = m_processingRequest->data();
     if (requestData.sequence() == sequence) {
         DocumentMarker::MarkerTypes markers = DocumentMarker::SpellCheckClientMarkers();
-        if (!requestData.maskContains(TextCheckingTypeSpelling))
-            markers.remove(DocumentMarker::Spelling);
-        if (!requestData.maskContains(TextCheckingTypeGrammar))
-            markers.remove(DocumentMarker::Grammar);
         if (m_processingRequest->isValid()) {
             Range* checkingRange = m_processingRequest->checkingRange();
             frame().document()->markers().removeMarkers(EphemeralRange(checkingRange), markers);

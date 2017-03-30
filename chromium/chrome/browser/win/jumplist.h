@@ -28,9 +28,10 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "extensions/schema/bookmarks_private.h"
 
 #include "chrome/common/extensions/api/bookmarks.h"
+
+#include "extensions/schema/bookmarks_private.h"
 
 namespace chrome {
 struct FaviconImageResult;
@@ -140,10 +141,10 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // given list.
   // These functions are copied from the RecentlyClosedTabsHandler class for
   // compatibility with the new-tab page.
-  bool AddTab(const sessions::TabRestoreService::Tab* tab,
+  bool AddTab(const sessions::TabRestoreService::Tab& tab,
               ShellLinkItemList* list,
               size_t max_items);
-  void AddWindow(const sessions::TabRestoreService::Window* window,
+  void AddWindow(const sessions::TabRestoreService::Window& window,
                  ShellLinkItemList* list,
                  size_t max_items);
 

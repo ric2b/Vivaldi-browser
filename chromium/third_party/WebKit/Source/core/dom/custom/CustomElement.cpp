@@ -9,34 +9,40 @@
 #include "core/dom/custom/CEReactionsScope.h"
 #include "core/dom/custom/CustomElementDefinition.h"
 #include "core/dom/custom/CustomElementReactionStack.h"
-#include "core/dom/custom/CustomElementsRegistry.h"
+#include "core/dom/custom/CustomElementRegistry.h"
 #include "core/dom/custom/V0CustomElement.h"
 #include "core/dom/custom/V0CustomElementRegistrationContext.h"
-#include "core/frame/FrameHost.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/HTMLUnknownElement.h"
 #include "platform/text/Character.h"
 #include "wtf/text/AtomicStringHash.h"
 
 namespace blink {
 
-CustomElementsRegistry* CustomElement::registry(const Element& element)
+CustomElementRegistry* CustomElement::registry(const Element& element)
 {
     return registry(element.document());
 }
 
-CustomElementsRegistry* CustomElement::registry(const Document& document)
+CustomElementRegistry* CustomElement::registry(const Document& document)
 {
-    if (LocalDOMWindow* window = document.domWindow())
+    if (LocalDOMWindow* window = document.executingWindow())
         return window->customElements();
     return nullptr;
 }
 
-CustomElementDefinition* CustomElement::definitionForElement(const Element& element)
+static CustomElementDefinition* definitionForElementWithoutCheck(const Element& element)
 {
-    if (CustomElementsRegistry* registry = CustomElement::registry(element))
-        return registry->definitionForName(element.localName());
-    return nullptr;
+    DCHECK_EQ(element.getCustomElementState(), CustomElementState::Custom);
+    return element.customElementDefinition();
+}
+
+CustomElementDefinition* CustomElement::definitionForElement(const Element* element)
+{
+    if (!element || element->getCustomElementState() != CustomElementState::Custom)
+        return nullptr;
+    return definitionForElementWithoutCheck(*element);
 }
 
 bool CustomElement::isValidName(const AtomicString& name)
@@ -60,36 +66,34 @@ bool CustomElement::isValidName(const AtomicString& name)
         return false;
 
     // https://html.spec.whatwg.org/multipage/scripting.html#valid-custom-element-name
-    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, hyphenContainingElementNames, ());
-    if (hyphenContainingElementNames.isEmpty()) {
-        hyphenContainingElementNames.add("annotation-xml");
-        hyphenContainingElementNames.add("color-profile");
-        hyphenContainingElementNames.add("font-face");
-        hyphenContainingElementNames.add("font-face-src");
-        hyphenContainingElementNames.add("font-face-uri");
-        hyphenContainingElementNames.add("font-face-format");
-        hyphenContainingElementNames.add("font-face-name");
-        hyphenContainingElementNames.add("missing-glyph");
-    }
-
+    DEFINE_STATIC_LOCAL(HashSet<AtomicString>, hyphenContainingElementNames, ({
+        "annotation-xml",
+        "color-profile",
+        "font-face",
+        "font-face-src",
+        "font-face-uri",
+        "font-face-format",
+        "font-face-name",
+        "missing-glyph",
+    }));
     return !hyphenContainingElementNames.contains(name);
 }
 
-bool CustomElement::shouldCreateCustomElement(Document& document, const AtomicString& localName)
+bool CustomElement::shouldCreateCustomElement(const AtomicString& localName)
 {
     return RuntimeEnabledFeatures::customElementsV1Enabled()
-        && document.frame() && isValidName(localName);
+        && isValidName(localName);
 }
 
-bool CustomElement::shouldCreateCustomElement(Document& document, const QualifiedName& tagName)
+bool CustomElement::shouldCreateCustomElement(const QualifiedName& tagName)
 {
-    return shouldCreateCustomElement(document, tagName.localName())
+    return shouldCreateCustomElement(tagName.localName())
         && tagName.namespaceURI() == HTMLNames::xhtmlNamespaceURI;
 }
 
 static CustomElementDefinition* definitionForName(const Document& document, const QualifiedName& name)
 {
-    if (CustomElementsRegistry* registry = CustomElement::registry(document))
+    if (CustomElementRegistry* registry = CustomElement::registry(document))
         return registry->definitionForName(name.localName());
     return nullptr;
 }
@@ -103,7 +107,7 @@ HTMLElement* CustomElement::createCustomElementSync(Document& document, const At
 
 HTMLElement* CustomElement::createCustomElementSync(Document& document, const QualifiedName& tagName, ExceptionState& exceptionState)
 {
-    CHECK(shouldCreateCustomElement(document, tagName));
+    CHECK(shouldCreateCustomElement(tagName));
 
     // To create an element:
     // https://dom.spec.whatwg.org/#concept-create-element
@@ -117,7 +121,7 @@ HTMLElement* CustomElement::createCustomElementSync(Document& document, const Qu
 
 HTMLElement* CustomElement::createCustomElementSync(Document& document, const QualifiedName& tagName)
 {
-    CHECK(shouldCreateCustomElement(document, tagName));
+    CHECK(shouldCreateCustomElement(tagName));
 
     // When invoked from "create an element for a token":
     // https://html.spec.whatwg.org/multipage/syntax.html#create-an-element-for-the-token
@@ -132,7 +136,7 @@ HTMLElement* CustomElement::createCustomElementSync(Document& document, const Qu
 
 HTMLElement* CustomElement::createCustomElementAsync(Document& document, const QualifiedName& tagName)
 {
-    CHECK(shouldCreateCustomElement(document, tagName));
+    CHECK(shouldCreateCustomElement(tagName));
 
     // To create an element:
     // https://dom.spec.whatwg.org/#concept-create-element
@@ -146,7 +150,7 @@ HTMLElement* CustomElement::createCustomElementAsync(Document& document, const Q
 
 HTMLElement* CustomElement::createUndefinedElement(Document& document, const QualifiedName& tagName)
 {
-    DCHECK(shouldCreateCustomElement(document, tagName));
+    DCHECK(shouldCreateCustomElement(tagName));
 
     HTMLElement* element;
     if (V0CustomElement::isValidName(tagName.localName()) && document.registrationContext()) {
@@ -159,6 +163,23 @@ HTMLElement* CustomElement::createUndefinedElement(Document& document, const Qua
 
     element->setCustomElementState(CustomElementState::Undefined);
 
+    return element;
+}
+
+HTMLElement* CustomElement::createFailedElement(Document& document, const QualifiedName& tagName)
+{
+    DCHECK(shouldCreateCustomElement(tagName));
+
+    // "create an element for a token":
+    // https://html.spec.whatwg.org/multipage/syntax.html#create-an-element-for-the-token
+
+    // 7. If this step throws an exception, let element be instead a new element
+    // that implements HTMLUnknownElement, with no attributes, namespace set to
+    // given namespace, namespace prefix set to null, custom element state set
+    // to "failed", and node document set to document.
+
+    HTMLElement* element = HTMLUnknownElement::create(tagName, document);
+    element->setCustomElementState(CustomElementState::Failed);
     return element;
 }
 
@@ -176,33 +197,36 @@ void CustomElement::enqueue(Element* element, CustomElementReaction* reaction)
 
     // If the custom element reactions stack is empty, then
     // Add element to the backup element queue.
-    element->document().frameHost()->customElementReactionStack()
-        .enqueueToBackupQueue(element, reaction);
+    CustomElementReactionStack::current().enqueueToBackupQueue(element, reaction);
 }
 
 void CustomElement::enqueueConnectedCallback(Element* element)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasConnectedCallback())
         definition->enqueueConnectedCallback(element);
 }
 
 void CustomElement::enqueueDisconnectedCallback(Element* element)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasDisconnectedCallback())
         definition->enqueueDisconnectedCallback(element);
 }
 
+void CustomElement::enqueueAdoptedCallback(Element* element)
+{
+    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
+    if (definition->hasAdoptedCallback())
+        definition->enqueueAdoptedCallback(element);
+}
 
 void CustomElement::enqueueAttributeChangedCallback(Element* element,
     const QualifiedName& name,
     const AtomicString& oldValue, const AtomicString& newValue)
 {
-    DCHECK_EQ(element->getCustomElementState(), CustomElementState::Custom);
-    CustomElementDefinition* definition = definitionForElement(*element);
+    CustomElementDefinition* definition = definitionForElementWithoutCheck(*element);
     if (definition->hasAttributeChangedCallback(name))
         definition->enqueueAttributeChangedCallback(element, name, oldValue, newValue);
 }
@@ -214,7 +238,7 @@ void CustomElement::tryToUpgrade(Element* element)
 
     DCHECK_EQ(element->getCustomElementState(), CustomElementState::Undefined);
 
-    CustomElementsRegistry* registry = CustomElement::registry(*element);
+    CustomElementRegistry* registry = CustomElement::registry(*element);
     if (!registry)
         return;
     if (CustomElementDefinition* definition = registry->definitionForName(element->localName()))

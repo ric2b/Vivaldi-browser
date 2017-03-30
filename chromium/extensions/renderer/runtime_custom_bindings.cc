@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
@@ -66,10 +67,14 @@ void RuntimeCustomBindings::OpenChannelToExtension(
   bool include_tls_channel_id =
       args.Length() > 2 ? args[2]->BooleanValue() : false;
   int port_id = -1;
-  // TODO(devlin): This file is littered with sync IPCs. Yuck.
-  renderframe->Send(new ExtensionHostMsg_OpenChannelToExtension(
-      renderframe->GetRoutingID(), info, channel_name, include_tls_channel_id,
-      &port_id));
+  {
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Extensions.Messaging.GetPortIdSyncTime.Extension");
+    // TODO(devlin): This file is littered with sync IPCs. Yuck.
+    renderframe->Send(new ExtensionHostMsg_OpenChannelToExtension(
+        renderframe->GetRoutingID(), info, channel_name, include_tls_channel_id,
+        &port_id));
+  }
   args.GetReturnValue().Set(static_cast<int32_t>(port_id));
 }
 
@@ -90,8 +95,12 @@ void RuntimeCustomBindings::OpenChannelToNativeApp(
   std::string native_app_name = *v8::String::Utf8Value(args[0]);
 
   int port_id = -1;
-  render_frame->Send(new ExtensionHostMsg_OpenChannelToNativeApp(
-      render_frame->GetRoutingID(), native_app_name, &port_id));
+  {
+    SCOPED_UMA_HISTOGRAM_TIMER(
+        "Extensions.Messaging.GetPortIdSyncTime.NativeApp");
+    render_frame->Send(new ExtensionHostMsg_OpenChannelToNativeApp(
+        render_frame->GetRoutingID(), native_app_name, &port_id));
+  }
   args.GetReturnValue().Set(static_cast<int32_t>(port_id));
 }
 
@@ -107,16 +116,18 @@ void RuntimeCustomBindings::GetManifest(
 
 void RuntimeCustomBindings::GetExtensionViews(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
-  CHECK_EQ(args.Length(), 2);
+  CHECK_EQ(args.Length(), 3);
   CHECK(args[0]->IsInt32());
-  CHECK(args[1]->IsString());
+  CHECK(args[1]->IsInt32());
+  CHECK(args[2]->IsString());
 
   // |browser_window_id| == extension_misc::kUnknownWindowId means getting
   // all views for the current extension.
   int browser_window_id = args[0]->Int32Value();
+  int tab_id = args[1]->Int32Value();
 
   std::string view_type_string =
-      base::ToUpperASCII(*v8::String::Utf8Value(args[1]));
+      base::ToUpperASCII(*v8::String::Utf8Value(args[2]));
   // |view_type| == VIEW_TYPE_INVALID means getting any type of
   // views.
   ViewType view_type = VIEW_TYPE_INVALID;
@@ -144,7 +155,7 @@ void RuntimeCustomBindings::GetExtensionViews(
 
   std::vector<content::RenderFrame*> frames =
       ExtensionFrameHelper::GetExtensionFrames(extension_id, browser_window_id,
-                                               view_type);
+                                               tab_id, view_type);
   v8::Local<v8::Context> v8_context = args.GetIsolate()->GetCurrentContext();
   v8::Local<v8::Array> v8_views = v8::Array::New(args.GetIsolate());
   int v8_index = 0;

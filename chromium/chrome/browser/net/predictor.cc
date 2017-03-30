@@ -12,8 +12,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/mru_cache.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -22,7 +24,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -40,10 +41,7 @@
 #include "net/base/address_list.h"
 #include "net/base/completion_callback.h"
 #include "net/base/host_port_pair.h"
-#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
-#include "net/dns/host_resolver.h"
-#include "net/dns/single_request_host_resolver.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
 #include "net/proxy/proxy_info.h"
@@ -57,6 +55,13 @@ using content::BrowserThread;
 
 namespace chrome_browser_net {
 
+namespace {
+
+const base::Feature kNetworkPrediction{"NetworkPrediction",
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+
+}  // namespace
+
 // static
 const int Predictor::kPredictorReferrerVersion = 2;
 const double Predictor::kPreconnectWorthyExpectedValue = 0.8;
@@ -65,9 +70,12 @@ const double Predictor::kDiscardableExpectedValue = 0.05;
 const size_t Predictor::kMaxSpeculativeParallelResolves = 3;
 const int Predictor::kMaxUnusedSocketLifetimeSecondsWithoutAGet = 10;
 
-// TODO(csharrison): Tune this by observing UMA. We can probably get a lot
-// lower.
-const int Predictor::kMaxReferrers = 1000;
+// This number was obtained by the Net.Predictor.MRUIndex histogram on Canary
+// and Dev channel (M53). The database size was initialized to 1000, and the
+// histogram logged the index into the MRU in PrepareFrameSubresources. The
+// results showed that 99% of all accesses used the first 100 elements, and
+// 99.5% of all accesses used the first 170 elements.
+const int Predictor::kMaxReferrers = 100;
 
 // To control our congestion avoidance system, which discards a queue when
 // resolutions are "taking too long," we need an expected resolution time.
@@ -90,7 +98,7 @@ static size_t g_max_parallel_resolves =
 // we change the format so that we discard old data.
 static const int kPredictorStartupFormatVersion = 1;
 
-Predictor::Predictor(bool preconnect_enabled, bool predictor_enabled)
+Predictor::Predictor(bool predictor_enabled)
     : url_request_context_getter_(nullptr),
       predictor_enabled_(predictor_enabled),
       user_prefs_(nullptr),
@@ -104,12 +112,12 @@ Predictor::Predictor(bool preconnect_enabled, bool predictor_enabled)
       transport_security_state_(nullptr),
       ssl_config_service_(nullptr),
       proxy_service_(nullptr),
-      preconnect_enabled_(preconnect_enabled),
       consecutive_omnibox_preconnect_count_(0),
       referrers_(kMaxReferrers),
       observer_(nullptr),
       timed_cache_(new TimedCache(base::TimeDelta::FromSeconds(
-          kMaxUnusedSocketLifetimeSecondsWithoutAGet))) {
+          kMaxUnusedSocketLifetimeSecondsWithoutAGet))),
+      ui_weak_factory_(new base::WeakPtrFactory<Predictor>(this)) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
@@ -119,18 +127,19 @@ Predictor::~Predictor() {
 }
 
 // static
-Predictor* Predictor::CreatePredictor(bool preconnect_enabled,
-                                      bool predictor_enabled,
-                                      bool simple_shutdown) {
+Predictor* Predictor::CreatePredictor(bool simple_shutdown) {
+  bool predictor_enabled = base::FeatureList::IsEnabled(kNetworkPrediction);
   if (simple_shutdown)
-    return new SimplePredictor(preconnect_enabled, predictor_enabled);
-  return new Predictor(preconnect_enabled, predictor_enabled);
+    return new SimplePredictor(predictor_enabled);
+  return new Predictor(predictor_enabled);
 }
 
 void Predictor::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterListPref(prefs::kDnsPrefetchingStartupList);
-  registry->RegisterListPref(prefs::kDnsPrefetchingHostReferralList);
+  registry->RegisterListPref(prefs::kDnsPrefetchingStartupList,
+                             PrefRegistry::LOSSY_PREF);
+  registry->RegisterListPref(prefs::kDnsPrefetchingHostReferralList,
+                             PrefRegistry::LOSSY_PREF);
 }
 
 // --------------------- Start UI methods. ------------------------------------
@@ -160,7 +169,7 @@ void Predictor::InitNetworkPredictor(PrefService* user_prefs,
 
 void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!predictor_enabled_)
+  if (!PredictorEnabled())
     return;
   if (!url.is_valid() || !url.has_host())
     return;
@@ -174,45 +183,41 @@ void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
   UrlInfo::ResolutionMotivation motivation(UrlInfo::OMNIBOX_MOTIVATED);
   base::TimeTicks now = base::TimeTicks::Now();
 
-  if (PreconnectEnabled()) {
-    if (preconnectable && !is_new_host_request) {
-      ++consecutive_omnibox_preconnect_count_;
-      // The omnibox suggests a search URL (for which we can preconnect) after
-      // one or two characters are typed, even though such typing often (1 in
-      // 3?) becomes a real URL.  This code waits till is has more evidence of a
-      // preconnectable URL (search URL) before forming a preconnection, so as
-      // to reduce the useless preconnect rate.
-      // Perchance this logic should be pushed back into the omnibox, where the
-      // actual characters typed, such as a space, can better forcast whether
-      // we need to search/preconnect or not.  By waiting for at least 4
-      // characters in a row that have lead to a search proposal, we avoid
-      // preconnections for a prefix like "www." and we also wait until we have
-      // at least a 4 letter word to search for.
-      // Each character typed appears to induce 2 calls to
-      // AnticipateOmniboxUrl(), so we double 4 characters and limit at 8
-      // requests.
-      // TODO(jar): Use an A/B test to optimize this.
-      const int kMinConsecutiveRequests = 8;
-      if (consecutive_omnibox_preconnect_count_ >= kMinConsecutiveRequests) {
-        // TODO(jar): Perhaps we should do a GET to leave the socket open in the
-        // pool.  Currently, we just do a connect, which MAY be reset if we
-        // don't use it in 10 secondes!!!  As a result, we may do more
-        // connections, and actually cost the server more than if we did a real
-        // get with a fake request (/gen_204 might be the good path on Google).
-        const int kMaxSearchKeepaliveSeconds(10);
-        if ((now - last_omnibox_preconnect_).InSeconds() <
-            kMaxSearchKeepaliveSeconds)
-          return;  // We've done a preconnect recently.
-        last_omnibox_preconnect_ = now;
-        const int kConnectionsNeeded = 1;
-        PreconnectUrl(CanonicalizeUrl(url), GURL(), motivation,
-                      kAllowCredentialsOnPreconnectByDefault,
-                      kConnectionsNeeded);
-        return;  // Skip pre-resolution, since we'll open a connection.
-      }
-    } else {
-      consecutive_omnibox_preconnect_count_ = 0;
+  if (preconnectable && !is_new_host_request) {
+    ++consecutive_omnibox_preconnect_count_;
+    // The omnibox suggests a search URL (for which we can preconnect) after
+    // one or two characters are typed, even though such typing often (1 in
+    // 3?) becomes a real URL.  This code waits till is has more evidence of a
+    // preconnectable URL (search URL) before forming a preconnection, so as
+    // to reduce the useless preconnect rate.
+    // Perchance this logic should be pushed back into the omnibox, where the
+    // actual characters typed, such as a space, can better forcast whether
+    // we need to search/preconnect or not.  By waiting for at least 4
+    // characters in a row that have lead to a search proposal, we avoid
+    // preconnections for a prefix like "www." and we also wait until we have
+    // at least a 4 letter word to search for.
+    // Each character typed appears to induce 2 calls to AnticipateOmniboxUrl(),
+    // so we double 4 characters and limit at 8 requests.
+    // TODO(jar): Use an A/B test to optimize this.
+    const int kMinConsecutiveRequests = 8;
+    if (consecutive_omnibox_preconnect_count_ >= kMinConsecutiveRequests) {
+      // TODO(jar): Perhaps we should do a GET to leave the socket open in the
+      // pool.  Currently, we just do a connect, which MAY be reset if we
+      // don't use it in 10 secondes!!!  As a result, we may do more
+      // connections, and actually cost the server more than if we did a real
+      // get with a fake request (/gen_204 might be the good path on Google).
+      const int kMaxSearchKeepaliveSeconds(10);
+      if ((now - last_omnibox_preconnect_).InSeconds() <
+          kMaxSearchKeepaliveSeconds)
+        return;  // We've done a preconnect recently.
+      last_omnibox_preconnect_ = now;
+      const int kConnectionsNeeded = 1;
+      PreconnectUrl(CanonicalizeUrl(url), GURL(), motivation,
+                    kAllowCredentialsOnPreconnectByDefault, kConnectionsNeeded);
+      return;  // Skip pre-resolution, since we'll open a connection.
     }
+  } else {
+    consecutive_omnibox_preconnect_count_ = 0;
   }
 
   // Fall through and consider pre-resolution.
@@ -228,8 +233,7 @@ void Predictor::AnticipateOmniboxUrl(const GURL& url, bool preconnectable) {
   last_omnibox_preresolve_ = now;
 
   BrowserThread::PostTask(
-      BrowserThread::IO,
-      FROM_HERE,
+      BrowserThread::IO, FROM_HERE,
       base::Bind(&Predictor::Resolve, base::Unretained(this),
                  CanonicalizeUrl(url), motivation));
 }
@@ -238,7 +242,7 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
     const GURL& first_party_for_cookies) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
-  if (!predictor_enabled_ || !PreconnectEnabled() || !url.is_valid() ||
+  if (!PredictorEnabled() || !url.is_valid() ||
       !url.has_host())
     return;
   if (!CanPreresolveAndPreconnect())
@@ -308,9 +312,9 @@ std::vector<GURL> Predictor::GetPredictedUrlListAtStartup(
 
 void Predictor::DiscardAllResultsAndClearPrefsOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&Predictor::DiscardAllResults, weak_factory_->GetWeakPtr()));
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&Predictor::DiscardAllResults,
+                                     io_weak_factory_->GetWeakPtr()));
   ClearPrefsOnUIThread();
 }
 
@@ -332,6 +336,7 @@ void Predictor::set_max_parallel_resolves(size_t max_parallel_resolves) {
 
 void Predictor::ShutdownOnUIThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  ui_weak_factory_->InvalidateWeakPtrs();
   BrowserThread::PostTask(
       BrowserThread::IO,
       FROM_HERE,
@@ -409,7 +414,7 @@ void Predictor::Resolve(const GURL& url,
 void Predictor::LearnFromNavigation(const GURL& referring_url,
                                     const GURL& target_url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!predictor_enabled_ || !CanPreresolveAndPreconnect())
+  if (!PredictorEnabled() || !CanPreresolveAndPreconnect())
     return;
   DCHECK_EQ(referring_url, Predictor::CanonicalizeUrl(referring_url));
   DCHECK_NE(referring_url, GURL::EmptyGURL());
@@ -443,7 +448,7 @@ void Predictor::PredictorGetHtmlInfo(Predictor* predictor,
                  // We'd like the following no-cache... but it doesn't work.
                  // "<META HTTP-EQUIV=\"Pragma\" CONTENT=\"no-cache\">"
                  "</head><body>");
-  if (predictor && predictor->predictor_enabled() &&
+  if (predictor && predictor->PredictorEnabled() &&
       predictor->CanPreresolveAndPreconnect()) {
     predictor->GetHtmlInfo(output);
   } else {
@@ -533,7 +538,7 @@ void Predictor::GetHtmlInfo(std::string* output) {
 // backwards here so that adding items in order "Just Works" when deserializing.
 void Predictor::SerializeReferrers(base::ListValue* referral_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  referral_list->Clear();
+  DCHECK(referral_list->empty());
   referral_list->AppendInteger(kPredictorReferrerVersion);
   for (Referrers::const_reverse_iterator it = referrers_.rbegin();
        it != referrers_.rend(); ++it) {
@@ -602,11 +607,8 @@ void Predictor::FinalizeInitializationOnIOThread(
   proxy_service_ = context->proxy_service();
 
   // base::WeakPtrFactory instances need to be created and destroyed
-  // on the same thread. The predictor lives on the IO thread and will die
-  // from there so now that we're on the IO thread we need to properly
-  // initialize the base::WeakPtrFactory.
-  // TODO(groby): Check if WeakPtrFactory has the same constraint.
-  weak_factory_.reset(new base::WeakPtrFactory<Predictor>(this));
+  // on the same thread. Initialize the IO thread weak factory now.
+  io_weak_factory_.reset(new base::WeakPtrFactory<Predictor>(this));
 
   // Prefetch these hostnames on startup.
   DnsPrefetchMotivatedList(startup_urls, UrlInfo::STARTUP_LIST_MOTIVATED);
@@ -625,7 +627,7 @@ void Predictor::FinalizeInitializationOnIOThread(
 
 void Predictor::LearnAboutInitialNavigation(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!predictor_enabled_ || nullptr == initial_observer_.get() ||
+  if (!PredictorEnabled() || nullptr == initial_observer_.get() ||
       !CanPreresolveAndPreconnect()) {
     return;
   }
@@ -654,7 +656,7 @@ void Predictor::DnsPrefetchMotivatedList(
     UrlInfo::ResolutionMotivation motivation) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
-  if (!predictor_enabled_)
+  if (!PredictorEnabled())
     return;
   if (!CanPreresolveAndPreconnect())
     return;
@@ -674,68 +676,47 @@ void Predictor::DnsPrefetchMotivatedList(
 // Functions to handle saving of hostnames from one session to the next, to
 // expedite startup times.
 
-static void SaveDnsPrefetchStateForNextStartupOnIOThread(
-    base::ListValue* startup_list,
-    base::ListValue* referral_list,
-    base::WaitableEvent* completion,
-    Predictor* predictor) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-
-  if (nullptr == predictor) {
-    completion->Signal();
-    return;
-  }
-  predictor->SaveDnsPrefetchStateForNextStartup(startup_list, referral_list,
-                                                completion);
-}
-
 void Predictor::SaveStateForNextStartup() {
-  if (!predictor_enabled_)
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!PredictorEnabled())
     return;
   if (!CanPreresolveAndPreconnect())
     return;
 
-  base::WaitableEvent completion(
-      base::WaitableEvent::ResetPolicy::MANUAL,
-      base::WaitableEvent::InitialState::NOT_SIGNALED);
+  std::unique_ptr<base::ListValue> startup_list(new base::ListValue);
+  std::unique_ptr<base::ListValue> referral_list(new base::ListValue);
 
-  ListPrefUpdate update_startup_list(user_prefs_,
-                                     prefs::kDnsPrefetchingStartupList);
-  ListPrefUpdate update_referral_list(user_prefs_,
-                                      prefs::kDnsPrefetchingHostReferralList);
-  if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
-    SaveDnsPrefetchStateForNextStartupOnIOThread(update_startup_list.Get(),
-                                                 update_referral_list.Get(),
-                                                 &completion, this);
-  } else {
-    bool posted = BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&SaveDnsPrefetchStateForNextStartupOnIOThread,
-                   update_startup_list.Get(), update_referral_list.Get(),
-                   &completion, this));
+  // Get raw pointers to pass to the first task. Ownership of the unique_ptrs
+  // will be passed to the reply task.
+  base::ListValue* startup_list_raw = startup_list.get();
+  base::ListValue* referral_list_raw = referral_list.get();
 
-    // TODO(jar): Synchronous waiting for the IO thread is a potential source
-    // to deadlocks and should be investigated. See http://crbug.com/78451.
-    DCHECK(posted);
-    if (posted) {
-      // http://crbug.com/124954
-      base::ThreadRestrictions::ScopedAllowWait allow_wait;
-      completion.Wait();
-    }
-  }
+  BrowserThread::PostTaskAndReply(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&Predictor::WriteDnsPrefetchState,
+                 io_weak_factory_->GetWeakPtr(), startup_list_raw,
+                 referral_list_raw),
+      base::Bind(&Predictor::UpdatePrefsOnUIThread,
+                 ui_weak_factory_->GetWeakPtr(),
+                 base::Passed(std::move(startup_list)),
+                 base::Passed(std::move(referral_list))));
 }
 
-void Predictor::SaveDnsPrefetchStateForNextStartup(
-    base::ListValue* startup_list,
-    base::ListValue* referral_list,
-    base::WaitableEvent* completion) {
+void Predictor::UpdatePrefsOnUIThread(
+    std::unique_ptr<base::ListValue> startup_list,
+    std::unique_ptr<base::ListValue> referral_list) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  user_prefs_->Set(prefs::kDnsPrefetchingStartupList, *startup_list);
+  user_prefs_->Set(prefs::kDnsPrefetchingHostReferralList, *referral_list);
+}
+
+void Predictor::WriteDnsPrefetchState(base::ListValue* startup_list,
+                                      base::ListValue* referral_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (initial_observer_.get())
     initial_observer_->GetInitialDnsResolutionList(startup_list);
 
   SerializeReferrers(referral_list);
-
-  completion->Signal();
 }
 
 void Predictor::PreconnectUrl(const GURL& url,
@@ -810,7 +791,7 @@ void Predictor::PredictFrameSubresources(const GURL& url,
                                          const GURL& first_party_for_cookies) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI) ||
          BrowserThread::CurrentlyOn(BrowserThread::IO));
-  if (!predictor_enabled_)
+  if (!PredictorEnabled())
     return;
   if (!CanPreresolveAndPreconnect())
     return;
@@ -863,9 +844,9 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
 
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_EQ(url.GetWithEmptyPath(), url);
+  DCHECK(PredictorEnabled());
   // Peek here, and Get after logging the index into the MRU.
-  // TODO(csharrison): Remove this logic when the MRU size is tuned.
-  Referrers::iterator it = referrers_.Peek(url);
+  Referrers::iterator it = referrers_.Get(url);
   if (referrers_.end() == it) {
     // Only when we don't know anything about this url, make 2 connections
     // available.  We could do this completely via learning (by prepopulating
@@ -873,17 +854,11 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
     // size of the list with all the "Leaf" nodes in the tree (nodes that don't
     // load any subresources).  If we learn about this resource, we will instead
     // provide a more carefully estimated preconnection count.
-    if (PreconnectEnabled()) {
-      PreconnectUrlOnIOThread(url, first_party_for_cookies,
-                              UrlInfo::SELF_REFERAL_MOTIVATED,
-                              kAllowCredentialsOnPreconnectByDefault, 2);
-    }
+    PreconnectUrlOnIOThread(url, first_party_for_cookies,
+                            UrlInfo::SELF_REFERAL_MOTIVATED,
+                            kAllowCredentialsOnPreconnectByDefault, 2);
     return;
   }
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Net.Predictor.MRUIndex",
-                              std::distance(referrers_.begin(), it), 1, 1000,
-                              50);
-  it = referrers_.Get(url);
   Referrer* referrer = &(it->second);
 
   referrer->IncrementUseCount();
@@ -897,8 +872,7 @@ void Predictor::PrepareFrameSubresources(const GURL& original_url,
                                 static_cast<int>(connection_expectation * 100),
                                 10, 5000, 50);
     future_url->second.ReferrerWasObserved();
-    if (PreconnectEnabled() &&
-        connection_expectation > kPreconnectWorthyExpectedValue) {
+    if (connection_expectation > kPreconnectWorthyExpectedValue) {
       evalution = PRECONNECTION;
       future_url->second.IncrementPreconnectionCount();
       int count = static_cast<int>(std::ceil(connection_expectation));
@@ -961,7 +935,7 @@ bool Predictor::WouldLikelyProxyURL(const GURL& url) {
 
   net::ProxyInfo info;
   bool synchronous_success = proxy_service_->TryResolveProxySynchronously(
-      url, std::string(), net::LOAD_NORMAL, &info, nullptr, net::BoundNetLog());
+      url, std::string(), &info, nullptr, net::BoundNetLog());
 
   return synchronous_success && !info.is_direct();
 }
@@ -1035,7 +1009,7 @@ void Predictor::StartSomeQueuedResolutions() {
     int status =
         content::PreresolveUrl(profile_io_data_->GetResourceContext(), url,
                                base::Bind(&Predictor::OnLookupFinished,
-                                          weak_factory_->GetWeakPtr(), url));
+                                          io_weak_factory_->GetWeakPtr(), url));
     if (status == net::ERR_IO_PENDING) {
       // Will complete asynchronously.
       num_pending_lookups_++;
@@ -1085,14 +1059,14 @@ void Predictor::LogStartupMetrics() {
 
 //-----------------------------------------------------------------------------
 
-bool Predictor::PreconnectEnabled() const {
-  base::AutoLock lock(preconnect_enabled_lock_);
-  return preconnect_enabled_;
+bool Predictor::PredictorEnabled() const {
+  base::AutoLock lock(predictor_enabled_lock_);
+  return predictor_enabled_;
 }
 
-void Predictor::SetPreconnectEnabledForTest(bool preconnect_enabled) {
-  base::AutoLock lock(preconnect_enabled_lock_);
-  preconnect_enabled_ = preconnect_enabled;
+void Predictor::SetPredictorEnabledForTest(bool predictor_enabled) {
+  base::AutoLock lock(predictor_enabled_lock_);
+  predictor_enabled_ = predictor_enabled;
 }
 
 Predictor::HostNameQueue::HostNameQueue() {
@@ -1158,7 +1132,7 @@ void Predictor::InitialObserver::GetInitialDnsResolutionList(
     base::ListValue* startup_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(startup_list);
-  startup_list->Clear();
+  DCHECK(startup_list->empty());
   DCHECK_EQ(0u, startup_list->GetSize());
   startup_list->AppendInteger(kPredictorStartupFormatVersion);
   for (FirstNavigations::iterator it = first_navigations_.begin();

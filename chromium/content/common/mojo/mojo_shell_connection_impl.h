@@ -6,68 +6,73 @@
 #define CONTENT_COMMON_MOJO_SHELL_CONNECTION_IMPL_H_
 
 #include <memory>
-#include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "content/public/common/mojo_shell_connection.h"
-#include "mojo/public/cpp/bindings/binding_set.h"
+#include "mojo/public/cpp/bindings/string.h"
 #include "mojo/public/cpp/system/message_pipe.h"
-#include "services/shell/public/cpp/shell_client.h"
-#include "services/shell/public/cpp/shell_connection.h"
-#include "services/shell/public/interfaces/shell_client_factory.mojom.h"
+#include "services/shell/public/cpp/identity.h"
+#include "services/shell/public/interfaces/service.mojom.h"
+
+namespace shell {
+class Connector;
+}
 
 namespace content {
 
 class EmbeddedApplicationRunner;
 
-class MojoShellConnectionImpl
-    : public MojoShellConnection,
-      public shell::ShellClient,
-      public shell::InterfaceFactory<shell::mojom::ShellClientFactory>,
-      public shell::mojom::ShellClientFactory {
-
+class MojoShellConnectionImpl : public MojoShellConnection {
  public:
-  explicit MojoShellConnectionImpl(shell::mojom::ShellClientRequest request);
+  explicit MojoShellConnectionImpl(
+      shell::mojom::ServiceRequest request,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner);
   ~MojoShellConnectionImpl() override;
 
  private:
+  class IOThreadContext;
+
   // MojoShellConnection:
-  shell::ShellConnection* GetShellConnection() override;
+  void Start() override;
+  void SetInitializeHandler(const base::Closure& handler) override;
   shell::Connector* GetConnector() override;
   const shell::Identity& GetIdentity() const override;
   void SetConnectionLostClosure(const base::Closure& closure) override;
-  void AddEmbeddedShellClient(
-      std::unique_ptr<shell::ShellClient> shell_client) override;
-  void AddEmbeddedShellClient(shell::ShellClient* shell_client) override;
+  void SetupInterfaceRequestProxies(
+      shell::InterfaceRegistry* registry,
+      shell::InterfaceProvider* provider) override;
+  int AddConnectionFilter(std::unique_ptr<ConnectionFilter> filter) override;
+  void RemoveConnectionFilter(int filter_id) override;
   void AddEmbeddedService(const std::string& name,
                           const MojoApplicationInfo& info) override;
-  void AddShellClientRequestHandler(
+  void AddServiceRequestHandler(
       const std::string& name,
-      const ShellClientRequestHandler& handler) override;
+      const ServiceRequestHandler& handler) override;
 
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
-  shell::InterfaceRegistry* GetInterfaceRegistryForConnection() override;
-  shell::InterfaceProvider* GetInterfaceProviderForConnection() override;
+  void OnContextInitialized(const shell::Identity& identity);
+  void OnConnectionLost();
+  void CreateService(shell::mojom::ServiceRequest request,
+                     const std::string& name);
+  void GetInterface(shell::mojom::InterfaceProvider* provider,
+                    const std::string& interface_name,
+                    mojo::ScopedMessagePipeHandle request_handle);
 
-  // shell::InterfaceFactory<shell::mojom::ShellClientFactory>:
-  void Create(shell::Connection* connection,
-              shell::mojom::ShellClientFactoryRequest request) override;
+  shell::Identity identity_;
 
-  // shell::mojom::ShellClientFactory:
-  void CreateShellClient(shell::mojom::ShellClientRequest request,
-                         const mojo::String& name) override;
+  std::unique_ptr<shell::Connector> connector_;
+  scoped_refptr<IOThreadContext> context_;
 
-  std::unique_ptr<shell::ShellConnection> shell_connection_;
-  mojo::BindingSet<shell::mojom::ShellClientFactory> factory_bindings_;
-  std::vector<shell::ShellClient*> embedded_shell_clients_;
-  std::vector<std::unique_ptr<shell::ShellClient>> owned_shell_clients_;
+  base::Closure initialize_handler_;
+  base::Closure connection_lost_handler_;
+
   std::unordered_map<std::string, std::unique_ptr<EmbeddedApplicationRunner>>
       embedded_apps_;
-  std::unordered_map<std::string, ShellClientRequestHandler> request_handlers_;
+  std::unordered_map<std::string, ServiceRequestHandler> request_handlers_;
+
+  base::WeakPtrFactory<MojoShellConnectionImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(MojoShellConnectionImpl);
 };

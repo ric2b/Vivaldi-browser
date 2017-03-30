@@ -79,13 +79,28 @@ void FakeCrosDisksClient::Init(dbus::Bus* bus) {
 void FakeCrosDisksClient::Mount(const std::string& source_path,
                                 const std::string& source_format,
                                 const std::string& mount_label,
+                                MountAccessMode access_mode,
                                 const base::Closure& callback,
                                 const base::Closure& error_callback) {
-  // This fake implementation only accepts archive mount requests.
-  const MountType type = MOUNT_TYPE_ARCHIVE;
+  // This fake implementation assumes mounted path is device when source_format
+  // is empty, or an archive otherwise.
+  MountType type =
+      (source_format == "") ? MOUNT_TYPE_DEVICE : MOUNT_TYPE_ARCHIVE;
 
-  const base::FilePath mounted_path = GetArchiveMountPoint().Append(
-      base::FilePath::FromUTF8Unsafe(mount_label));
+  base::FilePath mounted_path;
+  switch (type) {
+    case MOUNT_TYPE_ARCHIVE:
+      mounted_path = GetArchiveMountPoint().Append(
+          base::FilePath::FromUTF8Unsafe(mount_label));
+      break;
+    case MOUNT_TYPE_DEVICE:
+      mounted_path = GetRemovableDiskMountPoint().Append(
+          base::FilePath::FromUTF8Unsafe(mount_label));
+      break;
+    case MOUNT_TYPE_INVALID:
+      // Unreachable
+      return;
+  }
   mounted_paths_.insert(mounted_path);
 
   base::PostTaskAndReplyWithResult(

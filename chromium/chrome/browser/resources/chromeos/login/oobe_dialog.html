@@ -1,0 +1,49 @@
+<!-- Copyright 2016 The Chromium Authors. All rights reserved.
+     Use of this source code is governed by a BSD-style license that can be
+     found in the LICENSE file. -->
+
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
+
+<!--
+  Simple OOBE card which should be used for OOBE UI elements.
+  It has blue header and grey footer.
+
+  Example:
+    <oobe-dialog>
+      <iron-icon ... class="oobe-icon">
+      <div class="header flex vertical layout end-justified start">
+        ...
+      </div>
+      <oobe-input-form class="footer" ...>
+      </oobe-input-form>
+      <oobe-text-button class="footer" label="OK" ...>
+      </oobe-text-button>
+    </oobe-dialog>
+
+  Add class |header| to all which you want to go inside the header.  Similar
+  with clases |footer| and |oobe-icon|.
+-->
+<dom-module name="oobe-dialog">
+  <template>
+    <link rel="stylesheet" href="oobe_dialog_host.css">
+    <link rel="stylesheet" href="oobe_dialog.css">
+    <div id="header-container">
+      <div class="oobe-icon-div">
+        <content select=".oobe-icon"></content>
+      </div>
+      <div class="oobe-header layout vertical">
+        <content select=".header"></content>
+      </div>
+    </div>
+    <div id="footer-container" class="flex">
+      <content select=".footer"></content>
+    </div>
+    <template is="dom-if" if="[[hasButtons]]">
+      <div id="oobe-bottom" class="layout horizontal center">
+        <content select=".bottom-buttons"></content>
+      </div>
+    </template>
+  </template>
+</dom-module>
+

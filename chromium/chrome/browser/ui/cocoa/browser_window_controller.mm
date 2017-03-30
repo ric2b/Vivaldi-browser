@@ -21,6 +21,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_commands_global_registry.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -57,7 +58,6 @@
 #include "chrome/browser/ui/cocoa/fullscreen_low_power_coordinator.h"
 #import "chrome/browser/ui/cocoa/fullscreen_window.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
-#include "chrome/browser/ui/cocoa/last_active_browser_cocoa.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
@@ -77,7 +77,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/translate/translate_bubble_model_impl.h"
-#include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/command.h"
@@ -396,7 +395,7 @@ bool IsTabDetachingInFullscreenEnabled() {
     if ([self hasToolbar])  // Do not create the buttons in popups.
       [toolbarController_ createBrowserActionButtons];
 
-    extension_keybinding_registry_.reset(
+    extensionKeybindingRegistry_.reset(
         new ExtensionKeybindingRegistryCocoa(browser_->profile(),
             [self window],
             extensions::ExtensionKeybindingRegistry::ALL_EXTENSIONS,
@@ -598,9 +597,10 @@ bool IsTabDetachingInFullscreenEnabled() {
 
 // Called right after our window became the main window.
 - (void)windowDidBecomeMain:(NSNotification*)notification {
-  if (chrome::GetLastActiveBrowser() != browser_.get()) {
-    BrowserList::SetLastActive(browser_.get());
-  }
+  // Set this window as active even if the previously active windows was the
+  // same one. This is needed for tracking visibility changes of a browser.
+  BrowserList::SetLastActive(browser_.get());
+
   // Always saveWindowPositionIfNeeded when becoming main, not just
   // when |browser_| is not the last active browser. See crbug.com/536280 .
   [self saveWindowPositionIfNeeded];
@@ -612,7 +612,7 @@ bool IsTabDetachingInFullscreenEnabled() {
   }];
 
   extensions::ExtensionCommandsGlobalRegistry::Get(browser_->profile())
-      ->set_registry_for_active_window(extension_keybinding_registry_.get());
+      ->set_registry_for_active_window(extensionKeybindingRegistry_.get());
 }
 
 - (void)windowDidResignMain:(NSNotification*)notification {
@@ -624,6 +624,8 @@ bool IsTabDetachingInFullscreenEnabled() {
 
   extensions::ExtensionCommandsGlobalRegistry::Get(browser_->profile())
       ->set_registry_for_active_window(nullptr);
+
+  BrowserList::NotifyBrowserNoLongerActive(browser_.get());
 }
 
 // Called when we have been minimized.
@@ -986,7 +988,7 @@ bool IsTabDetachingInFullscreenEnabled() {
 
 - (BOOL)handledByExtensionCommand:(NSEvent*)event
     priority:(ui::AcceleratorManager::HandlerPriority)priority {
-  return extension_keybinding_registry_->ProcessKeyEvent(
+  return extensionKeybindingRegistry_->ProcessKeyEvent(
       content::NativeWebKeyboardEvent(event), priority);
 }
 
@@ -1016,15 +1018,15 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)onActiveTabChanged:(content::WebContents*)oldContents
                         to:(content::WebContents*)newContents {
   // No need to remove previous bubble. It will close itself.
-  PermissionBubbleManager* manager(nullptr);
+  PermissionRequestManager* manager(nullptr);
   if (oldContents) {
-    manager = PermissionBubbleManager::FromWebContents(oldContents);
+    manager = PermissionRequestManager::FromWebContents(oldContents);
     if (manager)
       manager->HideBubble();
   }
 
   if (newContents) {
-    manager = PermissionBubbleManager::FromWebContents(newContents);
+    manager = PermissionRequestManager::FromWebContents(newContents);
     if (manager)
       manager->DisplayPendingRequests();
   }
@@ -1549,7 +1551,7 @@ bool IsTabDetachingInFullscreenEnabled() {
         browser_.get(), url, alreadyMarked);
   } else {
     BookmarkModel* model =
-        BookmarkModelFactory::GetForProfile(browser_->profile());
+        BookmarkModelFactory::GetForBrowserContext(browser_->profile());
     bookmarks::ManagedBookmarkService* managed =
         ManagedBookmarkServiceFactory::GetForProfile(browser_->profile());
     const BookmarkNode* node = model->GetMostRecentlyAddedUserNodeForURL(url);
@@ -1634,7 +1636,7 @@ bool IsTabDetachingInFullscreenEnabled() {
 }
 
 - (void)dismissPermissionBubble {
-  PermissionBubbleManager* manager = [self permissionBubbleManager];
+  PermissionRequestManager* manager = [self permissionRequestManager];
   if (manager)
     manager->HideBubble();
 }
@@ -1710,6 +1712,8 @@ bool IsTabDetachingInFullscreenEnabled() {
   if (statusBubble_) {
     statusBubble_->UpdateSizeAndPosition();
   }
+
+  [self updatePermissionBubbleAnchor];
 
   // The FindBar needs to know its own position to properly detect overlaps
   // with find results. The position changes whenever the window is resized,
@@ -1848,8 +1852,8 @@ willAnimateFromState:(BookmarkBar::State)oldState
   // Global commands are handled by the ExtensionCommandsGlobalRegistry
   // instance.
   DCHECK(!command.global());
-  extension_keybinding_registry_->ExecuteCommand(extension_id,
-                                                 command.accelerator());
+  extensionKeybindingRegistry_->ExecuteCommand(extension_id,
+                                               command.accelerator());
 }
 
 - (void)setAlertState:(TabAlertState)alertState {
@@ -1873,13 +1877,15 @@ willAnimateFromState:(BookmarkBar::State)oldState
     (ExclusiveAccessContext::TabFullscreenState)state {
   DCHECK([self isInAnyFullscreenMode]);
   if (state == ExclusiveAccessContext::STATE_ENTER_TAB_FULLSCREEN) {
-    [self adjustUIForSlidingFullscreenStyle:fullscreen_mac::OMNIBOX_TABS_NONE];
+    [self adjustUIForSlidingFullscreenStyle:FullscreenSlidingStyle::
+                                                OMNIBOX_TABS_NONE];
     return;
   }
 
   [self adjustUIForSlidingFullscreenStyle:
-            shouldShowFullscreenToolbar_ ? fullscreen_mac::OMNIBOX_TABS_PRESENT
-                                         : fullscreen_mac::OMNIBOX_TABS_HIDDEN];
+            shouldShowFullscreenToolbar_
+                ? FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT
+                : FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN];
 }
 
 - (void)updateFullscreenExitBubble {
@@ -1901,11 +1907,11 @@ willAnimateFromState:(BookmarkBar::State)oldState
   if (shouldShowFullscreenToolbar_ == visible)
     return;
 
-  [fullscreenToolbarController_ setToolbarFraction:0.0];
   shouldShowFullscreenToolbar_ = visible;
   [self adjustUIForSlidingFullscreenStyle:
-            shouldShowFullscreenToolbar_ ? fullscreen_mac::OMNIBOX_TABS_PRESENT
-                                         : fullscreen_mac::OMNIBOX_TABS_HIDDEN];
+            shouldShowFullscreenToolbar_
+                ? FullscreenSlidingStyle::OMNIBOX_TABS_PRESENT
+                : FullscreenSlidingStyle::OMNIBOX_TABS_HIDDEN];
 }
 
 - (BOOL)isInAnyFullscreenMode {
@@ -1976,29 +1982,24 @@ willAnimateFromState:(BookmarkBar::State)oldState
 }
 
 - (BOOL)isBarVisibilityLockedForOwner:(id)owner {
-  DCHECK(owner);
   DCHECK(barVisibilityLocks_);
-  return [barVisibilityLocks_ containsObject:owner];
+  return owner ? [barVisibilityLocks_ containsObject:owner]
+               : [barVisibilityLocks_ count];
 }
 
-- (void)lockBarVisibilityForOwner:(id)owner
-                    withAnimation:(BOOL)animate
-                            delay:(BOOL)delay {
+- (void)lockBarVisibilityForOwner:(id)owner withAnimation:(BOOL)animate {
   if (![self isBarVisibilityLockedForOwner:owner]) {
     [barVisibilityLocks_ addObject:owner];
 
     // If enabled, show the overlay if necessary (and if the fullscreen
     // toolbar is hidden).
     if (barVisibilityUpdatesEnabled_) {
-      [fullscreenToolbarController_ ensureOverlayShownWithAnimation:animate
-                                                              delay:delay];
+      [fullscreenToolbarController_ lockBarVisibilityWithAnimation:animate];
     }
   }
 }
 
-- (void)releaseBarVisibilityForOwner:(id)owner
-                       withAnimation:(BOOL)animate
-                               delay:(BOOL)delay {
+- (void)releaseBarVisibilityForOwner:(id)owner withAnimation:(BOOL)animate {
   if ([self isBarVisibilityLockedForOwner:owner]) {
     [barVisibilityLocks_ removeObject:owner];
 
@@ -2006,8 +2007,7 @@ willAnimateFromState:(BookmarkBar::State)oldState
     // toolbar is hidden).
     if (barVisibilityUpdatesEnabled_ &&
         ![barVisibilityLocks_ count]) {
-      [fullscreenToolbarController_ ensureOverlayHiddenWithAnimation:animate
-                                                               delay:delay];
+      [fullscreenToolbarController_ releaseBarVisibilityWithAnimation:animate];
     }
   }
 }

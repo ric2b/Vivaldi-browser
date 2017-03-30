@@ -48,8 +48,12 @@ _java_target_whitelist = [
   "//third_party/netty4:netty_all",
   "//third_party/netty-tcnative:netty-tcnative",
   "//third_party/robolectric:android-all-4.3_r2-robolectric-0",
+  "//third_party/robolectric:android-all-5.0.0_r2-robolectric-1",
   "//third_party/robolectric:json-20080701",
   "//third_party/robolectric:tagsoup-1.2",
+  "//third_party/robolectric:shadows-core-3.0-18",
+  "//third_party/robolectric:shadows-core-3.0-21",
+  "//third_party/robolectric:shadows-multidex-3.0",
 ]
 
 # Targets that match the whitelist but are not actually java targets.
@@ -57,6 +61,7 @@ _java_target_blacklist = [
   "//chrome:packed_extra_resources",
   "//chrome:packed_resources",
   "//remoting/android:remoting_android_raw_resources",
+  "*:*_unpack_aar",
 ]
 
 # Write the target's .build_config file. This is a json file that contains a
@@ -102,7 +107,7 @@ template("write_build_config") {
     assert(type == "android_apk" || type == "java_library" ||
            type == "android_resources" || type == "deps_dex" ||
            type == "android_assets" || type == "resource_rewriter" ||
-           type == "java_binary" || type == "group")
+           type == "java_binary" || type == "group" || type == "java_prebuilt")
 
     forward_variables_from(invoker,
                            [
@@ -159,7 +164,8 @@ template("write_build_config") {
       rebase_path(build_config, root_build_dir),
     ]
 
-    is_java = type == "java_library" || type == "java_binary"
+    is_java = type == "java_library" || type == "java_binary" ||
+              type == "java_prebuilt"
     is_apk = type == "android_apk"
     is_android_assets = type == "android_assets"
     is_android_resources = type == "android_resources"
@@ -314,11 +320,46 @@ template("write_build_config") {
       }
     }
 
+    if (defined(invoker.java_sources_file)) {
+      args += [
+        "--java-sources-file",
+        rebase_path(invoker.java_sources_file, root_build_dir),
+      ]
+    }
     if (defined(invoker.srcjar)) {
       args += [
         "--srcjar",
         rebase_path(invoker.srcjar, root_build_dir),
       ]
+    }
+    if (defined(invoker.bundled_srcjars)) {
+      _rebased_bundled_srcjars =
+          rebase_path(invoker.bundled_srcjars, root_build_dir)
+      args += [ "--bundled-srcjars=$_rebased_bundled_srcjars" ]
+    }
+    if (defined(invoker.input_jars_paths)) {
+      _rebased_input_jars_paths =
+          rebase_path(invoker.input_jars_paths, root_build_dir)
+      args += [ "--extra-classpath-jars=$_rebased_input_jars_paths" ]
+    }
+    if (current_toolchain != default_toolchain) {
+      # This has to be a built-time error rather than a GN assert because many
+      # packages have a mix of java and non-java targets. For example, the
+      # following would fail even though nothing depends on :bar(//baz):
+      #
+      # shared_library("foo") {
+      # }
+      #
+      # android_library("bar") {
+      #   deps = [ ":foo(//baz)" ]
+      #   assert(current_toolchain == default_toolchain)
+      # }
+      _msg = [
+        "Tried to build an Android target in a non-default toolchain.",
+        "target: " + get_label_info(":$target_name", "label_with_toolchain"),
+        "default_toolchain: $default_toolchain",
+      ]
+      args += [ "--fail=$_msg" ]
     }
   }
 }
@@ -372,6 +413,55 @@ template("copy_ex") {
       renaming_destinations = invoker.renaming_destinations
       args += [ "--renaming-destinations=$renaming_destinations" ]
     }
+  }
+}
+
+template("device_isolate") {
+  testonly = true
+  _runtime_deps_file = "$target_gen_dir/$target_name.runtime_deps"
+  group("${target_name}__write_deps") {
+    forward_variables_from(invoker,
+                           [
+                             "data",
+                             "data_deps",
+                             "deps",
+                             "public_deps",
+                           ])
+    write_runtime_deps = _runtime_deps_file
+  }
+
+  action(target_name) {
+    script = "//build/android/gn/generate_isolate.py"
+    inputs = [
+      _runtime_deps_file,
+    ]
+    outputs = [
+      invoker.output,
+    ]
+    args = [
+      "--output-directory=.",
+      "--out-file",
+      rebase_path(invoker.output, root_build_dir),
+      "--runtime-deps-file",
+      rebase_path(_runtime_deps_file, root_build_dir),
+      "--apply-android-filters",
+      "--apply-device-filters",
+    ]
+    _assert_no_odd_data =
+        defined(invoker.assert_no_odd_data) && invoker.assert_no_odd_data
+    if (_assert_no_odd_data) {
+      args += [ "--assert-no-odd-data" ]
+    }
+    if (defined(invoker.command)) {
+      _isolate_dir = get_path_info(invoker.output, "dir")
+      args += [
+        "--command",
+        rebase_path(invoker.command, _isolate_dir),
+      ]
+    }
+    deps = [
+      ":${invoker.target_name}__write_deps",
+    ]
   }
 }
 
@@ -534,7 +624,6 @@ if (enable_java_templates) {
   import("//third_party/ijar/ijar.gni")
 
   rebased_android_sdk = rebase_path(android_sdk, root_build_dir)
-  rebased_android_sdk_root = rebase_path(android_sdk_root, root_build_dir)
   rebased_android_sdk_build_tools =
       rebase_path(android_sdk_build_tools, root_build_dir)
 
@@ -565,6 +654,8 @@ if (enable_java_templates) {
       _suppressions_file = "//build/android/lint/suppressions.xml"
       _platform_xml_path =
           "${android_sdk_root}/platform-tools/api/api-versions.xml"
+      _rebased_lint_android_sdk_root =
+          rebase_path(lint_android_sdk_root, root_build_dir)
 
       script = "//build/android/gyp/lint.py"
       depfile = "$target_gen_dir/$target_name.d"
@@ -581,12 +672,12 @@ if (enable_java_templates) {
       ]
 
       args = [
-        "--lint-path=$rebased_android_sdk_root/tools/lint",
+        "--lint-path=$_rebased_lint_android_sdk_root/tools/lint",
         "--cache-dir",
         rebase_path(_cache_dir, root_build_dir),
         "--platform-xml-path",
         rebase_path(_platform_xml_path, root_build_dir),
-        "--android-sdk-version=${android_sdk_version}",
+        "--android-sdk-version=${lint_android_sdk_version}",
         "--depfile",
         rebase_path(depfile, root_build_dir),
         "--config-path",
@@ -612,17 +703,22 @@ if (enable_java_templates) {
           invoker.jar_path,
           invoker.build_config,
         ]
+        if (invoker.java_files != []) {
+          inputs += [ invoker.java_sources_file ]
+          _rebased_java_sources_file =
+              rebase_path(invoker.java_sources_file, root_build_dir)
+          args += [ "--java-sources-file=$_rebased_java_sources_file" ]
+        }
         deps += [ "//build/android:prepare_android_lint_cache" ]
-        _rebased_java_files = rebase_path(invoker.java_files, root_build_dir)
+
         _rebased_build_config =
             rebase_path(invoker.build_config, root_build_dir)
         args += [
           "--jar-path",
           rebase_path(invoker.jar_path, root_build_dir),
-          "--java-files=$_rebased_java_files",
           "--classpath=@FileArg($_rebased_build_config:javac:interface_classpath)",
-          "--resource-sources=@FileArg($_rebased_build_config:lint:resources_dirs)",
-          "--resource-sources=@FileArg($_rebased_build_config:lint:resources_zips)",
+          "--resource-sources=@FileArg($_rebased_build_config:deps_info:owned_resources_dirs)",
+          "--resource-sources=@FileArg($_rebased_build_config:deps_info:owned_resources_zips)",
         ]
       }
     }
@@ -645,11 +741,9 @@ if (enable_java_templates) {
         _proguard_jar_path = "//third_party/proguard/lib/proguard.jar"
       }
       _output_jar_path = invoker.output_jar_path
-      _input_jars_paths = []
-      if (defined(invoker.input_jars_paths)) {
-        _input_jars_paths += invoker.input_jars_paths
-      }
-      inputs = _input_jars_paths + [ _proguard_jar_path ]
+      inputs = [
+        _proguard_jar_path,
+      ]
       if (defined(invoker.alternative_android_sdk_jar)) {
         inputs += [ invoker.alternative_android_sdk_jar ]
         _rebased_android_sdk_jar =
@@ -680,14 +774,16 @@ if (enable_java_templates) {
         "--classpath",
         _rebased_android_sdk_jar,
       ]
-      foreach(c, _input_jars_paths) {
-        args += [ "--classpath=" + rebase_path(c, root_build_dir) ]
-      }
       if (proguard_verbose) {
         args += [ "--verbose" ]
       }
       if (defined(invoker.args)) {
         args += invoker.args
+      }
+      if (defined(invoker.proguard_jar_path)) {
+        # We assume that if we are using a different ProGuard, this new version
+        # can handle the 'dangerous' optimizaions.
+        args += [ "--enable-dangerous-optimizations" ]
       }
     }
   }
@@ -772,7 +868,7 @@ if (enable_java_templates) {
         rebase_path(depfile, root_build_dir),
         "--output",
         rebase_path(java_script, root_build_dir),
-        "--classpath=@FileArg($_rebased_build_config:java:full_classpath)",
+        "--classpath=@FileArg($_rebased_build_config:deps_info:java:full_classpath)",
         "--jar-path",
         rebase_path(_jar_path, root_build_dir),
         "--main-class",
@@ -906,12 +1002,7 @@ if (enable_java_templates) {
 
   template("process_java_prebuilt") {
     set_sources_assignment_filter([])
-    forward_variables_from(invoker,
-                           [
-                             "testonly",
-                             "input_jars_paths",
-                           ])
-    assert(!defined(input_jars_paths) || input_jars_paths != [] || true)  # Mark as used
+    forward_variables_from(invoker, [ "testonly" ])
 
     assert(invoker.build_config != "")
     _build_config = invoker.build_config
@@ -1039,77 +1130,56 @@ if (enable_java_templates) {
   }
 
   template("emma_instr") {
-    set_sources_assignment_filter([])
-    forward_variables_from(invoker, [ "testonly" ])
+    action(target_name) {
+      forward_variables_from(invoker,
+                             [
+                               "deps",
+                               "testonly",
+                             ])
 
-    assert(invoker.source_files != [] || true)  # Mark as used
-
-    if (invoker.emma_instrument) {
-      _output_jar_target = "${target_name}__process"
       _coverage_file = "$target_out_dir/${target_name}.em"
       _source_dirs_listing_file = "$target_out_dir/${target_name}_sources.txt"
       _emma_jar = "${android_sdk_root}/tools/lib/emma.jar"
-      _rebased_source_files = rebase_path(invoker.source_files, root_build_dir)
-      action(_output_jar_target) {
-        forward_variables_from(invoker, [ "deps" ])
 
-        script = "//build/android/gyp/emma_instr.py"
-        depfile = "${target_gen_dir}/${target_name}.d"
-        inputs = [
-          _emma_jar,
-          invoker.input_jar_path,
-        ]
-        outputs = [
-          depfile,
-          _coverage_file,
-          _source_dirs_listing_file,
-          invoker.output_jar_path,
-        ]
-        args = [
-          "instrument_jar",
-          "--input-path",
-          rebase_path(invoker.input_jar_path, root_build_dir),
-          "--output-path",
-          rebase_path(invoker.output_jar_path, root_build_dir),
-          "--depfile",
-          rebase_path(depfile, root_build_dir),
-          "--coverage-file",
-          rebase_path(_coverage_file, root_build_dir),
-          "--sources-list-file",
-          rebase_path(_source_dirs_listing_file, root_build_dir),
-          "--source-files=$_rebased_source_files",
-          "--src-root",
-          rebase_path("//", root_build_dir),
-          "--emma-jar",
-          rebase_path(_emma_jar, root_build_dir),
-        ]
-
-        if (emma_filter != "") {
-          args += [
-            "--filter-string",
-            emma_filter,
-          ]
-        }
-      }
-    } else {
-      _output_jar_target = "${target_name}__copy_jar"
-      copy(_output_jar_target) {
-        forward_variables_from(invoker, [ "deps" ])
-
-        sources = [
-          invoker.input_jar_path,
-        ]
-        outputs = [
-          invoker.output_jar_path,
-        ]
-      }
-    }
-
-    group(target_name) {
-      forward_variables_from(invoker, [ "visibility" ])
-      public_deps = [
-        ":$_output_jar_target",
+      script = "//build/android/gyp/emma_instr.py"
+      depfile = "${target_gen_dir}/${target_name}.d"
+      inputs = invoker.java_files + [
+                 _emma_jar,
+                 invoker.input_jar_path,
+               ]
+      outputs = [
+        depfile,
+        _coverage_file,
+        _source_dirs_listing_file,
+        invoker.output_jar_path,
       ]
+      args = [
+        "instrument_jar",
+        "--input-path",
+        rebase_path(invoker.input_jar_path, root_build_dir),
+        "--output-path",
+        rebase_path(invoker.output_jar_path, root_build_dir),
+        "--depfile",
+        rebase_path(depfile, root_build_dir),
+        "--coverage-file",
+        rebase_path(_coverage_file, root_build_dir),
+        "--sources-list-file",
+        rebase_path(_source_dirs_listing_file, root_build_dir),
+        "--src-root",
+        rebase_path("//", root_build_dir),
+        "--emma-jar",
+        rebase_path(_emma_jar, root_build_dir),
+      ]
+      _rebased_java_sources_file =
+          rebase_path(invoker.java_sources_file, root_build_dir)
+      args += [ "--java-sources-file=$_rebased_java_sources_file" ]
+
+      if (emma_filter != "") {
+        args += [
+          "--filter-string",
+          emma_filter,
+        ]
+      }
     }
   }
 
@@ -1688,7 +1758,8 @@ if (enable_java_templates) {
     }
 
     write_build_config(_build_config_target_name) {
-      type = "java_library"
+      type = "java_prebuilt"
+      forward_variables_from(invoker, [ "input_jars_paths" ])
       supports_android = _supports_android
       requires_android =
           defined(invoker.requires_android) && invoker.requires_android
@@ -1708,9 +1779,7 @@ if (enable_java_templates) {
                              [
                                "jar_excluded_patterns",
                                "strip_resource_classes",
-                               "input_jars_paths",
                              ])
-      assert(!defined(input_jars_paths) || input_jars_paths != [] || true)  # Mark as used
 
       visibility = [
         ":$_ijar_target_name",
@@ -1797,7 +1866,8 @@ if (enable_java_templates) {
   #  $jar_path.interface.jar
   #
   # Variables
-  #   java_files: List of .java files to compile.
+  #   java_files: List of .java files to compile (same as exists in java_sources_file)
+  #   java_sources_file: Path to file containing list of files to compile.
   #   chromium_code: If true, enable extra warnings.
   #   srcjar_deps: List of srcjar dependencies. The .java files contained in the
   #     dependencies srcjar outputs will be compiled and added to the output jar.
@@ -1807,24 +1877,10 @@ if (enable_java_templates) {
     set_sources_assignment_filter([])
     forward_variables_from(invoker, [ "testonly" ])
 
-    assert(defined(invoker.java_files))
     assert(defined(invoker.build_config))
     assert(defined(invoker.jar_path))
 
-    _java_files = invoker.java_files
-    _final_jar_path = invoker.jar_path
-    _javac_jar_path = "$target_gen_dir/$target_name.javac.jar"
-    _process_prebuilt_jar_path =
-        "$target_gen_dir/$target_name.process_prebuilt.jar"
-    _final_ijar_path = get_path_info(_final_jar_path, "dir") + "/" +
-                       get_path_info(_final_jar_path, "name") + ".interface.jar"
-
     _build_config = invoker.build_config
-
-    _input_jars_paths = []
-    if (defined(invoker.input_jars_paths)) {
-      _input_jars_paths += invoker.input_jars_paths
-    }
 
     _chromium_code = false
     if (defined(invoker.chromium_code)) {
@@ -1835,6 +1891,9 @@ if (enable_java_templates) {
     if (defined(invoker.supports_android)) {
       _supports_android = invoker.supports_android
     }
+
+    _requires_android =
+        defined(invoker.requires_android) && invoker.requires_android
 
     _enable_errorprone = use_errorprone_java_compiler
     if (!_chromium_code) {
@@ -1852,12 +1911,17 @@ if (enable_java_templates) {
     _enable_interface_jars_javac = true
     if (defined(invoker.processors_javac)) {
       _processors = invoker.processors_javac
-      _enable_iterface_jars_javac = _processors == []
+      _enable_interface_jars_javac = _processors == []
     }
 
     _processor_args = []
     if (defined(invoker.processor_args_javac)) {
       _processor_args = invoker.processor_args_javac
+    }
+
+    _additional_jar_files = []
+    if (defined(invoker.additional_jar_files)) {
+      _additional_jar_files = invoker.additional_jar_files
     }
 
     if (defined(invoker.enable_incremental_javac_override)) {
@@ -1891,14 +1955,27 @@ if (enable_java_templates) {
     # Mark srcjar_deps as used.
     assert(_srcjar_deps == [] || true)
 
-    _rebased_build_config = rebase_path(_build_config, root_build_dir)
-    _rebased_jar_path = rebase_path(_javac_jar_path, root_build_dir)
-
     _javac_target_name = "${target_name}__javac"
     _process_prebuilt_target_name = "${target_name}__process_prebuilt"
-    _emma_instr_target_name = "${target_name}__emma_instr"
     _ijar_target_name = "${target_name}__ijar"
     _final_target_name = target_name
+
+    _final_jar_path = invoker.jar_path
+    _javac_jar_path = "$target_gen_dir/$target_name.javac.jar"
+    _process_prebuilt_jar_path = _final_jar_path
+    _final_ijar_path = get_path_info(_final_jar_path, "dir") + "/" +
+                       get_path_info(_final_jar_path, "name") + ".interface.jar"
+
+    _emma_instrument = defined(invoker.emma_instrument) &&
+                       invoker.emma_instrument && invoker.java_files != []
+    if (_emma_instrument) {
+      _emma_instr_target_name = "${target_name}__emma_instr"
+      _process_prebuilt_jar_path =
+          "$target_gen_dir/$target_name.process_prebuilt.jar"
+    }
+
+    _rebased_build_config = rebase_path(_build_config, root_build_dir)
+    _rebased_jar_path = rebase_path(_javac_jar_path, root_build_dir)
 
     action(_javac_target_name) {
       script = "//build/android/gyp/javac.py"
@@ -1913,10 +1990,13 @@ if (enable_java_templates) {
         _javac_jar_path,
         _javac_jar_path + ".md5.stamp",
       ]
-      sources = _java_files + _java_srcjars
+      sources = invoker.java_files + _java_srcjars
       inputs = [
         _build_config,
       ]
+      if (invoker.java_files != []) {
+        inputs += [ invoker.java_sources_file ]
+      }
 
       _rebased_java_srcjars = rebase_path(_java_srcjars, root_build_dir)
       _rebased_depfile = rebase_path(depfile, root_build_dir)
@@ -1938,7 +2018,7 @@ if (enable_java_templates) {
         inputs += [ "$root_build_dir/bin/jmake" ]
         outputs += [ "${_javac_jar_path}.pdb" ]
       }
-      if (_supports_android) {
+      if (_requires_android) {
         if (defined(invoker.alternative_android_sdk_ijar)) {
           deps += [ invoker.alternative_android_sdk_ijar_dep ]
           _android_sdk_ijar = invoker.alternative_android_sdk_ijar
@@ -1951,8 +2031,8 @@ if (enable_java_templates) {
             rebase_path(_android_sdk_ijar, root_build_dir)
         args += [ "--bootclasspath=$_rebased_android_sdk_ijar" ]
       }
-      foreach(c, _input_jars_paths) {
-        args += [ "--classpath=" + c ]
+      if (_supports_android) {
+        args += [ "--java-version=1.7" ]
       }
       foreach(e, _manifest_entries) {
         args += [ "--manifest-entry=" + e ]
@@ -1976,7 +2056,15 @@ if (enable_java_templates) {
       foreach(e, _processor_args) {
         args += [ "--processor-arg=" + e ]
       }
-      args += rebase_path(_java_files, root_build_dir)
+      foreach(file_tuple, _additional_jar_files) {
+        # Each element is of length two, [ path_to_file, path_to_put_in_jar ]
+        inputs += [ file_tuple[0] ]
+        args +=
+            [ "--additional-jar-file=" + file_tuple[0] + ":" + file_tuple[1] ]
+      }
+      if (invoker.java_files != []) {
+        args += [ "@" + rebase_path(invoker.java_sources_file, root_build_dir) ]
+      }
     }
 
     process_java_prebuilt(_process_prebuilt_target_name) {
@@ -1996,37 +2084,47 @@ if (enable_java_templates) {
       }
     }
 
-    emma_instr(_emma_instr_target_name) {
-      visibility = [
-        ":$_ijar_target_name",
-        ":$_final_target_name",
-      ]
+    if (_emma_instrument) {
+      emma_instr(_emma_instr_target_name) {
+        forward_variables_from(invoker,
+                               [
+                                 "java_files",
+                                 "java_sources_file",
+                               ])
 
-      forward_variables_from(invoker, [ "emma_instrument" ])
+        input_jar_path = _process_prebuilt_jar_path
+        output_jar_path = _final_jar_path
 
-      input_jar_path = _process_prebuilt_jar_path
-      output_jar_path = _final_jar_path
-      source_files = _java_files
-
-      deps = [
-        ":$_process_prebuilt_target_name",
-      ]
+        deps = [
+          ":$_process_prebuilt_target_name",
+        ]
+      }
     }
 
     generate_interface_jar(_ijar_target_name) {
       input_jar = _final_jar_path
       output_jar = _final_ijar_path
-      deps = [
-        ":$_emma_instr_target_name",
-      ]
+      if (_emma_instrument) {
+        deps = [
+          ":$_emma_instr_target_name",
+        ]
+      } else {
+        deps = [
+          ":$_process_prebuilt_target_name",
+        ]
+      }
     }
 
     group(_final_target_name) {
       forward_variables_from(invoker, [ "visibility" ])
       public_deps = [
-        ":$_emma_instr_target_name",
         ":$_ijar_target_name",
       ]
+      if (_emma_instrument) {
+        public_deps += [ ":$_emma_instr_target_name" ]
+      } else {
+        public_deps += [ ":$_process_prebuilt_target_name" ]
+      }
     }
   }
 
@@ -2112,6 +2210,15 @@ if (enable_java_templates) {
       }
     }
 
+    _java_files = []
+    if (defined(invoker.java_files)) {
+      _java_files += invoker.java_files
+    }
+    if (_java_files != []) {
+      _java_sources_file = "$_base_path.sources"
+      write_file(_java_sources_file, rebase_path(_java_files, root_build_dir))
+    }
+
     # Define build_config_deps which will be a list of targets required to
     # build the _build_config.
     if (defined(invoker.override_build_config)) {
@@ -2121,6 +2228,7 @@ if (enable_java_templates) {
       build_config_target_name = "${_template_name}__build_config"
 
       write_build_config(build_config_target_name) {
+        forward_variables_from(invoker, [ "input_jars_paths" ])
         if (defined(invoker.is_java_binary) && invoker.is_java_binary) {
           type = "java_binary"
         } else {
@@ -2139,6 +2247,18 @@ if (enable_java_templates) {
         if (_supports_android) {
           dex_path = _dex_path
         }
+        if (_java_files != []) {
+          java_sources_file = _java_sources_file
+        }
+
+        if (defined(invoker.srcjar_deps)) {
+          bundled_srcjars = []
+          foreach(d, invoker.srcjar_deps) {
+            _dep_gen_dir = get_label_info(d, "target_gen_dir")
+            _dep_name = get_label_info(d, "name")
+            bundled_srcjars += [ "$_dep_gen_dir/$_dep_name.srcjar" ]
+          }
+        }
       }
       _accumulated_deps += [ ":$build_config_target_name" ]
     }
@@ -2153,10 +2273,6 @@ if (enable_java_templates) {
       _srcjars = invoker.srcjars
     }
 
-    _java_files = []
-    if (defined(invoker.java_files)) {
-      _java_files += invoker.java_files
-    }
     assert(_java_files != [] || _srcjar_deps != [] || _srcjars != [])
 
     _compile_java_target = "${_template_name}__compile_java"
@@ -2164,12 +2280,12 @@ if (enable_java_templates) {
     compile_java(_compile_java_target) {
       forward_variables_from(invoker,
                              [
+                               "additional_jar_files",
                                "alternative_android_sdk_ijar",
                                "alternative_android_sdk_ijar_dep",
                                "dist_jar_path",
                                "enable_errorprone",
                                "enable_incremental_javac_override",
-                               "input_jars_paths",
                                "jar_excluded_patterns",
                                "manifest_entries",
                                "processors_javac",
@@ -2181,10 +2297,14 @@ if (enable_java_templates) {
       jar_path = _jar_path
       build_config = _build_config
       java_files = _java_files
+      if (_java_files != []) {
+        java_sources_file = _java_sources_file
+      }
       srcjar_deps = _srcjar_deps
       srcjars = _srcjars
       chromium_code = _chromium_code
       supports_android = _supports_android
+      requires_android = _requires_android
       emma_instrument = _emma_instrument
       deps = _accumulated_deps
     }
@@ -2221,6 +2341,9 @@ if (enable_java_templates) {
           build_config = _build_config
           jar_path = _jar_path
           java_files = _java_files
+          if (_java_files != []) {
+            java_sources_file = _java_sources_file
+          }
           deps = _accumulated_deps
         }
 
@@ -2260,6 +2383,7 @@ if (enable_java_templates) {
     group(target_name) {
       forward_variables_from(invoker,
                              [
+                               "data",
                                "data_deps",
                                "visibility",
                              ])

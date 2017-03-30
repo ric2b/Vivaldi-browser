@@ -105,7 +105,7 @@ IN_PROC_BROWSER_TEST_F(InputImeApiTest, BasicApiTest) {
   input_method->DetachTextInputClient(client2.get());
 }
 
-IN_PROC_BROWSER_TEST_F(InputImeApiTest, SendKeyEvntsOnNormalPage) {
+IN_PROC_BROWSER_TEST_F(InputImeApiTest, SendKeyEventsOnNormalPage) {
   // Navigates to special page that sendKeyEvents API has limition with.
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   // Manipulates the focused text input client because the follow cursor

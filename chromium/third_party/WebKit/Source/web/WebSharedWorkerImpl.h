@@ -48,6 +48,7 @@
 namespace blink {
 
 class ConsoleMessage;
+class ParentFrameTaskRunners;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebLocalFrameImpl;
@@ -75,19 +76,18 @@ public:
     explicit WebSharedWorkerImpl(WebSharedWorkerClient*);
 
     // WorkerReportingProxy methods:
-    void reportException(const WTF::String&, std::unique_ptr<SourceLocation>) override;
-    void reportConsoleMessage(ConsoleMessage*) override;
+    void reportException(const WTF::String&, std::unique_ptr<SourceLocation>, int exceptionId) override;
+    void reportConsoleMessage(MessageSource, MessageLevel, const String& message, SourceLocation*) override;
     void postMessageToPageInspector(const WTF::String&) override;
-    void postWorkerConsoleAgentEnabled() override { }
     void didEvaluateWorkerScript(bool success) override { }
-    void workerGlobalScopeStarted(WorkerGlobalScope*) override;
+    void workerGlobalScopeStarted(WorkerOrWorkletGlobalScope*) override;
     void workerGlobalScopeClosed() override;
     void workerThreadTerminated() override;
     void willDestroyWorkerGlobalScope() override { }
 
     // WebFrameClient methods to support resource loading thru the 'shadow page'.
     WebApplicationCacheHost* createApplicationCacheHost(WebApplicationCacheHostClient*) override;
-    void willSendRequest(WebLocalFrame*, unsigned identifier, WebURLRequest&, const WebURLResponse& redirectResponse) override;
+    void willSendRequest(WebLocalFrame*, WebURLRequest&) override;
     void didFinishDocumentLoad(WebLocalFrame*) override;
     bool isControlledByServiceWorker(WebDataSource&) override;
     int64_t serviceWorkerID(WebDataSource&) override;
@@ -131,8 +131,8 @@ private:
     void postMessageToPageInspectorOnMainThread(const String& message);
 
     // WorkerLoaderProxyProvider
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
 
     // 'shadow page' - created to proxy loading requests from the worker.
     Persistent<ExecutionContext> m_loadingDocument;
@@ -144,6 +144,8 @@ private:
     std::unique_ptr<WebServiceWorkerNetworkProvider> m_networkProvider;
 
     Persistent<WorkerInspectorProxy> m_workerInspectorProxy;
+
+    Persistent<ParentFrameTaskRunners> m_mainThreadTaskRunners;
 
     std::unique_ptr<WorkerThread> m_workerThread;
 

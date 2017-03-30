@@ -10,9 +10,10 @@ def ScanDir(scandir):
   dirlist = []
   for dirname, _dirs, filenames in os.walk(scandir):
     dirname = os.path.normpath(os.path.relpath(dirname, scandir))
-    assert dirname and not dirname.startswith(".")
     if dirname == ".":
       dirname = None
+    else:
+      assert dirname and not dirname.startswith("."),  dirname
     dirlist.extend([os.path.join(
                       *filter(None, [dirname, f])).replace("\\", "/")
                         for f in filenames])

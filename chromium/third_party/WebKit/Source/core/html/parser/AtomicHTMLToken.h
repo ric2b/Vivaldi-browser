@@ -197,6 +197,10 @@ public:
         ASSERT(usesName());
     }
 
+#ifndef NDEBUG
+    void show() const;
+#endif
+
 private:
     HTMLToken::TokenType m_type;
 
@@ -235,10 +239,8 @@ inline void AtomicHTMLToken::initializeAttributes(const HTMLToken::AttributeList
         if (attribute.nameAsVector().isEmpty())
             continue;
 
-        ASSERT(attribute.nameRange().start);
-        ASSERT(attribute.nameRange().end);
-        ASSERT(attribute.valueRange().start);
-        ASSERT(attribute.valueRange().end);
+        attribute.nameRange().checkValid();
+        attribute.valueRange().checkValid();
 
         AtomicString value(attribute.value8BitIfNecessary());
         const QualifiedName& name = nameForAttribute(attribute);

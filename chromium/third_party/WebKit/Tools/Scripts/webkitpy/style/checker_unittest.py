@@ -118,7 +118,7 @@ class ConfigureLoggingTest(ConfigureLoggingTestBase):
     is_verbose = False
 
     def test_warning_message(self):
-        self._log.warn("test message")
+        self._log.warning("test message")
         self.assert_log_messages(["WARNING: test message\n"])
 
     def test_below_warning_message(self):
@@ -162,7 +162,6 @@ class GlobalVariablesTest(unittest.TestCase):
 
     def test_webkit_base_filter_rules(self):
         base_filter_rules = _BASE_FILTER_RULES
-        defaults = self.defaults()
         already_seen = []
         validate_filter_rules(base_filter_rules, self._all_categories())
         # Also do some additional checks.
@@ -192,16 +191,13 @@ class GlobalVariablesTest(unittest.TestCase):
         parser.parse(args=[])
 
     def test_path_rules_specifier(self):
-        all_categories = self._all_categories()
-        for (sub_paths, path_rules) in PATH_RULES_SPECIFIER:
+        for _, path_rules in PATH_RULES_SPECIFIER:
             validate_filter_rules(path_rules, self._all_categories())
 
         config = FilterConfiguration(path_specific=PATH_RULES_SPECIFIER)
 
         def assertCheck(path, category):
             """Assert that the given category should be checked."""
-            message = ('Should check category "%s" for path "%s".'
-                       % (category, path))
             self.assertTrue(config.should_check(category, path))
 
         def assertNoCheck(path, category):
@@ -240,11 +236,11 @@ class CheckWebKitStyleFunctionTest(unittest.TestCase):
     def test_check_webkit_style_configuration(self):
         # Exercise the code path to make sure the function does not error out.
         option_values = CommandOptionValues()
-        configuration = check_webkit_style_configuration(option_values)
+        check_webkit_style_configuration(option_values)
 
     def test_check_webkit_style_parser(self):
         # Exercise the code path to make sure the function does not error out.
-        parser = check_webkit_style_parser()
+        check_webkit_style_parser()
 
 
 class CheckerDispatcherSkipTest(unittest.TestCase):
@@ -720,7 +716,6 @@ class StyleProcessor_CodeCoverageTest(LoggingTestCase):
         """Swallow a message passed to stderr.write()."""
         # This is a mock stderr.write() for passing to the constructor
         # of the StyleProcessorConfiguration class.
-        pass
 
     def _create_carriage_checker_class(self):
 

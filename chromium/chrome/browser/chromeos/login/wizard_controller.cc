@@ -385,8 +385,7 @@ BaseScreen* WizardController::CreateScreen(const std::string& screen_name) {
     if (!remora_controller_) {
       remora_controller_.reset(
           new pairing_chromeos::BluetoothHostPairingController(
-              BrowserThread::GetMessageLoopProxyForThread(
-                  BrowserThread::FILE)));
+              BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)));
       remora_controller_->StartPairing();
     }
     return new HostPairingScreen(this, this,
@@ -462,7 +461,7 @@ void WizardController::ShowEnrollmentScreen() {
   prescribed_enrollment_config_ = g_browser_process->platform_part()
                                       ->browser_policy_connector_chromeos()
                                       ->GetPrescribedEnrollmentConfig();
-  StartEnrollmentScreen();
+  StartEnrollmentScreen(false);
 }
 
 void WizardController::ShowResetScreen() {
@@ -633,9 +632,9 @@ void WizardController::OnUpdateCompleted() {
 void WizardController::OnEulaAccepted() {
   time_eula_accepted_ = base::Time::Now();
   StartupUtils::MarkEulaAccepted();
-  InitiateMetricsReportingChange(
+  ChangeMetricsReportingStateWithReply(
       usage_statistics_reporting_,
-      base::Bind(&WizardController::InitiateMetricsReportingChangeCallback,
+      base::Bind(&WizardController::OnChangedMetricsReportingState,
                  weak_factory_.GetWeakPtr()));
   PerformPostEulaActions();
 
@@ -646,7 +645,7 @@ void WizardController::OnEulaAccepted() {
   }
 }
 
-void WizardController::InitiateMetricsReportingChangeCallback(bool enabled) {
+void WizardController::OnChangedMetricsReportingState(bool enabled) {
   CrosSettings::Get()->SetBoolean(kStatsReportingPref, enabled);
   if (!enabled)
     return;
@@ -792,7 +791,7 @@ void WizardController::OnDeviceDisabledChecked(bool device_disabled) {
     ShowDeviceDisabledScreen();
   } else if (skip_update_enroll_after_eula_ ||
              prescribed_enrollment_config_.should_enroll()) {
-    StartEnrollmentScreen();
+    StartEnrollmentScreen(skip_update_enroll_after_eula_);
   } else {
     PerformOOBECompletedActions();
     ShowLoginScreen(LoginScreenContext());
@@ -1133,6 +1132,9 @@ void WizardController::ConfigureHostRequested(
 }
 
 void WizardController::AddNetworkRequested(const std::string& onc_spec) {
+  remora_controller_->OnNetworkConnectivityChanged(
+      pairing_chromeos::HostPairingController::CONNECTIVITY_CONNECTING);
+
   NetworkScreen* network_screen = NetworkScreen::Get(this);
   const chromeos::NetworkState* network_state = chromeos::NetworkHandler::Get()
                                                     ->network_state_handler()
@@ -1143,7 +1145,7 @@ void WizardController::AddNetworkRequested(const std::string& onc_spec) {
         onc_spec, base::Bind(&base::DoNothing), base::Bind(&base::DoNothing));
   } else {
     network_screen->CreateAndConnectNetworkFromOnc(
-        onc_spec, base::Bind(&WizardController::InitiateOOBEUpdate,
+        onc_spec, base::Bind(&WizardController::OnSetHostNetworkSuccessful,
                              weak_factory_.GetWeakPtr()),
         base::Bind(&WizardController::OnSetHostNetworkFailed,
                    weak_factory_.GetWeakPtr()));
@@ -1354,7 +1356,7 @@ void WizardController::MaybeStartListeningForSharkConnection() {
   if (!shark_connection_listener_) {
     shark_connection_listener_.reset(
         new pairing_chromeos::SharkConnectionListener(
-            BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
             base::Bind(&WizardController::OnSharkConnected,
                        weak_factory_.GetWeakPtr())));
   }
@@ -1371,19 +1373,27 @@ void WizardController::OnSharkConnected(
   ShowHostPairingScreen();
 }
 
+void WizardController::OnSetHostNetworkSuccessful() {
+  remora_controller_->OnNetworkConnectivityChanged(
+      pairing_chromeos::HostPairingController::CONNECTIVITY_CONNECTED);
+  InitiateOOBEUpdate();
+}
+
 void WizardController::OnSetHostNetworkFailed() {
   remora_controller_->OnNetworkConnectivityChanged(
       pairing_chromeos::HostPairingController::CONNECTIVITY_NONE);
 }
 
-void WizardController::StartEnrollmentScreen() {
-  VLOG(1) << "Showing enrollment screen.";
+void WizardController::StartEnrollmentScreen(bool force_interactive) {
+  VLOG(1) << "Showing enrollment screen."
+          << " Forcing interactive enrollment: " << force_interactive << ".";
 
   // Determine the effective enrollment configuration. If there is a valid
   // prescribed configuration, use that. If not, figure out which variant of
   // manual enrollment is taking place.
   policy::EnrollmentConfig effective_config = prescribed_enrollment_config_;
-  if (!effective_config.should_enroll()) {
+  if (!effective_config.should_enroll() ||
+      (force_interactive && !effective_config.should_enroll_interactively())) {
     effective_config.mode =
         prescribed_enrollment_config_.management_domain.empty()
             ? policy::EnrollmentConfig::MODE_MANUAL

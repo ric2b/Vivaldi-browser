@@ -8,11 +8,10 @@
 #include <list>
 #include <memory>
 
-#include "ash/common/shelf/shelf_item_delegate_manager.h"
+#include "ash/common/shelf/shelf_delegate.h"
 #include "ash/common/shelf/shelf_model_observer.h"
 #include "ash/common/shelf/shelf_types.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shelf/shelf_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -33,7 +32,6 @@ class AppWindowLauncherController;
 class TabContents;
 
 namespace ash {
-class ShelfItemDelegateManager;
 class ShelfModel;
 namespace launcher {
 class ChromeLauncherPrefsObserver;
@@ -66,7 +64,6 @@ class ChromeLauncherControllerImpl
       private ash::WindowTreeHostManager::Observer,
       private AppIconLoaderDelegate,
       private AppSyncUIStateObserver,
-      private ash::ShelfItemDelegateManagerObserver,
       private app_list::AppListSyncableService::Observer {
  public:
   ChromeLauncherControllerImpl(Profile* profile, ash::ShelfModel* model);
@@ -138,27 +135,30 @@ class ChromeLauncherControllerImpl
       const ash::ShelfID id) override;
   bool ShelfBoundsChangesProbablyWithUser(
       ash::Shelf* shelf,
-      const std::string& user_id) const override;
+      const AccountId& account_id) const override;
   void OnUserProfileReadyToSwitch(Profile* profile) override;
   ArcAppDeferredLauncherController* GetArcDeferredLauncher() override;
+
+  void SetProfileForTest(Profile* profile);
 
   // Access to the BrowserStatusMonitor for tests.
   BrowserStatusMonitor* browser_status_monitor_for_test() {
     return browser_status_monitor_.get();
   }
 
-  // Access to the AppWindowLauncherController for tests.
-  AppWindowLauncherController* app_window_controller_for_test() {
-    return app_window_controllers_[0].get();
+  // Access to the AppWindowLauncherController list for tests.
+  const std::vector<std::unique_ptr<AppWindowLauncherController>>&
+  app_window_controllers_for_test() {
+    return app_window_controllers_;
   }
 
   // ash::ShelfDelegate:
-  void OnShelfCreated(ash::Shelf* shelf) override;
-  void OnShelfDestroyed(ash::Shelf* shelf) override;
-  void OnShelfAlignmentChanged(ash::Shelf* shelf) override;
-  void OnShelfAutoHideBehaviorChanged(ash::Shelf* shelf) override;
-  void OnShelfAutoHideStateChanged(ash::Shelf* shelf) override;
-  void OnShelfVisibilityStateChanged(ash::Shelf* shelf) override;
+  void OnShelfCreated(ash::WmShelf* shelf) override;
+  void OnShelfDestroyed(ash::WmShelf* shelf) override;
+  void OnShelfAlignmentChanged(ash::WmShelf* shelf) override;
+  void OnShelfAutoHideBehaviorChanged(ash::WmShelf* shelf) override;
+  void OnShelfAutoHideStateChanged(ash::WmShelf* shelf) override;
+  void OnShelfVisibilityStateChanged(ash::WmShelf* shelf) override;
   ash::ShelfID GetShelfIDForAppID(const std::string& app_id) override;
   bool HasShelfIDToAppIDMapping(ash::ShelfID id) const override;
   const std::string& GetAppIDForShelfID(ash::ShelfID id) override;
@@ -185,11 +185,6 @@ class ChromeLauncherControllerImpl
   void SetAppIconLoadersForTest(
       std::vector<std::unique_ptr<AppIconLoader>>& loaders);
   const std::string& GetAppIdFromShelfIdForTest(ash::ShelfID id);
-
-  // Sets the ash::ShelfItemDelegateManager only for unittests and doesn't
-  // take an ownership of it.
-  void SetShelfItemDelegateManagerForTest(
-      ash::ShelfItemDelegateManager* manager);
 
  private:
   friend class ChromeLauncherControllerImplTest;
@@ -221,9 +216,8 @@ class ChromeLauncherControllerImpl
   void DoPinAppWithID(const std::string& app_id);
   void DoUnpinAppWithID(const std::string& app_id, bool update_prefs);
 
-  // Pin a running app with |shelf_id| internally to |index|. It returns
-  // the index where the item was pinned.
-  int PinRunningAppInternal(int index, ash::ShelfID shelf_id);
+  // Pin a running app with |shelf_id| internally to |index|.
+  void PinRunningAppInternal(int index, ash::ShelfID shelf_id);
 
   // Unpin a locked application. This is an internal call which converts the
   // model type of the given app index from a shortcut into an unpinned running
@@ -289,22 +283,20 @@ class ChromeLauncherControllerImpl
                             ash::ShelfItemDelegate* item_delegate);
 
   // Attach to a specific profile.
-  void AttachProfile(Profile* proifile);
+  void AttachProfile(Profile* profile);
 
   // Forget the current profile to allow attaching to a new one.
   void ReleaseProfile();
 
   AppIconLoader* GetAppIconLoaderForApp(const std::string& app_id);
 
-  // ash::ShelfItemDelegateManagerObserver:
-  void OnSetShelfItemDelegate(ash::ShelfID id,
-                              ash::ShelfItemDelegate* item_delegate) override;
-
   // ash::ShelfModelObserver:
   void ShelfItemAdded(int index) override;
   void ShelfItemRemoved(int index, ash::ShelfID id) override;
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemChanged(int index, const ash::ShelfItem& old_item) override;
+  void OnSetShelfItemDelegate(ash::ShelfID id,
+                              ash::ShelfItemDelegate* item_delegate) override;
 
   // ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
@@ -325,13 +317,11 @@ class ChromeLauncherControllerImpl
 
   ash::ShelfModel* model_;
 
-  ash::ShelfItemDelegateManager* item_delegate_manager_ = nullptr;
-
   // Profile used for prefs and loading extensions. This is NOT necessarily the
   // profile new windows are created with.
   Profile* profile_;
 
-  // Controller items in this map are owned by |ShelfItemDelegateManager|.
+  // Controller items in this map are owned by |ShelfModel|.
   IDToItemControllerMap id_to_item_controller_map_;
 
   // Direct access to app_id for a web contents.

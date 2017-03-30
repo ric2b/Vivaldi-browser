@@ -107,8 +107,8 @@ private:
     bool canStartSelection() const override;
     bool willRespondToMouseClickEvents() final;
     void defaultEventHandler(Event*) final;
-    void attach(const AttachContext& = AttachContext()) final;
-    void detach(const AttachContext& = AttachContext()) final;
+    void attachLayoutTree(const AttachContext& = AttachContext()) final;
+    void detachLayoutTree(const AttachContext& = AttachContext()) final;
     void finishParsingChildren() final;
 
     // Element functions:
@@ -137,9 +137,15 @@ private:
 
     void setPersistedPluginWidget(Widget*);
 
+    bool requestObjectInternal(const String& url, const String& mimeType, const Vector<String>& paramNames, const Vector<String>& paramValues);
+
     mutable RefPtr<SharedPersistent<v8::Object>> m_pluginWrapper;
     bool m_needsWidgetUpdate;
     bool m_shouldPreferPlugInsForImages;
+    // Represents |layoutObject() && layoutObject()->isEmbeddedObject() &&
+    // !layoutEmbeddedItem().showsUnavailablePluginIndicator()|.  We want to
+    // avoid accessing |layoutObject()| in layoutObjectIsFocusable().
+    bool m_pluginIsAvailable = false;
 
     // Normally the Widget is stored in HTMLFrameOwnerElement::m_widget.
     // However, plugins can persist even when not rendered. In order to

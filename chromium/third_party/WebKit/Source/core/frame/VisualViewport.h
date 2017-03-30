@@ -43,8 +43,8 @@
 #include <memory>
 
 namespace blink {
-class WebLayerTreeView;
 class WebScrollbarLayer;
+class WebLayer;
 }
 
 namespace blink {
@@ -89,6 +89,14 @@ public:
     {
         return m_innerViewportScrollLayer.get();
     }
+    GraphicsLayer* pageScaleLayer()
+    {
+        return m_pageScaleLayer.get();
+    }
+    GraphicsLayer* overscrollElasticityLayer()
+    {
+        return m_overscrollElasticityLayer.get();
+    }
 
     void initializeScrollbars();
 
@@ -124,8 +132,7 @@ public:
     // scale factor is left unchanged.
     bool magnifyScaleAroundAnchor(float magnifyDelta, const FloatPoint& anchor);
 
-    void registerLayersWithTreeView(WebLayerTreeView*) const;
-    void clearLayersForTreeView(WebLayerTreeView*) const;
+    void setScrollLayerOnScrollbars(WebLayer*) const;
 
     // The portion of the unzoomed frame visible in the visual viewport,
     // in partial CSS pixels. Relative to the main frame.
@@ -173,6 +180,7 @@ public:
     DoubleRect visibleContentRectDouble(IncludeScrollbarsInRect = ExcludeScrollbars) const override;
     IntRect visibleContentRect(IncludeScrollbarsInRect = ExcludeScrollbars) const override;
     bool shouldUseIntegerScrollOffset() const override;
+    void setScrollPosition(const DoublePoint&, ScrollType, ScrollBehavior = ScrollBehaviorInstant) override;
     LayoutRect visualRectForScrollbarParts() const override { ASSERT_NOT_REACHED(); return LayoutRect(); }
     bool isActive() const override { return false; }
     int scrollSize(ScrollbarOrientation) const override;
@@ -218,6 +226,10 @@ public:
 
 private:
     explicit VisualViewport(FrameHost&);
+
+    bool didSetScaleOrLocation(float scale, const FloatPoint& location);
+
+    void clearScrollAnchor();
 
     bool visualViewportSuppliesScrollbars() const;
 

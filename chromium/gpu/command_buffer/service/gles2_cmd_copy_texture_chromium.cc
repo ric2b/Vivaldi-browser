@@ -10,7 +10,7 @@
 
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
-#include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_version_info.h"
 
 namespace {
 
@@ -94,11 +94,11 @@ const char* kShaderPrecisionPreamble = "\
     #define TexCoordPrecision\n\
     #endif\n";
 
-std::string GetVertexShaderSource() {
+std::string GetVertexShaderSource(const gl::GLVersionInfo& gl_version_info) {
   std::string source;
 
   // Preamble for core and compatibility mode.
-  if (gl::GetGLImplementation() == gl::kGLImplementationDesktopGLCoreProfile) {
+  if (gl_version_info.is_desktop_core_profile) {
     source += std::string("\
         #version 150\n\
         #define ATTRIBUTE in\n\
@@ -130,13 +130,15 @@ std::string GetVertexShaderSource() {
   return source;
 }
 
-std::string GetFragmentShaderSource(bool premultiply_alpha,
+std::string GetFragmentShaderSource(const gl::GLVersionInfo& gl_version_info,
+                                    bool premultiply_alpha,
                                     bool unpremultiply_alpha,
+                                    bool nv_egl_stream_consumer_external,
                                     GLenum target) {
   std::string source;
 
   // Preamble for core and compatibility mode.
-  if (gl::GetGLImplementation() == gl::kGLImplementationDesktopGLCoreProfile) {
+  if (gl_version_info.is_desktop_core_profile) {
     source += std::string("\
         #version 150\n\
         out vec4 frag_color;\n\
@@ -154,8 +156,12 @@ std::string GetFragmentShaderSource(bool premultiply_alpha,
       case GL_TEXTURE_EXTERNAL_OES:
         source +=
             std::string("#extension GL_OES_EGL_image_external : enable\n");
-        source += std::string(
-            "#extension GL_NV_EGL_stream_consumer_external : enable\n");
+
+        if (nv_egl_stream_consumer_external) {
+          source += std::string(
+              "#extension GL_NV_EGL_stream_consumer_external : enable\n");
+        }
+
         source += std::string("#define TextureLookup texture2D\n");
         break;
       default:
@@ -319,6 +325,7 @@ namespace gpu {
 
 CopyTextureCHROMIUMResourceManager::CopyTextureCHROMIUMResourceManager()
     : initialized_(false),
+      nv_egl_stream_consumer_external_(false),
       vertex_shader_(0u),
       fragment_shaders_(NUM_FRAGMENT_SHADERS, 0u),
       vertex_array_object_id_(0u),
@@ -341,6 +348,9 @@ void CopyTextureCHROMIUMResourceManager::Initialize(
   DCHECK(!vertex_array_object_id_);
   DCHECK(!framebuffer_);
   DCHECK(programs_.empty());
+
+  nv_egl_stream_consumer_external_ =
+      feature_flags.nv_egl_stream_consumer_external;
 
   if (feature_flags.native_vertex_array_object) {
     glGenVertexArraysOES(1, &vertex_array_object_id_);
@@ -574,12 +584,13 @@ void CopyTextureCHROMIUMResourceManager::DoCopyTextureInternal(
     DLOG(ERROR) << "CopyTextureCHROMIUM: Uninitialized manager.";
     return;
   }
+  const gl::GLVersionInfo& gl_version_info =
+      decoder->GetFeatureInfo()->gl_version_info();
 
   if (vertex_array_object_id_) {
     glBindVertexArrayOES(vertex_array_object_id_);
   } else {
-    if (gl::GetGLImplementation() !=
-        gl::kGLImplementationDesktopGLCoreProfile) {
+    if (!gl_version_info.is_desktop_core_profile) {
       decoder->ClearAllAttributes();
     }
     glEnableVertexAttribArray(kVertexPositionAttrib);
@@ -598,7 +609,7 @@ void CopyTextureCHROMIUMResourceManager::DoCopyTextureInternal(
     info->program = glCreateProgram();
     if (!vertex_shader_) {
       vertex_shader_ = glCreateShader(GL_VERTEX_SHADER);
-      std::string source = GetVertexShaderSource();
+      std::string source = GetVertexShaderSource(gl_version_info);
       CompileShader(vertex_shader_, source.c_str());
     }
     glAttachShader(info->program, vertex_shader_);
@@ -606,7 +617,8 @@ void CopyTextureCHROMIUMResourceManager::DoCopyTextureInternal(
     if (!*fragment_shader) {
       *fragment_shader = glCreateShader(GL_FRAGMENT_SHADER);
       std::string source = GetFragmentShaderSource(
-          premultiply_alpha, unpremultiply_alpha, source_target);
+          gl_version_info, premultiply_alpha, unpremultiply_alpha,
+          nv_egl_stream_consumer_external_, source_target);
       CompileShader(*fragment_shader, source.c_str());
     }
     glAttachShader(info->program, *fragment_shader);

@@ -25,13 +25,13 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
-import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
 
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -52,6 +52,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
     public static final String EXTRA_LOCATION = "org.chromium.chrome.preferences.location";
 
     public static final String EXTRA_WEB_CONTENTS = "org.chromium.chrome.preferences.web_contents";
+    public static final String EXTRA_USB_INFO = "org.chromium.chrome.preferences.usb_info";
 
     // Preference keys, see single_website_preferences.xml
     // Headings:
@@ -106,6 +107,9 @@ public class SingleWebsitePreferences extends PreferenceFragment
     // The address of the site we want to display. Used only if EXTRA_ADDRESS is provided.
     private WebsiteAddress mSiteAddress;
 
+    // The number of USB device permissions displayed.
+    private int mUsbPermissionCount;
+
     private class SingleWebsitePermissionsPopulator
             implements WebsitePermissionsFetcher.WebsitePermissionsCallback {
         private final WebContents mWebContents;
@@ -115,18 +119,13 @@ public class SingleWebsitePreferences extends PreferenceFragment
         }
 
         @Override
-        public void onWebsitePermissionsAvailable(
-                Map<String, Set<Website>> sitesByOrigin, Map<String, Set<Website>> sitesByHost) {
+        public void onWebsitePermissionsAvailable(Collection<Website> sites) {
             // This method may be called after the activity has been destroyed.
             // In that case, bail out.
             if (getActivity() == null) return;
 
-            // TODO(mvanouwerkerk): Do this merge at data retrieval time in C++, instead of now.
-            List<Set<Website>> allSites = new ArrayList<>();
-            allSites.addAll(sitesByOrigin.values());
-            allSites.addAll(sitesByHost.values());
             // TODO(mvanouwerkerk): Avoid modifying the outer class from this inner class.
-            mSite = mergePermissionInfoForTopLevelOrigin(mSiteAddress, allSites);
+            mSite = mergePermissionInfoForTopLevelOrigin(mSiteAddress, sites);
 
             // Display Keygen Content Setting if Keygen is blocked.
             if (mSite.getKeygenInfo() == null && mWebContents != null
@@ -152,7 +151,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
         // TODO(mvanouwerkerk): Define a pure getOrigin method in UrlUtilities that is the
         // equivalent of the call below, because this is perfectly fine for non-display purposes.
         String origin =
-                UrlUtilities.formatUrlForSecurityDisplay(URI.create(url), true /* showScheme */);
+                UrlFormatter.formatUrlForSecurityDisplay(URI.create(url), true /* showScheme */);
         fragmentArgs.putString(SingleWebsitePreferences.EXTRA_ORIGIN, origin);
         return fragmentArgs;
     }
@@ -192,78 +191,77 @@ public class SingleWebsitePreferences extends PreferenceFragment
      * first place.
      *
      * @param address The address to search for.
-     * @param websiteSets The websites to search in.
+     * @param websites The websites to search in.
      * @return The merged website.
      */
     private static Website mergePermissionInfoForTopLevelOrigin(
-            WebsiteAddress address, List<Set<Website>> websiteSets) {
+            WebsiteAddress address, Collection<Website> websites) {
         String origin = address.getOrigin();
         String host = Uri.parse(origin).getHost();
-        Website merged = new Website(address);
-        // This nested loop looks expensive, but the amount of data is likely to be relatively
-        // small because most sites have very few permissions.
-        for (Set<Website> websiteSet : websiteSets) {
-            for (Website other : websiteSet) {
-                if (merged.getFullscreenInfo() == null && other.getFullscreenInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(other.getFullscreenInfo(), origin)) {
-                    merged.setFullscreenInfo(other.getFullscreenInfo());
-                }
-                if (merged.getGeolocationInfo() == null && other.getGeolocationInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(other.getGeolocationInfo(), origin)) {
-                    merged.setGeolocationInfo(other.getGeolocationInfo());
-                }
-                if (merged.getKeygenInfo() == null && other.getKeygenInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(other.getKeygenInfo(), origin)) {
-                    merged.setKeygenInfo(other.getKeygenInfo());
-                }
-                if (merged.getMidiInfo() == null && other.getMidiInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(other.getMidiInfo(), origin)) {
-                    merged.setMidiInfo(other.getMidiInfo());
-                }
-                if (merged.getProtectedMediaIdentifierInfo() == null
-                        && other.getProtectedMediaIdentifierInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(
-                                   other.getProtectedMediaIdentifierInfo(), origin)) {
-                    merged.setProtectedMediaIdentifierInfo(other.getProtectedMediaIdentifierInfo());
-                }
-                if (merged.getNotificationInfo() == null
-                        && other.getNotificationInfo() != null
-                        && permissionInfoIsForTopLevelOrigin(
-                                   other.getNotificationInfo(), origin)) {
-                    merged.setNotificationInfo(other.getNotificationInfo());
-                }
-                if (merged.getCameraInfo() == null && other.getCameraInfo() != null) {
-                    if (origin.equals(other.getCameraInfo().getOrigin())
-                            && (origin.equals(other.getCameraInfo().getEmbedderSafe())
-                                    || "*".equals(other.getCameraInfo().getEmbedderSafe()))) {
-                        merged.setCameraInfo(other.getCameraInfo());
-                    }
-                }
-                if (merged.getMicrophoneInfo() == null && other.getMicrophoneInfo() != null) {
-                    if (origin.equals(other.getMicrophoneInfo().getOrigin())
-                            && (origin.equals(other.getMicrophoneInfo().getEmbedderSafe())
-                                    || "*".equals(other.getMicrophoneInfo().getEmbedderSafe()))) {
-                        merged.setMicrophoneInfo(other.getMicrophoneInfo());
-                    }
-                }
-                if (merged.getLocalStorageInfo() == null
-                        && other.getLocalStorageInfo() != null
-                        && origin.equals(other.getLocalStorageInfo().getOrigin())) {
-                    merged.setLocalStorageInfo(other.getLocalStorageInfo());
-                }
-                for (StorageInfo storageInfo : other.getStorageInfo()) {
-                    if (host.equals(storageInfo.getHost())) {
-                        merged.addStorageInfo(storageInfo);
-                    }
-                }
-
-                // TODO(mvanouwerkerk): Make the various info types share a common interface that
-                // supports reading the origin or host.
-                // TODO(mvanouwerkerk): Merge in PopupExceptionInfo? It uses a pattern, and is never
-                // set on Android.
-                // TODO(mvanouwerkerk): Merge in JavaScriptExceptionInfo? It uses a pattern.
-                // TODO(lshang): Merge in CookieException? It will use patterns.
+        Website merged = new Website(address, null);
+        // This loop looks expensive, but the amount of data is likely to be relatively small
+        // because most sites have very few permissions.
+        for (Website other : websites) {
+            if (merged.getFullscreenInfo() == null && other.getFullscreenInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(other.getFullscreenInfo(), origin)) {
+                merged.setFullscreenInfo(other.getFullscreenInfo());
             }
+            if (merged.getGeolocationInfo() == null && other.getGeolocationInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(other.getGeolocationInfo(), origin)) {
+                merged.setGeolocationInfo(other.getGeolocationInfo());
+            }
+            if (merged.getKeygenInfo() == null && other.getKeygenInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(other.getKeygenInfo(), origin)) {
+                merged.setKeygenInfo(other.getKeygenInfo());
+            }
+            if (merged.getMidiInfo() == null && other.getMidiInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(other.getMidiInfo(), origin)) {
+                merged.setMidiInfo(other.getMidiInfo());
+            }
+            if (merged.getProtectedMediaIdentifierInfo() == null
+                    && other.getProtectedMediaIdentifierInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(
+                               other.getProtectedMediaIdentifierInfo(), origin)) {
+                merged.setProtectedMediaIdentifierInfo(other.getProtectedMediaIdentifierInfo());
+            }
+            if (merged.getNotificationInfo() == null
+                    && other.getNotificationInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(
+                               other.getNotificationInfo(), origin)) {
+                merged.setNotificationInfo(other.getNotificationInfo());
+            }
+            if (merged.getCameraInfo() == null && other.getCameraInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(
+                               other.getCameraInfo(), origin)) {
+                merged.setCameraInfo(other.getCameraInfo());
+            }
+            if (merged.getMicrophoneInfo() == null && other.getMicrophoneInfo() != null
+                    && permissionInfoIsForTopLevelOrigin(other.getMicrophoneInfo(), origin)) {
+                merged.setMicrophoneInfo(other.getMicrophoneInfo());
+            }
+            if (merged.getLocalStorageInfo() == null
+                    && other.getLocalStorageInfo() != null
+                    && origin.equals(other.getLocalStorageInfo().getOrigin())) {
+                merged.setLocalStorageInfo(other.getLocalStorageInfo());
+            }
+            for (StorageInfo storageInfo : other.getStorageInfo()) {
+                if (host.equals(storageInfo.getHost())) {
+                    merged.addStorageInfo(storageInfo);
+                }
+            }
+            for (UsbInfo usbInfo : other.getUsbInfo()) {
+                if (origin.equals(usbInfo.getOrigin())
+                        && (usbInfo.getEmbedder() == null || usbInfo.getEmbedder().equals("*"))) {
+                    merged.addUsbInfo(usbInfo);
+                }
+            }
+
+            // TODO(mvanouwerkerk): Make the various info types share a common interface that
+            // supports reading the origin or host.
+            // TODO(mvanouwerkerk): Merge in PopupExceptionInfo? It uses a pattern, and is never
+            // set on Android.
+            // TODO(mvanouwerkerk): Merge in JavaScriptExceptionInfo? It uses a pattern.
+            // TODO(lshang): Merge in CookieException? It will use patterns.
         }
         return merged;
     }
@@ -281,6 +279,9 @@ public class SingleWebsitePreferences extends PreferenceFragment
     private void displaySitePermissions() {
         addPreferencesFromResource(R.xml.single_website_preferences);
 
+        Set<String> permissionPreferenceKeys =
+                new HashSet<>(Arrays.asList(PERMISSION_PREFERENCE_KEYS));
+        int maxPermissionOrder = 0;
         ListAdapter preferences = getPreferenceScreen().getRootAdapter();
         for (int i = 0; i < preferences.getCount(); ++i) {
             Preference preference = (Preference) preferences.getItem(i);
@@ -327,6 +328,22 @@ public class SingleWebsitePreferences extends PreferenceFragment
             } else if (PREF_PROTECTED_MEDIA_IDENTIFIER_PERMISSION.equals(preference.getKey())) {
                 setUpListPreference(preference, mSite.getProtectedMediaIdentifierPermission());
             }
+
+            if (permissionPreferenceKeys.contains(preference.getKey())) {
+                maxPermissionOrder = Math.max(maxPermissionOrder, preference.getOrder());
+            }
+        }
+
+        for (UsbInfo info : mSite.getUsbInfo()) {
+            Preference preference = new Preference(getActivity());
+            preference.getExtras().putSerializable(EXTRA_USB_INFO, info);
+            preference.setIcon(R.drawable.settings_usb);
+            preference.setOnPreferenceClickListener(this);
+            preference.setOrder(maxPermissionOrder);
+            preference.setTitle(info.getName());
+            preference.setWidgetLayoutResource(R.layout.usb_permission);
+            getPreferenceScreen().addPreference(preference);
+            mUsbPermissionCount++;
         }
 
         // Remove the 'permission is off in Android' message if not needed.
@@ -411,6 +428,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
     }
 
     private boolean hasPermissionsPreferences() {
+        if (mUsbPermissionCount > 0) return true;
         PreferenceScreen screen = getPreferenceScreen();
         for (String key : PERMISSION_PREFERENCE_KEYS) {
             if (screen.findPreference(key) != null) return true;
@@ -615,6 +633,23 @@ public class SingleWebsitePreferences extends PreferenceFragment
 
     @Override
     public boolean onPreferenceClick(Preference preference) {
+        Bundle extras = preference.peekExtras();
+        if (extras != null) {
+            UsbInfo usbInfo = (UsbInfo) extras.getSerializable(EXTRA_USB_INFO);
+            if (usbInfo != null) {
+                usbInfo.revoke();
+
+                PreferenceScreen preferenceScreen = getPreferenceScreen();
+                preferenceScreen.removePreference(preference);
+                mUsbPermissionCount--;
+                if (!hasPermissionsPreferences()) {
+                    Preference heading = preferenceScreen.findPreference(PREF_PERMISSIONS);
+                    preferenceScreen.removePreference(heading);
+                }
+                return true;
+            }
+        }
+
         // Handle the Clear & Reset preference click by showing a confirmation.
         new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
                 .setTitle(R.string.website_reset)
@@ -661,6 +696,7 @@ public class SingleWebsitePreferences extends PreferenceFragment
         mSite.setNotificationPermission(ContentSetting.DEFAULT);
         mSite.setPopupPermission(ContentSetting.DEFAULT);
         mSite.setProtectedMediaIdentifierPermission(ContentSetting.DEFAULT);
+        for (UsbInfo info : mSite.getUsbInfo()) info.revoke();
 
         // Clear the storage and finish the activity if necessary.
         if (mSite.getTotalUsage() > 0) {

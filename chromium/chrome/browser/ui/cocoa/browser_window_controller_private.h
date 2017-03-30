@@ -10,7 +10,7 @@
 #import "chrome/browser/ui/cocoa/fullscreen_toolbar_controller.h"
 
 @class BrowserWindowLayout;
-class PermissionBubbleManager;
+class PermissionRequestManager;
 
 namespace content {
 class WebContents;
@@ -73,10 +73,8 @@ class WebContents;
                           regularWindow:(NSWindow*)regularWindow
                        fullscreenWindow:(NSWindow*)fullscreenWindow;
 
-// Called when a permission bubble closes, and informs the fullscreen toolbar
-// controller that the dropdown can be hidden.  (The dropdown should never be
-// hidden while a permissions bubble is visible.)
-- (void)permissionBubbleWindowWillClose:(NSNotification*)notification;
+// Updates the anchor position of the permission bubble.
+- (void)updatePermissionBubbleAnchor;
 
 // Enter or exit fullscreen without using Cocoa's System Fullscreen API.  These
 // methods are internal implementations of |-setFullscreen:|.
@@ -96,8 +94,8 @@ class WebContents;
 - (void)disableBarVisibilityUpdates;
 
 // If there are no visibility locks and bar visibity updates are enabled, hides
-// the bar with |animation| and |delay|.  Otherwise, does nothing.
-- (void)hideOverlayIfPossibleWithAnimation:(BOOL)animation delay:(BOOL)delay;
+// the bar with |animation|.  Otherwise, does nothing.
+- (void)hideOverlayIfPossibleWithAnimation:(BOOL)animation;
 
 // The opacity for the toolbar divider; 0 means that it shouldn't be shown.
 - (CGFloat)toolbarDividerOpacity;
@@ -114,7 +112,7 @@ class WebContents;
 // Allows the omnibox to slide. Also prepares UI for several fullscreen modes.
 // This method gets called when entering AppKit fullscren, or when entering
 // Immersive fullscreen. Expects fullscreenStyle_ to be set.
-- (void)adjustUIForSlidingFullscreenStyle:(fullscreen_mac::SlidingStyle)style;
+- (void)adjustUIForSlidingFullscreenStyle:(FullscreenSlidingStyle)style;
 
 // This method gets called when exiting AppKit fullscreen, or when exiting
 // Immersive fullscreen. It performs some common UI changes, and stops the
@@ -124,7 +122,7 @@ class WebContents;
 // Exposed for testing.
 // Creates a FullscreenToolbarController with the given style.
 - (FullscreenToolbarController*)newFullscreenToolbarControllerWithStyle:
-    (fullscreen_mac::SlidingStyle)style;
+    (FullscreenSlidingStyle)style;
 
 // Toggles the AppKit Fullscreen API. By default, doing so enters Canonical
 // Fullscreen.
@@ -176,7 +174,7 @@ class WebContents;
 - (void)resetCustomAppKitFullscreenVariables;
 
 - (content::WebContents*)webContents;
-- (PermissionBubbleManager*)permissionBubbleManager;
+- (PermissionRequestManager*)permissionRequestManager;
 
 // Hides or unhides any displayed modal sheet for fullscreen transition.
 // Modal sheets should be hidden at the beginning and then shown at the end.

@@ -33,11 +33,12 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
                    &task_graph_runner_),
         redraw_needed_(false),
         update_draw_properties_needed_(false),
+        bottom_controls_height_(0.f),
         top_controls_shown_ratio_(1.f),
         top_controls_height_(top_controls_height),
         top_controls_show_threshold_(top_controls_show_threshold),
         top_controls_hide_threshold_(top_controls_hide_threshold) {
-    active_tree_ = LayerTreeImpl::create(
+    active_tree_ = base::MakeUnique<LayerTreeImpl>(
         &host_impl_, new SyncedProperty<ScaleGroup>, new SyncedTopControls,
         new SyncedElasticOverscroll);
     root_scroll_layer_ = LayerImpl::Create(active_tree_.get(), 1);
@@ -51,6 +52,10 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
   }
 
   bool HaveRootScrollLayer() const override { return true; }
+
+  float BottomControlsHeight() const override {
+    return bottom_controls_height_;
+  }
 
   float TopControlsHeight() const override { return top_controls_height_; }
 
@@ -82,6 +87,10 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
 
   void SetTopControlsHeight(float height) { top_controls_height_ = height; }
 
+  void SetBottomControlsHeight(float height) {
+    bottom_controls_height_ = height;
+  }
+
  private:
   FakeImplTaskRunnerProvider task_runner_provider_;
   TestSharedBitmapManager shared_bitmap_manager_;
@@ -93,6 +102,7 @@ class MockTopControlsManagerClient : public TopControlsManagerClient {
   bool redraw_needed_;
   bool update_draw_properties_needed_;
 
+  float bottom_controls_height_;
   float top_controls_shown_ratio_;
   float top_controls_height_;
   float top_controls_show_threshold_;
@@ -468,6 +478,54 @@ TEST(TopControlsManagerTest, ScrollByWithZeroHeightControlsIsNoop) {
   manager->ScrollEnd();
 }
 
+TEST(TopControlsManagerTest, ScrollThenRestoreBottomControls) {
+  MockTopControlsManagerClient client(100.f, 0.5f, 0.5f);
+  client.SetBottomControlsHeight(100.f);
+  TopControlsManager* manager = client.manager();
+  manager->ScrollBegin();
+  manager->ScrollBy(gfx::Vector2dF(0.f, 20.f));
+  EXPECT_FLOAT_EQ(80.f, manager->ContentBottomOffset());
+  EXPECT_FLOAT_EQ(0.8f, manager->BottomControlsShownRatio());
+  manager->ScrollEnd();
+
+  manager->ScrollBegin();
+  manager->ScrollBy(gfx::Vector2dF(0.f, -200.f));
+  EXPECT_FLOAT_EQ(100.f, manager->ContentBottomOffset());
+  EXPECT_FLOAT_EQ(1.f, manager->BottomControlsShownRatio());
+  manager->ScrollEnd();
+}
+
+TEST(TopControlsManagerTest, HideAndPeekBottomControls) {
+  MockTopControlsManagerClient client(100.f, 0.5f, 0.5f);
+  client.SetBottomControlsHeight(100.f);
+  TopControlsManager* manager = client.manager();
+  manager->ScrollBegin();
+  manager->ScrollBy(gfx::Vector2dF(0.f, 300.f));
+  EXPECT_FLOAT_EQ(0.f, manager->ContentBottomOffset());
+  EXPECT_FLOAT_EQ(0.f, manager->BottomControlsShownRatio());
+  manager->ScrollEnd();
+
+  manager->ScrollBegin();
+  manager->ScrollBy(gfx::Vector2dF(0.f, -15.f));
+  EXPECT_FLOAT_EQ(15.f, manager->ContentBottomOffset());
+  EXPECT_FLOAT_EQ(0.15f, manager->BottomControlsShownRatio());
+  manager->ScrollEnd();
+}
+
+TEST(TopControlsManagerTest, HideAndImmediateShowKeepsControlsVisible) {
+  MockTopControlsManagerClient client(100.f, 0.5f, 0.5f);
+  client.SetBottomControlsHeight(100.f);
+  TopControlsManager* manager = client.manager();
+  EXPECT_FLOAT_EQ(1.f, client.CurrentTopControlsShownRatio());
+
+  manager->UpdateTopControlsState(BOTH, HIDDEN, true);
+  EXPECT_TRUE(manager->has_animation());
+  EXPECT_FLOAT_EQ(1.f, client.CurrentTopControlsShownRatio());
+
+  manager->UpdateTopControlsState(BOTH, SHOWN, true);
+  EXPECT_FALSE(manager->has_animation());
+  EXPECT_FLOAT_EQ(1.f, client.CurrentTopControlsShownRatio());
+}
 
 }  // namespace
 }  // namespace cc

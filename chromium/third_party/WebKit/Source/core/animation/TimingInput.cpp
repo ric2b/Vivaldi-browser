@@ -29,13 +29,13 @@ void TimingInput::setEndDelay(Timing& timing, double endDelay)
 void TimingInput::setFillMode(Timing& timing, const String& fillMode)
 {
     if (fillMode == "none") {
-        timing.fillMode = Timing::FillModeNone;
+        timing.fillMode = Timing::FillMode::NONE;
     } else if (fillMode == "backwards") {
-        timing.fillMode = Timing::FillModeBackwards;
+        timing.fillMode = Timing::FillMode::BACKWARDS;
     } else if (fillMode == "both") {
-        timing.fillMode = Timing::FillModeBoth;
+        timing.fillMode = Timing::FillMode::BOTH;
     } else if (fillMode == "forwards") {
-        timing.fillMode = Timing::FillModeForwards;
+        timing.fillMode = Timing::FillMode::FORWARDS;
     } else {
         timing.fillMode = Timing::defaults().fillMode;
     }
@@ -43,7 +43,7 @@ void TimingInput::setFillMode(Timing& timing, const String& fillMode)
 
 bool TimingInput::setIterationStart(Timing& timing, double iterationStart, ExceptionState& exceptionState)
 {
-    ASSERT(std::isfinite(iterationStart));
+    DCHECK(std::isfinite(iterationStart));
     if (std::isnan(iterationStart) || iterationStart < 0) {
         exceptionState.throwTypeError("iterationStart must be non-negative.");
         return false;
@@ -96,11 +96,11 @@ void TimingInput::setPlaybackRate(Timing& timing, double playbackRate)
 void TimingInput::setPlaybackDirection(Timing& timing, const String& direction)
 {
     if (direction == "reverse") {
-        timing.direction = Timing::PlaybackDirectionReverse;
+        timing.direction = Timing::PlaybackDirection::REVERSE;
     } else if (direction == "alternate") {
-        timing.direction = Timing::PlaybackDirectionAlternate;
+        timing.direction = Timing::PlaybackDirection::ALTERNATE_NORMAL;
     } else if (direction == "alternate-reverse") {
-        timing.direction = Timing::PlaybackDirectionAlternateReverse;
+        timing.direction = Timing::PlaybackDirection::ALTERNATE_REVERSE;
     } else {
         timing.direction = Timing::defaults().direction;
     }
@@ -130,7 +130,7 @@ bool TimingInput::convert(const KeyframeEffectOptions& timingInput, Timing& timi
     if (!setIterationDuration(timingOutput, timingInput.duration(), exceptionState))
         return false;
 
-    setPlaybackRate(timingOutput, timingInput.playbackRate());
+    setPlaybackRate(timingOutput, 1.0);
     setPlaybackDirection(timingOutput, timingInput.direction());
 
     if (!setTimingFunction(timingOutput, timingInput.easing(), document, exceptionState))
@@ -143,7 +143,7 @@ bool TimingInput::convert(const KeyframeEffectOptions& timingInput, Timing& timi
 
 bool TimingInput::convert(double duration, Timing& timingOutput, ExceptionState& exceptionState)
 {
-    ASSERT(timingOutput == Timing::defaults());
+    DCHECK(timingOutput == Timing::defaults());
     return setIterationDuration(timingOutput, UnrestrictedDoubleOrString::fromUnrestrictedDouble(duration), exceptionState);
 }
 

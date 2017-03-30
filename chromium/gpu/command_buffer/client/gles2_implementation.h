@@ -136,7 +136,7 @@ class GLES2_IMPL_EXPORT GLES2Implementation
     ShaderPrecisionMap shader_precisions;
   };
 
-  // The maxiumum result size from simple GL get commands.
+  // The maximum result size from simple GL get commands.
   static const size_t kMaxSizeOfSimpleResult =
       16 * sizeof(uint32_t);  // NOLINT.
 
@@ -186,13 +186,6 @@ class GLES2_IMPL_EXPORT GLES2Implementation
   // it means we can easily edit the non-auto generated parts right here in
   // this file instead of having to edit some template or the code generator.
   #include "gpu/command_buffer/client/gles2_implementation_autogen.h"
-
-  void DisableVertexAttribArray(GLuint index) override;
-  void EnableVertexAttribArray(GLuint index) override;
-  void GetVertexAttribfv(GLuint index, GLenum pname, GLfloat* params) override;
-  void GetVertexAttribiv(GLuint index, GLenum pname, GLint* params) override;
-  void GetVertexAttribIiv(GLuint index, GLenum pname, GLint* params) override;
-  void GetVertexAttribIuiv(GLuint index, GLenum pname, GLuint* params) override;
 
   // ContextSupport implementation.
   void Swap() override;

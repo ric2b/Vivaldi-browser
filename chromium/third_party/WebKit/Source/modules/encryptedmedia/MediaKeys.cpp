@@ -34,7 +34,6 @@
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
 #include "modules/encryptedmedia/SimpleContentDecryptionModuleResultPromise.h"
-#include "platform/Logging.h"
 #include "platform/Timer.h"
 #include "public/platform/WebContentDecryptionModule.h"
 #include "wtf/RefPtr.h"
@@ -133,17 +132,17 @@ MediaKeys::MediaKeys(ExecutionContext* context, const WebVector<WebEncryptedMedi
     , m_reservedForMediaElement(false)
     , m_timer(this, &MediaKeys::timerFired)
 {
-    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")";
 }
 
 MediaKeys::~MediaKeys()
 {
-    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")";
+    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")";
 }
 
 MediaKeySession* MediaKeys::createSession(ScriptState* scriptState, const String& sessionTypeString, ExceptionState& exceptionState)
 {
-    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") " << sessionTypeString;
+    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ") " << sessionTypeString;
 
     // From http://w3c.github.io/encrypted-media/#createSession
 
@@ -242,7 +241,7 @@ bool MediaKeys::sessionTypeSupported(WebEncryptedMediaSessionType sessionType)
     return false;
 }
 
-void MediaKeys::timerFired(Timer<MediaKeys>*)
+void MediaKeys::timerFired(TimerBase*)
 {
     DCHECK(m_pendingActions.size());
 
@@ -253,7 +252,7 @@ void MediaKeys::timerFired(Timer<MediaKeys>*)
 
     while (!pendingActions.isEmpty()) {
         PendingAction* action = pendingActions.takeFirst();
-        DVLOG(MEDIA_KEYS_LOG_LEVEL) << __FUNCTION__ << "(" << this << ") Certificate";
+        DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ") Certificate";
 
         // 5.1 Let cdm be the cdm during the initialization of this object.
         WebContentDecryptionModule* cdm = contentDecryptionModule();
@@ -291,7 +290,7 @@ void MediaKeys::contextDestroyed()
 bool MediaKeys::hasPendingActivity() const
 {
     // Remain around if there are pending events.
-    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __FUNCTION__ << "(" << this << ")"
+    DVLOG(MEDIA_KEYS_LOG_LEVEL) << __func__ << "(" << this << ")"
         << (!m_pendingActions.isEmpty() ? " !m_pendingActions.isEmpty()" : "")
         << (m_reservedForMediaElement ? " m_reservedForMediaElement" : "");
 

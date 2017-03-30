@@ -25,7 +25,7 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_associated_data.h"
-#include "content/public/browser/android/content_view_core.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/escape.h"
 #include "net/http/http_status_code.h"
@@ -33,6 +33,7 @@
 #include "url/gurl.h"
 
 using content::ContentViewCore;
+using content::RenderFrameHost;
 
 namespace {
 
@@ -40,6 +41,7 @@ const char kContextualSearchResponseDisplayTextParam[] = "display_text";
 const char kContextualSearchResponseSelectedTextParam[] = "selected_text";
 const char kContextualSearchResponseSearchTermParam[] = "search_term";
 const char kContextualSearchResponseLanguageParam[] = "lang";
+const char kContextualSearchResponseMidParam[] = "mid";
 const char kContextualSearchResponseResolvedTermParam[] = "resolved_term";
 const char kContextualSearchPreventPreload[] = "prevent_preload";
 const char kContextualSearchMentions[] = "mentions";
@@ -81,11 +83,10 @@ ContextualSearchDelegate::~ContextualSearchDelegate() {
 void ContextualSearchDelegate::StartSearchTermResolutionRequest(
     const std::string& selection,
     bool use_resolved_search_term,
-    content::ContentViewCore* content_view_core,
+    content::WebContents* web_contents,
     bool may_send_base_page_url) {
   GatherSurroundingTextWithCallback(
-      selection, use_resolved_search_term, content_view_core,
-      may_send_base_page_url,
+      selection, use_resolved_search_term, web_contents, may_send_base_page_url,
       base::Bind(&ContextualSearchDelegate::StartSearchTermRequestFromSelection,
                  AsWeakPtr()));
 }
@@ -93,11 +94,10 @@ void ContextualSearchDelegate::StartSearchTermResolutionRequest(
 void ContextualSearchDelegate::GatherAndSaveSurroundingText(
     const std::string& selection,
     bool use_resolved_search_term,
-    content::ContentViewCore* content_view_core,
+    content::WebContents* web_contents,
     bool may_send_base_page_url) {
   GatherSurroundingTextWithCallback(
-      selection, use_resolved_search_term, content_view_core,
-      may_send_base_page_url,
+      selection, use_resolved_search_term, web_contents, may_send_base_page_url,
       base::Bind(&ContextualSearchDelegate::SaveSurroundingText, AsWeakPtr()));
   // TODO(donnd): clear the context here, since we're done with it (but risky).
 }
@@ -157,6 +157,7 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   std::string search_term;
   std::string display_text;
   std::string alternate_term;
+  std::string mid;
   std::string prevent_preload;
   int mention_start = 0;
   int mention_end = 0;
@@ -165,7 +166,7 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   std::string context_language;
 
   DecodeSearchTermFromJsonResponse(
-      json_string, &search_term, &display_text, &alternate_term,
+      json_string, &search_term, &display_text, &alternate_term, &mid,
       &prevent_preload, &mention_start, &mention_end, &context_language);
   if (mention_start != 0 || mention_end != 0) {
     // Sanity check that our selection is non-zero and it is less than
@@ -185,7 +186,7 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   }
   bool is_invalid = response_code == net::URLFetcher::RESPONSE_CODE_INVALID;
   return std::unique_ptr<ResolvedSearchTerm>(new ResolvedSearchTerm(
-      is_invalid, response_code, search_term, display_text, alternate_term,
+      is_invalid, response_code, search_term, display_text, alternate_term, mid,
       prevent_preload == kDoPreventPreloadValue, start_adjust, end_adjust,
       context_language));
 }
@@ -231,32 +232,40 @@ std::string ContextualSearchDelegate::BuildRequestUrl(std::string selection) {
 void ContextualSearchDelegate::GatherSurroundingTextWithCallback(
     const std::string& selection,
     bool use_resolved_search_term,
-    content::ContentViewCore* content_view_core,
+    content::WebContents* web_contents,
     bool may_send_base_page_url,
     HandleSurroundingsCallback callback) {
+  DCHECK(web_contents);
+  DCHECK(!callback.is_null());
+  DCHECK(!selection.empty());
+  RenderFrameHost* focused_frame = web_contents->GetFocusedFrame();
+  if (!focused_frame) {
+    callback.Run(base::string16(), 0, 0);
+    return;
+  }
   // Immediately cancel any request that's in flight, since we're building a new
   // context (and the response disposes of any existing context).
   search_term_fetcher_.reset();
-  BuildContext(selection, use_resolved_search_term, content_view_core,
+  BuildContext(selection, use_resolved_search_term, web_contents,
                may_send_base_page_url);
-  content_view_core->RequestTextSurroundingSelection(
-      field_trial_->GetSurroundingSize(), callback);
+  focused_frame->RequestTextSurroundingSelection(
+      callback, field_trial_->GetSurroundingSize());
 }
 
 void ContextualSearchDelegate::BuildContext(
     const std::string& selection,
     bool use_resolved_search_term,
-    content::ContentViewCore* content_view_core,
+    content::WebContents* web_contents,
     bool may_send_base_page_url) {
   // Decide if the URL should be sent with the context.
-  GURL page_url(content_view_core->GetWebContents()->GetURL());
+  GURL page_url(web_contents->GetURL());
   GURL url_to_send;
   if (may_send_base_page_url &&
       CanSendPageURL(page_url, ProfileManager::GetActiveUserProfile(),
                      template_url_service_)) {
     url_to_send = page_url;
   }
-  std::string encoding(content_view_core->GetWebContents()->GetEncoding());
+  std::string encoding(web_contents->GetEncoding());
   context_.reset(new ContextualSearchContext(
       selection, use_resolved_search_term, url_to_send, encoding));
 }
@@ -423,47 +432,54 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
     std::string* search_term,
     std::string* display_text,
     std::string* alternate_term,
+    std::string* mid,
     std::string* prevent_preload,
     int* mention_start,
     int* mention_end,
     std::string* lang) {
-  bool contains_xssi_escape = response.find(kXssiEscape) == 0;
+  bool contains_xssi_escape =
+      base::StartsWith(response, kXssiEscape, base::CompareCase::SENSITIVE);
   const std::string& proper_json =
-      contains_xssi_escape ? response.substr(strlen(kXssiEscape)) : response;
+      contains_xssi_escape ? response.substr(sizeof(kXssiEscape) - 1)
+                           : response;
   JSONStringValueDeserializer deserializer(proper_json);
-  std::unique_ptr<base::Value> root = deserializer.Deserialize(NULL, NULL);
+  std::unique_ptr<base::Value> root =
+      deserializer.Deserialize(nullptr, nullptr);
+  std::unique_ptr<base::DictionaryValue> dict =
+      base::DictionaryValue::From(std::move(root));
+  if (!dict)
+    return;
 
-  if (root.get() != NULL && root->IsType(base::Value::TYPE_DICTIONARY)) {
-    base::DictionaryValue* dict =
-        static_cast<base::DictionaryValue*>(root.get());
-    dict->GetString(kContextualSearchPreventPreload, prevent_preload);
-    dict->GetString(kContextualSearchResponseSearchTermParam, search_term);
-    dict->GetString(kContextualSearchResponseLanguageParam, lang);
-    // For the display_text, if not present fall back to the "search_term".
-    if (!dict->GetString(kContextualSearchResponseDisplayTextParam,
-                         display_text)) {
-      *display_text = *search_term;
-    }
-    // Extract mentions for selection expansion.
-    if (!field_trial_->IsDecodeMentionsDisabled()) {
-      base::ListValue* mentions_list = NULL;
-      dict->GetList(kContextualSearchMentions, &mentions_list);
-      if (mentions_list != NULL && mentions_list->GetSize() >= 2)
-        ExtractMentionsStartEnd(*mentions_list, mention_start, mention_end);
-    }
-    // If either the selected text or the resolved term is not the search term,
-    // use it as the alternate term.
-    std::string selected_text;
-    dict->GetString(kContextualSearchResponseSelectedTextParam, &selected_text);
-    if (selected_text != *search_term) {
-      *alternate_term = selected_text;
-    } else {
-      std::string resolved_term;
-      dict->GetString(kContextualSearchResponseResolvedTermParam,
-                      &resolved_term);
-      if (resolved_term != *search_term) {
-        *alternate_term = resolved_term;
-      }
+  dict->GetString(kContextualSearchPreventPreload, prevent_preload);
+  dict->GetString(kContextualSearchResponseSearchTermParam, search_term);
+  dict->GetString(kContextualSearchResponseLanguageParam, lang);
+
+  // For the display_text, if not present fall back to the "search_term".
+  if (!dict->GetString(kContextualSearchResponseDisplayTextParam,
+                       display_text)) {
+    *display_text = *search_term;
+  }
+  dict->GetString(kContextualSearchResponseMidParam, mid);
+
+  // Extract mentions for selection expansion.
+  if (!field_trial_->IsDecodeMentionsDisabled()) {
+    base::ListValue* mentions_list = nullptr;
+    dict->GetList(kContextualSearchMentions, &mentions_list);
+    if (mentions_list && mentions_list->GetSize() >= 2)
+      ExtractMentionsStartEnd(*mentions_list, mention_start, mention_end);
+  }
+
+  // If either the selected text or the resolved term is not the search term,
+  // use it as the alternate term.
+  std::string selected_text;
+  dict->GetString(kContextualSearchResponseSelectedTextParam, &selected_text);
+  if (selected_text != *search_term) {
+    *alternate_term = selected_text;
+  } else {
+    std::string resolved_term;
+    dict->GetString(kContextualSearchResponseResolvedTermParam, &resolved_term);
+    if (resolved_term != *search_term) {
+      *alternate_term = resolved_term;
     }
   }
 }

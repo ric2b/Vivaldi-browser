@@ -22,26 +22,10 @@ namespace blink {
 namespace {
 double gCurrentTimeSecs = 0.0;
 
-// This class exists because gcc doesn't know how to move an std::unique_ptr.
-class RefCountedTaskContainer : public RefCounted<RefCountedTaskContainer> {
-public:
-    explicit RefCountedTaskContainer(WebTaskRunner::Task* task) : m_task(wrapUnique(task)) { }
-
-    ~RefCountedTaskContainer() { }
-
-    void run()
-    {
-        m_task->run();
-    }
-
-private:
-    std::unique_ptr<WebTaskRunner::Task> m_task;
-};
-
 class DelayedTask {
 public:
     DelayedTask(WebTaskRunner::Task* task, double delaySeconds)
-        : m_task(adoptRef(new RefCountedTaskContainer(task)))
+        : m_task(task)
         , m_runTimeSeconds(gCurrentTimeSecs + delaySeconds)
         , m_delaySeconds(delaySeconds)
     {
@@ -68,7 +52,7 @@ public:
     }
 
 private:
-    RefPtr<RefCountedTaskContainer> m_task;
+    std::unique_ptr<WebTaskRunner::Task> m_task;
     double m_runTimeSeconds;
     double m_delaySeconds;
 };
@@ -88,21 +72,33 @@ public:
         m_timerTasks->push(DelayedTask(task, delayMs * 0.001));
     }
 
-    WebTaskRunner* clone() override
+    bool runsTasksOnCurrentThread() override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
+        return true;
+    }
+
+    std::unique_ptr<WebTaskRunner> clone() override
+    {
+        NOTREACHED();
         return nullptr;
     }
 
     double virtualTimeSeconds() const override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0.0;
     }
 
     double monotonicallyIncreasingVirtualTimeSeconds() const override
     {
         return gCurrentTimeSecs;
+    }
+
+    base::SingleThreadTaskRunner* taskRunner() override
+    {
+        ASSERT_NOT_REACHED();
+        return nullptr;
     }
 
     std::priority_queue<DelayedTask>* m_timerTasks; // NOT OWNED
@@ -142,7 +138,7 @@ public:
 
     WebTaskRunner* loadingTaskRunner() override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 
@@ -188,7 +184,7 @@ public:
     }
 
     void shutdown() override {}
-    std::unique_ptr<WebViewScheduler> createWebViewScheduler(blink::WebView*) override { return nullptr; }
+    std::unique_ptr<WebViewScheduler> createWebViewScheduler(InterventionReporter*) override { return nullptr; }
     void suspendTimerQueue() override { }
     void resumeTimerQueue() override { }
     void addPendingNavigation(WebScheduler::NavigatingFrameType) override { }
@@ -207,19 +203,19 @@ public:
 
     virtual bool isCurrentThread() const
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return true;
     }
 
     virtual PlatformThreadId threadId() const
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0;
     }
 
     WebTaskRunner* getWebTaskRunner() override
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 
@@ -230,12 +226,12 @@ public:
 
     virtual void enterRunLoop()
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
     virtual void exitRunLoop()
     {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
 private:
@@ -296,12 +292,12 @@ public:
         m_startTime = gCurrentTimeSecs;
     }
 
-    void countingTask(Timer<TimerTest>*)
+    void countingTask(TimerBase*)
     {
         m_runTimes.append(gCurrentTimeSecs);
     }
 
-    void recordNextFireTimeTask(Timer<TimerTest>* timer)
+    void recordNextFireTimeTask(TimerBase* timer)
     {
         m_nextFireTimes.append(gCurrentTimeSecs + timer->nextFireInterval());
     }
@@ -759,14 +755,14 @@ TEST_F(TimerTest, RepeatingTimerDoesNotDrift)
 }
 
 template <typename TimerFiredClass>
-class TimerForTest : public Timer<TimerFiredClass> {
+class TimerForTest : public TaskRunnerTimer<TimerFiredClass> {
 public:
-    using TimerFiredFunction = void (TimerFiredClass::*)(Timer<TimerFiredClass>*);
+    using TimerFiredFunction = typename TaskRunnerTimer<TimerFiredClass>::TimerFiredFunction;
 
     ~TimerForTest() override { }
 
-    TimerForTest(TimerFiredClass* timerFiredClass, TimerFiredFunction timerFiredFunction, WebTaskRunner* webTaskRunner)
-        : Timer<TimerFiredClass>(timerFiredClass, timerFiredFunction, webTaskRunner)
+    TimerForTest(WebTaskRunner* webTaskRunner, TimerFiredClass* timerFiredClass, TimerFiredFunction timerFiredFunction)
+        : TaskRunnerTimer<TimerFiredClass>(webTaskRunner, timerFiredClass, timerFiredFunction)
     {
     }
 };
@@ -775,7 +771,7 @@ TEST_F(TimerTest, UserSuppliedWebTaskRunner)
 {
     std::priority_queue<DelayedTask> timerTasks;
     MockWebTaskRunner taskRunner(&timerTasks);
-    TimerForTest<TimerTest> timer(this, &TimerTest::countingTask, &taskRunner);
+    TimerForTest<TimerTest> timer(&taskRunner, this, &TimerTest::countingTask);
     timer.startOneShot(0, BLINK_FROM_HERE);
 
     // Make sure the task was posted on taskRunner.

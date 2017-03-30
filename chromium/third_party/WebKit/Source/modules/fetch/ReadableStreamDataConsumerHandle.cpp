@@ -70,7 +70,7 @@ public:
             v8::MaybeLocal<v8::Value> maybeValue = v8UnpackIteratorResult(v.getScriptState(), item.As<v8::Object>(), &done);
             if (isTerminating(v.getScriptState()))
                 return ScriptValue();
-            v8::Local<v8::Value> value = v8CallOrCrash(maybeValue);
+            v8::Local<v8::Value> value = maybeValue.ToLocalChecked();
             if (done) {
                 readingContext->onReadDone();
                 return v;
@@ -293,9 +293,9 @@ ReadableStreamDataConsumerHandle::ReadableStreamDataConsumerHandle(ScriptState* 
 }
 ReadableStreamDataConsumerHandle::~ReadableStreamDataConsumerHandle() = default;
 
-FetchDataConsumerHandle::Reader* ReadableStreamDataConsumerHandle::obtainReaderInternal(Client* client)
+std::unique_ptr<FetchDataConsumerHandle::Reader> ReadableStreamDataConsumerHandle::obtainFetchDataReader(Client* client)
 {
-    return new ReadingContext::ReaderImpl(m_readingContext, client);
+    return WTF::wrapUnique(new ReadingContext::ReaderImpl(m_readingContext, client));
 }
 
 } // namespace blink

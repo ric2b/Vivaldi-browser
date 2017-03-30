@@ -15,7 +15,6 @@ namespace blink {
 
 class Document;
 class KURL;
-class WebTraceLocation;
 class WorkerGlobalScopeProxy;
 
 // A proxy for talking to the worker inspector on the worker thread.
@@ -37,8 +36,7 @@ public:
     void workerThreadCreated(Document*, WorkerThread*, const KURL&);
     void workerThreadTerminated();
     void dispatchMessageFromWorker(const String&);
-    void workerConsoleAgentEnabled();
-    void addConsoleMessageFromWorker(ConsoleMessage*);
+    void addConsoleMessageFromWorker(MessageLevel, const String& message, std::unique_ptr<SourceLocation>);
 
     void connectToInspector(PageInspector*);
     void disconnectFromInspector(PageInspector*);
@@ -60,8 +58,6 @@ private:
     PageInspector* m_pageInspector;
     String m_url;
     String m_inspectorId;
-    HeapDeque<Member<ConsoleMessage>> m_consoleMessages;
-    bool m_ignoreConsoleMessages;
 };
 
 } // namespace blink

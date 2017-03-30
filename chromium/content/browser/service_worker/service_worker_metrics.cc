@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_util.h"
+#include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
@@ -71,6 +72,12 @@ std::string EventTypeToSuffix(ServiceWorkerMetrics::EventType event_type) {
       return "_FETCH_WAITUNTIL";
     case ServiceWorkerMetrics::EventType::FOREIGN_FETCH_WAITUNTIL:
       return "_FOREIGN_FETCH_WAITUNTIL";
+    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
+      return "_NAVIGATION_HINT_LINK_MOUSE_DOWN";
+    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
+      return "_NAVIGATION_HINT_LINK_TAP_UNCONFIRMED";
+    case ServiceWorkerMetrics::EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
+      return "_NAVIGATION_HINT_LINK_TAP_DOWN";
     case ServiceWorkerMetrics::EventType::NUM_TYPES:
       NOTREACHED() << static_cast<int>(event_type);
   }
@@ -104,11 +111,46 @@ std::string GetWorkerPreparationSuffix(
   return "_UNKNOWN";
 }
 
+std::string GetSiteSuffix(ServiceWorkerMetrics::Site site) {
+  switch (site) {
+    case ServiceWorkerMetrics::Site::OTHER:
+    case ServiceWorkerMetrics::Site::WITH_FETCH_HANDLER:
+    case ServiceWorkerMetrics::Site::WITHOUT_FETCH_HANDLER:
+      return "";
+    case ServiceWorkerMetrics::Site::NEW_TAB_PAGE:
+      return ".ntp";
+    case ServiceWorkerMetrics::Site::PLUS:
+      return ".plus";
+    case ServiceWorkerMetrics::Site::INBOX:
+      return ".inbox";
+    case ServiceWorkerMetrics::Site::DOCS:
+      return ".docs";
+    case ServiceWorkerMetrics::Site::NUM_TYPES:
+      NOTREACHED() << static_cast<int>(site);
+  }
+  NOTREACHED();
+  return "";
+}
+
 // Use this for histograms with dynamically generated names, which
 // otherwise can't use the UMA_HISTOGRAM macro without code duplication.
 void RecordSuffixedTimeHistogram(const std::string& name,
                                  const std::string& suffix,
                                  base::TimeDelta sample) {
+  const std::string name_with_suffix = name + suffix;
+  // This unrolls UMA_HISTOGRAM_TIMES.
+  base::HistogramBase* histogram_pointer = base::Histogram::FactoryTimeGet(
+      name_with_suffix, base::TimeDelta::FromMilliseconds(1),
+      base::TimeDelta::FromSeconds(10), 50,
+      base::HistogramBase::kUmaTargetedHistogramFlag);
+  histogram_pointer->AddTime(sample);
+}
+
+// Use this for histograms with dynamically generated names, which
+// otherwise can't use the UMA_MEDIUM_HISTOGRAM macro without code duplication.
+void RecordSuffixedMediumTimeHistogram(const std::string& name,
+                                       const std::string& suffix,
+                                       base::TimeDelta sample) {
   const std::string name_with_suffix = name + suffix;
   // This unrolls UMA_HISTOGRAM_MEDIUM_TIMES.
   base::HistogramBase* histogram_pointer = base::Histogram::FactoryTimeGet(
@@ -136,21 +178,6 @@ void RecordURLMetricOnUI(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   GetContentClient()->browser()->RecordURLMetric(
       "ServiceWorker.ControlledPageUrl", url);
-}
-
-ServiceWorkerMetrics::Site SiteFromURL(const GURL& gurl) {
-  // UIThreadSearchTermsData::GoogleBaseURLValue() returns the google base
-  // URL, but not available in content layer.
-  static const char google_like_scope_prefix[] = "https://www.google.";
-  static const char ntp_scope_path[] = "/_/chrome/";
-  if (base::StartsWith(gurl.spec(), google_like_scope_prefix,
-                       base::CompareCase::INSENSITIVE_ASCII) &&
-      base::StartsWith(gurl.path(), ntp_scope_path,
-                       base::CompareCase::SENSITIVE)) {
-    return ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
-  }
-
-  return ServiceWorkerMetrics::Site::OTHER;
 }
 
 enum EventHandledRatioType {
@@ -194,6 +221,12 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
       return "Fetch WaitUntil";
     case EventType::FOREIGN_FETCH_WAITUNTIL:
       return "Foreign Fetch WaitUntil";
+    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
+      return "Navigation Hint Link Mouse Down";
+    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
+      return "Navigation Hint Link Tap Unconfirmed";
+    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
+      return "Navigation Hint Link Tap Down";
     case EventType::NUM_TYPES:
       break;
   }
@@ -201,12 +234,36 @@ const char* ServiceWorkerMetrics::EventTypeToString(EventType event_type) {
   return "error";
 }
 
-bool ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(Site site) {
-  return site == ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
+ServiceWorkerMetrics::Site ServiceWorkerMetrics::SiteFromURL(const GURL& url) {
+  // UIThreadSearchTermsData::GoogleBaseURLValue() returns the google base
+  // URL, but not available in content layer.
+  static const char google_like_scope_prefix[] = "https://www.google.";
+  static const char ntp_scope_path[] = "/_/chrome/";
+  if (base::StartsWith(url.spec(), google_like_scope_prefix,
+                       base::CompareCase::INSENSITIVE_ASCII) &&
+      base::StartsWith(url.path(), ntp_scope_path,
+                       base::CompareCase::SENSITIVE)) {
+    return ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
+  }
+
+  const std::string host = url.host();
+  if (host == "plus.google.com")
+    return ServiceWorkerMetrics::Site::PLUS;
+  if (host == "inbox.google.com")
+    return ServiceWorkerMetrics::Site::INBOX;
+  if ((host == "docs.google.com") || (host == "drive.google.com"))
+    return ServiceWorkerMetrics::Site::DOCS;
+  return ServiceWorkerMetrics::Site::OTHER;
 }
 
-bool ServiceWorkerMetrics::ShouldExcludeURLFromHistogram(const GURL& url) {
-  return ShouldExcludeSiteFromHistogram(SiteFromURL(url));
+bool ServiceWorkerMetrics::IsNavigationHintEvent(EventType event_type) {
+  return event_type == EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN ||
+         event_type == EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED ||
+         event_type == EventType::NAVIGATION_HINT_LINK_TAP_DOWN;
+}
+
+bool ServiceWorkerMetrics::ShouldExcludeSiteFromHistogram(Site site) {
+  return site == ServiceWorkerMetrics::Site::NEW_TAB_PAGE;
 }
 
 void ServiceWorkerMetrics::CountInitDiskCacheResult(bool result) {
@@ -260,14 +317,10 @@ void ServiceWorkerMetrics::RecordDeleteAndStartOverResult(
                             result, NUM_DELETE_AND_START_OVER_RESULT_TYPES);
 }
 
-void ServiceWorkerMetrics::CountControlledPageLoad(const GURL& url,
-                                                   bool has_fetch_handler,
+void ServiceWorkerMetrics::CountControlledPageLoad(Site site,
+                                                   const GURL& url,
                                                    bool is_main_frame_load) {
-  Site site = SiteFromURL(url);
-  if (site == Site::OTHER) {
-    site = (has_fetch_handler) ? Site::WITH_FETCH_HANDLER
-                               : Site::WITHOUT_FETCH_HANDLER;
-  }
+  DCHECK_NE(site, Site::OTHER);
   UMA_HISTOGRAM_ENUMERATION("ServiceWorker.PageLoad", static_cast<int>(site),
                             static_cast<int>(Site::NUM_TYPES));
   if (is_main_frame_load) {
@@ -313,9 +366,9 @@ void ServiceWorkerMetrics::RecordStartWorkerTime(base::TimeDelta time,
   if (is_installed) {
     std::string name = "ServiceWorker.StartWorker.Time";
     UMA_HISTOGRAM_MEDIUM_TIMES(name, time);
-    RecordSuffixedTimeHistogram(name, StartSituationToSuffix(start_situation),
-                                time);
-    RecordSuffixedTimeHistogram(
+    RecordSuffixedMediumTimeHistogram(
+        name, StartSituationToSuffix(start_situation), time);
+    RecordSuffixedMediumTimeHistogram(
         "ServiceWorker.StartWorker.Time",
         StartSituationToSuffix(start_situation) + EventTypeToSuffix(purpose),
         time);
@@ -331,7 +384,7 @@ void ServiceWorkerMetrics::RecordActivatedWorkerPreparationTimeForMainFrame(
   std::string name =
       "ServiceWorker.ActivatedWorkerPreparationForMainFrame.Time";
   UMA_HISTOGRAM_MEDIUM_TIMES(name, time);
-  RecordSuffixedTimeHistogram(
+  RecordSuffixedMediumTimeHistogram(
       name, GetWorkerPreparationSuffix(initial_worker_status, start_situation),
       time);
 }
@@ -366,6 +419,19 @@ void ServiceWorkerMetrics::RecordInstallEventStatus(
                             SERVICE_WORKER_ERROR_MAX_VALUE);
 }
 
+void ServiceWorkerMetrics::RecordForeignFetchRegistrationCount(
+    size_t scope_count,
+    size_t origin_count) {
+  UMA_HISTOGRAM_COUNTS_100("ServiceWorker.ForeignFetch.ScopeCount",
+                           scope_count);
+  if (scope_count > 0) {
+    // Only record number of origins if service worker registered for at least
+    // one foreign fetch scope.
+    UMA_HISTOGRAM_COUNTS_100("ServiceWorker.ForeignFetch.OriginCount",
+                             origin_count);
+  }
+}
+
 void ServiceWorkerMetrics::RecordEventHandledRatio(EventType event,
                                                    size_t handled_events,
                                                    size_t fired_events) {
@@ -393,6 +459,44 @@ void ServiceWorkerMetrics::RecordEventHandledRatio(EventType event,
       break;
     default:
       // Do nothing.
+      break;
+  }
+}
+
+void ServiceWorkerMetrics::RecordEventDispatchingDelay(EventType event_type,
+                                                       base::TimeDelta time,
+                                                       Site site_for_metrics) {
+  const std::string name = "ServiceWorker.EventDispatchingDelay";
+  UMA_HISTOGRAM_TIMES(name, time);
+  const std::string event_type_suffix = EventTypeToSuffix(event_type);
+  const std::string site_suffix = GetSiteSuffix(site_for_metrics);
+  RecordSuffixedTimeHistogram(name, event_type_suffix + site_suffix, time);
+}
+
+void ServiceWorkerMetrics::RecordNavigationHintPrecision(
+    EventType start_worker_purpose,
+    bool frame_fetch_event_fired) {
+  DCHECK(IsNavigationHintEvent(start_worker_purpose));
+  UMA_HISTOGRAM_BOOLEAN("ServiceWorker.NavigationHintPrecision",
+                        frame_fetch_event_fired);
+  switch (start_worker_purpose) {
+    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
+      UMA_HISTOGRAM_BOOLEAN(
+          "ServiceWorker.NavigationHintPrecision.LINK_MOUSE_DOWN",
+          frame_fetch_event_fired);
+      break;
+    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
+      UMA_HISTOGRAM_BOOLEAN(
+          "ServiceWorker.NavigationHintPrecision.LINK_TAP_UNCONFIRMED",
+          frame_fetch_event_fired);
+      break;
+    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
+      UMA_HISTOGRAM_BOOLEAN(
+          "ServiceWorker.NavigationHintPrecision.LINK_TAP_DOWN",
+          frame_fetch_event_fired);
+      break;
+    default:
+      NOTREACHED();
       break;
   }
 }
@@ -461,6 +565,10 @@ void ServiceWorkerMetrics::RecordEventDuration(EventType event,
       UMA_HISTOGRAM_MEDIUM_TIMES("ServiceWorker.ExtendableMessageEvent.Time",
                                  time);
       break;
+    // Those navigation hints should not be sent as request events.
+    case EventType::NAVIGATION_HINT_LINK_MOUSE_DOWN:
+    case EventType::NAVIGATION_HINT_LINK_TAP_UNCONFIRMED:
+    case EventType::NAVIGATION_HINT_LINK_TAP_DOWN:
 
     case EventType::UNKNOWN:
     case EventType::NUM_TYPES:
@@ -526,16 +634,16 @@ void ServiceWorkerMetrics::RecordTimeToSendStartWorker(
     StartSituation situation) {
   std::string name = "EmbeddedWorkerInstance.Start.TimeToSendStartWorker";
   UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-  RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                              duration);
+  RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                    duration);
 }
 
 void ServiceWorkerMetrics::RecordTimeToURLJob(base::TimeDelta duration,
                                               StartSituation situation) {
   std::string name = "EmbeddedWorkerInstance.Start.TimeToURLJob";
   UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-  RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                              duration);
+  RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                    duration);
 }
 
 void ServiceWorkerMetrics::RecordTimeToLoad(base::TimeDelta duration,
@@ -546,20 +654,20 @@ void ServiceWorkerMetrics::RecordTimeToLoad(base::TimeDelta duration,
     case LoadSource::NETWORK:
       name = "EmbeddedWorkerInstance.Start.TimeToLoad.Network";
       UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-      RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                                  duration);
+      RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                        duration);
       break;
     case LoadSource::HTTP_CACHE:
       name = "EmbeddedWorkerInstance.Start.TimeToLoad.HttpCache";
       UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-      RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                                  duration);
+      RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                        duration);
       break;
     case LoadSource::SERVICE_WORKER_STORAGE:
       name = "EmbeddedWorkerInstance.Start.TimeToLoad.InstalledScript";
       UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-      RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                                  duration);
+      RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                        duration);
       break;
     default:
       NOTREACHED() << static_cast<int>(source);
@@ -570,8 +678,8 @@ void ServiceWorkerMetrics::RecordTimeToStartThread(base::TimeDelta duration,
                                                    StartSituation situation) {
   std::string name = "EmbeddedWorkerInstance.Start.TimeToStartThread";
   UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-  RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                              duration);
+  RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                    duration);
 }
 
 void ServiceWorkerMetrics::RecordTimeToEvaluateScript(
@@ -579,8 +687,8 @@ void ServiceWorkerMetrics::RecordTimeToEvaluateScript(
     StartSituation situation) {
   std::string name = "EmbeddedWorkerInstance.Start.TimeToEvaluateScript";
   UMA_HISTOGRAM_MEDIUM_TIMES(name, duration);
-  RecordSuffixedTimeHistogram(name, StartSituationToSuffix(situation),
-                              duration);
+  RecordSuffixedMediumTimeHistogram(name, StartSituationToSuffix(situation),
+                                    duration);
 }
 
 const char* ServiceWorkerMetrics::LoadSourceToString(LoadSource source) {

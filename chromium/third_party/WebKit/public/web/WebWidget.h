@@ -72,8 +72,8 @@ public:
     virtual void resizeVisualViewport(const WebSize&) { }
 
     // Called to notify the WebWidget of entering/exiting fullscreen mode.
-    virtual void didEnterFullScreen() { }
-    virtual void didExitFullScreen() { }
+    virtual void didEnterFullscreen() { }
+    virtual void didExitFullscreen() { }
 
     // Called to update imperative animation state. This should be called before
     // paint, although the client can rate-limit these calls.
@@ -242,6 +242,14 @@ public:
     // Updates top controls constraints and current state. Allows embedder to
     // control what are valid states for top controls and if it should animate.
     virtual void updateTopControlsState(WebTopControlsState constraints, WebTopControlsState current, bool animate) { }
+
+    // Populate |bounds| with the composition character bounds for the ongoing
+    // composition. Returns false if there is no focused input or any ongoing
+    // composition.
+    virtual bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) { return false; }
+
+    // Applies the range from |start| to |start + length| on the foucsed frame so that the text will later be replaced.
+    virtual void applyReplacementRange(int start, int length) {}
 
 protected:
     ~WebWidget() { }

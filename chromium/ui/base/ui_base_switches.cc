@@ -40,9 +40,6 @@ const char kDisableTouchAdjustment[] = "disable-touch-adjustment";
 // Disables touch event based drag and drop.
 const char kDisableTouchDragDrop[] = "disable-touch-drag-drop";
 
-// Disables additional visual feedback to touch input.
-const char kDisableTouchFeedback[] = "disable-touch-feedback";
-
 // Enables large icons on the New Tab page.
 const char kEnableIconNtp[] = "enable-icon-ntp";
 
@@ -75,6 +72,11 @@ const char kTopChromeMDMaterialHybrid[] = "material-hybrid";
 
 // Classic, non-material, mode for the |kTopChromeMD| switch.
 const char kTopChromeMDNonMaterial[] = "non-material";
+
+// Use new window behavior for virtual keyboard (do not change work area in
+// non-sticky mode).
+const char kUseNewVirtualKeyboardBehavior[] =
+    "use-new-virtual-keyboard-behavior";
 
 // Applies the material design mode passed via --top-chrome-md to elements
 // throughout Chrome (not just top Chrome).

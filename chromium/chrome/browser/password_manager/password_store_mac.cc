@@ -6,6 +6,7 @@
 
 #include <CoreServices/CoreServices.h>
 #include <stddef.h>
+#include <algorithm>
 #include <set>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@
 #include "components/os_crypt/os_crypt.h"
 #include "components/password_manager/core/browser/affiliation_utils.h"
 #include "components/password_manager/core/browser/login_database.h"
+#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_store_change.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/apple_keychain.h"
@@ -248,6 +250,18 @@ bool IsLoginDatabaseOnlyForm(const autofill::PasswordForm& form) {
          form.scheme == autofill::PasswordForm::SCHEME_USERNAME_ONLY;
 }
 
+// TODO(crbug.com/555132): Temporary utility to convert from std::vector to
+// ScopedVector.
+ScopedVector<PasswordForm> ConvertToScopedVector(
+    std::vector<std::unique_ptr<PasswordForm>> forms) {
+  ScopedVector<PasswordForm> result;
+  result.resize(forms.size());
+  std::transform(
+      forms.begin(), forms.end(), result.begin(),
+      [](std::unique_ptr<PasswordForm>& form) { return form.release(); });
+  return result;
+}
+
 }  // namespace
 
 #pragma mark -
@@ -279,8 +293,7 @@ GURL URLFromComponents(bool is_secure, const std::string& host, int port,
 }
 
 // Converts a Keychain time string to a Time object, returning true if
-// time_string_bytes was parsable. If the return value is false, the value of
-// |time| is unchanged.
+// time_string_bytes was parsable.
 bool TimeFromKeychainTimeString(const char* time_string_bytes,
                                 unsigned int byte_length,
                                 base::Time* time) {
@@ -298,11 +311,7 @@ bool TimeFromKeychainTimeString(const char* time_string_bytes,
                            &exploded_time.minute, &exploded_time.second);
   free(time_string);
 
-  if (assignments == 6) {
-    *time = base::Time::FromUTCExploded(exploded_time);
-    return true;
-  }
-  return false;
+  return assignments == 6 && base::Time::FromUTCExploded(exploded_time, time);
 }
 
 // Returns the PasswordForm Scheme corresponding to |auth_type|.
@@ -368,6 +377,7 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
   std::string server;
   std::string security_domain;
   std::string path;
+  bool is_secure = false;
   for (unsigned int i = 0; i < attrList->count; i++) {
     SecKeychainAttribute attr = attrList->attr[i];
     if (!attr.data) {
@@ -391,7 +401,7 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
       {
         SecProtocolType protocol = *(static_cast<SecProtocolType*>(attr.data));
         // TODO(stuartmorgan): Handle proxy types
-        form->ssl_valid = (protocol == kSecProtocolTypeHTTPS);
+        is_secure = (protocol == kSecProtocolTypeHTTPS);
         break;
       }
       case kSecAuthenticationTypeItemAttr:
@@ -434,9 +444,8 @@ bool FillPasswordFormFromKeychainItem(const AppleKeychain& keychain,
   if (password_manager::IsValidAndroidFacetURI(server)) {
     form->signon_realm = server;
     form->origin = GURL();
-    form->ssl_valid = true;
   } else {
-    form->origin = URLFromComponents(form->ssl_valid, server, port, path);
+    form->origin = URLFromComponents(is_secure, server, port, path);
     // TODO(stuartmorgan): Handle proxies, which need a different signon_realm
     // format.
     form->signon_realm = form->origin.GetOrigin().spec();
@@ -551,8 +560,8 @@ void MergePasswordForms(ScopedVector<autofill::PasswordForm>* keychain_forms,
   // Clear out all the Keychain entries we used.
   ScopedVector<autofill::PasswordForm> unused_keychain_forms;
   unused_keychain_forms.reserve(keychain_forms->size());
-  for (auto& keychain_form : *keychain_forms) {
-    if (!ContainsKey(used_keychain_forms, keychain_form)) {
+  for (auto*& keychain_form : *keychain_forms) {
+    if (!base::ContainsKey(used_keychain_forms, keychain_form)) {
       unused_keychain_forms.push_back(keychain_form);
       keychain_form = nullptr;
     }
@@ -616,8 +625,8 @@ void GetPasswordsForForms(const AppleKeychain& keychain,
       });
   database_forms->swap(unused_db_forms);
 
-  STLDeleteContainerPairSecondPointers(item_form_pairs.begin(),
-                                       item_form_pairs.end());
+  base::STLDeleteContainerPairSecondPointers(item_form_pairs.begin(),
+                                             item_form_pairs.end());
   for (SecKeychainItemRef item : keychain_items) {
     keychain.Free(item);
   }
@@ -979,9 +988,11 @@ PasswordStoreMac::MigrationResult PasswordStoreMac::ImportFromKeychain() {
   if (!login_metadata_db_)
     return LOGIN_DB_UNAVAILABLE;
 
-  ScopedVector<PasswordForm> database_forms;
-  if (!login_metadata_db_->GetAutofillableLogins(&database_forms))
+  std::vector<std::unique_ptr<PasswordForm>> database_forms_new_format;
+  if (!login_metadata_db_->GetAutofillableLogins(&database_forms_new_format))
     return LOGIN_DB_FAILURE;
+  ScopedVector<PasswordForm> database_forms =
+      ConvertToScopedVector(std::move(database_forms_new_format));
 
   ScopedVector<PasswordForm> uninteresting_forms;
   internal_keychain_helpers::ExtractNonKeychainForms(&database_forms,
@@ -1034,8 +1045,8 @@ PasswordStoreMac::MigrationResult PasswordStoreMac::ImportFromKeychain() {
       }
     }
   }
-  STLDeleteContainerPairSecondPointers(item_form_pairs.begin(),
-                                       item_form_pairs.end());
+  base::STLDeleteContainerPairSecondPointers(item_form_pairs.begin(),
+                                             item_form_pairs.end());
   for (SecKeychainItemRef item : keychain_items)
     keychain_->Free(item);
 
@@ -1201,16 +1212,35 @@ PasswordStoreChangeList PasswordStoreMac::RemoveLoginsSyncedBetweenImpl(
   return changes;
 }
 
-PasswordStoreChangeList PasswordStoreMac::DisableAutoSignInForAllLoginsImpl() {
-  ScopedVector<PasswordForm> forms;
-  PasswordStoreChangeList list;
-  if (login_metadata_db_ && login_metadata_db_->GetAutoSignInLogins(&forms) &&
-      login_metadata_db_->DisableAutoSignInForAllLogins()) {
-    for (const auto& form : forms)
-      list.push_back(PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+PasswordStoreChangeList PasswordStoreMac::DisableAutoSignInForOriginsImpl(
+    const base::Callback<bool(const GURL&)>& origin_filter) {
+  ScopedVector<autofill::PasswordForm> forms;
+  PasswordStoreChangeList changes;
+  if (!login_metadata_db_ ||
+      !login_metadata_db_->GetAutoSignInLogins(&forms)) {
+    return changes;
   }
 
-  return list;
+  std::set<GURL> origins_to_update;
+  for (const auto* form : forms) {
+    if (origin_filter.Run(form->origin))
+      origins_to_update.insert(form->origin);
+  }
+
+  std::set<GURL> origins_updated;
+  for (const GURL& origin : origins_to_update) {
+    if (login_metadata_db_->DisableAutoSignInForOrigin(origin))
+      origins_updated.insert(origin);
+  }
+
+  for (const auto* form : forms) {
+    if (origins_updated.count(form->origin)) {
+      changes.push_back(
+          PasswordStoreChange(PasswordStoreChange::UPDATE, *form));
+    }
+  }
+
+  return changes;
 }
 
 bool PasswordStoreMac::RemoveStatisticsCreatedBetweenImpl(
@@ -1221,16 +1251,21 @@ bool PasswordStoreMac::RemoveStatisticsCreatedBetweenImpl(
                                                               delete_end);
 }
 
-ScopedVector<autofill::PasswordForm> PasswordStoreMac::FillMatchingLogins(
-    const autofill::PasswordForm& form) {
+std::vector<std::unique_ptr<PasswordForm>> PasswordStoreMac::FillMatchingLogins(
+    const FormDigest& form) {
   chrome::ScopedSecKeychainSetUserInteractionAllowed user_interaction_allowed(
       false);
 
-  ScopedVector<PasswordForm> database_forms;
+  // TODO(crbug.com/555132): "new_format" means std::vector instead of
+  // ScopedVector. Remove |database_forms_new_format| in favour of
+  // |database_forms| as soon as the latter is migrated to std::vector.
+  std::vector<std::unique_ptr<PasswordForm>> database_forms_new_format;
   if (!login_metadata_db_ ||
-      !login_metadata_db_->GetLogins(form, &database_forms)) {
-    return ScopedVector<autofill::PasswordForm>();
+      !login_metadata_db_->GetLogins(form, &database_forms_new_format)) {
+    return std::vector<std::unique_ptr<PasswordForm>>();
   }
+  ScopedVector<PasswordForm> database_forms =
+      ConvertToScopedVector(std::move(database_forms_new_format));
 
   // Let's gather all signon realms we want to match with keychain entries.
   std::set<std::string> realm_set;
@@ -1268,21 +1303,26 @@ ScopedVector<autofill::PasswordForm> PasswordStoreMac::FillMatchingLogins(
     NotifyLoginsChanged(FormsToRemoveChangeList(database_forms.get()));
   }
 
-  return matched_forms;
+  return password_manager_util::ConvertScopedVector(std::move(matched_forms));
 }
 
 bool PasswordStoreMac::FillAutofillableLogins(
-    ScopedVector<PasswordForm>* forms) {
+    std::vector<std::unique_ptr<PasswordForm>>* forms) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   forms->clear();
 
-  ScopedVector<PasswordForm> database_forms;
+  std::vector<std::unique_ptr<PasswordForm>> database_forms_new_format;
   if (!login_metadata_db_ ||
-      !login_metadata_db_->GetAutofillableLogins(&database_forms))
+      !login_metadata_db_->GetAutofillableLogins(&database_forms_new_format))
     return false;
+  ScopedVector<PasswordForm> database_forms =
+      ConvertToScopedVector(std::move(database_forms_new_format));
 
+  ScopedVector<PasswordForm> forms_scopedvector;
   internal_keychain_helpers::GetPasswordsForForms(*keychain_, &database_forms,
-                                                  forms);
+                                                  &forms_scopedvector);
+  *forms =
+      password_manager_util::ConvertScopedVector(std::move(forms_scopedvector));
 
   if (!database_forms.empty()) {
     RemoveDatabaseForms(&database_forms);
@@ -1292,7 +1332,8 @@ bool PasswordStoreMac::FillAutofillableLogins(
   return true;
 }
 
-bool PasswordStoreMac::FillBlacklistLogins(ScopedVector<PasswordForm>* forms) {
+bool PasswordStoreMac::FillBlacklistLogins(
+    std::vector<std::unique_ptr<PasswordForm>>* forms) {
   DCHECK(GetBackgroundTaskRunner()->BelongsToCurrentThread());
   return login_metadata_db_ && login_metadata_db_->GetBlacklistLogins(forms);
 }
@@ -1330,10 +1371,11 @@ bool PasswordStoreMac::DatabaseHasFormMatchingKeychainForm(
     const autofill::PasswordForm& form) {
   DCHECK(login_metadata_db_);
   bool has_match = false;
-  ScopedVector<autofill::PasswordForm> database_forms;
-  if (!login_metadata_db_->GetLogins(form, &database_forms))
+  std::vector<std::unique_ptr<PasswordForm>> database_forms;
+  if (!login_metadata_db_->GetLogins(
+          password_manager::PasswordStore::FormDigest(form), &database_forms))
     return false;
-  for (const autofill::PasswordForm* db_form : database_forms) {
+  for (const auto& db_form : database_forms) {
     // Below we filter out fuzzy matched forms because we are only interested
     // in exact ones.
     if (!db_form->is_public_suffix_match &&
@@ -1374,9 +1416,11 @@ void PasswordStoreMac::CleanOrphanedForms(
   DCHECK(orphaned_forms);
   DCHECK(login_metadata_db_);
 
-  ScopedVector<autofill::PasswordForm> database_forms;
-  if (!login_metadata_db_->GetAutofillableLogins(&database_forms))
+  std::vector<std::unique_ptr<PasswordForm>> database_forms_new_format;
+  if (!login_metadata_db_->GetAutofillableLogins(&database_forms_new_format))
     return;
+  ScopedVector<PasswordForm> database_forms =
+      ConvertToScopedVector(std::move(database_forms_new_format));
 
   // Filter forms with corresponding Keychain entry out of |database_forms|.
   ScopedVector<PasswordForm> forms_with_keychain_entry;

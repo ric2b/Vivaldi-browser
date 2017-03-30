@@ -209,13 +209,9 @@ final class ChromeBluetoothAdapter extends BroadcastReceiver {
      * are on.
      */
     private boolean canScan() {
-        Context context = mAdapter.getContext();
-
-        boolean havePermission = LocationUtils.getInstance().hasAndroidLocationPermission(context);
-        boolean locationServicesOn =
-                LocationUtils.getInstance().isSystemLocationSettingEnabled(context);
-
-        return havePermission && locationServicesOn;
+        LocationUtils locationUtils = LocationUtils.getInstance();
+        return locationUtils.hasAndroidLocationPermission()
+                && locationUtils.isSystemLocationSettingEnabled();
     }
 
     private void registerBroadcastReceiver() {
@@ -246,10 +242,21 @@ final class ChromeBluetoothAdapter extends BroadcastReceiver {
             Log.v(TAG, "onScanResult %d %s %s", callbackType, result.getDevice().getAddress(),
                     result.getDevice().getName());
 
+            String[] uuid_strings;
             List<ParcelUuid> uuids = result.getScanRecord_getServiceUuids();
 
+            if (uuids == null) {
+                uuid_strings = new String[] {};
+            } else {
+                uuid_strings = new String[uuids.size()];
+                for (int i = 0; i < uuids.size(); i++) {
+                    uuid_strings[i] = uuids.get(i).toString();
+                }
+            }
+
             nativeCreateOrUpdateDeviceOnScan(mNativeBluetoothAdapterAndroid,
-                    result.getDevice().getAddress(), result.getDevice(), uuids);
+                    result.getDevice().getAddress(), result.getDevice(), result.getRssi(),
+                    uuid_strings, result.getScanRecord_getTxPowerLevel());
         }
 
         @Override
@@ -309,7 +316,8 @@ final class ChromeBluetoothAdapter extends BroadcastReceiver {
     // Wrappers.BluetoothDeviceWrapper reference is not handled by jni_generator.py JavaToJni.
     // http://crbug.com/505554
     private native void nativeCreateOrUpdateDeviceOnScan(long nativeBluetoothAdapterAndroid,
-            String address, Object bluetoothDeviceWrapper, List<ParcelUuid> advertisedUuids);
+            String address, Object bluetoothDeviceWrapper, int rssi, String[] advertisedUuids,
+            int txPower);
 
     // Binds to BluetoothAdapterAndroid::nativeOnAdapterStateChanged
     private native void nativeOnAdapterStateChanged(

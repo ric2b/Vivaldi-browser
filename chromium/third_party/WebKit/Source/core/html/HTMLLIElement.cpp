@@ -91,14 +91,14 @@ void HTMLLIElement::parseAttribute(const QualifiedName& name, const AtomicString
     }
 }
 
-void HTMLLIElement::attach(const AttachContext& context)
+void HTMLLIElement::attachLayoutTree(const AttachContext& context)
 {
-    HTMLElement::attach(context);
+    HTMLElement::attachLayoutTree(context);
 
     if (layoutObject() && layoutObject()->isListItem()) {
         LayoutLIItem liLayoutItem = LayoutLIItem(toLayoutListItem(layoutObject()));
 
-        ASSERT(!document().childNeedsDistributionRecalc());
+        DCHECK(!document().childNeedsDistributionRecalc());
 
         // Find the enclosing list node.
         Element* listNode = 0;
@@ -122,7 +122,8 @@ void HTMLLIElement::attach(const AttachContext& context)
 
 inline void HTMLLIElement::parseValue(const AtomicString& value)
 {
-    ASSERT(layoutObject() && layoutObject()->isListItem());
+    DCHECK(layoutObject());
+    DCHECK(layoutObject()->isListItem());
 
     bool valueOK;
     int requestedValue = value.toInt(&valueOK);

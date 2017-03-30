@@ -194,10 +194,10 @@ bool URLRequestJob::Read(IOBuffer* buf, int buf_size, int *bytes_read) {
     if (*bytes_read == 0)
       NotifyDone(URLRequestStatus());
   } else if (error == ERR_IO_PENDING) {
-    SetStatus(URLRequestStatus::FromError(ERR_IO_PENDING));
+    *bytes_read = ERR_IO_PENDING;
   } else {
     NotifyDone(URLRequestStatus::FromError(error));
-    *bytes_read = -1;
+    *bytes_read = error;
   }
   return error == OK;
 }
@@ -431,10 +431,6 @@ bool URLRequestJob::CanEnablePrivacyMode() const {
   return request_->CanEnablePrivacyMode();
 }
 
-void URLRequestJob::NotifyBeforeNetworkStart(bool* defer) {
-  request_->NotifyBeforeNetworkStart(defer);
-}
-
 void URLRequestJob::NotifyHeadersComplete() {
   if (has_handled_response_)
     return;
@@ -443,7 +439,6 @@ void URLRequestJob::NotifyHeadersComplete() {
   // before the URLRequestJob was started.  On error or cancellation, this
   // method should not be called.
   DCHECK(request_->status().is_io_pending());
-  SetStatus(URLRequestStatus());
 
   // Initialize to the current time, and let the subclass optionally override
   // the time stamps if it has that information.  The default request_time is
@@ -514,7 +509,7 @@ void URLRequestJob::NotifyHeadersComplete() {
         base::Bind(&FiltersSetCallback, base::Unretained(filter_.get())));
   }
 
-  request_->NotifyResponseStarted();
+  request_->NotifyResponseStarted(URLRequestStatus());
 
   // |this| may be destroyed at this point.
 }
@@ -569,38 +564,24 @@ void URLRequestJob::ReadRawDataComplete(int result) {
     if (error == OK && !filter_bytes_read)
       DoneReading();
 
-    DVLOG(1) << __FUNCTION__ << "() "
-             << "\"" << request_->url().spec() << "\""
+    DVLOG(1) << __func__ << "() \"" << request_->url().spec() << "\""
              << " pre bytes read = " << bytes_read
              << " pre total = " << prefilter_bytes_read_
              << " post total = " << postfilter_bytes_read_;
     bytes_read = filter_bytes_read;
   } else {
-    DVLOG(1) << __FUNCTION__ << "() "
-             << "\"" << request_->url().spec() << "\""
+    DVLOG(1) << __func__ << "() \"" << request_->url().spec() << "\""
              << " pre bytes read = " << bytes_read
              << " pre total = " << prefilter_bytes_read_
              << " post total = " << postfilter_bytes_read_;
   }
 
-  // Synchronize the URLRequest state machine with the URLRequestJob state
-  // machine. If this read succeeded, either the request is at EOF and the
-  // URLRequest state machine goes to 'finished', or it is not and the
-  // URLRequest state machine goes to 'success'. If the read failed, the
-  // URLRequest state machine goes directly to 'finished'.  If filtered data is
-  // pending, then there's nothing to do, since the status of the request is
-  // already pending.
-  //
-  // Update the URLRequest's status first, so that NotifyReadCompleted has an
-  // accurate view of the request.
-  if (error == OK && bytes_read > 0) {
-    SetStatus(URLRequestStatus());
-  } else if (error != ERR_IO_PENDING) {
-    NotifyDone(URLRequestStatus::FromError(error));
-  }
+  if (error == ERR_IO_PENDING)
+    return;
 
-  // NotifyReadCompleted should be called after SetStatus or NotifyDone updates
-  // the status.
+  if (bytes_read <= 0)
+    NotifyDone(URLRequestStatus::FromError(error));
+
   if (error == OK)
     request_->NotifyReadCompleted(bytes_read);
 
@@ -616,8 +597,7 @@ void URLRequestJob::NotifyStartError(const URLRequestStatus &status) {
   // error case.
   GetResponseInfo(&request_->response_info_);
 
-  SetStatus(status);
-  request_->NotifyResponseStarted();
+  request_->NotifyResponseStarted(status);
   // |this| may have been deleted here.
 }
 
@@ -639,10 +619,9 @@ void URLRequestJob::NotifyDone(const URLRequestStatus &status) {
   // enforce this, only set the status if the job is so far
   // successful.
   if (request_->status().is_success()) {
-    if (status.status() == URLRequestStatus::FAILED) {
+    if (status.status() == URLRequestStatus::FAILED)
       request_->net_log().AddEventWithNetErrorCode(NetLog::TYPE_FAILED,
                                                    status.error());
-    }
     request_->set_status(status);
   }
 
@@ -683,7 +662,7 @@ void URLRequestJob::CompleteNotifyDone() {
       request_->NotifyReadCompleted(-1);
     } else {
       has_handled_response_ = true;
-      request_->NotifyResponseStarted();
+      request_->NotifyResponseStarted(URLRequestStatus());
     }
   }
 }
@@ -800,8 +779,7 @@ Error URLRequestJob::ReadFilteredData(int* bytes_read) {
           break;
         }
         case Filter::FILTER_ERROR: {
-          DVLOG(1) << __FUNCTION__ << "() "
-                   << "\"" << request_->url().spec() << "\""
+          DVLOG(1) << __func__ << "() \"" << request_->url().spec() << "\""
                    << " Filter Error";
           filter_needs_more_output_space_ = false;
           error = ERR_CONTENT_DECODING_FAILED;
@@ -846,16 +824,6 @@ void URLRequestJob::DestroyFilters() {
 
 const URLRequestStatus URLRequestJob::GetStatus() {
   return request_->status();
-}
-
-void URLRequestJob::SetStatus(const URLRequestStatus &status) {
-  // An error status should never be replaced by a non-error status by a
-  // URLRequestJob.  URLRequest has some retry paths, but it resets the status
-  // itself, if needed.
-  DCHECK(request_->status().is_io_pending() ||
-         request_->status().is_success() ||
-         (!status.is_success() && !status.is_io_pending()));
-  request_->set_status(status);
 }
 
 void URLRequestJob::SetProxyServer(const HostPortPair& proxy_server) {
@@ -946,8 +914,7 @@ void URLRequestJob::RecordBytesRead(int bytes_read) {
 
   if (!filter_.get())
     postfilter_bytes_read_ += bytes_read;
-  DVLOG(2) << __FUNCTION__ << "() "
-           << "\"" << request_->url().spec() << "\""
+  DVLOG(2) << __func__ << "() \"" << request_->url().spec() << "\""
            << " pre bytes read = " << bytes_read
            << " pre total = " << prefilter_bytes_read_
            << " post total = " << postfilter_bytes_read_;
@@ -1017,7 +984,7 @@ RedirectInfo URLRequestJob::ComputeRedirectInfo(const GURL& location,
           .spec();
 
   std::string include_referer;
-  request_->GetResponseHeaderByName("include-referer-token-binding-id",
+  request_->GetResponseHeaderByName("include-referred-token-binding-id",
                                     &include_referer);
   if (include_referer == "true" &&
       request_->ssl_info().token_binding_negotiated) {

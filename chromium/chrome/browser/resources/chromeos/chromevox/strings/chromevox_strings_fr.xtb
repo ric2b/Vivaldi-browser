@@ -269,6 +269,7 @@ Une fois le didacticiel terminé, utilisez ChromeVox pour accéder au bouton de 
 <translation id="3392045790598181549"><ph name="NAME" />, élément de menu</translation>
 <translation id="3406283310380167331">Afficher la liste des formulaires</translation>
 <translation id="3422338090358345848">Ouvrir l'explorateur du clavier</translation>
+<translation id="3423495725743882470">ligne $1 colonne $2</translation>
 <translation id="3457000393508828486">Partiellement sélectionné</translation>
 <translation id="3462439746547587373"><ph name="NAME" />, bouton</translation>
 <translation id="3473644018603298796"><ph name="COUNT" /> slct</translation>
@@ -297,6 +298,7 @@ Une fois le didacticiel terminé, utilisez ChromeVox pour accéder au bouton de 
 <translation id="3795836767122514678">et{COUNT,plural, =1{# autre}one{# autre}other{# autres}}</translation>
 <translation id="3801735343383419236">Saisie semi-automatique sous forme de liste</translation>
 <translation id="3810838688059735925">Vidéo</translation>
+<translation id="3812237531158591503">coller $1.</translation>
 <translation id="3816633764618089385">Contenu multimédia suivant</translation>
 <translation id="3819376190738087562">Aucun renvoi</translation>
 <translation id="385383972552776628">Ouvrir la page d'options</translation>
@@ -411,6 +413,7 @@ Une fois le didacticiel terminé, utilisez ChromeVox pour accéder au bouton de 
 <translation id="5000760171916499057">Aucun formulaire</translation>
 <translation id="5005670136041063723">Aucun autre élément similaire</translation>
 <translation id="501473567976723023">Janvier</translation>
+<translation id="5040591161308540832">Tableau $1, $2 par $3</translation>
 <translation id="5041394372352067729">Déplacer l'écran de braille vers le haut de la page</translation>
 <translation id="5042770794184672516">Augmenter le volume de la voix</translation>
 <translation id="5050015258024679800">En-tête précédent de niveau 4</translation>
@@ -518,7 +521,6 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="5876817486144482042">Diminuer le volume de la voix</translation>
 <translation id="5887397643266327462">Sous-titres braille activés</translation>
 <translation id="5891934789323004067">Tableau</translation>
-<translation id="5919442531159595654">copier</translation>
 <translation id="5937336320314038555">{COUNT,plural, =1{signe égal}one{# signe égal}other{# signes égal}}</translation>
 <translation id="5939518447894949180">Réinitialiser</translation>
 <translation id="5948123859135882163">Passer de l'interprétation structurelle à l'interprétation sémantique des expressions mathématiques et vice versa</translation>
@@ -554,6 +556,8 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="6355910664415701303">Aucun élément de liste précédent</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">En-tête précédent</translation>
+<translation id="6378565991815958969">copier $1.</translation>
+<translation id="6385591741672306837">colonne</translation>
 <translation id="6387719785439924554">contenu relatif</translation>
 <translation id="6411426777058107714">Aucune case d'option précédente</translation>
 <translation id="6414968628640960377">Élément différent précédent</translation>
@@ -653,7 +657,6 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="7532613204005497612">Juin</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, curseur</translation>
 <translation id="7552432549459840808">Raccourcis Chrome utiles</translation>
-<translation id="7586163296341959563">coller</translation>
 <translation id="7596919493010894443">sélection effacée</translation>
 <translation id="7604026522577407655">Accéder au début de la colonne actuelle</translation>
 <translation id="7604451927827590395">hdng</translation>
@@ -704,8 +707,8 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="8153880621934657047">Hors du tableau</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{trait de soulignement}one{# trait de soulignement}other{# traits de soulignement}}</translation>
 <translation id="8179976553408161302">Entrée</translation>
+<translation id="8184828902145951186">ligne</translation>
 <translation id="8186185314313222077">activer/désactiver le mode plein écran</translation>
-<translation id="81960742267269908">couper</translation>
 <translation id="8199231515320852133">Énoncer les en-têtes de la cellule actuelle</translation>
 <translation id="820417203470636242">Cellule vide</translation>
 <translation id="8215202828671303819">Sélection multiple</translation>
@@ -782,6 +785,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="9077213568694924680">supprimé de la sélection</translation>
 <translation id="9082874451376019682">Aucun curseur précédent</translation>
 <translation id="9089864840575085222">Écho de la saisie par cycle</translation>
+<translation id="9105227991373418255">couper $1.</translation>
 <translation id="9107530006868467849">Aucun widget de contenu multimédia précédent</translation>
 <translation id="9108370397979208512">math.</translation>
 <translation id="9108589040018540527">scbr</translation>
@@ -789,6 +793,7 @@ Pour ouvrir le menu du navigateur Chrome, appuyez sur Alt+F.</translation>
 <translation id="9115913704608474258">Novembre</translation>
 <translation id="9128414153595658330">boîte dialogue</translation>
 <translation id="9149560530563164529">sctn</translation>
+<translation id="9150735707954472829">Onglet</translation>
 <translation id="9151211641321628915">Énonce une brève description de la position actuelle.</translation>
 <translation id="9153606228985488238">Timbre de voix : <ph name="PERCENT" /> %</translation>
 <translation id="9160096769946561184">Accéder à la fin de la colonne actuelle</translation>

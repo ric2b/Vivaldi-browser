@@ -287,6 +287,8 @@ component("proxy") {
     "//mojo/edk/system",
     "//ppapi/c",
     "//ppapi/shared_impl",
+    "//ui/gfx/geometry",
+    "//ui/gfx/ipc/geometry",
   ]
 
   if (!is_nacl) {
@@ -356,7 +358,7 @@ source_set("ipc_sources") {
   }
 }
 
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [

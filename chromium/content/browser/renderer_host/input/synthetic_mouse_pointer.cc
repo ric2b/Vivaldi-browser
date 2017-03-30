@@ -33,9 +33,12 @@ void SyntheticMousePointer::Move(int index,
                                  float y,
                                  SyntheticGestureTarget* target,
                                  const base::TimeTicks& timestamp) {
+  blink::WebMouseEvent::Button button = mouse_event_.button;
+  int click_count = mouse_event_.clickCount;
   mouse_event_ = SyntheticWebMouseEventBuilder::Build(
       blink::WebInputEvent::MouseMove, x, y, 0);
-  mouse_event_.button = blink::WebMouseEvent::ButtonLeft;
+  mouse_event_.button = button;
+  mouse_event_.clickCount = click_count;
 }
 
 void SyntheticMousePointer::Release(int index,
@@ -44,6 +47,11 @@ void SyntheticMousePointer::Release(int index,
   mouse_event_ = SyntheticWebMouseEventBuilder::Build(
       blink::WebInputEvent::MouseUp, mouse_event_.x, mouse_event_.y, 0);
   mouse_event_.clickCount = 1;
+}
+
+SyntheticGestureParams::GestureSourceType SyntheticMousePointer::SourceType()
+    const {
+  return SyntheticGestureParams::MOUSE_INPUT;
 }
 
 }  // namespace content

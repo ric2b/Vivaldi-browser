@@ -7,8 +7,6 @@ component("net") {
   sources = [
     "blimp_connection.cc",
     "blimp_connection.h",
-    "blimp_connection_statistics.cc",
-    "blimp_connection_statistics.h",
     "blimp_message_checkpoint_observer.h",
     "blimp_message_checkpointer.cc",
     "blimp_message_checkpointer.h",
@@ -24,6 +22,8 @@ component("net") {
     "blimp_message_thread_pipe.cc",
     "blimp_message_thread_pipe.h",
     "blimp_net_export.h",
+    "blimp_stats.cc",
+    "blimp_stats.h",
     "blimp_transport.h",
     "blob_channel/blob_channel_receiver.cc",
     "blob_channel/blob_channel_receiver.h",
@@ -56,6 +56,8 @@ component("net") {
     "input_message_converter.h",
     "input_message_generator.cc",
     "input_message_generator.h",
+    "message_port.cc",
+    "message_port.h",
     "null_blimp_message_processor.cc",
     "null_blimp_message_processor.h",
     "ssl_client_transport.cc",
@@ -64,8 +66,6 @@ component("net") {
     "stream_packet_reader.h",
     "stream_packet_writer.cc",
     "stream_packet_writer.h",
-    "stream_socket_connection.cc",
-    "stream_socket_connection.h",
     "tcp_client_transport.cc",
     "tcp_client_transport.h",
     "tcp_engine_transport.cc",
@@ -79,11 +79,14 @@ component("net") {
   deps = [
     "//base",
     "//blimp/common",
-    "//blimp/common/proto",
     "//net",
     "//third_party/WebKit/public:blink_headers",
     "//third_party/zlib",
     "//ui/base/ime:text_input_types",
+  ]
+
+  public_deps = [
+    "//blimp/common/proto",
   ]
 }
 
@@ -93,15 +96,20 @@ source_set("test_support") {
   sources = [
     "blob_channel/mock_blob_channel_receiver.cc",
     "blob_channel/mock_blob_channel_receiver.h",
+    "blob_channel/mock_blob_channel_sender.cc",
+    "blob_channel/mock_blob_channel_sender.h",
     "test_common.cc",
     "test_common.h",
   ]
 
   deps = [
     ":net",
-    "//blimp/common/proto",
     "//net:test_support",
     "//testing/gmock",
+  ]
+
+  public_deps = [
+    "//blimp/common/proto",
   ]
 }
 
@@ -109,7 +117,6 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
-    "blimp_connection_statistics_unittest.cc",
     "blimp_connection_unittest.cc",
     "blimp_message_checkpointer_unittest.cc",
     "blimp_message_demultiplexer_unittest.cc",
@@ -117,6 +124,7 @@ source_set("unit_tests") {
     "blimp_message_output_buffer_unittest.cc",
     "blimp_message_pump_unittest.cc",
     "blimp_message_thread_pipe_unittest.cc",
+    "blimp_stats_unittest.cc",
     "blob_channel/blob_channel_integration_test.cc",
     "blob_channel/blob_channel_receiver_unittest.cc",
     "blob_channel/blob_channel_sender_unittest.cc",
@@ -138,7 +146,6 @@ source_set("unit_tests") {
     ":net",
     ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//blimp/common",
     "//blimp/common:test_support",

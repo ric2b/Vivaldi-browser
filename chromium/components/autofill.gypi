@@ -69,7 +69,7 @@
         '../net/net.gyp:net',
         '../skia/skia.gyp:skia',
         '../sql/sql.gyp:sql',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../third_party/fips181/fips181.gyp:fips181',
         '../third_party/icu/icu.gyp:icui18n',
         '../third_party/icu/icu.gyp:icuuc',
@@ -95,7 +95,6 @@
         'rappor',
         'signin_core_browser',
         'signin_core_common',
-        'sync_driver',
         'variations_net',
         'webdata_common',
       ],
@@ -250,10 +249,16 @@
       'conditions': [
         ['OS=="ios"', {
           'sources': [
-            'autofill/core/browser/autofill_field_trial_ios.cc',
-            'autofill/core/browser/autofill_field_trial_ios.h',
             'autofill/core/browser/keyboard_accessory_metrics_logger.h',
             'autofill/core/browser/keyboard_accessory_metrics_logger.mm',
+        ],
+        }],
+        ['OS=="android"', {
+          'sources': [
+            'autofill/core/browser/autofill_assistant.cc',
+            'autofill/core/browser/autofill_assistant.h',
+            'autofill/core/browser/autofill_credit_card_filling_infobar_delegate_mobile.cc',
+            'autofill/core/browser/autofill_credit_card_filling_infobar_delegate_mobile.h',
           ],
         }],
         ['OS=="ios" or OS=="android"', {
@@ -262,8 +267,14 @@
             'autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h',
             'autofill/core/browser/autofill_save_card_infobar_mobile.h',
           ],
-        }]
+        }],
+        ['OS!="ios"', {
+          'dependencies': [
+          '../device/geolocation/geolocation.gyp:device_geolocation',
+          ]
+        }],
       ],
+
     },
 
     {
@@ -292,6 +303,7 @@
         '../testing/gtest.gyp:gtest',
         'autofill_core_common',
         'autofill_core_browser',
+        'infobars',
         'os_crypt',
         'pref_registry',
         'prefs/prefs.gyp:prefs',
@@ -328,7 +340,9 @@
             ],
             'mojom_typemaps': [
               'autofill/content/public/cpp/autofill_types.typemap',
+              '<(DEPTH)/mojo/common/common_custom_types.typemap',
               '<(DEPTH)/url/mojo/gurl.typemap',
+              '<(DEPTH)/url/mojo/origin.typemap',
             ],
           },
           'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
@@ -344,9 +358,11 @@
             'autofill/content/public/cpp/autofill_types_struct_traits.cc'
           ],
           'export_dependent_settings': [
+            '../mojo/mojo_base.gyp:mojo_common_custom_types_mojom',
             '../url/url.gyp:url_mojom',
            ],
           'dependencies': [
+            '../mojo/mojo_base.gyp:mojo_common_custom_types_mojom',
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
             '../url/url.gyp:url_mojom',
             'autofill_content_types_mojo_bindings_mojom',
@@ -359,17 +375,21 @@
           'variables': {
             'mojom_typemaps': [
               'autofill/content/public/cpp/autofill_types.typemap',
+              '<(DEPTH)/mojo/common/common_custom_types.typemap',
               '<(DEPTH)/url/mojo/gurl.typemap',
+              '<(DEPTH)/url/mojo/origin.typemap',
             ],
           },
           'sources': [
             'autofill/content/public/interfaces/test_autofill_types.mojom',
           ],
           'export_dependent_settings': [
+            '../mojo/mojo_base.gyp:mojo_common_custom_types_mojom',
             '../url/url.gyp:url_mojom',
             'autofill_content_types_mojo_bindings',
            ],
           'dependencies': [
+            '../mojo/mojo_base.gyp:mojo_common_custom_types_mojom',
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
             '../url/url.gyp:url_mojom',
             'autofill_content_types_mojo_bindings',
@@ -387,6 +407,9 @@
             ],
             'mojom_typemaps': [
               'autofill/content/public/cpp/autofill_types.typemap',
+              '<(DEPTH)/mojo/common/common_custom_types.typemap',
+              '<(DEPTH)/ui/gfx/geometry/mojo/geometry.typemap',
+              '<(DEPTH)/url/mojo/gurl.typemap',
             ],
           },
           'include_dirs': [
@@ -402,9 +425,14 @@
           'type': 'static_library',
           'export_dependent_settings': [
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../ui/gfx/gfx.gyp:mojo_geometry_bindings',
+            '../url/url.gyp:url_mojom',
+            'autofill_content_types_mojo_bindings',
            ],
           'dependencies': [
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../ui/gfx/gfx.gyp:mojo_geometry_bindings',
+            '../url/url.gyp:url_mojom',
             'autofill_content_mojo_bindings_mojom',
             'autofill_content_types_mojo_bindings',
           ],
@@ -485,6 +513,7 @@
             '../content/content.gyp:content_common',
             '../google_apis/google_apis.gyp:google_apis',
             '../ipc/ipc.gyp:ipc',
+            '../mojo/mojo_base.gyp:mojo_common_lib',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia',
             '../sql/sql.gyp:sql',
@@ -540,6 +569,7 @@
             '../content/content.gyp:content_renderer',
             '../google_apis/google_apis.gyp:google_apis',
             '../ipc/ipc.gyp:ipc',
+            '../mojo/mojo_base.gyp:mojo_common_lib',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia',
             '../third_party/re2/re2.gyp:re2',

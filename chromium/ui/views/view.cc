@@ -447,7 +447,13 @@ void View::OnEnabledChanged() {
 // Transformations -------------------------------------------------------------
 
 gfx::Transform View::GetTransform() const {
-  return layer() ? layer()->transform() : gfx::Transform();
+  if (!layer())
+    return gfx::Transform();
+
+  gfx::Transform transform = layer()->transform();
+  gfx::ScrollOffset scroll_offset = layer()->CurrentScrollOffset();
+  transform.Translate(-scroll_offset.x(), -scroll_offset.y());
+  return transform;
 }
 
 void View::SetTransform(const gfx::Transform& transform) {
@@ -826,7 +832,7 @@ void View::Paint(const ui::PaintContext& parent_context) {
     transform_from_parent.Translate(offset_from_parent.x(),
                                     offset_from_parent.y());
     transform_from_parent.PreconcatTransform(GetTransform());
-    transform_recorder.Transform(transform_from_parent, size());
+    transform_recorder.Transform(transform_from_parent);
   }
 
   // Note that the cache is not aware of the offset of the view
@@ -835,16 +841,8 @@ void View::Paint(const ui::PaintContext& parent_context) {
   if (is_invalidated || !paint_cache_.UseCache(context, size())) {
     ui::PaintRecorder recorder(context, size(), &paint_cache_);
     gfx::Canvas* canvas = recorder.canvas();
-
-    // If the View we are about to paint requested the canvas to be flipped, we
-    // should change the transform appropriately.
-    // The canvas mirroring is undone once the View is done painting so that we
-    // don't pass the canvas with the mirrored transform to Views that didn't
-    // request the canvas to be flipped.
-    if (FlipCanvasOnPaintForRTLUI()) {
-      canvas->Translate(gfx::Vector2d(width(), 0));
-      canvas->Scale(-1, 1);
-    }
+    gfx::ScopedRTLFlipCanvas scoped_canvas(canvas, width(),
+                                           flip_canvas_on_paint_for_rtl_ui_);
 
     // Delegate painting the contents of the View to the virtual OnPaint method.
     OnPaint(canvas);
@@ -1091,7 +1089,7 @@ ui::EventTarget* View::GetParentTarget() {
 }
 
 std::unique_ptr<ui::EventTargetIterator> View::GetChildIterator() const {
-  return base::WrapUnique(new ui::EventTargetIteratorImpl<View>(children_));
+  return base::MakeUnique<ui::EventTargetIteratorImpl<View>>(children_);
 }
 
 ui::EventTargeter* View::GetEventTargeter() {
@@ -1109,7 +1107,7 @@ void View::AddAccelerator(const ui::Accelerator& accelerator) {
   if (!accelerators_.get())
     accelerators_.reset(new std::vector<ui::Accelerator>());
 
-  if (!ContainsValue(*accelerators_.get(), accelerator))
+  if (!base::ContainsValue(*accelerators_.get(), accelerator))
     accelerators_->push_back(accelerator);
 
   RegisterPendingAccelerators();

@@ -12,8 +12,6 @@
           '../../../webui/resources/js/cr/event_target.js',
           '../../../webui/resources/js/cr/ui.js',
           '../../../webui/resources/js/cr/ui/array_data_model.js',
-          # Referenced in common/js/util.js.
-          '../../../webui/resources/js/cr/ui/dialogs.js',
           '../../../webui/resources/js/load_time_data.js',
           '../../../webui/resources/js/promise_resolver.js',
           '../../../webui/resources/js/util.js',
@@ -40,6 +38,7 @@
           '../../externs/chrome_test.js',
           '../../externs/es6_workaround.js',
           '../../externs/platform.js',
+          '../../externs/volume_info.js',
         ],
       },
       'includes': [
@@ -84,8 +83,8 @@
           '../../file_manager/foreground/js/metadata/metadata_cache_set.js',
           '../../file_manager/foreground/js/metadata/metadata_item.js',
           '../../file_manager/foreground/js/metadata/metadata_model.js',
+          '../../file_manager/foreground/js/metadata/metadata_provider.js',
           '../../file_manager/foreground/js/metadata/multi_metadata_provider.js',
-          '../../file_manager/foreground/js/metadata/new_metadata_provider.js',
           '../../file_manager/foreground/js/metadata/thumbnail_model.js',
           '../../file_manager/background/js/volume_manager.js',
           '../../file_manager/foreground/js/volume_manager_wrapper.js',
@@ -104,6 +103,7 @@
           '../../externs/chrome_test.js',
           '../../externs/es6_workaround.js',
           '../../externs/platform.js',
+          '../../externs/volume_info.js',
         ],
       },
       'includes': [

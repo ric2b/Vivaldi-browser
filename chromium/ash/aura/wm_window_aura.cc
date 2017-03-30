@@ -11,13 +11,16 @@
 #include "ash/common/shell_window_ids.h"
 #include "ash/common/wm/window_state.h"
 #include "ash/common/wm_layout_manager.h"
+#include "ash/common/wm_transient_window_observer.h"
 #include "ash/common/wm_window_observer.h"
 #include "ash/common/wm_window_property.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shell.h"
+#include "ash/wm/resize_handle_window_targeter.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_animations.h"
+#include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -34,8 +37,10 @@
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/widget/widget.h"
+#include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
+#include "ui/wm/core/transient_window_manager.h"
 #include "ui/wm/core/visibility_controller.h"
 #include "ui/wm/core/window_util.h"
 
@@ -87,6 +92,9 @@ WmWindowAura::WmWindowAura(aura::Window* window)
 }
 
 WmWindowAura::~WmWindowAura() {
+  if (added_transient_observer_)
+    ::wm::TransientWindowManager::Get(window_)->RemoveObserver(this);
+
   window_->RemoveObserver(this);
 }
 
@@ -144,6 +152,10 @@ void WmWindowAura::SetName(const char* name) {
   window_->SetName(name);
 }
 
+std::string WmWindowAura::GetName() const {
+  return window_->name();
+}
+
 base::string16 WmWindowAura::GetTitle() const {
   return window_->title();
 }
@@ -158,6 +170,11 @@ int WmWindowAura::GetShellWindowId() const {
 
 ui::wm::WindowType WmWindowAura::GetType() const {
   return window_->type();
+}
+
+bool WmWindowAura::IsBubble() {
+  views::Widget* widget = views::Widget::GetWidgetForNativeView(window_);
+  return widget->widget_delegate()->AsBubbleDialogDelegate() != nullptr;
 }
 
 ui::Layer* WmWindowAura::GetLayer() {
@@ -273,12 +290,43 @@ int WmWindowAura::GetIntProperty(WmWindowProperty key) {
   return 0;
 }
 
+void WmWindowAura::SetIntProperty(WmWindowProperty key, int value) {
+  if (key == WmWindowProperty::SHELF_ID) {
+    SetShelfIDForWindow(value, window_);
+    return;
+  }
+  if (key == WmWindowProperty::TOP_VIEW_INSET) {
+    window_->SetProperty(aura::client::kTopViewInset, value);
+    return;
+  }
+
+  NOTREACHED();
+}
+
+ShelfItemDetails* WmWindowAura::GetShelfItemDetails() {
+  return window_->GetProperty(kShelfItemDetailsKey);
+}
+
+void WmWindowAura::SetShelfItemDetails(const ShelfItemDetails& details) {
+  // |item_details| is owned by |window_|.
+  ShelfItemDetails* item_details = new ShelfItemDetails(details);
+  window_->SetProperty(kShelfItemDetailsKey, item_details);
+}
+
+void WmWindowAura::ClearShelfItemDetails() {
+  window_->ClearProperty(kShelfItemDetailsKey);
+}
+
 const wm::WindowState* WmWindowAura::GetWindowState() const {
   return ash::wm::GetWindowState(window_);
 }
 
 WmWindow* WmWindowAura::GetToplevelWindow() {
   return Get(window_->GetToplevelWindow());
+}
+
+WmWindow* WmWindowAura::GetToplevelWindowForFocus() {
+  return Get(::wm::GetToplevelWindow(window_));
 }
 
 void WmWindowAura::SetParentUsingContext(WmWindow* context,
@@ -307,12 +355,14 @@ void WmWindowAura::SetLayoutManager(
     std::unique_ptr<WmLayoutManager> layout_manager) {
   // |window_| takes ownership of AuraLayoutManagerAdapter.
   window_->SetLayoutManager(
-      new AuraLayoutManagerAdapter(std::move(layout_manager)));
+      layout_manager ? new AuraLayoutManagerAdapter(std::move(layout_manager))
+                     : nullptr);
 }
 
 WmLayoutManager* WmWindowAura::GetLayoutManager() {
-  return static_cast<AuraLayoutManagerAdapter*>(window_->layout_manager())
-      ->wm_layout_manager();
+  AuraLayoutManagerAdapter* adapter =
+      static_cast<AuraLayoutManagerAdapter*>(window_->layout_manager());
+  return adapter ? adapter->wm_layout_manager() : nullptr;
 }
 
 void WmWindowAura::SetVisibilityAnimationType(int type) {
@@ -606,6 +656,12 @@ void WmWindowAura::HideResizeShadow() {
     resize_shadow_controller->HideShadow(window_);
 }
 
+void WmWindowAura::InstallResizeHandleWindowTargeter(
+    ImmersiveFullscreenController* immersive_fullscreen_controller) {
+  window_->SetEventTargeter(base::MakeUnique<ResizeHandleWindowTargeter>(
+      window_, immersive_fullscreen_controller));
+}
+
 void WmWindowAura::SetBoundsInScreenBehaviorForChildren(
     BoundsInScreenBehavior behavior) {
   window_->SetProperty(
@@ -627,12 +683,16 @@ void WmWindowAura::SetChildrenUseExtendedHitRegion() {
                            -kResizeOutsideBoundsSize);
   gfx::Insets touch_extend =
       mouse_extend.Scale(kResizeOutsideBoundsScaleForTouch);
-  window_->SetEventTargeter(base::WrapUnique(
-      new ::wm::EasyResizeWindowTargeter(window_, mouse_extend, touch_extend)));
+  window_->SetEventTargeter(base::MakeUnique<::wm::EasyResizeWindowTargeter>(
+      window_, mouse_extend, touch_extend));
 }
 
 void WmWindowAura::SetDescendantsStayInSameRootWindow(bool value) {
   window_->SetProperty(kStayInSameRootWindowKey, true);
+}
+
+std::unique_ptr<views::View> WmWindowAura::CreateViewWithRecreatedLayers() {
+  return base::MakeUnique<wm::WindowMirrorView>(this);
 }
 
 void WmWindowAura::AddObserver(WmWindowObserver* observer) {
@@ -645,6 +705,34 @@ void WmWindowAura::RemoveObserver(WmWindowObserver* observer) {
 
 bool WmWindowAura::HasObserver(const WmWindowObserver* observer) const {
   return observers_.HasObserver(observer);
+}
+
+void WmWindowAura::AddTransientWindowObserver(
+    WmTransientWindowObserver* observer) {
+  if (!added_transient_observer_) {
+    added_transient_observer_ = true;
+    ::wm::TransientWindowManager::Get(window_)->AddObserver(this);
+  }
+  transient_observers_.AddObserver(observer);
+}
+
+void WmWindowAura::RemoveTransientWindowObserver(
+    WmTransientWindowObserver* observer) {
+  transient_observers_.RemoveObserver(observer);
+  if (added_transient_observer_ &&
+      !transient_observers_.might_have_observers()) {
+    added_transient_observer_ = false;
+    ::wm::TransientWindowManager::Get(window_)->RemoveObserver(this);
+  }
+}
+
+void WmWindowAura::AddLimitedPreTargetHandler(ui::EventHandler* handler) {
+  // This behaves differently from WmWindowMus for child and embedded windows.
+  window_->AddPreTargetHandler(handler);
+}
+
+void WmWindowAura::RemoveLimitedPreTargetHandler(ui::EventHandler* handler) {
+  window_->RemovePreTargetHandler(handler);
 }
 
 void WmWindowAura::OnWindowHierarchyChanging(
@@ -686,6 +774,8 @@ void WmWindowAura::OnWindowPropertyChanged(aura::Window* window,
     wm_property = WmWindowProperty::ALWAYS_ON_TOP;
   } else if (key == kShelfID) {
     wm_property = WmWindowProperty::SHELF_ID;
+  } else if (key == kShelfItemDetailsKey) {
+    wm_property = WmWindowProperty::SHELF_ITEM_DETAILS;
   } else if (key == aura::client::kTopViewInset) {
     wm_property = WmWindowProperty::TOP_VIEW_INSET;
   } else if (key == aura::client::kExcludeFromMruKey) {
@@ -718,8 +808,26 @@ void WmWindowAura::OnWindowVisibilityChanging(aura::Window* window,
                     OnWindowVisibilityChanging(this, visible));
 }
 
+void WmWindowAura::OnWindowVisibilityChanged(aura::Window* window,
+                                             bool visible) {
+  FOR_EACH_OBSERVER(WmWindowObserver, observers_,
+                    OnWindowVisibilityChanged(this, visible));
+}
+
 void WmWindowAura::OnWindowTitleChanged(aura::Window* window) {
   FOR_EACH_OBSERVER(WmWindowObserver, observers_, OnWindowTitleChanged(this));
+}
+
+void WmWindowAura::OnTransientChildAdded(aura::Window* window,
+                                         aura::Window* transient) {
+  FOR_EACH_OBSERVER(WmTransientWindowObserver, transient_observers_,
+                    OnTransientChildAdded(this, Get(transient)));
+}
+
+void WmWindowAura::OnTransientChildRemoved(aura::Window* window,
+                                           aura::Window* transient) {
+  FOR_EACH_OBSERVER(WmTransientWindowObserver, transient_observers_,
+                    OnTransientChildRemoved(this, Get(transient)));
 }
 
 }  // namespace ash

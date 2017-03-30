@@ -49,13 +49,11 @@ int BrowserPluginManager::GetNextInstanceID() {
 }
 
 void BrowserPluginManager::UpdateFocusState() {
-  is_updating_focus_ = true;
   IDMap<BrowserPlugin>::iterator iter(&instances_);
   while (!iter.IsAtEnd()) {
     iter.GetCurrentValue()->UpdateGuestFocusState(blink::WebFocusTypeNone);
     iter.Advance();
   }
-  is_updating_focus_ = false;
 }
 
 void BrowserPluginManager::Attach(int browser_plugin_instance_id) {
@@ -105,10 +103,6 @@ bool BrowserPluginManager::OnControlMessageReceived(
 
 bool BrowserPluginManager::Send(IPC::Message* msg) {
   return RenderThreadImpl::current()->Send(msg);
-}
-
-bool BrowserPluginManager::IsUpdatingFocusForGuests() {
-  return is_updating_focus_;
 }
 
 }  // namespace content

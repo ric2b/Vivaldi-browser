@@ -13,7 +13,7 @@
 #include "mash/init/public/interfaces/init.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connector.h"
-#include "services/shell/public/cpp/shell_client.h"
+#include "services/shell/public/cpp/service.h"
 
 namespace mojo {
 class Connection;
@@ -22,7 +22,7 @@ class Connection;
 namespace mash {
 namespace init {
 
-class Init : public shell::ShellClient,
+class Init : public shell::Service,
              public shell::InterfaceFactory<mojom::Init>,
              public mojom::Init {
  public:
@@ -30,14 +30,13 @@ class Init : public shell::ShellClient,
   ~Init() override;
 
  private:
-  // shell::ShellClient:
-  void Initialize(shell::Connector* connector,
-                  const shell::Identity& identity,
-                  uint32_t id) override;
-  bool AcceptConnection(shell::Connection* connection) override;
+  // shell::Service:
+  void OnStart(const shell::Identity& identity) override;
+  bool OnConnect(const shell::Identity& remote_identity,
+                 shell::InterfaceRegistry* registry) override;
 
   // shell::InterfaceFactory<mojom::Login>:
-  void Create(shell::Connection* connection,
+  void Create(const shell::Identity& remote_identity,
               mojom::InitRequest request) override;
 
   // mojom::Init:
@@ -50,7 +49,6 @@ class Init : public shell::ShellClient,
   void StartTracing();
   void StartLogin();
 
-  shell::Connector* connector_;
   std::unique_ptr<shell::Connection> login_connection_;
   mojo::BindingSet<mojom::Init> init_bindings_;
   std::map<std::string, std::unique_ptr<shell::Connection>> user_services_;

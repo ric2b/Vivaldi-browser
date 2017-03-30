@@ -13,12 +13,11 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../url/url.gyp:url_lib',
         'bookmarks_browser',
         'history_core_browser',
         'prefs/prefs.gyp:prefs',
-        'sync_driver',
       ],
       'sources': [
         # Note: sources list duplicated in GN build.
@@ -83,7 +82,7 @@
       'dependencies': [
         'sync_sessions',
         '../base/base.gyp:base',
-        '../sync/sync.gyp:sync',
+        '../components/sync.gyp:sync',
         '../testing/gtest.gyp:gtest',
       ],
       'include_dirs': [

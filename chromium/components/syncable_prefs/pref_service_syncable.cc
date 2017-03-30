@@ -35,6 +35,7 @@ PrefServiceSyncable::PrefServiceSyncable(
                   pref_registry,
                   read_error_callback,
                   async),
+      pref_service_forked_(false),
       pref_sync_associator_(pref_model_associator_client, syncer::PREFERENCES),
       priority_pref_sync_associator_(pref_model_associator_client,
                                      syncer::PRIORITY_PREFERENCES) {
@@ -151,6 +152,11 @@ void PrefServiceSyncable::RemoveSyncedPrefObserver(
     SyncedPrefObserver* observer) {
   pref_sync_associator_.RemoveSyncedPrefObserver(name, observer);
   priority_pref_sync_associator_.RemoveSyncedPrefObserver(name, observer);
+}
+
+void PrefServiceSyncable::RegisterMergeDataFinishedCallback(
+    const base::Closure& callback) {
+  pref_sync_associator_.RegisterMergeDataFinishedCallback(callback);
 }
 
 // Set the PrefModelAssociatorClient to use for that object during tests.

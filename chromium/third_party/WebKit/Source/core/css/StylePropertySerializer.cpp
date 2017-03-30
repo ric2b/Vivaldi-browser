@@ -50,7 +50,7 @@ StylePropertySerializer::StylePropertySetForSerializer::StylePropertySetForSeria
                 continue;
             if (static_cast<unsigned>(m_allIndex) >= i)
                 continue;
-            if (property.value()->equals(*allProperty.value())
+            if (property.value().equals(allProperty.value())
                 && property.isImportant() == allProperty.isImportant())
                 continue;
             m_needToExpandAll = true;
@@ -87,7 +87,7 @@ StylePropertySerializer::PropertyValueForSerializer StylePropertySerializer::Sty
     }
 
     StylePropertySet::PropertyReference property = m_propertySet->propertyAt(m_allIndex);
-    return StylePropertySerializer::PropertyValueForSerializer(propertyID, property.value(), property.isImportant());
+    return StylePropertySerializer::PropertyValueForSerializer(propertyID, &property.value(), property.isImportant());
 }
 
 bool StylePropertySerializer::StylePropertySetForSerializer::shouldProcessPropertyAt(unsigned index) const
@@ -141,17 +141,6 @@ const CSSValue* StylePropertySerializer::StylePropertySetForSerializer::getPrope
     return value.value();
 }
 
-String StylePropertySerializer::StylePropertySetForSerializer::getPropertyValue(CSSPropertyID propertyID) const
-{
-    if (!hasExpandedAllProperty())
-        return m_propertySet->getPropertyValue(propertyID);
-
-    const CSSValue* value = getPropertyCSSValue(propertyID);
-    if (!value)
-        return String();
-    return value->cssText();
-}
-
 bool StylePropertySerializer::StylePropertySetForSerializer::isPropertyImplicit(CSSPropertyID propertyID) const
 {
     int index = findPropertyIndex(propertyID);
@@ -159,15 +148,6 @@ bool StylePropertySerializer::StylePropertySetForSerializer::isPropertyImplicit(
         return false;
     StylePropertySerializer::PropertyValueForSerializer value = propertyAt(index);
     return value.isImplicit();
-}
-
-bool StylePropertySerializer::StylePropertySetForSerializer::propertyIsImportant(CSSPropertyID propertyID) const
-{
-    int index = findPropertyIndex(propertyID);
-    if (index == -1)
-        return false;
-    StylePropertySerializer::PropertyValueForSerializer value = propertyAt(index);
-    return value.isImportant();
 }
 
 StylePropertySerializer::StylePropertySerializer(const StylePropertySet& properties)
@@ -184,6 +164,8 @@ String StylePropertySerializer::getCustomPropertyText(const PropertyValueForSeri
     const CSSCustomPropertyDeclaration* value = toCSSCustomPropertyDeclaration(property.value());
     result.append(value->name());
     result.append(':');
+    if (!value->value())
+        result.append(' ');
     result.append(value->customCSSText());
     if (property.isImportant())
         result.append(" !important");
@@ -372,9 +354,7 @@ String StylePropertySerializer::commonShorthandChecks(const StylePropertyShortha
     if (hasImportant && hasNonImportant)
         return emptyString();
 
-    // TODO(timloh): This should be isCSSWideKeyword()
-    if (longhands[0]->isInitialValue() || longhands[0]->isInheritedValue()
-        || longhands[0]->isPendingSubstitutionValue()) {
+    if (longhands[0]->isCSSWideKeyword() || longhands[0]->isPendingSubstitutionValue()) {
         bool success = true;
         for (int i = 1; i < longhandCount; i++) {
             if (!longhands[i]->equals(*longhands[0])) {
@@ -402,8 +382,7 @@ String StylePropertySerializer::commonShorthandChecks(const StylePropertyShortha
         }
         if (!allowInitial && value.isInitialValue())
             return emptyString();
-        // TODO(timloh): This should also check unset
-        if (value.isInheritedValue() || value.isPendingSubstitutionValue())
+        if (value.isInheritedValue() || value.isUnsetValue() || value.isPendingSubstitutionValue())
             return emptyString();
         if (value.isVariableReferenceValue())
             return emptyString();
@@ -853,7 +832,7 @@ static void appendBackgroundRepeatValue(StringBuilder& builder, const CSSValue& 
         builder.append("repeat-x");
     } else {
         builder.append(repeatX.cssText());
-        builder.append(" ");
+        builder.append(' ');
         builder.append(repeatY.cssText());
     }
 }

@@ -46,6 +46,7 @@
 #include "public/platform/WebLayer.h"
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebRect.h"
+#include "public/platform/WebScheduler.h"
 #include "public/platform/WebSize.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
@@ -58,6 +59,7 @@
 #include "web/EditorClientImpl.h"
 #include "web/MediaKeysClientImpl.h"
 #include "web/PageWidgetDelegate.h"
+#include "web/ResizeViewportAnchor.h"
 #include "web/SpellCheckerClientImpl.h"
 #include "web/StorageClientImpl.h"
 #include "web/WebExport.h"
@@ -98,7 +100,8 @@ class WebViewScheduler;
 class WEB_EXPORT WebViewImpl final : WTF_NON_EXPORTED_BASE(public WebView)
     , public RefCounted<WebViewImpl>
     , WTF_NON_EXPORTED_BASE(public WebGestureCurveTarget)
-    , public PageWidgetEventHandler {
+    , public PageWidgetEventHandler
+    , public WebScheduler::InterventionReporter {
 public:
     static WebViewImpl* create(WebViewClient*, WebPageVisibilityState);
     static HashSet<WebViewImpl*>& allInstances();
@@ -108,8 +111,8 @@ public:
     WebSize size() override;
     void resize(const WebSize&) override;
     void resizeVisualViewport(const WebSize&) override;
-    void didEnterFullScreen() override;
-    void didExitFullScreen() override;
+    void didEnterFullscreen() override;
+    void didExitFullscreen() override;
 
     void beginFrame(double lastFrameTimeMonotonic) override;
 
@@ -157,6 +160,8 @@ public:
     void didNotAcquirePointerLock() override;
     void didLosePointerLock() override;
     void didChangeWindowResizerRect() override;
+    bool getCompositionCharacterBounds(WebVector<WebRect>& bounds) override;
+    void applyReplacementRange(int start, int length) override;
 
     // WebView methods:
     virtual bool isWebView() const { return true; }
@@ -183,9 +188,10 @@ public:
     WebFrame* mainFrame() override;
     WebFrame* findFrameByName(
         const WebString& name, WebFrame* relativeToFrame) override;
-    WebFrame* focusedFrame() override;
+    WebLocalFrame* focusedFrame() override;
     void setFocusedFrame(WebFrame*) override;
     void focusDocumentView(WebFrame*) override;
+    void unfocusDocumentView() override;
     void setInitialFocus(bool reverse) override;
     void clearFocusedElement() override;
     bool scrollFocusedEditableElementIntoRect(const WebRect&) override;
@@ -220,7 +226,6 @@ public:
     void setZoomFactorForDeviceScaleFactor(float) override;
 
     void setDeviceColorProfile(const WebVector<char>&) override;
-    void resetDeviceColorProfileForTesting() override;
 
     void enableAutoResizeMode(
         const WebSize& minSize,
@@ -236,25 +241,25 @@ public:
     WebHitTestResult hitTestResultForTap(const WebPoint&, const WebSize&) override;
     void loadImageAt(const WebPoint&) override;
     void dragSourceEndedAt(
-        const WebPoint& clientPoint,
+        const WebPoint& pointInViewport,
         const WebPoint& screenPoint,
         WebDragOperation) override;
     void dragSourceSystemDragEnded() override;
     WebDragOperation dragTargetDragEnter(
         const WebDragData&,
-        const WebPoint& clientPoint,
+        const WebPoint& pointInViewport,
         const WebPoint& screenPoint,
         WebDragOperationsMask operationsAllowed,
         int modifiers) override;
     WebDragOperation dragTargetDragOver(
-        const WebPoint& clientPoint,
+        const WebPoint& pointInViewport,
         const WebPoint& screenPoint,
         WebDragOperationsMask operationsAllowed,
         int modifiers) override;
     void dragTargetDragLeave() override;
     void dragTargetDrop(
         const WebDragData&,
-        const WebPoint& clientPoint,
+        const WebPoint& pointInViewport,
         const WebPoint& screenPoint,
         int modifiers) override;
     void spellingMarkers(WebVector<uint32_t>* markers) override;
@@ -282,6 +287,9 @@ public:
     void setShowFPSCounter(bool) override;
     void setShowScrollBottleneckRects(bool) override;
     void acceptLanguagesChanged() override;
+
+    // WebScheduler::InterventionReporter implementation:
+    void ReportIntervention(const WebString& message) override;
 
     void didUpdateFullScreenSize();
 
@@ -340,10 +348,6 @@ public:
     // Returns the main frame associated with this view. This may be null when
     // the page is shutting down, but will be valid at all other times.
     WebLocalFrameImpl* mainFrameImpl() const;
-
-    // FIXME: Temporary method to accommodate out-of-process frame ancestors;
-    // will be removed when there can be multiple WebWidgets for a single page.
-    WebLocalFrameImpl* localFrameRootTemporary() const;
 
     // Event related methods:
     void mouseContextMenu(const WebMouseEvent&);
@@ -430,11 +434,8 @@ public:
     }
 
     GraphicsLayer* rootGraphicsLayer();
-    void setRootGraphicsLayer(GraphicsLayer*);
+    void registerViewportLayersWithCompositor();
     PaintLayerCompositor* compositor() const;
-    void scheduleAnimation();
-    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
-    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
     CompositorAnimationTimeline* linkHighlightsTimeline() const { return m_linkHighlightsTimeline.get(); }
 
     WebViewScheduler* scheduler() const override;
@@ -470,9 +471,6 @@ public:
 
     void enterFullScreenForElement(Element*);
     void exitFullScreenForElement(Element*);
-
-    void clearCompositedSelection();
-    void updateCompositedSelection(const WebSelection&);
 
     // Exposed for the purpose of overriding device metrics.
     void sendResizeEventAndRepaint();
@@ -548,6 +546,9 @@ private:
     // m_overrideCompositorVisibility for more details.
     void setCompositorVisibility(bool);
 
+    // TODO(lfg): Remove once WebViewFrameWidget is deleted.
+    void scheduleAnimationForWidget();
+
     friend class WebView;  // So WebView::Create can call our constructor
     friend class WebViewFrameWidget;
     friend class WTF::RefCounted<WebViewImpl>;
@@ -581,7 +582,7 @@ private:
     // Consolidate some common code between starting a drag over a target and
     // updating a drag over a target. If we're starting a drag, |isEntering|
     // should be true.
-    WebDragOperation dragTargetDragEnterOrOver(const WebPoint& clientPoint,
+    WebDragOperation dragTargetDragEnterOrOver(const WebPoint& pointInViewport,
                                                const WebPoint& screenPoint,
                                                DragAction,
                                                int modifiers);
@@ -626,6 +627,13 @@ private:
     void updatePageOverlays();
 
     float deviceScaleFactor() const;
+
+    void setRootGraphicsLayer(GraphicsLayer*);
+    void attachCompositorAnimationTimeline(CompositorAnimationTimeline*);
+    void detachCompositorAnimationTimeline(CompositorAnimationTimeline*);
+
+    LocalFrame* focusedLocalFrameInWidget() const;
+    LocalFrame* focusedLocalFrameAvailableForIme() const;
 
     WebViewClient* m_client; // Can be 0 (e.g. unittests, shared workers, etc.)
     WebSpellCheckClient* m_spellCheckClient;
@@ -773,6 +781,8 @@ private:
     // split is complete, since in out-of-process iframes the page can be
     // visible, but the WebView should not be used as a widget.
     bool m_overrideCompositorVisibility;
+
+    Persistent<ResizeViewportAnchor> m_resizeViewportAnchor;
 };
 
 // We have no ways to check if the specified WebView is an instance of

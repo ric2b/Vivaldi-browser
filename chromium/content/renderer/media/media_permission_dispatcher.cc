@@ -69,10 +69,10 @@ void MediaPermissionDispatcher::HasPermission(
     connect_to_service_cb_.Run(mojo::GetProxy(&permission_service_));
 
   int request_id = RegisterCallback(permission_status_cb);
-  DVLOG(2) << __FUNCTION__ << ": request ID " << request_id;
+  DVLOG(2) << __func__ << ": request ID " << request_id;
 
   permission_service_->HasPermission(
-      MediaPermissionTypeToPermissionName(type), security_origin.spec(),
+      MediaPermissionTypeToPermissionName(type), url::Origin(security_origin),
       base::Bind(&MediaPermissionDispatcher::OnPermissionStatus, weak_ptr_,
                  request_id));
 }
@@ -95,10 +95,10 @@ void MediaPermissionDispatcher::RequestPermission(
     connect_to_service_cb_.Run(mojo::GetProxy(&permission_service_));
 
   int request_id = RegisterCallback(permission_status_cb);
-  DVLOG(2) << __FUNCTION__ << ": request ID " << request_id;
+  DVLOG(2) << __func__ << ": request ID " << request_id;
 
   permission_service_->RequestPermission(
-      MediaPermissionTypeToPermissionName(type), security_origin.spec(),
+      MediaPermissionTypeToPermissionName(type), url::Origin(security_origin),
       blink::WebUserGestureIndicator::isProcessingUserGesture(),
       base::Bind(&MediaPermissionDispatcher::OnPermissionStatus, weak_ptr_,
                  request_id));
@@ -118,7 +118,7 @@ uint32_t MediaPermissionDispatcher::RegisterCallback(
 void MediaPermissionDispatcher::OnPermissionStatus(
     uint32_t request_id,
     blink::mojom::PermissionStatus status) {
-  DVLOG(2) << __FUNCTION__ << ": (" << request_id << ", " << status << ")";
+  DVLOG(2) << __func__ << ": (" << request_id << ", " << status << ")";
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   RequestMap::iterator iter = requests_.find(request_id);

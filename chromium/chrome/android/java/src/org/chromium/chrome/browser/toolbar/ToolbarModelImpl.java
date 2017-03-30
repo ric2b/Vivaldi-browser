@@ -87,6 +87,8 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
 
     @Override
     public String getText() {
+        if (mTab != null && mTab.isBlimpTab()) return mTab.getUrl().trim();
+
         String displayText = super.getText();
 
         if (mTab == null || mTab.isFrozen()) return displayText;
@@ -106,7 +108,7 @@ class ToolbarModelImpl extends ToolbarModel implements ToolbarDataProvider, Tool
                         DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl);
             }
         } else if (mTab.isOfflinePage()) {
-            String originalUrl = mTab.getOfflinePageOriginalUrl();
+            String originalUrl = mTab.getOriginalUrl();
             displayText = OfflinePageUtils.stripSchemeFromOnlineUrl(
                   DomDistillerTabUtils.getFormattedUrlFromOriginalDistillerUrl(originalUrl));
         }

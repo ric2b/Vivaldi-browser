@@ -33,8 +33,8 @@
 #include "core/html/parser/HTMLPreloadScanner.h"
 #include "core/html/parser/HTMLSourceTracker.h"
 #include "core/html/parser/HTMLTreeBuilderSimulator.h"
-#include "core/html/parser/ParsedChunkQueue.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "core/html/parser/TokenizedChunkQueue.h"
 #include "core/html/parser/XSSAuditorDelegate.h"
 #include "wtf/WeakPtr.h"
 #include <memory>
@@ -57,11 +57,12 @@ public:
         WeakPtr<HTMLDocumentParser> parser;
         std::unique_ptr<XSSAuditor> xssAuditor;
         std::unique_ptr<TextResourceDecoder> decoder;
-        RefPtr<ParsedChunkQueue> parsedChunkQueue;
+        RefPtr<TokenizedChunkQueue> tokenizedChunkQueue;
         // outstandingTokenLimit must be greater than or equal to
         // pendingTokenLimit
         size_t outstandingTokenLimit;
         size_t pendingTokenLimit;
+        bool shouldCoalesceChunks;
     };
 
     static void start(PassRefPtr<WeakReference<BackgroundHTMLParser>>, std::unique_ptr<Configuration>, const KURL& documentURL, std::unique_ptr<CachedDocumentParameters>, const MediaValuesCached::MediaValuesCachedData&, std::unique_ptr<WebTaskRunner>);
@@ -95,7 +96,11 @@ private:
     void appendDecodedBytes(const String&);
     void markEndOfFile();
     void pumpTokenizer();
-    void sendTokensToMainThread();
+
+    // Returns whether or not the HTMLDocumentParser should be notified of
+    // pending chunks.
+    bool queueChunkForMainThread();
+    void notifyMainThreadOfNewChunks();
     void updateDocument(const String& decodedData);
 
     template <typename FunctionType, typename... Ps>
@@ -124,10 +129,15 @@ private:
     std::unique_ptr<TextResourceDecoder> m_decoder;
     DocumentEncodingData m_lastSeenEncodingData;
     std::unique_ptr<WebTaskRunner> m_loadingTaskRunner;
-    RefPtr<ParsedChunkQueue> m_parsedChunkQueue;
+    RefPtr<TokenizedChunkQueue> m_tokenizedChunkQueue;
+
+    // Index into |m_pendingTokens| of the last <meta> csp token found. Will be
+    // |TokenizedChunk::noPendingToken| if none have been found.
+    int m_pendingCSPMetaTokenIndex;
 
     bool m_startingScript;
     double m_lastBytesReceivedTime;
+    bool m_shouldCoalesceChunks;
 };
 
 } // namespace blink

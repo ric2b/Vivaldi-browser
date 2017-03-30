@@ -9,6 +9,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
+#include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
@@ -37,15 +38,14 @@ public:
     MockWorkerLoaderProxyProvider() { }
     ~MockWorkerLoaderProxyProvider() override { }
 
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override
+    void postTaskToLoader(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override
     {
         NOTIMPLEMENTED();
     }
 
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override
+    void postTaskToWorkerGlobalScope(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override
     {
         NOTIMPLEMENTED();
-        return false;
     }
 };
 
@@ -54,16 +54,15 @@ public:
     MockWorkerReportingProxy() { }
     ~MockWorkerReportingProxy() override { }
 
-    MOCK_METHOD2(reportExceptionMock, void(const String& errorMessage, SourceLocation*));
-    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
+    MOCK_METHOD3(reportExceptionMock, void(const String& errorMessage, SourceLocation*, int exceptionId));
+    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation> location, int exceptionId)
     {
-        reportExceptionMock(errorMessage, location.get());
+        reportExceptionMock(errorMessage, location.get(), exceptionId);
     }
-    MOCK_METHOD1(reportConsoleMessage, void(ConsoleMessage*));
+    MOCK_METHOD4(reportConsoleMessage, void(MessageSource, MessageLevel, const String& message, SourceLocation*));
     MOCK_METHOD1(postMessageToPageInspector, void(const String&));
-    MOCK_METHOD0(postWorkerConsoleAgentEnabled, void());
     MOCK_METHOD1(didEvaluateWorkerScript, void(bool success));
-    MOCK_METHOD1(workerGlobalScopeStarted, void(WorkerGlobalScope*));
+    MOCK_METHOD1(workerGlobalScopeStarted, void(WorkerOrWorkletGlobalScope*));
     MOCK_METHOD0(workerGlobalScopeClosed, void());
     MOCK_METHOD0(workerThreadTerminated, void());
     MOCK_METHOD0(willDestroyWorkerGlobalScope, void());
@@ -93,8 +92,9 @@ public:
     ~WorkerThreadForTest() override { }
 
     WorkerBackingThread& workerBackingThread() override { return *m_workerBackingThread; }
+    void clearWorkerBackingThread() override { m_workerBackingThread = nullptr; }
 
-    WorkerGlobalScope* createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData>) override;
+    WorkerOrWorkletGlobalScope* createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData>) override;
 
     void waitUntilScriptLoaded()
     {
@@ -125,6 +125,7 @@ public:
             securityOrigin,
             clients,
             WebAddressSpaceLocal,
+            nullptr,
             nullptr,
             V8CacheOptionsDefault));
     }
@@ -164,7 +165,7 @@ public:
         return EventTargetNames::DedicatedWorkerGlobalScope;
     }
 
-    void logExceptionToConsole(const String&, std::unique_ptr<SourceLocation>) override
+    void exceptionThrown(ErrorEvent*) override
     {
     }
 
@@ -172,7 +173,7 @@ private:
     WorkerThreadForTest* m_thread;
 };
 
-inline WorkerGlobalScope* WorkerThreadForTest::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
+inline WorkerOrWorkletGlobalScope* WorkerThreadForTest::createWorkerGlobalScope(std::unique_ptr<WorkerThreadStartupData> startupData)
 {
     return new FakeWorkerGlobalScope(startupData->m_scriptURL, startupData->m_userAgent, this, std::move(startupData->m_starterOriginPrivilegeData), std::move(startupData->m_workerClients));
 }

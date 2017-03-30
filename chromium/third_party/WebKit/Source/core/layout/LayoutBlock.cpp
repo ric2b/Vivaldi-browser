@@ -51,6 +51,7 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/page/Page.h"
 #include "core/paint/BlockPainter.h"
+#include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -225,6 +226,15 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
     m_heightAvailableToChildrenChanged |= oldStyle && diff.needsFullLayout() && needsLayout() && borderOrPaddingLogicalDimensionChanged(*oldStyle, newStyle, LogicalHeight);
 }
 
+void LayoutBlock::invalidateCaret() const
+{
+    if (hasCaret()) {
+        ObjectPaintInvalidator(*this).slowSetPaintingLayerNeedsRepaint();
+        frame()->selection().setCaretRectNeedsUpdate();
+        frame()->selection().invalidateCaretRect(true);
+    }
+}
+
 void LayoutBlock::updateFromStyle()
 {
     LayoutBox::updateFromStyle();
@@ -364,7 +374,8 @@ void LayoutBlock::layout()
 {
     LayoutAnalyzer::Scope analyzer(*this);
 
-    bool needsScrollAnchoring = RuntimeEnabledFeatures::scrollAnchoringEnabled() && hasOverflowClip();
+    bool needsScrollAnchoring = hasOverflowClip()
+        && getScrollableArea()->shouldPerformScrollAnchoring();
     if (needsScrollAnchoring)
         getScrollableArea()->scrollAnchor().save();
 
@@ -379,7 +390,10 @@ void LayoutBlock::layout()
 
     invalidateBackgroundObscurationStatus();
 
-    if (needsScrollAnchoring)
+    // If clamping is delayed, we will restore in PaintLayerScrollableArea::clampScrollPositionsAfterLayout.
+    // Restoring during the intermediate layout may clamp the scroller to the wrong bounds.
+    bool clampingDelayed = PaintLayerScrollableArea::DelayScrollPositionClampScope::clampingIsDelayed();
+    if (needsScrollAnchoring && !clampingDelayed)
         getScrollableArea()->scrollAnchor().restore();
 
     m_heightAvailableToChildrenChanged = false;
@@ -790,7 +804,7 @@ bool LayoutBlock::isSelectionRoot() const
 
     if (view() && view()->selectionStart()) {
         Node* startElement = view()->selectionStart()->node();
-        if (startElement && startElement->rootEditableElement() == node())
+        if (startElement && rootEditableElement(*startElement) == node())
             return true;
     }
 
@@ -917,6 +931,14 @@ void LayoutBlock::removePositionedObject(LayoutBox* o)
     }
 }
 
+PaintInvalidationReason LayoutBlock::invalidatePaintIfNeeded(const PaintInvalidationState& paintInvalidationState)
+{
+    PaintInvalidationReason reason = LayoutBox::invalidatePaintIfNeeded(paintInvalidationState);
+    if (reason != PaintInvalidationNone)
+        invalidateCaret();
+    return reason;
+}
+
 void LayoutBlock::removePositionedObjects(LayoutBlock* o, ContainingBlockState containingBlockState)
 {
     TrackedLayoutBoxListHashSet* positionedDescendants = positionedObjects();
@@ -937,7 +959,7 @@ void LayoutBlock::removePositionedObjects(LayoutBlock* o, ContainingBlockState c
                     // This valid because we need to invalidate based on the current status.
                     DisableCompositingQueryAsserts compositingDisabler;
                     if (!positionedObject->isPaintInvalidationContainer())
-                        positionedObject->invalidatePaintIncludingNonCompositingDescendants();
+                        ObjectPaintInvalidator(*positionedObject).invalidatePaintIncludingNonCompositingDescendants();
                 }
             }
 
@@ -1090,7 +1112,7 @@ static inline bool isEditingBoundary(LayoutObject* ancestor, LineLayoutBox child
     ASSERT(!ancestor || ancestor->nonPseudoNode());
     ASSERT(child && child.nonPseudoNode());
     return !ancestor || !ancestor->parent() || (ancestor->hasLayer() && ancestor->parent()->isLayoutView())
-        || ancestor->nonPseudoNode()->hasEditableStyle() == child.nonPseudoNode()->hasEditableStyle();
+        || hasEditableStyle(*ancestor->nonPseudoNode()) == hasEditableStyle(*child.nonPseudoNode());
 }
 
 // FIXME: This function should go on LayoutObject.
@@ -1148,7 +1170,7 @@ PositionWithAffinity LayoutBlock::positionForPointIfOutsideAtomicInlineLevel(con
 
 static inline bool isChildHitTestCandidate(LayoutBox* box)
 {
-    return box->size().height() && box->style()->visibility() == VISIBLE && !box->isFloatingOrOutOfFlowPositioned() && !box->isLayoutFlowThread();
+    return box->size().height() && box->style()->visibility() == EVisibility::Visible && !box->isFloatingOrOutOfFlowPositioned() && !box->isLayoutFlowThread();
 }
 
 PositionWithAffinity LayoutBlock::positionForPoint(const LayoutPoint& point)
@@ -1409,7 +1431,7 @@ bool LayoutBlock::hasLineIfEmpty() const
     if (!node())
         return false;
 
-    if (node()->isRootEditableElement())
+    if (isRootEditableElement(*node()))
         return true;
 
     if (node()->isShadowRoot() && isHTMLInputElement(toShadowRoot(node())->host()))
@@ -1433,7 +1455,7 @@ LayoutUnit LayoutBlock::lineHeight(bool firstLine, LineDirectionMode direction, 
 
 int LayoutBlock::beforeMarginInLineDirection(LineDirectionMode direction) const
 {
-    return direction == HorizontalLine ? marginTop() : marginRight();
+    return (direction == HorizontalLine ? marginTop() : marginRight()).toInt();
 }
 
 int LayoutBlock::baselinePosition(FontBaseline baselineType, bool firstLine, LineDirectionMode direction, LinePositionMode linePositionMode) const
@@ -1473,7 +1495,7 @@ int LayoutBlock::baselinePosition(FontBaseline baselineType, bool firstLine, Lin
     ASSERT(linePositionMode == PositionOfInteriorLineBoxes);
 
     const FontMetrics& fontMetrics = style(firstLine)->getFontMetrics();
-    return fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2;
+    return (fontMetrics.ascent(baselineType) + (lineHeight(firstLine, direction, linePositionMode) - fontMetrics.height()) / 2).toInt();
 }
 
 LayoutUnit LayoutBlock::minLineHeightForReplacedObject(bool isFirstLine, LayoutUnit replacedHeight) const
@@ -1499,7 +1521,7 @@ int LayoutBlock::firstLineBoxBaseline() const
         if (!curr->isFloatingOrOutOfFlowPositioned()) {
             int result = curr->firstLineBoxBaseline();
             if (result != -1)
-                return curr->logicalTop() + result; // Translate to our coordinate space.
+                return (curr->logicalTop() + result).toInt(); // Translate to our coordinate space.
         }
     }
     return -1;
@@ -1510,7 +1532,7 @@ int LayoutBlock::inlineBlockBaseline(LineDirectionMode lineDirection) const
     ASSERT(!childrenInline());
     if ((!style()->isOverflowVisible() && !shouldIgnoreOverflowPropertyForInlineBlockBaseline()) || style()->containsSize()) {
         // We are not calling LayoutBox::baselinePosition here because the caller should add the margin-top/margin-right, not us.
-        return lineDirection == HorizontalLine ? size().height() + marginBottom() : size().width() + marginLeft();
+        return (lineDirection == HorizontalLine ? size().height() + marginBottom() : size().width() + marginLeft()).toInt();
     }
 
     if (isWritingModeRoot() && !isRubyRun())
@@ -1522,14 +1544,14 @@ int LayoutBlock::inlineBlockBaseline(LineDirectionMode lineDirection) const
             haveNormalFlowChild = true;
             int result = curr->inlineBlockBaseline(lineDirection);
             if (result != -1)
-                return curr->logicalTop() + result; // Translate to our coordinate space.
+                return (curr->logicalTop() + result).toInt(); // Translate to our coordinate space.
         }
     }
     if (!haveNormalFlowChild && hasLineIfEmpty()) {
         const FontMetrics& fontMetrics = firstLineStyle()->getFontMetrics();
-        return fontMetrics.ascent()
+        return (fontMetrics.ascent()
             + (lineHeight(true, lineDirection, PositionOfInteriorLineBoxes) - fontMetrics.height()) / 2
-            + (lineDirection == HorizontalLine ? borderTop() + paddingTop() : borderRight() + paddingRight());
+            + (lineDirection == HorizontalLine ? borderTop() + paddingTop() : borderRight() + paddingRight())).toInt();
     }
     return -1;
 }
@@ -1602,13 +1624,13 @@ bool LayoutBlock::hasDragCaret() const
 {
     LocalFrame* frame = this->frame();
     DragCaretController& dragCaretController = frame->page()->dragCaretController();
-    return dragCaretController.caretLayoutObject() == this && (dragCaretController.isContentEditable() || caretBrowsingEnabled(frame));
+    return dragCaretController.hasCaretIn(*this);
 }
 
 LayoutRect LayoutBlock::localCaretRect(InlineBox* inlineBox, int caretOffset, LayoutUnit* extraWidthToEndOfLine)
 {
     // Do the normal calculation in most cases.
-    if (firstChild() || isInlineBoxWrapperActuallyChild())
+    if ((firstChild() && !firstChild()->isPseudoElement()) || isInlineBoxWrapperActuallyChild())
         return LayoutBox::localCaretRect(inlineBox, caretOffset, extraWidthToEndOfLine);
 
     LayoutRect caretRect = localCaretRectForEmptyElement(size().width(), textIndentOffset());

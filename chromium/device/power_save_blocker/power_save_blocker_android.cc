@@ -15,6 +15,7 @@
 namespace device {
 
 using base::android::AttachCurrentThread;
+using base::android::ScopedJavaLocalRef;
 
 class PowerSaveBlocker::Delegate
     : public base::RefCountedThreadSafe<PowerSaveBlocker::Delegate> {
@@ -34,6 +35,8 @@ class PowerSaveBlocker::Delegate
 
   base::android::ScopedJavaGlobalRef<jobject> java_power_save_blocker_;
 
+  ui::ViewAndroid::ScopedAnchorView anchor_view_;
+
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(Delegate);
@@ -52,22 +55,24 @@ PowerSaveBlocker::Delegate::~Delegate() {}
 void PowerSaveBlocker::Delegate::ApplyBlock() {
   DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
 
-  ScopedJavaLocalRef<jobject> obj(java_power_save_blocker_);
+  if (!view_android_)
+    return;
+
   JNIEnv* env = AttachCurrentThread();
-  if (view_android_) {
-    Java_PowerSaveBlocker_applyBlock(
-        env, obj.obj(), view_android_->GetViewAndroidDelegate().obj());
-  }
+  anchor_view_ = view_android_->AcquireAnchorView();
+  const ScopedJavaLocalRef<jobject> popup_view = anchor_view_.view();
+  if (popup_view.is_null())
+    return;
+  view_android_->SetAnchorRect(popup_view, gfx::RectF());
+  ScopedJavaLocalRef<jobject> obj(java_power_save_blocker_);
+  Java_PowerSaveBlocker_applyBlock(env, obj, popup_view);
 }
 
 void PowerSaveBlocker::Delegate::RemoveBlock() {
   DCHECK(ui_task_runner_->RunsTasksOnCurrentThread());
   ScopedJavaLocalRef<jobject> obj(java_power_save_blocker_);
-  JNIEnv* env = AttachCurrentThread();
-  if (view_android_) {
-    Java_PowerSaveBlocker_removeBlock(
-        env, obj.obj(), view_android_->GetViewAndroidDelegate().obj());
-  }
+  Java_PowerSaveBlocker_removeBlock(AttachCurrentThread(), obj);
+  anchor_view_.Reset();
 }
 
 PowerSaveBlocker::PowerSaveBlocker(
@@ -96,10 +101,6 @@ void PowerSaveBlocker::InitDisplaySleepBlocker(
 
   delegate_ = new Delegate(view_android, ui_task_runner_);
   delegate_->ApplyBlock();
-}
-
-bool RegisterPowerSaveBlocker(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace device

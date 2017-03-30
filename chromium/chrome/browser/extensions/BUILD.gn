@@ -4,6 +4,7 @@
 
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//chrome/common/features.gni")
 
 assert(enable_extensions)
 
@@ -39,23 +40,69 @@ static_library("extensions") {
     "//chrome:extra_resources",
     "//chrome:resources",
     "//chrome:strings",
+    "//chrome/app:command_ids",
     "//chrome/app/resources:platform_locale_settings",
     "//chrome/app/theme:theme_resources",
     "//chrome/browser/devtools",
+    "//chrome/browser/media/router",
     "//chrome/common",
     "//chrome/common/extensions/api:api_registration",
+    "//chrome/common/extensions/api:extensions_features",
     "//chrome/common/safe_browsing:proto",
     "//chrome/installer/util:with_no_strings",
-    "//components/copresence",
-    "//components/data_reduction_proxy/proto:data_reduction_proxy_proto",
+    "//components/app_modal",
+    "//components/autofill/content/browser",
+    "//components/bookmarks/browser",
+    "//components/bookmarks/managed",
+    "//components/browser_sync/browser",
+    "//components/browsing_data/core",
+    "//components/bubble",
+    "//components/content_settings/core/browser",
+    "//components/crx_file",
+    "//components/data_reduction_proxy/core/browser",
     "//components/dom_distiller/core",
+    "//components/favicon/content",
+    "//components/feedback",
+    "//components/gcm_driver",
+    "//components/guest_view/browser",
+    "//components/history/core/browser",
+    "//components/infobars/core",
+    "//components/keyed_service/content",
+    "//components/navigation_interception",
+    "//components/net_log",
+    "//components/omnibox/browser",
     "//components/onc",
-    "//components/policy",
+    "//components/password_manager/core/browser",
+    "//components/pdf/browser",
+    "//components/policy:generated",
+    "//components/policy/core/browser",
+    "//components/pref_registry",
     "//components/proximity_auth",
+    "//components/proximity_auth/ble",
+    "//components/proximity_auth/cryptauth",
+    "//components/proximity_auth/logging",
+    "//components/proxy_config",
+    "//components/rappor",
     "//components/resources",
+    "//components/safe_browsing_db:database_manager",
+    "//components/safe_browsing_db:util",
+    "//components/safe_json",
+    "//components/search_engines",
+    "//components/sessions",
+    "//components/signin/core/browser",
+    "//components/spellcheck/browser",
+    "//components/storage_monitor",
     "//components/strings",
+    "//components/sync",
+    "//components/sync_sessions",
+    "//components/syncable_prefs",
+    "//components/translate/core/browser",
+    "//components/undo",
     "//components/update_client",
     "//components/url_matcher",
+    "//components/user_prefs",
+    "//components/web_modal",
+    "//components/zoom",
     "//content/app/resources",
     "//content/public/common",
     "//crypto",
@@ -68,9 +115,9 @@ static_library("extensions") {
     "//extensions/strings",
     "//net",
     "//skia",
+    "//sql",
     "//storage/browser",
     "//storage/common",
-    "//sync",
     "//third_party/WebKit/public:image_resources",
     "//third_party/WebKit/public:resources",
     "//third_party/cacheinvalidation",
@@ -84,17 +131,12 @@ static_library("extensions") {
     "//ui/base/ime",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/native_theme",
     "//ui/resources",
+    "//ui/shell_dialogs",
     "//ui/strings",
     "//url",
   ]
-
-  if (enable_task_manager) {
-    sources += rebase_path(
-            gypi_values.chrome_browser_extensions_task_manager_enabled_sources,
-            ".",
-            "//chrome")
-  }
 
   if (is_chromeos) {
     sources +=
@@ -107,8 +149,16 @@ static_library("extensions") {
     }
     deps += [
       "//components/chrome_apps",
+      "//components/constrained_window",
+      "//components/drive",
+      "//components/user_manager",
+      "//remoting/host",
       "//remoting/host/it2me:common",
       "//third_party/protobuf:protobuf_lite",
+      "//ui/app_list",
+      "//ui/chromeos",
+      "//ui/file_manager",
+      "//ui/views/",
     ]
   } else {
     sources += [
@@ -121,30 +171,19 @@ static_library("extensions") {
                     "//chrome")
   }
 
-  if (enable_service_discovery) {
-    sources += rebase_path(
-            gypi_values.chrome_browser_extensions_service_discovery_sources,
-            ".",
-            "//chrome")
-  }
-
-  if (use_ash) {
-    sources += [
-      "api/tabs/ash_panel_contents.cc",
-      "api/tabs/ash_panel_contents.h",
+  # chromeos uses its own global_shortcut_listener, _x11 is not necessary.
+  if (is_chromeos || !use_x11) {
+    sources -= [
+      "global_shortcut_listener_x11.cc",
+      "global_shortcut_listener_x11.h",
     ]
   }
 
-  if (use_aura) {
-    deps += [
-      "//ui/keyboard",
-      "//ui/keyboard:keyboard_with_content",
-      "//ui/keyboard:resources",
-    ]
+  if (is_chromeos && use_ozone) {
+    sources -= [ "global_shortcut_listener_chromeos.cc" ]
   }
-
-  if (toolkit_views) {
-    deps += [ "//ui/views" ]
+  if (!use_ozone) {
+    sources -= [ "global_shortcut_listener_ozone.cc" ]
   }
 
   if (is_linux) {
@@ -152,6 +191,9 @@ static_library("extensions") {
 
     if (use_dbus) {
       deps += [ "//dbus" ]
+    }
+    if (use_udev) {
+      deps += [ "//device/udev_linux" ]
     }
 
     if (use_x11) {
@@ -170,28 +212,9 @@ static_library("extensions") {
     }
   }
 
-  if (enable_webrtc) {
-    sources += [ "api/webrtc_logging_private/webrtc_logging_private_api.cc" ]
-  } else {
-    sources +=
-        [ "api/webrtc_logging_private/webrtc_logging_private_api_stub.cc" ]
-  }
-
-  if (use_brlapi) {
-    deps += [ "//build/linux/libbrlapi" ]
-    sources += rebase_path(gypi_values.chrome_browser_extensions_brlapi_sources,
-                           ".",
-                           "//chrome")
-  } else {
-    sources += [ "api/braille_display_private/braille_controller_stub.cc" ]
-  }
-
-  # chromeos uses its own global_shortcut_listener, _x11 is not necessary.
-  if (is_chromeos || !use_x11) {
-    sources -= [
-      "global_shortcut_listener_x11.cc",
-      "global_shortcut_listener_x11.h",
-    ]
+  if (!is_android && !is_ios) {
+    # Non-mobile.
+    #deps += [ "//apps" ]
   }
 
   if (is_win || is_mac) {
@@ -225,10 +248,62 @@ static_library("extensions") {
                     "//chrome")
   }
 
-  if (is_chromeos && use_ozone) {
-    sources -= [ "global_shortcut_listener_chromeos.cc" ]
+  if (enable_hotwording) {
+    defines += [ "ENABLE_HOTWORDING" ]
   }
-  if (!use_ozone) {
-    sources -= [ "global_shortcut_listener_ozone.cc" ]
+
+  if (enable_service_discovery) {
+    sources += rebase_path(
+            gypi_values.chrome_browser_extensions_service_discovery_sources,
+            ".",
+            "//chrome")
+  }
+
+  if (enable_task_manager) {
+    sources += rebase_path(
+            gypi_values.chrome_browser_extensions_task_manager_enabled_sources,
+            ".",
+            "//chrome")
+  }
+
+  if (enable_rlz_support) {
+    deps += [ "//rlz:rlz_lib" ]
+  }
+
+  if (enable_webrtc) {
+    sources += [ "api/webrtc_logging_private/webrtc_logging_private_api.cc" ]
+  } else {
+    sources +=
+        [ "api/webrtc_logging_private/webrtc_logging_private_api_stub.cc" ]
+  }
+
+  if (toolkit_views) {
+    deps += [ "//ui/views" ]
+  }
+
+  if (use_ash) {
+    sources += [
+      "api/tabs/ash_panel_contents.cc",
+      "api/tabs/ash_panel_contents.h",
+    ]
+    deps += [ "//ash" ]
+  }
+
+  if (use_aura) {
+    deps += [
+      "//ui/aura",
+      "//ui/keyboard",
+      "//ui/keyboard:keyboard_with_content",
+      "//ui/keyboard:resources",
+    ]
+  }
+
+  if (use_brlapi) {
+    deps += [ "//build/linux/libbrlapi" ]
+    sources += rebase_path(gypi_values.chrome_browser_extensions_brlapi_sources,
+                           ".",
+                           "//chrome")
+  } else {
+    sources += [ "api/braille_display_private/braille_controller_stub.cc" ]
   }
 }

@@ -15,7 +15,6 @@
 #include "build/build_config.h"
 #include "content/renderer/media/audio_renderer_sink_cache.h"
 #include "media/audio/audio_device_description.h"
-#include "media/base/audio_hardware_config.h"
 #include "media/base/audio_renderer_mixer.h"
 #include "media/base/audio_renderer_mixer_input.h"
 
@@ -202,7 +201,7 @@ media::AudioRendererMixer* AudioRendererMixerManager::GetMixer(
       mixer_output_params, sink, base::Bind(LogMixerUmaHistogram, latency));
   AudioRendererMixerReference mixer_reference = {mixer, 1, sink.get()};
   mixers_[key] = mixer_reference;
-  DVLOG(1) << __FUNCTION__ << " mixer: " << mixer << " latency: " << latency
+  DVLOG(1) << __func__ << " mixer: " << mixer << " latency: " << latency
            << "\n input: " << input_params.AsHumanReadableString()
            << "\noutput: " << mixer_output_params.AsHumanReadableString();
   return mixer;

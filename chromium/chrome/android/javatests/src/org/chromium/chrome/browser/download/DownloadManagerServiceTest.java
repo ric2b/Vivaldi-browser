@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.download;
 
 import android.app.DownloadManager;
 import android.content.Context;
-import android.content.Intent;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -63,6 +62,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
             DOWNLOAD_FAILED,
             DOWNLOAD_PROGRESS,
             DOWNLOAD_PAUSED,
+            DOWNLOAD_INTERRUPTED,
             CANCEL_DOWNLOAD_ID,
             CLEAR_PENDING_DOWNLOADS
         }
@@ -133,10 +133,9 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
         @Override
         public void notifyDownloadSuccessful(DownloadInfo downloadInfo,
-                long systemDownloadId, boolean canResolve, Intent intent) {
+                long systemDownloadId, boolean canResolve) {
             assertCorrectExpectedCall(MethodID.DOWNLOAD_SUCCESSFUL, downloadInfo);
-            super.notifyDownloadSuccessful(
-                    downloadInfo, systemDownloadId, canResolve, intent);
+            super.notifyDownloadSuccessful(downloadInfo, systemDownloadId, canResolve);
         }
 
         @Override
@@ -152,8 +151,13 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         }
 
         @Override
-        public void notifyDownloadPaused(DownloadInfo downloadInfo, boolean isAutoResumable) {
+        public void notifyDownloadPaused(DownloadInfo downloadInfo) {
             assertCorrectExpectedCall(MethodID.DOWNLOAD_PAUSED, downloadInfo);
+        }
+
+        @Override
+        public void notifyDownloadInterrupted(DownloadInfo downloadInfo, boolean isAutoResumable) {
+            assertCorrectExpectedCall(MethodID.DOWNLOAD_INTERRUPTED, downloadInfo);
         }
 
         @Override
@@ -301,7 +305,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         protected void init() {}
 
         @Override
-        protected void resumeDownload(DownloadItem item, boolean hasUserGesture) {
+        public void resumeDownload(DownloadItem item, boolean hasUserGesture) {
             mResumed = true;
         }
     }
@@ -331,7 +335,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
     @MediumTest
     @Feature({"Download"})
-    public void testDownloadProgressIsCalled() throws InterruptedException {
+    public void testAllDownloadProgressIsCalledForSlowUpdates() throws InterruptedException {
         MockDownloadNotifier notifier = new MockDownloadNotifier(getTestContext());
         DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
@@ -362,7 +366,7 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
 
     @MediumTest
     @Feature({"Download"})
-    public void testOnlyOneProgressForFastUpdates() throws InterruptedException {
+    public void testOnlyTwoProgressForFastUpdates() throws InterruptedException {
         MockDownloadNotifier notifier = new MockDownloadNotifier(getTestContext());
         DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, LONG_UPDATE_DELAY_FOR_TEST);
@@ -370,12 +374,14 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         DownloadInfo update1 = Builder.fromDownloadInfo(downloadInfo)
                 .setPercentCompleted(10).build();
         DownloadInfo update2 = Builder.fromDownloadInfo(downloadInfo)
-                .setPercentCompleted(30).build();
+                .setPercentCompleted(20).build();
         DownloadInfo update3 = Builder.fromDownloadInfo(downloadInfo)
                 .setPercentCompleted(30).build();
 
-        // Should only get one update call, the last update.
-        notifier.expect(MethodID.DOWNLOAD_PROGRESS, update3);
+        // Should get 2 update calls, the first and the last. The 2nd update will be merged into
+        // the last one.
+        notifier.expect(MethodID.DOWNLOAD_PROGRESS, update1)
+                .andThen(MethodID.DOWNLOAD_PROGRESS, update3);
         dService.onDownloadUpdated(update1);
         Thread.sleep(DELAY_BETWEEN_CALLS);
         dService.onDownloadUpdated(update2);
@@ -441,10 +447,10 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
         DownloadManagerService.disableNetworkListenerForTest();
-        DownloadInfo paused =
+        DownloadInfo interrupted =
                 Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
-        notifier.expect(MethodID.DOWNLOAD_PAUSED, paused);
-        dService.onDownloadInterrupted(paused, true);
+        notifier.expect(MethodID.DOWNLOAD_INTERRUPTED, interrupted);
+        dService.onDownloadInterrupted(interrupted, true);
         notifier.waitTillExpectedCallsComplete();
     }
 
@@ -477,13 +483,13 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         final DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
         DownloadManagerService.disableNetworkListenerForTest();
-        DownloadInfo paused =
+        DownloadInfo interrupted =
                 Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
-        notifier.expect(MethodID.DOWNLOAD_PROGRESS, paused)
-                .andThen(MethodID.DOWNLOAD_PAUSED, paused);
-        dService.onDownloadUpdated(paused);
+        notifier.expect(MethodID.DOWNLOAD_PROGRESS, interrupted)
+                .andThen(MethodID.DOWNLOAD_INTERRUPTED, interrupted);
+        dService.onDownloadUpdated(interrupted);
         Thread.sleep(DELAY_BETWEEN_CALLS);
-        dService.onDownloadInterrupted(paused, true);
+        dService.onDownloadInterrupted(interrupted, true);
         notifier.waitTillExpectedCallsComplete();
         int resumableIdCount = dService.mAutoResumableDownloadIds.size();
         dService.onConnectionTypeChanged(ConnectionType.CONNECTION_WIFI);
@@ -504,13 +510,13 @@ public class DownloadManagerServiceTest extends InstrumentationTestCase {
         final DownloadManagerServiceForTest dService = new DownloadManagerServiceForTest(
                 getTestContext(), notifier, UPDATE_DELAY_FOR_TEST);
         DownloadManagerService.disableNetworkListenerForTest();
-        DownloadInfo paused =
+        DownloadInfo interrupted =
                 Builder.fromDownloadInfo(getDownloadInfo()).setIsResumable(true).build();
-        notifier.expect(MethodID.DOWNLOAD_PROGRESS, paused)
-                .andThen(MethodID.DOWNLOAD_PAUSED, paused);
-        dService.onDownloadUpdated(paused);
+        notifier.expect(MethodID.DOWNLOAD_PROGRESS, interrupted)
+                .andThen(MethodID.DOWNLOAD_INTERRUPTED, interrupted);
+        dService.onDownloadUpdated(interrupted);
         Thread.sleep(DELAY_BETWEEN_CALLS);
-        dService.onDownloadInterrupted(paused, true);
+        dService.onDownloadInterrupted(interrupted, true);
         notifier.waitTillExpectedCallsComplete();
         DownloadManagerService.setIsNetworkMeteredForTest(true);
         int resumableIdCount = dService.mAutoResumableDownloadIds.size();

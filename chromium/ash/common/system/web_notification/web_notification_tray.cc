@@ -11,6 +11,7 @@
 #include "ash/common/shelf/wm_shelf.h"
 #include "ash/common/shelf/wm_shelf_util.h"
 #include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray.h"
 #include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/common/system/tray/tray_bubble_wrapper.h"
 #include "ash/common/system/tray/tray_constants.h"
@@ -20,7 +21,6 @@
 #include "ash/common/wm_root_window_controller.h"
 #include "ash/common/wm_shell.h"
 #include "ash/common/wm_window.h"
-#include "ash/system/tray/system_tray.h"
 #include "base/auto_reset.h"
 #include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
@@ -39,7 +39,6 @@
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/bubble/tray_bubble_view.h"
-#include "ui/views/controls/button/custom_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -176,7 +175,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
   }
 
  protected:
-  // Overridden from views::ImageButton:
+  // Overridden from views::View:
   gfx::Size GetPreferredSize() const override {
     if (!animation_.get() || !animation_->is_animating())
       return kTrayItemOuterSize;
@@ -554,12 +553,6 @@ bool WebNotificationTray::IsCommandIdEnabled(int command_id) const {
   return true;
 }
 
-bool WebNotificationTray::GetAcceleratorForCommandId(
-    int command_id,
-    ui::Accelerator* accelerator) {
-  return false;
-}
-
 void WebNotificationTray::ExecuteCommand(int command_id, int event_flags) {
   if (command_id == kToggleQuietMode) {
     bool in_quiet_mode = message_center()->IsQuietMode();
@@ -662,7 +655,6 @@ message_center::MessageCenter* WebNotificationTray::message_center() const {
 
 bool WebNotificationTray::IsLoggedIn() const {
   WmShell* shell = WmShell::Get();
-  // TODO(jamescook): Should this also check LoginState::LOCKED?
   return shell->system_tray_delegate()->GetUserLoginStatus() !=
              LoginStatus::NOT_LOGGED_IN &&
          !shell->GetSessionStateDelegate()->IsInSecondaryLoginScreen();

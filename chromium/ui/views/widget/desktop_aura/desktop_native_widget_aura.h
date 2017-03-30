@@ -129,7 +129,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void StackAbove(gfx::NativeView native_view) override;
   void StackAtTop() override;
   void StackBelow(gfx::NativeView native_view) override;
-  void SetShape(SkRegion* shape) override;
+  void SetShape(std::unique_ptr<SkRegion> shape) override;
   void Close() override;
   void CloseNow() override;
   void Show() override;
@@ -143,6 +143,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetAlwaysOnTop(bool always_on_top) override;
   bool IsAlwaysOnTop() const override;
   void SetVisibleOnAllWorkspaces(bool always_visible) override;
+  bool IsVisibleOnAllWorkspaces() const override;
   void Maximize() override;
   void Minimize() override;
   bool IsMaximized() const override;

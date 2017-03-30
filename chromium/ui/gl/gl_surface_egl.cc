@@ -40,7 +40,6 @@ extern "C" {
 #include <X11/Xlib.h>
 #define Status int
 }
-#include "ui/base/x/x11_util_internal.h"  // nogncheck
 #include "ui/gfx/x/x11_switches.h"  // nogncheck
 #endif
 
@@ -116,10 +115,10 @@ const unsigned int MULTISWAP_FRAME_VSYNC_THRESHOLD = 60;
 
 namespace {
 
-EGLDisplay g_display;
-EGLNativeDisplayType g_native_display;
+EGLDisplay g_display = EGL_NO_DISPLAY;
+EGLNativeDisplayType g_native_display = EGL_DEFAULT_DISPLAY;
 
-const char* g_egl_extensions = NULL;
+const char* g_egl_extensions = nullptr;
 bool g_egl_create_context_robustness_supported = false;
 bool g_egl_sync_control_supported = false;
 bool g_egl_window_fixed_size_supported = false;
@@ -447,14 +446,36 @@ void GetEGLInitDisplays(bool supports_angle_d3d,
 
 GLSurfaceEGL::GLSurfaceEGL() {}
 
-bool GLSurfaceEGL::InitializeOneOff() {
+GLSurface::Format GLSurfaceEGL::GetFormat() {
+  return format_;
+}
+
+EGLDisplay GLSurfaceEGL::GetDisplay() {
+  return g_display;
+}
+
+EGLConfig GLSurfaceEGL::GetConfig() {
+  if (!config_) {
+    config_ = ChooseConfig(format_);
+  }
+  return config_;
+}
+
+// static
+bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
   static bool initialized = false;
   if (initialized)
     return true;
 
-  InitializeDisplay();
+  // Must be called before InitializeDisplay().
+  g_driver_egl.InitializeClientExtensionBindings();
+
+  InitializeDisplay(native_display);
   if (g_display == EGL_NO_DISPLAY)
     return false;
+
+  // Must be called after InitializeDisplay().
+  g_driver_egl.InitializeExtensionBindings();
 
   g_egl_extensions = eglQueryString(g_display, EGL_EXTENSIONS);
   g_egl_create_context_robustness_supported =
@@ -508,45 +529,37 @@ bool GLSurfaceEGL::InitializeOneOff() {
   return true;
 }
 
-GLSurface::Format GLSurfaceEGL::GetFormat() {
-  return format_;
-}
-
-EGLDisplay GLSurfaceEGL::GetDisplay() {
-  return g_display;
-}
-
-EGLConfig GLSurfaceEGL::GetConfig() {
-  if (!config_) {
-    config_ = ChooseConfig(format_);
-  }
-  return config_;
-}
-
+// static
 EGLDisplay GLSurfaceEGL::GetHardwareDisplay() {
   return g_display;
 }
 
+// static
 EGLNativeDisplayType GLSurfaceEGL::GetNativeDisplay() {
   return g_native_display;
 }
 
+// static
 const char* GLSurfaceEGL::GetEGLExtensions() {
   return g_egl_extensions;
 }
 
+// static
 bool GLSurfaceEGL::HasEGLExtension(const char* name) {
   return ExtensionsContain(GetEGLExtensions(), name);
 }
 
+// static
 bool GLSurfaceEGL::IsCreateContextRobustnessSupported() {
   return g_egl_create_context_robustness_supported;
 }
 
+// static
 bool GLSurfaceEGL::IsEGLSurfacelessContextSupported() {
   return g_egl_surfaceless_context_supported;
 }
 
+// static
 bool GLSurfaceEGL::IsDirectCompositionSupported() {
   return g_use_direct_composition;
 }
@@ -556,12 +569,13 @@ GLSurfaceEGL::~GLSurfaceEGL() {}
 // InitializeDisplay is necessary because the static binding code
 // needs a full Display init before it can query the Display extensions.
 // static
-EGLDisplay GLSurfaceEGL::InitializeDisplay() {
+EGLDisplay GLSurfaceEGL::InitializeDisplay(
+    EGLNativeDisplayType native_display) {
   if (g_display != EGL_NO_DISPLAY) {
     return g_display;
   }
 
-  g_native_display = GetPlatformDefaultEGLNativeDisplay();
+  g_native_display = native_display;
 
   // If EGL_EXT_client_extensions not supported this call to eglQueryString
   // will return NULL.
@@ -732,18 +746,16 @@ bool NativeViewGLSurfaceEGL::IsOffscreen() {
   return false;
 }
 
-gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers() {
-  TRACE_EVENT2("gpu", "NativeViewGLSurfaceEGL:RealSwapBuffers",
-      "width", GetSize().width(),
-      "height", GetSize().height());
-
+void NativeViewGLSurfaceEGL::UpdateSwapInterval() {
 #if defined(OS_WIN)
-  if (swap_interval_ != 0) {
+  if (!g_use_direct_composition && (swap_interval_ != 0)) {
     // This code is a simple way of enforcing that we only vsync if one surface
     // is swapping per frame. This provides single window cases a stable refresh
     // while allowing multi-window cases to not slow down due to multiple syncs
     // on a single thread. A better way to fix this problem would be to have
-    // each surface present on its own thread.
+    // each surface present on its own thread. This is unnecessary with
+    // DirectComposition because that doesn't block swaps, but instead blocks
+    // the first draw into a surface during the next frame.
 
     if (current_swap_generation_ == swap_generation_) {
       if (swaps_this_generation_ > 1)
@@ -771,6 +783,14 @@ gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers() {
     swaps_this_generation_++;
   }
 #endif
+}
+
+gfx::SwapResult NativeViewGLSurfaceEGL::SwapBuffers() {
+  TRACE_EVENT2("gpu", "NativeViewGLSurfaceEGL:RealSwapBuffers",
+      "width", GetSize().width(),
+      "height", GetSize().height());
+
+  UpdateSwapInterval();
 
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
@@ -857,6 +877,7 @@ gfx::SwapResult NativeViewGLSurfaceEGL::PostSubBuffer(int x,
                                                       int width,
                                                       int height) {
   DCHECK(supports_post_sub_buffer_);
+  UpdateSwapInterval();
   if (!CommitAndClearPendingOverlays()) {
     DVLOG(1) << "Failed to commit pending overlay planes.";
     return gfx::SwapResult::SWAP_FAILED;

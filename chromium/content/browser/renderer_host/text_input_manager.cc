@@ -4,8 +4,12 @@
 
 #include "content/browser/renderer_host/text_input_manager.h"
 
+#include "base/strings/string16.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/common/view_messages.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/range/range.h"
 
 namespace content {
 
@@ -16,6 +20,9 @@ bool AreDifferentTextInputStates(const content::TextInputState& old_state,
 #if defined(USE_AURA)
   return old_state.type != new_state.type || old_state.mode != new_state.mode ||
          old_state.flags != new_state.flags ||
+         old_state.can_compose_inline != new_state.can_compose_inline;
+#elif defined(OS_MACOSX)
+  return old_state.type != new_state.type ||
          old_state.can_compose_inline != new_state.can_compose_inline;
 #else
   // TODO(ekaramad): Implement the logic for other platforms (crbug.com/578168).
@@ -40,12 +47,8 @@ TextInputManager::~TextInputManager() {
   for (auto pair : text_input_state_map_)
     views.push_back(pair.first);
 
-  for (auto view : views)
+  for (auto* view : views)
     Unregister(view);
-}
-
-const TextInputState* TextInputManager::GetTextInputState() {
-  return !!active_view_ ? &text_input_state_map_[active_view_] : nullptr;
 }
 
 RenderWidgetHostImpl* TextInputManager::GetActiveWidget() const {
@@ -54,21 +57,78 @@ RenderWidgetHostImpl* TextInputManager::GetActiveWidget() const {
                         : nullptr;
 }
 
+const TextInputState* TextInputManager::GetTextInputState() const {
+  return !!active_view_ ? &text_input_state_map_.at(active_view_) : nullptr;
+}
+
+const TextInputManager::SelectionRegion* TextInputManager::GetSelectionRegion(
+    RenderWidgetHostViewBase* view) const {
+  DCHECK(!view || IsRegistered(view));
+  if (!view)
+    view = active_view_;
+  return view ? &selection_region_map_.at(view) : nullptr;
+}
+
+const TextInputManager::CompositionRangeInfo*
+TextInputManager::GetCompositionRangeInfo(
+    RenderWidgetHostViewBase* view) const {
+  DCHECK(!view || IsRegistered(view));
+  if (!view)
+    view = active_view_;
+  return active_view_ ? &composition_range_info_map_.at(active_view_) : nullptr;
+}
+
+const TextInputManager::TextSelection* TextInputManager::GetTextSelection(
+    RenderWidgetHostViewBase* view) const {
+  DCHECK(!view || IsRegistered(view));
+  if (!view)
+    view = active_view_;
+  return !!view ? &text_selection_map_.at(view) : nullptr;
+}
+
 void TextInputManager::UpdateTextInputState(
     RenderWidgetHostViewBase* view,
     const TextInputState& text_input_state) {
   DCHECK(IsRegistered(view));
 
-  // Since |view| is registgered, we already have a previous value for its
+  if (text_input_state.type == ui::TEXT_INPUT_TYPE_NONE &&
+      active_view_ != view) {
+    // We reached here because an IPC is received to reset the TextInputState
+    // for |view|. But |view| != |active_view_|, which suggests that at least
+    // one other view has become active and we have received the corresponding
+    // IPC from their RenderWidget sooner than this one. That also means we have
+    // already synthesized the loss of TextInputState for the |view| before (see
+    // below). So we can forget about this method ever being called (no observer
+    // calls necessary).
+    return;
+  }
+
+  // Since |view| is registered, we already have a previous value for its
   // TextInputState.
   bool changed = AreDifferentTextInputStates(text_input_state_map_[view],
                                              text_input_state);
 
   text_input_state_map_[view] = text_input_state;
 
-  // |active_view_| is only updated when the state for |view| is not none.
-  if (text_input_state.type != ui::TEXT_INPUT_TYPE_NONE)
+  // If |view| is different from |active_view| and its |TextInputState.type| is
+  // not NONE, |active_view_| should change to |view|.
+  if (text_input_state.type != ui::TEXT_INPUT_TYPE_NONE &&
+      active_view_ != view) {
+    if (active_view_) {
+      // Ideally, we should always receive an IPC from |active_view_|'s
+      // RenderWidget to reset its |TextInputState.type| to NONE, before any
+      // other RenderWidget updates its TextInputState. But there is no
+      // guarantee in the order of IPCs from different RenderWidgets and another
+      // RenderWidget's IPC might arrive sooner and we reach here. To make the
+      // IME behavior identical to the non-OOPIF case, we have to manually reset
+      // the state for |active_view_|.
+      text_input_state_map_[active_view_].type = ui::TEXT_INPUT_TYPE_NONE;
+      RenderWidgetHostViewBase* active_view = active_view_;
+      active_view_ = nullptr;
+      NotifyObserversAboutInputStateUpdate(active_view, true);
+    }
     active_view_ = view;
+  }
 
   // If the state for |active_view_| is none, then we no longer have an
   // |active_view_|.
@@ -84,16 +144,125 @@ void TextInputManager::ImeCancelComposition(RenderWidgetHostViewBase* view) {
                     OnImeCancelComposition(this, view));
 }
 
+void TextInputManager::SelectionBoundsChanged(
+    RenderWidgetHostViewBase* view,
+    const ViewHostMsg_SelectionBounds_Params& params) {
+  DCHECK(IsRegistered(view));
+  // Converting the anchor point to root's coordinate space (for child frame
+  // views).
+  gfx::Point anchor_origin_transformed =
+      view->TransformPointToRootCoordSpace(params.anchor_rect.origin());
+#if defined(USE_AURA)
+  gfx::SelectionBound anchor_bound, focus_bound;
+
+  anchor_bound.SetEdge(gfx::PointF(anchor_origin_transformed),
+                       gfx::PointF(view->TransformPointToRootCoordSpace(
+                           params.anchor_rect.bottom_left())));
+  focus_bound.SetEdge(gfx::PointF(view->TransformPointToRootCoordSpace(
+                          params.focus_rect.origin())),
+                      gfx::PointF(view->TransformPointToRootCoordSpace(
+                          params.focus_rect.bottom_left())));
+
+  if (params.anchor_rect == params.focus_rect) {
+    anchor_bound.set_type(gfx::SelectionBound::CENTER);
+    focus_bound.set_type(gfx::SelectionBound::CENTER);
+  } else {
+    // Whether text is LTR at the anchor handle.
+    bool anchor_LTR = params.anchor_dir == blink::WebTextDirectionLeftToRight;
+    // Whether text is LTR at the focus handle.
+    bool focus_LTR = params.focus_dir == blink::WebTextDirectionLeftToRight;
+
+    if ((params.is_anchor_first && anchor_LTR) ||
+        (!params.is_anchor_first && !anchor_LTR)) {
+      anchor_bound.set_type(gfx::SelectionBound::LEFT);
+    } else {
+      anchor_bound.set_type(gfx::SelectionBound::RIGHT);
+    }
+    if ((params.is_anchor_first && focus_LTR) ||
+        (!params.is_anchor_first && !focus_LTR)) {
+      focus_bound.set_type(gfx::SelectionBound::RIGHT);
+    } else {
+      focus_bound.set_type(gfx::SelectionBound::LEFT);
+    }
+  }
+
+  if (anchor_bound == selection_region_map_[view].anchor &&
+      focus_bound == selection_region_map_[view].focus)
+    return;
+
+  selection_region_map_[view].anchor = anchor_bound;
+  selection_region_map_[view].focus = focus_bound;
+#else
+  if (params.anchor_rect == params.focus_rect) {
+    selection_region_map_[view].caret_rect.set_origin(
+        anchor_origin_transformed);
+    selection_region_map_[view].caret_rect.set_size(params.anchor_rect.size());
+  }
+  selection_region_map_[view].first_selection_rect.set_origin(
+      anchor_origin_transformed);
+  selection_region_map_[view].first_selection_rect.set_size(
+      params.anchor_rect.size());
+#endif  // USE_AURA
+  FOR_EACH_OBSERVER(Observer, observer_list_,
+                    OnSelectionBoundsChanged(this, view));
+}
+
+// TODO(ekaramad): We use |range| only on Mac OS; but we still track its value
+// here for other platforms. See if there is a nice way around this with minimal
+// #ifdefs for platform specific code (https://crbug.com/602427).
+void TextInputManager::ImeCompositionRangeChanged(
+    RenderWidgetHostViewBase* view,
+    const gfx::Range& range,
+    const std::vector<gfx::Rect>& character_bounds) {
+  DCHECK(IsRegistered(view));
+  composition_range_info_map_[view].character_bounds.clear();
+
+  // The values for the bounds should be converted to root view's coordinates
+  // before being stored.
+  for (auto rect : character_bounds) {
+    composition_range_info_map_[view].character_bounds.emplace_back(gfx::Rect(
+        view->TransformPointToRootCoordSpace(rect.origin()), rect.size()));
+  }
+
+  composition_range_info_map_[view].range.set_start(range.start());
+  composition_range_info_map_[view].range.set_end(range.end());
+
+  FOR_EACH_OBSERVER(Observer, observer_list_,
+                    OnImeCompositionRangeChanged(this, view));
+}
+
+void TextInputManager::SelectionChanged(RenderWidgetHostViewBase* view,
+                                        const base::string16& text,
+                                        size_t offset,
+                                        const gfx::Range& range) {
+  DCHECK(IsRegistered(view));
+
+  text_selection_map_[view].text = text;
+  text_selection_map_[view].offset = offset;
+  text_selection_map_[view].range.set_start(range.start());
+  text_selection_map_[view].range.set_end(range.end());
+
+  FOR_EACH_OBSERVER(Observer, observer_list_,
+                    OnTextSelectionChanged(this, view));
+}
+
 void TextInputManager::Register(RenderWidgetHostViewBase* view) {
   DCHECK(!IsRegistered(view));
 
   text_input_state_map_[view] = TextInputState();
+  selection_region_map_[view] = SelectionRegion();
+  composition_range_info_map_[view] = CompositionRangeInfo();
+  text_selection_map_[view] = TextSelection();
 }
 
 void TextInputManager::Unregister(RenderWidgetHostViewBase* view) {
   DCHECK(IsRegistered(view));
 
   text_input_state_map_.erase(view);
+  selection_region_map_.erase(view);
+  composition_range_info_map_.erase(view);
+  text_selection_map_.erase(view);
+
   if (active_view_ == view) {
     active_view_ = nullptr;
     NotifyObserversAboutInputStateUpdate(view, true);
@@ -113,6 +282,10 @@ void TextInputManager::RemoveObserver(Observer* observer) {
   observer_list_.RemoveObserver(observer);
 }
 
+bool TextInputManager::HasObserver(Observer* observer) const {
+  return observer_list_.HasObserver(observer);
+}
+
 size_t TextInputManager::GetRegisteredViewsCountForTesting() {
   return text_input_state_map_.size();
 }
@@ -129,6 +302,50 @@ void TextInputManager::NotifyObserversAboutInputStateUpdate(
   FOR_EACH_OBSERVER(
       Observer, observer_list_,
       OnUpdateTextInputStateCalled(this, updated_view, did_update_state));
+}
+
+TextInputManager::SelectionRegion::SelectionRegion() {}
+
+TextInputManager::SelectionRegion::SelectionRegion(
+    const SelectionRegion& other) = default;
+
+TextInputManager::CompositionRangeInfo::CompositionRangeInfo() {}
+
+TextInputManager::CompositionRangeInfo::CompositionRangeInfo(
+    const CompositionRangeInfo& other) = default;
+
+TextInputManager::CompositionRangeInfo::~CompositionRangeInfo() {}
+
+TextInputManager::TextSelection::TextSelection()
+    : offset(0), range(gfx::Range::InvalidRange()), text(base::string16()) {}
+
+TextInputManager::TextSelection::TextSelection(const TextSelection& other) =
+    default;
+
+TextInputManager::TextSelection::~TextSelection() {}
+
+bool TextInputManager::TextSelection::GetSelectedText(
+    base::string16* selected_text) const {
+  if (text.empty() || range.is_empty())
+    return false;
+
+  size_t pos = range.GetMin() - offset;
+  size_t n = range.length();
+  if (pos + n > text.length()) {
+    LOG(WARNING) << "The text can not fully cover range (selection's end point "
+                    "exceeds text length).";
+    return false;
+  }
+
+  if (pos >= text.length()) {
+    LOG(WARNING) << "The text ca not cover range (selection range's starting "
+                    "point exceeds text length).";
+    return false;
+  }
+
+  selected_text->clear();
+  selected_text->append(text.substr(pos, n));
+  return true;
 }
 
 }  // namespace content

@@ -5,14 +5,19 @@
 #ifndef HEADLESS_PUBLIC_HEADLESS_WEB_CONTENTS_H_
 #define HEADLESS_PUBLIC_HEADLESS_WEB_CONTENTS_H_
 
+#include <list>
+#include <string>
+#include <utility>
+
 #include "base/callback.h"
 #include "base/macros.h"
 #include "headless/public/headless_export.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 namespace headless {
-class HeadlessBrowserContext;
+class HeadlessBrowserContextImpl;
 class HeadlessBrowserImpl;
 class HeadlessDevToolsTarget;
 
@@ -73,14 +78,24 @@ class HEADLESS_EXPORT HeadlessWebContents::Builder {
   // about:blank.
   Builder& SetInitialURL(const GURL& initial_url);
 
-  // Specify the initial window size (default is 800x600).
+  // Specify the initial window size (default is configured in browser options).
   Builder& SetWindowSize(const gfx::Size& size);
 
-  // Set a browser context for storing session data (e.g., cookies, cache, local
-  // storage) for the tab. Several tabs can share the same browser context. If
-  // unset, the default browser context will be used. The browser context must
-  // outlive this HeadlessWebContents.
-  Builder& SetBrowserContext(HeadlessBrowserContext* browser_context);
+  // Specify an embedder provided Mojo service to be installed.  The
+  // |service_factory| callback is called on demand by Mojo to instantiate the
+  // service if a client asks for it.
+  template <typename Interface>
+  Builder& AddMojoService(
+      const base::Callback<void(mojo::InterfaceRequest<Interface>)>&
+          service_factory) {
+    return AddMojoService(
+        Interface::Name_,
+        base::Bind(&Builder::ForwardToServiceFactory<Interface>,
+                   service_factory));
+  }
+  Builder& AddMojoService(const std::string& service_name,
+                          const base::Callback<void(
+                              mojo::ScopedMessagePipeHandle)>& service_factory);
 
   // The returned object is owned by HeadlessBrowser. Call
   // HeadlessWebContents::Close() to dispose it.
@@ -88,14 +103,38 @@ class HEADLESS_EXPORT HeadlessWebContents::Builder {
 
  private:
   friend class HeadlessBrowserImpl;
+  friend class HeadlessBrowserContextImpl;
   friend class HeadlessWebContentsImpl;
 
-  explicit Builder(HeadlessBrowserImpl* browser);
+  explicit Builder(HeadlessBrowserContextImpl* browser_context);
 
-  HeadlessBrowserImpl* browser_;
+  template <typename Interface>
+  static void ForwardToServiceFactory(
+      const base::Callback<void(mojo::InterfaceRequest<Interface>)>&
+          service_factory,
+      mojo::ScopedMessagePipeHandle handle) {
+    service_factory.Run(mojo::MakeRequest<Interface>(std::move(handle)));
+  }
+
+  struct MojoService {
+    MojoService();
+    MojoService(const std::string& service_name,
+                const base::Callback<void(mojo::ScopedMessagePipeHandle)>&
+                    service_factory);
+    ~MojoService();
+
+    std::string service_name;
+    base::Callback<void(mojo::ScopedMessagePipeHandle)> service_factory;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(MojoService);
+  };
+
+  HeadlessBrowserContextImpl* browser_context_;
+
   GURL initial_url_ = GURL("about:blank");
-  gfx::Size window_size_ = gfx::Size(800, 600);
-  HeadlessBrowserContext* browser_context_;
+  gfx::Size window_size_;
+  std::list<MojoService> mojo_services_;
 
   DISALLOW_COPY_AND_ASSIGN(Builder);
 };

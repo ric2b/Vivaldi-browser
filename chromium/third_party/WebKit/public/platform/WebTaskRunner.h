@@ -6,16 +6,20 @@
 #define WebTaskRunner_h
 
 #include "WebCommon.h"
+#include "public/platform/WebTraceLocation.h"
+#include <memory>
 
 #ifdef INSIDE_BLINK
 #include "wtf/Functional.h"
-#include "wtf/PtrUtil.h"
-#include <memory>
 #endif
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace blink {
 
-class WebTraceLocation;
+using SingleThreadTaskRunner = base::SingleThreadTaskRunner;
 
 // The blink representation of a chromium SingleThreadTaskRunner.
 class BLINK_PLATFORM_EXPORT WebTaskRunner {
@@ -37,7 +41,11 @@ public:
     virtual void postDelayedTask(const WebTraceLocation&, Task*, double delayMs) = 0;
 
     // Returns a clone of the WebTaskRunner.
-    virtual WebTaskRunner* clone() = 0;
+    virtual std::unique_ptr<WebTaskRunner> clone() = 0;
+
+    // Returns true if the current thread is a thread on which a task may be run.
+    // Can be called from any thread.
+    virtual bool runsTasksOnCurrentThread() = 0;
 
     // ---
 
@@ -57,6 +65,9 @@ public:
     // real time domain.
     virtual double monotonicallyIncreasingVirtualTimeSeconds() const = 0;
 
+    // Returns the underlying task runner object.
+    virtual SingleThreadTaskRunner* taskRunner() = 0;
+
 #ifdef INSIDE_BLINK
     // Helpers for posting bound functions as tasks.
 
@@ -67,11 +78,6 @@ public:
     // For same-thread posting. Must be called from the associated WebThread.
     void postTask(const WebTraceLocation&, std::unique_ptr<WTF::Closure>);
     void postDelayedTask(const WebTraceLocation&, std::unique_ptr<WTF::Closure>, long long delayMs);
-
-    std::unique_ptr<WebTaskRunner> adoptClone()
-    {
-        return wrapUnique(clone());
-    }
 #endif
 };
 

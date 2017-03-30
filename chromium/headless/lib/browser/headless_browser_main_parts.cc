@@ -16,8 +16,8 @@ namespace headless {
 
 namespace {
 
-void PlatformInitialize() {
-  HeadlessScreen* screen = HeadlessScreen::Create(gfx::Size());
+void PlatformInitialize(const gfx::Size& screen_size) {
+  HeadlessScreen* screen = HeadlessScreen::Create(screen_size);
   display::Screen::SetScreenInstance(screen);
 }
 
@@ -32,24 +32,17 @@ HeadlessBrowserMainParts::HeadlessBrowserMainParts(HeadlessBrowserImpl* browser)
 HeadlessBrowserMainParts::~HeadlessBrowserMainParts() {}
 
 void HeadlessBrowserMainParts::PreMainMessageLoopRun() {
-  browser_context_.reset(new HeadlessBrowserContextImpl(ProtocolHandlerMap(),
-                                                        browser_->options()));
   if (browser_->options()->devtools_endpoint.address().IsValid()) {
     devtools_http_handler_ =
-        CreateLocalDevToolsHttpHandler(browser_context_.get());
+        CreateLocalDevToolsHttpHandler(browser_->options());
   }
-  PlatformInitialize();
+  PlatformInitialize(browser_->options()->window_size);
 }
 
 void HeadlessBrowserMainParts::PostMainMessageLoopRun() {
-  browser_context_.reset();
   devtools_http_handler_.reset();
-  PlatformExit();
-}
 
-HeadlessBrowserContextImpl* HeadlessBrowserMainParts::default_browser_context()
-    const {
-  return browser_context_.get();
+  PlatformExit();
 }
 
 }  // namespace headless

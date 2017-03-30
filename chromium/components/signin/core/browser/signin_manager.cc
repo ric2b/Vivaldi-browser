@@ -339,7 +339,8 @@ void SigninManager::MergeSigninCredentialIntoCookieJar() {
   if (!IsAuthenticated())
     return;
 
-  cookie_manager_service_->AddAccountToCookie(GetAuthenticatedAccountId());
+  cookie_manager_service_->AddAccountToCookie(GetAuthenticatedAccountId(),
+                                              "ChromiumSigninManager");
 }
 
 void SigninManager::CompletePendingSignin() {

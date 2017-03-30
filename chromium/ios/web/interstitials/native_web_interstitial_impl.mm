@@ -12,6 +12,10 @@
 #include "ios/web/web_state/web_state_impl.h"
 #include "ui/gfx/geometry/size.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace web {
 
 // static
@@ -57,6 +61,12 @@ void NativeWebInterstitialImpl::EvaluateJavaScript(
     NSString* script,
     JavaScriptCompletion completionHandler) {
   NOTREACHED() << "JavaScript cannot be evaluated on native interstitials.";
+}
+
+void NativeWebInterstitialImpl::ExecuteJavaScript(
+    NSString* script,
+    JavaScriptResultBlock completion_handler) {
+  NOTREACHED() << "JavaScript cannot be executed on native interstitials.";
 }
 
 }  // namespace web

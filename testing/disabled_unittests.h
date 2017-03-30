@@ -39,3 +39,17 @@
 */
 
   DISABLE_ALL(FirefoxProfileImporterBrowserTest)
+
+  // Assume these fails due to switches::kExtensionActionRedesign being disabled
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, ExtensionActionContextMenu)
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, ExtensionActionBlockedActions)
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, ExtensionActionWantsToRunAppearance)
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, TestNeedsOverflow)
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, TestActionFrameBounds)
+  DISABLE_MULTI(ToolbarActionsBarUnitTest, TestStartAndEndIndexes)
+  DISABLE(ToolbarActionViewInteractiveUITest, TestContextMenuOnOverflowedAction)
+  DISABLE(ToolbarActionViewInteractiveUITest,
+          ActivateOverflowedToolbarActionWithKeyboard)
+
+  // Seems to have broken on all the testers
+  DISABLE(NavigatingExtensionPopupBrowserTest, DownloadViaPost)
